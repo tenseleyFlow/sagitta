@@ -1,0 +1,11 @@
+.fac/
+.docs/
+.git/
+.idea/
+.vscode/
+
+CLAUDE.md
+AGENTS.md
+
+*.a
+*.o
