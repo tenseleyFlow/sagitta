@@ -31,7 +31,8 @@ enum {
     LOG_STRING_CAP = 4,
     LOG_BUFFER_CAP = 8,
     LOG_UTF8 = 16,
-    LOG_MOUSE = 32
+    LOG_MOUSE = 32,
+    LOG_OSC52 = 64
 };
 
 static const u8 paste_end[] = "\x1b[201~";
@@ -88,6 +89,31 @@ static void note_drop(In *in, u8 shape, const char *message)
         in->log_mask = (u8)(in->log_mask | shape);
         sag_log(SAG_LOG_DEBUG, "input: %s (further instances suppressed)",
                 message);
+    }
+}
+
+static bool string_is_osc52(const In *in)
+{
+    static const u8 prefix[] = "\x1b]52;";
+    size_t len = in->scan - in->seq_start;
+
+    return len >= sizeof(prefix) - 1U &&
+           memcmp(in->buf.data + in->seq_start, prefix,
+                  sizeof(prefix) - 1U) == 0;
+}
+
+static void note_string_drop(In *in, u8 shape, const char *message)
+{
+    if (!string_is_osc52(in)) {
+        note_drop(in, shape, message);
+        return;
+    }
+    in->dropped++;
+    if ((in->log_mask & LOG_OSC52) == 0U) {
+        in->log_mask = (u8)(in->log_mask | LOG_OSC52);
+        sag_log(SAG_LOG_WARN,
+                "input: unsolicited OSC 52 reply discarded "
+                "(further instances suppressed)");
     }
 }
 
@@ -763,8 +789,8 @@ bool sag_input_next(In *in, i64 now_ms, Key *out)
                 if (in->eof) {
                     in->rd = in->scan;
                     in->state = IN_GROUND;
-                    note_drop(in, LOG_UNKNOWN,
-                              "unterminated terminal string sequence");
+                    note_string_drop(in, LOG_UNKNOWN,
+                                     "unterminated terminal string sequence");
                     return false;
                 }
                 return false;
@@ -841,14 +867,16 @@ bool sag_input_next(In *in, i64 now_ms, Key *out)
                 in->rd = in->scan;
                 in->state = IN_GROUND;
                 in->deadline = 0;
-                note_drop(in, LOG_UNKNOWN, "terminal string sequence");
+                note_string_drop(in, LOG_UNKNOWN,
+                                 "terminal string sequence");
                 continue;
             }
             if (b == 7U) {
                 in->rd = in->scan;
                 in->state = IN_GROUND;
                 in->deadline = 0;
-                note_drop(in, LOG_UNKNOWN, "terminal string sequence");
+                note_string_drop(in, LOG_UNKNOWN,
+                                 "terminal string sequence");
                 continue;
             }
             in->string_len++;
@@ -858,7 +886,8 @@ bool sag_input_next(In *in, i64 now_ms, Key *out)
                 in->state = b == 0x1BU ? IN_STRING_DROP_ESC
                                        : IN_STRING_DROP;
                 in->deadline = 0;
-                note_drop(in, LOG_STRING_CAP, "terminal string cap exceeded");
+                note_string_drop(in, LOG_STRING_CAP,
+                                 "terminal string cap exceeded");
                 return true;
             }
             continue;
