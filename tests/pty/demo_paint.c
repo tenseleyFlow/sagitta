@@ -13,6 +13,8 @@
 #include "term/input.h"
 #include "term/render.h"
 #include "term/tty.h"
+#include "text/clipboard.h"
+#include "text/register.h"
 #include "util/arena.h"
 #include "util/base.h"
 #include "util/buf.h"
@@ -30,6 +32,7 @@ typedef struct Demo {
     bool input_ready;
     bool grid_ready;
     bool damage_flip;
+    bool clipboard_after_render;
     bool echo_ready;
     Key echo_key;
 } Demo;
@@ -295,8 +298,11 @@ static bool emit_frame(Demo *d, size_t *emitted)
     n = sag_render_frame(&d->render, &d->grid, &d->frame);
     if (emitted != NULL)
         *emitted = n;
-    if (n != d->frame.len || !write_all(d->tty.wfd, d->frame.data,
-                                        d->frame.len))
+    if (n != d->frame.len)
+        return false;
+    if (d->clipboard_after_render)
+        sag_clip_after_render(&d->frame, now_ms());
+    if (!write_all(d->tty.wfd, d->frame.data, d->frame.len))
         return false;
     sag_grid_flip(&d->grid);
     return true;
@@ -346,11 +352,13 @@ static bool probe(Demo *d)
 
 static void demo_free(Demo *d)
 {
+    sag_clip_shutdown();
     if (d->grid_ready)
         sag_grid_free(&d->grid);
     if (d->input_ready)
         sag_input_free(&d->input);
     bytebuf_free(&d->frame);
+    sag_term_oob_clear();
     interner_free(&d->interner);
     arena_free_all(&d->arena);
     /* Keep close last: its restore blob must be the final terminal output. */
@@ -484,7 +492,8 @@ static bool parse_args(int argc, char **argv, const char **scene, bool *crash)
     return strcmp(*scene, "basic") == 0 || strcmp(*scene, "wide") == 0 ||
            strcmp(*scene, "colors") == 0 ||
            strcmp(*scene, "damage") == 0 ||
-           strcmp(*scene, "resize") == 0 || strcmp(*scene, "echo") == 0;
+           strcmp(*scene, "resize") == 0 || strcmp(*scene, "echo") == 0 ||
+           strcmp(*scene, "osc52") == 0;
 }
 
 int main(int argc, char **argv)
@@ -497,7 +506,7 @@ int main(int argc, char **argv)
 
     if (!parse_args(argc, argv, &scene, &crash)) {
         (void)fprintf(stderr,
-                      "usage: demo_paint [--scene basic|wide|colors|damage|resize|echo] [--crash]\n");
+                      "usage: demo_paint [--scene basic|wide|colors|damage|resize|echo|osc52] [--crash]\n");
         return 2;
     }
     memset(&demo, 0, sizeof(demo));
@@ -532,6 +541,25 @@ int main(int argc, char **argv)
         render_caps.sync_output = false;
     sag_render_init(&demo.render, &render_caps, demo_getenv);
     paint_scene(&demo);
+    if (strcmp(demo.scene, "osc52") == 0) {
+        Registers registers;
+        RegVal value;
+
+        if (setenv("SAG_CLIPBOARD", "osc52", 1) != 0 ||
+            setenv("SAG_OSC52", "plain", 1) != 0 ||
+            setenv("SAG_CLIPBOARD_TARGET", "c", 1) != 0 ||
+            setenv("SAG_OSC52_MAX", "100000", 1) != 0) {
+            demo_free(&demo);
+            return 1;
+        }
+        sag_reg_init(&registers);
+        sag_regval_init(&value);
+        bytebuf_append(&value.bytes, "sagitta", 7U);
+        sag_reg_yank(&registers, 0U, &value);
+        demo.clipboard_after_render = true;
+        sag_regval_free(&value);
+        sag_reg_free(&registers);
+    }
     if (!emit_frame(&demo, NULL)) {
         demo_free(&demo);
         return 1;

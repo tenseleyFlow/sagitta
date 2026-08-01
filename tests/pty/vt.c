@@ -10,6 +10,8 @@ enum {
     VT_PARSE_TEXT = 0,
     VT_PARSE_ESC,
     VT_PARSE_CSI,
+    VT_PARSE_OSC,
+    VT_PARSE_OSC_ESC,
     VT_ERROR_BYTES_MAX = VT_TRANSCRIPT_BYTES_MAX
 };
 
@@ -586,6 +588,33 @@ static void seq_push(VtScreen *v, u8 byte)
     text_reset(v);
 }
 
+static void osc_dispatch(VtScreen *v)
+{
+    static const u8 prefix[] = {0x1bu, (u8)']', (u8)'5', (u8)'2', (u8)';'};
+    bool valid = v->nseq >= sizeof(prefix) + 4U &&
+                 memcmp(v->seq, prefix, sizeof(prefix)) == 0 &&
+                 v->seq[v->nseq - 2U] == 0x1bu &&
+                 v->seq[v->nseq - 1U] == (u8)'\\';
+    size_t i;
+
+    for (i = sizeof(prefix); valid && i + 2U < v->nseq; i++) {
+        u8 byte = v->seq[i];
+
+        if (byte == (u8)'?')
+            valid = false;
+        else if (byte < 0x20u || byte > 0x7eu)
+            valid = false;
+    }
+    if (!valid) {
+        unknown(v);
+    } else {
+        v->nosc52++;
+        if (v->in_sync)
+            v->nosc52_in_sync++;
+    }
+    text_reset(v);
+}
+
 void vt_feed(VtScreen *v, const u8 *b, size_t n)
 {
     size_t i;
@@ -620,6 +649,8 @@ void vt_feed(VtScreen *v, const u8 *b, size_t n)
             seq_push(v, byte);
             if (byte == '[') {
                 v->parse_state = VT_PARSE_CSI;
+            } else if (byte == ']') {
+                v->parse_state = VT_PARSE_OSC;
             } else {
                 if (byte == '7') {
                     v->saved_r = v->cur_r; v->saved_c = v->cur_c;
@@ -635,13 +666,25 @@ void vt_feed(VtScreen *v, const u8 *b, size_t n)
                 v->nseq = 0u;
                 text_reset(v);
             }
-        } else {
+        } else if (v->parse_state == VT_PARSE_CSI) {
             seq_push(v, byte);
-            if (v->parse_state == VT_PARSE_CSI && byte >= 0x40u && byte <= 0x7eu) {
+            if (byte >= 0x40u && byte <= 0x7eu) {
                 csi_dispatch(v);
                 v->parse_state = VT_PARSE_TEXT;
                 v->nseq = 0u;
             }
+        } else if (v->parse_state == VT_PARSE_OSC) {
+            seq_push(v, byte);
+            if (byte == 0x1bu)
+                v->parse_state = VT_PARSE_OSC_ESC;
+        } else {
+            seq_push(v, byte);
+            if (byte == (u8)'\\')
+                osc_dispatch(v);
+            else
+                unknown(v);
+            v->parse_state = VT_PARSE_TEXT;
+            v->nseq = 0u;
         }
     }
 }

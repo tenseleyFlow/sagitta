@@ -60,6 +60,8 @@ typedef struct VtScreen {
     Bytebuf errors;
     u32 nerrors;
     u32 nsync_pairs;
+    u32 nosc52;
+    u32 nosc52_in_sync;
 
     /* Probe replies are drained by the pty runner and written to master. */
     VtProfile profile;

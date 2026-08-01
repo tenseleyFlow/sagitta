@@ -1,7 +1,11 @@
 #include "harness.h"
 
+#include <errno.h>
+#include <fcntl.h>
 #include <signal.h>
+#include <stdio.h>
 #include <string.h>
+#include <unistd.h>
 
 static const char restore_blob[] =
     "\x1b[<u"
@@ -114,6 +118,68 @@ static void case_paint_resize(PtyCtx *c)
     quit_cleanly(c);
 }
 
+static void case_osc52_frame(PtyCtx *c)
+{
+    static const char sequence[] = "\x1b]52;c;c2FnaXR0YQ==\x1b\\";
+
+    spawn_scene(c, "osc52");
+    ptc_expect_output(c, sequence, sizeof(sequence) - 1U);
+    ptc_check(c, c->vt.nosc52 == 1U,
+              "OSC 52 writer did not emit exactly one logical sequence");
+    ptc_check(c, c->vt.nosc52_in_sync == 0U,
+              "OSC 52 bytes appeared between BSU and ESU");
+    ptc_snapshot(c, "paint_basic");
+    quit_cleanly(c);
+}
+
+static bool file_contains(const char *path, const char *needle)
+{
+    int fd = open(path, O_RDONLY);
+    Bytebuf bytes;
+    bool found = false;
+
+    if (fd < 0)
+        return false;
+    bytebuf_init(&bytes);
+    for (;;) {
+        u8 chunk[1024];
+        ssize_t n = read(fd, chunk, sizeof(chunk));
+
+        if (n > 0)
+            bytebuf_append(&bytes, chunk, (size_t)n);
+        else if (n == 0)
+            break;
+        else if (errno != EINTR)
+            break;
+    }
+    (void)close(fd);
+    bytebuf_push_u8(&bytes, 0U);
+    found = strstr((const char *)bytes.data, needle) != NULL;
+    bytebuf_free(&bytes);
+    return found;
+}
+
+static void case_osc52_reply(PtyCtx *c)
+{
+    static const char reply[] = "\x1b]52;c;c2VjcmV0\x1b\\";
+    char log_path[1024];
+    int n;
+
+    spawn_scene(c, "echo");
+    ptc_bytes(c, reply);
+    ptc_settle(c, 50);
+    n = snprintf(log_path, sizeof(log_path), "%s/sagitta/log",
+                 c->state_dir);
+    ptc_check(c, n > 0 && (size_t)n < sizeof(log_path),
+              "OSC 52 reply log path overflow");
+    if (!c->failed)
+        ptc_check(c, file_contains(log_path,
+                                  "warn: input: unsolicited OSC 52 reply discarded"),
+                  "unsolicited OSC 52 reply did not log WARN");
+    ptc_snapshot(c, "osc52_reply");
+    quit_cleanly(c);
+}
+
 static void case_restore_quit(PtyCtx *c)
 {
     spawn_scene(c, "basic");
@@ -201,6 +267,8 @@ const PtyCase sag_pty_cases[] = {
     C(paint_colors_16, modern, 24U, 80U, case_colors_16),
     C(paint_damage, modern, 24U, 80U, case_paint_damage),
     C(paint_resize, modern, 24U, 80U, case_paint_resize),
+    C(osc52_frame, modern, 24U, 80U, case_osc52_frame),
+    C(osc52_reply, modern, 24U, 80U, case_osc52_reply),
     C(restore_quit, modern, 24U, 80U, case_restore_quit),
     C(restore_crash, modern, 24U, 80U, case_restore_crash),
     C(restore_suspend, modern, 24U, 80U, case_restore_suspend),
