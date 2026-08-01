@@ -2,6 +2,7 @@
 
 #include <limits.h>
 #include <stddef.h>
+#include <string.h>
 
 #include "unicode/grapheme.h"
 #include "unicode/utf8.h"
@@ -86,6 +87,48 @@ static bool reader_get(TextReader *reader, u8 *out)
     }
     *out = reader->chunk[(size_t)reader->chunk_pos++];
     reader->off++;
+    return true;
+}
+
+static bool reader_all_ascii(TextReader *reader)
+{
+    while (reader->off < reader->end) {
+        u64 available;
+        u64 remaining;
+        u64 take;
+        u64 i = 0U;
+
+        while (reader->chunk_pos == reader->chunk_len) {
+            if (!reader->active ||
+                !sag_textiter_advance(&reader->it, reader->tb))
+                SAG_BUG("unicode coordinates: iterator ended early");
+            if (!sag_textiter_chunk(&reader->it, reader->tb,
+                                    &reader->chunk,
+                                    &reader->chunk_len) ||
+                reader->chunk_len == 0U)
+                SAG_BUG("unicode coordinates: iterator yielded empty chunk");
+            reader->chunk_pos = 0U;
+        }
+        available = reader->chunk_len - reader->chunk_pos;
+        remaining = reader->end - reader->off;
+        take = available < remaining ? available : remaining;
+        while (i + sizeof(u64) <= take) {
+            u64 word;
+
+            memcpy(&word,
+                   reader->chunk + (size_t)(reader->chunk_pos + i),
+                   sizeof(word));
+            if ((word & UINT64_C(0x8080808080808080)) != 0U)
+                return false;
+            i += sizeof(word);
+        }
+        for (; i < take; i++) {
+            if (reader->chunk[(size_t)(reader->chunk_pos + i)] >= 0x80U)
+                return false;
+        }
+        reader->chunk_pos += take;
+        reader->off += take;
+    }
     return true;
 }
 
@@ -235,6 +278,7 @@ GCol sag_off_to_gcol(const TextBuf *tb, Span line, ByteOff pos)
 {
     ClusterReader reader;
     StreamCluster cluster;
+    TextReader ascii;
     u64 end;
     u64 count = 0U;
 
@@ -243,6 +287,11 @@ GCol sag_off_to_gcol(const TextBuf *tb, Span line, ByteOff pos)
     end = line_content_end(tb, line);
     if (pos.v > end)
         pos.v = end;
+    if (pos.v == line.lo)
+        return (GCol){0U};
+    reader_init(&ascii, tb, line.lo, pos.v);
+    if (reader_all_ascii(&ascii) && pos.v == end)
+        return (GCol){pos.v - line.lo};
     cluster_reader_init(&reader, tb, line.lo, end);
     while (cluster_next(&reader, &cluster, false)) {
         if (pos.v < cluster.end)
@@ -393,6 +442,26 @@ ByteOff sag_grapheme_next(const TextBuf *tb, ByteOff pos)
     return BYTEOFF(span.hi);
 }
 
+ByteOff sag_grapheme_next_boundary(const TextBuf *tb, ByteOff pos)
+{
+    ClusterReader reader;
+    StreamCluster cluster;
+    Span span;
+    u64 len;
+
+    if (tb == NULL)
+        SAG_BUG("sag_grapheme_next_boundary: NULL text buffer");
+    len = sag_textbuf_len(tb);
+    if (pos.v >= len)
+        return BYTEOFF(len);
+    span = motion_span(tb, pos, false);
+    cluster_reader_init(&reader, tb, pos.v, span.hi);
+    if (!cluster_next(&reader, &cluster, false))
+        SAG_BUG("sag_grapheme_next_boundary: no cluster at offset");
+    cluster_reader_free(&reader);
+    return BYTEOFF(cluster.end);
+}
+
 ByteOff sag_grapheme_prev(const TextBuf *tb, ByteOff pos)
 {
     ClusterReader reader;
@@ -426,6 +495,40 @@ ByteOff sag_grapheme_prev(const TextBuf *tb, ByteOff pos)
     }
     cluster_reader_free(&reader);
     return BYTEOFF(previous);
+}
+
+ByteOff sag_grapheme_prev_boundary(const TextBuf *tb, ByteOff pos)
+{
+    TextReader reader;
+    Span span;
+    u8 previous;
+    u8 before_previous;
+    u64 len;
+
+    if (tb == NULL)
+        SAG_BUG("sag_grapheme_prev_boundary: NULL text buffer");
+    len = sag_textbuf_len(tb);
+    if (pos.v > len)
+        pos.v = len;
+    if (pos.v == 0U)
+        return BYTEOFF(0U);
+    span = motion_span(tb, pos, true);
+    reader_init(&reader, tb, pos.v - 1U, pos.v);
+    if (!reader_get(&reader, &previous))
+        SAG_BUG("sag_grapheme_prev_boundary: cannot inspect byte");
+    if (previous < 0x80U) {
+        if (pos.v - span.lo == 1U)
+            return BYTEOFF(pos.v - 1U);
+        reader_init(&reader, tb, pos.v - 2U, pos.v - 1U);
+        if (!reader_get(&reader, &before_previous))
+            SAG_BUG("sag_grapheme_prev_boundary: cannot inspect prefix");
+        if (before_previous < 0x80U) {
+            if (previous == '\n' && before_previous == '\r')
+                return BYTEOFF(pos.v - 2U);
+            return BYTEOFF(pos.v - 1U);
+        }
+    }
+    return sag_grapheme_prev(tb, pos);
 }
 
 bool sag_is_grapheme_boundary(const TextBuf *tb, ByteOff pos)

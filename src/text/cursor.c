@@ -43,14 +43,14 @@ static ByteOff cursor_line_end(const TextBuf *tb, LineNo line)
 void sag_cursor_left(const TextBuf *tb, Cursor *c)
 {
     cursor_require(tb, c);
-    cursor_set_pos(c, sag_grapheme_prev(tb, c->pos));
+    cursor_set_pos(c, sag_grapheme_prev_boundary(tb, c->pos));
     cursor_update_goal(tb, c);
 }
 
 void sag_cursor_right(const TextBuf *tb, Cursor *c)
 {
     cursor_require(tb, c);
-    cursor_set_pos(c, sag_grapheme_next(tb, c->pos));
+    cursor_set_pos(c, sag_grapheme_next_boundary(tb, c->pos));
     cursor_update_goal(tb, c);
 }
 

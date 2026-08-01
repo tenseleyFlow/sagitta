@@ -112,6 +112,7 @@ FUZZ_LINK_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ)) $(FUZZ_LIB_OBJ)
 PERF_UNICODE_OBJ := $(BUILD)/tests/perf/perf_unicode.o
 PERF_RENDER_OBJ := $(BUILD)/tests/perf/perf_render.o
 PERF_PIECE_OBJ := $(BUILD)/tests/perf/perf_piece.o
+PERF_CURSOR_OBJ := $(BUILD)/tests/perf/perf_cursor.o
 PERF_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 
 TORTURE_CHILD_OBJ := $(BUILD)/tests/torture/sag-torture.o
@@ -126,7 +127,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(FUZZ_LIB_OBJ) \
                 $(FUZZ_GRID_OBJ) $(FUZZ_VT_OBJ) $(PTY_ORACLE_OBJ) \
                 $(PTY_HARNESS_OBJ) $(PTY_REGISTRY_OBJ) $(PTY_RUNNER_OBJ) \
                 $(PTY_DEMO_OBJ) $(PERF_UNICODE_OBJ) $(PERF_RENDER_OBJ) \
-                $(PERF_PIECE_OBJ) $(TORTURE_CHILD_OBJ) \
+                $(PERF_PIECE_OBJ) $(PERF_CURSOR_OBJ) $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(FAULTSHIM)))
 
 # A content mismatch makes FORCE a normal prerequisite of every object built
@@ -140,8 +141,8 @@ endif
 
 .DEFAULT_GOAL := all
 .PHONY: all test clean install dirs FORCE test-script test-pty fuzz \
-        unicode-tables perf perf-unicode perf-render perf-piece torture \
-        torture-build
+        unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
+        torture torture-build
 
 all: $(BUILD)/sagitta $(BUILD)/sag
 
@@ -185,6 +186,9 @@ $(BUILD)/perf_render: $(PERF_CORE_OBJ) $(PERF_RENDER_OBJ)
 $(BUILD)/perf_piece: $(PERF_CORE_OBJ) $(PERF_PIECE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_PIECE_OBJ)
 
+$(BUILD)/perf_cursor: $(PERF_CORE_OBJ) $(PERF_CURSOR_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_CURSOR_OBJ)
+
 $(TORTURE_CHILD): $(TORTURE_CORE_OBJ) $(TORTURE_CHILD_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TORTURE_CORE_OBJ) \
 		$(TORTURE_CHILD_OBJ)
@@ -225,7 +229,10 @@ perf-render: $(BUILD)/perf_render
 perf-piece: $(BUILD)/perf_piece
 	$(BUILD)/perf_piece
 
-perf: perf-unicode perf-render perf-piece
+perf: perf-unicode perf-render perf-piece perf-cursor
+
+perf-cursor: $(BUILD)/perf_cursor
+	$(BUILD)/perf_cursor
 
 torture-build: $(TORTURE_CHILD) $(TORTURE_DRIVER) $(FAULTSHIM)
 

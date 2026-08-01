@@ -25,4 +25,8 @@ ByteOff sag_grapheme_next(const TextBuf *tb, ByteOff pos);
 ByteOff sag_grapheme_prev(const TextBuf *tb, ByteOff pos);
 bool sag_is_grapheme_boundary(const TextBuf *tb, ByteOff pos);
 
+/* Cursor fast paths: pos must already satisfy the boundary invariant. */
+ByteOff sag_grapheme_next_boundary(const TextBuf *tb, ByteOff pos);
+ByteOff sag_grapheme_prev_boundary(const TextBuf *tb, ByteOff pos);
+
 #endif
