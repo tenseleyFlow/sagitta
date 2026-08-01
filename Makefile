@@ -66,6 +66,7 @@ VALGRIND_UNIT_EXCLUDES := \
   --exclude piece_line_iterator_rejects_other_buffer \
   --exclude piece_checker_rejects_corruption \
   --exclude piece_live_iterator_rejects_edit \
+  --exclude register_block_producer_hard_errors_with_sprint17 \
   --exclude log_bug_prehook \
   --exclude mark_generational_handles \
   --exclude multicursor_edit_guard_names_sprint17 \
