@@ -60,6 +60,11 @@ VALGRIND_UNIT_EXCLUDES := \
   --exclude log_bug_prehook \
   --exclude mark_generational_handles \
   --exclude multicursor_edit_guard_names_sprint17 \
+  --exclude undo_multi_reason_names_sprint17 \
+  --exclude undo_filter_reason_names_sprint19 \
+  --exclude undo_replace_reason_names_sprint21 \
+  --exclude undo_macro_reason_names_sprint34 \
+  --exclude undo_lsp_reason_names_sprint47 \
   --exclude render_invalid_cells_are_bugs
 UNIT_RUN := $(VALGRIND_RUN) $(BUILD)/unit_tests $(VALGRIND_UNIT_EXCLUDES) && \
             SAG_TORTURE_CLEAN_ONLY=1 $(VALGRIND_RUN) \
@@ -107,12 +112,15 @@ FUZZ_GRAPHEME_OBJ := $(BUILD)/tests/fuzz/fuzz_grapheme.o
 FUZZ_INPUT_OBJ := $(BUILD)/tests/fuzz/fuzz_input.o
 FUZZ_GRID_OBJ := $(BUILD)/tests/fuzz/fuzz_grid.o
 FUZZ_VT_OBJ := $(BUILD)/tests/fuzz/fuzz_vt.o
-FUZZ_LINK_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ)) $(FUZZ_LIB_OBJ)
+FUZZ_UNDO_OBJ := $(BUILD)/tests/fuzz/fuzz_undo.o
+FUZZ_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
+FUZZ_LINK_OBJ := $(FUZZ_CORE_OBJ) $(FUZZ_LIB_OBJ)
 
 PERF_UNICODE_OBJ := $(BUILD)/tests/perf/perf_unicode.o
 PERF_RENDER_OBJ := $(BUILD)/tests/perf/perf_render.o
 PERF_PIECE_OBJ := $(BUILD)/tests/perf/perf_piece.o
 PERF_CURSOR_OBJ := $(BUILD)/tests/perf/perf_cursor.o
+PERF_UNDO_OBJ := $(BUILD)/tests/perf/perf_undo.o
 PERF_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 
 TORTURE_CHILD_OBJ := $(BUILD)/tests/torture/sag-torture.o
@@ -124,10 +132,12 @@ FAULTSHIM := $(BUILD)/tests/torture/faultshim.so
 
 BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(FUZZ_LIB_OBJ) \
                 $(FUZZ_UTF8_OBJ) $(FUZZ_GRAPHEME_OBJ) $(FUZZ_INPUT_OBJ) \
-                $(FUZZ_GRID_OBJ) $(FUZZ_VT_OBJ) $(PTY_ORACLE_OBJ) \
+                $(FUZZ_GRID_OBJ) $(FUZZ_VT_OBJ) $(FUZZ_UNDO_OBJ) \
+                $(PTY_ORACLE_OBJ) \
                 $(PTY_HARNESS_OBJ) $(PTY_REGISTRY_OBJ) $(PTY_RUNNER_OBJ) \
                 $(PTY_DEMO_OBJ) $(PERF_UNICODE_OBJ) $(PERF_RENDER_OBJ) \
-                $(PERF_PIECE_OBJ) $(PERF_CURSOR_OBJ) $(TORTURE_CHILD_OBJ) \
+                $(PERF_PIECE_OBJ) $(PERF_CURSOR_OBJ) $(PERF_UNDO_OBJ) \
+                $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(FAULTSHIM)))
 
 # A content mismatch makes FORCE a normal prerequisite of every object built
@@ -142,7 +152,7 @@ endif
 .DEFAULT_GOAL := all
 .PHONY: all test clean install dirs FORCE test-script test-pty fuzz \
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
-        torture torture-build
+        perf-undo torture torture-build
 
 all: $(BUILD)/sagitta $(BUILD)/sag
 
@@ -177,6 +187,9 @@ $(BUILD)/fuzz_vt: $(FUZZ_LINK_OBJ) $(PTY_VT_OBJ) $(FUZZ_VT_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) $(PTY_VT_OBJ) \
 		$(FUZZ_VT_OBJ)
 
+$(BUILD)/fuzz_undo: $(FUZZ_CORE_OBJ) $(FUZZ_UNDO_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) $(FUZZ_UNDO_OBJ)
+
 $(BUILD)/perf_unicode: $(PERF_CORE_OBJ) $(PERF_UNICODE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_UNICODE_OBJ)
 
@@ -188,6 +201,9 @@ $(BUILD)/perf_piece: $(PERF_CORE_OBJ) $(PERF_PIECE_OBJ)
 
 $(BUILD)/perf_cursor: $(PERF_CORE_OBJ) $(PERF_CURSOR_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_CURSOR_OBJ)
+
+$(BUILD)/perf_undo: $(PERF_CORE_OBJ) $(PERF_UNDO_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_UNDO_OBJ)
 
 $(TORTURE_CHILD): $(TORTURE_CORE_OBJ) $(TORTURE_CHILD_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TORTURE_CORE_OBJ) \
@@ -210,12 +226,13 @@ test: $(BUILD)/unit_tests $(BUILD)/sagitta test-pty torture-build
 	scripts/smoke.sh $(BUILD)/sagitta
 
 fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
-      $(BUILD)/fuzz_grid $(BUILD)/fuzz_vt
+      $(BUILD)/fuzz_grid $(BUILD)/fuzz_vt $(BUILD)/fuzz_undo
 	$(BUILD)/fuzz_utf8 --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_grapheme --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_input --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_grid --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_vt --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+	$(BUILD)/fuzz_undo --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	@if [ -n "$(FUZZ_SECONDS)" ]; then \
 		$(BUILD)/fuzz_input --seconds=$(FUZZ_SECONDS) --seed=$(FUZZ_SEED); \
 	fi
@@ -229,10 +246,13 @@ perf-render: $(BUILD)/perf_render
 perf-piece: $(BUILD)/perf_piece
 	$(BUILD)/perf_piece
 
-perf: perf-unicode perf-render perf-piece perf-cursor
+perf: perf-unicode perf-render perf-piece perf-cursor perf-undo
 
 perf-cursor: $(BUILD)/perf_cursor
 	$(BUILD)/perf_cursor
+
+perf-undo: $(BUILD)/perf_undo
+	$(BUILD)/perf_undo
 
 torture-build: $(TORTURE_CHILD) $(TORTURE_DRIVER) $(FAULTSHIM)
 
@@ -276,11 +296,13 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/sagitta
 -include $(OBJ:.o=.d) $(UNIT_OBJ:.o=.d) $(FUZZ_LIB_OBJ:.o=.d) \
          $(FUZZ_UTF8_OBJ:.o=.d) $(FUZZ_GRAPHEME_OBJ:.o=.d) \
          $(FUZZ_INPUT_OBJ:.o=.d) $(FUZZ_GRID_OBJ:.o=.d) \
-         $(FUZZ_VT_OBJ:.o=.d) $(PTY_ORACLE_OBJ:.o=.d) \
+         $(FUZZ_VT_OBJ:.o=.d) $(FUZZ_UNDO_OBJ:.o=.d) \
+         $(PTY_ORACLE_OBJ:.o=.d) \
          $(PTY_HARNESS_OBJ:.o=.d) $(PTY_REGISTRY_OBJ:.o=.d) \
          $(PTY_RUNNER_OBJ:.o=.d) $(PTY_DEMO_OBJ:.o=.d) \
          $(PERF_UNICODE_OBJ:.o=.d) $(PERF_RENDER_OBJ:.o=.d) \
          $(PERF_PIECE_OBJ:.o=.d) $(PERF_CURSOR_OBJ:.o=.d) \
+         $(PERF_UNDO_OBJ:.o=.d) \
          $(TORTURE_CHILD_OBJ:.o=.d) \
 	 $(TORTURE_DRIVER_OBJ:.o=.d)
 
