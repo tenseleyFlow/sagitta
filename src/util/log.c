@@ -14,6 +14,7 @@
 
 static SagLogSink active_sink;
 static bool has_custom_sink;
+static void (*bug_prehook)(void);
 
 static const char *level_name(SagLogLevel level)
 {
@@ -183,6 +184,11 @@ void sag_log_set_sink(const SagLogSink *sink)
     }
 }
 
+void sag_bug_set_prehook(void (*fn)(void))
+{
+    bug_prehook = fn;
+}
+
 void sag_log(SagLogLevel level, const char *fmt, ...)
 {
     va_list args;
@@ -215,6 +221,8 @@ _Noreturn void sag_bug(const char *file, int line, const char *fmt, ...)
     int needed;
     char *message;
 
+    if (bug_prehook != NULL)
+        bug_prehook();
     va_start(args, fmt);
     detail = format_message(fmt, args);
     va_end(args);

@@ -1,9 +1,11 @@
 #include "args.h"
 #include "mod/mods.h"
+#include "term/tty.h"
 #include "util/base.h"
 #include "util/buf.h"
 #include "util/log.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -19,7 +21,10 @@ static const char help_text[] =
     "\n"
     "Environment:\n"
     "  SAG_LOG          Override the log file path.\n"
-    "  SAG_LOG_LEVEL    Set debug, info, warn, or error logging.\n";
+    "  SAG_LOG_LEVEL    Set debug, info, warn, or error logging.\n"
+    "  SAG_TTY_PROBE    Set 0 to disable terminal capability probes.\n"
+    "  SAG_PROBE_TIMEOUT_MS  Override the 50 ms probe deadline.\n"
+    "  SAG_TRUECOLOR    Set 0 or 1 to override truecolor detection.\n";
 
 static void print_version(void)
 {
@@ -41,6 +46,8 @@ static void print_version(void)
 
 static int run_driver(const SagArgs *args)
 {
+    Tty tty;
+
     if (args->selftest_bug) {
         SAG_BUG("selftest");
     }
@@ -68,6 +75,12 @@ static int run_driver(const SagArgs *args)
         (void)fprintf(stderr, "sagitta: error: unknown argument '%s'\n",
             args->files[0]);
         return SAG_EXIT_ERR;
+    }
+    if (args->nfiles == 0U) {
+        errno = 0;
+        if (!sag_tty_open(&tty))
+            return errno == ENOTTY ? SAG_EXIT_ERR : SAG_EXIT_IO;
+        sag_tty_close(&tty);
     }
     (void)fprintf(stderr,
         "sagitta: error: the editor is not yet implemented: Sprint 14 (modes L and I)\n");
