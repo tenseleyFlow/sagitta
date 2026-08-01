@@ -370,6 +370,8 @@ static void validate_records(void)
         (records[0x0301u] & (GCB_MASK | INCB_MASK | ZERO_WIDTH)) !=
             (4u | (3u << 4) | ZERO_WIDTH) ||
         (records[0x094Du] & INCB_MASK) != (1u << 4) ||
+        (records[0x1160u] & ZERO_WIDTH) == 0 ||
+        (records[0x11FFu] & ZERO_WIDTH) == 0 ||
         (records[0x200Du] & GCB_MASK) != 5u ||
         (records[0x4E00u] & EAW_MASK) != (3u << 7) ||
         (records[0xAC00u] & GCB_MASK) != 12u ||
@@ -387,7 +389,12 @@ static void emit_u16(const char *decl, const U16 *values, size_t count)
     for (i = 0; i < count; i++) {
         if ((i % 8u) == 0)
             fputs("    ", stdout);
-        printf("0x%04X%s", (unsigned)values[i], i + 1u == count ? "" : ", ");
+        printf("0x%04X", (unsigned)values[i]);
+        if (i + 1u != count) {
+            putchar(',');
+            if ((i % 8u) != 7u)
+                putchar(' ');
+        }
         if ((i % 8u) == 7u || i + 1u == count)
             putchar('\n');
     }
@@ -401,7 +408,12 @@ static void emit_u8(const char *decl, const U8 *values, size_t count)
     for (i = 0; i < count; i++) {
         if ((i % 16u) == 0)
             fputs("    ", stdout);
-        printf("%uu%s", (unsigned)values[i], i + 1u == count ? "" : ", ");
+        printf("%uu", (unsigned)values[i]);
+        if (i + 1u != count) {
+            putchar(',');
+            if ((i % 16u) != 15u)
+                putchar(' ');
+        }
         if ((i % 16u) == 15u || i + 1u == count)
             putchar('\n');
     }
@@ -477,6 +489,9 @@ int main(int argc, char **argv)
         die("out of memory", NULL);
 
     parse_unicode_data(argv[1]);
+    /* UAX #11 terminal-width policy: conjoining Hangul V/T jamo do not
+     * advance independently, regardless of their General_Category. */
+    set_field(0x1160u, 0x11FFu, ZERO_WIDTH, ZERO_WIDTH);
     parse_property_file(argv[1], "GraphemeBreakProperty.txt", 0);
     parse_property_file(argv[1], "emoji-data.txt", 2);
     parse_property_file(argv[1], "EastAsianWidth.txt", 1);
