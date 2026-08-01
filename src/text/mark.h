@@ -31,7 +31,7 @@ MarkId sag_mark_add(MarkSet *ms, ByteOff pos, MarkBias bias);
 void sag_mark_del(MarkSet *ms, MarkId id);
 ByteOff sag_mark_pos(const MarkSet *ms, MarkId id);
 
-/* Visits marks governed by the delete-collapse row before adjustment. */
+/* Visits marks whose original positions an inverse insert cannot infer. */
 void sag_marks_observe_collapse(const MarkSet *ms, Span range,
                                 SagMarkCollapseFn observe, void *ctx);
 /* Returns false when id is dead, stale, or names a reused slab slot. */

@@ -237,10 +237,13 @@ void sag_marks_observe_collapse(const MarkSet *ms, Span range,
         u32 slot_id = ms->order[i];
         const MarkSlot *slot = &ms->slots[slot_id];
 
-        if (slot->mark.pos.v >= range.hi)
+        if (slot->mark.pos.v > range.hi)
             break;
-        observe(ctx, (MarkId){slot_id, slot->gen},
-                slot->mark.pos.v - range.lo);
+        if (slot->mark.pos.v < range.hi ||
+            slot->mark.bias == SAG_BIAS_LEFT) {
+            observe(ctx, (MarkId){slot_id, slot->gen},
+                    slot->mark.pos.v - range.lo);
+        }
         i++;
     }
 }
