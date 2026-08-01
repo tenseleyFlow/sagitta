@@ -507,9 +507,12 @@ void test_coords_sparse_index_edit_invalidation(void)
     large_ascii = sag_xmalloc(64U * 1024U);
     memset(large_ascii, 'a', 64U * 1024U);
     tb = sag_textbuf_from_owned_bytes(large_ascii, 64U * 1024U);
-    SAG_ASSERT(!tb->graphemes.initialized);
+    SAG_ASSERT(tb->graphemes.initialized);
+    SAG_ASSERT(tb->graphemes.simple_ascii);
+    SAG_ASSERT(!tb->graphemes.simple_ascii_direct);
     sag_textbuf_insert(tb, BYTEOFF(10U), &x, 1U);
-    SAG_ASSERT(!tb->graphemes.initialized);
+    SAG_ASSERT(tb->graphemes.initialized);
+    SAG_ASSERT(tb->graphemes.simple_ascii_direct);
     SAG_ASSERT_EQ_U64(tb->graphemes.pending.len, 0U);
     line = sag_textbuf_line_span(tb, LINENO(0U));
     SAG_ASSERT_EQ_U64(sag_off_to_gcol(tb, line, BYTEOFF(64U * 1024U + 1U)).v,

@@ -224,7 +224,9 @@ enum {
     SAG_GCOL_CHECKPOINT_STRIDE = 64,
     SAG_MOTION_CHECKPOINT_STRIDE = 512,
     SAG_SIMPLE_ASCII_BYPASS_BYTES = 64 * 1024,
-    SAG_DEFER_INDEX_BYTES = 64 * 1024
+    /* Keep the existing 8 MiB first-motion latency gate eager while the
+     * 100 MiB open-budget fixtures defer their full Unicode index. */
+    SAG_DEFER_INDEX_BYTES = 16 * 1024 * 1024
 };
 
 typedef struct {
@@ -373,17 +375,63 @@ static void index_scan(const TextBuf *tb, u64 start, u64 end,
     index_finalize_cluster(builder, state);
 }
 
-static bool range_is_simple_ascii(const TextBuf *tb, u64 start, u64 end)
+static bool bytes_are_simple_ascii(const u8 *bytes, size_t len)
 {
-    TextReader reader;
-    u8 byte;
+    size_t ones = SIZE_MAX / 0xffU;
+    size_t highs = ones * 0x80U;
+    size_t low_limit = ones * 0x20U;
+    size_t del_bytes = ones * 0x7fU;
+    size_t pos = 0U;
 
-    reader_init(&reader, tb, start, end);
-    while (reader_get(&reader, &byte)) {
-        if (byte < 0x20U || byte >= 0x7fU)
+    while (len - pos >= sizeof(size_t)) {
+        size_t word;
+        size_t del;
+
+        memcpy(&word, bytes + pos, sizeof(word));
+        del = word ^ del_bytes;
+        if ((word & highs) != 0U ||
+            ((word - low_limit) & ~word & highs) != 0U ||
+            ((del - ones) & ~del & highs) != 0U)
             return false;
+        pos += sizeof(word);
+    }
+    while (pos < len) {
+        if (bytes[pos] < 0x20U || bytes[pos] >= 0x7fU)
+            return false;
+        pos++;
     }
     return true;
+}
+
+static bool range_is_simple_ascii(const TextBuf *tb, u64 start, u64 end)
+{
+    TextIter iter;
+    u64 remaining = end - start;
+
+    if (remaining == 0U)
+        return true;
+    if (!sag_textiter_begin(&iter, tb, BYTEOFF(start)))
+        SAG_BUG("simple ASCII scan cannot begin");
+    do {
+        const u8 *bytes;
+        u64 chunk_len;
+        size_t take;
+
+        if (!sag_textiter_chunk(&iter, tb, &bytes, &chunk_len) ||
+            chunk_len == 0U)
+            SAG_BUG("simple ASCII scan found an empty chunk");
+        if (chunk_len > remaining)
+            chunk_len = remaining;
+        if (chunk_len > SIZE_MAX)
+            SAG_BUG("simple ASCII scan chunk is not addressable");
+        take = (size_t)chunk_len;
+        if (!bytes_are_simple_ascii(bytes, take))
+            return false;
+        remaining -= chunk_len;
+        if (remaining == 0U)
+            return true;
+    } while (sag_textiter_advance(&iter, tb));
+    SAG_BUG("simple ASCII scan ended early");
 }
 
 static void pending_clear(TextBuf *tb)
@@ -429,9 +477,10 @@ void sag_coords_index_seed(TextBuf *tb)
         index->len = 0U;
         index->motion_len = 0U;
         index->gen = tb->gen;
-        index->simple_ascii = false;
-        index->simple_ascii_direct = false;
-        index->initialized = false;
+        index->simple_ascii = range_is_simple_ascii(
+            tb, 0U, sag_textbuf_len(tb));
+        index->simple_ascii_direct = index->simple_ascii;
+        index->initialized = index->simple_ascii;
         pending_clear(tb);
         return;
     }
