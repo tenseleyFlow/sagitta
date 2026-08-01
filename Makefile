@@ -85,13 +85,15 @@ FUZZ_LINK_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ)) $(FUZZ_LIB_OBJ)
 
 PERF_UNICODE_OBJ := $(BUILD)/tests/perf/perf_unicode.o
 PERF_RENDER_OBJ := $(BUILD)/tests/perf/perf_render.o
+PERF_PIECE_OBJ := $(BUILD)/tests/perf/perf_piece.o
 PERF_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 
 BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(FUZZ_LIB_OBJ) \
                 $(FUZZ_UTF8_OBJ) $(FUZZ_GRAPHEME_OBJ) $(FUZZ_INPUT_OBJ) \
                 $(FUZZ_GRID_OBJ) $(FUZZ_VT_OBJ) $(PTY_ORACLE_OBJ) \
                 $(PTY_HARNESS_OBJ) $(PTY_REGISTRY_OBJ) $(PTY_RUNNER_OBJ) \
-                $(PTY_DEMO_OBJ) $(PERF_UNICODE_OBJ) $(PERF_RENDER_OBJ)))
+                $(PTY_DEMO_OBJ) $(PERF_UNICODE_OBJ) $(PERF_RENDER_OBJ) \
+                $(PERF_PIECE_OBJ)))
 
 # A content mismatch makes FORCE a normal prerequisite of every object built
 # by this invocation.  The stamp recipe also removes objects not reachable
@@ -104,7 +106,7 @@ endif
 
 .DEFAULT_GOAL := all
 .PHONY: all test clean install dirs FORCE test-script test-pty fuzz \
-        unicode-tables perf perf-unicode perf-render
+        unicode-tables perf perf-unicode perf-render perf-piece
 
 all: $(BUILD)/sagitta $(BUILD)/sag
 
@@ -145,6 +147,9 @@ $(BUILD)/perf_unicode: $(PERF_CORE_OBJ) $(PERF_UNICODE_OBJ)
 $(BUILD)/perf_render: $(PERF_CORE_OBJ) $(PERF_RENDER_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_RENDER_OBJ)
 
+$(BUILD)/perf_piece: $(PERF_CORE_OBJ) $(PERF_PIECE_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_PIECE_OBJ)
+
 $(BUILD)/gen-unicode-tables: scripts/gen-unicode-tables.c | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
 
@@ -172,7 +177,10 @@ perf-unicode: $(BUILD)/perf_unicode
 perf-render: $(BUILD)/perf_render
 	$(BUILD)/perf_render
 
-perf: perf-unicode perf-render
+perf-piece: $(BUILD)/perf_piece
+	$(BUILD)/perf_piece
+
+perf: perf-unicode perf-render perf-piece
 
 unicode-tables: $(BUILD)/gen-unicode-tables
 	$< ucd/16.0.0 > src/unicode/tables.c
@@ -212,6 +220,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/sagitta
          $(FUZZ_VT_OBJ:.o=.d) $(PTY_ORACLE_OBJ:.o=.d) \
          $(PTY_HARNESS_OBJ:.o=.d) $(PTY_REGISTRY_OBJ:.o=.d) \
          $(PTY_RUNNER_OBJ:.o=.d) $(PTY_DEMO_OBJ:.o=.d) \
-         $(PERF_UNICODE_OBJ:.o=.d) $(PERF_RENDER_OBJ:.o=.d)
+         $(PERF_UNICODE_OBJ:.o=.d) $(PERF_RENDER_OBJ:.o=.d) \
+         $(PERF_PIECE_OBJ:.o=.d)
 
 FORCE:
