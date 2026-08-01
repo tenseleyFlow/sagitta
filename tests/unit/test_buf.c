@@ -1,0 +1,31 @@
+#include "harness.h"
+
+#include "util/buf.h"
+
+void test_bytebuf(void)
+{
+    Bytebuf buf;
+
+    bytebuf_init(&buf);
+    bytebuf_printf(&buf, "%s:%d", "value", 42);
+    SAG_ASSERT_EQ_U64(buf.len, 8U);
+    SAG_ASSERT_EQ_MEM(buf.data, "value:42", 8U);
+    SAG_ASSERT(buf.cap >= buf.len + 1U);
+    bytebuf_free(&buf);
+    SAG_ASSERT_NULL(buf.data);
+}
+
+void test_bytebuf_binary(void)
+{
+    Bytebuf buf;
+    static const u8 expected[] = {'x', 0U, 0xffU};
+
+    bytebuf_init(&buf);
+    bytebuf_push_u8(&buf, (u8)'x');
+    bytebuf_append(&buf, expected + 1U, 2U);
+    SAG_ASSERT_EQ_U64(buf.len, sizeof(expected));
+    SAG_ASSERT_EQ_MEM(buf.data, expected, sizeof(expected));
+    bytebuf_append(&buf, NULL, 0U);
+    SAG_ASSERT_EQ_U64(buf.len, sizeof(expected));
+    bytebuf_free(&buf);
+}
