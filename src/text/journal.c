@@ -14,6 +14,7 @@
 #include <unistd.h>
 
 #include "util/log.h"
+#include "text/edit.h"
 
 #define SAG_JOURNAL_VERSION 1U
 #define SAG_JOURNAL_HEADER_FIXED 36U
@@ -511,17 +512,21 @@ static bool apply_record(TextBuf *tb, u8 op, u64 off, const u8 *bytes,
                          u64 len)
 {
     u64 total = sag_textbuf_len(tb);
+    EditCtx ec;
+
+    (void)memset(&ec, 0, sizeof(ec));
+    ec.tb = tb;
 
     if (off > total) {
         return false;
     }
     if (op == SAG_JOURNAL_INS && len <= UINT64_MAX - total) {
-        sag_textbuf_insert(tb, (ByteOff){off}, bytes, len);
+        sag_edit_insert(&ec, (ByteOff){off}, bytes, len);
         return true;
     }
     if (op == SAG_JOURNAL_DEL && len <= total - off &&
         buffer_matches(tb, off, bytes, len)) {
-        sag_textbuf_delete(tb, (Span){off, off + len});
+        sag_edit_delete(&ec, (Span){off, off + len});
         return true;
     }
     return false;

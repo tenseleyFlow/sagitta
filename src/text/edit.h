@@ -14,10 +14,11 @@ typedef struct EditCtx {
     u32 win_id;
     Journal *jrnl;
     UndoTree *undo;
-    const FileMeta *meta;
+    FileMeta *meta;
 } EditCtx;
 
 void sag_edit_insert(EditCtx *ec, ByteOff at, const u8 *bytes, u64 len);
 void sag_edit_delete(EditCtx *ec, Span range);
+SagSaveErr sag_edit_save(EditCtx *ec, const char *path);
 
 #endif

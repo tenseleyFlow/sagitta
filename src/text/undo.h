@@ -128,6 +128,8 @@ typedef struct UndoTree {
     u64 bytes_live;
     u64 bytes_dead;
     u64 gen;
+    u64 root_len;
+    u64 root_hash;
     u64 bytes_max;
     u64 persist_bytes_max;
     u32 min_nodes;
