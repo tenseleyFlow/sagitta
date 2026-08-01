@@ -835,6 +835,7 @@ void ptc_suspend_resume(PtyCtx *c)
     size_t restore_len;
     const u8 *restore;
     bool fallback_sent = false;
+    bool stopped = false;
 
     if (c == NULL || !c->spawned || c->failed)
         return;
@@ -850,18 +851,12 @@ void ptc_suspend_resume(PtyCtx *c)
         bool activity = false;
 
         (void)read_available(c, &activity);
-        do {
-            result = waitpid(c->pty.pid, &status, WNOHANG | WUNTRACED);
-        } while (result < 0 && errno == EINTR);
-        if (result == c->pty.pid && WIFSTOPPED(status))
-            break;
         if (!fallback_sent && c->raw.len >= raw_before &&
             find_bytes(c->raw.data + raw_before, c->raw.len - raw_before,
                        restore, restore_len) != NULL) {
-            /* A setsid() fixture is an orphaned process group, so the
-             * default job-control stop may be discarded after Sagitta's
-             * SIGTSTP handler restores the terminal. SIGSTOP supplies the
-             * kernel stop that a real shell job controller would observe. */
+            /* A setsid() fixture is an orphaned process group, so its
+             * job-control stop may be discarded. Normalize both outcomes
+             * with SIGSTOP before accepting the observed stopped state. */
             if (kill(c->pty.pid, SIGSTOP) != 0) {
                 ptc_fail(c, "SIGSTOP child after restore: %s",
                          strerror(errno));
@@ -869,12 +864,19 @@ void ptc_suspend_resume(PtyCtx *c)
             }
             fallback_sent = true;
         }
+        do {
+            result = waitpid(c->pty.pid, &status, WNOHANG | WUNTRACED);
+        } while (result < 0 && errno == EINTR);
+        if (result == c->pty.pid && WIFSTOPPED(status))
+            stopped = true;
+        if (fallback_sent && stopped)
+            break;
         {
             struct pollfd fd = {c->pty.master, POLLIN | POLLHUP, 0};
             (void)poll(&fd, 1U, 10);
         }
     }
-    if (result != c->pty.pid || !WIFSTOPPED(status)) {
+    if (!fallback_sent || !stopped) {
         ptc_fail(c, "child did not stop after SIGTSTP");
         return;
     }
