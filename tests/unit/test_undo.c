@@ -1,6 +1,10 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "harness.h"
 
 #include <errno.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <sys/wait.h>
 #include <unistd.h>
 
@@ -414,4 +418,72 @@ void test_undo_to_root_reproduces_loaded_bytes(void)
     SAG_ASSERT_EQ_U64(sag_undo_current(f.undo), f.undo->root);
     SAG_ASSERT(!sag_undo(&f.edit));
     undo_fixture_free(&f);
+}
+
+void test_undo_save_reopens_journal_on_navigation(void)
+{
+    char state[] = "/tmp/sagitta-undo-save-XXXXXX";
+    char source[128];
+    char journal_dir[128];
+    char sagitta_dir[112];
+    FileMeta meta;
+    FileMeta recovered_meta;
+    TextBuf *tb = NULL;
+    TextBuf *recovered = NULL;
+    CursorSet cursors;
+    Cursor cursor = undo_cursor(0U, 0U, 0U);
+    UndoTree *undo;
+    EditCtx edit;
+    Journal *adopted;
+    FILE *file;
+    int count;
+
+    SAG_ASSERT_NOT_NULL(mkdtemp(state));
+    count = snprintf(source, sizeof(source), "%s/base.txt", state);
+    SAG_ASSERT(count > 0 && (size_t)count < sizeof(source));
+    file = fopen(source, "wb");
+    SAG_ASSERT_NOT_NULL(file);
+    SAG_ASSERT_EQ_U64(fwrite("base", 1U, 4U, file), 4U);
+    SAG_ASSERT_EQ_I64(fclose(file), 0);
+    SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", state, 1), 0);
+    SAG_ASSERT_EQ_U64(sag_file_load(source, &tb, &meta), SAG_LOAD_OK);
+    sag_cset_init(&cursors, cursor);
+    undo = sag_undo_new(tb);
+    edit = (EditCtx){tb, NULL, &cursors, 0U, NULL, undo, &meta};
+
+    sag_edit_insert(&edit, BYTEOFF(4U), (const u8 *)"X", 1U);
+    SAG_ASSERT_NOT_NULL(edit.jrnl);
+    SAG_ASSERT(sag_journal_ok(edit.jrnl));
+    SAG_ASSERT_EQ_U64(sag_edit_save(&edit, source), SAG_SAVE_OK);
+    SAG_ASSERT(edit.jrnl == NULL);
+    SAG_ASSERT(sag_undo_at_save_point(undo));
+
+    SAG_ASSERT(sag_undo(&edit));
+    SAG_ASSERT_NOT_NULL(edit.jrnl);
+    SAG_ASSERT(sag_journal_ok(edit.jrnl));
+    undo_assert_text(tb, (const u8 *)"base", 4U);
+    sag_journal_close(edit.jrnl);
+    edit.jrnl = NULL;
+
+    SAG_ASSERT_EQ_U64(sag_file_load(source, &recovered, &recovered_meta),
+                      SAG_LOAD_OK);
+    SAG_ASSERT(sag_journal_replay(source, recovered, &recovered_meta));
+    undo_assert_text(recovered, (const u8 *)"base", 4U);
+    adopted = sag_journal_open(source, &recovered_meta);
+    SAG_ASSERT_NOT_NULL(adopted);
+    sag_journal_discard(adopted);
+
+    sag_filemeta_dispose(&recovered_meta);
+    sag_textbuf_free(recovered);
+    sag_undo_free(undo);
+    sag_cset_free(&cursors);
+    sag_filemeta_dispose(&meta);
+    sag_textbuf_free(tb);
+    SAG_ASSERT_EQ_I64(unlink(source), 0);
+    (void)snprintf(journal_dir, sizeof(journal_dir), "%s/sagitta/journal",
+                   state);
+    (void)snprintf(sagitta_dir, sizeof(sagitta_dir), "%s/sagitta", state);
+    SAG_ASSERT_EQ_I64(rmdir(journal_dir), 0);
+    SAG_ASSERT_EQ_I64(rmdir(sagitta_dir), 0);
+    SAG_ASSERT_EQ_I64(rmdir(state), 0);
 }

@@ -127,6 +127,7 @@ void test_undo_abort_restores_content_and_single_cursor(void);
 void test_undo_restores_eight_cursor_after_snapshot(void);
 void test_undo_redo_cycles_do_not_grow_add_store(void);
 void test_undo_to_root_reproduces_loaded_bytes(void);
+void test_undo_save_reopens_journal_on_navigation(void);
 void test_undo_tree_preserves_abandoned_branch(void);
 void test_undo_tree_redo_child_tracks_most_recent_traversal(void);
 void test_undo_tree_branch_cycle_rotates_live_siblings(void);

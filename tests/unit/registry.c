@@ -130,6 +130,7 @@ const SagTest sag_tests[] = {
     T(undo_restores_eight_cursor_after_snapshot),
     T(undo_redo_cycles_do_not_grow_add_store),
     T(undo_to_root_reproduces_loaded_bytes),
+    T(undo_save_reopens_journal_on_navigation),
     T(undo_tree_preserves_abandoned_branch),
     T(undo_tree_redo_child_tracks_most_recent_traversal),
     T(undo_tree_branch_cycle_rotates_live_siblings),
