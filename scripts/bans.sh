@@ -77,6 +77,48 @@ scan "piece tree file I/O belongs to Sprint 8" \
 scan "generated edit campaigns must use xorshift64*, not libc randomness" \
     '(^|[^[:alnum:]_])rand[[:space:]]*\(|(^|[^[:alnum:]_])srand[[:space:]]*\(|time[[:space:]]*\([[:space:]]*NULL[[:space:]]*\)' \
     "$deterministic_fuzz_files"
+scan "clipboard subprocesses must never invoke a shell" \
+    '(^|[^[:alnum:]_])(popen|system)[[:space:]]*\(' "$source_files"
+scan "OSC 52 clipboard queries are forbidden" \
+    '52;[^[:space:]]*\?' "$source_files"
+
+register_set_hits=$tmp/register-set-hits
+: >"$register_set_hits"
+while IFS= read -r file; do
+    case ${file#"$repo_dir"/} in
+        src/text/register.c|src/text/register.h) continue ;;
+    esac
+    grep -nE -e '(^|[^[:alnum:]_])sag_reg_set[[:space:]]*\(' \
+        "$file" 2>/dev/null |
+        sed "s|^|${file#"$repo_dir"/}:|" >>"$register_set_hits" || :
+done <"$source_files"
+if [ -s "$register_set_hits" ]; then
+    echo "ban: register writes must use the yank/delete routing choke point" \
+        >>"$hits"
+    cat "$register_set_hits" >>"$hits"
+fi
+
+register=$repo_dir/src/text/register.c
+if grep -nE '(unicode/width\.h|sag_(cluster_)?width)' \
+        "$register" >"$tmp/register-width-hits" 2>/dev/null; then
+    echo "ban: register paste width calculations belong in src/unicode" \
+        >>"$hits"
+    sed 's|^|src/text/register.c:|' "$tmp/register-width-hits" >>"$hits"
+fi
+if grep -nE '(column|landed|content_column)\.v' \
+        "$register" >"$tmp/register-column-math-hits" 2>/dev/null; then
+    echo "ban: register paste must not perform cell-column arithmetic" \
+        >>"$hits"
+    sed 's|^|src/text/register.c:|' \
+        "$tmp/register-column-math-hits" >>"$hits"
+fi
+for required in sag_off_to_ccol sag_ccol_to_off_padded \
+                sag_ccol_shortfall; do
+    if ! grep -F "$required" "$register" >/dev/null 2>&1; then
+        echo "ban: register paste must route column math through $required" \
+            >>"$hits"
+    fi
+done
 
 if grep -nE 'sag_textbuf_|piece\.h' \
         "$repo_dir/tests/fuzz/oracle.c" >"$tmp/oracle-hits" 2>/dev/null; then

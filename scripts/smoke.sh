@@ -87,6 +87,9 @@ echo "smoke: modules ok"
 run_capture "$bin" --help
 expect_rc 0 help
 expect_stdout_contains Usage help
+expect_stdout_contains "SAG_CLIPBOARD" help
+expect_stdout_contains "SAG_OSC52" help
+expect_stdout_contains "plain" help
 echo "smoke: help ok"
 
 run_capture "$bin" --no-such-flag

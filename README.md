@@ -52,6 +52,18 @@ backup—never silently corrupted.
 - `SAG_PROBE_TIMEOUT_MS` changes the default 50 ms probe deadline for
   high-latency links. Probing races startup and never delays first paint.
 - `SAG_TRUECOLOR=0` or `1` overrides truecolor environment detection.
+- `SAG_CLIPBOARD=auto|osc52|wl|xclip|xsel|pb|none` selects the system
+  clipboard backend. `cmd:<write-argv>[|<read-argv>]` runs a custom command
+  directly without a shell.
+- `SAG_OSC52=off|plain|tmux|screen` controls OSC 52 wrapping. `plain` is the
+  escape hatch when a multiplexer consumes OSC 52 itself. OSC 52 is
+  write-only; clipboard reads use a local subprocess.
+- For tmux passthrough, use `set -g allow-passthrough on` on tmux 3.3 or
+  newer. If tmux owns clipboard forwarding through `set -g set-clipboard on`
+  instead, use `SAG_OSC52=plain` so tmux consumes the unwrapped sequence.
+- `SAG_CLIPBOARD_TARGET=c|p|cp` selects the OSC 52 target,
+  `SAG_OSC52_MAX` caps encoded payload size at 100,000 bytes by default, and
+  `SAG_CLIPBOARD_TIMEOUT_MS` changes the 1,000 ms subprocess deadline.
 
 The terminal lifecycle is terminfo-free. Raw mode restoration is armed for
 normal close, `atexit`, internal-error reports, and fatal signals.

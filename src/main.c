@@ -24,7 +24,14 @@ static const char help_text[] =
     "  SAG_LOG_LEVEL    Set debug, info, warn, or error logging.\n"
     "  SAG_TTY_PROBE    Set 0 to disable terminal capability probes.\n"
     "  SAG_PROBE_TIMEOUT_MS  Override the 50 ms probe deadline.\n"
-    "  SAG_TRUECOLOR    Set 0 or 1 to override truecolor detection.\n";
+    "  SAG_TRUECOLOR    Set 0 or 1 to override truecolor detection.\n"
+    "  SAG_CLIPBOARD    Set auto, osc52, wl, xclip, xsel, pb, none,\n"
+    "                   or cmd:<write-argv>[|<read-argv>].\n"
+    "  SAG_CLIPBOARD_TARGET  Set OSC 52 target c, p, or cp.\n"
+    "  SAG_CLIPBOARD_TIMEOUT_MS  Set subprocess timeout (default 1000).\n"
+    "  SAG_OSC52        Set off, plain, tmux, or screen; plain bypasses\n"
+    "                   multiplexer detection.\n"
+    "  SAG_OSC52_MAX    Set maximum encoded OSC 52 bytes (default 100000).\n";
 
 static void print_version(void)
 {
