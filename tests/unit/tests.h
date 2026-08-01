@@ -51,6 +51,7 @@ void test_clipboard_override_matrix(void);
 void test_clipboard_write_defers_backend_detection(void);
 void test_clipboard_custom_write_coalesces_binary(void);
 void test_clipboard_custom_read_binary_and_cap(void);
+void test_clipboard_read_failures_are_reported(void);
 void test_clipboard_osc52_flushes_after_esu(void);
 void test_clipboard_nonexit_100_writes_are_nonblocking(void);
 void test_clipboard_epipe_demotes_failed_backend(void);

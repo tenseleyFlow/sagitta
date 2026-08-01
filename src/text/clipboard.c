@@ -973,10 +973,19 @@ bool sag_clip_read(RegVal *out, u8 target)
         return false;
     clip_init();
     backend = sag_clip_detect_read();
-    if (backend == SAG_CLIP_NONE || backend == SAG_CLIP_OSC52 ||
-        !clip_command(&cmd, backend, true, target == '*' ? '*' : '+'))
+    if (backend == SAG_CLIP_NONE || backend == SAG_CLIP_OSC52) {
+        sag_log(SAG_LOG_WARN,
+                "clipboard: no readable system clipboard backend");
         return false;
+    }
+    if (!clip_command(&cmd, backend, true, target == '*' ? '*' : '+')) {
+        sag_log(SAG_LOG_WARN,
+                "clipboard: selected backend has no read command");
+        return false;
+    }
     if (!clip_spawn_reader(&cmd, &fd, &pid)) {
+        sag_log(SAG_LOG_WARN, "clipboard: cannot start reader: %s",
+                strerror(errno));
         clip_cmd_free(&cmd);
         return false;
     }
@@ -991,6 +1000,9 @@ bool sag_clip_read(RegVal *out, u8 target)
         int timeout;
 
         if (now >= deadline) {
+            sag_log(SAG_LOG_WARN,
+                    "clipboard: reader timed out after %lld ms",
+                    (long long)sag_clip.timeout_ms);
             failed = true;
             break;
         }
@@ -1002,6 +1014,8 @@ bool sag_clip_read(RegVal *out, u8 target)
             int ready = poll(&pfd, 1U, timeout);
 
             if (ready < 0 && errno != EINTR) {
+                sag_log(SAG_LOG_WARN, "clipboard: reader poll failed: %s",
+                        strerror(errno));
                 failed = true;
                 break;
             }
@@ -1013,6 +1027,9 @@ bool sag_clip_read(RegVal *out, u8 target)
 
                     if (n > 0) {
                         if ((u64)n > sag_clip.read_max - bytes.len) {
+                            sag_log(SAG_LOG_WARN,
+                                    "clipboard: read exceeds %llu-byte limit",
+                                    (unsigned long long)sag_clip.read_max);
                             failed = true;
                             break;
                         }
@@ -1027,6 +1044,9 @@ bool sag_clip_read(RegVal *out, u8 target)
                     } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
                         break;
                     } else {
+                        sag_log(SAG_LOG_WARN,
+                                "clipboard: reader pipe failed: %s",
+                                strerror(errno));
                         failed = true;
                         break;
                     }
@@ -1039,6 +1059,8 @@ bool sag_clip_read(RegVal *out, u8 target)
             if (got == pid)
                 reaped = true;
             else if (got < 0 && errno != EINTR) {
+                sag_log(SAG_LOG_WARN, "clipboard: reader wait failed: %s",
+                        strerror(errno));
                 failed = true;
                 reaped = errno == ECHILD;
             }
@@ -1057,6 +1079,19 @@ bool sag_clip_read(RegVal *out, u8 target)
         out->t_wall = (i64)time(NULL);
         bytebuf_free(&bytes);
         return true;
+    }
+    if (!failed) {
+        if (WIFEXITED(status))
+            sag_log(SAG_LOG_WARN,
+                    "clipboard: reader exited with status %d",
+                    WEXITSTATUS(status));
+        else if (WIFSIGNALED(status))
+            sag_log(SAG_LOG_WARN,
+                    "clipboard: reader terminated by signal %d",
+                    WTERMSIG(status));
+        else
+            sag_log(SAG_LOG_WARN,
+                    "clipboard: reader did not exit cleanly");
     }
     bytebuf_free(&bytes);
     return false;

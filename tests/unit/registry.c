@@ -54,6 +54,7 @@ const SagTest sag_tests[] = {
     T(clipboard_write_defers_backend_detection),
     T(clipboard_custom_write_coalesces_binary),
     T(clipboard_custom_read_binary_and_cap),
+    T(clipboard_read_failures_are_reported),
     T(clipboard_osc52_flushes_after_esu),
     T(clipboard_nonexit_100_writes_are_nonblocking),
     T(clipboard_epipe_demotes_failed_backend),

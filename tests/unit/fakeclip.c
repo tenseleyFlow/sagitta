@@ -105,6 +105,10 @@ int main(int argc, char **argv)
     }
     if (strcmp(mode, "exit") == 0)
         return 17;
+    if (strcmp(mode, "hang") == 0) {
+        for (;;)
+            (void)pause();
+    }
     if (strcmp(mode, "read") == 0) {
         fd = open(path, O_RDONLY);
         if (fd < 0)

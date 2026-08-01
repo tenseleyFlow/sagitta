@@ -446,11 +446,65 @@ void test_clipboard_custom_read_binary_and_cap(void)
     SAG_ASSERT_EQ_U64(out.bytes.len, sizeof(payload));
     SAG_ASSERT_EQ_MEM(out.bytes.data, payload, sizeof(payload));
     sag_clip_set_read_max(sizeof(payload) - 1U);
+    sag_test_capture_log();
     SAG_ASSERT(!sag_clip_read(&out, '*'));
+    SAG_ASSERT(sag_test_log_contains(SAG_LOG_WARN, "exceeds"));
     SAG_ASSERT_EQ_U64(out.bytes.len, sizeof(payload));
     sag_regval_free(&out);
     sag_clip_shutdown();
     clip_fixture_free(&f);
+    clip_env_restore(&clipboard);
+}
+
+void test_clipboard_read_failures_are_reported(void)
+{
+    static const u8 keep[] = {(u8)'k', 0U, (u8)'p'};
+    ClipEnv clipboard;
+    ClipEnv timeout;
+    ClipFixture f;
+    RegVal out;
+    char command[PATH_MAX * 4U];
+    int n;
+
+    clip_env_save(&clipboard, "SAG_CLIPBOARD");
+    clip_env_save(&timeout, "SAG_CLIPBOARD_TIMEOUT_MS");
+    clip_fixture_init(&f);
+    clip_value(&out, keep, sizeof(keep));
+
+    SAG_ASSERT_EQ_I64(setenv("SAG_CLIPBOARD", "none", 1), 0);
+    sag_clip_reset();
+    sag_test_capture_log();
+    SAG_ASSERT(!sag_clip_read(&out, '+'));
+    SAG_ASSERT(sag_test_log_contains(SAG_LOG_WARN, "no readable"));
+    SAG_ASSERT_EQ_MEM(out.bytes.data, keep, sizeof(keep));
+
+    n = snprintf(command, sizeof(command), "cmd:%s %s write|%s %s exit",
+                 f.fake, f.output, f.fake, f.input);
+    if (n < 0 || (size_t)n >= sizeof(command))
+        SAG_BUG("clipboard exit reader command overflow");
+    SAG_ASSERT_EQ_I64(setenv("SAG_CLIPBOARD", command, 1), 0);
+    sag_clip_reset();
+    sag_test_capture_log();
+    SAG_ASSERT(!sag_clip_read(&out, '+'));
+    SAG_ASSERT(sag_test_log_contains(SAG_LOG_WARN, "status 17"));
+    SAG_ASSERT_EQ_MEM(out.bytes.data, keep, sizeof(keep));
+
+    n = snprintf(command, sizeof(command), "cmd:%s %s write|%s %s hang",
+                 f.fake, f.output, f.fake, f.input);
+    if (n < 0 || (size_t)n >= sizeof(command))
+        SAG_BUG("clipboard hanging reader command overflow");
+    SAG_ASSERT_EQ_I64(setenv("SAG_CLIPBOARD", command, 1), 0);
+    SAG_ASSERT_EQ_I64(setenv("SAG_CLIPBOARD_TIMEOUT_MS", "10", 1), 0);
+    sag_clip_reset();
+    sag_test_capture_log();
+    SAG_ASSERT(!sag_clip_read(&out, '+'));
+    SAG_ASSERT(sag_test_log_contains(SAG_LOG_WARN, "timed out"));
+    SAG_ASSERT_EQ_MEM(out.bytes.data, keep, sizeof(keep));
+
+    sag_regval_free(&out);
+    sag_clip_shutdown();
+    clip_fixture_free(&f);
+    clip_env_restore(&timeout);
     clip_env_restore(&clipboard);
 }
 
