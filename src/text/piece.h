@@ -90,7 +90,6 @@ enum { SAG_GRAPHEME_PENDING_MAX = 2 };
 typedef struct {
     SagGraphemePendingEdit edits[SAG_GRAPHEME_PENDING_MAX];
     u8 len;
-    bool rebuild_required;
 } SagGraphemePendingJournal;
 
 typedef struct {
@@ -101,7 +100,9 @@ typedef struct {
     size_t motion_len;
     size_t motion_cap;
     u64 gen;
-    /* Adjacent after-state snapshots make a short edit burst replayable. */
+    bool simple_ascii;             /* one printable-ASCII line */
+    bool simple_ascii_direct;      /* formulas supersede stale arrays */
+    /* Adjacent after-state snapshots are replayed before this queue fills. */
     SagGraphemePendingJournal pending;
 } SagGraphemeIndex;
 

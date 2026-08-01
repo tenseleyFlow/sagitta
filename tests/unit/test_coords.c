@@ -373,11 +373,11 @@ void test_coords_sparse_index_edit_invalidation(void)
     u8 two_lines[261];
     u8 long_lines[1401];
     u8 deferred[700];
+    u8 *large_ascii;
     static const u8 accent[] = {0xCCU, 0x81U};
     static const u8 split[] = {'\n', 'z', 'z'};
     static const u8 x = 'x';
     static const u8 y = 'y';
-    static const u8 z = 'z';
     static const u8 split_cluster[] = {
         'a', 0xCCU, 0x81U, 0xCCU, 0x81U, 0xCCU, 0x81U
     };
@@ -492,15 +492,38 @@ void test_coords_sparse_index_edit_invalidation(void)
     sag_textbuf_free(tb);
 
     tb = sag_textbuf_from_bytes(deferred, sizeof(deferred));
-    sag_textbuf_insert(tb, BYTEOFF(10U), &x, 1U);
-    sag_textbuf_insert(tb, BYTEOFF(20U), &y, 1U);
-    sag_textbuf_insert(tb, BYTEOFF(30U), &z, 1U);
-    SAG_ASSERT_EQ_U64(tb->graphemes.pending.len, 0U);
-    SAG_ASSERT(tb->graphemes.pending.rebuild_required);
+    for (u64 edit_at = 10U; edit_at <= 90U; edit_at += 10U) {
+        sag_textbuf_insert(tb, BYTEOFF(edit_at), &x, 1U);
+        sag_textbuf_check(tb);
+    }
+    SAG_ASSERT_EQ_U64(tb->graphemes.pending.len, 1U);
+    SAG_ASSERT_EQ_U64(tb->graphemes.gen, tb->gen - 1U);
     line = sag_textbuf_line_span(tb, LINENO(0U));
-    SAG_ASSERT_EQ_U64(sag_off_to_gcol(tb, line, BYTEOFF(703U)).v, 703U);
+    SAG_ASSERT_EQ_U64(sag_off_to_gcol(tb, line, BYTEOFF(709U)).v, 709U);
     SAG_ASSERT_EQ_U64(tb->graphemes.gen, tb->gen);
-    SAG_ASSERT(!tb->graphemes.pending.rebuild_required);
+    SAG_ASSERT_EQ_U64(tb->graphemes.pending.len, 0U);
+    sag_textbuf_free(tb);
+
+    large_ascii = sag_xmalloc(64U * 1024U);
+    memset(large_ascii, 'a', 64U * 1024U);
+    tb = sag_textbuf_from_owned_bytes(large_ascii, 64U * 1024U);
+    SAG_ASSERT(tb->graphemes.simple_ascii);
+    sag_textbuf_insert(tb, BYTEOFF(10U), &x, 1U);
+    SAG_ASSERT(tb->graphemes.simple_ascii_direct);
+    sag_textbuf_delete(tb, (Span){0U, 2048U});
+    sag_textbuf_insert(tb, BYTEOFF(20U), &x, 1U);
+    SAG_ASSERT(tb->graphemes.simple_ascii_direct);
+    line = sag_textbuf_line_span(tb, LINENO(0U));
+    SAG_ASSERT_EQ_U64(sag_off_to_gcol(tb, line, BYTEOFF(63490U)).v,
+                      63490U);
+    sag_textbuf_insert(tb, BYTEOFF(32U * 1024U), accent,
+                       sizeof(accent));
+    SAG_ASSERT(!tb->graphemes.simple_ascii);
+    SAG_ASSERT_EQ_U64(tb->graphemes.pending.len, 1U);
+    line = sag_textbuf_line_span(tb, LINENO(0U));
+    SAG_ASSERT_EQ_U64(sag_off_to_gcol(tb, line,
+                                     BYTEOFF(63492U)).v,
+                      63490U);
     sag_textbuf_free(tb);
 
     tb = sag_textbuf_from_bytes(split_cluster, sizeof(split_cluster));

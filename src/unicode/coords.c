@@ -222,7 +222,8 @@ static u64 line_content_end(const TextBuf *tb, Span line)
 
 enum {
     SAG_GCOL_CHECKPOINT_STRIDE = 64,
-    SAG_MOTION_CHECKPOINT_STRIDE = 512
+    SAG_MOTION_CHECKPOINT_STRIDE = 512,
+    SAG_SIMPLE_ASCII_BYPASS_BYTES = 64 * 1024
 };
 
 typedef struct {
@@ -371,6 +372,19 @@ static void index_scan(const TextBuf *tb, u64 start, u64 end,
     index_finalize_cluster(builder, state);
 }
 
+static bool range_is_simple_ascii(const TextBuf *tb, u64 start, u64 end)
+{
+    TextReader reader;
+    u8 byte;
+
+    reader_init(&reader, tb, start, end);
+    while (reader_get(&reader, &byte)) {
+        if (byte < 0x20U || byte >= 0x7fU)
+            return false;
+    }
+    return true;
+}
+
 static void pending_clear(TextBuf *tb)
 {
     SagGraphemePendingJournal *pending = &tb->graphemes.pending;
@@ -396,6 +410,9 @@ static void coords_index_rebuild(TextBuf *tb)
     builder.next_motion = (u64)SAG_MOTION_CHECKPOINT_STRIDE;
     index_scan(tb, 0U, sag_textbuf_len(tb), &state, &builder);
     index->gen = tb->gen;
+    index->simple_ascii = range_is_simple_ascii(
+        tb, 0U, sag_textbuf_len(tb));
+    index->simple_ascii_direct = false;
     pending_clear(tb);
 }
 
@@ -499,6 +516,42 @@ static u64 next_motion_threshold(u64 off)
     u64 add = remainder == 0U ? stride : stride - remainder;
 
     return off > UINT64_MAX - add ? UINT64_MAX : off + add;
+}
+
+static void coords_index_restore_simple_ascii(SagGraphemeIndex *index,
+                                              u64 len, u64 gen)
+{
+    SagGbState gb;
+    u64 off;
+
+    index->len = 0U;
+    index->motion_len = 0U;
+    for (off = (u64)SAG_GCOL_CHECKPOINT_STRIDE; off < len;) {
+        index_push(index, off, off);
+        if (off > UINT64_MAX - (u64)SAG_GCOL_CHECKPOINT_STRIDE)
+            break;
+        off += (u64)SAG_GCOL_CHECKPOINT_STRIDE;
+    }
+    sag_gb_init(&gb);
+    (void)sag_gb_boundary(&gb, (u32)'x');
+    for (off = (u64)SAG_MOTION_CHECKPOINT_STRIDE; off <= len;
+         off += (u64)SAG_MOTION_CHECKPOINT_STRIDE) {
+        SagGraphemeMotionCheckpoint checkpoint;
+
+        checkpoint.off = off;
+        checkpoint.cluster_start = off - 1U;
+        checkpoint.gcol = off - 1U;
+        checkpoint.prev_gcb = gb.prev_gcb;
+        checkpoint.flags = gb.flags;
+        checkpoint.have_cluster = true;
+        checkpoint.after_lf = false;
+        motion_index_push(index, checkpoint);
+        if (off > UINT64_MAX - (u64)SAG_MOTION_CHECKPOINT_STRIDE)
+            break;
+    }
+    index->gen = gen;
+    index->simple_ascii = true;
+    index->simple_ascii_direct = false;
 }
 
 static void coords_index_apply_edit(SagGraphemeIndex *old_index,
@@ -673,56 +726,15 @@ static void coords_index_apply_edit(SagGraphemeIndex *old_index,
     old_index->gen = next.gen;
 }
 
-void sag_coords_index_note_edit(TextBuf *tb, Span old_range,
-                                u64 inserted_len, Span old_affected,
-                                u64 old_gen)
-{
-    SagGraphemeIndex *index;
-    SagGraphemePendingJournal *pending;
-    SagGraphemePendingEdit *edit;
-    u64 expected_gen;
-
-    if (tb == NULL)
-        SAG_BUG("sag_coords_index_note_edit: NULL buffer");
-    index = &tb->graphemes;
-    pending = &index->pending;
-    if (pending->rebuild_required)
-        return;
-    if (old_range.lo > old_range.hi ||
-        old_affected.lo > old_range.lo ||
-        old_affected.hi < old_range.hi)
-        SAG_BUG("sag_coords_index_note_edit: invalid old range");
-    expected_gen = pending->len == 0U
-                       ? index->gen
-                       : pending->edits[pending->len - 1U].new_gen;
-    if (expected_gen != old_gen || tb->gen != old_gen + 1U) {
-        pending_clear(tb);
-        pending->rebuild_required = true;
-        return;
-    }
-    if (pending->len == SAG_GRAPHEME_PENDING_MAX) {
-        pending_clear(tb);
-        pending->rebuild_required = true;
-        return;
-    }
-    edit = &pending->edits[pending->len++];
-    edit->range = old_range;
-    edit->affected = old_affected;
-    edit->inserted_len = inserted_len;
-    edit->old_gen = old_gen;
-    edit->new_gen = tb->gen;
-    edit->after = sag_textbuf_snap(tb);
-}
-
-static void coords_index_apply_pending(TextBuf *tb)
+static void coords_index_apply_pending(TextBuf *tb, u64 through_gen)
 {
     SagGraphemeIndex *index = &tb->graphemes;
     SagGraphemePendingJournal *pending = &index->pending;
     u8 i;
 
-    if (pending->len == 0U || pending->rebuild_required ||
+    if (pending->len == 0U ||
         pending->edits[0].old_gen != index->gen ||
-        pending->edits[pending->len - 1U].new_gen != tb->gen)
+        pending->edits[pending->len - 1U].new_gen != through_gen)
         SAG_BUG("grapheme index pending journal is inconsistent");
     for (i = 0U; i < pending->len; i++) {
         SagGraphemePendingEdit *edit = &pending->edits[i];
@@ -739,16 +751,80 @@ static void coords_index_apply_pending(TextBuf *tb)
     memset(pending, 0, sizeof(*pending));
 }
 
+void sag_coords_index_note_edit(TextBuf *tb, Span old_range,
+                                u64 inserted_len, Span old_affected,
+                                u64 old_gen)
+{
+    SagGraphemeIndex *index;
+    SagGraphemePendingJournal *pending;
+    SagGraphemePendingEdit *edit;
+    u64 expected_gen;
+
+    if (tb == NULL)
+        SAG_BUG("sag_coords_index_note_edit: NULL buffer");
+    index = &tb->graphemes;
+    pending = &index->pending;
+    if (old_range.lo > old_range.hi ||
+        old_affected.lo > old_range.lo ||
+        old_affected.hi < old_range.hi)
+        SAG_BUG("sag_coords_index_note_edit: invalid old range");
+    if (index->simple_ascii) {
+        u64 old_len = sag_textbuf_len(tb) - inserted_len +
+                      (old_range.hi - old_range.lo);
+        u64 inserted_hi = old_range.lo + inserted_len;
+        bool inserted_simple;
+
+        if (inserted_hi < old_range.lo ||
+            inserted_hi > sag_textbuf_len(tb))
+            SAG_BUG("simple ASCII edit range overflow");
+        inserted_simple = range_is_simple_ascii(tb, old_range.lo,
+                                                inserted_hi);
+        if (index->simple_ascii_direct && pending->len != 0U)
+            SAG_BUG("direct simple ASCII index has pending edits");
+        if (inserted_simple && pending->len == 0U &&
+            (index->simple_ascii_direct ||
+             old_len >= (u64)SAG_SIMPLE_ASCII_BYPASS_BYTES)) {
+            index->gen = tb->gen;
+            index->simple_ascii_direct = true;
+            return;
+        }
+        if (!inserted_simple) {
+            if (pending->len == 0U && index->gen == old_gen &&
+                index->simple_ascii_direct)
+                coords_index_restore_simple_ascii(index, old_len,
+                                                  old_gen);
+            index->simple_ascii = false;
+            index->simple_ascii_direct = false;
+        }
+    }
+    expected_gen = pending->len == 0U
+                       ? index->gen
+                       : pending->edits[pending->len - 1U].new_gen;
+    if (expected_gen != old_gen || tb->gen != old_gen + 1U)
+        SAG_BUG("sag_coords_index_note_edit: generation mismatch");
+    if (pending->len == SAG_GRAPHEME_PENDING_MAX) {
+        coords_index_apply_pending(tb, old_gen);
+        if (index->gen != old_gen)
+            SAG_BUG("sag_coords_index_note_edit: replay ended at wrong generation");
+    }
+    edit = &pending->edits[pending->len++];
+    edit->range = old_range;
+    edit->affected = old_affected;
+    edit->inserted_len = inserted_len;
+    edit->old_gen = old_gen;
+    edit->new_gen = tb->gen;
+    edit->after = sag_textbuf_snap(tb);
+}
+
 static const SagGraphemeIndex *coords_index(const TextBuf *tb)
 {
     if (tb->graphemes.gen != tb->gen) {
         TextBuf *mutable = (TextBuf *)tb;
 
-        if (!tb->graphemes.pending.rebuild_required &&
-            tb->graphemes.pending.len != 0U)
-            coords_index_apply_pending(mutable);
+        if (tb->graphemes.pending.len != 0U)
+            coords_index_apply_pending(mutable, tb->gen);
         else
-            coords_index_rebuild(mutable);
+            SAG_BUG("grapheme index generation changed without an edit");
     }
     return &tb->graphemes;
 }
@@ -823,6 +899,23 @@ static u64 cluster_cells(const StreamCluster *cluster, u64 cells, u32 tabw)
     return (u64)tabw - cells % (u64)tabw;
 }
 
+static bool coords_simple_ascii(const TextBuf *tb)
+{
+    return tb->graphemes.simple_ascii &&
+           tb->graphemes.gen == tb->gen;
+}
+
+static ByteOff simple_col_to_off(Span line, u64 col)
+{
+    u64 len = line.hi - line.lo;
+
+    if (col <= len)
+        return BYTEOFF(line.lo + col);
+    if (len == 0U)
+        return BYTEOFF(line.hi);
+    return BYTEOFF(line.hi - 1U);
+}
+
 GCol sag_off_to_gcol(const TextBuf *tb, Span line, ByteOff pos)
 {
     const SagGraphemeIndex *index;
@@ -839,6 +932,8 @@ GCol sag_off_to_gcol(const TextBuf *tb, Span line, ByteOff pos)
 
     require_span(tb, line);
     require_pos(line, pos);
+    if (coords_simple_ascii(tb))
+        return (GCol){pos.v - line.lo};
     end = line_content_end(tb, line);
     if (pos.v > end)
         pos.v = end;
@@ -905,6 +1000,8 @@ ByteOff sag_gcol_to_off(const TextBuf *tb, Span line, GCol g)
     bool have_cluster = false;
 
     require_span(tb, line);
+    if (coords_simple_ascii(tb))
+        return simple_col_to_off(line, g.v);
     end = line_content_end(tb, line);
     index = coords_index(tb);
     checkpoint = index_before_gcol(index, line, end, g.v);
@@ -934,6 +1031,8 @@ CharCol sag_off_to_charcol(const TextBuf *tb, Span line, ByteOff pos)
 
     require_span(tb, line);
     require_pos(line, pos);
+    if (coords_simple_ascii(tb))
+        return (CharCol){pos.v - line.lo};
     end = line_content_end(tb, line);
     if (pos.v > end)
         pos.v = end;
@@ -956,6 +1055,8 @@ CCol sag_off_to_ccol(const TextBuf *tb, Span line, ByteOff pos, u32 tabw)
 
     require_span(tb, line);
     require_pos(line, pos);
+    if (coords_simple_ascii(tb))
+        return (CCol){pos.v - line.lo};
     end = line_content_end(tb, line);
     if (pos.v > end)
         pos.v = end;
@@ -979,6 +1080,8 @@ ByteOff sag_ccol_to_off(const TextBuf *tb, Span line, CCol c, u32 tabw)
     bool have_cluster = false;
 
     require_span(tb, line);
+    if (coords_simple_ascii(tb))
+        return simple_col_to_off(line, c.v);
     end = line_content_end(tb, line);
     cluster_reader_init(&reader, tb, line.lo, end);
     while (cluster_next(&reader, &cluster, true)) {
@@ -1025,6 +1128,8 @@ ByteOff sag_grapheme_next(const TextBuf *tb, ByteOff pos)
     len = sag_textbuf_len(tb);
     if (pos.v >= len)
         return BYTEOFF(len);
+    if (coords_simple_ascii(tb))
+        return BYTEOFF(pos.v + 1U);
     span = motion_span(tb, pos, false);
     cluster_reader_init(&reader, tb, span.lo, span.hi);
     while (cluster_next(&reader, &cluster, false)) {
@@ -1049,6 +1154,8 @@ ByteOff sag_grapheme_next_boundary(const TextBuf *tb, ByteOff pos)
     len = sag_textbuf_len(tb);
     if (pos.v >= len)
         return BYTEOFF(len);
+    if (coords_simple_ascii(tb))
+        return BYTEOFF(pos.v + 1U);
     span = motion_span(tb, pos, false);
     cluster_reader_init(&reader, tb, pos.v, span.hi);
     if (!cluster_next(&reader, &cluster, false))
@@ -1072,6 +1179,8 @@ ByteOff sag_grapheme_prev(const TextBuf *tb, ByteOff pos)
         pos.v = len;
     if (pos.v == 0U)
         return BYTEOFF(0U);
+    if (coords_simple_ascii(tb))
+        return BYTEOFF(pos.v - 1U);
     span = motion_span(tb, pos, true);
     previous = span.lo;
     cluster_reader_init(&reader, tb, span.lo, span.hi);
@@ -1113,6 +1222,8 @@ ByteOff sag_grapheme_prev_boundary(const TextBuf *tb, ByteOff pos)
         pos.v = len;
     if (pos.v == 0U)
         return BYTEOFF(0U);
+    if (coords_simple_ascii(tb))
+        return BYTEOFF(pos.v - 1U);
     span = motion_span(tb, pos, true);
     reader_init(&reader, tb, pos.v - 1U, pos.v);
     if (!reader_get(&reader, &previous))
@@ -1169,6 +1280,8 @@ bool sag_is_grapheme_boundary(const TextBuf *tb, ByteOff pos)
     len = sag_textbuf_len(tb);
     if (pos.v > len)
         return false;
+    if (coords_simple_ascii(tb))
+        return true;
     if (pos.v == 0U || pos.v == len)
         return true;
     span = motion_span(tb, pos, false);
