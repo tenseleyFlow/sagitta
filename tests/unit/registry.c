@@ -264,6 +264,8 @@ const SagTest sag_tests[] = {
     T(input_seed_and_cap),
     T(input_large_streaming_paste),
     T(input_hostile_strings),
+    T(input_osc52_reply_quarantined),
+    T(input_osc52_reply_over_cap_quarantined),
     T(grid_cell_layout),
     T(grid_put_zeroes_inline_tail),
     T(grid_interns_long_cluster),

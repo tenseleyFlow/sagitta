@@ -261,6 +261,8 @@ void test_input_random_progress(void);
 void test_input_seed_and_cap(void);
 void test_input_large_streaming_paste(void);
 void test_input_hostile_strings(void);
+void test_input_osc52_reply_quarantined(void);
+void test_input_osc52_reply_over_cap_quarantined(void);
 void test_grid_cell_layout(void);
 void test_grid_put_zeroes_inline_tail(void);
 void test_grid_interns_long_cluster(void);
