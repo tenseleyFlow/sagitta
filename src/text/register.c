@@ -273,7 +273,8 @@ static void append_block(RegVal *dst, const RegVal *src)
 {
     Bytebuf rebuilt;
     SagRegRowVec rows = {NULL, 0U, 0U};
-    u32 result_width = dst->width > src->width ? dst->width : src->width;
+    u32 result_width = (u32)sag_ccol_max((CCol){dst->width},
+                                         (CCol){src->width}).v;
     bool result_ragged = dst->ragged || src->ragged;
     const RegVal *parts[2] = {dst, src};
     size_t p;
@@ -292,10 +293,11 @@ static void append_block(RegVal *dst, const RegVal *src)
             bytebuf_append(&rebuilt, part->bytes.data + row.lo,
                            (size_t)(row.hi - row.lo));
             if (!part->ragged) {
-                u32 padded = part->width;
-                while (padded < result_width) {
+                u64 padding = sag_ccol_shortfall((CCol){result_width},
+                                                  (CCol){part->width});
+                while (padding != 0U) {
                     bytebuf_push_u8(&rebuilt, (u8)' ');
-                    padded++;
+                    padding--;
                 }
             }
             next.hi = rebuilt.len;

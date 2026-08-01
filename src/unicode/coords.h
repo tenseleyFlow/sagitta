@@ -25,6 +25,7 @@ ByteOff sag_ccol_to_off(const TextBuf *tb, Span line, CCol c, u32 tabw);
  * real padding spaces needed after round-left. */
 ByteOff sag_ccol_to_off_padded(const TextBuf *tb, Span line, CCol c,
                                u32 tabw);
+CCol sag_ccol_max(CCol left, CCol right);
 u64 sag_ccol_shortfall(CCol target, CCol landed);
 
 ByteOff sag_grapheme_next(const TextBuf *tb, ByteOff pos);

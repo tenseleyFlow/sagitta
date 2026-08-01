@@ -1205,6 +1205,11 @@ u64 sag_ccol_shortfall(CCol target, CCol landed)
     return target.v - landed.v;
 }
 
+CCol sag_ccol_max(CCol left, CCol right)
+{
+    return left.v >= right.v ? left : right;
+}
+
 static Span motion_span(const TextBuf *tb, ByteOff pos, bool previous)
 {
     LineNo line = sag_textbuf_line_of(tb, pos);
