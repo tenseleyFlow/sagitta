@@ -4,6 +4,7 @@
 #include <string.h>
 #include <time.h>
 
+#include "text/clipboard.h"
 #include "unicode/coords.h"
 #include "util/base.h"
 #include "util/log.h"
@@ -172,6 +173,15 @@ void sag_reg_free(Registers *r)
     (void)memset(r, 0, sizeof(*r));
 }
 
+void sag_reg_bind_context(Registers *r, const UndoTree *undo,
+                          const FileMeta *meta)
+{
+    if (r == NULL)
+        SAG_BUG("sag_reg_bind_context: NULL register file");
+    r->bound_undo = undo;
+    r->bound_meta = meta;
+}
+
 RegVal *sag_reg_get(Registers *r, u8 name)
 {
     if (r == NULL)
@@ -186,10 +196,21 @@ RegVal *sag_reg_get(Registers *r, u8 name)
         return &r->numbered[name - '0'];
     switch (name) {
     case '-': return &r->small_del;
-    case '.': return &r->last_insert;
+    case '.':
+        regval_clear(&r->last_insert);
+        if (r->bound_undo != NULL)
+            (void)sag_undo_last_insert(r->bound_undo,
+                                       &r->last_insert.bytes,
+                                       &r->last_insert.t_wall);
+        return &r->last_insert;
     case '/': return &r->search;
     case ':': return &r->cmdline;
-    case '%': return &r->file;
+    case '%':
+        regval_clear(&r->file);
+        if (r->bound_meta != NULL && r->bound_meta->realpath != NULL)
+            bytebuf_append(&r->file.bytes, r->bound_meta->realpath,
+                           strlen(r->bound_meta->realpath));
+        return &r->file;
     case '#': return &r->alt_file;
     case '+':
     case '*': return &r->system;
@@ -392,18 +413,31 @@ static void set_explicit(Registers *r, u8 name, const RegVal *v)
         sag_reg_append(r, name, v);
         return;
     }
+    if (name >= '0' && name <= '9')
+        return;
+    if (name == '-')
+        return;
     sag_reg_set(r, name, v);
 }
 
 void sag_reg_yank(Registers *r, u8 explicit_name, const RegVal *v)
 {
+    bool system;
+
     if (r == NULL || v == NULL)
         SAG_BUG("sag_reg_yank: NULL argument");
     if (explicit_name == '_')
         return;
+    system = explicit_name == '+' || explicit_name == '*';
     set_explicit(r, explicit_name, v);
     set_unnamed(r, v);
     reg_set_raw(&r->numbered[0], v);
+    if (system || r->clipboard_sync == SAG_CLIP_SYNC_YANK ||
+        r->clipboard_sync == SAG_CLIP_SYNC_ALL ||
+        r->clipboard_sync == SAG_CLIP_SYNC_UNNAMED) {
+        reg_set_raw(&r->system, v);
+        (void)sag_clip_write(v, explicit_name == '*' ? '*' : '+');
+    }
 }
 
 static bool contains_lf(const RegVal *v)
@@ -415,11 +449,13 @@ static bool contains_lf(const RegVal *v)
 void sag_reg_delete(Registers *r, u8 explicit_name, const RegVal *v)
 {
     size_t i;
+    bool system;
 
     if (r == NULL || v == NULL)
         SAG_BUG("sag_reg_delete: NULL argument");
     if (explicit_name == '_')
         return;
+    system = explicit_name == '+' || explicit_name == '*';
     set_explicit(r, explicit_name, v);
     set_unnamed(r, v);
     if (v->type == SAG_REG_LINEWISE || contains_lf(v)) {
@@ -428,6 +464,11 @@ void sag_reg_delete(Registers *r, u8 explicit_name, const RegVal *v)
         reg_set_raw(&r->numbered[1], v);
     } else {
         reg_set_raw(&r->small_del, v);
+    }
+    if (system || r->clipboard_sync == SAG_CLIP_SYNC_ALL ||
+        r->clipboard_sync == SAG_CLIP_SYNC_UNNAMED) {
+        reg_set_raw(&r->system, v);
+        (void)sag_clip_write(v, explicit_name == '*' ? '*' : '+');
     }
 }
 
@@ -600,8 +641,6 @@ static bool paste_block(Registers *r, EditCtx *ec, const RegVal *v,
         LineNo line = LINENO(first_line.v + i);
         Span dst;
         ByteOff off;
-        ByteOff content_end;
-        CCol content_column;
         CCol landed;
         u64 pad;
         Span row = v->rows.data[i];
@@ -619,13 +658,9 @@ static bool paste_block(Registers *r, EditCtx *ec, const RegVal *v,
         if (row.lo > row.hi || row.hi > v->bytes.len)
             SAG_BUG("register: invalid block row span");
         dst = sag_textbuf_line_span(ec->tb, line);
-        content_end = BYTEOFF(dst.hi - line_eol_len(ec->tb, dst));
-        content_column =
-            sag_off_to_ccol(ec->tb, dst, content_end, tabw);
-        off = column.v >= content_column.v ? content_end :
-              sag_ccol_to_off(ec->tb, dst, column, tabw);
+        off = sag_ccol_to_off_padded(ec->tb, dst, column, tabw);
         landed = sag_off_to_ccol(ec->tb, dst, off, tabw);
-        pad = column.v - landed.v;
+        pad = sag_ccol_shortfall(column, landed);
         insert_spaces(r, ec, off, pad);
         off.v += pad;
         sag_edit_insert(ec, off, v->bytes.data + row.lo, row.hi - row.lo);
@@ -671,6 +706,19 @@ bool sag_reg_paste(Registers *r, EditCtx *ec, u8 name, bool before,
     if (r == NULL || ec == NULL || ec->tb == NULL || ec->undo == NULL ||
         ec->cset == NULL)
         SAG_BUG("sag_reg_paste: incomplete context");
+    if (name == '+' || name == '*') {
+        sag_clip_set_read_max(r->clip_read_max);
+        if (!sag_clip_read(&r->system, name == '*' ? '*' : '+'))
+            return false;
+        name = '+';
+    } else if ((name == 0U || name == '"') &&
+               r->clipboard_sync == SAG_CLIP_SYNC_UNNAMED) {
+        sag_clip_set_read_max(r->clip_read_max);
+        if (!sag_clip_read(&r->system, '+'))
+            return false;
+        set_unnamed(r, &r->system);
+        name = '"';
+    }
     v = sag_reg_get(r, name);
     if (v == NULL)
         return false;

@@ -1184,6 +1184,27 @@ ByteOff sag_ccol_to_off(const TextBuf *tb, Span line, CCol c, u32 tabw)
     return BYTEOFF(last);
 }
 
+ByteOff sag_ccol_to_off_padded(const TextBuf *tb, Span line, CCol c,
+                               u32 tabw)
+{
+    u64 end;
+    CCol end_col;
+
+    require_span(tb, line);
+    end = line_content_end(tb, line);
+    end_col = sag_off_to_ccol(tb, line, BYTEOFF(end), tabw);
+    if (c.v >= end_col.v)
+        return BYTEOFF(end);
+    return sag_ccol_to_off(tb, line, c, tabw);
+}
+
+u64 sag_ccol_shortfall(CCol target, CCol landed)
+{
+    if (landed.v > target.v)
+        SAG_BUG("cell-column landing exceeds target");
+    return target.v - landed.v;
+}
+
 static Span motion_span(const TextBuf *tb, ByteOff pos, bool previous)
 {
     LineNo line = sag_textbuf_line_of(tb, pos);

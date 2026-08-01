@@ -65,6 +65,8 @@ typedef struct Registers {
     u64 ring_bytes_max;
     u64 clip_read_max;
     u8 clipboard_sync;
+    const UndoTree *bound_undo;
+    const FileMeta *bound_meta;
 
     SagRegPasteSpanVec paste_spans;
     const TextBuf *paste_owner;
@@ -84,6 +86,8 @@ void sag_regval_from_span(RegVal *out, const TextBuf *tb, Span range,
 
 void sag_reg_init(Registers *r);
 void sag_reg_free(Registers *r);
+void sag_reg_bind_context(Registers *r, const UndoTree *undo,
+                          const FileMeta *meta);
 RegVal *sag_reg_get(Registers *r, u8 name);
 void sag_reg_set(Registers *r, u8 name, const RegVal *v);
 void sag_reg_append(Registers *r, u8 name, const RegVal *v);

@@ -201,6 +201,7 @@ u32 sag_undo_branch_cycle(UndoTree *ut, i32 delta);
 u32 sag_undo_current(const UndoTree *ut);
 bool sag_undo_at_save_point(const UndoTree *ut);
 void sag_undo_mark_saved(UndoTree *ut);
+bool sag_undo_last_insert(const UndoTree *ut, Bytebuf *out, i64 *t_wall);
 
 u32 sag_undo_list(const UndoTree *ut, UndoNodeInfo *out, u32 max);
 u32 sag_undo_children(const UndoTree *ut, u32 id, u32 *out, u32 max);

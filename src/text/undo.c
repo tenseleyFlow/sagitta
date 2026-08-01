@@ -551,6 +551,40 @@ static const u8 *store_bytes(const TextBuf *tb, u8 src, Span span)
     return store->bytes + (size_t)span.lo;
 }
 
+bool sag_undo_last_insert(const UndoTree *ut, Bytebuf *out, i64 *t_wall)
+{
+    size_t at;
+
+    if (ut == NULL || out == NULL || ut->owner == NULL)
+        SAG_BUG("sag_undo_last_insert: NULL context");
+    out->len = 0U;
+    if (t_wall != NULL)
+        *t_wall = 0;
+    at = ut->nodes.len;
+    while (at > 1U) {
+        const UndoNode *node = &ut->nodes.data[--at];
+        u32 i;
+
+        if (!node_live(ut, node->id) || node->reason != SAG_TXN_TYPE)
+            continue;
+        for (i = 0U; i < node->n_ops; i++) {
+            const UndoOp *op = &ut->ops.data[node->ops_at + i];
+            const u8 *bytes;
+
+            if (op->kind != SAG_OP_INS)
+                SAG_BUG("undo: type transaction contains non-insert op");
+            bytes = store_bytes(ut->owner, op->src,
+                                (Span){op->payload,
+                                       op->payload + op->len});
+            bytebuf_append(out, bytes, (size_t)op->len);
+        }
+        if (t_wall != NULL)
+            *t_wall = node->t_wall;
+        return true;
+    }
+    return false;
+}
+
 static u8 *copy_live_range(const TextBuf *tb, Span range)
 {
     TextIter it;

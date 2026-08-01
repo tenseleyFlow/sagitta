@@ -44,6 +44,20 @@ u64 sag_term_oob_pending(void)
     return sag_oob_ready ? (u64)sag_oob.len : 0u;
 }
 
+size_t sag_term_oob_flush(Bytebuf *out)
+{
+    size_t n;
+
+    if (out == NULL)
+        SAG_BUG("terminal OOB flush received NULL output");
+    if (!sag_oob_ready || sag_oob.len == 0u)
+        return 0u;
+    n = sag_oob.len;
+    bytebuf_append(out, sag_oob.data, n);
+    sag_oob.len = 0u;
+    return n;
+}
+
 void sag_term_oob_clear(void)
 {
     if (sag_oob_ready)
@@ -57,10 +71,7 @@ static size_t render_finish(Render *r, Bytebuf *out, size_t start,
     if (frame_end < start || frame_end > out->len)
         SAG_BUG("renderer produced invalid frame bounds");
     r->bytes += (u64)(frame_end - start);
-    if (sag_oob_ready && sag_oob.len != 0u) {
-        bytebuf_append(out, sag_oob.data, sag_oob.len);
-        sag_oob.len = 0u;
-    }
+    (void)sag_term_oob_flush(out);
     return out->len - start;
 }
 

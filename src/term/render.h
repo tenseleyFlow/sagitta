@@ -48,6 +48,7 @@ size_t sag_render_frame(Render *r, Grid *g, Bytebuf *out);
  */
 void sag_term_oob_queue(const u8 *seq, u64 n);
 u64 sag_term_oob_pending(void);
+size_t sag_term_oob_flush(Bytebuf *out);
 void sag_term_oob_clear(void);
 
 #endif
