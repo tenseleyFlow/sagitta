@@ -124,6 +124,8 @@ static int save_case(const char *path, const char *post_path)
     sag_journal_record(journal, SAG_JOURNAL_INS, 0U, post_bytes, post_len);
     sag_textbuf_insert(tb, BYTEOFF(0U), post_bytes, post_len);
     sag_journal_sync(journal);
+    if (!sag_journal_ok(journal))
+        goto io_fail_loaded;
 
     ready_env = getenv("SAG_TORTURE_READY_FD");
     if (ready_env != NULL)
@@ -148,7 +150,7 @@ static int save_case(const char *path, const char *post_path)
     return 0;
 
 io_fail_loaded:
-    sag_journal_discard(journal);
+    sag_journal_close(journal);
     sag_textbuf_free(tb);
     sag_filemeta_dispose(&meta);
 io_fail:

@@ -1,0 +1,262 @@
+#define _POSIX_C_SOURCE 200809L
+
+#include "harness.h"
+
+#include <dirent.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include "text/file.h"
+#include "util/buf.h"
+
+typedef struct {
+    char root[64];
+    char state[96];
+} SaveFixture;
+
+static void save_fixture_make(SaveFixture *fixture)
+{
+    int count;
+
+    (void)snprintf(fixture->root, sizeof(fixture->root),
+                   "/tmp/sag-save-XXXXXX");
+    SAG_ASSERT_NOT_NULL(mkdtemp(fixture->root));
+    count = snprintf(fixture->state, sizeof(fixture->state), "%s/state",
+                     fixture->root);
+    SAG_ASSERT(count > 0 && (size_t)count < sizeof(fixture->state));
+    SAG_ASSERT_EQ_I64(mkdir(fixture->state, 0700), 0);
+    SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", fixture->state, 1), 0);
+}
+
+static void remove_tree(const char *path)
+{
+    struct stat st;
+
+    if (lstat(path, &st) != 0)
+        return;
+    if (S_ISDIR(st.st_mode)) {
+        DIR *dir;
+        struct dirent *entry;
+
+        (void)chmod(path, 0700);
+        dir = opendir(path);
+        SAG_ASSERT_NOT_NULL(dir);
+        while ((entry = readdir(dir)) != NULL) {
+            char child[PATH_MAX];
+            int count;
+
+            if (strcmp(entry->d_name, ".") == 0 ||
+                strcmp(entry->d_name, "..") == 0)
+                continue;
+            count = snprintf(child, sizeof(child), "%s/%s", path,
+                             entry->d_name);
+            SAG_ASSERT(count > 0 && (size_t)count < sizeof(child));
+            remove_tree(child);
+        }
+        SAG_ASSERT_EQ_I64(closedir(dir), 0);
+        SAG_ASSERT_EQ_I64(rmdir(path), 0);
+    } else {
+        SAG_ASSERT_EQ_I64(unlink(path), 0);
+    }
+}
+
+static void path_in(char *out, size_t cap, const char *dir, const char *name)
+{
+    int count = snprintf(out, cap, "%s/%s", dir, name);
+
+    SAG_ASSERT(count > 0 && (size_t)count < cap);
+}
+
+static void save_write(const char *path, const u8 *bytes, size_t len,
+                       mode_t mode)
+{
+    size_t at = 0U;
+    int fd = open(path, O_WRONLY | O_CREAT | O_EXCL, mode);
+
+    SAG_ASSERT(fd >= 0);
+    while (at < len) {
+        ssize_t n = write(fd, bytes + at, len - at);
+
+        SAG_ASSERT(n > 0);
+        at += (size_t)n;
+    }
+    SAG_ASSERT_EQ_I64(close(fd), 0);
+}
+
+static Bytebuf save_read(const char *path)
+{
+    Bytebuf out;
+    u8 block[256];
+    int fd = open(path, O_RDONLY);
+
+    bytebuf_init(&out);
+    SAG_ASSERT(fd >= 0);
+    for (;;) {
+        ssize_t n = read(fd, block, sizeof(block));
+
+        SAG_ASSERT(n >= 0);
+        if (n == 0)
+            break;
+        bytebuf_append(&out, block, (size_t)n);
+    }
+    SAG_ASSERT_EQ_I64(close(fd), 0);
+    return out;
+}
+
+static void assert_saved_bytes(const char *path, const u8 *expected,
+                               size_t len)
+{
+    Bytebuf actual = save_read(path);
+
+    SAG_ASSERT_EQ_U64(actual.len, len);
+    SAG_ASSERT_EQ_MEM(actual.data, expected, len);
+    bytebuf_free(&actual);
+}
+
+void test_save_symlink_preserves_link_and_updates_target(void)
+{
+    static const u8 original[] = "old";
+    static const u8 expected[] = "old-new";
+    SaveFixture fixture;
+    char target[128];
+    char link_path[128];
+    struct stat st;
+    FileMeta meta;
+    TextBuf *tb = NULL;
+
+    save_fixture_make(&fixture);
+    path_in(target, sizeof(target), fixture.root, "target.txt");
+    path_in(link_path, sizeof(link_path), fixture.root, "link.txt");
+    save_write(target, original, sizeof(original) - 1U, 0600);
+    SAG_ASSERT_EQ_I64(symlink("target.txt", link_path), 0);
+    SAG_ASSERT_EQ_U64(sag_file_load(link_path, &tb, &meta), SAG_LOAD_OK);
+    SAG_ASSERT(meta.via_symlink);
+    sag_textbuf_insert(tb, BYTEOFF(sag_textbuf_len(tb)),
+                       (const u8 *)"-new", 4U);
+    SAG_ASSERT_EQ_U64(sag_file_save(tb, &meta, link_path), SAG_SAVE_OK);
+    SAG_ASSERT_EQ_I64(lstat(link_path, &st), 0);
+    SAG_ASSERT(S_ISLNK(st.st_mode));
+    assert_saved_bytes(target, expected, sizeof(expected) - 1U);
+    sag_textbuf_free(tb);
+    sag_filemeta_dispose(&meta);
+    remove_tree(fixture.root);
+}
+
+void test_save_hardlink_preserves_shared_inode(void)
+{
+    static const u8 original[] = "old";
+    static const u8 expected[] = "old-new";
+    SaveFixture fixture;
+    char first[128];
+    char second[128];
+    struct stat first_st;
+    struct stat second_st;
+    FileMeta meta;
+    TextBuf *tb = NULL;
+
+    save_fixture_make(&fixture);
+    path_in(first, sizeof(first), fixture.root, "first.txt");
+    path_in(second, sizeof(second), fixture.root, "second.txt");
+    save_write(first, original, sizeof(original) - 1U, 0600);
+    SAG_ASSERT_EQ_I64(link(first, second), 0);
+    SAG_ASSERT_EQ_U64(sag_file_load(first, &tb, &meta), SAG_LOAD_OK);
+    SAG_ASSERT_EQ_U64(meta.nlink, 2U);
+    sag_textbuf_insert(tb, BYTEOFF(sag_textbuf_len(tb)),
+                       (const u8 *)"-new", 4U);
+    SAG_ASSERT_EQ_U64(sag_file_save(tb, &meta, first), SAG_SAVE_OK);
+    SAG_ASSERT_EQ_I64(stat(first, &first_st), 0);
+    SAG_ASSERT_EQ_I64(stat(second, &second_st), 0);
+    SAG_ASSERT_EQ_U64(first_st.st_ino, second_st.st_ino);
+    assert_saved_bytes(first, expected, sizeof(expected) - 1U);
+    assert_saved_bytes(second, expected, sizeof(expected) - 1U);
+    sag_textbuf_free(tb);
+    sag_filemeta_dispose(&meta);
+    remove_tree(fixture.root);
+}
+
+void test_save_read_only_directory_uses_in_place_path(void)
+{
+    static const u8 original[] = "old";
+    static const u8 expected[] = "new";
+    SaveFixture fixture;
+    char work[128];
+    char path[160];
+    struct stat before;
+    struct stat after;
+    FileMeta meta;
+    TextBuf *tb = NULL;
+
+    save_fixture_make(&fixture);
+    path_in(work, sizeof(work), fixture.root, "readonly");
+    SAG_ASSERT_EQ_I64(mkdir(work, 0700), 0);
+    path_in(path, sizeof(path), work, "file.txt");
+    save_write(path, original, sizeof(original) - 1U, 0600);
+    SAG_ASSERT_EQ_U64(sag_file_load(path, &tb, &meta), SAG_LOAD_OK);
+    SAG_ASSERT_EQ_I64(stat(path, &before), 0);
+    sag_textbuf_delete(tb, (Span){0U, sag_textbuf_len(tb)});
+    sag_textbuf_insert(tb, BYTEOFF(0U), expected, sizeof(expected) - 1U);
+    SAG_ASSERT_EQ_I64(chmod(work, 0500), 0);
+    SAG_ASSERT_EQ_U64(sag_file_save(tb, &meta, path), SAG_SAVE_OK);
+    SAG_ASSERT_EQ_I64(stat(path, &after), 0);
+    SAG_ASSERT_EQ_U64(before.st_ino, after.st_ino);
+    assert_saved_bytes(path, expected, sizeof(expected) - 1U);
+    SAG_ASSERT_EQ_I64(chmod(work, 0700), 0);
+    sag_textbuf_free(tb);
+    sag_filemeta_dispose(&meta);
+    remove_tree(fixture.root);
+}
+
+void test_save_existing_file_preserves_mode_owner_and_group(void)
+{
+    static const u8 original[] = "old";
+    SaveFixture fixture;
+    char path[128];
+    struct stat before;
+    struct stat after;
+    FileMeta meta;
+    TextBuf *tb = NULL;
+
+    save_fixture_make(&fixture);
+    path_in(path, sizeof(path), fixture.root, "mode.txt");
+    save_write(path, original, sizeof(original) - 1U, 0640);
+    SAG_ASSERT_EQ_I64(stat(path, &before), 0);
+    SAG_ASSERT_EQ_U64(sag_file_load(path, &tb, &meta), SAG_LOAD_OK);
+    sag_textbuf_insert(tb, BYTEOFF(sag_textbuf_len(tb)), (const u8 *)"!", 1U);
+    SAG_ASSERT_EQ_U64(sag_file_save(tb, &meta, path), SAG_SAVE_OK);
+    SAG_ASSERT_EQ_I64(stat(path, &after), 0);
+    SAG_ASSERT_EQ_U64(after.st_mode & 07777U, before.st_mode & 07777U);
+    SAG_ASSERT_EQ_U64(after.st_uid, before.st_uid);
+    SAG_ASSERT_EQ_U64(after.st_gid, before.st_gid);
+    sag_textbuf_free(tb);
+    sag_filemeta_dispose(&meta);
+    remove_tree(fixture.root);
+}
+
+void test_save_new_file_creates_requested_content(void)
+{
+    static const u8 expected[] = "brand new\n";
+    SaveFixture fixture;
+    char path[128];
+    struct stat st;
+    FileMeta meta;
+    TextBuf *tb = NULL;
+
+    save_fixture_make(&fixture);
+    path_in(path, sizeof(path), fixture.root, "new.txt");
+    SAG_ASSERT_EQ_U64(sag_file_load(path, &tb, &meta), SAG_LOAD_ENOENT);
+    SAG_ASSERT_NOT_NULL(tb);
+    SAG_ASSERT(!meta.exists);
+    sag_textbuf_insert(tb, BYTEOFF(0U), expected, sizeof(expected) - 1U);
+    SAG_ASSERT_EQ_U64(sag_file_save(tb, &meta, path), SAG_SAVE_OK);
+    SAG_ASSERT_EQ_I64(stat(path, &st), 0);
+    SAG_ASSERT(S_ISREG(st.st_mode));
+    assert_saved_bytes(path, expected, sizeof(expected) - 1U);
+    sag_textbuf_free(tb);
+    sag_filemeta_dispose(&meta);
+    remove_tree(fixture.root);
+}

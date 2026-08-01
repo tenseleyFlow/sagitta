@@ -99,6 +99,21 @@ void test_piece_construct_bytes(void)
     sag_textbuf_free(tb);
 }
 
+void test_piece_construct_owned_bytes(void)
+{
+    u8 *bytes = sag_xmalloc(4U);
+    TextBuf *tb;
+
+    (void)memcpy(bytes, "a\nb", 4U);
+    tb = sag_textbuf_from_owned_bytes(bytes, 4U);
+    SAG_ASSERT(tb->orig.bytes == bytes);
+    SAG_ASSERT_EQ_U64(sag_textbuf_len(tb), 4U);
+    SAG_ASSERT_EQ_U64(sag_textbuf_line_count(tb), 2U);
+    assert_content(tb, (const u8 *)"a\nb", 4U);
+    sag_textbuf_check(tb);
+    sag_textbuf_free(tb);
+}
+
 void test_piece_insert_positions(void)
 {
     TextBuf *front = sag_textbuf_from_bytes((const u8 *)"bc", 2U);
