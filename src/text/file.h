@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <sys/stat.h>
+#include <sys/types.h>
 #include <time.h>
 
 #include "text/piece.h"
