@@ -21,6 +21,49 @@ enum {
     ATTR_TERMINAL = (1u << 10) - 1u
 };
 
+static Bytebuf sag_oob;
+static bool sag_oob_ready;
+
+void sag_term_oob_queue(const u8 *seq, u64 n)
+{
+    if (n == 0u)
+        return;
+    if (seq == NULL)
+        SAG_BUG("terminal OOB queue received NULL bytes");
+    if (n > SIZE_MAX)
+        SAG_BUG("terminal OOB sequence exceeds addressable memory");
+    if (!sag_oob_ready) {
+        bytebuf_init(&sag_oob);
+        sag_oob_ready = true;
+    }
+    bytebuf_append(&sag_oob, seq, (size_t)n);
+}
+
+u64 sag_term_oob_pending(void)
+{
+    return sag_oob_ready ? (u64)sag_oob.len : 0u;
+}
+
+void sag_term_oob_clear(void)
+{
+    if (sag_oob_ready)
+        bytebuf_free(&sag_oob);
+    sag_oob_ready = false;
+}
+
+static size_t render_finish(Render *r, Bytebuf *out, size_t start,
+                            size_t frame_end)
+{
+    if (frame_end < start || frame_end > out->len)
+        SAG_BUG("renderer produced invalid frame bounds");
+    r->bytes += (u64)(frame_end - start);
+    if (sag_oob_ready && sag_oob.len != 0u) {
+        bytebuf_append(out, sag_oob.data, sag_oob.len);
+        sag_oob.len = 0u;
+    }
+    return out->len - start;
+}
+
 static u16 terminal_attrs(u16 attrs, bool undercurl)
 {
     u16 result = (u16)(attrs & ATTR_TERMINAL);
@@ -602,13 +645,13 @@ size_t sag_render_frame(Render *r, Grid *g, Bytebuf *out)
 
     r->frames++;
     if (g->rows == 0u || g->cols == 0u)
-        return 0u;
+        return render_finish(r, out, start, out->len);
     cells_changed = has_changes(g);
     cursor_changed = r->cursor_known &&
                      (r->row != g->cur_row || r->col != g->cur_col ||
                       r->cursor_visible != g->cur_vis);
     if (!cells_changed && !cursor_changed)
-        return 0u;
+        return render_finish(r, out, start, out->len);
 
     if (!cells_changed) {
         if (r->sync)
@@ -620,8 +663,7 @@ size_t sag_render_frame(Render *r, Grid *g, Bytebuf *out)
             bytes(out, "\033[?2026l");
         r->cursor_known = true;
         r->cursor_visible = g->cur_vis;
-        r->bytes += (u64)(out->len - start);
-        return out->len - start;
+        return render_finish(r, out, start, out->len);
     }
 
     /* Cell-bearing frames are byte-identical for the same grid state and do
@@ -668,6 +710,5 @@ size_t sag_render_frame(Render *r, Grid *g, Bytebuf *out)
         bytes(out, "\033[?2026l");
     r->cursor_known = true;
     r->cursor_visible = g->cur_vis;
-    r->bytes += (u64)(out->len - start);
-    return out->len - start;
+    return render_finish(r, out, start, out->len);
 }

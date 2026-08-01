@@ -82,6 +82,47 @@ void test_render_empty_frame_emits_zero_bytes(void)
     render_fixture_free(&f);
 }
 
+void test_render_oob_flushes_after_frame(void)
+{
+    static const u8 oob_a[] = {0x1bu, (u8)']', (u8)'5', (u8)'2'};
+    static const u8 oob_b[] = {(u8)';', (u8)'c'};
+    static const char esu[] = "\033[?2026l";
+    RenderFixture f;
+    SagColor color = render_default_color();
+    size_t first_len;
+
+    sag_term_oob_clear();
+    render_fixture_init(&f, 1u, 1u, true);
+    sag_grid_flip(&f.grid);
+    sag_grid_put(&f.grid, 0u, 0u, (const u8 *)"x", 1u,
+                 color, color, 0u);
+    sag_term_oob_queue(oob_a, sizeof(oob_a));
+    sag_term_oob_queue(oob_b, sizeof(oob_b));
+    SAG_ASSERT_EQ_U64(sag_term_oob_pending(),
+                      sizeof(oob_a) + sizeof(oob_b));
+    (void)sag_render_frame(&f.render, &f.grid, &f.out);
+    SAG_ASSERT_EQ_U64(sag_term_oob_pending(), 0u);
+    SAG_ASSERT(f.out.len >= sizeof(esu) - 1u + sizeof(oob_a) +
+                            sizeof(oob_b));
+    SAG_ASSERT_EQ_MEM(f.out.data + f.out.len - sizeof(oob_a) - sizeof(oob_b),
+                      oob_a, sizeof(oob_a));
+    SAG_ASSERT_EQ_MEM(f.out.data + f.out.len - sizeof(oob_b),
+                      oob_b, sizeof(oob_b));
+    SAG_ASSERT_EQ_MEM(f.out.data + f.out.len - sizeof(oob_a) - sizeof(oob_b)
+                                    - (sizeof(esu) - 1u),
+                      esu, sizeof(esu) - 1u);
+
+    first_len = f.out.len;
+    sag_grid_flip(&f.grid);
+    sag_term_oob_queue((const u8 *)"z", 1u);
+    SAG_ASSERT_EQ_U64(sag_render_frame(&f.render, &f.grid, &f.out), 1u);
+    SAG_ASSERT_EQ_U64(f.out.len, first_len + 1u);
+    SAG_ASSERT_EQ_U64(f.out.data[f.out.len - 1u], (u8)'z');
+    SAG_ASSERT_EQ_U64(sag_term_oob_pending(), 0u);
+    sag_term_oob_clear();
+    render_fixture_free(&f);
+}
+
 void test_render_frame_envelope_goldens(void)
 {
     static const char bare[] = "\033[?25l\033[H\033[0mx\033[H\033[?25h";

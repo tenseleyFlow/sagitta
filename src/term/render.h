@@ -41,4 +41,13 @@ void sag_render_init(Render *r, const TtyCaps *caps,
                      const char *(*getv)(const char *));
 size_t sag_render_frame(Render *r, Grid *g, Bytebuf *out);
 
+/*
+ * Out-of-band terminal controls are queued during an input burst and are
+ * appended only after the frame's synchronized-output end marker. The queue
+ * is process-global because Sagitta owns exactly one terminal output stream.
+ */
+void sag_term_oob_queue(const u8 *seq, u64 n);
+u64 sag_term_oob_pending(void);
+void sag_term_oob_clear(void);
+
 #endif
