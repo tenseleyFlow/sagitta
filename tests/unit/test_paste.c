@@ -1,0 +1,257 @@
+#include "harness.h"
+
+#include "text/register.h"
+
+typedef struct PasteFixture {
+    Registers regs;
+    TextBuf *tb;
+    CursorSet cursors;
+    UndoTree *undo;
+    FileMeta meta;
+    EditCtx edit;
+} PasteFixture;
+
+static Cursor paste_cursor(u64 pos)
+{
+    Cursor c;
+    c.pos = BYTEOFF(pos);
+    c.anchor = BYTEOFF(pos);
+    c.goal_col = (GCol){0U};
+    return c;
+}
+
+static void paste_fixture_init(PasteFixture *f, const char *text, u64 cursor)
+{
+    sag_reg_init(&f->regs);
+    f->tb = sag_textbuf_from_bytes((const u8 *)text, strlen(text));
+    sag_cset_init(&f->cursors, paste_cursor(cursor));
+    f->undo = sag_undo_new(f->tb);
+    sag_filemeta_init(&f->meta);
+    f->edit = (EditCtx){f->tb, NULL, &f->cursors, 1U, NULL, f->undo,
+                       NULL};
+}
+
+static void paste_fixture_enable_meta(PasteFixture *f, SagEol eol)
+{
+    static const char path[] = "/tmp/sagitta-s12-register-test";
+    f->meta.realpath = sag_xmalloc(sizeof(path));
+    (void)memcpy(f->meta.realpath, path, sizeof(path));
+    f->meta.eol = eol;
+    f->meta.dominant_eol = eol;
+    f->edit.meta = &f->meta;
+}
+
+static void paste_fixture_free(PasteFixture *f)
+{
+    if (f->edit.jrnl != NULL)
+        sag_journal_discard(f->edit.jrnl);
+    sag_filemeta_dispose(&f->meta);
+    sag_undo_free(f->undo);
+    sag_cset_free(&f->cursors);
+    sag_textbuf_free(f->tb);
+    sag_reg_free(&f->regs);
+}
+
+static void paste_set(RegVal *v, RegType type, const char *text)
+{
+    sag_regval_init(v);
+    v->type = (u8)type;
+    bytebuf_append(&v->bytes, text, strlen(text));
+}
+
+static void paste_materialize(const TextBuf *tb, Bytebuf *out)
+{
+    TextIter it;
+    u64 done = 0U;
+    u64 total = sag_textbuf_len(tb);
+    out->len = 0U;
+    if (total == 0U)
+        return;
+    SAG_ASSERT(sag_textiter_begin(&it, tb, BYTEOFF(0U)));
+    while (done < total) {
+        const u8 *bytes;
+        u64 len;
+        SAG_ASSERT(sag_textiter_chunk(&it, tb, &bytes, &len));
+        bytebuf_append(out, bytes, (size_t)len);
+        done += len;
+        if (done < total)
+            SAG_ASSERT(sag_textiter_advance(&it, tb));
+    }
+}
+
+static void paste_assert_text(const TextBuf *tb, const char *want)
+{
+    Bytebuf got;
+    bytebuf_init(&got);
+    paste_materialize(tb, &got);
+    SAG_ASSERT_EQ_U64(got.len, strlen(want));
+    SAG_ASSERT_EQ_MEM(got.data, want, got.len);
+    bytebuf_free(&got);
+}
+
+static void paste_install(Registers *r, const RegVal *v)
+{
+    sag_regval_copy(&r->unnamed, v);
+}
+
+void test_paste_char_before_and_after_are_one_undo_node(void)
+{
+    PasteFixture before;
+    PasteFixture after;
+    RegVal v;
+
+    paste_set(&v, SAG_REG_CHARWISE, "XY");
+    paste_fixture_init(&before, "abc\n", 1U);
+    paste_install(&before.regs, &v);
+    SAG_ASSERT(sag_reg_paste(&before.regs, &before.edit, '"', true, 8U));
+    paste_assert_text(before.tb, "aXYbc\n");
+    SAG_ASSERT_EQ_U64(before.cursors.curs.data[0].pos.v, 2U);
+    SAG_ASSERT_EQ_U64(before.undo->nodes.len, 2U);
+    SAG_ASSERT(sag_undo(&before.edit));
+    paste_assert_text(before.tb, "abc\n");
+    SAG_ASSERT_EQ_U64(before.cursors.curs.data[0].pos.v, 1U);
+
+    paste_fixture_init(&after, "abc\n", 1U);
+    paste_install(&after.regs, &v);
+    SAG_ASSERT(sag_reg_paste(&after.regs, &after.edit, '"', false, 8U));
+    paste_assert_text(after.tb, "abXYc\n");
+    SAG_ASSERT_EQ_U64(after.cursors.curs.data[0].pos.v, 3U);
+    SAG_ASSERT_EQ_U64(after.undo->nodes.len, 2U);
+    paste_fixture_free(&after);
+    paste_fixture_free(&before);
+    sag_regval_free(&v);
+}
+
+void test_paste_char_after_eol_stays_before_eol(void)
+{
+    PasteFixture f;
+    RegVal v;
+    paste_set(&v, SAG_REG_CHARWISE, "Z");
+    paste_fixture_init(&f, "a\nb", 0U);
+    paste_install(&f.regs, &v);
+    SAG_ASSERT(sag_reg_paste(&f.regs, &f.edit, '"', false, 8U));
+    paste_assert_text(f.tb, "aZ\nb");
+    SAG_ASSERT_EQ_U64(f.cursors.curs.data[0].pos.v, 1U);
+    paste_fixture_free(&f);
+    sag_regval_free(&v);
+}
+
+void test_paste_line_before_first_and_middle(void)
+{
+    PasteFixture first;
+    PasteFixture middle;
+    RegVal v;
+    paste_set(&v, SAG_REG_LINEWISE, "  new\n");
+
+    paste_fixture_init(&first, "one\ntwo\n", 0U);
+    paste_install(&first.regs, &v);
+    SAG_ASSERT(sag_reg_paste(&first.regs, &first.edit, '"', true, 8U));
+    paste_assert_text(first.tb, "  new\none\ntwo\n");
+    SAG_ASSERT_EQ_U64(first.cursors.curs.data[0].pos.v, 2U);
+
+    paste_fixture_init(&middle, "one\ntwo\nthree\n", 5U);
+    paste_install(&middle.regs, &v);
+    SAG_ASSERT(sag_reg_paste(&middle.regs, &middle.edit, '"', false, 8U));
+    paste_assert_text(middle.tb, "one\ntwo\n  new\nthree\n");
+    SAG_ASSERT_EQ_U64(middle.cursors.curs.data[0].pos.v, 10U);
+    SAG_ASSERT_EQ_U64(middle.undo->nodes.len, 2U);
+    paste_fixture_free(&middle);
+    paste_fixture_free(&first);
+    sag_regval_free(&v);
+}
+
+void test_paste_line_after_missing_final_newline_uses_destination_eol(void)
+{
+    PasteFixture f;
+    RegVal v;
+    paste_set(&v, SAG_REG_LINEWISE, "new\n");
+    paste_fixture_init(&f, "last", 2U);
+    paste_fixture_enable_meta(&f, SAG_EOL_CRLF);
+    paste_install(&f.regs, &v);
+    SAG_ASSERT(sag_reg_paste(&f.regs, &f.edit, '"', false, 8U));
+    paste_assert_text(f.tb, "last\r\nnew");
+    SAG_ASSERT_EQ_U64(f.cursors.curs.data[0].pos.v, 6U);
+    SAG_ASSERT_EQ_U64(f.undo->nodes.len, 2U);
+    SAG_ASSERT(sag_undo(&f.edit));
+    paste_assert_text(f.tb, "last");
+    SAG_ASSERT_EQ_U64(f.cursors.curs.data[0].pos.v, 2U);
+    paste_fixture_free(&f);
+    sag_regval_free(&v);
+}
+
+static void paste_block_value(RegVal *v, const char *bytes,
+                              const Span *rows, size_t count, u32 width,
+                              bool ragged)
+{
+    size_t i;
+    paste_set(v, SAG_REG_BLOCKWISE, bytes);
+    for (i = 0U; i < count; i++)
+        SagRegRowVec_push(&v->rows, rows[i]);
+    v->width = width;
+    v->ragged = ragged;
+}
+
+void test_paste_block_short_lines_and_extension(void)
+{
+    static const Span rows[] = {{0U, 1U}, {1U, 2U}, {2U, 3U}};
+    PasteFixture f;
+    RegVal v;
+    paste_block_value(&v, "XYZ", rows, SAG_ARRAY_LEN(rows), 1U, false);
+    paste_fixture_init(&f, "abcd\na", 3U);
+    paste_fixture_enable_meta(&f, SAG_EOL_LF);
+    paste_install(&f.regs, &v);
+    SAG_ASSERT(sag_reg_paste(&f.regs, &f.edit, '"', true, 8U));
+    paste_assert_text(f.tb, "abcXd\na  Y\n   Z");
+    SAG_ASSERT_EQ_U64(f.cursors.curs.data[0].pos.v, 3U);
+    SAG_ASSERT_EQ_U64(f.undo->nodes.len, 2U);
+    SAG_ASSERT(sag_undo(&f.edit));
+    paste_assert_text(f.tb, "abcd\na");
+    SAG_ASSERT_EQ_U64(f.cursors.curs.data[0].pos.v, 3U);
+    paste_fixture_free(&f);
+    sag_regval_free(&v);
+}
+
+void test_paste_block_tab_round_left_adds_spaces(void)
+{
+    static const Span rows[] = {{0U, 1U}, {1U, 2U}};
+    PasteFixture f;
+    RegVal v;
+    paste_block_value(&v, "XY", rows, 2U, 1U, false);
+    paste_fixture_init(&f, "abc\n\tz\n", 2U);
+    paste_install(&f.regs, &v);
+    SAG_ASSERT(sag_reg_paste(&f.regs, &f.edit, '"', true, 4U));
+    paste_assert_text(f.tb, "abXc\n  Y\tz\n");
+    SAG_ASSERT_EQ_U64(f.cursors.curs.data[0].pos.v, 2U);
+    paste_fixture_free(&f);
+    sag_regval_free(&v);
+}
+
+void test_paste_block_cjk_column_is_cell_based(void)
+{
+    static const Span rows[] = {{0U, 1U}, {1U, 2U}};
+    PasteFixture f;
+    RegVal v;
+    paste_block_value(&v, "XY", rows, 2U, 1U, false);
+    paste_fixture_init(&f, "界a\nq\n", 3U);
+    paste_install(&f.regs, &v);
+    SAG_ASSERT(sag_reg_paste(&f.regs, &f.edit, '"', true, 8U));
+    paste_assert_text(f.tb, "界Xa\nq Y\n");
+    SAG_ASSERT_EQ_U64(f.cursors.curs.data[0].pos.v, 3U);
+    paste_fixture_free(&f);
+    sag_regval_free(&v);
+}
+
+void test_paste_block_ragged_rows_remain_ragged(void)
+{
+    static const Span rows[] = {{0U, 1U}, {1U, 4U}};
+    PasteFixture f;
+    RegVal v;
+    paste_block_value(&v, "xyyy", rows, 2U, 3U, true);
+    paste_fixture_init(&f, "ab\ncd\n", 1U);
+    paste_install(&f.regs, &v);
+    SAG_ASSERT(sag_reg_paste(&f.regs, &f.edit, '"', true, 8U));
+    paste_assert_text(f.tb, "axb\ncyyyd\n");
+    SAG_ASSERT_EQ_U64(f.undo->nodes.len, 2U);
+    paste_fixture_free(&f);
+    sag_regval_free(&v);
+}
