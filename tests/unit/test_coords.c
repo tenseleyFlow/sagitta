@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "text/cursor.h"
 #include "text/piece.h"
 #include "unicode/coords.h"
 
@@ -71,6 +72,7 @@ void test_coords_motion_golden(void)
         u64 cells = 0U;
         TextBuf *tb;
         Span line;
+        Cursor cursor;
 
         while (isspace((unsigned char)*p))
             p++;
@@ -96,12 +98,17 @@ void test_coords_motion_golden(void)
         tb = sag_textbuf_from_bytes(bytes, (u64)byte_len);
         SAG_ASSERT_NOT_NULL(tb);
         line = (Span){0U, (u64)byte_len};
+        cursor.pos = BYTEOFF(0U);
+        cursor.anchor = cursor.pos;
+        cursor.goal_col = (GCol){0U};
 
         SAG_ASSERT(sag_is_grapheme_boundary(tb, BYTEOFF(0U)));
         for (i = 0U; i < cluster_count; i++) {
             u64 start = off;
 
             off += lengths[i];
+            sag_cursor_right(tb, &cursor);
+            SAG_ASSERT_EQ_U64(cursor.pos.v, off);
             SAG_ASSERT_EQ_U64(sag_grapheme_next(tb, BYTEOFF(start)).v,
                               off);
             SAG_ASSERT_EQ_U64(sag_grapheme_prev(tb, BYTEOFF(off)).v,
@@ -128,6 +135,13 @@ void test_coords_motion_golden(void)
             cells += widths[i];
         }
         SAG_ASSERT_EQ_U64(off, byte_len);
+        for (i = cluster_count; i > 0U; i--) {
+            off -= lengths[i - 1U];
+            sag_cursor_left(tb, &cursor);
+            SAG_ASSERT_EQ_U64(cursor.pos.v, off);
+        }
+        SAG_ASSERT_EQ_U64(off, 0U);
+        off = (u64)byte_len;
         if (strcmp(fields[0], "crlf") == 0) {
             SAG_ASSERT_EQ_U64(sag_off_to_gcol(tb, line, BYTEOFF(2U)).v,
                               0U);
