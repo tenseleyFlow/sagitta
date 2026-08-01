@@ -21,6 +21,7 @@ const SagTest sag_tests[] = {
     T(piece_insert_positions),
     T(piece_insert_every_seam),
     T(piece_insert_accepts_exposed_chunk_alias),
+    T(piece_insert_recoalesces_after_delete),
     T(piece_delete_single_byte),
     T(piece_delete_cross_piece),
     T(piece_delete_whole_buffer),

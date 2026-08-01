@@ -176,6 +176,21 @@ void test_piece_insert_accepts_exposed_chunk_alias(void)
     sag_textbuf_free(tb);
 }
 
+void test_piece_insert_recoalesces_after_delete(void)
+{
+    TextBuf *tb = sag_textbuf_new();
+
+    sag_textbuf_insert(tb, BYTEOFF(0U), (const u8 *)"ab", 2U);
+    sag_textbuf_check(tb);
+    sag_textbuf_delete(tb, (Span){0U, 1U});
+    sag_textbuf_check(tb);
+    sag_textbuf_insert(tb, BYTEOFF(1U), (const u8 *)"c", 1U);
+    sag_textbuf_check(tb);
+    SAG_ASSERT_EQ_U64(sag_textbuf_piece_count(tb), 1U);
+    assert_content(tb, "bc", 2U);
+    sag_textbuf_free(tb);
+}
+
 void test_piece_delete_single_byte(void)
 {
     TextBuf *tb = sag_textbuf_from_bytes((const u8 *)"abc", 3U);

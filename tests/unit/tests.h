@@ -18,6 +18,7 @@ void test_piece_construct_bytes(void);
 void test_piece_insert_positions(void);
 void test_piece_insert_every_seam(void);
 void test_piece_insert_accepts_exposed_chunk_alias(void);
+void test_piece_insert_recoalesces_after_delete(void);
 void test_piece_delete_single_byte(void);
 void test_piece_delete_cross_piece(void);
 void test_piece_delete_whole_buffer(void);

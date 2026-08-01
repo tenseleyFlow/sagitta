@@ -60,6 +60,8 @@ typedef struct TextBuf {
     TextStore add;
     PieceNode *root;
     u64 gen;
+    u64 add_tail_at;               /* buffer end of latest add-store run */
+    bool add_tail_known;           /* false after delete; probe once */
 } TextBuf;
 
 typedef struct {

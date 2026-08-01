@@ -632,6 +632,26 @@ static bool node_extend_predecessor(TextBuf *tb, PieceNode **slot, u64 at,
     return changed;
 }
 
+static const PieceNode *node_ending_at(const PieceNode *node, u64 at)
+{
+    while (node != NULL) {
+        u64 left_bytes = node_bytes(node->left);
+        u64 piece_len = node->span.hi - node->span.lo;
+
+        if (at <= left_bytes) {
+            node = node->left;
+        } else if (at == left_bytes + piece_len) {
+            return node;
+        } else if (at < left_bytes + piece_len) {
+            return NULL;
+        } else {
+            at -= left_bytes + piece_len;
+            node = node->right;
+        }
+    }
+    return NULL;
+}
+
 static bool payload_aliases_store(const u8 *bytes, u64 len,
                                   const TextStore *store)
 {
@@ -655,6 +675,7 @@ static bool payload_aliases_store(const u8 *bytes, u64 len,
 
 void sag_textbuf_insert(TextBuf *tb, ByteOff at, const u8 *bytes, u64 len)
 {
+    u64 buffer_len;
     u64 old_add_len;
     PieceNode *left;
     PieceNode *right;
@@ -664,12 +685,15 @@ void sag_textbuf_insert(TextBuf *tb, ByteOff at, const u8 *bytes, u64 len)
 
     if (tb == NULL)
         SAG_BUG("sag_textbuf_insert: NULL buffer");
-    if (at.v > sag_textbuf_len(tb))
+    buffer_len = node_bytes(tb->root);
+    if (at.v > buffer_len)
         SAG_BUG("insert offset %llu beyond buffer length %llu",
                 (unsigned long long)at.v,
-                (unsigned long long)sag_textbuf_len(tb));
+                (unsigned long long)buffer_len);
     if (len == 0U)
         return;
+    if (len > UINT64_MAX - buffer_len)
+        SAG_BUG("insert length overflows text buffer");
     textbuf_require_edit_generation(tb);
     if (payload_aliases_store(bytes, len, &tb->backing->add)) {
         if (len > SIZE_MAX)
@@ -682,11 +706,14 @@ void sag_textbuf_insert(TextBuf *tb, ByteOff at, const u8 *bytes, u64 len)
     }
     old_add_len = tb->backing->add.len;
     store_append(&tb->backing->add, payload, len);
-    textbuf_sync_store_views(tb);
+    tb->add = tb->backing->add;
     free(staged);
-    if (node_extend_predecessor(tb, &tb->root, at.v, old_add_len,
+    if ((!tb->add_tail_known || tb->add_tail_at == at.v) &&
+        node_extend_predecessor(tb, &tb->root, at.v, old_add_len,
                                 tb->backing->add.len)) {
         tb->gen++;
+        tb->add_tail_at = at.v + len;
+        tb->add_tail_known = true;
         return;
     }
     node_split(tb, tb->root, at.v, &left, &right);
@@ -695,6 +722,8 @@ void sag_textbuf_insert(TextBuf *tb, ByteOff at, const u8 *bytes, u64 len)
                                         tb->backing->add.len}));
     tb->root = node_link(middle, left, right);
     tb->gen++;
+    tb->add_tail_at = at.v + len;
+    tb->add_tail_known = true;
 }
 
 void sag_textbuf_delete(TextBuf *tb, Span range)
@@ -721,6 +750,7 @@ void sag_textbuf_delete(TextBuf *tb, Span range)
     node_release(removed);
     tb->root = node_concat(before, after);
     tb->gen++;
+    tb->add_tail_known = false;
 }
 
 ByteOff sag_textbuf_line_start(const TextBuf *tb, LineNo line)
@@ -1093,6 +1123,7 @@ static void node_check_canonical(const PieceNode *root)
 
 void sag_textbuf_check(const TextBuf *tb)
 {
+    const PieceNode *add_tail;
     size_t i;
 
     if (tb == NULL)
@@ -1128,4 +1159,12 @@ void sag_textbuf_check(const TextBuf *tb)
     }
     (void)node_check(tb, tb->root, 0U);
     node_check_canonical(tb->root);
+    if (tb->add_tail_known) {
+        if (tb->add_tail_at > node_bytes(tb->root))
+            SAG_BUG("text buffer add-tail position is outside the tree");
+        add_tail = node_ending_at(tb->root, tb->add_tail_at);
+        if (add_tail == NULL || add_tail->src != SAG_STORE_ADD ||
+            add_tail->span.hi != tb->backing->add.len)
+            SAG_BUG("text buffer add-tail cache is stale");
+    }
 }
