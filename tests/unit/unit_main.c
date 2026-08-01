@@ -200,11 +200,12 @@ static void test_log_sink_receives_structured_message(void)
     SagLogSink sink = {capture_log, &capture};
 
     sag_log_set_sink(&sink);
-    sag_log(SAG_LOG_WARN, "captured %s %d", "message", 7);
+    /* Error survives every valid SAG_LOG_LEVEL setting from the caller. */
+    sag_log(SAG_LOG_ERROR, "captured %s %d", "message", 7);
     sag_log_set_sink(NULL);
 
     assert(capture.calls == 1U);
-    assert(capture.level == SAG_LOG_WARN);
+    assert(capture.level == SAG_LOG_ERROR);
     assert(strcmp(capture.message, "captured message 7") == 0);
 }
 
