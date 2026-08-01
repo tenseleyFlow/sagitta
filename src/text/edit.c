@@ -117,6 +117,9 @@ SagSaveErr sag_edit_save(EditCtx *ec, const char *path)
     edit_require(ec);
     if (ec->meta == NULL)
         SAG_BUG("edit save: scratch buffer has no file metadata");
+    if (ec->undo != NULL &&
+        (ec->undo->depth != 0U || ec->undo->open != 0U))
+        SAG_BUG("edit save: open undo transaction");
     result = sag_file_save(ec->tb, ec->meta, path);
     if (result != SAG_SAVE_OK)
         return result;

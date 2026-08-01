@@ -197,7 +197,7 @@ void test_undo_merge_rejects_payload_limit(void)
     undo_fixture_free(&f);
 }
 
-void test_undo_boundary_forces_new_node(void)
+static void undo_assert_boundary_splits_burst(void)
 {
     UndoFixture f;
 
@@ -209,6 +209,31 @@ void test_undo_boundary_forces_new_node(void)
     SAG_ASSERT(!f.undo->boundary);
     SAG_ASSERT_EQ_U64(f.undo->nodes.data[2].parent, f.undo->nodes.data[1].id);
     undo_fixture_free(&f);
+}
+
+void test_undo_boundary_forces_new_node(void)
+{
+    undo_assert_boundary_splits_burst();
+}
+
+void test_undo_boundary_leave_insert_splits_burst(void)
+{
+    undo_assert_boundary_splits_burst();
+}
+
+void test_undo_boundary_cursor_motion_splits_burst(void)
+{
+    undo_assert_boundary_splits_burst();
+}
+
+void test_undo_boundary_newline_splits_burst(void)
+{
+    undo_assert_boundary_splits_burst();
+}
+
+void test_undo_boundary_window_focus_splits_burst(void)
+{
+    undo_assert_boundary_splits_burst();
 }
 
 void test_undo_explicit_depth_prevents_implicit_merge(void)
@@ -334,6 +359,48 @@ void test_undo_lsp_reason_names_sprint47(void)
     undo_assert_deferred_reason(SAG_TXN_LSP, "Sprint 47");
 }
 
+void test_undo_save_rejects_open_transaction(void)
+{
+    int fds[2];
+    pid_t child;
+    pid_t waited;
+    int status;
+    char output[1024];
+    ssize_t got;
+
+    SAG_ASSERT_EQ_I64(pipe(fds), 0);
+    SAG_ASSERT_EQ_I64(fflush(NULL), 0);
+    child = fork();
+    SAG_ASSERT(child >= 0);
+    if (child == 0) {
+        UndoFixture f;
+        FileMeta meta;
+
+        (void)close(fds[0]);
+        (void)dup2(fds[1], STDERR_FILENO);
+        (void)close(fds[1]);
+        (void)memset(&meta, 0, sizeof(meta));
+        undo_fixture_init(&f, NULL, 0U);
+        sag_undo_begin(&f.edit, SAG_TXN_PASTE);
+        sag_edit_insert(&f.edit, BYTEOFF(0U), (const u8 *)"x", 1U);
+        f.edit.meta = &meta;
+        (void)sag_edit_save(&f.edit, "/tmp/sagitta-save-open-transaction");
+        _exit(0);
+    }
+    SAG_ASSERT_EQ_I64(close(fds[1]), 0);
+    got = read(fds[0], output, sizeof(output) - 1U);
+    SAG_ASSERT(got >= 0);
+    output[got < 0 ? 0U : (size_t)got] = '\0';
+    SAG_ASSERT_EQ_I64(close(fds[0]), 0);
+    do {
+        waited = waitpid(child, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+    SAG_ASSERT_EQ_I64(waited, child);
+    SAG_ASSERT(WIFEXITED(status));
+    SAG_ASSERT_EQ_I64(WEXITSTATUS(status), SAG_EXIT_BUG);
+    SAG_ASSERT(strstr(output, "edit save: open undo transaction") != NULL);
+}
+
 void test_undo_abort_restores_content_and_single_cursor(void)
 {
     UndoFixture f;
@@ -377,6 +444,37 @@ void test_undo_restores_eight_cursor_after_snapshot(void)
         SAG_ASSERT_EQ_U64(f.cursors.curs.data[i].pos.v, i == 0U ? 0U : i);
         SAG_ASSERT_EQ_U64(f.cursors.curs.data[i].anchor.v, i);
     }
+    undo_fixture_free(&f);
+}
+
+void test_undo_window_gone_restores_into_focused_cursor_set(void)
+{
+    UndoFixture f;
+    CursorSet focused;
+
+    undo_fixture_init(&f, (const u8 *)"abc", 3U);
+    f.cursors.curs.data[0] = undo_cursor(1U, 0U, 5U);
+    sag_undo_begin(&f.edit, SAG_TXN_PASTE);
+    sag_edit_insert(&f.edit, BYTEOFF(3U), (const u8 *)"X", 1U);
+    f.cursors.curs.data[0] = undo_cursor(4U, 4U, 8U);
+    sag_undo_end(&f.edit);
+    SAG_ASSERT_EQ_U64(undo_current_node(f.undo)->win_id, 7U);
+
+    sag_cset_init(&focused, undo_cursor(2U, 2U, 2U));
+    f.edit.cset = &focused;
+    f.edit.win_id = 99U;
+    SAG_ASSERT(sag_undo(&f.edit));
+    SAG_ASSERT_EQ_U64(focused.curs.data[0].pos.v, 1U);
+    SAG_ASSERT_EQ_U64(focused.curs.data[0].anchor.v, 0U);
+    SAG_ASSERT_EQ_U64(focused.curs.data[0].goal_col.v, 5U);
+    SAG_ASSERT_EQ_U64(f.cursors.curs.data[0].pos.v, 4U);
+    SAG_ASSERT(sag_redo(&f.edit));
+    SAG_ASSERT_EQ_U64(focused.curs.data[0].pos.v, 4U);
+    SAG_ASSERT_EQ_U64(focused.curs.data[0].anchor.v, 4U);
+    SAG_ASSERT_EQ_U64(focused.curs.data[0].goal_col.v, 8U);
+    SAG_ASSERT_EQ_U64(f.cursors.curs.data[0].pos.v, 4U);
+    sag_cset_free(&focused);
+    f.edit.cset = &f.cursors;
     undo_fixture_free(&f);
 }
 

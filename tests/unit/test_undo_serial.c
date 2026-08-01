@@ -4,6 +4,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "text/edit.h"
@@ -142,6 +143,20 @@ static u64 serial_u64(const u8 *bytes)
     return (u64)serial_u32(bytes) | (u64)serial_u32(bytes + 4U) << 32U;
 }
 
+static void serial_put_u32(u8 *bytes, u32 value)
+{
+    bytes[0] = (u8)value;
+    bytes[1] = (u8)(value >> 8U);
+    bytes[2] = (u8)(value >> 16U);
+    bytes[3] = (u8)(value >> 24U);
+}
+
+static void serial_put_u64(u8 *bytes, u64 value)
+{
+    serial_put_u32(bytes, (u32)value);
+    serial_put_u32(bytes + 4U, (u32)(value >> 32U));
+}
+
 static size_t serial_crc_offsets(const Bytebuf *file, size_t *out,
                                  size_t cap)
 {
@@ -188,6 +203,27 @@ static size_t serial_crc_offsets(const Bytebuf *file, size_t *out,
     }
     SAG_ASSERT(at + 8U <= file->len);
     return count;
+}
+
+static void serial_recrc_node(Bytebuf *file, size_t node_index)
+{
+    size_t crc_at[8];
+    size_t count = serial_crc_offsets(file, crc_at, SAG_ARRAY_LEN(crc_at));
+    size_t record_at;
+    u32 old_crc;
+    u32 new_crc;
+    u32 trailer_xor;
+
+    SAG_ASSERT(count <= SAG_ARRAY_LEN(crc_at));
+    SAG_ASSERT(node_index < count);
+    record_at = node_index == 0U ? 64U : crc_at[node_index - 1U] + 4U;
+    old_crc = serial_u32(file->data + crc_at[node_index]);
+    new_crc = sag_crc32(file->data + record_at,
+                        crc_at[node_index] - record_at);
+    serial_put_u32(file->data + crc_at[node_index], new_crc);
+    trailer_xor = serial_u32(file->data + file->len - 8U);
+    serial_put_u32(file->data + file->len - 8U,
+                   trailer_xor ^ old_crc ^ new_crc);
 }
 
 static SagUndoReadResult serial_try_read(const char *path, const u8 *content,
@@ -373,9 +409,13 @@ void test_undo_serial_validates_current_anchor_and_stale_content(void)
 void test_undo_serial_persist_budget_does_not_mutate_memory_tree(void)
 {
     SerialFixture source;
+    SerialFixture loaded;
     Bytebuf content;
+    Bytebuf anchor_content;
     Bytebuf file;
     u32 cur;
+    u32 persisted_root;
+    u32 persisted_count;
     size_t nodes;
     u64 gen;
     char path[64];
@@ -401,12 +441,111 @@ void test_undo_serial_persist_budget_does_not_mutate_memory_tree(void)
     serial_read_file(path, &file);
     SAG_ASSERT(file.len <= 4096U);
     SAG_ASSERT((serial_u32(file.data + 8U) & 1U) != 0U);
+    persisted_root = serial_u32(file.data + 12U);
+    persisted_count = serial_u32(file.data + 28U);
+    SAG_ASSERT(persisted_count > 1U);
+    SAG_ASSERT(persisted_root != cur);
     serial_flatten(source.tb, &content);
-    SAG_ASSERT_EQ_U64(serial_try_read(path, content.data, content.len),
+    serial_fixture_init(&loaded, content.data, content.len);
+    SAG_ASSERT_EQ_U64(sag_undo_read(&loaded.edit, path),
                       SAG_UNDO_READ_CURRENT);
+    SAG_ASSERT_EQ_U64(loaded.undo->cur, cur);
+    SAG_ASSERT_EQ_U64(loaded.undo->root, persisted_root);
+    SAG_ASSERT(sag_undo(&loaded.edit));
+    SAG_ASSERT(sag_textbuf_len(loaded.tb) < content.len);
+    SAG_ASSERT(sag_redo(&loaded.edit));
+    {
+        Bytebuf restored;
+
+        serial_flatten(loaded.tb, &restored);
+        SAG_ASSERT_EQ_U64(restored.len, content.len);
+        SAG_ASSERT_EQ_MEM(restored.data, content.data, content.len);
+        bytebuf_free(&restored);
+    }
+    SAG_ASSERT(sag_undo_to(&source.edit, persisted_root));
+    serial_flatten(source.tb, &anchor_content);
+    SAG_ASSERT(sag_undo_to(&source.edit, cur));
+    SAG_ASSERT_EQ_U64(serial_try_read(path, anchor_content.data,
+                                      anchor_content.len),
+                      SAG_UNDO_READ_ANCHOR);
+    bytebuf_free(&anchor_content);
+    serial_fixture_free(&loaded);
     bytebuf_free(&file);
     bytebuf_free(&content);
     SAG_ASSERT_EQ_I64(unlink(path), 0);
+    serial_fixture_free(&source);
+}
+
+void test_undo_serial_rejects_crc_valid_out_of_bounds_op(void)
+{
+    SerialFixture source;
+    Bytebuf content;
+    Bytebuf file;
+    size_t crc_at[2];
+    size_t child_at;
+    char path[64];
+
+    serial_fixture_init(&source, NULL, 0U);
+    (void)serial_append(&source, (const u8 *)"payload", 7U);
+    serial_flatten(source.tb, &content);
+    serial_path(path);
+    SAG_ASSERT_EQ_U64(sag_undo_write(&source.edit, path), SAG_UNDO_WRITE_OK);
+    serial_read_file(path, &file);
+    SAG_ASSERT_EQ_U64(serial_crc_offsets(&file, crc_at,
+                                         SAG_ARRAY_LEN(crc_at)),
+                      2U);
+    child_at = crc_at[0] + 4U;
+    SAG_ASSERT_EQ_U64(serial_u32(file.data + child_at + 32U), 1U);
+    serial_put_u64(file.data + child_at + 36U + 4U, UINT64_MAX);
+    serial_recrc_node(&file, 1U);
+    serial_write_file(path, file.data, file.len);
+    SAG_ASSERT_EQ_U64(serial_try_read(path, content.data, content.len),
+                      SAG_UNDO_READ_DROPPED);
+    bytebuf_free(&file);
+    bytebuf_free(&content);
+    SAG_ASSERT_EQ_I64(unlink(path), 0);
+    serial_fixture_free(&source);
+}
+
+void test_undo_serial_rejects_unsafe_and_oversized_inputs(void)
+{
+    SerialFixture source;
+    Bytebuf content;
+    char target[64];
+    char candidate[64];
+    int fd;
+
+    serial_fixture_init(&source, NULL, 0U);
+    (void)serial_append(&source, (const u8 *)"safe", 4U);
+    serial_flatten(source.tb, &content);
+    serial_path(target);
+    SAG_ASSERT_EQ_U64(sag_undo_write(&source.edit, target), SAG_UNDO_WRITE_OK);
+
+    serial_path(candidate);
+    SAG_ASSERT_EQ_I64(symlink(target, candidate), 0);
+    SAG_ASSERT_EQ_U64(serial_try_read(candidate, content.data, content.len),
+                      SAG_UNDO_READ_DROPPED);
+    SAG_ASSERT_EQ_I64(unlink(candidate), 0);
+
+    serial_path(candidate);
+    SAG_ASSERT_EQ_I64(mkfifo(candidate, 0600), 0);
+    SAG_ASSERT_EQ_U64(serial_try_read(candidate, content.data, content.len),
+                      SAG_UNDO_READ_DROPPED);
+    SAG_ASSERT_EQ_I64(unlink(candidate), 0);
+
+    serial_path(candidate);
+    fd = open(candidate, O_WRONLY | O_CREAT | O_EXCL, 0600);
+    SAG_ASSERT(fd >= 0);
+    SAG_ASSERT_EQ_I64(ftruncate(
+                          fd, (off_t)(SAG_UNDO_PERSIST_BYTES_MAX + 1U)),
+                      0);
+    SAG_ASSERT_EQ_I64(close(fd), 0);
+    SAG_ASSERT_EQ_U64(serial_try_read(candidate, content.data, content.len),
+                      SAG_UNDO_READ_DROPPED);
+    SAG_ASSERT_EQ_I64(unlink(candidate), 0);
+
+    bytebuf_free(&content);
+    SAG_ASSERT_EQ_I64(unlink(target), 0);
     serial_fixture_free(&source);
 }
 

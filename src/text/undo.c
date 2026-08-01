@@ -3,10 +3,13 @@
 #include "text/undo.h"
 
 #include <errno.h>
+#include <fcntl.h>
 #include <inttypes.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "text/edit.h"
 #include "text/journal.h"
@@ -16,7 +19,7 @@ enum { SAGU_VERSION = 1U, SAGU_HEADER_LEN = 64U, SAGU_TRUNCATED = 1U };
 
 VEC_DECL(SagU32Vec, u32);
 
-static void trim_tree(UndoTree *ut);
+static void trim_tree(EditCtx *ec);
 static bool is_ancestor(const UndoTree *ut, u32 ancestor, u32 id);
 static void account_live(UndoTree *ut);
 
@@ -429,7 +432,8 @@ static void finish_record(EditCtx *ec, UndoNode *node)
 {
     UndoTree *ut = ec->undo;
     if (node->n_after != 0U &&
-        (size_t)node->cur_after + node->n_after == ut->cursors.len) {
+        (size_t)node->cur_after + node->n_after == ut->cursors.len &&
+        (!ut->reopened || node->cur_after != ut->reopen_cur_after)) {
         ut->cursors.len = node->cur_after;
         ut->bytes_live -= (u64)node->n_after * sizeof(CursorRec);
         node->n_after = 0U;
@@ -444,7 +448,7 @@ static void finish_record(EditCtx *ec, UndoNode *node)
         ut->open = 0U;
         if (ec->jrnl != NULL)
             sag_journal_sync(ec->jrnl);
-        trim_tree(ut);
+        trim_tree(ec);
     }
 }
 
@@ -452,7 +456,8 @@ static void replace_after_snapshot(EditCtx *ec, UndoNode *node)
 {
     UndoTree *ut = ec->undo;
     if (node->n_after != 0U &&
-        (size_t)node->cur_after + node->n_after == ut->cursors.len) {
+        (size_t)node->cur_after + node->n_after == ut->cursors.len &&
+        (!ut->reopened || node->cur_after != ut->reopen_cur_after)) {
         ut->cursors.len = node->cur_after;
         ut->bytes_live -= (u64)node->n_after * sizeof(CursorRec);
         node->n_after = 0U;
@@ -688,7 +693,7 @@ void sag_undo_end(EditCtx *ec)
     ut->reopened = false;
     ut->boundary = true;
     sync_navigation(ec);
-    trim_tree(ut);
+    trim_tree(ec);
 }
 
 static void unlink_child(UndoTree *ut, u32 parent_id, u32 child_id)
@@ -724,6 +729,58 @@ void sag_undo_abort(EditCtx *ec)
     node = node_mut(ut, ut->open);
     parent = node->parent;
     sag_edit_ensure_journal(ec);
+    if (ut->reopened) {
+        u32 i = node->n_ops;
+
+        while (i > ut->reopen_n_ops) {
+            u32 index = node->ops_at + --i;
+            const UndoOp *op = &ut->ops.data[index];
+
+            if (op->kind == SAG_OP_INS) {
+                replay_delete(ec, op);
+            } else if (op->kind == SAG_OP_DEL) {
+                const UndoRepairRun *run;
+                u32 r;
+
+                replay_insert_blob(ec, index, op);
+                run = &ut->repair_runs.data[index];
+                for (r = 0U; r < run->len; r++) {
+                    const MarkRepair *repair =
+                        &ut->repairs.data[run->at + r];
+                    if (ec->marks != NULL) {
+                        (void)sag_mark_repair(
+                            ec->marks,
+                            (MarkId){repair->mark_id, repair->mark_gen},
+                            BYTEOFF(op->off + repair->rel_off));
+                    }
+                }
+            } else {
+                SAG_BUG("undo: invalid reopened operation kind");
+            }
+        }
+        restore_cursors(ec, ut->reopen_cur_after, ut->reopen_n_after);
+        ut->ops.len = node->ops_at + ut->reopen_n_ops;
+        ut->repair_runs.len = ut->ops.len;
+        ut->replay_spans.len = ut->ops.len;
+        ut->repairs.len = node->rep_at + ut->reopen_n_rep;
+        ut->blobs.len = (size_t)ut->reopen_blob_hi;
+        ut->cursors.len = (size_t)ut->reopen_cur_after +
+                          ut->reopen_n_after;
+        node->n_ops = ut->reopen_n_ops;
+        node->n_rep = ut->reopen_n_rep;
+        node->blob_hi = ut->reopen_blob_hi;
+        node->cur_after = ut->reopen_cur_after;
+        node->n_after = ut->reopen_n_after;
+        node->t_last_ms = ut->reopen_t_last_ms;
+        ut->open = 0U;
+        ut->depth = 0U;
+        ut->pending_reason = SAG_TXN_REASON_MAX;
+        ut->boundary = true;
+        ut->reopened = false;
+        account_live(ut);
+        sync_navigation(ec);
+        return;
+    }
     apply_inverse(ec, node);
     restore_cursors(ec, node->cur_before, node->n_before);
     unlink_child(ut, parent, node->id);
@@ -760,8 +817,20 @@ bool sag_undo_reopen(EditCtx *ec, SagTxnReason expect)
         return false;
     node = node_mut(ut, ut->cur);
     if (node == NULL || node->id == ut->root || node->reason != (u8)expect ||
-        node->first_child != 0U)
+        node->first_child != 0U ||
+        (size_t)node->ops_at + node->n_ops != ut->ops.len ||
+        ut->repair_runs.len != ut->ops.len ||
+        ut->replay_spans.len != ut->ops.len ||
+        (size_t)node->rep_at + node->n_rep != ut->repairs.len ||
+        node->blob_hi != ut->blobs.len ||
+        (size_t)node->cur_after + node->n_after != ut->cursors.len)
         return false;
+    ut->reopen_n_ops = node->n_ops;
+    ut->reopen_n_rep = node->n_rep;
+    ut->reopen_cur_after = node->cur_after;
+    ut->reopen_n_after = node->n_after;
+    ut->reopen_blob_hi = node->blob_hi;
+    ut->reopen_t_last_ms = node->t_last_ms;
     ut->open = node->id;
     ut->depth = 1U;
     ut->pending_reason = expect;
@@ -959,24 +1028,29 @@ static void compact_blobs(UndoTree *ut)
 {
     Bytebuf compact;
     u32 id;
-    u64 dead_blobs = 0U;
+    u64 dead_blobs;
     u64 live_blobs = 0U;
 
     for (id = 1U; (size_t)id <= ut->nodes.len; id++) {
         const UndoNode *node = node_get(ut, id);
         if (node_live(ut, id))
             live_blobs += node->blob_hi - node->blob_lo;
-        else
-            dead_blobs += node->blob_hi - node->blob_lo;
     }
+    if (live_blobs > ut->blobs.len)
+        SAG_BUG("undo compact: live blobs exceed arena");
+    dead_blobs = ut->blobs.len - live_blobs;
     if (dead_blobs <= live_blobs)
         return;
     bytebuf_init(&compact);
     for (id = 1U; (size_t)id <= ut->nodes.len; id++) {
         UndoNode *node;
         u32 i;
-        if (!node_live(ut, id))
+        if (!node_live(ut, id)) {
+            node = node_mut(ut, id);
+            node->blob_lo = 0U;
+            node->blob_hi = 0U;
             continue;
+        }
         node = node_mut(ut, id);
         node->blob_lo = compact.len;
         for (i = 0U; i < node->n_ops; i++) {
@@ -996,6 +1070,9 @@ static void compact_blobs(UndoTree *ut)
     }
     bytebuf_free(&ut->blobs);
     ut->blobs = compact;
+    ut->bytes_dead = dead_blobs > ut->bytes_dead
+                         ? 0U
+                         : ut->bytes_dead - dead_blobs;
     ut->gen++;
     account_live(ut);
 }
@@ -1041,13 +1118,60 @@ static bool prune_branch(UndoTree *ut, u32 floor)
             !subtree_is_unprotected(ut, id, floor))
             continue;
         tombstone_subtree(ut, id);
+        ut->gen++;
         return true;
     }
     return false;
 }
 
-static bool reroot_one(UndoTree *ut)
+static void state_identity_at(const EditCtx *ec, u32 target,
+                              u64 *len_out, u64 *hash_out)
 {
+    const UndoTree *ut = ec->undo;
+    u64 current_len = sag_textbuf_len(ec->tb);
+    u8 *bytes = copy_live_range(ec->tb, (Span){0U, current_len});
+    TextBuf *scratch = sag_textbuf_from_owned_bytes(bytes, current_len);
+    u32 id = ut->cur;
+
+    if (!is_ancestor(ut, target, id))
+        SAG_BUG("undo: identity target is not on current path");
+    while (id != target) {
+        const UndoNode *node = node_get(ut, id);
+        u32 i = node->n_ops;
+
+        while (i != 0U) {
+            const UndoOp *op = &ut->ops.data[node->ops_at + --i];
+
+            if (op->kind == SAG_OP_INS) {
+                u64 scratch_len = sag_textbuf_len(scratch);
+
+                if (op->off > scratch_len ||
+                    op->len > scratch_len - op->off)
+                    SAG_BUG("undo: invalid insert while hashing state");
+                sag_textbuf_delete(scratch,
+                                   (Span){op->off, op->off + op->len});
+            } else if (op->kind == SAG_OP_DEL) {
+                if (op->payload > ut->blobs.len ||
+                    op->len > ut->blobs.len - op->payload ||
+                    op->off > sag_textbuf_len(scratch))
+                    SAG_BUG("undo: invalid delete while hashing state");
+                sag_textbuf_insert(scratch, BYTEOFF(op->off),
+                                   ut->blobs.data + (size_t)op->payload,
+                                   op->len);
+            } else {
+                SAG_BUG("undo: invalid operation while hashing state");
+            }
+        }
+        id = node->parent;
+    }
+    *len_out = sag_textbuf_len(scratch);
+    *hash_out = text_hash(scratch);
+    sag_textbuf_free(scratch);
+}
+
+static bool reroot_one(EditCtx *ec)
+{
+    UndoTree *ut = ec->undo;
     UndoNode *root = node_mut(ut, ut->root);
     u32 child = 0U;
     u32 at;
@@ -1067,6 +1191,10 @@ static bool reroot_one(UndoTree *ut)
         return false;
     {
         UndoNode *next = node_mut(ut, child);
+        u64 root_len;
+        u64 root_hash;
+
+        state_identity_at(ec, child, &root_len, &root_hash);
         ut->bytes_dead += next->blob_hi - next->blob_lo;
         next->n_ops = 0U;
         next->n_before = 0U;
@@ -1076,20 +1204,22 @@ static bool reroot_one(UndoTree *ut)
         next->flags |= SAG_TXN_TRIMMED;
         root->flags |= SAG_TXN_DEAD;
         ut->root = child;
+        ut->root_len = root_len;
+        ut->root_hash = root_hash;
         ut->gen++;
     }
     return true;
 }
 
-static void trim_tree(UndoTree *ut)
+static void trim_tree(EditCtx *ec)
 {
+    UndoTree *ut = ec->undo;
+
     if (ut->bytes_live <= ut->bytes_max)
-        return;
-    if (ut->over_budget_logged && (ut->nodes.len & 31U) != 0U)
         return;
     while (ut->bytes_live > ut->bytes_max) {
         u32 floor = recent_floor(ut);
-        if (prune_branch(ut, floor) || reroot_one(ut)) {
+        if (prune_branch(ut, floor) || reroot_one(ec)) {
             account_live(ut);
             continue;
         }
@@ -1380,47 +1510,180 @@ static void write_header(Bytebuf *file, u32 flags, u32 root, u32 cur,
     put_u64(file, cur_hash);
 }
 
-static bool write_truncated_current(EditCtx *ec, Bytebuf *file,
-                                    u64 cur_len, u64 cur_hash)
+static u32 write_node_record(EditCtx *ec, Bytebuf *file,
+                             const UndoNode *node, u32 parent,
+                             u32 redo_child, u32 depth, u8 flags,
+                             bool rerooted)
 {
-    const UndoNode *source = node_get(ec->undo, ec->undo->cur);
+    const UndoTree *ut = ec->undo;
     size_t record_at;
-    u32 crc;
-    u32 count = ec->cset == NULL ? 0U : (u32)ec->cset->curs.len;
+    u32 n_ops = rerooted ? 0U : node->n_ops;
+    u32 n_before = rerooted ? 0U : node->n_before;
     u32 i;
+    u32 crc;
 
-    bytebuf_free(file);
-    bytebuf_init(file);
-    write_header(file, SAGU_TRUNCATED, ec->undo->cur, ec->undo->cur, 0U,
-                 ec->undo->cur, 1U, cur_len, cur_hash, cur_len, cur_hash);
     record_at = file->len;
-    put_u32(file, ec->undo->cur);
-    put_u32(file, 0U);
-    put_u32(file, 0U);
-    put_u32(file, 0U);
-    bytebuf_push_u8(file, source == NULL ? SAG_TXN_EXTERNAL : source->reason);
-    bytebuf_push_u8(file, SAG_TXN_TRIMMED);
+    put_u32(file, node->id);
+    put_u32(file, parent);
+    put_u32(file, redo_child);
+    put_u32(file, depth);
+    bytebuf_push_u8(file, node->reason);
+    bytebuf_push_u8(file, flags);
     put_u16(file, 0U);
-    put_u32(file, ec->win_id);
-    put_u64(file, source == NULL ? 0U : (u64)source->t_wall);
-    put_u32(file, 0U);
-    put_u32(file, 0U);
-    put_u32(file, count);
-    if (ec->cset != NULL) {
-        for (i = 0U; i < count; i++) {
-            size_t index = i == 0U ? (size_t)ec->cset->primary
-                                   : (i <= ec->cset->primary ? i - 1U : i);
-            const Cursor *cursor = &ec->cset->curs.data[index];
-            CursorRec rec = {cursor->pos.v, cursor->anchor.v,
-                             cursor->goal_col.v};
-            put_cursor(file, &rec);
+    put_u32(file, node->win_id);
+    put_u64(file, (u64)node->t_wall);
+    put_u32(file, n_ops);
+    for (i = 0U; i < n_ops; i++) {
+        u32 index = node->ops_at + i;
+        const UndoOp *op = &ut->ops.data[index];
+        const UndoRepairRun *run = &ut->repair_runs.data[index];
+        const u8 *payload;
+        u32 r;
+
+        if (op->kind == SAG_OP_INS) {
+            payload = store_bytes(ec->tb, op->src,
+                                  (Span){op->payload,
+                                         op->payload + op->len});
+        } else {
+            if (op->payload > ut->blobs.len ||
+                op->len > ut->blobs.len - op->payload)
+                SAG_BUG("undo write: corrupt delete payload");
+            payload = ut->blobs.data + (size_t)op->payload;
         }
+        bytebuf_push_u8(file, op->kind);
+        bytebuf_push_u8(file, 0U);
+        put_u16(file, 0U);
+        put_u64(file, op->off);
+        put_u64(file, op->len);
+        put_u64(file, op->len);
+        bytebuf_append(file, payload, (size_t)op->len);
+        put_u32(file, run->len);
+        for (r = 0U; r < run->len; r++)
+            put_repair(file, &ut->repairs.data[run->at + r]);
     }
+    put_u32(file, n_before);
+    for (i = 0U; i < n_before; i++)
+        put_cursor(file, &ut->cursors.data[node->cur_before + i]);
+    put_u32(file, node->n_after);
+    for (i = 0U; i < node->n_after; i++)
+        put_cursor(file, &ut->cursors.data[node->cur_after + i]);
     crc = sag_crc32(file->data + record_at, file->len - record_at);
     put_u32(file, crc);
-    put_u32(file, crc);
+    return crc;
+}
+
+static u64 serialized_node_size(const UndoTree *ut, const UndoNode *node,
+                                bool rerooted)
+{
+    u64 total = 36U + 12U + (u64)node->n_after * 24U;
+    u32 i;
+
+    if (!rerooted)
+        total += (u64)node->n_before * 24U;
+    if (rerooted)
+        return total;
+    for (i = 0U; i < node->n_ops; i++) {
+        u32 index = node->ops_at + i;
+        const UndoOp *op = &ut->ops.data[index];
+        const UndoRepairRun *run = &ut->repair_runs.data[index];
+        u64 repair_size = (u64)run->len * 16U;
+
+        if (total > UINT64_MAX - 32U ||
+            op->len > UINT64_MAX - total - 32U ||
+            repair_size > UINT64_MAX - total - 32U - op->len)
+            SAG_BUG("undo write: serialized node size overflow");
+        total += 32U + op->len + repair_size;
+    }
+    return total;
+}
+
+static bool write_truncated_path(EditCtx *ec, Bytebuf *file,
+                                 u64 cur_len, u64 cur_hash)
+{
+    UndoTree *ut = ec->undo;
+    SagU32Vec path = {0};
+    u64 tail_size = 0U;
+    size_t first = SIZE_MAX;
+    size_t i;
+    u32 id = ut->cur;
+    u32 saved = 0U;
+    u32 crc_xor = 0U;
+    u64 root_len;
+    u64 root_hash;
+
+    while (id != 0U) {
+        SagU32Vec_push(&path, id);
+        if (id == ut->root)
+            break;
+        id = node_get(ut, id)->parent;
+    }
+    if (path.len == 0U || path.data[path.len - 1U] != ut->root)
+        SAG_BUG("undo write: current path does not reach root");
+    for (i = 0U; i < path.len / 2U; i++) {
+        u32 swap = path.data[i];
+        path.data[i] = path.data[path.len - i - 1U];
+        path.data[path.len - i - 1U] = swap;
+    }
+    for (i = path.len; i != 0U; ) {
+        const UndoNode *node = node_get(ut, path.data[--i]);
+        u64 root_size = serialized_node_size(ut, node, true);
+        u64 total = SAGU_HEADER_LEN + 8U;
+
+        if (tail_size <= UINT64_MAX - total - root_size)
+            total += root_size + tail_size;
+        else
+            total = UINT64_MAX;
+        if (total <= ut->persist_bytes_max)
+            first = i;
+        else
+            break;
+        root_size = serialized_node_size(ut, node, false);
+        if (root_size > UINT64_MAX - tail_size)
+            tail_size = UINT64_MAX;
+        else
+            tail_size += root_size;
+    }
+    if (first == SIZE_MAX) {
+        SagU32Vec_free(&path);
+        return false;
+    }
+    if (ut->saved != 0U) {
+        for (i = first; i < path.len; i++) {
+            if (path.data[i] == ut->saved) {
+                saved = ut->saved;
+                break;
+            }
+        }
+    }
+    state_identity_at(ec, path.data[first], &root_len, &root_hash);
+    bytebuf_free(file);
+    bytebuf_init(file);
+    if (path.len - first > UINT32_MAX)
+        SAG_BUG("undo write: too many nodes on truncated path");
+    write_header(file, SAGU_TRUNCATED, path.data[first], ut->cur, saved,
+                 saved != 0U ? saved : path.data[first],
+                 (u32)(path.len - first),
+                 saved != 0U ? ut->saved_len : root_len,
+                 saved != 0U ? ut->saved_hash : root_hash,
+                 cur_len, cur_hash);
+    for (i = first; i < path.len; i++) {
+        const UndoNode *node = node_get(ut, path.data[i]);
+        u8 flags = node->flags & (u8)~SAG_TXN_SAVED;
+        bool rerooted = i == first;
+
+        if (rerooted)
+            flags |= SAG_TXN_TRIMMED;
+        if (node->id == saved)
+            flags |= SAG_TXN_SAVED;
+        crc_xor ^= write_node_record(
+            ec, file, node, rerooted ? 0U : path.data[i - 1U],
+            i + 1U < path.len ? path.data[i + 1U] : 0U,
+            (u32)(i - first), flags, rerooted);
+    }
+    put_u32(file, crc_xor);
     bytebuf_append(file, "UGAS", 4U);
-    return (u64)file->len <= ec->undo->persist_bytes_max;
+    SagU32Vec_free(&path);
+    return (u64)file->len <= ut->persist_bytes_max;
 }
 
 SagUndoWriteResult sag_undo_write(EditCtx *ec, const char *path)
@@ -1431,7 +1694,6 @@ SagUndoWriteResult sag_undo_write(EditCtx *ec, const char *path)
     u32 count;
     u32 crc_xor = 0U;
     u32 id;
-    u32 flags = 0U;
     u64 current_len;
     u64 current_hash;
     SagSaveErr result;
@@ -1453,72 +1715,21 @@ SagUndoWriteResult sag_undo_write(EditCtx *ec, const char *path)
                  current_len, current_hash);
     for (id = 1U; (size_t)id <= ut->nodes.len; id++) {
         const UndoNode *node;
-        size_t record_at;
-        u32 i;
-        u32 crc;
         if (!node_live(ut, id))
             continue;
         node = node_get(ut, id);
-        record_at = file.len;
-        put_u32(&file, node->id);
-        put_u32(&file, node->parent);
-        put_u32(&file, node->redo_child);
-        put_u32(&file, node->depth);
-        bytebuf_push_u8(&file, node->reason);
-        bytebuf_push_u8(&file, node->flags);
-        put_u16(&file, 0U);
-        put_u32(&file, node->win_id);
-        put_u64(&file, (u64)node->t_wall);
-        put_u32(&file, node->n_ops);
-        for (i = 0U; i < node->n_ops; i++) {
-            u32 index = node->ops_at + i;
-            const UndoOp *op = &ut->ops.data[index];
-            const u8 *payload;
-            const UndoRepairRun *run = &ut->repair_runs.data[index];
-            if (op->kind == SAG_OP_INS) {
-                payload = store_bytes(ec->tb, op->src,
-                                      (Span){op->payload,
-                                             op->payload + op->len});
-            } else {
-                if (op->payload > ut->blobs.len ||
-                    op->len > ut->blobs.len - op->payload)
-                    SAG_BUG("undo write: corrupt delete payload");
-                payload = ut->blobs.data + (size_t)op->payload;
-            }
-            bytebuf_push_u8(&file, op->kind);
-            bytebuf_push_u8(&file, 0U);
-            put_u16(&file, 0U);
-            put_u64(&file, op->off);
-            put_u64(&file, op->len);
-            put_u64(&file, op->len);
-            bytebuf_append(&file, payload, (size_t)op->len);
-            put_u32(&file, run->len);
-            {
-                u32 r;
-                for (r = 0U; r < run->len; r++)
-                    put_repair(&file, &ut->repairs.data[run->at + r]);
-            }
-        }
-        put_u32(&file, node->n_before);
-        for (i = 0U; i < node->n_before; i++)
-            put_cursor(&file, &ut->cursors.data[node->cur_before + i]);
-        put_u32(&file, node->n_after);
-        for (i = 0U; i < node->n_after; i++)
-            put_cursor(&file, &ut->cursors.data[node->cur_after + i]);
-        crc = sag_crc32(file.data + record_at, file.len - record_at);
-        put_u32(&file, crc);
-        crc_xor ^= crc;
+        crc_xor ^= write_node_record(ec, &file, node, node->parent,
+                                     node->redo_child, node->depth,
+                                     node->flags, false);
     }
     put_u32(&file, crc_xor);
     bytebuf_append(&file, "UGAS", 4U);
     if ((u64)file.len > ut->persist_bytes_max) {
-        flags |= SAGU_TRUNCATED;
-        if (!write_truncated_current(ec, &file, current_len, current_hash)) {
+        if (!write_truncated_path(ec, &file, current_len, current_hash)) {
             bytebuf_free(&file);
             return SAG_UNDO_WRITE_TOO_LARGE;
         }
     }
-    (void)flags;
     result = sag_file_write_atomic(path, file.data, file.len, 0600);
     bytebuf_free(&file);
     return result == SAG_SAVE_OK ? SAG_UNDO_WRITE_OK : SAG_UNDO_WRITE_IO;
@@ -1530,9 +1741,15 @@ typedef struct {
     size_t at;
 } SaguReader;
 
+typedef enum {
+    SAGU_FILE_OK = 0,
+    SAGU_FILE_IO,
+    SAGU_FILE_INVALID
+} SaguFileRead;
+
 static bool take(SaguReader *reader, size_t len, const u8 **out)
 {
-    if (len > reader->len - reader->at)
+    if (reader->at > reader->len || len > reader->len - reader->at)
         return false;
     *out = reader->data + reader->at;
     reader->at += len;
@@ -1571,26 +1788,65 @@ static bool get_u64(SaguReader *reader, u64 *out)
     return true;
 }
 
-static bool read_file_bytes(const char *path, Bytebuf *buf)
+static SaguFileRead read_file_bytes(const char *path, u64 max_bytes,
+                                    Bytebuf *buf)
 {
-    FILE *file;
-    u8 block[8192];
-    size_t count;
-    file = fopen(path, "rb");
-    if (file == NULL)
-        return false;
+    struct stat path_st;
+    struct stat before;
+    struct stat after;
+    int flags = O_RDONLY;
+    int fd;
+    size_t size;
+    size_t at = 0U;
+    SaguFileRead result = SAGU_FILE_IO;
+
     bytebuf_init(buf);
-    while ((count = fread(block, 1U, sizeof(block), file)) != 0U)
-        bytebuf_append(buf, block, count);
-    {
-        bool failed = ferror(file) != 0;
-        if (fclose(file) != 0)
-            failed = true;
-        if (!failed)
-            return true;
-        bytebuf_free(buf);
-        return false;
+    if (lstat(path, &path_st) != 0)
+        return SAGU_FILE_IO;
+    if (!S_ISREG(path_st.st_mode))
+        return SAGU_FILE_INVALID;
+#ifdef O_CLOEXEC
+    flags |= O_CLOEXEC;
+#endif
+#ifdef O_NOFOLLOW
+    flags |= O_NOFOLLOW;
+#endif
+    fd = open(path, flags);
+    if (fd < 0)
+        return errno == ELOOP ? SAGU_FILE_INVALID : SAGU_FILE_IO;
+    if (fstat(fd, &before) != 0)
+        goto done;
+    if (!S_ISREG(before.st_mode) || before.st_dev != path_st.st_dev ||
+        before.st_ino != path_st.st_ino || before.st_size < 0 ||
+        (u64)before.st_size > max_bytes ||
+        (u64)before.st_size > SIZE_MAX) {
+        result = SAGU_FILE_INVALID;
+        goto done;
     }
+    size = (size_t)before.st_size;
+    bytebuf_reserve(buf, size);
+    while (at < size) {
+        ssize_t got = read(fd, buf->data + at, size - at);
+
+        if (got > 0)
+            at += (size_t)got;
+        else if (got < 0 && errno == EINTR)
+            continue;
+        else
+            goto done;
+    }
+    buf->len = size;
+    if (fstat(fd, &after) != 0 || before.st_dev != after.st_dev ||
+        before.st_ino != after.st_ino || before.st_size != after.st_size)
+        goto done;
+    result = SAGU_FILE_OK;
+
+done:
+    if (close(fd) != 0 && result == SAGU_FILE_OK)
+        result = SAGU_FILE_IO;
+    if (result != SAGU_FILE_OK)
+        bytebuf_free(buf);
+    return result;
 }
 
 static void init_loaded_tree(UndoTree *ut, const TextBuf *tb)
@@ -1635,7 +1891,9 @@ static bool parse_repair(SaguReader *reader, MarkRepair *repair)
 static bool grow_node_ids(UndoTree *ut, u32 id)
 {
     UndoNode dead;
-    if (id == 0U || id > UINT32_C(10000000))
+    const u64 max_ids = SAG_UNDO_PERSIST_BYTES_MAX / 48U;
+
+    if (id == 0U || id > max_ids)
         return false;
     (void)memset(&dead, 0, sizeof(dead));
     dead.flags = SAG_TXN_DEAD;
@@ -1667,14 +1925,18 @@ static bool parse_node(SaguReader *reader, UndoTree *ut, u32 *crc_xor,
             !get_u32(reader, &n_ops))
             return false;
         node.reason = small[0];
-        node.flags = small[1] & (u8)~SAG_TXN_DEAD;
+        node.flags = small[1];
         node.t_wall = (i64)wall;
-        if (pad != 0U)
+        if (pad != 0U ||
+            (node.flags & (u8)~(SAG_TXN_TRIMMED | SAG_TXN_SAVED)) != 0U)
             return false;
     }
     if (node.id <= previous_id || node.reason >= SAG_TXN_REASON_MAX ||
         !grow_node_ids(ut, node.id) ||
-        (node.parent != 0U && !node_live(ut, node.parent)))
+        (node.parent != 0U && !node_live(ut, node.parent)) ||
+        ut->ops.len > UINT32_MAX || ut->repairs.len > UINT32_MAX ||
+        n_ops > (reader->len - reader->at) / 32U ||
+        n_ops > UINT32_MAX - ut->ops.len)
         return false;
     node.ops_at = (u32)ut->ops.len;
     node.rep_at = (u32)ut->repairs.len;
@@ -1692,7 +1954,9 @@ static bool parse_node(SaguReader *reader, UndoTree *ut, u32 *crc_xor,
         if (!take(reader, 2U, &small) || !get_u16(reader, &pad) ||
             !get_u64(reader, &op.off) || !get_u64(reader, &op.len) ||
             !get_u64(reader, &plen) || plen != op.len ||
-            plen > SIZE_MAX || !take(reader, (size_t)plen, &payload))
+            plen == 0U || plen > SIZE_MAX ||
+            plen > SIZE_MAX - ut->blobs.len ||
+            !take(reader, (size_t)plen, &payload))
             return false;
         op.kind = small[0];
         if ((op.kind != SAG_OP_INS && op.kind != SAG_OP_DEL) ||
@@ -1700,7 +1964,11 @@ static bool parse_node(SaguReader *reader, UndoTree *ut, u32 *crc_xor,
             return false;
         op.payload = ut->blobs.len;
         bytebuf_append(&ut->blobs, payload, (size_t)plen);
-        if (!get_u32(reader, &repair_count))
+        if (!get_u32(reader, &repair_count) ||
+            repair_count > (reader->len - reader->at) / 16U ||
+            repair_count > UINT32_MAX - ut->repairs.len ||
+            repair_count > UINT32_MAX - node.n_rep ||
+            (op.kind == SAG_OP_INS && repair_count != 0U))
             return false;
         run.at = (u32)ut->repairs.len;
         run.len = repair_count;
@@ -1719,7 +1987,10 @@ static bool parse_node(SaguReader *reader, UndoTree *ut, u32 *crc_xor,
         SagUndoReplaySpanVec_push(&ut->replay_spans, replay);
     }
     node.n_ops = n_ops;
-    if (!get_u32(reader, &node.n_before))
+    if (!get_u32(reader, &node.n_before) ||
+        ut->cursors.len > UINT32_MAX ||
+        node.n_before > (reader->len - reader->at) / 24U ||
+        node.n_before > UINT32_MAX - ut->cursors.len)
         return false;
     node.cur_before = (u32)ut->cursors.len;
     for (i = 0U; i < node.n_before; i++) {
@@ -1728,7 +1999,10 @@ static bool parse_node(SaguReader *reader, UndoTree *ut, u32 *crc_xor,
             return false;
         SagCursorRecVec_push(&ut->cursors, cursor);
     }
-    if (!get_u32(reader, &node.n_after))
+    if (!get_u32(reader, &node.n_after) ||
+        ut->cursors.len > UINT32_MAX ||
+        node.n_after > (reader->len - reader->at) / 24U ||
+        node.n_after > UINT32_MAX - ut->cursors.len)
         return false;
     node.cur_after = (u32)ut->cursors.len;
     for (i = 0U; i < node.n_after; i++) {
@@ -1753,29 +2027,164 @@ static bool parse_node(SaguReader *reader, UndoTree *ut, u32 *crc_xor,
     return true;
 }
 
-static bool validate_loaded(const UndoTree *ut, u32 root, u32 cur, u32 saved,
-                            u32 anchor)
+static bool reverse_node_len(const UndoTree *ut, const UndoNode *node,
+                             u64 *len)
 {
-    u32 id;
-    if (!node_live(ut, root) || node_get(ut, root)->parent != 0U ||
-        !node_live(ut, cur) || !node_live(ut, anchor) ||
-        (saved != 0U && !node_live(ut, saved)))
-        return false;
-    for (id = 1U; (size_t)id <= ut->nodes.len; id++) {
-        const UndoNode *node;
-        if (!node_live(ut, id))
-            continue;
-        node = node_get(ut, id);
-        if (id != root &&
-            (!node_live(ut, node->parent) ||
-             node->depth != node_get(ut, node->parent)->depth + 1U))
+    u32 i = node->n_ops;
+
+    while (i != 0U) {
+        const UndoOp *op = &ut->ops.data[node->ops_at + --i];
+
+        if (op->kind == SAG_OP_INS) {
+            if (op->off > *len || op->len > *len - op->off)
+                return false;
+            *len -= op->len;
+        } else if (op->kind == SAG_OP_DEL) {
+            if (op->off > *len || op->len > UINT64_MAX - *len)
+                return false;
+            *len += op->len;
+        } else {
             return false;
-        if (node->redo_child != 0U &&
-            (!node_live(ut, node->redo_child) ||
-             node_get(ut, node->redo_child)->parent != id))
+        }
+    }
+    return true;
+}
+
+static bool forward_node_len(const UndoTree *ut, const UndoNode *node,
+                             u64 *len)
+{
+    u32 i;
+
+    for (i = 0U; i < node->n_ops; i++) {
+        const UndoOp *op = &ut->ops.data[node->ops_at + i];
+
+        if (op->kind == SAG_OP_INS) {
+            if (op->off > *len || op->len > UINT64_MAX - *len)
+                return false;
+            *len += op->len;
+        } else if (op->kind == SAG_OP_DEL) {
+            if (op->off > *len || op->len > *len - op->off)
+                return false;
+            *len -= op->len;
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
+
+static bool cursor_slice_valid(const UndoTree *ut, u32 at, u32 count,
+                               u64 len)
+{
+    u32 i;
+
+    if ((size_t)at > ut->cursors.len ||
+        count > ut->cursors.len - (size_t)at)
+        return false;
+    for (i = 0U; i < count; i++) {
+        const CursorRec *cursor = &ut->cursors.data[at + i];
+
+        if (cursor->pos > len || cursor->anchor > len)
             return false;
     }
     return true;
+}
+
+static bool node_payloads_valid(const UndoTree *ut, const UndoNode *node)
+{
+    u32 i;
+
+    if ((size_t)node->ops_at > ut->ops.len ||
+        node->n_ops > ut->ops.len - (size_t)node->ops_at)
+        return false;
+    for (i = 0U; i < node->n_ops; i++) {
+        u32 index = node->ops_at + i;
+        const UndoOp *op = &ut->ops.data[index];
+        const UndoRepairRun *run;
+        u32 r;
+
+        if ((size_t)index >= ut->repair_runs.len ||
+            op->payload > ut->blobs.len ||
+            op->len > ut->blobs.len - op->payload)
+            return false;
+        run = &ut->repair_runs.data[index];
+        if ((size_t)run->at > ut->repairs.len ||
+            run->len > ut->repairs.len - (size_t)run->at ||
+            (op->kind == SAG_OP_INS && run->len != 0U))
+            return false;
+        for (r = 0U; r < run->len; r++) {
+            if (ut->repairs.data[run->at + r].rel_off > op->len)
+                return false;
+        }
+    }
+    return true;
+}
+
+static bool validate_loaded(const UndoTree *ut, u32 root, u32 cur, u32 saved,
+                            u32 anchor, u64 anchor_len, u64 cur_len,
+                            u64 *root_len_out)
+{
+    u64 *lengths;
+    u64 root_len = anchor_len;
+    u32 id;
+
+    if (!node_live(ut, root) || node_get(ut, root)->parent != 0U ||
+        !node_live(ut, cur) || !node_live(ut, anchor) ||
+        (saved != 0U && !node_live(ut, saved)) ||
+        anchor != (saved != 0U ? saved : root) ||
+        !is_ancestor(ut, root, cur) || !is_ancestor(ut, root, anchor) ||
+        node_get(ut, root)->depth != 0U ||
+        node_get(ut, root)->n_ops != 0U ||
+        node_get(ut, root)->n_before != 0U)
+        return false;
+    id = anchor;
+    while (id != root) {
+        const UndoNode *node = node_get(ut, id);
+
+        if (!reverse_node_len(ut, node, &root_len))
+            return false;
+        id = node->parent;
+    }
+    lengths = sag_xcalloc(ut->nodes.len, sizeof(*lengths));
+    for (id = 1U; (size_t)id <= ut->nodes.len; id++) {
+        const UndoNode *node;
+        u64 before_len;
+        u64 after_len;
+
+        if (!node_live(ut, id))
+            continue;
+        node = node_get(ut, id);
+        if ((id == root && node->parent != 0U) ||
+            (id != root &&
+             (!node_live(ut, node->parent) || node->parent == 0U ||
+              node->depth != node_get(ut, node->parent)->depth + 1U)) ||
+            ((node->flags & SAG_TXN_SAVED) != 0U) != (id == saved) ||
+            !node_payloads_valid(ut, node))
+            goto invalid;
+        if (node->redo_child != 0U &&
+            (!node_live(ut, node->redo_child) ||
+             node_get(ut, node->redo_child)->parent != id))
+            goto invalid;
+        before_len = id == root ? root_len : lengths[node->parent - 1U];
+        after_len = before_len;
+        if (!forward_node_len(ut, node, &after_len) ||
+            !cursor_slice_valid(ut, node->cur_before, node->n_before,
+                                before_len) ||
+            !cursor_slice_valid(ut, node->cur_after, node->n_after,
+                                after_len))
+            goto invalid;
+        lengths[id - 1U] = after_len;
+    }
+    if (lengths[cur - 1U] != cur_len ||
+        lengths[anchor - 1U] != anchor_len)
+        goto invalid;
+    free(lengths);
+    *root_len_out = root_len;
+    return true;
+
+invalid:
+    free(lengths);
+    return false;
 }
 
 static void materialize_insert_payloads(EditCtx *ec, UndoTree *ut)
@@ -1846,6 +2255,8 @@ SagUndoReadResult sag_undo_read(EditCtx *ec, const char *path)
     u64 anchor_hash;
     u64 cur_len;
     u64 cur_hash;
+    u64 root_len;
+    u64 root_hash;
     u32 crc_xor = 0U;
     u32 stored_xor;
     u32 i;
@@ -1853,6 +2264,7 @@ SagUndoReadResult sag_undo_read(EditCtx *ec, const char *path)
     u64 len;
     u64 hash;
     SagUndoReadResult outcome;
+    SaguFileRead file_result;
     UndoTree *old;
 
     require_ctx(ec);
@@ -1860,8 +2272,17 @@ SagUndoReadResult sag_undo_read(EditCtx *ec, const char *path)
         SAG_BUG("sag_undo_read: NULL path");
     if (ec->undo->depth != 0U || ec->undo->open != 0U)
         SAG_BUG("undo: deserialize inside transaction");
-    if (!read_file_bytes(path, &file))
+    file_result = read_file_bytes(
+        path, ec->undo->persist_bytes_max < SAG_UNDO_PERSIST_BYTES_MAX
+                  ? ec->undo->persist_bytes_max
+                  : SAG_UNDO_PERSIST_BYTES_MAX,
+        &file);
+    if (file_result == SAGU_FILE_IO)
         return SAG_UNDO_READ_IO;
+    if (file_result == SAGU_FILE_INVALID) {
+        sag_log(SAG_LOG_WARN, "undo: dropped unsafe or oversized .sagu");
+        return SAG_UNDO_READ_DROPPED;
+    }
     reader = (SaguReader){file.data, file.len, 0U};
     init_loaded_tree(&loaded, ec->tb);
     if (!take(&reader, 4U, &magic) || memcmp(magic, "SAGU", 4U) != 0 ||
@@ -1871,10 +2292,12 @@ SagUndoReadResult sag_undo_read(EditCtx *ec, const char *path)
         !get_u32(&reader, &anchor) || !get_u32(&reader, &count) ||
         !get_u64(&reader, &anchor_len) || !get_u64(&reader, &anchor_hash) ||
         !get_u64(&reader, &cur_len) || !get_u64(&reader, &cur_hash) ||
-        reader.at != SAGU_HEADER_LEN) {
+        reader.at != SAGU_HEADER_LEN ||
+        (flags & (u32)~SAGU_TRUNCATED) != 0U || count == 0U ||
+        reader.len < SAGU_HEADER_LEN + 8U ||
+        count > (reader.len - SAGU_HEADER_LEN - 8U) / 48U) {
         goto dropped;
     }
-    (void)flags;
     for (i = 0U; i < count; i++) {
         size_t before = reader.at;
         if (!parse_node(&reader, &loaded, &crc_xor, previous_id))
@@ -1886,7 +2309,8 @@ SagUndoReadResult sag_undo_read(EditCtx *ec, const char *path)
     if (!get_u32(&reader, &stored_xor) || stored_xor != crc_xor ||
         !take(&reader, 4U, &magic) || memcmp(magic, "UGAS", 4U) != 0 ||
         reader.at != reader.len ||
-        !validate_loaded(&loaded, root, cur, saved, anchor))
+        !validate_loaded(&loaded, root, cur, saved, anchor, anchor_len,
+                         cur_len, &root_len))
         goto dropped;
     len = sag_textbuf_len(ec->tb);
     hash = text_hash(ec->tb);
@@ -1901,10 +2325,9 @@ SagUndoReadResult sag_undo_read(EditCtx *ec, const char *path)
     }
     loaded.root = root;
     loaded.saved = saved;
-    loaded.root_len = root == anchor ? anchor_len : 0U;
-    loaded.root_hash = root == anchor ? anchor_hash : 0U;
-    loaded.saved_len = saved != 0U ? anchor_len : loaded.root_len;
-    loaded.saved_hash = saved != 0U ? anchor_hash : loaded.root_hash;
+    loaded.root_len = root_len;
+    loaded.saved_len = saved != 0U ? anchor_len : root_len;
+    loaded.saved_hash = saved != 0U ? anchor_hash : 0U;
     old = ec->undo;
     loaded.bytes_max = old->bytes_max;
     loaded.min_nodes = old->min_nodes;
@@ -1914,6 +2337,17 @@ SagUndoReadResult sag_undo_read(EditCtx *ec, const char *path)
     loaded.clock_ctx = old->clock_ctx;
     materialize_insert_payloads(ec, &loaded);
     retain_delete_payloads(&loaded);
+    {
+        EditCtx identity = *ec;
+
+        identity.undo = &loaded;
+        state_identity_at(&identity, root, &root_len, &root_hash);
+    }
+    if (root_len != loaded.root_len)
+        SAG_BUG("undo read: validated root length changed");
+    loaded.root_hash = root_hash;
+    if (saved == 0U)
+        loaded.saved_hash = root_hash;
     account_live(&loaded);
     dispose_loaded_tree(old);
     *old = loaded;

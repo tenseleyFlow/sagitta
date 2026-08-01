@@ -67,6 +67,29 @@ static u32 trim_append(TrimFixture *f, const u8 *bytes, u64 len)
     return sag_undo_current(f->undo);
 }
 
+static void trim_assert_bytes(const TextBuf *tb, const u8 *want, u64 len)
+{
+    TextIter it;
+    u64 at = 0U;
+
+    SAG_ASSERT_EQ_U64(sag_textbuf_len(tb), len);
+    if (len == 0U)
+        return;
+    SAG_ASSERT(sag_textiter_begin(&it, tb, BYTEOFF(0U)));
+    while (at < len) {
+        const u8 *bytes;
+        u64 avail;
+        u64 take;
+
+        SAG_ASSERT(sag_textiter_chunk(&it, tb, &bytes, &avail));
+        take = avail < len - at ? avail : len - at;
+        SAG_ASSERT_EQ_MEM(bytes, want + at, take);
+        at += take;
+        if (at < len)
+            SAG_ASSERT(sag_textiter_advance(&it, tb));
+    }
+}
+
 static bool trim_live(const UndoTree *ut, u32 id)
 {
     return id != 0U && id <= ut->nodes.len &&
@@ -198,29 +221,51 @@ void test_undo_trim_compaction_preserves_delete_payloads(void)
 {
     TrimFixture f;
     u8 initial[8192];
-    u8 expected[8192];
+    u8 before[8193];
+    u8 after[8193 - 256];
+    const UndoNode *current;
+    const UndoOp *op;
     u64 old_gen;
     u32 i;
 
     for (i = 0U; i < sizeof(initial); i++)
         initial[i] = (u8)(i * 17U + 3U);
-    (void)memcpy(expected, initial, sizeof(expected));
-    trim_fixture_init(&f, 2U);
-    sag_edit_insert(&f.edit, BYTEOFF(0U), initial, sizeof(initial));
+    (void)memcpy(before, initial, sizeof(initial));
+    before[sizeof(initial)] = 'x';
+    (void)memcpy(after, before, 100U);
+    (void)memcpy(after + 100U, before + 356U,
+                 sizeof(before) - 356U);
+
+    trim_fixture_init(&f, 1U);
+    sag_undo_set_limits(f.undo, 1024U * 1024U, 1U,
+                        SAG_UNDO_PERSIST_BYTES_MAX);
+    (void)trim_append(&f, initial, sizeof(initial));
     sag_undo_mark_saved(f.undo);
+    sag_undo_begin(&f.edit, SAG_TXN_CUT);
+    sag_edit_delete(&f.edit, (Span){0U, 6144U});
+    sag_undo_end(&f.edit);
+    SAG_ASSERT(sag_undo(&f.edit));
+    (void)trim_append(&f, (const u8 *)"x", 1U);
     old_gen = f.undo->gen;
-    for (i = 0U; i < 12U && sag_textbuf_len(f.tb) >= 512U; i++) {
-        sag_undo_begin(&f.edit, SAG_TXN_CUT);
-        sag_edit_delete(&f.edit, (Span){0U, 512U});
-        sag_undo_end(&f.edit);
-    }
-    SAG_ASSERT(f.undo->gen >= old_gen);
-    SAG_ASSERT(f.undo->bytes_dead <= f.undo->bytes_live ||
-               f.undo->bytes_live > f.undo->bytes_max);
-    while (sag_undo(&f.edit))
-        ;
-    SAG_ASSERT(sag_textbuf_len(f.tb) <= sizeof(expected));
-    SAG_ASSERT(sag_undo_to(&f.edit, f.undo->cur));
+
+    sag_undo_set_limits(f.undo, 2048U, 1U,
+                        SAG_UNDO_PERSIST_BYTES_MAX);
+    sag_undo_begin(&f.edit, SAG_TXN_CUT);
+    sag_edit_delete(&f.edit, (Span){100U, 356U});
+    sag_undo_end(&f.edit);
+
+    SAG_ASSERT(f.undo->gen > old_gen);
+    SAG_ASSERT_EQ_U64(f.undo->blobs.len, 256U);
+    current = &f.undo->nodes.data[f.undo->cur - 1U];
+    SAG_ASSERT_EQ_U64(current->n_ops, 1U);
+    op = &f.undo->ops.data[current->ops_at];
+    SAG_ASSERT_EQ_U64(op->kind, SAG_OP_DEL);
+    SAG_ASSERT_EQ_U64(op->payload, 0U);
+    trim_assert_bytes(f.tb, after, sizeof(after));
+    SAG_ASSERT(sag_undo(&f.edit));
+    trim_assert_bytes(f.tb, before, sizeof(before));
+    SAG_ASSERT(sag_redo(&f.edit));
+    trim_assert_bytes(f.tb, after, sizeof(after));
     sag_textbuf_check(f.tb);
     trim_fixture_free(&f);
 }

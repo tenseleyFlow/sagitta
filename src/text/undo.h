@@ -139,6 +139,12 @@ typedef struct UndoTree {
     bool boundary;
     bool over_budget_logged;
     bool reopened;
+    u32 reopen_n_ops;
+    u32 reopen_n_rep;
+    u32 reopen_cur_after;
+    u32 reopen_n_after;
+    u64 reopen_blob_hi;
+    u64 reopen_t_last_ms;
     SagUndoMonoClock mono_clock;
     SagUndoWallClock wall_clock;
     void *clock_ctx;

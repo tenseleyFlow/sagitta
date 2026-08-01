@@ -113,6 +113,80 @@ void test_undo_tree_preserves_abandoned_branch(void)
     tree_fixture_free(&f);
 }
 
+void test_undo_tree_reopen_rejects_non_tail_branch_leaf(void)
+{
+    TreeFixture f;
+    u32 a;
+    u32 b;
+    u32 c;
+    u32 children[2] = {0U};
+
+    tree_fixture_init(&f);
+    a = tree_append(&f, 'A');
+    SAG_ASSERT(sag_undo(&f.edit));
+    b = tree_append(&f, 'B');
+    SAG_ASSERT(sag_undo_to(&f.edit, a));
+    SAG_ASSERT(!sag_undo_reopen(&f.edit, SAG_TXN_PASTE));
+    SAG_ASSERT_EQ_U64(f.undo->depth, 0U);
+    SAG_ASSERT_EQ_U64(f.undo->open, 0U);
+    SAG_ASSERT(!f.undo->reopened);
+    tree_assert_text(&f, "A");
+
+    c = tree_append(&f, 'C');
+    tree_assert_text(&f, "AC");
+    SAG_ASSERT_EQ_U64(tree_node(f.undo, c)->parent, a);
+    SAG_ASSERT_EQ_U64(sag_undo_children(f.undo, f.undo->root, children, 2U),
+                      2U);
+    SAG_ASSERT_EQ_U64(children[0], a);
+    SAG_ASSERT_EQ_U64(children[1], b);
+    SAG_ASSERT(sag_undo(&f.edit));
+    tree_assert_text(&f, "A");
+    SAG_ASSERT(sag_undo_to(&f.edit, b));
+    tree_assert_text(&f, "B");
+    tree_fixture_free(&f);
+}
+
+void test_undo_tree_reopen_abort_preserves_original_node(void)
+{
+    TreeFixture f;
+    u32 node_id;
+    size_t ops_len;
+    size_t repairs_len;
+    size_t cursors_len;
+    size_t blobs_len;
+    u32 node_ops;
+
+    tree_fixture_init(&f);
+    node_id = tree_append(&f, 'A');
+    ops_len = f.undo->ops.len;
+    repairs_len = f.undo->repairs.len;
+    cursors_len = f.undo->cursors.len;
+    blobs_len = f.undo->blobs.len;
+    node_ops = tree_node(f.undo, node_id)->n_ops;
+
+    SAG_ASSERT(sag_undo_reopen(&f.edit, SAG_TXN_PASTE));
+    sag_edit_insert(&f.edit, BYTEOFF(1U), (const u8 *)"B", 1U);
+    tree_assert_text(&f, "AB");
+    sag_undo_abort(&f.edit);
+
+    tree_assert_text(&f, "A");
+    SAG_ASSERT_EQ_U64(sag_undo_current(f.undo), node_id);
+    SAG_ASSERT_EQ_U64(f.undo->depth, 0U);
+    SAG_ASSERT_EQ_U64(f.undo->open, 0U);
+    SAG_ASSERT(!f.undo->reopened);
+    SAG_ASSERT_EQ_U64(f.undo->nodes.len, 2U);
+    SAG_ASSERT_EQ_U64(tree_node(f.undo, node_id)->n_ops, node_ops);
+    SAG_ASSERT_EQ_U64(f.undo->ops.len, ops_len);
+    SAG_ASSERT_EQ_U64(f.undo->repairs.len, repairs_len);
+    SAG_ASSERT_EQ_U64(f.undo->cursors.len, cursors_len);
+    SAG_ASSERT_EQ_U64(f.undo->blobs.len, blobs_len);
+    SAG_ASSERT(sag_undo(&f.edit));
+    tree_assert_text(&f, "");
+    SAG_ASSERT(sag_redo(&f.edit));
+    tree_assert_text(&f, "A");
+    tree_fixture_free(&f);
+}
+
 void test_undo_tree_redo_child_tracks_most_recent_traversal(void)
 {
     TreeFixture f;
