@@ -330,6 +330,26 @@ void test_tty_probe_ambiguous_prefix(void)
     tty_fixture_free(&t, pipefd);
 }
 
+void test_tty_resume_failure_visible(void)
+{
+    static const u8 cont_note = (u8)'C';
+    Tty t;
+    int pipefd[2];
+    bool cont = false;
+
+    memset(&t, 0, sizeof(t));
+    SAG_ASSERT_EQ_I64(pipe(pipefd), 0);
+    t.sigpipe[0] = pipefd[0];
+    t.sigpipe[1] = -1;
+    t.raw = true;
+    SAG_ASSERT_EQ_I64(write(pipefd[1], &cont_note, 1U), 1);
+    SAG_ASSERT_EQ_I64(close(pipefd[1]), 0);
+    sag_tty_drain_signals(&t, NULL, &cont, NULL);
+    SAG_ASSERT(cont);
+    SAG_ASSERT(!t.raw);
+    SAG_ASSERT_EQ_I64(close(pipefd[0]), 0);
+}
+
 void test_tty_probe_config(void)
 {
     static const TestEnvEntry disabled[] = {{"SAG_TTY_PROBE", "0"}};

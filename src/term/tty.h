@@ -56,6 +56,7 @@ bool sag_tty_winsize(Tty *t);
 void sag_tty_altscreen(Tty *t, bool on);
 
 int sag_tty_signal_fd(const Tty *t);
+/* A cont event reports delivery; t->raw reports whether raw re-entry worked. */
 void sag_tty_drain_signals(Tty *t, bool *winch, bool *cont, bool *chld);
 void sag_tty_suspend(Tty *t);
 

@@ -33,6 +33,32 @@ if grep -nE '(^|[^[:alnum:]_])(printf|fprintf|snprintf|malloc|calloc|free|sag_lo
     exit 1
 fi
 
+if grep -nE 'signal[[:space:]]*\([[:space:]]*SIGTSTP[[:space:]]*,[[:space:]]*sag_tty_tstp' \
+    "$region" >&2; then
+    echo "sigsafe: SIGTSTP re-arm must preserve the lifecycle signal mask" >&2
+    exit 1
+fi
+
+restore=$tmp/restore
+sed -n '/^void sag_tty_restore(void)$/,/^}$/p' "$tty" >"$restore"
+restore_block_line=$(grep -n 'sigprocmask(SIG_BLOCK' "$restore" |
+    cut -d: -f1 || :)
+restore_write_line=$(grep -n 'write(g_wfd' "$restore" | cut -d: -f1 || :)
+restore_termios_line=$(grep -n 'tcsetattr' "$restore" | cut -d: -f1 || :)
+restore_disarm_line=$(grep -n 'g_raw = 0;' "$restore" | cut -d: -f1 || :)
+restore_unblock_line=$(grep -n 'sigprocmask(SIG_SETMASK' "$restore" |
+    cut -d: -f1 || :)
+if [ -z "$restore_block_line" ] || [ -z "$restore_write_line" ] ||
+    [ -z "$restore_termios_line" ] || [ -z "$restore_disarm_line" ] ||
+    [ -z "$restore_unblock_line" ] ||
+    [ "$restore_write_line" -le "$restore_block_line" ] ||
+    [ "$restore_termios_line" -le "$restore_write_line" ] ||
+    [ "$restore_disarm_line" -le "$restore_termios_line" ] ||
+    [ "$restore_unblock_line" -le "$restore_disarm_line" ]; then
+    echo "sigsafe: restore must stay armed and mask signals through restore" >&2
+    exit 1
+fi
+
 term_hits=$tmp/term-hits
 : >"$term_hits"
 find "$repo_dir/src/term" -type f -print | LC_ALL=C sort |

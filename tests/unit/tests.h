@@ -72,6 +72,7 @@ void test_tty_probe_decrpm_states(void);
 void test_tty_probe_chunking(void);
 void test_tty_probe_pending_interleaved(void);
 void test_tty_probe_ambiguous_prefix(void);
+void test_tty_resume_failure_visible(void);
 void test_tty_probe_config(void);
 void test_tty_truecolor(void);
 

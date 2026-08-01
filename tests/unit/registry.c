@@ -75,6 +75,7 @@ const SagTest sag_tests[] = {
     T(tty_probe_chunking),
     T(tty_probe_pending_interleaved),
     T(tty_probe_ambiguous_prefix),
+    T(tty_resume_failure_visible),
     T(tty_probe_config),
     T(tty_truecolor),
 };

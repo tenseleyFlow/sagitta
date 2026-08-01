@@ -53,15 +53,38 @@ static const char SAG_TTY_RESTORE_BLOB[] =
     "\x1b[?25h";
 
 /* BEGIN ASYNC-SIGNAL-SAFE — allowlist: write tcsetattr sigaction signal
- * raise kill. */
+ * raise kill sigemptyset sigaddset sigprocmask. */
+static void sag_tty_lifecycle_mask(sigset_t *mask)
+{
+    (void)sigemptyset(mask);
+    (void)sigaddset(mask, SIGSEGV);
+    (void)sigaddset(mask, SIGBUS);
+    (void)sigaddset(mask, SIGABRT);
+    (void)sigaddset(mask, SIGTERM);
+    (void)sigaddset(mask, SIGWINCH);
+    (void)sigaddset(mask, SIGCHLD);
+    (void)sigaddset(mask, SIGCONT);
+    (void)sigaddset(mask, SIGTSTP);
+}
+
 void sag_tty_restore(void)
 {
-    if (!g_raw)
-        return;
-    g_raw = 0;
-    (void)!write(g_wfd, SAG_TTY_RESTORE_BLOB,
-                 sizeof(SAG_TTY_RESTORE_BLOB) - 1U);
-    (void)tcsetattr(g_tfd, TCSAFLUSH, &g_saved);
+    int saved_errno = errno;
+    sigset_t blocked;
+    sigset_t saved;
+    bool masked;
+
+    sag_tty_lifecycle_mask(&blocked);
+    masked = sigprocmask(SIG_BLOCK, &blocked, &saved) == 0;
+    if (g_raw) {
+        (void)!write(g_wfd, SAG_TTY_RESTORE_BLOB,
+                     sizeof(SAG_TTY_RESTORE_BLOB) - 1U);
+        (void)tcsetattr(g_tfd, TCSAFLUSH, &g_saved);
+        g_raw = 0;
+    }
+    if (masked)
+        (void)sigprocmask(SIG_SETMASK, &saved, NULL);
+    errno = saved_errno;
 }
 
 static void sag_tty_fatal(int sig)
@@ -93,18 +116,28 @@ static void sag_tty_signote(int sig)
 
 static void sag_tty_tstp(int sig)
 {
+    int saved_errno = errno;
+
     (void)sig;
     sag_tty_restore();
     (void)signal(SIGTSTP, SIG_DFL);
     (void)raise(SIGTSTP);
+    errno = saved_errno;
 }
 
 static void sag_tty_cont(int sig)
 {
+    int saved_errno = errno;
+    struct sigaction action = {0};
+
+    g_raw = 0;
     if (g_resume_raw && tcsetattr(g_tfd, TCSANOW, &g_rawios) == 0)
         g_raw = 1;
-    (void)signal(SIGTSTP, sag_tty_tstp);
+    action.sa_handler = sag_tty_tstp;
+    sag_tty_lifecycle_mask(&action.sa_mask);
+    (void)sigaction(SIGTSTP, &action, NULL);
     sag_tty_signote(sig);
+    errno = saved_errno;
 }
 /* END ASYNC-SIGNAL-SAFE */
 
@@ -155,7 +188,7 @@ static bool sag_tty_handlers_install(void)
     for (i = 0U; i < SAG_ARRAY_LEN(g_signals); i++) {
         (void)memset(&action, 0, sizeof(action));
         action.sa_handler = g_signals[i].handler;
-        (void)sigemptyset(&action.sa_mask);
+        sag_tty_lifecycle_mask(&action.sa_mask);
         if (sigaction(g_signals[i].sig, &action,
                       &g_signals[i].saved) != 0) {
             while (i != 0U) {
@@ -284,6 +317,7 @@ static bool sag_tty_broken(void)
     static const char message[] =
         "sagitta: error: terminal is broken: raw mode was only partially applied\n";
 
+    g_resume_raw = 0;
     sag_tty_restore();
     (void)!write(STDERR_FILENO, message, sizeof(message) - 1U);
     errno = EIO;
@@ -293,6 +327,7 @@ static bool sag_tty_broken(void)
 bool sag_tty_raw(Tty *t)
 {
     struct termios actual;
+    int saved_errno;
 
     if (t == NULL || t != g_owner) {
         errno = EINVAL;
@@ -305,25 +340,32 @@ bool sag_tty_raw(Tty *t)
             return false;
         g_atexit_armed = true;
     }
-    if (!sag_tty_handlers_install())
-        return false;
-
     g_saved = t->saved;
     g_rawios = t->saved;
     sag_tty_rawios(&g_rawios);
     g_tfd = t->rfd;
     g_wfd = t->wfd;
     g_sigpipe_w = t->sigpipe[1];
-    g_resume_raw = 1;
+    g_resume_raw = 0;
     g_winch_pending = 0;
     g_cont_pending = 0;
     g_chld_pending = 0;
+    if (!sag_tty_handlers_install()) {
+        g_resume_raw = 0;
+        g_tfd = -1;
+        g_wfd = -1;
+        g_sigpipe_w = -1;
+        return false;
+    }
     sag_bug_set_prehook(sag_tty_restore);
 
+    g_resume_raw = 1;
     g_raw = 1;
     if (tcsetattr(t->rfd, TCSANOW, &g_rawios) != 0) {
-        g_raw = 0;
+        saved_errno = errno;
+        sag_tty_restore();
         g_resume_raw = 0;
+        errno = saved_errno;
         return false;
     }
     if (tcgetattr(t->rfd, &actual) != 0 ||
@@ -399,6 +441,7 @@ void sag_tty_drain_signals(Tty *t, bool *winch, bool *cont, bool *chld)
     sigset_t blocked;
     sigset_t saved;
     bool masked;
+    bool saw_cont = false;
 
     if (winch != NULL)
         *winch = false;
@@ -416,12 +459,8 @@ void sag_tty_drain_signals(Tty *t, bool *winch, bool *cont, bool *chld)
     masked = sigprocmask(SIG_BLOCK, &blocked, &saved) == 0;
     if (g_winch_pending && winch != NULL)
         *winch = true;
-    if (g_cont_pending) {
-        if (cont != NULL)
-            *cont = true;
-        t->raw = g_raw != 0;
-        t->alt = false;
-    }
+    if (g_cont_pending)
+        saw_cont = true;
     if (g_chld_pending && chld != NULL)
         *chld = true;
     g_winch_pending = 0;
@@ -436,12 +475,9 @@ void sag_tty_drain_signals(Tty *t, bool *winch, bool *cont, bool *chld)
             for (i = 0; i < (size_t)count; ++i) {
                 if (bytes[i] == (u8)'W' && winch != NULL)
                     *winch = true;
-                else if (bytes[i] == (u8)'C') {
-                    if (cont != NULL)
-                        *cont = true;
-                    t->raw = true;
-                    t->alt = false;
-                } else if (bytes[i] == (u8)'H' && chld != NULL) {
+                else if (bytes[i] == (u8)'C')
+                    saw_cont = true;
+                else if (bytes[i] == (u8)'H' && chld != NULL) {
                     *chld = true;
                 }
             }
@@ -450,6 +486,12 @@ void sag_tty_drain_signals(Tty *t, bool *winch, bool *cont, bool *chld)
         } else {
             break;
         }
+    }
+    if (saw_cont) {
+        if (cont != NULL)
+            *cont = true;
+        t->raw = g_raw != 0;
+        t->alt = false;
     }
     if (masked)
         (void)sigprocmask(SIG_SETMASK, &saved, NULL);
