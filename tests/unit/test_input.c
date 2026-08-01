@@ -461,6 +461,10 @@ void test_input_kitty_keys(void)
     }
     assert_dropped((const u8 *)"\x1b[97:55296;2u",
                    sizeof("\x1b[97:55296;2u") - 1U);
+    assert_dropped((const u8 *)"\x1b[57364:65:97;2u",
+                   sizeof("\x1b[57364:65:97;2u") - 1U);
+    assert_dropped((const u8 *)"\x1b[97:57364:97;2u",
+                   sizeof("\x1b[97:57364:97;2u") - 1U);
     assert_dropped((const u8 *)"\x1b[97;;1114112u",
                    sizeof("\x1b[97;;1114112u") - 1U);
     {

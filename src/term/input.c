@@ -274,7 +274,7 @@ static bool dispatch_kitty(In *in, Key *out)
     if (event < SAG_KEY_PRESS || event > SAG_KEY_RELEASE)
         return false;
     for (i = 0U; i < in->xnsub[0]; i++) {
-        if (in->xpresent[0][i] && !is_scalar(in->xpar[0][i]))
+        if (in->xpresent[0][i] && kitty_code(in->xpar[0][i]) == 0U)
             return false;
     }
     if (in->npar >= 3U) {
