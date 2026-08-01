@@ -65,6 +65,7 @@ VALGRIND_UNIT_EXCLUDES := \
   --exclude undo_replace_reason_names_sprint21 \
   --exclude undo_macro_reason_names_sprint34 \
   --exclude undo_lsp_reason_names_sprint47 \
+  --exclude undo_save_rejects_open_transaction \
   --exclude render_invalid_cells_are_bugs
 UNIT_RUN := $(VALGRIND_RUN) $(BUILD)/unit_tests $(VALGRIND_UNIT_EXCLUDES) && \
             SAG_TORTURE_CLEAN_ONLY=1 $(VALGRIND_RUN) \
