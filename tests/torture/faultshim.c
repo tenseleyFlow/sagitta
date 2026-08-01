@@ -1,0 +1,250 @@
+#define _POSIX_C_SOURCE 200809L
+
+/*
+ * Public controls are SAG_FAULT_AT, SAG_FAULT_SHORT, SAG_FAULT_SEED and
+ * SAG_FAULT_LOG.  The harness also uses SAG_FAULT_ENABLE=0 as its durable-
+ * journal barrier, SAG_FAULT_RENAME_EXDEV=1 for decision-table row 5,
+ * SAG_FAULT_FCHOWN_EPERM=1 for row 6, and SAG_FAULT_EINTR_AT=N to return
+ * EINTR once at intercepted call N.
+ */
+
+#include <dlfcn.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+
+typedef ssize_t (*WriteFn)(int, const void *, size_t);
+typedef ssize_t (*PwriteFn)(int, const void *, size_t, off_t);
+typedef int (*FsyncFn)(int);
+typedef int (*RenameFn)(const char *, const char *);
+typedef int (*FtruncateFn)(int, off_t);
+typedef int (*FchownFn)(int, uid_t, gid_t);
+typedef int (*CloseFn)(int);
+
+static WriteFn real_write_fn;
+static PwriteFn real_pwrite_fn;
+static FsyncFn real_fsync_fn;
+static FsyncFn real_fdatasync_fn;
+static RenameFn real_rename_fn;
+static FtruncateFn real_ftruncate_fn;
+static FchownFn real_fchown_fn;
+static CloseFn real_close_fn;
+static long fault_at = -1;
+static unsigned long long call_no;
+static uint64_t rng_state;
+static int short_writes;
+static int log_fd = -1;
+static int initialized;
+static int resolving;
+
+static void load_symbol(void *dst, size_t dst_size, const char *name)
+{
+    void *sym = dlsym(RTLD_NEXT, name);
+
+    if (sym == NULL || dst_size != sizeof(sym))
+        _exit(126);
+    memcpy(dst, &sym, sizeof(sym));
+}
+
+static unsigned long long parse_ull(const char *s, unsigned long long fallback)
+{
+    char *end;
+    unsigned long long value;
+
+    if (s == NULL || *s == '\0')
+        return fallback;
+    errno = 0;
+    value = strtoull(s, &end, 10);
+    if (errno != 0 || *end != '\0')
+        return fallback;
+    return value;
+}
+
+static int env_is_one(const char *name)
+{
+    const char *value = getenv(name);
+
+    return value != NULL && strcmp(value, "1") == 0;
+}
+
+static void initialize(void)
+{
+    const char *at;
+    const char *log_path;
+    unsigned long long parsed;
+
+    if (initialized || resolving)
+        return;
+    resolving = 1;
+    load_symbol(&real_write_fn, sizeof(real_write_fn), "write");
+    load_symbol(&real_pwrite_fn, sizeof(real_pwrite_fn), "pwrite");
+    load_symbol(&real_fsync_fn, sizeof(real_fsync_fn), "fsync");
+    load_symbol(&real_fdatasync_fn, sizeof(real_fdatasync_fn), "fdatasync");
+    load_symbol(&real_rename_fn, sizeof(real_rename_fn), "rename");
+    load_symbol(&real_ftruncate_fn, sizeof(real_ftruncate_fn), "ftruncate");
+    load_symbol(&real_fchown_fn, sizeof(real_fchown_fn), "fchown");
+    load_symbol(&real_close_fn, sizeof(real_close_fn), "close");
+
+    at = getenv("SAG_FAULT_AT");
+    parsed = parse_ull(at, UINT64_MAX);
+    if (parsed <= (unsigned long long)LONG_MAX)
+        fault_at = (long)parsed;
+    rng_state = (uint64_t)parse_ull(getenv("SAG_FAULT_SEED"), 1U);
+    if (rng_state == 0U)
+        rng_state = UINT64_C(0x9e3779b97f4a7c15);
+    short_writes = env_is_one("SAG_FAULT_SHORT");
+    log_path = getenv("SAG_FAULT_LOG");
+    if (log_path != NULL && *log_path != '\0')
+        log_fd = open(log_path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC,
+                      0600);
+    resolving = 0;
+    initialized = 1;
+}
+
+static uint64_t next_random(void)
+{
+    uint64_t x = rng_state;
+
+    x ^= x << 13;
+    x ^= x >> 7;
+    x ^= x << 17;
+    rng_state = x;
+    return x;
+}
+
+static void log_call(const char *name, const char *action)
+{
+    char line[160];
+    int n;
+
+    if (log_fd < 0 || real_write_fn == NULL)
+        return;
+    n = snprintf(line, sizeof(line), "%llu %s %s\n", call_no, name, action);
+    if (n > 0 && (size_t)n < sizeof(line))
+        (void)real_write_fn(log_fd, line, (size_t)n);
+}
+
+static void before_call(const char *name)
+{
+    const char *enabled;
+
+    initialize();
+    enabled = getenv("SAG_FAULT_ENABLE");
+    if (enabled != NULL && strcmp(enabled, "0") == 0)
+        return;
+    if (fault_at >= 0 && call_no == (unsigned long long)fault_at) {
+        log_call(name, "kill");
+        _exit(137);
+    }
+    log_call(name, "pass");
+    call_no++;
+}
+
+static size_t maybe_short(size_t count, const char *name)
+{
+    const char *enabled = getenv("SAG_FAULT_ENABLE");
+
+    if (enabled != NULL && strcmp(enabled, "0") == 0)
+        return count;
+    if (!short_writes || count < 2U || (next_random() & 1U) == 0U)
+        return count;
+    log_call(name, "short");
+    return count / 2U;
+}
+
+static int inject_eintr(const char *name)
+{
+    const char *enabled = getenv("SAG_FAULT_ENABLE");
+    unsigned long long at;
+
+    if (enabled != NULL && strcmp(enabled, "0") == 0)
+        return 0;
+    at = parse_ull(getenv("SAG_FAULT_EINTR_AT"), UINT64_MAX);
+    if (call_no == 0U || at != call_no - 1U)
+        return 0;
+    log_call(name, "errno=EINTR");
+    errno = EINTR;
+    return 1;
+}
+
+ssize_t write(int fd, const void *buf, size_t count)
+{
+    before_call("write");
+    if (inject_eintr("write"))
+        return -1;
+    return real_write_fn(fd, buf, maybe_short(count, "write"));
+}
+
+ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset)
+{
+    before_call("pwrite");
+    if (inject_eintr("pwrite"))
+        return -1;
+    return real_pwrite_fn(fd, buf, maybe_short(count, "pwrite"), offset);
+}
+
+int fsync(int fd)
+{
+    before_call("fsync");
+    if (inject_eintr("fsync"))
+        return -1;
+    return real_fsync_fn(fd);
+}
+
+int fdatasync(int fd)
+{
+    before_call("fdatasync");
+    if (inject_eintr("fdatasync"))
+        return -1;
+    return real_fdatasync_fn(fd);
+}
+
+int rename(const char *old_path, const char *new_path)
+{
+    before_call("rename");
+    if (env_is_one("SAG_FAULT_RENAME_EXDEV")) {
+        log_call("rename", "errno=EXDEV");
+        errno = EXDEV;
+        return -1;
+    }
+    if (inject_eintr("rename"))
+        return -1;
+    return real_rename_fn(old_path, new_path);
+}
+
+int ftruncate(int fd, off_t length)
+{
+    before_call("ftruncate");
+    if (inject_eintr("ftruncate"))
+        return -1;
+    return real_ftruncate_fn(fd, length);
+}
+
+int fchown(int fd, uid_t owner, gid_t group)
+{
+    before_call("fchown");
+    if (env_is_one("SAG_FAULT_FCHOWN_EPERM")) {
+        log_call("fchown", "errno=EPERM");
+        errno = EPERM;
+        return -1;
+    }
+    if (inject_eintr("fchown"))
+        return -1;
+    return real_fchown_fn(fd, owner, group);
+}
+
+int close(int fd)
+{
+    initialize();
+    if (fd == log_fd)
+        return real_close_fn(fd);
+    before_call("close");
+    if (inject_eintr("close"))
+        return -1;
+    return real_close_fn(fd);
+}
