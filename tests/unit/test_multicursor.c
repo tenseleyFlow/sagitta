@@ -16,7 +16,7 @@
 
 static Cursor test_cursor(u64 pos, u64 anchor, u64 goal)
 {
-    Cursor cursor;
+    Cursor cursor = {0};
 
     cursor.pos = BYTEOFF(pos);
     cursor.anchor = BYTEOFF(anchor);

@@ -82,6 +82,7 @@ static Cursor merged_cursor(const CursorItem *governing, u64 lo, u64 hi)
         merged.pos = BYTEOFF(hi);
         merged.anchor = BYTEOFF(lo);
     }
+    merged.motion_col_valid = 0U;
     return merged;
 }
 
@@ -261,6 +262,7 @@ void sag_cset_adjust(CursorSet *cs, u8 op, ByteOff at, u64 len)
             adjust_off(cs->curs.data[i].pos, true, op, at, len);
         cs->curs.data[i].anchor =
             adjust_off(cs->curs.data[i].anchor, false, op, at, len);
+        cs->curs.data[i].motion_col_valid = 0U;
     }
     normalize_unclamped(cs);
 }

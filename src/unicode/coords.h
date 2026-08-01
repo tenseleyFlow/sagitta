@@ -17,6 +17,8 @@ typedef struct {
 
 GCol sag_off_to_gcol(const TextBuf *tb, Span line, ByteOff pos);
 ByteOff sag_gcol_to_off(const TextBuf *tb, Span line, GCol g);
+ByteOff sag_gcol_to_off_resolved(const TextBuf *tb, Span line, GCol g,
+                                 GCol *resolved);
 CharCol sag_off_to_charcol(const TextBuf *tb, Span line, ByteOff pos);
 CCol sag_off_to_ccol(const TextBuf *tb, Span line, ByteOff pos, u32 tabw);
 ByteOff sag_ccol_to_off(const TextBuf *tb, Span line, CCol c, u32 tabw);

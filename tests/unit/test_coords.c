@@ -72,7 +72,7 @@ void test_coords_motion_golden(void)
         u64 cells = 0U;
         TextBuf *tb;
         Span line;
-        Cursor cursor;
+        Cursor cursor = {0};
 
         while (isspace((unsigned char)*p))
             p++;
@@ -253,6 +253,7 @@ void test_coords_crlf_and_clamping(void)
     static const u8 bytes[] = {'a', 'b', '\r', '\n', 'x'};
     TextBuf *tb = sag_textbuf_from_bytes(bytes, sizeof(bytes));
     Span first;
+    GCol resolved;
 
     SAG_ASSERT_NOT_NULL(tb);
     first = sag_textbuf_line_span(tb, LINENO(0U));
@@ -260,6 +261,10 @@ void test_coords_crlf_and_clamping(void)
     SAG_ASSERT_EQ_U64(first.hi, 4U);
     SAG_ASSERT_EQ_U64(sag_gcol_to_off(tb, first, (GCol){UINT64_MAX}).v,
                       2U);
+    SAG_ASSERT_EQ_U64(sag_gcol_to_off_resolved(
+                          tb, first, (GCol){UINT64_MAX}, &resolved).v,
+                      2U);
+    SAG_ASSERT_EQ_U64(resolved.v, 2U);
     SAG_ASSERT_EQ_U64(sag_ccol_to_off(tb, first, (CCol){UINT64_MAX}, 4U).v,
                       2U);
     SAG_ASSERT_EQ_U64(sag_off_to_gcol(tb, first, BYTEOFF(4U)).v, 2U);
@@ -272,6 +277,12 @@ void test_coords_crlf_and_clamping(void)
     SAG_ASSERT_EQ_U64(sag_grapheme_next(tb, BYTEOFF(UINT64_MAX)).v,
                       sizeof(bytes));
     SAG_ASSERT_EQ_U64(sag_grapheme_prev(tb, BYTEOFF(UINT64_MAX)).v, 4U);
+
+    SAG_ASSERT_EQ_U64(sag_gcol_to_off_resolved(
+                          tb, (Span){4U, 5U}, (GCol){UINT64_MAX},
+                          &resolved).v,
+                      4U);
+    SAG_ASSERT_EQ_U64(resolved.v, 0U);
     sag_textbuf_free(tb);
 }
 

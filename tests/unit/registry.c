@@ -54,6 +54,7 @@ const SagTest sag_tests[] = {
     T(coords_streams_large_cluster_width),
     T(cursor_horizontal_graphemes),
     T(cursor_vertical_sticky_goal),
+    T(cursor_horizontal_resolves_vertical_clamp),
     T(cursor_home_end_and_crlf),
     T(cursor_clamp_repairs_new_cluster),
     T(cursor_motion_preserves_selection_anchor),

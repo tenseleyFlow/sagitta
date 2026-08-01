@@ -303,7 +303,8 @@ GCol sag_off_to_gcol(const TextBuf *tb, Span line, ByteOff pos)
     return (GCol){count};
 }
 
-ByteOff sag_gcol_to_off(const TextBuf *tb, Span line, GCol g)
+ByteOff sag_gcol_to_off_resolved(const TextBuf *tb, Span line, GCol g,
+                                 GCol *resolved)
 {
     ClusterReader reader;
     StreamCluster cluster;
@@ -312,11 +313,14 @@ ByteOff sag_gcol_to_off(const TextBuf *tb, Span line, GCol g)
     u64 last = line.lo;
     bool have_cluster = false;
 
+    if (resolved == NULL)
+        SAG_BUG("sag_gcol_to_off_resolved: NULL output");
     require_span(tb, line);
     end = line_content_end(tb, line);
     cluster_reader_init(&reader, tb, line.lo, end);
     while (cluster_next(&reader, &cluster, false)) {
         if (count == g.v) {
+            *resolved = (GCol){count};
             cluster_reader_free(&reader);
             return BYTEOFF(cluster.start);
         }
@@ -325,9 +329,19 @@ ByteOff sag_gcol_to_off(const TextBuf *tb, Span line, GCol g)
         count++;
     }
     cluster_reader_free(&reader);
-    if (g.v == count || end < line.hi || !have_cluster)
+    if (g.v == count || end < line.hi || !have_cluster) {
+        *resolved = (GCol){count};
         return BYTEOFF(end);
+    }
+    *resolved = (GCol){count - 1U};
     return BYTEOFF(last);
+}
+
+ByteOff sag_gcol_to_off(const TextBuf *tb, Span line, GCol g)
+{
+    GCol resolved;
+
+    return sag_gcol_to_off_resolved(tb, line, g, &resolved);
 }
 
 CharCol sag_off_to_charcol(const TextBuf *tb, Span line, ByteOff pos)
@@ -499,10 +513,15 @@ ByteOff sag_grapheme_prev(const TextBuf *tb, ByteOff pos)
 
 ByteOff sag_grapheme_prev_boundary(const TextBuf *tb, ByteOff pos)
 {
+    enum { PREV_WINDOW = 512 };
     TextReader reader;
     Span span;
+    u8 window[PREV_WINDOW];
     u8 previous;
     u8 before_previous;
+    u64 start;
+    size_t count = 0U;
+    size_t found;
     u64 len;
 
     if (tb == NULL)
@@ -528,6 +547,18 @@ ByteOff sag_grapheme_prev_boundary(const TextBuf *tb, ByteOff pos)
             return BYTEOFF(pos.v - 1U);
         }
     }
+    start = pos.v - span.lo > PREV_WINDOW
+                ? pos.v - PREV_WINDOW
+                : span.lo;
+    reader_init(&reader, tb, start, pos.v);
+    while (count < SAG_ARRAY_LEN(window) &&
+           reader_get(&reader, &window[count]))
+        count++;
+    if (reader.off != pos.v)
+        SAG_BUG("sag_grapheme_prev_boundary: window ended early");
+    found = sag_gb_prev_bytes(window, count, count);
+    if (found != 0U || start == span.lo)
+        return BYTEOFF(start + (u64)found);
     return sag_grapheme_prev(tb, pos);
 }
 

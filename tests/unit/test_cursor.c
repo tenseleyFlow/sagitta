@@ -4,7 +4,7 @@
 
 static Cursor cursor_at(const TextBuf *tb, u64 off)
 {
-    Cursor c;
+    Cursor c = {0};
     LineNo line = sag_textbuf_line_of(tb, BYTEOFF(off));
 
     c.pos = BYTEOFF(off);
@@ -78,6 +78,25 @@ void test_cursor_vertical_sticky_goal(void)
     sag_textbuf_free(tb);
 }
 
+void test_cursor_horizontal_resolves_vertical_clamp(void)
+{
+    static const u8 text[] = "abcdef\nxy";
+    TextBuf *tb = sag_textbuf_from_bytes(text, sizeof(text) - 1U);
+    Cursor c = cursor_at(tb, 5U);
+
+    sag_cursor_down(tb, &c);
+    SAG_ASSERT_EQ_U64(c.pos.v, 8U);
+    SAG_ASSERT_EQ_U64(c.goal_col.v, 5U);
+    sag_cursor_right(tb, &c);
+    SAG_ASSERT_EQ_U64(c.pos.v, 9U);
+    SAG_ASSERT_EQ_U64(c.goal_col.v, 2U);
+    sag_cursor_left(tb, &c);
+    SAG_ASSERT_EQ_U64(c.pos.v, 8U);
+    SAG_ASSERT_EQ_U64(c.goal_col.v, 1U);
+    assert_cursor_boundary(tb, &c);
+    sag_textbuf_free(tb);
+}
+
 void test_cursor_home_end_and_crlf(void)
 {
     static const u8 text[] = "abc\r\nq\r\nlast";
@@ -99,6 +118,9 @@ void test_cursor_home_end_and_crlf(void)
     sag_cursor_buf_end(tb, &c);
     SAG_ASSERT_EQ_U64(c.pos.v, sizeof(text) - 1U);
     SAG_ASSERT_EQ_U64(c.goal_col.v, UINT64_MAX);
+    sag_cursor_left(tb, &c);
+    SAG_ASSERT_EQ_U64(c.pos.v, sizeof(text) - 2U);
+    SAG_ASSERT_EQ_U64(c.goal_col.v, 3U);
     sag_cursor_buf_home(tb, &c);
     SAG_ASSERT_EQ_U64(c.pos.v, 0U);
     SAG_ASSERT_EQ_U64(c.goal_col.v, 0U);

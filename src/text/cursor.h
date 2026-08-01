@@ -12,7 +12,11 @@ typedef struct Cursor {
     ByteOff pos;
     GCol goal_col;
     ByteOff anchor;
+    GCol motion_col;       /* transient actual column after vertical move */
+    u8 motion_col_valid;
 } Cursor;
+
+_Static_assert(sizeof(Cursor) <= 40U, "cursor bloat");
 
 void sag_cursor_left(const TextBuf *tb, Cursor *c);
 void sag_cursor_right(const TextBuf *tb, Cursor *c);

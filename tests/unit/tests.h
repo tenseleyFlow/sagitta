@@ -51,6 +51,7 @@ void test_coords_inside_cluster_rounds_left(void);
 void test_coords_streams_large_cluster_width(void);
 void test_cursor_horizontal_graphemes(void);
 void test_cursor_vertical_sticky_goal(void);
+void test_cursor_horizontal_resolves_vertical_clamp(void);
 void test_cursor_home_end_and_crlf(void);
 void test_cursor_clamp_repairs_new_cluster(void);
 void test_cursor_motion_preserves_selection_anchor(void);
