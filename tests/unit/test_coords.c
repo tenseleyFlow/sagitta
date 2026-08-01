@@ -291,3 +291,26 @@ void test_coords_inside_cluster_rounds_left(void)
     SAG_ASSERT(!sag_is_grapheme_boundary(tb, BYTEOFF(2U)));
     sag_textbuf_free(tb);
 }
+
+void test_coords_streams_large_cluster_width(void)
+{
+    enum { EXTEND_COUNT = 256 * 1024 };
+    const u64 len = 1U + (u64)EXTEND_COUNT * 2U;
+    u8 *bytes = sag_xmalloc((size_t)len);
+    TextBuf *tb;
+    Span line = {0U, len};
+    size_t i;
+
+    bytes[0] = 'e';
+    for (i = 0U; i < EXTEND_COUNT; i++) {
+        bytes[1U + i * 2U] = 0xccU;
+        bytes[2U + i * 2U] = 0x81U;
+    }
+    tb = sag_textbuf_from_owned_bytes(bytes, len);
+    SAG_ASSERT_NOT_NULL(tb);
+    SAG_ASSERT_EQ_U64(sag_off_to_gcol(tb, line, BYTEOFF(len)).v, 1U);
+    SAG_ASSERT_EQ_U64(sag_off_to_ccol(tb, line, BYTEOFF(len), 4U).v, 1U);
+    SAG_ASSERT_EQ_U64(sag_ccol_to_off(tb, line, (CCol){1U}, 4U).v, len);
+    SAG_ASSERT_EQ_U64(sag_grapheme_next(tb, BYTEOFF(0U)).v, len);
+    sag_textbuf_free(tb);
+}

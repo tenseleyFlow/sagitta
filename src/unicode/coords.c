@@ -6,7 +6,6 @@
 #include "unicode/grapheme.h"
 #include "unicode/utf8.h"
 #include "unicode/width.h"
-#include "util/buf.h"
 #include "util/log.h"
 
 typedef struct {
@@ -30,7 +29,6 @@ typedef struct {
 
 typedef struct {
     TextReader reader;
-    Bytebuf bytes;
 } ClusterReader;
 
 typedef struct {
@@ -137,32 +135,36 @@ static void cluster_reader_init(ClusterReader *reader, const TextBuf *tb,
                                 u64 start, u64 end)
 {
     reader_init(&reader->reader, tb, start, end);
-    bytebuf_init(&reader->bytes);
 }
 
 static void cluster_reader_free(ClusterReader *reader)
 {
-    bytebuf_free(&reader->bytes);
+    (void)reader;
 }
 
 static bool cluster_next(ClusterReader *reader, StreamCluster *out,
                          bool need_width)
 {
     SagGbState gb;
+    SagClusterWidthState width;
     StreamCp cp;
+    u32 cp_count = 0U;
+    u32 first_cp = 0U;
 
     if (reader->reader.off >= reader->reader.end)
         return false;
     out->start = reader->reader.off;
     out->cells = 0U;
     out->tab = false;
-    reader->bytes.len = 0U;
     sag_gb_init(&gb);
+    sag_cluster_width_init(&width);
     if (!reader_cp(&reader->reader, &cp))
         SAG_BUG("unicode coordinates: missing cluster head");
     (void)sag_gb_boundary(&gb, cp.cp);
+    first_cp = cp.cp;
+    cp_count = 1U;
     if (need_width)
-        bytebuf_append(&reader->bytes, cp.bytes, cp.len);
+        sag_cluster_width_push(&width, cp.cp);
 
     while (reader->reader.off < reader->reader.end) {
         TextReader probe = reader->reader;
@@ -174,18 +176,20 @@ static bool cluster_next(ClusterReader *reader, StreamCluster *out,
             break;
         reader->reader = probe;
         gb = next_gb;
+        if (cp_count != UINT32_MAX)
+            cp_count++;
         if (need_width)
-            bytebuf_append(&reader->bytes, cp.bytes, cp.len);
+            sag_cluster_width_push(&width, cp.cp);
     }
     out->end = reader->reader.off;
     if (need_width) {
-        out->tab = reader->bytes.len == 1U && reader->bytes.data[0] == '\t';
+        out->tab = cp_count == 1U && first_cp == '\t';
         if (!out->tab) {
-            int width = sag_cluster_width(reader->bytes.data,
-                                          reader->bytes.len);
-            if (width < 0)
+            int cells = sag_cluster_width_finish(&width);
+
+            if (cells < 0)
                 SAG_BUG("unicode coordinates: negative cluster width");
-            out->cells = (u64)width;
+            out->cells = (u64)cells;
         }
     }
     return true;

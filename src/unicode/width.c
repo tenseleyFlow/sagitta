@@ -9,6 +9,19 @@
 
 static SagWidthOpts width_opts;
 
+enum {
+    SAG_CWF_SEEN = 1U << 0,
+    SAG_CWF_STARTS_ESCAPE = 1U << 1,
+    SAG_CWF_HAVE_BASE = 1U << 2,
+    SAG_CWF_VS15 = 1U << 3,
+    SAG_CWF_VS16 = 1U << 4,
+    SAG_CWF_ZWJ = 1U << 5,
+    SAG_CWF_EXT_PICT = 1U << 6
+};
+
+_Static_assert(sizeof(SagClusterWidthState) <= 12U,
+               "cluster width state bloat");
+
 void sag_width_set_opts(const SagWidthOpts *opts)
 {
     width_opts.ambiguous_wide = opts != NULL && opts->ambiguous_wide;
@@ -50,63 +63,92 @@ int sag_cp_width(u32 cp)
     return cp_width_record(cp, false);
 }
 
+void sag_cluster_width_init(SagClusterWidthState *state)
+{
+    if (state == NULL)
+        SAG_BUG("sag_cluster_width_init: NULL state");
+    state->base_cp = 0U;
+    state->base_rec = 0U;
+    state->flags = 0U;
+    state->ri_count = 0U;
+}
+
+void sag_cluster_width_push(SagClusterWidthState *state, u32 cp)
+{
+    u16 rec;
+    u8 gcb;
+
+    if (state == NULL)
+        SAG_BUG("sag_cluster_width_push: NULL state");
+    rec = sag_utf8_is_escape(cp) ? 0U : sag_u_rec(cp);
+    gcb = (u8)(rec & SAG_U_GCB_MASK);
+    if ((state->flags & SAG_CWF_SEEN) == 0U) {
+        state->flags |= SAG_CWF_SEEN;
+        if (sag_utf8_is_escape(cp))
+            state->flags |= SAG_CWF_STARTS_ESCAPE;
+    }
+    if (gcb == (u8)SAG_GCB_RI) {
+        if (state->ri_count < 3U)
+            state->ri_count++;
+    }
+    if (cp == 0xfe0eU)
+        state->flags |= SAG_CWF_VS15;
+    else if (cp == 0xfe0fU)
+        state->flags |= SAG_CWF_VS16;
+    else if (cp == 0x200dU)
+        state->flags |= SAG_CWF_ZWJ;
+    if ((rec & SAG_U_EXT_PICT) != 0U)
+        state->flags |= SAG_CWF_EXT_PICT;
+    if ((state->flags & SAG_CWF_HAVE_BASE) == 0U &&
+        gcb != (u8)SAG_GCB_PREPEND) {
+        state->base_cp = cp;
+        state->base_rec = rec;
+        state->flags |= SAG_CWF_HAVE_BASE;
+    }
+}
+
+int sag_cluster_width_finish(const SagClusterWidthState *state)
+{
+    if (state == NULL)
+        SAG_BUG("sag_cluster_width_finish: NULL state");
+    if ((state->flags & SAG_CWF_SEEN) == 0U)
+        return 0;
+    if ((state->flags & SAG_CWF_STARTS_ESCAPE) != 0U)
+        return 4;
+    if (state->ri_count == 2U)
+        return 2;
+    if ((state->flags & SAG_CWF_HAVE_BASE) == 0U)
+        return 0;
+    if (state->base_cp == 0x0009U)
+        return 0;
+    if ((state->flags & SAG_CWF_VS16) != 0U &&
+        (state->base_rec & SAG_U_EMOJI) != 0U)
+        return 2;
+    if ((state->flags & SAG_CWF_VS15) != 0U)
+        return cp_width_record(state->base_cp, true);
+    if ((state->flags & (SAG_CWF_ZWJ | SAG_CWF_EXT_PICT)) ==
+        (SAG_CWF_ZWJ | SAG_CWF_EXT_PICT))
+        return 2;
+    return sag_cp_width(state->base_cp);
+}
+
 int sag_cluster_width(const u8 *s, size_t len)
 {
+    SagClusterWidthState state;
     size_t pos = 0u;
     u32 cp;
-    u32 base = 0u;
-    u16 base_rec = 0u;
-    bool have_base = false;
-    bool starts_escape = false;
-    bool has_vs15 = false;
-    bool has_vs16 = false;
-    bool has_zwj = false;
-    bool has_ext_pict = false;
-    unsigned ri_count = 0u;
 
     if (s == NULL || len == 0u)
         return 0;
 
+    sag_cluster_width_init(&state);
     while (pos < len) {
         size_t used = sag_utf8_decode(s + pos, len - pos, &cp);
-        u16 rec = sag_u_rec(cp);
-        u8 gcb = (u8)(rec & SAG_U_GCB_MASK);
 
-        if (pos == 0u)
-            starts_escape = sag_utf8_is_escape(cp);
-        if (gcb == (u8)SAG_GCB_RI)
-            ri_count++;
-        if (cp == 0xfe0eu)
-            has_vs15 = true;
-        else if (cp == 0xfe0fu)
-            has_vs16 = true;
-        else if (cp == 0x200du)
-            has_zwj = true;
-        if ((rec & SAG_U_EXT_PICT) != 0u)
-            has_ext_pict = true;
-        if (!have_base && gcb != (u8)SAG_GCB_PREPEND) {
-            base = cp;
-            base_rec = rec;
-            have_base = true;
-        }
+        sag_cluster_width_push(&state, cp);
         pos += used;
     }
-
-    if (starts_escape)
-        return 4;
-    if (ri_count == 2u)
-        return 2;
-    if (!have_base)
-        return 0;
-    if (base == 0x0009u)
-        return 0;
-    if (has_vs16 && (base_rec & SAG_U_EMOJI) != 0u)
-        return 2;
-    if (has_vs15)
-        return cp_width_record(base, true);
-    if (has_zwj && has_ext_pict)
-        return 2;
-    return sag_cp_width(base);
+    return sag_cluster_width_finish(&state);
 }
 
 static size_t cluster_end(const u8 *s, size_t len, size_t pos)

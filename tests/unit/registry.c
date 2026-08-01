@@ -51,6 +51,7 @@ const SagTest sag_tests[] = {
     T(coords_tabs_wide_and_invalid),
     T(coords_crlf_and_clamping),
     T(coords_inside_cluster_rounds_left),
+    T(coords_streams_large_cluster_width),
     T(cursor_horizontal_graphemes),
     T(cursor_vertical_sticky_goal),
     T(cursor_home_end_and_crlf),

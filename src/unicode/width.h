@@ -16,10 +16,20 @@ typedef struct {
     bool ambiguous_wide;
 } SagWidthOpts;
 
+typedef struct {
+    u32 base_cp;
+    u16 base_rec;
+    u8 flags;
+    u8 ri_count;
+} SagClusterWidthState;
+
 /* Startup-only process option. NULL restores the deterministic default. */
 void sag_width_set_opts(const SagWidthOpts *opts);
 
 int sag_cp_width(u32 cp);
+void sag_cluster_width_init(SagClusterWidthState *state);
+void sag_cluster_width_push(SagClusterWidthState *state, u32 cp);
+int sag_cluster_width_finish(const SagClusterWidthState *state);
 int sag_cluster_width(const u8 *s, size_t len);
 int sag_str_width(const u8 *s, size_t len, u32 tabw);
 size_t sag_str_clip(const u8 *s, size_t len, int max_cells,
