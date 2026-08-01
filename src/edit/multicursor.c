@@ -119,6 +119,7 @@ static void normalize_unclamped(CursorSet *cs)
     i = 0U;
     while (i < item_count) {
         CursorItem governing = items[i];
+        CursorItem point_survivor = items[i];
         u64 lo = cursor_lo(&items[i].cursor);
         u64 hi = cursor_hi(&items[i].cursor);
         bool selected = cursor_selected(&items[i].cursor);
@@ -135,6 +136,8 @@ static void normalize_unclamped(CursorSet *cs)
             if (next_hi > hi)
                 hi = next_hi;
             selected = selected || cursor_selected(&items[j].cursor);
+            if (items[j].order < point_survivor.order)
+                point_survivor = items[j];
             if (items[j].primary ||
                 (!primary && items[j].order < governing.order)) {
                 governing = items[j];
@@ -142,6 +145,8 @@ static void normalize_unclamped(CursorSet *cs)
             primary = primary || items[j].primary;
             j++;
         }
+        if (!selected)
+            governing = point_survivor;
         groups[group_count].cursor = merged_cursor(&governing, lo, hi);
         groups[group_count].order = governing.order;
         groups[group_count].primary = primary;

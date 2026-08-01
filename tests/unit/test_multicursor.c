@@ -189,7 +189,7 @@ void test_multicursor_adjust_bias_and_merge(void)
     sag_cset_adjust(&collapse, SAG_JOURNAL_DEL, BYTEOFF(6U), 4U);
     SAG_ASSERT_EQ_U64(collapse.curs.len, 1U);
     SAG_ASSERT_EQ_U64(collapse.primary, 0U);
-    assert_cursor(&collapse.curs.data[0], 6U, 6U, 90U);
+    assert_cursor(&collapse.curs.data[0], 6U, 6U, 70U);
 
     sag_cset_free(&collapse);
     sag_cset_free(&deletion);
