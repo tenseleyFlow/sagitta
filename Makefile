@@ -100,8 +100,10 @@ MOD_SRC  := src/mod/mods.c \
 SRC      := $(CORE_SRC) $(MOD_SRC)
 OBJ      := $(SRC:%.c=$(BUILD)/%.o)
 
-UNIT_SRC := $(sort $(wildcard tests/unit/*.c))
+UNIT_SRC := $(filter-out tests/unit/fakeclip.c, \
+              $(sort $(wildcard tests/unit/*.c)))
 UNIT_OBJ := $(UNIT_SRC:%.c=$(BUILD)/%.o)
+FAKECLIP := $(BUILD)/fakeclip
 PTY_VT_OBJ := $(BUILD)/tests/pty/vt.o
 PTY_SNAPSHOT_OBJ := $(BUILD)/tests/pty/snapshot.o
 PTY_ORACLE_OBJ := $(PTY_VT_OBJ) $(PTY_SNAPSHOT_OBJ)
@@ -184,7 +186,7 @@ $(BUILD)/sagitta: $(OBJ)
 $(BUILD)/sag: $(BUILD)/sagitta
 	ln -sf sagitta $@
 
-$(BUILD)/unit_tests: $(UNIT_LINK_OBJ)
+$(BUILD)/unit_tests: $(UNIT_LINK_OBJ) $(FAKECLIP)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(UNIT_LINK_OBJ)
 
 $(BUILD)/pty_runner: $(PTY_LINK_OBJ)
@@ -250,6 +252,9 @@ $(FAULTSHIM): tests/torture/faultshim.c | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC $(SHARED_FLAG) -o $@ $< $(DL_LIBS)
 
 $(BUILD)/gen-unicode-tables: scripts/gen-unicode-tables.c | dirs
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
+
+$(FAKECLIP): tests/unit/fakeclip.c | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
 
 test: $(BUILD)/unit_tests $(BUILD)/sagitta test-pty torture-build

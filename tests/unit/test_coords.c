@@ -225,6 +225,9 @@ void test_coords_tabs_wide_and_invalid(void)
     SAG_ASSERT_EQ_U64(sag_ccol_to_off(tb, line, (CCol){11U}, 4U).v,
                       sizeof(bytes));
     SAG_ASSERT_EQ_U64(sag_ccol_to_off(tb, line, (CCol){12U}, 4U).v, 6U);
+    SAG_ASSERT_EQ_U64(sag_ccol_to_off_padded(tb, line, (CCol){12U}, 4U).v,
+                      sizeof(bytes));
+    SAG_ASSERT_EQ_U64(sag_ccol_shortfall((CCol){12U}, (CCol){10U}), 2U);
     SAG_ASSERT_EQ_U64(sag_ccol_to_off(tb, line, (CCol){UINT64_MAX}, 4U).v,
                       6U);
     SAG_ASSERT_EQ_U64(sag_gcol_to_off(tb, line, (GCol){5U}).v,

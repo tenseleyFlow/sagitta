@@ -58,6 +58,7 @@ void test_kill_ring_zero_depth_disables_history(void)
     Registers r;
     RegVal v;
     sag_reg_init(&r);
+    r.clipboard_sync = SAG_CLIP_SYNC_OFF;
     r.ring_depth = 0U;
     ring_value(&v, "value");
     sag_reg_yank(&r, 0U, &v);
@@ -81,6 +82,7 @@ static void ring_fixture_init(RingFixture *f)
 {
     Cursor c = {BYTEOFF(0U), {0U}, BYTEOFF(0U)};
     sag_reg_init(&f->regs);
+    f->regs.clipboard_sync = SAG_CLIP_SYNC_OFF;
     f->tb = sag_textbuf_from_bytes((const u8 *)"z", 1U);
     sag_cset_init(&f->cursors, c);
     f->undo = sag_undo_new(f->tb);

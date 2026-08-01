@@ -42,12 +42,49 @@ void test_register_defaults_and_empty_deferred_slots(void)
     sag_reg_free(&r);
 }
 
+void test_register_computes_last_insert_and_current_path_on_read(void)
+{
+    static const u8 inserted[] = {(u8)'a', 0U, (u8)'b'};
+    static const char path[] = "/tmp/sagitta-current-path";
+    Registers r;
+    TextBuf *tb;
+    CursorSet cursors;
+    Cursor cursor = {BYTEOFF(0U), {0U}, BYTEOFF(0U)};
+    UndoTree *undo;
+    FileMeta meta;
+    EditCtx edit;
+
+    sag_reg_init(&r);
+    tb = sag_textbuf_new();
+    sag_cset_init(&cursors, cursor);
+    undo = sag_undo_new(tb);
+    sag_filemeta_init(&meta);
+    meta.realpath = sag_xmalloc(sizeof(path));
+    (void)memcpy(meta.realpath, path, sizeof(path));
+    edit = (EditCtx){tb, NULL, &cursors, 1U, NULL, undo, NULL};
+    sag_edit_insert(&edit, BYTEOFF(0U), inserted, sizeof(inserted));
+    sag_edit_delete(&edit, (Span){2U, 3U});
+    sag_reg_bind_context(&r, undo, &meta);
+
+    reg_assert_value(sag_reg_get(&r, '.'), SAG_REG_CHARWISE,
+                     inserted, sizeof(inserted));
+    reg_assert_value(sag_reg_get(&r, '%'), SAG_REG_CHARWISE,
+                     (const u8 *)path, sizeof(path) - 1U);
+
+    sag_filemeta_dispose(&meta);
+    sag_undo_free(undo);
+    sag_cset_free(&cursors);
+    sag_textbuf_free(tb);
+    sag_reg_free(&r);
+}
+
 void test_register_yank_routes_named_unnamed_zero_and_ring(void)
 {
     Registers r;
     RegVal v;
 
     sag_reg_init(&r);
+    r.clipboard_sync = SAG_CLIP_SYNC_OFF;
     reg_test_value(&v, SAG_REG_CHARWISE, (const u8 *)"yank\0", 5U);
     sag_reg_yank(&r, 'b', &v);
     reg_assert_value(sag_reg_get(&r, 'b'), SAG_REG_CHARWISE,
@@ -97,6 +134,37 @@ void test_register_delete_shift_boundary(void)
     sag_reg_free(&r);
 }
 
+void test_register_reserved_histories_ignore_explicit_names(void)
+{
+    Registers r;
+    RegVal keep_zero;
+    RegVal keep_one;
+    RegVal replacement;
+
+    sag_reg_init(&r);
+    r.clipboard_sync = SAG_CLIP_SYNC_OFF;
+    reg_test_value(&keep_zero, SAG_REG_CHARWISE, (const u8 *)"zero", 4U);
+    reg_test_value(&keep_one, SAG_REG_CHARWISE, (const u8 *)"one", 3U);
+    reg_test_value(&replacement, SAG_REG_CHARWISE,
+                   (const u8 *)"replacement", 11U);
+    sag_regval_copy(&r.numbered[0], &keep_zero);
+    sag_regval_copy(&r.numbered[1], &keep_one);
+
+    sag_reg_delete(&r, '0', &replacement);
+    reg_assert_value(&r.numbered[0], SAG_REG_CHARWISE,
+                     (const u8 *)"zero", 4U);
+    sag_reg_yank(&r, '1', &replacement);
+    reg_assert_value(&r.numbered[1], SAG_REG_CHARWISE,
+                     (const u8 *)"one", 3U);
+    reg_assert_value(&r.numbered[0], SAG_REG_CHARWISE,
+                     (const u8 *)"replacement", 11U);
+
+    sag_regval_free(&replacement);
+    sag_regval_free(&keep_one);
+    sag_regval_free(&keep_zero);
+    sag_reg_free(&r);
+}
+
 void test_register_delete_shifts_nine_and_discards_oldest(void)
 {
     Registers r;
@@ -126,6 +194,7 @@ void test_register_blackhole_is_total_discard(void)
     RegVal drop;
 
     sag_reg_init(&r);
+    r.clipboard_sync = SAG_CLIP_SYNC_OFF;
     reg_test_value(&keep, SAG_REG_CHARWISE, (const u8 *)"keep", 4U);
     reg_test_value(&drop, SAG_REG_LINEWISE, (const u8 *)"drop\n", 5U);
     sag_reg_yank(&r, 0U, &keep);
@@ -151,6 +220,7 @@ void test_register_uppercase_routes_append_but_unnamed_is_new_value(void)
     RegVal two;
 
     sag_reg_init(&r);
+    r.clipboard_sync = SAG_CLIP_SYNC_OFF;
     reg_test_value(&one, SAG_REG_CHARWISE, (const u8 *)"one", 3U);
     reg_test_value(&two, SAG_REG_CHARWISE, (const u8 *)"two", 3U);
     sag_reg_yank(&r, 'a', &one);
