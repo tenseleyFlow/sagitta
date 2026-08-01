@@ -28,5 +28,19 @@ void test_harness_filter_selects(void);
 void test_harness_list_order(void);
 void test_harness_failure_isolated(void);
 void test_harness_intentional_failure(void);
+void test_utf8_valid_decode(void);
+void test_utf8_reject_classes(void);
+void test_utf8_truncated_decode(void);
+void test_utf8_incremental_valid(void);
+void test_utf8_incremental_recovery(void);
+void test_utf8_incremental_finish(void);
+void test_utf8_decode_prev(void);
+void test_utf8_encode_edges(void);
+void test_utf8_escape_helpers(void);
+void test_utf8_validate(void);
+void test_utf8_boundaries(void);
+void test_utf8_exhaustive_scalars(void);
+void test_utf8_exhaustive_surrogates(void);
+void test_utf8_exhaustive_short_strings(void);
 
 #endif

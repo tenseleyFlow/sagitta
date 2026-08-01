@@ -31,6 +31,20 @@ const SagTest sag_tests[] = {
     T(harness_list_order),
     T(harness_failure_isolated),
     T(harness_intentional_failure),
+    T(utf8_valid_decode),
+    T(utf8_reject_classes),
+    T(utf8_truncated_decode),
+    T(utf8_incremental_valid),
+    T(utf8_incremental_recovery),
+    T(utf8_incremental_finish),
+    T(utf8_decode_prev),
+    T(utf8_encode_edges),
+    T(utf8_escape_helpers),
+    T(utf8_validate),
+    T(utf8_boundaries),
+    T(utf8_exhaustive_scalars),
+    T(utf8_exhaustive_surrogates),
+    T(utf8_exhaustive_short_strings),
 };
 
 const size_t sag_tests_len = SAG_ARRAY_LEN(sag_tests);
