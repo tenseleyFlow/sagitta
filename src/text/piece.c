@@ -770,6 +770,8 @@ void sag_textbuf_insert(TextBuf *tb, ByteOff at, const u8 *bytes, u64 len)
 {
     u64 buffer_len;
     u64 old_add_len;
+    u64 old_gen;
+    Span old_affected;
     PieceNode *middle;
     u8 *staged = NULL;
     const u8 *payload = bytes;
@@ -786,6 +788,9 @@ void sag_textbuf_insert(TextBuf *tb, ByteOff at, const u8 *bytes, u64 len)
     if (len > UINT64_MAX - buffer_len)
         SAG_BUG("insert length overflows text buffer");
     textbuf_require_edit_generation(tb);
+    old_gen = tb->gen;
+    old_affected = sag_textbuf_line_span(
+        tb, sag_textbuf_line_of(tb, at));
     if (payload_aliases_store(bytes, len, &tb->backing->add)) {
         if (len > SIZE_MAX)
             SAG_BUG("insert payload exceeds addressable memory");
@@ -803,6 +808,8 @@ void sag_textbuf_insert(TextBuf *tb, ByteOff at, const u8 *bytes, u64 len)
         node_extend_predecessor(tb, &tb->root, at.v, old_add_len,
                                 tb->backing->add.len)) {
         tb->gen++;
+        sag_coords_index_note_edit(tb, (Span){at.v, at.v}, len,
+                                   old_affected, old_gen);
         tb->add_tail_at = at.v + len;
         tb->add_tail_known = true;
         return;
@@ -812,6 +819,8 @@ void sag_textbuf_insert(TextBuf *tb, ByteOff at, const u8 *bytes, u64 len)
                                         tb->backing->add.len}));
     tb->root = node_insert(tb, tb->root, at.v, middle);
     tb->gen++;
+    sag_coords_index_note_edit(tb, (Span){at.v, at.v}, len,
+                               old_affected, old_gen);
     tb->add_tail_at = at.v + len;
     tb->add_tail_known = true;
 }
@@ -822,6 +831,10 @@ void sag_textbuf_delete(TextBuf *tb, Span range)
     PieceNode *after;
     PieceNode *before;
     PieceNode *removed;
+    Span old_affected;
+    LineNo first_line;
+    LineNo last_line;
+    u64 old_gen;
     u64 len;
 
     if (tb == NULL)
@@ -835,11 +848,17 @@ void sag_textbuf_delete(TextBuf *tb, Span range)
     if (range.lo == range.hi)
         return;
     textbuf_require_edit_generation(tb);
+    old_gen = tb->gen;
+    first_line = sag_textbuf_line_of(tb, BYTEOFF(range.lo));
+    last_line = sag_textbuf_line_of(tb, BYTEOFF(range.hi));
+    old_affected.lo = sag_textbuf_line_start(tb, first_line).v;
+    old_affected.hi = sag_textbuf_line_span(tb, last_line).hi;
     node_split(tb, tb->root, range.hi, &before_end, &after);
     node_split(tb, before_end, range.lo, &before, &removed);
     node_release(removed);
     tb->root = node_concat(before, after);
     tb->gen++;
+    sag_coords_index_note_edit(tb, range, 0U, old_affected, old_gen);
     tb->add_tail_known = false;
 }
 

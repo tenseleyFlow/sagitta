@@ -59,10 +59,34 @@ typedef struct {
 } SagGraphemeCheckpoint;
 
 typedef struct {
+    u64 off;
+    u64 cluster_start;
+    u64 gcol;
+    u8 prev_gcb;
+    u8 flags;
+    bool have_cluster;
+    bool after_lf;
+} SagGraphemeMotionCheckpoint;
+
+typedef struct {
+    Span range;
+    Span affected;
+    u64 inserted_len;
+    u64 old_gen;
+    u64 new_gen;
+    bool valid;
+} SagGraphemePendingEdit;
+
+typedef struct {
     SagGraphemeCheckpoint *data;
     size_t len;
     size_t cap;
+    SagGraphemeMotionCheckpoint *motion;
+    size_t motion_len;
+    size_t motion_cap;
     u64 gen;
+    /* One edit can be repaired lazily; a second edit forces a rebuild. */
+    SagGraphemePendingEdit pending;
 } SagGraphemeIndex;
 
 typedef struct TextBuf {

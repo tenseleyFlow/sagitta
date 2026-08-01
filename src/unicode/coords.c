@@ -39,7 +39,6 @@ typedef struct {
     u64 end;
     u64 cells;
     bool tab;
-    bool lf;
 } StreamCluster;
 
 static void require_span(const TextBuf *tb, Span line)
@@ -160,7 +159,6 @@ static bool cluster_next(ClusterReader *reader, StreamCluster *out,
     out->start = reader->reader.off;
     out->cells = 0U;
     out->tab = false;
-    out->lf = false;
     sag_gb_init(&gb);
     sag_cluster_width_init(&width);
     if (!reader_cp(&reader->reader, &cp))
@@ -168,7 +166,6 @@ static bool cluster_next(ClusterReader *reader, StreamCluster *out,
     (void)sag_gb_boundary(&gb, cp.cp);
     first_cp = cp.cp;
     cp_count = 1U;
-    out->lf = cp.cp == '\n';
     if (need_width)
         sag_cluster_width_push(&width, cp.cp);
 
@@ -184,8 +181,6 @@ static bool cluster_next(ClusterReader *reader, StreamCluster *out,
         gb = next_gb;
         if (cp_count != UINT32_MAX)
             cp_count++;
-        if (cp.cp == '\n')
-            out->lf = true;
         if (need_width)
             sag_cluster_width_push(&width, cp.cp);
     }
@@ -225,10 +220,34 @@ static u64 line_content_end(const TextBuf *tb, Span line)
     return line.hi - 1U;
 }
 
-enum { SAG_GCOL_CHECKPOINT_STRIDE = 64 };
+enum {
+    SAG_GCOL_CHECKPOINT_STRIDE = 64,
+    SAG_MOTION_CHECKPOINT_STRIDE = 512
+};
+
+typedef struct {
+    SagGbState gb;
+    u64 cluster_start;
+    u64 gcol;
+    bool have_cluster;
+    bool after_lf;
+} IndexScanState;
+
+typedef struct {
+    SagGraphemeIndex *index;
+    u64 next_motion;
+} IndexBuilder;
 
 static void index_push(SagGraphemeIndex *index, u64 off, u64 gcol)
 {
+    if (index->len != 0U) {
+        u64 previous = index->data[index->len - 1U].off;
+
+        if (off < previous)
+            SAG_BUG("grapheme coordinate index is not ordered");
+        if (off == previous)
+            return;
+    }
     if (index->len == index->cap) {
         size_t cap = index->cap == 0U ? 64U : index->cap * 2U;
 
@@ -241,29 +260,131 @@ static void index_push(SagGraphemeIndex *index, u64 off, u64 gcol)
     index->data[index->len++] = (SagGraphemeCheckpoint){off, gcol};
 }
 
+static void motion_index_push(SagGraphemeIndex *index,
+                              SagGraphemeMotionCheckpoint checkpoint)
+{
+    if (index->motion_len != 0U) {
+        u64 previous = index->motion[index->motion_len - 1U].off;
+
+        if (checkpoint.off < previous)
+            SAG_BUG("grapheme motion index is not ordered");
+        if (checkpoint.off == previous)
+            return;
+    }
+    if (index->motion_len == index->motion_cap) {
+        size_t cap = index->motion_cap == 0U
+                         ? 64U
+                         : index->motion_cap * 2U;
+
+        if (cap < index->motion_cap)
+            SAG_BUG("grapheme motion index capacity overflow");
+        index->motion = sag_xreallocarray(index->motion, cap,
+                                          sizeof(*index->motion));
+        index->motion_cap = cap;
+    }
+    index->motion[index->motion_len++] = checkpoint;
+}
+
+static void index_scan_init(IndexScanState *state)
+{
+    sag_gb_init(&state->gb);
+    state->cluster_start = 0U;
+    state->gcol = 0U;
+    state->have_cluster = false;
+    state->after_lf = false;
+}
+
+static void index_finalize_cluster(IndexBuilder *builder,
+                                   const IndexScanState *state)
+{
+    if (builder == NULL || !state->have_cluster || state->after_lf ||
+        state->gcol == 0U ||
+        state->gcol % (u64)SAG_GCOL_CHECKPOINT_STRIDE != 0U)
+        return;
+    index_push(builder->index, state->cluster_start, state->gcol);
+}
+
+static void index_motion_maybe(IndexBuilder *builder,
+                               const IndexScanState *state, u64 off)
+{
+    SagGraphemeMotionCheckpoint checkpoint;
+
+    if (builder == NULL || off < builder->next_motion)
+        return;
+    checkpoint.off = off;
+    checkpoint.cluster_start = state->cluster_start;
+    checkpoint.gcol = state->gcol;
+    checkpoint.prev_gcb = state->gb.prev_gcb;
+    checkpoint.flags = state->gb.flags;
+    checkpoint.have_cluster = state->have_cluster;
+    checkpoint.after_lf = state->after_lf;
+    motion_index_push(builder->index, checkpoint);
+    if (builder->next_motion >
+        UINT64_MAX - (u64)SAG_MOTION_CHECKPOINT_STRIDE)
+        builder->next_motion = UINT64_MAX;
+    else
+        builder->next_motion += (u64)SAG_MOTION_CHECKPOINT_STRIDE;
+}
+
+static void index_consume_cp(IndexBuilder *builder, IndexScanState *state,
+                             const StreamCp *cp)
+{
+    bool boundary = sag_gb_boundary(&state->gb, cp->cp);
+
+    if (boundary) {
+        index_finalize_cluster(builder, state);
+        if (!state->have_cluster || state->after_lf) {
+            state->gcol = 0U;
+        } else {
+            if (state->gcol == UINT64_MAX)
+                SAG_BUG("grapheme coordinate index column overflow");
+            state->gcol++;
+        }
+        state->cluster_start = cp->start;
+        state->have_cluster = true;
+        state->after_lf = false;
+    } else if (!state->have_cluster) {
+        SAG_BUG("grapheme index first codepoint was not a boundary");
+    }
+    if (cp->cp == '\n')
+        state->after_lf = true;
+    index_motion_maybe(builder, state, cp->end);
+}
+
+static void index_scan_part(TextBuf *tb, u64 start, u64 end,
+                            IndexScanState *state, IndexBuilder *builder)
+{
+    TextReader reader;
+    StreamCp cp;
+
+    reader_init(&reader, tb, start, end);
+    while (reader_cp(&reader, &cp))
+        index_consume_cp(builder, state, &cp);
+    if (reader.off != end)
+        SAG_BUG("grapheme index scan ended early");
+}
+
+static void index_scan(TextBuf *tb, u64 start, u64 end,
+                       IndexScanState *state, IndexBuilder *builder)
+{
+    index_scan_part(tb, start, end, state, builder);
+    index_finalize_cluster(builder, state);
+}
+
 static void coords_index_rebuild(TextBuf *tb)
 {
     SagGraphemeIndex *index = &tb->graphemes;
-    ClusterReader reader;
-    StreamCluster cluster;
-    u64 gcol = 0U;
+    IndexScanState state;
+    IndexBuilder builder;
 
     index->len = 0U;
-    cluster_reader_init(&reader, tb, 0U, sag_textbuf_len(tb));
-    while (cluster_next(&reader, &cluster, false)) {
-        if (cluster.lf) {
-            gcol = 0U;
-            continue;
-        }
-        if (gcol != 0U &&
-            gcol % (u64)SAG_GCOL_CHECKPOINT_STRIDE == 0U)
-            index_push(index, cluster.start, gcol);
-        if (gcol == UINT64_MAX)
-            SAG_BUG("grapheme coordinate index column overflow");
-        gcol++;
-    }
-    cluster_reader_free(&reader);
+    index->motion_len = 0U;
+    index_scan_init(&state);
+    builder.index = index;
+    builder.next_motion = (u64)SAG_MOTION_CHECKPOINT_STRIDE;
+    index_scan(tb, 0U, sag_textbuf_len(tb), &state, &builder);
     index->gen = tb->gen;
+    index->pending.valid = false;
 }
 
 void sag_coords_index_seed(TextBuf *tb)
@@ -278,13 +399,287 @@ void sag_coords_index_dispose(TextBuf *tb)
     if (tb == NULL)
         return;
     free(tb->graphemes.data);
+    free(tb->graphemes.motion);
     memset(&tb->graphemes, 0, sizeof(tb->graphemes));
+}
+
+static size_t motion_lower_bound_off(const SagGraphemeIndex *index, u64 off)
+{
+    size_t lo = 0U;
+    size_t hi = index->motion_len;
+
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2U;
+
+        if (index->motion[mid].off < off)
+            lo = mid + 1U;
+        else
+            hi = mid;
+    }
+    return lo;
+}
+
+static size_t motion_upper_bound_off(const SagGraphemeIndex *index, u64 off)
+{
+    size_t lo = 0U;
+    size_t hi = index->motion_len;
+
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2U;
+
+        if (index->motion[mid].off <= off)
+            lo = mid + 1U;
+        else
+            hi = mid;
+    }
+    return lo;
+}
+
+static u64 shifted_offset(u64 off, u64 deleted_len, u64 inserted_len)
+{
+    if (deleted_len != 0U)
+        return off - deleted_len;
+    if (off > UINT64_MAX - inserted_len)
+        SAG_BUG("grapheme index edit offset overflow");
+    return off + inserted_len;
+}
+
+static u64 shifted_gcol(u64 gcol, u64 old_gcol, u64 new_gcol)
+{
+    if (new_gcol >= old_gcol) {
+        u64 add = new_gcol - old_gcol;
+
+        if (gcol > UINT64_MAX - add)
+            SAG_BUG("grapheme index edit column overflow");
+        return gcol + add;
+    }
+    if (gcol < old_gcol - new_gcol)
+        SAG_BUG("grapheme index edit column underflow");
+    return gcol - (old_gcol - new_gcol);
+}
+
+static bool scan_state_matches(const IndexScanState *state,
+                               const SagGraphemeMotionCheckpoint *old,
+                               u64 deleted_len, u64 inserted_len)
+{
+    if (old->cluster_start < deleted_len)
+        return false;
+    return state->gb.prev_gcb == old->prev_gcb &&
+           state->gb.flags == old->flags &&
+           state->have_cluster == old->have_cluster &&
+           state->after_lf == old->after_lf &&
+           state->cluster_start == shifted_offset(old->cluster_start,
+                                                  deleted_len,
+                                                  inserted_len);
+}
+
+static u64 next_motion_threshold(u64 off)
+{
+    u64 stride = (u64)SAG_MOTION_CHECKPOINT_STRIDE;
+    u64 remainder = off % stride;
+    u64 add = remainder == 0U ? stride : stride - remainder;
+
+    return off > UINT64_MAX - add ? UINT64_MAX : off + add;
+}
+
+static void coords_index_apply_edit(TextBuf *tb)
+{
+    SagGraphemeIndex *old_index;
+    SagGraphemeIndex next = {0};
+    SagGraphemeMotionCheckpoint resume;
+    IndexScanState state;
+    IndexBuilder builder;
+    Span old_range;
+    Span old_affected;
+    u64 deleted_len;
+    u64 inserted_len;
+    u64 old_gen;
+    u64 scan_start;
+    u64 scan_cursor;
+    u64 rebuild_lo;
+    u64 scan_end;
+    u64 convergence_off = 0U;
+    u64 convergence_old_gcol = 0U;
+    u64 convergence_new_gcol = 0U;
+    size_t motion_first;
+    size_t motion_after;
+    size_t candidate;
+    size_t i;
+    bool have_resume = false;
+    bool converged = false;
+
+    old_index = &tb->graphemes;
+    old_range = old_index->pending.range;
+    inserted_len = old_index->pending.inserted_len;
+    old_affected = old_index->pending.affected;
+    old_gen = old_index->pending.old_gen;
+    if (!old_index->pending.valid || old_index->gen != old_gen ||
+        old_index->pending.new_gen != tb->gen)
+        SAG_BUG("grapheme index pending edit is inconsistent");
+    if (old_range.lo > old_range.hi ||
+        old_affected.lo > old_range.lo ||
+        old_affected.hi < old_range.hi)
+        SAG_BUG("grapheme index pending edit has invalid range");
+    deleted_len = old_range.hi - old_range.lo;
+    motion_first = motion_lower_bound_off(old_index, old_affected.lo);
+    motion_after = motion_upper_bound_off(old_index, old_range.lo);
+    if (motion_after > motion_first) {
+        resume = old_index->motion[motion_after - 1U];
+        have_resume = true;
+    }
+    if (have_resume) {
+        state.gb.prev_gcb = resume.prev_gcb;
+        state.gb.flags = resume.flags;
+        state.cluster_start = resume.cluster_start;
+        state.gcol = resume.gcol;
+        state.have_cluster = resume.have_cluster;
+        state.after_lf = resume.after_lf;
+        scan_start = resume.off;
+        rebuild_lo = resume.cluster_start > old_affected.lo
+                         ? resume.cluster_start
+                         : old_affected.lo;
+    } else {
+        index_scan_init(&state);
+        scan_start = old_affected.lo;
+        rebuild_lo = old_affected.lo;
+    }
+    if (old_affected.hi < deleted_len)
+        SAG_BUG("grapheme index edit span underflow");
+    scan_end = old_affected.hi - deleted_len;
+    if (scan_end > UINT64_MAX - inserted_len)
+        SAG_BUG("grapheme index edit span overflow");
+    scan_end += inserted_len;
+
+    for (i = 0U; i < old_index->len; i++) {
+        if (old_index->data[i].off >= rebuild_lo)
+            break;
+        index_push(&next, old_index->data[i].off,
+                   old_index->data[i].gcol);
+    }
+    for (i = 0U; i < old_index->motion_len; i++) {
+        if (old_index->motion[i].off > scan_start)
+            break;
+        motion_index_push(&next, old_index->motion[i]);
+    }
+    builder.index = &next;
+    builder.next_motion = next_motion_threshold(scan_start);
+    scan_cursor = scan_start;
+    candidate = motion_upper_bound_off(old_index, old_range.hi);
+    for (; candidate < old_index->motion_len; candidate++) {
+        const SagGraphemeMotionCheckpoint *checkpoint =
+            &old_index->motion[candidate];
+        u64 candidate_end;
+
+        if (checkpoint->off > old_affected.hi)
+            break;
+        if (checkpoint->cluster_start < old_range.hi)
+            continue;
+        candidate_end = shifted_offset(checkpoint->off, deleted_len,
+                                       inserted_len);
+        if (candidate_end < scan_cursor || candidate_end > scan_end)
+            continue;
+        index_scan_part(tb, scan_cursor, candidate_end, &state, &builder);
+        scan_cursor = candidate_end;
+        if (!scan_state_matches(&state, checkpoint, deleted_len,
+                                inserted_len))
+            continue;
+        convergence_off = checkpoint->off;
+        convergence_old_gcol = checkpoint->gcol;
+        convergence_new_gcol = state.gcol;
+        converged = true;
+        break;
+    }
+    if (!converged) {
+        index_scan_part(tb, scan_cursor, scan_end, &state, &builder);
+        index_finalize_cluster(&builder, &state);
+    }
+
+    for (i = 0U; i < old_index->len; i++) {
+        SagGraphemeCheckpoint checkpoint = old_index->data[i];
+
+        if (converged && checkpoint.off >= convergence_off &&
+            checkpoint.off < old_affected.hi) {
+            checkpoint.off = shifted_offset(checkpoint.off, deleted_len,
+                                            inserted_len);
+            checkpoint.gcol = shifted_gcol(checkpoint.gcol,
+                                           convergence_old_gcol,
+                                           convergence_new_gcol);
+            index_push(&next, checkpoint.off, checkpoint.gcol);
+            continue;
+        }
+        if (checkpoint.off < old_affected.hi)
+            continue;
+        checkpoint.off = shifted_offset(checkpoint.off, deleted_len,
+                                        inserted_len);
+        index_push(&next, checkpoint.off, checkpoint.gcol);
+    }
+    for (i = 0U; i < old_index->motion_len; i++) {
+        SagGraphemeMotionCheckpoint checkpoint = old_index->motion[i];
+
+        if (converged && checkpoint.off >= convergence_off &&
+            checkpoint.off <= old_affected.hi) {
+            checkpoint.off = shifted_offset(checkpoint.off, deleted_len,
+                                            inserted_len);
+            checkpoint.cluster_start = shifted_offset(
+                checkpoint.cluster_start, deleted_len, inserted_len);
+            checkpoint.gcol = shifted_gcol(checkpoint.gcol,
+                                           convergence_old_gcol,
+                                           convergence_new_gcol);
+            motion_index_push(&next, checkpoint);
+            continue;
+        }
+        if (checkpoint.off <= old_affected.hi)
+            continue;
+        checkpoint.off = shifted_offset(checkpoint.off, deleted_len,
+                                        inserted_len);
+        checkpoint.cluster_start = shifted_offset(checkpoint.cluster_start,
+                                                  deleted_len,
+                                                  inserted_len);
+        motion_index_push(&next, checkpoint);
+    }
+    next.gen = tb->gen;
+    free(old_index->data);
+    free(old_index->motion);
+    *old_index = next;
+}
+
+void sag_coords_index_note_edit(TextBuf *tb, Span old_range,
+                                u64 inserted_len, Span old_affected,
+                                u64 old_gen)
+{
+    SagGraphemeIndex *index;
+
+    if (tb == NULL)
+        SAG_BUG("sag_coords_index_note_edit: NULL buffer");
+    index = &tb->graphemes;
+    if (index->gen != old_gen) {
+        index->pending.valid = false;
+        return;
+    }
+    if (old_range.lo > old_range.hi ||
+        old_affected.lo > old_range.lo ||
+        old_affected.hi < old_range.hi)
+        SAG_BUG("sag_coords_index_note_edit: invalid old range");
+    index->pending.range = old_range;
+    index->pending.affected = old_affected;
+    index->pending.inserted_len = inserted_len;
+    index->pending.old_gen = old_gen;
+    index->pending.new_gen = tb->gen;
+    index->pending.valid = true;
 }
 
 static const SagGraphemeIndex *coords_index(const TextBuf *tb)
 {
-    if (tb->graphemes.gen != tb->gen)
-        coords_index_rebuild((TextBuf *)tb);
+    if (tb->graphemes.gen != tb->gen) {
+        TextBuf *mutable = (TextBuf *)tb;
+
+        if (tb->graphemes.pending.valid &&
+            tb->graphemes.pending.old_gen == tb->graphemes.gen &&
+            tb->graphemes.pending.new_gen == tb->gen)
+            coords_index_apply_edit(mutable);
+        else
+            coords_index_rebuild(mutable);
+    }
     return &tb->graphemes;
 }
 
@@ -372,6 +767,8 @@ GCol sag_off_to_gcol(const TextBuf *tb, Span line, ByteOff pos)
     end = line_content_end(tb, line);
     if (pos.v > end)
         pos.v = end;
+    if (pos.v == line.lo)
+        return (GCol){0U};
     index = coords_index(tb);
     checkpoint = index_before_off(index, line, end, pos.v);
     count = checkpoint.gcol;
@@ -585,37 +982,19 @@ ByteOff sag_grapheme_prev(const TextBuf *tb, ByteOff pos)
     return BYTEOFF(previous);
 }
 
-static bool ri_restart_unproven(const u8 *window, size_t count,
-                                bool truncated)
-{
-    enum { RESTART_CP_LIMIT = 64 };
-    size_t cursor = count;
-    size_t scanned;
-
-    for (scanned = 0U; scanned < RESTART_CP_LIMIT; scanned++) {
-        u32 cp;
-        size_t used = sag_utf8_decode_prev(window, 0U, cursor, &cp);
-
-        if (used == 0U || used > cursor ||
-            cp < UINT32_C(0x1F1E6) || cp > UINT32_C(0x1F1FF))
-            return false;
-        cursor -= used;
-    }
-    return cursor != 0U || truncated;
-}
-
 ByteOff sag_grapheme_prev_boundary(const TextBuf *tb, ByteOff pos)
 {
-    enum { PREV_WINDOW = 512 };
+    const SagGraphemeIndex *index;
+    IndexScanState state;
     TextReader reader;
+    StreamCp cp;
     Span span;
-    u8 window[PREV_WINDOW];
     u8 previous;
     u8 before_previous;
-    u64 start;
-    size_t count = 0U;
-    size_t found;
+    u64 scan_start;
     u64 len;
+    size_t first;
+    size_t after;
 
     if (tb == NULL)
         SAG_BUG("sag_grapheme_prev_boundary: NULL text buffer");
@@ -640,20 +1019,32 @@ ByteOff sag_grapheme_prev_boundary(const TextBuf *tb, ByteOff pos)
             return BYTEOFF(pos.v - 1U);
         }
     }
-    start = pos.v - span.lo > PREV_WINDOW
-                ? pos.v - PREV_WINDOW
-                : span.lo;
-    reader_init(&reader, tb, start, pos.v);
-    while (count < SAG_ARRAY_LEN(window) &&
-           reader_get(&reader, &window[count]))
-        count++;
+    index = coords_index(tb);
+    first = motion_lower_bound_off(index, span.lo);
+    after = motion_upper_bound_off(index, pos.v);
+    if (after > first) {
+        const SagGraphemeMotionCheckpoint *checkpoint =
+            &index->motion[after - 1U];
+
+        state.gb.prev_gcb = checkpoint->prev_gcb;
+        state.gb.flags = checkpoint->flags;
+        state.cluster_start = checkpoint->cluster_start;
+        state.gcol = checkpoint->gcol;
+        state.have_cluster = checkpoint->have_cluster;
+        state.after_lf = checkpoint->after_lf;
+        scan_start = checkpoint->off;
+    } else {
+        index_scan_init(&state);
+        scan_start = span.lo;
+    }
+    reader_init(&reader, tb, scan_start, pos.v);
+    while (reader_cp(&reader, &cp))
+        index_consume_cp(NULL, &state, &cp);
     if (reader.off != pos.v)
-        SAG_BUG("sag_grapheme_prev_boundary: window ended early");
-    found = sag_gb_prev_bytes(window, count, count);
-    if (!ri_restart_unproven(window, count, start != span.lo) &&
-        (found != 0U || start == span.lo))
-        return BYTEOFF(start + (u64)found);
-    return sag_grapheme_prev(tb, pos);
+        SAG_BUG("sag_grapheme_prev_boundary: checkpoint ended early");
+    if (!state.have_cluster)
+        SAG_BUG("sag_grapheme_prev_boundary: checkpoint has no cluster");
+    return BYTEOFF(state.cluster_start);
 }
 
 bool sag_is_grapheme_boundary(const TextBuf *tb, ByteOff pos)

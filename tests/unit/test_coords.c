@@ -327,7 +327,19 @@ static TextBuf *coords_ri_buffer(size_t count)
     return sag_textbuf_from_owned_bytes(bytes, (u64)len);
 }
 
-void test_coords_reverse_long_ri_runs(void)
+static TextBuf *coords_extend_buffer(size_t count)
+{
+    static const u8 extend[] = {0xCCU, 0x81U};
+    size_t len = count * sizeof(extend);
+    u8 *bytes = sag_xmalloc(len);
+    size_t i;
+
+    for (i = 0U; i < count; i++)
+        memcpy(bytes + i * sizeof(extend), extend, sizeof(extend));
+    return sag_textbuf_from_owned_bytes(bytes, (u64)len);
+}
+
+void test_coords_reverse_long_context_runs(void)
 {
     TextBuf *tb = coords_ri_buffer(65U);
 
@@ -341,13 +353,30 @@ void test_coords_reverse_long_ri_runs(void)
                       512U);
     SAG_ASSERT_EQ_U64(sag_grapheme_prev(tb, BYTEOFF(516U)).v, 512U);
     sag_textbuf_free(tb);
+
+    tb = coords_extend_buffer(65U);
+    SAG_ASSERT_EQ_U64(sag_grapheme_prev_boundary(tb, BYTEOFF(130U)).v,
+                      0U);
+    SAG_ASSERT(sag_is_grapheme_boundary(tb, BYTEOFF(0U)));
+    sag_textbuf_free(tb);
+
+    tb = coords_extend_buffer(129U);
+    SAG_ASSERT_EQ_U64(sag_grapheme_prev_boundary(tb, BYTEOFF(258U)).v,
+                      0U);
+    SAG_ASSERT(sag_is_grapheme_boundary(tb, BYTEOFF(0U)));
+    sag_textbuf_free(tb);
 }
 
 void test_coords_sparse_index_edit_invalidation(void)
 {
     u8 bytes[130];
     u8 two_lines[261];
+    u8 long_lines[1401];
+    u8 deferred[700];
     static const u8 accent[] = {0xCCU, 0x81U};
+    static const u8 split[] = {'\n', 'z', 'z'};
+    static const u8 x = 'x';
+    static const u8 y = 'y';
     TextBuf *tb;
     Span line;
 
@@ -362,6 +391,7 @@ void test_coords_sparse_index_edit_invalidation(void)
 
     sag_textbuf_insert(tb, BYTEOFF(1U), accent, sizeof(accent));
     SAG_ASSERT(tb->graphemes.gen != tb->gen);
+    SAG_ASSERT(tb->graphemes.pending.valid);
     line = sag_textbuf_line_span(tb, LINENO(0U));
     SAG_ASSERT_EQ_U64(sag_gcol_to_off(tb, line, (GCol){64U}).v, 66U);
     SAG_ASSERT_EQ_U64(tb->graphemes.gen, tb->gen);
@@ -369,6 +399,7 @@ void test_coords_sparse_index_edit_invalidation(void)
 
     sag_textbuf_delete(tb, (Span){1U, 3U});
     SAG_ASSERT(tb->graphemes.gen != tb->gen);
+    SAG_ASSERT(tb->graphemes.pending.valid);
     line = sag_textbuf_line_span(tb, LINENO(0U));
     SAG_ASSERT_EQ_U64(sag_gcol_to_off(tb, line, (GCol){128U}).v, 128U);
     SAG_ASSERT_EQ_U64(tb->graphemes.gen, tb->gen);
@@ -383,5 +414,56 @@ void test_coords_sparse_index_edit_invalidation(void)
     line = sag_textbuf_line_span(tb, LINENO(1U));
     SAG_ASSERT_EQ_U64(sag_gcol_to_off(tb, line, (GCol){64U}).v, 195U);
     SAG_ASSERT_EQ_U64(sag_off_to_gcol(tb, line, BYTEOFF(261U)).v, 130U);
+    sag_textbuf_free(tb);
+
+    memset(long_lines, 'a', 700U);
+    long_lines[700U] = '\n';
+    memset(long_lines + 701U, 'b', 700U);
+    tb = sag_textbuf_from_bytes(long_lines, sizeof(long_lines));
+    sag_textbuf_insert(tb, BYTEOFF(650U), split, sizeof(split));
+    SAG_ASSERT(tb->graphemes.gen != tb->gen);
+    SAG_ASSERT(tb->graphemes.pending.valid);
+    SAG_ASSERT_EQ_U64(sag_textbuf_line_count(tb), 3U);
+    line = sag_textbuf_line_span(tb, LINENO(0U));
+    SAG_ASSERT_EQ_U64(sag_off_to_gcol(tb, line, BYTEOFF(650U)).v, 650U);
+    line = sag_textbuf_line_span(tb, LINENO(1U));
+    SAG_ASSERT_EQ_U64(sag_off_to_gcol(tb, line, BYTEOFF(703U)).v, 52U);
+    line = sag_textbuf_line_span(tb, LINENO(2U));
+    SAG_ASSERT_EQ_U64(sag_gcol_to_off(tb, line, (GCol){64U}).v, 768U);
+
+    sag_textbuf_delete(tb, (Span){650U, 653U});
+    SAG_ASSERT(tb->graphemes.gen != tb->gen);
+    SAG_ASSERT(tb->graphemes.pending.valid);
+    SAG_ASSERT_EQ_U64(sag_textbuf_line_count(tb), 2U);
+    line = sag_textbuf_line_span(tb, LINENO(1U));
+    SAG_ASSERT_EQ_U64(sag_gcol_to_off(tb, line, (GCol){64U}).v, 765U);
+    SAG_ASSERT_EQ_U64(sag_off_to_gcol(tb, line, BYTEOFF(1401U)).v, 700U);
+    sag_textbuf_free(tb);
+
+    memset(deferred, 'a', sizeof(deferred));
+    tb = sag_textbuf_from_bytes(deferred, sizeof(deferred));
+    sag_textbuf_insert(tb, BYTEOFF(10U), &x, 1U);
+    SAG_ASSERT(tb->graphemes.pending.valid);
+    SAG_ASSERT_EQ_U64(sag_grapheme_prev_boundary(tb, BYTEOFF(701U)).v,
+                      700U);
+    line = sag_textbuf_line_span(tb, LINENO(0U));
+    SAG_ASSERT_EQ_U64(sag_off_to_gcol(tb, line, BYTEOFF(701U)).v, 701U);
+    sag_textbuf_delete(tb, (Span){10U, 11U});
+    SAG_ASSERT(tb->graphemes.pending.valid);
+    SAG_ASSERT_EQ_U64(sag_grapheme_prev_boundary(tb, BYTEOFF(700U)).v,
+                      699U);
+    line = sag_textbuf_line_span(tb, LINENO(0U));
+    SAG_ASSERT_EQ_U64(sag_off_to_gcol(tb, line, BYTEOFF(700U)).v, 700U);
+    sag_textbuf_free(tb);
+
+    tb = sag_textbuf_from_bytes(deferred, sizeof(deferred));
+    sag_textbuf_insert(tb, BYTEOFF(10U), &x, 1U);
+    SAG_ASSERT(tb->graphemes.pending.valid);
+    sag_textbuf_insert(tb, BYTEOFF(20U), &y, 1U);
+    SAG_ASSERT(!tb->graphemes.pending.valid);
+    SAG_ASSERT(tb->graphemes.gen != tb->gen);
+    line = sag_textbuf_line_span(tb, LINENO(0U));
+    SAG_ASSERT_EQ_U64(sag_off_to_gcol(tb, line, BYTEOFF(702U)).v, 702U);
+    SAG_ASSERT_EQ_U64(tb->graphemes.gen, tb->gen);
     sag_textbuf_free(tb);
 }

@@ -49,7 +49,7 @@ void test_coords_tabs_wide_and_invalid(void);
 void test_coords_crlf_and_clamping(void);
 void test_coords_inside_cluster_rounds_left(void);
 void test_coords_streams_large_cluster_width(void);
-void test_coords_reverse_long_ri_runs(void);
+void test_coords_reverse_long_context_runs(void);
 void test_coords_sparse_index_edit_invalidation(void);
 void test_cursor_horizontal_graphemes(void);
 void test_cursor_vertical_sticky_goal(void);
