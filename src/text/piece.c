@@ -514,22 +514,11 @@ static void store_append(TextStore *store, const u8 *bytes, u64 len)
     }
 }
 
-static void store_init_original(TextStore *store, const u8 *bytes, u64 len)
+static void store_index_original(TextStore *store)
 {
-    size_t size;
+    size_t size = (size_t)store->len;
     size_t pos = 0U;
 
-    if (len == 0U)
-        return;
-    if (bytes == NULL)
-        SAG_BUG("original text store initialized with NULL bytes");
-    if (len > SIZE_MAX)
-        SAG_BUG("original text store exceeds addressable memory");
-    size = (size_t)len;
-    store->bytes = sag_xmalloc(size);
-    memcpy(store->bytes, bytes, size);
-    store->len = len;
-    store->cap = len;
     while (pos < size) {
         const u8 *lf = memchr(store->bytes + pos, '\n', size - pos);
         size_t off;
@@ -540,6 +529,37 @@ static void store_init_original(TextStore *store, const u8 *bytes, u64 len)
         SagU64Vec_push(&store->lfs, (u64)off);
         pos = off + 1U;
     }
+}
+
+static void store_init_original(TextStore *store, const u8 *bytes, u64 len)
+{
+    if (len == 0U)
+        return;
+    if (bytes == NULL)
+        SAG_BUG("original text store initialized with NULL bytes");
+    if (len > SIZE_MAX)
+        SAG_BUG("original text store exceeds addressable memory");
+    store->bytes = sag_xmalloc((size_t)len);
+    memcpy(store->bytes, bytes, (size_t)len);
+    store->len = len;
+    store->cap = len;
+    store_index_original(store);
+}
+
+static void store_init_original_owned(TextStore *store, u8 *bytes, u64 len)
+{
+    if (len > SIZE_MAX)
+        SAG_BUG("owned original text store exceeds addressable memory");
+    if (len != 0U && bytes == NULL)
+        SAG_BUG("owned original text store initialized with NULL bytes");
+    if (len == 0U) {
+        free(bytes);
+        return;
+    }
+    store->bytes = bytes;
+    store->len = len;
+    store->cap = len;
+    store_index_original(store);
 }
 
 static void store_free(TextStore *store)
@@ -609,6 +629,21 @@ TextBuf *sag_textbuf_from_bytes(const u8 *bytes, u64 len)
         store_init_original(&tb->backing->orig, bytes, len);
         textbuf_sync_store_views(tb);
         piece = piece_make(tb->backing, SAG_STORE_ORIG, (Span){0U, len});
+        tb->root = node_new(piece);
+    }
+    return tb;
+}
+
+TextBuf *sag_textbuf_from_owned_bytes(u8 *bytes, u64 len)
+{
+    TextBuf *tb = sag_textbuf_new();
+
+    store_init_original_owned(&tb->backing->orig, bytes, len);
+    textbuf_sync_store_views(tb);
+    if (len != 0U) {
+        Piece piece = piece_make(tb->backing, SAG_STORE_ORIG,
+                                 (Span){0U, len});
+
         tb->root = node_new(piece);
     }
     return tb;

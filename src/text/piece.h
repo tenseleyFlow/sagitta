@@ -91,6 +91,8 @@ typedef struct {
 /* Constructors allocate a buffer; from_bytes copies its input. */
 TextBuf *sag_textbuf_new(void);
 TextBuf *sag_textbuf_from_bytes(const u8 *bytes, u64 len);
+/* Transfers bytes to the immutable original store, including for len == 0. */
+TextBuf *sag_textbuf_from_owned_bytes(u8 *bytes, u64 len);
 /* Frees the live buffer; snapshots and their backing bytes remain valid. */
 void sag_textbuf_free(TextBuf *tb);
 
