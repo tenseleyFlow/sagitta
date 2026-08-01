@@ -26,6 +26,8 @@ typedef struct FileMeta {
     uid_t uid;
     gid_t gid;
     nlink_t nlink;
+    dev_t dev;
+    ino_t ino;
     bool exists;
     bool via_symlink;
     char *realpath;

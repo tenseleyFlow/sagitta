@@ -168,6 +168,8 @@ static void classify_bytes(const u8 *bytes, size_t len, FileMeta *meta,
 
 static char *path_dirname(const char *path);
 static const char *path_basename(const char *path);
+static int open_temp(const char *dir, const char *base, mode_t mode,
+                     char **path_out);
 
 static char *canonical_new_path(const char *path)
 {
@@ -187,6 +189,69 @@ static char *canonical_new_path(const char *path)
     }
     free(resolved_dir);
     return result;
+}
+
+static char *resolve_save_target_at(const char *path, unsigned int depth)
+{
+    struct stat st;
+    char *resolved;
+    char *link_text;
+    char *next;
+    size_t cap;
+    ssize_t len;
+
+    resolved = realpath(path, NULL);
+    if (resolved != NULL)
+        return resolved;
+    if (errno != ENOENT || depth >= 40U)
+        return NULL;
+    if (lstat(path, &st) != 0) {
+        if (errno != ENOENT)
+            return NULL;
+        return canonical_new_path(path);
+    }
+    if (!S_ISLNK(st.st_mode)) {
+        errno = EINVAL;
+        return NULL;
+    }
+    if (st.st_size > 0) {
+        if ((u64)st.st_size > SIZE_MAX - 2U) {
+            errno = ENAMETOOLONG;
+            return NULL;
+        }
+        cap = (size_t)st.st_size + 2U;
+    } else {
+        cap = (size_t)PATH_MAX + 2U;
+    }
+    link_text = sag_xmalloc(cap);
+    len = readlink(path, link_text, cap - 1U);
+    if (len < 0 || (size_t)len >= cap - 1U) {
+        int saved_errno = len < 0 ? errno : ENAMETOOLONG;
+
+        free(link_text);
+        errno = saved_errno;
+        return NULL;
+    }
+    link_text[len] = '\0';
+    if (link_text[0] == '/') {
+        next = link_text;
+    } else {
+        char *dir = path_dirname(path);
+        size_t next_len = strlen(dir) + strlen(link_text) + 2U;
+
+        next = sag_xmalloc(next_len);
+        (void)snprintf(next, next_len, "%s/%s", dir, link_text);
+        free(dir);
+        free(link_text);
+    }
+    resolved = resolve_save_target_at(next, depth + 1U);
+    free(next);
+    return resolved;
+}
+
+static char *resolve_save_target(const char *path)
+{
+    return resolve_save_target_at(path, 0U);
 }
 
 static void warn_temp_leftovers(const char *path)
@@ -243,7 +308,13 @@ SagLoadErr sag_file_load(const char *path, TextBuf **out, FileMeta *meta)
 
         if (error == SAG_LOAD_ENOENT) {
             *out = sag_textbuf_new();
-            meta->realpath = canonical_new_path(path);
+            meta->realpath = meta->via_symlink ? resolve_save_target(path)
+                                               : canonical_new_path(path);
+            if (meta->realpath == NULL) {
+                sag_textbuf_free(*out);
+                *out = NULL;
+                return SAG_LOAD_IO;
+            }
             meta->mode = 0666U;
         }
         return error;
@@ -293,6 +364,8 @@ SagLoadErr sag_file_load(const char *path, TextBuf **out, FileMeta *meta)
     meta->uid = st.st_uid;
     meta->gid = st.st_gid;
     meta->nlink = st.st_nlink;
+    meta->dev = st.st_dev;
+    meta->ino = st.st_ino;
     meta->mtime = stat_mtime(&st);
     meta->size_on_disk = (u64)size;
     meta->realpath = realpath(path, NULL);
@@ -316,8 +389,11 @@ static bool write_full(int fd, const u8 *bytes, size_t len)
             at += (size_t)n;
         else if (n < 0 && errno == EINTR)
             continue;
-        else
+        else {
+            if (n == 0)
+                errno = EIO;
             return false;
+        }
     }
     return true;
 }
@@ -332,20 +408,49 @@ static bool fsync_full(int fd)
     return result == 0;
 }
 
-static SagSaveErr destination_matches(const FileMeta *meta, const char *path)
+static bool fsync_directory(const char *path)
+{
+    int fd = open(path, O_RDONLY
+#ifdef O_DIRECTORY
+                  | O_DIRECTORY
+#endif
+    );
+    bool ok;
+
+    if (fd < 0)
+        return false;
+    ok = fsync_full(fd);
+    if (close(fd) != 0)
+        ok = false;
+    return ok;
+}
+
+static SagSaveErr destination_matches(const FileMeta *meta, const char *path,
+                                      bool *needs_inplace)
 {
     struct stat st;
 
+    *needs_inplace = false;
     if (stat(path, &st) == 0) {
-        if (!meta->exists || st.st_size < 0 ||
+        if (!S_ISREG(st.st_mode) || !meta->exists || st.st_size < 0 ||
+            st.st_dev != meta->dev || st.st_ino != meta->ino ||
             (u64)st.st_size != meta->size_on_disk ||
             !timespec_equal(stat_mtime(&st), meta->mtime))
             return SAG_SAVE_CHANGED_ON_DISK;
+        *needs_inplace = st.st_nlink > 1;
         return SAG_SAVE_OK;
     }
     if (errno == ENOENT)
         return meta->exists ? SAG_SAVE_CHANGED_ON_DISK : SAG_SAVE_OK;
     return errno == EACCES || errno == EPERM ? SAG_SAVE_PERM : SAG_SAVE_IO;
+}
+
+static bool stat_matches_meta(const struct stat *st, const FileMeta *meta)
+{
+    return S_ISREG(st->st_mode) && meta->exists && st->st_size >= 0 &&
+           st->st_dev == meta->dev && st->st_ino == meta->ino &&
+           (u64)st->st_size == meta->size_on_disk &&
+           timespec_equal(stat_mtime(st), meta->mtime);
 }
 
 static bool write_text(int fd, const TextBuf *tb, bool had_bom)
@@ -504,24 +609,68 @@ static bool copy_fd(int src, int dst)
     }
 }
 
-static bool copy_path_to_backup(const char *src_path, const char *bak_path)
+static bool copy_path_to_backup(const char *src_path, const char *bak_path,
+                                const FileMeta *meta)
 {
+    struct stat src_st;
+    struct stat bak_st;
+    char *dir = path_dirname(bak_path);
+    char *tmp = NULL;
     int src = -1;
     int bak = -1;
     bool ok = false;
+    int saved_errno = 0;
 
-    src = open(src_path, O_RDONLY);
+    src = open(src_path, O_RDONLY
+#ifdef O_NOFOLLOW
+               | O_NOFOLLOW
+#endif
+    );
     if (src < 0)
         goto done;
-    bak = open(bak_path, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    if (fstat(src, &src_st) != 0)
+        goto done;
+    if (!stat_matches_meta(&src_st, meta)) {
+        errno = ESTALE;
+        goto done;
+    }
+    bak = open_temp(dir, path_basename(bak_path), 0600, &tmp);
     if (bak < 0)
         goto done;
-    ok = copy_fd(src, bak) && fsync_full(bak);
+    if (fstat(bak, &bak_st) != 0)
+        goto done;
+    if (!S_ISREG(bak_st.st_mode) ||
+        (bak_st.st_dev == src_st.st_dev && bak_st.st_ino == src_st.st_ino)) {
+        errno = EINVAL;
+        goto done;
+    }
+    if (!copy_fd(src, bak) || !fsync_full(bak))
+        goto done;
+    if (close(bak) != 0) {
+        bak = -1;
+        goto done;
+    }
+    bak = -1;
+    if (rename(tmp, bak_path) != 0 || !fsync_directory(dir))
+        goto done;
+    ok = true;
 done:
-    if (bak >= 0 && close(bak) != 0)
+    if (!ok)
+        saved_errno = errno == 0 ? EIO : errno;
+    if (bak >= 0 && close(bak) != 0 && ok) {
         ok = false;
-    if (src >= 0 && close(src) != 0)
+        saved_errno = errno;
+    }
+    if (src >= 0 && close(src) != 0 && ok) {
         ok = false;
+        saved_errno = errno;
+    }
+    if (!ok && tmp != NULL)
+        (void)unlink(tmp);
+    free(tmp);
+    free(dir);
+    if (!ok)
+        errno = saved_errno;
     return ok;
 }
 
@@ -531,10 +680,18 @@ static bool restore_backup(const char *bak_path, const char *dst_path)
     int dst = -1;
     bool ok = false;
 
-    bak = open(bak_path, O_RDONLY);
+    bak = open(bak_path, O_RDONLY
+#ifdef O_NOFOLLOW
+               | O_NOFOLLOW
+#endif
+    );
     if (bak < 0)
         goto done;
-    dst = open(dst_path, O_WRONLY);
+    dst = open(dst_path, O_WRONLY
+#ifdef O_NOFOLLOW
+               | O_NOFOLLOW
+#endif
+    );
     if (dst < 0)
         goto done;
     if (!copy_fd(bak, dst))
@@ -558,22 +715,36 @@ static SagSaveErr inplace_save(const TextBuf *tb, const FileMeta *meta,
                                const char *dst)
 {
     char *bak = backup_path(dst);
+    struct stat st;
     int fd;
     off_t end;
     bool ok;
 
     if (bak == NULL)
         return SAG_SAVE_IO;
-    if (!copy_path_to_backup(dst, bak)) {
+    if (!copy_path_to_backup(dst, bak, meta)) {
+        int saved_errno = errno;
+
         free(bak);
-        return errno == EACCES || errno == EPERM ? SAG_SAVE_PERM
-                                                  : SAG_SAVE_IO;
+        if (saved_errno == ESTALE)
+            return SAG_SAVE_CHANGED_ON_DISK;
+        return saved_errno == EACCES || saved_errno == EPERM ? SAG_SAVE_PERM
+                                                              : SAG_SAVE_IO;
     }
-    fd = open(dst, O_WRONLY);
+    fd = open(dst, O_WRONLY
+#ifdef O_NOFOLLOW
+              | O_NOFOLLOW
+#endif
+    );
     if (fd < 0) {
         free(bak);
         return errno == EACCES || errno == EPERM ? SAG_SAVE_PERM
                                                   : SAG_SAVE_IO;
+    }
+    if (fstat(fd, &st) != 0 || !stat_matches_meta(&st, meta)) {
+        (void)close(fd);
+        free(bak);
+        return SAG_SAVE_CHANGED_ON_DISK;
     }
     ok = write_text(fd, tb, meta->had_bom);
     end = ok ? lseek(fd, 0, SEEK_CUR) : (off_t)-1;
@@ -640,11 +811,18 @@ static int open_temp(const char *dir, const char *base, mode_t mode,
             (unsigned long long)++temp_counter;
         size_t n = strlen(dir) + strlen(base) + 64U;
         char *path = sag_xmalloc(n);
+        int flags = O_WRONLY | O_CREAT | O_EXCL;
         int fd;
 
         (void)snprintf(path, n, "%s/.sag-%s-%ld-%llu", dir, base,
                        (long)getpid(), counter);
-        fd = open(path, O_WRONLY | O_CREAT | O_EXCL, mode);
+#ifdef O_CLOEXEC
+        flags |= O_CLOEXEC;
+#endif
+#ifdef O_NOFOLLOW
+        flags |= O_NOFOLLOW;
+#endif
+        fd = open(path, flags, mode);
         if (fd >= 0) {
             *path_out = path;
             return fd;
@@ -668,6 +846,7 @@ static SagSaveErr atomic_save(const TextBuf *tb, const FileMeta *meta,
     bool foreign_owner;
     int saved_errno;
     SagSaveErr match;
+    bool needs_inplace;
 
     if (fd < 0) {
         saved_errno = errno;
@@ -696,12 +875,18 @@ static SagSaveErr atomic_save(const TextBuf *tb, const FileMeta *meta,
         goto fail;
     }
     fd = -1;
-    match = destination_matches(meta, dst);
+    match = destination_matches(meta, dst, &needs_inplace);
     if (match != SAG_SAVE_OK) {
         (void)unlink(tmp);
         free(tmp);
         free(dir);
         return match;
+    }
+    if (needs_inplace) {
+        (void)unlink(tmp);
+        free(tmp);
+        free(dir);
+        return inplace_save(tb, meta, dst);
     }
     if (rename(tmp, dst) != 0) {
         saved_errno = errno;
@@ -750,26 +935,24 @@ SagSaveErr sag_file_save(const TextBuf *tb, const FileMeta *meta,
                          const char *path)
 {
     struct stat link_st;
-    struct stat st;
     char *resolved = NULL;
     const char *dst = path;
     char *dir;
-    bool exists;
+    bool needs_inplace;
+    bool is_symlink = false;
+    SagSaveErr match;
     SagSaveErr result;
 
     if (tb == NULL || meta == NULL || path == NULL)
         SAG_BUG("sag_file_save: NULL argument");
-    exists = stat(path, &st) == 0;
-    if (!exists && errno != ENOENT)
+    if (lstat(path, &link_st) == 0) {
+        is_symlink = S_ISLNK(link_st.st_mode);
+    } else if (errno != ENOENT) {
         return errno == EACCES || errno == EPERM ? SAG_SAVE_PERM
                                                   : SAG_SAVE_IO;
-    if (meta->exists != exists)
-        return SAG_SAVE_CHANGED_ON_DISK;
-    if (exists && ((u64)st.st_size != meta->size_on_disk ||
-                   !timespec_equal(stat_mtime(&st), meta->mtime)))
-        return SAG_SAVE_CHANGED_ON_DISK;
-    if (lstat(path, &link_st) == 0 && S_ISLNK(link_st.st_mode)) {
-        resolved = realpath(path, NULL);
+    }
+    if (is_symlink) {
+        resolved = resolve_save_target(path);
         if (resolved == NULL)
             return SAG_SAVE_IO;
         if (meta->realpath != NULL && strcmp(resolved, meta->realpath) != 0) {
@@ -777,13 +960,14 @@ SagSaveErr sag_file_save(const TextBuf *tb, const FileMeta *meta,
             return SAG_SAVE_CHANGED_ON_DISK;
         }
         dst = resolved;
-        if (stat(dst, &st) != 0) {
-            free(resolved);
-            return SAG_SAVE_IO;
-        }
+    }
+    match = destination_matches(meta, dst, &needs_inplace);
+    if (match != SAG_SAVE_OK) {
+        free(resolved);
+        return match;
     }
     dir = path_dirname(dst);
-    if ((exists && st.st_nlink > 1) || !directory_writable(dir))
+    if (needs_inplace || !directory_writable(dir))
         result = inplace_save(tb, meta, dst);
     else
         result = atomic_save(tb, meta, dst);

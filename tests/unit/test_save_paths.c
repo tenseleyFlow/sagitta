@@ -1,10 +1,12 @@
 #define _POSIX_C_SOURCE 200809L
+#define _XOPEN_SOURCE 700
 
 #include "harness.h"
 
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <inttypes.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -120,6 +122,17 @@ static void assert_saved_bytes(const char *path, const u8 *expected,
     bytebuf_free(&actual);
 }
 
+static u64 save_fnv64(const char *text)
+{
+    u64 hash = UINT64_C(14695981039346656037);
+
+    while (*text != '\0') {
+        hash ^= (u8)*text++;
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash;
+}
+
 static void save_sibling_path(char *out, size_t cap, const char *name)
 {
     const char *program = sag_test_program_path();
@@ -193,6 +206,33 @@ void test_save_symlink_preserves_link_and_updates_target(void)
     remove_tree(fixture.root);
 }
 
+void test_save_dangling_symlink_preserves_link_and_creates_target(void)
+{
+    static const u8 expected[] = "created through link\n";
+    SaveFixture fixture;
+    char target[128];
+    char link_path[128];
+    struct stat st;
+    FileMeta meta;
+    TextBuf *tb = NULL;
+
+    save_fixture_make(&fixture);
+    path_in(target, sizeof(target), fixture.root, "future.txt");
+    path_in(link_path, sizeof(link_path), fixture.root, "link.txt");
+    SAG_ASSERT_EQ_I64(symlink("future.txt", link_path), 0);
+    SAG_ASSERT_EQ_U64(sag_file_load(link_path, &tb, &meta), SAG_LOAD_ENOENT);
+    SAG_ASSERT_NOT_NULL(tb);
+    SAG_ASSERT(meta.via_symlink);
+    sag_textbuf_insert(tb, BYTEOFF(0U), expected, sizeof(expected) - 1U);
+    SAG_ASSERT_EQ_U64(sag_file_save(tb, &meta, link_path), SAG_SAVE_OK);
+    SAG_ASSERT_EQ_I64(lstat(link_path, &st), 0);
+    SAG_ASSERT(S_ISLNK(st.st_mode));
+    assert_saved_bytes(target, expected, sizeof(expected) - 1U);
+    sag_textbuf_free(tb);
+    sag_filemeta_dispose(&meta);
+    remove_tree(fixture.root);
+}
+
 void test_save_hardlink_preserves_shared_inode(void)
 {
     static const u8 original[] = "old";
@@ -218,6 +258,56 @@ void test_save_hardlink_preserves_shared_inode(void)
     SAG_ASSERT_EQ_I64(stat(first, &first_st), 0);
     SAG_ASSERT_EQ_I64(stat(second, &second_st), 0);
     SAG_ASSERT_EQ_U64(first_st.st_ino, second_st.st_ino);
+    assert_saved_bytes(first, expected, sizeof(expected) - 1U);
+    assert_saved_bytes(second, expected, sizeof(expected) - 1U);
+    sag_textbuf_free(tb);
+    sag_filemeta_dispose(&meta);
+    remove_tree(fixture.root);
+}
+
+void test_save_backup_path_symlink_cannot_overwrite_victim(void)
+{
+    static const u8 original[] = "original";
+    static const u8 expected[] = "replacement";
+    static const u8 victim_bytes[] = "do not overwrite";
+    SaveFixture fixture;
+    char first[128];
+    char second[128];
+    char victim[128];
+    char sagitta_dir[128];
+    char backup_dir[160];
+    char backup[224];
+    char resolved[PATH_MAX];
+    struct stat backup_st;
+    FileMeta meta;
+    TextBuf *tb = NULL;
+    int count;
+
+    save_fixture_make(&fixture);
+    path_in(first, sizeof(first), fixture.root, "first.txt");
+    path_in(second, sizeof(second), fixture.root, "second.txt");
+    path_in(victim, sizeof(victim), fixture.root, "victim.txt");
+    path_in(sagitta_dir, sizeof(sagitta_dir), fixture.state, "sagitta");
+    path_in(backup_dir, sizeof(backup_dir), sagitta_dir, "backup");
+    save_write(first, original, sizeof(original) - 1U, 0600);
+    SAG_ASSERT_EQ_I64(link(first, second), 0);
+    save_write(victim, victim_bytes, sizeof(victim_bytes) - 1U, 0600);
+    SAG_ASSERT_NOT_NULL(realpath(first, resolved));
+    SAG_ASSERT_EQ_I64(mkdir(sagitta_dir, 0700), 0);
+    SAG_ASSERT_EQ_I64(mkdir(backup_dir, 0700), 0);
+    count = snprintf(backup, sizeof(backup), "%s/%016" PRIx64 ".bak",
+                     backup_dir, save_fnv64(resolved));
+    SAG_ASSERT(count > 0 && (size_t)count < sizeof(backup));
+    SAG_ASSERT_EQ_I64(symlink(victim, backup), 0);
+
+    SAG_ASSERT_EQ_U64(sag_file_load(first, &tb, &meta), SAG_LOAD_OK);
+    sag_textbuf_delete(tb, (Span){0U, sag_textbuf_len(tb)});
+    sag_textbuf_insert(tb, BYTEOFF(0U), expected, sizeof(expected) - 1U);
+    SAG_ASSERT_EQ_U64(sag_file_save(tb, &meta, first), SAG_SAVE_OK);
+    SAG_ASSERT_EQ_I64(lstat(backup, &backup_st), 0);
+    SAG_ASSERT(S_ISREG(backup_st.st_mode));
+    assert_saved_bytes(backup, original, sizeof(original) - 1U);
+    assert_saved_bytes(victim, victim_bytes, sizeof(victim_bytes) - 1U);
     assert_saved_bytes(first, expected, sizeof(expected) - 1U);
     assert_saved_bytes(second, expected, sizeof(expected) - 1U);
     sag_textbuf_free(tb);

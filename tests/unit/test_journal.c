@@ -183,9 +183,12 @@ void test_journal_replays_insert_and_delete_records(void)
     sag_journal_record(journal, SAG_JOURNAL_DEL, 1U, (const u8 *)"bc", 2U);
     sag_journal_record(journal, SAG_JOURNAL_INS, 7U, (const u8 *)"!", 1U);
     sag_journal_sync(journal);
+    sag_journal_close(journal);
     SAG_ASSERT(sag_journal_replay(fixture.source, tb, &meta));
     journal_assert_text(tb, "aXYZdef!");
     sag_textbuf_check(tb);
+    journal = sag_journal_open(fixture.source, &meta);
+    SAG_ASSERT_NOT_NULL(journal);
     sag_journal_discard(journal);
     sag_textbuf_free(tb);
     sag_filemeta_dispose(&meta);
@@ -206,8 +209,11 @@ void test_journal_delete_requires_and_removes_recorded_bytes(void)
     SAG_ASSERT_NOT_NULL(journal);
     sag_journal_record(journal, SAG_JOURNAL_DEL, 2U, (const u8 *)"cd", 2U);
     sag_journal_sync(journal);
+    sag_journal_close(journal);
     SAG_ASSERT(sag_journal_replay(fixture.source, tb, &meta));
     journal_assert_text(tb, "abef");
+    journal = sag_journal_open(fixture.source, &meta);
+    SAG_ASSERT_NOT_NULL(journal);
     sag_journal_discard(journal);
     sag_textbuf_free(tb);
     sag_filemeta_dispose(&meta);
@@ -334,6 +340,44 @@ void test_journal_discard_removes_log(void)
     journal = sag_journal_open(fixture.source, &meta);
     SAG_ASSERT_NOT_NULL(journal);
     SAG_ASSERT_EQ_I64(access(fixture.journal, F_OK), 0);
+    sag_journal_discard(journal);
+    SAG_ASSERT(access(fixture.journal, F_OK) != 0);
+    sag_filemeta_dispose(&meta);
+    journal_fixture_remove(&fixture);
+}
+
+void test_journal_replayed_log_can_be_adopted_and_discarded(void)
+{
+    JournalFixture fixture;
+    FileMeta meta;
+    TextBuf *tb;
+    Journal *journal;
+
+    journal_fixture_make(&fixture);
+    journal_meta_init(&meta, fixture.source);
+    journal = sag_journal_open(fixture.source, &meta);
+    SAG_ASSERT_NOT_NULL(journal);
+    sag_journal_record(journal, SAG_JOURNAL_INS, 6U, (const u8 *)"!", 1U);
+    sag_journal_sync(journal);
+    sag_journal_close(journal);
+
+    tb = sag_textbuf_from_bytes((const u8 *)"abcdef", 6U);
+    SAG_ASSERT(sag_journal_replay(fixture.source, tb, &meta));
+    journal_assert_text(tb, "abcdef!");
+    sag_textbuf_free(tb);
+
+    journal = sag_journal_open(fixture.source, &meta);
+    SAG_ASSERT_NOT_NULL(journal);
+    sag_journal_record(journal, SAG_JOURNAL_INS, 7U, (const u8 *)"?", 1U);
+    sag_journal_sync(journal);
+    sag_journal_close(journal);
+
+    tb = sag_textbuf_from_bytes((const u8 *)"abcdef", 6U);
+    SAG_ASSERT(sag_journal_replay(fixture.source, tb, &meta));
+    journal_assert_text(tb, "abcdef!?");
+    sag_textbuf_free(tb);
+    journal = sag_journal_open(fixture.source, &meta);
+    SAG_ASSERT_NOT_NULL(journal);
     sag_journal_discard(journal);
     SAG_ASSERT(access(fixture.journal, F_OK) != 0);
     sag_filemeta_dispose(&meta);

@@ -32,6 +32,14 @@ CFLAGS := -std=c11 -pedantic -Wall -Wextra -Werror -Wvla -g -O2 \
           -DSAG_WITH_FUSS=$(if $(filter fuss,$(MODULES)),1,0) \
           -DSAG_WITH_PLUGINS=$(if $(filter plugins,$(MODULES)),1,0)
 LDFLAGS :=
+HOST_OS := $(shell uname -s)
+ifeq ($(HOST_OS),Darwin)
+SHARED_FLAG := -dynamiclib
+DL_LIBS :=
+else
+SHARED_FLAG := -shared
+DL_LIBS := -ldl
+endif
 
 # Sanitized and plain objects must never mix: use SAN=1 BUILD=build-san.
 ifeq ($(SAN),1)
@@ -43,7 +51,8 @@ UNIT_RUN := $(BUILD)/unit_tests
 PTY_RUN  := $(BUILD)/pty_runner
 ifeq ($(VALGRIND),1)
 UNIT_RUN := valgrind --quiet --error-exitcode=99 --leak-check=full \
-            --errors-for-leak-kinds=definite $(BUILD)/unit_tests
+            --errors-for-leak-kinds=definite --track-fds=yes \
+            --trace-children=yes $(BUILD)/unit_tests
 PTY_RUN  := valgrind --quiet --error-exitcode=99 --leak-check=full \
             --errors-for-leak-kinds=definite --track-fds=yes \
             $(BUILD)/pty_runner
@@ -168,7 +177,7 @@ $(TORTURE_DRIVER): $(TORTURE_DRIVER_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TORTURE_DRIVER_OBJ)
 
 $(FAULTSHIM): tests/torture/faultshim.c | dirs
-	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC -shared -o $@ $< -ldl
+	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC $(SHARED_FLAG) -o $@ $< $(DL_LIBS)
 
 $(BUILD)/gen-unicode-tables: scripts/gen-unicode-tables.c | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<

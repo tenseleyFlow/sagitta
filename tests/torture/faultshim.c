@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 typedef ssize_t (*WriteFn)(int, const void *, size_t);
@@ -42,6 +43,8 @@ static int short_writes;
 static int log_fd = -1;
 static int initialized;
 static int resolving;
+static int rename_exdev_done;
+static int link_done;
 
 static void load_symbol(void *dst, size_t dst_size, const char *name)
 {
@@ -133,11 +136,21 @@ static void log_call(const char *name, const char *action)
 static void before_call(const char *name)
 {
     const char *enabled;
+    unsigned long long delay_us;
 
     initialize();
     enabled = getenv("SAG_FAULT_ENABLE");
     if (enabled != NULL && strcmp(enabled, "0") == 0)
         return;
+    delay_us = parse_ull(getenv("SAG_FAULT_DELAY_US"), 0U);
+    if (delay_us != 0U) {
+        struct timespec delay;
+
+        delay.tv_sec = (time_t)(delay_us / UINT64_C(1000000));
+        delay.tv_nsec = (long)((delay_us % UINT64_C(1000000)) * 1000U);
+        while (nanosleep(&delay, &delay) != 0 && errno == EINTR)
+            ;
+    }
     if (fault_at >= 0 && call_no == (unsigned long long)fault_at) {
         log_call(name, "kill");
         _exit(137);
@@ -222,7 +235,8 @@ int fdatasync(int fd)
 int rename(const char *old_path, const char *new_path)
 {
     before_call("rename");
-    if (env_is_one("SAG_FAULT_RENAME_EXDEV")) {
+    if (env_is_one("SAG_FAULT_RENAME_EXDEV") && !rename_exdev_done) {
+        rename_exdev_done = 1;
         log_call("rename", "errno=EXDEV");
         errno = EXDEV;
         return -1;
@@ -255,10 +269,21 @@ int fchown(int fd, uid_t owner, gid_t group)
 
 int close(int fd)
 {
+    const char *source;
+    const char *twin;
+
     initialize();
     if (fd == log_fd)
         return real_close_fn(fd);
     before_call("close");
+    source = getenv("SAG_FAULT_LINK_SOURCE");
+    twin = getenv("SAG_FAULT_LINK_TWIN");
+    if (!link_done && source != NULL && twin != NULL) {
+        link_done = 1;
+        if (link(source, twin) != 0)
+            _exit(125);
+        log_call("close", "late-hardlink");
+    }
     if (inject_eintr("close"))
         return -1;
     return real_close_fn(fd);

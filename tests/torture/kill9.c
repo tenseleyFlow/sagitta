@@ -1,4 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
+#define _XOPEN_SOURCE 700
 
 #include <dirent.h>
 #include <errno.h>
@@ -148,6 +149,21 @@ static int wait_child(pid_t pid)
     return 255;
 }
 
+static int wait_child_status(pid_t pid, int *status)
+{
+    pid_t waited;
+
+    do {
+        waited = waitpid(pid, status, 0);
+    } while (waited < 0 && errno == EINTR);
+    if (waited < 0)
+        die("waitpid");
+    return WIFEXITED(*status) ? WEXITSTATUS(*status)
+                              : WIFSIGNALED(*status)
+                                    ? 128 + WTERMSIG(*status)
+                                    : 255;
+}
+
 static void set_num_env(const char *name, unsigned long long value)
 {
     char buf[32];
@@ -180,7 +196,13 @@ static pid_t start_save(const char *driver, const char *shim,
                 _exit(126);
             (void)snprintf(preload, n, "%s:%s", prefix, shim);
         }
+#if defined(__APPLE__)
+        if (setenv("DYLD_INSERT_LIBRARIES",
+                   preload != NULL ? preload : shim, 1) != 0 ||
+            setenv("DYLD_FORCE_FLAT_NAMESPACE", "1", 1) != 0)
+#else
         if (setenv("LD_PRELOAD", preload != NULL ? preload : shim, 1) != 0)
+#endif
             _exit(126);
         free(preload);
     }
@@ -211,6 +233,8 @@ static bool run_check(const char *driver, const char *dst,
         die("fork checker");
     if (pid == 0) {
         (void)unsetenv("LD_PRELOAD");
+        (void)unsetenv("DYLD_INSERT_LIBRARIES");
+        (void)unsetenv("DYLD_FORCE_FLAT_NAMESPACE");
         (void)unsetenv("SAG_FAULT_AT");
         (void)unsetenv("SAG_FAULT_SHORT");
         (void)unsetenv("SAG_FAULT_ENABLE");
@@ -358,29 +382,31 @@ static bool atomic_log_order(const char *path)
     return ok;
 }
 
-static bool backup_exists(const char *state)
+static uint64_t path_hash(const char *text)
 {
-    char dir_path[512];
-    struct dirent *ent;
-    DIR *dir;
+    uint64_t hash = UINT64_C(14695981039346656037);
 
-    (void)snprintf(dir_path, sizeof(dir_path), "%s/sagitta/backup", state);
-    dir = opendir(dir_path);
-    if (dir == NULL)
-        return false;
-    while ((ent = readdir(dir)) != NULL) {
-        char path[768];
-
-        if (ent->d_name[0] == '.')
-            continue;
-        (void)snprintf(path, sizeof(path), "%s/%s", dir_path, ent->d_name);
-        if (file_equals_bytes(path, old_bytes, sizeof(old_bytes) - 1U)) {
-            (void)closedir(dir);
-            return true;
-        }
+    while (*text != '\0') {
+        hash ^= (unsigned char)*text++;
+        hash *= UINT64_C(1099511628211);
     }
-    (void)closedir(dir);
-    return false;
+    return hash;
+}
+
+static bool backup_matches(const char *state, const char *dst)
+{
+    char resolved[1024];
+    char path[1536];
+    struct stat st;
+    int n;
+
+    if (realpath(dst, resolved) == NULL)
+        return false;
+    n = snprintf(path, sizeof(path), "%s/sagitta/backup/%016llx.bak",
+                 state, (unsigned long long)path_hash(resolved));
+    return n > 0 && (size_t)n < sizeof(path) && lstat(path, &st) == 0 &&
+           S_ISREG(st.st_mode) &&
+           file_equals_bytes(path, old_bytes, sizeof(old_bytes) - 1U);
 }
 
 static bool same_inode(const char *a, const char *b)
@@ -414,7 +440,8 @@ static void hardlink_sweep(const char *driver, const char *shim,
         code = wait_child(start_save(driver, shim, dst, post, log, 42U,
                                      (long)at, -1));
         old_or_new = run_check(driver, dst, old, post);
-        if (!same_inode(dst, twin) || (!old_or_new && !backup_exists(state))) {
+        if (!same_inode(dst, twin) ||
+            (!old_or_new && !backup_matches(state, dst))) {
             (void)fprintf(stderr,
                           "torture: hardlink invariant failed at=%llu\n", at);
             exit(1);
@@ -493,11 +520,41 @@ static void injected_fallback(const char *driver, const char *shim,
     (void)unsetenv("SAG_FAULT_RENAME_EXDEV");
     (void)unsetenv("SAG_TORTURE_FOREIGN_OWNER");
     if (code != 0 || !run_check(driver, dst, old, post) ||
-        !backup_exists(state)) {
+        !backup_matches(state, dst)) {
         (void)fprintf(stderr, "torture: injected %s fallback failed\n", kind);
         exit(1);
     }
     (void)printf("fallback %s ok\n", kind);
+}
+
+static void late_hardlink_fallback(const char *driver, const char *shim,
+                                   const char *root, const char *state,
+                                   unsigned long long *serial)
+{
+    char dst[512], old[512], post[512], log[512], twin[768];
+    int code;
+
+    case_paths(dst, sizeof(dst), old, sizeof(old), post, sizeof(post),
+               log, sizeof(log), root, "late-hardlink", (*serial)++);
+    (void)snprintf(twin, sizeof(twin), "%s.twin", dst);
+    make_file(dst, old_bytes, sizeof(old_bytes) - 1U);
+    make_file(old, old_bytes, sizeof(old_bytes) - 1U);
+    make_file(post, post_bytes, sizeof(post_bytes) - 1U);
+    if (setenv("SAG_FAULT_LINK_SOURCE", dst, 1) != 0 ||
+        setenv("SAG_FAULT_LINK_TWIN", twin, 1) != 0)
+        die("setenv late hardlink");
+    code = wait_child(start_save(driver, shim, dst, post, log, 314159U,
+                                 -1, -1));
+    (void)unsetenv("SAG_FAULT_LINK_SOURCE");
+    (void)unsetenv("SAG_FAULT_LINK_TWIN");
+    if (code != 0 || !same_inode(dst, twin) ||
+        !file_equals_bytes(dst, post_bytes, sizeof(post_bytes) - 1U) ||
+        !file_equals_bytes(twin, post_bytes, sizeof(post_bytes) - 1U) ||
+        !backup_matches(state, dst)) {
+        (void)fprintf(stderr, "torture: late hardlink fallback failed\n");
+        exit(1);
+    }
+    (void)printf("fallback late-hardlink ok\n");
 }
 
 static void injected_eintr(const char *driver, const char *shim,
@@ -586,16 +643,22 @@ static void external_kills(const char *driver, const char *shim,
                            unsigned long long *serial)
 {
     uint64_t rng = UINT64_C(0x7361676974746108);
-    unsigned long long i;
+    unsigned long long killed = 0U;
+    unsigned long long attempts = 0U;
+    unsigned long long safety = count > (UINT64_MAX - 100U) / 10U
+                                    ? UINT64_MAX
+                                    : count * 10U + 100U;
 
-    for (i = 0U; i < count; i++) {
+    while (killed < count && attempts < safety) {
         char dst[512], old[512], post[512], log[512];
         char ready;
         int pipefd[2];
+        int status;
         pid_t pid;
         struct timespec delay;
         ssize_t n;
 
+        attempts++;
         case_paths(dst, sizeof(dst), old, sizeof(old), post, sizeof(post),
                    log, sizeof(log), root, "signal", (*serial)++);
         make_file(dst, old_bytes, sizeof(old_bytes) - 1U);
@@ -603,8 +666,11 @@ static void external_kills(const char *driver, const char *shim,
         make_file(post, post_bytes, sizeof(post_bytes) - 1U);
         if (pipe(pipefd) != 0)
             die("pipe");
+        if (setenv("SAG_FAULT_DELAY_US", "5000", 1) != 0)
+            die("setenv fault delay");
         pid = start_save(driver, shim, dst, post, log, random_next(&rng),
                          -1, pipefd[1]);
+        (void)unsetenv("SAG_FAULT_DELAY_US");
         (void)close(pipefd[1]);
         do {
             n = read(pipefd[0], &ready, 1U);
@@ -618,14 +684,24 @@ static void external_kills(const char *driver, const char *shim,
             if (kill(pid, SIGKILL) != 0 && errno != ESRCH)
                 die("kill");
         }
-        (void)wait_child(pid);
+        (void)wait_child_status(pid, &status);
         if (!run_check(driver, dst, old, post)) {
             (void)fprintf(stderr,
                           "torture: external SIGKILL invariant failed at=%llu\n",
-                          i);
+                          killed);
             exit(1);
         }
+        if (WIFSIGNALED(status) && WTERMSIG(status) == SIGKILL)
+            killed++;
     }
+    if (killed != count) {
+        (void)fprintf(stderr,
+                      "torture: only %llu/%llu children received SIGKILL\n",
+                      killed, count);
+        exit(1);
+    }
+    (void)printf("external-sigkill iterations=%llu attempts=%llu ok\n",
+                 count, attempts);
 }
 
 int main(int argc, char **argv)
@@ -661,12 +737,12 @@ int main(int argc, char **argv)
         (void)printf("atomic seed=%llu syscalls=%llu ok\n", seeds[i], calls);
     }
     hardlink_sweep(argv[1], argv[2], root, state, &serial);
+    late_hardlink_fallback(argv[1], argv[2], root, state, &serial);
     injected_fallback(argv[1], argv[2], root, state, "rename-exdev", &serial);
     injected_fallback(argv[1], argv[2], root, state, "fchown", &serial);
     injected_eintr(argv[1], argv[2], root, &serial);
     determinism_check(argv[1], argv[2], root, &serial);
     external_kills(argv[1], argv[2], root, signal_iterations, &serial);
-    (void)printf("external-sigkill iterations=%llu ok\n", signal_iterations);
     if (getenv("SAG_TORTURE_KEEP") != NULL)
         (void)printf("torture root retained for inspection: %s\n", root);
     else if (!remove_tree(root))

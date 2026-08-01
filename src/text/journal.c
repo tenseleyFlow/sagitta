@@ -29,6 +29,9 @@ struct Journal {
 static u32 crc32_table[256];
 static bool crc32_ready;
 
+static int adopt_existing_journal(const char *path, const char *realpath,
+                                  const FileMeta *meta);
+
 static bool size_add(size_t a, size_t b, size_t *out)
 {
     if (a > SIZE_MAX - b) {
@@ -236,14 +239,27 @@ static bool fsync_retry(int fd)
     return result == 0;
 }
 
-static void fsync_dir(const char *dir)
+static bool lock_journal(int fd)
+{
+    struct flock lock;
+
+    (void)memset(&lock, 0, sizeof(lock));
+    lock.l_type = F_WRLCK;
+    lock.l_whence = SEEK_SET;
+    return fcntl(fd, F_SETLK, &lock) == 0;
+}
+
+static bool fsync_dir(const char *dir)
 {
     int fd = open(dir, O_RDONLY);
+    bool ok = false;
 
     if (fd >= 0) {
-        (void)fsync_retry(fd);
-        (void)close(fd);
+        ok = fsync_retry(fd);
+        if (close(fd) != 0)
+            ok = false;
     }
+    return ok;
 }
 
 static bool write_header(int fd, const char *realpath, const FileMeta *meta)
@@ -273,6 +289,7 @@ Journal *sag_journal_open(const char *realpath, const FileMeta *m)
     char *path;
     int flags = O_WRONLY | O_CREAT | O_EXCL | O_APPEND;
     int fd;
+    bool created;
 
     if (realpath == NULL || realpath[0] == '\0' || m == NULL) {
         errno = EINVAL;
@@ -297,6 +314,9 @@ Journal *sag_journal_open(const char *realpath, const FileMeta *m)
     flags |= O_NOFOLLOW;
 #endif
     fd = open(path, flags, 0600);
+    created = fd >= 0;
+    if (!created && errno == EEXIST)
+        fd = adopt_existing_journal(path, realpath, m);
     if (fd < 0) {
         sag_log(SAG_LOG_ERROR, "cannot open crash journal %s: %s", path,
                 strerror(errno));
@@ -304,7 +324,19 @@ Journal *sag_journal_open(const char *realpath, const FileMeta *m)
         free(dir);
         return NULL;
     }
-    if (!write_header(fd, realpath, m)) {
+    if (created && !lock_journal(fd)) {
+        int saved_errno = errno;
+
+        (void)close(fd);
+        (void)unlink(path);
+        (void)fsync_dir(dir);
+        free(path);
+        free(dir);
+        errno = saved_errno;
+        return NULL;
+    }
+    if (created && (!write_header(fd, realpath, m) || !fsync_retry(fd) ||
+                    !fsync_dir(dir))) {
         int saved_errno = errno;
 
         (void)close(fd);
@@ -389,14 +421,13 @@ void sag_journal_discard(Journal *j)
     if (j == NULL) {
         return;
     }
-    if (close(j->fd) < 0) {
-        saved_errno = errno;
-    }
-    if (unlink(j->path) < 0 && errno != ENOENT && saved_errno == 0) {
+    if (unlink(j->path) < 0 && errno != ENOENT) {
         saved_errno = errno;
     } else {
-        fsync_dir(j->dir);
+        (void)fsync_dir(j->dir);
     }
+    if (close(j->fd) < 0 && saved_errno == 0)
+        saved_errno = errno;
     if (saved_errno != 0) {
         sag_log(SAG_LOG_ERROR, "cannot discard crash journal %s: %s", j->path,
                 strerror(saved_errno));
@@ -525,6 +556,95 @@ static bool header_matches(const u8 *data, size_t size, const char *realpath,
     return true;
 }
 
+static size_t valid_record_prefix(const u8 *data, size_t size, size_t at)
+{
+    while (size - at >= SAG_JOURNAL_RECORD_FIXED) {
+        const u8 *record = data + at;
+        u64 payload_len = get_u64_le(record + 9U);
+        size_t payload_size;
+        size_t record_size;
+        u32 expected;
+        u32 actual;
+
+        if ((record[0] != SAG_JOURNAL_INS &&
+             record[0] != SAG_JOURNAL_DEL) ||
+            payload_len > SIZE_MAX)
+            break;
+        payload_size = (size_t)payload_len;
+        if (!size_add(17U, payload_size, &record_size) ||
+            !size_add(record_size, 4U, &record_size) ||
+            record_size > size - at)
+            break;
+        expected = get_u32_le(record + 17U + payload_size);
+        actual = crc32_end(crc32_add(crc32_begin(), record,
+                                     17U + payload_size));
+        if (actual != expected)
+            break;
+        at += record_size;
+    }
+    return at;
+}
+
+static int adopt_existing_journal(const char *path, const char *realpath,
+                                  const FileMeta *meta)
+{
+    struct stat st;
+    u8 *data = NULL;
+    size_t size;
+    size_t records_at;
+    size_t prefix;
+    int flags = O_RDWR | O_APPEND;
+    int fd;
+    int saved_errno;
+
+#ifdef O_CLOEXEC
+    flags |= O_CLOEXEC;
+#endif
+#ifdef O_NOFOLLOW
+    flags |= O_NOFOLLOW;
+#endif
+    fd = open(path, flags);
+    if (fd < 0)
+        return -1;
+    if (!lock_journal(fd))
+        goto fail;
+    if (fstat(fd, &st) != 0)
+        goto fail;
+    if (!S_ISREG(st.st_mode) || st.st_uid != geteuid() || st.st_nlink != 1 ||
+        (st.st_mode & 0077U) != 0U || st.st_size < 0 ||
+        (u64)st.st_size > SIZE_MAX) {
+        errno = EPERM;
+        goto fail;
+    }
+    size = (size_t)st.st_size;
+    data = sag_xmalloc(size == 0U ? 1U : size);
+    if (!read_all(fd, data, size))
+        goto fail;
+    if (!header_matches(data, size, realpath, meta, &records_at)) {
+        errno = ESTALE;
+        goto fail;
+    }
+    prefix = valid_record_prefix(data, size, records_at);
+    if (prefix != size &&
+        (ftruncate(fd, (off_t)prefix) != 0 || !fsync_retry(fd)))
+        goto fail;
+    if (lseek(fd, 0, SEEK_END) < 0)
+        goto fail;
+    if (prefix != size)
+        sag_log(SAG_LOG_WARN,
+                "discarded incomplete crash journal tail while adopting %s",
+                path);
+    free(data);
+    return fd;
+
+fail:
+    saved_errno = errno == 0 ? EIO : errno;
+    free(data);
+    (void)close(fd);
+    errno = saved_errno;
+    return -1;
+}
+
 static const char *replay_realpath(const char *path, const FileMeta *meta,
                                    char **owned)
 {
@@ -561,8 +681,18 @@ bool sag_journal_replay(const char *path, TextBuf *tb, FileMeta *m)
     if (jpath == NULL) {
         goto done;
     }
-    fd = open(jpath, O_RDONLY);
+    fd = open(jpath, O_RDWR
+#ifdef O_CLOEXEC
+              | O_CLOEXEC
+#endif
+#ifdef O_NOFOLLOW
+              | O_NOFOLLOW
+#endif
+    );
     if (fd < 0) {
+        goto done;
+    }
+    if (!lock_journal(fd)) {
         goto done;
     }
     if (fstat(fd, &st) < 0 || st.st_size < 0 ||
@@ -613,6 +743,10 @@ bool sag_journal_replay(const char *path, TextBuf *tb, FileMeta *m)
         sag_log(SAG_LOG_WARN,
                 "ignored incomplete or corrupt crash journal tail in %s",
                 jpath);
+        if (ftruncate(fd, (off_t)at) != 0 || !fsync_retry(fd))
+            sag_log(SAG_LOG_ERROR,
+                    "cannot discard crash journal tail in %s: %s", jpath,
+                    strerror(errno));
     }
 
 done:
