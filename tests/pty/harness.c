@@ -883,11 +883,12 @@ void ptc_suspend_resume(PtyCtx *c)
         ptc_fail(c, "suspend did not emit the terminal restore blob");
         return;
     }
+    c->ready = false;
     if (kill(c->pty.pid, SIGCONT) != 0) {
         ptc_fail(c, "SIGCONT child: %s", strerror(errno));
         return;
     }
-    pump_quiet(c, PTC_DEFAULT_QUIET_MS, false);
+    pump_quiet(c, PTC_DEFAULT_QUIET_MS, true);
 }
 
 const char *ptc_demo_bin(const PtyCtx *c)
