@@ -113,7 +113,7 @@ if grep -nE '(column|landed|content_column)\.v' \
         "$tmp/register-column-math-hits" >>"$hits"
 fi
 for required in sag_off_to_ccol sag_ccol_to_off_padded \
-                sag_ccol_shortfall; do
+                sag_ccol_shortfall sag_ccol_max; do
     if ! grep -F "$required" "$register" >/dev/null 2>&1; then
         echo "ban: register paste must route column math through $required" \
             >>"$hits"
