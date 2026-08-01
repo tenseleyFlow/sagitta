@@ -395,18 +395,22 @@ static uint64_t path_hash(const char *text)
 
 static bool backup_matches(const char *state, const char *dst)
 {
-    char resolved[1024];
+    char *resolved;
     char path[1536];
     struct stat st;
     int n;
+    bool matches;
 
-    if (realpath(dst, resolved) == NULL)
+    resolved = realpath(dst, NULL);
+    if (resolved == NULL)
         return false;
     n = snprintf(path, sizeof(path), "%s/sagitta/backup/%016llx.bak",
                  state, (unsigned long long)path_hash(resolved));
-    return n > 0 && (size_t)n < sizeof(path) && lstat(path, &st) == 0 &&
-           S_ISREG(st.st_mode) &&
-           file_equals_bytes(path, old_bytes, sizeof(old_bytes) - 1U);
+    free(resolved);
+    matches = n > 0 && (size_t)n < sizeof(path) &&
+              lstat(path, &st) == 0 && S_ISREG(st.st_mode) &&
+              file_equals_bytes(path, old_bytes, sizeof(old_bytes) - 1U);
+    return matches;
 }
 
 static bool same_inode(const char *a, const char *b)
