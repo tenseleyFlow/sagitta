@@ -7,5 +7,14 @@
 CLAUDE.md
 AGENTS.md
 
+build/
 *.a
 *.o
+*.d
+
+# Editor and operating-system droppings.
+*~
+*.swp
+*.swo
+.#*
+.DS_Store
