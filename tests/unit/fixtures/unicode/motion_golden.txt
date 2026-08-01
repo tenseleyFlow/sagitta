@@ -1,0 +1,11 @@
+# name|hex bytes|cluster byte lengths|cell widths at tabw=4
+combining|65 CC 81|3|1
+zwj-family|F0 9F 91 A8 E2 80 8D F0 9F 91 A9 E2 80 8D F0 9F 91 A7 E2 80 8D F0 9F 91 A6|25|2
+flag-pairs|F0 9F 87 A6 F0 9F 87 BA F0 9F 87 B8 F0 9F 87 A6|8,8|2,2
+skin-tone|F0 9F 91 8D F0 9F 8F BD|8|2
+crlf|0D 0A|2|0
+cjk|E6 BC A2|3|2
+invalid|FF 41|1,1|4,1
+keycap|31 EF B8 8F E2 83 A3|7|2
+hangul-jamo|E1 84 80 E1 85 A1 E1 86 A8|9|2
+tabs|61 09 62|1,1,1|1,3,1
