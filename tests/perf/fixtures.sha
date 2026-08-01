@@ -1,0 +1,8 @@
+# sagitta deterministic fixture manifest v1
+# profile          bytes       seed                  fnv64
+100m-code          104857600   0x9e3779b97f4a7c15    8207be845d7f139b
+100m-utf8          104857600   0x9e3779b97f4a7c15    bbb4e5a165a8b974
+100m-allnl         104857600   0x9e3779b97f4a7c15    f920685f22222325
+1g-code           1073741824   0x9e3779b97f4a7c15    8fab43fed9ea0457
+1g-longlines      1073741824   0x9e3779b97f4a7c15    891c58b24c628ac1
+1g-noline         1073741824   0x9e3779b97f4a7c15    3b722eec0110de1c

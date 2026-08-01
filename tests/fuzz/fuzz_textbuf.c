@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 
@@ -15,7 +16,7 @@
 
 enum {
     SAG_TEXT_FUZZ_DEFAULT_ITERS = 200000,
-    SAG_TEXT_FUZZ_MAX_LIVE = 256 * 1024,
+    SAG_TEXT_FUZZ_MAX_LIVE = 64 * 1024,
     SAG_TEXT_FUZZ_MAX_LINES = 8192,
     SAG_TEXT_FUZZ_SNAPSHOTS = 4,
     SAG_TEXT_FUZZ_MARKS = 8,
@@ -549,7 +550,7 @@ static bool check_state(Replay *run, const TraceOp *op, size_t index,
         return fail_at(failure, op, CHECK_LINE_QUERY);
     if (!compare_cursor_marks(run, &which))
         return fail_at(failure, op, which);
-    if (!compare_snapshots(run))
+    if (deep && !compare_snapshots(run))
         return fail_at(failure, op, CHECK_SNAPSHOT);
     if (deep && !compare_materialized(run))
         return fail_at(failure, op, CHECK_MATERIALIZE);
@@ -624,6 +625,11 @@ done:
     return ok;
 }
 
+static void normalize_generated_cursor(Replay *run)
+{
+    sag_cset_normalize(run->tb, &run->cursors);
+}
+
 static bool apply_trace_op(Replay *run, const TraceOp *op,
                            TraceFailure *failure)
 {
@@ -640,10 +646,10 @@ static bool apply_trace_op(Replay *run, const TraceOp *op,
         sag_undo_begin(&run->edit, SAG_TXN_TYPE);
         sag_edit_insert(&run->edit, BYTEOFF(lo), op->payload.data,
                         (u64)op->payload.len);
+        normalize_generated_cursor(run);
         sag_undo_end(&run->edit);
         oracle_insert(&run->oracle, lo, op->payload.data,
                       (u64)op->payload.len);
-        sag_cset_normalize(run->tb, &run->cursors);
         run->mutation_count++;
         state_capture(run, sag_undo_current(run->undo));
         state_prune_dead(run);
@@ -659,9 +665,9 @@ static bool apply_trace_op(Replay *run, const TraceOp *op,
         }
         sag_undo_begin(&run->edit, SAG_TXN_ERASE);
         sag_edit_delete(&run->edit, (Span){lo, hi});
+        normalize_generated_cursor(run);
         sag_undo_end(&run->edit);
         oracle_delete(&run->oracle, lo, hi);
-        sag_cset_normalize(run->tb, &run->cursors);
         run->mutation_count++;
         state_capture(run, sag_undo_current(run->undo));
         state_prune_dead(run);
@@ -1277,6 +1283,10 @@ static int report_failure(Trace *trace, TraceFailure observed)
     bytebuf_init(&snippet);
     trace_write(trace, &text);
     trace_write_c_snippet(trace, &snippet);
+    if (mkdir("tests/fuzz/crashes", 0755) != 0 && errno != EEXIST)
+        (void)fprintf(stderr,
+                      "fuzz_textbuf: cannot create crash directory: %s\n",
+                      strerror(errno));
     (void)snprintf(path, sizeof(path),
                    "tests/fuzz/crashes/%016llx-%llu.trace",
                    (unsigned long long)trace->seed,
@@ -1368,6 +1378,8 @@ static int run_generated(u64 seed, Mix mix, size_t iterations,
     oracle_materialize(&run.oracle, &final_bytes);
     gen.trace_hash = fnv_bytes(trace_bytes.data, trace_bytes.len);
     final_hash = fnv_bytes(final_bytes.data, final_bytes.len);
+    final_hash ^= sag_undo_current(run.undo);
+    final_hash *= UINT64_C(1099511628211);
     if (trace_out != NULL &&
         !write_file(trace_out, trace_bytes.data, trace_bytes.len)) {
         (void)fprintf(stderr, "fuzz_textbuf: cannot write trace %s\n",

@@ -270,10 +270,30 @@ size_t sag_utf8_len(u32 cp)
 size_t sag_utf8_validate(const u8 *s, size_t len)
 {
     size_t pos = 0;
+    size_t high_bits = 0U;
+    size_t i;
+
+    assert(s != NULL || len == 0U);
+    for (i = 0U; i < sizeof(high_bits); i++)
+        high_bits = (high_bits << 8) | 0x80U;
 
     while (pos < len) {
         u32 cp;
-        size_t n = sag_utf8_decode(s + pos, len - pos, &cp);
+        size_t n;
+
+        while (len - pos >= sizeof(size_t)) {
+            size_t word;
+
+            memcpy(&word, s + pos, sizeof(word));
+            if ((word & high_bits) != 0U)
+                break;
+            pos += sizeof(word);
+        }
+        while (pos < len && s[pos] < 0x80U)
+            pos++;
+        if (pos == len)
+            return len;
+        n = sag_utf8_decode(s + pos, len - pos, &cp);
 
         if (sag_utf8_is_escape(cp))
             return pos;

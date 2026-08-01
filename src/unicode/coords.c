@@ -223,7 +223,8 @@ static u64 line_content_end(const TextBuf *tb, Span line)
 enum {
     SAG_GCOL_CHECKPOINT_STRIDE = 64,
     SAG_MOTION_CHECKPOINT_STRIDE = 512,
-    SAG_SIMPLE_ASCII_BYPASS_BYTES = 64 * 1024
+    SAG_SIMPLE_ASCII_BYPASS_BYTES = 64 * 1024,
+    SAG_DEFER_INDEX_BYTES = 64 * 1024
 };
 
 typedef struct {
@@ -413,13 +414,27 @@ static void coords_index_rebuild(TextBuf *tb)
     index->simple_ascii = range_is_simple_ascii(
         tb, 0U, sag_textbuf_len(tb));
     index->simple_ascii_direct = false;
+    index->initialized = true;
     pending_clear(tb);
 }
 
 void sag_coords_index_seed(TextBuf *tb)
 {
+    SagGraphemeIndex *index;
+
     if (tb == NULL)
         SAG_BUG("sag_coords_index_seed: NULL buffer");
+    index = &tb->graphemes;
+    if (sag_textbuf_len(tb) >= (u64)SAG_DEFER_INDEX_BYTES) {
+        index->len = 0U;
+        index->motion_len = 0U;
+        index->gen = tb->gen;
+        index->simple_ascii = false;
+        index->simple_ascii_direct = false;
+        index->initialized = false;
+        pending_clear(tb);
+        return;
+    }
     coords_index_rebuild(tb);
 }
 
@@ -552,6 +567,7 @@ static void coords_index_restore_simple_ascii(SagGraphemeIndex *index,
     index->gen = gen;
     index->simple_ascii = true;
     index->simple_ascii_direct = false;
+    index->initialized = true;
 }
 
 static void coords_index_apply_edit(SagGraphemeIndex *old_index,
@@ -724,6 +740,7 @@ static void coords_index_apply_edit(SagGraphemeIndex *old_index,
     old_index->motion_len = next.motion_len;
     old_index->motion_cap = next.motion_cap;
     old_index->gen = next.gen;
+    old_index->initialized = true;
 }
 
 static void coords_index_apply_pending(TextBuf *tb, u64 through_gen)
@@ -768,6 +785,12 @@ void sag_coords_index_note_edit(TextBuf *tb, Span old_range,
         old_affected.lo > old_range.lo ||
         old_affected.hi < old_range.hi)
         SAG_BUG("sag_coords_index_note_edit: invalid old range");
+    if (!index->initialized) {
+        if (pending->len != 0U)
+            SAG_BUG("deferred grapheme index has pending edits");
+        index->gen = tb->gen;
+        return;
+    }
     if (index->simple_ascii) {
         u64 old_len = sag_textbuf_len(tb) - inserted_len +
                       (old_range.hi - old_range.lo);
@@ -818,7 +841,13 @@ void sag_coords_index_note_edit(TextBuf *tb, Span old_range,
 
 static const SagGraphemeIndex *coords_index(const TextBuf *tb)
 {
-    if (tb->graphemes.gen != tb->gen) {
+    if (!tb->graphemes.initialized) {
+        TextBuf *mutable = (TextBuf *)tb;
+
+        if (tb->graphemes.pending.len != 0U)
+            SAG_BUG("deferred grapheme index has pending edits");
+        coords_index_rebuild(mutable);
+    } else if (tb->graphemes.gen != tb->gen) {
         TextBuf *mutable = (TextBuf *)tb;
 
         if (tb->graphemes.pending.len != 0U)
@@ -901,7 +930,7 @@ static u64 cluster_cells(const StreamCluster *cluster, u64 cells, u32 tabw)
 
 static bool coords_simple_ascii(const TextBuf *tb)
 {
-    return tb->graphemes.simple_ascii &&
+    return tb->graphemes.initialized && tb->graphemes.simple_ascii &&
            tb->graphemes.gen == tb->gen;
 }
 

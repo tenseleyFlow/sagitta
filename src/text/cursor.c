@@ -125,7 +125,10 @@ static ByteOff cursor_clamp_off(const TextBuf *tb, ByteOff pos)
 
 void sag_cursor_clamp(const TextBuf *tb, Cursor *c)
 {
+    bool unselected;
+
     cursor_require(tb, c);
+    unselected = c->anchor.v == c->pos.v;
     c->pos = cursor_clamp_off(tb, c->pos);
-    c->anchor = cursor_clamp_off(tb, c->anchor);
+    c->anchor = unselected ? c->pos : cursor_clamp_off(tb, c->anchor);
 }

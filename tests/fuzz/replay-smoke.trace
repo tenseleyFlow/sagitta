@@ -1,0 +1,13 @@
+# sagitta textbuf trace v1
+# seed=0x9e3779b97f4a7c15 mix=typing base=empty
+ins 0 5 68656c6c6f
+ins 5 1 0a
+ins 1 3 e282ac
+del 2 4
+line_of 3
+snap 0
+ins 0 3 0080ff
+undo
+redo
+release 0
+check

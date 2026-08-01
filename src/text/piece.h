@@ -102,6 +102,7 @@ typedef struct {
     u64 gen;
     bool simple_ascii;             /* one printable-ASCII line */
     bool simple_ascii_direct;      /* formulas supersede stale arrays */
+    bool initialized;              /* false until first large-file query */
     /* Adjacent after-state snapshots are replayed before this queue fills. */
     SagGraphemePendingJournal pending;
 } SagGraphemeIndex;

@@ -5,7 +5,16 @@ MODULES ?= lsp ai fuss plugins
 FUZZ_ITERS ?= 200000
 FUZZ_SEED  ?= 1
 FUZZ_SECONDS ?=
+TEXTBUF_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
+                      0x9e3779b97f4a7c15 0xd1b54a32d192ed03
+TEXTBUF_FUZZ_MIXES ?= typing paste undo
+FUZZ_LONG_SECONDS ?= 450
 TORTURE_SIGKILL_ITERS ?= 500
+FIXTURE_DIR ?= $(BUILD)/fixtures
+FIXTURE_MANIFEST ?= tests/perf/fixtures.sha
+PERF_RUNNER_ID ?= local-$(shell uname -m)-$(shell uname -s | tr A-Z a-z)
+PERF_BASELINE ?= tests/perf/baselines/perf-x86_64-linux-gnu.txt
+PERF_ADVISORY ?= 0
 
 ifneq ($(filter 1,$(SAN)),)
 ifneq ($(filter 1,$(VALGRIND)),)
@@ -126,7 +135,9 @@ PERF_RENDER_OBJ := $(BUILD)/tests/perf/perf_render.o
 PERF_PIECE_OBJ := $(BUILD)/tests/perf/perf_piece.o
 PERF_CURSOR_OBJ := $(BUILD)/tests/perf/perf_cursor.o
 PERF_UNDO_OBJ := $(BUILD)/tests/perf/perf_undo.o
+PERF_TEXTBUF_OBJ := $(BUILD)/tests/perf/perf_textbuf.o
 PERF_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
+GEN_BIGFILE_OBJ := $(BUILD)/scripts/gen-bigfile.o
 
 TORTURE_CHILD_OBJ := $(BUILD)/tests/torture/sag-torture.o
 TORTURE_DRIVER_OBJ := $(BUILD)/tests/torture/kill9.o
@@ -143,6 +154,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(FUZZ_LIB_OBJ) \
                 $(PTY_HARNESS_OBJ) $(PTY_REGISTRY_OBJ) $(PTY_RUNNER_OBJ) \
                 $(PTY_DEMO_OBJ) $(PERF_UNICODE_OBJ) $(PERF_RENDER_OBJ) \
                 $(PERF_PIECE_OBJ) $(PERF_CURSOR_OBJ) $(PERF_UNDO_OBJ) \
+                $(PERF_TEXTBUF_OBJ) $(GEN_BIGFILE_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(FAULTSHIM)))
 
@@ -157,9 +169,11 @@ endif
 
 .DEFAULT_GOAL := all
 .PHONY: all test clean install dirs FORCE test-script test-pty fuzz \
-        fuzz-textbuf \
+        fuzz-textbuf fuzz-long fixtures fixtures-quick fixtures-verify \
+        fixtures-verify-quick \
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
-        perf-undo torture torture-build
+        perf-undo perf-textbuf perf-huge perf-update perf-baseline-guard \
+        torture torture-build
 
 all: $(BUILD)/sagitta $(BUILD)/sag
 
@@ -202,6 +216,13 @@ $(BUILD)/fuzz_textbuf: $(FUZZ_CORE_OBJ) $(TEXT_FUZZ_SUPPORT_OBJ) \
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) \
 		$(TEXT_FUZZ_SUPPORT_OBJ) $(FUZZ_TEXTBUF_OBJ)
 
+$(BUILD)/gen-bigfile: $(GEN_BIGFILE_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(GEN_BIGFILE_OBJ)
+
+$(BUILD)/perf_textbuf: $(PERF_CORE_OBJ) $(PERF_TEXTBUF_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
+		$(PERF_TEXTBUF_OBJ)
+
 $(BUILD)/perf_unicode: $(PERF_CORE_OBJ) $(PERF_UNICODE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_UNICODE_OBJ)
 
@@ -238,7 +259,8 @@ test: $(BUILD)/unit_tests $(BUILD)/sagitta test-pty torture-build
 	scripts/smoke.sh $(BUILD)/sagitta
 
 fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
-      $(BUILD)/fuzz_grid $(BUILD)/fuzz_vt $(BUILD)/fuzz_undo
+      $(BUILD)/fuzz_grid $(BUILD)/fuzz_vt $(BUILD)/fuzz_undo \
+      fuzz-textbuf
 	$(BUILD)/fuzz_utf8 --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_grapheme --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_input --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
@@ -250,8 +272,22 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
 	fi
 
 fuzz-textbuf: $(BUILD)/fuzz_textbuf
-	$(BUILD)/fuzz_textbuf --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED) \
-		--mix=typing
+	$(BUILD)/fuzz_textbuf --replay tests/fuzz/replay-smoke.trace
+	@set -eu; \
+	for seed in $(TEXTBUF_FUZZ_SEEDS); do \
+		for mix in $(TEXTBUF_FUZZ_MIXES); do \
+			$(BUILD)/fuzz_textbuf --iters=$(FUZZ_ITERS) \
+				--seed=$$seed --mix=$$mix; \
+		done; \
+	done
+
+fuzz-long: $(BUILD)/fuzz_textbuf
+	@set -eu; \
+	for mix in typing paste undo lines; do \
+		seed=0x$$(od -An -N8 -tx8 /dev/urandom | tr -d ' \n'); \
+		$(BUILD)/fuzz_textbuf --iters=6 --seconds=$(FUZZ_LONG_SECONDS) \
+			--seed=$$seed --mix=$$mix; \
+	done
 
 perf-unicode: $(BUILD)/perf_unicode
 	$(BUILD)/perf_unicode
@@ -262,13 +298,77 @@ perf-render: $(BUILD)/perf_render
 perf-piece: $(BUILD)/perf_piece
 	$(BUILD)/perf_piece
 
-perf: perf-unicode perf-render perf-piece perf-cursor perf-undo
+perf: perf-unicode perf-render perf-piece perf-cursor perf-undo perf-textbuf
 
 perf-cursor: $(BUILD)/perf_cursor
 	$(BUILD)/perf_cursor
 
 perf-undo: $(BUILD)/perf_undo
 	$(BUILD)/perf_undo
+
+fixtures-quick: $(BUILD)/gen-bigfile
+	@mkdir -p $(FIXTURE_DIR); \
+	awk '!/^#/ && $$1 ~ /^100m-/ { print $$1, $$2, $$3, $$4 }' \
+		$(FIXTURE_MANIFEST) | \
+	while read profile bytes seed hash; do \
+		out=$(FIXTURE_DIR)/$$profile.bin; \
+		stamp=$(FIXTURE_DIR)/$$profile-$$bytes-$$seed.stamp; \
+		if [ ! -f "$$out" ] || [ ! -f "$$stamp" ] || \
+		   [ $(BUILD)/gen-bigfile -nt "$$stamp" ]; then \
+			$(BUILD)/gen-bigfile --profile "$$profile" --size "$$bytes" \
+				--seed "$$seed" --output "$$out"; \
+			touch "$$stamp"; \
+		fi; \
+	done
+
+fixtures: $(BUILD)/gen-bigfile
+	@mkdir -p $(FIXTURE_DIR); \
+	awk '!/^#/ { print $$1, $$2, $$3, $$4 }' $(FIXTURE_MANIFEST) | \
+	while read profile bytes seed hash; do \
+		out=$(FIXTURE_DIR)/$$profile.bin; \
+		stamp=$(FIXTURE_DIR)/$$profile-$$bytes-$$seed.stamp; \
+		if [ ! -f "$$out" ] || [ ! -f "$$stamp" ] || \
+		   [ $(BUILD)/gen-bigfile -nt "$$stamp" ]; then \
+			$(BUILD)/gen-bigfile --profile "$$profile" --size "$$bytes" \
+				--seed "$$seed" --output "$$out"; \
+			touch "$$stamp"; \
+		fi; \
+	done
+
+fixtures-verify-quick: fixtures-quick
+	@set -eu; \
+	awk '!/^#/ && $$1 ~ /^100m-/ { print $$1, $$4 }' \
+		$(FIXTURE_MANIFEST) | \
+	while read profile hash; do \
+		$(BUILD)/gen-bigfile --verify \
+			$(FIXTURE_DIR)/$$profile.bin 0x$$hash; \
+	done
+
+fixtures-verify: fixtures
+	@set -eu; \
+	awk '!/^#/ { print $$1, $$4 }' $(FIXTURE_MANIFEST) | \
+	while read profile hash; do \
+		$(BUILD)/gen-bigfile --verify \
+			$(FIXTURE_DIR)/$$profile.bin 0x$$hash; \
+	done
+
+perf-textbuf: $(BUILD)/perf_textbuf fixtures-quick
+	SAG_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_textbuf \
+		--fixtures $(FIXTURE_DIR) --baseline $(PERF_BASELINE) \
+		--runner-id $(PERF_RUNNER_ID)
+
+perf-huge: $(BUILD)/perf_textbuf fixtures
+	SAG_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_textbuf \
+		--fixtures $(FIXTURE_DIR) --baseline $(PERF_BASELINE) \
+		--runner-id $(PERF_RUNNER_ID) --huge
+
+perf-update: $(BUILD)/perf_textbuf fixtures
+	SAG_PERF_ADVISORY=1 $(BUILD)/perf_textbuf --fixtures $(FIXTURE_DIR) \
+		--baseline $(PERF_BASELINE) --runner-id $(PERF_RUNNER_ID) \
+		--huge --update
+
+perf-baseline-guard:
+	scripts/perf-baseline-guard.sh
 
 torture-build: $(TORTURE_CHILD) $(TORTURE_DRIVER) $(FAULTSHIM)
 
@@ -319,7 +419,8 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/sagitta
          $(PTY_RUNNER_OBJ:.o=.d) $(PTY_DEMO_OBJ:.o=.d) \
          $(PERF_UNICODE_OBJ:.o=.d) $(PERF_RENDER_OBJ:.o=.d) \
          $(PERF_PIECE_OBJ:.o=.d) $(PERF_CURSOR_OBJ:.o=.d) \
-         $(PERF_UNDO_OBJ:.o=.d) \
+         $(PERF_UNDO_OBJ:.o=.d) $(PERF_TEXTBUF_OBJ:.o=.d) \
+         $(GEN_BIGFILE_OBJ:.o=.d) \
          $(TORTURE_CHILD_OBJ:.o=.d) \
 	 $(TORTURE_DRIVER_OBJ:.o=.d)
 
