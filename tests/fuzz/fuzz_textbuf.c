@@ -1139,9 +1139,11 @@ static bool generate_op(Generator *gen, const Replay *run, size_t index)
     if (choice < 76U) {
         static const TraceOpKind queries[] = {
             TRACE_LINE_START, TRACE_LINE_OF, TRACE_LINE_SPAN};
+        size_t query_index = choose(&gen->rng, SAG_ARRAY_LEN(queries));
+        u64 query_arg = rng_next(&gen->rng);
 
-        return push_op(gen, queries[choose(&gen->rng, SAG_ARRAY_LEN(queries))],
-                       rng_next(&gen->rng), 0U, NULL, TRACE_CONTENT_ASCII);
+        return push_op(gen, queries[query_index], query_arg, 0U, NULL,
+                       TRACE_CONTENT_ASCII);
     }
     if (choice < 81U)
         return push_op(gen, TRACE_ITER, rng_next(&gen->rng), 0U, NULL,
