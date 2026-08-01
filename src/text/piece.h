@@ -53,6 +53,18 @@ typedef struct PieceNode {
 
 _Static_assert(sizeof(PieceNode) <= 96, "node bloat");
 
+typedef struct {
+    u64 off;
+    u64 gcol;
+} SagGraphemeCheckpoint;
+
+typedef struct {
+    SagGraphemeCheckpoint *data;
+    size_t len;
+    size_t cap;
+    u64 gen;
+} SagGraphemeIndex;
+
 typedef struct TextBuf {
     TextBacking *backing;
     /* Read-only compatibility views; mutation is owned by piece.c. */
@@ -60,6 +72,7 @@ typedef struct TextBuf {
     TextStore add;
     PieceNode *root;
     u64 gen;
+    SagGraphemeIndex graphemes;
     u64 add_tail_at;               /* buffer end of latest add-store run */
     bool add_tail_known;           /* false after delete; probe once */
 } TextBuf;

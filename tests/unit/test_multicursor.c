@@ -16,7 +16,7 @@
 
 static Cursor test_cursor(u64 pos, u64 anchor, u64 goal)
 {
-    Cursor cursor = {0};
+    Cursor cursor;
 
     cursor.pos = BYTEOFF(pos);
     cursor.anchor = BYTEOFF(anchor);
@@ -396,6 +396,24 @@ void test_multicursor_remove_and_normalize_clamp(void)
     SAG_ASSERT_EQ_U64(set.curs.len, 1U);
     SAG_ASSERT_EQ_U64(set.primary, 0U);
     assert_cursor(&set.curs.data[0], 4U, 4U, 9U);
+    sag_cset_free(&set);
+    sag_textbuf_free(tb);
+}
+
+void test_multicursor_normalize_preserves_sticky_motion(void)
+{
+    TextBuf *tb = sag_textbuf_from_bytes((const u8 *)"abcdef\nxy", 9U);
+    Cursor cursor = test_cursor(5U, 5U, 5U);
+    CursorSet set;
+
+    sag_cursor_down(tb, &cursor);
+    assert_cursor(&cursor, 8U, 8U, 5U);
+
+    sag_cset_init(&set, cursor);
+    sag_cset_normalize(tb, &set);
+    sag_cursor_right(tb, &set.curs.data[0]);
+    assert_cursor(&set.curs.data[0], 9U, 9U, 2U);
+
     sag_cset_free(&set);
     sag_textbuf_free(tb);
 }

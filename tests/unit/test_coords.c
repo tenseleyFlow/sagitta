@@ -72,7 +72,7 @@ void test_coords_motion_golden(void)
         u64 cells = 0U;
         TextBuf *tb;
         Span line;
-        Cursor cursor = {0};
+        Cursor cursor;
 
         while (isspace((unsigned char)*p))
             p++;
@@ -253,7 +253,6 @@ void test_coords_crlf_and_clamping(void)
     static const u8 bytes[] = {'a', 'b', '\r', '\n', 'x'};
     TextBuf *tb = sag_textbuf_from_bytes(bytes, sizeof(bytes));
     Span first;
-    GCol resolved;
 
     SAG_ASSERT_NOT_NULL(tb);
     first = sag_textbuf_line_span(tb, LINENO(0U));
@@ -261,10 +260,6 @@ void test_coords_crlf_and_clamping(void)
     SAG_ASSERT_EQ_U64(first.hi, 4U);
     SAG_ASSERT_EQ_U64(sag_gcol_to_off(tb, first, (GCol){UINT64_MAX}).v,
                       2U);
-    SAG_ASSERT_EQ_U64(sag_gcol_to_off_resolved(
-                          tb, first, (GCol){UINT64_MAX}, &resolved).v,
-                      2U);
-    SAG_ASSERT_EQ_U64(resolved.v, 2U);
     SAG_ASSERT_EQ_U64(sag_ccol_to_off(tb, first, (CCol){UINT64_MAX}, 4U).v,
                       2U);
     SAG_ASSERT_EQ_U64(sag_off_to_gcol(tb, first, BYTEOFF(4U)).v, 2U);
@@ -277,12 +272,6 @@ void test_coords_crlf_and_clamping(void)
     SAG_ASSERT_EQ_U64(sag_grapheme_next(tb, BYTEOFF(UINT64_MAX)).v,
                       sizeof(bytes));
     SAG_ASSERT_EQ_U64(sag_grapheme_prev(tb, BYTEOFF(UINT64_MAX)).v, 4U);
-
-    SAG_ASSERT_EQ_U64(sag_gcol_to_off_resolved(
-                          tb, (Span){4U, 5U}, (GCol){UINT64_MAX},
-                          &resolved).v,
-                      4U);
-    SAG_ASSERT_EQ_U64(resolved.v, 0U);
     sag_textbuf_free(tb);
 }
 
@@ -323,5 +312,76 @@ void test_coords_streams_large_cluster_width(void)
     SAG_ASSERT_EQ_U64(sag_off_to_ccol(tb, line, BYTEOFF(len), 4U).v, 1U);
     SAG_ASSERT_EQ_U64(sag_ccol_to_off(tb, line, (CCol){1U}, 4U).v, len);
     SAG_ASSERT_EQ_U64(sag_grapheme_next(tb, BYTEOFF(0U)).v, len);
+    sag_textbuf_free(tb);
+}
+
+static TextBuf *coords_ri_buffer(size_t count)
+{
+    static const u8 ri[] = {0xF0U, 0x9FU, 0x87U, 0xA6U};
+    size_t len = count * sizeof(ri);
+    u8 *bytes = sag_xmalloc(len);
+    size_t i;
+
+    for (i = 0U; i < count; i++)
+        memcpy(bytes + i * sizeof(ri), ri, sizeof(ri));
+    return sag_textbuf_from_owned_bytes(bytes, (u64)len);
+}
+
+void test_coords_reverse_long_ri_runs(void)
+{
+    TextBuf *tb = coords_ri_buffer(65U);
+
+    SAG_ASSERT_EQ_U64(sag_grapheme_prev_boundary(tb, BYTEOFF(260U)).v,
+                      256U);
+    SAG_ASSERT_EQ_U64(sag_grapheme_prev(tb, BYTEOFF(260U)).v, 256U);
+    sag_textbuf_free(tb);
+
+    tb = coords_ri_buffer(129U);
+    SAG_ASSERT_EQ_U64(sag_grapheme_prev_boundary(tb, BYTEOFF(516U)).v,
+                      512U);
+    SAG_ASSERT_EQ_U64(sag_grapheme_prev(tb, BYTEOFF(516U)).v, 512U);
+    sag_textbuf_free(tb);
+}
+
+void test_coords_sparse_index_edit_invalidation(void)
+{
+    u8 bytes[130];
+    u8 two_lines[261];
+    static const u8 accent[] = {0xCCU, 0x81U};
+    TextBuf *tb;
+    Span line;
+
+    memset(bytes, 'a', sizeof(bytes));
+    tb = sag_textbuf_from_bytes(bytes, sizeof(bytes));
+    SAG_ASSERT_NOT_NULL(tb);
+    SAG_ASSERT_EQ_U64(tb->graphemes.gen, tb->gen);
+    SAG_ASSERT_EQ_U64(tb->graphemes.len, 2U);
+    line = sag_textbuf_line_span(tb, LINENO(0U));
+    SAG_ASSERT_EQ_U64(sag_off_to_gcol(tb, line, BYTEOFF(130U)).v, 130U);
+    SAG_ASSERT_EQ_U64(sag_gcol_to_off(tb, line, (GCol){64U}).v, 64U);
+
+    sag_textbuf_insert(tb, BYTEOFF(1U), accent, sizeof(accent));
+    SAG_ASSERT(tb->graphemes.gen != tb->gen);
+    line = sag_textbuf_line_span(tb, LINENO(0U));
+    SAG_ASSERT_EQ_U64(sag_gcol_to_off(tb, line, (GCol){64U}).v, 66U);
+    SAG_ASSERT_EQ_U64(tb->graphemes.gen, tb->gen);
+    SAG_ASSERT_EQ_U64(sag_off_to_gcol(tb, line, BYTEOFF(132U)).v, 130U);
+
+    sag_textbuf_delete(tb, (Span){1U, 3U});
+    SAG_ASSERT(tb->graphemes.gen != tb->gen);
+    line = sag_textbuf_line_span(tb, LINENO(0U));
+    SAG_ASSERT_EQ_U64(sag_gcol_to_off(tb, line, (GCol){128U}).v, 128U);
+    SAG_ASSERT_EQ_U64(tb->graphemes.gen, tb->gen);
+    SAG_ASSERT_EQ_U64(sag_off_to_gcol(tb, line, BYTEOFF(130U)).v, 130U);
+    sag_textbuf_free(tb);
+
+    memset(two_lines, 'a', 130U);
+    two_lines[130U] = '\n';
+    memset(two_lines + 131U, 'b', 130U);
+    tb = sag_textbuf_from_bytes(two_lines, sizeof(two_lines));
+    SAG_ASSERT_EQ_U64(tb->graphemes.len, 4U);
+    line = sag_textbuf_line_span(tb, LINENO(1U));
+    SAG_ASSERT_EQ_U64(sag_gcol_to_off(tb, line, (GCol){64U}).v, 195U);
+    SAG_ASSERT_EQ_U64(sag_off_to_gcol(tb, line, BYTEOFF(261U)).v, 130U);
     sag_textbuf_free(tb);
 }

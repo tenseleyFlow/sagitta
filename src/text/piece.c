@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "unicode/coords_internal.h"
 #include "util/log.h"
 
 static u64 node_bytes(const PieceNode *node)
@@ -616,6 +617,7 @@ TextBuf *sag_textbuf_new(void)
 
     tb->backing = backing_new();
     textbuf_sync_store_views(tb);
+    sag_coords_index_seed(tb);
     return tb;
 }
 
@@ -631,6 +633,7 @@ TextBuf *sag_textbuf_from_bytes(const u8 *bytes, u64 len)
         piece = piece_make(tb->backing, SAG_STORE_ORIG, (Span){0U, len});
         tb->root = node_new(piece);
     }
+    sag_coords_index_seed(tb);
     return tb;
 }
 
@@ -646,6 +649,7 @@ TextBuf *sag_textbuf_from_owned_bytes(u8 *bytes, u64 len)
 
         tb->root = node_new(piece);
     }
+    sag_coords_index_seed(tb);
     return tb;
 }
 
@@ -653,6 +657,7 @@ void sag_textbuf_free(TextBuf *tb)
 {
     if (tb == NULL)
         return;
+    sag_coords_index_dispose(tb);
     node_release(tb->root);
     backing_release(tb->backing);
     free(tb);

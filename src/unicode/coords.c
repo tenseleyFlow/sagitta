@@ -2,8 +2,10 @@
 
 #include <limits.h>
 #include <stddef.h>
+#include <stdlib.h>
 #include <string.h>
 
+#include "unicode/coords_internal.h"
 #include "unicode/grapheme.h"
 #include "unicode/utf8.h"
 #include "unicode/width.h"
@@ -37,6 +39,7 @@ typedef struct {
     u64 end;
     u64 cells;
     bool tab;
+    bool lf;
 } StreamCluster;
 
 static void require_span(const TextBuf *tb, Span line)
@@ -87,48 +90,6 @@ static bool reader_get(TextReader *reader, u8 *out)
     }
     *out = reader->chunk[(size_t)reader->chunk_pos++];
     reader->off++;
-    return true;
-}
-
-static bool reader_all_ascii(TextReader *reader)
-{
-    while (reader->off < reader->end) {
-        u64 available;
-        u64 remaining;
-        u64 take;
-        u64 i = 0U;
-
-        while (reader->chunk_pos == reader->chunk_len) {
-            if (!reader->active ||
-                !sag_textiter_advance(&reader->it, reader->tb))
-                SAG_BUG("unicode coordinates: iterator ended early");
-            if (!sag_textiter_chunk(&reader->it, reader->tb,
-                                    &reader->chunk,
-                                    &reader->chunk_len) ||
-                reader->chunk_len == 0U)
-                SAG_BUG("unicode coordinates: iterator yielded empty chunk");
-            reader->chunk_pos = 0U;
-        }
-        available = reader->chunk_len - reader->chunk_pos;
-        remaining = reader->end - reader->off;
-        take = available < remaining ? available : remaining;
-        while (i + sizeof(u64) <= take) {
-            u64 word;
-
-            memcpy(&word,
-                   reader->chunk + (size_t)(reader->chunk_pos + i),
-                   sizeof(word));
-            if ((word & UINT64_C(0x8080808080808080)) != 0U)
-                return false;
-            i += sizeof(word);
-        }
-        for (; i < take; i++) {
-            if (reader->chunk[(size_t)(reader->chunk_pos + i)] >= 0x80U)
-                return false;
-        }
-        reader->chunk_pos += take;
-        reader->off += take;
-    }
     return true;
 }
 
@@ -199,6 +160,7 @@ static bool cluster_next(ClusterReader *reader, StreamCluster *out,
     out->start = reader->reader.off;
     out->cells = 0U;
     out->tab = false;
+    out->lf = false;
     sag_gb_init(&gb);
     sag_cluster_width_init(&width);
     if (!reader_cp(&reader->reader, &cp))
@@ -206,6 +168,7 @@ static bool cluster_next(ClusterReader *reader, StreamCluster *out,
     (void)sag_gb_boundary(&gb, cp.cp);
     first_cp = cp.cp;
     cp_count = 1U;
+    out->lf = cp.cp == '\n';
     if (need_width)
         sag_cluster_width_push(&width, cp.cp);
 
@@ -221,6 +184,8 @@ static bool cluster_next(ClusterReader *reader, StreamCluster *out,
         gb = next_gb;
         if (cp_count != UINT32_MAX)
             cp_count++;
+        if (cp.cp == '\n')
+            out->lf = true;
         if (need_width)
             sag_cluster_width_push(&width, cp.cp);
     }
@@ -260,6 +225,125 @@ static u64 line_content_end(const TextBuf *tb, Span line)
     return line.hi - 1U;
 }
 
+enum { SAG_GCOL_CHECKPOINT_STRIDE = 64 };
+
+static void index_push(SagGraphemeIndex *index, u64 off, u64 gcol)
+{
+    if (index->len == index->cap) {
+        size_t cap = index->cap == 0U ? 64U : index->cap * 2U;
+
+        if (cap < index->cap)
+            SAG_BUG("grapheme coordinate index capacity overflow");
+        index->data = sag_xreallocarray(index->data, cap,
+                                        sizeof(*index->data));
+        index->cap = cap;
+    }
+    index->data[index->len++] = (SagGraphemeCheckpoint){off, gcol};
+}
+
+static void coords_index_rebuild(TextBuf *tb)
+{
+    SagGraphemeIndex *index = &tb->graphemes;
+    ClusterReader reader;
+    StreamCluster cluster;
+    u64 gcol = 0U;
+
+    index->len = 0U;
+    cluster_reader_init(&reader, tb, 0U, sag_textbuf_len(tb));
+    while (cluster_next(&reader, &cluster, false)) {
+        if (cluster.lf) {
+            gcol = 0U;
+            continue;
+        }
+        if (gcol != 0U &&
+            gcol % (u64)SAG_GCOL_CHECKPOINT_STRIDE == 0U)
+            index_push(index, cluster.start, gcol);
+        if (gcol == UINT64_MAX)
+            SAG_BUG("grapheme coordinate index column overflow");
+        gcol++;
+    }
+    cluster_reader_free(&reader);
+    index->gen = tb->gen;
+}
+
+void sag_coords_index_seed(TextBuf *tb)
+{
+    if (tb == NULL)
+        SAG_BUG("sag_coords_index_seed: NULL buffer");
+    coords_index_rebuild(tb);
+}
+
+void sag_coords_index_dispose(TextBuf *tb)
+{
+    if (tb == NULL)
+        return;
+    free(tb->graphemes.data);
+    memset(&tb->graphemes, 0, sizeof(tb->graphemes));
+}
+
+static const SagGraphemeIndex *coords_index(const TextBuf *tb)
+{
+    if (tb->graphemes.gen != tb->gen)
+        coords_index_rebuild((TextBuf *)tb);
+    return &tb->graphemes;
+}
+
+static size_t index_lower_bound_off(const SagGraphemeIndex *index, u64 off)
+{
+    size_t lo = 0U;
+    size_t hi = index->len;
+
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2U;
+
+        if (index->data[mid].off < off)
+            lo = mid + 1U;
+        else
+            hi = mid;
+    }
+    return lo;
+}
+
+static SagGraphemeCheckpoint index_before_off(const SagGraphemeIndex *index,
+                                              Span line, u64 end, u64 off)
+{
+    size_t lo = index_lower_bound_off(index, line.lo);
+    size_t hi = index_lower_bound_off(index, end);
+    size_t first = lo;
+
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2U;
+
+        if (index->data[mid].off <= off)
+            lo = mid + 1U;
+        else
+            hi = mid;
+    }
+    if (lo == first)
+        return (SagGraphemeCheckpoint){line.lo, 0U};
+    return index->data[lo - 1U];
+}
+
+static SagGraphemeCheckpoint index_before_gcol(
+    const SagGraphemeIndex *index, Span line, u64 end, u64 gcol)
+{
+    size_t first = index_lower_bound_off(index, line.lo);
+    size_t lo = first;
+    size_t hi = index_lower_bound_off(index, end);
+
+    while (lo < hi) {
+        size_t mid = lo + (hi - lo) / 2U;
+
+        if (index->data[mid].gcol <= gcol)
+            lo = mid + 1U;
+        else
+            hi = mid;
+    }
+    if (lo == first)
+        return (SagGraphemeCheckpoint){line.lo, 0U};
+    return index->data[lo - 1U];
+}
+
 static u64 add_cells(u64 cells, u64 width)
 {
     return width > UINT64_MAX - cells ? UINT64_MAX : cells + width;
@@ -276,23 +360,22 @@ static u64 cluster_cells(const StreamCluster *cluster, u64 cells, u32 tabw)
 
 GCol sag_off_to_gcol(const TextBuf *tb, Span line, ByteOff pos)
 {
+    const SagGraphemeIndex *index;
+    SagGraphemeCheckpoint checkpoint;
     ClusterReader reader;
     StreamCluster cluster;
-    TextReader ascii;
     u64 end;
-    u64 count = 0U;
+    u64 count;
 
     require_span(tb, line);
     require_pos(line, pos);
     end = line_content_end(tb, line);
     if (pos.v > end)
         pos.v = end;
-    if (pos.v == line.lo)
-        return (GCol){0U};
-    reader_init(&ascii, tb, line.lo, pos.v);
-    if (reader_all_ascii(&ascii) && pos.v == end)
-        return (GCol){pos.v - line.lo};
-    cluster_reader_init(&reader, tb, line.lo, end);
+    index = coords_index(tb);
+    checkpoint = index_before_off(index, line, end, pos.v);
+    count = checkpoint.gcol;
+    cluster_reader_init(&reader, tb, checkpoint.off, end);
     while (cluster_next(&reader, &cluster, false)) {
         if (pos.v < cluster.end)
             break;
@@ -303,24 +386,25 @@ GCol sag_off_to_gcol(const TextBuf *tb, Span line, ByteOff pos)
     return (GCol){count};
 }
 
-ByteOff sag_gcol_to_off_resolved(const TextBuf *tb, Span line, GCol g,
-                                 GCol *resolved)
+ByteOff sag_gcol_to_off(const TextBuf *tb, Span line, GCol g)
 {
+    const SagGraphemeIndex *index;
+    SagGraphemeCheckpoint checkpoint;
     ClusterReader reader;
     StreamCluster cluster;
     u64 end;
-    u64 count = 0U;
+    u64 count;
     u64 last = line.lo;
     bool have_cluster = false;
 
-    if (resolved == NULL)
-        SAG_BUG("sag_gcol_to_off_resolved: NULL output");
     require_span(tb, line);
     end = line_content_end(tb, line);
-    cluster_reader_init(&reader, tb, line.lo, end);
+    index = coords_index(tb);
+    checkpoint = index_before_gcol(index, line, end, g.v);
+    count = checkpoint.gcol;
+    cluster_reader_init(&reader, tb, checkpoint.off, end);
     while (cluster_next(&reader, &cluster, false)) {
         if (count == g.v) {
-            *resolved = (GCol){count};
             cluster_reader_free(&reader);
             return BYTEOFF(cluster.start);
         }
@@ -329,19 +413,9 @@ ByteOff sag_gcol_to_off_resolved(const TextBuf *tb, Span line, GCol g,
         count++;
     }
     cluster_reader_free(&reader);
-    if (g.v == count || end < line.hi || !have_cluster) {
-        *resolved = (GCol){count};
+    if (g.v == count || end < line.hi || !have_cluster)
         return BYTEOFF(end);
-    }
-    *resolved = (GCol){count - 1U};
     return BYTEOFF(last);
-}
-
-ByteOff sag_gcol_to_off(const TextBuf *tb, Span line, GCol g)
-{
-    GCol resolved;
-
-    return sag_gcol_to_off_resolved(tb, line, g, &resolved);
 }
 
 CharCol sag_off_to_charcol(const TextBuf *tb, Span line, ByteOff pos)
@@ -511,6 +585,25 @@ ByteOff sag_grapheme_prev(const TextBuf *tb, ByteOff pos)
     return BYTEOFF(previous);
 }
 
+static bool ri_restart_unproven(const u8 *window, size_t count,
+                                bool truncated)
+{
+    enum { RESTART_CP_LIMIT = 64 };
+    size_t cursor = count;
+    size_t scanned;
+
+    for (scanned = 0U; scanned < RESTART_CP_LIMIT; scanned++) {
+        u32 cp;
+        size_t used = sag_utf8_decode_prev(window, 0U, cursor, &cp);
+
+        if (used == 0U || used > cursor ||
+            cp < UINT32_C(0x1F1E6) || cp > UINT32_C(0x1F1FF))
+            return false;
+        cursor -= used;
+    }
+    return cursor != 0U || truncated;
+}
+
 ByteOff sag_grapheme_prev_boundary(const TextBuf *tb, ByteOff pos)
 {
     enum { PREV_WINDOW = 512 };
@@ -557,7 +650,8 @@ ByteOff sag_grapheme_prev_boundary(const TextBuf *tb, ByteOff pos)
     if (reader.off != pos.v)
         SAG_BUG("sag_grapheme_prev_boundary: window ended early");
     found = sag_gb_prev_bytes(window, count, count);
-    if (found != 0U || start == span.lo)
+    if (!ri_restart_unproven(window, count, start != span.lo) &&
+        (found != 0U || start == span.lo))
         return BYTEOFF(start + (u64)found);
     return sag_grapheme_prev(tb, pos);
 }

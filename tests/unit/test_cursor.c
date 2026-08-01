@@ -4,7 +4,7 @@
 
 static Cursor cursor_at(const TextBuf *tb, u64 off)
 {
-    Cursor c = {0};
+    Cursor c;
     LineNo line = sag_textbuf_line_of(tb, BYTEOFF(off));
 
     c.pos = BYTEOFF(off);
@@ -94,6 +94,34 @@ void test_cursor_horizontal_resolves_vertical_clamp(void)
     SAG_ASSERT_EQ_U64(c.pos.v, 8U);
     SAG_ASSERT_EQ_U64(c.goal_col.v, 1U);
     assert_cursor_boundary(tb, &c);
+    sag_textbuf_free(tb);
+}
+
+void test_cursor_horizontal_recomputes_cross_line_and_edges(void)
+{
+    static const u8 text[] = "abcdef\nabcdefghij";
+    TextBuf *tb = sag_textbuf_from_bytes(text, sizeof(text) - 1U);
+    Cursor c = cursor_at(tb, 7U);
+
+    sag_cursor_left(tb, &c);
+    SAG_ASSERT_EQ_U64(c.pos.v, 6U);
+    SAG_ASSERT_EQ_U64(c.goal_col.v, 6U);
+    sag_cursor_down(tb, &c);
+    SAG_ASSERT_EQ_U64(c.pos.v, 13U);
+
+    c.pos = BYTEOFF(0U);
+    c.anchor = c.pos;
+    c.goal_col = (GCol){99U};
+    sag_cursor_left(tb, &c);
+    SAG_ASSERT_EQ_U64(c.pos.v, 0U);
+    SAG_ASSERT_EQ_U64(c.goal_col.v, 0U);
+
+    c.pos = BYTEOFF(sizeof(text) - 1U);
+    c.anchor = c.pos;
+    c.goal_col = (GCol){99U};
+    sag_cursor_right(tb, &c);
+    SAG_ASSERT_EQ_U64(c.pos.v, sizeof(text) - 1U);
+    SAG_ASSERT_EQ_U64(c.goal_col.v, 10U);
     sag_textbuf_free(tb);
 }
 
