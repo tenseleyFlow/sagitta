@@ -1915,9 +1915,7 @@ SagUndoReadResult sag_undo_read(EditCtx *ec, const char *path)
     materialize_insert_payloads(ec, &loaded);
     retain_delete_payloads(&loaded);
     account_live(&loaded);
-    ec->undo = &loaded;
-    sag_undo_free(old);
-    old = sag_xmalloc(sizeof(*old));
+    dispose_loaded_tree(old);
     *old = loaded;
     ec->undo = old;
     bytebuf_free(&file);
