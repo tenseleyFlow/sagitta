@@ -127,8 +127,12 @@ bool sag_pty_spawn(Pty *p, const PtySpec *sp)
         goto fail;
     if (pid == 0) {
         struct winsize ws;
+        sigset_t empty;
         int s;
 
+        if (sigemptyset(&empty) != 0 ||
+            sigprocmask(SIG_SETMASK, &empty, NULL) != 0)
+            _exit(127);
         if (setsid() < 0)
             _exit(127);
         s = open(sname, O_RDWR);
@@ -829,12 +833,13 @@ void ptc_check(PtyCtx *c, bool condition, const char *message)
 void ptc_suspend_resume(PtyCtx *c)
 {
     i64 deadline;
+    i64 retry_at;
     int status = 0;
     pid_t result = 0;
     size_t raw_before;
     size_t restore_len;
     const u8 *restore;
-    bool fallback_sent = false;
+    bool restored = false;
     bool stopped = false;
 
     if (c == NULL || !c->spawned || c->failed)
@@ -847,42 +852,59 @@ void ptc_suspend_resume(PtyCtx *c)
         return;
     }
     deadline = case_deadline(c);
-    while (ptc_now_ms() < deadline) {
+    while (!restored && !c->failed && ptc_now_ms() < deadline) {
         bool activity = false;
 
         (void)read_available(c, &activity);
-        if (!fallback_sent && c->raw.len >= raw_before &&
-            find_bytes(c->raw.data + raw_before, c->raw.len - raw_before,
-                       restore, restore_len) != NULL) {
-            /* A setsid() fixture is an orphaned process group, so its
-             * job-control stop may be discarded. Normalize both outcomes
-             * with SIGSTOP before accepting the observed stopped state. */
-            if (kill(c->pty.pid, SIGSTOP) != 0) {
-                ptc_fail(c, "SIGSTOP child after restore: %s",
-                         strerror(errno));
-                return;
-            }
-            fallback_sent = true;
-        }
-        do {
-            result = waitpid(c->pty.pid, &status, WNOHANG | WUNTRACED);
-        } while (result < 0 && errno == EINTR);
-        if (result == c->pty.pid && WIFSTOPPED(status))
-            stopped = true;
-        if (fallback_sent && stopped)
+        restored = c->raw.len >= raw_before &&
+                   find_bytes(c->raw.data + raw_before,
+                              c->raw.len - raw_before,
+                              restore, restore_len) != NULL;
+        if (restored)
             break;
         {
             struct pollfd fd = {c->pty.master, POLLIN | POLLHUP, 0};
             (void)poll(&fd, 1U, 10);
         }
     }
-    if (!fallback_sent || !stopped) {
-        ptc_fail(c, "child did not stop after SIGTSTP");
+    if (!restored) {
+        ptc_fail(c, "suspend did not emit the terminal restore blob");
         return;
     }
-    if (find_bytes(c->raw.data + raw_before, c->raw.len - raw_before,
-                   restore, restore_len) == NULL) {
-        ptc_fail(c, "suspend did not emit the terminal restore blob");
+    /* setsid() makes this fixture's process group orphaned, so the
+     * job-control SIGTSTP may be discarded. SIGSTOP gives the harness a
+     * portable stopped state after the real handler has restored the tty. */
+    if (kill(c->pty.pid, SIGSTOP) != 0) {
+        ptc_fail(c, "SIGSTOP child after restore: %s", strerror(errno));
+        return;
+    }
+    while (!stopped && ptc_now_ms() < deadline) {
+        do {
+            result = waitpid(c->pty.pid, &status, WNOHANG | WUNTRACED);
+        } while (result < 0 && errno == EINTR);
+        if (result == c->pty.pid) {
+            if (WIFSTOPPED(status)) {
+                stopped = true;
+            } else if (WIFEXITED(status) || WIFSIGNALED(status)) {
+                c->pty.reaped = true;
+                c->pty.status = status;
+                live_remove(&c->pty);
+                ptc_fail(c, "child exited while entering suspend state");
+                return;
+            }
+        } else if (result < 0) {
+            ptc_fail(c, "waitpid for suspend: %s", strerror(errno));
+            return;
+        }
+        if (stopped)
+            break;
+        {
+            struct pollfd fd = {-1, 0, 0};
+            (void)poll(&fd, 0U, 10);
+        }
+    }
+    if (!stopped) {
+        ptc_fail(c, "child did not stop after SIGTSTP");
         return;
     }
     c->ready = false;
@@ -890,7 +912,51 @@ void ptc_suspend_resume(PtyCtx *c)
         ptc_fail(c, "SIGCONT child: %s", strerror(errno));
         return;
     }
-    pump_quiet(c, PTC_DEFAULT_QUIET_MS, true);
+    retry_at = add_ms(ptc_now_ms(), PTC_DEFAULT_QUIET_MS);
+    while (!c->ready && !c->failed && ptc_now_ms() < deadline) {
+        struct pollfd fd = {c->pty.master, POLLIN | POLLHUP, 0};
+        bool activity = false;
+        i64 now;
+
+        (void)read_available(c, &activity);
+        if (c->ready)
+            break;
+        do {
+            result = waitpid(c->pty.pid, &status, WNOHANG | WUNTRACED);
+        } while (result < 0 && errno == EINTR);
+        if (result == c->pty.pid) {
+            if (WIFSTOPPED(status)) {
+                if (kill(c->pty.pid, SIGCONT) != 0) {
+                    ptc_fail(c, "repeat SIGCONT child: %s",
+                             strerror(errno));
+                    break;
+                }
+                retry_at = add_ms(ptc_now_ms(), PTC_DEFAULT_QUIET_MS);
+            } else if (WIFEXITED(status) || WIFSIGNALED(status)) {
+                c->pty.reaped = true;
+                c->pty.status = status;
+                live_remove(&c->pty);
+                ptc_fail(c, "child exited before repaint after SIGCONT");
+                break;
+            }
+        } else if (result < 0) {
+            ptc_fail(c, "waitpid for resume: %s", strerror(errno));
+            break;
+        }
+        now = ptc_now_ms();
+        if (now >= retry_at) {
+            if (kill(c->pty.pid, SIGCONT) != 0) {
+                ptc_fail(c, "retry SIGCONT child: %s", strerror(errno));
+                break;
+            }
+            retry_at = add_ms(now, PTC_DEFAULT_QUIET_MS);
+        }
+        (void)poll(&fd, 1U, 10);
+    }
+    if (!c->ready && !c->failed)
+        ptc_fail(c, "child did not repaint after SIGCONT");
+    if (!c->failed)
+        pump_quiet(c, PTC_DEFAULT_QUIET_MS, false);
 }
 
 const char *ptc_demo_bin(const PtyCtx *c)

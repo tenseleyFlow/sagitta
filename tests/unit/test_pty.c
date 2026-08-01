@@ -1,3 +1,4 @@
+#define _POSIX_C_SOURCE 200809L
 #include "harness.h"
 
 #include <signal.h>
@@ -29,6 +30,34 @@ void test_pty_environment_exact(void)
     ptc_env_free(envp);
     for (i = 0U; i <= SAG_PTY_ENV_COUNT; i++)
         SAG_ASSERT_NULL(envp[i]);
+}
+
+void test_pty_spawn_clears_signal_mask(void)
+{
+    static const PtyCase test = {
+        "signal_mask", "dumb", 2U, 8U, NULL
+    };
+    sigset_t blocked;
+    sigset_t saved;
+    PtyCtx ctx;
+    i64 deadline = ptc_now_ms() + 1000;
+
+    SAG_ASSERT_EQ_I64(sigemptyset(&blocked), 0);
+    SAG_ASSERT_EQ_I64(sigaddset(&blocked, SIGTERM), 0);
+    SAG_ASSERT_EQ_I64(sigprocmask(SIG_BLOCK, &blocked, &saved), 0);
+    ptc_init(&ctx, &test, "/tmp/sagitta-pty-signal-mask", "/bin/sleep",
+             "/bin/sleep", 1000, deadline);
+    ptc_spawn(&ctx, "/bin/sleep", "300", NULL);
+    SAG_ASSERT_EQ_I64(sigprocmask(SIG_SETMASK, &saved, NULL), 0);
+    SAG_ASSERT(ctx.spawned);
+    SAG_ASSERT_EQ_I64(kill(ctx.pty.pid, SIGTERM), 0);
+    ptc_expect_signal(&ctx, SIGTERM);
+    SAG_ASSERT(!ctx.failed);
+    ptc_cleanup(&ctx);
+    SAG_ASSERT(ctx.pty.reaped);
+    SAG_ASSERT_EQ_I64(ctx.pty.master, -1);
+    SAG_ASSERT(ptc_sweep_all());
+    ptc_dispose(&ctx);
 }
 
 void test_pty_timeout_reaps_child(void)

@@ -130,6 +130,7 @@ const SagTest sag_tests[] = {
     T(render_underline_undercurl_shared_reset),
     T(render_invalid_cells_are_bugs),
     T(pty_environment_exact),
+    T(pty_spawn_clears_signal_mask),
     T(pty_timeout_reaps_child),
     T(pty_post_snapshot_protocol_error_fails_cleanup),
     T(vt_closed_set_and_modes),
