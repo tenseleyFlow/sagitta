@@ -1169,9 +1169,8 @@ static void state_identity_at(const EditCtx *ec, u32 target,
     sag_textbuf_free(scratch);
 }
 
-static bool reroot_one(EditCtx *ec)
+static bool reroot_one(UndoTree *ut)
 {
-    UndoTree *ut = ec->undo;
     UndoNode *root = node_mut(ut, ut->root);
     u32 child = 0U;
     u32 at;
@@ -1191,10 +1190,7 @@ static bool reroot_one(EditCtx *ec)
         return false;
     {
         UndoNode *next = node_mut(ut, child);
-        u64 root_len;
-        u64 root_hash;
 
-        state_identity_at(ec, child, &root_len, &root_hash);
         ut->bytes_dead += next->blob_hi - next->blob_lo;
         next->n_ops = 0U;
         next->n_before = 0U;
@@ -1204,8 +1200,6 @@ static bool reroot_one(EditCtx *ec)
         next->flags |= SAG_TXN_TRIMMED;
         root->flags |= SAG_TXN_DEAD;
         ut->root = child;
-        ut->root_len = root_len;
-        ut->root_hash = root_hash;
         ut->gen++;
     }
     return true;
@@ -1214,12 +1208,18 @@ static bool reroot_one(EditCtx *ec)
 static void trim_tree(EditCtx *ec)
 {
     UndoTree *ut = ec->undo;
+    bool rerooted = false;
 
     if (ut->bytes_live <= ut->bytes_max)
         return;
     while (ut->bytes_live > ut->bytes_max) {
         u32 floor = recent_floor(ut);
-        if (prune_branch(ut, floor) || reroot_one(ec)) {
+        if (prune_branch(ut, floor)) {
+            account_live(ut);
+            continue;
+        }
+        if (reroot_one(ut)) {
+            rerooted = true;
             account_live(ut);
             continue;
         }
@@ -1229,6 +1229,8 @@ static void trim_tree(EditCtx *ec)
         }
         break;
     }
+    if (rerooted)
+        state_identity_at(ec, ut->root, &ut->root_len, &ut->root_hash);
     compact_blobs(ut);
 }
 
