@@ -1,0 +1,135 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=5,1 vis=0
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
+--- text
+
+                                                                
+
+                
+
+ default
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+--- style
+
+BCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz#0#1#2#3#4#5#6#7#8#9#10#11#12
+
+#13#14#15#16#17#18#19#20#21#22#23#24#25#26#27#28
+
+AAAAAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+--- legend
+A fg=default bg=default attrs=----------
+B fg=default bg=#00ff00 attrs=----------
+C fg=default bg=#04fb03 attrs=----------
+D fg=default bg=#08f706 attrs=----------
+E fg=default bg=#0cf309 attrs=----------
+F fg=default bg=#10ef0c attrs=----------
+G fg=default bg=#14eb0f attrs=----------
+H fg=default bg=#18e712 attrs=----------
+I fg=default bg=#1ce315 attrs=----------
+J fg=default bg=#20df18 attrs=----------
+K fg=default bg=#24db1b attrs=----------
+L fg=default bg=#28d71e attrs=----------
+M fg=default bg=#2cd321 attrs=----------
+N fg=default bg=#30cf24 attrs=----------
+O fg=default bg=#34cb27 attrs=----------
+P fg=default bg=#38c72a attrs=----------
+Q fg=default bg=#3cc32d attrs=----------
+R fg=default bg=#40bf30 attrs=----------
+S fg=default bg=#44bb33 attrs=----------
+T fg=default bg=#48b736 attrs=----------
+U fg=default bg=#4cb339 attrs=----------
+V fg=default bg=#50af3c attrs=----------
+W fg=default bg=#54ab3f attrs=----------
+X fg=default bg=#58a742 attrs=----------
+Y fg=default bg=#5ca345 attrs=----------
+Z fg=default bg=#609f48 attrs=----------
+a fg=default bg=#649b4b attrs=----------
+b fg=default bg=#68974e attrs=----------
+c fg=default bg=#6c9351 attrs=----------
+d fg=default bg=#708f54 attrs=----------
+e fg=default bg=#748b57 attrs=----------
+f fg=default bg=#78875a attrs=----------
+g fg=default bg=#7c835d attrs=----------
+h fg=default bg=#807f60 attrs=----------
+i fg=default bg=#847b63 attrs=----------
+j fg=default bg=#887766 attrs=----------
+k fg=default bg=#8c7369 attrs=----------
+l fg=default bg=#906f6c attrs=----------
+m fg=default bg=#946b6f attrs=----------
+n fg=default bg=#986772 attrs=----------
+o fg=default bg=#9c6375 attrs=----------
+p fg=default bg=#a05f78 attrs=----------
+q fg=default bg=#a45b7b attrs=----------
+r fg=default bg=#a8577e attrs=----------
+s fg=default bg=#ac5381 attrs=----------
+t fg=default bg=#b04f84 attrs=----------
+u fg=default bg=#b44b87 attrs=----------
+v fg=default bg=#b8478a attrs=----------
+w fg=default bg=#bc438d attrs=----------
+x fg=default bg=#c03f90 attrs=----------
+y fg=default bg=#c43b93 attrs=----------
+z fg=default bg=#c83796 attrs=----------
+#0 fg=default bg=#cc3399 attrs=----------
+#1 fg=default bg=#d02f9c attrs=----------
+#2 fg=default bg=#d42b9f attrs=----------
+#3 fg=default bg=#d827a2 attrs=----------
+#4 fg=default bg=#dc23a5 attrs=----------
+#5 fg=default bg=#e01fa8 attrs=----------
+#6 fg=default bg=#e41bab attrs=----------
+#7 fg=default bg=#e817ae attrs=----------
+#8 fg=default bg=#ec13b1 attrs=----------
+#9 fg=default bg=#f00fb4 attrs=----------
+#10 fg=default bg=#f40bb7 attrs=----------
+#11 fg=default bg=#f807ba attrs=----------
+#12 fg=default bg=#fc03bd attrs=----------
+#13 fg=default bg=idx:0 attrs=----------
+#14 fg=default bg=idx:1 attrs=----------
+#15 fg=default bg=idx:2 attrs=----------
+#16 fg=default bg=idx:3 attrs=----------
+#17 fg=default bg=idx:4 attrs=----------
+#18 fg=default bg=idx:5 attrs=----------
+#19 fg=default bg=idx:6 attrs=----------
+#20 fg=default bg=idx:7 attrs=----------
+#21 fg=default bg=idx:8 attrs=----------
+#22 fg=default bg=idx:9 attrs=----------
+#23 fg=default bg=idx:10 attrs=----------
+#24 fg=default bg=idx:11 attrs=----------
+#25 fg=default bg=idx:12 attrs=----------
+#26 fg=default bg=idx:13 attrs=----------
+#27 fg=default bg=idx:14 attrs=----------
+#28 fg=default bg=idx:15 attrs=----------

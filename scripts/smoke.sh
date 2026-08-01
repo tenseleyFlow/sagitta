@@ -151,4 +151,3 @@ check_deferred_target()
 }
 
 check_deferred_target test-script 37
-check_deferred_target test-pty 6

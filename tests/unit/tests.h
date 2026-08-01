@@ -121,11 +121,27 @@ void test_render_three_resets_use_full_reset(void);
 void test_render_same_state_is_byte_identical(void);
 void test_render_put_order_is_byte_identical(void);
 void test_render_resize_repaint_is_deterministic(void);
-void test_render_roundtrip_reference_vt(void);
 void test_render_cursor_only_frames_track_position_and_visibility(void);
 void test_render_tier16_downconverts_high_index(void);
 void test_render_invalid_byte_style_is_reverse(void);
 void test_render_underline_undercurl_shared_reset(void);
 void test_render_invalid_cells_are_bugs(void);
+void test_pty_environment_exact(void);
+void test_vt_closed_set_and_modes(void);
+void test_vt_probe_profiles(void);
+void test_vt_sgr_closed_rows(void);
+void test_vt_utf8_graphemes_and_wide_cells(void);
+void test_vt_chunk_safe_every_boundary(void);
+void test_vt_rejects_unknown_and_protocol_errors(void);
+void test_vt_resize_preserves_and_repairs_cells(void);
+void test_vt_primary_screen_policy_and_transcript(void);
+void test_vt_combining_storage_is_bounded(void);
+void test_snapshot_golden_v1_format(void);
+void test_snapshot_legend_supports_sixty_styles(void);
+void test_snapshot_trim_reconstructs_roundtrip(void);
+void test_snapshot_diff_reports_one_cell(void);
+void test_snapshot_diff_reports_one_row(void);
+void test_snapshot_diff_reports_changed_legend(void);
+void test_snapshot_diff_full_dumps_both_snapshots(void);
 
 #endif

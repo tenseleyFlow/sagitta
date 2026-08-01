@@ -1,0 +1,1 @@
+tests/pty/goldens/*.golden whitespace=-blank-at-eol

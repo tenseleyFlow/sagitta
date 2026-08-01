@@ -1,0 +1,59 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=5,2 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
+--- text
+
+  CJK: 漢字
+
+  emoji: 😀 ☀️
+
+  family: 👨‍👩‍👧‍👦
+
+  stack: ȩ́̂̈̄
+
+                                                                                
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+--- style
+
+AABBBBBBBBB
+
+AACCCCCCCCCCCC
+
+AADDDDDDDDDD
+
+AAEEEEEEEE
+
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+--- legend
+A fg=default bg=default attrs=----------
+B fg=#bb9af7 bg=default attrs=----------
+C fg=#e0af68 bg=default attrs=----------
+D fg=#7dcfff bg=default attrs=----------
+E fg=#9ece6a bg=default attrs=---u------

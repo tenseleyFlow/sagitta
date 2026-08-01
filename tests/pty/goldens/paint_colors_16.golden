@@ -1,0 +1,71 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=5,1 vis=0
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
+--- text
+
+                                                                
+
+                
+
+ default
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+--- style
+
+BBBBBBBBBBBBBBBBCDDDDDEEEEEEEEEEEEEEEEEEEEEEEEEEFFFFFFFFFGGGGGGG
+
+HICDJFKLEMBNOGPQ
+
+AAAAAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+--- legend
+A fg=default bg=default attrs=----------
+B fg=default bg=idx:10 attrs=----------
+C fg=default bg=idx:2 attrs=----------
+D fg=default bg=idx:3 attrs=----------
+E fg=default bg=idx:8 attrs=----------
+F fg=default bg=idx:5 attrs=----------
+G fg=default bg=idx:13 attrs=----------
+H fg=default bg=idx:0 attrs=----------
+I fg=default bg=idx:1 attrs=----------
+J fg=default bg=idx:4 attrs=----------
+K fg=default bg=idx:6 attrs=----------
+L fg=default bg=idx:7 attrs=----------
+M fg=default bg=idx:9 attrs=----------
+N fg=default bg=idx:11 attrs=----------
+O fg=default bg=idx:12 attrs=----------
+P fg=default bg=idx:14 attrs=----------
+Q fg=default bg=idx:15 attrs=----------

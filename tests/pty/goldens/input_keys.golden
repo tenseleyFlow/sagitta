@@ -1,0 +1,56 @@
+# sagitta pty golden v1
+size 80x24 alt=0 cursor=2,2 vis=1
+modes - kitty=0 sync_pairs=2
+--- text
+
+
+  kind=1 code=97 mods=4 ev=1 text=
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+--- style
+
+
+AABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+--- legend
+A fg=default bg=default attrs=----------
+B fg=#c0caf5 bg=default attrs=b---------
