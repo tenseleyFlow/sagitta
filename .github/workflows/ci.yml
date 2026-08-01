@@ -65,6 +65,13 @@ jobs:
           sudo apt-get install -y valgrind
       - run: make test VALGRIND=1
 
+  torture:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Prove the no-corruption save contract
+        run: make torture CC=gcc
+
   modules:
     runs-on: ubuntu-latest
     steps:
@@ -94,6 +101,14 @@ jobs:
           seed=$(date -u +%Y%m%d)
           echo "nightly fuzz seed=$seed"
           make fuzz CC=gcc FUZZ_ITERS=2000000 FUZZ_SEED="$seed"
+
+  torture-nightly:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run the extended external-SIGKILL campaign
+        run: make torture CC=gcc TORTURE_SIGKILL_ITERS=5000
 
   determinism:
     runs-on: ubuntu-latest

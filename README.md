@@ -6,15 +6,17 @@ designed so recorded edits are readable programs and programs can drive the
 editor. The implementation is C11 using only the C standard library and POSIX.
 
 Sagitta is currently **pre-1.0**. Its terminal stack, deterministic renderer,
-PTY acceptance harness, and byte-oriented text-engine foundation are in place.
-Interactive editing and Fletch execution land in later sprints; unimplemented
-surfaces fail with a message naming the sprint that provides them.
+PTY acceptance harness, piece-tree text engine, byte-exact file loading,
+durable save paths, and crash journal are in place. Interactive editing and
+Fletch execution land in later sprints; unimplemented surfaces fail with a
+message naming the sprint that provides them.
 
 ## Build
 
 ```sh
 make
 make test
+make torture
 make MODULES="lsp ai"
 ```
 
@@ -28,6 +30,21 @@ a fresh clone builds offline with only a C compiler, while `make
 unicode-tables` reproducibly regenerates the file for review and CI drift
 checks. No network access, Python, locale data, or platform `wcwidth` is part
 of the build or rendering contract.
+
+## Data-safety contract
+
+Files are loaded with ordinary full-read POSIX I/O—never `mmap`—and remain
+byte-exact in memory apart from a detected UTF-8 BOM, which is restored on
+save. CRLF, mixed line endings, invalid UTF-8, and binary bytes round-trip
+without normalization.
+
+Ordinary saves write and `fsync` a same-directory temporary before rename and
+directory `fsync`. Symlinks, hardlinks, and unwritable-directory cases use a
+fsynced state-directory backup plus in-place preservation. Per-buffer crash
+journals are versioned, checksummed, append-only recovery logs. `make torture`
+faults every save syscall boundary and runs external `SIGKILL` campaigns to
+prove the destination is always old or new—or recoverable from journal and
+backup—never silently corrupted.
 
 ## Terminal environment
 

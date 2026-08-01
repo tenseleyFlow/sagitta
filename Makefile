@@ -5,6 +5,7 @@ MODULES ?= lsp ai fuss plugins
 FUZZ_ITERS ?= 200000
 FUZZ_SEED  ?= 1
 FUZZ_SECONDS ?=
+TORTURE_SIGKILL_ITERS ?= 500
 
 ifneq ($(filter 1,$(SAN)),)
 ifneq ($(filter 1,$(VALGRIND)),)
@@ -88,12 +89,20 @@ PERF_RENDER_OBJ := $(BUILD)/tests/perf/perf_render.o
 PERF_PIECE_OBJ := $(BUILD)/tests/perf/perf_piece.o
 PERF_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 
+TORTURE_CHILD_OBJ := $(BUILD)/tests/torture/sag-torture.o
+TORTURE_DRIVER_OBJ := $(BUILD)/tests/torture/kill9.o
+TORTURE_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
+TORTURE_CHILD := $(BUILD)/sag-torture
+TORTURE_DRIVER := $(BUILD)/kill9
+FAULTSHIM := $(BUILD)/tests/torture/faultshim.so
+
 BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(FUZZ_LIB_OBJ) \
                 $(FUZZ_UTF8_OBJ) $(FUZZ_GRAPHEME_OBJ) $(FUZZ_INPUT_OBJ) \
                 $(FUZZ_GRID_OBJ) $(FUZZ_VT_OBJ) $(PTY_ORACLE_OBJ) \
                 $(PTY_HARNESS_OBJ) $(PTY_REGISTRY_OBJ) $(PTY_RUNNER_OBJ) \
                 $(PTY_DEMO_OBJ) $(PERF_UNICODE_OBJ) $(PERF_RENDER_OBJ) \
-                $(PERF_PIECE_OBJ)))
+                $(PERF_PIECE_OBJ) $(TORTURE_CHILD_OBJ) \
+                $(TORTURE_DRIVER_OBJ) $(FAULTSHIM)))
 
 # A content mismatch makes FORCE a normal prerequisite of every object built
 # by this invocation.  The stamp recipe also removes objects not reachable
@@ -106,7 +115,8 @@ endif
 
 .DEFAULT_GOAL := all
 .PHONY: all test clean install dirs FORCE test-script test-pty fuzz \
-        unicode-tables perf perf-unicode perf-render perf-piece
+        unicode-tables perf perf-unicode perf-render perf-piece torture \
+        torture-build
 
 all: $(BUILD)/sagitta $(BUILD)/sag
 
@@ -150,10 +160,20 @@ $(BUILD)/perf_render: $(PERF_CORE_OBJ) $(PERF_RENDER_OBJ)
 $(BUILD)/perf_piece: $(PERF_CORE_OBJ) $(PERF_PIECE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_PIECE_OBJ)
 
+$(TORTURE_CHILD): $(TORTURE_CORE_OBJ) $(TORTURE_CHILD_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TORTURE_CORE_OBJ) \
+		$(TORTURE_CHILD_OBJ)
+
+$(TORTURE_DRIVER): $(TORTURE_DRIVER_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TORTURE_DRIVER_OBJ)
+
+$(FAULTSHIM): tests/torture/faultshim.c | dirs
+	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC -shared -o $@ $< -ldl
+
 $(BUILD)/gen-unicode-tables: scripts/gen-unicode-tables.c | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
 
-test: $(BUILD)/unit_tests $(BUILD)/sagitta test-pty
+test: $(BUILD)/unit_tests $(BUILD)/sagitta test-pty torture-build
 	$(UNIT_RUN)
 	scripts/check-input.sh
 	scripts/check-render.sh
@@ -181,6 +201,13 @@ perf-piece: $(BUILD)/perf_piece
 	$(BUILD)/perf_piece
 
 perf: perf-unicode perf-render perf-piece
+
+torture-build: $(TORTURE_CHILD) $(TORTURE_DRIVER) $(FAULTSHIM)
+
+torture: torture-build
+	SAG_TORTURE_SIGKILL_ITERS=$(TORTURE_SIGKILL_ITERS) \
+		$(TORTURE_DRIVER) $(abspath $(TORTURE_CHILD)) \
+		$(abspath $(FAULTSHIM))
 
 unicode-tables: $(BUILD)/gen-unicode-tables
 	$< ucd/16.0.0 > src/unicode/tables.c
@@ -221,6 +248,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/sagitta
          $(PTY_HARNESS_OBJ:.o=.d) $(PTY_REGISTRY_OBJ:.o=.d) \
          $(PTY_RUNNER_OBJ:.o=.d) $(PTY_DEMO_OBJ:.o=.d) \
          $(PERF_UNICODE_OBJ:.o=.d) $(PERF_RENDER_OBJ:.o=.d) \
-         $(PERF_PIECE_OBJ:.o=.d)
+         $(PERF_PIECE_OBJ:.o=.d) $(TORTURE_CHILD_OBJ:.o=.d) \
+	 $(TORTURE_DRIVER_OBJ:.o=.d)
 
 FORCE:
