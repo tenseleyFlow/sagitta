@@ -26,7 +26,7 @@ MODDIR_fuss    := git
 MODDIR_plugins := plug
 
 CFLAGS := -std=c11 -pedantic -Wall -Wextra -Werror -Wvla -g -O2 \
-          -MMD -MP -Isrc -Itests/pty \
+          -MMD -MP -Isrc -Itests/pty -Itests/fuzz \
           -DSAG_WITH_LSP=$(if $(filter lsp,$(MODULES)),1,0) \
           -DSAG_WITH_AI=$(if $(filter ai,$(MODULES)),1,0) \
           -DSAG_WITH_FUSS=$(if $(filter fuss,$(MODULES)),1,0) \
@@ -104,8 +104,11 @@ PTY_LINK_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ)) \
                 $(PTY_ORACLE_OBJ) $(PTY_HARNESS_OBJ) $(PTY_REGISTRY_OBJ) \
                 $(PTY_RUNNER_OBJ)
 PTY_DEMO_LINK_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ)) $(PTY_DEMO_OBJ)
+TEXT_FUZZ_SUPPORT_OBJ := $(BUILD)/tests/fuzz/oracle.o \
+                         $(BUILD)/tests/fuzz/shrink.o
 UNIT_LINK_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ)) $(UNIT_OBJ) \
-                 $(PTY_ORACLE_OBJ) $(PTY_HARNESS_OBJ)
+                 $(PTY_ORACLE_OBJ) $(PTY_HARNESS_OBJ) \
+                 $(TEXT_FUZZ_SUPPORT_OBJ)
 
 FUZZ_LIB_OBJ := $(BUILD)/tests/fuzz/fuzzlib.o
 FUZZ_UTF8_OBJ := $(BUILD)/tests/fuzz/fuzz_utf8.o
@@ -114,6 +117,7 @@ FUZZ_INPUT_OBJ := $(BUILD)/tests/fuzz/fuzz_input.o
 FUZZ_GRID_OBJ := $(BUILD)/tests/fuzz/fuzz_grid.o
 FUZZ_VT_OBJ := $(BUILD)/tests/fuzz/fuzz_vt.o
 FUZZ_UNDO_OBJ := $(BUILD)/tests/fuzz/fuzz_undo.o
+FUZZ_TEXTBUF_OBJ := $(BUILD)/tests/fuzz/fuzz_textbuf.o
 FUZZ_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 FUZZ_LINK_OBJ := $(FUZZ_CORE_OBJ) $(FUZZ_LIB_OBJ)
 
@@ -134,6 +138,7 @@ FAULTSHIM := $(BUILD)/tests/torture/faultshim.so
 BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(FUZZ_LIB_OBJ) \
                 $(FUZZ_UTF8_OBJ) $(FUZZ_GRAPHEME_OBJ) $(FUZZ_INPUT_OBJ) \
                 $(FUZZ_GRID_OBJ) $(FUZZ_VT_OBJ) $(FUZZ_UNDO_OBJ) \
+                $(FUZZ_TEXTBUF_OBJ) $(TEXT_FUZZ_SUPPORT_OBJ) \
                 $(PTY_ORACLE_OBJ) \
                 $(PTY_HARNESS_OBJ) $(PTY_REGISTRY_OBJ) $(PTY_RUNNER_OBJ) \
                 $(PTY_DEMO_OBJ) $(PERF_UNICODE_OBJ) $(PERF_RENDER_OBJ) \
@@ -152,6 +157,7 @@ endif
 
 .DEFAULT_GOAL := all
 .PHONY: all test clean install dirs FORCE test-script test-pty fuzz \
+        fuzz-textbuf \
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
         perf-undo torture torture-build
 
@@ -190,6 +196,11 @@ $(BUILD)/fuzz_vt: $(FUZZ_LINK_OBJ) $(PTY_VT_OBJ) $(FUZZ_VT_OBJ)
 
 $(BUILD)/fuzz_undo: $(FUZZ_CORE_OBJ) $(FUZZ_UNDO_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) $(FUZZ_UNDO_OBJ)
+
+$(BUILD)/fuzz_textbuf: $(FUZZ_CORE_OBJ) $(TEXT_FUZZ_SUPPORT_OBJ) \
+                       $(FUZZ_TEXTBUF_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) \
+		$(TEXT_FUZZ_SUPPORT_OBJ) $(FUZZ_TEXTBUF_OBJ)
 
 $(BUILD)/perf_unicode: $(PERF_CORE_OBJ) $(PERF_UNICODE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_UNICODE_OBJ)
@@ -237,6 +248,10 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
 	@if [ -n "$(FUZZ_SECONDS)" ]; then \
 		$(BUILD)/fuzz_input --seconds=$(FUZZ_SECONDS) --seed=$(FUZZ_SEED); \
 	fi
+
+fuzz-textbuf: $(BUILD)/fuzz_textbuf
+	$(BUILD)/fuzz_textbuf --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED) \
+		--mix=typing
 
 perf-unicode: $(BUILD)/perf_unicode
 	$(BUILD)/perf_unicode
@@ -298,6 +313,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/sagitta
          $(FUZZ_UTF8_OBJ:.o=.d) $(FUZZ_GRAPHEME_OBJ:.o=.d) \
          $(FUZZ_INPUT_OBJ:.o=.d) $(FUZZ_GRID_OBJ:.o=.d) \
          $(FUZZ_VT_OBJ:.o=.d) $(FUZZ_UNDO_OBJ:.o=.d) \
+         $(FUZZ_TEXTBUF_OBJ:.o=.d) $(TEXT_FUZZ_SUPPORT_OBJ:.o=.d) \
          $(PTY_ORACLE_OBJ:.o=.d) \
          $(PTY_HARNESS_OBJ:.o=.d) $(PTY_REGISTRY_OBJ:.o=.d) \
          $(PTY_RUNNER_OBJ:.o=.d) $(PTY_DEMO_OBJ:.o=.d) \

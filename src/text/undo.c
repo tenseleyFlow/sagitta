@@ -486,7 +486,7 @@ void sag_undo_record_insert(EditCtx *ec, ByteOff at, u64 len, u64 payload)
     UndoTree *ut;
     UndoNode *node;
     UndoOp op;
-    UndoRepairRun run = {0U, 0U};
+    UndoRepairRun run;
     UndoReplaySpan replay;
 
     require_ctx(ec);
@@ -499,6 +499,8 @@ void sag_undo_record_insert(EditCtx *ec, ByteOff at, u64 len, u64 payload)
     op.off = at.v;
     op.len = len;
     op.payload = payload;
+    run.at = node->rep_at + node->n_rep;
+    run.len = 0U;
     (void)memset(&replay, 0, sizeof(replay));
     SagUndoOpVec_push(&ut->ops, op);
     SagUndoRepairRunVec_push(&ut->repair_runs, run);
