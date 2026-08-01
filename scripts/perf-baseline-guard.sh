@@ -7,10 +7,12 @@ trap 'rm -f "$tmp"' EXIT HUP INT TERM
 
 if [ "${1:-}" = "--stdin" ]; then
     cat >"$tmp"
+elif [ "${1:-}" = "--commit" ] && [ "$#" -eq 2 ]; then
+    git show --format= --name-only "$2" >"$tmp"
 elif [ "$#" -eq 0 ]; then
     git show --format= --name-only HEAD >"$tmp"
 else
-    echo "usage: $0 [--stdin]" >&2
+    echo "usage: $0 [--stdin | --commit REV]" >&2
     exit 2
 fi
 

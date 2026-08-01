@@ -163,6 +163,16 @@ static bool load_once(const char *path, u64 *elapsed, u64 *rss_growth)
     if (!rss_bytes(&before) || !now_ns(&start))
         return false;
     error = sag_file_load(path, &tb, &meta);
+    if (error == SAG_LOAD_OK && getenv("SAG_PERF_INJECT_OPEN_DELAY") != NULL) {
+        struct timespec delay = {0, 200000000L};
+        struct timespec left;
+
+        while (nanosleep(&delay, &left) != 0) {
+            if (errno != EINTR)
+                break;
+            delay = left;
+        }
+    }
     if (!now_ns(&end) || error != SAG_LOAD_OK || !rss_bytes(&after)) {
         sag_textbuf_free(tb);
         sag_filemeta_dispose(&meta);

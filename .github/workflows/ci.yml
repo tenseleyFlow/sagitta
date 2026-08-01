@@ -16,16 +16,8 @@ jobs:
       - uses: actions/checkout@v6
       - run: make CC=gcc
       - run: make test CC=gcc
-      - name: Fuzz and prove fixed-seed determinism
-        run: |
-          make fuzz CC=gcc FUZZ_ITERS=200000 FUZZ_SEED=1 > fuzz-1.txt
-          cat fuzz-1.txt
-          make fuzz CC=gcc FUZZ_ITERS=200000 FUZZ_SEED=1 > fuzz-2.txt
-          cat fuzz-2.txt
-          grep '^fuzz_' fuzz-1.txt > fuzz-results-1.txt
-          grep '^fuzz_' fuzz-2.txt > fuzz-results-2.txt
-          diff -u fuzz-results-1.txt fuzz-results-2.txt
-      - run: make perf CC=gcc
+      - name: Run the fixed Sprint 11 campaign
+        run: make fuzz CC=gcc FUZZ_ITERS=200000 FUZZ_SEED=1
 
   clang:
     runs-on: ubuntu-latest
@@ -33,6 +25,11 @@ jobs:
       - uses: actions/checkout@v6
       - run: make CC=clang
       - run: make test CC=clang
+      - name: Compile the campaign, fixture, and budget binaries
+        run: |
+          make CC=clang BUILD=build-clang \
+            build-clang/fuzz_textbuf build-clang/gen-bigfile \
+            build-clang/perf_textbuf
 
   pty:
     runs-on: ubuntu-latest
@@ -52,8 +49,10 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - run: make test CC=clang SAN=1 BUILD=build-san
-      - name: Fuzz, including the 60-second input campaign
-        run: make fuzz CC=clang SAN=1 BUILD=build-san FUZZ_ITERS=200000 FUZZ_SEED=1 FUZZ_SECONDS=60
+      - name: Run all fixed campaigns under ASan and UBSan
+        run: |
+          make fuzz CC=clang SAN=1 BUILD=build-san \
+            FUZZ_ITERS=200000 FUZZ_SEED=1 FUZZ_SECONDS=60
 
   valgrind:
     runs-on: ubuntu-latest
@@ -63,7 +62,27 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y valgrind
-      - run: make test VALGRIND=1
+      - name: Run properties at the leak-check cadence
+        run: SAG_PROP_N=50 make test VALGRIND=1
+
+  performance:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify deterministic 100 MiB fixtures
+        run: make fixtures-verify-quick CC=gcc
+      - name: Run the budget suite five times without flapping
+        run: |
+          for run in 1 2 3 4 5; do
+            echo "performance stability run=$run"
+            make perf-textbuf CC=gcc PERF_ADVISORY=0 \
+              PERF_RUNNER_ID=perf-x86_64-linux-gnu
+          done
+      - name: Prove the absolute gate rejects an injected delay
+        run: make perf-gate-selftest CC=gcc
+      - name: Run the existing subsystem budgets
+        run: |
+          make perf-unicode perf-render perf-piece perf-cursor perf-undo CC=gcc
 
   torture:
     runs-on: ubuntu-latest
@@ -91,37 +110,55 @@ jobs:
           make unicode-tables
           sha256sum -c unicode.sha256
 
-  fuzz-nightly:
-    if: github.event_name == 'schedule'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - name: Run date-seeded 2M Unicode campaign
-        run: |
-          seed=$(date -u +%Y%m%d)
-          echo "nightly fuzz seed=$seed"
-          make fuzz CC=gcc FUZZ_ITERS=2000000 FUZZ_SEED="$seed"
-
-  torture-nightly:
-    if: github.event_name == 'schedule'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v6
-      - name: Run the extended external-SIGKILL campaign
-        run: make torture CC=gcc TORTURE_SIGKILL_ITERS=5000
-
   determinism:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
-      - name: Compare test output
+      - name: Build GCC and Clang deterministic tools
+        run: |
+          make CC=gcc BUILD=build-det-gcc \
+            build-det-gcc/fuzz_textbuf build-det-gcc/gen-bigfile
+          make CC=clang BUILD=build-det-clang \
+            build-det-clang/fuzz_textbuf build-det-clang/gen-bigfile
+      - name: Compare edit traces across runs and compilers
+        run: |
+          build-det-gcc/fuzz_textbuf --iters=5000 --seed=0x9e3779b97f4a7c15 \
+            --mix=typing --trace-out=trace-gcc-1.txt
+          build-det-gcc/fuzz_textbuf --iters=5000 --seed=0x9e3779b97f4a7c15 \
+            --mix=typing --trace-out=trace-gcc-2.txt
+          build-det-clang/fuzz_textbuf --iters=5000 --seed=0x9e3779b97f4a7c15 \
+            --mix=typing --trace-out=trace-clang-1.txt
+          diff -u trace-gcc-1.txt trace-gcc-2.txt
+          diff -u trace-gcc-1.txt trace-clang-1.txt
+          build-det-gcc/fuzz_textbuf --replay trace-gcc-1.txt > replay-gcc.txt
+          build-det-clang/fuzz_textbuf --replay trace-gcc-1.txt > replay-clang.txt
+          sed 's/replay=[^ ]*/replay=TRACE/' replay-gcc.txt > replay-gcc.norm
+          sed 's/replay=[^ ]*/replay=TRACE/' replay-clang.txt > replay-clang.norm
+          diff -u replay-gcc.norm replay-clang.norm
+      - name: Compare all fixture hashes across runs and compilers
+        run: |
+          while read -r profile bytes seed expected; do
+            case "$profile" in ''|'#'*) continue ;; esac
+            g1=$(build-det-gcc/gen-bigfile --hash --profile "$profile" \
+              --size "$bytes" --seed "$seed")
+            g2=$(build-det-gcc/gen-bigfile --hash --profile "$profile" \
+              --size "$bytes" --seed "$seed")
+            c1=$(build-det-clang/gen-bigfile --hash --profile "$profile" \
+              --size "$bytes" --seed "$seed")
+            c2=$(build-det-clang/gen-bigfile --hash --profile "$profile" \
+              --size "$bytes" --seed "$seed")
+            test "$g1" = "$expected"
+            test "$g1" = "$g2"
+            test "$g1" = "$c1"
+            test "$g1" = "$c2"
+            echo "$profile $g1"
+          done < tests/perf/fixtures.sha
+      - name: Compare test and PTY output
         run: |
           make test > /dev/null 2>&1
           make test > r1.txt 2>&1
           make test > r2.txt 2>&1
-          diff r1.txt r2.txt
-      - name: Compare PTY runner output
-        run: |
+          diff -u r1.txt r2.txt
           make test-pty > pty-1.txt 2>&1
           make test-pty > pty-2.txt 2>&1
           diff -u pty-1.txt pty-2.txt
@@ -138,4 +175,71 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
       - run: scripts/bans.sh
+      - name: Reject mixed source and performance-baseline commits
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          if test -n "$BASE_SHA" && ! printf '%s' "$BASE_SHA" | grep -Eq '^0+$'; then
+            commits=$(git rev-list "$BASE_SHA..$HEAD_SHA")
+          else
+            commits=$HEAD_SHA
+          fi
+          for commit in $commits; do
+            scripts/perf-baseline-guard.sh --commit "$commit"
+          done
+
+  fuzz-nightly:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run randomized text campaigns for 30 minutes
+        run: make fuzz-long CC=clang SAN=1 BUILD=build-nightly-san
+      - name: Attach minimized open findings
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: textbuf-crash-traces
+          path: tests/fuzz/crashes/*.trace
+          if-no-files-found: ignore
+      - name: Run P6 and P8 at nightly depth
+        run: |
+          make CC=clang SAN=1 BUILD=build-nightly-san \
+            build-nightly-san/unit_tests
+          SAG_PROP_N=20000 build-nightly-san/unit_tests \
+            --filter textbuf_prop_p6_undo_redo_identity
+          SAG_PROP_N=20000 build-nightly-san/unit_tests \
+            --filter textbuf_prop_p8_branch_preservation
+      - name: Run the date-seeded 2M legacy campaigns
+        run: |
+          make CC=gcc BUILD=build-nightly \
+            build-nightly/fuzz_utf8 build-nightly/fuzz_grapheme \
+            build-nightly/fuzz_input build-nightly/fuzz_grid \
+            build-nightly/fuzz_vt build-nightly/fuzz_undo
+          seed=$(date -u +%Y%m%d)
+          for target in utf8 grapheme input grid vt undo; do
+            build-nightly/fuzz_$target --iters=2000000 --seed="$seed"
+          done
+
+  perf-nightly:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Verify every full-size fixture and run 1 GiB budgets
+        run: |
+          make fixtures-verify CC=gcc
+          make perf-huge CC=gcc PERF_ADVISORY=1
+
+  torture-nightly:
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Run the extended external-SIGKILL campaign
+        run: make torture CC=gcc TORTURE_SIGKILL_ITERS=5000

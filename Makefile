@@ -173,6 +173,7 @@ endif
         fixtures-verify-quick \
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
         perf-undo perf-textbuf perf-huge perf-update perf-baseline-guard \
+        perf-gate-selftest \
         torture torture-build
 
 all: $(BUILD)/sagitta $(BUILD)/sag
@@ -369,6 +370,17 @@ perf-update: $(BUILD)/perf_textbuf fixtures
 
 perf-baseline-guard:
 	scripts/perf-baseline-guard.sh
+
+perf-gate-selftest: $(BUILD)/perf_textbuf fixtures-quick
+	@if SAG_PERF_INJECT_OPEN_DELAY=1 SAG_PERF_ADVISORY=0 \
+		$(BUILD)/perf_textbuf --fixtures $(FIXTURE_DIR) \
+		--baseline $(PERF_BASELINE) \
+		--runner-id perf-x86_64-linux-gnu; then \
+		echo 'error: performance gate accepted injected delay' >&2; \
+		exit 1; \
+	else \
+		echo 'perf-gate-selftest: injected delay rejected'; \
+	fi
 
 torture-build: $(TORTURE_CHILD) $(TORTURE_DRIVER) $(FAULTSHIM)
 
