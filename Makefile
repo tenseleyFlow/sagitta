@@ -107,6 +107,7 @@ $(BUILD)/gen-unicode-tables: scripts/gen-unicode-tables.c | dirs
 
 test: $(BUILD)/unit_tests $(BUILD)/sagitta
 	$(UNIT_RUN)
+	scripts/check-sigsafe.sh
 	scripts/smoke.sh $(BUILD)/sagitta
 
 fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme

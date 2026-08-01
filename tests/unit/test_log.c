@@ -2,8 +2,14 @@
 
 #include "harness.h"
 
+#include "util/buf.h"
+
+#include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 static char *copy_env(const char *name)
 {
@@ -80,4 +86,65 @@ void test_log_levels(void)
     SAG_ASSERT_EQ_U64(count, 1U);
     SAG_ASSERT(has_error);
     SAG_ASSERT(!has_info);
+}
+
+static void bug_prehook_marker(void)
+{
+    static const char marker[] = "prehook\n";
+    ssize_t written = write(STDERR_FILENO, marker, sizeof(marker) - 1U);
+
+    (void)written;
+}
+
+void test_log_bug_prehook(void)
+{
+    static const char marker[] = "prehook\n";
+    static const char report[] = "sagitta: internal error at";
+    Bytebuf output;
+    int pipefd[2];
+    char chunk[512];
+    pid_t child;
+    pid_t waited;
+    ssize_t count;
+    int status;
+
+    bytebuf_init(&output);
+    SAG_ASSERT_EQ_I64(fflush(NULL), 0);
+    SAG_ASSERT_EQ_I64(pipe(pipefd), 0);
+    child = fork();
+    SAG_ASSERT(child >= 0);
+    if (child == 0) {
+        (void)close(pipefd[0]);
+        if (dup2(pipefd[1], STDERR_FILENO) < 0)
+            _exit(126);
+        (void)close(pipefd[1]);
+        (void)setenv("SAG_LOG", "/dev/null", 1);
+        sag_bug_set_prehook(bug_prehook_marker);
+        sag_bug("prehook-test", 7, "ordered");
+    }
+    (void)close(pipefd[1]);
+    for (;;) {
+        count = read(pipefd[0], chunk, sizeof(chunk));
+        if (count > 0) {
+            bytebuf_append(&output, chunk, (size_t)count);
+            continue;
+        }
+        if (count < 0 && errno == EINTR)
+            continue;
+        break;
+    }
+    (void)close(pipefd[0]);
+    do {
+        waited = waitpid(child, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+
+    SAG_ASSERT_EQ_I64(count, 0);
+    SAG_ASSERT_EQ_I64(waited, child);
+    SAG_ASSERT(WIFEXITED(status));
+    SAG_ASSERT_EQ_I64(WEXITSTATUS(status), SAG_EXIT_BUG);
+    SAG_ASSERT(output.len >= sizeof(marker) - 1U + sizeof(report) - 1U);
+    SAG_ASSERT_EQ_MEM(output.data, marker, sizeof(marker) - 1U);
+    SAG_ASSERT(memcmp(output.data + sizeof(marker) - 1U,
+                      report, sizeof(report) - 1U) == 0);
+    bytebuf_free(&output);
 }

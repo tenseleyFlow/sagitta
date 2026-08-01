@@ -99,10 +99,12 @@ expect_rc 1 "file arg"
 expect_stderr_contains "Sprint 14" "file arg"
 echo "smoke: file arg ok"
 
-run_capture "$bin"
-expect_rc 1 "no args"
-expect_stderr_contains "Sprint 14" "no args"
-echo "smoke: no args ok"
+rc=0
+"$bin" </dev/null >"$out" 2>"$err" || rc=$?
+expect_rc 1 "non-tty stdin"
+expect_stderr_contains \
+    "stdin is not a terminal (--batch lands in Sprint 37)" "non-tty stdin"
+echo "smoke: non-tty stdin ok"
 
 run_capture "$bin" --batch x.fl
 expect_rc 1 batch

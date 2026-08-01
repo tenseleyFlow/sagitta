@@ -15,6 +15,7 @@ void test_bytebuf(void);
 void test_bytebuf_binary(void);
 void test_log_capture(void);
 void test_log_levels(void);
+void test_log_bug_prehook(void);
 void test_mod_require_message(void);
 void test_args_parse_version(void);
 void test_args_parse_help(void);
@@ -58,5 +59,20 @@ void test_width_codepoints(void);
 void test_width_golden(void);
 void test_width_strings(void);
 void test_width_clip(void);
+void test_tty_raw_input_flags(void);
+void test_tty_raw_output_flags(void);
+void test_tty_raw_local_flags(void);
+void test_tty_raw_control_flags(void);
+void test_tty_restore_blob(void);
+void test_tty_probe_modern(void);
+void test_tty_probe_kitty_only(void);
+void test_tty_probe_sync_only(void);
+void test_tty_probe_dumb_deadline(void);
+void test_tty_probe_decrpm_states(void);
+void test_tty_probe_chunking(void);
+void test_tty_probe_pending_interleaved(void);
+void test_tty_probe_ambiguous_prefix(void);
+void test_tty_probe_config(void);
+void test_tty_truecolor(void);
 
 #endif
