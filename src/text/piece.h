@@ -54,6 +54,14 @@ typedef struct PieceNode {
 _Static_assert(sizeof(PieceNode) <= 96, "node bloat");
 
 typedef struct {
+    PieceNode *root;
+    TextBacking *backing;
+    u64 len;
+    u64 gen;
+    bool active;
+} TextSnap;
+
+typedef struct {
     u64 off;
     u64 gcol;
 } SagGraphemeCheckpoint;
@@ -74,8 +82,16 @@ typedef struct {
     u64 inserted_len;
     u64 old_gen;
     u64 new_gen;
-    bool valid;
+    TextSnap after;
 } SagGraphemePendingEdit;
+
+enum { SAG_GRAPHEME_PENDING_MAX = 2 };
+
+typedef struct {
+    SagGraphemePendingEdit edits[SAG_GRAPHEME_PENDING_MAX];
+    u8 len;
+    bool rebuild_required;
+} SagGraphemePendingJournal;
 
 typedef struct {
     SagGraphemeCheckpoint *data;
@@ -85,8 +101,8 @@ typedef struct {
     size_t motion_len;
     size_t motion_cap;
     u64 gen;
-    /* One edit can be repaired lazily; a second edit forces a rebuild. */
-    SagGraphemePendingEdit pending;
+    /* Adjacent after-state snapshots make a short edit burst replayable. */
+    SagGraphemePendingJournal pending;
 } SagGraphemeIndex;
 
 typedef struct TextBuf {
@@ -116,14 +132,6 @@ typedef struct {
     u64 next_line;
     u64 gen;
 } LineIter;
-
-typedef struct {
-    PieceNode *root;
-    TextBacking *backing;
-    u64 len;
-    u64 gen;
-    bool active;
-} TextSnap;
 
 /* Constructors allocate a buffer; from_bytes copies its input. */
 TextBuf *sag_textbuf_new(void);

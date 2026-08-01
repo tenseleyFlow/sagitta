@@ -432,6 +432,180 @@ fail:
     return false;
 }
 
+static bool measure_two_deferred_edits(const PerfCase *pc)
+{
+    static const i64 budget_ns = INT64_C(5000000);
+    static const u8 first = 'q';
+    static const u8 second = 'r';
+    const u64 midpoint = LONG_LINE_BYTES / 2U;
+    const u64 shifted_midpoint = midpoint + 1U;
+    const u64 clusters = LONG_LINE_BYTES / pc->pattern_len;
+    u8 *bytes = malloc(LONG_LINE_BYTES);
+    TextBuf *tb;
+    Cursor cursor;
+    i64 worst_edit = 0;
+    i64 worst_left = 0;
+    size_t fill;
+    int round;
+
+    if (bytes == NULL || midpoint % pc->pattern_len != 0U) {
+        free(bytes);
+        return false;
+    }
+    for (fill = 0U; fill < LONG_LINE_BYTES; fill += pc->pattern_len)
+        memcpy(bytes + fill, pc->pattern, pc->pattern_len);
+    tb = sag_textbuf_from_owned_bytes(bytes, LONG_LINE_BYTES);
+    if (tb == NULL)
+        return false;
+
+    for (round = 0; round < PERF_ROUNDS; round++) {
+        i64 start;
+        i64 elapsed;
+
+        start = now_ns();
+        sag_textbuf_insert(tb, BYTEOFF(0U), &first, 1U);
+        elapsed = now_ns() - start;
+        if (start < 0 || elapsed < 0)
+            goto fail;
+        if (elapsed > worst_edit)
+            worst_edit = elapsed;
+
+        start = now_ns();
+        sag_textbuf_insert(tb, BYTEOFF(shifted_midpoint), &second, 1U);
+        elapsed = now_ns() - start;
+        if (start < 0 || elapsed < 0)
+            goto fail;
+        if (elapsed > worst_edit)
+            worst_edit = elapsed;
+
+        cursor.pos = BYTEOFF(LONG_LINE_BYTES + 2U);
+        cursor.anchor = cursor.pos;
+        cursor.goal_col = (GCol){0U};
+        start = now_ns();
+        sag_cursor_left(tb, &cursor);
+        elapsed = now_ns() - start;
+        if (start < 0 || elapsed < 0 ||
+            cursor.pos.v != LONG_LINE_BYTES ||
+            cursor.goal_col.v != clusters + 1U)
+            goto fail;
+        if (elapsed > worst_left)
+            worst_left = elapsed;
+        perf_cursor_sink = cursor.pos.v + cursor.goal_col.v;
+
+        start = now_ns();
+        sag_textbuf_delete(tb,
+                           (Span){shifted_midpoint,
+                                  shifted_midpoint + 1U});
+        elapsed = now_ns() - start;
+        if (start < 0 || elapsed < 0)
+            goto fail;
+        if (elapsed > worst_edit)
+            worst_edit = elapsed;
+
+        start = now_ns();
+        sag_textbuf_delete(tb, (Span){0U, 1U});
+        elapsed = now_ns() - start;
+        if (start < 0 || elapsed < 0 ||
+            sag_textbuf_len(tb) != LONG_LINE_BYTES)
+            goto fail;
+        if (elapsed > worst_edit)
+            worst_edit = elapsed;
+
+        if (sag_grapheme_prev_boundary(tb,
+                                       BYTEOFF(LONG_LINE_BYTES)).v !=
+            LONG_LINE_BYTES - pc->pattern_len)
+            goto fail;
+    }
+
+    (void)printf("cursor-perf: case=%s two-deferred-edits rounds=%u "
+                 "edit_worst_us=%lld first_left_worst_us=%lld "
+                 "budget_us=5000%s\n",
+                 pc->name, PERF_ROUNDS,
+                 (long long)(worst_edit / INT64_C(1000)),
+                 (long long)(worst_left / INT64_C(1000)),
+                 worst_edit <= budget_ns && worst_left <= budget_ns
+                     ? ""
+                     : " OVER-BUDGET");
+    sag_textbuf_free(tb);
+    return worst_edit <= budget_ns && worst_left <= budget_ns;
+
+fail:
+    sag_textbuf_free(tb);
+    return false;
+}
+
+static bool measure_giant_cluster_midpoint_edit(void)
+{
+    static const i64 budget_ns = INT64_C(5000000);
+    static const u8 extend[] = {0xCCU, 0x81U};
+    static const u8 inserted = 'q';
+    const u64 len = LONG_LINE_BYTES + 1U;
+    const u64 midpoint = 1U + LONG_LINE_BYTES / 2U;
+    u8 *bytes = malloc((size_t)len);
+    TextBuf *tb;
+    Cursor cursor;
+    i64 worst_edit = 0;
+    i64 worst_left = 0;
+    size_t at;
+    int round;
+
+    if (bytes == NULL)
+        return false;
+    bytes[0] = 'a';
+    for (at = 1U; at < (size_t)len; at += sizeof(extend))
+        memcpy(bytes + at, extend, sizeof(extend));
+    tb = sag_textbuf_from_owned_bytes(bytes, len);
+    if (tb == NULL)
+        return false;
+
+    for (round = 0; round < PERF_ROUNDS; round++) {
+        i64 start;
+        i64 elapsed;
+
+        start = now_ns();
+        sag_textbuf_insert(tb, BYTEOFF(midpoint), &inserted, 1U);
+        elapsed = now_ns() - start;
+        if (start < 0 || elapsed < 0)
+            goto fail;
+        if (elapsed > worst_edit)
+            worst_edit = elapsed;
+
+        cursor.pos = BYTEOFF(len + 1U);
+        cursor.anchor = cursor.pos;
+        cursor.goal_col = (GCol){0U};
+        start = now_ns();
+        sag_cursor_left(tb, &cursor);
+        elapsed = now_ns() - start;
+        if (start < 0 || elapsed < 0 || cursor.pos.v != midpoint ||
+            cursor.goal_col.v != 1U)
+            goto fail;
+        if (elapsed > worst_left)
+            worst_left = elapsed;
+        perf_cursor_sink = cursor.pos.v + cursor.goal_col.v;
+
+        sag_textbuf_delete(tb, (Span){midpoint, midpoint + 1U});
+        if (sag_textbuf_len(tb) != len ||
+            sag_grapheme_prev_boundary(tb, BYTEOFF(len)).v != 0U)
+            goto fail;
+    }
+
+    (void)printf("cursor-perf: case=giant-extend-cluster "
+                 "edit_at=%llu rounds=%u edit_worst_us=%lld "
+                 "first_left_worst_us=%lld budget_us=5000%s\n",
+                 (unsigned long long)midpoint, PERF_ROUNDS,
+                 (long long)(worst_edit / INT64_C(1000)),
+                 (long long)(worst_left / INT64_C(1000)),
+                 worst_edit <= budget_ns && worst_left <= budget_ns
+                     ? ""
+                     : " OVER-BUDGET");
+    sag_textbuf_free(tb);
+    return worst_edit <= budget_ns && worst_left <= budget_ns;
+
+fail:
+    sag_textbuf_free(tb);
+    return false;
+}
+
 int main(void)
 {
     static const u8 ascii[] = {'x'};
@@ -440,6 +614,7 @@ int main(void)
         {"ascii", ascii, sizeof(ascii)},
         {"u00e9", latin2, sizeof(latin2)}
     };
+    bool passed = true;
     size_t i;
 
     for (i = 0U; i < SAG_ARRAY_LEN(cases); i++) {
@@ -451,7 +626,11 @@ int main(void)
             !measure_edit_position(&cases[i], LONG_LINE_BYTES / 2U))
             return 1;
     }
+    if (!measure_two_deferred_edits(&cases[1]))
+        passed = false;
+    if (!measure_giant_cluster_midpoint_edit())
+        passed = false;
     if (!measure_contextual_reverse())
-        return 1;
-    return 0;
+        passed = false;
+    return passed ? 0 : 1;
 }
