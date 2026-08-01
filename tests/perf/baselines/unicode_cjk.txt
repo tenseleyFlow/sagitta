@@ -1,0 +1,8 @@
+# Sagitta Sprint 02 advisory Unicode baseline
+scenario=cjk
+bytes=1048578
+clusters=349526
+cells=699052
+gate_us=advisory_until_sprint_56
+metric=best_of_7_us
+reference_best_us=15452

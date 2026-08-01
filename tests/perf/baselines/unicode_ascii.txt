@@ -1,0 +1,8 @@
+# Sagitta Sprint 02 advisory Unicode baseline
+scenario=ascii
+bytes=1048576
+clusters=1048576
+cells=1048576
+gate_us=5000
+metric=best_of_7_us
+reference_best_us=355

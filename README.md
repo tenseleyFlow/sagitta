@@ -21,6 +21,13 @@ The default build enables the `lsp`, `ai`, `fuss`, and `plugins` compile-time
 modules. Build products are written under `build/`; the executables are
 `build/sagitta` and its `build/sag` symlink.
 
+Unicode behavior is generated from the checked-in Unicode 16.0.0 data under
+`ucd/`. The generated `src/unicode/tables.c` is also committed deliberately:
+a fresh clone builds offline with only a C compiler, while `make
+unicode-tables` reproducibly regenerates the file for review and CI drift
+checks. No network access, Python, locale data, or platform `wcwidth` is part
+of the build or rendering contract.
+
 ## Sister projects
 
 - [Cgfried](https://github.com/tenseleyFlow/Cgfried)
