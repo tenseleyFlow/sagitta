@@ -67,7 +67,9 @@ typedef struct Registers {
     u8 clipboard_sync;
 
     SagRegPasteSpanVec paste_spans;
+    const TextBuf *paste_owner;
     Cursor paste_origin;
+    u32 paste_win_id;
     u32 paste_ring_index;
     u32 paste_tabw;
     bool paste_before;

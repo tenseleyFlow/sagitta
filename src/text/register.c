@@ -356,6 +356,7 @@ void sag_reg_ring_push(Registers *r, const RegVal *v)
 
     if (r == NULL || v == NULL)
         SAG_BUG("sag_reg_ring_push: NULL argument");
+    r->paste_live = false;
     depth = r->ring_depth > SAG_KILL_RING_MAX ? SAG_KILL_RING_MAX :
                                                r->ring_depth;
     if (depth == 0U)
@@ -683,6 +684,8 @@ bool sag_reg_paste(Registers *r, EditCtx *ec, u8 name, bool before,
         return false;
     }
     r->paste_origin = origin;
+    r->paste_owner = ec->tb;
+    r->paste_win_id = ec->win_id;
     r->paste_ring_index = find_ring_value(r, v);
     r->paste_tabw = tabw;
     r->paste_before = before;
@@ -698,7 +701,8 @@ bool sag_reg_ring_cycle(Registers *r, EditCtx *ec, i32 delta)
     bool changed;
 
     if (r == NULL || ec == NULL || !r->paste_live || r->ring_len == 0U ||
-        ec->undo == NULL || ec->cset == NULL)
+        ec->undo == NULL || ec->cset == NULL || r->paste_owner != ec->tb ||
+        r->paste_win_id != ec->win_id)
         return false;
     if (!sag_undo_reopen(ec, SAG_TXN_PASTE)) {
         r->paste_live = false;
