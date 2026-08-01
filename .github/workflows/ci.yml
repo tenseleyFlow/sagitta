@@ -34,6 +34,19 @@ jobs:
       - run: make CC=clang
       - run: make test CC=clang
 
+  pty:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: First-paint PTY suite with GCC
+        run: make test-pty CC=gcc
+      - name: First-paint PTY suite with Clang
+        run: |
+          make clean
+          make test-pty CC=clang
+      - name: Prove inherited colour settings cannot affect goldens
+        run: COLORTERM=truecolor make test-pty CC=clang
+
   sanitize:
     runs-on: ubuntu-latest
     steps:
@@ -92,6 +105,11 @@ jobs:
           make test > r1.txt 2>&1
           make test > r2.txt 2>&1
           diff r1.txt r2.txt
+      - name: Compare PTY runner output
+        run: |
+          make test-pty > pty-1.txt 2>&1
+          make test-pty > pty-2.txt 2>&1
+          diff -u pty-1.txt pty-2.txt
       - name: Compare clean rebuilds
         run: |
           make clean
