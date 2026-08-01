@@ -832,6 +832,8 @@ void sag_textbuf_insert_span(TextBuf *tb, ByteOff at, u8 src, Span span)
     u64 inserted_len;
     u64 old_gen;
     Span old_affected;
+    PieceNode *before;
+    PieceNode *after;
     PieceNode *middle;
 
     if (tb == NULL)
@@ -857,7 +859,8 @@ void sag_textbuf_insert_span(TextBuf *tb, ByteOff at, u8 src, Span span)
     old_affected = sag_textbuf_line_span(
         tb, sag_textbuf_line_of(tb, at));
     middle = node_new(piece_make(tb->backing, src, span));
-    tb->root = node_insert(tb, tb->root, at.v, middle);
+    node_split(tb, tb->root, at.v, &before, &after);
+    tb->root = node_concat(node_concat(before, middle), after);
     tb->gen++;
     sag_coords_index_note_edit(tb, (Span){at.v, at.v}, inserted_len,
                                old_affected, old_gen);

@@ -182,6 +182,21 @@ void test_piece_insert_every_seam(void)
     assert_insert_span_reuses_store(SAG_STORE_ADD);
 }
 
+void test_piece_insert_span_recoalesces_boundaries(void)
+{
+    TextBuf *tb = sag_textbuf_from_bytes((const u8 *)"abcdef", 6U);
+
+    sag_textbuf_delete(tb, (Span){2U, 4U});
+    sag_textbuf_check(tb);
+    SAG_ASSERT_EQ_U64(sag_textbuf_piece_count(tb), 2U);
+    sag_textbuf_insert_span(tb, BYTEOFF(2U), SAG_STORE_ORIG,
+                            (Span){2U, 4U});
+    sag_textbuf_check(tb);
+    SAG_ASSERT_EQ_U64(sag_textbuf_piece_count(tb), 1U);
+    assert_content(tb, "abcdef", 6U);
+    sag_textbuf_free(tb);
+}
+
 void test_piece_insert_accepts_exposed_chunk_alias(void)
 {
     TextBuf *tb = sag_textbuf_new();
