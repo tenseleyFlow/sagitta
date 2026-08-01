@@ -132,8 +132,13 @@ static int save_case(const char *path, const char *post_path)
         ready_fd = (int)strtol(ready_env, NULL, 10);
     if (ready_fd >= 0) {
         static const char ready = 'R';
-        (void)write(ready_fd, &ready, 1U);
-        (void)close(ready_fd);
+        ssize_t written;
+
+        do {
+            written = write(ready_fd, &ready, 1U);
+        } while (written < 0 && errno == EINTR);
+        if (close(ready_fd) != 0 || written != 1)
+            goto io_fail_loaded;
     }
     if (setenv("SAG_FAULT_ENABLE", "1", 1) != 0)
         goto io_fail_loaded;
