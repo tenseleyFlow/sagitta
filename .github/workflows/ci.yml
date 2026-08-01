@@ -1,0 +1,68 @@
+name: CI
+
+on: [push, pull_request]
+
+permissions:
+  contents: read
+
+jobs:
+  gcc:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: make CC=gcc
+      - run: make test CC=gcc
+
+  clang:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: make CC=clang
+      - run: make test CC=clang
+
+  sanitize:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: make test CC=clang SAN=1 BUILD=build-san
+
+  valgrind:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Valgrind
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y valgrind
+      - run: make test VALGRIND=1
+
+  modules:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: SMOKE_MODULES=none make test 'MODULES='
+
+  determinism:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Compare test output
+        run: |
+          make test > /dev/null 2>&1
+          make test > r1.txt 2>&1
+          make test > r2.txt 2>&1
+          diff r1.txt r2.txt
+      - name: Compare clean rebuilds
+        run: |
+          make clean
+          make
+          sha256sum build/sagitta > s1
+          make clean
+          make
+          sha256sum -c s1
+
+  bans:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - run: scripts/bans.sh
