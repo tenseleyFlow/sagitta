@@ -277,21 +277,40 @@ void test_tty_probe_chunking(void)
 
 void test_tty_probe_pending_interleaved(void)
 {
-    static const u8 stream[] =
+    static const u8 modern[] =
         "ihello\x1b[?23u\x1b[A!\x1b[?2026;3$y?\x1b[?1;2c\x1b";
+    static const u8 kitty[] =
+        "ihello\x1b[?23u\x1b[A!?\x1b[?1;2c\x1b";
+    static const u8 sync[] =
+        "ihello\x1b[A!\x1b[?2026;3$y?\x1b[?1;2c\x1b";
     static const u8 expected[] = "ihello\x1b[A!?\x1b";
-    Tty t;
-    int pipefd[2];
+    static const struct {
+        ProbeFixture probe;
+        bool expire;
+    } fixtures[] = {
+        {{modern, sizeof(modern) - 1U, true, 23U, true, true}, false},
+        {{kitty, sizeof(kitty) - 1U, true, 23U, false, true}, false},
+        {{sync, sizeof(sync) - 1U, false, 0U, true, true}, false},
+        {{expected, sizeof(expected) - 1U, false, 0U, false, false}, true}
+    };
+    size_t i;
 
-    tty_fixture_init(&t, pipefd, 100);
-    (void)sag_tty_probe_feed(&t, stream, sizeof(stream) - 1U);
-    SAG_ASSERT(t.caps.kitty_kbd);
-    SAG_ASSERT_EQ_U64(t.caps.kitty_flags, 23U);
-    SAG_ASSERT(t.caps.sync_output);
-    SAG_ASSERT(t.caps.da1_seen);
-    SAG_ASSERT_EQ_U64(t.pending.len, sizeof(expected) - 1U);
-    SAG_ASSERT_EQ_MEM(t.pending.data, expected, sizeof(expected) - 1U);
-    tty_fixture_free(&t, pipefd);
+    for (i = 0U; i < SAG_ARRAY_LEN(fixtures); i++) {
+        Tty t;
+        int pipefd[2];
+
+        tty_fixture_init(&t, pipefd, 100);
+        (void)sag_tty_probe_feed(&t, fixtures[i].probe.stream,
+                                 fixtures[i].probe.len);
+        if (fixtures[i].expire) {
+            SAG_ASSERT(!sag_tty_probe_done(&t));
+            sag_tty_probe_tick(&t, 150);
+        }
+        assert_caps(&t, &fixtures[i].probe);
+        SAG_ASSERT_EQ_U64(t.pending.len, sizeof(expected) - 1U);
+        SAG_ASSERT_EQ_MEM(t.pending.data, expected, sizeof(expected) - 1U);
+        tty_fixture_free(&t, pipefd);
+    }
 }
 
 void test_tty_probe_ambiguous_prefix(void)
