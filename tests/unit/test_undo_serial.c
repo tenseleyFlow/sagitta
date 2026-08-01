@@ -1,0 +1,406 @@
+#define _POSIX_C_SOURCE 200809L
+
+#include "harness.h"
+
+#include <errno.h>
+#include <fcntl.h>
+#include <unistd.h>
+
+#include "text/edit.h"
+
+typedef struct {
+    TextBuf *tb;
+    CursorSet cursors;
+    UndoTree *undo;
+    EditCtx edit;
+    u64 mono;
+    i64 wall;
+} SerialFixture;
+
+static u64 serial_mono(void *ctx)
+{
+    return ((SerialFixture *)ctx)->mono;
+}
+
+static i64 serial_wall(void *ctx)
+{
+    return ((SerialFixture *)ctx)->wall;
+}
+
+static void serial_fixture_init(SerialFixture *f, const u8 *bytes, u64 len)
+{
+    Cursor cursor;
+
+    cursor.pos = BYTEOFF(0U);
+    cursor.goal_col = (GCol){0U};
+    cursor.anchor = BYTEOFF(0U);
+    f->tb = sag_textbuf_from_bytes(bytes, len);
+    sag_cset_init(&f->cursors, cursor);
+    f->undo = sag_undo_new(f->tb);
+    f->mono = 1000U;
+    f->wall = 100;
+    sag_undo_set_clock(f->undo, serial_mono, serial_wall, f);
+    f->edit = (EditCtx){f->tb, NULL, &f->cursors, 0U, NULL, f->undo, NULL};
+}
+
+static void serial_fixture_free(SerialFixture *f)
+{
+    sag_undo_free(f->undo);
+    sag_cset_free(&f->cursors);
+    sag_textbuf_free(f->tb);
+}
+
+static u32 serial_append(SerialFixture *f, const u8 *bytes, u64 len)
+{
+    f->mono += SAG_UNDO_BURST_MS;
+    f->wall++;
+    sag_undo_begin(&f->edit, SAG_TXN_PASTE);
+    sag_edit_insert(&f->edit, BYTEOFF(sag_textbuf_len(f->tb)), bytes, len);
+    sag_undo_end(&f->edit);
+    return sag_undo_current(f->undo);
+}
+
+static void serial_path(char path[64])
+{
+    int fd;
+
+    (void)strcpy(path, "/tmp/sagitta-sagu-XXXXXX");
+    fd = mkstemp(path);
+    SAG_ASSERT(fd >= 0);
+    SAG_ASSERT_EQ_I64(close(fd), 0);
+    SAG_ASSERT_EQ_I64(unlink(path), 0);
+}
+
+static void serial_read_file(const char *path, Bytebuf *out)
+{
+    FILE *file = fopen(path, "rb");
+    u8 block[8192];
+    size_t got;
+
+    SAG_ASSERT_NOT_NULL(file);
+    bytebuf_init(out);
+    while ((got = fread(block, 1U, sizeof(block), file)) != 0U)
+        bytebuf_append(out, block, got);
+    SAG_ASSERT(feof(file));
+    SAG_ASSERT_EQ_I64(fclose(file), 0);
+}
+
+static void serial_write_file(const char *path, const u8 *bytes, size_t len)
+{
+    FILE *file = fopen(path, "wb");
+
+    SAG_ASSERT_NOT_NULL(file);
+    SAG_ASSERT_EQ_U64(fwrite(bytes, 1U, len, file), len);
+    SAG_ASSERT_EQ_I64(fclose(file), 0);
+}
+
+static void serial_flatten(const TextBuf *tb, Bytebuf *out)
+{
+    TextIter it;
+
+    bytebuf_init(out);
+    if (sag_textbuf_len(tb) == 0U)
+        return;
+    SAG_ASSERT(sag_textiter_begin(&it, tb, BYTEOFF(0U)));
+    for (;;) {
+        const u8 *bytes;
+        u64 len;
+
+        SAG_ASSERT(sag_textiter_chunk(&it, tb, &bytes, &len));
+        bytebuf_append(out, bytes, (size_t)len);
+        if (!sag_textiter_advance(&it, tb))
+            break;
+    }
+    SAG_ASSERT_EQ_U64(out->len, sag_textbuf_len(tb));
+}
+
+static void serial_dump(const UndoTree *ut, Bytebuf *out)
+{
+    FILE *file = tmpfile();
+    u8 block[4096];
+    size_t got;
+
+    SAG_ASSERT_NOT_NULL(file);
+    sag_undo_dump(ut, file);
+    SAG_ASSERT_EQ_I64(fflush(file), 0);
+    SAG_ASSERT_EQ_I64(fseek(file, 0L, SEEK_SET), 0);
+    bytebuf_init(out);
+    while ((got = fread(block, 1U, sizeof(block), file)) != 0U)
+        bytebuf_append(out, block, got);
+    SAG_ASSERT(feof(file));
+    SAG_ASSERT_EQ_I64(fclose(file), 0);
+}
+
+static u32 serial_u32(const u8 *bytes)
+{
+    return (u32)bytes[0] | (u32)bytes[1] << 8U | (u32)bytes[2] << 16U |
+           (u32)bytes[3] << 24U;
+}
+
+static u64 serial_u64(const u8 *bytes)
+{
+    return (u64)serial_u32(bytes) | (u64)serial_u32(bytes + 4U) << 32U;
+}
+
+static size_t serial_crc_offsets(const Bytebuf *file, size_t *out,
+                                 size_t cap)
+{
+    size_t at = 64U;
+    size_t count = 0U;
+    u32 node_count;
+
+    SAG_ASSERT(file->len >= 72U);
+    node_count = serial_u32(file->data + 28U);
+    while (count < node_count) {
+        u32 n_ops;
+        u32 n_before;
+        u32 n_after;
+        u32 i;
+
+        SAG_ASSERT(at + 36U <= file->len);
+        n_ops = serial_u32(file->data + at + 32U);
+        at += 36U;
+        for (i = 0U; i < n_ops; i++) {
+            u64 payload_len;
+
+            SAG_ASSERT(at + 28U <= file->len);
+            payload_len = serial_u64(file->data + at + 20U);
+            SAG_ASSERT(payload_len <= SIZE_MAX - at - 28U);
+            at += 28U + (size_t)payload_len;
+            SAG_ASSERT(at + 4U <= file->len);
+            {
+                u32 n_rep = serial_u32(file->data + at);
+
+                at += 4U + (size_t)n_rep * 16U;
+            }
+        }
+        SAG_ASSERT(at + 4U <= file->len);
+        n_before = serial_u32(file->data + at);
+        at += 4U + (size_t)n_before * 24U;
+        SAG_ASSERT(at + 4U <= file->len);
+        n_after = serial_u32(file->data + at);
+        at += 4U + (size_t)n_after * 24U;
+        SAG_ASSERT(at + 4U <= file->len);
+        if (count < cap)
+            out[count] = at;
+        at += 4U;
+        count++;
+    }
+    SAG_ASSERT(at + 8U <= file->len);
+    return count;
+}
+
+static SagUndoReadResult serial_try_read(const char *path, const u8 *content,
+                                         size_t len)
+{
+    SerialFixture f;
+    SagUndoReadResult result;
+
+    serial_fixture_init(&f, content, len);
+    result = sag_undo_read(&f.edit, path);
+    sag_textbuf_check(f.tb);
+    serial_fixture_free(&f);
+    return result;
+}
+
+static void serial_build_500(SerialFixture *f)
+{
+    u8 *large = sag_xmalloc(1024U * 1024U);
+    u32 i;
+
+    for (i = 0U; i < 1024U * 1024U; i++)
+        large[i] = (u8)(i * 29U + (i % 251U));
+    large[0] = 0U;
+    large[1] = 0xffU;
+    large[2] = 0xc0U;
+    (void)serial_append(f, large, 1024U * 1024U);
+    free(large);
+    for (i = 1U; i < 500U; i++) {
+        u8 byte = (u8)(i * 37U);
+        (void)serial_append(f, &byte, 1U);
+    }
+    SAG_ASSERT_EQ_U64(f->undo->nodes.len, 501U);
+}
+
+void test_undo_serial_roundtrips_500_binary_nodes(void)
+{
+    SerialFixture source;
+    SerialFixture loaded;
+    Bytebuf content;
+    Bytebuf before;
+    Bytebuf after;
+    char path[64];
+
+    serial_fixture_init(&source, NULL, 0U);
+    serial_build_500(&source);
+    serial_flatten(source.tb, &content);
+    serial_dump(source.undo, &before);
+    serial_path(path);
+    SAG_ASSERT_EQ_U64(sag_undo_write(&source.edit, path), SAG_UNDO_WRITE_OK);
+    serial_fixture_init(&loaded, content.data, content.len);
+    SAG_ASSERT_EQ_U64(sag_undo_read(&loaded.edit, path),
+                      SAG_UNDO_READ_CURRENT);
+    serial_dump(loaded.undo, &after);
+    SAG_ASSERT_EQ_U64(after.len, before.len);
+    SAG_ASSERT_EQ_MEM(after.data, before.data, before.len);
+    SAG_ASSERT_EQ_U64(loaded.undo->nodes.len, 501U);
+    SAG_ASSERT_EQ_U64(loaded.undo->cur, source.undo->cur);
+    bytebuf_free(&after);
+    bytebuf_free(&before);
+    bytebuf_free(&content);
+    SAG_ASSERT_EQ_I64(unlink(path), 0);
+    serial_fixture_free(&loaded);
+    serial_fixture_free(&source);
+}
+
+void test_undo_serial_rejects_each_corrupt_node_crc(void)
+{
+    SerialFixture source;
+    Bytebuf content;
+    Bytebuf file;
+    size_t crc_at[501];
+    size_t count;
+    size_t i;
+    char path[64];
+
+    serial_fixture_init(&source, NULL, 0U);
+    serial_build_500(&source);
+    serial_flatten(source.tb, &content);
+    serial_path(path);
+    SAG_ASSERT_EQ_U64(sag_undo_write(&source.edit, path), SAG_UNDO_WRITE_OK);
+    serial_read_file(path, &file);
+    count = serial_crc_offsets(&file, crc_at, SAG_ARRAY_LEN(crc_at));
+    SAG_ASSERT_EQ_U64(count, 501U);
+    for (i = 0U; i < count; i++) {
+        u8 saved = file.data[crc_at[i]];
+
+        file.data[crc_at[i]] ^= 0x80U;
+        serial_write_file(path, file.data, file.len);
+        SAG_ASSERT_EQ_U64(serial_try_read(path, content.data, content.len),
+                          SAG_UNDO_READ_DROPPED);
+        file.data[crc_at[i]] = saved;
+    }
+    bytebuf_free(&file);
+    bytebuf_free(&content);
+    SAG_ASSERT_EQ_I64(unlink(path), 0);
+    serial_fixture_free(&source);
+}
+
+void test_undo_serial_rejects_every_64_byte_truncation(void)
+{
+    SerialFixture source;
+    Bytebuf content;
+    Bytebuf file;
+    size_t len;
+    char path[64];
+
+    serial_fixture_init(&source, NULL, 0U);
+    serial_build_500(&source);
+    serial_flatten(source.tb, &content);
+    serial_path(path);
+    SAG_ASSERT_EQ_U64(sag_undo_write(&source.edit, path), SAG_UNDO_WRITE_OK);
+    serial_read_file(path, &file);
+    for (len = 0U; len < file.len; len += 64U) {
+        SagUndoReadResult result;
+
+        serial_write_file(path, file.data, len);
+        result = serial_try_read(path, content.data, content.len);
+        SAG_ASSERT(result == SAG_UNDO_READ_DROPPED ||
+                   result == SAG_UNDO_READ_IO);
+    }
+    serial_write_file(path, file.data, file.len);
+    SAG_ASSERT_EQ_U64(serial_try_read(path, content.data, content.len),
+                      SAG_UNDO_READ_CURRENT);
+    bytebuf_free(&file);
+    bytebuf_free(&content);
+    SAG_ASSERT_EQ_I64(unlink(path), 0);
+    serial_fixture_free(&source);
+}
+
+void test_undo_serial_rejects_unknown_version(void)
+{
+    SerialFixture source;
+    Bytebuf content;
+    Bytebuf file;
+    char path[64];
+
+    serial_fixture_init(&source, NULL, 0U);
+    (void)serial_append(&source, (const u8 *)"version", 7U);
+    serial_flatten(source.tb, &content);
+    serial_path(path);
+    SAG_ASSERT_EQ_U64(sag_undo_write(&source.edit, path), SAG_UNDO_WRITE_OK);
+    serial_read_file(path, &file);
+    SAG_ASSERT_EQ_MEM(file.data, "SAGU", 4U);
+    file.data[4] = 2U;
+    file.data[5] = 0U;
+    file.data[6] = 0U;
+    file.data[7] = 0U;
+    serial_write_file(path, file.data, file.len);
+    SAG_ASSERT_EQ_U64(serial_try_read(path, content.data, content.len),
+                      SAG_UNDO_READ_DROPPED);
+    bytebuf_free(&file);
+    bytebuf_free(&content);
+    SAG_ASSERT_EQ_I64(unlink(path), 0);
+    serial_fixture_free(&source);
+}
+
+void test_undo_serial_validates_current_anchor_and_stale_content(void)
+{
+    SerialFixture source;
+    Bytebuf current;
+    char path[64];
+
+    serial_fixture_init(&source, NULL, 0U);
+    (void)serial_append(&source, (const u8 *)"saved", 5U);
+    sag_undo_mark_saved(source.undo);
+    (void)serial_append(&source, (const u8 *)"-current", 8U);
+    serial_flatten(source.tb, &current);
+    serial_path(path);
+    SAG_ASSERT_EQ_U64(sag_undo_write(&source.edit, path), SAG_UNDO_WRITE_OK);
+    SAG_ASSERT_EQ_U64(serial_try_read(path, current.data, current.len),
+                      SAG_UNDO_READ_CURRENT);
+    SAG_ASSERT_EQ_U64(serial_try_read(path, (const u8 *)"saved", 5U),
+                      SAG_UNDO_READ_ANCHOR);
+    SAG_ASSERT_EQ_U64(serial_try_read(path, (const u8 *)"stale", 5U),
+                      SAG_UNDO_READ_DROPPED);
+    SAG_ASSERT_EQ_U64(serial_try_read(path, (const u8 *)"saved!", 6U),
+                      SAG_UNDO_READ_DROPPED);
+    bytebuf_free(&current);
+    SAG_ASSERT_EQ_I64(unlink(path), 0);
+    serial_fixture_free(&source);
+}
+
+void test_undo_serial_persist_budget_does_not_mutate_memory_tree(void)
+{
+    SerialFixture source;
+    Bytebuf content;
+    u32 cur;
+    size_t nodes;
+    u64 gen;
+    char path[64];
+    u32 i;
+
+    serial_fixture_init(&source, NULL, 0U);
+    for (i = 0U; i < 80U; i++) {
+        u8 payload[256];
+
+        (void)memset(payload, (int)i, sizeof(payload));
+        (void)serial_append(&source, payload, sizeof(payload));
+    }
+    cur = source.undo->cur;
+    nodes = source.undo->nodes.len;
+    gen = source.undo->gen;
+    sag_undo_set_limits(source.undo, SAG_UNDO_BYTES_MAX, SAG_UNDO_MIN_NODES,
+                        4096U);
+    serial_path(path);
+    SAG_ASSERT_EQ_U64(sag_undo_write(&source.edit, path), SAG_UNDO_WRITE_OK);
+    SAG_ASSERT_EQ_U64(source.undo->cur, cur);
+    SAG_ASSERT_EQ_U64(source.undo->nodes.len, nodes);
+    SAG_ASSERT_EQ_U64(source.undo->gen, gen);
+    serial_flatten(source.tb, &content);
+    SAG_ASSERT(serial_try_read(path, content.data, content.len) !=
+               SAG_UNDO_READ_IO);
+    bytebuf_free(&content);
+    SAG_ASSERT_EQ_I64(unlink(path), 0);
+    serial_fixture_free(&source);
+}
