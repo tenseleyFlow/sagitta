@@ -192,12 +192,14 @@ static bool run_one_test(const SagTest *test)
         sag_test_teardown();
         failure_target = NULL;
         (void)printf("PASS %s\n", test->name);
+        (void)fflush(stdout);
         return true;
     }
     sag_test_teardown();
     failure_target = NULL;
     (void)printf("FAIL %s at %s:%d: %s\n", test->name,
                  failure_file, failure_line, failure_detail);
+    (void)fflush(stdout);
     if (getenv("SAG_TEST_SELFCHECK") != NULL) {
         sag_log(SAG_LOG_INFO, "harness teardown restored default sink");
         if (sag_test_log_count() != 0U)
@@ -270,5 +272,6 @@ int sag_test_run(int argc, char **argv)
     (void)printf("unit: %zu tests, %zu assertions, %zu failure%s\n",
                  selected, assertion_count, failures,
                  failures == 1U ? "" : "s");
+    (void)fflush(stdout);
     return failures == 0U ? 0 : 1;
 }
