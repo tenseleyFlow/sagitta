@@ -1,4 +1,11 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "harness.h"
+
+#include <errno.h>
+#include <stdio.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include "text/register.h"
 
@@ -183,4 +190,52 @@ void test_register_line_capture_synthesizes_only_missing_eol(void)
     sag_regval_free(&line);
     sag_filemeta_dispose(&meta);
     sag_textbuf_free(tb);
+}
+
+void test_register_block_producer_hard_errors_with_sprint17(void)
+{
+    int pipefd[2];
+    pid_t child;
+    pid_t waited;
+    int status;
+    Bytebuf output;
+
+    bytebuf_init(&output);
+    SAG_ASSERT_EQ_I64(pipe(pipefd), 0);
+    (void)fflush(NULL);
+    child = fork();
+    SAG_ASSERT(child >= 0);
+    if (child == 0) {
+        Registers r;
+        RegVal block;
+        (void)close(pipefd[0]);
+        (void)dup2(pipefd[1], STDERR_FILENO);
+        (void)close(pipefd[1]);
+        sag_reg_init(&r);
+        reg_test_value(&block, SAG_REG_BLOCKWISE, (const u8 *)"x", 1U);
+        sag_reg_set(&r, 'a', &block);
+        _exit(99);
+    }
+    (void)close(pipefd[1]);
+    for (;;) {
+        u8 chunk[128];
+        ssize_t count = read(pipefd[0], chunk, sizeof(chunk));
+        if (count > 0) {
+            bytebuf_append(&output, chunk, (size_t)count);
+            continue;
+        }
+        if (count < 0 && errno == EINTR)
+            continue;
+        break;
+    }
+    (void)close(pipefd[0]);
+    do {
+        waited = waitpid(child, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+    SAG_ASSERT_EQ_I64(waited, child);
+    SAG_ASSERT(WIFEXITED(status));
+    SAG_ASSERT_EQ_I64(WEXITSTATUS(status), SAG_EXIT_BUG);
+    bytebuf_append(&output, "", 1U);
+    SAG_ASSERT(strstr((const char *)output.data, "Sprint 17") != NULL);
+    bytebuf_free(&output);
 }
