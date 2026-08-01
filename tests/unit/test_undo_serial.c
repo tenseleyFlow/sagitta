@@ -409,3 +409,47 @@ void test_undo_serial_persist_budget_does_not_mutate_memory_tree(void)
     SAG_ASSERT_EQ_I64(unlink(path), 0);
     serial_fixture_free(&source);
 }
+
+void test_undo_serial_is_deterministic_for_5000_ops(void)
+{
+    SerialFixture left;
+    SerialFixture right;
+    Bytebuf left_dump;
+    Bytebuf right_dump;
+    Bytebuf left_file;
+    Bytebuf right_file;
+    char left_path[64];
+    char right_path[64];
+    u32 i;
+
+    serial_fixture_init(&left, NULL, 0U);
+    serial_fixture_init(&right, NULL, 0U);
+    for (i = 0U; i < 5000U; i++) {
+        u8 byte = (u8)(i * 131U + i / 251U);
+
+        (void)serial_append(&left, &byte, 1U);
+        (void)serial_append(&right, &byte, 1U);
+    }
+    serial_dump(left.undo, &left_dump);
+    serial_dump(right.undo, &right_dump);
+    SAG_ASSERT_EQ_U64(left_dump.len, right_dump.len);
+    SAG_ASSERT_EQ_MEM(left_dump.data, right_dump.data, left_dump.len);
+    serial_path(left_path);
+    serial_path(right_path);
+    SAG_ASSERT_EQ_U64(sag_undo_write(&left.edit, left_path),
+                      SAG_UNDO_WRITE_OK);
+    SAG_ASSERT_EQ_U64(sag_undo_write(&right.edit, right_path),
+                      SAG_UNDO_WRITE_OK);
+    serial_read_file(left_path, &left_file);
+    serial_read_file(right_path, &right_file);
+    SAG_ASSERT_EQ_U64(left_file.len, right_file.len);
+    SAG_ASSERT_EQ_MEM(left_file.data, right_file.data, left_file.len);
+    bytebuf_free(&right_file);
+    bytebuf_free(&left_file);
+    bytebuf_free(&right_dump);
+    bytebuf_free(&left_dump);
+    SAG_ASSERT_EQ_I64(unlink(right_path), 0);
+    SAG_ASSERT_EQ_I64(unlink(left_path), 0);
+    serial_fixture_free(&right);
+    serial_fixture_free(&left);
+}

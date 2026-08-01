@@ -151,6 +151,7 @@ const SagTest sag_tests[] = {
     T(undo_serial_rejects_unknown_version),
     T(undo_serial_validates_current_anchor_and_stale_content),
     T(undo_serial_persist_budget_does_not_mutate_memory_tree),
+    T(undo_serial_is_deterministic_for_5000_ops),
     T(undo_marks_repairs_each_delete_run_in_transaction),
     T(undo_marks_stale_generation_skips_repair),
     T(undo_marks_insert_records_empty_repair_run),

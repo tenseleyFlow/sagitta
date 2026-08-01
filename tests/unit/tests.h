@@ -148,6 +148,7 @@ void test_undo_serial_rejects_every_64_byte_truncation(void);
 void test_undo_serial_rejects_unknown_version(void);
 void test_undo_serial_validates_current_anchor_and_stale_content(void);
 void test_undo_serial_persist_budget_does_not_mutate_memory_tree(void);
+void test_undo_serial_is_deterministic_for_5000_ops(void);
 void test_undo_marks_repairs_each_delete_run_in_transaction(void);
 void test_undo_marks_stale_generation_skips_repair(void);
 void test_undo_marks_insert_records_empty_repair_run(void);
