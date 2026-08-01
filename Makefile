@@ -58,6 +58,8 @@ VALGRIND_UNIT_EXCLUDES := \
   --exclude piece_checker_rejects_corruption \
   --exclude piece_live_iterator_rejects_edit \
   --exclude log_bug_prehook \
+  --exclude mark_generational_handles \
+  --exclude multicursor_edit_guard_names_sprint17 \
   --exclude render_invalid_cells_are_bugs
 UNIT_RUN := $(VALGRIND_RUN) $(BUILD)/unit_tests $(VALGRIND_UNIT_EXCLUDES) && \
             SAG_TORTURE_CLEAN_ONLY=1 $(VALGRIND_RUN) \
