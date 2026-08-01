@@ -3,12 +3,14 @@
 #include "harness.h"
 
 #include <dirent.h>
+#include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "text/file.h"
@@ -116,6 +118,50 @@ static void assert_saved_bytes(const char *path, const u8 *expected,
     SAG_ASSERT_EQ_U64(actual.len, len);
     SAG_ASSERT_EQ_MEM(actual.data, expected, len);
     bytebuf_free(&actual);
+}
+
+static void save_sibling_path(char *out, size_t cap, const char *name)
+{
+    const char *program = sag_test_program_path();
+    const char *slash = strrchr(program, '/');
+    int count;
+
+    if (slash == NULL)
+        count = snprintf(out, cap, "./%s", name);
+    else if (slash == program)
+        count = snprintf(out, cap, "/%s", name);
+    else
+        count = snprintf(out, cap, "%.*s/%s", (int)(slash - program),
+                         program, name);
+    SAG_ASSERT(count > 0 && (size_t)count < cap);
+}
+
+void test_save_fault_shim_contract(void)
+{
+    char driver[PATH_MAX];
+    char child[PATH_MAX];
+    char shim[PATH_MAX];
+    pid_t pid;
+    pid_t waited;
+    int status;
+
+    save_sibling_path(driver, sizeof(driver), "kill9");
+    save_sibling_path(child, sizeof(child), "sag-torture");
+    save_sibling_path(shim, sizeof(shim), "tests/torture/faultshim.so");
+    pid = fork();
+    SAG_ASSERT(pid >= 0);
+    if (pid == 0) {
+        if (setenv("SAG_TORTURE_SIGKILL_ITERS", "0", 1) != 0)
+            _exit(126);
+        execl(driver, driver, child, shim, (char *)NULL);
+        _exit(126);
+    }
+    do {
+        waited = waitpid(pid, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+    SAG_ASSERT_EQ_I64(waited, pid);
+    SAG_ASSERT(WIFEXITED(status));
+    SAG_ASSERT_EQ_I64(WEXITSTATUS(status), 0);
 }
 
 void test_save_symlink_preserves_link_and_updates_target(void)

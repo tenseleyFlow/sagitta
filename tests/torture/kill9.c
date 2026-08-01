@@ -291,11 +291,10 @@ static bool atomic_log_order(const char *path)
     unsigned char *bytes;
     size_t len;
     char *text;
-    char *write_at;
-    char *file_sync;
-    char *rename_at;
-    char *dir_sync;
-    bool ok;
+    char *line;
+    char *save = NULL;
+    unsigned state = 0U;
+    bool ok = true;
 
     if (!read_file(path, &bytes, &len))
         return false;
@@ -306,12 +305,54 @@ static bool atomic_log_order(const char *path)
     }
     (void)memcpy(text, bytes, len);
     text[len] = '\0';
-    write_at = strstr(text, " write ");
-    file_sync = write_at != NULL ? strstr(write_at, " fsync ") : NULL;
-    rename_at = file_sync != NULL ? strstr(file_sync, " rename ") : NULL;
-    dir_sync = rename_at != NULL ? strstr(rename_at, " fsync ") : NULL;
-    ok = write_at != NULL && file_sync != NULL && rename_at != NULL &&
-         dir_sync != NULL;
+    for (line = strtok_r(text, "\n", &save); line != NULL && state < 4U;
+         line = strtok_r(NULL, "\n", &save)) {
+        unsigned long long call;
+        char name[32];
+        char action[32];
+
+        if (sscanf(line, "%llu %31s %31s", &call, name, action) != 3) {
+            ok = false;
+            break;
+        }
+        (void)call;
+        if (strcmp(action, "short") == 0)
+            continue;
+        if (strcmp(action, "pass") != 0) {
+            ok = false;
+            break;
+        }
+        if (state == 0U) {
+            if (strcmp(name, "write") != 0) {
+                ok = false;
+                break;
+            }
+            state = 1U;
+        } else if (state == 1U) {
+            if (strcmp(name, "write") == 0)
+                continue;
+            if (strcmp(name, "fsync-file") != 0) {
+                ok = false;
+                break;
+            }
+            state = 2U;
+        } else if (state == 2U) {
+            if (strcmp(name, "fchown") == 0 || strcmp(name, "close") == 0)
+                continue;
+            if (strcmp(name, "rename") != 0) {
+                ok = false;
+                break;
+            }
+            state = 3U;
+        } else {
+            if (strcmp(name, "fsync-dir") != 0) {
+                ok = false;
+                break;
+            }
+            state = 4U;
+        }
+    }
+    ok = ok && state == 4U;
     free(text);
     free(bytes);
     return ok;

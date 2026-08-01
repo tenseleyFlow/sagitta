@@ -73,6 +73,7 @@ const SagTest sag_tests[] = {
     T(save_read_only_directory_uses_in_place_path),
     T(save_existing_file_preserves_mode_owner_and_group),
     T(save_new_file_creates_requested_content),
+    T(save_fault_shim_contract),
     T(log_capture),
     T(log_levels),
     T(log_bug_prehook),

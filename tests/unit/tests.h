@@ -70,6 +70,7 @@ void test_save_hardlink_preserves_shared_inode(void);
 void test_save_read_only_directory_uses_in_place_path(void);
 void test_save_existing_file_preserves_mode_owner_and_group(void);
 void test_save_new_file_creates_requested_content(void);
+void test_save_fault_shim_contract(void);
 void test_log_capture(void);
 void test_log_levels(void);
 void test_log_bug_prehook(void);

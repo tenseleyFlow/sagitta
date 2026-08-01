@@ -16,6 +16,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 typedef ssize_t (*WriteFn)(int, const void *, size_t);
@@ -172,6 +173,16 @@ static int inject_eintr(const char *name)
     return 1;
 }
 
+static const char *sync_name(int fd, const char *file_name,
+                             const char *dir_name)
+{
+    struct stat st;
+
+    if (fstat(fd, &st) == 0 && S_ISDIR(st.st_mode))
+        return dir_name;
+    return file_name;
+}
+
 ssize_t write(int fd, const void *buf, size_t count)
 {
     before_call("write");
@@ -190,16 +201,20 @@ ssize_t pwrite(int fd, const void *buf, size_t count, off_t offset)
 
 int fsync(int fd)
 {
-    before_call("fsync");
-    if (inject_eintr("fsync"))
+    const char *name = sync_name(fd, "fsync-file", "fsync-dir");
+
+    before_call(name);
+    if (inject_eintr(name))
         return -1;
     return real_fsync_fn(fd);
 }
 
 int fdatasync(int fd)
 {
-    before_call("fdatasync");
-    if (inject_eintr("fdatasync"))
+    const char *name = sync_name(fd, "fdatasync-file", "fdatasync-dir");
+
+    before_call(name);
+    if (inject_eintr(name))
         return -1;
     return real_fdatasync_fn(fd);
 }
