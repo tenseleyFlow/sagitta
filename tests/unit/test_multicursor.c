@@ -11,6 +11,7 @@
 
 #include "edit/multicursor.h"
 #include "text/journal.h"
+#include "text/mark.h"
 #include "util/buf.h"
 
 static Cursor test_cursor(u64 pos, u64 anchor, u64 goal)
@@ -258,6 +259,124 @@ void test_multicursor_adjust_random_oracle(void)
         assert_cursor(&set.curs.data[0], pos, anchor, 17U);
     }
     sag_cset_free(&set);
+}
+
+static void integrated_move(const TextBuf *tb, CursorSet *set, u64 motion)
+{
+    size_t i;
+
+    for (i = 0U; i < set->curs.len; i++) {
+        Cursor *cursor = &set->curs.data[i];
+
+        switch (motion) {
+        case 0U: sag_cursor_left(tb, cursor); break;
+        case 1U: sag_cursor_right(tb, cursor); break;
+        case 2U: sag_cursor_up(tb, cursor); break;
+        case 3U: sag_cursor_down(tb, cursor); break;
+        case 4U: sag_cursor_line_home(tb, cursor); break;
+        default: sag_cursor_line_end(tb, cursor); break;
+        }
+    }
+    sag_cset_normalize(tb, set);
+}
+
+static void integrated_assert(const TextBuf *tb, const CursorSet *set,
+                              const MarkSet *marks, const MarkId *ids,
+                              size_t mark_count)
+{
+    size_t i;
+
+    sag_cset_check(set);
+    SAG_ASSERT(set->curs.len != 0U);
+    SAG_ASSERT((size_t)set->primary < set->curs.len);
+    for (i = 0U; i < set->curs.len; i++) {
+        SAG_ASSERT(sag_is_grapheme_boundary(tb, set->curs.data[i].pos));
+        SAG_ASSERT(sag_is_grapheme_boundary(tb,
+                                            set->curs.data[i].anchor));
+    }
+    for (i = 0U; i < mark_count; i++) {
+        ByteOff pos = sag_mark_pos(marks, ids[i]);
+
+        SAG_ASSERT(pos.v <= sag_textbuf_len(tb));
+        SAG_ASSERT(sag_is_grapheme_boundary(tb, pos));
+    }
+}
+
+void test_multicursor_integrated_edit_motion_fuzz(void)
+{
+    static const u64 seeds[] = {
+        1U, UINT64_C(0x243f6a8885a308d3),
+        UINT64_C(0x9e3779b97f4a7c15), UINT64_C(0xd1b54a32d192ed03)
+    };
+    static const u8 initial[] = "alpha\nbeta\ngamma\n";
+    enum { MARK_COUNT = 24 };
+    size_t seed_i;
+
+    for (seed_i = 0U; seed_i < SAG_ARRAY_LEN(seeds); seed_i++) {
+        TextBuf *tb = sag_textbuf_from_bytes(initial, sizeof(initial) - 1U);
+        MarkSet *marks = sag_marks_new();
+        MarkId ids[MARK_COUNT];
+        CursorSet set;
+        u64 state = seeds[seed_i];
+        size_t i;
+
+        sag_cset_init(&set, test_cursor(0U, 0U, 0U));
+        SAG_ASSERT(sag_cset_add(&set, test_cursor(6U, 6U, 0U)));
+        SAG_ASSERT(sag_cset_add(&set, test_cursor(11U, 11U, 0U)));
+        for (i = 0U; i < MARK_COUNT; i++) {
+            u64 pos = (u64)i % (sag_textbuf_len(tb) + 1U);
+
+            ids[i] = sag_mark_add(marks, BYTEOFF(pos),
+                                  (i & 1U) == 0U ? SAG_BIAS_LEFT
+                                                : SAG_BIAS_RIGHT);
+        }
+
+        for (i = 0U; i < 10000U; i++) {
+            u64 action = multicursor_random(&state) % 12U;
+
+            if (action < 6U) {
+                integrated_move(tb, &set, action);
+            } else if (action == 6U || action == 7U) {
+                static const u8 payloads[] = {'x', '\n'};
+                ByteOff at = set.curs.data[set.primary].pos;
+                const u8 *payload = &payloads[action - 6U];
+
+                sag_textbuf_insert(tb, at, payload, 1U);
+                sag_marks_adjust(marks, SAG_JOURNAL_INS, at, 1U);
+                sag_cset_adjust(&set, SAG_JOURNAL_INS, at, 1U);
+                sag_cset_normalize(tb, &set);
+            } else if (action == 8U) {
+                ByteOff at = set.curs.data[set.primary].pos;
+
+                if (at.v < sag_textbuf_len(tb)) {
+                    ByteOff end = sag_grapheme_next_boundary(tb, at);
+                    u64 len = end.v - at.v;
+
+                    sag_textbuf_delete(tb, (Span){at.v, end.v});
+                    sag_marks_adjust(marks, SAG_JOURNAL_DEL, at, len);
+                    sag_cset_adjust(&set, SAG_JOURNAL_DEL, at, len);
+                    sag_cset_normalize(tb, &set);
+                }
+            } else if (action == 9U && set.curs.len < 16U) {
+                u64 pos = multicursor_random(&state) %
+                          (sag_textbuf_len(tb) + 1U);
+                LineNo line = sag_textbuf_line_of(tb, BYTEOFF(pos));
+                GCol goal = sag_off_to_gcol(tb,
+                    sag_textbuf_line_span(tb, line), BYTEOFF(pos));
+
+                (void)sag_cset_add(&set, test_cursor(pos, pos, goal.v));
+            } else if (action == 10U && set.curs.len > 1U) {
+                sag_cset_remove_all_but_primary(&set);
+            } else {
+                integrated_move(tb, &set,
+                                multicursor_random(&state) % 6U);
+            }
+            integrated_assert(tb, &set, marks, ids, MARK_COUNT);
+        }
+        sag_cset_free(&set);
+        sag_marks_free(marks);
+        sag_textbuf_free(tb);
+    }
 }
 
 void test_multicursor_remove_and_normalize_clamp(void)
