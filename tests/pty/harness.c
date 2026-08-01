@@ -251,6 +251,16 @@ static bool read_available(PtyCtx *c, bool *activity)
     }
 }
 
+static void validate_vt(PtyCtx *c)
+{
+    const char *errors = c->vt.errors.data == NULL
+                             ? "" : (char *)c->vt.errors.data;
+
+    if (c->vt.nerrors != 0U)
+        ptc_fail(c, "VT rejected output: %.*s",
+                 (int)c->vt.errors.len, errors);
+}
+
 static void pump_quiet(PtyCtx *c, i64 quiet_ms, bool need_ready)
 {
     i64 quiet_deadline;
@@ -686,11 +696,9 @@ void ptc_snapshot(PtyCtx *c, const char *golden_name)
         ptc_fail(c, "case took more than one snapshot per execution");
         return;
     }
-    if (c->vt.nerrors != 0U) {
-        ptc_fail(c, "VT rejected output: %.*s", (int)c->vt.errors.len,
-                 c->vt.errors.data == NULL ? "" : (char *)c->vt.errors.data);
+    validate_vt(c);
+    if (c->failed)
         return;
-    }
     c->golden_name = copy_string(golden_name);
     if (c->golden_name == NULL) {
         ptc_fail(c, "allocating golden name");
@@ -922,6 +930,7 @@ void ptc_init(PtyCtx *c, const PtyCase *test, const char *state_dir,
 void ptc_cleanup(PtyCtx *c)
 {
     i64 deadline;
+    bool activity = false;
 
     if (c == NULL || !c->spawned)
         return;
@@ -940,6 +949,9 @@ void ptc_cleanup(PtyCtx *c)
         if (!c->pty.reaped)
             ptc_fail(c, "SIGKILLed child could not be reaped within 1 second");
     }
+    if (c->pty.master >= 0 && !c->eof)
+        (void)read_available(c, &activity);
+    validate_vt(c);
     if (c->pty.master >= 0) {
         (void)close(c->pty.master);
         c->pty.master = -1;
@@ -964,12 +976,10 @@ void ptc_dispose(PtyCtx *c)
 
 bool ptc_sweep_all(void)
 {
-    size_t i = 0U;
     i64 deadline = add_ms(ptc_now_ms(), PTC_KILL_BUDGET_MS);
-    bool clean = true;
 
-    while (i < nlive) {
-        Pty *p = live_children[i];
+    while (nlive != 0U) {
+        Pty *p = live_children[0];
         int status;
         pid_t result;
 
@@ -990,17 +1000,14 @@ bool ptc_sweep_all(void)
             live_remove(p);
             continue;
         }
-        if (ptc_now_ms() >= deadline) {
-            clean = false;
-            live_remove(p);
-            continue;
-        }
+        if (ptc_now_ms() >= deadline)
+            return false;
         {
             struct pollfd fd = {-1, 0, 0};
             (void)poll(&fd, 0U, 10);
         }
     }
-    return clean && nlive == 0U;
+    return nlive == 0U;
 }
 
 bool ptc_fd_hygiene(Bytebuf *msg)

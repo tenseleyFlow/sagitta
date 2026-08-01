@@ -127,6 +127,8 @@ void test_render_invalid_byte_style_is_reverse(void);
 void test_render_underline_undercurl_shared_reset(void);
 void test_render_invalid_cells_are_bugs(void);
 void test_pty_environment_exact(void);
+void test_pty_timeout_reaps_child(void);
+void test_pty_post_snapshot_protocol_error_fails_cleanup(void);
 void test_vt_closed_set_and_modes(void);
 void test_vt_probe_profiles(void);
 void test_vt_sgr_closed_rows(void);

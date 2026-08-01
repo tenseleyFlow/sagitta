@@ -28,7 +28,9 @@ that renderer sequence expands the pinned set in the same change.
 The timeout cleanup drill is `SAG_PTY_BUDGET_MS=1 make test-pty`. It must fail
 within the runner's bounded cleanup path, leave no `demo_paint` child alive,
 and preserve the failing case's state directory. A following ordinary
-`make test-pty` must be green.
+`make test-pty` must be green. The focused `pty_timeout_reaps_child` unit also
+runs `/bin/sleep 300` under a 50 ms budget and asserts `SIGKILL`, bounded reap,
+an empty live-child list, and a closed master descriptor.
 
 Terminal profiles are deterministic (`modern`, `nokitty`, `nosync`, `dumb`).
 The child receives only the exact pinned environment from Sprint 06; the

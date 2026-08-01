@@ -22,6 +22,7 @@ static void spawn_scene(PtyCtx *c, const char *scene)
 
 static void quit_cleanly(PtyCtx *c)
 {
+    ptc_allow_restore(c);
     ptc_keys(c, "q");
     ptc_expect_exit(c, 0);
 }
