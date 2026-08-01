@@ -126,5 +126,6 @@ void test_render_cursor_only_frames_track_position_and_visibility(void);
 void test_render_tier16_downconverts_high_index(void);
 void test_render_invalid_byte_style_is_reverse(void);
 void test_render_underline_undercurl_shared_reset(void);
+void test_render_invalid_cells_are_bugs(void);
 
 #endif

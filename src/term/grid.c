@@ -396,6 +396,7 @@ void sag_grid_fill(Grid *g, u16 row, u16 c0, u16 c1, Cell c)
         c.bg = color_normalize(bg);
         c.attrs = (u16)(attrs & ((SAG_ATTR_INVALID_BYTE << 1) - 1u));
     } else {
+        const u8 *data;
         size_t n;
 
         c.fg = color_normalize(c.fg);
@@ -403,21 +404,23 @@ void sag_grid_fill(Grid *g, u16 row, u16 c0, u16 c1, Cell c)
         c.attrs = (u16)(c.attrs & ((SAG_ATTR_INVALID_BYTE << 1) - 1u));
         c.flags &= CELL_INTERNED;
         if ((c.flags & CELL_INTERNED) != 0u) {
-            if (sag_intern_str(g->gi, c.id) == NULL) {
-                SagColor fg = c.fg;
-                SagColor bg = c.bg;
-                u16 attrs = c.attrs;
+            const char *interned = sag_intern_str(g->gi, c.id);
 
-                c = g->blank;
-                c.fg = fg;
-                c.bg = bg;
-                c.attrs = attrs;
-            }
+            if (interned == NULL)
+                SAG_BUG("grid fill contains invalid grapheme intern id %u",
+                        c.id);
+            data = (const u8 *)interned;
+            n = strlen(interned);
         } else {
             n = inline_len(&c);
+            data = c.utf8;
             if (n < sizeof(c.utf8))
                 memset(c.utf8 + n, 0, sizeof(c.utf8) - n);
         }
+        if (n != 0u &&
+            (sag_gb_next_bytes(data, n, 0u) != n ||
+             sag_cluster_width(data, n) != 1))
+            SAG_BUG("grid fill requires one printable width-1 grapheme");
     }
     for (col = c0; col < c1; col++)
         cells[col] = c;

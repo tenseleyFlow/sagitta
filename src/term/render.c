@@ -2,7 +2,10 @@
 
 #include <string.h>
 
+#include "unicode/grapheme.h"
+#include "unicode/width.h"
 #include "util/intern.h"
+#include "util/log.h"
 
 enum {
     ATTR_BOLD = 1u << 0,
@@ -17,6 +20,23 @@ enum {
     ATTR_OVERLINE = 1u << 9,
     ATTR_TERMINAL = (1u << 10) - 1u
 };
+
+static u16 terminal_attrs(u16 attrs, bool undercurl)
+{
+    u16 result = (u16)(attrs & ATTR_TERMINAL);
+
+    if ((attrs & SAG_ATTR_INVALID_BYTE) != 0u)
+        result |= ATTR_REVERSE;
+    if ((result & ATTR_UNDERCURL) != 0u) {
+        if (undercurl)
+            result &= (u16)~ATTR_UNDERLINE;
+        else {
+            result &= (u16)~ATTR_UNDERCURL;
+            result |= ATTR_UNDERLINE;
+        }
+    }
+    return result;
+}
 
 static const u8 cube_level[6] = { 0, 95, 135, 175, 215, 255 };
 
@@ -362,18 +382,14 @@ static void attrs_delta(Bytebuf *out, bool *first, u16 from, u16 to,
 
 static void set_style(Render *r, Bytebuf *out, const Cell *cell)
 {
-    u16 attrs = (u16)(cell->attrs & ATTR_TERMINAL);
-    u16 old_attrs = (u16)(r->attrs & ATTR_TERMINAL);
+    u16 attrs = terminal_attrs(cell->attrs, r->undercurl);
+    u16 old_attrs = terminal_attrs(r->attrs, r->undercurl);
     bool fg_changed;
     bool bg_changed;
     bool full;
     bool first = true;
     unsigned resets;
 
-    if ((cell->attrs & SAG_ATTR_INVALID_BYTE) != 0u)
-        attrs |= ATTR_REVERSE;
-    if ((r->attrs & SAG_ATTR_INVALID_BYTE) != 0u)
-        old_attrs |= ATTR_REVERSE;
     if (r->pen_known && old_attrs == attrs &&
         color_equal(r->fg, cell->fg) && color_equal(r->bg, cell->bg)) {
         r->attrs = cell->attrs;
@@ -411,19 +427,17 @@ static void set_style(Render *r, Bytebuf *out, const Cell *cell)
     r->pen_known = true;
 }
 
-static void cell_bytes(const Grid *g, const Cell *cell, const u8 **data,
-                       size_t *len)
+static void cell_bytes(const Grid *g, const Cell *cell, u16 row, u16 col,
+                       const u8 **data, size_t *len)
 {
     size_t n;
 
     if ((cell->flags & CELL_INTERNED) != 0u) {
         const char *text = sag_intern_str(g->gi, cell->id);
 
-        if (text == NULL) {
-            *data = (const u8 *)" ";
-            *len = 1u;
-            return;
-        }
+        if (text == NULL)
+            SAG_BUG("render cell %u,%u has invalid grapheme intern id %u",
+                    row, col, cell->id);
         *data = (const u8 *)text;
         *len = strlen(text);
         return;
@@ -447,14 +461,18 @@ static void emit_cell(Render *r, const Grid *g, Bytebuf *out,
     size_t i;
 
     set_style(r, out, cell);
-    cell_bytes(g, cell, &data, &len);
+    cell_bytes(g, cell, r->row, r->col, &data, &len);
+    if (sag_gb_next_bytes(data, len, 0u) != len)
+        SAG_BUG("render cell %u,%u contains multiple grapheme clusters",
+                r->row, r->col);
     for (i = 0; i < len; i++) {
-        if (data[i] < 0x20u || data[i] == 0x7fu) {
-            bytebuf_push_u8(out, (u8)' ');
-            r->pos_known = false;
-            return;
-        }
+        if (data[i] < 0x20u || data[i] == 0x7fu)
+            SAG_BUG("render cell %u,%u contains raw control byte 0x%02x",
+                    r->row, r->col, data[i]);
     }
+    if (sag_cluster_width(data, len) != (int)cell->w)
+        SAG_BUG("render cell %u,%u has inconsistent grapheme width",
+                r->row, r->col);
     bytebuf_append(out, data, len);
     if (r->pos_known) {
         u32 next = (u32)r->col + (cell->w == 2u ? 2u : 1u);
@@ -485,6 +503,8 @@ static void cup(Render *r, Bytebuf *out, u16 row, u16 col)
 static bool can_reemit_gap(const Render *r, const Grid *g, u16 row,
                            u16 target)
 {
+    size_t motion_cost = 4u;
+    size_t reemit_cost = 0u;
     u16 col;
 
     if (!r->pos_known || r->row != row || target <= r->col ||
@@ -492,19 +512,21 @@ static bool can_reemit_gap(const Render *r, const Grid *g, u16 row,
         return false;
     for (col = r->col; col < target; col++) {
         const Cell *cell = &g->back[(size_t)row * g->cols + col];
-        u16 cell_attrs = (u16)(cell->attrs & ATTR_TERMINAL);
-        u16 pen_attrs = (u16)(r->attrs & ATTR_TERMINAL);
-
-        if ((cell->attrs & SAG_ATTR_INVALID_BYTE) != 0u)
-            cell_attrs |= ATTR_REVERSE;
-        if ((r->attrs & SAG_ATTR_INVALID_BYTE) != 0u)
-            pen_attrs |= ATTR_REVERSE;
+        const u8 *data;
+        size_t len;
+        u16 cell_attrs = terminal_attrs(cell->attrs, r->undercurl);
+        u16 pen_attrs = terminal_attrs(r->attrs, r->undercurl);
 
         if (cell->w != 1u || cell_attrs != pen_attrs ||
             !color_equal(cell->fg, r->fg) || !color_equal(cell->bg, r->bg))
             return false;
+        cell_bytes(g, cell, row, col, &data, &len);
+        (void)data;
+        if (len >= motion_cost - reemit_cost)
+            return false;
+        reemit_cost += len;
     }
-    return true;
+    return reemit_cost < motion_cost;
 }
 
 static void move_to(Render *r, const Grid *g, Bytebuf *out, u16 row, u16 col)

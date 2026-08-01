@@ -129,6 +129,7 @@ const SagTest sag_tests[] = {
     T(render_tier16_downconverts_high_index),
     T(render_invalid_byte_style_is_reverse),
     T(render_underline_undercurl_shared_reset),
+    T(render_invalid_cells_are_bugs),
 };
 
 const size_t sag_tests_len = SAG_ARRAY_LEN(sag_tests);

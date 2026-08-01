@@ -17,6 +17,7 @@ typedef struct VtRef {
     Cell blank;
     SagColor fg, bg;
     u16 attrs;
+    bool cursor_visible;
     size_t bsu, esu;
 } VtRef;
 
@@ -143,6 +144,8 @@ static size_t vt_csi(VtRef *vt, const u8 *s, size_t n, size_t pos)
     if (private_mode) {
         SAG_ASSERT(final == 'h' || final == 'l');
         SAG_ASSERT(np == 1u && (p[0] == 25u || p[0] == 2026u));
+        if (p[0] == 25u)
+            vt->cursor_visible = final == 'h';
         if (p[0] == 2026u && final == 'h') vt->bsu++;
         if (p[0] == 2026u && final == 'l') vt->esu++;
     } else if (final == 'H') {
@@ -218,6 +221,23 @@ static void vt_replay(VtRef *vt, const u8 *s, size_t n)
     }
 }
 
+static Cell vt_expected_cell(Cell cell, bool undercurl)
+{
+    if ((cell.attrs & SAG_ATTR_INVALID_BYTE) != 0u) {
+        cell.attrs &= (u16)~SAG_ATTR_INVALID_BYTE;
+        cell.attrs |= SAG_ATTR_REVERSE;
+    }
+    if ((cell.attrs & SAG_ATTR_UNDERCURL) != 0u) {
+        if (undercurl)
+            cell.attrs &= (u16)~SAG_ATTR_UNDERLINE;
+        else {
+            cell.attrs &= (u16)~SAG_ATTR_UNDERCURL;
+            cell.attrs |= SAG_ATTR_UNDERLINE;
+        }
+    }
+    return cell;
+}
+
 static u32 roundtrip_rand(u32 *state)
 {
     u32 x = *state;
@@ -232,22 +252,31 @@ static u32 roundtrip_rand(u32 *state)
 void test_render_roundtrip_reference_vt(void)
 {
     static const u8 cjk[] = {0xe6u, 0xbcu, 0xa2u};
+    Arena arena;
+    Interner interner;
+    Grid grid;
+    Render render;
+    TtyCaps caps = {0};
+    Bytebuf out;
+    VtRef vt;
     u32 state = 0x5a17c0deu;
     size_t iteration;
 
+    arena_init(&arena);
+    interner_init(&interner, &arena);
+    SAG_ASSERT(sag_grid_init(&grid, &interner, 4u, 12u));
+    caps.truecolor = true;
+    caps.sync_output = true;
+    bytebuf_init(&out);
+    sag_render_init(&render, &caps, roundtrip_env);
+    vt_init(&vt, grid.rows, grid.cols);
+
     for (iteration = 0u; iteration < 5000u; iteration++) {
-        Arena arena;
-        Interner interner;
-        Grid grid;
-        Render render;
-        TtyCaps caps = {0};
-        Bytebuf out;
-        VtRef vt;
+        size_t prior_bsu = vt.bsu;
+        size_t prior_esu = vt.esu;
+        size_t emitted;
         size_t op;
 
-        arena_init(&arena);
-        interner_init(&interner, &arena);
-        SAG_ASSERT(sag_grid_init(&grid, &interner, 4u, 12u));
         for (op = 0u; op < 16u; op++) {
             u32 value = roundtrip_rand(&state);
             u16 row = (u16)(value % grid.rows);
@@ -259,8 +288,6 @@ void test_render_roundtrip_reference_vt(void)
 
             if ((value & 3u) == 0u)
                 fg.tag = SAG_COLOR_DEFAULT;
-            if ((attrs & SAG_ATTR_UNDERCURL) != 0u)
-                attrs &= (u16)~SAG_ATTR_UNDERLINE;
             if ((value & 7u) == 1u && col + 1u < grid.cols)
                 sag_grid_put(&grid, row, col, cjk, sizeof(cjk), fg, bg, attrs);
             else
@@ -270,21 +297,25 @@ void test_render_roundtrip_reference_vt(void)
         }
         sag_grid_cursor(&grid, (u16)(iteration % 4u),
                         (u16)(iteration % 12u), (iteration & 1u) != 0u);
-        caps.truecolor = true;
-        caps.sync_output = true;
-        bytebuf_init(&out);
-        sag_render_init(&render, &caps, roundtrip_env);
-        SAG_ASSERT(sag_render_frame(&render, &grid, &out) != 0u);
-        vt_init(&vt, grid.rows, grid.cols);
+        out.len = 0u;
+        emitted = sag_render_frame(&render, &grid, &out);
+        SAG_ASSERT_EQ_U64(emitted, out.len);
         vt_replay(&vt, out.data, out.len);
-        SAG_ASSERT_EQ_MEM(vt.cells, grid.back,
-                          (size_t)grid.rows * grid.cols * sizeof(Cell));
-        SAG_ASSERT_EQ_U64(vt.bsu, 1u);
-        SAG_ASSERT_EQ_U64(vt.esu, 1u);
-        free(vt.cells);
-        bytebuf_free(&out);
-        sag_grid_free(&grid);
-        interner_free(&interner);
-        arena_free_all(&arena);
+        for (op = 0u; op < (size_t)grid.rows * grid.cols; op++) {
+            Cell expected = vt_expected_cell(grid.back[op], render.undercurl);
+
+            SAG_ASSERT_EQ_MEM(&vt.cells[op], &expected, sizeof(expected));
+        }
+        SAG_ASSERT_EQ_U64(vt.row, grid.cur_row);
+        SAG_ASSERT_EQ_U64(vt.col, grid.cur_col);
+        SAG_ASSERT_EQ_U64(vt.cursor_visible, grid.cur_vis);
+        SAG_ASSERT_EQ_U64(vt.bsu - prior_bsu, emitted != 0u ? 1u : 0u);
+        SAG_ASSERT_EQ_U64(vt.esu - prior_esu, emitted != 0u ? 1u : 0u);
+        sag_grid_flip(&grid);
     }
+    free(vt.cells);
+    bytebuf_free(&out);
+    sag_grid_free(&grid);
+    interner_free(&interner);
+    arena_free_all(&arena);
 }

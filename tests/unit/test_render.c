@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "harness.h"
 
 #include "term/grid.h"
@@ -6,8 +8,12 @@
 #include "util/buf.h"
 #include "util/intern.h"
 
+#include <errno.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 typedef struct RenderFixture {
     Arena arena;
@@ -141,6 +147,28 @@ void test_render_gap_motion_goldens(void)
                      color, color, 0u);
         sag_render_frame(&f.render, &f.grid, &f.out);
         SAG_ASSERT(render_contains(&f.out, "X\033[2;4HY"));
+        render_fixture_free(&f);
+    }
+    {
+        static const u8 combining[] = {
+            (u8)'e', 0xccu, 0x81u, 0xccu, 0x82u
+        };
+        RenderFixture f;
+
+        render_fixture_init(&f, 1u, 3u, false);
+        sag_grid_put(&f.grid, 0u, 0u, (const u8 *)"a", 1u,
+                     color, color, 0u);
+        sag_grid_put(&f.grid, 0u, 1u, combining, sizeof(combining),
+                     color, color, 0u);
+        sag_grid_put(&f.grid, 0u, 2u, (const u8 *)"c", 1u,
+                     color, color, 0u);
+        sag_grid_flip(&f.grid);
+        sag_grid_put(&f.grid, 0u, 0u, (const u8 *)"X", 1u,
+                     color, color, 0u);
+        sag_grid_put(&f.grid, 0u, 2u, (const u8 *)"Y", 1u,
+                     color, color, 0u);
+        sag_render_frame(&f.render, &f.grid, &f.out);
+        SAG_ASSERT(render_contains(&f.out, "X\033[1CY"));
         render_fixture_free(&f);
     }
 }
@@ -360,19 +388,96 @@ void test_render_invalid_byte_style_is_reverse(void)
 
 void test_render_underline_undercurl_shared_reset(void)
 {
-    RenderFixture f;
+    static const u16 states[] = {
+        0u, SAG_ATTR_UNDERLINE, SAG_ATTR_UNDERCURL,
+        SAG_ATTR_UNDERLINE | SAG_ATTR_UNDERCURL
+    };
+    static const char *const delta[4][4] = {
+        {NULL, "\033[4m", "\033[4:3m", "\033[4:3m"},
+        {"\033[24m", NULL, "\033[24;4:3m", "\033[24;4:3m"},
+        {"\033[24m", "\033[24;4m", NULL, NULL},
+        {"\033[24m", "\033[24;4m", NULL, NULL}
+    };
     SagColor color = render_default_color();
+    size_t from;
+    size_t to;
 
-    render_fixture_init(&f, 1u, 3u, false);
-    sag_grid_flip(&f.grid);
-    sag_grid_put(&f.grid, 0u, 0u, (const u8 *)"a", 1u, color, color,
-                 SAG_ATTR_UNDERCURL);
-    sag_grid_put(&f.grid, 0u, 1u, (const u8 *)"b", 1u, color, color,
-                 SAG_ATTR_UNDERLINE);
-    sag_grid_put(&f.grid, 0u, 2u, (const u8 *)"c", 1u, color, color,
-                 SAG_ATTR_UNDERCURL);
-    sag_render_frame(&f.render, &f.grid, &f.out);
-    SAG_ASSERT(render_contains(
-        &f.out, "\033[0;4:3ma\033[24;4mb\033[24;4:3mc"));
-    render_fixture_free(&f);
+    for (from = 0u; from < SAG_ARRAY_LEN(states); from++) {
+        for (to = 0u; to < SAG_ARRAY_LEN(states); to++) {
+            RenderFixture f;
+
+            render_fixture_init(&f, 1u, 2u, false);
+            sag_grid_put(&f.grid, 0u, 0u, (const u8 *)"a", 1u,
+                         color, color, states[from]);
+            sag_grid_put(&f.grid, 0u, 1u, (const u8 *)"b", 1u,
+                         color, color, states[to]);
+            sag_render_frame(&f.render, &f.grid, &f.out);
+            if (delta[from][to] == NULL) {
+                SAG_ASSERT(render_contains(&f.out, "ab"));
+            } else {
+                char expected[32];
+                int n = snprintf(expected, sizeof(expected), "a%sb",
+                                 delta[from][to]);
+
+                SAG_ASSERT(n > 0 && (size_t)n < sizeof(expected));
+                SAG_ASSERT(render_contains(&f.out, expected));
+            }
+            render_fixture_free(&f);
+        }
+    }
+}
+
+static int invalid_cell_child_exit(int scenario)
+{
+    pid_t child;
+    pid_t waited;
+    int status;
+
+    SAG_ASSERT_EQ_I64(fflush(NULL), 0);
+    child = fork();
+    SAG_ASSERT(child >= 0);
+    if (child == 0) {
+        RenderFixture f;
+        Cell bad;
+
+        (void)close(STDERR_FILENO);
+        (void)setenv("SAG_LOG", "/dev/null", 1);
+        render_fixture_init(&f, 1u, 1u, false);
+        bad = f.grid.blank;
+        if (scenario < 2) {
+            bad.flags = CELL_INTERNED;
+            bad.id = UINT32_MAX;
+        } else if (scenario == 2) {
+            bad.utf8[0] = 0x1bu;
+        } else if (scenario < 5) {
+            bad.utf8[0] = (u8)'a';
+            bad.utf8[1] = (u8)'b';
+        } else {
+            bad.utf8[0] = 0xffu;
+        }
+        if (scenario == 0 || scenario == 3)
+            sag_grid_fill(&f.grid, 0u, 0u, 1u, bad);
+        else {
+            f.grid.back[0] = bad;
+            sag_grid_mark_all(&f.grid);
+            (void)sag_render_frame(&f.render, &f.grid, &f.out);
+        }
+        _exit(0);
+    }
+    do {
+        waited = waitpid(child, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+    SAG_ASSERT_EQ_I64(waited, child);
+    SAG_ASSERT(WIFEXITED(status));
+    return WEXITSTATUS(status);
+}
+
+void test_render_invalid_cells_are_bugs(void)
+{
+    SAG_ASSERT_EQ_I64(invalid_cell_child_exit(0), SAG_EXIT_BUG);
+    SAG_ASSERT_EQ_I64(invalid_cell_child_exit(1), SAG_EXIT_BUG);
+    SAG_ASSERT_EQ_I64(invalid_cell_child_exit(2), SAG_EXIT_BUG);
+    SAG_ASSERT_EQ_I64(invalid_cell_child_exit(3), SAG_EXIT_BUG);
+    SAG_ASSERT_EQ_I64(invalid_cell_child_exit(4), SAG_EXIT_BUG);
+    SAG_ASSERT_EQ_I64(invalid_cell_child_exit(5), SAG_EXIT_BUG);
 }
