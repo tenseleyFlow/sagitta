@@ -374,6 +374,7 @@ void test_undo_serial_persist_budget_does_not_mutate_memory_tree(void)
 {
     SerialFixture source;
     Bytebuf content;
+    Bytebuf file;
     u32 cur;
     size_t nodes;
     u64 gen;
@@ -397,9 +398,13 @@ void test_undo_serial_persist_budget_does_not_mutate_memory_tree(void)
     SAG_ASSERT_EQ_U64(source.undo->cur, cur);
     SAG_ASSERT_EQ_U64(source.undo->nodes.len, nodes);
     SAG_ASSERT_EQ_U64(source.undo->gen, gen);
+    serial_read_file(path, &file);
+    SAG_ASSERT(file.len <= 4096U);
+    SAG_ASSERT((serial_u32(file.data + 8U) & 1U) != 0U);
     serial_flatten(source.tb, &content);
-    SAG_ASSERT(serial_try_read(path, content.data, content.len) !=
-               SAG_UNDO_READ_IO);
+    SAG_ASSERT_EQ_U64(serial_try_read(path, content.data, content.len),
+                      SAG_UNDO_READ_CURRENT);
+    bytebuf_free(&file);
     bytebuf_free(&content);
     SAG_ASSERT_EQ_I64(unlink(path), 0);
     serial_fixture_free(&source);
