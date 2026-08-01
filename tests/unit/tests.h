@@ -42,5 +42,21 @@ void test_utf8_boundaries(void);
 void test_utf8_exhaustive_scalars(void);
 void test_utf8_exhaustive_surrogates(void);
 void test_utf8_exhaustive_short_strings(void);
+void test_grapheme_state_size(void);
+void test_grapheme_ascii(void);
+void test_grapheme_crlf_control(void);
+void test_grapheme_extend_spacing_prepend(void);
+void test_grapheme_hangul(void);
+void test_grapheme_ri_pairs(void);
+void test_grapheme_emoji_zwj(void);
+void test_grapheme_indic_conjunct(void);
+void test_grapheme_invalid_bytes(void);
+void test_grapheme_backward_bound(void);
+void test_grapheme_corpus(void);
+void test_graphemebreaktest_conformance(void);
+void test_width_codepoints(void);
+void test_width_golden(void);
+void test_width_strings(void);
+void test_width_clip(void);
 
 #endif

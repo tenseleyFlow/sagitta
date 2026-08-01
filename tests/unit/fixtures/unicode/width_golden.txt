@@ -1,0 +1,75 @@
+# name|hex bytes|ambiguous narrow|ambiguous wide
+ascii-space|20|1|1
+ascii-bang|21|1|1
+ascii-digit|31|1|1
+ascii-upper|41|1|1
+ascii-lower|61|1|1
+ascii-tilde|7E|1|1
+tab|09|0|0
+c0-nul|00|2|2
+c0-bel|07|2|2
+c0-esc|1B|2|2
+c0-us|1F|2|2
+c0-del|7F|2|2
+c1-pad|C2 80|4|4
+c1-nel|C2 85|4|4
+c1-csi|C2 9B|4|4
+soft-hyphen|C2 AD|1|1
+combining-acute|CC 81|0|0
+combining-enclosing-circle|E2 83 9D|0|0
+word-joiner|E2 81 A0|0|0
+zero-width-space|E2 80 8B|0|0
+zero-width-nonjoiner|E2 80 8C|0|0
+zero-width-joiner|E2 80 8D|0|0
+left-to-right-mark|E2 80 8E|0|0
+right-to-left-mark|E2 80 8F|0|0
+variation-selector-15|EF B8 8E|0|0
+variation-selector-16|EF B8 8F|0|0
+jamo-v|E1 85 A0|0|0
+jamo-t|E1 86 A8|0|0
+cjk-han|E6 BC A2|2|2
+cjk-hiragana|E3 81 82|2|2
+cjk-katakana|E3 82 A2|2|2
+cjk-hangul|EA B0 80|2|2
+fullwidth-a|EF BC A1|2|2
+fullwidth-exclamation|EF BC 81|2|2
+halfwidth-kana|EF BD B1|1|1
+emoji-grinning|F0 9F 98 80|2|2
+emoji-thumbs-up|F0 9F 91 8D|2|2
+emoji-rocket|F0 9F 9A 80|2|2
+emoji-red-circle|F0 9F 94 B4|2|2
+emoji-soccer|E2 9A BD|2|2
+ambiguous-inverted-bang|C2 A1|1|2
+ambiguous-currency|C2 A4|1|2
+ambiguous-section|C2 A7|1|2
+ambiguous-diaeresis|C2 A8|1|2
+ambiguous-ordinal-feminine|C2 AA|1|2
+ambiguous-registered|C2 AE|1|2
+ambiguous-degree|C2 B0|1|2
+ambiguous-plus-minus|C2 B1|1|2
+ambiguous-superscript-two|C2 B2|1|2
+ambiguous-superscript-three|C2 B3|1|2
+ambiguous-acute|C2 B4|1|2
+ambiguous-pilcrow|C2 B6|1|2
+ambiguous-middle-dot|C2 B7|1|2
+ambiguous-cedilla|C2 B8|1|2
+ambiguous-superscript-one|C2 B9|1|2
+ambiguous-ordinal-masculine|C2 BA|1|2
+ambiguous-quarter|C2 BC|1|2
+ambiguous-half|C2 BD|1|2
+ambiguous-three-quarters|C2 BE|1|2
+ambiguous-inverted-question|C2 BF|1|2
+cluster-combining|65 CC 81|1|1
+cluster-stacked-marks|65 CC 81 CC A7 CD 8F|1|1
+cluster-prepend|D8 80 41|1|1
+cluster-flag-us|F0 9F 87 BA F0 9F 87 B8|2|2
+cluster-keycap|31 EF B8 8F E2 83 A3|2|2
+cluster-heart-vs15|E2 9D A4 EF B8 8E|1|1
+cluster-heart-vs16|E2 9D A4 EF B8 8F|2|2
+cluster-skin-tone|F0 9F 91 8D F0 9F 8F BD|2|2
+cluster-woman-technologist|F0 9F 91 A9 E2 80 8D F0 9F 92 BB|2|2
+cluster-family|F0 9F 91 A8 E2 80 8D F0 9F 91 A9 E2 80 8D F0 9F 91 A7 E2 80 8D F0 9F 91 A6|2|2
+cluster-crlf|0D 0A|2|2
+invalid-80|80|4|4
+invalid-ff|FF|4|4
+unassigned-0378|CD B8|1|1

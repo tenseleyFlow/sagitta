@@ -1,0 +1,54 @@
+# name|hex bytes|cluster byte lengths|cell widths
+ascii-a|61|1|1
+ascii-word|61 62 63|1,1,1|1,1,1
+ascii-space|20|1|1
+ascii-nul|00|1|2
+ascii-tab|09|1|255
+lone-cr|0D|1|2
+lone-lf|0A|1|2
+crlf|0D 0A|2|2
+cr-a|0D 61|1,1|2,1
+c1-control|C2 85|2|4
+soft-hyphen|C2 AD|2|1
+combining-acute|65 CC 81|3|1
+combining-stack|65 CC 81 CC 81 CC 81 CC 81 CC 81 CC 81 CC 81 CC 81 CC 81 CC 81|21|1
+leading-combining|CC 81 61|2,1|0,1
+spacing-mark|E0 A4 95 E0 A4 BE|6|1
+prepend|D8 80 61|3|1
+prepend-chain|D8 80 D8 80 61|5|1
+plain-zwj|61 E2 80 8D 62|4,1|1,1
+hangul-lv-jamo|E1 84 80 E1 85 A1|6|2
+hangul-lvt-jamo|E1 84 80 E1 85 A1 E1 86 A8|9|2
+hangul-vt-jamo|E1 85 A1 E1 86 A8|6|0
+hangul-tt-jamo|E1 86 A8 E1 86 A8|6|0
+hangul-precomposed|EA B0 80|3|2
+hangul-lv-plus-t|EA B0 80 E1 86 A8|6|2
+devanagari-conjunct|E0 A4 95 E0 A5 8D E0 A4 B7|9|1
+devanagari-separated|E0 A4 95 20 E0 A4 B7|3,1,3|1,1,1
+cjk-han|E6 BC A2|3|2
+fullwidth-a|EF BC A1|3|2
+halfwidth-kana|EF BD B6|3|1
+emoji-grin|F0 9F 98 80|4|2
+emoji-skin-tone|F0 9F 91 8D F0 9F 8F BD|8|2
+emoji-woman-technologist|F0 9F 91 A9 E2 80 8D F0 9F 92 BB|11|2
+emoji-health-worker|F0 9F 91 A9 E2 80 8D E2 9A 95 EF B8 8F|13|2
+emoji-family|F0 9F 91 A8 E2 80 8D F0 9F 91 A9 E2 80 8D F0 9F 91 A7 E2 80 8D F0 9F 91 A6|25|2
+flag-au|F0 9F 87 A6 F0 9F 87 BA|8|2
+flag-three|F0 9F 87 A6 F0 9F 87 BA F0 9F 87 B8|8,4|2,2
+flag-four|F0 9F 87 A6 F0 9F 87 BA F0 9F 87 B8 F0 9F 87 A6|8,8|2,2
+keycap-one|31 EF B8 8F E2 83 A3|7|2
+heart-text|E2 9D A4 EF B8 8E|6|1
+heart-emoji|E2 9D A4 EF B8 8F|6|2
+copyright-emoji|C2 A9 EF B8 8F|5|2
+invalid-ff|FF|1|4
+invalid-then-a|FF 41|1,1|4,1
+invalid-surrogate|ED A0 80|1,1,1|4,4,4
+overlong-two|C0 80|1,1|4,4
+overlong-three|E0 80 80|1,1,1|4,4,4
+overlong-four|F0 80 80 80|1,1,1,1|4,4,4,4
+above-unicode|F4 90 80 80|1,1,1,1|4,4,4,4
+invalid-lead|F5 80 80 80|1,1,1,1|4,4,4,4
+truncated-two|C2|1|4
+truncated-three|E1 80|1,1|4,4
+truncated-four|F0 90 80|1,1,1|4,4,4
+mixed-invalid|61 CC 81 FF E6 BC A2 C2 62|3,1,3,1,1|1,4,2,4,1

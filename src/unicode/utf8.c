@@ -300,4 +300,3 @@ bool sag_utf8_is_boundary(const u8 *s, size_t len, size_t pos)
     }
     return cursor == pos;
 }
-

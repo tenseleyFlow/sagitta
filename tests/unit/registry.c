@@ -45,6 +45,22 @@ const SagTest sag_tests[] = {
     T(utf8_exhaustive_scalars),
     T(utf8_exhaustive_surrogates),
     T(utf8_exhaustive_short_strings),
+    T(grapheme_state_size),
+    T(grapheme_ascii),
+    T(grapheme_crlf_control),
+    T(grapheme_extend_spacing_prepend),
+    T(grapheme_hangul),
+    T(grapheme_ri_pairs),
+    T(grapheme_emoji_zwj),
+    T(grapheme_indic_conjunct),
+    T(grapheme_invalid_bytes),
+    T(grapheme_backward_bound),
+    T(grapheme_corpus),
+    T(graphemebreaktest_conformance),
+    T(width_codepoints),
+    T(width_golden),
+    T(width_strings),
+    T(width_clip),
 };
 
 const size_t sag_tests_len = SAG_ARRAY_LEN(sag_tests);
