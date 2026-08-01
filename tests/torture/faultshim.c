@@ -46,6 +46,14 @@ static int resolving;
 static int rename_exdev_done;
 static int link_done;
 
+static void close_log(void)
+{
+    if (log_fd >= 0 && real_close_fn != NULL) {
+        (void)real_close_fn(log_fd);
+        log_fd = -1;
+    }
+}
+
 static void load_symbol(void *dst, size_t dst_size, const char *name)
 {
     void *sym = dlsym(RTLD_NEXT, name);
@@ -103,9 +111,12 @@ static void initialize(void)
         rng_state = UINT64_C(0x9e3779b97f4a7c15);
     short_writes = env_is_one("SAG_FAULT_SHORT");
     log_path = getenv("SAG_FAULT_LOG");
-    if (log_path != NULL && *log_path != '\0')
+    if (log_path != NULL && *log_path != '\0') {
         log_fd = open(log_path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC,
                       0600);
+        if (log_fd >= 0 && atexit(close_log) != 0)
+            _exit(126);
+    }
     resolving = 0;
     initialized = 1;
 }

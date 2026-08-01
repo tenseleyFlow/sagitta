@@ -2,6 +2,7 @@
 
 #include "harness.h"
 
+#include <errno.h>
 #include <fcntl.h>
 #include <inttypes.h>
 #include <stdio.h>
@@ -317,13 +318,13 @@ void test_journal_stale_header_is_renamed_and_not_applied(void)
     SAG_ASSERT_NOT_NULL(journal);
     sag_journal_record(journal, SAG_JOURNAL_INS, 6U, (const u8 *)"!", 1U);
     sag_journal_sync(journal);
+    sag_journal_close(journal);
     changed = meta;
     changed.size_on_disk++;
     SAG_ASSERT(!sag_journal_replay(fixture.source, tb, &changed));
     journal_assert_text(tb, "abcdef");
     SAG_ASSERT(access(fixture.journal, F_OK) != 0);
     SAG_ASSERT_EQ_I64(access(fixture.stale, F_OK), 0);
-    sag_journal_discard(journal);
     sag_textbuf_free(tb);
     sag_filemeta_dispose(&meta);
     journal_fixture_remove(&fixture);
@@ -380,6 +381,54 @@ void test_journal_replayed_log_can_be_adopted_and_discarded(void)
     SAG_ASSERT_NOT_NULL(journal);
     sag_journal_discard(journal);
     SAG_ASSERT(access(fixture.journal, F_OK) != 0);
+    sag_filemeta_dispose(&meta);
+    journal_fixture_remove(&fixture);
+}
+
+void test_journal_rejects_duplicate_in_process_owner(void)
+{
+    JournalFixture fixture;
+    FileMeta meta;
+    Journal *first;
+    Journal *second;
+
+    journal_fixture_make(&fixture);
+    journal_meta_init(&meta, fixture.source);
+    first = sag_journal_open(fixture.source, &meta);
+    SAG_ASSERT_NOT_NULL(first);
+    errno = 0;
+    second = sag_journal_open(fixture.source, &meta);
+    SAG_ASSERT_NULL(second);
+    SAG_ASSERT_EQ_I64(errno, EBUSY);
+    sag_journal_close(first);
+    second = sag_journal_open(fixture.source, &meta);
+    SAG_ASSERT_NOT_NULL(second);
+    sag_journal_discard(second);
+    sag_filemeta_dispose(&meta);
+    journal_fixture_remove(&fixture);
+}
+
+void test_journal_replay_refuses_hardlinked_log(void)
+{
+    JournalFixture fixture;
+    FileMeta meta;
+    TextBuf *tb;
+    Journal *journal;
+
+    journal_fixture_make(&fixture);
+    journal_meta_init(&meta, fixture.source);
+    journal = sag_journal_open(fixture.source, &meta);
+    SAG_ASSERT_NOT_NULL(journal);
+    sag_journal_record(journal, SAG_JOURNAL_INS, 6U, (const u8 *)"!", 1U);
+    sag_journal_sync(journal);
+    sag_journal_close(journal);
+    SAG_ASSERT_EQ_I64(link(fixture.journal, fixture.stale), 0);
+    tb = sag_textbuf_from_bytes((const u8 *)"abcdef", 6U);
+    SAG_ASSERT(!sag_journal_replay(fixture.source, tb, &meta));
+    journal_assert_text(tb, "abcdef");
+    SAG_ASSERT_EQ_I64(access(fixture.journal, F_OK), 0);
+    SAG_ASSERT_EQ_I64(access(fixture.stale, F_OK), 0);
+    sag_textbuf_free(tb);
     sag_filemeta_dispose(&meta);
     journal_fixture_remove(&fixture);
 }

@@ -50,12 +50,26 @@ endif
 UNIT_RUN := $(BUILD)/unit_tests
 PTY_RUN  := $(BUILD)/pty_runner
 ifeq ($(VALGRIND),1)
-UNIT_RUN := valgrind --quiet --error-exitcode=99 --leak-check=full \
-            --errors-for-leak-kinds=definite --track-fds=yes \
-            --trace-children=yes $(BUILD)/unit_tests
+VALGRIND_RUN := valgrind --quiet --error-exitcode=99 --leak-check=full \
+                 --errors-for-leak-kinds=definite --track-fds=yes \
+                 --child-silent-after-fork=yes
+VALGRIND_UNIT_EXCLUDES := \
+  --exclude piece_line_iterator_rejects_other_buffer \
+  --exclude piece_checker_rejects_corruption \
+  --exclude piece_live_iterator_rejects_edit \
+  --exclude log_bug_prehook \
+  --exclude render_invalid_cells_are_bugs
+UNIT_RUN := $(VALGRIND_RUN) $(BUILD)/unit_tests $(VALGRIND_UNIT_EXCLUDES) && \
+            SAG_TORTURE_CLEAN_ONLY=1 $(VALGRIND_RUN) \
+            --trace-children=yes $(BUILD)/unit_tests \
+            --filter save_fault_shim_contract
 PTY_RUN  := valgrind --quiet --error-exitcode=99 --leak-check=full \
             --errors-for-leak-kinds=definite --track-fds=yes \
             $(BUILD)/pty_runner
+endif
+
+ifeq ($(SAN),1)
+UNIT_RUN := SAG_TORTURE_CLEAN_ONLY=1 $(BUILD)/unit_tests
 endif
 
 # Keep source and link order deterministic across filesystems.

@@ -69,6 +69,8 @@ const SagTest sag_tests[] = {
     T(journal_stale_header_is_renamed_and_not_applied),
     T(journal_discard_removes_log),
     T(journal_replayed_log_can_be_adopted_and_discarded),
+    T(journal_rejects_duplicate_in_process_owner),
+    T(journal_replay_refuses_hardlinked_log),
     T(save_symlink_preserves_link_and_updates_target),
     T(save_dangling_symlink_preserves_link_and_creates_target),
     T(save_hardlink_preserves_shared_inode),

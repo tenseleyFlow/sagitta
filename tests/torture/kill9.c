@@ -184,7 +184,7 @@ static pid_t start_save(const char *driver, const char *shim,
         die("fork");
     if (pid != 0)
         return pid;
-    {
+    if (getenv("SAG_TORTURE_NO_SHIM") == NULL) {
         const char *prefix = getenv("SAG_TORTURE_PRELOAD_PREFIX");
         char *preload = NULL;
 
@@ -579,6 +579,29 @@ static void injected_eintr(const char *driver, const char *shim,
     (void)printf("retry EINTR ok\n");
 }
 
+static void clean_child_check(const char *driver, const char *shim,
+                              const char *root, unsigned long long *serial)
+{
+    char dst[512], old[512], post[512], log[512];
+    int code;
+
+    case_paths(dst, sizeof(dst), old, sizeof(old), post, sizeof(post),
+               log, sizeof(log), root, "clean", (*serial)++);
+    make_file(dst, old_bytes, sizeof(old_bytes) - 1U);
+    make_file(old, old_bytes, sizeof(old_bytes) - 1U);
+    make_file(post, post_bytes, sizeof(post_bytes) - 1U);
+    if (setenv("SAG_TORTURE_NO_SHIM", "1", 1) != 0)
+        die("setenv no shim");
+    code = wait_child(start_save(driver, shim, dst, post, log, 1U, -1, -1));
+    (void)unsetenv("SAG_TORTURE_NO_SHIM");
+    if (code != 0 || !run_check(driver, dst, old, post) ||
+        !file_equals_bytes(dst, post_bytes, sizeof(post_bytes) - 1U)) {
+        (void)fprintf(stderr, "torture: clean child check failed\n");
+        exit(1);
+    }
+    (void)printf("clean child save+check ok\n");
+}
+
 static void case_paths(char *dst, size_t dst_n, char *old, size_t old_n,
                        char *post, size_t post_n, char *log, size_t log_n,
                        const char *root, const char *lane,
@@ -713,6 +736,7 @@ int main(int argc, char **argv)
     const char *iterations_env;
     unsigned long long signal_iterations = 500U;
     unsigned long long serial = 0U;
+    bool fault_boundaries = true;
     size_t i;
 
     if (argc != 3) {
@@ -730,13 +754,26 @@ int main(int argc, char **argv)
     iterations_env = getenv("SAG_TORTURE_SIGKILL_ITERS");
     if (iterations_env != NULL)
         signal_iterations = strtoull(iterations_env, NULL, 10);
-
-    for (i = 0U; i < sizeof(seeds) / sizeof(seeds[0]); i++) {
-        unsigned long long calls = atomic_sweep(argv[1], argv[2], root,
-                                                seeds[i], &serial);
-        (void)printf("atomic seed=%llu syscalls=%llu ok\n", seeds[i], calls);
+    if (getenv("SAG_TORTURE_CLEAN_ONLY") != NULL &&
+        strcmp(getenv("SAG_TORTURE_CLEAN_ONLY"), "1") == 0) {
+        clean_child_check(argv[1], argv[2], root, &serial);
+        if (!remove_tree(root))
+            die("remove torture root");
+        return 0;
     }
-    hardlink_sweep(argv[1], argv[2], root, state, &serial);
+    if (getenv("SAG_TORTURE_FAULT_BOUNDARIES") != NULL &&
+        strcmp(getenv("SAG_TORTURE_FAULT_BOUNDARIES"), "0") == 0)
+        fault_boundaries = false;
+
+    if (fault_boundaries) {
+        for (i = 0U; i < sizeof(seeds) / sizeof(seeds[0]); i++) {
+            unsigned long long calls = atomic_sweep(argv[1], argv[2], root,
+                                                    seeds[i], &serial);
+            (void)printf("atomic seed=%llu syscalls=%llu ok\n", seeds[i],
+                         calls);
+        }
+        hardlink_sweep(argv[1], argv[2], root, state, &serial);
+    }
     late_hardlink_fallback(argv[1], argv[2], root, state, &serial);
     injected_fallback(argv[1], argv[2], root, state, "rename-exdev", &serial);
     injected_fallback(argv[1], argv[2], root, state, "fchown", &serial);

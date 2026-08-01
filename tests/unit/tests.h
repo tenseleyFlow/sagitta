@@ -66,6 +66,8 @@ void test_journal_crc_failure_stops_before_corrupt_record(void);
 void test_journal_stale_header_is_renamed_and_not_applied(void);
 void test_journal_discard_removes_log(void);
 void test_journal_replayed_log_can_be_adopted_and_discarded(void);
+void test_journal_rejects_duplicate_in_process_owner(void);
+void test_journal_replay_refuses_hardlinked_log(void);
 void test_save_symlink_preserves_link_and_updates_target(void);
 void test_save_dangling_symlink_preserves_link_and_creates_target(void);
 void test_save_hardlink_preserves_shared_inode(void);

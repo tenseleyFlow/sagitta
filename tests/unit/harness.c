@@ -162,6 +162,18 @@ bool sag_test_name_matches(const char *name, const char *filter)
     return filter == NULL || strstr(name, filter) != NULL;
 }
 
+static bool test_is_excluded(const char *name, const char **excluded,
+                             size_t excluded_len)
+{
+    size_t i;
+
+    for (i = 0U; i < excluded_len; i++) {
+        if (strcmp(name, excluded[i]) == 0)
+            return true;
+    }
+    return false;
+}
+
 const char *sag_test_program_path(void)
 {
     return program_path;
@@ -197,6 +209,8 @@ static bool run_one_test(const SagTest *test)
 int sag_test_run(int argc, char **argv)
 {
     const char *filter = NULL;
+    const char *excluded[16];
+    size_t excluded_len = 0U;
     bool list = false;
     size_t selected = 0U;
     size_t failures = 0U;
@@ -213,6 +227,14 @@ int sag_test_run(int argc, char **argv)
                 return 1;
             }
             filter = argv[argi];
+        } else if (strcmp(argv[argi], "--exclude") == 0) {
+            if (++argi >= argc || excluded_len ==
+                                      sizeof(excluded) / sizeof(excluded[0])) {
+                (void)fprintf(stderr,
+                              "unit: --exclude requires a test name\n");
+                return 1;
+            }
+            excluded[excluded_len++] = argv[argi];
         } else {
             (void)fprintf(stderr, "unit: unknown option '%s'\n", argv[argi]);
             return 1;
@@ -220,7 +242,8 @@ int sag_test_run(int argc, char **argv)
     }
 
     for (i = 0U; i < sag_tests_len; i++) {
-        if (sag_test_name_matches(sag_tests[i].name, filter))
+        if (sag_test_name_matches(sag_tests[i].name, filter) &&
+            !test_is_excluded(sag_tests[i].name, excluded, excluded_len))
             selected++;
     }
     if (selected == 0U) {
@@ -229,14 +252,17 @@ int sag_test_run(int argc, char **argv)
     }
     if (list) {
         for (i = 0U; i < sag_tests_len; i++) {
-            if (sag_test_name_matches(sag_tests[i].name, filter))
+            if (sag_test_name_matches(sag_tests[i].name, filter) &&
+                !test_is_excluded(sag_tests[i].name, excluded,
+                                  excluded_len))
                 (void)printf("%s\n", sag_tests[i].name);
         }
         return 0;
     }
 
     for (i = 0U; i < sag_tests_len; i++) {
-        if (!sag_test_name_matches(sag_tests[i].name, filter))
+        if (!sag_test_name_matches(sag_tests[i].name, filter) ||
+            test_is_excluded(sag_tests[i].name, excluded, excluded_len))
             continue;
         if (!run_one_test(&sag_tests[i]))
             failures++;

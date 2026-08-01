@@ -24,13 +24,36 @@ struct Journal {
     char *path;
     char *dir;
     bool failed;
+    struct Journal *next;
 };
 
 static u32 crc32_table[256];
 static bool crc32_ready;
+static Journal *open_journals;
 
 static int adopt_existing_journal(const char *path, const char *realpath,
                                   const FileMeta *meta);
+
+static bool journal_path_owned(const char *path)
+{
+    const Journal *journal;
+
+    for (journal = open_journals; journal != NULL; journal = journal->next) {
+        if (strcmp(journal->path, path) == 0)
+            return true;
+    }
+    return false;
+}
+
+static void journal_unregister(Journal *journal)
+{
+    Journal **at = &open_journals;
+
+    while (*at != NULL && *at != journal)
+        at = &(*at)->next;
+    if (*at == journal)
+        *at = journal->next;
+}
 
 static bool size_add(size_t a, size_t b, size_t *out)
 {
@@ -307,6 +330,12 @@ Journal *sag_journal_open(const char *realpath, const FileMeta *m)
         free(dir);
         return NULL;
     }
+    if (journal_path_owned(path)) {
+        free(path);
+        free(dir);
+        errno = EBUSY;
+        return NULL;
+    }
 #ifdef O_CLOEXEC
     flags |= O_CLOEXEC;
 #endif
@@ -350,6 +379,8 @@ Journal *sag_journal_open(const char *realpath, const FileMeta *m)
     journal->fd = fd;
     journal->path = path;
     journal->dir = dir;
+    journal->next = open_journals;
+    open_journals = journal;
     return journal;
 }
 
@@ -406,6 +437,7 @@ void sag_journal_close(Journal *j)
 {
     if (j == NULL)
         return;
+    journal_unregister(j);
     if (close(j->fd) != 0)
         sag_log(SAG_LOG_ERROR, "cannot close crash journal %s: %s", j->path,
                 strerror(errno));
@@ -421,6 +453,7 @@ void sag_journal_discard(Journal *j)
     if (j == NULL) {
         return;
     }
+    journal_unregister(j);
     if (unlink(j->path) < 0 && errno != ENOENT) {
         saved_errno = errno;
     } else {
@@ -487,13 +520,18 @@ static bool apply_record(TextBuf *tb, u8 op, u64 off, const u8 *bytes,
     return false;
 }
 
-static void stale_journal(const char *path, const char *dir)
+static void stale_journal(int fd, const char *path, const char *dir)
 {
+    struct stat fd_st;
+    struct stat path_st;
     size_t len;
     char *stale;
     unsigned int suffix = 0U;
 
-    if (!size_add(strlen(path), sizeof(".stale") + 12U, &len)) {
+    if (fstat(fd, &fd_st) != 0 || lstat(path, &path_st) != 0 ||
+        !S_ISREG(path_st.st_mode) || fd_st.st_dev != path_st.st_dev ||
+        fd_st.st_ino != path_st.st_ino ||
+        !size_add(strlen(path), sizeof(".stale") + 12U, &len)) {
         return;
     }
     stale = sag_xmalloc(len);
@@ -514,7 +552,12 @@ static void stale_journal(const char *path, const char *dir)
             return;
         }
     }
-    if (unlink(path) == 0) {
+    if (lstat(path, &path_st) != 0 || path_st.st_dev != fd_st.st_dev ||
+        path_st.st_ino != fd_st.st_ino) {
+        sag_log(SAG_LOG_ERROR,
+                "crash journal identity changed while preserving %s", path);
+        (void)unlink(stale);
+    } else if (unlink(path) == 0) {
         fsync_dir(dir);
         sag_log(SAG_LOG_WARN, "renamed stale crash journal to %s", stale);
     } else {
@@ -553,6 +596,19 @@ static bool header_matches(const u8 *data, size_t size, const char *realpath,
         return false;
     }
     *records_at = tail_at + 20U;
+    return true;
+}
+
+static bool journal_fd_valid(int fd, struct stat *st)
+{
+    if (fstat(fd, st) != 0)
+        return false;
+    if (!S_ISREG(st->st_mode) || st->st_uid != geteuid() ||
+        st->st_nlink != 1 || (st->st_mode & 0077U) != 0U ||
+        st->st_size < 0 || (u64)st->st_size > SIZE_MAX) {
+        errno = EPERM;
+        return false;
+    }
     return true;
 }
 
@@ -608,14 +664,8 @@ static int adopt_existing_journal(const char *path, const char *realpath,
         return -1;
     if (!lock_journal(fd))
         goto fail;
-    if (fstat(fd, &st) != 0)
+    if (!journal_fd_valid(fd, &st))
         goto fail;
-    if (!S_ISREG(st.st_mode) || st.st_uid != geteuid() || st.st_nlink != 1 ||
-        (st.st_mode & 0077U) != 0U || st.st_size < 0 ||
-        (u64)st.st_size > SIZE_MAX) {
-        errno = EPERM;
-        goto fail;
-    }
     size = (size_t)st.st_size;
     data = sag_xmalloc(size == 0U ? 1U : size);
     if (!read_all(fd, data, size))
@@ -681,6 +731,10 @@ bool sag_journal_replay(const char *path, TextBuf *tb, FileMeta *m)
     if (jpath == NULL) {
         goto done;
     }
+    if (journal_path_owned(jpath)) {
+        errno = EBUSY;
+        goto done;
+    }
     fd = open(jpath, O_RDWR
 #ifdef O_CLOEXEC
               | O_CLOEXEC
@@ -695,8 +749,7 @@ bool sag_journal_replay(const char *path, TextBuf *tb, FileMeta *m)
     if (!lock_journal(fd)) {
         goto done;
     }
-    if (fstat(fd, &st) < 0 || st.st_size < 0 ||
-        (u64)st.st_size > SIZE_MAX) {
+    if (!journal_fd_valid(fd, &st)) {
         goto done;
     }
     size = (size_t)st.st_size;
@@ -705,9 +758,7 @@ bool sag_journal_replay(const char *path, TextBuf *tb, FileMeta *m)
         goto done;
     }
     if (!header_matches(data, size, canonical, m, &at)) {
-        (void)close(fd);
-        fd = -1;
-        stale_journal(jpath, dir);
+        stale_journal(fd, jpath, dir);
         goto done;
     }
     matched = true;
