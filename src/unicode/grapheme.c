@@ -121,6 +121,11 @@ bool sag_gb_boundary(SagGbState *st, u32 cp)
 
     assert(st != NULL);
 
+    if (st->prev_gcb == SAG_GCB_OTHER && cp >= 0x20u && cp < 0x7Fu) {
+        st->flags = SAG_GBF_SEEN;
+        return true;
+    }
+
     if (!sag_utf8_is_escape(cp) && cp < 0x80u) {
         if (cp == '\r')
             curr = SAG_GCB_CR;
@@ -140,11 +145,7 @@ bool sag_gb_boundary(SagGbState *st, u32 cp)
         ext_pict = (rec & SAG_U_EXT_PICT) != 0;
     }
 
-    /* Hot ASCII text reaches GB999 without a table lookup. */
-    if (st->prev_gcb == SAG_GCB_OTHER && cp >= 0x20u && cp < 0x7Fu)
-        boundary = true;
-    else
-        boundary = gb_break(st, curr, incb, ext_pict);
+    boundary = gb_break(st, curr, incb, ext_pict);
 
     gb_absorb(st, curr, incb, ext_pict);
     return boundary;

@@ -30,7 +30,10 @@ size_t sag_str_clip(const u8 *s, size_t len, int max_cells,
  * viewport tab-stop consumption lands in Sprint 15. Word_Break belongs to
  * Sprint 16 and case folding to Sprint 20. Sagitta deliberately provides no
  * normalization API: normalization would rewrite untouched file bytes.
- * UAX #14 line breaking and UAX #9 bidi are not part of the 1.0 width model.
+ * UAX #14 line breaking is outside 1.0 because Sprint 15 wraps on whitespace
+ * and cluster boundaries. UAX #9 bidi is outside 1.0, so RTL stays in logical
+ * order. Unicode 17 tables are deferred until after 1.0 to keep the 16.0.0
+ * conformance target stable throughout this campaign.
  */
 
 #endif

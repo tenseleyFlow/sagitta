@@ -3,6 +3,7 @@
 #include "unicode/grapheme.h"
 #include "unicode/tables.h"
 #include "unicode/utf8.h"
+#include "util/log.h"
 
 #include <limits.h>
 
@@ -112,9 +113,9 @@ static size_t cluster_end(const u8 *s, size_t len, size_t pos)
 {
     size_t next = sag_gb_next_bytes(s, len, pos);
 
-    /* Defensive progress for arbitrary byte strings. */
     if (next <= pos || next > len)
-        return pos + 1u;
+        SAG_BUG("grapheme iterator returned invalid boundary %zu for "
+                "offset %zu of %zu", next, pos, len);
     return next;
 }
 

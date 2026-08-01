@@ -5,4 +5,4 @@ clusters=349526
 cells=699052
 gate_us=advisory_until_sprint_56
 metric=best_of_7_us
-reference_best_us=15452
+reference_best_us=10824

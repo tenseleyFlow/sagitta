@@ -345,20 +345,72 @@ static bool parse_hex_field(const char *line, FuzzBuf *out)
     return !have_high && out->len != 0U;
 }
 
-static void load_file_lines(Corpus *corpus, const char *path)
+static int parse_gbtest_line(const char *line, FuzzBuf *out)
+{
+    const u8 *p = (const u8 *)line;
+
+    out->len = 0U;
+    while (*p != 0U) {
+        u32 cp = 0U;
+        size_t digits = 0U;
+        u8 encoded[SAG_UTF8_MAX];
+        size_t encoded_len;
+        u8 nibble;
+
+        while (*p == (u8)' ' || *p == (u8)'\t')
+            p++;
+        if (*p == (u8)'#' || *p == (u8)'\r' || *p == (u8)'\n' ||
+            *p == 0U)
+            break;
+        if (p[0] == 0xC3U && (p[1] == 0xB7U || p[1] == 0x97U)) {
+            p += 2;
+            continue;
+        }
+        while (hex_nibble((char)*p, &nibble)) {
+            if (digits == 6U)
+                return -1;
+            cp = (cp << 4) | nibble;
+            digits++;
+            p++;
+        }
+        if (digits == 0U)
+            return -1;
+        encoded_len = sag_utf8_encode(cp, encoded);
+        if (encoded_len == 0U)
+            return -1;
+        buf_insert(out, out->len, encoded, encoded_len);
+    }
+    return out->len == 0U ? 0 : 1;
+}
+
+static const char *path_basename(const char *path)
+{
+    const char *slash = strrchr(path, '/');
+
+    return slash == NULL ? path : slash + 1;
+}
+
+static bool load_file_lines(Corpus *corpus, const char *path)
 {
     FILE *fp = fopen(path, "rb");
     char *line = NULL;
     size_t line_cap = 0U;
     size_t line_no = 0U;
     ssize_t got;
+    bool ok = true;
+    bool gbtest = strcmp(path_basename(path),
+                         "GraphemeBreakTest.txt") == 0;
 
-    if (fp == NULL)
-        return;
+    if (fp == NULL) {
+        (void)fprintf(stderr, "fuzz: cannot open corpus %s: %s\n", path,
+                      strerror(errno));
+        return false;
+    }
     while ((got = getline(&line, &line_cap, fp)) >= 0) {
         char *name;
         FuzzBuf parsed = {0};
         size_t len = (size_t)got;
+        int gbtest_status = 0;
 
         line_no++;
         while (len != 0U && (line[len - 1U] == '\n' ||
@@ -368,41 +420,96 @@ static void load_file_lines(Corpus *corpus, const char *path)
             continue;
         name = xmalloc(strlen(path) + 32U);
         (void)snprintf(name, strlen(path) + 32U, "%s:%zu", path, line_no);
-        if (parse_hex_field(line, &parsed))
+        if (gbtest)
+            gbtest_status = parse_gbtest_line(line, &parsed);
+        if (gbtest_status < 0) {
+            (void)fprintf(stderr,
+                          "fuzz: malformed grapheme corpus %s:%zu\n",
+                          path, line_no);
+            free(name);
+            free(parsed.data);
+            ok = false;
+            break;
+        }
+        if (gbtest_status > 0 || parse_hex_field(line, &parsed))
             corpus_add(corpus, name, parsed.data, parsed.len);
-        else
+        else if (!gbtest)
             corpus_add(corpus, name, (const u8 *)line, len);
         free(name);
         free(parsed.data);
     }
+    if (ferror(fp)) {
+        (void)fprintf(stderr, "fuzz: cannot read corpus %s: %s\n", path,
+                      strerror(errno == 0 ? EIO : errno));
+        ok = false;
+    }
     free(line);
-    (void)fclose(fp);
+    if (fclose(fp) != 0) {
+        (void)fprintf(stderr, "fuzz: cannot close corpus %s: %s\n", path,
+                      strerror(errno));
+        ok = false;
+    }
+    return ok;
 }
 
-static void load_dir(Corpus *corpus, const char *path)
+static bool load_dir(Corpus *corpus, const char *path)
 {
     DIR *dir = opendir(path);
     struct dirent *ent;
+    bool ok = true;
 
-    if (dir == NULL)
-        return;
-    while ((ent = readdir(dir)) != NULL) {
+    if (dir == NULL) {
+        (void)fprintf(stderr, "fuzz: cannot open corpus directory %s: %s\n",
+                      path, strerror(errno));
+        return false;
+    }
+    for (;;) {
         char child[1024];
         struct stat st;
 
+        errno = 0;
+        ent = readdir(dir);
+        if (ent == NULL) {
+            if (errno != 0) {
+                (void)fprintf(stderr,
+                              "fuzz: cannot read corpus directory %s: %s\n",
+                              path, strerror(errno));
+                ok = false;
+            }
+            break;
+        }
         if (strcmp(ent->d_name, ".") == 0 || strcmp(ent->d_name, "..") == 0)
             continue;
         if (snprintf(child, sizeof(child), "%s/%s", path, ent->d_name) >=
-            (int)sizeof(child))
-            continue;
-        if (stat(child, &st) != 0)
-            continue;
-        if (S_ISDIR(st.st_mode))
-            load_dir(corpus, child);
-        else if (S_ISREG(st.st_mode))
-            load_file_lines(corpus, child);
+            (int)sizeof(child)) {
+            (void)fprintf(stderr, "fuzz: corpus path is too long: %s/%s\n",
+                          path, ent->d_name);
+            ok = false;
+            break;
+        }
+        if (stat(child, &st) != 0) {
+            (void)fprintf(stderr, "fuzz: cannot stat corpus %s: %s\n",
+                          child, strerror(errno));
+            ok = false;
+            break;
+        }
+        if (S_ISDIR(st.st_mode)) {
+            if (!load_dir(corpus, child)) {
+                ok = false;
+                break;
+            }
+        } else if (S_ISREG(st.st_mode) &&
+                   !load_file_lines(corpus, child)) {
+            ok = false;
+            break;
+        }
     }
-    (void)closedir(dir);
+    if (closedir(dir) != 0) {
+        (void)fprintf(stderr, "fuzz: cannot close corpus directory %s: %s\n",
+                      path, strerror(errno));
+        ok = false;
+    }
+    return ok;
 }
 
 static u64 prng_next(FuzzRun *run)
@@ -501,10 +608,14 @@ static void mutate_splice(FuzzRun *run, FuzzBuf *buf)
 {
     const FuzzBuf *other =
         &run->corpus.entries[choose(run, run->corpus.len)].bytes;
-    size_t from = choose(run, other->len + 1U);
-    size_t len = other->len - from;
+    size_t from;
+    size_t len;
     size_t at = choose(run, buf->len + 1U);
 
+    if (other->len == 0U)
+        return;
+    from = choose(run, other->len + 1U);
+    len = other->len - from;
     if (len != 0U)
         len = 1U + choose(run, len);
     buf_insert(buf, at, other->data + from, len);
@@ -608,12 +719,16 @@ static void watchdog(int signo)
 static bool checked(FuzzRun *run, const FuzzBuf *buf,
                     char why[SAG_FUZZ_WHY_CAP])
 {
+    u8 *exact = xmalloc(buf->len == 0U ? 1U : buf->len);
     bool ok;
 
+    if (buf->len != 0U)
+        (void)memcpy(exact, buf->data, buf->len);
     watchdog_iteration = (sig_atomic_t)run->iteration;
     (void)alarm(5U);
-    ok = run->check(buf->data, buf->len, why, SAG_FUZZ_WHY_CAP);
+    ok = run->check(exact, buf->len, why, SAG_FUZZ_WHY_CAP);
     (void)alarm(0U);
+    free(exact);
     return ok;
 }
 
@@ -779,8 +894,10 @@ int sag_fuzz_main(int argc, char **argv, const char *target,
         return 1;
     }
     add_builtin_corpus(&run.corpus);
-    if (corpus_dir != NULL)
-        load_dir(&run.corpus, corpus_dir);
+    if (corpus_dir != NULL && !load_dir(&run.corpus, corpus_dir)) {
+        corpus_free(&run.corpus);
+        return 2;
+    }
     corpus_sort(&run.corpus);
     run.state = run.seed == 0U ? UINT64_C(0x9E3779B97F4A7C15) : run.seed;
     run.hash = UINT64_C(1469598103934665603);

@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "unicode/grapheme.h"
+#include "unicode/utf8.h"
 #include "unicode/width.h"
 
 #include <stdio.h>
@@ -53,18 +54,60 @@ static bool prepare(PerfCase *pc)
 
 static bool scan(const u8 *s, size_t len, size_t *clusters, int *cells)
 {
+    SagGbState state;
     size_t pos = 0u;
+    size_t cluster_start = 0u;
     size_t count = 0u;
     int width = 0;
+    bool have_cluster = false;
+    bool simple_ascii = false;
 
+    sag_gb_init(&state);
     while (pos < len) {
-        SagCluster cluster;
-        size_t before = pos;
+        u32 cp;
+        size_t used;
+        bool boundary;
 
-        if (!sag_cluster_next(s, len, &pos, &cluster) || pos <= before)
+        if (state.prev_gcb == SAG_GCB_OTHER &&
+            s[pos] >= 0x20u && s[pos] <= 0x7eu) {
+            if (have_cluster) {
+                width += simple_ascii
+                             ? 1
+                             : sag_cluster_width(s + cluster_start,
+                                                 pos - cluster_start);
+                count++;
+            }
+            if (!sag_gb_boundary(&state, s[pos]))
+                return false;
+            cluster_start = pos;
+            have_cluster = true;
+            simple_ascii = true;
+            pos++;
+            continue;
+        }
+        used = sag_utf8_decode(s + pos, len - pos, &cp);
+        if (used == 0u || used > len - pos)
             return false;
+        boundary = sag_gb_boundary(&state, cp);
+        if (boundary && have_cluster) {
+            width += simple_ascii
+                         ? 1
+                         : sag_cluster_width(s + cluster_start,
+                                             pos - cluster_start);
+            count++;
+        }
+        if (boundary)
+            cluster_start = pos;
+        simple_ascii = false;
+        have_cluster = true;
+        pos += used;
+    }
+    if (have_cluster) {
+        width += simple_ascii
+                     ? 1
+                     : sag_cluster_width(s + cluster_start,
+                                         len - cluster_start);
         count++;
-        width += (int)cluster.cells;
     }
     *clusters = count;
     *cells = width;
@@ -82,17 +125,19 @@ static bool measure(PerfCase *pc)
     for (round = 0; round < PERF_ROUNDS; round++) {
         i64 start = now_ns();
         i64 elapsed;
+        size_t clusters;
         int cells;
 
         if (start < 0)
             return false;
-        cells = sag_str_width(pc->data, pc->len, 4u);
+        if (!scan(pc->data, pc->len, &clusters, &cells))
+            return false;
         elapsed = now_ns() - start;
         if (elapsed < 0)
             return false;
         if (elapsed < pc->best_ns)
             pc->best_ns = elapsed;
-        if (cells != pc->cells)
+        if (clusters != pc->clusters || cells != pc->cells)
             return false;
         perf_sink = pc->clusters + (size_t)cells;
     }

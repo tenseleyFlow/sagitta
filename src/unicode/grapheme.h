@@ -63,6 +63,9 @@ bool sag_cluster_next(const u8 *s, size_t len, size_t *pos,
  * Sprint 16; case folding in Sprint 20. Glyph attributes and tab-stop
  * consumption land in Sprints 5 and 15. Normalization is deliberately
  * absent for 1.0: an editor must not rewrite untouched file bytes. UAX #14
- * line breaking and UAX #9 bidi are also outside the 1.0 scope. */
+ * line breaking is outside 1.0 because Sprint 15 wraps on whitespace and
+ * cluster boundaries. UAX #9 bidi is outside 1.0, so RTL remains in logical
+ * order. Unicode 17 tables are a post-1.0 update; 16.0.0 stays pinned to keep
+ * this campaign's conformance results stable. */
 
 #endif

@@ -12,7 +12,11 @@ static void assert_round_trip(const u8 *input, size_t len)
         size_t consumed = sag_utf8_decode(input + pos, len - pos, &cp);
         size_t produced = sag_utf8_encode(cp, encoded);
 
-        SAG_ASSERT(consumed != 0);
+        if (consumed == 0 || consumed > len - pos ||
+            produced > sizeof(encoded) || produced != consumed) {
+            SAG_ASSERT(false);
+            return;
+        }
         SAG_ASSERT_EQ_U64(consumed, produced);
         SAG_ASSERT_EQ_MEM(input + pos, encoded, produced);
         pos += consumed;

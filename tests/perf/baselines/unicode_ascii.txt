@@ -5,4 +5,4 @@ clusters=1048576
 cells=1048576
 gate_us=5000
 metric=best_of_7_us
-reference_best_us=355
+reference_best_us=2716
