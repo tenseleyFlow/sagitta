@@ -1,0 +1,7 @@
+# Sagitta Sprint 05 advisory render baselines (median ns)
+# Timing rows warn at 1.2x through Sprint 55; deterministic byte limits fail.
+full_200x50 150000
+full_80x24 29000
+single_cell_200x50 80
+single_row_200x50 3100
+zero_damage_200x50 20

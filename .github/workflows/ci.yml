@@ -25,7 +25,7 @@ jobs:
           grep '^fuzz_' fuzz-1.txt > fuzz-results-1.txt
           grep '^fuzz_' fuzz-2.txt > fuzz-results-2.txt
           diff -u fuzz-results-1.txt fuzz-results-2.txt
-      - run: make perf-unicode CC=gcc
+      - run: make perf CC=gcc
 
   clang:
     runs-on: ubuntu-latest
