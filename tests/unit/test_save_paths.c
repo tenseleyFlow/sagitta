@@ -368,6 +368,12 @@ void test_save_existing_file_preserves_mode_owner_and_group(void)
     SAG_ASSERT_EQ_U64(after.st_mode & 07777U, before.st_mode & 07777U);
     SAG_ASSERT_EQ_U64(after.st_uid, before.st_uid);
     SAG_ASSERT_EQ_U64(after.st_gid, before.st_gid);
+    SAG_ASSERT(meta.exists);
+    SAG_ASSERT_EQ_U64(meta.dev, after.st_dev);
+    SAG_ASSERT_EQ_U64(meta.ino, after.st_ino);
+    SAG_ASSERT_EQ_U64(meta.nlink, after.st_nlink);
+    SAG_ASSERT_EQ_U64(meta.size_on_disk, (u64)after.st_size);
+    SAG_ASSERT_NOT_NULL(meta.realpath);
     sag_textbuf_free(tb);
     sag_filemeta_dispose(&meta);
     remove_tree(fixture.root);
@@ -391,6 +397,10 @@ void test_save_new_file_creates_requested_content(void)
     SAG_ASSERT_EQ_U64(sag_file_save(tb, &meta, path), SAG_SAVE_OK);
     SAG_ASSERT_EQ_I64(stat(path, &st), 0);
     SAG_ASSERT(S_ISREG(st.st_mode));
+    SAG_ASSERT(meta.exists);
+    SAG_ASSERT_EQ_U64(meta.dev, st.st_dev);
+    SAG_ASSERT_EQ_U64(meta.ino, st.st_ino);
+    SAG_ASSERT_EQ_U64(meta.size_on_disk, (u64)st.st_size);
     assert_saved_bytes(path, expected, sizeof(expected) - 1U);
     sag_textbuf_free(tb);
     sag_filemeta_dispose(&meta);

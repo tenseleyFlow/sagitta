@@ -962,7 +962,35 @@ fail:
                                                           : SAG_SAVE_IO;
 }
 
-SagSaveErr sag_file_save(const TextBuf *tb, const FileMeta *meta,
+static void refresh_saved_meta(FileMeta *meta, const char *path,
+                               bool via_symlink)
+{
+    struct stat st;
+    char *resolved;
+
+    if (stat(path, &st) != 0 || !S_ISREG(st.st_mode) || st.st_size < 0) {
+        sag_log(SAG_LOG_WARN,
+                "save succeeded but metadata refresh failed for %s", path);
+        return;
+    }
+    resolved = realpath(path, NULL);
+    if (resolved == NULL)
+        resolved = canonical_new_path(path);
+    free(meta->realpath);
+    meta->realpath = resolved;
+    meta->exists = true;
+    meta->via_symlink = via_symlink;
+    meta->mode = st.st_mode;
+    meta->uid = st.st_uid;
+    meta->gid = st.st_gid;
+    meta->nlink = st.st_nlink;
+    meta->dev = st.st_dev;
+    meta->ino = st.st_ino;
+    meta->mtime = stat_mtime(&st);
+    meta->size_on_disk = (u64)st.st_size;
+}
+
+SagSaveErr sag_file_save(const TextBuf *tb, FileMeta *meta,
                          const char *path)
 {
     struct stat link_st;
@@ -1002,6 +1030,8 @@ SagSaveErr sag_file_save(const TextBuf *tb, const FileMeta *meta,
         result = inplace_save(tb, meta, dst);
     else
         result = atomic_save(tb, meta, dst);
+    if (result == SAG_SAVE_OK)
+        refresh_saved_meta(meta, dst, is_symlink);
     free(dir);
     free(resolved);
     return result;
