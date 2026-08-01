@@ -11,17 +11,18 @@ static void edit_require(const EditCtx *ec)
         SAG_BUG("edit: NULL context or buffer");
 }
 
-static bool edit_ensure_journal(EditCtx *ec)
+void sag_edit_ensure_journal(EditCtx *ec)
 {
     const char *path;
 
     if (ec->meta == NULL || ec->jrnl != NULL)
-        return true;
+        return;
     path = ec->meta->realpath;
     if (path == NULL)
-        return false;
+        SAG_BUG("edit: file-backed buffer has no journal path");
     ec->jrnl = sag_journal_open(path, ec->meta);
-    return ec->jrnl != NULL;
+    if (ec->jrnl == NULL)
+        SAG_BUG("edit: cannot open crash journal before mutation");
 }
 
 static u8 *copy_range(const TextBuf *tb, Span range)
@@ -63,8 +64,7 @@ void sag_edit_insert(EditCtx *ec, ByteOff at, const u8 *bytes, u64 len)
         SAG_BUG("edit insert: NULL payload");
     if (len == 0U)
         return;
-    if (!edit_ensure_journal(ec))
-        return;
+    sag_edit_ensure_journal(ec);
     if (ec->cset != NULL)
         sag_cset_require_single_edit(ec->cset);
     payload = ec->tb->add.len;
@@ -92,8 +92,7 @@ void sag_edit_delete(EditCtx *ec, Span range)
     len = range.hi - range.lo;
     if (len == 0U)
         return;
-    if (!edit_ensure_journal(ec))
-        return;
+    sag_edit_ensure_journal(ec);
     if (ec->cset != NULL)
         sag_cset_require_single_edit(ec->cset);
     removed = copy_range(ec->tb, range);

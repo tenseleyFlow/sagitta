@@ -130,15 +130,19 @@ typedef struct UndoTree {
     u64 gen;
     u64 root_len;
     u64 root_hash;
+    u64 saved_len;
+    u64 saved_hash;
     u64 bytes_max;
     u64 persist_bytes_max;
     u32 min_nodes;
     SagTxnReason pending_reason;
     bool boundary;
     bool over_budget_logged;
+    bool reopened;
     SagUndoMonoClock mono_clock;
     SagUndoWallClock wall_clock;
     void *clock_ctx;
+    const TextBuf *owner;
 } UndoTree;
 
 typedef struct {
