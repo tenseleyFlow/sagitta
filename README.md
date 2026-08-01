@@ -5,9 +5,10 @@ arrow-key focus. Its scripting and macro language, **Fletch** (`*.fl`), is
 designed so recorded edits are readable programs and programs can drive the
 editor. The implementation is C11 using only the C standard library and POSIX.
 
-Sagitta is currently **pre-1.0 scaffolding**. Editing, terminal rendering, and
-Fletch execution land in later sprints; unimplemented surfaces fail with a
-message naming the sprint that provides them.
+Sagitta is currently **pre-1.0**. Its terminal stack, deterministic renderer,
+PTY acceptance harness, and byte-oriented text-engine foundation are in place.
+Interactive editing and Fletch execution land in later sprints; unimplemented
+surfaces fail with a message naming the sprint that provides them.
 
 ## Build
 
