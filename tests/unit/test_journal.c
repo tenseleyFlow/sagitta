@@ -21,6 +21,19 @@ typedef struct {
     char stale[208];
 } JournalFixture;
 
+void test_journal_crc32_known_vectors_and_streaming(void)
+{
+    static const u8 check[] = "123456789";
+    u32 crc;
+
+    SAG_ASSERT_EQ_U64(sag_crc32(NULL, 0U), 0U);
+    SAG_ASSERT_EQ_U64(sag_crc32(check, sizeof(check) - 1U), 0xcbf43926U);
+    crc = sag_crc32_begin();
+    crc = sag_crc32_add(crc, check, 4U);
+    crc = sag_crc32_add(crc, check + 4U, sizeof(check) - 1U - 4U);
+    SAG_ASSERT_EQ_U64(sag_crc32_end(crc), 0xcbf43926U);
+}
+
 static u64 journal_test_fnv64(const char *text)
 {
     u64 hash = UINT64_C(14695981039346656037);

@@ -118,25 +118,32 @@ static void crc32_init(void)
     crc32_ready = true;
 }
 
-static u32 crc32_begin(void)
+u32 sag_crc32_begin(void)
 {
     crc32_init();
     return UINT32_MAX;
 }
 
-static u32 crc32_add(u32 crc, const u8 *bytes, size_t len)
+u32 sag_crc32_add(u32 crc, const u8 *bytes, size_t len)
 {
     size_t i;
 
+    if (bytes == NULL && len != 0U)
+        SAG_BUG("sag_crc32_add: NULL bytes");
     for (i = 0U; i < len; i++) {
         crc = crc32_table[(crc ^ bytes[i]) & 0xffU] ^ (crc >> 8U);
     }
     return crc;
 }
 
-static u32 crc32_end(u32 crc)
+u32 sag_crc32_end(u32 crc)
 {
     return crc ^ UINT32_MAX;
+}
+
+u32 sag_crc32(const u8 *bytes, size_t len)
+{
+    return sag_crc32_end(sag_crc32_add(sag_crc32_begin(), bytes, len));
 }
 
 static u64 fnv64(const char *path)
@@ -403,10 +410,10 @@ void sag_journal_record(Journal *j, u8 op, u64 off, const u8 *b, u64 n)
     fixed[0] = op;
     put_u64_le(fixed + 1U, off);
     put_u64_le(fixed + 9U, n);
-    crc = crc32_begin();
-    crc = crc32_add(crc, fixed, sizeof(fixed));
-    crc = crc32_add(crc, b, (size_t)n);
-    put_u32_le(encoded_crc, crc32_end(crc));
+    crc = sag_crc32_begin();
+    crc = sag_crc32_add(crc, fixed, sizeof(fixed));
+    crc = sag_crc32_add(crc, b, (size_t)n);
+    put_u32_le(encoded_crc, sag_crc32_end(crc));
     if (!write_all(j->fd, fixed, sizeof(fixed)) ||
         !write_all(j->fd, b, (size_t)n) ||
         !write_all(j->fd, encoded_crc, sizeof(encoded_crc))) {
@@ -632,8 +639,7 @@ static size_t valid_record_prefix(const u8 *data, size_t size, size_t at)
             record_size > size - at)
             break;
         expected = get_u32_le(record + 17U + payload_size);
-        actual = crc32_end(crc32_add(crc32_begin(), record,
-                                     17U + payload_size));
+        actual = sag_crc32(record, 17U + payload_size);
         if (actual != expected)
             break;
         at += record_size;
@@ -782,8 +788,7 @@ bool sag_journal_replay(const char *path, TextBuf *tb, FileMeta *m)
             break;
         }
         expected = get_u32_le(record + 17U + payload_size);
-        actual = crc32_end(crc32_add(crc32_begin(), record,
-                                     17U + payload_size));
+        actual = sag_crc32(record, 17U + payload_size);
         if (actual != expected ||
             !apply_record(tb, op, off, record + 17U, payload_len)) {
             break;

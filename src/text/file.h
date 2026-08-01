@@ -55,6 +55,8 @@ typedef enum {
 SagLoadErr sag_file_load(const char *path, TextBuf **out, FileMeta *meta);
 SagSaveErr sag_file_save(const TextBuf *tb, const FileMeta *meta,
                          const char *path);
+SagSaveErr sag_file_write_atomic(const char *path, const u8 *bytes,
+                                 size_t len, mode_t mode);
 
 void sag_filemeta_init(FileMeta *meta);
 void sag_filemeta_dispose(FileMeta *meta);

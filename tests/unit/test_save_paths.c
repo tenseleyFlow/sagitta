@@ -396,3 +396,34 @@ void test_save_new_file_creates_requested_content(void)
     sag_filemeta_dispose(&meta);
     remove_tree(fixture.root);
 }
+
+void test_save_atomic_bytes_replaces_file_and_cleans_temp(void)
+{
+    static const u8 original[] = "old";
+    static const u8 replacement[] = {0U, 1U, 2U, 0xffU, '\n'};
+    SaveFixture fixture;
+    char path[128];
+    DIR *dir;
+    struct dirent *entry;
+    struct stat before;
+    struct stat after;
+
+    save_fixture_make(&fixture);
+    path_in(path, sizeof(path), fixture.root, "tree.sagu");
+    save_write(path, original, sizeof(original) - 1U, 0600);
+    SAG_ASSERT_EQ_I64(stat(path, &before), 0);
+    SAG_ASSERT_EQ_U64(sag_file_write_atomic(path, replacement,
+                                            sizeof(replacement), 0600),
+                      SAG_SAVE_OK);
+    SAG_ASSERT_EQ_I64(stat(path, &after), 0);
+    SAG_ASSERT(before.st_ino != after.st_ino);
+    SAG_ASSERT_EQ_U64(after.st_mode & 07777U, 0600U);
+    assert_saved_bytes(path, replacement, sizeof(replacement));
+
+    dir = opendir(fixture.root);
+    SAG_ASSERT_NOT_NULL(dir);
+    while ((entry = readdir(dir)) != NULL)
+        SAG_ASSERT(strncmp(entry->d_name, ".sag-tree.sagu-", 15U) != 0);
+    SAG_ASSERT_EQ_I64(closedir(dir), 0);
+    remove_tree(fixture.root);
+}

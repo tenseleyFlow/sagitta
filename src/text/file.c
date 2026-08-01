@@ -835,6 +835,55 @@ static int open_temp(const char *dir, const char *base, mode_t mode,
     return -1;
 }
 
+static bool commit_temp(const char *tmp, const char *dst, const char *dir)
+{
+    if (rename(tmp, dst) != 0)
+        return false;
+    return fsync_directory(dir);
+}
+
+SagSaveErr sag_file_write_atomic(const char *path, const u8 *bytes,
+                                 size_t len, mode_t mode)
+{
+    char *dir;
+    char *tmp = NULL;
+    int fd;
+    int saved_errno;
+
+    if (path == NULL || (bytes == NULL && len != 0U)) {
+        errno = EINVAL;
+        return SAG_SAVE_IO;
+    }
+    dir = path_dirname(path);
+    fd = open_temp(dir, path_basename(path), mode, &tmp);
+    if (fd < 0)
+        goto fail;
+    if (!write_full(fd, bytes, len) || !fsync_full(fd))
+        goto fail;
+    if (close(fd) != 0) {
+        fd = -1;
+        goto fail;
+    }
+    fd = -1;
+    if (!commit_temp(tmp, path, dir))
+        goto fail;
+    free(tmp);
+    free(dir);
+    return SAG_SAVE_OK;
+
+fail:
+    saved_errno = errno == 0 ? EIO : errno;
+    if (fd >= 0)
+        (void)close(fd);
+    if (tmp != NULL)
+        (void)unlink(tmp);
+    free(tmp);
+    free(dir);
+    errno = saved_errno;
+    return saved_errno == EACCES || saved_errno == EPERM ? SAG_SAVE_PERM
+                                                          : SAG_SAVE_IO;
+}
+
 static SagSaveErr atomic_save(const TextBuf *tb, const FileMeta *meta,
                               const char *dst)
 {
@@ -842,7 +891,6 @@ static SagSaveErr atomic_save(const TextBuf *tb, const FileMeta *meta,
     char *tmp = NULL;
     mode_t mode = meta->exists ? meta->mode & 07777U : 0666U;
     int fd = open_temp(dir, path_basename(dst), mode, &tmp);
-    int dfd;
     bool foreign_owner;
     int saved_errno;
     SagSaveErr match;
@@ -888,7 +936,7 @@ static SagSaveErr atomic_save(const TextBuf *tb, const FileMeta *meta,
         free(dir);
         return inplace_save(tb, meta, dst);
     }
-    if (rename(tmp, dst) != 0) {
+    if (!commit_temp(tmp, dst, dir)) {
         saved_errno = errno;
         (void)unlink(tmp);
         free(tmp);
@@ -898,23 +946,6 @@ static SagSaveErr atomic_save(const TextBuf *tb, const FileMeta *meta,
         return saved_errno == EACCES || saved_errno == EPERM
                    ? SAG_SAVE_PERM
                    : SAG_SAVE_IO;
-    }
-    dfd = open(dir, O_RDONLY
-#ifdef O_DIRECTORY
-                    | O_DIRECTORY
-#endif
-    );
-    if (dfd < 0 || !fsync_full(dfd)) {
-        if (dfd >= 0)
-            (void)close(dfd);
-        free(tmp);
-        free(dir);
-        return SAG_SAVE_IO;
-    }
-    if (close(dfd) != 0) {
-        free(tmp);
-        free(dir);
-        return SAG_SAVE_IO;
     }
     free(tmp);
     free(dir);

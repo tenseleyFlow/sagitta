@@ -14,6 +14,12 @@ enum {
     SAG_JOURNAL_DEL = 2
 };
 
+/* IEEE CRC-32, suitable for streaming serialized records. */
+u32 sag_crc32_begin(void);
+u32 sag_crc32_add(u32 crc, const u8 *bytes, size_t len);
+u32 sag_crc32_end(u32 crc);
+u32 sag_crc32(const u8 *bytes, size_t len);
+
 Journal *sag_journal_open(const char *realpath, const FileMeta *m);
 void sag_journal_record(Journal *j, u8 op, u64 off, const u8 *b, u64 n);
 void sag_journal_sync(Journal *j);
