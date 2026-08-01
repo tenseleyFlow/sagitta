@@ -709,10 +709,12 @@ static void hash_bytes(FuzzRun *run, const FuzzBuf *buf)
 static void watchdog(int signo)
 {
     static const char message[] = "fuzz: watchdog expired\n";
+    ssize_t written;
 
     (void)signo;
     (void)watchdog_iteration;
-    (void)write(STDERR_FILENO, message, sizeof(message) - 1U);
+    written = write(STDERR_FILENO, message, sizeof(message) - 1U);
+    (void)written;
     _Exit(124);
 }
 
