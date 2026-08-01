@@ -197,6 +197,69 @@ void test_multicursor_adjust_bias_and_merge(void)
     sag_cset_free(&insert);
 }
 
+static u64 multicursor_random(u64 *state)
+{
+    u64 x = *state;
+
+    x ^= x >> 12U;
+    x ^= x << 25U;
+    x ^= x >> 27U;
+    *state = x;
+    return x * UINT64_C(2685821657736338717);
+}
+
+static u64 multicursor_oracle_adjust(u64 pos, bool right_bias, u8 op,
+                                     u64 at, u64 len)
+{
+    if (op == SAG_JOURNAL_INS) {
+        if (pos > at || (pos == at && right_bias))
+            pos += len;
+    } else if (pos >= at + len) {
+        pos -= len;
+    } else if (pos >= at) {
+        pos = at;
+    }
+    return pos;
+}
+
+void test_multicursor_adjust_random_oracle(void)
+{
+    CursorSet set;
+    u64 state = UINT64_C(0xd1b54a32d192ed03);
+    u64 text_len = 1000U;
+    u64 pos = 750U;
+    u64 anchor = 250U;
+    u64 i;
+
+    sag_cset_init(&set, test_cursor(pos, anchor, 17U));
+    for (i = 0U; i < 10000U; i++) {
+        u8 op;
+        u64 at;
+        u64 len;
+
+        if (text_len == 0U || (multicursor_random(&state) & 1U) == 0U) {
+            op = SAG_JOURNAL_INS;
+            at = multicursor_random(&state) % (text_len + 1U);
+            len = multicursor_random(&state) % 9U;
+            text_len += len;
+        } else {
+            op = SAG_JOURNAL_DEL;
+            at = multicursor_random(&state) % text_len;
+            len = 1U + multicursor_random(&state) % (text_len - at);
+            if (len > 8U)
+                len = 8U;
+            text_len -= len;
+        }
+        pos = multicursor_oracle_adjust(pos, true, op, at, len);
+        anchor = multicursor_oracle_adjust(anchor, false, op, at, len);
+        sag_cset_adjust(&set, op, BYTEOFF(at), len);
+        SAG_ASSERT_EQ_U64(set.curs.len, 1U);
+        SAG_ASSERT_EQ_U64(set.primary, 0U);
+        assert_cursor(&set.curs.data[0], pos, anchor, 17U);
+    }
+    sag_cset_free(&set);
+}
+
 void test_multicursor_remove_and_normalize_clamp(void)
 {
     TextBuf *tb = sag_textbuf_from_bytes((const u8 *)"abcd", 4U);

@@ -65,6 +65,7 @@ const SagTest sag_tests[] = {
     T(multicursor_touch_and_adjacency),
     T(multicursor_permutation_determinism),
     T(multicursor_adjust_bias_and_merge),
+    T(multicursor_adjust_random_oracle),
     T(multicursor_remove_and_normalize_clamp),
     T(multicursor_edit_guard_names_sprint17),
     T(file_load_empty_roundtrips),

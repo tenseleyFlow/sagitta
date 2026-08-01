@@ -62,6 +62,7 @@ void test_multicursor_selection_union_semantics(void);
 void test_multicursor_touch_and_adjacency(void);
 void test_multicursor_permutation_determinism(void);
 void test_multicursor_adjust_bias_and_merge(void);
+void test_multicursor_adjust_random_oracle(void);
 void test_multicursor_remove_and_normalize_clamp(void);
 void test_multicursor_edit_guard_names_sprint17(void);
 void test_file_load_empty_roundtrips(void);
