@@ -17,6 +17,22 @@ typedef struct {
     MarkBias bias;
 } OracleMark;
 
+typedef struct {
+    MarkId ids[8];
+    u64 rel[8];
+    size_t len;
+} CollapseLog;
+
+static void record_collapse(void *ctx, MarkId id, u64 rel_off)
+{
+    CollapseLog *log = ctx;
+
+    SAG_ASSERT(log->len < SAG_ARRAY_LEN(log->ids));
+    log->ids[log->len] = id;
+    log->rel[log->len] = rel_off;
+    log->len++;
+}
+
 static void assert_adjust(u8 op, u64 at, u64 len, u64 pos, MarkBias bias,
                           u64 expected)
 {
@@ -75,7 +91,11 @@ void test_mark_generational_handles(void)
 {
     MarkSet *ms = sag_marks_new();
     MarkId stale = sag_mark_add(ms, BYTEOFF(9U), SAG_BIAS_LEFT);
+    MarkId inside_a;
+    MarkId inside_b;
+    MarkId edge;
     MarkId fresh;
+    CollapseLog log = {0};
 
     sag_mark_del(ms, stale);
     fresh = sag_mark_add(ms, BYTEOFF(12U), SAG_BIAS_RIGHT);
@@ -84,6 +104,35 @@ void test_mark_generational_handles(void)
     SAG_ASSERT_EQ_U64(sag_mark_pos(ms, fresh).v, 12U);
     SAG_ASSERT_EQ_I64(stale_handle_exit(ms, stale, false), SAG_EXIT_BUG);
     SAG_ASSERT_EQ_I64(stale_handle_exit(ms, stale, true), SAG_EXIT_BUG);
+
+    inside_a = sag_mark_add(ms, BYTEOFF(5U), SAG_BIAS_LEFT);
+    inside_b = sag_mark_add(ms, BYTEOFF(7U), SAG_BIAS_RIGHT);
+    edge = sag_mark_add(ms, BYTEOFF(4U), SAG_BIAS_RIGHT);
+    sag_marks_observe_collapse(ms, (Span){4U, 8U}, record_collapse, &log);
+    SAG_ASSERT_EQ_U64(log.len, 3U);
+    SAG_ASSERT_EQ_U64(log.ids[0].id, edge.id);
+    SAG_ASSERT_EQ_U64(log.rel[0], 0U);
+    SAG_ASSERT_EQ_U64(log.ids[1].id, inside_a.id);
+    SAG_ASSERT_EQ_U64(log.ids[1].gen, inside_a.gen);
+    SAG_ASSERT_EQ_U64(log.rel[1], 1U);
+    SAG_ASSERT_EQ_U64(log.ids[2].id, inside_b.id);
+    SAG_ASSERT_EQ_U64(log.rel[2], 3U);
+    sag_marks_adjust(ms, SAG_JOURNAL_DEL, BYTEOFF(4U), 4U);
+    SAG_ASSERT_EQ_U64(sag_mark_pos(ms, inside_a).v, 4U);
+    SAG_ASSERT_EQ_U64(sag_mark_pos(ms, inside_b).v, 4U);
+    SAG_ASSERT_EQ_U64(sag_mark_pos(ms, edge).v, 4U);
+    sag_marks_adjust(ms, SAG_JOURNAL_INS, BYTEOFF(4U), 4U);
+    SAG_ASSERT_EQ_U64(sag_mark_pos(ms, inside_a).v, 4U);
+    SAG_ASSERT_EQ_U64(sag_mark_pos(ms, inside_b).v, 8U);
+    SAG_ASSERT_EQ_U64(sag_mark_pos(ms, edge).v, 8U);
+    SAG_ASSERT(sag_mark_repair(ms, edge, BYTEOFF(4U)));
+    SAG_ASSERT(sag_mark_repair(ms, inside_a, BYTEOFF(5U)));
+    SAG_ASSERT(sag_mark_repair(ms, inside_b, BYTEOFF(7U)));
+    SAG_ASSERT_EQ_U64(sag_mark_pos(ms, edge).v, 4U);
+    SAG_ASSERT_EQ_U64(sag_mark_pos(ms, inside_a).v, 5U);
+    SAG_ASSERT_EQ_U64(sag_mark_pos(ms, inside_b).v, 7U);
+    SAG_ASSERT(!sag_mark_repair(ms, stale, BYTEOFF(99U)));
+    SAG_ASSERT_EQ_U64(sag_mark_pos(ms, fresh).v, 12U);
     sag_marks_free(ms);
 }
 

@@ -220,6 +220,62 @@ ByteOff sag_mark_pos(const MarkSet *ms, MarkId id)
     return slot->mark.pos;
 }
 
+void sag_marks_observe_collapse(const MarkSet *ms, Span range,
+                                SagMarkCollapseFn observe, void *ctx)
+{
+    u32 i;
+
+    require_set(ms, "sag_marks_observe_collapse");
+    if (range.lo > range.hi)
+        SAG_BUG("sag_marks_observe_collapse: invalid range [%llu,%llu)",
+                (unsigned long long)range.lo,
+                (unsigned long long)range.hi);
+    if (observe == NULL)
+        SAG_BUG("sag_marks_observe_collapse: NULL observer");
+    i = lower_bound_pos(ms, range.lo);
+    while (i < ms->order_len) {
+        u32 slot_id = ms->order[i];
+        const MarkSlot *slot = &ms->slots[slot_id];
+
+        if (slot->mark.pos.v >= range.hi)
+            break;
+        observe(ctx, (MarkId){slot_id, slot->gen},
+                slot->mark.pos.v - range.lo);
+        i++;
+    }
+}
+
+bool sag_mark_repair(MarkSet *ms, MarkId id, ByteOff pos)
+{
+    MarkSlot *slot;
+    u32 old_at;
+    u32 new_at;
+
+    require_set(ms, "sag_mark_repair");
+    if (id.id >= ms->slots_len)
+        return false;
+    slot = &ms->slots[id.id];
+    if (!slot->mark.alive || slot->gen != id.gen)
+        return false;
+    for (old_at = 0U;
+         old_at < ms->order_len && ms->order[old_at] != id.id;
+         old_at++) {
+    }
+    if (old_at == ms->order_len)
+        SAG_BUG("sag_mark_repair: live mark missing from ordered index");
+    (void)memmove(&ms->order[old_at], &ms->order[old_at + 1U],
+                  (size_t)(ms->order_len - old_at - 1U) *
+                      sizeof(*ms->order));
+    ms->order_len--;
+    slot->mark.pos = pos;
+    new_at = upper_bound_pos(ms, pos.v);
+    (void)memmove(&ms->order[new_at + 1U], &ms->order[new_at],
+                  (size_t)(ms->order_len - new_at) * sizeof(*ms->order));
+    ms->order[new_at] = id.id;
+    ms->order_len++;
+    return true;
+}
+
 static void adjust_insert(MarkSet *ms, u64 at, u64 len)
 {
     u32 first = lower_bound_pos(ms, at);

@@ -134,6 +134,29 @@ void test_piece_insert_positions(void)
     sag_textbuf_free(end);
 }
 
+static void assert_insert_span_reuses_store(u8 src)
+{
+    TextBuf *tb = sag_textbuf_from_bytes((const u8 *)"orig\n", 5U);
+    Span span;
+    u64 add_len;
+    u64 gen;
+
+    sag_textbuf_insert(tb, BYTEOFF(5U), (const u8 *)"add\n", 4U);
+    span = src == SAG_STORE_ORIG ? (Span){0U, 5U} : (Span){0U, 4U};
+    add_len = tb->add.len;
+    gen = tb->gen;
+    sag_textbuf_insert_span(tb, BYTEOFF(0U), src, span);
+    sag_textbuf_check(tb);
+    SAG_ASSERT_EQ_U64(tb->add.len, add_len);
+    SAG_ASSERT_EQ_U64(tb->gen, gen + 1U);
+    SAG_ASSERT_EQ_U64(sag_textbuf_line_count(tb), 4U);
+    if (src == SAG_STORE_ORIG)
+        assert_content(tb, "orig\norig\nadd\n", 14U);
+    else
+        assert_content(tb, "add\norig\nadd\n", 13U);
+    sag_textbuf_free(tb);
+}
+
 void test_piece_insert_every_seam(void)
 {
     TextBuf *left_seam = sag_textbuf_from_bytes((const u8 *)"abcdef", 6U);
@@ -154,6 +177,9 @@ void test_piece_insert_every_seam(void)
     assert_content(right_seam, "abcXRdef", 8U);
     sag_textbuf_free(left_seam);
     sag_textbuf_free(right_seam);
+
+    assert_insert_span_reuses_store(SAG_STORE_ORIG);
+    assert_insert_span_reuses_store(SAG_STORE_ADD);
 }
 
 void test_piece_insert_accepts_exposed_chunk_alias(void)

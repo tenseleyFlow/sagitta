@@ -825,6 +825,45 @@ void sag_textbuf_insert(TextBuf *tb, ByteOff at, const u8 *bytes, u64 len)
     tb->add_tail_known = true;
 }
 
+void sag_textbuf_insert_span(TextBuf *tb, ByteOff at, u8 src, Span span)
+{
+    const TextStore *store;
+    u64 buffer_len;
+    u64 inserted_len;
+    u64 old_gen;
+    Span old_affected;
+    PieceNode *middle;
+
+    if (tb == NULL)
+        SAG_BUG("sag_textbuf_insert_span: NULL buffer");
+    buffer_len = node_bytes(tb->root);
+    if (at.v > buffer_len)
+        SAG_BUG("span insert offset %llu beyond buffer length %llu",
+                (unsigned long long)at.v,
+                (unsigned long long)buffer_len);
+    store = text_store(tb->backing, src);
+    if (span.lo > span.hi || span.hi > store->len)
+        SAG_BUG("invalid inserted span [%llu,%llu) for store length %llu",
+                (unsigned long long)span.lo,
+                (unsigned long long)span.hi,
+                (unsigned long long)store->len);
+    inserted_len = span.hi - span.lo;
+    if (inserted_len == 0U)
+        return;
+    if (inserted_len > UINT64_MAX - buffer_len)
+        SAG_BUG("span insert length overflows text buffer");
+    textbuf_require_edit_generation(tb);
+    old_gen = tb->gen;
+    old_affected = sag_textbuf_line_span(
+        tb, sag_textbuf_line_of(tb, at));
+    middle = node_new(piece_make(tb->backing, src, span));
+    tb->root = node_insert(tb, tb->root, at.v, middle);
+    tb->gen++;
+    sag_coords_index_note_edit(tb, (Span){at.v, at.v}, inserted_len,
+                               old_affected, old_gen);
+    tb->add_tail_known = false;
+}
+
 void sag_textbuf_delete(TextBuf *tb, Span range)
 {
     PieceNode *before_end;

@@ -144,6 +144,8 @@ void sag_textbuf_free(TextBuf *tb);
 
 /* Payload may alias either backing store; the implementation stages it. */
 void sag_textbuf_insert(TextBuf *tb, ByteOff at, const u8 *bytes, u64 len);
+/* Splices an existing immutable store span without appending its bytes. */
+void sag_textbuf_insert_span(TextBuf *tb, ByteOff at, u8 src, Span span);
 void sag_textbuf_delete(TextBuf *tb, Span range);
 
 u64 sag_textbuf_len(const TextBuf *tb);
