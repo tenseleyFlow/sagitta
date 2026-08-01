@@ -4,6 +4,7 @@ PREFIX  ?= /usr/local
 MODULES ?= lsp ai fuss plugins
 FUZZ_ITERS ?= 200000
 FUZZ_SEED  ?= 1
+FUZZ_SECONDS ?=
 
 ifneq ($(filter 1,$(SAN)),)
 ifneq ($(filter 1,$(VALGRIND)),)
@@ -61,13 +62,15 @@ UNIT_LINK_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ)) $(UNIT_OBJ)
 FUZZ_LIB_OBJ := $(BUILD)/tests/fuzz/fuzzlib.o
 FUZZ_UTF8_OBJ := $(BUILD)/tests/fuzz/fuzz_utf8.o
 FUZZ_GRAPHEME_OBJ := $(BUILD)/tests/fuzz/fuzz_grapheme.o
+FUZZ_INPUT_OBJ := $(BUILD)/tests/fuzz/fuzz_input.o
 FUZZ_LINK_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ)) $(FUZZ_LIB_OBJ)
 
 PERF_UNICODE_OBJ := $(BUILD)/tests/perf/perf_unicode.o
 PERF_LINK_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ)) $(PERF_UNICODE_OBJ)
 
 BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(FUZZ_LIB_OBJ) \
-                $(FUZZ_UTF8_OBJ) $(FUZZ_GRAPHEME_OBJ) $(PERF_UNICODE_OBJ)))
+                $(FUZZ_UTF8_OBJ) $(FUZZ_GRAPHEME_OBJ) $(FUZZ_INPUT_OBJ) \
+                $(PERF_UNICODE_OBJ)))
 
 # A content mismatch makes FORCE a normal prerequisite of every object built
 # by this invocation.  The stamp recipe also removes objects not reachable
@@ -99,6 +102,9 @@ $(BUILD)/fuzz_utf8: $(FUZZ_LINK_OBJ) $(FUZZ_UTF8_OBJ)
 $(BUILD)/fuzz_grapheme: $(FUZZ_LINK_OBJ) $(FUZZ_GRAPHEME_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) $(FUZZ_GRAPHEME_OBJ)
 
+$(BUILD)/fuzz_input: $(FUZZ_LINK_OBJ) $(FUZZ_INPUT_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) $(FUZZ_INPUT_OBJ)
+
 $(BUILD)/perf_unicode: $(PERF_LINK_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_LINK_OBJ)
 
@@ -107,12 +113,17 @@ $(BUILD)/gen-unicode-tables: scripts/gen-unicode-tables.c | dirs
 
 test: $(BUILD)/unit_tests $(BUILD)/sagitta
 	$(UNIT_RUN)
+	scripts/check-input.sh
 	scripts/check-sigsafe.sh
 	scripts/smoke.sh $(BUILD)/sagitta
 
-fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme
+fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input
 	$(BUILD)/fuzz_utf8 --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_grapheme --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+	$(BUILD)/fuzz_input --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+	@if [ -n "$(FUZZ_SECONDS)" ]; then \
+		$(BUILD)/fuzz_input --seconds=$(FUZZ_SECONDS) --seed=$(FUZZ_SEED); \
+	fi
 
 perf-unicode: $(BUILD)/perf_unicode
 	$(BUILD)/perf_unicode
@@ -150,6 +161,7 @@ test-pty:
 
 -include $(OBJ:.o=.d) $(UNIT_OBJ:.o=.d) $(FUZZ_LIB_OBJ:.o=.d) \
          $(FUZZ_UTF8_OBJ:.o=.d) $(FUZZ_GRAPHEME_OBJ:.o=.d) \
+         $(FUZZ_INPUT_OBJ:.o=.d) \
          $(PERF_UNICODE_OBJ:.o=.d)
 
 FORCE:

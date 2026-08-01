@@ -39,7 +39,8 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       - run: make test CC=clang SAN=1 BUILD=build-san
-      - run: make fuzz CC=clang SAN=1 BUILD=build-san FUZZ_ITERS=200000 FUZZ_SEED=1
+      - name: Fuzz, including the 60-second input campaign
+        run: make fuzz CC=clang SAN=1 BUILD=build-san FUZZ_ITERS=200000 FUZZ_SEED=1 FUZZ_SECONDS=60
 
   valgrind:
     runs-on: ubuntu-latest

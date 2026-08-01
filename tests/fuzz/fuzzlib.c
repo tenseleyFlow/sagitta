@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "unicode/utf8.h"
@@ -43,6 +44,8 @@ typedef struct {
     u64 hash;
     size_t iteration;
     size_t iterations;
+    u64 seconds;
+    u64 deadline_ms;
     const char *target;
     SagFuzzCheck check;
     Corpus corpus;
@@ -51,6 +54,17 @@ typedef struct {
 static volatile sig_atomic_t watchdog_iteration;
 
 static void *xmalloc(size_t size);
+
+static u64 monotonic_ms(void)
+{
+    struct timespec ts;
+
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0) {
+        (void)fprintf(stderr, "fuzz: clock_gettime: %s\n", strerror(errno));
+        _Exit(2);
+    }
+    return (u64)ts.tv_sec * UINT64_C(1000) + (u64)ts.tv_nsec / 1000000U;
+}
 
 static bool fail_at(char *why, size_t cap, const char *message, size_t off)
 {
@@ -885,8 +899,12 @@ int sag_fuzz_main(int argc, char **argv, const char *target,
             continue;
         if (parse_size_option(argv[i], "--iters=", &run.iterations))
             continue;
+        if (parse_u64_option(argv[i], "--seconds=", &run.seconds) &&
+            run.seconds != 0U)
+            continue;
         (void)fprintf(stderr,
-                      "usage: %s [--seed=N] [--iters=N]\n", argv[0]);
+                      "usage: %s [--seed=N] [--iters=N] [--seconds=N]\n",
+                      argv[0]);
         return 2;
     }
     if (!crashes_empty()) {
@@ -903,6 +921,19 @@ int sag_fuzz_main(int argc, char **argv, const char *target,
     corpus_sort(&run.corpus);
     run.state = run.seed == 0U ? UINT64_C(0x9E3779B97F4A7C15) : run.seed;
     run.hash = UINT64_C(1469598103934665603);
+    if (run.seconds != 0U) {
+        u64 now = monotonic_ms();
+        u64 span;
+
+        if (run.seconds > UINT64_MAX / 1000U) {
+            (void)fprintf(stderr, "%s: duration is too large\n", target);
+            corpus_free(&run.corpus);
+            return 2;
+        }
+        span = run.seconds * 1000U;
+        run.deadline_ms = now > UINT64_MAX - span ? UINT64_MAX : now + span;
+        run.iterations = SIZE_MAX;
+    }
     (void)memset(&action, 0, sizeof(action));
     action.sa_handler = watchdog;
     (void)sigemptyset(&action.sa_mask);
@@ -922,6 +953,10 @@ int sag_fuzz_main(int argc, char **argv, const char *target,
         size_t m;
         char why[SAG_FUZZ_WHY_CAP] = {0};
 
+        if (run.seconds != 0U && run.iteration != 0U &&
+            monotonic_ms() >= run.deadline_ms)
+            break;
+
         buf_assign(&input, seed->bytes.data, seed->bytes.len);
         for (m = 0U; m < mutations; m++)
             op = mutate(&run, &input);
@@ -939,9 +974,17 @@ int sag_fuzz_main(int argc, char **argv, const char *target,
         }
         free(input.data);
     }
-    (void)printf("%s: seed=%llu iters=%zu corpus=%zu hash=%016llx ok\n",
-                 target, (unsigned long long)run.seed, run.iterations,
-                 run.corpus.len, (unsigned long long)run.hash);
+    if (run.seconds != 0U) {
+        (void)printf("%s: seed=%llu seconds=%llu iters=%zu corpus=%zu "
+                     "hash=%016llx ok\n",
+                     target, (unsigned long long)run.seed,
+                     (unsigned long long)run.seconds, run.iteration,
+                     run.corpus.len, (unsigned long long)run.hash);
+    } else {
+        (void)printf("%s: seed=%llu iters=%zu corpus=%zu hash=%016llx ok\n",
+                     target, (unsigned long long)run.seed, run.iterations,
+                     run.corpus.len, (unsigned long long)run.hash);
+    }
     corpus_free(&run.corpus);
     return 0;
 }

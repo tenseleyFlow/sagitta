@@ -78,6 +78,21 @@ const SagTest sag_tests[] = {
     T(tty_resume_failure_visible),
     T(tty_probe_config),
     T(tty_truecolor),
+    T(input_legacy_bytes),
+    T(input_csi_keys),
+    T(input_csi_drops),
+    T(input_ss3_keys),
+    T(input_kitty_keys),
+    T(input_paste_framing),
+    T(input_mouse_and_focus),
+    T(input_chunking_independence),
+    T(input_escape_deadlines),
+    T(input_enable_blobs),
+    T(input_unknown_csi),
+    T(input_random_progress),
+    T(input_seed_and_cap),
+    T(input_large_streaming_paste),
+    T(input_hostile_strings),
 };
 
 const size_t sag_tests_len = SAG_ARRAY_LEN(sag_tests);

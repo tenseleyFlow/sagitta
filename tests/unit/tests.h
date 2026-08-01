@@ -75,5 +75,20 @@ void test_tty_probe_ambiguous_prefix(void);
 void test_tty_resume_failure_visible(void);
 void test_tty_probe_config(void);
 void test_tty_truecolor(void);
+void test_input_legacy_bytes(void);
+void test_input_csi_keys(void);
+void test_input_csi_drops(void);
+void test_input_ss3_keys(void);
+void test_input_kitty_keys(void);
+void test_input_paste_framing(void);
+void test_input_mouse_and_focus(void);
+void test_input_chunking_independence(void);
+void test_input_escape_deadlines(void);
+void test_input_enable_blobs(void);
+void test_input_unknown_csi(void);
+void test_input_random_progress(void);
+void test_input_seed_and_cap(void);
+void test_input_large_streaming_paste(void);
+void test_input_hostile_strings(void);
 
 #endif
