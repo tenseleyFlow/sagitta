@@ -466,6 +466,21 @@ static void replace_after_snapshot(EditCtx *ec, UndoNode *node)
     ut->bytes_live += (u64)node->n_after * sizeof(CursorRec);
 }
 
+static void commit_reopened_snapshot(UndoTree *ut, UndoNode *node)
+{
+    if (!ut->reopened)
+        return;
+    if (node->cur_after < ut->reopen_cur_after + ut->reopen_n_after ||
+        (size_t)node->cur_after + node->n_after != ut->cursors.len)
+        SAG_BUG("undo: invalid reopened cursor snapshots");
+    (void)memmove(ut->cursors.data + ut->reopen_cur_after,
+                  ut->cursors.data + node->cur_after,
+                  (size_t)node->n_after * sizeof(CursorRec));
+    node->cur_after = ut->reopen_cur_after;
+    ut->cursors.len = (size_t)node->cur_after + node->n_after;
+    ut->bytes_live -= (u64)ut->reopen_n_after * sizeof(CursorRec);
+}
+
 void sag_undo_record_insert(EditCtx *ec, ByteOff at, u64 len, u64 payload)
 {
     UndoTree *ut;
@@ -688,6 +703,8 @@ void sag_undo_end(EditCtx *ec)
         return;
     if (ut->open != 0U)
         replace_after_snapshot(ec, node_mut(ut, ut->open));
+    if (ut->open != 0U)
+        commit_reopened_snapshot(ut, node_mut(ut, ut->open));
     ut->pending_reason = SAG_TXN_REASON_MAX;
     ut->open = 0U;
     ut->reopened = false;
@@ -1004,6 +1021,17 @@ static bool protected_node(const UndoTree *ut, u32 id, u32 floor)
            (ut->saved != 0U && is_ancestor(ut, id, ut->saved));
 }
 
+static u64 node_storage_bytes(const UndoNode *node)
+{
+    return sizeof(*node) +
+           (u64)node->n_ops *
+               (sizeof(UndoOp) + sizeof(UndoRepairRun) +
+                sizeof(UndoReplaySpan)) +
+           (node->blob_hi - node->blob_lo) +
+           ((u64)node->n_before + node->n_after) * sizeof(CursorRec) +
+           (u64)node->n_rep * sizeof(MarkRepair);
+}
+
 static void account_live(UndoTree *ut)
 {
     u64 total = 0U;
@@ -1013,66 +1041,148 @@ static void account_live(UndoTree *ut)
         if (!node_live(ut, id))
             continue;
         node = node_get(ut, id);
-        total += sizeof(*node);
-        total += (u64)node->n_ops *
-                 (sizeof(UndoOp) + sizeof(UndoRepairRun) +
-                  sizeof(UndoReplaySpan));
-        total += node->blob_hi - node->blob_lo;
-        total += (u64)(node->n_before + node->n_after) * sizeof(CursorRec);
-        total += (u64)node->n_rep * sizeof(MarkRepair);
+        total += node_storage_bytes(node);
     }
     ut->bytes_live = total;
 }
 
-static void compact_blobs(UndoTree *ut)
+static void compact_history(UndoTree *ut)
 {
-    Bytebuf compact;
+    SagUndoOpVec ops = {0};
+    SagCursorRecVec cursors = {0};
+    SagMarkRepairVec repairs = {0};
+    SagUndoRepairRunVec repair_runs = {0};
+    SagUndoReplaySpanVec replay_spans = {0};
+    Bytebuf blobs;
     u32 id;
-    u64 dead_blobs;
-    u64 live_blobs = 0U;
 
-    for (id = 1U; (size_t)id <= ut->nodes.len; id++) {
-        const UndoNode *node = node_get(ut, id);
-        if (node_live(ut, id))
-            live_blobs += node->blob_hi - node->blob_lo;
-    }
-    if (live_blobs > ut->blobs.len)
-        SAG_BUG("undo compact: live blobs exceed arena");
-    dead_blobs = ut->blobs.len - live_blobs;
-    if (dead_blobs <= live_blobs)
+    if (ut->bytes_dead <= ut->bytes_live)
         return;
-    bytebuf_init(&compact);
+    bytebuf_init(&blobs);
     for (id = 1U; (size_t)id <= ut->nodes.len; id++) {
         UndoNode *node;
+        u32 old_ops_at;
+        u32 old_rep_at;
+        u32 old_n_rep;
+        u32 old_cur_before;
+        u32 old_cur_after;
+        u32 copied_repairs = 0U;
         u32 i;
+
         if (!node_live(ut, id)) {
             node = node_mut(ut, id);
+            node->ops_at = 0U;
+            node->n_ops = 0U;
+            node->rep_at = 0U;
+            node->n_rep = 0U;
             node->blob_lo = 0U;
             node->blob_hi = 0U;
+            node->cur_before = 0U;
+            node->n_before = 0U;
+            node->cur_after = 0U;
+            node->n_after = 0U;
             continue;
         }
         node = node_mut(ut, id);
-        node->blob_lo = compact.len;
+        old_ops_at = node->ops_at;
+        old_rep_at = node->rep_at;
+        old_n_rep = node->n_rep;
+        old_cur_before = node->cur_before;
+        old_cur_after = node->cur_after;
+        if ((size_t)old_ops_at > ut->ops.len ||
+            node->n_ops > ut->ops.len - old_ops_at ||
+            (size_t)old_ops_at > ut->repair_runs.len ||
+            node->n_ops > ut->repair_runs.len - old_ops_at ||
+            (size_t)old_ops_at > ut->replay_spans.len ||
+            node->n_ops > ut->replay_spans.len - old_ops_at ||
+            (size_t)old_rep_at > ut->repairs.len ||
+            old_n_rep > ut->repairs.len - old_rep_at ||
+            (size_t)old_cur_before > ut->cursors.len ||
+            node->n_before > ut->cursors.len - old_cur_before ||
+            (size_t)old_cur_after > ut->cursors.len ||
+            node->n_after > ut->cursors.len - old_cur_after)
+            SAG_BUG("undo compact: corrupt arena slice");
+        if (ops.len > UINT32_MAX || repairs.len > UINT32_MAX ||
+            cursors.len > UINT32_MAX)
+            SAG_BUG("undo compact: arena index overflow");
+        if (node->n_ops > UINT32_MAX - (u32)ops.len ||
+            old_n_rep > UINT32_MAX - (u32)repairs.len ||
+            node->n_before > UINT32_MAX - (u32)cursors.len ||
+            node->n_after >
+                UINT32_MAX - (u32)cursors.len - node->n_before)
+            SAG_BUG("undo compact: arena length overflow");
+        node->ops_at = (u32)ops.len;
+        node->rep_at = (u32)repairs.len;
+        node->n_rep = 0U;
+        node->blob_lo = blobs.len;
         for (i = 0U; i < node->n_ops; i++) {
-            UndoOp *op = &ut->ops.data[node->ops_at + i];
-            u64 old_payload;
-            if (op->kind != SAG_OP_DEL)
-                continue;
-            if (op->payload > ut->blobs.len ||
-                op->len > ut->blobs.len - op->payload)
-                SAG_BUG("undo compact: corrupt blob slice");
-            old_payload = op->payload;
-            op->payload = compact.len;
-            bytebuf_append(&compact, ut->blobs.data + (size_t)old_payload,
-                           (size_t)op->len);
+            u32 old_index = old_ops_at + i;
+            UndoOp op = ut->ops.data[old_index];
+            const UndoRepairRun *old_run =
+                &ut->repair_runs.data[old_index];
+            UndoRepairRun run;
+            u32 r;
+
+            if (old_run->at != old_rep_at + copied_repairs ||
+                old_run->len > old_n_rep - copied_repairs)
+                SAG_BUG("undo compact: inconsistent repair run");
+            run.at = (u32)repairs.len;
+            run.len = old_run->len;
+            for (r = 0U; r < old_run->len; r++)
+                SagMarkRepairVec_push(
+                    &repairs, ut->repairs.data[old_run->at + r]);
+            if (op.kind == SAG_OP_DEL) {
+                if (op.payload > ut->blobs.len ||
+                    op.len > ut->blobs.len - op.payload)
+                    SAG_BUG("undo compact: corrupt blob slice");
+                {
+                    u64 old_payload = op.payload;
+
+                    op.payload = blobs.len;
+                    bytebuf_append(&blobs,
+                                   ut->blobs.data + (size_t)old_payload,
+                                   (size_t)op.len);
+                }
+            }
+            if (run.len > UINT32_MAX - node->n_rep)
+                SAG_BUG("undo compact: repair count overflow");
+            node->n_rep += run.len;
+            copied_repairs += run.len;
+            SagUndoOpVec_push(&ops, op);
+            SagUndoRepairRunVec_push(&repair_runs, run);
+            SagUndoReplaySpanVec_push(
+                &replay_spans, ut->replay_spans.data[old_index]);
         }
-        node->blob_hi = compact.len;
+        if (copied_repairs != old_n_rep ||
+            node->n_rep != (u32)(repairs.len - node->rep_at))
+            SAG_BUG("undo compact: inconsistent repair slice");
+        node->blob_hi = blobs.len;
+        if (cursors.len > UINT32_MAX)
+            SAG_BUG("undo compact: cursor index overflow");
+        node->cur_before = (u32)cursors.len;
+        for (i = 0U; i < node->n_before; i++)
+            SagCursorRecVec_push(
+                &cursors, ut->cursors.data[old_cur_before + i]);
+        if (cursors.len > UINT32_MAX)
+            SAG_BUG("undo compact: cursor index overflow");
+        node->cur_after = (u32)cursors.len;
+        for (i = 0U; i < node->n_after; i++)
+            SagCursorRecVec_push(
+                &cursors, ut->cursors.data[old_cur_after + i]);
     }
+    SagUndoOpVec_free(&ut->ops);
+    SagCursorRecVec_free(&ut->cursors);
+    SagMarkRepairVec_free(&ut->repairs);
+    SagUndoRepairRunVec_free(&ut->repair_runs);
+    SagUndoReplaySpanVec_free(&ut->replay_spans);
     bytebuf_free(&ut->blobs);
-    ut->blobs = compact;
-    ut->bytes_dead = dead_blobs > ut->bytes_dead
-                         ? 0U
-                         : ut->bytes_dead - dead_blobs;
+    ut->ops = ops;
+    ut->cursors = cursors;
+    ut->repairs = repairs;
+    ut->repair_runs = repair_runs;
+    ut->replay_spans = replay_spans;
+    ut->blobs = blobs;
+    ut->bytes_dead = 0U;
     ut->gen++;
     account_live(ut);
 }
@@ -1099,14 +1209,7 @@ static void tombstone_subtree(UndoTree *ut, u32 root)
             continue;
         node = node_mut(ut, id);
         node->flags |= SAG_TXN_DEAD;
-        ut->bytes_dead += sizeof(*node) +
-                          (u64)node->n_ops *
-                              (sizeof(UndoOp) + sizeof(UndoRepairRun) +
-                               sizeof(UndoReplaySpan)) +
-                          (node->blob_hi - node->blob_lo) +
-                          (u64)(node->n_before + node->n_after) *
-                              sizeof(CursorRec) +
-                          (u64)node->n_rep * sizeof(MarkRepair);
+        ut->bytes_dead += node_storage_bytes(node);
     }
 }
 
@@ -1191,7 +1294,13 @@ static bool reroot_one(UndoTree *ut)
     {
         UndoNode *next = node_mut(ut, child);
 
-        ut->bytes_dead += next->blob_hi - next->blob_lo;
+        ut->bytes_dead += node_storage_bytes(root) +
+            (u64)next->n_ops *
+                (sizeof(UndoOp) + sizeof(UndoRepairRun) +
+                 sizeof(UndoReplaySpan)) +
+            (next->blob_hi - next->blob_lo) +
+            (u64)next->n_before * sizeof(CursorRec) +
+            (u64)next->n_rep * sizeof(MarkRepair);
         next->n_ops = 0U;
         next->n_before = 0U;
         next->n_rep = 0U;
@@ -1229,9 +1338,23 @@ static void trim_tree(EditCtx *ec)
         }
         break;
     }
-    if (rerooted)
+    if (rerooted) {
+        u32 depth_base = node_get(ut, ut->root)->depth;
+        u32 id;
+
+        for (id = 1U; (size_t)id <= ut->nodes.len; id++) {
+            UndoNode *node;
+
+            if (!node_live(ut, id))
+                continue;
+            node = node_mut(ut, id);
+            if (node->depth < depth_base)
+                SAG_BUG("undo trim: descendant depth underflow");
+            node->depth -= depth_base;
+        }
         state_identity_at(ec, ut->root, &ut->root_len, &ut->root_hash);
-    compact_blobs(ut);
+    }
+    compact_history(ut);
 }
 
 u32 sag_undo_branch_cycle(UndoTree *ut, i32 delta)
@@ -1688,6 +1811,236 @@ static bool write_truncated_path(EditCtx *ec, Bytebuf *file,
     return (u64)file->len <= ut->persist_bytes_max;
 }
 
+static u32 selected_redo_child(const UndoTree *ut, const u8 *keep,
+                               const UndoNode *node)
+{
+    u32 child;
+
+    if (node->redo_child != 0U && keep[node->redo_child] != 0U)
+        return node->redo_child;
+    for (child = node->first_child; child != 0U;
+         child = node_get(ut, child)->next_sibling) {
+        if (keep[child] != 0U)
+            return child;
+    }
+    return 0U;
+}
+
+static bool write_selected_tree(EditCtx *ec, Bytebuf *file,
+                                const u8 *keep, u32 root, u32 count,
+                                u64 cur_len, u64 cur_hash)
+{
+    UndoTree *ut = ec->undo;
+    const UndoNode *root_node = node_get(ut, root);
+    u32 saved = ut->saved != 0U && keep[ut->saved] != 0U ? ut->saved : 0U;
+    u32 anchor = saved != 0U ? saved : root;
+    u32 depth_base = root_node->depth;
+    u32 crc_xor = 0U;
+    u64 root_len;
+    u64 root_hash;
+    u32 id;
+
+    state_identity_at(ec, root, &root_len, &root_hash);
+    bytebuf_free(file);
+    bytebuf_init(file);
+    write_header(file, SAGU_TRUNCATED, root, ut->cur, saved, anchor, count,
+                 saved != 0U ? ut->saved_len : root_len,
+                 saved != 0U ? ut->saved_hash : root_hash,
+                 cur_len, cur_hash);
+    for (id = 1U; (size_t)id <= ut->nodes.len; id++) {
+        const UndoNode *node;
+        bool rerooted;
+        u8 flags;
+
+        if (keep[id] == 0U)
+            continue;
+        node = node_get(ut, id);
+        if (node->depth < depth_base)
+            SAG_BUG("undo write: selected depth underflow");
+        rerooted = id == root && root != ut->root;
+        flags = node->flags &
+                (u8)~(SAG_TXN_DEAD | SAG_TXN_SAVED);
+        if (rerooted)
+            flags |= SAG_TXN_TRIMMED;
+        if (id == saved)
+            flags |= SAG_TXN_SAVED;
+        crc_xor ^= write_node_record(
+            ec, file, node, id == root ? 0U : node->parent,
+            selected_redo_child(ut, keep, node),
+            node->depth - depth_base, flags, rerooted);
+    }
+    put_u32(file, crc_xor);
+    bytebuf_append(file, "UGAS", 4U);
+    return (u64)file->len <= ut->persist_bytes_max;
+}
+
+static bool write_truncated_tree(EditCtx *ec, Bytebuf *file,
+                                 u64 full_size, u64 cur_len, u64 cur_hash)
+{
+    UndoTree *ut = ec->undo;
+    size_t slots = ut->nodes.len + 1U;
+    u8 *keep = sag_xcalloc(slots, sizeof(*keep));
+    u8 *protect = sag_xcalloc(slots, sizeof(*protect));
+    u8 *subtree_protected = sag_xcalloc(slots, sizeof(*subtree_protected));
+    u64 *node_sizes = sag_xcalloc(slots, sizeof(*node_sizes));
+    u64 *subtree_sizes = sag_xcalloc(slots, sizeof(*subtree_sizes));
+    u32 *subtree_counts = sag_xcalloc(slots, sizeof(*subtree_counts));
+    u64 total = full_size;
+    u32 count = live_count(ut);
+    u32 root = ut->root;
+    u32 recent = 0U;
+    u32 id;
+    bool wrote = false;
+
+    for (id = 1U; (size_t)id <= ut->nodes.len; id++) {
+        if (!node_live(ut, id))
+            continue;
+        keep[id] = 1U;
+        node_sizes[id] = serialized_node_size(ut, node_get(ut, id), false);
+    }
+    id = ut->cur;
+    while (id != 0U) {
+        protect[id] = 1U;
+        id = node_get(ut, id)->parent;
+    }
+    id = ut->saved;
+    while (id != 0U) {
+        protect[id] = 1U;
+        id = node_get(ut, id)->parent;
+    }
+    id = (u32)ut->nodes.len;
+    while (id != 0U && recent < ut->min_nodes) {
+        if (keep[id] != 0U) {
+            protect[id] = 1U;
+            recent++;
+        }
+        id--;
+    }
+    {
+        size_t at = ut->nodes.len;
+
+        while (at != 0U) {
+            const UndoNode *node;
+            u32 parent;
+
+            id = (u32)at--;
+            if (keep[id] == 0U)
+                continue;
+            node = node_get(ut, id);
+            subtree_sizes[id] += node_sizes[id];
+            subtree_counts[id]++;
+            if (protect[id] != 0U)
+                subtree_protected[id] = 1U;
+            parent = node->parent;
+            if (parent != 0U) {
+                if (subtree_sizes[id] >
+                    UINT64_MAX - subtree_sizes[parent])
+                    subtree_sizes[parent] = UINT64_MAX;
+                else
+                    subtree_sizes[parent] += subtree_sizes[id];
+                if (subtree_counts[id] >
+                    UINT32_MAX - subtree_counts[parent])
+                    SAG_BUG("undo write: selected node count overflow");
+                subtree_counts[parent] += subtree_counts[id];
+                if (subtree_protected[id] != 0U)
+                    subtree_protected[parent] = 1U;
+            }
+        }
+    }
+    for (id = 1U; (size_t)id <= ut->nodes.len &&
+                       total > ut->persist_bytes_max;
+         id++) {
+        const UndoNode *node;
+        u32 parent;
+        u32 drop;
+
+        if (keep[id] == 0U || subtree_protected[id] != 0U)
+            continue;
+        node = node_get(ut, id);
+        parent = node->parent;
+        if (parent != 0U && subtree_protected[parent] == 0U)
+            continue;
+        if (subtree_sizes[id] > total || subtree_counts[id] > count)
+            SAG_BUG("undo write: invalid selected subtree accounting");
+        total -= subtree_sizes[id];
+        count -= subtree_counts[id];
+        keep[id] = 0U;
+        for (drop = id + 1U; (size_t)drop <= ut->nodes.len; drop++) {
+            const UndoNode *candidate;
+
+            if (keep[drop] == 0U)
+                continue;
+            candidate = node_get(ut, drop);
+            if (candidate->parent != 0U &&
+                keep[candidate->parent] == 0U)
+                keep[drop] = 0U;
+        }
+    }
+    while (total > ut->persist_bytes_max && count > ut->min_nodes &&
+           root != ut->saved) {
+        const UndoNode *root_node = node_get(ut, root);
+        u32 child = 0U;
+        u32 at;
+        u64 old_child_size;
+        u64 new_child_size;
+
+        for (at = root_node->first_child; at != 0U;
+             at = node_get(ut, at)->next_sibling) {
+            if (keep[at] == 0U)
+                continue;
+            if (child != 0U) {
+                child = 0U;
+                break;
+            }
+            child = at;
+        }
+        if (child == 0U || child == ut->cur)
+            break;
+        old_child_size = node_sizes[child];
+        new_child_size = serialized_node_size(
+            ut, node_get(ut, child), true);
+        if (node_sizes[root] > total ||
+            old_child_size > total - node_sizes[root])
+            SAG_BUG("undo write: invalid selected root accounting");
+        total -= node_sizes[root] + old_child_size;
+        if (new_child_size > UINT64_MAX - total)
+            total = UINT64_MAX;
+        else
+            total += new_child_size;
+        keep[root] = 0U;
+        root = child;
+        count--;
+    }
+    if (total <= ut->persist_bytes_max)
+        wrote = write_selected_tree(ec, file, keep, root, count,
+                                    cur_len, cur_hash);
+    free(subtree_counts);
+    free(subtree_sizes);
+    free(node_sizes);
+    free(subtree_protected);
+    free(protect);
+    free(keep);
+    return wrote;
+}
+
+static u64 serialized_tree_size(const UndoTree *ut)
+{
+    u64 total = SAGU_HEADER_LEN + 8U;
+    u32 id;
+
+    for (id = 1U; (size_t)id <= ut->nodes.len; id++) {
+        u64 node_size;
+
+        if (!node_live(ut, id))
+            continue;
+        node_size = serialized_node_size(ut, node_get(ut, id), false);
+        if (node_size > UINT64_MAX - total)
+            return UINT64_MAX;
+        total += node_size;
+    }
+    return total;
+}
+
 SagUndoWriteResult sag_undo_write(EditCtx *ec, const char *path)
 {
     UndoTree *ut;
@@ -1696,6 +2049,7 @@ SagUndoWriteResult sag_undo_write(EditCtx *ec, const char *path)
     u32 count;
     u32 crc_xor = 0U;
     u32 id;
+    u64 serialized_size;
     u64 current_len;
     u64 current_hash;
     SagSaveErr result;
@@ -1710,27 +2064,33 @@ SagUndoWriteResult sag_undo_write(EditCtx *ec, const char *path)
     current_hash = text_hash(ec->tb);
     anchor = ut->saved != 0U ? ut->saved : ut->root;
     count = live_count(ut);
+    serialized_size = serialized_tree_size(ut);
     bytebuf_init(&file);
-    write_header(&file, 0U, ut->root, ut->cur, ut->saved, anchor, count,
-                 ut->saved != 0U ? ut->saved_len : ut->root_len,
-                 ut->saved != 0U ? ut->saved_hash : ut->root_hash,
-                 current_len, current_hash);
-    for (id = 1U; (size_t)id <= ut->nodes.len; id++) {
-        const UndoNode *node;
-        if (!node_live(ut, id))
-            continue;
-        node = node_get(ut, id);
-        crc_xor ^= write_node_record(ec, &file, node, node->parent,
-                                     node->redo_child, node->depth,
-                                     node->flags, false);
-    }
-    put_u32(&file, crc_xor);
-    bytebuf_append(&file, "UGAS", 4U);
-    if ((u64)file.len > ut->persist_bytes_max) {
-        if (!write_truncated_path(ec, &file, current_len, current_hash)) {
+    if (serialized_size > ut->persist_bytes_max ||
+        serialized_size > SIZE_MAX) {
+        if (!write_truncated_tree(ec, &file, serialized_size,
+                                  current_len, current_hash) &&
+            !write_truncated_path(ec, &file, current_len, current_hash)) {
             bytebuf_free(&file);
             return SAG_UNDO_WRITE_TOO_LARGE;
         }
+    } else {
+        write_header(&file, 0U, ut->root, ut->cur, ut->saved, anchor, count,
+                     ut->saved != 0U ? ut->saved_len : ut->root_len,
+                     ut->saved != 0U ? ut->saved_hash : ut->root_hash,
+                     current_len, current_hash);
+        for (id = 1U; (size_t)id <= ut->nodes.len; id++) {
+            const UndoNode *node;
+
+            if (!node_live(ut, id))
+                continue;
+            node = node_get(ut, id);
+            crc_xor ^= write_node_record(ec, &file, node, node->parent,
+                                         node->redo_child, node->depth,
+                                         node->flags, false);
+        }
+        put_u32(&file, crc_xor);
+        bytebuf_append(&file, "UGAS", 4U);
     }
     result = sag_file_write_atomic(path, file.data, file.len, 0600);
     bytebuf_free(&file);

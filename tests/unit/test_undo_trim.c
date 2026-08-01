@@ -209,6 +209,7 @@ void test_undo_trim_reroot_stops_undo_at_oldest_survivor(void)
     SAG_ASSERT(f.undo->root != original_root);
     SAG_ASSERT(!trim_live(f.undo, original_root));
     SAG_ASSERT_EQ_U64(f.undo->nodes.data[f.undo->root - 1U].parent, 0U);
+    SAG_ASSERT_EQ_U64(f.undo->nodes.data[f.undo->root - 1U].depth, 0U);
     SAG_ASSERT((f.undo->nodes.data[f.undo->root - 1U].flags &
                 SAG_TXN_TRIMMED) != 0U);
     SAG_ASSERT(sag_undo_to(&f.edit, f.undo->root));
@@ -256,6 +257,10 @@ void test_undo_trim_compaction_preserves_delete_payloads(void)
 
     SAG_ASSERT(f.undo->gen > old_gen);
     SAG_ASSERT_EQ_U64(f.undo->blobs.len, 256U);
+    SAG_ASSERT_EQ_U64(f.undo->ops.len, 3U);
+    SAG_ASSERT_EQ_U64(f.undo->repair_runs.len, 3U);
+    SAG_ASSERT_EQ_U64(f.undo->replay_spans.len, 3U);
+    SAG_ASSERT_EQ_U64(f.undo->cursors.len, 6U);
     current = &f.undo->nodes.data[f.undo->cur - 1U];
     SAG_ASSERT_EQ_U64(current->n_ops, 1U);
     op = &f.undo->ops.data[current->ops_at];
@@ -307,17 +312,20 @@ void test_undo_trim_random_edits_keep_live_parent_chains(void)
             continue;
         node = &f.undo->nodes.data[i - 1U];
         SAG_ASSERT(node->parent == 0U || trim_live(f.undo, node->parent));
-        SAG_ASSERT(node->parent == 0U ||
-                   f.undo->nodes.data[node->parent - 1U].depth < node->depth);
-        if (checked < 64U) {
-            SAG_ASSERT(sag_undo_to(&f.edit, i));
-            SAG_ASSERT_EQ_U64(sag_undo_current(f.undo), i);
-            checked++;
-        }
+        SAG_ASSERT(node->parent == 0U
+                       ? node->depth == 0U
+                       : node->depth ==
+                             f.undo->nodes.data[node->parent - 1U].depth +
+                                 1U);
+        SAG_ASSERT(sag_undo_to(&f.edit, i));
+        SAG_ASSERT_EQ_U64(sag_undo_current(f.undo), i);
+        checked++;
     }
     SAG_ASSERT(checked != 0U);
     SAG_ASSERT(trim_live(f.undo, f.undo->root));
     SAG_ASSERT(trim_live(f.undo, f.undo->cur));
+    SAG_ASSERT(f.undo->ops.len < 512U);
+    SAG_ASSERT(f.undo->cursors.len < 1024U);
     sag_textbuf_check(f.tb);
     trim_fixture_free(&f);
 }
