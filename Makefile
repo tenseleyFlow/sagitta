@@ -3,6 +3,12 @@ BUILD   ?= build
 PREFIX  ?= /usr/local
 MODULES ?= lsp ai fuss plugins
 
+ifneq ($(filter 1,$(SAN)),)
+ifneq ($(filter 1,$(VALGRIND)),)
+$(error SAN=1 and VALGRIND=1 are mutually exclusive)
+endif
+endif
+
 KNOWN_MODS := lsp ai fuss plugins
 BAD_MODS   := $(filter-out $(KNOWN_MODS),$(MODULES))
 ifneq ($(BAD_MODS),)
@@ -21,6 +27,19 @@ CFLAGS := -std=c11 -pedantic -Wall -Wextra -Werror -Wvla -g -O2 \
           -DSAG_WITH_AI=$(if $(filter ai,$(MODULES)),1,0) \
           -DSAG_WITH_FUSS=$(if $(filter fuss,$(MODULES)),1,0) \
           -DSAG_WITH_PLUGINS=$(if $(filter plugins,$(MODULES)),1,0)
+LDFLAGS :=
+
+# Sanitized and plain objects must never mix: use SAN=1 BUILD=build-san.
+ifeq ($(SAN),1)
+CFLAGS  += -fsanitize=address,undefined -fno-omit-frame-pointer -O1
+LDFLAGS += -fsanitize=address,undefined -fno-omit-frame-pointer -O1
+endif
+
+UNIT_RUN := $(BUILD)/unit_tests
+ifeq ($(VALGRIND),1)
+UNIT_RUN := valgrind --quiet --error-exitcode=99 --leak-check=full \
+            --errors-for-leak-kinds=definite $(BUILD)/unit_tests
+endif
 
 # Keep source and link order deterministic across filesystems.
 CORE_SRC := $(shell find src -path 'src/mod/*' -prune -o -name '*.c' \
@@ -54,16 +73,17 @@ endif
 all: $(BUILD)/sagitta $(BUILD)/sag
 
 $(BUILD)/sagitta: $(OBJ)
-	$(CC) $(CFLAGS) -o $@ $(OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJ)
 
 $(BUILD)/sag: $(BUILD)/sagitta
 	ln -sf sagitta $@
 
 $(BUILD)/unit_tests: $(UNIT_LINK_OBJ)
-	$(CC) $(CFLAGS) -o $@ $(UNIT_LINK_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(UNIT_LINK_OBJ)
 
-test: $(BUILD)/unit_tests
-	./$(BUILD)/unit_tests
+test: $(BUILD)/unit_tests $(BUILD)/sagitta
+	$(UNIT_RUN)
+	scripts/smoke.sh $(BUILD)/sagitta
 
 # Check the literal selection on every invocation, but preserve the stamp's
 # mtime when it is unchanged so objects are not rebuilt spuriously.
@@ -87,9 +107,14 @@ install: all
 clean:
 	rm -rf $(BUILD)
 
-test-script test-pty fuzz:
-	@echo "make: $@ is not implemented until Sprint 1" >&2
-	@false
+test-script:
+	@echo 'error: script-test runner lands in Sprint 37 (sag --batch)'; exit 1
+
+test-pty:
+	@echo 'error: pty-test harness lands in Sprint 6'; exit 1
+
+fuzz:
+	@echo 'error: fuzz harness lands in Sprint 2'; exit 1
 
 -include $(OBJ:.o=.d) $(UNIT_OBJ:.o=.d)
 
