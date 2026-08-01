@@ -712,7 +712,7 @@ done:
 }
 
 static SagSaveErr inplace_save(const TextBuf *tb, const FileMeta *meta,
-                               const char *dst)
+                               const char *dst, struct stat *saved_st)
 {
     char *bak = backup_path(dst);
     struct stat st;
@@ -748,7 +748,8 @@ static SagSaveErr inplace_save(const TextBuf *tb, const FileMeta *meta,
     }
     ok = write_text(fd, tb, meta->had_bom);
     end = ok ? lseek(fd, 0, SEEK_CUR) : (off_t)-1;
-    if (end < 0 || ftruncate(fd, end) != 0 || !fsync_full(fd))
+    if (end < 0 || ftruncate(fd, end) != 0 || !fsync_full(fd) ||
+        fstat(fd, saved_st) != 0)
         ok = false;
     if (close(fd) != 0)
         ok = false;
@@ -885,7 +886,7 @@ fail:
 }
 
 static SagSaveErr atomic_save(const TextBuf *tb, const FileMeta *meta,
-                              const char *dst)
+                              const char *dst, struct stat *saved_st)
 {
     char *dir = path_dirname(dst);
     char *tmp = NULL;
@@ -912,12 +913,14 @@ static SagSaveErr atomic_save(const TextBuf *tb, const FileMeta *meta,
             (void)unlink(tmp);
             free(tmp);
             free(dir);
-            return inplace_save(tb, meta, dst);
+            return inplace_save(tb, meta, dst, saved_st);
         }
         if (fchmod(fd, meta->mode & 07777U) != 0)
             goto fail;
         copy_xattrs(dst, fd);
     }
+    if (fstat(fd, saved_st) != 0)
+        goto fail;
     if (close(fd) != 0) {
         fd = -1;
         goto fail;
@@ -934,7 +937,7 @@ static SagSaveErr atomic_save(const TextBuf *tb, const FileMeta *meta,
         (void)unlink(tmp);
         free(tmp);
         free(dir);
-        return inplace_save(tb, meta, dst);
+        return inplace_save(tb, meta, dst, saved_st);
     }
     if (!commit_temp(tmp, dst, dir)) {
         saved_errno = errno;
@@ -942,7 +945,7 @@ static SagSaveErr atomic_save(const TextBuf *tb, const FileMeta *meta,
         free(tmp);
         free(dir);
         if (saved_errno == EXDEV)
-            return inplace_save(tb, meta, dst);
+            return inplace_save(tb, meta, dst, saved_st);
         return saved_errno == EACCES || saved_errno == EPERM
                    ? SAG_SAVE_PERM
                    : SAG_SAVE_IO;
@@ -962,39 +965,30 @@ fail:
                                                           : SAG_SAVE_IO;
 }
 
-static void refresh_saved_meta(FileMeta *meta, const char *path,
-                               bool via_symlink)
+static void refresh_saved_meta(FileMeta *meta, const struct stat *st,
+                               char *saved_path, bool via_symlink)
 {
-    struct stat st;
-    char *resolved;
-
-    if (stat(path, &st) != 0 || !S_ISREG(st.st_mode) || st.st_size < 0) {
-        sag_log(SAG_LOG_WARN,
-                "save succeeded but metadata refresh failed for %s", path);
-        return;
-    }
-    resolved = realpath(path, NULL);
-    if (resolved == NULL)
-        resolved = canonical_new_path(path);
     free(meta->realpath);
-    meta->realpath = resolved;
+    meta->realpath = saved_path;
     meta->exists = true;
     meta->via_symlink = via_symlink;
-    meta->mode = st.st_mode;
-    meta->uid = st.st_uid;
-    meta->gid = st.st_gid;
-    meta->nlink = st.st_nlink;
-    meta->dev = st.st_dev;
-    meta->ino = st.st_ino;
-    meta->mtime = stat_mtime(&st);
-    meta->size_on_disk = (u64)st.st_size;
+    meta->mode = st->st_mode;
+    meta->uid = st->st_uid;
+    meta->gid = st->st_gid;
+    meta->nlink = st->st_nlink;
+    meta->dev = st->st_dev;
+    meta->ino = st->st_ino;
+    meta->mtime = stat_mtime(st);
+    meta->size_on_disk = (u64)st->st_size;
 }
 
 SagSaveErr sag_file_save(const TextBuf *tb, FileMeta *meta,
                          const char *path)
 {
     struct stat link_st;
+    struct stat saved_st;
     char *resolved = NULL;
+    char *saved_realpath;
     const char *dst = path;
     char *dir;
     bool needs_inplace;
@@ -1025,13 +1019,19 @@ SagSaveErr sag_file_save(const TextBuf *tb, FileMeta *meta,
         free(resolved);
         return match;
     }
+    saved_realpath = realpath(dst, NULL);
+    if (saved_realpath == NULL)
+        saved_realpath = canonical_new_path(dst);
     dir = path_dirname(dst);
     if (needs_inplace || !directory_writable(dir))
-        result = inplace_save(tb, meta, dst);
+        result = inplace_save(tb, meta, dst, &saved_st);
     else
-        result = atomic_save(tb, meta, dst);
-    if (result == SAG_SAVE_OK)
-        refresh_saved_meta(meta, dst, is_symlink);
+        result = atomic_save(tb, meta, dst, &saved_st);
+    if (result == SAG_SAVE_OK) {
+        refresh_saved_meta(meta, &saved_st, saved_realpath, is_symlink);
+        saved_realpath = NULL;
+    }
+    free(saved_realpath);
     free(dir);
     free(resolved);
     return result;

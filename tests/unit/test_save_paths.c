@@ -180,7 +180,7 @@ void test_save_fault_shim_contract(void)
 void test_save_symlink_preserves_link_and_updates_target(void)
 {
     static const u8 original[] = "old";
-    static const u8 expected[] = "old-new";
+    static const u8 expected[] = "old-new!";
     SaveFixture fixture;
     char target[128];
     char link_path[128];
@@ -197,6 +197,10 @@ void test_save_symlink_preserves_link_and_updates_target(void)
     SAG_ASSERT(meta.via_symlink);
     sag_textbuf_insert(tb, BYTEOFF(sag_textbuf_len(tb)),
                        (const u8 *)"-new", 4U);
+    SAG_ASSERT_EQ_U64(sag_file_save(tb, &meta, link_path), SAG_SAVE_OK);
+    SAG_ASSERT_EQ_I64(lstat(link_path, &st), 0);
+    SAG_ASSERT(S_ISLNK(st.st_mode));
+    sag_textbuf_insert(tb, BYTEOFF(sag_textbuf_len(tb)), (const u8 *)"!", 1U);
     SAG_ASSERT_EQ_U64(sag_file_save(tb, &meta, link_path), SAG_SAVE_OK);
     SAG_ASSERT_EQ_I64(lstat(link_path, &st), 0);
     SAG_ASSERT(S_ISLNK(st.st_mode));
@@ -236,7 +240,7 @@ void test_save_dangling_symlink_preserves_link_and_creates_target(void)
 void test_save_hardlink_preserves_shared_inode(void)
 {
     static const u8 original[] = "old";
-    static const u8 expected[] = "old-new";
+    static const u8 expected[] = "old-new!";
     SaveFixture fixture;
     char first[128];
     char second[128];
@@ -254,6 +258,11 @@ void test_save_hardlink_preserves_shared_inode(void)
     SAG_ASSERT_EQ_U64(meta.nlink, 2U);
     sag_textbuf_insert(tb, BYTEOFF(sag_textbuf_len(tb)),
                        (const u8 *)"-new", 4U);
+    SAG_ASSERT_EQ_U64(sag_file_save(tb, &meta, first), SAG_SAVE_OK);
+    SAG_ASSERT_EQ_I64(stat(first, &first_st), 0);
+    SAG_ASSERT_EQ_I64(stat(second, &second_st), 0);
+    SAG_ASSERT_EQ_U64(first_st.st_ino, second_st.st_ino);
+    sag_textbuf_insert(tb, BYTEOFF(sag_textbuf_len(tb)), (const u8 *)"!", 1U);
     SAG_ASSERT_EQ_U64(sag_file_save(tb, &meta, first), SAG_SAVE_OK);
     SAG_ASSERT_EQ_I64(stat(first, &first_st), 0);
     SAG_ASSERT_EQ_I64(stat(second, &second_st), 0);
@@ -350,6 +359,7 @@ void test_save_read_only_directory_uses_in_place_path(void)
 void test_save_existing_file_preserves_mode_owner_and_group(void)
 {
     static const u8 original[] = "old";
+    static const u8 expected[] = "old!?";
     SaveFixture fixture;
     char path[128];
     struct stat before;
@@ -374,6 +384,13 @@ void test_save_existing_file_preserves_mode_owner_and_group(void)
     SAG_ASSERT_EQ_U64(meta.nlink, after.st_nlink);
     SAG_ASSERT_EQ_U64(meta.size_on_disk, (u64)after.st_size);
     SAG_ASSERT_NOT_NULL(meta.realpath);
+    sag_textbuf_insert(tb, BYTEOFF(sag_textbuf_len(tb)), (const u8 *)"?", 1U);
+    SAG_ASSERT_EQ_U64(sag_file_save(tb, &meta, path), SAG_SAVE_OK);
+    SAG_ASSERT_EQ_I64(stat(path, &after), 0);
+    SAG_ASSERT_EQ_U64(meta.dev, after.st_dev);
+    SAG_ASSERT_EQ_U64(meta.ino, after.st_ino);
+    SAG_ASSERT_EQ_U64(meta.size_on_disk, (u64)after.st_size);
+    assert_saved_bytes(path, expected, sizeof(expected) - 1U);
     sag_textbuf_free(tb);
     sag_filemeta_dispose(&meta);
     remove_tree(fixture.root);
