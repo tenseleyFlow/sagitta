@@ -158,6 +158,7 @@ void test_undo_serial_rejects_unknown_version(void);
 void test_undo_serial_validates_current_anchor_and_stale_content(void);
 void test_undo_serial_persist_budget_does_not_mutate_memory_tree(void);
 void test_undo_serial_persist_budget_preserves_surviving_branches(void);
+void test_undo_serial_virtual_reroot_preserves_saved_branch(void);
 void test_undo_serial_rejects_crc_valid_out_of_bounds_op(void);
 void test_undo_serial_rejects_unsafe_and_oversized_inputs(void);
 void test_undo_serial_roundtrips_rerooted_tree_depths(void);

@@ -161,6 +161,7 @@ const SagTest sag_tests[] = {
     T(undo_serial_validates_current_anchor_and_stale_content),
     T(undo_serial_persist_budget_does_not_mutate_memory_tree),
     T(undo_serial_persist_budget_preserves_surviving_branches),
+    T(undo_serial_virtual_reroot_preserves_saved_branch),
     T(undo_serial_rejects_crc_valid_out_of_bounds_op),
     T(undo_serial_rejects_unsafe_and_oversized_inputs),
     T(undo_serial_roundtrips_rerooted_tree_depths),

@@ -1886,6 +1886,7 @@ static bool write_truncated_tree(EditCtx *ec, Bytebuf *file,
     u64 *subtree_sizes = sag_xcalloc(slots, sizeof(*subtree_sizes));
     u32 *subtree_counts = sag_xcalloc(slots, sizeof(*subtree_counts));
     u64 total = full_size;
+    u64 root_size;
     u32 count = live_count(ut);
     u32 root = ut->root;
     u32 recent = 0U;
@@ -1898,6 +1899,7 @@ static bool write_truncated_tree(EditCtx *ec, Bytebuf *file,
         keep[id] = 1U;
         node_sizes[id] = serialized_node_size(ut, node_get(ut, id), false);
     }
+    root_size = node_sizes[root];
     id = ut->cur;
     while (id != 0U) {
         protect[id] = 1U;
@@ -1999,16 +2001,16 @@ static bool write_truncated_tree(EditCtx *ec, Bytebuf *file,
         old_child_size = node_sizes[child];
         new_child_size = serialized_node_size(
             ut, node_get(ut, child), true);
-        if (node_sizes[root] > total ||
-            old_child_size > total - node_sizes[root])
+        if (root_size > total || old_child_size > total - root_size)
             SAG_BUG("undo write: invalid selected root accounting");
-        total -= node_sizes[root] + old_child_size;
+        total -= root_size + old_child_size;
         if (new_child_size > UINT64_MAX - total)
             total = UINT64_MAX;
         else
             total += new_child_size;
         keep[root] = 0U;
         root = child;
+        root_size = new_child_size;
         count--;
     }
     if (total <= ut->persist_bytes_max)

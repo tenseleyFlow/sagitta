@@ -534,6 +534,65 @@ void test_undo_serial_persist_budget_preserves_surviving_branches(void)
     serial_fixture_free(&source);
 }
 
+void test_undo_serial_virtual_reroot_preserves_saved_branch(void)
+{
+    SerialFixture source;
+    SerialFixture loaded;
+    Bytebuf content;
+    Bytebuf saved_content;
+    Bytebuf restored;
+    Bytebuf file;
+    u8 payload[128];
+    u32 common = 0U;
+    u32 saved;
+    u32 current;
+    u32 i;
+    char path[64];
+
+    serial_fixture_init(&source, NULL, 0U);
+    (void)memset(payload, 'p', sizeof(payload));
+    for (i = 0U; i < 8U; i++)
+        common = serial_append(&source, payload, sizeof(payload));
+    (void)memset(payload, 's', sizeof(payload));
+    saved = serial_append(&source, payload, sizeof(payload));
+    sag_undo_mark_saved(source.undo);
+    serial_flatten(source.tb, &saved_content);
+    SAG_ASSERT(sag_undo_to(&source.edit, common));
+    (void)memset(payload, 'c', sizeof(payload));
+    for (i = 0U; i < 4U; i++)
+        (void)serial_append(&source, payload, sizeof(payload));
+    current = source.undo->cur;
+    sag_undo_set_limits(source.undo, SAG_UNDO_BYTES_MAX, 4U, 1500U);
+
+    serial_flatten(source.tb, &content);
+    serial_path(path);
+    SAG_ASSERT_EQ_U64(sag_undo_write(&source.edit, path),
+                      SAG_UNDO_WRITE_OK);
+    serial_read_file(path, &file);
+    SAG_ASSERT(file.len <= 1500U);
+    SAG_ASSERT_EQ_U64(serial_u32(file.data + 12U), common);
+    SAG_ASSERT_EQ_U64(serial_u32(file.data + 20U), saved);
+    SAG_ASSERT_EQ_U64(serial_u32(file.data + 28U), 6U);
+
+    serial_fixture_init(&loaded, content.data, content.len);
+    SAG_ASSERT_EQ_U64(sag_undo_read(&loaded.edit, path),
+                      SAG_UNDO_READ_CURRENT);
+    SAG_ASSERT_EQ_U64(loaded.undo->cur, current);
+    SAG_ASSERT_EQ_U64(loaded.undo->saved, saved);
+    SAG_ASSERT(sag_undo_to(&loaded.edit, saved));
+    serial_flatten(loaded.tb, &restored);
+    SAG_ASSERT_EQ_U64(restored.len, saved_content.len);
+    SAG_ASSERT_EQ_MEM(restored.data, saved_content.data, restored.len);
+
+    bytebuf_free(&restored);
+    serial_fixture_free(&loaded);
+    bytebuf_free(&file);
+    bytebuf_free(&content);
+    bytebuf_free(&saved_content);
+    SAG_ASSERT_EQ_I64(unlink(path), 0);
+    serial_fixture_free(&source);
+}
+
 void test_undo_serial_rejects_crc_valid_out_of_bounds_op(void)
 {
     SerialFixture source;
