@@ -41,14 +41,14 @@ typedef struct {
 typedef struct PieceNode {
     struct PieceNode *left;
     struct PieceNode *right;
-    u32 refs;
-    u8 src;
     Span span;
-    u64 lf_first;
-    u64 lf_count;
     u64 sub_bytes;
     u64 sub_lfs;
+    u64 lf_count;
     u32 sub_count;
+    u32 refs;
+    u8 src;
+    u64 lf_first;
 } PieceNode;
 
 _Static_assert(sizeof(PieceNode) <= 96, "node bloat");

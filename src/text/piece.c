@@ -59,14 +59,18 @@ static void node_fix(PieceNode *node)
 
 static PieceNode *node_new(Piece piece)
 {
-    PieceNode *node = sag_xcalloc(1U, sizeof(*node));
+    PieceNode *node = sag_xmalloc(sizeof(*node));
 
+    node->left = NULL;
+    node->right = NULL;
+    node->span = piece.span;
+    node->sub_bytes = piece.span.hi - piece.span.lo;
+    node->sub_lfs = piece.lf_count;
+    node->lf_count = piece.lf_count;
+    node->sub_count = 1U;
     node->refs = 1U;
     node->src = piece.src;
-    node->span = piece.span;
     node->lf_first = piece.lf_first;
-    node->lf_count = piece.lf_count;
-    node_fix(node);
     return node;
 }
 
@@ -425,6 +429,55 @@ static void node_split(TextBuf *tb, PieceNode *root, u64 at,
     }
 }
 
+/* Consumes root and inserted; inserts one piece at the byte seam. */
+static PieceNode *node_insert(TextBuf *tb, PieceNode *root, u64 at,
+                              PieceNode *inserted)
+{
+    u64 left_bytes;
+    u64 piece_len;
+
+    if (root == NULL) {
+        if (at != 0U)
+            SAG_BUG("piece insert offset outside empty tree");
+        return inserted;
+    }
+    if (at > root->sub_bytes)
+        SAG_BUG("piece insert offset outside tree");
+    root = node_own(root);
+    left_bytes = node_bytes(root->left);
+    piece_len = root->span.hi - root->span.lo;
+    if (at <= left_bytes) {
+        root->left = node_insert(tb, root->left, at, inserted);
+        node_fix(root);
+        return node_balance(root);
+    }
+    if (at >= left_bytes + piece_len) {
+        root->right = node_insert(tb, root->right,
+                                  at - left_bytes - piece_len, inserted);
+        node_fix(root);
+        return node_balance(root);
+    }
+    {
+        PieceNode *old_left = root->left;
+        PieceNode *old_right = root->right;
+        u64 split = root->span.lo + at - left_bytes;
+        Piece tail = piece_make(tb->backing, root->src,
+                                (Span){split, root->span.hi});
+        Piece head = piece_make(tb->backing, root->src,
+                                (Span){root->span.lo, split});
+        PieceNode *tail_tree;
+        PieceNode *inserted_tree;
+
+        root->span = head.span;
+        root->lf_first = head.lf_first;
+        root->lf_count = head.lf_count;
+        node_make_singleton(root);
+        tail_tree = node_link(node_new(tail), NULL, old_right);
+        inserted_tree = node_link(inserted, NULL, tail_tree);
+        return node_link(root, old_left, inserted_tree);
+    }
+}
+
 static void store_append(TextStore *store, const u8 *bytes, u64 len)
 {
     u64 old_len = store->len;
@@ -677,8 +730,6 @@ void sag_textbuf_insert(TextBuf *tb, ByteOff at, const u8 *bytes, u64 len)
 {
     u64 buffer_len;
     u64 old_add_len;
-    PieceNode *left;
-    PieceNode *right;
     PieceNode *middle;
     u8 *staged = NULL;
     const u8 *payload = bytes;
@@ -716,11 +767,10 @@ void sag_textbuf_insert(TextBuf *tb, ByteOff at, const u8 *bytes, u64 len)
         tb->add_tail_known = true;
         return;
     }
-    node_split(tb, tb->root, at.v, &left, &right);
     middle = node_new(piece_make(tb->backing, SAG_STORE_ADD,
                                  (Span){old_add_len,
                                         tb->backing->add.len}));
-    tb->root = node_link(middle, left, right);
+    tb->root = node_insert(tb, tb->root, at.v, middle);
     tb->gen++;
     tb->add_tail_at = at.v + len;
     tb->add_tail_known = true;
