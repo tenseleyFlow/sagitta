@@ -1,0 +1,18 @@
+# sagitta perf baseline v1  runner=perf-x86_64-linux-gnu
+# metric                         p50_ns        p99_ns        max_ns     rss_bytes
+open.100m-code                 118400000      131900000      140000000     148897792
+open.100m-utf8                 120000000      140000000      148000000     155000000
+# Informational: all-newline input is exempt from the 1.6x RSS gate because
+# s07's u64 line-feed index necessarily dominates one-byte lines.
+rss.100m-allnl                1200000000     1500000000     1700000000    1000000000
+open.1g-code                  1250000000     1600000000     1800000000    1550000000
+open.1g-noline                1100000000     1500000000     1700000000    1450000000
+insert.head.1g-code                18000          41000          50000             0
+insert.eof.1g-code                  500           1500           5000             0
+line_start.1g-code                  800           2500           5000             0
+line_of.1g-code                      80            300           1000             0
+line_start.1g-noline                 40            150            500             0
+materialize.1g-code           650000000      850000000      950000000             0
+edit.ends.1g-code             500000000      800000000      900000000       8388608
+undo.100m-code                250000000      350000000      390000000      67108864
+save.atomic.1g-code          4000000000     5500000000     6000000000             0
