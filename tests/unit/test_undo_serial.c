@@ -295,7 +295,7 @@ void test_undo_serial_rejects_every_64_byte_truncation(void)
     char path[64];
 
     serial_fixture_init(&source, NULL, 0U);
-    serial_build_500(&source);
+    (void)serial_append(&source, (const u8 *)"truncate\0\xff", 10U);
     serial_flatten(source.tb, &content);
     serial_path(path);
     SAG_ASSERT_EQ_U64(sag_undo_write(&source.edit, path), SAG_UNDO_WRITE_OK);
