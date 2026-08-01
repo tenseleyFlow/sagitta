@@ -42,9 +42,16 @@ enum {
 
 /*
  * Eight inline bytes keep ordinary Latin, CJK, and emoji clusters out of
- * the interner. At 200x50, two 20-byte grids occupy about 391 KiB and remain
- * cache-friendly; widening the inline store would make the common repaint
- * path pay for rare long combining and ZWJ sequences.
+ * the interner. The 20-byte cell keeps the double-buffered diff working set
+ * within the intended cache tier at representative terminal sizes:
+ *
+ *   Grid      Cells    One buffer    Both buffers
+ *   80x24      1,920     37.5 KiB       75 KiB (L1/L2)
+ *   200x50    10,000      195 KiB      391 KiB (L2)
+ *   400x100   40,000      781 KiB      1.5 MiB (L3)
+ *
+ * Widening the inline store would make the common repaint path pay for rare
+ * long combining and ZWJ sequences; shrinking it would intern common text.
  */
 typedef struct Cell {
     union {
