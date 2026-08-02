@@ -836,11 +836,6 @@ static void case_live_restore_suspend(PtyCtx *c)
 {
     static const u8 initial[] = "resume\n";
     static const u8 expected[] = "Rresume\n";
-    static const char edit_and_save[] =
-        "\x1b[105;1u"             /* i */
-        "\x1b[82;1u"              /* R */
-        "\x1b[27;1u"              /* escape */
-        "\x1b[115;1u";            /* s */
     const u32 active_modes = VT_MODE_BRACKETED_PASTE | VT_MODE_BUTTON_MOUSE |
                              VT_MODE_SGR_MOUSE | VT_MODE_FOCUS;
     char path[256];
@@ -852,7 +847,7 @@ static void case_live_restore_suspend(PtyCtx *c)
     ptc_check(c, c->vt.alt && c->vt.modes == active_modes &&
                  c->vt.ksp == 1 && c->vt.kitty[0] == 21U,
               "ed.suspend + SIGCONT did not restore the interactive modes");
-    ptc_bytes(c, edit_and_save);
+    ptc_keys(c, "i R esc s");
     ptc_settle(c, 0);
     ptc_check(c, file_equals(path, expected, sizeof(expected) - 1U),
               "editor was not usable after ed.suspend + SIGCONT");

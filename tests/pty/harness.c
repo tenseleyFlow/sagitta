@@ -661,7 +661,8 @@ static bool key_parse(const char *token, size_t len, u16 *mods,
     return false;
 }
 
-static void emit_key(PtyCtx *c, const char *token, size_t len)
+static void emit_key(PtyCtx *c, Bytebuf *burst,
+                     const char *token, size_t len)
 {
     char sequence[64];
     const char *legacy;
@@ -685,7 +686,7 @@ static void emit_key(PtyCtx *c, const char *token, size_t len)
             ptc_fail(c, "key encoding overflow");
             return;
         }
-        (void)write_master(c, (const u8 *)sequence, (size_t)n);
+        bytebuf_append(burst, sequence, (size_t)n);
         return;
     }
     if (scalar != 0U) {
@@ -700,24 +701,24 @@ static void emit_key(PtyCtx *c, const char *token, size_t len)
             bytes[nb++] = (u8)((tolower(scalar) - 'a') + 1);
         else
             bytes[nb++] = scalar;
-        (void)write_master(c, bytes, nb);
+        bytebuf_append(burst, bytes, nb);
     } else if (tilde != 0U) {
         n = mods == 0U
                 ? snprintf(sequence, sizeof(sequence), "\x1b[%u~", tilde)
                 : snprintf(sequence, sizeof(sequence), "\x1b[%u;%u~", tilde,
                            (unsigned)mods + 1U);
         if (n > 0 && (size_t)n < sizeof(sequence))
-            (void)write_master(c, (const u8 *)sequence, (size_t)n);
+            bytebuf_append(burst, sequence, (size_t)n);
         else
             ptc_fail(c, "key encoding overflow");
     } else if (legacy != NULL && mods == 0U) {
-        (void)write_master(c, (const u8 *)legacy, strlen(legacy));
+        bytebuf_append(burst, legacy, strlen(legacy));
     } else if (legacy != NULL && strlen(legacy) == 3U && legacy[0] == '\x1b' &&
                legacy[1] == '[') {
         n = snprintf(sequence, sizeof(sequence), "\x1b[1;%u%c",
                      (unsigned)mods + 1U, legacy[2]);
         if (n > 0 && (size_t)n < sizeof(sequence))
-            (void)write_master(c, (const u8 *)sequence, (size_t)n);
+            bytebuf_append(burst, sequence, (size_t)n);
         else
             ptc_fail(c, "key encoding overflow");
     } else {
@@ -728,12 +729,14 @@ static void emit_key(PtyCtx *c, const char *token, size_t len)
 
 void ptc_keys(PtyCtx *c, const char *spec)
 {
+    Bytebuf burst;
     const char *p;
 
     if (c == NULL || spec == NULL || !c->spawned || c->failed)
         return;
+    bytebuf_init(&burst);
     p = spec;
-    while (*p != '\0') {
+    while (*p != '\0' && !c->failed) {
         const char *start;
 
         while (*p == ' ' || *p == '\t' || *p == ',')
@@ -743,8 +746,11 @@ void ptc_keys(PtyCtx *c, const char *spec)
         start = p;
         while (*p != '\0' && *p != ' ' && *p != '\t' && *p != ',')
             p++;
-        emit_key(c, start, (size_t)(p - start));
+        emit_key(c, &burst, start, (size_t)(p - start));
     }
+    if (!c->failed && burst.len != 0U)
+        (void)write_master(c, burst.data, burst.len);
+    bytebuf_free(&burst);
 }
 
 void ptc_resize(PtyCtx *c, u16 rows, u16 cols)
