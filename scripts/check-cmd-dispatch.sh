@@ -4,7 +4,8 @@ set -eu
 
 symbols()
 {
-    rg -o --no-filename '\bcmd_[a-z0-9_]*\b' src
+    grep -rEh 'cmd_' src | tr -cs 'A-Za-z0-9_' '\n' | \
+        grep -E '^cmd_[a-z0-9_]+$'
 }
 
 check_counts()
@@ -27,7 +28,7 @@ if { symbols; printf '%s\n' "$seed"; } | check_counts >/dev/null 2>&1; then
     exit 1
 fi
 
-definitions=$(rg -n \
+definitions=$(grep -En \
     '^[A-Za-z_][A-Za-z0-9_ *]*\([^;]*\)[[:space:]]*$' \
     src/edit/keys_default.c || :)
 if [ "$(printf '%s\n' "$definitions" | sed '/^$/d' | wc -l | tr -d ' ')" \
