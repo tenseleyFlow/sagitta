@@ -1,4 +1,5 @@
 #include "args.h"
+#include "edit/cmd.h"
 #include "mod/mods.h"
 #include "term/tty.h"
 #include "util/base.h"
@@ -15,6 +16,7 @@ static const char help_text[] =
     "\n"
     "Options:\n"
     "  --help           Show this help.\n"
+    "  --help-cmds      List named editor commands.\n"
     "  --version        Show version and compiled modules.\n"
     "  --clean          Ignore user configuration (Sprint 36).\n"
     "  --batch <file>   Run a Fletch batch script (Sprint 37).\n"
@@ -25,6 +27,7 @@ static const char help_text[] =
     "  SAG_TTY_PROBE    Set 0 to disable terminal capability probes.\n"
     "  SAG_PROBE_TIMEOUT_MS  Override the 50 ms probe deadline.\n"
     "  SAG_TRUECOLOR    Set 0 or 1 to override truecolor detection.\n"
+    "  SAG_CHORD_TIMEOUT_MS  Set key chord timeout (default 500).\n"
     "  SAG_CLIPBOARD    Set auto, osc52, wl, xclip, xsel, pb, none,\n"
     "                   or cmd:<write-argv>[|<read-argv>].\n"
     "  SAG_CLIPBOARD_TARGET  Set OSC 52 target c, p, or cp.\n"
@@ -51,6 +54,19 @@ static void print_version(void)
     (void)putchar('\n');
 }
 
+static void print_commands(void)
+{
+    u32 i;
+
+    sag_cmd_init();
+    for (i = 0U; i < sag_cmd_count(); i++) {
+        const CmdDesc *desc = sag_cmd_at(i);
+
+        (void)printf("%-32s %s\n", desc->name, desc->help);
+    }
+    sag_cmd_shutdown();
+}
+
 static int run_driver(const SagArgs *args)
 {
     Tty tty;
@@ -64,6 +80,10 @@ static int run_driver(const SagArgs *args)
     }
     if (args->help) {
         (void)fputs(help_text, stdout);
+        return SAG_EXIT_OK;
+    }
+    if (args->help_cmds) {
+        print_commands();
         return SAG_EXIT_OK;
     }
     if (args->batch_script != NULL) {

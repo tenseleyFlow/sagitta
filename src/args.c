@@ -30,6 +30,8 @@ int sag_args_parse(SagArgs *out, int argc, char **argv, Bytebuf *err)
             out->version = true;
         } else if (strcmp(arg, "--help") == 0) {
             out->help = true;
+        } else if (strcmp(arg, "--help-cmds") == 0) {
+            out->help_cmds = true;
         } else if (strcmp(arg, "--clean") == 0) {
             out->clean = true;
         } else if (strcmp(arg, "--batch") == 0) {
@@ -50,7 +52,7 @@ int sag_args_parse(SagArgs *out, int argc, char **argv, Bytebuf *err)
         out->nfiles = (size_t)(argc - i);
     }
 
-    if (out->version || out->help) {
+    if (out->version || out->help || out->help_cmds) {
         return SAG_EXIT_OK;
     }
     return -1;

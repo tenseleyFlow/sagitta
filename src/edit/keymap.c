@@ -128,6 +128,7 @@ static bool parse_atom(const char *s, size_t n, KeyId *out)
     size_t prefix;
     u16 mods = 0U;
     u32 code;
+    bool named = false;
 
     for (prefix = 0U; prefix < SAG_ARRAY_LEN(prefixes); prefix++) {
         if (pos + 2U <= n && s[pos] == prefixes[prefix].letter &&
@@ -146,6 +147,7 @@ static bool parse_atom(const char *s, size_t n, KeyId *out)
         if (n - pos < 3U || s[n - 1U] != '>' ||
             !key_name_parse(s + pos + 1U, n - pos - 2U, &code))
             return false;
+        named = true;
     } else {
         size_t used = sag_utf8_decode((const u8 *)s + pos, n - pos, &code);
 
@@ -153,7 +155,7 @@ static bool parse_atom(const char *s, size_t n, KeyId *out)
             code == 127U || code == (u32)'<')
             return false;
     }
-    if (code < SAG_KEY_BASE && (mods & SAG_MOD_SHIFT) != 0U) {
+    if (!named && code < SAG_KEY_BASE && (mods & SAG_MOD_SHIFT) != 0U) {
         if (code >= (u32)'a' && code <= (u32)'z')
             code -= (u32)'a' - (u32)'A';
         mods = (u16)(mods & (u16)~SAG_MOD_SHIFT);

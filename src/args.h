@@ -9,6 +9,7 @@
 typedef struct {
     bool version;
     bool help;
+    bool help_cmds;
     bool clean;
     const char *batch_script;
     const char **files;
