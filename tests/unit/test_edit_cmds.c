@@ -480,8 +480,12 @@ void test_edit_forward_delete_removes_invalid_byte_as_one_cluster(void)
 void test_edit_journal_open_failure_returns_io_without_mutation(void)
 {
     static const u8 before[] = "abc";
+    static const u8 after[] = "Xabc";
     char root[] = "/tmp/sagitta-edit-cmd-journal-XXXXXX";
     char blocker[128];
+    char journal_dir[128];
+    char sagitta_dir[128];
+    char source_path[128];
     const char source[] = "/tmp/sagitta-edit-cmd-source";
     const char *saved_state;
     char *saved_copy = NULL;
@@ -532,13 +536,45 @@ void test_edit_journal_open_failure_returns_io_without_mutation(void)
     SAG_ASSERT(ed.quit);
     sag_ed_free(&ed);
 
+    n = snprintf(source_path, sizeof(source_path), "%s/source.txt", root);
+    SAG_ASSERT(n > 0 && (size_t)n < sizeof(source_path));
+    fp = fopen(source_path, "wb");
+    SAG_ASSERT_NOT_NULL(fp);
+    SAG_ASSERT_EQ_U64(fwrite(before, 1U, sizeof(before) - 1U, fp),
+                      sizeof(before) - 1U);
+    SAG_ASSERT_EQ_I64(fclose(fp), 0);
+    SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", root, 1), 0);
+    sag_ed_init(&ed);
+    SAG_ASSERT_EQ_U64(sag_ed_open(&ed, source_path), SAG_LOAD_OK);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.insert.text", 1U, false,
+                                  "X", 1U), SAG_CMD_OK);
+    edit_assert_text(&ed, after, sizeof(after) - 1U);
+    SAG_ASSERT_EQ_U64(sag_ed_file_save(&ed, false), SAG_CMD_OK);
+    SAG_ASSERT_NULL(ed.buffer.jrn);
+    SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", blocker, 1), 0);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.undo", 1U, false,
+                                  NULL, 0U), SAG_CMD_ERR_IO);
+    edit_assert_text(&ed, after, sizeof(after) - 1U);
+    SAG_ASSERT(ed.durability_failed);
+    SAG_ASSERT_EQ_U64(sag_ed_request_quit(&ed, false), SAG_CMD_ERR_IO);
+    SAG_ASSERT(!ed.quit);
+    sag_ed_free(&ed);
+
     if (saved_copy != NULL) {
         SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", saved_copy, 1), 0);
     } else {
         SAG_ASSERT_EQ_I64(unsetenv("XDG_STATE_HOME"), 0);
     }
     free(saved_copy);
+    n = snprintf(journal_dir, sizeof(journal_dir), "%s/sagitta/journal",
+                 root);
+    SAG_ASSERT(n > 0 && (size_t)n < sizeof(journal_dir));
+    n = snprintf(sagitta_dir, sizeof(sagitta_dir), "%s/sagitta", root);
+    SAG_ASSERT(n > 0 && (size_t)n < sizeof(sagitta_dir));
+    SAG_ASSERT_EQ_I64(unlink(source_path), 0);
     SAG_ASSERT_EQ_I64(unlink(blocker), 0);
+    SAG_ASSERT_EQ_I64(rmdir(journal_dir), 0);
+    SAG_ASSERT_EQ_I64(rmdir(sagitta_dir), 0);
     SAG_ASSERT_EQ_I64(rmdir(root), 0);
 }
 
