@@ -79,7 +79,8 @@ ifeq ($(VALGRIND),1)
 VALGRIND_RUN := valgrind --quiet --error-exitcode=99 --leak-check=full \
                  --errors-for-leak-kinds=definite --track-fds=yes \
                  --child-silent-after-fork=yes
-UNIT_RUN := $(VALGRIND_RUN) $(BUILD)/unit_tests $(UNIT_DEATH_EXCLUDES) && \
+UNIT_RUN := SAG_TEST_INSTRUMENTED=1 $(VALGRIND_RUN) \
+            $(BUILD)/unit_tests $(UNIT_DEATH_EXCLUDES) && \
             SAG_TORTURE_CLEAN_ONLY=1 $(VALGRIND_RUN) \
             --trace-children=yes $(BUILD)/unit_tests \
             --filter save_fault_shim_contract
