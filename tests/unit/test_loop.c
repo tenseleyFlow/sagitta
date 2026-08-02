@@ -1,7 +1,9 @@
 #include "harness.h"
 
+#include <fcntl.h>
 #include <limits.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "edit/ed.h"
 #include "edit/loop.h"
@@ -55,7 +57,8 @@ static void loop_ed_init(Ed *ed)
 {
     (void)memset(ed, 0, sizeof(*ed));
     ed->tty.rfd = -1;
-    ed->tty.wfd = -1;
+    ed->tty.wfd = open("/dev/null", O_WRONLY);
+    SAG_ASSERT(ed->tty.wfd >= 0);
     sag_timers_init(&ed->timers);
     sag_tty_probe_config(&ed->tty, 0, probe_disabled);
 }
@@ -65,6 +68,8 @@ static void loop_ed_free(Ed *ed)
     sag_timers_free(&ed->timers);
     sag_input_free(&ed->in);
     bytebuf_free(&ed->tty.pending);
+    if (ed->tty.wfd >= 0)
+        (void)close(ed->tty.wfd);
 }
 
 void test_loop_deadline_matrix(void)
