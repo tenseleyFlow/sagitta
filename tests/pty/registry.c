@@ -361,7 +361,9 @@ typedef enum NotepadGolden {
     NOTEPAD_BURST_KEYS,
     NOTEPAD_BURST_PASTE,
     NOTEPAD_RESTORE_TERM,
-    NOTEPAD_RESTORE_SEGV
+    NOTEPAD_RESTORE_SEGV,
+    NOTEPAD_RESTORE_SUSPEND,
+    NOTEPAD_RESTORE_KILL
 } NotepadGolden;
 
 static void notepad_snapshot(PtyCtx *c, NotepadGolden golden)
@@ -414,6 +416,12 @@ static void notepad_snapshot(PtyCtx *c, NotepadGolden golden)
         break;
     case NOTEPAD_RESTORE_SEGV:
         ptc_snapshot(c, "notepad_restore_segv");
+        break;
+    case NOTEPAD_RESTORE_SUSPEND:
+        ptc_snapshot(c, "notepad_restore_suspend");
+        break;
+    case NOTEPAD_RESTORE_KILL:
+        ptc_snapshot(c, "notepad_restore_kill");
         break;
     }
 }
@@ -782,6 +790,14 @@ static void case_burst_paste(PtyCtx *c)
     burst_case(c, true);
 }
 
+static void check_terminal_restored(PtyCtx *c, const char *context)
+{
+    bool restored = !c->vt.alt && !c->vt.in_sync && c->vt.modes == 0U &&
+                    c->vt.ksp == 0 && c->vt.cur_vis;
+
+    ptc_check(c, restored, context);
+}
+
 static void live_signal_restore(PtyCtx *c, int signal_number,
                                 NotepadGolden golden)
 {
@@ -798,6 +814,8 @@ static void live_signal_restore(PtyCtx *c, int signal_number,
     } else {
         ptc_expect_signal(c, signal_number);
         ptc_expect_output(c, restore_blob, sizeof(restore_blob) - 1U);
+        check_terminal_restored(c,
+            "fatal signal did not leave the terminal in restored state");
         notepad_snapshot(c, golden);
     }
     (void)unlink(path);
@@ -811,6 +829,56 @@ static void case_live_restore_term(PtyCtx *c)
 static void case_live_restore_segv(PtyCtx *c)
 {
     live_signal_restore(c, SIGSEGV, NOTEPAD_RESTORE_SEGV);
+}
+
+static void case_live_restore_suspend(PtyCtx *c)
+{
+    static const u8 initial[] = "resume\n";
+    static const u8 expected[] = "Rresume\n";
+    const u32 active_modes = VT_MODE_BRACKETED_PASTE | VT_MODE_BUTTON_MOUSE |
+                             VT_MODE_SGR_MOUSE | VT_MODE_FOCUS;
+    char path[256];
+
+    if (!make_fixture(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    spawn_editor(c, path);
+    ptc_command_suspend_resume(c);
+    ptc_check(c, c->vt.alt && c->vt.modes == active_modes &&
+                 c->vt.ksp == 1 && c->vt.kitty[0] == 21U,
+              "ed.suspend + SIGCONT did not restore the interactive modes");
+    ptc_keys(c, "i R esc s");
+    ptc_settle(c, 0);
+    ptc_check(c, file_equals(path, expected, sizeof(expected) - 1U),
+              "editor was not usable after ed.suspend + SIGCONT");
+    notepad_snapshot(c, NOTEPAD_RESTORE_SUSPEND);
+    quit_cleanly(c);
+    (void)unlink(path);
+}
+
+static void case_live_restore_kill(PtyCtx *c)
+{
+    static const u8 initial[] = "kill\n";
+    char path[256];
+
+    if (!make_fixture(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    ptc_allow_primary(c);
+    ptc_allow_restore(c);
+    spawn_editor(c, path);
+    if (kill(c->pty.pid, SIGKILL) != 0) {
+        ptc_check(c, false, "could not SIGKILL live editor");
+        (void)unlink(path);
+        return;
+    }
+    ptc_expect_signal(c, SIGKILL);
+    ptc_settle(c, 100);
+    ptc_expect_output(c, restore_blob, sizeof(restore_blob) - 1U);
+    check_terminal_restored(c,
+        "SIGKILL guardian did not restore the live editor terminal");
+    ptc_check(c, file_equals(path, initial, sizeof(initial) - 1U),
+              "SIGKILL changed the file on disk");
+    notepad_snapshot(c, NOTEPAD_RESTORE_KILL);
+    (void)unlink(path);
 }
 
 static void case_notepad_quit_force(PtyCtx *c)
@@ -873,6 +941,9 @@ const PtyCase sag_pty_cases[] = {
     C(notepad_burst_paste, modern, 24U, 80U, case_burst_paste),
     C(notepad_restore_term, modern, 24U, 80U, case_live_restore_term),
     C(notepad_restore_segv, modern, 24U, 80U, case_live_restore_segv),
+    C(notepad_restore_suspend, modern, 24U, 80U,
+      case_live_restore_suspend),
+    C(notepad_restore_kill, modern, 24U, 80U, case_live_restore_kill),
     C(notepad_quit_force, modern, 24U, 80U, case_notepad_quit_force),
     {NULL, NULL, 0U, 0U, NULL}
 };

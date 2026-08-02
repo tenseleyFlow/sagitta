@@ -866,10 +866,9 @@ void ptc_check(PtyCtx *c, bool condition, const char *message)
         ptc_fail(c, "%s", message);
 }
 
-void ptc_suspend_resume(PtyCtx *c)
+static bool enter_suspend(PtyCtx *c, bool through_command)
 {
     i64 deadline;
-    i64 retry_at;
     int status = 0;
     pid_t result = 0;
     size_t raw_before;
@@ -879,13 +878,15 @@ void ptc_suspend_resume(PtyCtx *c)
     bool stopped = false;
 
     if (c == NULL || !c->spawned || c->failed)
-        return;
+        return false;
     ptc_allow_restore(c);
     raw_before = c->raw.len;
     restore = sag_tty_restore_blob(&restore_len);
-    if (kill(c->pty.pid, SIGTSTP) != 0) {
+    if (through_command) {
+        ptc_keys(c, "ctrl+z");
+    } else if (kill(c->pty.pid, SIGTSTP) != 0) {
         ptc_fail(c, "SIGTSTP child: %s", strerror(errno));
-        return;
+        return false;
     }
     deadline = case_deadline(c);
     while (!restored && !c->failed && ptc_now_ms() < deadline) {
@@ -905,14 +906,14 @@ void ptc_suspend_resume(PtyCtx *c)
     }
     if (!restored) {
         ptc_fail(c, "suspend did not emit the terminal restore blob");
-        return;
+        return false;
     }
     /* setsid() makes this fixture's process group orphaned, so the
      * job-control SIGTSTP may be discarded. SIGSTOP gives the harness a
      * portable stopped state after the real handler has restored the tty. */
     if (kill(c->pty.pid, SIGSTOP) != 0) {
         ptc_fail(c, "SIGSTOP child after restore: %s", strerror(errno));
-        return;
+        return false;
     }
     while (!stopped && ptc_now_ms() < deadline) {
         do {
@@ -926,11 +927,11 @@ void ptc_suspend_resume(PtyCtx *c)
                 c->pty.status = status;
                 live_remove(&c->pty);
                 ptc_fail(c, "child exited while entering suspend state");
-                return;
+                return false;
             }
         } else if (result < 0) {
             ptc_fail(c, "waitpid for suspend: %s", strerror(errno));
-            return;
+            return false;
         }
         if (stopped)
             break;
@@ -941,9 +942,22 @@ void ptc_suspend_resume(PtyCtx *c)
     }
     if (!stopped) {
         ptc_fail(c, "child did not stop after SIGTSTP");
-        return;
+        return false;
     }
     c->ready = false;
+    return true;
+}
+
+static void resume_suspended(PtyCtx *c)
+{
+    i64 deadline;
+    i64 retry_at;
+    int status = 0;
+    pid_t result = 0;
+
+    if (c == NULL || c->failed)
+        return;
+    deadline = case_deadline(c);
     if (kill(c->pty.pid, SIGCONT) != 0) {
         ptc_fail(c, "SIGCONT child: %s", strerror(errno));
         return;
@@ -993,6 +1007,18 @@ void ptc_suspend_resume(PtyCtx *c)
         ptc_fail(c, "child did not repaint after SIGCONT");
     if (!c->failed)
         pump_quiet(c, PTC_DEFAULT_QUIET_MS, false);
+}
+
+void ptc_suspend_resume(PtyCtx *c)
+{
+    if (enter_suspend(c, false))
+        resume_suspended(c);
+}
+
+void ptc_command_suspend_resume(PtyCtx *c)
+{
+    if (enter_suspend(c, true))
+        resume_suspended(c);
 }
 
 const char *ptc_demo_bin(const PtyCtx *c)

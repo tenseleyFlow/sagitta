@@ -85,6 +85,7 @@ void ptc_expect_output(PtyCtx *c, const void *bytes, size_t len);
 void ptc_reject_output(PtyCtx *c, const void *bytes, size_t len);
 void ptc_expect_tail(PtyCtx *c, const void *bytes, size_t len);
 void ptc_suspend_resume(PtyCtx *c);
+void ptc_command_suspend_resume(PtyCtx *c);
 void ptc_check(PtyCtx *c, bool condition, const char *message);
 const char *ptc_demo_bin(const PtyCtx *c);
 const char *ptc_sagitta_bin(const PtyCtx *c);
