@@ -70,6 +70,7 @@ void ptc_env_free(char **envp);
 
 void ptc_spawn(PtyCtx *c, const char *bin, ...);
 void ptc_settle(PtyCtx *c, i64 quiet_ms);
+void ptc_wait_kitty_push(PtyCtx *c, u32 flags);
 void ptc_wait_sync_pairs(PtyCtx *c, u32 count);
 void ptc_keys(PtyCtx *c, const char *spec);
 void ptc_bytes(PtyCtx *c, const char *lit);

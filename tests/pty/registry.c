@@ -336,6 +336,7 @@ static void spawn_editor(PtyCtx *c, const char *path)
 {
     ptc_spawn(c, ptc_sagitta_bin(c), path, NULL);
     ptc_settle(c, 0);
+    ptc_wait_kitty_push(c, 21U);
 }
 
 static void force_quit(PtyCtx *c)
