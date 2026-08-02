@@ -1173,6 +1173,14 @@ CCol sag_off_to_ccol(const TextBuf *tb, Span line, ByteOff pos, u32 tabw)
     end = line_content_end(tb, line);
     if (pos.v > end)
         pos.v = end;
+    /* A multi-line buffer cannot use the whole-buffer ASCII flag, but the
+     * prefix that determines this cell column often still can.  The word
+     * scan is substantially cheaper than running grapheme and width state
+     * over a long line on every viewport frame. */
+    if (range_is_simple_ascii(tb, line.lo, pos.v) &&
+        (pos.v == line.lo || pos.v == end ||
+         range_is_simple_ascii(tb, pos.v, pos.v + 1U)))
+        return (CCol){pos.v - line.lo};
     cluster_reader_init(&reader, tb, line.lo, end);
     while (cluster_next(&reader, &cluster, true)) {
         if (pos.v < cluster.end)
@@ -1196,6 +1204,20 @@ ByteOff sag_ccol_to_off(const TextBuf *tb, Span line, CCol c, u32 tabw)
     if (coords_simple_ascii(tb))
         return simple_col_to_off(line, c.v);
     end = line_content_end(tb, line);
+    if (c.v <= end - line.lo) {
+        u64 candidate = line.lo + c.v;
+
+        if (range_is_simple_ascii(tb, line.lo, candidate) &&
+            (candidate == line.lo || candidate == end ||
+             range_is_simple_ascii(tb, candidate, candidate + 1U)))
+            return BYTEOFF(candidate);
+    }
+    if (c.v > end - line.lo &&
+        range_is_simple_ascii(tb, line.lo, end)) {
+        if (end < line.hi || end == line.lo)
+            return BYTEOFF(end);
+        return BYTEOFF(end - 1U);
+    }
     cluster_reader_init(&reader, tb, line.lo, end);
     while (cluster_next(&reader, &cluster, true)) {
         u64 next;
