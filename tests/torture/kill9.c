@@ -598,10 +598,18 @@ static void clean_child_check(const char *driver, const char *shim,
         die("setenv no shim");
     code = wait_child(start_save(driver, shim, dst, post, log, 1U, -1, -1));
     (void)unsetenv("SAG_TORTURE_NO_SHIM");
-    if (code != 0 || !run_check(driver, dst, old, post) ||
-        !file_equals_bytes(dst, post_bytes, sizeof(post_bytes) - 1U)) {
-        (void)fprintf(stderr, "torture: clean child check failed\n");
-        exit(1);
+    {
+        bool oracle = run_check(driver, dst, old, post);
+        bool exact = file_equals_bytes(dst, post_bytes,
+                                       sizeof(post_bytes) - 1U);
+
+        if (code != 0 || !oracle || !exact) {
+            (void)fprintf(stderr,
+                          "torture: clean child check failed "
+                          "(exit=%d oracle=%d exact=%d)\n",
+                          code, oracle, exact);
+            exit(1);
+        }
     }
     (void)printf("clean child save+check ok\n");
 }
@@ -741,12 +749,15 @@ int main(int argc, char **argv)
     unsigned long long signal_iterations = 500U;
     unsigned long long serial = 0U;
     bool fault_boundaries = true;
+    bool live_editor = false;
     size_t i;
 
     if (argc != 3) {
         (void)fprintf(stderr, "usage: %s SAG_TORTURE FAULTSHIM_SO\n", argv[0]);
         return 2;
     }
+    live_editor = getenv("SAG_TORTURE_LANE") != NULL &&
+                  strcmp(getenv("SAG_TORTURE_LANE"), "live-editor") == 0;
     root = mkdtemp(root_template);
     if (root == NULL)
         die("mkdtemp");
@@ -778,9 +789,16 @@ int main(int argc, char **argv)
         }
         hardlink_sweep(argv[1], argv[2], root, state, &serial);
     }
-    late_hardlink_fallback(argv[1], argv[2], root, state, &serial);
-    injected_fallback(argv[1], argv[2], root, state, "rename-exdev", &serial);
-    injected_fallback(argv[1], argv[2], root, state, "fchown", &serial);
+    /* These decision-table fallbacks need synthetic metadata or a fault at a
+     * helper-internal close boundary. Keep them in the API lane; the live
+     * editor lane exercises the atomic sweep, retries, determinism, and
+     * external SIGKILL against the real process. */
+    if (!live_editor) {
+        late_hardlink_fallback(argv[1], argv[2], root, state, &serial);
+        injected_fallback(argv[1], argv[2], root, state, "rename-exdev",
+                          &serial);
+        injected_fallback(argv[1], argv[2], root, state, "fchown", &serial);
+    }
     injected_eintr(argv[1], argv[2], root, &serial);
     determinism_check(argv[1], argv[2], root, &serial);
     external_kills(argv[1], argv[2], root, signal_iterations, &serial);

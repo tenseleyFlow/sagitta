@@ -84,7 +84,9 @@ jobs:
         run: |
           make perf-unicode perf-render perf-piece perf-cursor perf-undo CC=gcc
       - name: Enforce Sprint 14 editor latency budgets
-        run: make perf-latency CC=gcc
+        run: |
+          make perf-latency CC=gcc
+          make perf-latency-selftest CC=gcc
 
   torture:
     runs-on: ubuntu-latest

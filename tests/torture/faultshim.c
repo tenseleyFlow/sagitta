@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -45,6 +46,13 @@ static int initialized;
 static int resolving;
 static int rename_exdev_done;
 static int link_done;
+static volatile sig_atomic_t signal_enabled;
+
+static void enable_faults(int sig)
+{
+    (void)sig;
+    signal_enabled = 1;
+}
 
 static void close_log(void)
 {
@@ -117,8 +125,27 @@ static void initialize(void)
         if (log_fd >= 0 && atexit(close_log) != 0)
             _exit(126);
     }
+    if (env_is_one("SAG_FAULT_SIGNAL_ENABLE")) {
+        struct sigaction action;
+
+        (void)memset(&action, 0, sizeof(action));
+        action.sa_handler = enable_faults;
+        (void)sigemptyset(&action.sa_mask);
+        if (sigaction(SIGUSR2, &action, NULL) != 0)
+            _exit(126);
+    }
     resolving = 0;
     initialized = 1;
+}
+
+static int faults_enabled(void)
+{
+    const char *enabled;
+
+    if (env_is_one("SAG_FAULT_SIGNAL_ENABLE"))
+        return signal_enabled != 0;
+    enabled = getenv("SAG_FAULT_ENABLE");
+    return enabled == NULL || strcmp(enabled, "0") != 0;
 }
 
 static uint64_t next_random(void)
@@ -146,12 +173,10 @@ static void log_call(const char *name, const char *action)
 
 static void before_call(const char *name)
 {
-    const char *enabled;
     unsigned long long delay_us;
 
     initialize();
-    enabled = getenv("SAG_FAULT_ENABLE");
-    if (enabled != NULL && strcmp(enabled, "0") == 0)
+    if (!faults_enabled())
         return;
     delay_us = parse_ull(getenv("SAG_FAULT_DELAY_US"), 0U);
     if (delay_us != 0U) {
@@ -172,9 +197,7 @@ static void before_call(const char *name)
 
 static size_t maybe_short(size_t count, const char *name)
 {
-    const char *enabled = getenv("SAG_FAULT_ENABLE");
-
-    if (enabled != NULL && strcmp(enabled, "0") == 0)
+    if (!faults_enabled())
         return count;
     if (!short_writes || count < 2U || (next_random() & 1U) == 0U)
         return count;
@@ -184,10 +207,9 @@ static size_t maybe_short(size_t count, const char *name)
 
 static int inject_eintr(const char *name)
 {
-    const char *enabled = getenv("SAG_FAULT_ENABLE");
     unsigned long long at;
 
-    if (enabled != NULL && strcmp(enabled, "0") == 0)
+    if (!faults_enabled())
         return 0;
     at = parse_ull(getenv("SAG_FAULT_EINTR_AT"), UINT64_MAX);
     if (call_no == 0U || at != call_no - 1U)

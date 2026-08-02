@@ -36,7 +36,7 @@ MODDIR_fuss    := git
 MODDIR_plugins := plug
 
 CFLAGS := -std=c11 -pedantic -Wall -Wextra -Werror -Wvla -g -O2 \
-          -MMD -MP -Isrc -Itests/pty -Itests/fuzz \
+          -MMD -MP -Isrc -Itests -Itests/pty -Itests/fuzz \
           -DSAG_WITH_LSP=$(if $(filter lsp,$(MODULES)),1,0) \
           -DSAG_WITH_AI=$(if $(filter ai,$(MODULES)),1,0) \
           -DSAG_WITH_FUSS=$(if $(filter fuss,$(MODULES)),1,0) \
@@ -88,7 +88,7 @@ UNIT_RUN := SAG_TEST_INSTRUMENTED=1 $(VALGRIND_RUN) \
             --filter save_fault_shim_contract
 PTY_RUN  := valgrind --quiet --error-exitcode=99 --leak-check=full \
             --errors-for-leak-kinds=definite --track-fds=yes \
-            $(BUILD)/pty_runner
+            --trace-children=yes $(BUILD)/pty_runner
 endif
 
 ifeq ($(SAN),1)
@@ -146,6 +146,7 @@ PERF_CURSOR_OBJ := $(BUILD)/tests/perf/perf_cursor.o
 PERF_UNDO_OBJ := $(BUILD)/tests/perf/perf_undo.o
 PERF_TEXTBUF_OBJ := $(BUILD)/tests/perf/perf_textbuf.o
 PERF_LATENCY_OBJ := $(BUILD)/tests/perf/latency.o
+LIVE_PTY_OBJ := $(BUILD)/tests/support/live_pty.o
 PERF_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 GEN_BIGFILE_OBJ := $(BUILD)/scripts/gen-bigfile.o
 
@@ -166,7 +167,8 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(FUZZ_LIB_OBJ) \
                 $(PTY_HARNESS_OBJ) $(PTY_REGISTRY_OBJ) $(PTY_RUNNER_OBJ) \
                 $(PTY_DEMO_OBJ) $(PERF_UNICODE_OBJ) $(PERF_RENDER_OBJ) \
                 $(PERF_PIECE_OBJ) $(PERF_CURSOR_OBJ) $(PERF_UNDO_OBJ) \
-                $(PERF_TEXTBUF_OBJ) $(GEN_BIGFILE_OBJ) \
+                $(PERF_TEXTBUF_OBJ) $(PERF_LATENCY_OBJ) $(LIVE_PTY_OBJ) \
+                $(GEN_BIGFILE_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) $(FAULTSHIM)))
 
@@ -185,8 +187,8 @@ endif
         fixtures-verify-quick \
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
         perf-undo perf-textbuf perf-huge perf-update perf-baseline-guard \
-        perf-gate-selftest perf-latency \
-        torture torture-build
+        perf-gate-selftest perf-latency perf-latency-selftest \
+        torture torture-build torture-live-check
 
 all: $(BUILD)/sagitta $(BUILD)/sag
 
@@ -251,9 +253,9 @@ $(BUILD)/perf_cursor: $(PERF_CORE_OBJ) $(PERF_CURSOR_OBJ)
 $(BUILD)/perf_undo: $(PERF_CORE_OBJ) $(PERF_UNDO_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_UNDO_OBJ)
 
-$(BUILD)/perf_latency: $(PERF_CORE_OBJ) $(PERF_LATENCY_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
-		$(PERF_LATENCY_OBJ)
+$(BUILD)/perf_latency: $(PERF_LATENCY_OBJ) $(LIVE_PTY_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_LATENCY_OBJ) \
+		$(LIVE_PTY_OBJ)
 
 $(TORTURE_CHILD): $(TORTURE_CORE_OBJ) $(TORTURE_CHILD_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TORTURE_CORE_OBJ) \
@@ -262,9 +264,9 @@ $(TORTURE_CHILD): $(TORTURE_CORE_OBJ) $(TORTURE_CHILD_OBJ)
 $(TORTURE_DRIVER): $(TORTURE_DRIVER_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TORTURE_DRIVER_OBJ)
 
-$(TORTURE_LIVE): $(TORTURE_CORE_OBJ) $(TORTURE_LIVE_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TORTURE_CORE_OBJ) \
-		$(TORTURE_LIVE_OBJ)
+$(TORTURE_LIVE): $(TORTURE_LIVE_OBJ) $(LIVE_PTY_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TORTURE_LIVE_OBJ) \
+		$(LIVE_PTY_OBJ)
 
 $(FAULTSHIM): tests/torture/faultshim.c | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC $(SHARED_FLAG) -o $@ $< $(DL_LIBS)
@@ -282,6 +284,8 @@ test: $(BUILD)/unit_tests $(BUILD)/sagitta test-pty torture-build
 	scripts/check-render.sh
 	scripts/check-sigsafe.sh
 	scripts/smoke.sh $(BUILD)/sagitta
+	$(MAKE) --no-print-directory torture-live-check BUILD=$(BUILD) \
+		CC=$(CC) SAN=$(SAN) VALGRIND=$(VALGRIND)
 
 fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
       $(BUILD)/fuzz_grid $(BUILD)/fuzz_vt $(BUILD)/fuzz_undo \
@@ -332,8 +336,19 @@ perf-cursor: $(BUILD)/perf_cursor
 perf-undo: $(BUILD)/perf_undo
 	$(BUILD)/perf_undo
 
-perf-latency: $(BUILD)/perf_latency
-	$(BUILD)/perf_latency --baseline $(LATENCY_BASELINE)
+perf-latency: $(BUILD)/perf_latency $(BUILD)/sagitta
+	$(BUILD)/perf_latency --sagitta $(abspath $(BUILD)/sagitta) \
+		--baseline $(LATENCY_BASELINE)
+
+perf-latency-selftest: $(BUILD)/perf_latency $(BUILD)/sagitta
+	@if SAG_LATENCY_KEYS=100 SAG_LATENCY_INJECT_NS=6000000 \
+		$(BUILD)/perf_latency --sagitta $(abspath $(BUILD)/sagitta) \
+		--baseline $(LATENCY_BASELINE); then \
+		echo 'error: latency gate accepted injected paint delay' >&2; \
+		exit 1; \
+	else \
+		echo 'perf-latency-selftest: injected delay rejected'; \
+	fi
 
 fixtures-quick: $(BUILD)/gen-bigfile
 	@mkdir -p $(FIXTURE_DIR); \
@@ -410,13 +425,23 @@ perf-gate-selftest: $(BUILD)/perf_textbuf fixtures-quick
 		echo 'perf-gate-selftest: injected delay rejected'; \
 	fi
 
-torture-build: $(TORTURE_CHILD) $(TORTURE_LIVE) $(TORTURE_DRIVER) $(FAULTSHIM)
+torture-build: $(BUILD)/sagitta $(TORTURE_CHILD) $(TORTURE_LIVE) \
+               $(TORTURE_DRIVER) $(FAULTSHIM)
+
+torture-live-check: torture-build
+	SAG_TORTURE_CLEAN_ONLY=1 \
+	SAG_TORTURE_CHECKER=$(abspath $(TORTURE_CHILD)) \
+	SAG_TORTURE_SAGITTA=$(abspath $(BUILD)/sagitta) \
+		$(if $(filter 1,$(VALGRIND)),$(VALGRIND_RUN) --trace-children=yes,) \
+		$(TORTURE_DRIVER) $(abspath $(TORTURE_LIVE)) \
+		$(abspath $(FAULTSHIM))
 
 torture: torture-build
 	SAG_TORTURE_SIGKILL_ITERS=$(TORTURE_SIGKILL_ITERS) \
 		$(TORTURE_DRIVER) $(abspath $(TORTURE_CHILD)) \
 		$(abspath $(FAULTSHIM))
 	SAG_TORTURE_CHECKER=$(abspath $(TORTURE_CHILD)) \
+	SAG_TORTURE_SAGITTA=$(abspath $(BUILD)/sagitta) \
 	SAG_TORTURE_LANE=live-editor \
 	SAG_TORTURE_SIGKILL_ITERS=$(TORTURE_SIGKILL_ITERS) \
 		$(TORTURE_DRIVER) $(abspath $(TORTURE_LIVE)) \
@@ -465,7 +490,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/sagitta
          $(PERF_UNICODE_OBJ:.o=.d) $(PERF_RENDER_OBJ:.o=.d) \
          $(PERF_PIECE_OBJ:.o=.d) $(PERF_CURSOR_OBJ:.o=.d) \
          $(PERF_UNDO_OBJ:.o=.d) $(PERF_TEXTBUF_OBJ:.o=.d) \
-         $(PERF_LATENCY_OBJ:.o=.d) \
+         $(PERF_LATENCY_OBJ:.o=.d) $(LIVE_PTY_OBJ:.o=.d) \
          $(GEN_BIGFILE_OBJ:.o=.d) \
          $(TORTURE_CHILD_OBJ:.o=.d) \
 	 $(TORTURE_DRIVER_OBJ:.o=.d) $(TORTURE_LIVE_OBJ:.o=.d)

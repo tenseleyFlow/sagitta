@@ -1,7 +1,8 @@
 #define _POSIX_C_SOURCE 200809L
 
-#include "edit/ed.h"
+#include "support/live_pty.h"
 
+#include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -19,21 +20,10 @@ enum {
     SCREEN_COLS = 80
 };
 
-typedef struct {
+typedef struct LatencyLimits {
     i64 key_p99_ns;
     i64 cold_ns;
 } LatencyLimits;
-
-static volatile u64 latency_sink;
-
-static i64 now_ns(void)
-{
-    struct timespec ts;
-
-    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
-        return -1;
-    return (i64)ts.tv_sec * INT64_C(1000000000) + ts.tv_nsec;
-}
 
 static bool write_all(int fd, const void *data, size_t len)
 {
@@ -54,23 +44,26 @@ static bool write_all(int fd, const void *data, size_t len)
     return true;
 }
 
-static bool make_fixture(char *path, size_t path_len,
-                         char *state, size_t state_len)
+static bool make_fixture(char *root, size_t root_cap,
+                         char *path, size_t path_cap,
+                         char *state, size_t state_cap)
 {
-    static const char line[] =
-        "int sagitta_latency_fixture(void) { return 14; }\n";
-    char root[] = "/tmp/sagitta-latency-XXXXXX";
+    static const char line[] = "x\n";
+    char template[] = "/tmp/sagitta-latency-XXXXXX";
+    char *made;
     int fd;
     int n;
     size_t i;
 
-    if (mkdtemp(root) == NULL)
+    made = mkdtemp(template);
+    if (made == NULL || strlen(made) + 1U > root_cap)
         return false;
-    n = snprintf(path, path_len, "%s/fixture.c", root);
-    if (n < 0 || (size_t)n >= path_len)
+    (void)strcpy(root, made);
+    n = snprintf(path, path_cap, "%s/fixture.c", root);
+    if (n < 0 || (size_t)n >= path_cap)
         return false;
-    n = snprintf(state, state_len, "%s/state", root);
-    if (n < 0 || (size_t)n >= state_len || mkdir(state, 0700) != 0)
+    n = snprintf(state, state_cap, "%s/state", root);
+    if (n < 0 || (size_t)n >= state_cap || mkdir(state, 0700) != 0)
         return false;
     fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0600);
     if (fd < 0)
@@ -84,21 +77,38 @@ static bool make_fixture(char *path, size_t path_len,
     return close(fd) == 0;
 }
 
-static void remove_fixture(const char *path, const char *state)
+static bool remove_tree(const char *path)
 {
-    char root[1024];
-    char *slash;
+    struct stat st;
 
-    (void)unlink(path);
-    (void)rmdir(state);
-    if (strlen(path) >= sizeof(root))
-        return;
-    (void)strcpy(root, path);
-    slash = strrchr(root, '/');
-    if (slash != NULL) {
-        *slash = '\0';
-        (void)rmdir(root);
+    if (lstat(path, &st) != 0)
+        return errno == ENOENT;
+    if (S_ISDIR(st.st_mode)) {
+        DIR *dir = opendir(path);
+        struct dirent *entry;
+
+        if (dir == NULL)
+            return false;
+        while ((entry = readdir(dir)) != NULL) {
+            char child[1200];
+            int n;
+
+            if (strcmp(entry->d_name, ".") == 0 ||
+                strcmp(entry->d_name, "..") == 0)
+                continue;
+            n = snprintf(child, sizeof(child), "%s/%s", path,
+                         entry->d_name);
+            if (n < 0 || (size_t)n >= sizeof(child) ||
+                !remove_tree(child)) {
+                (void)closedir(dir);
+                return false;
+            }
+        }
+        if (closedir(dir) != 0)
+            return false;
+        return rmdir(path) == 0;
     }
+    return unlink(path) == 0;
 }
 
 static bool load_limits(const char *path, LatencyLimits *limits)
@@ -152,100 +162,165 @@ static void merge_sort_i64(i64 *values, i64 *work, size_t len)
     }
 }
 
-static bool editor_ready(Ed *ed, const char *path, int sink_fd)
+static bool stop_editor(SagLivePty *pty)
 {
-    sag_ed_init(ed);
-    if (sag_ed_open(ed, path) != SAG_LOAD_OK) {
-        sag_ed_free(ed);
+    static const char escape = '\033';
+    static const char quit[] = "q!";
+    struct timespec settle = {0, 50000000};
+    i64 deadline = sag_live_pty_now_ns() + INT64_C(2000000000);
+    int code;
+
+    if (!sag_live_pty_write(pty, &escape, 1U, deadline))
         return false;
-    }
-    ed->tty.wfd = sink_fd;
-    if (!sag_grid_init(&ed->grid, &ed->interner,
-                       SCREEN_ROWS, SCREEN_COLS)) {
-        sag_ed_free(ed);
+    while (nanosleep(&settle, &settle) != 0 && errno == EINTR)
+        ;
+    if (!sag_live_pty_write(pty, quit, sizeof(quit) - 1U, deadline) ||
+        !sag_live_pty_wait_exit(pty, deadline, &code))
         return false;
-    }
-    ed->grid_ready = true;
-    sag_render_init(&ed->render, &ed->tty.caps, NULL);
-    ed->render_ready = true;
-    sag_ed_layout(ed);
-    return true;
+    return code == 0;
 }
 
-static Key ascii_key(u8 byte)
-{
-    Key key = {0};
-
-    key.kind = SAG_EV_KEY;
-    key.ev = SAG_KEY_PRESS;
-    key.code = byte;
-    key.ntext = 1U;
-    key.text[0] = byte;
-    return key;
-}
-
-static bool measure_cold(const char *path, int sink_fd, i64 *median_out)
+static bool measure_cold(const char *binary, const char *path,
+                         const char *state, i64 *median_out)
 {
     i64 samples[COLD_RUNS];
     i64 work[COLD_RUNS];
     size_t run;
 
     for (run = 0U; run < COLD_RUNS; run++) {
-        Ed ed;
-        i64 start = now_ns();
+        SagLivePty pty = {.master = -1, .pid = -1};
+        i64 start = sag_live_pty_now_ns();
+        i64 completed;
+        i64 deadline = start + INT64_C(2000000000);
 
-        if (start < 0 || !editor_ready(&ed, path, sink_fd))
-            return false;
-        sag_ed_render(&ed);
-        samples[run] = now_ns() - start;
-        if (samples[run] < 0 || ed.quit) {
-            sag_ed_free(&ed);
+        if (start < 0 ||
+            !sag_live_pty_spawn(&pty, binary, path, state,
+                                SCREEN_ROWS, SCREEN_COLS) ||
+            !sag_live_pty_wait_frame(&pty, 0U, deadline, &completed)) {
+            (void)fprintf(stderr, "latency: cold run %zu did not paint\n",
+                          run + 1U);
+            sag_live_pty_close(&pty);
             return false;
         }
-        latency_sink += ed.frame.len;
-        sag_ed_free(&ed);
+        samples[run] = completed - start;
+        if (samples[run] < 0 || !stop_editor(&pty)) {
+            (void)fprintf(stderr, "latency: cold run %zu did not quit\n",
+                          run + 1U);
+            sag_live_pty_close(&pty);
+            return false;
+        }
+        sag_live_pty_close(&pty);
     }
     merge_sort_i64(samples, work, COLD_RUNS);
     *median_out = samples[COLD_RUNS / 2U];
     return true;
 }
 
-static bool measure_keys(const char *path, int sink_fd, i64 *p99_out)
+static size_t key_count(void)
 {
-    i64 *samples = malloc(LATENCY_KEYS * sizeof(*samples));
-    i64 *work = malloc(LATENCY_KEYS * sizeof(*work));
-    Ed ed;
-    Key enter = ascii_key((u8)'i');
+    const char *env = getenv("SAG_LATENCY_KEYS");
+    char *end;
+    unsigned long value;
+
+    if (env == NULL || *env == '\0')
+        return LATENCY_KEYS;
+    errno = 0;
+    value = strtoul(env, &end, 10);
+    if (errno != 0 || *end != '\0' || value < 100U || value > LATENCY_KEYS)
+        return 0U;
+    return (size_t)value;
+}
+
+static i64 injected_delay(void)
+{
+    const char *env = getenv("SAG_LATENCY_INJECT_NS");
+    char *end;
+    long long value;
+
+    if (env == NULL || *env == '\0')
+        return 0;
+    errno = 0;
+    value = strtoll(env, &end, 10);
+    if (errno != 0 || *end != '\0' || value < 0)
+        return -1;
+    return (i64)value;
+}
+
+static void delay_ns(i64 ns)
+{
+    struct timespec delay;
+
+    if (ns <= 0)
+        return;
+    delay.tv_sec = (time_t)(ns / INT64_C(1000000000));
+    delay.tv_nsec = (long)(ns % INT64_C(1000000000));
+    while (nanosleep(&delay, &delay) != 0 && errno == EINTR)
+        ;
+}
+
+static bool measure_keys(const char *binary, const char *path,
+                         const char *state, i64 *p99_out)
+{
+    size_t count = key_count();
+    i64 inject = injected_delay();
+    i64 *samples;
+    i64 *work;
+    SagLivePty pty = {.master = -1, .pid = -1};
+    i64 deadline;
     size_t i;
     bool ok = false;
 
+    if (count == 0U || inject < 0)
+        return false;
+    samples = malloc(count * sizeof(*samples));
+    work = malloc(count * sizeof(*work));
     if (samples == NULL || work == NULL)
         goto done_alloc;
-    if (!editor_ready(&ed, path, sink_fd))
-        goto done_alloc;
-    /* The model is the loaded 10 kLOC fixture. Suppress journal fsync noise:
-     * durability has its own torture gate and is not paint latency. */
-    ed.buffer.path = NULL;
-    sag_ed_handle_key(&ed, enter, 0);
-    sag_ed_render(&ed);
-    for (i = 0U; i < LATENCY_KEYS; i++) {
-        Key key = ascii_key((u8)((i & 1U) != 0U ? 'a' : 'b'));
-        i64 start = now_ns();
-
-        sag_ed_handle_key(&ed, key, (i64)i + 1);
-        sag_ed_render(&ed);
-        samples[i] = now_ns() - start;
-        if (samples[i] < 0 || ed.quit) {
-            sag_ed_free(&ed);
-            goto done_alloc;
-        }
-        latency_sink += ed.frame.len;
+    deadline = sag_live_pty_now_ns() + INT64_C(2000000000);
+    if (!sag_live_pty_spawn(&pty, binary, path, state,
+                            SCREEN_ROWS, SCREEN_COLS) ||
+        !sag_live_pty_wait_frame(&pty, 0U, deadline, NULL)) {
+        (void)fprintf(stderr, "latency: key run did not paint initially\n");
+        goto done_pty;
     }
-    sag_ed_free(&ed);
-    merge_sort_i64(samples, work, LATENCY_KEYS);
-    *p99_out = samples[((size_t)LATENCY_KEYS * 99U + 99U) / 100U - 1U];
+    {
+        static const char enter_insert = 'i';
+        u64 frame = pty.frames;
+
+        deadline = sag_live_pty_now_ns() + INT64_C(2000000000);
+        if (!sag_live_pty_write(&pty, &enter_insert, 1U, deadline) ||
+            !sag_live_pty_wait_frame(&pty, frame, deadline, NULL)) {
+            (void)fprintf(stderr, "latency: insert mode did not paint\n");
+            goto done_pty;
+        }
+    }
+    for (i = 0U; i < count; i++) {
+        char key = (i & 1U) != 0U ? 'a' : 'b';
+        u64 frame = pty.frames;
+        i64 start = sag_live_pty_now_ns();
+        i64 completed;
+
+        deadline = start + INT64_C(1000000000);
+        if (start < 0 ||
+            !sag_live_pty_write(&pty, &key, 1U, deadline))
+            goto done_pty;
+        delay_ns(inject);
+        if (!sag_live_pty_wait_frame(&pty, frame, deadline, &completed)) {
+            (void)fprintf(stderr, "latency: key %zu did not paint\n", i + 1U);
+            goto done_pty;
+        }
+        samples[i] = completed - start;
+    }
+    if (!stop_editor(&pty)) {
+        (void)fprintf(stderr, "latency: key run did not quit\n");
+        goto done_pty;
+    }
+    merge_sort_i64(samples, work, count);
+    *p99_out = samples[(count * 99U + 99U) / 100U - 1U];
     ok = true;
 
+done_pty:
+    sag_live_pty_close(&pty);
 done_alloc:
     free(work);
     free(samples);
@@ -254,38 +329,39 @@ done_alloc:
 
 int main(int argc, char **argv)
 {
+    char root[1024];
     char fixture[1024];
     char state[1024];
     LatencyLimits limits;
     i64 key_p99;
     i64 cold;
-    int sink_fd;
     int status = 0;
 
-    if (argc != 3 || strcmp(argv[1], "--baseline") != 0) {
-        (void)fprintf(stderr, "usage: %s --baseline PATH\n", argv[0]);
+    if (argc != 5 || strcmp(argv[1], "--sagitta") != 0 ||
+        strcmp(argv[3], "--baseline") != 0) {
+        (void)fprintf(stderr,
+                      "usage: %s --sagitta PATH --baseline PATH\n", argv[0]);
         return 2;
     }
-    if (!load_limits(argv[2], &limits)) {
-        (void)fprintf(stderr, "latency: invalid baseline %s\n", argv[2]);
+    if (!load_limits(argv[4], &limits)) {
+        (void)fprintf(stderr, "latency: invalid baseline %s\n", argv[4]);
         return 2;
     }
-    if (!make_fixture(fixture, sizeof(fixture), state, sizeof(state)) ||
-        setenv("XDG_STATE_HOME", state, 1) != 0) {
+    if (!make_fixture(root, sizeof(root), fixture, sizeof(fixture),
+                      state, sizeof(state))) {
         (void)fprintf(stderr, "latency: cannot create 10 kLOC fixture\n");
         return 2;
     }
-    sink_fd = open("/dev/null", O_WRONLY);
-    if (sink_fd < 0 || !measure_cold(fixture, sink_fd, &cold) ||
-        !measure_keys(fixture, sink_fd, &key_p99)) {
-        (void)fprintf(stderr, "latency: measurement failed\n");
-        if (sink_fd >= 0)
-            (void)close(sink_fd);
-        remove_fixture(fixture, state);
+    if (!measure_cold(argv[2], fixture, state, &cold) ||
+        !measure_keys(argv[2], fixture, state, &key_p99)) {
+        (void)fprintf(stderr, "latency: PTY measurement failed\n");
+        (void)remove_tree(root);
         return 2;
     }
-    (void)close(sink_fd);
-    remove_fixture(fixture, state);
+    if (!remove_tree(root)) {
+        (void)fprintf(stderr, "latency: cannot remove fixture tree\n");
+        return 2;
+    }
 
     (void)printf("keypress_to_paint_p99 %lld limit=%lld%s\n",
                  (long long)key_p99, (long long)limits.key_p99_ns,

@@ -1,14 +1,18 @@
 #define _POSIX_C_SOURCE 200809L
 
-#include "edit/ed.h"
+#include "support/live_pty.h"
 
 #include <errno.h>
 #include <fcntl.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include <unistd.h>
+
+enum { LIVE_ROWS = 24, LIVE_COLS = 80 };
 
 static bool read_all(int fd, u8 *bytes, size_t len)
 {
@@ -21,6 +25,25 @@ static bool read_all(int fd, u8 *bytes, size_t len)
             return false;
         bytes += (size_t)n;
         len -= (size_t)n;
+    }
+    return true;
+}
+
+static bool write_all(int fd, const void *data, size_t len)
+{
+    const u8 *bytes = data;
+
+    while (len != 0U) {
+        ssize_t n = write(fd, bytes, len);
+
+        if (n > 0) {
+            bytes += (size_t)n;
+            len -= (size_t)n;
+        } else if (n < 0 && errno == EINTR) {
+            continue;
+        } else {
+            return false;
+        }
     }
     return true;
 }
@@ -58,119 +81,138 @@ static bool slurp(const char *path, u8 **out, size_t *out_len)
     return true;
 }
 
-static bool buffer_equals(const TextBuf *tb, const u8 *want, size_t want_len)
+static u64 line_count(const u8 *bytes, size_t len)
 {
-    TextIter it;
-    size_t off = 0U;
+    u64 lines = 1U;
+    size_t i;
 
-    if (sag_textbuf_len(tb) != (u64)want_len)
-        return false;
-    if (want_len == 0U)
-        return true;
-    if (!sag_textiter_begin(&it, tb, BYTEOFF(0U)))
-        return false;
-    do {
-        const u8 *chunk;
-        u64 chunk_len;
-
-        if (!sag_textiter_chunk(&it, tb, &chunk, &chunk_len) ||
-            chunk_len > SIZE_MAX || off + (size_t)chunk_len > want_len ||
-            memcmp(chunk, want + off, (size_t)chunk_len) != 0)
-            return false;
-        off += (size_t)chunk_len;
-    } while (sag_textiter_advance(&it, tb));
-    return off == want_len;
-}
-
-static Key ascii_key(u32 code)
-{
-    Key key = {0};
-
-    key.kind = SAG_EV_KEY;
-    key.ev = SAG_KEY_PRESS;
-    key.code = code;
-    if (code < 0x80U) {
-        key.ntext = 1U;
-        key.text[0] = (u8)code;
+    for (i = 0U; i < len; i++) {
+        if (bytes[i] == (u8)'\n')
+            lines++;
     }
-    return key;
+    return lines;
 }
 
-static bool delete_document(Ed *ed)
+static bool feed_replace(SagLivePty *pty, const u8 *old, size_t old_len,
+                         const u8 *post, size_t post_len, i64 deadline)
 {
-    CmdId id = sag_cmd_lookup("ed.edit.line.delete", 19U);
-    CmdCtx cx = {0};
-    u64 lines = sag_textbuf_line_count(ed->buffer.tb);
+    char erase[64];
+    int n;
+    u64 frame;
+    static const char paste_begin[] = "i\033[200~";
+    static const char paste_end[] = "\033[201~\033";
 
-    if (id.v == 0U || lines > UINT32_MAX)
+    n = snprintf(erase, sizeof(erase), "%lludd",
+                 (unsigned long long)line_count(old, old_len));
+    if (n <= 0 || (size_t)n >= sizeof(erase))
         return false;
-    cx.ed = ed;
-    cx.win = ed->win;
-    cx.count = (u32)lines;
-    cx.count_given = true;
-    cx.source = SAG_SRC_TEST;
-    return sag_ed_invoke(ed, id, &cx) == SAG_CMD_OK;
+    frame = pty->frames;
+    if (!sag_live_pty_write(pty, erase, (size_t)n, deadline) ||
+        !sag_live_pty_wait_frame(pty, frame, deadline, NULL))
+        return false;
+    frame = pty->frames;
+    if (!sag_live_pty_write(pty, paste_begin, sizeof(paste_begin) - 1U,
+                            deadline) ||
+        !sag_live_pty_write(pty, post, post_len, deadline) ||
+        !sag_live_pty_write(pty, paste_end, sizeof(paste_end) - 1U,
+                            deadline) ||
+        !sag_live_pty_wait_frame(pty, frame, deadline, NULL))
+        return false;
+    return true;
+}
+
+static void feeder(SagLivePty *pty, pid_t editor, int ready_fd,
+                   const u8 *old, size_t old_len,
+                   const u8 *post, size_t post_len)
+{
+    i64 deadline = sag_live_pty_now_ns() + INT64_C(3000000000);
+    struct timespec escape_settle = {0, 50000000};
+    static const char save = 's';
+    static const char quit[] = "q!";
+
+    if (!sag_live_pty_wait_frame(pty, 0U, deadline, NULL) ||
+        !feed_replace(pty, old, old_len, post, post_len, deadline))
+        _exit(3);
+    while (nanosleep(&escape_settle, &escape_settle) != 0 && errno == EINTR)
+        ;
+    if (getenv("SAG_TORTURE_NO_SHIM") == NULL &&
+        kill(editor, SIGUSR2) != 0)
+        _exit(3);
+    if (!sag_live_pty_write(pty, &save, 1U, deadline))
+        _exit(3);
+    if (ready_fd >= 0) {
+        static const char ready = 'R';
+
+        if (!write_all(ready_fd, &ready, 1U) || close(ready_fd) != 0)
+            _exit(3);
+    }
+    {
+        struct timespec settle = {0, 100000000};
+
+        while (nanosleep(&settle, &settle) != 0 && errno == EINTR)
+            ;
+    }
+    deadline = sag_live_pty_now_ns() + INT64_C(2000000000);
+    (void)sag_live_pty_write(pty, quit, sizeof(quit) - 1U, deadline);
+    {
+        struct timespec quit_settle = {0, 200000000};
+
+        while (nanosleep(&quit_settle, &quit_settle) != 0 && errno == EINTR)
+            ;
+    }
+    _exit(0);
 }
 
 static int live_save(const char *path, const char *post_path)
 {
+    const char *binary = getenv("SAG_TORTURE_SAGITTA");
+    const char *ready_env = getenv("SAG_TORTURE_READY_FD");
+    u8 *old = NULL;
     u8 *post = NULL;
+    size_t old_len = 0U;
     size_t post_len = 0U;
-    const char *ready_env;
+    SagLivePty pty;
+    char slave[128];
     int ready_fd = -1;
-    Ed ed;
-    Key key;
+    pid_t feeder_pid;
 
-    if (setenv("SAG_FAULT_ENABLE", "0", 1) != 0 ||
-        !slurp(post_path, &post, &post_len))
-        return 3;
-    sag_ed_init(&ed);
-    if (sag_ed_open(&ed, path) != SAG_LOAD_OK || !delete_document(&ed))
+    if (binary == NULL || *binary == '\0' ||
+        !slurp(path, &old, &old_len) ||
+        !slurp(post_path, &post, &post_len) ||
+        !sag_live_pty_open(&pty, slave, sizeof(slave),
+                           LIVE_ROWS, LIVE_COLS))
         goto fail;
-
-    key = ascii_key((u32)'i');
-    sag_ed_handle_key(&ed, key, 0);
-    sag_ed_handle_paste(&ed, NULL, 0U, false);
-    sag_ed_handle_paste(&ed, post, post_len, false);
-    sag_ed_handle_paste(&ed, NULL, 0U, true);
-    key = ascii_key(SAG_KEY_ESCAPE);
-    sag_ed_handle_key(&ed, key, 1);
-    if (!buffer_equals(ed.buffer.tb, post, post_len))
-        goto fail;
-    if (ed.buffer.jrn == NULL)
-        goto fail;
-    sag_journal_sync(ed.buffer.jrn);
-    if (!sag_journal_ok(ed.buffer.jrn))
-        goto fail;
-
-    ready_env = getenv("SAG_TORTURE_READY_FD");
     if (ready_env != NULL)
         ready_fd = (int)strtol(ready_env, NULL, 10);
+    feeder_pid = fork();
+    if (feeder_pid < 0)
+        goto fail_pty;
+    if (feeder_pid == 0)
+        feeder(&pty, getppid(), ready_fd, old, old_len, post, post_len);
+
+    free(old);
+    free(post);
+    old = NULL;
+    post = NULL;
     if (ready_fd >= 0) {
-        static const char ready = 'R';
-        ssize_t written;
+        int flags = fcntl(ready_fd, F_GETFD);
 
-        do {
-            written = write(ready_fd, &ready, 1U);
-        } while (written < 0 && errno == EINTR);
-        if (close(ready_fd) != 0 || written != 1)
-            goto fail;
+        if (flags < 0 || fcntl(ready_fd, F_SETFD, flags | FD_CLOEXEC) != 0)
+            goto fail_pty;
     }
-    if (setenv("SAG_FAULT_ENABLE", "1", 1) != 0)
-        goto fail;
-    if (getenv("SAG_TORTURE_FOREIGN_OWNER") != NULL)
-        ed.buffer.meta.uid = ed.buffer.meta.uid == (uid_t)-1
-                                 ? 1U : ed.buffer.meta.uid + 1U;
-    key = ascii_key((u32)'s');
-    sag_ed_handle_key(&ed, key, 2);
-    free(post);
-    if (ed.last_status == SAG_CMD_OK)
-        _exit(0);
-    _exit(3);
+    if (setenv("TERM", "xterm-256color", 1) != 0 ||
+        setenv("COLORTERM", "truecolor", 1) != 0 ||
+        setenv("SAG_LOG", "/dev/null", 1) != 0 ||
+        setenv("SAG_FAULT_SIGNAL_ENABLE", "1", 1) != 0 ||
+        !sag_live_pty_attach(&pty, slave, LIVE_ROWS, LIVE_COLS))
+        _exit(126);
+    sag_live_pty_exec(binary, path);
 
+fail_pty:
+    sag_live_pty_close(&pty);
 fail:
+    free(old);
     free(post);
-    sag_ed_free(&ed);
     return 3;
 }
 
