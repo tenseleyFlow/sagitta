@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 static bool write_all(int fd, const void *data, size_t len)
@@ -108,6 +109,25 @@ int main(int argc, char **argv)
     if (strcmp(mode, "hang") == 0) {
         for (;;)
             (void)pause();
+    }
+    if (strcmp(mode, "read-hold") == 0) {
+        pid_t holder = fork();
+
+        if (holder < 0)
+            return 4;
+        if (holder == 0) {
+            struct timespec pause = {0, 250000000L};
+
+            while (nanosleep(&pause, &pause) != 0 && errno == EINTR)
+                ;
+            fd = open(path, O_RDONLY);
+            if (fd < 0)
+                _exit(3);
+            result = copy_fd(fd, STDOUT_FILENO);
+            (void)close(fd);
+            _exit(result);
+        }
+        return 0;
     }
     if (strcmp(mode, "read") == 0) {
         fd = open(path, O_RDONLY);

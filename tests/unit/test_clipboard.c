@@ -458,6 +458,37 @@ void test_clipboard_custom_read_binary_and_cap(void)
     clip_env_restore(&clipboard);
 }
 
+void test_clipboard_reader_reaped_before_pipe_eof(void)
+{
+    static const u8 payload[] = {(u8)'h', 0U, (u8)'i'};
+    ClipEnv clipboard;
+    ClipFixture f;
+    RegVal out;
+    char command[PATH_MAX * 4U];
+    int n;
+
+    clip_env_save(&clipboard, "SAG_CLIPBOARD");
+    clip_fixture_init(&f);
+    clip_write_file(f.input, payload, sizeof(payload));
+    n = snprintf(command, sizeof(command),
+                 "cmd:%s %s write|%s %s read-hold",
+                 f.fake, f.output, f.fake, f.input);
+    if (n < 0 || (size_t)n >= sizeof(command))
+        SAG_BUG("clipboard held reader command overflow");
+    SAG_ASSERT_EQ_I64(setenv("SAG_CLIPBOARD", command, 1), 0);
+    sag_clip_reset();
+    sag_regval_init(&out);
+
+    SAG_ASSERT(sag_clip_read(&out, '+'));
+    SAG_ASSERT_EQ_U64(out.bytes.len, sizeof(payload));
+    SAG_ASSERT_EQ_MEM(out.bytes.data, payload, sizeof(payload));
+
+    sag_regval_free(&out);
+    sag_clip_shutdown();
+    clip_fixture_free(&f);
+    clip_env_restore(&clipboard);
+}
+
 void test_clipboard_read_failures_are_reported(void)
 {
     static const u8 keep[] = {(u8)'k', 0U, (u8)'p'};

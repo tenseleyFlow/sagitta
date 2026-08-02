@@ -1053,7 +1053,7 @@ bool sag_clip_read(RegVal *out, u8 target)
                 }
             }
         }
-        {
+        if (!reaped) {
             pid_t got = waitpid(pid, &status, WNOHANG);
 
             if (got == pid)
