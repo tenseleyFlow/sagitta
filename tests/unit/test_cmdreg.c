@@ -164,6 +164,7 @@ void test_cmd_registry_invocation_and_deferred(void)
         SAG_ASSERT(sag_test_log_contains(SAG_LOG_ERROR,
                                          mode_rows[i].sprint));
     }
+    sag_cmd_shutdown();
 }
 
 static int descriptor_child_exit(const CmdDesc *desc, bool register_twice)
