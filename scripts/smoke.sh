@@ -109,10 +109,17 @@ expect_rc 1 "unknown flag"
 expect_stderr_contains --no-such-flag "unknown flag"
 echo "smoke: unknown flag ok"
 
-run_capture "$bin" foo.txt
-expect_rc 1 "file arg"
-expect_stderr_contains "Sprint 14" "file arg"
-echo "smoke: file arg ok"
+printf 'sprint 14 smoke fixture\n' >"$tmp/file.txt"
+rc=0
+"$bin" "$tmp/file.txt" </dev/null >"$out" 2>"$err" || rc=$?
+expect_rc 1 "file arg without tty"
+expect_stderr_contains \
+    "stdin is not a terminal (--batch lands in Sprint 37)" \
+    "file arg without tty"
+if grep -F "Sprint 14" "$out" "$err" >/dev/null 2>&1; then
+    fail "file arg still deferred to Sprint 14"
+fi
+echo "smoke: file arg reaches live editor ok"
 
 rc=0
 "$bin" </dev/null >"$out" 2>"$err" || rc=$?

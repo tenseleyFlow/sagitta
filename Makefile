@@ -14,6 +14,7 @@ FIXTURE_DIR ?= $(BUILD)/fixtures
 FIXTURE_MANIFEST ?= tests/perf/fixtures.sha
 PERF_RUNNER_ID ?= local-$(shell uname -m)-$(shell uname -s | tr A-Z a-z)
 PERF_BASELINE ?= tests/perf/baselines/perf-x86_64-linux-gnu.txt
+LATENCY_BASELINE ?= tests/perf/baselines/latency-x86_64-linux-gnu.txt
 PERF_ADVISORY ?= 0
 
 ifneq ($(filter 1,$(SAN)),)
@@ -144,14 +145,17 @@ PERF_PIECE_OBJ := $(BUILD)/tests/perf/perf_piece.o
 PERF_CURSOR_OBJ := $(BUILD)/tests/perf/perf_cursor.o
 PERF_UNDO_OBJ := $(BUILD)/tests/perf/perf_undo.o
 PERF_TEXTBUF_OBJ := $(BUILD)/tests/perf/perf_textbuf.o
+PERF_LATENCY_OBJ := $(BUILD)/tests/perf/latency.o
 PERF_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 GEN_BIGFILE_OBJ := $(BUILD)/scripts/gen-bigfile.o
 
 TORTURE_CHILD_OBJ := $(BUILD)/tests/torture/sag-torture.o
 TORTURE_DRIVER_OBJ := $(BUILD)/tests/torture/kill9.o
+TORTURE_LIVE_OBJ := $(BUILD)/tests/torture/sag-live-torture.o
 TORTURE_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 TORTURE_CHILD := $(BUILD)/sag-torture
 TORTURE_DRIVER := $(BUILD)/kill9
+TORTURE_LIVE := $(BUILD)/sag-live-torture
 FAULTSHIM := $(BUILD)/tests/torture/faultshim.so
 
 BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(FUZZ_LIB_OBJ) \
@@ -164,7 +168,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(FUZZ_LIB_OBJ) \
                 $(PERF_PIECE_OBJ) $(PERF_CURSOR_OBJ) $(PERF_UNDO_OBJ) \
                 $(PERF_TEXTBUF_OBJ) $(GEN_BIGFILE_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
-                $(TORTURE_DRIVER_OBJ) $(FAULTSHIM)))
+                $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) $(FAULTSHIM)))
 
 # A content mismatch makes FORCE a normal prerequisite of every object built
 # by this invocation.  The stamp recipe also removes objects not reachable
@@ -181,7 +185,7 @@ endif
         fixtures-verify-quick \
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
         perf-undo perf-textbuf perf-huge perf-update perf-baseline-guard \
-        perf-gate-selftest \
+        perf-gate-selftest perf-latency \
         torture torture-build
 
 all: $(BUILD)/sagitta $(BUILD)/sag
@@ -247,12 +251,20 @@ $(BUILD)/perf_cursor: $(PERF_CORE_OBJ) $(PERF_CURSOR_OBJ)
 $(BUILD)/perf_undo: $(PERF_CORE_OBJ) $(PERF_UNDO_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_UNDO_OBJ)
 
+$(BUILD)/perf_latency: $(PERF_CORE_OBJ) $(PERF_LATENCY_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
+		$(PERF_LATENCY_OBJ)
+
 $(TORTURE_CHILD): $(TORTURE_CORE_OBJ) $(TORTURE_CHILD_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TORTURE_CORE_OBJ) \
 		$(TORTURE_CHILD_OBJ)
 
 $(TORTURE_DRIVER): $(TORTURE_DRIVER_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TORTURE_DRIVER_OBJ)
+
+$(TORTURE_LIVE): $(TORTURE_CORE_OBJ) $(TORTURE_LIVE_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TORTURE_CORE_OBJ) \
+		$(TORTURE_LIVE_OBJ)
 
 $(FAULTSHIM): tests/torture/faultshim.c | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC $(SHARED_FLAG) -o $@ $< $(DL_LIBS)
@@ -311,13 +323,17 @@ perf-render: $(BUILD)/perf_render
 perf-piece: $(BUILD)/perf_piece
 	$(BUILD)/perf_piece
 
-perf: perf-unicode perf-render perf-piece perf-cursor perf-undo perf-textbuf
+perf: perf-unicode perf-render perf-piece perf-cursor perf-undo perf-textbuf \
+      perf-latency
 
 perf-cursor: $(BUILD)/perf_cursor
 	$(BUILD)/perf_cursor
 
 perf-undo: $(BUILD)/perf_undo
 	$(BUILD)/perf_undo
+
+perf-latency: $(BUILD)/perf_latency
+	$(BUILD)/perf_latency --baseline $(LATENCY_BASELINE)
 
 fixtures-quick: $(BUILD)/gen-bigfile
 	@mkdir -p $(FIXTURE_DIR); \
@@ -394,11 +410,16 @@ perf-gate-selftest: $(BUILD)/perf_textbuf fixtures-quick
 		echo 'perf-gate-selftest: injected delay rejected'; \
 	fi
 
-torture-build: $(TORTURE_CHILD) $(TORTURE_DRIVER) $(FAULTSHIM)
+torture-build: $(TORTURE_CHILD) $(TORTURE_LIVE) $(TORTURE_DRIVER) $(FAULTSHIM)
 
 torture: torture-build
 	SAG_TORTURE_SIGKILL_ITERS=$(TORTURE_SIGKILL_ITERS) \
 		$(TORTURE_DRIVER) $(abspath $(TORTURE_CHILD)) \
+		$(abspath $(FAULTSHIM))
+	SAG_TORTURE_CHECKER=$(abspath $(TORTURE_CHILD)) \
+	SAG_TORTURE_LANE=live-editor \
+	SAG_TORTURE_SIGKILL_ITERS=$(TORTURE_SIGKILL_ITERS) \
+		$(TORTURE_DRIVER) $(abspath $(TORTURE_LIVE)) \
 		$(abspath $(FAULTSHIM))
 
 unicode-tables: $(BUILD)/gen-unicode-tables
@@ -444,8 +465,9 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/sagitta
          $(PERF_UNICODE_OBJ:.o=.d) $(PERF_RENDER_OBJ:.o=.d) \
          $(PERF_PIECE_OBJ:.o=.d) $(PERF_CURSOR_OBJ:.o=.d) \
          $(PERF_UNDO_OBJ:.o=.d) $(PERF_TEXTBUF_OBJ:.o=.d) \
+         $(PERF_LATENCY_OBJ:.o=.d) \
          $(GEN_BIGFILE_OBJ:.o=.d) \
          $(TORTURE_CHILD_OBJ:.o=.d) \
-	 $(TORTURE_DRIVER_OBJ:.o=.d)
+	 $(TORTURE_DRIVER_OBJ:.o=.d) $(TORTURE_LIVE_OBJ:.o=.d)
 
 FORCE:
