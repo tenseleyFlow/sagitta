@@ -1,8 +1,8 @@
 # sagitta pty golden v1
-size 80x24 alt=1 cursor=0,1 vis=1
+size 80x24 alt=1 cursor=0,7 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- text
-Rresume
+      Rresume
 
 
 
@@ -25,9 +25,9 @@ Rresume
 
 
 
-wrote build/pty-s14-notepad_restore_suspend.txt, 2 lines
+   wrote build/pty-s14-notepad_restore_suspend.txt, 2 lines                     
 --- style
-AAAAAAA
+AAAAAAAAAAAAA
 
 
 
@@ -50,6 +50,7 @@ AAAAAAA
 
 
 
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 --- legend
 A fg=default bg=default attrs=----------
+B fg=#dae5f0 bg=#14304c attrs=----------

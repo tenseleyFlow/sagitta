@@ -13,6 +13,7 @@
 
 #include "text/file.h"
 #include "text/journal.h"
+#include "snapshot.h"
 
 static const char restore_blob[] =
     "\x1b[<u"
@@ -926,6 +927,176 @@ static void case_notepad_quit_force(PtyCtx *c)
     (void)unlink(path);
 }
 
+static void s15_scene(PtyCtx *c, const char *scene, const char *golden)
+{
+    spawn_scene(c, scene);
+    ptc_snapshot(c, golden);
+    quit_cleanly(c);
+}
+
+static void case_s15_gutter_abs_1(PtyCtx *c)
+{
+    s15_scene(c, "s15_gutter_abs_1", "s15_gutter_abs_1");
+}
+
+static void case_s15_gutter_rel_9(PtyCtx *c)
+{
+    s15_scene(c, "s15_gutter_rel_9", "s15_gutter_rel_9");
+}
+
+static void case_s15_gutter_hybrid_10(PtyCtx *c)
+{
+    s15_scene(c, "s15_gutter_hybrid_10", "s15_gutter_hybrid_10");
+}
+
+static void case_s15_gutter_hybrid_100(PtyCtx *c)
+{
+    s15_scene(c, "s15_gutter_hybrid_100", "s15_gutter_hybrid_100");
+}
+
+static void case_s15_nowrap_cjk(PtyCtx *c)
+{
+    s15_scene(c, "s15_nowrap_cjk", "s15_nowrap_cjk");
+}
+
+static void case_s15_wrap_cjk(PtyCtx *c)
+{
+    s15_scene(c, "s15_wrap_cjk", "s15_wrap_cjk");
+}
+
+static size_t snapshot_visual_at(const Bytebuf *snapshot)
+{
+    static const char marker[] = "--- text\n";
+    size_t i;
+
+    for (i = 0U; i + sizeof(marker) - 1U <= snapshot->len; i++) {
+        if (memcmp(snapshot->data + i, marker, sizeof(marker) - 1U) == 0)
+            return i;
+    }
+    return SIZE_MAX;
+}
+
+static void case_s15_resize_roundtrip(PtyCtx *c)
+{
+    static const u8 initial[] =
+        "line 01 alpha\nline 02 beta\nline 03 gamma\nline 04 delta\n"
+        "line 05 epsilon\nline 06 zeta\nline 07 eta\nline 08 theta\n"
+        "line 09 iota\nline 10 kappa\nline 11 lambda\nline 12 mu\n"
+        "line 13 nu\nline 14 xi\nline 15 omicron\nline 16 pi\n"
+        "line 17 rho\nline 18 sigma\nline 19 tau\nline 20 upsilon\n"
+        "line 21 phi\nline 22 chi\nline 23 psi\nline 24 omega\n"
+        "line 25 \xE6\xBC\xA2\xE5\xAD\x97 tab\there\nline 26 tail\n";
+    Bytebuf before;
+    Bytebuf after;
+    char path[256];
+    size_t before_at;
+    size_t after_at;
+    int cursor_r;
+    int cursor_c;
+    bool cursor_vis;
+    u32 sync_before;
+
+    bytebuf_init(&before);
+    bytebuf_init(&after);
+    if (!make_fixture(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        goto done;
+    spawn_editor(c, path);
+    ptc_keys(c, "2 5 G right right");
+    ptc_settle(c, 0);
+    snapshot_write(&c->vt, &before);
+    cursor_r = c->vt.cur_r;
+    cursor_c = c->vt.cur_c;
+    cursor_vis = c->vt.cur_vis;
+    sync_before = c->vt.nsync_pairs;
+    ptc_resize(c, 24U, 80U);
+    ptc_settle(c, 100);
+    ptc_check(c, c->vt.nsync_pairs == sync_before,
+              "identical SIGWINCH emitted a redundant frame");
+    ptc_resize(c, 12U, 40U);
+    ptc_settle(c, 0);
+    ptc_resize(c, 24U, 80U);
+    ptc_settle(c, 0);
+    snapshot_write(&c->vt, &after);
+    before_at = snapshot_visual_at(&before);
+    after_at = snapshot_visual_at(&after);
+    ptc_check(c, before_at != SIZE_MAX && after_at != SIZE_MAX,
+              "resize snapshots lack visual payload");
+    if (!c->failed) {
+        ptc_check(c, before.len - before_at == after.len - after_at &&
+                     memcmp(before.data + before_at, after.data + after_at,
+                            before.len - before_at) == 0,
+                  "80x24 -> 40x12 -> 80x24 changed the rendered grid");
+        ptc_check(c, c->vt.cur_r == cursor_r && c->vt.cur_c == cursor_c &&
+                     c->vt.cur_vis == cursor_vis,
+                  "resize round-trip changed the rendered cursor");
+    }
+    ptc_snapshot(c, "s15_resize_roundtrip");
+    force_quit(c);
+    (void)unlink(path);
+done:
+    bytebuf_free(&after);
+    bytebuf_free(&before);
+}
+
+static void case_s15_degenerate(PtyCtx *c)
+{
+    s15_scene(c, "s15_degenerate", "s15_degenerate");
+}
+
+static void case_s15_mode_l(PtyCtx *c)
+{
+    static const u8 initial[] = "line mode\n";
+    char path[256];
+
+    if (!make_fixture(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    spawn_editor(c, path);
+    ptc_snapshot(c, "s15_mode_l");
+    quit_cleanly(c);
+    (void)unlink(path);
+}
+
+static void case_s15_mode_i(PtyCtx *c)
+{
+    static const u8 initial[] = "insert mode\n";
+    char path[256];
+
+    if (!make_fixture(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    spawn_editor(c, path);
+    ptc_keys(c, "i");
+    ptc_settle(c, 0);
+    ptc_snapshot(c, "s15_mode_i");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s15_metadata_crlf(PtyCtx *c)
+{
+    s15_scene(c, "s15_metadata_crlf", "s15_metadata_crlf");
+}
+
+static void case_s15_metadata_mixed(PtyCtx *c)
+{
+    s15_scene(c, "s15_metadata_mixed", "s15_metadata_mixed");
+}
+
+static void case_s15_metadata_bom(PtyCtx *c)
+{
+    s15_scene(c, "s15_metadata_bom", "s15_metadata_bom");
+}
+
+static void case_s15_metadata_binary_invalid(PtyCtx *c)
+{
+    s15_scene(c, "s15_metadata_binary_invalid",
+              "s15_metadata_binary_invalid");
+}
+
+static void case_s15_position_unicode(PtyCtx *c)
+{
+    s15_scene(c, "s15_position_unicode", "s15_position_unicode");
+}
+
 #define C(name, profile, rows, cols, fn) \
     {#name, #profile, rows, cols, fn}
 
@@ -973,6 +1144,26 @@ const PtyCase sag_pty_cases[] = {
       case_live_restore_suspend),
     C(notepad_restore_kill, modern, 24U, 80U, case_live_restore_kill),
     C(notepad_quit_force, modern, 24U, 80U, case_notepad_quit_force),
+    C(s15_gutter_abs_1, modern, 24U, 80U, case_s15_gutter_abs_1),
+    C(s15_gutter_rel_9, modern, 24U, 80U, case_s15_gutter_rel_9),
+    C(s15_gutter_hybrid_10, modern, 24U, 80U,
+      case_s15_gutter_hybrid_10),
+    C(s15_gutter_hybrid_100, modern, 24U, 80U,
+      case_s15_gutter_hybrid_100),
+    C(s15_nowrap_cjk, modern, 24U, 80U, case_s15_nowrap_cjk),
+    C(s15_wrap_cjk, modern, 24U, 80U, case_s15_wrap_cjk),
+    C(s15_resize_roundtrip, modern, 24U, 80U,
+      case_s15_resize_roundtrip),
+    C(s15_degenerate, modern, 1U, 4U, case_s15_degenerate),
+    C(s15_mode_l, modern, 24U, 80U, case_s15_mode_l),
+    C(s15_mode_i, modern, 24U, 80U, case_s15_mode_i),
+    C(s15_metadata_crlf, modern, 24U, 80U, case_s15_metadata_crlf),
+    C(s15_metadata_mixed, modern, 24U, 80U, case_s15_metadata_mixed),
+    C(s15_metadata_bom, modern, 24U, 80U, case_s15_metadata_bom),
+    C(s15_metadata_binary_invalid, modern, 24U, 80U,
+      case_s15_metadata_binary_invalid),
+    C(s15_position_unicode, modern, 24U, 80U,
+      case_s15_position_unicode),
     {NULL, NULL, 0U, 0U, NULL}
 };
 

@@ -3,13 +3,13 @@
 #include "edit/ed.h"
 
 #include <errno.h>
-#include <stdarg.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 #include "ui/draw.h"
+#include "ui/viewport.h"
 #include "util/log.h"
 
 static void ed_buffer_free(Ed *ed)
@@ -19,6 +19,7 @@ static void ed_buffer_free(Ed *ed)
     if (!ed->model_ready)
         return;
     sag_ed_insert_barrier(ed);
+    sag_vp_free(&ed->single_win);
     if (b->jrn != NULL) {
         sag_journal_close(b->jrn);
         b->jrn = NULL;
@@ -48,6 +49,7 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
     ed->buffer.jrn = NULL;
     sag_cset_init(&ed->single_win.cs, cursor);
     ed->single_win.buf = &ed->buffer;
+    sag_vp_init(&ed->single_win);
     ed->win = &ed->single_win;
     ed->ws.bufs = &ed->buffer;
     ed->ws.nbufs = 1U;
@@ -55,6 +57,7 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
     ed->durability_failed = false;
     ed->layout_dirty = true;
     ed->full_damage = true;
+    ed->footer_dirty = true;
     ed->doc_damage_lo = 0U;
     ed->doc_damage_hi = 0U;
     ed->drawn_top_valid = false;
@@ -178,6 +181,7 @@ void sag_ed_damage_document(Ed *ed)
         return;
     ed->doc_damage_lo = 0U;
     ed->doc_damage_hi = ed->win->rect.h;
+    ed->footer_dirty = true;
 }
 
 void sag_ed_damage_line(Ed *ed, LineNo line, bool line_count_changed)
@@ -190,6 +194,13 @@ void sag_ed_damage_line(Ed *ed, LineNo line, bool line_count_changed)
     if (ed == NULL || ed->win == NULL)
         return;
     win = ed->win;
+    sag_vp_invalidate_from(win, line);
+    if (line_count_changed)
+        ed->layout_dirty = true;
+    if (win->vp.wrap) {
+        sag_ed_damage_document(ed);
+        return;
+    }
     top = sag_win_view_top(win);
     if (line.v < top.v) {
         if (line_count_changed)
@@ -305,45 +316,8 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
         sag_msg(ed, SAG_MSG_ERROR,
                 "crash journal failed; save or q! before continuing");
     }
+    ed->footer_dirty = true;
     return status;
-}
-
-static void msg_expire(Ed *ed, void *ctx)
-{
-    (void)ctx;
-    ed->msg.expiry = SAG_TIMER_NONE;
-    ed->msg.active = false;
-}
-
-void sag_msg_clear(Ed *ed)
-{
-    if (ed == NULL)
-        return;
-    if (ed->msg.expiry != SAG_TIMER_NONE)
-        (void)sag_timer_cancel(&ed->timers, ed->msg.expiry);
-    (void)memset(&ed->msg, 0, sizeof(ed->msg));
-}
-
-void sag_msg(Ed *ed, MsgSev sev, const char *fmt, ...)
-{
-    va_list ap;
-    i64 duration;
-    i64 now;
-
-    if (ed == NULL || fmt == NULL)
-        return;
-    sag_msg_clear(ed);
-    va_start(ap, fmt);
-    (void)vsnprintf(ed->msg.text, sizeof(ed->msg.text), fmt, ap);
-    va_end(ap);
-    ed->msg.sev = sev;
-    ed->msg.active = true;
-    duration = sev == SAG_MSG_INFO ? 4000 : sev == SAG_MSG_WARN ? 8000 : -1;
-    if (duration >= 0) {
-        now = sag_now_ms();
-        ed->msg.expiry = sag_timer_add(&ed->timers, now + duration,
-                                       msg_expire, NULL);
-    }
 }
 
 void sag_ed_prompt(Ed *ed, PromptKind prompt)
@@ -372,6 +346,8 @@ void sag_ed_prompt(Ed *ed, PromptKind prompt)
                 "file changed on disk - [o]verwrite [esc] cancel");
         break;
     }
+    if (prompt != SAG_PROMPT_NONE)
+        ed->msg.prompt = true;
 }
 
 CmdStatus sag_ed_file_save(Ed *ed, bool force)
@@ -511,6 +487,9 @@ void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms)
 
     if (ed == NULL || key.kind != SAG_EV_KEY)
         return;
+    if (key.ev != SAG_KEY_RELEASE && sag_msg_dismiss_overlay(ed)) {
+        return;
+    }
     if (key.code == SAG_KEY_ESCAPE &&
         (ed->chord.n != 0U || ed->chord.count_given)) {
         sag_dispatch_key(ed, key, now_ms);
@@ -520,8 +499,7 @@ void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms)
         (void)prompt_key(ed, key);
         return;
     }
-    if (ed->msg.active && ed->msg.sev == SAG_MSG_ERROR &&
-        !ed->durability_failed)
+    if (ed->msg.active && ed->msg.sev == SAG_MSG_ERROR)
         sag_msg_clear(ed);
     if (ed->mode == SAG_MODE_I && key.ev != SAG_KEY_RELEASE &&
         key.ntext != 0U && (key.mods & command_mods) == 0U) {
@@ -580,6 +558,8 @@ void sag_ed_handle_paste(Ed *ed, const u8 *bytes, size_t len, bool end)
 
 void sag_ed_resize(Ed *ed, bool resumed)
 {
+    bool resized = false;
+
     if (ed == NULL || !ed->tty_ready)
         return;
     if (resumed) {
@@ -600,9 +580,15 @@ void sag_ed_resize(Ed *ed, bool resumed)
             ed->exit_code = SAG_EXIT_IO;
             return;
         }
+        if (ed->win != NULL)
+            sag_vp_invalidate(ed->win);
+        resized = true;
     }
+    if (!resumed && !resized)
+        return;
     ed->layout_dirty = true;
     ed->full_damage = true;
+    ed->footer_dirty = true;
 }
 
 static bool write_all(int fd, const u8 *bytes, size_t len)
@@ -630,9 +616,11 @@ void sag_ed_render(Ed *ed)
         !ed->model_ready)
         return;
     win = ed->win;
-    sag_win_follow_cursor(win);
     if (!ed->drawn_top_valid ||
-        ed->drawn_top.v != sag_win_view_top(win).v)
+        ed->drawn_top.v != sag_win_view_top(win).v ||
+        ed->drawn_top_sub != win->vp.top_sub ||
+        ed->drawn_left.v != win->vp.left.v ||
+        ed->drawn_wrap != win->vp.wrap)
         sag_ed_damage_document(ed);
     if (ed->full_damage) {
         sag_draw_document_rows(ed, win, 0U, win->rect.h);
@@ -641,7 +629,8 @@ void sag_ed_render(Ed *ed)
         sag_draw_document_rows(ed, win, ed->doc_damage_lo,
                                ed->doc_damage_hi);
     }
-    sag_draw_footer(ed, win);
+    if (ed->full_damage || ed->footer_dirty)
+        sag_draw_footer(ed, win);
     sag_draw_cursor(ed, win);
     ed->frame.len = 0U;
     (void)sag_render_frame(&ed->render, &ed->grid, &ed->frame);
@@ -652,9 +641,13 @@ void sag_ed_render(Ed *ed)
     }
     sag_grid_flip(&ed->grid);
     ed->full_damage = false;
+    ed->footer_dirty = false;
     ed->doc_damage_lo = ed->grid.rows;
     ed->doc_damage_hi = 0U;
     ed->drawn_top = sag_win_view_top(win);
+    ed->drawn_top_sub = win->vp.top_sub;
+    ed->drawn_left = win->vp.left;
+    ed->drawn_wrap = win->vp.wrap;
     ed->drawn_top_valid = true;
 }
 

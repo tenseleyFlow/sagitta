@@ -1,0 +1,57 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=0,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
+--- text
+    1 line 001  viewport statusline fixture
+    1 line 002  viewport statusline fixture
+    2 line 003  viewport statusline fixture
+    3 line 004  viewport statusline fixture
+    4 line 005  viewport statusline fixture
+    5 line 006  viewport statusline fixture
+    6 line 007  viewport statusline fixture
+    7 line 008  viewport statusline fixture
+    8 line 009  viewport statusline fixture
+    9 line 010  viewport statusline fixture
+   10 line 011  viewport statusline fixture
+   11 line 012  viewport statusline fixture
+   12 line 013  viewport statusline fixture
+   13 line 014  viewport statusline fixture
+   14 line 015  viewport statusline fixture
+   15 line 016  viewport statusline fixture
+   16 line 017  viewport statusline fixture
+   17 line 018  viewport statusline fixture
+   18 line 019  viewport statusline fixture
+   19 line 020  viewport statusline fixture
+   20 line 021  viewport statusline fixture
+   21 line 022  viewport statusline fixture
+   22 line 023  viewport statusline fixture
+ L  viewport.c                                    utf-8 bin  lf  !utf8  1:1  top
+--- style
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+--- legend
+A fg=default bg=default attrs=----------
+B fg=#ebf4ff bg=#266eba attrs=b---------
+C fg=#dae5f0 bg=#14304c attrs=----------

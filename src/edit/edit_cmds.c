@@ -4,6 +4,8 @@
 
 #include "edit/ed.h"
 #include "edit/mode.h"
+#include "ui/message.h"
+#include "ui/viewport.h"
 #include "unicode/coords.h"
 #include "util/log.h"
 
@@ -71,11 +73,23 @@ static CmdStatus move_vertical(CmdCtx *cx, bool down, u64 rows)
 
     if (!edit_window(cx, &win, &tb, &cursor))
         return SAG_CMD_ERR_STATE;
-    for (i = 0U; i < rows; i++) {
-        if (down)
-            sag_cursor_down(tb, cursor);
+    if (win->vp.wrap) {
+        i32 amount;
+
+        if (rows > (u64)INT32_MAX)
+            amount = INT32_MAX;
         else
-            sag_cursor_up(tb, cursor);
+            amount = (i32)rows;
+        if (!down)
+            amount = -amount;
+        (void)sag_vp_move_display(win, amount);
+    } else {
+        for (i = 0U; i < rows; i++) {
+            if (down)
+                sag_cursor_down(tb, cursor);
+            else
+                sag_cursor_up(tb, cursor);
+        }
     }
     sag_win_follow_cursor(win);
     return SAG_CMD_OK;
@@ -90,6 +104,7 @@ CmdStatus sag_edit_cmd_move_buf_home(CmdCtx *cx)
     if (!edit_window(cx, &win, &tb, &cursor))
         return SAG_CMD_ERR_STATE;
     sag_cursor_buf_home(tb, cursor);
+    win->wrap_goal_valid = false;
     sag_win_follow_cursor(win);
     return SAG_CMD_OK;
 }
@@ -111,6 +126,7 @@ CmdStatus sag_edit_cmd_move_buf_end(CmdCtx *cx)
     } else {
         sag_cursor_buf_end(tb, cursor);
     }
+    win->wrap_goal_valid = false;
     sag_win_follow_cursor(win);
     return SAG_CMD_OK;
 }
@@ -124,6 +140,7 @@ CmdStatus sag_edit_cmd_move_line_home(CmdCtx *cx)
     if (!edit_window(cx, &win, &tb, &cursor))
         return SAG_CMD_ERR_STATE;
     sag_cursor_line_home(tb, cursor);
+    win->wrap_goal_valid = false;
     sag_win_follow_cursor(win);
     return SAG_CMD_OK;
 }
@@ -137,6 +154,7 @@ CmdStatus sag_edit_cmd_move_line_end(CmdCtx *cx)
     if (!edit_window(cx, &win, &tb, &cursor))
         return SAG_CMD_ERR_STATE;
     sag_cursor_line_end(tb, cursor);
+    win->wrap_goal_valid = false;
     sag_win_follow_cursor(win);
     return SAG_CMD_OK;
 }
@@ -173,6 +191,7 @@ CmdStatus sag_edit_cmd_move_line_first_nonblank(CmdCtx *cx)
         pos = next;
     }
     cursor_place(tb, cursor, pos);
+    win->wrap_goal_valid = false;
     sag_win_follow_cursor(win);
     return SAG_CMD_OK;
 }
@@ -201,6 +220,7 @@ CmdStatus sag_edit_cmd_move_line_last_nonblank(CmdCtx *cx)
         pos = next;
     }
     cursor_place(tb, cursor, last);
+    win->wrap_goal_valid = false;
     sag_win_follow_cursor(win);
     return SAG_CMD_OK;
 }
@@ -227,22 +247,168 @@ CmdStatus sag_edit_cmd_move_line_half_page_down(CmdCtx *cx)
 
 CmdStatus sag_edit_cmd_view_page_up(CmdCtx *cx)
 {
-    u64 rows;
-
-    if (cx == NULL || cx->win == NULL)
+    if (cx == NULL || cx->win == NULL || cx->ed == NULL)
         return SAG_CMD_ERR_STATE;
-    rows = cx->win->vp.rows;
-    return move_vertical(cx, false, rows == 0U ? 1U : rows);
+    sag_vp_page(cx->win, -1);
+    sag_vp_push_cursor(cx->win);
+    cx->ed->full_damage = true;
+    return SAG_CMD_OK;
 }
 
 CmdStatus sag_edit_cmd_view_page_down(CmdCtx *cx)
 {
-    u64 rows;
+    if (cx == NULL || cx->win == NULL || cx->ed == NULL)
+        return SAG_CMD_ERR_STATE;
+    sag_vp_page(cx->win, 1);
+    sag_vp_push_cursor(cx->win);
+    cx->ed->full_damage = true;
+    return SAG_CMD_OK;
+}
+
+static CmdStatus view_scroll(CmdCtx *cx, i32 rows)
+{
+    if (cx == NULL || cx->win == NULL || cx->ed == NULL)
+        return SAG_CMD_ERR_STATE;
+    sag_vp_scroll(cx->win, rows);
+    sag_vp_push_cursor(cx->win);
+    cx->ed->full_damage = true;
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_edit_cmd_view_scroll_up(CmdCtx *cx)
+{
+    return view_scroll(cx, -1);
+}
+
+CmdStatus sag_edit_cmd_view_scroll_down(CmdCtx *cx)
+{
+    return view_scroll(cx, 1);
+}
+
+CmdStatus sag_edit_cmd_view_half_page_up(CmdCtx *cx)
+{
+    i32 rows;
 
     if (cx == NULL || cx->win == NULL)
         return SAG_CMD_ERR_STATE;
-    rows = cx->win->vp.rows;
-    return move_vertical(cx, true, rows == 0U ? 1U : rows);
+    rows = (i32)(cx->win->vp.rows / 2U);
+    return view_scroll(cx, rows == 0 ? -1 : -rows);
+}
+
+CmdStatus sag_edit_cmd_view_half_page_down(CmdCtx *cx)
+{
+    i32 rows;
+
+    if (cx == NULL || cx->win == NULL)
+        return SAG_CMD_ERR_STATE;
+    rows = (i32)(cx->win->vp.rows / 2U);
+    return view_scroll(cx, rows == 0 ? 1 : rows);
+}
+
+CmdStatus sag_edit_cmd_view_center(CmdCtx *cx)
+{
+    if (cx == NULL || cx->win == NULL || cx->ed == NULL)
+        return SAG_CMD_ERR_STATE;
+    sag_vp_center(cx->win);
+    cx->ed->full_damage = true;
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_edit_cmd_view_top(CmdCtx *cx)
+{
+    if (cx == NULL || cx->win == NULL || cx->ed == NULL)
+        return SAG_CMD_ERR_STATE;
+    sag_vp_top(cx->win);
+    cx->ed->full_damage = true;
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_edit_cmd_view_bottom(CmdCtx *cx)
+{
+    if (cx == NULL || cx->win == NULL || cx->ed == NULL)
+        return SAG_CMD_ERR_STATE;
+    sag_vp_bottom(cx->win);
+    cx->ed->full_damage = true;
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_edit_cmd_view_goto_line(CmdCtx *cx)
+{
+    Win *win;
+    TextBuf *tb;
+    Cursor *cursor;
+    u64 line_count;
+    u64 requested;
+
+    if (!edit_window(cx, &win, &tb, &cursor))
+        return SAG_CMD_ERR_STATE;
+    line_count = sag_textbuf_line_count(tb);
+    requested = cx->count == 0U ? 0U : (u64)cx->count - 1U;
+    if (requested >= line_count)
+        requested = line_count - 1U;
+    cursor_place(tb, cursor, sag_textbuf_line_start(tb, LINENO(requested)));
+    win->wrap_goal_valid = false;
+    sag_vp_center(win);
+    cx->ed->full_damage = true;
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_edit_cmd_view_toggle_wrap(CmdCtx *cx)
+{
+    if (cx == NULL || cx->win == NULL || cx->ed == NULL)
+        return SAG_CMD_ERR_STATE;
+    cx->win->vp.wrap = !cx->win->vp.wrap;
+    cx->win->vp.left = (CCol){0U};
+    cx->win->vp.top_sub = 0U;
+    cx->win->wrap_goal_valid = false;
+    sag_vp_invalidate(cx->win);
+    sag_vp_clamp(cx->win);
+    sag_vp_follow(cx->win);
+    cx->ed->full_damage = true;
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_edit_cmd_view_number_style(CmdCtx *cx)
+{
+    NumStyle style;
+
+    if (cx == NULL || cx->win == NULL || cx->ed == NULL ||
+        cx->sarg == NULL)
+        return SAG_CMD_ERR_ARG;
+    if (cx->sarg_len == 4U && memcmp(cx->sarg, "none", 4U) == 0)
+        style = SAG_NUM_NONE;
+    else if (cx->sarg_len == 3U && memcmp(cx->sarg, "abs", 3U) == 0)
+        style = SAG_NUM_ABS;
+    else if (cx->sarg_len == 3U && memcmp(cx->sarg, "rel", 3U) == 0)
+        style = SAG_NUM_REL;
+    else if (cx->sarg_len == 6U && memcmp(cx->sarg, "hybrid", 6U) == 0)
+        style = SAG_NUM_HYBRID;
+    else
+        return SAG_CMD_ERR_ARG;
+    cx->win->number_style = style;
+    cx->ed->layout_dirty = true;
+    cx->ed->full_damage = true;
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_edit_cmd_message_expand(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL)
+        return SAG_CMD_ERR_ARG;
+    if (!sag_msg_expand(cx->ed))
+        return SAG_CMD_ERR_STATE;
+    cx->ed->full_damage = true;
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_edit_cmd_ui_cancel(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL)
+        return SAG_CMD_ERR_ARG;
+    (void)sag_msg_dismiss_overlay(cx->ed);
+    if (cx->ed->prompt != SAG_PROMPT_NONE)
+        sag_ed_prompt(cx->ed, SAG_PROMPT_NONE);
+    return SAG_CMD_OK;
 }
 
 CmdStatus sag_edit_cmd_move_char_prev(CmdCtx *cx)
@@ -254,6 +420,7 @@ CmdStatus sag_edit_cmd_move_char_prev(CmdCtx *cx)
     if (!edit_window(cx, &win, &tb, &cursor))
         return SAG_CMD_ERR_STATE;
     sag_cursor_left(tb, cursor);
+    win->wrap_goal_valid = false;
     sag_win_follow_cursor(win);
     return SAG_CMD_OK;
 }
@@ -267,6 +434,7 @@ CmdStatus sag_edit_cmd_move_char_next(CmdCtx *cx)
     if (!edit_window(cx, &win, &tb, &cursor))
         return SAG_CMD_ERR_STATE;
     sag_cursor_right(tb, cursor);
+    win->wrap_goal_valid = false;
     sag_win_follow_cursor(win);
     return SAG_CMD_OK;
 }
@@ -294,6 +462,7 @@ static CmdStatus insert_bytes(CmdCtx *cx, const u8 *bytes, u64 len)
         return SAG_CMD_ERR_IO;
     }
     sag_ed_finish_edit(cx->ed, &ec);
+    win->wrap_goal_valid = false;
     sag_win_follow_cursor(win);
     sag_ed_damage_line(cx->ed, line,
                        old_line_count != sag_textbuf_line_count(tb));
@@ -376,6 +545,7 @@ static CmdStatus open_line(CmdCtx *cx, bool below)
     sag_ed_finish_edit(cx->ed, &ec);
     cursor = &win->cs.curs.data[win->cs.primary];
     cursor_place(tb, cursor, placed);
+    win->wrap_goal_valid = false;
     sag_win_follow_cursor(win);
     sag_ed_damage_line(cx->ed, line, true);
     return sag_mode_enter(cx->ed, SAG_MODE_I);
@@ -414,6 +584,7 @@ static CmdStatus delete_span(CmdCtx *cx, Span span)
         return SAG_CMD_ERR_IO;
     }
     sag_ed_finish_edit(cx->ed, &ec);
+    win->wrap_goal_valid = false;
     sag_win_follow_cursor(win);
     sag_ed_damage_line(cx->ed, line,
                        old_line_count != sag_textbuf_line_count(tb));
@@ -490,6 +661,7 @@ CmdStatus sag_edit_cmd_undo(CmdCtx *cx)
                 "cannot persist edit to crash journal");
         return SAG_CMD_ERR_IO;
     }
+    win->wrap_goal_valid = false;
     sag_win_follow_cursor(win);
     sag_ed_damage_document(cx->ed);
     return SAG_CMD_OK;
@@ -523,6 +695,7 @@ CmdStatus sag_edit_cmd_redo(CmdCtx *cx)
                 "cannot persist edit to crash journal");
         return SAG_CMD_ERR_IO;
     }
+    win->wrap_goal_valid = false;
     sag_win_follow_cursor(win);
     sag_ed_damage_document(cx->ed);
     return SAG_CMD_OK;

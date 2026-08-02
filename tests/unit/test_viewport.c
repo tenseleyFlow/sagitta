@@ -1,0 +1,330 @@
+#include "unit/harness.h"
+
+#include <stdlib.h>
+#include <string.h>
+
+#include "edit/ed.h"
+#include "ui/layout.h"
+#include "ui/viewport.h"
+
+typedef struct {
+    Buffer buffer;
+    Win win;
+} VpFixture;
+
+static Cursor vp_test_cursor(u64 off)
+{
+    Cursor c;
+    c.pos = BYTEOFF(off);
+    c.anchor = c.pos;
+    c.goal_col = (GCol){0U};
+    return c;
+}
+
+static void vp_fixture_init(VpFixture *f, const char *text, u16 rows,
+                            u16 cols)
+{
+    memset(f, 0, sizeof(*f));
+    f->buffer.tb = sag_textbuf_from_bytes((const u8 *)text, strlen(text));
+    f->win.buf = &f->buffer;
+    sag_cset_init(&f->win.cs, vp_test_cursor(0U));
+    sag_vp_init(&f->win);
+    SAG_ASSERT_EQ_U64(f->win.number_style, SAG_NUM_HYBRID);
+    f->win.vp.rows = rows;
+    f->win.vp.cols = cols;
+}
+
+static void vp_fixture_free(VpFixture *f)
+{
+    sag_vp_free(&f->win);
+    sag_cset_free(&f->win.cs);
+    sag_textbuf_free(f->buffer.tb);
+}
+
+static void vp_set_line(VpFixture *f, u64 line)
+{
+    Cursor *c = &f->win.cs.curs.data[0];
+    c->pos = sag_textbuf_line_start(f->buffer.tb, LINENO(line));
+    c->anchor = c->pos;
+}
+
+static char *vp_make_lines(size_t count, size_t line_cells)
+{
+    size_t line_bytes = line_cells + 1U;
+    size_t len = count * line_bytes;
+    char *text = sag_xmalloc(len + 1U);
+    size_t line;
+
+    for (line = 0U; line < count; line++) {
+        (void)memset(text + line * line_bytes, 'x', line_cells);
+        text[line * line_bytes + line_cells] = '\n';
+    }
+    text[len - 1U] = 'x';
+    text[len] = '\0';
+    return text;
+}
+
+void test_viewport_follow_vertical_rules(void)
+{
+    VpFixture f;
+    u64 expected[] = {0U, 0U, 0U, 0U, 1U, 2U, 3U, 4U, 5U, 5U};
+    size_t i;
+
+    vp_fixture_init(&f, "0\n1\n2\n3\n4\n5\n6\n7\n8\n9", 5U, 20U);
+    f.win.vp.scrolloff = 1U;
+    for (i = 0U; i < SAG_ARRAY_LEN(expected); i++) {
+        vp_set_line(&f, i);
+        sag_vp_follow(&f.win);
+        SAG_ASSERT_EQ_U64(f.win.vp.top.v, expected[i]);
+    }
+    vp_fixture_free(&f);
+}
+
+void test_viewport_short_document_and_scrolloff_degrade(void)
+{
+    VpFixture f;
+    u64 line;
+
+    vp_fixture_init(&f, "a\nb\nc\nd\ne", 24U, 20U);
+    for (line = 0U; line < 5U; line++) {
+        vp_set_line(&f, line);
+        sag_vp_follow(&f.win);
+        SAG_ASSERT_EQ_U64(f.win.vp.top.v, 0U);
+    }
+    f.win.vp.rows = 3U;
+    f.win.vp.scrolloff = 9U;
+    vp_set_line(&f, 3U);
+    sag_vp_follow(&f.win);
+    SAG_ASSERT_EQ_U64(f.win.vp.top.v, 2U);
+    vp_fixture_free(&f);
+}
+
+void test_viewport_horizontal_follow_wide_glyph(void)
+{
+    static const char text[] = "abcdef\xE6\xBC\xA2z";
+    VpFixture f;
+    Cursor *c;
+
+    vp_fixture_init(&f, text, 4U, 8U);
+    f.win.vp.sidescrolloff = 0U;
+    c = &f.win.cs.curs.data[0];
+    c->pos = BYTEOFF(6U);
+    c->anchor = c->pos;
+    sag_vp_follow(&f.win);
+    SAG_ASSERT_EQ_U64(f.win.vp.left.v, 0U);
+    f.win.vp.cols = 7U;
+    sag_vp_follow(&f.win);
+    SAG_ASSERT_EQ_U64(f.win.vp.left.v, 1U);
+    c->pos = BYTEOFF(0U);
+    c->anchor = c->pos;
+    sag_vp_follow(&f.win);
+    SAG_ASSERT_EQ_U64(f.win.vp.left.v, 0U);
+    vp_fixture_free(&f);
+}
+
+void test_viewport_wrap_forces_left_and_conversions(void)
+{
+    VpFixture f;
+    u16 row;
+    LineNo line;
+    u32 sub;
+
+    vp_fixture_init(&f, "abcdef\nghijkl", 4U, 3U);
+    f.win.vp.wrap = true;
+    f.win.vp.left = (CCol){99U};
+    sag_vp_follow(&f.win);
+    SAG_ASSERT_EQ_U64(f.win.vp.left.v, 0U);
+    SAG_ASSERT(sag_vp_row_of_line(&f.win, LINENO(1U), 0U, &row));
+    SAG_ASSERT_EQ_U64(row, 2U);
+    SAG_ASSERT(sag_vp_line_of_row(&f.win, 3U, &line, &sub));
+    SAG_ASSERT_EQ_U64(line.v, 1U);
+    SAG_ASSERT_EQ_U64(sub, 1U);
+    f.win.gutter_width = 6U;
+    SAG_ASSERT_EQ_U64(sag_vp_gridx_of_ccol(&f.win, (CCol){2U}), 8U);
+    SAG_ASSERT_EQ_U64(sag_vp_ccol_of_gridx(&f.win, 9U).v, 3U);
+    vp_fixture_free(&f);
+}
+
+void test_viewport_scroll_page_center_top_bottom_and_clamp(void)
+{
+    VpFixture f;
+    ByteOff delete_from;
+
+    vp_fixture_init(&f, "0\n1\n2\n3\n4\n5\n6\n7\n8\n9", 5U, 20U);
+    sag_vp_scroll(&f.win, 100);
+    SAG_ASSERT_EQ_U64(f.win.vp.top.v, 5U);
+    sag_vp_scroll(&f.win, -100);
+    SAG_ASSERT_EQ_U64(f.win.vp.top.v, 0U);
+    sag_vp_page(&f.win, 1);
+    SAG_ASSERT_EQ_U64(f.win.vp.top.v, 3U);
+    vp_set_line(&f, 7U);
+    sag_vp_center(&f.win);
+    SAG_ASSERT_EQ_U64(f.win.vp.top.v, 5U);
+    sag_vp_top(&f.win);
+    SAG_ASSERT_EQ_U64(f.win.vp.top.v, 7U);
+    vp_set_line(&f, 3U);
+    sag_vp_bottom(&f.win);
+    SAG_ASSERT_EQ_U64(f.win.vp.top.v, 0U);
+    f.win.vp.top = LINENO(99U);
+    sag_vp_clamp(&f.win);
+    SAG_ASSERT_EQ_U64(f.win.vp.top.v, 5U);
+    delete_from = sag_textbuf_line_start(f.buffer.tb, LINENO(4U));
+    sag_textbuf_delete(f.buffer.tb,
+                       (Span){delete_from.v, sag_textbuf_len(f.buffer.tb)});
+    sag_vp_invalidate_from(&f.win, LINENO(4U));
+    sag_vp_clamp(&f.win);
+    SAG_ASSERT_EQ_U64(sag_textbuf_line_count(f.buffer.tb), 5U);
+    SAG_ASSERT_EQ_U64(f.win.vp.top.v, 0U);
+    vp_fixture_free(&f);
+}
+
+void test_viewport_display_row_motion(void)
+{
+    VpFixture f;
+    Cursor *c;
+
+    vp_fixture_init(&f, "abcdef\nxy", 5U, 3U);
+    f.win.vp.wrap = true;
+    c = &f.win.cs.curs.data[0];
+    c->pos = BYTEOFF(1U);
+    c->anchor = c->pos;
+    SAG_ASSERT(sag_vp_move_display(&f.win, 1));
+    SAG_ASSERT_EQ_U64(c->pos.v, 4U);
+    SAG_ASSERT(sag_vp_move_display(&f.win, 1));
+    SAG_ASSERT_EQ_U64(c->pos.v, 8U);
+    SAG_ASSERT(sag_vp_move_display(&f.win, -2));
+    SAG_ASSERT_EQ_U64(c->pos.v, 1U);
+    vp_fixture_free(&f);
+}
+
+void test_viewport_display_motion_stays_on_short_and_tab_rows(void)
+{
+    VpFixture f;
+    Cursor *c;
+
+    vp_fixture_init(&f, "abcdef\na-bbbbb", 6U, 4U);
+    f.win.vp.wrap = true;
+    c = &f.win.cs.curs.data[0];
+    c->pos = BYTEOFF(5U);
+    c->anchor = c->pos;
+    SAG_ASSERT(sag_vp_move_display(&f.win, 1));
+    SAG_ASSERT_EQ_U64(c->pos.v, 8U);
+    SAG_ASSERT_EQ_U64(sag_vp_cursor_subrow(&f.win), 0U);
+    vp_fixture_free(&f);
+
+    vp_fixture_init(&f, "abc\tz", 5U, 3U);
+    f.win.vp.wrap = true;
+    c = &f.win.cs.curs.data[0];
+    c->pos = BYTEOFF(2U);
+    c->anchor = c->pos;
+    SAG_ASSERT(sag_vp_move_display(&f.win, 1));
+    SAG_ASSERT_EQ_U64(c->pos.v, 3U);
+    SAG_ASSERT_EQ_U64(sag_vp_cursor_subrow(&f.win), 1U);
+    vp_fixture_free(&f);
+}
+
+void test_viewport_cursor_push_preserves_nowrap_goal(void)
+{
+    VpFixture f;
+    Cursor *c;
+
+    vp_fixture_init(&f, "abcdef\nx\nabcdef", 1U, 20U);
+    c = &f.win.cs.curs.data[0];
+    c->pos = BYTEOFF(5U);
+    c->anchor = c->pos;
+    c->goal_col = (GCol){5U};
+    f.win.vp.top = LINENO(1U);
+    sag_vp_push_cursor(&f.win);
+    SAG_ASSERT_EQ_U64(c->pos.v, 8U);
+    SAG_ASSERT_EQ_U64(c->goal_col.v, 5U);
+    f.win.vp.top = LINENO(2U);
+    sag_vp_push_cursor(&f.win);
+    SAG_ASSERT_EQ_U64(c->pos.v, 14U);
+    SAG_ASSERT_EQ_U64(c->goal_col.v, 5U);
+    vp_fixture_free(&f);
+}
+
+void test_viewport_scroll_pushes_cursor_without_follow_snapback(void)
+{
+    VpFixture f;
+
+    vp_fixture_init(&f, "0\n1\n2\n3\n4\n5\n6\n7\n8\n9", 5U, 20U);
+    f.win.vp.scrolloff = 1U;
+    vp_set_line(&f, 1U);
+    sag_vp_scroll(&f.win, 2);
+    SAG_ASSERT_EQ_U64(f.win.vp.top.v, 2U);
+    sag_vp_push_cursor(&f.win);
+    SAG_ASSERT_EQ_U64(f.win.vp.top.v, 2U);
+    SAG_ASSERT_EQ_U64(sag_textbuf_line_of(f.buffer.tb,
+                                           f.win.cs.curs.data[0].pos).v,
+                      3U);
+    sag_vp_scroll(&f.win, -2);
+    SAG_ASSERT_EQ_U64(f.win.vp.top.v, 0U);
+    sag_vp_push_cursor(&f.win);
+    SAG_ASSERT_EQ_U64(f.win.vp.top.v, 0U);
+    SAG_ASSERT_EQ_U64(sag_textbuf_line_of(f.buffer.tb,
+                                           f.win.cs.curs.data[0].pos).v,
+                      3U);
+    vp_fixture_free(&f);
+}
+
+void test_viewport_resize_roundtrip_and_gutter_digit_damage(void)
+{
+    VpFixture f;
+    Viewport before;
+    Ed ed;
+    char *text = vp_make_lines(999U, 20U);
+    Cursor *cursor;
+    ByteOff end;
+
+    vp_fixture_init(&f, text, 23U, 74U);
+    free(text);
+    memset(&ed, 0, sizeof(ed));
+    arena_init(&ed.arena);
+    interner_init(&ed.interner, &ed.arena);
+    SAG_ASSERT(sag_grid_init(&ed.grid, &ed.interner, 24U, 80U));
+    ed.win = &f.win;
+    f.win.number_style = SAG_NUM_HYBRID;
+    cursor = &f.win.cs.curs.data[0];
+    cursor->pos = BYTEOFF(
+        sag_textbuf_line_start(f.buffer.tb, LINENO(35U)).v + 10U);
+    cursor->anchor = cursor->pos;
+    f.win.vp.top = LINENO(30U);
+    f.win.vp.left = (CCol){5U};
+    f.win.vp.scrolloff = 3U;
+    f.win.vp.sidescrolloff = 1U;
+    sag_layout(&ed);
+    before = f.win.vp;
+
+    SAG_ASSERT(sag_grid_resize(&ed.grid, 12U, 40U));
+    sag_layout(&ed);
+    SAG_ASSERT(sag_grid_resize(&ed.grid, 24U, 80U));
+    sag_layout(&ed);
+    SAG_ASSERT_EQ_U64(f.win.vp.top.v, before.top.v);
+    SAG_ASSERT_EQ_U64(f.win.vp.top_sub, before.top_sub);
+    SAG_ASSERT_EQ_U64(f.win.vp.left.v, before.left.v);
+    SAG_ASSERT_EQ_U64(f.win.vp.rows, before.rows);
+    SAG_ASSERT_EQ_U64(f.win.vp.cols, before.cols);
+    SAG_ASSERT_EQ_U64(f.win.vp.scrolloff, before.scrolloff);
+    SAG_ASSERT_EQ_U64(f.win.vp.sidescrolloff, before.sidescrolloff);
+    SAG_ASSERT(f.win.vp.wrap == before.wrap);
+
+    SAG_ASSERT_EQ_U64(sag_textbuf_line_count(f.buffer.tb), 999U);
+    SAG_ASSERT_EQ_U64(f.win.gutter_width, 6U);
+    ed.full_damage = false;
+    end = BYTEOFF(sag_textbuf_len(f.buffer.tb));
+    sag_textbuf_insert(f.buffer.tb, end, (const u8 *)"\nx", 2U);
+    sag_ed_damage_line(&ed, LINENO(998U), true);
+    sag_layout(&ed);
+    SAG_ASSERT_EQ_U64(sag_textbuf_line_count(f.buffer.tb), 1000U);
+    SAG_ASSERT_EQ_U64(f.win.gutter_width, 7U);
+    SAG_ASSERT(ed.full_damage);
+    ed.full_damage = false;
+    sag_layout(&ed);
+    SAG_ASSERT(!ed.full_damage);
+
+    sag_grid_free(&ed.grid);
+    interner_free(&ed.interner);
+    arena_free_all(&ed.arena);
+    vp_fixture_free(&f);
+}

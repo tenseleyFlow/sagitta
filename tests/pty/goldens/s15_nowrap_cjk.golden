@@ -1,0 +1,57 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=0,75 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
+--- text
+    1 /mu/nu/xi/omicron/pi/rho/sigma/tau/upsilon/phi/chi/psi/omega/漢字-end
+    1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ L  viewport.c                                             utf-8  lf  1:134  all
+--- style
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+--- legend
+A fg=default bg=default attrs=----------
+B fg=#ebf4ff bg=#266eba attrs=b---------
+C fg=#dae5f0 bg=#14304c attrs=----------

@@ -64,6 +64,7 @@ CmdStatus sag_mode_enter(Ed *ed, Mode mode)
     if (sag_modes[mode].is_unit)
         ed->prev_unit = mode;
     sag_dispatch_set_mode(ed, mode);
+    ed->footer_dirty = true;
     return SAG_CMD_OK;
 }
 

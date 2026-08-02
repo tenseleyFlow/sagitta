@@ -13,8 +13,13 @@
 #include "term/input.h"
 #include "term/render.h"
 #include "term/tty.h"
+#include "edit/ed.h"
 #include "text/clipboard.h"
 #include "text/register.h"
+#include "text/undo.h"
+#include "ui/draw.h"
+#include "ui/layout.h"
+#include "ui/viewport.h"
 #include "util/arena.h"
 #include "util/base.h"
 #include "util/buf.h"
@@ -262,9 +267,120 @@ static void paint_damage(Demo *d)
                        (SagColor){0}, (SagColor){0}, 0U);
 }
 
+static bool s15_scene_is(const Demo *d, const char *suffix)
+{
+    return strncmp(d->scene, "s15_", 4U) == 0 &&
+           strcmp(d->scene + 4U, suffix) == 0;
+}
+
+static void s15_make_text(const Demo *d, Bytebuf *text)
+{
+    u32 line;
+
+    bytebuf_init(text);
+    if (s15_scene_is(d, "nowrap_cjk") || s15_scene_is(d, "wrap_cjk")) {
+        static const char long_line[] =
+            "\xE6\xBC\xA2\xE5\xAD\x97\talpha/beta/gamma/delta/epsilon/"
+            "zeta/eta/theta/iota/kappa/lambda/mu/nu/xi/omicron/pi/rho/"
+            "sigma/tau/upsilon/phi/chi/psi/omega/"
+            "\xE6\xBC\xA2\xE5\xAD\x97-end\n";
+
+        bytebuf_append(text, long_line, sizeof(long_line) - 1U);
+        return;
+    }
+    if (s15_scene_is(d, "position_unicode")) {
+        static const char position[] = "\xE6\xBC\xA2\xE5\xAD\x97\tx\n";
+
+        bytebuf_append(text, position, sizeof(position) - 1U);
+        return;
+    }
+    for (line = 0U; line < 120U; line++)
+        bytebuf_printf(text, "line %03u  viewport statusline fixture\n",
+                       line + 1U);
+}
+
+static void paint_s15(Demo *d)
+{
+    Ed ed;
+    Buffer buffer;
+    Win win;
+    Cursor cursor;
+    Bytebuf text;
+    LineNo target = LINENO(0U);
+
+    (void)memset(&ed, 0, sizeof(ed));
+    (void)memset(&buffer, 0, sizeof(buffer));
+    (void)memset(&win, 0, sizeof(win));
+    s15_make_text(d, &text);
+    buffer.tb = sag_textbuf_from_bytes(text.data, text.len);
+    buffer.undo = sag_undo_new(buffer.tb);
+    sag_undo_mark_saved(buffer.undo);
+    sag_filemeta_init(&buffer.meta);
+    buffer.path = (char *)"src/ui/viewport.c";
+
+    if (s15_scene_is(d, "gutter_rel_9"))
+        target = LINENO(8U);
+    else if (s15_scene_is(d, "gutter_hybrid_10"))
+        target = LINENO(9U);
+    else if (s15_scene_is(d, "gutter_hybrid_100"))
+        target = LINENO(99U);
+    cursor.pos = sag_textbuf_line_start(buffer.tb, target);
+    if (s15_scene_is(d, "nowrap_cjk") || s15_scene_is(d, "wrap_cjk")) {
+        Span span = sag_textbuf_line_span(buffer.tb, LINENO(0U));
+
+        cursor.pos = BYTEOFF(span.hi - 1U);
+    } else if (s15_scene_is(d, "position_unicode")) {
+        cursor.pos = BYTEOFF(7U);
+    }
+    cursor.anchor = cursor.pos;
+    cursor.goal_col = (GCol){0U};
+
+    win.buf = &buffer;
+    sag_cset_init(&win.cs, cursor);
+    sag_vp_init(&win);
+    win.number_style = SAG_NUM_HYBRID;
+    if (s15_scene_is(d, "gutter_abs_1"))
+        win.number_style = SAG_NUM_ABS;
+    else if (s15_scene_is(d, "gutter_rel_9"))
+        win.number_style = SAG_NUM_REL;
+    if (s15_scene_is(d, "wrap_cjk"))
+        win.vp.wrap = true;
+
+    ed.grid = d->grid;
+    ed.mode = s15_scene_is(d, "mode_i") ? SAG_MODE_I : SAG_MODE_L;
+    ed.prev_unit = SAG_MODE_L;
+    ed.win = &win;
+    ed.ws.bufs = &buffer;
+    ed.ws.nbufs = 1U;
+    if (s15_scene_is(d, "metadata_crlf"))
+        buffer.meta.eol = SAG_EOL_CRLF;
+    else if (s15_scene_is(d, "metadata_mixed"))
+        buffer.meta.eol = SAG_EOL_MIXED;
+    else if (s15_scene_is(d, "metadata_bom"))
+        buffer.meta.had_bom = true;
+    else if (s15_scene_is(d, "metadata_binary_invalid")) {
+        buffer.meta.binary = true;
+        buffer.meta.had_invalid_utf8 = true;
+    }
+
+    sag_layout(&ed);
+    sag_draw_win(&ed, &win);
+    sag_grid_mark_all(&ed.grid);
+    d->grid = ed.grid;
+
+    sag_vp_free(&win);
+    sag_cset_free(&win.cs);
+    sag_undo_free(buffer.undo);
+    sag_textbuf_free(buffer.tb);
+    sag_filemeta_dispose(&buffer.meta);
+    bytebuf_free(&text);
+}
+
 static void paint_scene(Demo *d)
 {
-    if (strcmp(d->scene, "wide") == 0)
+    if (strncmp(d->scene, "s15_", 4U) == 0)
+        paint_s15(d);
+    else if (strcmp(d->scene, "wide") == 0)
         paint_wide(&d->grid);
     else if (strcmp(d->scene, "colors") == 0)
         paint_colors(&d->grid);
@@ -489,7 +605,8 @@ static bool parse_args(int argc, char **argv, const char **scene, bool *crash)
             return false;
         }
     }
-    return strcmp(*scene, "basic") == 0 || strcmp(*scene, "wide") == 0 ||
+    return strncmp(*scene, "s15_", 4U) == 0 ||
+           strcmp(*scene, "basic") == 0 || strcmp(*scene, "wide") == 0 ||
            strcmp(*scene, "colors") == 0 ||
            strcmp(*scene, "damage") == 0 ||
            strcmp(*scene, "resize") == 0 || strcmp(*scene, "echo") == 0 ||
@@ -506,7 +623,7 @@ int main(int argc, char **argv)
 
     if (!parse_args(argc, argv, &scene, &crash)) {
         (void)fprintf(stderr,
-                      "usage: demo_paint [--scene basic|wide|colors|damage|resize|echo|osc52] [--crash]\n");
+                      "usage: demo_paint [--scene NAME] [--crash]\n");
         return 2;
     }
     memset(&demo, 0, sizeof(demo));

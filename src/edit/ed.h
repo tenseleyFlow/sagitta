@@ -12,23 +12,11 @@
 #include "term/render.h"
 #include "term/tty.h"
 #include "text/edit.h"
+#include "ui/message.h"
 #include "ui/win.h"
 #include "util/arena.h"
 #include "util/buf.h"
 #include "util/intern.h"
-
-typedef enum {
-    SAG_MSG_INFO,
-    SAG_MSG_WARN,
-    SAG_MSG_ERROR
-} MsgSev;
-
-typedef struct Msg {
-    char text[512];
-    MsgSev sev;
-    TimerId expiry;
-    bool active;
-} Msg;
 
 typedef enum {
     SAG_PROMPT_NONE,
@@ -66,6 +54,7 @@ struct Ed {
     Buffer buffer;
     Win single_win;
     Win *win;
+    Rect footer_rect;
 
     Mode mode;
     Mode prev_unit;
@@ -90,9 +79,13 @@ struct Ed {
     int exit_code;
     bool layout_dirty;
     bool full_damage;
+    bool footer_dirty;
     u16 doc_damage_lo;
     u16 doc_damage_hi;
     LineNo drawn_top;
+    u32 drawn_top_sub;
+    CCol drawn_left;
+    bool drawn_wrap;
     bool drawn_top_valid;
 
     bool dispatch_ready;
@@ -127,8 +120,6 @@ void sag_ed_render(Ed *ed);
 void sag_ed_damage_line(Ed *ed, LineNo line, bool line_count_changed);
 void sag_ed_damage_document(Ed *ed);
 
-void sag_msg(Ed *ed, MsgSev sev, const char *fmt, ...);
-void sag_msg_clear(Ed *ed);
 void sag_ed_prompt(Ed *ed, PromptKind prompt);
 
 #endif

@@ -1,0 +1,57 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=20,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=3
+--- text
+   20 line 05 epsilon
+   19 line 06 zeta
+   18 line 07 eta
+   17 line 08 theta
+   16 line 09 iota
+   15 line 10 kappa
+   14 line 11 lambda
+   13 line 12 mu
+   12 line 13 nu
+   11 line 14 xi
+   10 line 15 omicron
+    9 line 16 pi
+    8 line 17 rho
+    7 line 18 sigma
+    6 line 19 tau
+    5 line 20 upsilon
+    4 line 21 phi
+    3 line 22 chi
+    2 line 23 psi
+    1 line 24 omega
+   25 line 25 漢字 tab    here
+    1 line 26 tail
+    2
+ L  pty-s14-s15_resize_roundtrip.txt                        utf-8  lf  25:1  bot
+--- style
+AAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAA
+AAAAA
+BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+--- legend
+A fg=default bg=default attrs=----------
+B fg=#ebf4ff bg=#266eba attrs=b---------
+C fg=#dae5f0 bg=#14304c attrs=----------

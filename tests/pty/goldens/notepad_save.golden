@@ -1,8 +1,9 @@
 # sagitta pty golden v1
-size 80x24 alt=1 cursor=0,5 vis=1
+size 80x24 alt=1 cursor=0,11 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- text
-hellotail
+    1 hellotail
+    1
 
 
 
@@ -24,10 +25,10 @@ hellotail
 
 
 
-
-wrote build/pty-s14-notepad_save.txt, 2 lines
+ L wrote build/pty-s14-notepad_save.txt, 2 lines                                
 --- style
-AAAAAAAAA
+AAAAAAAAAAAAAAA
+AAAAA
 
 
 
@@ -49,7 +50,8 @@ AAAAAAAAA
 
 
 
-
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 --- legend
 A fg=default bg=default attrs=----------
+B fg=#ebf4ff bg=#266eba attrs=b---------
+C fg=#dae5f0 bg=#14304c attrs=----------

@@ -15,6 +15,18 @@ CmdStatus sag_edit_cmd_move_line_half_page_up(CmdCtx *cx);
 CmdStatus sag_edit_cmd_move_line_half_page_down(CmdCtx *cx);
 CmdStatus sag_edit_cmd_view_page_up(CmdCtx *cx);
 CmdStatus sag_edit_cmd_view_page_down(CmdCtx *cx);
+CmdStatus sag_edit_cmd_view_scroll_up(CmdCtx *cx);
+CmdStatus sag_edit_cmd_view_scroll_down(CmdCtx *cx);
+CmdStatus sag_edit_cmd_view_half_page_up(CmdCtx *cx);
+CmdStatus sag_edit_cmd_view_half_page_down(CmdCtx *cx);
+CmdStatus sag_edit_cmd_view_center(CmdCtx *cx);
+CmdStatus sag_edit_cmd_view_top(CmdCtx *cx);
+CmdStatus sag_edit_cmd_view_bottom(CmdCtx *cx);
+CmdStatus sag_edit_cmd_view_goto_line(CmdCtx *cx);
+CmdStatus sag_edit_cmd_view_toggle_wrap(CmdCtx *cx);
+CmdStatus sag_edit_cmd_view_number_style(CmdCtx *cx);
+CmdStatus sag_edit_cmd_message_expand(CmdCtx *cx);
+CmdStatus sag_edit_cmd_ui_cancel(CmdCtx *cx);
 CmdStatus sag_edit_cmd_move_char_prev(CmdCtx *cx);
 CmdStatus sag_edit_cmd_move_char_next(CmdCtx *cx);
 

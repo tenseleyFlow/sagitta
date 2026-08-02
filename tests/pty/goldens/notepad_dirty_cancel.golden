@@ -1,8 +1,9 @@
 # sagitta pty golden v1
-size 80x24 alt=1 cursor=0,1 vis=1
+size 80x24 alt=1 cursor=0,7 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
 --- text
-Xclean
+    1 Xclean
+    1
 
 
 
@@ -24,10 +25,10 @@ Xclean
 
 
 
-
-save changes to build/pty-s14-notepad_dirty_cancel.txt? [w]rite [d]iscard [esc]
+ L save changes to build/pty-s14-notepad_dirty_cancel.txt? [w]rite [d]iscard [e…
 --- style
-AAAAAA
+AAAAAAAAAAAA
+AAAAA
 
 
 
@@ -49,7 +50,8 @@ AAAAAA
 
 
 
-
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 --- legend
 A fg=default bg=default attrs=----------
+B fg=#ebf4ff bg=#266eba attrs=b---------
+C fg=idx:81 bg=#14304c attrs=b---------

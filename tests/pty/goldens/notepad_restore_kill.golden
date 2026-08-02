@@ -1,8 +1,9 @@
 # sagitta pty golden v1
-size 80x24 alt=0 cursor=0,0 vis=1
+size 80x24 alt=0 cursor=0,6 vis=1
 modes - kitty=0 sync_pairs=0
 --- text
-kill
+    1 kill
+    1
 
 
 
@@ -24,10 +25,10 @@ kill
 
 
 
-
-[L] build/pty-s14-notepad_restore_kill.txt 1:1
+ L  pty-s14-notepad_restore_kill.txt                         utf-8  lf  1:1  all
 --- style
-AAAA
+AAAAAAAAAA
+AAAAA
 
 
 
@@ -49,7 +50,8 @@ AAAA
 
 
 
-
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 --- legend
 A fg=default bg=default attrs=----------
+B fg=#ebf4ff bg=#266eba attrs=b---------
+C fg=#dae5f0 bg=#14304c attrs=----------

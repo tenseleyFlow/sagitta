@@ -1,8 +1,9 @@
 # sagitta pty golden v1
-size 80x24 alt=1 cursor=0,0 vis=1
+size 80x24 alt=1 cursor=0,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=0
 --- text
-base
+    1 base
+    1
 
 
 
@@ -24,10 +25,10 @@ base
 
 
 
-
-recover unsaved changes to build/pty-s14-notepad_recover_apply.txt? [r]ecover [d
+ L recover unsaved changes to build/pty-s14-notepad_recover_apply.txt? [r]ecove…
 --- style
-AAAA
+AAAAAAAAAA
+AAAAA
 
 
 
@@ -49,7 +50,8 @@ AAAA
 
 
 
-
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 --- legend
 A fg=default bg=default attrs=----------
+B fg=#ebf4ff bg=#266eba attrs=b---------
+C fg=idx:81 bg=#14304c attrs=b---------

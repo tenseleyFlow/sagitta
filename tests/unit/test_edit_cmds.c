@@ -177,7 +177,7 @@ void test_edit_l_motion_table_handles_unicode_crlf_and_viewport_counts(void)
     SAG_ASSERT_EQ_U64(sag_textbuf_line_of(ed.buffer.tb, cursor->pos).v, 2U);
     SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.view.page_down", 1U, false,
                                   NULL, 0U), SAG_CMD_OK);
-    SAG_ASSERT_EQ_U64(sag_textbuf_line_of(ed.buffer.tb, cursor->pos).v, 6U);
+    SAG_ASSERT_EQ_U64(sag_textbuf_line_of(ed.buffer.tb, cursor->pos).v, 4U);
     SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.view.page_up", 1U, false,
                                   NULL, 0U), SAG_CMD_OK);
     SAG_ASSERT_EQ_U64(sag_textbuf_line_of(ed.buffer.tb, cursor->pos).v, 2U);

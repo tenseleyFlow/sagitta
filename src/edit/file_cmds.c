@@ -1,6 +1,7 @@
 #include "edit/file_cmds.h"
 
 #include "edit/ed.h"
+#include "ui/viewport.h"
 
 CmdStatus sag_file_cmd_save(Ed *ed, bool force)
 {
@@ -44,6 +45,8 @@ CmdStatus sag_file_cmd_redraw(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL)
         return SAG_CMD_ERR_ARG;
+    if (cx->ed->win != NULL)
+        sag_vp_invalidate(cx->ed->win);
     cx->ed->full_damage = true;
     return SAG_CMD_OK;
 }

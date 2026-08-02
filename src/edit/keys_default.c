@@ -12,8 +12,8 @@ static const BindRow keys_L[] = {
     {"<down>", "ed.move.line.down", 0, NULL},
     {"A-<left>", "ed.move.line.first_nonblank", 0, NULL},
     {"A-<right>", "ed.move.line.last_nonblank", 0, NULL},
-    {"A-<up>", "ed.move.line.half_page_up", 0, NULL},
-    {"A-<down>", "ed.move.line.half_page_down", 0, NULL},
+    {"A-<up>", "ed.view.half_page_up", 0, NULL},
+    {"A-<down>", "ed.view.half_page_down", 0, NULL},
     {"<home>", "ed.move.line.home", 0, NULL},
     {"<end>", "ed.move.line.end", 0, NULL},
     {"<pgup>", "ed.view.page_up", 0, NULL},
@@ -34,6 +34,7 @@ static const BindRow keys_L[] = {
     {"q !", "ed.quit_force", 0, NULL},
     {"C-z", "ed.suspend", 0, NULL},
     {"C-l", "ed.redraw", 0, NULL},
+    {"C-g", "ed.ui.message_expand", 0, NULL},
     {"0", "ed.move.line.home", 0, NULL},
     {"w", "ed.mode.enter", 0, "W"},
     {"b", "ed.mode.enter", 0, "B"},
@@ -44,18 +45,22 @@ static const BindRow keys_L[] = {
 
 static const BindRow keys_W[] = {
     {"<esc>", "ed.mode.escape", 0, NULL},
+    {"C-g", "ed.ui.message_expand", 0, NULL},
 };
 
 static const BindRow keys_B[] = {
     {"<esc>", "ed.mode.escape", 0, NULL},
+    {"C-g", "ed.ui.message_expand", 0, NULL},
 };
 
 static const BindRow keys_H[] = {
     {"<esc>", "ed.mode.escape", 0, NULL},
+    {"C-g", "ed.ui.message_expand", 0, NULL},
 };
 
 static const BindRow keys_I[] = {
     {"<esc>", "ed.mode.escape", 0, NULL},
+    {"C-g", "ed.ui.message_expand", 0, NULL},
     {"<cr>", "ed.edit.insert.newline", 0, NULL},
     {"<tab>", "ed.edit.insert.tab", 0, NULL},
     {"<bs>", "ed.edit.delete.grapheme_left", 0, NULL},
@@ -70,10 +75,12 @@ static const BindRow keys_I[] = {
 
 static const BindRow keys_E[] = {
     {"<esc>", "ed.mode.escape", 0, NULL},
+    {"C-g", "ed.ui.message_expand", 0, NULL},
 };
 
 static const BindRow keys_F[] = {
     {"<esc>", "ed.mode.escape", 0, NULL},
+    {"C-g", "ed.ui.message_expand", 0, NULL},
 };
 
 void sag_keys_default_install(Ed *ed)

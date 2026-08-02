@@ -38,6 +38,7 @@ typedef struct {
     u64 start;
     u64 end;
     u64 cells;
+    u32 base_cp;
     bool tab;
 } StreamCluster;
 
@@ -158,6 +159,7 @@ static bool cluster_next(ClusterReader *reader, StreamCluster *out,
         return false;
     out->start = reader->reader.off;
     out->cells = 0U;
+    out->base_cp = 0U;
     out->tab = false;
     sag_gb_init(&gb);
     sag_cluster_width_init(&width);
@@ -165,6 +167,7 @@ static bool cluster_next(ClusterReader *reader, StreamCluster *out,
         SAG_BUG("unicode coordinates: missing cluster head");
     (void)sag_gb_boundary(&gb, cp.cp);
     first_cp = cp.cp;
+    out->base_cp = first_cp;
     cp_count = 1U;
     if (need_width)
         sag_cluster_width_push(&width, cp.cp);
@@ -195,6 +198,31 @@ static bool cluster_next(ClusterReader *reader, StreamCluster *out,
             out->cells = (u64)cells;
         }
     }
+    return true;
+}
+
+bool sag_text_cluster_next(const TextBuf *tb, Span span, ByteOff at,
+                           SagTextCluster *out)
+{
+    ClusterReader reader;
+    StreamCluster cluster;
+
+    require_span(tb, span);
+    require_pos(span, at);
+    if (out == NULL)
+        SAG_BUG("sag_text_cluster_next: missing output");
+    if (at.v == span.hi)
+        return false;
+    cluster_reader_init(&reader, tb, at.v, span.hi);
+    if (!cluster_next(&reader, &cluster, true))
+        SAG_BUG("sag_text_cluster_next: cluster scan made no progress");
+    cluster_reader_free(&reader);
+    if (cluster.end <= cluster.start || cluster.cells > UINT32_MAX)
+        SAG_BUG("sag_text_cluster_next: invalid cluster");
+    out->bytes = (Span){cluster.start, cluster.end};
+    out->base_cp = cluster.base_cp;
+    out->cells = (u32)cluster.cells;
+    out->tab = cluster.tab;
     return true;
 }
 
@@ -975,6 +1003,13 @@ static u64 cluster_cells(const StreamCluster *cluster, u64 cells, u32 tabw)
     if (tabw == 0U)
         tabw = 1U;
     return (u64)tabw - cells % (u64)tabw;
+}
+
+u32 sag_tab_cells(CCol at, u32 tabw)
+{
+    if (tabw == 0U)
+        tabw = 1U;
+    return tabw - (u32)(at.v % (u64)tabw);
 }
 
 static bool coords_simple_ascii(const TextBuf *tb)

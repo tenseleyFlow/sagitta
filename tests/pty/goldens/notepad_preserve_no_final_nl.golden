@@ -1,8 +1,8 @@
 # sagitta pty golden v1
-size 80x24 alt=1 cursor=0,1 vis=1
+size 80x24 alt=1 cursor=0,7 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- text
-Zlast line
+    1 Zlast line
 
 
 
@@ -25,9 +25,9 @@ Zlast line
 
 
 
-wrote build/pty-s14-notepad_preserve_no_final_nl.txt, 1 lines
+ L wrote build/pty-s14-notepad_preserve_no_final_nl.txt, 1 lines                
 --- style
-AAAAAAAAAA
+AAAAAAAAAAAAAAAA
 
 
 
@@ -50,6 +50,8 @@ AAAAAAAAAA
 
 
 
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 --- legend
 A fg=default bg=default attrs=----------
+B fg=#ebf4ff bg=#266eba attrs=b---------
+C fg=#dae5f0 bg=#14304c attrs=----------

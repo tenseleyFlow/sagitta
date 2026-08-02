@@ -3,6 +3,9 @@
 
 #include "edit/multicursor.h"
 #include "text/coords.h"
+#include "ui/gutter.h"
+#include "ui/viewport.h"
+#include "unicode/coords.h"
 #include "util/base.h"
 
 typedef struct Buffer Buffer;
@@ -15,20 +18,19 @@ typedef struct Rect {
     u16 h;
 } Rect;
 
-/* Sprint 15 replaces this placeholder with the scrolling viewport. */
-typedef struct Viewport {
-    LineNo top;
-    u16 rows;
-    u16 cols;
-} Viewport;
-
 typedef struct Win {
     Buffer *buf;
     CursorSet cs;
     Viewport vp;
+    WrapCache wrap_cache;
     Rect rect;
+    NumStyle number_style;
+    u16 gutter_width;
+    CCol wrap_goal;
+    bool wrap_goal_valid;
 } Win;
 
+/* Sprint 14 compatibility names; new code uses the sag_vp_* API. */
 void sag_win_follow_cursor(Win *w);
 LineNo sag_win_view_top(const Win *w);
 bool sag_win_view_row(const Win *w, LineNo line, u16 *row);

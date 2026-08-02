@@ -1,10 +1,11 @@
 # sagitta pty golden v1
-size 80x24 alt=1 cursor=0,0 vis=1
+size 80x24 alt=1 cursor=0,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=0
 --- text
-alpha
-beta
-gamma
+    1 alpha
+    1 beta
+    2 gamma
+    3
 
 
 
@@ -24,12 +25,12 @@ gamma
 
 
 
-
-[L] build/pty-s14-notepad_open.txt 1:1
+ L  pty-s14-notepad_open.txt                                 utf-8  lf  1:1  all
 --- style
+AAAAAAAAAAA
+AAAAAAAAAA
+AAAAAAAAAAA
 AAAAA
-AAAA
-AAAAA
 
 
 
@@ -49,7 +50,8 @@ AAAAA
 
 
 
-
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 --- legend
 A fg=default bg=default attrs=----------
+B fg=#ebf4ff bg=#266eba attrs=b---------
+C fg=#dae5f0 bg=#14304c attrs=----------

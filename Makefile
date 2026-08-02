@@ -150,6 +150,7 @@ FUZZ_LINK_OBJ := $(FUZZ_CORE_OBJ) $(FUZZ_LIB_OBJ)
 
 PERF_UNICODE_OBJ := $(BUILD)/tests/perf/perf_unicode.o
 PERF_RENDER_OBJ := $(BUILD)/tests/perf/perf_render.o
+PERF_SCROLL_OBJ := $(BUILD)/tests/perf/scroll.o
 PERF_PIECE_OBJ := $(BUILD)/tests/perf/perf_piece.o
 PERF_CURSOR_OBJ := $(BUILD)/tests/perf/perf_cursor.o
 PERF_UNDO_OBJ := $(BUILD)/tests/perf/perf_undo.o
@@ -253,6 +254,9 @@ $(BUILD)/perf_unicode: $(PERF_CORE_OBJ) $(PERF_UNICODE_OBJ)
 $(BUILD)/perf_render: $(PERF_CORE_OBJ) $(PERF_RENDER_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_RENDER_OBJ)
 
+$(BUILD)/perf_scroll: $(PERF_CORE_OBJ) $(PERF_SCROLL_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_SCROLL_OBJ)
+
 $(BUILD)/perf_piece: $(PERF_CORE_OBJ) $(PERF_PIECE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_PIECE_OBJ)
 
@@ -333,10 +337,13 @@ perf-unicode: $(BUILD)/perf_unicode
 perf-render: $(BUILD)/perf_render
 	$(BUILD)/perf_render
 
+perf-scroll: $(BUILD)/perf_scroll
+	$(BUILD)/perf_scroll
+
 perf-piece: $(BUILD)/perf_piece
 	$(BUILD)/perf_piece
 
-perf: perf-unicode perf-render perf-piece perf-cursor perf-undo perf-textbuf \
+perf: perf-unicode perf-render perf-scroll perf-piece perf-cursor perf-undo perf-textbuf \
       perf-latency
 
 perf-cursor: $(BUILD)/perf_cursor

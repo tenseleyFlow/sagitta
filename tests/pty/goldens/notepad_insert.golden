@@ -1,8 +1,9 @@
 # sagitta pty golden v1
-size 80x24 alt=1 cursor=0,13 vis=1
+size 80x24 alt=1 cursor=0,19 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- text
-héllo 漢字 👨‍👩‍👧‍👦tail
+    1 héllo 漢字 👨‍👩‍👧‍👦tail
+    1
 
 
 
@@ -24,10 +25,10 @@ héllo 漢字 👨‍👩‍👧‍👦tail
 
 
 
-
-[I] build/pty-s14-notepad_insert.txt* 1:14
+ I  pty-s14-notepad_insert.txt *                            utf-8  lf  1:11  all
 --- style
-AAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAA
+AAAAA
 
 
 
@@ -49,7 +50,8 @@ AAAAAAAAAAAAAAAAA
 
 
 
-
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 --- legend
 A fg=default bg=default attrs=----------
+B fg=#e1f7e6 bg=#2a9148 attrs=b---------
+C fg=#d8eede bg=#12401f attrs=----------
