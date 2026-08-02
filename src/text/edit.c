@@ -11,18 +11,19 @@ static void edit_require(const EditCtx *ec)
         SAG_BUG("edit: NULL context or buffer");
 }
 
-void sag_edit_ensure_journal(EditCtx *ec)
+bool sag_edit_ensure_journal(EditCtx *ec)
 {
     const char *path;
 
-    if (ec->meta == NULL || ec->jrnl != NULL)
-        return;
+    if (ec->meta == NULL)
+        return true;
+    if (ec->jrnl != NULL)
+        return sag_journal_ok(ec->jrnl);
     path = ec->meta->realpath;
     if (path == NULL)
         SAG_BUG("edit: file-backed buffer has no journal path");
     ec->jrnl = sag_journal_open(path, ec->meta);
-    if (ec->jrnl == NULL)
-        SAG_BUG("edit: cannot open crash journal before mutation");
+    return ec->jrnl != NULL;
 }
 
 static u8 *copy_range(const TextBuf *tb, Span range)
@@ -53,7 +54,7 @@ static u8 *copy_range(const TextBuf *tb, Span range)
     return copy;
 }
 
-void sag_edit_insert(EditCtx *ec, ByteOff at, const u8 *bytes, u64 len)
+bool sag_edit_insert(EditCtx *ec, ByteOff at, const u8 *bytes, u64 len)
 {
     u64 payload;
 
@@ -63,10 +64,11 @@ void sag_edit_insert(EditCtx *ec, ByteOff at, const u8 *bytes, u64 len)
     if (bytes == NULL && len != 0U)
         SAG_BUG("edit insert: NULL payload");
     if (len == 0U)
-        return;
-    sag_edit_ensure_journal(ec);
+        return true;
     if (ec->cset != NULL)
         sag_cset_require_single_edit(ec->cset);
+    if (!sag_edit_ensure_journal(ec))
+        return false;
     payload = ec->tb->add.len;
     if (ec->undo != NULL)
         sag_undo_prepare_insert(ec, at, len);
@@ -76,12 +78,14 @@ void sag_edit_insert(EditCtx *ec, ByteOff at, const u8 *bytes, u64 len)
     if (ec->cset != NULL)
         sag_cset_adjust(ec->cset, SAG_JOURNAL_INS, at, len);
     if (ec->jrnl != NULL)
-        sag_journal_record(ec->jrnl, SAG_JOURNAL_INS, at.v, bytes, len);
+        (void)sag_journal_record(ec->jrnl, SAG_JOURNAL_INS, at.v, bytes,
+                                 len);
     if (ec->undo != NULL)
         sag_undo_record_insert(ec, at, len, payload);
+    return ec->jrnl == NULL || sag_journal_ok(ec->jrnl);
 }
 
-void sag_edit_delete(EditCtx *ec, Span range)
+bool sag_edit_delete(EditCtx *ec, Span range)
 {
     u8 *removed;
     u64 len;
@@ -91,11 +95,14 @@ void sag_edit_delete(EditCtx *ec, Span range)
         SAG_BUG("edit delete: range out of bounds");
     len = range.hi - range.lo;
     if (len == 0U)
-        return;
-    sag_edit_ensure_journal(ec);
+        return true;
     if (ec->cset != NULL)
         sag_cset_require_single_edit(ec->cset);
     removed = copy_range(ec->tb, range);
+    if (!sag_edit_ensure_journal(ec)) {
+        free(removed);
+        return false;
+    }
     if (ec->undo != NULL)
         sag_undo_prepare_delete(ec, range);
     sag_textbuf_delete(ec->tb, range);
@@ -104,10 +111,12 @@ void sag_edit_delete(EditCtx *ec, Span range)
     if (ec->cset != NULL)
         sag_cset_adjust(ec->cset, SAG_JOURNAL_DEL, BYTEOFF(range.lo), len);
     if (ec->jrnl != NULL)
-        sag_journal_record(ec->jrnl, SAG_JOURNAL_DEL, range.lo, removed, len);
+        (void)sag_journal_record(ec->jrnl, SAG_JOURNAL_DEL, range.lo,
+                                 removed, len);
     if (ec->undo != NULL)
         sag_undo_record_delete(ec, range);
     free(removed);
+    return ec->jrnl == NULL || sag_journal_ok(ec->jrnl);
 }
 
 SagSaveErr sag_edit_save(EditCtx *ec, const char *path)

@@ -1,6 +1,11 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "harness.h"
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "edit/ed.h"
 
@@ -464,6 +469,60 @@ void test_edit_forward_delete_removes_invalid_byte_as_one_cluster(void)
     edit_assert_text(&ed, after, sizeof(after));
     SAG_ASSERT_EQ_U64(sag_ed_cursor(&ed)->pos.v, 1U);
     sag_ed_free(&ed);
+}
+
+void test_edit_journal_open_failure_returns_io_without_mutation(void)
+{
+    static const u8 before[] = "abc";
+    char root[] = "/tmp/sagitta-edit-cmd-journal-XXXXXX";
+    char blocker[128];
+    const char source[] = "/tmp/sagitta-edit-cmd-source";
+    const char *saved_state;
+    char *saved_copy = NULL;
+    FILE *fp;
+    Ed ed;
+    size_t source_len = sizeof(source);
+    int n;
+
+    saved_state = getenv("XDG_STATE_HOME");
+    if (saved_state != NULL) {
+        size_t saved_len = strlen(saved_state) + 1U;
+
+        saved_copy = sag_xmalloc(saved_len);
+        (void)memcpy(saved_copy, saved_state, saved_len);
+    }
+    SAG_ASSERT_NOT_NULL(mkdtemp(root));
+    n = snprintf(blocker, sizeof(blocker), "%s/blocker", root);
+    SAG_ASSERT(n > 0 && (size_t)n < sizeof(blocker));
+    fp = fopen(blocker, "wb");
+    SAG_ASSERT_NOT_NULL(fp);
+    SAG_ASSERT_EQ_U64(fwrite("x", 1U, 1U, fp), 1U);
+    SAG_ASSERT_EQ_I64(fclose(fp), 0);
+    SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", blocker, 1), 0);
+
+    edit_fixture(&ed, before, sizeof(before) - 1U, SAG_EOL_LF);
+    ed.buffer.path = arena_strdup(&ed.arena, source);
+    ed.buffer.meta.realpath = sag_xmalloc(source_len);
+    (void)memcpy(ed.buffer.meta.realpath, source, source_len);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.insert.text", 1U, false,
+                                  "X", 1U), SAG_CMD_ERR_IO);
+    edit_assert_text(&ed, before, sizeof(before) - 1U);
+    SAG_ASSERT_EQ_U64(sag_undo_current(ed.buffer.undo),
+                      ed.buffer.undo->root);
+    SAG_ASSERT_EQ_U64(ed.buffer.undo->nodes.len, 1U);
+    SAG_ASSERT_EQ_U64(ed.buffer.undo->ops.len, 0U);
+    SAG_ASSERT_NULL(ed.buffer.jrn);
+    SAG_ASSERT_EQ_U64(sag_ed_cursor(&ed)->pos.v, 0U);
+    sag_ed_free(&ed);
+
+    if (saved_copy != NULL) {
+        SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", saved_copy, 1), 0);
+    } else {
+        SAG_ASSERT_EQ_I64(unsetenv("XDG_STATE_HOME"), 0);
+    }
+    free(saved_copy);
+    SAG_ASSERT_EQ_I64(unlink(blocker), 0);
+    SAG_ASSERT_EQ_I64(rmdir(root), 0);
 }
 
 #undef FAMILY

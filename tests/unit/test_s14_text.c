@@ -7,6 +7,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <signal.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -64,11 +66,14 @@ static void s14_journal_fixture_free(S14JournalFixture *f, FileMeta *meta)
 {
     char journal_dir[128];
     char sagitta_dir[96];
+    char log_path[128];
 
     (void)unlink(f->journal);
     (void)snprintf(journal_dir, sizeof(journal_dir), "%s/sagitta/journal",
                    f->root);
     (void)snprintf(sagitta_dir, sizeof(sagitta_dir), "%s/sagitta", f->root);
+    (void)snprintf(log_path, sizeof(log_path), "%s/sagitta/log", f->root);
+    (void)unlink(log_path);
     SAG_ASSERT_EQ_I64(rmdir(journal_dir), 0);
     SAG_ASSERT_EQ_I64(rmdir(sagitta_dir), 0);
     SAG_ASSERT_EQ_I64(rmdir(f->root), 0);
@@ -107,6 +112,24 @@ static Bytebuf s14_read(const char *path)
         bytebuf_append(&bytes, block, (size_t)n);
     }
     SAG_ASSERT_EQ_I64(close(fd), 0);
+    return bytes;
+}
+
+static Bytebuf s14_materialize(const TextBuf *tb)
+{
+    Bytebuf bytes;
+    TextIter iter;
+
+    bytebuf_init(&bytes);
+    if (sag_textiter_begin(&iter, tb, BYTEOFF(0U))) {
+        do {
+            const u8 *chunk;
+            u64 len;
+
+            SAG_ASSERT(sag_textiter_chunk(&iter, tb, &chunk, &len));
+            bytebuf_append(&bytes, chunk, (size_t)len);
+        } while (sag_textiter_advance(&iter, tb));
+    }
     return bytes;
 }
 
@@ -227,4 +250,124 @@ void test_s14_force_save_accepts_current_destination_identity(void)
     sag_filemeta_dispose(&meta);
     SAG_ASSERT_EQ_I64(unlink(path), 0);
     SAG_ASSERT_EQ_I64(rmdir(dir), 0);
+}
+
+typedef struct {
+    TextBuf *tb;
+    MarkSet *marks;
+    MarkId mark;
+    CursorSet cursors;
+    UndoTree *undo;
+    EditCtx edit;
+} S14EditFixture;
+
+static void s14_edit_fixture_init(S14EditFixture *f, FileMeta *meta,
+                                  Journal *journal)
+{
+    Cursor cursor = {BYTEOFF(4U), {4U}, BYTEOFF(4U)};
+
+    f->tb = sag_textbuf_from_bytes((const u8 *)"abcdef", 6U);
+    f->marks = sag_marks_new();
+    f->mark = sag_mark_add(f->marks, BYTEOFF(3U), SAG_BIAS_RIGHT);
+    sag_cset_init(&f->cursors, cursor);
+    f->undo = sag_undo_new(f->tb);
+    f->edit = (EditCtx){f->tb, f->marks, &f->cursors, 7U, journal,
+                        f->undo, meta};
+}
+
+static void s14_edit_fixture_assert_unchanged(const S14EditFixture *f)
+{
+    static const u8 original[] = "abcdef";
+    Bytebuf bytes = s14_materialize(f->tb);
+
+    SAG_ASSERT_EQ_U64(bytes.len, sizeof(original) - 1U);
+    SAG_ASSERT_EQ_MEM(bytes.data, original, sizeof(original) - 1U);
+    SAG_ASSERT_EQ_U64(f->undo->nodes.len, 1U);
+    SAG_ASSERT_EQ_U64(f->undo->ops.len, 0U);
+    SAG_ASSERT_EQ_U64(f->undo->cur, f->undo->root);
+    SAG_ASSERT_EQ_U64(f->undo->open, 0U);
+    SAG_ASSERT_EQ_U64(f->undo->depth, 0U);
+    SAG_ASSERT_EQ_U64(sag_mark_pos(f->marks, f->mark).v, 3U);
+    SAG_ASSERT_EQ_U64(f->cursors.curs.len, 1U);
+    SAG_ASSERT_EQ_U64(f->cursors.primary, 0U);
+    SAG_ASSERT_EQ_U64(f->cursors.curs.data[0].pos.v, 4U);
+    SAG_ASSERT_EQ_U64(f->cursors.curs.data[0].anchor.v, 4U);
+    SAG_ASSERT_EQ_U64(f->cursors.curs.data[0].goal_col.v, 4U);
+    bytebuf_free(&bytes);
+}
+
+static void s14_edit_fixture_free(S14EditFixture *f)
+{
+    sag_undo_free(f->undo);
+    sag_cset_free(&f->cursors);
+    sag_marks_free(f->marks);
+    sag_textbuf_free(f->tb);
+}
+
+void test_s14_journal_open_failure_preserves_complete_edit_state(void)
+{
+    S14JournalFixture journal_fixture;
+    S14EditFixture edit_fixture;
+    FileMeta meta;
+    Journal *cleanup;
+    char blocker[96];
+    int n;
+
+    s14_journal_fixture_init(&journal_fixture, &meta);
+    s14_edit_fixture_init(&edit_fixture, &meta, NULL);
+    n = snprintf(blocker, sizeof(blocker), "%s/blocker", journal_fixture.root);
+    SAG_ASSERT(n > 0 && (size_t)n < sizeof(blocker));
+    s14_write_new(blocker, (const u8 *)"x", 1U);
+    SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", blocker, 1), 0);
+
+    SAG_ASSERT(!sag_edit_insert(&edit_fixture.edit, BYTEOFF(2U),
+                                (const u8 *)"XYZ", 3U));
+    SAG_ASSERT_NULL(edit_fixture.edit.jrnl);
+    s14_edit_fixture_assert_unchanged(&edit_fixture);
+
+    SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", journal_fixture.root, 1), 0);
+    SAG_ASSERT_EQ_I64(unlink(blocker), 0);
+    cleanup = sag_journal_open(journal_fixture.source, &meta);
+    SAG_ASSERT_NOT_NULL(cleanup);
+    sag_journal_discard(cleanup);
+    s14_edit_fixture_free(&edit_fixture);
+    s14_journal_fixture_free(&journal_fixture, &meta);
+}
+
+void test_s14_journal_append_failure_preserves_complete_edit_state(void)
+{
+    S14JournalFixture journal_fixture;
+    S14EditFixture edit_fixture;
+    FileMeta meta;
+    Journal *journal;
+    struct rlimit saved_limit;
+    struct rlimit blocked_limit;
+    struct sigaction saved_action;
+    struct sigaction ignored_action;
+
+    s14_journal_fixture_init(&journal_fixture, &meta);
+    journal = sag_journal_open(journal_fixture.source, &meta);
+    SAG_ASSERT_NOT_NULL(journal);
+    s14_edit_fixture_init(&edit_fixture, &meta, journal);
+    SAG_ASSERT_EQ_I64(getrlimit(RLIMIT_FSIZE, &saved_limit), 0);
+    blocked_limit = saved_limit;
+    blocked_limit.rlim_cur = 1U;
+    (void)memset(&ignored_action, 0, sizeof(ignored_action));
+    ignored_action.sa_handler = SIG_IGN;
+    SAG_ASSERT_EQ_I64(sigemptyset(&ignored_action.sa_mask), 0);
+    SAG_ASSERT_EQ_I64(sigaction(SIGXFSZ, &ignored_action, &saved_action), 0);
+    SAG_ASSERT_EQ_I64(setrlimit(RLIMIT_FSIZE, &blocked_limit), 0);
+
+    sag_undo_begin(&edit_fixture.edit, SAG_TXN_ERASE);
+    SAG_ASSERT(!sag_edit_delete(&edit_fixture.edit, (Span){1U, 4U}));
+    sag_undo_abort(&edit_fixture.edit);
+
+    SAG_ASSERT_EQ_I64(setrlimit(RLIMIT_FSIZE, &saved_limit), 0);
+    SAG_ASSERT_EQ_I64(sigaction(SIGXFSZ, &saved_action, NULL), 0);
+    SAG_ASSERT(!sag_journal_ok(journal));
+    s14_edit_fixture_assert_unchanged(&edit_fixture);
+
+    sag_journal_discard(journal);
+    s14_edit_fixture_free(&edit_fixture);
+    s14_journal_fixture_free(&journal_fixture, &meta);
 }

@@ -401,6 +401,8 @@ const SagTest sag_tests[] = {
     T(s14_journal_probe_and_discard_are_nonmutating_until_discard),
     T(s14_journal_replay_edit_is_one_external_undo_transaction),
     T(s14_force_save_accepts_current_destination_identity),
+    T(s14_journal_open_failure_preserves_complete_edit_state),
+    T(s14_journal_append_failure_preserves_complete_edit_state),
     T(modes_escape_cancels_chord_before_prompt_or_mode),
     T(modes_escape_cancels_count_before_prompt_or_mode),
     T(modes_escape_closes_prompt_before_changing_mode),
@@ -421,6 +423,7 @@ const SagTest sag_tests[] = {
     T(edit_line_delete_undo_and_redo_preserve_crlf_bytes),
     T(edit_insert_after_and_i_arrows_use_grapheme_boundaries),
     T(edit_forward_delete_removes_invalid_byte_as_one_cluster),
+    T(edit_journal_open_failure_returns_io_without_mutation),
 };
 
 const size_t sag_tests_len = SAG_ARRAY_LEN(sag_tests);

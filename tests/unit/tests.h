@@ -398,6 +398,8 @@ void test_timer_callback_may_add_due_timer(void);
 void test_s14_journal_probe_and_discard_are_nonmutating_until_discard(void);
 void test_s14_journal_replay_edit_is_one_external_undo_transaction(void);
 void test_s14_force_save_accepts_current_destination_identity(void);
+void test_s14_journal_open_failure_preserves_complete_edit_state(void);
+void test_s14_journal_append_failure_preserves_complete_edit_state(void);
 void test_modes_escape_cancels_chord_before_prompt_or_mode(void);
 void test_modes_escape_cancels_count_before_prompt_or_mode(void);
 void test_modes_escape_closes_prompt_before_changing_mode(void);
@@ -418,5 +420,6 @@ void test_edit_open_above_and_below_emit_native_eol_and_enter_insert(void);
 void test_edit_line_delete_undo_and_redo_preserve_crlf_bytes(void);
 void test_edit_insert_after_and_i_arrows_use_grapheme_boundaries(void);
 void test_edit_forward_delete_removes_invalid_byte_as_one_cluster(void);
+void test_edit_journal_open_failure_returns_io_without_mutation(void);
 
 #endif

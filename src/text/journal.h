@@ -22,8 +22,8 @@ u32 sag_crc32_end(u32 crc);
 u32 sag_crc32(const u8 *bytes, size_t len);
 
 Journal *sag_journal_open(const char *realpath, const FileMeta *m);
-void sag_journal_record(Journal *j, u8 op, u64 off, const u8 *b, u64 n);
-void sag_journal_sync(Journal *j);
+bool sag_journal_record(Journal *j, u8 op, u64 off, const u8 *b, u64 n);
+bool sag_journal_sync(Journal *j);
 bool sag_journal_ok(const Journal *j);
 /* Close a dirty journal without deleting its recovery data. */
 void sag_journal_close(Journal *j);

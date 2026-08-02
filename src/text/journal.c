@@ -392,21 +392,22 @@ Journal *sag_journal_open(const char *realpath, const FileMeta *m)
     return journal;
 }
 
-void sag_journal_record(Journal *j, u8 op, u64 off, const u8 *b, u64 n)
+bool sag_journal_record(Journal *j, u8 op, u64 off, const u8 *b, u64 n)
 {
     u8 fixed[17];
     u8 encoded_crc[4];
     u32 crc;
 
     if (j == NULL || j->failed) {
-        return;
+        errno = EIO;
+        return false;
     }
     if ((op != SAG_JOURNAL_INS && op != SAG_JOURNAL_DEL) ||
         (n != 0U && b == NULL) || n > SIZE_MAX) {
         j->failed = true;
         errno = EINVAL;
         sag_log(SAG_LOG_ERROR, "invalid crash journal record");
-        return;
+        return false;
     }
     fixed[0] = op;
     put_u64_le(fixed + 1U, off);
@@ -421,19 +422,24 @@ void sag_journal_record(Journal *j, u8 op, u64 off, const u8 *b, u64 n)
         j->failed = true;
         sag_log(SAG_LOG_ERROR, "cannot append crash journal %s: %s", j->path,
                 strerror(errno));
+        return false;
     }
+    return true;
 }
 
-void sag_journal_sync(Journal *j)
+bool sag_journal_sync(Journal *j)
 {
     if (j == NULL || j->failed) {
-        return;
+        errno = EIO;
+        return false;
     }
     if (!fsync_retry(j->fd)) {
         j->failed = true;
         sag_log(SAG_LOG_ERROR, "cannot sync crash journal %s: %s", j->path,
                 strerror(errno));
+        return false;
     }
+    return true;
 }
 
 bool sag_journal_ok(const Journal *j)
@@ -518,13 +524,11 @@ static bool apply_record(EditCtx *ec, u8 op, u64 off, const u8 *bytes,
         return false;
     }
     if (op == SAG_JOURNAL_INS && len <= UINT64_MAX - total) {
-        sag_edit_insert(ec, (ByteOff){off}, bytes, len);
-        return true;
+        return sag_edit_insert(ec, (ByteOff){off}, bytes, len);
     }
     if (op == SAG_JOURNAL_DEL && len <= total - off &&
         buffer_matches(tb, off, bytes, len)) {
-        sag_edit_delete(ec, (Span){off, off + len});
-        return true;
+        return sag_edit_delete(ec, (Span){off, off + len});
     }
     return false;
 }

@@ -277,16 +277,26 @@ static CmdStatus insert_bytes(CmdCtx *cx, const u8 *bytes, u64 len)
     TextBuf *tb;
     Cursor *cursor;
     EditCtx ec;
+    LineNo line;
+    u64 old_line_count;
 
     if (!edit_window(cx, &win, &tb, &cursor))
         return SAG_CMD_ERR_STATE;
     if (bytes == NULL && len != 0U)
         return SAG_CMD_ERR_ARG;
+    line = sag_textbuf_line_of(tb, cursor->pos);
+    old_line_count = sag_textbuf_line_count(tb);
     ec = sag_ed_edit_ctx(cx->ed);
-    sag_edit_insert(&ec, cursor->pos, bytes, len);
+    if (!sag_edit_insert(&ec, cursor->pos, bytes, len)) {
+        sag_ed_finish_edit(cx->ed, &ec);
+        sag_msg(cx->ed, SAG_MSG_ERROR,
+                "cannot persist edit to crash journal");
+        return SAG_CMD_ERR_IO;
+    }
     sag_ed_finish_edit(cx->ed, &ec);
     sag_win_follow_cursor(win);
-    cx->ed->full_damage = true;
+    sag_ed_damage_line(cx->ed, line,
+                       old_line_count != sag_textbuf_line_count(tb));
     return SAG_CMD_OK;
 }
 
@@ -357,12 +367,17 @@ static CmdStatus open_line(CmdCtx *cx, bool below)
     if (below && line.v + 1U == lines)
         placed = BYTEOFF(at.v + (u64)eol_len);
     ec = sag_ed_edit_ctx(cx->ed);
-    sag_edit_insert(&ec, at, eol, (u64)eol_len);
+    if (!sag_edit_insert(&ec, at, eol, (u64)eol_len)) {
+        sag_ed_finish_edit(cx->ed, &ec);
+        sag_msg(cx->ed, SAG_MSG_ERROR,
+                "cannot persist edit to crash journal");
+        return SAG_CMD_ERR_IO;
+    }
     sag_ed_finish_edit(cx->ed, &ec);
     cursor = &win->cs.curs.data[win->cs.primary];
     cursor_place(tb, cursor, placed);
     sag_win_follow_cursor(win);
-    cx->ed->full_damage = true;
+    sag_ed_damage_line(cx->ed, line, true);
     return sag_mode_enter(cx->ed, SAG_MODE_I);
 }
 
@@ -382,16 +397,26 @@ static CmdStatus delete_span(CmdCtx *cx, Span span)
     TextBuf *tb;
     Cursor *cursor;
     EditCtx ec;
+    LineNo line;
+    u64 old_line_count;
 
     if (!edit_window(cx, &win, &tb, &cursor))
         return SAG_CMD_ERR_STATE;
     if (span.lo > span.hi || span.hi > sag_textbuf_len(tb))
         return SAG_CMD_ERR_ARG;
+    line = sag_textbuf_line_of(tb, BYTEOFF(span.lo));
+    old_line_count = sag_textbuf_line_count(tb);
     ec = sag_ed_edit_ctx(cx->ed);
-    sag_edit_delete(&ec, span);
+    if (!sag_edit_delete(&ec, span)) {
+        sag_ed_finish_edit(cx->ed, &ec);
+        sag_msg(cx->ed, SAG_MSG_ERROR,
+                "cannot persist edit to crash journal");
+        return SAG_CMD_ERR_IO;
+    }
     sag_ed_finish_edit(cx->ed, &ec);
     sag_win_follow_cursor(win);
-    cx->ed->full_damage = true;
+    sag_ed_damage_line(cx->ed, line,
+                       old_line_count != sag_textbuf_line_count(tb));
     return SAG_CMD_OK;
 }
 
@@ -450,10 +475,23 @@ CmdStatus sag_edit_cmd_undo(CmdCtx *cx)
     (void)tb;
     (void)cursor;
     ec = sag_ed_edit_ctx(cx->ed);
+    if ((ec.jrnl != NULL && !sag_journal_ok(ec.jrnl)) ||
+        (sag_undo_current(ec.undo) != ec.undo->root &&
+         !sag_edit_ensure_journal(&ec))) {
+        sag_ed_finish_edit(cx->ed, &ec);
+        sag_msg(cx->ed, SAG_MSG_ERROR,
+                "cannot persist edit to crash journal");
+        return SAG_CMD_ERR_IO;
+    }
     (void)sag_undo(&ec);
     sag_ed_finish_edit(cx->ed, &ec);
+    if (ec.jrnl != NULL && !sag_journal_ok(ec.jrnl)) {
+        sag_msg(cx->ed, SAG_MSG_ERROR,
+                "cannot persist edit to crash journal");
+        return SAG_CMD_ERR_IO;
+    }
     sag_win_follow_cursor(win);
-    cx->ed->full_damage = true;
+    sag_ed_damage_document(cx->ed);
     return SAG_CMD_OK;
 }
 
@@ -469,10 +507,24 @@ CmdStatus sag_edit_cmd_redo(CmdCtx *cx)
     (void)tb;
     (void)cursor;
     ec = sag_ed_edit_ctx(cx->ed);
+    if ((ec.jrnl != NULL && !sag_journal_ok(ec.jrnl)) ||
+        (ec.undo->cur != 0U && ec.undo->cur <= ec.undo->nodes.len &&
+         ec.undo->nodes.data[ec.undo->cur - 1U].redo_child != 0U &&
+         !sag_edit_ensure_journal(&ec))) {
+        sag_ed_finish_edit(cx->ed, &ec);
+        sag_msg(cx->ed, SAG_MSG_ERROR,
+                "cannot persist edit to crash journal");
+        return SAG_CMD_ERR_IO;
+    }
     (void)sag_redo(&ec);
     sag_ed_finish_edit(cx->ed, &ec);
+    if (ec.jrnl != NULL && !sag_journal_ok(ec.jrnl)) {
+        sag_msg(cx->ed, SAG_MSG_ERROR,
+                "cannot persist edit to crash journal");
+        return SAG_CMD_ERR_IO;
+    }
     sag_win_follow_cursor(win);
-    cx->ed->full_damage = true;
+    sag_ed_damage_document(cx->ed);
     return SAG_CMD_OK;
 }
 
