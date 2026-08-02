@@ -1,0 +1,55 @@
+# sagitta pty golden v1
+size 80x24 alt=0 cursor=0,0 vis=1
+modes - kitty=0 sync_pairs=0
+--- text
+signal
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+[L] build/pty-s14-notepad_restore_term.txt 1:1
+--- style
+AAAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+--- legend
+A fg=default bg=default attrs=----------

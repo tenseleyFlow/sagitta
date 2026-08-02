@@ -1,0 +1,55 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=0,1 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
+--- text
+Zone
+two
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+wrote build/pty-s14-notepad_preserve_lf.txt, 3 lines
+--- style
+AAAA
+AAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+--- legend
+A fg=default bg=default attrs=----------
