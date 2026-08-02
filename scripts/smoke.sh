@@ -89,8 +89,20 @@ expect_rc 0 help
 expect_stdout_contains Usage help
 expect_stdout_contains "SAG_CLIPBOARD" help
 expect_stdout_contains "SAG_OSC52" help
+expect_stdout_contains "SAG_CHORD_TIMEOUT_MS" help
 expect_stdout_contains "plain" help
 echo "smoke: help ok"
+
+run_capture "$bin" --help-cmds
+expect_rc 0 help-cmds
+[ ! -s "$err" ] || fail help-cmds
+[ "$(wc -l < "$out" | tr -d ' ')" -ge 40 ] || fail help-cmds
+cp "$out" "$tmp/help-cmds.first"
+run_capture "$bin" --help-cmds
+expect_rc 0 "help-cmds repeat"
+cmp -s "$out" "$tmp/help-cmds.first" || fail "help-cmds determinism"
+expect_stdout_contains "ed.nop" help-cmds
+echo "smoke: help-cmds ok"
 
 run_capture "$bin" --no-such-flag
 expect_rc 1 "unknown flag"

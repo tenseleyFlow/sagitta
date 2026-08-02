@@ -74,6 +74,7 @@ UNIT_DEATH_EXCLUDES := \
   --exclude undo_macro_reason_names_sprint34 \
   --exclude undo_lsp_reason_names_sprint47 \
   --exclude undo_save_rejects_open_transaction \
+  --exclude cmd_registry_rejects_invalid_descriptors \
   --exclude render_invalid_cells_are_bugs
 ifeq ($(VALGRIND),1)
 VALGRIND_RUN := valgrind --quiet --error-exitcode=99 --leak-check=full \
@@ -264,6 +265,7 @@ $(FAKECLIP): tests/unit/fakeclip.c | dirs
 
 test: $(BUILD)/unit_tests $(BUILD)/sagitta test-pty torture-build
 	$(UNIT_RUN)
+	scripts/check-cmd-dispatch.sh
 	scripts/check-input.sh
 	scripts/check-render.sh
 	scripts/check-sigsafe.sh

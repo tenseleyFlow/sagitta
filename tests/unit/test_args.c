@@ -23,6 +23,24 @@ void test_args_parse_version(void)
     SAG_ASSERT_EQ_I64(rc, SAG_EXIT_OK);
     SAG_ASSERT(args.version);
     SAG_ASSERT(!args.help);
+    SAG_ASSERT(!args.help_cmds);
+    SAG_ASSERT_EQ_U64(err.len, 0U);
+    bytebuf_free(&err);
+}
+
+void test_args_parse_help_cmds(void)
+{
+    char *argv[] = {"sagitta", "--help-cmds"};
+    SagArgs args;
+    Bytebuf err;
+    int rc;
+
+    bytebuf_init(&err);
+    rc = sag_args_parse(&args, 2, argv, &err);
+    SAG_ASSERT_EQ_I64(rc, SAG_EXIT_OK);
+    SAG_ASSERT(args.help_cmds);
+    SAG_ASSERT(!args.help);
+    SAG_ASSERT(!args.version);
     SAG_ASSERT_EQ_U64(err.len, 0U);
     bytebuf_free(&err);
 }
