@@ -927,41 +927,51 @@ static void case_notepad_quit_force(PtyCtx *c)
     (void)unlink(path);
 }
 
-static void s15_scene(PtyCtx *c, const char *scene, const char *golden)
+static void s15_scene(PtyCtx *c, const char *scene)
 {
     spawn_scene(c, scene);
-    ptc_snapshot(c, golden);
-    quit_cleanly(c);
 }
 
 static void case_s15_gutter_abs_1(PtyCtx *c)
 {
-    s15_scene(c, "s15_gutter_abs_1", "s15_gutter_abs_1");
+    s15_scene(c, "s15_gutter_abs_1");
+    ptc_snapshot(c, "s15_gutter_abs_1");
+    quit_cleanly(c);
 }
 
 static void case_s15_gutter_rel_9(PtyCtx *c)
 {
-    s15_scene(c, "s15_gutter_rel_9", "s15_gutter_rel_9");
+    s15_scene(c, "s15_gutter_rel_9");
+    ptc_snapshot(c, "s15_gutter_rel_9");
+    quit_cleanly(c);
 }
 
 static void case_s15_gutter_hybrid_10(PtyCtx *c)
 {
-    s15_scene(c, "s15_gutter_hybrid_10", "s15_gutter_hybrid_10");
+    s15_scene(c, "s15_gutter_hybrid_10");
+    ptc_snapshot(c, "s15_gutter_hybrid_10");
+    quit_cleanly(c);
 }
 
 static void case_s15_gutter_hybrid_100(PtyCtx *c)
 {
-    s15_scene(c, "s15_gutter_hybrid_100", "s15_gutter_hybrid_100");
+    s15_scene(c, "s15_gutter_hybrid_100");
+    ptc_snapshot(c, "s15_gutter_hybrid_100");
+    quit_cleanly(c);
 }
 
 static void case_s15_nowrap_cjk(PtyCtx *c)
 {
-    s15_scene(c, "s15_nowrap_cjk", "s15_nowrap_cjk");
+    s15_scene(c, "s15_nowrap_cjk");
+    ptc_snapshot(c, "s15_nowrap_cjk");
+    quit_cleanly(c);
 }
 
 static void case_s15_wrap_cjk(PtyCtx *c)
 {
-    s15_scene(c, "s15_wrap_cjk", "s15_wrap_cjk");
+    s15_scene(c, "s15_wrap_cjk");
+    ptc_snapshot(c, "s15_wrap_cjk");
+    quit_cleanly(c);
 }
 
 static size_t snapshot_visual_at(const Bytebuf *snapshot)
@@ -1040,7 +1050,9 @@ done:
 
 static void case_s15_degenerate(PtyCtx *c)
 {
-    s15_scene(c, "s15_degenerate", "s15_degenerate");
+    s15_scene(c, "s15_degenerate");
+    ptc_snapshot(c, "s15_degenerate");
+    quit_cleanly(c);
 }
 
 static void case_s15_mode_l(PtyCtx *c)
@@ -1073,28 +1085,37 @@ static void case_s15_mode_i(PtyCtx *c)
 
 static void case_s15_metadata_crlf(PtyCtx *c)
 {
-    s15_scene(c, "s15_metadata_crlf", "s15_metadata_crlf");
+    s15_scene(c, "s15_metadata_crlf");
+    ptc_snapshot(c, "s15_metadata_crlf");
+    quit_cleanly(c);
 }
 
 static void case_s15_metadata_mixed(PtyCtx *c)
 {
-    s15_scene(c, "s15_metadata_mixed", "s15_metadata_mixed");
+    s15_scene(c, "s15_metadata_mixed");
+    ptc_snapshot(c, "s15_metadata_mixed");
+    quit_cleanly(c);
 }
 
 static void case_s15_metadata_bom(PtyCtx *c)
 {
-    s15_scene(c, "s15_metadata_bom", "s15_metadata_bom");
+    s15_scene(c, "s15_metadata_bom");
+    ptc_snapshot(c, "s15_metadata_bom");
+    quit_cleanly(c);
 }
 
 static void case_s15_metadata_binary_invalid(PtyCtx *c)
 {
-    s15_scene(c, "s15_metadata_binary_invalid",
-              "s15_metadata_binary_invalid");
+    s15_scene(c, "s15_metadata_binary_invalid");
+    ptc_snapshot(c, "s15_metadata_binary_invalid");
+    quit_cleanly(c);
 }
 
 static void case_s15_position_unicode(PtyCtx *c)
 {
-    s15_scene(c, "s15_position_unicode", "s15_position_unicode");
+    s15_scene(c, "s15_position_unicode");
+    ptc_snapshot(c, "s15_position_unicode");
+    quit_cleanly(c);
 }
 
 #define C(name, profile, rows, cols, fn) \
