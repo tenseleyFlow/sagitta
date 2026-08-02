@@ -1,12 +1,11 @@
 #include "args.h"
 #include "edit/cmd.h"
+#include "edit/ed.h"
 #include "mod/mods.h"
-#include "term/tty.h"
 #include "util/base.h"
 #include "util/buf.h"
 #include "util/log.h"
 
-#include <errno.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -69,8 +68,6 @@ static void print_commands(void)
 
 static int run_driver(const SagArgs *args)
 {
-    Tty tty;
-
     if (args->selftest_bug) {
         SAG_BUG("selftest");
     }
@@ -103,15 +100,12 @@ static int run_driver(const SagArgs *args)
             args->files[0]);
         return SAG_EXIT_ERR;
     }
-    if (args->nfiles == 0U) {
-        errno = 0;
-        if (!sag_tty_open(&tty))
-            return errno == ENOTTY ? SAG_EXIT_ERR : SAG_EXIT_IO;
-        sag_tty_close(&tty);
+    if (args->nfiles > 1U) {
+        (void)fprintf(stderr,
+            "sagitta: error: multiple files are not yet implemented: Sprint 23 (tabs)\n");
+        return SAG_EXIT_ERR;
     }
-    (void)fprintf(stderr,
-        "sagitta: error: the editor is not yet implemented: Sprint 14 (modes L and I)\n");
-    return SAG_EXIT_ERR;
+    return sag_ed_driver(args->nfiles == 0U ? NULL : args->files[0]);
 }
 
 int main(int argc, char **argv)

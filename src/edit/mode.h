@@ -3,7 +3,10 @@
 
 #include <stdbool.h>
 
+#include "edit/cmd.h"
 #include "util/base.h"
+
+typedef struct Ed Ed;
 
 typedef enum {
     SAG_MODE_L,
@@ -25,5 +28,8 @@ typedef struct ModeDesc {
 } ModeDesc;
 
 extern const ModeDesc sag_modes[SAG_MODE__N];
+
+CmdStatus sag_mode_enter(Ed *ed, Mode mode);
+CmdStatus sag_mode_escape(Ed *ed);
 
 #endif

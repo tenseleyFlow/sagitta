@@ -91,7 +91,7 @@ static void dispatch_fire(Ed *ed, const Binding *selected)
 
     cx = (CmdCtx){0};
     cx.ed = ed;
-    cx.win = NULL;
+    cx.win = ed->win;
     cx.count = ed->chord.count_given ? ed->chord.count : 1U;
     cx.count_given = ed->chord.count_given;
     cx.iarg = binding.iarg;
@@ -100,7 +100,7 @@ static void dispatch_fire(Ed *ed, const Binding *selected)
     cx.source = SAG_SRC_KEY;
     dispatch_reset_chord(ed);
     ed->last_cmd = binding.cmd;
-    ed->last_status = sag_cmd_invoke(binding.cmd, &cx);
+    ed->last_status = sag_ed_invoke(ed, binding.cmd, &cx);
     ed->dispatch_count++;
 }
 
@@ -129,7 +129,18 @@ static bool dispatch_take_count(Ed *ed, KeyId key)
 
 void sag_dispatch_init(Ed *ed)
 {
-    memset(ed, 0, sizeof(*ed));
+    u32 i;
+
+    if (ed == NULL)
+        SAG_BUG("dispatch init: NULL editor");
+    for (i = 0U; i < SAG_MODE__N; i++)
+        (void)memset(&ed->mode_keys[i], 0, sizeof(ed->mode_keys[i]));
+    (void)memset(&ed->user_keys, 0, sizeof(ed->user_keys));
+    (void)memset(&ed->keys, 0, sizeof(ed->keys));
+    (void)memset(&ed->chord, 0, sizeof(ed->chord));
+    ed->last_cmd = SAG_CMD_NONE;
+    ed->dispatch_count = 0U;
+    ed->dispatch_message[0] = '\0';
     sag_cmd_init();
     ed->mode = SAG_MODE_L;
     ed->prev_unit = SAG_MODE_L;
@@ -146,7 +157,9 @@ void sag_dispatch_free(Ed *ed)
     for (i = 0U; i < SAG_MODE__N; i++)
         sag_keymap_free(&ed->mode_keys[i]);
     sag_keymap_free(&ed->user_keys);
-    memset(ed, 0, sizeof(*ed));
+    (void)memset(&ed->keys, 0, sizeof(ed->keys));
+    dispatch_reset_chord(ed);
+    ed->dispatch_message[0] = '\0';
 }
 
 void sag_dispatch_key(Ed *ed, Key key, i64 now_ms)

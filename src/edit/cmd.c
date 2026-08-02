@@ -5,6 +5,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "edit/edit_cmds.h"
+#include "edit/file_cmds.h"
 #include "util/arena.h"
 #include "util/intern.h"
 #include "util/log.h"
@@ -27,35 +29,6 @@ static CmdStatus cmd_nop(CmdCtx *cx)
     return SAG_CMD_OK;
 }
 
-static CmdStatus cmd_mode_enter(CmdCtx *cx)
-{
-    const char *sprint = "14";
-
-    if (cx->sarg_len == 1U) {
-        switch (cx->sarg[0]) {
-        case 'W':
-        case 'B':
-            sprint = "16";
-            break;
-        case 'H':
-            sprint = "17";
-            break;
-        case 'E':
-            sprint = "18";
-            break;
-        case 'F':
-            sprint = "52";
-            break;
-        default:
-            break;
-        }
-    }
-    sag_log(SAG_LOG_ERROR,
-            "command not implemented yet: ed.mode.enter lands in Sprint %s",
-            sprint);
-    return SAG_CMD_ERR_DEFERRED;
-}
-
 static CmdStatus deferred_unreachable(CmdCtx *cx)
 {
     (void)cx;
@@ -70,73 +43,131 @@ static CmdStatus deferred_unreachable(CmdCtx *cx)
 
 static const CmdDesc builtins[] = {
     {"ed.nop", cmd_nop, SAG_ARITY_NONE, 0U, "Do nothing"},
-    DEFER("ed.quit", SAG_ARITY_NONE, 0U, 14, "quit the editor"),
-    DEFER("ed.quit_force", SAG_ARITY_NONE, 0U, 14,
-          "quit and discard unsaved changes"),
-    DEFER("ed.suspend", SAG_ARITY_NONE, 0U, 14, "suspend the editor"),
-    DEFER("ed.redraw", SAG_ARITY_NONE, 0U, 15, "redraw the display"),
+    {"ed.quit", sag_file_cmd_quit, SAG_ARITY_NONE, 0U,
+     "Quit, prompting when the buffer is dirty"},
+    {"ed.quit_force", sag_file_cmd_quit_force, SAG_ARITY_NONE, 0U,
+     "Quit without discarding the recovery journal"},
+    {"ed.suspend", sag_file_cmd_suspend, SAG_ARITY_NONE, 0U,
+     "Suspend the editor and restore the terminal"},
+    {"ed.redraw", sag_file_cmd_redraw, SAG_ARITY_NONE, 0U,
+     "Redraw the complete display"},
     DEFER("ed.repeat", SAG_ARITY_NONE, SAG_CMD_RECORDABLE, 35,
           "repeat the last command"),
 
-    DEFER("ed.move.buf.home", SAG_ARITY_NONE,
-          SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, 14,
-          "move to the start of the buffer"),
-    DEFER("ed.move.buf.end", SAG_ARITY_NONE,
-          SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, 14,
-          "move to the end of the buffer"),
-    DEFER("ed.move.line.home", SAG_ARITY_NONE,
-          SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, 14,
-          "move to the start of the line"),
-    DEFER("ed.move.line.end", SAG_ARITY_NONE,
-          SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, 14,
-          "move to the end of the line"),
-    DEFER("ed.move.line.up", SAG_ARITY_NONE,
-          SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, 14,
-          "move one display line up"),
-    DEFER("ed.move.line.down", SAG_ARITY_NONE,
-          SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, 14,
-          "move one display line down"),
+    {"ed.move.buf.home", sag_edit_cmd_move_buf_home, SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Move to the start of the buffer"},
+    {"ed.move.buf.end", sag_edit_cmd_move_buf_end, SAG_ARITY_NONE,
+     SAG_CMD_TAKES_COUNT | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Move to the end of the buffer or a counted line"},
+    {"ed.move.line.home", sag_edit_cmd_move_line_home, SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Move to the start of the line"},
+    {"ed.move.line.end", sag_edit_cmd_move_line_end, SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Move to the end of the line"},
+    {"ed.move.line.up", sag_edit_cmd_move_line_up, SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Move one line up"},
+    {"ed.move.line.down", sag_edit_cmd_move_line_down, SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Move one line down"},
+    {"ed.move.line.first_nonblank", sag_edit_cmd_move_line_first_nonblank,
+     SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Move to the first nonblank grapheme"},
+    {"ed.move.line.last_nonblank", sag_edit_cmd_move_line_last_nonblank,
+     SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Move to the last nonblank grapheme"},
+    {"ed.move.line.half_page_up", sag_edit_cmd_move_line_half_page_up,
+     SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Move half a viewport up"},
+    {"ed.move.line.half_page_down", sag_edit_cmd_move_line_half_page_down,
+     SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Move half a viewport down"},
     DEFER("ed.move.unit.next", SAG_ARITY_NONE,
           SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, 16,
           "move to the next unit"),
     DEFER("ed.move.unit.prev", SAG_ARITY_NONE,
           SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, 16,
           "move to the previous unit"),
-    DEFER("ed.move.char.left", SAG_ARITY_NONE,
-          SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, 14,
-          "move one character left"),
-    DEFER("ed.move.char.right", SAG_ARITY_NONE,
-          SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, 14,
-          "move one character right"),
+    {"ed.move.char.prev", sag_edit_cmd_move_char_prev, SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Move one grapheme left"},
+    {"ed.move.char.next", sag_edit_cmd_move_char_next, SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Move one grapheme right"},
+    {"ed.move.char.left", sag_edit_cmd_move_char_prev, SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Alias for moving one grapheme left"},
+    {"ed.move.char.right", sag_edit_cmd_move_char_next, SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Alias for moving one grapheme right"},
 
-    DEFER("ed.edit.insert.text", SAG_ARITY_STR,
-          SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER, 14,
-          "insert text at the cursor"),
-    DEFER("ed.edit.delete.prev", SAG_ARITY_NONE,
-          SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN |
-              SAG_CMD_CHANGES_BUFFER,
-          14, "delete the previous character"),
-    DEFER("ed.edit.delete.next", SAG_ARITY_NONE,
-          SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN |
-              SAG_CMD_CHANGES_BUFFER,
-          14, "delete the next character"),
-    DEFER("ed.edit.undo", SAG_ARITY_NONE,
-          SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, 14,
-          "undo the last edit"),
-    DEFER("ed.edit.redo", SAG_ARITY_NONE,
-          SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, 14,
-          "redo the last undone edit"),
+    {"ed.edit.insert.text", sag_edit_cmd_insert_text, SAG_ARITY_STR,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
+     "Insert UTF-8 text at the cursor"},
+    {"ed.edit.insert.newline", sag_edit_cmd_insert_newline, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
+     "Insert the buffer's native line ending"},
+    {"ed.edit.insert.tab", sag_edit_cmd_insert_tab, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
+     "Insert a literal tab"},
+    {"ed.edit.insert.after", sag_edit_cmd_insert_after, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Enter insert mode after the current grapheme"},
+    {"ed.edit.line.open_below", sag_edit_cmd_open_below, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
+     "Open a new line below and enter insert mode"},
+    {"ed.edit.line.open_above", sag_edit_cmd_open_above, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
+     "Open a new line above and enter insert mode"},
+    {"ed.edit.delete.grapheme_left", sag_edit_cmd_delete_grapheme_left,
+     SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN |
+         SAG_CMD_CHANGES_BUFFER,
+     "Delete the grapheme left of the cursor"},
+    {"ed.edit.delete.grapheme", sag_edit_cmd_delete_grapheme,
+     SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN |
+         SAG_CMD_CHANGES_BUFFER,
+     "Delete the grapheme at the cursor"},
+    {"ed.edit.line.delete", sag_edit_cmd_delete_line, SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN |
+         SAG_CMD_CHANGES_BUFFER,
+     "Delete the current logical line"},
+    {"ed.edit.delete.prev", sag_edit_cmd_delete_grapheme_left,
+     SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN |
+         SAG_CMD_CHANGES_BUFFER,
+     "Alias for deleting the previous grapheme"},
+    {"ed.edit.delete.next", sag_edit_cmd_delete_grapheme, SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN |
+         SAG_CMD_CHANGES_BUFFER,
+     "Alias for deleting the next grapheme"},
+    {"ed.edit.undo", sag_edit_cmd_undo, SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Undo the last edit transaction"},
+    {"ed.edit.redo", sag_edit_cmd_redo, SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Redo the last undone transaction"},
+    {"ed.edit.undo_barrier", sag_edit_cmd_undo_barrier, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN, "Close the active insert transaction"},
     DEFER("ed.edit.yank", SAG_ARITY_OPT_STR,
-          SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, 14,
+          SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, 17,
           "yank text into a register"),
     DEFER("ed.edit.paste", SAG_ARITY_OPT_STR,
-          SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER, 14,
+          SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER, 17,
           "paste text from a register"),
 
-    {"ed.mode.enter", cmd_mode_enter, SAG_ARITY_STR, SAG_CMD_RECORDABLE,
+    {"ed.mode.enter", sag_edit_cmd_mode_enter, SAG_ARITY_STR,
+     SAG_CMD_RECORDABLE,
      "Sprint 14: enter L/I; W/B Sprint 16, H Sprint 17, E Sprint 18, F Sprint 52"},
-    DEFER("ed.mode.escape", SAG_ARITY_NONE, SAG_CMD_RECORDABLE, 14,
-          "return to line mode"),
+    {"ed.mode.escape", sag_edit_cmd_mode_escape, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE, "Return to line mode"},
     DEFER("ed.sel.expand", SAG_ARITY_NONE,
           SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, 17,
           "expand the selection"),
@@ -157,19 +188,25 @@ static const CmdDesc builtins[] = {
     DEFER("ed.view.down", SAG_ARITY_NONE,
           SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, 15,
           "scroll the active view down"),
+    {"ed.view.page_up", sag_edit_cmd_view_page_up, SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Move one viewport up"},
+    {"ed.view.page_down", sag_edit_cmd_view_page_down, SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Move one viewport down"},
     DEFER("ed.ui.message_expand", SAG_ARITY_NONE, SAG_CMD_PROMPTS, 15,
           "expand the current message"),
     DEFER("ed.ui.cancel", SAG_ARITY_NONE, 0U, 15,
           "cancel the active prompt"),
 
-    DEFER("ed.file.open", SAG_ARITY_STR, SAG_CMD_PROMPTS, 14,
+    DEFER("ed.file.open", SAG_ARITY_STR, SAG_CMD_PROMPTS, 23,
           "open a file"),
-    DEFER("ed.file.save", SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN, 14,
-          "save the active file"),
-    DEFER("ed.file.new", SAG_ARITY_OPT_STR, 0U, 14, "create a file"),
-    DEFER("ed.file.reload", SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN, 14,
+    {"ed.file.save", sag_file_cmd_save_current, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN, "Atomically save the active file"},
+    DEFER("ed.file.new", SAG_ARITY_OPT_STR, 0U, 18, "create a file"),
+    DEFER("ed.file.reload", SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN, 18,
           "reload the active file"),
-    DEFER("ed.file.close", SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN, 14,
+    DEFER("ed.file.close", SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN, 23,
           "close the active file"),
     DEFER("ed.buf.next", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 23,
           "activate the next buffer"),
@@ -255,7 +292,11 @@ static bool command_name_valid(const char *name)
         "open", "close", "save", "new", "enter", "leave", "grow",
         "shrink", "expand", "contract", "list", "reload", "cancel",
         "text", "undo", "redo", "escape", "add", "above", "below", "center",
-        "message_expand", "split_h", "split_v", "record", "replay", "stage"};
+        "message_expand", "split_h", "split_v", "record", "replay", "stage",
+        "first_nonblank", "last_nonblank", "half_page_up", "half_page_down",
+        "page_up", "page_down", "after", "newline", "tab",
+        "grapheme_left", "grapheme", "undo_barrier", "open_above",
+        "open_below"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;
