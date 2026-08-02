@@ -570,6 +570,29 @@ static u32 clip_parse_pids(const Bytebuf *log, pid_t *out, u32 max)
     return count;
 }
 
+static bool clip_wait_pids_gone(const pid_t *pids, u32 count)
+{
+    struct timespec pause = {0, 1000000L};
+    u32 attempt;
+
+    for (attempt = 0U; attempt < 2000U; attempt++) {
+        bool any_live = false;
+        u32 i;
+
+        for (i = 0U; i < count; i++) {
+            errno = 0;
+            if (kill(pids[i], 0) == 0 || errno != ESRCH) {
+                any_live = true;
+                break;
+            }
+        }
+        if (!any_live)
+            return true;
+        (void)nanosleep(&pause, NULL);
+    }
+    return false;
+}
+
 void test_clipboard_nonexit_100_writes_are_nonblocking(void)
 {
     ClipEnv clipboard;
@@ -629,6 +652,7 @@ void test_clipboard_nonexit_100_writes_are_nonblocking(void)
         SAG_ASSERT_EQ_I64(errno, ECHILD);
         SAG_ASSERT_EQ_I64(kill(pids[i], SIGTERM), 0);
     }
+    SAG_ASSERT(clip_wait_pids_gone(pids, count));
     for (i = 0U; i < 200U && sag_clip_owned_children() != 0U; i++) {
         struct timespec pause = {0, 1000000L};
         sag_clip_reap();
@@ -834,6 +858,31 @@ void test_clipboard_sync_modes_route_only_documented_writes(void)
     clip_env_restore(&clipboard);
 }
 
+static const char *clip_captured_read_failure(void)
+{
+    if (sag_test_log_contains(SAG_LOG_WARN, "no readable"))
+        return "clipboard read failed: no readable backend";
+    if (sag_test_log_contains(SAG_LOG_WARN, "no read command"))
+        return "clipboard read failed: backend has no read command";
+    if (sag_test_log_contains(SAG_LOG_WARN, "cannot start reader"))
+        return "clipboard read failed: cannot start reader";
+    if (sag_test_log_contains(SAG_LOG_WARN, "timed out"))
+        return "clipboard read failed: reader timed out";
+    if (sag_test_log_contains(SAG_LOG_WARN, "poll failed"))
+        return "clipboard read failed: poll failed";
+    if (sag_test_log_contains(SAG_LOG_WARN, "read exceeds"))
+        return "clipboard read failed: byte limit exceeded";
+    if (sag_test_log_contains(SAG_LOG_WARN, "pipe failed"))
+        return "clipboard read failed: pipe read failed";
+    if (sag_test_log_contains(SAG_LOG_WARN, "wait failed"))
+        return "clipboard read failed: waitpid failed";
+    if (sag_test_log_contains(SAG_LOG_WARN, "exited with status"))
+        return "clipboard read failed: reader exited nonzero";
+    if (sag_test_log_contains(SAG_LOG_WARN, "terminated by signal"))
+        return "clipboard read failed: reader was signaled";
+    return "clipboard read failed without a diagnostic";
+}
+
 void test_clipboard_unnamed_paste_reads_subprocess(void)
 {
     static const u8 payload[] = {0U, (u8)'Q'};
@@ -849,6 +898,7 @@ void test_clipboard_unnamed_paste_reads_subprocess(void)
     const u8 *bytes;
     u64 len;
     Bytebuf materialized;
+    const char *paste_failure = NULL;
 
     clip_env_save(&clipboard, "SAG_CLIPBOARD");
     clip_fixture_init(&f);
@@ -862,7 +912,12 @@ void test_clipboard_unnamed_paste_reads_subprocess(void)
     edit = (EditCtx){tb, NULL, &cursors, 7U, NULL, undo, NULL};
     bytebuf_init(&materialized);
 
-    SAG_ASSERT(sag_reg_paste(&registers, &edit, '"', true, 8U));
+    sag_test_capture_log();
+    sag_test_count_assertion();
+    if (!sag_reg_paste(&registers, &edit, '"', true, 8U)) {
+        paste_failure = clip_captured_read_failure();
+        goto cleanup;
+    }
     SAG_ASSERT_EQ_U64(sag_textbuf_len(tb), 3U);
     SAG_ASSERT(sag_textiter_begin(&iter, tb, BYTEOFF(0U)));
     while (materialized.len < 3U) {
@@ -878,6 +933,7 @@ void test_clipboard_unnamed_paste_reads_subprocess(void)
     SAG_ASSERT_EQ_U64(registers.ring_len, 1U);
     SAG_ASSERT_EQ_U64(undo->nodes.len, 2U);
 
+cleanup:
     bytebuf_free(&materialized);
     sag_undo_free(undo);
     sag_cset_free(&cursors);
@@ -886,4 +942,6 @@ void test_clipboard_unnamed_paste_reads_subprocess(void)
     sag_clip_shutdown();
     clip_fixture_free(&f);
     clip_env_restore(&clipboard);
+    if (paste_failure != NULL)
+        sag_test_fail(__FILE__, __LINE__, paste_failure);
 }
