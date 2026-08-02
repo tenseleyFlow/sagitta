@@ -946,6 +946,9 @@ static bool enter_suspend(PtyCtx *c, bool through_command)
         ptc_fail(c, "suspend did not emit the terminal restore blob");
         return false;
     }
+    c->ready = false;
+    if (through_command)
+        return true;
     /* setsid() makes this fixture's process group orphaned, so the
      * job-control SIGTSTP may be discarded. SIGSTOP gives the harness a
      * portable stopped state after the real handler has restored the tty. */
@@ -982,7 +985,6 @@ static bool enter_suspend(PtyCtx *c, bool through_command)
         ptc_fail(c, "child did not stop after SIGTSTP");
         return false;
     }
-    c->ready = false;
     return true;
 }
 
