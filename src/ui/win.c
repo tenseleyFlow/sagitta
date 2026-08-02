@@ -3,6 +3,28 @@
 #include "edit/ed.h"
 #include "util/log.h"
 
+LineNo sag_win_view_top(const Win *w)
+{
+    if (w == NULL)
+        SAG_BUG("window viewport: missing window");
+    return w->vp.top;
+}
+
+bool sag_win_view_row(const Win *w, LineNo line, u16 *row)
+{
+    u64 relative;
+
+    if (w == NULL || row == NULL)
+        SAG_BUG("window viewport row: missing argument");
+    if (line.v < w->vp.top.v)
+        return false;
+    relative = line.v - w->vp.top.v;
+    if (relative >= w->rect.h)
+        return false;
+    *row = (u16)relative;
+    return true;
+}
+
 void sag_win_follow_cursor(Win *w)
 {
     const Cursor *cursor;

@@ -183,22 +183,21 @@ void sag_ed_damage_document(Ed *ed)
 void sag_ed_damage_line(Ed *ed, LineNo line, bool line_count_changed)
 {
     Win *win;
-    u64 relative;
+    LineNo top;
     u16 lo;
     u16 hi;
 
     if (ed == NULL || ed->win == NULL)
         return;
     win = ed->win;
-    if (line.v < win->vp.top.v) {
+    top = sag_win_view_top(win);
+    if (line.v < top.v) {
         if (line_count_changed)
             sag_ed_damage_document(ed);
         return;
     }
-    relative = line.v - win->vp.top.v;
-    if (relative >= win->rect.h)
+    if (!sag_win_view_row(win, line, &lo))
         return;
-    lo = (u16)relative;
     hi = line_count_changed ? win->rect.h : (u16)(lo + 1U);
     if (ed->doc_damage_lo >= ed->doc_damage_hi) {
         ed->doc_damage_lo = lo;
@@ -632,7 +631,8 @@ void sag_ed_render(Ed *ed)
         return;
     win = ed->win;
     sag_win_follow_cursor(win);
-    if (!ed->drawn_top_valid || ed->drawn_top.v != win->vp.top.v)
+    if (!ed->drawn_top_valid ||
+        ed->drawn_top.v != sag_win_view_top(win).v)
         sag_ed_damage_document(ed);
     if (ed->full_damage) {
         sag_draw_document_rows(ed, win, 0U, win->rect.h);
@@ -654,7 +654,7 @@ void sag_ed_render(Ed *ed)
     ed->full_damage = false;
     ed->doc_damage_lo = ed->grid.rows;
     ed->doc_damage_hi = 0U;
-    ed->drawn_top = win->vp.top;
+    ed->drawn_top = sag_win_view_top(win);
     ed->drawn_top_valid = true;
 }
 

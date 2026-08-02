@@ -30,5 +30,7 @@ typedef struct Win {
 } Win;
 
 void sag_win_follow_cursor(Win *w);
+LineNo sag_win_view_top(const Win *w);
+bool sag_win_view_row(const Win *w, LineNo line, u16 *row);
 
 #endif
