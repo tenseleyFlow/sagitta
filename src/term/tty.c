@@ -10,6 +10,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/ioctl.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "util/log.h"
@@ -39,6 +40,7 @@ static Tty *g_owner;
 static int g_tfd = -1;
 static int g_wfd = -1;
 static int g_sigpipe_w = -1;
+static int g_guard_wfd = -1;
 static bool g_atexit_armed;
 
 static const char SAG_TTY_RESTORE_BLOB[] =
@@ -51,6 +53,11 @@ static const char SAG_TTY_RESTORE_BLOB[] =
     "\x1b[0m"
     "\x1b[?1049l"
     "\x1b[?25h";
+
+enum {
+    SAG_TTY_GUARD_RAW = 'R',
+    SAG_TTY_GUARD_CLEAN = 'C'
+};
 
 /* BEGIN ASYNC-SIGNAL-SAFE — allowlist: write tcsetattr sigaction signal
  * raise kill sigemptyset sigaddset sigprocmask. */
@@ -67,6 +74,19 @@ static void sag_tty_lifecycle_mask(sigset_t *mask)
     (void)sigaddset(mask, SIGTSTP);
 }
 
+static void sag_tty_guard_note(u8 state)
+{
+    int saved_errno = errno;
+    ssize_t written;
+
+    if (g_guard_wfd >= 0) {
+        do {
+            written = write(g_guard_wfd, &state, 1U);
+        } while (written < 0 && errno == EINTR);
+    }
+    errno = saved_errno;
+}
+
 void sag_tty_restore(void)
 {
     int saved_errno = errno;
@@ -81,6 +101,7 @@ void sag_tty_restore(void)
                      sizeof(SAG_TTY_RESTORE_BLOB) - 1U);
         (void)tcsetattr(g_tfd, TCSAFLUSH, &g_saved);
         g_raw = 0;
+        sag_tty_guard_note(SAG_TTY_GUARD_CLEAN);
     }
     if (masked)
         (void)sigprocmask(SIG_SETMASK, &saved, NULL);
@@ -131,8 +152,14 @@ static void sag_tty_cont(int sig)
     struct sigaction action = {0};
 
     g_raw = 0;
-    if (g_resume_raw && tcsetattr(g_tfd, TCSANOW, &g_rawios) == 0)
-        g_raw = 1;
+    if (g_resume_raw) {
+        sag_tty_guard_note(SAG_TTY_GUARD_RAW);
+        if (tcsetattr(g_tfd, TCSANOW, &g_rawios) == 0) {
+            g_raw = 1;
+        } else {
+            sag_tty_guard_note(SAG_TTY_GUARD_CLEAN);
+        }
+    }
     action.sa_handler = sag_tty_tstp;
     sag_tty_lifecycle_mask(&action.sa_mask);
     (void)sigaction(SIGTSTP, &action, NULL);
@@ -158,6 +185,136 @@ static bool sag_tty_write_all(int fd, const void *data, size_t len)
         }
     }
     return true;
+}
+
+static void guard_ignore(int sig)
+{
+    struct sigaction action;
+
+    (void)memset(&action, 0, sizeof(action));
+    action.sa_handler = SIG_IGN;
+    (void)sigemptyset(&action.sa_mask);
+    (void)sigaction(sig, &action, NULL);
+}
+
+static void guard_child(int read_fd, const struct termios *saved)
+{
+    u8 states[64];
+    bool raw = false;
+    bool ok = true;
+
+    (void)setpgid(0, 0);
+    guard_ignore(SIGHUP);
+    guard_ignore(SIGINT);
+    guard_ignore(SIGQUIT);
+    guard_ignore(SIGTERM);
+    guard_ignore(SIGTSTP);
+    guard_ignore(SIGTTIN);
+    guard_ignore(SIGTTOU);
+    for (;;) {
+        ssize_t n = read(read_fd, states, sizeof(states));
+        ssize_t i;
+
+        if (n > 0) {
+            for (i = 0; i < n; i++) {
+                if (states[i] == SAG_TTY_GUARD_RAW)
+                    raw = true;
+                else if (states[i] == SAG_TTY_GUARD_CLEAN)
+                    raw = false;
+            }
+            continue;
+        }
+        if (n < 0 && errno == EINTR)
+            continue;
+        if (n < 0)
+            ok = false;
+        break;
+    }
+    if (raw) {
+        ok = sag_tty_write_all(STDOUT_FILENO, SAG_TTY_RESTORE_BLOB,
+                               sizeof(SAG_TTY_RESTORE_BLOB) - 1U) && ok;
+        if (tcsetattr(STDIN_FILENO, TCSAFLUSH, saved) != 0)
+            ok = false;
+    }
+    (void)close(read_fd);
+    _exit(ok ? 0 : 1);
+}
+
+bool sag_tty_guard_start(TtyGuard *guard)
+{
+    struct termios saved;
+    int fds[2];
+    pid_t pid;
+
+    if (guard == NULL || g_guard_wfd >= 0) {
+        errno = EINVAL;
+        return false;
+    }
+    (void)memset(guard, 0, sizeof(*guard));
+    guard->pid = -1;
+    guard->notify_fd = -1;
+    if (!isatty(STDIN_FILENO) || !isatty(STDOUT_FILENO))
+        return true;
+    /* A dead guardian must make notification writes fail with EPIPE, never
+     * terminate the editor before its own restoration path can run. */
+    if (signal(SIGPIPE, SIG_IGN) == SIG_ERR)
+        return false;
+    if (tcgetattr(STDIN_FILENO, &saved) != 0)
+        return false;
+    if (pipe(fds) != 0)
+        return false;
+    if (fcntl(fds[1], F_SETFD, FD_CLOEXEC) != 0) {
+        int saved_errno = errno;
+
+        (void)close(fds[0]);
+        (void)close(fds[1]);
+        errno = saved_errno;
+        return false;
+    }
+    pid = fork();
+    if (pid < 0) {
+        int saved_errno = errno;
+
+        (void)close(fds[0]);
+        (void)close(fds[1]);
+        errno = saved_errno;
+        return false;
+    }
+    if (pid == 0) {
+        (void)close(fds[1]);
+        g_guard_wfd = -1;
+        guard_child(fds[0], &saved);
+    }
+    (void)close(fds[0]);
+    (void)setpgid(pid, pid);
+    guard->pid = pid;
+    guard->notify_fd = fds[1];
+    guard->active = true;
+    g_guard_wfd = fds[1];
+    return true;
+}
+
+bool sag_tty_guard_finish(TtyGuard *guard)
+{
+    int status = 0;
+    pid_t waited;
+
+    if (guard == NULL) {
+        errno = EINVAL;
+        return false;
+    }
+    if (!guard->active)
+        return true;
+    g_guard_wfd = -1;
+    if (guard->notify_fd >= 0)
+        (void)close(guard->notify_fd);
+    do {
+        waited = waitpid(guard->pid, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+    guard->pid = -1;
+    guard->notify_fd = -1;
+    guard->active = false;
+    return waited >= 0 && WIFEXITED(status) && WEXITSTATUS(status) == 0;
 }
 
 typedef struct {
@@ -361,6 +518,7 @@ bool sag_tty_raw(Tty *t)
 
     g_resume_raw = 1;
     g_raw = 1;
+    sag_tty_guard_note(SAG_TTY_GUARD_RAW);
     if (tcsetattr(t->rfd, TCSANOW, &g_rawios) != 0) {
         saved_errno = errno;
         sag_tty_restore();

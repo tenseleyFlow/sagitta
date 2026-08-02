@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 #include <stddef.h>
+#include <sys/types.h>
 #include <termios.h>
 
 #include "util/base.h"
@@ -40,6 +41,21 @@ typedef struct Tty {
     u8 probe_prefix[64];
     size_t probe_prefix_len;
 } Tty;
+
+typedef struct TtyGuard {
+    pid_t pid;
+    int notify_fd;
+    bool active;
+} TtyGuard;
+
+/*
+ * The editor process cannot handle SIGKILL.  A tiny sibling process keeps
+ * the pre-raw termios state and restores it if the editor disappears while
+ * raw mode is active.  Start it before sag_tty_open(), and finish it after
+ * sag_tty_close().
+ */
+bool sag_tty_guard_start(TtyGuard *guard);
+bool sag_tty_guard_finish(TtyGuard *guard);
 
 /*
  * Raw mode is restored on normal close, atexit, and the sag_bug prehook.

@@ -33,6 +33,7 @@ void test_modes_escape_cancels_chord_before_prompt_or_mode(void)
 
     modes_editor(&ed);
     SAG_ASSERT_EQ_U64(sag_mode_enter(&ed, SAG_MODE_I), SAG_CMD_OK);
+    ed.full_damage = false;
     sag_ed_prompt(&ed, SAG_PROMPT_QUIT_DIRTY);
     ed.chord.seq[0] = sag_keyid(modes_key((u32)'q'));
     ed.chord.n = 1U;
@@ -54,6 +55,7 @@ void test_modes_escape_cancels_count_before_prompt_or_mode(void)
 
     modes_editor(&ed);
     SAG_ASSERT_EQ_U64(sag_mode_enter(&ed, SAG_MODE_I), SAG_CMD_OK);
+    ed.full_damage = false;
     sag_ed_prompt(&ed, SAG_PROMPT_QUIT_DIRTY);
     ed.chord.count = 42U;
     ed.chord.count_given = true;
@@ -72,6 +74,7 @@ void test_modes_escape_closes_prompt_before_changing_mode(void)
 
     modes_editor(&ed);
     SAG_ASSERT_EQ_U64(sag_mode_enter(&ed, SAG_MODE_I), SAG_CMD_OK);
+    ed.full_damage = false;
     sag_ed_prompt(&ed, SAG_PROMPT_QUIT_DIRTY);
     SAG_ASSERT(ed.msg.active);
 
@@ -79,7 +82,7 @@ void test_modes_escape_closes_prompt_before_changing_mode(void)
     SAG_ASSERT_EQ_U64(ed.prompt, SAG_PROMPT_NONE);
     SAG_ASSERT(!ed.msg.active);
     SAG_ASSERT_EQ_U64(ed.mode, SAG_MODE_I);
-    SAG_ASSERT(ed.full_damage);
+    SAG_ASSERT(!ed.full_damage);
     sag_ed_free(&ed);
 }
 
@@ -95,7 +98,7 @@ void test_modes_escape_from_insert_enters_line_and_repaints(void)
     SAG_ASSERT_EQ_U64(ed.last_status, SAG_CMD_OK);
     SAG_ASSERT_EQ_U64(ed.mode, SAG_MODE_L);
     SAG_ASSERT_EQ_U64(ed.prev_unit, SAG_MODE_L);
-    SAG_ASSERT(ed.full_damage);
+    SAG_ASSERT(!ed.full_damage);
     SAG_ASSERT_EQ_U64(ed.keys.l[0], &ed.mode_keys[SAG_MODE_L]);
     sag_ed_free(&ed);
 }
@@ -109,7 +112,7 @@ void test_modes_escape_in_line_is_repaint_noop(void)
     sag_ed_handle_key(&ed, modes_key(SAG_KEY_ESCAPE), 10);
     SAG_ASSERT_EQ_U64(ed.mode, SAG_MODE_L);
     SAG_ASSERT_EQ_U64(ed.last_status, SAG_CMD_OK);
-    SAG_ASSERT(ed.full_damage);
+    SAG_ASSERT(!ed.full_damage);
     SAG_ASSERT_EQ_U64(ed.dispatch_count, 1U);
     sag_ed_free(&ed);
 }

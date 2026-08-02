@@ -73,6 +73,8 @@ static void edit_fixture(Ed *ed, const u8 *bytes, size_t len, SagEol eol)
     ed->buffer.meta.lf_count = eol == SAG_EOL_LF ? 1U : 0U;
     ed->win->vp.rows = 4U;
     ed->win->vp.cols = 80U;
+    ed->win->rect.h = 4U;
+    ed->win->rect.w = 80U;
     cursor = sag_ed_cursor(ed);
     SAG_ASSERT_NOT_NULL(cursor);
     cursor->pos = BYTEOFF(0U);
@@ -271,6 +273,8 @@ void test_edit_insert_newline_uses_crlf_bytes(void)
     SAG_ASSERT_EQ_U64(sag_undo_current(ed.buffer.undo),
                       ed.buffer.undo->root + 1U);
     SAG_ASSERT(!ed.insert_txn);
+    SAG_ASSERT_EQ_U64(ed.doc_damage_lo, 1U);
+    SAG_ASSERT_EQ_U64(ed.doc_damage_hi, 4U);
     sag_ed_free(&ed);
 }
 
@@ -306,6 +310,8 @@ void test_edit_insert_text_and_tab_share_one_insert_transaction(void)
     sag_ed_handle_key(&ed, edit_text_key(acute, sizeof(acute)), 0);
     SAG_ASSERT_EQ_U64(ed.last_status, SAG_CMD_OK);
     SAG_ASSERT(ed.insert_txn);
+    SAG_ASSERT_EQ_U64(ed.doc_damage_lo, 0U);
+    SAG_ASSERT_EQ_U64(ed.doc_damage_hi, 1U);
     sag_ed_handle_key(&ed, edit_key(SAG_KEY_TAB), 0);
     SAG_ASSERT_EQ_U64(ed.last_status, SAG_CMD_OK);
     SAG_ASSERT(ed.insert_txn);
@@ -513,6 +519,17 @@ void test_edit_journal_open_failure_returns_io_without_mutation(void)
     SAG_ASSERT_EQ_U64(ed.buffer.undo->ops.len, 0U);
     SAG_ASSERT_NULL(ed.buffer.jrn);
     SAG_ASSERT_EQ_U64(sag_ed_cursor(&ed)->pos.v, 0U);
+    SAG_ASSERT(ed.durability_failed);
+    SAG_ASSERT(ed.msg.active);
+    SAG_ASSERT_EQ_U64(ed.msg.sev, SAG_MSG_ERROR);
+    SAG_ASSERT(strstr(ed.msg.text, "crash journal failed") != NULL);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.insert.text", 1U, false,
+                                  "Y", 1U), SAG_CMD_ERR_IO);
+    edit_assert_text(&ed, before, sizeof(before) - 1U);
+    SAG_ASSERT_EQ_U64(sag_ed_request_quit(&ed, false), SAG_CMD_ERR_IO);
+    SAG_ASSERT(!ed.quit);
+    SAG_ASSERT_EQ_U64(sag_ed_request_quit(&ed, true), SAG_CMD_OK);
+    SAG_ASSERT(ed.quit);
     sag_ed_free(&ed);
 
     if (saved_copy != NULL) {

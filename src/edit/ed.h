@@ -84,11 +84,16 @@ struct Ed {
     PromptKind prompt;
     bool quit_after_save;
     bool insert_txn;
+    bool durability_failed;
     bool paste_active;
     bool quit;
     int exit_code;
     bool layout_dirty;
     bool full_damage;
+    u16 doc_damage_lo;
+    u16 doc_damage_hi;
+    LineNo drawn_top;
+    bool drawn_top_valid;
 
     bool dispatch_ready;
     bool model_ready;
@@ -119,6 +124,8 @@ void sag_ed_handle_paste(Ed *ed, const u8 *bytes, size_t len, bool end);
 void sag_ed_resize(Ed *ed, bool resumed);
 void sag_ed_layout(Ed *ed);
 void sag_ed_render(Ed *ed);
+void sag_ed_damage_line(Ed *ed, LineNo line, bool line_count_changed);
+void sag_ed_damage_document(Ed *ed);
 
 void sag_msg(Ed *ed, MsgSev sev, const char *fmt, ...);
 void sag_msg_clear(Ed *ed);

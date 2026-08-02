@@ -130,14 +130,18 @@ static void draw_line(Grid *grid, const TextBuf *tb, Span line,
         (void)put_spaces(grid, row, col, right);
 }
 
-static void draw_document(Ed *ed, Win *w)
+void sag_draw_document_rows(Ed *ed, Win *w, u16 lo, u16 hi)
 {
     Grid *grid = &ed->grid;
     TextBuf *tb = w->buf->tb;
     u64 line_count = sag_textbuf_line_count(tb);
     u16 screen_row;
 
-    for (screen_row = 0U; screen_row < w->rect.h; screen_row++) {
+    if (hi > w->rect.h)
+        hi = w->rect.h;
+    if (lo > hi)
+        lo = hi;
+    for (screen_row = lo; screen_row < hi; screen_row++) {
         u32 row32 = (u32)w->rect.y + screen_row;
         u64 line_no;
 
@@ -161,7 +165,7 @@ static void draw_document(Ed *ed, Win *w)
     }
 }
 
-static void place_cursor(Ed *ed, Win *w)
+void sag_draw_cursor(Ed *ed, Win *w)
 {
     const Cursor *cursor;
     TextBuf *tb = w->buf->tb;
@@ -202,7 +206,7 @@ static void place_cursor(Ed *ed, Win *w)
                     true);
 }
 
-static void draw_footer(Ed *ed, Win *w)
+void sag_draw_footer(Ed *ed, Win *w)
 {
     Grid *grid = &ed->grid;
     const Cursor *cursor;
@@ -256,7 +260,7 @@ void sag_draw_win(Ed *ed, Win *w)
 {
     if (ed == NULL || w == NULL || w->buf == NULL || w->buf->tb == NULL)
         SAG_BUG("draw: missing editor window");
-    draw_document(ed, w);
-    draw_footer(ed, w);
-    place_cursor(ed, w);
+    sag_draw_document_rows(ed, w, 0U, w->rect.h);
+    sag_draw_footer(ed, w);
+    sag_draw_cursor(ed, w);
 }

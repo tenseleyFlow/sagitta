@@ -52,8 +52,12 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
     ed->ws.bufs = &ed->buffer;
     ed->ws.nbufs = 1U;
     ed->model_ready = true;
+    ed->durability_failed = false;
     ed->layout_dirty = true;
     ed->full_damage = true;
+    ed->doc_damage_lo = 0U;
+    ed->doc_damage_hi = 0U;
+    ed->drawn_top_valid = false;
     return true;
 }
 
@@ -161,8 +165,50 @@ void sag_ed_finish_edit(Ed *ed, const EditCtx *ec)
     if (ed == NULL || ec == NULL)
         return;
     ed->buffer.jrn = ec->jrnl;
-    ed->layout_dirty = true;
-    ed->full_damage = true;
+    if (ec->jrnl != NULL && !sag_journal_ok(ec->jrnl)) {
+        ed->durability_failed = true;
+        sag_msg(ed, SAG_MSG_ERROR,
+                "crash journal failed; save or q! before continuing");
+    }
+}
+
+void sag_ed_damage_document(Ed *ed)
+{
+    if (ed == NULL || ed->win == NULL)
+        return;
+    ed->doc_damage_lo = 0U;
+    ed->doc_damage_hi = ed->win->rect.h;
+}
+
+void sag_ed_damage_line(Ed *ed, LineNo line, bool line_count_changed)
+{
+    Win *win;
+    u64 relative;
+    u16 lo;
+    u16 hi;
+
+    if (ed == NULL || ed->win == NULL)
+        return;
+    win = ed->win;
+    if (line.v < win->vp.top.v) {
+        if (line_count_changed)
+            sag_ed_damage_document(ed);
+        return;
+    }
+    relative = line.v - win->vp.top.v;
+    if (relative >= win->rect.h)
+        return;
+    lo = (u16)relative;
+    hi = line_count_changed ? win->rect.h : (u16)(lo + 1U);
+    if (ed->doc_damage_lo >= ed->doc_damage_hi) {
+        ed->doc_damage_lo = lo;
+        ed->doc_damage_hi = hi;
+    } else {
+        if (lo < ed->doc_damage_lo)
+            ed->doc_damage_lo = lo;
+        if (hi > ed->doc_damage_hi)
+            ed->doc_damage_hi = hi;
+    }
 }
 
 Cursor *sag_ed_cursor(Ed *ed)
@@ -207,6 +253,12 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     newline = strcmp(desc->name, "ed.edit.insert.newline") == 0;
     started_in_insert = ed->mode == SAG_MODE_I;
 
+    if (changes && ed->durability_failed) {
+        sag_msg(ed, SAG_MSG_ERROR,
+                "crash journal failed; save or q! before continuing");
+        return SAG_CMD_ERR_IO;
+    }
+
     if (started_in_insert && (!changes || newline))
         sag_ed_insert_barrier(ed);
     if (changes && ed->model_ready) {
@@ -231,9 +283,10 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     status = sag_cmd_invoke(id, cx);
     if (changes && ed->model_ready) {
         ec = sag_ed_edit_ctx(ed);
-        if (status != SAG_CMD_OK && opened) {
+        if (status != SAG_CMD_OK &&
+            (opened || (started_in_insert && ed->insert_txn))) {
             sag_undo_abort(&ec);
-            if (started_in_insert && !newline)
+            if (started_in_insert)
                 ed->insert_txn = false;
         } else if (!started_in_insert && ed->mode == SAG_MODE_I &&
                    !newline && opened) {
@@ -243,6 +296,11 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
             sag_undo_end(&ec);
         }
         sag_ed_finish_edit(ed, &ec);
+        if (status == SAG_CMD_ERR_IO) {
+            ed->durability_failed = true;
+            sag_msg(ed, SAG_MSG_ERROR,
+                    "crash journal failed; save or q! before continuing");
+        }
     }
     return status;
 }
@@ -252,7 +310,6 @@ static void msg_expire(Ed *ed, void *ctx)
     (void)ctx;
     ed->msg.expiry = SAG_TIMER_NONE;
     ed->msg.active = false;
-    ed->full_damage = true;
 }
 
 void sag_msg_clear(Ed *ed)
@@ -262,7 +319,6 @@ void sag_msg_clear(Ed *ed)
     if (ed->msg.expiry != SAG_TIMER_NONE)
         (void)sag_timer_cancel(&ed->timers, ed->msg.expiry);
     (void)memset(&ed->msg, 0, sizeof(ed->msg));
-    ed->full_damage = true;
 }
 
 void sag_msg(Ed *ed, MsgSev sev, const char *fmt, ...)
@@ -285,7 +341,6 @@ void sag_msg(Ed *ed, MsgSev sev, const char *fmt, ...)
         ed->msg.expiry = sag_timer_add(&ed->timers, now + duration,
                                        msg_expire, NULL);
     }
-    ed->full_damage = true;
 }
 
 void sag_ed_prompt(Ed *ed, PromptKind prompt)
@@ -355,6 +410,7 @@ CmdStatus sag_ed_file_save(Ed *ed, bool force)
         ed->quit_after_save = false;
         return SAG_CMD_ERR_IO;
     }
+    ed->durability_failed = false;
     ed->prompt = SAG_PROMPT_NONE;
     lines = sag_textbuf_line_count(ed->buffer.tb);
     sag_msg(ed, SAG_MSG_INFO, "wrote %s, %llu lines", ed->buffer.path,
@@ -371,6 +427,11 @@ CmdStatus sag_ed_request_quit(Ed *ed, bool force)
     if (ed == NULL || !ed->model_ready)
         return SAG_CMD_ERR_STATE;
     sag_ed_insert_barrier(ed);
+    if (!force && ed->durability_failed) {
+        sag_msg(ed, SAG_MSG_ERROR,
+                "crash journal failed; save or q! to discard changes");
+        return SAG_CMD_ERR_IO;
+    }
     if (!force && sag_buf_dirty(&ed->buffer)) {
         sag_ed_prompt(ed, SAG_PROMPT_QUIT_DIRTY);
         return SAG_CMD_OK;
@@ -403,9 +464,15 @@ static bool prompt_key(Ed *ed, Key key)
                                        &ed->buffer.meta);
         sag_ed_finish_edit(ed, &ec);
         sag_ed_prompt(ed, SAG_PROMPT_NONE);
-        sag_msg(ed, recovered ? SAG_MSG_WARN : SAG_MSG_ERROR,
-                recovered ? "recovered unsaved changes" :
-                            "could not recover unsaved changes");
+        if (recovered && ec.jrnl == NULL) {
+            ed->durability_failed = true;
+            sag_msg(ed, SAG_MSG_ERROR,
+                    "recovered changes, but crash journal could not reopen; save or q!");
+        } else {
+            sag_msg(ed, recovered ? SAG_MSG_WARN : SAG_MSG_ERROR,
+                    recovered ? "recovered unsaved changes" :
+                                "could not recover unsaved changes");
+        }
         return true;
     }
     if (ed->prompt == SAG_PROMPT_RECOVER && code == (u32)'d') {
@@ -444,14 +511,14 @@ void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms)
     if (key.code == SAG_KEY_ESCAPE &&
         (ed->chord.n != 0U || ed->chord.count_given)) {
         sag_dispatch_key(ed, key, now_ms);
-        ed->full_damage = true;
         return;
     }
     if (ed->prompt != SAG_PROMPT_NONE) {
         (void)prompt_key(ed, key);
         return;
     }
-    if (ed->msg.active && ed->msg.sev == SAG_MSG_ERROR)
+    if (ed->msg.active && ed->msg.sev == SAG_MSG_ERROR &&
+        !ed->durability_failed)
         sag_msg_clear(ed);
     if (ed->mode == SAG_MODE_I && key.ev != SAG_KEY_RELEASE &&
         key.ntext != 0U && (key.mods & command_mods) == 0U) {
@@ -554,14 +621,24 @@ static bool write_all(int fd, const u8 *bytes, size_t len)
 
 void sag_ed_render(Ed *ed)
 {
+    Win *win;
+
     if (ed == NULL || !ed->grid_ready || !ed->render_ready ||
         !ed->model_ready)
         return;
-    sag_win_follow_cursor(ed->win);
-    sag_grid_clear(&ed->grid);
-    sag_draw_win(ed, ed->win);
-    if (ed->full_damage)
+    win = ed->win;
+    sag_win_follow_cursor(win);
+    if (!ed->drawn_top_valid || ed->drawn_top.v != win->vp.top.v)
+        sag_ed_damage_document(ed);
+    if (ed->full_damage) {
+        sag_draw_document_rows(ed, win, 0U, win->rect.h);
         sag_grid_mark_all(&ed->grid);
+    } else if (ed->doc_damage_lo < ed->doc_damage_hi) {
+        sag_draw_document_rows(ed, win, ed->doc_damage_lo,
+                               ed->doc_damage_hi);
+    }
+    sag_draw_footer(ed, win);
+    sag_draw_cursor(ed, win);
     ed->frame.len = 0U;
     (void)sag_render_frame(&ed->render, &ed->grid, &ed->frame);
     if (!write_all(ed->tty.wfd, ed->frame.data, ed->frame.len)) {
@@ -571,6 +648,10 @@ void sag_ed_render(Ed *ed)
     }
     sag_grid_flip(&ed->grid);
     ed->full_damage = false;
+    ed->doc_damage_lo = ed->grid.rows;
+    ed->doc_damage_hi = 0U;
+    ed->drawn_top = win->vp.top;
+    ed->drawn_top_valid = true;
 }
 
 static const char *load_error_text(SagLoadErr error)
@@ -596,7 +677,7 @@ static const char *ed_getenv(const char *name)
     return getenv(name);
 }
 
-int sag_ed_driver(const char *path)
+static int ed_driver_inner(const char *path)
 {
     Ed ed;
     SagLoadErr load = SAG_LOAD_OK;
@@ -655,5 +736,18 @@ int sag_ed_driver(const char *path)
     sag_ed_render(&ed);
     result = ed.quit ? ed.exit_code : sag_loop_run(&ed);
     sag_ed_free(&ed);
+    return result;
+}
+
+int sag_ed_driver(const char *path)
+{
+    TtyGuard guard;
+    int result;
+
+    if (!sag_tty_guard_start(&guard))
+        return SAG_EXIT_IO;
+    result = ed_driver_inner(path);
+    if (!sag_tty_guard_finish(&guard) && result == SAG_EXIT_OK)
+        result = SAG_EXIT_IO;
     return result;
 }
