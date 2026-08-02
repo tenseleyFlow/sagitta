@@ -206,7 +206,8 @@ static i64 clip_test_now_ms(void)
 {
     struct timespec ts;
 
-    SAG_ASSERT_EQ_I64(clock_gettime(CLOCK_MONOTONIC, &ts), 0);
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
+        SAG_BUG("clipboard test monotonic clock failed: %s", strerror(errno));
     return (i64)ts.tv_sec * 1000 + (i64)(ts.tv_nsec / 1000000L);
 }
 
@@ -214,7 +215,8 @@ static u64 clip_test_now_ns(void)
 {
     struct timespec ts;
 
-    SAG_ASSERT_EQ_I64(clock_gettime(CLOCK_MONOTONIC, &ts), 0);
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
+        SAG_BUG("clipboard test monotonic clock failed: %s", strerror(errno));
     return (u64)ts.tv_sec * UINT64_C(1000000000) + (u64)ts.tv_nsec;
 }
 
@@ -578,6 +580,7 @@ void test_clipboard_nonexit_100_writes_are_nonblocking(void)
     char command[PATH_MAX * 4U];
     pid_t pids[100];
     u64 slowest = 0U;
+    u64 budget_ns;
     u32 count;
     u32 i;
     int n;
@@ -593,6 +596,9 @@ void test_clipboard_nonexit_100_writes_are_nonblocking(void)
     clip_value(&value, (const u8 *)"x", 1U);
     bytebuf_init(&log);
     bytebuf_init(&terminal);
+    /* Preserve the production budget while allowing instrumentation overhead. */
+    budget_ns = getenv("SAG_TEST_INSTRUMENTED") != NULL ?
+                    UINT64_C(100000000) : UINT64_C(2000000);
     for (i = 0U; i < 100U; i++) {
         u64 start = clip_test_now_ns();
         u64 elapsed;
@@ -604,7 +610,7 @@ void test_clipboard_nonexit_100_writes_are_nonblocking(void)
             slowest = elapsed;
         clip_pump_until_idle();
     }
-    SAG_ASSERT(slowest < UINT64_C(2000000));
+    SAG_ASSERT(slowest < budget_ns);
     count = 0U;
     for (i = 0U; i < 2000U && count < 100U; i++) {
         struct timespec pause = {0, 1000000L};

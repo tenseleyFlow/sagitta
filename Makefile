@@ -58,11 +58,9 @@ endif
 
 UNIT_RUN := $(BUILD)/unit_tests
 PTY_RUN  := $(BUILD)/pty_runner
-ifeq ($(VALGRIND),1)
-VALGRIND_RUN := valgrind --quiet --error-exitcode=99 --leak-check=full \
-                 --errors-for-leak-kinds=definite --track-fds=yes \
-                 --child-silent-after-fork=yes
-VALGRIND_UNIT_EXCLUDES := \
+# Plain compiler lanes cover intentional abort contracts. Instrumented lanes
+# exclude them because their deliberately unreleased process state is noise.
+UNIT_DEATH_EXCLUDES := \
   --exclude piece_line_iterator_rejects_other_buffer \
   --exclude piece_checker_rejects_corruption \
   --exclude piece_live_iterator_rejects_edit \
@@ -77,7 +75,11 @@ VALGRIND_UNIT_EXCLUDES := \
   --exclude undo_lsp_reason_names_sprint47 \
   --exclude undo_save_rejects_open_transaction \
   --exclude render_invalid_cells_are_bugs
-UNIT_RUN := $(VALGRIND_RUN) $(BUILD)/unit_tests $(VALGRIND_UNIT_EXCLUDES) && \
+ifeq ($(VALGRIND),1)
+VALGRIND_RUN := valgrind --quiet --error-exitcode=99 --leak-check=full \
+                 --errors-for-leak-kinds=definite --track-fds=yes \
+                 --child-silent-after-fork=yes
+UNIT_RUN := $(VALGRIND_RUN) $(BUILD)/unit_tests $(UNIT_DEATH_EXCLUDES) && \
             SAG_TORTURE_CLEAN_ONLY=1 $(VALGRIND_RUN) \
             --trace-children=yes $(BUILD)/unit_tests \
             --filter save_fault_shim_contract
@@ -87,7 +89,8 @@ PTY_RUN  := valgrind --quiet --error-exitcode=99 --leak-check=full \
 endif
 
 ifeq ($(SAN),1)
-UNIT_RUN := SAG_TORTURE_CLEAN_ONLY=1 $(BUILD)/unit_tests
+UNIT_RUN := SAG_TORTURE_CLEAN_ONLY=1 SAG_TEST_INSTRUMENTED=1 \
+            $(BUILD)/unit_tests $(UNIT_DEATH_EXCLUDES)
 endif
 
 # Keep source and link order deterministic across filesystems.
