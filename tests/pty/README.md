@@ -32,6 +32,14 @@ and preserve the failing case's state directory. A following ordinary
 runs `/bin/sleep 300` under a 50 ms budget and asserts `SIGKILL`, bounded reap,
 an empty live-child list, and a closed master descriptor.
 
+`SAG_PTY_CASE_BUDGET_MS` overrides the default 5-second per-case deadline.
+The Valgrind lane uses 15 seconds per case and a 180-second global budget to
+account for instrumentation overhead; ordinary runs retain the strict defaults.
+`SAG_PTY_EXCLUDE` omits cases whose names contain its value. Valgrind excludes
+only `notepad_restore_segv`: compiler and sanitizer PTY lanes cover that
+deliberate fatal-signal contract because Valgrind owns the fatal signal and can
+hold the independently repeated child indefinitely.
+
 Terminal profiles are deterministic (`modern`, `nokitty`, `nosync`, `dumb`).
 The child receives only the exact pinned environment from Sprint 06; the
 developer shell environment, including `COLORTERM`, is never inherited.

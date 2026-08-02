@@ -59,6 +59,8 @@ endif
 
 UNIT_RUN := $(BUILD)/unit_tests
 PTY_RUN  := $(BUILD)/pty_runner
+PTY_PREP :=
+PTY_LOG_REDIRECT :=
 # Plain compiler lanes cover intentional abort contracts. Instrumented lanes
 # exclude them because their deliberately unreleased process state is noise.
 UNIT_DEATH_EXCLUDES := \
@@ -78,6 +80,8 @@ UNIT_DEATH_EXCLUDES := \
   --exclude cmd_registry_rejects_invalid_descriptors \
   --exclude render_invalid_cells_are_bugs
 ifeq ($(VALGRIND),1)
+SAG_PTY_BUDGET_MS ?= 180000
+SAG_PTY_CASE_BUDGET_MS ?= 15000
 VALGRIND_RUN := valgrind --quiet --error-exitcode=99 --leak-check=full \
                  --errors-for-leak-kinds=definite --track-fds=yes \
                  --child-silent-after-fork=yes
@@ -86,9 +90,14 @@ UNIT_RUN := SAG_TEST_INSTRUMENTED=1 $(VALGRIND_RUN) \
             SAG_TORTURE_CLEAN_ONLY=1 $(VALGRIND_RUN) \
             --trace-children=yes $(BUILD)/unit_tests \
             --filter save_fault_shim_contract
-PTY_RUN  := valgrind --quiet --error-exitcode=99 --leak-check=full \
+PTY_RUN  := SAG_PTY_BUDGET_MS=$(SAG_PTY_BUDGET_MS) \
+            SAG_PTY_CASE_BUDGET_MS=$(SAG_PTY_CASE_BUDGET_MS) \
+            SAG_PTY_EXCLUDE=notepad_restore_segv \
+            valgrind --quiet --error-exitcode=99 --leak-check=full \
             --errors-for-leak-kinds=definite --track-fds=yes \
-            --trace-children=yes $(BUILD)/pty_runner
+            --trace-children=yes --log-fd=9 $(BUILD)/pty_runner
+PTY_PREP := ulimit -c 0 &&
+PTY_LOG_REDIRECT := 9>&2
 endif
 
 ifeq ($(SAN),1)
@@ -476,8 +485,8 @@ test-script:
 	@echo 'error: script-test runner lands in Sprint 37 (sag --batch)'; exit 1
 
 test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/sagitta
-	$(PTY_RUN) --demo $(abspath $(BUILD)/demo_paint) \
-		--sagitta $(abspath $(BUILD)/sagitta)
+	$(PTY_PREP) $(PTY_RUN) --demo $(abspath $(BUILD)/demo_paint) \
+		--sagitta $(abspath $(BUILD)/sagitta) $(PTY_LOG_REDIRECT)
 
 -include $(OBJ:.o=.d) $(UNIT_OBJ:.o=.d) $(FUZZ_LIB_OBJ:.o=.d) \
          $(FUZZ_UTF8_OBJ:.o=.d) $(FUZZ_GRAPHEME_OBJ:.o=.d) \

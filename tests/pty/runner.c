@@ -25,25 +25,25 @@ static bool env_truthy(const char *name)
     return value != NULL && *value != '\0' && strcmp(value, "0") != 0;
 }
 
-static i64 parse_budget(void)
+static i64 parse_budget(const char *name, i64 fallback)
 {
-    const char *value = getenv("SAG_PTY_BUDGET_MS");
+    const char *value = getenv(name);
     i64 parsed = 0;
 
     if (value == NULL || *value == '\0')
-        return RUNNER_BUDGET_MS;
+        return fallback;
     while (*value != '\0') {
         unsigned digit;
 
         if (*value < '0' || *value > '9')
-            return RUNNER_BUDGET_MS;
+            return fallback;
         digit = (unsigned)(*value - '0');
         if (parsed > (INT64_MAX - (i64)digit) / 10)
-            return RUNNER_BUDGET_MS;
+            return fallback;
         parsed = parsed * 10 + (i64)digit;
         value++;
     }
-    return parsed > 0 ? parsed : RUNNER_BUDGET_MS;
+    return parsed > 0 ? parsed : fallback;
 }
 
 static char *path_join(const char *left, const char *right)
@@ -166,7 +166,7 @@ static bool valid_golden_name(const char *name)
 
 static bool run_once(PtyCtx *ctx, const PtyCase *test, unsigned run,
                      const char *demo, const char *sagitta,
-                     i64 global_deadline)
+                     i64 case_budget, i64 global_deadline)
 {
     char state[512];
 
@@ -175,7 +175,7 @@ static bool run_once(PtyCtx *ctx, const PtyCase *test, unsigned run,
                       test->name, strerror(errno));
         return false;
     }
-    ptc_init(ctx, test, state, demo, sagitta, CASE_BUDGET_MS,
+    ptc_init(ctx, test, state, demo, sagitta, case_budget,
              global_deadline);
     test->fn(ctx);
     if (!ctx->failed && !ctx->snapshot_taken)
@@ -263,8 +263,8 @@ static void preserve_failure(const PtyCtx *ctx)
 }
 
 static bool run_case(const PtyCase *test, const char *demo,
-                     const char *sagitta, i64 global_deadline, bool update,
-                     bool *any_updated)
+                     const char *sagitta, i64 case_budget,
+                     i64 global_deadline, bool update, bool *any_updated)
 {
     PtyCtx first;
     PtyCtx second;
@@ -281,9 +281,10 @@ static bool run_case(const PtyCase *test, const char *demo,
     (void)memset(&second, 0, sizeof(second));
     bytebuf_init(&diff);
     bytebuf_init(&fdmsg);
-    first_ok = run_once(&first, test, 1U, demo, sagitta, global_deadline);
+    first_ok = run_once(&first, test, 1U, demo, sagitta, case_budget,
+                        global_deadline);
     if (first_ok && ptc_now_ms() < global_deadline)
-        second_ok = run_once(&second, test, 2U, demo, sagitta,
+        second_ok = run_once(&second, test, 2U, demo, sagitta, case_budget,
                              global_deadline);
     if (first_ok && second_ok) {
         stable = compare_independent(&first, &second, &diff);
@@ -374,7 +375,9 @@ int main(int argc, char **argv)
     const char *demo;
     const char *sagitta;
     const char *filter = getenv("SAG_PTY_FILTER");
+    const char *exclude = getenv("SAG_PTY_EXCLUDE");
     i64 budget;
+    i64 case_budget;
     i64 global_deadline;
     bool update = env_truthy("SAG_PTY_UPDATE");
     bool any_updated = false;
@@ -392,11 +395,15 @@ int main(int argc, char **argv)
                       strerror(errno));
         return 1;
     }
-    budget = parse_budget();
+    budget = parse_budget("SAG_PTY_BUDGET_MS", RUNNER_BUDGET_MS);
+    case_budget = parse_budget("SAG_PTY_CASE_BUDGET_MS", CASE_BUDGET_MS);
     global_deadline = ptc_now_ms();
     global_deadline = budget > INT64_MAX - global_deadline
                           ? INT64_MAX : global_deadline + budget;
     for (i = 0U; sag_pty_cases[i].name != NULL; i++) {
+        if (exclude != NULL && *exclude != '\0' &&
+            strstr(sag_pty_cases[i].name, exclude) != NULL)
+            continue;
         if (filter != NULL && *filter != '\0' &&
             strstr(sag_pty_cases[i].name, filter) == NULL)
             continue;
@@ -407,8 +414,8 @@ int main(int argc, char **argv)
             ok = false;
             break;
         }
-        if (!run_case(&sag_pty_cases[i], demo, sagitta, global_deadline,
-                      update, &any_updated))
+        if (!run_case(&sag_pty_cases[i], demo, sagitta, case_budget,
+                      global_deadline, update, &any_updated))
             ok = false;
     }
     if (!any_selected) {

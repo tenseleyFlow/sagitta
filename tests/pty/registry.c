@@ -28,7 +28,11 @@ static const char restore_blob[] =
 static void spawn_scene(PtyCtx *c, const char *scene)
 {
     ptc_spawn(c, ptc_demo_bin(c), "--scene", scene, NULL);
-    ptc_settle(c, 0);
+    if (strcmp(c->test->profile, "modern") == 0 &&
+        strcmp(scene, "damage") != 0)
+        ptc_wait_sync_pairs(c, 1U);
+    else
+        ptc_settle(c, 0);
 }
 
 static void quit_cleanly(PtyCtx *c)
