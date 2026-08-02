@@ -508,25 +508,22 @@ static bool buffer_matches(const TextBuf *tb, u64 off, const u8 *bytes,
     return true;
 }
 
-static bool apply_record(TextBuf *tb, u8 op, u64 off, const u8 *bytes,
+static bool apply_record(EditCtx *ec, u8 op, u64 off, const u8 *bytes,
                          u64 len)
 {
+    TextBuf *tb = ec->tb;
     u64 total = sag_textbuf_len(tb);
-    EditCtx ec;
-
-    (void)memset(&ec, 0, sizeof(ec));
-    ec.tb = tb;
 
     if (off > total) {
         return false;
     }
     if (op == SAG_JOURNAL_INS && len <= UINT64_MAX - total) {
-        sag_edit_insert(&ec, (ByteOff){off}, bytes, len);
+        sag_edit_insert(ec, (ByteOff){off}, bytes, len);
         return true;
     }
     if (op == SAG_JOURNAL_DEL && len <= total - off &&
         buffer_matches(tb, off, bytes, len)) {
-        sag_edit_delete(&ec, (Span){off, off + len});
+        sag_edit_delete(ec, (Span){off, off + len});
         return true;
     }
     return false;
@@ -716,7 +713,123 @@ static const char *replay_realpath(const char *path, const FileMeta *meta,
     return *owned != NULL ? *owned : path;
 }
 
-bool sag_journal_replay(const char *path, TextBuf *tb, FileMeta *m)
+bool sag_journal_probe(const char *path, const FileMeta *m)
+{
+    const char *canonical;
+    char *owned = NULL;
+    char *dir = NULL;
+    char *jpath = NULL;
+    struct stat st;
+    u8 *data = NULL;
+    size_t size;
+    size_t records_at;
+    bool matched = false;
+    int fd = -1;
+
+    if (path == NULL || m == NULL) {
+        errno = EINVAL;
+        return false;
+    }
+    canonical = replay_realpath(path, m, &owned);
+    dir = journal_dir();
+    if (dir == NULL)
+        goto done;
+    jpath = journal_path(dir, canonical);
+    if (jpath == NULL)
+        goto done;
+    if (journal_path_owned(jpath)) {
+        errno = EBUSY;
+        goto done;
+    }
+    fd = open(jpath, O_RDONLY
+#ifdef O_CLOEXEC
+              | O_CLOEXEC
+#endif
+#ifdef O_NOFOLLOW
+              | O_NOFOLLOW
+#endif
+    );
+    if (fd < 0 || !journal_fd_valid(fd, &st))
+        goto done;
+    size = (size_t)st.st_size;
+    data = sag_xmalloc(size == 0U ? 1U : size);
+    if (read_all(fd, data, size))
+        matched = header_matches(data, size, canonical, m, &records_at);
+
+done:
+    if (fd >= 0)
+        (void)close(fd);
+    free(data);
+    free(jpath);
+    free(dir);
+    free(owned);
+    return matched;
+}
+
+bool sag_journal_discard_path(const char *path, const FileMeta *m)
+{
+    const char *canonical;
+    char *owned = NULL;
+    char *dir = NULL;
+    char *jpath = NULL;
+    struct stat st;
+    struct stat path_st;
+    u8 *data = NULL;
+    size_t size;
+    size_t records_at;
+    bool discarded = false;
+    int fd = -1;
+
+    if (path == NULL || m == NULL) {
+        errno = EINVAL;
+        return false;
+    }
+    canonical = replay_realpath(path, m, &owned);
+    dir = journal_dir();
+    if (dir == NULL)
+        goto done;
+    jpath = journal_path(dir, canonical);
+    if (jpath == NULL)
+        goto done;
+    if (journal_path_owned(jpath)) {
+        errno = EBUSY;
+        goto done;
+    }
+    fd = open(jpath, O_RDWR
+#ifdef O_CLOEXEC
+              | O_CLOEXEC
+#endif
+#ifdef O_NOFOLLOW
+              | O_NOFOLLOW
+#endif
+    );
+    if (fd < 0 || !lock_journal(fd) || !journal_fd_valid(fd, &st))
+        goto done;
+    size = (size_t)st.st_size;
+    data = sag_xmalloc(size == 0U ? 1U : size);
+    if (!read_all(fd, data, size) ||
+        !header_matches(data, size, canonical, m, &records_at))
+        goto done;
+    if (lstat(jpath, &path_st) != 0 || path_st.st_dev != st.st_dev ||
+        path_st.st_ino != st.st_ino) {
+        errno = ESTALE;
+        goto done;
+    }
+    if (unlink(jpath) == 0 && fsync_dir(dir))
+        discarded = true;
+
+done:
+    if (fd >= 0)
+        (void)close(fd);
+    free(data);
+    free(jpath);
+    free(dir);
+    free(owned);
+    return discarded;
+}
+
+static bool journal_replay_edit(const char *path, EditCtx *ec, FileMeta *m,
+                                bool external_transaction)
 {
     const char *canonical;
     char *owned = NULL;
@@ -729,7 +842,7 @@ bool sag_journal_replay(const char *path, TextBuf *tb, FileMeta *m)
     bool matched = false;
     int fd = -1;
 
-    if (path == NULL || tb == NULL || m == NULL) {
+    if (path == NULL || ec == NULL || ec->tb == NULL || m == NULL) {
         errno = EINVAL;
         return false;
     }
@@ -773,6 +886,8 @@ bool sag_journal_replay(const char *path, TextBuf *tb, FileMeta *m)
         goto done;
     }
     matched = true;
+    if (external_transaction && ec->undo != NULL)
+        sag_undo_begin(ec, SAG_TXN_EXTERNAL);
     while (size - at >= SAG_JOURNAL_RECORD_FIXED) {
         const u8 *record = data + at;
         u8 op = record[0];
@@ -795,11 +910,13 @@ bool sag_journal_replay(const char *path, TextBuf *tb, FileMeta *m)
         expected = get_u32_le(record + 17U + payload_size);
         actual = sag_crc32(record, 17U + payload_size);
         if (actual != expected ||
-            !apply_record(tb, op, off, record + 17U, payload_len)) {
+            !apply_record(ec, op, off, record + 17U, payload_len)) {
             break;
         }
         at += record_size;
     }
+    if (external_transaction && ec->undo != NULL)
+        sag_undo_end(ec);
     if (at != size) {
         sag_log(SAG_LOG_WARN,
                 "ignored incomplete or corrupt crash journal tail in %s",
@@ -819,4 +936,33 @@ done:
     free(dir);
     free(owned);
     return matched;
+}
+
+bool sag_journal_replay(const char *path, TextBuf *tb, FileMeta *m)
+{
+    EditCtx ec;
+
+    if (tb == NULL) {
+        errno = EINVAL;
+        return false;
+    }
+    (void)memset(&ec, 0, sizeof(ec));
+    ec.tb = tb;
+    return journal_replay_edit(path, &ec, m, false);
+}
+
+bool sag_journal_replay_edit(const char *path, EditCtx *ec, FileMeta *m)
+{
+    EditCtx replay;
+
+    if (ec == NULL) {
+        errno = EINVAL;
+        return false;
+    }
+    replay = *ec;
+    /* Recovery replays an existing durable stream; writing it back would
+     * duplicate every operation and could grow the journal without bound. */
+    replay.jrnl = NULL;
+    replay.meta = NULL;
+    return journal_replay_edit(path, &replay, m, true);
 }

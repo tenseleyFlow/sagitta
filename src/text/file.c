@@ -982,11 +982,46 @@ static void refresh_saved_meta(FileMeta *meta, const struct stat *st,
     meta->size_on_disk = (u64)st->st_size;
 }
 
-SagSaveErr sag_file_save(const TextBuf *tb, FileMeta *meta,
-                         const char *path)
+static SagSaveErr accept_destination(FileMeta *accepted, const char *path)
+{
+    struct stat st;
+
+    if (stat(path, &st) == 0) {
+        if (!S_ISREG(st.st_mode) || st.st_size < 0)
+            return SAG_SAVE_IO;
+        accepted->exists = true;
+        accepted->mode = st.st_mode;
+        accepted->uid = st.st_uid;
+        accepted->gid = st.st_gid;
+        accepted->nlink = st.st_nlink;
+        accepted->dev = st.st_dev;
+        accepted->ino = st.st_ino;
+        accepted->mtime = stat_mtime(&st);
+        accepted->size_on_disk = (u64)st.st_size;
+        return SAG_SAVE_OK;
+    }
+    if (errno != ENOENT)
+        return errno == EACCES || errno == EPERM ? SAG_SAVE_PERM
+                                                  : SAG_SAVE_IO;
+    accepted->exists = false;
+    accepted->mode = 0666U;
+    accepted->uid = 0;
+    accepted->gid = 0;
+    accepted->nlink = 0;
+    accepted->dev = 0;
+    accepted->ino = 0;
+    accepted->mtime = (struct timespec){0, 0};
+    accepted->size_on_disk = 0U;
+    return SAG_SAVE_OK;
+}
+
+static SagSaveErr file_save(const TextBuf *tb, FileMeta *meta,
+                            const char *path, bool force)
 {
     struct stat link_st;
     struct stat saved_st;
+    FileMeta accepted;
+    const FileMeta *expected = meta;
     char *resolved = NULL;
     char *saved_realpath;
     const char *dst = path;
@@ -1008,13 +1043,23 @@ SagSaveErr sag_file_save(const TextBuf *tb, FileMeta *meta,
         resolved = resolve_save_target(path);
         if (resolved == NULL)
             return SAG_SAVE_IO;
-        if (meta->realpath != NULL && strcmp(resolved, meta->realpath) != 0) {
+        if (!force && meta->realpath != NULL &&
+            strcmp(resolved, meta->realpath) != 0) {
             free(resolved);
             return SAG_SAVE_CHANGED_ON_DISK;
         }
         dst = resolved;
     }
-    match = destination_matches(meta, dst, &needs_inplace);
+    if (force) {
+        accepted = *meta;
+        match = accept_destination(&accepted, dst);
+        if (match != SAG_SAVE_OK) {
+            free(resolved);
+            return match;
+        }
+        expected = &accepted;
+    }
+    match = destination_matches(expected, dst, &needs_inplace);
     if (match != SAG_SAVE_OK) {
         free(resolved);
         return match;
@@ -1024,9 +1069,9 @@ SagSaveErr sag_file_save(const TextBuf *tb, FileMeta *meta,
         saved_realpath = canonical_new_path(dst);
     dir = path_dirname(dst);
     if (needs_inplace || !directory_writable(dir))
-        result = inplace_save(tb, meta, dst, &saved_st);
+        result = inplace_save(tb, expected, dst, &saved_st);
     else
-        result = atomic_save(tb, meta, dst, &saved_st);
+        result = atomic_save(tb, expected, dst, &saved_st);
     if (result == SAG_SAVE_OK) {
         refresh_saved_meta(meta, &saved_st, saved_realpath, is_symlink);
         saved_realpath = NULL;
@@ -1035,4 +1080,16 @@ SagSaveErr sag_file_save(const TextBuf *tb, FileMeta *meta,
     free(dir);
     free(resolved);
     return result;
+}
+
+SagSaveErr sag_file_save(const TextBuf *tb, FileMeta *meta,
+                         const char *path)
+{
+    return file_save(tb, meta, path, false);
+}
+
+SagSaveErr sag_file_save_force(const TextBuf *tb, FileMeta *meta,
+                               const char *path)
+{
+    return file_save(tb, meta, path, true);
 }
