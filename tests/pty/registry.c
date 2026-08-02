@@ -1011,8 +1011,9 @@ static void case_s15_resize_roundtrip(PtyCtx *c)
     if (!make_fixture(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
         goto done;
     spawn_editor(c, path);
+    sync_before = c->vt.nsync_pairs;
     ptc_keys(c, "2 5 G right right");
-    ptc_settle(c, 0);
+    settle_sync_delta(c, sync_before, 1U, 0);
     snapshot_write(&c->vt, &before);
     cursor_r = c->vt.cur_r;
     cursor_c = c->vt.cur_c;
@@ -1022,10 +1023,12 @@ static void case_s15_resize_roundtrip(PtyCtx *c)
     ptc_settle(c, 100);
     ptc_check(c, c->vt.nsync_pairs == sync_before,
               "identical SIGWINCH emitted a redundant frame");
+    sync_before = c->vt.nsync_pairs;
     ptc_resize(c, 12U, 40U);
-    ptc_settle(c, 0);
+    settle_sync_delta(c, sync_before, 1U, 0);
+    sync_before = c->vt.nsync_pairs;
     ptc_resize(c, 24U, 80U);
-    ptc_settle(c, 0);
+    settle_sync_delta(c, sync_before, 1U, 0);
     snapshot_write(&c->vt, &after);
     before_at = snapshot_visual_at(&before);
     after_at = snapshot_visual_at(&after);
