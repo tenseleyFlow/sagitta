@@ -153,6 +153,14 @@ static bool parse_atom(const char *s, size_t n, KeyId *out)
             code == 127U || code == (u32)'<')
             return false;
     }
+    if (code < SAG_KEY_BASE && (mods & SAG_MOD_SHIFT) != 0U) {
+        if (code >= (u32)'a' && code <= (u32)'z')
+            code -= (u32)'a' - (u32)'A';
+        mods = (u16)(mods & (u16)~SAG_MOD_SHIFT);
+    }
+    if ((mods & SAG_MOD_CTRL) != 0U && code >= (u32)'A' &&
+        code <= (u32)'Z')
+        code += (u32)'a' - (u32)'A';
     out->v = ((u64)code << 16) | (u64)mods;
     return true;
 }
