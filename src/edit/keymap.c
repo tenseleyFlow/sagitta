@@ -56,9 +56,9 @@ static char *keymap_strdup(const char *s)
     return copy;
 }
 
-static bool text_control(const Key *key)
+static bool code_control(u32 code)
 {
-    return key->code < 32U || key->code == 127U;
+    return code < 32U || code == 127U;
 }
 
 KeyId sag_keyid(Key key)
@@ -71,6 +71,13 @@ KeyId sag_keyid(Key key)
         id.v = 0U;
         return id;
     }
+    if (key.ntext != 0U) {
+        u32 text_code;
+        size_t used = sag_utf8_decode(key.text, key.ntext, &text_code);
+
+        if (used == key.ntext && !sag_utf8_is_escape(text_code))
+            code = text_code;
+    }
     if (code >= 1U && code <= 26U) {
         code = (u32)'a' + code - 1U;
         mods = (u16)(mods | SAG_MOD_CTRL);
@@ -78,7 +85,7 @@ KeyId sag_keyid(Key key)
     if ((mods & SAG_MOD_CTRL) != 0U && code >= (u32)'A' &&
         code <= (u32)'Z')
         code += (u32)'a' - (u32)'A';
-    if (key.ntext != 0U && !text_control(&key))
+    if (key.ntext != 0U && !code_control(code))
         mods = (u16)(mods & (u16)~SAG_MOD_SHIFT);
     id.v = ((u64)code << 16) | (u64)mods;
     return id;
