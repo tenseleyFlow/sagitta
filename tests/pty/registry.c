@@ -755,10 +755,17 @@ static void burst_case(PtyCtx *c, bool paste)
     ptc_settle(c, 0);
     before = c->vt.nsync_pairs;
     ptc_bytes(c, burst);
+    ptc_wait_sync_pairs(c, before + 1U);
     ptc_settle(c, 0);
-    ptc_check(c, c->vt.nsync_pairs == before + 1U,
-              paste ? "4 KiB paste rendered more than one frame" :
-                      "4096-key burst rendered more than one frame");
+    if (c->vt.nsync_pairs != before + 1U) {
+        char failure[128];
+
+        (void)snprintf(failure, sizeof(failure),
+                       "%s rendered %u frames, expected 1",
+                       paste ? "4 KiB paste" : "4096-key burst",
+                       c->vt.nsync_pairs - before);
+        ptc_check(c, false, failure);
+    }
     notepad_snapshot(c, paste ? NOTEPAD_BURST_PASTE : NOTEPAD_BURST_KEYS);
     force_quit(c);
     (void)unlink(path);

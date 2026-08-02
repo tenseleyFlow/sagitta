@@ -466,6 +466,42 @@ void ptc_settle(PtyCtx *c, i64 quiet_ms)
     pump_quiet(c, quiet_ms, !c->ready);
 }
 
+void ptc_wait_sync_pairs(PtyCtx *c, u32 count)
+{
+    i64 deadline;
+
+    if (c == NULL || !c->spawned || c->failed)
+        return;
+    deadline = case_deadline(c);
+    while (c->vt.nsync_pairs < count && !c->failed) {
+        struct pollfd fd = {c->pty.master, POLLIN | POLLHUP, 0};
+        i64 left = deadline - ptc_now_ms();
+        int timeout = left <= 0 ? 0 : left > 250 ? 250 : (int)left;
+        int result;
+        bool activity = false;
+
+        reap_nonblocking(c);
+        if (left <= 0) {
+            c->timed_out = true;
+            ptc_fail(c, "timed out waiting for synchronized frame");
+            break;
+        }
+        result = poll(&fd, 1U, timeout);
+        if (result < 0 && errno == EINTR)
+            continue;
+        if (result < 0) {
+            ptc_fail(c, "poll for synchronized frame: %s",
+                     strerror(errno));
+            break;
+        }
+        if (result > 0 &&
+            (fd.revents & (POLLIN | POLLHUP | POLLERR)) != 0)
+            (void)read_available(c, &activity);
+        if (c->eof && c->pty.reaped && c->vt.nsync_pairs < count)
+            ptc_fail(c, "child exited before synchronized frame");
+    }
+}
+
 void ptc_bytes(PtyCtx *c, const char *lit)
 {
     if (c == NULL || lit == NULL || !c->spawned || c->failed)

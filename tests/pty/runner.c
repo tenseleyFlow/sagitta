@@ -373,10 +373,12 @@ int main(int argc, char **argv)
 {
     const char *demo;
     const char *sagitta;
+    const char *filter = getenv("SAG_PTY_FILTER");
     i64 budget;
     i64 global_deadline;
     bool update = env_truthy("SAG_PTY_UPDATE");
     bool any_updated = false;
+    bool any_selected = false;
     bool ok = true;
     size_t i;
 
@@ -395,6 +397,10 @@ int main(int argc, char **argv)
     global_deadline = budget > INT64_MAX - global_deadline
                           ? INT64_MAX : global_deadline + budget;
     for (i = 0U; sag_pty_cases[i].name != NULL; i++) {
+        if (filter != NULL && *filter != '\0' &&
+            strstr(sag_pty_cases[i].name, filter) == NULL)
+            continue;
+        any_selected = true;
         if (ptc_now_ms() >= global_deadline) {
             (void)fprintf(stderr, "pty: global budget exhausted after %lld ms\n",
                           (long long)budget);
@@ -404,6 +410,10 @@ int main(int argc, char **argv)
         if (!run_case(&sag_pty_cases[i], demo, sagitta, global_deadline,
                       update, &any_updated))
             ok = false;
+    }
+    if (!any_selected) {
+        (void)fprintf(stderr, "pty: filter selected no cases\n");
+        ok = false;
     }
     if (!ptc_sweep_all()) {
         (void)fprintf(stderr,

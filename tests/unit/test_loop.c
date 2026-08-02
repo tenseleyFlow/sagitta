@@ -63,6 +63,7 @@ static void loop_ed_init(Ed *ed)
 static void loop_ed_free(Ed *ed)
 {
     sag_timers_free(&ed->timers);
+    sag_input_free(&ed->in);
     bytebuf_free(&ed->tty.pending);
 }
 
