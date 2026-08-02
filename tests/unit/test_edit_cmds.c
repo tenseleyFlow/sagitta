@@ -1,0 +1,469 @@
+#include "harness.h"
+
+#include <string.h>
+
+#include "edit/ed.h"
+
+#define FAMILY                                                              \
+    "\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x91\xa9"                \
+    "\xe2\x80\x8d\xf0\x9f\x91\xa7\xe2\x80\x8d"                    \
+    "\xf0\x9f\x91\xa6"
+
+static const u8 mixed_fixture[] =
+    "  alpha  \r\n"
+    "e\xcc\x81 \xe6\xbc\xa2 " FAMILY " X\r\n"
+    "line03\r\n"
+    "line04\r\n"
+    "line05\r\n"
+    "line06\r\n"
+    "line07\r\n"
+    "line08\r\n"
+    "line09\r\n"
+    "line10\r\n"
+    "line11\r\n"
+    "line12\r\n"
+    "line13\r\n"
+    "bad:" "\xff" ":byte";
+
+static Key edit_key(u32 code)
+{
+    Key key = {0};
+
+    key.code = code;
+    key.kind = SAG_EV_KEY;
+    key.ev = SAG_KEY_PRESS;
+    if (code < 0x80U) {
+        key.ntext = 1U;
+        key.text[0] = (u8)code;
+    }
+    return key;
+}
+
+static Key edit_text_key(const u8 *bytes, u8 len)
+{
+    Key key = {0};
+
+    SAG_ASSERT(len <= sizeof(key.text));
+    key.code = len == 1U ? bytes[0] : 0U;
+    key.kind = SAG_EV_KEY;
+    key.ev = SAG_KEY_PRESS;
+    key.ntext = len;
+    (void)memcpy(key.text, bytes, len);
+    return key;
+}
+
+static void edit_fixture(Ed *ed, const u8 *bytes, size_t len, SagEol eol)
+{
+    Cursor *cursor;
+
+    sag_ed_init(ed);
+    SAG_ASSERT(sag_ed_open_scratch(ed));
+    sag_undo_free(ed->buffer.undo);
+    sag_textbuf_free(ed->buffer.tb);
+    ed->buffer.tb = sag_textbuf_from_bytes(bytes, len);
+    ed->buffer.undo = sag_undo_new(ed->buffer.tb);
+    ed->buffer.meta.eol = eol;
+    ed->buffer.meta.dominant_eol = eol;
+    ed->buffer.meta.crlf_count = eol == SAG_EOL_CRLF ? 1U : 0U;
+    ed->buffer.meta.lf_count = eol == SAG_EOL_LF ? 1U : 0U;
+    ed->win->vp.rows = 4U;
+    ed->win->vp.cols = 80U;
+    cursor = sag_ed_cursor(ed);
+    SAG_ASSERT_NOT_NULL(cursor);
+    cursor->pos = BYTEOFF(0U);
+    cursor->anchor = BYTEOFF(0U);
+    cursor->goal_col = (GCol){0U};
+    SAG_ASSERT_EQ_U64(sag_undo_current(ed->buffer.undo),
+                      ed->buffer.undo->root);
+}
+
+static CmdStatus edit_invoke(Ed *ed, const char *name, u32 count,
+                             bool count_given, const char *arg, u32 arg_len)
+{
+    CmdId id = sag_cmd_lookup(name, (u32)strlen(name));
+    CmdCtx cx = {0};
+
+    SAG_ASSERT(id.v != 0U);
+    cx.ed = ed;
+    cx.win = ed->win;
+    cx.count = count;
+    cx.count_given = count_given;
+    cx.sarg = arg;
+    cx.sarg_len = arg_len;
+    cx.source = SAG_SRC_TEST;
+    return sag_ed_invoke(ed, id, &cx);
+}
+
+static Bytebuf edit_materialize(const TextBuf *tb)
+{
+    Bytebuf out;
+    TextIter iter;
+
+    bytebuf_init(&out);
+    if (sag_textiter_begin(&iter, tb, BYTEOFF(0U))) {
+        do {
+            const u8 *chunk;
+            u64 len;
+
+            SAG_ASSERT(sag_textiter_chunk(&iter, tb, &chunk, &len));
+            bytebuf_append(&out, chunk, (size_t)len);
+        } while (sag_textiter_advance(&iter, tb));
+    }
+    return out;
+}
+
+static void edit_assert_text(const Ed *ed, const u8 *want, size_t want_len)
+{
+    Bytebuf got = edit_materialize(ed->buffer.tb);
+
+    SAG_ASSERT_EQ_U64(sag_textbuf_len(ed->buffer.tb), want_len);
+    SAG_ASSERT_EQ_U64(got.len, want_len);
+    SAG_ASSERT_EQ_MEM(got.data, want, want_len);
+    bytebuf_free(&got);
+}
+
+static void edit_place(Ed *ed, u64 off)
+{
+    Cursor *cursor = sag_ed_cursor(ed);
+    Span line;
+
+    SAG_ASSERT_NOT_NULL(cursor);
+    cursor->pos = BYTEOFF(off);
+    cursor->anchor = cursor->pos;
+    line = sag_textbuf_line_span(ed->buffer.tb,
+                                 sag_textbuf_line_of(ed->buffer.tb,
+                                                    cursor->pos));
+    cursor->goal_col = sag_off_to_gcol(ed->buffer.tb, line, cursor->pos);
+}
+
+void test_edit_l_motion_table_handles_unicode_crlf_and_viewport_counts(void)
+{
+    Ed ed;
+    Cursor *cursor;
+    Span line;
+
+    edit_fixture(&ed, mixed_fixture, sizeof(mixed_fixture) - 1U,
+                 SAG_EOL_CRLF);
+    cursor = sag_ed_cursor(&ed);
+    edit_place(&ed, 5U);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.move.line.home", 1U, false,
+                                  NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(cursor->pos.v, 0U);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.move.line.end", 1U, false,
+                                  NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(cursor->pos.v, 9U);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.move.line.first_nonblank", 1U,
+                                  false, NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(cursor->pos.v, 2U);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.move.line.last_nonblank", 1U,
+                                  false, NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(cursor->pos.v, 6U);
+
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.move.line.down", 1U, false,
+                                  NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(sag_textbuf_line_of(ed.buffer.tb, cursor->pos).v, 1U);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.move.line.up", 1U, false,
+                                  NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(sag_textbuf_line_of(ed.buffer.tb, cursor->pos).v, 0U);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.move.line.half_page_down", 1U,
+                                  false, NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(sag_textbuf_line_of(ed.buffer.tb, cursor->pos).v, 2U);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.view.page_down", 1U, false,
+                                  NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(sag_textbuf_line_of(ed.buffer.tb, cursor->pos).v, 6U);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.view.page_up", 1U, false,
+                                  NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(sag_textbuf_line_of(ed.buffer.tb, cursor->pos).v, 2U);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.move.line.half_page_up", 1U,
+                                  false, NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(sag_textbuf_line_of(ed.buffer.tb, cursor->pos).v, 0U);
+
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.move.buf.end", 12U, true,
+                                  NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(sag_textbuf_line_of(ed.buffer.tb, cursor->pos).v, 11U);
+    line = sag_textbuf_line_span(ed.buffer.tb, LINENO(11U));
+    SAG_ASSERT_EQ_U64(cursor->pos.v, line.lo);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.move.buf.home", 1U, false,
+                                  NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(cursor->pos.v, 0U);
+    sag_ed_free(&ed);
+}
+
+void test_edit_12G_dispatch_lands_on_one_based_line_twelve(void)
+{
+    Ed ed;
+    Cursor *cursor;
+
+    edit_fixture(&ed, mixed_fixture, sizeof(mixed_fixture) - 1U,
+                 SAG_EOL_CRLF);
+    sag_ed_handle_key(&ed, edit_key((u32)'1'), 0);
+    sag_ed_handle_key(&ed, edit_key((u32)'2'), 0);
+    SAG_ASSERT(ed.chord.count_given);
+    SAG_ASSERT_EQ_U64(ed.chord.count, 12U);
+    sag_ed_handle_key(&ed, edit_key((u32)'G'), 0);
+    cursor = sag_ed_cursor(&ed);
+    SAG_ASSERT_EQ_U64(ed.last_status, SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(sag_textbuf_line_of(ed.buffer.tb, cursor->pos).v, 11U);
+    SAG_ASSERT_EQ_U64(cursor->pos.v,
+                      sag_textbuf_line_start(ed.buffer.tb, LINENO(11U)).v);
+    SAG_ASSERT(!ed.chord.count_given);
+    SAG_ASSERT_EQ_U64(ed.dispatch_count, 1U);
+    sag_ed_free(&ed);
+}
+
+void test_edit_delete_zwj_grapheme_removes_exactly_twenty_five_bytes(void)
+{
+    static const u8 before[] = FAMILY "X";
+    static const u8 after[] = "X";
+    Ed ed;
+
+    edit_fixture(&ed, before, sizeof(before) - 1U, SAG_EOL_LF);
+    SAG_ASSERT_EQ_U64(sizeof(before) - sizeof(after), 25U);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.delete.grapheme", 1U,
+                                  false, NULL, 0U), SAG_CMD_OK);
+    edit_assert_text(&ed, after, sizeof(after) - 1U);
+    SAG_ASSERT_EQ_U64(sag_ed_cursor(&ed)->pos.v, 0U);
+    SAG_ASSERT_EQ_U64(sag_undo_current(ed.buffer.undo),
+                      ed.buffer.undo->root + 1U);
+    sag_ed_free(&ed);
+}
+
+void test_edit_4x_is_one_undo_step_for_four_clusters(void)
+{
+    static const u8 before[] = "a" FAMILY "\xe6\xbc\xa2" "bc";
+    static const u8 after[] = "c";
+    Ed ed;
+
+    edit_fixture(&ed, before, sizeof(before) - 1U, SAG_EOL_LF);
+    sag_ed_handle_key(&ed, edit_key((u32)'4'), 0);
+    sag_ed_handle_key(&ed, edit_key((u32)'x'), 0);
+    SAG_ASSERT_EQ_U64(ed.last_status, SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(ed.dispatch_count, 1U);
+    SAG_ASSERT_EQ_U64(sag_undo_current(ed.buffer.undo),
+                      ed.buffer.undo->root + 1U);
+    edit_assert_text(&ed, after, sizeof(after) - 1U);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.undo", 1U, false,
+                                  NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(sag_undo_current(ed.buffer.undo),
+                      ed.buffer.undo->root);
+    edit_assert_text(&ed, before, sizeof(before) - 1U);
+    sag_ed_free(&ed);
+}
+
+void test_edit_insert_newline_uses_crlf_bytes(void)
+{
+    static const u8 before[] = "ab\r\ncd";
+    static const u8 after[] = "ab\r\n\r\ncd";
+    Ed ed;
+
+    edit_fixture(&ed, before, sizeof(before) - 1U, SAG_EOL_CRLF);
+    edit_place(&ed, 4U);
+    SAG_ASSERT_EQ_U64(sag_mode_enter(&ed, SAG_MODE_I), SAG_CMD_OK);
+    sag_ed_handle_key(&ed, edit_key(SAG_KEY_ENTER), 0);
+    SAG_ASSERT_EQ_U64(ed.last_status, SAG_CMD_OK);
+    edit_assert_text(&ed, after, sizeof(after) - 1U);
+    SAG_ASSERT_EQ_U64(sag_ed_cursor(&ed)->pos.v, 6U);
+    SAG_ASSERT_EQ_U64(sag_undo_current(ed.buffer.undo),
+                      ed.buffer.undo->root + 1U);
+    SAG_ASSERT(!ed.insert_txn);
+    sag_ed_free(&ed);
+}
+
+void test_edit_backspace_at_line_start_joins_crlf_lines(void)
+{
+    static const u8 before[] = "ab\r\ncd";
+    static const u8 after[] = "abcd";
+    Ed ed;
+
+    edit_fixture(&ed, before, sizeof(before) - 1U, SAG_EOL_CRLF);
+    edit_place(&ed, 4U);
+    SAG_ASSERT_EQ_U64(sag_mode_enter(&ed, SAG_MODE_I), SAG_CMD_OK);
+    sag_ed_handle_key(&ed, edit_key(SAG_KEY_BACKSPACE), 0);
+    SAG_ASSERT_EQ_U64(ed.last_status, SAG_CMD_OK);
+    edit_assert_text(&ed, after, sizeof(after) - 1U);
+    SAG_ASSERT_EQ_U64(sag_ed_cursor(&ed)->pos.v, 2U);
+    SAG_ASSERT(ed.insert_txn);
+    sag_ed_handle_key(&ed, edit_key(SAG_KEY_ESCAPE), 0);
+    SAG_ASSERT(!ed.insert_txn);
+    SAG_ASSERT_EQ_U64(sag_undo_current(ed.buffer.undo),
+                      ed.buffer.undo->root + 1U);
+    sag_ed_free(&ed);
+}
+
+void test_edit_insert_text_and_tab_share_one_insert_transaction(void)
+{
+    static const u8 acute[] = {0xc3U, 0xa9U};
+    static const u8 want[] = {0xc3U, 0xa9U, (u8)'\t'};
+    Ed ed;
+
+    edit_fixture(&ed, NULL, 0U, SAG_EOL_LF);
+    SAG_ASSERT_EQ_U64(sag_mode_enter(&ed, SAG_MODE_I), SAG_CMD_OK);
+    sag_ed_handle_key(&ed, edit_text_key(acute, sizeof(acute)), 0);
+    SAG_ASSERT_EQ_U64(ed.last_status, SAG_CMD_OK);
+    SAG_ASSERT(ed.insert_txn);
+    sag_ed_handle_key(&ed, edit_key(SAG_KEY_TAB), 0);
+    SAG_ASSERT_EQ_U64(ed.last_status, SAG_CMD_OK);
+    SAG_ASSERT(ed.insert_txn);
+    sag_ed_handle_key(&ed, edit_key(SAG_KEY_ESCAPE), 0);
+    edit_assert_text(&ed, want, sizeof(want));
+    SAG_ASSERT_EQ_U64(sag_undo_current(ed.buffer.undo),
+                      ed.buffer.undo->root + 1U);
+    SAG_ASSERT(!ed.insert_txn);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.undo", 1U, false,
+                                  NULL, 0U), SAG_CMD_OK);
+    edit_assert_text(&ed, NULL, 0U);
+    sag_ed_free(&ed);
+}
+
+void test_edit_insert_motion_splits_typing_into_two_undo_steps(void)
+{
+    static const u8 typed[] = "hello";
+    static const u8 after_motion[] = "helol";
+    static const u8 hel[] = "hel";
+    static const u8 empty[] = "";
+    Ed ed;
+    size_t i;
+
+    edit_fixture(&ed, NULL, 0U, SAG_EOL_LF);
+    SAG_ASSERT_EQ_U64(sag_mode_enter(&ed, SAG_MODE_I), SAG_CMD_OK);
+    for (i = 0U; i < 3U; i++)
+        sag_ed_handle_key(&ed, edit_key((u32)typed[i]), 0);
+    SAG_ASSERT(ed.insert_txn);
+    sag_ed_handle_key(&ed, edit_key(SAG_KEY_LEFT), 0);
+    SAG_ASSERT(!ed.insert_txn);
+    for (i = 3U; i < sizeof(typed) - 1U; i++)
+        sag_ed_handle_key(&ed, edit_key((u32)typed[i]), 0);
+    sag_ed_handle_key(&ed, edit_key(SAG_KEY_ESCAPE), 0);
+    edit_assert_text(&ed, after_motion, sizeof(after_motion) - 1U);
+    SAG_ASSERT_EQ_U64(sag_undo_current(ed.buffer.undo),
+                      ed.buffer.undo->root + 2U);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.undo", 1U, false,
+                                  NULL, 0U), SAG_CMD_OK);
+    edit_assert_text(&ed, hel, sizeof(hel) - 1U);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.undo", 1U, false,
+                                  NULL, 0U), SAG_CMD_OK);
+    edit_assert_text(&ed, empty, 0U);
+    sag_ed_free(&ed);
+}
+
+void test_edit_escape_closes_typing_as_one_undo_step(void)
+{
+    static const u8 hello[] = "hello";
+    Ed ed;
+    size_t i;
+
+    edit_fixture(&ed, NULL, 0U, SAG_EOL_LF);
+    SAG_ASSERT_EQ_U64(sag_mode_enter(&ed, SAG_MODE_I), SAG_CMD_OK);
+    for (i = 0U; i < sizeof(hello) - 1U; i++)
+        sag_ed_handle_key(&ed, edit_key((u32)hello[i]), 0);
+    SAG_ASSERT(ed.insert_txn);
+    SAG_ASSERT_EQ_U64(sag_undo_current(ed.buffer.undo),
+                      ed.buffer.undo->root + 1U);
+    SAG_ASSERT_EQ_U64(ed.buffer.undo->depth, 1U);
+    sag_ed_handle_key(&ed, edit_key(SAG_KEY_ESCAPE), 0);
+    SAG_ASSERT_EQ_U64(ed.mode, SAG_MODE_L);
+    SAG_ASSERT(!ed.insert_txn);
+    SAG_ASSERT_EQ_U64(sag_undo_current(ed.buffer.undo),
+                      ed.buffer.undo->root + 1U);
+    edit_assert_text(&ed, hello, sizeof(hello) - 1U);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.undo", 1U, false,
+                                  NULL, 0U), SAG_CMD_OK);
+    edit_assert_text(&ed, NULL, 0U);
+    sag_ed_free(&ed);
+}
+
+void test_edit_open_above_and_below_emit_native_eol_and_enter_insert(void)
+{
+    static const u8 before[] = "aa\r\nbb";
+    static const u8 above[] = "aa\r\n\r\nbb";
+    static const u8 both[] = "aa\r\n\r\n\r\nbb";
+    Ed ed;
+
+    edit_fixture(&ed, before, sizeof(before) - 1U, SAG_EOL_CRLF);
+    edit_place(&ed, 4U);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.line.open_above", 1U,
+                                  false, NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(ed.mode, SAG_MODE_I);
+    SAG_ASSERT_EQ_U64(sag_ed_cursor(&ed)->pos.v, 4U);
+    edit_assert_text(&ed, above, sizeof(above) - 1U);
+    SAG_ASSERT_EQ_U64(sag_mode_escape(&ed), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.line.open_below", 1U,
+                                  false, NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(ed.mode, SAG_MODE_I);
+    SAG_ASSERT_EQ_U64(sag_ed_cursor(&ed)->pos.v, 6U);
+    edit_assert_text(&ed, both, sizeof(both) - 1U);
+    sag_ed_free(&ed);
+}
+
+void test_edit_line_delete_undo_and_redo_preserve_crlf_bytes(void)
+{
+    static const u8 before[] = "aa\r\nbb\r\ncc";
+    static const u8 after[] = "aa\r\ncc";
+    Ed ed;
+
+    edit_fixture(&ed, before, sizeof(before) - 1U, SAG_EOL_CRLF);
+    edit_place(&ed, 4U);
+    sag_ed_handle_key(&ed, edit_key((u32)'d'), 0);
+    SAG_ASSERT_EQ_U64(ed.chord.n, 1U);
+    sag_ed_handle_key(&ed, edit_key((u32)'d'), 0);
+    SAG_ASSERT_EQ_U64(ed.last_status, SAG_CMD_OK);
+    edit_assert_text(&ed, after, sizeof(after) - 1U);
+    SAG_ASSERT_EQ_U64(sag_undo_current(ed.buffer.undo),
+                      ed.buffer.undo->root + 1U);
+    sag_ed_handle_key(&ed, edit_key((u32)'u'), 0);
+    edit_assert_text(&ed, before, sizeof(before) - 1U);
+    SAG_ASSERT_EQ_U64(sag_undo_current(ed.buffer.undo),
+                      ed.buffer.undo->root);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.redo", 1U, false,
+                                  NULL, 0U), SAG_CMD_OK);
+    edit_assert_text(&ed, after, sizeof(after) - 1U);
+    sag_ed_free(&ed);
+}
+
+void test_edit_insert_after_and_i_arrows_use_grapheme_boundaries(void)
+{
+    static const u8 before[] = "A" FAMILY "\xe6\xbc\xa2\r\nZ";
+    Ed ed;
+    Cursor *cursor;
+
+    edit_fixture(&ed, before, sizeof(before) - 1U, SAG_EOL_CRLF);
+    cursor = sag_ed_cursor(&ed);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.insert.after", 1U, false,
+                                  NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(ed.mode, SAG_MODE_I);
+    SAG_ASSERT_EQ_U64(cursor->pos.v, 1U);
+    sag_ed_handle_key(&ed, edit_key(SAG_KEY_RIGHT), 0);
+    SAG_ASSERT_EQ_U64(cursor->pos.v, 26U);
+    sag_ed_handle_key(&ed, edit_key(SAG_KEY_RIGHT), 0);
+    SAG_ASSERT_EQ_U64(cursor->pos.v, 29U);
+    sag_ed_handle_key(&ed, edit_key(SAG_KEY_LEFT), 0);
+    SAG_ASSERT_EQ_U64(cursor->pos.v, 26U);
+    sag_ed_handle_key(&ed, edit_key(SAG_KEY_END), 0);
+    SAG_ASSERT_EQ_U64(cursor->pos.v, 29U);
+    sag_ed_handle_key(&ed, edit_key(SAG_KEY_DOWN), 0);
+    SAG_ASSERT_EQ_U64(sag_textbuf_line_of(ed.buffer.tb, cursor->pos).v, 1U);
+    sag_ed_handle_key(&ed, edit_key(SAG_KEY_HOME), 0);
+    SAG_ASSERT_EQ_U64(cursor->pos.v,
+                      sag_textbuf_line_start(ed.buffer.tb, LINENO(1U)).v);
+    sag_ed_handle_key(&ed, edit_key(SAG_KEY_UP), 0);
+    SAG_ASSERT_EQ_U64(sag_textbuf_line_of(ed.buffer.tb, cursor->pos).v, 0U);
+    sag_ed_free(&ed);
+}
+
+void test_edit_forward_delete_removes_invalid_byte_as_one_cluster(void)
+{
+    static const u8 before[] = {(u8)'a', 0xffU, (u8)'b'};
+    static const u8 after[] = {(u8)'a', (u8)'b'};
+    Ed ed;
+
+    edit_fixture(&ed, before, sizeof(before), SAG_EOL_LF);
+    edit_place(&ed, 1U);
+    SAG_ASSERT_EQ_U64(sag_mode_enter(&ed, SAG_MODE_I), SAG_CMD_OK);
+    sag_ed_handle_key(&ed, edit_key(SAG_KEY_DELETE), 0);
+    SAG_ASSERT_EQ_U64(ed.last_status, SAG_CMD_OK);
+    edit_assert_text(&ed, after, sizeof(after));
+    SAG_ASSERT_EQ_U64(sag_ed_cursor(&ed)->pos.v, 1U);
+    sag_ed_free(&ed);
+}
+
+#undef FAMILY

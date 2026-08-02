@@ -115,7 +115,7 @@ void test_chord_full_prefix_timeout_and_refeed(void)
         {"q !", "ed.ui.open", 0, NULL},
         {"i", "ed.ui.close", 0, NULL},
     };
-    Ed ed;
+    Ed ed = {0};
 
     chord_editor(&ed, rows, SAG_ARRAY_LEN(rows));
     chord_probe_reset();
@@ -149,7 +149,7 @@ void test_chord_dead_sequence_escape_and_release(void)
         {"q", "ed.ui.toggle", 0, NULL},
         {"q !", "ed.ui.open", 0, NULL},
     };
-    Ed ed;
+    Ed ed = {0};
     Key release = chord_text_key('z');
 
     chord_editor(&ed, rows, SAG_ARRAY_LEN(rows));
@@ -190,7 +190,7 @@ void test_chord_top_layer_owns_sequence(void)
         {"g x", "ed.ui.open", 0, NULL},
     };
     Keymap plugin = {0};
-    Ed ed;
+    Ed ed = {0};
 
     chord_editor(&ed, mode_rows, SAG_ARRAY_LEN(mode_rows));
     SAG_ASSERT(sag_keymap_build(&plugin, "plug:vimish", plugin_rows,

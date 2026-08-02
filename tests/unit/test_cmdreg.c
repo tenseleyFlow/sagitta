@@ -11,6 +11,7 @@
 #include <unistd.h>
 
 #include "edit/cmd.h"
+#include "edit/ed.h"
 #include "util/buf.h"
 
 static u32 probe_calls;
@@ -79,6 +80,7 @@ void test_cmd_registry_builtins_are_deterministic(void)
 
 void test_cmd_registry_invocation_and_deferred(void)
 {
+    Ed fake_ed = {0};
     static const CmdDesc repeat_desc = {
         "ed.ui.toggle", probe_repeat, SAG_ARITY_NONE,
         SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE, "Toggle the test probe",
@@ -155,14 +157,22 @@ void test_cmd_registry_invocation_and_deferred(void)
         CmdId enter = sag_cmd_lookup("ed.mode.enter", 13U);
 
         mode.count = 1U;
+        mode.ed = &fake_ed;
         mode.source = SAG_SRC_TEST;
         mode.sarg = mode_rows[i].mode;
         mode.sarg_len = 1U;
         sag_test_capture_log();
-        SAG_ASSERT_EQ_I64(sag_cmd_invoke(enter, &mode),
-                          SAG_CMD_ERR_DEFERRED);
-        SAG_ASSERT(sag_test_log_contains(SAG_LOG_ERROR,
-                                         mode_rows[i].sprint));
+        if (i < 2U) {
+            SAG_ASSERT_EQ_I64(sag_cmd_invoke(enter, &mode), SAG_CMD_OK);
+            SAG_ASSERT_EQ_U64(fake_ed.mode,
+                              mode_rows[i].mode[0] == 'L' ? SAG_MODE_L :
+                                                           SAG_MODE_I);
+        } else {
+            SAG_ASSERT_EQ_I64(sag_cmd_invoke(enter, &mode),
+                              SAG_CMD_ERR_DEFERRED);
+            SAG_ASSERT(sag_test_log_contains(SAG_LOG_ERROR,
+                                             mode_rows[i].sprint));
+        }
     }
     sag_cmd_shutdown();
 }

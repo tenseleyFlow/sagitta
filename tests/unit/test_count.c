@@ -101,7 +101,7 @@ static void count_editor(Ed *ed)
 
 void test_count_repeat_and_takes_count(void)
 {
-    Ed ed;
+    Ed ed = {0};
     u32 i;
 
     count_editor(&ed);
@@ -138,7 +138,7 @@ void test_count_repeat_and_takes_count(void)
 
 void test_count_zero_reset_and_escape(void)
 {
-    Ed ed;
+    Ed ed = {0};
 
     count_editor(&ed);
     count_probe_reset();
@@ -171,7 +171,7 @@ void test_count_insert_mode_digits_are_keys(void)
     static const BindRow rows[] = {
         {"4", "ed.ui.expand", 0, NULL},
     };
-    Ed ed;
+    Ed ed = {0};
 
     count_editor(&ed);
     sag_keymap_free(&ed.mode_keys[SAG_MODE_I]);

@@ -124,7 +124,7 @@ static bool default_roundtrip(const KeyId *seq, u32 n,
 void test_keyseq_default_tables_roundtrip(void)
 {
     DefaultVisit visit = {0};
-    Ed ed;
+    Ed ed = {0};
     u32 i;
 
     sag_dispatch_init(&ed);
