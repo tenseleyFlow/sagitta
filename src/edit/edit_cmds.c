@@ -463,7 +463,9 @@ static CmdStatus insert_bytes(CmdCtx *cx, const u8 *bytes, u64 len)
     }
     sag_ed_finish_edit(cx->ed, &ec);
     win->wrap_goal_valid = false;
-    sag_win_follow_cursor(win);
+    /* Typeahead is drained as one event-loop batch.  Following here would
+     * rescan the growing line for every byte; render follows once instead. */
+    cx->ed->cursor_follow_pending = true;
     sag_ed_damage_line(cx->ed, line,
                        old_line_count != sag_textbuf_line_count(tb));
     return SAG_CMD_OK;

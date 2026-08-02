@@ -58,6 +58,7 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
     ed->layout_dirty = true;
     ed->full_damage = true;
     ed->footer_dirty = true;
+    ed->cursor_follow_pending = false;
     ed->doc_damage_lo = 0U;
     ed->doc_damage_hi = 0U;
     ed->drawn_top_valid = false;
@@ -616,6 +617,10 @@ void sag_ed_render(Ed *ed)
         !ed->model_ready)
         return;
     win = ed->win;
+    if (ed->cursor_follow_pending) {
+        sag_win_follow_cursor(win);
+        ed->cursor_follow_pending = false;
+    }
     if (!ed->drawn_top_valid ||
         ed->drawn_top.v != sag_win_view_top(win).v ||
         ed->drawn_top_sub != win->vp.top_sub ||

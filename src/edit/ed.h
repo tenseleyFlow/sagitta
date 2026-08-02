@@ -80,6 +80,7 @@ struct Ed {
     bool layout_dirty;
     bool full_damage;
     bool footer_dirty;
+    bool cursor_follow_pending;
     u16 doc_damage_lo;
     u16 doc_damage_hi;
     LineNo drawn_top;
