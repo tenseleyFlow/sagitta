@@ -339,6 +339,13 @@ static void spawn_editor(PtyCtx *c, const char *path)
     ptc_wait_kitty_push(c, 21U);
 }
 
+static void settle_sync_delta(PtyCtx *c, u32 before, u32 delta,
+                              i64 quiet_ms)
+{
+    ptc_wait_sync_pairs(c, before + delta);
+    ptc_settle(c, quiet_ms);
+}
+
 static void force_quit(PtyCtx *c)
 {
     ptc_allow_restore(c);
@@ -459,15 +466,17 @@ static void case_notepad_insert(PtyCtx *c)
 {
     static const u8 initial[] = "tail\n";
     char path[256];
+    u32 before;
 
     if (!make_fixture(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
         return;
     spawn_editor(c, path);
+    before = c->vt.nsync_pairs;
     ptc_keys(c, "i");
     ptc_bytes(c, "h\xc3\xa9llo \xe6\xbc\xa2\xe5\xad\x97 "
                  "\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x91\xa9\xe2\x80\x8d"
                  "\xf0\x9f\x91\xa7\xe2\x80\x8d\xf0\x9f\x91\xa6");
-    ptc_settle(c, 0);
+    settle_sync_delta(c, before, 1U, 0);
     ptc_snapshot(c, "notepad_insert");
     force_quit(c);
     (void)unlink(path);
@@ -477,12 +486,14 @@ static void case_notepad_escape(PtyCtx *c)
 {
     static const u8 initial[] = "tail\n";
     char path[256];
+    u32 before;
 
     if (!make_fixture(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
         return;
     spawn_editor(c, path);
+    before = c->vt.nsync_pairs;
     ptc_keys(c, "i h e l l o esc");
-    ptc_settle(c, 0);
+    settle_sync_delta(c, before, 1U, 0);
     ptc_snapshot(c, "notepad_escape");
     force_quit(c);
     (void)unlink(path);
@@ -493,12 +504,14 @@ static void case_notepad_save(PtyCtx *c)
     static const u8 initial[] = "tail\n";
     static const u8 expected[] = "hellotail\n";
     char path[256];
+    u32 before;
 
     if (!make_fixture(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
         return;
     spawn_editor(c, path);
+    before = c->vt.nsync_pairs;
     ptc_keys(c, "i h e l l o esc s");
-    ptc_settle(c, 0);
+    settle_sync_delta(c, before, 1U, 0);
     ptc_check(c, file_equals(path, expected, sizeof(expected) - 1U),
               "live save did not write the edited bytes");
     ptc_snapshot(c, "notepad_save");
@@ -511,6 +524,7 @@ static void case_notepad_save_error(PtyCtx *c)
     static const u8 initial[] = "clean\n";
     static const char dir[] = "build/pty-s14-save-error";
     static const char path[] = "build/pty-s14-save-error/file.txt";
+    u32 before;
 
     if ((mkdir(dir, 0700) != 0 && errno != EEXIST) ||
         !write_bytes(path, initial, sizeof(initial) - 1U)) {
@@ -522,8 +536,9 @@ static void case_notepad_save_error(PtyCtx *c)
         ptc_check(c, false, "could not remove failing-save destination");
         return;
     }
+    before = c->vt.nsync_pairs;
     ptc_keys(c, "i X esc s");
-    ptc_settle(c, 0);
+    settle_sync_delta(c, before, 1U, 0);
     ptc_check(c, !c->pty.reaped, "failed save unexpectedly exited editor");
     ptc_snapshot(c, "notepad_save_error");
     force_quit(c);
@@ -535,12 +550,14 @@ static void dirty_prompt(PtyCtx *c, NotepadGolden golden, char answer)
     static const u8 expected[] = "Xclean\n";
     char path[256];
     char answer_spec[2] = {answer, '\0'};
+    u32 before;
 
     if (!make_fixture(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
         return;
     spawn_editor(c, path);
+    before = c->vt.nsync_pairs;
     ptc_keys(c, "i X esc q");
-    ptc_settle(c, 600);
+    settle_sync_delta(c, before, 2U, 600);
     notepad_snapshot(c, golden);
     if (answer == 'w') {
         ptc_allow_restore(c);
@@ -670,6 +687,7 @@ static void preserve_case(PtyCtx *c, NotepadGolden golden,
     size_t insert_at = initial_len >= 3U && initial[0] == 0xefU &&
                        initial[1] == 0xbbU && initial[2] == 0xbfU ? 3U : 0U;
     char path[256];
+    u32 before;
 
     if (expected == NULL) {
         ptc_check(c, false, "allocating preservation oracle");
@@ -684,8 +702,9 @@ static void preserve_case(PtyCtx *c, NotepadGolden golden,
         return;
     }
     spawn_editor(c, path);
+    before = c->vt.nsync_pairs;
     ptc_keys(c, "i Z esc s");
-    ptc_settle(c, 0);
+    settle_sync_delta(c, before, 1U, 0);
     ptc_check(c, file_equals(path, expected, initial_len + 1U),
               "live edit/save did not preserve fixture bytes");
     notepad_snapshot(c, golden);
@@ -839,6 +858,7 @@ static void case_live_restore_suspend(PtyCtx *c)
     const u32 active_modes = VT_MODE_BRACKETED_PASTE | VT_MODE_BUTTON_MOUSE |
                              VT_MODE_SGR_MOUSE | VT_MODE_FOCUS;
     char path[256];
+    u32 before;
 
     if (!make_fixture(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
         return;
@@ -847,8 +867,9 @@ static void case_live_restore_suspend(PtyCtx *c)
     ptc_check(c, c->vt.alt && c->vt.modes == active_modes &&
                  c->vt.ksp == 1 && c->vt.kitty[0] == 21U,
               "ed.suspend + SIGCONT did not restore the interactive modes");
+    before = c->vt.nsync_pairs;
     ptc_keys(c, "i R esc s");
-    ptc_settle(c, 0);
+    settle_sync_delta(c, before, 1U, 0);
     ptc_check(c, file_equals(path, expected, sizeof(expected) - 1U),
               "editor was not usable after ed.suspend + SIGCONT");
     notepad_snapshot(c, NOTEPAD_RESTORE_SUSPEND);
@@ -886,12 +907,14 @@ static void case_notepad_quit_force(PtyCtx *c)
 {
     static const u8 initial[] = "keep\n";
     char path[256];
+    u32 before;
 
     if (!make_fixture(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
         return;
     spawn_editor(c, path);
+    before = c->vt.nsync_pairs;
     ptc_keys(c, "i X esc");
-    ptc_settle(c, 0);
+    settle_sync_delta(c, before, 1U, 0);
     ptc_snapshot(c, "notepad_quit_force");
     force_quit(c);
     ptc_check(c, file_equals(path, initial, sizeof(initial) - 1U),

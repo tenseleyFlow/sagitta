@@ -953,8 +953,10 @@ static bool enter_suspend(PtyCtx *c, bool through_command)
         return false;
     }
     c->ready = false;
-    if (through_command)
-        return true;
+    if (through_command) {
+        pump_quiet(c, PTC_DEFAULT_QUIET_MS, false);
+        return !c->failed;
+    }
     /* setsid() makes this fixture's process group orphaned, so the
      * job-control SIGTSTP may be discarded. SIGSTOP gives the harness a
      * portable stopped state after the real handler has restored the tty. */
@@ -1032,7 +1034,14 @@ static void resume_suspended(PtyCtx *c)
                 c->pty.reaped = true;
                 c->pty.status = status;
                 live_remove(&c->pty);
-                ptc_fail(c, "child exited before repaint after SIGCONT");
+                if (WIFEXITED(status))
+                    ptc_fail(c,
+                             "child exited %d before repaint after SIGCONT",
+                             WEXITSTATUS(status));
+                else
+                    ptc_fail(c,
+                             "child died on signal %d before repaint after SIGCONT",
+                             WTERMSIG(status));
                 break;
             }
         } else if (result < 0) {
