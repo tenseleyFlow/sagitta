@@ -551,6 +551,93 @@ static const u8 *store_bytes(const TextBuf *tb, u8 src, Span span)
     return store->bytes + (size_t)span.lo;
 }
 
+typedef struct {
+    u64 off;
+    u64 len;
+    u64 payload;
+} LastInsertSpan;
+
+VEC_DECL(SagLastInsertSpanVec, LastInsertSpan);
+
+static void last_insert_push(SagLastInsertSpanVec *spans, u64 off,
+                             u64 len, u64 payload)
+{
+    LastInsertSpan span;
+
+    if (len == 0U)
+        return;
+    span.off = off;
+    span.len = len;
+    span.payload = payload;
+    SagLastInsertSpanVec_push(spans, span);
+}
+
+static void last_insert_apply_insert(SagLastInsertSpanVec *spans,
+                                     const UndoOp *op)
+{
+    SagLastInsertSpanVec next = {0};
+    bool placed = false;
+    size_t i;
+
+    for (i = 0U; i < spans->len; i++) {
+        LastInsertSpan span = spans->data[i];
+        u64 hi = span.off + span.len;
+
+        if (hi <= op->off) {
+            last_insert_push(&next, span.off, span.len, span.payload);
+            continue;
+        }
+        if (!placed) {
+            if (span.off < op->off) {
+                u64 left = op->off - span.off;
+                last_insert_push(&next, span.off, left, span.payload);
+                last_insert_push(&next, op->off, op->len, op->payload);
+                last_insert_push(&next, op->off + op->len,
+                                 span.len - left, span.payload + left);
+                placed = true;
+                continue;
+            }
+            last_insert_push(&next, op->off, op->len, op->payload);
+            placed = true;
+        }
+        last_insert_push(&next, span.off + op->len,
+                         span.len, span.payload);
+    }
+    if (!placed)
+        last_insert_push(&next, op->off, op->len, op->payload);
+    SagLastInsertSpanVec_free(spans);
+    *spans = next;
+}
+
+static void last_insert_apply_delete(SagLastInsertSpanVec *spans,
+                                     const UndoOp *op)
+{
+    SagLastInsertSpanVec next = {0};
+    u64 hi = op->off + op->len;
+    size_t i;
+
+    for (i = 0U; i < spans->len; i++) {
+        LastInsertSpan span = spans->data[i];
+        u64 span_hi = span.off + span.len;
+
+        if (span_hi <= op->off) {
+            last_insert_push(&next, span.off, span.len, span.payload);
+        } else if (span.off >= hi) {
+            last_insert_push(&next, span.off - op->len,
+                             span.len, span.payload);
+        } else {
+            u64 left = span.off < op->off ? op->off - span.off : 0U;
+            u64 right = span_hi > hi ? span_hi - hi : 0U;
+
+            last_insert_push(&next, span.off, left, span.payload);
+            last_insert_push(&next, op->off, right,
+                             span.payload + span.len - right);
+        }
+    }
+    SagLastInsertSpanVec_free(spans);
+    *spans = next;
+}
+
 bool sag_undo_last_insert(const UndoTree *ut, Bytebuf *out, i64 *t_wall)
 {
     size_t at;
@@ -563,21 +650,30 @@ bool sag_undo_last_insert(const UndoTree *ut, Bytebuf *out, i64 *t_wall)
     at = ut->nodes.len;
     while (at > 1U) {
         const UndoNode *node = &ut->nodes.data[--at];
+        SagLastInsertSpanVec spans = {0};
         u32 i;
 
         if (!node_live(ut, node->id) || node->reason != SAG_TXN_TYPE)
             continue;
         for (i = 0U; i < node->n_ops; i++) {
             const UndoOp *op = &ut->ops.data[node->ops_at + i];
-            const u8 *bytes;
 
-            if (op->kind != SAG_OP_INS)
-                SAG_BUG("undo: type transaction contains non-insert op");
-            bytes = store_bytes(ut->owner, op->src,
-                                (Span){op->payload,
-                                       op->payload + op->len});
-            bytebuf_append(out, bytes, (size_t)op->len);
+            if (op->kind == SAG_OP_INS)
+                last_insert_apply_insert(&spans, op);
+            else if (op->kind == SAG_OP_DEL)
+                last_insert_apply_delete(&spans, op);
+            else
+                SAG_BUG("undo: invalid type transaction operation");
         }
+        for (i = 0U; i < spans.len; i++) {
+            const LastInsertSpan *span = &spans.data[i];
+            const u8 *bytes = store_bytes(
+                ut->owner, SAG_STORE_ADD,
+                (Span){span->payload, span->payload + span->len});
+
+            bytebuf_append(out, bytes, (size_t)span->len);
+        }
+        SagLastInsertSpanVec_free(&spans);
         if (t_wall != NULL)
             *t_wall = node->t_wall;
         return true;

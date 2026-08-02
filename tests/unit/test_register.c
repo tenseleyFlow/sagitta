@@ -78,6 +78,33 @@ void test_register_computes_last_insert_and_current_path_on_read(void)
     sag_reg_free(&r);
 }
 
+void test_register_last_insert_reflects_backspace_in_type_run(void)
+{
+    Registers r;
+    TextBuf *tb;
+    UndoTree *undo;
+    EditCtx edit;
+
+    sag_reg_init(&r);
+    tb = sag_textbuf_from_bytes((const u8 *)"--", 2U);
+    undo = sag_undo_new(tb);
+    edit = (EditCtx){tb, NULL, NULL, 1U, NULL, undo, NULL};
+    sag_undo_begin(&edit, SAG_TXN_TYPE);
+    sag_edit_insert(&edit, BYTEOFF(1U), (const u8 *)"abc", 3U);
+    sag_edit_delete(&edit, (Span){2U, 3U});
+    sag_edit_insert(&edit, BYTEOFF(2U), (const u8 *)"X", 1U);
+    sag_edit_delete(&edit, (Span){0U, 2U});
+    sag_undo_end(&edit);
+    sag_reg_bind_context(&r, undo, NULL);
+
+    reg_assert_value(sag_reg_get(&r, '.'), SAG_REG_CHARWISE,
+                     (const u8 *)"Xc", 2U);
+
+    sag_undo_free(undo);
+    sag_textbuf_free(tb);
+    sag_reg_free(&r);
+}
+
 void test_register_yank_routes_named_unnamed_zero_and_ring(void)
 {
     Registers r;

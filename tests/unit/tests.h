@@ -18,6 +18,7 @@ void test_base64_lengths_and_alphabet(void);
 void test_base64_binary_roundtrip_fuzz(void);
 void test_register_defaults_and_empty_deferred_slots(void);
 void test_register_computes_last_insert_and_current_path_on_read(void);
+void test_register_last_insert_reflects_backspace_in_type_run(void);
 void test_register_yank_routes_named_unnamed_zero_and_ring(void);
 void test_register_delete_shift_boundary(void);
 void test_register_reserved_histories_ignore_explicit_names(void);

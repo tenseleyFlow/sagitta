@@ -398,6 +398,9 @@ static bool prompt_key(Ed *ed, Key key)
         bool recovered = sag_journal_replay_edit(ed->buffer.meta.realpath,
                                                  &ec, &ed->buffer.meta);
 
+        if (recovered)
+            ec.jrnl = sag_journal_open(ed->buffer.meta.realpath,
+                                       &ed->buffer.meta);
         sag_ed_finish_edit(ed, &ec);
         sag_ed_prompt(ed, SAG_PROMPT_NONE);
         sag_msg(ed, recovered ? SAG_MSG_WARN : SAG_MSG_ERROR,

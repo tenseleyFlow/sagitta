@@ -21,6 +21,7 @@ const SagTest sag_tests[] = {
     T(base64_binary_roundtrip_fuzz),
     T(register_defaults_and_empty_deferred_slots),
     T(register_computes_last_insert_and_current_path_on_read),
+    T(register_last_insert_reflects_backspace_in_type_run),
     T(register_yank_routes_named_unnamed_zero_and_ring),
     T(register_delete_shift_boundary),
     T(register_reserved_histories_ignore_explicit_names),
