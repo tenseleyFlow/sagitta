@@ -237,6 +237,7 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     EditCtx ec;
     CmdStatus status;
     bool changes;
+    bool durability_command;
     bool newline;
     bool opened = false;
     bool started_in_insert;
@@ -250,10 +251,13 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     if (cx->win == NULL)
         cx->win = ed->win;
     changes = (desc->flags & SAG_CMD_CHANGES_BUFFER) != 0U;
+    durability_command = changes ||
+                         strcmp(desc->name, "ed.edit.undo") == 0 ||
+                         strcmp(desc->name, "ed.edit.redo") == 0;
     newline = strcmp(desc->name, "ed.edit.insert.newline") == 0;
     started_in_insert = ed->mode == SAG_MODE_I;
 
-    if (changes && ed->durability_failed) {
+    if (durability_command && ed->durability_failed) {
         sag_msg(ed, SAG_MSG_ERROR,
                 "crash journal failed; save or q! before continuing");
         return SAG_CMD_ERR_IO;
@@ -296,11 +300,11 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
             sag_undo_end(&ec);
         }
         sag_ed_finish_edit(ed, &ec);
-        if (status == SAG_CMD_ERR_IO) {
-            ed->durability_failed = true;
-            sag_msg(ed, SAG_MSG_ERROR,
-                    "crash journal failed; save or q! before continuing");
-        }
+    }
+    if (durability_command && status == SAG_CMD_ERR_IO) {
+        ed->durability_failed = true;
+        sag_msg(ed, SAG_MSG_ERROR,
+                "crash journal failed; save or q! before continuing");
     }
     return status;
 }
