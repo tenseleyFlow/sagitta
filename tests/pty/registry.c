@@ -1212,8 +1212,6 @@ static void case_s16_block_c_expand(PtyCtx *c)
         ptc_keys(c, "alt+up");
         settle_sync_delta(c, before, 1U, 0);
     }
-    /* Valgrind may pause between a synchronized repaint and the next one. */
-    ptc_settle(c, 1000);
     ptc_snapshot(c, "s16_block_c_expand");
     force_quit(c);
     (void)unlink(path);
@@ -1242,8 +1240,6 @@ static void case_s16_block_prose_expand(PtyCtx *c)
         ptc_keys(c, "alt+up");
         settle_sync_delta(c, before, 1U, 0);
     }
-    /* Valgrind may pause between a synchronized repaint and the next one. */
-    ptc_settle(c, 1000);
     ptc_snapshot(c, "s16_block_prose_expand");
     force_quit(c);
     (void)unlink(path);

@@ -594,8 +594,10 @@ void test_edit_unit_selection_replays_and_invalidates(void)
     cursor = sag_ed_cursor(&ed);
     SAG_ASSERT_EQ_U64(ed.mode, SAG_MODE_L);
 
+    ed.full_damage = false;
     SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.sel.unit.expand", 1U, false,
                                   NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT(ed.full_damage);
     SAG_ASSERT_EQ_U64(ed.win->sels.n, 1U);
     level0 = ed.win->sels.s[0];
     SAG_ASSERT_EQ_U64(cursor->anchor.v, level0.lo);
@@ -609,8 +611,10 @@ void test_edit_unit_selection_replays_and_invalidates(void)
                                   NULL, 0U), SAG_CMD_OK);
     SAG_ASSERT(ed.win->sels.n >= 3U);
 
+    ed.full_damage = false;
     SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.sel.unit.contract", 1U, false,
                                   NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT(ed.full_damage);
     SAG_ASSERT_EQ_U64(cursor->anchor.v,
                       ed.win->sels.s[ed.win->sels.n - 1U].lo);
     SAG_ASSERT_EQ_U64(cursor->pos.v,

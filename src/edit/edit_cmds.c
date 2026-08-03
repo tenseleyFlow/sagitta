@@ -642,6 +642,7 @@ CmdStatus sag_edit_cmd_sel_unit_expand(CmdCtx *cx)
     select_span(tb, cursor, span);
     win->wrap_goal_valid = false;
     sag_win_follow_cursor(win);
+    cx->ed->full_damage = true;
     return SAG_CMD_OK;
 }
 
@@ -666,6 +667,7 @@ CmdStatus sag_edit_cmd_sel_unit_contract(CmdCtx *cx)
         select_span(tb, cursor, win->sels.s[win->sels.n - 1U]);
     win->wrap_goal_valid = false;
     sag_win_follow_cursor(win);
+    cx->ed->full_damage = true;
     return SAG_CMD_OK;
 }
 

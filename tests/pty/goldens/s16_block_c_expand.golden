@@ -2,12 +2,12 @@
 size 80x24 alt=1 cursor=5,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=6
 --- text
-    1 int main(void) {
-    1   if (ready) {
-    2     call();
-    3   }
-    4 }
-    5
+    5 int main(void) {
+    4   if (ready) {
+    3     call();
+    2   }
+    1 }
+    6
 
 
 
