@@ -33,6 +33,22 @@ static ByteOff line_at_col(const TextBuf *tb, LineNo line, GCol goal)
     return sag_gcol_to_off(tb, span, goal);
 }
 
+static GCol line_goal(const UnitCtx *u, ByteOff p)
+{
+    if (u->win != NULL && u->win->cs.curs.len != 0U &&
+        (size_t)u->win->cs.primary < u->win->cs.curs.len) {
+        const Cursor *cursor =
+            &u->win->cs.curs.data[u->win->cs.primary];
+
+        if (cursor->pos.v == p.v)
+            return cursor->goal_col;
+    }
+    return sag_off_to_gcol(u->tb,
+                           sag_textbuf_line_span(
+                               u->tb, sag_textbuf_line_of(u->tb, p)),
+                           p);
+}
+
 static u64 line_step(const UnitCtx *u, bool alt)
 {
     u64 rows;
@@ -51,11 +67,18 @@ static ByteOff line_next(UnitCtx *u, ByteOff p, bool alt)
     u64 target;
 
     p = clamp_pos(u->tb, p);
+    if (u->win != NULL && u->win->vp.wrap) {
+        ByteOff target = sag_vp_display_target(
+            u->win, p, (i32)line_step(u, alt));
+
+        return target.v > p.v ? target
+                              : BYTEOFF(sag_textbuf_len(u->tb));
+    }
     count = sag_textbuf_line_count(u->tb);
     line = sag_textbuf_line_of(u->tb, p);
     if (line.v + 1U >= count)
         return BYTEOFF(sag_textbuf_len(u->tb));
-    goal = sag_off_to_gcol(u->tb, sag_textbuf_line_span(u->tb, line), p);
+    goal = line_goal(u, p);
     target = line.v + line_step(u, alt);
     if (target >= count)
         target = count - 1U;
@@ -71,10 +94,16 @@ static ByteOff line_prev(UnitCtx *u, ByteOff p, bool alt)
     p = clamp_pos(u->tb, p);
     if (p.v == 0U)
         return p;
+    if (u->win != NULL && u->win->vp.wrap) {
+        ByteOff target = sag_vp_display_target(
+            u->win, p, -(i32)line_step(u, alt));
+
+        return target.v < p.v ? target : BYTEOFF(0U);
+    }
     line = sag_textbuf_line_of(u->tb, p);
     if (line.v == 0U)
         return BYTEOFF(0U);
-    goal = sag_off_to_gcol(u->tb, sag_textbuf_line_span(u->tb, line), p);
+    goal = line_goal(u, p);
     step = line_step(u, alt);
     return line_at_col(u->tb, LINENO(line.v > step ? line.v - step : 0U),
                        goal);

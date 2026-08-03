@@ -636,11 +636,32 @@ void test_edit_unit_selection_replays_and_invalidates(void)
 
 void test_edit_word_and_block_key_layers_dispatch(void)
 {
+    static const u8 line_text[] = "abcdef\nxy";
     static const u8 word_text[] =
         "foo \xe6\xbc\xa2\xe5\xad\x97 tail\n";
     static const u8 block_text[] = "one\n\n  two\n    three\n";
     Ed ed;
     Key key;
+
+    edit_fixture(&ed, line_text, sizeof(line_text) - 1U, SAG_EOL_LF);
+    ed.win->vp.cols = 3U;
+    ed.win->vp.wrap = true;
+    edit_place(&ed, 1U);
+    sag_ed_handle_key(&ed, edit_key(SAG_KEY_DOWN), 0);
+    SAG_ASSERT_EQ_U64(ed.last_cmd.v,
+                      sag_cmd_lookup("ed.move.unit.next", 17U).v);
+    SAG_ASSERT_EQ_U64(sag_ed_cursor(&ed)->pos.v, 4U);
+    key = edit_key(SAG_KEY_DOWN);
+    key.mods = SAG_MOD_ALT;
+    sag_ed_handle_key(&ed, key, 1);
+    SAG_ASSERT_EQ_U64(ed.last_cmd.v,
+                      sag_cmd_lookup("ed.move.unit.next_alt", 21U).v);
+    SAG_ASSERT_EQ_U64(sag_ed_cursor(&ed)->pos.v, 8U);
+    sag_ed_handle_key(&ed, edit_key(SAG_KEY_LEFT), 2);
+    SAG_ASSERT_EQ_U64(ed.last_cmd.v,
+                      sag_cmd_lookup("ed.move.unit.home", 17U).v);
+    SAG_ASSERT_EQ_U64(sag_ed_cursor(&ed)->pos.v, 7U);
+    sag_ed_free(&ed);
 
     edit_fixture(&ed, word_text, sizeof(word_text) - 1U, SAG_EOL_LF);
     sag_ed_handle_key(&ed, edit_key((u32)'w'), 0);

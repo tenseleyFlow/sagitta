@@ -457,12 +457,23 @@ static CmdStatus move_unit(CmdCtx *cx, UnitMotion motion, bool alt)
     const UnitOps *ops;
     UnitCtx u;
     ByteOff pos;
+    GCol vertical_goal;
+    bool line_vertical;
+    bool unselected;
 
     if (!edit_window(cx, &win, &tb, &cursor))
         return SAG_CMD_ERR_STATE;
     ops = sag_unit_of_mode(cx->ed->mode);
     if (ops == NULL)
         return SAG_CMD_ERR_STATE;
+    line_vertical = ops == &sag_unit_line &&
+                    (motion == UNIT_NEXT || motion == UNIT_PREV);
+    vertical_goal = cursor->goal_col;
+    unselected = cursor->anchor.v == cursor->pos.v;
+    if (line_vertical && win->vp.wrap && !win->wrap_goal_valid) {
+        win->wrap_goal = sag_vp_display_col(win, cursor->pos);
+        win->wrap_goal_valid = true;
+    }
     u = (UnitCtx){tb, win->buf, win};
     switch (motion) {
     case UNIT_NEXT:
@@ -480,8 +491,17 @@ static CmdStatus move_unit(CmdCtx *cx, UnitMotion motion, bool alt)
     default:
         return SAG_CMD_ERR_ARG;
     }
-    cursor_place(tb, cursor, pos);
-    win->wrap_goal_valid = false;
+    if (line_vertical) {
+        cursor->pos = pos;
+        if (unselected)
+            cursor->anchor = pos;
+        cursor->goal_col = vertical_goal;
+        if (!win->vp.wrap)
+            win->wrap_goal_valid = false;
+    } else {
+        cursor_place(tb, cursor, pos);
+        win->wrap_goal_valid = false;
+    }
     sag_win_follow_cursor(win);
     return SAG_CMD_OK;
 }

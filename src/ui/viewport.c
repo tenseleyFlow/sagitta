@@ -144,6 +144,62 @@ static u32 wrap_count_raw(const TextBuf *tb, LineNo line, u16 cols)
     return rows;
 }
 
+static Span wrap_row_raw(const TextBuf *tb, LineNo line, u32 sub,
+                         u16 cols)
+{
+    Span content = sag_textbuf_line_span(tb, line);
+    u64 start;
+    u32 row = 0U;
+
+    content.hi = line_content_hi(tb, line, content);
+    if (content.lo == content.hi)
+        return sub == 0U ? content : (Span){content.hi, content.hi};
+    start = content.lo;
+    while (start < content.hi) {
+        u64 end = wrap_next(tb, content, start, cols);
+
+        if (end <= start)
+            SAG_BUG("viewport: raw wrap made no progress");
+        if (row == sub)
+            return (Span){start, end};
+        start = end;
+        if (row == UINT32_MAX)
+            SAG_BUG("viewport: too many raw display rows");
+        row++;
+    }
+    return (Span){content.hi, content.hi};
+}
+
+static u32 wrap_subrow_raw(const TextBuf *tb, LineNo line, ByteOff pos,
+                           u16 cols, Span *row_span)
+{
+    Span content = sag_textbuf_line_span(tb, line);
+    u64 start;
+    u32 sub = 0U;
+
+    content.hi = line_content_hi(tb, line, content);
+    if (content.lo == content.hi) {
+        *row_span = content;
+        return 0U;
+    }
+    start = content.lo;
+    while (start < content.hi) {
+        u64 end = wrap_next(tb, content, start, cols);
+
+        if (end <= start)
+            SAG_BUG("viewport: raw wrap made no progress");
+        if (pos.v < end || end == content.hi) {
+            *row_span = (Span){start, end};
+            return sub;
+        }
+        start = end;
+        if (sub == UINT32_MAX)
+            SAG_BUG("viewport: too many raw display rows");
+        sub++;
+    }
+    SAG_BUG("viewport: position did not map to a raw display row");
+}
+
 static void cache_reserve(WrapCache *cache, size_t need)
 {
     if (cache->cap >= need)
@@ -799,6 +855,64 @@ bool sag_vp_move_display(Win *w, i32 rows)
         cursor->anchor = cursor->pos;
     sag_vp_follow(w);
     return cursor->pos.v != old.v;
+}
+
+CCol sag_vp_display_col(const Win *w, ByteOff pos)
+{
+    const TextBuf *tb = vp_text(w);
+    LineNo line = sag_textbuf_line_of(tb, pos);
+    Span row;
+
+    (void)wrap_subrow_raw(tb, line, pos, w->vp.cols, &row);
+    return sag_off_to_ccol(tb, row, pos, SAG_VP_TABWIDTH);
+}
+
+ByteOff sag_vp_display_target(const Win *w, ByteOff pos, i32 rows)
+{
+    const TextBuf *tb = vp_text(w);
+    u64 line_count = sag_textbuf_line_count(tb);
+    LineNo line = sag_textbuf_line_of(tb, pos);
+    Span current;
+    u32 sub = wrap_subrow_raw(tb, line, pos, w->vp.cols, &current);
+    CCol goal = w->wrap_goal_valid
+                    ? w->wrap_goal
+                    : sag_off_to_ccol(tb, current, pos, SAG_VP_TABWIDTH);
+    i64 remain = rows;
+    Span target;
+    ByteOff result;
+    u32 target_rows;
+
+    while (remain > 0) {
+        u32 count = wrap_count_raw(tb, line, w->vp.cols);
+
+        if (sub + 1U < count) {
+            sub++;
+        } else if (line.v + 1U < line_count) {
+            line = LINENO(line.v + 1U);
+            sub = 0U;
+        } else {
+            break;
+        }
+        remain--;
+    }
+    while (remain < 0) {
+        if (sub != 0U) {
+            sub--;
+        } else if (line.v != 0U) {
+            line = LINENO(line.v - 1U);
+            sub = wrap_count_raw(tb, line, w->vp.cols) - 1U;
+        } else {
+            break;
+        }
+        remain++;
+    }
+    target = wrap_row_raw(tb, line, sub, w->vp.cols);
+    target_rows = wrap_count_raw(tb, line, w->vp.cols);
+    result = sag_ccol_to_off(tb, target, goal, SAG_VP_TABWIDTH);
+    if (result.v == target.hi && sub + 1U < target_rows &&
+        target.lo < target.hi)
+        result = sag_grapheme_prev_boundary(tb, result);
+    return result;
 }
 
 LineNo sag_vp_last_visible_line(Win *w)

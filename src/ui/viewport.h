@@ -68,6 +68,10 @@ void sag_vp_top(Win *w);
 void sag_vp_bottom(Win *w);
 void sag_vp_clamp(Win *w);
 bool sag_vp_move_display(Win *w, i32 rows);
+/* Pure counterparts used by the line unit engine.  They perform no cache,
+ * cursor, or viewport writes. */
+CCol sag_vp_display_col(const Win *w, ByteOff pos);
+ByteOff sag_vp_display_target(const Win *w, ByteOff pos, i32 rows);
 LineNo sag_vp_last_visible_line(Win *w);
 
 #endif
