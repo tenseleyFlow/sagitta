@@ -98,6 +98,14 @@ static bool vt_stream_closed(const u8 *s, size_t len, VtCounts *counts,
                           s[j] == (u8)';' || s[j] == (u8)':'))
                         return fail(why, why_cap, "invalid SGR parameter", i);
                 }
+            } else if (command == (u8)'q') {
+                bool is_shape = final - body == 2u &&
+                                (s[body] == (u8)'2' ||
+                                 s[body] == (u8)'6') &&
+                                s[body + 1u] == (u8)' ';
+
+                if (!is_shape)
+                    return fail(why, why_cap, "invalid DECSCUSR", i);
             } else {
                 return fail(why, why_cap, "unsupported CSI command", i);
             }
