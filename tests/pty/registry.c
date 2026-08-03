@@ -1258,8 +1258,10 @@ static bool s17_open(PtyCtx *c, const u8 *initial, size_t len,
 
 static void s17_settle_after_keys(PtyCtx *c, const char *keys)
 {
+    u32 before = c->vt.nsync_pairs;
+
     ptc_keys(c, keys);
-    ptc_settle(c, 0);
+    settle_sync_delta(c, before, 1U, 0);
 }
 
 static void case_s17_h_l_extends_by_line(PtyCtx *c)
@@ -1497,8 +1499,7 @@ static void case_s17_char_delete_matches_highlight(PtyCtx *c)
 
     if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
         return;
-    ptc_keys(c, "h right d s");
-    ptc_settle(c, 0);
+    s17_settle_after_keys(c, "h right d s");
     ptc_check(c, file_equals(path, expected, sizeof(expected) - 1U),
               "character selection delete disagreed with its highlight");
     ptc_snapshot(c, "s17_char_delete_matches_highlight");
@@ -1516,8 +1517,8 @@ static void case_s17_modal_milestone_saves(PtyCtx *c)
 
     if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
         return;
-    ptc_keys(c, "down up w right esc b down h right c X left right esc s");
-    ptc_settle(c, 0);
+    s17_settle_after_keys(
+        c, "down up w right esc b down h right c X left right esc s");
     ptc_check(c, !c->failed && file_contains(path, "X"),
               "L-W-B-H-I-Esc-save milestone did not persist its edit");
     ptc_snapshot(c, "s17_modal_milestone_saves");

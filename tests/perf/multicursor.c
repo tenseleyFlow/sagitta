@@ -31,9 +31,11 @@ static void timeout_handler(int signo)
 {
     static const char message[] =
         "perf-multicursor: edit exceeded 2-second safety timeout\n";
+    ssize_t written;
 
     (void)signo;
-    (void)write(STDERR_FILENO, message, sizeof(message) - 1U);
+    written = write(STDERR_FILENO, message, sizeof(message) - 1U);
+    (void)written;
     _Exit(1);
 }
 

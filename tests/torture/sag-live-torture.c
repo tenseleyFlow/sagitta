@@ -4,6 +4,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -46,6 +47,41 @@ static bool write_all(int fd, const void *data, size_t len)
         }
     }
     return true;
+}
+
+static bool wait_hangup(SagLivePty *pty, i64 deadline)
+{
+    u8 discard[8192];
+
+    while (sag_live_pty_now_ns() < deadline) {
+        struct pollfd fd = {pty->master, POLLIN | POLLHUP, 0};
+        int result = poll(&fd, 1U, 100);
+
+        if (result < 0 && errno == EINTR)
+            continue;
+        if (result < 0)
+            return false;
+        if (result == 0)
+            continue;
+        if ((fd.revents & POLLIN) != 0) {
+            for (;;) {
+                ssize_t n = read(pty->master, discard, sizeof(discard));
+
+                if (n > 0)
+                    continue;
+                if (n == 0 || (n < 0 && errno == EIO))
+                    return true;
+                if (n < 0 && errno == EINTR)
+                    continue;
+                if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
+                    break;
+                return false;
+            }
+        }
+        if ((fd.revents & POLLHUP) != 0)
+            return true;
+    }
+    return false;
 }
 
 static bool slurp(const char *path, u8 **out, size_t *out_len)
@@ -154,13 +190,8 @@ static void feeder(SagLivePty *pty, pid_t editor, int ready_fd,
     }
     deadline = sag_live_pty_now_ns() + INT64_C(2000000000);
     (void)sag_live_pty_write(pty, quit, sizeof(quit) - 1U, deadline);
-    {
-        struct timespec quit_settle = {0, 200000000};
-
-        while (nanosleep(&quit_settle, &quit_settle) != 0 && errno == EINTR)
-            ;
-    }
-    _exit(0);
+    deadline = sag_live_pty_now_ns() + INT64_C(3000000000);
+    _exit(wait_hangup(pty, deadline) ? 0 : 3);
 }
 
 static int live_save(const char *path, const char *post_path)
