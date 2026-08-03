@@ -1,4 +1,10 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "harness.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <unistd.h>
 
 #include "text/register.h"
 
@@ -162,9 +168,44 @@ void test_paste_line_before_first_and_middle(void)
 
 void test_paste_line_after_missing_final_newline_uses_destination_eol(void)
 {
+    PasteFixture failed;
     PasteFixture f;
     RegVal v;
+    char root[] = "/tmp/sagitta-paste-line-XXXXXX";
+    char blocker[128];
+    char journal_dir[128];
+    char sagitta_dir[128];
+    const char *saved_state = getenv("XDG_STATE_HOME");
+    char *saved_copy = NULL;
+    FILE *fp;
+    int n;
+
+    if (saved_state != NULL) {
+        size_t saved_len = strlen(saved_state) + 1U;
+
+        saved_copy = sag_xmalloc(saved_len);
+        (void)memcpy(saved_copy, saved_state, saved_len);
+    }
+    SAG_ASSERT_NOT_NULL(mkdtemp(root));
+    n = snprintf(blocker, sizeof(blocker), "%s/blocker", root);
+    SAG_ASSERT(n > 0 && (size_t)n < sizeof(blocker));
+    fp = fopen(blocker, "wb");
+    SAG_ASSERT_NOT_NULL(fp);
+    SAG_ASSERT_EQ_U64(fwrite("x", 1U, 1U, fp), 1U);
+    SAG_ASSERT_EQ_I64(fclose(fp), 0);
+
     paste_set(&v, SAG_REG_LINEWISE, "new\n");
+    paste_fixture_init(&failed, "last", 2U);
+    paste_fixture_enable_meta(&failed, SAG_EOL_CRLF);
+    paste_install(&failed.regs, &v);
+    SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", blocker, 1), 0);
+    SAG_ASSERT(!sag_reg_paste(&failed.regs, &failed.edit, '"', false, 8U));
+    paste_assert_text(failed.tb, "last");
+    SAG_ASSERT_EQ_U64(failed.cursors.curs.data[0].pos.v, 2U);
+    SAG_ASSERT_EQ_U64(failed.undo->nodes.len, 1U);
+    paste_fixture_free(&failed);
+
+    SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", root, 1), 0);
     paste_fixture_init(&f, "last", 2U);
     paste_fixture_enable_meta(&f, SAG_EOL_CRLF);
     paste_install(&f.regs, &v);
@@ -177,6 +218,22 @@ void test_paste_line_after_missing_final_newline_uses_destination_eol(void)
     SAG_ASSERT_EQ_U64(f.cursors.curs.data[0].pos.v, 2U);
     paste_fixture_free(&f);
     sag_regval_free(&v);
+
+    if (saved_copy != NULL) {
+        SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", saved_copy, 1), 0);
+    } else {
+        SAG_ASSERT_EQ_I64(unsetenv("XDG_STATE_HOME"), 0);
+    }
+    free(saved_copy);
+    n = snprintf(journal_dir, sizeof(journal_dir), "%s/sagitta/journal",
+                 root);
+    SAG_ASSERT(n > 0 && (size_t)n < sizeof(journal_dir));
+    n = snprintf(sagitta_dir, sizeof(sagitta_dir), "%s/sagitta", root);
+    SAG_ASSERT(n > 0 && (size_t)n < sizeof(sagitta_dir));
+    SAG_ASSERT_EQ_I64(unlink(blocker), 0);
+    SAG_ASSERT_EQ_I64(rmdir(journal_dir), 0);
+    SAG_ASSERT_EQ_I64(rmdir(sagitta_dir), 0);
+    SAG_ASSERT_EQ_I64(rmdir(root), 0);
 }
 
 static void paste_block_value(RegVal *v, const char *bytes,
@@ -191,11 +248,118 @@ static void paste_block_value(RegVal *v, const char *bytes,
     v->ragged = ragged;
 }
 
+void test_paste_journal_failure_stops_char_and_block(void)
+{
+    static const Span direct_row[] = {{0U, 1U}};
+    static const Span deferred_rows[] = {{0U, 0U}, {0U, 1U}};
+    PasteFixture character;
+    PasteFixture direct;
+    PasteFixture padded;
+    PasteFixture extended;
+    RegVal char_value;
+    RegVal direct_value;
+    RegVal deferred_value;
+    char root[] = "/tmp/sagitta-paste-failure-XXXXXX";
+    char blocker[128];
+    const char *saved_state = getenv("XDG_STATE_HOME");
+    char *saved_copy = NULL;
+    FILE *fp;
+    int n;
+
+    if (saved_state != NULL) {
+        size_t saved_len = strlen(saved_state) + 1U;
+
+        saved_copy = sag_xmalloc(saved_len);
+        (void)memcpy(saved_copy, saved_state, saved_len);
+    }
+    SAG_ASSERT_NOT_NULL(mkdtemp(root));
+    n = snprintf(blocker, sizeof(blocker), "%s/blocker", root);
+    SAG_ASSERT(n > 0 && (size_t)n < sizeof(blocker));
+    fp = fopen(blocker, "wb");
+    SAG_ASSERT_NOT_NULL(fp);
+    SAG_ASSERT_EQ_U64(fwrite("x", 1U, 1U, fp), 1U);
+    SAG_ASSERT_EQ_I64(fclose(fp), 0);
+    SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", blocker, 1), 0);
+
+    paste_set(&char_value, SAG_REG_CHARWISE, "Z");
+    paste_fixture_init(&character, "abc", 1U);
+    paste_fixture_enable_meta(&character, SAG_EOL_LF);
+    paste_install(&character.regs, &char_value);
+    SAG_ASSERT(!sag_reg_paste(&character.regs, &character.edit, '"',
+                              false, 8U));
+    paste_assert_text(character.tb, "abc");
+    SAG_ASSERT_EQ_U64(character.cursors.curs.data[0].pos.v, 1U);
+    SAG_ASSERT_EQ_U64(character.undo->nodes.len, 1U);
+    SAG_ASSERT_EQ_U64(character.regs.paste_spans.len, 0U);
+    paste_fixture_free(&character);
+    sag_regval_free(&char_value);
+
+    paste_block_value(&direct_value, "X", direct_row, 1U, 1U, false);
+    paste_fixture_init(&direct, "abc", 1U);
+    paste_fixture_enable_meta(&direct, SAG_EOL_LF);
+    paste_install(&direct.regs, &direct_value);
+    SAG_ASSERT(!sag_reg_paste(&direct.regs, &direct.edit, '"', true, 8U));
+    paste_assert_text(direct.tb, "abc");
+    SAG_ASSERT_EQ_U64(direct.cursors.curs.data[0].pos.v, 1U);
+    SAG_ASSERT_EQ_U64(direct.undo->nodes.len, 1U);
+    SAG_ASSERT_EQ_U64(direct.regs.paste_spans.len, 0U);
+    paste_fixture_free(&direct);
+    sag_regval_free(&direct_value);
+
+    paste_block_value(&deferred_value, "Y", deferred_rows, 2U, 1U,
+                      true);
+    paste_fixture_init(&padded, "abcd\nx", 3U);
+    paste_fixture_enable_meta(&padded, SAG_EOL_LF);
+    paste_install(&padded.regs, &deferred_value);
+    SAG_ASSERT(!sag_reg_paste(&padded.regs, &padded.edit, '"', true, 8U));
+    paste_assert_text(padded.tb, "abcd\nx");
+    SAG_ASSERT_EQ_U64(padded.cursors.curs.data[0].pos.v, 3U);
+    SAG_ASSERT_EQ_U64(padded.undo->nodes.len, 1U);
+    SAG_ASSERT_EQ_U64(padded.regs.paste_spans.len, 0U);
+    paste_fixture_free(&padded);
+
+    paste_fixture_init(&extended, "a", 0U);
+    paste_fixture_enable_meta(&extended, SAG_EOL_LF);
+    paste_install(&extended.regs, &deferred_value);
+    SAG_ASSERT(!sag_reg_paste(&extended.regs, &extended.edit, '"', true,
+                              8U));
+    paste_assert_text(extended.tb, "a");
+    SAG_ASSERT_EQ_U64(extended.cursors.curs.data[0].pos.v, 0U);
+    SAG_ASSERT_EQ_U64(extended.undo->nodes.len, 1U);
+    SAG_ASSERT_EQ_U64(extended.regs.paste_spans.len, 0U);
+    paste_fixture_free(&extended);
+    sag_regval_free(&deferred_value);
+
+    if (saved_copy != NULL) {
+        SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", saved_copy, 1), 0);
+    } else {
+        SAG_ASSERT_EQ_I64(unsetenv("XDG_STATE_HOME"), 0);
+    }
+    free(saved_copy);
+    SAG_ASSERT_EQ_I64(unlink(blocker), 0);
+    SAG_ASSERT_EQ_I64(rmdir(root), 0);
+}
+
 void test_paste_block_short_lines_and_extension(void)
 {
     static const Span rows[] = {{0U, 1U}, {1U, 2U}, {2U, 3U}};
     PasteFixture f;
     RegVal v;
+    char root[] = "/tmp/sagitta-paste-block-XXXXXX";
+    char journal_dir[128];
+    char sagitta_dir[128];
+    const char *saved_state = getenv("XDG_STATE_HOME");
+    char *saved_copy = NULL;
+    int n;
+
+    if (saved_state != NULL) {
+        size_t saved_len = strlen(saved_state) + 1U;
+
+        saved_copy = sag_xmalloc(saved_len);
+        (void)memcpy(saved_copy, saved_state, saved_len);
+    }
+    SAG_ASSERT_NOT_NULL(mkdtemp(root));
+    SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", root, 1), 0);
     paste_block_value(&v, "XYZ", rows, SAG_ARRAY_LEN(rows), 1U, false);
     paste_fixture_init(&f, "abcd\na", 3U);
     paste_fixture_enable_meta(&f, SAG_EOL_LF);
@@ -209,6 +373,21 @@ void test_paste_block_short_lines_and_extension(void)
     SAG_ASSERT_EQ_U64(f.cursors.curs.data[0].pos.v, 3U);
     paste_fixture_free(&f);
     sag_regval_free(&v);
+
+    if (saved_copy != NULL) {
+        SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", saved_copy, 1), 0);
+    } else {
+        SAG_ASSERT_EQ_I64(unsetenv("XDG_STATE_HOME"), 0);
+    }
+    free(saved_copy);
+    n = snprintf(journal_dir, sizeof(journal_dir), "%s/sagitta/journal",
+                 root);
+    SAG_ASSERT(n > 0 && (size_t)n < sizeof(journal_dir));
+    n = snprintf(sagitta_dir, sizeof(sagitta_dir), "%s/sagitta", root);
+    SAG_ASSERT(n > 0 && (size_t)n < sizeof(sagitta_dir));
+    SAG_ASSERT_EQ_I64(rmdir(journal_dir), 0);
+    SAG_ASSERT_EQ_I64(rmdir(sagitta_dir), 0);
+    SAG_ASSERT_EQ_I64(rmdir(root), 0);
 }
 
 void test_paste_block_tab_round_left_adds_spaces(void)

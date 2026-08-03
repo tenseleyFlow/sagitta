@@ -7,6 +7,7 @@
 
 #include "edit/edit_cmds.h"
 #include "edit/file_cmds.h"
+#include "edit/sel_actions.h"
 #include "util/arena.h"
 #include "util/intern.h"
 #include "util/log.h"
@@ -194,24 +195,17 @@ static const CmdDesc builtins[] = {
      "Redo the last undone transaction"},
     {"ed.edit.undo_barrier", sag_edit_cmd_undo_barrier, SAG_ARITY_NONE,
      SAG_CMD_NEEDS_WIN, "Close the active insert transaction"},
-    DEFER("ed.edit.yank", SAG_ARITY_OPT_STR,
-          SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, 17,
-          "yank text into a register"),
-    DEFER("ed.edit.paste", SAG_ARITY_OPT_STR,
-          SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER, 17,
-          "paste text from a register"),
-
     {"ed.mode.enter", sag_edit_cmd_mode_enter, SAG_ARITY_STR,
      SAG_CMD_RECORDABLE,
-     "Enter L/W/B/I; H Sprint 17, E Sprint 18, F Sprint 52"},
+     "Enter L/W/B/I/H; E Sprint 18, F Sprint 52"},
     {"ed.mode.escape", sag_edit_cmd_mode_escape, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE, "Return to line mode"},
-    DEFER("ed.sel.expand", SAG_ARITY_NONE,
-          SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, 17,
-          "expand the selection"),
-    DEFER("ed.sel.contract", SAG_ARITY_NONE,
-          SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, 17,
-          "contract the selection"),
+    {"ed.sel.expand", sag_edit_cmd_sel_unit_expand, SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Expand the selection to the next structural unit"},
+    {"ed.sel.contract", sag_edit_cmd_sel_unit_contract, SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Contract the selection to the previous structural unit"},
     {"ed.sel.unit.expand", sag_edit_cmd_sel_unit_expand, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
      "Expand to the next structural unit"},
@@ -219,11 +213,88 @@ static const CmdDesc builtins[] = {
      SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
      "Contract to the previous structural unit"},
-    DEFER("ed.cursor.add", SAG_ARITY_INT,
-          SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, 17, "add a cursor"),
-    DEFER("ed.cursor.delete", SAG_ARITY_NONE,
-          SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, 17, "delete a cursor"),
-
+    {"ed.sel.kind", sag_edit_cmd_sel_kind, SAG_ARITY_STR,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Choose character, line, or rectangular selection geometry"},
+    {"ed.sel.swap_ends", sag_edit_cmd_sel_swap_ends, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Exchange the active and anchored ends of each selection"},
+    {"ed.sel.yank", sag_sel_cmd_yank, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_MULTI_AGGREGATE,
+     "Yank the active selections"},
+    {"ed.sel.delete", sag_sel_cmd_delete, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
+         SAG_CMD_MULTI_AGGREGATE,
+     "Delete the active selections"},
+    {"ed.sel.change", sag_sel_cmd_change, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
+         SAG_CMD_MULTI_AGGREGATE,
+     "Change the active selections"},
+    {"ed.sel.case_upper", sag_sel_cmd_case_upper, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
+         SAG_CMD_MULTI_AGGREGATE,
+     "Uppercase the active selections"},
+    {"ed.sel.case_lower", sag_sel_cmd_case_lower, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
+         SAG_CMD_MULTI_AGGREGATE,
+     "Lowercase the active selections"},
+    {"ed.sel.case_toggle", sag_sel_cmd_case_toggle, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
+         SAG_CMD_MULTI_AGGREGATE,
+     "Toggle case in the active selections"},
+    {"ed.sel.indent", sag_sel_cmd_indent, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
+         SAG_CMD_MULTI_AGGREGATE,
+     "Indent lines covered by the selection"},
+    {"ed.sel.dedent", sag_sel_cmd_dedent, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
+         SAG_CMD_MULTI_AGGREGATE,
+     "Dedent lines covered by the selection"},
+    {"ed.sel.shift_left", sag_sel_cmd_shift_left, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
+         SAG_CMD_MULTI_AGGREGATE,
+     "Shift selected text left"},
+    {"ed.sel.shift_right", sag_sel_cmd_shift_right, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
+         SAG_CMD_MULTI_AGGREGATE,
+     "Shift selected text right"},
+    {"ed.sel.join", sag_sel_cmd_join, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
+         SAG_CMD_MULTI_AGGREGATE,
+     "Join lines covered by the selection"},
+    {"ed.sel.replace_char", sag_sel_cmd_replace_char, SAG_ARITY_STR,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
+         SAG_CMD_MULTI_AGGREGATE | SAG_CMD_CAPTURES_TEXT,
+     "Replace selected graphemes with one grapheme"},
+    {"ed.edit.rect.insert", sag_sel_cmd_rect_insert, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
+         SAG_CMD_MULTI_AGGREGATE,
+     "Insert at the left edge of a rectangular selection"},
+    {"ed.edit.rect.append", sag_sel_cmd_rect_append, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
+         SAG_CMD_MULTI_AGGREGATE,
+     "Insert at the right edge of a rectangular selection"},
+    {"ed.cursor.lift.lines", sag_edit_cmd_cursor_lift_lines, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Lift a selection to one cursor per line"},
+    {"ed.cursor.lift.matches", sag_edit_cmd_cursor_lift_matches,
+     SAG_ARITY_OPT_STR, SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Lift literal matches in the selection to cursors"},
+    {"ed.cursor.lift.ends", sag_edit_cmd_cursor_lift_ends, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Lift both ends of each selection to cursors"},
+    {"ed.cursor.add.above", sag_edit_cmd_cursor_add_above, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Add a cursor on the preceding line"},
+    {"ed.cursor.add.below", sag_edit_cmd_cursor_add_below, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Add a cursor on the following line"},
+    {"ed.cursor.drop", sag_edit_cmd_cursor_drop, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Drop the most recently added cursor"},
+    {"ed.cursor.collapse", sag_edit_cmd_cursor_collapse, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Keep only the primary cursor"},
     {"ed.view.center", sag_edit_cmd_view_center, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, "Center the cursor line"},
     {"ed.view.top", sag_edit_cmd_view_top, SAG_ARITY_NONE,
@@ -305,12 +376,6 @@ static const CmdDesc builtins[] = {
     DEFER("ed.win.prev", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 22,
           "focus the previous window"),
 
-    DEFER("ed.reg.yank", SAG_ARITY_OPT_STR,
-          SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, 17,
-          "yank into a register"),
-    DEFER("ed.reg.paste", SAG_ARITY_OPT_STR,
-          SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER, 17,
-          "paste from a register"),
     DEFER("ed.search.open", SAG_ARITY_OPT_STR, SAG_CMD_PROMPTS, 21,
           "open incremental search"),
     DEFER("ed.search.next", SAG_ARITY_NONE,
@@ -360,7 +425,7 @@ static bool command_name_valid(const char *name)
         "search", "macro", "job", "git", "lsp", "ai", "plug"};
     static const char *const verbs[] = {
         "home", "end", "next", "prev", "up", "down", "left", "right",
-        "goto", "insert", "delete", "replace", "yank", "paste", "toggle",
+        "goto", "insert", "delete", "replace", "change", "yank", "paste", "toggle",
         "open", "close", "save", "new", "enter", "leave", "grow",
         "shrink", "expand", "contract", "list", "reload", "cancel",
         "text", "undo", "redo", "escape", "add", "above", "below", "center",
@@ -370,7 +435,10 @@ static bool command_name_valid(const char *name)
         "grapheme_left", "grapheme", "undo_barrier", "open_above",
         "open_below", "top", "bottom", "goto_line", "toggle_wrap",
         "number_style", "next_alt", "prev_alt", "home_alt", "end_alt",
-        "match_prev", "match_next", "sub_prev", "sub_next"};
+        "match_prev", "match_next", "sub_prev", "sub_next", "kind",
+        "swap_ends", "lines", "matches", "ends", "drop", "collapse",
+        "case_upper", "case_lower", "case_toggle", "indent", "dedent",
+        "shift_left", "shift_right", "join", "replace_char", "append"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;
@@ -435,7 +503,8 @@ static void desc_validate(const CmdDesc *d)
     const u32 known_flags = SAG_CMD_REPEATABLE | SAG_CMD_TAKES_COUNT |
                             SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN |
                             SAG_CMD_CHANGES_BUFFER | SAG_CMD_PROMPTS |
-                            SAG_CMD_DEFERRED;
+                            SAG_CMD_DEFERRED | SAG_CMD_MULTI_AGGREGATE |
+                            SAG_CMD_CAPTURES_TEXT;
 
     if (d == NULL)
         SAG_BUG("sag_cmd_register: NULL descriptor");
@@ -451,6 +520,9 @@ static void desc_validate(const CmdDesc *d)
     if ((d->flags & SAG_CMD_REPEATABLE) != 0U &&
         (d->flags & SAG_CMD_TAKES_COUNT) != 0U)
         SAG_BUG("command %s is both REPEATABLE and TAKES_COUNT", d->name);
+    if ((d->flags & SAG_CMD_CAPTURES_TEXT) != 0U &&
+        d->arity != SAG_ARITY_STR)
+        SAG_BUG("command %s captures text without string arity", d->name);
     if (d->help == NULL || d->help[0] == '\0')
         SAG_BUG("command %s has empty help", d->name);
     if ((d->flags & SAG_CMD_DEFERRED) != 0U &&
@@ -590,14 +662,13 @@ static CmdStatus command_deferred(const CmdDesc *d)
     return SAG_CMD_ERR_DEFERRED;
 }
 
-CmdStatus sag_cmd_invoke(CmdId id, CmdCtx *cx)
+CmdStatus sag_cmd_prepare(CmdId id, CmdCtx *cx, const CmdDesc **out)
 {
     const CmdDesc *d = sag_cmd_desc(id);
-    CmdStatus status = SAG_CMD_OK;
-    u32 n;
-    u32 i;
 
-    if (d == NULL || cx == NULL)
+    if (out != NULL)
+        *out = NULL;
+    if (d == NULL || cx == NULL || out == NULL)
         return SAG_CMD_ERR_ARG;
     if ((d->flags & SAG_CMD_NEEDS_WIN) != 0U && cx->win == NULL)
         return command_fail(d, "no window", SAG_CMD_ERR_STATE);
@@ -608,6 +679,20 @@ CmdStatus sag_cmd_invoke(CmdId id, CmdCtx *cx)
     if (registry.record_tap != NULL &&
         (d->flags & SAG_CMD_RECORDABLE) != 0U)
         registry.record_tap(id, cx);
+    *out = d;
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_cmd_invoke(CmdId id, CmdCtx *cx)
+{
+    const CmdDesc *d;
+    CmdStatus status;
+    u32 n;
+    u32 i;
+
+    status = sag_cmd_prepare(id, cx, &d);
+    if (status != SAG_CMD_OK)
+        return status;
     n = (d->flags & SAG_CMD_REPEATABLE) != 0U ? cx->count : 1U;
     for (i = 0; i < n && status == SAG_CMD_OK; i++)
         status = d->fn(cx);

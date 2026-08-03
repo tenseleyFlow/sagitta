@@ -4,6 +4,8 @@
 
 #include "edit/dispatch.h"
 #include "edit/ed.h"
+#include "edit/keys_highlight.h"
+#include "edit/motion.h"
 #include "util/log.h"
 
 const ModeDesc sag_modes[SAG_MODE__N] = {
@@ -19,8 +21,6 @@ const ModeDesc sag_modes[SAG_MODE__N] = {
 static const char *mode_sprint(Mode mode)
 {
     switch (mode) {
-    case SAG_MODE_H:
-        return "17";
     case SAG_MODE_E:
         return "18";
     case SAG_MODE_F:
@@ -28,6 +28,7 @@ static const char *mode_sprint(Mode mode)
     case SAG_MODE_L:
     case SAG_MODE_W:
     case SAG_MODE_B:
+    case SAG_MODE_H:
     case SAG_MODE_I:
     case SAG_MODE__N:
         break;
@@ -42,6 +43,11 @@ CmdStatus sag_mode_enter(Ed *ed, Mode mode)
 
     if (ed == NULL || mode >= SAG_MODE__N)
         return SAG_CMD_ERR_ARG;
+    if (mode == SAG_MODE_H) {
+        Mode unit = ed->mode == SAG_MODE_I ? SAG_MODE_I : ed->prev_unit;
+
+        return sag_mode_enter_highlight(ed, unit, false);
+    }
     sprint = mode_sprint(mode);
     if (sprint != NULL) {
         sag_msg(ed, SAG_MSG_ERROR,
@@ -67,8 +73,42 @@ CmdStatus sag_mode_enter(Ed *ed, Mode mode)
     return SAG_CMD_OK;
 }
 
+CmdStatus sag_mode_enter_highlight(Ed *ed, Mode unit, bool sticky)
+{
+    const UnitOps *ops;
+
+    if (ed == NULL || ed->win == NULL)
+        return SAG_CMD_ERR_STATE;
+    if (unit == SAG_MODE_I)
+        ops = &sag_unit_char;
+    else
+        ops = sag_unit_of_mode(unit);
+    if (ops == NULL)
+        return SAG_CMD_ERR_ARG;
+    if (ed->mode == SAG_MODE_I) {
+        size_t i;
+
+        sag_ed_insert_barrier(ed);
+        if (ed->win->buf != NULL && ed->win->buf->tb != NULL) {
+            for (i = 0U; i < ed->win->cs.curs.len; i++)
+                sag_cursor_clamp(ed->win->buf->tb,
+                                 &ed->win->cs.curs.data[i]);
+        }
+    }
+    ed->win->h.from = unit;
+    ed->win->h.unit = ops;
+    ed->win->h.kind = SAG_SEL_CHAR;
+    ed->win->h.sticky = sticky;
+    sag_keys_highlight_install(ed, unit);
+    sag_dispatch_set_mode(ed, SAG_MODE_H);
+    ed->footer_dirty = true;
+    return SAG_CMD_OK;
+}
+
 CmdStatus sag_mode_escape(Ed *ed)
 {
+    size_t i;
+
     if (ed == NULL)
         return SAG_CMD_ERR_ARG;
     ed->chord.n = 0U;
@@ -79,6 +119,15 @@ CmdStatus sag_mode_escape(Ed *ed)
     if (ed->prompt != SAG_PROMPT_NONE) {
         ed->prompt = SAG_PROMPT_NONE;
         sag_msg_clear(ed);
+    }
+    if (ed->mode == SAG_MODE_H && ed->win != NULL &&
+        ed->win->cs.curs.len != 0U) {
+        for (i = 0U; i < ed->win->cs.curs.len; i++)
+            ed->win->cs.curs.data[i].anchor =
+                ed->win->cs.curs.data[i].pos;
+        sag_cset_remove_all_but_primary(&ed->win->cs);
+        sag_selstack_clear(ed->win);
+        sag_ed_damage_document(ed);
     }
     return sag_mode_enter(ed, SAG_MODE_L);
 }

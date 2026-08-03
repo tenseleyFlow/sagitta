@@ -28,6 +28,8 @@ typedef struct Render {
     bool undercurl;
     bool cursor_known;
     bool cursor_visible;
+    SagCursorShape cursor_shape;
+    u64 cursor_generation;
     u64 frames;
     u64 bytes;
 } Render;

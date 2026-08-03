@@ -124,7 +124,6 @@ void test_modes_deferred_entries_name_their_sprints(void)
         const char *mode;
         const char *sprint;
     } cases[] = {
-        {'h', "H", "17"},
         {'e', "E", "18"},
         {'f', "F", "52"},
     };

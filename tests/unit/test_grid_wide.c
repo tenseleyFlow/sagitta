@@ -35,14 +35,33 @@ void test_grid_wide_tail_copies_style(void)
     Interner interner;
     SagColor fg = wide_color(2u, 10u, 20u, 30u);
     SagColor bg = wide_color(1u, 4u, 0u, 0u);
+    Cell overlay;
 
     wide_init(&grid, &arena, &interner, 4u);
-    sag_grid_put(&grid, 0u, 1u, WIDE_CJK, sizeof(WIDE_CJK), fg, bg, 0x155u);
+    sag_grid_put(&grid, 0u, 1u, WIDE_CJK, sizeof(WIDE_CJK), fg, bg,
+                 SAG_ATTR_INVALID_BYTE);
     SAG_ASSERT_EQ_U64(grid.back[1].w, 2u);
     SAG_ASSERT_EQ_U64(grid.back[2].w, 0u);
     SAG_ASSERT_EQ_MEM(&grid.back[1].fg, &grid.back[2].fg, sizeof(SagColor));
     SAG_ASSERT_EQ_MEM(&grid.back[1].bg, &grid.back[2].bg, sizeof(SagColor));
     SAG_ASSERT_EQ_U64(grid.back[1].attrs, grid.back[2].attrs);
+    sag_grid_flip(&grid);
+    overlay = grid.blank;
+    overlay.bg = wide_color(SAG_COLOR_RGB, 90u, 80u, 70u);
+    overlay.attrs = SAG_ATTR_REVERSE;
+    sag_grid_overlay(&grid, 0u, 2u, 3u, &overlay,
+                     SAG_OVERLAY_BG | SAG_OVERLAY_ATTRS);
+    SAG_ASSERT_EQ_U64(grid.back[1].w, 2u);
+    SAG_ASSERT_EQ_U64(grid.back[2].w, 0u);
+    SAG_ASSERT_EQ_MEM(grid.back[1].utf8, WIDE_CJK, sizeof(WIDE_CJK));
+    SAG_ASSERT_EQ_MEM(&grid.back[1].bg, &overlay.bg, sizeof(SagColor));
+    SAG_ASSERT_EQ_MEM(&grid.back[2].bg, &overlay.bg, sizeof(SagColor));
+    SAG_ASSERT_EQ_U64(grid.back[1].attrs,
+                      SAG_ATTR_INVALID_BYTE | SAG_ATTR_REVERSE);
+    SAG_ASSERT_EQ_U64(grid.back[2].attrs,
+                      SAG_ATTR_INVALID_BYTE | SAG_ATTR_REVERSE);
+    SAG_ASSERT_EQ_U64(grid.dmg[0].lo, 1u);
+    SAG_ASSERT_EQ_U64(grid.dmg[0].hi, 3u);
     wide_free(&grid, &arena, &interner);
 }
 

@@ -218,6 +218,7 @@ bool sag_grid_init(Grid *g, Interner *gi, u16 rows, u16 cols)
     memset(g, 0, sizeof(*g));
     g->gi = gi;
     g->blank.w = 1u;
+    g->cur_shape = SAG_CURSOR_BLOCK;
     return sag_grid_resize(g, rows, cols);
 }
 
@@ -427,6 +428,34 @@ void sag_grid_fill(Grid *g, u16 row, u16 c0, u16 c1, Cell c)
     damage_add(g, row, lo, hi);
 }
 
+void sag_grid_overlay(Grid *g, u16 row, u16 c0, u16 c1,
+                      const Cell *style, u8 fields)
+{
+    Cell *cells;
+    u16 col;
+
+    if (g == NULL || style == NULL || row >= g->rows || c0 >= c1 ||
+        c0 >= g->cols)
+        return;
+    if (c1 > g->cols)
+        c1 = g->cols;
+    cells = &g->back[(size_t)row * g->cols];
+    if (cells[c0].w == 0u && c0 > 0u)
+        c0--;
+    if (c1 < g->cols && cells[c1 - 1u].w == 2u)
+        c1++;
+    for (col = c0; col < c1; col++) {
+        if ((fields & SAG_OVERLAY_FG) != 0u)
+            cells[col].fg = color_normalize(style->fg);
+        if ((fields & SAG_OVERLAY_BG) != 0u)
+            cells[col].bg = color_normalize(style->bg);
+        if ((fields & SAG_OVERLAY_ATTRS) != 0u)
+            cells[col].attrs |= (u16)(style->attrs &
+                                      ((SAG_ATTR_INVALID_BYTE << 1) - 1u));
+    }
+    damage_add(g, row, c0, c1);
+}
+
 void sag_grid_cursor(Grid *g, u16 row, u16 col, bool visible)
 {
     if (g == NULL)
@@ -448,6 +477,18 @@ void sag_grid_cursor(Grid *g, u16 row, u16 col, bool visible)
     g->cur_vis = visible;
 }
 
+void sag_grid_cursor_shape(Grid *g, SagCursorShape shape)
+{
+    if (g == NULL)
+        return;
+    if (shape != SAG_CURSOR_BLOCK && shape != SAG_CURSOR_BAR)
+        SAG_BUG("grid cursor: invalid shape");
+    if (g->cur_shape == shape)
+        return;
+    g->cur_shape = shape;
+    g->cursor_generation++;
+}
+
 void sag_grid_mark_all(Grid *g)
 {
     u16 row;
@@ -460,6 +501,7 @@ void sag_grid_mark_all(Grid *g)
     }
     g->dmg_lo = 0u;
     g->dmg_hi = g->rows;
+    g->cursor_generation++;
 }
 
 void sag_grid_flip(Grid *g)

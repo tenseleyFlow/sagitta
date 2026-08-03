@@ -135,6 +135,9 @@ static void restore_cursors(EditCtx *ec, u32 at, u32 count)
         cs->curs.data[i].anchor = BYTEOFF(rec->anchor);
         cs->curs.data[i].goal_col = (GCol){rec->goal};
     }
+    sag_cset_reseed(cs);
+    for (i = 0U; i < count; i++)
+        cs->selstacks.data[i].n = 0U;
     sag_cset_normalize(ec->tb, cs);
 }
 
@@ -211,8 +214,6 @@ static void require_reason(EditCtx *ec, SagTxnReason reason)
 {
     if (reason >= SAG_TXN_REASON_MAX)
         SAG_BUG("undo: invalid transaction reason");
-    if (reason == SAG_TXN_MULTI)
-        SAG_BUG("multi-cursor transactions land in Sprint 17");
     if (reason == SAG_TXN_FILTER)
         SAG_BUG("filter transactions land in Sprint 19");
     if (reason == SAG_TXN_REPLACE)
@@ -221,7 +222,11 @@ static void require_reason(EditCtx *ec, SagTxnReason reason)
         SAG_BUG("macro transactions land in Sprint 34");
     if (reason == SAG_TXN_LSP)
         SAG_BUG("LSP transactions land in Sprint 47");
-    if (ec->cset != NULL)
+    if (reason == SAG_TXN_MULTI) {
+        if (ec->cset == NULL || ec->cset->curs.len < 2U)
+            SAG_BUG("multi-cursor transaction requires multiple cursors");
+        sag_cset_check_text(ec->tb, ec->cset);
+    } else if (ec->cset != NULL)
         sag_cset_require_single_edit(ec->cset);
 }
 
@@ -241,6 +246,28 @@ void sag_undo_begin(EditCtx *ec, SagTxnReason why)
     if (ut->depth == UINT32_MAX)
         SAG_BUG("undo: transaction nesting overflow");
     ut->depth++;
+}
+
+void sag_undo_promote_multi(EditCtx *ec)
+{
+    UndoTree *ut;
+    UndoNode *node;
+
+    require_ctx(ec);
+    ut = ec->undo;
+    if (ut->depth == 0U || ec->cset == NULL || ec->cset->curs.len < 2U)
+        SAG_BUG("undo: invalid multi-cursor transaction promotion");
+    sag_cset_check_text(ec->tb, ec->cset);
+    if (ut->pending_reason == SAG_TXN_MULTI)
+        return;
+    if (ut->pending_reason != SAG_TXN_TYPE &&
+        ut->pending_reason != SAG_TXN_ERASE)
+        SAG_BUG("undo: cannot promote transaction reason %u",
+                (u32)ut->pending_reason);
+    node = node_mut(ut, ut->open);
+    if (node != NULL)
+        node->reason = SAG_TXN_MULTI;
+    ut->pending_reason = SAG_TXN_MULTI;
 }
 
 void sag_undo_boundary(UndoTree *ut)
@@ -431,6 +458,13 @@ void sag_undo_prepare_delete(EditCtx *ec, Span range)
 static void finish_record(EditCtx *ec, UndoNode *node)
 {
     UndoTree *ut = ec->undo;
+    if (ut->depth != 0U && ut->pending_reason == SAG_TXN_MULTI) {
+        node->t_last_ms = ut->mono_clock(ut->clock_ctx);
+        ut->cur = node->id;
+        ut->bytes_live += sizeof(UndoOp) + sizeof(UndoRepairRun) +
+                          sizeof(UndoReplaySpan);
+        return;
+    }
     if (node->n_after != 0U &&
         (size_t)node->cur_after + node->n_after == ut->cursors.len &&
         (!ut->reopened || node->cur_after != ut->reopen_cur_after)) {

@@ -40,6 +40,17 @@ enum {
     CELL_INTERNED = 1u << 0
 };
 
+enum {
+    SAG_OVERLAY_FG = 1u << 0,
+    SAG_OVERLAY_BG = 1u << 1,
+    SAG_OVERLAY_ATTRS = 1u << 2
+};
+
+typedef enum SagCursorShape {
+    SAG_CURSOR_BLOCK = 0,
+    SAG_CURSOR_BAR
+} SagCursorShape;
+
 /*
  * Eight inline bytes keep ordinary Latin, CJK, and emoji clusters out of
  * the interner. The 20-byte cell keeps the double-buffered diff working set
@@ -84,6 +95,13 @@ typedef struct Grid {
     u16 cur_row;
     u16 cur_col;
     bool cur_vis;
+    SagCursorShape cur_shape;
+    u64 cursor_generation;
+    u64 cursor_overlay_signature;
+    bool cursor_overlay_valid;
+    u64 cursor_overlay_primary_pos;
+    u64 cursor_overlay_primary_anchor;
+    bool cursor_overlay_primary_valid;
     Cell blank;
 } Grid;
 
@@ -96,7 +114,12 @@ u16 sag_grid_put(Grid *g, u16 row, u16 col, const u8 *cluster, size_t n,
 u16 sag_grid_puts(Grid *g, u16 row, u16 col, const u8 *s, size_t n,
                   SagColor fg, SagColor bg, u16 attrs);
 void sag_grid_fill(Grid *g, u16 row, u16 c0, u16 c1, Cell c);
+/* Applies selected style fields without replacing the glyph or its width.
+ * An overlap with either half of a wide glyph styles the complete pair. */
+void sag_grid_overlay(Grid *g, u16 row, u16 c0, u16 c1,
+                      const Cell *style, u8 fields);
 void sag_grid_cursor(Grid *g, u16 row, u16 col, bool visible);
+void sag_grid_cursor_shape(Grid *g, SagCursorShape shape);
 void sag_grid_mark_all(Grid *g);
 void sag_grid_flip(Grid *g);
 bool sag_cell_eq(const Cell *a, const Cell *b);

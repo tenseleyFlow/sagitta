@@ -75,7 +75,7 @@ void test_vt_closed_set_and_modes(void)
     vt_init(&v, 3, 8);
     feed_lit(&v, "\0337\033[?1049h\033[?2004h\033[?1002h\033[?1006h"
                  "\033[?1004h\033[>21u\033[?2026h\033[2;3H\033[4C"
-                 "\033[?25l\033[?2026l");
+                 "\033[?25l\033[6 q\033[?2026l");
     SAG_ASSERT_EQ_U64(v.nerrors, 0u);
     SAG_ASSERT_EQ_U64(v.modes, all_modes);
     SAG_ASSERT_EQ_I64(v.ksp, 1);
@@ -83,12 +83,14 @@ void test_vt_closed_set_and_modes(void)
     SAG_ASSERT_EQ_I64(v.cur_r, 1);
     SAG_ASSERT_EQ_I64(v.cur_c, 6);
     SAG_ASSERT(!v.cur_vis);
+    SAG_ASSERT_EQ_U64(v.cursor_shape, 6u);
     SAG_ASSERT_EQ_U64(v.nsync_pairs, 1u);
-    feed_lit(&v, "\033[<u\033[?2004l\033[?1002l\033[?1006l\033[?1004l"
+    feed_lit(&v, "\033[0 q\033[<u\033[?2004l\033[?1002l\033[?1006l\033[?1004l"
                  "\033[?1049l\0338");
     SAG_ASSERT_EQ_U64(v.modes, 0u);
     SAG_ASSERT_EQ_I64(v.ksp, 0);
     SAG_ASSERT(!v.alt);
+    SAG_ASSERT_EQ_U64(v.cursor_shape, 0u);
     SAG_ASSERT_EQ_I64(v.cur_r, 0);
     SAG_ASSERT_EQ_I64(v.cur_c, 0);
     vt_free(&v);

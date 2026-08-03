@@ -51,6 +51,7 @@ static const char SAG_TTY_RESTORE_BLOB[] =
     "\x1b[?1004l"
     "\x1b[?2026l"
     "\x1b[0m"
+    "\x1b[0 q"
     "\x1b[?1049l"
     "\x1b[?25h";
 

@@ -30,6 +30,7 @@ typedef struct ModeDesc {
 extern const ModeDesc sag_modes[SAG_MODE__N];
 
 CmdStatus sag_mode_enter(Ed *ed, Mode mode);
+CmdStatus sag_mode_enter_highlight(Ed *ed, Mode unit, bool sticky);
 CmdStatus sag_mode_escape(Ed *ed);
 
 #endif

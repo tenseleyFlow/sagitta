@@ -3,6 +3,7 @@
 
 #include "edit/motion.h"
 #include "edit/multicursor.h"
+#include "edit/select.h"
 #include "text/coords.h"
 #include "ui/gutter.h"
 #include "ui/viewport.h"
@@ -22,7 +23,7 @@ typedef struct Rect {
 typedef struct Win {
     Buffer *buf;
     CursorSet cs;
-    SelStack sels;
+    HState h;
     Viewport vp;
     WrapCache wrap_cache;
     Rect rect;

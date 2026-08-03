@@ -105,7 +105,7 @@ void sag_regval_from_span(RegVal *out, const TextBuf *tb, Span range,
     if (out == NULL || tb == NULL)
         SAG_BUG("sag_regval_from_span: NULL argument");
     if (type == SAG_REG_BLOCKWISE)
-        SAG_BUG("blockwise register production lands in Sprint 17");
+        SAG_BUG("blockwise capture requires per-row geometry");
     regval_clear(out);
     out->type = (u8)type;
     append_text_range(&out->bytes, tb, range);
@@ -231,8 +231,6 @@ void sag_reg_set(Registers *r, u8 name, const RegVal *v)
 
     if (r == NULL || v == NULL)
         SAG_BUG("sag_reg_set: NULL argument");
-    if (v->type == SAG_REG_BLOCKWISE)
-        SAG_BUG("blockwise register production lands in Sprint 17");
     if (name == '_' || name == 0U)
         return;
     if (name == '.' || name == '/' || name == ':' || name == '%' ||
@@ -549,7 +547,8 @@ static bool paste_char(Registers *r, EditCtx *ec, const RegVal *v,
         at = content_end;
     else
         at = sag_grapheme_next(ec->tb, cursor.pos);
-    sag_edit_insert(ec, at, v->bytes.data, v->bytes.len);
+    if (!sag_edit_insert(ec, at, v->bytes.data, v->bytes.len))
+        return false;
     remember_insert(r, at, v->bytes.len);
     end = BYTEOFF(at.v + v->bytes.len);
     set_primary_cursor(ec, sag_grapheme_prev(ec->tb, end));
@@ -569,11 +568,13 @@ static bool paste_line(Registers *r, EditCtx *ec, const RegVal *v,
         SAG_BUG("linewise register payload lacks trailing EOL");
     if (before) {
         at = sag_textbuf_line_start(ec->tb, line);
-        sag_edit_insert(ec, at, v->bytes.data, v->bytes.len);
+        if (!sag_edit_insert(ec, at, v->bytes.data, v->bytes.len))
+            return false;
         remember_insert(r, at, v->bytes.len);
     } else if (dst_eol_len != 0U) {
         at = BYTEOFF(span.hi);
-        sag_edit_insert(ec, at, v->bytes.data, v->bytes.len);
+        if (!sag_edit_insert(ec, at, v->bytes.data, v->bytes.len))
+            return false;
         remember_insert(r, at, v->bytes.len);
     } else {
         const u8 *eol;
@@ -584,12 +585,14 @@ static bool paste_line(Registers *r, EditCtx *ec, const RegVal *v,
             SAG_BUG("linewise paste requires file metadata");
         at = BYTEOFF(sag_textbuf_len(ec->tb));
         sag_filemeta_eol_bytes(ec->meta, &eol, &eol_len);
-        sag_edit_insert(ec, at, eol, eol_len);
+        if (!sag_edit_insert(ec, at, eol, eol_len))
+            return false;
         remember_insert(r, at, eol_len);
         if (v->bytes.len > payload_eol) {
             ByteOff payload_at = BYTEOFF(at.v + eol_len);
-            sag_edit_insert(ec, payload_at, v->bytes.data,
-                            v->bytes.len - payload_eol);
+            if (!sag_edit_insert(ec, payload_at, v->bytes.data,
+                                 v->bytes.len - payload_eol))
+                return false;
             remember_insert(r, payload_at, v->bytes.len - payload_eol);
         }
         at = BYTEOFF(at.v + eol_len);
@@ -608,7 +611,7 @@ static ByteOff block_target(const TextBuf *tb, Cursor cursor, bool before)
     return sag_grapheme_next(tb, cursor.pos);
 }
 
-static void insert_spaces(Registers *r, EditCtx *ec, ByteOff at, u64 count)
+static bool insert_spaces(Registers *r, EditCtx *ec, ByteOff at, u64 count)
 {
     static const u8 spaces[64] = {
         ' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',
@@ -620,10 +623,12 @@ static void insert_spaces(Registers *r, EditCtx *ec, ByteOff at, u64 count)
     while (done < count) {
         u64 take = count - done < sizeof(spaces) ? count - done :
                                                      sizeof(spaces);
-        sag_edit_insert(ec, BYTEOFF(at.v + done), spaces, take);
+        if (!sag_edit_insert(ec, BYTEOFF(at.v + done), spaces, take))
+            return false;
         remember_insert(r, BYTEOFF(at.v + done), take);
         done += take;
     }
+    return true;
 }
 
 static bool paste_block(Registers *r, EditCtx *ec, const RegVal *v,
@@ -654,7 +659,8 @@ static bool paste_block(Registers *r, EditCtx *ec, const RegVal *v,
             if (ec->meta == NULL)
                 SAG_BUG("blockwise line extension requires file metadata");
             sag_filemeta_eol_bytes(ec->meta, &eol, &eol_len);
-            sag_edit_insert(ec, end, eol, eol_len);
+            if (!sag_edit_insert(ec, end, eol, eol_len))
+                return false;
             remember_insert(r, end, eol_len);
         }
         if (row.lo > row.hi || row.hi > v->bytes.len)
@@ -663,9 +669,12 @@ static bool paste_block(Registers *r, EditCtx *ec, const RegVal *v,
         off = sag_ccol_to_off_padded(ec->tb, dst, column, tabw);
         landed = sag_off_to_ccol(ec->tb, dst, off, tabw);
         pad = sag_ccol_shortfall(column, landed);
-        insert_spaces(r, ec, off, pad);
+        if (!insert_spaces(r, ec, off, pad))
+            return false;
         off.v += pad;
-        sag_edit_insert(ec, off, v->bytes.data + row.lo, row.hi - row.lo);
+        if (!sag_edit_insert(ec, off, v->bytes.data + row.lo,
+                             row.hi - row.lo))
+            return false;
         remember_insert(r, off, row.hi - row.lo);
         if (i == 0U)
             first_insert = off;

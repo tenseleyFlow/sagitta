@@ -3,6 +3,7 @@
 #include <stddef.h>
 
 #include "edit/ed.h"
+#include "edit/keys_highlight.h"
 #include "util/log.h"
 
 static const BindRow keys_L[] = {
@@ -54,6 +55,7 @@ static const BindRow keys_W[] = {
     {"C-<right>", "ed.move.word.sub_next", 0, NULL},
     {"<home>", "ed.move.unit.home", 0, NULL},
     {"<end>", "ed.move.unit.end", 0, NULL},
+    {"h", "ed.mode.enter", 0, "H"},
     {"<esc>", "ed.mode.escape", 0, NULL},
     {"C-g", "ed.ui.message_expand", 0, NULL},
 };
@@ -67,16 +69,13 @@ static const BindRow keys_B[] = {
     {"A-<right>", "ed.move.block.match_next", 0, NULL},
     {"A-<up>", "ed.sel.unit.expand", 0, NULL},
     {"A-<down>", "ed.sel.unit.contract", 0, NULL},
-    {"<esc>", "ed.mode.escape", 0, NULL},
-    {"C-g", "ed.ui.message_expand", 0, NULL},
-};
-
-static const BindRow keys_H[] = {
+    {"h", "ed.mode.enter", 0, "H"},
     {"<esc>", "ed.mode.escape", 0, NULL},
     {"C-g", "ed.ui.message_expand", 0, NULL},
 };
 
 static const BindRow keys_I[] = {
+    {"A-h", "ed.mode.enter", 0, "H"},
     {"<esc>", "ed.mode.escape", 0, NULL},
     {"C-g", "ed.ui.message_expand", 0, NULL},
     {"<cr>", "ed.edit.insert.newline", 0, NULL},
@@ -104,11 +103,11 @@ static const BindRow keys_F[] = {
 void sag_keys_default_install(Ed *ed)
 {
     static const BindRow *const rows[SAG_MODE__N] = {
-        keys_L, keys_W, keys_B, keys_H, keys_I, keys_E, keys_F,
+        keys_L, keys_W, keys_B, NULL, keys_I, keys_E, keys_F,
     };
     static const u32 counts[SAG_MODE__N] = {
         SAG_ARRAY_LEN(keys_L), SAG_ARRAY_LEN(keys_W),
-        SAG_ARRAY_LEN(keys_B), SAG_ARRAY_LEN(keys_H),
+        SAG_ARRAY_LEN(keys_B), 0U,
         SAG_ARRAY_LEN(keys_I), SAG_ARRAY_LEN(keys_E),
         SAG_ARRAY_LEN(keys_F),
     };
@@ -119,6 +118,7 @@ void sag_keys_default_install(Ed *ed)
                               rows[i], counts[i]))
             SAG_BUG("invalid built-in %s-mode key table", sag_modes[i].name);
     }
+    sag_keys_highlight_install(ed, SAG_MODE_L);
     if (!sag_keymap_build(&ed->user_keys, "user", NULL, 0U))
         SAG_BUG("cannot build empty user key table");
     ed->keys.n = 2U;

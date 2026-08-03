@@ -81,6 +81,7 @@ void test_cmd_registry_builtins_are_deterministic(void)
 void test_cmd_registry_invocation_and_deferred(void)
 {
     Ed fake_ed = {0};
+    Win fake_win = {0};
     static const CmdDesc repeat_desc = {
         "ed.ui.toggle", probe_repeat, SAG_ARITY_NONE,
         SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE, "Toggle the test probe",
@@ -105,6 +106,7 @@ void test_cmd_registry_invocation_and_deferred(void)
 
     sag_cmd_shutdown();
     sag_cmd_init();
+    fake_ed.win = &fake_win;
     repeat = sag_cmd_register(&repeat_desc);
     takes = sag_cmd_register(&count_desc);
     cx.count = 4U;
@@ -162,13 +164,14 @@ void test_cmd_registry_invocation_and_deferred(void)
         mode.sarg = mode_rows[i].mode;
         mode.sarg_len = 1U;
         sag_test_capture_log();
-        if (i < 4U) {
+        if (i < 5U) {
             SAG_ASSERT_EQ_I64(sag_cmd_invoke(enter, &mode), SAG_CMD_OK);
             SAG_ASSERT_EQ_U64(
                 fake_ed.mode,
                 mode_rows[i].mode[0] == 'L' ? SAG_MODE_L :
                 mode_rows[i].mode[0] == 'I' ? SAG_MODE_I :
-                mode_rows[i].mode[0] == 'W' ? SAG_MODE_W : SAG_MODE_B);
+                mode_rows[i].mode[0] == 'W' ? SAG_MODE_W :
+                mode_rows[i].mode[0] == 'B' ? SAG_MODE_B : SAG_MODE_H);
         } else {
             SAG_ASSERT_EQ_I64(sag_cmd_invoke(enter, &mode),
                               SAG_CMD_ERR_DEFERRED);
@@ -176,6 +179,7 @@ void test_cmd_registry_invocation_and_deferred(void)
                                              mode_rows[i].sprint));
         }
     }
+    sag_keymap_free(&fake_ed.mode_keys[SAG_MODE_H]);
     sag_cmd_shutdown();
 }
 

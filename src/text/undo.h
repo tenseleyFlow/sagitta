@@ -187,6 +187,7 @@ void sag_undo_set_limits(UndoTree *ut, u64 bytes_max, u32 min_nodes,
                          u64 persist_bytes_max);
 
 void sag_undo_begin(EditCtx *ec, SagTxnReason why);
+void sag_undo_promote_multi(EditCtx *ec);
 void sag_undo_end(EditCtx *ec);
 void sag_undo_boundary(UndoTree *ut);
 void sag_undo_abort(EditCtx *ec);

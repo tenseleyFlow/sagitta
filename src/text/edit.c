@@ -54,6 +54,17 @@ static u8 *copy_range(const TextBuf *tb, Span range)
     return copy;
 }
 
+static void require_edit_wrapped(const EditCtx *ec)
+{
+    if (ec->cset == NULL || ec->cset->curs.len <= 1U)
+        return;
+    if (ec->undo == NULL || ec->undo->depth == 0U ||
+        ec->undo->pending_reason != SAG_TXN_MULTI)
+        sag_cset_require_single_edit(ec->cset);
+    if (!ec->cset->batching)
+        sag_cset_check_text(ec->tb, ec->cset);
+}
+
 bool sag_edit_insert(EditCtx *ec, ByteOff at, const u8 *bytes, u64 len)
 {
     u64 payload;
@@ -65,8 +76,7 @@ bool sag_edit_insert(EditCtx *ec, ByteOff at, const u8 *bytes, u64 len)
         SAG_BUG("edit insert: NULL payload");
     if (len == 0U)
         return true;
-    if (ec->cset != NULL)
-        sag_cset_require_single_edit(ec->cset);
+    require_edit_wrapped(ec);
     if (!sag_edit_ensure_journal(ec))
         return false;
     payload = ec->tb->add.len;
@@ -96,8 +106,7 @@ bool sag_edit_delete(EditCtx *ec, Span range)
     len = range.hi - range.lo;
     if (len == 0U)
         return true;
-    if (ec->cset != NULL)
-        sag_cset_require_single_edit(ec->cset);
+    require_edit_wrapped(ec);
     removed = copy_range(ec->tb, range);
     if (!sag_edit_ensure_journal(ec)) {
         free(removed);

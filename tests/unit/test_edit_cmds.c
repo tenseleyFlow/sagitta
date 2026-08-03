@@ -598,43 +598,45 @@ void test_edit_unit_selection_replays_and_invalidates(void)
     SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.sel.unit.expand", 1U, false,
                                   NULL, 0U), SAG_CMD_OK);
     SAG_ASSERT(ed.full_damage);
-    SAG_ASSERT_EQ_U64(ed.win->sels.n, 1U);
-    level0 = ed.win->sels.s[0];
+    SAG_ASSERT_EQ_U64(ed.win->cs.selstacks.data[0].n, 1U);
+    level0 = ed.win->cs.selstacks.data[0].s[0];
     SAG_ASSERT_EQ_U64(cursor->anchor.v, level0.lo);
     SAG_ASSERT_EQ_U64(cursor->pos.v, level0.hi);
     SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.sel.unit.expand", 1U, false,
                                   NULL, 0U), SAG_CMD_OK);
-    SAG_ASSERT_EQ_U64(ed.win->sels.n, 2U);
-    level1 = ed.win->sels.s[1];
+    SAG_ASSERT_EQ_U64(ed.win->cs.selstacks.data[0].n, 2U);
+    level1 = ed.win->cs.selstacks.data[0].s[1];
     SAG_ASSERT(level1.lo <= level0.lo && level1.hi >= level0.hi);
     SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.sel.unit.expand", 1U, false,
                                   NULL, 0U), SAG_CMD_OK);
-    SAG_ASSERT(ed.win->sels.n >= 3U);
+    SAG_ASSERT(ed.win->cs.selstacks.data[0].n >= 3U);
 
     ed.full_damage = false;
     SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.sel.unit.contract", 1U, false,
                                   NULL, 0U), SAG_CMD_OK);
     SAG_ASSERT(ed.full_damage);
     SAG_ASSERT_EQ_U64(cursor->anchor.v,
-                      ed.win->sels.s[ed.win->sels.n - 1U].lo);
+                      ed.win->cs.selstacks.data[0]
+                          .s[ed.win->cs.selstacks.data[0].n - 1U].lo);
     SAG_ASSERT_EQ_U64(cursor->pos.v,
-                      ed.win->sels.s[ed.win->sels.n - 1U].hi);
+                      ed.win->cs.selstacks.data[0]
+                          .s[ed.win->cs.selstacks.data[0].n - 1U].hi);
     SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.sel.unit.contract", 1U, false,
                                   NULL, 0U), SAG_CMD_OK);
-    SAG_ASSERT_EQ_U64(ed.win->sels.n, 1U);
+    SAG_ASSERT_EQ_U64(ed.win->cs.selstacks.data[0].n, 1U);
     SAG_ASSERT_EQ_U64(cursor->anchor.v, level0.lo);
     SAG_ASSERT_EQ_U64(cursor->pos.v, level0.hi);
 
     SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.move.line.home", 1U, false,
                                   NULL, 0U), SAG_CMD_OK);
-    SAG_ASSERT_EQ_U64(ed.win->sels.n, 0U);
+    SAG_ASSERT_EQ_U64(ed.win->cs.selstacks.data[0].n, 0U);
     edit_place(&ed, 16U);
     SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.sel.unit.expand", 1U, false,
                                   NULL, 0U), SAG_CMD_OK);
-    SAG_ASSERT_EQ_U64(ed.win->sels.n, 1U);
+    SAG_ASSERT_EQ_U64(ed.win->cs.selstacks.data[0].n, 1U);
     SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.insert.text", 1U, false,
                                   "X", 1U), SAG_CMD_OK);
-    SAG_ASSERT_EQ_U64(ed.win->sels.n, 0U);
+    SAG_ASSERT_EQ_U64(ed.win->cs.selstacks.data[0].n, 0U);
     sag_ed_free(&ed);
 }
 
@@ -681,61 +683,39 @@ void test_edit_word_and_block_key_layers_dispatch(void)
     key = edit_key(SAG_KEY_UP);
     key.mods = SAG_MOD_ALT;
     sag_ed_handle_key(&ed, key, 1);
-    SAG_ASSERT_EQ_U64(ed.win->sels.n, 1U);
+    SAG_ASSERT_EQ_U64(ed.win->cs.selstacks.data[0].n, 1U);
     sag_ed_free(&ed);
 }
 
-void test_edit_unit_selection_multicursor_names_sprint17(void)
+void test_edit_unit_selection_multicursor_has_independent_stacks(void)
 {
-    static const u8 text[] = "alpha\nbeta\n";
+    static const u8 text[] = "alpha\n\nbeta\n";
     Ed ed;
-    Cursor second = {BYTEOFF(6U), {0U}, BYTEOFF(6U)};
-    Bytebuf output;
-    int pipefd[2];
-    pid_t child;
-    pid_t waited;
-    int status;
-    ssize_t count;
-    u8 chunk[256];
+    Cursor second = {BYTEOFF(7U), {0U}, BYTEOFF(7U)};
 
     edit_fixture(&ed, text, sizeof(text) - 1U, SAG_EOL_LF);
+    edit_place(&ed, 1U);
     SAG_ASSERT(sag_cset_add(&ed.win->cs, second));
-    bytebuf_init(&output);
-    SAG_ASSERT_EQ_I64(fflush(NULL), 0);
-    SAG_ASSERT_EQ_I64(pipe(pipefd), 0);
-    child = fork();
-    SAG_ASSERT(child >= 0);
-    if (child == 0) {
-        (void)close(pipefd[0]);
-        if (dup2(pipefd[1], STDERR_FILENO) < 0)
-            _exit(126);
-        (void)close(pipefd[1]);
-        (void)setenv("SAG_LOG", "/dev/null", 1);
-        (void)edit_invoke(&ed, "ed.sel.unit.expand", 1U, false,
-                          NULL, 0U);
-        _exit(99);
-    }
-    (void)close(pipefd[1]);
-    for (;;) {
-        count = read(pipefd[0], chunk, sizeof(chunk));
-        if (count > 0) {
-            bytebuf_append(&output, chunk, (size_t)count);
-            continue;
-        }
-        if (count < 0 && errno == EINTR)
-            continue;
-        break;
-    }
-    (void)close(pipefd[0]);
-    do {
-        waited = waitpid(child, &status, 0);
-    } while (waited < 0 && errno == EINTR);
-    SAG_ASSERT_EQ_I64(waited, child);
-    SAG_ASSERT(WIFEXITED(status));
-    SAG_ASSERT_EQ_I64(WEXITSTATUS(status), SAG_EXIT_BUG);
-    bytebuf_append(&output, "", 1U);
-    SAG_ASSERT(strstr((const char *)output.data, "Sprint 17") != NULL);
-    bytebuf_free(&output);
+    SAG_ASSERT_EQ_U64(ed.win->cs.curs.len, 2U);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.sel.unit.expand", 1U, false,
+                                  NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(ed.win->cs.curs.len, 2U);
+    SAG_ASSERT_EQ_U64(ed.win->cs.selstacks.len, 2U);
+    SAG_ASSERT_EQ_U64(ed.win->cs.selstacks.data[0].n, 1U);
+    SAG_ASSERT_EQ_U64(ed.win->cs.selstacks.data[1].n, 1U);
+    SAG_ASSERT(ed.win->cs.curs.data[0].pos.v !=
+               ed.win->cs.curs.data[0].anchor.v);
+    SAG_ASSERT(ed.win->cs.curs.data[1].pos.v !=
+               ed.win->cs.curs.data[1].anchor.v);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.sel.unit.contract", 1U, false,
+                                  NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(ed.win->cs.curs.len, 2U);
+    SAG_ASSERT_EQ_U64(ed.win->cs.selstacks.data[0].n, 0U);
+    SAG_ASSERT_EQ_U64(ed.win->cs.selstacks.data[1].n, 0U);
+    SAG_ASSERT_EQ_U64(ed.win->cs.curs.data[0].pos.v,
+                      ed.win->cs.curs.data[0].anchor.v);
+    SAG_ASSERT_EQ_U64(ed.win->cs.curs.data[1].pos.v,
+                      ed.win->cs.curs.data[1].anchor.v);
     sag_ed_free(&ed);
 }
 

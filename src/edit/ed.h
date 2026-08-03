@@ -65,6 +65,9 @@ struct Ed {
     Keymap user_keys;
     KeyStack keys;
     Chord chord;
+    CmdId capture_cmd;
+    u32 capture_count;
+    bool capture_count_given;
     u32 chord_timeout_ms;
     CmdId last_cmd;
     CmdStatus last_status;
@@ -123,6 +126,7 @@ void sag_ed_handle_paste(Ed *ed, const u8 *bytes, size_t len, bool end);
 void sag_ed_resize(Ed *ed, bool resumed);
 void sag_ed_layout(Ed *ed);
 void sag_ed_render(Ed *ed);
+void sag_ed_damage_rows(Ed *ed, u16 lo, u16 hi);
 void sag_ed_damage_line(Ed *ed, LineNo line, bool line_count_changed);
 void sag_ed_damage_document(Ed *ed);
 

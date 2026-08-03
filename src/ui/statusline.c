@@ -171,14 +171,25 @@ static void percent_text(Win *w, char *dst, size_t cap)
     (void)snprintf(dst, cap, "%llu%%", (unsigned long long)percent);
 }
 
-static void chip_text(const Ed *ed, char *dst, size_t cap)
+static const char *highlight_unit(const Win *w)
+{
+    if (w->h.unit == &sag_unit_line)
+        return "L";
+    if (w->h.unit == &sag_unit_word)
+        return "W";
+    if (w->h.unit == &sag_unit_block)
+        return "B";
+    if (w->h.unit == &sag_unit_char)
+        return "C";
+    if (w->h.from >= SAG_MODE_L && w->h.from <= SAG_MODE_B)
+        return sag_modes[w->h.from].name;
+    return "C";
+}
+
+static void chip_text(const Ed *ed, const Win *w, char *dst, size_t cap)
 {
     if (ed->mode == SAG_MODE_H) {
-        const char *unit = (ed->prev_unit >= SAG_MODE_L &&
-                            ed->prev_unit <= SAG_MODE_B) ?
-                           sag_modes[ed->prev_unit].name : "L";
-
-        (void)snprintf(dst, cap, " H\xC2\xB7%s ", unit);
+        (void)snprintf(dst, cap, " H\xC2\xB7%s ", highlight_unit(w));
     } else {
         (void)snprintf(dst, cap, " %s ", sag_modes[ed->mode].name);
     }
@@ -293,6 +304,7 @@ void sag_statusline_build(const Ed *ed, Win *w, u16 cols,
     char encoding[16];
     char position[112];
     char percent[16];
+    char cursor_badge[32];
     char *clipped_path;
     size_t path_len;
     Segment segments[8];
@@ -320,7 +332,7 @@ void sag_statusline_build(const Ed *ed, Win *w, u16 cols,
     out->body_cap = path_len + (size_t)cols + 512U;
     out->body = sag_xmalloc(out->body_cap);
     out->body[0] = '\0';
-    chip_text(ed, out->chip, sizeof(out->chip));
+    chip_text(ed, w, out->chip, sizeof(out->chip));
     out->chip_len = strlen(out->chip);
     out->chip_cells = (u16)cells(out->chip);
     if (cols <= out->chip_cells)
@@ -330,7 +342,8 @@ void sag_statusline_build(const Ed *ed, Win *w, u16 cols,
     line = sag_textbuf_line_of(w->buf->tb, cursor->pos);
     line_span = sag_textbuf_line_span(w->buf->tb, line);
     gcol = sag_off_to_gcol(w->buf->tb, line_span, cursor->pos);
-    if (w->sels.n == 0U || cursor->anchor.v == cursor->pos.v) {
+    if (w->cs.selstacks.data[w->cs.primary].n == 0U ||
+        cursor->anchor.v == cursor->pos.v) {
         (void)snprintf(position, sizeof(position), "%llu:%llu",
                        (unsigned long long)(line.v + 1U),
                        (unsigned long long)(gcol.v + 1U));
@@ -358,7 +371,14 @@ void sag_statusline_build(const Ed *ed, Win *w, u16 cols,
                             w->buf->meta.had_invalid_utf8};
     segments[5] = (Segment){position, 1U, true};
     segments[6] = (Segment){percent, 5U, true};
-    segments[7] = (Segment){"", 5U, false};
+    if (w->cs.curs.len > 1U) {
+        (void)snprintf(cursor_badge, sizeof(cursor_badge),
+                       "\xC3\x97%llu",
+                       (unsigned long long)w->cs.curs.len);
+    } else {
+        cursor_badge[0] = '\0';
+    }
+    segments[7] = (Segment){cursor_badge, 1U, w->cs.curs.len > 1U};
     path_cells = cells(path);
     dirty_cells = sag_buf_dirty(w->buf) ? 2 : 0;
     right_cells = right_width(segments, SAG_ARRAY_LEN(segments));

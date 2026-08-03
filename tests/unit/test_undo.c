@@ -334,9 +334,32 @@ static void undo_assert_deferred_reason(SagTxnReason reason,
     SAG_ASSERT(strstr(output, sprint) != NULL);
 }
 
-void test_undo_multi_reason_names_sprint17(void)
+void test_undo_multi_transaction_commits_one_node(void)
 {
-    undo_assert_deferred_reason(SAG_TXN_MULTI, "Sprint 17");
+    UndoFixture f;
+    const UndoNode *node;
+
+    undo_fixture_init(&f, (const u8 *)"ab", 2U);
+    SAG_ASSERT(sag_cset_add(&f.cursors, undo_cursor(2U, 2U, 2U)));
+    sag_undo_begin(&f.edit, SAG_TXN_MULTI);
+    SAG_ASSERT(sag_edit_insert(&f.edit, BYTEOFF(0U),
+                               (const u8 *)"X", 1U));
+    SAG_ASSERT(sag_edit_insert(&f.edit, f.cursors.curs.data[1].pos,
+                               (const u8 *)"Y", 1U));
+    sag_undo_end(&f.edit);
+
+    node = undo_current_node(f.undo);
+    SAG_ASSERT_EQ_U64(node->reason, SAG_TXN_MULTI);
+    SAG_ASSERT_EQ_U64(node->n_ops, 2U);
+    SAG_ASSERT_EQ_U64(f.undo->depth, 0U);
+    SAG_ASSERT_EQ_U64(f.cursors.curs.len, 2U);
+    undo_assert_text(f.tb, (const u8 *)"XabY", 4U);
+    SAG_ASSERT(sag_undo(&f.edit));
+    undo_assert_text(f.tb, (const u8 *)"ab", 2U);
+    SAG_ASSERT_EQ_U64(f.cursors.curs.len, 2U);
+    SAG_ASSERT_EQ_U64(f.cursors.curs.data[0].pos.v, 0U);
+    SAG_ASSERT_EQ_U64(f.cursors.curs.data[1].pos.v, 2U);
+    undo_fixture_free(&f);
 }
 
 void test_undo_filter_reason_names_sprint19(void)
@@ -410,6 +433,7 @@ void test_undo_abort_restores_content_and_single_cursor(void)
     sag_undo_begin(&f.edit, SAG_TXN_PASTE);
     sag_edit_insert(&f.edit, BYTEOFF(2U), (const u8 *)"XYZ", 3U);
     sag_edit_delete(&f.edit, (Span){0U, 1U});
+    f.cursors.selstacks.data[0].n = 2U;
     SAG_ASSERT_EQ_U64(f.undo->depth, 1U);
     SAG_ASSERT(f.undo->open != 0U);
     sag_undo_abort(&f.edit);
@@ -418,6 +442,7 @@ void test_undo_abort_restores_content_and_single_cursor(void)
     SAG_ASSERT_EQ_U64(f.cursors.curs.data[0].pos.v, 2U);
     SAG_ASSERT_EQ_U64(f.cursors.curs.data[0].anchor.v, 1U);
     SAG_ASSERT_EQ_U64(f.cursors.curs.data[0].goal_col.v, 9U);
+    SAG_ASSERT_EQ_U64(f.cursors.selstacks.data[0].n, 0U);
     SAG_ASSERT_EQ_U64(f.undo->depth, 0U);
     SAG_ASSERT_EQ_U64(f.undo->open, 0U);
     SAG_ASSERT_EQ_U64(f.undo->nodes.len, 1U);

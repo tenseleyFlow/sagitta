@@ -243,6 +243,10 @@ const UnitOps *sag_unit_of_mode(Mode mode)
 
 void sag_selstack_clear(Win *win)
 {
-    if (win != NULL)
-        win->sels.n = 0U;
+    size_t i;
+
+    if (win == NULL)
+        return;
+    for (i = 0U; i < win->cs.selstacks.len; i++)
+        win->cs.selstacks.data[i].n = 0U;
 }

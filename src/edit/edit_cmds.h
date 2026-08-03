@@ -43,6 +43,15 @@ CmdStatus sag_edit_cmd_move_word_sub_prev(CmdCtx *cx);
 CmdStatus sag_edit_cmd_move_word_sub_next(CmdCtx *cx);
 CmdStatus sag_edit_cmd_sel_unit_expand(CmdCtx *cx);
 CmdStatus sag_edit_cmd_sel_unit_contract(CmdCtx *cx);
+CmdStatus sag_edit_cmd_sel_kind(CmdCtx *cx);
+CmdStatus sag_edit_cmd_sel_swap_ends(CmdCtx *cx);
+CmdStatus sag_edit_cmd_cursor_lift_lines(CmdCtx *cx);
+CmdStatus sag_edit_cmd_cursor_lift_matches(CmdCtx *cx);
+CmdStatus sag_edit_cmd_cursor_lift_ends(CmdCtx *cx);
+CmdStatus sag_edit_cmd_cursor_add_above(CmdCtx *cx);
+CmdStatus sag_edit_cmd_cursor_add_below(CmdCtx *cx);
+CmdStatus sag_edit_cmd_cursor_drop(CmdCtx *cx);
+CmdStatus sag_edit_cmd_cursor_collapse(CmdCtx *cx);
 
 CmdStatus sag_edit_cmd_insert_text(CmdCtx *cx);
 CmdStatus sag_edit_cmd_insert_newline(CmdCtx *cx);

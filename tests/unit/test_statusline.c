@@ -130,12 +130,12 @@ void test_statusline_metadata_position_percent_and_mode_chip(void)
     SAG_ASSERT_EQ_U64(out.chip_cells + out.body_cells, 200U);
 
     f.win.cs.curs.data[0].anchor = BYTEOFF(0U);
-    f.win.sels.n = 1U;
+    f.win.cs.selstacks.data[f.win.cs.primary].n = 1U;
     sag_statusline_text_free(&out);
     sag_statusline_build(&f.ed, &f.win, 200U, &out);
     SAG_ASSERT(contains(&out, "1:4@1:1"));
     f.win.cs.curs.data[0].anchor = f.win.cs.curs.data[0].pos;
-    f.win.sels.n = 0U;
+    f.win.cs.selstacks.data[f.win.cs.primary].n = 0U;
 
     f.win.vp.top = LINENO(0U);
     sag_statusline_text_free(&out);
@@ -152,10 +152,20 @@ void test_statusline_metadata_position_percent_and_mode_chip(void)
 
     f.ed.mode = SAG_MODE_H;
     f.ed.prev_unit = SAG_MODE_B;
+    f.win.h.from = SAG_MODE_B;
+    f.win.h.unit = &sag_unit_block;
     sag_statusline_text_free(&out);
     sag_statusline_build(&f.ed, &f.win, 200U, &out);
     SAG_ASSERT_EQ_STR(out.chip, " H\xC2\xB7" "B ");
     SAG_ASSERT_EQ_U64(out.chip_cells, 5U);
+    {
+        Cursor extra = {BYTEOFF(11U), {0U}, BYTEOFF(11U)};
+
+        SAG_ASSERT(sag_cset_add(&f.win.cs, extra));
+        sag_statusline_text_free(&out);
+        sag_statusline_build(&f.ed, &f.win, 200U, &out);
+        SAG_ASSERT(contains(&out, "\xC3\x97" "2"));
+    }
     sag_statusline_text_free(&out);
     status_fixture_free(&f);
 }

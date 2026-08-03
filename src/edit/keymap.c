@@ -274,7 +274,9 @@ static bool binding_arity_ok(const CmdDesc *desc, const BindRow *row)
     case SAG_ARITY_OPT_INT:
         return row->sarg == NULL;
     case SAG_ARITY_STR:
-        return row->iarg == 0 && row->sarg != NULL;
+        return row->iarg == 0 &&
+               (row->sarg != NULL ||
+                (desc->flags & SAG_CMD_CAPTURES_TEXT) != 0U);
     case SAG_ARITY_OPT_STR:
         return row->iarg == 0;
     }

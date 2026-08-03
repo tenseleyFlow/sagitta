@@ -18,6 +18,13 @@ static void dispatch_reset_chord(Ed *ed)
     ed->chord.deadline = 0;
 }
 
+static void dispatch_reset_capture(Ed *ed)
+{
+    ed->capture_cmd = SAG_CMD_NONE;
+    ed->capture_count = 0U;
+    ed->capture_count_given = false;
+}
+
 static void dispatch_set_message(Ed *ed, const char *message)
 {
     size_t len = strlen(message);
@@ -87,7 +94,18 @@ static KeyMatch dispatch_current_match(const Ed *ed,
 static void dispatch_fire(Ed *ed, const Binding *selected)
 {
     Binding binding = *selected;
+    const CmdDesc *desc = sag_cmd_desc(binding.cmd);
     CmdCtx cx;
+
+    if (desc != NULL && (desc->flags & SAG_CMD_CAPTURES_TEXT) != 0U &&
+        binding.sarg == NULL) {
+        ed->capture_cmd = binding.cmd;
+        ed->capture_count = ed->chord.count_given ? ed->chord.count : 1U;
+        ed->capture_count_given = ed->chord.count_given;
+        dispatch_reset_chord(ed);
+        dispatch_set_message(ed, "argument: ");
+        return;
+    }
 
     cx = (CmdCtx){0};
     cx.ed = ed;
@@ -147,6 +165,7 @@ void sag_dispatch_init(Ed *ed)
     ed->chord.layer = -1;
     ed->chord_timeout_ms = dispatch_timeout_from_env();
     ed->last_status = SAG_CMD_OK;
+    dispatch_reset_capture(ed);
     sag_keys_default_install(ed);
 }
 
@@ -159,6 +178,7 @@ void sag_dispatch_free(Ed *ed)
     sag_keymap_free(&ed->user_keys);
     (void)memset(&ed->keys, 0, sizeof(ed->keys));
     dispatch_reset_chord(ed);
+    dispatch_reset_capture(ed);
     ed->dispatch_message[0] = '\0';
 }
 
@@ -171,6 +191,36 @@ void sag_dispatch_key(Ed *ed, Key key, i64 now_ms)
 
     if (key.ev == SAG_KEY_RELEASE)
         return;
+    if (ed->capture_cmd.v != 0U) {
+        CmdCtx cx = {0};
+        CmdId cmd = ed->capture_cmd;
+
+        if (key.code == SAG_KEY_ESCAPE) {
+            dispatch_reset_capture(ed);
+            ed->dispatch_message[0] = '\0';
+            return;
+        }
+        cx.ed = ed;
+        cx.win = ed->win;
+        cx.count = ed->capture_count;
+        cx.count_given = ed->capture_count_given;
+        cx.sarg = (const char *)key.text;
+        cx.sarg_len = key.ntext;
+        cx.source = SAG_SRC_KEY;
+        dispatch_reset_capture(ed);
+        if (key.ntext == 0U) {
+            dispatch_set_message(ed, "argument needs text");
+            ed->last_cmd = cmd;
+            ed->last_status = SAG_CMD_ERR_ARG;
+            ed->dispatch_count++;
+            return;
+        }
+        ed->dispatch_message[0] = '\0';
+        ed->last_cmd = cmd;
+        ed->last_status = sag_ed_invoke(ed, cmd, &cx);
+        ed->dispatch_count++;
+        return;
+    }
     id = sag_keyid(key);
     if ((u32)(id.v >> 16U) == SAG_KEY_ESCAPE &&
         (ed->chord.n != 0U || ed->chord.count_given)) {
@@ -282,6 +332,7 @@ void sag_dispatch_set_mode(Ed *ed, Mode mode)
     if (mode >= SAG_MODE__N)
         SAG_BUG("invalid editor mode %u", (u32)mode);
     dispatch_reset_chord(ed);
+    dispatch_reset_capture(ed);
     ed->mode = mode;
     ed->keys.l[0] = &ed->mode_keys[mode];
 }

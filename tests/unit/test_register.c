@@ -289,50 +289,31 @@ void test_register_line_capture_synthesizes_only_missing_eol(void)
     sag_textbuf_free(tb);
 }
 
-void test_register_block_producer_hard_errors_with_sprint17(void)
+void test_register_accepts_explicit_blockwise_values(void)
 {
-    int pipefd[2];
-    pid_t child;
-    pid_t waited;
-    int status;
-    Bytebuf output;
+    static const u8 bytes[] = "ab\nZ";
+    static const Span rows[] = {{0U, 2U}, {3U, 4U}};
+    Registers r;
+    RegVal block;
+    const RegVal *stored;
+    size_t i;
 
-    bytebuf_init(&output);
-    SAG_ASSERT_EQ_I64(pipe(pipefd), 0);
-    (void)fflush(NULL);
-    child = fork();
-    SAG_ASSERT(child >= 0);
-    if (child == 0) {
-        Registers r;
-        RegVal block;
-        (void)close(pipefd[0]);
-        (void)dup2(pipefd[1], STDERR_FILENO);
-        (void)close(pipefd[1]);
-        sag_reg_init(&r);
-        reg_test_value(&block, SAG_REG_BLOCKWISE, (const u8 *)"x", 1U);
-        sag_reg_set(&r, 'a', &block);
-        _exit(99);
-    }
-    (void)close(pipefd[1]);
-    for (;;) {
-        u8 chunk[128];
-        ssize_t count = read(pipefd[0], chunk, sizeof(chunk));
-        if (count > 0) {
-            bytebuf_append(&output, chunk, (size_t)count);
-            continue;
-        }
-        if (count < 0 && errno == EINTR)
-            continue;
-        break;
-    }
-    (void)close(pipefd[0]);
-    do {
-        waited = waitpid(child, &status, 0);
-    } while (waited < 0 && errno == EINTR);
-    SAG_ASSERT_EQ_I64(waited, child);
-    SAG_ASSERT(WIFEXITED(status));
-    SAG_ASSERT_EQ_I64(WEXITSTATUS(status), SAG_EXIT_BUG);
-    bytebuf_append(&output, "", 1U);
-    SAG_ASSERT(strstr((const char *)output.data, "Sprint 17") != NULL);
-    bytebuf_free(&output);
+    sag_reg_init(&r);
+    reg_test_value(&block, SAG_REG_BLOCKWISE, bytes, sizeof(bytes) - 1U);
+    block.width = 2U;
+    block.ragged = true;
+    for (i = 0U; i < sizeof(rows) / sizeof(rows[0]); i++)
+        SagRegRowVec_push(&block.rows, rows[i]);
+    sag_reg_set(&r, 'a', &block);
+    stored = sag_reg_get(&r, 'a');
+    reg_assert_value(stored, SAG_REG_BLOCKWISE, bytes, sizeof(bytes) - 1U);
+    SAG_ASSERT_EQ_U64(stored->width, 2U);
+    SAG_ASSERT(stored->ragged);
+    SAG_ASSERT_EQ_U64(stored->rows.len, 2U);
+    SAG_ASSERT_EQ_U64(stored->rows.data[0].lo, 0U);
+    SAG_ASSERT_EQ_U64(stored->rows.data[0].hi, 2U);
+    SAG_ASSERT_EQ_U64(stored->rows.data[1].lo, 3U);
+    SAG_ASSERT_EQ_U64(stored->rows.data[1].hi, 4U);
+    sag_regval_free(&block);
+    sag_reg_free(&r);
 }

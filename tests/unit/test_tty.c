@@ -150,6 +150,7 @@ void test_tty_restore_blob(void)
         "\x1b[?1004l"
         "\x1b[?2026l"
         "\x1b[0m"
+        "\x1b[0 q"
         "\x1b[?1049l"
         "\x1b[?25h";
     const u8 *actual;

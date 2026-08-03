@@ -26,6 +26,7 @@ typedef enum {
 typedef struct CmdCtx {
     Ed *ed;
     Win *win;
+    u32 cursor_index;
     u32 count;
     bool count_given;
     i64 iarg;
@@ -59,7 +60,11 @@ enum {
     SAG_CMD_NEEDS_WIN = 1U << 3,
     SAG_CMD_CHANGES_BUFFER = 1U << 4,
     SAG_CMD_PROMPTS = 1U << 5,
-    SAG_CMD_DEFERRED = 1U << 6
+    SAG_CMD_DEFERRED = 1U << 6,
+    /* Command consumes the cursor set instead of running per cursor. */
+    SAG_CMD_MULTI_AGGREGATE = 1U << 7,
+    /* A key binding without sarg captures the next text-producing key. */
+    SAG_CMD_CAPTURES_TEXT = 1U << 8
 };
 
 typedef struct CmdDesc {
@@ -77,6 +82,7 @@ void sag_cmd_shutdown(void);
 CmdId sag_cmd_register(const CmdDesc *d);
 CmdId sag_cmd_lookup(const char *name, u32 len);
 const CmdDesc *sag_cmd_desc(CmdId id);
+CmdStatus sag_cmd_prepare(CmdId id, CmdCtx *cx, const CmdDesc **out);
 CmdStatus sag_cmd_invoke(CmdId id, CmdCtx *cx);
 u32 sag_cmd_count(void);
 const CmdDesc *sag_cmd_at(u32 i);

@@ -125,9 +125,11 @@ void test_render_oob_flushes_after_frame(void)
 
 void test_render_frame_envelope_goldens(void)
 {
-    static const char bare[] = "\033[?25l\033[H\033[0mx\033[H\033[?25h";
+    static const char bare[] =
+        "\033[?25l\033[2 q\033[H\033[0mx\033[H\033[?25h";
     static const char synced[] =
-        "\033[?2026h\033[?25l\033[H\033[0mx\033[H\033[?25h\033[?2026l";
+        "\033[?2026h\033[?25l\033[2 q\033[H\033[0mx\033[H\033[?25h"
+        "\033[?2026l";
     RenderFixture f;
     SagColor color = render_default_color();
 
@@ -375,6 +377,7 @@ void test_render_cursor_only_frames_track_position_and_visibility(void)
 {
     static const char move_show[] = "\033[1;3H\033[?25h";
     static const char hide[] = "\033[1;3H\033[?25l";
+    static const char bar[] = "\033[6 q\033[1;3H";
     RenderFixture f;
     SagColor color = render_default_color();
 
@@ -394,6 +397,11 @@ void test_render_cursor_only_frames_track_position_and_visibility(void)
     SAG_ASSERT_EQ_U64(sag_render_frame(&f.render, &f.grid, &f.out),
                       sizeof(hide) - 1u);
     SAG_ASSERT_EQ_MEM(f.out.data, hide, sizeof(hide) - 1u);
+    f.out.len = 0u;
+    sag_grid_cursor_shape(&f.grid, SAG_CURSOR_BAR);
+    SAG_ASSERT_EQ_U64(sag_render_frame(&f.render, &f.grid, &f.out),
+                      sizeof(bar) - 1u);
+    SAG_ASSERT_EQ_MEM(f.out.data, bar, sizeof(bar) - 1u);
     render_fixture_free(&f);
 }
 

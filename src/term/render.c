@@ -645,11 +645,24 @@ static bool has_changes(const Grid *g)
     return false;
 }
 
+static void cursor_shape(Render *r, const Grid *g, Bytebuf *out)
+{
+    if (g->cur_shape == SAG_CURSOR_BLOCK)
+        bytes(out, "\033[2 q");
+    else if (g->cur_shape == SAG_CURSOR_BAR)
+        bytes(out, "\033[6 q");
+    else
+        SAG_BUG("renderer received invalid cursor shape");
+    r->cursor_shape = g->cur_shape;
+    r->cursor_generation = g->cursor_generation;
+}
+
 size_t sag_render_frame(Render *r, Grid *g, Bytebuf *out)
 {
     size_t start = out->len;
     bool cells_changed;
     bool cursor_changed;
+    bool shape_changed;
     u16 row;
     u16 lo;
     u16 hi;
@@ -661,12 +674,17 @@ size_t sag_render_frame(Render *r, Grid *g, Bytebuf *out)
     cursor_changed = r->cursor_known &&
                      (r->row != g->cur_row || r->col != g->cur_col ||
                       r->cursor_visible != g->cur_vis);
-    if (!cells_changed && !cursor_changed)
+    shape_changed = r->cursor_generation != g->cursor_generation ||
+                    r->cursor_shape != g->cur_shape;
+    if (!cells_changed && !cursor_changed &&
+        (!shape_changed || !r->cursor_known))
         return render_finish(r, out, start, out->len);
 
     if (!cells_changed) {
         if (r->sync)
             bytes(out, "\033[?2026h");
+        if (shape_changed)
+            cursor_shape(r, g, out);
         cup(r, out, g->cur_row, g->cur_col);
         if (r->cursor_visible != g->cur_vis)
             bytes(out, g->cur_vis ? "\033[?25h" : "\033[?25l");
@@ -685,6 +703,8 @@ size_t sag_render_frame(Render *r, Grid *g, Bytebuf *out)
     if (r->sync)
         bytes(out, "\033[?2026h");
     bytes(out, "\033[?25l");
+    if (shape_changed)
+        cursor_shape(r, g, out);
 
     lo = g->dmg_lo < g->rows ? g->dmg_lo : g->rows;
     hi = g->dmg_hi < g->rows ? g->dmg_hi : g->rows;

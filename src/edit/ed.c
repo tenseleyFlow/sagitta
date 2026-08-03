@@ -191,6 +191,27 @@ void sag_ed_damage_document(Ed *ed)
     ed->footer_dirty = true;
 }
 
+void sag_ed_damage_rows(Ed *ed, u16 lo, u16 hi)
+{
+    if (ed == NULL || ed->win == NULL || lo >= hi)
+        return;
+    if (lo > ed->win->rect.h)
+        lo = ed->win->rect.h;
+    if (hi > ed->win->rect.h)
+        hi = ed->win->rect.h;
+    if (lo >= hi)
+        return;
+    if (ed->doc_damage_lo >= ed->doc_damage_hi) {
+        ed->doc_damage_lo = lo;
+        ed->doc_damage_hi = hi;
+    } else {
+        if (lo < ed->doc_damage_lo)
+            ed->doc_damage_lo = lo;
+        if (hi > ed->doc_damage_hi)
+            ed->doc_damage_hi = hi;
+    }
+}
+
 void sag_ed_damage_line(Ed *ed, LineNo line, bool line_count_changed)
 {
     Win *win;
@@ -217,15 +238,7 @@ void sag_ed_damage_line(Ed *ed, LineNo line, bool line_count_changed)
     if (!sag_win_view_row(win, line, &lo))
         return;
     hi = line_count_changed ? win->rect.h : (u16)(lo + 1U);
-    if (ed->doc_damage_lo >= ed->doc_damage_hi) {
-        ed->doc_damage_lo = lo;
-        ed->doc_damage_hi = hi;
-    } else {
-        if (lo < ed->doc_damage_lo)
-            ed->doc_damage_lo = lo;
-        if (hi > ed->doc_damage_hi)
-            ed->doc_damage_hi = hi;
-    }
+    sag_ed_damage_rows(ed, lo, hi);
 }
 
 Cursor *sag_ed_cursor(Ed *ed)
@@ -254,6 +267,8 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     EditCtx ec;
     CmdStatus status;
     bool changes;
+    bool multiple;
+    bool multi;
     bool durability_command;
     bool newline;
     bool opened = false;
@@ -268,6 +283,10 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     if (cx->win == NULL)
         cx->win = ed->win;
     changes = (desc->flags & SAG_CMD_CHANGES_BUFFER) != 0U;
+    multiple = changes && ed->model_ready && cx->win != NULL &&
+               cx->win->cs.curs.len > 1U;
+    multi = multiple &&
+            (desc->flags & SAG_CMD_MULTI_AGGREGATE) == 0U;
     durability_command = changes ||
                          strcmp(desc->name, "ed.edit.undo") == 0 ||
                          strcmp(desc->name, "ed.edit.redo") == 0;
@@ -286,22 +305,25 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
         ec = sag_ed_edit_ctx(ed);
         if (started_in_insert && !newline) {
             if (!ed->insert_txn) {
-                sag_undo_begin(&ec, SAG_TXN_TYPE);
+                sag_undo_begin(&ec,
+                               multiple ? SAG_TXN_MULTI : SAG_TXN_TYPE);
                 ed->insert_txn = true;
                 opened = true;
             }
         } else {
-            sag_undo_begin(&ec,
-                           strstr(desc->name, ".delete.") != NULL ||
-                                   strcmp(desc->name,
-                                          "ed.edit.line.delete") == 0
-                               ? SAG_TXN_ERASE
-                               : SAG_TXN_TYPE);
+            sag_undo_begin(
+                &ec,
+                multiple ? SAG_TXN_MULTI
+                      : (strstr(desc->name, ".delete.") != NULL ||
+                                 strcmp(desc->name,
+                                        "ed.edit.line.delete") == 0
+                             ? SAG_TXN_ERASE
+                             : SAG_TXN_TYPE));
             opened = true;
         }
     }
 
-    status = sag_cmd_invoke(id, cx);
+    status = multi ? sag_mc_run(cx->win, id, cx) : sag_cmd_invoke(id, cx);
     if (status == SAG_CMD_OK && ed->win != NULL &&
         (changes || durability_command ||
          strncmp(desc->name, "ed.move.", 8U) == 0 ||
@@ -317,6 +339,8 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
         } else if (!started_in_insert && ed->mode == SAG_MODE_I &&
                    !newline && opened) {
             /* `o`/`O` create the line and enter I as one editing run. */
+            if (ed->win != NULL && ed->win->cs.curs.len > 1U)
+                sag_undo_promote_multi(&ec);
             ed->insert_txn = true;
         } else if ((!started_in_insert || newline) && opened) {
             sag_undo_end(&ec);
