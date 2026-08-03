@@ -8,6 +8,8 @@ FUZZ_SECONDS ?=
 TEXTBUF_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
                       0x9e3779b97f4a7c15 0xd1b54a32d192ed03
 TEXTBUF_FUZZ_MIXES ?= typing paste undo
+UNITS_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
+                    0x9e3779b97f4a7c15 0xd1b54a32d192ed03
 FUZZ_LONG_SECONDS ?= 450
 TORTURE_SIGKILL_ITERS ?= 500
 FIXTURE_DIR ?= $(BUILD)/fixtures
@@ -71,6 +73,8 @@ UNIT_DEATH_EXCLUDES := \
   --exclude log_bug_prehook \
   --exclude mark_generational_handles \
   --exclude multicursor_edit_guard_names_sprint17 \
+  --exclude edit_unit_selection_multicursor_names_sprint17 \
+  --exclude block_syntax_install_names_sprint40 \
   --exclude undo_multi_reason_names_sprint17 \
   --exclude undo_filter_reason_names_sprint19 \
   --exclude undo_replace_reason_names_sprint21 \
@@ -145,6 +149,7 @@ FUZZ_GRID_OBJ := $(BUILD)/tests/fuzz/fuzz_grid.o
 FUZZ_VT_OBJ := $(BUILD)/tests/fuzz/fuzz_vt.o
 FUZZ_UNDO_OBJ := $(BUILD)/tests/fuzz/fuzz_undo.o
 FUZZ_TEXTBUF_OBJ := $(BUILD)/tests/fuzz/fuzz_textbuf.o
+FUZZ_UNITS_OBJ := $(BUILD)/tests/fuzz/fuzz_units.o
 FUZZ_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 FUZZ_LINK_OBJ := $(FUZZ_CORE_OBJ) $(FUZZ_LIB_OBJ)
 
@@ -156,6 +161,7 @@ PERF_CURSOR_OBJ := $(BUILD)/tests/perf/perf_cursor.o
 PERF_UNDO_OBJ := $(BUILD)/tests/perf/perf_undo.o
 PERF_TEXTBUF_OBJ := $(BUILD)/tests/perf/perf_textbuf.o
 PERF_LATENCY_OBJ := $(BUILD)/tests/perf/latency.o
+PERF_UNITS_OBJ := $(BUILD)/tests/perf/perf_units.o
 LIVE_PTY_OBJ := $(BUILD)/tests/support/live_pty.o
 PERF_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 GEN_BIGFILE_OBJ := $(BUILD)/scripts/gen-bigfile.o
@@ -173,11 +179,13 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(FUZZ_LIB_OBJ) \
                 $(FUZZ_UTF8_OBJ) $(FUZZ_GRAPHEME_OBJ) $(FUZZ_INPUT_OBJ) \
                 $(FUZZ_GRID_OBJ) $(FUZZ_VT_OBJ) $(FUZZ_UNDO_OBJ) \
                 $(FUZZ_TEXTBUF_OBJ) $(TEXT_FUZZ_SUPPORT_OBJ) \
+                $(FUZZ_UNITS_OBJ) \
                 $(PTY_ORACLE_OBJ) \
                 $(PTY_HARNESS_OBJ) $(PTY_REGISTRY_OBJ) $(PTY_RUNNER_OBJ) \
                 $(PTY_DEMO_OBJ) $(PERF_UNICODE_OBJ) $(PERF_RENDER_OBJ) \
                 $(PERF_PIECE_OBJ) $(PERF_CURSOR_OBJ) $(PERF_UNDO_OBJ) \
                 $(PERF_TEXTBUF_OBJ) $(PERF_LATENCY_OBJ) $(LIVE_PTY_OBJ) \
+                $(PERF_UNITS_OBJ) \
                 $(GEN_BIGFILE_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) $(FAULTSHIM)))
@@ -193,9 +201,10 @@ endif
 
 .DEFAULT_GOAL := all
 .PHONY: all test clean install dirs FORCE test-script test-pty fuzz \
-        fuzz-textbuf fuzz-long fixtures fixtures-quick fixtures-verify \
+        fuzz-textbuf fuzz-units fuzz-long fixtures fixtures-quick fixtures-verify \
         fixtures-verify-quick \
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
+        perf-units \
         perf-undo perf-textbuf perf-huge perf-update perf-baseline-guard \
         perf-gate-selftest perf-latency perf-latency-selftest \
         torture torture-build torture-live-check
@@ -241,6 +250,9 @@ $(BUILD)/fuzz_textbuf: $(FUZZ_CORE_OBJ) $(TEXT_FUZZ_SUPPORT_OBJ) \
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) \
 		$(TEXT_FUZZ_SUPPORT_OBJ) $(FUZZ_TEXTBUF_OBJ)
 
+$(BUILD)/fuzz_units: $(FUZZ_CORE_OBJ) $(FUZZ_UNITS_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) $(FUZZ_UNITS_OBJ)
+
 $(BUILD)/gen-bigfile: $(GEN_BIGFILE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(GEN_BIGFILE_OBJ)
 
@@ -269,6 +281,9 @@ $(BUILD)/perf_undo: $(PERF_CORE_OBJ) $(PERF_UNDO_OBJ)
 $(BUILD)/perf_latency: $(PERF_LATENCY_OBJ) $(LIVE_PTY_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_LATENCY_OBJ) \
 		$(LIVE_PTY_OBJ)
+
+$(BUILD)/perf_units: $(PERF_CORE_OBJ) $(PERF_UNITS_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_UNITS_OBJ)
 
 $(TORTURE_CHILD): $(TORTURE_CORE_OBJ) $(TORTURE_CHILD_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TORTURE_CORE_OBJ) \
@@ -302,7 +317,7 @@ test: $(BUILD)/unit_tests $(BUILD)/sagitta test-pty torture-build
 
 fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
       $(BUILD)/fuzz_grid $(BUILD)/fuzz_vt $(BUILD)/fuzz_undo \
-      fuzz-textbuf
+      fuzz-textbuf fuzz-units
 	$(BUILD)/fuzz_utf8 --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_grapheme --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_input --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
@@ -312,6 +327,12 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
 	@if [ -n "$(FUZZ_SECONDS)" ]; then \
 		$(BUILD)/fuzz_input --seconds=$(FUZZ_SECONDS) --seed=$(FUZZ_SEED); \
 	fi
+
+fuzz-units: $(BUILD)/fuzz_units
+	@set -eu; \
+	for seed in $(UNITS_FUZZ_SEEDS); do \
+		$(BUILD)/fuzz_units --iters=$(FUZZ_ITERS) --seed=$$seed; \
+	done
 
 fuzz-textbuf: $(BUILD)/fuzz_textbuf
 	$(BUILD)/fuzz_textbuf --replay tests/fuzz/replay-smoke.trace
@@ -344,13 +365,16 @@ perf-piece: $(BUILD)/perf_piece
 	$(BUILD)/perf_piece
 
 perf: perf-unicode perf-render perf-scroll perf-piece perf-cursor perf-undo perf-textbuf \
-      perf-latency
+      perf-latency perf-units
 
 perf-cursor: $(BUILD)/perf_cursor
 	$(BUILD)/perf_cursor
 
 perf-undo: $(BUILD)/perf_undo
 	$(BUILD)/perf_undo
+
+perf-units: $(BUILD)/perf_units
+	$(BUILD)/perf_units
 
 perf-latency: $(BUILD)/perf_latency $(BUILD)/sagitta
 	$(BUILD)/perf_latency --sagitta $(abspath $(BUILD)/sagitta) \

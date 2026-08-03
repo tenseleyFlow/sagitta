@@ -82,7 +82,8 @@ jobs:
         run: make perf-gate-selftest CC=gcc
       - name: Run the existing subsystem budgets
         run: |
-          make perf-unicode perf-render perf-piece perf-cursor perf-undo CC=gcc
+          make perf-unicode perf-render perf-piece perf-cursor perf-undo \
+            perf-units CC=gcc
       - name: Enforce Sprint 14 editor latency budgets
         run: |
           make perf-latency CC=gcc

@@ -423,6 +423,12 @@ static bool indent_enclosing(void *ctx, UnitCtx *u, ByteOff p, Span inner,
         if (!found)
             return false;
     }
+    /* At level zero an unindented line cannot yield a useful indentation
+     * unit smaller than its paragraph.  Avoid walking to both file ends on
+     * large flat files; paragraph/section and the buffer fallback own those
+     * outer levels. */
+    if (target_info.indent == 0U && inner.lo == inner.hi)
+        return false;
     {
         Span candidate;
 
@@ -748,7 +754,7 @@ static ByteOff block_prev(UnitCtx *u, ByteOff p, bool alt)
 {
     Span current;
     ByteOff probe;
-    Span sibling;
+    ByteOff best = BYTEOFF(UINT64_MAX);
     Span parent;
 
     (void)alt;
@@ -758,8 +764,21 @@ static ByteOff block_prev(UnitCtx *u, ByteOff p, bool alt)
     probe = skip_white_prev(u->tb, BYTEOFF(current.lo));
     if (probe.v != 0U) {
         probe = sag_grapheme_prev_boundary(u->tb, probe);
-        if (sag_block_level(u, probe, 0U, &sibling) && sibling.lo < p.v)
-            return BYTEOFF(sibling.lo);
+        for (u32 level = 0U; level < SAG_SEL_DEPTH; level++) {
+            Span sibling;
+            ByteOff after;
+
+            if (!sag_block_level(u, probe, level, &sibling) ||
+                sibling.lo >= p.v)
+                break;
+            after = skip_white_next(u->tb, BYTEOFF(sibling.hi));
+            if (after.v >= current.lo)
+                best = BYTEOFF(sibling.lo);
+            if (sibling.lo == 0U || sibling.hi >= current.hi)
+                break;
+        }
+        if (best.v != UINT64_MAX)
+            return best;
     }
     (void)sag_block_level(u, p, 1U, &parent);
     if (parent.lo < p.v)

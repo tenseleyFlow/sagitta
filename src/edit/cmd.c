@@ -203,7 +203,7 @@ static const CmdDesc builtins[] = {
 
     {"ed.mode.enter", sag_edit_cmd_mode_enter, SAG_ARITY_STR,
      SAG_CMD_RECORDABLE,
-     "Sprint 14: enter L/I; W/B Sprint 16, H Sprint 17, E Sprint 18, F Sprint 52"},
+     "Enter L/W/B/I; H Sprint 17, E Sprint 18, F Sprint 52"},
     {"ed.mode.escape", sag_edit_cmd_mode_escape, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE, "Return to line mode"},
     DEFER("ed.sel.expand", SAG_ARITY_NONE,

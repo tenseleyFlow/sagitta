@@ -258,6 +258,23 @@ bool sag_word_boundary(const TextBuf *tb, ByteOff pos)
     return true; /* WB999 */
 }
 
+/* The editor's word-motion vocabulary exposes punctuation as a reachable
+ * unit even when WB6/WB7 absorb it for Unicode boundary conformance.  Keep
+ * the oracle above exact; this presentation boundary is deliberately
+ * narrower and preserves apostrophes and numeric punctuation. */
+static bool word_motion_boundary(const TextBuf *tb, ByteOff pos)
+{
+    WordCp left;
+    WordCp right;
+
+    if (sag_word_boundary(tb, pos))
+        return true;
+    if (!cp_prev(tb, pos.v, &left) || !cp_next(tb, pos.v, &right))
+        return true;
+    return (left.cp == (u32)'.' && is_ah(right.prop)) ||
+           (right.cp == (u32)'.' && is_ah(left.prop));
+}
+
 static ByteOff clamp_grapheme(const TextBuf *tb, ByteOff p)
 {
     u64 len = sag_textbuf_len(tb);
@@ -293,10 +310,10 @@ static Span uax_span(const TextBuf *tb, ByteOff p)
     if (p.v == len)
         p = sag_grapheme_prev_boundary(tb, p);
     lo = p;
-    while (lo.v > 0U && !sag_word_boundary(tb, lo))
+    while (lo.v > 0U && !word_motion_boundary(tb, lo))
         lo = sag_grapheme_prev_boundary(tb, lo);
     hi = sag_grapheme_next_boundary(tb, p);
-    while (hi.v < len && !sag_word_boundary(tb, hi))
+    while (hi.v < len && !word_motion_boundary(tb, hi))
         hi = sag_grapheme_next_boundary(tb, hi);
     return (Span){lo.v, hi.v};
 }
@@ -389,9 +406,10 @@ static ByteOff word_prev(UnitCtx *u, ByteOff p, bool alt)
     p = clamp_grapheme(u->tb, p);
     if (p.v == 0U || len == 0U)
         return BYTEOFF(0U);
-    if (p.v < len && !sag_word_boundary(u->tb, p)) {
+    if (p.v < len) {
         current = word_span(u->tb, p, alt);
-        return BYTEOFF(current.lo);
+        if (current.lo < p.v)
+            return BYTEOFF(current.lo);
     }
     at = p;
     while (at.v > 0U) {

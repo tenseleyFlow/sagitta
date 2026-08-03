@@ -2,9 +2,12 @@
 
 #include "harness.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/types.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "edit/ed.h"
@@ -576,6 +579,139 @@ void test_edit_journal_open_failure_returns_io_without_mutation(void)
     SAG_ASSERT_EQ_I64(rmdir(journal_dir), 0);
     SAG_ASSERT_EQ_I64(rmdir(sagitta_dir), 0);
     SAG_ASSERT_EQ_I64(rmdir(root), 0);
+}
+
+void test_edit_unit_selection_replays_and_invalidates(void)
+{
+    static const u8 text[] = "one\n\n  two\n    three\n";
+    Ed ed;
+    Cursor *cursor;
+    Span level0;
+    Span level1;
+
+    edit_fixture(&ed, text, sizeof(text) - 1U, SAG_EOL_LF);
+    edit_place(&ed, 16U);
+    cursor = sag_ed_cursor(&ed);
+    SAG_ASSERT_EQ_U64(ed.mode, SAG_MODE_L);
+
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.sel.unit.expand", 1U, false,
+                                  NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(ed.win->sels.n, 1U);
+    level0 = ed.win->sels.s[0];
+    SAG_ASSERT_EQ_U64(cursor->anchor.v, level0.lo);
+    SAG_ASSERT_EQ_U64(cursor->pos.v, level0.hi);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.sel.unit.expand", 1U, false,
+                                  NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(ed.win->sels.n, 2U);
+    level1 = ed.win->sels.s[1];
+    SAG_ASSERT(level1.lo <= level0.lo && level1.hi >= level0.hi);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.sel.unit.expand", 1U, false,
+                                  NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT(ed.win->sels.n >= 3U);
+
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.sel.unit.contract", 1U, false,
+                                  NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(cursor->anchor.v,
+                      ed.win->sels.s[ed.win->sels.n - 1U].lo);
+    SAG_ASSERT_EQ_U64(cursor->pos.v,
+                      ed.win->sels.s[ed.win->sels.n - 1U].hi);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.sel.unit.contract", 1U, false,
+                                  NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(ed.win->sels.n, 1U);
+    SAG_ASSERT_EQ_U64(cursor->anchor.v, level0.lo);
+    SAG_ASSERT_EQ_U64(cursor->pos.v, level0.hi);
+
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.move.line.home", 1U, false,
+                                  NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(ed.win->sels.n, 0U);
+    edit_place(&ed, 16U);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.sel.unit.expand", 1U, false,
+                                  NULL, 0U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(ed.win->sels.n, 1U);
+    SAG_ASSERT_EQ_U64(edit_invoke(&ed, "ed.edit.insert.text", 1U, false,
+                                  "X", 1U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(ed.win->sels.n, 0U);
+    sag_ed_free(&ed);
+}
+
+void test_edit_word_and_block_key_layers_dispatch(void)
+{
+    static const u8 word_text[] =
+        "foo \xe6\xbc\xa2\xe5\xad\x97 tail\n";
+    static const u8 block_text[] = "one\n\n  two\n    three\n";
+    Ed ed;
+    Key key;
+
+    edit_fixture(&ed, word_text, sizeof(word_text) - 1U, SAG_EOL_LF);
+    sag_ed_handle_key(&ed, edit_key((u32)'w'), 0);
+    SAG_ASSERT_EQ_U64(ed.mode, SAG_MODE_W);
+    sag_ed_handle_key(&ed, edit_key(SAG_KEY_RIGHT), 1);
+    SAG_ASSERT_EQ_U64(sag_ed_cursor(&ed)->pos.v, 4U);
+    sag_ed_free(&ed);
+
+    edit_fixture(&ed, block_text, sizeof(block_text) - 1U, SAG_EOL_LF);
+    edit_place(&ed, 16U);
+    sag_ed_handle_key(&ed, edit_key((u32)'b'), 0);
+    SAG_ASSERT_EQ_U64(ed.mode, SAG_MODE_B);
+    key = edit_key(SAG_KEY_UP);
+    key.mods = SAG_MOD_ALT;
+    sag_ed_handle_key(&ed, key, 1);
+    SAG_ASSERT_EQ_U64(ed.win->sels.n, 1U);
+    sag_ed_free(&ed);
+}
+
+void test_edit_unit_selection_multicursor_names_sprint17(void)
+{
+    static const u8 text[] = "alpha\nbeta\n";
+    Ed ed;
+    Cursor second = {BYTEOFF(6U), {0U}, BYTEOFF(6U)};
+    Bytebuf output;
+    int pipefd[2];
+    pid_t child;
+    pid_t waited;
+    int status;
+    ssize_t count;
+    u8 chunk[256];
+
+    edit_fixture(&ed, text, sizeof(text) - 1U, SAG_EOL_LF);
+    SAG_ASSERT(sag_cset_add(&ed.win->cs, second));
+    bytebuf_init(&output);
+    SAG_ASSERT_EQ_I64(fflush(NULL), 0);
+    SAG_ASSERT_EQ_I64(pipe(pipefd), 0);
+    child = fork();
+    SAG_ASSERT(child >= 0);
+    if (child == 0) {
+        (void)close(pipefd[0]);
+        if (dup2(pipefd[1], STDERR_FILENO) < 0)
+            _exit(126);
+        (void)close(pipefd[1]);
+        (void)setenv("SAG_LOG", "/dev/null", 1);
+        (void)edit_invoke(&ed, "ed.sel.unit.expand", 1U, false,
+                          NULL, 0U);
+        _exit(99);
+    }
+    (void)close(pipefd[1]);
+    for (;;) {
+        count = read(pipefd[0], chunk, sizeof(chunk));
+        if (count > 0) {
+            bytebuf_append(&output, chunk, (size_t)count);
+            continue;
+        }
+        if (count < 0 && errno == EINTR)
+            continue;
+        break;
+    }
+    (void)close(pipefd[0]);
+    do {
+        waited = waitpid(child, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+    SAG_ASSERT_EQ_I64(waited, child);
+    SAG_ASSERT(WIFEXITED(status));
+    SAG_ASSERT_EQ_I64(WEXITSTATUS(status), SAG_EXIT_BUG);
+    bytebuf_append(&output, "", 1U);
+    SAG_ASSERT(strstr((const char *)output.data, "Sprint 17") != NULL);
+    bytebuf_free(&output);
+    sag_ed_free(&ed);
 }
 
 #undef FAMILY
