@@ -109,8 +109,8 @@ jobs:
         run: |
           (cd ucd && sha256sum -c MANIFEST)
           make unicode-tables
-          git diff --exit-code src/unicode/tables.c
-          sha256sum src/unicode/tables.c > unicode.sha256
+          git diff --exit-code src/unicode/tables.c src/unicode/tables_wb.c
+          sha256sum src/unicode/tables.c src/unicode/tables_wb.c > unicode.sha256
           make unicode-tables
           sha256sum -c unicode.sha256
 
