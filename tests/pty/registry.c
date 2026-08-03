@@ -478,6 +478,8 @@ static void case_notepad_insert(PtyCtx *c)
     spawn_editor(c, path);
     before = c->vt.nsync_pairs;
     ptc_keys(c, "i");
+    settle_sync_delta(c, before, 1U, 0);
+    before = c->vt.nsync_pairs;
     ptc_bytes(c, "h\xc3\xa9llo \xe6\xbc\xa2\xe5\xad\x97 "
                  "\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x91\xa9\xe2\x80\x8d"
                  "\xf0\x9f\x91\xa7\xe2\x80\x8d\xf0\x9f\x91\xa6");
@@ -1210,6 +1212,8 @@ static void case_s16_block_c_expand(PtyCtx *c)
         ptc_keys(c, "alt+up");
         settle_sync_delta(c, before, 1U, 0);
     }
+    /* Valgrind may pause between a synchronized repaint and the next one. */
+    ptc_settle(c, 1000);
     ptc_snapshot(c, "s16_block_c_expand");
     force_quit(c);
     (void)unlink(path);
@@ -1238,6 +1242,8 @@ static void case_s16_block_prose_expand(PtyCtx *c)
         ptc_keys(c, "alt+up");
         settle_sync_delta(c, before, 1U, 0);
     }
+    /* Valgrind may pause between a synchronized repaint and the next one. */
+    ptc_settle(c, 1000);
     ptc_snapshot(c, "s16_block_prose_expand");
     force_quit(c);
     (void)unlink(path);
