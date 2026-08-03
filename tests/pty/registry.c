@@ -1121,18 +1121,16 @@ static void case_s15_position_unicode(PtyCtx *c)
     quit_cleanly(c);
 }
 
-static void s16_word_stop(PtyCtx *c, u32 steps,
-                          const char *golden)
+static bool s16_word_reach(PtyCtx *c, u32 steps,
+                           char *path, size_t path_cap)
 {
     static const u8 initial[] =
         "foo \xe6\xbc\xa2\xe5\xad\x97 "
         "\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x91\xa9"
         "\xe2\x80\x8d\xf0\x9f\x91\xa7\xe2\x80\x8d"
         "\xf0\x9f\x91\xa6 tail\n";
-    char path[256];
-
-    if (!make_fixture(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
-        return;
+    if (!make_fixture(c, initial, sizeof(initial) - 1U, path, path_cap))
+        return false;
     spawn_editor(c, path);
     ptc_keys(c, "w");
     ptc_settle(c, 0);
@@ -1140,29 +1138,51 @@ static void s16_word_stop(PtyCtx *c, u32 steps,
         ptc_keys(c, "right");
         ptc_settle(c, 0);
     }
-    ptc_snapshot(c, golden);
-    force_quit(c);
-    (void)unlink(path);
+    return true;
 }
 
 static void case_s16_word_han_first(PtyCtx *c)
 {
-    s16_word_stop(c, 1U, "s16_word_han_first");
+    char path[256];
+
+    if (!s16_word_reach(c, 1U, path, sizeof(path)))
+        return;
+    ptc_snapshot(c, "s16_word_han_first");
+    force_quit(c);
+    (void)unlink(path);
 }
 
 static void case_s16_word_han_second(PtyCtx *c)
 {
-    s16_word_stop(c, 2U, "s16_word_han_second");
+    char path[256];
+
+    if (!s16_word_reach(c, 2U, path, sizeof(path)))
+        return;
+    ptc_snapshot(c, "s16_word_han_second");
+    force_quit(c);
+    (void)unlink(path);
 }
 
 static void case_s16_word_emoji(PtyCtx *c)
 {
-    s16_word_stop(c, 3U, "s16_word_emoji");
+    char path[256];
+
+    if (!s16_word_reach(c, 3U, path, sizeof(path)))
+        return;
+    ptc_snapshot(c, "s16_word_emoji");
+    force_quit(c);
+    (void)unlink(path);
 }
 
 static void case_s16_word_tail(PtyCtx *c)
 {
-    s16_word_stop(c, 4U, "s16_word_tail");
+    char path[256];
+
+    if (!s16_word_reach(c, 4U, path, sizeof(path)))
+        return;
+    ptc_snapshot(c, "s16_word_tail");
+    force_quit(c);
+    (void)unlink(path);
 }
 
 static void case_s16_block_c_expand(PtyCtx *c)

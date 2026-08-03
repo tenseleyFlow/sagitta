@@ -211,7 +211,7 @@ static bool run_one_test(const SagTest *test)
 int sag_test_run(int argc, char **argv)
 {
     const char *filter = NULL;
-    const char *excluded[16];
+    const char *excluded[32];
     size_t excluded_len = 0U;
     bool list = false;
     size_t selected = 0U;
