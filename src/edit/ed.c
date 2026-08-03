@@ -19,6 +19,7 @@ static void ed_buffer_free(Ed *ed)
     if (!ed->model_ready)
         return;
     sag_ed_insert_barrier(ed);
+    sag_reg_bind_context(&ed->regs, NULL, NULL);
     sag_vp_free(&ed->single_win);
     if (b->jrn != NULL) {
         sag_journal_close(b->jrn);
@@ -48,6 +49,7 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
     sag_undo_mark_saved(ed->buffer.undo);
     ed->buffer.marks = sag_marks_new();
     ed->buffer.jrn = NULL;
+    sag_reg_bind_context(&ed->regs, ed->buffer.undo, &ed->buffer.meta);
     sag_cset_init(&ed->single_win.cs, cursor);
     ed->single_win.buf = &ed->buffer;
     sag_vp_init(&ed->single_win);
@@ -76,6 +78,7 @@ void sag_ed_init(Ed *ed)
     interner_init(&ed->interner, &ed->arena);
     bytebuf_init(&ed->frame);
     bytebuf_init(&ed->paste);
+    sag_reg_init(&ed->regs);
     sag_timers_init(&ed->timers);
     sag_dispatch_init(ed);
     ed->dispatch_ready = true;
@@ -87,6 +90,7 @@ void sag_ed_free(Ed *ed)
     if (ed == NULL)
         return;
     ed_buffer_free(ed);
+    sag_reg_free(&ed->regs);
     sag_msg_clear(ed);
     if (ed->grid_ready)
         sag_grid_free(&ed->grid);

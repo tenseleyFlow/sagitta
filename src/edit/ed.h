@@ -12,6 +12,7 @@
 #include "term/render.h"
 #include "term/tty.h"
 #include "text/edit.h"
+#include "text/register.h"
 #include "ui/message.h"
 #include "ui/win.h"
 #include "util/arena.h"
@@ -52,6 +53,7 @@ struct Ed {
     Bytebuf paste;
 
     Workspace ws;
+    Registers regs;
     Buffer buffer;
     Win single_win;
     Win *win;
