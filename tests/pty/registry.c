@@ -1194,17 +1194,21 @@ static void case_s16_block_c_expand(PtyCtx *c)
         "  }\n"
         "}\n";
     char path[256];
+    u32 before;
 
     if (!make_fixture(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
         return;
     spawn_editor(c, path);
+    before = c->vt.nsync_pairs;
     ptc_keys(c, "3 G");
-    ptc_settle(c, 0);
+    settle_sync_delta(c, before, 1U, 0);
+    before = c->vt.nsync_pairs;
     ptc_keys(c, "b");
-    ptc_settle(c, 0);
+    settle_sync_delta(c, before, 1U, 0);
     for (u32 i = 0U; i < 4U; i++) {
+        before = c->vt.nsync_pairs;
         ptc_keys(c, "alt+up");
-        ptc_settle(c, 0);
+        settle_sync_delta(c, before, 1U, 0);
     }
     ptc_snapshot(c, "s16_block_c_expand");
     force_quit(c);
@@ -1218,17 +1222,21 @@ static void case_s16_block_prose_expand(PtyCtx *c)
         "  paragraph line\n"
         "    nested detail\n";
     char path[256];
+    u32 before;
 
     if (!make_fixture(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
         return;
     spawn_editor(c, path);
+    before = c->vt.nsync_pairs;
     ptc_keys(c, "4 G");
-    ptc_settle(c, 0);
+    settle_sync_delta(c, before, 1U, 0);
+    before = c->vt.nsync_pairs;
     ptc_keys(c, "b");
-    ptc_settle(c, 0);
+    settle_sync_delta(c, before, 1U, 0);
     for (u32 i = 0U; i < 3U; i++) {
+        before = c->vt.nsync_pairs;
         ptc_keys(c, "alt+up");
-        ptc_settle(c, 0);
+        settle_sync_delta(c, before, 1U, 0);
     }
     ptc_snapshot(c, "s16_block_prose_expand");
     force_quit(c);
