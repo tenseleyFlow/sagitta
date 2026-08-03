@@ -162,11 +162,13 @@ void test_cmd_registry_invocation_and_deferred(void)
         mode.sarg = mode_rows[i].mode;
         mode.sarg_len = 1U;
         sag_test_capture_log();
-        if (i < 2U) {
+        if (i < 4U) {
             SAG_ASSERT_EQ_I64(sag_cmd_invoke(enter, &mode), SAG_CMD_OK);
-            SAG_ASSERT_EQ_U64(fake_ed.mode,
-                              mode_rows[i].mode[0] == 'L' ? SAG_MODE_L :
-                                                           SAG_MODE_I);
+            SAG_ASSERT_EQ_U64(
+                fake_ed.mode,
+                mode_rows[i].mode[0] == 'L' ? SAG_MODE_L :
+                mode_rows[i].mode[0] == 'I' ? SAG_MODE_I :
+                mode_rows[i].mode[0] == 'W' ? SAG_MODE_W : SAG_MODE_B);
         } else {
             SAG_ASSERT_EQ_I64(sag_cmd_invoke(enter, &mode),
                               SAG_CMD_ERR_DEFERRED);

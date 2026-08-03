@@ -44,11 +44,29 @@ static const BindRow keys_L[] = {
 };
 
 static const BindRow keys_W[] = {
+    {"<left>", "ed.move.unit.prev", 0, NULL},
+    {"<right>", "ed.move.unit.next", 0, NULL},
+    {"<up>", "ed.move.line.up", 0, NULL},
+    {"<down>", "ed.move.line.down", 0, NULL},
+    {"A-<left>", "ed.move.unit.prev_alt", 0, NULL},
+    {"A-<right>", "ed.move.unit.next_alt", 0, NULL},
+    {"C-<left>", "ed.move.word.sub_prev", 0, NULL},
+    {"C-<right>", "ed.move.word.sub_next", 0, NULL},
+    {"<home>", "ed.move.unit.home", 0, NULL},
+    {"<end>", "ed.move.unit.end", 0, NULL},
     {"<esc>", "ed.mode.escape", 0, NULL},
     {"C-g", "ed.ui.message_expand", 0, NULL},
 };
 
 static const BindRow keys_B[] = {
+    {"<left>", "ed.move.unit.home", 0, NULL},
+    {"<right>", "ed.move.unit.end", 0, NULL},
+    {"<up>", "ed.move.unit.prev", 0, NULL},
+    {"<down>", "ed.move.unit.next", 0, NULL},
+    {"A-<left>", "ed.move.block.match_prev", 0, NULL},
+    {"A-<right>", "ed.move.block.match_next", 0, NULL},
+    {"A-<up>", "ed.sel.unit.expand", 0, NULL},
+    {"A-<down>", "ed.sel.unit.contract", 0, NULL},
     {"<esc>", "ed.mode.escape", 0, NULL},
     {"C-g", "ed.ui.message_expand", 0, NULL},
 };

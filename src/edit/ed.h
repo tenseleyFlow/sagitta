@@ -29,6 +29,7 @@ typedef struct Buffer {
     TextBuf *tb;
     FileMeta meta;
     char *path;
+    u32 tabwidth;
     UndoTree *undo;
     Journal *jrn;
     MarkSet *marks;

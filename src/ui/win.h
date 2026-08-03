@@ -1,6 +1,7 @@
 #ifndef SAG_UI_WIN_H
 #define SAG_UI_WIN_H
 
+#include "edit/motion.h"
 #include "edit/multicursor.h"
 #include "text/coords.h"
 #include "ui/gutter.h"
@@ -21,6 +22,7 @@ typedef struct Rect {
 typedef struct Win {
     Buffer *buf;
     CursorSet cs;
+    SelStack sels;
     Viewport vp;
     WrapCache wrap_cache;
     Rect rect;

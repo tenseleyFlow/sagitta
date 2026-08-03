@@ -43,6 +43,7 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
 
     ed->buffer.tb = tb;
     ed->buffer.path = path == NULL ? NULL : arena_strdup(&ed->arena, path);
+    ed->buffer.tabwidth = SAG_VP_TABWIDTH;
     ed->buffer.undo = sag_undo_new(tb);
     sag_undo_mark_saved(ed->buffer.undo);
     ed->buffer.marks = sag_marks_new();
@@ -296,6 +297,11 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     }
 
     status = sag_cmd_invoke(id, cx);
+    if (status == SAG_CMD_OK && ed->win != NULL &&
+        (changes || durability_command ||
+         strncmp(desc->name, "ed.move.", 8U) == 0 ||
+         strncmp(desc->name, "ed.view.", 8U) == 0))
+        sag_selstack_clear(ed->win);
     if (changes && ed->model_ready) {
         ec = sag_ed_edit_ctx(ed);
         if (status != SAG_CMD_OK &&

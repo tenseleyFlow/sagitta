@@ -19,9 +19,6 @@ const ModeDesc sag_modes[SAG_MODE__N] = {
 static const char *mode_sprint(Mode mode)
 {
     switch (mode) {
-    case SAG_MODE_W:
-    case SAG_MODE_B:
-        return "16";
     case SAG_MODE_H:
         return "17";
     case SAG_MODE_E:
@@ -29,6 +26,8 @@ static const char *mode_sprint(Mode mode)
     case SAG_MODE_F:
         return "52";
     case SAG_MODE_L:
+    case SAG_MODE_W:
+    case SAG_MODE_B:
     case SAG_MODE_I:
     case SAG_MODE__N:
         break;

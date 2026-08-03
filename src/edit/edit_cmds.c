@@ -2,8 +2,11 @@
 
 #include <string.h>
 
+#include "edit/block.h"
 #include "edit/ed.h"
 #include "edit/mode.h"
+#include "edit/motion.h"
+#include "edit/word.h"
 #include "ui/message.h"
 #include "ui/viewport.h"
 #include "unicode/coords.h"
@@ -434,6 +437,213 @@ CmdStatus sag_edit_cmd_move_char_next(CmdCtx *cx)
     if (!edit_window(cx, &win, &tb, &cursor))
         return SAG_CMD_ERR_STATE;
     sag_cursor_right(tb, cursor);
+    win->wrap_goal_valid = false;
+    sag_win_follow_cursor(win);
+    return SAG_CMD_OK;
+}
+
+typedef enum {
+    UNIT_NEXT,
+    UNIT_PREV,
+    UNIT_HOME,
+    UNIT_END
+} UnitMotion;
+
+static CmdStatus move_unit(CmdCtx *cx, UnitMotion motion, bool alt)
+{
+    Win *win;
+    TextBuf *tb;
+    Cursor *cursor;
+    const UnitOps *ops;
+    UnitCtx u;
+    ByteOff pos;
+
+    if (!edit_window(cx, &win, &tb, &cursor))
+        return SAG_CMD_ERR_STATE;
+    ops = sag_unit_of_mode(cx->ed->mode);
+    if (ops == NULL)
+        return SAG_CMD_ERR_STATE;
+    u = (UnitCtx){tb, win->buf, win};
+    switch (motion) {
+    case UNIT_NEXT:
+        pos = ops->next(&u, cursor->pos, alt);
+        break;
+    case UNIT_PREV:
+        pos = ops->prev(&u, cursor->pos, alt);
+        break;
+    case UNIT_HOME:
+        pos = ops->home(&u, cursor->pos, alt);
+        break;
+    case UNIT_END:
+        pos = ops->end(&u, cursor->pos, alt);
+        break;
+    default:
+        return SAG_CMD_ERR_ARG;
+    }
+    cursor_place(tb, cursor, pos);
+    win->wrap_goal_valid = false;
+    sag_win_follow_cursor(win);
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_edit_cmd_move_unit_next(CmdCtx *cx)
+{
+    return move_unit(cx, UNIT_NEXT, false);
+}
+
+CmdStatus sag_edit_cmd_move_unit_prev(CmdCtx *cx)
+{
+    return move_unit(cx, UNIT_PREV, false);
+}
+
+CmdStatus sag_edit_cmd_move_unit_home(CmdCtx *cx)
+{
+    return move_unit(cx, UNIT_HOME, false);
+}
+
+CmdStatus sag_edit_cmd_move_unit_end(CmdCtx *cx)
+{
+    return move_unit(cx, UNIT_END, false);
+}
+
+CmdStatus sag_edit_cmd_move_unit_next_alt(CmdCtx *cx)
+{
+    return move_unit(cx, UNIT_NEXT, true);
+}
+
+CmdStatus sag_edit_cmd_move_unit_prev_alt(CmdCtx *cx)
+{
+    return move_unit(cx, UNIT_PREV, true);
+}
+
+CmdStatus sag_edit_cmd_move_unit_home_alt(CmdCtx *cx)
+{
+    return move_unit(cx, UNIT_HOME, true);
+}
+
+CmdStatus sag_edit_cmd_move_unit_end_alt(CmdCtx *cx)
+{
+    return move_unit(cx, UNIT_END, true);
+}
+
+static CmdStatus move_block_match(CmdCtx *cx, bool next)
+{
+    Win *win;
+    TextBuf *tb;
+    Cursor *cursor;
+    UnitCtx u;
+    ByteOff pos;
+
+    if (!edit_window(cx, &win, &tb, &cursor))
+        return SAG_CMD_ERR_STATE;
+    u = (UnitCtx){tb, win->buf, win};
+    if (!sag_block_match(&u, cursor->pos, next, &pos)) {
+        sag_msg(cx->ed, SAG_MSG_INFO, "no enclosing delimiter");
+        return SAG_CMD_OK;
+    }
+    cursor_place(tb, cursor, pos);
+    win->wrap_goal_valid = false;
+    sag_win_follow_cursor(win);
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_edit_cmd_move_block_match_prev(CmdCtx *cx)
+{
+    return move_block_match(cx, false);
+}
+
+CmdStatus sag_edit_cmd_move_block_match_next(CmdCtx *cx)
+{
+    return move_block_match(cx, true);
+}
+
+static CmdStatus move_word_sub(CmdCtx *cx, bool next)
+{
+    Win *win;
+    TextBuf *tb;
+    Cursor *cursor;
+    UnitCtx u;
+    ByteOff pos;
+
+    if (!edit_window(cx, &win, &tb, &cursor))
+        return SAG_CMD_ERR_STATE;
+    u = (UnitCtx){tb, win->buf, win};
+    pos = next ? sag_word_sub_next(&u, cursor->pos)
+               : sag_word_sub_prev(&u, cursor->pos);
+    cursor_place(tb, cursor, pos);
+    win->wrap_goal_valid = false;
+    sag_win_follow_cursor(win);
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_edit_cmd_move_word_sub_prev(CmdCtx *cx)
+{
+    return move_word_sub(cx, false);
+}
+
+CmdStatus sag_edit_cmd_move_word_sub_next(CmdCtx *cx)
+{
+    return move_word_sub(cx, true);
+}
+
+static void select_span(const TextBuf *tb, Cursor *cursor, Span span)
+{
+    cursor->anchor = BYTEOFF(span.lo);
+    cursor->pos = BYTEOFF(span.hi);
+    cursor->goal_col = sag_off_to_gcol(
+        tb, sag_textbuf_line_span(tb, sag_textbuf_line_of(tb, cursor->pos)),
+        cursor->pos);
+}
+
+CmdStatus sag_edit_cmd_sel_unit_expand(CmdCtx *cx)
+{
+    Win *win;
+    TextBuf *tb;
+    Cursor *cursor;
+    UnitCtx u;
+    Span span;
+    ByteOff seed;
+
+    if (!edit_window(cx, &win, &tb, &cursor))
+        return SAG_CMD_ERR_STATE;
+    if (win->cs.curs.len != 1U)
+        SAG_BUG("structural multi-cursor selection lands in Sprint 17");
+    u = (UnitCtx){tb, win->buf, win};
+    seed = win->sels.n == 0U ? cursor->pos : BYTEOFF(win->sels.s[0].lo);
+    if (win->sels.n == SAG_SEL_DEPTH ||
+        !sag_block_level(&u, seed, win->sels.n, &span) ||
+        (win->sels.n != 0U &&
+         span.lo == win->sels.s[win->sels.n - 1U].lo &&
+         span.hi == win->sels.s[win->sels.n - 1U].hi)) {
+        sag_msg(cx->ed, SAG_MSG_INFO, "selection is already at buffer level");
+        return SAG_CMD_OK;
+    }
+    win->sels.s[win->sels.n++] = span;
+    select_span(tb, cursor, span);
+    win->wrap_goal_valid = false;
+    sag_win_follow_cursor(win);
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_edit_cmd_sel_unit_contract(CmdCtx *cx)
+{
+    Win *win;
+    TextBuf *tb;
+    Cursor *cursor;
+
+    if (!edit_window(cx, &win, &tb, &cursor))
+        return SAG_CMD_ERR_STATE;
+    if (win->cs.curs.len != 1U)
+        SAG_BUG("structural multi-cursor selection lands in Sprint 17");
+    if (win->sels.n == 0U) {
+        sag_msg(cx->ed, SAG_MSG_INFO, "selection stack is empty");
+        return SAG_CMD_OK;
+    }
+    win->sels.n--;
+    if (win->sels.n == 0U)
+        cursor->anchor = cursor->pos;
+    else
+        select_span(tb, cursor, win->sels.s[win->sels.n - 1U]);
     win->wrap_goal_valid = false;
     sag_win_follow_cursor(win);
     return SAG_CMD_OK;

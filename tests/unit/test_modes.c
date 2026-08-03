@@ -124,8 +124,6 @@ void test_modes_deferred_entries_name_their_sprints(void)
         const char *mode;
         const char *sprint;
     } cases[] = {
-        {'w', "W", "16"},
-        {'b', "B", "16"},
         {'h', "H", "17"},
         {'e', "E", "18"},
         {'f', "F", "52"},
@@ -157,7 +155,13 @@ void test_modes_only_line_and_insert_are_enterable_in_sprint14(void)
     SAG_ASSERT_EQ_U64(sag_mode_enter(&ed, SAG_MODE_L), SAG_CMD_OK);
     SAG_ASSERT_EQ_U64(ed.mode, SAG_MODE_L);
     SAG_ASSERT_EQ_U64(ed.prev_unit, SAG_MODE_L);
+    SAG_ASSERT_EQ_U64(sag_mode_enter(&ed, SAG_MODE_W), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(ed.mode, SAG_MODE_W);
+    SAG_ASSERT_EQ_U64(ed.prev_unit, SAG_MODE_W);
+    SAG_ASSERT_EQ_U64(sag_mode_enter(&ed, SAG_MODE_B), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(ed.mode, SAG_MODE_B);
+    SAG_ASSERT_EQ_U64(ed.prev_unit, SAG_MODE_B);
     SAG_ASSERT_EQ_U64(sag_mode_enter(&ed, SAG_MODE__N), SAG_CMD_ERR_ARG);
-    SAG_ASSERT_EQ_U64(ed.mode, SAG_MODE_L);
+    SAG_ASSERT_EQ_U64(ed.mode, SAG_MODE_B);
     sag_ed_free(&ed);
 }

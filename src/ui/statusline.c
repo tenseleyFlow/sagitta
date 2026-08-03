@@ -284,11 +284,14 @@ void sag_statusline_build(const Ed *ed, Win *w, u16 cols,
 {
     const Cursor *cursor;
     LineNo line;
+    LineNo anchor_line;
     Span line_span;
+    Span anchor_span;
     GCol gcol;
+    GCol anchor_gcol;
     const char *path;
     char encoding[16];
-    char position[48];
+    char position[112];
     char percent[16];
     char *clipped_path;
     size_t path_len;
@@ -327,9 +330,21 @@ void sag_statusline_build(const Ed *ed, Win *w, u16 cols,
     line = sag_textbuf_line_of(w->buf->tb, cursor->pos);
     line_span = sag_textbuf_line_span(w->buf->tb, line);
     gcol = sag_off_to_gcol(w->buf->tb, line_span, cursor->pos);
-    (void)snprintf(position, sizeof(position), "%llu:%llu",
-                   (unsigned long long)(line.v + 1U),
-                   (unsigned long long)(gcol.v + 1U));
+    if (w->sels.n == 0U || cursor->anchor.v == cursor->pos.v) {
+        (void)snprintf(position, sizeof(position), "%llu:%llu",
+                       (unsigned long long)(line.v + 1U),
+                       (unsigned long long)(gcol.v + 1U));
+    } else {
+        anchor_line = sag_textbuf_line_of(w->buf->tb, cursor->anchor);
+        anchor_span = sag_textbuf_line_span(w->buf->tb, anchor_line);
+        anchor_gcol = sag_off_to_gcol(w->buf->tb, anchor_span,
+                                     cursor->anchor);
+        (void)snprintf(position, sizeof(position), "%llu:%llu@%llu:%llu",
+                       (unsigned long long)(line.v + 1U),
+                       (unsigned long long)(gcol.v + 1U),
+                       (unsigned long long)(anchor_line.v + 1U),
+                       (unsigned long long)(anchor_gcol.v + 1U));
+    }
     percent_text(w, percent, sizeof(percent));
     (void)snprintf(encoding, sizeof(encoding), "%s",
                    w->buf->meta.binary ? "utf-8 bin" : "utf-8");

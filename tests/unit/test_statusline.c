@@ -129,6 +129,14 @@ void test_statusline_metadata_position_percent_and_mode_chip(void)
     SAG_ASSERT(contains(&out, "25%"));
     SAG_ASSERT_EQ_U64(out.chip_cells + out.body_cells, 200U);
 
+    f.win.cs.curs.data[0].anchor = BYTEOFF(0U);
+    f.win.sels.n = 1U;
+    sag_statusline_text_free(&out);
+    sag_statusline_build(&f.ed, &f.win, 200U, &out);
+    SAG_ASSERT(contains(&out, "1:4@1:1"));
+    f.win.cs.curs.data[0].anchor = f.win.cs.curs.data[0].pos;
+    f.win.sels.n = 0U;
+
     f.win.vp.top = LINENO(0U);
     sag_statusline_text_free(&out);
     sag_statusline_build(&f.ed, &f.win, 200U, &out);
