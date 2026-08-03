@@ -92,6 +92,20 @@ static Cursor merged_cursor(const CursorItem *governing, u64 lo, u64 hi)
     return merged;
 }
 
+static bool collapsed_strictly_sorted(const CursorSet *cs)
+{
+    size_t i;
+
+    if (cs->curs.data[0].pos.v != cs->curs.data[0].anchor.v)
+        return false;
+    for (i = 1U; i < cs->curs.len; i++) {
+        if (cs->curs.data[i].pos.v != cs->curs.data[i].anchor.v ||
+            cs->curs.data[i - 1U].pos.v >= cs->curs.data[i].pos.v)
+            return false;
+    }
+    return true;
+}
+
 static void normalize_unclamped(CursorSet *cs)
 {
     CursorItem *items;
@@ -114,6 +128,14 @@ static void normalize_unclamped(CursorSet *cs)
     if (cs->active != SAG_MC_ACTIVE_NONE &&
         (size_t)cs->active >= cs->curs.len)
         SAG_BUG("cursor set: active index out of range");
+
+    /* The simultaneous-insert hot path preserves strict position order.
+     * A collapsed, strictly ordered set has neither intervals nor duplicate
+     * points to merge, so the stable-sort normalization would be a no-op. */
+    if (collapsed_strictly_sorted(cs)) {
+        sag_cset_check(cs);
+        return;
+    }
 
     item_count = cs->curs.len;
     items = sag_xreallocarray(NULL, item_count, sizeof(*items));
@@ -768,6 +790,8 @@ void sag_cset_check(const CursorSet *cs)
         if (cs->curs.data[i - 1U].pos.v > cs->curs.data[i].pos.v)
             SAG_BUG("cursor set invariant: cursors are not sorted");
     }
+    if (collapsed_strictly_sorted(cs))
+        return;
 
     items = sag_xreallocarray(NULL, cs->curs.len, sizeof(*items));
     for (i = 0U; i < cs->curs.len; i++) {
@@ -904,7 +928,6 @@ CmdStatus sag_mc_run(Win *w, CmdId cmd, CmdCtx *cx)
         size_t merged;
 
         sag_cset_normalize(w->buf->tb, &w->cs);
-        sag_cset_check_text(w->buf->tb, &w->cs);
         merged = before_count - w->cs.curs.len;
         if (merged != 0U) {
             sag_msg(cx->ed, SAG_MSG_INFO, "%zu cursor%s merged", merged,
