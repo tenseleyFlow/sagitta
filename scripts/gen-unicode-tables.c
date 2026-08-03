@@ -14,6 +14,7 @@
 #define MAX_BLOCKS STAGE1_LEN
 #define MAX_PALETTE 256u
 #define MAX_HI_RANGES 128u
+#define CASE_MAX_CPS 3u
 
 #define WB_MASK 0x1Fu
 #define WB_WHITE_SPACE 0x20u
@@ -36,6 +37,21 @@ typedef struct {
     U16 rec;
 } Range;
 
+typedef struct {
+    U32 lower[CASE_MAX_CPS];
+    U32 upper[CASE_MAX_CPS];
+    U8 lower_len;
+    U8 upper_len;
+} CaseMap;
+
+typedef struct {
+    U32 cp;
+    U32 lower_at;
+    U32 upper_at;
+    U8 lower_len;
+    U8 upper_len;
+} CaseRec;
+
 static U16 *records;
 static U16 stage1[STAGE1_LEN];
 static U8 stage2[MAX_BLOCKS * BLOCK_SIZE];
@@ -51,6 +67,12 @@ static U8 wb_stage2[MAX_BLOCKS * BLOCK_SIZE];
 static Range wb_hi_ranges[MAX_HI_RANGES];
 static size_t wb_block_count;
 static size_t wb_hi_count;
+
+static CaseMap *case_maps;
+static CaseRec *case_recs;
+static U32 *case_data;
+static size_t case_rec_count;
+static size_t case_data_count;
 
 static void die(const char *what, const char *path)
 {
@@ -99,6 +121,140 @@ static U32 hex_cp(const char *s, const char *path, unsigned long line_no)
         exit(1);
     }
     return (U32)value;
+}
+
+static size_t split_fields(char *line, char **fields, size_t count)
+{
+    size_t n = 0u;
+    char *p = line;
+
+    while (n < count) {
+        char *semi;
+
+        fields[n++] = p;
+        semi = strchr(p, ';');
+        if (semi == NULL)
+            break;
+        *semi = '\0';
+        p = semi + 1;
+    }
+    return n;
+}
+
+static U8 parse_case_sequence(char *field, U32 out[CASE_MAX_CPS],
+                              const char *path, unsigned long line_no)
+{
+    U8 count = 0u;
+    char *p = trim(field);
+
+    while (*p != '\0') {
+        char *end = p;
+        char saved;
+
+        while (*end != '\0' && !isspace((unsigned char)*end))
+            end++;
+        saved = *end;
+        *end = '\0';
+        if (count == CASE_MAX_CPS)
+            die("case mapping exceeds SAG_CASE_MAX_CODEPOINTS", path);
+        out[count++] = hex_cp(p, path, line_no);
+        *end = saved;
+        p = end;
+        while (isspace((unsigned char)*p))
+            p++;
+    }
+    return count;
+}
+
+static void case_store(U32 cp, U32 lower[CASE_MAX_CPS], U8 lower_len,
+                       U32 upper[CASE_MAX_CPS], U8 upper_len)
+{
+    CaseMap *map = &case_maps[cp];
+
+    map->lower_len = lower_len == 1u && lower[0] == cp ? 0u : lower_len;
+    map->upper_len = upper_len == 1u && upper[0] == cp ? 0u : upper_len;
+    if (map->lower_len != 0u)
+        memcpy(map->lower, lower, (size_t)map->lower_len * sizeof(U32));
+    if (map->upper_len != 0u)
+        memcpy(map->upper, upper, (size_t)map->upper_len * sizeof(U32));
+}
+
+static void parse_case_unicode_data(const char *dir)
+{
+    char path[4096];
+    char line[4096];
+    unsigned long line_no = 0;
+    FILE *fp = open_input(dir, "UnicodeData.txt", path, sizeof(path));
+
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        char *fields[15];
+        U32 lower[CASE_MAX_CPS];
+        U32 upper[CASE_MAX_CPS];
+        U8 lower_len = 0u;
+        U8 upper_len = 0u;
+        U32 cp;
+
+        line_no++;
+        if (strchr(line, '\n') == NULL && !feof(fp))
+            die("input line exceeds parser buffer", path);
+        if (split_fields(line, fields, 15u) != 15u)
+            die("UnicodeData line has too few fields", path);
+        cp = hex_cp(trim(fields[0]), path, line_no);
+        if (*trim(fields[12]) != '\0') {
+            upper[0] = hex_cp(trim(fields[12]), path, line_no);
+            upper_len = 1u;
+        }
+        if (*trim(fields[13]) != '\0') {
+            lower[0] = hex_cp(trim(fields[13]), path, line_no);
+            lower_len = 1u;
+        }
+        case_store(cp, lower, lower_len, upper, upper_len);
+    }
+    if (ferror(fp))
+        die(strerror(errno), path);
+    if (fclose(fp) != 0)
+        die(strerror(errno), path);
+}
+
+static void parse_special_casing(const char *dir)
+{
+    char path[4096];
+    char line[4096];
+    unsigned long line_no = 0;
+    FILE *fp = open_input(dir, "SpecialCasing.txt", path, sizeof(path));
+
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        char *fields[5];
+        char *hash;
+        U32 lower[CASE_MAX_CPS];
+        U32 upper[CASE_MAX_CPS];
+        U8 lower_len;
+        U8 upper_len;
+        U32 cp;
+
+        line_no++;
+        if (strchr(line, '\n') == NULL && !feof(fp))
+            die("input line exceeds parser buffer", path);
+        hash = strchr(line, '#');
+        if (hash != NULL)
+            *hash = '\0';
+        if (*trim(line) == '\0')
+            continue;
+        if (split_fields(line, fields, 5u) != 5u)
+            die("SpecialCasing line has too few fields", path);
+        if (*trim(fields[4]) != '\0')
+            continue;
+        cp = hex_cp(trim(fields[0]), path, line_no);
+        lower_len = parse_case_sequence(fields[1], lower, path, line_no);
+        upper_len = parse_case_sequence(fields[3], upper, path, line_no);
+        if (lower_len == 0u || upper_len == 0u)
+            die("SpecialCasing mapping is empty", path);
+        case_store(cp, lower, lower_len, upper, upper_len);
+    }
+    if (ferror(fp))
+        die(strerror(errno), path);
+    if (fclose(fp) != 0)
+        die(strerror(errno), path);
 }
 
 static void parse_range(char *field, U32 *lo, U32 *hi, const char *path,
@@ -687,6 +843,204 @@ static void generate_word_break(const char *dir)
     free(wb_records);
 }
 
+static void build_case_tables(void)
+{
+    U32 cp;
+    size_t rec_at = 0u;
+    size_t data_at = 0u;
+
+    for (cp = 0u; cp < CP_COUNT; cp++) {
+        case_rec_count += case_maps[cp].lower_len != 0u ||
+                          case_maps[cp].upper_len != 0u;
+        case_data_count += case_maps[cp].lower_len;
+        case_data_count += case_maps[cp].upper_len;
+    }
+    case_recs = calloc(case_rec_count, sizeof(*case_recs));
+    case_data = calloc(case_data_count, sizeof(*case_data));
+    if (case_recs == NULL || case_data == NULL)
+        die("out of memory", NULL);
+    for (cp = 0u; cp < CP_COUNT; cp++) {
+        const CaseMap *map = &case_maps[cp];
+        CaseRec *rec;
+
+        if (map->lower_len == 0u && map->upper_len == 0u)
+            continue;
+        rec = &case_recs[rec_at++];
+        rec->cp = cp;
+        rec->lower_at = (U32)data_at;
+        rec->lower_len = map->lower_len;
+        if (map->lower_len != 0u) {
+            memcpy(case_data + data_at, map->lower,
+                   (size_t)map->lower_len * sizeof(U32));
+            data_at += map->lower_len;
+        }
+        rec->upper_at = (U32)data_at;
+        rec->upper_len = map->upper_len;
+        if (map->upper_len != 0u) {
+            memcpy(case_data + data_at, map->upper,
+                   (size_t)map->upper_len * sizeof(U32));
+            data_at += map->upper_len;
+        }
+    }
+    if (rec_at != case_rec_count || data_at != case_data_count)
+        die("case table size mismatch", NULL);
+}
+
+static void validate_case_tables(void)
+{
+    const CaseMap *sharp_s = &case_maps[0x00DFu];
+    const CaseMap *dotted_i = &case_maps[0x0130u];
+    const CaseMap *upper_a = &case_maps[0x0041u];
+    const CaseMap *lower_a = &case_maps[0x0061u];
+
+    if (sharp_s->upper_len != 2u || sharp_s->upper[0] != 0x0053u ||
+        sharp_s->upper[1] != 0x0053u || dotted_i->lower_len != 2u ||
+        dotted_i->lower[0] != 0x0069u ||
+        dotted_i->lower[1] != 0x0307u || upper_a->lower_len != 1u ||
+        upper_a->lower[0] != 0x0061u || lower_a->upper_len != 1u ||
+        lower_a->upper[0] != 0x0041u)
+        die("Unicode 16.0.0 case-mapping semantic spot check failed", NULL);
+    if (case_rec_count > UINT32_MAX || case_data_count > UINT32_MAX)
+        die("case tables exceed 32-bit offsets", NULL);
+}
+
+static void emit_case_output(void)
+{
+    size_t i;
+
+    fputs("/* GENERATED by scripts/gen-unicode-tables from UCD 16.0.0 — do not edit;\n"
+          " * regenerate with 'build/scripts/gen-unicode-tables --case ucd/16.0.0 > src/unicode/tables_case.c'.\n"
+          " */\n#include \"case.h\"\n\n"
+          "#include \"unicode/utf8.h\"\n"
+          "#include \"util/log.h\"\n\n"
+          "struct SagCaseRec {\n"
+          "    u32 cp;\n"
+          "    u32 lower_at;\n"
+          "    u32 upper_at;\n"
+          "    u8 lower_len;\n"
+          "    u8 upper_len;\n"
+          "};\n\n", stdout);
+    fputs("static const u32 sag_case_data[] = {\n", stdout);
+    for (i = 0u; i < case_data_count; i++) {
+        if ((i % 8u) == 0u)
+            fputs("    ", stdout);
+        printf("0x%06Xu%s", (unsigned)case_data[i],
+               i + 1u == case_data_count ? "" : ",");
+        if ((i % 8u) == 7u || i + 1u == case_data_count)
+            putchar('\n');
+        else
+            putchar(' ');
+    }
+    fputs("};\n\nstatic const struct SagCaseRec sag_case_recs[] = {\n",
+          stdout);
+    for (i = 0u; i < case_rec_count; i++) {
+        const CaseRec *rec = &case_recs[i];
+
+        printf("    {0x%06Xu, %uu, %uu, %uu, %uu}%s\n",
+               (unsigned)rec->cp, (unsigned)rec->lower_at,
+               (unsigned)rec->upper_at, (unsigned)rec->lower_len,
+               (unsigned)rec->upper_len,
+               i + 1u == case_rec_count ? "" : ",");
+    }
+    fputs("};\n\n"
+          "static const struct SagCaseRec *case_record(u32 cp)\n"
+          "{\n"
+          "    size_t lo = 0U;\n"
+          "    size_t hi = SAG_ARRAY_LEN(sag_case_recs);\n\n"
+          "    while (lo < hi) {\n"
+          "        size_t mid = lo + (hi - lo) / 2U;\n\n"
+          "        if (cp < sag_case_recs[mid].cp)\n"
+          "            hi = mid;\n"
+          "        else if (cp > sag_case_recs[mid].cp)\n"
+          "            lo = mid + 1U;\n"
+          "        else\n"
+          "            return &sag_case_recs[mid];\n"
+          "    }\n"
+          "    return NULL;\n"
+          "}\n\n"
+          "u8 sag_case_map(u32 cp, SagCaseKind kind,\n"
+          "                u32 out[SAG_CASE_MAX_CODEPOINTS])\n"
+          "{\n"
+          "    const struct SagCaseRec *rec;\n"
+          "    u32 at = 0U;\n"
+          "    u8 len = 0U;\n\n"
+          "    if (out == NULL)\n"
+          "        SAG_BUG(\"sag_case_map: NULL output\");\n"
+          "    rec = case_record(cp);\n"
+          "    if (rec != NULL) {\n"
+          "        switch (kind) {\n"
+          "        case SAG_CASE_LOWER:\n"
+          "            at = rec->lower_at;\n"
+          "            len = rec->lower_len;\n"
+          "            break;\n"
+          "        case SAG_CASE_UPPER:\n"
+          "            at = rec->upper_at;\n"
+          "            len = rec->upper_len;\n"
+          "            break;\n"
+          "        case SAG_CASE_TOGGLE:\n"
+          "            if (rec->upper_len != 0U) {\n"
+          "                at = rec->upper_at;\n"
+          "                len = rec->upper_len;\n"
+          "            } else {\n"
+          "                at = rec->lower_at;\n"
+          "                len = rec->lower_len;\n"
+          "            }\n"
+          "            break;\n"
+          "        default:\n"
+          "            SAG_BUG(\"sag_case_map: invalid case kind %u\",\n"
+          "                    (unsigned)kind);\n"
+          "        }\n"
+          "    } else if (kind < SAG_CASE_LOWER || kind > SAG_CASE_TOGGLE) {\n"
+          "        SAG_BUG(\"sag_case_map: invalid case kind %u\",\n"
+          "                (unsigned)kind);\n"
+          "    }\n"
+          "    if (len == 0U) {\n"
+          "        out[0] = cp;\n"
+          "        return 1U;\n"
+          "    }\n"
+          "    for (u8 i = 0U; i < len; i++)\n"
+          "        out[i] = sag_case_data[(size_t)at + i];\n"
+          "    return len;\n"
+          "}\n\n"
+          "size_t sag_case_map_utf8(u32 cp, SagCaseKind kind,\n"
+          "                         u8 out[SAG_CASE_MAX_UTF8])\n"
+          "{\n"
+          "    u32 mapped[SAG_CASE_MAX_CODEPOINTS];\n"
+          "    u8 count;\n"
+          "    size_t used = 0U;\n\n"
+          "    if (out == NULL)\n"
+          "        SAG_BUG(\"sag_case_map_utf8: NULL output\");\n"
+          "    count = sag_case_map(cp, kind, mapped);\n"
+          "    for (u8 i = 0U; i < count; i++) {\n"
+          "        size_t n = sag_utf8_encode(mapped[i], out + used);\n\n"
+          "        if (n == 0U)\n"
+          "            return 0U;\n"
+          "        used += n;\n"
+          "    }\n"
+          "    return used;\n"
+          "}\n\n", stdout);
+    printf("/* UCD 16.0.0; %zu records; %zu mapped codepoints.\n",
+           case_rec_count, case_data_count);
+    fputs(" * sha256 UnicodeData.txt ff58e5823bd095166564a006e47d111130813dcf8bf234ef79fa51a870edb48f\n"
+          " * sha256 SpecialCasing.txt 8d5de354eef79f2395a54c9c7dcebbaf3d30fc962d0f85611ea97aa973a0c451\n"
+          " */\n", stdout);
+}
+
+static void generate_case(const char *dir)
+{
+    case_maps = calloc(CP_COUNT, sizeof(*case_maps));
+    if (case_maps == NULL)
+        die("out of memory", NULL);
+    parse_case_unicode_data(dir);
+    parse_special_casing(dir);
+    build_case_tables();
+    validate_case_tables();
+    emit_case_output();
+    free(case_data);
+    free(case_recs);
+    free(case_maps);
+}
+
 int main(int argc, char **argv)
 {
     if (argc == 3 && strcmp(argv[1], "--word-break") == 0) {
@@ -695,8 +1049,16 @@ int main(int argc, char **argv)
             die("failed writing generated output", NULL);
         return 0;
     }
+    if (argc == 3 && strcmp(argv[1], "--case") == 0) {
+        generate_case(argv[2]);
+        if (ferror(stdout))
+            die("failed writing generated output", NULL);
+        return 0;
+    }
     if (argc != 2) {
-        fprintf(stderr, "usage: %s [--word-break] UCD-DIRECTORY\n", argv[0]);
+        fprintf(stderr,
+                "usage: %s [--word-break|--case] UCD-DIRECTORY\n",
+                argv[0]);
         return 1;
     }
     records = calloc(CP_COUNT, sizeof(*records));
