@@ -15,6 +15,9 @@
 #define MAX_PALETTE 256u
 #define MAX_HI_RANGES 128u
 
+#define WB_MASK 0x1Fu
+#define WB_WHITE_SPACE 0x20u
+
 #define GCB_MASK 0x000Fu
 #define INCB_MASK 0x0030u
 #define EXT_PICT 0x0040u
@@ -41,6 +44,13 @@ static Range hi_ranges[MAX_HI_RANGES];
 static size_t block_count;
 static size_t palette_count;
 static size_t hi_count;
+
+static U8 *wb_records;
+static U16 wb_stage1[STAGE1_LEN];
+static U8 wb_stage2[MAX_BLOCKS * BLOCK_SIZE];
+static Range wb_hi_ranges[MAX_HI_RANGES];
+static size_t wb_block_count;
+static size_t wb_hi_count;
 
 static void die(const char *what, const char *path)
 {
@@ -151,6 +161,85 @@ static int incb_value(const char *name)
         if (strcmp(name, names[i]) == 0)
             return (int)i;
     return -1;
+}
+
+static int wb_value(const char *name)
+{
+    static const char *const names[] = {
+        "Other", "CR", "LF", "Newline", "Extend", "Format", "ZWJ",
+        "WSegSpace", "ALetter", "Hebrew_Letter", "Numeric", "Katakana",
+        "ExtendNumLet", "Regional_Indicator", "MidLetter", "MidNum",
+        "MidNumLet", "Single_Quote", "Double_Quote"
+    };
+    size_t i;
+    for (i = 0; i < sizeof(names) / sizeof(names[0]); i++)
+        if (strcmp(name, names[i]) == 0)
+            return (int)i;
+    return -1;
+}
+
+static void wb_set_field(U32 lo, U32 hi, U8 mask, U8 value)
+{
+    U32 cp;
+    for (cp = lo; cp <= hi; cp++)
+        wb_records[cp] = (U8)((wb_records[cp] & (U8)~mask) | value);
+}
+
+static void parse_wb_property_file(const char *dir, const char *name,
+                                   int white_space)
+{
+    char path[4096];
+    char line[4096];
+    unsigned long line_no = 0;
+    FILE *fp = open_input(dir, name, path, sizeof(path));
+
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        char *hash;
+        char *missing;
+        char *semi;
+        char *range_field;
+        char *property;
+        U32 lo, hi;
+        int value;
+        line_no++;
+        if (strchr(line, '\n') == NULL && !feof(fp))
+            die("input line exceeds parser buffer", path);
+        missing = strstr(line, "@missing:");
+        if (missing != NULL) {
+            memmove(line, missing + strlen("@missing:"),
+                    strlen(missing + strlen("@missing:")) + 1u);
+        }
+        hash = strchr(line, '#');
+        if (hash != NULL)
+            *hash = '\0';
+        range_field = trim(line);
+        if (*range_field == '\0')
+            continue;
+        semi = strchr(range_field, ';');
+        if (semi == NULL)
+            die("property line has no semicolon", path);
+        *semi = '\0';
+        property = trim(semi + 1);
+        semi = strchr(property, ';');
+        if (semi != NULL)
+            *semi = '\0';
+        property = trim(property);
+        parse_range(range_field, &lo, &hi, path, line_no);
+
+        if (white_space) {
+            if (strcmp(property, "White_Space") == 0)
+                wb_set_field(lo, hi, WB_WHITE_SPACE, WB_WHITE_SPACE);
+        } else {
+            value = wb_value(property);
+            if (value < 0)
+                die("unknown Word_Break value", property);
+            wb_set_field(lo, hi, WB_MASK, (U8)value);
+        }
+    }
+    if (ferror(fp))
+        die(strerror(errno), path);
+    if (fclose(fp) != 0)
+        die(strerror(errno), path);
 }
 
 static void parse_property_file(const char *dir, const char *name, int kind)
@@ -382,6 +471,72 @@ static void validate_records(void)
         die("Unicode 16.0.0 semantic spot check failed", NULL);
 }
 
+static void build_wb_trie(void)
+{
+    size_t input_block;
+    for (input_block = 0; input_block < STAGE1_LEN; input_block++) {
+        const U8 *block = wb_records + input_block * BLOCK_SIZE;
+        size_t i;
+        size_t found = wb_block_count;
+        for (i = 0; i < wb_block_count; i++) {
+            if (memcmp(wb_stage2 + i * BLOCK_SIZE, block, BLOCK_SIZE) == 0) {
+                found = i;
+                break;
+            }
+        }
+        if (found == wb_block_count) {
+            if (wb_block_count == MAX_BLOCKS)
+                die("word-break stage-2 block limit exceeded", NULL);
+            memcpy(wb_stage2 + wb_block_count * BLOCK_SIZE, block,
+                   BLOCK_SIZE);
+            wb_block_count++;
+        }
+        wb_stage1[input_block] = (U16)found;
+    }
+}
+
+static void build_wb_high_ranges(void)
+{
+    U32 cp = TRIE_HI;
+    while (cp < CP_COUNT) {
+        U32 lo;
+        U8 rec;
+        if (wb_records[cp] == 0) {
+            cp++;
+            continue;
+        }
+        lo = cp;
+        rec = wb_records[cp++];
+        while (cp < CP_COUNT && wb_records[cp] == rec)
+            cp++;
+        if (wb_hi_count == MAX_HI_RANGES)
+            die("word-break high-plane range limit exceeded", NULL);
+        wb_hi_ranges[wb_hi_count].lo = lo;
+        wb_hi_ranges[wb_hi_count].hi = cp - 1u;
+        wb_hi_ranges[wb_hi_count].rec = rec;
+        wb_hi_count++;
+    }
+}
+
+static void validate_wb_records(void)
+{
+    U32 cp;
+    for (cp = 0; cp < CP_COUNT; cp++) {
+        if ((wb_records[cp] & (U8)~(WB_MASK | WB_WHITE_SPACE)) != 0)
+            die("word-break packed-record bits are invalid", NULL);
+        if ((wb_records[cp] & WB_MASK) > 18u)
+            die("word-break packed-record value is invalid", NULL);
+    }
+    if (wb_records[0x000Au] != (U8)(2u | WB_WHITE_SPACE) ||
+        wb_records[0x0020u] != (U8)(7u | WB_WHITE_SPACE) ||
+        wb_records[0x0041u] != 8u ||
+        wb_records[0x0301u] != 4u ||
+        wb_records[0x05D0u] != 9u ||
+        wb_records[0x30A2u] != 11u ||
+        wb_records[0x1F1E6u] != 13u)
+        die("Unicode 16.0.0 word-break semantic spot check failed", NULL);
+}
+
 static void emit_u16(const char *decl, const U16 *values, size_t count)
 {
     size_t i;
@@ -478,10 +633,70 @@ static void emit_output(void)
     fputs(" */\n", stdout);
 }
 
+static void emit_wb_output(void)
+{
+    static const char *const hashes[] = {
+        "PropList.txt 53d614508e2a0b2305a8aa21cd60d993de9326cdf65993660dfcce4503548583",
+        "WordBreakProperty.txt 476464e71a4b7b779b8ba7c5671f4338fea77da8e6b6b05fb82b3fdd14603779",
+        "WordBreakTest.txt ad985d5721f3fa6b45495663dfe44180f2f68976100dee0ea7451ef1a8f838e8"
+    };
+    size_t i;
+    size_t table_bytes = STAGE1_LEN * 2u + wb_block_count * BLOCK_SIZE +
+                         wb_hi_count * 12u;
+    unsigned dedup = (unsigned)(((STAGE1_LEN - wb_block_count) * 100u) /
+                                STAGE1_LEN);
+
+    fputs("/* GENERATED by scripts/gen-unicode-tables from UCD 16.0.0 — do not edit;\n"
+          " * regenerate with 'scripts/gen-unicode-tables --word-break ucd/16.0.0'.\n"
+          " */\n#include \"wordbreak.h\"\n\n", stdout);
+    emit_u16("sag_wb_stage1[SAG_WB_TRIE_HI >> SAG_WB_TRIE_SHIFT]",
+             wb_stage1, STAGE1_LEN);
+    emit_u8("sag_wb_stage2[]", wb_stage2,
+            wb_block_count * BLOCK_SIZE);
+    fputs("const struct SagWbRange sag_wb_hi[] = {\n", stdout);
+    for (i = 0; i < wb_hi_count; i++)
+        printf("    {0x%06Xu, 0x%06Xu, 0x%02Xu}%s\n",
+               (unsigned)wb_hi_ranges[i].lo,
+               (unsigned)wb_hi_ranges[i].hi,
+               (unsigned)wb_hi_ranges[i].rec,
+               i + 1u == wb_hi_count ? "" : ",");
+    fputs("};\n\n", stdout);
+    printf("const u32 sag_wb_hi_len = %uu;\n\n", (unsigned)wb_hi_count);
+    fputs("_Static_assert(sizeof(sag_wb_stage1) + sizeof(sag_wb_stage2) +\n"
+          "               sizeof(sag_wb_hi) <= 64u * 1024u,\n"
+          "               \"word-break tables exceed the 64 KiB budget\");\n\n",
+          stdout);
+    printf("/* UCD 16.0.0; %zu bytes; %zu/%u unique stage-2 blocks; %u%% dedup.\n",
+           table_bytes, wb_block_count, (unsigned)STAGE1_LEN, dedup);
+    for (i = 0; i < sizeof(hashes) / sizeof(hashes[0]); i++)
+        printf(" * sha256 %s\n", hashes[i]);
+    fputs(" */\n", stdout);
+}
+
+static void generate_word_break(const char *dir)
+{
+    wb_records = calloc(CP_COUNT, sizeof(*wb_records));
+    if (wb_records == NULL)
+        die("out of memory", NULL);
+    parse_wb_property_file(dir, "WordBreakProperty.txt", 0);
+    parse_wb_property_file(dir, "PropList.txt", 1);
+    validate_wb_records();
+    build_wb_trie();
+    build_wb_high_ranges();
+    emit_wb_output();
+    free(wb_records);
+}
+
 int main(int argc, char **argv)
 {
+    if (argc == 3 && strcmp(argv[1], "--word-break") == 0) {
+        generate_word_break(argv[2]);
+        if (ferror(stdout))
+            die("failed writing generated output", NULL);
+        return 0;
+    }
     if (argc != 2) {
-        fprintf(stderr, "usage: %s UCD-DIRECTORY\n", argv[0]);
+        fprintf(stderr, "usage: %s [--word-break] UCD-DIRECTORY\n", argv[0]);
         return 1;
     }
     records = calloc(CP_COUNT, sizeof(*records));
