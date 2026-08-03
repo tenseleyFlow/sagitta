@@ -347,20 +347,30 @@ fuzz-units: $(BUILD)/fuzz_units
 		$(BUILD)/fuzz_units --iters=$(FUZZ_ITERS) --seed=$$seed; \
 	done
 
+# Sanitizer contention can push a valid case past fuzzlib's per-input
+# watchdog, so instrumented seeds run serially while the plain lane stays
+# parallel.
 fuzz-multicursor: $(BUILD)/fuzz_multicursor
 	@set -eu; \
 	iters=$$(( ($(MULTICURSOR_FUZZ_OPS) + 127) / 128 )); \
-	pids=""; \
-	for seed in $(MULTICURSOR_FUZZ_SEEDS); do \
-		$(BUILD)/fuzz_multicursor --iters=$$iters \
-			--seed=$$seed & \
-		pids="$$pids $$!"; \
-	done; \
-	status=0; \
-	for pid in $$pids; do \
-		wait $$pid || status=1; \
-	done; \
-	exit $$status
+	if [ "$(SAN)" = "1" ]; then \
+		for seed in $(MULTICURSOR_FUZZ_SEEDS); do \
+			$(BUILD)/fuzz_multicursor --iters=$$iters \
+				--seed=$$seed; \
+		done; \
+	else \
+		pids=""; \
+		for seed in $(MULTICURSOR_FUZZ_SEEDS); do \
+			$(BUILD)/fuzz_multicursor --iters=$$iters \
+				--seed=$$seed & \
+			pids="$$pids $$!"; \
+		done; \
+		status=0; \
+		for pid in $$pids; do \
+			wait $$pid || status=1; \
+		done; \
+		exit $$status; \
+	fi
 
 fuzz-textbuf: $(BUILD)/fuzz_textbuf
 	$(BUILD)/fuzz_textbuf --replay tests/fuzz/replay-smoke.trace
