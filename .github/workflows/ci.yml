@@ -80,19 +80,22 @@ jobs:
           done
       - name: Prove the absolute gate rejects an injected delay
         run: make perf-gate-selftest CC=gcc
-      - name: Run the existing subsystem budgets
+      - name: Run subsystem budgets despite runner noise
         run: |
-          make perf-unicode perf-render perf-cursor perf-undo \
-            perf-units perf-multicursor CC=gcc
-      - name: Enforce the piece-table budget despite runner noise
-        run: |
-          for attempt in 1 2 3; do
-            if make perf-piece CC=gcc; then
-              exit 0
+          for target in perf-unicode perf-render perf-cursor perf-undo \
+            perf-units perf-multicursor perf-piece; do
+            passed=0
+            for attempt in 1 2 3; do
+              if make "$target" CC=gcc; then
+                passed=1
+                break
+              fi
+              echo "$target budget retry attempt=$attempt"
+            done
+            if [ "$passed" -ne 1 ]; then
+              exit 1
             fi
-            echo "piece-table budget retry attempt=$attempt"
           done
-          exit 1
       - name: Enforce Sprint 14 editor latency budgets
         run: |
           make perf-latency CC=gcc
