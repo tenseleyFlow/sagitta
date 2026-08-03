@@ -98,6 +98,62 @@ void test_units_registered_mode_mapping(void)
     SAG_ASSERT_NULL(sag_unit_of_mode(SAG_MODE_F));
 }
 
+void test_units_char_alt_projects_codepoints_to_graphemes(void)
+{
+    static const u8 bytes[] = {
+        0xE6U, 0xBCU, 0xA2U,             /* Han */
+        (u8)'e', 0xCCU, 0x81U,           /* e + combining acute */
+        (u8)'\r', (u8)'\n',
+        0xF0U, 0x9FU, 0x87U, 0xA6U,     /* regional indicator A */
+        0xF0U, 0x9FU, 0x87U, 0xBAU,     /* regional indicator U */
+        0xEDU, 0xA0U, 0x80U, 0xFFU,     /* four escaped bytes */
+        (u8)'A',
+    };
+    static const u64 stops[] = {
+        0U, 3U, 6U, 8U, 16U, 17U, 18U, 19U, 20U, 21U,
+    };
+    static const u64 interiors[] = {1U, 2U, 4U, 5U, 7U, 12U};
+    UnitFixture fixture = {bytes, sizeof(bytes)};
+    UnitTestCtx ctx;
+
+    unit_ctx_init(&ctx, &fixture);
+    for (size_t i = 0U; i + 1U < SAG_ARRAY_LEN(stops); i++) {
+        ByteOff at = BYTEOFF(stops[i]);
+        ByteOff next = sag_unit_char.next(&ctx.unit, at, true);
+        Span alt_span = sag_unit_char.span(&ctx.unit, at, true);
+        Span plain_span = sag_unit_char.span(&ctx.unit, at, false);
+
+        SAG_ASSERT_EQ_U64(next.v, stops[i + 1U]);
+        SAG_ASSERT_EQ_U64(sag_unit_char.next(&ctx.unit, at, false).v,
+                          next.v);
+        SAG_ASSERT_EQ_U64(alt_span.lo, stops[i]);
+        SAG_ASSERT_EQ_U64(alt_span.hi, stops[i + 1U]);
+        SAG_ASSERT_EQ_U64(plain_span.lo, alt_span.lo);
+        SAG_ASSERT_EQ_U64(plain_span.hi, alt_span.hi);
+        SAG_ASSERT(sag_is_grapheme_boundary(ctx.unit.tb, next));
+    }
+    for (size_t i = SAG_ARRAY_LEN(stops) - 1U; i != 0U; i--) {
+        ByteOff at = BYTEOFF(stops[i]);
+        ByteOff prev = sag_unit_char.prev(&ctx.unit, at, true);
+
+        SAG_ASSERT_EQ_U64(prev.v, stops[i - 1U]);
+        SAG_ASSERT_EQ_U64(sag_unit_char.prev(&ctx.unit, at, false).v,
+                          prev.v);
+        SAG_ASSERT(sag_is_grapheme_boundary(ctx.unit.tb, prev));
+    }
+    {
+        Span end = sag_unit_char.span(&ctx.unit, BYTEOFF(sizeof(bytes)),
+                                      true);
+
+        SAG_ASSERT_EQ_U64(end.lo, stops[SAG_ARRAY_LEN(stops) - 2U]);
+        SAG_ASSERT_EQ_U64(end.hi, sizeof(bytes));
+    }
+    for (size_t i = 0U; i < SAG_ARRAY_LEN(interiors); i++)
+        SAG_ASSERT(!sag_is_grapheme_boundary(ctx.unit.tb,
+                                             BYTEOFF(interiors[i])));
+    unit_ctx_free(&ctx);
+}
+
 void test_units_next_prev_are_monotone_and_terminate(void)
 {
     for (size_t f = 0U; f < SAG_ARRAY_LEN(unit_fixtures); f++) {

@@ -171,6 +171,11 @@ static Span line_span(UnitCtx *u, ByteOff p, bool alt)
 
 static ByteOff char_next(UnitCtx *u, ByteOff p, bool alt)
 {
+    /* UnitOps returns cursor positions, and every cursor position must be an
+     * extended-grapheme boundary.  The alternate's decoded-codepoint view is
+     * therefore projected onto legal cursor positions: valid codepoints
+     * inside one grapheme are skipped, while each escaped invalid byte remains
+     * its own codepoint and singleton grapheme. */
     (void)alt;
     return sag_grapheme_next_boundary(u->tb, clamp_pos(u->tb, p));
 }

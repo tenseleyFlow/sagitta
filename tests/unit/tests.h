@@ -461,6 +461,7 @@ void test_word_motion_reference_rows(void);
 void test_word_motion_word_variant(void);
 void test_word_subword_reference_rows(void);
 void test_units_registered_mode_mapping(void);
+void test_units_char_alt_projects_codepoints_to_graphemes(void);
 void test_units_next_prev_are_monotone_and_terminate(void);
 void test_units_results_are_boundaries_and_spans_obey_law(void);
 void test_units_roundtrip_and_purity_hold_for_every_engine(void);

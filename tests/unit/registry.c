@@ -464,6 +464,7 @@ const SagTest sag_tests[] = {
     T(word_motion_word_variant),
     T(word_subword_reference_rows),
     T(units_registered_mode_mapping),
+    T(units_char_alt_projects_codepoints_to_graphemes),
     T(units_next_prev_are_monotone_and_terminate),
     T(units_results_are_boundaries_and_spans_obey_law),
     T(units_roundtrip_and_purity_hold_for_every_engine),
