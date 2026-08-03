@@ -679,7 +679,14 @@ static void emit_key(PtyCtx *c, Bytebuf *burst,
     }
     modern = strcmp(c->test->profile, "modern") == 0 ||
              strcmp(c->test->profile, "nosync") == 0;
-    if (modern) {
+    /* Kitty flag 21 does not request "report all keys".  Printable keys,
+     * the four disambiguated controls, and Kitty-only functional codes use
+     * CSI u; arrows/navigation keep their legacy CSI finals, with modifiers
+     * in the legacy parameter.  This mirrors the terminal contract and the
+     * real sequences a flag-21 terminal sends. */
+    if (modern &&
+        (scalar != 0U || kitty == 27U || kitty == 13U || kitty == 9U ||
+         kitty == 127U || (legacy == NULL && tilde == 0U))) {
         n = snprintf(sequence, sizeof(sequence), "\x1b[%u;%uu",
                      (unsigned)kitty, (unsigned)mods + 1U);
         if (n < 0 || (size_t)n >= sizeof(sequence)) {

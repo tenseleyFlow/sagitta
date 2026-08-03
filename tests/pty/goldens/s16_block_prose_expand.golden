@@ -1,0 +1,57 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=4,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=5
+--- text
+    1 Section one
+    1
+    2   paragraph line
+    3     nested detail
+    4
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ B  pty-s14-s16_block_prose_expand.txt                   utf-8  lf  5:1@1:1  all
+--- style
+AAAAAAAAAAAAAAAAA
+AAAAA
+AAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAA
+AAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+--- legend
+A fg=default bg=default attrs=----------
+B fg=#f5eeff bg=#7e57c2 attrs=b---------
+C fg=#e4daf4 bg=#34254e attrs=----------

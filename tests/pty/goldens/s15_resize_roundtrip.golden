@@ -1,5 +1,5 @@
 # sagitta pty golden v1
-size 80x24 alt=1 cursor=20,6 vis=1
+size 80x24 alt=1 cursor=20,30 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=3
 --- text
    20 line 05 epsilon
@@ -25,7 +25,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=3
    25 line 25 漢字 tab    here
     1 line 26 tail
     2
- L  pty-s14-s15_resize_roundtrip.txt                        utf-8  lf  25:1  bot
+ L  pty-s14-s15_resize_roundtrip.txt                       utf-8  lf  25:20  bot
 --- style
 AAAAAAAAAAAAAAAAAAAAA
 AAAAAAAAAAAAAAAAAA

@@ -1,0 +1,57 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=0,18 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=5
+--- text
+    1 foo 漢字 👨‍👩‍👧‍👦 tail
+    1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ W  pty-s14-s16_word_tail.txt                               utf-8  lf  1:10  all
+--- style
+AAAAAAAAAAAAAAAAAAAAAA
+AAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+--- legend
+A fg=default bg=default attrs=----------
+B fg=#0a2328 bg=#42beca attrs=b---------
+C fg=#cdebee bg=#133e43 attrs=----------

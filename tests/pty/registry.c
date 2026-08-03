@@ -1121,6 +1121,100 @@ static void case_s15_position_unicode(PtyCtx *c)
     quit_cleanly(c);
 }
 
+static void s16_word_stop(PtyCtx *c, u32 steps,
+                          const char *golden)
+{
+    static const u8 initial[] =
+        "foo \xe6\xbc\xa2\xe5\xad\x97 "
+        "\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x91\xa9"
+        "\xe2\x80\x8d\xf0\x9f\x91\xa7\xe2\x80\x8d"
+        "\xf0\x9f\x91\xa6 tail\n";
+    char path[256];
+
+    if (!make_fixture(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    spawn_editor(c, path);
+    ptc_keys(c, "w");
+    ptc_settle(c, 0);
+    for (u32 i = 0U; i < steps; i++) {
+        ptc_keys(c, "right");
+        ptc_settle(c, 0);
+    }
+    ptc_snapshot(c, golden);
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s16_word_han_first(PtyCtx *c)
+{
+    s16_word_stop(c, 1U, "s16_word_han_first");
+}
+
+static void case_s16_word_han_second(PtyCtx *c)
+{
+    s16_word_stop(c, 2U, "s16_word_han_second");
+}
+
+static void case_s16_word_emoji(PtyCtx *c)
+{
+    s16_word_stop(c, 3U, "s16_word_emoji");
+}
+
+static void case_s16_word_tail(PtyCtx *c)
+{
+    s16_word_stop(c, 4U, "s16_word_tail");
+}
+
+static void case_s16_block_c_expand(PtyCtx *c)
+{
+    static const u8 initial[] =
+        "int main(void) {\n"
+        "  if (ready) {\n"
+        "    call();\n"
+        "  }\n"
+        "}\n";
+    char path[256];
+
+    if (!make_fixture(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    spawn_editor(c, path);
+    ptc_keys(c, "3 G");
+    ptc_settle(c, 0);
+    ptc_keys(c, "b");
+    ptc_settle(c, 0);
+    for (u32 i = 0U; i < 4U; i++) {
+        ptc_keys(c, "alt+up");
+        ptc_settle(c, 0);
+    }
+    ptc_snapshot(c, "s16_block_c_expand");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s16_block_prose_expand(PtyCtx *c)
+{
+    static const u8 initial[] =
+        "Section one\n\n"
+        "  paragraph line\n"
+        "    nested detail\n";
+    char path[256];
+
+    if (!make_fixture(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    spawn_editor(c, path);
+    ptc_keys(c, "4 G");
+    ptc_settle(c, 0);
+    ptc_keys(c, "b");
+    ptc_settle(c, 0);
+    for (u32 i = 0U; i < 3U; i++) {
+        ptc_keys(c, "alt+up");
+        ptc_settle(c, 0);
+    }
+    ptc_snapshot(c, "s16_block_prose_expand");
+    force_quit(c);
+    (void)unlink(path);
+}
+
 #define C(name, profile, rows, cols, fn) \
     {#name, #profile, rows, cols, fn}
 
@@ -1188,6 +1282,16 @@ const PtyCase sag_pty_cases[] = {
       case_s15_metadata_binary_invalid),
     C(s15_position_unicode, modern, 24U, 80U,
       case_s15_position_unicode),
+    C(s16_word_han_first, modern, 24U, 80U,
+      case_s16_word_han_first),
+    C(s16_word_han_second, modern, 24U, 80U,
+      case_s16_word_han_second),
+    C(s16_word_emoji, modern, 24U, 80U, case_s16_word_emoji),
+    C(s16_word_tail, modern, 24U, 80U, case_s16_word_tail),
+    C(s16_block_c_expand, modern, 24U, 80U,
+      case_s16_block_c_expand),
+    C(s16_block_prose_expand, modern, 24U, 80U,
+      case_s16_block_prose_expand),
     {NULL, NULL, 0U, 0U, NULL}
 };
 
