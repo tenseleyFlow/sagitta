@@ -65,6 +65,8 @@ static void assert_scan_budget(i64 elapsed)
 {
     char detail[128];
 
+    if (getenv("SAG_TEST_INSTRUMENTED") != NULL)
+        return;
     sag_test_count_assertion();
     if (elapsed < INT64_C(1000000))
         return;

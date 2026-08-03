@@ -45,33 +45,52 @@ static bool measure_engine(UnitCtx *u, const UnitOps *ops)
 {
     ByteOff p = BYTEOFF(0U);
     u64 len = sag_textbuf_len(u->tb);
-    i64 start = now_ns();
-    i64 elapsed;
+    i64 total_start = now_ns();
+    i64 total_elapsed;
+    i64 max_elapsed = 0;
+    u32 over_budget = 0U;
     int call;
 
-    if (start < 0)
+    if (total_start < 0)
         return false;
     for (call = 0; call < PERF_UNIT_CALLS; call++) {
+        i64 start;
+        i64 elapsed;
         ByteOff next;
 
-        if (p.v == len &&
-            (ops != &sag_unit_block || call % 100 == 0))
+        /* Every timed call must advance.  Endpoint fixed points are part of
+         * the API contract, but measuring them would hide real keystroke
+         * latency for engines whose first unit spans the whole fixture. */
+        if (p.v == len)
             p = BYTEOFF(0U);
-        next = ops->next(u, p, false);
-        if ((p.v < len && next.v <= p.v) || next.v > len)
+        start = now_ns();
+        if (start < 0)
             return false;
+        next = ops->next(u, p, false);
+        elapsed = now_ns() - start;
+        if (elapsed < 0 || next.v <= p.v || next.v > len)
+            return false;
+        if (elapsed > max_elapsed)
+            max_elapsed = elapsed;
+        if (elapsed > PERF_UNIT_KEY_NS)
+            over_budget++;
         p = next;
         perf_unit_sink ^= p.v + (u64)call;
     }
-    elapsed = now_ns() - start;
-    if (elapsed < 0)
+    total_elapsed = now_ns() - total_start;
+    if (total_elapsed < 0)
         return false;
-    (void)printf("perf-units: %-5s calls=%d total_ms=%.3f ns/op=%.1f\n",
+    (void)printf("perf-units: %-5s calls=%d total_ms=%.3f ns/op=%.1f "
+                 "max_ms=%.3f over_5ms=%u\n",
                  ops->name, PERF_UNIT_CALLS,
-                 (double)elapsed / 1000000.0,
-                 (double)elapsed / (double)PERF_UNIT_CALLS);
+                 (double)total_elapsed / 1000000.0,
+                 (double)total_elapsed / (double)PERF_UNIT_CALLS,
+                 (double)max_elapsed / 1000000.0, over_budget);
     (void)fflush(stdout);
-    return elapsed <= (i64)PERF_UNIT_CALLS * PERF_UNIT_KEY_NS;
+    /* At least 99% of representative calls must meet the keypress budget.
+     * A percentile gate tolerates scheduler preemption without averaging
+     * slow engine work into invisibility. */
+    return over_budget <= PERF_UNIT_CALLS / 100;
 }
 
 static bool measure_nested(void)
@@ -84,6 +103,7 @@ static bool measure_nested(void)
     Span span;
     i64 start;
     i64 elapsed;
+    i64 max_elapsed = 0;
     int i;
 
     for (i = 0; i < DEPTH; i++)
@@ -98,21 +118,29 @@ static bool measure_nested(void)
     buffer.tb = tb;
     buffer.tabwidth = 4U;
     u = (UnitCtx){tb, &buffer, NULL};
-    start = now_ns();
     for (i = 0; i < DEPTH; i++) {
+        start = now_ns();
+        if (start < 0) {
+            sag_textbuf_free(tb);
+            return false;
+        }
         if (!sag_block_level(&u, BYTEOFF(DEPTH), (u32)i, &span)) {
             sag_textbuf_free(tb);
             return false;
         }
+        elapsed = now_ns() - start;
+        if (elapsed < 0 || elapsed > PERF_UNIT_KEY_NS) {
+            sag_textbuf_free(tb);
+            return false;
+        }
+        if (elapsed > max_elapsed)
+            max_elapsed = elapsed;
         perf_unit_sink ^= span.lo + span.hi;
     }
-    elapsed = now_ns() - start;
     sag_textbuf_free(tb);
-    if (elapsed < 0)
-        return false;
-    (void)printf("perf-units: nested-depth=%d total_ms=%.3f\n", DEPTH,
-                 (double)elapsed / 1000000.0);
-    return elapsed <= (i64)DEPTH * PERF_UNIT_KEY_NS;
+    (void)printf("perf-units: nested-depth=%d max_ms=%.3f\n", DEPTH,
+                 (double)max_elapsed / 1000000.0);
+    return true;
 }
 
 int main(void)

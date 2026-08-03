@@ -127,6 +127,54 @@ static u64 line_content_hi(const u8 *bytes, Span span)
     return len;
 }
 
+static bool ascii_white(u8 byte)
+{
+    return byte == (u8)' ' || byte == (u8)'\t' || byte == (u8)'\n' ||
+           byte == (u8)'\r' || byte == (u8)'\v' || byte == (u8)'\f';
+}
+
+/* Most source and prose lines reveal their indentation entirely in ASCII.
+ * Keep column calculation in unicode/coords.c, but avoid constructing a
+ * grapheme reader for every unindented ASCII line in a large paragraph. */
+static bool line_ascii_first_nonwhite(const TextBuf *tb, Span span,
+                                      ByteOff *first, bool *blank)
+{
+    TextIter it;
+    u64 consumed = 0U;
+
+    *first = BYTEOFF(span.lo);
+    *blank = true;
+    if (span.lo == span.hi)
+        return true;
+    if (!sag_textiter_begin(&it, tb, BYTEOFF(span.lo)))
+        SAG_BUG("block line classifier cannot start iterator");
+    while (consumed < span.hi - span.lo) {
+        const u8 *chunk;
+        u64 chunk_len;
+        u64 take;
+
+        if (!sag_textiter_chunk(&it, tb, &chunk, &chunk_len))
+            SAG_BUG("block line classifier cannot read iterator");
+        take = span.hi - span.lo - consumed;
+        if (take > chunk_len)
+            take = chunk_len;
+        for (u64 i = 0U; i < take; i++) {
+            if (chunk[i] >= 0x80U)
+                return false;
+            if (!ascii_white(chunk[i])) {
+                *first = BYTEOFF(span.lo + consumed + i);
+                *blank = false;
+                return true;
+            }
+        }
+        consumed += take;
+        if (consumed != span.hi - span.lo &&
+            !sag_textiter_advance(&it, tb))
+            SAG_BUG("block line classifier iterator ended early");
+    }
+    return true;
+}
+
 static bool line_info(UnitCtx *u, LineNo line, LineInfo *out)
 {
     Span span = sag_textbuf_line_span(u->tb, line);
@@ -139,6 +187,12 @@ static bool line_info(UnitCtx *u, LineNo line, LineInfo *out)
     out->span = span;
     out->blank = true;
     out->indent = 0U;
+    if (line_ascii_first_nonwhite(u->tb, span, &first, &out->blank)) {
+        if (!out->blank && first.v != span.lo)
+            out->indent =
+                sag_off_to_ccol(u->tb, span, first, tabwidth).v;
+        return true;
+    }
     while (at.v < span.hi) {
         SagTextCluster cluster;
 
@@ -518,6 +572,18 @@ static bool is_open(u8 byte)
     return byte == (u8)'(' || byte == (u8)'[' || byte == (u8)'{';
 }
 
+static bool scope_window_has_delimiter(const u8 *bytes, u64 len)
+{
+    for (u64 i = 0U; i < len; i++) {
+        u8 byte = bytes[i];
+
+        if (is_open(byte) || byte == (u8)')' || byte == (u8)']' ||
+            byte == (u8)'}')
+            return true;
+    }
+    return false;
+}
+
 static void scope_push(ScopeStack *stack, ScopeOpen open)
 {
     if (stack->len == stack->cap) {
@@ -560,6 +626,10 @@ static bool scope_pair(UnitCtx *u, ByteOff p, Span inner, Span *out,
     bytes = sag_xmalloc((size_t)(window_len == 0U ? 1U : window_len));
     if (!read_span(u->tb, window, bytes))
         SAG_BUG("scope provider cannot read scan window");
+    if (!scope_window_has_delimiter(bytes, window_len)) {
+        free(bytes);
+        return false;
+    }
     while (cursor < window_len) {
         u64 raw_len = 0U;
         u64 absolute = window.lo + cursor;
@@ -740,6 +810,8 @@ static ByteOff block_next(UnitCtx *u, ByteOff p, bool alt)
     if (p.v >= len)
         return BYTEOFF(len);
     current = block_span(u, p, false);
+    if (current.lo == 0U && current.hi == len)
+        return BYTEOFF(len);
     probe = skip_white_next(u->tb, BYTEOFF(current.hi));
     if (probe.v < len && sag_block_level(u, probe, 0U, &sibling) &&
         sibling.lo > p.v)
