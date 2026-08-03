@@ -1,0 +1,58 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=0,17 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
+--- text
+    1 alpha beta gamma 
+    1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ H·W  pty-s14-s17_h_w_keyboard_entry.txt                    utf-8  lf  1:12  all
+--- style
+AAAAAAAAAAAABBBBBBBBBBB
+AAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+CCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+--- legend
+A fg=default bg=default attrs=----------
+B fg=default bg=#34486c attrs=----------
+C fg=#2b1f08 bg=#e1a82c attrs=b---------
+D fg=#f5e5c2 bg=#4b3914 attrs=----------

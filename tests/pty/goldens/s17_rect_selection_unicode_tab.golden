@@ -1,0 +1,58 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=2,13 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
+--- text
+    2 a漢 b😀z     
+    1 short      
+    3 xy  漢q      
+    1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ H·L  pty-s14-s17_rect_selection_unicode_tab.txt             utf-8  lf  3:6  all
+--- style
+AAAAAAAAAAABBBBBBBB
+AAAAAAAAAAAABBBBB
+AAAAAAAAAAAABBBBBBB
+AAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+CCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+--- legend
+A fg=default bg=default attrs=----------
+B fg=default bg=#34486c attrs=----------
+C fg=#2b1f08 bg=#e1a82c attrs=b---------
+D fg=#f5e5c2 bg=#4b3914 attrs=----------

@@ -51,6 +51,7 @@ typedef struct VtScreen {
     int cur_c;
     bool alt;
     bool cur_vis;
+    u8 cursor_shape;
     bool in_sync;
     bool primary_written;
     u32 modes;

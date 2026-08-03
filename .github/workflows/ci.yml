@@ -83,7 +83,7 @@ jobs:
       - name: Run the existing subsystem budgets
         run: |
           make perf-unicode perf-render perf-piece perf-cursor perf-undo \
-            perf-units CC=gcc
+            perf-units perf-multicursor CC=gcc
       - name: Enforce Sprint 14 editor latency budgets
         run: |
           make perf-latency CC=gcc

@@ -1,0 +1,58 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=1,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
+--- text
+    1 a漢 b      
+    2 emoji 👨‍👩‍👧‍👦      
+    1 tail
+    2
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ H·L  pty-s14-s17_line_selection_unicode_tab.txt             utf-8  lf  2:1  all
+--- style
+AAAAAAAAAAAABBBBB
+AAAAAAAAAAAABBBBBBBB
+AAAAAAAAAA
+AAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+CCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+--- legend
+A fg=default bg=default attrs=----------
+B fg=default bg=#34486c attrs=----------
+C fg=#2b1f08 bg=#e1a82c attrs=b---------
+D fg=#f5e5c2 bg=#4b3914 attrs=----------

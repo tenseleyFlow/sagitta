@@ -1,0 +1,58 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=0,7 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
+--- text
+    1 Xaa
+    1 Xbb     
+    2 Xcc     
+    3 Xdd     
+    4 Xee     
+    5 Xff     
+    6 Xgg     
+    7
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ L  pty-s14-s17_multicursor_typing_is_simultaneous.txt *      utf-8  lf  1:2  ×7
+--- style
+AAAAAAAAA
+AAAAAAAAAAAAAB
+AAAAAAAAAAAAAB
+AAAAAAAAAAAAAB
+AAAAAAAAAAAAAB
+AAAAAAAAAAAAAB
+AAAAAAAAAAAAAB
+AAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+CCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+--- legend
+A fg=default bg=default attrs=----------
+B fg=#fafcff bg=#688bd6 attrs=----------
+C fg=#ebf4ff bg=#266eba attrs=b---------
+D fg=#dae5f0 bg=#14304c attrs=----------

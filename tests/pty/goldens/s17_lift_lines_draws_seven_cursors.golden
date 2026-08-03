@@ -1,0 +1,58 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=0,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
+--- text
+    1 one
+    1 two    
+    2 three  
+    3 four   
+    4 five   
+    5 six    
+    6 seven  
+    7
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ L  pty-s14-s17_lift_lines_draws_seven_cursors.txt       utf-8  lf  1:1  all  ×7
+--- style
+AAAAAAAAA
+AAAAAAAAAAAAB
+AAAAAAAAAAAAB
+AAAAAAAAAAAAB
+AAAAAAAAAAAAB
+AAAAAAAAAAAAB
+AAAAAAAAAAAAB
+AAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+CCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+--- legend
+A fg=default bg=default attrs=----------
+B fg=#fafcff bg=#688bd6 attrs=----------
+C fg=#ebf4ff bg=#266eba attrs=b---------
+D fg=#dae5f0 bg=#14304c attrs=----------

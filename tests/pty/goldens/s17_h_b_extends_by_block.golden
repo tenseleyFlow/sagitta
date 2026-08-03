@@ -1,0 +1,58 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=5,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
+--- text
+    5 int main(void) {      
+    4   if (ready) {      
+    3     call();      
+    2   }      
+    1 }      
+    6
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ H·B  pty-s14-s17_h_b_extends_by_block.txt                   utf-8  lf  6:1  all
+--- style
+AAAAAAAAAAAABBBBBBBBBBBBBBBB
+AAAAAAAAAAAABBBBBBBBBBBBBB
+AAAAAAAAAAAABBBBBBBBBBB
+AAAAAAAAAAAABBB
+AAAAAAAAAAAAB
+AAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+CCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+--- legend
+A fg=default bg=default attrs=----------
+B fg=default bg=#34486c attrs=----------
+C fg=#2b1f08 bg=#e1a82c attrs=b---------
+D fg=#f5e5c2 bg=#4b3914 attrs=----------

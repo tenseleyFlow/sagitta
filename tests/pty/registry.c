@@ -23,6 +23,7 @@ static const char restore_blob[] =
     "\x1b[?1004l"
     "\x1b[?2026l"
     "\x1b[0m"
+    "\x1b[0 q"
     "\x1b[?1049l"
     "\x1b[?25h";
 
@@ -210,6 +211,7 @@ static void case_restore_crash(PtyCtx *c)
         "\x1b[?1004l"
         "\x1b[?2026l"
         "\x1b[0m"
+        "\x1b[0 q"
         "\x1b[?1049l"
         "\x1b[?25h"
         "sagitta: fatal signal, terminal restored\r\r\n";
@@ -1245,6 +1247,284 @@ static void case_s16_block_prose_expand(PtyCtx *c)
     (void)unlink(path);
 }
 
+static bool s17_open(PtyCtx *c, const u8 *initial, size_t len,
+                     char *path, size_t path_cap)
+{
+    if (!make_fixture(c, initial, len, path, path_cap))
+        return false;
+    spawn_editor(c, path);
+    return true;
+}
+
+static void s17_settle_after_keys(PtyCtx *c, const char *keys)
+{
+    ptc_keys(c, keys);
+    ptc_settle(c, 0);
+}
+
+static void case_s17_h_l_extends_by_line(PtyCtx *c)
+{
+    static const u8 initial[] = "alpha\nbeta\ngamma\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s17_settle_after_keys(c, "h down");
+    ptc_snapshot(c, "s17_h_l_extends_by_line");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s17_h_w_extends_by_word(PtyCtx *c)
+{
+    static const u8 initial[] = "alpha beta gamma\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s17_settle_after_keys(c, "w h right");
+    ptc_snapshot(c, "s17_h_w_extends_by_word");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s17_h_w_keyboard_entry(PtyCtx *c)
+{
+    static const u8 initial[] = "alpha beta gamma\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    /* Sprint 37 owns the Fletch surface for explicit `ed.mode.enter H W`.
+     * Until then, W -> h is the keyboard-reachable equivalent and its H.W
+     * chip is the strongest PTY-visible proof of the selected source unit. */
+    s17_settle_after_keys(c, "w h right right");
+    ptc_snapshot(c, "s17_h_w_keyboard_entry");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s17_h_b_extends_by_block(PtyCtx *c)
+{
+    static const u8 initial[] =
+        "int main(void) {\n"
+        "  if (ready) {\n"
+        "    call();\n"
+        "  }\n"
+        "}\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s17_settle_after_keys(c, "b h down");
+    ptc_snapshot(c, "s17_h_b_extends_by_block");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s17_h_c_extends_by_character(PtyCtx *c)
+{
+    static const u8 initial[] =
+        "a\xe6\xbc\xa2\tb"
+        "\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x91\xa9"
+        "\xe2\x80\x8d\xf0\x9f\x91\xa7\xe2\x80\x8d"
+        "\xf0\x9f\x91\xa6z\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s17_settle_after_keys(c, "i alt+h right right");
+    ptc_snapshot(c, "s17_h_c_extends_by_character");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s17_char_selection_unicode_tab(PtyCtx *c)
+{
+    static const u8 initial[] =
+        "a\xe6\xbc\xa2\tb"
+        "\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x91\xa9"
+        "\xe2\x80\x8d\xf0\x9f\x91\xa7\xe2\x80\x8d"
+        "\xf0\x9f\x91\xa6z\n"
+        "tail\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s17_settle_after_keys(c, "h right");
+    ptc_snapshot(c, "s17_char_selection_unicode_tab");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s17_line_selection_unicode_tab(PtyCtx *c)
+{
+    static const u8 initial[] =
+        "a\xe6\xbc\xa2\tb\n"
+        "emoji \xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x91\xa9"
+        "\xe2\x80\x8d\xf0\x9f\x91\xa7\xe2\x80\x8d"
+        "\xf0\x9f\x91\xa6\n"
+        "tail\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s17_settle_after_keys(c, "h v l down");
+    ptc_snapshot(c, "s17_line_selection_unicode_tab");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s17_rect_selection_unicode_tab(PtyCtx *c)
+{
+    static const u8 initial[] =
+        "a\xe6\xbc\xa2\tb\xf0\x9f\x98\x80z\n"
+        "short\n"
+        "xy\t\xe6\xbc\xa2q\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s17_settle_after_keys(c, "h v r right 2 down");
+    ptc_snapshot(c, "s17_rect_selection_unicode_tab");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s17_lift_lines_draws_seven_cursors(PtyCtx *c)
+{
+    static const u8 initial[] =
+        "one\ntwo\nthree\nfour\nfive\nsix\nseven\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s17_settle_after_keys(c, "h 6 down enter");
+    ptc_snapshot(c, "s17_lift_lines_draws_seven_cursors");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s17_lift_lines_draws_thousand_cursors(PtyCtx *c)
+{
+    enum { CURSOR_COUNT = 1000 };
+    u8 *initial;
+    char path[256];
+    size_t i;
+    u32 before;
+
+    initial = malloc((size_t)CURSOR_COUNT * 2U);
+    if (initial == NULL) {
+        ptc_check(c, false, "allocating 1,000-cursor PTY fixture");
+        return;
+    }
+    for (i = 0U; i < (size_t)CURSOR_COUNT; i++) {
+        initial[i * 2U] = (u8)'x';
+        initial[i * 2U + 1U] = (u8)'\n';
+    }
+    if (!s17_open(c, initial, (size_t)CURSOR_COUNT * 2U,
+                  path, sizeof(path))) {
+        free(initial);
+        return;
+    }
+    free(initial);
+    before = c->vt.nsync_pairs;
+    ptc_keys(c, "h 9 9 9 down enter");
+    settle_sync_delta(c, before, 1U, 0);
+    ptc_snapshot(c, "s17_lift_lines_draws_thousand_cursors");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s17_secondary_cursors_draw_at_eol(PtyCtx *c)
+{
+    static const u8 initial[] = "a\nwide\n\nlast\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s17_settle_after_keys(c, "h 3 down enter right");
+    ptc_snapshot(c, "s17_secondary_cursors_draw_at_eol");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s17_lift_ends_draws_two_cursors(PtyCtx *c)
+{
+    static const u8 initial[] = "alpha beta\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s17_settle_after_keys(c, "h right e");
+    ptc_snapshot(c, "s17_lift_ends_draws_two_cursors");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s17_multicursor_typing_is_simultaneous(PtyCtx *c)
+{
+    static const u8 initial[] = "aa\nbb\ncc\ndd\nee\nff\ngg\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s17_settle_after_keys(c, "h 6 down enter i X esc");
+    ptc_snapshot(c, "s17_multicursor_typing_is_simultaneous");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s17_one_undo_reverts_multicursor_typing(PtyCtx *c)
+{
+    static const u8 initial[] = "aa\nbb\ncc\ndd\nee\nff\ngg\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s17_settle_after_keys(c, "h 6 down enter i X esc u");
+    ptc_snapshot(c, "s17_one_undo_reverts_multicursor_typing");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s17_char_delete_matches_highlight(PtyCtx *c)
+{
+    static const u8 initial[] =
+        "a\xe6\xbc\xa2\tb\xf0\x9f\x98\x80z\nsecond\n";
+    static const u8 expected[] = "\nsecond\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    ptc_keys(c, "h right d s");
+    ptc_settle(c, 0);
+    ptc_check(c, file_equals(path, expected, sizeof(expected) - 1U),
+              "character selection delete disagreed with its highlight");
+    ptc_snapshot(c, "s17_char_delete_matches_highlight");
+    quit_cleanly(c);
+    (void)unlink(path);
+}
+
+static void case_s17_modal_milestone_saves(PtyCtx *c)
+{
+    static const u8 initial[] =
+        "alpha beta\n"
+        "block body\n"
+        "tail\n";
+    char path[256];
+
+    if (!s17_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    ptc_keys(c, "down up w right esc b down h right c X left right esc s");
+    ptc_settle(c, 0);
+    ptc_check(c, !c->failed && file_contains(path, "X"),
+              "L-W-B-H-I-Esc-save milestone did not persist its edit");
+    ptc_snapshot(c, "s17_modal_milestone_saves");
+    quit_cleanly(c);
+    (void)unlink(path);
+}
+
 #define C(name, profile, rows, cols, fn) \
     {#name, #profile, rows, cols, fn}
 
@@ -1322,6 +1602,38 @@ const PtyCase sag_pty_cases[] = {
       case_s16_block_c_expand),
     C(s16_block_prose_expand, modern, 24U, 80U,
       case_s16_block_prose_expand),
+    C(s17_h_l_extends_by_line, modern, 24U, 80U,
+      case_s17_h_l_extends_by_line),
+    C(s17_h_w_extends_by_word, modern, 24U, 80U,
+      case_s17_h_w_extends_by_word),
+    C(s17_h_w_keyboard_entry, modern, 24U, 80U,
+      case_s17_h_w_keyboard_entry),
+    C(s17_h_b_extends_by_block, modern, 24U, 80U,
+      case_s17_h_b_extends_by_block),
+    C(s17_h_c_extends_by_character, modern, 24U, 80U,
+      case_s17_h_c_extends_by_character),
+    C(s17_char_selection_unicode_tab, modern, 24U, 80U,
+      case_s17_char_selection_unicode_tab),
+    C(s17_line_selection_unicode_tab, modern, 24U, 80U,
+      case_s17_line_selection_unicode_tab),
+    C(s17_rect_selection_unicode_tab, modern, 24U, 80U,
+      case_s17_rect_selection_unicode_tab),
+    C(s17_lift_lines_draws_seven_cursors, modern, 24U, 80U,
+      case_s17_lift_lines_draws_seven_cursors),
+    C(s17_lift_lines_draws_thousand_cursors, modern, 24U, 80U,
+      case_s17_lift_lines_draws_thousand_cursors),
+    C(s17_secondary_cursors_draw_at_eol, modern, 24U, 80U,
+      case_s17_secondary_cursors_draw_at_eol),
+    C(s17_lift_ends_draws_two_cursors, modern, 24U, 80U,
+      case_s17_lift_ends_draws_two_cursors),
+    C(s17_multicursor_typing_is_simultaneous, modern, 24U, 80U,
+      case_s17_multicursor_typing_is_simultaneous),
+    C(s17_one_undo_reverts_multicursor_typing, modern, 24U, 80U,
+      case_s17_one_undo_reverts_multicursor_typing),
+    C(s17_char_delete_matches_highlight, modern, 24U, 80U,
+      case_s17_char_delete_matches_highlight),
+    C(s17_modal_milestone_saves, modern, 24U, 80U,
+      case_s17_modal_milestone_saves),
     {NULL, NULL, 0U, 0U, NULL}
 };
 

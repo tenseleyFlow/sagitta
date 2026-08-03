@@ -494,6 +494,10 @@ static void csi_dispatch(VtScreen *v)
         }
     } else if ((final == 'h' || final == 'l') && exact(body, nbody, "?25")) {
         v->cur_vis = final == 'h';
+    } else if (final == 'q' && nbody == 2u && body[1] == (u8)' ' &&
+               (body[0] == (u8)'0' || body[0] == (u8)'2' ||
+                body[0] == (u8)'6')) {
+        v->cursor_shape = (u8)(body[0] - (u8)'0');
     } else if ((final == 'h' || final == 'l') && exact(body, nbody, "?2004")) {
         set_mode(v, VT_MODE_BRACKETED_PASTE, final == 'h');
     } else if ((final == 'h' || final == 'l') && exact(body, nbody, "?1002")) {

@@ -2,7 +2,7 @@
 set -eu
 
 bad=$(grep -RIn '2026' src --include='*.c' --include='*.h' |
-    grep -Ev 'src/term/(render|tty)\.c:' || true)
+    grep -Ev 'src/(term/(render|tty)\.c|unicode/)' || true)
 if [ -n "$bad" ]; then
     printf '%s\n' "$bad" >&2
     printf '%s\n' 'error: mode 2026 emission escaped render.c/tty.c' >&2

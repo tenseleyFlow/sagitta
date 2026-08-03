@@ -1,0 +1,57 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=3,7 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
+--- text
+    3 alpha beta
+    2 block body
+    1 tail
+    4 X
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ L wrote build/pty-s14-s17_modal_milestone_saves.txt, 4 lines                   
+--- style
+AAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAA
+AAAAAAAAAA
+AAAAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+--- legend
+A fg=default bg=default attrs=----------
+B fg=#ebf4ff bg=#266eba attrs=b---------
+C fg=#dae5f0 bg=#14304c attrs=----------

@@ -1,0 +1,58 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=0,16 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
+--- text
+    1 alpha beta
+    1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ L  pty-s14-s17_lift_ends_draws_two_cursors.txt         utf-8  lf  1:11  all  ×2
+--- style
+AAAAAAAAAAAABAAA
+AAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+CCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+--- legend
+A fg=default bg=default attrs=----------
+B fg=#fafcff bg=#688bd6 attrs=----------
+C fg=#ebf4ff bg=#266eba attrs=b---------
+D fg=#dae5f0 bg=#14304c attrs=----------
