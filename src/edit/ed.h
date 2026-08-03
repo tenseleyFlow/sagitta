@@ -88,6 +88,8 @@ struct Ed {
     u32 drawn_top_sub;
     CCol drawn_left;
     bool drawn_wrap;
+    LineNo drawn_cursor_line;
+    bool drawn_cursor_line_valid;
     bool drawn_top_valid;
 
     bool dispatch_ready;

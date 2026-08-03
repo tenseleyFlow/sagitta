@@ -62,6 +62,7 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
     ed->cursor_follow_pending = false;
     ed->doc_damage_lo = 0U;
     ed->doc_damage_hi = 0U;
+    ed->drawn_cursor_line_valid = false;
     ed->drawn_top_valid = false;
     return true;
 }
@@ -618,6 +619,7 @@ static bool write_all(int fd, const u8 *bytes, size_t len)
 void sag_ed_render(Ed *ed)
 {
     Win *win;
+    LineNo cursor_line;
 
     if (ed == NULL || !ed->grid_ready || !ed->render_ready ||
         !ed->model_ready)
@@ -627,11 +629,17 @@ void sag_ed_render(Ed *ed)
         sag_win_follow_cursor(win);
         ed->cursor_follow_pending = false;
     }
+    cursor_line = sag_textbuf_line_of(win->buf->tb,
+                                      sag_ed_cursor(ed)->pos);
     if (!ed->drawn_top_valid ||
         ed->drawn_top.v != sag_win_view_top(win).v ||
         ed->drawn_top_sub != win->vp.top_sub ||
         ed->drawn_left.v != win->vp.left.v ||
-        ed->drawn_wrap != win->vp.wrap)
+        ed->drawn_wrap != win->vp.wrap ||
+        !ed->drawn_cursor_line_valid ||
+        ((win->number_style == SAG_NUM_REL ||
+          win->number_style == SAG_NUM_HYBRID) &&
+         ed->drawn_cursor_line.v != cursor_line.v))
         sag_ed_damage_document(ed);
     if (ed->full_damage) {
         sag_draw_document_rows(ed, win, 0U, win->rect.h);
@@ -659,6 +667,8 @@ void sag_ed_render(Ed *ed)
     ed->drawn_top_sub = win->vp.top_sub;
     ed->drawn_left = win->vp.left;
     ed->drawn_wrap = win->vp.wrap;
+    ed->drawn_cursor_line = cursor_line;
+    ed->drawn_cursor_line_valid = true;
     ed->drawn_top_valid = true;
 }
 
