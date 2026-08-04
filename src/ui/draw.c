@@ -475,7 +475,9 @@ void sag_draw_footer(Ed *ed, Win *w)
 {
     if (ed->footer_rect.h == 0U)
         return;
-    if (ed->msg.active)
+    if (ed->cmdline.active)
+        sag_cmdline_draw(ed, ed->footer_rect);
+    else if (ed->msg.active)
         sag_message_draw(ed, w);
     else
         sag_statusline_draw(ed, w);
@@ -487,5 +489,6 @@ void sag_draw_win(Ed *ed, Win *w)
         SAG_BUG("draw: missing editor window");
     sag_draw_document_rows(ed, w, 0U, w->rect.h);
     sag_draw_footer(ed, w);
-    sag_draw_cursor(ed, w);
+    if (!ed->cmdline.active)
+        sag_draw_cursor(ed, w);
 }

@@ -13,6 +13,7 @@
 #include "term/tty.h"
 #include "text/edit.h"
 #include "text/register.h"
+#include "ui/cmdline.h"
 #include "ui/message.h"
 #include "ui/win.h"
 #include "util/arena.h"
@@ -76,6 +77,7 @@ struct Ed {
 
     TimerHeap timers;
     Msg msg;
+    CmdLine cmdline;
     PromptKind prompt;
     bool quit_after_save;
     bool insert_txn;
@@ -111,14 +113,19 @@ void sag_ed_free(Ed *ed);
 SagLoadErr sag_ed_open(Ed *ed, const char *path);
 bool sag_ed_open_scratch(Ed *ed);
 int sag_ed_driver(const char *path);
+const char *sag_ws_root(const Ed *ed);
 
 bool sag_buf_dirty(const Buffer *b);
 EditCtx sag_ed_edit_ctx(Ed *ed);
+EditCtx sag_ed_edit_ctx_for(Ed *ed, Win *win);
 void sag_ed_finish_edit(Ed *ed, const EditCtx *ec);
 Cursor *sag_ed_cursor(Ed *ed);
 void sag_ed_insert_barrier(Ed *ed);
 CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx);
+CmdStatus sag_ed_invoke_parsed(Ed *ed, CmdId id,
+                               const SagCmdInvoke *invoke);
 CmdStatus sag_ed_file_save(Ed *ed, bool force);
+CmdStatus sag_ed_file_write_to(Ed *ed, const char *path, bool force);
 CmdStatus sag_ed_request_quit(Ed *ed, bool force);
 
 void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms);

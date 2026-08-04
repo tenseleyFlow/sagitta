@@ -109,7 +109,7 @@ static SelEdit *edit_push(SelEditVec *edits, Span span)
 
 static bool apply_edits(CmdCtx *cx, SelEditVec *edits, ByteOff *first)
 {
-    EditCtx ec = sag_ed_edit_ctx(cx->ed);
+    EditCtx ec = sag_ed_edit_ctx_for(cx->ed, cx->win);
     i64 delta = 0;
     size_t i;
 

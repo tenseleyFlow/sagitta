@@ -7,6 +7,10 @@
 
 CmdStatus sag_file_cmd_save(Ed *ed, bool force);
 CmdStatus sag_file_cmd_save_current(CmdCtx *cx);
+CmdStatus sag_file_cmd_write(CmdCtx *cx);
+CmdStatus sag_file_cmd_write_quit(CmdCtx *cx);
+CmdStatus sag_file_cmd_new(CmdCtx *cx);
+CmdStatus sag_file_cmd_reload(CmdCtx *cx);
 CmdStatus sag_file_cmd_quit(CmdCtx *cx);
 CmdStatus sag_file_cmd_quit_force(CmdCtx *cx);
 CmdStatus sag_file_cmd_suspend(CmdCtx *cx);

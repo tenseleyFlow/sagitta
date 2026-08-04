@@ -40,6 +40,7 @@ static const BindRow keys_L[] = {
     {"w", "ed.mode.enter", 0, "W"},
     {"b", "ed.mode.enter", 0, "B"},
     {"h", "ed.mode.enter", 0, "H"},
+    {":", "ed.mode.enter", 0, "E"},
     {"e", "ed.mode.enter", 0, "E"},
     {"f", "ed.mode.enter", 0, "F"},
 };
@@ -56,6 +57,7 @@ static const BindRow keys_W[] = {
     {"<home>", "ed.move.unit.home", 0, NULL},
     {"<end>", "ed.move.unit.end", 0, NULL},
     {"h", "ed.mode.enter", 0, "H"},
+    {":", "ed.mode.enter", 0, "E"},
     {"<esc>", "ed.mode.escape", 0, NULL},
     {"C-g", "ed.ui.message_expand", 0, NULL},
 };
@@ -70,6 +72,7 @@ static const BindRow keys_B[] = {
     {"A-<up>", "ed.sel.unit.expand", 0, NULL},
     {"A-<down>", "ed.sel.unit.contract", 0, NULL},
     {"h", "ed.mode.enter", 0, "H"},
+    {":", "ed.mode.enter", 0, "E"},
     {"<esc>", "ed.mode.escape", 0, NULL},
     {"C-g", "ed.ui.message_expand", 0, NULL},
 };
@@ -91,8 +94,26 @@ static const BindRow keys_I[] = {
 };
 
 static const BindRow keys_E[] = {
-    {"<esc>", "ed.mode.escape", 0, NULL},
-    {"C-g", "ed.ui.message_expand", 0, NULL},
+    {"<left>", "ed.move.char.prev", 0, NULL},
+    {"<right>", "ed.move.char.next", 0, NULL},
+    {"<home>", "ed.move.line.home", 0, NULL},
+    {"<end>", "ed.move.line.end", 0, NULL},
+    {"C-a", "ed.move.line.home", 0, NULL},
+    {"C-e", "ed.move.line.end", 0, NULL},
+    {"<bs>", "ed.edit.delete.grapheme_left", 0, NULL},
+    {"<del>", "ed.edit.delete.grapheme", 0, NULL},
+    {"C-w", "ed.del.word_prev", 0, NULL},
+    {"C-u", "ed.del.to_home", 0, NULL},
+    {"C-k", "ed.del.to_end", 0, NULL},
+    {"<up>", "ed.cmdline.hist_prev", 0, NULL},
+    {"<down>", "ed.cmdline.hist_next", 0, NULL},
+    {"<tab>", "ed.cmdline.complete_next", 0, NULL},
+    {"S-<tab>", "ed.cmdline.complete_prev", 0, NULL},
+    {"C-r", "ed.cmdline.insert_register", 0, NULL},
+    {"C-v", "ed.cmdline.literal_next", 0, NULL},
+    {"<cr>", "ed.cmdline.accept", 0, NULL},
+    {"<esc>", "ed.cmdline.cancel", 0, NULL},
+    {"C-g", "ed.cmdline.cancel", 0, NULL},
 };
 
 static const BindRow keys_F[] = {

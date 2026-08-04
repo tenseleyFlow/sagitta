@@ -3,10 +3,47 @@
 
 #include <stdbool.h>
 
+#include "text/coords.h"
 #include "util/base.h"
 
 typedef struct Ed Ed;
 typedef struct Win Win;
+
+typedef struct CmdArgv {
+    char **v;
+    u32 n;
+} CmdArgv;
+
+typedef enum {
+    SAG_RANGE_NONE,
+    SAG_RANGE_LINES,
+    SAG_RANGE_BUFFER,
+    SAG_RANGE_SELECTION
+} SagRangeKind;
+
+typedef struct CmdRange {
+    SagRangeKind kind;
+    LineNo lo;
+    LineNo hi;
+    bool given;
+    Span tok;
+} CmdRange;
+
+typedef enum {
+    SAG_RP_FORBID,
+    SAG_RP_OPT,
+    SAG_RP_LINE,
+    SAG_RP_BUFFER,
+    SAG_RP_REQUIRED
+} CmdRangePolicy;
+
+typedef struct SagCmdInvoke {
+    CmdRange range;
+    CmdArgv argv;
+    i64 count;
+    bool bang;
+    Win *win;
+} SagCmdInvoke;
 
 typedef struct {
     u32 v;
@@ -26,9 +63,12 @@ typedef enum {
 typedef struct CmdCtx {
     Ed *ed;
     Win *win;
+    CmdRange range;
+    CmdArgv argv;
     u32 cursor_index;
     u32 count;
     bool count_given;
+    bool bang;
     i64 iarg;
     const char *sarg;
     u32 sarg_len;
@@ -75,13 +115,25 @@ typedef struct CmdDesc {
     const char *help;
 } CmdDesc;
 
+/* CmdDesc remains the key/Fletch execution descriptor.  CmdEntry is the
+ * singular registry record and adds E-mode grammar metadata without forcing
+ * every earlier static descriptor initializer to grow Sprint 18 fields. */
+typedef struct CmdEntry {
+    CmdDesc cmd;
+    const char *argspec;
+    u8 range_policy;
+    const char *abbrev;
+} CmdEntry;
+
 typedef void (*CmdRecordTap)(CmdId id, const CmdCtx *cx);
 
 void sag_cmd_init(void);
 void sag_cmd_shutdown(void);
 CmdId sag_cmd_register(const CmdDesc *d);
+CmdId sag_cmd_register_entry(const CmdEntry *entry);
 CmdId sag_cmd_lookup(const char *name, u32 len);
 const CmdDesc *sag_cmd_desc(CmdId id);
+const CmdEntry *sag_cmd_entry(CmdId id);
 CmdStatus sag_cmd_prepare(CmdId id, CmdCtx *cx, const CmdDesc **out);
 CmdStatus sag_cmd_invoke(CmdId id, CmdCtx *cx);
 u32 sag_cmd_count(void);

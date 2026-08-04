@@ -8,6 +8,7 @@
 #include "edit/edit_cmds.h"
 #include "edit/file_cmds.h"
 #include "edit/sel_actions.h"
+#include "ui/cmdline.h"
 #include "util/arena.h"
 #include "util/intern.h"
 #include "util/log.h"
@@ -15,7 +16,7 @@
 typedef struct {
     Arena arena;
     Interner names;
-    CmdDesc *descs;
+    CmdEntry *entries;
     size_t len;
     size_t cap;
     CmdRecordTap record_tap;
@@ -197,7 +198,7 @@ static const CmdDesc builtins[] = {
      SAG_CMD_NEEDS_WIN, "Close the active insert transaction"},
     {"ed.mode.enter", sag_edit_cmd_mode_enter, SAG_ARITY_STR,
      SAG_CMD_RECORDABLE,
-     "Enter L/W/B/I/H; E Sprint 18, F Sprint 52"},
+     "Enter L/W/B/I/H/E; F Sprint 52"},
     {"ed.mode.escape", sag_edit_cmd_mode_escape, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE, "Return to line mode"},
     {"ed.sel.expand", sag_edit_cmd_sel_unit_expand, SAG_ARITY_NONE,
@@ -342,13 +343,48 @@ static const CmdDesc builtins[] = {
     {"ed.ui.cancel", sag_edit_cmd_ui_cancel, SAG_ARITY_NONE, 0U,
      "Cancel the active prompt or message overlay"},
 
+    {"ed.cmdline.hist_prev", sag_cmdline_cmd_hist_prev, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN, "Find the previous matching command-line history entry"},
+    {"ed.cmdline.hist_next", sag_cmdline_cmd_hist_next, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN, "Find the next matching command-line history entry"},
+    {"ed.cmdline.complete_next", sag_cmdline_cmd_complete_next,
+     SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN,
+     "Open or advance command-line completion"},
+    {"ed.cmdline.complete_prev", sag_cmdline_cmd_complete_prev,
+     SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN,
+     "Open or reverse command-line completion"},
+    {"ed.cmdline.insert_register", sag_cmdline_cmd_insert_register,
+     SAG_ARITY_STR, SAG_CMD_NEEDS_WIN | SAG_CMD_CAPTURES_TEXT,
+     "Insert one named register into the command line"},
+    {"ed.cmdline.literal_next", sag_cmdline_cmd_literal_next,
+     SAG_ARITY_STR, SAG_CMD_NEEDS_WIN | SAG_CMD_CAPTURES_TEXT,
+     "Insert the next text-producing key literally"},
+    {"ed.cmdline.accept", sag_cmdline_cmd_accept, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN | SAG_CMD_PROMPTS, "Accept the command line"},
+    {"ed.cmdline.cancel", sag_cmdline_cmd_cancel, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN | SAG_CMD_PROMPTS, "Cancel the command line or menu"},
+    {"ed.del.word_prev", sag_cmdline_cmd_delete_word_prev, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
+     "Delete to the previous word boundary"},
+    {"ed.del.to_home", sag_cmdline_cmd_delete_to_home, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
+     "Delete from the cursor to line start"},
+    {"ed.del.to_end", sag_cmdline_cmd_delete_to_end, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
+     "Delete from the cursor to line end"},
+
     DEFER("ed.file.open", SAG_ARITY_STR, SAG_CMD_PROMPTS, 23,
           "open a file"),
+    {"ed.file.write", sag_file_cmd_write, SAG_ARITY_OPT_STR,
+     SAG_CMD_NEEDS_WIN, "Write the active buffer, optionally to a path"},
+    {"ed.file.write_quit", sag_file_cmd_write_quit, SAG_ARITY_OPT_STR,
+     SAG_CMD_NEEDS_WIN, "Write the active buffer and quit"},
     {"ed.file.save", sag_file_cmd_save_current, SAG_ARITY_NONE,
      SAG_CMD_NEEDS_WIN, "Atomically save the active file"},
-    DEFER("ed.file.new", SAG_ARITY_OPT_STR, 0U, 18, "create a file"),
-    DEFER("ed.file.reload", SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN, 18,
-          "reload the active file"),
+    {"ed.file.new", sag_file_cmd_new, SAG_ARITY_OPT_STR, 0U,
+     "Create an empty buffer, optionally naming its file"},
+    {"ed.file.reload", sag_file_cmd_reload, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN, "Reload the active file from disk"},
     DEFER("ed.file.close", SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN, 23,
           "close the active file"),
     DEFER("ed.buf.next", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 23,
@@ -403,6 +439,26 @@ static const CmdDesc builtins[] = {
 
 #undef DEFER
 
+typedef struct {
+    const char *name;
+    const char *argspec;
+    u8 range_policy;
+    const char *abbrev;
+} BuiltinMeta;
+
+static const BuiltinMeta builtin_meta[] = {
+    {"ed.quit", "", SAG_RP_FORBID, "q"},
+    {"ed.redraw", "", SAG_RP_FORBID, "redraw"},
+    {"ed.edit.line.delete", "", SAG_RP_LINE, "d"},
+    {"ed.file.open", "f", SAG_RP_FORBID, "e"},
+    {"ed.file.write", "f", SAG_RP_FORBID, "w"},
+    {"ed.file.write_quit", "f", SAG_RP_FORBID, "wq"},
+    {"ed.file.new", "f", SAG_RP_FORBID, "new"},
+    {"ed.file.reload", "", SAG_RP_FORBID, "reload"},
+    {"ed.file.close", "", SAG_RP_FORBID, "close"},
+    {"ed.search.open", "s", SAG_RP_FORBID, "search"},
+};
+
 static bool word_in(const char *word, size_t len, const char *const *words,
                     size_t n)
 {
@@ -422,7 +478,8 @@ static bool command_name_valid(const char *name)
     static const char *const domains[] = {
         "move", "edit", "mode", "sel", "cursor", "view", "ui",
         "file", "buf", "tab", "group", "pane", "win", "reg",
-        "search", "macro", "job", "git", "lsp", "ai", "plug"};
+        "search", "macro", "job", "git", "lsp", "ai", "plug",
+        "cmdline", "del"};
     static const char *const verbs[] = {
         "home", "end", "next", "prev", "up", "down", "left", "right",
         "goto", "insert", "delete", "replace", "change", "yank", "paste", "toggle",
@@ -438,7 +495,10 @@ static bool command_name_valid(const char *name)
         "match_prev", "match_next", "sub_prev", "sub_next", "kind",
         "swap_ends", "lines", "matches", "ends", "drop", "collapse",
         "case_upper", "case_lower", "case_toggle", "indent", "dedent",
-        "shift_left", "shift_right", "join", "replace_char", "append"};
+        "shift_left", "shift_right", "join", "replace_char", "append",
+        "write", "write_quit", "hist_prev", "hist_next",
+        "complete_next", "complete_prev", "insert_register",
+        "literal_next", "accept", "word_prev", "to_home", "to_end"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;
@@ -530,12 +590,47 @@ static void desc_validate(const CmdDesc *d)
         SAG_BUG("deferred command %s help does not name its sprint", d->name);
 }
 
-static CmdId register_desc(const CmdDesc *d)
+static const char *default_argspec(const CmdDesc *d)
 {
-    CmdDesc copy;
+    return d->arity == SAG_ARITY_NONE ? "" : "s";
+}
+
+static void entry_validate(const CmdEntry *entry)
+{
+    const char *p;
+
+    if (entry == NULL)
+        SAG_BUG("sag_cmd_register_entry: NULL entry");
+    desc_validate(&entry->cmd);
+    if (entry->range_policy > SAG_RP_REQUIRED)
+        SAG_BUG("command %s has invalid range policy", entry->cmd.name);
+    p = entry->argspec == NULL ? default_argspec(&entry->cmd) :
+                                entry->argspec;
+    while (*p != '\0') {
+        if (*p != 'f' && *p != 'b' && *p != 'o' && *p != 'v' &&
+            *p != 's' && !(*p == '*' && p[1] == '\0'))
+            SAG_BUG("command %s has invalid argspec", entry->cmd.name);
+        p++;
+    }
+    if (entry->abbrev != NULL) {
+        if (entry->abbrev[0] == '\0')
+            SAG_BUG("command %s has empty abbreviation", entry->cmd.name);
+        for (p = entry->abbrev; *p != '\0'; p++) {
+            if (!(isalnum((unsigned char)*p) || *p == '_'))
+                SAG_BUG("command %s has invalid abbreviation",
+                        entry->cmd.name);
+        }
+    }
+}
+
+static CmdId register_entry(const CmdEntry *entry)
+{
+    CmdEntry copy;
+    const CmdDesc *d;
     u32 id;
 
-    desc_validate(d);
+    entry_validate(entry);
+    d = &entry->cmd;
     if (strmap_has(&registry.names.map, d->name, strlen(d->name)))
         SAG_BUG("duplicate command registration: %s", d->name);
     if (registry.len == UINT32_MAX)
@@ -545,18 +640,56 @@ static CmdId register_desc(const CmdDesc *d)
 
         if (cap < registry.cap)
             SAG_BUG("command registry allocation overflow");
-        registry.descs = sag_xreallocarray(registry.descs, cap,
-                                           sizeof(*registry.descs));
+        registry.entries = sag_xreallocarray(registry.entries, cap,
+                                             sizeof(*registry.entries));
         registry.cap = cap;
     }
     id = sag_intern_cstr(&registry.names, d->name);
     if ((size_t)id != registry.len + 1U)
         SAG_BUG("command registry and interner order diverged");
-    copy = *d;
-    copy.name = sag_intern_str(&registry.names, id);
-    copy.help = arena_strdup(&registry.arena, d->help);
-    registry.descs[registry.len++] = copy;
+    copy = *entry;
+    copy.cmd = *d;
+    copy.cmd.name = sag_intern_str(&registry.names, id);
+    copy.cmd.help = arena_strdup(&registry.arena, d->help);
+    copy.argspec = arena_strdup(
+        &registry.arena,
+        entry->argspec == NULL ? default_argspec(d) : entry->argspec);
+    copy.abbrev = entry->abbrev == NULL ? NULL :
+                  arena_strdup(&registry.arena, entry->abbrev);
+    registry.entries[registry.len++] = copy;
     return (CmdId){id};
+}
+
+static CmdId register_desc(const CmdDesc *d)
+{
+    CmdEntry entry;
+
+    if (d == NULL)
+        SAG_BUG("sag_cmd_register: NULL descriptor");
+    entry = (CmdEntry){*d, NULL, SAG_RP_FORBID, NULL};
+    return register_entry(&entry);
+}
+
+static void install_builtin_meta(void)
+{
+    size_t i;
+
+    for (i = 0U; i < SAG_ARRAY_LEN(builtin_meta); i++) {
+        const BuiltinMeta *meta = &builtin_meta[i];
+        void *found = strmap_get(&registry.names.map, meta->name,
+                                 strlen(meta->name));
+        u32 id = (u32)(uintptr_t)found;
+        CmdEntry *entry;
+
+        if (id == 0U || (size_t)id > registry.len)
+            SAG_BUG("metadata names missing command: %s", meta->name);
+        entry = &registry.entries[id - 1U];
+        entry->argspec = arena_strdup(&registry.arena, meta->argspec);
+        entry->range_policy = meta->range_policy;
+        entry->abbrev = meta->abbrev == NULL ? NULL :
+                        arena_strdup(&registry.arena, meta->abbrev);
+        entry_validate(entry);
+    }
 }
 
 void sag_cmd_init(void)
@@ -570,6 +703,7 @@ void sag_cmd_init(void)
     registry.initialized = true;
     for (i = 0; i < SAG_ARRAY_LEN(builtins); i++)
         (void)register_desc(&builtins[i]);
+    install_builtin_meta();
 }
 
 void sag_cmd_shutdown(void)
@@ -578,7 +712,7 @@ void sag_cmd_shutdown(void)
         return;
     interner_free(&registry.names);
     arena_free_all(&registry.arena);
-    free(registry.descs);
+    free(registry.entries);
     registry = (CmdRegistry){0};
 }
 
@@ -586,6 +720,12 @@ CmdId sag_cmd_register(const CmdDesc *d)
 {
     sag_cmd_init();
     return register_desc(d);
+}
+
+CmdId sag_cmd_register_entry(const CmdEntry *entry)
+{
+    sag_cmd_init();
+    return register_entry(entry);
 }
 
 CmdId sag_cmd_lookup(const char *name, u32 len)
@@ -604,7 +744,15 @@ const CmdDesc *sag_cmd_desc(CmdId id)
     sag_cmd_init();
     if (id.v == 0U || (size_t)id.v > registry.len)
         return NULL;
-    return &registry.descs[id.v - 1U];
+    return &registry.entries[id.v - 1U].cmd;
+}
+
+const CmdEntry *sag_cmd_entry(CmdId id)
+{
+    sag_cmd_init();
+    if (id.v == 0U || (size_t)id.v > registry.len)
+        return NULL;
+    return &registry.entries[id.v - 1U];
 }
 
 static bool args_valid(const CmdDesc *d, const CmdCtx *cx)
@@ -710,7 +858,7 @@ const CmdDesc *sag_cmd_at(u32 i)
     sag_cmd_init();
     if ((size_t)i >= registry.len)
         return NULL;
-    return &registry.descs[i];
+    return &registry.entries[i].cmd;
 }
 
 void sag_cmd_set_record_tap(CmdRecordTap tap)

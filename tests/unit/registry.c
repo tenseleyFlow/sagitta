@@ -538,6 +538,19 @@ const SagTest sag_tests[] = {
     T(block_matching_delimiters_ignores_nested_and_suppressed_pairs),
     T(block_selection_chain_saturates_at_buffer_for_stack_replay),
     T(block_syntax_install_names_sprint40),
+    T(cmdhist_memory_rules),
+    T(cmdhist_frozen_stem_navigation),
+    T(cmdhist_escape_corruption_and_xdg),
+    T(cmdhist_concurrent_handles_preserve_appends),
+    T(cmdparse_tokenizer_expansion_matrix),
+    T(cmdparse_resolution_bang_errors_and_parse_point),
+    T(cmdrange_addresses_policies_and_deferred_forms),
+    T(cmdrange_selection_and_eol_spans),
+    T(cmdcomp_source_selection_and_score),
+    T(cmdcomp_path_hidden_directory_and_unknown_dtype),
+    T(cmdcomp_cap_and_deterministic_order),
+    T(cmdcomp_path_quoting_retokenizes_one_argv),
+    T(cmdcomp_lcp_menu_and_empty_providers),
 };
 
 const size_t sag_tests_len = SAG_ARRAY_LEN(sag_tests);

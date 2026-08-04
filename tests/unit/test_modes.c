@@ -119,27 +119,24 @@ void test_modes_escape_in_line_is_repaint_noop(void)
 
 void test_modes_deferred_entries_name_their_sprints(void)
 {
-    static const struct {
-        char key;
-        const char *mode;
-        const char *sprint;
-    } cases[] = {
-        {'e', "E", "18"},
-        {'f', "F", "52"},
-    };
     Ed ed;
-    size_t i;
 
     modes_editor(&ed);
-    for (i = 0U; i < SAG_ARRAY_LEN(cases); i++) {
-        sag_ed_handle_key(&ed, modes_key((u32)(u8)cases[i].key), 10);
-        SAG_ASSERT_EQ_U64(ed.last_status, SAG_CMD_ERR_DEFERRED);
-        SAG_ASSERT_EQ_U64(ed.mode, SAG_MODE_L);
-        SAG_ASSERT(ed.msg.active);
-        SAG_ASSERT_EQ_U64(ed.msg.sev, SAG_MSG_ERROR);
-        SAG_ASSERT(strstr(ed.msg.text, cases[i].mode) != NULL);
-        SAG_ASSERT(strstr(ed.msg.text, cases[i].sprint) != NULL);
-    }
+    sag_ed_handle_key(&ed, modes_key((u32)'e'), 10);
+    SAG_ASSERT_EQ_U64(ed.last_status, SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(ed.mode, SAG_MODE_E);
+    SAG_ASSERT(ed.cmdline.active);
+    sag_ed_handle_key(&ed, modes_key(SAG_KEY_ESCAPE), 11);
+    SAG_ASSERT_EQ_U64(ed.mode, SAG_MODE_L);
+    SAG_ASSERT(!ed.cmdline.active);
+
+    sag_ed_handle_key(&ed, modes_key((u32)'f'), 12);
+    SAG_ASSERT_EQ_U64(ed.last_status, SAG_CMD_ERR_DEFERRED);
+    SAG_ASSERT_EQ_U64(ed.mode, SAG_MODE_L);
+    SAG_ASSERT(ed.msg.active);
+    SAG_ASSERT_EQ_U64(ed.msg.sev, SAG_MSG_ERROR);
+    SAG_ASSERT(strstr(ed.msg.text, "F") != NULL);
+    SAG_ASSERT(strstr(ed.msg.text, "52") != NULL);
     sag_ed_free(&ed);
 }
 
@@ -160,6 +157,11 @@ void test_modes_only_line_and_insert_are_enterable_in_sprint14(void)
     SAG_ASSERT_EQ_U64(sag_mode_enter(&ed, SAG_MODE_B), SAG_CMD_OK);
     SAG_ASSERT_EQ_U64(ed.mode, SAG_MODE_B);
     SAG_ASSERT_EQ_U64(ed.prev_unit, SAG_MODE_B);
+    SAG_ASSERT_EQ_U64(sag_mode_enter(&ed, SAG_MODE_E), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(ed.mode, SAG_MODE_E);
+    SAG_ASSERT(ed.cmdline.active);
+    sag_cmdline_close(&ed, false);
+    SAG_ASSERT_EQ_U64(ed.mode, SAG_MODE_B);
     SAG_ASSERT_EQ_U64(sag_mode_enter(&ed, SAG_MODE__N), SAG_CMD_ERR_ARG);
     SAG_ASSERT_EQ_U64(ed.mode, SAG_MODE_B);
     sag_ed_free(&ed);

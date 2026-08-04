@@ -109,7 +109,7 @@ static void dispatch_fire(Ed *ed, const Binding *selected)
 
     cx = (CmdCtx){0};
     cx.ed = ed;
-    cx.win = ed->win;
+    cx.win = ed->cmdline.active ? sag_cmdline_target(ed) : ed->win;
     cx.count = ed->chord.count_given ? ed->chord.count : 1U;
     cx.count_given = ed->chord.count_given;
     cx.iarg = binding.iarg;
@@ -201,7 +201,7 @@ void sag_dispatch_key(Ed *ed, Key key, i64 now_ms)
             return;
         }
         cx.ed = ed;
-        cx.win = ed->win;
+        cx.win = ed->cmdline.active ? sag_cmdline_target(ed) : ed->win;
         cx.count = ed->capture_count;
         cx.count_given = ed->capture_count_given;
         cx.sarg = (const char *)key.text;

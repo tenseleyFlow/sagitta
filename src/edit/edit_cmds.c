@@ -9,6 +9,7 @@
 #include "edit/motion.h"
 #include "edit/word.h"
 #include "ui/message.h"
+#include "ui/cmdparse.h"
 #include "ui/viewport.h"
 #include "unicode/coords.h"
 #include "util/log.h"
@@ -1202,7 +1203,7 @@ static CmdStatus insert_bytes(CmdCtx *cx, const u8 *bytes, u64 len)
         return SAG_CMD_ERR_ARG;
     line = sag_textbuf_line_of(tb, cursor->pos);
     old_line_count = sag_textbuf_line_count(tb);
-    ec = sag_ed_edit_ctx(cx->ed);
+    ec = sag_ed_edit_ctx_for(cx->ed, cx->win);
     if (!sag_edit_insert(&ec, cursor->pos, bytes, len)) {
         sag_ed_finish_edit(cx->ed, &ec);
         sag_msg(cx->ed, SAG_MSG_ERROR,
@@ -1285,7 +1286,7 @@ static CmdStatus open_line(CmdCtx *cx, bool below)
     placed = at;
     if (below && line.v + 1U == lines)
         placed = BYTEOFF(at.v + (u64)eol_len);
-    ec = sag_ed_edit_ctx(cx->ed);
+    ec = sag_ed_edit_ctx_for(cx->ed, cx->win);
     if (!sag_edit_insert(&ec, at, eol, (u64)eol_len)) {
         sag_ed_finish_edit(cx->ed, &ec);
         sag_msg(cx->ed, SAG_MSG_ERROR,
@@ -1326,7 +1327,7 @@ static CmdStatus delete_span(CmdCtx *cx, Span span)
         return SAG_CMD_ERR_ARG;
     line = sag_textbuf_line_of(tb, BYTEOFF(span.lo));
     old_line_count = sag_textbuf_line_count(tb);
-    ec = sag_ed_edit_ctx(cx->ed);
+    ec = sag_ed_edit_ctx_for(cx->ed, cx->win);
     if (!sag_edit_delete(&ec, span)) {
         sag_ed_finish_edit(cx->ed, &ec);
         sag_msg(cx->ed, SAG_MSG_ERROR,
@@ -1377,6 +1378,8 @@ CmdStatus sag_edit_cmd_delete_line(CmdCtx *cx)
 
     if (!edit_window(cx, &win, &tb, &cursor))
         return SAG_CMD_ERR_STATE;
+    if (cx->range.kind != SAG_RANGE_NONE)
+        return delete_span(cx, sag_range_span(tb, &cx->range));
     line = sag_textbuf_line_of(tb, cursor->pos);
     span = sag_textbuf_line_span(tb, line);
     if (line.v + 1U == sag_textbuf_line_count(tb) && line.v != 0U)
@@ -1395,7 +1398,7 @@ CmdStatus sag_edit_cmd_undo(CmdCtx *cx)
         return SAG_CMD_ERR_STATE;
     (void)tb;
     (void)cursor;
-    ec = sag_ed_edit_ctx(cx->ed);
+    ec = sag_ed_edit_ctx_for(cx->ed, cx->win);
     if ((ec.jrnl != NULL && !sag_journal_ok(ec.jrnl)) ||
         (sag_undo_current(ec.undo) != ec.undo->root &&
          !sag_edit_ensure_journal(&ec))) {
@@ -1428,7 +1431,7 @@ CmdStatus sag_edit_cmd_redo(CmdCtx *cx)
         return SAG_CMD_ERR_STATE;
     (void)tb;
     (void)cursor;
-    ec = sag_ed_edit_ctx(cx->ed);
+    ec = sag_ed_edit_ctx_for(cx->ed, cx->win);
     if ((ec.jrnl != NULL && !sag_journal_ok(ec.jrnl)) ||
         (ec.undo->cur != 0U && ec.undo->cur <= ec.undo->nodes.len &&
          ec.undo->nodes.data[ec.undo->cur - 1U].redo_child != 0U &&

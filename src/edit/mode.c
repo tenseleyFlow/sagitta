@@ -21,8 +21,6 @@ const ModeDesc sag_modes[SAG_MODE__N] = {
 static const char *mode_sprint(Mode mode)
 {
     switch (mode) {
-    case SAG_MODE_E:
-        return "18";
     case SAG_MODE_F:
         return "52";
     case SAG_MODE_L:
@@ -30,6 +28,7 @@ static const char *mode_sprint(Mode mode)
     case SAG_MODE_B:
     case SAG_MODE_H:
     case SAG_MODE_I:
+    case SAG_MODE_E:
     case SAG_MODE__N:
         break;
     }
@@ -47,6 +46,20 @@ CmdStatus sag_mode_enter(Ed *ed, Mode mode)
         Mode unit = ed->mode == SAG_MODE_I ? SAG_MODE_I : ed->prev_unit;
 
         return sag_mode_enter_highlight(ed, unit, false);
+    }
+    if (mode == SAG_MODE_E) {
+        const char *seed = NULL;
+
+        if (ed->mode == SAG_MODE_I)
+            sag_ed_insert_barrier(ed);
+        if (ed->mode == SAG_MODE_H && ed->win != NULL &&
+            ed->win->cs.curs.len != 0U &&
+            ed->win->cs.primary < ed->win->cs.curs.len &&
+            ed->win->cs.curs.data[ed->win->cs.primary].anchor.v !=
+                ed->win->cs.curs.data[ed->win->cs.primary].pos.v)
+            seed = "'<,'>";
+        sag_cmdline_open(ed, SAG_PROMPT_CMD, seed);
+        return SAG_CMD_OK;
     }
     sprint = mode_sprint(mode);
     if (sprint != NULL) {
@@ -116,6 +129,10 @@ CmdStatus sag_mode_escape(Ed *ed)
     ed->chord.count = 0U;
     ed->chord.count_given = false;
     ed->chord.deadline = 0;
+    if (ed->cmdline.active) {
+        sag_cmdline_close(ed, false);
+        return SAG_CMD_OK;
+    }
     if (ed->prompt != SAG_PROMPT_NONE) {
         ed->prompt = SAG_PROMPT_NONE;
         sag_msg_clear(ed);

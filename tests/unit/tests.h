@@ -535,5 +535,18 @@ void test_block_scan_budget_falls_through_before_distant_pair(void);
 void test_block_matching_delimiters_ignores_nested_and_suppressed_pairs(void);
 void test_block_selection_chain_saturates_at_buffer_for_stack_replay(void);
 void test_block_syntax_install_names_sprint40(void);
+void test_cmdhist_memory_rules(void);
+void test_cmdhist_frozen_stem_navigation(void);
+void test_cmdhist_escape_corruption_and_xdg(void);
+void test_cmdhist_concurrent_handles_preserve_appends(void);
+void test_cmdparse_tokenizer_expansion_matrix(void);
+void test_cmdparse_resolution_bang_errors_and_parse_point(void);
+void test_cmdrange_addresses_policies_and_deferred_forms(void);
+void test_cmdrange_selection_and_eol_spans(void);
+void test_cmdcomp_source_selection_and_score(void);
+void test_cmdcomp_path_hidden_directory_and_unknown_dtype(void);
+void test_cmdcomp_cap_and_deterministic_order(void);
+void test_cmdcomp_path_quoting_retokenizes_one_argv(void);
+void test_cmdcomp_lcp_menu_and_empty_providers(void);
 
 #endif

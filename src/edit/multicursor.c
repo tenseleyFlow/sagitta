@@ -882,7 +882,7 @@ CmdStatus sag_mc_run(Win *w, CmdId cmd, CmdCtx *cx)
         (desc->flags & SAG_CMD_CHANGES_BUFFER) == 0U)
         return SAG_CMD_ERR_ARG;
     sag_cset_check_text(w->buf->tb, &w->cs);
-    ec = sag_ed_edit_ctx(cx->ed);
+    ec = sag_ed_edit_ctx_for(cx->ed, cx->win);
     if (ec.tb != w->buf->tb || ec.cset != &w->cs || ec.undo == NULL ||
         ec.undo->depth == 0U || ec.undo->pending_reason != SAG_TXN_MULTI)
         return SAG_CMD_ERR_STATE;

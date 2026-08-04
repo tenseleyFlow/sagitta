@@ -96,8 +96,7 @@ void test_cmd_registry_invocation_and_deferred(void)
     } mode_rows[] = {
         {"L", "Sprint 14"}, {"I", "Sprint 14"},
         {"W", "Sprint 16"}, {"B", "Sprint 16"},
-        {"H", "Sprint 17"}, {"E", "Sprint 18"},
-        {"F", "Sprint 52"},
+        {"H", "Sprint 17"}, {"F", "Sprint 52"},
     };
     CmdCtx cx = {0};
     CmdId repeat;

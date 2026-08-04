@@ -1,4 +1,4 @@
-#define _POSIX_C_SOURCE 200809L
+#define _XOPEN_SOURCE 700
 
 #include "edit/ed.h"
 
@@ -71,6 +71,8 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
 
 void sag_ed_init(Ed *ed)
 {
+    char *root;
+
     if (ed == NULL)
         SAG_BUG("editor init: NULL editor");
     (void)memset(ed, 0, sizeof(*ed));
@@ -80,15 +82,26 @@ void sag_ed_init(Ed *ed)
     bytebuf_init(&ed->paste);
     sag_reg_init(&ed->regs);
     sag_timers_init(&ed->timers);
+    root = realpath(".", NULL);
+    if (root == NULL)
+        root = getcwd(NULL, 0U);
+    ed->ws.dir = arena_strdup(&ed->arena, root == NULL ? "." : root);
+    free(root);
     sag_dispatch_init(ed);
     ed->dispatch_ready = true;
     ed->exit_code = SAG_EXIT_OK;
+}
+
+const char *sag_ws_root(const Ed *ed)
+{
+    return ed == NULL || ed->ws.dir == NULL ? "." : ed->ws.dir;
 }
 
 void sag_ed_free(Ed *ed)
 {
     if (ed == NULL)
         return;
+    sag_cmdline_dispose(ed);
     ed_buffer_free(ed);
     sag_reg_free(&ed->regs);
     sag_msg_clear(ed);
@@ -154,27 +167,36 @@ bool sag_buf_dirty(const Buffer *b)
     return b != NULL && b->undo != NULL && !sag_undo_at_save_point(b->undo);
 }
 
-EditCtx sag_ed_edit_ctx(Ed *ed)
+EditCtx sag_ed_edit_ctx_for(Ed *ed, Win *win)
 {
     EditCtx ec = {0};
+    Buffer *buffer;
 
-    if (ed == NULL || !ed->model_ready || ed->win == NULL)
+    if (ed == NULL || win == NULL || win->buf == NULL ||
+        win->buf->tb == NULL)
         return ec;
-    ec.tb = ed->buffer.tb;
-    ec.marks = ed->buffer.marks;
-    ec.cset = &ed->win->cs;
+    buffer = win->buf;
+    ec.tb = buffer->tb;
+    ec.marks = buffer->marks;
+    ec.cset = &win->cs;
     ec.win_id = 0U;
-    ec.jrnl = ed->buffer.jrn;
-    ec.undo = ed->buffer.undo;
-    ec.meta = ed->buffer.path == NULL ? NULL : &ed->buffer.meta;
+    ec.jrnl = buffer->jrn;
+    ec.undo = buffer->undo;
+    ec.meta = buffer->path == NULL ? NULL : &buffer->meta;
     return ec;
+}
+
+EditCtx sag_ed_edit_ctx(Ed *ed)
+{
+    return ed == NULL ? (EditCtx){0} : sag_ed_edit_ctx_for(ed, ed->win);
 }
 
 void sag_ed_finish_edit(Ed *ed, const EditCtx *ec)
 {
     if (ed == NULL || ec == NULL)
         return;
-    ed->buffer.jrn = ec->jrnl;
+    if (ed->buffer.tb == ec->tb)
+        ed->buffer.jrn = ec->jrnl;
     if (ec->jrnl != NULL && !sag_journal_ok(ec->jrnl)) {
         ed->durability_failed = true;
         sag_msg(ed, SAG_MSG_ERROR,
@@ -302,7 +324,7 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     if (started_in_insert && (!changes || newline))
         sag_ed_insert_barrier(ed);
     if (changes && ed->model_ready) {
-        ec = sag_ed_edit_ctx(ed);
+        ec = sag_ed_edit_ctx_for(ed, cx->win);
         if (started_in_insert && !newline) {
             if (!ed->insert_txn) {
                 sag_undo_begin(&ec,
@@ -330,7 +352,7 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
          strncmp(desc->name, "ed.view.", 8U) == 0))
         sag_selstack_clear(ed->win);
     if (changes && ed->model_ready) {
-        ec = sag_ed_edit_ctx(ed);
+        ec = sag_ed_edit_ctx_for(ed, cx->win);
         if (status != SAG_CMD_OK &&
             (opened || (started_in_insert && ed->insert_txn))) {
             sag_undo_abort(&ec);
@@ -352,8 +374,63 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
         sag_msg(ed, SAG_MSG_ERROR,
                 "crash journal failed; save or q! before continuing");
     }
+    if (ed->cmdline.active && cx->win == sag_cmdline_target(ed)) {
+        if (changes)
+            sag_cmdline_edited(ed);
+        else
+            sag_cmdline_sync(ed);
+    }
     ed->footer_dirty = true;
     return status;
+}
+
+CmdStatus sag_ed_invoke_parsed(Ed *ed, CmdId id,
+                               const SagCmdInvoke *invoke)
+{
+    const CmdDesc *desc;
+    CmdCtx cx = {0};
+    const char *arg = NULL;
+
+    if (ed == NULL || invoke == NULL)
+        return SAG_CMD_ERR_ARG;
+    desc = sag_cmd_desc(id);
+    if (desc == NULL || invoke->argv.n == 0U)
+        return SAG_CMD_ERR_ARG;
+    if (invoke->argv.n > 1U)
+        arg = invoke->argv.v[1];
+    cx.win = invoke->win;
+    cx.range = invoke->range;
+    cx.argv = invoke->argv;
+    cx.count = invoke->count > 0 && invoke->count <= UINT32_MAX ?
+               (u32)invoke->count : 1U;
+    cx.count_given = invoke->count > 0;
+    cx.bang = invoke->bang;
+    cx.source = SAG_SRC_CMDLINE;
+    switch ((CmdArity)desc->arity) {
+    case SAG_ARITY_NONE:
+        break;
+    case SAG_ARITY_STR:
+    case SAG_ARITY_OPT_STR:
+        cx.sarg = arg;
+        cx.sarg_len = arg == NULL ? 0U :
+                      strlen(arg) > UINT32_MAX ? UINT32_MAX :
+                                                (u32)strlen(arg);
+        break;
+    case SAG_ARITY_INT:
+    case SAG_ARITY_OPT_INT:
+        if (arg != NULL) {
+            char *end = NULL;
+            long long value;
+
+            errno = 0;
+            value = strtoll(arg, &end, 10);
+            if (errno != 0 || end == arg || *end != '\0')
+                return SAG_CMD_ERR_ARG;
+            cx.iarg = (i64)value;
+        }
+        break;
+    }
+    return sag_ed_invoke(ed, id, &cx);
 }
 
 void sag_ed_prompt(Ed *ed, PromptKind prompt)
@@ -397,7 +474,7 @@ CmdStatus sag_ed_file_save(Ed *ed, bool force)
     sag_ed_insert_barrier(ed);
     if (ed->buffer.path == NULL) {
         sag_msg(ed, SAG_MSG_ERROR,
-                "no file name (save-as lands in Sprint 18)");
+                "no file name; use :w path");
         ed->quit_after_save = false;
         return SAG_CMD_ERR_STATE;
     }
@@ -434,6 +511,53 @@ CmdStatus sag_ed_file_save(Ed *ed, bool force)
         ed->quit_after_save = false;
         ed->quit = true;
     }
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_ed_file_write_to(Ed *ed, const char *path, bool force)
+{
+    FileMeta next;
+    TextBuf *existing = NULL;
+    EditCtx ec;
+    SagLoadErr load;
+    SagSaveErr result;
+
+    if (ed == NULL || !ed->model_ready || path == NULL || path[0] == '\0')
+        return SAG_CMD_ERR_ARG;
+    sag_ed_insert_barrier(ed);
+    sag_filemeta_init(&next);
+    load = sag_file_load(path, &existing, &next);
+    sag_textbuf_free(existing);
+    if (load != SAG_LOAD_OK && load != SAG_LOAD_ENOENT) {
+        sag_filemeta_dispose(&next);
+        sag_msg(ed, SAG_MSG_ERROR, "could not inspect %s", path);
+        return SAG_CMD_ERR_IO;
+    }
+    ec = sag_ed_edit_ctx(ed);
+    ec.meta = &next;
+    result = force ? sag_file_save_force(ec.tb, ec.meta, path) :
+                     sag_edit_save(&ec, path);
+    if (force && result == SAG_SAVE_OK) {
+        sag_undo_boundary(ec.undo);
+        sag_undo_mark_saved(ec.undo);
+        if (ec.jrnl != NULL) {
+            sag_journal_discard(ec.jrnl);
+            ec.jrnl = NULL;
+        }
+    }
+    sag_ed_finish_edit(ed, &ec);
+    if (result != SAG_SAVE_OK) {
+        sag_filemeta_dispose(&next);
+        sag_msg(ed, SAG_MSG_ERROR, "could not write %s", path);
+        return SAG_CMD_ERR_IO;
+    }
+    sag_filemeta_dispose(&ed->buffer.meta);
+    ed->buffer.meta = next;
+    ed->buffer.path = arena_strdup(&ed->arena, path);
+    sag_reg_bind_context(&ed->regs, ed->buffer.undo, &ed->buffer.meta);
+    ed->durability_failed = false;
+    sag_msg(ed, SAG_MSG_INFO, "wrote %s, %llu lines", path,
+            (unsigned long long)sag_textbuf_line_count(ed->buffer.tb));
     return SAG_CMD_OK;
 }
 
@@ -535,6 +659,8 @@ void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms)
         (void)prompt_key(ed, key);
         return;
     }
+    if (ed->cmdline.active && sag_cmdline_key(ed, &key))
+        return;
     if (ed->msg.active && ed->msg.sev == SAG_MSG_ERROR)
         sag_msg_clear(ed);
     if (ed->mode == SAG_MODE_I && key.ev != SAG_KEY_RELEASE &&
@@ -572,7 +698,9 @@ void sag_ed_handle_paste(Ed *ed, const u8 *bytes, size_t len, bool end)
             bytebuf_append(&ed->paste, bytes, len);
         return;
     }
-    if (ed->mode == SAG_MODE_I && ed->prompt == SAG_PROMPT_NONE &&
+    if (ed->cmdline.active && ed->paste.len != 0U) {
+        sag_cmdline_paste(ed, ed->paste.data, ed->paste.len);
+    } else if (ed->mode == SAG_MODE_I && ed->prompt == SAG_PROMPT_NONE &&
         ed->paste.len != 0U) {
         CmdCtx cx = {0};
         CmdId id = sag_cmd_lookup("ed.edit.insert.text", 19U);
@@ -678,7 +806,8 @@ void sag_ed_render(Ed *ed)
     }
     if (ed->full_damage || ed->footer_dirty)
         sag_draw_footer(ed, win);
-    sag_draw_cursor(ed, win);
+    if (!ed->cmdline.active)
+        sag_draw_cursor(ed, win);
     ed->frame.len = 0U;
     (void)sag_render_frame(&ed->render, &ed->grid, &ed->frame);
     if (!write_all(ed->tty.wfd, ed->frame.data, ed->frame.len)) {
