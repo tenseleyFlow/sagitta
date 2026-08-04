@@ -32,8 +32,8 @@ static SagColor indexed_color(u8 index)
 static void message_damage(Ed *ed)
 {
     ed->footer_dirty = true;
-    /* Only the expanded overlay borrows document rows. */
-    if (ed->msg.expanded)
+    /* Expanded overlays and prompt messages borrow document rows. */
+    if (ed->msg.expanded || ed->cmdline.active)
         ed->full_damage = true;
 }
 
@@ -48,7 +48,7 @@ static void message_expire(Ed *ed, void *ctx)
     free(ed->msg.full);
     (void)memset(&ed->msg, 0, sizeof(ed->msg));
     ed->footer_dirty = true;
-    if (expanded)
+    if (expanded || ed->cmdline.active)
         ed->full_damage = true;
 }
 
@@ -64,7 +64,7 @@ void sag_msg_clear(Ed *ed)
     free(ed->msg.full);
     (void)memset(&ed->msg, 0, sizeof(ed->msg));
     ed->footer_dirty = true;
-    if (expanded)
+    if (expanded || ed->cmdline.active)
         ed->full_damage = true;
 }
 

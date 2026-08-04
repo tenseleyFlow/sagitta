@@ -143,6 +143,12 @@ static CmdStatus cmdline_invoke(Ed *ed, CmdStatus (*command)(CmdCtx *))
     return command(&context);
 }
 
+static CmdStatus cmdline_noop(CmdCtx *context)
+{
+    (void)context;
+    return SAG_CMD_OK;
+}
+
 void test_cmdline_reuses_textbuf_and_grapheme_cursor(void)
 {
     CmdlineFixture fixture;
@@ -274,6 +280,7 @@ void test_cmdline_escape_restores_completion_stem_before_closing(void)
                                      sag_cmdline_cmd_complete_next),
                       SAG_CMD_OK);
     SAG_ASSERT(fixture.ed.cmdline.menu.items.len > 1U);
+    SAG_ASSERT_NOT_NULL(fixture.ed.cmdline.comp_arena.head);
     SAG_ASSERT(fixture.ed.cmdline.active);
 
     SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, sag_cmdline_cmd_cancel),
@@ -281,6 +288,7 @@ void test_cmdline_escape_restores_completion_stem_before_closing(void)
     text = cmdline_text(&fixture.ed.cmdline);
     SAG_ASSERT_EQ_STR((const char *)text.data, "f");
     SAG_ASSERT_EQ_U64(fixture.ed.cmdline.menu.items.len, 0U);
+    SAG_ASSERT_NULL(fixture.ed.cmdline.comp_arena.head);
     SAG_ASSERT(fixture.ed.cmdline.active);
     bytebuf_free(&text);
 
@@ -359,6 +367,73 @@ void test_cmdline_parse_error_preserves_text_and_points_at_token(void)
     SAG_ASSERT(strncmp(fixture.ed.msg.text, "E: ", 3U) == 0);
     bytebuf_free(&text);
     cmdline_fixture_free(&fixture);
+}
+
+void test_cmdline_catalogue_errors_preserve_live_prompt(void)
+{
+    static const struct {
+        const char *line;
+        const char *message;
+        u32 lo;
+        u32 hi;
+    } rows[] = {
+        {"not_a_command", "unknown command 'not_a_command' (try Tab)",
+         0U, 13U},
+        {"file.w", "ambiguous: file.write, file.write_quit", 0U, 6U},
+        {"file.open", ":file.open requires 1 argument", 0U, 9U},
+        {"quit extra", ":quit takes no arguments", 5U, 10U},
+        {"1quit", ":quit takes no range", 0U, 1U},
+        {"ui.grow", ":ui.grow requires a range", 0U, 7U},
+        {"5,3d", "backwards range (5,3)", 0U, 3U},
+        {"900d", "line 900 past end of buffer (412 lines)", 0U, 3U},
+        {"w \"abc", "unterminated \"", 2U, 3U},
+        {"w \"\\q\"", "unknown escape '\\q'", 3U, 5U},
+        {"w %z", "unknown expansion '%z'", 2U, 4U},
+        {"w %", "buffer has no file name", 2U, 3U},
+        {"w %s", "%s needs a selection", 2U, 4U},
+        {"!printf x", ":! runs shell commands: Sprint 19", 0U, 1U},
+        {"mode.enter I", "unknown command 'mode.enter' (try Tab)",
+         0U, 10U},
+    };
+    CmdlineFixture fixture;
+    CmdEntry required = {
+        {"ed.ui.grow", cmdline_noop, SAG_ARITY_NONE, 0U,
+         "Command-line error test command"},
+        "", SAG_RP_REQUIRED, NULL};
+    char document[412];
+    size_t i;
+
+    cmdline_fixture_init(&fixture);
+    (void)memset(document, '\n', sizeof(document) - 1U);
+    document[sizeof(document) - 1U] = '\0';
+    cmdline_document(&fixture, document);
+    (void)sag_cmd_register_entry(&required);
+
+    for (i = 0U; i < SAG_ARRAY_LEN(rows); i++) {
+        Bytebuf text;
+        char expected[sizeof(fixture.ed.msg.text)];
+
+        sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, rows[i].line);
+        SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                         sag_cmdline_cmd_accept),
+                          SAG_CMD_ERR_ARG);
+        SAG_ASSERT(fixture.ed.cmdline.active);
+        text = cmdline_text(&fixture.ed.cmdline);
+        SAG_ASSERT_EQ_STR((const char *)text.data, rows[i].line);
+        SAG_ASSERT_EQ_U64(fixture.ed.cmdline.cur.pos.v, rows[i].lo);
+        SAG_ASSERT_EQ_U64(fixture.ed.cmdline.err.tok_lo, rows[i].lo);
+        SAG_ASSERT_EQ_U64(fixture.ed.cmdline.err.tok_hi, rows[i].hi);
+        SAG_ASSERT_EQ_STR(fixture.ed.cmdline.err.msg, rows[i].message);
+        SAG_ASSERT(fixture.ed.msg.active);
+        (void)snprintf(expected, sizeof(expected), "E: %s",
+                       rows[i].message);
+        SAG_ASSERT_EQ_STR(fixture.ed.msg.text, expected);
+        bytebuf_free(&text);
+        sag_cmdline_close(&fixture.ed, false);
+    }
+    cmdline_fixture_free(&fixture);
+    sag_cmd_shutdown();
+    sag_cmd_init();
 }
 
 void test_cmdline_printable_edit_resets_history_walk_to_new_draft(void)

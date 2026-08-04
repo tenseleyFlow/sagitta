@@ -208,3 +208,30 @@ void test_cmdhist_concurrent_handles_preserve_appends(void)
     sag_hist_close(check);
     hist_fixture_free(&fixture);
 }
+
+void test_cmdhist_flush_read_failure_preserves_state(void)
+{
+    HistFixture fixture;
+    char path[160];
+    struct stat st;
+    CmdHist *h;
+
+    hist_fixture_init(&fixture);
+    h = sag_hist_open("shell");
+    sag_hist_add(h, "preserve");
+    (void)snprintf(path, sizeof(path), "%s/sagitta/history/shell",
+                   fixture.root);
+    SAG_ASSERT_EQ_I64(unlink(path), 0);
+    SAG_ASSERT_EQ_I64(mkdir(path, 0700), 0);
+    sag_test_capture_log();
+    sag_hist_flush(h);
+    SAG_ASSERT_EQ_I64(stat(path, &st), 0);
+    SAG_ASSERT(S_ISDIR(st.st_mode));
+    SAG_ASSERT_EQ_U64(sag_hist_len(h), 1U);
+    SAG_ASSERT_EQ_STR(sag_hist_at(h, 0U), "preserve");
+    SAG_ASSERT(sag_test_log_contains(SAG_LOG_WARN,
+                                     "cannot read command history"));
+    sag_hist_close(h);
+    SAG_ASSERT_EQ_I64(rmdir(path), 0);
+    hist_fixture_free(&fixture);
+}

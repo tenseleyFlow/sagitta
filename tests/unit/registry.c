@@ -542,6 +542,7 @@ const SagTest sag_tests[] = {
     T(cmdhist_frozen_stem_navigation),
     T(cmdhist_escape_corruption_and_xdg),
     T(cmdhist_concurrent_handles_preserve_appends),
+    T(cmdhist_flush_read_failure_preserves_state),
     T(cmdparse_tokenizer_expansion_matrix),
     T(cmdparse_resolution_bang_errors_and_parse_point),
     T(cmdrange_addresses_policies_and_deferred_forms),
@@ -560,6 +561,7 @@ const SagTest sag_tests[] = {
     T(cmdline_range_executes_once_with_multiple_cursors),
     T(cmdline_bang_quit_bypasses_durability_failure),
     T(cmdline_parse_error_preserves_text_and_points_at_token),
+    T(cmdline_catalogue_errors_preserve_live_prompt),
     T(cmdline_printable_edit_resets_history_walk_to_new_draft),
 };
 

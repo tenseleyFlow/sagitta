@@ -156,6 +156,8 @@ static void candidate_add_owned(CandidateVec *v, const char *stem,
 static u32 candidate_finish(Ed *ed, SagCompKind kind, CandidateVec *matches,
                             Vec_CompItem *out)
 {
+    Arena *arena = ed->cmdline.active ? &ed->cmdline.comp_arena :
+                                        &ed->arena;
     size_t i;
     size_t keep;
     u32 total = matches->len > UINT32_MAX ? UINT32_MAX : (u32)matches->len;
@@ -170,10 +172,10 @@ static u32 candidate_finish(Ed *ed, SagCompKind kind, CandidateVec *matches,
         CompItem item;
 
         item.text = kind == SAG_COMP_PATH ?
-                    sag_comp_quote(&ed->arena, src->text) :
-                    arena_strdup(&ed->arena, src->text);
+                    sag_comp_quote(arena, src->text) :
+                    arena_strdup(arena, src->text);
         item.detail = src->detail == NULL ? NULL :
-                      arena_strdup(&ed->arena, src->detail);
+                      arena_strdup(arena, src->detail);
         item.kind = (u8)kind;
         item.is_dir = src->is_dir;
         item.score = src->score;
@@ -265,6 +267,8 @@ char *sag_comp_quote(Arena *arena, const char *text)
             bytebuf_push_u8(&quoted, *p);
         } else if (*p == '\n') {
             bytebuf_append(&quoted, "\\n", 2U);
+        } else if (*p == '\r') {
+            bytebuf_push_u8(&quoted, (u8)' ');
         } else if (*p == '\t') {
             bytebuf_append(&quoted, "\\t", 2U);
         } else if (*p == '%') {

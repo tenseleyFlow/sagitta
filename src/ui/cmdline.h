@@ -26,6 +26,7 @@ typedef struct CmdLine {
     TextBuf *buf;
     Cursor cur;
     CompMenu menu;
+    Arena comp_arena;
     HistCur hist;
     CmdErr err;
     u16 scroll;

@@ -77,6 +77,7 @@ void sag_ed_init(Ed *ed)
         SAG_BUG("editor init: NULL editor");
     (void)memset(ed, 0, sizeof(*ed));
     arena_init(&ed->arena);
+    arena_init(&ed->cmdline.comp_arena);
     interner_init(&ed->interner, &ed->arena);
     bytebuf_init(&ed->frame);
     bytebuf_init(&ed->paste);
@@ -119,6 +120,7 @@ void sag_ed_free(Ed *ed)
     bytebuf_free(&ed->paste);
     bytebuf_free(&ed->frame);
     interner_free(&ed->interner);
+    arena_free_all(&ed->cmdline.comp_arena);
     arena_free_all(&ed->arena);
     if (ed->tty_ready) {
         sag_tty_altscreen(&ed->tty, false);

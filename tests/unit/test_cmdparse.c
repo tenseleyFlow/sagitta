@@ -85,6 +85,18 @@ static void assert_error(ParseFixture *f, const char *line,
     SAG_ASSERT(parsed.err.tok_hi <= len);
 }
 
+static void assert_error_span(ParseFixture *f, const char *line,
+                              const char *expected, u32 lo, u32 hi)
+{
+    CmdParse parsed;
+
+    SAG_ASSERT(!sag_cmd_parse(&f->ed, line, strlen(line), &f->arena,
+                              &parsed));
+    SAG_ASSERT_EQ_STR(parsed.err.msg, expected);
+    SAG_ASSERT_EQ_U64(parsed.err.tok_lo, lo);
+    SAG_ASSERT_EQ_U64(parsed.err.tok_hi, hi);
+}
+
 void test_cmdparse_tokenizer_expansion_matrix(void)
 {
     static const char nul_line[] = ":w a\0b";
@@ -146,6 +158,18 @@ void test_cmdparse_tokenizer_expansion_matrix(void)
     f.ed.single_win.cs.curs.data[0].anchor = BYTEOFF(0U);
     f.ed.single_win.cs.curs.data[0].pos = BYTEOFF(2U);
     assert_arg(&f, ":w %s", "on");
+    {
+        static const u8 binary[] = {'a', '\0', 'b'};
+
+        sag_textbuf_free(f.tb);
+        f.tb = sag_textbuf_from_bytes(binary, sizeof(binary));
+        f.ed.buffer.tb = f.tb;
+        f.ed.single_win.buf = &f.ed.buffer;
+        f.ed.single_win.cs.curs.data[0].anchor = BYTEOFF(0U);
+        f.ed.single_win.cs.curs.data[0].pos = BYTEOFF(sizeof(binary));
+        assert_error(&f, ":w %s",
+                     "NUL byte is not valid in a command line");
+    }
 
     assert_error(&f, ":w \"abc", "unterminated \"");
     assert_error(&f, ":w 'abc", "unterminated '");
@@ -184,8 +208,11 @@ void test_cmdparse_resolution_bang_errors_and_parse_point(void)
     SAG_ASSERT(parsed.bang);
     assert_error(&f, ":ui.shrink extra",
                  ":ui.shrink takes no arguments");
+    assert_error_span(&f, ":quit extra", ":quit takes no arguments",
+                      6U, 11U);
+    assert_error(&f, ":1quit", ":quit takes no range");
     assert_error(&f, ":sort", ":ui.grow requires a range");
-    assert_error(&f, ":not_a_command", 
+    assert_error(&f, ":not_a_command",
                  "unknown command 'not_a_command' (try Tab)");
     assert_error(&f, ":cmdline.accept",
                  "unknown command 'cmdline.accept' (try Tab)");
@@ -211,5 +238,10 @@ void test_cmdparse_resolution_bang_errors_and_parse_point(void)
     SAG_ASSERT_EQ_U64(point.token_index, 2U);
     SAG_ASSERT_EQ_U64(point.token.lo, 7U);
     SAG_ASSERT_EQ_U64(point.token.hi, 7U);
+
+    assert_error(&f, ":file.w",
+                 "ambiguous: file.write, file.write_quit");
+    assert_error(&f, ":file.open",
+                 ":file.open requires 1 argument");
     parse_fixture_free(&f);
 }

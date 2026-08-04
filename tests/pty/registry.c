@@ -1617,6 +1617,56 @@ static void case_s18_cmdline_completion_menu(PtyCtx *c)
     s18_finish(c, path);
 }
 
+static void case_s18_cmdline_completion_zero(PtyCtx *c)
+{
+    static const u8 initial[] = "completion fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "file.open zzzzzzzzzzzz");
+    s18_settle_after_keys(c, "tab");
+    ptc_snapshot(c, "cmdline_completion_zero");
+    s18_finish(c, path);
+}
+
+static void case_s18_cmdline_completion_one(PtyCtx *c)
+{
+    static const u8 initial[] = "completion fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "redr");
+    s18_settle_after_keys(c, "tab");
+    ptc_snapshot(c, "cmdline_completion_one");
+    s18_finish(c, path);
+}
+
+static void case_s18_cmdline_completion_printable_closes(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open_completion_menu(c, path, sizeof(path)))
+        return;
+    s18_settle_after_bytes(c, "x");
+    ptc_snapshot(c, "cmdline_completion_printable_closes");
+    s18_finish(c, path);
+}
+
+static void case_s18_cmdline_completion_escape_restores(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open_completion_menu(c, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "esc");
+    ptc_snapshot(c, "cmdline_completion_escape_restores");
+    s18_finish(c, path);
+}
+
 static void case_s18_cmdline_completion_next(PtyCtx *c)
 {
     char path[256];
@@ -1843,6 +1893,14 @@ const PtyCase sag_pty_cases[] = {
       case_s18_cmdline_selection_seed),
     C(s18_cmdline_completion_menu, modern, 24U, 80U,
       case_s18_cmdline_completion_menu),
+    C(s18_cmdline_completion_zero, modern, 24U, 80U,
+      case_s18_cmdline_completion_zero),
+    C(s18_cmdline_completion_one, modern, 24U, 80U,
+      case_s18_cmdline_completion_one),
+    C(s18_cmdline_completion_printable_closes, modern, 24U, 80U,
+      case_s18_cmdline_completion_printable_closes),
+    C(s18_cmdline_completion_escape_restores, modern, 24U, 80U,
+      case_s18_cmdline_completion_escape_restores),
     C(s18_cmdline_completion_next, modern, 24U, 80U,
       case_s18_cmdline_completion_next),
     C(s18_cmdline_completion_next_again, modern, 24U, 80U,

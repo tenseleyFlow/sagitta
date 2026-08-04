@@ -233,7 +233,7 @@ static void hist_parse_line(CmdHist *h, const Bytebuf *line)
     free(decoded);
 }
 
-static void hist_read(CmdHist *h)
+static bool hist_read(CmdHist *h)
 {
     enum { ENCODED_MAX = SAG_HIST_LINE_MAX * 4 };
     u8 block[4096];
@@ -242,17 +242,19 @@ static void hist_read(CmdHist *h)
     int fd;
 
     if (h->path == NULL)
-        return;
+        return false;
     fd = open(h->path, O_RDONLY
 #ifdef O_CLOEXEC
                         | O_CLOEXEC
 #endif
     );
     if (fd < 0) {
-        if (errno != ENOENT)
+        int error = errno;
+
+        if (error != ENOENT)
             sag_log(SAG_LOG_WARN, "cannot read command history %s: %s",
-                    h->path, strerror(errno));
-        return;
+                    h->path, strerror(error));
+        return error == ENOENT;
     }
     bytebuf_init(&line);
     for (;;) {
@@ -264,7 +266,9 @@ static void hist_read(CmdHist *h)
                 continue;
             sag_log(SAG_LOG_WARN, "cannot read command history %s: %s",
                     h->path, strerror(errno));
-            break;
+            bytebuf_free(&line);
+            (void)close(fd);
+            return false;
         }
         if (got == 0)
             break;
@@ -294,6 +298,7 @@ static void hist_read(CmdHist *h)
     }
     bytebuf_free(&line);
     (void)close(fd);
+    return true;
 }
 
 static int hist_lock(const char *path)
@@ -339,7 +344,7 @@ CmdHist *sag_hist_open(const char *kind)
         sag_log(SAG_LOG_WARN,
                 "command history unavailable; using in-memory history");
     } else {
-        hist_read(h);
+        (void)hist_read(h);
     }
     return h;
 }
@@ -402,6 +407,7 @@ void sag_hist_add(CmdHist *h, const char *line)
 
 void sag_hist_flush(CmdHist *h)
 {
+    CmdHist merged = {0};
     Bytebuf encoded;
     int lock_fd;
     size_t i;
@@ -414,19 +420,35 @@ void sag_hist_flush(CmdHist *h)
                 strerror(errno));
         return;
     }
-    hist_clear(h);
-    hist_read(h);
+    merged.path = h->path;
+    if (!hist_read(&merged)) {
+        hist_clear(&merged);
+        free(merged.entries);
+        (void)close(lock_fd);
+        return;
+    }
     bytebuf_init(&encoded);
-    for (i = 0U; i < h->len; i++) {
-        hist_escape(&encoded, h->entries[i]);
+    for (i = 0U; i < merged.len; i++) {
+        hist_escape(&encoded, merged.entries[i]);
         bytebuf_push_u8(&encoded, (u8)'\n');
     }
     if (sag_file_write_atomic(h->path, encoded.data, encoded.len, 0600) !=
         SAG_SAVE_OK) {
         sag_log(SAG_LOG_WARN, "cannot compact command history %s: %s",
                 h->path, strerror(errno));
+    } else {
+        hist_clear(h);
+        free(h->entries);
+        h->entries = merged.entries;
+        h->len = merged.len;
+        h->cap = merged.cap;
+        merged.entries = NULL;
+        merged.len = 0U;
+        merged.cap = 0U;
     }
     bytebuf_free(&encoded);
+    hist_clear(&merged);
+    free(merged.entries);
     (void)close(lock_fd);
 }
 

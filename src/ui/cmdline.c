@@ -103,6 +103,7 @@ static void menu_discard(Ed *ed)
     bool was_open = line->menu.items.len != 0U || line->menu.sel >= 0;
 
     sag_comp_menu_free(&line->menu);
+    arena_free_all(&line->comp_arena);
     free(line->menu_stem);
     line->menu_stem = NULL;
     line->menu_original = (Span){0U, 0U};
@@ -449,7 +450,7 @@ static bool insert_completion(Ed *ed, Span replace, const CompItem *item,
     bool ok;
 
     bytebuf_init(&bytes);
-    bytebuf_append(&bytes, item->text, strlen(item->text));
+    sanitize_bytes((const u8 *)item->text, strlen(item->text), &bytes);
     if (trailing_space && !item->is_dir)
         bytebuf_push_u8(&bytes, (u8)' ');
     ok = replace_span(ed, replace, bytes.data, bytes.len, true);
@@ -494,6 +495,7 @@ static CmdStatus complete(Ed *ed, bool previous)
 
     if (line->menu.items.len != 0U)
         return completion_cycle(ed, previous);
+    arena_free_all(&line->comp_arena);
     text = text_string(line->buf);
     arena_init(&scratch);
     if (!sag_comp_query(ed, text, (size_t)sag_textbuf_len(line->buf),
@@ -507,6 +509,8 @@ static CmdStatus complete(Ed *ed, bool previous)
                                           &items);
     if (items.len == 0U) {
         sag_msg(ed, SAG_MSG_INFO, "no completions");
+        ed->full_damage = true;
+        ed->footer_dirty = true;
         Vec_CompItem_free(&items);
         arena_free_all(&scratch);
         free(text);
@@ -870,25 +874,33 @@ static void draw_menu(Ed *ed, u16 footer, const SagUiStyle *style)
     }
 }
 
-static void draw_error_message(Ed *ed, u16 footer,
-                               const SagUiStyle *style)
+static void draw_prompt_message(Ed *ed, u16 footer,
+                                const SagUiStyle *style)
 {
-    char message[sizeof(ed->cmdline.err.msg) + 4U];
-    SagUiStyle error_style = *style;
+    char message[sizeof(ed->msg.text) + 4U];
+    SagUiStyle message_style = *style;
 
-    if (footer == 0U || ed->cmdline.err.msg[0] == '\0' ||
-        ed->cmdline.menu.items.len != 0U)
+    if (footer == 0U || ed->cmdline.menu.items.len != 0U)
         return;
-    error_style.row_fg = (SagColor){SAG_COLOR_INDEXED, 196U, 0U, 0U};
-    error_style.attrs |= SAG_ATTR_BOLD;
-    (void)snprintf(message, sizeof(message), "E: %s",
-                   ed->cmdline.err.msg);
+    if (ed->cmdline.err.msg[0] != '\0') {
+        message_style.row_fg = (SagColor){SAG_COLOR_INDEXED, 196U, 0U, 0U};
+        message_style.attrs |= SAG_ATTR_BOLD;
+        (void)snprintf(message, sizeof(message), "E: %s",
+                       ed->cmdline.err.msg);
+    } else if (ed->msg.active) {
+        message_style = sag_message_style(ed);
+        (void)snprintf(message, sizeof(message),
+                       ed->msg.sev == SAG_MSG_ERROR ? "E: %s" : "%s",
+                       ed->msg.text);
+    } else {
+        return;
+    }
     sag_grid_fill(&ed->grid, (u16)(footer - 1U), 0U, ed->grid.cols,
-                  styled_blank(&error_style));
+                  styled_blank(&message_style));
     (void)sag_grid_puts(&ed->grid, (u16)(footer - 1U), 0U,
                         (const u8 *)message, strlen(message),
-                        error_style.row_fg, error_style.row_bg,
-                        error_style.attrs);
+                        message_style.row_fg, message_style.row_bg,
+                        message_style.attrs);
 }
 
 void sag_cmdline_draw(Ed *ed, Rect rect)
@@ -994,7 +1006,7 @@ void sag_cmdline_draw(Ed *ed, Rect rect)
                          SAG_OVERLAY_BG | SAG_OVERLAY_ATTRS);
     }
     draw_menu(ed, rect.y, &style);
-    draw_error_message(ed, rect.y, &style);
+    draw_prompt_message(ed, rect.y, &style);
     {
         u64 cursor_x = (u64)(rect.x + 1U) +
                        (caret.v > line->scroll ?

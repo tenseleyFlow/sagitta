@@ -135,6 +135,13 @@ void test_cmdcomp_source_selection_and_score(void)
     SAG_ASSERT_EQ_U64(
         sag_comp_enumerate(&ed, SAG_COMP_CMD, "cmdline.", &commands), 0U);
     SAG_ASSERT_EQ_U64(commands.len, 0U);
+    (void)sag_comp_enumerate(&ed, SAG_COMP_CMD, "del.", &commands);
+    SAG_ASSERT_NULL(find_item(&commands, "del.word_prev"));
+    SAG_ASSERT_NULL(find_item(&commands, "del.to_home"));
+    SAG_ASSERT_NULL(find_item(&commands, "del.to_end"));
+    (void)sag_comp_enumerate(&ed, SAG_COMP_CMD, "mode.", &commands);
+    SAG_ASSERT_NULL(find_item(&commands, "mode.enter"));
+    SAG_ASSERT_NULL(find_item(&commands, "mode.escape"));
     Vec_CompItem_free(&commands);
     sag_cmd_shutdown();
     arena_free_all(&scratch);
@@ -248,7 +255,38 @@ void test_cmdcomp_path_quoting_retokenizes_one_argv(void)
     SAG_ASSERT_EQ_STR(parsed.argv.v[1], raw);
     arena_free_all(&parse_arena);
 
+    arena_init(&parse_arena);
+    SAG_ASSERT(sag_cmd_parse(
+        &fixture.ed,
+        "file.open a\\ space\\\"quote\\'$\\\\percent\\%and\\\nline",
+        sizeof("file.open a\\ space\\\"quote\\'$\\\\percent\\%and\\\nline") -
+            1U,
+        &parse_arena, &parsed));
+    SAG_ASSERT_EQ_U64(parsed.argv.n, 2U);
+    SAG_ASSERT_EQ_STR(parsed.argv.v[0], "ed.file.open");
+    SAG_ASSERT_EQ_STR(parsed.argv.v[1], raw);
+    arena_free_all(&parse_arena);
+
+    arena_init(&parse_arena);
+    SAG_ASSERT(sag_cmd_parse(
+        &fixture.ed,
+        "file.open 'a space\"quote'\\''$\\percent%and\nline'",
+        sizeof("file.open 'a space\"quote'\\''$\\percent%and\nline'") - 1U,
+        &parse_arena, &parsed));
+    SAG_ASSERT_EQ_U64(parsed.argv.n, 2U);
+    SAG_ASSERT_EQ_STR(parsed.argv.v[0], "ed.file.open");
+    SAG_ASSERT_EQ_STR(parsed.argv.v[1], raw);
+    arena_free_all(&parse_arena);
+
     fixture_unlink(&fixture, raw, false);
+    fixture_file(&fixture, "cr\rname");
+    items.len = 0U;
+    SAG_ASSERT_EQ_U64(
+        sag_comp_enumerate(&fixture.ed, SAG_COMP_PATH, "cr", &items), 1U);
+    SAG_ASSERT_EQ_U64(items.len, 1U);
+    SAG_ASSERT_NULL(strchr(items.data[0].text, '\r'));
+    SAG_ASSERT_NOT_NULL(strstr(items.data[0].text, "cr name"));
+    fixture_unlink(&fixture, "cr\rname", false);
     Vec_CompItem_free(&items);
     fixture_dispose(&fixture);
 }

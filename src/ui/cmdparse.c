@@ -196,6 +196,9 @@ static bool append_expansion(Parser *p, size_t *at, Bytebuf *out)
         return true;
     }
     case 's':
+    {
+        size_t before = out->len;
+
         if (tb == NULL || win == NULL || win->cs.curs.len == 0U ||
             win->cs.primary >= win->cs.curs.len ||
             win->cs.curs.data[win->cs.primary].anchor.v ==
@@ -205,7 +208,13 @@ static bool append_expansion(Parser *p, size_t *at, Bytebuf *out)
         }
         append_text(out, tb,
                     sag_sel_span(win, &win->cs.curs.data[win->cs.primary]));
+        if (memchr(out->data + before, '\0', out->len - before) != NULL) {
+            set_error(p, lo, *at,
+                      "NUL byte is not valid in a command line");
+            return false;
+        }
         return true;
+    }
     case 'p':
         if (buf == NULL || buf->path == NULL || buf->path[0] == '\0') {
             set_error(p, lo, *at, "buffer has no file name");
@@ -707,7 +716,7 @@ static void argspec_bounds(const CmdEntry *entry, u32 *min, u32 *max)
 }
 
 static bool validate_arity(Parser *p, const CmdEntry *entry, u32 nargs,
-                           Span name_tok)
+                           const Span *tokens, Span name_tok)
 {
     u32 min;
     u32 max;
@@ -721,7 +730,7 @@ static bool validate_arity(Parser *p, const CmdEntry *entry, u32 nargs,
         return false;
     }
     if (nargs > max) {
-        Span tok = name_tok;
+        Span tok = tokens[max + 1U];
 
         set_error(p, (size_t)tok.lo, (size_t)tok.hi,
                   max == 0U ? ":%s takes no arguments" :
@@ -859,7 +868,7 @@ bool sag_cmd_parse(Ed *ed, const char *line, size_t len, Arena *a,
         tokens[n] = tok;
         n++;
     }
-    if (!validate_arity(&p, entry, n - 1U, out->name_tok) ||
+    if (!validate_arity(&p, entry, n - 1U, tokens, out->name_tok) ||
         !apply_policy(&p, entry, &out->range, out->name_tok))
         return false;
     out->argv = (CmdArgv){values, n};

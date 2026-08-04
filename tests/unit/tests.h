@@ -539,6 +539,7 @@ void test_cmdhist_memory_rules(void);
 void test_cmdhist_frozen_stem_navigation(void);
 void test_cmdhist_escape_corruption_and_xdg(void);
 void test_cmdhist_concurrent_handles_preserve_appends(void);
+void test_cmdhist_flush_read_failure_preserves_state(void);
 void test_cmdparse_tokenizer_expansion_matrix(void);
 void test_cmdparse_resolution_bang_errors_and_parse_point(void);
 void test_cmdrange_addresses_policies_and_deferred_forms(void);
@@ -557,6 +558,7 @@ void test_cmdline_accepts_registered_command_and_closes(void);
 void test_cmdline_range_executes_once_with_multiple_cursors(void);
 void test_cmdline_bang_quit_bypasses_durability_failure(void);
 void test_cmdline_parse_error_preserves_text_and_points_at_token(void);
+void test_cmdline_catalogue_errors_preserve_live_prompt(void);
 void test_cmdline_printable_edit_resets_history_walk_to_new_draft(void);
 
 #endif
