@@ -734,8 +734,11 @@ static void job_write_stdin(SagJob *j)
         }
         j->in_off += (u64)wrote;
     }
-    if (j->in_off >= total || j->in_fd >= 0)
-        job_close(&j->in_fd); /* end of region: accumulating filters need EOF */
+    /* Close only once the whole region is written.  `sort`, `sha256sum`
+     * and every accumulating filter emit nothing until stdin EOF, so
+     * closing early truncates their input; closing never is §2's hang. */
+    if (j->in_off >= total)
+        job_close(&j->in_fd);
 }
 
 void sag_job_pump(Ed *ed, const struct pollfd *pfd, u32 n)

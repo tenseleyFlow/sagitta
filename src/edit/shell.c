@@ -22,6 +22,10 @@
 
 #define SAG_JOBS_TABLE_NAME "*jobs*"
 
+/* Filter poll tick: bounds how long the restricted loop sleeps before
+ * checking for child exit.  See filter_drive. */
+#define SAG_FILTER_TICK_MS 20
+
 /* Our own table rather than strsignal(): its text is locale-dependent and
  * would leak into pty goldens, breaking deterministic rendering. */
 static const char *sag_signame(int sig)
@@ -337,7 +341,15 @@ static SagFilterResult filter_drive(Ed *ed, SagJob *j, Bytebuf *typeahead)
             pfd[n].revents = 0;
             sig_slot = (int)n++;
         }
-        rc = poll(pfd, (nfds_t)n, deadline < 0 ? 50 : (int)deadline);
+        /* Cap the wait: once the child's pipes hit EOF there is nothing
+         * left in the poll set, and without a tty there is no SIGCHLD
+         * pipe here either — sleeping the full timeout would report a
+         * finished `sort` as SAG_FILT_TIMEOUT.  A short tick keeps exit
+         * detection prompt; this loop is synchronous, so it costs
+         * nothing the user can perceive. */
+        if (deadline < 0 || deadline > SAG_FILTER_TICK_MS)
+            deadline = SAG_FILTER_TICK_MS;
+        rc = poll(pfd, (nfds_t)n, (int)deadline);
         if (rc < 0 && errno != EINTR)
             return SAG_FILT_SPAWN;
         now = sag_now_ms();
@@ -367,10 +379,11 @@ static SagFilterResult filter_drive(Ed *ed, SagJob *j, Bytebuf *typeahead)
                 bytebuf_push_u8(typeahead, bytes[i]);
             }
         }
-        sag_job_tick(ed, now);
-        /* Reap without waiting for the signal: a child that exits between
-         * polls must not stall the filter for a full timeout. */
+        /* Reap before tick: a child that exits right as the deadline
+         * lands must be recorded as EXITED, not lose the race and be
+         * reported as a timeout it actually beat. */
         sag_job_reap(ed);
+        sag_job_tick(ed, now);
     }
     switch (j->state) {
     case SAG_JOB_TIMEOUT:

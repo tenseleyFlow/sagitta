@@ -594,4 +594,17 @@ void test_job_running_count_tracks_state(void);
 void test_job_timeout_escalates_to_kill(void);
 void test_job_shell_resolution_prefers_env(void);
 
+void test_filter_ok_replaces_region_in_one_transaction(void);
+void test_filter_undo_restores_original_exactly(void);
+void test_filter_nonzero_exit_leaves_buffer_untouched(void);
+void test_filter_spawn_failure_leaves_buffer_untouched(void);
+void test_filter_timeout_leaves_buffer_untouched(void);
+void test_filter_empty_output_deletes_region(void);
+void test_filter_partial_region_leaves_the_rest(void);
+void test_filter_survives_output_before_stdin_is_read(void);
+void test_filter_tolerates_epipe_from_early_exit(void);
+void test_filter_preserves_invalid_utf8_bytes(void);
+void test_filter_large_output_round_trips(void);
+void test_filter_ten_thousand_lines_is_one_node(void);
+
 #endif
