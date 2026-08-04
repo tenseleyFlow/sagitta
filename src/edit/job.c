@@ -818,13 +818,17 @@ void sag_job_tick(Ed *ed, i64 now_ms)
     for (i = 0U; i < ed->jobs.len; i++) {
         SagJob *j = &ed->jobs.v[i];
 
-        if (j->state != SAG_JOB_RUNNING)
-            continue;
-        if (j->kill_at_ms != 0 && now_ms >= j->kill_at_ms) {
+        /* Escalation is checked BEFORE the RUNNING guard on purpose: a
+         * timed-out or cancelled job has already left RUNNING but is
+         * still alive until SIGKILL lands.  Guarding first would strand a
+         * child that ignores SIGTERM (`trap '' TERM`) forever. */
+        if (j->kill_at_ms != 0 && !j->reaped && now_ms >= j->kill_at_ms) {
             (void)kill(-j->pgid, SIGKILL);
             j->kill_at_ms = 0;
             continue;
         }
+        if (j->state != SAG_JOB_RUNNING)
+            continue;
         if (j->timeout_ms > 0 && now_ms - j->start_ms >= j->timeout_ms) {
             j->state = SAG_JOB_TIMEOUT;
             ed->jobs.dirty = true;

@@ -571,4 +571,27 @@ void test_buflist_show_buffer_rejects_foreign(void);
 void test_buflist_drop_refocuses_document(void);
 void test_buflist_drop_compacts_and_ignores_document(void);
 
+void test_job_stream_split_at_every_offset(void);
+void test_job_stream_holds_incomplete_utf8(void);
+void test_job_stream_newline_holds_nothing(void);
+void test_job_stream_eof_flushes_invalid_tail(void);
+void test_job_stream_hold_cap_flushes(void);
+void test_job_stream_empty_and_null(void);
+void test_shell_quote_algorithm(void);
+void test_shell_quote_roundtrips_hard_cases(void);
+void test_shell_quote_roundtrips_random_bytes(void);
+
+void test_job_echo_lifecycle(void);
+void test_job_exec_failure_is_not_exit_127(void);
+void test_job_exit_127_is_not_exec_failure(void);
+void test_job_exit_code_and_stderr(void);
+void test_job_killed_by_signal(void);
+void test_job_signal_reaches_the_whole_group(void);
+void test_job_max_refuses_rather_than_queues(void);
+void test_job_stdin_region_is_piped(void);
+void test_job_no_fd_or_zombie_leak_across_many_spawns(void);
+void test_job_running_count_tracks_state(void);
+void test_job_timeout_escalates_to_kill(void);
+void test_job_shell_resolution_prefers_env(void);
+
 #endif
