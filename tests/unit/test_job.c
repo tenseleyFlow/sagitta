@@ -129,7 +129,18 @@ void test_job_echo_lifecycle(void)
     SAG_ASSERT_EQ_I64(j->out_fd, -1);
     SAG_ASSERT_EQ_I64(j->err_fd, -1);
     SAG_ASSERT_EQ_I64(j->in_fd, -1);
-    sag_ed_free(&ed);
+    /* The exec-status pipe closes too: closing it empty IS the success
+     * signal, so a still-open exec_fd would mean we never observed it. */
+    SAG_ASSERT_EQ_I64(j->exec_fd, -1);
+    {
+        u32 fds_before_free = open_fd_count();
+
+        sag_ed_free(&ed);
+        /* Teardown must not strand descriptors; valgrind --track-fds
+         * reports the forked child's inherited copies, so this is the
+         * assertion that speaks for the parent. */
+        SAG_ASSERT(open_fd_count() <= fds_before_free);
+    }
 }
 
 void test_job_exec_failure_is_not_exit_127(void)
