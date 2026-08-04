@@ -1041,10 +1041,320 @@ static void generate_case(const char *dir)
     free(case_maps);
 }
 
+
+/* ------------------------------------------------------------------ */
+/* General categories (Sprint 20): what the regex engine needs to      */
+/* answer \w and the POSIX bracket classes correctly.                  */
+/* ------------------------------------------------------------------ */
+
+#define CAT_ALPHA    0x0001u
+#define CAT_ND       0x0002u
+#define CAT_UPPER    0x0004u
+#define CAT_LOWER    0x0008u
+#define CAT_PUNCT    0x0010u   /* P* or S*                             */
+#define CAT_CNTRL    0x0020u   /* Cc                                   */
+#define CAT_ZS       0x0040u   /* Zs                                   */
+#define CAT_PC       0x0080u   /* Pc — connector punctuation, i.e. '_' */
+#define CAT_ASSIGNED 0x0100u
+
+static U16 *cat_records;
+static U16 cat_stage1[STAGE1_LEN];
+static U8 *cat_stage2;
+static U16 cat_palette[MAX_PALETTE];
+static size_t cat_palette_count;
+static size_t cat_block_count;
+static Range cat_hi_ranges[MAX_HI_RANGES];
+static size_t cat_hi_count;
+
+static void cat_or(U32 lo, U32 hi, U16 bits)
+{
+    U32 cp;
+
+    if (hi >= CP_COUNT)
+        hi = CP_COUNT - 1u;
+    for (cp = lo; cp <= hi; cp++)
+        cat_records[cp] |= bits;
+}
+
+/* Maps a General_Category two-letter code onto our flag set. */
+static U16 cat_bits_for(const char *gc)
+{
+    U16 bits = CAT_ASSIGNED;
+
+    if (strcmp(gc, "Nd") == 0)
+        bits |= CAT_ND;
+    else if (strcmp(gc, "Cc") == 0)
+        bits |= CAT_CNTRL;
+    else if (strcmp(gc, "Zs") == 0)
+        bits |= CAT_ZS;
+    else if (strcmp(gc, "Pc") == 0)
+        bits |= (U16)(CAT_PUNCT | CAT_PC);
+    else if (gc[0] == 'P' || gc[0] == 'S')
+        bits |= CAT_PUNCT;
+    return bits;
+}
+
+static void parse_cat_unicodedata(const char *dir)
+{
+    char path[4096];
+    char line[4096];
+    char pending_category[8] = "";
+    U32 pending_lo = 0;
+    unsigned long line_no = 0;
+    int have_pending = 0;
+    FILE *fp = open_input(dir, "UnicodeData.txt", path, sizeof(path));
+
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        char *fields[3];
+        char *p = line;
+        char *semi;
+        U32 cp;
+        int i;
+
+        line_no++;
+        for (i = 0; i < 3; i++) {
+            fields[i] = p;
+            semi = strchr(p, ';');
+            if (semi == NULL)
+                die("UnicodeData line has too few fields", path);
+            *semi = '\0';
+            p = semi + 1;
+        }
+        cp = hex_cp(fields[0], path, line_no);
+        /* First/Last pairs cover whole blocks (CJK, Hangul) with one
+         * category; missing them leaves 100k codepoints unassigned. */
+        if (strstr(fields[1], ", First>") != NULL) {
+            pending_lo = cp;
+            if (strlen(fields[2]) >= sizeof(pending_category))
+                die("General_Category is too long", path);
+            strcpy(pending_category, fields[2]);
+            have_pending = 1;
+        } else if (strstr(fields[1], ", Last>") != NULL) {
+            if (!have_pending)
+                die("malformed UnicodeData First/Last pair", path);
+            cat_or(pending_lo, cp, cat_bits_for(pending_category));
+            have_pending = 0;
+        } else {
+            cat_or(cp, cp, cat_bits_for(fields[2]));
+        }
+    }
+    if (ferror(fp))
+        die(strerror(errno), path);
+    if (fclose(fp) != 0)
+        die(strerror(errno), path);
+}
+
+static void parse_cat_derived(const char *dir)
+{
+    char path[4096];
+    char line[4096];
+    unsigned long line_no = 0;
+    FILE *fp = open_input(dir, "DerivedCoreProperties.txt", path,
+                          sizeof(path));
+
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        char *hash;
+        char *semi;
+        char *range_field;
+        char *property;
+        U32 lo, hi;
+
+        line_no++;
+        hash = strchr(line, '#');
+        if (hash != NULL)
+            *hash = '\0';
+        range_field = trim(line);
+        if (*range_field == '\0')
+            continue;
+        semi = strchr(range_field, ';');
+        if (semi == NULL)
+            continue;
+        *semi = '\0';
+        property = trim(semi + 1);
+        semi = strchr(property, ';');
+        if (semi != NULL)
+            *semi = '\0';
+        property = trim(property);
+        parse_range(range_field, &lo, &hi, path, line_no);
+        if (strcmp(property, "Alphabetic") == 0)
+            cat_or(lo, hi, CAT_ALPHA);
+        else if (strcmp(property, "Uppercase") == 0)
+            cat_or(lo, hi, CAT_UPPER);
+        else if (strcmp(property, "Lowercase") == 0)
+            cat_or(lo, hi, CAT_LOWER);
+    }
+    if (ferror(fp))
+        die(strerror(errno), path);
+    if (fclose(fp) != 0)
+        die(strerror(errno), path);
+}
+
+static U8 cat_palette_index(U16 rec)
+{
+    size_t i;
+
+    for (i = 0; i < cat_palette_count; i++) {
+        if (cat_palette[i] == rec)
+            return (U8)i;
+    }
+    if (cat_palette_count == MAX_PALETTE)
+        die("category palette overflow", NULL);
+    cat_palette[cat_palette_count] = rec;
+    return (U8)cat_palette_count++;
+}
+
+static void build_cat_trie(void)
+{
+    U8 *folded = calloc(TRIE_HI, 1u);
+    size_t input_block;
+
+    if (folded == NULL)
+        die("out of memory", NULL);
+    /* Records are u16; the stage-2 table stores palette indices so the
+     * hot table stays one byte per codepoint, exactly like the grapheme
+     * tables next door. */
+    for (input_block = 0; input_block < TRIE_HI; input_block++)
+        folded[input_block] = cat_palette_index(cat_records[input_block]);
+    cat_stage2 = calloc(MAX_BLOCKS * BLOCK_SIZE, 1u);
+    if (cat_stage2 == NULL)
+        die("out of memory", NULL);
+    for (input_block = 0; input_block < STAGE1_LEN; input_block++) {
+        const U8 *block = folded + input_block * BLOCK_SIZE;
+        size_t i;
+        size_t found = cat_block_count;
+
+        for (i = 0; i < cat_block_count; i++) {
+            if (memcmp(cat_stage2 + i * BLOCK_SIZE, block,
+                       BLOCK_SIZE) == 0) {
+                found = i;
+                break;
+            }
+        }
+        if (found == cat_block_count) {
+            if (cat_block_count == MAX_BLOCKS)
+                die("category stage-2 block limit exceeded", NULL);
+            memcpy(cat_stage2 + cat_block_count * BLOCK_SIZE, block,
+                   BLOCK_SIZE);
+            cat_block_count++;
+        }
+        cat_stage1[input_block] = (U16)found;
+    }
+    free(folded);
+}
+
+static void build_cat_high_ranges(void)
+{
+    U32 cp = TRIE_HI;
+
+    while (cp < CP_COUNT) {
+        U32 lo;
+        U16 rec;
+
+        if (cat_records[cp] == 0) {
+            cp++;
+            continue;
+        }
+        lo = cp;
+        rec = cat_records[cp++];
+        while (cp < CP_COUNT && cat_records[cp] == rec)
+            cp++;
+        if (cat_hi_count == MAX_HI_RANGES)
+            die("category high-plane range limit exceeded", NULL);
+        cat_hi_ranges[cat_hi_count].lo = lo;
+        cat_hi_ranges[cat_hi_count].hi = cp - 1u;
+        cat_hi_ranges[cat_hi_count].rec = rec;
+        cat_hi_count++;
+    }
+}
+
+static void validate_cat_records(void)
+{
+    /* Spot checks that would catch a shifted field or a dropped
+     * First/Last range.  CJK is the one that matters most here: it is
+     * why this table exists. */
+    if ((cat_records[0x0041u] & (CAT_ALPHA | CAT_UPPER)) !=
+        (CAT_ALPHA | CAT_UPPER))
+        die("category spot check failed: U+0041 is not Alphabetic+Upper",
+            NULL);
+    if ((cat_records[0x0061u] & (CAT_ALPHA | CAT_LOWER)) !=
+        (CAT_ALPHA | CAT_LOWER))
+        die("category spot check failed: U+0061", NULL);
+    if ((cat_records[0x0030u] & CAT_ND) == 0u)
+        die("category spot check failed: U+0030 is not Nd", NULL);
+    if ((cat_records[0x005Fu] & CAT_PC) == 0u)
+        die("category spot check failed: U+005F is not Pc", NULL);
+    if ((cat_records[0x6F22u] & CAT_ALPHA) == 0u)
+        die("category spot check failed: U+6F22 (Han) is not Alphabetic",
+            NULL);
+    if ((cat_records[0x0009u] & CAT_CNTRL) == 0u)
+        die("category spot check failed: U+0009 is not Cc", NULL);
+    if ((cat_records[0x0020u] & CAT_ZS) == 0u)
+        die("category spot check failed: U+0020 is not Zs", NULL);
+    if ((cat_records[0x0021u] & CAT_PUNCT) == 0u)
+        die("category spot check failed: U+0021 is not punctuation", NULL);
+    if ((cat_records[0x1F600u] & CAT_ASSIGNED) == 0u)
+        die("category spot check failed: U+1F600 is unassigned", NULL);
+}
+
+static void emit_cat_output(void)
+{
+    size_t i;
+    size_t table_bytes = STAGE1_LEN * 2u + cat_block_count * BLOCK_SIZE +
+                         cat_palette_count * 2u + cat_hi_count * 12u;
+
+    fputs("/* GENERATED by scripts/gen-unicode-tables from UCD 16.0.0 — do not edit;\n"
+          " * regenerate with 'make unicode-tables'.\n"
+          " */\n#include \"category.h\"\n\n", stdout);
+    emit_u16("sag_cat_stage1[SAG_CAT_TRIE_HI >> SAG_CAT_TRIE_SHIFT]",
+             cat_stage1, STAGE1_LEN);
+    emit_u8("sag_cat_stage2[]", cat_stage2,
+            cat_block_count * BLOCK_SIZE);
+    emit_u16("sag_cat_pal[]", cat_palette, cat_palette_count);
+    fputs("const struct SagCatRange sag_cat_hi[] = {\n", stdout);
+    for (i = 0; i < cat_hi_count; i++)
+        printf("    {0x%06Xu, 0x%06Xu, 0x%04Xu}%s\n",
+               (unsigned)cat_hi_ranges[i].lo,
+               (unsigned)cat_hi_ranges[i].hi,
+               (unsigned)cat_hi_ranges[i].rec,
+               i + 1u == cat_hi_count ? "" : ",");
+    fputs("};\n\n", stdout);
+    printf("const u32 sag_cat_hi_len = %uu;\n\n", (unsigned)cat_hi_count);
+    fputs("_Static_assert(sizeof(sag_cat_stage1) + sizeof(sag_cat_stage2) +\n"
+          "               sizeof(sag_cat_pal) + sizeof(sag_cat_hi) <=\n"
+          "               64u * 1024u,\n"
+          "               \"category tables exceed the 64 KiB budget\");\n\n",
+          stdout);
+    printf("/* UCD 16.0.0; %zu bytes; %zu/%u unique stage-2 blocks; "
+           "%zu palette entries. */\n",
+           table_bytes, cat_block_count, (unsigned)STAGE1_LEN,
+           cat_palette_count);
+}
+
+static void generate_category(const char *dir)
+{
+    cat_records = calloc(CP_COUNT, sizeof(*cat_records));
+    if (cat_records == NULL)
+        die("out of memory", NULL);
+    parse_cat_unicodedata(dir);
+    parse_cat_derived(dir);
+    validate_cat_records();
+    build_cat_trie();
+    build_cat_high_ranges();
+    emit_cat_output();
+    free(cat_records);
+    free(cat_stage2);
+}
+
 int main(int argc, char **argv)
 {
     if (argc == 3 && strcmp(argv[1], "--word-break") == 0) {
         generate_word_break(argv[2]);
+        if (ferror(stdout))
+            die("failed writing generated output", NULL);
+        return 0;
+    }
+    if (argc == 3 && strcmp(argv[1], "--category") == 0) {
+        generate_category(argv[2]);
         if (ferror(stdout))
             die("failed writing generated output", NULL);
         return 0;
@@ -1057,7 +1367,7 @@ int main(int argc, char **argv)
     }
     if (argc != 2) {
         fprintf(stderr,
-                "usage: %s [--word-break|--case] UCD-DIRECTORY\n",
+                "usage: %s [--word-break|--case|--category] UCD-DIRECTORY\n",
                 argv[0]);
         return 1;
     }

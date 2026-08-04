@@ -144,16 +144,25 @@ static const ReRow rows[] = {
     ROW("\\Bfoo", " foo", false, 0, 0),
     ROW("\\b", "ab", true, 0, 0),
     /*
-     * KNOWN DIVERGENCE from the sprint text.  §3 says there is no \b
-     * between a Han character and 'f' because both are Alphabetic.  That
-     * holds for \w = Alphabetic, which needs general-category data the
-     * Sprint 2 tables do not emit.  This implementation defines \w off
-     * the UAX #29 word-break properties instead — which buys agreement
-     * with W-mode word motion, but classifies Han as Other, so a
-     * boundary DOES exist here.  Asserted as-built so the divergence is
-     * visible rather than silently accumulating; see regex.h.
+     * §3's surprising case, now answerable.  Han is Alphabetic, so it is
+     * a word character and there is NO boundary between it and 'f' — the
+     * boundary is at the buffer start instead.  This needed the general
+     * category table; from word-break properties alone Han reads as
+     * Other and the answer came out backwards.
      */
-    ROW("\\b", "\xE6\xBC\xA2" "f", true, 3, 3),
+    ROW("\\b", "\xE6\xBC\xA2" "f", true, 0, 0),
+    ROW("\\bf", "\xE6\xBC\xA2" "f", false, 0, 0),
+    ROW("\\w+", "\xE6\xBC\xA2\xE5\xAD\x97", true, 0, 6),   /* CJK is \w */
+    ROW("[[:alpha:]]+", "  \xE6\xBC\xA2" "x  ", true, 2, 6),
+    ROW("[[:upper:]]+", "abcDEFghi", true, 3, 6),
+    ROW("[[:lower:]]+", "ABCdefGHI", true, 3, 6),
+    ROW("[[:punct:]]+", "ab!?;cd", true, 2, 5),
+    ROW("[[:cntrl:]]", "a\x01" "b", true, 1, 2),
+    ROW("[[:blank:]]+", "a \t b", true, 1, 4),
+    ROW("[[:xdigit:]]+", "zzDEADzz", true, 2, 6),
+    ROW("[[:alnum:]]+", "  a1b2  ", true, 2, 6),
+    ROW("[[:graph:]]+", "  ab  ", true, 2, 4),
+    ROW("[[:^digit:]]+", "12ab34", true, 2, 4),
     ROW("a\\bb", "ab", false, 0, 0),
 
     /* --- groups and captures ---------------------------------- */

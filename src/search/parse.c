@@ -5,6 +5,7 @@
 #include <string.h>
 
 #include "unicode/case.h"
+#include "unicode/category.h"
 #include "unicode/utf8.h"
 #include "unicode/wordbreak.h"
 #include "util/log.h"
@@ -14,25 +15,26 @@
 /* Character properties (§3)                                        */
 /* ---------------------------------------------------------------- */
 
+/*
+ * \w = Alphabetic union Nd union Pc, per the sprint.
+ *
+ * This deliberately does NOT use the word-break properties that Sprint
+ * 16's W-mode motion uses.  UAX #29 classifies Han as Other so that word
+ * segmentation does not glue ideographs together — correct for motion,
+ * but it would make \w+ match nothing at all in Chinese text.  The two
+ * therefore disagree about CJK on purpose: motion asks "where does a
+ * word end", \w asks "is this a letter".
+ */
 bool sag_re_is_word(u32 cp)
 {
-    switch (sag_wb_prop(cp)) {
-    case SAG_WB_ALETTER:
-    case SAG_WB_HEBREW_LETTER:
-    case SAG_WB_NUMERIC:
-    case SAG_WB_KATAKANA:
-    /* EXTENDNUMLET is the Pc category, which is where '_' lives. */
-    case SAG_WB_EXTENDNUMLET:
-        return true;
-    default:
-        break;
-    }
-    return false;
+    u16 rec = sag_cat_rec(cp);
+
+    return (rec & (SAG_CAT_ALPHA | SAG_CAT_ND | SAG_CAT_PC)) != 0U;
 }
 
 bool sag_re_is_digit(u32 cp)
 {
-    return sag_wb_prop(cp) == SAG_WB_NUMERIC;
+    return (sag_cat_rec(cp) & SAG_CAT_ND) != 0U;
 }
 
 bool sag_re_is_space(u32 cp)
@@ -456,13 +458,57 @@ static void cbuf_add_folded(ReParse *p, ClassBuf *b, u32 cp)
 }
 
 /* [[:name:]] — only valid inside a bracket expression. */
+static bool posix_alpha(u32 cp)  { return (sag_cat_rec(cp) & SAG_CAT_ALPHA) != 0U; }
+static bool posix_digit(u32 cp)  { return (sag_cat_rec(cp) & SAG_CAT_ND) != 0U; }
+static bool posix_alnum(u32 cp)
+{
+    return (sag_cat_rec(cp) & (SAG_CAT_ALPHA | SAG_CAT_ND)) != 0U;
+}
+static bool posix_upper(u32 cp)  { return (sag_cat_rec(cp) & SAG_CAT_UPPER) != 0U; }
+static bool posix_lower(u32 cp)  { return (sag_cat_rec(cp) & SAG_CAT_LOWER) != 0U; }
+static bool posix_space(u32 cp)  { return sag_re_is_space(cp); }
+static bool posix_blank(u32 cp)
+{
+    /* Horizontal whitespace only: tab, space, and the Zs category. */
+    return cp == 0x09U || cp == 0x20U ||
+           (sag_cat_rec(cp) & SAG_CAT_ZS) != 0U;
+}
+static bool posix_punct(u32 cp)  { return (sag_cat_rec(cp) & SAG_CAT_PUNCT) != 0U; }
+static bool posix_cntrl(u32 cp)  { return (sag_cat_rec(cp) & SAG_CAT_CNTRL) != 0U; }
+static bool posix_graph(u32 cp)
+{
+    u16 rec = sag_cat_rec(cp);
+
+    /* Assigned, not whitespace, not a control. */
+    return (rec & SAG_CAT_ASSIGNED) != 0U &&
+           (rec & SAG_CAT_CNTRL) == 0U && !sag_re_is_space(cp);
+}
+static bool posix_print(u32 cp)
+{
+    return posix_graph(cp) || cp == 0x20U;
+}
+static bool posix_xdigit(u32 cp)
+{
+    /* ASCII by definition — the POSIX class is about hex digits, and
+     * fullwidth forms are not usable as such. */
+    return (cp >= '0' && cp <= '9') || (cp >= 'a' && cp <= 'f') ||
+           (cp >= 'A' && cp <= 'F');
+}
+static bool posix_word(u32 cp)   { return sag_re_is_word(cp); }
+
 static bool parse_posix_class(ReParse *p, ClassBuf *b)
 {
     static const struct {
         const char *name;
-        char perl;
-    } simple[] = {
-        {"digit", 'd'}, {"space", 's'}, {"word", 'w'}
+        bool (*pred)(u32);
+    } classes[] = {
+        {"alpha", posix_alpha}, {"digit", posix_digit},
+        {"alnum", posix_alnum}, {"upper", posix_upper},
+        {"lower", posix_lower}, {"space", posix_space},
+        {"blank", posix_blank}, {"punct", posix_punct},
+        {"cntrl", posix_cntrl}, {"graph", posix_graph},
+        {"print", posix_print}, {"xdigit", posix_xdigit},
+        {"word", posix_word}
     };
     size_t start = p->at;
     size_t end;
@@ -486,17 +532,19 @@ static bool parse_posix_class(ReParse *p, ClassBuf *b)
     }
     name_len = p->at - name_at;
     end = p->at + 2U;
-    for (i = 0U; i < SAG_ARRAY_LEN(simple); i++) {
-        if (strlen(simple[i].name) == name_len &&
-            memcmp(p->pat + name_at, simple[i].name, name_len) == 0) {
-            u32 idx = sag_re_class_perl(p, negate ?
-                                        (char)(simple[i].perl - 32) :
-                                        simple[i].perl);
+    for (i = 0U; i < SAG_ARRAY_LEN(classes); i++) {
+        ReRange *r = NULL;
+        u32 n;
+        u32 idx;
 
-            cbuf_add_class(p, b, idx);
-            p->at = end;
-            return !p->failed;
-        }
+        if (strlen(classes[i].name) != name_len ||
+            memcmp(p->pat + name_at, classes[i].name, name_len) != 0)
+            continue;
+        n = build_prop_ranges(p, classes[i].pred, &r);
+        idx = sag_re_class_intern(p, r, n, negate);
+        cbuf_add_class(p, b, idx);
+        p->at = end;
+        return !p->failed;
     }
     /*
      * The remaining nine POSIX classes need general-category data

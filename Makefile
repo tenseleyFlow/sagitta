@@ -584,6 +584,7 @@ unicode-tables: $(BUILD)/gen-unicode-tables
 	$< ucd/16.0.0 > src/unicode/tables.c
 	$< --word-break ucd/16.0.0 > src/unicode/tables_wb.c
 	$< --case ucd/16.0.0 > src/unicode/tables_case.c
+	$< --category ucd/16.0.0 > src/unicode/tables_cat.c
 
 # Check the literal selection on every invocation, but preserve the stamp's
 # mtime when it is unchanged so objects are not rebuilt spuriously.

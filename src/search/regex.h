@@ -15,22 +15,17 @@
  * Lookaround, backreferences and atomic groups are permanent non-goals,
  * not deferrals — see the rejection message in regex.c.
  *
- * KNOWN GAP, tracked not hidden.  The sprint defines \w as Alphabetic ∪
- * Nd ∪ Pc and specifies twelve POSIX bracket classes over Unicode
- * general categories.  Sprint 2's generated tables carry grapheme,
- * width and word-break properties but NOT general category, so:
+ * Character classes come from the Unicode general-category table
+ * (src/unicode/category.h): \w is Alphabetic ∪ Nd ∪ Pc, \d is Nd, and
+ * all twelve POSIX bracket classes are defined over categories rather
+ * than ASCII approximations.
  *
- *   - \w \d \s and \b are defined off the UAX #29 word-break properties.
- *     That buys something worth having — search boundaries agree exactly
- *     with Sprint 16's W-mode word motion — but it also means Han
- *     ideographs are word-break Other, so \w+ does not match CJK text.
- *     For a Unicode-correct editor that is a real limitation, not a
- *     nuance.
- *   - [[:digit:]], [[:space:]] and [[:word:]] work; the other nine POSIX
- *     classes report an error naming the missing tables rather than
- *     silently answering with an ASCII approximation.
- *
- * Closing both needs the Unicode generator to emit a category field.
+ * Worth knowing: \w and Sprint 16's W-mode word motion deliberately
+ * disagree about CJK.  Motion uses the UAX #29 word-break properties,
+ * where Han is Other so that segmentation does not glue ideographs
+ * together; \w uses Alphabetic, so \w+ matches Chinese text.  The two
+ * answer different questions — "where does a word end" versus "is this
+ * a letter" — and each uses the table that answers its own.
  */
 
 #include <stdbool.h>
