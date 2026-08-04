@@ -557,6 +557,8 @@ const SagTest sag_tests[] = {
     T(cmdline_highlight_selection_seeds_range),
     T(cmdline_escape_restores_completion_stem_before_closing),
     T(cmdline_accepts_registered_command_and_closes),
+    T(cmdline_range_executes_once_with_multiple_cursors),
+    T(cmdline_bang_quit_bypasses_durability_failure),
     T(cmdline_parse_error_preserves_text_and_points_at_token),
     T(cmdline_printable_edit_resets_history_walk_to_new_draft),
 };

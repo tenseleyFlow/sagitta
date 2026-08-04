@@ -569,7 +569,8 @@ static CmdId resolve_name(Parser *p, const char *name, Span tok)
         const CmdEntry *entry = sag_cmd_entry(id);
         const char *candidate;
 
-        if (desc == NULL || entry == NULL)
+        if (desc == NULL || entry == NULL ||
+            (desc->flags & SAG_CMD_INTERNAL) != 0U)
             continue;
         candidate = short_name(desc->name);
         if (entry->abbrev != NULL && strcmp(entry->abbrev, name) == 0) {
@@ -768,6 +769,17 @@ bool sag_cmd_parse(Ed *ed, const char *line, size_t len, Arena *a,
         return false;
     memset(out, 0, sizeof(*out));
     p = (Parser){ed, line, len, 0U, a, &out->err};
+    {
+        const char *nul = memchr(line, '\0', len);
+
+        if (nul != NULL) {
+            size_t at = (size_t)(nul - line);
+
+            set_error(&p, at, at + 1U,
+                      "NUL byte is not valid in a command line");
+            return false;
+        }
+    }
     skip_ws(&p);
     if (p.at < len && line[p.at] == ':') {
         p.at++;
@@ -898,6 +910,8 @@ bool sag_cmd_parse_point(Ed *ed, const char *line, size_t len,
     u32 index = 0U;
 
     if (line == NULL || a == NULL || out == NULL)
+        return false;
+    if (memchr(line, '\0', len) != NULL)
         return false;
     if (cursor > len)
         cursor = len;

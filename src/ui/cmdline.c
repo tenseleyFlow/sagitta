@@ -186,6 +186,11 @@ static CmdStatus insert_sanitized(Ed *ed, const u8 *bytes, size_t len)
     Bytebuf clean;
     CmdStatus status;
 
+    if (len != 0U && memchr(bytes, '\0', len) != NULL) {
+        sag_msg(ed, SAG_MSG_ERROR,
+                "NUL byte is not valid in a command line");
+        return SAG_CMD_ERR_ARG;
+    }
     bytebuf_init(&clean);
     sanitize_bytes(bytes, len, &clean);
     status = invoke_prompt_text(ed, clean.data, clean.len);
@@ -491,7 +496,8 @@ static CmdStatus complete(Ed *ed, bool previous)
         return completion_cycle(ed, previous);
     text = text_string(line->buf);
     arena_init(&scratch);
-    if (!sag_comp_query(ed, text, strlen(text), (size_t)line->cur.pos.v,
+    if (!sag_comp_query(ed, text, (size_t)sag_textbuf_len(line->buf),
+                        (size_t)line->cur.pos.v,
                         &scratch, &query)) {
         arena_free_all(&scratch);
         free(text);
@@ -692,13 +698,14 @@ CmdStatus sag_cmdline_cmd_accept(CmdCtx *cx)
         return SAG_CMD_OK;
     }
     text = text_string(line->buf);
-    if (text[0] == '\0') {
+    if (sag_textbuf_len(line->buf) == 0U) {
         free(text);
         sag_cmdline_close(ed, true);
         return SAG_CMD_OK;
     }
     arena_init(&arena);
-    if (!sag_cmd_parse(ed, text, strlen(text), &arena, &parsed)) {
+    if (!sag_cmd_parse(ed, text, (size_t)sag_textbuf_len(line->buf),
+                       &arena, &parsed)) {
         set_error(ed, &parsed.err);
         arena_free_all(&arena);
         free(text);

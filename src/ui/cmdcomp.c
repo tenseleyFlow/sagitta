@@ -16,6 +16,7 @@
 
 #include "edit/ed.h"
 #include "ui/cmdparse.h"
+#include "unicode/utf8.h"
 #include "util/buf.h"
 #include "util/log.h"
 #include "util/sort.h"
@@ -100,7 +101,8 @@ static void candidate_dispose(CandidateVec *v)
     size_t i;
 
     for (i = 0U; i < v->len; i++) {
-        free(v->data[i].match);
+        if (v->data[i].match != v->data[i].text)
+            free(v->data[i].match);
         free(v->data[i].text);
     }
     CandidateVec_free(v);
@@ -115,16 +117,40 @@ static bool candidate_add(CandidateVec *v, const char *stem,
 
     if (score < 0)
         return false;
-    item.match = sag_xmalloc(strlen(match) + 1U);
     item.text = sag_xmalloc(strlen(text) + 1U);
-    (void)strcpy(item.match, match);
     (void)strcpy(item.text, text);
+    if (strcmp(match, text) == 0) {
+        item.match = item.text;
+    } else {
+        item.match = sag_xmalloc(strlen(match) + 1U);
+        (void)strcpy(item.match, match);
+    }
     item.detail = detail;
     item.is_dir = is_dir;
     item.prefix = starts_with(match, stem);
     item.score = score;
     CandidateVec_push(v, item);
     return true;
+}
+
+static void candidate_add_owned(CandidateVec *v, const char *stem,
+                                const char *match, char *text, i32 score,
+                                const char *detail, bool is_dir)
+{
+    Candidate item;
+
+    item.text = text;
+    if (strcmp(match, text) == 0) {
+        item.match = text;
+    } else {
+        item.match = sag_xmalloc(strlen(match) + 1U);
+        (void)strcpy(item.match, match);
+    }
+    item.detail = detail;
+    item.is_dir = is_dir;
+    item.prefix = starts_with(match, stem);
+    item.score = score;
+    CandidateVec_push(v, item);
 }
 
 static u32 candidate_finish(Ed *ed, SagCompKind kind, CandidateVec *matches,
@@ -168,7 +194,8 @@ static u32 enumerate_commands(Ed *ed, const char *stem, Vec_CompItem *out)
         const CmdEntry *entry;
         const char *name;
 
-        if (desc == NULL || !starts_with(desc->name, "ed."))
+        if (desc == NULL || !starts_with(desc->name, "ed.") ||
+            (desc->flags & SAG_CMD_INTERNAL) != 0U)
             continue;
         name = desc->name + 3U;
         (void)candidate_add(&matches, stem, name, name, desc->help, false);
@@ -372,13 +399,15 @@ static u32 enumerate_paths(Ed *ed, const char *stem, Vec_CompItem *out)
         bool is_dir;
         char *shown;
         char *raw;
+        i32 score;
 
         if (strcmp(entry->d_name, ".") == 0 ||
             strcmp(entry->d_name, "..") == 0)
             continue;
         if (entry->d_name[0] == '.' && tail[0] != '.')
             continue;
-        if (sag_comp_score(tail, entry->d_name) < 0)
+        score = sag_comp_score(tail, entry->d_name);
+        if (score < 0)
             continue;
         is_dir = path_is_dir(scan_dir, entry);
         shown = join2(head, entry->d_name);
@@ -388,9 +417,8 @@ static u32 enumerate_paths(Ed *ed, const char *stem, Vec_CompItem *out)
         } else {
             raw = shown;
         }
-        (void)candidate_add(&matches, tail, entry->d_name, raw, NULL,
-                            is_dir);
-        free(raw);
+        candidate_add_owned(&matches, tail, entry->d_name, raw, score,
+                            NULL, is_dir);
     }
     (void)closedir(dir);
     free(scan_dir);
@@ -516,6 +544,10 @@ char *sag_comp_lcp(Arena *arena, const Vec_CompItem *items)
             j++;
         common = j;
     }
+    while (common > 0U &&
+           !sag_utf8_is_boundary((const u8 *)items->data[0].text,
+                                 strlen(items->data[0].text), common))
+        common--;
     return arena_strndup(arena, items->data[0].text, common);
 }
 

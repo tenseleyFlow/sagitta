@@ -78,7 +78,7 @@ CmdStatus sag_file_cmd_quit(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL)
         return SAG_CMD_ERR_ARG;
-    return sag_ed_request_quit(cx->ed, false);
+    return sag_ed_request_quit(cx->ed, cx->bang);
 }
 
 CmdStatus sag_file_cmd_quit_force(CmdCtx *cx)

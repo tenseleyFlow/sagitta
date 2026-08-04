@@ -87,6 +87,7 @@ static void assert_error(ParseFixture *f, const char *line,
 
 void test_cmdparse_tokenizer_expansion_matrix(void)
 {
+    static const char nul_line[] = ":w a\0b";
     static const struct {
         const char *line;
         const char *arg;
@@ -155,6 +156,16 @@ void test_cmdparse_tokenizer_expansion_matrix(void)
     assert_error(&f, ":w %s", "%s needs a selection");
     f.ed.buffer.path = NULL;
     assert_error(&f, ":w %", "buffer has no file name");
+    {
+        CmdParse parsed;
+
+        SAG_ASSERT(!sag_cmd_parse(&f.ed, nul_line, sizeof(nul_line) - 1U,
+                                  &f.arena, &parsed));
+        SAG_ASSERT_EQ_STR(parsed.err.msg,
+                          "NUL byte is not valid in a command line");
+        SAG_ASSERT_EQ_U64(parsed.err.tok_lo, 4U);
+        SAG_ASSERT_EQ_U64(parsed.err.tok_hi, 5U);
+    }
     parse_fixture_free(&f);
 }
 
@@ -176,6 +187,8 @@ void test_cmdparse_resolution_bang_errors_and_parse_point(void)
     assert_error(&f, ":sort", ":ui.grow requires a range");
     assert_error(&f, ":not_a_command", 
                  "unknown command 'not_a_command' (try Tab)");
+    assert_error(&f, ":cmdline.accept",
+                 "unknown command 'cmdline.accept' (try Tab)");
     assert_error(&f, ":!printf x", ":! runs shell commands: Sprint 19");
     assert_error(&f, ":1,2!sort", ":! runs shell commands: Sprint 19");
     assert_error(&f, ":r !printf x",

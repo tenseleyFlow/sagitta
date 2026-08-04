@@ -344,25 +344,31 @@ static const CmdDesc builtins[] = {
      "Cancel the active prompt or message overlay"},
 
     {"ed.cmdline.hist_prev", sag_cmdline_cmd_hist_prev, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Find the previous matching command-line history entry"},
+     SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
+     "Find the previous matching command-line history entry"},
     {"ed.cmdline.hist_next", sag_cmdline_cmd_hist_next, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Find the next matching command-line history entry"},
+     SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
+     "Find the next matching command-line history entry"},
     {"ed.cmdline.complete_next", sag_cmdline_cmd_complete_next,
-     SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN,
+     SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
      "Open or advance command-line completion"},
     {"ed.cmdline.complete_prev", sag_cmdline_cmd_complete_prev,
-     SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN,
+     SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
      "Open or reverse command-line completion"},
     {"ed.cmdline.insert_register", sag_cmdline_cmd_insert_register,
-     SAG_ARITY_STR, SAG_CMD_NEEDS_WIN | SAG_CMD_CAPTURES_TEXT,
+     SAG_ARITY_STR,
+     SAG_CMD_NEEDS_WIN | SAG_CMD_CAPTURES_TEXT | SAG_CMD_INTERNAL,
      "Insert one named register into the command line"},
     {"ed.cmdline.literal_next", sag_cmdline_cmd_literal_next,
-     SAG_ARITY_STR, SAG_CMD_NEEDS_WIN | SAG_CMD_CAPTURES_TEXT,
+     SAG_ARITY_STR,
+     SAG_CMD_NEEDS_WIN | SAG_CMD_CAPTURES_TEXT | SAG_CMD_INTERNAL,
      "Insert the next text-producing key literally"},
     {"ed.cmdline.accept", sag_cmdline_cmd_accept, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN | SAG_CMD_PROMPTS, "Accept the command line"},
+     SAG_CMD_NEEDS_WIN | SAG_CMD_PROMPTS | SAG_CMD_INTERNAL,
+     "Accept the command line"},
     {"ed.cmdline.cancel", sag_cmdline_cmd_cancel, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN | SAG_CMD_PROMPTS, "Cancel the command line or menu"},
+     SAG_CMD_NEEDS_WIN | SAG_CMD_PROMPTS | SAG_CMD_INTERNAL,
+     "Cancel the command line or menu"},
     {"ed.del.word_prev", sag_cmdline_cmd_delete_word_prev, SAG_ARITY_NONE,
      SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
      "Delete to the previous word boundary"},
@@ -564,7 +570,7 @@ static void desc_validate(const CmdDesc *d)
                             SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN |
                             SAG_CMD_CHANGES_BUFFER | SAG_CMD_PROMPTS |
                             SAG_CMD_DEFERRED | SAG_CMD_MULTI_AGGREGATE |
-                            SAG_CMD_CAPTURES_TEXT;
+                            SAG_CMD_CAPTURES_TEXT | SAG_CMD_INTERNAL;
 
     if (d == NULL)
         SAG_BUG("sag_cmd_register: NULL descriptor");
@@ -820,6 +826,9 @@ CmdStatus sag_cmd_prepare(CmdId id, CmdCtx *cx, const CmdDesc **out)
         return SAG_CMD_ERR_ARG;
     if ((d->flags & SAG_CMD_NEEDS_WIN) != 0U && cx->win == NULL)
         return command_fail(d, "no window", SAG_CMD_ERR_STATE);
+    if ((d->flags & SAG_CMD_INTERNAL) != 0U &&
+        cx->source == SAG_SRC_CMDLINE)
+        return command_fail(d, "internal E command", SAG_CMD_ERR_ARG);
     if ((d->flags & SAG_CMD_DEFERRED) != 0U)
         return command_deferred(d);
     if (!args_valid(d, cx))

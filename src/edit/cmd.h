@@ -104,7 +104,9 @@ enum {
     /* Command consumes the cursor set instead of running per cursor. */
     SAG_CMD_MULTI_AGGREGATE = 1U << 7,
     /* A key binding without sarg captures the next text-producing key. */
-    SAG_CMD_CAPTURES_TEXT = 1U << 8
+    SAG_CMD_CAPTURES_TEXT = 1U << 8,
+    /* Keymap plumbing that must not resolve as a typed E command. */
+    SAG_CMD_INTERNAL = 1U << 9
 };
 
 typedef struct CmdDesc {

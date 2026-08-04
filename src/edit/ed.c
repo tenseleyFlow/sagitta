@@ -313,6 +313,7 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     multiple = changes && ed->model_ready && cx->win != NULL &&
                cx->win->cs.curs.len > 1U;
     multi = multiple &&
+            cx->range.kind == SAG_RANGE_NONE &&
             (desc->flags & SAG_CMD_MULTI_AGGREGATE) == 0U;
     durability_command = document_target && edits_text;
     newline = strcmp(desc->name, "ed.edit.insert.newline") == 0;

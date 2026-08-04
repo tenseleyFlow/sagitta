@@ -554,6 +554,8 @@ void test_cmdline_e_keymap_leaves_are_registered_editor_commands(void);
 void test_cmdline_highlight_selection_seeds_range(void);
 void test_cmdline_escape_restores_completion_stem_before_closing(void);
 void test_cmdline_accepts_registered_command_and_closes(void);
+void test_cmdline_range_executes_once_with_multiple_cursors(void);
+void test_cmdline_bang_quit_bypasses_durability_failure(void);
 void test_cmdline_parse_error_preserves_text_and_points_at_token(void);
 void test_cmdline_printable_edit_resets_history_walk_to_new_draft(void);
 

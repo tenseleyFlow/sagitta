@@ -92,6 +92,7 @@ void test_cmdcomp_source_selection_and_score(void)
         "s", SAG_RP_FORBID, NULL,
     };
     SagCompKind kind = SAG_COMP_VALUE;
+    Vec_CompItem commands = {0};
     Ed ed = {0};
     Arena scratch;
     SagCompQuery query;
@@ -131,6 +132,10 @@ void test_cmdcomp_source_selection_and_score(void)
                                &scratch, &query));
     SAG_ASSERT(sag_comp_query(&ed, "file.o", 6U, 6U, &scratch, &query));
     SAG_ASSERT_EQ_I64(query.kind, SAG_COMP_CMD);
+    SAG_ASSERT_EQ_U64(
+        sag_comp_enumerate(&ed, SAG_COMP_CMD, "cmdline.", &commands), 0U);
+    SAG_ASSERT_EQ_U64(commands.len, 0U);
+    Vec_CompItem_free(&commands);
     sag_cmd_shutdown();
     arena_free_all(&scratch);
     arena_free_all(&ed.arena);
@@ -276,6 +281,23 @@ void test_cmdcomp_lcp_menu_and_empty_providers(void)
                                           "tab", &items), 0U);
     SAG_ASSERT_EQ_U64(sag_comp_enumerate(&fixture.ed, SAG_COMP_VALUE,
                                           "4", &items), 0U);
+    Vec_CompItem_push(&items,
+                      ((CompItem){"\xc3\xa9" "lan", NULL,
+                                  SAG_COMP_VALUE, false, 0}));
+    Vec_CompItem_push(&items,
+                      ((CompItem){"\xc3\xaa" "tre", NULL,
+                                  SAG_COMP_VALUE, false, 0}));
+    lcp = sag_comp_lcp(&scratch, &items);
+    SAG_ASSERT_EQ_STR(lcp, "");
+    items.len = 0U;
+    Vec_CompItem_push(&items,
+                      ((CompItem){"\xc3\xa9" "clair", NULL,
+                                  SAG_COMP_VALUE, false, 0}));
+    Vec_CompItem_push(&items,
+                      ((CompItem){"\xc3\xa9" "toile", NULL,
+                                  SAG_COMP_VALUE, false, 0}));
+    lcp = sag_comp_lcp(&scratch, &items);
+    SAG_ASSERT_EQ_STR(lcp, "\xc3\xa9");
     arena_free_all(&scratch);
     Vec_CompItem_free(&items);
     fixture_unlink(&fixture, "alpine", false);
