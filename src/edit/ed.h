@@ -4,6 +4,7 @@
 #include <stdbool.h>
 
 #include "edit/dispatch.h"
+#include "edit/job.h"
 #include "edit/keymap.h"
 #include "edit/loop.h"
 #include "edit/mode.h"
@@ -95,6 +96,7 @@ struct Ed {
     char dispatch_message[192];
 
     TimerHeap timers;
+    JobTable jobs;
     Msg msg;
     CmdLine cmdline;
     PromptKind prompt;

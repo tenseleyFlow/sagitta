@@ -26,6 +26,18 @@ enum {
 
 #define SAG_VERSION "1.0.0-dev"
 
+/*
+ * The ONLY place in the tree allowed to call pipe(): every other site uses
+ * this, so no descriptor is ever created without close-on-exec.
+ *
+ * pipe2() is Linux/FreeBSD; macOS (a locked 1.0 target) has no such call,
+ * so there it degrades to pipe() + FD_CLOEXEC.  That fallback is race-free
+ * *here* because invariant 8 makes the core single-threaded and nothing
+ * forks from a signal handler — the window pipe2() closes needs a
+ * concurrent spawn to matter, and sagitta has none.
+ */
+bool sag_pipe_cloexec(int fds[2]);
+
 /* Allocation failure is an internal error, never a recoverable NULL. */
 void *sag_xmalloc(size_t size);
 void *sag_xrealloc(void *ptr, size_t size);

@@ -220,6 +220,7 @@ void sag_ed_init(Ed *ed)
     bytebuf_init(&ed->paste);
     sag_reg_init(&ed->regs);
     sag_timers_init(&ed->timers);
+    sag_jobs_init(&ed->jobs);
     root = realpath(".", NULL);
     if (root == NULL)
         root = getcwd(NULL, 0U);
@@ -240,6 +241,9 @@ void sag_ed_free(Ed *ed)
     if (ed == NULL)
         return;
     sag_cmdline_dispose(ed);
+    /* Jobs die with the process (never persisted, s25); kill and reap
+     * before the buffers they append into go away. */
+    sag_jobs_free(ed);
     ed_buffer_free(ed);
     sag_reg_free(&ed->regs);
     sag_msg_clear(ed);

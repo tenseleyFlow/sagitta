@@ -262,7 +262,7 @@ bool sag_tty_guard_start(TtyGuard *guard)
         return false;
     if (tcgetattr(STDIN_FILENO, &saved) != 0)
         return false;
-    if (pipe(fds) != 0)
+    if (!sag_pipe_cloexec(fds))
         return false;
     if (fcntl(fds[1], F_SETFD, FD_CLOEXEC) != 0) {
         int saved_errno = errno;
@@ -379,7 +379,7 @@ static bool sag_tty_pipe_open(int fds[2])
 #else
     int i;
 
-    if (pipe(fds) != 0)
+    if (!sag_pipe_cloexec(fds))
         return false;
     for (i = 0; i < 2; ++i) {
         int flags = fcntl(fds[i], F_GETFL);

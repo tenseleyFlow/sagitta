@@ -12,6 +12,7 @@
 
 #include "edit/dispatch.h"
 #include "edit/ed.h"
+#include "edit/job.h"
 #include "term/input.h"
 #include "term/tty.h"
 #include "util/log.h"
@@ -220,6 +221,9 @@ int sag_loop_deadline(const Ed *ed, i64 now_ms)
                             sag_input_deadline(&ed->in, now_ms));
     deadline = deadline_min(deadline,
                             sag_timers_deadline(&ed->timers, now_ms));
+    /* Filter timeouts and SIGTERM->SIGKILL escalation are deadlines too:
+     * without this the loop could sleep past a job's kill window. */
+    deadline = deadline_min(deadline, sag_job_deadline(ed, now_ms));
     if (!sag_tty_probe_done(&ed->tty))
         deadline = deadline_min(deadline,
                                 sag_tty_probe_deadline(&ed->tty, now_ms));
@@ -303,7 +307,9 @@ int sag_loop_run(Ed *ed)
     if (ed == NULL)
         return SAG_EXIT_BUG;
     for (;;) {
-        struct pollfd fds[2];
+        /* Two fixed slots (tty, signal pipe) plus up to four per job. */
+        struct pollfd fds[2U + SAG_JOB_MAX * 4U];
+        u32 nfds = 2U;
         i64 now = sag_now_ms();
         int result;
         bool winch = false;
@@ -319,7 +325,8 @@ int sag_loop_run(Ed *ed)
         fds[1].fd = sag_tty_signal_fd(&ed->tty);
         fds[1].events = POLLIN;
         fds[1].revents = 0;
-        result = poll(fds, SAG_ARRAY_LEN(fds), sag_loop_deadline(ed, now));
+        sag_job_collect_fds(ed, fds, &nfds);
+        result = poll(fds, (nfds_t)nfds, sag_loop_deadline(ed, now));
         if (result < 0 && errno != EINTR)
             return SAG_EXIT_IO;
         if ((fds[0].revents & (POLLERR | POLLNVAL)) != 0 ||
@@ -336,9 +343,16 @@ int sag_loop_run(Ed *ed)
 
         if ((fds[1].revents & POLLIN) != 0 || result < 0)
             sag_tty_drain_signals(&ed->tty, &winch, &cont, &chld);
-        (void)chld;
         if (winch || cont)
             sag_ed_resize(ed, cont);
+
+        /* Jobs are pumped before dispatch so a burst of output is one
+         * render, and after input is drained so keystrokes always win the
+         * race for this iteration (invariant 4). */
+        sag_job_pump(ed, fds, nfds);
+        if (chld)
+            sag_job_reap(ed);
+        sag_job_tick(ed, now);
 
         sag_tty_probe_tick(&ed->tty, now);
         loop_seed_probe(ed);

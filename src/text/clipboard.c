@@ -482,7 +482,7 @@ static bool clip_pipe(int fds[2])
 {
     int i;
 
-    if (pipe(fds) != 0)
+    if (!sag_pipe_cloexec(fds))
         return false;
     for (i = 0; i < 2; i++) {
         int flags = fcntl(fds[i], F_GETFD);

@@ -1,9 +1,35 @@
+/* _GNU_SOURCE exposes pipe2() on glibc; the macOS path below does not
+ * need it, and the guard keeps the declaration from leaking elsewhere. */
+#define _GNU_SOURCE
+
 #include "util/base.h"
 
+#include <fcntl.h>
 #include <stdint.h>
 #include <stdlib.h>
+#include <unistd.h>
 
 #include "util/log.h"
+
+bool sag_pipe_cloexec(int fds[2])
+{
+#if defined(__linux__) || defined(__FreeBSD__)
+    return pipe2(fds, O_CLOEXEC) == 0;
+#else
+    /* See base.h: safe without pipe2() because the core is single-threaded
+     * and never forks from a signal handler. */
+    if (pipe(fds) != 0)
+        return false;
+    if (fcntl(fds[0], F_SETFD, FD_CLOEXEC) != 0 ||
+        fcntl(fds[1], F_SETFD, FD_CLOEXEC) != 0) {
+        (void)close(fds[0]);
+        (void)close(fds[1]);
+        fds[0] = fds[1] = -1;
+        return false;
+    }
+    return true;
+#endif
+}
 
 void *sag_xmalloc(size_t size)
 {
