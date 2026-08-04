@@ -13,6 +13,7 @@
 #include "edit/dispatch.h"
 #include "edit/ed.h"
 #include "edit/job.h"
+#include "edit/shell.h"
 #include "term/input.h"
 #include "term/tty.h"
 #include "util/log.h"
@@ -353,6 +354,13 @@ int sag_loop_run(Ed *ed)
         if (chld)
             sag_job_reap(ed);
         sag_job_tick(ed, now);
+        if (ed->jobs.dirty) {
+            /* One refresh per iteration, not one per state change: a
+             * burst of exits redraws the table and badge exactly once. */
+            ed->jobs.dirty = false;
+            sag_jobs_table_refresh(ed);
+            ed->footer_dirty = true;
+        }
 
         sag_tty_probe_tick(&ed->tty, now);
         loop_seed_probe(ed);

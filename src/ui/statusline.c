@@ -1,5 +1,7 @@
 #include "ui/statusline.h"
 
+#include "edit/job.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -305,9 +307,10 @@ void sag_statusline_build(const Ed *ed, Win *w, u16 cols,
     char position[112];
     char percent[16];
     char cursor_badge[32];
+    char job_badge[32];
     char *clipped_path;
     size_t path_len;
-    Segment segments[8];
+    Segment segments[9];
     int available;
     int path_cells;
     int dirty_cells;
@@ -379,6 +382,20 @@ void sag_statusline_build(const Ed *ed, Win *w, u16 cols,
         cursor_badge[0] = '\0';
     }
     segments[7] = (Segment){cursor_badge, 1U, w->cs.curs.len > 1U};
+    {
+        /* Sprint 19 §8: the job badge is present iff something is
+         * running, and disappears at zero — a badge that lingers at
+         * "0 jobs" trains people to ignore it. */
+        u32 running = sag_job_running_count(ed);
+
+        if (running != 0U)
+            (void)snprintf(job_badge, sizeof(job_badge),
+                           "\xE2\x9F\xA8%llu\xE2\x9F\xA9",
+                           (unsigned long long)running);
+        else
+            job_badge[0] = '\0';
+        segments[8] = (Segment){job_badge, 2U, running != 0U};
+    }
     path_cells = cells(path);
     dirty_cells = sag_buf_dirty(w->buf) ? 2 : 0;
     right_cells = right_width(segments, SAG_ARRAY_LEN(segments));

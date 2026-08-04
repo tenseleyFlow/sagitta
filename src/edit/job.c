@@ -160,7 +160,7 @@ static void job_dispose(SagJob *j)
     job_close(&j->exec_fd);
     bytebuf_free(&j->hold);
     bytebuf_free(&j->collect);
-    free(j->cmd_display);
+    free(j->label);
     (void)memset(j, 0, sizeof(*j));
     j->in_fd = j->out_fd = j->err_fd = j->exec_fd = -1;
 }
@@ -503,8 +503,8 @@ u32 sag_job_spawn(Ed *ed, const SagJobSpec *spec, char *err, size_t errsz)
     {
         size_t dlen = strlen(display);
 
-        j->cmd_display = sag_xmalloc(dlen + 1U);
-        (void)memcpy(j->cmd_display, display, dlen + 1U);
+        j->label = sag_xmalloc(dlen + 1U);
+        (void)memcpy(j->label, display, dlen + 1U);
     }
     /* No stdin to write means closing immediately: a child whose read()
      * never sees EOF is this subsystem's signature hang, and it presents

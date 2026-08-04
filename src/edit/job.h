@@ -106,7 +106,7 @@ typedef struct SagJob {
     /* Mode (c): insertion point that survives edits elsewhere. */
     MarkId at;
     bool has_mark;
-    char *cmd_display; /* owned                                          */
+    char *label; /* owned                                          */
 } SagJob;
 
 typedef struct JobTable {

@@ -51,6 +51,22 @@ static bool run_to_completion(Ed *ed, u32 id)
     }
 }
 
+/* Releases every finished job through the real API.  Zeroing jobs.len
+ * instead would skip job_dispose and leak the collect buffer and label —
+ * ASan catches exactly that. */
+static void release_finished(Ed *ed)
+{
+    u32 i = 0U;
+
+    while (i < ed->jobs.len) {
+        if (ed->jobs.v[i].state == SAG_JOB_RUNNING) {
+            i++;
+            continue;
+        }
+        sag_job_release(ed, &ed->jobs.v[i]);
+    }
+}
+
 static u32 spawn_argv(Ed *ed, char **argv, char *err, size_t errsz)
 {
     SagJobSpec spec = {0};
@@ -309,15 +325,15 @@ void test_job_no_fd_or_zombie_leak_across_many_spawns(void)
     /* Warm up once so one-time allocations do not count as a leak. */
     SAG_ASSERT(run_to_completion(&ed, spawn_argv(&ed, argv, err,
                                                  sizeof(err))));
-    ed.jobs.len = 0U;
+    release_finished(&ed);
     before = open_fd_count();
     for (i = 0U; i < 120U; i++) {
         u32 id = spawn_argv(&ed, argv, err, sizeof(err));
 
         SAG_ASSERT(id != 0U);
         SAG_ASSERT(run_to_completion(&ed, id));
-        /* Recycle the table the way clear-finished will. */
-        ed.jobs.len = 0U;
+        /* Recycle the table the way ed.job.clear_finished does. */
+        release_finished(&ed);
     }
     after = open_fd_count();
     /* DoD 8: delta zero.  A missed close here is the hang nobody

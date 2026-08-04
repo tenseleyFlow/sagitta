@@ -238,7 +238,7 @@ CmdStatus sag_job_cmd_rerun(CmdCtx *cx)
         sag_msg(cx->ed, SAG_MSG_ERROR, "no job selected");
         return SAG_CMD_ERR_ARG;
     }
-    (void)snprintf(cmdline, sizeof(cmdline), "%s", j->cmd_display);
+    (void)snprintf(cmdline, sizeof(cmdline), "%s", j->label);
     if (sag_shell_run(cx->ed, cmdline, false, err, sizeof(err)) == 0U) {
         sag_msg(cx->ed, SAG_MSG_ERROR, "%s", err);
         return SAG_CMD_ERR_STATE;

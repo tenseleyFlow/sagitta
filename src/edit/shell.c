@@ -125,7 +125,7 @@ static void job_footer(Ed *ed, SagJob *j, char *out, size_t n)
     fmt_elapsed(elapsed, sizeof(elapsed), j->end_ms - j->start_ms);
     switch (j->state) {
     case SAG_JOB_EXECFAIL:
-        (void)snprintf(out, n, "[cannot run %s: %s]", j->cmd_display,
+        (void)snprintf(out, n, "[cannot run %s: %s]", j->label,
                        strerror(j->exec_errno));
         break;
     case SAG_JOB_SIGNALED:
@@ -160,11 +160,11 @@ static void job_insert_collected(Ed *ed, SagJob *j)
         char foot[256];
 
         job_footer(ed, j, foot, sizeof(foot));
-        sag_msg(ed, SAG_MSG_WARN, "%s %s", j->cmd_display, foot);
+        sag_msg(ed, SAG_MSG_WARN, "%s %s", j->label, foot);
         return;
     }
     if (j->collect.len == 0U) {
-        sag_msg(ed, SAG_MSG_INFO, "%s — no output", j->cmd_display);
+        sag_msg(ed, SAG_MSG_INFO, "%s — no output", j->label);
         return;
     }
     at = BYTEOFF(sag_mark_pos(b->marks, j->at).v);
@@ -188,7 +188,7 @@ static void job_insert_collected(Ed *ed, SagJob *j)
     sag_mark_del(b->marks, j->at);
     j->has_mark = false;
     sag_ed_damage_document(ed);
-    sag_msg(ed, SAG_MSG_INFO, "%s — %llu bytes read", j->cmd_display,
+    sag_msg(ed, SAG_MSG_INFO, "%s — %llu bytes read", j->label,
             (unsigned long long)j->collect.len);
 }
 
@@ -215,7 +215,7 @@ void sag_job_finish(Ed *ed, SagJob *j)
         if (ed->win != NULL && ed->win->buf == j->buf)
             (void)sag_ed_show_buffer(ed, &ed->buffer);
         sag_msg(ed, SAG_MSG_INFO, ":!%s — no output (exit %d)",
-                j->cmd_display, j->exit_code);
+                j->label, j->exit_code);
         sag_ws_scratch_drop(ed, j->buf);
         j->buf = NULL;
         return;
@@ -238,7 +238,7 @@ void sag_job_finish(Ed *ed, SagJob *j)
     buf_append_str(ed, j->buf, "\n");
     sag_msg(ed, j->state == SAG_JOB_EXITED && j->exit_code == 0 ?
                     SAG_MSG_INFO : SAG_MSG_WARN,
-            ":!%s %s", j->cmd_display, foot);
+            ":!%s %s", j->label, foot);
     sag_ed_damage_document(ed);
 }
 
@@ -511,7 +511,7 @@ static void jobs_table_render(Ed *ed, Buffer *b)
                        (unsigned)j->id, sag_job_state_name(j->state), code,
                        elapsed,
                        (unsigned long long)(j->bytes_out + j->bytes_err),
-                       j->cmd_display);
+                       j->label);
     }
     /* Replace wholesale: the table is derived state, so diffing it would
      * buy nothing but a chance to disagree with the job list. */
