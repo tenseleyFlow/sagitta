@@ -103,6 +103,11 @@ static const char *unambiguous_path(const Ed *ed, const Buffer *buffer)
     const char *path = buffer->path;
     const char *suffix;
 
+    /* A scratch buffer carries a display name instead of a path — showing
+     * "[no name]" while the user looks at *job:3 make* tells them nothing
+     * about what they are reading. */
+    if (buffer->name != NULL)
+        return buffer->name;
     if (path == NULL)
         return "[no name]";
     suffix = base_name(path);

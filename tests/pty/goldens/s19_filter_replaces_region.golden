@@ -1,0 +1,57 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=3,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
+--- text
+    3 alpha
+    2 beta
+    1 gamma
+    4
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ L  pty-s14-s19_filter_replaces_region.txt *                 utf-8  lf  4:1  all
+--- style
+AAAAAAAAAAA
+AAAAAAAAAA
+AAAAAAAAAAA
+AAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+--- legend
+A fg=default bg=default attrs=----------
+B fg=#ebf4ff bg=#266eba attrs=b---------
+C fg=#dae5f0 bg=#14304c attrs=----------

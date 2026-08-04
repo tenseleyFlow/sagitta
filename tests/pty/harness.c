@@ -358,14 +358,24 @@ bool ptc_env_build(char **envp, const char *colors, const char *state_dir)
     static const char *const keys[] = {
         "TERM", "SAG_COLORS", "SAG_TTY_PROBE", "SAG_PROBE_TIMEOUT_MS",
         "SAG_ESC_TIMEOUT_MS", "XDG_STATE_HOME", "LANG", "LC_ALL",
-        "SAG_LOG_LEVEL"
+        "SAG_LOG_LEVEL", "SAG_JOB_ELAPSED_MS", "SHELL"
     };
     const char *values[] = {
         "xterm-256color", colors, "1", "500", "25", state_dir,
-        "C.UTF-8", "C.UTF-8", "debug"
+        "C.UTF-8", "C.UTF-8", "debug",
+        /* Pin job elapsed time: it is the only nondeterministic thing a
+         * job prints, and goldens are byte-compared (invariant 5). */
+        "1240",
+        /* Pin the shell too.  Without this the editor falls back to the
+         * developer's pw_shell, so a machine running fish or zsh records
+         * different goldens than one running bash — the tests would encode
+         * whoever generated them. */
+        "/bin/sh"
     };
     size_t i;
 
+    _Static_assert(SAG_ARRAY_LEN(keys) == SAG_PTY_ENV_COUNT,
+                   "SAG_PTY_ENV_COUNT must match the key table");
     if (envp == NULL || colors == NULL || state_dir == NULL)
         return false;
     for (i = 0U; i < SAG_ARRAY_LEN(keys); i++) {
@@ -407,7 +417,7 @@ static void strv_free(char **v)
 void ptc_spawn(PtyCtx *c, const char *bin, ...)
 {
     char **argv;
-    char *envp[10];
+    char *envp[SAG_PTY_ENV_COUNT + 1U];
     PtySpec spec;
     va_list ap;
     va_list count_ap;

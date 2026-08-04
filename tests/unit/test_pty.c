@@ -18,10 +18,19 @@ void test_pty_environment_exact(void)
         "XDG_STATE_HOME=/tmp/sagitta-pty-state",
         "LANG=C.UTF-8",
         "LC_ALL=C.UTF-8",
-        "SAG_LOG_LEVEL=debug"
+        "SAG_LOG_LEVEL=debug",
+        /* Sprint 19 pins both so job goldens are byte-stable and
+         * machine-independent. */
+        "SAG_JOB_ELAPSED_MS=1240",
+        "SHELL=/bin/sh"
     };
     char *envp[SAG_PTY_ENV_COUNT + 1U] = {0};
     size_t i;
+
+    /* Keeps the two in lockstep: adding a key without an expectation
+     * would otherwise read past `expected` (it did, once). */
+    SAG_ASSERT_EQ_U64((u64)SAG_ARRAY_LEN(expected),
+                      (u64)SAG_PTY_ENV_COUNT);
 
     SAG_ASSERT(ptc_env_build(envp, "truecolor", "/tmp/sagitta-pty-state"));
     for (i = 0U; i < SAG_PTY_ENV_COUNT; i++)

@@ -763,11 +763,17 @@ static bool finish_bang(Parser *p, CmdParse *out, const char *cmdname)
         set_error(p, p->at, p->at + 1U, "%s needs a command", cmdname);
         return false;
     }
-    out->argv.v = arena_alloc(p->arena, sizeof(char *), sizeof(char *));
-    out->argv.v[0] = arena_strndup(p->arena, p->line + rest, n);
-    out->argv.n = 1U;
-    out->arg_tok = arena_alloc(p->arena, sizeof(Span), sizeof(Span));
-    out->arg_tok[0] = (Span){rest, p->len};
+    /* argv[0] is the command NAME and arguments start at index 1 — that is
+     * the contract sag_ed_invoke_parsed reads.  Putting the shell command
+     * at index 0 makes an ARITY_STR command see no argument at all. */
+    out->argv.v = arena_alloc(p->arena, 2U * sizeof(char *),
+                              sizeof(char *));
+    out->argv.v[0] = arena_strdup(p->arena, cmdname);
+    out->argv.v[1] = arena_strndup(p->arena, p->line + rest, n);
+    out->argv.n = 2U;
+    out->arg_tok = arena_alloc(p->arena, 2U * sizeof(Span), sizeof(Span));
+    out->arg_tok[0] = out->name_tok;
+    out->arg_tok[1] = (Span){rest, p->len};
     return true;
 }
 

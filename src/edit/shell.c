@@ -53,8 +53,39 @@ static const char *sag_signame(int sig)
 /* Shared helpers                                                     */
 /* ------------------------------------------------------------------ */
 
+/*
+ * Elapsed time is the one nondeterministic thing a job puts on screen, and
+ * invariant 5 requires the pty harness to byte-compare grids exactly.
+ * SAG_JOB_ELAPSED_MS pins the displayed value so goldens stay exact
+ * instead of fuzzy-matched — the same test-determinism hook pattern as
+ * SAG_CHORD_TIMEOUT_MS.  Unset in normal use, where real timings show.
+ */
+static i64 elapsed_override(void)
+{
+    static bool looked_up;
+    static i64 fixed = -1;
+
+    if (!looked_up) {
+        const char *value = getenv("SAG_JOB_ELAPSED_MS");
+
+        looked_up = true;
+        if (value != NULL && value[0] != '\0') {
+            char *end = NULL;
+            long parsed = strtol(value, &end, 10);
+
+            if (end != NULL && *end == '\0' && parsed >= 0)
+                fixed = (i64)parsed;
+        }
+    }
+    return fixed;
+}
+
 static void fmt_elapsed(char *out, size_t n, i64 ms)
 {
+    i64 fixed = elapsed_override();
+
+    if (fixed >= 0)
+        ms = fixed;
     (void)snprintf(out, n, "%.2fs", (double)ms / 1000.0);
 }
 
@@ -72,7 +103,10 @@ static void buf_append_raw(Ed *ed, Buffer *b, const u8 *bytes, u64 len)
     ec.cset = w != NULL ? &w->cs : NULL;
     ec.undo = NULL; /* SAG_BUF_NOUNDO: no ops recorded, nothing journaled */
     ec.jrnl = NULL;
-    ec.meta = &b->meta;
+    /* meta stays NULL: the edit chokepoint treats a non-NULL meta as
+     * file-backed and demands a journal path, which a scratch buffer has
+     * no business owning — there is no file here to protect. */
+    ec.meta = NULL;
     (void)sag_edit_insert(&ec, BYTEOFF(sag_textbuf_len(b->tb)), bytes, len);
 }
 

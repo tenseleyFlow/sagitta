@@ -9,7 +9,7 @@
 #include "util/buf.h"
 #include "vt.h"
 
-#define SAG_PTY_ENV_COUNT 9U
+#define SAG_PTY_ENV_COUNT 11U
 
 typedef struct PtySpec {
     const char *path;

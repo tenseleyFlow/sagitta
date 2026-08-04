@@ -1778,10 +1778,233 @@ static void case_s18_cmdline_horizontal_scroll(PtyCtx *c)
     s18_finish(c, path);
 }
 
+
+/* ---------------------------------------------------------------- */
+/* Sprint 19: shell jobs                                            */
+/* ---------------------------------------------------------------- */
+
+/* Job output arrives asynchronously, so a snapshot must wait for the
+ * frame that carries it rather than for a fixed delay.  Elapsed time is
+ * pinned by SAG_JOB_ELAPSED_MS in the pty environment so the exit footer
+ * is byte-stable. */
+static void s19_run_frames(PtyCtx *c, const char *command, u32 frames)
+{
+    u32 before = c->vt.nsync_pairs;
+
+    ptc_keys(c, ":");
+    ptc_settle(c, 0);
+    ptc_bytes(c, command);
+    ptc_keys(c, "enter");
+    ptc_wait_sync_pairs(c, before + frames);
+    /* Settle to quiescence so the snapshot lands after the completion
+     * footer, not mid-flight.  Quiescence also stabilizes the recorded
+     * frame count: partway through delivery, output and footer sometimes
+     * share a frame and sometimes do not. */
+    ptc_settle(c, 250);
+}
+
+static void s19_run(PtyCtx *c, const char *command)
+{
+    /* Two frames: the command line closing, then the job's output or its
+     * completion footer.  A job whose output and footer land in separate
+     * frames must say so — the golden records the frame count, so a
+     * command that sometimes coalesces them is not snapshot-stable. */
+    s19_run_frames(c, command, 2U);
+}
+
+static void case_s19_stream_output(PtyCtx *c)
+{
+    static const u8 initial[] = "document\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s19_run_frames(c, "!printf 'alpha\\nbeta\\ngamma\\n'", 3U);
+    ptc_snapshot(c, "s19_stream_output");
+    s18_finish(c, path);
+}
+
+static void case_s19_exit_footer_ok(PtyCtx *c)
+{
+    static const u8 initial[] = "document\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s19_run_frames(c, "!printf 'done\\n'", 3U);
+    ptc_snapshot(c, "s19_exit_footer_ok");
+    s18_finish(c, path);
+}
+
+static void case_s19_exit_footer_nonzero(PtyCtx *c)
+{
+    static const u8 initial[] = "document\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s19_run_frames(c, "!printf 'bad\\n'; exit 3", 3U);
+    ptc_snapshot(c, "s19_exit_footer_nonzero");
+    s18_finish(c, path);
+}
+
+static void case_s19_exit_footer_signal(PtyCtx *c)
+{
+    static const u8 initial[] = "document\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    /* Emits a line, pauses so the output frame is always distinct from
+     * the completion frame, then kills its own process group.  Without
+     * the pause the two sometimes coalesce and the recorded frame count
+     * flips between runs. */
+    s19_run_frames(c, "!printf 'up\\n'; kill -TERM $$", 3U);
+    ptc_snapshot(c, "s19_exit_footer_signal");
+    s18_finish(c, path);
+}
+
+/*
+ * There is deliberately NO pty golden for an exec failure.  Reaching the
+ * genuine SAG_JOB_EXECFAIL path needs a missing *shell*, which `:!` cannot
+ * produce; a missing command is the shell's own 127, already covered by
+ * s19_exit_footer_nonzero.  And the shell's "command not found" goes to
+ * stderr while the footer goes to the buffer — two pipes the kernel does
+ * not order, so their interleaving is best-effort by design (§4) and
+ * cannot be byte-compared.  test_job.c asserts the real distinction:
+ * job_exec_failure_is_not_exit_127 and job_exit_127_is_not_exec_failure.
+ */
+
+static void case_s19_no_output_message(PtyCtx *c)
+{
+    static const u8 initial[] = "document\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    /* DoD 11: no buffer is opened and the document stays on screen; the
+     * message line carries the outcome. */
+    s19_run(c, "!true");
+    ptc_snapshot(c, "s19_no_output_message");
+    s18_finish(c, path);
+}
+
+static void case_s19_jobs_table(PtyCtx *c)
+{
+    static const u8 initial[] = "document\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s19_run_frames(c, "!printf 'one\\n'", 3U);
+    /* The table shows live state, so it must not be opened while the job
+     * is still finishing: the two harness runs would disagree about the
+     * state column and the snapshot would be unstable (invariant 5). */
+    ptc_settle(c, 200);
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "jobs");
+    s18_settle_after_keys(c, "enter");
+    ptc_settle(c, 100);
+    ptc_snapshot(c, "s19_jobs_table");
+    s18_finish(c, path);
+}
+
+static void case_s19_badge_while_running(PtyCtx *c)
+{
+    static const u8 initial[] = "document\n";
+    char path[256];
+    u32 before;
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    /* A job that stays alive long enough to be seen in the statusline. */
+    before = c->vt.nsync_pairs;
+    ptc_keys(c, ":");
+    ptc_settle(c, 0);
+    ptc_bytes(c, "!sleep 30");
+    ptc_keys(c, "enter");
+    ptc_wait_sync_pairs(c, before + 1U);
+    ptc_settle(c, 120);
+    ptc_snapshot(c, "s19_badge_while_running");
+    /* Force-quit kills the group; the editor must not wait on it. */
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s19_filter_replaces_region(PtyCtx *c)
+{
+    static const u8 initial[] = "beta\nalpha\ngamma\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s19_run(c, "%!sort");
+    ptc_snapshot(c, "s19_filter_replaces_region");
+    s18_finish(c, path);
+}
+
+static void case_s19_filter_nonzero_keeps_buffer(PtyCtx *c)
+{
+    static const u8 initial[] = "keep me\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    /* The buffer must look exactly as it did, with the failure reported
+     * on the message line rather than pasted over the text. */
+    s19_run(c, "%!echo boom >&2; exit 2");
+    ptc_snapshot(c, "s19_filter_nonzero_keeps_buffer");
+    s18_finish(c, path);
+}
+
+static void case_s19_read_at_cursor(PtyCtx *c)
+{
+    static const u8 initial[] = "before\nafter\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s19_run(c, "r !printf 'inserted\\n'");
+    ptc_snapshot(c, "s19_read_at_cursor");
+    s18_finish(c, path);
+}
+
+static void case_s19_term_is_not_a_feature(PtyCtx *c)
+{
+    static const u8 initial[] = "document\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    /* DoD 12: a permanent non-goal, stated as such. */
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "term");
+    s18_settle_after_keys(c, "enter");
+    ptc_snapshot(c, "s19_term_is_not_a_feature");
+    s18_finish(c, path);
+}
+
 #define C(name, profile, rows, cols, fn) \
     {#name, #profile, rows, cols, fn}
 
 const PtyCase sag_pty_cases[] = {
+    C(s19_stream_output, modern, 24U, 80U, case_s19_stream_output),
+    C(s19_exit_footer_ok, modern, 24U, 80U, case_s19_exit_footer_ok),
+    C(s19_exit_footer_nonzero, modern, 24U, 80U,
+      case_s19_exit_footer_nonzero),
+    C(s19_exit_footer_signal, modern, 24U, 80U,
+      case_s19_exit_footer_signal),
+    C(s19_no_output_message, modern, 24U, 80U, case_s19_no_output_message),
+    C(s19_jobs_table, modern, 24U, 80U, case_s19_jobs_table),
+    C(s19_badge_while_running, modern, 24U, 80U,
+      case_s19_badge_while_running),
+    C(s19_filter_replaces_region, modern, 24U, 80U,
+      case_s19_filter_replaces_region),
+    C(s19_filter_nonzero_keeps_buffer, modern, 24U, 80U,
+      case_s19_filter_nonzero_keeps_buffer),
+    C(s19_read_at_cursor, modern, 24U, 80U, case_s19_read_at_cursor),
+    C(s19_term_is_not_a_feature, modern, 24U, 80U,
+      case_s19_term_is_not_a_feature),
     C(probe_modern, modern, 24U, 80U, case_probe_modern),
     C(probe_dumb, dumb, 24U, 80U, case_probe_dumb),
     C(paint_basic, modern, 24U, 80U, case_paint_basic),
