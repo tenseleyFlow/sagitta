@@ -165,28 +165,58 @@ bool sag_re_search(const SagRe *re, const SagReInput *in, ByteOff from,
     if (re == NULL || in == NULL)
         return false;
     at = from.v < in->window.lo ? in->window.lo : from.v;
-    while (at <= in->window.hi) {
-        u64 candidate = prefilter_find(re, in, at);
 
-        if (candidate == UINT64_MAX)
-            return false;
-        if (candidate > in->window.hi)
-            return false;
-        /* A prefilter hit is a candidate, not a match: it may land
-         * mid-sequence, and the rest of the pattern still has to hold. */
-        if (!is_cp_start(in, candidate)) {
-            at = candidate + 1U;
-            continue;
-        }
-        if (sag_re_pike_run(re, in, candidate, out))
+    /*
+     * Whole-pattern literal: the VM is never entered.  This is the
+     * common case in an editor — most searches are a plain string — and
+     * it runs at memchr/BMH speed.
+     */
+    if (re->lit.kind == RE_LIT_WHOLE) {
+        while (at <= in->window.hi) {
+            u64 hit = prefilter_find(re, in, at);
+
+            if (hit == UINT64_MAX || hit + re->lit.n > in->window.hi)
+                return false;
+            if (!is_cp_start(in, hit)) {
+                at = hit + 1U;
+                continue;
+            }
+            if (out != NULL) {
+                (void)memset(out, 0, sizeof(*out));
+                out->ngroups = 1U;
+                out->g[0].lo = hit;
+                out->g[0].hi = hit + re->lit.n;
+            }
             return true;
-        if (candidate >= in->window.hi)
-            return false;
-        at = next_cp_off(in, candidate);
-        if (at <= candidate)
-            at = candidate + 1U;
+        }
+        return false;
     }
-    return false;
+
+    /*
+     * Otherwise: use the prefilter ONLY to skip the dead zone before the
+     * first candidate, then hand the rest to one unanchored VM pass.
+     *
+     * Re-running an anchored match at every prefilter hit looks like an
+     * optimization and is a trap: for `a(a*)*b` the extracted literal is
+     * the single byte "a", so in an all-'a' buffer every position is a
+     * hit and the "fast path" is O(n^2).  That is what made the
+     * pathological gate hang rather than merely run slowly.  The VM
+     * seeds a start thread at each position inside its single pass, so
+     * the scan stays O(n*m) no matter how dense the candidates are.
+     */
+    if (re->lit.kind != RE_LIT_NONE) {
+        u64 first = prefilter_find(re, in, at);
+
+        if (first == UINT64_MAX || first > in->window.hi)
+            return false;
+        at = first;
+    }
+    {
+        SagReInput sub = *in;
+
+        sub.window.lo = at;
+        return sag_re_pike_run_ex(re, &sub, at, false, out);
+    }
 }
 
 bool sag_re_test(const SagRe *re, const SagReInput *in, ByteOff from)

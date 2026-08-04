@@ -16,3 +16,9 @@ materialize.1g-code           650000000      850000000      950000000           
 edit.ends.1g-code             500000000      800000000      900000000       8388608
 undo.100m-code                250000000      350000000      390000000      67108864
 save.atomic.1g-code          4000000000     5500000000     6000000000             0
+
+# Sprint 20: the no-backtracking proof.  The ratio is the load-bearing
+# limit -- an absolute budget only catches a slow machine, while a
+# super-linear ratio catches backtracking creeping back in on any machine.
+re.pathological_100k_ns            50000000
+re.pathological_scale_ratio              15

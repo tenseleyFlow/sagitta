@@ -90,39 +90,57 @@ static u32 cursor_decode(ReCursor *c, const SagReInput *in, u64 off,
 /* Capture arrays — refcounted, copy-on-write                        */
 /* ---------------------------------------------------------------- */
 
+/*
+ * Slots are sized to the pattern, not to SAG_RE_MAX_GROUPS.  A fixed
+ * 64-slot array means every seed memsets 512 bytes and every
+ * copy-on-write copies 512 bytes — and with a start thread seeded at
+ * each input position that dominates the whole search.  A two-group
+ * pattern needs 4 slots (32 bytes), which is 16x less traffic.
+ */
 typedef struct Caps {
     u32 refs;
-    u64 slot[SAG_RE_MAX_GROUPS * 2U];
+    u64 *slot;
+    struct Caps *next_free;
 } Caps;
 
+/*
+ * Dead arrays go on a free list instead of being abandoned.  An
+ * unanchored scan seeds a thread at every input position, so without
+ * reuse the live set would grow with the INPUT (O(n*k)) rather than with
+ * the thread count (O(m*k) as specified) — and a working set that leaves
+ * cache at 100 KB shows up as super-linear scaling even though the
+ * algorithm is linear.
+ */
 typedef struct CapPool {
-    Caps *blocks;
-    u32 n;
-    u32 cap;
     Arena *arena;
+    Caps *free_list;
     u32 nslots;
+    u64 live;
 } CapPool;
 
 static Caps *caps_new(CapPool *pool)
 {
-    Caps *c;
+    Caps *c = pool->free_list;
 
-    if (pool->n == pool->cap) {
-        u32 cap = pool->cap == 0U ? 32U : pool->cap * 2U;
-        Caps *grown = arena_alloc(pool->arena,
-                                  (size_t)cap * sizeof(*grown),
-                                  sizeof(u64));
-
-        if (pool->n != 0U)
-            (void)memcpy(grown, pool->blocks,
-                         (size_t)pool->n * sizeof(*grown));
-        pool->blocks = grown;
-        pool->cap = cap;
+    if (c != NULL) {
+        pool->free_list = c->next_free;
+    } else {
+        c = arena_alloc(pool->arena, sizeof(*c), sizeof(void *));
+        c->slot = arena_alloc(pool->arena,
+                              (size_t)pool->nslots * sizeof(*c->slot),
+                              sizeof(u64));
+        pool->live++;
     }
-    c = &pool->blocks[pool->n++];
     c->refs = 1U;
-    (void)memset(c->slot, 0xFF, sizeof(c->slot));
+    c->next_free = NULL;
+    (void)memset(c->slot, 0xFF, (size_t)pool->nslots * sizeof(*c->slot));
     return c;
+}
+
+static void caps_free(CapPool *pool, Caps *c)
+{
+    c->next_free = pool->free_list;
+    pool->free_list = c;
 }
 
 static Caps *caps_share(Caps *c)
@@ -132,10 +150,13 @@ static Caps *caps_share(Caps *c)
     return c;
 }
 
-static void caps_release(Caps *c)
+static void caps_release(CapPool *pool, Caps *c)
 {
-    if (c != NULL && c->refs != 0U)
-        c->refs--;
+    if (c == NULL || c->refs == 0U)
+        return;
+    c->refs--;
+    if (c->refs == 0U)
+        caps_free(pool, c);
 }
 
 /* Copy-on-write: a SAVE on a shared array copies once instead of every
@@ -144,15 +165,15 @@ static Caps *caps_set(CapPool *pool, Caps *c, u32 slot, u64 value)
 {
     Caps *target = c;
 
-    if (slot >= SAG_RE_MAX_GROUPS * 2U)
+    if (slot >= pool->nslots)
         return c;
     if (c == NULL)
         return NULL;
     if (c->refs > 1U) {
         Caps *copy = caps_new(pool);
 
-        /* caps_new may have moved the block array. */
-        (void)memcpy(copy->slot, c->slot, sizeof(copy->slot));
+        (void)memcpy(copy->slot, c->slot,
+                     (size_t)pool->nslots * sizeof(*copy->slot));
         c->refs--;
         target = copy;
     }
@@ -312,7 +333,7 @@ static void addthread(VmState *vm, ReList *l, u32 pc, Caps *caps,
          * dedicated unit test hang.
          */
         if (pc >= vm->nprog || list_has(l, pc)) {
-            caps_release(caps);
+            caps_release(&vm->pool, caps);
             continue;
         }
         list_mark(l, pc);
@@ -354,7 +375,7 @@ static void addthread(VmState *vm, ReList *l, u32 pc, Caps *caps,
                 vm->stack[top].caps = caps;
                 top++;
             } else {
-                caps_release(caps);
+                caps_release(&vm->pool, caps);
             }
             break;
         default:
@@ -364,7 +385,7 @@ static void addthread(VmState *vm, ReList *l, u32 pc, Caps *caps,
                 l->dense[l->n].caps = caps;
                 l->n++;
             } else {
-                caps_release(caps);
+                caps_release(&vm->pool, caps);
             }
             break;
         }
@@ -392,8 +413,32 @@ static bool inst_matches(const SagRe *re, const ReInst *ins, u32 cp)
  * `out`.  Anchored means the match must begin exactly at `start`; the
  * unanchored search loop lives in search.c and calls this per candidate.
  */
+/*
+ * `anchored` distinguishes the two ways to run the VM, and the
+ * difference is the whole linear-time story:
+ *
+ *   anchored   — the match must begin exactly at `start`.
+ *   unanchored — a fresh thread is seeded at EVERY position during the
+ *                one pass, until a match is recorded.
+ *
+ * Restarting an anchored run at each candidate position instead would
+ * make an unanchored search O(n^2) — and on `a(a*)*b` over 100 000 a's
+ * that is not a slow search, it is a hang.  Seeding inside the pass
+ * keeps the whole scan O(n*m).  Later seeds are appended after the
+ * threads already in the list, so earlier start positions keep their
+ * priority and leftmost semantics hold.
+ */
+bool sag_re_pike_run_ex(const SagRe *re, const SagReInput *in, u64 start,
+                        bool anchored, SagReMatch *out);
+
 bool sag_re_pike_run(const SagRe *re, const SagReInput *in, u64 start,
                      SagReMatch *out)
+{
+    return sag_re_pike_run_ex(re, in, start, true, out);
+}
+
+bool sag_re_pike_run_ex(const SagRe *re, const SagReInput *in, u64 start,
+                        bool anchored, SagReMatch *out)
 {
     Arena arena;
     VmState vm;
@@ -415,6 +460,10 @@ bool sag_re_pike_run(const SagRe *re, const SagReInput *in, u64 start,
     vm.prog = re->prog;
     vm.nprog = re->nprog;
     vm.pool.arena = &arena;
+    /* Only the slots this pattern can actually write. */
+    vm.pool.nslots = re->ngroups * 2U;
+    if (vm.pool.nslots > SAG_RE_MAX_GROUPS * 2U)
+        vm.pool.nslots = SAG_RE_MAX_GROUPS * 2U;
     /* Each instruction can push at most two frames. */
     vm.stack_cap = re->nprog * 2U + 8U;
     vm.stack = arena_alloc(&arena,
@@ -462,14 +511,27 @@ bool sag_re_pike_run(const SagRe *re, const SagReInput *in, u64 start,
         x.prev_cp = prev_cp;
         x.at_start = pos == in->window.lo;
 
-        /* Seed only at the anchor position; this run is anchored. */
-        if (pos == start) {
+        /*
+         * Seed a new start thread here.  Appending after the existing
+         * threads is what makes this leftmost: a thread that began at an
+         * earlier position was added earlier and therefore outranks it.
+         * Once a match is recorded we stop seeding — a later start can
+         * never beat one already found.
+         */
+        if (!matched && (pos == start || !anchored)) {
             Caps *seed = caps_new(&vm.pool);
 
             addthread(&vm, &clist, 0U, seed, &x, cp, have_cp);
         }
-        if (clist.n == 0U)
-            break;
+        if (clist.n == 0U) {
+            if (anchored || matched || !have_cp)
+                break;
+            /* No live threads, but an unanchored scan keeps walking. */
+            prev_cp = cp;
+            pos += cp_len;
+            list_clear(&clist);
+            continue;
+        }
 
         list_clear(&nlist);
         /*
@@ -502,7 +564,7 @@ bool sag_re_pike_run(const SagRe *re, const SagReInput *in, u64 start,
                 const ReInst *ins = &re->prog[pc];
 
                 if ((ReOp)ins->op == RE_MATCH) {
-                    caps_release(best);
+                    caps_release(&vm.pool, best);
                     best = caps;
                     matched = true;
                     /*
@@ -512,14 +574,14 @@ bool sag_re_pike_run(const SagRe *re, const SagReInput *in, u64 start,
                      * already in nlist keep running.
                      */
                     for (i++; i < clist.n; i++)
-                        caps_release(clist.dense[i].caps);
+                        caps_release(&vm.pool, clist.dense[i].caps);
                     break;
                 }
                 if (have_cp && inst_matches(re, ins, cp))
                     addthread(&vm, &nlist, pc + 1U, caps, &xn, next_cp,
                               have_next);
                 else
-                    caps_release(caps);
+                    caps_release(&vm.pool, caps);
             }
         }
         if (!have_cp)
@@ -533,7 +595,7 @@ bool sag_re_pike_run(const SagRe *re, const SagReInput *in, u64 start,
         }
         prev_cp = cp;
         pos += cp_len;
-        if (clist.n == 0U)
+        if (clist.n == 0U && (anchored || matched))
             break;
     }
 

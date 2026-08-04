@@ -145,6 +145,10 @@ u64 sag_lit_find(const ReLit *l, const u8 *hay, u64 n);
  * This is the correctness reference the lazy DFA is checked against. */
 bool sag_re_pike_run(const SagRe *re, const SagReInput *in, u64 start,
                      SagReMatch *out);
+/* Unanchored form: seeds a start thread at every position in one pass,
+ * which is what keeps an unanchored search O(n*m) instead of O(n^2). */
+bool sag_re_pike_run_ex(const SagRe *re, const SagReInput *in, u64 start,
+                        bool anchored, SagReMatch *out);
 
 /* Character-property predicates, defined off the word-break tables so a
  * search \b and Sprint 16's W-mode word motion agree about what a word
