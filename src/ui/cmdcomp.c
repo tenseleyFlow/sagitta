@@ -32,6 +32,16 @@ typedef struct {
 
 VEC_DECL(CandidateVec, Candidate);
 
+typedef struct {
+    char *name;
+    size_t cap;
+    i32 score;
+    unsigned char dtype;
+    bool prefix;
+} PathCandidate;
+
+VEC_DECL(PathCandidateVec, PathCandidate);
+
 static bool force_dtype_unknown;
 static u32 test_lstat_calls;
 
@@ -42,17 +52,13 @@ static bool starts_with(const char *s, const char *prefix)
     return strncmp(s, prefix, n) == 0;
 }
 
-i32 sag_comp_score(const char *stem, const char *cand)
+static i32 comp_score_n(const char *stem, size_t stem_len, const char *cand)
 {
     size_t si = 0U;
     size_t ci;
-    size_t stem_len;
     i64 score = 0;
     size_t previous = SIZE_MAX;
 
-    if (stem == NULL || cand == NULL)
-        return -1;
-    stem_len = strlen(stem);
     if (stem_len == 0U)
         return 0;
     for (ci = 0U; cand[ci] != '\0' && si < stem_len; ci++) {
@@ -73,10 +79,17 @@ i32 sag_comp_score(const char *stem, const char *cand)
     }
     if (si != stem_len)
         return -1;
-    if (starts_with(cand, stem)) {
+    if (ci == stem_len) {
         score += stem_len > (size_t)INT32_MAX ? INT32_MAX : (i64)stem_len;
     }
     return score > INT32_MAX ? INT32_MAX : (i32)score;
+}
+
+i32 sag_comp_score(const char *stem, const char *cand)
+{
+    if (stem == NULL || cand == NULL)
+        return -1;
+    return comp_score_n(stem, strlen(stem), cand);
 }
 
 static int candidate_cmp(const void *left, const void *right, void *ctx)
@@ -131,26 +144,6 @@ static bool candidate_add(CandidateVec *v, const char *stem,
     item.score = score;
     CandidateVec_push(v, item);
     return true;
-}
-
-static void candidate_add_owned(CandidateVec *v, const char *stem,
-                                const char *match, char *text, i32 score,
-                                const char *detail, bool is_dir)
-{
-    Candidate item;
-
-    item.text = text;
-    if (strcmp(match, text) == 0) {
-        item.match = text;
-    } else {
-        item.match = sag_xmalloc(strlen(match) + 1U);
-        (void)strcpy(item.match, match);
-    }
-    item.detail = detail;
-    item.is_dir = is_dir;
-    item.prefix = starts_with(match, stem);
-    item.score = score;
-    CandidateVec_push(v, item);
 }
 
 static u32 candidate_finish(Ed *ed, SagCompKind kind, CandidateVec *matches,
@@ -334,9 +327,10 @@ static char *expand_home_head(const char *head)
     return expanded;
 }
 
-static bool path_is_dir(const char *scan_dir, const struct dirent *entry)
+static bool path_is_dir(const char *scan_dir, const char *name,
+                        unsigned char entry_dtype)
 {
-    unsigned char dtype = force_dtype_unknown ? DT_UNKNOWN : entry->d_type;
+    unsigned char dtype = force_dtype_unknown ? DT_UNKNOWN : entry_dtype;
 
     if (dtype == DT_DIR)
         return true;
@@ -351,7 +345,7 @@ static bool path_is_dir(const char *scan_dir, const struct dirent *entry)
         with_slash = join2(scan_dir,
                            scan_dir[0] != '\0' &&
                            scan_dir[strlen(scan_dir) - 1U] == '/' ? "" : "/");
-        path = join2(with_slash, entry->d_name);
+        path = join2(with_slash, name);
         free(with_slash);
         test_lstat_calls++;
         is_dir = lstat(path, &st) == 0 && S_ISDIR(st.st_mode);
@@ -360,17 +354,171 @@ static bool path_is_dir(const char *scan_dir, const struct dirent *entry)
     }
 }
 
+static int path_candidate_cmp(const void *left, const void *right, void *ctx)
+{
+    const PathCandidate *a = left;
+    const PathCandidate *b = right;
+
+    (void)ctx;
+    if (a->prefix != b->prefix)
+        return a->prefix ? -1 : 1;
+    if (!a->prefix && a->score != b->score)
+        return a->score > b->score ? -1 : 1;
+    return strcmp(a->name, b->name);
+}
+
+static int path_candidate_rank_cmp(const PathCandidate *a,
+                                   const PathCandidate *b)
+{
+    return path_candidate_cmp(a, b, NULL);
+}
+
+static void path_candidate_swap(PathCandidate *a, PathCandidate *b)
+{
+    PathCandidate tmp = *a;
+
+    *a = *b;
+    *b = tmp;
+}
+
+/* Paths have unique names within one directory.  Keep a worst-first heap of
+ * the best SAG_COMP_MAX ranks.  Its filename buffers are reused when the
+ * root is replaced, so a large directory allocates and materializes only the
+ * candidates the menu can display. */
+static void path_heap_push(PathCandidateVec *heap, const char *name,
+                           bool prefix, i32 score, unsigned char dtype)
+{
+    PathCandidate item;
+    size_t at;
+    size_t need = strlen(name) + 1U;
+
+    item.name = sag_xmalloc(need);
+    (void)memcpy(item.name, name, need);
+    item.cap = need;
+    item.score = score;
+    item.dtype = dtype;
+    item.prefix = prefix;
+    PathCandidateVec_push(heap, item);
+    at = heap->len - 1U;
+    while (at != 0U) {
+        size_t parent = (at - 1U) / 2U;
+
+        if (path_candidate_rank_cmp(&heap->data[at],
+                                    &heap->data[parent]) <= 0)
+            break;
+        path_candidate_swap(&heap->data[at], &heap->data[parent]);
+        at = parent;
+    }
+}
+
+static void path_heap_replace_worst(PathCandidateVec *heap, const char *name,
+                                    bool prefix, i32 score,
+                                    unsigned char dtype)
+{
+    PathCandidate *root = &heap->data[0];
+    size_t need = strlen(name) + 1U;
+    size_t at = 0U;
+
+    if (root->cap < need) {
+        root->name = sag_xrealloc(root->name, need);
+        root->cap = need;
+    }
+    (void)memcpy(root->name, name, need);
+    root->score = score;
+    root->dtype = dtype;
+    root->prefix = prefix;
+    for (;;) {
+        size_t worst = at;
+        size_t left = at * 2U + 1U;
+        size_t right = left + 1U;
+
+        if (left < heap->len &&
+            path_candidate_rank_cmp(&heap->data[left],
+                                    &heap->data[worst]) > 0)
+            worst = left;
+        if (right < heap->len &&
+            path_candidate_rank_cmp(&heap->data[right],
+                                    &heap->data[worst]) > 0)
+            worst = right;
+        if (worst == at)
+            break;
+        path_candidate_swap(&heap->data[at], &heap->data[worst]);
+        at = worst;
+    }
+}
+
+static bool path_candidate_wanted(const PathCandidateVec *heap,
+                                  const char *match, bool prefix, i32 score)
+{
+    PathCandidate preview;
+
+    if (heap->len < SAG_COMP_MAX)
+        return true;
+    preview = (PathCandidate){(char *)match, 0U, score, DT_UNKNOWN, prefix};
+    return path_candidate_rank_cmp(&preview, &heap->data[0]) < 0;
+}
+
+static void path_candidates_dispose(PathCandidateVec *paths)
+{
+    size_t i;
+
+    for (i = 0U; i < paths->len; i++)
+        free(paths->data[i].name);
+    PathCandidateVec_free(paths);
+}
+
+static void path_candidates_finish(Ed *ed, PathCandidateVec *paths,
+                                   const char *scan_dir, const char *head,
+                                   const char *tail, size_t tail_len,
+                                   Vec_CompItem *out)
+{
+    Arena *arena = ed->cmdline.active ? &ed->cmdline.comp_arena :
+                                        &ed->arena;
+    size_t i;
+
+    sag_sort_stable(paths->data, paths->len, sizeof(paths->data[0]),
+                    path_candidate_cmp, NULL);
+    out->len = 0U;
+    Vec_CompItem_reserve(out, paths->len);
+    for (i = 0U; i < paths->len; i++) {
+        PathCandidate *path = &paths->data[i];
+        bool is_dir = path_is_dir(scan_dir, path->name, path->dtype);
+        char *shown = join2(head, path->name);
+        char *raw;
+        CompItem item;
+
+        if (path->prefix)
+            path->score = comp_score_n(tail, tail_len, path->name);
+        if (is_dir) {
+            raw = join2(shown, "/");
+            free(shown);
+        } else {
+            raw = shown;
+        }
+        item.text = sag_comp_quote(arena, raw);
+        item.detail = NULL;
+        item.kind = SAG_COMP_PATH;
+        item.is_dir = is_dir;
+        item.score = path->score;
+        Vec_CompItem_push(out, item);
+        free(raw);
+    }
+    path_candidates_dispose(paths);
+}
+
 static u32 enumerate_paths(Ed *ed, const char *stem, Vec_CompItem *out)
 {
-    CandidateVec matches = {0};
+    PathCandidateVec paths = {0};
     const char *slash = strrchr(stem, '/');
     size_t head_len = slash == NULL ? 0U : (size_t)(slash - stem) + 1U;
     const char *tail = stem + head_len;
+    size_t tail_len = strlen(tail);
     char *head = sag_xmalloc(head_len + 1U);
     char *expanded;
     char *scan_dir;
     DIR *dir;
     struct dirent *entry;
+    u32 total = 0U;
 
     (void)memcpy(head, stem, head_len);
     head[head_len] = '\0';
@@ -400,35 +548,39 @@ static u32 enumerate_paths(Ed *ed, const char *stem, Vec_CompItem *out)
         return 0U;
     }
     while ((entry = readdir(dir)) != NULL) {
-        bool is_dir;
-        char *shown;
-        char *raw;
         i32 score;
+        bool prefix;
 
         if (strcmp(entry->d_name, ".") == 0 ||
             strcmp(entry->d_name, "..") == 0)
             continue;
         if (entry->d_name[0] == '.' && tail[0] != '.')
             continue;
-        score = sag_comp_score(tail, entry->d_name);
-        if (score < 0)
-            continue;
-        is_dir = path_is_dir(scan_dir, entry);
-        shown = join2(head, entry->d_name);
-        if (is_dir) {
-            raw = join2(shown, "/");
-            free(shown);
-        } else {
-            raw = shown;
+        prefix = strncmp(entry->d_name, tail, tail_len) == 0;
+        if (prefix)
+            score = 0;
+        else {
+            score = comp_score_n(tail, tail_len, entry->d_name);
+            if (score < 0)
+                continue;
         }
-        candidate_add_owned(&matches, tail, entry->d_name, raw, score,
-                            NULL, is_dir);
+        if (total != UINT32_MAX)
+            total++;
+        if (!path_candidate_wanted(&paths, entry->d_name, prefix, score))
+            continue;
+        if (paths.len < SAG_COMP_MAX)
+            path_heap_push(&paths, entry->d_name, prefix, score,
+                           entry->d_type);
+        else
+            path_heap_replace_worst(&paths, entry->d_name, prefix, score,
+                                    entry->d_type);
     }
     (void)closedir(dir);
+    path_candidates_finish(ed, &paths, scan_dir, head, tail, tail_len, out);
     free(scan_dir);
     free(expanded);
     free(head);
-    return candidate_finish(ed, SAG_COMP_PATH, &matches, out);
+    return total;
 }
 
 static u32 enumerate_empty(Ed *ed, const char *stem, Vec_CompItem *out)

@@ -200,8 +200,8 @@ void test_cmdcomp_cap_and_deterministic_order(void)
     u32 i;
 
     fixture_init(&fixture);
-    for (i = 0U; i < 1200U; i++) {
-        (void)snprintf(name, sizeof(name), "file%04u", (unsigned)i);
+    for (i = 1200U; i != 0U; i--) {
+        (void)snprintf(name, sizeof(name), "file%04u", (unsigned)(i - 1U));
         fixture_file(&fixture, name);
     }
     SAG_ASSERT_EQ_U64(
