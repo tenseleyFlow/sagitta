@@ -197,6 +197,27 @@ SagJob *sag_job_find(Ed *ed, u32 id)
     return NULL;
 }
 
+void sag_job_release(Ed *ed, SagJob *j)
+{
+    u32 idx;
+
+    if (ed == NULL || j == NULL)
+        return;
+    idx = (u32)(j - ed->jobs.v);
+    if (idx >= ed->jobs.len)
+        return;
+    /* Never drop a live child: that would orphan it with no way back. */
+    if (j->state == SAG_JOB_RUNNING)
+        return;
+    if (j->pid > 0 && !j->reaped)
+        (void)waitpid(j->pid, NULL, WNOHANG);
+    job_dispose(j);
+    (void)memmove(&ed->jobs.v[idx], &ed->jobs.v[idx + 1U],
+                  (size_t)(ed->jobs.len - idx - 1U) * sizeof(*ed->jobs.v));
+    ed->jobs.len--;
+    ed->jobs.dirty = true;
+}
+
 u32 sag_job_running_count(const Ed *ed)
 {
     u32 i;

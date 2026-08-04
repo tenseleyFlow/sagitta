@@ -391,7 +391,7 @@ void test_cmdline_catalogue_errors_preserve_live_prompt(void)
         {"w %z", "unknown expansion '%z'", 2U, 4U},
         {"w %", "buffer has no file name", 2U, 3U},
         {"w %s", "%s needs a selection", 2U, 4U},
-        {"!printf x", ":! runs shell commands: Sprint 19", 0U, 1U},
+        {"!", "ed.shell.run needs a command", 0U, 1U},
         {"mode.enter I", "unknown command 'mode.enter' (try Tab)",
          0U, 10U},
     };

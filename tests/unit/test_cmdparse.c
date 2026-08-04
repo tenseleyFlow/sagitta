@@ -216,11 +216,10 @@ void test_cmdparse_resolution_bang_errors_and_parse_point(void)
                  "unknown command 'not_a_command' (try Tab)");
     assert_error(&f, ":cmdline.accept",
                  "unknown command 'cmdline.accept' (try Tab)");
-    assert_error(&f, ":!printf x", ":! runs shell commands: Sprint 19");
-    assert_error(&f, ":1,2!sort", ":! runs shell commands: Sprint 19");
-    assert_error(&f, ":r !printf x",
-                 ":r ! reads shell output: Sprint 19");
-    assert_error(&f, ":jobs", ":jobs lists shell jobs: Sprint 19");
+    /* Sprint 19 opened these: a bang takes the rest of the line verbatim
+     * as one argument, because a shell command is not a token list. */
+    assert_error(&f, ":!", "ed.shell.run needs a command");
+    assert_error(&f, ":r !", "ed.shell.read needs a command");
     assert_error(&f, ":s", ":s substitutes text: Sprint 21");
     assert_error(&f, ":g",
                  ":g search surface: Sprint 21; Fletch queries: Sprint 34");

@@ -364,7 +364,19 @@ void test_undo_multi_transaction_commits_one_node(void)
 
 void test_undo_filter_reason_names_sprint19(void)
 {
-    undo_assert_deferred_reason(SAG_TXN_FILTER, "Sprint 19");
+    UndoFixture f;
+
+    /* Sprint 19 landed the filter, so SAG_TXN_FILTER is a working reason
+     * rather than a hard error.  One filter is exactly one undo node. */
+    undo_fixture_init(&f, (const u8 *)"alpha\nbeta\n", 11U);
+    sag_undo_begin(&f.edit, SAG_TXN_FILTER);
+    SAG_ASSERT(sag_edit_delete(&f.edit, (Span){0U, 6U}));
+    SAG_ASSERT(sag_edit_insert(&f.edit, BYTEOFF(0U),
+                               (const u8 *)"ALPHA\n", 6U));
+    sag_undo_end(&f.edit);
+    SAG_ASSERT(sag_undo(&f.edit));
+    SAG_ASSERT_EQ_U64(sag_textbuf_len(f.tb), 11U);
+    undo_fixture_free(&f);
 }
 
 void test_undo_replace_reason_names_sprint21(void)

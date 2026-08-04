@@ -7,6 +7,7 @@
 
 #include "edit/edit_cmds.h"
 #include "edit/file_cmds.h"
+#include "edit/shell_cmds.h"
 #include "edit/sel_actions.h"
 #include "ui/cmdline.h"
 #include "util/arena.h"
@@ -431,8 +432,30 @@ static const CmdDesc builtins[] = {
     DEFER("ed.macro.replay", SAG_ARITY_OPT_STR,
           SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE, 35,
           "replay a command macro"),
-    DEFER("ed.job.cancel", SAG_ARITY_OPT_INT, 0U, 19,
-          "cancel a background job"),
+    {"ed.shell.run", sag_shell_cmd_run, SAG_ARITY_STR,
+     SAG_CMD_RECORDABLE, "Run a shell command, streaming its output"},
+    {"ed.shell.run_bg", sag_shell_cmd_run_bg, SAG_ARITY_STR,
+     SAG_CMD_RECORDABLE, "Run a shell command without stealing focus"},
+    {"ed.shell.read", sag_shell_cmd_read, SAG_ARITY_STR,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
+     "Insert a shell command's output at the cursor"},
+    {"ed.shell.filter", sag_shell_cmd_filter, SAG_ARITY_STR,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
+     "Pipe a region through a shell command and replace it"},
+    {"ed.shell.term", sag_shell_cmd_term, SAG_ARITY_NONE, 0U,
+     "Interactive terminals are not a 1.0 feature"},
+    {"ed.job.list", sag_job_cmd_list, SAG_ARITY_NONE, 0U,
+     "Open the job table"},
+    {"ed.job.kill", sag_job_cmd_kill, SAG_ARITY_OPT_INT,
+     SAG_CMD_TAKES_COUNT, "Terminate a job's process group"},
+    {"ed.job.kill_force", sag_job_cmd_kill_force, SAG_ARITY_OPT_INT,
+     SAG_CMD_TAKES_COUNT, "Kill a job's process group"},
+    {"ed.job.jump", sag_job_cmd_jump, SAG_ARITY_OPT_INT,
+     SAG_CMD_TAKES_COUNT, "Focus a job's output buffer"},
+    {"ed.job.clear_finished", sag_job_cmd_clear_finished, SAG_ARITY_NONE,
+     0U, "Drop every finished job and its output buffer"},
+    {"ed.job.rerun", sag_job_cmd_rerun, SAG_ARITY_OPT_INT,
+     SAG_CMD_TAKES_COUNT, "Run a job's command line again"},
     DEFER("ed.git.stage", SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN, 52,
           "stage the selected path"),
     DEFER("ed.lsp.goto", SAG_ARITY_STR, SAG_CMD_NEEDS_WIN, 47,
@@ -463,6 +486,14 @@ static const BuiltinMeta builtin_meta[] = {
     {"ed.file.reload", "", SAG_RP_FORBID, "reload"},
     {"ed.file.close", "", SAG_RP_FORBID, "close"},
     {"ed.search.open", "s", SAG_RP_FORBID, "search"},
+    /* :! carries an arbitrary command line, so its argspec is one string
+     * and the range decides run-vs-filter (§5). */
+    {"ed.shell.run", "s", SAG_RP_OPT, NULL},
+    {"ed.shell.read", "s", SAG_RP_FORBID, NULL},
+    {"ed.shell.filter", "s", SAG_RP_REQUIRED, NULL},
+    {"ed.job.list", "", SAG_RP_FORBID, "jobs"},
+    {"ed.job.kill", "", SAG_RP_FORBID, NULL},
+    {"ed.shell.term", "", SAG_RP_FORBID, "term"},
 };
 
 static bool word_in(const char *word, size_t len, const char *const *words,
@@ -485,7 +516,7 @@ static bool command_name_valid(const char *name)
         "move", "edit", "mode", "sel", "cursor", "view", "ui",
         "file", "buf", "tab", "group", "pane", "win", "reg",
         "search", "macro", "job", "git", "lsp", "ai", "plug",
-        "cmdline", "del"};
+        "cmdline", "del", "shell"};
     static const char *const verbs[] = {
         "home", "end", "next", "prev", "up", "down", "left", "right",
         "goto", "insert", "delete", "replace", "change", "yank", "paste", "toggle",
@@ -504,7 +535,10 @@ static bool command_name_valid(const char *name)
         "shift_left", "shift_right", "join", "replace_char", "append",
         "write", "write_quit", "hist_prev", "hist_next",
         "complete_next", "complete_prev", "insert_register",
-        "literal_next", "accept", "word_prev", "to_home", "to_end"};
+        "literal_next", "accept", "word_prev", "to_home", "to_end",
+        /* Sprint 19 */
+        "run", "run_bg", "read", "filter", "term", "kill", "kill_force",
+        "jump", "clear_finished", "rerun"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

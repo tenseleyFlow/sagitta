@@ -134,6 +134,9 @@ void sag_job_reap(Ed *ed);
  * children running, and `:!sleep 100 | cat` becomes unkillable. */
 bool sag_job_signal(Ed *ed, u32 id, int sig);
 SagJob *sag_job_find(Ed *ed, u32 id);
+/* Drops a finished job's slot, compacting the table.  The caller owns any
+ * buffer the job pointed at. */
+void sag_job_release(Ed *ed, SagJob *j);
 u32 sag_job_running_count(const Ed *ed);
 /* Escalation + timeout deadlines feed the loop's poll timeout. */
 i64 sag_job_deadline(const Ed *ed, i64 now_ms);
