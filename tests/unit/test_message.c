@@ -209,6 +209,7 @@ void test_message_draw_retains_chip_and_caps_overlay(void)
     static const u8 bytes[] = "x\n";
     Ed ed;
     Buffer buffer;
+    Buffer *bufptrs[1];
     Win win;
     Cursor cursor = {BYTEOFF(0U), {0U}, BYTEOFF(0U)};
     Cell *cell;
@@ -232,7 +233,8 @@ void test_message_draw_retains_chip_and_caps_overlay(void)
     ed.mode = SAG_MODE_L;
     ed.prev_unit = SAG_MODE_L;
     ed.win = &win;
-    ed.ws.bufs = &buffer;
+    bufptrs[0] = &buffer;
+    ed.ws.bufs = bufptrs;
     ed.ws.nbufs = 1U;
     ed.footer_rect = (Rect){0U, 5U, 12U, 1U};
 

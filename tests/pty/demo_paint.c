@@ -303,6 +303,7 @@ static void paint_s15(Demo *d)
 {
     Ed ed;
     Buffer buffer;
+    Buffer *bufptrs[1];
     Win win;
     Cursor cursor;
     Bytebuf text;
@@ -350,7 +351,8 @@ static void paint_s15(Demo *d)
     ed.mode = s15_scene_is(d, "mode_i") ? SAG_MODE_I : SAG_MODE_L;
     ed.prev_unit = SAG_MODE_L;
     ed.win = &win;
-    ed.ws.bufs = &buffer;
+    bufptrs[0] = &buffer;
+    ed.ws.bufs = bufptrs;
     ed.ws.nbufs = 1U;
     if (s15_scene_is(d, "metadata_crlf"))
         buffer.meta.eol = SAG_EOL_CRLF;

@@ -12,6 +12,36 @@
 #include "ui/viewport.h"
 #include "util/log.h"
 
+/* Tears down everything a buffer owns without touching the list slot. */
+static void ed_buffer_dispose(Buffer *b)
+{
+    if (b->jrn != NULL) {
+        sag_journal_close(b->jrn);
+        b->jrn = NULL;
+    }
+    sag_marks_free(b->marks);
+    sag_undo_free(b->undo);
+    sag_textbuf_free(b->tb);
+    sag_filemeta_dispose(&b->meta);
+    (void)memset(b, 0, sizeof(*b));
+}
+
+static void ed_ws_free(Ed *ed)
+{
+    u32 i;
+
+    /* Slot 0 aliases &ed->buffer and is disposed by the caller; every
+     * other slot is heap-owned here. */
+    for (i = 1U; i < ed->ws.nbufs; i++) {
+        ed_buffer_dispose(ed->ws.bufs[i]);
+        free(ed->ws.bufs[i]);
+    }
+    free(ed->ws.bufs);
+    ed->ws.bufs = NULL;
+    ed->ws.nbufs = 0U;
+    ed->ws.cap = 0U;
+}
+
 static void ed_buffer_free(Ed *ed)
 {
     Buffer *b = &ed->buffer;
@@ -21,21 +51,128 @@ static void ed_buffer_free(Ed *ed)
     sag_ed_insert_barrier(ed);
     sag_reg_bind_context(&ed->regs, NULL, NULL);
     sag_vp_free(&ed->single_win);
-    if (b->jrn != NULL) {
-        sag_journal_close(b->jrn);
-        b->jrn = NULL;
-    }
     sag_cset_free(&ed->single_win.cs);
-    sag_marks_free(b->marks);
-    sag_undo_free(b->undo);
-    sag_textbuf_free(b->tb);
-    sag_filemeta_dispose(&b->meta);
-    (void)memset(b, 0, sizeof(*b));
+    ed_ws_free(ed);
+    ed_buffer_dispose(b);
     (void)memset(&ed->single_win, 0, sizeof(ed->single_win));
     ed->win = NULL;
-    ed->ws.bufs = NULL;
-    ed->ws.nbufs = 0U;
     ed->model_ready = false;
+}
+
+static void ed_ws_push(Ed *ed, Buffer *b)
+{
+    if (ed->ws.nbufs == ed->ws.cap) {
+        u32 cap = ed->ws.cap == 0U ? 4U : ed->ws.cap * 2U;
+
+        if (cap < ed->ws.cap)
+            SAG_BUG("workspace buffer list overflow");
+        ed->ws.bufs = sag_xreallocarray(ed->ws.bufs, cap,
+                                        sizeof(*ed->ws.bufs));
+        ed->ws.cap = cap;
+    }
+    ed->ws.bufs[ed->ws.nbufs++] = b;
+}
+
+const char *sag_buf_label(const Buffer *b)
+{
+    if (b == NULL)
+        return "";
+    if (b->name != NULL)
+        return b->name;
+    return b->path == NULL ? "[No Name]" : b->path;
+}
+
+Buffer *sag_ws_scratch_new(Ed *ed, const char *name, u32 flags)
+{
+    Buffer *b;
+
+    if (ed == NULL || !ed->model_ready || name == NULL)
+        return NULL;
+    b = sag_xcalloc(1U, sizeof(*b));
+    sag_filemeta_init(&b->meta);
+    b->tb = sag_textbuf_new();
+    b->name = arena_strdup(&ed->arena, name);
+    b->flags = flags | SAG_BUF_SCRATCH;
+    b->tabwidth = SAG_VP_TABWIDTH;
+    /* A scratch buffer still carries an undo tree so the edit chokepoint
+     * stays uniform; SAG_BUF_NOUNDO governs whether edits record into it. */
+    b->undo = sag_undo_new(b->tb);
+    sag_undo_mark_saved(b->undo);
+    b->marks = sag_marks_new();
+    b->jrn = NULL;
+    ed_ws_push(ed, b);
+    return b;
+}
+
+Buffer *sag_ws_scratch_find(Ed *ed, const char *name)
+{
+    u32 i;
+
+    if (ed == NULL || name == NULL)
+        return NULL;
+    for (i = 1U; i < ed->ws.nbufs; i++) {
+        Buffer *b = ed->ws.bufs[i];
+
+        if (b->name != NULL && strcmp(b->name, name) == 0)
+            return b;
+    }
+    return NULL;
+}
+
+void sag_ws_scratch_drop(Ed *ed, Buffer *b)
+{
+    u32 i;
+
+    if (ed == NULL || b == NULL || b == &ed->buffer)
+        return;
+    for (i = 1U; i < ed->ws.nbufs; i++) {
+        if (ed->ws.bufs[i] != b)
+            continue;
+        /* Never leave a window pointing at freed memory: a window showing
+         * this buffer falls back to the document buffer first. */
+        if (ed->win != NULL && ed->win->buf == b)
+            (void)sag_ed_show_buffer(ed, &ed->buffer);
+        ed_buffer_dispose(b);
+        free(b);
+        (void)memmove(&ed->ws.bufs[i], &ed->ws.bufs[i + 1U],
+                      (size_t)(ed->ws.nbufs - i - 1U) *
+                          sizeof(*ed->ws.bufs));
+        ed->ws.nbufs--;
+        return;
+    }
+}
+
+bool sag_ed_show_buffer(Ed *ed, Buffer *b)
+{
+    Cursor cursor = {BYTEOFF(0U), {0U}, BYTEOFF(0U)};
+    u32 i;
+    bool found = false;
+
+    if (ed == NULL || b == NULL || ed->win == NULL || !ed->model_ready)
+        return false;
+    for (i = 0U; i < ed->ws.nbufs; i++) {
+        if (ed->ws.bufs[i] == b) {
+            found = true;
+            break;
+        }
+    }
+    if (!found)
+        return false;
+    if (ed->win->buf == b)
+        return true;
+    sag_ed_insert_barrier(ed);
+    sag_vp_free(ed->win);
+    sag_cset_free(&ed->win->cs);
+    sag_cset_init(&ed->win->cs, cursor);
+    ed->win->buf = b;
+    sag_vp_init(ed->win);
+    sag_reg_bind_context(&ed->regs, b->undo, &b->meta);
+    ed->layout_dirty = true;
+    ed->full_damage = true;
+    ed->footer_dirty = true;
+    ed->drawn_cursor_line_valid = false;
+    ed->drawn_top_valid = false;
+    return true;
 }
 
 static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
@@ -54,9 +191,9 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
     ed->single_win.buf = &ed->buffer;
     sag_vp_init(&ed->single_win);
     ed->win = &ed->single_win;
-    ed->ws.bufs = &ed->buffer;
-    ed->ws.nbufs = 1U;
     ed->model_ready = true;
+    /* Slot 0 is the document buffer and is never heap-owned. */
+    ed_ws_push(ed, &ed->buffer);
     ed->durability_failed = false;
     ed->layout_dirty = true;
     ed->full_damage = true;

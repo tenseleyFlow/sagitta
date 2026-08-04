@@ -109,7 +109,7 @@ static const char *unambiguous_path(const Ed *ed, const Buffer *buffer)
         u32 i;
 
         for (i = 0U; i < ed->ws.nbufs; i++) {
-            const char *other = ed->ws.bufs[i].path;
+            const char *other = ed->ws.bufs[i]->path;
 
             if (other != NULL && suffix_matches(other, suffix))
                 matches++;

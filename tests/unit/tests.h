@@ -561,4 +561,14 @@ void test_cmdline_parse_error_preserves_text_and_points_at_token(void);
 void test_cmdline_catalogue_errors_preserve_live_prompt(void);
 void test_cmdline_printable_edit_resets_history_walk_to_new_draft(void);
 
+void test_buflist_document_occupies_slot_zero(void);
+void test_buflist_scratch_new_sets_flags_and_name(void);
+void test_buflist_label_prefers_name_then_path(void);
+void test_buflist_pointers_survive_growth(void);
+void test_buflist_find_matches_by_name(void);
+void test_buflist_show_buffer_switches_focus(void);
+void test_buflist_show_buffer_rejects_foreign(void);
+void test_buflist_drop_refocuses_document(void);
+void test_buflist_drop_compacts_and_ignores_document(void);
+
 #endif

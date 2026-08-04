@@ -109,6 +109,7 @@ static bool measure(const ScrollCase *pc, const Bytebuf *fixture,
 {
     Ed ed;
     Buffer buffer;
+    Buffer *bufptrs[1];
     Win win;
     Cursor cursor;
     i64 start;
@@ -146,7 +147,8 @@ static bool measure(const ScrollCase *pc, const Bytebuf *fixture,
     ed.mode = SAG_MODE_L;
     ed.prev_unit = SAG_MODE_L;
     ed.win = &win;
-    ed.ws.bufs = &buffer;
+    bufptrs[0] = &buffer;
+    ed.ws.bufs = bufptrs;
     ed.ws.nbufs = 1U;
     sag_render_init(&ed.render, &caps, NULL);
     sag_layout(&ed);

@@ -27,19 +27,38 @@ typedef enum {
     SAG_PROMPT_OVERWRITE
 } PromptKind;
 
+enum {
+    /* No file behind it: save refuses, the journal never opens.  Sprint 19
+     * §4 — job output must never be mistaken for a document. */
+    SAG_BUF_SCRATCH = 1U << 0,
+    /* Appends bypass the undo tree.  Recording a million streamed appends
+     * as undo ops would also journal them (s08); undo in such a buffer is
+     * a no-op with a message rather than a lie. */
+    SAG_BUF_NOUNDO = 1U << 1
+};
+
 typedef struct Buffer {
     TextBuf *tb;
     FileMeta meta;
     char *path;
+    /* Display name for buffers with no path ("*job:3 make*").  NULL for
+     * ordinary file buffers, which display their path. */
+    char *name;
+    u32 flags;
     u32 tabwidth;
     UndoTree *undo;
     Journal *jrn;
     MarkSet *marks;
 } Buffer;
 
+/* Buffers are referenced by pointer from every Win, so the list holds
+ * pointers, never values: a growing value array would relocate under the
+ * windows pointing into it.  Slot 0 is always the document buffer
+ * (&ed->buffer, not owned); every other slot is heap-owned by the list. */
 typedef struct Workspace {
-    Buffer *bufs;
+    Buffer **bufs;
     u32 nbufs;
+    u32 cap;
     char *dir;
 } Workspace;
 
@@ -116,6 +135,16 @@ int sag_ed_driver(const char *path);
 const char *sag_ws_root(const Ed *ed);
 
 bool sag_buf_dirty(const Buffer *b);
+const char *sag_buf_label(const Buffer *b);
+
+/* Scratch buffers (Sprint 19: job output and the *jobs* table).  The
+ * returned pointer is stable for the buffer's lifetime — windows hold it. */
+Buffer *sag_ws_scratch_new(Ed *ed, const char *name, u32 flags);
+Buffer *sag_ws_scratch_find(Ed *ed, const char *name);
+void sag_ws_scratch_drop(Ed *ed, Buffer *b);
+/* Points the focused window at `b` with a fresh cursor set and viewport.
+ * Returns false when `b` is not in the workspace. */
+bool sag_ed_show_buffer(Ed *ed, Buffer *b);
 EditCtx sag_ed_edit_ctx(Ed *ed);
 EditCtx sag_ed_edit_ctx_for(Ed *ed, Win *win);
 void sag_ed_finish_edit(Ed *ed, const EditCtx *ec);

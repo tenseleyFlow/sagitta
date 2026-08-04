@@ -16,6 +16,8 @@ enum { TEST_STATUS_WARN_COLOR = 214 };
 typedef struct StatusFixture {
     Ed ed;
     Buffer buffers[2];
+    /* ws.bufs holds pointers so the list cannot relocate under a Win. */
+    Buffer *bufptrs[2];
     Win win;
 } StatusFixture;
 
@@ -38,7 +40,9 @@ static void status_fixture_init(StatusFixture *f, const u8 *bytes,
     f->ed.mode = SAG_MODE_L;
     f->ed.prev_unit = SAG_MODE_L;
     f->ed.win = &f->win;
-    f->ed.ws.bufs = f->buffers;
+    f->bufptrs[0] = &f->buffers[0];
+    f->bufptrs[1] = &f->buffers[1];
+    f->ed.ws.bufs = f->bufptrs;
     f->ed.ws.nbufs = 1U;
 }
 

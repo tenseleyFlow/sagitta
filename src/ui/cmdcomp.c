@@ -220,7 +220,7 @@ static u32 enumerate_buffers(Ed *ed, const char *stem, Vec_CompItem *out)
     u32 i;
 
     for (i = 0U; i < ed->ws.nbufs; i++) {
-        const Buffer *buffer = &ed->ws.bufs[i];
+        const Buffer *buffer = ed->ws.bufs[i];
         const char *name = buffer_name(buffer);
         char number[32];
 
