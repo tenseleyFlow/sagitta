@@ -617,4 +617,12 @@ void test_re_match_at_is_anchored(void);
 void test_re_search_from_offset_and_back(void);
 void test_re_group_count_and_min_len(void);
 
+void test_re_error_table(void);
+void test_re_non_goals_are_not_sprint_deferrals(void);
+void test_re_program_shapes(void);
+void test_re_reverse_program_swaps_anchors(void);
+void test_re_limits_fire_during_emission(void);
+void test_re_inst_size_budget(void);
+void test_re_error_offsets_are_always_in_range(void);
+
 #endif

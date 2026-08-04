@@ -613,6 +613,13 @@ const SagTest sag_tests[] = {
     T(re_match_at_is_anchored),
     T(re_search_from_offset_and_back),
     T(re_group_count_and_min_len),
+    T(re_error_table),
+    T(re_non_goals_are_not_sprint_deferrals),
+    T(re_program_shapes),
+    T(re_reverse_program_swaps_anchors),
+    T(re_limits_fire_during_emission),
+    T(re_inst_size_budget),
+    T(re_error_offsets_are_always_in_range),
 };
 
 const size_t sag_tests_len = SAG_ARRAY_LEN(sag_tests);

@@ -546,24 +546,11 @@ static bool parse_posix_class(ReParse *p, ClassBuf *b)
         p->at = end;
         return !p->failed;
     }
-    /*
-     * The remaining nine POSIX classes need general-category data
-     * (Alphabetic, Uppercase, punctuation and symbol categories,
-     * Cc, assigned).  Sprint 2's tables
-     * carry grapheme, width and word-break properties but not category,
-     * so those classes cannot be answered correctly yet — and answering
-     * them with an ASCII approximation would be a silent wrong answer in
-     * exactly the scripts a Unicode-correct editor exists to serve.
-     * They error honestly until the generator emits the category field.
-     */
     {
-        static char msg[160];
+        static char msg[96];
         int shown = (int)(name_len > 24U ? 24U : name_len);
 
-        (void)snprintf(msg, sizeof(msg),
-                       "POSIX class '[:%.*s:]' needs Unicode general "
-                       "categories, which the Sprint 2 tables do not "
-                       "emit yet",
+        (void)snprintf(msg, sizeof(msg), "unknown POSIX class '[:%.*s:]'",
                        shown, (const char *)(p->pat + name_at));
         sag_re_fail(p, start - 1U, msg);
     }
@@ -580,6 +567,31 @@ static u32 parse_class(ReParse *p)
     if (peek(p) == '^') {
         negate = true;
         p->at++;
+    }
+    /*
+     * `[:alpha:]` written where a class was expected is the classic POSIX
+     * mistake: it is a bracket expression containing ':','a','l','p','h',
+     * which matches, silently, the wrong thing.  A bracket class needs
+     * two layers — [[:alpha:]] — so say that rather than accept it.
+     */
+    if (peek(p) == ':') {
+        size_t scan = p->at + 1U;
+
+        while (scan + 1U < p->len && p->pat[scan] != ':')
+            scan++;
+        if (scan + 1U < p->len && p->pat[scan] == ':' &&
+            p->pat[scan + 1U] == ']') {
+            static char msg[96];
+            int shown = (int)(scan - p->at - 1U);
+
+            if (shown > 24)
+                shown = 24;
+            (void)snprintf(msg, sizeof(msg),
+                           "[:%.*s:] is only valid inside [...]", shown,
+                           (const char *)(p->pat + p->at + 1U));
+            sag_re_fail(p, open, msg);
+            return UINT32_MAX;
+        }
     }
     for (;;) {
         u32 lo = 0U;
@@ -756,7 +768,14 @@ static ReAst *parse_group(ReParse *p)
          * linear-time guarantee that keeps a typed pattern from freezing
          * the editor.
          */
-        if (k == '=' || k == '!' || k == '<' || k == '>') {
+        if (k == '>') {
+            sag_re_fail(p, open,
+                        "atomic groups are not supported (sagitta's "
+                        "regex engine is linear-time by design; see man "
+                        "sagitta-regex)");
+            return NULL;
+        }
+        if (k == '=' || k == '!' || k == '<') {
             sag_re_fail(p, open,
                         "lookaround is not supported (sagitta's regex "
                         "engine is linear-time by design; see man "
@@ -988,8 +1007,16 @@ static ReAst *parse_piece(ReParse *p)
             q->greedy = false;
         }
         a = q;
-        /* `a**` is nothing to repeat, not a second quantifier. */
-        if (peek(p) == '*' || peek(p) == '+') {
+        if (peek(p) == '+') {
+            /* a*+ is possessive: it only means something to a
+             * backtracker, so name it rather than report the symptom. */
+            sag_re_fail(p, p->at,
+                        "possessive quantifiers are not supported "
+                        "(sagitta's regex engine is linear-time by "
+                        "design; see man sagitta-regex)");
+            return NULL;
+        }
+        if (peek(p) == '*') {
             sag_re_fail(p, p->at, "nothing to repeat");
             return NULL;
         }
