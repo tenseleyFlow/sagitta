@@ -177,7 +177,13 @@ void test_cmdparse_resolution_bang_errors_and_parse_point(void)
     assert_error(&f, ":not_a_command", 
                  "unknown command 'not_a_command' (try Tab)");
     assert_error(&f, ":!printf x", ":! runs shell commands: Sprint 19");
+    assert_error(&f, ":1,2!sort", ":! runs shell commands: Sprint 19");
+    assert_error(&f, ":r !printf x",
+                 ":r ! reads shell output: Sprint 19");
+    assert_error(&f, ":jobs", ":jobs lists shell jobs: Sprint 19");
     assert_error(&f, ":s", ":s substitutes text: Sprint 21");
+    assert_error(&f, ":g",
+                 ":g search surface: Sprint 21; Fletch queries: Sprint 34");
     assert_error(&f, ":fl", ":fl evaluates Fletch: Sprint 32");
 
     SAG_ASSERT(sag_cmd_parse_point(&f.ed, ":w \"my fi", 9U, 9U,

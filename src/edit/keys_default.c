@@ -111,6 +111,8 @@ static const BindRow keys_E[] = {
     {"S-<tab>", "ed.cmdline.complete_prev", 0, NULL},
     {"C-r", "ed.cmdline.insert_register", 0, NULL},
     {"C-v", "ed.cmdline.literal_next", 0, NULL},
+    {"C-z", "ed.edit.undo", 0, NULL},
+    {"C-y", "ed.edit.redo", 0, NULL},
     {"<cr>", "ed.cmdline.accept", 0, NULL},
     {"<esc>", "ed.cmdline.cancel", 0, NULL},
     {"C-g", "ed.cmdline.cancel", 0, NULL},

@@ -39,6 +39,9 @@ void test_register_defaults_and_empty_deferred_slots(void)
     SAG_ASSERT_NULL(sag_reg_get(&r, '_'));
     SAG_ASSERT_NULL(sag_reg_get(&r, '?'));
     SAG_ASSERT(sag_reg_get(&r, '*') == sag_reg_get(&r, '+'));
+    sag_reg_set_cmdline(&r, (const u8 *)"write", 5U);
+    reg_assert_value(sag_reg_get(&r, ':'), SAG_REG_CHARWISE,
+                     (const u8 *)"write", 5U);
     sag_reg_free(&r);
 }
 

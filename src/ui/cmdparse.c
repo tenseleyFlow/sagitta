@@ -738,7 +738,9 @@ static bool deferred_name(Parser *p, const char *name, Span tok)
     if (strcmp(name, "s") == 0)
         msg = ":s substitutes text: Sprint 21";
     else if (strcmp(name, "g") == 0)
-        msg = ":g uses Fletch queries: Sprint 34";
+        msg = ":g search surface: Sprint 21; Fletch queries: Sprint 34";
+    else if (strcmp(name, "jobs") == 0)
+        msg = ":jobs lists shell jobs: Sprint 19";
     else if (strcmp(name, "fl") == 0)
         msg = ":fl evaluates Fletch: Sprint 32";
     else if (strcmp(name, "source") == 0)
@@ -779,6 +781,11 @@ bool sag_cmd_parse(Ed *ed, const char *line, size_t len, Arena *a,
     if (!parse_range(&p, &out->range))
         return false;
     skip_ws(&p);
+    if (p.at < len && line[p.at] == '!') {
+        set_error(&p, p.at, p.at + 1U,
+                  ":! runs shell commands: Sprint 19");
+        return false;
+    }
     name_start = p.at;
     if (p.at >= len ||
         !(isalpha((unsigned char)line[p.at]) || line[p.at] == '_')) {
@@ -801,6 +808,17 @@ bool sag_cmd_parse(Ed *ed, const char *line, size_t len, Arena *a,
         set_error(&p, name_start, p.at + 1U,
                   "unknown command '%s' (try Tab)", name);
         return false;
+    }
+    if (strcmp(name, "r") == 0) {
+        size_t bang = p.at;
+
+        while (bang < len && is_ws(line[bang]))
+            bang++;
+        if (bang < len && line[bang] == '!') {
+            set_error(&p, bang, bang + 1U,
+                      ":r ! reads shell output: Sprint 19");
+            return false;
+        }
     }
     if (deferred_name(&p, name, out->name_tok))
         return false;

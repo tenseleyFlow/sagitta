@@ -289,8 +289,10 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     EditCtx ec;
     CmdStatus status;
     bool changes;
+    bool edits_text;
     bool multiple;
     bool multi;
+    bool document_target;
     bool durability_command;
     bool newline;
     bool opened = false;
@@ -305,13 +307,14 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     if (cx->win == NULL)
         cx->win = ed->win;
     changes = (desc->flags & SAG_CMD_CHANGES_BUFFER) != 0U;
+    edits_text = changes || strcmp(desc->name, "ed.edit.undo") == 0 ||
+                 strcmp(desc->name, "ed.edit.redo") == 0;
+    document_target = cx->win == ed->win;
     multiple = changes && ed->model_ready && cx->win != NULL &&
                cx->win->cs.curs.len > 1U;
     multi = multiple &&
             (desc->flags & SAG_CMD_MULTI_AGGREGATE) == 0U;
-    durability_command = changes ||
-                         strcmp(desc->name, "ed.edit.undo") == 0 ||
-                         strcmp(desc->name, "ed.edit.redo") == 0;
+    durability_command = document_target && edits_text;
     newline = strcmp(desc->name, "ed.edit.insert.newline") == 0;
     started_in_insert = ed->mode == SAG_MODE_I;
 
@@ -346,7 +349,7 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     }
 
     status = multi ? sag_mc_run(cx->win, id, cx) : sag_cmd_invoke(id, cx);
-    if (status == SAG_CMD_OK && ed->win != NULL &&
+    if (status == SAG_CMD_OK && document_target && ed->win != NULL &&
         (changes || durability_command ||
          strncmp(desc->name, "ed.move.", 8U) == 0 ||
          strncmp(desc->name, "ed.view.", 8U) == 0))
@@ -375,7 +378,7 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
                 "crash journal failed; save or q! before continuing");
     }
     if (ed->cmdline.active && cx->win == sag_cmdline_target(ed)) {
-        if (changes)
+        if (edits_text)
             sag_cmdline_edited(ed);
         else
             sag_cmdline_sync(ed);

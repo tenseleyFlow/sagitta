@@ -241,13 +241,7 @@ static bool replace_all(Ed *ed, const char *text, bool reset_history)
 
 static void set_cmd_register(Ed *ed, const char *text)
 {
-    RegVal value;
-
-    sag_regval_init(&value);
-    bytebuf_append(&value.bytes, text, strlen(text));
-    value.type = SAG_REG_CHARWISE;
-    sag_reg_set(&ed->regs, (u8)':', &value);
-    sag_regval_free(&value);
+    sag_reg_set_cmdline(&ed->regs, (const u8 *)text, strlen(text));
 }
 
 static const char *history_kind(SagPromptKind kind)

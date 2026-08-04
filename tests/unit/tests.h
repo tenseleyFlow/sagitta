@@ -548,5 +548,13 @@ void test_cmdcomp_path_hidden_directory_and_unknown_dtype(void);
 void test_cmdcomp_cap_and_deterministic_order(void);
 void test_cmdcomp_path_quoting_retokenizes_one_argv(void);
 void test_cmdcomp_lcp_menu_and_empty_providers(void);
+void test_cmdline_reuses_textbuf_and_grapheme_cursor(void);
+void test_cmdline_sanitizes_seed_paste_and_register_newlines(void);
+void test_cmdline_e_keymap_leaves_are_registered_editor_commands(void);
+void test_cmdline_highlight_selection_seeds_range(void);
+void test_cmdline_escape_restores_completion_stem_before_closing(void);
+void test_cmdline_accepts_registered_command_and_closes(void);
+void test_cmdline_parse_error_preserves_text_and_points_at_token(void);
+void test_cmdline_printable_edit_resets_history_walk_to_new_draft(void);
 
 #endif

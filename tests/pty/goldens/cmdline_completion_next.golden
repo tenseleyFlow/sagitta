@@ -1,0 +1,59 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=23,11 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
+--- text
+    1 completion fixture
+    1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+> file.close                   Sprint 23: close the active file                 
+  file.new                     Create an empty buffer, optionally naming its fil
+  file.open                    Sprint 23: open a file                           
+  file.reload                  Reload the active file from disk                 
+  file.save                    Atomically save the active file                  
+:file.close                                                                     
+--- style
+AAAAAAAAAAAAAAAAAAAAAAAA
+AAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+DEEEEEEEEEECCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+--- legend
+A fg=default bg=default attrs=----------
+B fg=#4e2a0f bg=#f7e0cc attrs=b---------
+C fg=#f7e0cc bg=#4e2a0f attrs=b---------
+D fg=#2f1806 bg=#e77d24 attrs=b---------
+E fg=#f7e0cc bg=#4e2a0f attrs=----------

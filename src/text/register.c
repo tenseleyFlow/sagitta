@@ -246,6 +246,16 @@ void sag_reg_set(Registers *r, u8 name, const RegVal *v)
     reg_set_raw(dst, v);
 }
 
+void sag_reg_set_cmdline(Registers *r, const u8 *bytes, size_t len)
+{
+    if (r == NULL || (bytes == NULL && len != 0U))
+        SAG_BUG("sag_reg_set_cmdline: NULL argument");
+    regval_clear(&r->cmdline);
+    bytebuf_append(&r->cmdline.bytes, bytes, len);
+    r->cmdline.type = SAG_REG_CHARWISE;
+    r->cmdline.t_wall = (i64)time(NULL);
+}
+
 static size_t eol_len_at_end(const RegVal *v)
 {
     if (!ends_in_lf(&v->bytes))

@@ -29,7 +29,8 @@ jobs:
         run: |
           make CC=clang BUILD=build-clang \
             build-clang/fuzz_textbuf build-clang/gen-bigfile \
-            build-clang/perf_textbuf build-clang/perf_latency
+            build-clang/perf_textbuf build-clang/perf_latency \
+            build-clang/fuzz_cmdparse build-clang/perf_cmdcomp
 
   pty:
     runs-on: ubuntu-latest
@@ -100,6 +101,8 @@ jobs:
         run: |
           make perf-latency CC=gcc
           make perf-latency-selftest CC=gcc
+      - name: Enforce Sprint 18 completion latency budget
+        run: make perf-cmdcomp CC=gcc
 
   torture:
     runs-on: ubuntu-latest
@@ -134,9 +137,11 @@ jobs:
       - name: Build GCC and Clang deterministic tools
         run: |
           make CC=gcc BUILD=build-det-gcc \
-            build-det-gcc/fuzz_textbuf build-det-gcc/gen-bigfile
+            build-det-gcc/fuzz_textbuf build-det-gcc/fuzz_cmdparse \
+            build-det-gcc/gen-bigfile
           make CC=clang BUILD=build-det-clang \
-            build-det-clang/fuzz_textbuf build-det-clang/gen-bigfile
+            build-det-clang/fuzz_textbuf build-det-clang/fuzz_cmdparse \
+            build-det-clang/gen-bigfile
       - name: Compare edit traces across runs and compilers
         run: |
           build-det-gcc/fuzz_textbuf --iters=5000 --seed=0x9e3779b97f4a7c15 \
@@ -152,6 +157,11 @@ jobs:
           sed 's/replay=[^ ]*/replay=TRACE/' replay-gcc.txt > replay-gcc.norm
           sed 's/replay=[^ ]*/replay=TRACE/' replay-clang.txt > replay-clang.norm
           diff -u replay-gcc.norm replay-clang.norm
+          build-det-gcc/fuzz_cmdparse --iters=10000 --seed=1 \
+            > cmdparse-gcc.txt
+          build-det-clang/fuzz_cmdparse --iters=10000 --seed=1 \
+            > cmdparse-clang.txt
+          diff -u cmdparse-gcc.txt cmdparse-clang.txt
       - name: Compare all fixture hashes across runs and compilers
         run: |
           while read -r profile bytes seed expected; do

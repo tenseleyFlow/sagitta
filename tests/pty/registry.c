@@ -1526,6 +1526,208 @@ static void case_s17_modal_milestone_saves(PtyCtx *c)
     (void)unlink(path);
 }
 
+static bool s18_open(PtyCtx *c, const u8 *initial, size_t len,
+                     char *path, size_t path_cap)
+{
+    if (!make_fixture(c, initial, len, path, path_cap))
+        return false;
+    spawn_editor(c, path);
+    return true;
+}
+
+static void s18_settle_after_keys(PtyCtx *c, const char *keys)
+{
+    u32 before = c->vt.nsync_pairs;
+
+    ptc_keys(c, keys);
+    settle_sync_delta(c, before, 1U, 0);
+}
+
+static void s18_settle_after_bytes(PtyCtx *c, const char *bytes)
+{
+    u32 before = c->vt.nsync_pairs;
+
+    ptc_bytes(c, bytes);
+    settle_sync_delta(c, before, 1U, 0);
+}
+
+static void s18_finish(PtyCtx *c, const char *path)
+{
+    ptc_keys(c, "esc");
+    ptc_settle(c, 0);
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s18_cmdline_open(PtyCtx *c)
+{
+    static const u8 initial[] = "alpha\nbeta\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    ptc_snapshot(c, "cmdline_open");
+    s18_finish(c, path);
+}
+
+static void case_s18_cmdline_cancel(PtyCtx *c)
+{
+    static const u8 initial[] = "alpha\nbeta\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_keys(c, "esc");
+    ptc_snapshot(c, "cmdline_cancel");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s18_cmdline_selection_seed(PtyCtx *c)
+{
+    static const u8 initial[] = "alpha\nbeta\ngamma\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "h down :");
+    ptc_snapshot(c, "cmdline_selection_seed");
+    s18_finish(c, path);
+}
+
+static bool s18_open_completion_menu(PtyCtx *c, char *path, size_t path_cap)
+{
+    static const u8 initial[] = "completion fixture\n";
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, path_cap))
+        return false;
+    s18_settle_after_keys(c, ": f tab");
+    return !c->failed;
+}
+
+static void case_s18_cmdline_completion_menu(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open_completion_menu(c, path, sizeof(path)))
+        return;
+    ptc_snapshot(c, "cmdline_completion_menu");
+    s18_finish(c, path);
+}
+
+static void case_s18_cmdline_completion_next(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open_completion_menu(c, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "tab");
+    ptc_snapshot(c, "cmdline_completion_next");
+    s18_finish(c, path);
+}
+
+static void case_s18_cmdline_completion_next_again(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open_completion_menu(c, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "tab tab");
+    ptc_snapshot(c, "cmdline_completion_next_again");
+    s18_finish(c, path);
+}
+
+static void case_s18_cmdline_completion_prev_wraps(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open_completion_menu(c, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "shift+tab");
+    ptc_snapshot(c, "cmdline_completion_prev_wraps");
+    s18_finish(c, path);
+}
+
+static void case_s18_cmdline_menu_enter_not_execute(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open_completion_menu(c, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "tab enter");
+    ptc_snapshot(c, "cmdline_menu_enter_not_execute");
+    s18_finish(c, path);
+}
+
+static void case_s18_cmdline_error_caret(PtyCtx *c)
+{
+    static const u8 initial[] = "error fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "bogus");
+    s18_settle_after_keys(c, "enter");
+    ptc_snapshot(c, "cmdline_error_caret");
+    s18_finish(c, path);
+}
+
+static bool s18_open_zwj_prompt(PtyCtx *c, char *path, size_t path_cap)
+{
+    static const u8 initial[] = "emoji fixture\n";
+    static const char family[] =
+        "\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x91\xa9"
+        "\xe2\x80\x8d\xf0\x9f\x91\xa7\xe2\x80\x8d"
+        "\xf0\x9f\x91\xa6";
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, path_cap))
+        return false;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, family);
+    return !c->failed;
+}
+
+static void case_s18_cmdline_zwj_left(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open_zwj_prompt(c, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "left");
+    ptc_snapshot(c, "cmdline_zwj_left");
+    s18_finish(c, path);
+}
+
+static void case_s18_cmdline_zwj_right(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open_zwj_prompt(c, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "left");
+    s18_settle_after_keys(c, "right");
+    ptc_snapshot(c, "cmdline_zwj_right");
+    s18_finish(c, path);
+}
+
+static void case_s18_cmdline_horizontal_scroll(PtyCtx *c)
+{
+    static const u8 initial[] = "scroll fixture\n";
+    static const char command[] =
+        "this_is_a_command_line_longer_than_the_narrow_terminal_width";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, command);
+    ptc_snapshot(c, "cmdline_horizontal_scroll");
+    s18_finish(c, path);
+}
+
 #define C(name, profile, rows, cols, fn) \
     {#name, #profile, rows, cols, fn}
 
@@ -1635,6 +1837,28 @@ const PtyCase sag_pty_cases[] = {
       case_s17_char_delete_matches_highlight),
     C(s17_modal_milestone_saves, modern, 24U, 80U,
       case_s17_modal_milestone_saves),
+    C(s18_cmdline_open, modern, 24U, 80U, case_s18_cmdline_open),
+    C(s18_cmdline_cancel, modern, 24U, 80U, case_s18_cmdline_cancel),
+    C(s18_cmdline_selection_seed, modern, 24U, 80U,
+      case_s18_cmdline_selection_seed),
+    C(s18_cmdline_completion_menu, modern, 24U, 80U,
+      case_s18_cmdline_completion_menu),
+    C(s18_cmdline_completion_next, modern, 24U, 80U,
+      case_s18_cmdline_completion_next),
+    C(s18_cmdline_completion_next_again, modern, 24U, 80U,
+      case_s18_cmdline_completion_next_again),
+    C(s18_cmdline_completion_prev_wraps, modern, 24U, 80U,
+      case_s18_cmdline_completion_prev_wraps),
+    C(s18_cmdline_menu_enter_not_execute, modern, 24U, 80U,
+      case_s18_cmdline_menu_enter_not_execute),
+    C(s18_cmdline_error_caret, modern, 24U, 80U,
+      case_s18_cmdline_error_caret),
+    C(s18_cmdline_zwj_left, modern, 24U, 80U,
+      case_s18_cmdline_zwj_left),
+    C(s18_cmdline_zwj_right, modern, 24U, 80U,
+      case_s18_cmdline_zwj_right),
+    C(s18_cmdline_horizontal_scroll, modern, 8U, 32U,
+      case_s18_cmdline_horizontal_scroll),
     {NULL, NULL, 0U, 0U, NULL}
 };
 
