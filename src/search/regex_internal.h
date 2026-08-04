@@ -150,6 +150,13 @@ bool sag_re_pike_run(const SagRe *re, const SagReInput *in, u64 start,
 bool sag_re_pike_run_ex(const SagRe *re, const SagReInput *in, u64 start,
                         bool anchored, SagReMatch *out);
 
+/* Lazy DFA (§6b).  It answers only "is there a match": a state is a set
+ * of pcs and knows nothing about which path reached it, so it cannot
+ * report captures.  GIVE_UP means the state cache thrashed and the
+ * caller should finish on the Pike VM. */
+enum { SAG_DFA_NO = 0, SAG_DFA_YES = 1, SAG_DFA_GIVE_UP = -1 };
+int sag_re_dfa_test(const SagRe *re, const SagReInput *in, u64 from);
+
 /* Character-property predicates, defined off the word-break tables so a
  * search \b and Sprint 16's W-mode word motion agree about what a word
  * is.  A user who selects a word with W and searches \bword\b must not

@@ -258,6 +258,19 @@ bool sag_re_search(const SagRe *re, const SagReInput *in, ByteOff from,
 
 bool sag_re_test(const SagRe *re, const SagReInput *in, ByteOff from)
 {
+    int verdict;
+
+    if (re == NULL || in == NULL)
+        return false;
+    /* §6's dispatcher row: prefilter, then the lazy DFA.  A
+     * whole-pattern literal is answered by the prefilter alone. */
+    if (re->lit.kind == RE_LIT_WHOLE)
+        return sag_re_search(re, in, from, NULL);
+    verdict = sag_re_dfa_test(re, in, from.v);
+    if (verdict != SAG_DFA_GIVE_UP)
+        return verdict == SAG_DFA_YES;
+    /* The cache thrashed: finish on the VM rather than rebuild every
+     * state per character, which is slower than never having cached. */
     return sag_re_search(re, in, from, NULL);
 }
 

@@ -639,4 +639,10 @@ void test_re_multibyte_spans_pieces(void);
 void test_re_prefilter_rejects_mid_sequence_candidates(void);
 void test_re_textbuf_and_bytes_agree(void);
 
+void test_re_engines_agree_on_match_or_not(void);
+void test_re_engines_agree_over_piece_trees(void);
+void test_re_engines_agree_from_offsets(void);
+void test_re_dfa_survives_cache_pressure(void);
+void test_re_dfa_handles_pathological_patterns(void);
+
 #endif
