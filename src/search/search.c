@@ -1,0 +1,242 @@
+/*
+ * Sprint 20 §6: the search entry points.
+ *
+ * The lazy DFA is a later chunk of this sprint; until it lands every
+ * entry point runs the Pike VM, which is the correctness reference the
+ * DFA will be checked against.  The literal prefilter is already live,
+ * so the common case (a plain string) never enters the VM at all.
+ */
+#include "search/regex_internal.h"
+
+#include <string.h>
+
+#include "unicode/utf8.h"
+#include "util/log.h"
+
+bool sag_re_pike_run(const SagRe *re, const SagReInput *in, u64 start,
+                     SagReMatch *out);
+
+/* Reads one byte, chunk-aware.  Kept local so callers cannot accidentally
+ * grow it into a "give me the whole buffer" helper (§1's law). */
+static bool byte_at(const SagReInput *in, TextIter *it, u64 off, u8 *out)
+{
+    const u8 *chunk = NULL;
+    size_t n = 0U;
+
+    if (off >= in->window.hi)
+        return false;
+    if (in->tb == NULL) {
+        if (off >= in->len)
+            return false;
+        *out = in->bytes[off];
+        return true;
+    }
+    if (!sag_textiter_begin(it, in->tb, BYTEOFF(off)) ||
+        !sag_textiter_chunk(it, in->tb, &chunk, &n) || n == 0U)
+        return false;
+    *out = chunk[0];
+    return true;
+}
+
+static bool is_cp_start(const SagReInput *in, u64 off)
+{
+    TextIter it;
+    u8 b;
+
+    if (off == 0U)
+        return true;
+    if (!byte_at(in, &it, off, &b))
+        return true;
+    /* A BMH candidate knows no encoding and can land mid-sequence;
+     * omitting this check produces phantom matches inside multibyte
+     * text (§7). */
+    return (b & 0xC0U) != 0x80U;
+}
+
+/* Advances one codepoint from `off`. */
+static u64 next_cp_off(const SagReInput *in, u64 off)
+{
+    TextIter it;
+    u8 b;
+    u64 step;
+
+    if (!byte_at(in, &it, off, &b))
+        return off + 1U;
+    if ((b & 0x80U) == 0U)
+        step = 1U;
+    else if ((b & 0xE0U) == 0xC0U)
+        step = 2U;
+    else if ((b & 0xF0U) == 0xE0U)
+        step = 3U;
+    else if ((b & 0xF8U) == 0xF0U)
+        step = 4U;
+    else
+        step = 1U;
+    return off + step;
+}
+
+/*
+ * Scans the literal prefilter over the input one TextIter chunk at a
+ * time, carrying n-1 bytes across chunk boundaries.
+ *
+ * Pitfall the carry exists for: without it a literal straddling two
+ * pieces is missed — which happens only on buffers that have been
+ * edited, only sometimes, and never in a test built from one contiguous
+ * array.  The differential fuzzer builds its buffers by random insertion
+ * precisely to hit this.
+ */
+static u64 prefilter_find(const SagRe *re, const SagReInput *in, u64 from)
+{
+    const ReLit *l = &re->lit;
+    u64 at = from;
+
+    if (l->kind == RE_LIT_NONE || l->n == 0U)
+        return from;
+    if (in->tb == NULL) {
+        u64 hit;
+
+        if (from >= in->window.hi)
+            return UINT64_MAX;
+        hit = sag_lit_find(l, in->bytes + from, in->window.hi - from);
+        return hit == UINT64_MAX ? UINT64_MAX : from + hit;
+    }
+    while (at < in->window.hi) {
+        TextIter it;
+        const u8 *chunk = NULL;
+        size_t n = 0U;
+        u64 span;
+        u64 hit;
+        u8 carry[64];
+        u64 carry_n;
+
+        if (!sag_textiter_begin(&it, in->tb, BYTEOFF(at)) ||
+            !sag_textiter_chunk(&it, in->tb, &chunk, &n) || n == 0U)
+            return UINT64_MAX;
+        span = (u64)n;
+        if (at + span > in->window.hi)
+            span = in->window.hi - at;
+        hit = sag_lit_find(l, chunk, span);
+        if (hit != UINT64_MAX)
+            return at + hit;
+        /* Straddle window: the last n-1 bytes of this chunk plus the
+         * first n-1 of the next. */
+        carry_n = 0U;
+        if (l->n > 1U && span >= 1U) {
+            u64 back = l->n - 1U < span ? (u64)(l->n - 1U) : span;
+            u64 base = at + span - back;
+            u64 want = (u64)(l->n - 1U) * 2U;
+            u64 k;
+
+            if (want > sizeof(carry))
+                want = sizeof(carry);
+            for (k = 0U; k < want && base + k < in->window.hi; k++) {
+                TextIter probe;
+                u8 b;
+
+                if (!byte_at(in, &probe, base + k, &b))
+                    break;
+                carry[carry_n++] = b;
+            }
+            if (carry_n >= l->n) {
+                u64 chit = sag_lit_find(l, carry, carry_n);
+
+                if (chit != UINT64_MAX)
+                    return base + chit;
+            }
+        }
+        at += span;
+    }
+    return UINT64_MAX;
+}
+
+bool sag_re_match_at(const SagRe *re, const SagReInput *in, ByteOff at,
+                     SagReMatch *out)
+{
+    if (re == NULL || in == NULL)
+        return false;
+    return sag_re_pike_run(re, in, at.v, out);
+}
+
+bool sag_re_search(const SagRe *re, const SagReInput *in, ByteOff from,
+                   SagReMatch *out)
+{
+    u64 at;
+
+    if (re == NULL || in == NULL)
+        return false;
+    at = from.v < in->window.lo ? in->window.lo : from.v;
+    while (at <= in->window.hi) {
+        u64 candidate = prefilter_find(re, in, at);
+
+        if (candidate == UINT64_MAX)
+            return false;
+        if (candidate > in->window.hi)
+            return false;
+        /* A prefilter hit is a candidate, not a match: it may land
+         * mid-sequence, and the rest of the pattern still has to hold. */
+        if (!is_cp_start(in, candidate)) {
+            at = candidate + 1U;
+            continue;
+        }
+        if (sag_re_pike_run(re, in, candidate, out))
+            return true;
+        if (candidate >= in->window.hi)
+            return false;
+        at = next_cp_off(in, candidate);
+        if (at <= candidate)
+            at = candidate + 1U;
+    }
+    return false;
+}
+
+bool sag_re_test(const SagRe *re, const SagReInput *in, ByteOff from)
+{
+    return sag_re_search(re, in, from, NULL);
+}
+
+/*
+ * §6c: no reverse engine here yet either.  The window walk is the shape
+ * the reverse DFA will slot into — scan forward inside a bounded window
+ * that walks backwards, keeping the last match.
+ */
+bool sag_re_search_back(const SagRe *re, const SagReInput *in,
+                        ByteOff before, SagReMatch *out)
+{
+    enum { WINDOW = 256U * 1024U };
+    u64 hi = before.v > in->window.hi ? in->window.hi : before.v;
+    u64 lo;
+
+    if (re == NULL || in == NULL || hi <= in->window.lo)
+        return false;
+    for (;;) {
+        SagReInput sub = *in;
+        SagReMatch best;
+        SagReMatch cur;
+        bool found = false;
+        u64 at;
+
+        lo = hi > in->window.lo + WINDOW ? hi - WINDOW : in->window.lo;
+        sub.window.lo = lo;
+        sub.window.hi = in->window.hi;
+        at = lo;
+        (void)memset(&best, 0, sizeof(best));
+        while (at < hi) {
+            if (!sag_re_search(re, &sub, BYTEOFF(at), &cur))
+                break;
+            if (cur.g[0].lo >= hi)
+                break;
+            best = cur;
+            found = true;
+            at = cur.g[0].hi > cur.g[0].lo ? cur.g[0].hi :
+                 next_cp_off(in, cur.g[0].lo);
+        }
+        if (found) {
+            if (out != NULL)
+                *out = best;
+            return true;
+        }
+        if (lo == in->window.lo)
+            return false;
+        hi = lo;
+    }
+}
