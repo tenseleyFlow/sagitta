@@ -605,6 +605,7 @@ const SagTest sag_tests[] = {
     T(filter_preserves_invalid_utf8_bytes),
     T(filter_large_output_round_trips),
     T(filter_ten_thousand_lines_is_one_node),
+    T(job_torture_spawn_kill_cycles),
 };
 
 const size_t sag_tests_len = SAG_ARRAY_LEN(sag_tests);

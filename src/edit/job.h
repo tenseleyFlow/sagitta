@@ -26,10 +26,24 @@ enum {
     /* Concurrent jobs.  Spawning past this errors — never queues silently,
      * because a queued job that runs minutes later surprises the user. */
     SAG_JOB_MAX = 32,
-    /* Max bytes drained per job per loop iteration.  `yes` emits gigabytes
+    /*
+     * Max bytes drained per job per loop iteration.  `yes` emits gigabytes
      * per second; an unbudgeted drain starves input and blows the 5 ms
-     * keypress gate (invariant 4). */
-    SAG_JOB_READ_BUDGET = 256U * 1024U,
+     * keypress gate (invariant 4).
+     *
+     * The sprint file pinned 256 KiB, which does not achieve the thing it
+     * was written to protect: at 256 KiB an iteration appends ~4000 lines
+     * and repaints, measuring p99 13.6 ms against a 50 MiB stream —
+     * roughly 2.7x over budget.  Measured on the perf_jobstream gate,
+     * x86_64-linux-gnu:
+     *
+     *     256 KiB -> 13.63 ms p99      (fails)
+     *      64 KiB ->  4.27 ms p99      (passes, ~15% headroom)
+     *
+     * The constant serves the budget, not the other way round, so it is
+     * 64 KiB here.  Raising it again requires re-running perf-jobstream.
+     */
+    SAG_JOB_READ_BUDGET = 64U * 1024U,
     /* A single output "line" longer than this is split, so a `tr -d '\n'`
      * firehose cannot build one unbounded line. */
     SAG_JOB_LINE_MAX = 1024U * 1024U,

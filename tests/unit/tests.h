@@ -607,4 +607,6 @@ void test_filter_preserves_invalid_utf8_bytes(void);
 void test_filter_large_output_round_trips(void);
 void test_filter_ten_thousand_lines_is_one_node(void);
 
+void test_job_torture_spawn_kill_cycles(void);
+
 #endif

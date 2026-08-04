@@ -408,3 +408,81 @@ void test_job_shell_resolution_prefers_env(void)
     else
         (void)unsetenv("SHELL");
 }
+
+void test_job_torture_spawn_kill_cycles(void)
+{
+    Ed ed;
+    char *argv[4];
+    char err[256] = {0};
+    /* Deterministic LCG: the same cycle pattern every run (invariant 3). */
+    u64 seed = 0x9E3779B97F4A7C15ULL;
+    u32 before;
+    u32 after;
+    u32 cycle;
+
+    job_fixture(&ed);
+    argv[0] = (char *)"/bin/sh";
+    argv[1] = (char *)"-c";
+    argv[3] = NULL;
+    /* Warm up so first-touch allocations are not counted as leaks. */
+    argv[2] = (char *)"printf x";
+    SAG_ASSERT(run_to_completion(&ed, spawn_argv(&ed, argv, err,
+                                                 sizeof(err))));
+    release_finished(&ed);
+    before = open_fd_count();
+
+    /* DoD 8: 200 spawn/kill cycles at varying timings.  The interesting
+     * cases are the races — killing before the child has exec'd, while it
+     * is mid-write, and after it has already exited. */
+    for (cycle = 0U; cycle < 200U; cycle++) {
+        u32 shape;
+        u32 id;
+
+        seed = seed * 6364136223846793005ULL + 1442695040888963407ULL;
+        shape = (u32)((seed >> 33) % 4U);
+        switch (shape) {
+        case 0U:
+            argv[2] = (char *)"printf 'quick\n'";
+            break;
+        case 1U:
+            argv[2] = (char *)"sleep 30";
+            break;
+        case 2U:
+            argv[2] = (char *)"sleep 30 | cat";  /* a whole group */
+            break;
+        default:
+            argv[2] = (char *)"printf 'a\n'; sleep 30";
+            break;
+        }
+        id = spawn_argv(&ed, argv, err, sizeof(err));
+        SAG_ASSERT(id != 0U);
+        if (shape != 0U) {
+            /* Pump once so some cycles kill a child mid-flight and others
+             * kill one that has not been polled at all. */
+            if ((seed & 0x10000U) != 0U) {
+                struct pollfd pfd[SAG_JOB_MAX * 4U];
+                u32 n = 0U;
+
+                sag_job_collect_fds(&ed, pfd, &n);
+                if (n != 0U)
+                    (void)poll(pfd, (nfds_t)n, 1);
+                sag_job_pump(&ed, pfd, n);
+            }
+            (void)sag_job_signal(&ed, id, SIGKILL);
+        }
+        SAG_ASSERT(run_to_completion(&ed, id));
+        release_finished(&ed);
+    }
+
+    after = open_fd_count();
+    SAG_ASSERT_EQ_U64(after, before);
+    /* Zero zombies at quiesce. */
+    SAG_ASSERT(waitpid(-1, NULL, WNOHANG) == -1);
+    SAG_ASSERT_EQ_I64(errno, ECHILD);
+    /* The editor is still usable: one more job runs normally. */
+    argv[2] = (char *)"printf 'still here\n'";
+    SAG_ASSERT(run_to_completion(&ed, spawn_argv(&ed, argv, err,
+                                                 sizeof(err))));
+    SAG_ASSERT_EQ_U64(ed.jobs.v[0].bytes_out, 11U);
+    sag_ed_free(&ed);
+}
