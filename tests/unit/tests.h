@@ -625,4 +625,18 @@ void test_re_limits_fire_during_emission(void);
 void test_re_inst_size_budget(void);
 void test_re_error_offsets_are_always_in_range(void);
 
+void test_re_icase_ascii(void);
+void test_re_icase_kelvin_sign(void);
+void test_re_icase_greek_sigma(void);
+void test_re_icase_is_simple_folding_only(void);
+void test_re_no_normalization(void);
+void test_re_invalid_bytes_match_dot_never_word(void);
+void test_re_invalid_bytes_are_word_boundaries(void);
+void test_re_search_over_binary_survives(void);
+void test_re_match_spans_multiple_pieces(void);
+void test_re_match_spans_interleaved_pieces(void);
+void test_re_multibyte_spans_pieces(void);
+void test_re_prefilter_rejects_mid_sequence_candidates(void);
+void test_re_textbuf_and_bytes_agree(void);
+
 #endif

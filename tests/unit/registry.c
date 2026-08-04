@@ -620,6 +620,19 @@ const SagTest sag_tests[] = {
     T(re_limits_fire_during_emission),
     T(re_inst_size_budget),
     T(re_error_offsets_are_always_in_range),
+    T(re_icase_ascii),
+    T(re_icase_kelvin_sign),
+    T(re_icase_greek_sigma),
+    T(re_icase_is_simple_folding_only),
+    T(re_no_normalization),
+    T(re_invalid_bytes_match_dot_never_word),
+    T(re_invalid_bytes_are_word_boundaries),
+    T(re_search_over_binary_survives),
+    T(re_match_spans_multiple_pieces),
+    T(re_match_spans_interleaved_pieces),
+    T(re_multibyte_spans_pieces),
+    T(re_prefilter_rejects_mid_sequence_candidates),
+    T(re_textbuf_and_bytes_agree),
 };
 
 const size_t sag_tests_len = SAG_ARRAY_LEN(sag_tests);

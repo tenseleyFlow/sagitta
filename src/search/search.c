@@ -38,10 +38,25 @@ static bool byte_at(const SagReInput *in, TextIter *it, u64 off, u8 *out)
     return true;
 }
 
+/* Bytes a lead byte claims, or 0 when it is not a lead. */
+static u64 lead_len(u8 b)
+{
+    if ((b & 0x80U) == 0U)
+        return 1U;
+    if ((b & 0xE0U) == 0xC0U)
+        return 2U;
+    if ((b & 0xF0U) == 0xE0U)
+        return 3U;
+    if ((b & 0xF8U) == 0xF0U)
+        return 4U;
+    return 0U;
+}
+
 static bool is_cp_start(const SagReInput *in, u64 off)
 {
     TextIter it;
     u8 b;
+    u64 back;
 
     if (off == 0U)
         return true;
@@ -50,7 +65,29 @@ static bool is_cp_start(const SagReInput *in, u64 off)
     /* A BMH candidate knows no encoding and can land mid-sequence;
      * omitting this check produces phantom matches inside multibyte
      * text (§7). */
-    return (b & 0xC0U) != 0x80U;
+    if ((b & 0xC0U) != 0x80U)
+        return true;
+    /*
+     * It LOOKS like a continuation byte — but a stray 0x9F with no lead
+     * in front of it is its own codepoint (a U+DC80-range escape), and
+     * rejecting it would make a search for that byte fail on exactly the
+     * binary files the escape policy exists to support.  So check
+     * whether a real lead actually claims this offset.
+     */
+    for (back = 1U; back < SAG_UTF8_MAX && back <= off; back++) {
+        u8 lead;
+        u64 span;
+
+        if (!byte_at(in, &it, off - back, &lead))
+            break;
+        if ((lead & 0xC0U) == 0x80U)
+            continue; /* another continuation; keep walking back */
+        span = lead_len(lead);
+        /* A lead covering this offset means we are genuinely inside a
+         * sequence; anything else means the byte stands alone. */
+        return span == 0U || back >= span;
+    }
+    return true;
 }
 
 /* Advances one codepoint from `off`. */

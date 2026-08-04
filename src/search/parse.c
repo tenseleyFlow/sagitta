@@ -223,16 +223,123 @@ u32 sag_re_class_perl(ReParse *p, char which)
     return sag_re_class_intern(p, r, n, negate);
 }
 
+/*
+ * Fold classes need the INVERSE of the case maps, not just the maps.
+ *
+ * Greek sigma is the case that proves it: Σ maps down to medial σ, and
+ * both σ and final ς map up to Σ — but nothing maps Σ down to ς.  Asking
+ * only "what does this map to" therefore finds {Σ, σ} and silently omits
+ * ς, so searching for Σ misses every word ending in sigma.
+ *
+ * The inverse is built once, on the first ICASE compile, by grouping
+ * every codepoint under its uppercase form.  One 1.1M-codepoint scan
+ * costs a few milliseconds once per process; doing it per compile would
+ * be visible in Sprint 21's per-keystroke recompile.
+ */
+enum { FOLD_MAX = 4096 };
+
+typedef struct FoldEntry {
+    u32 canon;
+    u32 cp;
+} FoldEntry;
+
+static FoldEntry fold_table[FOLD_MAX];
+static u32 fold_len;
+static bool fold_ready;
+
+static u32 fold_canon(u32 cp)
+{
+    u32 mapped[SAG_CASE_MAX_CODEPOINTS];
+
+    /* Single-codepoint uppercase only: a multi-codepoint expansion is
+     * full folding, which §3 rules out. */
+    if (sag_case_map(cp, SAG_CASE_UPPER, mapped) == 1U)
+        return mapped[0];
+    return cp;
+}
+
+static int fold_cmp(const void *a, const void *b, void *ctx)
+{
+    const FoldEntry *ea = a;
+    const FoldEntry *eb = b;
+
+    (void)ctx;
+    if (ea->canon != eb->canon)
+        return ea->canon < eb->canon ? -1 : 1;
+    if (ea->cp != eb->cp)
+        return ea->cp < eb->cp ? -1 : 1;
+    return 0;
+}
+
+static void fold_build(void)
+{
+    u32 cp;
+
+    if (fold_ready)
+        return;
+    fold_ready = true;
+    for (cp = 0U; cp <= 0x10FFFFU; cp++) {
+        u32 canon = fold_canon(cp);
+
+        /* Only codepoints that actually case-map join a class. */
+        if (canon == cp)
+            continue;
+        if (fold_len == FOLD_MAX)
+            break;
+        fold_table[fold_len].canon = canon;
+        fold_table[fold_len].cp = cp;
+        fold_len++;
+    }
+    sag_sort_stable(fold_table, fold_len, sizeof(*fold_table), fold_cmp,
+                    NULL);
+}
+
+/* Appends every member of `canon`'s class that is not already present. */
+static u32 fold_class_members(u32 canon, u32 *out, u32 n, u32 cap)
+{
+    u32 lo = 0U;
+    u32 hi = fold_len;
+
+    while (lo < hi) {
+        u32 mid = lo + (hi - lo) / 2U;
+
+        if (fold_table[mid].canon < canon)
+            lo = mid + 1U;
+        else
+            hi = mid;
+    }
+    while (lo < fold_len && fold_table[lo].canon == canon && n < cap) {
+        u32 member = fold_table[lo].cp;
+        u32 i;
+        bool dup = false;
+
+        for (i = 0U; i < n; i++)
+            dup = dup || out[i] == member;
+        if (!dup)
+            out[n++] = member;
+        lo++;
+    }
+    return n;
+}
+
 /* Simple folding only: a length-changing fold (ss -> ß) would break the
  * one-codepoint-per-step invariant the linear-time VM depends on. */
 u32 sag_re_fold_partners(u32 cp, u32 out[4])
 {
     u32 n = 0U;
     u32 mapped[SAG_CASE_MAX_CODEPOINTS];
+    u32 canon;
     u32 probe;
     u8 got;
 
     out[n++] = cp;
+    fold_build();
+    /* The whole equivalence class, found through the shared uppercase
+     * form — this is what brings final sigma in. */
+    canon = fold_canon(cp);
+    if (canon != cp && n < 4U)
+        out[n++] = canon;
+    n = fold_class_members(canon, out, n, 4U);
     got = sag_case_map(cp, SAG_CASE_LOWER, mapped);
     if (got == 1U && mapped[0] != cp)
         out[n++] = mapped[0];
