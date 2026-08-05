@@ -3,6 +3,8 @@
 
 #include "edit/motion.h"
 #include "edit/jumplist.h"
+/* Sprint 22 moved Rect here, as this file said it would. */
+#include "ui/layout.h"
 #include "search/overlay.h"
 #include "edit/multicursor.h"
 #include "edit/select.h"
@@ -13,14 +15,6 @@
 #include "util/base.h"
 
 typedef struct Buffer Buffer;
-
-/* Screen-cell geometry.  Sprint 22 moves this unchanged to layout.h. */
-typedef struct Rect {
-    u16 x;
-    u16 y;
-    u16 w;
-    u16 h;
-} Rect;
 
 typedef struct Win {
     Buffer *buf;

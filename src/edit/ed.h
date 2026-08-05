@@ -100,6 +100,14 @@ struct Ed {
     Buffer buffer;
     Win single_win;
     Win *win;
+    /*
+     * Sprint 22: the pane tree.  `focus` is a LEAF pointer, revalidated
+     * after any tree mutation.  Sprint 23 gives each tab its own root.
+     */
+    struct Pane *pane_root;
+    struct Pane *focus;
+    Win *panes[SAG_PANE_MAX_LEAVES];
+    u32 npanes;
     Rect footer_rect;
 
     Mode mode;
@@ -181,6 +189,13 @@ bool sag_ed_show_buffer(Ed *ed, Buffer *b);
  * for a name that has not been set (or whose mark has since died). */
 bool sag_ed_mark_set(Ed *ed, Buffer *b, u8 name, ByteOff at);
 bool sag_ed_mark_get(Ed *ed, const Buffer *b, u8 name, ByteOff *out);
+
+/* Sprint 22 pane plumbing.  A clone shares the BUFFER and copies the
+ * view (cursor, viewport); Sprint 21's jumplist is per window and so
+ * deliberately starts empty in the new pane. */
+struct Pane *sag_ed_pane_root(Ed *ed);
+Win *sag_ed_win_clone(Ed *ed, const Win *src);
+void sag_ed_win_release(Ed *ed, Win *w);
 
 EditCtx sag_ed_edit_ctx(Ed *ed);
 EditCtx sag_ed_edit_ctx_for(Ed *ed, Win *win);

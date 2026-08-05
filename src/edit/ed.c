@@ -52,6 +52,20 @@ static void ed_buffer_free(Ed *ed)
     sag_reg_bind_context(&ed->regs, NULL, NULL);
     sag_search_state_free(&ed->search);
     sag_search_confirm_cancel(ed);
+    {
+        u32 i;
+
+        for (i = 0U; i < ed->npanes; i++) {
+            sag_overlay_free(&ed->panes[i]->overlay);
+            sag_vp_free(ed->panes[i]);
+            sag_cset_free(&ed->panes[i]->cs);
+            free(ed->panes[i]);
+        }
+        ed->npanes = 0U;
+    }
+    sag_pane_free(ed->pane_root);
+    ed->pane_root = NULL;
+    ed->focus = NULL;
     sag_overlay_free(&ed->single_win.overlay);
     sag_vp_free(&ed->single_win);
     sag_cset_free(&ed->single_win.cs);
@@ -207,6 +221,10 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
     sag_search_opts_init(&ed->search_opts);
     sag_search_state_init(&ed->search);
     sag_overlay_init(&ed->single_win.overlay);
+    /* One leaf holding the document window: the pane tree always
+     * exists, so no code path has to ask whether panes are "on". */
+    ed->pane_root = sag_pane_new_leaf(&ed->single_win);
+    ed->focus = ed->pane_root;
     sag_reg_bind_context(&ed->regs, ed->buffer.undo, &ed->buffer.meta);
     sag_cset_init(&ed->single_win.cs, cursor);
     ed->single_win.buf = &ed->buffer;
@@ -373,6 +391,64 @@ bool sag_ed_mark_get(Ed *ed, const Buffer *b, u8 name, ByteOff *out)
     if (out != NULL)
         *out = sag_mark_pos(b->marks, b->named[slot]);
     return true;
+}
+
+struct Pane *sag_ed_pane_root(Ed *ed)
+{
+    return ed == NULL ? NULL : ed->pane_root;
+}
+
+/*
+ * A new view of the SAME buffer.  The cursor set and viewport are
+ * copied so the split opens showing what the user was already looking
+ * at; the jumplist is not, because it is this view's history and a view
+ * that has been nowhere has no history (Sprint 21 §5).
+ */
+Win *sag_ed_win_clone(Ed *ed, const Win *src)
+{
+    Win *w;
+
+    if (ed == NULL || src == NULL || ed->npanes >= SAG_PANE_MAX_LEAVES)
+        return NULL;
+    w = sag_xcalloc(1U, sizeof(*w));
+    w->buf = src->buf;
+    w->rect = src->rect;
+    w->number_style = src->number_style;
+    w->gutter_width = src->gutter_width;
+    {
+        Cursor seed = {BYTEOFF(0U), {0U}, BYTEOFF(0U)};
+
+        if (src->cs.curs.len > 0U && src->cs.primary < src->cs.curs.len)
+            seed = src->cs.curs.data[src->cs.primary];
+        sag_cset_init(&w->cs, seed);
+    }
+    sag_vp_init(w);
+    w->vp.top = src->vp.top;
+    w->vp.top_sub = src->vp.top_sub;
+    sag_overlay_init(&w->overlay);
+    sag_jumplist_init(&w->jumps);
+    ed->panes[ed->npanes++] = w;
+    return w;
+}
+
+void sag_ed_win_release(Ed *ed, Win *w)
+{
+    u32 i;
+
+    if (ed == NULL || w == NULL || w == &ed->single_win)
+        return;
+    for (i = 0U; i < ed->npanes; i++) {
+        if (ed->panes[i] != w)
+            continue;
+        (void)memmove(&ed->panes[i], &ed->panes[i + 1U],
+                      (size_t)(ed->npanes - i - 1U) * sizeof(*ed->panes));
+        ed->npanes--;
+        break;
+    }
+    sag_overlay_free(&w->overlay);
+    sag_vp_free(w);
+    sag_cset_free(&w->cs);
+    free(w);
 }
 
 EditCtx sag_ed_edit_ctx_for(Ed *ed, Win *win)
@@ -798,6 +874,10 @@ CmdStatus sag_ed_file_write_to(Ed *ed, const char *path, bool force)
     sag_search_opts_init(&ed->search_opts);
     sag_search_state_init(&ed->search);
     sag_overlay_init(&ed->single_win.overlay);
+    /* One leaf holding the document window: the pane tree always
+     * exists, so no code path has to ask whether panes are "on". */
+    ed->pane_root = sag_pane_new_leaf(&ed->single_win);
+    ed->focus = ed->pane_root;
     sag_reg_bind_context(&ed->regs, ed->buffer.undo, &ed->buffer.meta);
     ed->durability_failed = false;
     sag_msg(ed, SAG_MSG_INFO, "wrote %s, %llu lines", path,
