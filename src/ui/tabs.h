@@ -80,4 +80,10 @@ Tab *sag_tab_at(Ed *ed, int idx);
 /* Where index `i` lands when `from` moves to `to`. */
 int sag_tab_shifted_index(int i, int from, int to);
 
+/* Rows the strip needs; layout reserves them like the footer row. */
+u32 sag_tab_strip_rows(const Ed *ed);
+void sag_tab_strip_draw(Ed *ed, Rect rect);
+/* True when the click was consumed. */
+bool sag_tab_strip_click(Ed *ed, u16 x, u16 y);
+
 #endif

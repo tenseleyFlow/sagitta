@@ -11,6 +11,8 @@
 
 #include "edit/ed.h"
 #include "ui/message.h"
+#include "ui/region.h"
+#include "ui/strip.h"
 #include "util/log.h"
 
 void sag_tabs_init(Tabs *t)
@@ -286,4 +288,184 @@ bool sag_tab_modified(const Ed *ed, int idx)
      * drifted from the thing it claimed to describe.
      */
     return w != NULL && sag_buf_dirty(w->buf);
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 23 §3: the tab strip                                      */
+/* ---------------------------------------------------------------- */
+
+static const char *tab_basename(const Tab *t)
+{
+    const char *slash;
+
+    if (t->path == NULL)
+        return "untitled";
+    slash = strrchr(t->path, '/');
+    return slash != NULL && slash[1] != '\0' ? slash + 1 : t->path;
+}
+
+/*
+ * `[N: name*]` — N is the 1-based index the user types for goto, and
+ * the `*` is asked for, never remembered (§4).
+ */
+static void tab_label(const Ed *ed, int idx, char *out, size_t cap)
+{
+    (void)snprintf(out, cap, "[%d: %s%s]", idx + 1,
+                   tab_basename(&ed->tabs.v.data[idx]),
+                   sag_tab_modified(ed, idx) ? "*" : "");
+}
+
+u32 sag_tab_strip_rows(const Ed *ed)
+{
+    /*
+     * A parameter, not a renderer: Sprint 22's layout reserves whatever
+     * this returns before handing the rest to the pane tree, exactly as
+     * it reserves the footer row.  One tab needs no strip.
+     */
+    return ed != NULL && ed->tabs.v.len > 1U ? 1U : 0U;
+}
+
+void sag_tab_strip_draw(Ed *ed, Rect rect)
+{
+    StripEntry entries[SAG_TAB_MAX];
+    StripSpan spans[SAG_TAB_MAX];
+    int n_spans = 0;
+    bool more_left = false;
+    bool more_right = false;
+    int n;
+    int i;
+    u16 avail;
+    SagColor dim = {SAG_COLOR_RGB, 120U, 120U, 120U};
+    SagColor fg = {SAG_COLOR_DEFAULT, 0U, 0U, 0U};
+    SagColor bg = {SAG_COLOR_DEFAULT, 0U, 0U, 0U};
+
+    if (ed == NULL || rect.w == 0U || rect.h == 0U)
+        return;
+    n = (int)ed->tabs.v.len;
+    if (n <= 0)
+        return;
+    for (i = 0; i < n; i++) {
+        (void)memset(&entries[i], 0, sizeof(entries[i]));
+        tab_label(ed, i, entries[i].label, sizeof(entries[i].label));
+        entries[i].payload = i;
+        /* Orphans — files outside the workspace — render dim.  Sprint
+         * 25 refines what "outside" means. */
+        {
+            /*
+             * Orphans are files outside the workspace root.  Both sides
+             * are already canonical — the tab's path from sag_tab_open
+             * and the root from the workspace — so this is a prefix
+             * test, not a filesystem call on a draw path.  Sprint 25
+             * refines what "outside" means.
+             */
+            const char *root = sag_ws_root(ed);
+            const char *p = ed->tabs.v.data[i].path;
+
+            entries[i].dim = p != NULL && root != NULL &&
+                             strncmp(p, root, strlen(root)) != 0;
+        }
+    }
+    /* Reserve a cell for `<` when scrolled, so the indicator never
+     * overlaps the first entry it is pointing away from. */
+    avail = rect.w;
+    if (ed->tabs.scroll > 0 && avail > 1U)
+        avail = (u16)(avail - 1U);
+    sag_strip_layout(entries, n, avail, ed->tabs.active, &ed->tabs.scroll,
+                     spans, &n_spans, &more_left, &more_right);
+
+    {
+        /* Blank the row first: a shorter strip than last frame must not
+         * leave the tail of the old one behind. */
+        Cell blank;
+
+        (void)memset(&blank, 0, sizeof(blank));
+        sag_grid_fill(&ed->grid, rect.y, rect.x,
+                      (u16)(rect.x + rect.w), blank);
+    }
+    for (i = 0; i < n_spans; i++) {
+        int idx = spans[i].idx;
+        u16 x = (u16)(rect.x + spans[i].col0 + (more_left ? 1U : 0U));
+        u16 attrs = 0U;
+        Rect span_rect;
+
+        if (idx == ed->tabs.active)
+            attrs = SAG_ATTR_REVERSE;
+        else if (entries[idx].dim)
+            attrs = SAG_ATTR_DIM;
+        (void)sag_grid_puts(&ed->grid, rect.y, x,
+                            (const u8 *)entries[idx].label,
+                            strlen(entries[idx].label),
+                            entries[idx].dim ? dim : fg, bg, attrs);
+        /*
+         * Registered with the SAME cells the layout produced and the
+         * draw used.  Recomputing this from strlen while hit-testing is
+         * the multibyte click-shift the Sprint 22 law forbids.
+         */
+        span_rect = (Rect){x, rect.y,
+                           (u16)(spans[i].col1 - spans[i].col0), 1U};
+        sag_region_add(SAG_REGION_TAB, span_rect, idx);
+    }
+    if (more_left) {
+        Rect r = {rect.x, rect.y, 1U, 1U};
+
+        (void)sag_grid_puts(&ed->grid, rect.y, rect.x, (const u8 *)"<",
+                            1U, dim, bg, SAG_ATTR_DIM);
+        sag_region_add(SAG_REGION_TAB_SCROLL, r, -1);
+    }
+    if (more_right) {
+        char more[16];
+        int past = n - (n_spans > 0 ? spans[n_spans - 1].idx + 1 : 0);
+        u16 w;
+        u16 x;
+        Rect r;
+
+        (void)snprintf(more, sizeof(more), ">%d", past);
+        w = (u16)strlen(more);
+        if (w < rect.w) {
+            x = (u16)(rect.x + rect.w - w);
+            (void)sag_grid_puts(&ed->grid, rect.y, x, (const u8 *)more,
+                                strlen(more), dim, bg, SAG_ATTR_DIM);
+            r = (Rect){x, rect.y, w, 1U};
+            sag_region_add(SAG_REGION_TAB_SCROLL, r, 1);
+        }
+    }
+}
+
+/*
+ * Click routing for the strip.  Everything that is not a tab span or a
+ * scroll indicator is IGNORED — Sprint 27 owns wheel, drag-reorder and
+ * the context menu, and a click half-handled here would move a tab the
+ * user meant to scroll past.
+ */
+bool sag_tab_strip_click(Ed *ed, u16 x, u16 y)
+{
+    Region hit;
+
+    if (ed == NULL)
+        return false;
+    hit = sag_region_hit(x, y);
+    if (hit.kind == SAG_REGION_TAB_SCROLL) {
+        int to = ed->tabs.scroll + (hit.payload < 0 ? -1 : 1);
+
+        if (to < 0)
+            to = 0;
+        if (to >= (int)ed->tabs.v.len)
+            to = (int)ed->tabs.v.len - 1;
+        ed->tabs.scroll = to;
+        ed->full_damage = true;
+        return true;
+    }
+    if (hit.kind != SAG_REGION_TAB)
+        return false;
+    /*
+     * Sprint 24 introduces negative payloads for groups.  Until then
+     * one arriving means the renderer and the router disagree about the
+     * convention, which is the bug the sign rule was written down early
+     * to prevent — so say so loudly rather than switching to tab -3.
+     */
+    if (hit.payload < 0)
+        SAG_BUG("negative SAG_REGION_TAB payload: groups land in "
+                "Sprint 24");
+    sag_tab_switch(ed, hit.payload);
+    return true;
 }

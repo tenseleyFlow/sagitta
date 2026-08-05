@@ -118,6 +118,7 @@ struct Ed {
     PaneDrag drag;
     Tabs tabs;
     Rect footer_rect;
+    Rect tab_strip_rect;
 
     Mode mode;
     Mode prev_unit;

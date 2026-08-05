@@ -1,5 +1,7 @@
 #include "ui/draw.h"
 
+#include "ui/tabs.h"
+
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
@@ -674,6 +676,9 @@ void sag_draw_panes(Ed *ed)
     sag_pane_tables_reset(ed);
     draw_pane_rec(ed, ed->pane_root);
     draw_crossings_rec(ed, ed->pane_root);
+    /* After the panes, so a strip span shadows the document beneath it
+     * on overlap — last added wins. */
+    sag_tab_strip_draw(ed, ed->tab_strip_rect);
 }
 
 bool sag_draw_pane_is_focused(const Ed *ed, const Win *w)

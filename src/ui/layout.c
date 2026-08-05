@@ -6,6 +6,7 @@
 #include "edit/ed.h"
 #include "ui/gutter.h"
 #include "ui/viewport.h"
+#include "ui/tabs.h"
 #include "ui/win.h"
 #include "util/log.h"
 
@@ -473,6 +474,7 @@ static void layout_leaf_visit(Pane *p, void *ctx)
 void sag_layout(Ed *ed)
 {
     u16 content_rows;
+    u16 top = 0U;
 
     if (ed == NULL || ed->win == NULL)
         SAG_BUG("editor layout: missing window");
@@ -485,18 +487,28 @@ void sag_layout(Ed *ed)
         content_rows = ed->grid.rows;
     }
     /*
-     * The tree owns the document area; the footer row is reserved
-     * before it and the tab strip's rows will be reserved the same way
-     * in Sprint 23 — a parameter here, not a renderer.
+     * The tree owns what is left after the reserved rows.  The tab
+     * strip is a PARAMETER here, not a renderer: it asks for rows and
+     * layout takes them off the top, exactly as the footer takes one
+     * off the bottom.
      *
      * A NULL root is legal: several fixtures build an Ed directly
      * rather than through sag_ed_init.  Laying the single window out
      * against the same area keeps them working, and is exactly what the
      * one-leaf tree would compute anyway.
      */
+    {
+        u16 strip = (u16)sag_tab_strip_rows(ed);
+
+        if (strip > content_rows)
+            strip = content_rows;
+        ed->tab_strip_rect = (Rect){0U, 0U, ed->grid.cols, strip};
+        top = strip;
+        content_rows = (u16)(content_rows - strip);
+    }
     if (ed->pane_root != NULL) {
         sag_layout_compute(ed->pane_root,
-                           (Rect){0U, 0U, ed->grid.cols, content_rows});
+                           (Rect){0U, top, ed->grid.cols, content_rows});
         sag_pane_tree_walk(ed->pane_root, layout_leaf_visit, ed);
     } else {
         Pane solo;
@@ -504,7 +516,7 @@ void sag_layout(Ed *ed)
         (void)memset(&solo, 0, sizeof(solo));
         solo.is_leaf = true;
         solo.win = ed->win;
-        solo.rect = (Rect){0U, 0U, ed->grid.cols, content_rows};
+        solo.rect = (Rect){0U, top, ed->grid.cols, content_rows};
         layout_leaf_win(ed, &solo);
     }
     ed->layout_dirty = false;
