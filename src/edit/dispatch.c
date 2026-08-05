@@ -1,5 +1,7 @@
 #include "edit/dispatch.h"
 
+#include "ui/tabs.h"
+
 #include <errno.h>
 #include <stdlib.h>
 #include <string.h>
@@ -197,6 +199,19 @@ void sag_dispatch_key(Ed *ed, Key key, i64 now_ms)
      * rest of the time, and answering "replace this one?" must not also
      * run whatever `a` is bound to.
      */
+    /*
+     * The dirty-close question owns the keyboard while it is up: `w`
+     * and `d` are ordinary bindings the rest of the time, and answering
+     * "save changes?" must not also run whatever `d` is bound to.
+     */
+    if (ed->tab_prompt.active) {
+        u8 answer = key.code == SAG_KEY_ESCAPE
+                    ? 0x1BU
+                    : (key.ntext == 1U ? key.text[0] : 0U);
+
+        if (sag_tab_prompt_key(ed, answer))
+            return;
+    }
     if (ed->confirm.active) {
         u8 answer = key.code == SAG_KEY_ESCAPE
                     ? 0x1BU

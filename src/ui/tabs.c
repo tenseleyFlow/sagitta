@@ -469,3 +469,217 @@ bool sag_tab_strip_click(Ed *ed, u16 x, u16 y)
     sag_tab_switch(ed, hit.payload);
     return true;
 }
+
+/* ---------------------------------------------------------------- */
+/* Sprint 23 §5/§6: commands and the dirty-close prompt             */
+/* ---------------------------------------------------------------- */
+
+CmdStatus sag_tab_cmd_new(CmdCtx *cx)
+{
+    int idx;
+
+    if (cx == NULL || cx->ed == NULL)
+        return SAG_CMD_ERR_STATE;
+    idx = sag_tab_open(cx->ed, NULL);
+    /* The return value is checked at EVERY call site (DoD 6): a silent
+     * cap failure is how facsimile loaded a new file into the
+     * still-active tab and then wrote it over the old path. */
+    if (idx < 0)
+        return SAG_CMD_ERR_STATE;
+    sag_tab_switch(cx->ed, idx);
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_tab_cmd_open(CmdCtx *cx)
+{
+    int idx;
+
+    if (cx == NULL || cx->ed == NULL || cx->sarg == NULL)
+        return SAG_CMD_ERR_ARG;
+    idx = sag_tab_open(cx->ed, cx->sarg);
+    if (idx < 0)
+        return SAG_CMD_ERR_STATE;
+    sag_tab_switch(cx->ed, idx);
+    return SAG_CMD_OK;
+}
+
+static CmdStatus tab_step(CmdCtx *cx, int delta)
+{
+    int n;
+    int at;
+
+    if (cx == NULL || cx->ed == NULL)
+        return SAG_CMD_ERR_STATE;
+    n = (int)sag_tab_count(cx->ed);
+    if (n <= 1)
+        return SAG_CMD_OK;
+    at = cx->ed->tabs.active + delta;
+    /* Cyclic, because next-from-the-last meaning "nothing" is a worse
+     * answer than wrapping when there is a strip showing the ring. */
+    while (at < 0)
+        at += n;
+    sag_tab_switch(cx->ed, at % n);
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_tab_cmd_next(CmdCtx *cx)
+{
+    return tab_step(cx, 1);
+}
+
+CmdStatus sag_tab_cmd_prev(CmdCtx *cx)
+{
+    return tab_step(cx, -1);
+}
+
+/*
+ * A pure function of its argument.  Sprint 24's 500 ms digit-extension
+ * window WRAPS this command, so it must not carry state of its own or
+ * the wrapper inherits it.
+ */
+CmdStatus sag_tab_cmd_goto(CmdCtx *cx)
+{
+    i64 want;
+    int idx;
+
+    if (cx == NULL || cx->ed == NULL)
+        return SAG_CMD_ERR_STATE;
+    want = cx->iarg;
+    if (cx->count_given && cx->count != 0U)
+        want = (i64)cx->count;
+    /* 0 means tab 10: the digit row reads 1..9 then 0, so `0` is the
+     * tenth key, not the zeroth tab. */
+    if (want == 0)
+        want = 10;
+    idx = (int)want - 1;
+    if (idx < 0 || idx >= (int)sag_tab_count(cx->ed)) {
+        sag_msg(cx->ed, SAG_MSG_ERROR, "no tab %lld",
+                (long long)want);
+        return SAG_CMD_ERR_ARG;
+    }
+    sag_tab_switch(cx->ed, idx);
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_tab_cmd_move(CmdCtx *cx)
+{
+    i64 want;
+    int to;
+
+    if (cx == NULL || cx->ed == NULL || cx->ed->tabs.active < 0)
+        return SAG_CMD_ERR_STATE;
+    want = cx->iarg;
+    if (cx->count_given && cx->count != 0U)
+        want = (i64)cx->count;
+    to = (int)want - 1;
+    if (to < 0 || to >= (int)sag_tab_count(cx->ed)) {
+        sag_msg(cx->ed, SAG_MSG_ERROR, "no position %lld",
+                (long long)want);
+        return SAG_CMD_ERR_ARG;
+    }
+    sag_tab_reorder(cx->ed, cx->ed->tabs.active, to);
+    cx->ed->full_damage = true;
+    return SAG_CMD_OK;
+}
+
+/*
+ * The dirty-close prompt.
+ *
+ * It captures the tab_ID, not the index: another event — an async job
+ * closing a tab (Sprint 19) — can compact the array while the prompt is
+ * up, and an index captured a moment ago would then answer for a
+ * different file.  The id is resolved when the answer arrives; if it is
+ * gone the prompt dissolves silently.
+ */
+static void tab_prompt_show(Ed *ed)
+{
+    int idx = sag_tab_index_of_id(ed, ed->tab_prompt.tab_id);
+    const Tab *t;
+
+    if (idx < 0) {
+        ed->tab_prompt.active = false;
+        return;
+    }
+    t = sag_tab_at(ed, idx);
+    sag_msg(ed, SAG_MSG_INFO,
+            "save changes to %s?  [w]rite  [d]iscard  [esc] cancel",
+            t->path != NULL ? t->path : "untitled");
+}
+
+CmdStatus sag_tab_cmd_close(CmdCtx *cx)
+{
+    Ed *ed;
+    int idx;
+
+    if (cx == NULL || cx->ed == NULL)
+        return SAG_CMD_ERR_STATE;
+    ed = cx->ed;
+    idx = ed->tabs.active;
+    if (idx < 0)
+        return SAG_CMD_ERR_STATE;
+    if (sag_tab_count(ed) <= 1U) {
+        sag_msg(ed, SAG_MSG_ERROR, "cannot close the last tab");
+        return SAG_CMD_ERR_STATE;
+    }
+    if (!sag_tab_modified(ed, idx)) {
+        (void)sag_tab_close(ed, idx);
+        return SAG_CMD_OK;
+    }
+    ed->tab_prompt.tab_id = sag_tab_at(ed, idx)->tab_id;
+    ed->tab_prompt.active = true;
+    tab_prompt_show(ed);
+    return SAG_CMD_OK;
+}
+
+bool sag_tab_prompt_key(Ed *ed, u8 answer)
+{
+    int idx;
+
+    if (ed == NULL || !ed->tab_prompt.active)
+        return false;
+    idx = sag_tab_index_of_id(ed, ed->tab_prompt.tab_id);
+    if (idx < 0) {
+        /* The tab went away while the question was up; the question
+         * goes away with it rather than answering for its successor. */
+        ed->tab_prompt.active = false;
+        sag_msg_clear(ed);
+        return true;
+    }
+    switch (answer) {
+    case 'w': {
+        Tab *t = sag_tab_at(ed, idx);
+        CmdStatus st;
+
+        /*
+         * Write through the ONE save path, and close only on success.
+         * There is no route where "close" discards bytes the user asked
+         * to keep (invariant 1), so an I/O error aborts the close and
+         * leaves the tab and its text exactly as they were.
+         */
+        sag_tab_switch(ed, idx);
+        st = sag_ed_file_save(ed, false);
+        if (st != SAG_CMD_OK) {
+            ed->tab_prompt.active = false;
+            return true; /* the save path already reported why */
+        }
+        idx = sag_tab_index_of_id(ed, t->tab_id);
+        if (idx >= 0)
+            (void)sag_tab_close(ed, idx);
+        break;
+    }
+    case 'd':
+        (void)sag_tab_close(ed, idx);
+        break;
+    case 0x1BU: /* Esc cancels the close entirely. */
+        break;
+    default:
+        /* Every other key is swallowed with the question restated,
+         * rather than falling through to whatever it is normally
+         * bound to. */
+        tab_prompt_show(ed);
+        return true;
+    }
+    ed->tab_prompt.active = false;
+    sag_msg_clear(ed);
+    return true;
+}

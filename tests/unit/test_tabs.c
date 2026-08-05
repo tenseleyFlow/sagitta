@@ -12,10 +12,14 @@
  */
 #include "harness.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include "edit/ed.h"
+#include "ui/region.h"
 #include "ui/tabs.h"
 
 static void tb_fixture(Ed *ed)
@@ -432,4 +436,248 @@ void test_tabs_group_fields_are_inert_until_sprint_24(void)
         SAG_ASSERT(!t->deferred);
     }
     sag_ed_free(&ed);
+}
+
+/* ---------------------------------------------------------------- */
+/* Commands and the dirty-close prompt (§5/§6)                      */
+/* ---------------------------------------------------------------- */
+
+static CmdStatus tb_invoke(Ed *ed, const char *name, i64 iarg,
+                           const char *sarg)
+{
+    CmdId id = sag_cmd_lookup(name, (u32)strlen(name));
+    CmdCtx cx;
+
+    SAG_ASSERT(id.v != 0U);
+    (void)memset(&cx, 0, sizeof(cx));
+    cx.ed = ed;
+    cx.win = ed->win;
+    cx.count = 1U;
+    cx.iarg = iarg;
+    cx.sarg = sarg;
+    cx.sarg_len = sarg == NULL ? 0U : (u32)strlen(sarg);
+    cx.source = SAG_SRC_TEST;
+    return sag_ed_invoke(ed, id, &cx);
+}
+
+/* DoD 8: 0 reaches tab 10, and out of range messages and stays put. */
+void test_tabs_goto_maps_zero_to_ten_and_refuses_out_of_range(void)
+{
+    Ed ed;
+    u32 ids[9];
+
+    tb_fixture(&ed);
+    tb_open_many(&ed, 9U, ids); /* 10 tabs total */
+    SAG_ASSERT_EQ_U64(sag_tab_count(&ed), 10U);
+
+    SAG_ASSERT_EQ_U64(tb_invoke(&ed, "ed.tab.goto", 1, NULL), SAG_CMD_OK);
+    SAG_ASSERT_EQ_I64(ed.tabs.active, 0);
+    SAG_ASSERT_EQ_U64(tb_invoke(&ed, "ed.tab.goto", 3, NULL), SAG_CMD_OK);
+    SAG_ASSERT_EQ_I64(ed.tabs.active, 2);
+    /* 0 is the tenth key on the digit row, so it means tab 10. */
+    SAG_ASSERT_EQ_U64(tb_invoke(&ed, "ed.tab.goto", 0, NULL), SAG_CMD_OK);
+    SAG_ASSERT_EQ_I64(ed.tabs.active, 9);
+
+    /* Out of range: refused, and the active tab does not move. */
+    SAG_ASSERT(tb_invoke(&ed, "ed.tab.goto", 99, NULL) != SAG_CMD_OK);
+    SAG_ASSERT_EQ_I64(ed.tabs.active, 9);
+    sag_ed_free(&ed);
+}
+
+void test_tabs_next_and_prev_are_cyclic(void)
+{
+    Ed ed;
+    u32 ids[2];
+
+    tb_fixture(&ed);
+    tb_open_many(&ed, 2U, ids);
+    sag_tab_switch(&ed, 0);
+
+    SAG_ASSERT_EQ_U64(tb_invoke(&ed, "ed.tab.next", 0, NULL), SAG_CMD_OK);
+    SAG_ASSERT_EQ_I64(ed.tabs.active, 1);
+    SAG_ASSERT_EQ_U64(tb_invoke(&ed, "ed.tab.next", 0, NULL), SAG_CMD_OK);
+    SAG_ASSERT_EQ_I64(ed.tabs.active, 2);
+    /* Round the ring rather than stopping at the end. */
+    SAG_ASSERT_EQ_U64(tb_invoke(&ed, "ed.tab.next", 0, NULL), SAG_CMD_OK);
+    SAG_ASSERT_EQ_I64(ed.tabs.active, 0);
+    SAG_ASSERT_EQ_U64(tb_invoke(&ed, "ed.tab.prev", 0, NULL), SAG_CMD_OK);
+    SAG_ASSERT_EQ_I64(ed.tabs.active, 2);
+    sag_ed_free(&ed);
+}
+
+void test_tabs_move_reorders_the_active_tab(void)
+{
+    Ed ed;
+    u32 ids[3];
+    u32 active_id;
+
+    tb_fixture(&ed);
+    tb_open_many(&ed, 3U, ids);
+    sag_tab_switch(&ed, 0);
+    active_id = sag_tab_at(&ed, 0)->tab_id;
+
+    SAG_ASSERT_EQ_U64(tb_invoke(&ed, "ed.tab.move", 3, NULL), SAG_CMD_OK);
+    SAG_ASSERT_EQ_I64(ed.tabs.active, 2);
+    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 2)->tab_id, active_id);
+    SAG_ASSERT(tb_invoke(&ed, "ed.tab.move", 99, NULL) != SAG_CMD_OK);
+    sag_ed_free(&ed);
+}
+
+/* A clean tab closes without a question. */
+void test_tabs_close_command_is_silent_when_clean(void)
+{
+    Ed ed;
+    u32 ids[1];
+
+    tb_fixture(&ed);
+    tb_open_many(&ed, 1U, ids);
+    sag_tab_switch(&ed, 1);
+    SAG_ASSERT_EQ_U64(tb_invoke(&ed, "ed.tab.close", 0, NULL),
+                      SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(sag_tab_count(&ed), 1U);
+    SAG_ASSERT(!ed.tab_prompt.active);
+    /* The last tab refuses to close. */
+    SAG_ASSERT(tb_invoke(&ed, "ed.tab.close", 0, NULL) != SAG_CMD_OK);
+    sag_ed_free(&ed);
+}
+
+/*
+ * The prompt holds the tab_ID.  If the tab it asked about disappears
+ * while the question is up, the question dissolves rather than
+ * answering for whichever tab inherited the index.
+ */
+void test_tabs_dirty_prompt_holds_the_id_not_the_index(void)
+{
+    Ed ed;
+    u32 ids[2];
+    EditCtx ec;
+    u32 asked_id;
+    u32 other_id;
+
+    tb_fixture(&ed);
+    tb_open_many(&ed, 2U, ids);
+    sag_tab_switch(&ed, 2);
+    /* Dirty the active tab so closing it asks. */
+    ec = sag_ed_edit_ctx(&ed);
+    SAG_ASSERT(sag_edit_insert(&ec, BYTEOFF(0U), (const u8 *)"x", 1U));
+    sag_ed_finish_edit(&ed, &ec);
+    SAG_ASSERT(sag_tab_modified(&ed, 2));
+
+    SAG_ASSERT_EQ_U64(tb_invoke(&ed, "ed.tab.close", 0, NULL),
+                      SAG_CMD_OK);
+    SAG_ASSERT(ed.tab_prompt.active);
+    asked_id = ed.tab_prompt.tab_id;
+    SAG_ASSERT_EQ_U64(asked_id, sag_tab_at(&ed, 2)->tab_id);
+
+    /* Something else closes a LOWER tab while the question is up, so
+     * index 2 now names a different tab entirely. */
+    other_id = sag_tab_at(&ed, 1)->tab_id;
+    SAG_ASSERT(sag_tab_close(&ed, 1));
+    SAG_ASSERT_EQ_I64(sag_tab_index_of_id(&ed, other_id), -1);
+    /* The question still refers to the tab it asked about, now at 1. */
+    SAG_ASSERT_EQ_I64(sag_tab_index_of_id(&ed, asked_id), 1);
+
+    /* Discard answers for THAT tab, not for whatever index 2 became. */
+    SAG_ASSERT(sag_tab_prompt_key(&ed, (u8)'d'));
+    SAG_ASSERT_EQ_I64(sag_tab_index_of_id(&ed, asked_id), -1);
+    SAG_ASSERT(!ed.tab_prompt.active);
+    sag_ed_free(&ed);
+}
+
+void test_tabs_dirty_prompt_esc_cancels_the_close(void)
+{
+    Ed ed;
+    u32 ids[1];
+    EditCtx ec;
+    u32 id;
+
+    tb_fixture(&ed);
+    tb_open_many(&ed, 1U, ids);
+    sag_tab_switch(&ed, 1);
+    ec = sag_ed_edit_ctx(&ed);
+    SAG_ASSERT(sag_edit_insert(&ec, BYTEOFF(0U), (const u8 *)"x", 1U));
+    sag_ed_finish_edit(&ed, &ec);
+    id = sag_tab_at(&ed, 1)->tab_id;
+
+    SAG_ASSERT_EQ_U64(tb_invoke(&ed, "ed.tab.close", 0, NULL),
+                      SAG_CMD_OK);
+    SAG_ASSERT(ed.tab_prompt.active);
+    SAG_ASSERT(sag_tab_prompt_key(&ed, 0x1BU));
+    /* Cancelled: the tab is still there, with its text. */
+    SAG_ASSERT(!ed.tab_prompt.active);
+    SAG_ASSERT_EQ_I64(sag_tab_index_of_id(&ed, id), 1);
+    SAG_ASSERT(sag_tab_modified(&ed, 1));
+    sag_ed_free(&ed);
+}
+
+/* Any other key is swallowed with the question restated, rather than
+ * falling through to whatever it is normally bound to. */
+void test_tabs_dirty_prompt_swallows_other_keys(void)
+{
+    Ed ed;
+    u32 ids[1];
+    EditCtx ec;
+
+    tb_fixture(&ed);
+    tb_open_many(&ed, 1U, ids);
+    sag_tab_switch(&ed, 1);
+    ec = sag_ed_edit_ctx(&ed);
+    SAG_ASSERT(sag_edit_insert(&ec, BYTEOFF(0U), (const u8 *)"x", 1U));
+    sag_ed_finish_edit(&ed, &ec);
+
+    SAG_ASSERT_EQ_U64(tb_invoke(&ed, "ed.tab.close", 0, NULL),
+                      SAG_CMD_OK);
+    /* `j` would normally move the cursor; here it is consumed. */
+    SAG_ASSERT(sag_tab_prompt_key(&ed, (u8)'j'));
+    SAG_ASSERT(ed.tab_prompt.active);
+    SAG_ASSERT_EQ_U64(sag_tab_count(&ed), 2U);
+    sag_ed_free(&ed);
+}
+
+/*
+ * DoD 9: a negative SAG_REGION_TAB payload means the renderer and the
+ * router disagree about the sign convention Sprint 24 will use, which
+ * is exactly what writing it down early was meant to prevent.
+ */
+void test_tabs_negative_region_payload_is_a_bug(void)
+{
+    int fds[2];
+    pid_t child;
+    pid_t waited;
+    int status;
+    char output[1024];
+    ssize_t got;
+
+    SAG_ASSERT_EQ_I64(pipe(fds), 0);
+    SAG_ASSERT_EQ_I64(fflush(NULL), 0);
+    child = fork();
+    SAG_ASSERT(child >= 0);
+    if (child == 0) {
+        Ed ed;
+
+        (void)close(fds[0]);
+        (void)dup2(fds[1], STDERR_FILENO);
+        (void)close(fds[1]);
+        tb_fixture(&ed);
+        sag_region_frame_begin();
+        /* A hand-built region carrying the convention Sprint 24 will
+         * introduce.  Reaching the router today means the renderer and
+         * the router disagree, which is what writing the sign rule down
+         * early was meant to prevent. */
+        sag_region_add(SAG_REGION_TAB, (Rect){0U, 0U, 8U, 1U}, -3);
+        (void)sag_tab_strip_click(&ed, 1U, 0U);
+        _exit(0);
+    }
+    SAG_ASSERT_EQ_I64(close(fds[1]), 0);
+    got = read(fds[0], output, sizeof(output) - 1U);
+    SAG_ASSERT(got >= 0);
+    output[got < 0 ? 0U : (size_t)got] = '\0';
+    SAG_ASSERT_EQ_I64(close(fds[0]), 0);
+    do {
+        waited = waitpid(child, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+    SAG_ASSERT_EQ_I64(waited, child);
+    SAG_ASSERT(WIFEXITED(status));
+    SAG_ASSERT_EQ_I64(WEXITSTATUS(status), SAG_EXIT_BUG);
+    SAG_ASSERT(strstr(output, "Sprint 24") != NULL);
 }

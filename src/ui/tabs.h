@@ -15,6 +15,7 @@
  * stale one resolves to nothing rather than to whatever took the slot.
  */
 
+#include "edit/cmd.h"
 #include "ui/layout.h"
 #include "util/base.h"
 #include "util/vec.h"
@@ -85,5 +86,26 @@ u32 sag_tab_strip_rows(const Ed *ed);
 void sag_tab_strip_draw(Ed *ed, Rect rect);
 /* True when the click was consumed. */
 bool sag_tab_strip_click(Ed *ed, u16 x, u16 y);
+
+/*
+ * The dirty-close question.  It holds the tab_ID: another event can
+ * compact the array while the prompt is up, and an index captured
+ * beforehand would then answer for a different file.
+ */
+typedef struct TabPrompt {
+    u32 tab_id;
+    bool active;
+} TabPrompt;
+
+/* True when the key was consumed by the prompt. */
+bool sag_tab_prompt_key(Ed *ed, u8 answer);
+
+CmdStatus sag_tab_cmd_new(CmdCtx *cx);
+CmdStatus sag_tab_cmd_open(CmdCtx *cx);
+CmdStatus sag_tab_cmd_close(CmdCtx *cx);
+CmdStatus sag_tab_cmd_next(CmdCtx *cx);
+CmdStatus sag_tab_cmd_prev(CmdCtx *cx);
+CmdStatus sag_tab_cmd_goto(CmdCtx *cx);
+CmdStatus sag_tab_cmd_move(CmdCtx *cx);
 
 #endif

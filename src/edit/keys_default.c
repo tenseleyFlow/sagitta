@@ -44,6 +44,11 @@ static const BindRow keys_L[] = {
     {"C-w w", "ed.pane.focus_next", 0, NULL},
     {"C-w =", "ed.pane.grow", 0, NULL},
     {"C-w -", "ed.pane.shrink", 0, NULL},
+    /* Sprint 23 §5: tabs.  t-prefix family, keymap DATA. */
+    {"t n", "ed.tab.next", 0, NULL},
+    {"t p", "ed.tab.prev", 0, NULL},
+    {"t t", "ed.tab.new", 0, NULL},
+    {"t c", "ed.tab.close", 0, NULL},
     {"m", "ed.mark.set", 0, NULL},
     {"'", "ed.mark.jump", 0, NULL},
     {"/", "ed.search.open", 0, NULL},

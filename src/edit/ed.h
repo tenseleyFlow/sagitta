@@ -117,6 +117,7 @@ struct Ed {
     u32 nsplit_tab;
     PaneDrag drag;
     Tabs tabs;
+    TabPrompt tab_prompt;
     Rect footer_rect;
     Rect tab_strip_rect;
 

@@ -13,6 +13,7 @@
 #include "edit/shell_cmds.h"
 #include "edit/sel_actions.h"
 #include "ui/cmdline.h"
+#include "ui/tabs.h"
 #include "util/arena.h"
 #include "util/intern.h"
 #include "util/log.h"
@@ -401,10 +402,20 @@ static const CmdDesc builtins[] = {
           "activate the next buffer"),
     DEFER("ed.buf.prev", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 23,
           "activate the previous buffer"),
-    DEFER("ed.tab.goto", SAG_ARITY_INT, SAG_CMD_TAKES_COUNT, 23,
-          "activate a numbered tab"),
-    DEFER("ed.tab.new", SAG_ARITY_NONE, 0U, 23, "create a tab"),
-    DEFER("ed.tab.close", SAG_ARITY_NONE, 0U, 23, "close the active tab"),
+    {"ed.tab.goto", sag_tab_cmd_goto, SAG_ARITY_OPT_INT,
+     SAG_CMD_TAKES_COUNT, "Activate a numbered tab (0 = tab 10)"},
+    {"ed.tab.new", sag_tab_cmd_new, SAG_ARITY_NONE, 0U,
+     "Open an untitled tab"},
+    {"ed.tab.open", sag_tab_cmd_open, SAG_ARITY_STR, 0U,
+     "Open a path in a new tab"},
+    {"ed.tab.close", sag_tab_cmd_close, SAG_ARITY_NONE, 0U,
+     "Close the active tab"},
+    {"ed.tab.next", sag_tab_cmd_next, SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE, "Activate the next tab"},
+    {"ed.tab.prev", sag_tab_cmd_prev, SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE, "Activate the previous tab"},
+    {"ed.tab.move", sag_tab_cmd_move, SAG_ARITY_OPT_INT,
+     SAG_CMD_TAKES_COUNT, "Move the active tab to position N"},
     DEFER("ed.group.next", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 24,
           "activate the next tab group"),
     DEFER("ed.group.prev", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 24,
@@ -537,6 +548,9 @@ static const BuiltinMeta builtin_meta[] = {
     {"ed.file.reload", "", SAG_RP_FORBID, "reload"},
     {"ed.file.close", "", SAG_RP_FORBID, "close"},
     {"ed.search.open", "s", SAG_RP_FORBID, "search"},
+    {"ed.tab.new", "", SAG_RP_FORBID, "tabnew"},
+    {"ed.tab.open", "f", SAG_RP_FORBID, "tabedit"},
+    {"ed.tab.close", "", SAG_RP_FORBID, "tabclose"},
     /* The substitution body is ONE opaque string; s18's tokenizer must
      * not try to understand `/` inside a regex. */
     {"ed.search.replace", "s", SAG_RP_OPT, "s"},
@@ -602,7 +616,9 @@ static bool command_name_valid(const char *name)
         "open_back", "word_next", "clear_highlight", "set",
         /* Sprint 22 */
         "split_h", "split_v", "focus_left", "focus_right", "focus_up",
-        "focus_down", "focus_next"};
+        "focus_down", "focus_next",
+        /* Sprint 23 */
+        "move"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;
