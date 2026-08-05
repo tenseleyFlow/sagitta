@@ -442,6 +442,16 @@ u32 sag_repl_plan_apply(SagReplPlan *p, EditCtx *ec)
 
         if (!ed->accepted)
             continue;
+        /*
+         * A zero-width match with an empty template changes nothing.
+         * Counting it would report replacements that did not happen —
+         * `:s/^//` would claim one per line — and, worse, would let a
+         * run of only such entries open and close an EMPTY transaction,
+         * so the next undo would reach past it to the user's previous
+         * edit.
+         */
+        if (ed->span.hi == ed->span.lo && ed->text.len == 0U)
+            continue;
         if (ed->span.hi > ed->span.lo &&
             !sag_edit_delete(ec, ed->span))
             break;

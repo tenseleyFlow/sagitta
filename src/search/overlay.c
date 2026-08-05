@@ -84,6 +84,16 @@ static Span visible_window(const Win *w, const TextBuf *tb)
         vis.hi = 0U;
         return vis;
     }
+    /*
+     * Clamp the TOP as well as the last line.  An edit that shrinks the
+     * buffer can leave the viewport pointing past the new end — the
+     * viewport is corrected when the window next follows the cursor,
+     * which has not happened yet at the moment the overlay runs.
+     * fuzz_search found this by refreshing straight after a delete.
+     */
+    if (top.v >= nlines)
+        top = LINENO(nlines - 1U);
+    last = top.v + height;
     if (last >= nlines)
         last = nlines - 1U;
     vis.lo = sag_textbuf_line_start(tb, top).v;
@@ -109,6 +119,9 @@ static Span scan_window(const Win *w, const TextBuf *tb)
         out.hi = 0U;
         return out;
     }
+    if (top.v >= nlines)
+        top = LINENO(nlines - 1U);
+    last = top.v + height;
     if (last >= nlines)
         last = nlines - 1U;
     vis.lo = sag_textbuf_line_start(tb, top).v;

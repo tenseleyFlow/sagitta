@@ -374,6 +374,21 @@ void sag_ed_finish_edit(Ed *ed, const EditCtx *ec)
 {
     if (ed == NULL || ec == NULL)
         return;
+    /*
+     * Drop stale highlight spans the moment the text moves under them.
+     *
+     * The overlay carries buf_gen and would notice at its next refresh,
+     * but "next refresh" is not soon enough: between the edit and the
+     * refresh the spans describe bytes that no longer exist, and a
+     * draw in that window paints from offsets past the end of the
+     * buffer.  fuzz_search caught exactly that — a 7..8 span in a
+     * 7-byte buffer — by checking after every operation rather than
+     * after every repaint.
+     */
+    if (ed->win != NULL && ed->win->buf != NULL &&
+        ed->win->buf->tb == ec->tb &&
+        ed->win->overlay.buf_gen != ec->tb->gen)
+        sag_overlay_invalidate(&ed->win->overlay);
     if (ed->buffer.tb == ec->tb)
         ed->buffer.jrn = ec->jrnl;
     if (ec->jrnl != NULL && !sag_journal_ok(ec->jrnl)) {
