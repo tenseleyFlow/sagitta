@@ -1,10 +1,13 @@
 /*
  * Sprint 20 §6: the search entry points.
  *
- * The lazy DFA is a later chunk of this sprint; until it lands every
- * entry point runs the Pike VM, which is the correctness reference the
- * DFA will be checked against.  The literal prefilter is already live,
- * so the common case (a plain string) never enters the VM at all.
+ * Three engines, one answer.  The literal prefilter handles the common
+ * case (a plain string) without entering the VM at all; the lazy DFA
+ * decides match-or-not and bounds where a match can start; the Pike VM
+ * produces every span and capture, and is the correctness reference the
+ * other two are held to — test_re_engines_agree_on_spans checks the
+ * dispatcher against a bare VM run on every pattern, input and start
+ * offset in its corpus.
  */
 #include "search/regex_internal.h"
 
@@ -248,12 +251,85 @@ bool sag_re_search(const SagRe *re, const SagReInput *in, ByteOff from,
             return false;
         at = first;
     }
+    /*
+     * §6c: span recovery.  A forward DFA reports where a match ENDS, so
+     * on its own it cannot produce a span — and the sprint's suggested
+     * composition (reverse-scan from that end to find the start) does
+     * not survive our semantics.  Leftmost beats earliest-end: on
+     * "abcd", /bc|abcd/ has its earliest end at 3 (from `bc` at 1..3),
+     * but the answer is 0..4, which no scan seeded at 3 can reach.
+     * test_re_match pins both orders of that pattern.
+     *
+     * So the DFA locates a REGION and the VM still produces the answer,
+     * which is the shape §6's own with-groups dispatcher row describes.
+     * Two uses, both sound:
+     *
+     *   NO   nothing matches ahead, so return without entering the VM
+     *        at all.  This is the whole-file miss, and it is the case
+     *        that used to cost a full VM pass over the buffer.
+     *   YES  the earliest end `e` bounds the leftmost start: that match
+     *        [s*, E*) has E* >= e and consumes at most max_len
+     *        codepoints, so s* >= e - 4*max_len.  Seed the VM there and
+     *        it still sees s* — provided max_len is bounded, which is
+     *        why an unbounded pattern (`\w+`) keeps the plain scan.
+     */
     {
-        SagReInput sub = *in;
+        u64 end = 0U;
+        int verdict = sag_re_dfa_find_end(re, in, at, &end);
 
-        sub.window.lo = at;
-        return sag_re_pike_run_ex(re, &sub, at, false, out);
+        if (verdict == SAG_DFA_NO)
+            return false;
+        if (verdict == SAG_DFA_YES && is_cp_start(in, at) &&
+            re->max_len != UINT32_MAX &&
+            re->max_len <= SAG_RE_SPAN_WINDOW / 4U) {
+            u64 span = (u64)re->max_len * 4U;
+
+            if (end > at + span) {
+                u64 to = end - span;
+                u64 floor = to > (u64)SAG_UTF8_MAX ?
+                            to - (u64)SAG_UTF8_MAX : in->window.lo;
+
+                /*
+                 * Start and finish on codepoint boundaries, or not at
+                 * all — hence the is_cp_start guard above as well.
+                 *
+                 * Both engines derive `\b` and `^` context by decoding
+                 * backwards from wherever they start, and inside a
+                 * sequence that decode is ambiguous: over "漢字",
+                 * offset 2 reads as the tail of 漢 when you walk back
+                 * to it, and as a lone invalid byte when you step onto
+                 * it from 1.  A scan that begins mid-sequence therefore
+                 * sees different context for the rest of the run than
+                 * any aligned scan does, and /\B/ genuinely matches at
+                 * offset 6 from 5 but not from 6.  Neither answer is
+                 * wrong; they are answers to different questions, so
+                 * the skip declines to restate the question.  Walking
+                 * back to a boundary only widens the window, which is
+                 * always sound.
+                 */
+                while (to > floor && !is_cp_start(in, to))
+                    to--;
+                if (to > at && is_cp_start(in, to))
+                    at = to;
+            }
+        }
+        /* GIVE_UP: the cache thrashed.  `at` is unchanged, so the scan
+         * below is exactly what it would have been. */
     }
+    /*
+     * Start the scan at `at`, but hand the VM the ORIGINAL window.
+     * window.lo is what `^`, `\A` and `\b` are measured against, and
+     * narrowing it to the skip point tells the VM that text begins
+     * where we merely started looking.
+     *
+     * This line used to narrow it and was still correct, because the
+     * only thing that moved `at` was the prefilter and collect_literal
+     * stops at a leading assertion — so an assertion-sensitive pattern
+     * had no literal and never skipped.  The DFA skip above moves `at`
+     * for every pattern, which makes the narrowing reachable; /\B/ over
+     * "漢字" flipped to a false match the moment it was.
+     */
+    return sag_re_pike_run_ex(re, in, at, false, out);
 }
 
 bool sag_re_test(const SagRe *re, const SagReInput *in, ByteOff from)
@@ -275,9 +351,12 @@ bool sag_re_test(const SagRe *re, const SagReInput *in, ByteOff from)
 }
 
 /*
- * §6c: no reverse engine here yet either.  The window walk is the shape
- * the reverse DFA will slot into — scan forward inside a bounded window
- * that walks backwards, keeping the last match.
+ * Backward search: scan forward inside a bounded window that walks
+ * backwards, keeping the last match.  Each window is one sag_re_search,
+ * so the DFA skip-ahead above applies inside it too.
+ *
+ * This is the shape a reverse engine would have replaced; see the rprog
+ * comment in regex_internal.h for why it does not.
  */
 bool sag_re_search_back(const SagRe *re, const SagReInput *in,
                         ByteOff before, SagReMatch *out)

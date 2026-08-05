@@ -119,6 +119,17 @@ static const ReRow rows[] = {
     ROW("|a", "a", true, 0, 0),                /* empty branch wins  */
     ROW("a|", "a", true, 0, 1),
     ROW("cat|dog", "hotdog", true, 3, 6),
+    /* Leftmost beats shortest-end: `bc` would end at 3, earlier than
+     * `abcd` ends at 4, but `abcd` STARTS earlier and leftmost wins.
+     * This is why a forward DFA's earliest match end cannot be composed
+     * with a reverse scan to recover a leftmost-first span. */
+    ROW("bc|abcd", "abcd", true, 0, 4),
+    /* Skipping ahead must not move what `^` and `\b` are measured
+     * against: the prefilter finds `foo` at 1, but only the one at 5
+     * starts a line. */
+    ROW("^foo", "xfoo\nfoo", true, 5, 8),
+    ROW("\\Boo", "xfoo\nfoo", true, 2, 4),
+    ROW("abcd|bc", "abcd", true, 0, 4),
     ROW("(a|b)+", "abab", true, 0, 4),
 
     /* --- anchors ---------------------------------------------- */

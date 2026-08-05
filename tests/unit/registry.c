@@ -635,6 +635,7 @@ const SagTest sag_tests[] = {
     T(re_textbuf_and_bytes_agree),
     T(re_engines_agree_on_match_or_not),
     T(re_engines_agree_over_piece_trees),
+    T(re_engines_agree_on_spans),
     T(re_engines_agree_from_offsets),
     T(re_dfa_survives_cache_pressure),
     T(re_dfa_handles_pathological_patterns),

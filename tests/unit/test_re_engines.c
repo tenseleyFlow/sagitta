@@ -223,3 +223,96 @@ void test_re_dfa_handles_pathological_patterns(void)
         arena_free_all(&arena);
     }
 }
+
+/*
+ * DoD 5's span half.  The boolean tests above prove the DFA agrees
+ * about WHETHER there is a match; this proves the dispatcher's
+ * DFA-assisted skip-ahead (§6c) does not move WHERE the match is.
+ *
+ * The reference is the Pike VM run straight from the window start with
+ * no skip, no prefilter and no DFA — the slow path that defines the
+ * answer.  Every span the fast path produces has to be that span,
+ * byte for byte, including the group captures.
+ */
+void test_re_engines_agree_on_spans(void)
+{
+    size_t p;
+    size_t i;
+    u32 checked = 0U;
+    u32 skipped_ahead = 0U;
+
+    for (p = 0U; p < SAG_ARRAY_LEN(patterns); p++) {
+        Arena arena;
+        SagRe *re;
+
+        arena_init(&arena);
+        re = sag_re_compile(&arena, patterns[p], strlen(patterns[p]), 0U,
+                            NULL);
+        SAG_ASSERT_NOT_NULL(re);
+        if (re == NULL) {
+            arena_free_all(&arena);
+            continue;
+        }
+        if (re->max_len != UINT32_MAX)
+            skipped_ahead++;
+        for (i = 0U; i < SAG_ARRAY_LEN(inputs); i++) {
+            u64 len = (u64)strlen(inputs[i]);
+            u64 from;
+
+            /* Every start offset, not just 0: the skip-ahead computes
+             * its window relative to where the search began, and an
+             * off-by-one there would only show up mid-buffer. */
+            for (from = 0U; from <= len; from++) {
+                SagReInput in = sag_re_input_bytes((const u8 *)inputs[i],
+                                                   len);
+                SagReMatch fast;
+                SagReMatch slow;
+                bool fast_hit;
+                bool slow_hit;
+                u32 g;
+
+                (void)memset(&fast, 0, sizeof(fast));
+                (void)memset(&slow, 0, sizeof(slow));
+                fast_hit = sag_re_search(re, &in, BYTEOFF(from), &fast);
+                slow_hit = sag_re_pike_run_ex(re, &in, from, false, &slow);
+                if (fast_hit != slow_hit)
+                    (void)fprintf(stderr,
+                                  "/%s/ on \"%s\" from %llu: search says "
+                                  "%s, VM says %s\n",
+                                  patterns[p], inputs[i],
+                                  (unsigned long long)from,
+                                  fast_hit ? "match" : "no match",
+                                  slow_hit ? "match" : "no match");
+                SAG_ASSERT_EQ_U64((u64)fast_hit, (u64)slow_hit);
+                if (!slow_hit) {
+                    checked++;
+                    continue;
+                }
+                if (fast.g[0].lo != slow.g[0].lo ||
+                    fast.g[0].hi != slow.g[0].hi)
+                    (void)fprintf(stderr,
+                                  "/%s/ on \"%s\" from %llu: search span "
+                                  "%llu..%llu, VM span %llu..%llu\n",
+                                  patterns[p], inputs[i],
+                                  (unsigned long long)from,
+                                  (unsigned long long)fast.g[0].lo,
+                                  (unsigned long long)fast.g[0].hi,
+                                  (unsigned long long)slow.g[0].lo,
+                                  (unsigned long long)slow.g[0].hi);
+                SAG_ASSERT_EQ_U64(fast.g[0].lo, slow.g[0].lo);
+                SAG_ASSERT_EQ_U64(fast.g[0].hi, slow.g[0].hi);
+                SAG_ASSERT_EQ_U64(fast.ngroups, slow.ngroups);
+                for (g = 0U; g < slow.ngroups; g++) {
+                    SAG_ASSERT_EQ_U64(fast.g[g].lo, slow.g[g].lo);
+                    SAG_ASSERT_EQ_U64(fast.g[g].hi, slow.g[g].hi);
+                }
+                checked++;
+            }
+        }
+        arena_free_all(&arena);
+    }
+    SAG_ASSERT(checked > 5000U);
+    /* If nothing in the corpus were length-bounded the skip-ahead
+     * would never run and this test would prove nothing about it. */
+    SAG_ASSERT(skipped_ahead > 5U);
+}
