@@ -42,7 +42,7 @@ static const BindRow keys_L[] = {
     {"C-w <up>", "ed.pane.focus_up", 0, NULL},
     {"C-w <down>", "ed.pane.focus_down", 0, NULL},
     {"C-w w", "ed.pane.focus_next", 0, NULL},
-    {"C-w +", "ed.pane.grow", 0, NULL},
+    {"C-w =", "ed.pane.grow", 0, NULL},
     {"C-w -", "ed.pane.shrink", 0, NULL},
     {"m", "ed.mark.set", 0, NULL},
     {"'", "ed.mark.jump", 0, NULL},

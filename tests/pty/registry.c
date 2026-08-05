@@ -2328,10 +2328,162 @@ static void case_s21_global_is_a_non_goal(PtyCtx *c)
     (void)unlink(path);
 }
 
+
+/* ---------------------------------------------------------------- */
+/* Sprint 22: panes                                                 */
+/* ---------------------------------------------------------------- */
+
+static const u8 s22_doc[] =
+    "alpha one\n"
+    "beta two\n"
+    "gamma three\n"
+    "delta four\n"
+    "epsilon five\n"
+    "zeta six\n";
+
+static void case_s22_split_h(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s22_doc, sizeof(s22_doc) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "ctrl+w s");
+    ptc_snapshot(c, "s22_split_h");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s22_split_v(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s22_doc, sizeof(s22_doc) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "ctrl+w v");
+    ptc_snapshot(c, "s22_split_v");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/* Nested: a vertical split inside the right half of a horizontal one,
+ * which is where the border crossing shows up. */
+static void case_s22_nested_three_panes(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s22_doc, sizeof(s22_doc) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "ctrl+w s");
+    s18_settle_after_keys(c, "ctrl+w v");
+    ptc_snapshot(c, "s22_nested_three_panes");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/* Focus moves change which border is drawn in the accent colour, which
+ * is the visible half of "only the focused pane is active". */
+static void case_s22_focus_moves_the_accent(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s22_doc, sizeof(s22_doc) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "ctrl+w s");
+    s18_settle_after_keys(c, "ctrl+w v");
+    s18_settle_after_keys(c, "ctrl+w left");
+    ptc_snapshot(c, "s22_focus_moves_the_accent");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s22_keyboard_resize(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s22_doc, sizeof(s22_doc) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "ctrl+w s");
+    s18_settle_after_keys(c, "ctrl+w =");
+    s18_settle_after_keys(c, "ctrl+w =");
+    ptc_snapshot(c, "s22_keyboard_resize");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s22_close_restores_full_width(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s22_doc, sizeof(s22_doc) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "ctrl+w s");
+    s18_settle_after_keys(c, "ctrl+w c");
+    ptc_snapshot(c, "s22_close_restores_full_width");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/*
+ * DoD 3: at a width that cannot hold two minima, the split is refused
+ * with a message and NO sliver pane is drawn.
+ */
+static void case_s22_split_refused_when_too_narrow(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s22_doc, sizeof(s22_doc) - 1U, path, sizeof(path)))
+        return;
+    /* Three splits fit in 80 columns; the fourth cannot. */
+    s18_settle_after_keys(c, "ctrl+w s");
+    s18_settle_after_keys(c, "ctrl+w s");
+    s18_settle_after_keys(c, "ctrl+w s");
+    /* The refusal only writes a message, so there may be no new frame
+     * to wait for; settle on quiet rather than on a sync pair. */
+    ptc_keys(c, "ctrl+w s");
+    ptc_settle(c, 80);
+    ptc_snapshot(c, "s22_split_refused_when_too_narrow");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/*
+ * Borders beside a CJK line.  The overlay speaks cells and the width
+ * tables own the conversion, so a double-width glyph must not push the
+ * border off its column.
+ */
+static void case_s22_border_beside_wide_glyphs(PtyCtx *c)
+{
+    static const u8 wide[] =
+        "\xE6\xBC\xA2\xE5\xAD\x97 wide text here\n"
+        "ascii line two\n"
+        "\xF0\x9F\x98\x80 emoji lead\n";
+    char path[256];
+
+    if (!s18_open(c, wide, sizeof(wide) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "ctrl+w s");
+    ptc_snapshot(c, "s22_border_beside_wide_glyphs");
+    force_quit(c);
+    (void)unlink(path);
+}
+
 #define C(name, profile, rows, cols, fn) \
     {#name, #profile, rows, cols, fn}
 
 const PtyCase sag_pty_cases[] = {
+    C(s22_split_h, modern, 24U, 80U, case_s22_split_h),
+    C(s22_split_v, modern, 24U, 80U, case_s22_split_v),
+    C(s22_nested_three_panes, modern, 24U, 80U,
+      case_s22_nested_three_panes),
+    C(s22_focus_moves_the_accent, modern, 24U, 80U,
+      case_s22_focus_moves_the_accent),
+    C(s22_keyboard_resize, modern, 24U, 80U, case_s22_keyboard_resize),
+    C(s22_close_restores_full_width, modern, 24U, 80U,
+      case_s22_close_restores_full_width),
+    C(s22_split_refused_when_too_narrow, modern, 24U, 80U,
+      case_s22_split_refused_when_too_narrow),
+    C(s22_border_beside_wide_glyphs, modern, 24U, 80U,
+      case_s22_border_beside_wide_glyphs),
     C(s21_search_cancel_restores_grid, modern, 24U, 80U,
       case_s21_search_cancel_restores_grid),
     C(s21_search_preview, modern, 24U, 80U, case_s21_search_preview),

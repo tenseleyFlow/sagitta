@@ -12,4 +12,9 @@ void sag_draw_cursor(Ed *ed, Win *w);
 /* Draws the complete Sprint 15 viewport and footer. */
 void sag_draw_win(Ed *ed, Win *w);
 
+/* Sprint 22 §7: draws every leaf, then the borders their split nodes
+ * own, registering a region for each with the SAME rect it drew. */
+void sag_draw_panes(Ed *ed);
+bool sag_draw_pane_is_focused(const Ed *ed, const Win *w);
+
 #endif

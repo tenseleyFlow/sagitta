@@ -1,6 +1,7 @@
 #include "ui/layout.h"
 
 #include <stdlib.h>
+#include <string.h>
 
 #include "edit/ed.h"
 #include "ui/gutter.h"
@@ -391,19 +392,59 @@ bool sag_pane_resize(Pane *split, i32 cells)
     return true;
 }
 
-void sag_layout(Ed *ed)
+/*
+ * Gives one leaf's Win the geometry its Pane was assigned.  The gutter
+ * is per pane, since two panes on the same buffer can be scrolled to
+ * line 9 and line 1000 and need different widths.
+ */
+static void layout_leaf_win(Ed *ed, Pane *leaf)
 {
-    Win *w;
-    u16 content_rows;
+    Win *w = leaf->win;
     u16 gutter;
     u16 old_cols;
     u16 old_gutter;
 
-    if (ed == NULL || ed->win == NULL)
-        SAG_BUG("editor layout: missing window");
-    w = ed->win;
+    if (w == NULL)
+        return;
+    if (leaf->rect.w == 0U || leaf->rect.h == 0U) {
+        /* Collapsed: draw skips it, and it keeps its state for when the
+         * terminal grows back. */
+        w->rect = leaf->rect;
+        w->vp.rows = 0U;
+        w->vp.cols = 0U;
+        return;
+    }
     old_cols = w->vp.cols;
     old_gutter = w->gutter_width;
+    gutter = leaf->rect.w < 20U ? 0U : sag_gutter_width(w);
+    if (gutter >= leaf->rect.w)
+        gutter = 0U;
+    w->gutter_width = gutter;
+    w->rect = (Rect){(u16)(leaf->rect.x + gutter), leaf->rect.y,
+                     (u16)(leaf->rect.w - gutter), leaf->rect.h};
+    w->vp.rows = leaf->rect.h;
+    w->vp.cols = w->rect.w;
+    if (old_cols != w->vp.cols || old_gutter != gutter) {
+        sag_vp_invalidate(w);
+        ed->full_damage = true;
+        ed->footer_dirty = true;
+    }
+    sag_vp_clamp(w);
+    sag_vp_follow(w);
+}
+
+static void layout_leaf_visit(Pane *p, void *ctx)
+{
+    if (p->is_leaf)
+        layout_leaf_win(ctx, p);
+}
+
+void sag_layout(Ed *ed)
+{
+    u16 content_rows;
+
+    if (ed == NULL || ed->win == NULL)
+        SAG_BUG("editor layout: missing window");
 
     ed->footer_rect = (Rect){0U, 0U, 0U, 0U};
     if (ed->grid.rows >= 2U) {
@@ -412,27 +453,29 @@ void sag_layout(Ed *ed)
     } else {
         content_rows = ed->grid.rows;
     }
+    /*
+     * The tree owns the document area; the footer row is reserved
+     * before it and the tab strip's rows will be reserved the same way
+     * in Sprint 23 — a parameter here, not a renderer.
+     *
+     * A NULL root is legal: several fixtures build an Ed directly
+     * rather than through sag_ed_init.  Laying the single window out
+     * against the same area keeps them working, and is exactly what the
+     * one-leaf tree would compute anyway.
+     */
+    if (ed->pane_root != NULL) {
+        sag_layout_compute(ed->pane_root,
+                           (Rect){0U, 0U, ed->grid.cols, content_rows});
+        sag_pane_tree_walk(ed->pane_root, layout_leaf_visit, ed);
+    } else {
+        Pane solo;
 
-    gutter = ed->grid.cols < 20U ? 0U : sag_gutter_width(w);
-    if (gutter >= ed->grid.cols)
-        gutter = 0U;
-    w->gutter_width = gutter;
-    w->rect = (Rect){gutter, 0U, (u16)(ed->grid.cols - gutter),
-                     content_rows};
-    w->vp.rows = content_rows;
-    w->vp.cols = w->rect.w;
-
-    if (old_cols != w->vp.cols) {
-        sag_vp_invalidate(w);
-        ed->full_damage = true;
-        ed->footer_dirty = true;
+        (void)memset(&solo, 0, sizeof(solo));
+        solo.is_leaf = true;
+        solo.win = ed->win;
+        solo.rect = (Rect){0U, 0U, ed->grid.cols, content_rows};
+        layout_leaf_win(ed, &solo);
     }
-    if (old_gutter != gutter) {
-        ed->full_damage = true;
-        ed->footer_dirty = true;
-    }
-    sag_vp_clamp(w);
-    sag_vp_follow(w);
     ed->layout_dirty = false;
 }
 

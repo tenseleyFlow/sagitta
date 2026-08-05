@@ -1123,11 +1123,23 @@ void sag_ed_render(Ed *ed)
          ed->drawn_cursor_line.v != cursor_line.v))
         sag_ed_damage_document(ed);
     if (ed->full_damage) {
-        sag_draw_document_rows(ed, win, 0U, win->rect.h);
+        /*
+         * Every leaf plus the borders their splits own.  With a single
+         * pane this draws exactly the rows the one-window path drew,
+         * which is what keeps the Sprint 6-21 goldens byte-identical.
+         */
+        sag_draw_panes(ed);
         sag_grid_mark_all(&ed->grid);
     } else if (ed->doc_damage_lo < ed->doc_damage_hi) {
-        sag_draw_document_rows(ed, win, ed->doc_damage_lo,
-                               ed->doc_damage_hi);
+        if (sag_pane_leaf_count(ed->pane_root) > 1U) {
+            /* Partial damage is expressed in the focused pane's rows,
+             * and a border or a neighbour may share them; redrawing the
+             * tree is correct and still bounded by the screen. */
+            sag_draw_panes(ed);
+        } else {
+            sag_draw_document_rows(ed, win, ed->doc_damage_lo,
+                                   ed->doc_damage_hi);
+        }
     }
     if (ed->full_damage || ed->footer_dirty)
         sag_draw_footer(ed, win);

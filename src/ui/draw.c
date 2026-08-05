@@ -492,3 +492,191 @@ void sag_draw_win(Ed *ed, Win *w)
     if (!ed->cmdline.active)
         sag_draw_cursor(ed, w);
 }
+
+/* ---------------------------------------------------------------- */
+/* Sprint 22 §7: panes, borders, dim-inactive                       */
+/* ---------------------------------------------------------------- */
+
+/*
+ * Border glyphs.  Each split node owns its own border row or column and
+ * draws it; leaves never draw borders.  That is what makes it
+ * impossible for two adjacent leaves to double-draw a shared edge —
+ * there is exactly one node responsible for each border cell.
+ */
+static const u8 BORDER_V[] = {0xE2U, 0x94U, 0x82U};       /* │ */
+static const u8 BORDER_H[] = {0xE2U, 0x94U, 0x80U};       /* ─ */
+static const u8 BORDER_CROSS[] = {0xE2U, 0x94U, 0xBCU};   /* ┼ */
+static const u8 BORDER_TEE_R[] = {0xE2U, 0x94U, 0x9CU};   /* ├ */
+static const u8 BORDER_TEE_L[] = {0xE2U, 0x94U, 0xA4U};   /* ┤ */
+
+typedef struct PaneDrawCtx {
+    Ed *ed;
+    bool focused_subtree;
+} PaneDrawCtx;
+
+static SagColor border_color(bool active)
+{
+    /* Accent for the pane with focus, dim for the rest.  Exact palette
+     * is theme data in a later sprint; the distinction is what this
+     * sprint owes. */
+    if (active)
+        return (SagColor){SAG_COLOR_RGB, 231U, 125U, 36U};
+    return (SagColor){SAG_COLOR_RGB, 90U, 90U, 90U};
+}
+
+/* Does the focused leaf live under this node? */
+static bool subtree_has_focus(const Pane *p, const Pane *focus)
+{
+    if (p == NULL || focus == NULL)
+        return false;
+    if (p == focus)
+        return true;
+    if (p->is_leaf)
+        return false;
+    return subtree_has_focus(p->a, focus) ||
+           subtree_has_focus(p->b, focus);
+}
+
+static void draw_pane_rec(Ed *ed, Pane *p)
+{
+    if (p == NULL || p->rect.w == 0U || p->rect.h == 0U)
+        return; /* a collapsed subtree is skipped, never drawn */
+    if (p->is_leaf) {
+        i32 index;
+
+        if (p->win == NULL || p->win->buf == NULL)
+            return;
+        sag_draw_document_rows(ed, p->win, 0U, p->win->rect.h);
+        /*
+         * Registered with the SAME rect that was drawn — the one-source
+         * rule.  Registering the pane's full rect rather than the Win's
+         * means a click in the gutter still focuses the pane.
+         */
+        index = sag_pane_table_add_leaf(ed, p);
+        if (index >= 0)
+            sag_region_add(SAG_REGION_PANE, p->rect, index);
+        return;
+    }
+    draw_pane_rec(ed, p->a);
+    draw_pane_rec(ed, p->b);
+    /*
+     * Draw the border after the children so a child that overran would
+     * be visibly wrong here rather than invisibly wrong underneath.
+     */
+    {
+        bool active = subtree_has_focus(p, ed->focus);
+        SagColor fg = border_color(active);
+        SagColor bg = (SagColor){SAG_COLOR_DEFAULT, 0U, 0U, 0U};
+        u16 attrs = active ? 0U : SAG_ATTR_DIM;
+        i32 index = sag_pane_table_add_split(ed, p);
+        Rect border;
+
+        if (p->dir == SAG_SPLIT_H) {
+            u16 col = (u16)(p->a->rect.x + p->a->rect.w);
+            u16 row;
+
+            if (p->a->rect.w == 0U || p->b->rect.w == 0U)
+                return; /* collapsed: no border to own */
+            for (row = p->rect.y; row < p->rect.y + p->rect.h; row++)
+                (void)sag_grid_put(&ed->grid, row, col, BORDER_V,
+                                   sizeof(BORDER_V), fg, bg, attrs);
+            border = (Rect){col, p->rect.y, 1U, p->rect.h};
+        } else {
+            u16 row = (u16)(p->a->rect.y + p->a->rect.h);
+            u16 col;
+
+            if (p->a->rect.h == 0U || p->b->rect.h == 0U)
+                return;
+            for (col = p->rect.x; col < p->rect.x + p->rect.w; col++)
+                (void)sag_grid_put(&ed->grid, row, col, BORDER_H,
+                                   sizeof(BORDER_H), fg, bg, attrs);
+            border = (Rect){p->rect.x, row, p->rect.w, 1U};
+        }
+        if (index >= 0)
+            sag_region_add(SAG_REGION_PANE_BORDER, border, index);
+    }
+}
+
+/*
+ * A crossing is a cell where a border of one axis meets a border of the
+ * other.  It is drawn last, from the tree, so neither owner has to know
+ * about the other.
+ */
+static void draw_crossings_rec(Ed *ed, Pane *p)
+{
+    if (p == NULL || p->is_leaf || p->rect.w == 0U || p->rect.h == 0U)
+        return;
+    draw_crossings_rec(ed, p->a);
+    draw_crossings_rec(ed, p->b);
+    if (p->dir == SAG_SPLIT_H && p->a->rect.w != 0U &&
+        p->b->rect.w != 0U) {
+        u16 col = (u16)(p->a->rect.x + p->a->rect.w);
+        Pane *side[2];
+        u32 i;
+
+        side[0] = p->a;
+        side[1] = p->b;
+        for (i = 0U; i < 2U; i++) {
+            u16 row;
+            bool active;
+            bool from_left = i == 0U;
+            bool both;
+            const u8 *glyph;
+            size_t glyph_n;
+
+            /* A vertical split immediately inside either child puts a
+             * horizontal border against this column. */
+            if (side[i]->is_leaf || side[i]->dir != SAG_SPLIT_V ||
+                side[i]->a->rect.h == 0U || side[i]->b->rect.h == 0U)
+                continue;
+            row = (u16)(side[i]->a->rect.y + side[i]->a->rect.h);
+            /*
+             * The glyph says which way the horizontal line actually
+             * runs.  A `┼` where the line stops at the column draws a
+             * stub pointing at nothing — the joint has to match the
+             * geometry, so a line arriving only from the right is `├`.
+             */
+            both = !side[1U - i]->is_leaf &&
+                   side[1U - i]->dir == SAG_SPLIT_V &&
+                   side[1U - i]->a->rect.h != 0U &&
+                   side[1U - i]->b->rect.h != 0U &&
+                   (u16)(side[1U - i]->a->rect.y +
+                         side[1U - i]->a->rect.h) == row;
+            if (both) {
+                glyph = BORDER_CROSS;
+                glyph_n = sizeof(BORDER_CROSS);
+            } else if (from_left) {
+                glyph = BORDER_TEE_L;
+                glyph_n = sizeof(BORDER_TEE_L);
+            } else {
+                glyph = BORDER_TEE_R;
+                glyph_n = sizeof(BORDER_TEE_R);
+            }
+            active = subtree_has_focus(p, ed->focus);
+            (void)sag_grid_put(&ed->grid, row, col, glyph, glyph_n,
+                               border_color(active),
+                               (SagColor){SAG_COLOR_DEFAULT, 0U, 0U, 0U},
+                               active ? 0U : SAG_ATTR_DIM);
+        }
+    }
+}
+
+void sag_draw_panes(Ed *ed)
+{
+    if (ed == NULL || ed->pane_root == NULL)
+        return;
+    /*
+     * Frame begin CLEARS the region table, and it happens here rather
+     * than after drawing so an early return below leaves an empty table
+     * rather than a stale one.
+     */
+    sag_region_frame_begin();
+    sag_pane_tables_reset(ed);
+    draw_pane_rec(ed, ed->pane_root);
+    draw_crossings_rec(ed, ed->pane_root);
+}
+
+bool sag_draw_pane_is_focused(const Ed *ed, const Win *w)
+{
+    return ed != NULL && ed->focus != NULL && ed->focus->win == w;
+}
