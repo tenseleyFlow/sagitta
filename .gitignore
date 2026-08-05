@@ -18,3 +18,5 @@ build/
 *.swo
 .#*
 .DS_Store
+build-san/
+build-cov/
