@@ -9,6 +9,7 @@
 #include "ui/cmdcomp.h"
 #include "ui/cmdhist.h"
 #include "ui/cmdparse.h"
+#include "ui/menu.h"
 #include "ui/win.h"
 
 typedef struct Ed Ed;
@@ -25,7 +26,7 @@ typedef struct CmdLine {
     bool active;
     TextBuf *buf;
     Cursor cur;
-    CompMenu menu;
+    Menu menu;
     Arena comp_arena;
     /* §4: the cached candidate set `comp_arena` backs. */
     CompFilter filter;

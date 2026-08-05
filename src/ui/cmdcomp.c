@@ -1037,18 +1037,6 @@ char *sag_comp_lcp(Arena *arena, const Vec_CompItem *items)
     return arena_strndup(arena, items->data[0].text, common);
 }
 
-void sag_comp_menu_init(CompMenu *menu)
-{
-    *menu = (CompMenu){0};
-    menu->sel = -1;
-}
-
-void sag_comp_menu_free(CompMenu *menu)
-{
-    Vec_CompItem_free(&menu->items);
-    sag_comp_menu_init(menu);
-}
-
 void sag_comp_test_force_dtype_unknown(bool force)
 {
     force_dtype_unknown = force;

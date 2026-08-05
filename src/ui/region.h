@@ -43,7 +43,15 @@ typedef enum {
     /* Sprint 24 §4: the group picker's name field and its listing rows
      * (payload = index into the listing). */
     SAG_REGION_GP_NAME,
-    SAG_REGION_GP_ROW
+    SAG_REGION_GP_ROW,
+    /*
+     * Sprint 18.5 §5.  Payload is the row's index within the menu's
+     * CURRENT item vector -- not a stable id, because the menu has none
+     * and the table is rebuilt every frame.  That is sound precisely
+     * because a region can only be hit during the frame it was
+     * registered in; see region.c on clearing at frame BEGIN.
+     */
+    SAG_REGION_MENU_ROW
 } RegionKind;
 
 typedef struct Region {

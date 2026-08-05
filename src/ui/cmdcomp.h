@@ -105,13 +105,6 @@ typedef struct CompSource {
     u32 flags;
 } CompSource;
 
-typedef struct CompMenu {
-    Vec_CompItem items;
-    i32 sel;
-    Span replace;
-    bool cycling;
-} CompMenu;
-
 typedef struct SagCompQuery {
     SagCompKind kind;
     const CompSource *source;
@@ -185,9 +178,6 @@ size_t sag_comp_path_head_len(const char *stem);
 /* Quote one completion so the Sprint 18 tokenizer reads one argv element. */
 char *sag_comp_quote(Arena *arena, const char *text);
 char *sag_comp_lcp(Arena *arena, const Vec_CompItem *items);
-
-void sag_comp_menu_init(CompMenu *menu);
-void sag_comp_menu_free(CompMenu *menu);
 
 /* Unit-test seam: exercise the required DT_UNKNOWN/lstat path. */
 void sag_comp_test_force_dtype_unknown(bool force);

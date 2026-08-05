@@ -13,6 +13,7 @@
 #include "edit/ed.h"
 #include "ui/cmdcomp.h"
 #include "ui/cmdparse.h"
+#include "ui/menu.h"
 
 typedef struct {
     char root[128];
@@ -599,7 +600,7 @@ void test_cmdcomp_lcp_menu_and_empty_providers(void)
 {
     CompFixture fixture;
     Vec_CompItem items = {0};
-    CompMenu menu;
+    Menu menu;
     Arena scratch;
     char *lcp;
 
@@ -611,12 +612,12 @@ void test_cmdcomp_lcp_menu_and_empty_providers(void)
     arena_init(&scratch);
     lcp = sag_comp_lcp(&scratch, &items);
     SAG_ASSERT_EQ_STR(lcp, "alp");
-    sag_comp_menu_init(&menu);
+    sag_menu_init(&menu, NULL);
     SAG_ASSERT_EQ_I64(menu.sel, -1);
-    SAG_ASSERT(!menu.cycling);
-    menu.items = items;
+    SAG_ASSERT(!menu.explicit_sel);
+    sag_menu_reset(&menu, items, 2U, (Span){0U, 0U});
     items = (Vec_CompItem){0};
-    sag_comp_menu_free(&menu);
+    sag_menu_free(&menu);
     SAG_ASSERT_EQ_I64(menu.sel, -1);
     SAG_ASSERT_NULL(menu.items.data);
     SAG_ASSERT_EQ_U64(sag_comp_enumerate(&fixture.ed, SAG_COMP_OPTION,

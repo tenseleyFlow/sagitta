@@ -104,7 +104,7 @@ static void menu_discard(Ed *ed)
     CmdLine *line = &ed->cmdline;
     bool was_open = line->menu.items.len != 0U || line->menu.sel >= 0;
 
-    sag_comp_menu_free(&line->menu);
+    sag_menu_dismiss(&line->menu);
     /* The cached candidate set's strings live in this arena, so the
      * cache dies with it -- a surviving `valid` flag over freed strings
      * is a use-after-free waiting for the next keystroke. */
@@ -304,7 +304,14 @@ void sag_cmdline_open(Ed *ed, SagPromptKind kind, const char *seed)
     line->target = target;
     line->return_mode = (u8)ed->mode;
     line->history = sag_hist_open(history_kind(kind));
-    sag_comp_menu_init(&line->menu);
+    {
+        /* Inline, five rows, wrapping, detail at column 31 -- the
+         * geometry Sprint 18's goldens pinned, now expressed as a spec
+         * so Sprint 26's picker can pick a different one. */
+        MenuSpec spec = {NULL, 5U, true, true, 31U};
+
+        sag_menu_init(&line->menu, &spec);
+    }
     sag_comp_filter_init(&line->filter);
     {
         char *draft = text_string(line->buf);
@@ -343,6 +350,7 @@ void sag_cmdline_close(Ed *ed, bool accepted)
     if (restore == SAG_MODE_E)
         restore = SAG_MODE_L;
     menu_discard(ed);
+    sag_menu_free(&line->menu);
     sag_comp_filter_free(&line->filter);
     sag_hist_flush(line->history);
     sag_hist_close(line->history);
@@ -509,20 +517,14 @@ static bool insert_completion(Ed *ed, Span replace, const CompItem *item,
 static CmdStatus completion_cycle(Ed *ed, bool previous)
 {
     CmdLine *line = &ed->cmdline;
-    i32 count = line->menu.items.len > INT32_MAX ? INT32_MAX :
-                                                     (i32)line->menu.items.len;
+    const CompItem *item;
 
-    if (count == 0)
+    if (!sag_menu_move(&line->menu, previous ? -1 : 1, false))
         return SAG_CMD_OK;
-    if (previous)
-        line->menu.sel = line->menu.sel <= 0 ? count - 1 :
-                                              line->menu.sel - 1;
-    else
-        line->menu.sel = line->menu.sel + 1 >= count ? 0 :
-                                                        line->menu.sel + 1;
-    line->menu.cycling = true;
-    if (!insert_completion(ed, line->menu.replace,
-                           &line->menu.items.data[line->menu.sel], false))
+    item = sag_menu_selected(&line->menu);
+    if (item == NULL)
+        return SAG_CMD_OK;
+    if (!insert_completion(ed, line->menu.replace, item, false))
         return SAG_CMD_ERR_IO;
     ed->full_damage = true;
     return SAG_CMD_OK;
@@ -577,10 +579,7 @@ static CmdStatus complete(Ed *ed, bool previous)
     }
     line->menu_stem = heap_slice(text, query.replace);
     line->menu_original = query.replace;
-    line->menu.items = items;
-    line->menu.sel = -1;
-    line->menu.replace = query.replace;
-    line->menu.cycling = false;
+    sag_menu_reset(&line->menu, items, line->comp_total, query.replace);
     lcp = sag_comp_lcp(&scratch, &line->menu.items);
     stem_len = strlen(query.stem);
     if (strlen(lcp) > stem_len) {
@@ -880,63 +879,13 @@ static void text_copy_span(const TextBuf *tb, Span span, u8 *out)
 
 static void draw_menu(Ed *ed, u16 footer, const SagUiStyle *style)
 {
-    CmdLine *line = &ed->cmdline;
-    size_t rows = line->menu.items.len < SAG_CMDLINE_MENU_ROWS ?
-                  line->menu.items.len : SAG_CMDLINE_MENU_ROWS;
-    size_t first = 0U;
-    size_t i;
+    /* Everything above the prompt row is the menu's to use; the widget
+     * bottom-aligns itself inside it and registers its own rows. */
+    Rect area = {0U, 0U, ed->grid.cols, footer};
 
-    if (rows == 0U || footer == 0U)
+    if (footer == 0U)
         return;
-    if (rows > footer)
-        rows = footer;
-    if (line->menu.sel >= (i32)rows)
-        first = (size_t)line->menu.sel - rows + 1U;
-    for (i = 0U; i < rows; i++) {
-        size_t index = first + i;
-        u16 row = (u16)(footer - rows + i);
-        const CompItem *item = &line->menu.items.data[index];
-        char display[512];
-        SagUiStyle row_style = *style;
-
-        if ((i32)index == line->menu.sel) {
-            SagColor swap = row_style.row_fg;
-
-            row_style.row_fg = row_style.row_bg;
-            row_style.row_bg = swap;
-            row_style.attrs |= SAG_ATTR_BOLD;
-        }
-        if (item->detail == NULL)
-            (void)snprintf(display, sizeof(display), "%c %s",
-                           (i32)index == line->menu.sel ? '>' : ' ',
-                           item->text);
-        else
-            (void)snprintf(display, sizeof(display), "%c %-28s %s",
-                           (i32)index == line->menu.sel ? '>' : ' ',
-                           item->text, item->detail);
-        sag_grid_fill(&ed->grid, row, 0U, ed->grid.cols,
-                      styled_blank(&row_style));
-        (void)sag_grid_puts(&ed->grid, row, 0U, (const u8 *)display,
-                            strlen(display), row_style.row_fg,
-                            row_style.row_bg, row_style.attrs);
-        if (i + 1U == rows && line->comp_total > line->menu.items.len) {
-            char count[64];
-            size_t n;
-            int width;
-
-            (void)snprintf(count, sizeof(count), "%u+ of %u",
-                           (unsigned)line->menu.items.len,
-                           (unsigned)line->comp_total);
-            n = strlen(count);
-            width = sag_str_width((const u8 *)count, n, 1U);
-            if (width > 0 && (u16)width < ed->grid.cols)
-                (void)sag_grid_puts(&ed->grid, row,
-                                    (u16)(ed->grid.cols - (u16)width),
-                                    (const u8 *)count, n,
-                                    row_style.row_fg, row_style.row_bg,
-                                    row_style.attrs);
-        }
-    }
+    sag_menu_draw(ed, &ed->cmdline.menu, area, style);
 }
 
 static void draw_prompt_message(Ed *ed, u16 footer,
