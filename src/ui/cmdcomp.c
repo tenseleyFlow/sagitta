@@ -989,28 +989,38 @@ bool sag_comp_kind_for(const CmdEntry *entry, u32 token_index,
     return true;
 }
 
+bool sag_comp_query_at(Ed *ed, const CmdParsePoint *point,
+                       SagCompQuery *out)
+{
+    const CmdEntry *entry = NULL;
+    SagCompKind kind;
+
+    (void)ed;
+    if (out == NULL || point == NULL)
+        return false;
+    if (point->token_index != 0U) {
+        if (!point->command_known)
+            return false;
+        entry = sag_cmd_entry(point->command);
+    }
+    if (!sag_comp_kind_for(entry, point->token_index, &kind))
+        return false;
+    out->kind = kind;
+    out->source = sag_comp_source(kind);
+    out->stem = point->stem;
+    out->replace = point->token;
+    return true;
+}
+
 bool sag_comp_query(Ed *ed, const char *line, size_t len, size_t cursor,
                     Arena *scratch, SagCompQuery *out)
 {
     CmdParsePoint point;
-    const CmdEntry *entry = NULL;
-    SagCompKind kind;
 
     if (out == NULL || scratch == NULL ||
         !sag_cmd_parse_point(ed, line, len, cursor, scratch, &point))
         return false;
-    if (point.token_index != 0U) {
-        if (!point.command_known)
-            return false;
-        entry = sag_cmd_entry(point.command);
-    }
-    if (!sag_comp_kind_for(entry, point.token_index, &kind))
-        return false;
-    out->kind = kind;
-    out->source = sag_comp_source(kind);
-    out->stem = point.stem;
-    out->replace = point.token;
-    return true;
+    return sag_comp_query_at(ed, &point, out);
 }
 
 char *sag_comp_lcp(Arena *arena, const Vec_CompItem *items)

@@ -373,6 +373,26 @@ static const CmdDesc builtins[] = {
     {"ed.cmdline.ghost.accept", sag_cmdline_cmd_ghost_accept,
      SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
      "Accept the inline suggestion, or move one grapheme right"},
+    /* Sprint 18.5 §10.  complete_next/prev stay as the names the keymap
+     * and the goldens already use; these are the same behaviours under
+     * the menu's own namespace, plus the two the old menu could not do. */
+    {"ed.cmdline.menu.next", sag_cmdline_cmd_complete_next, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL, "Select the next menu row"},
+    {"ed.cmdline.menu.prev", sag_cmdline_cmd_complete_prev, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
+     "Select the previous menu row"},
+    {"ed.cmdline.menu.page_next", sag_cmdline_cmd_menu_page_next,
+     SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
+     "Move one visible page down the menu"},
+    {"ed.cmdline.menu.page_prev", sag_cmdline_cmd_menu_page_prev,
+     SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
+     "Move one visible page up the menu"},
+    {"ed.cmdline.menu.accept", sag_cmdline_cmd_menu_accept, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
+     "Accept the selected menu row"},
+    {"ed.cmdline.menu.dismiss", sag_cmdline_cmd_menu_dismiss,
+     SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
+     "Close the menu without accepting"},
     {"ed.cmdline.accept", sag_cmdline_cmd_accept, SAG_ARITY_NONE,
      SAG_CMD_NEEDS_WIN | SAG_CMD_PROMPTS | SAG_CMD_INTERNAL,
      "Accept the command line"},
@@ -640,6 +660,8 @@ static bool command_name_valid(const char *name)
         "write", "write_quit", "hist_prev", "hist_next",
         "complete_next", "complete_prev", "insert_register",
         "literal_next", "accept", "word_prev", "to_home", "to_end",
+        /* Sprint 18.5 */
+        "page_next", "page_prev", "dismiss",
         /* Sprint 19 */
         "run", "run_bg", "read", "filter", "term", "kill", "kill_force",
         "jump", "clear_finished", "rerun",

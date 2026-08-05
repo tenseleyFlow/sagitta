@@ -420,10 +420,121 @@ Win *sag_cmdline_target(Ed *ed)
  * a word being typed.  That is Sprint 21's doctrine -- a half-typed line
  * is the normal state of a prompt -- applied to the menu.
  */
+/*
+ * Sprint 18.5 §9: what the parser already understands, said out loud.
+ *
+ * Only ever reports what it KNOWS.  An unknown command produces no hint
+ * at all rather than an "unknown command" line: while the user is still
+ * typing, an empty menu is already the signal, and styling the normal
+ * state of a half-typed line as a failure is the flashing-message-line
+ * behaviour Sprint 21's doctrine forbids.
+ */
+static const char *hint_arg_name(const CmdEntry *entry, u32 token_index,
+                                 bool *repeats)
+{
+    const char *spec;
+    size_t len;
+    size_t at;
+    char code;
+
+    *repeats = false;
+    if (entry == NULL || entry->argspec == NULL)
+        return NULL;
+    spec = entry->argspec;
+    len = strlen(spec);
+    if (len != 0U && spec[len - 1U] == '*') {
+        *repeats = true;
+        len--;
+    }
+    if (len == 0U)
+        return NULL;
+    /* Token 0 is the name itself, so the argument being ASKED for is the
+     * first; inside argument N it is that argument's own slot. */
+    at = token_index == 0U ? 0U : (size_t)token_index - 1U;
+    if (at >= len) {
+        if (!*repeats)
+            return NULL;
+        at = len - 1U;
+    }
+    code = spec[at];
+    switch (code) {
+    case 'f':
+        return "<file>";
+    case 'b':
+        return "<buffer>";
+    case 'o':
+        return "<option>";
+    case 'v':
+        return "<value>";
+    case 's':
+        return "<text>";
+    default:
+        break;
+    }
+    return NULL;
+}
+
+static void cmdline_set_hint(Ed *ed, const CmdParsePoint *point)
+{
+    CmdLine *line = &ed->cmdline;
+    const CmdDesc *desc;
+    const CmdEntry *entry;
+    const char *shown;
+    const char *arg;
+    bool repeats = false;
+    size_t at = 0U;
+
+    line->hint[0] = '\0';
+    if (!point->command_known)
+        return;
+    desc = sag_cmd_desc(point->command);
+    entry = sag_cmd_entry(point->command);
+    if (desc == NULL || entry == NULL)
+        return;
+    shown = strncmp(desc->name, "ed.", 3U) == 0 ? desc->name + 3U
+                                                : desc->name;
+    /* An abbreviation resolved to something else is the one case where
+     * the user cannot see what will run, so it is spelled out. */
+    if (point->stem != NULL && point->stem[0] != '\0' &&
+        strcmp(point->stem, shown) != 0 && point->token_index == 0U)
+        at += (size_t)snprintf(line->hint + at, sizeof(line->hint) - at,
+                               "%s \xE2\x86\x92 %s", point->stem, shown);
+    else
+        at += (size_t)snprintf(line->hint + at, sizeof(line->hint) - at,
+                               "%s", shown);
+    if (at >= sizeof(line->hint))
+        return;
+    arg = hint_arg_name(entry, point->token_index, &repeats);
+    if (arg != NULL)
+        at += (size_t)snprintf(line->hint + at, sizeof(line->hint) - at,
+                               " \xC2\xB7 %s%s", arg, repeats ? "\xE2\x80\xA6"
+                                                             : "");
+    if (at >= sizeof(line->hint) || !point->range.given)
+        return;
+    /*
+     * The user typed the line numbers, so echoing them says nothing; how
+     * many lines they resolve to is the part they cannot see.
+     */
+    if (point->range.kind == SAG_RANGE_BUFFER)
+        (void)snprintf(line->hint + at, sizeof(line->hint) - at,
+                       " \xC2\xB7 whole buffer");
+    else if (point->range.kind == SAG_RANGE_SELECTION)
+        (void)snprintf(line->hint + at, sizeof(line->hint) - at,
+                       " \xC2\xB7 selection");
+    else {
+        u64 lines = point->range.hi.v - point->range.lo.v + 1U;
+
+        (void)snprintf(line->hint + at, sizeof(line->hint) - at,
+                       " \xC2\xB7 %llu line%s", (unsigned long long)lines,
+                       lines == 1U ? "" : "s");
+    }
+}
+
 static void cmdline_refilter(Ed *ed)
 {
     CmdLine *line = &ed->cmdline;
     Arena scratch;
+    CmdParsePoint point;
     SagCompQuery query;
     Vec_CompItem items = {0};
     char *text;
@@ -431,12 +542,24 @@ static void cmdline_refilter(Ed *ed)
     /* Only `:` completes; `/` and `?` carry a pattern, not a command. */
     if (line->kind != SAG_PROMPT_CMD) {
         sag_menu_dismiss(&line->menu);
+        line->hint[0] = '\0';
         return;
     }
     text = text_string(line->buf);
     arena_init(&scratch);
-    if (!sag_comp_query(ed, text, (size_t)sag_textbuf_len(line->buf),
-                        (size_t)line->cur.pos.v, &scratch, &query) ||
+    /* ONE tolerant parse per keystroke, read by both the hint and the
+     * filter.  Two would drift apart. */
+    if (!sag_cmd_parse_point(ed, text, (size_t)sag_textbuf_len(line->buf),
+                             (size_t)line->cur.pos.v, &scratch, &point)) {
+        sag_menu_dismiss(&line->menu);
+        line->hint[0] = '\0';
+        arena_free_all(&scratch);
+        free(text);
+        ed->full_damage = true;
+        return;
+    }
+    cmdline_set_hint(ed, &point);
+    if (!sag_comp_query_at(ed, &point, &query) ||
         query.replace.hi <= query.replace.lo) {
         sag_menu_dismiss(&line->menu);
         arena_free_all(&scratch);
@@ -728,6 +851,69 @@ static CmdStatus complete(Ed *ed, bool previous)
     ed->footer_dirty = true;
     arena_free_all(&scratch);
     free(text);
+    return SAG_CMD_OK;
+}
+
+/*
+ * Sprint 18.5 §10.  Every menu behaviour is a registered command, so it
+ * is rebindable, recordable, and reachable from Fletch (Sprint 34)
+ * rather than being a keystroke handled inside a switch.  They all carry
+ * SAG_CMD_INTERNAL: they are keymap plumbing, not commands a user types.
+ */
+static CmdStatus menu_page(Ed *ed, bool previous)
+{
+    CmdLine *line = &ed->cmdline;
+    const CompItem *item;
+
+    if (!sag_menu_move(&line->menu, previous ? -1 : 1, true))
+        return SAG_CMD_OK;
+    item = sag_menu_selected(&line->menu);
+    if (item == NULL)
+        return SAG_CMD_OK;
+    if (!insert_completion(ed, line->menu.replace, item, false))
+        return SAG_CMD_ERR_IO;
+    ed->full_damage = true;
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_cmdline_cmd_menu_page_next(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
+        return SAG_CMD_ERR_STATE;
+    return menu_page(cx->ed, false);
+}
+
+CmdStatus sag_cmdline_cmd_menu_page_prev(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
+        return SAG_CMD_ERR_STATE;
+    return menu_page(cx->ed, true);
+}
+
+/* No default binding: this is how §8's click and Fletch commit a row. */
+CmdStatus sag_cmdline_cmd_menu_accept(CmdCtx *cx)
+{
+    Ed *ed;
+    const CompItem *item;
+
+    if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
+        return SAG_CMD_ERR_STATE;
+    ed = cx->ed;
+    item = sag_menu_selected(&ed->cmdline.menu);
+    if (item == NULL)
+        return SAG_CMD_OK;
+    if (!insert_completion(ed, ed->cmdline.menu.replace, item, true))
+        return SAG_CMD_ERR_IO;
+    menu_discard(ed);
+    cmdline_refilter(ed);
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_cmdline_cmd_menu_dismiss(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
+        return SAG_CMD_ERR_STATE;
+    menu_discard(cx->ed);
     return SAG_CMD_OK;
 }
 
@@ -1149,6 +1335,15 @@ static void draw_prompt_message(Ed *ed, u16 footer,
         (void)snprintf(message, sizeof(message),
                        ed->msg.sev == SAG_MSG_ERROR ? "E: %s" : "%s",
                        ed->msg.text);
+    } else if (ed->cmdline.hint[0] != '\0') {
+        /*
+         * §9: a hint, not a diagnostic.  It draws in the ORDINARY footer
+         * style -- dimmed, unadorned -- because styling the normal state
+         * of a half-typed line as a failure is what makes a message line
+         * flash through a word being typed.
+         */
+        message_style.attrs |= SAG_ATTR_DIM;
+        (void)snprintf(message, sizeof(message), "%s", ed->cmdline.hint);
     } else {
         return;
     }

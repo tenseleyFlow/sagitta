@@ -191,6 +191,8 @@ static const BindRow keys_E[] = {
      */
     {"C-n", "ed.cmdline.complete_next", 0, NULL},
     {"C-p", "ed.cmdline.complete_prev", 0, NULL},
+    {"<pgdn>", "ed.cmdline.menu.page_next", 0, NULL},
+    {"<pgup>", "ed.cmdline.menu.page_prev", 0, NULL},
     {"C-r", "ed.cmdline.insert_register", 0, NULL},
     {"C-v", "ed.cmdline.literal_next", 0, NULL},
     {"C-z", "ed.edit.undo", 0, NULL},

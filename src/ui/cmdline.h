@@ -32,6 +32,9 @@ typedef struct CmdLine {
     CompFilter filter;
     HistCur hist;
     CmdErr err;
+    /* §9: what the parser currently understands.  Empty when it
+     * understands nothing -- silence, never a guess. */
+    char hint[160];
     u16 scroll;
 
     void *target;
@@ -60,6 +63,10 @@ CmdStatus sag_cmdline_cmd_complete_next(CmdCtx *cx);
 CmdStatus sag_cmdline_cmd_complete_prev(CmdCtx *cx);
 CmdStatus sag_cmdline_cmd_insert_register(CmdCtx *cx);
 CmdStatus sag_cmdline_cmd_literal_next(CmdCtx *cx);
+CmdStatus sag_cmdline_cmd_menu_page_next(CmdCtx *cx);
+CmdStatus sag_cmdline_cmd_menu_page_prev(CmdCtx *cx);
+CmdStatus sag_cmdline_cmd_menu_accept(CmdCtx *cx);
+CmdStatus sag_cmdline_cmd_menu_dismiss(CmdCtx *cx);
 CmdStatus sag_cmdline_cmd_ghost_accept(CmdCtx *cx);
 CmdStatus sag_cmdline_cmd_accept(CmdCtx *cx);
 CmdStatus sag_cmdline_cmd_cancel(CmdCtx *cx);

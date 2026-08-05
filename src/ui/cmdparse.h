@@ -33,6 +33,9 @@ typedef struct CmdParsePoint {
     u32 token_index;
     CmdId command;
     bool command_known;
+    /* What the leading range resolved to, for Sprint 18.5 §9's hint.
+     * `given` is false when the user typed none. */
+    CmdRange range;
 } CmdParsePoint;
 
 bool sag_cmd_parse(Ed *ed, const char *line, size_t len, Arena *a,

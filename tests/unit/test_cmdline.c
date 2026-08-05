@@ -560,6 +560,124 @@ void test_cmdline_escape_leaves_a_live_menu_and_closes_the_prompt(void)
     cmdline_fixture_free(&fixture);
 }
 
+void test_cmdline_hint_reports_what_the_parser_understands(void)
+{
+    CmdlineFixture fixture;
+
+    cmdline_fixture_init(&fixture);
+    cmdline_document(&fixture, "one\ntwo\nthree\nfour\n");
+
+    /* An abbreviation is the one case where the user cannot see what
+     * will actually run, so it is spelled out -- with the argument the
+     * command is waiting for. */
+    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    cmdline_type(&fixture, "w");
+    SAG_ASSERT_EQ_STR(fixture.ed.cmdline.hint,
+                      "w \xE2\x86\x92 file.write \xC2\xB7 <file>");
+    sag_cmdline_close(&fixture.ed, false);
+
+    /* A full name needs no arrow. */
+    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    cmdline_type(&fixture, "redraw");
+    SAG_ASSERT_EQ_STR(fixture.ed.cmdline.hint, "redraw");
+    sag_cmdline_close(&fixture.ed, false);
+
+    /*
+     * A range reports how many LINES it covers.  The user typed the
+     * numbers, so echoing them back says nothing; what they cannot see
+     * is what those numbers resolve to.
+     */
+    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    cmdline_type(&fixture, "1,3d");
+    SAG_ASSERT_EQ_STR(fixture.ed.cmdline.hint,
+                      "d \xE2\x86\x92 edit.line.delete \xC2\xB7 3 lines");
+    sag_cmdline_close(&fixture.ed, false);
+
+    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    cmdline_type(&fixture, "%d");
+    SAG_ASSERT_EQ_STR(fixture.ed.cmdline.hint,
+                      "d \xE2\x86\x92 edit.line.delete \xC2\xB7 whole buffer");
+    sag_cmdline_close(&fixture.ed, false);
+
+    cmdline_fixture_free(&fixture);
+}
+
+void test_cmdline_hint_says_nothing_it_does_not_know(void)
+{
+    CmdlineFixture fixture;
+
+    cmdline_fixture_init(&fixture);
+    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+
+    /* Nothing typed: nothing understood, nothing said. */
+    SAG_ASSERT_EQ_STR(fixture.ed.cmdline.hint, "");
+
+    /*
+     * An unknown command produces NO hint rather than an error line.
+     * While the user is still typing, the empty menu is already the
+     * signal, and styling a half-typed line as a failure is the
+     * flashing message line Sprint 21's doctrine forbids.
+     */
+    cmdline_type(&fixture, "zzzzz");
+    SAG_ASSERT_EQ_STR(fixture.ed.cmdline.hint, "");
+    SAG_ASSERT(!(fixture.ed.msg.active &&
+                 fixture.ed.msg.sev == SAG_MSG_ERROR));
+    cmdline_fixture_free(&fixture);
+}
+
+void test_cmdline_menu_commands_are_registered_and_internal(void)
+{
+    static const char *const names[] = {
+        "ed.cmdline.menu.next",      "ed.cmdline.menu.prev",
+        "ed.cmdline.menu.page_next", "ed.cmdline.menu.page_prev",
+        "ed.cmdline.menu.accept",    "ed.cmdline.menu.dismiss",
+        "ed.cmdline.ghost.accept",
+    };
+    size_t i;
+
+    for (i = 0U; i < SAG_ARRAY_LEN(names); i++) {
+        CmdId id = sag_cmd_lookup(names[i], (u32)strlen(names[i]));
+        const CmdDesc *desc = sag_cmd_desc(id);
+
+        SAG_ASSERT(id.v != 0U);
+        SAG_ASSERT_NOT_NULL(desc);
+        /* Keymap plumbing, not commands a user types: SAG_CMD_INTERNAL
+         * is what keeps them out of the `:` menu and out of the
+         * E-mode resolver. */
+        SAG_ASSERT((desc->flags & SAG_CMD_INTERNAL) != 0U);
+    }
+}
+
+void test_cmdline_menu_page_moves_by_a_page(void)
+{
+    CmdlineFixture fixture;
+
+    cmdline_fixture_init(&fixture);
+    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    cmdline_type(&fixture, "e");
+    SAG_ASSERT(fixture.ed.cmdline.menu.items.len > 5U);
+
+    /* Entering the list lands on row 0, the same as Tab does -- a page
+     * key should not skip past the best match on its way in. */
+    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                     sag_cmdline_cmd_menu_page_next),
+                      SAG_CMD_OK);
+    SAG_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 0);
+    SAG_ASSERT(fixture.ed.cmdline.menu.explicit_sel);
+
+    /* Now it pages: five visible rows, so row 0 -> row 5. */
+    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                     sag_cmdline_cmd_menu_page_next),
+                      SAG_CMD_OK);
+    SAG_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 5);
+
+    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                     sag_cmdline_cmd_menu_page_prev),
+                      SAG_CMD_OK);
+    SAG_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 0);
+    cmdline_fixture_free(&fixture);
+}
+
 void test_cmdline_ghost_is_never_in_the_buffer(void)
 {
     CmdlineFixture fixture;

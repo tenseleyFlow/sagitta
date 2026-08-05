@@ -12,6 +12,9 @@
 #include "ws/finder.h"
 
 typedef struct Ed Ed;
+/* cmdparse.h includes this header, so the tolerant parse result is
+ * forward-declared rather than included back. */
+typedef struct CmdParsePoint CmdParsePoint;
 
 enum { SAG_COMP_MAX = 500 };
 
@@ -151,6 +154,14 @@ bool sag_comp_kind_for(const CmdEntry *entry, u32 token_index,
 /* Tolerant command-line source selection at the cursor. */
 bool sag_comp_query(Ed *ed, const char *line, size_t len, size_t cursor,
                     Arena *scratch, SagCompQuery *out);
+/*
+ * The same, from a parse the caller already has.  §9's hint and §4's
+ * filter both read one tolerant parse per keystroke: two independent
+ * parses would drift, and then the hint names one command while the menu
+ * completes another.
+ */
+bool sag_comp_query_at(Ed *ed, const CmdParsePoint *point,
+                       SagCompQuery *out);
 
 /*
  * Registration is idempotent BY KIND: registering a kind that already

@@ -1011,7 +1011,8 @@ bool sag_cmd_parse(Ed *ed, const char *line, size_t len, Arena *a,
     return true;
 }
 
-static bool loose_name(Parser *p, size_t cursor, char **name, Span *tok)
+static bool loose_name(Parser *p, size_t cursor, char **name, Span *tok,
+                       CmdRange *range)
 {
     size_t start;
 
@@ -1020,7 +1021,7 @@ static bool loose_name(Parser *p, size_t cursor, char **name, Span *tok)
         p->at++;
         skip_ws(p);
     }
-    if (!parse_range(p, &(CmdRange){0})) {
+    if (!parse_range(p, range)) {
         p->err = NULL;
         p->at = 0U;
         skip_ws(p);
@@ -1061,7 +1062,7 @@ bool sag_cmd_parse_point(Ed *ed, const char *line, size_t len,
         cursor = len;
     memset(out, 0, sizeof(*out));
     p = (Parser){ed, line, len, 0U, a, &ignored};
-    (void)loose_name(&p, cursor, &name, &name_tok);
+    (void)loose_name(&p, cursor, &name, &name_tok, &out->range);
     if (name != NULL && name[0] != '\0') {
         CmdErr saved = ignored;
 
