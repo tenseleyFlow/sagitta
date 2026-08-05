@@ -89,6 +89,7 @@ Buffer *sag_ws_scratch_new(Ed *ed, const char *name, u32 flags)
     if (ed == NULL || !ed->model_ready || name == NULL)
         return NULL;
     b = sag_xcalloc(1U, sizeof(*b));
+    b->id = ed->ws.next_buf_id++;
     sag_filemeta_init(&b->meta);
     b->tb = sag_textbuf_new();
     b->name = arena_strdup(&ed->arena, name);
@@ -102,6 +103,19 @@ Buffer *sag_ws_scratch_new(Ed *ed, const char *name, u32 flags)
     b->jrn = NULL;
     ed_ws_push(ed, b);
     return b;
+}
+
+Buffer *sag_ws_buf_by_id(Ed *ed, u32 id)
+{
+    u32 i;
+
+    if (ed == NULL || !ed->model_ready)
+        return NULL;
+    for (i = 0U; i < ed->ws.nbufs; i++) {
+        if (ed->ws.bufs[i]->id == id)
+            return ed->ws.bufs[i];
+    }
+    return NULL;
 }
 
 Buffer *sag_ws_scratch_find(Ed *ed, const char *name)
@@ -180,6 +194,7 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
     Cursor cursor = {BYTEOFF(0U), {0U}, BYTEOFF(0U)};
 
     ed->buffer.tb = tb;
+    ed->buffer.id = ed->ws.next_buf_id++;
     ed->buffer.path = path == NULL ? NULL : arena_strdup(&ed->arena, path);
     ed->buffer.tabwidth = SAG_VP_TABWIDTH;
     ed->buffer.undo = sag_undo_new(tb);
@@ -310,6 +325,18 @@ bool sag_buf_dirty(const Buffer *b)
     return b != NULL && b->undo != NULL && !sag_undo_at_save_point(b->undo);
 }
 
+/* Shim so the text layer can feed the changelist without knowing it
+ * exists.  Job output goes to SAG_BUF_NOUNDO scratch buffers, which are
+ * not places the user "changed" and so are excluded here. */
+static void ed_on_change(void *ctx, ByteOff at, i64 now_ms)
+{
+    Buffer *b = ctx;
+
+    if (b == NULL || (b->flags & SAG_BUF_NOUNDO) != 0U)
+        return;
+    sag_change_record(b, at, now_ms);
+}
+
 EditCtx sag_ed_edit_ctx_for(Ed *ed, Win *win)
 {
     EditCtx ec = {0};
@@ -326,6 +353,9 @@ EditCtx sag_ed_edit_ctx_for(Ed *ed, Win *win)
     ec.jrnl = buffer->jrn;
     ec.undo = buffer->undo;
     ec.meta = buffer->path == NULL ? NULL : &buffer->meta;
+    ec.on_change = ed_on_change;
+    ec.on_change_ctx = buffer;
+    ec.now_ms = ed->now_ms;
     return ec;
 }
 
@@ -794,6 +824,7 @@ void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms)
 
     if (ed == NULL || key.kind != SAG_EV_KEY)
         return;
+    ed->now_ms = now_ms;
     if (key.ev != SAG_KEY_RELEASE && sag_msg_dismiss_overlay(ed)) {
         return;
     }

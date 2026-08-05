@@ -248,6 +248,16 @@ void sag_marks_observe_collapse(const MarkSet *ms, Span range,
     }
 }
 
+bool sag_mark_alive(const MarkSet *ms, MarkId id)
+{
+    const MarkSlot *slot;
+
+    if (ms == NULL || id.id >= ms->slots_len)
+        return false;
+    slot = &ms->slots[id.id];
+    return slot->mark.alive && slot->gen == id.gen;
+}
+
 bool sag_mark_repair(MarkSet *ms, MarkId id, ByteOff pos)
 {
     MarkSlot *slot;

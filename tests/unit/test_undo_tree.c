@@ -37,7 +37,7 @@ static void tree_fixture_init(TreeFixture *f)
     f->undo = sag_undo_new(f->tb);
     f->clock = (TreeClock){1000U, 100};
     sag_undo_set_clock(f->undo, tree_mono, tree_wall, &f->clock);
-    f->edit = (EditCtx){f->tb, NULL, &f->cursors, 1U, NULL, f->undo, NULL};
+    f->edit = (EditCtx){f->tb, NULL, &f->cursors, 1U, NULL, f->undo, NULL, NULL, NULL, 0};
 }
 
 static void tree_fixture_free(TreeFixture *f)

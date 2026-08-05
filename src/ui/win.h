@@ -2,6 +2,7 @@
 #define SAG_UI_WIN_H
 
 #include "edit/motion.h"
+#include "edit/jumplist.h"
 #include "edit/multicursor.h"
 #include "edit/select.h"
 #include "text/coords.h"
@@ -25,6 +26,9 @@ typedef struct Win {
     CursorSet cs;
     HState h;
     Viewport vp;
+    /* Navigation history of this VIEW; two panes on one file keep
+     * separate ones (Sprint 21 §5). */
+    JumpList jumps;
     WrapCache wrap_cache;
     Rect rect;
     NumStyle number_style;

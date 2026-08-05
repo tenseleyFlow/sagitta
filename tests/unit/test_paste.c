@@ -34,7 +34,7 @@ static void paste_fixture_init(PasteFixture *f, const char *text, u64 cursor)
     f->undo = sag_undo_new(f->tb);
     sag_filemeta_init(&f->meta);
     f->edit = (EditCtx){f->tb, NULL, &f->cursors, 1U, NULL, f->undo,
-                       NULL};
+                       NULL, NULL, NULL, 0};
 }
 
 static void paste_fixture_enable_meta(PasteFixture *f, SagEol eol)

@@ -165,7 +165,7 @@ static void prop_edit_init(PropEdit *f, const u8 *bytes, u64 len)
     sag_cset_init(&f->cursors, prop_cursor(0U, 17U));
     f->undo = sag_undo_new(f->tb);
     f->edit = (EditCtx){f->tb, f->marks, &f->cursors, 1U, NULL,
-                       f->undo, NULL};
+                       f->undo, NULL, NULL, NULL, 0};
 }
 
 static void prop_edit_free(PropEdit *f)

@@ -92,6 +92,8 @@ bool sag_edit_insert(EditCtx *ec, ByteOff at, const u8 *bytes, u64 len)
                                  len);
     if (ec->undo != NULL)
         sag_undo_record_insert(ec, at, len, payload);
+    if (ec->on_change != NULL)
+        ec->on_change(ec->on_change_ctx, at, ec->now_ms);
     return ec->jrnl == NULL || sag_journal_ok(ec->jrnl);
 }
 
@@ -124,6 +126,8 @@ bool sag_edit_delete(EditCtx *ec, Span range)
                                  removed, len);
     if (ec->undo != NULL)
         sag_undo_record_delete(ec, range);
+    if (ec->on_change != NULL)
+        ec->on_change(ec->on_change_ctx, BYTEOFF(range.lo), ec->now_ms);
     free(removed);
     return ec->jrnl == NULL || sag_journal_ok(ec->jrnl);
 }

@@ -64,7 +64,7 @@ void test_register_computes_last_insert_and_current_path_on_read(void)
     sag_filemeta_init(&meta);
     meta.realpath = sag_xmalloc(sizeof(path));
     (void)memcpy(meta.realpath, path, sizeof(path));
-    edit = (EditCtx){tb, NULL, &cursors, 1U, NULL, undo, NULL};
+    edit = (EditCtx){tb, NULL, &cursors, 1U, NULL, undo, NULL, NULL, NULL, 0};
     sag_edit_insert(&edit, BYTEOFF(0U), inserted, sizeof(inserted));
     sag_edit_delete(&edit, (Span){2U, 3U});
     sag_reg_bind_context(&r, undo, &meta);
@@ -91,7 +91,7 @@ void test_register_last_insert_reflects_backspace_in_type_run(void)
     sag_reg_init(&r);
     tb = sag_textbuf_from_bytes((const u8 *)"--", 2U);
     undo = sag_undo_new(tb);
-    edit = (EditCtx){tb, NULL, NULL, 1U, NULL, undo, NULL};
+    edit = (EditCtx){tb, NULL, NULL, 1U, NULL, undo, NULL, NULL, NULL, 0};
     sag_undo_begin(&edit, SAG_TXN_TYPE);
     sag_edit_insert(&edit, BYTEOFF(1U), (const u8 *)"abc", 3U);
     sag_edit_delete(&edit, (Span){2U, 3U});

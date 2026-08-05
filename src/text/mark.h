@@ -36,6 +36,14 @@ void sag_marks_observe_collapse(const MarkSet *ms, Span range,
                                 SagMarkCollapseFn observe, void *ctx);
 /* Returns false when id is dead, stale, or names a reused slab slot. */
 bool sag_mark_repair(MarkSet *ms, MarkId id, ByteOff pos);
+/*
+ * Non-fatal liveness test.  sag_mark_pos treats a dead handle as a bug
+ * and aborts, which is right for code that owns its marks; Sprint 21's
+ * jumplist holds handles it does NOT own — a position the user visited
+ * ten jumps ago may have been deleted since — and has to skip those
+ * entries rather than die on them.
+ */
+bool sag_mark_alive(const MarkSet *ms, MarkId id);
 
 /* op is SAG_JOURNAL_INS or SAG_JOURNAL_DEL; at is a pre-edit offset. */
 void sag_marks_adjust(MarkSet *ms, u8 op, ByteOff at, u64 len);

@@ -36,7 +36,7 @@ static void trim_fixture_init(TrimFixture *f, u32 min_nodes)
     sag_undo_set_clock(f->undo, trim_mono, trim_wall, f);
     sag_undo_set_limits(f->undo, 4096U, min_nodes,
                         SAG_UNDO_PERSIST_BYTES_MAX);
-    f->edit = (EditCtx){f->tb, NULL, &f->cursors, 0U, NULL, f->undo, NULL};
+    f->edit = (EditCtx){f->tb, NULL, &f->cursors, 0U, NULL, f->undo, NULL, NULL, NULL, 0};
 }
 
 static void trim_fixture_free(TrimFixture *f)

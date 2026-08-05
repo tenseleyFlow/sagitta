@@ -88,7 +88,7 @@ static void ring_fixture_init(RingFixture *f)
     f->undo = sag_undo_new(f->tb);
     sag_filemeta_init(&f->meta);
     f->edit = (EditCtx){f->tb, NULL, &f->cursors, 3U, NULL, f->undo,
-                       NULL};
+                       NULL, NULL, NULL, 0};
 }
 
 static void ring_fixture_free(RingFixture *f)

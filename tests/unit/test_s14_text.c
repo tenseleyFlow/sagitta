@@ -193,7 +193,7 @@ void test_s14_journal_replay_edit_is_one_external_undo_transaction(void)
     mark = sag_mark_add(marks, BYTEOFF(3U), SAG_BIAS_RIGHT);
     sag_cset_init(&cursors, cursor);
     undo = sag_undo_new(tb);
-    edit = (EditCtx){tb, marks, &cursors, 9U, NULL, undo, &meta};
+    edit = (EditCtx){tb, marks, &cursors, 9U, NULL, undo, &meta, NULL, NULL, 0};
     SAG_ASSERT(sag_journal_replay_edit(f.source, &edit, &meta));
     SAG_ASSERT_NULL(edit.jrnl);
     SAG_ASSERT_EQ_U64(sag_textbuf_len(tb), 7U);
@@ -272,7 +272,7 @@ static void s14_edit_fixture_init(S14EditFixture *f, FileMeta *meta,
     sag_cset_init(&f->cursors, cursor);
     f->undo = sag_undo_new(f->tb);
     f->edit = (EditCtx){f->tb, f->marks, &f->cursors, 7U, journal,
-                        f->undo, meta};
+                        f->undo, meta, NULL, NULL, 0};
 }
 
 static void s14_edit_fixture_assert_unchanged(const S14EditFixture *f)

@@ -98,7 +98,7 @@ void test_piece_regress_undo_branch_survives(void)
 
     sag_cset_init(&cursors, cursor);
     undo = sag_undo_new(tb);
-    edit = (EditCtx){tb, marks, &cursors, 3U, NULL, undo, NULL};
+    edit = (EditCtx){tb, marks, &cursors, 3U, NULL, undo, NULL, NULL, NULL, 0};
 
     sag_undo_boundary(undo);
     sag_edit_insert(&edit, BYTEOFF(4U), (const u8 *)"A", 1U);
@@ -156,7 +156,7 @@ void test_piece_regress_undo_compact_zero_repair_run(void)
     const UndoRepairRun *insert_run;
 
     sag_cset_init(&cursors, cursor);
-    edit = (EditCtx){tb, marks, &cursors, 1U, NULL, undo, NULL};
+    edit = (EditCtx){tb, marks, &cursors, 1U, NULL, undo, NULL, NULL, NULL, 0};
 
     /* A deletion first records the collapsed mark. The following insert has
      * an empty repair run, but its offset still belongs at the current end

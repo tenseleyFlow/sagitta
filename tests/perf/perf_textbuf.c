@@ -778,7 +778,7 @@ static bool measure_undo(const char *dir, Result *out)
         return false;
     }
     /* Measure the undo engine, not the file-backed crash journal. */
-    edit = (EditCtx){tb, NULL, NULL, 0U, NULL, undo, NULL};
+    edit = (EditCtx){tb, NULL, NULL, 0U, NULL, undo, NULL, NULL, NULL, 0};
     if (!now_ns(&begin))
         goto done;
     for (i = 0U; i < INSERT_SAMPLES; i++) {

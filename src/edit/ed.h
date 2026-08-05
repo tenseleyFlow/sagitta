@@ -5,6 +5,7 @@
 
 #include "edit/dispatch.h"
 #include "edit/job.h"
+#include "edit/jumplist.h"
 #include "edit/keymap.h"
 #include "edit/loop.h"
 #include "edit/mode.h"
@@ -39,6 +40,13 @@ enum {
 };
 
 typedef struct Buffer {
+    /*
+     * Stable for the buffer's lifetime and never reused.  Workspace
+     * indices shift when a buffer is dropped, so anything that outlives
+     * a close — Sprint 21's jumplist entries, Sprint 25's persisted
+     * state — names buffers by this instead.
+     */
+    u32 id;
     TextBuf *tb;
     FileMeta meta;
     char *path;
@@ -50,6 +58,8 @@ typedef struct Buffer {
     UndoTree *undo;
     Journal *jrn;
     MarkSet *marks;
+    /* Where this TEXT was edited; reachable from any view of it. */
+    ChangeList changes;
 } Buffer;
 
 /* Buffers are referenced by pointer from every Win, so the list holds
@@ -60,6 +70,7 @@ typedef struct Workspace {
     Buffer **bufs;
     u32 nbufs;
     u32 cap;
+    u32 next_buf_id;
     char *dir;
 } Workspace;
 
@@ -95,6 +106,9 @@ struct Ed {
     u64 dispatch_count;
     char dispatch_message[192];
 
+    /* The loop's clock, handed in with each key; nothing in the core
+     * reads a clock itself (invariant 5). */
+    i64 now_ms;
     TimerHeap timers;
     JobTable jobs;
     Msg msg;
@@ -143,6 +157,8 @@ const char *sag_buf_label(const Buffer *b);
  * returned pointer is stable for the buffer's lifetime — windows hold it. */
 Buffer *sag_ws_scratch_new(Ed *ed, const char *name, u32 flags);
 Buffer *sag_ws_scratch_find(Ed *ed, const char *name);
+/* NULL when the buffer has been closed since the id was recorded. */
+Buffer *sag_ws_buf_by_id(Ed *ed, u32 id);
 void sag_ws_scratch_drop(Ed *ed, Buffer *b);
 /* Points the focused window at `b` with a fresh cursor set and viewport.
  * Returns false when `b` is not in the workspace. */

@@ -940,7 +940,8 @@ void test_clipboard_unnamed_paste_reads_subprocess(void)
     tb = sag_textbuf_from_bytes((const u8 *)"a", 1U);
     sag_cset_init(&cursors, cursor);
     undo = sag_undo_new(tb);
-    edit = (EditCtx){tb, NULL, &cursors, 7U, NULL, undo, NULL};
+    edit = (EditCtx){tb, NULL, &cursors, 7U, NULL, undo, NULL,
+                     NULL, NULL, 0};
     bytebuf_init(&materialized);
 
     sag_test_capture_log();
