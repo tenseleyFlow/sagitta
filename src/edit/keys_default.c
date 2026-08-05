@@ -31,6 +31,13 @@ static const BindRow keys_L[] = {
     {"g g", "ed.move.buf.home", 0, NULL},
     /* Sprint 21 §5.  Ctrl-O/Ctrl-I are the jumplist's two directions;
      * g; / g, walk the changelist. */
+    /* Sprint 21 §1: the search surface. */
+    {"/", "ed.search.open", 0, NULL},
+    {"?", "ed.search.open_back", 0, NULL},
+    {"n", "ed.search.next", 0, NULL},
+    {"N", "ed.search.prev", 0, NULL},
+    {"*", "ed.search.word_next", 0, NULL},
+    {"#", "ed.search.word_prev", 0, NULL},
     {"C-o", "ed.jump.back", 0, NULL},
     {"C-i", "ed.jump.fwd", 0, NULL},
     {"g ;", "ed.change.older", 0, NULL},

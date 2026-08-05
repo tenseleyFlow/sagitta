@@ -50,6 +50,9 @@ static void ed_buffer_free(Ed *ed)
         return;
     sag_ed_insert_barrier(ed);
     sag_reg_bind_context(&ed->regs, NULL, NULL);
+    sag_search_state_free(&ed->search);
+    sag_search_confirm_cancel(ed);
+    sag_overlay_free(&ed->single_win.overlay);
     sag_vp_free(&ed->single_win);
     sag_cset_free(&ed->single_win.cs);
     ed_ws_free(ed);
@@ -202,6 +205,8 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
     ed->buffer.marks = sag_marks_new();
     ed->buffer.jrn = NULL;
     sag_search_opts_init(&ed->search_opts);
+    sag_search_state_init(&ed->search);
+    sag_overlay_init(&ed->single_win.overlay);
     sag_reg_bind_context(&ed->regs, ed->buffer.undo, &ed->buffer.meta);
     sag_cset_init(&ed->single_win.cs, cursor);
     ed->single_win.buf = &ed->buffer;
@@ -733,6 +738,8 @@ CmdStatus sag_ed_file_write_to(Ed *ed, const char *path, bool force)
     ed->buffer.meta = next;
     ed->buffer.path = arena_strdup(&ed->arena, path);
     sag_search_opts_init(&ed->search_opts);
+    sag_search_state_init(&ed->search);
+    sag_overlay_init(&ed->single_win.overlay);
     sag_reg_bind_context(&ed->regs, ed->buffer.undo, &ed->buffer.meta);
     ed->durability_failed = false;
     sag_msg(ed, SAG_MSG_INFO, "wrote %s, %llu lines", path,

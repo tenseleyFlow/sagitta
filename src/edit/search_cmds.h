@@ -8,6 +8,13 @@ typedef struct Ed Ed;
 
 CmdStatus sag_search_cmd_replace(CmdCtx *cx);
 CmdStatus sag_search_cmd_global(CmdCtx *cx);
+CmdStatus sag_search_cmd_open(CmdCtx *cx);
+CmdStatus sag_search_cmd_open_back(CmdCtx *cx);
+CmdStatus sag_search_cmd_next(CmdCtx *cx);
+CmdStatus sag_search_cmd_prev(CmdCtx *cx);
+CmdStatus sag_search_cmd_word_next(CmdCtx *cx);
+CmdStatus sag_search_cmd_word_prev(CmdCtx *cx);
+CmdStatus sag_search_cmd_clear_highlight(CmdCtx *cx);
 
 /*
  * Confirm-mode state.  The plan is MOVED here from the command, so the

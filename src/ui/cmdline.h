@@ -47,6 +47,8 @@ void sag_cmdline_paste(Ed *ed, const u8 *bytes, size_t len);
 void sag_cmdline_draw(Ed *ed, Rect rect);
 Win *sag_cmdline_target(Ed *ed);
 void sag_cmdline_sync(Ed *ed);
+/* Appends the prompt's current text to `out`. */
+void sag_cmdline_text(Ed *ed, Bytebuf *out);
 void sag_cmdline_edited(Ed *ed);
 
 CmdStatus sag_cmdline_cmd_hist_prev(CmdCtx *cx);

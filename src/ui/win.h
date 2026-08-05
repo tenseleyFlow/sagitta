@@ -3,6 +3,7 @@
 
 #include "edit/motion.h"
 #include "edit/jumplist.h"
+#include "search/overlay.h"
 #include "edit/multicursor.h"
 #include "edit/select.h"
 #include "text/coords.h"
@@ -29,6 +30,8 @@ typedef struct Win {
     /* Navigation history of this VIEW; two panes on one file keep
      * separate ones (Sprint 21 §5). */
     JumpList jumps;
+    /* Sprint 21 $3: match highlighting for THIS view. */
+    MatchOverlay overlay;
     WrapCache wrap_cache;
     Rect rect;
     NumStyle number_style;

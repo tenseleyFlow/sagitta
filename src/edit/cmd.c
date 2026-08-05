@@ -421,14 +421,25 @@ static const CmdDesc builtins[] = {
     DEFER("ed.win.prev", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 22,
           "focus the previous window"),
 
-    DEFER("ed.search.open", SAG_ARITY_OPT_STR, SAG_CMD_PROMPTS, 21,
-          "open incremental search"),
-    DEFER("ed.search.next", SAG_ARITY_NONE,
-          SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, 21,
-          "move to the next search match"),
-    DEFER("ed.search.prev", SAG_ARITY_NONE,
-          SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, 21,
-          "move to the previous search match"),
+    {"ed.search.open", sag_search_cmd_open, SAG_ARITY_OPT_STR,
+     SAG_CMD_PROMPTS | SAG_CMD_NEEDS_WIN, "Open incremental search"},
+    {"ed.search.open_back", sag_search_cmd_open_back, SAG_ARITY_OPT_STR,
+     SAG_CMD_PROMPTS | SAG_CMD_NEEDS_WIN,
+     "Open incremental search, backwards"},
+    {"ed.search.next", sag_search_cmd_next, SAG_ARITY_OPT_INT,
+     SAG_CMD_TAKES_COUNT | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Move to the next search match"},
+    {"ed.search.prev", sag_search_cmd_prev, SAG_ARITY_OPT_INT,
+     SAG_CMD_TAKES_COUNT | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Move to the previous search match"},
+    {"ed.search.word_next", sag_search_cmd_word_next, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Search forward for the word under the cursor"},
+    {"ed.search.word_prev", sag_search_cmd_word_prev, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Search backward for the word under the cursor"},
+    {"ed.search.clear_highlight", sag_search_cmd_clear_highlight,
+     SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN, "Clear match highlighting"},
     {"ed.jump.back", sag_jump_cmd_back, SAG_ARITY_OPT_INT,
      SAG_CMD_TAKES_COUNT | SAG_CMD_NEEDS_WIN,
      "Jump to an older position in this window's history"},
@@ -567,7 +578,8 @@ static bool command_name_valid(const char *name)
         "run", "run_bg", "read", "filter", "term", "kill", "kill_force",
         "jump", "clear_finished", "rerun",
         /* Sprint 21 */
-        "back", "fwd", "older", "newer", "global"};
+        "back", "fwd", "older", "newer", "global",
+        "open_back", "word_next", "clear_highlight"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

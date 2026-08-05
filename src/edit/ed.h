@@ -115,6 +115,7 @@ struct Ed {
     JobTable jobs;
     Msg msg;
     SearchOpts search_opts;
+    SearchState search;
     SearchConfirm confirm;
     CmdLine cmdline;
     PromptKind prompt;

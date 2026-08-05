@@ -1,3 +1,4 @@
+#include "search/searchui.h"
 #include "ui/cmdline.h"
 
 #include <limits.h>
@@ -318,10 +319,19 @@ void sag_cmdline_close(Ed *ed, bool accepted)
     CmdLine *line;
     Mode restore;
 
-    (void)accepted;
     if (ed == NULL || !ed->cmdline.active)
         return;
     line = &ed->cmdline;
+    if (line->kind == SAG_PROMPT_SEARCH_F ||
+        line->kind == SAG_PROMPT_SEARCH_B) {
+        /* Accept commits the pattern and the jump; cancel restores the
+         * view exactly, which is why it happens BEFORE the widget tears
+         * down and repaints. */
+        if (accepted)
+            sag_search_accept(ed, ed->win);
+        else
+            sag_search_cancel(ed, ed->win);
+    }
     restore = line->return_mode < SAG_MODE__N ? (Mode)line->return_mode :
                                                SAG_MODE_L;
     if (restore == SAG_MODE_E)
@@ -371,6 +381,31 @@ void sag_cmdline_edited(Ed *ed)
     free(draft);
     clear_error(ed);
     ed->footer_dirty = true;
+    /* Search-as-you-type: the `/` and `?` prompts preview on every
+     * edit.  This is the one place that hook belongs — the widget is
+     * shared, and only these two kinds want it. */
+    if (ed->cmdline.kind == SAG_PROMPT_SEARCH_F ||
+        ed->cmdline.kind == SAG_PROMPT_SEARCH_B)
+        sag_search_input(ed, ed->win);
+}
+
+/* The prompt's current text.  Sprint 21's search-as-you-type needs it
+ * on every edit, and reaching into ed->cmdline.buf from another module
+ * would make the widget's internals part of its interface. */
+void sag_cmdline_text(Ed *ed, Bytebuf *out)
+{
+    char *text;
+
+    if (out == NULL)
+        return;
+    if (ed == NULL || !ed->cmdline.active || ed->cmdline.buf == NULL)
+        return;
+    sync_from_target(&ed->cmdline);
+    text = text_string(ed->cmdline.buf);
+    if (text == NULL)
+        return;
+    bytebuf_append(out, text, strlen(text));
+    free(text);
 }
 
 void sag_cmdline_sync(Ed *ed)

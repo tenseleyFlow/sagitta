@@ -380,3 +380,56 @@ void sag_search_confirm_cancel(Ed *ed)
     bytebuf_free(&ed->confirm.shown);
     ed->confirm.active = false;
 }
+
+/* ---------------------------------------------------------------- */
+/* Search commands                                                  */
+/* ---------------------------------------------------------------- */
+
+CmdStatus sag_search_cmd_open(CmdCtx *cx)
+{
+    /* `:search pat` seeds and accepts in one step; `/` opens the
+     * prompt.  Both go through the same state. */
+    sag_search_open(cx->ed, cx->win, false);
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_search_cmd_open_back(CmdCtx *cx)
+{
+    sag_search_open(cx->ed, cx->win, true);
+    return SAG_CMD_OK;
+}
+
+static u32 step_count(const CmdCtx *cx)
+{
+    return cx->count_given && cx->count != 0U ? cx->count : 1U;
+}
+
+CmdStatus sag_search_cmd_next(CmdCtx *cx)
+{
+    (void)sag_search_step(cx->ed, cx->win, true, step_count(cx));
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_search_cmd_prev(CmdCtx *cx)
+{
+    (void)sag_search_step(cx->ed, cx->win, false, step_count(cx));
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_search_cmd_word_next(CmdCtx *cx)
+{
+    (void)sag_search_word(cx->ed, cx->win, true);
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_search_cmd_word_prev(CmdCtx *cx)
+{
+    (void)sag_search_word(cx->ed, cx->win, false);
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_search_cmd_clear_highlight(CmdCtx *cx)
+{
+    sag_search_clear_highlight(cx->ed, cx->win);
+    return SAG_CMD_OK;
+}
