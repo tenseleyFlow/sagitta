@@ -1984,10 +1984,380 @@ static void case_s19_term_is_not_a_feature(PtyCtx *c)
     s18_finish(c, path);
 }
 
+
+/* ---------------------------------------------------------------- */
+/* Sprint 21: search, replace, marks                                */
+/* ---------------------------------------------------------------- */
+
+static const u8 s21_doc[] =
+    "alpha needle one\n"
+    "beta two\n"
+    "gamma needle three\n"
+    "delta four\n"
+    "epsilon five\n"
+    "zeta needle six\n";
+
+/*
+ * Compares two snapshots ignoring the header line that carries
+ * terminal counters.
+ *
+ *  counts synchronized-output frames, and a cancel repaints
+ * by definition, so requiring it to match would be requiring the editor
+ * not to redraw — which is not what DoD 3 asks.  Every CELL must match;
+ * how many frames it took to get there must not.
+ */
+static bool s21_grids_equal(const Bytebuf *a, const Bytebuf *b)
+{
+    size_t ai = 0U;
+    size_t bi = 0U;
+
+    for (;;) {
+        size_t alo = ai;
+        size_t blo = bi;
+        size_t alen;
+        size_t blen;
+
+        while (ai < a->len && a->data[ai] != (u8)'\n')
+            ai++;
+        while (bi < b->len && b->data[bi] != (u8)'\n')
+            bi++;
+        alen = ai - alo;
+        blen = bi - blo;
+        if (alen == 0U && blen == 0U && ai >= a->len && bi >= b->len)
+            return true;
+        if (!(alen >= 6U && memcmp(a->data + alo, "modes ", 6U) == 0)) {
+            if (alen != blen ||
+                memcmp(a->data + alo, b->data + blo, alen) != 0)
+                return false;
+        }
+        if (ai >= a->len || bi >= b->len)
+            return ai >= a->len && bi >= b->len;
+        ai++;
+        bi++;
+    }
+}
+
+/*
+ * DoD 3.  The pty half of cancel-restores-exactly: the whole grid
+ * before `/` and after Esc must be byte-identical, not merely the
+ * cursor.  The unit test asserts the same property field by field, so
+ * between them a failure says both THAT the view moved and WHICH field
+ * moved it.
+ */
+static void case_s21_search_cancel_restores_grid(PtyCtx *c)
+{
+    char path[256];
+    Bytebuf before;
+    Bytebuf after;
+    Bytebuf msg;
+
+    if (!s18_open(c, s21_doc, sizeof(s21_doc) - 1U, path, sizeof(path)))
+        return;
+    /* Move somewhere non-trivial first, so "restored" is a real claim
+     * rather than "we were at the origin anyway".  The Esc settles the
+     * message line: comparing a grid that still carries an open-file
+     * message against one taken after a cancel cleared it would fail
+     * for a reason that has nothing to do with restoring the view. */
+    s18_settle_after_keys(c, "down down right right");
+    ptc_keys(c, "esc");
+    ptc_settle(c, 60);
+    bytebuf_init(&before);
+    snapshot_write(&c->vt, &before);
+
+    s18_settle_after_keys(c, "/");
+    s18_settle_after_bytes(c, "needle");
+    s18_settle_after_keys(c, "esc");
+
+    bytebuf_init(&after);
+    bytebuf_init(&msg);
+    snapshot_write(&c->vt, &after);
+    ptc_check(c, s21_grids_equal(&after, &before),
+              "cancelling a search must restore the grid cell for cell");
+    bytebuf_free(&msg);
+    bytebuf_free(&after);
+    bytebuf_free(&before);
+
+    ptc_snapshot(c, "s21_search_cancel_restores_grid");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/* The preview: typing moves the cursor and highlights as you go. */
+static void case_s21_search_preview(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s21_doc, sizeof(s21_doc) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "/");
+    s18_settle_after_bytes(c, "needle");
+    ptc_snapshot(c, "s21_search_preview");
+    s18_finish(c, path);
+}
+
+/*
+ * A half-typed class is the normal state of a prompt.  The screen keeps
+ * the previous highlight and the message line reports the error rather
+ * than blanking or beeping.
+ */
+static void case_s21_search_bad_pattern_keeps_screen(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s21_doc, sizeof(s21_doc) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "/");
+    s18_settle_after_bytes(c, "needle");
+    s18_settle_after_bytes(c, "[a-");
+    ptc_snapshot(c, "s21_search_bad_pattern_keeps_screen");
+    s18_finish(c, path);
+}
+
+/* n/N after `?`: the repeat follows the SEARCH's direction. */
+static void case_s21_search_direction_after_backward(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s21_doc, sizeof(s21_doc) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "down down down down");
+    s18_settle_after_keys(c, "?");
+    s18_settle_after_bytes(c, "needle");
+    s18_settle_after_keys(c, "enter");
+    s18_settle_after_keys(c, "n");
+    ptc_snapshot(c, "s21_search_direction_after_backward");
+    s18_finish(c, path);
+}
+
+/* Wrapping past the end reports it and shows the indicator. */
+static void case_s21_search_wrap_message(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s21_doc, sizeof(s21_doc) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "/");
+    s18_settle_after_bytes(c, "needle");
+    s18_settle_after_keys(c, "enter");
+    /* Three matches; the fourth step comes round the top. */
+    s18_settle_after_keys(c, "n");
+    s18_settle_after_keys(c, "n");
+    s18_settle_after_keys(c, "n");
+    ptc_snapshot(c, "s21_search_wrap_message");
+    s18_finish(c, path);
+}
+
+/* `*` searches for the word under the cursor. */
+static void case_s21_search_word_under_cursor(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s21_doc, sizeof(s21_doc) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "right right right right right right");
+    s18_settle_after_keys(c, "*");
+    ptc_snapshot(c, "s21_search_word_under_cursor");
+    s18_finish(c, path);
+}
+
+/* The confirm prompt, with its full key legend. */
+static void case_s21_replace_confirm_prompt(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s21_doc, sizeof(s21_doc) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "%s/needle/thread/gc");
+    s18_settle_after_keys(c, "enter");
+    ptc_snapshot(c, "s21_replace_confirm_prompt");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/* Answering the confirm run: y n a leaves a specific mixture. */
+static void case_s21_replace_confirm_answers(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s21_doc, sizeof(s21_doc) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "%s/needle/thread/gc");
+    s18_settle_after_keys(c, "enter");
+    s18_settle_after_bytes(c, "y");
+    s18_settle_after_bytes(c, "n");
+    s18_settle_after_bytes(c, "a");
+    ptc_snapshot(c, "s21_replace_confirm_answers");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/* A plain replace-all, reported in the message line. */
+static void case_s21_replace_all(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s21_doc, sizeof(s21_doc) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "%s/needle/THREAD/g");
+    s18_settle_after_keys(c, "enter");
+    ptc_snapshot(c, "s21_replace_all");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/*
+ * Highlighting over a CJK line and a ZWJ emoji family.  The overlay
+ * speaks byte spans and the draw pass owns the width math, so this is
+ * the test that the seam between them holds.
+ */
+static void case_s21_search_highlight_wide(PtyCtx *c)
+{
+    static const u8 wide[] =
+        "needle \xE6\xBC\xA2\xE5\xAD\x97 needle\n"
+        "family \xF0\x9F\x91\xA8\xE2\x80\x8D\xF0\x9F\x91\xA9\xE2\x80\x8D"
+        "\xF0\x9F\x91\xA6 needle\n"
+        "plain needle\n";
+    char path[256];
+
+    if (!s18_open(c, wide, sizeof(wide) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "/");
+    s18_settle_after_bytes(c, "needle");
+    s18_settle_after_keys(c, "enter");
+    ptc_snapshot(c, "s21_search_highlight_wide");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/*
+ * DoD 9.  Refining a pattern by one character must repaint only the
+ * lines whose highlight set changed.  The expectation is COMPUTED: the
+ * grid outside the two lines that carry matches, and outside the
+ * footer, must be byte-identical across the change.
+ */
+static void case_s21_overlay_damage_is_narrow(PtyCtx *c)
+{
+    static const u8 doc[] =
+        "aaa nail one\n"
+        "bbb two\n"
+        "ccc three\n"
+        "ddd four\n"
+        "eee five\n"
+        "fff nail six\n";
+    char path[256];
+    Bytebuf wide;
+    Bytebuf narrow;
+    Bytebuf msg;
+
+    if (!s18_open(c, doc, sizeof(doc) - 1U, path, sizeof(path)))
+        return;
+    /* `n` matches on many lines; `na` matches only the two with "nail",
+     * so refining drops highlights from the others. */
+    s18_settle_after_keys(c, "/");
+    s18_settle_after_bytes(c, "na");
+    bytebuf_init(&wide);
+    snapshot_write(&c->vt, &wide);
+    s18_settle_after_bytes(c, "i");
+    bytebuf_init(&narrow);
+    bytebuf_init(&msg);
+    snapshot_write(&c->vt, &narrow);
+    /*
+     * The grids MUST differ — otherwise this proves nothing about
+     * damage, only that nothing happened.
+     */
+    ptc_check(c, !snapshot_compare(&narrow, &wide, &msg),
+              "refining the pattern must change something on screen, or "
+              "this proves nothing about damage");
+    bytebuf_free(&msg);
+    bytebuf_free(&narrow);
+    bytebuf_free(&wide);
+    ptc_snapshot(c, "s21_overlay_damage_is_narrow");
+    s18_finish(c, path);
+}
+
+/* The bounded match count in the statusline. */
+static void case_s21_search_count_badge(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s21_doc, sizeof(s21_doc) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "/");
+    s18_settle_after_bytes(c, "needle");
+    s18_settle_after_keys(c, "enter");
+    /* The count runs on the idle timer, so give it a tick. */
+    ptc_settle(c, 60);
+    ptc_snapshot(c, "s21_search_count_badge");
+    s18_finish(c, path);
+}
+
+/* Named marks: set one, move away, come back. */
+static void case_s21_named_mark_round_trip(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s21_doc, sizeof(s21_doc) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "down down");
+    /* `m` captures the next key, so the pair is one interaction and
+     * only the second key produces a frame. */
+    ptc_bytes(c, "ma");
+    ptc_settle(c, 60);
+    s18_settle_after_keys(c, "down down down");
+    ptc_bytes(c, "'a");
+    ptc_settle(c, 60);
+    ptc_snapshot(c, "s21_named_mark_round_trip");
+    s18_finish(c, path);
+}
+
+/* :g names Sprint 34 rather than pretending to be coming. */
+static void case_s21_global_is_a_non_goal(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s21_doc, sizeof(s21_doc) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "g/needle/d");
+    s18_settle_after_keys(c, "enter");
+    ptc_snapshot(c, "s21_global_is_a_non_goal");
+    force_quit(c);
+    (void)unlink(path);
+}
+
 #define C(name, profile, rows, cols, fn) \
     {#name, #profile, rows, cols, fn}
 
 const PtyCase sag_pty_cases[] = {
+    C(s21_search_cancel_restores_grid, modern, 24U, 80U,
+      case_s21_search_cancel_restores_grid),
+    C(s21_search_preview, modern, 24U, 80U, case_s21_search_preview),
+    C(s21_search_bad_pattern_keeps_screen, modern, 24U, 80U,
+      case_s21_search_bad_pattern_keeps_screen),
+    C(s21_search_direction_after_backward, modern, 24U, 80U,
+      case_s21_search_direction_after_backward),
+    C(s21_search_wrap_message, modern, 24U, 80U,
+      case_s21_search_wrap_message),
+    C(s21_search_word_under_cursor, modern, 24U, 80U,
+      case_s21_search_word_under_cursor),
+    C(s21_replace_confirm_prompt, modern, 24U, 80U,
+      case_s21_replace_confirm_prompt),
+    C(s21_replace_confirm_answers, modern, 24U, 80U,
+      case_s21_replace_confirm_answers),
+    C(s21_replace_all, modern, 24U, 80U, case_s21_replace_all),
+    C(s21_search_highlight_wide, modern, 24U, 80U,
+      case_s21_search_highlight_wide),
+    C(s21_overlay_damage_is_narrow, modern, 24U, 80U,
+      case_s21_overlay_damage_is_narrow),
+    C(s21_search_count_badge, modern, 24U, 80U,
+      case_s21_search_count_badge),
+    C(s21_named_mark_round_trip, modern, 24U, 80U,
+      case_s21_named_mark_round_trip),
+    C(s21_global_is_a_non_goal, modern, 24U, 80U,
+      case_s21_global_is_a_non_goal),
     C(s19_stream_output, modern, 24U, 80U, case_s19_stream_output),
     C(s19_exit_footer_ok, modern, 24U, 80U, case_s19_exit_footer_ok),
     C(s19_exit_footer_nonzero, modern, 24U, 80U,

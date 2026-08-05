@@ -14,7 +14,17 @@
 #include "snapshot.h"
 
 enum {
-    RUNNER_BUDGET_MS = 60000,
+    /*
+     * The whole-suite ceiling.  Each case spawns a real editor under a
+     * pty and waits for synchronized frames, so the suite's cost grows
+     * with the case count: Sprint 21's fourteen search cases took it
+     * past the previous 60 s and the runner reported the case that
+     * happened to be running as a timeout, which named the wrong
+     * culprit entirely.  Raised with the suite it has to cover; the
+     * PER-CASE budget is the one that catches a hung editor, and it is
+     * deliberately unchanged.
+     */
+    RUNNER_BUDGET_MS = 180000,
     CASE_BUDGET_MS = 5000
 };
 

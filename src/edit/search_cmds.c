@@ -289,7 +289,12 @@ CmdStatus sag_search_cmd_global(CmdCtx *cx)
             ":g is Fletch's query API in Sprint 34 (buf.find(re) mapped "
             "over an action); a bespoke global-command mini-language is "
             "a permanent non-goal");
-    return SAG_CMD_ERR_DEFERRED;
+    /*
+     * ERR_ARG, not ERR_DEFERRED: this is a rejection with a reason, and
+     * the deferred path replaces the message with a generic "lands in
+     * Sprint N" that says none of it.
+     */
+    return SAG_CMD_ERR_ARG;
 }
 
 /* ---------------------------------------------------------------- */
@@ -370,6 +375,14 @@ bool sag_search_confirm_key(Ed *ed, u8 key)
     else
         confirm_finish(ed);
     return true;
+}
+
+void sag_search_confirm_reprompt(Ed *ed)
+{
+    if (ed == NULL || !ed->confirm.active)
+        return;
+    if (sag_repl_confirm_pending(&ed->confirm.walk))
+        confirm_prompt(ed);
 }
 
 void sag_search_confirm_cancel(Ed *ed)

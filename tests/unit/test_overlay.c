@@ -237,6 +237,44 @@ void test_overlay_cur_index_tracks_the_cursor(void)
     sag_ed_free(&ed);
 }
 
+/*
+ * The numerator must follow the cursor even when the spans are reused.
+ * The reuse fast path returned before recomputing it, so `[2/3]` would
+ * stay `[2/3]` while `n` walked — visible in a pty golden as a badge
+ * naming the previous match.
+ */
+void test_overlay_cur_index_updates_when_spans_are_reused(void)
+{
+    Ed ed;
+    Arena arena;
+    SagRe *re;
+
+    ov_fixture(&ed, 20U, 1U, 3U);
+    re = ov_compile(&arena, "needle");
+    sag_ed_cursor(&ed)->pos = BYTEOFF(0U);
+    sag_overlay_refresh(&ed, ed.win, re, 1U, 0);
+    SAG_ASSERT_EQ_U64(ed.win->overlay.spans.len, 2U);
+    SAG_ASSERT(ed.win->overlay.complete);
+    SAG_ASSERT_EQ_I64(ed.win->overlay.cur_index, -1);
+
+    /* Same pattern, same viewport: the spans are reused.  The cursor
+     * moved, so the index must not be. */
+    sag_ed_cursor(&ed)->pos = BYTEOFF(ed.win->overlay.spans.data[0].lo);
+    sag_overlay_refresh(&ed, ed.win, re, 1U, 0);
+    SAG_ASSERT_EQ_I64(ed.win->overlay.cur_index, 0);
+
+    sag_ed_cursor(&ed)->pos = BYTEOFF(ed.win->overlay.spans.data[1].lo);
+    sag_overlay_refresh(&ed, ed.win, re, 1U, 0);
+    SAG_ASSERT_EQ_I64(ed.win->overlay.cur_index, 1);
+
+    /* And back to nothing when the cursor leaves every match. */
+    sag_ed_cursor(&ed)->pos = BYTEOFF(0U);
+    sag_overlay_refresh(&ed, ed.win, re, 1U, 0);
+    SAG_ASSERT_EQ_I64(ed.win->overlay.cur_index, -1);
+    arena_free_all(&arena);
+    sag_ed_free(&ed);
+}
+
 /* A NULL pattern clears the highlight; that is what `clear_highlight`
  * and an emptied prompt both do. */
 void test_overlay_null_pattern_clears(void)

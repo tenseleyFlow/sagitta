@@ -286,9 +286,27 @@ void sag_search_cancel(Ed *ed, Win *w)
     w->vp.top = ed->search.save_top;
     w->vp.top_sub = ed->search.save_top_sub;
     sag_search_clear_highlight(ed, w);
+    /*
+     * Cancel every trace of the preview, including the work that has
+     * not happened yet.  A pending count timer would fire after the
+     * restore and put a `[3/17]` badge on a statusline that had none
+     * before the search — which is not "byte-identical", and is exactly
+     * what the pty golden compares.
+     */
+    if (ed->search.count_timer != SAG_TIMER_NONE) {
+        (void)sag_timer_cancel(&ed->timers, ed->search.count_timer);
+        ed->search.count_timer = SAG_TIMER_NONE;
+    }
     w->overlay.count_total = 0U;
     w->overlay.count_capped = false;
     ed->search.wrap_until_ms = 0;
+    ed->search.wrapped = false;
+    /* No search was accepted, so there is nothing for `n` to repeat.
+     * Register `/` still holds the last ACCEPTED pattern, which is what
+     * `n` falls back to. */
+    ed->search.re = NULL;
+    ed->search.pat = NULL;
+    ed->search.patlen = 0U;
     sag_msg_clear(ed);
     sag_ed_damage_document(ed);
     ed->full_damage = true;

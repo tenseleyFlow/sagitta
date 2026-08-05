@@ -1,0 +1,60 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=23,1 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=3
+--- text
+    1 alpha needle one
+    1 beta two
+    2 gamma needle three
+    3 delta four
+    4 epsilon five
+    5 zeta needle six
+    6
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+E: :g is Fletch's query API in Sprint 34 (buf.find(re) mapped over an action); a
+:g/needle/d                                                                     
+--- style
+AAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAA
+AAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+CDEEEEEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+--- legend
+A fg=default bg=default attrs=----------
+B fg=idx:196 bg=#4e2a0f attrs=b---------
+C fg=#2f1806 bg=#e77d24 attrs=b---------
+D fg=#f7e0cc bg=idx:196 attrs=b--u------
+E fg=#f7e0cc bg=#4e2a0f attrs=----------
+F fg=#f7e0cc bg=#4e2a0f attrs=b---------

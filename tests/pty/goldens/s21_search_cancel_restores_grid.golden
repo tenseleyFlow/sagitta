@@ -1,0 +1,57 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=2,24 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=4
+--- text
+    2 alpha needle one
+    1 beta two
+    3 gamma needle three
+    1 delta four
+    2 epsilon five
+    3 zeta needle six
+    4
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ L  pty-s14-s21_search_cancel_restores_grid.txt             utf-8  lf  3:19  all
+--- style
+AAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAA
+AAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+--- legend
+A fg=default bg=default attrs=----------
+B fg=#ebf4ff bg=#266eba attrs=b---------
+C fg=#dae5f0 bg=#14304c attrs=----------

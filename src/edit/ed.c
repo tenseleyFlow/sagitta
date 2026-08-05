@@ -563,14 +563,25 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
                 opened = true;
             }
         } else {
+            /*
+             * The reason has to describe what the command IS, because
+             * a command that opens its own inner transaction must
+             * agree with the one wrapped around it — `:s` opens
+             * SAG_TXN_REPLACE inside, and a TYPE wrapper aborts on the
+             * mismatch.  Reached through the real dispatcher only, so
+             * unit tests calling the replace API directly never saw it;
+             * the pty golden did.
+             */
             sag_undo_begin(
                 &ec,
                 multiple ? SAG_TXN_MULTI
+                      : (strcmp(desc->name, "ed.search.replace") == 0
+                             ? SAG_TXN_REPLACE
                       : (strstr(desc->name, ".delete.") != NULL ||
                                  strcmp(desc->name,
                                         "ed.edit.line.delete") == 0
                              ? SAG_TXN_ERASE
-                             : SAG_TXN_TYPE));
+                             : SAG_TXN_TYPE)));
             opened = true;
         }
     }

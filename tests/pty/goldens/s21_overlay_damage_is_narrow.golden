@@ -1,0 +1,58 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=23,4 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=3
+--- text
+    1 aaa nail one
+    1 bbb two
+    2 ccc three
+    3 ddd four
+    4 eee five
+    5 fff nail six
+    6
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/nai                                                                            
+--- style
+AAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAA
+AAAAAAAAAAAAAAA
+AAAAAAAAAAAAAA
+AAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAA
+AAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+BCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+--- legend
+A fg=default bg=default attrs=----------
+B fg=#2f1806 bg=#e77d24 attrs=b---------
+C fg=#f7e0cc bg=#4e2a0f attrs=----------
+D fg=#f7e0cc bg=#4e2a0f attrs=b---------

@@ -1,0 +1,58 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=23,7 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
+--- text
+    1 alpha needle one
+    1 beta two
+    2 gamma needle three
+    3 delta four
+    4 epsilon five
+    5 zeta needle six
+    6
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+/needle                                                                         
+--- style
+AAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAA
+AAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+BCCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+--- legend
+A fg=default bg=default attrs=----------
+B fg=#2f1806 bg=#e77d24 attrs=b---------
+C fg=#f7e0cc bg=#4e2a0f attrs=----------
+D fg=#f7e0cc bg=#4e2a0f attrs=b---------

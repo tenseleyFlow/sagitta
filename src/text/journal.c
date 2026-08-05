@@ -32,6 +32,10 @@ static u32 crc32_table[256];
 static bool crc32_ready;
 static Journal *open_journals;
 
+/* adopt_existing_journal returns this when the file on disk belongs to
+ * another version of the document: not an error, a replace. */
+#define SAG_JOURNAL_OBSOLETE (-2)
+
 static int adopt_existing_journal(const char *path, const char *realpath,
                                   const FileMeta *meta);
 
@@ -352,8 +356,27 @@ Journal *sag_journal_open(const char *realpath, const FileMeta *m)
 #endif
     fd = open(path, flags, 0600);
     created = fd >= 0;
-    if (!created && errno == EEXIST)
+    if (!created && errno == EEXIST) {
         fd = adopt_existing_journal(path, realpath, m);
+        if (fd == SAG_JOURNAL_OBSOLETE) {
+            /* Start over: truncate the obsolete journal in place and
+             * write this file's header into it. */
+            int reflags = O_RDWR | O_TRUNC;
+
+#ifdef O_CLOEXEC
+            reflags |= O_CLOEXEC;
+#endif
+#ifdef O_NOFOLLOW
+            reflags |= O_NOFOLLOW;
+#endif
+            fd = open(path, reflags);
+            created = fd >= 0;
+            if (created)
+                sag_log(SAG_LOG_WARN,
+                        "replaced an obsolete crash journal for %s",
+                        realpath);
+        }
+    }
     if (fd < 0) {
         sag_log(SAG_LOG_ERROR, "cannot open crash journal %s: %s", path,
                 strerror(errno));
@@ -683,8 +706,21 @@ static int adopt_existing_journal(const char *path, const char *realpath,
     if (!read_all(fd, data, size))
         goto fail;
     if (!header_matches(data, size, realpath, meta, &records_at)) {
-        errno = ESTALE;
-        goto fail;
+        /*
+         * The leftover journal describes a DIFFERENT version of this
+         * file (or a different file that hashed to the same name).
+         * sag_journal_probe applies this same predicate at open time,
+         * so the editor has already decided there is nothing here to
+         * recover and has told the user nothing.  Reporting a failure
+         * now would block every future edit of this path until someone
+         * deleted the file by hand — which is what it did, under the
+         * nonsense message "Stale file handle", because ESTALE was
+         * being used as an internal sentinel and then printed with
+         * strerror.  An obsolete journal is replaced, not obeyed.
+         */
+        free(data);
+        (void)close(fd);
+        return SAG_JOURNAL_OBSOLETE;
     }
     prefix = valid_record_prefix(data, size, records_at);
     if (prefix != size &&

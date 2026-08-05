@@ -220,9 +220,27 @@ void test_cmdparse_resolution_bang_errors_and_parse_point(void)
      * as one argument, because a shell command is not a token list. */
     assert_error(&f, ":!", "ed.shell.run needs a command");
     assert_error(&f, ":r !", "ed.shell.read needs a command");
-    assert_error(&f, ":s", ":s substitutes text: Sprint 21");
-    assert_error(&f, ":g",
-                 ":g search surface: Sprint 21; Fletch queries: Sprint 34");
+    /*
+     * Sprint 21 opened `:s` and `:g`, so a bare one is an arity error
+     * rather than a deferral.  Their bodies take the rest of the line
+     * verbatim — `:s/pat/rep/` has no space after the name, and the
+     * tokenizer must not try to understand a `/` inside a regex.
+     */
+    assert_error(&f, ":s", ":search.replace requires 1 argument");
+    {
+        CmdParse parsed;
+
+        SAG_ASSERT(sag_cmd_parse(&f.ed, ":s/a/b/g", 8U, &f.arena,
+                                 &parsed));
+        SAG_ASSERT_EQ_U64(parsed.argv.n, 2U);
+        SAG_ASSERT_EQ_STR(parsed.argv.v[1], "/a/b/g");
+        SAG_ASSERT(sag_cmd_parse(&f.ed, ":%s#a#b#", 8U, &f.arena,
+                                 &parsed));
+        SAG_ASSERT_EQ_STR(parsed.argv.v[1], "#a#b#");
+        SAG_ASSERT_EQ_U64(parsed.range.kind, SAG_RANGE_BUFFER);
+        SAG_ASSERT(sag_cmd_parse(&f.ed, ":g/re/d", 7U, &f.arena, &parsed));
+        SAG_ASSERT_EQ_STR(parsed.argv.v[1], "/re/d");
+    }
     assert_error(&f, ":fl", ":fl evaluates Fletch: Sprint 32");
 
     SAG_ASSERT(sag_cmd_parse_point(&f.ed, ":w \"my fi", 9U, 9U,

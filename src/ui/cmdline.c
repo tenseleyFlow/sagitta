@@ -1,3 +1,4 @@
+#include "edit/search_cmds.h"
 #include "search/searchui.h"
 #include "ui/cmdline.h"
 
@@ -351,6 +352,9 @@ void sag_cmdline_close(Ed *ed, bool accepted)
     sag_dispatch_set_mode(ed, restore);
     ed->full_damage = true;
     ed->footer_dirty = true;
+    /* A `:s/../../c` started a confirm run whose question this close
+     * just wiped; restate it. */
+    sag_search_confirm_reprompt(ed);
 }
 
 void sag_cmdline_dispose(Ed *ed)
@@ -738,6 +742,20 @@ CmdStatus sag_cmdline_cmd_accept(CmdCtx *cx)
     }
     text = text_string(line->buf);
     if (sag_textbuf_len(line->buf) == 0U) {
+        free(text);
+        sag_cmdline_close(ed, true);
+        return SAG_CMD_OK;
+    }
+    /*
+     * A search prompt's text is a PATTERN, not a command line.  The
+     * preview has already applied it and sag_search_accept commits it;
+     * handing it to the command parser instead reports the pattern as
+     * an unknown command, which is what `/needle` did before this
+     * check existed.
+     */
+    if (line->kind == SAG_PROMPT_SEARCH_F ||
+        line->kind == SAG_PROMPT_SEARCH_B) {
+        sag_hist_add(line->history, text);
         free(text);
         sag_cmdline_close(ed, true);
         return SAG_CMD_OK;

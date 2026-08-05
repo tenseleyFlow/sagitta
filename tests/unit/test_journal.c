@@ -445,3 +445,62 @@ void test_journal_replay_refuses_hardlinked_log(void)
     sag_filemeta_dispose(&meta);
     journal_fixture_remove(&fixture);
 }
+
+/*
+ * A leftover journal describing a DIFFERENT version of the file must be
+ * replaced, not obeyed.
+ *
+ * sag_journal_probe applies the same header check at open time and, on
+ * a mismatch, offers no recovery and says nothing — so failing here
+ * blocked every future edit of that path behind "crash journal failed;
+ * save or q! before continuing", until someone deleted the file by
+ * hand.  The message was also a lie: ESTALE was an internal sentinel
+ * meaning "not for this file", printed through strerror as "Stale file
+ * handle".
+ */
+void test_journal_obsolete_leftover_is_replaced_not_fatal(void)
+{
+    JournalFixture fixture;
+    FileMeta meta;
+    Journal *journal;
+
+    journal_fixture_make(&fixture);
+    journal_meta_init(&meta, fixture.source);
+
+    /* A session that crashed: records written, never discarded. */
+    journal = sag_journal_open(fixture.source, &meta);
+    SAG_ASSERT_NOT_NULL(journal);
+    sag_journal_record(journal, SAG_JOURNAL_INS, 0U, (const u8 *)"old", 3U);
+    sag_journal_sync(journal);
+    sag_journal_close(journal);
+
+    /* The file has changed on disk since, so that journal describes a
+     * version that no longer exists. */
+    meta.size_on_disk = 4096U;
+    meta.mtime.tv_sec = 999999;
+
+    /* Nothing to recover, by the probe's own predicate... */
+    SAG_ASSERT(!sag_journal_probe(fixture.source, &meta));
+    /* ...so opening must succeed by replacing it, not fail. */
+    journal = sag_journal_open(fixture.source, &meta);
+    SAG_ASSERT_NOT_NULL(journal);
+    SAG_ASSERT(sag_journal_ok(journal));
+    /* And the replacement is usable: it is this file's journal now. */
+    sag_journal_record(journal, SAG_JOURNAL_INS, 0U, (const u8 *)"new", 3U);
+    sag_journal_sync(journal);
+    SAG_ASSERT(sag_journal_ok(journal));
+    sag_journal_discard(journal);
+    {
+        /* The replacement logs a warning, and the logger creates
+         * $state/sagitta/log; the fixture teardown expects that
+         * directory to hold nothing but `journal`. */
+        char logpath[128];
+
+        (void)snprintf(logpath, sizeof(logpath), "%s/sagitta/log",
+                       fixture.state);
+        (void)unlink(logpath);
+    }
+
+    sag_filemeta_dispose(&meta);
+    journal_fixture_remove(&fixture);
+}

@@ -181,6 +181,36 @@ static void damage_diff(Ed *ed, const TextBuf *tb, const SpanVec *before,
     }
 }
 
+/*
+ * Which match the cursor stands on, for the `search_current` style and
+ * the `[3/17]` numerator.  Recomputed on EVERY refresh including the
+ * one that reuses its spans — the cursor moves without the spans
+ * changing on every `n`, and skipping this left the numerator naming
+ * the previous match.
+ */
+static void overlay_track_cursor(Ed *ed, MatchOverlay *ov)
+{
+    const Cursor *c = sag_ed_cursor(ed);
+    size_t i;
+
+    ov->cur_index = -1;
+    if (c == NULL)
+        return;
+    for (i = 0U; i < ov->spans.len; i++) {
+        if (c->pos.v >= ov->spans.data[i].lo &&
+            c->pos.v < ov->spans.data[i].hi) {
+            ov->cur_index = (i32)i;
+            return;
+        }
+        /* A zero-width match sits exactly at the cursor. */
+        if (ov->spans.data[i].lo == ov->spans.data[i].hi &&
+            c->pos.v == ov->spans.data[i].lo) {
+            ov->cur_index = (i32)i;
+            return;
+        }
+    }
+}
+
 void sag_overlay_refresh(Ed *ed, Win *w, const SagRe *re, u32 pat_gen,
                          i64 budget_us)
 {
@@ -224,8 +254,11 @@ void sag_overlay_refresh(Ed *ed, Win *w, const SagRe *re, u32 pat_gen,
         Span vis = visible_window(w, tb);
 
         if (ov->complete && ov->scanned.lo <= vis.lo &&
-            ov->scanned.hi >= vis.hi)
-            return; /* the scroll stayed inside what we already know */
+            ov->scanned.hi >= vis.hi) {
+            /* Spans are reusable, the cursor's position is not. */
+            overlay_track_cursor(ed, ov);
+            return;
+        }
     }
 
     (void)memset(&before, 0, sizeof(before));
@@ -315,29 +348,7 @@ void sag_overlay_refresh(Ed *ed, Win *w, const SagRe *re, u32 pat_gen,
     damage_diff(ed, tb, &before, &ov->spans);
     SpanVec_free(&before);
 
-    /* Which match the cursor is standing on, for the `search_current`
-     * style and the `[3/17]` numerator. */
-    ov->cur_index = -1;
-    {
-        const Cursor *c = sag_ed_cursor(ed);
-        size_t i;
-
-        if (c != NULL) {
-            for (i = 0U; i < ov->spans.len; i++) {
-                if (c->pos.v >= ov->spans.data[i].lo &&
-                    c->pos.v < ov->spans.data[i].hi) {
-                    ov->cur_index = (i32)i;
-                    break;
-                }
-                /* A zero-width match sits exactly at the cursor. */
-                if (ov->spans.data[i].lo == ov->spans.data[i].hi &&
-                    c->pos.v == ov->spans.data[i].lo) {
-                    ov->cur_index = (i32)i;
-                    break;
-                }
-            }
-        }
-    }
+    overlay_track_cursor(ed, ov);
 }
 
 void sag_overlay_count(MatchOverlay *ov, const SagRe *re, const TextBuf *tb,

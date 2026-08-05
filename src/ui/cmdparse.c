@@ -850,15 +850,44 @@ static bool finish_bang(Parser *p, CmdParse *out, const char *cmdname)
     return true;
 }
 
+/*
+ * `:s/pat/rep/flags` has no space after the command name, so the normal
+ * grammar — name, whitespace, arguments — never reaches it.  The whole
+ * body from the delimiter onward is ONE opaque argument, split on the
+ * delimiter by search_cmds.c; the tokenizer must not try to understand
+ * a `/` inside a regex.  Same shape as `:!`, for the same reason.
+ */
+static bool finish_body(Parser *p, CmdParse *out, const char *cmdname,
+                        Span name_tok)
+{
+    size_t rest = p->at;
+    size_t n = p->len - rest;
+
+    out->command = sag_cmd_lookup(cmdname, (u32)strlen(cmdname));
+    if (out->command.v == 0U) {
+        set_error(p, name_tok.lo, name_tok.hi, "%s is not registered",
+                  cmdname);
+        return false;
+    }
+    out->name_tok = name_tok;
+    out->argv.v = arena_alloc(p->arena, 2U * sizeof(char *),
+                              sizeof(char *));
+    out->argv.v[0] = arena_strdup(p->arena, cmdname);
+    out->argv.v[1] = arena_strndup(p->arena, p->line + rest, n);
+    out->argv.n = 2U;
+    out->arg_tok = arena_alloc(p->arena, 2U * sizeof(Span), sizeof(Span));
+    out->arg_tok[0] = out->name_tok;
+    out->arg_tok[1] = (Span){rest, p->len};
+    return true;
+}
+
 static bool deferred_name(Parser *p, const char *name, Span tok)
 {
     const char *msg = NULL;
 
-    if (strcmp(name, "s") == 0)
-        msg = ":s substitutes text: Sprint 21";
-    else if (strcmp(name, "g") == 0)
-        msg = ":g search surface: Sprint 21; Fletch queries: Sprint 34";
-    else if (strcmp(name, "fl") == 0)
+    /* `:s` and `:g` landed in Sprint 21 — `:g` as an explicit rejection
+     * naming Sprint 34, which is a command, not a parse deferral. */
+    if (strcmp(name, "fl") == 0)
         msg = ":fl evaluates Fletch: Sprint 32";
     else if (strcmp(name, "source") == 0)
         msg = ":source loads Fletch config: Sprint 36";
@@ -927,6 +956,12 @@ bool sag_cmd_parse(Ed *ed, const char *line, size_t len, Arena *a,
         out->name_tok.hi = p.at;
     }
     if (p.at < len && !is_ws(line[p.at])) {
+        if (strcmp(name, "s") == 0)
+            return finish_body(&p, out, "ed.search.replace",
+                               out->name_tok);
+        if (strcmp(name, "g") == 0)
+            return finish_body(&p, out, "ed.search.global",
+                               out->name_tok);
         set_error(&p, name_start, p.at + 1U,
                   "unknown command '%s' (try Tab)", name);
         return false;

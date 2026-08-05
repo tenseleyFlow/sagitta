@@ -37,5 +37,9 @@ void sag_search_confirm_start(Ed *ed, SagReplPlan *plan, const char *rep,
  * consumed, so the dispatcher knows not to treat it as a command. */
 bool sag_search_confirm_key(Ed *ed, u8 key);
 void sag_search_confirm_cancel(Ed *ed);
+/* Re-issues the confirm question.  The command line clears the message
+ * line when it closes, which happens AFTER the `:s` that started the
+ * run — so the question has to be restated once the prompt is gone. */
+void sag_search_confirm_reprompt(Ed *ed);
 
 #endif
