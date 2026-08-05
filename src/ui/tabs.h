@@ -66,6 +66,10 @@ int sag_tab_open(Ed *ed, const char *path);
 /* False when vetoed — a modified tab needs an answer first. */
 bool sag_tab_close(Ed *ed, int idx);
 int sag_tab_index_of_id(const Ed *ed, u32 id);
+/* Renames what a tab shows — the save-as path.  Canonicalized here, at
+ * the one site that establishes a tab's name, so comparators never
+ * touch the filesystem. */
+void sag_tab_set_path(Ed *ed, int idx, const char *path);
 int sag_tab_find_by_path(const Ed *ed, const char *path);
 void sag_tab_switch(Ed *ed, int idx);
 /* Insertion, not swap: dragging a tab three places right leaves the two

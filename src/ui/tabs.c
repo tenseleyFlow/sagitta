@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#include "ui/groups.h"
 #include "ui/message.h"
 #include "ui/region.h"
 #include "ui/strip.h"
@@ -132,6 +133,16 @@ int sag_tab_find_by_path(const Ed *ed, const char *path)
     return found;
 }
 
+void sag_tab_set_path(Ed *ed, int idx, const char *path)
+{
+    Tab *t = sag_tab_at(ed, idx);
+
+    if (t == NULL)
+        return;
+    free(t->path);
+    t->path = canonical_path(path);
+}
+
 int sag_tab_open(Ed *ed, const char *path)
 {
     Tab t;
@@ -197,6 +208,13 @@ bool sag_tab_close(Ed *ed, int idx)
     if (ed == NULL || idx < 0 || (size_t)idx >= ed->tabs.v.len)
         return false;
     survivor = pick_survivor_id(ed, idx);
+    /*
+     * Leave the group BEFORE the compaction, while `idx` still names
+     * this tab.  Doing it after would compact the ordinals of whichever
+     * tab slid into the slot, and auto-dissolve would count a group
+     * that still has members.
+     */
+    sag_group_remove_member(ed, idx);
     tab_destroy(ed, &ed->tabs.v.data[idx]);
     (void)memmove(&ed->tabs.v.data[idx], &ed->tabs.v.data[idx + 1],
                   (ed->tabs.v.len - (size_t)idx - 1U) *

@@ -58,6 +58,9 @@ static void ed_buffer_free(Ed *ed)
      * Freeing ed->panes here as well double-freed every split view.
      */
     sag_tabs_free(ed);
+    /* After the tabs: dissolving a group walks the tabs array, so the
+     * groups outlive the members they are asked about. */
+    sag_groups_free(ed);
     ed->pane_root = NULL;
     ed->focus = NULL;
     sag_overlay_free(&ed->single_win.overlay);
@@ -225,6 +228,7 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
      * tab, so no code path has to ask whether tabs are "on".
      */
     sag_tabs_init(&ed->tabs);
+    sag_groups_init(&ed->groups);
     {
         Tab first;
 
@@ -433,7 +437,17 @@ Win *sag_ed_win_clone(Ed *ed, const Win *src)
 {
     Win *w;
 
-    if (ed == NULL || src == NULL || ed->npanes >= SAG_PANE_MAX_LEAVES)
+    /*
+     * No cap here.  SAG_PANE_MAX_LEAVES bounds the leaves of ONE tab's
+     * tree, and sag_pane_split enforces it by counting that tree.
+     * Sprint 23 also kept a write-only registry of every cloned Win and
+     * capped it with the same constant, which quietly made 16 the limit
+     * on tabs-plus-splits for the whole editor — a 40-file group (D3)
+     * could not be opened at all, and the refusal surfaced as
+     * sag_tab_open returning -1 for no stated reason.  Nothing ever
+     * read the registry: tab trees own their leaves and release them.
+     */
+    if (ed == NULL || src == NULL)
         return NULL;
     w = sag_xcalloc(1U, sizeof(*w));
     w->buf = src->buf;
@@ -452,24 +466,13 @@ Win *sag_ed_win_clone(Ed *ed, const Win *src)
     w->vp.top_sub = src->vp.top_sub;
     sag_overlay_init(&w->overlay);
     sag_jumplist_init(&w->jumps);
-    ed->panes[ed->npanes++] = w;
     return w;
 }
 
 void sag_ed_win_release(Ed *ed, Win *w)
 {
-    u32 i;
-
     if (ed == NULL || w == NULL || w == &ed->single_win)
         return;
-    for (i = 0U; i < ed->npanes; i++) {
-        if (ed->panes[i] != w)
-            continue;
-        (void)memmove(&ed->panes[i], &ed->panes[i + 1U],
-                      (size_t)(ed->npanes - i - 1U) * sizeof(*ed->panes));
-        ed->npanes--;
-        break;
-    }
     sag_overlay_free(&w->overlay);
     sag_vp_free(w);
     sag_cset_free(&w->cs);
@@ -899,41 +902,18 @@ CmdStatus sag_ed_file_write_to(Ed *ed, const char *path, bool force)
     sag_search_opts_init(&ed->search_opts);
     sag_search_state_init(&ed->search);
     sag_overlay_init(&ed->single_win.overlay);
-    /* One leaf holding the document window: the pane tree always
-     * exists, so no code path has to ask whether panes are "on". */
-    ed->pane_root = sag_pane_new_leaf(&ed->single_win);
-    ed->focus = ed->pane_root;
     /*
-     * Tab 0 owns the tree that already exists rather than cloning a
-     * second view of the same buffer: the editor always has exactly one
-     * tab, so no code path has to ask whether tabs are "on".
+     * A save-as RENAMES what the active tab shows.  It does not build a
+     * new world.
+     *
+     * Sprints 22 and 23 grew a copy of ed_model_finish's tail here, so
+     * `:w other` rebuilt the pane tree and reset the tab array to a
+     * single entry — silently discarding every split and every other
+     * tab, and leaking all of them, because sag_tabs_init only zeroes
+     * the struct.  Nothing about writing bytes to a path justifies
+     * touching either tree.
      */
-    sag_tabs_init(&ed->tabs);
-    {
-        Tab first;
-
-        (void)memset(&first, 0, sizeof(first));
-        first.tab_id = ed->tabs.next_tab_id++;
-        first.root = ed->pane_root;
-        first.focus = ed->focus;
-        first.buffer_id = ed->buffer.id;
-        /*
-         * malloc'd, like every other tab's path.  Arena-owning this one
-         * made Tab.path mean two different things depending on which
-         * tab you had, and tab_destroy's free() then corrupted the heap
-         * — and a reorder moves this tab away from index 0, so "the
-         * first one is special" is not even checkable.
-         */
-        first.path = NULL;
-        if (ed->buffer.path != NULL) {
-            size_t n = strlen(ed->buffer.path) + 1U;
-
-            first.path = sag_xmalloc(n);
-            (void)memcpy(first.path, ed->buffer.path, n);
-        }
-        TabVec_push(&ed->tabs.v, first);
-        ed->tabs.active = 0;
-    }
+    sag_tab_set_path(ed, ed->tabs.active, ed->buffer.path);
     sag_reg_bind_context(&ed->regs, ed->buffer.undo, &ed->buffer.meta);
     ed->durability_failed = false;
     sag_msg(ed, SAG_MSG_INFO, "wrote %s, %llu lines", path,
