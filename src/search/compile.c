@@ -287,6 +287,61 @@ static u32 min_len(const ReAst *a)
     return 0U;
 }
 
+/*
+ * Maximum codepoints any match can consume; UINT32_MAX means unbounded.
+ * The mirror of min_len, and its safety runs the other way: an
+ * OVERestimate is safe (a wider window still contains the match), an
+ * underestimate is a correctness bug, so every saturating case returns
+ * UINT32_MAX rather than a wrapped total.
+ */
+static u32 max_len(const ReAst *a)
+{
+    if (a == NULL)
+        return 0U;
+    switch ((ReAstKind)a->kind) {
+    case RE_A_CHAR:
+    case RE_A_CLASS:
+    case RE_A_ANY:
+        return 1U;
+    case RE_A_CAT: {
+        u32 l = max_len(a->a);
+        u32 r = max_len(a->b);
+
+        if (l == UINT32_MAX || r == UINT32_MAX || l + r < l)
+            return UINT32_MAX;
+        return l + r;
+    }
+    case RE_A_ALT: {
+        u32 l = max_len(a->a);
+        u32 r = max_len(a->b);
+
+        return l > r ? l : r;
+    }
+    case RE_A_STAR:
+    case RE_A_PLUS:
+        return UINT32_MAX;
+    case RE_A_QUEST:
+        return max_len(a->a);
+    case RE_A_REPEAT: {
+        u32 inner;
+
+        if (a->max == UINT32_MAX)
+            return UINT32_MAX;
+        inner = max_len(a->a);
+        if (inner == UINT32_MAX || a->max == 0U)
+            return inner == UINT32_MAX ? UINT32_MAX : 0U;
+        if (inner != 0U && a->max > UINT32_MAX / inner)
+            return UINT32_MAX;
+        return inner * a->max;
+    }
+    case RE_A_GROUP:
+        return max_len(a->a);
+    default:
+        break;
+    }
+    return 0U;
+}
+
 static bool build_program(Emit *e, const ReAst *root, bool reverse)
 {
     e->reverse = reverse;
@@ -436,6 +491,7 @@ SagRe *sag_re_compile(Arena *a, const char *pat, size_t len, u32 flags,
     re->ngroups = p.ngroups;
     re->flags = flags;
     re->min_len = min_len(root);
+    re->max_len = max_len(root);
     build_literal(re, root, flags);
     return re;
 }

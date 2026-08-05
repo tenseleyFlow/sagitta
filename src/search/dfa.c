@@ -345,7 +345,24 @@ static u8 ctx_at(const SagReInput *in, u64 pos, u32 prev_cp, bool has_prev,
  * SAG_DFA_NO, or SAG_DFA_GIVE_UP when the cache thrashed and the caller
  * should fall back to the Pike VM.
  */
+static int dfa_scan(const SagRe *re, const SagReInput *in, u64 from,
+                    u64 *end_out);
+
 int sag_re_dfa_test(const SagRe *re, const SagReInput *in, u64 from)
+{
+    return dfa_scan(re, in, from, NULL);
+}
+
+/* Reports where the earliest match ENDS.  Not where it starts, and not
+ * necessarily the end of the leftmost match — see sag_re_search. */
+int sag_re_dfa_find_end(const SagRe *re, const SagReInput *in, u64 from,
+                        u64 *end_out)
+{
+    return dfa_scan(re, in, from, end_out);
+}
+
+static int dfa_scan(const SagRe *re, const SagReInput *in, u64 from,
+                    u64 *end_out)
 {
     Dfa d;
     u64 pos;
@@ -416,10 +433,42 @@ int sag_re_dfa_test(const SagRe *re, const SagReInput *in, u64 from)
         bool matched0 = false;
         u32 n0;
 
+        u32 prev0 = 0U;
+        bool has_prev0 = false;
+
+        /*
+         * The codepoint before `pos`, for the same reason the VM walks
+         * back for it: a scan that starts mid-text still has to know
+         * whether it stands after a newline or a word character.
+         * Seeding with has_prev=false instead reports "no context",
+         * which reads as "not a line start" — /^$/ over "foo\n" from 4
+         * then missed the empty last line, because the DFA could not
+         * see the '\n' it was standing behind.  Bounded by
+         * SAG_UTF8_MAX, so this is a few bytes, not a rescan.
+         */
+        if (pos > in->window.lo) {
+            u64 back = pos - in->window.lo > SAG_UTF8_MAX ?
+                       (u64)SAG_UTF8_MAX : pos - in->window.lo;
+            u64 probe = pos - back;
+
+            while (probe < pos) {
+                u32 plen = 0U;
+                u32 pcp = dfa_decode(in, probe, &plen);
+
+                if (plen == 0U)
+                    break;
+                if (probe + plen >= pos) {
+                    prev0 = pcp;
+                    has_prev0 = true;
+                    break;
+                }
+                probe += plen;
+            }
+        }
         cp0 = dfa_decode(in, pos, &len0);
         have0 = len0 != 0U && pos < in->window.hi;
         ctx0 = d.has_assert ?
-               ctx_at(in, pos, 0U, false, cp0, have0) : 0U;
+               ctx_at(in, pos, prev0, has_prev0, cp0, have0) : 0U;
         d.combined[0] = 0U; /* the start instruction */
         n0 = closure(&d, d.combined, 1U, ctx0, &matched0);
         state = dfa_intern(&d, n0, ctx0, matched0);
@@ -438,6 +487,8 @@ int sag_re_dfa_test(const SagRe *re, const SagReInput *in, u64 from)
 
         if (d.states[state].matched) {
             verdict = SAG_DFA_YES;
+            if (end_out != NULL)
+                *end_out = pos;
             break;
         }
         cp = dfa_decode(in, pos, &cp_len);

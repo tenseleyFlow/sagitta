@@ -62,7 +62,25 @@ typedef struct ReLit {
 struct SagRe {
     ReInst *prog;
     u32 nprog;
-    ReInst *rprog; /* reverse program, Sprint 20 §6c                     */
+    /*
+     * The reverse program: the same AST with concatenation flipped and
+     * BOL<->EOL, BOT<->EOT swapped.  Compiled, shape-pinned by
+     * test_re_program_shapes, and deliberately not run by any engine.
+     *
+     * §6c proposed recovering a span by scanning it backwards from the
+     * end a forward DFA reports.  That composition cannot express our
+     * semantics: leftmost beats earliest-end, so on "abcd" /bc|abcd/
+     * ends earliest at 3 while the answer is 0..4, and no backward scan
+     * seeded at 3 reaches 0.  sag_re_search instead uses the DFA to
+     * bound a REGION and lets the VM produce the span, which is what
+     * §6's own with-groups dispatcher row describes.
+     *
+     * It is kept because it is the correct object for the job it was
+     * meant for — a longest-match or anchored-at-end search, neither of
+     * which the editor asks for yet.  Deleting it would cost more than
+     * the two words of struct it occupies.
+     */
+    ReInst *rprog;
     u32 nrprog;
     ReClass *classes;
     u32 nclasses;
@@ -70,6 +88,8 @@ struct SagRe {
     ReLit lit;
     u32 flags;
     u32 min_len;
+    /* Codepoints; UINT32_MAX = unbounded.  Bounds the skip-ahead window. */
+    u32 max_len;
 };
 
 /* ---------------------------------------------------------------- */
@@ -156,6 +176,14 @@ bool sag_re_pike_run_ex(const SagRe *re, const SagReInput *in, u64 start,
  * caller should finish on the Pike VM. */
 enum { SAG_DFA_NO = 0, SAG_DFA_YES = 1, SAG_DFA_GIVE_UP = -1 };
 int sag_re_dfa_test(const SagRe *re, const SagReInput *in, u64 from);
+/* Ceiling on the §6c skip-ahead window, in bytes.  Bounded so span
+ * recovery is O(window) and never O(file). */
+#define SAG_RE_SPAN_WINDOW (64U * 1024U)
+
+/* Where the earliest match ends.  Used to skip the VM ahead over text
+ * that provably contains no match. */
+int sag_re_dfa_find_end(const SagRe *re, const SagReInput *in, u64 from,
+                        u64 *end_out);
 
 /* Character-property predicates, defined off the word-break tables so a
  * search \b and Sprint 16's W-mode word motion agree about what a word
