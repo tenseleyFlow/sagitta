@@ -1,5 +1,5 @@
 # sagitta pty golden v1
-size 80x24 alt=1 cursor=23,3 vis=1
+size 80x24 alt=1 cursor=23,7 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
 --- text
     1 completion fixture
@@ -25,7 +25,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
 
 
 
-:fx                                                                             
+:file.x                                                                         
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAA
 AAAAA
@@ -50,7 +50,7 @@ AAAAA
 
 
 
-BCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+BCCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 --- legend
 A fg=default bg=default attrs=----------
 B fg=#2f1806 bg=#e77d24 attrs=b---------

@@ -47,6 +47,13 @@ typedef struct Menu {
     Span replace;
     u32 total; /* pre-cap match count, for the footer */
     char *stem; /* restored when the menu is dismissed */
+    /*
+     * A private copy of the selected row's text, so identity survives a
+     * refilter that RESET the arena the items' strings live in.  Reading
+     * it back out of `items` at reset time would be a use-after-free the
+     * moment the filter re-enumerated.
+     */
+    char *held;
     bool scanning;
 } Menu;
 

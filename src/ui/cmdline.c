@@ -23,7 +23,13 @@
 
 enum {
     SAG_CMDLINE_TABWIDTH = 4,
-    SAG_CMDLINE_MENU_ROWS = 5
+    SAG_CMDLINE_MENU_ROWS = 5,
+    /*
+     * Advisory budget for a refilter that runs inside a keystroke.  Tab
+     * passes 0 (unlimited) because the user asked a question and is
+     * waiting for the answer; typing has to stay inside the frame.
+     */
+    SAG_CMDLINE_LIVE_BUDGET_US = 5000
 };
 
 typedef struct CmdLineTarget {
@@ -134,6 +140,16 @@ static void set_error(Ed *ed, const CmdErr *error)
     u64 len = sag_textbuf_len(line->buf);
     u64 at;
 
+    /*
+     * The menu and the message share the rows above the prompt, and the
+     * menu wins when both are present.  Under live filtering the menu is
+     * open almost always, so an error would simply never be seen -- s18
+     * §7's whole contract is that the prompt stays open WITH the message
+     * and the offending token highlighted.  The error is about the line
+     * as typed, so a stale candidate list underneath it is noise: it
+     * goes, and the next edit brings the list back.
+     */
+    sag_menu_dismiss(&line->menu);
     line->err = *error;
     if (len != 0U) {
         if (line->err.tok_lo >= len)
@@ -387,6 +403,59 @@ Win *sag_cmdline_target(Ed *ed)
     return target == NULL ? NULL : &target->win;
 }
 
+/*
+ * Sprint 18.5 §6: refilter for the prompt's current text.
+ *
+ * The menu opens when there is a TOKEN to filter on, and closes when
+ * there is not.  An empty token means a bare `:` or a fresh argument
+ * position, where "every command in the registry" is noise rather than
+ * an answer -- Tab still asks that question explicitly.
+ *
+ * A live filter that finds nothing says NOTHING.  Tab is a question and
+ * deserves `no completions`; a keystroke is not, and answering every
+ * unmatched character with an error makes the message line flash through
+ * a word being typed.  That is Sprint 21's doctrine -- a half-typed line
+ * is the normal state of a prompt -- applied to the menu.
+ */
+static void cmdline_refilter(Ed *ed)
+{
+    CmdLine *line = &ed->cmdline;
+    Arena scratch;
+    SagCompQuery query;
+    Vec_CompItem items = {0};
+    char *text;
+
+    /* Only `:` completes; `/` and `?` carry a pattern, not a command. */
+    if (line->kind != SAG_PROMPT_CMD) {
+        sag_menu_dismiss(&line->menu);
+        return;
+    }
+    text = text_string(line->buf);
+    arena_init(&scratch);
+    if (!sag_comp_query(ed, text, (size_t)sag_textbuf_len(line->buf),
+                        (size_t)line->cur.pos.v, &scratch, &query) ||
+        query.replace.hi <= query.replace.lo) {
+        sag_menu_dismiss(&line->menu);
+        arena_free_all(&scratch);
+        free(text);
+        ed->full_damage = true;
+        return;
+    }
+    line->comp_total = sag_comp_filter_run(ed, &line->filter,
+                                           &line->comp_arena, &query,
+                                           SAG_CMDLINE_LIVE_BUDGET_US,
+                                           &items);
+    if (items.len == 0U) {
+        Vec_CompItem_free(&items);
+        sag_menu_dismiss(&line->menu);
+    } else {
+        sag_menu_reset(&line->menu, items, line->comp_total, query.replace);
+    }
+    arena_free_all(&scratch);
+    free(text);
+    ed->full_damage = true;
+}
+
 void sag_cmdline_edited(Ed *ed)
 {
     char *draft;
@@ -398,6 +467,7 @@ void sag_cmdline_edited(Ed *ed)
     sag_hist_cur_reset(&ed->cmdline.hist, draft);
     free(draft);
     clear_error(ed);
+    cmdline_refilter(ed);
     ed->footer_dirty = true;
     /* Search-as-you-type: the `/` and `?` prompts preview on every
      * edit.  This is the one place that hook belongs — the widget is
@@ -445,7 +515,12 @@ bool sag_cmdline_key(Ed *ed, const Key *key)
         return true;
     if (key->code < SAG_KEY_BASE && key->ntext != 0U &&
         (key->mods & command_mods) == 0U) {
-        menu_discard(ed);
+        /*
+         * §6 inverts Sprint 18's rule: a printable key REFILTERS rather
+         * than dismissing.  The insert runs through the registry, which
+         * lands in sag_cmdline_edited, which refilters -- so there is
+         * still exactly one place that reacts to a prompt edit.
+         */
         (void)insert_sanitized(ed, key->text, key->ntext);
         return true;
     }
@@ -456,7 +531,7 @@ void sag_cmdline_paste(Ed *ed, const u8 *bytes, size_t len)
 {
     if (ed == NULL || !ed->cmdline.active || bytes == NULL || len == 0U)
         return;
-    menu_discard(ed);
+    /* Like a printable key: the insert refilters through the one hook. */
     (void)insert_sanitized(ed, bytes, len);
 }
 
@@ -472,8 +547,12 @@ static CmdStatus history_move(CmdCtx *cx, bool previous)
                                      &cx->ed->cmdline.hist);
     if (found == NULL)
         return SAG_CMD_OK;
-    menu_discard(cx->ed);
-    return replace_all(cx->ed, found, false) ? SAG_CMD_OK : SAG_CMD_ERR_IO;
+    if (!replace_all(cx->ed, found, false))
+        return SAG_CMD_ERR_IO;
+    /* A history jump rewrites the whole line without going through the
+     * edit hook, so the menu is refiltered here rather than left stale. */
+    cmdline_refilter(cx->ed);
+    return SAG_CMD_OK;
 }
 
 CmdStatus sag_cmdline_cmd_hist_prev(CmdCtx *cx)
@@ -540,7 +619,12 @@ static CmdStatus complete(Ed *ed, bool previous)
     char *lcp;
     size_t stem_len;
 
-    if (line->menu.items.len != 0U)
+    /*
+     * Already walking the list: Tab and S-Tab just move.  A LIVE menu
+     * with nothing chosen is not "already cycling" -- it falls through
+     * so the first Tab can still offer the longest common prefix.
+     */
+    if (line->menu.explicit_sel)
         return completion_cycle(ed, previous);
     text = text_string(line->buf);
     arena_init(&scratch);
@@ -575,14 +659,44 @@ static CmdStatus complete(Ed *ed, bool previous)
         Vec_CompItem_free(&items);
         arena_free_all(&scratch);
         free(text);
-        return ok ? SAG_CMD_OK : SAG_CMD_ERR_IO;
+        if (!ok)
+            return SAG_CMD_ERR_IO;
+        /*
+         * The line just changed under the live menu, which is still
+         * holding rows for the OLD token.  Completion insertion does not
+         * run through the edit hook, so refilter explicitly rather than
+         * leaving stale rows on screen.
+         */
+        cmdline_refilter(ed);
+        return SAG_CMD_OK;
     }
+    free(line->menu_stem);
     line->menu_stem = heap_slice(text, query.replace);
     line->menu_original = query.replace;
     sag_menu_reset(&line->menu, items, line->comp_total, query.replace);
-    lcp = sag_comp_lcp(&scratch, &line->menu.items);
+    /*
+     * The common prefix is taken over the TIERED rows only -- the ones
+     * that matched as an exact or prefix match.  A fuzzy match shares no
+     * meaningful prefix with them (`f` matches `move.line.first_nonblank`
+     * somewhere in the middle), so including it drags the LCP to empty
+     * and Tab stops being able to complete `file.` at all.
+     */
+    {
+        Vec_CompItem tiered = {0};
+        size_t i;
+
+        for (i = 0U; i < line->menu.items.len; i++) {
+            if (line->menu.items.data[i].score >= SAG_FZ_BASENAME_TIER)
+                Vec_CompItem_push(&tiered, line->menu.items.data[i]);
+        }
+        lcp = sag_comp_lcp(&scratch, &tiered);
+        Vec_CompItem_free(&tiered);
+    }
     stem_len = strlen(query.stem);
     if (strlen(lcp) > stem_len) {
+        /* The prefix every candidate shares is unambiguous, so insert it
+         * and leave the list open with nothing selected -- the user has
+         * still not chosen a row. */
         if (!replace_span(ed, query.replace, (const u8 *)lcp, strlen(lcp),
                           true)) {
             menu_discard(ed);
@@ -592,6 +706,20 @@ static CmdStatus complete(Ed *ed, bool previous)
         }
         line->menu.replace = (Span){query.replace.lo,
                                     query.replace.lo + strlen(lcp)};
+    } else {
+        /* Nothing left to insert unambiguously, so this Tab is a choice:
+         * enter the list (from the far end for S-Tab). */
+        (void)sag_menu_move(&line->menu, previous ? -1 : 1, false);
+        {
+            const CompItem *item = sag_menu_selected(&line->menu);
+
+            if (item != NULL &&
+                !insert_completion(ed, line->menu.replace, item, false)) {
+                arena_free_all(&scratch);
+                free(text);
+                return SAG_CMD_ERR_IO;
+            }
+        }
     }
     ed->full_damage = true;
     ed->footer_dirty = true;
@@ -628,7 +756,6 @@ CmdStatus sag_cmdline_cmd_insert_register(CmdCtx *cx)
         sag_msg(cx->ed, SAG_MSG_ERROR, "unknown register '%c'", name);
         return SAG_CMD_ERR_ARG;
     }
-    menu_discard(cx->ed);
     return insert_sanitized(cx->ed, value->bytes.data, value->bytes.len);
 }
 
@@ -637,7 +764,6 @@ CmdStatus sag_cmdline_cmd_literal_next(CmdCtx *cx)
     if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active ||
         cx->sarg == NULL)
         return SAG_CMD_ERR_ARG;
-    menu_discard(cx->ed);
     return insert_sanitized(cx->ed, (const u8 *)cx->sarg, cx->sarg_len);
 }
 
@@ -741,13 +867,28 @@ CmdStatus sag_cmdline_cmd_accept(CmdCtx *cx)
         return SAG_CMD_ERR_STATE;
     ed = cx->ed;
     line = &ed->cmdline;
-    if (line->menu.items.len != 0U) {
-        if (line->menu.sel >= 0) {
-            const CompItem *item = &line->menu.items.data[line->menu.sel];
+    /*
+     * §6: Enter is governed by whether the user CHOSE a row, not by
+     * whether a menu happens to be open.
+     *
+     * Sprint 18's rule -- Enter with a menu open accepts instead of
+     * executing -- exists so `:w /etc/pas` cannot run when the user
+     * meant to pick `passwd`.  Under a live menu the list is open for
+     * the whole time a command name is being typed, so that rule taken
+     * literally would mean the prompt can never be executed with one
+     * Enter.  Keying on `explicit_sel` preserves exactly the property
+     * s18 was protecting: a selection only becomes explicit through Tab,
+     * S-Tab, C-n, C-p or a click, and filtering alone never selects.  So
+     * the dangerous case -- the user was looking at a highlighted row --
+     * still accepts, and the ordinary case -- a complete command typed
+     * out -- still executes.
+     */
+    if (line->menu.explicit_sel && line->menu.sel >= 0) {
+        const CompItem *item = sag_menu_selected(&line->menu);
 
-            if (!insert_completion(ed, line->menu.replace, item, true))
-                return SAG_CMD_ERR_IO;
-        }
+        if (item != NULL && !insert_completion(ed, line->menu.replace, item,
+                                               true))
+            return SAG_CMD_ERR_IO;
         menu_discard(ed);
         return SAG_CMD_OK;
     }
@@ -821,7 +962,16 @@ CmdStatus sag_cmdline_cmd_cancel(CmdCtx *cx)
     if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
         return SAG_CMD_ERR_STATE;
     line = &cx->ed->cmdline;
-    if (line->menu.items.len != 0U) {
+    /*
+     * Esc dismisses the MENU only when the user opened or entered it --
+     * Tab left a stem to restore, or a row was chosen.  A menu that
+     * merely filtered itself open while typing is not something the user
+     * asked for, so Esc goes past it and closes the prompt; otherwise a
+     * live menu would make leaving the prompt take two presses.  Same
+     * reasoning as the Enter rule above.
+     */
+    if (line->menu.items.len != 0U &&
+        (line->menu.explicit_sel || line->menu_stem != NULL)) {
         char *stem = line->menu_stem == NULL ? NULL :
                      strcpy(sag_xmalloc(strlen(line->menu_stem) + 1U),
                             line->menu_stem);

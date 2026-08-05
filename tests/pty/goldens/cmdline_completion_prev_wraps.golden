@@ -1,5 +1,5 @@
 # sagitta pty golden v1
-size 80x24 alt=1 cursor=23,26 vis=1
+size 80x24 alt=1 cursor=23,16 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
 --- text
     1 completion fixture
@@ -20,12 +20,12 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
 
 
 
-  cursor.lift.matches          Lift literal matches in the selection to cursors 
-  view.half_page_down          Scroll half a viewport down                      
-  move.line.half_page_up       Move half a viewport up                          
-  move.line.half_page_down     Move half a viewport down                        
-> edit.delete.grapheme_left    Delete the grapheme left of the cursor      34/34
-:edit.delete.grapheme_left                                                      
+  file.save                    Atomically save the active file                  
+  file.close                   Sprint 23: close the active file                 
+  file.write                   Write the active buffer, optionally to a path    
+  file.reload                  Reload the active file from disk                 
+> file.write_quit              Write the active buffer and quit              7/7
+:file.write_quit                                                                
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAA
 AAAAA
@@ -45,17 +45,19 @@ AAAAA
 
 
 
-BBBBBBBBBBBCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-BBBBBBBBBBCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-BBBBBBBBBBBBBBBCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-BBBBBBBBBBBBBBBCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-DDDDDDDDDDDDDDDDDDDDDDDDDEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-FGGGGGGGGGGGGGGGGGGGGGGGGGBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+DDEEEEEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+BBCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBCCCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+FFGGGGGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+HIIIIIIIIIIIIIIIBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 --- legend
 A fg=default bg=default attrs=----------
 B fg=#f7e0cc bg=#4e2a0f attrs=b---------
 C fg=#f7e0cc bg=#4e2a0f attrs=b--u------
-D fg=#4e2a0f bg=#f7e0cc attrs=b---------
-E fg=#4e2a0f bg=#f7e0cc attrs=b--u------
-F fg=#2f1806 bg=#e77d24 attrs=b---------
-G fg=#f7e0cc bg=#4e2a0f attrs=----------
+D fg=#f7e0cc bg=#4e2a0f attrs=bd--------
+E fg=#f7e0cc bg=#4e2a0f attrs=bd-u------
+F fg=#4e2a0f bg=#f7e0cc attrs=b---------
+G fg=#4e2a0f bg=#f7e0cc attrs=b--u------
+H fg=#2f1806 bg=#e77d24 attrs=b---------
+I fg=#f7e0cc bg=#4e2a0f attrs=----------

@@ -586,6 +586,10 @@ void test_cmdline_range_executes_once_with_multiple_cursors(void);
 void test_cmdline_bang_quit_bypasses_durability_failure(void);
 void test_cmdline_parse_error_preserves_text_and_points_at_token(void);
 void test_cmdline_catalogue_errors_preserve_live_prompt(void);
+void test_cmdline_menu_filters_live_while_typing(void);
+void test_cmdline_enter_executes_while_filtering(void);
+void test_cmdline_enter_accepts_a_chosen_row_without_executing(void);
+void test_cmdline_escape_leaves_a_live_menu_and_closes_the_prompt(void);
 void test_cmdline_printable_edit_resets_history_walk_to_new_draft(void);
 
 void test_buflist_document_occupies_slot_zero(void);

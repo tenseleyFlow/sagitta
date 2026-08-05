@@ -175,6 +175,16 @@ static const BindRow keys_E[] = {
     {"<down>", "ed.cmdline.hist_next", 0, NULL},
     {"<tab>", "ed.cmdline.complete_next", 0, NULL},
     {"S-<tab>", "ed.cmdline.complete_prev", 0, NULL},
+    /*
+     * Sprint 18.5 §6.  The menu moves on Tab/S-Tab and C-n/C-p, and NOT
+     * on the arrow keys: a live menu is open the whole time a command
+     * name is being typed, so giving Up to the menu would make history
+     * unreachable exactly when it is most wanted -- you reach for it
+     * blind, at the start of a line, which is when the list is fullest.
+     * Keymap data, so flipping this is two lines plus goldens.
+     */
+    {"C-n", "ed.cmdline.complete_next", 0, NULL},
+    {"C-p", "ed.cmdline.complete_prev", 0, NULL},
     {"C-r", "ed.cmdline.insert_register", 0, NULL},
     {"C-v", "ed.cmdline.literal_next", 0, NULL},
     {"C-z", "ed.edit.undo", 0, NULL},

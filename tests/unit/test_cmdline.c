@@ -436,6 +436,130 @@ void test_cmdline_catalogue_errors_preserve_live_prompt(void)
     sag_cmd_init();
 }
 
+static void cmdline_type(CmdlineFixture *fixture, const char *text)
+{
+    const char *p;
+
+    for (p = text; *p != '\0'; p++)
+        sag_ed_handle_key(&fixture->ed, cmdline_key((u32)(u8)*p), 1);
+}
+
+void test_cmdline_menu_filters_live_while_typing(void)
+{
+    CmdlineFixture fixture;
+
+    cmdline_fixture_init(&fixture);
+    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    /* A bare `:` has no token to filter on, so no list -- "every command
+     * in the registry" is noise, not an answer. */
+    SAG_ASSERT_EQ_U64(fixture.ed.cmdline.menu.items.len, 0U);
+
+    /* Sprint 18 needed a Tab to see anything here. */
+    cmdline_type(&fixture, "fil");
+    SAG_ASSERT(fixture.ed.cmdline.menu.items.len > 1U);
+    /* Filtering ranked a row first but the user has chosen nothing. */
+    SAG_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, -1);
+    SAG_ASSERT(!fixture.ed.cmdline.menu.explicit_sel);
+
+    /* Typing narrows rather than dismissing, which is the inversion of
+     * s18's "any printable key closes the menu". */
+    cmdline_type(&fixture, "e.wri");
+    SAG_ASSERT(fixture.ed.cmdline.menu.items.len >= 1U);
+
+    /* And a token that matches nothing closes it -- silently. */
+    cmdline_type(&fixture, "zzzz");
+    SAG_ASSERT_EQ_U64(fixture.ed.cmdline.menu.items.len, 0U);
+    SAG_ASSERT(!(fixture.ed.msg.active &&
+                 fixture.ed.msg.sev == SAG_MSG_ERROR));
+    cmdline_fixture_free(&fixture);
+}
+
+void test_cmdline_enter_executes_while_filtering(void)
+{
+    CmdlineFixture fixture;
+
+    cmdline_fixture_init(&fixture);
+    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    cmdline_type(&fixture, "redraw");
+    /* The menu is open -- s18's rule taken literally would refuse to
+     * execute, and the prompt could never be used with one Enter. */
+    SAG_ASSERT(fixture.ed.cmdline.menu.items.len != 0U);
+    SAG_ASSERT(!fixture.ed.cmdline.menu.explicit_sel);
+
+    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, sag_cmdline_cmd_accept),
+                      SAG_CMD_OK);
+    SAG_ASSERT(!fixture.ed.cmdline.active);
+    SAG_ASSERT_EQ_U64(fixture.ed.mode, SAG_MODE_L);
+    cmdline_fixture_free(&fixture);
+}
+
+void test_cmdline_enter_accepts_a_chosen_row_without_executing(void)
+{
+    CmdlineFixture fixture;
+    Bytebuf text;
+
+    cmdline_fixture_init(&fixture);
+    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    /* A stem with SEVERAL matches: a single match is inserted outright
+     * and never becomes a choice to accept. */
+    cmdline_type(&fixture, "fil");
+    SAG_ASSERT(fixture.ed.cmdline.menu.items.len > 1U);
+
+    /*
+     * The first Tab inserts the prefix every tiered candidate shares
+     * (`file.`) and chooses nothing -- there is still an unambiguous
+     * completion to offer, so it offers it.
+     */
+    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                     sag_cmdline_cmd_complete_next),
+                      SAG_CMD_OK);
+    SAG_ASSERT(!fixture.ed.cmdline.menu.explicit_sel);
+
+    /* With nothing left to insert unambiguously, the next Tab IS a
+     * choice.  Only Tab, S-Tab, C-n, C-p or a click get here. */
+    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                     sag_cmdline_cmd_complete_next),
+                      SAG_CMD_OK);
+    SAG_ASSERT(fixture.ed.cmdline.menu.explicit_sel);
+
+    /*
+     * Now Enter accepts instead of executing -- the property s18 pinned
+     * so `:w /etc/pas` cannot run when the user meant to pick `passwd`.
+     */
+    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, sag_cmdline_cmd_accept),
+                      SAG_CMD_OK);
+    SAG_ASSERT(fixture.ed.cmdline.active);
+    SAG_ASSERT_EQ_U64(fixture.ed.cmdline.menu.items.len, 0U);
+    /* The chosen row landed in the line, followed by the separating
+     * space that says the argument position is next. */
+    text = cmdline_text(&fixture.ed.cmdline);
+    SAG_ASSERT(strncmp((const char *)text.data, "file.", 5U) == 0);
+    SAG_ASSERT_EQ_STR((const char *)text.data +
+                          strlen((const char *)text.data) - 1U, " ");
+    bytebuf_free(&text);
+    cmdline_fixture_free(&fixture);
+}
+
+void test_cmdline_escape_leaves_a_live_menu_and_closes_the_prompt(void)
+{
+    CmdlineFixture fixture;
+
+    cmdline_fixture_init(&fixture);
+    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    cmdline_type(&fixture, "fil");
+    SAG_ASSERT(fixture.ed.cmdline.menu.items.len != 0U);
+
+    /*
+     * The user never opened this menu -- it filtered itself open while
+     * they typed.  Esc goes past it and closes the prompt, or leaving
+     * would take two presses for a list nobody asked for.
+     */
+    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, sag_cmdline_cmd_cancel),
+                      SAG_CMD_OK);
+    SAG_ASSERT(!fixture.ed.cmdline.active);
+    cmdline_fixture_free(&fixture);
+}
+
 void test_cmdline_printable_edit_resets_history_walk_to_new_draft(void)
 {
     CmdlineFixture fixture;

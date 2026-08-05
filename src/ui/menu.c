@@ -40,7 +40,22 @@ void sag_menu_free(Menu *m)
     spec = m->spec;
     Vec_CompItem_free(&m->items);
     free(m->stem);
+    free(m->held);
     sag_menu_init(m, &spec);
+}
+
+static void menu_hold(Menu *m)
+{
+    const CompItem *item = sag_menu_selected(m);
+
+    free(m->held);
+    m->held = NULL;
+    if (item != NULL && item->text != NULL) {
+        size_t n = strlen(item->text) + 1U;
+
+        m->held = sag_xmalloc(n);
+        (void)memcpy(m->held, item->text, n);
+    }
 }
 
 static void menu_scroll_to_selection(Menu *m, u16 rows)
@@ -59,45 +74,41 @@ static void menu_scroll_to_selection(Menu *m, u16 rows)
 
 void sag_menu_reset(Menu *m, Vec_CompItem items, u32 total, Span replace)
 {
-    char *held = NULL;
     size_t i;
 
     if (m == NULL)
         return;
-    /*
-     * Remember WHAT was selected, not WHERE.  The new ranking may put it
-     * anywhere, and an index carried across lands on a different row.
-     */
-    if (m->sel >= 0 && (size_t)m->sel < m->items.len &&
-        m->items.data[m->sel].text != NULL) {
-        size_t n = strlen(m->items.data[m->sel].text) + 1U;
-
-        held = sag_xmalloc(n);
-        (void)memcpy(held, m->items.data[m->sel].text, n);
-    }
     Vec_CompItem_free(&m->items);
     m->items = items;
     m->total = total;
     m->replace = replace;
     m->sel = -1;
     m->top = 0U;
-    if (held != NULL) {
+    /*
+     * Re-find WHAT was selected, not WHERE.  The new ranking may put it
+     * anywhere, and an index carried across lands on a different row.
+     * `held` is our own copy precisely because the items it came from
+     * may already have been freed with their arena.
+     */
+    if (m->held != NULL) {
         for (i = 0U; i < m->items.len; i++) {
             if (m->items.data[i].text != NULL &&
-                strcmp(m->items.data[i].text, held) == 0) {
+                strcmp(m->items.data[i].text, m->held) == 0) {
                 m->sel = (i32)i;
                 break;
             }
         }
-        free(held);
     }
     /*
      * The held item left the filtered set.  Falling to row 0 would leave
      * a selection the user never made, and §6's Enter rule would then
      * accept it instead of executing the line.
      */
-    if (m->sel < 0)
+    if (m->sel < 0) {
         m->explicit_sel = false;
+        free(m->held);
+        m->held = NULL;
+    }
 }
 
 u16 sag_menu_rows(const Menu *m, u16 height)
@@ -143,6 +154,7 @@ bool sag_menu_move(Menu *m, i32 delta, bool page)
     }
     m->sel = next;
     m->explicit_sel = true;
+    menu_hold(m);
     return true;
 }
 
@@ -158,6 +170,8 @@ void sag_menu_dismiss(Menu *m)
     if (m == NULL)
         return;
     Vec_CompItem_free(&m->items);
+    free(m->held);
+    m->held = NULL;
     m->sel = -1;
     m->explicit_sel = false;
     m->top = 0U;
