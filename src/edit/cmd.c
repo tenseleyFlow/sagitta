@@ -427,6 +427,20 @@ static const CmdDesc builtins[] = {
     DEFER("ed.search.prev", SAG_ARITY_NONE,
           SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, 21,
           "move to the previous search match"),
+    {"ed.jump.back", sag_jump_cmd_back, SAG_ARITY_OPT_INT,
+     SAG_CMD_TAKES_COUNT | SAG_CMD_NEEDS_WIN,
+     "Jump to an older position in this window's history"},
+    {"ed.jump.fwd", sag_jump_cmd_fwd, SAG_ARITY_OPT_INT,
+     SAG_CMD_TAKES_COUNT | SAG_CMD_NEEDS_WIN,
+     "Jump to a newer position in this window's history"},
+    {"ed.jump.list", sag_jump_cmd_list, SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN,
+     "Show this window's jumplist"},
+    {"ed.change.older", sag_change_cmd_older, SAG_ARITY_OPT_INT,
+     SAG_CMD_TAKES_COUNT | SAG_CMD_NEEDS_WIN,
+     "Jump to an older change position in this buffer"},
+    {"ed.change.newer", sag_change_cmd_newer, SAG_ARITY_OPT_INT,
+     SAG_CMD_TAKES_COUNT | SAG_CMD_NEEDS_WIN,
+     "Jump to a newer change position in this buffer"},
     DEFER("ed.macro.record", SAG_ARITY_OPT_STR, SAG_CMD_PROMPTS, 35,
           "record a command macro"),
     DEFER("ed.macro.replay", SAG_ARITY_OPT_STR,
@@ -516,7 +530,9 @@ static bool command_name_valid(const char *name)
         "move", "edit", "mode", "sel", "cursor", "view", "ui",
         "file", "buf", "tab", "group", "pane", "win", "reg",
         "search", "macro", "job", "git", "lsp", "ai", "plug",
-        "cmdline", "del", "shell"};
+        "cmdline", "del", "shell",
+        /* Sprint 21 */
+        "jump", "change"};
     static const char *const verbs[] = {
         "home", "end", "next", "prev", "up", "down", "left", "right",
         "goto", "insert", "delete", "replace", "change", "yank", "paste", "toggle",
@@ -538,7 +554,9 @@ static bool command_name_valid(const char *name)
         "literal_next", "accept", "word_prev", "to_home", "to_end",
         /* Sprint 19 */
         "run", "run_bg", "read", "filter", "term", "kill", "kill_force",
-        "jump", "clear_finished", "rerun"};
+        "jump", "clear_finished", "rerun",
+        /* Sprint 21 */
+        "back", "fwd", "older", "newer"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

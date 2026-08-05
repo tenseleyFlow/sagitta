@@ -29,6 +29,12 @@ static const BindRow keys_L[] = {
     {"C-r", "ed.edit.redo", 0, NULL},
     {"<esc>", "ed.mode.escape", 0, NULL},
     {"g g", "ed.move.buf.home", 0, NULL},
+    /* Sprint 21 §5.  Ctrl-O/Ctrl-I are the jumplist's two directions;
+     * g; / g, walk the changelist. */
+    {"C-o", "ed.jump.back", 0, NULL},
+    {"C-i", "ed.jump.fwd", 0, NULL},
+    {"g ;", "ed.change.older", 0, NULL},
+    {"g ,", "ed.change.newer", 0, NULL},
     {"G", "ed.move.buf.end", 0, NULL},
     {"s", "ed.file.save", 0, NULL},
     {"q", "ed.quit", 0, NULL},

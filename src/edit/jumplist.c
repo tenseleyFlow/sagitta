@@ -425,3 +425,79 @@ bool sag_jumplist_deserialize(JumpList *jl, const u8 *bytes, size_t len)
     jl->cur = jl->len;
     return true;
 }
+
+/*
+ * Commands.  Bound in the keymap DATA, not here — nothing in this file
+ * names a key.
+ */
+static u32 jump_count(const CmdCtx *cx)
+{
+    return cx->count_given && cx->count != 0U ? cx->count : 1U;
+}
+
+CmdStatus sag_jump_cmd_back(CmdCtx *cx)
+{
+    /* A walk with nowhere to go is not an error: walk() has already
+     * said so in the message line, and reporting it twice is noise. */
+    (void)sag_jump_back(cx->ed, cx->win, jump_count(cx));
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_jump_cmd_fwd(CmdCtx *cx)
+{
+    /* A walk with nowhere to go is not an error: walk() has already
+     * said so in the message line, and reporting it twice is noise. */
+    (void)sag_jump_fwd(cx->ed, cx->win, jump_count(cx));
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_change_cmd_older(CmdCtx *cx)
+{
+    /* A walk with nowhere to go is not an error: walk() has already
+     * said so in the message line, and reporting it twice is noise. */
+    (void)sag_change_older(cx->ed, cx->win, jump_count(cx));
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_change_cmd_newer(CmdCtx *cx)
+{
+    /* A walk with nowhere to go is not an error: walk() has already
+     * said so in the message line, and reporting it twice is noise. */
+    (void)sag_change_newer(cx->ed, cx->win, jump_count(cx));
+    return SAG_CMD_OK;
+}
+
+/* The list itself, newest first, into the message line's overlay. */
+CmdStatus sag_jump_cmd_list(CmdCtx *cx)
+{
+    Bytebuf out;
+    u32 n;
+    u32 i;
+
+    if (cx->win == NULL)
+        return SAG_CMD_ERR_STATE;
+    n = sag_jumplist_len(&cx->win->jumps);
+    if (n == 0U) {
+        sag_msg(cx->ed, SAG_MSG_INFO, "jumplist is empty");
+        return SAG_CMD_OK;
+    }
+    bytebuf_init(&out);
+    for (i = n; i > 0U; i--) {
+        const JumpEntry *je = sag_jumplist_at(&cx->win->jumps, i - 1U);
+        Buffer *b = sag_ws_buf_by_id(cx->ed, je->buf_id);
+        LineNo line = je->line_hint;
+
+        if (b != NULL && b->marks != NULL &&
+            sag_mark_alive(b->marks, je->mark))
+            line = sag_textbuf_line_of(b->tb, sag_mark_pos(b->marks,
+                                                           je->mark));
+        bytebuf_printf(&out, "%s%3u  %s:%llu",
+                       i == n ? "" : "\n", (unsigned)(n - i),
+                       b != NULL ? sag_buf_label(b) : "(closed)",
+                       (unsigned long long)line.v + 1ULL);
+    }
+    sag_msg(cx->ed, SAG_MSG_INFO, "%.*s", (int)out.len,
+            (const char *)out.data);
+    bytebuf_free(&out);
+    return SAG_CMD_OK;
+}

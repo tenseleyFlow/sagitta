@@ -22,6 +22,7 @@
  * it from nobody.  Nothing here opens a file (DoD 11).
  */
 
+#include "edit/cmd.h"
 #include "text/coords.h"
 #include "text/mark.h"
 #include "util/base.h"
@@ -99,5 +100,11 @@ const JumpEntry *sag_jumplist_at(const JumpList *jl, u32 index);
  */
 void sag_jumplist_serialize(const JumpList *jl, const Ed *ed, Bytebuf *out);
 bool sag_jumplist_deserialize(JumpList *jl, const u8 *bytes, size_t len);
+
+CmdStatus sag_jump_cmd_back(CmdCtx *cx);
+CmdStatus sag_jump_cmd_fwd(CmdCtx *cx);
+CmdStatus sag_jump_cmd_list(CmdCtx *cx);
+CmdStatus sag_change_cmd_older(CmdCtx *cx);
+CmdStatus sag_change_cmd_newer(CmdCtx *cx);
 
 #endif
