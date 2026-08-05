@@ -21,6 +21,7 @@
 #include "util/vec.h"
 
 typedef struct Ed Ed;
+typedef struct Buffer Buffer;
 
 enum {
     /* A directory opened as a group routinely exceeds a small cap, and
@@ -35,15 +36,24 @@ typedef struct Tab {
     char *path;   /* canonical realpath; NULL when untitled */
     Pane *root;   /* this tab's pane tree */
     Pane *focus;  /* focused leaf within root */
-    /* Sprint 24 animates these; 0 means ungrouped until then. */
+    /*
+     * Membership.  `group_id` 0 means ungrouped and is authoritative;
+     * `group_ordinal` is 1-based within the group.  See ui/groups.h for
+     * why the group does not keep the other half of this.
+     */
     u32 group_id;
     u32 group_ordinal;
     /*
-     * Placeholder so Sprint 25's schema work can proceed in parallel.
-     * Real lazy hydration is Sprint 24; until then this is always false
-     * and asserted so.
+     * There is deliberately NO `deferred` flag here.
+     *
+     * Sprint 23 carried one as a placeholder.  Sprint 24 deletes it:
+     * residency is asked of the ALLOCATION (does this tab's buffer hold
+     * a TextBuf), which is the same question every save path already
+     * ends up asking.  A flag is a second answer that can disagree with
+     * the first, and the disagreement is unrecoverable — a tab that
+     * looks resident is never read, and the empty buffer is what gets
+     * saved over the real file.
      */
-    bool deferred;
 } Tab;
 
 VEC_DECL(TabVec, Tab);
@@ -81,6 +91,28 @@ void sag_tab_reorder(Ed *ed, int from, int to);
 bool sag_tab_modified(const Ed *ed, int idx);
 u32 sag_tab_count(const Ed *ed);
 Tab *sag_tab_at(Ed *ed, int idx);
+
+/*
+ * Sprint 24 §3: lazy hydration.
+ *
+ * `is_resident` asks the allocation, never a flag.  `hydrate` runs at
+ * the top of every switch-to-tab and returns immediately for a resident
+ * tab, so opening a 40-file group costs ONE file read (D4) and the
+ * other 39 tabs are a path and no buffer.
+ */
+bool sag_tab_is_resident(const Ed *ed, int tab_idx);
+int sag_tab_hydrate(Ed *ed, int tab_idx); /* 0 ok; performs the read */
+/*
+ * Releases the text.  Refuses the ACTIVE tab: deferring what the user
+ * is looking at leaves the window pointing at no text.
+ *
+ * NEVER copy a buffer into a non-resident tab to "prime" it.  The copy
+ * allocates, which makes the tab look resident, after which the real
+ * file is never read and the fabricated content is what a save writes.
+ */
+void sag_tab_defer(Ed *ed, int tab_idx);
+/* The buffer this tab shows; NULL when the tab has no view yet. */
+Buffer *sag_tab_buffer(Ed *ed, int tab_idx);
 
 /* Where index `i` lands when `from` moves to `to`. */
 int sag_tab_shifted_index(int i, int from, int to);

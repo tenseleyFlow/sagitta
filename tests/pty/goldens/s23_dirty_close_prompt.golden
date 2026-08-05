@@ -3,10 +3,10 @@ size 80x24 alt=1 cursor=1,7 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=7
 --- text
 [1: pty-s14-s23_dirty_cl[2: sag-pty-0.txt]
-    1 xalpha
-    1 beta
-    2 gamma
-    3
+    1 x
+
+
+
 
 
 
@@ -28,10 +28,10 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=7
  L save changes to /tmp/sag-pty-0.txt?  [w]rite  [d]iscard  [esc] cancel        
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBB
-CCCCCCCCCCCC
-CCCCCCCCCC
-CCCCCCCCCCC
-CCCCC
+CCCCCCC
+
+
+
 
 
 

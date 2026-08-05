@@ -2,7 +2,7 @@
 size 80x24 alt=1 cursor=0,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=8
 --- text
-    1 xalpha
+    1 alpha
     1 beta
     2 gamma
     3
@@ -25,9 +25,9 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=8
 
 
 
- L  pty-s14-s23_dirty_close_discard.txt *                    utf-8  lf  1:1  all
+ L  pty-s14-s23_dirty_close_discard.txt                      utf-8  lf  1:1  all
 --- style
-AAAAAAAAAAAA
+AAAAAAAAAAA
 AAAAAAAAAA
 AAAAAAAAAAA
 AAAAA

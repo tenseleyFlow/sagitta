@@ -53,6 +53,10 @@ typedef enum {
 } SagSaveErr;
 
 SagLoadErr sag_file_load(const char *path, TextBuf **out, FileMeta *meta);
+/* Sprint 24 D4 test hook: file reads performed so far.  Counting is the
+ * only way to check that a deferred group costs one read, not forty. */
+u64 sag_file_load_count(void);
+void sag_file_load_count_reset(void);
 SagSaveErr sag_file_save(const TextBuf *tb, FileMeta *meta,
                          const char *path);
 /* Overwrite after accepting the destination identity observed now. */

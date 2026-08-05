@@ -3,10 +3,7 @@ size 80x24 alt=1 cursor=1,10 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=6
 --- text
 [1: pty-s14-s23_modified[2: sag-pty-0.txt]
-    1 editalpha
-    1 beta
-    2 gamma
-    3
+    1 edit
 
 
 
@@ -25,13 +22,16 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=6
 
 
 
- L  pty-s14-s23_modified_marker_follows_undo.txt *           utf-8  lf  1:5  all
+
+
+
+ L  sag-pty-0.txt *                                          utf-8  lf  1:5  all
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBB
-CCCCCCCCCCCCCCC
 CCCCCCCCCC
-CCCCCCCCCCC
-CCCCC
+
+
+
 
 
 

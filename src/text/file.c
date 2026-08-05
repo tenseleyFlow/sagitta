@@ -277,6 +277,26 @@ static void warn_temp_leftovers(const char *path)
     free(dir);
 }
 
+/*
+ * Sprint 24 D4: how many times the editor has actually read a file.
+ *
+ * A test hook, and deliberately a COUNTER rather than a flag: the claim
+ * being defended is "opening a 40-file group costs one read", which is
+ * only checkable by counting.  Nothing outside tests reads it, and it
+ * is never reset by the editor itself.
+ */
+static u64 file_load_calls;
+
+u64 sag_file_load_count(void)
+{
+    return file_load_calls;
+}
+
+void sag_file_load_count_reset(void)
+{
+    file_load_calls = 0U;
+}
+
 SagLoadErr sag_file_load(const char *path, TextBuf **out, FileMeta *meta)
 {
     struct stat link_st;
@@ -290,6 +310,7 @@ SagLoadErr sag_file_load(const char *path, TextBuf **out, FileMeta *meta)
 
     if (path == NULL || out == NULL || meta == NULL)
         SAG_BUG("sag_file_load: NULL argument");
+    file_load_calls++;
     *out = NULL;
     sag_filemeta_init(meta);
     warn_temp_leftovers(path);

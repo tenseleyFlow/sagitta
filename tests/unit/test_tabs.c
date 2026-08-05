@@ -420,7 +420,9 @@ void test_tabs_switch_swaps_the_pane_tree(void)
 
 /* Sprint 24 owns groups; until then the fields are inert and the
  * deferred placeholder is asserted false. */
-void test_tabs_group_fields_are_inert_until_sprint_24(void)
+/* A freshly opened tab is ungrouped.  Sprint 24 made the group fields
+ * live, so what is asserted here is the DEFAULT, not inertness. */
+void test_tabs_open_leaves_a_tab_ungrouped(void)
 {
     Ed ed;
     u32 ids[2];
@@ -433,7 +435,6 @@ void test_tabs_group_fields_are_inert_until_sprint_24(void)
 
         SAG_ASSERT_EQ_U64(t->group_id, 0U);
         SAG_ASSERT_EQ_U64(t->group_ordinal, 0U);
-        SAG_ASSERT(!t->deferred);
     }
     sag_ed_free(&ed);
 }

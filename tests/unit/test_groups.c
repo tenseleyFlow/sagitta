@@ -11,10 +11,16 @@
  * reorder_block past a run of ungrouped tabs — are the off-by-one and
  * the interleave that the sprint contract calls out by name.
  */
+#define _POSIX_C_SOURCE 200809L
+
 #include "harness.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
+
+#include "text/file.h"
 
 #include "edit/ed.h"
 #include "ui/groups.h"
@@ -705,4 +711,194 @@ void test_groups_membership_storm_matches_a_naive_oracle(void)
         storm_check(&ed, &o);
     }
     sag_ed_free(&ed);
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 24 §3: lazy hydration                                     */
+/* ---------------------------------------------------------------- */
+
+/*
+ * Every row below is about the SAME hazard, from a different angle:
+ * something makes a never-read tab look loaded, so the real file is
+ * never read and whatever is in the fabricated buffer is what a save
+ * writes over it.  Residency is asked of the allocation precisely so
+ * that "looks loaded" and "is loaded" cannot come apart.
+ */
+
+typedef struct GpFiles {
+    char dir[64];
+    char paths[40][128];
+    int n;
+} GpFiles;
+
+static void gp_files_make(GpFiles *f, int n)
+{
+    int i;
+
+    (void)snprintf(f->dir, sizeof(f->dir), "/tmp/sag-grp-XXXXXX");
+    SAG_ASSERT_NOT_NULL(mkdtemp(f->dir));
+    f->n = n;
+    for (i = 0; i < n; i++) {
+        FILE *fp;
+
+        (void)snprintf(f->paths[i], sizeof(f->paths[i]), "%s/f%02d.txt",
+                       f->dir, i);
+        fp = fopen(f->paths[i], "w");
+        SAG_ASSERT_NOT_NULL(fp);
+        (void)fprintf(fp, "file %d line one\nline two\n", i);
+        SAG_ASSERT_EQ_I64(fclose(fp), 0);
+    }
+}
+
+static void gp_files_remove(GpFiles *f)
+{
+    int i;
+
+    for (i = 0; i < f->n; i++)
+        (void)unlink(f->paths[i]);
+    SAG_ASSERT_EQ_I64(rmdir(f->dir), 0);
+}
+
+/*
+ * DoD 4, the headline claim: opening a 40-file group performs exactly
+ * ONE file read, and switching to member 2 performs the second.
+ *
+ * Counted rather than asserted structurally because "deferred" is only
+ * worth anything if it actually avoids the syscall.
+ */
+void test_groups_opening_a_forty_file_group_reads_one_file(void)
+{
+    Ed ed;
+    GpFiles f;
+    u32 g;
+    u64 base;
+    int i;
+
+    gp_files_make(&f, 40);
+    gp_fixture(&ed);
+    g = sag_group_create(&ed, f.dir, NULL);
+
+    base = sag_file_load_count();
+    for (i = 0; i < 40; i++) {
+        int idx = sag_tab_open(&ed, f.paths[i]);
+
+        SAG_ASSERT(idx >= 0);
+        sag_group_add_member(&ed, g, idx);
+    }
+    /* Forty tabs, and not one of them has been read. */
+    SAG_ASSERT_EQ_I64(sag_group_member_count(&ed, g), 40);
+    SAG_ASSERT_EQ_U64(sag_file_load_count(), base);
+    for (i = 0; i < 40; i++)
+        SAG_ASSERT(!sag_tab_is_resident(&ed, sag_tab_count(&ed) - 40U + (u32)i));
+
+    /* Viewing the first member costs exactly one read. */
+    sag_tab_switch(&ed, 1);
+    SAG_ASSERT_EQ_U64(sag_file_load_count(), base + 1U);
+    SAG_ASSERT(sag_tab_is_resident(&ed, 1));
+
+    /* The second member costs the second. */
+    sag_tab_switch(&ed, 2);
+    SAG_ASSERT_EQ_U64(sag_file_load_count(), base + 2U);
+
+    /* Going back reads nothing: a resident tab returns immediately. */
+    sag_tab_switch(&ed, 1);
+    SAG_ASSERT_EQ_U64(sag_file_load_count(), base + 2U);
+
+    sag_ed_free(&ed);
+    gp_files_remove(&f);
+}
+
+void test_groups_defer_and_hydrate_round_trip(void)
+{
+    Ed ed;
+    GpFiles f;
+    u64 before;
+    int idx;
+
+    gp_files_make(&f, 2);
+    gp_fixture(&ed);
+    idx = sag_tab_open(&ed, f.paths[0]);
+    SAG_ASSERT(idx >= 0);
+    SAG_ASSERT(!sag_tab_is_resident(&ed, idx));
+
+    sag_tab_switch(&ed, idx);
+    SAG_ASSERT(sag_tab_is_resident(&ed, idx));
+
+    /* Deferring the ACTIVE tab is refused: the window would be left
+     * pointing at no text with a cursor in it. */
+    sag_tab_defer(&ed, idx);
+    SAG_ASSERT(sag_tab_is_resident(&ed, idx));
+
+    sag_tab_switch(&ed, 0);
+    sag_tab_defer(&ed, idx);
+    SAG_ASSERT(!sag_tab_is_resident(&ed, idx));
+    /* A tab read from nowhere cannot be modified. */
+    SAG_ASSERT(!sag_tab_modified(&ed, idx));
+
+    /* And it rereads on the way back. */
+    before = sag_file_load_count();
+    sag_tab_switch(&ed, idx);
+    SAG_ASSERT_EQ_U64(sag_file_load_count(), before + 1U);
+    SAG_ASSERT(sag_tab_is_resident(&ed, idx));
+
+    sag_ed_free(&ed);
+    gp_files_remove(&f);
+}
+
+/*
+ * Save refuses a non-resident tab with a DISTINCT status, not an I/O
+ * error: an I/O error sends the user to check permissions on a file
+ * that is perfectly fine, and writing the empty buffer destroys it.
+ */
+void test_groups_save_refuses_a_non_resident_tab(void)
+{
+    Ed ed;
+    GpFiles f;
+    FILE *fp;
+    char first[64];
+    int idx;
+
+    gp_files_make(&f, 1);
+    gp_fixture(&ed);
+    idx = sag_tab_open(&ed, f.paths[0]);
+    SAG_ASSERT(idx >= 0);
+    SAG_ASSERT(!sag_tab_is_resident(&ed, idx));
+
+    /* Point the editor at the non-resident tab's window WITHOUT going
+     * through the switch that would hydrate it — the shape of every
+     * historical bug here is a path that skipped hydrate. */
+    ed.win = sag_tab_at(&ed, idx)->focus->win;
+    SAG_ASSERT_EQ_I64(sag_ed_file_save(&ed, false), SAG_CMD_ERR_STATE);
+
+    /* The file on disk is untouched — not truncated to nothing. */
+    fp = fopen(f.paths[0], "r");
+    SAG_ASSERT_NOT_NULL(fp);
+    SAG_ASSERT_NOT_NULL(fgets(first, sizeof(first), fp));
+    SAG_ASSERT_EQ_I64(fclose(fp), 0);
+    SAG_ASSERT_EQ_STR(first, "file 0 line one\n");
+
+    sag_ed_free(&ed);
+    gp_files_remove(&f);
+}
+
+/* Two tabs on one path share ONE buffer, so hydrating through either
+ * makes both resident — and there is only ever one claim on the save
+ * destination. */
+void test_groups_one_buffer_per_path(void)
+{
+    Ed ed;
+    GpFiles f;
+    int a;
+    int b;
+
+    gp_files_make(&f, 1);
+    gp_fixture(&ed);
+    a = sag_tab_open(&ed, f.paths[0]);
+    b = sag_tab_open(&ed, f.paths[0]);
+    /* The second open switches to the first tab rather than duplicating
+     * it (Sprint 23), so both names resolve to the same tab. */
+    SAG_ASSERT_EQ_I64(a, b);
+    SAG_ASSERT_EQ_U64(sag_tab_count(&ed), 2U);
+    sag_ed_free(&ed);
+    gp_files_remove(&f);
 }

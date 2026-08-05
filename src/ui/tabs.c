@@ -148,6 +148,7 @@ int sag_tab_open(Ed *ed, const char *path)
     Tab t;
     int existing;
     Win *win;
+    Buffer *buf;
 
     if (ed == NULL)
         return -1;
@@ -172,10 +173,26 @@ int sag_tab_open(Ed *ed, const char *path)
     (void)memset(&t, 0, sizeof(t));
     t.tab_id = ed->tabs.next_tab_id++;
     t.path = canonical_path(path);
+    /*
+     * The new tab gets its OWN buffer, and a file one is born
+     * NON-RESIDENT: opening it costs no read at all.  The read happens
+     * at the first switch, through sag_tab_hydrate.
+     *
+     * Sprint 23 pointed every tab at the window it cloned from, so all
+     * tabs showed one buffer; that is why the save path could say
+     * &ed->buffer and be right.  Both halves changed together.
+     */
+    buf = sag_ws_file_buf(ed, t.path);
+    if (buf == NULL) {
+        sag_ed_win_release(ed, win);
+        free(t.path);
+        sag_msg(ed, SAG_MSG_ERROR, "no room for another buffer");
+        return -1;
+    }
+    sag_ed_win_set_buffer(ed, win, buf);
     t.root = sag_pane_new_leaf(win);
     t.focus = t.root;
-    t.buffer_id = win->buf != NULL ? win->buf->id : 0U;
-    t.deferred = false; /* real hydration is Sprint 24 */
+    t.buffer_id = buf->id;
     TabVec_push(&ed->tabs.v, t);
     return (int)ed->tabs.v.len - 1;
 }
@@ -240,6 +257,12 @@ void sag_tab_switch(Ed *ed, int idx)
         return;
     }
     ed->tabs.active = idx;
+    /*
+     * Hydrate FIRST.  Every route to a different tab comes through
+     * here, so this is the one place the read can be guaranteed to
+     * happen before anything tries to draw the text (§3).
+     */
+    (void)sag_tab_hydrate(ed, idx);
     /*
      * Swapping the visible tree is the whole switch.  Each Win owns its
      * cursors and viewport, so there is no save/restore choreography —
@@ -306,6 +329,64 @@ bool sag_tab_modified(const Ed *ed, int idx)
      * drifted from the thing it claimed to describe.
      */
     return w != NULL && sag_buf_dirty(w->buf);
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 24 §3: lazy hydration                                     */
+/* ---------------------------------------------------------------- */
+
+Buffer *sag_tab_buffer(Ed *ed, int idx)
+{
+    Tab *t = sag_tab_at(ed, idx);
+
+    if (t == NULL || t->focus == NULL)
+        return NULL;
+    return t->focus->win == NULL ? NULL : t->focus->win->buf;
+}
+
+bool sag_tab_is_resident(const Ed *ed, int idx)
+{
+    /*
+     * The question is asked of the ALLOCATION — does this tab's buffer
+     * hold a TextBuf — never of a flag.  A flag drifts; a pointer
+     * cannot disagree with itself, and every save path ends up asking
+     * this same question anyway.
+     */
+    return sag_buf_resident(sag_tab_buffer((Ed *)ed, idx));
+}
+
+int sag_tab_hydrate(Ed *ed, int idx)
+{
+    Buffer *b = sag_tab_buffer(ed, idx);
+    Tab *t = sag_tab_at(ed, idx);
+
+    if (b == NULL || t == NULL)
+        return -1;
+    if (b->tb != NULL)
+        return 0; /* resident: returns without touching the disk */
+    if (sag_buf_hydrate(ed, b) != 0) {
+        sag_msg(ed, SAG_MSG_ERROR, "could not read %s",
+                t->path != NULL ? t->path : "untitled");
+        return -1;
+    }
+    /* The view was built against no text; give it a fresh one now that
+     * there is some. */
+    if (t->focus != NULL && t->focus->win != NULL)
+        sag_vp_init(t->focus->win);
+    return 0;
+}
+
+void sag_tab_defer(Ed *ed, int idx)
+{
+    Buffer *b = sag_tab_buffer(ed, idx);
+
+    if (ed == NULL || b == NULL)
+        return;
+    /* Never the tab being looked at: the window would be left pointing
+     * at no text with a cursor in it. */
+    if (idx == ed->tabs.active)
+        return;
+    sag_buf_defer(ed, b);
 }
 
 /* ---------------------------------------------------------------- */

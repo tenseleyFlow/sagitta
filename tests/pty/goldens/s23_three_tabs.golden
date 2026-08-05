@@ -3,10 +3,7 @@ size 80x24 alt=1 cursor=1,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=6
 --- text
 [1: pty-s14-s23_three_ta[2: sag-pty-0.txt][3: sag-pty-1.txt]
-    1 alpha
-    1 beta
-    2 gamma
-    3
+    1
 
 
 
@@ -25,13 +22,16 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=6
 
 
 
- L  pty-s14-s23_three_tabs.txt                               utf-8  lf  1:1  all
+
+
+
+ L  sag-pty-1.txt                                            utf-8  lf  1:1  all
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBB
-CCCCCCCCCCC
-CCCCCCCCCC
-CCCCCCCCCCC
 CCCCC
+
+
+
 
 
 

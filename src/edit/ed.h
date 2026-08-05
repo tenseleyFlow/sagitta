@@ -200,6 +200,19 @@ void sag_ws_scratch_drop(Ed *ed, Buffer *b);
 /* Points the focused window at `b` with a fresh cursor set and viewport.
  * Returns false when `b` is not in the workspace. */
 bool sag_ed_show_buffer(Ed *ed, Buffer *b);
+
+/*
+ * Sprint 24 §3: deferred file buffers.
+ *
+ * sag_ws_file_buf returns the buffer for `path`, creating a
+ * NON-RESIDENT one (path, no text) if it is new.  Residency is asked of
+ * the allocation — there is no flag to go stale.
+ */
+Buffer *sag_ws_file_buf(Ed *ed, const char *path);
+bool sag_buf_resident(const Buffer *b);
+int sag_buf_hydrate(Ed *ed, Buffer *b);  /* 0 ok; performs the read */
+void sag_buf_defer(Ed *ed, Buffer *b);   /* releases text; modified off */
+void sag_ed_win_set_buffer(Ed *ed, Win *w, Buffer *b);
 /* Named marks.  `name` is 'a'..'z'; returns false for anything else or
  * for a name that has not been set (or whose mark has since died). */
 bool sag_ed_mark_set(Ed *ed, Buffer *b, u8 name, ByteOff at);

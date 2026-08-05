@@ -119,6 +119,111 @@ Buffer *sag_ws_scratch_new(Ed *ed, const char *name, u32 flags)
     return b;
 }
 
+/*
+ * Sprint 24 §3: a file buffer that has NOT been read.
+ *
+ * It carries a path and nothing else — no TextBuf, no undo tree, no
+ * marks.  That is the whole trick: residency is a question about the
+ * ALLOCATION, so it cannot drift the way a `deferred` flag can.  Every
+ * save path already ends up asking "is there text here", and the
+ * honest answer is a null pointer rather than a boolean someone has to
+ * remember to clear.
+ */
+Buffer *sag_ws_file_buf(Ed *ed, const char *path)
+{
+    Buffer *b;
+    u32 i;
+
+    if (ed == NULL || !ed->model_ready)
+        return NULL;
+    if (path != NULL) {
+        /* One buffer per file: two buffers on one path are two claims
+         * on one save destination. */
+        for (i = 0U; i < ed->ws.nbufs; i++) {
+            Buffer *e = ed->ws.bufs[i];
+
+            if (e->name == NULL && e->path != NULL &&
+                strcmp(e->path, path) == 0)
+                return e;
+        }
+    }
+    b = sag_xcalloc(1U, sizeof(*b));
+    b->id = ed->ws.next_buf_id++;
+    sag_filemeta_init(&b->meta);
+    b->tabwidth = SAG_VP_TABWIDTH;
+    b->path = path == NULL ? NULL : arena_strdup(&ed->arena, path);
+    if (path == NULL) {
+        /*
+         * An untitled tab has nowhere to be read FROM, so deferring it
+         * would mean a buffer that can never become resident.  It is
+         * born loaded and empty.
+         */
+        b->tb = sag_textbuf_new();
+        b->undo = sag_undo_new(b->tb);
+        sag_undo_mark_saved(b->undo);
+        b->marks = sag_marks_new();
+    }
+    ed_ws_push(ed, b);
+    return b;
+}
+
+bool sag_buf_resident(const Buffer *b)
+{
+    /* Asked of the allocation.  DoD 2 greps src/ui for a residency
+     * FLAG and must find none. */
+    return b != NULL && b->tb != NULL;
+}
+
+int sag_buf_hydrate(Ed *ed, Buffer *b)
+{
+    TextBuf *tb = NULL;
+    SagLoadErr load;
+
+    if (ed == NULL || b == NULL)
+        return -1;
+    if (b->tb != NULL)
+        return 0; /* already resident: no read, no work */
+    if (b->path == NULL)
+        return -1;
+    load = sag_file_load(b->path, &tb, &b->meta);
+    if (load != SAG_LOAD_OK && load != SAG_LOAD_ENOENT) {
+        sag_textbuf_free(tb);
+        return -1;
+    }
+    /* A path that does not exist yet opens empty, exactly as it does
+     * on the command line. */
+    if (tb == NULL)
+        tb = sag_textbuf_new();
+    b->tb = tb;
+    b->undo = sag_undo_new(tb);
+    sag_undo_mark_saved(b->undo);
+    if (b->marks == NULL)
+        b->marks = sag_marks_new();
+    return 0;
+}
+
+void sag_buf_defer(Ed *ed, Buffer *b)
+{
+    (void)ed;
+    if (b == NULL || b->tb == NULL || b->path == NULL)
+        return;
+    if (b->jrn != NULL) {
+        sag_journal_close(b->jrn);
+        b->jrn = NULL;
+    }
+    /*
+     * Releasing the undo tree is what clears modified: dirtiness is
+     * derived from it, so a buffer read from nowhere reports clean
+     * without anyone assigning a flag.
+     */
+    sag_undo_free(b->undo);
+    b->undo = NULL;
+    sag_marks_free(b->marks);
+    b->marks = NULL;
+    sag_textbuf_free(b->tb);
+    b->tb = NULL;
+}
+
 Buffer *sag_ws_buf_by_id(Ed *ed, u32 id)
 {
     u32 i;
@@ -489,6 +594,27 @@ Win *sag_ed_win_clone(Ed *ed, const Win *src)
     sag_overlay_init(&w->overlay);
     sag_jumplist_init(&w->jumps);
     return w;
+}
+
+/*
+ * Points a window at a buffer with a fresh view.
+ *
+ * The cursor is NOT carried over: a clone seeds its cursor from the
+ * window it copied, and that offset means nothing in a different file
+ * — in a shorter one it is past the end.
+ */
+void sag_ed_win_set_buffer(Ed *ed, Win *w, Buffer *b)
+{
+    Cursor origin = {BYTEOFF(0U), {0U}, BYTEOFF(0U)};
+
+    (void)ed;
+    if (w == NULL || b == NULL || w->buf == b)
+        return;
+    sag_vp_free(w);
+    sag_cset_free(&w->cs);
+    sag_cset_init(&w->cs, origin);
+    w->buf = b;
+    sag_vp_init(w);
 }
 
 void sag_ed_win_release(Ed *ed, Win *w)
