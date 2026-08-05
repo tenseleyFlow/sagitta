@@ -1,3 +1,18 @@
+/*
+ * Sprint 18.5 §4/§10: the per-KEYSTROKE completion gate.
+ *
+ * Before this sprint the menu was built once, on Tab, and measuring one
+ * enumerate-and-draw was the right gate.  Now the menu is live: every
+ * character the user types re-runs the filter and repaints the rows, so
+ * the budget that matters is invariant 4's keypress->paint p99 <= 5 ms,
+ * applied to EACH key of a realistic prefix -- including the one key that
+ * pays for the cold opendir of a 10,000-entry directory.
+ *
+ * Timing sag_cmdline_key + sag_cmdline_draw is deliberate: those are the
+ * two calls the event loop makes per key.  Timing the filter alone would
+ * pass while the draw blew the budget.
+ */
+
 #define _POSIX_C_SOURCE 200809L
 
 #include <errno.h>
@@ -13,10 +28,20 @@
 #include "ui/cmdcomp.h"
 #include "ui/cmdline.h"
 
+/*
+ * The typed prefix walks through three regimes on purpose: the command
+ * name (a small static set), the space (which switches source to PATH and
+ * pays the cold opendir), and then digits that narrow 10,000 entries down
+ * to one -- the narrowing keystrokes are the ones §4's cache exists for.
+ */
+#define PERF_COMP_PREFIX "file.open entry000"
+
 enum {
     PERF_COMP_ENTRIES = 10000,
-    PERF_COMP_SAMPLES = 101,
-    PERF_COMP_WARMUPS = 5,
+    PERF_COMP_TRIALS = 11,
+    PERF_COMP_KEYS = sizeof(PERF_COMP_PREFIX) - 1U,
+    PERF_COMP_SAMPLES = PERF_COMP_TRIALS * PERF_COMP_KEYS,
+    PERF_COMP_WARMUPS = 3,
     PERF_COMP_ROWS = 24,
     PERF_COMP_COLS = 100,
     PERF_COMP_BUDGET_NS = 5000000
@@ -107,54 +132,72 @@ static bool fixture_remove(const char *root)
     return ok;
 }
 
-static bool measure_once(const char *root, i64 *elapsed_out)
+static Key perf_key(char c)
 {
-    static const u8 prompt[] = "file.open entry";
+    Key key = {0};
+
+    key.code = (u32)(u8)c;
+    key.kind = SAG_EV_KEY;
+    key.ev = SAG_KEY_PRESS;
+    key.ntext = 1U;
+    key.text[0] = (u8)c;
+    return key;
+}
+
+/*
+ * One trial types the whole prefix, timing each key.  `samples` receives
+ * PERF_COMP_KEYS values; `worst_key` reports which position was slowest,
+ * which is the difference between "the cold opendir is the cost" and
+ * "narrowing regressed".
+ */
+static bool measure_trial(const char *root, i64 *samples)
+{
     Ed ed;
-    Vec_CompItem items = {0};
-    i64 start;
-    i64 elapsed;
-    u32 total;
+    Rect rect;
+    u32 i;
     bool ok = false;
 
     sag_ed_init(&ed);
+    if (!sag_ed_open_scratch(&ed))
+        goto done;
     ed.ws.dir = (char *)root;
     if (!sag_grid_init(&ed.grid, &ed.interner,
                        PERF_COMP_ROWS, PERF_COMP_COLS))
         goto done;
     ed.grid_ready = true;
-    ed.cmdline.buf = sag_textbuf_from_bytes(prompt, sizeof(prompt) - 1U);
-    if (ed.cmdline.buf == NULL)
-        goto done;
-    ed.cmdline.active = true;
-    ed.cmdline.kind = SAG_PROMPT_CMD;
-    ed.cmdline.cur = (Cursor){BYTEOFF(sizeof(prompt) - 1U), {0U},
-                              BYTEOFF(sizeof(prompt) - 1U)};
     ed.mode = SAG_MODE_E;
+    rect.x = 0U;
+    rect.y = PERF_COMP_ROWS - 1U;
+    rect.w = PERF_COMP_COLS;
+    rect.h = 1U;
+    sag_cmdline_open(&ed, SAG_PROMPT_CMD, NULL);
 
-    start = now_ns();
-    if (start < 0)
+    for (i = 0U; i < PERF_COMP_KEYS; i++) {
+        Key key = perf_key(PERF_COMP_PREFIX[i]);
+        i64 start = now_ns();
+        i64 elapsed;
+
+        if (start < 0)
+            goto done;
+        (void)sag_cmdline_key(&ed, &key);
+        sag_cmdline_draw(&ed, rect);
+        elapsed = now_ns() - start;
+        if (elapsed < 0)
+            goto done;
+        samples[i] = elapsed;
+        perf_comp_sink ^= (u64)ed.grid.cur_col + ed.grid.cur_row;
+    }
+    /* A gate that measures an empty menu measures nothing.  The last key
+     * of the prefix leaves "entry000" selecting entry00000..entry00099. */
+    if (ed.cmdline.menu.items.len == 0U) {
+        (void)fprintf(stderr, "perf_cmdcomp: menu was empty\n");
         goto done;
-    total = sag_comp_enumerate(&ed, SAG_COMP_PATH, "entry", &items);
-    ed.cmdline.menu.items = items;
-    items = (Vec_CompItem){0};
-    ed.cmdline.comp_total = total;
-    sag_cmdline_draw(&ed, (Rect){0U, PERF_COMP_ROWS - 1U,
-                                 PERF_COMP_COLS, 1U});
-    elapsed = now_ns() - start;
-    if (elapsed < 0 || total != PERF_COMP_ENTRIES ||
-        ed.cmdline.menu.items.len != SAG_COMP_MAX)
-        goto done;
-    perf_comp_sink ^= (u64)total + ed.grid.cur_col + ed.grid.cur_row;
-    *elapsed_out = elapsed;
+    }
     ok = true;
 
 done:
-    Vec_CompItem_free(&items);
-    Vec_CompItem_free(&ed.cmdline.menu.items);
-    sag_textbuf_free(ed.cmdline.buf);
-    ed.cmdline.buf = NULL;
-    ed.cmdline.active = false;
+    sag_cmdline_dispose(&ed);
+    ed.ws.dir = NULL;
     sag_ed_free(&ed);
     return ok;
 }
@@ -163,7 +206,10 @@ int main(void)
 {
     char root[64];
     i64 samples[PERF_COMP_SAMPLES];
-    size_t sample;
+    i64 worst_by_key[PERF_COMP_KEYS];
+    size_t trial;
+    size_t i;
+    size_t worst_key = 0U;
     i64 p99;
     i64 median;
     int status = 0;
@@ -174,27 +220,43 @@ int main(void)
         sag_cmd_shutdown();
         return 2;
     }
-    for (sample = 0U; sample < PERF_COMP_WARMUPS; sample++) {
-        i64 ignored;
+    for (i = 0U; i < PERF_COMP_KEYS; i++)
+        worst_by_key[i] = 0;
+    for (trial = 0U; trial < PERF_COMP_WARMUPS; trial++) {
+        i64 ignored[PERF_COMP_KEYS];
 
-        if (!measure_once(root, &ignored)) {
+        if (!measure_trial(root, ignored)) {
             status = 2;
             goto done;
         }
     }
-    for (sample = 0U; sample < PERF_COMP_SAMPLES; sample++) {
-        if (!measure_once(root, &samples[sample])) {
+    for (trial = 0U; trial < PERF_COMP_TRIALS; trial++) {
+        if (!measure_trial(root, &samples[trial * PERF_COMP_KEYS])) {
             status = 2;
             goto done;
         }
+        for (i = 0U; i < PERF_COMP_KEYS; i++) {
+            i64 value = samples[trial * PERF_COMP_KEYS + i];
+
+            if (value > worst_by_key[i])
+                worst_by_key[i] = value;
+        }
+    }
+    for (i = 0U; i < PERF_COMP_KEYS; i++) {
+        if (worst_by_key[i] > worst_by_key[worst_key])
+            worst_key = i;
     }
     stable_sort_i64(samples, PERF_COMP_SAMPLES);
     median = samples[PERF_COMP_SAMPLES / 2U];
     p99 = samples[(PERF_COMP_SAMPLES * 99U + 99U) / 100U - 1U];
-    (void)printf("perf-cmdcomp: entries=%u kept=%u median_ms=%.3f "
-                 "p99_ms=%.3f budget_ms=%.3f%s\n",
-                 PERF_COMP_ENTRIES, SAG_COMP_MAX,
+    (void)printf("perf-cmdcomp: entries=%u keys=%u samples=%u "
+                 "median_ms=%.3f p99_ms=%.3f max_ms=%.3f "
+                 "slowest_key=%u('%c') budget_ms=%.3f%s\n",
+                 PERF_COMP_ENTRIES, (unsigned)PERF_COMP_KEYS,
+                 (unsigned)PERF_COMP_SAMPLES,
                  (double)median / 1000000.0, (double)p99 / 1000000.0,
+                 (double)samples[PERF_COMP_SAMPLES - 1U] / 1000000.0,
+                 (unsigned)worst_key, PERF_COMP_PREFIX[worst_key],
                  (double)PERF_COMP_BUDGET_NS / 1000000.0,
                  p99 <= PERF_COMP_BUDGET_NS ? " ok" : " FAIL");
     if (p99 > PERF_COMP_BUDGET_NS)
