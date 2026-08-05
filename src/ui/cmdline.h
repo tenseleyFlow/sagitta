@@ -27,6 +27,8 @@ typedef struct CmdLine {
     Cursor cur;
     CompMenu menu;
     Arena comp_arena;
+    /* §4: the cached candidate set `comp_arena` backs. */
+    CompFilter filter;
     HistCur hist;
     CmdErr err;
     u16 scroll;

@@ -151,11 +151,10 @@ static bool candidate_add(CandidateVec *v, const char *stem,
     return true;
 }
 
-static u32 candidate_finish(Ed *ed, SagCompKind kind, CandidateVec *matches,
-                            Vec_CompItem *out)
+static u32 candidate_finish(const CompReq *req, SagCompKind kind,
+                            CandidateVec *matches, Vec_CompItem *out)
 {
-    Arena *arena = ed->cmdline.active ? &ed->cmdline.comp_arena :
-                                        &ed->arena;
+    Arena *arena = req->arena;
     size_t i;
     size_t keep;
     u32 total = matches->len > UINT32_MAX ? UINT32_MAX : (u32)matches->len;
@@ -182,6 +181,10 @@ static u32 candidate_finish(Ed *ed, SagCompKind kind, CandidateVec *matches,
          * text -- except for a quoted path, handled in
          * path_candidates_finish. */
         item.m = src->m;
+        item.match = arena_strdup(arena, src->match);
+        item.match_off = strcmp(item.text, item.match) == 0
+                             ? 0U
+                             : (u16)SAG_COMP_NO_HIGHLIGHT;
         Vec_CompItem_push(out, item);
     }
     candidate_dispose(matches);
@@ -191,7 +194,6 @@ static u32 candidate_finish(Ed *ed, SagCompKind kind, CandidateVec *matches,
 static u32 enumerate_commands(const CompReq *req, Vec_CompItem *out)
 {
     CandidateVec matches = {0};
-    Ed *ed = req->ed;
     const char *stem = req->stem;
     u32 i;
 
@@ -218,7 +220,7 @@ static u32 enumerate_commands(const CompReq *req, Vec_CompItem *out)
             (void)candidate_add(&matches, stem, entry->abbrev,
                                 entry->abbrev, name, false, deferred);
     }
-    return candidate_finish(ed, SAG_COMP_CMD, &matches, out);
+    return candidate_finish(req, SAG_COMP_CMD, &matches, out);
 }
 
 static const char *buffer_name(const Buffer *buffer)
@@ -249,7 +251,7 @@ static u32 enumerate_buffers(const CompReq *req, Vec_CompItem *out)
         (void)candidate_add(&matches, stem, number, number, name, false,
                             false);
     }
-    return candidate_finish(ed, SAG_COMP_BUFFER, &matches, out);
+    return candidate_finish(req, SAG_COMP_BUFFER, &matches, out);
 }
 
 static bool unsafe_path_byte(unsigned char ch)
@@ -495,12 +497,12 @@ static void path_candidates_dispose(PathCandidateVec *paths)
     PathCandidateVec_free(paths);
 }
 
-static void path_candidates_finish(Ed *ed, PathCandidateVec *paths,
+static void path_candidates_finish(const CompReq *req,
+                                   PathCandidateVec *paths,
                                    const char *scan_dir, const char *head,
                                    Vec_CompItem *out)
 {
-    Arena *arena = ed->cmdline.active ? &ed->cmdline.comp_arena :
-                                        &ed->arena;
+    Arena *arena = req->arena;
     size_t head_len = strlen(head);
     size_t i;
 
@@ -535,11 +537,15 @@ static void path_candidates_finish(Ed *ed, PathCandidateVec *paths,
          * highlight on the wrong columns is worse than none.
          */
         item.m = path->m;
-        if (strcmp(item.text, raw) != 0) {
+        item.match = arena_strdup(arena, path->name);
+        if (strcmp(item.text, raw) != 0 ||
+            head_len >= (size_t)SAG_COMP_NO_HIGHLIGHT) {
             item.m.n_pos = 0U;
-        } else if (head_len != 0U) {
+            item.match_off = (u16)SAG_COMP_NO_HIGHLIGHT;
+        } else {
             u16 p;
 
+            item.match_off = (u16)head_len;
             for (p = 0U; p < item.m.n_pos; p++) {
                 size_t at = (size_t)item.m.pos[p] + head_len;
 
@@ -628,7 +634,7 @@ static u32 enumerate_paths(const CompReq *req, Vec_CompItem *out)
                                     entry->d_type, &m);
     }
     (void)closedir(dir);
-    path_candidates_finish(ed, &paths, scan_dir, head, out);
+    path_candidates_finish(req, &paths, scan_dir, head, out);
     free(scan_dir);
     free(expanded);
     free(head);
@@ -711,7 +717,8 @@ u32 sag_comp_request(const CompReq *req, Vec_CompItem *out)
 {
     const CompSource *source;
 
-    if (req == NULL || out == NULL || req->ed == NULL || req->stem == NULL)
+    if (req == NULL || out == NULL || req->ed == NULL ||
+        req->stem == NULL || req->arena == NULL)
         return 0U;
     source = sag_comp_source(req->kind);
     if (source == NULL)
@@ -728,8 +735,215 @@ u32 sag_comp_enumerate(Ed *ed, SagCompKind kind, const char *stem,
     req.kind = kind;
     req.stem = stem;
     req.ed = ed;
+    /* The unbudgeted convenience form allocates from the editor arena,
+     * which lives as long as the editor -- callers wanting a resettable
+     * lifetime go through sag_comp_filter_run. */
+    req.arena = ed == NULL ? NULL : &ed->arena;
     req.budget_us = 0; /* a Tab: the user is waiting, take the time */
     return sag_comp_request(&req, out);
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 18.5 §4: the live filter                                  */
+/* ---------------------------------------------------------------- */
+
+static u32 test_enumerate_calls;
+
+void sag_comp_test_reset_enumerate_count(void)
+{
+    test_enumerate_calls = 0U;
+}
+
+u32 sag_comp_test_enumerate_count(void)
+{
+    return test_enumerate_calls;
+}
+
+void sag_comp_filter_init(CompFilter *f)
+{
+    if (f == NULL)
+        return;
+    (void)memset(f, 0, sizeof(*f));
+}
+
+void sag_comp_filter_invalidate(CompFilter *f)
+{
+    if (f == NULL)
+        return;
+    /* base's strings belong to the caller's arena, so only the vector
+     * and the two keys are ours to release. */
+    f->base.len = 0U;
+    free(f->head);
+    free(f->pattern);
+    f->head = NULL;
+    f->pattern = NULL;
+    f->valid = false;
+    f->capped = false;
+    f->total = 0U;
+}
+
+void sag_comp_filter_free(CompFilter *f)
+{
+    if (f == NULL)
+        return;
+    sag_comp_filter_invalidate(f);
+    Vec_CompItem_free(&f->base);
+}
+
+static char *dup_range(const char *s, size_t len)
+{
+    char *copy = sag_xmalloc(len + 1U);
+
+    if (len != 0U)
+        (void)memcpy(copy, s, len);
+    copy[len] = '\0';
+    return copy;
+}
+
+static int filter_item_cmp(const void *left, const void *right, void *ctx)
+{
+    const CompItem *a = left;
+    const CompItem *b = right;
+    size_t la;
+    size_t lb;
+    int by_bytes;
+
+    (void)ctx;
+    if (a->score != b->score)
+        return a->score > b->score ? -1 : 1;
+    la = strlen(a->match);
+    lb = strlen(b->match);
+    if (la != lb)
+        return la < lb ? -1 : 1;
+    by_bytes = strcmp(a->match, b->match);
+    if (by_bytes != 0)
+        return by_bytes < 0 ? -1 : 1;
+    return strcmp(a->text, b->text);
+}
+
+/*
+ * Re-score the cached set against a longer pattern.
+ *
+ * Legal only when the base was NOT capped.  A capped base holds the
+ * SAG_COMP_MAX best matches for the OLD pattern, and an entry that the
+ * cap cut can still be among the best for the new one -- narrowing over
+ * it would silently lose rows, which is the exact failure the CompReq
+ * budget comment warns about.  So `filter_reusable` refuses, and the
+ * cost is one more opendir in a directory big enough to cap.
+ */
+static u32 filter_rerank(CompFilter *f, const char *pattern,
+                         Vec_CompItem *out)
+{
+    size_t pattern_len = strlen(pattern);
+    size_t i;
+
+    out->len = 0U;
+    Vec_CompItem_reserve(out, f->base.len);
+    for (i = 0U; i < f->base.len; i++) {
+        CompItem item = f->base.data[i];
+        FzMatch m;
+        i32 score = comp_key(pattern, pattern_len, item.match, &m);
+
+        if (score == SAG_FZ_NO_MATCH)
+            continue;
+        item.score = score;
+        if (item.match_off == (u16)SAG_COMP_NO_HIGHLIGHT) {
+            item.m.n_pos = 0U;
+        } else {
+            u16 p;
+
+            for (p = 0U; p < m.n_pos; p++) {
+                size_t at = (size_t)m.pos[p] + item.match_off;
+
+                m.pos[p] = at > (size_t)UINT16_MAX ? (u16)UINT16_MAX
+                                                   : (u16)at;
+            }
+            item.m = m;
+        }
+        Vec_CompItem_push(out, item);
+    }
+    sag_sort_stable(out->data, out->len, sizeof(out->data[0]),
+                    filter_item_cmp, NULL);
+    return out->len > UINT32_MAX ? UINT32_MAX : (u32)out->len;
+}
+
+static bool filter_reusable(const CompFilter *f, SagCompKind kind,
+                            const char *head, const char *pattern)
+{
+    size_t old_len;
+
+    if (!f->valid || f->kind != kind || f->capped)
+        return false;
+    if (strcmp(f->head, head) != 0)
+        return false;
+    /*
+     * Appending can only SHRINK a subsequence match, never widen it, so
+     * re-scoring the survivors is exact rather than an approximation.
+     * Backspacing or a mid-token edit can widen it, and then the cached
+     * set is missing candidates that never matched the longer pattern.
+     */
+    old_len = strlen(f->pattern);
+    return strncmp(pattern, f->pattern, old_len) == 0;
+}
+
+u32 sag_comp_filter_run(Ed *ed, CompFilter *f, Arena *arena,
+                        const SagCompQuery *q, i64 budget_us,
+                        Vec_CompItem *out)
+{
+    size_t head_len;
+    const char *pattern;
+    char *head;
+    bool reuse;
+
+    if (ed == NULL || f == NULL || q == NULL || out == NULL ||
+        q->stem == NULL) {
+        if (out != NULL)
+            out->len = 0U;
+        return 0U;
+    }
+    /*
+     * Only a path has a directory head; every other source ranks the
+     * whole stem.  sag_comp_path_head_len is the ONE split rule, shared
+     * with the path source itself.
+     */
+    head_len = q->kind == SAG_COMP_PATH ? sag_comp_path_head_len(q->stem)
+                                        : 0U;
+    pattern = q->stem + head_len;
+    head = dup_range(q->stem, head_len);
+    reuse = filter_reusable(f, q->kind, head, pattern);
+    if (!reuse) {
+        CompReq req;
+
+        /* The arena backs the cached set, so it can only be reset when
+         * that set is being replaced. */
+        arena_free_all(arena);
+        f->base.len = 0U;
+        (void)memset(&req, 0, sizeof(req));
+        req.kind = q->kind;
+        req.stem = q->stem;
+        req.ed = ed;
+        req.arena = arena;
+        req.budget_us = budget_us;
+        test_enumerate_calls++;
+        f->total = sag_comp_request(&req, &f->base);
+        f->capped = f->base.len < (size_t)f->total;
+        free(f->head);
+        free(f->pattern);
+        f->head = head;
+        f->pattern = dup_range(pattern, strlen(pattern));
+        f->kind = q->kind;
+        f->valid = true;
+        head = NULL;
+    }
+    free(head);
+    {
+        u32 matched = filter_rerank(f, pattern, out);
+
+        /* A fresh enumerate knows the true pre-cap total; a narrowed
+         * pass counted every survivor itself, and its base was uncapped
+         * by construction, so the count is exact either way. */
+        return reuse ? matched : f->total;
+    }
 }
 
 bool sag_comp_kind_for(const CmdEntry *entry, u32 token_index,

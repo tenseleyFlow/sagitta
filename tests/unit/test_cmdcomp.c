@@ -221,6 +221,237 @@ void test_cmdcomp_path_head_len_is_the_one_split_rule(void)
     SAG_ASSERT_EQ_U64(sag_comp_path_head_len(NULL), 0U);
 }
 
+static SagCompQuery path_query(const char *stem)
+{
+    SagCompQuery q;
+
+    (void)memset(&q, 0, sizeof(q));
+    q.kind = SAG_COMP_PATH;
+    q.source = sag_comp_source(SAG_COMP_PATH);
+    q.stem = stem;
+    return q;
+}
+
+void test_cmdcomp_filter_reuses_the_set_while_the_pattern_only_grows(void)
+{
+    CompFilter filter;
+    CompFixture fixture;
+    Arena arena;
+    Vec_CompItem out = {0};
+    SagCompQuery q;
+
+    fixture_init(&fixture);
+    fixture_dir(&fixture, "sub");
+    fixture_file(&fixture, "alpha");
+    fixture_file(&fixture, "alpine");
+    fixture_file(&fixture, "beta");
+    arena_init(&arena);
+    sag_comp_filter_init(&filter);
+    sag_comp_test_reset_enumerate_count();
+
+    /* Typing forward: one opendir, then pure re-ranking.  The opendir is
+     * the cost that matters, which is why the cache is keyed on the
+     * directory head and not on the whole stem. */
+    /* Three, not two: matching is subsequence, so "beta" matches "a"
+     * as surely as "alpha" does -- it just scores far below it. */
+    q = path_query("a");
+    SAG_ASSERT_EQ_U64(sag_comp_filter_run(&fixture.ed, &filter, &arena, &q,
+                                          0, &out), 3U);
+    q = path_query("al");
+    (void)sag_comp_filter_run(&fixture.ed, &filter, &arena, &q, 0, &out);
+    q = path_query("alp");
+    (void)sag_comp_filter_run(&fixture.ed, &filter, &arena, &q, 0, &out);
+    q = path_query("alph");
+    SAG_ASSERT_EQ_U64(sag_comp_filter_run(&fixture.ed, &filter, &arena, &q,
+                                          0, &out), 1U);
+    SAG_ASSERT_EQ_STR(out.data[0].text, "alpha");
+    SAG_ASSERT_EQ_U64(sag_comp_test_enumerate_count(), 1U);
+
+    /*
+     * Narrowing is measured against the pattern the set was ENUMERATED
+     * with, not against the previous keystroke -- so backspacing all the
+     * way to "a" still reuses the set that "a" produced.  Retreating
+     * inside the cached superset is free; only leaving it costs.
+     */
+    q = path_query("a");
+    SAG_ASSERT_EQ_U64(sag_comp_filter_run(&fixture.ed, &filter, &arena, &q,
+                                          0, &out), 3U);
+    SAG_ASSERT_EQ_U64(sag_comp_test_enumerate_count(), 1U);
+
+    /*
+     * Backspacing PAST it does widen the set: the cached candidates were
+     * the ones matching "a", and "" matches everything, including "sub"
+     * which the cache never held.
+     */
+    q = path_query("");
+    SAG_ASSERT_EQ_U64(sag_comp_filter_run(&fixture.ed, &filter, &arena, &q,
+                                          0, &out), 4U);
+    SAG_ASSERT_EQ_U64(sag_comp_test_enumerate_count(), 2U);
+
+    /* A different directory head is a different set entirely. */
+    q = path_query("sub/");
+    (void)sag_comp_filter_run(&fixture.ed, &filter, &arena, &q, 0, &out);
+    SAG_ASSERT_EQ_U64(sag_comp_test_enumerate_count(), 3U);
+
+    Vec_CompItem_free(&out);
+    sag_comp_filter_free(&filter);
+    arena_free_all(&arena);
+    fixture_unlink(&fixture, "beta", false);
+    fixture_unlink(&fixture, "alpine", false);
+    fixture_unlink(&fixture, "alpha", false);
+    fixture_unlink(&fixture, "sub", true);
+    fixture_dispose(&fixture);
+}
+
+void test_cmdcomp_filter_narrowing_equals_a_full_reenumerate(void)
+{
+    static const char alphabet[] = "abcdefgh";
+    CompFixture fixture;
+    Arena arena;
+    CompFilter narrowed;
+    CompFilter fresh;
+    Vec_CompItem a = {0};
+    Vec_CompItem b = {0};
+    char name[16];
+    char pattern[8];
+    u32 seed = 12345U;
+    u32 trial;
+    u32 i;
+
+    fixture_init(&fixture);
+    /* A deterministic spread of names over a small alphabet, so patterns
+     * hit varied match counts without the cap ever biting. */
+    for (i = 0U; i < 240U; i++) {
+        (void)snprintf(name, sizeof(name), "%c%c%c%02u",
+                       alphabet[i % 8U], alphabet[(i / 8U) % 8U],
+                       alphabet[(i / 64U) % 8U], (unsigned)(i % 40U));
+        fixture_file(&fixture, name);
+    }
+    arena_init(&arena);
+
+    for (trial = 0U; trial < 400U; trial++) {
+        u32 len;
+        u32 step;
+
+        /* Deterministic LCG: a random-looking walk that is byte-identical
+         * on every run and every libc (invariant 5). */
+        seed = seed * 1103515245U + 12345U;
+        len = 1U + (seed >> 16U) % 3U;
+        for (i = 0U; i < len; i++) {
+            seed = seed * 1103515245U + 12345U;
+            pattern[i] = alphabet[(seed >> 16U) % 8U];
+        }
+        pattern[len] = '\0';
+
+        sag_comp_filter_init(&narrowed);
+        /* Build the cached set from the first character, then narrow it
+         * one character at a time up to the full pattern. */
+        for (step = 1U; step <= len; step++) {
+            char prefix[8];
+            SagCompQuery q;
+
+            (void)memcpy(prefix, pattern, step);
+            prefix[step] = '\0';
+            q = path_query(prefix);
+            (void)sag_comp_filter_run(&fixture.ed, &narrowed, &arena, &q, 0,
+                                      &a);
+        }
+        /* The same final pattern, straight from the source. */
+        {
+            Arena fresh_arena;
+            SagCompQuery q = path_query(pattern);
+
+            arena_init(&fresh_arena);
+            sag_comp_filter_init(&fresh);
+            (void)sag_comp_filter_run(&fixture.ed, &fresh, &fresh_arena, &q,
+                                      0, &b);
+            SAG_ASSERT_EQ_U64(a.len, b.len);
+            for (i = 0U; i < a.len; i++)
+                SAG_ASSERT_EQ_STR(a.data[i].text, b.data[i].text);
+            sag_comp_filter_free(&fresh);
+            arena_free_all(&fresh_arena);
+        }
+        sag_comp_filter_free(&narrowed);
+        arena_free_all(&arena);
+    }
+
+    Vec_CompItem_free(&a);
+    Vec_CompItem_free(&b);
+    arena_free_all(&arena);
+    for (i = 0U; i < 240U; i++) {
+        (void)snprintf(name, sizeof(name), "%c%c%c%02u",
+                       alphabet[i % 8U], alphabet[(i / 8U) % 8U],
+                       alphabet[(i / 64U) % 8U], (unsigned)(i % 40U));
+        fixture_unlink(&fixture, name, false);
+    }
+    fixture_dispose(&fixture);
+}
+
+void test_cmdcomp_filter_refuses_to_narrow_a_capped_set(void)
+{
+    CompFilter filter;
+    CompFixture fixture;
+    Arena arena;
+    Vec_CompItem out = {0};
+    SagCompQuery q;
+    char name[32];
+    u32 i;
+
+    fixture_init(&fixture);
+    /* More matches than SAG_COMP_MAX, so the source has to cap. */
+    for (i = 0U; i < SAG_COMP_MAX + 200U; i++) {
+        (void)snprintf(name, sizeof(name), "file%04u", (unsigned)i);
+        fixture_file(&fixture, name);
+    }
+    arena_init(&arena);
+    sag_comp_filter_init(&filter);
+    sag_comp_test_reset_enumerate_count();
+
+    q = path_query("file");
+    SAG_ASSERT_EQ_U64(sag_comp_filter_run(&fixture.ed, &filter, &arena, &q,
+                                          0, &out),
+                      SAG_COMP_MAX + 200U);
+    SAG_ASSERT_EQ_U64(out.len, SAG_COMP_MAX);
+
+    /*
+     * The cached set holds the 500 best matches for "file"; an entry the
+     * cap cut can still be among the best for "file06", so narrowing
+     * over it would silently lose rows.  The filter re-enumerates
+     * instead, and the answer is exact.
+     */
+    q = path_query("file06");
+    (void)sag_comp_filter_run(&fixture.ed, &filter, &arena, &q, 0, &out);
+    SAG_ASSERT_EQ_U64(sag_comp_test_enumerate_count(), 2U);
+    /*
+     * Exactly ten entries have "file06" as a PREFIX and so sit in the
+     * basename tier; many more match it as a subsequence ("file0160"
+     * contains f,i,l,e,0,6 in order) and rank below them.  Asserting the
+     * tier count rather than the raw match count is what pins the
+     * ordering the user actually sees.
+     */
+    {
+        u32 tiered = 0U;
+
+        for (i = 0U; i < out.len; i++) {
+            if (out.data[i].score >= SAG_FZ_BASENAME_TIER)
+                tiered++;
+        }
+        /* file0600..file0699 -- the fixture stops at 699. */
+        SAG_ASSERT_EQ_U64(tiered, 100U);
+    }
+    SAG_ASSERT_EQ_STR(out.data[0].text, "file0600");
+    SAG_ASSERT_EQ_STR(out.data[9].text, "file0609");
+
+    Vec_CompItem_free(&out);
+    sag_comp_filter_free(&filter);
+    arena_free_all(&arena);
+    for (i = 0U; i < SAG_COMP_MAX + 200U; i++) {
+        (void)snprintf(name, sizeof(name), "file%04u", (unsigned)i);
+        fixture_unlink(&fixture, name, false);
+    }
+    fixture_dispose(&fixture);
+}
+
 void test_cmdcomp_path_hidden_directory_and_unknown_dtype(void)
 {
     CompFixture fixture;

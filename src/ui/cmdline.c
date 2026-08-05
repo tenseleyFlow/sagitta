@@ -105,6 +105,10 @@ static void menu_discard(Ed *ed)
     bool was_open = line->menu.items.len != 0U || line->menu.sel >= 0;
 
     sag_comp_menu_free(&line->menu);
+    /* The cached candidate set's strings live in this arena, so the
+     * cache dies with it -- a surviving `valid` flag over freed strings
+     * is a use-after-free waiting for the next keystroke. */
+    sag_comp_filter_invalidate(&line->filter);
     arena_free_all(&line->comp_arena);
     free(line->menu_stem);
     line->menu_stem = NULL;
@@ -301,6 +305,7 @@ void sag_cmdline_open(Ed *ed, SagPromptKind kind, const char *seed)
     line->return_mode = (u8)ed->mode;
     line->history = sag_hist_open(history_kind(kind));
     sag_comp_menu_init(&line->menu);
+    sag_comp_filter_init(&line->filter);
     {
         char *draft = text_string(line->buf);
 
@@ -338,6 +343,7 @@ void sag_cmdline_close(Ed *ed, bool accepted)
     if (restore == SAG_MODE_E)
         restore = SAG_MODE_L;
     menu_discard(ed);
+    sag_comp_filter_free(&line->filter);
     sag_hist_flush(line->history);
     sag_hist_close(line->history);
     line->history = NULL;
@@ -534,7 +540,6 @@ static CmdStatus complete(Ed *ed, bool previous)
 
     if (line->menu.items.len != 0U)
         return completion_cycle(ed, previous);
-    arena_free_all(&line->comp_arena);
     text = text_string(line->buf);
     arena_init(&scratch);
     if (!sag_comp_query(ed, text, (size_t)sag_textbuf_len(line->buf),
@@ -544,8 +549,15 @@ static CmdStatus complete(Ed *ed, bool previous)
         free(text);
         return insert_sanitized(ed, (const u8 *)"\t", 1U);
     }
-    line->comp_total = sag_comp_enumerate(ed, query.kind, query.stem,
-                                          &items);
+    /*
+     * Tab is an explicit question, so the budget is 0 (unlimited): the
+     * user is waiting for the answer.  §6's live path passes a real
+     * budget.  The filter owns comp_arena and resets it only when it
+     * actually re-enumerates.
+     */
+    line->comp_total = sag_comp_filter_run(ed, &line->filter,
+                                           &line->comp_arena, &query, 0,
+                                           &items);
     if (items.len == 0U) {
         sag_msg(ed, SAG_MSG_INFO, "no completions");
         ed->full_damage = true;

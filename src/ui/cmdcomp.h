@@ -44,7 +44,21 @@ typedef struct {
      * ranked name, and a wrong highlight is worse than none.
      */
     FzMatch m;
+    /*
+     * The string that was RANKED -- the bare entry name for a path, and
+     * `text` itself for everything else.  §4 re-ranks a cached candidate
+     * set against a longer pattern without going back to the source, and
+     * it has to score the same string the source scored.
+     */
+    const char *match;
+    /*
+     * Byte offset of `match` within `text`, or SAG_COMP_NO_HIGHLIGHT
+     * when the two cannot be aligned (a quoted path).
+     */
+    u16 match_off;
 } CompItem;
+
+enum { SAG_COMP_NO_HIGHLIGHT = 0xFFFFU };
 
 VEC_DECL(Vec_CompItem, CompItem);
 
@@ -57,6 +71,14 @@ typedef struct CompReq {
     SagCompKind kind;
     const char *stem; /* decoded token text at the cursor */
     Ed *ed;
+    /*
+     * Where the returned items' strings are allocated.  Explicit rather
+     * than chosen by the source from editor state: §4 resets this arena
+     * when it replaces its cached set, and a source that quietly
+     * allocated somewhere else would leave the cache pointing at freed
+     * strings -- or leak, depending on which way the two disagreed.
+     */
+    Arena *arena;
     /*
      * Advisory: 0 means "no limit" (a Tab, where the user is waiting for
      * an answer); a positive value is roughly how long a live keystroke
@@ -96,6 +118,38 @@ typedef struct SagCompQuery {
     const char *stem;
     Span replace;
 } SagCompQuery;
+
+/*
+ * Sprint 18.5 §4: the live filter's cached candidate set.
+ *
+ * The expensive part of completing a path is the opendir, not the
+ * ranking -- so the set is cached and re-ranked while the user keeps
+ * typing, and only re-enumerated when the answer could actually change.
+ */
+typedef struct CompFilter {
+    Vec_CompItem base; /* strings live in the caller's completion arena */
+    SagCompKind kind;
+    char *head;    /* the directory this set came from ("" for non-paths) */
+    char *pattern; /* the pattern it was enumerated with                  */
+    u32 total;     /* pre-cap total, for the footer                       */
+    bool capped;   /* the source had more than SAG_COMP_MAX matches       */
+    bool valid;
+} CompFilter;
+
+void sag_comp_filter_init(CompFilter *f);
+/* Drops the cached set; the strings belong to the caller's arena. */
+void sag_comp_filter_invalidate(CompFilter *f);
+void sag_comp_filter_free(CompFilter *f);
+
+/*
+ * Rank the candidates for `q` into `out`, re-enumerating only when the
+ * cache cannot answer.  `arena` owns the enumerated strings and is reset
+ * whenever this re-enumerates, so `out` and `f->base` from a previous
+ * call are both invalid afterwards.  Returns the pre-cap match total.
+ */
+u32 sag_comp_filter_run(Ed *ed, CompFilter *f, Arena *arena,
+                        const SagCompQuery *q, i64 budget_us,
+                        Vec_CompItem *out);
 
 /* Resolve an argspec position. token_index is zero for the command name. */
 bool sag_comp_kind_for(const CmdEntry *entry, u32 token_index,
@@ -138,5 +192,8 @@ void sag_comp_menu_free(CompMenu *menu);
 /* Unit-test seam: exercise the required DT_UNKNOWN/lstat path. */
 void sag_comp_test_force_dtype_unknown(bool force);
 u32 sag_comp_test_lstat_count(void);
+/* Unit-test seam: how often the live filter went back to the source. */
+void sag_comp_test_reset_enumerate_count(void);
+u32 sag_comp_test_enumerate_count(void);
 
 #endif
