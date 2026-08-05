@@ -744,6 +744,7 @@ void test_tabs_dirty_prompt_holds_the_id_not_the_index(void);
 void test_tabs_dirty_prompt_esc_cancels_the_close(void);
 void test_tabs_dirty_prompt_swallows_other_keys(void);
 void test_tabs_negative_region_payload_is_a_bug(void);
+void test_strip_label_bytes_match_the_clipped_cells(void);
 void test_jumplist_push_appends_in_order(void);
 void test_jumplist_push_same_position_is_noop(void);
 void test_jumplist_push_same_line_replaces_keeping_new_column(void);

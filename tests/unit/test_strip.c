@@ -215,3 +215,36 @@ void test_strip_handles_empty_and_zero_width(void)
     sag_strip_layout(e, 2, 0U, 0, &scroll, spans, &n_spans, NULL, NULL);
     SAG_ASSERT_EQ_I64(n_spans, 0);
 }
+
+/*
+ * A clipped label must report the BYTES that fit, not just the cells.
+ *
+ * Measuring the clipped width and then drawing the whole string writes
+ * the tail past the span, over whatever the layout placed next — the
+ * tab strip golden caught exactly that, as `[2: b.txt]do.txt]`.
+ */
+void test_strip_label_bytes_match_the_clipped_cells(void)
+{
+    static const char long_label[] =
+        "[1: a-name-long-enough-to-be-clipped.txt]";
+    size_t fit = sag_strip_label_bytes(long_label);
+
+    SAG_ASSERT_EQ_U64(sag_strip_label_cells(long_label),
+                      SAG_STRIP_LABEL_CELLS);
+    /* Fewer bytes than the whole label, and exactly the clipped cells
+     * worth for an ASCII label. */
+    SAG_ASSERT(fit < strlen(long_label));
+    SAG_ASSERT_EQ_U64(fit, SAG_STRIP_LABEL_CELLS);
+
+    /* A short label is not clipped at all. */
+    SAG_ASSERT_EQ_U64(sag_strip_label_bytes("[1: a]"), 6U);
+
+    /* CJK: four cells is six BYTES, so a byte-count clip would cut a
+     * sequence in half. */
+    {
+        const char *cjk = "\xE6\xBC\xA2\xE5\xAD\x97";
+
+        SAG_ASSERT_EQ_U64(sag_strip_label_cells(cjk), 4U);
+        SAG_ASSERT_EQ_U64(sag_strip_label_bytes(cjk), 6U);
+    }
+}

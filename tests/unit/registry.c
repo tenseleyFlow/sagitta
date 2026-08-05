@@ -738,6 +738,7 @@ const SagTest sag_tests[] = {
     T(tabs_dirty_prompt_esc_cancels_the_close),
     T(tabs_dirty_prompt_swallows_other_keys),
     T(tabs_negative_region_payload_is_a_bug),
+    T(strip_label_bytes_match_the_clipped_cells),
     T(jumplist_push_appends_in_order),
     T(jumplist_push_same_position_is_noop),
     T(jumplist_push_same_line_replaces_keeping_new_column),

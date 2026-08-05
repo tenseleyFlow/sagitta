@@ -1,0 +1,59 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=1,10 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=6
+--- text
+[1: pty-s14-s23_modified[2: sag-pty-0.txt]
+    1 editalpha
+    1 beta
+    2 gamma
+    3
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ L  pty-s14-s23_modified_marker_follows_undo.txt *           utf-8  lf  1:5  all
+--- style
+AAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBB
+CCCCCCCCCCCCCCC
+CCCCCCCCCC
+CCCCCCCCCCC
+CCCCC
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+DDDEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+--- legend
+A fg=#787878 bg=default attrs=-d--------
+B fg=#787878 bg=default attrs=------r---
+C fg=default bg=default attrs=----------
+D fg=#ebf4ff bg=#266eba attrs=b---------
+E fg=#dae5f0 bg=#14304c attrs=----------

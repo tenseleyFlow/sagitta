@@ -26,6 +26,16 @@ u16 sag_strip_label_cells(const char *label)
     return (u16)(cells < 0 ? 0 : cells);
 }
 
+size_t sag_strip_label_bytes(const char *label)
+{
+    int cells = 0;
+
+    if (label == NULL)
+        return 0U;
+    return sag_str_clip((const u8 *)label, strlen(label),
+                        SAG_STRIP_LABEL_CELLS, &cells);
+}
+
 void sag_strip_layout(const StripEntry *entries, int n, u16 width,
                       int active, int *scroll, StripSpan *spans,
                       int *n_spans, bool *more_left, bool *more_right)

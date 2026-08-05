@@ -392,9 +392,12 @@ void sag_tab_strip_draw(Ed *ed, Rect rect)
             attrs = SAG_ATTR_REVERSE;
         else if (entries[idx].dim)
             attrs = SAG_ATTR_DIM;
+        /* Draw only the bytes that fit the span the layout gave us.
+         * Drawing the whole label writes its tail over the next
+         * entry — which is exactly what the golden caught. */
         (void)sag_grid_puts(&ed->grid, rect.y, x,
                             (const u8 *)entries[idx].label,
-                            strlen(entries[idx].label),
+                            sag_strip_label_bytes(entries[idx].label),
                             entries[idx].dim ? dim : fg, bg, attrs);
         /*
          * Registered with the SAME cells the layout produced and the

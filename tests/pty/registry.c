@@ -2535,10 +2535,155 @@ static void case_s22_drag_border(PtyCtx *c)
     (void)unlink(path);
 }
 
+
+/* ---------------------------------------------------------------- */
+/* Sprint 23: tabs                                                  */
+/* ---------------------------------------------------------------- */
+
+static const u8 s23_doc[] = "alpha\nbeta\ngamma\n";
+
+/* Opens `n` extra tabs through the command line. */
+static void s23_open_tabs(PtyCtx *c, int n)
+{
+    int i;
+
+    for (i = 0; i < n; i++) {
+        char line[96];
+
+        (void)snprintf(line, sizeof(line), ":tabedit /tmp/sag-pty-%d.txt",
+                       i);
+        s18_settle_after_keys(c, ":");
+        s18_settle_after_bytes(c, line + 1);
+        s18_settle_after_keys(c, "enter");
+    }
+}
+
+/* Three tabs, the active one reversed. */
+static void case_s23_three_tabs(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s23_doc, sizeof(s23_doc) - 1U, path, sizeof(path)))
+        return;
+    s23_open_tabs(c, 2);
+    ptc_snapshot(c, "s23_three_tabs");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/* The modified marker appears on an edit and disappears on undo,
+ * because it is asked for rather than remembered. */
+static void case_s23_modified_marker_follows_undo(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s23_doc, sizeof(s23_doc) - 1U, path, sizeof(path)))
+        return;
+    s23_open_tabs(c, 1);
+    s18_settle_after_keys(c, "i");
+    s18_settle_after_bytes(c, "edit");
+    s18_settle_after_keys(c, "esc");
+    ptc_snapshot(c, "s23_modified_marker_follows_undo");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/* Overflow at a narrow width shows `<` and `>N`. */
+static void case_s23_overflow_indicators(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s23_doc, sizeof(s23_doc) - 1U, path, sizeof(path)))
+        return;
+    s23_open_tabs(c, 6);
+    ptc_snapshot(c, "s23_overflow_indicators");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/*
+ * DoD 3.  Click-to-switch on a strip whose labels are MULTIBYTE: the
+ * span the router answers from is the one the layout produced in cells,
+ * so a CJK tab name cannot shift the click to its right.  The assertion
+ * is which tab became active, not what the pixels look like.
+ */
+static void case_s23_click_switches_with_cjk_labels(PtyCtx *c)
+{
+    char path[256];
+    char seq[64];
+
+    if (!s18_open(c, s23_doc, sizeof(s23_doc) - 1U, path, sizeof(path)))
+        return;
+    /* Two tabs whose basenames are ideographs. */
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c,
+                           "tabedit /tmp/\xE6\xBC\xA2\xE5\xAD\x97.txt");
+    s18_settle_after_keys(c, "enter");
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c,
+                           "tabedit /tmp/\xE6\x97\xA5\xE6\x9C\xAC.txt");
+    s18_settle_after_keys(c, "enter");
+    /* Click the FIRST tab's span, which sits left of both CJK ones. */
+    (void)snprintf(seq, sizeof(seq), "\033[<0;3;1M");
+    ptc_bytes(c, seq);
+    (void)snprintf(seq, sizeof(seq), "\033[<0;3;1m");
+    ptc_bytes(c, seq);
+    ptc_settle(c, 80);
+    ptc_snapshot(c, "s23_click_switches_with_cjk_labels");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/* The dirty-close question, and Esc cancelling it. */
+static void case_s23_dirty_close_prompt(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s23_doc, sizeof(s23_doc) - 1U, path, sizeof(path)))
+        return;
+    s23_open_tabs(c, 1);
+    s18_settle_after_keys(c, "i");
+    s18_settle_after_bytes(c, "x");
+    s18_settle_after_keys(c, "esc");
+    s18_settle_after_keys(c, "t c");
+    ptc_snapshot(c, "s23_dirty_close_prompt");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s23_dirty_close_discard(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s23_doc, sizeof(s23_doc) - 1U, path, sizeof(path)))
+        return;
+    s23_open_tabs(c, 1);
+    s18_settle_after_keys(c, "i");
+    s18_settle_after_bytes(c, "x");
+    s18_settle_after_keys(c, "esc");
+    s18_settle_after_keys(c, "t c");
+    ptc_bytes(c, "d");
+    ptc_settle(c, 80);
+    ptc_snapshot(c, "s23_dirty_close_discard");
+    force_quit(c);
+    (void)unlink(path);
+}
+
 #define C(name, profile, rows, cols, fn) \
     {#name, #profile, rows, cols, fn}
 
 const PtyCase sag_pty_cases[] = {
+    C(s23_three_tabs, modern, 24U, 80U, case_s23_three_tabs),
+    C(s23_modified_marker_follows_undo, modern, 24U, 80U,
+      case_s23_modified_marker_follows_undo),
+    C(s23_overflow_indicators, modern, 24U, 40U,
+      case_s23_overflow_indicators),
+    C(s23_click_switches_with_cjk_labels, modern, 24U, 80U,
+      case_s23_click_switches_with_cjk_labels),
+    C(s23_dirty_close_prompt, modern, 24U, 80U,
+      case_s23_dirty_close_prompt),
+    C(s23_dirty_close_discard, modern, 24U, 80U,
+      case_s23_dirty_close_discard),
     C(s22_click_focuses_and_lands_on_grapheme, modern, 24U, 80U,
       case_s22_click_focuses_and_lands_on_grapheme),
     C(s22_drag_border, modern, 24U, 80U, case_s22_drag_border),

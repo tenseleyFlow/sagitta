@@ -52,5 +52,12 @@ void sag_strip_layout(const StripEntry *entries, int n, u16 width,
 /* Cells a label occupies once clipped — the same measurement the
  * layout used, exposed so a renderer never re-derives it. */
 u16 sag_strip_label_cells(const char *label);
+/*
+ * BYTES of the label that fit in those cells.  A renderer must draw
+ * this many and no more: measuring the clipped width but drawing the
+ * whole string writes the tail past the span, over whatever the layout
+ * placed next.
+ */
+size_t sag_strip_label_bytes(const char *label);
 
 #endif
