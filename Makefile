@@ -189,6 +189,7 @@ PERF_LATENCY_OBJ := $(BUILD)/tests/perf/latency.o
 PERF_JOBSTREAM_OBJ := $(BUILD)/tests/perf/jobstream.o
 PERF_REPATH_OBJ := $(BUILD)/tests/perf/re_pathological.o
 PERF_RETHRU_OBJ := $(BUILD)/tests/perf/re_throughput.o
+PERF_SEARCHLAT_OBJ := $(BUILD)/tests/perf/search_latency.o
 PERF_UNITS_OBJ := $(BUILD)/tests/perf/perf_units.o
 PERF_MULTICURSOR_OBJ := $(BUILD)/tests/perf/multicursor.o
 PERF_CMDCOMP_OBJ := $(BUILD)/tests/perf/perf_cmdcomp.o
@@ -345,6 +346,10 @@ $(BUILD)/perf_re_throughput: $(PERF_RETHRU_OBJ) $(PERF_CORE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_RETHRU_OBJ) \
 		$(PERF_CORE_OBJ)
 
+$(BUILD)/perf_search_latency: $(PERF_SEARCHLAT_OBJ) $(PERF_CORE_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_SEARCHLAT_OBJ) \
+		$(PERF_CORE_OBJ)
+
 $(BUILD)/perf_re_pathological: $(PERF_REPATH_OBJ) $(PERF_CORE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_REPATH_OBJ) \
 		$(PERF_CORE_OBJ)
@@ -479,7 +484,7 @@ perf-piece: $(BUILD)/perf_piece
 
 perf: perf-unicode perf-render perf-scroll perf-piece perf-cursor perf-undo perf-textbuf \
       perf-latency perf-jobstream perf-re-pathological \
-      perf-re-throughput \
+      perf-re-throughput perf-search-latency \
       perf-units perf-multicursor perf-cmdcomp
 
 perf-cursor: $(BUILD)/perf_cursor
@@ -506,6 +511,9 @@ perf-re-pathological: $(BUILD)/perf_re_pathological
 
 perf-re-throughput: $(BUILD)/perf_re_throughput
 	$(BUILD)/perf_re_throughput --baseline $(PERF_BASELINE)
+
+perf-search-latency: $(BUILD)/perf_search_latency
+	$(BUILD)/perf_search_latency --baseline $(PERF_BASELINE)
 
 perf-jobstream: $(BUILD)/perf_jobstream $(BUILD)/sagitta
 	$(BUILD)/perf_jobstream --sagitta $(abspath $(BUILD)/sagitta) \

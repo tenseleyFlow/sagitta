@@ -30,3 +30,11 @@ re.pathological_scale_ratio              15
 re.throughput_literal_mibs              500
 re.throughput_dfa_mibs                   50
 re.throughput_rss_bytes             4194304
+
+# Sprint 21: search latency.  The keypress budget is invariant 4's 5 ms,
+# measured on a 1 GB buffer with the only match far outside the viewport
+# -- an overlay that scans the file rather than the viewport misses the
+# budget by orders of magnitude, not by a margin.
+search.keypress_p99_ns             5000000
+search.step_mean_ns                1000000
+search.overlay_rss_bytes           4194304

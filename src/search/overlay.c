@@ -237,6 +237,24 @@ void sag_overlay_refresh(Ed *ed, Win *w, const SagRe *re, u32 pat_gen,
                                                         BYTEOFF(at))).v;
     ov->scanned.lo = at;
     ov->complete = true;
+    /*
+     * Bound the ENGINE's window, not just this loop.
+     *
+     * The first version left the window at the whole buffer and dropped
+     * matches past want.hi after the fact — which meant every keystroke
+     * that had no match on screen scanned to the end of the file to
+     * find one it would then throw away.  On a 1 GB buffer that is the
+     * exact whole-file scan §3 forbids, and the latency gate measured
+     * it at 73 ms against a 5 ms budget.
+     *
+     * Narrowing window.hi is safe in a way narrowing window.lo is not:
+     * `lo` is what `^` and `\b` look BACKWARD to, and moving it lies
+     * about text that exists.  Moving `hi` can only make the engine
+     * believe text ends early, which affects `$` and `\z` at exactly
+     * that offset — handled below.
+     */
+    if (want.hi < sag_textbuf_len(tb))
+        in.window.hi = want.hi;
     for (;;) {
         SagReMatch m;
 
@@ -246,6 +264,16 @@ void sag_overlay_refresh(Ed *ed, Win *w, const SagRe *re, u32 pat_gen,
         if (!sag_re_search(re, &in, BYTEOFF(at), &m))
             break;
         if (m.g[0].lo >= want.hi)
+            break;
+        /*
+         * A match ending exactly at the narrowed edge may only match
+         * because the engine thinks the buffer ends there — `foo\z`
+         * would fire on any window boundary.  Drop it: the edge sits
+         * inside the look-ahead, so it is not on screen, and a scroll
+         * that brings it into view rescans with a wider window and
+         * finds it honestly.
+         */
+        if (m.g[0].hi == want.hi && want.hi < sag_textbuf_len(tb))
             break;
         SpanVec_push(&ov->spans, m.g[0]);
         scanned_bytes = m.g[0].hi > want.lo ? m.g[0].hi - want.lo : 0U;
