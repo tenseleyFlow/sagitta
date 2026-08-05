@@ -34,6 +34,7 @@
 #include "text/coords.h"
 #include "util/arena.h"
 #include "util/base.h"
+#include "util/buf.h"
 
 typedef struct TextBuf TextBuf;
 typedef struct SagRe SagRe; /* arena-owned, immutable once compiled */
@@ -97,5 +98,18 @@ u32 sag_re_min_len(const SagRe *re);
 /* Convenience for callers holding a plain buffer. */
 SagReInput sag_re_input_bytes(const u8 *bytes, u64 len);
 SagReInput sag_re_input_textbuf(const TextBuf *tb);
+
+
+/*
+ * Sprint 21 §6.  Appends `s` to `out`, escaped so that compiling the
+ * result yields a pattern matching exactly `s` — no metacharacter in
+ * the literal survives as syntax.  Bytes >= 0x80 pass through, so a
+ * quoted CJK word is still readable in the message line and register.
+ *
+ * The single escaper: `*`/`#`, `:s//`, and any later surface that
+ * searches for text the user did not type as a pattern must call this
+ * rather than roll their own.
+ */
+void sag_re_quote(Bytebuf *out, const u8 *s, size_t n);
 
 #endif

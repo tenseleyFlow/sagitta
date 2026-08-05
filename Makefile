@@ -172,6 +172,7 @@ FUZZ_UNITS_OBJ := $(BUILD)/tests/fuzz/fuzz_units.o
 FUZZ_MULTICURSOR_OBJ := $(BUILD)/tests/fuzz/fuzz_multicursor.o
 FUZZ_CMDPARSE_OBJ := $(BUILD)/tests/fuzz/fuzz_cmdparse.o
 FUZZ_RECOMPILE_OBJ := $(BUILD)/tests/fuzz/fuzz_re_compile.o
+FUZZ_REQUOTE_OBJ := $(BUILD)/tests/fuzz/fuzz_re_quote.o
 FUZZ_REDIFF_OBJ := $(BUILD)/tests/fuzz/fuzz_re_diff.o
 RE_REF_OBJ := $(BUILD)/tests/fuzz/re_ref.o
 FUZZ_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
@@ -295,6 +296,10 @@ $(BUILD)/fuzz_multicursor: $(FUZZ_LINK_OBJ) $(FUZZ_MULTICURSOR_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_MULTICURSOR_OBJ)
 
+$(BUILD)/fuzz_re_quote: $(FUZZ_LINK_OBJ) $(FUZZ_REQUOTE_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
+		$(FUZZ_REQUOTE_OBJ)
+
 $(BUILD)/fuzz_re_compile: $(FUZZ_LINK_OBJ) $(FUZZ_RECOMPILE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_RECOMPILE_OBJ)
@@ -392,6 +397,7 @@ test: $(BUILD)/unit_tests $(BUILD)/sagitta test-pty torture-build
 fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
       $(BUILD)/fuzz_grid $(BUILD)/fuzz_vt $(BUILD)/fuzz_undo \
       $(BUILD)/fuzz_re_compile $(BUILD)/fuzz_re_diff \
+      $(BUILD)/fuzz_re_quote \
       fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse
 	$(BUILD)/fuzz_utf8 --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_grapheme --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
@@ -400,6 +406,7 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
 	$(BUILD)/fuzz_vt --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_undo --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_re_compile --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+	$(BUILD)/fuzz_re_quote --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_re_diff --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	@if [ -n "$(FUZZ_SECONDS)" ]; then \
 		$(BUILD)/fuzz_input --seconds=$(FUZZ_SECONDS) --seed=$(FUZZ_SEED); \
