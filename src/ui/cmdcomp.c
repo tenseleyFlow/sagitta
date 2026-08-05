@@ -188,9 +188,11 @@ static u32 candidate_finish(Ed *ed, SagCompKind kind, CandidateVec *matches,
     return total;
 }
 
-static u32 enumerate_commands(Ed *ed, const char *stem, Vec_CompItem *out)
+static u32 enumerate_commands(const CompReq *req, Vec_CompItem *out)
 {
     CandidateVec matches = {0};
+    Ed *ed = req->ed;
+    const char *stem = req->stem;
     u32 i;
 
     for (i = 0U; i < sag_cmd_count(); i++) {
@@ -229,9 +231,11 @@ static const char *buffer_name(const Buffer *buffer)
     return slash == NULL ? buffer->path : slash + 1U;
 }
 
-static u32 enumerate_buffers(Ed *ed, const char *stem, Vec_CompItem *out)
+static u32 enumerate_buffers(const CompReq *req, Vec_CompItem *out)
 {
     CandidateVec matches = {0};
+    Ed *ed = req->ed;
+    const char *stem = req->stem;
     u32 i;
 
     for (i = 0U; i < ed->ws.nbufs; i++) {
@@ -549,11 +553,22 @@ static void path_candidates_finish(Ed *ed, PathCandidateVec *paths,
     path_candidates_dispose(paths);
 }
 
-static u32 enumerate_paths(Ed *ed, const char *stem, Vec_CompItem *out)
+size_t sag_comp_path_head_len(const char *stem)
+{
+    const char *slash;
+
+    if (stem == NULL)
+        return 0U;
+    slash = strrchr(stem, '/');
+    return slash == NULL ? 0U : (size_t)(slash - stem) + 1U;
+}
+
+static u32 enumerate_paths(const CompReq *req, Vec_CompItem *out)
 {
     PathCandidateVec paths = {0};
-    const char *slash = strrchr(stem, '/');
-    size_t head_len = slash == NULL ? 0U : (size_t)(slash - stem) + 1U;
+    Ed *ed = req->ed;
+    const char *stem = req->stem;
+    size_t head_len = sag_comp_path_head_len(stem);
     const char *tail = stem + head_len;
     size_t tail_len = strlen(tail);
     char *head = sag_xmalloc(head_len + 1U);
@@ -620,37 +635,101 @@ static u32 enumerate_paths(Ed *ed, const char *stem, Vec_CompItem *out)
     return total;
 }
 
-static u32 enumerate_empty(Ed *ed, const char *stem, Vec_CompItem *out)
+/*
+ * Sprint 36 fills these in.  An empty provider is DATA, not a stub: it
+ * answers "no candidates" honestly, and the options model replaces the
+ * function without touching the plumbing around it.
+ */
+static u32 enumerate_empty(const CompReq *req, Vec_CompItem *out)
 {
-    (void)ed;
-    (void)stem;
+    (void)req;
     out->len = 0U;
     return 0U;
 }
 
-static const CompSource sources[] = {
-    {SAG_COMP_CMD, enumerate_commands},
-    {SAG_COMP_PATH, enumerate_paths},
-    {SAG_COMP_BUFFER, enumerate_buffers},
-    {SAG_COMP_OPTION, enumerate_empty},
-    {SAG_COMP_VALUE, enumerate_empty},
-};
+static struct {
+    CompSource v[SAG_COMP_KIND__N];
+    bool initialized;
+} comp_registry;
+
+static void comp_init(void)
+{
+    static const CompSource builtins[] = {
+        {SAG_COMP_CMD, "cmd", enumerate_commands, SAG_COMP_SRC_CACHEABLE},
+        /* SLOW: one opendir of a directory that may hold 10 000 entries,
+         * which is why §4 keys its cache on the directory head. */
+        {SAG_COMP_PATH, "path", enumerate_paths,
+         SAG_COMP_SRC_CACHEABLE | SAG_COMP_SRC_SLOW},
+        {SAG_COMP_BUFFER, "buffer", enumerate_buffers,
+         SAG_COMP_SRC_CACHEABLE},
+        {SAG_COMP_OPTION, "option", enumerate_empty,
+         SAG_COMP_SRC_CACHEABLE},
+        {SAG_COMP_VALUE, "value", enumerate_empty, SAG_COMP_SRC_CACHEABLE},
+    };
+    size_t i;
+
+    if (comp_registry.initialized)
+        return;
+    comp_registry.initialized = true;
+    for (i = 0U; i < SAG_ARRAY_LEN(builtins); i++)
+        sag_comp_source_register(&builtins[i]);
+}
+
+void sag_comp_source_register(const CompSource *src)
+{
+    if (src == NULL || src->enumerate == NULL || src->name == NULL)
+        SAG_BUG("completion source needs a name and an enumerator");
+    if ((u32)src->kind >= (u32)SAG_COMP_KIND__N)
+        SAG_BUG("completion source has an invalid kind");
+    comp_registry.initialized = true;
+    comp_registry.v[src->kind] = *src;
+}
 
 const CompSource *sag_comp_source(SagCompKind kind)
 {
-    if ((u32)kind >= SAG_ARRAY_LEN(sources))
+    comp_init();
+    if ((u32)kind >= (u32)SAG_COMP_KIND__N ||
+        comp_registry.v[kind].enumerate == NULL)
         return NULL;
-    return &sources[kind];
+    return &comp_registry.v[kind];
+}
+
+u32 sag_comp_source_count(void)
+{
+    u32 n = 0U;
+    u32 i;
+
+    comp_init();
+    for (i = 0U; i < (u32)SAG_COMP_KIND__N; i++) {
+        if (comp_registry.v[i].enumerate != NULL)
+            n++;
+    }
+    return n;
+}
+
+u32 sag_comp_request(const CompReq *req, Vec_CompItem *out)
+{
+    const CompSource *source;
+
+    if (req == NULL || out == NULL || req->ed == NULL || req->stem == NULL)
+        return 0U;
+    source = sag_comp_source(req->kind);
+    if (source == NULL)
+        return 0U;
+    return source->enumerate(req, out);
 }
 
 u32 sag_comp_enumerate(Ed *ed, SagCompKind kind, const char *stem,
                        Vec_CompItem *out)
 {
-    const CompSource *source = sag_comp_source(kind);
+    CompReq req;
 
-    if (ed == NULL || stem == NULL || out == NULL || source == NULL)
-        return 0U;
-    return source->enumerate(ed, stem, out);
+    (void)memset(&req, 0, sizeof(req));
+    req.kind = kind;
+    req.stem = stem;
+    req.ed = ed;
+    req.budget_us = 0; /* a Tab: the user is waiting, take the time */
+    return sag_comp_request(&req, out);
 }
 
 bool sag_comp_kind_for(const CmdEntry *entry, u32 token_index,

@@ -156,6 +156,71 @@ void test_cmdcomp_source_selection_and_score(void)
     arena_free_all(&ed.arena);
 }
 
+static u32 stub_enumerate(const CompReq *req, Vec_CompItem *out)
+{
+    CompItem item;
+
+    (void)memset(&item, 0, sizeof(item));
+    item.text = "stub";
+    item.kind = (u8)req->kind;
+    out->len = 0U;
+    Vec_CompItem_push(out, item);
+    return 1U;
+}
+
+void test_cmdcomp_source_registry_replaces_by_kind(void)
+{
+    CompSource mine = {SAG_COMP_PATH, "stub", stub_enumerate, 0U};
+    CompSource saved;
+    CompFixture fixture;
+    Vec_CompItem items = {0};
+
+    fixture_init(&fixture);
+    fixture_file(&fixture, "real");
+
+    /* Every kind ships a source; an empty provider is data, not a gap. */
+    SAG_ASSERT_EQ_U64(sag_comp_source_count(), (u64)SAG_COMP_KIND__N);
+    SAG_ASSERT_NOT_NULL(sag_comp_source(SAG_COMP_OPTION));
+    SAG_ASSERT_NULL(sag_comp_source(SAG_COMP_KIND__N));
+
+    saved = *sag_comp_source(SAG_COMP_PATH);
+    SAG_ASSERT_EQ_STR(saved.name, "path");
+    SAG_ASSERT((saved.flags & SAG_COMP_SRC_SLOW) != 0U);
+
+    /* Registration is idempotent by kind: this REPLACES the built-in
+     * path source rather than adding a second one fighting over it. */
+    sag_comp_source_register(&mine);
+    SAG_ASSERT_EQ_U64(sag_comp_source_count(), (u64)SAG_COMP_KIND__N);
+    SAG_ASSERT_EQ_STR(sag_comp_source(SAG_COMP_PATH)->name, "stub");
+    SAG_ASSERT_EQ_U64(
+        sag_comp_enumerate(&fixture.ed, SAG_COMP_PATH, "re", &items), 1U);
+    SAG_ASSERT_EQ_STR(items.data[0].text, "stub");
+
+    sag_comp_source_register(&saved);
+    SAG_ASSERT_EQ_STR(sag_comp_source(SAG_COMP_PATH)->name, "path");
+    SAG_ASSERT_EQ_U64(
+        sag_comp_enumerate(&fixture.ed, SAG_COMP_PATH, "re", &items), 1U);
+    SAG_ASSERT_EQ_STR(items.data[0].text, "real");
+
+    Vec_CompItem_free(&items);
+    fixture_unlink(&fixture, "real", false);
+    fixture_dispose(&fixture);
+}
+
+void test_cmdcomp_path_head_len_is_the_one_split_rule(void)
+{
+    /* §4 keys its cache on this and the path source splits on it; two
+     * split rules would let the cache serve one directory's entries
+     * while the source read another's. */
+    SAG_ASSERT_EQ_U64(sag_comp_path_head_len("file"), 0U);
+    SAG_ASSERT_EQ_U64(sag_comp_path_head_len("src/file"), 4U);
+    SAG_ASSERT_EQ_U64(sag_comp_path_head_len("src/ui/"), 7U);
+    SAG_ASSERT_EQ_U64(sag_comp_path_head_len("/abs/path"), 5U);
+    SAG_ASSERT_EQ_U64(sag_comp_path_head_len("/"), 1U);
+    SAG_ASSERT_EQ_U64(sag_comp_path_head_len(""), 0U);
+    SAG_ASSERT_EQ_U64(sag_comp_path_head_len(NULL), 0U);
+}
+
 void test_cmdcomp_path_hidden_directory_and_unknown_dtype(void)
 {
     CompFixture fixture;

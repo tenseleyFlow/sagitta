@@ -563,6 +563,8 @@ const SagTest sag_tests[] = {
     T(cmdrange_mark_and_pattern_addresses_resolve),
     T(cmdrange_selection_and_eol_spans),
     T(cmdcomp_source_selection_and_score),
+    T(cmdcomp_source_registry_replaces_by_kind),
+    T(cmdcomp_path_head_len_is_the_one_split_rule),
     T(cmdcomp_path_hidden_directory_and_unknown_dtype),
     T(cmdcomp_cap_and_deterministic_order),
     T(cmdcomp_path_quoting_retokenizes_one_argv),

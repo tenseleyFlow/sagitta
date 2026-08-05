@@ -560,6 +560,8 @@ void test_cmdrange_addresses_policies_and_deferred_forms(void);
 void test_cmdrange_mark_and_pattern_addresses_resolve(void);
 void test_cmdrange_selection_and_eol_spans(void);
 void test_cmdcomp_source_selection_and_score(void);
+void test_cmdcomp_source_registry_replaces_by_kind(void);
+void test_cmdcomp_path_head_len_is_the_one_split_rule(void);
 void test_cmdcomp_path_hidden_directory_and_unknown_dtype(void);
 void test_cmdcomp_cap_and_deterministic_order(void);
 void test_cmdcomp_path_quoting_retokenizes_one_argv(void);
