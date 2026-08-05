@@ -52,18 +52,12 @@ static void ed_buffer_free(Ed *ed)
     sag_reg_bind_context(&ed->regs, NULL, NULL);
     sag_search_state_free(&ed->search);
     sag_search_confirm_cancel(ed);
-    {
-        u32 i;
-
-        for (i = 0U; i < ed->npanes; i++) {
-            sag_overlay_free(&ed->panes[i]->overlay);
-            sag_vp_free(ed->panes[i]);
-            sag_cset_free(&ed->panes[i]->cs);
-            free(ed->panes[i]);
-        }
-        ed->npanes = 0U;
-    }
-    sag_pane_free(ed->pane_root);
+    /*
+     * Every tree belongs to a tab, including the first one, and each
+     * tab releases its own leaves' views — so this is the ONE owner.
+     * Freeing ed->panes here as well double-freed every split view.
+     */
+    sag_tabs_free(ed);
     ed->pane_root = NULL;
     ed->focus = NULL;
     sag_overlay_free(&ed->single_win.overlay);
@@ -225,6 +219,37 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
      * exists, so no code path has to ask whether panes are "on". */
     ed->pane_root = sag_pane_new_leaf(&ed->single_win);
     ed->focus = ed->pane_root;
+    /*
+     * Tab 0 owns the tree that already exists rather than cloning a
+     * second view of the same buffer: the editor always has exactly one
+     * tab, so no code path has to ask whether tabs are "on".
+     */
+    sag_tabs_init(&ed->tabs);
+    {
+        Tab first;
+
+        (void)memset(&first, 0, sizeof(first));
+        first.tab_id = ed->tabs.next_tab_id++;
+        first.root = ed->pane_root;
+        first.focus = ed->focus;
+        first.buffer_id = ed->buffer.id;
+        /*
+         * malloc'd, like every other tab's path.  Arena-owning this one
+         * made Tab.path mean two different things depending on which
+         * tab you had, and tab_destroy's free() then corrupted the heap
+         * — and a reorder moves this tab away from index 0, so "the
+         * first one is special" is not even checkable.
+         */
+        first.path = NULL;
+        if (ed->buffer.path != NULL) {
+            size_t n = strlen(ed->buffer.path) + 1U;
+
+            first.path = sag_xmalloc(n);
+            (void)memcpy(first.path, ed->buffer.path, n);
+        }
+        TabVec_push(&ed->tabs.v, first);
+        ed->tabs.active = 0;
+    }
     sag_reg_bind_context(&ed->regs, ed->buffer.undo, &ed->buffer.meta);
     sag_cset_init(&ed->single_win.cs, cursor);
     ed->single_win.buf = &ed->buffer;
@@ -878,6 +903,37 @@ CmdStatus sag_ed_file_write_to(Ed *ed, const char *path, bool force)
      * exists, so no code path has to ask whether panes are "on". */
     ed->pane_root = sag_pane_new_leaf(&ed->single_win);
     ed->focus = ed->pane_root;
+    /*
+     * Tab 0 owns the tree that already exists rather than cloning a
+     * second view of the same buffer: the editor always has exactly one
+     * tab, so no code path has to ask whether tabs are "on".
+     */
+    sag_tabs_init(&ed->tabs);
+    {
+        Tab first;
+
+        (void)memset(&first, 0, sizeof(first));
+        first.tab_id = ed->tabs.next_tab_id++;
+        first.root = ed->pane_root;
+        first.focus = ed->focus;
+        first.buffer_id = ed->buffer.id;
+        /*
+         * malloc'd, like every other tab's path.  Arena-owning this one
+         * made Tab.path mean two different things depending on which
+         * tab you had, and tab_destroy's free() then corrupted the heap
+         * — and a reorder moves this tab away from index 0, so "the
+         * first one is special" is not even checkable.
+         */
+        first.path = NULL;
+        if (ed->buffer.path != NULL) {
+            size_t n = strlen(ed->buffer.path) + 1U;
+
+            first.path = sag_xmalloc(n);
+            (void)memcpy(first.path, ed->buffer.path, n);
+        }
+        TabVec_push(&ed->tabs.v, first);
+        ed->tabs.active = 0;
+    }
     sag_reg_bind_context(&ed->regs, ed->buffer.undo, &ed->buffer.meta);
     ed->durability_failed = false;
     sag_msg(ed, SAG_MSG_INFO, "wrote %s, %llu lines", path,

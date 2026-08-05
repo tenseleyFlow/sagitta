@@ -44,6 +44,18 @@ u32 sag_pane_leaf_count(const Pane *root)
     return sag_pane_leaf_count(root->a) + sag_pane_leaf_count(root->b);
 }
 
+void sag_pane_collect_leaves(Pane *root, Pane **out, u32 cap, u32 *n)
+{
+    if (root == NULL || out == NULL || n == NULL || *n >= cap)
+        return;
+    if (root->is_leaf) {
+        out[(*n)++] = root;
+        return;
+    }
+    sag_pane_collect_leaves(root->a, out, cap, n);
+    sag_pane_collect_leaves(root->b, out, cap, n);
+}
+
 Pane *sag_pane_first_leaf(Pane *root)
 {
     Pane *at = root;

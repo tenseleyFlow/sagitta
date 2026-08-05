@@ -100,6 +100,8 @@ u32 sag_pane_leaf_count(const Pane *root);
  * a split, which is exactly what fuzz_panes caught.
  */
 Pane *sag_pane_first_leaf(Pane *root);
+/* Fills `out` with every leaf in tree order, capped at `cap`. */
+void sag_pane_collect_leaves(Pane *root, Pane **out, u32 cap, u32 *n);
 
 /* Spatial, directional, and it never wraps — wrapping makes
  * muscle-memory direction keys ambiguous in three-pane layouts. */

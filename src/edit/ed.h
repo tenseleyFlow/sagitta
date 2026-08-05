@@ -7,6 +7,7 @@
 #include "edit/job.h"
 #include "edit/jumplist.h"
 #include "edit/pane_cmds.h"
+#include "ui/tabs.h"
 #include "edit/search_cmds.h"
 #include "edit/keymap.h"
 #include "edit/loop.h"
@@ -115,6 +116,7 @@ struct Ed {
     u32 nleaf_tab;
     u32 nsplit_tab;
     PaneDrag drag;
+    Tabs tabs;
     Rect footer_rect;
 
     Mode mode;
