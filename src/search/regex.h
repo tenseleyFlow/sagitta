@@ -112,4 +112,14 @@ SagReInput sag_re_input_textbuf(const TextBuf *tb);
  */
 void sag_re_quote(Bytebuf *out, const u8 *s, size_t n);
 
+/*
+ * Sprint 21 §2 inputs to the smartcase table.  "Uppercase literal" is a
+ * property of what was TYPED: `\Wfoo`, `\x41` and `[[:upper:]]` all
+ * report false, because none of them is the user asking for case
+ * sensitivity.  `\c`/`\C` outrank every option.
+ */
+bool sag_re_has_upper_literal(const SagRe *re);
+bool sag_re_forces_icase(const SagRe *re);
+bool sag_re_forces_case(const SagRe *re);
+
 #endif

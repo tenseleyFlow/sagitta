@@ -87,6 +87,9 @@ struct SagRe {
     u32 ngroups;
     ReLit lit;
     u32 flags;
+    bool saw_upper_literal;
+    bool force_icase;
+    bool force_case;
     u32 min_len;
     /* Codepoints; UINT32_MAX = unbounded.  Bounds the skip-ahead window. */
     u32 max_len;
@@ -145,6 +148,17 @@ typedef struct ReParse {
     u32 ncap_classes;
     SagReErr *err;
     bool failed;
+    /*
+     * Sprint 21 §2.  Smartcase asks "did the user type an uppercase
+     * letter", which is a question about what was WRITTEN, not about
+     * what the program matches: `\x41` and `[[:upper:]]` both match 'A'
+     * and neither is the user asking for case sensitivity.  Only the
+     * bare-literal paths set this, which is why it lives in the parser
+     * and not in a scan of the pattern string.
+     */
+    bool saw_upper_literal;
+    bool force_icase; /* \c */
+    bool force_case;  /* \C */
 } ReParse;
 
 ReAst *sag_re_parse(ReParse *p);

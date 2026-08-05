@@ -384,12 +384,21 @@ static u8 peek_at(const ReParse *p, size_t ahead)
 
 /* Decodes one codepoint, advancing.  Invalid bytes become escapes so a
  * pattern typed with a stray byte still compiles to something exact. */
+/*
+ * Consumes one codepoint written literally in the pattern.  This is the
+ * ONLY path a bare literal takes — escapes, classes-by-name and inline
+ * flags all go elsewhere — which is what makes it the right and only
+ * place to answer Sprint 21's smartcase question: `\Wfoo` has no
+ * uppercase literal and must keep matching `Foo`.
+ */
 static u32 take_cp(ReParse *p)
 {
     u32 cp = 0U;
     size_t n = sag_utf8_decode(p->pat + p->at, p->len - p->at, &cp);
 
     p->at += n == 0U ? 1U : n;
+    if ((sag_cat_rec(cp) & SAG_CAT_UPPER) != 0U)
+        p->saw_upper_literal = true;
     return cp;
 }
 
@@ -991,6 +1000,16 @@ static ReAst *parse_atom(ReParse *p)
         case 'z': p->at++; return node(p, RE_A_EOT);
         case 'b': p->at++; return node(p, RE_A_WORDB);
         case 'B': p->at++; return node(p, RE_A_NWORDB);
+        /*
+         * Sprint 21 §2: \c and \C are case directives, not matchable
+         * atoms — they say what the whole search means and contribute
+         * nothing to the program, so they compile to EMPTY the same way
+         * `(?i)` does.  They outrank both options and smartcase.
+         */
+        case 'c': p->at++; p->force_icase = true;
+                  return node(p, RE_A_EMPTY);
+        case 'C': p->at++; p->force_case = true;
+                  return node(p, RE_A_EMPTY);
         case '1': case '2': case '3': case '4': case '5':
         case '6': case '7': case '8': case '9':
             sag_re_fail(p, here,

@@ -490,6 +490,9 @@ SagRe *sag_re_compile(Arena *a, const char *pat, size_t len, u32 flags,
     re->nclasses = p.nclasses;
     re->ngroups = p.ngroups;
     re->flags = flags;
+    re->saw_upper_literal = p.saw_upper_literal;
+    re->force_icase = p.force_icase;
+    re->force_case = p.force_case;
     re->min_len = min_len(root);
     re->max_len = max_len(root);
     build_literal(re, root, flags);
@@ -499,6 +502,21 @@ SagRe *sag_re_compile(Arena *a, const char *pat, size_t len, u32 flags,
 u32 sag_re_group_count(const SagRe *re)
 {
     return re == NULL ? 0U : re->ngroups;
+}
+
+bool sag_re_has_upper_literal(const SagRe *re)
+{
+    return re != NULL && re->saw_upper_literal;
+}
+
+bool sag_re_forces_icase(const SagRe *re)
+{
+    return re != NULL && re->force_icase;
+}
+
+bool sag_re_forces_case(const SagRe *re)
+{
+    return re != NULL && re->force_case;
 }
 
 u32 sag_re_min_len(const SagRe *re)
