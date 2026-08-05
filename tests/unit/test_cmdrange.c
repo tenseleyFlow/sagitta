@@ -76,6 +76,52 @@ static void range_error(RangeFixture *f, const char *line,
     SAG_ASSERT(parsed.err.tok_hi <= strlen(line));
 }
 
+/* Sprint 21 §7: `'a` and `/pat/` as addresses, now that they resolve. */
+void test_cmdrange_mark_and_pattern_addresses_resolve(void)
+{
+    RangeFixture f;
+    CmdRange range;
+
+    range_fixture_init(&f, "aa\nbb\ncc\ndd");
+    f.ed.buffer.marks = sag_marks_new();
+    sag_search_opts_init(&f.ed.search_opts);
+
+    /* A mark on line 2 (byte 6 is the start of "cc"). */
+    SAG_ASSERT(sag_ed_mark_set(&f.ed, &f.ed.buffer, (u8)'a', BYTEOFF(6U)));
+    range = parse_range_ok(&f, ":'atd");
+    SAG_ASSERT_EQ_U64(range.lo.v, 2U);
+    SAG_ASSERT_EQ_U64(range.hi.v, 2U);
+    SAG_ASSERT(range.given);
+
+    /* The cursor is on line 1, so a forward pattern address finds the
+     * next match after it. */
+    range = parse_range_ok(&f, ":/dd/td");
+    SAG_ASSERT_EQ_U64(range.lo.v, 3U);
+
+    /* A backward address searches the other way. */
+    range = parse_range_ok(&f, ":?aa?td");
+    SAG_ASSERT_EQ_U64(range.lo.v, 0U);
+
+    /* A range built from two addresses. */
+    range = parse_range_ok(&f, ":'a,/dd/td");
+    SAG_ASSERT_EQ_U64(range.lo.v, 2U);
+    SAG_ASSERT_EQ_U64(range.hi.v, 3U);
+
+    /* A mark follows an edit above it, which is the whole reason the
+     * table stores marks rather than line numbers. */
+    SAG_ASSERT(sag_ed_mark_get(&f.ed, &f.ed.buffer, (u8)'a', NULL));
+    sag_marks_adjust(f.ed.buffer.marks, SAG_JOURNAL_INS, BYTEOFF(0U), 3U);
+    {
+        ByteOff at;
+
+        SAG_ASSERT(sag_ed_mark_get(&f.ed, &f.ed.buffer, (u8)'a', &at));
+        SAG_ASSERT_EQ_U64(at.v, 9U);
+    }
+    sag_marks_free(f.ed.buffer.marks);
+    f.ed.buffer.marks = NULL;
+    range_fixture_free(&f);
+}
+
 void test_cmdrange_addresses_policies_and_deferred_forms(void)
 {
     static const struct {
@@ -117,9 +163,14 @@ void test_cmdrange_addresses_policies_and_deferred_forms(void)
     range_error(&f, ":900td",
                 "line 900 past end of buffer (4 lines)");
     range_error(&f, ":0td", "line 0 past end of buffer (4 lines)");
-    range_error(&f, ":'atd", "mark addresses: Sprint 21");
-    range_error(&f, ":/re/td", "pattern addresses: Sprint 21");
-    range_error(&f, ":?re?td", "pattern addresses: Sprint 21");
+    /*
+     * Sprint 21 closed both deferrals.  An unset mark and an unmatched
+     * pattern are errors that name what went wrong — addressing the
+     * wrong line silently is worse than refusing.
+     */
+    range_error(&f, ":'atd", "mark not set");
+    range_error(&f, ":/re/td", "pattern not found");
+    range_error(&f, ":?re?td", "pattern not found");
     range_fixture_free(&f);
 }
 

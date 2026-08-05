@@ -543,6 +543,7 @@ void test_cmdhist_flush_read_failure_preserves_state(void);
 void test_cmdparse_tokenizer_expansion_matrix(void);
 void test_cmdparse_resolution_bang_errors_and_parse_point(void);
 void test_cmdrange_addresses_policies_and_deferred_forms(void);
+void test_cmdrange_mark_and_pattern_addresses_resolve(void);
 void test_cmdrange_selection_and_eol_spans(void);
 void test_cmdcomp_source_selection_and_score(void);
 void test_cmdcomp_path_hidden_directory_and_unknown_dtype(void);

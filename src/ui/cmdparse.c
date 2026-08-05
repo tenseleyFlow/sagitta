@@ -1,3 +1,4 @@
+#include "search/searchui.h"
 #include "ui/cmdparse.h"
 
 #include <ctype.h>
@@ -426,18 +427,90 @@ static bool parse_address(Parser *p, LineNo *out, Span *tok)
     } else if (p->line[p->at] == '\'' && p->at + 1U < p->len &&
                p->line[p->at + 1U] >= 'a' &&
                p->line[p->at + 1U] <= 'z') {
-        p->at += 2U;
-        set_error(p, start, p->at, "mark addresses: Sprint 21");
-        return false;
-    } else if (p->line[p->at] == '/' || p->line[p->at] == '?') {
-        char close = p->line[p->at++];
+        /* Sprint 21 §7: `'a` resolves through the buffer's 26-slot name
+         * table.  An unset name is an error naming the mark, not a
+         * silent line 0 — addressing the wrong line is worse than
+         * refusing. */
+        u8 name = (u8)p->line[p->at + 1U];
+        Buffer *buf = active_buffer(p->ed);
+        TextBuf *tb = active_text(p->ed);
+        ByteOff at;
 
-        while (p->at < p->len && p->line[p->at] != close)
+        p->at += 2U;
+        if (buf == NULL || tb == NULL ||
+            !sag_ed_mark_get(p->ed, buf, name, &at)) {
+            set_error(p, start, p->at, "mark not set");
+            return false;
+        }
+        line = (i64)sag_textbuf_line_of(tb, at).v;
+    } else if (p->line[p->at] == '/' || p->line[p->at] == '?') {
+        /*
+         * Sprint 21: `/pat/` and `?pat?` address the next (previous)
+         * line matching the pattern, searching from the cursor.  The
+         * engine is Sprint 20's; no pattern logic lives here.
+         */
+        char close = p->line[p->at++];
+        size_t pat_lo = p->at;
+        size_t pat_hi;
+        TextBuf *tb = active_text(p->ed);
+        Arena arena;
+        SagRe *re;
+        i64 from_line = 0;
+
+        while (p->at < p->len && p->line[p->at] != close) {
+            if (p->line[p->at] == '\\' && p->at + 1U < p->len)
+                p->at++;
             p->at++;
+        }
+        pat_hi = p->at;
         if (p->at < p->len)
             p->at++;
-        set_error(p, start, p->at, "pattern addresses: Sprint 21");
-        return false;
+        if (tb == NULL || pat_hi <= pat_lo) {
+            set_error(p, start, p->at, "empty pattern address");
+            return false;
+        }
+        (void)cursor_line(p, &from_line);
+        arena_init(&arena);
+        re = sag_search_compile(&arena, p->line + pat_lo, pat_hi - pat_lo,
+                                &p->ed->search_opts, NULL);
+        if (re == NULL) {
+            arena_free_all(&arena);
+            set_error(p, start, p->at, "bad pattern in address");
+            return false;
+        }
+        {
+            SagReInput in = sag_re_input_textbuf(tb);
+            SagReMatch m;
+            u64 nlines = sag_textbuf_line_count(tb);
+            bool found;
+
+            (void)memset(&m, 0, sizeof(m));
+            if (close == '/') {
+                u64 next = (u64)from_line + 1U;
+                u64 at = next < nlines
+                         ? sag_textbuf_line_start(tb, LINENO(next)).v
+                         : sag_textbuf_len(tb);
+
+                found = sag_re_search(re, &in, BYTEOFF(at), &m);
+                if (!found) /* wrap, as a search does */
+                    found = sag_re_search(re, &in, BYTEOFF(0U), &m);
+            } else {
+                u64 at = sag_textbuf_line_start(tb,
+                                                LINENO((u64)from_line)).v;
+
+                found = sag_re_search_back(re, &in, BYTEOFF(at), &m);
+                if (!found)
+                    found = sag_re_search_back(re, &in,
+                                               BYTEOFF(sag_textbuf_len(tb)),
+                                               &m);
+            }
+            arena_free_all(&arena);
+            if (!found) {
+                set_error(p, start, p->at, "pattern not found");
+                return false;
+            }
+            line = (i64)sag_textbuf_line_of(tb, BYTEOFF(m.g[0].lo)).v;
+        }
     } else {
         return false;
     }

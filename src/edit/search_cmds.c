@@ -433,3 +433,61 @@ CmdStatus sag_search_cmd_clear_highlight(CmdCtx *cx)
     sag_search_clear_highlight(cx->ed, cx->win);
     return SAG_CMD_OK;
 }
+
+/* ---------------------------------------------------------------- */
+/* Named marks (Sprint 21 §7, closing the Sprint 18 deferral)       */
+/* ---------------------------------------------------------------- */
+
+/* The name comes from the captured key (`ma`) or from the argument
+ * (`:mark a`), so both front doors reach the same table. */
+static u8 mark_name_arg(const CmdCtx *cx)
+{
+    if (cx->sarg != NULL && cx->sarg_len == 1U)
+        return (u8)cx->sarg[0];
+    return 0U;
+}
+
+CmdStatus sag_mark_cmd_set(CmdCtx *cx)
+{
+    u8 name = mark_name_arg(cx);
+    const Cursor *c;
+
+    if (cx->win == NULL || cx->win->buf == NULL)
+        return SAG_CMD_ERR_STATE;
+    c = sag_ed_cursor(cx->ed);
+    if (c == NULL)
+        return SAG_CMD_ERR_STATE;
+    if (!sag_ed_mark_set(cx->ed, cx->win->buf, name, c->pos)) {
+        sag_msg(cx->ed, SAG_MSG_ERROR,
+                "mark names are a single letter a-z");
+        return SAG_CMD_ERR_ARG;
+    }
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_mark_cmd_jump(CmdCtx *cx)
+{
+    u8 name = mark_name_arg(cx);
+    ByteOff at;
+    Cursor *c;
+
+    if (cx->win == NULL || cx->win->buf == NULL)
+        return SAG_CMD_ERR_STATE;
+    if (!sag_ed_mark_get(cx->ed, cx->win->buf, name, &at)) {
+        sag_msg(cx->ed, SAG_MSG_ERROR, "mark not set");
+        return SAG_CMD_ERR_STATE;
+    }
+    c = sag_ed_cursor(cx->ed);
+    if (c == NULL)
+        return SAG_CMD_ERR_STATE;
+    /*
+     * A mark jump does NOT push the jumplist — §5's push table pins
+     * that, on the grounds that the list is navigation history and a
+     * mark jump is how you navigate it.
+     */
+    c->pos = at;
+    c->goal_col = (GCol){0U};
+    sag_win_follow_cursor(cx->win);
+    sag_ed_damage_document(cx->ed);
+    return SAG_CMD_OK;
+}

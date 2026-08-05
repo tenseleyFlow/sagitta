@@ -343,6 +343,38 @@ static void ed_on_change(void *ctx, ByteOff at, i64 now_ms)
     sag_change_record(b, at, now_ms);
 }
 
+bool sag_ed_mark_set(Ed *ed, Buffer *b, u8 name, ByteOff at)
+{
+    u32 slot;
+
+    (void)ed;
+    if (b == NULL || b->marks == NULL || name < 'a' || name > 'z')
+        return false;
+    slot = (u32)(name - 'a');
+    /* Re-setting a name drops the old mark: leaking one per keystroke
+     * of `ma` would grow the mark set without bound. */
+    if (b->named_set[slot] && sag_mark_alive(b->marks, b->named[slot]))
+        sag_mark_del(b->marks, b->named[slot]);
+    b->named[slot] = sag_mark_add(b->marks, at, SAG_BIAS_LEFT);
+    b->named_set[slot] = true;
+    return true;
+}
+
+bool sag_ed_mark_get(Ed *ed, const Buffer *b, u8 name, ByteOff *out)
+{
+    u32 slot;
+
+    (void)ed;
+    if (b == NULL || b->marks == NULL || name < 'a' || name > 'z')
+        return false;
+    slot = (u32)(name - 'a');
+    if (!b->named_set[slot] || !sag_mark_alive(b->marks, b->named[slot]))
+        return false;
+    if (out != NULL)
+        *out = sag_mark_pos(b->marks, b->named[slot]);
+    return true;
+}
+
 EditCtx sag_ed_edit_ctx_for(Ed *ed, Win *win)
 {
     EditCtx ec = {0};

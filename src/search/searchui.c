@@ -248,6 +248,7 @@ void sag_search_input(Ed *ed, Win *w)
     if (ed->search_opts.hlsearch)
         sag_overlay_refresh(ed, w, ed->search.re, ed->search.pat_gen,
                             SAG_OVERLAY_BUDGET_US);
+    sag_search_schedule_count(ed, w);
     bytebuf_free(&text);
 }
 
@@ -285,6 +286,9 @@ void sag_search_cancel(Ed *ed, Win *w)
     w->vp.top = ed->search.save_top;
     w->vp.top_sub = ed->search.save_top_sub;
     sag_search_clear_highlight(ed, w);
+    w->overlay.count_total = 0U;
+    w->overlay.count_capped = false;
+    ed->search.wrap_until_ms = 0;
     sag_msg_clear(ed);
     sag_ed_damage_document(ed);
     ed->full_damage = true;
@@ -368,6 +372,8 @@ bool sag_search_step(Ed *ed, Win *w, bool forward, u32 count)
     if (any && ed->search_opts.hlsearch)
         sag_overlay_refresh(ed, w, ed->search.re, ed->search.pat_gen,
                             SAG_OVERLAY_BUDGET_US);
+    if (any)
+        sag_search_schedule_count(ed, w);
     /*
      * Exactly one match, and the cursor is on it: say so rather than
      * appearing to do nothing.  Silence here reads as a broken
@@ -404,6 +410,49 @@ static bool search_word_span(const TextBuf *tb, ByteOff pos, Span *out)
     out->lo = lo;
     out->hi = hi;
     return hi > lo;
+}
+
+/*
+ * The idle pass.  It finishes any overlay scan the keystroke budget cut
+ * short, then counts — in that order, because the highlight is what the
+ * user is looking at and the number is what they glance at.
+ */
+static void search_idle(Ed *ed, void *ctx)
+{
+    Win *w = ctx;
+
+    if (ed == NULL || w == NULL || ed->search.re == NULL)
+        return;
+    ed->search.count_timer = SAG_TIMER_NONE;
+    if (!w->overlay.complete)
+        sag_overlay_refresh(ed, w, ed->search.re, ed->search.pat_gen, 0);
+    /*
+     * 50 ms and 10 000 matches, whichever comes first.  An unbounded
+     * counter is the exact feature that makes a big-file editor feel
+     * broken, so the number the statusline shows is explicitly a
+     * bounded one — `[3/10000+]` rather than a lie or a stall.
+     */
+    sag_overlay_count(&w->overlay, ed->search.re, w->buf->tb, 50000);
+    ed->footer_dirty = true;
+}
+
+void sag_search_schedule_count(Ed *ed, Win *w)
+{
+    if (ed == NULL || w == NULL || ed->search.re == NULL)
+        return;
+    if (ed->search.count_timer != SAG_TIMER_NONE)
+        (void)sag_timer_cancel(&ed->timers, ed->search.count_timer);
+    /* One tick out, so a burst of `n` presses schedules once rather
+     * than counting between each. */
+    ed->search.count_timer = sag_timer_add(&ed->timers,
+                                           ed->now_ms + 16, search_idle, w);
+    if (ed->search.wrapped)
+        ed->search.wrap_until_ms = ed->now_ms + 2000;
+}
+
+i64 sag_search_wrap_until(const Ed *ed)
+{
+    return ed == NULL ? 0 : ed->search.wrap_until_ms;
 }
 
 bool sag_search_word(Ed *ed, Win *w, bool forward)

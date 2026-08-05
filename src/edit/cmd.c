@@ -438,6 +438,12 @@ static const CmdDesc builtins[] = {
     {"ed.search.word_prev", sag_search_cmd_word_prev, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
      "Search backward for the word under the cursor"},
+    {"ed.mark.set", sag_mark_cmd_set, SAG_ARITY_STR,
+     SAG_CMD_CAPTURES_TEXT | SAG_CMD_NEEDS_WIN,
+     "Set a named mark at the cursor"},
+    {"ed.mark.jump", sag_mark_cmd_jump, SAG_ARITY_STR,
+     SAG_CMD_CAPTURES_TEXT | SAG_CMD_NEEDS_WIN,
+     "Jump to a named mark"},
     {"ed.search.clear_highlight", sag_search_cmd_clear_highlight,
      SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN, "Clear match highlighting"},
     {"ed.jump.back", sag_jump_cmd_back, SAG_ARITY_OPT_INT,
@@ -522,6 +528,7 @@ static const BuiltinMeta builtin_meta[] = {
      * not try to understand `/` inside a regex. */
     {"ed.search.replace", "s", SAG_RP_OPT, "s"},
     {"ed.search.global", "s", SAG_RP_OPT, "g"},
+    {"ed.mark.set", "s", SAG_RP_FORBID, "mark"},
     /* :! carries an arbitrary command line, so its argspec is one string
      * and the range decides run-vs-filter (§5). */
     {"ed.shell.run", "s", SAG_RP_OPT, NULL},
@@ -554,7 +561,7 @@ static bool command_name_valid(const char *name)
         "search", "macro", "job", "git", "lsp", "ai", "plug",
         "cmdline", "del", "shell",
         /* Sprint 21 */
-        "jump", "change"};
+        "jump", "change", "mark"};
     static const char *const verbs[] = {
         "home", "end", "next", "prev", "up", "down", "left", "right",
         "goto", "insert", "delete", "replace", "change", "yank", "paste", "toggle",
@@ -579,7 +586,7 @@ static bool command_name_valid(const char *name)
         "jump", "clear_finished", "rerun",
         /* Sprint 21 */
         "back", "fwd", "older", "newer", "global",
-        "open_back", "word_next", "clear_highlight"};
+        "open_back", "word_next", "clear_highlight", "set"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

@@ -1,3 +1,4 @@
+#include "search/searchui.h"
 #include "ui/statusline.h"
 
 #include "edit/job.h"
@@ -315,7 +316,9 @@ void sag_statusline_build(const Ed *ed, Win *w, u16 cols,
     char job_badge[32];
     char *clipped_path;
     size_t path_len;
-    Segment segments[9];
+    char search_badge[40];
+    char wrap_badge[8];
+    Segment segments[11];
     int available;
     int path_cells;
     int dirty_cells;
@@ -400,6 +403,45 @@ void sag_statusline_build(const Ed *ed, Win *w, u16 cols,
         else
             job_badge[0] = '\0';
         segments[8] = (Segment){job_badge, 2U, running != 0U};
+    }
+    {
+        /*
+         * Sprint 21 §3: `[3/17]`, and `[3/10000+]` past the cap.  The
+         * `+` is not decoration — it says the editor stopped counting
+         * rather than that there are exactly ten thousand, which is the
+         * difference between a bounded feature and a wrong number.
+         */
+        const MatchOverlay *ov = &w->overlay;
+        bool show = ov->count_total != 0U;
+
+        if (show) {
+            if (ov->cur_index >= 0)
+                (void)snprintf(search_badge, sizeof(search_badge),
+                               "[%llu/%llu%s]",
+                               (unsigned long long)ov->cur_index + 1ULL,
+                               (unsigned long long)ov->count_total,
+                               ov->count_capped ? "+" : "");
+            else
+                (void)snprintf(search_badge, sizeof(search_badge),
+                               "[%llu%s]",
+                               (unsigned long long)ov->count_total,
+                               ov->count_capped ? "+" : "");
+        } else {
+            search_badge[0] = '\0';
+        }
+        segments[9] = (Segment){search_badge, 2U, show};
+    }
+    {
+        /* The wrap indicator, for the two seconds after a search came
+         * round the other end.  It is a glyph rather than a message so
+         * it does not displace whatever the message line is saying. */
+        bool show = sag_search_wrap_until(ed) > ed->now_ms;
+
+        if (show)
+            (void)snprintf(wrap_badge, sizeof(wrap_badge), "\xE2\x86\xBB");
+        else
+            wrap_badge[0] = '\0';
+        segments[10] = (Segment){wrap_badge, 2U, show};
     }
     path_cells = cells(path);
     dirty_cells = sag_buf_dirty(w->buf) ? 2 : 0;

@@ -546,6 +546,7 @@ const SagTest sag_tests[] = {
     T(cmdparse_tokenizer_expansion_matrix),
     T(cmdparse_resolution_bang_errors_and_parse_point),
     T(cmdrange_addresses_policies_and_deferred_forms),
+    T(cmdrange_mark_and_pattern_addresses_resolve),
     T(cmdrange_selection_and_eol_spans),
     T(cmdcomp_source_selection_and_score),
     T(cmdcomp_path_hidden_directory_and_unknown_dtype),

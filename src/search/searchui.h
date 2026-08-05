@@ -11,6 +11,7 @@
 
 #include "search/regex.h"
 #include "text/coords.h"
+#include "edit/loop.h"
 #include "text/cursor.h"
 #include "unicode/coords.h"
 #include "util/base.h"
@@ -81,6 +82,8 @@ typedef struct SearchState {
 
     bool wrapped;
     bool active;      /* a prompt is open */
+    TimerId count_timer;
+    i64 wrap_until_ms; /* the 2 s indicator's deadline; 0 = not shown */
     SagReErr err;     /* live compile error; err.msg NULL means ok */
 } SearchState;
 
@@ -98,5 +101,15 @@ bool sag_search_step(Ed *ed, Win *w, bool forward, u32 count);
 bool sag_search_word(Ed *ed, Win *w, bool forward);
 /* Drops the highlight without disturbing the pattern register. */
 void sag_search_clear_highlight(Ed *ed, Win *w);
+
+/*
+ * Schedules the bounded match count and, when a step wrapped, the
+ * statusline's wrap indicator.  Both run on the Sprint 15 timer heap
+ * rather than on the keystroke: counting every match IS a whole-file
+ * scan, and a keystroke is not the place to do one.
+ */
+void sag_search_schedule_count(Ed *ed, Win *w);
+/* Idle deadline for the 2 s wrap indicator; 0 when not showing. */
+i64 sag_search_wrap_until(const Ed *ed);
 
 #endif

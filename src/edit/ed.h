@@ -62,6 +62,15 @@ typedef struct Buffer {
     MarkSet *marks;
     /* Where this TEXT was edited; reachable from any view of it. */
     ChangeList changes;
+    /*
+     * Sprint 21 §7: the 26 named marks, 'a'..'z'.  Marks rather than
+     * offsets for the same reason the jumplist uses them — a name set
+     * before an edit above it must still point at the same text after.
+     * `named_set[i]` says whether slot i has ever been set, since a
+     * zeroed MarkId is indistinguishable from a real one.
+     */
+    MarkId named[26];
+    bool named_set[26];
 } Buffer;
 
 /* Buffers are referenced by pointer from every Win, so the list holds
@@ -168,6 +177,11 @@ void sag_ws_scratch_drop(Ed *ed, Buffer *b);
 /* Points the focused window at `b` with a fresh cursor set and viewport.
  * Returns false when `b` is not in the workspace. */
 bool sag_ed_show_buffer(Ed *ed, Buffer *b);
+/* Named marks.  `name` is 'a'..'z'; returns false for anything else or
+ * for a name that has not been set (or whose mark has since died). */
+bool sag_ed_mark_set(Ed *ed, Buffer *b, u8 name, ByteOff at);
+bool sag_ed_mark_get(Ed *ed, const Buffer *b, u8 name, ByteOff *out);
+
 EditCtx sag_ed_edit_ctx(Ed *ed);
 EditCtx sag_ed_edit_ctx_for(Ed *ed, Win *win);
 void sag_ed_finish_edit(Ed *ed, const EditCtx *ec);

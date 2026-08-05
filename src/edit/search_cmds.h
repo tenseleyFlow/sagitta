@@ -15,6 +15,8 @@ CmdStatus sag_search_cmd_prev(CmdCtx *cx);
 CmdStatus sag_search_cmd_word_next(CmdCtx *cx);
 CmdStatus sag_search_cmd_word_prev(CmdCtx *cx);
 CmdStatus sag_search_cmd_clear_highlight(CmdCtx *cx);
+CmdStatus sag_mark_cmd_set(CmdCtx *cx);
+CmdStatus sag_mark_cmd_jump(CmdCtx *cx);
 
 /*
  * Confirm-mode state.  The plan is MOVED here from the command, so the
