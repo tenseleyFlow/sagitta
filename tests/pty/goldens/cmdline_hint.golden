@@ -1,0 +1,59 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=23,24 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
+--- text
+    1 hint fixture
+    1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+file.write · <file>                                                             
+:file.write zzzzzzzzzzzz                                                        
+--- style
+AAAAAAAAAAAAAAAAAA
+AAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+CDDDDDDDDDDDDDDDDDDDDDDDEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+--- legend
+A fg=default bg=default attrs=----------
+B fg=#f7e0cc bg=#4e2a0f attrs=bd--------
+C fg=#2f1806 bg=#e77d24 attrs=b---------
+D fg=#f7e0cc bg=#4e2a0f attrs=----------
+E fg=#f7e0cc bg=#4e2a0f attrs=b---------

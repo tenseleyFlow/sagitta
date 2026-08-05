@@ -1759,6 +1759,66 @@ static void case_s18_5_cmdline_click_row(PtyCtx *c)
     s18_finish(c, path);
 }
 
+/*
+ * Sprint 18.5 §3: matched characters are highlighted where they matched.
+ *
+ * "fwr" is a SUBSEQUENCE of file.write and not a prefix of anything, so
+ * the tiered rows are gone and every visible row is a fuzzy hit -- which
+ * makes the style section the whole point of this golden.  A regression
+ * that highlights by prefix length instead of by matched position shows
+ * up here and nowhere else.
+ */
+static void case_s18_5_cmdline_fuzzy_highlight(PtyCtx *c)
+{
+    static const u8 initial[] = "highlight fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "fwr");
+    ptc_snapshot(c, "cmdline_fuzzy_highlight");
+    s18_finish(c, path);
+}
+
+/*
+ * Sprint 18.5 §5: the window scrolls under the selection.
+ *
+ * Nine matches into five rows, paged twice: the selection lands on row 6,
+ * so the top row must no longer be row zero.  This is the only golden
+ * where `top` is non-zero, which makes it the one that would catch a
+ * highlighter or a row loop that indexes items[] by SCREEN row instead of
+ * by top + row -- a bug invisible in every unscrolled snapshot.
+ */
+static void case_s18_5_cmdline_menu_scrolled(PtyCtx *c)
+{
+    static const u8 initial[] = "scroll fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "fil");
+    s18_settle_after_keys(c, "pagedown pagedown");
+    ptc_snapshot(c, "cmdline_menu_scrolled");
+    s18_finish(c, path);
+}
+
+/* Sprint 18.5 §9: the hint names the argument the caret is sitting on,
+ * from the same tolerant parse the menu filtered with. */
+static void case_s18_5_cmdline_hint(PtyCtx *c)
+{
+    static const u8 initial[] = "hint fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "file.write zzzzzzzzzzzz");
+    ptc_snapshot(c, "cmdline_hint");
+    s18_finish(c, path);
+}
+
 static void case_s18_cmdline_error_caret(PtyCtx *c)
 {
     static const u8 initial[] = "error fixture\n";
@@ -3115,6 +3175,11 @@ const PtyCase sag_pty_cases[] = {
     C(s18_5_cmdline_ghost, modern, 24U, 80U, case_s18_5_cmdline_ghost),
     C(s18_5_cmdline_click_row, modern, 24U, 80U,
       case_s18_5_cmdline_click_row),
+    C(s18_5_cmdline_fuzzy_highlight, modern, 24U, 80U,
+      case_s18_5_cmdline_fuzzy_highlight),
+    C(s18_5_cmdline_menu_scrolled, modern, 24U, 80U,
+      case_s18_5_cmdline_menu_scrolled),
+    C(s18_5_cmdline_hint, modern, 24U, 80U, case_s18_5_cmdline_hint),
     C(s18_5_cmdline_ghost_accept, modern, 24U, 80U,
       case_s18_5_cmdline_ghost_accept),
     C(s18_cmdline_zwj_left, modern, 24U, 80U,
