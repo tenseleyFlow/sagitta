@@ -158,6 +158,39 @@ bool sag_menu_move(Menu *m, i32 delta, bool page)
     return true;
 }
 
+bool sag_menu_select(Menu *m, i32 index)
+{
+    if (m == NULL || index < 0 || (size_t)index >= m->items.len)
+        return false;
+    m->sel = index;
+    m->explicit_sel = true;
+    menu_hold(m);
+    return true;
+}
+
+bool sag_menu_scroll(Menu *m, i32 delta, u16 height)
+{
+    u16 rows;
+    i64 top;
+    i64 max_top;
+
+    if (m == NULL || m->items.len == 0U)
+        return false;
+    rows = sag_menu_rows(m, height);
+    if (rows == 0U || m->items.len <= rows)
+        return false;
+    max_top = (i64)m->items.len - (i64)rows;
+    top = (i64)m->top + delta;
+    if (top < 0)
+        top = 0;
+    if (top > max_top)
+        top = max_top;
+    if ((u32)top == m->top)
+        return false;
+    m->top = (u32)top;
+    return true;
+}
+
 const CompItem *sag_menu_selected(const Menu *m)
 {
     if (m == NULL || m->sel < 0 || (size_t)m->sel >= m->items.len)

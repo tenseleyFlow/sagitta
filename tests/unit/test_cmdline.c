@@ -12,6 +12,7 @@
 #include "edit/ed.h"
 #include "edit/mode.h"
 #include "ui/cmdline.h"
+#include "ui/region.h"
 #include "util/buf.h"
 
 #define FAMILY                                                              \
@@ -675,6 +676,158 @@ void test_cmdline_menu_page_moves_by_a_page(void)
                                      sag_cmdline_cmd_menu_page_prev),
                       SAG_CMD_OK);
     SAG_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 0);
+    cmdline_fixture_free(&fixture);
+}
+
+static Key cmdline_mouse(u8 button, u8 ev, u16 col, u16 row)
+{
+    Key key = {0};
+
+    key.kind = SAG_EV_MOUSE;
+    key.ev = ev;
+    key.button = button;
+    key.col = col;
+    key.row = row;
+    return key;
+}
+
+/* Stands in for a draw: §5 registers exactly these from the same Rect it
+ * draws each row with, but a unit fixture has no grid to draw into. */
+static void cmdline_fake_menu_regions(u32 rows)
+{
+    u32 i;
+
+    sag_region_frame_begin();
+    sag_region_add(SAG_REGION_BLOCK, (Rect){0U, 10U, 80U, (u16)rows}, 0);
+    for (i = 0U; i < rows; i++)
+        sag_region_add(SAG_REGION_MENU_ROW,
+                       (Rect){0U, (u16)(10U + i), 80U, 1U}, (i32)i);
+}
+
+void test_cmdline_click_selects_then_accepts_the_same_row(void)
+{
+    CmdlineFixture fixture;
+    Bytebuf text;
+
+    cmdline_fixture_init(&fixture);
+    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    cmdline_type(&fixture, "fil");
+    SAG_ASSERT(fixture.ed.cmdline.menu.items.len > 2U);
+    cmdline_fake_menu_regions(5U);
+
+    /* First click chooses the row -- explicitly, exactly as Tab does,
+     * which is what §6's Enter rule keys on. */
+    {
+        Key not_mouse = {0}; /* a key event must not reach the menu */
+
+        SAG_ASSERT(!sag_ed_mouse_claimed_by_menu(&fixture.ed, not_mouse));
+    }
+    {
+        Key press = cmdline_mouse((u8)SAG_MB_LEFT, SAG_KEY_PRESS, 4U, 12U);
+
+        sag_ed_handle_mouse(&fixture.ed, press);
+        SAG_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 2);
+        SAG_ASSERT(fixture.ed.cmdline.menu.explicit_sel);
+        SAG_ASSERT(fixture.ed.cmdline.active);
+
+        /* Second click on the SAME row accepts it and closes the menu. */
+        sag_ed_handle_mouse(&fixture.ed, press);
+        SAG_ASSERT_EQ_U64(fixture.ed.cmdline.menu.items.len, 0U);
+        SAG_ASSERT(fixture.ed.cmdline.active);
+    }
+    text = cmdline_text(&fixture.ed.cmdline);
+    SAG_ASSERT(strncmp((const char *)text.data, "file.", 5U) == 0);
+    bytebuf_free(&text);
+    cmdline_fixture_free(&fixture);
+}
+
+void test_cmdline_click_and_keyboard_reach_the_same_state(void)
+{
+    CmdlineFixture fixture;
+    Bytebuf clicked;
+    Bytebuf typed;
+
+    /* Invariant 9: the mouse is an accelerator, never the only way. */
+    cmdline_fixture_init(&fixture);
+    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    cmdline_type(&fixture, "fil");
+    cmdline_fake_menu_regions(5U);
+    {
+        Key press = cmdline_mouse((u8)SAG_MB_LEFT, SAG_KEY_PRESS, 4U, 10U);
+
+        sag_ed_handle_mouse(&fixture.ed, press);
+    }
+    SAG_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 0);
+    clicked = cmdline_text(&fixture.ed.cmdline);
+    cmdline_fixture_free(&fixture);
+
+    /* The same row, reached with C-n's command instead. */
+    cmdline_fixture_init(&fixture);
+    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    cmdline_type(&fixture, "fil");
+    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                     sag_cmdline_cmd_complete_next),
+                      SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                     sag_cmdline_cmd_complete_next),
+                      SAG_CMD_OK);
+    SAG_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 0);
+    typed = cmdline_text(&fixture.ed.cmdline);
+    SAG_ASSERT_EQ_STR((const char *)clicked.data, (const char *)typed.data);
+    bytebuf_free(&typed);
+    bytebuf_free(&clicked);
+    cmdline_fixture_free(&fixture);
+}
+
+void test_cmdline_wheel_scrolls_without_choosing(void)
+{
+    CmdlineFixture fixture;
+    Key wheel;
+
+    cmdline_fixture_init(&fixture);
+    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    cmdline_type(&fixture, "e");
+    SAG_ASSERT(fixture.ed.cmdline.menu.items.len > 8U);
+    cmdline_fake_menu_regions(5U);
+    /* The prompt row, so the menu has rows above it to scroll within. */
+    fixture.ed.footer_rect = (Rect){0U, 23U, 80U, 1U};
+
+    wheel = cmdline_mouse((u8)SAG_MB_WHEEL_DOWN, SAG_KEY_PRESS, 4U, 12U);
+    sag_ed_handle_mouse(&fixture.ed, wheel);
+    SAG_ASSERT_EQ_U64(fixture.ed.cmdline.menu.top, 3U);
+
+    /*
+     * Looking is not choosing: the wheel moved the window and left the
+     * selection alone, so Enter still EXECUTES rather than accepting a
+     * row the user only scrolled past.
+     */
+    SAG_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, -1);
+    SAG_ASSERT(!fixture.ed.cmdline.menu.explicit_sel);
+
+    wheel = cmdline_mouse((u8)SAG_MB_WHEEL_UP, SAG_KEY_PRESS, 4U, 12U);
+    sag_ed_handle_mouse(&fixture.ed, wheel);
+    SAG_ASSERT_EQ_U64(fixture.ed.cmdline.menu.top, 0U);
+    cmdline_fixture_free(&fixture);
+}
+
+void test_cmdline_click_on_a_menu_gap_is_swallowed(void)
+{
+    CmdlineFixture fixture;
+    Key press;
+
+    cmdline_fixture_init(&fixture);
+    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    cmdline_type(&fixture, "fil");
+    sag_region_frame_begin();
+    /* Only the inert block, as if the row rects did not cover it. */
+    sag_region_add(SAG_REGION_BLOCK, (Rect){0U, 10U, 80U, 5U}, 0);
+
+    /* Claimed, so it cannot fall through to the pane underneath -- and
+     * claiming it is all that happens: no row was chosen. */
+    press = cmdline_mouse((u8)SAG_MB_LEFT, SAG_KEY_PRESS, 4U, 12U);
+    SAG_ASSERT(sag_ed_mouse_claimed_by_menu(&fixture.ed, press));
+    sag_ed_handle_mouse(&fixture.ed, press);
+    SAG_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, -1);
     cmdline_fixture_free(&fixture);
 }
 

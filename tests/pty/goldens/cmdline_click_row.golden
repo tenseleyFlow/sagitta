@@ -1,0 +1,63 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=23,10 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=3
+--- text
+    1 click fixture
+    1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  file.new                     Create an empty buffer, optionally naming its fil
+  file.open                    Sprint 23: open a file                           
+> file.save                    Atomically save the active file                  
+  file.close                   Sprint 23: close the active file                 
+  file.write                   Write the active buffer, optionally to a path 3/9
+:file.save                                                                      
+--- style
+AAAAAAAAAAAAAAAAAAA
+AAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+BBCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+DDEEEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+FFGGGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+DDEEEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+BBCCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+HIIIIIIIIIBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+--- legend
+A fg=default bg=default attrs=----------
+B fg=#f7e0cc bg=#4e2a0f attrs=b---------
+C fg=#f7e0cc bg=#4e2a0f attrs=b--u------
+D fg=#f7e0cc bg=#4e2a0f attrs=bd--------
+E fg=#f7e0cc bg=#4e2a0f attrs=bd-u------
+F fg=#4e2a0f bg=#f7e0cc attrs=b---------
+G fg=#4e2a0f bg=#f7e0cc attrs=b--u------
+H fg=#2f1806 bg=#e77d24 attrs=b---------
+I fg=#f7e0cc bg=#4e2a0f attrs=----------

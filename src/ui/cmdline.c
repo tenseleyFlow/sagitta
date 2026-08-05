@@ -332,6 +332,9 @@ void sag_cmdline_open(Ed *ed, SagPromptKind kind, const char *seed)
         sag_menu_init(&line->menu, &spec);
     }
     sag_comp_filter_init(&line->filter);
+    /* -1, not 0: a zeroed field would make the very first click on row 0
+     * read as the SECOND click and accept it outright. */
+    line->click_row = -1;
     {
         char *draft = text_string(line->buf);
 
@@ -907,6 +910,60 @@ CmdStatus sag_cmdline_cmd_menu_accept(CmdCtx *cx)
     menu_discard(ed);
     cmdline_refilter(ed);
     return SAG_CMD_OK;
+}
+
+/*
+ * Sprint 18.5 §8: what a click on a menu row does.
+ *
+ * First click SELECTS, a second click on the same row ACCEPTS.  The pair
+ * is deliberately state-based rather than timed: a double-click window
+ * would make the pty goldens depend on a clock, and "click to choose,
+ * click again to confirm" is legible without one.
+ *
+ * Selection by click is EXPLICIT, exactly as Tab is -- which is what
+ * makes §6's Enter rule treat a clicked row as a choice.
+ */
+bool sag_cmdline_menu_click(Ed *ed, i32 row)
+{
+    CmdLine *line;
+    CmdCtx cx = {0};
+
+    if (ed == NULL || !ed->cmdline.active)
+        return false;
+    line = &ed->cmdline;
+    if (!sag_menu_select(&line->menu, row))
+        return false;
+    if (line->click_row == row) {
+        line->click_row = -1;
+        cx.ed = ed;
+        cx.win = sag_cmdline_target(ed);
+        cx.count = 1U;
+        cx.source = SAG_SRC_MOUSE;
+        (void)sag_cmdline_cmd_menu_accept(&cx);
+        ed->full_damage = true;
+        return true;
+    }
+    line->click_row = row;
+    /* Show the choice in the line, the same as Tab does. */
+    {
+        const CompItem *item = sag_menu_selected(&line->menu);
+
+        if (item != NULL)
+            (void)insert_completion(ed, line->menu.replace, item, false);
+    }
+    ed->full_damage = true;
+    return true;
+}
+
+bool sag_cmdline_menu_scroll(Ed *ed, i32 delta)
+{
+    if (ed == NULL || !ed->cmdline.active || ed->footer_rect.h == 0U)
+        return false;
+    /* The menu may use every row above the prompt. */
+    if (!sag_menu_scroll(&ed->cmdline.menu, delta, ed->footer_rect.y))
+        return false;
+    ed->full_damage = true;
+    return true;
 }
 
 CmdStatus sag_cmdline_cmd_menu_dismiss(CmdCtx *cx)

@@ -77,6 +77,15 @@ void sag_menu_reset(Menu *m, Vec_CompItem items, u32 total, Span replace);
 /* Moves the selection by `delta` rows (or pages), marking it explicit.
  * Returns false when there is nothing to move through. */
 bool sag_menu_move(Menu *m, i32 delta, bool page);
+/* Selects a row outright -- what a click does.  Explicit, like any other
+ * deliberate move.  False when the index is not a row. */
+bool sag_menu_select(Menu *m, i32 index);
+/*
+ * Scrolls the visible window WITHOUT moving the selection, which is what
+ * a wheel does: looking around a list is not the same as choosing in it,
+ * and §6's Enter rule turns on that difference.
+ */
+bool sag_menu_scroll(Menu *m, i32 delta, u16 height);
 /* Rows the menu would draw in an area `height` cells tall. */
 u16 sag_menu_rows(const Menu *m, u16 height);
 const CompItem *sag_menu_selected(const Menu *m);

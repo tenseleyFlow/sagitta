@@ -1740,6 +1740,25 @@ static void case_s18_5_cmdline_ghost_accept(PtyCtx *c)
     s18_finish(c, path);
 }
 
+/*
+ * Sprint 18.5 §8: a real SGR press through the terminal, routed by the
+ * region registry.  Menu rows occupy 18..22 in a 24-row grid, so row 20
+ * is the third row; SGR coordinates are 1-based.
+ */
+static void case_s18_5_cmdline_click_row(PtyCtx *c)
+{
+    static const u8 initial[] = "click fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "fil");
+    s18_settle_after_bytes(c, "\033[<0;4;21M");
+    ptc_snapshot(c, "cmdline_click_row");
+    s18_finish(c, path);
+}
+
 static void case_s18_cmdline_error_caret(PtyCtx *c)
 {
     static const u8 initial[] = "error fixture\n";
@@ -3094,6 +3113,8 @@ const PtyCase sag_pty_cases[] = {
     C(s18_cmdline_error_caret, modern, 24U, 80U,
       case_s18_cmdline_error_caret),
     C(s18_5_cmdline_ghost, modern, 24U, 80U, case_s18_5_cmdline_ghost),
+    C(s18_5_cmdline_click_row, modern, 24U, 80U,
+      case_s18_5_cmdline_click_row),
     C(s18_5_cmdline_ghost_accept, modern, 24U, 80U,
       case_s18_5_cmdline_ghost_accept),
     C(s18_cmdline_zwj_left, modern, 24U, 80U,

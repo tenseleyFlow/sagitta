@@ -1219,9 +1219,50 @@ static bool prompt_key(Ed *ed, Key key)
  * handler that half-fits, because a wheel event mis-dispatched as a
  * click moves the cursor somewhere the user never pointed.
  */
+/*
+ * Sprint 18.5 §8: does this event belong to the completion menu?
+ *
+ * Gated on cmdline.active because SAG_REGION_BLOCK is not ours alone --
+ * Sprint 24's group picker registers one over its own rectangle for the
+ * same swallow-the-gap reason.  The two overlays are never open at once,
+ * so the prompt's own state is what disambiguates them.
+ */
+bool sag_ed_mouse_claimed_by_menu(Ed *ed, Key key)
+{
+    Region hit;
+
+    if (ed == NULL || key.kind != SAG_EV_MOUSE || !ed->cmdline.active)
+        return false;
+    hit = sag_region_hit(key.col, key.row);
+    if (hit.kind != SAG_REGION_MENU_ROW && hit.kind != SAG_REGION_BLOCK)
+        return false;
+    if (key.button == (u8)SAG_MB_WHEEL_UP ||
+        key.button == (u8)SAG_MB_WHEEL_DOWN) {
+        /* Wheeling over the menu scrolls the LIST and deliberately does
+         * not move the selection: looking is not choosing. */
+        (void)sag_cmdline_menu_scroll(
+            ed, key.button == (u8)SAG_MB_WHEEL_UP ? -3 : 3);
+        return true;
+    }
+    if (key.button != SAG_MB_LEFT)
+        return false;
+    /* Swallow the release of a press we handled, so it cannot fall
+     * through to whatever is underneath. */
+    if (key.ev != SAG_KEY_PRESS)
+        return true;
+    if (hit.kind == SAG_REGION_MENU_ROW)
+        (void)sag_cmdline_menu_click(ed, hit.payload);
+    /* A BLOCK hit is inert by construction: it exists so a click on a gap
+     * in the menu does not land in the pane underneath it. */
+    return true;
+}
+
 void sag_ed_handle_mouse(Ed *ed, Key key)
 {
     if (ed == NULL || key.kind != SAG_EV_MOUSE)
+        return;
+    /* Before the button filter: the wheel is not SAG_MB_LEFT. */
+    if (sag_ed_mouse_claimed_by_menu(ed, key))
         return;
     if (key.button != SAG_MB_LEFT) {
         if (ed->drag.active && key.ev == SAG_KEY_RELEASE)
@@ -1331,6 +1372,21 @@ void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms)
     sag_dispatch_key(ed, key, now_ms);
 }
 
+/*
+ * Sprint 18.5 §8: the mouse routing spine.
+ *
+ * Sprint 4 decoded mouse events and Sprint 22 built the region registry
+ * and sag_pane_click, but nothing ever joined them: SAG_EV_MOUSE was
+ * dropped at the event loop's default case, so the registry had a
+ * producer and no consumer.  This is the join, deliberately narrow --
+ * one dispatch on Region.kind.  Sprint 27 owns drag-resize, tab reorder,
+ * drag-select and document scroll, and extends this table rather than
+ * inventing its own path.
+ *
+ * Invariant 9 holds: every action here already has a key.  Selecting a
+ * row is C-n/C-p, accepting is Enter, scrolling is PgUp/PgDn.  The mouse
+ * is an accelerator, never the only way.
+ */
 void sag_ed_handle_paste(Ed *ed, const u8 *bytes, size_t len, bool end)
 {
     if (ed == NULL)

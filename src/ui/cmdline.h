@@ -37,6 +37,10 @@ typedef struct CmdLine {
     char hint[160];
     u16 scroll;
 
+    /* §8: the menu row a click last selected, so a second click on the
+     * same row accepts it.  -1 when none.  A row index rather than a
+     * timer keeps it deterministic for the goldens. */
+    i32 click_row;
     void *target;
     CmdHist *history;
     u8 return_mode;
@@ -63,6 +67,10 @@ CmdStatus sag_cmdline_cmd_complete_next(CmdCtx *cx);
 CmdStatus sag_cmdline_cmd_complete_prev(CmdCtx *cx);
 CmdStatus sag_cmdline_cmd_insert_register(CmdCtx *cx);
 CmdStatus sag_cmdline_cmd_literal_next(CmdCtx *cx);
+/* §8: click selects, a second click on the same row accepts. */
+bool sag_cmdline_menu_click(Ed *ed, i32 row);
+bool sag_cmdline_menu_scroll(Ed *ed, i32 delta);
+
 CmdStatus sag_cmdline_cmd_menu_page_next(CmdCtx *cx);
 CmdStatus sag_cmdline_cmd_menu_page_prev(CmdCtx *cx);
 CmdStatus sag_cmdline_cmd_menu_accept(CmdCtx *cx);
