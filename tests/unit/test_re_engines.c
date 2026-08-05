@@ -37,7 +37,7 @@ static const char *const inputs[] = {
     "hello World", "2026-08-04", "A1b2C3", "...", "!!!",
     "aaaaaaaaaaaaaaaaaaaa", "abcabcabcabc", "zzz", "q",
     "\xE6\xBC\xA2\xE5\xAD\x97", "caf\xC3\xA9", "e\xCC\x81",
-    "\xF0\x9F\x98\x80", "x\xF0\x9F\x98\x80y", "a\xFF" "b"
+    "\xF0\x9F\x98\x80", "x\xF0\x9F\x98\x80y", "a\377b"
 };
 
 /* Builds the same content as a piece tree so both backings are covered. */

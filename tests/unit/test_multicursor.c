@@ -484,6 +484,26 @@ static void mc_sync_child(void)
     sag_filemeta_dispose(&meta);
 }
 
+/*
+ * LD_PRELOAD with the shim first puts it ahead of the ASan runtime in
+ * the child's initial library list; ASan then installs no interceptors
+ * and the fault log stays empty.  Same reason kill9 takes a prefix.
+ */
+static int mc_set_preload(const char *shim)
+{
+#ifdef SAG_ASAN_RUNTIME
+    char joined[PATH_MAX * 2];
+    int n = snprintf(joined, sizeof(joined), "%s:%s", SAG_ASAN_RUNTIME,
+                     shim);
+
+    if (n <= 0 || (size_t)n >= sizeof(joined))
+        return -1;
+    return setenv("LD_PRELOAD", joined, 1);
+#else
+    return setenv("LD_PRELOAD", shim, 1);
+#endif
+}
+
 void test_multicursor_200_insert_is_one_undo_and_one_journal_sync(void)
 {
     const char *child_mode = getenv("SAG_MC_SYNC_CHILD");
@@ -519,7 +539,7 @@ void test_multicursor_200_insert_is_one_undo_and_one_journal_sync(void)
             setenv("SAG_FAULT_LOG", log, 1) != 0 ||
             setenv("SAG_FAULT_ENABLE", "0", 1) != 0 ||
             setenv("SAG_LOG", "/dev/null", 1) != 0 ||
-            setenv("LD_PRELOAD", shim, 1) != 0)
+            mc_set_preload(shim) != 0)
             _exit(126);
         execl(sag_test_program_path(), sag_test_program_path(), "--filter",
               "multicursor_200_insert_is_one_undo_and_one_journal_sync",

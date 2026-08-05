@@ -188,6 +188,14 @@ static pid_t start_save(const char *driver, const char *shim,
         const char *prefix = getenv("SAG_TORTURE_PRELOAD_PREFIX");
         char *preload = NULL;
 
+#ifdef SAG_ASAN_RUNTIME
+        /* Under ASan the runtime has to be preloaded before the shim, or
+         * it refuses to install interceptors and the shim never fires.
+         * An explicit prefix in the environment still wins. */
+        if (prefix == NULL || *prefix == '\0')
+            prefix = SAG_ASAN_RUNTIME;
+#endif
+
         if (prefix != NULL && *prefix != '\0') {
             size_t n = strlen(prefix) + 1U + strlen(shim) + 1U;
 

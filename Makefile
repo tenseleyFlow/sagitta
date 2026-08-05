@@ -61,6 +61,23 @@ endif
 ifeq ($(SAN),1)
 CFLAGS  += -fsanitize=address,undefined -fno-omit-frame-pointer -O1
 LDFLAGS += -fsanitize=address,undefined -fno-omit-frame-pointer -O1
+# The torture shim is LD_PRELOADed, which puts it ahead of the ASan
+# runtime in the child's initial library list.  ASan then declines to
+# install its interceptors, the shim's fault injection does not take,
+# and the save-torture invariant fails for a reason that has nothing to
+# do with saving.  kill9 already accepts a preload prefix; tell it where
+# the runtime lives.  -print-file-name echoes its argument back when it
+# finds nothing, which is how the fallbacks below are detected.
+ASAN_RT := $(shell $(CC) -print-file-name=libasan.so)
+ifeq ($(ASAN_RT),libasan.so)
+ASAN_RT := $(shell $(CC) -print-file-name=libclang_rt.asan-x86_64.so)
+ifeq ($(ASAN_RT),libclang_rt.asan-x86_64.so)
+ASAN_RT :=
+endif
+endif
+ifneq ($(ASAN_RT),)
+CFLAGS  += -DSAG_ASAN_RUNTIME='"$(ASAN_RT)"'
+endif
 endif
 
 UNIT_RUN := $(BUILD)/unit_tests
