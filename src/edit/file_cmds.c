@@ -60,7 +60,7 @@ CmdStatus sag_file_cmd_reload(CmdCtx *cx)
 
     if (cx == NULL || cx->ed == NULL)
         return SAG_CMD_ERR_ARG;
-    path = cx->ed->buffer.path;
+    path = sag_ed_doc(cx->ed)->path;
     if (path == NULL) {
         sag_msg(cx->ed, SAG_MSG_ERROR, "buffer has no file name");
         return SAG_CMD_ERR_STATE;

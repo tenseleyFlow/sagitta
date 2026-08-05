@@ -184,6 +184,10 @@ int sag_ed_driver(const char *path);
 const char *sag_ws_root(const Ed *ed);
 
 bool sag_buf_dirty(const Buffer *b);
+/* THE document: the buffer the focused window is showing.  Everything
+ * that writes bytes or names a file asks this, never &ed->buffer — see
+ * ed.c for why the two stopped being the same object. */
+Buffer *sag_ed_doc(Ed *ed);
 const char *sag_buf_label(const Buffer *b);
 
 /* Scratch buffers (Sprint 19: job output and the *jobs* table).  The

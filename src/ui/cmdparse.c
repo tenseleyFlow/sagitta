@@ -69,7 +69,7 @@ static TextBuf *active_text(Ed *ed)
         return NULL;
     if (ed->win != NULL && ed->win->buf != NULL)
         return ed->win->buf->tb;
-    return ed->buffer.tb;
+    return sag_ed_doc((Ed *)ed)->tb;
 }
 
 static Buffer *active_buffer(Ed *ed)

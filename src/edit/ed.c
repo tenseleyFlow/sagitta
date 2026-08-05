@@ -378,6 +378,28 @@ bool sag_buf_dirty(const Buffer *b)
     return b != NULL && b->undo != NULL && !sag_undo_at_save_point(b->undo);
 }
 
+/*
+ * THE document — the one the focused window is showing.
+ *
+ * Sprint 23 could say `ed->buffer` and mean it, because every tab
+ * cloned a view of that single buffer.  Sprint 24 gives each tab its
+ * own, so "the buffer" and "the buffer the user is looking at" stop
+ * being the same object — and a save path that keeps asking for the
+ * former writes tab 1's bytes to tab 3's path, which is invariant 2
+ * (no byte confusion) failing silently.
+ *
+ * The fallback is not decoration: fixtures build an Ed without a window
+ * and still expect the primary buffer to answer.
+ */
+Buffer *sag_ed_doc(Ed *ed)
+{
+    if (ed == NULL)
+        return NULL;
+    if (ed->win != NULL && ed->win->buf != NULL)
+        return ed->win->buf;
+    return &ed->buffer;
+}
+
 /* Shim so the text layer can feed the changelist without knowing it
  * exists.  Job output goes to SAG_BUF_NOUNDO scratch buffers, which are
  * not places the user "changed" and so are excluded here. */
@@ -525,8 +547,21 @@ void sag_ed_finish_edit(Ed *ed, const EditCtx *ec)
         ed->win->buf->tb == ec->tb &&
         ed->win->overlay.buf_gen != ec->tb->gen)
         sag_overlay_invalidate(&ed->win->overlay);
-    if (ed->buffer.tb == ec->tb)
-        ed->buffer.jrn = ec->jrnl;
+    /*
+     * The journal belongs to whichever buffer the edit ran against.
+     * Matching on slot 0 alone stopped being right once tabs stopped
+     * sharing one buffer, and the miss is silent: the edit journals,
+     * the handle is dropped on the floor, and the next crash recovers
+     * nothing.
+     */
+    {
+        Buffer *doc = sag_ed_doc(ed);
+
+        if (doc != NULL && doc->tb == ec->tb)
+            doc->jrn = ec->jrnl;
+        else if (ed->buffer.tb == ec->tb)
+            ed->buffer.jrn = ec->jrnl;
+    }
     if (ec->jrnl != NULL && !sag_journal_ok(ec->jrnl)) {
         ed->durability_failed = true;
         sag_msg(ed, SAG_MSG_ERROR,
@@ -785,7 +820,11 @@ void sag_ed_prompt(Ed *ed, PromptKind prompt)
     if (ed == NULL)
         return;
     ed->prompt = prompt;
-    path = ed->buffer.path == NULL ? "[no name]" : ed->buffer.path;
+    {
+        const Buffer *doc = sag_ed_doc(ed);
+
+        path = doc == NULL || doc->path == NULL ? "[no name]" : doc->path;
+    }
     switch (prompt) {
     case SAG_PROMPT_NONE:
         sag_msg_clear(ed);
@@ -812,20 +851,34 @@ CmdStatus sag_ed_file_save(Ed *ed, bool force)
 {
     EditCtx ec;
     SagSaveErr result;
+    Buffer *doc;
     u64 lines;
 
     if (ed == NULL || !ed->model_ready)
         return SAG_CMD_ERR_STATE;
     sag_ed_insert_barrier(ed);
-    if (ed->buffer.path == NULL) {
+    doc = sag_ed_doc(ed);
+    if (doc == NULL || doc->path == NULL) {
         sag_msg(ed, SAG_MSG_ERROR,
                 "no file name; use :w path");
         ed->quit_after_save = false;
         return SAG_CMD_ERR_STATE;
     }
+    /*
+     * Sprint 24 §3: a tab that was never read holds no text, so there
+     * is nothing to write.  Saying so distinctly matters — an I/O error
+     * would send the user looking at permissions on a file that is
+     * perfectly fine, and writing the empty buffer would destroy it.
+     */
+    if (doc->tb == NULL) {
+        sag_msg(ed, SAG_MSG_ERROR, "%s was never loaded; nothing written",
+                doc->path);
+        ed->quit_after_save = false;
+        return SAG_CMD_ERR_STATE;
+    }
     ec = sag_ed_edit_ctx(ed);
     if (force) {
-        result = sag_file_save_force(ec.tb, ec.meta, ed->buffer.path);
+        result = sag_file_save_force(ec.tb, ec.meta, doc->path);
         if (result == SAG_SAVE_OK) {
             sag_undo_boundary(ec.undo);
             sag_undo_mark_saved(ec.undo);
@@ -835,7 +888,7 @@ CmdStatus sag_ed_file_save(Ed *ed, bool force)
             }
         }
     } else {
-        result = sag_edit_save(&ec, ed->buffer.path);
+        result = sag_edit_save(&ec, doc->path);
     }
     sag_ed_finish_edit(ed, &ec);
     if (result == SAG_SAVE_CHANGED_ON_DISK) {
@@ -843,14 +896,14 @@ CmdStatus sag_ed_file_save(Ed *ed, bool force)
         return SAG_CMD_ERR_IO;
     }
     if (result != SAG_SAVE_OK) {
-        sag_msg(ed, SAG_MSG_ERROR, "could not write %s", ed->buffer.path);
+        sag_msg(ed, SAG_MSG_ERROR, "could not write %s", doc->path);
         ed->quit_after_save = false;
         return SAG_CMD_ERR_IO;
     }
     ed->durability_failed = false;
     ed->prompt = SAG_PROMPT_NONE;
-    lines = sag_textbuf_line_count(ed->buffer.tb);
-    sag_msg(ed, SAG_MSG_INFO, "wrote %s, %llu lines", ed->buffer.path,
+    lines = sag_textbuf_line_count(doc->tb);
+    sag_msg(ed, SAG_MSG_INFO, "wrote %s, %llu lines", doc->path,
             (unsigned long long)lines);
     if (ed->quit_after_save) {
         ed->quit_after_save = false;
@@ -866,10 +919,17 @@ CmdStatus sag_ed_file_write_to(Ed *ed, const char *path, bool force)
     EditCtx ec;
     SagLoadErr load;
     SagSaveErr result;
+    Buffer *doc;
 
     if (ed == NULL || !ed->model_ready || path == NULL || path[0] == '\0')
         return SAG_CMD_ERR_ARG;
     sag_ed_insert_barrier(ed);
+    doc = sag_ed_doc(ed);
+    /* Nothing to write out under a new name either (§3). */
+    if (doc == NULL || doc->tb == NULL) {
+        sag_msg(ed, SAG_MSG_ERROR, "nothing loaded; nothing written");
+        return SAG_CMD_ERR_STATE;
+    }
     sag_filemeta_init(&next);
     load = sag_file_load(path, &existing, &next);
     sag_textbuf_free(existing);
@@ -896,9 +956,9 @@ CmdStatus sag_ed_file_write_to(Ed *ed, const char *path, bool force)
         sag_msg(ed, SAG_MSG_ERROR, "could not write %s", path);
         return SAG_CMD_ERR_IO;
     }
-    sag_filemeta_dispose(&ed->buffer.meta);
-    ed->buffer.meta = next;
-    ed->buffer.path = arena_strdup(&ed->arena, path);
+    sag_filemeta_dispose(&doc->meta);
+    doc->meta = next;
+    doc->path = arena_strdup(&ed->arena, path);
     sag_search_opts_init(&ed->search_opts);
     sag_search_state_init(&ed->search);
     sag_overlay_init(&ed->single_win.overlay);
@@ -913,11 +973,11 @@ CmdStatus sag_ed_file_write_to(Ed *ed, const char *path, bool force)
      * the struct.  Nothing about writing bytes to a path justifies
      * touching either tree.
      */
-    sag_tab_set_path(ed, ed->tabs.active, ed->buffer.path);
-    sag_reg_bind_context(&ed->regs, ed->buffer.undo, &ed->buffer.meta);
+    sag_tab_set_path(ed, ed->tabs.active, doc->path);
+    sag_reg_bind_context(&ed->regs, doc->undo, &doc->meta);
     ed->durability_failed = false;
     sag_msg(ed, SAG_MSG_INFO, "wrote %s, %llu lines", path,
-            (unsigned long long)sag_textbuf_line_count(ed->buffer.tb));
+            (unsigned long long)sag_textbuf_line_count(doc->tb));
     return SAG_CMD_OK;
 }
 
@@ -955,12 +1015,12 @@ static bool prompt_key(Ed *ed, Key key)
         return true;
     if (ed->prompt == SAG_PROMPT_RECOVER && code == (u32)'r') {
         EditCtx ec = sag_ed_edit_ctx(ed);
-        bool recovered = sag_journal_replay_edit(ed->buffer.meta.realpath,
-                                                 &ec, &ed->buffer.meta);
+        Buffer *doc = sag_ed_doc(ed);
+        bool recovered = sag_journal_replay_edit(doc->meta.realpath, &ec,
+                                                 &doc->meta);
 
         if (recovered)
-            ec.jrnl = sag_journal_open(ed->buffer.meta.realpath,
-                                       &ed->buffer.meta);
+            ec.jrnl = sag_journal_open(doc->meta.realpath, &doc->meta);
         sag_ed_finish_edit(ed, &ec);
         sag_ed_prompt(ed, SAG_PROMPT_NONE);
         if (recovered && ec.jrnl == NULL) {
@@ -975,8 +1035,9 @@ static bool prompt_key(Ed *ed, Key key)
         return true;
     }
     if (ed->prompt == SAG_PROMPT_RECOVER && code == (u32)'d') {
-        bool discarded = sag_journal_discard_path(
-            ed->buffer.meta.realpath, &ed->buffer.meta);
+        Buffer *doc = sag_ed_doc(ed);
+        bool discarded = sag_journal_discard_path(doc->meta.realpath,
+                                                  &doc->meta);
 
         sag_ed_prompt(ed, SAG_PROMPT_NONE);
         if (!discarded)
