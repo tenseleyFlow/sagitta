@@ -26,8 +26,9 @@ typedef struct {
     char *text;
     const char *detail;
     bool is_dir;
-    bool prefix;
+    bool deferred;
     i32 score;
+    FzMatch m;
 } Candidate;
 
 VEC_DECL(CandidateVec, Candidate);
@@ -37,7 +38,7 @@ typedef struct {
     size_t cap;
     i32 score;
     unsigned char dtype;
-    bool prefix;
+    FzMatch m;
 } PathCandidate;
 
 VEC_DECL(PathCandidateVec, PathCandidate);
@@ -52,57 +53,56 @@ static bool starts_with(const char *s, const char *prefix)
     return strncmp(s, prefix, n) == 0;
 }
 
-static i32 comp_score_n(const char *stem, size_t stem_len, const char *cand)
+/*
+ * Sprint 18.5 §2: one candidate's rank key, the single-item form of
+ * sag_fz_rank's ordering.  The streaming path enumerator cannot hand
+ * sag_fz_rank a whole array -- it never holds one -- so the tier rule
+ * lives here as well, in one helper both shapes call.
+ *
+ * `match` is always a bare name (a command name, a buffer label, a
+ * directory entry), never a path with slashes, so basename() would be
+ * the identity and path_mode is irrelevant.
+ */
+static i32 comp_key(const char *stem, size_t stem_len, const char *match,
+                    FzMatch *m)
 {
-    size_t si = 0U;
-    size_t ci;
-    i64 score = 0;
-    size_t previous = SIZE_MAX;
+    i32 score = sag_fz_score(stem, (u32)stem_len, match,
+                             (u32)strlen(match), m);
 
-    if (stem_len == 0U)
-        return 0;
-    for (ci = 0U; cand[ci] != '\0' && si < stem_len; ci++) {
-        unsigned char ch = (unsigned char)cand[ci];
-
-        if (ch != (unsigned char)stem[si])
-            continue;
-        score++;
-        if (ci == 0U || cand[ci - 1U] == '_' || cand[ci - 1U] == '/' ||
-            cand[ci - 1U] == '.' || cand[ci - 1U] == '-')
-            score += 6;
-        else if (isupper(ch) && islower((unsigned char)cand[ci - 1U]))
-            score += 4;
-        if (previous != SIZE_MAX && ci == previous + 1U)
-            score += 3;
-        previous = ci;
-        si++;
-    }
-    if (si != stem_len)
-        return -1;
-    if (ci == stem_len) {
-        score += stem_len > (size_t)INT32_MAX ? INT32_MAX : (i64)stem_len;
-    }
-    return score > INT32_MAX ? INT32_MAX : (i32)score;
+    if (score == SAG_FZ_NO_MATCH)
+        return SAG_FZ_NO_MATCH;
+    if (score >= 5000)
+        return score > INT32_MAX - SAG_FZ_BASENAME_TIER
+                   ? INT32_MAX
+                   : score + (i32)SAG_FZ_BASENAME_TIER;
+    return score;
 }
 
-i32 sag_comp_score(const char *stem, const char *cand)
-{
-    if (stem == NULL || cand == NULL)
-        return -1;
-    return comp_score_n(stem, strlen(stem), cand);
-}
-
+/*
+ * Descending by key, then shorter-then-memcmp -- sag_fz_rank's tie rule,
+ * so the two orderings cannot drift apart.
+ *
+ * Unlike sag_fz_rank, ties are broken by name even for the EMPTY stem.
+ * There the "preserve source order" rule has nothing to preserve:
+ * readdir order is filesystem order, it differs between ext4 and xfs and
+ * between two identical checkouts, and letting it through would make
+ * every completion golden filesystem-dependent (invariant 5).
+ */
 static int candidate_cmp(const void *left, const void *right, void *ctx)
 {
     const Candidate *a = left;
     const Candidate *b = right;
     int by_name;
+    size_t la;
+    size_t lb;
 
     (void)ctx;
-    if (a->prefix != b->prefix)
-        return a->prefix ? -1 : 1;
-    if (!a->prefix && a->score != b->score)
+    if (a->score != b->score)
         return a->score > b->score ? -1 : 1;
+    la = strlen(a->match);
+    lb = strlen(b->match);
+    if (la != lb)
+        return la < lb ? -1 : 1;
     by_name = strcmp(a->match, b->match);
     if (by_name != 0)
         return by_name;
@@ -123,12 +123,17 @@ static void candidate_dispose(CandidateVec *v)
 
 static bool candidate_add(CandidateVec *v, const char *stem,
                           const char *match, const char *text,
-                          const char *detail, bool is_dir)
+                          const char *detail, bool is_dir, bool deferred)
 {
-    i32 score = sag_comp_score(stem, match);
     Candidate item;
+    i32 score;
 
-    if (score < 0)
+    (void)memset(&item.m, 0, sizeof(item.m));
+    score = comp_key(stem, strlen(stem), match, &item.m);
+    /* SAG_FZ_NO_MATCH, not `< 0`: the length penalty makes a genuine
+     * match score negative, and a `< 0` test silently drops the longest
+     * real candidates. */
+    if (score == SAG_FZ_NO_MATCH)
         return false;
     item.text = sag_xmalloc(strlen(text) + 1U);
     (void)strcpy(item.text, text);
@@ -140,7 +145,7 @@ static bool candidate_add(CandidateVec *v, const char *stem,
     }
     item.detail = detail;
     item.is_dir = is_dir;
-    item.prefix = starts_with(match, stem);
+    item.deferred = deferred;
     item.score = score;
     CandidateVec_push(v, item);
     return true;
@@ -171,7 +176,12 @@ static u32 candidate_finish(Ed *ed, SagCompKind kind, CandidateVec *matches,
                       arena_strdup(arena, src->detail);
         item.kind = (u8)kind;
         item.is_dir = src->is_dir;
+        item.deferred = src->deferred;
         item.score = src->score;
+        /* Positions index `match`, which for these sources IS the drawn
+         * text -- except for a quoted path, handled in
+         * path_candidates_finish. */
+        item.m = src->m;
         Vec_CompItem_push(out, item);
     }
     candidate_dispose(matches);
@@ -188,18 +198,23 @@ static u32 enumerate_commands(Ed *ed, const char *stem, Vec_CompItem *out)
         CmdId id;
         const CmdEntry *entry;
         const char *name;
+        bool deferred;
 
         if (desc == NULL || !starts_with(desc->name, "ed.") ||
             (desc->flags & SAG_CMD_INTERNAL) != 0U)
             continue;
         name = desc->name + 3U;
-        (void)candidate_add(&matches, stem, name, name, desc->help, false);
+        /* A deferred command's help already reads "Sprint 23: open a
+         * file", so the detail column names the sprint for free. */
+        deferred = (desc->flags & SAG_CMD_DEFERRED) != 0U;
+        (void)candidate_add(&matches, stem, name, name, desc->help, false,
+                            deferred);
         id = sag_cmd_lookup(desc->name, (u32)strlen(desc->name));
         entry = sag_cmd_entry(id);
         if (entry != NULL && entry->abbrev != NULL &&
             strcmp(entry->abbrev, name) != 0)
             (void)candidate_add(&matches, stem, entry->abbrev,
-                                entry->abbrev, name, false);
+                                entry->abbrev, name, false, deferred);
     }
     return candidate_finish(ed, SAG_COMP_CMD, &matches, out);
 }
@@ -224,9 +239,11 @@ static u32 enumerate_buffers(Ed *ed, const char *stem, Vec_CompItem *out)
         const char *name = buffer_name(buffer);
         char number[32];
 
-        (void)candidate_add(&matches, stem, name, name, buffer->path, false);
+        (void)candidate_add(&matches, stem, name, name, buffer->path, false,
+                            false);
         (void)snprintf(number, sizeof(number), "%u", (unsigned)(i + 1U));
-        (void)candidate_add(&matches, stem, number, number, name, false);
+        (void)candidate_add(&matches, stem, number, number, name, false,
+                            false);
     }
     return candidate_finish(ed, SAG_COMP_BUFFER, &matches, out);
 }
@@ -358,12 +375,16 @@ static int path_candidate_cmp(const void *left, const void *right, void *ctx)
 {
     const PathCandidate *a = left;
     const PathCandidate *b = right;
+    size_t la;
+    size_t lb;
 
     (void)ctx;
-    if (a->prefix != b->prefix)
-        return a->prefix ? -1 : 1;
-    if (!a->prefix && a->score != b->score)
+    if (a->score != b->score)
         return a->score > b->score ? -1 : 1;
+    la = strlen(a->name);
+    lb = strlen(b->name);
+    if (la != lb)
+        return la < lb ? -1 : 1;
     return strcmp(a->name, b->name);
 }
 
@@ -386,7 +407,7 @@ static void path_candidate_swap(PathCandidate *a, PathCandidate *b)
  * root is replaced, so a large directory allocates and materializes only the
  * candidates the menu can display. */
 static void path_heap_push(PathCandidateVec *heap, const char *name,
-                           bool prefix, i32 score, unsigned char dtype)
+                           i32 score, unsigned char dtype, const FzMatch *m)
 {
     PathCandidate item;
     size_t at;
@@ -397,7 +418,7 @@ static void path_heap_push(PathCandidateVec *heap, const char *name,
     item.cap = need;
     item.score = score;
     item.dtype = dtype;
-    item.prefix = prefix;
+    item.m = *m;
     PathCandidateVec_push(heap, item);
     at = heap->len - 1U;
     while (at != 0U) {
@@ -412,8 +433,8 @@ static void path_heap_push(PathCandidateVec *heap, const char *name,
 }
 
 static void path_heap_replace_worst(PathCandidateVec *heap, const char *name,
-                                    bool prefix, i32 score,
-                                    unsigned char dtype)
+                                    i32 score, unsigned char dtype,
+                                    const FzMatch *m)
 {
     PathCandidate *root = &heap->data[0];
     size_t need = strlen(name) + 1U;
@@ -426,7 +447,7 @@ static void path_heap_replace_worst(PathCandidateVec *heap, const char *name,
     (void)memcpy(root->name, name, need);
     root->score = score;
     root->dtype = dtype;
-    root->prefix = prefix;
+    root->m = *m;
     for (;;) {
         size_t worst = at;
         size_t left = at * 2U + 1U;
@@ -448,13 +469,16 @@ static void path_heap_replace_worst(PathCandidateVec *heap, const char *name,
 }
 
 static bool path_candidate_wanted(const PathCandidateVec *heap,
-                                  const char *match, bool prefix, i32 score)
+                                  const char *match, i32 score)
 {
     PathCandidate preview;
 
     if (heap->len < SAG_COMP_MAX)
         return true;
-    preview = (PathCandidate){(char *)match, 0U, score, DT_UNKNOWN, prefix};
+    (void)memset(&preview, 0, sizeof(preview));
+    preview.name = (char *)match;
+    preview.score = score;
+    preview.dtype = DT_UNKNOWN;
     return path_candidate_rank_cmp(&preview, &heap->data[0]) < 0;
 }
 
@@ -469,11 +493,11 @@ static void path_candidates_dispose(PathCandidateVec *paths)
 
 static void path_candidates_finish(Ed *ed, PathCandidateVec *paths,
                                    const char *scan_dir, const char *head,
-                                   const char *tail, size_t tail_len,
                                    Vec_CompItem *out)
 {
     Arena *arena = ed->cmdline.active ? &ed->cmdline.comp_arena :
                                         &ed->arena;
+    size_t head_len = strlen(head);
     size_t i;
 
     sag_sort_stable(paths->data, paths->len, sizeof(paths->data[0]),
@@ -487,8 +511,6 @@ static void path_candidates_finish(Ed *ed, PathCandidateVec *paths,
         char *raw;
         CompItem item;
 
-        if (path->prefix)
-            path->score = comp_score_n(tail, tail_len, path->name);
         if (is_dir) {
             raw = join2(shown, "/");
             free(shown);
@@ -499,7 +521,28 @@ static void path_candidates_finish(Ed *ed, PathCandidateVec *paths,
         item.detail = NULL;
         item.kind = SAG_COMP_PATH;
         item.is_dir = is_dir;
+        item.deferred = false;
         item.score = path->score;
+        /*
+         * Ranking saw the bare entry name; the menu draws head + name.
+         * Shift the positions across the head, and give up entirely when
+         * the path had to be quoted -- quoting inserts a leading `"` and
+         * escapes, so there is no honest byte mapping back, and a
+         * highlight on the wrong columns is worse than none.
+         */
+        item.m = path->m;
+        if (strcmp(item.text, raw) != 0) {
+            item.m.n_pos = 0U;
+        } else if (head_len != 0U) {
+            u16 p;
+
+            for (p = 0U; p < item.m.n_pos; p++) {
+                size_t at = (size_t)item.m.pos[p] + head_len;
+
+                item.m.pos[p] = at > (size_t)UINT16_MAX ? (u16)UINT16_MAX
+                                                        : (u16)at;
+            }
+        }
         Vec_CompItem_push(out, item);
         free(raw);
     }
@@ -548,35 +591,29 @@ static u32 enumerate_paths(Ed *ed, const char *stem, Vec_CompItem *out)
         return 0U;
     }
     while ((entry = readdir(dir)) != NULL) {
+        FzMatch m;
         i32 score;
-        bool prefix;
 
         if (strcmp(entry->d_name, ".") == 0 ||
             strcmp(entry->d_name, "..") == 0)
             continue;
         if (entry->d_name[0] == '.' && tail[0] != '.')
             continue;
-        prefix = strncmp(entry->d_name, tail, tail_len) == 0;
-        if (prefix)
-            score = 0;
-        else {
-            score = comp_score_n(tail, tail_len, entry->d_name);
-            if (score < 0)
-                continue;
-        }
+        score = comp_key(tail, tail_len, entry->d_name, &m);
+        if (score == SAG_FZ_NO_MATCH)
+            continue;
         if (total != UINT32_MAX)
             total++;
-        if (!path_candidate_wanted(&paths, entry->d_name, prefix, score))
+        if (!path_candidate_wanted(&paths, entry->d_name, score))
             continue;
         if (paths.len < SAG_COMP_MAX)
-            path_heap_push(&paths, entry->d_name, prefix, score,
-                           entry->d_type);
+            path_heap_push(&paths, entry->d_name, score, entry->d_type, &m);
         else
-            path_heap_replace_worst(&paths, entry->d_name, prefix, score,
-                                    entry->d_type);
+            path_heap_replace_worst(&paths, entry->d_name, score,
+                                    entry->d_type, &m);
     }
     (void)closedir(dir);
-    path_candidates_finish(ed, &paths, scan_dir, head, tail, tail_len, out);
+    path_candidates_finish(ed, &paths, scan_dir, head, out);
     free(scan_dir);
     free(expanded);
     free(head);

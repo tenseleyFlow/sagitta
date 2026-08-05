@@ -113,10 +113,18 @@ void test_cmdcomp_source_selection_and_score(void)
     SAG_ASSERT(sag_comp_kind_for(&repeat, 9U, &kind));
     SAG_ASSERT_EQ_I64(kind, SAG_COMP_PATH);
     SAG_ASSERT(!sag_comp_kind_for(&free_string, 1U, &kind));
-    SAG_ASSERT(sag_comp_score("fop", "file.open") >= 0);
-    SAG_ASSERT(sag_comp_score("file", "file.open") >
-               sag_comp_score("fop", "file.open"));
-    SAG_ASSERT_EQ_I64(sag_comp_score("xyz", "file.open"), -1);
+    /*
+     * Sprint 18.5 §2 closed the sag_comp_score seam; ranking is now
+     * sag_fz_score's.  The sentinel moved from -1 to SAG_FZ_NO_MATCH,
+     * and a genuine match may score NEGATIVE (the length penalty) -- a
+     * `< 0` reject here would silently drop the longest real candidates.
+     */
+    SAG_ASSERT(sag_fz_score("fop", 3U, "file.open", 9U, NULL) !=
+               SAG_FZ_NO_MATCH);
+    SAG_ASSERT(sag_fz_score("file", 4U, "file.open", 9U, NULL) >
+               sag_fz_score("fop", 3U, "file.open", 9U, NULL));
+    SAG_ASSERT_EQ_I64(sag_fz_score("xyz", 3U, "file.open", 9U, NULL),
+                      SAG_FZ_NO_MATCH);
 
     arena_init(&ed.arena);
     arena_init(&scratch);
@@ -320,20 +328,20 @@ void test_cmdcomp_lcp_menu_and_empty_providers(void)
     SAG_ASSERT_EQ_U64(sag_comp_enumerate(&fixture.ed, SAG_COMP_VALUE,
                                           "4", &items), 0U);
     Vec_CompItem_push(&items,
-                      ((CompItem){"\xc3\xa9" "lan", NULL,
-                                  SAG_COMP_VALUE, false, 0}));
+                      ((CompItem){.text = "\xc3\xa9" "lan",
+                                  .kind = SAG_COMP_VALUE}));
     Vec_CompItem_push(&items,
-                      ((CompItem){"\xc3\xaa" "tre", NULL,
-                                  SAG_COMP_VALUE, false, 0}));
+                      ((CompItem){.text = "\xc3\xaa" "tre",
+                                  .kind = SAG_COMP_VALUE}));
     lcp = sag_comp_lcp(&scratch, &items);
     SAG_ASSERT_EQ_STR(lcp, "");
     items.len = 0U;
     Vec_CompItem_push(&items,
-                      ((CompItem){"\xc3\xa9" "clair", NULL,
-                                  SAG_COMP_VALUE, false, 0}));
+                      ((CompItem){.text = "\xc3\xa9" "clair",
+                                  .kind = SAG_COMP_VALUE}));
     Vec_CompItem_push(&items,
-                      ((CompItem){"\xc3\xa9" "toile", NULL,
-                                  SAG_COMP_VALUE, false, 0}));
+                      ((CompItem){.text = "\xc3\xa9" "toile",
+                                  .kind = SAG_COMP_VALUE}));
     lcp = sag_comp_lcp(&scratch, &items);
     SAG_ASSERT_EQ_STR(lcp, "\xc3\xa9");
     arena_free_all(&scratch);

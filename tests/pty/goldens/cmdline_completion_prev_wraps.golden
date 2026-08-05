@@ -1,5 +1,5 @@
 # sagitta pty golden v1
-size 80x24 alt=1 cursor=23,18 vis=1
+size 80x24 alt=1 cursor=23,26 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
 --- text
     1 completion fixture
@@ -20,12 +20,12 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
 
 
 
-  move.line.half_page_up       Move half a viewport up                          
-  sel.shift_left               Shift selected text left                         
-  sel.shift_right              Shift selected text right                        
+  cursor.lift.matches          Lift literal matches in the selection to cursors 
   view.half_page_down          Scroll half a viewport down                      
-> view.half_page_up            Scroll half a viewport up                        
-:view.half_page_up                                                              
+  move.line.half_page_up       Move half a viewport up                          
+  move.line.half_page_down     Move half a viewport down                        
+> edit.delete.grapheme_left    Delete the grapheme left of the cursor           
+:edit.delete.grapheme_left                                                      
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAA
 AAAAA
@@ -50,7 +50,7 @@ BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
-DEEEEEEEEEEEEEEEEEBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+DEEEEEEEEEEEEEEEEEEEEEEEEEBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 --- legend
 A fg=default bg=default attrs=----------
 B fg=#f7e0cc bg=#4e2a0f attrs=b---------

@@ -9,6 +9,7 @@
 #include "util/arena.h"
 #include "util/base.h"
 #include "util/vec.h"
+#include "ws/finder.h"
 
 typedef struct Ed Ed;
 
@@ -27,7 +28,21 @@ typedef struct {
     const char *detail;
     u8 kind;
     bool is_dir;
+    /*
+     * SAG_CMD_DEFERRED: the command exists but hard-errors naming its
+     * sprint.  Offering a row and then refusing it is worse than either
+     * hiding it or marking it, so the menu keeps the row, draws it dim,
+     * and puts the sprint in `detail` (invariant 3).
+     */
+    bool deferred;
     i32 score;
+    /*
+     * Which bytes of `text` matched, for the menu's highlighting.
+     * n_pos == 0 means "do not highlight" rather than "nothing matched":
+     * a path that needed quoting has no honest byte mapping back to the
+     * ranked name, and a wrong highlight is worse than none.
+     */
+    FzMatch m;
 } CompItem;
 
 VEC_DECL(Vec_CompItem, CompItem);
@@ -50,9 +65,6 @@ typedef struct SagCompQuery {
     const char *stem;
     Span replace;
 } SagCompQuery;
-
-/* Returns -1 when cand is not a bytewise subsequence of stem. */
-i32 sag_comp_score(const char *stem, const char *cand);
 
 /* Resolve an argspec position. token_index is zero for the command name. */
 bool sag_comp_kind_for(const CmdEntry *entry, u32 token_index,
