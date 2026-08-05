@@ -560,6 +560,97 @@ void test_cmdline_escape_leaves_a_live_menu_and_closes_the_prompt(void)
     cmdline_fixture_free(&fixture);
 }
 
+void test_cmdline_ghost_is_never_in_the_buffer(void)
+{
+    CmdlineFixture fixture;
+    Bytebuf typed;
+    Bytebuf via_api;
+
+    cmdline_fixture_init(&fixture);
+    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    cmdline_type(&fixture, "redr");
+    /* A suggestion is showing: `redraw` extends `redr`. */
+    SAG_ASSERT(fixture.ed.cmdline.menu.items.len != 0U);
+
+    /*
+     * The prompt still holds exactly what was typed.  A ghost in the
+     * TextBuf would poison the history draft, hand the parser text the
+     * user never wrote, and make sag_cmdline_text() -- which Sprint 21's
+     * search reads on every keystroke -- return a pattern with a
+     * suggestion glued onto it.
+     */
+    typed = cmdline_text(&fixture.ed.cmdline);
+    SAG_ASSERT_EQ_STR((const char *)typed.data, "redr");
+    bytebuf_free(&typed);
+
+    bytebuf_init(&via_api);
+    sag_cmdline_text(&fixture.ed, &via_api);
+    bytebuf_push_u8(&via_api, 0U);
+    SAG_ASSERT_EQ_STR((const char *)via_api.data, "redr");
+    bytebuf_free(&via_api);
+
+    /* And the history draft is the typed text, not the suggestion. */
+    SAG_ASSERT_EQ_STR(fixture.ed.cmdline.hist.draft, "redr");
+    cmdline_fixture_free(&fixture);
+}
+
+void test_cmdline_ghost_accept_matches_a_menu_accept(void)
+{
+    CmdlineFixture fixture;
+    Bytebuf ghosted;
+    Bytebuf chosen;
+
+    /* Accept the suggestion with Right. */
+    cmdline_fixture_init(&fixture);
+    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    cmdline_type(&fixture, "redr");
+    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                     sag_cmdline_cmd_ghost_accept),
+                      SAG_CMD_OK);
+    ghosted = cmdline_text(&fixture.ed.cmdline);
+    SAG_ASSERT_EQ_STR((const char *)ghosted.data, "redraw ");
+    cmdline_fixture_free(&fixture);
+
+    /* Accept the same candidate from the menu instead.  One accept path
+     * means the two land byte-identical text. */
+    cmdline_fixture_init(&fixture);
+    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    cmdline_type(&fixture, "redr");
+    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                     sag_cmdline_cmd_complete_next),
+                      SAG_CMD_OK);
+    chosen = cmdline_text(&fixture.ed.cmdline);
+    SAG_ASSERT_EQ_STR((const char *)chosen.data,
+                      (const char *)ghosted.data);
+    bytebuf_free(&chosen);
+    bytebuf_free(&ghosted);
+    cmdline_fixture_free(&fixture);
+}
+
+void test_cmdline_ghost_accept_is_a_motion_when_nothing_is_suggested(void)
+{
+    CmdlineFixture fixture;
+    Bytebuf text;
+
+    cmdline_fixture_init(&fixture);
+    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    cmdline_type(&fixture, "quit");
+    SAG_ASSERT_EQ_U64(fixture.ed.cmdline.cur.pos.v, 4U);
+
+    /* Step off the end: no suggestion can be shown mid-line, so Right
+     * has to be an ordinary motion.  Driven through the keymap, so the
+     * binding is under test too. */
+    sag_ed_handle_key(&fixture.ed, cmdline_key(SAG_KEY_LEFT), 1);
+    SAG_ASSERT_EQ_U64(fixture.ed.cmdline.cur.pos.v, 3U);
+    sag_ed_handle_key(&fixture.ed, cmdline_key(SAG_KEY_RIGHT), 1);
+    SAG_ASSERT_EQ_U64(fixture.ed.cmdline.cur.pos.v, 4U);
+
+    text = cmdline_text(&fixture.ed.cmdline);
+    SAG_ASSERT_EQ_STR((const char *)text.data, "quit");
+    bytebuf_free(&text);
+    cmdline_fixture_free(&fixture);
+}
+
 void test_cmdline_printable_edit_resets_history_walk_to_new_draft(void)
 {
     CmdlineFixture fixture;

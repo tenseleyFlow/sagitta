@@ -60,6 +60,7 @@ CmdStatus sag_cmdline_cmd_complete_next(CmdCtx *cx);
 CmdStatus sag_cmdline_cmd_complete_prev(CmdCtx *cx);
 CmdStatus sag_cmdline_cmd_insert_register(CmdCtx *cx);
 CmdStatus sag_cmdline_cmd_literal_next(CmdCtx *cx);
+CmdStatus sag_cmdline_cmd_ghost_accept(CmdCtx *cx);
 CmdStatus sag_cmdline_cmd_accept(CmdCtx *cx);
 CmdStatus sag_cmdline_cmd_cancel(CmdCtx *cx);
 CmdStatus sag_cmdline_cmd_delete_word_prev(CmdCtx *cx);

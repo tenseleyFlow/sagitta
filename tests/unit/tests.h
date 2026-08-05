@@ -590,6 +590,9 @@ void test_cmdline_menu_filters_live_while_typing(void);
 void test_cmdline_enter_executes_while_filtering(void);
 void test_cmdline_enter_accepts_a_chosen_row_without_executing(void);
 void test_cmdline_escape_leaves_a_live_menu_and_closes_the_prompt(void);
+void test_cmdline_ghost_is_never_in_the_buffer(void);
+void test_cmdline_ghost_accept_matches_a_menu_accept(void);
+void test_cmdline_ghost_accept_is_a_motion_when_nothing_is_suggested(void);
 void test_cmdline_printable_edit_resets_history_walk_to_new_draft(void);
 
 void test_buflist_document_occupies_slot_zero(void);

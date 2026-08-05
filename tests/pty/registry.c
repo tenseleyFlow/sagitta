@@ -1711,6 +1711,35 @@ static void case_s18_cmdline_menu_enter_not_execute(PtyCtx *c)
     s18_finish(c, path);
 }
 
+/* Sprint 18.5 §7: the suggestion trails the caret, dim, and is not in
+ * the buffer -- the accepted line proves what was really there. */
+static void case_s18_5_cmdline_ghost(PtyCtx *c)
+{
+    static const u8 initial[] = "ghost fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "redr");
+    ptc_snapshot(c, "cmdline_ghost");
+    s18_finish(c, path);
+}
+
+static void case_s18_5_cmdline_ghost_accept(PtyCtx *c)
+{
+    static const u8 initial[] = "ghost fixture\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "redr");
+    s18_settle_after_keys(c, "right");
+    ptc_snapshot(c, "cmdline_ghost_accept");
+    s18_finish(c, path);
+}
+
 static void case_s18_cmdline_error_caret(PtyCtx *c)
 {
     static const u8 initial[] = "error fixture\n";
@@ -3064,6 +3093,9 @@ const PtyCase sag_pty_cases[] = {
       case_s18_cmdline_menu_enter_not_execute),
     C(s18_cmdline_error_caret, modern, 24U, 80U,
       case_s18_cmdline_error_caret),
+    C(s18_5_cmdline_ghost, modern, 24U, 80U, case_s18_5_cmdline_ghost),
+    C(s18_5_cmdline_ghost_accept, modern, 24U, 80U,
+      case_s18_5_cmdline_ghost_accept),
     C(s18_cmdline_zwj_left, modern, 24U, 80U,
       case_s18_cmdline_zwj_left),
     C(s18_cmdline_zwj_right, modern, 24U, 80U,

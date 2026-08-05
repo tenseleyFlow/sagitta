@@ -161,7 +161,13 @@ static const BindRow keys_I[] = {
 
 static const BindRow keys_E[] = {
     {"<left>", "ed.move.char.prev", 0, NULL},
-    {"<right>", "ed.move.char.next", 0, NULL},
+    /*
+     * Sprint 18.5 §7.  Right accepts the inline suggestion when one is
+     * showing and otherwise moves one grapheme, so the key never stops
+     * being a motion.  C-e deliberately stays on end-of-line: its
+     * fallback would have to differ, and one command cannot carry two.
+     */
+    {"<right>", "ed.cmdline.ghost.accept", 0, NULL},
     {"<home>", "ed.move.line.home", 0, NULL},
     {"<end>", "ed.move.line.end", 0, NULL},
     {"C-a", "ed.move.line.home", 0, NULL},

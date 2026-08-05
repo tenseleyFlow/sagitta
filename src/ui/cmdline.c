@@ -37,6 +37,9 @@ typedef struct CmdLineTarget {
     Win win;
 } CmdLineTarget;
 
+/* Defined with the drawing helpers; §7 needs it above them. */
+static void text_copy_span(const TextBuf *tb, Span span, u8 *out);
+
 static CmdLineTarget *cmdline_target(const CmdLine *line)
 {
     return line == NULL ? NULL : line->target;
@@ -821,6 +824,96 @@ CmdStatus sag_cmdline_cmd_delete_to_end(CmdCtx *cx)
     return delete_range(cx, (Span){cursor->pos.v, len});
 }
 
+/*
+ * Sprint 18.5 §7: the part of a candidate that has not been typed yet.
+ *
+ * Computed at DRAW time and never stored, so there is no lifetime to get
+ * wrong -- the string it points into belongs to the completion arena and
+ * is valid exactly between two refilters, which is exactly when a frame
+ * is drawn.
+ *
+ * The ghost is NEVER inserted into the prompt's TextBuf.  Putting it
+ * there would poison the history draft, hand the parser text the user
+ * never typed, and make sag_cmdline_text() -- which Sprint 21's search
+ * reads on every keystroke -- return a pattern with a suggestion glued
+ * to it.
+ */
+static const char *cmdline_ghost(Ed *ed, size_t *len)
+{
+    const CmdLine *line = &ed->cmdline;
+    const CompItem *item;
+    u64 buf_len;
+    size_t stem_len;
+    size_t text_len;
+    u8 typed[256];
+
+    *len = 0U;
+    if (line->buf == NULL || line->menu.items.len == 0U)
+        return NULL;
+    buf_len = sag_textbuf_len(line->buf);
+    /* Only at end of line: a suggestion in the middle of a line has no
+     * coherent place to go. */
+    if (line->cur.pos.v != buf_len || line->menu.replace.hi != buf_len)
+        return NULL;
+    item = sag_menu_selected(&line->menu);
+    if (item == NULL)
+        item = &line->menu.items.data[0];
+    if (item == NULL || item->text == NULL)
+        return NULL;
+    stem_len = (size_t)(line->menu.replace.hi - line->menu.replace.lo);
+    text_len = strlen(item->text);
+    if (stem_len == 0U || stem_len >= text_len || stem_len > sizeof(typed))
+        return NULL;
+    text_copy_span(line->buf, line->menu.replace, typed);
+    /*
+     * Only a PREFIX match has a "rest of it" to show.  A fuzzy match
+     * shares no head with what was typed, so it shows nothing and the
+     * menu row's highlighting carries the information instead.
+     */
+    if (memcmp(typed, item->text, stem_len) != 0)
+        return NULL;
+    *len = text_len - stem_len;
+    return item->text + stem_len;
+}
+
+CmdStatus sag_cmdline_cmd_ghost_accept(CmdCtx *cx)
+{
+    Ed *ed;
+    const CompItem *item;
+    const char *ghost;
+    size_t len;
+
+    if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
+        return SAG_CMD_ERR_STATE;
+    ed = cx->ed;
+    ghost = cmdline_ghost(ed, &len);
+    if (ghost == NULL) {
+        /*
+         * No suggestion under the caret, so this is just a motion.  The
+         * fallback is one grapheme right rather than end-of-line, which
+         * is why this is bound to Right and not to C-e: at end of line
+         * the two agree, but anywhere else they do not.
+         */
+        CmdCtx move = {0};
+
+        move.win = sag_cmdline_target(ed);
+        move.count = 1U;
+        move.source = cx->source;
+        return sag_ed_invoke(ed, sag_cmd_lookup("ed.move.char.next", 17U),
+                             &move);
+    }
+    item = sag_menu_selected(&ed->cmdline.menu);
+    if (item == NULL)
+        item = &ed->cmdline.menu.items.data[0];
+    /* One accept path, shared with the menu's: a ghost accepted and a
+     * row accepted must land byte-identical text. */
+    if (!insert_completion(ed, ed->cmdline.menu.replace, item, true))
+        return SAG_CMD_ERR_IO;
+    menu_discard(ed);
+    cmdline_refilter(ed);
+    return SAG_CMD_OK;
+}
+
 static void deferred_dispatch_error(Ed *ed, const CmdParse *parsed)
 {
     const CmdDesc *desc = sag_cmd_desc(parsed->command);
@@ -1168,6 +1261,29 @@ void sag_cmdline_draw(Ed *ed, Rect rect)
             x1 = (u16)(x0 + 1U);
         sag_grid_overlay(&ed->grid, rect.y, x0, x1, &error_cell,
                          SAG_OVERLAY_BG | SAG_OVERLAY_ATTRS);
+    }
+    /*
+     * §7: the suggestion trails the caret, dim, and is drawn AFTER the
+     * line text so it can only ever occupy cells the text did not.  It
+     * never scrolls the prompt: horizontal scroll follows the caret, and
+     * the caret sits before the ghost, so a long suggestion cannot push
+     * what the user is reading off the left edge.
+     */
+    if (col < right) {
+        size_t ghost_len;
+        const char *ghost = cmdline_ghost(ed, &ghost_len);
+
+        if (ghost != NULL && ghost_len != 0U) {
+            SagUiStyle ghost_style = style;
+            size_t keep = sag_str_clip((const u8 *)ghost, ghost_len,
+                                       (int)(right - col), NULL);
+
+            ghost_style.attrs |= SAG_ATTR_DIM;
+            (void)sag_grid_puts(&ed->grid, rect.y, col,
+                                (const u8 *)ghost, keep,
+                                ghost_style.row_fg, ghost_style.row_bg,
+                                ghost_style.attrs);
+        }
     }
     draw_menu(ed, rect.y, &style);
     draw_prompt_message(ed, rect.y, &style);
