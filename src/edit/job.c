@@ -800,9 +800,38 @@ void sag_job_reap(Ed *ed)
                 j->exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : 127;
             }
             ed->jobs.dirty = true;
-            sag_job_finish(ed, j);
+            /*
+             * NOT finished yet.  The child exiting says nothing about
+             * whether we have read everything it wrote — a pipe can hold
+             * a bufferful past exit, and completing here truncated the
+             * output and appended the footer above bytes that had not
+             * arrived.  sag_job_settle finishes it once the pipes EOF.
+             */
             break;
         }
+    }
+}
+
+bool sag_job_pending(const SagJob *j)
+{
+    if (j == NULL)
+        return false;
+    return !j->reaped || j->out_fd >= 0 || j->err_fd >= 0;
+}
+
+void sag_job_settle(Ed *ed)
+{
+    u32 i;
+
+    if (ed == NULL)
+        return;
+    for (i = 0U; i < ed->jobs.len; i++) {
+        SagJob *j = &ed->jobs.v[i];
+
+        if (j->drained || sag_job_pending(j))
+            continue;
+        j->drained = true;
+        sag_job_finish(ed, j);
     }
 }
 

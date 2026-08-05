@@ -113,6 +113,10 @@ typedef struct SagJob {
     bool follow_tail;
     bool collect_capped;
     bool reaped;
+    /* Set once the child is reaped AND its output pipes have reached
+     * EOF.  Child exit alone is not the end of the output: up to a
+     * pipe-buffer's worth can still be unread. */
+    bool drained;
     /* A caller is driving this job to completion synchronously (the §5
      * filter).  sag_job_finish must not touch buffers or the message line
      * for such a job: the driver owns the outcome, including rollback. */
@@ -144,6 +148,11 @@ void sag_job_collect_fds(Ed *ed, struct pollfd *pfd, u32 *n);
 void sag_job_pump(Ed *ed, const struct pollfd *pfd, u32 n);
 /* Called when the signal self-pipe reports SIGCHLD. */
 void sag_job_reap(Ed *ed);
+/* Delivers completion for jobs that are reaped AND fully drained; the
+ * loop calls this after pumping. */
+void sag_job_settle(Ed *ed);
+/* True while the job still owes output or a wait status. */
+bool sag_job_pending(const SagJob *j);
 /* Signals the process GROUP: killing the pid alone leaves the shell's
  * children running, and `:!sleep 100 | cat` becomes unkillable. */
 bool sag_job_signal(Ed *ed, u32 id, int sig);

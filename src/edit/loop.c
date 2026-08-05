@@ -354,6 +354,9 @@ int sag_loop_run(Ed *ed)
         if (chld)
             sag_job_reap(ed);
         sag_job_tick(ed, now);
+        /* Completion is delivered here, not from reap: a job is done
+         * when the child is gone AND its pipes have drained. */
+        sag_job_settle(ed);
         if (ed->jobs.dirty) {
             /* One refresh per iteration, not one per state change: a
              * burst of exits redraws the table and badge exactly once. */

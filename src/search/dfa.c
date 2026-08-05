@@ -55,6 +55,12 @@ typedef struct DfaState {
     u8 ctx;
     bool matched;
     i32 next; /* chain within the bucket, -1 ends it */
+    /* Lazily filled transitions for ASCII, -1 meaning "not computed".
+     * This is what makes the steady state a table walk instead of an
+     * epsilon-closure per character.  It is only valid for patterns with
+     * no assertions, because an assertion makes the next state depend on
+     * the surrounding text and not merely on the input byte. */
+    i32 *next_ascii;
 } DfaState;
 
 typedef struct Dfa {
@@ -72,6 +78,11 @@ typedef struct Dfa {
     u32 *stamp;
     u32 gen;
     u32 *stack;
+    /* Scratch for building the next kernel; allocated ONCE.  Allocating
+     * it per input position made a 64 MiB search grow RSS by 268 MB,
+     * which the throughput gate's memory ceiling caught. */
+    u32 *combined;
+    bool has_assert;
 } Dfa;
 
 static bool ctx_holds(u8 ctx, ReOp op)
@@ -223,6 +234,16 @@ static i32 dfa_intern(Dfa *d, u32 n, u8 ctx, bool matched)
     st->ctx = ctx;
     st->matched = matched;
     st->next = d->buckets[bucket];
+    st->next_ascii = NULL;
+    if (!d->has_assert) {
+        u32 k;
+
+        st->next_ascii = arena_alloc(&d->arena, 128U * sizeof(i32),
+                                     sizeof(i32));
+        for (k = 0U; k < 128U; k++)
+            st->next_ascii[k] = -1;
+        d->bytes += 128U * sizeof(i32);
+    }
     d->buckets[bucket] = (i32)d->nstates;
     d->bytes += (u64)n * sizeof(u32);
     return (i32)d->nstates++;
@@ -274,6 +295,15 @@ static u32 dfa_decode(const SagReInput *in, u64 off, u32 *len_out)
     u32 cp = 0U;
     size_t used;
 
+    /* ASCII over a flat buffer is the overwhelmingly common case in a
+     * scan; taking it without the four-byte gather and the decoder call
+     * is most of this function's cost. */
+    if (in->tb == NULL && off < in->window.hi && off < in->len &&
+        in->bytes[off] < 0x80U) {
+        *len_out = 1U;
+        return in->bytes[off];
+    }
+
     while (have < SAG_UTF8_MAX) {
         u8 b;
 
@@ -319,11 +349,10 @@ int sag_re_dfa_test(const SagRe *re, const SagReInput *in, u64 from)
 {
     Dfa d;
     u64 pos;
-    u32 prev_cp = 0U;
-    bool has_prev = false;
     int verdict = SAG_DFA_NO;
     u32 *cur;
     u32 ncur;
+    i32 state;
 
     if (re == NULL || in == NULL || re->nprog == 0U)
         return SAG_DFA_NO;
@@ -345,64 +374,125 @@ int sag_re_dfa_test(const SagRe *re, const SagReInput *in, u64 from)
     (void)memset(d.stamp, 0, (size_t)re->nprog * sizeof(u32));
     cur = arena_alloc(&d.arena, (size_t)re->nprog * sizeof(u32),
                       sizeof(u32));
+
+    /* Assertions make a transition depend on the surrounding text, not
+     * just the byte, so the transition cache is only sound without
+     * them.  Patterns that use ^ $ \b and friends take the slower
+     * recompute-per-step path and stay correct. */
+    {
+        u32 k;
+
+        d.has_assert = false;
+        for (k = 0U; k < re->nprog; k++) {
+            ReOp op = (ReOp)re->prog[k].op;
+
+            if (op == RE_BOL || op == RE_EOL || op == RE_BOT ||
+                op == RE_EOT || op == RE_WORDB || op == RE_NWORDB)
+                d.has_assert = true;
+        }
+    }
+    d.combined = arena_alloc(&d.arena, (size_t)(re->nprog + 2U) *
+                             sizeof(u32), sizeof(u32));
     dfa_flush(&d);
     d.flushes = 0U;
 
-    ncur = 0U;
     pos = from < in->window.lo ? in->window.lo : from;
+
+    /*
+     * The transition is an explicit edge (state, codepoint) -> state.
+     *
+     * Getting this wrong is subtle and silent: an earlier version cached
+     * the new state under the codepoint at the CURRENT position, while
+     * the state had actually been reached by stepping on the PREVIOUS
+     * one.  Every cached edge was therefore off by one character, and
+     * the only visible symptom was a DFA that disagreed with the VM on
+     * about one pattern in fifty.
+     */
+    {
+        u32 cp0 = 0U;
+        u32 len0 = 0U;
+        bool have0;
+        u8 ctx0;
+        bool matched0 = false;
+        u32 n0;
+
+        cp0 = dfa_decode(in, pos, &len0);
+        have0 = len0 != 0U && pos < in->window.hi;
+        ctx0 = d.has_assert ?
+               ctx_at(in, pos, 0U, false, cp0, have0) : 0U;
+        d.combined[0] = 0U; /* the start instruction */
+        n0 = closure(&d, d.combined, 1U, ctx0, &matched0);
+        state = dfa_intern(&d, n0, ctx0, matched0);
+        if (state < 0) {
+            arena_free_all(&d.arena);
+            return SAG_DFA_GIVE_UP;
+        }
+    }
+
     for (;;) {
         u32 cp = 0U;
         u32 cp_len = 0U;
         bool have_cp;
-        u8 ctx;
-        u32 n;
-        bool matched = false;
-        u32 seed[64];
-        u32 nseed = 0U;
+        i32 next;
         u32 i;
 
-        cp = dfa_decode(in, pos, &cp_len);
-        have_cp = cp_len != 0U && pos < in->window.hi;
-        ctx = ctx_at(in, pos, prev_cp, has_prev, cp, have_cp);
-
-        /* Unanchored: the start pc is re-seeded at every position, which
-         * is the DFA equivalent of the VM's per-position seeding. */
-        if (ncur + 1U < re->nprog) {
-            for (i = 0U; i < ncur; i++)
-                d.work[i] = cur[i];
-            n = ncur;
-        } else {
-            n = 0U;
-        }
-        (void)seed;
-        (void)nseed;
-        {
-            u32 *combined = arena_alloc(&d.arena,
-                                        (size_t)(n + 1U) * sizeof(u32),
-                                        sizeof(u32));
-
-            (void)memcpy(combined, d.work, (size_t)n * sizeof(u32));
-            combined[n] = 0U; /* the start instruction */
-            n = closure(&d, combined, n + 1U, ctx, &matched);
-        }
-        if (matched) {
+        if (d.states[state].matched) {
             verdict = SAG_DFA_YES;
             break;
         }
-        if (dfa_intern(&d, n, ctx, matched) < 0) {
-            verdict = SAG_DFA_GIVE_UP;
-            break;
-        }
+        cp = dfa_decode(in, pos, &cp_len);
+        have_cp = cp_len != 0U && pos < in->window.hi;
         if (!have_cp)
             break;
-        /* Step every live instruction on this codepoint. */
-        ncur = 0U;
-        for (i = 0U; i < n; i++) {
-            if (inst_takes(re, &re->prog[d.work[i]], cp))
-                cur[ncur++] = d.work[i] + 1U;
+
+        next = -1;
+        if (!d.has_assert && cp < 128U &&
+            d.states[state].next_ascii != NULL)
+            next = d.states[state].next_ascii[cp];
+
+        if (next < 0) {
+            u8 ctx;
+            bool matched = false;
+            u32 n;
+            i32 from_state = state;
+
+            /* Step every live instruction of this state on `cp`, then
+             * re-seed the start instruction: this scan is unanchored, so
+             * a match may begin at the next position too. */
+            ncur = 0U;
+            for (i = 0U; i < d.states[state].npcs; i++) {
+                u32 pc = d.states[state].pcs[i];
+
+                if (inst_takes(re, &re->prog[pc], cp))
+                    cur[ncur++] = pc + 1U;
+            }
+            for (i = 0U; i < ncur; i++)
+                d.combined[i] = cur[i];
+            d.combined[ncur] = 0U;
+            if (d.has_assert) {
+                u32 nxt_len = 0U;
+                u32 nxt = dfa_decode(in, pos + cp_len, &nxt_len);
+                bool have_next = nxt_len != 0U &&
+                                 pos + cp_len < in->window.hi;
+
+                ctx = ctx_at(in, pos + cp_len, cp, true, nxt, have_next);
+            } else {
+                ctx = 0U;
+            }
+            n = closure(&d, d.combined, ncur + 1U, ctx, &matched);
+            next = dfa_intern(&d, n, ctx, matched);
+            if (next < 0) {
+                verdict = SAG_DFA_GIVE_UP;
+                break;
+            }
+            /* Record the edge we just walked.  A flush may have
+             * invalidated `from_state`, so only cache when it survived. */
+            if (!d.has_assert && cp < 128U &&
+                (u32)from_state < d.nstates &&
+                d.states[from_state].next_ascii != NULL)
+                d.states[from_state].next_ascii[cp] = next;
         }
-        prev_cp = cp;
-        has_prev = true;
+        state = next;
         pos += cp_len;
     }
     arena_free_all(&d.arena);

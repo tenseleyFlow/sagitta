@@ -358,7 +358,15 @@ static SagFilterResult filter_drive(Ed *ed, SagJob *j, Bytebuf *typeahead)
         bool cont = false;
         bool chld = false;
 
-        if (j->state != SAG_JOB_RUNNING && j->reaped)
+        /*
+         * Exit only when the child is reaped AND its output has reached
+         * EOF.  Breaking on reap alone silently truncated large filter
+         * output — `cat` over 3.7 MB lost a few hundred KB, and the
+         * filter still reported success, which is data loss wearing a
+         * success message.  The timeout path still forces termination,
+         * so a stuck writer cannot hang this loop.
+         */
+        if (!sag_job_pending(j))
             break;
         sag_job_collect_fds(ed, pfd, &n);
         tty_slot = -1;

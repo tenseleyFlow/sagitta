@@ -22,3 +22,11 @@ save.atomic.1g-code          4000000000     5500000000     6000000000           
 # super-linear ratio catches backtracking creeping back in on any machine.
 re.pathological_100k_ns            50000000
 re.pathological_scale_ratio              15
+
+# Sprint 20 search throughput.  The RSS ceiling is the no-materialization
+# proof: searching a gigabyte must cost the same kilobytes as searching a
+# line, so a regression that copies the buffer once is caught here even
+# though it would pass both rate gates.
+re.throughput_literal_mibs              500
+re.throughput_dfa_mibs                   50
+re.throughput_rss_bytes             4194304

@@ -170,6 +170,7 @@ PERF_TEXTBUF_OBJ := $(BUILD)/tests/perf/perf_textbuf.o
 PERF_LATENCY_OBJ := $(BUILD)/tests/perf/latency.o
 PERF_JOBSTREAM_OBJ := $(BUILD)/tests/perf/jobstream.o
 PERF_REPATH_OBJ := $(BUILD)/tests/perf/re_pathological.o
+PERF_RETHRU_OBJ := $(BUILD)/tests/perf/re_throughput.o
 PERF_UNITS_OBJ := $(BUILD)/tests/perf/perf_units.o
 PERF_MULTICURSOR_OBJ := $(BUILD)/tests/perf/multicursor.o
 PERF_CMDCOMP_OBJ := $(BUILD)/tests/perf/perf_cmdcomp.o
@@ -200,6 +201,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(FUZZ_LIB_OBJ) \
                 $(PERF_PIECE_OBJ) $(PERF_CURSOR_OBJ) $(PERF_UNDO_OBJ) \
                 $(PERF_TEXTBUF_OBJ) $(PERF_LATENCY_OBJ) \
                 $(PERF_JOBSTREAM_OBJ) $(PERF_REPATH_OBJ) \
+                $(PERF_RETHRU_OBJ) \
                 $(LIVE_PTY_OBJ) \
                 $(PERF_UNITS_OBJ) \
                 $(PERF_MULTICURSOR_OBJ) \
@@ -316,6 +318,10 @@ $(BUILD)/perf_undo: $(PERF_CORE_OBJ) $(PERF_UNDO_OBJ)
 $(BUILD)/perf_latency: $(PERF_LATENCY_OBJ) $(LIVE_PTY_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_LATENCY_OBJ) \
 		$(LIVE_PTY_OBJ)
+
+$(BUILD)/perf_re_throughput: $(PERF_RETHRU_OBJ) $(PERF_CORE_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_RETHRU_OBJ) \
+		$(PERF_CORE_OBJ)
 
 $(BUILD)/perf_re_pathological: $(PERF_REPATH_OBJ) $(PERF_CORE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_REPATH_OBJ) \
@@ -449,6 +455,7 @@ perf-piece: $(BUILD)/perf_piece
 
 perf: perf-unicode perf-render perf-scroll perf-piece perf-cursor perf-undo perf-textbuf \
       perf-latency perf-jobstream perf-re-pathological \
+      perf-re-throughput \
       perf-units perf-multicursor perf-cmdcomp
 
 perf-cursor: $(BUILD)/perf_cursor
@@ -472,6 +479,9 @@ perf-latency: $(BUILD)/perf_latency $(BUILD)/sagitta
 
 perf-re-pathological: $(BUILD)/perf_re_pathological
 	$(BUILD)/perf_re_pathological --baseline $(PERF_BASELINE)
+
+perf-re-throughput: $(BUILD)/perf_re_throughput
+	$(BUILD)/perf_re_throughput --baseline $(PERF_BASELINE)
 
 perf-jobstream: $(BUILD)/perf_jobstream $(BUILD)/sagitta
 	$(BUILD)/perf_jobstream --sagitta $(abspath $(BUILD)/sagitta) \
@@ -645,7 +655,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/sagitta
          $(PERF_PIECE_OBJ:.o=.d) $(PERF_CURSOR_OBJ:.o=.d) \
          $(PERF_UNDO_OBJ:.o=.d) $(PERF_TEXTBUF_OBJ:.o=.d) \
          $(PERF_LATENCY_OBJ:.o=.d) $(PERF_JOBSTREAM_OBJ:.o=.d) \
-         $(PERF_REPATH_OBJ:.o=.d) \
+         $(PERF_REPATH_OBJ:.o=.d) $(PERF_RETHRU_OBJ:.o=.d) \
          $(LIVE_PTY_OBJ:.o=.d) \
          $(PERF_MULTICURSOR_OBJ:.o=.d) \
          $(PERF_CMDCOMP_OBJ:.o=.d) \
