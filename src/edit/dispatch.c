@@ -191,6 +191,20 @@ void sag_dispatch_key(Ed *ed, Key key, i64 now_ms)
 
     if (key.ev == SAG_KEY_RELEASE)
         return;
+    /*
+     * A confirm run owns the keyboard while it is asking.  It sits
+     * ahead of the keymap because y/n/a/q/l are ordinary bindings the
+     * rest of the time, and answering "replace this one?" must not also
+     * run whatever `a` is bound to.
+     */
+    if (ed->confirm.active) {
+        u8 answer = key.code == SAG_KEY_ESCAPE
+                    ? 0x1BU
+                    : (key.ntext == 1U ? key.text[0] : 0U);
+
+        if (sag_search_confirm_key(ed, answer))
+            return;
+    }
     if (ed->capture_cmd.v != 0U) {
         CmdCtx cx = {0};
         CmdId cmd = ed->capture_cmd;
