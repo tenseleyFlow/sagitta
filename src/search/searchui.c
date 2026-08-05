@@ -259,13 +259,8 @@ void sag_search_accept(Ed *ed, Win *w)
     if (ed->search.pat != NULL && ed->search.patlen > 0U) {
         /* Register `/` is the pattern's home; `:s//` and `^R /` read it
          * from there rather than from this struct. */
-        RegVal v;
-
-        (void)memset(&v, 0, sizeof(v));
-        bytebuf_init(&v.bytes);
-        bytebuf_append(&v.bytes, ed->search.pat, ed->search.patlen);
-        sag_reg_set(&ed->regs, (u8)'/', &v);
-        bytebuf_free(&v.bytes);
+        sag_reg_set_search(&ed->regs, (const u8 *)ed->search.pat,
+                           ed->search.patlen);
         /* The jump is a jump: `origin` becomes a place to come back to. */
         sag_jump_push(w, ed->search.origin, ed->now_ms);
     }
@@ -456,19 +451,13 @@ bool sag_search_word(Ed *ed, Win *w, bool forward)
                                        (const char *)pat.data, pat.len,
                                        &ed->search_opts, NULL);
     if (ed->search.re != NULL) {
-        RegVal v;
-
         ed->search.pat = arena_alloc(&ed->search.arena, pat.len + 1U, 1U);
         (void)memcpy(ed->search.pat, pat.data, pat.len);
         ed->search.pat[pat.len] = '\0';
         ed->search.patlen = pat.len;
         ed->search.pat_gen++;
         ed->search.reverse = !forward;
-        (void)memset(&v, 0, sizeof(v));
-        bytebuf_init(&v.bytes);
-        bytebuf_append(&v.bytes, pat.data, pat.len);
-        sag_reg_set(&ed->regs, (u8)'/', &v);
-        bytebuf_free(&v.bytes);
+        sag_reg_set_search(&ed->regs, pat.data, pat.len);
         /* `*` is a jump, so where we stood is worth coming back to. */
         at = c->pos.v;
         sag_jump_push(w, BYTEOFF(at), ed->now_ms);

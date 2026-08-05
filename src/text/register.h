@@ -91,6 +91,7 @@ void sag_reg_bind_context(Registers *r, const UndoTree *undo,
 RegVal *sag_reg_get(Registers *r, u8 name);
 void sag_reg_set(Registers *r, u8 name, const RegVal *v);
 void sag_reg_set_cmdline(Registers *r, const u8 *bytes, size_t len);
+void sag_reg_set_search(Registers *r, const u8 *bytes, size_t len);
 void sag_reg_append(Registers *r, u8 name, const RegVal *v);
 void sag_reg_yank(Registers *r, u8 explicit_name, const RegVal *v);
 void sag_reg_delete(Registers *r, u8 explicit_name, const RegVal *v);

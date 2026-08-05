@@ -233,9 +233,16 @@ void sag_reg_set(Registers *r, u8 name, const RegVal *v)
         SAG_BUG("sag_reg_set: NULL argument");
     if (name == '_' || name == 0U)
         return;
+    /*
+     * These registers are written by the subsystem that owns them, each
+     * through its own door, so that "what can put a value here" stays a
+     * short list.  Sprint 21 opened `/` via sag_reg_set_search; the rest
+     * are still owned elsewhere.
+     */
     if (name == '.' || name == '/' || name == ':' || name == '%' ||
         name == '#')
-        SAG_BUG("register %c is read-only in Sprint 12", (int)name);
+        SAG_BUG("register %c is written by its owning subsystem, not by "
+                "sag_reg_set", (int)name);
     if (name >= 'A' && name <= 'Z') {
         sag_reg_append(r, name, v);
         return;
@@ -254,6 +261,19 @@ void sag_reg_set_cmdline(Registers *r, const u8 *bytes, size_t len)
     bytebuf_append(&r->cmdline.bytes, bytes, len);
     r->cmdline.type = SAG_REG_CHARWISE;
     r->cmdline.t_wall = (i64)time(NULL);
+}
+
+/* Sprint 21 §6: the last accepted search pattern.  `:s//` and `^R /`
+ * read it from here rather than from the live search state, so it
+ * survives the prompt that produced it. */
+void sag_reg_set_search(Registers *r, const u8 *bytes, size_t len)
+{
+    if (r == NULL || (bytes == NULL && len != 0U))
+        SAG_BUG("sag_reg_set_search: NULL argument");
+    regval_clear(&r->search);
+    bytebuf_append(&r->search.bytes, bytes, len);
+    r->search.type = SAG_REG_CHARWISE;
+    r->search.t_wall = (i64)time(NULL);
 }
 
 static size_t eol_len_at_end(const RegVal *v)
