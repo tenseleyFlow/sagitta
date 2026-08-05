@@ -98,6 +98,9 @@ u32 sag_re_min_len(const SagRe *re);
 /* Convenience for callers holding a plain buffer. */
 SagReInput sag_re_input_bytes(const u8 *bytes, u64 len);
 SagReInput sag_re_input_textbuf(const TextBuf *tb);
+/* One byte, either backing.  Seeks per call: fine for a match-sized
+ * span, wrong for a scan. */
+bool sag_re_input_byte(const SagReInput *in, u64 off, u8 *out);
 
 
 /*

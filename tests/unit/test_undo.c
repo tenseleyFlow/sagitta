@@ -379,9 +379,22 @@ void test_undo_filter_reason_names_sprint19(void)
     undo_fixture_free(&f);
 }
 
-void test_undo_replace_reason_names_sprint21(void)
+/* SAG_TXN_REPLACE used to hard-error naming this sprint.  Sprint 21
+ * landed it, so the reason is now accepted — that is what closing a
+ * deferral looks like, and the row stays to say so. */
+void test_undo_replace_reason_is_live(void)
 {
-    undo_assert_deferred_reason(SAG_TXN_REPLACE, "Sprint 21");
+    UndoFixture f;
+    EditCtx ec;
+
+    undo_fixture_init(&f, (const u8 *)"hello", 5U);
+    ec = f.edit;
+    sag_undo_begin(&ec, SAG_TXN_REPLACE);
+    SAG_ASSERT(sag_edit_insert(&ec, BYTEOFF(0U), (const u8 *)"X", 1U));
+    sag_undo_end(&ec);
+    SAG_ASSERT(sag_undo(&ec));
+    SAG_ASSERT_EQ_U64(sag_textbuf_len(f.tb), 5U);
+    undo_fixture_free(&f);
 }
 
 void test_undo_macro_reason_names_sprint34(void)

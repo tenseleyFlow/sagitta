@@ -6,6 +6,8 @@
 #include <string.h>
 
 #include "edit/edit_cmds.h"
+#include "edit/jumplist.h"
+#include "edit/search_cmds.h"
 #include "edit/file_cmds.h"
 #include "edit/shell_cmds.h"
 #include "edit/sel_actions.h"
@@ -441,6 +443,11 @@ static const CmdDesc builtins[] = {
     {"ed.change.newer", sag_change_cmd_newer, SAG_ARITY_OPT_INT,
      SAG_CMD_TAKES_COUNT | SAG_CMD_NEEDS_WIN,
      "Jump to a newer change position in this buffer"},
+    {"ed.search.replace", sag_search_cmd_replace, SAG_ARITY_STR,
+     SAG_CMD_CHANGES_BUFFER | SAG_CMD_NEEDS_WIN,
+     "Substitute matches of a pattern in a line range"},
+    {"ed.search.global", sag_search_cmd_global, SAG_ARITY_STR, 0U,
+     "Rejected: :g is Fletch's query API in Sprint 34"},
     DEFER("ed.macro.record", SAG_ARITY_OPT_STR, SAG_CMD_PROMPTS, 35,
           "record a command macro"),
     DEFER("ed.macro.replay", SAG_ARITY_OPT_STR,
@@ -500,6 +507,10 @@ static const BuiltinMeta builtin_meta[] = {
     {"ed.file.reload", "", SAG_RP_FORBID, "reload"},
     {"ed.file.close", "", SAG_RP_FORBID, "close"},
     {"ed.search.open", "s", SAG_RP_FORBID, "search"},
+    /* The substitution body is ONE opaque string; s18's tokenizer must
+     * not try to understand `/` inside a regex. */
+    {"ed.search.replace", "s", SAG_RP_OPT, "s"},
+    {"ed.search.global", "s", SAG_RP_OPT, "g"},
     /* :! carries an arbitrary command line, so its argspec is one string
      * and the range decides run-vs-filter (§5). */
     {"ed.shell.run", "s", SAG_RP_OPT, NULL},
@@ -556,7 +567,7 @@ static bool command_name_valid(const char *name)
         "run", "run_bg", "read", "filter", "term", "kill", "kill_force",
         "jump", "clear_finished", "rerun",
         /* Sprint 21 */
-        "back", "fwd", "older", "newer"};
+        "back", "fwd", "older", "newer", "global"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

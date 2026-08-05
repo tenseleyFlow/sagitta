@@ -201,6 +201,7 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
     sag_undo_mark_saved(ed->buffer.undo);
     ed->buffer.marks = sag_marks_new();
     ed->buffer.jrn = NULL;
+    sag_search_opts_init(&ed->search_opts);
     sag_reg_bind_context(&ed->regs, ed->buffer.undo, &ed->buffer.meta);
     sag_cset_init(&ed->single_win.cs, cursor);
     ed->single_win.buf = &ed->buffer;
@@ -731,6 +732,7 @@ CmdStatus sag_ed_file_write_to(Ed *ed, const char *path, bool force)
     sag_filemeta_dispose(&ed->buffer.meta);
     ed->buffer.meta = next;
     ed->buffer.path = arena_strdup(&ed->arena, path);
+    sag_search_opts_init(&ed->search_opts);
     sag_reg_bind_context(&ed->regs, ed->buffer.undo, &ed->buffer.meta);
     ed->durability_failed = false;
     sag_msg(ed, SAG_MSG_INFO, "wrote %s, %llu lines", path,

@@ -214,8 +214,6 @@ static void require_reason(EditCtx *ec, SagTxnReason reason)
 {
     if (reason >= SAG_TXN_REASON_MAX)
         SAG_BUG("undo: invalid transaction reason");
-    if (reason == SAG_TXN_REPLACE)
-        SAG_BUG("replace transactions land in Sprint 21");
     if (reason == SAG_TXN_MACRO)
         SAG_BUG("macro transactions land in Sprint 34");
     if (reason == SAG_TXN_LSP)

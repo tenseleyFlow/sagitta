@@ -6,6 +6,7 @@
 #include "edit/dispatch.h"
 #include "edit/job.h"
 #include "edit/jumplist.h"
+#include "edit/search_cmds.h"
 #include "edit/keymap.h"
 #include "edit/loop.h"
 #include "edit/mode.h"
@@ -15,6 +16,7 @@
 #include "term/tty.h"
 #include "text/edit.h"
 #include "text/register.h"
+#include "search/searchui.h"
 #include "ui/cmdline.h"
 #include "ui/message.h"
 #include "ui/win.h"
@@ -112,6 +114,8 @@ struct Ed {
     TimerHeap timers;
     JobTable jobs;
     Msg msg;
+    SearchOpts search_opts;
+    SearchConfirm confirm;
     CmdLine cmdline;
     PromptKind prompt;
     bool quit_after_save;

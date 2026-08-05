@@ -41,6 +41,22 @@ static bool byte_at(const SagReInput *in, TextIter *it, u64 off, u8 *out)
     return true;
 }
 
+/*
+ * Public single-byte read, for callers that need a few bytes out of a
+ * known-small span (Sprint 21 expands replacement templates this way).
+ * It re-seeks per call, so it is O(log n) per byte — correct for a
+ * match-sized span and quite wrong for a scan, which is why the engine
+ * itself uses the cursor above instead.
+ */
+bool sag_re_input_byte(const SagReInput *in, u64 off, u8 *out)
+{
+    TextIter it;
+
+    if (in == NULL || out == NULL)
+        return false;
+    return byte_at(in, &it, off, out);
+}
+
 /* Bytes a lead byte claims, or 0 when it is not a lead. */
 static u64 lead_len(u8 b)
 {
