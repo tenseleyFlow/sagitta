@@ -218,6 +218,9 @@ CmdStatus sag_ed_request_quit(Ed *ed, bool force);
 
 void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms);
 void sag_ed_handle_paste(Ed *ed, const u8 *bytes, size_t len, bool end);
+/* Sprint 22 §7: click-to-focus and border drag only; Sprint 27 routes
+ * the rest. */
+void sag_ed_handle_mouse(Ed *ed, Key key);
 void sag_ed_resize(Ed *ed, bool resumed);
 void sag_ed_layout(Ed *ed);
 void sag_ed_render(Ed *ed);

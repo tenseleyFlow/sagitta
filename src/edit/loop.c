@@ -298,6 +298,9 @@ static void loop_dispatch_event(Ed *ed, Key key, i64 now_ms)
     case SAG_EV_PASTE_END:
         sag_ed_handle_paste(ed, NULL, 0U, true);
         break;
+    case SAG_EV_MOUSE:
+        sag_ed_handle_mouse(ed, key);
+        break;
     default:
         break;
     }

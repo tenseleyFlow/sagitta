@@ -720,3 +720,34 @@ void test_layout_drag_moves_by_delta_and_esc_restores(void)
     SAG_ASSERT_EQ_U64(ed.pane_root->a->rect.w, before);
     sag_ed_free(&ed);
 }
+
+/*
+ * Closing a pane frees the SIBLING node after moving its content into
+ * the parent, so a focus pointer aimed at the sibling is left on freed
+ * memory and the next keystroke uses it.  fuzz_panes found this in
+ * eight operations; the row keeps it found.
+ */
+void test_layout_close_repairs_focus_on_the_freed_sibling(void)
+{
+    Ed ed;
+    Pane *right;
+    Pane *left;
+
+    ly_fixture(&ed);
+    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    right = sag_pane_split(&ed, ed.pane_root, SAG_SPLIT_H);
+    SAG_ASSERT_NOT_NULL(right);
+    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    left = ed.pane_root->a;
+
+    /* Focus the SIBLING of the pane about to close. */
+    ed.focus = right;
+    SAG_ASSERT(sag_pane_close(&ed, left));
+    /* Focus must name a leaf that still exists — not `right`, which was
+     * the sibling node and is now freed. */
+    SAG_ASSERT_NOT_NULL(ed.focus);
+    SAG_ASSERT(ed.focus == ed.pane_root);
+    SAG_ASSERT(ed.focus->is_leaf);
+    SAG_ASSERT_EQ_U64(sag_pane_leaf_count(ed.pane_root), 1U);
+    sag_ed_free(&ed);
+}

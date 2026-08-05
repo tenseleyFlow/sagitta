@@ -44,6 +44,15 @@ u32 sag_pane_leaf_count(const Pane *root)
     return sag_pane_leaf_count(root->a) + sag_pane_leaf_count(root->b);
 }
 
+Pane *sag_pane_first_leaf(Pane *root)
+{
+    Pane *at = root;
+
+    while (at != NULL && !at->is_leaf)
+        at = at->a;
+    return at;
+}
+
 void sag_pane_tree_walk(Pane *root, SagPaneVisit fn, void *ctx)
 {
     if (root == NULL || fn == NULL)
@@ -234,6 +243,16 @@ bool sag_pane_close(Ed *ed, Pane *leaf)
         parent->a->parent = parent;
         parent->b->parent = parent;
     }
+    /*
+     * The sibling NODE is freed after its content moves into the
+     * parent, so anything pointing at it now dangles.  Focus is the one
+     * that matters and the one nobody remembers: closing pane A when
+     * focus sits on its sibling B leaves focus on freed memory, and the
+     * next keystroke uses it.  fuzz_panes found this in eight
+     * operations.
+     */
+    if (ed->focus == sibling || ed->focus == leaf)
+        ed->focus = sag_pane_first_leaf(parent);
     free(sibling);
     free(leaf);
     return true;

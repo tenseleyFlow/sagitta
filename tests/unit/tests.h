@@ -714,6 +714,7 @@ void test_layout_close_command_moves_focus_to_a_live_leaf(void);
 void test_layout_focus_commands_move_and_stop_at_edges(void);
 void test_layout_grow_widens_the_focused_pane_on_either_side(void);
 void test_layout_drag_moves_by_delta_and_esc_restores(void);
+void test_layout_close_repairs_focus_on_the_freed_sibling(void);
 void test_jumplist_push_appends_in_order(void);
 void test_jumplist_push_same_position_is_noop(void);
 void test_jumplist_push_same_line_replaces_keeping_new_column(void);

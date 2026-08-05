@@ -964,6 +964,42 @@ static bool prompt_key(Ed *ed, Key key)
     return true;
 }
 
+/*
+ * Sprint 22 §7: click-to-focus and border drag, and nothing else.
+ *
+ * Wheel, drag-reorder, context menus and multi-click land in Sprint 27.
+ * Until then an unrouted mouse event is IGNORED — never handed to a
+ * handler that half-fits, because a wheel event mis-dispatched as a
+ * click moves the cursor somewhere the user never pointed.
+ */
+void sag_ed_handle_mouse(Ed *ed, Key key)
+{
+    if (ed == NULL || key.kind != SAG_EV_MOUSE)
+        return;
+    if (key.button != SAG_MB_LEFT) {
+        if (ed->drag.active && key.ev == SAG_KEY_RELEASE)
+            sag_pane_drag_end(ed);
+        return;
+    }
+    switch (key.ev) {
+    case SAG_KEY_PRESS:
+        (void)sag_pane_click(ed, key.col, key.row);
+        break;
+    case SAG_KEY_REPEAT:
+        /* Motion with the button held.  Only meaningful mid-drag; a
+         * drag that never started is not a click. */
+        if (ed->drag.active)
+            sag_pane_drag_motion(ed, key.col, key.row);
+        break;
+    case SAG_KEY_RELEASE:
+        if (ed->drag.active)
+            sag_pane_drag_end(ed);
+        break;
+    default:
+        break;
+    }
+}
+
 void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms)
 {
     const u16 command_mods = SAG_MOD_ALT | SAG_MOD_CTRL | SAG_MOD_SUPER |
@@ -972,6 +1008,12 @@ void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms)
     if (ed == NULL || key.kind != SAG_EV_KEY)
         return;
     ed->now_ms = now_ms;
+    /* Esc mid-drag cancels it and restores the entry ratio, before the
+     * key reaches any mode that would also act on Escape. */
+    if (ed->drag.active && key.code == SAG_KEY_ESCAPE) {
+        sag_pane_drag_cancel(ed);
+        return;
+    }
     if (key.ev != SAG_KEY_RELEASE && sag_msg_dismiss_overlay(ed)) {
         return;
     }

@@ -2467,10 +2467,81 @@ static void case_s22_border_beside_wide_glyphs(PtyCtx *c)
     (void)unlink(path);
 }
 
+
+/* Feeds an SGR press (and release) at a screen cell. */
+static void s22_click(PtyCtx *c, u16 col, u16 row)
+{
+    char seq[64];
+
+    /* SGR is 1-based; Rects and the region table are 0-based. */
+    (void)snprintf(seq, sizeof(seq), "\033[<0;%u;%uM", (unsigned)col + 1U,
+                   (unsigned)row + 1U);
+    ptc_bytes(c, seq);
+    (void)snprintf(seq, sizeof(seq), "\033[<0;%u;%um", (unsigned)col + 1U,
+                   (unsigned)row + 1U);
+    ptc_bytes(c, seq);
+    ptc_settle(c, 80);
+}
+
+/*
+ * DoD 5.  A click focuses the pane it landed in and puts the cursor on
+ * the clicked GRAPHEME.  The line begins with a double-width ideograph,
+ * so a hit test that counted bytes or codepoints instead of cells would
+ * land one column off for everything after it — which is the whole
+ * reason placement is computed once and shared.
+ */
+static void case_s22_click_focuses_and_lands_on_grapheme(PtyCtx *c)
+{
+    static const u8 wide[] =
+        "\xE6\xBC\xA2 abcdefghij\n"
+        "second line here\n"
+        "third line here\n";
+    char path[256];
+
+    if (!s18_open(c, wide, sizeof(wide) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "ctrl+w s");
+    /* Focus is on the RIGHT pane after a split; click back into the
+     * left one, past the ideograph. */
+    s22_click(c, 12U, 0U);
+    ptc_snapshot(c, "s22_click_focuses_and_lands_on_grapheme");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/* A press on the border starts a drag; motion moves it; release ends
+ * it.  The border must end up exactly where the pointer did. */
+static void case_s22_drag_border(PtyCtx *c)
+{
+    char path[256];
+    char seq[64];
+
+    if (!s18_open(c, s22_doc, sizeof(s22_doc) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "ctrl+w s");
+    /* The border of an 80-column split sits at column 40. */
+    (void)snprintf(seq, sizeof(seq), "\033[<0;41;5M");
+    ptc_bytes(c, seq);
+    ptc_settle(c, 40);
+    /* Motion with the button held is button 32 in SGR. */
+    (void)snprintf(seq, sizeof(seq), "\033[<32;51;5M");
+    ptc_bytes(c, seq);
+    ptc_settle(c, 40);
+    (void)snprintf(seq, sizeof(seq), "\033[<0;51;5m");
+    ptc_bytes(c, seq);
+    ptc_settle(c, 80);
+    ptc_snapshot(c, "s22_drag_border");
+    force_quit(c);
+    (void)unlink(path);
+}
+
 #define C(name, profile, rows, cols, fn) \
     {#name, #profile, rows, cols, fn}
 
 const PtyCase sag_pty_cases[] = {
+    C(s22_click_focuses_and_lands_on_grapheme, modern, 24U, 80U,
+      case_s22_click_focuses_and_lands_on_grapheme),
+    C(s22_drag_border, modern, 24U, 80U, case_s22_drag_border),
     C(s22_split_h, modern, 24U, 80U, case_s22_split_h),
     C(s22_split_v, modern, 24U, 80U, case_s22_split_v),
     C(s22_nested_three_panes, modern, 24U, 80U,

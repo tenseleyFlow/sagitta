@@ -93,6 +93,13 @@ void sag_layout_compute(Pane *root, Rect area);
 /* NULL when (x, y) is off the tree or lands on a border. */
 Pane *sag_pane_leaf_at(Pane *root, u16 x, u16 y);
 u32 sag_pane_leaf_count(const Pane *root);
+/*
+ * The first leaf in tree order.  Anything that has to land focus
+ * somewhere after a mutation uses this — a caller that walks down to a
+ * leaf itself gets it wrong on the first tree whose surviving child is
+ * a split, which is exactly what fuzz_panes caught.
+ */
+Pane *sag_pane_first_leaf(Pane *root);
 
 /* Spatial, directional, and it never wraps — wrapping makes
  * muscle-memory direction keys ambiguous in three-pane layouts. */

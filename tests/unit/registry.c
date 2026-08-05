@@ -708,6 +708,7 @@ const SagTest sag_tests[] = {
     T(layout_focus_commands_move_and_stop_at_edges),
     T(layout_grow_widens_the_focused_pane_on_either_side),
     T(layout_drag_moves_by_delta_and_esc_restores),
+    T(layout_close_repairs_focus_on_the_freed_sibling),
     T(jumplist_push_appends_in_order),
     T(jumplist_push_same_position_is_noop),
     T(jumplist_push_same_line_replaces_keeping_new_column),

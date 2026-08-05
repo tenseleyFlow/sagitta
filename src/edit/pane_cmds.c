@@ -27,11 +27,7 @@ static void pane_refocus(Ed *ed, Pane *want)
     } else if (ed->focus == NULL || !ed->focus->is_leaf) {
         /* Whatever we were looking at is gone: take the first leaf in
          * tree order rather than leaving a dangling pointer. */
-        Pane *at = ed->pane_root;
-
-        while (at != NULL && !at->is_leaf)
-            at = at->a;
-        ed->focus = at;
+        ed->focus = sag_pane_first_leaf(ed->pane_root);
     }
     if (ed->focus != NULL && ed->focus->win != NULL)
         ed->win = ed->focus->win;
