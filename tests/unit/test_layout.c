@@ -18,6 +18,13 @@
 
 static void ly_fixture(Ed *ed)
 {
+    /*
+     * The command registry is process-wide and other suites replace it
+     * with a reduced set; rebuild the full builtin table so a lookup
+     * here does not depend on test order.
+     */
+    sag_cmd_shutdown();
+    sag_cmd_init();
     sag_ed_init(ed);
     SAG_ASSERT(sag_ed_open_scratch(ed));
     SAG_ASSERT_NOT_NULL(ed->pane_root);
@@ -544,5 +551,172 @@ void test_layout_tree_walk_visits_every_node(void)
     sag_pane_tree_walk(ed.pane_root, count_visit, &n);
     /* 3 leaves + 2 split nodes. */
     SAG_ASSERT_EQ_U64(n, 5U);
+    sag_ed_free(&ed);
+}
+
+/* ---------------------------------------------------------------- */
+/* Commands (§4/§5) — dispatched through the registry, as bound      */
+/* ---------------------------------------------------------------- */
+
+static CmdStatus ly_invoke(Ed *ed, const char *name, u32 count)
+{
+    CmdId id = sag_cmd_lookup(name, (u32)strlen(name));
+    CmdCtx cx;
+
+    SAG_ASSERT(id.v != 0U);
+    (void)memset(&cx, 0, sizeof(cx));
+    cx.ed = ed;
+    cx.win = ed->win;
+    /* count 0 here means "the user gave none"; the registry requires a
+     * repeat count of at least one regardless. */
+    cx.count = count == 0U ? 1U : count;
+    cx.count_given = count != 0U;
+    cx.source = SAG_SRC_TEST;
+    return sag_ed_invoke(ed, id, &cx);
+}
+
+void test_layout_split_command_focuses_the_new_pane(void)
+{
+    Ed ed;
+
+    ly_fixture(&ed);
+    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.split_h", 0U), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(sag_pane_leaf_count(ed.pane_root), 2U);
+    /* The NEW pane takes focus: a split means "open a view here". */
+    SAG_ASSERT(ed.focus == ed.pane_root->b);
+    /* And Ed's active window follows focus, so edits land in it. */
+    SAG_ASSERT(ed.win == ed.focus->win);
+    /* Both views show the same buffer. */
+    SAG_ASSERT(ed.pane_root->a->win->buf == ed.pane_root->b->win->buf);
+    sag_ed_free(&ed);
+}
+
+void test_layout_split_command_refuses_with_a_message(void)
+{
+    Ed ed;
+
+    ly_fixture(&ed);
+    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 10U, 24U});
+    SAG_ASSERT(ly_invoke(&ed, "ed.pane.split_h", 0U) != SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(sag_pane_leaf_count(ed.pane_root), 1U);
+    sag_ed_free(&ed);
+}
+
+/* Closing the focused pane must leave focus on a leaf that still
+ * exists — the classic dangling-pointer case. */
+void test_layout_close_command_moves_focus_to_a_live_leaf(void)
+{
+    Ed ed;
+
+    ly_fixture(&ed);
+    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.split_h", 0U), SAG_CMD_OK);
+    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.close", 0U), SAG_CMD_OK);
+
+    SAG_ASSERT_EQ_U64(sag_pane_leaf_count(ed.pane_root), 1U);
+    SAG_ASSERT_NOT_NULL(ed.focus);
+    SAG_ASSERT(ed.focus->is_leaf);
+    SAG_ASSERT(ed.focus == ed.pane_root);
+    SAG_ASSERT(ed.win == ed.focus->win);
+    /* The last pane refuses, naming Sprint 23. */
+    SAG_ASSERT(ly_invoke(&ed, "ed.pane.close", 0U) != SAG_CMD_OK);
+    sag_ed_free(&ed);
+}
+
+void test_layout_focus_commands_move_and_stop_at_edges(void)
+{
+    Ed ed;
+
+    ly_fixture(&ed);
+    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.split_h", 0U), SAG_CMD_OK);
+    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+
+    SAG_ASSERT(ed.focus == ed.pane_root->b);
+    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.focus_left", 0U),
+                      SAG_CMD_OK);
+    SAG_ASSERT(ed.focus == ed.pane_root->a);
+    /* Left again is a no-op, not a wrap. */
+    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.focus_left", 0U),
+                      SAG_CMD_OK);
+    SAG_ASSERT(ed.focus == ed.pane_root->a);
+    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.focus_right", 0U),
+                      SAG_CMD_OK);
+    SAG_ASSERT(ed.focus == ed.pane_root->b);
+    sag_ed_free(&ed);
+}
+
+/* Grow means "make MY pane bigger" whichever side of the split it is
+ * on — the sign flips for the second child. */
+void test_layout_grow_widens_the_focused_pane_on_either_side(void)
+{
+    Ed ed;
+    u16 a0;
+    u16 b0;
+
+    ly_fixture(&ed);
+    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.split_h", 0U), SAG_CMD_OK);
+    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    b0 = ed.pane_root->b->rect.w;
+
+    /* Focus is on b, the second child. */
+    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.grow", 0U), SAG_CMD_OK);
+    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    SAG_ASSERT_EQ_U64(ed.pane_root->b->rect.w, (u64)b0 + 2U);
+
+    /* Now from the first child. */
+    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.focus_left", 0U),
+                      SAG_CMD_OK);
+    a0 = ed.pane_root->a->rect.w;
+    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.grow", 0U), SAG_CMD_OK);
+    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    SAG_ASSERT_EQ_U64(ed.pane_root->a->rect.w, (u64)a0 + 2U);
+
+    /* A count overrides the two-cell default. */
+    a0 = ed.pane_root->a->rect.w;
+    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.shrink", 5U), SAG_CMD_OK);
+    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    SAG_ASSERT_EQ_U64(ed.pane_root->a->rect.w, (u64)a0 - 5U);
+    sag_ed_free(&ed);
+}
+
+/* DoD 6: a drag moves the border by exactly the motion delta, and Esc
+ * restores the ratio the drag began with. */
+void test_layout_drag_moves_by_delta_and_esc_restores(void)
+{
+    Ed ed;
+    u16 before;
+    float entry;
+
+    ly_fixture(&ed);
+    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.split_h", 0U), SAG_CMD_OK);
+    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    before = ed.pane_root->a->rect.w;
+    entry = ed.pane_root->ratio;
+
+    /* Press on the border column, then move three cells right. */
+    sag_pane_drag_begin(&ed, ed.pane_root, before, 5U);
+    SAG_ASSERT(ed.drag.active);
+    sag_pane_drag_motion(&ed, (u16)(before + 3U), 5U);
+    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    SAG_ASSERT_EQ_U64(ed.pane_root->a->rect.w, (u64)before + 3U);
+    sag_pane_drag_end(&ed);
+    SAG_ASSERT(!ed.drag.active);
+
+    /* A second drag, cancelled: the entry ratio comes back exactly. */
+    entry = ed.pane_root->ratio;
+    before = ed.pane_root->a->rect.w;
+    sag_pane_drag_begin(&ed, ed.pane_root, before, 5U);
+    sag_pane_drag_motion(&ed, (u16)(before + 6U), 5U);
+    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    SAG_ASSERT(ed.pane_root->a->rect.w != before);
+    sag_pane_drag_cancel(&ed);
+    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    SAG_ASSERT(ed.pane_root->ratio == entry);
+    SAG_ASSERT_EQ_U64(ed.pane_root->a->rect.w, before);
     sag_ed_free(&ed);
 }

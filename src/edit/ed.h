@@ -6,6 +6,7 @@
 #include "edit/dispatch.h"
 #include "edit/job.h"
 #include "edit/jumplist.h"
+#include "edit/pane_cmds.h"
 #include "edit/search_cmds.h"
 #include "edit/keymap.h"
 #include "edit/loop.h"
@@ -108,6 +109,12 @@ struct Ed {
     struct Pane *focus;
     Win *panes[SAG_PANE_MAX_LEAVES];
     u32 npanes;
+    /* Per-frame tables the region payloads index into (§6). */
+    struct Pane *leaf_tab[SAG_PANE_MAX_LEAVES];
+    struct Pane *split_tab[SAG_PANE_MAX_LEAVES];
+    u32 nleaf_tab;
+    u32 nsplit_tab;
+    PaneDrag drag;
     Rect footer_rect;
 
     Mode mode;

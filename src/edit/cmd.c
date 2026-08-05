@@ -7,6 +7,7 @@
 
 #include "edit/edit_cmds.h"
 #include "edit/jumplist.h"
+#include "edit/pane_cmds.h"
 #include "edit/search_cmds.h"
 #include "edit/file_cmds.h"
 #include "edit/shell_cmds.h"
@@ -408,14 +409,26 @@ static const CmdDesc builtins[] = {
           "activate the next tab group"),
     DEFER("ed.group.prev", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 24,
           "activate the previous tab group"),
-    DEFER("ed.pane.split_h", SAG_ARITY_NONE, 0U, 22,
-          "split the pane horizontally"),
-    DEFER("ed.pane.split_v", SAG_ARITY_NONE, 0U, 22,
-          "split the pane vertically"),
-    DEFER("ed.pane.grow", SAG_ARITY_OPT_INT, SAG_CMD_TAKES_COUNT, 22,
-          "grow the active pane"),
-    DEFER("ed.pane.shrink", SAG_ARITY_OPT_INT, SAG_CMD_TAKES_COUNT, 22,
-          "shrink the active pane"),
+    {"ed.pane.split_h", sag_pane_cmd_split_h, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN, "Split the focused pane side by side"},
+    {"ed.pane.split_v", sag_pane_cmd_split_v, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN, "Split the focused pane top and bottom"},
+    {"ed.pane.close", sag_pane_cmd_close, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN, "Close the focused pane"},
+    {"ed.pane.focus_left", sag_pane_cmd_focus_left, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN, "Focus the pane to the left"},
+    {"ed.pane.focus_right", sag_pane_cmd_focus_right, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN, "Focus the pane to the right"},
+    {"ed.pane.focus_up", sag_pane_cmd_focus_up, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN, "Focus the pane above"},
+    {"ed.pane.focus_down", sag_pane_cmd_focus_down, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN, "Focus the pane below"},
+    {"ed.pane.focus_next", sag_pane_cmd_focus_next, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN, "Focus the next pane in tree order"},
+    {"ed.pane.grow", sag_pane_cmd_grow, SAG_ARITY_OPT_INT,
+     SAG_CMD_TAKES_COUNT | SAG_CMD_NEEDS_WIN, "Grow the focused pane"},
+    {"ed.pane.shrink", sag_pane_cmd_shrink, SAG_ARITY_OPT_INT,
+     SAG_CMD_TAKES_COUNT | SAG_CMD_NEEDS_WIN, "Shrink the focused pane"},
     DEFER("ed.win.next", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 22,
           "focus the next window"),
     DEFER("ed.win.prev", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 22,
@@ -586,7 +599,10 @@ static bool command_name_valid(const char *name)
         "jump", "clear_finished", "rerun",
         /* Sprint 21 */
         "back", "fwd", "older", "newer", "global",
-        "open_back", "word_next", "clear_highlight", "set"};
+        "open_back", "word_next", "clear_highlight", "set",
+        /* Sprint 22 */
+        "split_h", "split_v", "focus_left", "focus_right", "focus_up",
+        "focus_down", "focus_next"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

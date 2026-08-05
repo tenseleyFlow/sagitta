@@ -32,6 +32,18 @@ static const BindRow keys_L[] = {
     /* Sprint 21 §5.  Ctrl-O/Ctrl-I are the jumplist's two directions;
      * g; / g, walk the changelist. */
     /* Sprint 21 §1: the search surface. */
+    /* Sprint 22 §4: panes.  `s`-prefixed chords, keymap DATA — no key
+     * calls a pane function directly (DoD 8). */
+    {"C-w s", "ed.pane.split_h", 0, NULL},
+    {"C-w v", "ed.pane.split_v", 0, NULL},
+    {"C-w c", "ed.pane.close", 0, NULL},
+    {"C-w <left>", "ed.pane.focus_left", 0, NULL},
+    {"C-w <right>", "ed.pane.focus_right", 0, NULL},
+    {"C-w <up>", "ed.pane.focus_up", 0, NULL},
+    {"C-w <down>", "ed.pane.focus_down", 0, NULL},
+    {"C-w w", "ed.pane.focus_next", 0, NULL},
+    {"C-w +", "ed.pane.grow", 0, NULL},
+    {"C-w -", "ed.pane.shrink", 0, NULL},
     {"m", "ed.mark.set", 0, NULL},
     {"'", "ed.mark.jump", 0, NULL},
     {"/", "ed.search.open", 0, NULL},
