@@ -123,7 +123,11 @@ i32 sag_fz_score(const char *pat, u32 plen, const char *text, u32 tlen,
             score += 200;
         else if (fz_boundary(text[ti - 1U]))
             score += 150;
-        if (m != NULL && m->n_pos < (u16)SAG_FZ_MAX_POS)
+        /* Positions are u16.  Past 64 KiB of text the honest answer is
+         * "no highlight", the same as past SAG_FZ_MAX_POS -- never a
+         * truncated offset, which would highlight the wrong byte. */
+        if (m != NULL && m->n_pos < (u16)SAG_FZ_MAX_POS &&
+            ti <= (u32)UINT16_MAX)
             m->pos[m->n_pos++] = (u16)ti;
         pi++;
     }

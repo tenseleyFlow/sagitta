@@ -549,6 +549,7 @@ void test_fuzzy_rank_positions_are_relative_to_the_full_text(void);
 void test_fuzzy_rank_directory_basename_ignores_trailing_slash(void);
 void test_fuzzy_rank_empty_pattern_preserves_source_order(void);
 void test_fuzzy_handles_degenerate_input(void);
+void test_fuzzy_positions_past_64k_are_dropped_not_truncated(void);
 void test_menu_selection_survives_a_refilter_by_identity(void);
 void test_menu_lost_selection_falls_to_nothing_not_to_row_zero(void);
 void test_menu_filtering_alone_never_makes_a_selection_explicit(void);

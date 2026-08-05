@@ -14,6 +14,7 @@
  */
 #include "harness.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 #include "ws/finder.h"
@@ -373,4 +374,36 @@ void test_fuzzy_handles_degenerate_input(void)
     /* A NULL candidate is skipped, not dereferenced. */
     SAG_ASSERT_EQ_U64(sag_fz_rank("a", 1U, with_null, 2U, false, out), 1U);
     SAG_ASSERT_EQ_U64(out[0].idx, 1U);
+}
+
+/*
+ * Positions are u16.  Past 64 KiB of text a matched byte has no offset
+ * that fits, so it must go UNRECORDED -- a truncated offset would
+ * underline a byte 65536 positions earlier, and §5's highlighter walks
+ * grapheme clusters from those offsets.  The score is unaffected: the
+ * match is still a match, it just stops being highlightable, exactly as
+ * it does past SAG_FZ_MAX_POS.
+ */
+void test_fuzzy_positions_past_64k_are_dropped_not_truncated(void)
+{
+    enum { LONG_LEN = 70000 };
+    char *text = sag_xmalloc((size_t)LONG_LEN);
+    FzMatch m;
+    i32 score;
+
+    (void)memset(text, 'x', (size_t)LONG_LEN);
+    text[10] = 'a';
+    text[LONG_LEN - 1] = 'b';
+    score = sag_fz_score("ab", 2U, text, (u32)LONG_LEN, &m);
+    SAG_ASSERT(score != SAG_FZ_NO_MATCH);
+    SAG_ASSERT_EQ_U64(m.n_pos, 1U);
+    SAG_ASSERT_EQ_U64(m.pos[0], 10U);
+    /* The same text scored without the far byte keeps both positions,
+     * proving the drop is about the OFFSET and not about the pattern. */
+    text[70] = 'b';
+    score = sag_fz_score("ab", 2U, text, (u32)LONG_LEN, &m);
+    SAG_ASSERT(score != SAG_FZ_NO_MATCH);
+    SAG_ASSERT_EQ_U64(m.n_pos, 2U);
+    SAG_ASSERT_EQ_U64(m.pos[1], 70U);
+    free(text);
 }

@@ -552,6 +552,7 @@ const SagTest sag_tests[] = {
     T(fuzzy_rank_directory_basename_ignores_trailing_slash),
     T(fuzzy_rank_empty_pattern_preserves_source_order),
     T(fuzzy_handles_degenerate_input),
+    T(fuzzy_positions_past_64k_are_dropped_not_truncated),
     T(menu_selection_survives_a_refilter_by_identity),
     T(menu_lost_selection_falls_to_nothing_not_to_row_zero),
     T(menu_filtering_alone_never_makes_a_selection_explicit),
