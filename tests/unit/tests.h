@@ -1182,5 +1182,16 @@ void test_degrade_sag_mouse_zero_drops_events(void);
 void test_degrade_tiny_terminals_never_produce_a_bad_rect(void);
 void test_degrade_the_member_strip_sheds_before_the_tab_strip(void);
 void test_degrade_ascii_keeps_every_element_meaningful(void);
+void test_invariant9_click_a_pane_equals_focus_right(void);
+void test_invariant9_drag_a_border_equals_grow(void);
+void test_invariant9_click_a_tab_equals_tab_goto(void);
+void test_invariant9_drag_a_tab_equals_tab_move(void);
+void test_invariant9_drop_into_a_group_equals_group_add_tab(void);
+void test_invariant9_click_a_group_entry_equals_group_enter(void);
+void test_invariant9_strip_chevrons_equal_tab_next_and_prev(void);
+void test_invariant9_wheel_equals_three_view_scrolls(void);
+void test_invariant9_double_click_equals_h_plus_word_unit(void);
+void test_invariant9_menu_and_its_rows_are_keyboard_reachable(void);
+void test_invariant9_every_new_command_is_registered(void);
 
 #endif
