@@ -60,7 +60,14 @@ static void rs_rm_rf(const char *path)
     char cmd[512];
 
     (void)snprintf(cmd, sizeof(cmd), "rm -rf '%s'", path);
-    (void)system(cmd);
+    /* Assigned, not cast to void: glibc marks system warn_unused_result
+     * under _FORTIFY_SOURCE, which Ubuntu's gcc enables by default and
+     * Arch's does not — the cast compiled locally and failed CI. */
+    {
+        int removed = system(cmd);
+
+        (void)removed;
+    }
 }
 
 static void rs_make(RsFix *f)

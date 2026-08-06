@@ -3264,8 +3264,16 @@ static void s26_fixture_remove(void)
 
 /* The finder's full chrome: title, filter line, ranked rows with the
  * detail column, and the counts footer. */
-static void s26_open_finder(PtyCtx *c, const char *golden, char *path,
-                            size_t path_cap)
+/*
+ * Opens the finder over the fixture and leaves it up; the CALLER
+ * snapshots.
+ *
+ * The golden name used to be a parameter and the snapshot happened
+ * here, which hid both names from scripts/bans.sh — it greps for a
+ * string literal inside ptc_snapshot, and a literal handed to a helper
+ * is not one.  Both goldens read as orphaned and the ban lane failed.
+ */
+static void s26_open_finder(PtyCtx *c, char *path, size_t path_cap)
 {
     s26_fixture_make();
     /*
@@ -3286,7 +3294,11 @@ static void s26_open_finder(PtyCtx *c, const char *golden, char *path,
      */
     s18_settle_after_bytes(c, "find ");
     s18_settle_after_keys(c, "enter");
-    ptc_snapshot(c, golden);
+}
+
+/* Closes what s26_open_finder opened, after the caller's snapshot. */
+static void s26_close_finder(PtyCtx *c)
+{
     s18_settle_after_keys(c, "esc");
     force_quit(c);
 }
@@ -3297,11 +3309,14 @@ static void case_s26_finder_chrome(PtyCtx *c)
 
     path[0] = '\0';
     /*
-     * The golden NAME is the parameter, not the case name — two cases
-     * sharing one ptc_snapshot argument would write one golden and each
-     * overwrite the other's expectation.
+     * The golden name is a LITERAL here rather than a helper argument:
+     * two cases sharing one ptc_snapshot argument would write one
+     * golden and each overwrite the other's expectation, and a name
+     * that never appears literally is invisible to the orphan ban.
      */
-    s26_open_finder(c, "s26_finder_chrome", path, sizeof(path));
+    s26_open_finder(c, path, sizeof(path));
+    ptc_snapshot(c, "s26_finder_chrome");
+    s26_close_finder(c);
     if (path[0] != '\0')
         (void)unlink(path);
     s26_fixture_remove();
@@ -3314,7 +3329,9 @@ static void case_s26_finder_chrome_wide(PtyCtx *c)
     char path[256];
 
     path[0] = '\0';
-    s26_open_finder(c, "s26_finder_chrome_wide", path, sizeof(path));
+    s26_open_finder(c, path, sizeof(path));
+    ptc_snapshot(c, "s26_finder_chrome_wide");
+    s26_close_finder(c);
     if (path[0] != '\0')
         (void)unlink(path);
     s26_fixture_remove();

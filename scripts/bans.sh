@@ -196,7 +196,21 @@ if [ -f "$pty_registry" ]; then
         for file in "$golden_dir"/*.golden; do
             [ -f "$file" ] || continue
             name=$(basename "$file" .golden)
-            if ! grep -Fx "$name" "$golden_refs" >/dev/null 2>&1; then
+            #
+            # Not orphaned if a REGISTERED CASE bears the name, even
+            # when no ptc_snapshot spells it as a literal.  A case may
+            # snapshot under its own name — `ptc_snapshot(c, c->test->
+            # name)` — which is how Sprint 27's chrome review gives one
+            # scene function four degradation variants: the case name
+            # picks the environment, the scene AND the golden, so the
+            # three cannot drift apart.
+            #
+            # The ban's claim is unchanged.  A golden still has to be
+            # produced by something registered, and deleting or renaming
+            # the case still orphans the file — which is the staleness
+            # this exists to catch.
+            if ! grep -Fx "$name" "$golden_refs" >/dev/null 2>&1 &&
+               ! grep -Fx "$name" "$pty_cases" >/dev/null 2>&1; then
                 echo "ban: orphaned pty golden" >>"$hits"
                 echo "tests/pty/goldens/$name.golden" >>"$hits"
             fi

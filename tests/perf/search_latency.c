@@ -98,12 +98,25 @@ static bool read_limits(const char *path, u64 *keypress_ns, u64 *step_ns,
     return *keypress_ns != 0U && *step_ns != 0U && *rss_bytes != 0U;
 }
 
-static int cmp_i64(const void *a, const void *b)
+/*
+ * Insertion sort: a handful of samples, and raw qsort is banned —
+ * it is unstable, and this repository's answer is sag_sort_stable or,
+ * for a list this small, the obvious loop the sibling perf gates use.
+ */
+static void sort_i64(i64 *v, size_t n)
 {
-    i64 x = *(const i64 *)a;
-    i64 y = *(const i64 *)b;
+    size_t i;
 
-    return x < y ? -1 : (x > y ? 1 : 0);
+    for (i = 1U; i < n; i++) {
+        i64 key = v[i];
+        size_t k = i;
+
+        while (k > 0U && v[k - 1U] > key) {
+            v[k] = v[k - 1U];
+            k--;
+        }
+        v[k] = key;
+    }
 }
 
 int main(int argc, char **argv)
@@ -186,7 +199,7 @@ int main(int argc, char **argv)
             samples[nsamples++] = end - start;
         }
     }
-    qsort(samples, (size_t)nsamples, sizeof(*samples), cmp_i64);
+    sort_i64(samples, (size_t)nsamples);
     {
         i64 p99 = samples[nsamples - 1U]; /* few samples: take the max */
 

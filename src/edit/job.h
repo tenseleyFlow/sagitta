@@ -67,7 +67,7 @@ typedef enum {
 
 typedef enum {
     SAG_SINK_BUFFER,  /* append to a job buffer (mode a)                  */
-    SAG_SINK_COLLECT, /* accumulate, deliver on exit (modes b and c)      */
+    SAG_SINK_COLLECT, /* accumulate, deliver when the job ends (b and c) */
     SAG_SINK_DISCARD
 } SagJobSink;
 

@@ -47,7 +47,23 @@ MODDIR_ai      := ai
 MODDIR_fuss    := git
 MODDIR_plugins := plug
 
+#
+# _FORTIFY_SOURCE IS ON EVERYWHERE, DELIBERATELY.
+#
+# It is what turns glibc's warn_unused_result attributes on, and those
+# are the difference between a distro whose gcc enables it by default
+# (Ubuntu, and therefore CI) and one whose gcc does not (Arch, and
+# therefore several developers).  Without it here, `(void)write(...)`
+# compiles locally and fails the build on every CI gcc lane — which is
+# exactly what happened, repeatedly, and each round cost a full CI
+# cycle to learn one call site.
+#
+# Setting it in the one place both sides read means a developer sees
+# the same errors CI will.  It needs an optimiser, which -O2 provides;
+# the sanitizer lane drops to -O1 below and glibc simply ignores it
+# there.
 CFLAGS := -std=c11 -pedantic -Wall -Wextra -Werror -Wvla -g -O2 \
+          -D_FORTIFY_SOURCE=2 \
           -MMD -MP -Isrc -Itests -Itests/pty -Itests/fuzz \
           -DSAG_WITH_LSP=$(if $(filter lsp,$(MODULES)),1,0) \
           -DSAG_WITH_AI=$(if $(filter ai,$(MODULES)),1,0) \

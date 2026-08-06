@@ -51,7 +51,20 @@ static void ps_rm_rf(const char *path)
     char cmd[512];
 
     (void)snprintf(cmd, sizeof(cmd), "rm -rf '%s'", path);
-    (void)system(cmd);
+    /*
+     * Best-effort teardown of a fixture directory: the tests that
+     * follow rebuild it, so a failure here is not one of theirs.
+     *
+     * Assigned rather than cast to void because glibc marks system
+     * warn_unused_result under _FORTIFY_SOURCE, which Ubuntu's gcc
+     * enables by default and Arch's does not — so the cast compiled
+     * here and failed every gcc lane in CI.
+     */
+    {
+        int removed = system(cmd);
+
+        (void)removed;
+    }
 }
 
 static void ps_join(char *out, size_t cap, const char *dir, const char *leaf)
