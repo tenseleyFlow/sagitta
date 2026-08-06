@@ -10,6 +10,8 @@
 
 #include "ui/draw.h"
 #include "ui/grouppicker.h"
+#include "ui/picker.h"
+#include "ui/pickers.h"
 #include "ui/viewport.h"
 #include "util/log.h"
 
@@ -445,6 +447,8 @@ void sag_ed_free(Ed *ed)
     /* Belt and braces: a path that never reached sag_state_close still
      * must not leave its lock behind.  Dispose saves nothing. */
     sag_state_dispose(ed);
+    sag_picker_close(ed, false);
+    sag_pickers_dispose();
     sag_cmdline_dispose(ed);
     /* Jobs die with the process (never persisted, s25); kill and reap
      * before the buffers they append into go away. */
@@ -1354,6 +1358,13 @@ void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms)
         sag_gp_apply(ed);
         return;
     }
+    /*
+     * Sprint 26 §5: the list picker is modal for the same reason the
+     * group picker is — it swallows what it does not use, so no key
+     * reaches the document behind it.
+     */
+    if (sag_picker_active(ed) && sag_picker_key(ed, &key))
+        return;
     if (ed->cmdline.active && sag_cmdline_key(ed, &key))
         return;
     /*

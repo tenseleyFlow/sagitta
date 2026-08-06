@@ -1038,6 +1038,18 @@ void test_picker_same_length_filter_change_refilters(void);
 void test_picker_accept_in_split_reports_how(void);
 void test_picker_refuses_a_tiny_terminal(void);
 void test_picker_draw_fits_the_grid(void);
+
+/* Sprint 26 §6: the three instances. */
+void test_pickers_file_finder_opens_a_tab(void);
+void test_pickers_file_finder_respects_gitignore(void);
+void test_pickers_preview_allocates_no_buffer(void);
+void test_pickers_preview_reports_a_binary_file(void);
+void test_pickers_buffer_switcher_uses_tab_ids(void);
+void test_pickers_buffer_switcher_marks_deferred_tabs(void);
+void test_pickers_undo_branches_lists_the_tree(void);
+void test_pickers_undo_branches_travels_to_a_state(void);
+void test_pickers_commands_are_registered(void);
+void test_pickers_deferred_ones_name_their_sprint(void);
 void test_strip_lays_entries_left_to_right_without_gaps(void);
 void test_strip_measures_cjk_labels_in_cells(void);
 void test_strip_clips_long_labels(void);

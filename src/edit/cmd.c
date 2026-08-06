@@ -13,6 +13,7 @@
 #include "edit/shell_cmds.h"
 #include "edit/sel_actions.h"
 #include "edit/ws_cmds.h"
+#include "ui/pickers.h"
 #include "ui/cmdline.h"
 #include "ui/groupnav.h"
 #include "ui/grouppicker.h"
@@ -490,6 +491,13 @@ static const CmdDesc builtins[] = {
      * Sprint 38, so the name exists and hard-errors rather than being
      * absent and reading as "no such command" (invariant 3).
      */
+    /* Sprint 26 §6: the three instances. */
+    {"ed.find.file", sag_find_cmd_file, SAG_ARITY_NONE, 0U,
+     "Find a file in the workspace by fuzzy name"},
+    {"ed.find.buffer", sag_find_cmd_buffer, SAG_ARITY_NONE, 0U,
+     "Switch to an open tab by fuzzy name"},
+    {"ed.undo.branches", sag_undo_cmd_branches, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN, "Pick an undo state from the branch tree"},
     DEFER("ed.find.command", SAG_ARITY_NONE, 0U, 38,
           "open the command palette"),
     {"ed.pane.split_h", sag_pane_cmd_split_h, SAG_ARITY_NONE,
@@ -633,6 +641,9 @@ static const BuiltinMeta builtin_meta[] = {
     {"ed.ws.restore_state", "", SAG_RP_FORBID, "wsrestore"},
     {"ed.ws.info", "", SAG_RP_FORBID, "wsinfo"},
     {"ed.ws.forget", "", SAG_RP_FORBID, "wsforget"},
+    {"ed.find.file", "", SAG_RP_FORBID, "find"},
+    {"ed.find.buffer", "", SAG_RP_FORBID, "buffers"},
+    {"ed.undo.branches", "", SAG_RP_FORBID, "undolist"},
     /* The substitution body is ONE opaque string; s18's tokenizer must
      * not try to understand `/` inside a regex. */
     {"ed.search.replace", "s", SAG_RP_OPT, "s"},
@@ -675,7 +686,9 @@ static bool command_name_valid(const char *name)
          * to exist now so it can hard-error naming it (invariant 3). */
         "find",
         /* Sprint 25 */
-        "ws"};
+        "ws",
+        /* Sprint 26: the undo branch picker closes s10 §11's deferral. */
+        "undo"};
     static const char *const verbs[] = {
         "home", "end", "next", "prev", "up", "down", "left", "right",
         "goto", "insert", "delete", "replace", "change", "yank", "paste", "toggle",
@@ -711,7 +724,9 @@ static bool command_name_valid(const char *name)
         /* Sprint 24 */
         "dissolve", "remove_tab", "from_dir", "edit",
         /* Sprint 25 */
-        "save_state", "restore_state", "info", "forget", "migrate"};
+        "save_state", "restore_state", "info", "forget", "migrate",
+        /* Sprint 26 */
+        "file", "buffer", "branches"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;
