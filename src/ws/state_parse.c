@@ -344,6 +344,16 @@ static void apply_jumps(Ed *ed, Win *w, const FlLit *rec)
 
 typedef struct WinSlots {
     Win *v[SAG_PANE_MAX_LEAVES];
+    /*
+     * A Win may be claimed by exactly ONE leaf.
+     *
+     * The pane tree OWNS its windows: tab_destroy walks the leaves and
+     * releases each one.  A document that names the same `win` twice —
+     * which a corrupt one does, and which the index clamp below used to
+     * produce all by itself — therefore frees the same Win twice.
+     * fuzz_state found it in a few hundred cases.
+     */
+    bool used[SAG_PANE_MAX_LEAVES];
     u32 n;
     u32 leaves; /* leaves materialized so far, against the s22 cap */
 } WinSlots;
@@ -365,17 +375,38 @@ static Pane *build_panes(const FlLit *m, WinSlots *slots, u32 depth)
 
         if (slots->leaves >= (u32)SAG_PANE_MAX_LEAVES)
             return NULL;
+        if (slots->n == 0U)
+            return NULL;
         /*
-         * An out-of-range `win` takes slot 0 rather than failing the
-         * whole tab.  The index is positional, not an id, so a document
-         * whose lists disagree is corrupt in exactly one field — and a
-         * pane showing the wrong window beats a tab that vanished.
+         * An out-of-range `win` takes the first UNCLAIMED slot rather
+         * than failing the whole tab: the index is positional, not an
+         * id, so a document whose two lists disagree is corrupt in
+         * exactly one field, and a pane showing a neighbouring window
+         * beats a tab that vanished.
+         *
+         * It must not fall back to slot 0 unconditionally, which is
+         * what it did first: two out-of-range leaves then shared one
+         * Win and the tab freed it twice on close.
          */
-        if (idx < 0 || (u32)idx >= slots->n)
-            idx = 0;
-        w = slots->n == 0U ? NULL : slots->v[idx];
+        if (idx < 0 || (u32)idx >= slots->n || slots->used[idx]) {
+            u32 k;
+
+            idx = -1;
+            for (k = 0U; k < slots->n; k++) {
+                if (!slots->used[k]) {
+                    idx = (i64)k;
+                    break;
+                }
+            }
+            /* Every window is spoken for: this leaf has nothing to
+             * show, so it is dropped and its parent collapses. */
+            if (idx < 0)
+                return NULL;
+        }
+        w = slots->v[idx];
         if (w == NULL)
             return NULL;
+        slots->used[idx] = true;
         slots->leaves++;
         return sag_pane_new_leaf(w);
     }
