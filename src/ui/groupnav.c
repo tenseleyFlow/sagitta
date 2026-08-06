@@ -266,12 +266,3 @@ CmdStatus sag_group_cmd_remove_tab(CmdCtx *cx)
     cx->ed->full_damage = true;
     return SAG_CMD_OK;
 }
-
-CmdStatus sag_group_cmd_from_dir(CmdCtx *cx)
-{
-    (void)cx;
-    /* No silent stub: the path hard-errors naming the sprint that owns
-     * it, rather than quietly doing nothing (DoD 11). */
-    SAG_BUG("ed.group.from_dir: F-mode open-directory-as-group lands in "
-            "Sprint 53");
-}

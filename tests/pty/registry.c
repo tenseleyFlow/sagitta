@@ -2822,6 +2822,28 @@ static void case_s24_click_enters_a_group(PtyCtx *c)
     s24_fixture_remove();
 }
 
+/*
+ * DoD 7: the jump lands in the SAME frame.
+ *
+ * `alt+1` switches to tab 1 and only THEN arms the window.  The
+ * snapshot is taken immediately, well inside the 500 ms — so a grid
+ * already showing tab 1 is proof that nothing waited half a second to
+ * find out whether a second digit was coming.
+ */
+static void case_s24_digit_jump_is_immediate(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s23_doc, sizeof(s23_doc) - 1U, path, sizeof(path)))
+        return;
+    s23_open_tabs(c, 2);
+    /* Active is tab 3; alt+1 goes straight back to tab 1. */
+    s18_settle_after_keys(c, "alt+1");
+    ptc_snapshot(c, "s24_digit_jump_is_immediate");
+    force_quit(c);
+    (void)unlink(path);
+}
+
 #define C(name, profile, rows, cols, fn) \
     {#name, #profile, rows, cols, fn}
 
@@ -2829,6 +2851,8 @@ const PtyCase sag_pty_cases[] = {
     C(s24_group_two_row_bar, modern, 24U, 80U,
       case_s24_group_two_row_bar),
     C(s24_picker_chrome, modern, 24U, 80U, case_s24_picker_chrome),
+    C(s24_digit_jump_is_immediate, modern, 24U, 80U,
+      case_s24_digit_jump_is_immediate),
     C(s24_click_enters_a_group, modern, 24U, 80U,
       case_s24_click_enters_a_group),
     C(s23_three_tabs, modern, 24U, 80U, case_s23_three_tabs),

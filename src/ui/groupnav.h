@@ -47,7 +47,9 @@ CmdStatus sag_group_cmd_enter(CmdCtx *cx);
 CmdStatus sag_group_cmd_leave(CmdCtx *cx);
 CmdStatus sag_group_cmd_dissolve(CmdCtx *cx);
 CmdStatus sag_group_cmd_remove_tab(CmdCtx *cx);
-CmdStatus sag_group_cmd_from_dir(CmdCtx *cx);
+/* ed.group.from_dir is registered with the DEFER convention in cmd.c —
+ * it hard-errors naming Sprint 53 rather than existing here as a stub
+ * that does nothing. */
 
 /*
  * DoD 6: the mid-walk path must never consult last_active_member.

@@ -740,9 +740,13 @@ static void gp_files_make(GpFiles *f, int n)
     f->n = n;
     for (i = 0; i < n; i++) {
         FILE *fp;
+        /* Built in a local first: source and destination are members
+         * of the same struct, which snprintf is entitled to assume do
+         * not overlap. */
+        char path[128];
 
-        (void)snprintf(f->paths[i], sizeof(f->paths[i]), "%s/f%02d.txt",
-                       f->dir, i);
+        (void)snprintf(path, sizeof(path), "%s/f%02d.txt", f->dir, i);
+        (void)snprintf(f->paths[i], sizeof(f->paths[i]), "%s", path);
         fp = fopen(f->paths[i], "w");
         SAG_ASSERT_NOT_NULL(fp);
         (void)fprintf(fp, "file %d line one\nline two\n", i);
