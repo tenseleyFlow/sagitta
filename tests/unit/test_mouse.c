@@ -731,3 +731,95 @@ void test_mouse_press_on_a_group_entry_captures_the_gid(void)
     SAG_ASSERT_EQ_U64(sag_active_group_id(&ed), g);
     sag_ed_free(&ed);
 }
+
+/* ---------------------------------------------------------------- */
+/* §9: the deferrals, proved inert                                  */
+/* ---------------------------------------------------------------- */
+
+/*
+ * Dragging a tab into a PANE to open it there is post-1.0.  A release
+ * over a pane must therefore CANCEL — not open the file there, and not
+ * silently reorder the strip on the way, which is the failure the
+ * "nothing moves until the drop" law was written against.
+ *
+ * Named as a test rather than as a comment so the day somebody wires it
+ * up, they have to delete an assertion and think about it.
+ */
+void test_mouse_tab_dropped_on_a_pane_cancels(void)
+{
+    Ed ed;
+    u32 held;
+    int at_press;
+    i32 leaf;
+    int i;
+
+    ms_fixture(&ed);
+    for (i = 0; i < 4; i++) {
+        char path[64];
+
+        (void)snprintf(path, sizeof(path), "/tmp/sag-mouse-d%d.txt", i);
+        SAG_ASSERT(sag_tab_open(&ed, path) >= 0);
+    }
+    sag_tab_switch(&ed, 0);
+    sag_ed_layout(&ed);
+    sag_pane_tables_reset(&ed);
+    leaf = sag_pane_table_add_leaf(&ed, ed.pane_root);
+    sag_region_frame_begin();
+    sag_tab_strip_draw(&ed, ed.tab_strip_rect);
+    sag_region_add(SAG_REGION_PANE, ed.pane_root->rect, leaf);
+
+    held = sag_tab_at(&ed, 0)->tab_id;
+    at_press = 0;
+    {
+        u16 x;
+        Key press;
+        Key motion;
+        Key up;
+
+        for (x = 0U; x < 80U; x++) {
+            if (sag_strip_slot_at(x, 0U) == 0)
+                break;
+        }
+        SAG_ASSERT(x < 80U);
+        press = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_PRESS, x, 0U);
+        motion = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_REPEAT, 40U,
+                       (u16)(ed.pane_root->rect.y + 5U));
+        up = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_RELEASE, 40U,
+                   (u16)(ed.pane_root->rect.y + 5U));
+        sag_mouse_event(&ed, &press);
+        sag_mouse_event(&ed, &motion);
+        sag_mouse_event(&ed, &up);
+    }
+    /* Not moved, not opened anywhere, and the gesture is over. */
+    SAG_ASSERT_EQ_I64(sag_tab_index_of_id(&ed, held), at_press);
+    SAG_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)SAG_MP_IDLE);
+    sag_ed_free(&ed);
+}
+
+/*
+ * Sprint 47's hover has nothing to misroute: motion with NO button held
+ * is not decoded at all (Sprint 4 rejects the no-button report), so a
+ * pointer merely crossing the screen produces no event and no work.
+ */
+void test_mouse_hover_without_a_button_is_not_an_event(void)
+{
+    In in;
+    TtyCaps caps;
+    Key key;
+    bool got;
+
+    (void)memset(&caps, 0, sizeof(caps));
+    sag_input_init(&in, &caps);
+    /* cb 35 == motion with no button held, which is what a terminal
+     * sends while the pointer is simply moving. */
+    sag_input_feed(&in, (const u8 *)"\x1b[<35;10;5M", 11U);
+    got = sag_input_next(&in, 0, &key);
+    SAG_ASSERT(!got || key.kind != (u16)SAG_EV_MOUSE);
+    /* And a held-button motion IS decoded, so the test above is about
+     * the no-button case rather than about a broken feed. */
+    sag_input_feed(&in, (const u8 *)"\x1b[<32;10;5M", 11U);
+    SAG_ASSERT(sag_input_next(&in, 0, &key));
+    SAG_ASSERT_EQ_U64((u64)key.kind, (u64)SAG_EV_MOUSE);
+    SAG_ASSERT_EQ_U64(key.ev, (u64)SAG_KEY_REPEAT);
+    sag_input_free(&in);
+}

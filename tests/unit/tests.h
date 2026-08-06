@@ -1193,5 +1193,7 @@ void test_invariant9_wheel_equals_three_view_scrolls(void);
 void test_invariant9_double_click_equals_h_plus_word_unit(void);
 void test_invariant9_menu_and_its_rows_are_keyboard_reachable(void);
 void test_invariant9_every_new_command_is_registered(void);
+void test_mouse_tab_dropped_on_a_pane_cancels(void);
+void test_mouse_hover_without_a_button_is_not_an_event(void);
 
 #endif

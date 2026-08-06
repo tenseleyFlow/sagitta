@@ -1159,6 +1159,8 @@ const SagTest sag_tests[] = {
     T(invariant9_double_click_equals_h_plus_word_unit),
     T(invariant9_menu_and_its_rows_are_keyboard_reachable),
     T(invariant9_every_new_command_is_registered),
+    T(mouse_tab_dropped_on_a_pane_cancels),
+    T(mouse_hover_without_a_button_is_not_an_event),
 };
 
 const size_t sag_tests_len = SAG_ARRAY_LEN(sag_tests);

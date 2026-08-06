@@ -197,4 +197,35 @@ CmdStatus sag_ui_cmd_context_menu(CmdCtx *cx);
 CmdStatus sag_mouse_cmd_enable(CmdCtx *cx);
 CmdStatus sag_mouse_cmd_disable(CmdCtx *cx);
 
+/*
+ * §9 — THE DEFERRALS, named here so nobody invents them.
+ *
+ * Each is INERT rather than stubbed.  A stub that half-works is worse
+ * than nothing: it teaches a gesture that will change meaning, and the
+ * sprint that finally implements it has to break the habit it created.
+ *
+ * - A DOCUMENT CONTEXT MENU (right-click inside a pane) → post-1.0.
+ *   The right-click is unbound and does nothing at all; what belongs in
+ *   such a menu is a decision nobody has made yet.  Proved by
+ *   test_mouse_right_click_in_a_pane_does_nothing.
+ *
+ * - DRAGGING A TAB INTO A PANE, to open it there → post-1.0.  The drag
+ *   already carries its target by identity rather than by index, which
+ *   is the whole preparation that feature needs — and is exactly why §4
+ *   refuses to mutate Tabs.v during a drag.  Today a release over a
+ *   pane cancels; proved by test_mouse_tab_dropped_on_a_pane_cancels.
+ *
+ * - F-MODE TREE MOUSE (click to expand, drag to stage) → Sprint 52,
+ *   routed through THIS router and THIS registry.  F mode itself still
+ *   hard-errors naming 52, so there is nothing to click yet.
+ *
+ * - LSP HOVER-ON-POINTER and diagnostics tooltips → Sprint 47.  Motion
+ *   with no button held is not even decoded (Sprint 4 rejects the
+ *   no-button motion report), so there is no hover event to misroute.
+ *
+ * - PIXEL-PRECISE / KITTY-PROTOCOL MOUSE EXTENSIONS → NEVER.  The cell
+ *   is the unit of everything in this program, and sub-cell coordinates
+ *   would break the layout/hit-test identity Sprint 22 made a law.
+ */
+
 #endif
