@@ -3174,7 +3174,41 @@ static void case_s25_resume_survives_resize(PtyCtx *c)
     s25_fixture_remove();
 }
 
+
+/*
+ * Clicking in the RIGHT pane lands where you clicked.
+ *
+ * The existing click case clicks into the LEFT pane, whose rect.x
+ * happens to equal its gutter width — so the pane-relative and absolute
+ * conversions agree there and it passed either way.  That coincidence
+ * is why sag_vp_ccol_of_gridx subtracted the gutter instead of rect.x
+ * from Sprint 14 until Sprint 25, putting every click in a right-hand
+ * pane rect.x - gutter columns too far along the line.
+ *
+ * Column 53 is six cells into the right pane's content (which starts at
+ * 47), so the cursor must land on `g` of "abcdefghij" — and the status
+ * line's column readout is what says so.
+ */
+static void case_s22_click_in_the_right_pane(PtyCtx *c)
+{
+    static const u8 wide[] =
+        "abcdefghijklmnop\n"
+        "second line here\n"
+        "third line here\n";
+    char path[256];
+
+    if (!s18_open(c, wide, sizeof(wide) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "ctrl+w s");
+    s22_click(c, 53U, 0U);
+    ptc_snapshot(c, "s22_click_in_the_right_pane");
+    force_quit(c);
+    (void)unlink(path);
+}
+
 const PtyCase sag_pty_cases[] = {
+    C(s22_click_in_the_right_pane, modern, 24U, 80U,
+      case_s22_click_in_the_right_pane),
     C(s25_resume_exact, modern, 24U, 80U, case_s25_resume_exact),
     C(s25_resume_survives_resize, modern, 24U, 80U,
       case_s25_resume_survives_resize),

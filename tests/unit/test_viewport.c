@@ -139,9 +139,41 @@ void test_viewport_wrap_forces_left_and_conversions(void)
     SAG_ASSERT(sag_vp_line_of_row(&f.win, 3U, &line, &sub));
     SAG_ASSERT_EQ_U64(line.v, 1U);
     SAG_ASSERT_EQ_U64(sub, 1U);
+    /*
+     * The two conversions are absolute, and their origin is
+     * `rect.x` — which sag_layout_win sets to leaf->rect.x + gutter, so
+     * the gutter is already inside it.  This fixture sets rect.x the
+     * same way rather than leaving it zero: with a zero origin the two
+     * possible implementations agree, which is exactly how a
+     * gutter-relative version survived from Sprint 14 until panes gave
+     * a window a non-zero x and the cursor vanished from every split.
+     */
     f.win.gutter_width = 6U;
+    f.win.rect = (Rect){6U, 0U, 3U, 4U};
     SAG_ASSERT_EQ_U64(sag_vp_gridx_of_ccol(&f.win, (CCol){2U}), 8U);
     SAG_ASSERT_EQ_U64(sag_vp_ccol_of_gridx(&f.win, 9U).v, 3U);
+
+    /* And with the window somewhere other than column 0, which is the
+     * case that was broken: a pane at x=47 puts content column 2 at
+     * absolute 49, and a click at 49 comes back as column 2. */
+    f.win.rect = (Rect){47U, 0U, 33U, 4U};
+    SAG_ASSERT_EQ_U64(sag_vp_gridx_of_ccol(&f.win, (CCol){2U}), 49U);
+    SAG_ASSERT_EQ_U64(sag_vp_ccol_of_gridx(&f.win, 49U).v, 2U);
+    /*
+     * Round trip across the window's own columns.  Bounded by vp.cols
+     * rather than by the screen: past the last visible cell a WRAPPED
+     * window deliberately projects onto it, so a wider sweep would be
+     * asserting that the clamp does not happen.
+     */
+    {
+        u16 gx;
+
+        for (gx = 48U; gx < (u16)(47U + f.win.vp.cols); gx++) {
+            CCol c = sag_vp_ccol_of_gridx(&f.win, gx);
+
+            SAG_ASSERT_EQ_U64(sag_vp_gridx_of_ccol(&f.win, c), gx);
+        }
+    }
     vp_fixture_free(&f);
 }
 

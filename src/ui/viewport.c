@@ -506,6 +506,23 @@ bool sag_vp_line_of_row(Win *w, u16 row, LineNo *line, u32 *sub)
     return false;
 }
 
+/*
+ * ABSOLUTE grid x of a content column.
+ *
+ * `w->rect.x` is the CONTENT origin: sag_layout_win sets it to
+ * `leaf->rect.x + gutter`, so the gutter is already inside it and must
+ * not be added again.
+ *
+ * This returned `gutter + relative` until Sprint 25 — right only by
+ * coincidence, because with one full-width window leaf->rect.x is 0 and
+ * therefore rect.x == gutter.  The moment Sprint 22 gave panes an x
+ * offset the coincidence broke, and the one caller, sag_draw_cursor,
+ * compares the result against w->rect.x and row_right(), which are
+ * absolute.  For any pane not at column 0 the cursor was judged to be
+ * outside its own rect and hidden: SPLIT THE WINDOW AND THE CURSOR
+ * DISAPPEARS, frozen into s22_split_h.golden and five siblings as
+ * `cursor=0,0 vis=0`.
+ */
 u16 sag_vp_gridx_of_ccol(const Win *w, CCol col)
 {
     u64 relative;
@@ -514,25 +531,35 @@ u16 sag_vp_gridx_of_ccol(const Win *w, CCol col)
     if (w == NULL)
         SAG_BUG("viewport grid conversion: missing window");
     if (col.v < w->vp.left.v)
-        return w->gutter_width;
+        return w->rect.x;
     relative = col.v - w->vp.left.v;
     /* A wrapped row may absorb more trailing whitespace than it has cells.
      * Project those legal byte positions onto the last visible cell so the
      * cursor never disappears beyond the row boundary. */
     if (w->vp.wrap && w->vp.cols != 0U && relative >= w->vp.cols)
         relative = (u64)w->vp.cols - 1U;
-    x = (u64)w->gutter_width + relative;
+    x = (u64)w->rect.x + relative;
     return x > UINT16_MAX ? UINT16_MAX : (u16)x;
 }
 
+/*
+ * The inverse, and it has to use the same origin.
+ *
+ * `grid_x` arrives ABSOLUTE — sag_win_click_to_cursor gets it from the
+ * mouse and checks grid_y against w->rect.y — so the column to subtract
+ * is w->rect.x, which already contains the gutter.  Subtracting
+ * gutter_width instead was the same coincidence as its counterpart
+ * above: correct only while leaf->rect.x was 0.  In a right-hand pane
+ * it made every click land the cursor rect.x - gutter columns too far
+ * to the right.
+ */
 CCol sag_vp_ccol_of_gridx(const Win *w, u16 grid_x)
 {
     if (w == NULL)
         SAG_BUG("viewport cell conversion: missing window");
-    if (grid_x <= w->gutter_width)
+    if (grid_x <= w->rect.x)
         return w->vp.left;
-    return (CCol){sat_add(w->vp.left.v,
-                          (u64)(grid_x - w->gutter_width))};
+    return (CCol){sat_add(w->vp.left.v, (u64)(grid_x - w->rect.x))};
 }
 
 u32 sag_vp_cursor_subrow(Win *w)

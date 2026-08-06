@@ -1,14 +1,11 @@
 # sagitta pty golden v1
-size 80x24 alt=1 cursor=0,47 vis=1
-modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
+size 80x24 alt=1 cursor=0,53 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
 --- text
-    1 alpha one                         │      alpha one
-    1 beta two                          │      beta two
-    2 gamma three                       │      gamma three
-    3 delta four                        │      delta four
-    4 epsilon five                      │      epsilon five
-    5 zeta six                          │      zeta six
-    6                                   │
+    1 abcdefghijklmnop                  │      abcdefghijklmnop
+    1 second line here                  │      second line here
+    2 third line here                   │      third line here
+    3                                   │
                                         │
                                         │
                                         │
@@ -25,14 +22,17 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
                                         │
                                         │
                                         │
- L  pty-s14-s22_split_h.txt                                  utf-8  lf  1:1  all
+                                        │
+                                        │
+                                        │
+ L  pty-s14-s22_click_in_the_right_pane.txt                  utf-8  lf  1:7  all
 --- style
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAB
