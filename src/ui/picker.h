@@ -69,7 +69,10 @@ enum {
     SAG_PICKER_MIN_ROWS = 6,
     /* Below this the `detail` column is dropped: two columns in 40
      * cells means neither is readable. */
-    SAG_PICKER_DETAIL_MIN_W = 40
+    SAG_PICKER_DETAIL_MIN_W = 40,
+    /* §7.2: how much of a full rescan happens per frame.  2 ms leaves
+     * the rest of the 5 ms keypress budget for drawing. */
+    SAG_PICKER_SLICE_US = 2000
 };
 
 typedef struct PickItem {
@@ -121,5 +124,13 @@ i32 sag_picker_selected(const Ed *ed);
 /* Test seam: re-rank against the current filter text.  The editor calls
  * this from the cmdline's edited hook. */
 void sag_picker_refilter(Ed *ed);
+
+/*
+ * §7.2: continues a sliced rescan.  True while more remains, so the
+ * event loop keeps calling it from the idle timer.
+ */
+bool sag_picker_tick(Ed *ed);
+/* True while a rescan is in flight — the footer shows ` scanning…`. */
+bool sag_picker_scanning(const Ed *ed);
 
 #endif

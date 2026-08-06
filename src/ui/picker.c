@@ -12,6 +12,7 @@
 #include "edit/ed.h"
 #include "term/grid.h"
 #include "ui/cmdline.h"
+#include "ui/filter.h"
 #include "ui/message.h"
 #include "ui/region.h"
 #include "unicode/width.h"
@@ -29,11 +30,19 @@ typedef struct PickerState {
     PickerSpec spec;
     bool active;
 
-    /* Ranked candidates, rebuilt on every filter change. */
-    FzRanked *ranked;
+    /*
+     * §7: the incremental filter owns the candidate set; `ranked` is
+     * only the VISIBLE window it hands back, recomputed per draw.
+     * Ranking 100 000 candidates into a sorted array per keystroke is
+     * the thing §7 exists not to do.
+     */
+    FilterState filter;
+    FzRanked ranked[SAG_FILTER_TOPK];
     u32 n_ranked;
-    u32 cap_ranked;
     u32 total;
+    /* A sliced rescan is still running; the footer says ` scanning…`
+     * and the idle timer keeps calling sag_picker_tick. */
+    bool scanning;
 
     /*
      * THE SELECTION, held as an item PAYLOAD.
@@ -47,7 +56,9 @@ typedef struct PickerState {
     u32 scroll;
 
     Rect box;
-    Bytebuf filter;
+    /* The filter line's text, re-read on every keystroke. */
+    Bytebuf text;
+    FilterState filter_state;
 } PickerState;
 
 static PickerState pk;
@@ -61,7 +72,9 @@ bool sag_picker_active(const Ed *ed)
 u32 sag_picker_shown(const Ed *ed)
 {
     (void)ed;
-    return pk.active ? pk.n_ranked : 0U;
+    /* MATCHES, not drawn rows: the footer says "3/1043" about the
+     * filtered set, and only 20 of those are ever on screen. */
+    return pk.active ? sag_filter_matched(&pk.filter_state) : 0U;
 }
 
 u32 sag_picker_total(const Ed *ed)
@@ -147,12 +160,22 @@ i32 sag_picker_selected(const Ed *ed)
 /* Filtering                                                        */
 /* ---------------------------------------------------------------- */
 
+/* Re-reads the visible window from the filter's candidate set. */
+static void refresh_window(void)
+{
+    u32 n = 0U;
+    const PickItem *items = pk.spec.items(pk.spec.ctx, &n);
+
+    pk.n_ranked = sag_filter_top(&pk.filter_state, items,
+                                 pk.spec.path_mode, pk.ranked,
+                                 (u32)SAG_FILTER_TOPK);
+}
+
 void sag_picker_refilter(Ed *ed)
 {
     const PickItem *items;
-    const char **labels;
     u32 n = 0U;
-    u32 i;
+    bool complete;
 
     if (!pk.active || ed == NULL)
         return;
@@ -161,18 +184,11 @@ void sag_picker_refilter(Ed *ed)
     if (n == 0U) {
         pk.n_ranked = 0U;
         pk.has_sel = false;
+        pk.scanning = false;
         return;
     }
-    if (n > pk.cap_ranked) {
-        pk.cap_ranked = n;
-        pk.ranked = sag_xreallocarray(pk.ranked, n, sizeof(*pk.ranked));
-    }
-    labels = sag_xreallocarray(NULL, n, sizeof(*labels));
-    for (i = 0U; i < n; i++)
-        labels[i] = items[i].label;
-
-    pk.filter.len = 0U;
-    sag_cmdline_text(ed, &pk.filter);
+    pk.text.len = 0U;
+    sag_cmdline_text(ed, &pk.text);
     /*
      * An empty Bytebuf has a NULL data pointer, and the scorer reads a
      * NULL pattern as NO MATCH rather than as the empty pattern — so
@@ -180,12 +196,15 @@ void sag_picker_refilter(Ed *ed)
      * zero of its candidates.  "" is the empty pattern; NULL is the
      * absence of one, and they are not the same question.
      */
-    pk.n_ranked = sag_fz_rank(pk.filter.data == NULL
-                                  ? ""
-                                  : (const char *)pk.filter.data,
-                              (u32)pk.filter.len, labels, n,
-                              pk.spec.path_mode, pk.ranked);
-    free(labels);
+    complete = sag_filter_apply(&pk.filter_state, items, n,
+                                pk.spec.path_mode,
+                                pk.text.data == NULL
+                                    ? ""
+                                    : (const char *)pk.text.data,
+                                (u32)pk.text.len,
+                                SAG_PICKER_SLICE_US);
+    pk.scanning = !complete;
+    refresh_window();
 
     /*
      * The selection is NOT recomputed here.  It is a payload, and it
@@ -196,6 +215,35 @@ void sag_picker_refilter(Ed *ed)
     if (!pk.has_sel)
         sel_set_row(0U);
     pk.scroll = 0U;
+}
+
+/*
+ * §7.2: continues a sliced rescan.  Called from the idle timer, so a
+ * backspace over 100 000 candidates costs 2 ms this frame and the rest
+ * later — a partial list for one frame is invisible, a stalled
+ * keystroke is not (s21's overlay doctrine).
+ */
+bool sag_picker_tick(Ed *ed)
+{
+    const PickItem *items;
+    u32 n = 0U;
+
+    if (!pk.active || !pk.scanning || ed == NULL)
+        return false;
+    items = pk.spec.items(pk.spec.ctx, &n);
+    pk.scanning = sag_filter_step(&pk.filter_state, items,
+                                  pk.spec.path_mode, SAG_PICKER_SLICE_US);
+    refresh_window();
+    if (!pk.has_sel)
+        sel_set_row(0U);
+    ed->full_damage = true;
+    return pk.scanning;
+}
+
+bool sag_picker_scanning(const Ed *ed)
+{
+    (void)ed;
+    return pk.active && pk.scanning;
 }
 
 /* ---------------------------------------------------------------- */
@@ -221,7 +269,8 @@ void sag_picker_open(Ed *ed, const PickerSpec *s)
     (void)memset(&pk, 0, sizeof(pk));
     pk.spec = *s;
     pk.active = true;
-    bytebuf_init(&pk.filter);
+    bytebuf_init(&pk.text);
+    sag_filter_init(&pk.filter_state);
     /*
      * Law 2: the filter line IS the s18 widget.  Opening it here is
      * what gives the picker every motion, every register and every
@@ -244,11 +293,10 @@ void sag_picker_close(Ed *ed, bool accepted)
         ed->full_damage = true;
         ed->layout_dirty = true;
     }
-    free(pk.ranked);
-    pk.ranked = NULL;
-    pk.cap_ranked = 0U;
     pk.n_ranked = 0U;
-    bytebuf_free(&pk.filter);
+    pk.scanning = false;
+    sag_filter_free(&pk.filter_state);
+    bytebuf_free(&pk.text);
 }
 
 /* ---------------------------------------------------------------- */
@@ -404,14 +452,14 @@ bool sag_picker_key(Ed *ed, const Key *k)
          * would leave the list showing the previous query's results.
          */
         bytebuf_init(&before);
-        bytebuf_append(&before, pk.filter.data, (size_t)pk.filter.len);
+        bytebuf_append(&before, pk.text.data, (size_t)pk.text.len);
         (void)sag_cmdline_key(ed, k);
-        pk.filter.len = 0U;
-        sag_cmdline_text(ed, &pk.filter);
-        changed = before.len != pk.filter.len ||
-                  (pk.filter.len != 0U &&
-                   memcmp(before.data, pk.filter.data,
-                          (size_t)pk.filter.len) != 0);
+        pk.text.len = 0U;
+        sag_cmdline_text(ed, &pk.text);
+        changed = before.len != pk.text.len ||
+                  (pk.text.len != 0U &&
+                   memcmp(before.data, pk.text.data,
+                          (size_t)pk.text.len) != 0);
         bytebuf_free(&before);
         if (changed) {
             sag_picker_refilter(ed);
@@ -573,9 +621,16 @@ void sag_picker_draw(Ed *ed, Rect area)
                        items[pk.ranked[idx].idx].payload);
     }
 
+    /*
+     * `shown/total`, plus ` scanning…` while a sliced rescan is in
+     * flight (§7.2) — the count is meaningful mid-scan, so the footer
+     * stays honest rather than showing a number that will change.
+     */
     (void)snprintf(line, sizeof(line),
-                   " %u/%u   up/down move . enter open . ^v split . esc",
-                   (unsigned)pk.n_ranked, (unsigned)pk.total);
+                   " %u/%u%s   up/down move . enter open . ^v split . esc",
+                   (unsigned)sag_filter_matched(&pk.filter_state),
+                   (unsigned)pk.total,
+                   pk.scanning ? " scanning..." : "");
     (void)sag_grid_puts(&ed->grid, (u16)(y0 + h - 1U), x0,
                         (const u8 *)line, strlen(line), dim, bg,
                         SAG_ATTR_DIM);

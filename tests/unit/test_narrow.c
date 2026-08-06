@@ -395,7 +395,16 @@ void test_narrow_top_agrees_with_sag_fz_rank(void)
     nw_free(&f);
 }
 
-/* The empty pattern keeps everything, in source order. */
+/*
+ * The empty pattern keeps everything IN SOURCE ORDER.
+ *
+ * Everything scores the same, so any tie-break at all reorders the whole
+ * list.  This is not cosmetic: callers rely on row 0 being the first
+ * item they supplied — the undo picker's "row 0 is the root" stopped
+ * being true when a length tie-break slipped in here, and the failure
+ * surfaced two files away as a document that would not travel to the
+ * state the test asked for.
+ */
 void test_narrow_empty_pattern_keeps_source_order(void)
 {
     NwFix f;
@@ -410,9 +419,46 @@ void test_narrow_empty_pattern_keeps_source_order(void)
     SAG_ASSERT_EQ_U64(sag_filter_matched(&fs), 100U);
     n = sag_filter_top(&fs, f.items, true, top, SAG_FILTER_TOPK);
     SAG_ASSERT_EQ_U64(n, (u64)SAG_FILTER_TOPK);
-    /* Every score is the empty-pattern score, so nothing reordered. */
-    for (i = 0U; i < n; i++)
+    for (i = 0U; i < n; i++) {
+        /* Every score is the empty-pattern score... */
         SAG_ASSERT_EQ_I64(top[i].score, 1);
+        /* ...and the order is exactly the order they were given in,
+         * which the score assertion alone cannot say. */
+        SAG_ASSERT_EQ_U64(top[i].idx, i);
+    }
+    sag_filter_free(&fs);
+    nw_free(&f);
+}
+
+/*
+ * And the empty pattern agrees with sag_fz_rank, which has the same
+ * special case for the same reason — two orderings of one list is the
+ * drift §7 exists to avoid.
+ */
+void test_narrow_empty_pattern_agrees_with_sag_fz_rank(void)
+{
+    NwFix f;
+    FilterState fs;
+    FzRanked top[SAG_FILTER_TOPK];
+    FzRanked *ranked;
+    const char **labels;
+    u32 n_top;
+    u32 i;
+
+    nw_make(&f, 200U, 77U);
+    sag_filter_init(&fs);
+    sag_filter_reset(&fs, f.items, f.n, 0U);
+    n_top = sag_filter_top(&fs, f.items, true, top, SAG_FILTER_TOPK);
+
+    labels = sag_xreallocarray(NULL, f.n, sizeof(*labels));
+    ranked = sag_xreallocarray(NULL, f.n, sizeof(*ranked));
+    for (i = 0U; i < f.n; i++)
+        labels[i] = f.items[i].label;
+    (void)sag_fz_rank("", 0U, labels, f.n, true, ranked);
+    for (i = 0U; i < n_top; i++)
+        SAG_ASSERT_EQ_U64(top[i].idx, ranked[i].idx);
+    free(labels);
+    free(ranked);
     sag_filter_free(&fs);
     nw_free(&f);
 }

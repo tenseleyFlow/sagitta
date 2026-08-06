@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include "edit/loop.h"
+#include "ui/picker.h"
 
 #include <errno.h>
 #include <limits.h>
@@ -217,6 +218,14 @@ int sag_loop_deadline(const Ed *ed, i64 now_ms)
         return -1;
     if (ed->in.rd < ed->in.buf.len)
         return 0;
+    /*
+     * Sprint 26 §7.2: a sliced rescan is work waiting to be done, so
+     * the loop must not sleep on poll while one is in flight.  Without
+     * this the list would stop filling in and only resume when the user
+     * happened to press another key.
+     */
+    if (sag_picker_scanning(ed))
+        return 0;
     deadline = absolute_deadline(sag_dispatch_deadline(ed), now_ms);
     deadline = deadline_min(deadline,
                             sag_input_deadline(&ed->in, now_ms));
@@ -376,6 +385,13 @@ int sag_loop_run(Ed *ed)
         /* Deadline work cannot split a queued typeahead burst. */
         sag_dispatch_tick(ed, now);
         sag_timers_fire(&ed->timers, ed, now);
+        /*
+         * Sprint 26 §7.2: a sliced rescan continues here, on the idle
+         * path, AFTER input has been drained — so a keystroke always
+         * wins the race for this iteration (invariant 4) and the list
+         * fills in behind it.
+         */
+        (void)sag_picker_tick(ed);
         if (ed->quit)
             return ed->exit_code;
         if (ed->layout_dirty)

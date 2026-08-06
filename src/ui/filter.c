@@ -280,6 +280,19 @@ u32 sag_filter_top(const FilterState *f, const PickItem *items,
 
             if (prev->score != s) {
                 better = s > prev->score;
+            } else if (f->plen == 0U) {
+                /*
+                 * THE EMPTY PATTERN PRESERVES SOURCE ORDER.
+                 *
+                 * Everything scores the same, so any tie-break at all
+                 * would reorder the whole list — and sag_fz_rank has
+                 * the same special case for the same reason.  Without
+                 * it a freshly opened picker showed its candidates
+                 * sorted by length, which put row 0 somewhere the
+                 * caller never expected: the undo picker's "row 0 is
+                 * the root" stopped being true.
+                 */
+                better = false;
             } else {
                 /*
                  * Ties break by shorter text, then by bytes — the same

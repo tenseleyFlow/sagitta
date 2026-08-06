@@ -1030,6 +1030,7 @@ const SagTest sag_tests[] = {
     T(narrow_partial_scan_has_a_usable_count),
     T(narrow_top_agrees_with_sag_fz_rank),
     T(narrow_empty_pattern_keeps_source_order),
+    T(narrow_empty_pattern_agrees_with_sag_fz_rank),
     T(narrow_item_count_change_forces_a_rescan),
     T(narrow_degenerate_inputs),
     T(strip_lays_entries_left_to_right_without_gaps),

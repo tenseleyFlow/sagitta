@@ -1060,6 +1060,7 @@ void test_narrow_sliced_rescan_equals_unsliced(void);
 void test_narrow_partial_scan_has_a_usable_count(void);
 void test_narrow_top_agrees_with_sag_fz_rank(void);
 void test_narrow_empty_pattern_keeps_source_order(void);
+void test_narrow_empty_pattern_agrees_with_sag_fz_rank(void);
 void test_narrow_item_count_change_forces_a_rescan(void);
 void test_narrow_degenerate_inputs(void);
 void test_strip_lays_entries_left_to_right_without_gaps(void);
