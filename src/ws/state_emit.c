@@ -291,6 +291,19 @@ static void emit_tab(FlEmit *e, const Ed *ed, int idx)
     sag_fl_int(e, "group", (i64)t->group_id);
     sag_fl_int(e, "group_ordinal", (i64)t->group_ordinal);
     sag_fl_bool(e, "deferred", tab_should_defer(ed, idx));
+    /*
+     * WHICH PANE HAS FOCUS, as an index into the same pre-order `wins`
+     * list — not an id, for the reason §3.1 gives about `panes.win`.
+     *
+     * Without it a restored split always focuses its first leaf, and
+     * the drawn cursor follows focus: a session that quit with the
+     * right-hand pane active came back with the cursor in the left one.
+     * The resume_exact gate found this, because it is invisible to any
+     * test that checks tabs and paths rather than the grid.
+     */
+    sag_fl_int(e, "focus", t->focus == NULL ? 0
+                                            : win_index(&order,
+                                                        t->focus->win));
     emit_panes(e, "panes", t->root, &order);
     sag_fl_list_open(e, "wins");
     for (i = 0U; i < order.n; i++)

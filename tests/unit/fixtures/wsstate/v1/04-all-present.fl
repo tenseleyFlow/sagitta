@@ -22,6 +22,7 @@
       group: 0,
       group_ordinal: 0,
       deferred: false,
+      focus: 0,
       panes: {
         win: 0,
       },
@@ -55,6 +56,7 @@
       group: 1,
       group_ordinal: 1,
       deferred: false,
+      focus: 0,
       panes: {
         win: 0,
       },

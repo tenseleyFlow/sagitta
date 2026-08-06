@@ -2965,7 +2965,219 @@ static void case_s24_digit_jump_is_immediate(PtyCtx *c)
 #define C(name, profile, rows, cols, fn) \
     {#name, #profile, rows, cols, fn}
 
+
+/* ---------------------------------------------------------------- */
+/* Sprint 25 §9 / DoD 2: resume exactness                           */
+/* ---------------------------------------------------------------- */
+
+#define S25_DIR "/tmp/sag-s25-resume"
+
+/*
+ * Six files, one of them CJK so the goal column is not a byte count,
+ * and one long enough to scroll.
+ */
+static void s25_fixture_make(void)
+{
+    static const char *const names[] = {"a.txt", "b.txt", "c.txt",
+                                        "d.txt", "e.txt", "f.txt"};
+    size_t i;
+
+    for (i = 0U; i < SAG_ARRAY_LEN(names); i++) {
+        char path[256];
+
+        (void)snprintf(path, sizeof(path), "%s/%s", S25_DIR, names[i]);
+        (void)unlink(path);
+    }
+    (void)rmdir(S25_DIR);
+    (void)mkdir(S25_DIR, 0700);
+    for (i = 0U; i < SAG_ARRAY_LEN(names); i++) {
+        char path[256];
+        FILE *f;
+        u32 line;
+
+        (void)snprintf(path, sizeof(path), "%s/%s", S25_DIR, names[i]);
+        f = fopen(path, "w");
+        if (f == NULL)
+            continue;
+        /*
+         * A CJK line in every file: the cursor is parked on one, so
+         * `goal` has to be a COLUMN rather than an offset for the
+         * resumed grid to put it back in the same cell.
+         */
+        (void)fprintf(f, "%s header\n", names[i]);
+        (void)fprintf(f, "\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e wide line\n");
+        for (line = 0U; line < 60U; line++)
+            (void)fprintf(f, "%s line %02u\n", names[i], (unsigned)line);
+        (void)fclose(f);
+    }
+}
+
+static void s25_fixture_remove(void)
+{
+    static const char *const names[] = {"a.txt", "b.txt", "c.txt",
+                                        "d.txt", "e.txt", "f.txt"};
+    size_t i;
+
+    for (i = 0U; i < SAG_ARRAY_LEN(names); i++) {
+        char path[256];
+
+        (void)snprintf(path, sizeof(path), "%s/%s", S25_DIR, names[i]);
+        (void)unlink(path);
+    }
+    (void)rmdir(S25_DIR);
+}
+
+/*
+ * Spawned with NO file argument, which is what makes a restore happen:
+ * `sag file.c` is a request to edit that file, and burying it under
+ * restored tabs answers a question nobody asked.
+ */
+static void s25_spawn_bare(PtyCtx *c)
+{
+    ptc_spawn(c, ptc_sagitta_bin(c), NULL);
+    ptc_settle(c, 0);
+    ptc_wait_kitty_push(c, 21U);
+}
+
+static void s25_resume_bare(PtyCtx *c)
+{
+    ptc_resume(c, ptc_sagitta_bin(c), NULL);
+    ptc_settle(c, 0);
+    ptc_wait_kitty_push(c, 21U);
+}
+
+/*
+ * Keys settled on QUIET, not on a frame.
+ *
+ * s18_settle_after_keys waits for a synchronized frame, which is right
+ * when a key is guaranteed to repaint.  Motion keys are not: `g g` on
+ * line 0 moves nothing and paints nothing, and waiting for its frame
+ * times the whole case out with no clue which key was responsible.
+ * This case asserts the GRID, never a frame count, so quiet is the
+ * honest signal.
+ */
+static void s25_keys(PtyCtx *c, const char *spec)
+{
+    ptc_keys(c, spec);
+    ptc_settle(c, 40);
+}
+
+static void s25_open(PtyCtx *c, const char *name)
+{
+    char cmd[256];
+
+    (void)snprintf(cmd, sizeof(cmd), "tabedit %s/%s", S25_DIR, name);
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, cmd);
+    s18_settle_after_keys(c, "enter");
+}
+
+/*
+ * The arrangement DoD 2 names: six files, three of them grouped, two
+ * panes, cursors moved onto a CJK line, a scrolled viewport, and two
+ * jumplist entries.
+ */
+static void s25_build_session(PtyCtx *c)
+{
+    s25_open(c, "a.txt");
+    s25_open(c, "b.txt");
+    s25_open(c, "c.txt");
+    s25_open(c, "d.txt");
+    s25_open(c, "e.txt");
+    s25_open(c, "f.txt");
+    if (c->failed)
+        return;
+    /*
+     * A split, so `panes` is a tree rather than a leaf and the two
+     * windows hold independent cursors.
+     *
+     * No standalone `esc` anywhere in here: the cmdline already
+     * returned to normal mode, and a key that repaints NOTHING makes
+     * s18_settle_after_keys wait for a frame that never comes.
+     */
+    s25_keys(c, "ctrl+w s");
+    /* Scroll, then land on the CJK line: `goal` is a column, and a
+     * resume that stored an offset would put the cursor elsewhere. */
+    s25_keys(c, "G");
+    s25_keys(c, "g g");
+    s25_keys(c, "down");
+    s25_keys(c, "right");
+    s25_keys(c, "right");
+    /* Two jumplist entries. */
+    s25_keys(c, "G");
+    s25_keys(c, "g g");
+}
+
+/*
+ * DoD 2, the headline gate: the grid after quit-and-reopen is
+ * BYTE-IDENTICAL to the grid before the quit.
+ *
+ * Nothing weaker is worth having.  "The right files are open" is
+ * satisfied by a restore that loses every cursor; "the layout is back"
+ * is satisfied by one that scrolls each pane to the top.  The grid is
+ * the only artifact that covers tabs, groups, panes, cursors,
+ * viewports and the status line at once, and invariant 5 already says
+ * the same state must render the same bytes.
+ */
+static void case_s25_resume_exact(PtyCtx *c)
+{
+    s25_fixture_make();
+    s25_spawn_bare(c);
+    s25_build_session(c);
+    if (c->failed) {
+        s25_fixture_remove();
+        return;
+    }
+    /* The grid to come back to, recorded while this editor is still
+     * up. */
+    ptc_mark_resume(c);
+    /* The quit is what saves: the debounce is an optimization and
+     * quitting inside its window must not cost the arrangement. */
+    force_quit(c);
+    s25_resume_bare(c);
+    ptc_check_resume_exact(c);
+    ptc_snapshot(c, "s25_resume_exact");
+    force_quit(c);
+    s25_fixture_remove();
+}
+
+/*
+ * And the same arrangement survives a RESIZE away and back.
+ *
+ * Pane ratios are permille, not cells (s22's law), so a terminal that
+ * changed size and changed back must land on the same grid.  A layout
+ * that stored cells would drift by a column each way and never say so.
+ */
+static void case_s25_resume_survives_resize(PtyCtx *c)
+{
+    s25_fixture_make();
+    s25_spawn_bare(c);
+    s25_build_session(c);
+    if (c->failed) {
+        s25_fixture_remove();
+        return;
+    }
+    ptc_mark_resume(c);
+    force_quit(c);
+    s25_resume_bare(c);
+    if (c->failed) {
+        s25_fixture_remove();
+        return;
+    }
+    ptc_resize(c, 30U, 100U);
+    ptc_settle(c, 0);
+    ptc_resize(c, 24U, 80U);
+    ptc_settle(c, 0);
+    ptc_check_resume_exact(c);
+    ptc_snapshot(c, "s25_resume_after_resize");
+    force_quit(c);
+    s25_fixture_remove();
+}
+
 const PtyCase sag_pty_cases[] = {
+    C(s25_resume_exact, modern, 24U, 80U, case_s25_resume_exact),
+    C(s25_resume_survives_resize, modern, 24U, 80U,
+      case_s25_resume_survives_resize),
     C(s24_group_two_row_bar, modern, 24U, 80U,
       case_s24_group_two_row_bar),
     C(s24_picker_chrome, modern, 24U, 80U, case_s24_picker_chrome),

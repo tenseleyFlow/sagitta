@@ -59,6 +59,15 @@ struct PtyCtx {
     bool timed_out;
     bool snapshot_taken;
     bool allow_primary;
+    /*
+     * Sprint 25 DoD 2: the grid as it stood before ptc_resume reaped
+     * the first process.  Resume exactness is a claim about two
+     * PROCESSES producing one grid, which is the only claim in the
+     * suite that a single snapshot cannot express.
+     */
+    Bytebuf pre_resume;
+    bool resumed;
+    bool marked_resume;
     char failure[512];
 };
 
@@ -77,6 +86,23 @@ void ptc_bytes(PtyCtx *c, const char *lit);
 void ptc_resize(PtyCtx *c, u16 rows, u16 cols);
 void ptc_snapshot(PtyCtx *c, const char *golden_name);
 void ptc_expect_exit(PtyCtx *c, int code);
+
+/*
+ * Sprint 25 DoD 2.  Reaps the current child, records the grid it left
+ * behind, resets the terminal model, and spawns `bin` again.
+ *
+ * The reset is total — a fresh VtScreen, an empty raw log — because a
+ * resumed editor repaints from nothing and comparing against a grid
+ * that still held the first process's scrollback would pass for the
+ * wrong reason.
+ */
+/* Records the grid to resume against.  Called while the first editor is
+ * still RUNNING — after the quit the terminal has been torn down, and
+ * the comparison then fails on teardown rather than on state. */
+void ptc_mark_resume(PtyCtx *c);
+void ptc_resume(PtyCtx *c, const char *bin, ...);
+/* Asserts the CURRENT grid is byte-identical to the pre-resume one. */
+void ptc_check_resume_exact(PtyCtx *c);
 
 /* Narrow fixture helpers for lifecycle cases. */
 void ptc_allow_primary(PtyCtx *c);

@@ -31,6 +31,23 @@ static void pane_refocus(Ed *ed, Pane *want)
     }
     if (ed->focus != NULL && ed->focus->win != NULL)
         ed->win = ed->focus->win;
+    /*
+     * The TAB's copy of focus moves too.
+     *
+     * Nothing else kept it in sync, and sag_pane_split mutates the
+     * focused leaf IN PLACE into the split node — so after one split
+     * the tab's `focus` pointed at a split node, whose `win` is NULL.
+     * sag_tab_switch assigns ed->focus = t->focus, so switching away
+     * and back landed focus on a non-leaf with a stale ed->win, and
+     * Sprint 25 serialized that as "pane 0 is focused" no matter which
+     * one actually was.  The resume gate is what surfaced it.
+     */
+    {
+        Tab *t = sag_tab_at(ed, ed->tabs.active);
+
+        if (t != NULL && ed->focus != NULL && ed->focus->is_leaf)
+            t->focus = ed->focus;
+    }
     ed->layout_dirty = true;
     ed->full_damage = true;
     /* §5: split, close and plain focus movement all funnel through

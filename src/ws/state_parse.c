@@ -455,6 +455,32 @@ static bool path_is_readable_file(const char *path)
     return access(path, R_OK) == 0;
 }
 
+/*
+ * The leaf showing the window the document named as focused.
+ *
+ * Falls back to the first leaf, which is where focus went before this
+ * field existed — an out-of-range or absent `focus` is a tab that
+ * opens on its first pane, not a tab that fails to open.
+ */
+static Pane *focus_leaf(Pane *root, const FlLit *rec, const WinSlots *slots)
+{
+    i64 want = sag_fl_int_or(sag_fl_get(rec, "focus"), 0);
+    Pane *leaves[SAG_PANE_MAX_LEAVES * 2];
+    u32 n = 0U;
+    u32 i;
+
+    if (root == NULL)
+        return NULL;
+    if (want < 0 || (u32)want >= slots->n)
+        return sag_pane_first_leaf(root);
+    sag_pane_collect_leaves(root, leaves, SAG_ARRAY_LEN(leaves), &n);
+    for (i = 0U; i < n; i++) {
+        if (leaves[i]->win == slots->v[want])
+            return leaves[i];
+    }
+    return sag_pane_first_leaf(root);
+}
+
 static void apply_wins(Ed *ed, Tab *t, const FlLit *rec, Buffer *buf)
 {
     const FlLit *wins = sag_fl_get(rec, "wins");
@@ -533,7 +559,7 @@ static void apply_wins(Ed *ed, Tab *t, const FlLit *rec, Buffer *buf)
             sag_ed_win_release(ed, leaves[i]->win);
         sag_pane_free(t->root);
         t->root = root;
-        t->focus = sag_pane_first_leaf(root);
+        t->focus = focus_leaf(root, rec, &slots);
         if (was_live) {
             ed->pane_root = t->root;
             ed->focus = t->focus;
@@ -545,7 +571,7 @@ static void apply_wins(Ed *ed, Tab *t, const FlLit *rec, Buffer *buf)
         return;
     }
     t->root = root;
-    t->focus = sag_pane_first_leaf(root);
+    t->focus = focus_leaf(root, rec, &slots);
 }
 
 /* ---------------------------------------------------------------- */

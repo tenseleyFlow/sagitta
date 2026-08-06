@@ -16,6 +16,7 @@
       group: 0,
       group_ordinal: 0,
       deferred: false,
+      focus: 0,
       panes: {
         win: 0,
       },
@@ -49,6 +50,7 @@
       group: 0,
       group_ordinal: 0,
       deferred: false,
+      focus: 1,
       panes: {
         split: "v",
         ratio_permille: 999,

@@ -26,6 +26,10 @@ enum {
     PTC_DEFAULT_BUDGET_MS = 5000,
     PTC_DEFAULT_QUIET_MS = 50,
     PTC_KILL_BUDGET_MS = 1000,
+    /* Generous on purpose: the grid recorded here is compared byte for
+     * byte against a second process, so a frame that is 10 ms late
+     * would fail the gate rather than slow it down. */
+    PTC_RESUME_QUIET_MS = 250,
     PTC_LIVE_MAX = 64
 };
 
@@ -1121,6 +1125,7 @@ void ptc_init(PtyCtx *c, const PtyCase *test, const char *state_dir,
     c->global_deadline_ms = global_deadline_ms;
     bytebuf_init(&c->raw);
     bytebuf_init(&c->snapshot);
+    bytebuf_init(&c->pre_resume);
     vt_init(&c->vt, test->rows, test->cols);
     if (!vt_profile_from_name(test->profile, &profile))
         ptc_fail(c, "unknown terminal profile: %s", test->profile);
@@ -1163,6 +1168,149 @@ void ptc_cleanup(PtyCtx *c)
         live_remove(&c->pty);
 }
 
+/*
+ * Sprint 25 DoD 2: quit, reopen, and compare.
+ *
+ * Everything the first process left behind is discarded on purpose.  A
+ * resumed editor repaints from an empty terminal, so comparing against
+ * a model that still held the first one's output would pass whenever
+ * the second process painted nothing at all — which is exactly the
+ * regression this gate exists to catch.
+ */
+void ptc_mark_resume(PtyCtx *c)
+{
+    if (c == NULL || c->failed)
+        return;
+    /*
+     * Captured while the first editor is still RUNNING.
+     *
+     * Taking it after the quit records a terminal that has been torn
+     * down — alt screen off, modes reset, cursor homed — and every one
+     * of those differs from a live second process, so the comparison
+     * fails on the teardown rather than on the state.  The text and
+     * style grids were identical the whole time; only the header was
+     * wrong, which is the most misleading way for a gate to fail.
+     */
+    /*
+     * Settle FIRST.  A grid captured mid-frame has the cursor hidden at
+     * 0,0 — the editor hides it while painting and places it after —
+     * and the resumed process, settled properly, does not.  The text
+     * matched all along; the comparison failed on a cursor that was
+     * simply not drawn yet.
+     */
+    pump_quiet(c, PTC_RESUME_QUIET_MS, false);
+    if (c->failed)
+        return;
+    snapshot_write(&c->vt, &c->pre_resume);
+    if (c->pre_resume.len == 0U) {
+        ptc_fail(c, "nothing on screen to resume from");
+        return;
+    }
+    /*
+     * The frame COUNT is not editor state (s19).  It records how the
+     * kernel scheduled a scripted session's writes, and the second
+     * process paints once where the first painted twenty-five times —
+     * both from the same document.  Invariant 5 is about the grid.
+     */
+    c->vt.sync_pairs_unstable = true;
+    c->pre_resume.len = 0U;
+    snapshot_write(&c->vt, &c->pre_resume);
+    c->marked_resume = true;
+}
+
+void ptc_resume(PtyCtx *c, const char *bin, ...)
+{
+    va_list ap;
+    const char *args[8];
+    size_t n = 0U;
+    VtProfile profile;
+
+    if (c == NULL || bin == NULL || c->failed)
+        return;
+    if (c->resumed) {
+        ptc_fail(c, "case resumed more than once");
+        return;
+    }
+    if (!c->marked_resume) {
+        ptc_fail(c, "ptc_resume without ptc_mark_resume");
+        return;
+    }
+    /* The child must be GONE, not merely asked to leave: the clean-quit
+     * save happens on its way out, and spawning the reader before the
+     * writer has finished writing is the flakiest race available. */
+    ptc_cleanup(c);
+    if (c->failed)
+        return;
+    vt_free(&c->vt);
+    vt_init(&c->vt, c->test->rows, c->test->cols);
+    if (!vt_profile_from_name(c->test->profile, &profile)) {
+        ptc_fail(c, "unknown terminal profile: %s", c->test->profile);
+        return;
+    }
+    vt_set_profile(&c->vt, profile);
+    /* The fresh VtScreen must carry the same frame-count policy, or the
+     * two snapshots disagree about a field neither of them is about. */
+    c->vt.sync_pairs_unstable = true;
+    if (c->allow_primary)
+        vt_set_primary_policy(&c->vt, true);
+    c->raw.len = 0U;
+    c->eof = false;
+    c->ready = false;
+    c->spawned = false;
+    c->resumed = true;
+    c->pty.master = -1;
+    c->pty.pid = -1;
+    c->pty.status = -1;
+    c->pty.reaped = false;
+
+    va_start(ap, bin);
+    while (n < SAG_ARRAY_LEN(args) - 1U) {
+        const char *arg = va_arg(ap, const char *);
+
+        if (arg == NULL)
+            break;
+        args[n++] = arg;
+    }
+    va_end(ap);
+    args[n] = NULL;
+    ptc_spawn(c, bin, args[0], args[1], args[2], args[3], args[4], args[5],
+              args[6], NULL);
+}
+
+void ptc_check_resume_exact(PtyCtx *c)
+{
+    Bytebuf now;
+
+    if (c == NULL || c->failed)
+        return;
+    if (!c->resumed) {
+        ptc_fail(c, "resume exactness checked without a resume");
+        return;
+    }
+    /* And the resumed process gets the same settle, for the same
+     * reason. */
+    pump_quiet(c, PTC_RESUME_QUIET_MS, false);
+    if (c->failed)
+        return;
+    bytebuf_init(&now);
+    snapshot_write(&c->vt, &now);
+    if (now.len != c->pre_resume.len ||
+        memcmp(now.data, c->pre_resume.data, now.len) != 0) {
+        /*
+         * The two snapshots are dumped in full rather than diffed to a
+         * line: a resume that is one cell wrong is the interesting
+         * case, and a summary hides it.
+         */
+        (void)fprintf(stderr,
+                      "--- resume mismatch: before quit ---\n%.*s\n"
+                      "--- after reopen ---\n%.*s\n",
+                      (int)c->pre_resume.len, (const char *)c->pre_resume.data,
+                      (int)now.len, (const char *)now.data);
+        ptc_fail(c, "grid differs after quit and reopen");
+    }
+    bytebuf_free(&now);
+}
+
 void ptc_dispose(PtyCtx *c)
 {
     if (c == NULL)
@@ -1171,6 +1319,7 @@ void ptc_dispose(PtyCtx *c)
     vt_free(&c->vt);
     bytebuf_free(&c->raw);
     bytebuf_free(&c->snapshot);
+    bytebuf_free(&c->pre_resume);
     free(c->state_dir);
     free(c->golden_name);
     c->state_dir = NULL;
