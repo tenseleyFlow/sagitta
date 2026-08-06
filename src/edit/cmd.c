@@ -466,6 +466,14 @@ static const CmdDesc builtins[] = {
           "activate the next tab group"),
     DEFER("ed.group.prev", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 24,
           "activate the previous tab group"),
+    /*
+     * Sprint 18.5 ranks command NAMES and declared abbreviations.  The
+     * full palette -- a picker that also matches help text -- stays
+     * Sprint 38, so the name exists and hard-errors rather than being
+     * absent and reading as "no such command" (invariant 3).
+     */
+    DEFER("ed.find.command", SAG_ARITY_NONE, 0U, 38,
+          "open the command palette"),
     {"ed.pane.split_h", sag_pane_cmd_split_h, SAG_ARITY_NONE,
      SAG_CMD_NEEDS_WIN, "Split the focused pane side by side"},
     {"ed.pane.split_v", sag_pane_cmd_split_v, SAG_ARITY_NONE,
@@ -640,7 +648,10 @@ static bool command_name_valid(const char *name)
         "search", "macro", "job", "git", "lsp", "ai", "plug",
         "cmdline", "del", "shell",
         /* Sprint 21 */
-        "jump", "change", "mark"};
+        "jump", "change", "mark",
+        /* Sprint 18.5: the palette itself is Sprint 38's, but the name has
+         * to exist now so it can hard-error naming it (invariant 3). */
+        "find"};
     static const char *const verbs[] = {
         "home", "end", "next", "prev", "up", "down", "left", "right",
         "goto", "insert", "delete", "replace", "change", "yank", "paste", "toggle",
@@ -661,7 +672,7 @@ static bool command_name_valid(const char *name)
         "complete_next", "complete_prev", "insert_register",
         "literal_next", "accept", "word_prev", "to_home", "to_end",
         /* Sprint 18.5 */
-        "page_next", "page_prev", "dismiss",
+        "page_next", "page_prev", "dismiss", "command",
         /* Sprint 19 */
         "run", "run_bg", "read", "filter", "term", "kill", "kill_force",
         "jump", "clear_finished", "rerun",

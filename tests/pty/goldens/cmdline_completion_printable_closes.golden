@@ -1,5 +1,5 @@
 # sagitta pty golden v1
-size 80x24 alt=1 cursor=23,7 vis=1
+size 80x24 alt=1 cursor=23,4 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
 --- text
     1 completion fixture
@@ -25,7 +25,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
 
 
   file.next                    Walk to the next open file                       
-:file.x                                                                         
+:fix                                                                            
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAA
 AAAAA
@@ -49,8 +49,8 @@ AAAAA
 
 
 
-BBCCCCCBBCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-DEEEEEEBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBCCBBBBBCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+DEEEBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 --- legend
 A fg=default bg=default attrs=----------
 B fg=#f7e0cc bg=#4e2a0f attrs=b---------

@@ -153,6 +153,20 @@ void test_cmd_registry_invocation_and_deferred(void)
         SAG_ASSERT(sag_test_log_contains(SAG_LOG_ERROR, desc->name));
         SAG_ASSERT(sag_test_log_contains(SAG_LOG_ERROR, "Sprint"));
     }
+    /*
+     * Sprint 18.5 DoD 13 names this one: the sprint ranks command names,
+     * while the palette that also matches help text is Sprint 38's.  The
+     * name has to EXIST and say so -- absent, it reads to the user as
+     * "no such command" rather than "not yet".
+     */
+    {
+        CmdId palette = sag_cmd_lookup("ed.find.command", 15U);
+        const CmdDesc *desc = sag_cmd_desc(palette);
+
+        SAG_ASSERT_NOT_NULL(desc);
+        SAG_ASSERT((desc->flags & SAG_CMD_DEFERRED) != 0U);
+        SAG_ASSERT_NOT_NULL(strstr(desc->help, "Sprint 38"));
+    }
     for (i = 0U; i < SAG_ARRAY_LEN(mode_rows); i++) {
         CmdCtx mode = {0};
         CmdId enter = sag_cmd_lookup("ed.mode.enter", 13U);
