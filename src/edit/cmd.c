@@ -12,6 +12,7 @@
 #include "edit/file_cmds.h"
 #include "edit/shell_cmds.h"
 #include "edit/sel_actions.h"
+#include "edit/ws_cmds.h"
 #include "ui/cmdline.h"
 #include "ui/groupnav.h"
 #include "ui/grouppicker.h"
@@ -466,6 +467,23 @@ static const CmdDesc builtins[] = {
           "activate the next tab group"),
     DEFER("ed.group.prev", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 24,
           "activate the previous tab group"),
+    /* Sprint 25 §9: workspace state. */
+    {"ed.ws.save_state", sag_ws_cmd_save_state, SAG_ARITY_NONE, 0U,
+     "Write this workspace's state now, without waiting for the debounce"},
+    {"ed.ws.restore_state", sag_ws_cmd_restore_state, SAG_ARITY_NONE, 0U,
+     "Open what this workspace's saved state names, alongside what is open"},
+    {"ed.ws.info", sag_ws_cmd_info, SAG_ARITY_NONE, 0U,
+     "Report the workspace key, state directory, path record and lock owner"},
+    {"ed.ws.forget", sag_ws_cmd_forget, SAG_ARITY_NONE, 0U,
+     "Delete this workspace's state directory, after confirming"},
+    /*
+     * v1 is FROZEN and there is no v2, so there is nothing to migrate
+     * TO.  The name exists and hard-errors rather than being absent and
+     * reading as "no such command" (invariant 3); the first sprint that
+     * needs v2 builds the framework and takes this over.
+     */
+    DEFER("ed.ws.migrate", SAG_ARITY_NONE, 0U, 25,
+          "migrate workspace state to a newer schema (no v2 exists)"),
     /*
      * Sprint 18.5 ranks command NAMES and declared abbreviations.  The
      * full palette -- a picker that also matches help text -- stays
@@ -611,6 +629,10 @@ static const BuiltinMeta builtin_meta[] = {
     {"ed.group.remove_tab", "", SAG_RP_FORBID, "gremove"},
     {"ed.group.enter", "", SAG_RP_FORBID, "genter"},
     {"ed.group.leave", "", SAG_RP_FORBID, "gleave"},
+    {"ed.ws.save_state", "", SAG_RP_FORBID, "wssave"},
+    {"ed.ws.restore_state", "", SAG_RP_FORBID, "wsrestore"},
+    {"ed.ws.info", "", SAG_RP_FORBID, "wsinfo"},
+    {"ed.ws.forget", "", SAG_RP_FORBID, "wsforget"},
     /* The substitution body is ONE opaque string; s18's tokenizer must
      * not try to understand `/` inside a regex. */
     {"ed.search.replace", "s", SAG_RP_OPT, "s"},
@@ -651,7 +673,9 @@ static bool command_name_valid(const char *name)
         "jump", "change", "mark",
         /* Sprint 18.5: the palette itself is Sprint 38's, but the name has
          * to exist now so it can hard-error naming it (invariant 3). */
-        "find"};
+        "find",
+        /* Sprint 25 */
+        "ws"};
     static const char *const verbs[] = {
         "home", "end", "next", "prev", "up", "down", "left", "right",
         "goto", "insert", "delete", "replace", "change", "yank", "paste", "toggle",
@@ -685,7 +709,9 @@ static bool command_name_valid(const char *name)
         /* Sprint 23 */
         "move",
         /* Sprint 24 */
-        "dissolve", "remove_tab", "from_dir", "edit"};
+        "dissolve", "remove_tab", "from_dir", "edit",
+        /* Sprint 25 */
+        "save_state", "restore_state", "info", "forget", "migrate"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

@@ -7,6 +7,7 @@
 #include "edit/job.h"
 #include "edit/jumplist.h"
 #include "edit/pane_cmds.h"
+#include "edit/ws_cmds.h"
 #include "ui/groups.h"
 #include "ui/tabs.h"
 #include "edit/search_cmds.h"
@@ -32,7 +33,11 @@ typedef enum {
     SAG_PROMPT_NONE,
     SAG_PROMPT_RECOVER,
     SAG_PROMPT_QUIT_DIRTY,
-    SAG_PROMPT_OVERWRITE
+    SAG_PROMPT_OVERWRITE,
+    /* Sprint 25 §9: ed.ws.forget.  Its own kind because every other
+     * prompt here asks about unsaved BYTES, and answering "delete a
+     * cache" must never share a keystroke with those. */
+    SAG_PROMPT_WS_FORGET
 } PromptKind;
 
 enum {
@@ -134,6 +139,7 @@ struct Ed {
     Tabs tabs;
     Groups groups;
     TabPrompt tab_prompt;
+    WsPrompt ws_prompt;
     Rect footer_rect;
     Rect tab_strip_rect;
 

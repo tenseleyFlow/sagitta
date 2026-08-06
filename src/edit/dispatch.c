@@ -212,6 +212,16 @@ void sag_dispatch_key(Ed *ed, Key key, i64 now_ms)
         if (sag_tab_prompt_key(ed, answer))
             return;
     }
+    /* Same reasoning for ed.ws.forget: `y` is an ordinary binding the
+     * rest of the time, and it must not also run whatever that is. */
+    if (ed->ws_prompt.active) {
+        u8 answer = key.code == SAG_KEY_ESCAPE
+                    ? 0x1BU
+                    : (key.ntext == 1U ? key.text[0] : 0U);
+
+        if (sag_ws_prompt_key(ed, answer))
+            return;
+    }
     if (ed->confirm.active) {
         u8 answer = key.code == SAG_KEY_ESCAPE
                     ? 0x1BU

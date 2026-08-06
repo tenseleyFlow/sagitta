@@ -484,12 +484,34 @@ static void apply_wins(Ed *ed, Tab *t, const FlLit *rec, Buffer *buf)
     if (t->root != NULL) {
         Pane *leaves[SAG_PANE_MAX_LEAVES * 2];
         u32 nl = 0U;
+        /*
+         * Is the editor LOOKING at the tree we are about to free?
+         *
+         * It is whenever restore reuses an already-open tab:
+         * sag_tab_open finds the existing one and switches to it, which
+         * points ed->pane_root at this very root.  Freeing it and
+         * walking away leaves the next sag_ed_layout writing rects into
+         * freed memory — a use-after-free that surfaces as a segfault
+         * inside calloc several hundred tests later, nowhere near here.
+         */
+        bool was_live = ed->pane_root == t->root;
 
         sag_pane_collect_leaves(t->root, leaves, SAG_ARRAY_LEN(leaves),
                                 &nl);
         for (i = 0U; i < nl; i++)
             sag_ed_win_release(ed, leaves[i]->win);
         sag_pane_free(t->root);
+        t->root = root;
+        t->focus = sag_pane_first_leaf(root);
+        if (was_live) {
+            ed->pane_root = t->root;
+            ed->focus = t->focus;
+            if (ed->focus != NULL && ed->focus->win != NULL)
+                ed->win = ed->focus->win;
+            ed->layout_dirty = true;
+            ed->full_damage = true;
+        }
+        return;
     }
     t->root = root;
     t->focus = sag_pane_first_leaf(root);
@@ -536,8 +558,11 @@ static void apply_groups(Ed *ed, const FlLit *doc, IdMapVec *gids)
     }
 }
 
+/* `first_out` receives the index of the first tab this document
+ * accounted for, whether it was opened here or already present — see
+ * the fallback in sag_state_apply for why length cannot answer that. */
 static void apply_tabs(Ed *ed, const FlLit *doc, const IdMapVec *gids,
-                       IdMapVec *tids)
+                       IdMapVec *tids, int *first_out)
 {
     const FlLit *list = sag_fl_get(doc, "tabs");
     u32 n = sag_fl_len(list);
@@ -575,6 +600,8 @@ static void apply_tabs(Ed *ed, const FlLit *doc, const IdMapVec *gids,
             dropped++;
             continue;
         }
+        if (*first_out < 0)
+            *first_out = idx;
         file_id = (u32)sag_fl_int_or(sag_fl_get(rec, "id"), 0);
         sag_idmap_put(tids, file_id, t->tab_id);
         /*
@@ -722,6 +749,7 @@ SagWsResult sag_state_apply(Ed *ed, const u8 *bytes, u64 len)
     IdMapVec tids;
     i64 version;
     u32 before;
+    int first;
 
     static const u8 nothing = 0U;
 
@@ -785,17 +813,27 @@ SagWsResult sag_state_apply(Ed *ed, const u8 *bytes, u64 len)
     sag_idmap_init(&gids);
     sag_idmap_init(&tids);
     before = (u32)ed->tabs.v.len;
-    apply_groups(ed, doc, &gids);            /* step 3 */
-    apply_tabs(ed, doc, &gids, &tids);       /* step 4 */
-    apply_files(ed, doc);                    /* step 5 */
-    {                                        /* step 6 */
+    first = -1;
+    apply_groups(ed, doc, &gids);              /* step 3 */
+    apply_tabs(ed, doc, &gids, &tids, &first); /* step 4 */
+    apply_files(ed, doc);                      /* step 5 */
+    {                                          /* step 6 */
         u32 live = sag_idmap_get(&tids,
                                  (u32)sag_fl_int_or(
                                      sag_fl_get(doc, "active_tab"), 0));
         int idx = live == 0U ? -1 : sag_tab_index_of_id(ed, live);
 
-        if (idx < 0 && ed->tabs.v.len > before)
-            idx = (int)before; /* first restored tab */
+        /*
+         * The fallback is the FIRST TAB THIS DOCUMENT NAMED, not the
+         * first one past the old length.  active_tab can legitimately
+         * resolve to nothing — it names an untitled scratch tab, which
+         * is never emitted — and when restore reuses tabs that are
+         * already open, the length does not grow at all, so inferring
+         * the index from it lands on a tab the document never mentioned
+         * or on no tab whatsoever.
+         */
+        if (idx < 0)
+            idx = first;
         if (idx >= 0)
             sag_tab_switch(ed, idx);
     }
@@ -807,9 +845,14 @@ SagWsResult sag_state_apply(Ed *ed, const u8 *bytes, u64 len)
      * size and this function is also driven by tests with no terminal.
      * sag_ws_restore does both; see there.
      */
-    if (ed->tabs.v.len == before)
-        return SAG_WS_FRESH;
-    return SAG_WS_RESTORED;
+    /*
+     * RESTORED means the document named at least one tab we could
+     * account for — not that the tab count grew.  Restoring into a
+     * session that already has those files open changes nothing about
+     * the length and is still a restore.
+     */
+    (void)before;
+    return first < 0 ? SAG_WS_FRESH : SAG_WS_RESTORED;
 }
 
 SagWsResult sag_ws_restore(Ed *ed)

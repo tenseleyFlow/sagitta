@@ -1000,6 +1000,11 @@ void sag_ed_prompt(Ed *ed, PromptKind prompt)
         sag_msg(ed, SAG_MSG_ERROR,
                 "file changed on disk - [o]verwrite [esc] cancel");
         break;
+    case SAG_PROMPT_WS_FORGET:
+        /* ed.ws.forget writes its own question, because it names the
+         * directory it is about to remove and this function does not
+         * have it. */
+        break;
     }
     if (prompt != SAG_PROMPT_NONE)
         ed->msg.prompt = true;

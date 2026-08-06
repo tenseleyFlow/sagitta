@@ -930,6 +930,24 @@ void test_ws_history_global_scope_crosses_workspaces(void);
 void test_ws_history_null_workspace_is_the_global_history(void);
 void test_ws_history_kinds_do_not_share_a_file(void);
 void test_ws_history_memory_history_writes_nothing(void);
+
+/* Sprint 25 §9: the ws commands. */
+void test_ws_cmds_are_registered(void);
+void test_ws_cmds_migrate_is_deferred(void);
+void test_ws_cmds_save_state_writes_immediately(void);
+void test_ws_cmds_save_state_refuses_when_stateless(void);
+void test_ws_cmds_save_state_refuses_for_a_reader(void);
+void test_ws_cmds_restore_state_is_additive(void);
+void test_ws_cmds_restore_state_with_no_document_is_ok(void);
+void test_ws_cmds_info_reports_the_key_and_the_owner(void);
+void test_ws_cmds_info_names_a_foreign_owner(void);
+void test_ws_cmds_info_says_stateless(void);
+void test_ws_cmds_forget_asks_before_deleting(void);
+void test_ws_cmds_forget_removes_the_tree_on_yes(void);
+void test_ws_cmds_forget_cancels_on_anything_but_y(void);
+void test_ws_cmds_forget_key_is_not_swallowed_when_idle(void);
+void test_ws_cmds_forget_dir_refuses_a_path_outside_workspaces(void);
+void test_ws_cmds_forget_does_not_follow_symlinks(void);
 void test_strip_lays_entries_left_to_right_without_gaps(void);
 void test_strip_measures_cjk_labels_in_cells(void);
 void test_strip_clips_long_labels(void);
