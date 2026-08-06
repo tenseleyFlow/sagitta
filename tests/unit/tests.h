@@ -962,6 +962,14 @@ void test_state_corpus_unknown_keys_survive_reemission(void);
 void test_state_corpus_invalid_documents_are_rejected(void);
 void test_state_corpus_invalid_documents_reach_a_result(void);
 void test_state_corpus_reemission_is_idempotent(void);
+
+/* Sprint 25 DoD 13 / Sprint 36's named DoD item. */
+void test_state_differential_canonical_corpus(void);
+void test_state_differential_noncanonical_corpus(void);
+void test_state_differential_invalid_corpus(void);
+void test_state_differential_comparison_detects_differences(void);
+void test_state_differential_byte_comparison_is_not_redundant(void);
+void test_state_differential_names_sprint_36(void);
 void test_strip_lays_entries_left_to_right_without_gaps(void);
 void test_strip_measures_cjk_labels_in_cells(void);
 void test_strip_clips_long_labels(void);
