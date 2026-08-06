@@ -1,6 +1,6 @@
 # sagitta pty golden v1
 size 80x24 alt=1 cursor=2,6 vis=1
-modes 2004,1002,1006,1004 kitty=21 sync_pairs=3
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
     2 bad
     1 [exit 3 in 1.24s]

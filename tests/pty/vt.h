@@ -61,6 +61,18 @@ typedef struct VtScreen {
     Bytebuf errors;
     u32 nerrors;
     u32 nsync_pairs;
+    /*
+     * Sprint 24 follow-up: suppress the frame count in the snapshot.
+     *
+     * For a case driven by a SUBPROCESS's output, the number of
+     * synchronized frames is decided by when the kernel schedules the
+     * child's writes relative to our reads — not by anything the editor
+     * does.  Under load the same job splits across four frames instead
+     * of three, and the grid is identical either way.  Recording it
+     * there asserts a property of the scheduler; the grid, which is the
+     * property invariant 5 is actually about, stays byte-identical.
+     */
+    bool sync_pairs_unstable;
     u32 nosc52;
     u32 nosc52_in_sync;
 

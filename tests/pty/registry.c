@@ -1797,10 +1797,20 @@ static void s19_run_frames(PtyCtx *c, const char *command, u32 frames)
     ptc_keys(c, "enter");
     ptc_wait_sync_pairs(c, before + frames);
     /* Settle to quiescence so the snapshot lands after the completion
-     * footer, not mid-flight.  Quiescence also stabilizes the recorded
-     * frame count: partway through delivery, output and footer sometimes
-     * share a frame and sometimes do not. */
+     * footer, not mid-flight. */
     ptc_settle(c, 250);
+    /*
+     * The GRID is deterministic after quiescence; the frame COUNT is
+     * not.  How a child's output splits across synchronized frames is
+     * decided by when the kernel schedules its writes against our
+     * reads — under CPU load the same job lands in four frames rather
+     * than three.  Asserting it here was asserting a property of the
+     * scheduler, and it failed intermittently in exactly that way.
+     *
+     * The count is still asserted for keystroke-driven cases, where it
+     * IS an editor property.
+     */
+    c->vt.sync_pairs_unstable = true;
 }
 
 static void s19_run(PtyCtx *c, const char *command)

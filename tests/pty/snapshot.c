@@ -143,9 +143,12 @@ static void modes_write(const VtScreen *v, Bytebuf *out)
     }
     if (!any)
         bytebuf_push_u8(out, '-');
-    bytebuf_printf(out, " kitty=%u sync_pairs=%u\n",
-                   v->ksp > 0 ? (unsigned)v->kitty[v->ksp - 1] : 0u,
-                   (unsigned)v->nsync_pairs);
+    bytebuf_printf(out, " kitty=%u sync_pairs=",
+                   v->ksp > 0 ? (unsigned)v->kitty[v->ksp - 1] : 0u);
+    if (v->sync_pairs_unstable)
+        bytebuf_printf(out, "n/a\n");
+    else
+        bytebuf_printf(out, "%u\n", (unsigned)v->nsync_pairs);
 }
 
 void snapshot_write(const VtScreen *v, Bytebuf *out)
@@ -575,8 +578,13 @@ static bool modes_line_read(const SnapLines *lines, VtScreen *out)
         out->kitty[0] = value;
         out->ksp = 1;
     }
-    if (!literal_read(&p, end, " sync_pairs=") ||
-        !uint_read(&p, end, &value) || p != end) return false;
+    if (!literal_read(&p, end, " sync_pairs=")) return false;
+    if (literal_read(&p, end, "n/a")) {
+        if (p != end) return false;
+        out->sync_pairs_unstable = true;
+        return true;
+    }
+    if (!uint_read(&p, end, &value) || p != end) return false;
     out->nsync_pairs = value;
     return true;
 }
