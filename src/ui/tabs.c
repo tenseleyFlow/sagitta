@@ -46,7 +46,7 @@ static void tab_destroy(Ed *ed, Tab *t)
                                 SAG_ARRAY_LEN(leaves), &n);
         for (i = 0U; i < n; i++)
             sag_ed_win_release(ed, leaves[i]->win);
-        sag_pane_free(t->root);
+        sag_pane_free(ed, t->root);
     }
     free(t->path);
     (void)memset(t, 0, sizeof(*t));

@@ -557,7 +557,7 @@ static void apply_wins(Ed *ed, Tab *t, const FlLit *rec, Buffer *buf)
                                 &nl);
         for (i = 0U; i < nl; i++)
             sag_ed_win_release(ed, leaves[i]->win);
-        sag_pane_free(t->root);
+        sag_pane_free(ed, t->root);
         t->root = root;
         t->focus = focus_leaf(root, rec, &slots);
         if (was_live) {

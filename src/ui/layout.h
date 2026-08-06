@@ -70,7 +70,9 @@ typedef struct Pane {
 } Pane;
 
 Pane *sag_pane_new_leaf(Win *win);
-void sag_pane_free(Pane *p);
+/* Takes the editor so the per-frame pane tables die with the nodes they
+ * index — see layout.c for the use-after-free that shaped this. */
+void sag_pane_free(Ed *ed, Pane *p);
 
 /*
  * NULL when the split is refused: no room at the current size, or the

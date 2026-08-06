@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#include "edit/pane_cmds.h"
 #include "ui/gutter.h"
 #include "ui/viewport.h"
 #include "ui/tabs.h"
@@ -25,15 +26,37 @@ Pane *sag_pane_new_leaf(Win *win)
     return p;
 }
 
-void sag_pane_free(Pane *p)
+static void pane_free_rec(Pane *p)
 {
     if (p == NULL)
         return;
     if (!p->is_leaf) {
-        sag_pane_free(p->a);
-        sag_pane_free(p->b);
+        pane_free_rec(p->a);
+        pane_free_rec(p->b);
     }
     free(p);
+}
+
+/*
+ * Takes the editor so the PER-FRAME PANE TABLES can be invalidated here.
+ *
+ * pane_cmds.h says the region payloads are indices "so a stale payload
+ * from a previous frame cannot dereference a freed node" — but the
+ * table those indices address holds raw Pane pointers, so the claim
+ * only holds if the table dies with the panes.  It did not: closing a
+ * tab freed its tree and left ed->leaf_tab pointing into it, and a
+ * mouse event arriving before the next render — the event loop drains a
+ * whole input burst before drawing (s14) — read freed memory through
+ * sag_pane_leaf_by_index.
+ *
+ * fuzz_mouse found it as a heap-use-after-free in wheel_pane.  The
+ * parameter exists so the next caller cannot forget.
+ */
+void sag_pane_free(Ed *ed, Pane *p)
+{
+    if (ed != NULL)
+        sag_pane_tables_reset(ed);
+    pane_free_rec(p);
 }
 
 u32 sag_pane_leaf_count(const Pane *root)
@@ -266,6 +289,9 @@ bool sag_pane_close(Ed *ed, Pane *leaf)
      */
     if (ed->focus == sibling || ed->focus == leaf)
         ed->focus = sag_pane_first_leaf(parent);
+    /* Same reason as sag_pane_free's: the per-frame tables address
+     * these nodes by index and must not outlive them. */
+    sag_pane_tables_reset(ed);
     free(sibling);
     free(leaf);
     return true;
