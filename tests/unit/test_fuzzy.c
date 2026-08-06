@@ -11,6 +11,21 @@
  * fuss's 0 means "no match"; our port returns SAG_FZ_NO_MATCH, so a
  * corpus expectation of 0 is mapped on the way in -- except for the one
  * case that proves why the sentinel exists (see the divergence test).
+ *
+ * SPRINT 26's TESTING STRATEGY NAMES A test_rank.c.  It does not exist,
+ * on purpose: Sprint 18.5 pulled §1/§2 forward and its coverage landed
+ * here, so every item that file would hold is already below —
+ *
+ *   `src` selects the directory      test_fuzzy_rank_basename_tier
+ *   prefix-basename above fuzzy      test_fuzzy_rank_basename_tier
+ *   tie-break determinism            ..._excludes_and_breaks_ties_...
+ *   path_mode == false               ..._path_mode_off_scores_the_whole_label
+ *   empty pattern, source order      ..._empty_pattern_preserves_source_order
+ *   the >= 30-triple parity corpus   test_fuzzy_parity_corpus (38 rows)
+ *
+ * and the matched-count-equals-the-footer row is a picker claim, tested
+ * in test_picker.c.  A second file duplicating these would be two
+ * places to update and one place to forget.
  */
 #include "harness.h"
 
