@@ -150,9 +150,10 @@ static Key perf_key(char c)
  * which is the difference between "the cold opendir is the cost" and
  * "narrowing regressed".
  */
-static bool measure_trial(const char *root, i64 *samples)
+static bool measure_trial(const char *root, i64 *samples, u64 *opendirs)
 {
     Ed ed;
+    u64 before_opendirs;
     Rect rect;
     u32 i;
     bool ok = false;
@@ -171,6 +172,7 @@ static bool measure_trial(const char *root, i64 *samples)
     rect.w = PERF_COMP_COLS;
     rect.h = 1U;
     sag_cmdline_open(&ed, SAG_PROMPT_CMD, NULL);
+    before_opendirs = sag_comp_listing_opendirs();
 
     for (i = 0U; i < PERF_COMP_KEYS; i++) {
         Key key = perf_key(PERF_COMP_PREFIX[i]);
@@ -193,6 +195,7 @@ static bool measure_trial(const char *root, i64 *samples)
         (void)fprintf(stderr, "perf_cmdcomp: menu was empty\n");
         goto done;
     }
+    *opendirs = sag_comp_listing_opendirs() - before_opendirs;
     ok = true;
 
 done:
@@ -210,6 +213,7 @@ int main(void)
     size_t trial;
     size_t i;
     size_t worst_key = 0U;
+    u64 worst_opendirs = 0U;
     i64 p99;
     i64 median;
     int status = 0;
@@ -224,17 +228,29 @@ int main(void)
         worst_by_key[i] = 0;
     for (trial = 0U; trial < PERF_COMP_WARMUPS; trial++) {
         i64 ignored[PERF_COMP_KEYS];
+        u64 ignored_opendirs;
 
-        if (!measure_trial(root, ignored)) {
+        if (!measure_trial(root, ignored, &ignored_opendirs)) {
             status = 2;
             goto done;
         }
     }
     for (trial = 0U; trial < PERF_COMP_TRIALS; trial++) {
-        if (!measure_trial(root, &samples[trial * PERF_COMP_KEYS])) {
+        u64 opendirs = 0U;
+
+        if (!measure_trial(root, &samples[trial * PERF_COMP_KEYS],
+                           &opendirs)) {
             status = 2;
             goto done;
         }
+        /*
+         * DoD 10 asserts a COUNT, not a latency.  One opendir per trial
+         * is the whole claim: the directory is scanned when the PATH
+         * source is first reached and never again while the menu stays
+         * open, however many characters follow.
+         */
+        if (opendirs > worst_opendirs)
+            worst_opendirs = opendirs;
         for (i = 0U; i < PERF_COMP_KEYS; i++) {
             i64 value = samples[trial * PERF_COMP_KEYS + i];
 
@@ -251,15 +267,27 @@ int main(void)
     p99 = samples[(PERF_COMP_SAMPLES * 99U + 99U) / 100U - 1U];
     (void)printf("perf-cmdcomp: entries=%u keys=%u samples=%u "
                  "median_ms=%.3f p99_ms=%.3f max_ms=%.3f "
-                 "slowest_key=%u('%c') budget_ms=%.3f%s\n",
+                 "slowest_key=%u('%c') opendirs=%u budget_ms=%.3f%s\n",
                  PERF_COMP_ENTRIES, (unsigned)PERF_COMP_KEYS,
                  (unsigned)PERF_COMP_SAMPLES,
                  (double)median / 1000000.0, (double)p99 / 1000000.0,
                  (double)samples[PERF_COMP_SAMPLES - 1U] / 1000000.0,
                  (unsigned)worst_key, PERF_COMP_PREFIX[worst_key],
+                 (unsigned)worst_opendirs,
                  (double)PERF_COMP_BUDGET_NS / 1000000.0,
-                 p99 <= PERF_COMP_BUDGET_NS ? " ok" : " FAIL");
-    if (p99 > PERF_COMP_BUDGET_NS)
+                 p99 <= PERF_COMP_BUDGET_NS && worst_opendirs <= 1U
+                     ? " ok"
+                     : " FAIL");
+    /* Per-key worst, always printed: a single p99 over a prefix whose
+     * keys have wildly different costs hides which regime moved.  This is
+     * the line that shows one expensive scan followed by cheap re-ranks
+     * rather than a uniformly slow prompt. */
+    (void)printf("perf-cmdcomp: per_key_max_ms=");
+    for (i = 0U; i < PERF_COMP_KEYS; i++)
+        (void)printf("%s%.3f", i == 0U ? "" : ",",
+                     (double)worst_by_key[i] / 1000000.0);
+    (void)printf("\n");
+    if (p99 > PERF_COMP_BUDGET_NS || worst_opendirs > 1U)
         status = 1;
 
 done:

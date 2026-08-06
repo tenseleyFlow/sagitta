@@ -647,3 +647,72 @@ void test_cmdcomp_lcp_menu_and_empty_providers(void)
     fixture_unlink(&fixture, "alpha", false);
     fixture_dispose(&fixture);
 }
+
+/*
+ * Sprint 18.5 DoD 10: one opendir per directory, however many keystrokes
+ * follow.
+ *
+ * The ranked set caps at SAG_COMP_MAX and a capped set cannot answer a
+ * narrowed pattern, so before the listing cache every keystroke past the
+ * directory head rescanned.  This asserts the COUNT, which is what the
+ * DoD says; a latency number would pass on a fast disk and hide it.
+ */
+void test_cmdcomp_listing_scans_a_directory_once(void)
+{
+    CompFixture fixture;
+    CompFilter filter;
+    Arena arena;
+    Vec_CompItem out = {0};
+    static const char *const steps[] = {"e", "en", "ent", "entr", "entry",
+                                        "entry0", "entry01"};
+    u64 before;
+    u32 i;
+
+    fixture_init(&fixture);
+    /* Enough entries that the ranked set caps -- below the cap the filter
+     * could narrow on its own and the listing would prove nothing. */
+    for (i = 0U; i < 600U; i++) {
+        char name[32];
+
+        (void)snprintf(name, sizeof(name), "entry%03u", (unsigned)i);
+        fixture_file(&fixture, name);
+    }
+    arena_init(&arena);
+    sag_comp_filter_init(&filter);
+    /* One warm-up so the count excludes whatever the first call loads. */
+    {
+        SagCompQuery q = path_query("e");
+
+        (void)sag_comp_filter_run(&fixture.ed, &filter, &arena, &q, 0, &out);
+    }
+    before = sag_comp_listing_opendirs();
+    for (i = 0U; i < SAG_ARRAY_LEN(steps); i++) {
+        SagCompQuery q = path_query(steps[i]);
+
+        (void)sag_comp_filter_run(&fixture.ed, &filter, &arena, &q, 0, &out);
+    }
+    SAG_ASSERT_EQ_U64(sag_comp_listing_opendirs() - before, 0U);
+    SAG_ASSERT(out.len != 0U);
+
+    /*
+     * And the cache is not allowed to outlive the menu: a directory that
+     * changed between prompts must be seen.  sag_comp_enumerate is the
+     * fresh-read form, so it both rescans and retires the listing.
+     */
+    fixture_file(&fixture, "zebra");
+    out.len = 0U;
+    SAG_ASSERT_EQ_U64(
+        sag_comp_enumerate(&fixture.ed, SAG_COMP_PATH, "zebra", &out), 1U);
+    fixture_unlink(&fixture, "zebra", false);
+
+    Vec_CompItem_free(&out);
+    sag_comp_filter_free(&filter);
+    arena_free_all(&arena);
+    for (i = 0U; i < 600U; i++) {
+        char name[32];
+
+        (void)snprintf(name, sizeof(name), "entry%03u", (unsigned)i);
+        fixture_unlink(&fixture, name, false);
+    }
+    fixture_dispose(&fixture);
+}

@@ -16,7 +16,23 @@ typedef struct Ed Ed;
  * forward-declared rather than included back. */
 typedef struct CmdParsePoint CmdParsePoint;
 
-enum { SAG_COMP_MAX = 500 };
+enum {
+    SAG_COMP_MAX = 500,
+    /*
+     * Sprint 18.5 §4 / DoD 10: how many directory entries the path source
+     * will HOLD so that later keystrokes re-rank instead of re-scanning.
+     *
+     * The ranked set cannot answer a narrowed pattern once it is capped --
+     * an entry that missed the top SAG_COMP_MAX for "ent" may be the best
+     * match for "entry9" -- so the cache has to key on the DIRECTORY and
+     * keep everything in it.  50 000 short names cost a few megabytes and
+     * cover every real tree including node_modules; past that we go back
+     * to scanning per keystroke rather than let a runaway directory become
+     * unbounded memory, and Sprint 26's finder owns that case with its own
+     * budget and async walk.
+     */
+    SAG_COMP_LIST_MAX = 50000
+};
 
 typedef enum {
     SAG_COMP_CMD,
@@ -91,6 +107,16 @@ typedef struct CompReq {
      * silently lost rows.
      */
     i64 budget_us;
+    /*
+     * May the source answer from state it cached on an earlier request?
+     *
+     * True only on the live filter's path, where the menu is already open
+     * and the whole point is that twelve keystrokes cost one opendir.  A
+     * direct sag_comp_enumerate is a FRESH read: it is what a test calls
+     * after touching the filesystem, and memoizing it would answer with a
+     * directory that no longer exists.
+     */
+    bool allow_cache;
 } CompReq;
 
 enum {
@@ -136,6 +162,17 @@ void sag_comp_filter_init(CompFilter *f);
 /* Drops the cached set; the strings belong to the caller's arena. */
 void sag_comp_filter_invalidate(CompFilter *f);
 void sag_comp_filter_free(CompFilter *f);
+
+/*
+ * Drop the path source's cached directory listing.  Call this when the
+ * menu closes, not per keystroke -- holding it across a prompt is the
+ * whole point, and holding it BETWEEN prompts would show a directory that
+ * has since changed on disk.
+ */
+void sag_comp_listing_invalidate(void);
+/* Test hook: how many opendir calls the path source has made.  DoD 10
+ * asserts a COUNT, which a latency number cannot prove. */
+u64 sag_comp_listing_opendirs(void);
 
 /*
  * Rank the candidates for `q` into `out`, re-enumerating only when the

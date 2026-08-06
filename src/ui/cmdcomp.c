@@ -33,12 +33,19 @@ typedef struct {
 
 VEC_DECL(CandidateVec, Candidate);
 
+/*
+ * No FzMatch here, deliberately.  Match positions are 130 bytes and the
+ * heap sifts by copying whole structs -- carrying them made a 10 000-entry
+ * re-rank move ~40 MB through path_candidate_swap, which cost more than
+ * the readdir it followed.  Only the <= SAG_COMP_MAX survivors need
+ * positions, and rescoring those at finish time is a few hundred scans.
+ */
 typedef struct {
     char *name;
+    size_t len; /* strlen(name); `cap` only grows, so it cannot stand in */
     size_t cap;
     i32 score;
     unsigned char dtype;
-    FzMatch m;
 } PathCandidate;
 
 VEC_DECL(PathCandidateVec, PathCandidate);
@@ -387,8 +394,11 @@ static int path_candidate_cmp(const void *left, const void *right, void *ctx)
     (void)ctx;
     if (a->score != b->score)
         return a->score > b->score ? -1 : 1;
-    la = strlen(a->name);
-    lb = strlen(b->name);
+    /* Carried, not measured: this runs ~85 000 times per keystroke in a
+     * 10 000-entry directory, and two strlen calls per comparison were a
+     * measurable slice of the re-rank. */
+    la = a->len;
+    lb = b->len;
     if (la != lb)
         return la < lb ? -1 : 1;
     return strcmp(a->name, b->name);
@@ -413,7 +423,7 @@ static void path_candidate_swap(PathCandidate *a, PathCandidate *b)
  * root is replaced, so a large directory allocates and materializes only the
  * candidates the menu can display. */
 static void path_heap_push(PathCandidateVec *heap, const char *name,
-                           i32 score, unsigned char dtype, const FzMatch *m)
+                           i32 score, unsigned char dtype)
 {
     PathCandidate item;
     size_t at;
@@ -421,10 +431,10 @@ static void path_heap_push(PathCandidateVec *heap, const char *name,
 
     item.name = sag_xmalloc(need);
     (void)memcpy(item.name, name, need);
+    item.len = need - 1U;
     item.cap = need;
     item.score = score;
     item.dtype = dtype;
-    item.m = *m;
     PathCandidateVec_push(heap, item);
     at = heap->len - 1U;
     while (at != 0U) {
@@ -439,8 +449,7 @@ static void path_heap_push(PathCandidateVec *heap, const char *name,
 }
 
 static void path_heap_replace_worst(PathCandidateVec *heap, const char *name,
-                                    i32 score, unsigned char dtype,
-                                    const FzMatch *m)
+                                    i32 score, unsigned char dtype)
 {
     PathCandidate *root = &heap->data[0];
     size_t need = strlen(name) + 1U;
@@ -451,9 +460,9 @@ static void path_heap_replace_worst(PathCandidateVec *heap, const char *name,
         root->cap = need;
     }
     (void)memcpy(root->name, name, need);
+    root->len = need - 1U;
     root->score = score;
     root->dtype = dtype;
-    root->m = *m;
     for (;;) {
         size_t worst = at;
         size_t left = at * 2U + 1U;
@@ -483,6 +492,7 @@ static bool path_candidate_wanted(const PathCandidateVec *heap,
         return true;
     (void)memset(&preview, 0, sizeof(preview));
     preview.name = (char *)match;
+    preview.len = strlen(match);
     preview.score = score;
     preview.dtype = DT_UNKNOWN;
     return path_candidate_rank_cmp(&preview, &heap->data[0]) < 0;
@@ -504,6 +514,8 @@ static void path_candidates_finish(const CompReq *req,
 {
     Arena *arena = req->arena;
     size_t head_len = strlen(head);
+    const char *tail = req->stem + sag_comp_path_head_len(req->stem);
+    size_t tail_len = strlen(tail);
     size_t i;
 
     sag_sort_stable(paths->data, paths->len, sizeof(paths->data[0]),
@@ -536,7 +548,9 @@ static void path_candidates_finish(const CompReq *req,
          * escapes, so there is no honest byte mapping back, and a
          * highlight on the wrong columns is worse than none.
          */
-        item.m = path->m;
+        /* Rescored here rather than carried through the heap; see
+         * PathCandidate.  Same pattern, same name, so the same result. */
+        (void)comp_key(tail, tail_len, path->name, &item.m);
         item.match = arena_strdup(arena, path->name);
         if (strcmp(item.text, raw) != 0 ||
             head_len >= (size_t)SAG_COMP_NO_HIGHLIGHT) {
@@ -567,6 +581,183 @@ size_t sag_comp_path_head_len(const char *stem)
         return 0U;
     slash = strrchr(stem, '/');
     return slash == NULL ? 0U : (size_t)(slash - stem) + 1U;
+}
+
+/*
+ * Sprint 18.5 §4 / DoD 10: the cached directory listing.
+ *
+ * The ranked set is keyed on the PATTERN and so cannot answer a narrowed
+ * one once it caps -- which made every keystroke past the directory head
+ * pay another opendir over 10 000 entries.  This is keyed on the
+ * DIRECTORY instead and holds every name in it, so any pattern re-ranks
+ * from memory and the scan happens once.
+ *
+ * A file static, not per-CmdLine state: the core is single-threaded and
+ * there is one prompt, and the alternative threads a path-only cache
+ * through a CompSource interface that four other kinds share.
+ */
+/*
+ * Names live in ONE growing blob addressed by offset, not in n separate
+ * allocations.  A 10 000-entry directory is 10 000 mallocs the other way,
+ * and that alone cost more than the readdir it was meant to save -- the
+ * keystroke that scans has to stay inside the same 5 ms as the ones that
+ * do not.  Offsets rather than pointers because the blob moves when it
+ * grows.
+ */
+typedef struct DirListing {
+    char *dir; /* the scan_dir these names came from */
+    char *blob;
+    size_t blob_len;
+    size_t blob_cap;
+    u32 *offs;
+    u8 *dtypes;
+    u32 n;
+    /*
+     * The directory had more than SAG_COMP_LIST_MAX entries, so the blob
+     * is a PREFIX of it and narrowing from it would silently lose rows.
+     * Nothing is cached in that case; the scan streams as it used to.
+     */
+    bool overflow;
+} DirListing;
+
+static DirListing comp_listing;
+static u64 comp_opendirs;
+
+static const char *listing_name(const DirListing *l, u32 i)
+{
+    return l->blob + l->offs[i];
+}
+
+u64 sag_comp_listing_opendirs(void)
+{
+    return comp_opendirs;
+}
+
+static void listing_dispose(DirListing *l)
+{
+    free(l->blob);
+    free(l->offs);
+    free(l->dtypes);
+    free(l->dir);
+    (void)memset(l, 0, sizeof(*l));
+}
+
+void sag_comp_listing_invalidate(void)
+{
+    listing_dispose(&comp_listing);
+}
+
+static char *dup_cstr(const char *s)
+{
+    size_t len = strlen(s) + 1U;
+    char *copy = sag_xmalloc(len);
+
+    (void)memcpy(copy, s, len);
+    return copy;
+}
+
+static bool listing_push(DirListing *l, const char *name, u8 dtype,
+                         u32 *cap)
+{
+    size_t len = strlen(name) + 1U;
+
+    if (l->n == *cap) {
+        u32 next = *cap == 0U ? 256U : *cap * 2U;
+
+        if (next > (u32)SAG_COMP_LIST_MAX)
+            next = (u32)SAG_COMP_LIST_MAX;
+        if (next == *cap)
+            return false;
+        l->offs = sag_xrealloc(l->offs, (size_t)next * sizeof(*l->offs));
+        l->dtypes = sag_xrealloc(l->dtypes,
+                                 (size_t)next * sizeof(*l->dtypes));
+        *cap = next;
+    }
+    if (l->blob_len + len > l->blob_cap) {
+        size_t next = l->blob_cap == 0U ? 8192U : l->blob_cap * 2U;
+
+        while (next < l->blob_len + len)
+            next *= 2U;
+        l->blob = sag_xrealloc(l->blob, next);
+        l->blob_cap = next;
+    }
+    /* Offsets are u32; SAG_COMP_LIST_MAX names of any sane length stay
+     * far inside that, but a blob past 4 GiB would silently wrap. */
+    if (l->blob_len > (size_t)UINT32_MAX)
+        return false;
+    l->offs[l->n] = (u32)l->blob_len;
+    (void)memcpy(l->blob + l->blob_len, name, len);
+    l->blob_len += len;
+    l->dtypes[l->n] = dtype;
+    l->n++;
+    return true;
+}
+
+/*
+ * Load `scan_dir` into the cache unless it is already there.  Returns
+ * false when the directory could not be opened OR held more than
+ * SAG_COMP_LIST_MAX entries; the caller then scans the old way.
+ */
+static bool listing_load(const char *scan_dir)
+{
+    DirListing next = {0};
+    struct dirent *entry;
+    u32 cap = 0U;
+    DIR *dir;
+
+    if (comp_listing.dir != NULL &&
+        strcmp(comp_listing.dir, scan_dir) == 0)
+        return !comp_listing.overflow;
+    sag_comp_listing_invalidate();
+    dir = opendir(scan_dir);
+    comp_opendirs++;
+    if (dir == NULL)
+        return false;
+    while ((entry = readdir(dir)) != NULL) {
+        if (strcmp(entry->d_name, ".") == 0 ||
+            strcmp(entry->d_name, "..") == 0)
+            continue;
+        /* Dot files are kept and filtered at RANK time: whether they are
+         * wanted depends on the pattern, which changes per keystroke, and
+         * a listing that already dropped them could not answer ".git". */
+        if (!listing_push(&next, entry->d_name, (u8)entry->d_type, &cap)) {
+            next.overflow = true;
+            break;
+        }
+    }
+    (void)closedir(dir);
+    if (next.overflow) {
+        listing_dispose(&next);
+        return false;
+    }
+    next.dir = dup_cstr(scan_dir);
+    comp_listing = next;
+    return true;
+}
+
+/* Rank one candidate name into the bounded heap.  Shared by the cached
+ * path and the streaming fallback so the two cannot drift. */
+static void path_rank_one(PathCandidateVec *paths, const char *name,
+                          u8 dtype, const char *tail, size_t tail_len,
+                          u32 *total)
+{
+    i32 score;
+
+    if (name[0] == '.' && tail[0] != '.')
+        return;
+    /* NULL: positions are recomputed for survivors in
+     * path_candidates_finish, so the scan never fills one. */
+    score = comp_key(tail, tail_len, name, NULL);
+    if (score == SAG_FZ_NO_MATCH)
+        return;
+    if (*total != UINT32_MAX)
+        (*total)++;
+    if (!path_candidate_wanted(paths, name, score))
+        return;
+    if (paths->len < SAG_COMP_MAX)
+        path_heap_push(paths, name, score, dtype);
+    else
+        path_heap_replace_worst(paths, name, score, dtype);
 }
 
 static u32 enumerate_paths(const CompReq *req, Vec_CompItem *out)
@@ -603,37 +794,39 @@ static u32 enumerate_paths(const CompReq *req, Vec_CompItem *out)
         free(scan_dir);
         scan_dir = join2("", sag_ws_root(ed));
     }
-    dir = opendir(scan_dir);
-    if (dir == NULL) {
-        free(scan_dir);
-        free(expanded);
-        free(head);
-        out->len = 0U;
-        return 0U;
-    }
-    while ((entry = readdir(dir)) != NULL) {
-        FzMatch m;
-        i32 score;
+    /* A fresh request also RETIRES the cache: whoever asked for one did
+     * so because the directory may have changed, and a later cached read
+     * must not go on trusting the listing they distrusted. */
+    if (!req->allow_cache)
+        sag_comp_listing_invalidate();
+    if (req->allow_cache && listing_load(scan_dir)) {
+        /* The common path: no syscall at all, just a re-rank. */
+        u32 i;
 
-        if (strcmp(entry->d_name, ".") == 0 ||
-            strcmp(entry->d_name, "..") == 0)
-            continue;
-        if (entry->d_name[0] == '.' && tail[0] != '.')
-            continue;
-        score = comp_key(tail, tail_len, entry->d_name, &m);
-        if (score == SAG_FZ_NO_MATCH)
-            continue;
-        if (total != UINT32_MAX)
-            total++;
-        if (!path_candidate_wanted(&paths, entry->d_name, score))
-            continue;
-        if (paths.len < SAG_COMP_MAX)
-            path_heap_push(&paths, entry->d_name, score, entry->d_type, &m);
-        else
-            path_heap_replace_worst(&paths, entry->d_name, score,
-                                    entry->d_type, &m);
+        for (i = 0U; i < comp_listing.n; i++)
+            path_rank_one(&paths, listing_name(&comp_listing, i),
+                          comp_listing.dtypes[i], tail, tail_len, &total);
+    } else {
+        /* Unopenable, or too big to hold: stream it as before.  A
+         * directory this size is Sprint 26's problem, not the prompt's. */
+        dir = opendir(scan_dir);
+        comp_opendirs++;
+        if (dir == NULL) {
+            free(scan_dir);
+            free(expanded);
+            free(head);
+            out->len = 0U;
+            return 0U;
+        }
+        while ((entry = readdir(dir)) != NULL) {
+            if (strcmp(entry->d_name, ".") == 0 ||
+                strcmp(entry->d_name, "..") == 0)
+                continue;
+            path_rank_one(&paths, entry->d_name, (u8)entry->d_type, tail,
+                          tail_len, &total);
+        }
+        (void)closedir(dir);
     }
-    (void)closedir(dir);
     path_candidates_finish(req, &paths, scan_dir, head, out);
     free(scan_dir);
     free(expanded);
@@ -740,6 +933,8 @@ u32 sag_comp_enumerate(Ed *ed, SagCompKind kind, const char *stem,
      * lifetime go through sag_comp_filter_run. */
     req.arena = ed == NULL ? NULL : &ed->arena;
     req.budget_us = 0; /* a Tab: the user is waiting, take the time */
+    /* Fresh by construction -- see CompReq.allow_cache. */
+    req.allow_cache = false;
     return sag_comp_request(&req, out);
 }
 
@@ -924,6 +1119,7 @@ u32 sag_comp_filter_run(Ed *ed, CompFilter *f, Arena *arena,
         req.ed = ed;
         req.arena = arena;
         req.budget_us = budget_us;
+        req.allow_cache = true;
         test_enumerate_calls++;
         f->total = sag_comp_request(&req, &f->base);
         f->capped = f->base.len < (size_t)f->total;

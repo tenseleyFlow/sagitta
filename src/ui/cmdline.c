@@ -118,6 +118,9 @@ static void menu_discard(Ed *ed)
      * cache dies with it -- a surviving `valid` flag over freed strings
      * is a use-after-free waiting for the next keystroke. */
     sag_comp_filter_invalidate(&line->filter);
+    /* The directory listing outlives individual keystrokes but not the
+     * menu: a prompt opened later must see the directory as it is now. */
+    sag_comp_listing_invalidate();
     arena_free_all(&line->comp_arena);
     free(line->menu_stem);
     line->menu_stem = NULL;
