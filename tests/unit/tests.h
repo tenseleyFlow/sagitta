@@ -1023,6 +1023,21 @@ void test_gitignore_unignored_directory_is_not_prunable(void);
 void test_gitignore_load_reads_a_file(void);
 void test_gitignore_absent_file_returns_the_parent(void);
 void test_gitignore_degenerate_inputs(void);
+
+/* Sprint 26 §5: the list picker. */
+void test_picker_selection_survives_a_refilter(void);
+void test_picker_selection_falls_to_row_zero_when_filtered_out(void);
+void test_picker_movement_keys(void);
+void test_picker_ctrl_chords_move(void);
+void test_picker_counts_shown_and_total(void);
+void test_picker_empty_list_is_safe(void);
+void test_picker_escape_cancels(void);
+void test_picker_swallows_unhandled_keys(void);
+void test_picker_filter_line_is_the_cmdline(void);
+void test_picker_same_length_filter_change_refilters(void);
+void test_picker_accept_in_split_reports_how(void);
+void test_picker_refuses_a_tiny_terminal(void);
+void test_picker_draw_fits_the_grid(void);
 void test_strip_lays_entries_left_to_right_without_gaps(void);
 void test_strip_measures_cjk_labels_in_cells(void);
 void test_strip_clips_long_labels(void);

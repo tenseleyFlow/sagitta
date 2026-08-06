@@ -51,7 +51,14 @@ typedef enum {
      * because a region can only be hit during the frame it was
      * registered in; see region.c on clearing at frame BEGIN.
      */
-    SAG_REGION_MENU_ROW
+    SAG_REGION_MENU_ROW,
+    /*
+     * Sprint 26 §5.  Payload is the item's PAYLOAD, never the row
+     * index — the same law the picker's selection follows, so a click
+     * lands on what was pointed at even if the list reordered between
+     * the paint and the press.
+     */
+    SAG_REGION_PICK_ROW
 } RegionKind;
 
 typedef struct Region {
