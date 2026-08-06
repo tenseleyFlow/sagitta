@@ -974,6 +974,23 @@ void test_state_differential_invalid_corpus(void);
 void test_state_differential_comparison_detects_differences(void);
 void test_state_differential_byte_comparison_is_not_redundant(void);
 void test_state_differential_names_sprint_36(void);
+
+/* Sprint 26 §3: the workspace walk. */
+void test_walk_lists_files_relative_to_the_root(void);
+void test_walk_lists_only_regular_files(void);
+void test_walk_is_deterministic_regardless_of_creation_order(void);
+void test_walk_sliced_equals_unsliced(void);
+void test_walk_symlink_loop_terminates_and_is_counted(void);
+void test_walk_does_not_follow_symlinks_by_default(void);
+void test_walk_hidden_files_are_opt_in(void);
+void test_walk_always_skips_dot_git(void);
+void test_walk_truncation_is_flagged(void);
+void test_walk_max_depth_bounds_the_descent(void);
+void test_walk_deep_tree_does_not_recurse(void);
+void test_walk_missing_root_is_null(void);
+void test_walk_empty_root_is_empty(void);
+void test_walk_counts_syscalls(void);
+void test_walk_root_trailing_slash_is_normalized(void);
 void test_strip_lays_entries_left_to_right_without_gaps(void);
 void test_strip_measures_cjk_labels_in_cells(void);
 void test_strip_clips_long_labels(void);
