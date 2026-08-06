@@ -325,7 +325,22 @@ void sag_cmdline_open(Ed *ed, SagPromptKind kind, const char *seed)
     line->cur = cursor;
     line->target = target;
     line->return_mode = (u8)ed->mode;
-    line->history = sag_hist_open(history_kind(kind));
+    /*
+     * Sprint 25 §8.  A stateless session (--clean, --batch, an unusable
+     * state home) keeps the global history it has always had; there is
+     * no workspace directory to scope to and inventing one would put
+     * state where the user asked for none.
+     */
+    if (ed->state.ready) {
+        const char *scope =
+            sag_state_option_str(ed, "history.scope", "workspace");
+
+        line->history = sag_hist_open_scoped(history_kind(kind),
+                                             ed->state.key.dir,
+                                             strcmp(scope, "global") != 0);
+    } else {
+        line->history = sag_hist_open(history_kind(kind));
+    }
     {
         /* Inline, five rows, wrapping, detail at column 31 -- the
          * geometry Sprint 18's goldens pinned, now expressed as a spec

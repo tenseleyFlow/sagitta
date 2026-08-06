@@ -349,6 +349,92 @@ CmdHist *sag_hist_open(const char *kind)
     return h;
 }
 
+/* <ws_dir>/history/<kind>, created 0700 like every other state dir. */
+static char *ws_hist_path(const char *kind, const char *ws_dir)
+{
+    char *dir;
+    char *path;
+    size_t size;
+
+    if (!hist_kind_valid(kind) || ws_dir == NULL || ws_dir[0] == '\0')
+        return NULL;
+    size = strlen(ws_dir) + strlen("/history") + 1U;
+    dir = sag_xmalloc(size);
+    (void)snprintf(dir, size, "%s/history", ws_dir);
+    if (!sag_mkdirs(dir, 0700U)) {
+        free(dir);
+        return NULL;
+    }
+    size = strlen(dir) + 1U + strlen(kind) + 1U;
+    path = sag_xmalloc(size);
+    (void)snprintf(path, size, "%s/%s", dir, kind);
+    free(dir);
+    return path;
+}
+
+CmdHist *sag_hist_open_scoped(const char *kind, const char *ws_dir,
+                              bool workspace_scope)
+{
+    CmdHist *h = sag_xcalloc(1U, sizeof(*h));
+    char *global = hist_path(kind);
+    char *local = ws_hist_path(kind, ws_dir);
+
+    /*
+     * Loaded in this order on purpose: global first, workspace second.
+     * hist_store moves a duplicate to the END, so a command run in both
+     * places comes back once, dated by its most local use — which is
+     * what "the most local are newest" means under s18's newest-last
+     * convention.
+     */
+    if (global != NULL) {
+        h->path = global;
+        (void)hist_read(h);
+    }
+    if (local != NULL) {
+        h->path = local;
+        (void)hist_read(h);
+    }
+    /*
+     * And now the only thing that decides where WRITES go.  The merged
+     * list in memory is never written anywhere as a unit: sag_hist_add
+     * appends one line here, and sag_hist_flush re-reads THIS file and
+     * compacts it, so the merge cannot leak from one scope to the
+     * other.
+     */
+    if (workspace_scope && local != NULL) {
+        h->path = local;
+        free(global);
+    } else if (!workspace_scope && global != NULL) {
+        h->path = global;
+        free(local);
+    } else {
+        /*
+         * The requested scope has no file — a stateless session asking
+         * for workspace scope, or an unusable state home asking for
+         * global.  Fall back to whichever exists rather than to an
+         * in-memory history: losing every command the user types this
+         * session is a worse answer to "I could not make one directory"
+         * than writing to the other one.
+         */
+        h->path = local != NULL ? local : global;
+        if (h->path == local)
+            free(global);
+        else
+            free(local);
+    }
+    h->memory = h->path == NULL;
+    if (h->memory) {
+        sag_log(SAG_LOG_WARN,
+                "command history unavailable; using in-memory history");
+    }
+    return h;
+}
+
+const char *sag_hist_path(const CmdHist *h)
+{
+    return h == NULL ? NULL : h->path;
+}
+
 CmdHist *sag_hist_open_memory(void)
 {
     CmdHist *h = sag_xcalloc(1U, sizeof(*h));

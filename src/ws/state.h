@@ -156,6 +156,18 @@ SagWsResult sag_state_apply(Ed *ed, const u8 *bytes, u64 len);
 bool sag_state_set_aside(Ed *ed, char *out, size_t cap);
 
 /*
+ * Reads a workspace option out of the retained `options` map.
+ *
+ * The option MODEL is Sprint 36's; this is the one bridge to it, so
+ * that §8's `history.scope` has somewhere real to come from instead of
+ * a second parallel store that would have to be reconciled later.  The
+ * returned pointer lives in the document arena and dies with
+ * sag_state_dispose.
+ */
+const char *sag_state_option_str(const Ed *ed, const char *key,
+                                 const char *dflt);
+
+/*
  * The file-id -> live-id map (§3.1).
  *
  * A missing group record resolves to 0 — UNGROUPED — never to whatever

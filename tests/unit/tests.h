@@ -916,6 +916,20 @@ void test_ws_recover_retention_caps_at_five(void);
 void test_ws_recover_set_aside_never_overwrites(void);
 void test_ws_recover_every_bad_input_still_starts(void);
 void test_ws_recover_a_reader_still_sets_aside(void);
+
+/* Sprint 25 §8: per-workspace history. */
+void test_ws_history_workspace_scope_writes_locally(void);
+void test_ws_history_global_scope_writes_globally(void);
+void test_ws_history_reads_merge_both_files(void);
+void test_ws_history_local_entries_are_newest(void);
+void test_ws_history_duplicate_is_deduped_to_the_local_position(void);
+void test_ws_history_merge_never_migrates_into_the_workspace_file(void);
+void test_ws_history_flush_compacts_only_the_scope_file(void);
+void test_ws_history_workspaces_are_isolated_from_each_other(void);
+void test_ws_history_global_scope_crosses_workspaces(void);
+void test_ws_history_null_workspace_is_the_global_history(void);
+void test_ws_history_kinds_do_not_share_a_file(void);
+void test_ws_history_memory_history_writes_nothing(void);
 void test_strip_lays_entries_left_to_right_without_gaps(void);
 void test_strip_measures_cjk_labels_in_cells(void);
 void test_strip_clips_long_labels(void);

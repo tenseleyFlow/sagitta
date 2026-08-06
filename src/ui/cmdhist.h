@@ -15,6 +15,28 @@ typedef struct CmdHist CmdHist;
 
 /* Persistent history uses the XDG state directory and never fails hard. */
 CmdHist *sag_hist_open(const char *kind);
+
+/*
+ * Sprint 25 §8: per-workspace history, closing s18's deferral.
+ *
+ * `ws_dir` is a workspace state directory (<ws_dir>/history/<kind>), or
+ * NULL to behave exactly like sag_hist_open.
+ *
+ * READS MERGE, WRITES DO NOT.  Both files are loaded — global first,
+ * workspace second, so the most local entries land newest under s18's
+ * newest-last convention and win the dedupe.  Appends and compaction go
+ * only to the SCOPE's file.
+ *
+ * The pitfall this signature exists to prevent: merging at SAVE instead
+ * of at load.  Writing the merged list back would copy every global
+ * entry into the workspace file, and then into the next one, until
+ * every workspace held everybody's history and none of it meant
+ * anything.
+ */
+CmdHist *sag_hist_open_scoped(const char *kind, const char *ws_dir,
+                              bool workspace_scope);
+/* Where writes go.  NULL for an in-memory history. */
+const char *sag_hist_path(const CmdHist *h);
 /* In-memory histories are used by --clean and --batch. */
 CmdHist *sag_hist_open_memory(void);
 void sag_hist_close(CmdHist *h);

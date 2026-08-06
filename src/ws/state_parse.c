@@ -150,6 +150,18 @@ bool sag_state_set_aside(Ed *ed, char *out, size_t cap)
     return true;
 }
 
+const char *sag_state_option_str(const Ed *ed, const char *key,
+                                 const char *dflt)
+{
+    const char *v;
+    u64 n = 0U;
+
+    if (ed == NULL || ed->state.options == NULL)
+        return dflt;
+    v = sag_fl_str_or(sag_fl_get(ed->state.options, key), NULL, &n);
+    return v == NULL || n == 0U ? dflt : v;
+}
+
 /* One message, exactly once, and never a prompt.  A modal dialog before
  * the first paint, over a CACHE, is user-hostile. */
 static SagWsResult recover(Ed *ed, const char *why)
