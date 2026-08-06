@@ -1214,6 +1214,16 @@ void sag_ed_handle_mouse(Ed *ed, Key key)
             sag_gp_apply(ed);
             break;
         }
+        /*
+         * The tab bar BEFORE the panes.  Sprint 23 built
+         * sag_tab_strip_click and never called it from here, so
+         * clicking a tab did nothing in the running editor — and the
+         * golden could not see it, because every tab showed the same
+         * buffer and so painted the same grid whichever was active.
+         * Per-tab buffers made the omission visible.
+         */
+        if (sag_tab_strip_click(ed, key.col, key.row))
+            break;
         (void)sag_pane_click(ed, key.col, key.row);
         break;
     case SAG_KEY_REPEAT:

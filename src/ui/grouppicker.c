@@ -513,6 +513,13 @@ bool sag_gp_key(Ed *ed, Key key)
         return false;
     if (key.ev == SAG_KEY_RELEASE)
         return true;
+    /*
+     * Any key the dialog takes repaints it.  Without this the picker
+     * consumed the keystroke and nothing redrew — the cursor moved in
+     * the model and the screen never said so, which the pty harness
+     * sees as a frame that never arrives.
+     */
+    ed->full_damage = true;
 
     if (key.code == SAG_KEY_ESCAPE) {
         gp.result = SAG_GP_CANCELLED;
@@ -727,6 +734,7 @@ bool sag_gp_click(Ed *ed, u16 x, u16 y)
     if (!gp.active || ed == NULL)
         return false;
     hit = sag_region_hit(x, y);
+    ed->full_damage = true;
     if (hit.kind == SAG_REGION_GP_NAME) {
         gp.on_name = true;
         return true;

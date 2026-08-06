@@ -176,6 +176,7 @@ FUZZ_REQUOTE_OBJ := $(BUILD)/tests/fuzz/fuzz_re_quote.o
 FUZZ_SEARCH_OBJ := $(BUILD)/tests/fuzz/fuzz_search.o
 FUZZ_PANES_OBJ := $(BUILD)/tests/fuzz/fuzz_panes.o
 FUZZ_TABS_OBJ := $(BUILD)/tests/fuzz/fuzz_tabs.o
+FUZZ_GROUPS_OBJ := $(BUILD)/tests/fuzz/fuzz_groups.o
 FUZZ_REDIFF_OBJ := $(BUILD)/tests/fuzz/fuzz_re_diff.o
 RE_REF_OBJ := $(BUILD)/tests/fuzz/re_ref.o
 FUZZ_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
@@ -304,6 +305,10 @@ $(BUILD)/fuzz_tabs: $(FUZZ_LINK_OBJ) $(FUZZ_TABS_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_TABS_OBJ)
 
+$(BUILD)/fuzz_groups: $(FUZZ_LINK_OBJ) $(FUZZ_GROUPS_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
+		$(FUZZ_GROUPS_OBJ)
+
 $(BUILD)/fuzz_panes: $(FUZZ_LINK_OBJ) $(FUZZ_PANES_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_PANES_OBJ)
@@ -418,7 +423,7 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
       $(BUILD)/fuzz_grid $(BUILD)/fuzz_vt $(BUILD)/fuzz_undo \
       $(BUILD)/fuzz_re_compile $(BUILD)/fuzz_re_diff \
       $(BUILD)/fuzz_re_quote $(BUILD)/fuzz_search \
-      $(BUILD)/fuzz_panes $(BUILD)/fuzz_tabs \
+      $(BUILD)/fuzz_panes $(BUILD)/fuzz_tabs $(BUILD)/fuzz_groups \
       fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse
 	$(BUILD)/fuzz_utf8 --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_grapheme --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
@@ -431,6 +436,7 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
 	$(BUILD)/fuzz_search --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_panes --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_tabs --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+	$(BUILD)/fuzz_groups --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_re_diff --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	@if [ -n "$(FUZZ_SECONDS)" ]; then \
 		$(BUILD)/fuzz_input --seconds=$(FUZZ_SECONDS) --seed=$(FUZZ_SEED); \

@@ -2669,10 +2669,168 @@ static void case_s23_dirty_close_discard(PtyCtx *c)
     (void)unlink(path);
 }
 
+/* ---------------------------------------------------------------- */
+/* Sprint 24: tab groups                                            */
+/* ---------------------------------------------------------------- */
+
+/*
+ * A FIXED fixture directory with a known, small listing.
+ *
+ * Not mkdtemp: the picker draws the directory it is browsing, and a
+ * random name would put random bytes in the golden.  Pointing the
+ * dialog at the real /tmp is worse still — its contents differ between
+ * machines and between runs, so the golden would encode this laptop.
+ * Invariant 5 wants the same state to produce the same grid, which
+ * means the state has to be the same.
+ */
+/* Short on purpose: row-1 labels clip at 24 cells, and a long
+ * directory name would cut the `(N)` count the golden exists to
+ * show. */
+#define S24_DIR "/tmp/sag-s24-grp"
+
+static void s24_fixture_make(void)
+{
+    static const char *const names[] = {"one.txt", "two.txt",
+                                        "three.txt"};
+    size_t i;
+
+    /* Rebuilt every run so a leftover from a previous run cannot add a
+     * row to the listing. */
+    for (i = 0U; i < sizeof(names) / sizeof(names[0]); i++) {
+        char path[256];
+
+        (void)snprintf(path, sizeof(path), "%s/%s", S24_DIR, names[i]);
+        (void)unlink(path);
+    }
+    (void)rmdir(S24_DIR);
+    (void)mkdir(S24_DIR, 0700);
+    for (i = 0U; i < sizeof(names) / sizeof(names[0]); i++) {
+        char path[256];
+        FILE *f;
+
+        (void)snprintf(path, sizeof(path), "%s/%s", S24_DIR, names[i]);
+        f = fopen(path, "w");
+        if (f == NULL)
+            continue;
+        (void)fprintf(f, "%s\n", names[i]);
+        (void)fclose(f);
+    }
+}
+
+static void s24_fixture_remove(void)
+{
+    static const char *const names[] = {"one.txt", "two.txt",
+                                        "three.txt"};
+    size_t i;
+
+    for (i = 0U; i < sizeof(names) / sizeof(names[0]); i++) {
+        char path[256];
+
+        (void)snprintf(path, sizeof(path), "%s/%s", S24_DIR, names[i]);
+        (void)unlink(path);
+    }
+    (void)rmdir(S24_DIR);
+}
+
+/* Opens the picker on the fixture, ticks every file, and confirms. */
+static void s24_make_group(PtyCtx *c)
+{
+    int i;
+
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "gnew " S24_DIR);
+    s18_settle_after_keys(c, "enter");
+    /* Row 0 is `../`, so step past it before ticking.  Space on a
+     * directory WALKS into it — only files tick. */
+    s18_settle_after_keys(c, "down");
+    for (i = 0; i < 3; i++)
+        s18_settle_after_bytes(c, " ");
+    s18_settle_after_keys(c, "enter");
+    /* Confirming creates the group but leaves the user where they
+     * were; step in so row 2 has something to pin. */
+    s18_settle_after_keys(c, "t down");
+}
+
+/*
+ * Row 1 collapses a group into ONE entry carrying its live count, and
+ * row 2 pins the members below it — the two-row bar (§5).
+ */
+static void case_s24_group_two_row_bar(PtyCtx *c)
+{
+    char path[256];
+
+    s24_fixture_make();
+    if (!s18_open(c, s23_doc, sizeof(s23_doc) - 1U, path, sizeof(path)))
+        return;
+    s24_make_group(c);
+    ptc_snapshot(c, "s24_group_two_row_bar");
+    force_quit(c);
+    (void)unlink(path);
+    s24_fixture_remove();
+}
+
+/* The picker's full chrome: title, name field, ticks, the always-there
+ * selected count, and the footer hint. */
+static void case_s24_picker_chrome(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s23_doc, sizeof(s23_doc) - 1U, path, sizeof(path)))
+        return;
+    s24_fixture_make();
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "gnew " S24_DIR);
+    s18_settle_after_keys(c, "enter");
+    /* One file ticked, so the golden shows a `[x]` row and a non-zero
+     * count alongside the empty boxes. */
+    s18_settle_after_keys(c, "down");
+    s18_settle_after_bytes(c, " ");
+    ptc_snapshot(c, "s24_picker_chrome");
+    s18_settle_after_keys(c, "esc");
+    force_quit(c);
+    (void)unlink(path);
+    s24_fixture_remove();
+}
+
+/*
+ * DoD 9: clicking a group's row-1 entry enters the group.
+ *
+ * The payload the router reads is NEGATIVE, and the span it reads it
+ * from is the one the layout produced — so this is the click-agreement
+ * test with a group in the strip.
+ */
+static void case_s24_click_enters_a_group(PtyCtx *c)
+{
+    char path[256];
+
+    s24_fixture_make();
+    if (!s18_open(c, s23_doc, sizeof(s23_doc) - 1U, path, sizeof(path)))
+        return;
+    s24_make_group(c);
+    /* Step out of the group first, so the click has somewhere to go. */
+    s18_settle_after_keys(c, "t up");
+    /*
+     * Column 30 is inside the GROUP's row-1 entry — the document tab's
+     * entry occupies 0..23 — and that entry's payload is NEGATIVE.  The
+     * router reads the sign and enters the group, which is DoD 9 with a
+     * group in the strip.
+     */
+    s22_click(c, 30U, 0U);
+    ptc_snapshot(c, "s24_click_enters_a_group");
+    force_quit(c);
+    (void)unlink(path);
+    s24_fixture_remove();
+}
+
 #define C(name, profile, rows, cols, fn) \
     {#name, #profile, rows, cols, fn}
 
 const PtyCase sag_pty_cases[] = {
+    C(s24_group_two_row_bar, modern, 24U, 80U,
+      case_s24_group_two_row_bar),
+    C(s24_picker_chrome, modern, 24U, 80U, case_s24_picker_chrome),
+    C(s24_click_enters_a_group, modern, 24U, 80U,
+      case_s24_click_enters_a_group),
     C(s23_three_tabs, modern, 24U, 80U, case_s23_three_tabs),
     C(s23_modified_marker_follows_undo, modern, 24U, 80U,
       case_s23_modified_marker_follows_undo),
