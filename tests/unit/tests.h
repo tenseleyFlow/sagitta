@@ -1050,6 +1050,18 @@ void test_pickers_undo_branches_lists_the_tree(void);
 void test_pickers_undo_branches_travels_to_a_state(void);
 void test_pickers_commands_are_registered(void);
 void test_pickers_deferred_ones_name_their_sprint(void);
+
+/* Sprint 26 §7: incremental filtering. */
+void test_narrow_equals_a_full_rescan(void);
+void test_narrow_append_scores_only_the_candidate_set(void);
+void test_narrow_backspace_rescans_everything(void);
+void test_narrow_mid_edit_rescans_everything(void);
+void test_narrow_sliced_rescan_equals_unsliced(void);
+void test_narrow_partial_scan_has_a_usable_count(void);
+void test_narrow_top_agrees_with_sag_fz_rank(void);
+void test_narrow_empty_pattern_keeps_source_order(void);
+void test_narrow_item_count_change_forces_a_rescan(void);
+void test_narrow_degenerate_inputs(void);
 void test_strip_lays_entries_left_to_right_without_gaps(void);
 void test_strip_measures_cjk_labels_in_cells(void);
 void test_strip_clips_long_labels(void);

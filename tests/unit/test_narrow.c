@@ -1,0 +1,458 @@
+/*
+ * Sprint 26 §7: incremental filtering.
+ *
+ * Named test_narrow rather than test_filter because Sprint 19 already
+ * owns that name for the shell region filter — two unrelated things
+ * called "filter", and the test binary has one flat namespace.
+ *
+ * THE TEST THAT MATTERS IS THE EQUIVALENCE ONE (DoD 7).
+ *
+ * Narrowing on append is only legal because a subsequence match cannot
+ * appear by adding a character to the pattern — so rescoring just the
+ * current set gives the same answer as rescoring everything.  That is an
+ * argument, and arguments are wrong all the time.  The property test
+ * runs 10 000 random cases and demands the narrowed result equal a full
+ * rescan EXACTLY.
+ *
+ * A narrowing bug is silent in the worst way: the list shows fewer files
+ * than it should, and nobody notices a file that is not there.  There is
+ * no error, no warning, and nothing on screen to see.
+ */
+#define _POSIX_C_SOURCE 200809L
+
+#include "harness.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "ui/filter.h"
+#include "ui/picker.h"
+
+/* ---------------------------------------------------------------- */
+/* Fixtures                                                         */
+/* ---------------------------------------------------------------- */
+
+typedef struct NwFix {
+    PickItem *items;
+    char *text;
+    u32 n;
+} NwFix;
+
+static void nw_free(NwFix *f)
+{
+    free(f->items);
+    free(f->text);
+    (void)memset(f, 0, sizeof(*f));
+}
+
+/* A deterministic pseudo-random corpus of path-shaped labels. */
+static void nw_make(NwFix *f, u32 n, u64 seed)
+{
+    static const char *const dirs[] = {"src", "src/ui", "src/ws", "tests",
+                                       "tests/unit", "docs", "vendor/lib"};
+    static const char *const stems[] = {"tabs", "picker", "filter", "walk",
+                                        "state", "undo", "grid", "alpha",
+                                        "beta", "gamma"};
+    static const char *const exts[] = {"c", "h", "md", "txt"};
+    u64 rng = seed;
+    u32 i;
+    size_t at = 0U;
+    size_t cap = (size_t)n * 64U;
+
+    f->n = n;
+    f->items = sag_xreallocarray(NULL, n, sizeof(*f->items));
+    f->text = sag_xmalloc(cap);
+    for (i = 0U; i < n; i++) {
+        int wrote;
+
+        rng = rng * 6364136223846793005ULL + 1442695040888963407ULL;
+        wrote = snprintf(f->text + at, cap - at, "%s/%s%u.%s",
+                         dirs[(rng >> 33) % 7U], stems[(rng >> 21) % 10U],
+                         (unsigned)((rng >> 11) % 1000U),
+                         exts[(rng >> 7) % 4U]);
+        SAG_ASSERT(wrote > 0);
+        (void)memset(&f->items[i], 0, sizeof(f->items[i]));
+        f->items[i].label = f->text + at;
+        f->items[i].payload = (i32)i;
+        at += (size_t)wrote + 1U;
+    }
+}
+
+/* A full rescan from scratch, which is what narrowing must equal. */
+static u32 nw_full(NwFix *f, bool path_mode, const char *pat, u32 plen,
+                   FzRanked *out, u32 max)
+{
+    FilterState fresh;
+    u32 n;
+
+    sag_filter_init(&fresh);
+    sag_filter_reset(&fresh, f->items, f->n, 0U);
+    /* Applied in ONE step from the empty pattern, so it cannot narrow
+     * and must scan everything. */
+    (void)sag_filter_apply(&fresh, f->items, f->n, path_mode, pat, plen, 0);
+    n = sag_filter_top(&fresh, f->items, path_mode, out, max);
+    sag_filter_free(&fresh);
+    return n;
+}
+
+/* ---------------------------------------------------------------- */
+/* THE property (DoD 7)                                             */
+/* ---------------------------------------------------------------- */
+
+/*
+ * For 10 000 random (pattern, appended-char) pairs over a 5 000-item
+ * set, narrowing equals a full rescan exactly — same matched count,
+ * same visible order, same scores.
+ */
+void test_narrow_equals_a_full_rescan(void)
+{
+    static const char alphabet[] = "abcdefgpstuw./0123456789";
+    NwFix f;
+    FilterState fs;
+    u64 rng = 0x9E3779B97F4A7C15ULL;
+    u32 trial;
+    u32 extensions = 0U;
+    u32 narrowed_cases = 0U;
+
+    nw_make(&f, 5000U, 12345U);
+    sag_filter_init(&fs);
+    for (trial = 0U; trial < 10000U; trial++) {
+        char pat[8];
+        u32 plen;
+        u32 k;
+        FzRanked got[SAG_FILTER_TOPK];
+        FzRanked want[SAG_FILTER_TOPK];
+        u32 n_got;
+        u32 n_want;
+        u32 before_append;
+
+        /* A base pattern of 0-3 characters... */
+        rng = rng * 6364136223846793005ULL + 1442695040888963407ULL;
+        plen = (u32)((rng >> 33) % 4U);
+        for (k = 0U; k < plen; k++) {
+            rng = rng * 6364136223846793005ULL + 1442695040888963407ULL;
+            pat[k] = alphabet[(rng >> 29) % (sizeof(alphabet) - 1U)];
+        }
+        pat[plen] = '\0';
+
+        /* ...applied fresh, then EXTENDED by one character. */
+        sag_filter_reset(&fs, f.items, f.n, 0U);
+        (void)sag_filter_apply(&fs, f.items, f.n, true, pat, plen, 0);
+        rng = rng * 6364136223846793005ULL + 1442695040888963407ULL;
+        pat[plen] = alphabet[(rng >> 29) % (sizeof(alphabet) - 1U)];
+        plen++;
+        pat[plen] = '\0';
+        before_append = sag_filter_matched(&fs);
+        sag_filter_scored_reset();
+        (void)sag_filter_apply(&fs, f.items, f.n, true, pat, plen, 0);
+        /*
+         * It scored EXACTLY the candidate set — no more, no fewer.
+         *
+         * The obvious check, "fewer than the whole set", is wrong twice
+         * over: extending the empty pattern legitimately scores
+         * everything because the empty pattern matched everything, and
+         * so does a base pattern that happens to match every item.
+         * Both narrowed correctly.  Comparing against the set SIZE says
+         * what the optimization actually claims, and still fails
+         * loudly against an implementation that quietly rescans.
+         */
+        SAG_ASSERT_EQ_U64(sag_filter_scored(), (u64)before_append);
+        extensions++;
+        if (before_append < f.n)
+            narrowed_cases++;
+
+        n_got = sag_filter_top(&fs, f.items, true, got, SAG_FILTER_TOPK);
+        n_want = nw_full(&f, true, pat, plen, want, SAG_FILTER_TOPK);
+
+        if (n_got != n_want) {
+            (void)fprintf(stderr,
+                          "pattern '%s': narrowed %u rows, full %u\n", pat,
+                          (unsigned)n_got, (unsigned)n_want);
+        }
+        SAG_ASSERT_EQ_U64(n_got, n_want);
+        for (k = 0U; k < n_got; k++) {
+            if (got[k].idx != want[k].idx ||
+                got[k].score != want[k].score) {
+                (void)fprintf(stderr,
+                              "pattern '%s' row %u: narrowed idx=%u "
+                              "score=%d, full idx=%u score=%d\n",
+                              pat, (unsigned)k, (unsigned)got[k].idx,
+                              (int)got[k].score, (unsigned)want[k].idx,
+                              (int)want[k].score);
+            }
+            SAG_ASSERT_EQ_U64(got[k].idx, want[k].idx);
+            SAG_ASSERT_EQ_I64(got[k].score, want[k].score);
+        }
+    }
+    /*
+     * And in the overwhelming majority of trials the candidate set was
+     * genuinely smaller than the corpus, so the per-trial equality
+     * above is a statement about NARROWING rather than about two full
+     * rescans agreeing with each other.
+     */
+    SAG_ASSERT_EQ_U64(extensions, 10000U);
+    SAG_ASSERT(narrowed_cases > 7000U);
+    sag_filter_free(&fs);
+    nw_free(&f);
+}
+
+/* ---------------------------------------------------------------- */
+/* Narrowing does less work                                         */
+/* ---------------------------------------------------------------- */
+
+/*
+ * The whole point: appending a character rescores only what already
+ * matched.  Asserted by COUNTING, because a narrowed pass and a full
+ * one produce the same list and differ only in cost.
+ */
+void test_narrow_append_scores_only_the_candidate_set(void)
+{
+    NwFix f;
+    FilterState fs;
+    u32 after_first;
+
+    nw_make(&f, 5000U, 999U);
+    sag_filter_init(&fs);
+    sag_filter_reset(&fs, f.items, f.n, 0U);
+
+    /* First character: everything is scored, because the empty pattern
+     * matched everything. */
+    sag_filter_scored_reset();
+    (void)sag_filter_apply(&fs, f.items, f.n, true, "s", 1U, 0);
+    SAG_ASSERT_EQ_U64(sag_filter_scored(), (u64)f.n);
+    after_first = sag_filter_matched(&fs);
+    SAG_ASSERT(after_first > 0U);
+    SAG_ASSERT(after_first < f.n);
+
+    /* Second: only the survivors. */
+    sag_filter_scored_reset();
+    (void)sag_filter_apply(&fs, f.items, f.n, true, "st", 2U, 0);
+    SAG_ASSERT_EQ_U64(sag_filter_scored(), (u64)after_first);
+    /* And the set only shrinks. */
+    SAG_ASSERT(sag_filter_matched(&fs) <= after_first);
+
+    sag_filter_free(&fs);
+    nw_free(&f);
+}
+
+/*
+ * BACKSPACE cannot narrow — the new pattern is not an extension — so it
+ * rescans everything.  Getting this wrong would silently keep files out
+ * of the list after a correction, which is the same invisible failure
+ * as a bad narrow.
+ */
+void test_narrow_backspace_rescans_everything(void)
+{
+    NwFix f;
+    FilterState fs;
+    u32 narrow_matched;
+
+    nw_make(&f, 2000U, 4242U);
+    sag_filter_init(&fs);
+    sag_filter_reset(&fs, f.items, f.n, 0U);
+    (void)sag_filter_apply(&fs, f.items, f.n, true, "sta", 3U, 0);
+    narrow_matched = sag_filter_matched(&fs);
+
+    sag_filter_scored_reset();
+    (void)sag_filter_apply(&fs, f.items, f.n, true, "st", 2U, 0);
+    /* The whole set, not the narrowed one. */
+    SAG_ASSERT_EQ_U64(sag_filter_scored(), (u64)f.n);
+    /* And the list GREW back, which is the observable half. */
+    SAG_ASSERT(sag_filter_matched(&fs) >= narrow_matched);
+    sag_filter_free(&fs);
+    nw_free(&f);
+}
+
+/* A mid-line edit is not an extension either, however similar it
+ * looks. */
+void test_narrow_mid_edit_rescans_everything(void)
+{
+    NwFix f;
+    FilterState fs;
+
+    nw_make(&f, 1000U, 7U);
+    sag_filter_init(&fs);
+    sag_filter_reset(&fs, f.items, f.n, 0U);
+    (void)sag_filter_apply(&fs, f.items, f.n, true, "abc", 3U, 0);
+    sag_filter_scored_reset();
+    /* Same length, different bytes. */
+    (void)sag_filter_apply(&fs, f.items, f.n, true, "abd", 3U, 0);
+    SAG_ASSERT_EQ_U64(sag_filter_scored(), (u64)f.n);
+    sag_filter_free(&fs);
+    nw_free(&f);
+}
+
+/* ---------------------------------------------------------------- */
+/* Slicing                                                          */
+/* ---------------------------------------------------------------- */
+
+/*
+ * A sliced rescan reaches the same answer as an unsliced one.
+ *
+ * If slicing could change the result, a filter that happened to finish
+ * in one frame would show a different list than the same filter under
+ * load — a bug that only appears on someone else's machine.
+ */
+void test_narrow_sliced_rescan_equals_unsliced(void)
+{
+    NwFix f;
+    FilterState sliced;
+    FzRanked got[SAG_FILTER_TOPK];
+    FzRanked want[SAG_FILTER_TOPK];
+    u32 n_got;
+    u32 n_want;
+    u32 steps = 0U;
+    u32 k;
+
+    nw_make(&f, 20000U, 31337U);
+    sag_filter_init(&sliced);
+    sag_filter_reset(&sliced, f.items, f.n, 0U);
+    /* A 1 us budget forces many slices. */
+    (void)sag_filter_apply(&sliced, f.items, f.n, true, "sc", 2U, 1);
+    while (sag_filter_step(&sliced, f.items, true, 1)) {
+        steps++;
+        SAG_ASSERT(steps < 100000U);
+    }
+    n_got = sag_filter_top(&sliced, f.items, true, got, SAG_FILTER_TOPK);
+    n_want = nw_full(&f, true, "sc", 2U, want, SAG_FILTER_TOPK);
+    SAG_ASSERT_EQ_U64(n_got, n_want);
+    for (k = 0U; k < n_got; k++) {
+        SAG_ASSERT_EQ_U64(got[k].idx, want[k].idx);
+        SAG_ASSERT_EQ_I64(got[k].score, want[k].score);
+    }
+    sag_filter_free(&sliced);
+    nw_free(&f);
+}
+
+/* Mid-scan the matched count is meaningful, which is what lets the
+ * footer show a number while ` scanning…` is up. */
+void test_narrow_partial_scan_has_a_usable_count(void)
+{
+    NwFix f;
+    FilterState fs;
+    bool more;
+
+    nw_make(&f, 50000U, 5U);
+    sag_filter_init(&fs);
+    sag_filter_reset(&fs, f.items, f.n, 0U);
+    more = !sag_filter_apply(&fs, f.items, f.n, true, "s", 1U, 1);
+    if (more) {
+        /* Partway through: matches already found, cursor short of the
+         * end, and never more matches than candidates examined. */
+        SAG_ASSERT(fs.scan_at < fs.n_total);
+        SAG_ASSERT(sag_filter_matched(&fs) <= fs.scan_at);
+        while (sag_filter_step(&fs, f.items, true, 0))
+            ;
+    }
+    SAG_ASSERT_EQ_U64(fs.scan_at, fs.n_total);
+    sag_filter_free(&fs);
+    nw_free(&f);
+}
+
+/* ---------------------------------------------------------------- */
+/* Ordering, and agreement with sag_fz_rank                         */
+/* ---------------------------------------------------------------- */
+
+/*
+ * The top-k agrees with sag_fz_rank, which sorts.
+ *
+ * Two orderings of one list is the drift §7 avoids by having only one
+ * place that orders anything — so where they overlap they must agree,
+ * or the picker and the tests describe different programs.
+ */
+void test_narrow_top_agrees_with_sag_fz_rank(void)
+{
+    NwFix f;
+    FilterState fs;
+    FzRanked top[SAG_FILTER_TOPK];
+    FzRanked *ranked;
+    const char **labels;
+    u32 n_top;
+    u32 n_rank;
+    u32 i;
+
+    nw_make(&f, 500U, 2024U);
+    sag_filter_init(&fs);
+    sag_filter_reset(&fs, f.items, f.n, 0U);
+    (void)sag_filter_apply(&fs, f.items, f.n, true, "tab", 3U, 0);
+    n_top = sag_filter_top(&fs, f.items, true, top, SAG_FILTER_TOPK);
+
+    labels = sag_xreallocarray(NULL, f.n, sizeof(*labels));
+    ranked = sag_xreallocarray(NULL, f.n, sizeof(*ranked));
+    for (i = 0U; i < f.n; i++)
+        labels[i] = f.items[i].label;
+    n_rank = sag_fz_rank("tab", 3U, labels, f.n, true, ranked);
+
+    SAG_ASSERT_EQ_U64(sag_filter_matched(&fs), n_rank);
+    for (i = 0U; i < n_top; i++) {
+        SAG_ASSERT_EQ_U64(top[i].idx, ranked[i].idx);
+        SAG_ASSERT_EQ_I64(top[i].score, ranked[i].score);
+    }
+    free(labels);
+    free(ranked);
+    sag_filter_free(&fs);
+    nw_free(&f);
+}
+
+/* The empty pattern keeps everything, in source order. */
+void test_narrow_empty_pattern_keeps_source_order(void)
+{
+    NwFix f;
+    FilterState fs;
+    FzRanked top[SAG_FILTER_TOPK];
+    u32 n;
+    u32 i;
+
+    nw_make(&f, 100U, 11U);
+    sag_filter_init(&fs);
+    sag_filter_reset(&fs, f.items, f.n, 0U);
+    SAG_ASSERT_EQ_U64(sag_filter_matched(&fs), 100U);
+    n = sag_filter_top(&fs, f.items, true, top, SAG_FILTER_TOPK);
+    SAG_ASSERT_EQ_U64(n, (u64)SAG_FILTER_TOPK);
+    /* Every score is the empty-pattern score, so nothing reordered. */
+    for (i = 0U; i < n; i++)
+        SAG_ASSERT_EQ_I64(top[i].score, 1);
+    sag_filter_free(&fs);
+    nw_free(&f);
+}
+
+/*
+ * A changed item count forces a rescan rather than reusing indices into
+ * a table that has moved underneath them.
+ */
+void test_narrow_item_count_change_forces_a_rescan(void)
+{
+    NwFix f;
+    FilterState fs;
+
+    nw_make(&f, 100U, 3U);
+    sag_filter_init(&fs);
+    sag_filter_reset(&fs, f.items, f.n, 0U);
+    (void)sag_filter_apply(&fs, f.items, f.n, true, "s", 1U, 0);
+    sag_filter_scored_reset();
+    /* Same pattern, fewer items: not an extension of anything. */
+    (void)sag_filter_apply(&fs, f.items, 50U, true, "s", 1U, 0);
+    SAG_ASSERT_EQ_U64(sag_filter_scored(), 50U);
+    SAG_ASSERT(sag_filter_matched(&fs) <= 50U);
+    sag_filter_free(&fs);
+    nw_free(&f);
+}
+
+/* Degenerate inputs do not crash. */
+void test_narrow_degenerate_inputs(void)
+{
+    FilterState fs;
+    FzRanked out[4];
+
+    sag_filter_init(&fs);
+    sag_filter_init(NULL);
+    sag_filter_free(NULL);
+    sag_filter_reset(NULL, NULL, 0U, 0U);
+    sag_filter_reset(&fs, NULL, 0U, 0U);
+    SAG_ASSERT(sag_filter_apply(NULL, NULL, 0U, false, "a", 1U, 0));
+    SAG_ASSERT(!sag_filter_step(NULL, NULL, false, 0));
+    SAG_ASSERT_EQ_U64(sag_filter_matched(NULL), 0U);
+    SAG_ASSERT_EQ_U64(sag_filter_top(NULL, NULL, false, out, 4U), 0U);
+    sag_filter_free(&fs);
+}
