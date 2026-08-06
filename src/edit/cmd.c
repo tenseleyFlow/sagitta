@@ -498,6 +498,14 @@ static const CmdDesc builtins[] = {
      "Switch to an open tab by fuzzy name"},
     {"ed.undo.branches", sag_undo_cmd_branches, SAG_ARITY_NONE,
      SAG_CMD_NEEDS_WIN, "Pick an undo state from the branch tree"},
+    /*
+     * Sprint 26 §9 defers these two, and they must EXIST to say so:
+     * absent, they read to the user as "no such command" rather than
+     * "not yet" (invariant 3).  Both are PickerSpec values over §5's
+     * widget when their sprint arrives — no new machinery.
+     */
+    DEFER("ed.find.symbol", SAG_ARITY_NONE, 0U, 47,
+          "pick a symbol from the LSP workspace index"),
     DEFER("ed.find.command", SAG_ARITY_NONE, 0U, 38,
           "open the command palette"),
     {"ed.pane.split_h", sag_pane_cmd_split_h, SAG_ARITY_NONE,
@@ -726,7 +734,7 @@ static bool command_name_valid(const char *name)
         /* Sprint 25 */
         "save_state", "restore_state", "info", "forget", "migrate",
         /* Sprint 26 */
-        "file", "buffer", "branches"};
+        "file", "buffer", "branches", "symbol"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

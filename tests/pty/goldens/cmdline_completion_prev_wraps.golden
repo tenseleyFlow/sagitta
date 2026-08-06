@@ -24,7 +24,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
   group.from_dir               Sprint 53: open a directory as a tab group (F-mod
   pane.focus_right             Focus the pane to the right                      
   sel.shift_right              Shift selected text right                        
-> cursor.lift.lines            Lift a selection to one cursor per line     20/20
+> cursor.lift.lines            Lift a selection to one cursor per line     21/21
 :cursor.lift.lines                                                              
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAA

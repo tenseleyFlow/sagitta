@@ -1063,6 +1063,19 @@ void test_narrow_empty_pattern_keeps_source_order(void);
 void test_narrow_empty_pattern_agrees_with_sag_fz_rank(void);
 void test_narrow_item_count_change_forces_a_rescan(void);
 void test_narrow_degenerate_inputs(void);
+
+/* Sprint 26 §8: type-to-jump. */
+void test_typejump_appends_inside_the_window(void);
+void test_typejump_replaces_after_the_window(void);
+void test_typejump_window_boundary_is_exact(void);
+void test_typejump_exact_match_under_the_cursor_stays_put(void);
+void test_typejump_moves_when_the_cursor_is_elsewhere(void);
+void test_typejump_non_printable_clears_and_is_not_consumed(void);
+void test_typejump_ignores_modified_keys(void);
+void test_typejump_hint_expires_without_a_key(void);
+void test_typejump_no_match_leaves_the_selection(void);
+void test_typejump_degenerate_inputs(void);
+void test_typejump_long_pattern_is_bounded(void);
 void test_strip_lays_entries_left_to_right_without_gaps(void);
 void test_strip_measures_cjk_labels_in_cells(void);
 void test_strip_clips_long_labels(void);

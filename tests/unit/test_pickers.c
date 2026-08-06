@@ -418,17 +418,30 @@ void test_pickers_commands_are_registered(void)
  */
 void test_pickers_deferred_ones_name_their_sprint(void)
 {
-    CmdId id;
-    const CmdDesc *desc;
+    static const struct {
+        const char *name;
+        u32 len;
+        const char *sprint;
+    } rows[] = {
+        {"ed.find.command", 15U, "Sprint 38"},
+        {"ed.find.symbol", 14U, "Sprint 47"}
+    };
+    u32 i;
 
     sag_cmd_shutdown();
     sag_cmd_init();
-    id = sag_cmd_lookup("ed.find.command", 15U);
-    SAG_ASSERT(id.v != 0U);
-    desc = sag_cmd_desc(id);
-    SAG_ASSERT_NOT_NULL(desc);
-    SAG_ASSERT((desc->flags & SAG_CMD_DEFERRED) != 0U);
-    SAG_ASSERT_NOT_NULL(strstr(desc->help, "Sprint 38"));
+    for (i = 0U; i < SAG_ARRAY_LEN(rows); i++) {
+        CmdId id = sag_cmd_lookup(rows[i].name, rows[i].len);
+        const CmdDesc *desc;
+
+        SAG_ASSERT(id.v != 0U);
+        desc = sag_cmd_desc(id);
+        SAG_ASSERT_NOT_NULL(desc);
+        SAG_ASSERT((desc->flags & SAG_CMD_DEFERRED) != 0U);
+        /* It names the sprint that owns it, so "not yet" is
+         * distinguishable from "never". */
+        SAG_ASSERT_NOT_NULL(strstr(desc->help, rows[i].sprint));
+    }
     sag_cmd_shutdown();
     sag_cmd_init();
 }
