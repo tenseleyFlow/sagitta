@@ -47,6 +47,29 @@ void sag_mouse_init(MouseState *m)
     m->drag_to_slot = -1;
 }
 
+/*
+ * Ends a GESTURE without ending the multi-click run.
+ *
+ * The distinction matters: every click ends with a release, and a
+ * double-click is two of them.  Zeroing the whole struct at release
+ * would clear the counter the second click has to read, and no
+ * double-click could ever be recognised — which is exactly the bug the
+ * §6 tests caught.
+ */
+static void gesture_reset(MouseState *m)
+{
+    i64 last_ms = m->last_click_ms;
+    u16 last_x = m->last_click_x;
+    u16 last_y = m->last_click_y;
+    u8 clicks = m->click_n;
+
+    sag_mouse_init(m);
+    m->last_click_ms = last_ms;
+    m->last_click_x = last_x;
+    m->last_click_y = last_y;
+    m->click_n = clicks;
+}
+
 bool sag_mouse_gesture_active(const Ed *ed)
 {
     return ed != NULL && ed->mouse.phase != SAG_MP_IDLE;
@@ -437,25 +460,147 @@ void sag_mouse_menu_draw(Ed *ed)
 /* §2: press                                                        */
 /* ---------------------------------------------------------------- */
 
+/* ---------------------------------------------------------------- */
+/* §6: double and triple click, through the unit engines            */
+/* ---------------------------------------------------------------- */
+
+/*
+ * WHY THE ENGINES AND NOT A LOCAL SCAN: so the mouse and the keyboard
+ * agree on what a word is.  A double-click that selects `foo` where
+ * `W`+`H`+`→` selects `foo.bar` is a bug users cannot name and always
+ * feel.  Routing through sag_unit_word.span also makes double-click
+ * correct for CJK (per-ideograph, WB999), ZWJ emoji, `don't`,
+ * `1,000.50` and `foo_bar` FOR FREE, because Sprint 16 already fought
+ * those battles and has the conformance corpus.
+ */
+static Span unit_span_at(Win *w, const UnitOps *u, ByteOff at, bool alt)
+{
+    UnitCtx uc;
+
+    (void)memset(&uc, 0, sizeof(uc));
+    uc.tb = w->buf->tb;
+    uc.buf = w->buf;
+    uc.win = w;
+    return u->span(&uc, at, alt);
+}
+
+/*
+ * The multi-click counter.
+ *
+ * Resets on a different CELL — a cell, not a pixel radius, because
+ * cells are the unit of everything here and there is nothing to tune.
+ * Four clicks wrap to one: never a surprise paragraph selection.
+ */
+static u8 click_advance(Ed *ed, const Key *k)
+{
+    MouseState *m = &ed->mouse;
+    bool within = m->click_n != 0U &&
+                  ed->now_ms - m->last_click_ms < SAG_CLICK_MULTI_MS &&
+                  m->last_click_x == k->col && m->last_click_y == k->row;
+
+    m->click_n = within ? (u8)(m->click_n % 3U + 1U) : 1U;
+    m->last_click_ms = ed->now_ms;
+    m->last_click_x = k->col;
+    m->last_click_y = k->row;
+    return m->click_n;
+}
+
 static void press_pane(Ed *ed, const Region *hit, const Key *k)
 {
+    MouseState *m = &ed->mouse;
     Pane *leaf = sag_pane_leaf_by_index(ed, hit->payload);
+    Win *w;
+    /* The SAME `alt` the keyboard's A-← / A-→ pass (s16 §1), so
+     * Alt+double-click selects the whitespace-delimited WORD and
+     * Alt+triple-click the whole display line. */
+    bool alt = (k->mods & (u16)SAG_MOD_ALT) != 0U;
+    u8 clicks = click_advance(ed, k);
+    ByteOff at;
 
     if (leaf == NULL)
         return;
     (void)sag_pane_click(ed, k->col, k->row);
-    /*
-     * The anchor for a drag-select is the grapheme just clicked.  It is
-     * read back from the cursor rather than recomputed, so the
-     * selection can never start one cluster away from where the caret
-     * visibly landed.
-     */
-    ed->mouse.sel_unit = &sag_unit_char;
-    if (leaf->win != NULL && leaf->win->cs.curs.len != 0U) {
-        ByteOff at = leaf->win->cs.curs.data[leaf->win->cs.primary].pos;
-
-        ed->mouse.sel_anchor_span = (Span){at.v, at.v};
+    w = leaf->win;
+    if (w == NULL || w->buf == NULL || w->buf->tb == NULL ||
+        w->cs.curs.len == 0U)
+        return;
+    m->sel_alt = alt;
+    at = w->cs.curs.data[w->cs.primary].pos;
+    if (clicks == 1U) {
+        /*
+         * The anchor for a drag-select is the grapheme just clicked,
+         * read back from the cursor rather than recomputed — so the
+         * selection can never start one cluster away from where the
+         * caret visibly landed.
+         */
+        m->sel_unit = &sag_unit_char;
+        m->sel_anchor_span = (Span){at.v, at.v};
+        return;
     }
+    m->sel_unit = clicks == 2U ? &sag_unit_word : &sag_unit_line;
+    m->sel_anchor_span = unit_span_at(w, m->sel_unit, at, alt);
+    /*
+     * H MODE WITH THE CORRESPONDING UNIT BORROWED — exactly the state
+     * `H` plus the unit-mode key would produce.  Consequence: every
+     * H-mode key works on a mouse selection, the selection→multi-cursor
+     * lift (s17) works, and the recorder (s35) sees ordinary commands
+     * rather than a mouse-shaped side door.
+     */
+    (void)sag_mode_enter_highlight(ed, clicks == 2U ? SAG_MODE_W
+                                                    : SAG_MODE_L,
+                                   false);
+    {
+        Cursor *c = &w->cs.curs.data[w->cs.primary];
+
+        c->anchor = BYTEOFF(m->sel_anchor_span.lo);
+        c->pos = BYTEOFF(m->sel_anchor_span.hi);
+    }
+    ed->full_damage = true;
+}
+
+/*
+ * §6: middle-click paste, OFF by default.
+ *
+ * X11 primary-selection semantics cannot be implemented correctly from
+ * a terminal, and OSC 52 is write-only in most of them — shipping the
+ * half-thing silently would be worse than the option.  Sprint 36 owns
+ * the model that persists this; the default here is what ships.
+ */
+static bool middle_paste_on;
+
+bool sag_mouse_middle_paste(void)
+{
+    return middle_paste_on;
+}
+
+void sag_mouse_set_middle_paste(bool on)
+{
+    middle_paste_on = on;
+}
+
+static void press_middle(Ed *ed, const Region *hit, const Key *k)
+{
+    Pane *leaf;
+
+    if (!middle_paste_on || hit->kind != SAG_REGION_PANE)
+        return;
+    leaf = sag_pane_leaf_by_index(ed, hit->payload);
+    if (leaf == NULL || leaf->win == NULL)
+        return;
+    /* At the CLICK position, so the paste lands where the user pointed
+     * rather than wherever the caret happened to be. */
+    (void)sag_pane_click(ed, k->col, k->row);
+    {
+        /* ONE undo transaction, through Sprint 10's edit choke point,
+         * so undo takes the whole paste back in a single step rather
+         * than unpicking it line by line. */
+        EditCtx ec = sag_ed_edit_ctx(ed);
+
+        (void)sag_reg_paste(&ed->regs, &ec, (u8)'"', false,
+                            SAG_VP_TABWIDTH);
+        sag_ed_finish_edit(ed, &ec);
+    }
+    ed->full_damage = true;
 }
 
 static void press_border(Ed *ed, const Region *hit)
@@ -529,6 +674,10 @@ static void mouse_press(Ed *ed, const Key *k)
             }
         }
         ed->full_damage = true;
+        return;
+    }
+    if (k->button == (u8)SAG_MB_MIDDLE) {
+        press_middle(ed, &hit, k);
         return;
     }
     if (k->button != (u8)SAG_MB_LEFT)
@@ -608,18 +757,41 @@ static void mouse_press(Ed *ed, const Key *k)
  */
 static void drag_select(Ed *ed, const Key *k)
 {
-    Pane *leaf = sag_pane_leaf_by_index(ed, ed->mouse.press_rgn.payload);
+    MouseState *m = &ed->mouse;
+    Pane *leaf = sag_pane_leaf_by_index(ed, m->press_rgn.payload);
     Win *w = leaf != NULL ? leaf->win : NULL;
     Cursor *c;
+    Span head;
 
     if (w == NULL || w->buf == NULL || w->buf->tb == NULL ||
         w->cs.curs.len == 0U)
         return;
     sag_win_click_to_cursor(w, k->col, k->row);
     c = &w->cs.curs.data[w->cs.primary];
-    /* click_to_cursor collapses the anchor onto the caret; the drag's
-     * anchor is the press, so it is written back after. */
-    c->anchor = BYTEOFF(ed->mouse.sel_anchor_span.lo);
+    if (m->sel_unit == NULL || m->sel_unit == &sag_unit_char) {
+        /* click_to_cursor collapses the anchor onto the caret; the
+         * drag's anchor is the press, so it is written back after. */
+        c->anchor = BYTEOFF(m->sel_anchor_span.lo);
+        ed->full_damage = true;
+        return;
+    }
+    /*
+     * EXTENDING BY WHOLE UNITS after a multi-click.  The anchor stays
+     * at the initial unit's span and the head snaps to the boundary of
+     * the unit under the pointer.
+     *
+     * Pitfall: extending by CHARACTERS after a word double-click is
+     * what a naive implementation does, and it feels broken in a way
+     * people describe as "the selection is fighting me".
+     */
+    head = unit_span_at(w, m->sel_unit, c->pos, m->sel_alt);
+    if (head.lo < m->sel_anchor_span.lo) {
+        c->anchor = BYTEOFF(m->sel_anchor_span.hi);
+        c->pos = BYTEOFF(head.lo);
+    } else {
+        c->anchor = BYTEOFF(m->sel_anchor_span.lo);
+        c->pos = BYTEOFF(head.hi);
+    }
     ed->full_damage = true;
 }
 
@@ -633,8 +805,15 @@ static void begin_drag(Ed *ed)
          * A drag in a pane is a selection, and a selection in this
          * editor IS H mode.  Entering it here rather than at press is
          * the arming law: a plain click must not change the mode.
+         *
+         * A multi-click has ALREADY entered H with its own unit
+         * borrowed, and re-entering with the char engine here would
+         * throw that away — the drag would then extend by characters
+         * after a word double-click, which is exactly the feel §6
+         * forbids.
          */
-        (void)sag_mode_enter_highlight(ed, SAG_MODE_I, false);
+        if (m->sel_unit == NULL || m->sel_unit == &sag_unit_char)
+            (void)sag_mode_enter_highlight(ed, SAG_MODE_I, false);
         m->phase = SAG_MP_DRAG_SEL;
         break;
     case SAG_REGION_TAB:
@@ -957,7 +1136,7 @@ static void mouse_release(Ed *ed, const Key *k)
     if (k->button != (u8)SAG_MB_LEFT)
         return;
     if (sag_mouse_claimed_by_menu(ed, *k)) {
-        sag_mouse_init(m);
+        gesture_reset(m);
         return;
     }
     if (phase == SAG_MP_IDLE)
@@ -1025,7 +1204,7 @@ static void mouse_release(Ed *ed, const Key *k)
         ed->layout_dirty = true;
         ed->full_damage = true;
     }
-    sag_mouse_init(m);
+    gesture_reset(m);
 }
 
 /* ---------------------------------------------------------------- */
@@ -1034,7 +1213,16 @@ static void mouse_release(Ed *ed, const Key *k)
 
 void sag_mouse_cancel(Ed *ed)
 {
-    if (ed == NULL || ed->mouse.phase == SAG_MP_IDLE)
+    if (ed == NULL)
+        return;
+    /*
+     * The multi-click counter goes even when no gesture is in flight:
+     * §6 resets it on focus-out, and by then the click that armed it
+     * has long since released.
+     */
+    ed->mouse.click_n = 0U;
+    ed->mouse.last_click_ms = 0;
+    if (ed->mouse.phase == SAG_MP_IDLE)
         return;
     if (ed->mouse.phase == SAG_MP_DRAG_BORDER)
         sag_pane_drag_cancel(ed);

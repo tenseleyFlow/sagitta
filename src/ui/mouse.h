@@ -109,6 +109,9 @@ typedef struct MouseState {
     /* Selection drag (§6). */
     const UnitOps *sel_unit;
     Span sel_anchor_span;
+    /* The Alt modifier the multi-click carried, kept so the drag
+     * extends by the same flavour of unit the click selected. */
+    bool sel_alt;
 } MouseState;
 
 void sag_mouse_init(MouseState *m);
@@ -178,6 +181,17 @@ void sag_mouse_menu_draw(Ed *ed);
  */
 bool sag_mouse_enabled(void);
 void sag_mouse_set_enabled(bool on);
+
+/*
+ * §6: middle-click paste, OFF by default.
+ *
+ * X11 primary-selection semantics cannot be implemented correctly from
+ * a terminal, and OSC 52 is write-only in most of them — shipping the
+ * half-thing silently would be worse than the option.  Sprint 36 owns
+ * the model that persists it.
+ */
+bool sag_mouse_middle_paste(void);
+void sag_mouse_set_middle_paste(bool on);
 
 CmdStatus sag_ui_cmd_context_menu(CmdCtx *cx);
 CmdStatus sag_mouse_cmd_enable(CmdCtx *cx);

@@ -1159,5 +1159,15 @@ void test_ctxmenu_target_closed_under_it_is_inert(void);
 void test_ctxmenu_group_menu_captures_the_gid(void);
 void test_ctxmenu_right_click_in_a_pane_opens_nothing(void);
 void test_ctxmenu_a_row_handler_reading_a_payload_is_a_bug(void);
+void test_mouse_click_window_is_399_yes_401_no(void);
+void test_mouse_click_counter_resets_on_a_different_cell(void);
+void test_mouse_click_quad_wraps_to_one(void);
+void test_mouse_click_focus_out_resets_the_counter(void);
+void test_mouse_double_click_equals_the_word_engine(void);
+void test_mouse_triple_click_equals_the_line_engine(void);
+void test_mouse_alt_double_click_selects_the_whitespace_word(void);
+void test_mouse_drag_after_a_double_click_extends_by_words(void);
+void test_mouse_single_click_drag_is_character_wise(void);
+void test_mouse_middle_click_paste_is_off_by_default(void);
 
 #endif
