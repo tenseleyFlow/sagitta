@@ -1,0 +1,6 @@
+{ version: 1, writer: "sagitta",
+      workspace: { path: "/w", saved_at: 0, },
+  options: {},
+groups: [],
+        tabs: [ { id: 1, path: "/w/a.txt", }, ],
+  active_tab: 1, files: [], }

@@ -1,0 +1,1372 @@
+{
+  version: 1,
+  writer: "sagitta",
+  workspace: {
+    path: "/w",
+    saved_at: 0,
+  },
+  options: {
+  },
+  groups: [
+  ],
+  tabs: [
+    {
+      id: 1,
+      path: nil,
+      group: 0,
+      group_ordinal: 0,
+      deferred: false,
+      panes: {
+        win: 0,
+      },
+      wins: [
+        {
+          cursors: [
+            {
+              pos: 0,
+              anchor: 0,
+              goal: 0,
+            },
+          ],
+          primary: 0,
+          view: {
+            top: 0,
+            top_sub: 0,
+            left: 0,
+            wrap: false,
+          },
+          jumps: {
+            cur: 0,
+            entries: [
+            ],
+          },
+        },
+      ],
+    },
+    {
+      id: 2,
+      path: "/w/many-cursors.txt",
+      group: 0,
+      group_ordinal: 0,
+      deferred: false,
+      panes: {
+        win: 0,
+      },
+      wins: [
+        {
+          cursors: [
+            {
+              pos: 0,
+              anchor: 0,
+              goal: 0,
+            },
+            {
+              pos: 4,
+              anchor: 4,
+              goal: 1,
+            },
+            {
+              pos: 8,
+              anchor: 8,
+              goal: 2,
+            },
+            {
+              pos: 12,
+              anchor: 12,
+              goal: 3,
+            },
+            {
+              pos: 16,
+              anchor: 16,
+              goal: 4,
+            },
+            {
+              pos: 20,
+              anchor: 20,
+              goal: 5,
+            },
+            {
+              pos: 24,
+              anchor: 24,
+              goal: 6,
+            },
+            {
+              pos: 28,
+              anchor: 28,
+              goal: 7,
+            },
+            {
+              pos: 32,
+              anchor: 32,
+              goal: 0,
+            },
+            {
+              pos: 36,
+              anchor: 36,
+              goal: 1,
+            },
+            {
+              pos: 40,
+              anchor: 40,
+              goal: 2,
+            },
+            {
+              pos: 44,
+              anchor: 44,
+              goal: 3,
+            },
+            {
+              pos: 48,
+              anchor: 48,
+              goal: 4,
+            },
+            {
+              pos: 52,
+              anchor: 52,
+              goal: 5,
+            },
+            {
+              pos: 56,
+              anchor: 56,
+              goal: 6,
+            },
+            {
+              pos: 60,
+              anchor: 60,
+              goal: 7,
+            },
+            {
+              pos: 64,
+              anchor: 64,
+              goal: 0,
+            },
+            {
+              pos: 68,
+              anchor: 68,
+              goal: 1,
+            },
+            {
+              pos: 72,
+              anchor: 72,
+              goal: 2,
+            },
+            {
+              pos: 76,
+              anchor: 76,
+              goal: 3,
+            },
+            {
+              pos: 80,
+              anchor: 80,
+              goal: 4,
+            },
+            {
+              pos: 84,
+              anchor: 84,
+              goal: 5,
+            },
+            {
+              pos: 88,
+              anchor: 88,
+              goal: 6,
+            },
+            {
+              pos: 92,
+              anchor: 92,
+              goal: 7,
+            },
+            {
+              pos: 96,
+              anchor: 96,
+              goal: 0,
+            },
+            {
+              pos: 100,
+              anchor: 100,
+              goal: 1,
+            },
+            {
+              pos: 104,
+              anchor: 104,
+              goal: 2,
+            },
+            {
+              pos: 108,
+              anchor: 108,
+              goal: 3,
+            },
+            {
+              pos: 112,
+              anchor: 112,
+              goal: 4,
+            },
+            {
+              pos: 116,
+              anchor: 116,
+              goal: 5,
+            },
+            {
+              pos: 120,
+              anchor: 120,
+              goal: 6,
+            },
+            {
+              pos: 124,
+              anchor: 124,
+              goal: 7,
+            },
+            {
+              pos: 128,
+              anchor: 128,
+              goal: 0,
+            },
+            {
+              pos: 132,
+              anchor: 132,
+              goal: 1,
+            },
+            {
+              pos: 136,
+              anchor: 136,
+              goal: 2,
+            },
+            {
+              pos: 140,
+              anchor: 140,
+              goal: 3,
+            },
+            {
+              pos: 144,
+              anchor: 144,
+              goal: 4,
+            },
+            {
+              pos: 148,
+              anchor: 148,
+              goal: 5,
+            },
+            {
+              pos: 152,
+              anchor: 152,
+              goal: 6,
+            },
+            {
+              pos: 156,
+              anchor: 156,
+              goal: 7,
+            },
+            {
+              pos: 160,
+              anchor: 160,
+              goal: 0,
+            },
+            {
+              pos: 164,
+              anchor: 164,
+              goal: 1,
+            },
+            {
+              pos: 168,
+              anchor: 168,
+              goal: 2,
+            },
+            {
+              pos: 172,
+              anchor: 172,
+              goal: 3,
+            },
+            {
+              pos: 176,
+              anchor: 176,
+              goal: 4,
+            },
+            {
+              pos: 180,
+              anchor: 180,
+              goal: 5,
+            },
+            {
+              pos: 184,
+              anchor: 184,
+              goal: 6,
+            },
+            {
+              pos: 188,
+              anchor: 188,
+              goal: 7,
+            },
+            {
+              pos: 192,
+              anchor: 192,
+              goal: 0,
+            },
+            {
+              pos: 196,
+              anchor: 196,
+              goal: 1,
+            },
+            {
+              pos: 200,
+              anchor: 200,
+              goal: 2,
+            },
+            {
+              pos: 204,
+              anchor: 204,
+              goal: 3,
+            },
+            {
+              pos: 208,
+              anchor: 208,
+              goal: 4,
+            },
+            {
+              pos: 212,
+              anchor: 212,
+              goal: 5,
+            },
+            {
+              pos: 216,
+              anchor: 216,
+              goal: 6,
+            },
+            {
+              pos: 220,
+              anchor: 220,
+              goal: 7,
+            },
+            {
+              pos: 224,
+              anchor: 224,
+              goal: 0,
+            },
+            {
+              pos: 228,
+              anchor: 228,
+              goal: 1,
+            },
+            {
+              pos: 232,
+              anchor: 232,
+              goal: 2,
+            },
+            {
+              pos: 236,
+              anchor: 236,
+              goal: 3,
+            },
+            {
+              pos: 240,
+              anchor: 240,
+              goal: 4,
+            },
+            {
+              pos: 244,
+              anchor: 244,
+              goal: 5,
+            },
+            {
+              pos: 248,
+              anchor: 248,
+              goal: 6,
+            },
+            {
+              pos: 252,
+              anchor: 252,
+              goal: 7,
+            },
+            {
+              pos: 256,
+              anchor: 256,
+              goal: 0,
+            },
+            {
+              pos: 260,
+              anchor: 260,
+              goal: 1,
+            },
+            {
+              pos: 264,
+              anchor: 264,
+              goal: 2,
+            },
+            {
+              pos: 268,
+              anchor: 268,
+              goal: 3,
+            },
+            {
+              pos: 272,
+              anchor: 272,
+              goal: 4,
+            },
+            {
+              pos: 276,
+              anchor: 276,
+              goal: 5,
+            },
+            {
+              pos: 280,
+              anchor: 280,
+              goal: 6,
+            },
+            {
+              pos: 284,
+              anchor: 284,
+              goal: 7,
+            },
+            {
+              pos: 288,
+              anchor: 288,
+              goal: 0,
+            },
+            {
+              pos: 292,
+              anchor: 292,
+              goal: 1,
+            },
+            {
+              pos: 296,
+              anchor: 296,
+              goal: 2,
+            },
+            {
+              pos: 300,
+              anchor: 300,
+              goal: 3,
+            },
+            {
+              pos: 304,
+              anchor: 304,
+              goal: 4,
+            },
+            {
+              pos: 308,
+              anchor: 308,
+              goal: 5,
+            },
+            {
+              pos: 312,
+              anchor: 312,
+              goal: 6,
+            },
+            {
+              pos: 316,
+              anchor: 316,
+              goal: 7,
+            },
+            {
+              pos: 320,
+              anchor: 320,
+              goal: 0,
+            },
+            {
+              pos: 324,
+              anchor: 324,
+              goal: 1,
+            },
+            {
+              pos: 328,
+              anchor: 328,
+              goal: 2,
+            },
+            {
+              pos: 332,
+              anchor: 332,
+              goal: 3,
+            },
+            {
+              pos: 336,
+              anchor: 336,
+              goal: 4,
+            },
+            {
+              pos: 340,
+              anchor: 340,
+              goal: 5,
+            },
+            {
+              pos: 344,
+              anchor: 344,
+              goal: 6,
+            },
+            {
+              pos: 348,
+              anchor: 348,
+              goal: 7,
+            },
+            {
+              pos: 352,
+              anchor: 352,
+              goal: 0,
+            },
+            {
+              pos: 356,
+              anchor: 356,
+              goal: 1,
+            },
+            {
+              pos: 360,
+              anchor: 360,
+              goal: 2,
+            },
+            {
+              pos: 364,
+              anchor: 364,
+              goal: 3,
+            },
+            {
+              pos: 368,
+              anchor: 368,
+              goal: 4,
+            },
+            {
+              pos: 372,
+              anchor: 372,
+              goal: 5,
+            },
+            {
+              pos: 376,
+              anchor: 376,
+              goal: 6,
+            },
+            {
+              pos: 380,
+              anchor: 380,
+              goal: 7,
+            },
+            {
+              pos: 384,
+              anchor: 384,
+              goal: 0,
+            },
+            {
+              pos: 388,
+              anchor: 388,
+              goal: 1,
+            },
+            {
+              pos: 392,
+              anchor: 392,
+              goal: 2,
+            },
+            {
+              pos: 396,
+              anchor: 396,
+              goal: 3,
+            },
+            {
+              pos: 400,
+              anchor: 400,
+              goal: 4,
+            },
+            {
+              pos: 404,
+              anchor: 404,
+              goal: 5,
+            },
+            {
+              pos: 408,
+              anchor: 408,
+              goal: 6,
+            },
+            {
+              pos: 412,
+              anchor: 412,
+              goal: 7,
+            },
+            {
+              pos: 416,
+              anchor: 416,
+              goal: 0,
+            },
+            {
+              pos: 420,
+              anchor: 420,
+              goal: 1,
+            },
+            {
+              pos: 424,
+              anchor: 424,
+              goal: 2,
+            },
+            {
+              pos: 428,
+              anchor: 428,
+              goal: 3,
+            },
+            {
+              pos: 432,
+              anchor: 432,
+              goal: 4,
+            },
+            {
+              pos: 436,
+              anchor: 436,
+              goal: 5,
+            },
+            {
+              pos: 440,
+              anchor: 440,
+              goal: 6,
+            },
+            {
+              pos: 444,
+              anchor: 444,
+              goal: 7,
+            },
+            {
+              pos: 448,
+              anchor: 448,
+              goal: 0,
+            },
+            {
+              pos: 452,
+              anchor: 452,
+              goal: 1,
+            },
+            {
+              pos: 456,
+              anchor: 456,
+              goal: 2,
+            },
+            {
+              pos: 460,
+              anchor: 460,
+              goal: 3,
+            },
+            {
+              pos: 464,
+              anchor: 464,
+              goal: 4,
+            },
+            {
+              pos: 468,
+              anchor: 468,
+              goal: 5,
+            },
+            {
+              pos: 472,
+              anchor: 472,
+              goal: 6,
+            },
+            {
+              pos: 476,
+              anchor: 476,
+              goal: 7,
+            },
+            {
+              pos: 480,
+              anchor: 480,
+              goal: 0,
+            },
+            {
+              pos: 484,
+              anchor: 484,
+              goal: 1,
+            },
+            {
+              pos: 488,
+              anchor: 488,
+              goal: 2,
+            },
+            {
+              pos: 492,
+              anchor: 492,
+              goal: 3,
+            },
+            {
+              pos: 496,
+              anchor: 496,
+              goal: 4,
+            },
+            {
+              pos: 500,
+              anchor: 500,
+              goal: 5,
+            },
+            {
+              pos: 504,
+              anchor: 504,
+              goal: 6,
+            },
+            {
+              pos: 508,
+              anchor: 508,
+              goal: 7,
+            },
+            {
+              pos: 512,
+              anchor: 512,
+              goal: 0,
+            },
+            {
+              pos: 516,
+              anchor: 516,
+              goal: 1,
+            },
+            {
+              pos: 520,
+              anchor: 520,
+              goal: 2,
+            },
+            {
+              pos: 524,
+              anchor: 524,
+              goal: 3,
+            },
+            {
+              pos: 528,
+              anchor: 528,
+              goal: 4,
+            },
+            {
+              pos: 532,
+              anchor: 532,
+              goal: 5,
+            },
+            {
+              pos: 536,
+              anchor: 536,
+              goal: 6,
+            },
+            {
+              pos: 540,
+              anchor: 540,
+              goal: 7,
+            },
+            {
+              pos: 544,
+              anchor: 544,
+              goal: 0,
+            },
+            {
+              pos: 548,
+              anchor: 548,
+              goal: 1,
+            },
+            {
+              pos: 552,
+              anchor: 552,
+              goal: 2,
+            },
+            {
+              pos: 556,
+              anchor: 556,
+              goal: 3,
+            },
+            {
+              pos: 560,
+              anchor: 560,
+              goal: 4,
+            },
+            {
+              pos: 564,
+              anchor: 564,
+              goal: 5,
+            },
+            {
+              pos: 568,
+              anchor: 568,
+              goal: 6,
+            },
+            {
+              pos: 572,
+              anchor: 572,
+              goal: 7,
+            },
+            {
+              pos: 576,
+              anchor: 576,
+              goal: 0,
+            },
+            {
+              pos: 580,
+              anchor: 580,
+              goal: 1,
+            },
+            {
+              pos: 584,
+              anchor: 584,
+              goal: 2,
+            },
+            {
+              pos: 588,
+              anchor: 588,
+              goal: 3,
+            },
+            {
+              pos: 592,
+              anchor: 592,
+              goal: 4,
+            },
+            {
+              pos: 596,
+              anchor: 596,
+              goal: 5,
+            },
+            {
+              pos: 600,
+              anchor: 600,
+              goal: 6,
+            },
+            {
+              pos: 604,
+              anchor: 604,
+              goal: 7,
+            },
+            {
+              pos: 608,
+              anchor: 608,
+              goal: 0,
+            },
+            {
+              pos: 612,
+              anchor: 612,
+              goal: 1,
+            },
+            {
+              pos: 616,
+              anchor: 616,
+              goal: 2,
+            },
+            {
+              pos: 620,
+              anchor: 620,
+              goal: 3,
+            },
+            {
+              pos: 624,
+              anchor: 624,
+              goal: 4,
+            },
+            {
+              pos: 628,
+              anchor: 628,
+              goal: 5,
+            },
+            {
+              pos: 632,
+              anchor: 632,
+              goal: 6,
+            },
+            {
+              pos: 636,
+              anchor: 636,
+              goal: 7,
+            },
+            {
+              pos: 640,
+              anchor: 640,
+              goal: 0,
+            },
+            {
+              pos: 644,
+              anchor: 644,
+              goal: 1,
+            },
+            {
+              pos: 648,
+              anchor: 648,
+              goal: 2,
+            },
+            {
+              pos: 652,
+              anchor: 652,
+              goal: 3,
+            },
+            {
+              pos: 656,
+              anchor: 656,
+              goal: 4,
+            },
+            {
+              pos: 660,
+              anchor: 660,
+              goal: 5,
+            },
+            {
+              pos: 664,
+              anchor: 664,
+              goal: 6,
+            },
+            {
+              pos: 668,
+              anchor: 668,
+              goal: 7,
+            },
+            {
+              pos: 672,
+              anchor: 672,
+              goal: 0,
+            },
+            {
+              pos: 676,
+              anchor: 676,
+              goal: 1,
+            },
+            {
+              pos: 680,
+              anchor: 680,
+              goal: 2,
+            },
+            {
+              pos: 684,
+              anchor: 684,
+              goal: 3,
+            },
+            {
+              pos: 688,
+              anchor: 688,
+              goal: 4,
+            },
+            {
+              pos: 692,
+              anchor: 692,
+              goal: 5,
+            },
+            {
+              pos: 696,
+              anchor: 696,
+              goal: 6,
+            },
+            {
+              pos: 700,
+              anchor: 700,
+              goal: 7,
+            },
+            {
+              pos: 704,
+              anchor: 704,
+              goal: 0,
+            },
+            {
+              pos: 708,
+              anchor: 708,
+              goal: 1,
+            },
+            {
+              pos: 712,
+              anchor: 712,
+              goal: 2,
+            },
+            {
+              pos: 716,
+              anchor: 716,
+              goal: 3,
+            },
+            {
+              pos: 720,
+              anchor: 720,
+              goal: 4,
+            },
+            {
+              pos: 724,
+              anchor: 724,
+              goal: 5,
+            },
+            {
+              pos: 728,
+              anchor: 728,
+              goal: 6,
+            },
+            {
+              pos: 732,
+              anchor: 732,
+              goal: 7,
+            },
+            {
+              pos: 736,
+              anchor: 736,
+              goal: 0,
+            },
+            {
+              pos: 740,
+              anchor: 740,
+              goal: 1,
+            },
+            {
+              pos: 744,
+              anchor: 744,
+              goal: 2,
+            },
+            {
+              pos: 748,
+              anchor: 748,
+              goal: 3,
+            },
+            {
+              pos: 752,
+              anchor: 752,
+              goal: 4,
+            },
+            {
+              pos: 756,
+              anchor: 756,
+              goal: 5,
+            },
+            {
+              pos: 760,
+              anchor: 760,
+              goal: 6,
+            },
+            {
+              pos: 764,
+              anchor: 764,
+              goal: 7,
+            },
+            {
+              pos: 768,
+              anchor: 768,
+              goal: 0,
+            },
+            {
+              pos: 772,
+              anchor: 772,
+              goal: 1,
+            },
+            {
+              pos: 776,
+              anchor: 776,
+              goal: 2,
+            },
+            {
+              pos: 780,
+              anchor: 780,
+              goal: 3,
+            },
+            {
+              pos: 784,
+              anchor: 784,
+              goal: 4,
+            },
+            {
+              pos: 788,
+              anchor: 788,
+              goal: 5,
+            },
+            {
+              pos: 792,
+              anchor: 792,
+              goal: 6,
+            },
+            {
+              pos: 796,
+              anchor: 796,
+              goal: 7,
+            },
+            {
+              pos: 800,
+              anchor: 800,
+              goal: 0,
+            },
+            {
+              pos: 804,
+              anchor: 804,
+              goal: 1,
+            },
+            {
+              pos: 808,
+              anchor: 808,
+              goal: 2,
+            },
+            {
+              pos: 812,
+              anchor: 812,
+              goal: 3,
+            },
+            {
+              pos: 816,
+              anchor: 816,
+              goal: 4,
+            },
+            {
+              pos: 820,
+              anchor: 820,
+              goal: 5,
+            },
+            {
+              pos: 824,
+              anchor: 824,
+              goal: 6,
+            },
+            {
+              pos: 828,
+              anchor: 828,
+              goal: 7,
+            },
+            {
+              pos: 832,
+              anchor: 832,
+              goal: 0,
+            },
+            {
+              pos: 836,
+              anchor: 836,
+              goal: 1,
+            },
+            {
+              pos: 840,
+              anchor: 840,
+              goal: 2,
+            },
+            {
+              pos: 844,
+              anchor: 844,
+              goal: 3,
+            },
+            {
+              pos: 848,
+              anchor: 848,
+              goal: 4,
+            },
+            {
+              pos: 852,
+              anchor: 852,
+              goal: 5,
+            },
+            {
+              pos: 856,
+              anchor: 856,
+              goal: 6,
+            },
+            {
+              pos: 860,
+              anchor: 860,
+              goal: 7,
+            },
+            {
+              pos: 864,
+              anchor: 864,
+              goal: 0,
+            },
+            {
+              pos: 868,
+              anchor: 868,
+              goal: 1,
+            },
+            {
+              pos: 872,
+              anchor: 872,
+              goal: 2,
+            },
+            {
+              pos: 876,
+              anchor: 876,
+              goal: 3,
+            },
+            {
+              pos: 880,
+              anchor: 880,
+              goal: 4,
+            },
+            {
+              pos: 884,
+              anchor: 884,
+              goal: 5,
+            },
+            {
+              pos: 888,
+              anchor: 888,
+              goal: 6,
+            },
+            {
+              pos: 892,
+              anchor: 892,
+              goal: 7,
+            },
+            {
+              pos: 896,
+              anchor: 896,
+              goal: 0,
+            },
+            {
+              pos: 900,
+              anchor: 900,
+              goal: 1,
+            },
+            {
+              pos: 904,
+              anchor: 904,
+              goal: 2,
+            },
+            {
+              pos: 908,
+              anchor: 908,
+              goal: 3,
+            },
+            {
+              pos: 912,
+              anchor: 912,
+              goal: 4,
+            },
+            {
+              pos: 916,
+              anchor: 916,
+              goal: 5,
+            },
+            {
+              pos: 920,
+              anchor: 920,
+              goal: 6,
+            },
+            {
+              pos: 924,
+              anchor: 924,
+              goal: 7,
+            },
+            {
+              pos: 928,
+              anchor: 928,
+              goal: 0,
+            },
+            {
+              pos: 932,
+              anchor: 932,
+              goal: 1,
+            },
+            {
+              pos: 936,
+              anchor: 936,
+              goal: 2,
+            },
+            {
+              pos: 940,
+              anchor: 940,
+              goal: 3,
+            },
+            {
+              pos: 944,
+              anchor: 944,
+              goal: 4,
+            },
+            {
+              pos: 948,
+              anchor: 948,
+              goal: 5,
+            },
+            {
+              pos: 952,
+              anchor: 952,
+              goal: 6,
+            },
+            {
+              pos: 956,
+              anchor: 956,
+              goal: 7,
+            },
+            {
+              pos: 960,
+              anchor: 960,
+              goal: 0,
+            },
+            {
+              pos: 964,
+              anchor: 964,
+              goal: 1,
+            },
+            {
+              pos: 968,
+              anchor: 968,
+              goal: 2,
+            },
+            {
+              pos: 972,
+              anchor: 972,
+              goal: 3,
+            },
+            {
+              pos: 976,
+              anchor: 976,
+              goal: 4,
+            },
+            {
+              pos: 980,
+              anchor: 980,
+              goal: 5,
+            },
+            {
+              pos: 984,
+              anchor: 984,
+              goal: 6,
+            },
+            {
+              pos: 988,
+              anchor: 988,
+              goal: 7,
+            },
+            {
+              pos: 992,
+              anchor: 992,
+              goal: 0,
+            },
+            {
+              pos: 996,
+              anchor: 996,
+              goal: 1,
+            },
+            {
+              pos: 1000,
+              anchor: 1000,
+              goal: 2,
+            },
+            {
+              pos: 1004,
+              anchor: 1004,
+              goal: 3,
+            },
+            {
+              pos: 1008,
+              anchor: 1008,
+              goal: 4,
+            },
+            {
+              pos: 1012,
+              anchor: 1012,
+              goal: 5,
+            },
+            {
+              pos: 1016,
+              anchor: 1016,
+              goal: 6,
+            },
+            {
+              pos: 1020,
+              anchor: 1020,
+              goal: 7,
+            },
+          ],
+          primary: 0,
+          view: {
+            top: 0,
+            top_sub: 0,
+            left: 0,
+            wrap: false,
+          },
+          jumps: {
+            cur: 0,
+            entries: [
+            ],
+          },
+        },
+      ],
+    },
+  ],
+  active_tab: 2,
+  files: [
+    {
+      path: "/w/many-cursors.txt",
+      marks: [
+      ],
+      changes: {
+        cur: 0,
+        entries: [
+        ],
+      },
+      undo: {
+        file: "0ba2afae6923f137.sagu",
+        version: 1,
+      },
+    },
+  ],
+}

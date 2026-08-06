@@ -1,0 +1,125 @@
+{
+  version: 1,
+  writer: "sagitta",
+  workspace: {
+    path: "/w",
+    saved_at: 0,
+  },
+  options: {
+  },
+  groups: [
+  ],
+  tabs: [
+    {
+      id: 1,
+      path: nil,
+      group: 0,
+      group_ordinal: 0,
+      deferred: false,
+      panes: {
+        win: 0,
+      },
+      wins: [
+        {
+          cursors: [
+            {
+              pos: 0,
+              anchor: 0,
+              goal: 0,
+            },
+          ],
+          primary: 0,
+          view: {
+            top: 0,
+            top_sub: 0,
+            left: 0,
+            wrap: false,
+          },
+          jumps: {
+            cur: 0,
+            entries: [
+            ],
+          },
+        },
+      ],
+    },
+    {
+      id: 2,
+      path: "/w/split.txt",
+      group: 0,
+      group_ordinal: 0,
+      deferred: false,
+      panes: {
+        split: "h",
+        ratio_permille: 500,
+        a: {
+          win: 0,
+        },
+        b: {
+          win: 1,
+        },
+      },
+      wins: [
+        {
+          cursors: [
+            {
+              pos: 0,
+              anchor: 0,
+              goal: 0,
+            },
+          ],
+          primary: 0,
+          view: {
+            top: 0,
+            top_sub: 0,
+            left: 0,
+            wrap: false,
+          },
+          jumps: {
+            cur: 0,
+            entries: [
+            ],
+          },
+        },
+        {
+          cursors: [
+            {
+              pos: 64,
+              anchor: 0,
+              goal: 0,
+            },
+          ],
+          primary: 0,
+          view: {
+            top: 12,
+            top_sub: 0,
+            left: 0,
+            wrap: false,
+          },
+          jumps: {
+            cur: 0,
+            entries: [
+            ],
+          },
+        },
+      ],
+    },
+  ],
+  active_tab: 2,
+  files: [
+    {
+      path: "/w/split.txt",
+      marks: [
+      ],
+      changes: {
+        cur: 0,
+        entries: [
+        ],
+      },
+      undo: {
+        file: "4221555a27603a82.sagu",
+        version: 1,
+      },
+    },
+  ],
+}

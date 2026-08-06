@@ -1,0 +1,491 @@
+{
+  version: 1,
+  writer: "sagitta",
+  workspace: {
+    path: "/w",
+    saved_at: 0,
+  },
+  options: {
+  },
+  groups: [
+    {
+      id: 1,
+      label: "d0/",
+      dir_path: "/w/d0",
+      last_active_member: nil,
+    },
+    {
+      id: 2,
+      label: "d1/",
+      dir_path: "/w/d1",
+      last_active_member: nil,
+    },
+    {
+      id: 3,
+      label: "d2/",
+      dir_path: "/w/d2",
+      last_active_member: nil,
+    },
+  ],
+  tabs: [
+    {
+      id: 1,
+      path: nil,
+      group: 0,
+      group_ordinal: 0,
+      deferred: false,
+      panes: {
+        win: 0,
+      },
+      wins: [
+        {
+          cursors: [
+            {
+              pos: 0,
+              anchor: 0,
+              goal: 0,
+            },
+          ],
+          primary: 0,
+          view: {
+            top: 0,
+            top_sub: 0,
+            left: 0,
+            wrap: false,
+          },
+          jumps: {
+            cur: 0,
+            entries: [
+            ],
+          },
+        },
+      ],
+    },
+    {
+      id: 2,
+      path: "/w/d0/f0.txt",
+      group: 1,
+      group_ordinal: 1,
+      deferred: true,
+      panes: {
+        win: 0,
+      },
+      wins: [
+        {
+          cursors: [
+            {
+              pos: 0,
+              anchor: 0,
+              goal: 0,
+            },
+          ],
+          primary: 0,
+          view: {
+            top: 0,
+            top_sub: 0,
+            left: 0,
+            wrap: false,
+          },
+          jumps: {
+            cur: 0,
+            entries: [
+            ],
+          },
+        },
+      ],
+    },
+    {
+      id: 3,
+      path: "/w/d0/f1.txt",
+      group: 1,
+      group_ordinal: 2,
+      deferred: true,
+      panes: {
+        win: 0,
+      },
+      wins: [
+        {
+          cursors: [
+            {
+              pos: 0,
+              anchor: 0,
+              goal: 0,
+            },
+          ],
+          primary: 0,
+          view: {
+            top: 0,
+            top_sub: 0,
+            left: 0,
+            wrap: false,
+          },
+          jumps: {
+            cur: 0,
+            entries: [
+            ],
+          },
+        },
+      ],
+    },
+    {
+      id: 4,
+      path: "/w/d0/f2.txt",
+      group: 1,
+      group_ordinal: 3,
+      deferred: true,
+      panes: {
+        win: 0,
+      },
+      wins: [
+        {
+          cursors: [
+            {
+              pos: 0,
+              anchor: 0,
+              goal: 0,
+            },
+          ],
+          primary: 0,
+          view: {
+            top: 0,
+            top_sub: 0,
+            left: 0,
+            wrap: false,
+          },
+          jumps: {
+            cur: 0,
+            entries: [
+            ],
+          },
+        },
+      ],
+    },
+    {
+      id: 5,
+      path: "/w/d1/f0.txt",
+      group: 2,
+      group_ordinal: 1,
+      deferred: false,
+      panes: {
+        win: 0,
+      },
+      wins: [
+        {
+          cursors: [
+            {
+              pos: 0,
+              anchor: 0,
+              goal: 0,
+            },
+          ],
+          primary: 0,
+          view: {
+            top: 0,
+            top_sub: 0,
+            left: 0,
+            wrap: false,
+          },
+          jumps: {
+            cur: 0,
+            entries: [
+            ],
+          },
+        },
+      ],
+    },
+    {
+      id: 6,
+      path: "/w/d1/f1.txt",
+      group: 2,
+      group_ordinal: 2,
+      deferred: true,
+      panes: {
+        win: 0,
+      },
+      wins: [
+        {
+          cursors: [
+            {
+              pos: 0,
+              anchor: 0,
+              goal: 0,
+            },
+          ],
+          primary: 0,
+          view: {
+            top: 0,
+            top_sub: 0,
+            left: 0,
+            wrap: false,
+          },
+          jumps: {
+            cur: 0,
+            entries: [
+            ],
+          },
+        },
+      ],
+    },
+    {
+      id: 7,
+      path: "/w/d1/f2.txt",
+      group: 2,
+      group_ordinal: 3,
+      deferred: true,
+      panes: {
+        win: 0,
+      },
+      wins: [
+        {
+          cursors: [
+            {
+              pos: 0,
+              anchor: 0,
+              goal: 0,
+            },
+          ],
+          primary: 0,
+          view: {
+            top: 0,
+            top_sub: 0,
+            left: 0,
+            wrap: false,
+          },
+          jumps: {
+            cur: 0,
+            entries: [
+            ],
+          },
+        },
+      ],
+    },
+    {
+      id: 8,
+      path: "/w/d2/f0.txt",
+      group: 3,
+      group_ordinal: 1,
+      deferred: true,
+      panes: {
+        win: 0,
+      },
+      wins: [
+        {
+          cursors: [
+            {
+              pos: 0,
+              anchor: 0,
+              goal: 0,
+            },
+          ],
+          primary: 0,
+          view: {
+            top: 0,
+            top_sub: 0,
+            left: 0,
+            wrap: false,
+          },
+          jumps: {
+            cur: 0,
+            entries: [
+            ],
+          },
+        },
+      ],
+    },
+    {
+      id: 9,
+      path: "/w/d2/f1.txt",
+      group: 3,
+      group_ordinal: 2,
+      deferred: true,
+      panes: {
+        win: 0,
+      },
+      wins: [
+        {
+          cursors: [
+            {
+              pos: 0,
+              anchor: 0,
+              goal: 0,
+            },
+          ],
+          primary: 0,
+          view: {
+            top: 0,
+            top_sub: 0,
+            left: 0,
+            wrap: false,
+          },
+          jumps: {
+            cur: 0,
+            entries: [
+            ],
+          },
+        },
+      ],
+    },
+    {
+      id: 10,
+      path: "/w/d2/f2.txt",
+      group: 3,
+      group_ordinal: 3,
+      deferred: true,
+      panes: {
+        win: 0,
+      },
+      wins: [
+        {
+          cursors: [
+            {
+              pos: 0,
+              anchor: 0,
+              goal: 0,
+            },
+          ],
+          primary: 0,
+          view: {
+            top: 0,
+            top_sub: 0,
+            left: 0,
+            wrap: false,
+          },
+          jumps: {
+            cur: 0,
+            entries: [
+            ],
+          },
+        },
+      ],
+    },
+  ],
+  active_tab: 5,
+  files: [
+    {
+      path: "/w/d0/f0.txt",
+      marks: [
+      ],
+      changes: {
+        cur: 0,
+        entries: [
+        ],
+      },
+      undo: {
+        file: "d581ea6571f4c5fd.sagu",
+        version: 1,
+      },
+    },
+    {
+      path: "/w/d0/f1.txt",
+      marks: [
+      ],
+      changes: {
+        cur: 0,
+        entries: [
+        ],
+      },
+      undo: {
+        file: "a4046972a0fa6f1e.sagu",
+        version: 1,
+      },
+    },
+    {
+      path: "/w/d0/f2.txt",
+      marks: [
+      ],
+      changes: {
+        cur: 0,
+        entries: [
+        ],
+      },
+      undo: {
+        file: "b059816301c238c7.sagu",
+        version: 1,
+      },
+    },
+    {
+      path: "/w/d1/f0.txt",
+      marks: [
+      ],
+      changes: {
+        cur: 0,
+        entries: [
+        ],
+      },
+      undo: {
+        file: "69509183e9ac128c.sagu",
+        version: 1,
+      },
+    },
+    {
+      path: "/w/d1/f1.txt",
+      marks: [
+      ],
+      changes: {
+        cur: 0,
+        entries: [
+        ],
+      },
+      undo: {
+        file: "126f96a18b2c46db.sagu",
+        version: 1,
+      },
+    },
+    {
+      path: "/w/d1/f2.txt",
+      marks: [
+      ],
+      changes: {
+        cur: 0,
+        entries: [
+        ],
+      },
+      undo: {
+        file: "64ddfda5765edfd2.sagu",
+        version: 1,
+      },
+    },
+    {
+      path: "/w/d2/f0.txt",
+      marks: [
+      ],
+      changes: {
+        cur: 0,
+        entries: [
+        ],
+      },
+      undo: {
+        file: "40872216de04111b.sagu",
+        version: 1,
+      },
+    },
+    {
+      path: "/w/d2/f1.txt",
+      marks: [
+      ],
+      changes: {
+        cur: 0,
+        entries: [
+        ],
+      },
+      undo: {
+        file: "9acd1cf93f6552cc.sagu",
+        version: 1,
+      },
+    },
+    {
+      path: "/w/d2/f2.txt",
+      marks: [
+      ],
+      changes: {
+        cur: 0,
+        entries: [
+        ],
+      },
+      undo: {
+        file: "e8028a1237a7fe71.sagu",
+        version: 1,
+      },
+    },
+  ],
+}

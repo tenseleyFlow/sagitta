@@ -948,6 +948,20 @@ void test_ws_cmds_forget_cancels_on_anything_but_y(void);
 void test_ws_cmds_forget_key_is_not_swallowed_when_idle(void);
 void test_ws_cmds_forget_dir_refuses_a_path_outside_workspaces(void);
 void test_ws_cmds_forget_does_not_follow_symlinks(void);
+
+/* Sprint 25 §9: the frozen v1 corpus. */
+void test_state_corpus_regenerate(void);
+void test_state_corpus_has_at_least_twenty_documents(void);
+void test_state_corpus_round_trips_byte_for_byte(void);
+void test_state_corpus_documents_are_valid_v1(void);
+void test_state_corpus_contains_no_floats(void);
+void test_state_corpus_holds_no_undo_payload(void);
+void test_state_corpus_noncanonical_documents_parse(void);
+void test_state_corpus_noncanonical_reemits_to_canonical(void);
+void test_state_corpus_unknown_keys_survive_reemission(void);
+void test_state_corpus_invalid_documents_are_rejected(void);
+void test_state_corpus_invalid_documents_reach_a_result(void);
+void test_state_corpus_reemission_is_idempotent(void);
 void test_strip_lays_entries_left_to_right_without_gaps(void);
 void test_strip_measures_cjk_labels_in_cells(void);
 void test_strip_clips_long_labels(void);

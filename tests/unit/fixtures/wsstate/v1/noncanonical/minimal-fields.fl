@@ -1,0 +1,9 @@
+{
+  version: 1,
+  tabs: [
+    {
+      id: 1,
+      path: "/w/only-the-required-fields.txt",
+    },
+  ],
+}

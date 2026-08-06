@@ -1,0 +1,97 @@
+{
+  version: 1,
+  writer: "sagitta",
+  workspace: {
+    path: "/w",
+    saved_at: 0,
+  },
+  options: {
+  },
+  groups: [
+  ],
+  tabs: [
+    {
+      id: 1,
+      path: nil,
+      group: 0,
+      group_ordinal: 0,
+      deferred: false,
+      panes: {
+        win: 0,
+      },
+      wins: [
+        {
+          cursors: [
+            {
+              pos: 0,
+              anchor: 0,
+              goal: 0,
+            },
+          ],
+          primary: 0,
+          view: {
+            top: 0,
+            top_sub: 0,
+            left: 0,
+            wrap: false,
+          },
+          jumps: {
+            cur: 0,
+            entries: [
+            ],
+          },
+        },
+      ],
+    },
+    {
+      id: 2,
+      path: "/w/titled.txt",
+      group: 0,
+      group_ordinal: 0,
+      deferred: true,
+      panes: {
+        win: 0,
+      },
+      wins: [
+        {
+          cursors: [
+            {
+              pos: 0,
+              anchor: 0,
+              goal: 0,
+            },
+          ],
+          primary: 0,
+          view: {
+            top: 0,
+            top_sub: 0,
+            left: 0,
+            wrap: false,
+          },
+          jumps: {
+            cur: 0,
+            entries: [
+            ],
+          },
+        },
+      ],
+    },
+  ],
+  active_tab: 1,
+  files: [
+    {
+      path: "/w/titled.txt",
+      marks: [
+      ],
+      changes: {
+        cur: 0,
+        entries: [
+        ],
+      },
+      undo: {
+        file: "b9d1cfde90b4b4cc.sagu",
+        version: 1,
+      },
+    },
+  ],
+}

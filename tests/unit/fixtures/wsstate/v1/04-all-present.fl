@@ -1,0 +1,126 @@
+{
+  version: 1,
+  writer: "sagitta",
+  workspace: {
+    path: "/w",
+    saved_at: 0,
+  },
+  options: {
+  },
+  groups: [
+    {
+      id: 1,
+      label: "src/",
+      dir_path: "/w/src",
+      last_active_member: "/w/everything.txt",
+    },
+  ],
+  tabs: [
+    {
+      id: 1,
+      path: nil,
+      group: 0,
+      group_ordinal: 0,
+      deferred: false,
+      panes: {
+        win: 0,
+      },
+      wins: [
+        {
+          cursors: [
+            {
+              pos: 0,
+              anchor: 0,
+              goal: 0,
+            },
+          ],
+          primary: 0,
+          view: {
+            top: 0,
+            top_sub: 0,
+            left: 0,
+            wrap: false,
+          },
+          jumps: {
+            cur: 0,
+            entries: [
+            ],
+          },
+        },
+      ],
+    },
+    {
+      id: 2,
+      path: "/w/everything.txt",
+      group: 1,
+      group_ordinal: 1,
+      deferred: false,
+      panes: {
+        win: 0,
+      },
+      wins: [
+        {
+          cursors: [
+            {
+              pos: 812,
+              anchor: 800,
+              goal: 14,
+            },
+            {
+              pos: 900,
+              anchor: 900,
+              goal: -1,
+            },
+          ],
+          primary: 0,
+          view: {
+            top: 40,
+            top_sub: 2,
+            left: 8,
+            wrap: true,
+          },
+          jumps: {
+            cur: 2,
+            entries: [
+              {
+                path: "/w/everything.txt",
+                line: 10,
+                col: 0,
+                stamp: 1753899102,
+              },
+              {
+                path: "/w/everything.txt",
+                line: 11,
+                col: 0,
+                stamp: 1753899103,
+              },
+            ],
+          },
+        },
+      ],
+    },
+  ],
+  active_tab: 2,
+  files: [
+    {
+      path: "/w/everything.txt",
+      marks: [
+      ],
+      changes: {
+        cur: 1,
+        entries: [
+          {
+            path: "/w/everything.txt",
+            line: 10,
+            col: 0,
+            stamp: 1753899102,
+          },
+        ],
+      },
+      undo: {
+        file: "4b1d083cb3f4ccbb.sagu",
+        version: 1,
+      },
+    },
+  ],
+}

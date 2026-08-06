@@ -1,0 +1,30 @@
+# A workspace state file with comments.
+# Sprint 25 §2: comments are ACCEPTED by the parser and are NOT
+# re-emitted.  A comment is authored by a human; this document is
+# rewritten in full on every change, so preserving them would mean
+# deciding where they reattach after the thing they annotated moved.
+{
+  version: 1,          # the only version there is
+  writer: "sagitta",
+  workspace: {
+    path: "/w",
+    saved_at: 0,
+  },
+  options: {
+  },
+  groups: [
+  ],
+  # Two tabs, one of them deferred.
+  tabs: [
+    {
+      id: 1,
+      path: "/w/a.txt",
+      group: 0,
+      group_ordinal: 0,
+      deferred: true,
+    },
+  ],
+  active_tab: 1,
+  files: [
+  ],
+}

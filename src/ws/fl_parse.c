@@ -481,10 +481,24 @@ FlLit *sag_fl_parse(Arena *a, const u8 *src, u64 len, FlParseErr *err)
     P p;
     FlLit *root;
 
+    static const u8 nothing = 0U;
+
     if (err != NULL)
         (void)memset(err, 0, sizeof(*err));
-    if (a == NULL || src == NULL)
+    if (a == NULL)
         return NULL;
+    /*
+     * An EMPTY document is a document, and it must be rejected with a
+     * position like any other.  A zero-length Bytebuf has a NULL data
+     * pointer, so returning early here left `err` all zeroes — and a
+     * failure reporting line 0 tells the §7 log line nothing and gives
+     * the user nowhere to look.
+     */
+    if (src == NULL) {
+        if (len != 0U)
+            return NULL; /* a real caller bug: length without bytes */
+        src = &nothing;
+    }
     if (len > (u64)SAG_FL_MAX_BYTES) {
         if (err != NULL) {
             err->msg = "document exceeds 8 MiB";

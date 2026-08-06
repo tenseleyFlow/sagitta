@@ -1,0 +1,209 @@
+{
+  version: 1,
+  writer: "sagitta",
+  workspace: {
+    path: "/w",
+    saved_at: 0,
+  },
+  options: {
+  },
+  groups: [
+    {
+      id: 7,
+      label: "d",
+      dir_path: "/w/d",
+      last_active_member: nil,
+    },
+    {
+      id: 9,
+      label: "d",
+      dir_path: "/w/d",
+      last_active_member: nil,
+    },
+    {
+      id: 12,
+      label: "d",
+      dir_path: "/w/d",
+      last_active_member: nil,
+    },
+  ],
+  tabs: [
+    {
+      id: 1,
+      path: nil,
+      group: 0,
+      group_ordinal: 0,
+      deferred: false,
+      panes: {
+        win: 0,
+      },
+      wins: [
+        {
+          cursors: [
+            {
+              pos: 0,
+              anchor: 0,
+              goal: 0,
+            },
+          ],
+          primary: 0,
+          view: {
+            top: 0,
+            top_sub: 0,
+            left: 0,
+            wrap: false,
+          },
+          jumps: {
+            cur: 0,
+            entries: [
+            ],
+          },
+        },
+      ],
+    },
+    {
+      id: 2,
+      path: "/w/g7.txt",
+      group: 7,
+      group_ordinal: 1,
+      deferred: true,
+      panes: {
+        win: 0,
+      },
+      wins: [
+        {
+          cursors: [
+            {
+              pos: 0,
+              anchor: 0,
+              goal: 0,
+            },
+          ],
+          primary: 0,
+          view: {
+            top: 0,
+            top_sub: 0,
+            left: 0,
+            wrap: false,
+          },
+          jumps: {
+            cur: 0,
+            entries: [
+            ],
+          },
+        },
+      ],
+    },
+    {
+      id: 3,
+      path: "/w/g9.txt",
+      group: 9,
+      group_ordinal: 1,
+      deferred: true,
+      panes: {
+        win: 0,
+      },
+      wins: [
+        {
+          cursors: [
+            {
+              pos: 0,
+              anchor: 0,
+              goal: 0,
+            },
+          ],
+          primary: 0,
+          view: {
+            top: 0,
+            top_sub: 0,
+            left: 0,
+            wrap: false,
+          },
+          jumps: {
+            cur: 0,
+            entries: [
+            ],
+          },
+        },
+      ],
+    },
+    {
+      id: 4,
+      path: "/w/g12.txt",
+      group: 12,
+      group_ordinal: 1,
+      deferred: true,
+      panes: {
+        win: 0,
+      },
+      wins: [
+        {
+          cursors: [
+            {
+              pos: 0,
+              anchor: 0,
+              goal: 0,
+            },
+          ],
+          primary: 0,
+          view: {
+            top: 0,
+            top_sub: 0,
+            left: 0,
+            wrap: false,
+          },
+          jumps: {
+            cur: 0,
+            entries: [
+            ],
+          },
+        },
+      ],
+    },
+  ],
+  active_tab: 1,
+  files: [
+    {
+      path: "/w/g7.txt",
+      marks: [
+      ],
+      changes: {
+        cur: 0,
+        entries: [
+        ],
+      },
+      undo: {
+        file: "9366fa964e7bce34.sagu",
+        version: 1,
+      },
+    },
+    {
+      path: "/w/g9.txt",
+      marks: [
+      ],
+      changes: {
+        cur: 0,
+        entries: [
+        ],
+      },
+      undo: {
+        file: "3093e29b1b8c8dce.sagu",
+        version: 1,
+      },
+    },
+    {
+      path: "/w/g12.txt",
+      marks: [
+      ],
+      changes: {
+        cur: 0,
+        entries: [
+        ],
+      },
+      undo: {
+        file: "2228a8b67a20ecf0.sagu",
+        version: 1,
+      },
+    },
+  ],
+}

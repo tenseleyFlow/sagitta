@@ -1,0 +1,31 @@
+{
+  version: 1,
+  writer: "sagitta 99.0.0-from-the-future",
+  workspace: {
+    path: "/w",
+    saved_at: 0,
+    a_field_this_build_never_heard_of: true,
+  },
+  options: {
+    "editor.theme": "midnight",
+    "from.the.future": 42,
+    "nested.thing": {
+      deeply: [ 1, 2, 3, ],
+    },
+  },
+  groups: [
+  ],
+  tabs: [
+    {
+      id: 1,
+      path: "/w/a.txt",
+      unknown_tab_field: nil,
+    },
+  ],
+  active_tab: 1,
+  files: [
+  ],
+  a_whole_section_from_v2: {
+    with: "contents",
+  },
+}
