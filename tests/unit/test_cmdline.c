@@ -720,18 +720,18 @@ void test_cmdline_click_selects_then_accepts_the_same_row(void)
     {
         Key not_mouse = {0}; /* a key event must not reach the menu */
 
-        SAG_ASSERT(!sag_ed_mouse_claimed_by_menu(&fixture.ed, not_mouse));
+        SAG_ASSERT(!sag_mouse_claimed_by_menu(&fixture.ed, not_mouse));
     }
     {
         Key press = cmdline_mouse((u8)SAG_MB_LEFT, SAG_KEY_PRESS, 4U, 12U);
 
-        sag_ed_handle_mouse(&fixture.ed, press);
+        sag_mouse_event(&fixture.ed, &press);
         SAG_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 2);
         SAG_ASSERT(fixture.ed.cmdline.menu.explicit_sel);
         SAG_ASSERT(fixture.ed.cmdline.active);
 
         /* Second click on the SAME row accepts it and closes the menu. */
-        sag_ed_handle_mouse(&fixture.ed, press);
+        sag_mouse_event(&fixture.ed, &press);
         SAG_ASSERT_EQ_U64(fixture.ed.cmdline.menu.items.len, 0U);
         SAG_ASSERT(fixture.ed.cmdline.active);
     }
@@ -755,7 +755,7 @@ void test_cmdline_click_and_keyboard_reach_the_same_state(void)
     {
         Key press = cmdline_mouse((u8)SAG_MB_LEFT, SAG_KEY_PRESS, 4U, 10U);
 
-        sag_ed_handle_mouse(&fixture.ed, press);
+        sag_mouse_event(&fixture.ed, &press);
     }
     SAG_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 0);
     clicked = cmdline_text(&fixture.ed.cmdline);
@@ -793,7 +793,7 @@ void test_cmdline_wheel_scrolls_without_choosing(void)
     fixture.ed.footer_rect = (Rect){0U, 23U, 80U, 1U};
 
     wheel = cmdline_mouse((u8)SAG_MB_WHEEL_DOWN, SAG_KEY_PRESS, 4U, 12U);
-    sag_ed_handle_mouse(&fixture.ed, wheel);
+    sag_mouse_event(&fixture.ed, &wheel);
     SAG_ASSERT_EQ_U64(fixture.ed.cmdline.menu.top, 3U);
 
     /*
@@ -805,7 +805,7 @@ void test_cmdline_wheel_scrolls_without_choosing(void)
     SAG_ASSERT(!fixture.ed.cmdline.menu.explicit_sel);
 
     wheel = cmdline_mouse((u8)SAG_MB_WHEEL_UP, SAG_KEY_PRESS, 4U, 12U);
-    sag_ed_handle_mouse(&fixture.ed, wheel);
+    sag_mouse_event(&fixture.ed, &wheel);
     SAG_ASSERT_EQ_U64(fixture.ed.cmdline.menu.top, 0U);
     cmdline_fixture_free(&fixture);
 }
@@ -825,8 +825,8 @@ void test_cmdline_click_on_a_menu_gap_is_swallowed(void)
     /* Claimed, so it cannot fall through to the pane underneath -- and
      * claiming it is all that happens: no row was chosen. */
     press = cmdline_mouse((u8)SAG_MB_LEFT, SAG_KEY_PRESS, 4U, 12U);
-    SAG_ASSERT(sag_ed_mouse_claimed_by_menu(&fixture.ed, press));
-    sag_ed_handle_mouse(&fixture.ed, press);
+    SAG_ASSERT(sag_mouse_claimed_by_menu(&fixture.ed, press));
+    sag_mouse_event(&fixture.ed, &press);
     SAG_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, -1);
     cmdline_fixture_free(&fixture);
 }

@@ -128,6 +128,20 @@ u32 sag_picker_total(const Ed *ed);
 /* The payload under the cursor; 0 when the list is empty. */
 i32 sag_picker_selected(const Ed *ed);
 
+/*
+ * Sprint 27 §2: the mouse seams.
+ *
+ * By PAYLOAD, not by row, for law 1's reason — a click is resolved
+ * against the region the renderer registered, and the list may have
+ * been re-ranked between the paint and the press.
+ */
+void sag_picker_select_payload(Ed *ed, i32 payload);
+/* Accepts what is under the cursor, exactly as Enter does. */
+bool sag_picker_accept(Ed *ed);
+/* Wheel.  Moves the SELECTION, because that is what the list's scroll
+ * is derived from — there is no independent scroll offset to desync. */
+void sag_picker_scroll(Ed *ed, i32 rows);
+
 /* Test seam: re-rank against the current filter text.  The editor calls
  * this from the cmdline's edited hook. */
 void sag_picker_refilter(Ed *ed);

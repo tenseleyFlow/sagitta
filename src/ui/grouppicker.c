@@ -460,6 +460,26 @@ static void gp_cursor_to(int at)
         gp.scroll = 0;
 }
 
+/*
+ * Sprint 27 §2: the wheel over the dialog.
+ *
+ * It moves the CURSOR rather than an independent offset, because
+ * gp.scroll is derived from gp.cursor and always has been — a second
+ * writer would be reverted by the next cursor move and the list would
+ * appear to snap back for no reason.  Moving focus is also the honest
+ * reading here: unlike the completion menu, this dialog's cursor is
+ * what a click focuses too.
+ */
+void sag_gp_scroll(Ed *ed, int rows)
+{
+    if (!gp.active || rows == 0)
+        return;
+    gp.on_name = false;
+    gp_cursor_to(gp.cursor + rows);
+    if (ed != NULL)
+        ed->full_damage = true;
+}
+
 static void gp_enter_row(Ed *ed, const GpRow *r)
 {
     char full[SAG_GP_PATH_MAX];

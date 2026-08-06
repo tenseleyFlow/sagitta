@@ -308,7 +308,18 @@ static void loop_dispatch_event(Ed *ed, Key key, i64 now_ms)
         sag_ed_handle_paste(ed, NULL, 0U, true);
         break;
     case SAG_EV_MOUSE:
-        sag_ed_handle_mouse(ed, key);
+        sag_mouse_event(ed, &key);
+        break;
+    case SAG_EV_FOCUS:
+        /*
+         * Sprint 27 §1: focus-out cancels any gesture.  A drag whose
+         * release lands in another window never reports that release to
+         * us, so without this the router would sit with a button
+         * logically down forever and the next click would be read as
+         * the drop of a gesture the user abandoned minutes ago.
+         */
+        if (key.code == SAG_KEY_FOCUS_OUT)
+            sag_mouse_cancel(ed);
         break;
     default:
         break;

@@ -425,6 +425,7 @@ void sag_ed_init(Ed *ed)
     sag_reg_init(&ed->regs);
     sag_timers_init(&ed->timers);
     sag_jobs_init(&ed->jobs);
+    sag_mouse_init(&ed->mouse);
     root = realpath(".", NULL);
     if (root == NULL)
         root = getcwd(NULL, 0U);
@@ -1228,100 +1229,6 @@ static bool prompt_key(Ed *ed, Key key)
     return true;
 }
 
-/*
- * Sprint 22 §7: click-to-focus and border drag, and nothing else.
- *
- * Wheel, drag-reorder, context menus and multi-click land in Sprint 27.
- * Until then an unrouted mouse event is IGNORED — never handed to a
- * handler that half-fits, because a wheel event mis-dispatched as a
- * click moves the cursor somewhere the user never pointed.
- */
-/*
- * Sprint 18.5 §8: does this event belong to the completion menu?
- *
- * Gated on cmdline.active because SAG_REGION_BLOCK is not ours alone --
- * Sprint 24's group picker registers one over its own rectangle for the
- * same swallow-the-gap reason.  The two overlays are never open at once,
- * so the prompt's own state is what disambiguates them.
- */
-bool sag_ed_mouse_claimed_by_menu(Ed *ed, Key key)
-{
-    Region hit;
-
-    if (ed == NULL || key.kind != SAG_EV_MOUSE || !ed->cmdline.active)
-        return false;
-    hit = sag_region_hit(key.col, key.row);
-    if (hit.kind != SAG_REGION_MENU_ROW && hit.kind != SAG_REGION_BLOCK)
-        return false;
-    if (key.button == (u8)SAG_MB_WHEEL_UP ||
-        key.button == (u8)SAG_MB_WHEEL_DOWN) {
-        /* Wheeling over the menu scrolls the LIST and deliberately does
-         * not move the selection: looking is not choosing. */
-        (void)sag_cmdline_menu_scroll(
-            ed, key.button == (u8)SAG_MB_WHEEL_UP ? -3 : 3);
-        return true;
-    }
-    if (key.button != SAG_MB_LEFT)
-        return false;
-    /* Swallow the release of a press we handled, so it cannot fall
-     * through to whatever is underneath. */
-    if (key.ev != SAG_KEY_PRESS)
-        return true;
-    if (hit.kind == SAG_REGION_MENU_ROW)
-        (void)sag_cmdline_menu_click(ed, hit.payload);
-    /* A BLOCK hit is inert by construction: it exists so a click on a gap
-     * in the menu does not land in the pane underneath it. */
-    return true;
-}
-
-void sag_ed_handle_mouse(Ed *ed, Key key)
-{
-    if (ed == NULL || key.kind != SAG_EV_MOUSE)
-        return;
-    /* Before the button filter: the wheel is not SAG_MB_LEFT. */
-    if (sag_ed_mouse_claimed_by_menu(ed, key))
-        return;
-    if (key.button != SAG_MB_LEFT) {
-        if (ed->drag.active && key.ev == SAG_KEY_RELEASE)
-            sag_pane_drag_end(ed);
-        return;
-    }
-    switch (key.ev) {
-    case SAG_KEY_PRESS:
-        /* The modal picker gets first refusal, and its BLOCK swallows
-         * anything inside its rectangle so no click reaches the pane
-         * underneath. */
-        if (sag_gp_click(ed, key.col, key.row)) {
-            sag_gp_apply(ed);
-            break;
-        }
-        /*
-         * The tab bar BEFORE the panes.  Sprint 23 built
-         * sag_tab_strip_click and never called it from here, so
-         * clicking a tab did nothing in the running editor — and the
-         * golden could not see it, because every tab showed the same
-         * buffer and so painted the same grid whichever was active.
-         * Per-tab buffers made the omission visible.
-         */
-        if (sag_tab_strip_click(ed, key.col, key.row))
-            break;
-        (void)sag_pane_click(ed, key.col, key.row);
-        break;
-    case SAG_KEY_REPEAT:
-        /* Motion with the button held.  Only meaningful mid-drag; a
-         * drag that never started is not a click. */
-        if (ed->drag.active)
-            sag_pane_drag_motion(ed, key.col, key.row);
-        break;
-    case SAG_KEY_RELEASE:
-        if (ed->drag.active)
-            sag_pane_drag_end(ed);
-        break;
-    default:
-        break;
-    }
-}
-
 void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms)
 {
     const u16 command_mods = SAG_MOD_ALT | SAG_MOD_CTRL | SAG_MOD_SUPER |
@@ -1330,10 +1237,14 @@ void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms)
     if (ed == NULL || key.kind != SAG_EV_KEY)
         return;
     ed->now_ms = now_ms;
-    /* Esc mid-drag cancels it and restores the entry ratio, before the
-     * key reaches any mode that would also act on Escape. */
-    if (ed->drag.active && key.code == SAG_KEY_ESCAPE) {
-        sag_pane_drag_cancel(ed);
+    /*
+     * Esc mid-gesture cancels it and restores the state the gesture
+     * started from, before the key reaches any mode that would also act
+     * on Escape.  Sprint 27 widened this from the border drag alone to
+     * every gesture the router owns.
+     */
+    if (key.code == SAG_KEY_ESCAPE && sag_mouse_gesture_active(ed)) {
+        sag_mouse_cancel(ed);
         return;
     }
     if (key.ev != SAG_KEY_RELEASE && sag_msg_dismiss_overlay(ed)) {

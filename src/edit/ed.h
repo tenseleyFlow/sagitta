@@ -23,6 +23,7 @@
 #include "search/searchui.h"
 #include "ui/cmdline.h"
 #include "ui/message.h"
+#include "ui/mouse.h"
 #include "ui/win.h"
 #include "util/arena.h"
 #include "util/buf.h"
@@ -136,6 +137,9 @@ struct Ed {
     u32 nleaf_tab;
     u32 nsplit_tab;
     PaneDrag drag;
+    /* Sprint 27 §1: the router's gesture state.  One per editor: a
+     * terminal has one pointer. */
+    MouseState mouse;
     Tabs tabs;
     Groups groups;
     TabPrompt tab_prompt;
@@ -261,17 +265,9 @@ CmdStatus sag_ed_request_quit(Ed *ed, bool force);
 
 void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms);
 void sag_ed_handle_paste(Ed *ed, const u8 *bytes, size_t len, bool end);
-/* Sprint 22 §7 click-to-focus and border drag, Sprint 23's tab strip,
- * Sprint 24's group picker, and Sprint 18.5 §8's completion menu; Sprint
- * 27 routes the rest. */
-void sag_ed_handle_mouse(Ed *ed, Key key);
-/*
- * Did the completion menu claim this event (and act on it)?  Exposed
- * because "the click was swallowed so it could not reach the pane
- * underneath" is a claim with no other observable: the handler returns
- * nothing, and a swallowed click by definition changes nothing else.
- */
-bool sag_ed_mouse_claimed_by_menu(Ed *ed, Key key);
+/* Mouse events go to sag_mouse_event (ui/mouse.h).  There is deliberately
+ * no editor-level twin: Sprint 27 DoD 2 is that the router is the only
+ * place a mouse event becomes an action. */
 void sag_ed_resize(Ed *ed, bool resumed);
 void sag_ed_layout(Ed *ed);
 void sag_ed_render(Ed *ed);

@@ -70,6 +70,9 @@ bool sag_gp_key(Ed *ed, Key key);
 void sag_gp_draw(Ed *ed);
 /* True when the click was consumed. */
 bool sag_gp_click(Ed *ed, u16 x, u16 y);
+/* Sprint 27 §2: the wheel.  Moves the focused row — see grouppicker.c
+ * for why there is no separate scroll offset to move instead. */
+void sag_gp_scroll(Ed *ed, int rows);
 
 /*
  * Applies a CONFIRMED result, and does nothing while the dialog is

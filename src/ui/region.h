@@ -58,7 +58,20 @@ typedef enum {
      * lands on what was pointed at even if the list reordered between
      * the paint and the press.
      */
-    SAG_REGION_PICK_ROW
+    SAG_REGION_PICK_ROW,
+    /*
+     * Sprint 27 §5.  Payload is the row's index within the OPEN menu,
+     * which is sound for the same reason SAG_REGION_MENU_ROW's is: a
+     * region can only be hit during the frame it was registered in, and
+     * the menu's row list is fixed for its lifetime.
+     *
+     * What the payload is NOT is the menu's TARGET.  The menu captured
+     * that at open time — see ui/ctxmenu.h — because the strip can
+     * scroll and tabs can close under an open menu, and a row that
+     * re-resolved its target from the cells beneath it would act on a
+     * different file than the one the user right-clicked.
+     */
+    SAG_REGION_CTX_ROW
 } RegionKind;
 
 typedef struct Region {

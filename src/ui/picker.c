@@ -387,6 +387,36 @@ static bool accept_selected(Ed *ed, u8 how)
     return true;
 }
 
+void sag_picker_select_payload(Ed *ed, i32 payload)
+{
+    if (!pk.active || ed == NULL)
+        return;
+    /*
+     * Stored as the held payload rather than as a row, so a rescan
+     * landing between this press and its release cannot slide the
+     * selection onto a neighbour.  sel_row() derives the row again on
+     * every draw.
+     */
+    pk.sel_payload = payload;
+    pk.has_sel = true;
+    ed->full_damage = true;
+}
+
+bool sag_picker_accept(Ed *ed)
+{
+    if (!pk.active || ed == NULL)
+        return false;
+    return accept_selected(ed, (u8)SAG_PICK_ACCEPT_HERE);
+}
+
+void sag_picker_scroll(Ed *ed, i32 rows)
+{
+    if (!pk.active || ed == NULL || rows == 0)
+        return;
+    move_by(rows);
+    ed->full_damage = true;
+}
+
 bool sag_picker_key(Ed *ed, const Key *k)
 {
     u16 page;
