@@ -664,8 +664,10 @@ void test_drag_autoscroll_is_throttled_to_one_entry_per_window(void)
     i64 t0;
 
     dg_fixture(&f, 7U);
-    /* A narrow strip, so the `>N` chevron exists to hold over. */
-    SAG_ASSERT(sag_grid_init(&f.ed.grid, &f.ed.interner, 24U, 24U));
+    /* A narrow strip, so the `>N` chevron exists to hold over.  RESIZE
+     * rather than a second init, which would leak the first's
+     * buffers. */
+    SAG_ASSERT(sag_grid_resize(&f.ed.grid, 24U, 24U));
     sag_ed_layout(&f.ed);
     dg_paint(&f);
 

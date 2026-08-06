@@ -855,7 +855,10 @@ void test_mouse_the_router_is_the_only_dispatch_site(void)
         if (dir == NULL)
             continue;
         while ((e = readdir(dir)) != NULL) {
-            char path[256];
+            /* Wide enough for the longest dir plus the longest name;
+             * the sanitizer lane's -Wformat-truncation cannot prove it
+             * from the loop bounds, so the buffer says it instead. */
+            char path[512];
             FILE *f;
             char line[512];
             size_t i;

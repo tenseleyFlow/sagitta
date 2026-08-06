@@ -105,7 +105,10 @@ void test_degrade_no_color_emits_no_colour_and_stays_legible(void)
         int code;
 
         for (code = 30; code <= 37; code++) {
-            char want[8];
+            /* Wide enough for any int the compiler cannot prove is two
+             * digits — the sanitizer lane's -Wformat-truncation sees
+             * cases the plain build inlines away. */
+            char want[32];
 
             (void)snprintf(want, sizeof(want), "\x1b[%dm", code);
             SAG_ASSERT(strstr(p, want) == NULL);
@@ -322,14 +325,15 @@ void test_degrade_the_member_strip_sheds_before_the_tab_strip(void)
     two_row_h = ed.tab_strip_rect.h;
     SAG_ASSERT_EQ_U64(two_row_h, 2U);
 
-    /* Three rows total: footer, and whatever the strip can keep. */
-    SAG_ASSERT(sag_grid_init(&ed.grid, &ed.interner, 3U, 80U));
+    /* RESIZE, not re-init: sag_grid_init memsets over the buffers the
+     * first one allocated, so a second init leaks them. */
+    SAG_ASSERT(sag_grid_resize(&ed.grid, 3U, 80U));
     sag_ed_layout(&ed);
     SAG_ASSERT(ed.tab_strip_rect.h <= 2U);
     SAG_ASSERT((u32)ed.tab_strip_rect.y + ed.tab_strip_rect.h <= 3U);
 
     /* Two rows: the strip has at most one left. */
-    SAG_ASSERT(sag_grid_init(&ed.grid, &ed.interner, 2U, 80U));
+    SAG_ASSERT(sag_grid_resize(&ed.grid, 2U, 80U));
     sag_ed_layout(&ed);
     SAG_ASSERT(ed.tab_strip_rect.h <= 1U);
     sag_ed_free(&ed);
