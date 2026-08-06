@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#include "ui/groupnav.h"
 #include "ui/groups.h"
 #include "ui/message.h"
 #include "ui/region.h"
@@ -414,80 +415,171 @@ static void tab_label(const Ed *ed, int idx, char *out, size_t cap)
                    sag_tab_modified(ed, idx) ? "*" : "");
 }
 
+/*
+ * Orphans — files outside the workspace root — render dim.  Both sides
+ * are already canonical (the tab's path from sag_tab_open, the root
+ * from the workspace), so this is a prefix test rather than a
+ * filesystem call on a draw path.  Sprint 25 refines "outside".
+ */
+static bool tab_is_orphan(const Ed *ed, int idx)
+{
+    const char *root = sag_ws_root(ed);
+    const char *p = ed->tabs.v.data[idx].path;
+
+    return p != NULL && root != NULL &&
+           strncmp(p, root, strlen(root)) != 0;
+}
+
+int sag_tab_row1_entries(const Ed *ed, StripEntry *out, int cap)
+{
+    u32 seen[SAG_TAB_MAX];
+    int nseen = 0;
+    int n = 0;
+    size_t i;
+
+    if (ed == NULL || out == NULL || cap <= 0)
+        return 0;
+    for (i = 0U; i < ed->tabs.v.len && n < cap; i++) {
+        const Tab *t = &ed->tabs.v.data[i];
+
+        (void)memset(&out[n], 0, sizeof(out[n]));
+        if (t->group_id != 0U) {
+            /* Two cells shorter than the entry it goes into, so the
+             * brackets always fit. */
+            char label[SAG_TAB_LABEL_MAX - 4];
+            bool dup = false;
+            int k;
+
+            for (k = 0; k < nseen; k++) {
+                if (seen[k] == t->group_id) {
+                    dup = true;
+                    break;
+                }
+            }
+            /* Members are row 2's business; the group has had its one
+             * entry already. */
+            if (dup)
+                continue;
+            if (nseen < (int)SAG_ARRAY_LEN(seen))
+                seen[nseen++] = t->group_id;
+            sag_group_label(ed, t->group_id, label, sizeof(label));
+            (void)snprintf(out[n].label, sizeof(out[n].label), "[%s]",
+                           label);
+            /*
+             * NEGATIVE payload.  The sign is how the click router tells
+             * a group from a tab without a second region kind — the
+             * convention was written into region.h in Sprint 22 so the
+             * two ends could not invent it separately.
+             */
+            out[n].payload = -(i32)t->group_id;
+            n++;
+            continue;
+        }
+        tab_label(ed, (int)i, out[n].label, sizeof(out[n].label));
+        out[n].payload = (i32)i;
+        out[n].dim = tab_is_orphan(ed, (int)i);
+        n++;
+    }
+    return n;
+}
+
+int sag_tab_row1_active(const Ed *ed, const StripEntry *entries, int n)
+{
+    u32 gid;
+    int i;
+
+    if (ed == NULL || entries == NULL || ed->tabs.active < 0)
+        return -1;
+    gid = sag_active_group_id(ed);
+    for (i = 0; i < n; i++) {
+        if (gid != 0U) {
+            if (entries[i].payload == -(i32)gid)
+                return i;
+        } else if (entries[i].payload == ed->tabs.active) {
+            return i;
+        }
+    }
+    return -1;
+}
+
 u32 sag_tab_strip_rows(const Ed *ed)
 {
+    StripEntry entries[SAG_TAB_MAX];
+    int n;
+    u32 rows = 0U;
+
     /*
      * A parameter, not a renderer: Sprint 22's layout reserves whatever
      * this returns before handing the rest to the pane tree, exactly as
-     * it reserves the footer row.  One tab needs no strip.
+     * it reserves the footer row.
      */
-    return ed != NULL && ed->tabs.v.len > 1U ? 1U : 0U;
+    if (ed == NULL)
+        return 0U;
+    n = sag_tab_row1_entries(ed, entries, (int)SAG_ARRAY_LEN(entries));
+    /* One lone entry needs no strip to choose between. */
+    if (n > 1)
+        rows = 1U;
+    /*
+     * Inside a group the bar is two rows: row 1 keeps the group's own
+     * entry visible so leaving is one press away, and row 2 lists the
+     * members.  A member strip floating with no group above it reads as
+     * a different widget every time you enter.
+     */
+    if (sag_active_group_id(ed) != 0U)
+        rows = 2U;
+    return rows;
 }
 
-void sag_tab_strip_draw(Ed *ed, Rect rect)
+/*
+ * THE strip renderer.  Row 1 and row 2 both go through here.
+ *
+ * That is a law, not tidiness: facsimile drew the member row with the
+ * same layout engine specifically so the two rows could not disagree
+ * about where a click landed.  Placement split out of drawing is the
+ * whole point of Sprint 22 — a second copy of this arithmetic would
+ * drift the moment one row got a multibyte label the other did not.
+ *
+ * `scroll_mag` names the row in the scroll regions' payload (±1 row 1,
+ * ±2 row 2) so a click on `>N` scrolls the row it belongs to.
+ */
+static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
+                         int active_entry, int *scroll, i32 scroll_mag)
 {
-    StripEntry entries[SAG_TAB_MAX];
     StripSpan spans[SAG_TAB_MAX];
     int n_spans = 0;
     bool more_left = false;
     bool more_right = false;
-    int n;
     int i;
     u16 avail;
     SagColor dim = {SAG_COLOR_RGB, 120U, 120U, 120U};
     SagColor fg = {SAG_COLOR_DEFAULT, 0U, 0U, 0U};
     SagColor bg = {SAG_COLOR_DEFAULT, 0U, 0U, 0U};
+    Cell blank;
 
-    if (ed == NULL || rect.w == 0U || rect.h == 0U)
+    if (rect.w == 0U || rect.h == 0U)
         return;
-    n = (int)ed->tabs.v.len;
+    /* Blank the row first: a shorter strip than last frame must not
+     * leave the tail of the old one behind. */
+    (void)memset(&blank, 0, sizeof(blank));
+    sag_grid_fill(&ed->grid, rect.y, rect.x, (u16)(rect.x + rect.w), blank);
     if (n <= 0)
         return;
-    for (i = 0; i < n; i++) {
-        (void)memset(&entries[i], 0, sizeof(entries[i]));
-        tab_label(ed, i, entries[i].label, sizeof(entries[i].label));
-        entries[i].payload = i;
-        /* Orphans — files outside the workspace — render dim.  Sprint
-         * 25 refines what "outside" means. */
-        {
-            /*
-             * Orphans are files outside the workspace root.  Both sides
-             * are already canonical — the tab's path from sag_tab_open
-             * and the root from the workspace — so this is a prefix
-             * test, not a filesystem call on a draw path.  Sprint 25
-             * refines what "outside" means.
-             */
-            const char *root = sag_ws_root(ed);
-            const char *p = ed->tabs.v.data[i].path;
 
-            entries[i].dim = p != NULL && root != NULL &&
-                             strncmp(p, root, strlen(root)) != 0;
-        }
-    }
     /* Reserve a cell for `<` when scrolled, so the indicator never
      * overlaps the first entry it is pointing away from. */
     avail = rect.w;
-    if (ed->tabs.scroll > 0 && avail > 1U)
+    if (*scroll > 0 && avail > 1U)
         avail = (u16)(avail - 1U);
-    sag_strip_layout(entries, n, avail, ed->tabs.active, &ed->tabs.scroll,
-                     spans, &n_spans, &more_left, &more_right);
+    sag_strip_layout(entries, n, avail, active_entry, scroll, spans,
+                     &n_spans, &more_left, &more_right);
 
-    {
-        /* Blank the row first: a shorter strip than last frame must not
-         * leave the tail of the old one behind. */
-        Cell blank;
-
-        (void)memset(&blank, 0, sizeof(blank));
-        sag_grid_fill(&ed->grid, rect.y, rect.x,
-                      (u16)(rect.x + rect.w), blank);
-    }
     for (i = 0; i < n_spans; i++) {
         int idx = spans[i].idx;
         u16 x = (u16)(rect.x + spans[i].col0 + (more_left ? 1U : 0U));
         u16 attrs = 0U;
         Rect span_rect;
 
-        if (idx == ed->tabs.active)
+        if (idx == active_entry)
             attrs = SAG_ATTR_REVERSE;
         else if (entries[idx].dim)
             attrs = SAG_ATTR_DIM;
@@ -505,14 +597,14 @@ void sag_tab_strip_draw(Ed *ed, Rect rect)
          */
         span_rect = (Rect){x, rect.y,
                            (u16)(spans[i].col1 - spans[i].col0), 1U};
-        sag_region_add(SAG_REGION_TAB, span_rect, idx);
+        sag_region_add(SAG_REGION_TAB, span_rect, entries[idx].payload);
     }
     if (more_left) {
         Rect r = {rect.x, rect.y, 1U, 1U};
 
         (void)sag_grid_puts(&ed->grid, rect.y, rect.x, (const u8 *)"<",
                             1U, dim, bg, SAG_ATTR_DIM);
-        sag_region_add(SAG_REGION_TAB_SCROLL, r, -1);
+        sag_region_add(SAG_REGION_TAB_SCROLL, r, -scroll_mag);
     }
     if (more_right) {
         char more[16];
@@ -528,9 +620,63 @@ void sag_tab_strip_draw(Ed *ed, Rect rect)
             (void)sag_grid_puts(&ed->grid, rect.y, x, (const u8 *)more,
                                 strlen(more), dim, bg, SAG_ATTR_DIM);
             r = (Rect){x, rect.y, w, 1U};
-            sag_region_add(SAG_REGION_TAB_SCROLL, r, 1);
+            sag_region_add(SAG_REGION_TAB_SCROLL, r, scroll_mag);
         }
     }
+}
+
+/*
+ * Row 2: the members of `gid`, one entry each, payload = GLOBAL tab
+ * index — so the existing SAG_REGION_TAB click case handles them
+ * unchanged.  The active member is reversed; the others render dim,
+ * which is what makes row 2 read as secondary to row 1.
+ *
+ * This is also the hover-preview renderer (Sprint 27 calls it with a
+ * group the user is only pointing at).  Same function, so the pinned
+ * row and the preview cannot disagree.
+ */
+void sag_tab_member_strip_draw(Ed *ed, Rect rect, u32 gid)
+{
+    StripEntry entries[SAG_TAB_MAX];
+    int members[SAG_TAB_MAX];
+    int n;
+    int i;
+    int active_entry = -1;
+
+    if (ed == NULL || gid == 0U)
+        return;
+    n = sag_group_members(ed, gid, members, (int)SAG_ARRAY_LEN(members));
+    for (i = 0; i < n; i++) {
+        (void)memset(&entries[i], 0, sizeof(entries[i]));
+        (void)snprintf(entries[i].label, sizeof(entries[i].label), " %s%s",
+                       tab_basename(&ed->tabs.v.data[members[i]]),
+                       sag_tab_modified(ed, members[i]) ? "*" : "");
+        entries[i].payload = members[i];
+        entries[i].dim = true;
+        if (members[i] == ed->tabs.active)
+            active_entry = i;
+    }
+    strip_render(ed, rect, entries, n, active_entry,
+                 &ed->tabs.member_scroll, 2);
+}
+
+void sag_tab_strip_draw(Ed *ed, Rect rect)
+{
+    StripEntry entries[SAG_TAB_MAX];
+    int n;
+    u32 gid;
+
+    if (ed == NULL || rect.w == 0U || rect.h == 0U)
+        return;
+    n = sag_tab_row1_entries(ed, entries, (int)SAG_ARRAY_LEN(entries));
+    strip_render(ed, (Rect){rect.x, rect.y, rect.w, 1U}, entries, n,
+                 sag_tab_row1_active(ed, entries, n), &ed->tabs.scroll, 1);
+    gid = sag_active_group_id(ed);
+    if (rect.h >= 2U && gid != 0U)
+        sag_tab_member_strip_draw(ed,
+                                  (Rect){rect.x, (u16)(rect.y + 1U),
+                                         rect.w, 1U},
+                                  gid);
 }
 
 /*
@@ -547,27 +693,39 @@ bool sag_tab_strip_click(Ed *ed, u16 x, u16 y)
         return false;
     hit = sag_region_hit(x, y);
     if (hit.kind == SAG_REGION_TAB_SCROLL) {
-        int to = ed->tabs.scroll + (hit.payload < 0 ? -1 : 1);
+        /* The payload's MAGNITUDE names the row (1 or 2); its sign is
+         * the direction.  Without the row, a click on row 2's `>N`
+         * would scroll row 1 under the user's pointer. */
+        bool row2 = hit.payload == 2 || hit.payload == -2;
+        int *scroll = row2 ? &ed->tabs.member_scroll : &ed->tabs.scroll;
+        int limit = (int)ed->tabs.v.len;
+        int to = *scroll + (hit.payload < 0 ? -1 : 1);
 
+        if (row2)
+            limit = sag_group_member_count(ed, sag_active_group_id(ed));
         if (to < 0)
             to = 0;
-        if (to >= (int)ed->tabs.v.len)
-            to = (int)ed->tabs.v.len - 1;
-        ed->tabs.scroll = to;
+        if (to >= limit)
+            to = limit > 0 ? limit - 1 : 0;
+        *scroll = to;
         ed->full_damage = true;
         return true;
     }
     if (hit.kind != SAG_REGION_TAB)
         return false;
     /*
-     * Sprint 24 introduces negative payloads for groups.  Until then
-     * one arriving means the renderer and the router disagree about the
-     * convention, which is the bug the sign rule was written down early
-     * to prevent — so say so loudly rather than switching to tab -3.
+     * The sign convention region.h wrote down in Sprint 22, now live:
+     * a negative payload is a GROUP id, negated.  One region kind, and
+     * the renderer and the router read the same rule.
      */
-    if (hit.payload < 0)
-        SAG_BUG("negative SAG_REGION_TAB payload: groups land in "
-                "Sprint 24");
+    if (hit.payload < 0) {
+        sag_group_note_position(ed);
+        /* Clicking a group's entry is an EXPLICIT entry, so it resumes
+         * where the user left off — unlike a mid-walk arrival, which
+         * enters from the side it came from. */
+        sag_group_enter(ed, (u32)(-hit.payload));
+        return true;
+    }
     sag_tab_switch(ed, hit.payload);
     return true;
 }

@@ -13,6 +13,7 @@
 #include "edit/shell_cmds.h"
 #include "edit/sel_actions.h"
 #include "ui/cmdline.h"
+#include "ui/groupnav.h"
 #include "ui/tabs.h"
 #include "util/arena.h"
 #include "util/intern.h"
@@ -416,6 +417,27 @@ static const CmdDesc builtins[] = {
      SAG_CMD_REPEATABLE, "Activate the previous tab"},
     {"ed.tab.move", sag_tab_cmd_move, SAG_ARITY_OPT_INT,
      SAG_CMD_TAKES_COUNT, "Move the active tab to position N"},
+    /* Sprint 24 §6: the continuous line.  next/prev walk EVERY open
+     * file — members of the active group first, then the row-1 entry
+     * beside it — so left/right never dead-ends inside a group. */
+    {"ed.file.next", sag_file_cmd_next, SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE, "Walk to the next open file"},
+    {"ed.file.prev", sag_file_cmd_prev, SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE, "Walk to the previous open file"},
+    {"ed.group.enter", sag_group_cmd_enter, SAG_ARITY_NONE, 0U,
+     "Enter a tab group, resuming where you left it"},
+    {"ed.group.leave", sag_group_cmd_leave, SAG_ARITY_NONE, 0U,
+     "Leave the active tab group"},
+    {"ed.group.dissolve", sag_group_cmd_dissolve, SAG_ARITY_NONE, 0U,
+     "Dissolve the active group; its tabs stay open"},
+    {"ed.group.remove_tab", sag_group_cmd_remove_tab, SAG_ARITY_NONE, 0U,
+     "Remove the active tab from its group"},
+    DEFER("ed.group.new", SAG_ARITY_OPT_STR, SAG_CMD_PROMPTS, 24,
+          "assemble a new tab group (the picker)"),
+    DEFER("ed.group.edit", SAG_ARITY_NONE, SAG_CMD_PROMPTS, 24,
+          "edit the active group's membership (the picker)"),
+    DEFER("ed.group.from_dir", SAG_ARITY_STR, 0U, 53,
+          "open a directory as a tab group (F-mode)"),
     DEFER("ed.group.next", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 24,
           "activate the next tab group"),
     DEFER("ed.group.prev", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 24,
@@ -551,6 +573,12 @@ static const BuiltinMeta builtin_meta[] = {
     {"ed.tab.new", "", SAG_RP_FORBID, "tabnew"},
     {"ed.tab.open", "f", SAG_RP_FORBID, "tabedit"},
     {"ed.tab.close", "", SAG_RP_FORBID, "tabclose"},
+    {"ed.group.new", "s", SAG_RP_FORBID, "gnew"},
+    {"ed.group.edit", "", SAG_RP_FORBID, "gedit"},
+    {"ed.group.dissolve", "", SAG_RP_FORBID, "gdissolve"},
+    {"ed.group.remove_tab", "", SAG_RP_FORBID, "gremove"},
+    {"ed.group.enter", "", SAG_RP_FORBID, "genter"},
+    {"ed.group.leave", "", SAG_RP_FORBID, "gleave"},
     /* The substitution body is ONE opaque string; s18's tokenizer must
      * not try to understand `/` inside a regex. */
     {"ed.search.replace", "s", SAG_RP_OPT, "s"},
@@ -618,7 +646,9 @@ static bool command_name_valid(const char *name)
         "split_h", "split_v", "focus_left", "focus_right", "focus_up",
         "focus_down", "focus_next",
         /* Sprint 23 */
-        "move"};
+        "move",
+        /* Sprint 24 */
+        "dissolve", "remove_tab", "from_dir", "edit"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

@@ -17,6 +17,7 @@
 
 #include "edit/cmd.h"
 #include "ui/layout.h"
+#include "ui/strip.h"
 #include "util/base.h"
 #include "util/vec.h"
 
@@ -62,7 +63,11 @@ typedef struct Tabs {
     TabVec v;         /* compacted on close: indices shift, ids never */
     u32 next_tab_id;  /* starts at 1 */
     int active;       /* INDEX into v; -1 when empty */
-    int scroll;       /* first visible entry in the strip */
+    int scroll;       /* first visible entry on row 1 */
+    /* Row 2 scrolls independently: the member list and the row-1 list
+     * have different lengths, so one shared offset would scroll a row
+     * the user was not looking at. */
+    int member_scroll;
 } Tabs;
 
 void sag_tabs_init(Tabs *t);
@@ -117,9 +122,32 @@ Buffer *sag_tab_buffer(Ed *ed, int tab_idx);
 /* Where index `i` lands when `from` moves to `to`. */
 int sag_tab_shifted_index(int i, int from, int to);
 
+/*
+ * The ROW-1 ENTRY LIST — the one construction of it.
+ *
+ * A group is one entry, placed where its FIRST member sits, with
+ * payload = −gid; ungrouped tabs are themselves, with payload = index.
+ * Members never appear individually on row 1.
+ *
+ * The renderer and the walk-through (ui/groupnav.c) both call this
+ * rather than each building the list.  Two constructions of "what is on
+ * row 1" drift, and the drift shows up as left/right skipping an entry
+ * the user can see, or as a click landing on the wrong one.
+ */
+int sag_tab_row1_entries(const Ed *ed, StripEntry *out, int cap);
+/* Index into that list of the entry the active tab belongs to; -1 when
+ * there is none. */
+int sag_tab_row1_active(const Ed *ed, const StripEntry *entries, int n);
+
 /* Rows the strip needs; layout reserves them like the footer row. */
 u32 sag_tab_strip_rows(const Ed *ed);
 void sag_tab_strip_draw(Ed *ed, Rect rect);
+/*
+ * Row 2: the members of `gid`.  Also the hover-preview renderer Sprint
+ * 27 calls with a group the pointer is merely over — one function, so
+ * the pinned row and the preview cannot disagree about placement.
+ */
+void sag_tab_member_strip_draw(Ed *ed, Rect rect, u32 gid);
 /* True when the click was consumed. */
 bool sag_tab_strip_click(Ed *ed, u16 x, u16 y);
 

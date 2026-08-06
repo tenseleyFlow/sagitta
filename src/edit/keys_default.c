@@ -49,6 +49,25 @@ static const BindRow keys_L[] = {
     {"t p", "ed.tab.prev", 0, NULL},
     {"t t", "ed.tab.new", 0, NULL},
     {"t c", "ed.tab.close", 0, NULL},
+    /*
+     * Sprint 24 §6: the continuous line, and the group in/out pair.
+     *
+     * Kitty-protocol chords are the ENHANCEMENT, never the only path.
+     * `super+ctrl+up` is exactly the chord a window manager is most
+     * likely to eat, and a user who cannot leave a group is stuck — so
+     * the t-prefix forms exist for every one of these, and walking
+     * right out of a group works regardless (see groupnav.c).
+     */
+    {"C-<pgdn>", "ed.file.next", 0, NULL},
+    {"C-<pgup>", "ed.file.prev", 0, NULL},
+    {"t <right>", "ed.file.next", 0, NULL},
+    {"t <left>", "ed.file.prev", 0, NULL},
+    {"t <down>", "ed.group.enter", 0, NULL},
+    {"t <up>", "ed.group.leave", 0, NULL},
+    {"t g", "ed.group.new", 0, NULL},
+    {"t e", "ed.group.edit", 0, NULL},
+    {"t d", "ed.group.dissolve", 0, NULL},
+    {"t r", "ed.group.remove_tab", 0, NULL},
     {"m", "ed.mark.set", 0, NULL},
     {"'", "ed.mark.jump", 0, NULL},
     {"/", "ed.search.open", 0, NULL},

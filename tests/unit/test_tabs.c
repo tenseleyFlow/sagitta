@@ -19,6 +19,7 @@
 #include <unistd.h>
 
 #include "edit/ed.h"
+#include "ui/groups.h"
 #include "ui/region.h"
 #include "ui/tabs.h"
 
@@ -636,49 +637,41 @@ void test_tabs_dirty_prompt_swallows_other_keys(void)
 }
 
 /*
- * DoD 9: a negative SAG_REGION_TAB payload means the renderer and the
- * router disagree about the sign convention Sprint 24 will use, which
- * is exactly what writing it down early was meant to prevent.
+ * The sign convention, now live.
+ *
+ * Sprint 23 asserted that a negative SAG_REGION_TAB payload was a bug,
+ * because no renderer could produce one yet.  Sprint 24's row-1
+ * renderer produces exactly that for a group, and the router reads the
+ * same rule region.h wrote down — so the assertion flips from "this
+ * cannot happen" to "this means enter the group".
  */
-void test_tabs_negative_region_payload_is_a_bug(void)
+void test_tabs_negative_region_payload_enters_the_group(void)
 {
-    int fds[2];
-    pid_t child;
-    pid_t waited;
-    int status;
-    char output[1024];
-    ssize_t got;
+    Ed ed;
+    u32 g;
 
-    SAG_ASSERT_EQ_I64(pipe(fds), 0);
-    SAG_ASSERT_EQ_I64(fflush(NULL), 0);
-    child = fork();
-    SAG_ASSERT(child >= 0);
-    if (child == 0) {
-        Ed ed;
+    tb_fixture(&ed);
+    {
+        u32 ids[3];
 
-        (void)close(fds[0]);
-        (void)dup2(fds[1], STDERR_FILENO);
-        (void)close(fds[1]);
-        tb_fixture(&ed);
-        sag_region_frame_begin();
-        /* A hand-built region carrying the convention Sprint 24 will
-         * introduce.  Reaching the router today means the renderer and
-         * the router disagree, which is what writing the sign rule down
-         * early was meant to prevent. */
-        sag_region_add(SAG_REGION_TAB, (Rect){0U, 0U, 8U, 1U}, -3);
-        (void)sag_tab_strip_click(&ed, 1U, 0U);
-        _exit(0);
+        tb_open_many(&ed, 3U, ids);
     }
-    SAG_ASSERT_EQ_I64(close(fds[1]), 0);
-    got = read(fds[0], output, sizeof(output) - 1U);
-    SAG_ASSERT(got >= 0);
-    output[got < 0 ? 0U : (size_t)got] = '\0';
-    SAG_ASSERT_EQ_I64(close(fds[0]), 0);
-    do {
-        waited = waitpid(child, &status, 0);
-    } while (waited < 0 && errno == EINTR);
-    SAG_ASSERT_EQ_I64(waited, child);
-    SAG_ASSERT(WIFEXITED(status));
-    SAG_ASSERT_EQ_I64(WEXITSTATUS(status), SAG_EXIT_BUG);
-    SAG_ASSERT(strstr(output, "Sprint 24") != NULL);
+    g = sag_group_create(&ed, "/src", NULL);
+    sag_group_add_member(&ed, g, 2);
+    sag_group_add_member(&ed, g, 3);
+    sag_tab_switch(&ed, 0);
+
+    sag_region_frame_begin();
+    sag_region_add(SAG_REGION_TAB, (Rect){0U, 0U, 8U, 1U}, -(i32)g);
+    SAG_ASSERT(sag_tab_strip_click(&ed, 1U, 0U));
+    /* Entered the group, landing on its first member. */
+    SAG_ASSERT_EQ_U64(sag_active_group_id(&ed), g);
+    SAG_ASSERT_EQ_I64(ed.tabs.active, 2);
+
+    /* A positive payload still means a tab index, unchanged. */
+    sag_region_frame_begin();
+    sag_region_add(SAG_REGION_TAB, (Rect){0U, 0U, 8U, 1U}, 1);
+    SAG_ASSERT(sag_tab_strip_click(&ed, 1U, 0U));
+    SAG_ASSERT_EQ_I64(ed.tabs.active, 1);
+    sag_ed_free(&ed);
 }
