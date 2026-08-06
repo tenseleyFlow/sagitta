@@ -186,6 +186,14 @@ int sag_buf_hydrate(Ed *ed, Buffer *b)
         return 0; /* already resident: no read, no work */
     if (b->path == NULL)
         return -1;
+    /*
+     * sag_file_load overwrites meta->realpath, which realpath(3)
+     * allocated on the PREVIOUS load -- so re-entering a deferred tab
+     * leaked PATH_MAX bytes every time.  Disposing here rather than in
+     * sag_buf_defer keeps the pairing next to the call that overwrites
+     * it; dispose re-inits, so a never-loaded buffer is fine.
+     */
+    sag_filemeta_dispose(&b->meta);
     load = sag_file_load(b->path, &tb, &b->meta);
     if (load != SAG_LOAD_OK && load != SAG_LOAD_ENOENT) {
         sag_textbuf_free(tb);
