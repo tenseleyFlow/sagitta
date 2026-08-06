@@ -24,7 +24,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
   file.close                   Sprint 23: close the active file                 
   file.write                   Write the active buffer, optionally to a path    
   file.reload                  Reload the active file from disk                 
-> file.write_quit              Write the active buffer and quit              7/7
+> file.write_quit              Write the active buffer and quit              9/9
 :file.write_quit                                                                
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAA

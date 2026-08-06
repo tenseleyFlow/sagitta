@@ -24,7 +24,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
 
 
 
-
+  file.next                    Walk to the next open file                       
 :file.x                                                                         
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAA
@@ -49,10 +49,11 @@ AAAAA
 
 
 
-
-BCCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+BBCCCCCBBCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+DEEEEEEBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 --- legend
 A fg=default bg=default attrs=----------
-B fg=#2f1806 bg=#e77d24 attrs=b---------
-C fg=#f7e0cc bg=#4e2a0f attrs=----------
-D fg=#f7e0cc bg=#4e2a0f attrs=b---------
+B fg=#f7e0cc bg=#4e2a0f attrs=b---------
+C fg=#f7e0cc bg=#4e2a0f attrs=b--u------
+D fg=#2f1806 bg=#e77d24 attrs=b---------
+E fg=#f7e0cc bg=#4e2a0f attrs=----------

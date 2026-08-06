@@ -21,10 +21,10 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 
 
   file.new                     Create an empty buffer, optionally naming its fil
+  file.next                    Walk to the next open file                       
   file.open                    Sprint 23: open a file                           
+  file.prev                    Walk to the previous open file                   
   file.save                    Atomically save the active file                  
-  file.close                   Sprint 23: close the active file                 
-  file.write                   Write the active buffer, optionally to a path    
 :file.new                                                                       
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAA
@@ -46,9 +46,9 @@ AAAAA
 
 
 BBCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-DDEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 BBCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 DDEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+BBCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 BBCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 FGGGGGDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 --- legend
