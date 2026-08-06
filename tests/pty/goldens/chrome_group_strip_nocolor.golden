@@ -1,0 +1,58 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=2,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=9
+--- text
+[1: pty-s14-chrome_group[sag-s24-grp/ (3)]
+ one.txt three.txt two.txt
+    1 one.txt
+    1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ L  one.txt                                                  utf-8  lf  1:1  all
+--- style
+AAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBB
+BBBBBBBBAAAAAAAAAAAAAAAAAA
+CCCCCCCCCCCCC
+CCCCC
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+DDDCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+--- legend
+A fg=default bg=default attrs=-d--------
+B fg=default bg=default attrs=------r---
+C fg=default bg=default attrs=----------
+D fg=default bg=default attrs=b---------

@@ -1,0 +1,58 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=0,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=5
+--- text
+    1 alpha beta gamma
+    1 delta epsilon
+    2 zet New Tab Group 
+    3 kap name: sag-s24-grp/
+    4     /tmp/sag-s24-grp
+
+              ../
+          [✓] one.txt
+          [ ] three.txt
+          [ ] two.txt
+
+
+
+
+
+
+
+
+
+          1 selected
+          tab focus · space tick · enter create · esc cancel
+
+
+ L  pty-s14-chrome_gp_nocolor.txt                            utf-8  lf  1:1  all
+--- style
+AAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAA
+AAAAAAAAABBBBBBBBBBBBBBB
+AAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAACCCCCCCCCCCCCCCC
+
+AAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAADDDDDDDDDDDDDD
+AAAAAAAAAAAAAAAAAAAAA
+
+
+
+
+
+
+
+
+
+AAAAAAAAABBBBBBBBBBB
+AAAAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+
+
+BBBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+--- legend
+A fg=default bg=default attrs=----------
+B fg=default bg=default attrs=b---------
+C fg=default bg=default attrs=-d--------
+D fg=default bg=default attrs=------r---

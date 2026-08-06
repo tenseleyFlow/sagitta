@@ -1,0 +1,56 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=0,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=3
+--- text
+    1 alpha beta gamma
+    1 delta epsilon
+    2 zeta eta theta iota
+    3 kappa
+    4
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ L  pty-s14-chrome_search_nocolor.txt                utf-8  lf  1:1  all  [1/12]
+--- style
+AAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAA
+AAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+BBBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+--- legend
+A fg=default bg=default attrs=----------
+B fg=default bg=default attrs=b---------

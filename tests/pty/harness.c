@@ -363,13 +363,34 @@ static const char *color_tier(const PtyCtx *c)
     return "truecolor";
 }
 
-bool ptc_env_build(char **envp, const char *colors, const char *state_dir)
+/*
+ * Sprint 27 §7: the degradation variants are selected by the case NAME.
+ *
+ * A suffix rather than a per-case field because the golden is named
+ * after the case too — so `chrome_tabs_nocolor` names one env, one
+ * scene and one golden, and the three cannot drift apart.  An empty
+ * NO_COLOR is the un-set convention, so the default value is "".
+ */
+static const char *no_color_for(const PtyCtx *c)
+{
+    return strstr(c->test->name, "_nocolor") != NULL ? "1" : "";
+}
+
+static const char *ascii_for(const PtyCtx *c)
+{
+    return strstr(c->test->name, "_ascii") != NULL ? "1" : "0";
+}
+
+bool ptc_env_build(char **envp, const char *colors, const char *state_dir,
+                   const char *no_color, const char *ascii)
 {
     static const char *const keys[] = {
         "TERM", "SAG_COLORS", "SAG_TTY_PROBE", "SAG_PROBE_TIMEOUT_MS",
         "SAG_ESC_TIMEOUT_MS", "XDG_STATE_HOME", "LANG", "LC_ALL",
         "SAG_LOG_LEVEL", "SAG_JOB_ELAPSED_MS", "SHELL",
-        "SAG_PICKERS_NOW"
+        "SAG_PICKERS_NOW",
+        /* Sprint 27 §7's degradation variants. */
+        "NO_COLOR", "SAG_ASCII"
     };
     const char *values[] = {
         "xterm-256color", colors, "1", "500", "25", state_dir,
@@ -383,13 +404,15 @@ bool ptc_env_build(char **envp, const char *colors, const char *state_dir)
          * whoever generated them. */
         "/bin/sh",
         /* Sprint 26: pins the undo picker's relative timestamps. */
-        "1700000000"
+        "1700000000",
+        no_color, ascii
     };
     size_t i;
 
     _Static_assert(SAG_ARRAY_LEN(keys) == SAG_PTY_ENV_COUNT,
                    "SAG_PTY_ENV_COUNT must match the key table");
-    if (envp == NULL || colors == NULL || state_dir == NULL)
+    if (envp == NULL || colors == NULL || state_dir == NULL ||
+        no_color == NULL || ascii == NULL)
         return false;
     for (i = 0U; i < SAG_ARRAY_LEN(keys); i++) {
         envp[i] = env_pair(keys[i], values[i]);
@@ -465,7 +488,8 @@ void ptc_spawn(PtyCtx *c, const char *bin, ...)
             return;
         }
     }
-    if (!ptc_env_build(envp, color_tier(c), c->state_dir)) {
+    if (!ptc_env_build(envp, color_tier(c), c->state_dir,
+                       no_color_for(c), ascii_for(c))) {
         strv_free(argv);
         ptc_fail(c, "allocating pinned environment");
         return;

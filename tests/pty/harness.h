@@ -9,7 +9,7 @@
 #include "util/buf.h"
 #include "vt.h"
 
-#define SAG_PTY_ENV_COUNT 12U
+#define SAG_PTY_ENV_COUNT 14U
 
 typedef struct PtySpec {
     /*
@@ -87,7 +87,8 @@ struct PtyCtx {
 extern const PtyCase sag_pty_cases[];
 
 bool sag_pty_spawn(Pty *p, const PtySpec *sp);
-bool ptc_env_build(char **envp, const char *colors, const char *state_dir);
+bool ptc_env_build(char **envp, const char *colors, const char *state_dir,
+                   const char *no_color, const char *ascii);
 void ptc_env_free(char **envp);
 
 void ptc_spawn(PtyCtx *c, const char *bin, ...);

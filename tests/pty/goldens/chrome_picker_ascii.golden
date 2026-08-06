@@ -1,0 +1,63 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=3,2 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=9
+--- text
+[1: pty-s14-chrome_picke[2: sag-pty-0.txt][3: sag-pty-1.txt]
+    1
+find.buffer                                                                     
+ :                                                                             
+
+  build/pty-s14-chrome_picker_ascii.txt                                  build
+  /tmp/sag-pty-0.txt                                                      /tmp
+  /tmp/sag-pty-1.txt                                                      /tmp
+
+
+
+
+
+
+
+
+
+
+
+
+
+  3/3   up/down move . enter open . ^v split . esc
+
+ L  sag-pty-1.txt                                            utf-8  lf  1:1  all
+--- style
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBB
+CCCCC
+DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+CEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+
+CCGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCAAAAA
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCAAAA
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+
+HHHIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
+--- legend
+A fg=#787878 bg=default attrs=-d--------
+B fg=#787878 bg=default attrs=------r---
+C fg=default bg=default attrs=----------
+D fg=#f7e0cc bg=#4e2a0f attrs=bd--------
+E fg=#2f1806 bg=#e77d24 attrs=b---------
+F fg=#f7e0cc bg=#4e2a0f attrs=b---------
+G fg=default bg=default attrs=------r---
+H fg=#ebf4ff bg=#266eba attrs=b---------
+I fg=#dae5f0 bg=#14304c attrs=----------

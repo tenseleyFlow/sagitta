@@ -1,0 +1,60 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=2,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=10
+--- text
+[1: pty-s14-s27_group_me[sag-s24-grp/ (3)]
+ one.txt three.txt two.txt
+ Edit Group...
+ Rename Group...
+------------------
+ Dissolve Group
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ L  one.txt                                                  utf-8  lf  1:1  all
+--- style
+AAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBB
+DDDDDDDDAAAAAAAAAAAAAAAAAA
+CBBBBBBBBBBBBB
+CCCCCCCCCCCCCCCC
+AAAAAAAAAAAAAAAAAA
+CCCCCCCCCCCCCCC
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+EEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+--- legend
+A fg=#787878 bg=default attrs=-d--------
+B fg=default bg=default attrs=------r---
+C fg=default bg=default attrs=----------
+D fg=#787878 bg=default attrs=------r---
+E fg=#ebf4ff bg=#266eba attrs=b---------
+F fg=#dae5f0 bg=#14304c attrs=----------

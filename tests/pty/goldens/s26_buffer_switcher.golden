@@ -7,6 +7,8 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=10
 find.buffer                                                                     
  :                                                                             
 
+  build/pty-s14-s26_buffer_switcher.txt                                  build
+  /tmp/sag-s26-find/alpha.c                                  /tmp/sag-s26-find*
 
 
 
@@ -21,9 +23,7 @@ find.buffer
 
 
 
-
-
-  0/2   up/down move . enter open . ^v split . esc
+  2/2   up/down move . enter open . ^v split . esc
 
  L  alpha.c *                                                utf-8  lf  1:2  all
 --- style
@@ -32,8 +32,8 @@ CCCCCCCCCCCCCCCCCCCCCCCCCC
 DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 CEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 
-
-
+CCGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCAAAAA
+CCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCAAAAAAAAAAAAAAAAAH
 
 
 
@@ -50,7 +50,7 @@ CEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 
 CAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 
-GGGHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
+IIIJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
 --- legend
 A fg=#787878 bg=default attrs=-d--------
 B fg=#787878 bg=default attrs=------r---
@@ -58,5 +58,7 @@ C fg=default bg=default attrs=----------
 D fg=#f7e0cc bg=#4e2a0f attrs=bd--------
 E fg=#2f1806 bg=#e77d24 attrs=b---------
 F fg=#f7e0cc bg=#4e2a0f attrs=b---------
-G fg=#ebf4ff bg=#266eba attrs=b---------
-H fg=#dae5f0 bg=#14304c attrs=----------
+G fg=default bg=default attrs=------r---
+H fg=#78b4ff bg=default attrs=----------
+I fg=#ebf4ff bg=#266eba attrs=b---------
+J fg=#dae5f0 bg=#14304c attrs=----------

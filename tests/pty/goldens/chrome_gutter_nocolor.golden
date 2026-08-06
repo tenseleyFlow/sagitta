@@ -1,0 +1,56 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=0,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=3
+--- text
+    1 short
+    1 a very long line that has to wrap more than once in a narrow window so the
+      continuation indicator is on screen
+    2 tail
+    3
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ L  pty-s14-chrome_gutter_nocolor.txt                        utf-8  lf  1:1  all
+--- style
+AAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAA
+AAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+BBBAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+--- legend
+A fg=default bg=default attrs=----------
+B fg=default bg=default attrs=b---------

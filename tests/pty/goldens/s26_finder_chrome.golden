@@ -7,6 +7,11 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=3
 find.file                                                                       
  :                                                                             
 
+  alpha.c
+  beta.c
+  picker.c
+  tabs.c
+  日本語.c
 
 
 
@@ -18,12 +23,7 @@ find.file
 
 
 
-
-
-
-
-
-  0/5   up/down move . enter open . ^v split . esc
+  5/5   up/down move . enter open . ^v split . esc
 
  L  pty-s14-s26_finder_chrome.txt                            utf-8  lf  1:1  all
 --- style
@@ -32,6 +32,11 @@ AAAAA
 BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 ACDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 
+AAEEEEEEE
+AAAAAAAA
+AAAAAAAAAA
+AAAAAAAA
+AAAAAAAAAA
 
 
 
@@ -43,19 +48,15 @@ ACDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 
 
 
+AFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
 
-
-
-
-
-AEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
-
-FFFGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+GGGHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHH
 --- legend
 A fg=default bg=default attrs=----------
 B fg=#f7e0cc bg=#4e2a0f attrs=bd--------
 C fg=#2f1806 bg=#e77d24 attrs=b---------
 D fg=#f7e0cc bg=#4e2a0f attrs=b---------
-E fg=#787878 bg=default attrs=-d--------
-F fg=#ebf4ff bg=#266eba attrs=b---------
-G fg=#dae5f0 bg=#14304c attrs=----------
+E fg=default bg=default attrs=------r---
+F fg=#787878 bg=default attrs=-d--------
+G fg=#ebf4ff bg=#266eba attrs=b---------
+H fg=#dae5f0 bg=#14304c attrs=----------

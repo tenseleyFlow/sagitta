@@ -25,7 +25,12 @@ void test_pty_environment_exact(void)
         "SHELL=/bin/sh",
         /* Sprint 26 pins the undo picker's relative timestamps, so
          * "3 minutes ago" is the same string on every run. */
-        "SAG_PICKERS_NOW=1700000000"
+        "SAG_PICKERS_NOW=1700000000",
+        /* Sprint 27 §7's degradation variants, pinned to OFF for the
+         * baseline so a case that does not ask for them cannot inherit
+         * whatever the developer's shell happens to export. */
+        "NO_COLOR=",
+        "SAG_ASCII=0"
     };
     char *envp[SAG_PTY_ENV_COUNT + 1U] = {0};
     size_t i;
@@ -35,7 +40,8 @@ void test_pty_environment_exact(void)
     SAG_ASSERT_EQ_U64((u64)SAG_ARRAY_LEN(expected),
                       (u64)SAG_PTY_ENV_COUNT);
 
-    SAG_ASSERT(ptc_env_build(envp, "truecolor", "/tmp/sagitta-pty-state"));
+    SAG_ASSERT(ptc_env_build(envp, "truecolor", "/tmp/sagitta-pty-state",
+                             "", "0"));
     for (i = 0U; i < SAG_PTY_ENV_COUNT; i++)
         SAG_ASSERT_EQ_STR(envp[i], expected[i]);
     SAG_ASSERT_NULL(envp[SAG_PTY_ENV_COUNT]);

@@ -54,6 +54,17 @@ typedef struct PickerState {
     i32 sel_payload;
     bool has_sel;
     u32 scroll;
+    /*
+     * The picker OWNS the command line.
+     *
+     * Until it does, the line still belongs to the `:buffers` prompt
+     * that invoked us — and reading that as the filter pattern made a
+     * freshly opened picker filter its own candidates against the word
+     * "buffers" and show none of them.  The footer said `0/3` and the
+     * list was empty; only typing a character (which opens our line and
+     * replaces the text) made it recover.
+     */
+    bool filter_open;
 
     Rect box;
     /* The filter line's text, re-read on every keystroke. */
@@ -169,6 +180,7 @@ static void ensure_filter(Ed *ed)
     if (!pk.active || ed == NULL || ed->cmdline.active)
         return;
     sag_cmdline_open(ed, SAG_PROMPT_INPUT, "");
+    pk.filter_open = true;
 }
 
 /* Re-reads the visible window from the filter's candidate set. */
@@ -199,7 +211,9 @@ void sag_picker_refilter(Ed *ed)
         return;
     }
     pk.text.len = 0U;
-    sag_cmdline_text(ed, &pk.text);
+    /* Only OUR line is the pattern.  See PickerState.filter_open. */
+    if (pk.filter_open)
+        sag_cmdline_text(ed, &pk.text);
     /*
      * An empty Bytebuf has a NULL data pointer, and the scorer reads a
      * NULL pattern as NO MATCH rather than as the empty pattern — so
@@ -312,6 +326,7 @@ void sag_picker_close(Ed *ed, bool accepted)
     }
     pk.n_ranked = 0U;
     pk.scanning = false;
+    pk.filter_open = false;
     sag_filter_free(&pk.filter_state);
     bytebuf_free(&pk.text);
 }

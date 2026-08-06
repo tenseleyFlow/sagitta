@@ -3419,6 +3419,362 @@ static void case_s26_undo_branches(PtyCtx *c)
     (void)unlink(path);
 }
 
+
+/* ---------------------------------------------------------------- */
+/* Sprint 27 §7: the chrome review                                  */
+/* ---------------------------------------------------------------- */
+
+/*
+ * TWELVE ELEMENTS, FOUR VARIANTS EACH.
+ *
+ * The variants are truecolor, NO_COLOR=1, SAG_COLORS=16 and
+ * SAG_ASCII=1, and they are selected by the case's NAME (see
+ * harness.c's no_color_for / ascii_for).  One name therefore picks the
+ * environment, the scene AND the golden, so the three cannot drift
+ * apart — which is why every case below snapshots under `c->test->name`
+ * rather than a literal.
+ *
+ * What the review is FOR: a chrome element that only works at the top
+ * tier is a chrome element that is broken for whoever set NO_COLOR
+ * because the colours were unreadable on their terminal.  Four goldens
+ * per element is the cheapest way to notice.
+ */
+
+/*
+ * A mouse report, with NO frame expected.
+ *
+ * s18_settle_after_bytes blocks until the editor repaints, and half the
+ * router's events deliberately repaint nothing: an armed press draws no
+ * preview (that is the arming law), and a motion inside one cell
+ * changes no target.  Waiting for a frame after one of those hangs the
+ * case with no clue which byte did it.
+ */
+static void s27_mouse(PtyCtx *c, const char *report)
+{
+    ptc_bytes(c, report);
+    ptc_settle(c, 60);
+}
+
+static void chrome_snapshot(PtyCtx *c)
+{
+    ptc_snapshot(c, c->test->name);
+}
+
+static const u8 chrome_doc[] =
+    "alpha beta gamma\ndelta epsilon\nzeta eta theta iota\nkappa\n";
+
+/* Row 1: three tabs, the active one reversed. */
+static void case_chrome_tabs(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, chrome_doc, sizeof(chrome_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    s23_open_tabs(c, 2);
+    chrome_snapshot(c);
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/* Row 2: the member strip, pinned because we are inside the group. */
+static void case_chrome_group_strip(PtyCtx *c)
+{
+    char path[256];
+
+    s24_fixture_make();
+    if (!s18_open(c, chrome_doc, sizeof(chrome_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    s24_make_group(c);
+    chrome_snapshot(c);
+    force_quit(c);
+    (void)unlink(path);
+    s24_fixture_remove();
+}
+
+/* Pane borders and a joint, with the inactive side dimmed. */
+static void case_chrome_panes(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, chrome_doc, sizeof(chrome_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "ctrl+w v");
+    s18_settle_after_keys(c, "ctrl+w s");
+    chrome_snapshot(c);
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/* The statusline, every field it shows for a saved file. */
+static void case_chrome_status(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, chrome_doc, sizeof(chrome_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "down down right right");
+    chrome_snapshot(c);
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/* The message line, carrying an error. */
+static void case_chrome_msg(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, chrome_doc, sizeof(chrome_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "nosuchcommand ");
+    s18_settle_after_keys(c, "enter");
+    chrome_snapshot(c);
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/* The command line with its completion menu open. */
+static void case_chrome_cmdline(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open_completion_menu(c, path, sizeof(path)))
+        return;
+    chrome_snapshot(c);
+    s18_finish(c, path);
+}
+
+/* The s26 list picker, with a filter typed so a match highlight shows. */
+static void case_chrome_picker(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, chrome_doc, sizeof(chrome_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    s23_open_tabs(c, 2);
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "buffers ");
+    s18_settle_after_keys(c, "enter");
+    chrome_snapshot(c);
+    s18_settle_after_keys(c, "esc");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/* The group picker, in New mode, with one row ticked. */
+static void case_chrome_gp(PtyCtx *c)
+{
+    char path[256];
+
+    s24_fixture_make();
+    if (!s18_open(c, chrome_doc, sizeof(chrome_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "gnew " S24_DIR);
+    s18_settle_after_keys(c, "enter");
+    s18_settle_after_keys(c, "down");
+    s18_settle_after_bytes(c, " ");
+    chrome_snapshot(c);
+    s18_settle_after_keys(c, "esc");
+    force_quit(c);
+    (void)unlink(path);
+    s24_fixture_remove();
+}
+
+/*
+ * The tab context menu, with `Remove from Group` greyed — a disabled
+ * row is DRAWN, so the menu keeps its shape between one right-click and
+ * the next.
+ */
+static void case_chrome_ctxmenu(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, chrome_doc, sizeof(chrome_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    s23_open_tabs(c, 2);
+    s18_settle_after_keys(c, "t m");
+    chrome_snapshot(c);
+    s18_settle_after_keys(c, "esc");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/* The search overlay and its [n/m] counter. */
+static void case_chrome_search(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, chrome_doc, sizeof(chrome_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "/");
+    s18_settle_after_bytes(c, "a");
+    s18_settle_after_keys(c, "enter");
+    chrome_snapshot(c);
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/* The gutter, and the wrap indicators on a line too long for the box. */
+static void case_chrome_gutter(PtyCtx *c)
+{
+    static const u8 wide[] =
+        "short\n"
+        "a very long line that has to wrap more than once in a narrow "
+        "window so the continuation indicator is on screen\n"
+        "tail\n";
+    char path[256];
+
+    if (!s18_open(c, wide, sizeof(wide) - 1U, path, sizeof(path)))
+        return;
+    /* Wrap ON, so the continuation rows — and the gutter's blank
+     * numbering for them — are what the golden records.  Off, the line
+     * simply clips and there is no indicator to review. */
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.view.toggle_wrap ");
+    s18_settle_after_keys(c, "enter");
+    chrome_snapshot(c);
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/*
+ * A drag in progress: the ghost entry, drawn dim at its target, with
+ * Tabs.v untouched underneath.  Snapshotted mid-gesture — the release
+ * never happens.
+ */
+static void case_chrome_drag(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, chrome_doc, sizeof(chrome_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    s23_open_tabs(c, 2);
+    /* Press inside the first entry, then move into the third. */
+    s27_mouse(c, "\x1b[<0;3;1M");
+    s27_mouse(c, "\x1b[<32;60;1M");
+    chrome_snapshot(c);
+    s27_mouse(c, "\x1b[<0;60;1m");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 27: the interaction goldens                               */
+/* ---------------------------------------------------------------- */
+
+/*
+ * Click-to-focus with a CJK filename in the strip.  The entry's cells
+ * are twice its graphemes, so a click resolved from strlen rather than
+ * from the registered span would land on the wrong tab — which is the
+ * Sprint 22 law, tested where it bites hardest.
+ */
+static void case_s27_click_cjk_tab(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, chrome_doc, sizeof(chrome_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c,
+                           "tabedit /tmp/sag-s27-\xe6\xbc\xa2\xe5\xad\x97.txt");
+    s18_settle_after_keys(c, "enter");
+    s23_open_tabs(c, 1);
+    /* Column 3 (1-based in the report) is inside the FIRST entry. */
+    s27_mouse(c, "\x1b[<0;3;1M");
+    s27_mouse(c, "\x1b[<0;3;1m");
+    ptc_snapshot(c, "s27_click_cjk_tab");
+    force_quit(c);
+    (void)unlink(path);
+    (void)unlink("/tmp/sag-s27-\xe6\xbc\xa2\xe5\xad\x97.txt");
+}
+
+/*
+ * The wheel over an UNFOCUSED pane.  The other pane scrolls; the focus
+ * and the cursor do not move — which is the whole reason the wheel
+ * follows the pointer and not the focus.
+ */
+static void case_s27_wheel_unfocused_pane(PtyCtx *c)
+{
+    static const u8 many[] =
+        "l01\nl02\nl03\nl04\nl05\nl06\nl07\nl08\nl09\nl10\n"
+        "l11\nl12\nl13\nl14\nl15\nl16\nl17\nl18\nl19\nl20\n"
+        "l21\nl22\nl23\nl24\nl25\nl26\nl27\nl28\nl29\nl30\n";
+    char path[256];
+
+    if (!s18_open(c, many, sizeof(many) - 1U, path, sizeof(path)))
+        return;
+    /* split_h puts them SIDE BY SIDE, which is the arrangement the
+     * scroll-what-the-pointer-is-over rule exists for: two files to
+     * compare, and reading one must not move the cursor in the other. */
+    s18_settle_after_keys(c, "ctrl+w s");
+    s18_settle_after_keys(c, "ctrl+w left");
+    s27_mouse(c, "\x1b[<65;60;5M");
+    ptc_snapshot(c, "s27_wheel_unfocused_pane");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/*
+ * A dwell opening a group's member strip as a drop target, and the drop
+ * into it.  The strip grows a row mid-gesture, which is a LAYOUT change
+ * — so this golden is also the proof that the pane tree gives the row
+ * back and takes it again cleanly.
+ */
+static void case_s27_dwell_opens_member_strip(PtyCtx *c)
+{
+    char path[256];
+
+    s24_fixture_make();
+    if (!s18_open(c, chrome_doc, sizeof(chrome_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    s24_make_group(c);
+    /* Out of the group, so row 1 has both the document tab and the
+     * group's entry and there is something to drag between. */
+    s18_settle_after_keys(c, "t up");
+    s27_mouse(c, "\x1b[<0;3;1M");
+    s27_mouse(c, "\x1b[<32;30;1M");
+    /* The dwell is a CLOCK, so the case has to wait it out rather than
+     * send another event. */
+    ptc_settle(c, 500);
+    ptc_snapshot(c, "s27_dwell_opens_member_strip");
+    s27_mouse(c, "\x1b[<0;30;1m");
+    force_quit(c);
+    (void)unlink(path);
+    s24_fixture_remove();
+}
+
+/* The GROUP context menu, opened over a strip that has been scrolled —
+ * the case the capture-at-open law exists for. */
+static void case_s27_group_menu_over_scrolled_strip(PtyCtx *c)
+{
+    char path[256];
+
+    s24_fixture_make();
+    if (!s18_open(c, chrome_doc, sizeof(chrome_doc) - 1U, path,
+                  sizeof(path)))
+        return;
+    s24_make_group(c);
+    s18_settle_after_keys(c, "t m");
+    ptc_snapshot(c, "s27_group_menu_over_scrolled_strip");
+    s18_settle_after_keys(c, "esc");
+    force_quit(c);
+    (void)unlink(path);
+    s24_fixture_remove();
+}
+
 const PtyCase sag_pty_cases[] = {
     C(s22_click_in_the_right_pane, modern, 24U, 80U,
       case_s22_click_in_the_right_pane),
@@ -3655,6 +4011,61 @@ const PtyCase sag_pty_cases[] = {
       case_s18_cmdline_zwj_right),
     C(s18_cmdline_horizontal_scroll, modern, 8U, 32U,
       case_s18_cmdline_horizontal_scroll),
+    C(chrome_tabs, modern, 24U, 80U, case_chrome_tabs),
+    C(chrome_tabs_nocolor, modern, 24U, 80U, case_chrome_tabs),
+    C(chrome_tabs_colors_16, modern, 24U, 80U, case_chrome_tabs),
+    C(chrome_tabs_ascii, modern, 24U, 80U, case_chrome_tabs),
+    C(chrome_group_strip, modern, 24U, 80U, case_chrome_group_strip),
+    C(chrome_group_strip_nocolor, modern, 24U, 80U, case_chrome_group_strip),
+    C(chrome_group_strip_colors_16, modern, 24U, 80U, case_chrome_group_strip),
+    C(chrome_group_strip_ascii, modern, 24U, 80U, case_chrome_group_strip),
+    C(chrome_panes, modern, 24U, 80U, case_chrome_panes),
+    C(chrome_panes_nocolor, modern, 24U, 80U, case_chrome_panes),
+    C(chrome_panes_colors_16, modern, 24U, 80U, case_chrome_panes),
+    C(chrome_panes_ascii, modern, 24U, 80U, case_chrome_panes),
+    C(chrome_status, modern, 24U, 80U, case_chrome_status),
+    C(chrome_status_nocolor, modern, 24U, 80U, case_chrome_status),
+    C(chrome_status_colors_16, modern, 24U, 80U, case_chrome_status),
+    C(chrome_status_ascii, modern, 24U, 80U, case_chrome_status),
+    C(chrome_msg, modern, 24U, 80U, case_chrome_msg),
+    C(chrome_msg_nocolor, modern, 24U, 80U, case_chrome_msg),
+    C(chrome_msg_colors_16, modern, 24U, 80U, case_chrome_msg),
+    C(chrome_msg_ascii, modern, 24U, 80U, case_chrome_msg),
+    C(chrome_cmdline, modern, 24U, 80U, case_chrome_cmdline),
+    C(chrome_cmdline_nocolor, modern, 24U, 80U, case_chrome_cmdline),
+    C(chrome_cmdline_colors_16, modern, 24U, 80U, case_chrome_cmdline),
+    C(chrome_cmdline_ascii, modern, 24U, 80U, case_chrome_cmdline),
+    C(chrome_picker, modern, 24U, 80U, case_chrome_picker),
+    C(chrome_picker_nocolor, modern, 24U, 80U, case_chrome_picker),
+    C(chrome_picker_colors_16, modern, 24U, 80U, case_chrome_picker),
+    C(chrome_picker_ascii, modern, 24U, 80U, case_chrome_picker),
+    C(chrome_gp, modern, 24U, 80U, case_chrome_gp),
+    C(chrome_gp_nocolor, modern, 24U, 80U, case_chrome_gp),
+    C(chrome_gp_colors_16, modern, 24U, 80U, case_chrome_gp),
+    C(chrome_gp_ascii, modern, 24U, 80U, case_chrome_gp),
+    C(chrome_ctxmenu, modern, 24U, 80U, case_chrome_ctxmenu),
+    C(chrome_ctxmenu_nocolor, modern, 24U, 80U, case_chrome_ctxmenu),
+    C(chrome_ctxmenu_colors_16, modern, 24U, 80U, case_chrome_ctxmenu),
+    C(chrome_ctxmenu_ascii, modern, 24U, 80U, case_chrome_ctxmenu),
+    C(chrome_search, modern, 24U, 80U, case_chrome_search),
+    C(chrome_search_nocolor, modern, 24U, 80U, case_chrome_search),
+    C(chrome_search_colors_16, modern, 24U, 80U, case_chrome_search),
+    C(chrome_search_ascii, modern, 24U, 80U, case_chrome_search),
+    C(chrome_gutter, modern, 24U, 80U, case_chrome_gutter),
+    C(chrome_gutter_nocolor, modern, 24U, 80U, case_chrome_gutter),
+    C(chrome_gutter_colors_16, modern, 24U, 80U, case_chrome_gutter),
+    C(chrome_gutter_ascii, modern, 24U, 80U, case_chrome_gutter),
+    C(chrome_drag, modern, 24U, 80U, case_chrome_drag),
+    C(chrome_drag_nocolor, modern, 24U, 80U, case_chrome_drag),
+    C(chrome_drag_colors_16, modern, 24U, 80U, case_chrome_drag),
+    C(chrome_drag_ascii, modern, 24U, 80U, case_chrome_drag),
+    C(s27_click_cjk_tab, modern, 24U, 80U, case_s27_click_cjk_tab),
+    C(s27_wheel_unfocused_pane, modern, 24U, 80U,
+      case_s27_wheel_unfocused_pane),
+    C(s27_dwell_opens_member_strip, modern, 24U, 80U,
+      case_s27_dwell_opens_member_strip),
+    C(s27_group_menu_over_scrolled_strip, modern, 24U, 80U,
+      case_s27_group_menu_over_scrolled_strip),
     {NULL, NULL, 0U, 0U, NULL}
 };
 

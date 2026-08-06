@@ -1,0 +1,57 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=23,1 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=3
+--- text
+    1 alpha beta gamma
+    1 delta epsilon
+    2 zeta eta theta iota
+    3 kappa
+    4
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+E: unknown command 'nosuchcommand' (try Tab)                                    
+:nosuchcommand                                                                  
+--- style
+AAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAA
+AAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BCCCCCCCCCCCCCABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+--- legend
+A fg=default bg=default attrs=----------
+B fg=default bg=default attrs=b---------
+C fg=default bg=default attrs=b--u------

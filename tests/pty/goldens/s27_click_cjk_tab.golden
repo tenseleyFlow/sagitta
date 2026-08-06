@@ -1,0 +1,59 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=1,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=7
+--- text
+[1: pty-s14-s27_click_cj[2: sag-s27-漢字.txt][3: sag-pty-0.txt]
+    1 alpha beta gamma
+    1 delta epsilon
+    2 zeta eta theta iota
+    3 kappa
+    4
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ L  pty-s14-s27_click_cjk_tab.txt                            utf-8  lf  1:1  all
+--- style
+AAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+CCCCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCCCCCCCCCCCCCCCC
+CCCCCCCCCCC
+CCCCC
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+DDDEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+--- legend
+A fg=#787878 bg=default attrs=------r---
+B fg=#787878 bg=default attrs=-d--------
+C fg=default bg=default attrs=----------
+D fg=#ebf4ff bg=#266eba attrs=b---------
+E fg=#dae5f0 bg=#14304c attrs=----------

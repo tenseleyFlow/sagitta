@@ -1,0 +1,59 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=1,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=7
+--- text
+[2: sag-pty-0.txt][3: sag-pty-1.txt][1: pty-s14-chrome_drag_
+    1
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ L  sag-pty-1.txt                                            utf-8  lf  1:1  all
+--- style
+AAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBAAAAAAAAAAAAAAAAAAAAAAAA
+CCCCC
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+DDDEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+--- legend
+A fg=idx:8 bg=default attrs=-d--------
+B fg=idx:8 bg=default attrs=------r---
+C fg=default bg=default attrs=----------
+D fg=idx:15 bg=idx:6 attrs=b---------
+E fg=idx:15 bg=idx:4 attrs=----------
