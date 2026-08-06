@@ -8,6 +8,7 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "ui/ctxmenu.h"
 #include "ui/draw.h"
 #include "ui/grouppicker.h"
 #include "ui/picker.h"
@@ -1247,6 +1248,14 @@ void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms)
         sag_mouse_cancel(ed);
         return;
     }
+    /*
+     * Sprint 27 §5: the context menu is a keymap layer, and it is the
+     * TOPMOST one — a menu that let a key through would act on the
+     * document behind an open pop-up, the same law s24's and s26's
+     * dialogs obey.
+     */
+    if (sag_mouse_menu_key(ed, &key))
+        return;
     if (key.ev != SAG_KEY_RELEASE && sag_msg_dismiss_overlay(ed)) {
         return;
     }
@@ -1469,6 +1478,16 @@ void sag_ed_render(Ed *ed)
      */
     if (sag_picker_active(ed)) {
         sag_picker_draw(ed, (Rect){0U, 0U, ed->grid.cols, ed->grid.rows});
+        sag_grid_mark_all(&ed->grid);
+    }
+    /*
+     * Sprint 27 §5: the context menu is drawn after everything, for the
+     * same reason and with the same consequence — its BLOCK and CTX_ROW
+     * regions are added last, and last-added-wins is what makes it
+     * shadow whatever is beneath with no z-order machinery.
+     */
+    if (sag_ctx_active()) {
+        sag_mouse_menu_draw(ed);
         sag_grid_mark_all(&ed->grid);
     }
     if (!ed->cmdline.active)

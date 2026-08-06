@@ -16,6 +16,7 @@
 #include "ui/pickers.h"
 #include "ui/cmdline.h"
 #include "ui/groupnav.h"
+#include "ui/mouse.h"
 #include "ui/grouppicker.h"
 #include "ui/tabs.h"
 #include "util/arena.h"
@@ -443,6 +444,12 @@ static const CmdDesc builtins[] = {
      SAG_CMD_REPEATABLE, "Activate the previous tab"},
     {"ed.tab.move", sag_tab_cmd_move, SAG_ARITY_OPT_INT,
      SAG_CMD_TAKES_COUNT, "Move the active tab to position N"},
+    /* Sprint 27 §5: the tab context menu's rows.  Commands, because
+     * invariant 9 requires a keyboard path for every menu row. */
+    {"ed.tab.close_others", sag_tab_cmd_close_others, SAG_ARITY_NONE, 0U,
+     "Close every tab but the active one"},
+    {"ed.tab.copy_path", sag_tab_cmd_copy_path, SAG_ARITY_NONE, 0U,
+     "Copy the active tab's canonical path to the clipboard"},
     /* Sprint 24 §6: the continuous line.  next/prev walk EVERY open
      * file — members of the active group first, then the row-1 entry
      * beside it — so left/right never dead-ends inside a group. */
@@ -458,6 +465,18 @@ static const CmdDesc builtins[] = {
      "Dissolve the active group; its tabs stay open"},
     {"ed.group.remove_tab", sag_group_cmd_remove_tab, SAG_ARITY_NONE, 0U,
      "Remove the active tab from its group"},
+    /* Sprint 27 §5/§9. */
+    {"ed.ui.context_menu", sag_ui_cmd_context_menu, SAG_ARITY_NONE, 0U,
+     "Open the context menu for the focused tab or group"},
+    {"ed.mouse.enable", sag_mouse_cmd_enable, SAG_ARITY_NONE, 0U,
+     "Turn mouse reporting on for this session"},
+    {"ed.mouse.disable", sag_mouse_cmd_disable, SAG_ARITY_NONE, 0U,
+     "Turn mouse reporting off for this session"},
+    /* Sprint 27 §8: the keyboard twin of dropping a tab into a group. */
+    {"ed.group.add_tab", sag_group_cmd_add_tab, SAG_ARITY_STR, 0U,
+     "Add the active tab to the named group"},
+    {"ed.group.rename", sag_group_cmd_rename, SAG_ARITY_OPT_STR,
+     SAG_CMD_PROMPTS, "Rename the active tab group"},
     {"ed.group.new", sag_gp_cmd_new, SAG_ARITY_OPT_STR, SAG_CMD_PROMPTS,
      "Assemble a new tab group"},
     {"ed.group.edit", sag_gp_cmd_edit, SAG_ARITY_NONE, SAG_CMD_PROMPTS,
@@ -642,6 +661,10 @@ static const BuiltinMeta builtin_meta[] = {
     {"ed.group.new", "s", SAG_RP_FORBID, "gnew"},
     {"ed.group.edit", "", SAG_RP_FORBID, "gedit"},
     {"ed.group.dissolve", "", SAG_RP_FORBID, "gdissolve"},
+    {"ed.group.rename", "s", SAG_RP_OPT, "grename"},
+    {"ed.group.add_tab", "s", SAG_RP_FORBID, "gadd"},
+    {"ed.tab.close_others", "", SAG_RP_FORBID, "tabonly"},
+    {"ed.tab.copy_path", "", SAG_RP_FORBID, "copypath"},
     {"ed.group.remove_tab", "", SAG_RP_FORBID, "gremove"},
     {"ed.group.enter", "", SAG_RP_FORBID, "genter"},
     {"ed.group.leave", "", SAG_RP_FORBID, "gleave"},
@@ -696,7 +719,10 @@ static bool command_name_valid(const char *name)
         /* Sprint 25 */
         "ws",
         /* Sprint 26: the undo branch picker closes s10 §11's deferral. */
-        "undo"};
+        "undo",
+        /* Sprint 27 §9: the runtime mouse toggle.  The option model that
+         * PERSISTS it is Sprint 36. */
+        "mouse"};
     static const char *const verbs[] = {
         "home", "end", "next", "prev", "up", "down", "left", "right",
         "goto", "insert", "delete", "replace", "change", "yank", "paste", "toggle",
@@ -734,7 +760,10 @@ static bool command_name_valid(const char *name)
         /* Sprint 25 */
         "save_state", "restore_state", "info", "forget", "migrate",
         /* Sprint 26 */
-        "file", "buffer", "branches", "symbol"};
+        "file", "buffer", "branches", "symbol",
+        /* Sprint 27 */
+        "close_others", "copy_path", "rename", "context_menu", "add_tab",
+        "enable", "disable"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

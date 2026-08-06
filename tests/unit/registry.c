@@ -1112,6 +1112,19 @@ const SagTest sag_tests[] = {
     T(drag_autoscroll_is_throttled_to_one_entry_per_window),
     T(drag_reports_a_deadline_while_dwelling),
     T(drag_a_group_moves_the_whole_block),
+    T(ctxmenu_placement_clamps_at_all_four_edges),
+    T(ctxmenu_refuses_a_space_it_cannot_fit),
+    T(ctxmenu_is_at_least_the_minimum_width),
+    T(ctxmenu_arrows_skip_separators_and_disabled_rows),
+    T(ctxmenu_enter_invokes_and_escape_closes),
+    T(ctxmenu_swallows_unhandled_keys),
+    T(ctxmenu_a_disabled_row_is_unreachable_by_pointer),
+    T(ctxmenu_two_menus_are_never_both_open),
+    T(ctxmenu_acts_on_the_target_captured_at_open),
+    T(ctxmenu_target_closed_under_it_is_inert),
+    T(ctxmenu_group_menu_captures_the_gid),
+    T(ctxmenu_right_click_in_a_pane_opens_nothing),
+    T(ctxmenu_a_row_handler_reading_a_payload_is_a_bug),
 };
 
 const size_t sag_tests_len = SAG_ARRAY_LEN(sag_tests);

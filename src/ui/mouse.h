@@ -28,6 +28,7 @@
  * press-without-release hangs on the first scroll.
  */
 
+#include "edit/cmd.h"
 #include "edit/motion.h"
 #include "term/input.h"
 #include "text/coords.h"
@@ -158,5 +159,28 @@ u32 sag_mouse_preview_group(const Ed *ed);
 void sag_mouse_tick(Ed *ed, i64 now_ms);
 /* When the router next needs the clock, or 0 when it does not. */
 i64 sag_mouse_deadline(const Ed *ed, i64 now_ms);
+
+/*
+ * §5: the two menus.  Built here rather than in ui/ctxmenu.c because
+ * WHICH rows exist and what they mean is editor policy, and ctxmenu.c
+ * is deliberately ignorant of the editor.
+ */
+bool sag_mouse_open_tab_menu(Ed *ed, u32 tab_id, u16 x, u16 y);
+bool sag_mouse_open_group_menu(Ed *ed, u32 gid, u16 x, u16 y);
+/* The menu's keymap layer, and its draw.  Both no-ops when no menu is
+ * open, so the caller does not have to ask first. */
+bool sag_mouse_menu_key(Ed *ed, const Key *k);
+void sag_mouse_menu_draw(Ed *ed);
+
+/*
+ * §9: the runtime toggle.  Sprint 36 owns the option model that makes
+ * it persist; this is the session-lifetime half.
+ */
+bool sag_mouse_enabled(void);
+void sag_mouse_set_enabled(bool on);
+
+CmdStatus sag_ui_cmd_context_menu(CmdCtx *cx);
+CmdStatus sag_mouse_cmd_enable(CmdCtx *cx);
+CmdStatus sag_mouse_cmd_disable(CmdCtx *cx);
 
 #endif

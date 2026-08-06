@@ -1262,6 +1262,94 @@ CmdStatus sag_tab_cmd_close(CmdCtx *cx)
     return SAG_CMD_OK;
 }
 
+/*
+ * Sprint 27 §5: the tab context menu's rows, as registry commands.
+ *
+ * They exist as commands rather than as menu-only handlers because of
+ * invariant 9: every mouse action has a keyboard path, and the menu row
+ * and the key must reach the same code rather than two implementations
+ * that drift.
+ */
+CmdStatus sag_tab_cmd_close_others(CmdCtx *cx)
+{
+    Ed *ed;
+    u32 keep;
+    u32 doomed[SAG_TAB_MAX];
+    u32 n = 0U;
+    u32 i;
+
+    if (cx == NULL || cx->ed == NULL)
+        return SAG_CMD_ERR_STATE;
+    ed = cx->ed;
+    if (ed->tabs.active < 0)
+        return SAG_CMD_ERR_STATE;
+    if (sag_tab_count(ed) <= 1U) {
+        sag_msg(ed, SAG_MSG_ERROR, "no other tabs");
+        return SAG_CMD_ERR_STATE;
+    }
+    keep = sag_tab_at(ed, ed->tabs.active)->tab_id;
+    /*
+     * IDS FIRST, then close.  Every close compacts the array and
+     * renumbers the indices above it, so a loop over indices would skip
+     * a tab per close and eventually close the wrong file — the exact
+     * hazard tabs.h exists for.
+     */
+    for (i = 0U; i < ed->tabs.v.len; i++) {
+        if (ed->tabs.v.data[i].tab_id != keep)
+            doomed[n++] = ed->tabs.v.data[i].tab_id;
+    }
+    for (i = 0U; i < n; i++) {
+        int idx = sag_tab_index_of_id(ed, doomed[i]);
+
+        /* A modified tab needs an answer, and the answer prompt is
+         * per tab; refuse the whole gesture rather than closing half of
+         * them and leaving a dialog holding the rest. */
+        if (idx < 0)
+            continue;
+        if (sag_tab_modified(ed, idx)) {
+            sag_msg(ed, SAG_MSG_ERROR,
+                    "unsaved changes in another tab; save or force first");
+            return SAG_CMD_ERR_STATE;
+        }
+    }
+    for (i = 0U; i < n; i++) {
+        int idx = sag_tab_index_of_id(ed, doomed[i]);
+
+        if (idx >= 0)
+            (void)sag_tab_close(ed, idx);
+    }
+    ed->layout_dirty = true;
+    ed->full_damage = true;
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_tab_cmd_copy_path(CmdCtx *cx)
+{
+    Ed *ed;
+    const Tab *t;
+    RegVal v;
+
+    if (cx == NULL || cx->ed == NULL)
+        return SAG_CMD_ERR_STATE;
+    ed = cx->ed;
+    t = sag_tab_at(ed, ed->tabs.active);
+    if (t == NULL || t->path == NULL) {
+        sag_msg(ed, SAG_MSG_ERROR, "this tab has no path");
+        return SAG_CMD_ERR_STATE;
+    }
+    /* The CANONICAL path — which is what Tab.path already holds, set at
+     * the one site that establishes a tab's name. */
+    sag_regval_init(&v);
+    bytebuf_append(&v.bytes, (const u8 *)t->path, strlen(t->path));
+    v.type = (u8)SAG_REG_CHARWISE;
+    /* Register `+` is the system clipboard, so this also travels out
+     * through Sprint 12's OSC 52 path. */
+    sag_reg_yank(&ed->regs, (u8)'+', &v);
+    sag_regval_free(&v);
+    sag_msg(ed, SAG_MSG_INFO, "copied %s", t->path);
+    return SAG_CMD_OK;
+}
+
 bool sag_tab_prompt_key(Ed *ed, u8 answer)
 {
     int idx;

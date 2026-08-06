@@ -12,6 +12,7 @@ static struct {
     u32 len;
     u32 empty_queries;
     bool warned_full;
+    bool frozen;
 } regions;
 
 void sag_region_frame_begin(void)
@@ -53,11 +54,33 @@ void sag_region_add(RegionKind kind, Rect rect, i32 payload)
     r->payload = payload;
 }
 
+void sag_region_freeze(bool on)
+{
+    regions.frozen = on;
+}
+
+bool sag_region_frozen(void)
+{
+    return regions.frozen;
+}
+
 Region sag_region_hit(u16 x, u16 y)
 {
     Region none;
     u32 i;
 
+    /*
+     * Sprint 27 §5.  A context-menu row handler must re-find its target
+     * from the identity the menu captured at open time — never from the
+     * cells under the pointer, because the strip can scroll and tabs
+     * can close while the menu is up, and the entry at those
+     * coordinates may be a different file by the time the row is
+     * clicked.  Freezing the table for the duration of an invocation
+     * turns that rule from a comment into an abort.
+     */
+    if (regions.frozen)
+        SAG_BUG("region hit-test during a context-menu action: the "
+                "menu's target is captured at open time (Sprint 27 §5)");
     (void)memset(&none, 0, sizeof(none));
     if (regions.len == 0U) {
         regions.empty_queries++;

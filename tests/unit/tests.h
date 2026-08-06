@@ -1146,5 +1146,18 @@ void test_drag_drop_on_the_blank_tail_leaves_a_sole_group(void);
 void test_drag_autoscroll_is_throttled_to_one_entry_per_window(void);
 void test_drag_reports_a_deadline_while_dwelling(void);
 void test_drag_a_group_moves_the_whole_block(void);
+void test_ctxmenu_placement_clamps_at_all_four_edges(void);
+void test_ctxmenu_refuses_a_space_it_cannot_fit(void);
+void test_ctxmenu_is_at_least_the_minimum_width(void);
+void test_ctxmenu_arrows_skip_separators_and_disabled_rows(void);
+void test_ctxmenu_enter_invokes_and_escape_closes(void);
+void test_ctxmenu_swallows_unhandled_keys(void);
+void test_ctxmenu_a_disabled_row_is_unreachable_by_pointer(void);
+void test_ctxmenu_two_menus_are_never_both_open(void);
+void test_ctxmenu_acts_on_the_target_captured_at_open(void);
+void test_ctxmenu_target_closed_under_it_is_inert(void);
+void test_ctxmenu_group_menu_captures_the_gid(void);
+void test_ctxmenu_right_click_in_a_pane_opens_nothing(void);
+void test_ctxmenu_a_row_handler_reading_a_payload_is_a_bug(void);
 
 #endif

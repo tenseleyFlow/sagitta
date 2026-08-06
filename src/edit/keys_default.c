@@ -69,6 +69,14 @@ static const BindRow keys_L[] = {
     {"t d", "ed.group.dissolve", 0, NULL},
     {"t r", "ed.group.remove_tab", 0, NULL},
     /*
+     * Sprint 27 §5/§8.  Invariant 9: every context-menu row is reachable
+     * without a pointer, and the menu itself is one keystroke away.
+     */
+    {"t m", "ed.ui.context_menu", 0, NULL},
+    {"t l", "ed.group.rename", 0, NULL},
+    {"t o", "ed.tab.close_others", 0, NULL},
+    {"t y", "ed.tab.copy_path", 0, NULL},
+    /*
      * Sprint 24 §7: alt+1..9,0 jump straight to a tab and arm the
      * 500 ms window, so `alt+1` `5` reaches tab 15.  `0` is the TENTH
      * key on the digit row, not the zeroth tab.

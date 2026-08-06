@@ -9,6 +9,7 @@
 #include "edit/pane_cmds.h"
 #include "text/piece.h"
 #include "ui/cmdline.h"
+#include "ui/ctxmenu.h"
 #include "ui/groupnav.h"
 #include "ui/grouppicker.h"
 #include "ui/groups.h"
@@ -260,6 +261,179 @@ static void mouse_wheel(Ed *ed, const Key *k)
 }
 
 /* ---------------------------------------------------------------- */
+/* §5: the context menus                                            */
+/* ---------------------------------------------------------------- */
+
+/*
+ * The rows are OPAQUE ACTIONS to ctxmenu.c, which is what lets that
+ * module stay below the editor in the dependency graph.  The meaning
+ * lives here, with the caller, exactly as §5 requires.
+ */
+enum {
+    CTXA_NONE = 0,
+    CTXA_TAB_CLOSE,
+    CTXA_TAB_CLOSE_OTHERS,
+    CTXA_TAB_COPY_PATH,
+    CTXA_TAB_LEAVE_GROUP,
+    CTXA_GROUP_EDIT,
+    CTXA_GROUP_RENAME,
+    CTXA_GROUP_DISSOLVE
+};
+
+/* Where a menu may be placed: everything above the footer. */
+static Rect menu_allowed(const Ed *ed)
+{
+    u16 rows = ed->grid.rows;
+
+    if (rows > 1U)
+        rows = (u16)(rows - 1U); /* the footer keeps its row */
+    return (Rect){0U, 0U, ed->grid.cols, rows};
+}
+
+bool sag_mouse_open_tab_menu(Ed *ed, u32 tab_id, u16 x, u16 y)
+{
+    int idx = sag_tab_index_of_id(ed, tab_id);
+    Tab *t = sag_tab_at(ed, idx);
+
+    if (t == NULL)
+        return false;
+    sag_ctx_begin((u32)SAG_CTX_KIND_TAB);
+    /*
+     * The target, captured NOW: the tab_id and the canonical path.
+     * Every row re-finds the tab from the id when it is invoked,
+     * because the strip can scroll and tabs can close while the menu is
+     * up — and then the entry at those cells is a different file.
+     */
+    sag_ctx_target(tab_id, t->path);
+    sag_ctx_item("Close Tab", "C-w", CTXA_TAB_CLOSE,
+                 sag_tab_count(ed) > 1U);
+    /* Disabled rows are GREYED, never hidden, so the menu keeps its
+     * shape and a row does not move under the pointer between one
+     * right-click and the next. */
+    sag_ctx_item("Close Other Tabs", NULL, CTXA_TAB_CLOSE_OTHERS,
+                 sag_tab_count(ed) > 1U);
+    sag_ctx_sep();
+    sag_ctx_item("Copy Path", NULL, CTXA_TAB_COPY_PATH, t->path != NULL);
+    sag_ctx_item("Remove from Group", NULL, CTXA_TAB_LEAVE_GROUP,
+                 t->group_id != 0U);
+    return sag_ctx_show(x, y, menu_allowed(ed));
+}
+
+bool sag_mouse_open_group_menu(Ed *ed, u32 gid, u16 x, u16 y)
+{
+    if (sag_group_at(ed, gid) == NULL)
+        return false;
+    sag_ctx_begin((u32)SAG_CTX_KIND_GROUP);
+    sag_ctx_target(gid, NULL);
+    sag_ctx_item("Edit Group...", NULL, CTXA_GROUP_EDIT, true);
+    sag_ctx_item("Rename Group...", NULL, CTXA_GROUP_RENAME, true);
+    sag_ctx_sep();
+    sag_ctx_item("Dissolve Group", NULL, CTXA_GROUP_DISSOLVE, true);
+    return sag_ctx_show(x, y, menu_allowed(ed));
+}
+
+static void invoke_named(Ed *ed, const char *name)
+{
+    CmdCtx cx = {0};
+    CmdId id = sag_cmd_lookup(name, strlen(name));
+
+    cx.ed = ed;
+    cx.win = ed->win;
+    cx.count = 1U;
+    cx.source = SAG_SRC_KEY;
+    (void)sag_ed_invoke(ed, id, &cx);
+}
+
+/*
+ * Runs whatever row was chosen, against the target the menu captured.
+ *
+ * The region table is FROZEN for the duration: a row handler that
+ * reached for a payload would be re-resolving the target from cells
+ * that may since have come to mean a different file, and freezing turns
+ * that from a rule into an abort (ui/region.h).
+ */
+static void apply_menu_action(Ed *ed)
+{
+    u32 action = sag_ctx_take();
+    u32 kind = sag_ctx_kind();
+    u32 target = sag_ctx_target_id();
+
+    if (action == CTXA_NONE)
+        return;
+    sag_region_freeze(true);
+    if (kind == (u32)SAG_CTX_KIND_TAB) {
+        /*
+         * The target becomes active first, resolved from its ID.  A
+         * right-click on a tab is an act of pointing at it, so acting
+         * on it is what the user asked for — and it means the rows can
+         * be the ordinary registry commands rather than a second
+         * implementation that takes a tab argument.
+         */
+        int idx = sag_tab_index_of_id(ed, target);
+
+        if (idx >= 0) {
+            sag_tab_switch(ed, idx);
+            switch (action) {
+            case CTXA_TAB_CLOSE:
+                invoke_named(ed, "ed.tab.close");
+                break;
+            case CTXA_TAB_CLOSE_OTHERS:
+                invoke_named(ed, "ed.tab.close_others");
+                break;
+            case CTXA_TAB_COPY_PATH:
+                invoke_named(ed, "ed.tab.copy_path");
+                break;
+            case CTXA_TAB_LEAVE_GROUP:
+                invoke_named(ed, "ed.group.remove_tab");
+                break;
+            default:
+                break;
+            }
+        }
+    } else if (kind == (u32)SAG_CTX_KIND_GROUP) {
+        u32 was = sag_active_group_id(ed);
+
+        if (was != target)
+            sag_group_enter(ed, target);
+        switch (action) {
+        case CTXA_GROUP_EDIT:
+            invoke_named(ed, "ed.group.edit");
+            break;
+        case CTXA_GROUP_RENAME:
+            invoke_named(ed, "ed.group.rename");
+            break;
+        case CTXA_GROUP_DISSOLVE:
+            invoke_named(ed, "ed.group.dissolve");
+            break;
+        default:
+            break;
+        }
+    }
+    sag_region_freeze(false);
+    ed->layout_dirty = true;
+    ed->full_damage = true;
+}
+
+/* The menu is a keymap layer: it takes the key before any mode does,
+ * and swallows what it does not use. */
+bool sag_mouse_menu_key(Ed *ed, const Key *k)
+{
+    if (ed == NULL || !sag_ctx_active())
+        return false;
+    if (!sag_ctx_key(k))
+        return false;
+    apply_menu_action(ed);
+    ed->full_damage = true;
+    return true;
+}
+
+void sag_mouse_menu_draw(Ed *ed)
+{
+    if (ed != NULL)
+        sag_ctx_draw(&ed->grid);
+}
+
+/* ---------------------------------------------------------------- */
 /* §2: press                                                        */
 /* ---------------------------------------------------------------- */
 
@@ -328,8 +502,33 @@ static void mouse_press(Ed *ed, const Key *k)
     Region hit = sag_region_hit(k->col, k->row);
 
     if (k->button == (u8)SAG_MB_RIGHT) {
-        /* §5 owns the menus; §9 pins that a right-click inside a pane
-         * is unbound and does nothing rather than opening a stub. */
+        /*
+         * §9: a right-click inside a pane is UNBOUND and does nothing.
+         * The document context menu is post-1.0 and is named here so
+         * nobody invents one; a stub menu would be worse than none.
+         */
+        if (sag_ctx_active()) {
+            /* A right-click anywhere closes an open menu — including on
+             * the menu itself, which is how every menu everywhere
+             * behaves. */
+            sag_ctx_close();
+            ed->full_damage = true;
+            return;
+        }
+        if (hit.kind != SAG_REGION_TAB)
+            return;
+        if (hit.payload < 0) {
+            (void)sag_mouse_open_group_menu(ed, (u32)(-hit.payload),
+                                            k->col, (u16)(k->row + 1U));
+        } else {
+            Tab *t = sag_tab_at(ed, hit.payload);
+
+            if (t != NULL) {
+                (void)sag_mouse_open_tab_menu(ed, t->tab_id, k->col,
+                                              (u16)(k->row + 1U));
+            }
+        }
+        ed->full_damage = true;
         return;
     }
     if (k->button != (u8)SAG_MB_LEFT)
@@ -376,8 +575,23 @@ static void mouse_press(Ed *ed, const Key *k)
          * to the mouse without any dialog knowing the router exists. */
         break;
     case SAG_REGION_CTX_ROW:
+        /* Highlighting, not invoking: the action fires at release, and
+         * only when the release lands on the same row. */
+        sag_ctx_hover(hit.payload);
+        ed->full_damage = true;
+        break;
     case SAG_REGION_MENU_ROW:
     case SAG_REGION_NONE:
+        /* A left-click outside an open menu closes it, and is consumed
+         * doing so — the click that dismisses a menu must not also do
+         * whatever is underneath. */
+        if (sag_ctx_active()) {
+            sag_ctx_close();
+            m->phase = SAG_MP_IDLE;
+            m->held = 0U;
+            ed->full_damage = true;
+        }
+        break;
     default:
         break;
     }
@@ -773,6 +987,20 @@ static void mouse_release(Ed *ed, const Key *k)
                     m->press_rgn.payload)
                 (void)sag_picker_accept(ed);
             break;
+        case SAG_REGION_CTX_ROW: {
+            Region up = sag_region_hit(k->col, k->row);
+
+            /* Same row, or nothing: a press that slid onto a neighbour
+             * before coming up was a mis-aim, and invoking the
+             * neighbour is the worst possible reading of it. */
+            if (up.kind == SAG_REGION_CTX_ROW &&
+                up.payload == m->press_rgn.payload) {
+                sag_ctx_invoke(up.payload);
+                apply_menu_action(ed);
+            }
+            ed->full_damage = true;
+            break;
+        }
         default:
             break;
         }
@@ -922,6 +1150,14 @@ void sag_mouse_event(Ed *ed, const Key *k)
     if (ed == NULL || k == NULL || k->kind != (u16)SAG_EV_MOUSE)
         return;
     /*
+     * §9: with the mouse off, events are DROPPED here rather than at
+     * the terminal.  A terminal that keeps reporting after the disable
+     * sequence — or one that never honoured it — must not be able to
+     * move the cursor, and every action still has its keyboard path.
+     */
+    if (!sag_mouse_enabled())
+        return;
+    /*
      * BEFORE the phase machine, and never touching it.  A wheel event
      * has no release, so a state machine keyed on press-without-release
      * hangs on the first scroll — Sprint 4 pinned this and named this
@@ -944,4 +1180,83 @@ void sag_mouse_event(Ed *ed, const Key *k)
     default:
         break;
     }
+}
+
+/* ---------------------------------------------------------------- */
+/* §5/§9: the registry commands this file owns                      */
+/* ---------------------------------------------------------------- */
+
+/*
+ * Invariant 9's entry into the menu: opens it for the FOCUSED tab or
+ * group, anchored at the strip rather than at a pointer that may not
+ * exist.  Without this the menu rows would be mouse-only, and every one
+ * of them would be a feature the keyboard could not reach.
+ */
+CmdStatus sag_ui_cmd_context_menu(CmdCtx *cx)
+{
+    Ed *ed;
+    u32 gid;
+    u16 y;
+
+    if (cx == NULL || cx->ed == NULL)
+        return SAG_CMD_ERR_STATE;
+    ed = cx->ed;
+    if (ed->tabs.active < 0)
+        return SAG_CMD_ERR_STATE;
+    y = (u16)(ed->tab_strip_rect.y + ed->tab_strip_rect.h);
+    gid = sag_active_group_id(ed);
+    if (gid != 0U) {
+        if (!sag_mouse_open_group_menu(ed, gid, ed->tab_strip_rect.x, y))
+            return SAG_CMD_ERR_STATE;
+    } else {
+        Tab *t = sag_tab_at(ed, ed->tabs.active);
+
+        if (t == NULL ||
+            !sag_mouse_open_tab_menu(ed, t->tab_id, ed->tab_strip_rect.x,
+                                     y))
+            return SAG_CMD_ERR_STATE;
+    }
+    ed->full_damage = true;
+    return SAG_CMD_OK;
+}
+
+/*
+ * §9: the runtime toggle.  The option model that PERSISTS it is Sprint
+ * 36; until then it lives for the session, which is what makes it
+ * usable for "this terminal's mouse reporting is fighting me right
+ * now".
+ */
+static bool mouse_enabled = true;
+
+bool sag_mouse_enabled(void)
+{
+    return mouse_enabled;
+}
+
+void sag_mouse_set_enabled(bool on)
+{
+    mouse_enabled = on;
+}
+
+CmdStatus sag_mouse_cmd_enable(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL)
+        return SAG_CMD_ERR_STATE;
+    mouse_enabled = true;
+    sag_msg(cx->ed, SAG_MSG_INFO, "mouse on");
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_mouse_cmd_disable(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL)
+        return SAG_CMD_ERR_STATE;
+    /* Any gesture in flight goes with it: a router that stopped
+     * receiving events mid-drag would sit with the button logically
+     * down forever. */
+    sag_mouse_cancel(cx->ed);
+    sag_ctx_close();
+    mouse_enabled = false;
+    sag_msg(cx->ed, SAG_MSG_INFO, "mouse off");
+    return SAG_CMD_OK;
 }

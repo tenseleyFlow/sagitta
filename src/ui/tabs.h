@@ -225,5 +225,9 @@ CmdStatus sag_tab_cmd_next(CmdCtx *cx);
 CmdStatus sag_tab_cmd_prev(CmdCtx *cx);
 CmdStatus sag_tab_cmd_goto(CmdCtx *cx);
 CmdStatus sag_tab_cmd_move(CmdCtx *cx);
+/* Sprint 27 §5: the tab context menu's rows.  Commands, not menu-only
+ * handlers, so the mouse and the keyboard reach the same code. */
+CmdStatus sag_tab_cmd_close_others(CmdCtx *cx);
+CmdStatus sag_tab_cmd_copy_path(CmdCtx *cx);
 
 #endif

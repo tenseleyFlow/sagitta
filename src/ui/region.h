@@ -95,6 +95,14 @@ Region sag_region_hit(u16 x, u16 y);
 u32 sag_region_count(void);
 
 /*
+ * Sprint 27 §5: freezes the table.  A hit-test while frozen is a BUG
+ * and aborts — see region.c and ui/ctxmenu.h for the rule it enforces.
+ * The context menu is the only caller; it wraps a row's action.
+ */
+void sag_region_freeze(bool on);
+bool sag_region_frozen(void);
+
+/*
  * DoD 10: in a debug build, querying between frame_begin and the first
  * add is a bug — it means the input path ran against a frame that never
  * drew anything.  Returns the number of times that happened.

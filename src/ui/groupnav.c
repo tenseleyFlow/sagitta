@@ -3,9 +3,12 @@
  */
 #include "ui/groupnav.h"
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "edit/ed.h"
+#include "ui/cmdline.h"
 #include "ui/groups.h"
 #include "ui/message.h"
 #include "ui/strip.h"
@@ -264,5 +267,117 @@ CmdStatus sag_group_cmd_remove_tab(CmdCtx *cx)
     sag_group_remove_member(cx->ed, cx->ed->tabs.active);
     cx->ed->layout_dirty = true;
     cx->ed->full_damage = true;
+    return SAG_CMD_OK;
+}
+
+/* ---------------------------------------------------------------- */
+/* Sprint 27 §5/§8: the group menu's rows, as registry commands     */
+/* ---------------------------------------------------------------- */
+
+/*
+ * Adds the ACTIVE tab to the group whose label starts with `name`.
+ *
+ * This exists to close invariant 9's audit for "drop a tab into a
+ * group": the drag has to have a keyboard twin, and the twin has to run
+ * Sprint 24's exact sequence rather than a second implementation of it.
+ */
+CmdStatus sag_group_cmd_add_tab(CmdCtx *cx)
+{
+    Ed *ed;
+    u32 gid = 0U;
+    size_t i;
+    int tab_idx;
+
+    if (cx == NULL || cx->ed == NULL)
+        return SAG_CMD_ERR_STATE;
+    ed = cx->ed;
+    tab_idx = ed->tabs.active;
+    if (tab_idx < 0)
+        return SAG_CMD_ERR_STATE;
+    if (cx->sarg == NULL || cx->sarg_len == 0U) {
+        sag_msg(ed, SAG_MSG_ERROR, "which group?");
+        return SAG_CMD_ERR_ARG;
+    }
+    for (i = 0U; i < ed->groups.v.len; i++) {
+        const TabGroup *g = &ed->groups.v.data[i];
+
+        if (g->label != NULL && strlen(g->label) >= cx->sarg_len &&
+            memcmp(g->label, cx->sarg, cx->sarg_len) == 0) {
+            gid = g->id;
+            break;
+        }
+    }
+    if (gid == 0U) {
+        sag_msg(ed, SAG_MSG_ERROR, "no such group");
+        return SAG_CMD_ERR_ARG;
+    }
+    if (sag_tab_at(ed, tab_idx)->group_id == gid) {
+        sag_msg(ed, SAG_MSG_ERROR, "already in that group");
+        return SAG_CMD_ERR_STATE;
+    }
+    /* Sprint 24's sequence, in Sprint 24's order — the ordinal
+     * off-by-one is its pinned pitfall and must not be reinvented. */
+    if (sag_tab_at(ed, tab_idx)->group_id != 0U)
+        sag_group_remove_member(ed, tab_idx);
+    sag_group_add_member(ed, gid, tab_idx);
+    sag_group_set_ordinal(ed, tab_idx, sag_group_member_count(ed, gid));
+    {
+        int members[SAG_TAB_MAX];
+        int n = sag_group_members(ed, gid, members,
+                                  (int)SAG_ARRAY_LEN(members));
+        int lowest = -1;
+        int k;
+
+        for (k = 0; k < n; k++) {
+            if (lowest < 0 || members[k] < lowest)
+                lowest = members[k];
+        }
+        if (lowest >= 0)
+            sag_group_reorder_block(ed, gid, lowest);
+    }
+    sag_state_mark_dirty(ed);
+    ed->layout_dirty = true;
+    ed->full_damage = true;
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_group_cmd_rename(CmdCtx *cx)
+{
+    Ed *ed;
+    u32 gid;
+    TabGroup *g;
+    char *nu;
+
+    if (cx == NULL || cx->ed == NULL)
+        return SAG_CMD_ERR_STATE;
+    ed = cx->ed;
+    gid = sag_active_group_id(ed);
+    if (gid == 0U) {
+        sag_msg(ed, SAG_MSG_ERROR, "not in a tab group");
+        return SAG_CMD_ERR_STATE;
+    }
+    g = sag_group_at(ed, gid);
+    if (g == NULL)
+        return SAG_CMD_ERR_STATE;
+    if (cx->sarg == NULL || cx->sarg_len == 0U) {
+        /*
+         * No argument: hand the user the command line already holding
+         * the current name, so renaming is an edit rather than a
+         * retype.  The menu row takes this path.
+         */
+        char seed[128];
+
+        (void)snprintf(seed, sizeof(seed), "grename %s",
+                       g->label == NULL ? "" : g->label);
+        sag_cmdline_open(ed, SAG_PROMPT_CMD, seed);
+        return SAG_CMD_OK;
+    }
+    nu = sag_xmalloc(cx->sarg_len + 1U);
+    (void)memcpy(nu, cx->sarg, cx->sarg_len);
+    nu[cx->sarg_len] = '\0';
+    free(g->label);
+    g->label = nu;
+    sag_state_mark_dirty(ed);
+    ed->full_damage = true;
     return SAG_CMD_OK;
 }

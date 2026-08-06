@@ -47,6 +47,14 @@ CmdStatus sag_group_cmd_enter(CmdCtx *cx);
 CmdStatus sag_group_cmd_leave(CmdCtx *cx);
 CmdStatus sag_group_cmd_dissolve(CmdCtx *cx);
 CmdStatus sag_group_cmd_remove_tab(CmdCtx *cx);
+/*
+ * Sprint 27 §5/§8.  add_tab is the keyboard twin of dropping a tab into
+ * a group, and rename is the group menu's row; both exist as commands
+ * so the mouse and the keyboard run the same code rather than two
+ * implementations that drift.
+ */
+CmdStatus sag_group_cmd_add_tab(CmdCtx *cx);
+CmdStatus sag_group_cmd_rename(CmdCtx *cx);
 /* ed.group.from_dir is registered with the DEFER convention in cmd.c —
  * it hard-errors naming Sprint 53 rather than existing here as a stub
  * that does nothing. */
