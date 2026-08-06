@@ -882,6 +882,9 @@ void test_ws_save_stateless_is_a_silent_no_op(void);
 void test_ws_save_unusable_state_home_runs_stateless(void);
 void test_ws_save_has_no_second_atomic_primitive(void);
 void test_ws_save_never_writes_into_the_workspace(void);
+void test_ws_save_write_is_atomic_in_order(void);
+void test_ws_save_leaves_a_git_checkout_clean(void);
+void test_ws_save_survives_kill9_at_every_step(void);
 
 /* Sprint 25 §6: restore. */
 void test_ws_restore_round_trips_tabs_and_groups(void);
@@ -955,6 +958,7 @@ void test_state_corpus_has_at_least_twenty_documents(void);
 void test_state_corpus_round_trips_byte_for_byte(void);
 void test_state_corpus_documents_are_valid_v1(void);
 void test_state_corpus_contains_no_floats(void);
+void test_state_corpus_source_has_no_float_conversions(void);
 void test_state_corpus_holds_no_undo_payload(void);
 void test_state_corpus_noncanonical_documents_parse(void);
 void test_state_corpus_noncanonical_reemits_to_canonical(void);

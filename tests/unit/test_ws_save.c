@@ -23,6 +23,7 @@
 
 #include "harness.h"
 
+#include <errno.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -639,6 +640,71 @@ void test_ws_save_has_no_second_atomic_primitive(void)
     SAG_ASSERT_EQ_I64(n, 0);
 }
 
+/*
+ * DoD 9, in the form the contract states it: a scripted session inside
+ * a GIT CHECKOUT leaves `git status --porcelain` empty, and no .fl file
+ * appears in the workspace.
+ *
+ * "Nothing lands in the workspace" is the promise that makes this
+ * feature safe to have on by default.  A state file written next to
+ * someone's source would show up in their diff, get committed by
+ * accident, and conflict on every merge — which is why the directory
+ * is the workspace and the STATE lives under $XDG_STATE_HOME.
+ */
+void test_ws_save_leaves_a_git_checkout_clean(void)
+{
+    SaveFix f;
+    FILE *p;
+    char cmd[640];
+    char buf[256];
+    bool clean;
+
+    sf_make(&f);
+    /* A real repository, because the assertion is about git's opinion
+     * rather than ours. */
+    (void)snprintf(cmd, sizeof(cmd),
+                   "cd '%s' && git init -q . >/dev/null 2>&1 && "
+                   "git config user.email t@t && git config user.name t && "
+                   "printf 'hello\n' > tracked.txt && git add . && "
+                   "git commit -qm init >/dev/null 2>&1",
+                   f.work);
+    if (system(cmd) != 0) {
+        /* No git here; the CI lane has one. */
+        sf_remove(&f);
+        return;
+    }
+    sag_state_open(&f.ed);
+    SAG_ASSERT(f.ed.state.ready);
+    {
+        char path[256];
+
+        (void)snprintf(path, sizeof(path), "%s/tracked.txt", f.work);
+        SAG_ASSERT(sag_tab_open(&f.ed, path) >= 0);
+    }
+    sag_state_mark_dirty(&f.ed);
+    SAG_ASSERT(sag_state_save(&f.ed));
+    sag_state_close(&f.ed);
+
+    (void)snprintf(cmd, sizeof(cmd),
+                   "cd '%s' && git status --porcelain | wc -l", f.work);
+    p = popen(cmd, "r");
+    SAG_ASSERT_NOT_NULL(p);
+    clean = fgets(buf, (int)sizeof(buf), p) != NULL &&
+            strtol(buf, NULL, 10) == 0;
+    (void)pclose(p);
+    SAG_ASSERT(clean);
+
+    /* And not one .fl anywhere under it. */
+    (void)snprintf(cmd, sizeof(cmd),
+                   "find '%s' -name '*.fl' | wc -l", f.work);
+    p = popen(cmd, "r");
+    SAG_ASSERT_NOT_NULL(p);
+    SAG_ASSERT(fgets(buf, (int)sizeof(buf), p) != NULL);
+    SAG_ASSERT_EQ_I64(strtol(buf, NULL, 10), 0);
+    (void)pclose(p);
+    sf_remove(&f);
+}
+
 /* DoD 9: a full save cycle writes nothing into the workspace itself —
  * everything lands under the state home. */
 void test_ws_save_never_writes_into_the_workspace(void)
@@ -662,4 +728,319 @@ void test_ws_save_never_writes_into_the_workspace(void)
         SAG_ASSERT_EQ_I64(n, 0);
     }
     sf_remove(&f);
+}
+
+/* ---------------------------------------------------------------- */
+/* DoD 8: the write is atomic, in the primitive's order              */
+/* ---------------------------------------------------------------- */
+
+/*
+ * The grep above proves src/ws/ contains no second copy of atomic
+ * replacement.  This proves the copy it DOES use behaves: a state save
+ * issues write -> fsync(file) -> rename -> fsync(dir), in that order.
+ *
+ * Order is the whole property.  Every one of those calls happening is
+ * not enough — renaming before the file's data is on disk leaves a
+ * kill -9 with a state.fl whose name is new and whose contents are
+ * whatever the page cache had, which is precisely the half document
+ * §7 would then have to survive on every subsequent start.
+ *
+ * Driven through s08's LD_PRELOAD shim, which logs each intercepted
+ * call, exactly as the s08 and multicursor durability tests do.
+ */
+
+/* The child half: does one state save with the shim loaded. */
+static void ws_save_shim_child(void)
+{
+    SaveFix f;
+
+    sf_make(&f);
+    sag_state_open(&f.ed);
+    SAG_ASSERT(f.ed.state.writer);
+    /*
+     * The shim logs only while it is ENABLED, so the window is opened
+     * around the save and shut immediately after.  Everything else this
+     * process does — creating the fixture, opening the state dir,
+     * tearing down — writes and syncs too, and would bury the four
+     * calls the ordering assertion is about.
+     */
+    SAG_ASSERT_EQ_I64(setenv("SAG_FAULT_ENABLE", "1", 1), 0);
+    SAG_ASSERT(sag_state_save(&f.ed));
+    SAG_ASSERT_EQ_I64(setenv("SAG_FAULT_ENABLE", "0", 1), 0);
+    sf_remove(&f);
+}
+
+static void ws_sibling_path(char *out, size_t cap, const char *name)
+{
+    const char *program = sag_test_program_path();
+    const char *slash = strrchr(program, '/');
+    int count;
+
+    if (slash == NULL)
+        count = snprintf(out, cap, "./%s", name);
+    else if (slash == program)
+        count = snprintf(out, cap, "/%s", name);
+    else
+        count = snprintf(out, cap, "%.*s/%s", (int)(slash - program),
+                         program, name);
+    SAG_ASSERT(count > 0 && (size_t)count < cap);
+}
+
+static int ws_set_preload(const char *shim)
+{
+#ifdef SAG_ASAN_RUNTIME
+    char joined[PATH_MAX * 2];
+    int n = snprintf(joined, sizeof(joined), "%s:%s", SAG_ASAN_RUNTIME,
+                     shim);
+
+    if (n <= 0 || (size_t)n >= sizeof(joined))
+        return -1;
+    return setenv("LD_PRELOAD", joined, 1);
+#else
+    return setenv("LD_PRELOAD", shim, 1);
+#endif
+}
+
+/* The index of the first log line naming `needle`, or -1. */
+static int ws_log_first(const char *path, const char *needle)
+{
+    FILE *stream = fopen(path, "rb");
+    char line[192];
+    int at = 0;
+
+    if (stream == NULL)
+        return -1;
+    while (fgets(line, sizeof(line), stream) != NULL) {
+        if (strstr(line, needle) != NULL) {
+            (void)fclose(stream);
+            return at;
+        }
+        at++;
+    }
+    (void)fclose(stream);
+    return -1;
+}
+
+void test_ws_save_write_is_atomic_in_order(void)
+{
+    char root[] = "/tmp/sag-ws-atomic-XXXXXX";
+    char log[PATH_MAX];
+    char shim[PATH_MAX];
+    pid_t child;
+    pid_t waited;
+    int status = 0;
+    int wrote;
+    int fsync_file;
+    int renamed;
+    int fsync_dir;
+
+    if (getenv("SAG_WS_ATOMIC_CHILD") != NULL) {
+        ws_save_shim_child();
+        return;
+    }
+    SAG_ASSERT_NOT_NULL(mkdtemp(root));
+    SAG_ASSERT(snprintf(log, sizeof(log), "%s/intercept.log", root) > 0);
+    ws_sibling_path(shim, sizeof(shim), "tests/torture/faultshim.so");
+
+    child = fork();
+    SAG_ASSERT(child >= 0);
+    if (child == 0) {
+        if (setenv("SAG_WS_ATOMIC_CHILD", "1", 1) != 0 ||
+            setenv("SAG_FAULT_LOG", log, 1) != 0 ||
+            /* Log only; inject nothing.  This test is about ORDER. */
+            setenv("SAG_FAULT_ENABLE", "0", 1) != 0 ||
+            setenv("SAG_LOG", "/dev/null", 1) != 0 ||
+            ws_set_preload(shim) != 0)
+            _exit(126);
+        execl(sag_test_program_path(), sag_test_program_path(), "--filter",
+              "ws_save_write_is_atomic_in_order", (char *)NULL);
+        _exit(126);
+    }
+    do {
+        waited = waitpid(child, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+    SAG_ASSERT_EQ_I64(waited, child);
+    SAG_ASSERT(WIFEXITED(status));
+    SAG_ASSERT_EQ_I64(WEXITSTATUS(status), 0);
+
+    wrote = ws_log_first(log, "write");
+    fsync_file = ws_log_first(log, "fsync-file");
+    renamed = ws_log_first(log, "rename");
+    fsync_dir = ws_log_first(log, "fsync-dir");
+    /* Every step happened... */
+    SAG_ASSERT(wrote >= 0);
+    SAG_ASSERT(fsync_file >= 0);
+    SAG_ASSERT(renamed >= 0);
+    SAG_ASSERT(fsync_dir >= 0);
+    /* ...and in the only order that makes a kill -9 safe. */
+    SAG_ASSERT(wrote < fsync_file);
+    SAG_ASSERT(fsync_file < renamed);
+    SAG_ASSERT(renamed < fsync_dir);
+
+    (void)unlink(log);
+    (void)rmdir(root);
+}
+
+/* ---------------------------------------------------------------- */
+/* Torture: kill -9 through the save                                */
+/* ---------------------------------------------------------------- */
+
+/*
+ * The §5 durability claim, exercised rather than argued: a kill -9 at
+ * ANY point inside the save leaves state.fl either untouched or fully
+ * replaced — never a half document.
+ *
+ * This is the one that matters at 3am.  A torn state file is read on
+ * every subsequent start, so a save that can be interrupted into
+ * garbage does not fail once; it fails until somebody deletes the file
+ * by hand, and the only symptom is a workspace that has stopped coming
+ * back.  §7 would catch it and set it aside, but the arrangement would
+ * be gone every time.
+ *
+ * Driven with s08's shim: SAG_FAULT_AT=N _exit(137)s at intercepted
+ * call N, so walking N across the save covers the write, the file
+ * sync, the rename and the directory sync individually.
+ */
+static void ws_torture_child(void)
+{
+    Ed ed;
+    const char *work = getenv("SAG_WS_TORTURE_WORK");
+
+    SAG_ASSERT_NOT_NULL(work);
+    sag_cmd_shutdown();
+    sag_cmd_init();
+    sag_ed_init(&ed);
+    ed.ws.dir = arena_strdup(&ed.arena, work);
+    SAG_ASSERT(sag_ed_open_scratch(&ed));
+    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    sag_state_open(&ed);
+    SAG_ASSERT(ed.state.ready);
+    /* A few tabs, so the document is big enough to span several
+     * intercepted writes rather than landing in one. */
+    {
+        u32 i;
+
+        for (i = 0U; i < 12U; i++) {
+            char path[256];
+
+            (void)snprintf(path, sizeof(path), "%s/f%02u.txt", work,
+                           (unsigned)i);
+            (void)sag_tab_open(&ed, path);
+        }
+    }
+    SAG_ASSERT_EQ_I64(setenv("SAG_FAULT_ENABLE", "1", 1), 0);
+    (void)sag_state_save(&ed);
+    SAG_ASSERT_EQ_I64(setenv("SAG_FAULT_ENABLE", "0", 1), 0);
+    sag_state_dispose(&ed);
+    sag_ed_free(&ed);
+}
+
+/* Absent, or a complete v1 document.  Nothing in between. */
+static bool ws_state_is_whole(const char *path)
+{
+    Arena a;
+    Bytebuf raw;
+    FlParseErr err;
+    FlLit *lit;
+    FILE *fp = fopen(path, "rb");
+    u8 chunk[4096];
+    size_t n;
+    bool ok;
+
+    if (fp == NULL)
+        return true; /* never written yet: the old state is "nothing" */
+    bytebuf_init(&raw);
+    while ((n = fread(chunk, 1U, sizeof(chunk), fp)) > 0U)
+        bytebuf_append(&raw, chunk, n);
+    (void)fclose(fp);
+    arena_init(&a);
+    (void)memset(&err, 0, sizeof(err));
+    lit = sag_fl_parse(&a, raw.data, raw.len, &err);
+    ok = lit != NULL && lit->kind == FL_MAP &&
+         sag_fl_int_or(sag_fl_get(lit, "version"), 0) == 1;
+    if (!ok)
+        (void)fprintf(stderr,
+                      "torn state.fl (%llu bytes): %u:%u %s\n",
+                      (unsigned long long)raw.len, err.line, err.col,
+                      err.msg == NULL ? "schema" : err.msg);
+    arena_free_all(&a);
+    bytebuf_free(&raw);
+    return ok;
+}
+
+void test_ws_save_survives_kill9_at_every_step(void)
+{
+    char state_home[] = "/tmp/sag-wstort-home-XXXXXX";
+    char work[] = "/tmp/sag-wstort-work-XXXXXX";
+    char shim[PATH_MAX];
+    char statefile[PATH_MAX];
+    WsKey key;
+    u32 at;
+    u32 killed = 0U;
+    /* Enough to walk past the rename; the torture LANE runs longer. */
+    const u32 steps = 24U;
+
+    if (getenv("SAG_WS_TORTURE_CHILD") != NULL) {
+        ws_torture_child();
+        return;
+    }
+    SAG_ASSERT_NOT_NULL(mkdtemp(state_home));
+    SAG_ASSERT_NOT_NULL(mkdtemp(work));
+    ws_sibling_path(shim, sizeof(shim), "tests/torture/faultshim.so");
+    SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", state_home, 1), 0);
+    SAG_ASSERT(sag_ws_key(&key, work));
+    SAG_ASSERT(sag_ws_ensure_dir(&key));
+    (void)snprintf(statefile, sizeof(statefile), "%s",
+                   sag_ws_state_path(&key));
+
+    for (at = 1U; at <= steps; at++) {
+        char atbuf[32];
+        pid_t child;
+        pid_t waited;
+        int status = 0;
+
+        (void)snprintf(atbuf, sizeof(atbuf), "%u", (unsigned)at);
+        child = fork();
+        SAG_ASSERT(child >= 0);
+        if (child == 0) {
+            if (setenv("SAG_WS_TORTURE_CHILD", "1", 1) != 0 ||
+                setenv("SAG_WS_TORTURE_WORK", work, 1) != 0 ||
+                setenv("XDG_STATE_HOME", state_home, 1) != 0 ||
+                setenv("SAG_FAULT_AT", atbuf, 1) != 0 ||
+                setenv("SAG_FAULT_ENABLE", "0", 1) != 0 ||
+                setenv("SAG_LOG", "/dev/null", 1) != 0 ||
+                ws_set_preload(shim) != 0)
+                _exit(126);
+            execl(sag_test_program_path(), sag_test_program_path(),
+                  "--filter", "ws_save_survives_kill9_at_every_step",
+                  (char *)NULL);
+            _exit(126);
+        }
+        do {
+            waited = waitpid(child, &status, 0);
+        } while (waited < 0 && errno == EINTR);
+        SAG_ASSERT_EQ_I64(waited, child);
+        /* The child either finished or was killed at step `at`; both
+         * are fine.  What is NOT fine is the file it left behind. */
+        SAG_ASSERT(WIFEXITED(status));
+        SAG_ASSERT(WEXITSTATUS(status) != 126);
+        /* 137 is the shim's _exit at the chosen call. */
+        if (WEXITSTATUS(status) == 137)
+            killed++;
+        SAG_ASSERT(ws_state_is_whole(statefile));
+    }
+    /*
+     * The kills have to have HAPPENED.  If SAG_FAULT_AT never matched
+     * — a renamed env var, a shim that failed to preload, an enable
+     * window that closed too early — every child would run to
+     * completion and this test would report success while exercising
+     * nothing at all.
+     */
+    SAG_ASSERT(killed > 0U);
+    /* And after all that, the document is still usable — the last
+     * completed save survives every interrupted one after it. */
+    SAG_ASSERT(ws_state_is_whole(statefile));
+    sf_rm_rf(state_home);
+    sf_rm_rf(work);
+    (void)unsetenv("XDG_STATE_HOME");
 }

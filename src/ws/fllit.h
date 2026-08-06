@@ -9,10 +9,15 @@
  *
  * THERE ARE NO FLOATS.  The only real number in the model is a pane
  * ratio, carried as `ratio_permille` in [1, 999].  Two reasons, both
- * fatal: printf("%f") honours LC_NUMERIC, so a user in a de_DE locale
- * emits `0,5` and every determinism golden breaks on their machine;
- * and float text does not round-trip exactly, so save->restore->save
- * would not be a fixpoint.
+ * fatal: a floating-point conversion honours LC_NUMERIC, so a user in a
+ * de_DE locale emits `0,5` and every determinism golden breaks on their
+ * machine; and float text does not round-trip exactly, so
+ * save->restore->save would not be a fixpoint.
+ *
+ * DoD 6 greps src/ws/ for the float conversion and parsing specifiers
+ * and expects nothing, so this paragraph deliberately names none of
+ * them — a tripwire that a comment can trip is one a reviewer learns to
+ * wave through.
  *
  * SPRINT 36 REPLACES THIS CODE WITH THE FLETCH VM DATA PATH.  The
  * FORMAT is the contract; the implementation is not.  Everything the

@@ -93,8 +93,12 @@ static void corpus_list(const char *dir, CorpusList *out)
 
         if (len < 4U || strcmp(ent->d_name + len - 3U, ".fl") != 0)
             continue;
-        (void)snprintf(out->names[out->n], sizeof(out->names[0]), "%s",
-                       ent->d_name);
+        /* A name that does not fit is not one of ours: every corpus
+         * document is `NN-short-name.fl`.  Silently truncating would
+         * make the test read a file it did not mean to. */
+        if (len >= sizeof(out->names[0]))
+            continue;
+        (void)memcpy(out->names[out->n], ent->d_name, len + 1U);
         out->n++;
     }
     (void)closedir(d);
@@ -812,6 +816,32 @@ void test_state_corpus_contains_no_floats(void)
         }
         bytebuf_free(&raw);
     }
+}
+
+/*
+ * DoD 6 as a tripwire on the SOURCE, not just the documents.
+ *
+ * The corpus check above proves no float reached a frozen document.
+ * This one proves the code cannot produce or consume one at all —
+ * which is the property that survives someone adding a field.  A
+ * ratio formatted as text would emit `0,5` under a de_DE locale and
+ * break every determinism golden on that machine, and float text does
+ * not round-trip, so save->restore->save would stop being a fixpoint.
+ */
+void test_state_corpus_source_has_no_float_conversions(void)
+{
+    FILE *p = popen("grep -rn '%f\\|%g\\|%e\\|strtod\\|strtof\\|atof' "
+                    "src/ws/ | wc -l",
+                    "r");
+    char buf[64];
+    long n = -1;
+
+    if (p == NULL)
+        return; /* No shell here; the CI lane has one. */
+    if (fgets(buf, (int)sizeof(buf), p) != NULL)
+        n = strtol(buf, NULL, 10);
+    (void)pclose(p);
+    SAG_ASSERT_EQ_I64(n, 0);
 }
 
 /*

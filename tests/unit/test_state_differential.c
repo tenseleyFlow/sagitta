@@ -166,8 +166,12 @@ static void diff_list(const char *dir, DiffList *out)
 
         if (len < 4U || strcmp(ent->d_name + len - 3U, ".fl") != 0)
             continue;
-        (void)snprintf(out->names[out->n], sizeof(out->names[0]), "%s",
-                       ent->d_name);
+        /* A name that does not fit is not one of ours: every corpus
+         * document is `NN-short-name.fl`.  Silently truncating would
+         * make the test read a file it did not mean to. */
+        if (len >= sizeof(out->names[0]))
+            continue;
+        (void)memcpy(out->names[out->n], ent->d_name, len + 1U);
         out->n++;
     }
     (void)closedir(d);
