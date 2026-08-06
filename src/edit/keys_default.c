@@ -68,6 +68,21 @@ static const BindRow keys_L[] = {
     {"t e", "ed.group.edit", 0, NULL},
     {"t d", "ed.group.dissolve", 0, NULL},
     {"t r", "ed.group.remove_tab", 0, NULL},
+    /*
+     * Sprint 24 §7: alt+1..9,0 jump straight to a tab and arm the
+     * 500 ms window, so `alt+1` `5` reaches tab 15.  `0` is the TENTH
+     * key on the digit row, not the zeroth tab.
+     */
+    {"A-1", "ed.tab.goto", 1, NULL},
+    {"A-2", "ed.tab.goto", 2, NULL},
+    {"A-3", "ed.tab.goto", 3, NULL},
+    {"A-4", "ed.tab.goto", 4, NULL},
+    {"A-5", "ed.tab.goto", 5, NULL},
+    {"A-6", "ed.tab.goto", 6, NULL},
+    {"A-7", "ed.tab.goto", 7, NULL},
+    {"A-8", "ed.tab.goto", 8, NULL},
+    {"A-9", "ed.tab.goto", 9, NULL},
+    {"A-0", "ed.tab.goto", 0, NULL},
     {"m", "ed.mark.set", 0, NULL},
     {"'", "ed.mark.jump", 0, NULL},
     {"/", "ed.search.open", 0, NULL},

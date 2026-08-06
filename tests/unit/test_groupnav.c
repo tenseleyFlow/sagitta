@@ -322,3 +322,219 @@ void test_groupnav_walking_into_a_member_hydrates_it(void)
     SAG_ASSERT(sag_tab_is_resident(&ed, 2));
     sag_ed_free(&ed);
 }
+
+/* ---------------------------------------------------------------- */
+/* Sprint 24 §7: the 500 ms digit-extension window                  */
+/* ---------------------------------------------------------------- */
+
+/*
+ * The window's whole design is "jump immediately, then arm", so what
+ * these tests check is that the FIRST jump already happened before any
+ * second digit could arrive — and that a digit which cannot extend it
+ * is swallowed rather than typed into the document.
+ */
+
+static Key nav_digit(char c, u16 mods)
+{
+    Key k;
+
+    (void)memset(&k, 0, sizeof(k));
+    k.kind = SAG_EV_KEY;
+    k.ev = SAG_KEY_PRESS;
+    k.code = (u32)c;
+    k.mods = mods;
+    k.ntext = 1U;
+    k.text[0] = (u8)c;
+    return k;
+}
+
+static void nav_goto(Ed *ed, i64 n)
+{
+    CmdId id = sag_cmd_lookup("ed.tab.goto", 11U);
+    CmdCtx cx;
+
+    SAG_ASSERT(id.v != 0U);
+    (void)memset(&cx, 0, sizeof(cx));
+    cx.ed = ed;
+    cx.win = ed->win;
+    cx.count = 1U;
+    cx.iarg = n;
+    cx.source = SAG_SRC_TEST;
+    SAG_ASSERT_EQ_I64(sag_ed_invoke(ed, id, &cx), SAG_CMD_OK);
+}
+
+/* Opens enough tabs that two-digit jumps have somewhere to land. */
+static void nav_many_tabs(Ed *ed, int n)
+{
+    int i;
+
+    sag_cmd_shutdown();
+    sag_cmd_init();
+    sag_ed_init(ed);
+    SAG_ASSERT(sag_ed_open_scratch(ed));
+    sag_layout_compute(ed->pane_root, (Rect){0U, 0U, 80U, 24U});
+    for (i = 1; i < n; i++) {
+        char path[64];
+
+        (void)snprintf(path, sizeof(path), "/tmp/sag-jmp-%d.txt", i);
+        SAG_ASSERT(sag_tab_open(ed, path) >= 0);
+    }
+}
+
+/*
+ * DoD 7: `alt+1` then `5` reaches tab 15 — and the jump to tab 1
+ * happened in the same frame, with no wait.
+ */
+void test_groupnav_digit_jump_extends_to_two_digits(void)
+{
+    Ed ed;
+
+    nav_many_tabs(&ed, 20);
+    ed.now_ms = 1000;
+    nav_goto(&ed, 1);
+    /* Already there.  Nothing waited half a second to find out whether
+     * a second digit was coming. */
+    SAG_ASSERT_EQ_I64(ed.tabs.active, 0);
+    SAG_ASSERT(sag_tab_jump_armed());
+
+    ed.now_ms = 1100;
+    SAG_ASSERT(sag_tab_jump_key(&ed, nav_digit('5', 0U)));
+    SAG_ASSERT_EQ_I64(ed.tabs.active, 14); /* tab 15, 0-based */
+    /* Re-armed, so a third digit works. */
+    SAG_ASSERT(sag_tab_jump_armed());
+    sag_ed_free(&ed);
+}
+
+/* The modifier may still be held: `alt+1` `alt+5` is the natural way to
+ * type the chord, and rejecting it sent the 5 to the main dispatch as
+ * its own jump — tab 1 then tab 5, never tab 15. */
+void test_groupnav_digit_jump_accepts_held_modifiers(void)
+{
+    Ed ed;
+
+    nav_many_tabs(&ed, 20);
+    ed.now_ms = 1000;
+    nav_goto(&ed, 1);
+    ed.now_ms = 1100;
+    SAG_ASSERT(sag_tab_jump_key(&ed, nav_digit('5', SAG_MOD_ALT)));
+    SAG_ASSERT_EQ_I64(ed.tabs.active, 14);
+
+    nav_goto(&ed, 1);
+    ed.now_ms = 1200;
+    SAG_ASSERT(sag_tab_jump_key(&ed, nav_digit('5', SAG_MOD_CTRL)));
+    SAG_ASSERT_EQ_I64(ed.tabs.active, 14);
+    sag_ed_free(&ed);
+}
+
+/* An expired deadline clears the state BEFORE the key dispatches, so a
+ * digit typed much later is its own keystroke and not a continuation. */
+void test_groupnav_digit_jump_expires_on_the_clock(void)
+{
+    Ed ed;
+
+    nav_many_tabs(&ed, 20);
+    ed.now_ms = 1000;
+    nav_goto(&ed, 1);
+    SAG_ASSERT(sag_tab_jump_armed());
+
+    /* One millisecond past the window. */
+    ed.now_ms = 1000 + SAG_JUMP_WINDOW_MS;
+    SAG_ASSERT(!sag_tab_jump_key(&ed, nav_digit('5', 0U)));
+    SAG_ASSERT(!sag_tab_jump_armed());
+    /* Not consumed, and the tab did not move. */
+    SAG_ASSERT_EQ_I64(ed.tabs.active, 0);
+    sag_ed_free(&ed);
+}
+
+/* A non-digit clears the window first, then dispatches normally. */
+void test_groupnav_digit_jump_releases_a_non_digit(void)
+{
+    Ed ed;
+    Key k;
+
+    nav_many_tabs(&ed, 20);
+    ed.now_ms = 1000;
+    nav_goto(&ed, 1);
+    k = nav_digit('j', 0U);
+    SAG_ASSERT(!sag_tab_jump_key(&ed, k));
+    SAG_ASSERT(!sag_tab_jump_armed());
+    sag_ed_free(&ed);
+}
+
+/*
+ * Out of range: the window clears, the FIRST jump stands, and the digit
+ * is swallowed — it was part of a chord, and a surprise edit while
+ * navigating is worse than a dropped key.
+ */
+void test_groupnav_digit_jump_swallows_an_out_of_range_digit(void)
+{
+    Ed ed;
+
+    nav_many_tabs(&ed, 12);
+    ed.now_ms = 1000;
+    nav_goto(&ed, 1);
+    ed.now_ms = 1100;
+    /* Tab 19 does not exist. */
+    SAG_ASSERT(sag_tab_jump_key(&ed, nav_digit('9', 0U)));
+    /* CONSUMED — so nothing typed a 9 into the document. */
+    SAG_ASSERT(!sag_tab_jump_armed());
+    SAG_ASSERT_EQ_I64(ed.tabs.active, 0); /* the first jump stands */
+    sag_ed_free(&ed);
+}
+
+/*
+ * Landing inside a group changes what the next digit means: it picks
+ * that group's Nth member by ordinal, which is what row 2 is showing
+ * while the user counts.
+ */
+void test_groupnav_digit_jump_picks_a_group_member(void)
+{
+    Ed ed;
+    u32 g;
+
+    g = nav_fixture(&ed);
+    (void)g;
+    ed.now_ms = 1000;
+    /* Tab 3 (1-based) is the group's first member. */
+    nav_goto(&ed, 3);
+    SAG_ASSERT_EQ_I64(ed.tabs.active, 2);
+    SAG_ASSERT(sag_tab_jump_armed());
+
+    ed.now_ms = 1100;
+    /* `2` means the SECOND member, not tab 32. */
+    SAG_ASSERT(sag_tab_jump_key(&ed, nav_digit('2', 0U)));
+    SAG_ASSERT_EQ_I64(ed.tabs.active, 3);
+    sag_ed_free(&ed);
+}
+
+/* Out of range within a group leaves the first jump standing too. */
+void test_groupnav_digit_jump_group_member_out_of_range(void)
+{
+    Ed ed;
+
+    (void)nav_fixture(&ed);
+    ed.now_ms = 1000;
+    nav_goto(&ed, 3);
+    ed.now_ms = 1100;
+    /* The group has three members; there is no ninth. */
+    SAG_ASSERT(sag_tab_jump_key(&ed, nav_digit('9', 0U)));
+    SAG_ASSERT_EQ_I64(ed.tabs.active, 2);
+    SAG_ASSERT(!sag_tab_jump_armed());
+    sag_ed_free(&ed);
+}
+
+/* The deadline is a timer entry, so the hint clears on an idle editor
+ * rather than sitting there promising something until a key arrives. */
+void test_groupnav_digit_jump_deadline_is_a_timer(void)
+{
+    Ed ed;
+
+    nav_many_tabs(&ed, 12);
+    ed.now_ms = 1000;
+    nav_goto(&ed, 1);
+    SAG_ASSERT(sag_tab_jump_armed());
+    /* No keys at all — just the clock reaching the deadline. */
+    sag_timers_fire(&ed.timers, &ed, 1000 + SAG_JUMP_WINDOW_MS);
+    SAG_ASSERT(!sag_tab_jump_armed());
+    sag_ed_free(&ed);
+}

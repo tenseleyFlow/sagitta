@@ -792,10 +792,162 @@ CmdStatus sag_tab_cmd_prev(CmdCtx *cx)
     return tab_step(cx, -1);
 }
 
+/* ---------------------------------------------------------------- */
+/* Sprint 24 §7: the 500 ms digit-extension window                  */
+/* ---------------------------------------------------------------- */
+
 /*
- * A pure function of its argument.  Sprint 24's 500 ms digit-extension
- * window WRAPS this command, so it must not carry state of its own or
- * the wrapper inherits it.
+ * Module-local, because nothing outside this file has any business
+ * knowing a jump is half-finished.
+ */
+static i64 jump_value;
+static i64 jump_deadline_ms;
+static u32 jump_group;
+static bool jump_on;
+static TimerId jump_timer;
+
+bool sag_tab_jump_armed(void)
+{
+    return jump_on;
+}
+
+void sag_tab_jump_clear(Ed *ed)
+{
+    if (ed != NULL && jump_timer != SAG_TIMER_NONE) {
+        (void)sag_timer_cancel(&ed->timers, jump_timer);
+        jump_timer = SAG_TIMER_NONE;
+    }
+    jump_on = false;
+    jump_value = 0;
+    jump_deadline_ms = 0;
+    jump_group = 0U;
+}
+
+/*
+ * Fired by the event-loop timer heap rather than by the next keystroke.
+ *
+ * The hint on the status line promises that a further digit will do
+ * something; if it only cleared when a key arrived, the promise would
+ * sit there indefinitely on an idle editor and then be broken.
+ */
+static void jump_expire(Ed *ed, void *ctx)
+{
+    (void)ctx;
+    if (ed == NULL || !jump_on)
+        return;
+    jump_timer = SAG_TIMER_NONE;
+    sag_tab_jump_clear(ed);
+    sag_msg_clear(ed);
+    ed->footer_dirty = true;
+}
+
+/* Announces what a further digit would do.  The window must never feel
+ * like a lost keystroke. */
+static void jump_arm(Ed *ed, int idx)
+{
+    const Tab *t = sag_tab_at(ed, idx);
+
+    if (t == NULL)
+        return;
+    sag_tab_jump_clear(ed);
+    jump_on = true;
+    jump_value = idx + 1;
+    jump_deadline_ms = ed->now_ms + SAG_JUMP_WINDOW_MS;
+    jump_group = t->group_id;
+    jump_timer = sag_timer_add(&ed->timers, jump_deadline_ms, jump_expire,
+                               NULL);
+    if (jump_group != 0U) {
+        int n = sag_group_member_count(ed, jump_group);
+
+        sag_msg(ed, SAG_MSG_INFO, "tab %lld — a digit picks a member (1-%d)",
+                (long long)jump_value, n);
+    } else {
+        sag_msg(ed, SAG_MSG_INFO, "tab %lld — a digit extends to %lld_",
+                (long long)jump_value, (long long)jump_value);
+    }
+}
+
+/* 0 is the TENTH key on the digit row, not the zeroth thing. */
+static int digit_ordinal(u32 code)
+{
+    int d = (int)(code - (u32)'0');
+
+    return d == 0 ? 10 : d;
+}
+
+bool sag_tab_jump_key(Ed *ed, Key key)
+{
+    int digit;
+
+    if (ed == NULL || !jump_on)
+        return false;
+    if (key.ev == SAG_KEY_RELEASE)
+        return false;
+    /*
+     * Clear FIRST, then let the key dispatch normally.  Returning
+     * without clearing would let a digit typed much later read as a
+     * continuation of a jump the user has long forgotten.
+     */
+    if (ed->now_ms >= jump_deadline_ms) {
+        sag_tab_jump_clear(ed);
+        return false;
+    }
+    /*
+     * Bare `5`, and also `alt+5` / `ctrl+5`: holding the modifier down
+     * is the natural way to type `alt+1` `5`, and accepting only the
+     * bare form sent the second digit to the main dispatch as its own
+     * jump — tab 1 then tab 5, never tab 15.
+     */
+    if (key.code < (u32)'0' || key.code > (u32)'9') {
+        sag_tab_jump_clear(ed);
+        return false;
+    }
+    digit = digit_ordinal(key.code);
+
+    if (jump_group != 0U) {
+        int members[SAG_TAB_MAX];
+        int n = sag_group_members(ed, jump_group, members,
+                                  (int)SAG_ARRAY_LEN(members));
+
+        /* The digit counts what ROW 2 shows, which is what the user is
+         * looking at while counting. */
+        if (digit >= 1 && digit <= n) {
+            sag_tab_switch(ed, members[digit - 1]);
+            sag_tab_jump_clear(ed);
+            sag_msg_clear(ed);
+        } else {
+            sag_msg(ed, SAG_MSG_ERROR, "this group has %d members", n);
+            sag_tab_jump_clear(ed);
+        }
+        return true;
+    }
+
+    {
+        /* Here the digit is a DIGIT, not the tenth key: `1` then `0` is
+         * tab 10, and `1` then `5` is tab 15. */
+        i64 target = jump_value * 10 + (i64)(key.code - (u32)'0');
+        int idx = (int)target - 1;
+
+        if (idx >= 0 && idx < (int)sag_tab_count(ed)) {
+            sag_tab_switch(ed, idx);
+            /* Re-armed, so three digits work. */
+            jump_arm(ed, idx);
+        } else {
+            sag_msg(ed, SAG_MSG_ERROR, "no tab %lld", (long long)target);
+            sag_tab_jump_clear(ed);
+        }
+    }
+    /*
+     * Consumed either way.  The digit was part of a chord, so it must
+     * not fall through and be inserted into the document.
+     */
+    return true;
+}
+
+/*
+ * Jumps NOW and arms the window (§7).  The switch is the whole command;
+ * arming is what lets a second digit supersede it without the first
+ * jump having waited for one.
  */
 CmdStatus sag_tab_cmd_goto(CmdCtx *cx)
 {
@@ -818,6 +970,7 @@ CmdStatus sag_tab_cmd_goto(CmdCtx *cx)
         return SAG_CMD_ERR_ARG;
     }
     sag_tab_switch(cx->ed, idx);
+    jump_arm(cx->ed, idx);
     return SAG_CMD_OK;
 }
 

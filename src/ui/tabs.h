@@ -16,6 +16,7 @@
  */
 
 #include "edit/cmd.h"
+#include "term/input.h"
 #include "ui/layout.h"
 #include "ui/strip.h"
 #include "util/base.h"
@@ -163,6 +164,28 @@ typedef struct TabPrompt {
 
 /* True when the key was consumed by the prompt. */
 bool sag_tab_prompt_key(Ed *ed, u8 answer);
+
+/*
+ * Sprint 24 §7: the 500 ms digit-extension window.
+ *
+ * JUMP IMMEDIATELY, THEN ARM.  Waiting half a second to see whether a
+ * second digit is coming would put that lag on the overwhelmingly
+ * common single-digit case; superseding a jump already made costs
+ * nothing.
+ *
+ * sag_tab_jump_key returns true when it CONSUMED the key.  A digit
+ * arriving inside the window is part of a chord, so an out-of-range one
+ * is swallowed rather than inserted into the document — a surprise edit
+ * while navigating is worse than a dropped key.
+ */
+enum {
+    SAG_JUMP_WINDOW_MS = 500
+};
+
+bool sag_tab_jump_key(Ed *ed, Key key);
+void sag_tab_jump_clear(Ed *ed);
+/* Test seam: how the window currently stands. */
+bool sag_tab_jump_armed(void);
 
 CmdStatus sag_tab_cmd_new(CmdCtx *cx);
 CmdStatus sag_tab_cmd_open(CmdCtx *cx);

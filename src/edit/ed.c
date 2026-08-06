@@ -1251,6 +1251,14 @@ void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms)
     }
     if (ed->cmdline.active && sag_cmdline_key(ed, &key))
         return;
+    /*
+     * Sprint 24 §7.  BEFORE the insert-mode text path: a digit arriving
+     * inside the jump window is the second half of a chord, and letting
+     * it fall through would type it into the document while the user
+     * was navigating.
+     */
+    if (sag_tab_jump_key(ed, key))
+        return;
     if (ed->msg.active && ed->msg.sev == SAG_MSG_ERROR)
         sag_msg_clear(ed);
     if (ed->mode == SAG_MODE_I && key.ev != SAG_KEY_RELEASE &&
