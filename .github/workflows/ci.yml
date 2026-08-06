@@ -5,6 +5,11 @@ on:
   pull_request:
   schedule:
     - cron: '17 4 * * *'
+  # A hosted-runner outage drops the push event entirely: the workflow
+  # never starts, so there is nothing to re-run and the only way back is
+  # an empty commit.  This lets a dropped run be re-launched against the
+  # commit that lost it.
+  workflow_dispatch:
 
 permissions:
   contents: read
