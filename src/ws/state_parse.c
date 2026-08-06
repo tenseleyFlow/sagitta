@@ -687,8 +687,17 @@ static void clamp_all(Ed *ed)
         sag_pane_collect_leaves(ed->tabs.v.data[i].root, leaves,
                                 SAG_ARRAY_LEN(leaves), &n);
         for (k = 0U; k < n; k++) {
-            if (leaves[k]->win != NULL)
-                sag_vp_clamp(leaves[k]->win);
+            Win *w = leaves[k]->win;
+
+            /*
+             * Only RESIDENT windows.  Clamping asks the buffer how many
+             * lines it has, and a deferred one has no text to ask —
+             * reading it here to find out would defeat the deferral for
+             * every tab at once.  sag_tab_hydrate clamps at the first
+             * moment there is something to clamp against.
+             */
+            if (w != NULL && w->buf != NULL && w->buf->tb != NULL)
+                sag_vp_clamp(w);
         }
     }
 }
@@ -702,8 +711,20 @@ SagWsResult sag_state_apply(Ed *ed, const u8 *bytes, u64 len)
     i64 version;
     u32 before;
 
-    if (ed == NULL || bytes == NULL)
+    static const u8 nothing = 0U;
+
+    if (ed == NULL)
         return SAG_WS_FRESH;
+    /*
+     * An EMPTY file is not "nothing to do" — it is a document that does
+     * not parse, and §7 sets it aside like any other.  Treating a NULL
+     * buffer as absent here made a zero-byte state.fl come back FRESH
+     * and stay on disk forever, failing the same way every start.
+     */
+    if (bytes == NULL) {
+        bytes = &nothing;
+        len = 0U;
+    }
     if (!ed->state.doc_ready) {
         arena_init(&ed->state.doc);
         ed->state.doc_ready = true;

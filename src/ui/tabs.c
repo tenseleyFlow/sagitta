@@ -397,6 +397,9 @@ int sag_tab_hydrate(Ed *ed, int idx)
         w->vp.top_sub = top_sub;
         w->vp.left = left;
         w->vp.wrap = wrap;
+        /* Restore step 9, deferred to here: clamp, never follow.  The
+         * file may have shrunk since the state was written. */
+        sag_vp_clamp(w);
     }
     /*
      * Sprint 25 §6: cursors restored into a deferred tab were never

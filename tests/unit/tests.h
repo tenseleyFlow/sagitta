@@ -900,6 +900,22 @@ void test_ws_restore_marks_cost_no_read_until_hydration(void);
 void test_ws_restore_reads_what_save_wrote(void);
 void test_ws_restore_absent_state_is_fresh(void);
 void test_ws_restore_stateless_is_fresh(void);
+
+/* Sprint 25 §7: corruption recovery. */
+void test_ws_recover_absent_is_silent(void);
+void test_ws_recover_unreadable_is_not_set_aside(void);
+void test_ws_recover_parse_error_is_set_aside(void);
+void test_ws_recover_bad_version_is_set_aside(void);
+void test_ws_recover_absent_version_is_set_aside(void);
+void test_ws_recover_non_map_root_is_set_aside(void);
+void test_ws_recover_empty_file_is_set_aside(void);
+void test_ws_recover_oversize_is_set_aside_without_reading(void);
+void test_ws_recover_one_bad_tab_record_keeps_the_rest(void);
+void test_ws_recover_wrong_typed_fields_take_defaults(void);
+void test_ws_recover_retention_caps_at_five(void);
+void test_ws_recover_set_aside_never_overwrites(void);
+void test_ws_recover_every_bad_input_still_starts(void);
+void test_ws_recover_a_reader_still_sets_aside(void);
 void test_strip_lays_entries_left_to_right_without_gaps(void);
 void test_strip_measures_cjk_labels_in_cells(void);
 void test_strip_clips_long_labels(void);
