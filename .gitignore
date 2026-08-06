@@ -1,6 +1,18 @@
 .fac/
 .claude/
-.docs/
+# The Fletch spec is the one thing under .docs/ that is NORMATIVE rather
+# than planning: Sprint 28 freezes it, sprints 29-58 cite its sections by
+# number, and later sprints amend it in §16.  A frozen contract with no
+# history — nothing to diff, blame, or review an amendment against — is
+# not frozen, so this one file is tracked while the corpus around it
+# stays local.
+#
+# `.docs/*` rather than `.docs/`: git cannot re-include a file whose
+# PARENT DIRECTORY is excluded, so ignoring the directory itself would
+# make the negation below silently do nothing.  Excluding the entries
+# instead leaves the directory visible and the one exception effective.
+.docs/*
+!.docs/fletch-spec.md
 .git/
 .idea/
 .vscode/

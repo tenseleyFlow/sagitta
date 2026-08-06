@@ -167,7 +167,19 @@ static bool stop_editor(SagLivePty *pty)
     static const char escape = '\033';
     static const char quit[] = "q!";
     struct timespec settle = {0, 50000000};
-    i64 deadline = sag_live_pty_now_ns() + INT64_C(2000000000);
+    /*
+     * A LIVENESS bound, not a measured quantity.
+     *
+     * The sample is taken before this function runs, so how long the
+     * editor takes to shut down cannot move any number this gate
+     * reports — which means a tight deadline here buys nothing and
+     * costs a flake.  Two seconds, minus the 50 ms settle and two
+     * writes, is not much for a cold-started process on a loaded CI
+     * runner: the lane failed with "cold run 1 did not quit" while the
+     * same measurement passed locally with thirty times the budget to
+     * spare.
+     */
+    i64 deadline = sag_live_pty_now_ns() + INT64_C(20000000000);
     int code;
 
     if (!sag_live_pty_write(pty, &escape, 1U, deadline))
