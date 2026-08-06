@@ -325,27 +325,61 @@ void test_narrow_sliced_rescan_equals_unsliced(void)
     nw_free(&f);
 }
 
-/* Mid-scan the matched count is meaningful, which is what lets the
- * footer show a number while ` scanning…` is up. */
+/*
+ * Mid-pass the matched count is meaningful and only GROWS, which is
+ * what lets the footer show a number while ` scanning…` is up.
+ *
+ * Stated in terms of the public claim rather than an internal cursor:
+ * either pass can be the one in flight — the first keystroke narrows
+ * from the empty set, a backspace rescans — and a test that watched
+ * `scan_at` was really testing which branch it happened to take.
+ */
 void test_narrow_partial_scan_has_a_usable_count(void)
 {
     NwFix f;
     FilterState fs;
-    bool more;
+    FzRanked partial[SAG_FILTER_TOPK];
+    FzRanked whole[SAG_FILTER_TOPK];
+    u32 seen_partial;
+    u32 last = 0U;
+    u32 steps = 0U;
+    u32 n_partial;
+    u32 n_whole;
+    u32 k;
 
     nw_make(&f, 50000U, 5U);
     sag_filter_init(&fs);
     sag_filter_reset(&fs, f.items, f.n, 0U);
-    more = !sag_filter_apply(&fs, f.items, f.n, true, "s", 1U, 1);
-    if (more) {
-        /* Partway through: matches already found, cursor short of the
-         * end, and never more matches than candidates examined. */
-        SAG_ASSERT(fs.scan_at < fs.n_total);
-        SAG_ASSERT(sag_filter_matched(&fs) <= fs.scan_at);
-        while (sag_filter_step(&fs, f.items, true, 0))
-            ;
+    /* A 1 us budget stops almost immediately. */
+    if (!sag_filter_apply(&fs, f.items, f.n, true, "s", 1U, 1)) {
+        seen_partial = sag_filter_matched(&fs);
+        /* Partway through: a usable count, and never more matches than
+         * the corpus holds. */
+        SAG_ASSERT(seen_partial <= f.n);
+        /* The window is drawable mid-pass — that is the whole point of
+         * showing a partial list rather than a spinner. */
+        n_partial = sag_filter_top(&fs, f.items, true, partial,
+                                   SAG_FILTER_TOPK);
+        SAG_ASSERT(n_partial <= (u32)SAG_FILTER_TOPK);
+        last = seen_partial;
+        while (sag_filter_step(&fs, f.items, true, 1)) {
+            u32 now_matched = sag_filter_matched(&fs);
+
+            /* Monotone: a count that went backwards would make the
+             * footer flicker downward as the scan progressed. */
+            SAG_ASSERT(now_matched >= last);
+            last = now_matched;
+            steps++;
+            SAG_ASSERT(steps < 200000U);
+        }
     }
-    SAG_ASSERT_EQ_U64(fs.scan_at, fs.n_total);
+    /* And the finished answer equals an unsliced one. */
+    n_whole = nw_full(&f, true, "s", 1U, whole, SAG_FILTER_TOPK);
+    n_partial = sag_filter_top(&fs, f.items, true, partial,
+                               SAG_FILTER_TOPK);
+    SAG_ASSERT_EQ_U64(n_partial, n_whole);
+    for (k = 0U; k < n_whole; k++)
+        SAG_ASSERT_EQ_U64(partial[k].idx, whole[k].idx);
     sag_filter_free(&fs);
     nw_free(&f);
 }

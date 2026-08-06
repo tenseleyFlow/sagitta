@@ -70,6 +70,23 @@ typedef struct FilterState {
     u32 scan_at;
     u32 n_total;
     bool scanning;
+    /*
+     * A NARROWING pass can be sliced too, and needs its own cursor.
+     *
+     * §7 assumed two characters narrow to under 2 000 candidates, and
+     * the perf gate proved otherwise: on a 100 000-file checkout where
+     * half the tree is under `src/`, typing `src` still matches ~54 000
+     * paths and rescoring them costs ~7.5 ms — over the frame budget,
+     * for a completely ordinary thing to type.
+     *
+     * So narrowing slices as well.  `narrow_read` is the next candidate
+     * to examine and `n_cand` is the write cursor; the write never
+     * overtakes the read, so the set compacts in place while a partial
+     * result stays drawable.
+     */
+    u32 narrow_read;
+    u32 narrow_end;
+    bool narrowing;
 } FilterState;
 
 void sag_filter_init(FilterState *f);

@@ -1,0 +1,19 @@
+# sagitta finder perf baseline v1  (Sprint 26 DoD 6)
+#
+# Recorded on x86_64-linux-gnu, gcc -O2, 100 000 synthetic paths with
+# distinct names across 12 directories.  These are CEILINGS the gate
+# enforces, not observations to match: the gate in tests/perf/finder.c
+# carries the same numbers.
+#
+# metric                        budget_ns    observed_ns    note
+open_to_first_paint             16000000        483000      one 60 Hz frame
+first_keystroke_in_frame         5000000       2013000      sliced; remainder on idle
+narrowing_keystroke_in_frame     5000000       2035000      sliced; remainder on idle
+worst_single_slice               3000000       2030000      no frame blocks
+#
+# INFORMATIONAL, deliberately not gated.  Fully narrowing a pattern that
+# matches ~54 000 of 100 000 candidates — `src` on a checkout where half
+# the tree is under src/ — costs this much wall clock spread across idle
+# slices.  No in-frame budget can make that instant; the gates above
+# bound what blocks a frame, and this says what the rest costs.
+narrowing_total_all_slices             --      13488000    ~54 000 candidates

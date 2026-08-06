@@ -72,6 +72,9 @@ void sag_filter_reset(FilterState *f, const PickItem *items, u32 n,
     f->pat[0] = '\0';
     f->scan_at = 0U;
     f->scanning = false;
+    f->narrowing = false;
+    f->narrow_read = 0U;
+    f->narrow_end = 0U;
     f->n_cand = 0U;
     if (items == NULL)
         return;
@@ -118,39 +121,58 @@ static i32 score_one(const PickItem *items, const FilterCand *c,
         blen = end - start;
     }
     sb = sag_fz_score(pat, plen, text + boff, blen, NULL);
-    if (path_mode)
-        sp = sag_fz_score(pat, plen, text, c->len, NULL);
-    if (sb == SAG_FZ_NO_MATCH && sp == SAG_FZ_NO_MATCH)
-        return SAG_FZ_NO_MATCH;
-    /* A basename hit at prefix strength or better outranks every fuzzy
+    /*
+     * A basename hit at prefix strength or better outranks every fuzzy
      * path match, globally — which is why `src` selects `src/` and not
-     * `src/file.c`. */
+     * `src/file.c`.  Checked BEFORE scoring the full path, because the
+     * path score is then unused: computing it anyway doubled the work
+     * on exactly the candidates that matched best.
+     */
     if (sb >= 5000) {
         return sb > INT32_MAX - (i32)SAG_FZ_BASENAME_TIER
                    ? INT32_MAX
                    : sb + (i32)SAG_FZ_BASENAME_TIER;
     }
+    if (path_mode)
+        sp = sag_fz_score(pat, plen, text, c->len, NULL);
+    if (sb == SAG_FZ_NO_MATCH && sp == SAG_FZ_NO_MATCH)
+        return SAG_FZ_NO_MATCH;
     if (sb != SAG_FZ_NO_MATCH && sb >= sp)
         return sb;
     return sp;
 }
 
-/* Rescores the CURRENT set in place, dropping what no longer matches. */
-static void narrow(FilterState *f, const PickItem *items, bool path_mode)
+/*
+ * Rescores the current set in place, dropping what no longer matches.
+ *
+ * Resumable: `narrow_read` walks the old set while `n_cand` writes the
+ * survivors behind it.  The write cursor can never overtake the read
+ * cursor — a survivor is written at or before the slot it came from —
+ * so the compaction is safe to stop and continue mid-pass.
+ */
+static bool narrow_step(FilterState *f, const PickItem *items,
+                        bool path_mode, i64 budget_us)
 {
-    u32 kept = 0U;
-    u32 i;
+    i64 started = budget_us > 0 ? now_us() : 0;
+    u32 checked = 0U;
 
-    for (i = 0U; i < f->n_cand; i++) {
-        i32 s = score_one(items, &f->cand[i], path_mode, f->pat, f->plen);
+    while (f->narrow_read < f->narrow_end) {
+        i32 s = score_one(items, &f->cand[f->narrow_read], path_mode,
+                          f->pat, f->plen);
 
-        if (s == SAG_FZ_NO_MATCH)
-            continue;
-        f->cand[kept] = f->cand[i];
-        f->score[kept] = s;
-        kept++;
+        if (s != SAG_FZ_NO_MATCH) {
+            f->cand[f->n_cand] = f->cand[f->narrow_read];
+            f->score[f->n_cand] = s;
+            f->n_cand++;
+        }
+        f->narrow_read++;
+        checked++;
+        if (budget_us > 0 && (checked & 0xFFU) == 0U &&
+            now_us() - started >= budget_us)
+            return true;
     }
-    f->n_cand = kept;
+    f->narrowing = false;
+    return false;
 }
 
 /* True when `pat` has the filter's current pattern as a STRICT prefix. */
@@ -182,7 +204,8 @@ bool sag_filter_apply(FilterState *f, const PickItem *items, u32 n,
         sag_filter_reset(f, items, n, f->src_gen);
         can_narrow = plen == 0U;
     } else {
-        can_narrow = !f->scanning && extends(f, pat, plen);
+        can_narrow = !f->scanning && !f->narrowing &&
+                     extends(f, pat, plen);
     }
     if (plen > 0U)
         (void)memcpy(f->pat, pat, (size_t)plen);
@@ -195,10 +218,13 @@ bool sag_filter_apply(FilterState *f, const PickItem *items, u32 n,
          * appear by adding a character to the pattern, so nothing
          * outside the current set could have started matching.
          */
-        narrow(f, items, path_mode);
+        f->narrow_read = 0U;
+        f->narrow_end = f->n_cand;
+        f->n_cand = 0U;
+        f->narrowing = true;
         f->scanning = false;
         f->scan_at = f->n_total;
-        return true;
+        return !narrow_step(f, items, path_mode, budget_us);
     }
     /*
      * Backspace or a mid-line edit.  The old set is useless — the new
@@ -208,17 +234,25 @@ bool sag_filter_apply(FilterState *f, const PickItem *items, u32 n,
     f->n_cand = 0U;
     f->scan_at = 0U;
     f->scanning = true;
+    f->narrowing = false;
     return !sag_filter_step(f, items, path_mode, budget_us);
 }
 
 bool sag_filter_step(FilterState *f, const PickItem *items, bool path_mode,
                      i64 budget_us)
 {
-    i64 started = budget_us > 0 ? now_us() : 0;
+    i64 started;
     u32 checked = 0U;
 
-    if (f == NULL || items == NULL || !f->scanning)
+    if (f == NULL || items == NULL)
         return false;
+    /* A sliced NARROW resumes here too, so callers have one "keep
+     * going" entry point regardless of which pass is in flight. */
+    if (f->narrowing)
+        return narrow_step(f, items, path_mode, budget_us);
+    if (!f->scanning)
+        return false;
+    started = budget_us > 0 ? now_us() : 0;
     while (f->scan_at < f->n_total) {
         FilterCand c;
         i32 s;

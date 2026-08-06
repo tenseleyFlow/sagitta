@@ -200,6 +200,7 @@ PERF_UNITS_OBJ := $(BUILD)/tests/perf/perf_units.o
 PERF_MULTICURSOR_OBJ := $(BUILD)/tests/perf/multicursor.o
 PERF_CMDCOMP_OBJ := $(BUILD)/tests/perf/perf_cmdcomp.o
 PERF_STATE_OBJ := $(BUILD)/tests/perf/perf_state.o
+PERF_FINDER_OBJ := $(BUILD)/tests/perf/finder.o
 LIVE_PTY_OBJ := $(BUILD)/tests/support/live_pty.o
 PERF_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 GEN_BIGFILE_OBJ := $(BUILD)/scripts/gen-bigfile.o
@@ -233,6 +234,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(FUZZ_LIB_OBJ) \
                 $(PERF_MULTICURSOR_OBJ) \
                 $(PERF_CMDCOMP_OBJ) \
                 $(PERF_STATE_OBJ) \
+                $(PERF_FINDER_OBJ) \
                 $(GEN_BIGFILE_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) $(FAULTSHIM)))
@@ -252,7 +254,7 @@ endif
         fixtures fixtures-quick fixtures-verify \
         fixtures-verify-quick \
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
-        perf-units perf-multicursor perf-cmdcomp perf-state \
+        perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
         perf-undo perf-textbuf perf-huge perf-update perf-baseline-guard \
         perf-gate-selftest perf-latency perf-latency-selftest \
         torture torture-build torture-live-check
@@ -405,6 +407,10 @@ $(BUILD)/perf_state: $(PERF_CORE_OBJ) $(PERF_STATE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(PERF_STATE_OBJ)
 
+$(BUILD)/perf_finder: $(PERF_CORE_OBJ) $(PERF_FINDER_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
+		$(PERF_FINDER_OBJ)
+
 $(TORTURE_CHILD): $(TORTURE_CORE_OBJ) $(TORTURE_CHILD_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TORTURE_CORE_OBJ) \
 		$(TORTURE_CHILD_OBJ)
@@ -529,7 +535,7 @@ perf-piece: $(BUILD)/perf_piece
 perf: perf-unicode perf-render perf-scroll perf-piece perf-cursor perf-undo perf-textbuf \
       perf-latency perf-jobstream perf-re-pathological \
       perf-re-throughput perf-search-latency \
-      perf-units perf-multicursor perf-cmdcomp perf-state
+      perf-units perf-multicursor perf-cmdcomp perf-state perf-finder
 
 perf-cursor: $(BUILD)/perf_cursor
 	$(BUILD)/perf_cursor
@@ -548,6 +554,9 @@ perf-cmdcomp: $(BUILD)/perf_cmdcomp
 
 perf-state: $(BUILD)/perf_state
 	$(BUILD)/perf_state
+
+perf-finder: $(BUILD)/perf_finder
+	$(BUILD)/perf_finder
 
 perf-latency: $(BUILD)/perf_latency $(BUILD)/sagitta
 	$(BUILD)/perf_latency --sagitta $(abspath $(BUILD)/sagitta) \
@@ -739,6 +748,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/sagitta
          $(PERF_MULTICURSOR_OBJ:.o=.d) \
          $(PERF_CMDCOMP_OBJ:.o=.d) \
          $(PERF_STATE_OBJ:.o=.d) \
+         $(PERF_FINDER_OBJ:.o=.d) \
          $(GEN_BIGFILE_OBJ:.o=.d) \
          $(TORTURE_CHILD_OBJ:.o=.d) \
 	 $(TORTURE_DRIVER_OBJ:.o=.d) $(TORTURE_LIVE_OBJ:.o=.d)
