@@ -1547,6 +1547,19 @@ void sag_ed_render(Ed *ed)
     }
     if (ed->full_damage || ed->footer_dirty)
         sag_draw_footer(ed, win);
+    /*
+     * The picker draws LAST, after the footer.
+     *
+     * It is modal and owns its rectangle, and its filter line IS the
+     * command line — so drawing it inside sag_draw_panes meant the
+     * footer then painted the same widget at the bottom of the screen
+     * and left the picker's copy blank.  One widget, one place, and the
+     * modal thing on top.
+     */
+    if (sag_picker_active(ed)) {
+        sag_picker_draw(ed, (Rect){0U, 0U, ed->grid.cols, ed->grid.rows});
+        sag_grid_mark_all(&ed->grid);
+    }
     if (!ed->cmdline.active)
         sag_draw_cursor(ed, win);
     ed->frame.len = 0U;

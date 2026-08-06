@@ -22,7 +22,10 @@ void test_pty_environment_exact(void)
         /* Sprint 19 pins both so job goldens are byte-stable and
          * machine-independent. */
         "SAG_JOB_ELAPSED_MS=1240",
-        "SHELL=/bin/sh"
+        "SHELL=/bin/sh",
+        /* Sprint 26 pins the undo picker's relative timestamps, so
+         * "3 minutes ago" is the same string on every run. */
+        "SAG_PICKERS_NOW=1700000000"
     };
     char *envp[SAG_PTY_ENV_COUNT + 1U] = {0};
     size_t i;

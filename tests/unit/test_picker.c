@@ -323,8 +323,16 @@ void test_picker_swallows_unhandled_keys(void)
     SAG_ASSERT(!sag_picker_key(&f.ed, &k));
 }
 
-/* The filter line is the s18 widget, so it is open while the picker
- * is. */
+/*
+ * The filter line is the s18 widget, opened LAZILY on the first key or
+ * draw.
+ *
+ * Not at open time: a picker is normally launched from `:find`, and
+ * that prompt is still up while the command runs — so a filter line
+ * opened inside the command was closed again the moment the command
+ * returned, leaving a picker nobody could type into.  The guarantee is
+ * therefore "by the time you can interact with it", not "immediately".
+ */
 void test_picker_filter_line_is_the_cmdline(void)
 {
     static const PickItem items[] = {{"alpha", NULL, 1, 0U}};
@@ -333,9 +341,18 @@ void test_picker_filter_line_is_the_cmdline(void)
     pk_make(&f);
     SAG_ASSERT(!f.ed.cmdline.active);
     pk_open(&f, items, 1U, false);
+    /* A draw is enough to bring it up... */
+    sag_picker_draw(&f.ed, (Rect){0U, 0U, 80U, 24U});
+    SAG_ASSERT(f.ed.cmdline.active);
+    sag_picker_close(&f.ed, false);
+
+    /* ...and so is a key, for a picker opened and typed into without an
+     * intervening frame. */
+    pk_open(&f, items, 1U, false);
+    SAG_ASSERT(!f.ed.cmdline.active);
+    pk_type(&f, 'a');
     SAG_ASSERT(f.ed.cmdline.active);
     /* Typing reaches it, and the text comes back out of it. */
-    pk_type(&f, 'a');
     {
         Bytebuf text;
 

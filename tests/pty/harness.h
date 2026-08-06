@@ -9,9 +9,18 @@
 #include "util/buf.h"
 #include "vt.h"
 
-#define SAG_PTY_ENV_COUNT 11U
+#define SAG_PTY_ENV_COUNT 12U
 
 typedef struct PtySpec {
+    /*
+     * Sprint 26: the child's working directory, or NULL to inherit.
+     *
+     * The finder walks the WORKSPACE, which is the process's cwd — so a
+     * case that did not set this listed whatever happened to be in the
+     * repository, and its golden would change every time a file was
+     * added anywhere in the tree (invariant 5).
+     */
+    const char *cwd;
     const char *path;
     char *const *argv;
     char *const *envp;
@@ -68,6 +77,10 @@ struct PtyCtx {
     Bytebuf pre_resume;
     bool resumed;
     bool marked_resume;
+    /* Set by a case before spawning; NULL inherits the runner's. */
+    const char *cwd;
+    /* The binary, made absolute when cwd is set. */
+    char *resolved_bin;
     char failure[512];
 };
 
@@ -100,6 +113,9 @@ void ptc_expect_exit(PtyCtx *c, int code);
  * still RUNNING — after the quit the terminal has been torn down, and
  * the comparison then fails on teardown rather than on state. */
 void ptc_mark_resume(PtyCtx *c);
+/* Sets the child's working directory for the next spawn — the finder's
+ * workspace root.  Must be called before ptc_spawn. */
+void ptc_set_cwd(PtyCtx *c, const char *dir);
 void ptc_resume(PtyCtx *c, const char *bin, ...);
 /* Asserts the CURRENT grid is byte-identical to the pre-resume one. */
 void ptc_check_resume_exact(PtyCtx *c);

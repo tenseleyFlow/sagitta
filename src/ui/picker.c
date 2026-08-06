@@ -160,6 +160,17 @@ i32 sag_picker_selected(const Ed *ed)
 /* Filtering                                                        */
 /* ---------------------------------------------------------------- */
 
+/*
+ * Opens the filter line if it is not already up.  See sag_picker_open
+ * for why this cannot happen at open time.
+ */
+static void ensure_filter(Ed *ed)
+{
+    if (!pk.active || ed == NULL || ed->cmdline.active)
+        return;
+    sag_cmdline_open(ed, SAG_PROMPT_INPUT, "");
+}
+
 /* Re-reads the visible window from the filter's candidate set. */
 static void refresh_window(void)
 {
@@ -272,11 +283,17 @@ void sag_picker_open(Ed *ed, const PickerSpec *s)
     bytebuf_init(&pk.text);
     sag_filter_init(&pk.filter_state);
     /*
-     * Law 2: the filter line IS the s18 widget.  Opening it here is
-     * what gives the picker every motion, every register and every
-     * completion binding for free.
+     * Law 2: the filter line IS the s18 widget — but it is opened
+     * LAZILY, not here.
+     *
+     * A picker is normally launched from the command line (`:find`),
+     * and that prompt is still open while the command runs.  Opening
+     * ours inside the command meant the invoking prompt's close, which
+     * happens the moment the command returns, closed the picker's
+     * filter line too — leaving a picker with a blank input row and no
+     * way to type into it.  ensure_filter opens it on the first key or
+     * draw, by which time the caller's prompt is gone.
      */
-    sag_cmdline_open(ed, SAG_PROMPT_INPUT, "");
     sag_picker_refilter(ed);
     ed->full_damage = true;
     ed->layout_dirty = true;
@@ -376,6 +393,7 @@ bool sag_picker_key(Ed *ed, const Key *k)
 
     if (!pk.active || ed == NULL || k == NULL)
         return false;
+    ensure_filter(ed);
     page = list_rows();
     if (page == 0U)
         page = 1U;
@@ -555,10 +573,12 @@ void sag_picker_draw(Ed *ed, Rect area)
     u16 rows;
     u16 i;
     u32 cur;
+    u16 row_width;
     char line[SAG_PICKER_MAX_W + 64];
 
     if (!pk.active || ed == NULL || area.w == 0U || area.h == 0U)
         return;
+    ensure_filter(ed);
     w = area.w < (u16)SAG_PICKER_MAX_W ? area.w : (u16)SAG_PICKER_MAX_W;
     if (w > area.w - 2U)
         w = (u16)(area.w > 2U ? area.w - 2U : area.w);
@@ -601,6 +621,14 @@ void sag_picker_draw(Ed *ed, Rect area)
         else if (cur >= pk.scroll + rows)
             pk.scroll = (u32)(cur - rows + 1U);
     }
+    /* Rows stop at the preview's edge when there is one. */
+    {
+        u16 list_w = w;
+
+        if (pk.spec.preview != NULL && w >= (u16)SAG_PICKER_PREVIEW_MIN_W)
+            list_w = (u16)(w / 2U);
+        row_width = list_w;
+    }
     for (i = 0U; i < rows; i++) {
         u32 idx = pk.scroll + i;
         u16 y = (u16)(y0 + 3U + i);
@@ -609,7 +637,7 @@ void sag_picker_draw(Ed *ed, Rect area)
             break;
         if (pk.ranked[idx].idx >= n)
             continue;
-        draw_row(ed, y, x0, w, &items[pk.ranked[idx].idx],
+        draw_row(ed, y, x0, row_width, &items[pk.ranked[idx].idx],
                  &pk.ranked[idx].m, idx == cur);
         /*
          * The region payload is the item's PAYLOAD, not the row — the
@@ -617,7 +645,8 @@ void sag_picker_draw(Ed *ed, Rect area)
          * the file the user pointed at even if the list reorders
          * between the paint and the press.
          */
-        sag_region_add(SAG_REGION_PICK_ROW, (Rect){x0, y, w, 1U},
+        sag_region_add(SAG_REGION_PICK_ROW,
+                       (Rect){x0, y, row_width, 1U},
                        items[pk.ranked[idx].idx].payload);
     }
 
@@ -635,8 +664,24 @@ void sag_picker_draw(Ed *ed, Rect area)
                         (const u8 *)line, strlen(line), dim, bg,
                         SAG_ATTR_DIM);
 
-    if (pk.spec.preview != NULL && pk.has_sel && pk.n_ranked > 0U) {
-        pk.spec.preview(ed, pk.spec.ctx, pk.sel_payload,
-                        (Rect){x0, (u16)(y0 + 3U), w, rows});
+    /*
+     * The preview is a SLOT BESIDE the list, never over it.
+     *
+     * Handing it the list's own rectangle painted the selected file's
+     * contents on top of the rows — the list was still there
+     * underneath, drawn first and immediately covered, which looked
+     * exactly like the finder listing the wrong things.
+     *
+     * It only appears when the box is wide enough to give both halves
+     * something readable; below that there is no honest way to show a
+     * preview and a list at once, so the list wins.
+     */
+    if (pk.spec.preview != NULL && pk.has_sel && pk.n_ranked > 0U &&
+        w >= (u16)SAG_PICKER_PREVIEW_MIN_W) {
+        u16 split = (u16)(w / 2U);
+
+        pk.spec.preview(ed, pk.spec.ctx, sag_picker_selected(ed),
+                        (Rect){(u16)(x0 + split + 1U), (u16)(y0 + 3U),
+                               (u16)(w - split - 2U), rows});
     }
 }

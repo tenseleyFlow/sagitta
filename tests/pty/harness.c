@@ -9,6 +9,7 @@
 #include <ctype.h>
 #include <dirent.h>
 #include <errno.h>
+#include <limits.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdarg.h>
@@ -155,6 +156,11 @@ bool sag_pty_spawn(Pty *p, const PtySpec *sp)
         if (s > STDERR_FILENO)
             (void)close(s);
         (void)close(m);
+        /* Set BEFORE execve, so the editor's workspace root is the
+         * fixture rather than whatever directory the runner was
+         * started in. */
+        if (sp->cwd != NULL && chdir(sp->cwd) != 0)
+            _exit(127);
         execve(sp->path, sp->argv, sp->envp);
         _exit(127);
     }
@@ -362,7 +368,8 @@ bool ptc_env_build(char **envp, const char *colors, const char *state_dir)
     static const char *const keys[] = {
         "TERM", "SAG_COLORS", "SAG_TTY_PROBE", "SAG_PROBE_TIMEOUT_MS",
         "SAG_ESC_TIMEOUT_MS", "XDG_STATE_HOME", "LANG", "LC_ALL",
-        "SAG_LOG_LEVEL", "SAG_JOB_ELAPSED_MS", "SHELL"
+        "SAG_LOG_LEVEL", "SAG_JOB_ELAPSED_MS", "SHELL",
+        "SAG_PICKERS_NOW"
     };
     const char *values[] = {
         "xterm-256color", colors, "1", "500", "25", state_dir,
@@ -374,7 +381,9 @@ bool ptc_env_build(char **envp, const char *colors, const char *state_dir)
          * developer's pw_shell, so a machine running fish or zsh records
          * different goldens than one running bash — the tests would encode
          * whoever generated them. */
-        "/bin/sh"
+        "/bin/sh",
+        /* Sprint 26: pins the undo picker's relative timestamps. */
+        "1700000000"
     };
     size_t i;
 
@@ -461,9 +470,41 @@ void ptc_spawn(PtyCtx *c, const char *bin, ...)
         ptc_fail(c, "allocating pinned environment");
         return;
     }
+    (void)memset(&spec, 0, sizeof(spec));
     spec.path = bin;
     spec.argv = argv;
     spec.envp = envp;
+    spec.cwd = c->cwd;
+    /*
+     * The runner is invoked with a RELATIVE binary path
+     * (`--sagitta build/sagitta`), and the child chdirs before
+     * execve — so the path has to be resolved here, while we are still
+     * in the directory it is relative to.  Without this the child
+     * exec'd nothing and exited 127, which surfaced as "child exited
+     * before kitty keyboard push" and said nothing about why.
+     */
+    if (c->cwd != NULL) {
+        char *resolved = realpath(bin, NULL);
+
+        if (resolved == NULL) {
+            strv_free(argv);
+            ptc_env_free(envp);
+            ptc_fail(c, "cannot resolve %s: %s", bin, strerror(errno));
+            return;
+        }
+        free(c->resolved_bin);
+        c->resolved_bin = resolved;
+        spec.path = resolved;
+        /* argv[0] too, so the child's own idea of its path is real. */
+        free(argv[0]);
+        argv[0] = copy_string(resolved);
+        if (argv[0] == NULL) {
+            strv_free(argv);
+            ptc_env_free(envp);
+            ptc_fail(c, "allocating argv[0]");
+            return;
+        }
+    }
     spec.rows = c->test->rows;
     spec.cols = c->test->cols;
     spec.budget_ms = c->budget_ms;
@@ -1118,7 +1159,30 @@ void ptc_init(PtyCtx *c, const PtyCase *test, const char *state_dir,
     c->pty.master = -1;
     c->pty.pid = -1;
     c->pty.status = -1;
-    c->state_dir = copy_string(state_dir);
+    /*
+     * ABSOLUTE, always.
+     *
+     * The runner builds this as `build/pty-<case>-N.XXXX`, relative to
+     * where it was started.  A child that chdirs (Sprint 26's finder
+     * cases, so the walk has a fixed root) would then resolve
+     * XDG_STATE_HOME against ITS cwd — and the editor wrote its whole
+     * state directory inside the fixture the finder was about to walk,
+     * which grew the file list by five entries per run and made the
+     * golden unstable in a way that pointed nowhere near the cause.
+     */
+    if (state_dir != NULL && state_dir[0] != '/') {
+        char abs[PATH_MAX];
+        char cwd[PATH_MAX];
+
+        if (getcwd(cwd, sizeof(cwd)) != NULL &&
+            snprintf(abs, sizeof(abs), "%s/%s", cwd, state_dir) <
+                (int)sizeof(abs))
+            c->state_dir = copy_string(abs);
+        else
+            c->state_dir = copy_string(state_dir);
+    } else {
+        c->state_dir = copy_string(state_dir);
+    }
     c->demo_bin = demo_bin;
     c->sagitta_bin = sagitta_bin;
     c->budget_ms = budget_ms > 0 ? budget_ms : PTC_DEFAULT_BUDGET_MS;
@@ -1177,6 +1241,12 @@ void ptc_cleanup(PtyCtx *c)
  * the second process painted nothing at all — which is exactly the
  * regression this gate exists to catch.
  */
+void ptc_set_cwd(PtyCtx *c, const char *dir)
+{
+    if (c != NULL)
+        c->cwd = dir;
+}
+
 void ptc_mark_resume(PtyCtx *c)
 {
     if (c == NULL || c->failed)
@@ -1321,6 +1391,8 @@ void ptc_dispose(PtyCtx *c)
     bytebuf_free(&c->snapshot);
     bytebuf_free(&c->pre_resume);
     free(c->state_dir);
+    free(c->resolved_bin);
+    c->resolved_bin = NULL;
     free(c->golden_name);
     c->state_dir = NULL;
     c->golden_name = NULL;

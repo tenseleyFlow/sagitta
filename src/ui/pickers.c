@@ -51,8 +51,19 @@ void sag_pickers_preview_reset(void)
 
 static i64 pickers_now(void)
 {
+    const char *pinned;
+
     if (g_now != 0)
         return g_now;
+    /*
+     * The pty harness runs the editor as a CHILD, so a setter cannot
+     * reach it — the clock has to come through the environment for the
+     * undo picker's "3 minutes ago" rows to be the same string on every
+     * run.  Unset in normal use, which is the wall clock.
+     */
+    pinned = getenv("SAG_PICKERS_NOW");
+    if (pinned != NULL && pinned[0] != '\0')
+        return (i64)strtoll(pinned, NULL, 10);
     return (i64)time(NULL);
 }
 

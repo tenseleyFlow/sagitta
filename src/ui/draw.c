@@ -685,8 +685,6 @@ void sag_draw_panes(Ed *ed)
     /* Last of all: the picker is modal, so its BLOCK region must shadow
      * every span drawn beneath it (last added wins). */
     sag_gp_draw(ed);
-    if (sag_picker_active(ed))
-        sag_picker_draw(ed, (Rect){0U, 0U, ed->grid.cols, ed->grid.rows});
 }
 
 bool sag_draw_pane_is_focused(const Ed *ed, const Win *w)

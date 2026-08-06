@@ -1,0 +1,61 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=3,2 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=9
+--- text
+    1 onetwoalpha
+    1 beta
+undo.branches                                                                   
+ :                                                                             
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  0/3   up/down move . enter open . ^v split . esc
+
+ L  pty-s14-s26_undo_branches.txt *                          utf-8  lf  1:7  all
+--- style
+AAAAAAAAAAAAAAAAA
+AAAAAAAAAA
+BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+ACDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+AEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+
+FFFGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+--- legend
+A fg=default bg=default attrs=----------
+B fg=#f7e0cc bg=#4e2a0f attrs=bd--------
+C fg=#2f1806 bg=#e77d24 attrs=b---------
+D fg=#f7e0cc bg=#4e2a0f attrs=b---------
+E fg=#787878 bg=default attrs=-d--------
+F fg=#ebf4ff bg=#266eba attrs=b---------
+G fg=#dae5f0 bg=#14304c attrs=----------

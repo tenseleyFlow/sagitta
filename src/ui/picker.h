@@ -72,7 +72,14 @@ enum {
     SAG_PICKER_DETAIL_MIN_W = 40,
     /* §7.2: how much of a full rescan happens per frame.  2 ms leaves
      * the rest of the 5 ms keypress budget for drawing. */
-    SAG_PICKER_SLICE_US = 2000
+    SAG_PICKER_SLICE_US = 2000,
+    /*
+     * Below this the preview slot is dropped entirely.  Half of a
+     * 60-cell box is 30 cells of list and 30 of file contents, and
+     * neither is worth reading — the list is what the picker is FOR, so
+     * it keeps the space.
+     */
+    SAG_PICKER_PREVIEW_MIN_W = 100
 };
 
 typedef struct PickItem {

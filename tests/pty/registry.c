@@ -3206,9 +3206,230 @@ static void case_s22_click_in_the_right_pane(PtyCtx *c)
     (void)unlink(path);
 }
 
+
+/* ---------------------------------------------------------------- */
+/* Sprint 26: the finder                                            */
+/* ---------------------------------------------------------------- */
+
+#define S26_DIR "/tmp/sag-s26-find"
+
+/*
+ * A small tree with a CJK filename, because match highlighting is drawn
+ * per matched BYTE and the highlight has to land on the right CELL —
+ * a two-cell glyph earlier in the name shifts everything after it.
+ */
+static void s26_fixture_make(void)
+{
+    static const char *const names[] = {
+        "alpha.c", "beta.c", "picker.c", "tabs.c",
+        "\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e.c"};
+    size_t i;
+
+    for (i = 0U; i < SAG_ARRAY_LEN(names); i++) {
+        char path[256];
+
+        (void)snprintf(path, sizeof(path), "%s/%s", S26_DIR, names[i]);
+        (void)unlink(path);
+    }
+    (void)rmdir(S26_DIR);
+    (void)mkdir(S26_DIR, 0700);
+    for (i = 0U; i < SAG_ARRAY_LEN(names); i++) {
+        char path[256];
+        FILE *f;
+
+        (void)snprintf(path, sizeof(path), "%s/%s", S26_DIR, names[i]);
+        f = fopen(path, "w");
+        if (f == NULL)
+            continue;
+        (void)fprintf(f, "contents of %s\n", names[i]);
+        (void)fclose(f);
+    }
+}
+
+static void s26_fixture_remove(void)
+{
+    static const char *const names[] = {
+        "alpha.c", "beta.c", "picker.c", "tabs.c",
+        "\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e.c"};
+    size_t i;
+
+    for (i = 0U; i < SAG_ARRAY_LEN(names); i++) {
+        char path[256];
+
+        (void)snprintf(path, sizeof(path), "%s/%s", S26_DIR, names[i]);
+        (void)unlink(path);
+    }
+    (void)rmdir(S26_DIR);
+}
+
+/* The finder's full chrome: title, filter line, ranked rows with the
+ * detail column, and the counts footer. */
+static void s26_open_finder(PtyCtx *c, const char *golden, char *path,
+                            size_t path_cap)
+{
+    s26_fixture_make();
+    /*
+     * The child runs INSIDE the fixture, so the finder walks exactly
+     * these five files.  Without it the walk lists the repository and
+     * the golden changes whenever anyone adds a file anywhere.
+     */
+    ptc_set_cwd(c, S26_DIR);
+    if (!s18_open(c, s23_doc, sizeof(s23_doc) - 1U, path, path_cap))
+        return;
+    s18_settle_after_keys(c, ":");
+    /*
+     * The TRAILING SPACE matters: s18's completion menu is live, and
+     * Enter with the menu up ACCEPTS a completion rather than executing
+     * (s18's menu_enter_not_execute law).  Without it this case
+     * snapshotted the command menu — 118 rows of commands — and the
+     * finder never opened at all.
+     */
+    s18_settle_after_bytes(c, "find ");
+    s18_settle_after_keys(c, "enter");
+    ptc_snapshot(c, golden);
+    s18_settle_after_keys(c, "esc");
+    force_quit(c);
+}
+
+static void case_s26_finder_chrome(PtyCtx *c)
+{
+    char path[256];
+
+    path[0] = '\0';
+    /*
+     * The golden NAME is the parameter, not the case name — two cases
+     * sharing one ptc_snapshot argument would write one golden and each
+     * overwrite the other's expectation.
+     */
+    s26_open_finder(c, "s26_finder_chrome", path, sizeof(path));
+    if (path[0] != '\0')
+        (void)unlink(path);
+    s26_fixture_remove();
+}
+
+/* The same chrome at 120x40: the box is centred and capped, so a wider
+ * terminal must not stretch it. */
+static void case_s26_finder_chrome_wide(PtyCtx *c)
+{
+    char path[256];
+
+    path[0] = '\0';
+    s26_open_finder(c, "s26_finder_chrome_wide", path, sizeof(path));
+    if (path[0] != '\0')
+        (void)unlink(path);
+    s26_fixture_remove();
+}
+
+/*
+ * Match highlighting on a CJK path.
+ *
+ * The scorer returns BYTE offsets and the grid takes CELLS, so a
+ * highlight drawn at the byte index would land inside a multi-byte
+ * sequence — visible here as an accent on the wrong column, or a
+ * mangled glyph.
+ */
+static void case_s26_finder_cjk_highlight(PtyCtx *c)
+{
+    char path[256];
+
+    s26_fixture_make();
+    ptc_set_cwd(c, S26_DIR);
+    if (!s18_open(c, s23_doc, sizeof(s23_doc) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    /*
+     * The TRAILING SPACE matters: s18's completion menu is live, and
+     * Enter with the menu up ACCEPTS a completion rather than executing
+     * (s18's menu_enter_not_execute law).  Without it this case
+     * snapshotted the command menu — 118 rows of commands — and the
+     * finder never opened at all.
+     */
+    s18_settle_after_bytes(c, "find ");
+    s18_settle_after_keys(c, "enter");
+    /*
+     * `c` matches every row; the CJK one exercises the width path.
+     *
+     * Settled on QUIET rather than on a synchronized frame: a filter
+     * keystroke repaints the list but is not guaranteed to close a sync
+     * pair, and waiting for one times the case out with no clue which
+     * key was responsible.
+     */
+    ptc_bytes(c, "c");
+    ptc_settle(c, 80);
+    ptc_snapshot(c, "s26_finder_cjk_highlight");
+    s18_settle_after_keys(c, "esc");
+    force_quit(c);
+    (void)unlink(path);
+    s26_fixture_remove();
+}
+
+/* The buffer switcher, showing the modified marker and the deferred
+ * one — both derived, never stored. */
+static void case_s26_buffer_switcher(PtyCtx *c)
+{
+    char path[256];
+
+    s26_fixture_make();
+    if (!s18_open(c, s23_doc, sizeof(s23_doc) - 1U, path, sizeof(path)))
+        return;
+    /* A second tab, left deferred: opened but never switched to. */
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "tabedit " S26_DIR "/alpha.c");
+    s18_settle_after_keys(c, "enter");
+    /* Back to the first, and dirty it so the marker has something to
+     * report. */
+    s18_settle_after_keys(c, "t up");
+    s18_settle_after_keys(c, "i");
+    s18_settle_after_bytes(c, "x");
+    s18_settle_after_keys(c, "esc");
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "buffers ");
+    s18_settle_after_keys(c, "enter");
+    ptc_snapshot(c, "s26_buffer_switcher");
+    s18_settle_after_keys(c, "esc");
+    force_quit(c);
+    (void)unlink(path);
+    s26_fixture_remove();
+}
+
+/*
+ * The undo branch picker over a real tree, with the clock injected
+ * through SAG_PICKERS_NOW so "3 minutes ago" is the same string on
+ * every run — a golden of relative timestamps is otherwise unpinnable.
+ */
+static void case_s26_undo_branches(PtyCtx *c)
+{
+    char path[256];
+
+    if (!s18_open(c, s23_doc, sizeof(s23_doc) - 1U, path, sizeof(path)))
+        return;
+    /* Three edits, so the list has branches to show. */
+    s18_settle_after_keys(c, "i");
+    s18_settle_after_bytes(c, "one");
+    s18_settle_after_keys(c, "esc");
+    s18_settle_after_keys(c, "i");
+    s18_settle_after_bytes(c, "two");
+    s18_settle_after_keys(c, "esc");
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "undolist ");
+    s18_settle_after_keys(c, "enter");
+    ptc_snapshot(c, "s26_undo_branches");
+    s18_settle_after_keys(c, "esc");
+    force_quit(c);
+    (void)unlink(path);
+}
+
 const PtyCase sag_pty_cases[] = {
     C(s22_click_in_the_right_pane, modern, 24U, 80U,
       case_s22_click_in_the_right_pane),
+    C(s26_finder_chrome, modern, 24U, 80U, case_s26_finder_chrome),
+    C(s26_finder_chrome_wide, modern, 40U, 120U,
+      case_s26_finder_chrome_wide),
+    C(s26_finder_cjk_highlight, modern, 24U, 80U,
+      case_s26_finder_cjk_highlight),
+    C(s26_buffer_switcher, modern, 24U, 80U,
+      case_s26_buffer_switcher),
+    C(s26_undo_branches, modern, 24U, 80U, case_s26_undo_branches),
     C(s25_resume_exact, modern, 24U, 80U, case_s25_resume_exact),
     C(s25_resume_survives_resize, modern, 24U, 80U,
       case_s25_resume_survives_resize),
