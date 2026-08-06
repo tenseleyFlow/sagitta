@@ -24,6 +24,17 @@ typedef struct Render {
     u16 col;
     bool pos_known;
     u8 tier;
+    /*
+     * Sprint 27 §8: NO_COLOR is set and non-empty.
+     *
+     * Read ONCE, at init (Sprint 0's single-decision rule).  When it is
+     * on, ZERO colour SGR parameters are emitted and identity is
+     * carried by attributes alone — reverse for active/selected, dim
+     * for inactive, bold for headers, underline for the current match.
+     * A half-honoured NO_COLOR is worse than none: the user who set it
+     * did so because the colours are unreadable on their terminal.
+     */
+    bool no_color;
     bool sync;
     bool undercurl;
     bool cursor_known;

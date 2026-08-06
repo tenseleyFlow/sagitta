@@ -4,6 +4,7 @@
 
 #include <errno.h>
 #include <limits.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
@@ -36,11 +37,18 @@ enum {
 };
 
 static const u8 paste_end[] = "\x1b[201~";
-static const char input_enable[] =
-    "\x1b[?2004h"
+/*
+ * Sprint 27 §8: the mouse sequences are SEPARATE, so SAG_MOUSE=0 can
+ * leave them unsent.  Not merely dropping the events on our side: a
+ * terminal that is never asked to report does not steal the user's own
+ * selection and copy gestures, which is the whole reason somebody turns
+ * the mouse off.
+ */
+static const char enable_paste[] = "\x1b[?2004h";
+static const char enable_mouse[] =
     "\x1b[?1002h"
-    "\x1b[?1006h"
-    "\x1b[?1004h";
+    "\x1b[?1006h";
+static const char enable_focus[] = "\x1b[?1004h";
 static const char input_disable[] =
     "\x1b[<u"
     "\x1b[?2004l"
@@ -991,7 +999,20 @@ const u8 *sag_input_paste_chunk(const In *in, size_t *n)
 
 void sag_input_enable(int wfd, const TtyCaps *caps)
 {
-    write_blob(wfd, input_enable, sizeof(input_enable) - 1U);
+    const char *off = getenv("SAG_MOUSE");
+
+    /*
+     * Emitted in three pieces so SAG_MOUSE=0 can leave the middle one
+     * unsent — and in the SAME ORDER as before, because the disable
+     * path mirrors it and the pty goldens record the bytes.  Not merely
+     * dropping the events on our side: a terminal that is never asked
+     * to report does not steal the user's own selection and copy
+     * gestures, which is the whole reason somebody turns the mouse off.
+     */
+    write_blob(wfd, enable_paste, sizeof(enable_paste) - 1U);
+    if (off == NULL || off[0] != '0')
+        write_blob(wfd, enable_mouse, sizeof(enable_mouse) - 1U);
+    write_blob(wfd, enable_focus, sizeof(enable_focus) - 1U);
     if (caps != NULL && caps->kitty_kbd)
         write_blob(wfd, kitty_enable, sizeof(kitty_enable) - 1U);
 }

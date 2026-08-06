@@ -1175,5 +1175,12 @@ void test_glyphs_are_the_same_width_in_both_vocabularies(void);
 void test_glyphs_arrows_point_the_way_the_thing_moves(void);
 void test_glyphs_ascii_is_auto_from_the_locale(void);
 void test_glyphs_the_vocabulary_is_decided_once(void);
+void test_degrade_no_color_emits_no_colour_and_stays_legible(void);
+void test_degrade_empty_no_color_is_not_set(void);
+void test_degrade_16_colour_tier_uses_reverse_not_colour(void);
+void test_degrade_sag_mouse_zero_drops_events(void);
+void test_degrade_tiny_terminals_never_produce_a_bad_rect(void);
+void test_degrade_the_member_strip_sheds_before_the_tab_strip(void);
+void test_degrade_ascii_keeps_every_element_meaningful(void);
 
 #endif

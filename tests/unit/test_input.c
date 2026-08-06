@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "harness.h"
 
 #include <stdio.h>
@@ -761,6 +763,23 @@ void test_input_enable_blobs(void)
     assert_pipe_blob(false, enable, sizeof(enable) - 1U, true);
     assert_pipe_blob(true, enable_kitty, sizeof(enable_kitty) - 1U, true);
     assert_pipe_blob(false, disable, sizeof(disable) - 1U, false);
+
+    /*
+     * Sprint 27 §8: SAG_MOUSE=0 leaves 1002/1006 UNSENT, and the rest
+     * of the sequence is byte-identical — including its order, which
+     * the disable path mirrors.
+     */
+    {
+        static const u8 enable_nomouse[] = "\x1b[?2004h\x1b[?1004h";
+
+        (void)setenv("SAG_MOUSE", "0", 1);
+        assert_pipe_blob(false, enable_nomouse,
+                         sizeof(enable_nomouse) - 1U, true);
+        (void)setenv("SAG_MOUSE", "1", 1);
+        assert_pipe_blob(false, enable, sizeof(enable) - 1U, true);
+        (void)unsetenv("SAG_MOUSE");
+        assert_pipe_blob(false, enable, sizeof(enable) - 1U, true);
+    }
 }
 
 void test_input_unknown_csi(void)

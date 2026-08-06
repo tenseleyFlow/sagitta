@@ -229,6 +229,13 @@ void sag_render_init(Render *r, const TtyCaps *caps,
 {
     memset(r, 0, sizeof(*r));
     r->tier = sag_render_tier(caps, getv);
+    {
+        const char *nc = getv != NULL ? getv("NO_COLOR") : NULL;
+
+        /* Set and NON-EMPTY, per the no-color.org convention: an empty
+         * value is how a shell profile un-sets it. */
+        r->no_color = nc != NULL && nc[0] != '\0';
+    }
     r->sync = caps != NULL && caps->sync_output;
     r->undercurl = caps != NULL && caps->truecolor;
 }
@@ -279,8 +286,18 @@ static u8 color_ansi(const SagColor *color)
 }
 
 static void color_param(Bytebuf *out, bool *first, const SagColor *color,
-                        bool foreground, u8 tier)
+                        bool foreground, u8 tier, bool no_color)
 {
+    /*
+     * Sprint 27 §8.  Everything becomes the terminal's default, which
+     * is the only honest answer: the palette the user chose is the one
+     * they can read.  Attributes still carry every distinction the
+     * chrome makes.
+     */
+    if (no_color) {
+        param_num(out, first, foreground ? 39u : 49u);
+        return;
+    }
     if (color->tag == 0u) {
         param_num(out, first, foreground ? 39u : 49u);
         return;
@@ -464,15 +481,19 @@ static void set_style(Render *r, Bytebuf *out, const Cell *cell)
         param_num(out, &first, 0u);
         attrs_full(out, &first, attrs, r->undercurl);
         if (cell->fg.tag != 0u)
-            color_param(out, &first, &cell->fg, true, r->tier);
+            color_param(out, &first, &cell->fg, true, r->tier,
+                        r->no_color);
         if (cell->bg.tag != 0u)
-            color_param(out, &first, &cell->bg, false, r->tier);
+            color_param(out, &first, &cell->bg, false, r->tier,
+                        r->no_color);
     } else {
         attrs_delta(out, &first, old_attrs, attrs, r->undercurl);
         if (fg_changed)
-            color_param(out, &first, &cell->fg, true, r->tier);
+            color_param(out, &first, &cell->fg, true, r->tier,
+                        r->no_color);
         if (bg_changed)
-            color_param(out, &first, &cell->bg, false, r->tier);
+            color_param(out, &first, &cell->bg, false, r->tier,
+                        r->no_color);
     }
     bytebuf_push_u8(out, (u8)'m');
     r->fg = cell->fg;

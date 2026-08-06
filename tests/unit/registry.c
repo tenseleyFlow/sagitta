@@ -1141,6 +1141,13 @@ const SagTest sag_tests[] = {
     T(glyphs_arrows_point_the_way_the_thing_moves),
     T(glyphs_ascii_is_auto_from_the_locale),
     T(glyphs_the_vocabulary_is_decided_once),
+    T(degrade_no_color_emits_no_colour_and_stays_legible),
+    T(degrade_empty_no_color_is_not_set),
+    T(degrade_16_colour_tier_uses_reverse_not_colour),
+    T(degrade_sag_mouse_zero_drops_events),
+    T(degrade_tiny_terminals_never_produce_a_bad_rect),
+    T(degrade_the_member_strip_sheds_before_the_tab_strip),
+    T(degrade_ascii_keeps_every_element_meaningful),
 };
 
 const size_t sag_tests_len = SAG_ARRAY_LEN(sag_tests);

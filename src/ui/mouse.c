@@ -2,6 +2,7 @@
 
 #include "ui/mouse.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 #include "edit/ed.h"
@@ -1415,14 +1416,26 @@ CmdStatus sag_ui_cmd_context_menu(CmdCtx *cx)
  * now".
  */
 static bool mouse_enabled = true;
+static bool mouse_resolved;
 
 bool sag_mouse_enabled(void)
 {
+    if (!mouse_resolved) {
+        const char *off = getenv("SAG_MOUSE");
+
+        /* Resolved ONCE, and to the same answer term/input.c used when
+         * it decided whether to ask the terminal to report at all — two
+         * places reading the environment separately is how they come to
+         * disagree. */
+        mouse_resolved = true;
+        mouse_enabled = off == NULL || off[0] != '0';
+    }
     return mouse_enabled;
 }
 
 void sag_mouse_set_enabled(bool on)
 {
+    mouse_resolved = true;
     mouse_enabled = on;
 }
 
