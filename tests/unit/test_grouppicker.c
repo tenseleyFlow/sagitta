@@ -444,3 +444,49 @@ void test_grouppicker_apply_is_idempotent(void)
     sag_ed_free(&ed);
     gpt_remove(&t);
 }
+
+/*
+ * Only directories and REGULAR files are listed.
+ *
+ * Everything-that-is-not-a-directory was tickable until the fuzzer
+ * walked to /dev and selected a block device — which the group would
+ * then have opened as a document.  A picker for choosing files must
+ * only offer files.
+ */
+void test_grouppicker_lists_only_directories_and_regular_files(void)
+{
+    Ed ed;
+    GpTree t;
+    char fifo[256];
+    int i;
+    int rows_with_fifo = 0;
+
+    gpt_make(&t);
+    (void)snprintf(fifo, sizeof(fifo), "%s/a-fifo", t.root);
+    /* A FIFO stands in for every non-regular thing a directory can
+     * hold; skipping the test entirely when mkfifo is unavailable is
+     * better than asserting nothing. */
+    if (mkfifo(fifo, 0600) != 0) {
+        gpt_remove(&t);
+        return;
+    }
+    gpt_ed(&ed);
+    SAG_ASSERT(sag_gp_show(&ed, t.root));
+
+    /* Tick every listed row by walking the list and pressing space;
+     * the FIFO must never be among the results. */
+    for (i = 0; i < 8; i++)
+        SAG_ASSERT(sag_gp_key(&ed, gpk((u32)' ')));
+    SAG_ASSERT(sag_gp_key(&ed, gpk(SAG_KEY_TAB)));
+    SAG_ASSERT(sag_gp_key(&ed, gpk(SAG_KEY_ENTER)));
+    if (sag_gp_result() == SAG_GP_CONFIRMED) {
+        for (i = 0; i < sag_gp_count(); i++) {
+            if (strstr(sag_gp_path(i), "a-fifo") != NULL)
+                rows_with_fifo++;
+        }
+    }
+    SAG_ASSERT_EQ_I64(rows_with_fifo, 0);
+    (void)unlink(fifo);
+    sag_ed_free(&ed);
+    gpt_remove(&t);
+}

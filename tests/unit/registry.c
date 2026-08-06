@@ -775,6 +775,7 @@ const SagTest sag_tests[] = {
     T(grouppicker_new_adopts_an_already_open_file),
     T(grouppicker_edit_diffs_the_membership),
     T(grouppicker_apply_is_idempotent),
+    T(grouppicker_lists_only_directories_and_regular_files),
     T(strip_lays_entries_left_to_right_without_gaps),
     T(strip_measures_cjk_labels_in_cells),
     T(strip_clips_long_labels),

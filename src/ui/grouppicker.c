@@ -270,14 +270,26 @@ static void gp_list_dir(void)
             continue;
         if (e->d_name[0] == '.')
             continue; /* dotfiles stay out of the way */
-        r = &gp.rows[gp.n_rows];
-        (void)memset(r, 0, sizeof(*r));
-        (void)snprintf(r->name, sizeof(r->name), "%s", e->d_name);
         gp_join(gp.dir, e->d_name, full, sizeof(full));
         /* stat rather than d_type: d_type is DT_UNKNOWN on several
          * filesystems, and a directory listed as a file would be
          * tickable and then never openable. */
-        r->is_dir = stat(full, &st) == 0 && S_ISDIR(st.st_mode);
+        if (stat(full, &st) != 0)
+            continue;
+        /*
+         * Directories to walk, REGULAR FILES to tick, and nothing else.
+         *
+         * Without the S_ISREG half, everything that is not a directory
+         * became tickable — the fuzzer walked to /dev and selected a
+         * block device, which the group would then have opened as a
+         * document.  A picker for choosing files must only offer files.
+         */
+        if (!S_ISDIR(st.st_mode) && !S_ISREG(st.st_mode))
+            continue;
+        r = &gp.rows[gp.n_rows];
+        (void)memset(r, 0, sizeof(*r));
+        (void)snprintf(r->name, sizeof(r->name), "%s", e->d_name);
+        r->is_dir = S_ISDIR(st.st_mode);
         gp.n_rows++;
     }
     (void)closedir(d);

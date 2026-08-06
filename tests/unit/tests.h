@@ -781,6 +781,7 @@ void test_grouppicker_new_creates_the_group_deferred(void);
 void test_grouppicker_new_adopts_an_already_open_file(void);
 void test_grouppicker_edit_diffs_the_membership(void);
 void test_grouppicker_apply_is_idempotent(void);
+void test_grouppicker_lists_only_directories_and_regular_files(void);
 void test_strip_lays_entries_left_to_right_without_gaps(void);
 void test_strip_measures_cjk_labels_in_cells(void);
 void test_strip_clips_long_labels(void);
