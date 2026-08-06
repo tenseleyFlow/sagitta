@@ -75,6 +75,17 @@ typedef struct Buffer {
      */
     MarkId named[26];
     bool named_set[26];
+    /*
+     * Sprint 25 §6: marks read from workspace state, still as OFFSETS.
+     *
+     * A MarkId needs a MarkSet, which needs a loaded buffer — so a
+     * restore that materialized marks eagerly would read every file
+     * that has ever had one, which is exactly the cost deferral exists
+     * to avoid.  They are held here and converted by sag_buf_hydrate,
+     * at the first moment there is anything to anchor them to.
+     */
+    u64 pending_marks[26];
+    bool pending_mark_set[26];
 } Buffer;
 
 /* Buffers are referenced by pointer from every Win, so the list holds

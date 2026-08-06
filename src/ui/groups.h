@@ -111,4 +111,14 @@ void sag_group_reorder_block(Ed *ed, u32 gid, int to_idx);
  * means. */
 void sag_group_note_position(Ed *ed);
 
+/*
+ * Sprint 25 §6: restores the remembered member from workspace state.
+ *
+ * A PATH, not an index, for the same reason sag_group_note_position
+ * stores one: indices shift, and a dangling path already falls back to
+ * the lowest ordinal (s24) — so a member that has since been closed
+ * costs nothing rather than resolving to whoever now sits in its slot.
+ */
+void sag_group_set_last_member(Ed *ed, u32 gid, const char *path);
+
 #endif

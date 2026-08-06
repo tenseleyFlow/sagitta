@@ -200,6 +200,26 @@ int sag_buf_hydrate(Ed *ed, Buffer *b)
     sag_undo_mark_saved(b->undo);
     if (b->marks == NULL)
         b->marks = sag_marks_new();
+    /*
+     * Sprint 25 §6: restored marks become real here, at the first
+     * moment there is text to anchor them to.  Clamped to the buffer,
+     * because the file may well have changed on disk since the state
+     * was written and a mark past the end is not a cosmetic problem.
+     */
+    {
+        u32 i;
+        u64 size = sag_textbuf_len(b->tb);
+
+        for (i = 0U; i < 26U; i++) {
+            if (!b->pending_mark_set[i])
+                continue;
+            b->pending_mark_set[i] = false;
+            (void)sag_ed_mark_set(ed, b, (u8)('a' + i),
+                                  BYTEOFF(b->pending_marks[i] > size
+                                              ? size
+                                              : b->pending_marks[i]));
+        }
+    }
     return 0;
 }
 
@@ -1556,6 +1576,15 @@ static int ed_driver_inner(const char *path)
      * anything dirty.
      */
     sag_state_open(&ed);
+    /*
+     * Restored only when no file was named.  `sag sagitta.c` is a
+     * request to edit that file, and burying it under forty restored
+     * tabs answers a question nobody asked; the arrangement comes back
+     * when you start the way you left — in the directory, with no
+     * argument.
+     */
+    if (path == NULL)
+        (void)sag_ws_restore(&ed);
     result = ed.quit ? ed.exit_code : sag_loop_run(&ed);
     /* Clean quit: the unconditional save, before anything is freed. */
     sag_state_close(&ed);

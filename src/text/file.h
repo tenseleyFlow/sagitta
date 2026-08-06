@@ -65,6 +65,18 @@ SagSaveErr sag_file_save_force(const TextBuf *tb, FileMeta *meta,
 SagSaveErr sag_file_write_atomic(const char *path, const u8 *bytes,
                                  size_t len, mode_t mode);
 
+/*
+ * Moves `from` to `to`, REFUSING to overwrite an existing `to`.
+ *
+ * Sprint 25 §7 sets an unreadable state file aside under a
+ * second-resolution timestamp, so two failures inside one second
+ * collide — and plain rename(2) would silently destroy the first one.
+ * This lives here rather than in src/ws/ so there is exactly one place
+ * in the tree that moves a file the user might still want, next to the
+ * primitive that replaces one.
+ */
+SagSaveErr sag_file_move_aside(const char *from, const char *to);
+
 void sag_filemeta_init(FileMeta *meta);
 void sag_filemeta_dispose(FileMeta *meta);
 void sag_filemeta_eol_bytes(const FileMeta *meta, const u8 **bytes,

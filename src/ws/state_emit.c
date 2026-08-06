@@ -175,11 +175,63 @@ static void emit_panes(FlEmit *e, const char *key, const Pane *p,
 
 /* ---------------------------------------------------------------- */
 
+/*
+ * A ring entry, resolved to path + line + col.
+ *
+ * The stored form is a MARK, which means nothing to another process, so
+ * it is resolved here — but only when the buffer is actually loaded.
+ * For a deferred buffer the mark is dead and `line_hint` is what the
+ * entry is for: s21 keeps it precisely so a closed buffer's history
+ * survives as somewhere to reopen, and resolving it would mean reading
+ * every file the user has ever jumped through (§3.3's whole point).
+ */
+static void emit_ring_entry(FlEmit *e, const Ed *ed, const JumpEntry *je)
+{
+    Buffer *b = sag_ws_buf_by_id((Ed *)ed, je->buf_id);
+    LineNo line = je->line_hint;
+    u64 col = 0U;
+
+    if (b != NULL && b->marks != NULL && b->tb != NULL &&
+        sag_mark_alive(b->marks, je->mark)) {
+        ByteOff pos = sag_mark_pos(b->marks, je->mark);
+
+        line = sag_textbuf_line_of(b->tb, pos);
+        col = pos.v - sag_textbuf_line_start(b->tb, line).v;
+    }
+    sag_fl_map_open(e, NULL);
+    if (b == NULL || b->path == NULL)
+        sag_fl_nil(e, "path");
+    else
+        sag_fl_str(e, "path", b->path, (u64)strlen(b->path));
+    sag_fl_int(e, "line", (i64)line.v);
+    sag_fl_int(e, "col", (i64)col);
+    sag_fl_int(e, "stamp", (i64)je->stamp_ms);
+    sag_fl_map_close(e);
+}
+
+static void emit_jumps(FlEmit *e, const Ed *ed, const Win *w)
+{
+    u32 n = sag_jumplist_len(&w->jumps);
+    u32 i;
+
+    if (n > (u32)SAG_STATE_MAX_JUMPS)
+        n = (u32)SAG_STATE_MAX_JUMPS;
+    sag_fl_map_open(e, "jumps");
+    /* `cur` is a LOGICAL index and `cur == len` means "standing at now"
+     * (s21).  It is written as-is so a session that quit mid-walk
+     * resumes mid-walk. */
+    sag_fl_int(e, "cur", (i64)w->jumps.cur);
+    sag_fl_list_open(e, "entries");
+    for (i = 0U; i < n; i++)
+        emit_ring_entry(e, ed, sag_jumplist_at(&w->jumps, i));
+    sag_fl_list_close(e);
+    sag_fl_map_close(e);
+}
+
 static void emit_win(FlEmit *e, const Ed *ed, const Win *w)
 {
     u32 i;
 
-    (void)ed;
     sag_fl_map_open(e, NULL);
     sag_fl_list_open(e, "cursors");
     for (i = 0U; i < w->cs.curs.len && i < (u32)SAG_STATE_MAX_CURSORS;
@@ -200,6 +252,7 @@ static void emit_win(FlEmit *e, const Ed *ed, const Win *w)
     sag_fl_int(e, "left", (i64)w->vp.left.v);
     sag_fl_bool(e, "wrap", w->vp.wrap);
     sag_fl_map_close(e);
+    emit_jumps(e, ed, w);
     sag_fl_map_close(e);
 }
 
@@ -292,6 +345,32 @@ static void emit_file_records(FlEmit *e, const Ed *ed)
         (void)any_mark;
         sag_fl_list_close(e);
         /*
+         * The changelist is per BUFFER because a change is a property
+         * of the TEXT, so it rides the file record; the jumplist is per
+         * window and rides the win record.  Splitting them the other
+         * way round would give two panes on one file one shared history
+         * of where each view had been, which is the opposite of what a
+         * split is for (s21 §5, serialized).
+         */
+        {
+            u32 c;
+            u32 nc = b->changes.len;
+
+            if (nc > (u32)SAG_STATE_MAX_JUMPS)
+                nc = (u32)SAG_STATE_MAX_JUMPS;
+            sag_fl_map_open(e, "changes");
+            sag_fl_int(e, "cur", (i64)b->changes.cur);
+            sag_fl_list_open(e, "entries");
+            for (c = 0U; c < nc; c++) {
+                u32 at = (b->changes.head + SAG_CHANGELIST_MAX -
+                          b->changes.len + c) % SAG_CHANGELIST_MAX;
+
+                emit_ring_entry(e, ed, &b->changes.e[at]);
+            }
+            sag_fl_list_close(e);
+            sag_fl_map_close(e);
+        }
+        /*
          * Undo is a SIBLING FILE, never inline (§3.4): payloads are
          * arbitrary binary that would need \xNN encoding at 4x size,
          * the state file is rewritten in full on every change, and the
@@ -339,10 +418,20 @@ void sag_state_emit(const Ed *ed, Bytebuf *out)
     }
     sag_fl_map_close(&e);
 
-    /* Options land in Sprint 36; the key is emitted so the shape is
-     * frozen and unknown keys have somewhere to be preserved. */
-    sag_fl_map_open(&e, "options");
-    sag_fl_map_close(&e);
+    /*
+     * Options land in Sprint 36.  Until then whatever was READ is
+     * written back unchanged: an older sagitta opening a newer
+     * session's workspace must not silently delete every key it has
+     * never heard of, and since the document is rewritten in full on
+     * every change, dropping them once makes it permanent.
+     */
+    if (ed->state.options != NULL &&
+        ed->state.options->kind == FL_MAP) {
+        sag_fl_emit_lit(&e, "options", ed->state.options);
+    } else {
+        sag_fl_map_open(&e, "options");
+        sag_fl_map_close(&e);
+    }
 
     /*
      * GROUPS FIRST.  See state.h — the restore attaches each tab as it

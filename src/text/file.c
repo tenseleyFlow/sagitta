@@ -906,6 +906,34 @@ fail:
                                                           : SAG_SAVE_IO;
 }
 
+SagSaveErr sag_file_move_aside(const char *from, const char *to)
+{
+    if (from == NULL || to == NULL) {
+        errno = EINVAL;
+        return SAG_SAVE_IO;
+    }
+    /*
+     * link + unlink, NOT rename.
+     *
+     * rename(2) replaces the destination without a word.  The caller is
+     * moving a file precisely because it may still matter to somebody,
+     * and its name carries a one-second timestamp — so two of them in
+     * the same second is not hypothetical, and the loser would be gone
+     * with no record that it ever existed.  link fails with EEXIST
+     * instead, which is the answer the caller can act on.
+     */
+    if (link(from, to) != 0) {
+        return errno == EACCES || errno == EPERM ? SAG_SAVE_PERM
+                                                 : SAG_SAVE_IO;
+    }
+    if (unlink(from) != 0) {
+        /* The copy is in place; failing to remove the original leaves
+         * two names for one inode, which is untidy but loses nothing. */
+        return SAG_SAVE_IO;
+    }
+    return SAG_SAVE_OK;
+}
+
 static SagSaveErr atomic_save(const TextBuf *tb, const FileMeta *meta,
                               const char *dst, struct stat *saved_st)
 {

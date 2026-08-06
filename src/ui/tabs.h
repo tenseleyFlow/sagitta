@@ -55,7 +55,15 @@ typedef struct Tab {
      * the first, and the disagreement is unrecoverable — a tab that
      * looks resident is never read, and the empty buffer is what gets
      * saved over the real file.
+     *
+     * There IS a flag for a missing file, and it is a different kind of
+     * thing: "was this path absent when we restored" has no structural
+     * answer and cannot be recomputed on a draw path without a stat per
+     * tab per frame.  The name says when it was true so nobody mistakes
+     * it for a live fact — Sprint 25 §6 checks the disk once, at
+     * restore, and never again.
      */
+    bool missing_at_restore;
 } Tab;
 
 VEC_DECL(TabVec, Tab);

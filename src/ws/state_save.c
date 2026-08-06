@@ -271,6 +271,13 @@ void sag_state_dispose(Ed *ed)
         s->timer = SAG_TIMER_NONE;
     }
     lock_release(s);
+    if (s->doc_ready) {
+        /* The retained options tree lives in this arena, so it dies
+         * with it — and `options` must not outlive its bytes. */
+        arena_free_all(&s->doc);
+        s->doc_ready = false;
+        s->options = NULL;
+    }
     s->ready = false;
     s->dirty = false;
 }

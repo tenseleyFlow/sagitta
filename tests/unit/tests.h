@@ -840,6 +840,24 @@ void test_ws_save_stateless_is_a_silent_no_op(void);
 void test_ws_save_unusable_state_home_runs_stateless(void);
 void test_ws_save_has_no_second_atomic_primitive(void);
 void test_ws_save_never_writes_into_the_workspace(void);
+
+/* Sprint 25 §6: restore. */
+void test_ws_restore_round_trips_tabs_and_groups(void);
+void test_ws_restore_remaps_group_ids(void);
+void test_ws_restore_missing_group_record_ungroups_the_tab(void);
+void test_ws_restore_of_forty_tabs_reads_one_file(void);
+void test_ws_restore_rebuilds_the_pane_tree(void);
+void test_ws_restore_clamps_the_viewport_without_following(void);
+void test_ws_restore_brings_back_cursors_and_goal(void);
+void test_ws_restore_keeps_tabs_whose_files_vanished(void);
+void test_ws_restore_group_survives_a_missing_member(void);
+void test_ws_restore_treats_a_directory_as_missing(void);
+void test_ws_restore_save_restore_save_is_a_fixpoint(void);
+void test_ws_restore_preserves_unknown_options(void);
+void test_ws_restore_marks_cost_no_read_until_hydration(void);
+void test_ws_restore_reads_what_save_wrote(void);
+void test_ws_restore_absent_state_is_fresh(void);
+void test_ws_restore_stateless_is_fresh(void);
 void test_strip_lays_entries_left_to_right_without_gaps(void);
 void test_strip_measures_cjk_labels_in_cells(void);
 void test_strip_clips_long_labels(void);

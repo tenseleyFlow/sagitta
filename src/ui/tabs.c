@@ -375,10 +375,50 @@ int sag_tab_hydrate(Ed *ed, int idx)
                 t->path != NULL ? t->path : "untitled");
         return -1;
     }
-    /* The view was built against no text; give it a fresh one now that
-     * there is some. */
-    if (t->focus != NULL && t->focus->win != NULL)
-        sag_vp_init(t->focus->win);
+    /*
+     * The view was built against no text; give it a fresh one now that
+     * there is some — but the SCROLL POSITION is not part of "fresh".
+     *
+     * Sprint 25 §6 restores top/left into a deferred tab's window, and
+     * this runs afterwards, on the switch that hydrates it.  Letting
+     * vp_init zero them put every resumed tab back at line 0, which
+     * looks exactly like a working restore until you notice you are
+     * never where you left off.
+     */
+    if (t->focus != NULL && t->focus->win != NULL) {
+        Win *w = t->focus->win;
+        LineNo top = w->vp.top;
+        u32 top_sub = w->vp.top_sub;
+        CCol left = w->vp.left;
+        bool wrap = w->vp.wrap;
+
+        sag_vp_init(w);
+        w->vp.top = top;
+        w->vp.top_sub = top_sub;
+        w->vp.left = left;
+        w->vp.wrap = wrap;
+    }
+    /*
+     * Sprint 25 §6: cursors restored into a deferred tab were never
+     * checked against a buffer, because there was none.  This is the
+     * first moment there is one — and the offsets came out of a file
+     * that may have been rewritten since, so an unchecked cursor can
+     * sit past the end, which every motion and every edit derives from.
+     */
+    {
+        Pane *leaves[SAG_PANE_MAX_LEAVES * 2];
+        u32 n = 0U;
+        u32 i;
+
+        if (t->root != NULL) {
+            sag_pane_collect_leaves(t->root, leaves, SAG_ARRAY_LEN(leaves),
+                                    &n);
+        }
+        for (i = 0U; i < n; i++) {
+            if (leaves[i]->win != NULL && leaves[i]->win->buf == b)
+                sag_cset_normalize(b->tb, &leaves[i]->win->cs);
+        }
+    }
     return 0;
 }
 
@@ -431,6 +471,11 @@ static bool tab_is_orphan(const Ed *ed, int idx)
     const char *root = sag_ws_root(ed);
     const char *p = ed->tabs.v.data[idx].path;
 
+    /* Sprint 25 §6 refines "outside" as promised: a file that was gone
+     * when we restored is dim for the same reason, and for a reason the
+     * user cares about more. */
+    if (ed->tabs.v.data[idx].missing_at_restore)
+        return true;
     return p != NULL && root != NULL &&
            strncmp(p, root, strlen(root)) != 0;
 }

@@ -46,7 +46,17 @@ enum {
     /* Ratios travel as permille integers because there are no floats
      * in the format; see fllit.h for why. */
     SAG_STATE_RATIO_MIN = 1,
-    SAG_STATE_RATIO_MAX = 999
+    SAG_STATE_RATIO_MAX = 999,
+    /* §3: the pane tree nests at most this deep.  A deeper `panes` map
+     * is corruption, not a tree to recurse into — the parser's depth
+     * cap is 32 for the whole document, which is not a bound on this. */
+    SAG_STATE_MAX_PANE_DEPTH = 8,
+    /*
+     * §7 retention.  The oldest is deleted, and "oldest" is decided
+     * lexicographically — which is WHY the timestamp is %Y%m%dT%H%M%SZ
+     * and not anything friendlier to read.
+     */
+    SAG_STATE_CORRUPT_KEEP = 5
 };
 
 /* Emits the whole v1 document for `ed`. */
@@ -80,6 +90,24 @@ typedef struct WsState {
     /* Test hook: completed atomic writes.  Counting is the only way to
      * assert that a burst of ten changes debounces into one write. */
     u64 writes;
+
+    /*
+     * §6 step 2: the options map, held VERBATIM.
+     *
+     * The option model is Sprint 36's.  Until it exists this build must
+     * not delete settings it does not understand — an older sagitta
+     * opening a newer session's workspace would silently drop every key
+     * it had never heard of, and the next save would make that
+     * permanent.  So the parsed subtree is kept in its own arena and
+     * re-emitted unchanged.
+     */
+    Arena doc;
+    const FlLit *options;
+    bool doc_ready;
+
+    /* §6: files that were not on disk at restore.  Counted so exactly
+     * ONE summary message is shown, never one per tab. */
+    u32 missing_count;
 } WsState;
 
 /* Computes the key for `ed`'s workspace root, creates the state dir and
@@ -94,6 +122,38 @@ void sag_state_dispose(Ed *ed);
 
 void sag_state_mark_dirty(Ed *ed); /* from state-changing events */
 bool sag_state_save(Ed *ed);       /* false = not the writer, or I/O   */
+
+/*
+ * Sprint 25 §6/§7: restoring.
+ *
+ * FRESH     nothing to restore — no state file, or none was readable
+ *           and the bad one has been set aside.  Not an error.
+ * RESTORED  the document applied.
+ * RECOVERED the document was unusable; it was RENAMED ASIDE (never
+ *           deleted) and the editor starts fresh.
+ *
+ * There is no failure return, on purpose.  A corrupt cache is not a
+ * failed edit: §7's every row ends with "the editor starts", exit 0,
+ * exactly one message, and no prompt before the first paint.
+ */
+typedef enum {
+    SAG_WS_FRESH,
+    SAG_WS_RESTORED,
+    SAG_WS_RECOVERED
+} SagWsResult;
+
+SagWsResult sag_ws_restore(Ed *ed);
+
+/* Applies a document already in memory.  Split out so the tests and the
+ * fuzzer can drive the schema layer without a filesystem. */
+SagWsResult sag_state_apply(Ed *ed, const u8 *bytes, u64 len);
+
+/*
+ * §7: sets `state.fl` aside as state.fl.corrupt-YYYYMMDDTHHMMSSZ and
+ * prunes to the newest SAG_STATE_CORRUPT_KEEP.  Exposed for the
+ * recovery tests, which assert the retention rather than trusting it.
+ */
+bool sag_state_set_aside(Ed *ed, char *out, size_t cap);
 
 /*
  * The file-id -> live-id map (§3.1).

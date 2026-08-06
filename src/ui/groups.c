@@ -450,3 +450,14 @@ void sag_group_note_position(Ed *ed)
     free(g->last_active_member);
     g->last_active_member = dup_str(t->path);
 }
+
+void sag_group_set_last_member(Ed *ed, u32 gid, const char *path)
+{
+    TabGroup *g = sag_group_at(ed, gid);
+
+    if (g == NULL)
+        return;
+    free(g->last_active_member);
+    g->last_active_member = path == NULL ? NULL : dup_str(path);
+    sag_state_mark_dirty(ed);
+}
