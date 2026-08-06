@@ -275,6 +275,34 @@ static void validate_vt(PtyCtx *c)
                  (int)c->vt.errors.len, errors);
 }
 
+/*
+ * How much longer a "quiet" window has to be on this run.
+ *
+ * A settle waits for N ms of NO OUTPUT and then decides the editor is
+ * done.  That inference holds while the editor is fast: if it had more
+ * to draw, it would have drawn it.  Under valgrind it does not — the
+ * editor can sit silent for longer than N ms with a frame still to
+ * come, and the snapshot catches the screen mid-update.  The symptom is
+ * an "unstable snapshot": the runner's two snapshots disagree because a
+ * frame landed between them.
+ *
+ * So the valgrind lane scales every quiet window by one number rather
+ * than tuning cases one at a time.  At the default of 1 nothing
+ * changes, so no golden can move.
+ */
+static i64 quiet_scale(void)
+{
+    static i64 scale;
+
+    if (scale == 0) {
+        const char *v = getenv("SAG_PTY_QUIET_SCALE");
+        long parsed = v != NULL ? strtol(v, NULL, 10) : 1;
+
+        scale = parsed >= 1 && parsed <= 100 ? (i64)parsed : 1;
+    }
+    return scale;
+}
+
 static void pump_quiet(PtyCtx *c, i64 quiet_ms, bool need_ready)
 {
     i64 quiet_deadline;
@@ -284,6 +312,7 @@ static void pump_quiet(PtyCtx *c, i64 quiet_ms, bool need_ready)
         return;
     if (quiet_ms <= 0)
         quiet_ms = PTC_DEFAULT_QUIET_MS;
+    quiet_ms *= quiet_scale();
     deadline = case_deadline(c);
     quiet_deadline = add_ms(ptc_now_ms(), quiet_ms);
     while (!c->failed) {

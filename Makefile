@@ -142,8 +142,12 @@ UNIT_DEATH_EXCLUDES := \
   --exclude cmd_registry_rejects_invalid_descriptors \
   --exclude render_invalid_cells_are_bugs
 ifeq ($(VALGRIND),1)
-SAG_PTY_BUDGET_MS ?= 180000
-SAG_PTY_CASE_BUDGET_MS ?= 15000
+SAG_PTY_BUDGET_MS ?= 900000
+SAG_PTY_CASE_BUDGET_MS ?= 60000
+# A settle infers "done" from silence, and valgrind makes the editor
+# silent for far longer than it is idle.  See quiet_scale() in
+# tests/pty/harness.c.
+SAG_PTY_QUIET_SCALE ?= 8
 VALGRIND_RUN := valgrind --quiet --error-exitcode=99 --leak-check=full \
                  --errors-for-leak-kinds=definite --track-fds=yes \
                  --child-silent-after-fork=yes
@@ -152,12 +156,30 @@ UNIT_RUN := SAG_TEST_INSTRUMENTED=1 $(VALGRIND_RUN) \
             SAG_TORTURE_CLEAN_ONLY=1 $(VALGRIND_RUN) \
             --trace-children=yes $(BUILD)/unit_tests \
             --filter save_fault_shim_contract
+#
+# --trace-children-skip: TRACE OUR EDITOR, NOT THE COMMANDS IT RUNS.
+#
+# --trace-children=yes is needed because the pty runner FORKS the editor,
+# and the editor is what we are checking.  But the editor also shells out
+# (Sprint 19's jobs), and valgrind followed into those too — where two
+# things went wrong.  Their leaks are not ours: the lane reported
+# "8 bytes definitely lost" inside /usr/bin/sort.  Worse,
+# --error-exitcode=99 REPLACED the command's real exit status, so
+# s19_filter_nonzero_keeps_buffer read `E: filter: exit 99` where the
+# golden says `exit 2` — the gate was rewriting the thing under test.
+#
+# The editor is spawned by absolute path out of $(BUILD), so skipping the
+# system prefixes leaves it traced and takes /bin/sh and its descendants
+# out.
 PTY_RUN  := SAG_PTY_BUDGET_MS=$(SAG_PTY_BUDGET_MS) \
             SAG_PTY_CASE_BUDGET_MS=$(SAG_PTY_CASE_BUDGET_MS) \
+            SAG_PTY_QUIET_SCALE=$(SAG_PTY_QUIET_SCALE) \
             SAG_PTY_EXCLUDE=notepad_restore_segv \
             valgrind --quiet --error-exitcode=99 --leak-check=full \
             --errors-for-leak-kinds=definite --track-fds=yes \
-            --trace-children=yes --log-fd=9 $(BUILD)/pty_runner
+            --trace-children=yes \
+            --trace-children-skip='/bin/*,/usr/bin/*,/usr/lib/*,/sbin/*' \
+            --log-fd=9 $(BUILD)/pty_runner
 PTY_PREP := ulimit -c 0 &&
 PTY_LOG_REDIRECT := 9>&2
 endif
