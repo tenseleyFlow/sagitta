@@ -31,7 +31,10 @@
 #include "edit/pane_cmds.h"
 #include "ui/groups.h"
 #include "ui/layout.h"
+#include "ui/ctxmenu.h"
+#include "ui/grouppicker.h"
 #include "ui/mouse.h"
+#include "ui/picker.h"
 #include "ui/region.h"
 #include "ui/tabs.h"
 #include "ui/viewport.h"
@@ -896,4 +899,216 @@ void test_mouse_the_router_is_the_only_dispatch_site(void)
     /* Exactly one, and the walk actually found it — a check that
      * scanned nothing would pass silently. */
     SAG_ASSERT_EQ_U64(handoffs, 1U);
+}
+
+/* ---------------------------------------------------------------- */
+/* §2: the overlay rows                                             */
+/* ---------------------------------------------------------------- */
+
+static const PickItem *ms_pick_items(void *ctx, u32 *n)
+{
+    static const PickItem items[3] = {
+        {"alpha", NULL, 10, 0U},
+        {"beta", NULL, 20, 0U},
+        {"gamma", NULL, 30, 0U}
+    };
+
+    (void)ctx;
+    *n = 3U;
+    return items;
+}
+
+static i32 ms_pick_accepted;
+
+static bool ms_pick_accept(Ed *ed, void *ctx, i32 payload, u8 how)
+{
+    (void)ed;
+    (void)ctx;
+    (void)how;
+    ms_pick_accepted = payload;
+    return true;
+}
+
+/*
+ * SAG_REGION_PICK_ROW: a press SELECTS and a release ACCEPTS, but only
+ * when the release lands on the same row.  A press that slid onto a
+ * neighbour before coming up was a mis-aim, and opening the neighbour
+ * is the worst available reading of it.
+ */
+void test_mouse_pick_row_selects_then_accepts_the_same_row(void)
+{
+    Ed ed;
+    PickerSpec spec;
+
+    ms_fixture(&ed);
+    (void)memset(&spec, 0, sizeof(spec));
+    spec.title = "Pick";
+    spec.items = ms_pick_items;
+    spec.accept = ms_pick_accept;
+    ms_pick_accepted = -1;
+    sag_picker_open(&ed, &spec);
+    SAG_ASSERT(sag_picker_active(&ed));
+
+    sag_region_frame_begin();
+    sag_region_add(SAG_REGION_PICK_ROW, (Rect){10U, 5U, 40U, 1U}, 10);
+    sag_region_add(SAG_REGION_PICK_ROW, (Rect){10U, 6U, 40U, 1U}, 20);
+    {
+        Key press = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_PRESS, 12U, 6U);
+        Key elsewhere = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_RELEASE,
+                              12U, 5U);
+
+        sag_mouse_event(&ed, &press);
+        /* Selected by PAYLOAD, so a re-rank between press and release
+         * cannot slide it onto a neighbour. */
+        SAG_ASSERT_EQ_I64(sag_picker_selected(&ed), 20);
+        /* Released on a DIFFERENT row: nothing is accepted. */
+        sag_mouse_event(&ed, &elsewhere);
+        SAG_ASSERT_EQ_I64(ms_pick_accepted, -1);
+        SAG_ASSERT(sag_picker_active(&ed));
+    }
+    {
+        Key press = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_PRESS, 12U, 6U);
+        Key up = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_RELEASE, 30U, 6U);
+
+        sag_mouse_event(&ed, &press);
+        sag_mouse_event(&ed, &up);
+    }
+    SAG_ASSERT_EQ_I64(ms_pick_accepted, 20);
+    SAG_ASSERT(!sag_picker_active(&ed));
+    sag_picker_close(&ed, false);
+    sag_ed_free(&ed);
+}
+
+/* And the wheel over the list moves by SAG_WHEEL_ROWS, without
+ * accepting anything. */
+void test_mouse_wheel_over_a_pick_row_scrolls_the_list(void)
+{
+    Ed ed;
+    PickerSpec spec;
+
+    ms_fixture(&ed);
+    (void)memset(&spec, 0, sizeof(spec));
+    spec.title = "Pick";
+    spec.items = ms_pick_items;
+    spec.accept = ms_pick_accept;
+    ms_pick_accepted = -1;
+    sag_picker_open(&ed, &spec);
+    sag_region_frame_begin();
+    sag_region_add(SAG_REGION_PICK_ROW, (Rect){10U, 5U, 40U, 1U}, 10);
+    {
+        Key w = ms_wheel((u8)SAG_MB_WHEEL_DOWN, 12U, 5U, 0U);
+
+        SAG_ASSERT_EQ_I64(sag_picker_selected(&ed), 10);
+        sag_mouse_event(&ed, &w);
+        /* Three rows down from row 0 clamps at the last row of three. */
+        SAG_ASSERT_EQ_I64(sag_picker_selected(&ed), 30);
+        SAG_ASSERT_EQ_I64(ms_pick_accepted, -1);
+    }
+    sag_picker_close(&ed, false);
+    sag_ed_free(&ed);
+}
+
+/*
+ * SAG_REGION_GP_ROW / _GP_NAME: the group picker's rows.  The dialog is
+ * modal, so the press reaches it and nothing under it — its own BLOCK
+ * is what guarantees the second half, and this row proves the first.
+ */
+void test_mouse_gp_rows_reach_the_group_picker(void)
+{
+    Ed ed;
+
+    ms_fixture(&ed);
+    SAG_ASSERT(sag_gp_show(&ed, "/tmp"));
+    SAG_ASSERT(sag_gp_active());
+    sag_region_frame_begin();
+    sag_gp_draw(&ed);
+    /* The dialog registered its own rows; find one and click it. */
+    {
+        u16 y;
+        bool found = false;
+
+        for (y = 0U; y < 24U && !found; y++) {
+            Region hit = sag_region_hit(20U, y);
+
+            if (hit.kind != SAG_REGION_GP_ROW)
+                continue;
+            found = true;
+            {
+                Key press = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_PRESS,
+                                  20U, y);
+                Key w = ms_wheel((u8)SAG_MB_WHEEL_DOWN, 20U, y, 0U);
+
+                sag_mouse_event(&ed, &press);
+                SAG_ASSERT(sag_gp_active());
+                /* The wheel is claimed too, and does not close it. */
+                sag_mouse_event(&ed, &w);
+                SAG_ASSERT(sag_gp_active());
+            }
+        }
+        SAG_ASSERT(found);
+    }
+    sag_gp_close(&ed);
+    sag_ed_free(&ed);
+}
+
+/*
+ * SAG_REGION_CTX_ROW: a press HIGHLIGHTS and a release INVOKES — and,
+ * as with the picker, only when the release is on the row the press
+ * captured.
+ */
+void test_mouse_ctx_row_highlights_then_invokes(void)
+{
+    Ed ed;
+    u32 target;
+    int i;
+
+    ms_fixture(&ed);
+    for (i = 0; i < 3; i++) {
+        char path[64];
+
+        (void)snprintf(path, sizeof(path), "/tmp/sag-mouse-x%d.txt", i);
+        SAG_ASSERT(sag_tab_open(&ed, path) >= 0);
+    }
+    sag_tab_switch(&ed, 1);
+    target = sag_tab_at(&ed, 1)->tab_id;
+    sag_ed_layout(&ed);
+    SAG_ASSERT(sag_mouse_open_tab_menu(&ed, target, 0U, 2U));
+    sag_region_frame_begin();
+    sag_mouse_menu_draw(&ed);
+    {
+        Rect box = sag_ctx_box();
+        Key press = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_PRESS,
+                          (u16)(box.x + 1U), (u16)(box.y + 3U));
+        Key wrong = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_RELEASE,
+                          (u16)(box.x + 1U), box.y);
+
+        sag_mouse_event(&ed, &press);
+        /* Row 3 is `Copy Path`; the press highlighted it. */
+        SAG_ASSERT_EQ_I64(sag_ctx_cursor(), 3);
+        SAG_ASSERT(sag_ctx_active());
+        /* Released on row 0 instead: nothing is invoked, and the menu
+         * stays up rather than acting on the row the pointer drifted
+         * onto. */
+        sag_mouse_event(&ed, &wrong);
+        SAG_ASSERT(sag_ctx_active());
+    }
+    {
+        Rect box = sag_ctx_box();
+        Key press = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_PRESS,
+                          (u16)(box.x + 1U), (u16)(box.y + 3U));
+        Key up = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_RELEASE,
+                       (u16)(box.x + 2U), (u16)(box.y + 3U));
+
+        sag_mouse_event(&ed, &press);
+        sag_mouse_event(&ed, &up);
+    }
+    SAG_ASSERT(!sag_ctx_active());
+    {
+        RegVal *v = sag_reg_get(&ed.regs, (u8)'+');
+
+        SAG_ASSERT_NOT_NULL(v);
+        SAG_ASSERT(v->bytes.len != 0U);
+    }
+    sag_ctx_close();
+    sag_ed_free(&ed);
 }

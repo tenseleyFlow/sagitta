@@ -1162,6 +1162,10 @@ const SagTest sag_tests[] = {
     T(mouse_tab_dropped_on_a_pane_cancels),
     T(mouse_hover_without_a_button_is_not_an_event),
     T(mouse_the_router_is_the_only_dispatch_site),
+    T(mouse_pick_row_selects_then_accepts_the_same_row),
+    T(mouse_wheel_over_a_pick_row_scrolls_the_list),
+    T(mouse_gp_rows_reach_the_group_picker),
+    T(mouse_ctx_row_highlights_then_invokes),
 };
 
 const size_t sag_tests_len = SAG_ARRAY_LEN(sag_tests);

@@ -1196,5 +1196,9 @@ void test_invariant9_every_new_command_is_registered(void);
 void test_mouse_tab_dropped_on_a_pane_cancels(void);
 void test_mouse_hover_without_a_button_is_not_an_event(void);
 void test_mouse_the_router_is_the_only_dispatch_site(void);
+void test_mouse_pick_row_selects_then_accepts_the_same_row(void);
+void test_mouse_wheel_over_a_pick_row_scrolls_the_list(void);
+void test_mouse_gp_rows_reach_the_group_picker(void);
+void test_mouse_ctx_row_highlights_then_invokes(void);
 
 #endif
