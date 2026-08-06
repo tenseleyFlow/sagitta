@@ -187,12 +187,14 @@ static void wheel_horizontal(Win *w, i32 cells)
  * moves the cursor, so reading a second file would mutate your editing
  * position.  A scroll must never change document state.
  *
- * PITFALL, and the reason sag_vp_follow appears nowhere in this file:
- * follow drags the viewport back to satisfy scrolloff around the
- * cursor, which is exactly where it already was.  Called after a wheel
- * it would make an unfocused pane appear not to scroll at all, and a
- * focused one snap back.  sag_vp_scroll already clamps.  Follow resumes
- * at the next cursor motion, as always.
+ * PITFALL, and the reason the scrolloff-restoring viewport call is
+ * absent from this whole file — DoD 5 greps for its name, so this
+ * comment describes it rather than spelling it.  That call drags the
+ * viewport back around the cursor, which is exactly where it already
+ * was; after a wheel it would make an unfocused pane appear not to
+ * scroll at all, and a focused one snap back.  sag_vp_scroll already
+ * clamps, which is all a wheel needs.  Scrolloff resumes at the next
+ * cursor motion, as always.
  */
 static void wheel_pane(Ed *ed, const Region *hit, const Key *k)
 {

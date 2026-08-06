@@ -3,12 +3,12 @@ size 80x24 alt=1 cursor=0,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- text
     1 aa
-    1 bb     
-    2 cc     
-    3 dd     
-    4 ee     
-    5 ff     
-    6 gg     
+    1 bb
+    2 cc
+    3 dd
+    4 ee
+    5 ff
+    6 gg
     7
 
 
@@ -28,12 +28,12 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
  L  pty-s14-s17_one_undo_reverts_multicursor_typing.txt  utf-8  lf  1:1  all  ×7
 --- style
 AAAAAAAA
-AAAAAAAAAAAAB
-AAAAAAAAAAAAB
-AAAAAAAAAAAAB
-AAAAAAAAAAAAB
-AAAAAAAAAAAAB
-AAAAAAAAAAAAB
+AAAAAABA
+AAAAAABA
+AAAAAABA
+AAAAAABA
+AAAAAABA
+AAAAAABA
 AAAAA
 
 

@@ -1317,19 +1317,12 @@ void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms)
 }
 
 /*
- * Sprint 18.5 §8: the mouse routing spine.
- *
- * Sprint 4 decoded mouse events and Sprint 22 built the region registry
- * and sag_pane_click, but nothing ever joined them: SAG_EV_MOUSE was
- * dropped at the event loop's default case, so the registry had a
- * producer and no consumer.  This is the join, deliberately narrow --
- * one dispatch on Region.kind.  Sprint 27 owns drag-resize, tab reorder,
- * drag-select and document scroll, and extends this table rather than
- * inventing its own path.
- *
- * Invariant 9 holds: every action here already has a key.  Selecting a
- * row is C-n/C-p, accepting is Enter, scrolling is PgUp/PgDn.  The mouse
- * is an accelerator, never the only way.
+ * The mouse routing spine used to live here.  Sprint 18.5 joined the
+ * decoder to the region registry for the completion menu alone; Sprint
+ * 27 moved the whole join to ui/mouse.c, so that file is the only place
+ * a pointer event becomes an action (its DoD 2).  Nothing in this file
+ * routes one, and the event loop's only mouse line hands it straight to
+ * sag_mouse_event.
  */
 void sag_ed_handle_paste(Ed *ed, const u8 *bytes, size_t len, bool end)
 {

@@ -23,6 +23,7 @@
  */
 #include "harness.h"
 
+#include <dirent.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -822,4 +823,74 @@ void test_mouse_hover_without_a_button_is_not_an_event(void)
     SAG_ASSERT_EQ_U64((u64)key.kind, (u64)SAG_EV_MOUSE);
     SAG_ASSERT_EQ_U64(key.ev, (u64)SAG_KEY_REPEAT);
     sag_input_free(&in);
+}
+
+/*
+ * DoD 2, made executable rather than left as a grep somebody ran once.
+ *
+ * Every mouse event enters through sag_mouse_event.  The decoder
+ * produces them, the router consumes them, and the event loop's single
+ * `case SAG_EV_MOUSE:` hands one to the other — nothing else in the
+ * program may turn a pointer event into an action, because a second
+ * route is how a click comes to mean two different things depending on
+ * which handler saw it first.
+ */
+void test_mouse_the_router_is_the_only_dispatch_site(void)
+{
+    static const char *const allowed[] = {
+        "src/term/input.c", /* produces them */
+        "src/ui/mouse.c"    /* consumes them */
+    };
+    static const char *const dirs[] = {
+        "src", "src/edit", "src/ui", "src/term", "src/text", "src/search",
+        "src/ws", "src/util", "src/unicode"
+    };
+    u32 handoffs = 0U;
+    size_t d;
+
+    for (d = 0U; d < SAG_ARRAY_LEN(dirs); d++) {
+        DIR *dir = opendir(dirs[d]);
+        struct dirent *e;
+
+        if (dir == NULL)
+            continue;
+        while ((e = readdir(dir)) != NULL) {
+            char path[256];
+            FILE *f;
+            char line[512];
+            size_t i;
+            bool skip = false;
+            size_t n = strlen(e->d_name);
+
+            if (n < 3U || strcmp(e->d_name + n - 2U, ".c") != 0)
+                continue;
+            (void)snprintf(path, sizeof(path), "%s/%s", dirs[d],
+                           e->d_name);
+            for (i = 0U; i < SAG_ARRAY_LEN(allowed); i++) {
+                if (strcmp(path, allowed[i]) == 0)
+                    skip = true;
+            }
+            if (skip)
+                continue;
+            f = fopen(path, "r");
+            if (f == NULL)
+                continue;
+            while (fgets(line, sizeof(line), f) != NULL) {
+                if (strstr(line, "SAG_EV_MOUSE") == NULL)
+                    continue;
+                /*
+                 * The ONE legal mention outside those two files: the
+                 * loop's hand-off.  Anything else is a second route.
+                 */
+                SAG_ASSERT_EQ_STR(path, "src/edit/loop.c");
+                SAG_ASSERT_NOT_NULL(strstr(line, "case SAG_EV_MOUSE:"));
+                handoffs++;
+            }
+            (void)fclose(f);
+        }
+        (void)closedir(dir);
+    }
+    /* Exactly one, and the walk actually found it — a check that
+     * scanned nothing would pass silently. */
+    SAG_ASSERT_EQ_U64(handoffs, 1U);
 }

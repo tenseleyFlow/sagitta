@@ -178,11 +178,26 @@ static void redraw_primary_selection_change(Ed *ed, Win *w,
         sag_draw_document_rows(ed, w, lo, hi);
 }
 
+/*
+ * The screen column a content column occupies.
+ *
+ * `w->rect.x` IS the content origin — sag_layout sets it to
+ * `leaf->rect.x + gutter` — so adding the gutter again here shifts every
+ * overlay one gutter-width to the right.  It did: selection highlights
+ * and search highlights were drawn six cells past the text they were
+ * meant to mark, and the two agreed only in a window whose leaf sat at
+ * column 0 with no gutter, which is exactly the fixture every earlier
+ * golden used.
+ *
+ * This is the same mistake Sprint 22's cursor placement made, in the
+ * sibling helper; the cursor was fixed in Sprint 26 and this one was
+ * not looked at.  Both now read rect.x as what it is.
+ */
 static u16 grid_x(const Win *w, CCol col)
 {
     u64 left = w->vp.wrap ? 0U : w->vp.left.v;
     u64 relative = col.v > left ? col.v - left : 0U;
-    u64 x = (u64)w->rect.x + w->gutter_width + relative;
+    u64 x = (u64)w->rect.x + relative;
 
     return x > UINT16_MAX ? UINT16_MAX : (u16)x;
 }
@@ -207,8 +222,9 @@ static void overlay_span(Grid *grid, const Win *w, u16 row,
     x0 = grid_x(w, c0);
     x1 = grid_x(w, c1);
     right = row_right(grid, w);
-    if (x0 < (u16)(w->rect.x + w->gutter_width))
-        x0 = (u16)(w->rect.x + w->gutter_width);
+    /* The floor is the content origin, which rect.x already is. */
+    if (x0 < w->rect.x)
+        x0 = w->rect.x;
     if (x1 > right)
         x1 = right;
     sag_grid_overlay(grid, row, x0, x1, style, fields);
@@ -311,9 +327,12 @@ static void draw_secondary_rows(Ed *ed, Win *w, u16 lo, u16 hi)
         col = sag_off_to_ccol(w->buf->tb, displayed, cursor->pos,
                               draw_tabwidth(w));
         x = grid_x(w, col);
+        /* The left edge of the CONTENT, which rect.x already is — see
+         * grid_x.  Adding the gutter again here made this guard reject
+         * every secondary cursor in the leftmost gutter-width of the
+         * text, which for a short line is all of them. */
         if ((u32)w->rect.y + screen_row >= ed->grid.rows ||
-            x < (u16)(w->rect.x + w->gutter_width) ||
-            x >= row_right(&ed->grid, w))
+            x < w->rect.x || x >= row_right(&ed->grid, w))
             continue;
         fields = ed->render.tier == SAG_RENDER_TIER_16 ? SAG_OVERLAY_ATTRS :
                  (u8)(SAG_OVERLAY_FG | SAG_OVERLAY_BG);

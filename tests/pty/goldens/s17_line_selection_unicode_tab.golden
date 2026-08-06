@@ -2,8 +2,8 @@
 size 80x24 alt=1 cursor=1,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- text
-    1 a漢 b      
-    2 emoji 👨‍👩‍👧‍👦      
+    1 a漢 b
+    2 emoji 👨‍👩‍👧‍👦
     1 tail
     2
 
@@ -27,8 +27,8 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 
  H·L  pty-s14-s17_line_selection_unicode_tab.txt             utf-8  lf  2:1  all
 --- style
-AAAAAAAAAAAABBBBB
-AAAAAAAAAAAABBBBBBBB
+AAAAAABBBBB
+AAAAAABBBBBBBB
 AAAAAAAAAA
 AAAAA
 

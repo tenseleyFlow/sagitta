@@ -3,9 +3,9 @@ size 80x24 alt=1 cursor=0,7 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- text
     1 a
-    1 wide   
-    2        
-    3 last   
+    1 wide
+    2  
+    3 last
     4
 
 
@@ -28,9 +28,9 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
  L  pty-s14-s17_secondary_cursors_draw_at_eol.txt        utf-8  lf  1:2  all  ×4
 --- style
 AAAAAAA
-AAAAAAAAAAAAB
-AAAAAAAAAAAAB
-AAAAAAAAAAAAB
+AAAAAABAAA
+AAAAAAB
+AAAAAABAAA
 AAAAA
 
 

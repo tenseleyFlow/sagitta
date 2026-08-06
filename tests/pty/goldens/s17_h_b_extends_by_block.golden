@@ -2,11 +2,11 @@
 size 80x24 alt=1 cursor=5,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- text
-    5 int main(void) {      
-    4   if (ready) {      
-    3     call();      
-    2   }      
-    1 }      
+    5 int main(void) {
+    4   if (ready) {
+    3     call();
+    2   }
+    1 }
     6
 
 
@@ -27,11 +27,11 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 
  H·B  pty-s14-s17_h_b_extends_by_block.txt                   utf-8  lf  6:1  all
 --- style
-AAAAAAAAAAAABBBBBBBBBBBBBBBB
-AAAAAAAAAAAABBBBBBBBBBBBBB
-AAAAAAAAAAAABBBBBBBBBBB
-AAAAAAAAAAAABBB
-AAAAAAAAAAAAB
+AAAAAABBBBBBBBBBBBBBBB
+AAAAAABBBBBBBBBBBBBB
+AAAAAABBBBBBBBBBB
+AAAAAABBB
+AAAAAAB
 AAAAA
 
 

@@ -3756,6 +3756,33 @@ static void case_s27_dwell_opens_member_strip(PtyCtx *c)
     s24_fixture_remove();
 }
 
+/*
+ * DoD 6: the mode CHIP after a double-click.
+ *
+ * The unit tests prove the span equals sag_unit_word.span; this proves
+ * the editor actually ends up in H mode with the word engine borrowed,
+ * which is the half a caller can see.  A double-click that produced the
+ * right bytes in the wrong mode would leave every H-mode key doing
+ * something else.
+ */
+static void case_s27_double_click_mode_chip(PtyCtx *c)
+{
+    static const u8 words[] = "alpha beta gamma\ndelta\n";
+    char path[256];
+
+    if (!s18_open(c, words, sizeof(words) - 1U, path, sizeof(path)))
+        return;
+    /* Column 15 (1-based) is inside `beta`: the gutter takes the first
+     * six cells, so text column 8 is screen column 14. */
+    s27_mouse(c, "\x1b[<0;15;1M");
+    s27_mouse(c, "\x1b[<0;15;1m");
+    s27_mouse(c, "\x1b[<0;15;1M");
+    s27_mouse(c, "\x1b[<0;15;1m");
+    ptc_snapshot(c, "s27_double_click_mode_chip");
+    force_quit(c);
+    (void)unlink(path);
+}
+
 /* The GROUP context menu, opened over a strip that has been scrolled —
  * the case the capture-at-open law exists for. */
 static void case_s27_group_menu_over_scrolled_strip(PtyCtx *c)
@@ -4066,6 +4093,8 @@ const PtyCase sag_pty_cases[] = {
       case_s27_dwell_opens_member_strip),
     C(s27_group_menu_over_scrolled_strip, modern, 24U, 80U,
       case_s27_group_menu_over_scrolled_strip),
+    C(s27_double_click_mode_chip, modern, 24U, 80U,
+      case_s27_double_click_mode_chip),
     {NULL, NULL, 0U, 0U, NULL}
 };
 

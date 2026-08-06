@@ -1195,5 +1195,6 @@ void test_invariant9_menu_and_its_rows_are_keyboard_reachable(void);
 void test_invariant9_every_new_command_is_registered(void);
 void test_mouse_tab_dropped_on_a_pane_cancels(void);
 void test_mouse_hover_without_a_button_is_not_an_event(void);
+void test_mouse_the_router_is_the_only_dispatch_site(void);
 
 #endif

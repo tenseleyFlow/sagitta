@@ -2,7 +2,7 @@
 size 80x24 alt=1 cursor=0,17 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- text
-    1 alpha beta gamma 
+    1 alpha beta gamma
     1
 
 
@@ -27,7 +27,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 
  H·W  pty-s14-s17_h_w_keyboard_entry.txt                    utf-8  lf  1:12  all
 --- style
-AAAAAAAAAAAABBBBBBBBBBB
+AAAAAABBBBBBBBBBBAAAAA
 AAAAA
 
 
