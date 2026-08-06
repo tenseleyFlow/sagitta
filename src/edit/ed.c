@@ -414,6 +414,9 @@ void sag_ed_free(Ed *ed)
 {
     if (ed == NULL)
         return;
+    /* Belt and braces: a path that never reached sag_state_close still
+     * must not leave its lock behind.  Dispose saves nothing. */
+    sag_state_dispose(ed);
     sag_cmdline_dispose(ed);
     /* Jobs die with the process (never persisted, s25); kill and reap
      * before the buffers they append into go away. */
@@ -1547,7 +1550,15 @@ static int ed_driver_inner(const char *path)
     ed.render_ready = true;
     sag_ed_layout(&ed);
     sag_ed_render(&ed);
+    /*
+     * State comes up AFTER the buffers so a restore has somewhere to
+     * land, and the lock is claimed before the first change can mark
+     * anything dirty.
+     */
+    sag_state_open(&ed);
     result = ed.quit ? ed.exit_code : sag_loop_run(&ed);
+    /* Clean quit: the unconditional save, before anything is freed. */
+    sag_state_close(&ed);
     sag_ed_free(&ed);
     return result;
 }

@@ -33,6 +33,10 @@ static void pane_refocus(Ed *ed, Pane *want)
         ed->win = ed->focus->win;
     ed->layout_dirty = true;
     ed->full_damage = true;
+    /* §5: split, close and plain focus movement all funnel through
+     * here, so this one call covers the whole "active window changed"
+     * trigger without three separate ones to keep in sync. */
+    sag_state_mark_dirty(ed);
 }
 
 static CmdStatus pane_split(CmdCtx *cx, SplitDir dir)
@@ -188,6 +192,7 @@ static CmdStatus pane_resize(CmdCtx *cx, i32 sign)
     }
     ed->layout_dirty = true;
     ed->full_damage = true;
+    sag_state_mark_dirty(ed);
     return SAG_CMD_OK;
 }
 
@@ -241,6 +246,10 @@ void sag_pane_drag_end(Ed *ed)
 {
     if (ed == NULL)
         return;
+    /* Marked at RELEASE, not per motion event: the intermediate ratios
+     * are not a state the user ever chose. */
+    if (ed->drag.active)
+        sag_state_mark_dirty(ed);
     ed->drag.active = false;
     ed->drag.split = NULL;
 }

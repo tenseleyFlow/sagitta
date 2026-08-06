@@ -142,6 +142,7 @@ void sag_tab_set_path(Ed *ed, int idx, const char *path)
         return;
     free(t->path);
     t->path = canonical_path(path);
+    sag_state_mark_dirty(ed);
 }
 
 int sag_tab_open(Ed *ed, const char *path)
@@ -195,6 +196,7 @@ int sag_tab_open(Ed *ed, const char *path)
     t.focus = t.root;
     t.buffer_id = buf->id;
     TabVec_push(&ed->tabs.v, t);
+    sag_state_mark_dirty(ed);
     return (int)ed->tabs.v.len - 1;
 }
 
@@ -243,6 +245,7 @@ bool sag_tab_close(Ed *ed, int idx)
     if (ed->tabs.active < 0 && ed->tabs.v.len > 0U)
         ed->tabs.active = 0;
     sag_tab_switch(ed, ed->tabs.active);
+    sag_state_mark_dirty(ed);
     return true;
 }
 
@@ -276,6 +279,7 @@ void sag_tab_switch(Ed *ed, int idx)
         ed->win = ed->focus->win;
     ed->layout_dirty = true;
     ed->full_damage = true;
+    sag_state_mark_dirty(ed);
 }
 
 int sag_tab_shifted_index(int i, int from, int to)
@@ -310,6 +314,7 @@ void sag_tab_reorder(Ed *ed, int from, int to)
      * staying on a number that now names someone else. */
     if (ed->tabs.active >= 0)
         ed->tabs.active = sag_tab_shifted_index(ed->tabs.active, from, to);
+    sag_state_mark_dirty(ed);
 }
 
 bool sag_tab_modified(const Ed *ed, int idx)

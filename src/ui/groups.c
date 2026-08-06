@@ -107,6 +107,7 @@ u32 sag_group_create(Ed *ed, const char *dir_path, const char *name)
      * the caller to invent a temporary member.
      */
     GroupVec_push(&ed->groups.v, g);
+    sag_state_mark_dirty(ed);
     return g.id;
 }
 
@@ -222,6 +223,7 @@ void sag_group_add_member(Ed *ed, u32 gid, int tab_idx)
     }
     t->group_id = gid;
     t->group_ordinal = max + 1U;
+    sag_state_mark_dirty(ed);
 }
 
 void sag_group_remove_member(Ed *ed, int tab_idx)
@@ -251,6 +253,7 @@ void sag_group_remove_member(Ed *ed, int tab_idx)
      */
     if (sag_group_member_count(ed, gid) == 0)
         sag_group_dissolve(ed, gid);
+    sag_state_mark_dirty(ed);
 }
 
 void sag_group_dissolve(Ed *ed, u32 gid)
@@ -280,6 +283,7 @@ void sag_group_dissolve(Ed *ed, u32 gid)
     (void)memmove(&ed->groups.v.data[at], &ed->groups.v.data[at + 1],
                   (ed->groups.v.len - (size_t)at - 1U) * sizeof(TabGroup));
     ed->groups.v.len--;
+    sag_state_mark_dirty(ed);
 }
 
 void sag_group_label(const Ed *ed, u32 gid, char *buf, size_t n)
@@ -367,6 +371,7 @@ void sag_group_set_ordinal(Ed *ed, int tab_idx, int pos)
     k++;
     for (i = 0; i < k; i++)
         ed->tabs.v.data[final_order[i]].group_ordinal = (u32)(i + 1);
+    sag_state_mark_dirty(ed);
 }
 
 void sag_group_reorder_block(Ed *ed, u32 gid, int to_idx)
@@ -427,6 +432,7 @@ void sag_group_reorder_block(Ed *ed, u32 gid, int to_idx)
      * re-resolved from the id it named before the move. */
     if (active_id != 0U)
         ed->tabs.active = sag_tab_index_of_id(ed, active_id);
+    sag_state_mark_dirty(ed);
 }
 
 void sag_group_note_position(Ed *ed)

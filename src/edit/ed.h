@@ -26,6 +26,7 @@
 #include "util/arena.h"
 #include "util/buf.h"
 #include "util/intern.h"
+#include "ws/state.h"
 
 typedef enum {
     SAG_PROMPT_NONE,
@@ -99,6 +100,10 @@ struct Ed {
     Bytebuf paste;
 
     Workspace ws;
+    /* Sprint 25 §5.  Zeroed = stateless; the driver opts in with
+     * sag_state_open, so nothing that merely builds an Ed touches a
+     * filesystem. */
+    WsState state;
     Registers regs;
     Buffer buffer;
     Win single_win;

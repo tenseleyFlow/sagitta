@@ -24,14 +24,19 @@
  * 8 bytes per entry.
  */
 
+#include "edit/loop.h"
 #include "util/arena.h"
 #include "util/buf.h"
 #include "ws/fllit.h"
+#include "ws/workspace.h"
 
 typedef struct Ed Ed;
 
 enum {
     SAG_STATE_VERSION = 1,
+    /* §5: the debounce.  A state cache that is 2 s stale costs nothing;
+     * one written on every keystroke costs an fsync per keystroke. */
+    SAG_STATE_SAVE_DEBOUNCE_MS = 2000,
     /* §3's whole-document caps, enforced by the schema layer (the
      * parser owns only syntax and structure). */
     SAG_STATE_MAX_TABS = 512,
@@ -46,6 +51,49 @@ enum {
 
 /* Emits the whole v1 document for `ed`. */
 void sag_state_emit(const Ed *ed, Bytebuf *out);
+
+/*
+ * Sprint 25 §5: saving.
+ *
+ * Everything hangs off one struct on the Ed so the whole feature can be
+ * OFF by default.  A zeroed WsState is stateless: `ready` false means
+ * every entry point below returns without touching a filesystem, which
+ * is what unit tests, --clean and an unusable state home all want.  The
+ * driver opts in with sag_state_open.
+ */
+typedef struct WsState {
+    WsKey key;
+    /* Key computed and <dir> usable.  False = this session keeps no
+     * state, and that is never an error the caller handles. */
+    bool ready;
+    bool dirty;
+    /* We hold <dir>/lock.  A second sagitta in the same workspace
+     * restores normally and never writes: last-writer-wins would
+     * silently discard whichever session quit first. */
+    bool writer;
+    /* The ownership notice is shown exactly ONCE, and at the first
+     * change rather than at startup — before the first paint it would
+     * be a warning about something the user had not done yet. */
+    bool owner_told;
+    long owner_pid;
+    TimerId timer;
+    /* Test hook: completed atomic writes.  Counting is the only way to
+     * assert that a burst of ten changes debounces into one write. */
+    u64 writes;
+} WsState;
+
+/* Computes the key for `ed`'s workspace root, creates the state dir and
+ * claims the lock.  Never fails loudly: a bad state home leaves `ready`
+ * false and the editor runs stateless. */
+void sag_state_open(Ed *ed);
+/* Final unconditional save (if dirty and we are the writer), then
+ * dispose.  The clean-quit path; NOT the crash path. */
+void sag_state_close(Ed *ed);
+/* Cancels the timer and releases our lock.  Idempotent, saves nothing. */
+void sag_state_dispose(Ed *ed);
+
+void sag_state_mark_dirty(Ed *ed); /* from state-changing events */
+bool sag_state_save(Ed *ed);       /* false = not the writer, or I/O   */
 
 /*
  * The file-id -> live-id map (§3.1).
