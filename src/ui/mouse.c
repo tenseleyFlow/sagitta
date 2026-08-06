@@ -434,12 +434,248 @@ static void begin_drag(Ed *ed)
     }
 }
 
+/* ---------------------------------------------------------------- */
+/* §4: tab and group drag-reorder                                   */
+/* ---------------------------------------------------------------- */
+
+/* The group the held tab is currently a member of; 0 when ungrouped.
+ * Resolved from the id, never from the press's index. */
+static u32 held_tab_group(Ed *ed)
+{
+    int idx = sag_tab_index_of_id(ed, ed->mouse.drag_tab_id);
+    Tab *t = sag_tab_at(ed, idx);
+
+    return t != NULL ? t->group_id : 0U;
+}
+
+/*
+ * PITFALL — the dwell target is not sag_region_hit.
+ *
+ * The region table describes the PREVIEWED strip, where the held entry
+ * has been moved under the pointer, so hit-testing would always answer
+ * "you are hovering the thing you are holding".  The pre-drag slot
+ * table (s27 §4, ui/tabs.h) is the only thing that can answer what was
+ * here before the drag started.
+ *
+ * Arming rather than opening: a drag that merely PASSES over a group on
+ * its way somewhere else must not make that group's members flash open,
+ * so the clock restarts every time the hovered group changes and the
+ * open happens in sag_mouse_tick.
+ */
+static void drag_dwell(Ed *ed, int slot)
+{
+    MouseState *m = &ed->mouse;
+    i32 pre = 0;
+    u32 gid = 0U;
+
+    /* Only a TAB dwells into a group.  A group dragged into another
+     * group is not a thing this model has — groups do not nest. */
+    if (m->phase == SAG_MP_DRAG_TAB && slot >= 0 &&
+        sag_strip_pre_payload(slot, &pre) && pre < 0)
+        gid = (u32)(-pre);
+    /* A tab never dwells into the group it is already a member of:
+     * there is nothing to join, and opening the strip would offer a
+     * drop that means nothing. */
+    if (gid != 0U && gid == held_tab_group(ed))
+        gid = 0U;
+    if (gid != m->dwell_gid) {
+        m->dwell_gid = gid;
+        m->dwell_since_ms = gid != 0U ? ed->now_ms : 0;
+    }
+}
+
+static void drag_strip_motion(Ed *ed, const Key *k)
+{
+    MouseState *m = &ed->mouse;
+    int slot;
+
+    /*
+     * The array is frozen for the drag's lifetime, so a changed count
+     * means something ELSE mutated it — an async job closing a file, a
+     * script — and the target the user aimed at no longer means what it
+     * did.  Cancel outright rather than commit against a moved target.
+     */
+    if (sag_tab_count(ed) != m->tab_count_at_press) {
+        sag_mouse_cancel(ed);
+        return;
+    }
+    slot = sag_strip_slot_at(k->col, k->row);
+    if (slot >= 0) {
+        if (!m->drag_to_valid || m->drag_to_slot != slot || m->drag_to_tail) {
+            m->drag_to_slot = slot;
+            m->drag_to_valid = true;
+            m->drag_to_tail = false;
+            ed->full_damage = true;
+        }
+    } else if (sag_strip_slot_count() > 0 &&
+               k->row == ed->tab_strip_rect.y &&
+               k->col >= sag_strip_tail_x()) {
+        /*
+         * The blank tail past the last entry — row 1's, whatever row
+         * the press came from: a member dragged UP out of row 2 aims at
+         * row 1's empty space, and that gesture is the whole reason the
+         * tail is a drop target.
+         */
+        if (!m->drag_to_tail) {
+            m->drag_to_slot = sag_strip_slot_count() - 1;
+            m->drag_to_valid = true;
+            m->drag_to_tail = true;
+            ed->full_damage = true;
+        }
+    }
+    drag_dwell(ed, slot);
+}
+
+/* The tab-array index a row-1 slot names, resolved against the PRE-DRAG
+ * list.  A group entry answers with its first member's index, which is
+ * where the group's block starts. */
+static int slot_to_tab_index(Ed *ed, int slot)
+{
+    i32 pre = 0;
+
+    if (!sag_strip_pre_payload(slot, &pre))
+        return -1;
+    if (pre >= 0)
+        return (int)pre;
+    {
+        int members[SAG_TAB_MAX];
+        int n = sag_group_members(ed, (u32)(-pre), members,
+                                  (int)SAG_ARRAY_LEN(members));
+        int lowest = -1;
+        int i;
+
+        for (i = 0; i < n; i++) {
+            if (lowest < 0 || members[i] < lowest)
+                lowest = members[i];
+        }
+        return lowest;
+    }
+}
+
+/* Where a group's members begin in the tab array. */
+static int group_block_start(Ed *ed, u32 gid)
+{
+    int members[SAG_TAB_MAX];
+    int n = sag_group_members(ed, gid, members, (int)SAG_ARRAY_LEN(members));
+    int lowest = -1;
+    int i;
+
+    for (i = 0; i < n; i++) {
+        if (lowest < 0 || members[i] < lowest)
+            lowest = members[i];
+    }
+    return lowest;
+}
+
+/*
+ * Joining a group is Sprint 24's exact sequence, called and never
+ * re-derived: the ordinal off-by-one is s24's pinned pitfall and
+ * reinventing it here would put a second, subtly different answer in
+ * the program.
+ */
+static void drop_into_group(Ed *ed, u32 gid, int pos)
+{
+    int tab_idx = sag_tab_index_of_id(ed, ed->mouse.drag_tab_id);
+    Tab *t = sag_tab_at(ed, tab_idx);
+
+    if (t == NULL || gid == 0U)
+        return;
+    if (t->group_id != 0U)
+        sag_group_remove_member(ed, tab_idx); /* FIRST */
+    /* The removal can dissolve an emptied group and does not move
+     * anything, so the index still names this tab. */
+    sag_group_add_member(ed, gid, tab_idx);
+    sag_group_set_ordinal(ed, tab_idx, pos); /* pos counts in the FINAL list */
+    {
+        int start = group_block_start(ed, gid);
+
+        if (start >= 0)
+            sag_group_reorder_block(ed, gid, start); /* keep contiguous */
+    }
+    sag_state_mark_dirty(ed);
+}
+
+/*
+ * Row 2 under the pointer: which group, and at which ordinal.
+ *
+ * The group is the one row 2 is SHOWING — the dwell's preview when
+ * there is one, otherwise the pinned member strip.  Resolving it from
+ * the member under the pointer instead would fail on the blank tail,
+ * which is where "put it last" has to be expressible.
+ */
+static bool drop_target_row2(Ed *ed, const Key *k, u32 *gid, int *pos)
+{
+    Region hit;
+
+    if (ed->tab_strip_rect.h < 2U ||
+        k->row != (u16)(ed->tab_strip_rect.y + 1U))
+        return false;
+    *gid = ed->mouse.preview_gid != 0U ? ed->mouse.preview_gid
+                                       : sag_active_group_id(ed);
+    if (*gid == 0U)
+        return false;
+    hit = sag_region_hit(k->col, k->row);
+    if (hit.kind == SAG_REGION_TAB && hit.payload >= 0) {
+        Tab *t = sag_tab_at(ed, hit.payload);
+
+        if (t != NULL && t->group_id == *gid) {
+            *pos = (int)t->group_ordinal;
+            return true;
+        }
+    }
+    /* The blank tail of row 2: append. */
+    *pos = sag_group_member_count(ed, *gid) + 1;
+    return true;
+}
+
+static void drag_strip_drop(Ed *ed, const Key *k)
+{
+    MouseState *m = &ed->mouse;
+    u32 gid = 0U;
+    int pos = 0;
+    int to;
+
+    if (sag_tab_count(ed) != m->tab_count_at_press)
+        return; /* cancelled; nothing was mutated on the way */
+    if (m->phase == SAG_MP_DRAG_TAB && drop_target_row2(ed, k, &gid, &pos)) {
+        drop_into_group(ed, gid, pos);
+        ed->full_damage = true;
+        return;
+    }
+    if (!m->drag_to_valid)
+        return; /* released somewhere with no target: nothing changes */
+    to = m->drag_to_tail ? (int)sag_tab_count(ed) - 1
+                         : slot_to_tab_index(ed, m->drag_to_slot);
+    if (to < 0)
+        return;
+    if (m->phase == SAG_MP_DRAG_GROUP) {
+        sag_group_reorder_block(ed, m->drag_gid, to);
+    } else {
+        int from = sag_tab_index_of_id(ed, m->drag_tab_id);
+
+        if (from < 0)
+            return;
+        /*
+         * Dropping on the blank tail carries the tab OUT of its group —
+         * the one gesture that can, when the group is the only row-1
+         * entry left to aim at.
+         */
+        if (m->drag_to_tail && held_tab_group(ed) != 0U)
+            sag_group_remove_member(ed, from);
+        sag_tab_reorder(ed, from, to);
+    }
+    sag_state_mark_dirty(ed);
+    ed->full_damage = true;
+}
+
 static void mouse_motion(Ed *ed, const Key *k)
 {
     MouseState *m = &ed->mouse;
 
     if (m->phase == SAG_MP_IDLE)
         return;
+    m->at_x = k->col;
+    m->at_y = k->row;
     if (m->phase == SAG_MP_ARMED) {
         /* The pointer has to leave the pressed CELL.  Cells are the
          * unit of everything here, so there is no pixel radius to
@@ -459,7 +695,7 @@ static void mouse_motion(Ed *ed, const Key *k)
         break;
     case SAG_MP_DRAG_TAB:
     case SAG_MP_DRAG_GROUP:
-        /* §4 owns the preview, the dwell and the auto-scroll. */
+        drag_strip_motion(ed, k);
         break;
     case SAG_MP_IDLE:
     case SAG_MP_ARMED:
@@ -548,11 +784,18 @@ static void mouse_release(Ed *ed, const Key *k)
         break;
     case SAG_MP_DRAG_TAB:
     case SAG_MP_DRAG_GROUP:
-        /* §4 owns the drop. */
+        drag_strip_drop(ed, k);
         break;
     case SAG_MP_IDLE:
     default:
         break;
+    }
+    if (m->preview_gid != 0U) {
+        /* The dwell-opened strip goes away with the gesture that opened
+         * it, and it changed the strip's row count, so the layout has to
+         * be recomputed rather than merely repainted. */
+        ed->layout_dirty = true;
+        ed->full_damage = true;
     }
     sag_mouse_init(m);
 }
@@ -567,28 +810,88 @@ void sag_mouse_cancel(Ed *ed)
         return;
     if (ed->mouse.phase == SAG_MP_DRAG_BORDER)
         sag_pane_drag_cancel(ed);
-    if (ed->mouse.preview_gid != 0U)
+    /*
+     * A tab or group drag needs nothing undone: Tabs.v was never
+     * touched.  That is the whole reason the preview is a picture and
+     * not a live mutation — cancelling here would otherwise mean
+     * undoing an arbitrary number of moves.
+     */
+    if (ed->mouse.preview_gid != 0U) {
+        ed->layout_dirty = true;
         ed->full_damage = true;
+    } else if (ed->mouse.drag_to_valid) {
+        ed->full_damage = true;
+    }
     sag_mouse_init(&ed->mouse);
 }
 
 /* ---------------------------------------------------------------- */
-/* Timers                                                           */
+/* §4: the clocks                                                   */
 /* ---------------------------------------------------------------- */
+
+static bool drag_over_chevron(Ed *ed, i32 *delta)
+{
+    Region hit = sag_region_hit(ed->mouse.at_x, ed->mouse.at_y);
+
+    if (hit.kind != SAG_REGION_TAB_SCROLL)
+        return false;
+    *delta = hit.payload < 0 ? -1 : 1;
+    return true;
+}
 
 void sag_mouse_tick(Ed *ed, i64 now_ms)
 {
-    /* §4 owns dwell and auto-scroll; both are clocks, not motion
-     * counts. */
-    (void)ed;
-    (void)now_ms;
+    MouseState *m;
+    i32 delta = 0;
+
+    if (ed == NULL)
+        return;
+    m = &ed->mouse;
+    if (m->phase != SAG_MP_DRAG_TAB && m->phase != SAG_MP_DRAG_GROUP)
+        return;
+    ed->now_ms = now_ms;
+    if (m->dwell_gid != 0U && m->preview_gid != m->dwell_gid &&
+        now_ms - m->dwell_since_ms >= SAG_DRAG_DWELL_MS) {
+        m->preview_gid = m->dwell_gid;
+        /* The strip grew a row, so this is a layout change and not a
+         * repaint — the pane tree below it has to give the row back. */
+        ed->layout_dirty = true;
+        ed->full_damage = true;
+    }
+    /*
+     * Auto-scroll runs on THIS clock rather than per motion event: a
+     * fast pointer emits far more motion reports than a slow one, and
+     * a strip that scrolled per report would fly past the target at a
+     * speed that depends on how the terminal batches its reports.
+     */
+    if (drag_over_chevron(ed, &delta) &&
+        now_ms - m->autoscroll_ms >= SAG_DRAG_SCROLL_MS) {
+        m->autoscroll_ms = now_ms;
+        strip_scroll(ed, false, delta);
+    }
 }
 
 i64 sag_mouse_deadline(const Ed *ed, i64 now_ms)
 {
-    (void)ed;
-    (void)now_ms;
-    return 0;
+    const MouseState *m;
+    i64 next = -1;
+
+    if (ed == NULL)
+        return -1;
+    m = &ed->mouse;
+    if (m->phase != SAG_MP_DRAG_TAB && m->phase != SAG_MP_DRAG_GROUP)
+        return -1;
+    if (m->dwell_gid != 0U && m->preview_gid != m->dwell_gid)
+        next = m->dwell_since_ms + SAG_DRAG_DWELL_MS;
+    if (sag_region_hit(m->at_x, m->at_y).kind == SAG_REGION_TAB_SCROLL) {
+        i64 at = m->autoscroll_ms + SAG_DRAG_SCROLL_MS;
+
+        if (next < 0 || at < next)
+            next = at;
+    }
+    if (next < 0)
+        return -1;
+    return next <= now_ms ? 0 : next - now_ms;
 }
 
 bool sag_mouse_drag_preview(const Ed *ed, i32 *payload, int *to_slot)

@@ -1115,4 +1115,36 @@ void test_re_engines_agree_from_offsets(void);
 void test_re_dfa_survives_cache_pressure(void);
 void test_re_dfa_handles_pathological_patterns(void);
 
+/* Sprint 27 */
+void test_mouse_press_arms_and_does_not_drag(void);
+void test_mouse_wheel_never_touches_the_phase_machine(void);
+void test_mouse_escape_and_focus_out_cancel_a_drag(void);
+void test_mouse_release_without_press_is_inert(void);
+void test_mouse_click_a_pane_focuses_and_places_the_cursor(void);
+void test_mouse_block_region_swallows_everything(void);
+void test_mouse_right_click_in_a_pane_does_nothing(void);
+void test_mouse_unlisted_regions_are_inert(void);
+void test_mouse_wheel_scrolls_the_pane_under_the_pointer(void);
+void test_mouse_wheel_has_no_acceleration(void);
+void test_mouse_ctrl_wheel_is_unbound(void);
+void test_mouse_shift_wheel_scrolls_sideways_and_not_when_wrapped(void);
+void test_mouse_wheel_over_the_strip_scrolls_the_strip(void);
+void test_mouse_press_captures_its_target_across_a_strip_change(void);
+void test_mouse_press_on_a_tab_closed_mid_gesture_is_inert(void);
+void test_mouse_press_on_a_group_entry_captures_the_gid(void);
+void test_drag_never_mutates_the_tab_array_before_release(void);
+void test_drag_cancel_restores_nothing_because_nothing_moved(void);
+void test_drag_drop_reorders_by_insertion(void);
+void test_drag_drop_where_it_started_changes_nothing(void);
+void test_drag_a_changed_tab_count_cancels(void);
+void test_drag_dwell_opens_a_group_at_400ms_and_not_at_399(void);
+void test_drag_passing_over_three_groups_opens_none(void);
+void test_drag_dwell_reads_the_pre_drag_list_not_the_region(void);
+void test_drag_never_dwells_into_its_own_group(void);
+void test_drag_join_matches_the_keyboard_sequence(void);
+void test_drag_drop_on_the_blank_tail_leaves_a_sole_group(void);
+void test_drag_autoscroll_is_throttled_to_one_entry_per_window(void);
+void test_drag_reports_a_deadline_while_dwelling(void);
+void test_drag_a_group_moves_the_whole_block(void);
+
 #endif

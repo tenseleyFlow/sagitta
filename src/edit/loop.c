@@ -14,6 +14,7 @@
 #include "edit/dispatch.h"
 #include "edit/ed.h"
 #include "edit/job.h"
+#include "ui/mouse.h"
 #include "edit/shell.h"
 #include "term/input.h"
 #include "term/tty.h"
@@ -234,6 +235,11 @@ int sag_loop_deadline(const Ed *ed, i64 now_ms)
     /* Filter timeouts and SIGTERM->SIGKILL escalation are deadlines too:
      * without this the loop could sleep past a job's kill window. */
     deadline = deadline_min(deadline, sag_job_deadline(ed, now_ms));
+    /* Sprint 27 §4: the dwell and the drag auto-scroll are CLOCKS.  A
+     * pointer resting on a group emits no further events, so without
+     * this the loop would sleep through the 400 ms the dwell is
+     * counting. */
+    deadline = deadline_min(deadline, sag_mouse_deadline(ed, now_ms));
     if (!sag_tty_probe_done(&ed->tty))
         deadline = deadline_min(deadline,
                                 sag_tty_probe_deadline(&ed->tty, now_ms));
@@ -293,6 +299,10 @@ static void loop_dispatch_event(Ed *ed, Key key, i64 now_ms)
     const u8 *bytes;
     size_t len;
 
+    /* Every event carries the loop's clock in, because nothing in the
+     * core reads one itself (invariant 5) — and Sprint 27's dwell is
+     * driven from mouse motion as much as from the timer path. */
+    ed->now_ms = now_ms;
     switch (key.kind) {
     case SAG_EV_KEY:
         sag_ed_handle_key(ed, key, now_ms);
@@ -403,6 +413,7 @@ int sag_loop_run(Ed *ed)
          * fills in behind it.
          */
         (void)sag_picker_tick(ed);
+        sag_mouse_tick(ed, now);
         if (ed->quit)
             return ed->exit_code;
         if (ed->layout_dirty)

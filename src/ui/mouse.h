@@ -81,8 +81,19 @@ typedef struct MouseState {
      */
     int drag_to_slot;
     bool drag_to_valid;
-    /* Auto-scroll while held over a chevron, on a TIMER (§4). */
+    /*
+     * The pointer is past the last entry.  A separate flag rather than
+     * "the last slot", because the two mean different things: the last
+     * ENTRY is a reorder, the blank TAIL is "move to the end" — and the
+     * tail is the only way to carry a tab out of a group when the group
+     * is the sole row-1 entry, since there is nothing else to aim at.
+     */
+    bool drag_to_tail;
+    /* Auto-scroll while held over a chevron, on a TIMER (§4).  The
+     * pointer's last reported cell is kept because the timer fires when
+     * no motion event has arrived — that is the whole point of it. */
     i64 autoscroll_ms;
+    u16 at_x, at_y;
 
     /* Multi-click (§6). */
     i64 last_click_ms;

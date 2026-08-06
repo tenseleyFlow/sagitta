@@ -12,6 +12,7 @@
 #include "edit/ed.h"
 #include "ui/groupnav.h"
 #include "ui/groups.h"
+#include "ui/mouse.h"
 #include "ui/message.h"
 #include "ui/region.h"
 #include "ui/strip.h"
@@ -580,6 +581,10 @@ u32 sag_tab_strip_rows(const Ed *ed)
      */
     if (sag_active_group_id(ed) != 0U)
         rows = 2U;
+    /* Sprint 27 §4: a dwell-opened preview needs the row too, or the
+     * drop target it is offering has nowhere to be drawn. */
+    if (sag_mouse_preview_group(ed) != 0U)
+        rows = 2U;
     return rows;
 }
 
@@ -595,8 +600,146 @@ u32 sag_tab_strip_rows(const Ed *ed)
  * `scroll_mag` names the row in the scroll regions' payload (±1 row 1,
  * ±2 row 2) so a click on `>N` scrolls the row it belongs to.
  */
+/* ---------------------------------------------------------------- */
+/* Sprint 27 §4: the pre-drag slot table                            */
+/* ---------------------------------------------------------------- */
+
+typedef struct StripPreSlot {
+    u16 col0, col1; /* half-open, in SCREEN cells */
+    i32 pre_payload;
+} StripPreSlot;
+
+static StripPreSlot strip_pre[SAG_TAB_MAX];
+static int strip_pre_n;
+static u16 strip_pre_y;
+static u16 strip_tail_x;
+
+int sag_strip_slot_at(u16 x, u16 y)
+{
+    int i;
+
+    /* The table only ever holds row 1, so the row is checked once
+     * rather than stored per slot. */
+    if (strip_pre_n == 0 || y != strip_pre_y)
+        return -1;
+    for (i = 0; i < strip_pre_n; i++) {
+        if (x >= strip_pre[i].col0 && x < strip_pre[i].col1)
+            return i;
+    }
+    return -1;
+}
+
+bool sag_strip_pre_payload(int slot, i32 *payload)
+{
+    if (slot < 0 || slot >= strip_pre_n || payload == NULL)
+        return false;
+    *payload = strip_pre[slot].pre_payload;
+    return true;
+}
+
+int sag_strip_slot_count(void)
+{
+    return strip_pre_n;
+}
+
+u16 sag_strip_tail_x(void)
+{
+    return strip_tail_x;
+}
+
+/*
+ * The drag's preview: the held entry is drawn where it would land.
+ *
+ * NOTHING IN Tabs.v CHANGES UNTIL THE DROP.  Swapping live would look
+ * identical and be far worse underneath — cancelling would mean undoing
+ * an arbitrary number of moves, a drag that wandered off the bar would
+ * leave the array half-shuffled, and a future drop-into-a-pane must not
+ * have quietly reordered the strip on the way.
+ *
+ * Insertion, not swap, so the entries the held one passes keep their
+ * relative order — the same rule sag_tab_reorder commits with, applied
+ * to the picture so the drop holds no surprise.
+ */
+static void apply_drag_preview(const Ed *ed, StripEntry *entries, int n,
+                               int *active_entry)
+{
+    i32 held;
+    int to;
+    int from = -1;
+    int i;
+    StripEntry moved;
+
+    if (!sag_mouse_drag_preview(ed, &held, &to) || n <= 1)
+        return;
+    for (i = 0; i < n; i++) {
+        if (entries[i].payload == held) {
+            from = i;
+            break;
+        }
+    }
+    if (from < 0)
+        return;
+    if (to < 0)
+        to = 0;
+    if (to >= n)
+        to = n - 1;
+    moved = entries[from];
+    /* The ghost: dim marks the entry as travelling rather than
+     * settled, so a drop that lands where it started is visibly a
+     * no-op instead of looking like nothing happened. */
+    moved.dim = true;
+    if (from < to) {
+        (void)memmove(&entries[from], &entries[from + 1],
+                      sizeof(entries[0]) * (size_t)(to - from));
+    } else if (to < from) {
+        (void)memmove(&entries[to + 1], &entries[to],
+                      sizeof(entries[0]) * (size_t)(from - to));
+    }
+    entries[to] = moved;
+    if (active_entry != NULL && *active_entry >= 0)
+        *active_entry = sag_tab_shifted_index(*active_entry, from, to);
+}
+
 static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
-                         int active_entry, int *scroll, i32 scroll_mag)
+                         int active_entry, int *scroll, i32 scroll_mag,
+                         bool record_slots);
+
+/*
+ * Row 1, with the drag preview applied and the pre-drag list recorded.
+ *
+ * `pre` is the list BEFORE the permutation; `entries` is what gets
+ * drawn.  The two are the same array position by position when no drag
+ * is in flight, which is exactly why the dwell's fixture has to force
+ * them apart to prove it reads the right one.
+ */
+static void strip_render_row1(Ed *ed, Rect rect, StripEntry *entries,
+                              int n, int active_entry, int *scroll)
+{
+    StripEntry pre[SAG_TAB_MAX];
+    int i;
+
+    if (n > (int)SAG_ARRAY_LEN(pre))
+        n = (int)SAG_ARRAY_LEN(pre);
+    if (n > 0)
+        (void)memcpy(pre, entries, sizeof(pre[0]) * (size_t)n);
+    apply_drag_preview(ed, entries, n, &active_entry);
+    /* Cleared before the render fills the cell ranges in: a slot the
+     * layout scrolled out of view must not keep last frame's cells and
+     * answer for a position nobody can point at. */
+    strip_pre_n = n;
+    strip_pre_y = rect.y;
+    strip_tail_x = rect.x;
+    for (i = 0; i < n; i++) {
+        strip_pre[i].col0 = 0U;
+        strip_pre[i].col1 = 0U;
+        strip_pre[i].pre_payload = pre[i].payload;
+    }
+    strip_render(ed, rect, entries, n, active_entry, scroll, 1, true);
+}
+
+static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
+                         int active_entry, int *scroll, i32 scroll_mag,
+                         bool record_slots)
 {
     StripSpan spans[SAG_TAB_MAX];
     int n_spans = 0;
@@ -651,6 +794,19 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
         span_rect = (Rect){x, rect.y,
                            (u16)(spans[i].col1 - spans[i].col0), 1U};
         sag_region_add(SAG_REGION_TAB, span_rect, entries[idx].payload);
+        /*
+         * Sprint 27 §4.  The SAME cells, against the pre-drag list —
+         * `idx` is a position in the visible strip, and the pre-drag
+         * table is indexed by position for exactly that reason.  A
+         * second derivation of where a slot sits is the multibyte
+         * click-shift the Sprint 22 law forbids.
+         */
+        if (record_slots && idx >= 0 && idx < strip_pre_n) {
+            strip_pre[idx].col0 = x;
+            strip_pre[idx].col1 = (u16)(x + span_rect.w);
+            if (strip_pre[idx].col1 > strip_tail_x)
+                strip_tail_x = strip_pre[idx].col1;
+        }
     }
     if (more_left) {
         Rect r = {rect.x, rect.y, 1U, 1U};
@@ -710,7 +866,7 @@ void sag_tab_member_strip_draw(Ed *ed, Rect rect, u32 gid)
             active_entry = i;
     }
     strip_render(ed, rect, entries, n, active_entry,
-                 &ed->tabs.member_scroll, 2);
+                 &ed->tabs.member_scroll, 2, false);
 }
 
 void sag_tab_strip_draw(Ed *ed, Rect rect)
@@ -722,9 +878,18 @@ void sag_tab_strip_draw(Ed *ed, Rect rect)
     if (ed == NULL || rect.w == 0U || rect.h == 0U)
         return;
     n = sag_tab_row1_entries(ed, entries, (int)SAG_ARRAY_LEN(entries));
-    strip_render(ed, (Rect){rect.x, rect.y, rect.w, 1U}, entries, n,
-                 sag_tab_row1_active(ed, entries, n), &ed->tabs.scroll, 1);
+    strip_render_row1(ed, (Rect){rect.x, rect.y, rect.w, 1U}, entries, n,
+                      sag_tab_row1_active(ed, entries, n), &ed->tabs.scroll);
     gid = sag_active_group_id(ed);
+    /*
+     * Sprint 27 §4: a dwell opens a group's member strip as a drop
+     * target, so row 2 shows the PREVIEWED group when there is one.
+     * Same renderer as the pinned row, so the two cannot disagree about
+     * placement — which is the whole reason s24 wrote it as one
+     * function.
+     */
+    if (sag_mouse_preview_group(ed) != 0U)
+        gid = sag_mouse_preview_group(ed);
     if (rect.h >= 2U && gid != 0U)
         sag_tab_member_strip_draw(ed,
                                   (Rect){rect.x, (u16)(rect.y + 1U),

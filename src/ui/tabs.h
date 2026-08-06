@@ -148,6 +148,29 @@ int sag_tab_row1_entries(const Ed *ed, StripEntry *out, int cap);
  * there is none. */
 int sag_tab_row1_active(const Ed *ed, const StripEntry *entries, int n);
 
+/*
+ * Sprint 27 §4: the PRE-DRAG row-1 slot table.
+ *
+ * Rebuilt by every row-1 render.  A slot is a visual position on the
+ * strip; the payload is what occupied that position BEFORE the drag's
+ * preview permutation was applied.
+ *
+ * THE PITFALL THIS EXISTS FOR.  While a tab is being dragged the region
+ * table describes the PREVIEWED strip — the held entry has been moved
+ * under the pointer — so `sag_region_hit` always answers "you are
+ * hovering the thing you are holding".  The dwell-over-a-group test
+ * needs the other question: what was here before I picked this up.
+ * That is this table, and nothing else may answer it.
+ */
+int sag_strip_slot_at(u16 x, u16 y);              /* -1 when off row 1 */
+bool sag_strip_pre_payload(int slot, i32 *payload);
+/* Slots the last row-1 render produced. */
+int sag_strip_slot_count(void);
+/* The cell just past the last rendered entry — where "the blank tail"
+ * begins.  The drop target that carries a tab out of a sole group has
+ * nothing else to aim at. */
+u16 sag_strip_tail_x(void);
+
 /* Rows the strip needs; layout reserves them like the footer row. */
 u32 sag_tab_strip_rows(const Ed *ed);
 void sag_tab_strip_draw(Ed *ed, Rect rect);
