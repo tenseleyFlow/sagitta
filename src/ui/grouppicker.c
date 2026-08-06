@@ -13,6 +13,7 @@
 #include <sys/stat.h>
 
 #include "edit/ed.h"
+#include "ui/glyphs.h"
 #include "ui/groups.h"
 #include "ui/message.h"
 #include "ui/region.h"
@@ -726,11 +727,15 @@ void sag_gp_draw(Ed *ed)
          * box, or nothing on screen says the rows can be ticked at all.
          * Directories show no box, because they are walked.
          */
-        (void)snprintf(line, sizeof(line), " %s %s%s%s",
-                       r->is_dir ? "   " : (ticked ? "[x]" : "[ ]"),
+        (void)snprintf(line, sizeof(line), " %s %s%s%s%s",
+                       r->is_dir ? "   "
+                                 : sag_glyph(ticked ? SAG_GLYPH_TICKED
+                                                    : SAG_GLYPH_UNTICKED),
                        r->is_parent ? "../" : r->name,
                        r->is_dir && !r->is_parent ? "/" : "",
-                       ticked && is_dirty ? " *" : "");
+                       ticked && is_dirty ? " " : "",
+                       ticked && is_dirty
+                           ? sag_glyph(SAG_GLYPH_DIRTY_TICK) : "");
         (void)sag_grid_puts(&ed->grid, y, x0, (const u8 *)line,
                             strlen(line), ticked ? accent : fg, bg,
                             idx == gp.cursor && !gp.on_name

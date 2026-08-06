@@ -9,7 +9,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=5
           /tmp/sag-s24-grp
 
               ../
-          [x] one.txt
+          [✓] one.txt
           [ ] three.txt
           [ ] two.txt
 

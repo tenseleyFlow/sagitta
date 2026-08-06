@@ -1,5 +1,7 @@
 #include "ui/draw.h"
 
+#include "ui/glyphs.h"
+
 #include "ui/grouppicker.h"
 #include "ui/picker.h"
 
@@ -508,11 +510,12 @@ void sag_draw_win(Ed *ed, Win *w)
  * impossible for two adjacent leaves to double-draw a shared edge —
  * there is exactly one node responsible for each border cell.
  */
-static const u8 BORDER_V[] = {0xE2U, 0x94U, 0x82U};       /* │ */
-static const u8 BORDER_H[] = {0xE2U, 0x94U, 0x80U};       /* ─ */
-static const u8 BORDER_CROSS[] = {0xE2U, 0x94U, 0xBCU};   /* ┼ */
-static const u8 BORDER_TEE_R[] = {0xE2U, 0x94U, 0x9CU};   /* ├ */
-static const u8 BORDER_TEE_L[] = {0xE2U, 0x94U, 0xA4U};   /* ┤ */
+/*
+ * Sprint 27 §7: the borders come from THE glyph table, so the ASCII
+ * vocabulary reaches them and nothing here spells a box-drawing
+ * character a second time.
+ */
+#define BORDER_BYTES(g) ((const u8 *)sag_glyph(g)), sag_glyph_len(g)
 
 typedef struct PaneDrawCtx {
     Ed *ed;
@@ -583,8 +586,9 @@ static void draw_pane_rec(Ed *ed, Pane *p)
             if (p->a->rect.w == 0U || p->b->rect.w == 0U)
                 return; /* collapsed: no border to own */
             for (row = p->rect.y; row < p->rect.y + p->rect.h; row++)
-                (void)sag_grid_put(&ed->grid, row, col, BORDER_V,
-                                   sizeof(BORDER_V), fg, bg, attrs);
+                (void)sag_grid_put(&ed->grid, row, col,
+                                   BORDER_BYTES(SAG_GLYPH_BORDER_V),
+                                   fg, bg, attrs);
             border = (Rect){col, p->rect.y, 1U, p->rect.h};
         } else {
             u16 row = (u16)(p->a->rect.y + p->a->rect.h);
@@ -593,8 +597,9 @@ static void draw_pane_rec(Ed *ed, Pane *p)
             if (p->a->rect.h == 0U || p->b->rect.h == 0U)
                 return;
             for (col = p->rect.x; col < p->rect.x + p->rect.w; col++)
-                (void)sag_grid_put(&ed->grid, row, col, BORDER_H,
-                                   sizeof(BORDER_H), fg, bg, attrs);
+                (void)sag_grid_put(&ed->grid, row, col,
+                                   BORDER_BYTES(SAG_GLYPH_BORDER_H),
+                                   fg, bg, attrs);
             border = (Rect){p->rect.x, row, p->rect.w, 1U};
         }
         if (index >= 0)
@@ -626,8 +631,7 @@ static void draw_crossings_rec(Ed *ed, Pane *p)
             bool active;
             bool from_left = i == 0U;
             bool both;
-            const u8 *glyph;
-            size_t glyph_n;
+            SagGlyph glyph;
 
             /* A vertical split immediately inside either child puts a
              * horizontal border against this column. */
@@ -647,18 +651,14 @@ static void draw_crossings_rec(Ed *ed, Pane *p)
                    side[1U - i]->b->rect.h != 0U &&
                    (u16)(side[1U - i]->a->rect.y +
                          side[1U - i]->a->rect.h) == row;
-            if (both) {
-                glyph = BORDER_CROSS;
-                glyph_n = sizeof(BORDER_CROSS);
-            } else if (from_left) {
-                glyph = BORDER_TEE_L;
-                glyph_n = sizeof(BORDER_TEE_L);
-            } else {
-                glyph = BORDER_TEE_R;
-                glyph_n = sizeof(BORDER_TEE_R);
-            }
+            if (both)
+                glyph = SAG_GLYPH_BORDER_CROSS;
+            else if (from_left)
+                glyph = SAG_GLYPH_BORDER_TEE_L;
+            else
+                glyph = SAG_GLYPH_BORDER_TEE_R;
             active = subtree_has_focus(p, ed->focus);
-            (void)sag_grid_put(&ed->grid, row, col, glyph, glyph_n,
+            (void)sag_grid_put(&ed->grid, row, col, BORDER_BYTES(glyph),
                                border_color(active),
                                (SagColor){SAG_COLOR_DEFAULT, 0U, 0U, 0U},
                                active ? 0U : SAG_ATTR_DIM);

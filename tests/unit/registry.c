@@ -1135,6 +1135,12 @@ const SagTest sag_tests[] = {
     T(mouse_drag_after_a_double_click_extends_by_words),
     T(mouse_single_click_drag_is_character_wise),
     T(mouse_middle_click_paste_is_off_by_default),
+    T(glyphs_every_row_has_both_vocabularies),
+    T(glyphs_grip_and_tick_are_one_cell),
+    T(glyphs_are_the_same_width_in_both_vocabularies),
+    T(glyphs_arrows_point_the_way_the_thing_moves),
+    T(glyphs_ascii_is_auto_from_the_locale),
+    T(glyphs_the_vocabulary_is_decided_once),
 };
 
 const size_t sag_tests_len = SAG_ARRAY_LEN(sag_tests);

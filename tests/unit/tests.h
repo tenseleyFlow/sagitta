@@ -1169,5 +1169,11 @@ void test_mouse_alt_double_click_selects_the_whitespace_word(void);
 void test_mouse_drag_after_a_double_click_extends_by_words(void);
 void test_mouse_single_click_drag_is_character_wise(void);
 void test_mouse_middle_click_paste_is_off_by_default(void);
+void test_glyphs_every_row_has_both_vocabularies(void);
+void test_glyphs_grip_and_tick_are_one_cell(void);
+void test_glyphs_are_the_same_width_in_both_vocabularies(void);
+void test_glyphs_arrows_point_the_way_the_thing_moves(void);
+void test_glyphs_ascii_is_auto_from_the_locale(void);
+void test_glyphs_the_vocabulary_is_decided_once(void);
 
 #endif

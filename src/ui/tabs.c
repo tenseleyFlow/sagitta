@@ -11,6 +11,7 @@
 
 #include "edit/ed.h"
 #include "ui/groupnav.h"
+#include "ui/glyphs.h"
 #include "ui/groups.h"
 #include "ui/mouse.h"
 #include "ui/message.h"
@@ -461,7 +462,8 @@ static void tab_label(const Ed *ed, int idx, char *out, size_t cap)
 {
     (void)snprintf(out, cap, "[%d: %s%s]", idx + 1,
                    tab_basename(&ed->tabs.v.data[idx]),
-                   sag_tab_modified(ed, idx) ? "*" : "");
+                   sag_tab_modified(ed, idx)
+                       ? sag_glyph(SAG_GLYPH_MODIFIED) : "");
 }
 
 /*
@@ -811,8 +813,10 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
     if (more_left) {
         Rect r = {rect.x, rect.y, 1U, 1U};
 
-        (void)sag_grid_puts(&ed->grid, rect.y, rect.x, (const u8 *)"<",
-                            1U, dim, bg, SAG_ATTR_DIM);
+        (void)sag_grid_puts(&ed->grid, rect.y, rect.x,
+                            (const u8 *)sag_glyph(SAG_GLYPH_MORE_LEFT),
+                            sag_glyph_len(SAG_GLYPH_MORE_LEFT), dim, bg,
+                            SAG_ATTR_DIM);
         sag_region_add(SAG_REGION_TAB_SCROLL, r, -scroll_mag);
     }
     if (more_right) {
@@ -822,7 +826,8 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
         u16 x;
         Rect r;
 
-        (void)snprintf(more, sizeof(more), ">%d", past);
+        (void)snprintf(more, sizeof(more), "%s%d",
+                       sag_glyph(SAG_GLYPH_MORE_RIGHT), past);
         w = (u16)strlen(more);
         if (w < rect.w) {
             x = (u16)(rect.x + rect.w - w);
@@ -859,7 +864,8 @@ void sag_tab_member_strip_draw(Ed *ed, Rect rect, u32 gid)
         (void)memset(&entries[i], 0, sizeof(entries[i]));
         (void)snprintf(entries[i].label, sizeof(entries[i].label), " %s%s",
                        tab_basename(&ed->tabs.v.data[members[i]]),
-                       sag_tab_modified(ed, members[i]) ? "*" : "");
+                       sag_tab_modified(ed, members[i])
+                           ? sag_glyph(SAG_GLYPH_MODIFIED) : "");
         entries[i].payload = members[i];
         entries[i].dim = true;
         if (members[i] == ed->tabs.active)
