@@ -39,7 +39,11 @@ typedef enum {
      * Inert: owns its rectangle and means nothing.  A dialog registers
      * one so clicks on it never fall through to the pane underneath.
      */
-    SAG_REGION_BLOCK
+    SAG_REGION_BLOCK,
+    /* Sprint 24 §4: the group picker's name field and its listing rows
+     * (payload = index into the listing). */
+    SAG_REGION_GP_NAME,
+    SAG_REGION_GP_ROW
 } RegionKind;
 
 typedef struct Region {

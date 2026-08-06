@@ -14,6 +14,7 @@
 #include "edit/sel_actions.h"
 #include "ui/cmdline.h"
 #include "ui/groupnav.h"
+#include "ui/grouppicker.h"
 #include "ui/tabs.h"
 #include "util/arena.h"
 #include "util/intern.h"
@@ -432,10 +433,10 @@ static const CmdDesc builtins[] = {
      "Dissolve the active group; its tabs stay open"},
     {"ed.group.remove_tab", sag_group_cmd_remove_tab, SAG_ARITY_NONE, 0U,
      "Remove the active tab from its group"},
-    DEFER("ed.group.new", SAG_ARITY_OPT_STR, SAG_CMD_PROMPTS, 24,
-          "assemble a new tab group (the picker)"),
-    DEFER("ed.group.edit", SAG_ARITY_NONE, SAG_CMD_PROMPTS, 24,
-          "edit the active group's membership (the picker)"),
+    {"ed.group.new", sag_gp_cmd_new, SAG_ARITY_OPT_STR, SAG_CMD_PROMPTS,
+     "Assemble a new tab group"},
+    {"ed.group.edit", sag_gp_cmd_edit, SAG_ARITY_NONE, SAG_CMD_PROMPTS,
+     "Edit the active group's membership"},
     DEFER("ed.group.from_dir", SAG_ARITY_STR, 0U, 53,
           "open a directory as a tab group (F-mode)"),
     DEFER("ed.group.next", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 24,

@@ -1,5 +1,7 @@
 #include "ui/draw.h"
 
+#include "ui/grouppicker.h"
+
 #include "ui/tabs.h"
 
 #include <limits.h>
@@ -679,6 +681,9 @@ void sag_draw_panes(Ed *ed)
     /* After the panes, so a strip span shadows the document beneath it
      * on overlap — last added wins. */
     sag_tab_strip_draw(ed, ed->tab_strip_rect);
+    /* Last of all: the picker is modal, so its BLOCK region must shadow
+     * every span drawn beneath it (last added wins). */
+    sag_gp_draw(ed);
 }
 
 bool sag_draw_pane_is_focused(const Ed *ed, const Win *w)

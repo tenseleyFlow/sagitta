@@ -9,6 +9,7 @@
 #include <unistd.h>
 
 #include "ui/draw.h"
+#include "ui/grouppicker.h"
 #include "ui/viewport.h"
 #include "util/log.h"
 
@@ -1206,6 +1207,13 @@ void sag_ed_handle_mouse(Ed *ed, Key key)
     }
     switch (key.ev) {
     case SAG_KEY_PRESS:
+        /* The modal picker gets first refusal, and its BLOCK swallows
+         * anything inside its rectangle so no click reaches the pane
+         * underneath. */
+        if (sag_gp_click(ed, key.col, key.row)) {
+            sag_gp_apply(ed);
+            break;
+        }
         (void)sag_pane_click(ed, key.col, key.row);
         break;
     case SAG_KEY_REPEAT:
@@ -1247,6 +1255,16 @@ void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms)
     }
     if (ed->prompt != SAG_PROMPT_NONE) {
         (void)prompt_key(ed, key);
+        return;
+    }
+    /*
+     * Sprint 24 §4: the picker is MODAL, so it takes the key before the
+     * command line and before any mode.  It swallows everything it does
+     * not use — a dialog that let unhandled keys through would edit the
+     * document behind it.
+     */
+    if (sag_gp_key(ed, key)) {
+        sag_gp_apply(ed);
         return;
     }
     if (ed->cmdline.active && sag_cmdline_key(ed, &key))
