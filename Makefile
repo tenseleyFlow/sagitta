@@ -74,12 +74,28 @@ LDFLAGS += -fsanitize=address,undefined -fno-omit-frame-pointer -O1
 # do with saving.  kill9 already accepts a preload prefix; tell it where
 # the runtime lives.  -print-file-name echoes its argument back when it
 # finds nothing, which is how the fallbacks below are detected.
+#
+# ONLY GCC NEEDS ONE, and asking the question compiler-blind is a trap.
+#
+# GCC's ASan is a SHARED library, so a child that LD_PRELOADs a fault
+# shim must name libasan first or ASan installs no interceptors.  Clang
+# links its ASan STATICALLY, so there is no runtime to order against —
+# and preloading a shared one on top of a static one aborts the child
+# with "Your application is linked against incompatible ASan runtimes".
+#
+# The trap: `clang -print-file-name=libasan.so` SUCCEEDS.  It finds
+# GCC's runtime through clang's gcc-toolchain search path, so a probe
+# that just asks $(CC) for libasan hands clang the wrong library and the
+# spawned-child tests fail with an assertion that says nothing about
+# why.  So the probe runs for the GCC family only.
+ASAN_IS_CLANG := $(shell $(CC) --version 2>/dev/null | grep -ci clang)
+ifeq ($(ASAN_IS_CLANG),0)
 ASAN_RT := $(shell $(CC) -print-file-name=libasan.so)
 ifeq ($(ASAN_RT),libasan.so)
-ASAN_RT := $(shell $(CC) -print-file-name=libclang_rt.asan-x86_64.so)
-ifeq ($(ASAN_RT),libclang_rt.asan-x86_64.so)
 ASAN_RT :=
 endif
+else
+ASAN_RT :=
 endif
 ifneq ($(ASAN_RT),)
 CFLAGS  += -DSAG_ASAN_RUNTIME='"$(ASAN_RT)"'

@@ -402,7 +402,22 @@ static void job_child(char **argv, char **envp, const char *cwd,
     (void)execve(argv[0], argv, envp);
 fail:
     e = errno;
-    (void)write(exec_p[1], &e, sizeof e);
+    /*
+     * Best-effort: we are in the forked child with nothing left to do
+     * but report why exec failed, and the parent learns it from the
+     * exit status either way.
+     *
+     * Assigned rather than cast to void because glibc marks write
+     * warn_unused_result and several gcc versions do NOT accept a
+     * `(void)` cast as acknowledgement — the local compiler did, CI's
+     * did not, and -Werror turned that into a build failure on every
+     * gcc lane.
+     */
+    {
+        ssize_t reported = write(exec_p[1], &e, sizeof e);
+
+        (void)reported;
+    }
     _exit(127);
 }
 

@@ -378,6 +378,29 @@ void test_job_running_count_tracks_state(void)
     sag_ed_free(&ed);
 }
 
+/*
+ * Waits for a process GROUP to be gone, up to `budget_ms`.
+ *
+ * `kill(-pgid, 0)` keeps succeeding while any member is still a zombie,
+ * and the grandchild the shell spawned is reaped by init on its own
+ * schedule — so an instant assertion is a race that a loaded CI runner
+ * loses and a quiet laptop wins.  The CLAIM is that the escalation ends
+ * the group, not that it has already ended by the time the next line
+ * runs; this waits for the claim rather than weakening it.
+ */
+static bool group_gone_within(pid_t pgid, i64 budget_ms)
+{
+    i64 start = sag_now_ms();
+
+    for (;;) {
+        if (kill(-pgid, 0) != 0)
+            return true;
+        if (sag_now_ms() - start > budget_ms)
+            return false;
+        (void)poll(NULL, 0U, 5);
+    }
+}
+
 void test_job_timeout_escalates_to_kill(void)
 {
     Ed ed;
@@ -401,7 +424,7 @@ void test_job_timeout_escalates_to_kill(void)
     SAG_ASSERT(run_to_completion(&ed, id));
     j = sag_job_find(&ed, id);
     SAG_ASSERT(j->state == SAG_JOB_TIMEOUT);
-    SAG_ASSERT(kill(-j->pgid, 0) != 0);
+    SAG_ASSERT(group_gone_within(j->pgid, 5000));
     sag_ed_free(&ed);
 }
 
