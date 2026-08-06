@@ -41,6 +41,14 @@ VEC_DECL(SagPathVec, char *);
 typedef struct WalkOpts {
     bool follow_symlinks; /* default false                    */
     bool hidden;          /* include dotfiles; default false  */
+    /*
+     * Honour .gitignore (§4).  Off by default so a walk is a walk; the
+     * finder turns it on.  Nested ignore files are loaded as the
+     * descent reaches them, and an ignored directory with nothing that
+     * could re-include beneath it is PRUNED — one stat rather than
+     * 90 000 entries on a JavaScript checkout.
+     */
+    bool use_gitignore;
     u32 max_depth;        /* 0 = SAG_WALK_DEFAULT_DEPTH       */
     u64 max_entries;      /* 0 = SAG_WALK_DEFAULT_ENTRIES     */
 } WalkOpts;

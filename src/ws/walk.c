@@ -20,6 +20,7 @@
 
 #include "util/log.h"
 #include "util/sort.h"
+#include "ws/gitignore.h"
 
 /* ---------------------------------------------------------------- */
 /* Test hooks                                                       */
@@ -154,6 +155,22 @@ typedef struct WalkFrame {
     u32 at;
     u32 rel_len;
     u32 depth;
+    /* The ignore rules in scope HERE — this directory's .gitignore
+     * chained under everything above it.  Carried per frame because a
+     * nested ignore file applies only inside its own subtree. */
+    const GiSet *gi;
+    /*
+     * This directory was itself ignored, and we descended anyway
+     * because a negation might re-include something under it.
+     *
+     * git's rule is that an excluded directory's contents are excluded
+     * — it simply never descends.  We do descend, so the exclusion has
+     * to be carried down explicitly: without this, `node_modules/`
+     * (a DIRECTORY-only rule) never matches the file
+     * `node_modules/other.js`, and every file in a supposedly ignored
+     * tree came back in the list.
+     */
+    bool ignored;
 } WalkFrame;
 
 struct WalkState {
@@ -171,6 +188,9 @@ struct WalkState {
     SeenSet seen;
     WalkOpts opts;
     FileList *out;
+    /* Compiled ignore rules live here and die with the walk; FileList's
+     * arena outlives it and holds only paths. */
+    Arena gi_arena;
     bool done;
 };
 
@@ -200,7 +220,7 @@ static int name_cmp(const void *a, const void *b, void *ctx)
 }
 
 static bool frame_push(WalkState *w, char **names, u32 n, u32 rel_len,
-                       u32 depth)
+                       u32 depth, const GiSet *gi, bool ignored)
 {
     if (w->depth == w->stack_cap) {
         u32 cap = w->stack_cap == 0U ? 16U : w->stack_cap * 2U;
@@ -213,6 +233,8 @@ static bool frame_push(WalkState *w, char **names, u32 n, u32 rel_len,
     w->stack[w->depth].at = 0U;
     w->stack[w->depth].rel_len = rel_len;
     w->stack[w->depth].depth = depth;
+    w->stack[w->depth].gi = gi;
+    w->stack[w->depth].ignored = ignored;
     w->depth++;
     return true;
 }
@@ -331,6 +353,7 @@ WalkState *sag_walk_begin(const char *root, const WalkOpts *o, FileList *out)
     w->rel_base = w->path_len + 1U;
 
     seen_init(&w->seen);
+    arena_init(&w->gi_arena);
     g_statats++;
     if (stat(w->path, &st) == 0)
         (void)seen_add(&w->seen, (u64)st.st_dev, (u64)st.st_ino);
@@ -340,7 +363,24 @@ WalkState *sag_walk_begin(const char *root, const WalkOpts *o, FileList *out)
         free(w);
         return NULL;
     }
-    (void)frame_push(w, names, n, w->path_len, 0U);
+    {
+        const GiSet *root_gi = NULL;
+
+        if (w->opts.use_gitignore) {
+            char excl[PATH_MAX];
+
+            /*
+             * .git/info/exclude first, then the root .gitignore on top
+             * of it — the repository's own rules are the outermost
+             * layer, and a .gitignore may negate them.
+             */
+            if (snprintf(excl, sizeof(excl), "%s/.git/info", w->path) <
+                (int)sizeof(excl))
+                root_gi = sag_gi_load(&w->gi_arena, excl, NULL);
+            root_gi = sag_gi_load(&w->gi_arena, w->path, root_gi);
+        }
+        (void)frame_push(w, names, n, w->path_len, 0U, root_gi, false);
+    }
     return w;
 }
 
@@ -416,10 +456,29 @@ bool sag_walk_step(WalkState *w, i64 budget_us)
         if (S_ISDIR(st.st_mode)) {
             char **names;
             u32 n = 0U;
+            const GiSet *child_gi = f->gi;
+            bool child_ignored = f->ignored;
 
             if (f->depth + 1U >= w->opts.max_depth) {
                 path_truncate(w, saved);
                 continue;
+            }
+            /*
+             * §4.1: PRUNE before opening.  An ignored directory that
+             * nothing could re-include from is skipped without an
+             * opendir, which is what turns node_modules from 90 000
+             * entries into a single stat.  sag_gi_prunable is
+             * conservative, so when it says no we descend and filter
+             * per file instead.
+             */
+            if (w->opts.use_gitignore && f->gi != NULL &&
+                sag_gi_match(f->gi, w->path + w->rel_base, true)) {
+                w->out->n_ignored++;
+                if (sag_gi_prunable(f->gi, w->path + w->rel_base)) {
+                    path_truncate(w, saved);
+                    continue;
+                }
+                child_ignored = true;
             }
             /*
              * The loop guard, checked BEFORE opening: a directory we
@@ -437,11 +496,37 @@ bool sag_walk_step(WalkState *w, i64 budget_us)
                 continue;
             }
             w->out->n_dirs++;
-            (void)frame_push(w, names, n, saved, f->depth + 1U);
+            /* This directory's own .gitignore, if it has one, layered
+             * over everything above it. */
+            if (w->opts.use_gitignore)
+                child_gi = sag_gi_load(&w->gi_arena, w->path, f->gi);
+            (void)frame_push(w, names, n, saved, f->depth + 1U, child_gi,
+                             child_ignored);
             continue;
         }
-        if (S_ISREG(st.st_mode))
-            record_file(w);
+        if (S_ISREG(st.st_mode)) {
+            bool skip = false;
+
+            if (w->opts.use_gitignore && f->gi != NULL) {
+                /*
+                 * Inside an ignored directory the default flips: a file
+                 * is out unless a rule explicitly RE-INCLUDES it, which
+                 * is what makes `!node_modules/keep.js` the only thing
+                 * that survives `node_modules/`.
+                 */
+                if (f->ignored)
+                    skip = sag_gi_match(f->gi, w->path + w->rel_base,
+                                        false) ||
+                           !sag_gi_negated(f->gi, w->path + w->rel_base);
+                else
+                    skip = sag_gi_match(f->gi, w->path + w->rel_base,
+                                        false);
+            }
+            if (skip)
+                w->out->n_ignored++;
+            else
+                record_file(w);
+        }
         path_truncate(w, saved);
         if (w->out->truncated) {
             w->done = true;
@@ -460,5 +545,6 @@ void sag_walk_end(WalkState *w)
         frame_pop(w);
     free(w->stack);
     seen_free(&w->seen);
+    arena_free_all(&w->gi_arena);
     free(w);
 }

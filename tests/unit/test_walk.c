@@ -623,3 +623,176 @@ void test_walk_root_trailing_slash_is_normalized(void)
     sag_filelist_free(&fl);
     wk_remove(&f);
 }
+
+/* ---------------------------------------------------------------- */
+/* §4/§4.1 through the walk                                         */
+/* ---------------------------------------------------------------- */
+
+static void wk_ignore_file(const WkFix *f, const char *rel_dir,
+                           const char *text)
+{
+    char path[512];
+
+    if (rel_dir[0] == '\0')
+        wk_join(path, sizeof(path), f->root, ".gitignore");
+    else {
+        char sub[256];
+
+        wk_join(sub, sizeof(sub), rel_dir, ".gitignore");
+        wk_join(path, sizeof(path), f->root, sub);
+    }
+    {
+        FILE *fp = fopen(path, "wb");
+
+        SAG_ASSERT_NOT_NULL(fp);
+        (void)fputs(text, fp);
+        (void)fclose(fp);
+    }
+}
+
+/* Ignored files are counted and excluded; everything else survives. */
+void test_walk_honours_gitignore(void)
+{
+    WkFix f;
+    FileList fl;
+    WalkOpts o;
+
+    wk_make(&f);
+    wk_ignore_file(&f, "", "*.o\nbuild/\n");
+    wk_file(&f, "main.c");
+    wk_file(&f, "main.o");
+    wk_dir(&f, "build");
+    wk_file(&f, "build/out.bin");
+
+    (void)memset(&o, 0, sizeof(o));
+    o.use_gitignore = true;
+    wk_walk(&f, &o, &fl);
+    SAG_ASSERT(wk_has(&fl, "main.c"));
+    SAG_ASSERT(!wk_has(&fl, "main.o"));
+    SAG_ASSERT(!wk_has(&fl, "build/out.bin"));
+    SAG_ASSERT(fl.n_ignored > 0U);
+    sag_filelist_free(&fl);
+
+    /* Off by default: a walk is a walk. */
+    wk_walk(&f, NULL, &fl);
+    SAG_ASSERT(wk_has(&fl, "main.o"));
+    SAG_ASSERT(wk_has(&fl, "build/out.bin"));
+    sag_filelist_free(&fl);
+    wk_remove(&f);
+}
+
+/*
+ * DoD 5, the headline: a pruned directory costs ONE stat and ZERO
+ * opendirs, however many files are inside it.
+ *
+ * This is the difference between a usable and an unusable finder on a
+ * JavaScript checkout, and counting is the only way to know it is
+ * actually happening — a walk that descended and filtered would produce
+ * the same LIST while doing 5 000 times the work.
+ */
+void test_walk_prunes_an_ignored_directory_without_opening_it(void)
+{
+    WkFix f;
+    FileList fl;
+    WalkOpts o;
+    u64 opendirs;
+    u64 statats;
+    u32 i;
+
+    wk_make(&f);
+    wk_ignore_file(&f, "", "node_modules/\n");
+    wk_file(&f, "app.js");
+    wk_dir(&f, "node_modules");
+    /* 500 rather than 5 000: the property is identical and the fixture
+     * builds in a fraction of the time. */
+    for (i = 0U; i < 500U; i++) {
+        char rel[64];
+
+        (void)snprintf(rel, sizeof(rel), "node_modules/pkg%03u.js",
+                       (unsigned)i);
+        wk_file(&f, rel);
+    }
+
+    (void)memset(&o, 0, sizeof(o));
+    o.use_gitignore = true;
+    sag_walk_counts_reset();
+    wk_walk(&f, &o, &fl);
+    opendirs = sag_walk_opendir_count();
+    statats = sag_walk_statat_count();
+
+    SAG_ASSERT(wk_has(&fl, "app.js"));
+    SAG_ASSERT(!wk_has(&fl, "node_modules/pkg000.js"));
+    /*
+     * The root only.  node_modules was never opened, so none of its 500
+     * entries was ever stat'ed either.
+     */
+    SAG_ASSERT_EQ_U64(opendirs, 1U);
+    /* The root, .gitignore, app.js, node_modules — and nothing
+     * inside it. */
+    SAG_ASSERT(statats < 10U);
+    sag_filelist_free(&fl);
+    wk_remove(&f);
+}
+
+/*
+ * And the conservative half: a negation reaching inside blocks the
+ * prune, so the walk descends and the directory IS opened.
+ *
+ * Without this the fast path would be indistinguishable from a
+ * correctness bug that happens to be fast.
+ */
+void test_walk_descends_when_a_negation_blocks_pruning(void)
+{
+    WkFix f;
+    FileList fl;
+    WalkOpts o;
+    u64 opendirs;
+
+    wk_make(&f);
+    wk_ignore_file(&f, "", "node_modules/\n!node_modules/keep.js\n");
+    wk_file(&f, "app.js");
+    wk_dir(&f, "node_modules");
+    wk_file(&f, "node_modules/keep.js");
+    wk_file(&f, "node_modules/other.js");
+
+    (void)memset(&o, 0, sizeof(o));
+    o.use_gitignore = true;
+    sag_walk_counts_reset();
+    wk_walk(&f, &o, &fl);
+    opendirs = sag_walk_opendir_count();
+
+    /* It was opened: root plus node_modules. */
+    SAG_ASSERT_EQ_U64(opendirs, 2U);
+    SAG_ASSERT(wk_has(&fl, "app.js"));
+    /* The negation re-includes exactly one file. */
+    SAG_ASSERT(wk_has(&fl, "node_modules/keep.js"));
+    SAG_ASSERT(!wk_has(&fl, "node_modules/other.js"));
+    sag_filelist_free(&fl);
+    wk_remove(&f);
+}
+
+/* A nested .gitignore applies inside its own subtree and nowhere
+ * else. */
+void test_walk_nested_gitignore_applies_to_its_subtree(void)
+{
+    WkFix f;
+    FileList fl;
+    WalkOpts o;
+
+    wk_make(&f);
+    wk_ignore_file(&f, "", "*.log\n");
+    wk_file(&f, "root.log");
+    wk_dir(&f, "sub");
+    wk_ignore_file(&f, "sub", "!important.log\n");
+    wk_file(&f, "sub/important.log");
+    wk_file(&f, "sub/other.log");
+
+    (void)memset(&o, 0, sizeof(o));
+    o.use_gitignore = true;
+    wk_walk(&f, &o, &fl);
+    SAG_ASSERT(!wk_has(&fl, "root.log"));
+    SAG_ASSERT(wk_has(&fl, "sub/important.log"));
+    SAG_ASSERT(!wk_has(&fl, "sub/other.log"));
+    sag_filelist_free(&fl);
+    wk_remove(&f);
+}
