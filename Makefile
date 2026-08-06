@@ -14,6 +14,12 @@ UNITS_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
 MULTICURSOR_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
                           0x9e3779b97f4a7c15 0xd1b54a32d192ed03
 MULTICURSOR_FUZZ_OPS ?= 100000
+# Sprint 27: 100 000 mouse events per seed, four seeds.  Sessions rather
+# than a raw iteration count, because each session drives a whole editor
+# and the events are what the gate is counted in.
+MOUSE_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
+                    0x9e3779b97f4a7c15 0xd1b54a32d192ed03
+MOUSE_FUZZ_EVENTS ?= 100000
 FUZZ_LONG_SECONDS ?= 450
 TORTURE_SIGKILL_ITERS ?= 500
 FIXTURE_DIR ?= $(BUILD)/fixtures
@@ -182,6 +188,7 @@ FUZZ_REDIFF_OBJ := $(BUILD)/tests/fuzz/fuzz_re_diff.o
 FUZZ_FUZZY_OBJ := $(BUILD)/tests/fuzz/fuzz_fuzzy.o
 FUZZ_STATE_OBJ := $(BUILD)/tests/fuzz/fuzz_state.o
 FUZZ_GITIGNORE_OBJ := $(BUILD)/tests/fuzz/fuzz_gitignore.o
+FUZZ_MOUSE_OBJ := $(BUILD)/tests/fuzz/fuzz_mouse.o
 RE_REF_OBJ := $(BUILD)/tests/fuzz/re_ref.o
 FUZZ_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 FUZZ_LINK_OBJ := $(FUZZ_CORE_OBJ) $(FUZZ_LIB_OBJ)
@@ -203,6 +210,7 @@ PERF_MULTICURSOR_OBJ := $(BUILD)/tests/perf/multicursor.o
 PERF_CMDCOMP_OBJ := $(BUILD)/tests/perf/perf_cmdcomp.o
 PERF_STATE_OBJ := $(BUILD)/tests/perf/perf_state.o
 PERF_FINDER_OBJ := $(BUILD)/tests/perf/finder.o
+PERF_MOUSE_OBJ := $(BUILD)/tests/perf/mouse.o
 LIVE_PTY_OBJ := $(BUILD)/tests/support/live_pty.o
 PERF_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 GEN_BIGFILE_OBJ := $(BUILD)/scripts/gen-bigfile.o
@@ -236,7 +244,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(FUZZ_LIB_OBJ) \
                 $(PERF_MULTICURSOR_OBJ) \
                 $(PERF_CMDCOMP_OBJ) \
                 $(PERF_STATE_OBJ) \
-                $(PERF_FINDER_OBJ) \
+                $(PERF_FINDER_OBJ) $(PERF_MOUSE_OBJ) \
                 $(GEN_BIGFILE_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) $(FAULTSHIM)))
@@ -253,10 +261,12 @@ endif
 .DEFAULT_GOAL := all
 .PHONY: all test clean install dirs FORCE test-script test-pty fuzz \
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
+        fuzz-mouse \
         fixtures fixtures-quick fixtures-verify \
         fixtures-verify-quick \
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
         perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
+        perf-mouse \
         perf-undo perf-textbuf perf-huge perf-update perf-baseline-guard \
         perf-gate-selftest perf-latency perf-latency-selftest \
         torture torture-build torture-live-check
@@ -353,6 +363,10 @@ $(BUILD)/fuzz_gitignore: $(FUZZ_LINK_OBJ) $(FUZZ_GITIGNORE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_GITIGNORE_OBJ)
 
+$(BUILD)/fuzz_mouse: $(FUZZ_LINK_OBJ) $(FUZZ_MOUSE_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
+		$(FUZZ_MOUSE_OBJ)
+
 $(BUILD)/gen-bigfile: $(GEN_BIGFILE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(GEN_BIGFILE_OBJ)
 
@@ -413,6 +427,10 @@ $(BUILD)/perf_state: $(PERF_CORE_OBJ) $(PERF_STATE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(PERF_STATE_OBJ)
 
+$(BUILD)/perf_mouse: $(PERF_CORE_OBJ) $(PERF_MOUSE_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
+		$(PERF_MOUSE_OBJ)
+
 $(BUILD)/perf_finder: $(PERF_CORE_OBJ) $(PERF_FINDER_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(PERF_FINDER_OBJ)
@@ -454,7 +472,8 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
       $(BUILD)/fuzz_panes $(BUILD)/fuzz_tabs $(BUILD)/fuzz_groups \
       $(BUILD)/fuzz_fuzzy $(BUILD)/fuzz_state \
       $(BUILD)/fuzz_gitignore \
-      fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse
+      fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse \
+      fuzz-mouse
 	$(BUILD)/fuzz_utf8 --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_grapheme --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_input --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
@@ -474,6 +493,13 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
 	@if [ -n "$(FUZZ_SECONDS)" ]; then \
 		$(BUILD)/fuzz_input --seconds=$(FUZZ_SECONDS) --seed=$(FUZZ_SEED); \
 	fi
+
+fuzz-mouse: $(BUILD)/fuzz_mouse
+	@set -eu; \
+	iters=$$(( ($(MOUSE_FUZZ_EVENTS) + 24999) / 25000 )); \
+	for seed in $(MOUSE_FUZZ_SEEDS); do \
+		$(BUILD)/fuzz_mouse --iters=$$iters --seed=$$seed; \
+	done
 
 fuzz-units: $(BUILD)/fuzz_units
 	@set -eu; \
@@ -543,7 +569,8 @@ perf-piece: $(BUILD)/perf_piece
 perf: perf-unicode perf-render perf-scroll perf-piece perf-cursor perf-undo perf-textbuf \
       perf-latency perf-jobstream perf-re-pathological \
       perf-re-throughput perf-search-latency \
-      perf-units perf-multicursor perf-cmdcomp perf-state perf-finder
+      perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
+      perf-mouse
 
 perf-cursor: $(BUILD)/perf_cursor
 	$(BUILD)/perf_cursor
@@ -565,6 +592,9 @@ perf-state: $(BUILD)/perf_state
 
 perf-finder: $(BUILD)/perf_finder
 	$(BUILD)/perf_finder
+
+perf-mouse: $(BUILD)/perf_mouse
+	$(BUILD)/perf_mouse
 
 perf-latency: $(BUILD)/perf_latency $(BUILD)/sagitta
 	$(BUILD)/perf_latency --sagitta $(abspath $(BUILD)/sagitta) \
@@ -756,7 +786,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/sagitta
          $(PERF_MULTICURSOR_OBJ:.o=.d) \
          $(PERF_CMDCOMP_OBJ:.o=.d) \
          $(PERF_STATE_OBJ:.o=.d) \
-         $(PERF_FINDER_OBJ:.o=.d) \
+         $(PERF_FINDER_OBJ:.o=.d) $(PERF_MOUSE_OBJ:.o=.d) \
          $(GEN_BIGFILE_OBJ:.o=.d) \
          $(TORTURE_CHILD_OBJ:.o=.d) \
 	 $(TORTURE_DRIVER_OBJ:.o=.d) $(TORTURE_LIVE_OBJ:.o=.d)

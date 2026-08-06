@@ -1,0 +1,24 @@
+# sagitta mouse perf baseline v1  (Sprint 27 DoD 13)
+#
+# Recorded on x86_64-linux-gnu, gcc -O2, a live tab-strip drag over an
+# eight-tab bar — the most expensive motion path there is, because it
+# re-resolves the drop slot and runs the dwell against the pre-drag slot
+# table on every event.  These are CEILINGS the gate enforces, not
+# observations to match: tests/perf/mouse.c carries the same numbers.
+#
+# metric                        budget_ns    observed_ns    note
+motion_burst_1000_events         5000000         12000      invariant 4's key budget
+#
+# Two counts, both exactly zero and both gated:
+#
+#   renders_during_burst    0   the LOOP renders, once, after the burst
+#                               is drained (s14's typeahead coalescing).
+#                               A router that rendered per report would
+#                               turn a drag into a slideshow on exactly
+#                               the terminals that emit the most reports.
+#
+#   router_allocations      0   checked by reading src/ui/mouse.c rather
+#                               than by counting mallocs: glibc removed
+#                               the malloc hooks, and "this file contains
+#                               no allocation call" cannot regress under
+#                               a path the burst happened not to take.
