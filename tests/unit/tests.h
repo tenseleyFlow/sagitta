@@ -579,6 +579,8 @@ void test_cmdcomp_cap_and_deterministic_order(void);
 void test_cmdcomp_path_quoting_retokenizes_one_argv(void);
 void test_cmdcomp_lcp_menu_and_empty_providers(void);
 void test_cmdcomp_listing_scans_a_directory_once(void);
+void test_cmdcomp_listing_slices_and_resumes_without_rescanning(void);
+void test_cmdcomp_listing_overflow_midslice_keeps_its_key(void);
 void test_cmdline_reuses_textbuf_and_grapheme_cursor(void);
 void test_cmdline_sanitizes_seed_paste_and_register_newlines(void);
 void test_cmdline_e_keymap_leaves_are_registered_editor_commands(void);

@@ -582,6 +582,8 @@ const SagTest sag_tests[] = {
     T(cmdcomp_path_quoting_retokenizes_one_argv),
     T(cmdcomp_lcp_menu_and_empty_providers),
     T(cmdcomp_listing_scans_a_directory_once),
+    T(cmdcomp_listing_slices_and_resumes_without_rescanning),
+    T(cmdcomp_listing_overflow_midslice_keeps_its_key),
     T(cmdline_reuses_textbuf_and_grapheme_cursor),
     T(cmdline_sanitizes_seed_paste_and_register_newlines),
     T(cmdline_e_keymap_leaves_are_registered_editor_commands),

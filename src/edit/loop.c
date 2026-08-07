@@ -227,6 +227,11 @@ int sag_loop_deadline(const Ed *ed, i64 now_ms)
      */
     if (sag_picker_scanning(ed))
         return 0;
+    /* The sliced completion scan is the same kind of pending work, and
+     * omitting it here is the same bug: the menu would stop filling in
+     * and only resume when the user happened to press another key. */
+    if (ed->cmdline.active && sag_comp_listing_pending())
+        return 0;
     deadline = absolute_deadline(sag_dispatch_deadline(ed), now_ms);
     deadline = deadline_min(deadline,
                             sag_input_deadline(&ed->in, now_ms));
@@ -413,6 +418,9 @@ int sag_loop_run(Ed *ed)
          * fills in behind it.
          */
         (void)sag_picker_tick(ed);
+        /* The completion scan is sliced for the same reason and drains
+         * in the same place. */
+        (void)sag_cmdline_comp_tick(ed);
         sag_mouse_tick(ed, now);
         if (ed->quit)
             return ed->exit_code;

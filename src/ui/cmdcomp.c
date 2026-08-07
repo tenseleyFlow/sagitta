@@ -52,6 +52,14 @@ VEC_DECL(PathCandidateVec, PathCandidate);
 
 static bool force_dtype_unknown;
 static u32 test_lstat_calls;
+/*
+ * Test-only override of SAG_COMP_LIST_MAX.  The overflow path is
+ * otherwise only reachable with 50 000 entries on disk, which is not a
+ * unit test — and it is the path that has to move the cache key across
+ * an invalidate rather than free it, so leaving it uncovered would leave
+ * a use-after-free to the sanitizer lane and a big enough directory.
+ */
+static u32 test_list_max;
 
 static bool starts_with(const char *s, const char *prefix)
 {
@@ -618,6 +626,28 @@ typedef struct DirListing {
      * Nothing is cached in that case; the scan streams as it used to.
      */
     bool overflow;
+    /*
+     * THE SCAN IS RESUMABLE, and the open handle is what makes it so.
+     *
+     * Reading a 10 000-entry directory costs ~4 ms on a CI runner, which
+     * is most of invariant 4's whole 5 ms keypress budget — and it landed
+     * on ONE keystroke, the first character typed after the argument's
+     * space.  perf-cmdcomp measured 4.737 ms there against 0.8 ms for
+     * every key after it, and eventually tipped over.
+     *
+     * Moving the read to a different key only moves the spike, so it is
+     * SLICED instead: each call reads for at most a time budget and
+     * returns, and sag_cmdline_comp_tick resumes it on the idle path
+     * exactly as Sprint 26 §7.2 does for the picker.  `dir` stays open
+     * between slices because readdir has no seek that could resume a
+     * closed one cheaply, and reopening would re-read from the top.
+     *
+     * `cap` lives here rather than on the stack for the same reason: it
+     * is scan state now, not a local of one loop.
+     */
+    DIR *dir_handle;
+    u32 cap;
+    bool complete;
 } DirListing;
 
 static DirListing comp_listing;
@@ -635,6 +665,8 @@ u64 sag_comp_listing_opendirs(void)
 
 static void listing_dispose(DirListing *l)
 {
+    if (l->dir_handle != NULL)
+        (void)closedir(l->dir_handle);
     free(l->blob);
     free(l->offs);
     free(l->dtypes);
@@ -663,9 +695,11 @@ static bool listing_push(DirListing *l, const char *name, u8 dtype,
 
     if (l->n == *cap) {
         u32 next = *cap == 0U ? 256U : *cap * 2U;
+        u32 limit = test_list_max != 0U ? test_list_max
+                                        : (u32)SAG_COMP_LIST_MAX;
 
-        if (next > (u32)SAG_COMP_LIST_MAX)
-            next = (u32)SAG_COMP_LIST_MAX;
+        if (next > limit)
+            next = limit;
         if (next == *cap)
             return false;
         l->offs = sag_xrealloc(l->offs, (size_t)next * sizeof(*l->offs));
@@ -693,46 +727,118 @@ static bool listing_push(DirListing *l, const char *name, u8 dtype,
     return true;
 }
 
-/*
- * Load `scan_dir` into the cache unless it is already there.  Returns
- * false when the directory could not be opened OR held more than
- * SAG_COMP_LIST_MAX entries; the caller then scans the old way.
- */
-static bool listing_load(const char *scan_dir)
+static i64 comp_now_us(void)
 {
-    DirListing next = {0};
+    struct timespec ts;
+
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
+        return 0;
+    return (i64)ts.tv_sec * 1000000 + (i64)ts.tv_nsec / 1000;
+}
+
+typedef enum ListingState {
+    /* Could not be opened, or held more than SAG_COMP_LIST_MAX entries:
+     * nothing is cached and the caller streams the directory instead. */
+    LISTING_UNUSABLE,
+    /* Usable as far as it goes, with more still to read. */
+    LISTING_PARTIAL,
+    LISTING_COMPLETE
+} ListingState;
+
+/*
+ * Read `scan_dir` into the cache, for at most `slice_us`.
+ *
+ * `slice_us <= 0` means "no limit", which is what a Tab asks for: the
+ * user pressed a key and is waiting for an exact answer, so the scan
+ * runs to the end however long it takes.  A LIVE keystroke passes a
+ * slice and gets whatever fits, and the idle tick brings the rest.
+ *
+ * Resuming is why the handle is held open across calls (see DirListing).
+ * The directory is opened ONCE per scan no matter how many slices it
+ * takes — perf-cmdcomp asserts opendirs=1 and would catch a version that
+ * reopened per slice.
+ */
+static ListingState listing_step(const char *scan_dir, i64 slice_us)
+{
+    i64 started;
     struct dirent *entry;
-    u32 cap = 0U;
-    DIR *dir;
+    u32 checked = 0U;
 
     if (comp_listing.dir != NULL &&
-        strcmp(comp_listing.dir, scan_dir) == 0)
-        return !comp_listing.overflow;
-    sag_comp_listing_invalidate();
-    dir = opendir(scan_dir);
-    comp_opendirs++;
-    if (dir == NULL)
-        return false;
-    while ((entry = readdir(dir)) != NULL) {
+        strcmp(comp_listing.dir, scan_dir) == 0) {
+        if (comp_listing.overflow)
+            return LISTING_UNUSABLE;
+        if (comp_listing.complete)
+            return LISTING_COMPLETE;
+    } else {
+        DIR *dir;
+
+        sag_comp_listing_invalidate();
+        dir = opendir(scan_dir);
+        comp_opendirs++;
+        if (dir == NULL)
+            return LISTING_UNUSABLE;
+        comp_listing.dir_handle = dir;
+        comp_listing.dir = dup_cstr(scan_dir);
+    }
+    started = slice_us > 0 ? comp_now_us() : 0;
+    while ((entry = readdir(comp_listing.dir_handle)) != NULL) {
         if (strcmp(entry->d_name, ".") == 0 ||
             strcmp(entry->d_name, "..") == 0)
             continue;
         /* Dot files are kept and filtered at RANK time: whether they are
          * wanted depends on the pattern, which changes per keystroke, and
          * a listing that already dropped them could not answer ".git". */
-        if (!listing_push(&next, entry->d_name, (u8)entry->d_type, &cap)) {
-            next.overflow = true;
-            break;
+        if (!listing_push(&comp_listing, entry->d_name, (u8)entry->d_type,
+                          &comp_listing.cap)) {
+            /*
+             * Too big to hold.  Drop the partial blob rather than let a
+             * PREFIX of the directory masquerade as all of it — narrowing
+             * from it would silently lose rows.
+             *
+             * The key is MOVED across the invalidate rather than freed
+             * and re-duplicated: sag_comp_listing_advance resumes by
+             * passing comp_listing.dir straight back in, so `scan_dir`
+             * can BE this pointer, and disposing it here would leave the
+             * re-duplication reading freed memory.
+             */
+            char *keep = comp_listing.dir;
+
+            comp_listing.dir = NULL;
+            sag_comp_listing_invalidate();
+            comp_listing.dir = keep;
+            comp_listing.overflow = true;
+            comp_listing.complete = true;
+            return LISTING_UNUSABLE;
         }
+        /* Clock read every 256 entries, not every one: the syscall would
+         * otherwise cost more than the readdir it is timing. */
+        checked++;
+        if (slice_us > 0 && (checked & 0xFFU) == 0U &&
+            comp_now_us() - started >= slice_us)
+            return LISTING_PARTIAL;
     }
-    (void)closedir(dir);
-    if (next.overflow) {
-        listing_dispose(&next);
+    (void)closedir(comp_listing.dir_handle);
+    comp_listing.dir_handle = NULL;
+    comp_listing.complete = true;
+    return LISTING_COMPLETE;
+}
+
+bool sag_comp_listing_pending(void)
+{
+    return comp_listing.dir_handle != NULL && !comp_listing.complete;
+}
+
+bool sag_comp_listing_advance(i64 slice_us)
+{
+    char *dir = comp_listing.dir;
+
+    if (!sag_comp_listing_pending())
         return false;
-    }
-    next.dir = dup_cstr(scan_dir);
-    comp_listing = next;
-    return true;
+    /* `dir` is the cache's own key, and listing_step compares against it
+     * by value; passing it back in is the "same directory, keep going"
+     * case by construction. */
+    return listing_step(dir, slice_us) == LISTING_PARTIAL;
 }
 
 /* Rank one candidate name into the bounded heap.  Shared by the cached
@@ -799,8 +905,18 @@ static u32 enumerate_paths(const CompReq *req, Vec_CompItem *out)
      * must not go on trusting the listing they distrusted. */
     if (!req->allow_cache)
         sag_comp_listing_invalidate();
-    if (req->allow_cache && listing_load(scan_dir)) {
-        /* The common path: no syscall at all, just a re-rank. */
+    if (req->allow_cache &&
+        listing_step(scan_dir, req->budget_us) != LISTING_UNUSABLE) {
+        /*
+         * The common path: at most one slice of readdir, then a re-rank
+         * of what is held.  A complete listing does no syscall at all.
+         *
+         * Ranking a PARTIAL listing is deliberate — the menu shows the
+         * best of what has been read rather than nothing, and
+         * sag_cmdline_comp_tick brings the rest on the idle path.  The
+         * alternative, blocking until the directory is fully read, is
+         * the 4 ms keystroke this slicing exists to remove.
+         */
         u32 i;
 
         for (i = 0U; i < comp_listing.n; i++)
@@ -1241,6 +1357,12 @@ char *sag_comp_lcp(Arena *arena, const Vec_CompItem *items)
                                  strlen(items->data[0].text), common))
         common--;
     return arena_strndup(arena, items->data[0].text, common);
+}
+
+void sag_comp_test_set_list_max(u32 max)
+{
+    test_list_max = max;
+    sag_comp_listing_invalidate();
 }
 
 void sag_comp_test_force_dtype_unknown(bool force)

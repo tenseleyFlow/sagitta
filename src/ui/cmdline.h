@@ -61,6 +61,13 @@ void sag_cmdline_sync(Ed *ed);
 void sag_cmdline_text(Ed *ed, Bytebuf *out);
 void sag_cmdline_edited(Ed *ed);
 
+/*
+ * Continue a sliced completion scan on the idle path; true while more
+ * remains.  The loop calls this beside sag_picker_tick, after input is
+ * drained, for the reason given there.
+ */
+bool sag_cmdline_comp_tick(Ed *ed);
+
 CmdStatus sag_cmdline_cmd_hist_prev(CmdCtx *cx);
 CmdStatus sag_cmdline_cmd_hist_next(CmdCtx *cx);
 CmdStatus sag_cmdline_cmd_complete_next(CmdCtx *cx);

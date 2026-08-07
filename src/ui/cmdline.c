@@ -25,11 +25,20 @@ enum {
     SAG_CMDLINE_TABWIDTH = 4,
     SAG_CMDLINE_MENU_ROWS = 5,
     /*
-     * Advisory budget for a refilter that runs inside a keystroke.  Tab
-     * passes 0 (unlimited) because the user asked a question and is
-     * waiting for the answer; typing has to stay inside the frame.
+     * Budget for a refilter that runs inside a keystroke.  Tab passes 0
+     * (unlimited) because the user asked a question and is waiting for
+     * the answer; typing has to stay inside the frame.
+     *
+     * 1500, not invariant 4's whole 5000.  The budget bounds the SCAN
+     * only, and the keystroke still has to rank what was read, pick its
+     * survivors and draw them — about 0.8 ms in perf-cmdcomp's
+     * 10 000-entry directory on a CI runner.  Spending the entire 5 ms
+     * on the scan would leave the paint outside the budget and turn a
+     * gate that measures keypress-to-paint into one that passes while
+     * the frame is late.  Whatever the slice does not finish, the idle
+     * tick picks up.
      */
-    SAG_CMDLINE_LIVE_BUDGET_US = 5000
+    SAG_CMDLINE_LIVE_BUDGET_US = 1500
 };
 
 typedef struct CmdLineTarget {
@@ -601,6 +610,37 @@ static void cmdline_refilter(Ed *ed)
     arena_free_all(&scratch);
     free(text);
     ed->full_damage = true;
+}
+
+/*
+ * Sprint 26 §7.2's idle-path pattern, applied to the completion scan.
+ *
+ * Called after input is drained, so a keystroke always wins the race for
+ * the iteration (invariant 4) and the menu fills in behind it.  One more
+ * slice of readdir, then a refilter so the rows that slice revealed
+ * actually reach the screen — advancing the scan without re-ranking
+ * would leave the menu showing the first slice until the next keystroke,
+ * which is the stale-menu bug this is meant to avoid rather than cause.
+ *
+ * Returns true while more remains, matching sag_picker_tick.
+ */
+bool sag_cmdline_comp_tick(Ed *ed)
+{
+    if (ed == NULL || !ed->cmdline.active ||
+        ed->cmdline.kind != SAG_PROMPT_CMD)
+        return false;
+    if (!sag_comp_listing_pending())
+        return false;
+    (void)sag_comp_listing_advance(SAG_CMDLINE_LIVE_BUDGET_US);
+    /*
+     * The filter caches per (kind, head, pattern) and would hand back the
+     * previous slice's answer unchanged; the listing it was computed from
+     * has grown underneath it, so that cache entry is stale by
+     * definition.
+     */
+    sag_comp_filter_invalidate(&ed->cmdline.filter);
+    cmdline_refilter(ed);
+    return sag_comp_listing_pending();
 }
 
 void sag_cmdline_edited(Ed *ed)

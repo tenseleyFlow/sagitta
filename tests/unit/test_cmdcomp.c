@@ -716,3 +716,173 @@ void test_cmdcomp_listing_scans_a_directory_once(void)
     }
     fixture_dispose(&fixture);
 }
+
+/*
+ * The directory scan is SLICED, and resuming it must not rescan.
+ *
+ * Reading a big directory used to land entirely on one keystroke -- the
+ * first character typed after the argument's space -- and on a CI runner
+ * that was ~4 ms of invariant 4's 5 ms budget.  It is now bounded per
+ * call and continued from the idle path.
+ *
+ * Driven with a 1 us budget rather than a real one so the assertions are
+ * about the MECHANISM and not about how fast this machine reads a
+ * directory: the scan checks its clock every 256 entries, so any budget
+ * this small stops at the first check and a 600-entry fixture is
+ * guaranteed to come back partial.  A timing-based version of this test
+ * would pass vacuously on a fast filesystem -- which is exactly what
+ * happens locally, where the full scan fits inside one real slice.
+ */
+void test_cmdcomp_listing_slices_and_resumes_without_rescanning(void)
+{
+    CompFixture fixture;
+    CompFilter filter;
+    CompFilter fresh;
+    Arena arena;
+    Arena fresh_arena;
+    Vec_CompItem sliced = {0};
+    Vec_CompItem whole = {0};
+    SagCompQuery q;
+    u64 before;
+    u32 slices = 0U;
+    u32 i;
+
+    fixture_init(&fixture);
+    for (i = 0U; i < 600U; i++) {
+        char name[32];
+
+        (void)snprintf(name, sizeof(name), "entry%03u", (unsigned)i);
+        fixture_file(&fixture, name);
+    }
+    arena_init(&arena);
+    sag_comp_filter_init(&filter);
+
+    before = sag_comp_listing_opendirs();
+    q = path_query("e");
+    (void)sag_comp_filter_run(&fixture.ed, &filter, &arena, &q, 1, &sliced);
+    /* Stopped early, with the handle held open for the resume. */
+    SAG_ASSERT(sag_comp_listing_pending());
+    SAG_ASSERT_EQ_U64(sag_comp_listing_opendirs() - before, 1U);
+    /* Partial is still USEFUL: the menu shows the best of what was read
+     * rather than nothing at all. */
+    SAG_ASSERT(sliced.len != 0U);
+
+    /* The idle path drains it.  ONE opendir for the whole scan, however
+     * many slices it takes -- a resume that reopened would both re-read
+     * from the top and never terminate. */
+    while (sag_comp_listing_advance(1)) {
+        slices++;
+        SAG_ASSERT(slices < 100U);
+    }
+    SAG_ASSERT(slices != 0U);
+    SAG_ASSERT(!sag_comp_listing_pending());
+    SAG_ASSERT_EQ_U64(sag_comp_listing_opendirs() - before, 1U);
+
+    /*
+     * And the finished scan answers exactly what an unsliced one would.
+     * Compared against a fresh unbounded enumerate rather than against a
+     * count, so a slice boundary that dropped or duplicated an entry
+     * shows up as a different set and not merely a different total.
+     *
+     * TWO arenas and two filters, because sag_comp_filter_run resets the
+     * arena it is handed whenever it re-enumerates -- the second result
+     * would otherwise free the first one's strings out from under this
+     * comparison.  ASan caught exactly that when both shared one arena.
+     */
+    sag_comp_filter_invalidate(&filter);
+    q = path_query("e");
+    (void)sag_comp_filter_run(&fixture.ed, &filter, &arena, &q, 0, &sliced);
+
+    sag_comp_listing_invalidate();
+    arena_init(&fresh_arena);
+    sag_comp_filter_init(&fresh);
+    q = path_query("e");
+    (void)sag_comp_filter_run(&fixture.ed, &fresh, &fresh_arena, &q, 0,
+                              &whole);
+    /* Tab's unlimited budget finishes in the one call it is given. */
+    SAG_ASSERT(!sag_comp_listing_pending());
+    SAG_ASSERT_EQ_U64(sliced.len, whole.len);
+    SAG_ASSERT(whole.len != 0U);
+    for (i = 0U; i < (u32)sliced.len; i++)
+        SAG_ASSERT_EQ_I64(strcmp(sliced.data[i].text, whole.data[i].text), 0);
+
+    Vec_CompItem_free(&whole);
+    Vec_CompItem_free(&sliced);
+    sag_comp_filter_free(&fresh);
+    sag_comp_filter_free(&filter);
+    arena_free_all(&fresh_arena);
+    arena_free_all(&arena);
+    for (i = 0U; i < 600U; i++) {
+        char name[32];
+
+        (void)snprintf(name, sizeof(name), "entry%03u", (unsigned)i);
+        fixture_unlink(&fixture, name, false);
+    }
+    fixture_dispose(&fixture);
+}
+
+/*
+ * Overflowing the hold limit MID-SLICE must not free the cache key it is
+ * still being resumed with.
+ *
+ * sag_comp_listing_advance resumes a scan by passing comp_listing.dir
+ * straight back to the stepper, so on the overflow path `scan_dir` and
+ * the cache's own key are the SAME pointer.  Disposing the listing there
+ * and re-duplicating the name reads freed memory — quietly, on a build
+ * without a sanitizer, and only for a directory past SAG_COMP_LIST_MAX.
+ * The limit is lowered here so the path is reachable at 600 entries; the
+ * sanitizer lanes are what turn this into a hard failure.
+ */
+void test_cmdcomp_listing_overflow_midslice_keeps_its_key(void)
+{
+    CompFixture fixture;
+    CompFilter filter;
+    Arena arena;
+    Vec_CompItem out = {0};
+    SagCompQuery q;
+    u32 i;
+
+    fixture_init(&fixture);
+    for (i = 0U; i < 600U; i++) {
+        char name[32];
+
+        (void)snprintf(name, sizeof(name), "entry%03u", (unsigned)i);
+        fixture_file(&fixture, name);
+    }
+    arena_init(&arena);
+    sag_comp_filter_init(&filter);
+
+    /* Small enough that the fixture overflows it, large enough that the
+     * first slice ends before it does. */
+    sag_comp_test_set_list_max(400U);
+    q = path_query("e");
+    (void)sag_comp_filter_run(&fixture.ed, &filter, &arena, &q, 1, &out);
+    SAG_ASSERT(sag_comp_listing_pending());
+
+    /* Resumes straight into the overflow.  Nothing is cached afterwards,
+     * and the scan is over rather than pending. */
+    while (sag_comp_listing_advance(1))
+        ;
+    SAG_ASSERT(!sag_comp_listing_pending());
+
+    /*
+     * And an overflowed directory still COMPLETES, by streaming: the
+     * cache declining to hold it is not the menu declining to answer.
+     */
+    sag_comp_filter_invalidate(&filter);
+    q = path_query("entry1");
+    (void)sag_comp_filter_run(&fixture.ed, &filter, &arena, &q, 0, &out);
+    SAG_ASSERT(out.len != 0U);
+
+    sag_comp_test_set_list_max(0U);
+    Vec_CompItem_free(&out);
+    sag_comp_filter_free(&filter);
+    arena_free_all(&arena);
+    for (i = 0U; i < 600U; i++) {
+        char name[32];
+
+        (void)snprintf(name, sizeof(name), "entry%03u", (unsigned)i);
+        fixture_unlink(&fixture, name, false);
+    }
+    fixture_dispose(&fixture);
+}

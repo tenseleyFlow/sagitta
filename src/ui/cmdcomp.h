@@ -170,6 +170,19 @@ void sag_comp_filter_free(CompFilter *f);
  * has since changed on disk.
  */
 void sag_comp_listing_invalidate(void);
+
+/*
+ * The cached directory scan is SLICED (see DirListing in cmdcomp.c): a
+ * live keystroke reads for a bounded time and leaves the rest, so the
+ * one keystroke that opens a 10 000-entry directory cannot eat
+ * invariant 4's whole budget by itself.
+ *
+ * `pending` is true while a scan has more to read; `advance` reads one
+ * more slice and returns whether yet more remains.  sag_cmdline_comp_tick
+ * is the only caller of `advance` — it drives them from the idle path.
+ */
+bool sag_comp_listing_pending(void);
+bool sag_comp_listing_advance(i64 slice_us);
 /* Test hook: how many opendir calls the path source has made.  DoD 10
  * asserts a COUNT, which a latency number cannot prove. */
 u64 sag_comp_listing_opendirs(void);
@@ -228,6 +241,9 @@ char *sag_comp_quote(Arena *arena, const char *text);
 char *sag_comp_lcp(Arena *arena, const Vec_CompItem *items);
 
 /* Unit-test seam: exercise the required DT_UNKNOWN/lstat path. */
+/* 0 restores SAG_COMP_LIST_MAX.  Retires the cache, since the listing
+ * held under the old limit was built to a different rule. */
+void sag_comp_test_set_list_max(u32 max);
 void sag_comp_test_force_dtype_unknown(bool force);
 u32 sag_comp_test_lstat_count(void);
 /* Unit-test seam: how often the live filter went back to the source. */
