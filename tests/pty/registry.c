@@ -2043,6 +2043,20 @@ static void case_s19_badge_while_running(PtyCtx *c)
     ptc_keys(c, "enter");
     ptc_wait_sync_pairs(c, before + 1U);
     ptc_settle(c, 120);
+    /*
+     * Same class as s19_run_frames, and for the same reason: this case
+     * has a LIVE child, so the frame count is decided by when the
+     * kernel delivers that child's exec-status pipe against our reads,
+     * not by anything the editor does.  It cannot reuse the helper —
+     * the job here must still be running at the snapshot, so there is
+     * no completion to wait for — and the flag was missed in the copy.
+     * Under valgrind the pipe EOF lands in its own loop iteration and
+     * the badge frame becomes two: identical grid, different count.
+     *
+     * The badge's text, position and style are still fully asserted;
+     * only the scheduler's arithmetic is not.
+     */
+    c->vt.sync_pairs_unstable = true;
     ptc_snapshot(c, "s19_badge_while_running");
     /* Force-quit kills the group; the editor must not wait on it. */
     force_quit(c);
