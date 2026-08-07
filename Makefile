@@ -142,7 +142,12 @@ UNIT_DEATH_EXCLUDES := \
   --exclude cmd_registry_rejects_invalid_descriptors \
   --exclude render_invalid_cells_are_bugs
 ifeq ($(VALGRIND),1)
-SAG_PTY_BUDGET_MS ?= 900000
+# MEASURED, not guessed: the full suite takes 1147 s under valgrind on a
+# quiet developer machine (206 cases, QUIET_SCALE=8 — scaling the settles
+# is what makes it slow, and is not optional; see quiet_scale()).  CI
+# runners are slower still, so this is roughly 3x headroom.  It is a
+# wall-clock ceiling, not a latency budget: nothing measures against it.
+SAG_PTY_BUDGET_MS ?= 3600000
 SAG_PTY_CASE_BUDGET_MS ?= 60000
 # A settle infers "done" from silence, and valgrind makes the editor
 # silent for far longer than it is idle.  See quiet_scale() in

@@ -3789,12 +3789,21 @@ static void case_s27_double_click_mode_chip(PtyCtx *c)
 
     if (!s18_open(c, words, sizeof(words) - 1U, path, sizeof(path)))
         return;
-    /* Column 15 (1-based) is inside `beta`: the gutter takes the first
-     * six cells, so text column 8 is screen column 14. */
-    s27_mouse(c, "\x1b[<0;15;1M");
-    s27_mouse(c, "\x1b[<0;15;1m");
-    s27_mouse(c, "\x1b[<0;15;1M");
-    s27_mouse(c, "\x1b[<0;15;1m");
+    /*
+     * Column 15 (1-based) is inside `beta`: the gutter takes the first
+     * six cells, so text column 8 is screen column 14.
+     *
+     * All four reports go in ONE write, and that is load-bearing: a
+     * double-click is two clicks within SAG_CLICK_MULTI_MS (400 ms) of
+     * each other by the EDITOR's clock, so a settle between them is a
+     * race the harness can lose.  It did — under valgrind the settle
+     * scales (SAG_PTY_QUIET_SCALE) past 400 ms, the second click starts
+     * a fresh run, and the case recorded a single click's cursor.
+     * Delivering them together is also what a real double-click looks
+     * like arriving over a pty.
+     */
+    ptc_bytes(c, "\x1b[<0;15;1M\x1b[<0;15;1m\x1b[<0;15;1M\x1b[<0;15;1m");
+    ptc_settle(c, 120);
     ptc_snapshot(c, "s27_double_click_mode_chip");
     force_quit(c);
     (void)unlink(path);
