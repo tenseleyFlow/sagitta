@@ -1469,20 +1469,16 @@ void sag_ed_render(Ed *ed)
      * and left the picker's copy blank.  One widget, one place, and the
      * modal thing on top.
      */
-    if (sag_picker_active(ed)) {
+    if (sag_picker_active(ed))
         sag_picker_draw(ed, (Rect){0U, 0U, ed->grid.cols, ed->grid.rows});
-        sag_grid_mark_all(&ed->grid);
-    }
     /*
      * Sprint 27 §5: the context menu is drawn after everything, for the
      * same reason and with the same consequence — its BLOCK and CTX_ROW
      * regions are added last, and last-added-wins is what makes it
      * shadow whatever is beneath with no z-order machinery.
      */
-    if (sag_ctx_active()) {
+    if (sag_ctx_active())
         sag_mouse_menu_draw(ed);
-        sag_grid_mark_all(&ed->grid);
-    }
     if (!ed->cmdline.active)
         sag_draw_cursor(ed, win);
     ed->frame.len = 0U;
