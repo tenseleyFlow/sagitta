@@ -1,6 +1,11 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "harness.h"
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "edit/ed.h"
 #include "edit/sel_actions.h"
@@ -609,4 +614,81 @@ void test_sel_actions_rect_append_uses_effective_wide_and_tab_edges(void)
     SAG_ASSERT_EQ_U64(f.ed.win->cs.curs.data[1].pos.v, 6U);
     SAG_ASSERT_EQ_U64(f.ed.win->cs.curs.data[2].pos.v, 10U);
     fixture_free(&f);
+}
+
+/*
+ * The journal handle a selection edit opens must land on the BUFFER.
+ *
+ * apply_edits works through a COPY of the EditCtx, and sag_edit_delete
+ * opens the crash journal into that copy on the first write.  When the
+ * copy was dropped without sag_ed_finish_edit, b->jrn stayed NULL: the
+ * descriptor outlived the buffer that owned it (valgrind's --track-fds
+ * reported it at exit in s17_char_delete_matches_highlight), and the
+ * journal nobody held was a journal nobody could sync or discard — a
+ * crash after a selection delete would have recovered nothing.
+ *
+ * Asserted on the buffer rather than on the fd count, because the fd is
+ * the symptom and the dangling ownership is the defect.
+ */
+void test_sel_actions_delete_hands_the_journal_to_the_buffer(void)
+{
+    static const u8 before[] = "alpha\nbeta\n";
+    char root[] = "/tmp/sagitta-seljrn-XXXXXX";
+    char source[512];
+    char *saved_copy = NULL;
+    const char *saved_state;
+    CmdCtx cx = {0};
+    CmdId id;
+    FILE *fp;
+    Ed ed;
+    int n;
+
+    saved_state = getenv("XDG_STATE_HOME");
+    if (saved_state != NULL) {
+        size_t saved_len = strlen(saved_state) + 1U;
+
+        saved_copy = sag_xmalloc(saved_len);
+        (void)memcpy(saved_copy, saved_state, saved_len);
+    }
+    SAG_ASSERT_NOT_NULL(mkdtemp(root));
+    n = snprintf(source, sizeof(source), "%s/source.txt", root);
+    SAG_ASSERT(n > 0 && (size_t)n < sizeof(source));
+    fp = fopen(source, "wb");
+    SAG_ASSERT_NOT_NULL(fp);
+    SAG_ASSERT_EQ_U64(fwrite(before, 1U, sizeof(before) - 1U, fp),
+                      sizeof(before) - 1U);
+    SAG_ASSERT_EQ_I64(fclose(fp), 0);
+    SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", root, 1), 0);
+
+    sag_ed_init(&ed);
+    SAG_ASSERT_EQ_U64(sag_ed_open(&ed, source), SAG_LOAD_OK);
+    SAG_ASSERT_NULL(ed.buffer.jrn);
+    SAG_ASSERT_EQ_U64(sag_mode_enter_highlight(&ed, SAG_MODE_L, false),
+                      SAG_CMD_OK);
+    ed.win->h.kind = SAG_SEL_CHAR;
+    ed.win->cs.curs.data[ed.win->cs.primary] = make_selection(0U, 5U);
+    sag_cset_normalize(ed.buffer.tb, &ed.win->cs);
+
+    id = sag_cmd_lookup("ed.sel.delete", 13U);
+    SAG_ASSERT(id.v != 0U);
+    cx.ed = &ed;
+    cx.win = ed.win;
+    cx.count = 1U;
+    cx.source = SAG_SRC_TEST;
+    SAG_ASSERT_EQ_U64(sag_ed_invoke(&ed, id, &cx), SAG_CMD_OK);
+    SAG_ASSERT_NOT_NULL(ed.buffer.jrn);
+    SAG_ASSERT(!ed.durability_failed);
+
+    /* A clean save retires the journal through the same handle. */
+    SAG_ASSERT_EQ_U64(sag_ed_file_save(&ed, false), SAG_CMD_OK);
+    SAG_ASSERT_NULL(ed.buffer.jrn);
+    sag_ed_free(&ed);
+
+    if (saved_copy != NULL) {
+        SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", saved_copy, 1), 0);
+    } else {
+        SAG_ASSERT_EQ_I64(unsetenv("XDG_STATE_HOME"), 0);
+    }
+    free(saved_copy);
+    (void)unlink(source);
 }

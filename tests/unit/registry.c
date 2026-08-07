@@ -525,6 +525,7 @@ const SagTest sag_tests[] = {
     T(sel_actions_rect_insert_and_append_pad_and_lift_rows),
     T(sel_actions_rect_insert_typing_is_one_multi_undo_transaction),
     T(sel_actions_rect_append_uses_effective_wide_and_tab_edges),
+    T(sel_actions_delete_hands_the_journal_to_the_buffer),
     T(units_char_alt_projects_codepoints_to_graphemes),
     T(units_next_prev_are_monotone_and_terminate),
     T(units_results_are_boundaries_and_spans_obey_law),

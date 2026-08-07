@@ -107,17 +107,35 @@ static SelEdit *edit_push(SelEditVec *edits, Span span)
     return &edits->data[edits->len - 1U];
 }
 
+/*
+ * The EditCtx is a COPY, and the journal handle is an OUT parameter of
+ * the first edit made through it.
+ *
+ * sag_edit_delete/insert lazily open the crash journal into ec.jrnl on
+ * the first write.  Returning without sag_ed_finish_edit therefore drops
+ * the only reference to an open journal: the buffer's b->jrn stays NULL,
+ * so teardown closes nothing, the file descriptor outlives the buffer
+ * that owns it, and — worse than the leak — the next crash recovers
+ * nothing because the handle nobody kept is the handle nobody syncs.
+ * The dispatcher's own finish cannot cover for this: it rebuilds its
+ * context from b->jrn AFTER the command runs, and by then the value it
+ * needed was on this stack frame.
+ *
+ * Hence the single exit.  Every path out of the edit loop, including
+ * the failure paths, has to hand the journal back.
+ */
 static bool apply_edits(CmdCtx *cx, SelEditVec *edits, ByteOff *first)
 {
     EditCtx ec = sag_ed_edit_ctx_for(cx->ed, cx->win);
     i64 delta = 0;
+    bool ok = true;
     size_t i;
 
     if (ec.tb == NULL || ec.cset == NULL)
         return false;
     if (first != NULL && edits->len != 0U)
         *first = BYTEOFF(edits->data[0].span.lo);
-    for (i = 0U; i < edits->len; i++) {
+    for (i = 0U; ok && i < edits->len; i++) {
         SelEdit *edit = &edits->data[i];
         u64 removed = edit->span.hi - edit->span.lo;
         Span now;
@@ -128,16 +146,18 @@ static bool apply_edits(CmdCtx *cx, SelEditVec *edits, ByteOff *first)
                             edit->span.lo + (u64)delta;
         now.hi = now.lo + removed;
         if (removed != 0U && !sag_edit_delete(&ec, now)) {
-            return false;
+            ok = false;
+        } else if (edit->replacement.len != 0U &&
+                   !sag_edit_insert(&ec, BYTEOFF(now.lo),
+                                    edit->replacement.data,
+                                    edit->replacement.len)) {
+            ok = false;
+        } else {
+            delta += (i64)edit->replacement.len - (i64)removed;
         }
-        if (edit->replacement.len != 0U &&
-            !sag_edit_insert(&ec, BYTEOFF(now.lo), edit->replacement.data,
-                             edit->replacement.len)) {
-            return false;
-        }
-        delta += (i64)edit->replacement.len - (i64)removed;
     }
-    return true;
+    sag_ed_finish_edit(cx->ed, &ec);
+    return ok;
 }
 
 static void collapse_all(Win *win)
