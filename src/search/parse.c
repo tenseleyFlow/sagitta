@@ -294,6 +294,34 @@ static void fold_build(void)
                     NULL);
 }
 
+/*
+ * THE ONLY WAY A PARTNER GETS INTO `out`.
+ *
+ * `out` holds SAG_RE_FOLD_MAX, and sag_re_fold_partners appends from six
+ * places.  Four bounded the write and two did not — the simple lowercase
+ * and uppercase maps — so a codepoint whose equivalence class had
+ * already filled the array wrote one element past the end of a stack
+ * buffer.  fuzz_re_compile finds it at seed 1 under ASan.
+ *
+ * The duplicate check belongs here for the same reason: it was applied
+ * at three of the six sites and not the others, so the same codepoint
+ * could be added to a class twice.  One helper means neither rule can be
+ * forgotten at a seventh call site.
+ */
+static u32 fold_push(u32 *out, u32 n, u32 cap, u32 cp)
+{
+    u32 i;
+
+    if (n >= cap)
+        return n;
+    for (i = 0U; i < n; i++) {
+        if (out[i] == cp)
+            return n;
+    }
+    out[n++] = cp;
+    return n;
+}
+
 /* Appends every member of `canon`'s class that is not already present. */
 static u32 fold_class_members(u32 canon, u32 *out, u32 n, u32 cap)
 {
@@ -309,14 +337,7 @@ static u32 fold_class_members(u32 canon, u32 *out, u32 n, u32 cap)
             hi = mid;
     }
     while (lo < fold_len && fold_table[lo].canon == canon && n < cap) {
-        u32 member = fold_table[lo].cp;
-        u32 i;
-        bool dup = false;
-
-        for (i = 0U; i < n; i++)
-            dup = dup || out[i] == member;
-        if (!dup)
-            out[n++] = member;
+        n = fold_push(out, n, cap, fold_table[lo].cp);
         lo++;
     }
     return n;
@@ -324,7 +345,7 @@ static u32 fold_class_members(u32 canon, u32 *out, u32 n, u32 cap)
 
 /* Simple folding only: a length-changing fold (ss -> ß) would break the
  * one-codepoint-per-step invariant the linear-time VM depends on. */
-u32 sag_re_fold_partners(u32 cp, u32 out[4])
+u32 sag_re_fold_partners(u32 cp, u32 out[SAG_RE_FOLD_MAX])
 {
     u32 n = 0U;
     u32 mapped[SAG_CASE_MAX_CODEPOINTS];
@@ -332,34 +353,26 @@ u32 sag_re_fold_partners(u32 cp, u32 out[4])
     u32 probe;
     u8 got;
 
-    out[n++] = cp;
+    n = fold_push(out, n, SAG_RE_FOLD_MAX, cp);
     fold_build();
     /* The whole equivalence class, found through the shared uppercase
      * form — this is what brings final sigma in. */
     canon = fold_canon(cp);
-    if (canon != cp && n < 4U)
-        out[n++] = canon;
-    n = fold_class_members(canon, out, n, 4U);
+    n = fold_push(out, n, SAG_RE_FOLD_MAX, canon);
+    n = fold_class_members(canon, out, n, SAG_RE_FOLD_MAX);
     got = sag_case_map(cp, SAG_CASE_LOWER, mapped);
-    if (got == 1U && mapped[0] != cp)
-        out[n++] = mapped[0];
+    if (got == 1U)
+        n = fold_push(out, n, SAG_RE_FOLD_MAX, mapped[0]);
     got = sag_case_map(cp, SAG_CASE_UPPER, mapped);
-    if (got == 1U && mapped[0] != cp) {
-        u32 i;
-        bool dup = false;
-
-        for (i = 0U; i < n; i++)
-            dup = dup || out[i] == mapped[0];
-        if (!dup)
-            out[n++] = mapped[0];
-    }
+    if (got == 1U)
+        n = fold_push(out, n, SAG_RE_FOLD_MAX, mapped[0]);
     /* Kelvin sign and the long s fold onto ASCII letters; the simple
      * maps above do not round-trip them, so probe the two known singles
      * rather than pretend they do not exist. */
     probe = cp == 'k' || cp == 'K' ? 0x212AU :
             (cp == 's' || cp == 'S' ? 0x017FU : 0U);
-    if (probe != 0U && n < 4U)
-        out[n++] = probe;
+    if (probe != 0U)
+        n = fold_push(out, n, SAG_RE_FOLD_MAX, probe);
     return n;
 }
 
@@ -562,7 +575,7 @@ static void cbuf_add_class(ReParse *p, ClassBuf *b, u32 idx)
 static void cbuf_add_folded(ReParse *p, ClassBuf *b, u32 cp)
 {
     if ((p->flags & SAG_RE_ICASE) != 0U) {
-        u32 partners[4];
+        u32 partners[SAG_RE_FOLD_MAX];
         u32 n = sag_re_fold_partners(cp, partners);
         u32 i;
 
@@ -799,7 +812,7 @@ static ReAst *literal_node(ReParse *p, u32 cp)
     /* Under ICASE a literal becomes the class of its folded partners, so
      * the VM never does case work per input codepoint. */
     if ((p->flags & SAG_RE_ICASE) != 0U) {
-        u32 partners[4];
+        u32 partners[SAG_RE_FOLD_MAX];
         u32 n = sag_re_fold_partners(cp, partners);
 
         if (n > 1U) {

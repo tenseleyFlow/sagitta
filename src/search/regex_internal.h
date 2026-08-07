@@ -167,8 +167,17 @@ void sag_re_fail(ReParse *p, size_t off, const char *msg);
 u32 sag_re_class_intern(ReParse *p, ReRange *ranges, u32 n, bool negate);
 /* Builds the class for a Perl shorthand: 'w','d','s' and their negations. */
 u32 sag_re_class_perl(ReParse *p, char which);
-/* Simple case folding: appends the folded partners of `cp`. */
-u32 sag_re_fold_partners(u32 cp, u32 out[4]);
+/*
+ * Simple case folding: appends the folded partners of `cp`.
+ *
+ * `out` must hold SAG_RE_FOLD_MAX.  Named rather than spelled `4` at
+ * every call site because the bound is the function's contract: it used
+ * to appear as a literal in the declaration, in two stack arrays and in
+ * four of the six internal bounds checks -- and the two writes that
+ * spelled it nowhere ran off the end of the caller's buffer.
+ */
+enum { SAG_RE_FOLD_MAX = 4 };
+u32 sag_re_fold_partners(u32 cp, u32 out[SAG_RE_FOLD_MAX]);
 
 bool sag_re_class_has(const ReClass *c, u32 cp);
 
