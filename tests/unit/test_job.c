@@ -23,8 +23,23 @@ static void job_fixture(Ed *ed)
     SAG_ASSERT(sag_ed_open_scratch(ed));
 }
 
-/* Drives one job to completion off the main loop, the way sag_loop_run
- * would: poll the job fds, pump, reap.  Returns false on timeout. */
+/*
+ * Drives one job to completion off the main loop, the way sag_loop_run
+ * would: poll the job fds, pump, reap, SETTLE.  Returns false on timeout.
+ *
+ * The settle is not decoration, and leaving it out is what this helper
+ * used to do.  "Reaped" is not "finished": job.c says so in as many
+ * words — a pipe can hold a bufferful past the child's exit — and the
+ * old predicate, `state != RUNNING && reaped`, returned in exactly that
+ * window.  `/bin/echo hi` then had bytes_out == 0 perhaps one run in
+ * several, and because SAG_ASSERT longjmps out of the test, the failure
+ * skipped its sag_ed_free and valgrind reported the whole Ed as leaked:
+ * nineteen loss records whose real cause was one racy wait.
+ *
+ * `drained` is the honest condition, because only sag_job_settle sets
+ * it — waiting on it proves the pipes reached EOF AND that completion
+ * was delivered, rather than proving the child is merely dead.
+ */
 static bool run_to_completion(Ed *ed, u32 id)
 {
     i64 start = sag_now_ms();
@@ -36,7 +51,7 @@ static bool run_to_completion(Ed *ed, u32 id)
 
         if (j == NULL)
             return false;
-        if (j->state != SAG_JOB_RUNNING && j->reaped)
+        if (j->drained)
             return true;
         sag_job_collect_fds(ed, pfd, &n);
         if (n != 0U)
@@ -46,6 +61,7 @@ static bool run_to_completion(Ed *ed, u32 id)
         sag_job_pump(ed, pfd, n);
         sag_job_reap(ed);
         sag_job_tick(ed, sag_now_ms());
+        sag_job_settle(ed);
         if (sag_now_ms() - start > 10000)
             return false;
     }
