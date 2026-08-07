@@ -365,15 +365,93 @@ void test_ws_save_close_saves_inside_the_window(void)
     sf_remove(&f);
 }
 
-/* Closing a clean session writes nothing at all. */
-void test_ws_save_close_of_a_clean_session_writes_nothing(void)
+/*
+ * A writer's clean quit saves whether or not anything marked dirty.
+ *
+ * "Unconditional" is the sprint's word, and it is what makes the other
+ * half of the contract work: motion and scrolling are deliberately not
+ * triggers because they "ride the next save", and for a session about
+ * to quit the close IS that next save.  Gating it on `dirty` broke the
+ * composition — a session whose debounce timer happened to fire, and
+ * which then only moved around, quit with dirty already false and wrote
+ * nothing, so the file kept the cursor the timer caught mid-session.
+ *
+ * The cost of dropping the guard is one atomic write on the way out of
+ * a session that changed nothing; the alternative silently loses the
+ * last thing the user did.  See the sibling regression below.
+ */
+void test_ws_save_close_of_a_clean_session_still_saves(void)
 {
     SaveFix f;
 
     sf_make(&f);
     sag_state_open(&f.ed);
+    SAG_ASSERT(!f.ed.state.dirty);
     sag_state_close(&f.ed);
-    SAG_ASSERT_EQ_U64(f.ed.state.writes, 0U);
+    SAG_ASSERT_EQ_U64(f.ed.state.writes, 1U);
+    sf_remove(&f);
+}
+
+/*
+ * The regression s25_resume_exact caught under valgrind.
+ *
+ * Fire the debounce (which clears dirty), then move the cursor and
+ * scroll — neither is a trigger — then quit.  The document written on
+ * the way out must describe where the cursor ACTUALLY is, not where the
+ * timer found it.  Asserted on the bytes rather than on `writes`,
+ * because a second write of the stale document would satisfy a counter.
+ */
+void test_ws_save_close_captures_motion_after_the_timer_fired(void)
+{
+    SaveFix f;
+    Bytebuf at_timer;
+    Bytebuf at_close;
+    char path[PATH_MAX];
+    FILE *fp;
+
+    sf_make(&f);
+    sag_state_open(&f.ed);
+    (void)snprintf(path, sizeof(path), "%s",
+                   sag_ws_state_path(&f.ed.state.key));
+    sag_state_mark_dirty(&f.ed);
+    sf_tick(&f, SAG_STATE_SAVE_DEBOUNCE_MS + 1);
+    SAG_ASSERT_EQ_U64(f.ed.state.writes, 1U);
+    SAG_ASSERT(!f.ed.state.dirty);
+    bytebuf_init(&at_timer);
+    sag_state_emit(&f.ed, &at_timer);
+
+    /* Not triggers, by design — they ride the next save. */
+    f.ed.win->cs.curs.data[f.ed.win->cs.primary].pos = BYTEOFF(7U);
+    f.ed.win->cs.curs.data[f.ed.win->cs.primary].anchor = BYTEOFF(7U);
+    f.ed.win->vp.top = LINENO(3U);
+    SAG_ASSERT(!f.ed.state.dirty);
+
+    bytebuf_init(&at_close);
+    sag_state_emit(&f.ed, &at_close);
+    /* The move has to be visible in the document, or this test would
+     * pass on a state format that never recorded it. */
+    SAG_ASSERT(at_close.len != at_timer.len ||
+               memcmp(at_close.data, at_timer.data, at_close.len) != 0);
+
+    sag_state_close(&f.ed);
+    SAG_ASSERT_EQ_U64(f.ed.state.writes, 2U);
+    fp = fopen(path, "rb");
+    SAG_ASSERT_NOT_NULL(fp);
+    {
+        Bytebuf on_disk;
+        u8 chunk[4096];
+        size_t got;
+
+        bytebuf_init(&on_disk);
+        while ((got = fread(chunk, 1U, sizeof(chunk), fp)) != 0U)
+            bytebuf_append(&on_disk, chunk, got);
+        (void)fclose(fp);
+        SAG_ASSERT_EQ_U64(on_disk.len, at_close.len);
+        SAG_ASSERT_EQ_MEM(on_disk.data, at_close.data, at_close.len);
+        bytebuf_free(&on_disk);
+    }
+    bytebuf_free(&at_close);
+    bytebuf_free(&at_timer);
     sf_remove(&f);
 }
 

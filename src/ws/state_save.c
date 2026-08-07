@@ -290,8 +290,25 @@ void sag_state_close(Ed *ed)
      * The unconditional save on clean quit: the debounce is an
      * optimization, and quitting inside its window must not cost the
      * user the arrangement they just made.
+     *
+     * UNCONDITIONAL means not gated on `dirty`, and the omission is the
+     * whole point.  The emitted state includes the cursor and each
+     * viewport, but nothing on the motion path marks the workspace
+     * dirty — only tabs, panes, groups and the mouse do.  So a session
+     * whose debounce timer happened to fire, and which then only moved
+     * around, quits with dirty already false and writes nothing: the
+     * file keeps whatever the timer caught mid-session.
+     *
+     * s25_resume_exact found it under valgrind, where the stretched
+     * settles push the session past the 2 s debounce that a native run
+     * finishes inside; the resumed editor came back on line 63 where
+     * the pre-quit grid said line 1.  Marking motions dirty instead
+     * would re-arm the timer on every keystroke to protect a cache.
+     * One write on the way out is the cheaper half of the trade, and it
+     * makes "the state on disk after a clean quit is the state at quit"
+     * true by construction rather than by every mutation remembering.
      */
-    if (ed->state.ready && ed->state.writer && ed->state.dirty)
+    if (ed->state.ready && ed->state.writer)
         (void)sag_state_save(ed);
     sag_state_dispose(ed);
 }
