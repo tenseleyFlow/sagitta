@@ -2036,10 +2036,23 @@ static void case_s19_badge_while_running(PtyCtx *c)
     if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
         return;
     /* A job that stays alive long enough to be seen in the statusline. */
-    before = c->vt.nsync_pairs;
     ptc_keys(c, ":");
     ptc_settle(c, 0);
     ptc_bytes(c, "!sleep 30");
+    /*
+     * The count is taken HERE, immediately before Enter, so the wait
+     * below is for a frame ENTER causes.
+     *
+     * Sampling it before the `:` instead — which is what this did, and
+     * what s19_run_frames still does — makes `before + 1` satisfied by
+     * the frame that merely opened the command line, long before the
+     * command has run.  The 120 ms settle then has to carry the whole
+     * synchronisation on its own, and on a loaded runner it can find
+     * 120 ms of quiet while the editor has not yet processed Enter: the
+     * two runs snapshot different screens, one with the command line
+     * still up (cursor on the last row) and one back in the document.
+     */
+    before = c->vt.nsync_pairs;
     ptc_keys(c, "enter");
     ptc_wait_sync_pairs(c, before + 1U);
     ptc_settle(c, 120);
