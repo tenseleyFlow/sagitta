@@ -142,7 +142,13 @@ void fl_diag_vemit(DiagCtx *dc, FlDiagLevel level, FlSpan sp,
 
     if (dc == NULL || dc->muted)
         return;
-    (void)vsnprintf(msg, sizeof(msg), fmt == NULL ? "" : fmt, ap);
+    /* Not `fmt == NULL ? "" : fmt`: clang can see the empty literal
+     * through the ternary and -Wformat-zero-length rejects it, so the
+     * empty case never reaches vsnprintf at all. */
+    if (fmt == NULL || fmt[0] == '\0')
+        msg[0] = '\0';
+    else
+        (void)vsnprintf(msg, sizeof(msg), fmt, ap);
     if (level == FL_DIAG_ERROR)
         dc->nerrors++;
     else if (level == FL_DIAG_WARNING)
