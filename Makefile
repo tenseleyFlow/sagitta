@@ -378,7 +378,8 @@ endif
         perf-mouse \
         perf-undo perf-textbuf perf-huge perf-update perf-baseline-guard \
         perf-gate-selftest perf-latency perf-latency-selftest \
-        torture torture-build torture-live-check
+        torture torture-build torture-live-check \
+        fl-perf-smoke fl-dispatch-parity fl-gc-stress
 
 all: $(BUILD)/sagitta $(BUILD)/sag
 
@@ -725,6 +726,22 @@ fl-perf-smoke: $(BUILD)/fl_smoke
 	$(BUILD)/fl_smoke --perf
 
 #
+# Sprint 30 DoD 7: the GC-stress lane.
+#
+# Runs the WHOLE unit suite with the collector firing at every
+# instruction boundary, which is what turns a handle-protection
+# violation from a once-a-year wrong answer into a failure on the test
+# that exercises it.  ~30x slower than the plain lane, so it is never
+# part of `make test`.
+#
+# Under the sanitizers as well, deliberately: stress makes the
+# use-after-free happen and ASan is what names the line it happened on.
+# One without the other finds much less.
+#
+fl-gc-stress: $(UNIT_RUN)
+	FL_GC_STRESS=1 $(UNIT_RUN) $(UNIT_DEATH_EXCLUDES)
+
+#
 # Sprint 30 DoD 5: the differential-dispatch gate.
 #
 # Builds the trace driver under BOTH dispatch settings and byte-compares
@@ -749,6 +766,22 @@ fl-dispatch-parity:
 		echo "fl-dispatch-parity: traces identical"; \
 	else \
 		echo "fl-dispatch-parity: THE TWO DISPATCHERS DISAGREE"; \
+		exit 1; \
+	fi
+	@#
+	@# Sprint 30 DoD 6, the half a single-process test cannot make:
+	@# map iteration order stable ACROSS PROCESSES.  The corpus walks
+	@# maps and the trace records what that produced, so running the
+	@# same binary a second time and comparing catches an order that
+	@# depends on an address, a hash seed or an allocation sequence --
+	@# none of which repeat across a fork.
+	@#
+	$(BUILD)-fl-sw/fl_smoke --trace | grep -v '^# dispatch:' \
+		> $(BUILD)-fl-sw/trace2.txt
+	@if diff -u $(BUILD)-fl-sw/trace.txt $(BUILD)-fl-sw/trace2.txt; then \
+		echo "fl-dispatch-parity: stable across processes"; \
+	else \
+		echo "fl-dispatch-parity: NOT DETERMINISTIC ACROSS RUNS"; \
 		exit 1; \
 	fi
 

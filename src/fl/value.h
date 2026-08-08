@@ -36,7 +36,7 @@ typedef enum FlType {
      *
      * They exist so the type enum is stable and `type_of` can name them,
      * and they are CONSTRUCTIBLE ONLY FROM SPRINT 34.  Nothing in this
-     * sprint may build one: there is no constructor, and DoD 10 greps to
+     * sprint may build one: nothing allocates them, and DoD 10 greps to
      * confirm the names appear in the enum, the name table and the
      * deferral comment and nowhere else.
      */
