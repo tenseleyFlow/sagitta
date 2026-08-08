@@ -156,6 +156,15 @@ static void blacken(FlVm *vm, FlObj *o)
             mark_obj(vm, (FlObj *)c->up[i]);
         return;
     }
+    case FL_UPVAL: {
+        const FlUpval *uv = (const FlUpval *)o;
+
+        /* A CLOSED upvalue owns its value; an open one aliases a stack
+         * slot that root 1 already covers.  Marking both is harmless
+         * and marking neither loses the closed one. */
+        mark_value(vm, uv->closed);
+        return;
+    }
     case FL_NATIVE:
     case FL_MOTION_PROG:
         return;
@@ -220,7 +229,10 @@ static void obj_free(FlVm *vm, FlObj *o)
         free(((FlMap *)o)->idx);
         break;
     case FL_CLOSURE: free(((FlClosure *)o)->up); break;
-    case FL_MOTION_PROG: free(((FlMotionProg *)o)->op); break;
+    /* FL_MOTION_PROG's op array is ARENA memory, not heap: the
+     * compiler builds it alongside the chunk it belongs to and it
+     * dies with that arena.  Freeing it here handed an arena
+     * pointer to free(). */
     default: break;
     }
     if (vm->gc.stress) {
@@ -480,6 +492,16 @@ bool fl_list_push(FlVm *vm, FlList *l, FlValue v)
     l->v[l->n++] = v;
     l->mods++;
     return true;
+}
+
+FlUpval **fl_gc_upvals(FlVm *vm, u32 n)
+{
+    FlUpval **up = calloc((size_t)n, sizeof(*up));
+
+    if (up == NULL)
+        SAG_BUG("fletch: out of memory allocating upvalues");
+    vm->gc.bytes += (size_t)n * sizeof(*up);
+    return up;
 }
 
 FlMap *fl_map_new(FlVm *vm)

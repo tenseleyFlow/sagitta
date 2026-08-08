@@ -24,6 +24,14 @@ typedef enum FlType {
     FL_STR, FL_LIST, FL_MAP, FL_FN, FL_CLOSURE, FL_NATIVE, /* GC objects  */
     FL_MOTION_PROG,                                  /* §11's flat block  */
     /*
+     * Upvalues are their OWN tag, not a reused closure one.  The
+     * collector switches on the tag to trace children and to free
+     * owned arrays, so a differently-shaped object wearing FL_CLOSURE
+     * has its `closed` value read as a pointer and handed to free().
+     * That is a crash on the first collection, and it is what happened.
+     */
+    FL_UPVAL,
+    /*
      * RESERVED handle tags, spec §4.
      *
      * They exist so the type enum is stable and `type_of` can name them,
@@ -226,7 +234,7 @@ typedef struct FlNative {
 
 static inline bool fl_is_obj(FlValue v)
 {
-    return v.t >= (u8)FL_STR && v.t <= (u8)FL_MOTION_PROG;
+    return v.t >= (u8)FL_STR && v.t <= (u8)FL_UPVAL;
 }
 
 static inline FlObj *fl_as_obj(FlValue v) { return v.as.o; }

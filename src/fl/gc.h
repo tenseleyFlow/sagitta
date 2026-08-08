@@ -89,6 +89,10 @@ FlStr *fl_str_take(FlVm *vm, Bytebuf *bb);
 
 FlList *fl_list_new(FlVm *vm);
 bool fl_list_push(FlVm *vm, FlList *l, FlValue v);
+/* The closure's upvalue array.  Allocated here rather than in vm.c
+ * because gc.c owns the heap, and freed by obj_free with its closure. */
+FlUpval **fl_gc_upvals(FlVm *vm, u32 n);
+
 FlMap *fl_map_new(FlVm *vm);
 /* Insert or overwrite.  A re-inserted deleted key APPENDS; see the
  * ordering rules in value.c. */

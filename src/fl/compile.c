@@ -265,6 +265,26 @@ static void end_scope(Compiler *c, FlSpan sp)
     c->scope_depth--;
 }
 
+/*
+ * A compiler-generated slot with no source name: the three hidden
+ * cells ITER_NEW pushes, and the frame's own slot 0.  These skip the
+ * redeclaration check, which keys on the name -- three anonymous slots
+ * would otherwise collide with each other and report the shadowing
+ * error against a name the user never wrote.
+ */
+static void add_hidden_local(Compiler *c, FlSpan sp)
+{
+    if (c->nlocals >= (u32)FL_MAX_LOCALS) {
+        cerror(c, sp, "too many locals in one function (max %d)",
+               FL_MAX_LOCALS);
+        return;
+    }
+    c->locals[c->nlocals].name = 0U;
+    c->locals[c->nlocals].depth = c->scope_depth;
+    c->locals[c->nlocals].captured = false;
+    c->nlocals++;
+}
+
 static void add_local(Compiler *c, u32 name, FlSpan sp)
 {
     u32 i;
@@ -699,9 +719,9 @@ static void comp_for(Compiler *c, const FlNode *n)
     comp_expr(c, n->as.fors.iter);
     emit_op(c, FL_OP_ITER_NEW, n->sp);
     /* Three hidden slots: subject, cursor, mods snapshot. */
-    add_local(c, 0U, n->sp); mark_initialized(c);
-    add_local(c, 0U, n->sp); mark_initialized(c);
-    add_local(c, 0U, n->sp); mark_initialized(c);
+    add_hidden_local(c, n->sp);
+    add_hidden_local(c, n->sp);
+    add_hidden_local(c, n->sp);
 
     lp = &c->loops[c->nloops++];
     (void)memset(lp, 0, sizeof(*lp));
@@ -766,8 +786,7 @@ static FlFn *comp_function(Compiler *enclosing, const FlNode *n,
     sub.scope_depth = 0;
 
     /* Slot 0 is the callee itself, so parameters start at 1. */
-    add_local(&sub, 0U, n->sp);
-    mark_initialized(&sub);
+    add_hidden_local(&sub, n->sp);
     for (i = 0U; i < n->as.fn.nparams; i++) {
         add_local(&sub, n->as.fn.params[i], n->sp);
         mark_initialized(&sub);
@@ -1033,8 +1052,7 @@ FlFn *fl_compile(FlVm *vm, DiagCtx *dc, const FlProgram *p,
     top.dc = dc;
     top.file_id = file_id;
     bytebuf_init(&top.code);
-    add_local(&top, 0U, end);      /* slot 0: the top-level "callee" */
-    mark_initialized(&top);
+    add_hidden_local(&top, end);   /* slot 0: the top-level "callee" */
     push_depth(&top, 1);
 
     for (i = 0U; i < p->n; i++)

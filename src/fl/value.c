@@ -19,7 +19,7 @@
 static const char *const fl_type_names[FL_TYPE_COUNT] = {
     "nil", "bool", "int", "float",
     "str", "list", "map", "fn", "fn", "fn",
-    "motion",
+    "motion", "upval",
     /*
      * The reserved handles of spec §4.  Naming a type is not
      * constructing one: `type_of` must be able to say "buf" when
