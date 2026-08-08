@@ -25,7 +25,13 @@
  *   expr_stmt      fl_parse_let_and_assign
  *   block          fl_parse_functions
  *   params         fl_parse_functions               (zero, one, many)
- *   expr..mul_e    fl_parse_precedence_ladder
+ *   expr           fl_parse_precedence_ladder
+ *   or_e           fl_parse_precedence_ladder       (a or b)
+ *   and_e          fl_parse_precedence_ladder       (a and b)
+ *   eq_e           fl_parse_precedence_ladder       (==, !=)
+ *   rel_e          fl_parse_precedence_ladder       (<, <=, >, >=)
+ *   add_e          fl_parse_precedence_ladder       (+, -)
+ *   mul_e          fl_parse_precedence_ladder       (*, /, %)
  *   unary          fl_parse_precedence_ladder       (not, -)
  *   postfix        fl_parse_postfix_chain           (call, index, field)
  *   args           fl_parse_postfix_chain
