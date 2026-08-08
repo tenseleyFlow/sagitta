@@ -86,7 +86,22 @@ struct FlVm {
      * collection -- root 8 in the sprint's table, and the one that is
      * least obvious until it drops a half-built function.
      */
-    FlFn **compiling;
+    /*
+     * Root 8: every FlFn produced during the compile currently in
+     * progress.  A nested function is stored in its parent's constant
+     * VEC, which is compiler scratch and not a root, so between its
+     * allocation and the parent chunk reaching the arena it is
+     * reachable from nothing the collector can see.
+     *
+     * NOTE the limit of this root: the constant pool's FlStr entries
+     * are NOT covered by it, so compilation is not collection-safe and
+     * fl_gc_alloc deliberately never collects -- it sets `pending`, and
+     * the VM honours it at the next instruction boundary, by which time
+     * every chunk is built.  Root 8 is what keeps that true for the
+     * FUNCTIONS across a nested compile; making the whole compiler
+     * collection-safe is not this sprint's job and is not claimed here.
+     */
+    FlFn *compiling[FL_FRAMES_MAX];
     u32 ncompiling;
     FlGc gc;
     const FlHost *host;

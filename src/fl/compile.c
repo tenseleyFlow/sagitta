@@ -857,6 +857,11 @@ static FlFn *comp_function(Compiler *enclosing, const FlNode *n,
     }
 
     fn = fl_gc_alloc(sub.vm, sizeof(*fn), FL_FN);
+    /* Root 8.  From here the function lives in the enclosing
+     * compiler's constant Vec -- scratch, not a root -- until
+     * fl_compile pops the whole batch below. */
+    if (sub.vm->ncompiling < (u32)FL_FRAMES_MAX)
+        sub.vm->compiling[sub.vm->ncompiling++] = fn;
     /*
      * Copied to the arena AT FINAL SIZE, once the function is complete.
      * The builders above grow, and a growing array with live pointers
@@ -1153,6 +1158,7 @@ FlFn *fl_compile(FlVm *vm, DiagCtx *dc, const FlProgram *p,
     Compiler top;
     FlFn *fn;
     u32 i;
+    u32 root_base = vm->ncompiling;
     FlSpan end = {file_id, 0U, 0U, 0U};
 
     (void)memset(&top, 0, sizeof(top));
@@ -1178,6 +1184,7 @@ FlFn *fl_compile(FlVm *vm, DiagCtx *dc, const FlProgram *p,
     emit_op(&top, FL_OP_HALT, end);
 
     if (top.failed) {
+        vm->ncompiling = root_base;
         bytebuf_free(&top.code);
         FlConstVec_free(&top.consts);
         FlNameVec_free(&top.globals);
@@ -1209,6 +1216,15 @@ FlFn *fl_compile(FlVm *vm, DiagCtx *dc, const FlProgram *p,
     fn->ch.file_id = file_id;
     fn->max_stack = (u16)(top.max_depth < 0 ? 0 : top.max_depth);
     fn->origin = origin;
+    /*
+     * The batch is released here, not per function: a nested function
+     * must stay rooted until its PARENT's chunk has reached the arena,
+     * and the parent is the last thing built.  The top-level fn itself
+     * is unrooted on return by design -- the caller runs it, and
+     * fl_vm_run puts it on the stack before the first allocation that
+     * could collect.
+     */
+    vm->ncompiling = root_base;
     bytebuf_free(&top.code);
     FlConstVec_free(&top.consts);
     FlNameVec_free(&top.globals);
