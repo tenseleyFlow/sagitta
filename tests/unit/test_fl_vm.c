@@ -511,6 +511,135 @@ void test_fl_vm_instruction_boundary_work_happens(void)
     vf_close(&f);
 }
 
+void test_fl_vm_try_restores_the_stack_pointer_exactly(void)
+{
+    VmFix f;
+    FlValue out;
+    FlValue *sp_before;
+
+    /*
+     * The unwind's most easily wrong step.  A handler entered with the
+     * stack one slot high leaks a value per raise, and a loop that
+     * catches per iteration then overruns FL_STACK_MAX -- which
+     * presents as a stack overflow thousands of iterations away from
+     * the try block that caused it.
+     *
+     * Raising from inside a deep expression is the case that catches
+     * it: several operands are already pushed when the raise happens.
+     */
+    vf_open(&f);
+    SAG_ASSERT(vf_run(&f,
+                      "let n = 0\n"
+                      "while n < 200 {\n"
+                      "  try { let x = 1 + (2 * (3 + (4 / 0))) }\n"
+                      "  catch e { }\n"
+                      "  n = n + 1\n"
+                      "}\n"
+                      "return n\n", &out));
+    SAG_ASSERT_EQ_I64(out.as.i, 200);
+    /* Back to the base of the stack, not merely "not overflowed". */
+    sp_before = f.vm.stack;
+    SAG_ASSERT(f.vm.sp <= sp_before + 1);
+    vf_close(&f);
+}
+
+void test_fl_vm_handlers_nest(void)
+{
+    VmFix f;
+    FlValue out;
+    char src[8192];
+    size_t at = 0U;
+    u32 i;
+
+    /* The innermost handler wins, and the outer ones neither fire nor
+     * are left on the handler stack. */
+    SAG_ASSERT_EQ_I64(
+        run_int("try {\n"
+                "  try { return 1 / 0 } catch inner { return 1 }\n"
+                "} catch outer { return 2 }\n"), 1);
+    /* An uncaught raise in the inner block reaches the outer handler
+     * rather than escaping. */
+    SAG_ASSERT_EQ_I64(
+        run_int("try {\n"
+                "  try { return 5 } catch inner { return 1 }\n"
+                "  return 1 / 0\n"
+                "} catch outer { return 2 }\n"), 5);
+
+    /* And nesting to 64, which the sprint names as the depth. */
+    for (i = 0U; i < 64U; i++)
+        at += (size_t)snprintf(src + at, sizeof(src) - at,
+                               "try {\n");
+    at += (size_t)snprintf(src + at, sizeof(src) - at, "  return 7\n");
+    for (i = 0U; i < 64U; i++)
+        at += (size_t)snprintf(src + at, sizeof(src) - at,
+                               "} catch e%u { return %u }\n",
+                               (unsigned)i, (unsigned)(100U + i));
+    SAG_ASSERT(at < sizeof(src));
+    vf_open(&f);
+    SAG_ASSERT(vf_run(&f, src, &out));
+    SAG_ASSERT_EQ_I64(out.as.i, 7);
+    vf_close(&f);
+}
+
+void test_fl_vm_deep_recursion_raises_rather_than_overflowing(void)
+{
+    /*
+     * Runaway recursion is USER-TRIGGERABLE, so the frame array running
+     * out must raise a catchable value and not smash the stack -- which
+     * is amendment A1's entire argument for the "limit" kind.  A test
+     * that only checked the error string would pass against a build
+     * that overflows first and reports second, so this also proves the
+     * VM is still usable afterwards.
+     */
+    assert_kind("fn f(n) { return f(n + 1) }\nreturn f(0)\n", "limit");
+    SAG_ASSERT_EQ_I64(
+        run_int("fn f(n) { return f(n + 1) }\n"
+                "let hit = 0\n"
+                "try { let x = f(0) } catch e { hit = 1 }\n"
+                /* The VM keeps running: a second call still works. */
+                "fn g() { return 3 }\n"
+                "return hit + g()\n"), 4);
+}
+
+void test_fl_vm_import_names_its_sprint(void)
+{
+    VmFix f;
+    FlValue out;
+    FlValue got;
+
+    /*
+     * DoD 10, and the project's no-silent-stubs rule: the opcode exists
+     * so the compiler can emit it, and running it must say which sprint
+     * owes the behaviour rather than quietly returning nil.
+     */
+    vf_open(&f);
+    SAG_ASSERT(!vf_run(&f, "import io\nreturn 0\n", &out));
+    SAG_ASSERT(fl_map_get((FlMap *)out.as.o,
+                          FL_OBJ_V(FL_STR, fl_str_new(&f.vm, "msg", 3U)),
+                          &got));
+    SAG_ASSERT_NOT_NULL(strstr(((FlStr *)got.as.o)->b, "Sprint 31"));
+    vf_close(&f);
+}
+
+void test_fl_vm_reserved_handle_tags_are_named_not_constructible(void)
+{
+    /*
+     * DoD 10.  The five §4 handle tags must be nameable -- s34's
+     * type_of has to say "buf" the day it starts handing them out --
+     * without being reachable from any Fletch program today.
+     */
+    SAG_ASSERT_EQ_I64(strcmp(fl_type_name(FL_BUF), "buf"), 0);
+    SAG_ASSERT_EQ_I64(strcmp(fl_type_name(FL_CURSOR), "cursor"), 0);
+    SAG_ASSERT_EQ_I64(strcmp(fl_type_name(FL_SPAN), "span"), 0);
+    SAG_ASSERT_EQ_I64(strcmp(fl_type_name(FL_WIN), "win"), 0);
+    SAG_ASSERT_EQ_I64(strcmp(fl_type_name(FL_REGEX), "regex"), 0);
+    /* Out-of-range stays diagnosable rather than indexing past the
+     * table -- the tags are the last five, so this is the guard that
+     * keeps a future tag from reading garbage. */
+    SAG_ASSERT_EQ_I64(strcmp(fl_type_name((FlType)FL_TYPE_COUNT), "?"), 0);
+    SAG_ASSERT(FL_TYPE_COUNT <= 32);
+}
+
 /* ---------------------------------------------------------------- */
 /* DoD 4: the spec §14 example, asserted                            */
 /* ---------------------------------------------------------------- */
