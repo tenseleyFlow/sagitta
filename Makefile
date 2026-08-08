@@ -20,6 +20,24 @@ MULTICURSOR_FUZZ_OPS ?= 100000
 MOUSE_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
                     0x9e3779b97f4a7c15 0xd1b54a32d192ed03
 MOUSE_FUZZ_EVENTS ?= 100000
+#
+# fuzz_groups is counted in SESSIONS, and not with FUZZ_ITERS.
+#
+# Its run_session builds a whole editor and then drives 400 membership
+# steps and 400 picker steps, so one "iteration" costs ~50 ms plain and
+# ~80 ms under the sanitizers -- three orders of magnitude more than an
+# iteration of a per-operation target like fuzz_utf8.  Sharing
+# FUZZ_ITERS=200000 with those therefore asked for 200 000 whole editor
+# sessions, about 4.5 hours under ASan: the sanitize lane sat at 4 h 27 m
+# against GitHub's 6 h ceiling with this one campaign still running, and
+# had never once reached the end of it.  fuzz_panes and fuzz_tabs share
+# the session shape but not the cost, and stay on FUZZ_ITERS.
+#
+# Four seeds beat more sessions on one seed for reaching new states, so
+# the budget buys seeds first -- the same trade fuzz-mouse makes.
+GROUPS_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
+                     0x9e3779b97f4a7c15 0xd1b54a32d192ed03
+GROUPS_FUZZ_SESSIONS ?= 250
 FUZZ_LONG_SECONDS ?= 450
 TORTURE_SIGKILL_ITERS ?= 500
 FIXTURE_DIR ?= $(BUILD)/fixtures
@@ -320,7 +338,7 @@ endif
 .DEFAULT_GOAL := all
 .PHONY: all test clean install dirs FORCE test-script test-pty fuzz \
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
-        fuzz-mouse \
+        fuzz-mouse fuzz-groups \
         fixtures fixtures-quick fixtures-verify \
         fixtures-verify-quick \
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
@@ -528,11 +546,11 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
       $(BUILD)/fuzz_grid $(BUILD)/fuzz_vt $(BUILD)/fuzz_undo \
       $(BUILD)/fuzz_re_compile $(BUILD)/fuzz_re_diff \
       $(BUILD)/fuzz_re_quote $(BUILD)/fuzz_search \
-      $(BUILD)/fuzz_panes $(BUILD)/fuzz_tabs $(BUILD)/fuzz_groups \
+      $(BUILD)/fuzz_panes $(BUILD)/fuzz_tabs \
       $(BUILD)/fuzz_fuzzy $(BUILD)/fuzz_state \
       $(BUILD)/fuzz_gitignore \
       fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse \
-      fuzz-mouse
+      fuzz-mouse fuzz-groups
 	$(BUILD)/fuzz_utf8 --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_grapheme --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_input --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
@@ -544,7 +562,6 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
 	$(BUILD)/fuzz_search --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_panes --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_tabs --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
-	$(BUILD)/fuzz_groups --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_re_diff --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_fuzzy --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_state --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
@@ -552,6 +569,13 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
 	@if [ -n "$(FUZZ_SECONDS)" ]; then \
 		$(BUILD)/fuzz_input --seconds=$(FUZZ_SECONDS) --seed=$(FUZZ_SEED); \
 	fi
+
+fuzz-groups: $(BUILD)/fuzz_groups
+	@set -eu; \
+	for seed in $(GROUPS_FUZZ_SEEDS); do \
+		$(BUILD)/fuzz_groups --iters=$(GROUPS_FUZZ_SESSIONS) \
+			--seed=$$seed; \
+	done
 
 fuzz-mouse: $(BUILD)/fuzz_mouse
 	@set -eu; \
