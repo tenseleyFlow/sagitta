@@ -64,11 +64,24 @@ static bool nl_terminates(const Parser *p)
 static void track_depth(Parser *p, FlTokKind k)
 {
     switch (k) {
-    case FL_T_LPAREN: case FL_T_LBRACKET: case FL_T_LBRACE:
+    /*
+     * `{` IS ABSENT ON PURPOSE, and the map literal adds itself.
+     *
+     * §1.2 lists `{` among the openers that continue a line, but that
+     * can only mean a MAP LITERAL: statements inside a block are
+     * newline-terminated, as §14's own `fn counter` demonstrates two
+     * lines running.  Counting a block's brace here made every
+     * statement in every body a continuation of the one before it, and
+     * the normative example failed on `let n = start` / `return`.
+     * §1.7 is what keeps the two braces distinguishable at all, and the
+     * parser is the only thing that knows which one it consumed -- so
+     * the depth for a map is taken there rather than from the token.
+     */
+    case FL_T_LPAREN: case FL_T_LBRACKET:
     case FL_T_ATBRACKET: case FL_M_LPAREN:
         p->depth++;
         break;
-    case FL_T_RPAREN: case FL_T_RBRACKET: case FL_T_RBRACE:
+    case FL_T_RPAREN: case FL_T_RBRACKET:
     case FL_M_END: case FL_M_RPAREN:
         if (p->depth > 0U)
             p->depth--;
@@ -419,6 +432,7 @@ static FlNode *parse_map_literal(Parser *p)
     FlNode *n;
 
     advance(p); /* { */
+    p->depth++;   /* a map literal continues the line; a block does not */
     while (!check(p, FL_T_RBRACE) && !check(p, FL_T_EOF)) {
         FlNode *k;
 
@@ -446,8 +460,19 @@ static FlNode *parse_map_literal(Parser *p)
         if (!match(p, FL_T_COMMA))
             break;
     }
-    expect_closer(p, FL_T_RBRACE, "'}'");
+    /*
+     * Restored BEFORE the brace is consumed, not after.
+     *
+     * advance() fetches the next token in the same call that closes the
+     * construct, and decides there and then whether a newline is layout
+     * -- using the depth as it stands.  Putting the brace back
+     * afterwards left that one lookahead reading a depth of one, so the
+     * newline ending `let cfg = { ... }` was swallowed and the next
+     * statement ran on.  Bracket closers avoid this only because
+     * track_depth has already run on them by that point.
+     */
     p->depth = depth0;
+    expect_closer(p, FL_T_RBRACE, "'}'");
     n = node(p, FL_A_MAP, sp);
     n->as.map.keys = nl_freeze(p, &keys, &n->as.map.n);
     {
@@ -862,6 +887,20 @@ static FlNode *parse_block(Parser *p)
     return n;
 }
 
+/*
+ * A block is self-terminating, so a newline after its `}` is layout.
+ *
+ * §2 puts no TERM between a block and the `else` or `catch` that
+ * continues it, and §14 writes both on the following line.  Consuming
+ * the newline is safe even when the next token turns out to start a
+ * fresh statement: the block already ended the previous one.
+ */
+static void skip_block_newlines(Parser *p)
+{
+    while (check(p, FL_T_NEWLINE))
+        advance(p);
+}
+
 static bool is_assign_target(const FlNode *n)
 {
     return n->kind == (u8)FL_A_IDENT || n->kind == (u8)FL_A_INDEX ||
@@ -947,6 +986,7 @@ static FlNode *parse_stmt(Parser *p)
         n = node(p, FL_A_IF, sp);
         n->as.ifs.cond = parse_expr(p);
         n->as.ifs.then = parse_block(p);
+        skip_block_newlines(p);
         if (match(p, FL_T_ELSE)) {
             /* `else if` chains by nesting, which is what §2's
              * `{ "else" "if" expr block }` describes. */
@@ -1007,6 +1047,7 @@ static FlNode *parse_stmt(Parser *p)
         advance(p);
         n = node(p, FL_A_TRY, sp);
         n->as.trys.body = parse_block(p);
+        skip_block_newlines(p);
         if (!match(p, FL_T_CATCH))
             expected(p, "'catch'");
         if (check(p, FL_T_IDENT)) {
@@ -1151,11 +1192,13 @@ static FlNode *parse_pl_list(Parser *p)
 static FlNode *parse_pl_map(Parser *p)
 {
     FlSpan sp = p->cur.sp;
+    u32 depth0 = p->depth;
     NodeList keys = {0};
     NodeList vals = {0};
     FlNode *n;
 
     advance(p); /* { */
+    p->depth++;   /* a map literal continues the line; a block does not */
     while (!check(p, FL_T_RBRACE) && !check(p, FL_T_EOF)) {
         FlNode *k;
         FlNode *v;
@@ -1191,6 +1234,18 @@ static FlNode *parse_pl_map(Parser *p)
         if (!match(p, FL_T_COMMA))
             break;
     }
+    /*
+     * Restored BEFORE the brace is consumed, not after.
+     *
+     * advance() fetches the next token in the same call that closes the
+     * construct, and decides there and then whether a newline is layout
+     * -- using the depth as it stands.  Putting the brace back
+     * afterwards left that one lookahead reading a depth of one, so the
+     * newline ending `let cfg = { ... }` was swallowed and the next
+     * statement ran on.  Bracket closers avoid this only because
+     * track_depth has already run on them by that point.
+     */
+    p->depth = depth0;
     expect_closer(p, FL_T_RBRACE, "'}'");
     n = node(p, FL_A_MAP, sp);
     n->as.map.keys = nl_freeze(p, &keys, &n->as.map.n);
