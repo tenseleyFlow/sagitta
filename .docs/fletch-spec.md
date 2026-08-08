@@ -387,10 +387,16 @@ caught by no frame.
 Runtime error kinds, **closed for 1.0**:
 
 `"type"` `"arity"` `"name"` `"index"` `"key"` `"div"` `"capability"`
-`"io"` `"import"` `"motion"` `"user"`
+`"io"` `"import"` `"motion"` `"user"` `"limit"`
 
-**Count: 11.** Sprint 33 asserts this number. See §16 — later sprints
-amend it, and anything written after Sprint 34 says 13.
+**Count: 12.** Sprint 33 asserts this number. `"limit"` was added by
+amendment **A1** (Sprint 30) — see §16. Later sprints amend it again,
+and anything written after Sprint 34 says 13.
+
+`"limit"` covers VM resource exhaustion: call depth, value-stack depth,
+the step limit, and Sprint 31's io result caps. It is **catchable**, and
+that is the point of it — infinite recursion is user-triggerable, so it
+may not become an abort, and it is none of the other eleven.
 
 ### 9.2 Catching
 
@@ -634,13 +640,18 @@ per-section scheme (`§16-A1`) makes a collision invisible until someone
 reads both files. **This table is the registry: an amendment is not
 filed until it appears here with the next free id.**
 
-| Id | Sprint | § | Change | Reason |
-|---|---|---|---|---|
-| A1 | 30 | 9 / 16 | error kinds 11 → 12, adding `"limit"` | stack/step-limit exhaustion is user-triggerable and fits none of the 11 closed kinds |
-| A2 | 34 | 9 / 16 | error kinds 12 → 13, adding `"handle"` | a stale or closed editor handle is neither a type nor an index error; `catch` must distinguish "wrong argument" from "the buffer closed under you" |
-| A3 | 55 | 11 | import resolution gains a fourth row, `$SAG_RUNTIME_DIR/`, searched **last** | shipped presets must be importable, and searching last lets a user's copy shadow the shipped one |
+An id may be RESERVED here during planning; it is **filed** only when
+the Filed and Reviewer columns are populated by the sprint that lands
+it. A reserved row is a promise, not a change to the spec.
 
-**Pitfall — §9's kind count is 13, not 12.** Sprints 31, 32 and 33 were
+| Id | Sprint | § | Change | Reason | Filed | Reviewer |
+|---|---|---|---|---|---|---|
+| A1 | 30 | 9 / 16 | error kinds 11 → 12, adding `"limit"` | stack/step-limit exhaustion is user-triggerable and fits none of the 11 closed kinds | 2026-08-08 | Sprint 30 implementation review |
+| A2 | 34 | 9 / 16 | error kinds 12 → 13, adding `"handle"` | a stale or closed editor handle is neither a type nor an index error; `catch` must distinguish "wrong argument" from "the buffer closed under you" | reserved | — |
+| A3 | 55 | 11 | import resolution gains a fourth row, `$SAG_RUNTIME_DIR/`, searched **last** | shipped presets must be importable, and searching last lets a user's copy shadow the shipped one | reserved | — |
+
+**Pitfall — §9's kind count is 13, not 12,** once A2 lands. A1 is filed
+as of Sprint 30, so §9 reads **12** today. Sprints 31, 32 and 33 were
 written between A1 and A2 and correctly say 12 for their point in time;
 anything written after Sprint 34 says 13. Sprint 33's count assertion is
 updated in A2's own commit, and Sprint 58's audit front `FLETCH`
