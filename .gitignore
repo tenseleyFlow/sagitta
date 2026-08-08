@@ -20,7 +20,16 @@
 CLAUDE.md
 AGENTS.md
 
-build/
+#
+# EVERY build directory, not an enumerated few.
+#
+# The list used to name build/, build-san/, build-clang/, build-cov/ and
+# build-vg/ individually, so the first ad-hoc tree that did not match --
+# build-sanc/, from a one-off clang sanitizer run -- committed 24 MB of
+# instrumented binaries before anyone noticed.  A glob costs nothing and
+# cannot be outrun by the next invented name.
+#
+build*/
 *.a
 *.o
 *.d
@@ -31,7 +40,3 @@ build/
 *.swo
 .#*
 .DS_Store
-build-san/
-build-clang/
-build-cov/
-build-vg/
