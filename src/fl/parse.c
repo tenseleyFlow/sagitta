@@ -431,8 +431,13 @@ static FlNode *parse_map_literal(Parser *p)
     NodeList vals = {0};
     FlNode *n;
 
+    /* Raised BEFORE the brace is consumed, for the same reason it is
+     * lowered before the closing one: advance() fetches the following
+     * token in this very call and decides there whether a newline is
+     * layout.  Raising it afterwards delivered the newline that opens a
+     * multi-line map and the parse stopped on it. */
+    p->depth++;
     advance(p); /* { */
-    p->depth++;   /* a map literal continues the line; a block does not */
     while (!check(p, FL_T_RBRACE) && !check(p, FL_T_EOF)) {
         FlNode *k;
 
@@ -1197,8 +1202,13 @@ static FlNode *parse_pl_map(Parser *p)
     NodeList vals = {0};
     FlNode *n;
 
+    /* Raised BEFORE the brace is consumed, for the same reason it is
+     * lowered before the closing one: advance() fetches the following
+     * token in this very call and decides there whether a newline is
+     * layout.  Raising it afterwards delivered the newline that opens a
+     * multi-line map and the parse stopped on it. */
+    p->depth++;
     advance(p); /* { */
-    p->depth++;   /* a map literal continues the line; a block does not */
     while (!check(p, FL_T_RBRACE) && !check(p, FL_T_EOF)) {
         FlNode *k;
         FlNode *v;
