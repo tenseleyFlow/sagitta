@@ -5,11 +5,30 @@ on:
   pull_request:
   schedule:
     - cron: '17 4 * * *'
-  # A hosted-runner outage drops the push event entirely: the workflow
-  # never starts, so there is nothing to re-run and the only way back is
-  # an empty commit.  This lets a dropped run be re-launched against the
-  # commit that lost it.
+  # A push event that is dropped -- or refused because Actions billing is
+  # blocked, which looks identical: every job fails in seconds with no
+  # log -- leaves no run to re-run, so one can be launched by hand
+  # against the commit that lost it.
   workflow_dispatch:
+    inputs:
+      nightly:
+        description: Also run the nightly-only campaigns
+        type: boolean
+        default: false
+
+#
+# One run per ref, newest wins.
+#
+# Not a cost measure -- this repo is public, so standard runners are
+# free.  A full run is 11 jobs and the fuzz lanes take the better part of
+# an hour, so pushing three times in a row left three complete runs
+# racing, two of them testing commits nobody would ship and all three
+# reporting into the same branch.  Cancelling the superseded run costs no
+# coverage: the newest commit is still tested in full.
+#
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -226,7 +245,9 @@ jobs:
           done
 
   fuzz-nightly:
-    if: github.event_name == 'schedule'
+    # Nightly by cron, and on demand without waiting for one:
+    #   gh workflow run CI --ref trunk -f nightly=true
+    if: github.event_name == 'schedule' || inputs.nightly
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -259,7 +280,9 @@ jobs:
           done
 
   perf-nightly:
-    if: github.event_name == 'schedule'
+    # Nightly by cron, and on demand without waiting for one:
+    #   gh workflow run CI --ref trunk -f nightly=true
+    if: github.event_name == 'schedule' || inputs.nightly
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
@@ -269,7 +292,9 @@ jobs:
           make perf-huge CC=gcc PERF_ADVISORY=1
 
   torture-nightly:
-    if: github.event_name == 'schedule'
+    # Nightly by cron, and on demand without waiting for one:
+    #   gh workflow run CI --ref trunk -f nightly=true
+    if: github.event_name == 'schedule' || inputs.nightly
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
