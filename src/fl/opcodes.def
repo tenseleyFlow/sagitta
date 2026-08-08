@@ -1,0 +1,109 @@
+/*
+ * Sprint 30 deliverable 5: the Fletch instruction set, once.
+ *
+ * FL_OP(NAME, operands, effect, doc)
+ *
+ *   operands  "" | "b" (u8) | "s" (i8) | "w" (u16), concatenated in
+ *             encoding order.  Fixed width, little-endian, immediately
+ *             following the opcode byte.
+ *   effect    net stack delta, or FL_EFF_VAR when it depends on an
+ *             operand or on the frame.
+ *
+ * THE SWITCH DISPATCHER, THE COMPUTED-GOTO LABEL TABLE, THE
+ * DISASSEMBLER AND THE COMPILER'S max_stack ALL COME FROM THIS FILE.
+ * That is the point: DoD 5 requires the two dispatch modes to produce
+ * byte-identical traces, and the only durable way to get that is for
+ * neither of them to carry its own copy of the opcode list.
+ *
+ * No superinstructions and no tail-call opcode in 1.0, both deliberate:
+ * a fused GET_LOCAL+ADD would buy a few percent and cost a second
+ * definition of every stack effect, and tail calls would erase the
+ * frames Sprint 32's stack traces are made of.  0xF0..0xFF is left
+ * unused so a future superinstruction range does not renumber anything.
+ */
+
+/* --- constants and immediates ---------------------------------- */
+FL_OP(CONST,        "w",   +1,          "push consts[k]")
+FL_OP(NIL,          "",    +1,          "push nil")
+FL_OP(TRUE,         "",    +1,          "push true")
+FL_OP(FALSE,        "",    +1,          "push false")
+FL_OP(INT8,         "s",   +1,          "small-int fast path, keeps 0/1/-1 out of the pool")
+FL_OP(NIL_N,        "b",   FL_EFF_VAR,  "declare n locals without initializers")
+
+/* --- stack ------------------------------------------------------ */
+FL_OP(POP,          "",    -1,          "discard TOS")
+FL_OP(POPN,         "b",   FL_EFF_VAR,  "block exit")
+FL_OP(DUP,          "",    +1,          "duplicate TOS")
+
+/* --- locals and upvalues ---------------------------------------- */
+FL_OP(GET_LOCAL,    "b",   +1,          "frame->slots[s]")
+FL_OP(SET_LOCAL,    "b",   -1,          "assignment is a statement: no value left")
+FL_OP(GET_UPVAL,    "b",   +1,          "closure->up[u]")
+FL_OP(SET_UPVAL,    "b",   -1,          "assignment is a statement")
+FL_OP(CLOSE_UPVALS, "b",   FL_EFF_VAR,  "close upvalues with slot >= s, then sp = slots + s")
+
+/* --- globals ---------------------------------------------------- */
+FL_OP(GET_GLOBAL,   "w",   +1,          "consts[k] is the interned name; miss raises \"name\"")
+FL_OP(SET_GLOBAL,   "w",   -1,          "miss raises \"name\": no implicit globals")
+FL_OP(DEF_GLOBAL,   "w",   -1,          "module top level only")
+
+/* --- arithmetic and logic --------------------------------------- */
+FL_OP(ADD,          "",    -1,          "int/float per spec 4; also str+str and list+list")
+FL_OP(SUB,          "",    -1,          "")
+FL_OP(MUL,          "",    -1,          "")
+FL_OP(DIV,          "",    -1,          "int division truncates toward zero; /0 raises \"div\"")
+FL_OP(MOD,          "",    -1,          "sign follows the dividend; %0 raises \"div\"")
+FL_OP(NEG,          "",     0,          "")
+FL_OP(NOT,          "",     0,          "truthiness; never an error")
+
+/* --- comparison -------------------------------------------------- */
+FL_OP(EQ,           "",    -1,          "value for scalars, identity for objects")
+FL_OP(NE,           "",    -1,          "")
+FL_OP(LT,           "",    -1,          "numbers numerically, strings bytewise")
+FL_OP(LE,           "",    -1,          "")
+FL_OP(GT,           "",    -1,          "")
+FL_OP(GE,           "",    -1,          "")
+
+/* --- control flow ------------------------------------------------ */
+FL_OP(JUMP,         "w",    0,          "forward: ip += d")
+FL_OP(JUMP_BACK,    "w",    0,          "ip -= d; loops only")
+FL_OP(JUMP_IF_FALSE,"w",   -1,          "")
+FL_OP(JUMP_IF_TRUE, "w",   -1,          "")
+FL_OP(OR_JUMP,      "w",    0,          "peek: jump if truthy, leaving the value")
+FL_OP(AND_JUMP,     "w",    0,          "peek: jump if falsy, leaving the value")
+
+/* --- calls ------------------------------------------------------- */
+FL_OP(CALL,         "b",   FL_EFF_VAR,  "callee at sp-n-1; the result replaces it")
+FL_OP(RETURN,       "",    FL_EFF_VAR,  "pop the frame, TOS to the caller")
+FL_OP(RETURN_NIL,   "",    FL_EFF_VAR,  "bare return, and falling off the end")
+FL_OP(CLOSURE,      "w",   +1,          "then n pairs of (u8 is_local, u8 idx)")
+
+/* --- containers -------------------------------------------------- */
+FL_OP(LIST,         "w",   FL_EFF_VAR,  "")
+FL_OP(MAP,          "w",   FL_EFF_VAR,  "key,value pairs in source order")
+FL_OP(INDEX_GET,    "",    -1,          "list wants an int, out of range raises \"index\"; map raises \"key\"")
+FL_OP(INDEX_SET,    "",    -3,          "[c, i, v] -> []")
+FL_OP(FIELD_GET,    "w",    0,          ".name is [\"name\"]; modules read the same way")
+FL_OP(FIELD_SET,    "w",   -2,          "a frozen object raises \"type\"")
+
+/* --- iteration ---------------------------------------------------- */
+FL_OP(ITER_NEW,     "",    +2,          "pops the iterable, pushes subject, cursor and a mods snapshot")
+FL_OP(ITER_NEXT1,   "bw",  +1,          "for x in ...; jumps d when exhausted")
+FL_OP(ITER_NEXT2,   "bw",  +2,          "for k, v in ...")
+
+/* --- editor and modules ------------------------------------------- */
+FL_OP(MOTION,       "w",   +1,          "run consts[k] on the host, push nil")
+FL_OP(IMPORT,       "w",   +1,          "Sprint 31; hard-errors here rather than doing nothing")
+FL_OP(EDIT_BEGIN,   "",     0,          "spec 10 transaction open; the null host is a no-op")
+FL_OP(EDIT_END,     "",     0,          "")
+
+/* --- errors -------------------------------------------------------- */
+FL_OP(THROW,        "",    -1,          "raise TOS")
+FL_OP(TRY_PUSH,     "w",    0,          "push a handler: pc h, current sp, frame depth")
+FL_OP(TRY_POP,      "",     0,          "")
+
+/* --- misc ----------------------------------------------------------- */
+FL_OP(HALT,         "",     0,          "end of a top-level chunk")
+FL_OP(LIST_APPEND,  "b",   -1,          "append TOS to the list in slot s; literals past 65535 items")
+FL_OP(NOT_NIL,      "",     0,          "nil-coalescing fast path for generated code")
+FL_OP(TRACE_LINE,   "w",    0,          "FL_VM_CHECKS builds only; never emitted in release")
