@@ -231,15 +231,44 @@ static void obj_free(FlVm *vm, FlObj *o)
     free(o);
 }
 
-/* Drop weak entries whose string did not survive the mark. */
+/*
+ * Drop weak entries whose string did not survive the mark, then
+ * REBUILD the table.
+ *
+ * Simply NULLing a slot is wrong in an open-addressed table: the hole
+ * truncates every probe chain that ran through it, so a later lookup
+ * walks off the end and reports "absent" for a string that is still
+ * present.  The visible effect is mild -- a duplicate interned string,
+ * since fl_str_eq compares content -- but it quietly breaks the
+ * one-object-per-content property the pointer fast path is named for.
+ * Rehashing the survivors costs one pass per collection.
+ */
 static void strtab_clear_dead(FlStrTab *t)
 {
+    FlStr **survivors;
+    u32 live = 0U;
     u32 i;
 
+    if (t->cap == 0U)
+        return;
+    survivors = calloc((size_t)t->cap, sizeof(*survivors));
+    if (survivors == NULL)
+        SAG_BUG("fletch gc: out of memory rebuilding the string table");
     for (i = 0U; i < t->cap; i++) {
-        if (t->v[i] != NULL && t->v[i]->h.mark == 0U)
-            t->v[i] = NULL;
+        if (t->v[i] != NULL && t->v[i]->h.mark != 0U)
+            survivors[live++] = t->v[i];
     }
+    (void)memset(t->v, 0, (size_t)t->cap * sizeof(*t->v));
+    for (i = 0U; i < live; i++) {
+        FlStr *sv = survivors[i];
+        u32 at = sv->h.aux & (t->cap - 1U);
+
+        while (t->v[at] != NULL)
+            at = (at + 1U) & (t->cap - 1U);
+        t->v[at] = sv;
+    }
+    t->n = live;
+    free(survivors);
 }
 
 static void sweep(FlVm *vm)
@@ -321,4 +350,202 @@ void fl_gc_free_all(FlVm *vm)
     vm->gc.strings.cap = 0U;
     vm->gc.strings.n = 0U;
     vm->gc.bytes = 0U;
+}
+
+/* ---------------------------------------------------------------- */
+/* Strings: interning and heap escape (deliverable 10)              */
+/* ---------------------------------------------------------------- */
+
+/*
+ * The intern table is a weak, open-addressed set of FlStr*.  Weak means
+ * an entry never keeps its string alive -- sweep drops dead ones -- so
+ * a program that builds a million distinct short strings pays for them
+ * once and gets the table back when they die.
+ */
+static void strtab_grow(FlStrTab *t)
+{
+    u32 cap = t->cap == 0U ? 256U : t->cap * 2U;
+    FlStr **v = calloc((size_t)cap, sizeof(*v));
+    u32 i;
+
+    if (v == NULL)
+        SAG_BUG("fletch: out of memory growing the string table");
+    for (i = 0U; i < t->cap; i++) {
+        FlStr *s = t->v[i];
+        u32 at;
+
+        if (s == NULL)
+            continue;
+        at = s->h.aux & (cap - 1U);
+        while (v[at] != NULL)
+            at = (at + 1U) & (cap - 1U);
+        v[at] = s;
+    }
+    free(t->v);
+    t->v = v;
+    t->cap = cap;
+}
+
+static FlStr *strtab_find(const FlStrTab *t, const char *b, u32 n, u32 hash)
+{
+    u32 at;
+
+    if (t->cap == 0U)
+        return NULL;
+    at = hash & (t->cap - 1U);
+    for (;;) {
+        FlStr *s = t->v[at];
+
+        if (s == NULL)
+            return NULL;
+        if (s->len == n && s->h.aux == hash && memcmp(s->b, b, n) == 0)
+            return s;
+        at = (at + 1U) & (t->cap - 1U);
+    }
+}
+
+static void strtab_put(FlStrTab *t, FlStr *s)
+{
+    u32 at;
+
+    /* Grown at half load: the table holds weak entries that sweep turns
+     * into holes, and linear probing degrades badly once holes and live
+     * entries together fill it. */
+    if (t->cap == 0U || (t->n + 1U) * 2U > t->cap)
+        strtab_grow(t);
+    at = s->h.aux & (t->cap - 1U);
+    while (t->v[at] != NULL)
+        at = (at + 1U) & (t->cap - 1U);
+    t->v[at] = s;
+    t->n++;
+}
+
+FlStr *fl_str_new(FlVm *vm, const char *b, u32 n)
+{
+    u32 hash = fl_hash_bytes(b, n);
+    FlStr *s;
+
+    if (n <= (u32)FL_INTERN_MAX) {
+        s = strtab_find(&vm->gc.strings, b, n, hash);
+        if (s != NULL)
+            return s;
+    }
+    s = fl_gc_alloc(vm, sizeof(*s) + (size_t)n + 1U, FL_STR);
+    s->h.aux = hash;              /* eager: map keys need it anyway */
+    s->len = n;
+    /*
+     * Bytes VERBATIM.  Sprint 2's escape policy cleans buffer text;
+     * program and runtime strings are bytes, U+DC80..DCFF escapes
+     * included, and nothing here validates or normalizes them.
+     */
+    if (n != 0U)
+        (void)memcpy(s->b, b, n);
+    s->b[n] = '\0';
+    if (n <= (u32)FL_INTERN_MAX) {
+        s->h.oflags |= (u16)FL_OF_INTERNED;
+        strtab_put(&vm->gc.strings, s);
+    }
+    return s;
+}
+
+FlStr *fl_str_take(FlVm *vm, Bytebuf *bb)
+{
+    FlStr *s = fl_str_new(vm, (const char *)bb->data, (u32)bb->len);
+
+    bb->len = 0U;
+    return s;
+}
+
+/* ---------------------------------------------------------------- */
+/* Containers                                                       */
+/* ---------------------------------------------------------------- */
+
+FlList *fl_list_new(FlVm *vm)
+{
+    return fl_gc_alloc(vm, sizeof(FlList), FL_LIST);
+}
+
+bool fl_list_push(FlVm *vm, FlList *l, FlValue v)
+{
+    if (l->n == l->cap) {
+        u32 cap = l->cap == 0U ? 8U : l->cap * 2U;
+        FlValue *grown = realloc(l->v, (size_t)cap * sizeof(*grown));
+
+        if (grown == NULL)
+            SAG_BUG("fletch: out of memory growing a list");
+        l->v = grown;
+        l->cap = cap;
+        vm->gc.bytes += (size_t)(cap - l->n) * sizeof(*grown);
+    }
+    l->v[l->n++] = v;
+    l->mods++;
+    return true;
+}
+
+FlMap *fl_map_new(FlVm *vm)
+{
+    return fl_gc_alloc(vm, sizeof(FlMap), FL_MAP);
+}
+
+static void map_grow_index(FlVm *vm, FlMap *m)
+{
+    u32 cap = m->icap == 0U ? 8U : m->icap * 2U;
+    u32 *idx = calloc((size_t)cap, sizeof(*idx));
+
+    if (idx == NULL)
+        SAG_BUG("fletch: out of memory growing a map index");
+    free(m->idx);
+    m->idx = idx;
+    m->icap = cap;
+    vm->gc.bytes += (size_t)cap * sizeof(*idx);
+    fl_map_reindex(m);
+}
+
+bool fl_map_set(FlVm *vm, FlMap *m, FlValue k, FlValue v)
+{
+    u32 hash;
+    bool found = false;
+    u32 at;
+
+    if (!fl_hashable(k))
+        return false;              /* caller raises kind "key" */
+    hash = fl_hash_value(k);
+    if (m->icap != 0U) {
+        at = fl_map_probe(m, k, hash, &found);
+        if (found) {
+            m->ent[m->idx[at] - 1U].v = v;   /* overwrite in place: the
+                                              * key kept its position */
+            return true;
+        }
+    }
+    /* Grow at 70% load, capacity a power of two, probing linear. */
+    if (m->icap == 0U || (m->n + 1U) * 10U > m->icap * 7U)
+        map_grow_index(vm, m);
+    if (m->n == m->cap) {
+        u32 cap = m->cap == 0U ? 8U : m->cap * 2U;
+        FlMapEnt *grown = realloc(m->ent, (size_t)cap * sizeof(*grown));
+
+        if (grown == NULL)
+            SAG_BUG("fletch: out of memory growing a map");
+        m->ent = grown;
+        m->cap = cap;
+        vm->gc.bytes += (size_t)cap * sizeof(*grown);
+    }
+    /*
+     * APPEND.  A key that was deleted and is being re-inserted lands at
+     * the end rather than reviving its old row -- the alternative makes
+     * iteration order depend on whether a key was ever deleted, which
+     * is invisible in the source and untestable from it.
+     */
+    m->ent[m->n].k = k;
+    m->ent[m->n].v = v;
+    m->ent[m->n].hash = hash;
+    m->ent[m->n].dead = false;
+    m->n++;
+    m->mods++;
+    at = hash & (m->icap - 1U);
+    while (m->idx[at] != 0U)
+        at = (at + 1U) & (m->icap - 1U);
+    m->idx[at] = m->n;             /* entry index + 1 */
+    return true;
 }

@@ -274,4 +274,10 @@ u32 fl_map_count(const FlMap *m);
 /* Walks live entries in insertion order.  `*cursor` starts at 0. */
 bool fl_map_iter(const FlMap *m, u32 *cursor, FlValue *k, FlValue *v);
 
+/* Shared with gc.c, which owns insertion because insertion allocates.
+ * Probe returns the index slot; `*found` says whether it holds the key
+ * or is the place to put it. */
+u32 fl_map_probe(const FlMap *m, FlValue k, u32 hash, bool *found);
+void fl_map_reindex(FlMap *m);
+
 #endif /* SAG_FL_VALUE_H */

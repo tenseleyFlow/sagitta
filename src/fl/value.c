@@ -169,7 +169,7 @@ bool fl_str_eq(const FlStr *a, const FlStr *b)
 
 enum { FL_MAP_MIN_ICAP = 8U };
 
-static u32 map_probe(const FlMap *m, FlValue k, u32 hash, bool *found)
+u32 fl_map_probe(const FlMap *m, FlValue k, u32 hash, bool *found)
 {
     u32 mask = m->icap - 1U;
     u32 i = hash & mask;
@@ -201,7 +201,7 @@ bool fl_map_get(const FlMap *m, FlValue k, FlValue *out)
 
     if (m == NULL || m->icap == 0U || !fl_hashable(k))
         return false;
-    i = map_probe(m, k, fl_hash_value(k), &found);
+    i = fl_map_probe(m, k, fl_hash_value(k), &found);
     if (!found)
         return false;
     if (out != NULL)
@@ -211,7 +211,7 @@ bool fl_map_get(const FlMap *m, FlValue k, FlValue *out)
 
 /* Rebuilds `idx` from the live rows of `ent`.  Used after growth and
  * after compaction; never reorders `ent`. */
-static void map_reindex(FlMap *m)
+void fl_map_reindex(FlMap *m)
 {
     u32 mask;
     u32 i;
@@ -248,7 +248,7 @@ void fl_map_compact(FlMap *m)
     }
     m->n = w;
     m->ndead = 0U;
-    map_reindex(m);
+    fl_map_reindex(m);
 }
 
 bool fl_map_del(FlMap *m, FlValue k)
@@ -258,7 +258,7 @@ bool fl_map_del(FlMap *m, FlValue k)
 
     if (m == NULL || m->icap == 0U || !fl_hashable(k))
         return false;
-    i = map_probe(m, k, fl_hash_value(k), &found);
+    i = fl_map_probe(m, k, fl_hash_value(k), &found);
     if (!found)
         return false;
     m->ent[m->idx[i] - 1U].dead = true;
@@ -273,7 +273,7 @@ bool fl_map_del(FlMap *m, FlValue k)
      * that must distinguish it from empty, which is where linear-probe
      * tables usually go wrong.
      */
-    map_reindex(m);
+    fl_map_reindex(m);
     if (m->ndead > m->n / 2U)
         fl_map_compact(m);
     return true;
