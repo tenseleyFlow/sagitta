@@ -10,7 +10,8 @@
  *
  * CHILD ARRAYS ARE ALLOCATED AT THEIR FINAL SIZE -- count first, then
  * fill -- and never grown.  A parent holds interior pointers into those
- * arrays, so a realloc would leave every sibling reference dangling.
+ * arrays, so growing one in place would leave every sibling
+ * reference dangling.
  * The same discipline Cgfried's s17 pinned, for the same reason.
  */
 

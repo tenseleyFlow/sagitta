@@ -316,7 +316,8 @@ static FlNode *node(Parser *p, FlAstKind kind, FlSpan sp)
 /*
  * A staging list that becomes a right-sized arena array.
  *
- * ARENA ONLY, in chunks, and never realloc'd.  DoD 4 requires the
+ * ARENA ONLY, in chunks, and never resized in place.  DoD 4 requires
+ * the
  * parser to allocate from the caller's arena and nowhere else, and a
  * heap-backed staging vector would satisfy the letter of DoD 4's
  * allocator grep while breaking exactly the property it exists to
