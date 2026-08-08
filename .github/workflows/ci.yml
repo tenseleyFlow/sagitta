@@ -56,6 +56,27 @@ jobs:
             build-clang/perf_textbuf build-clang/perf_latency \
             build-clang/fuzz_cmdparse build-clang/perf_cmdcomp
 
+  # Sprint 30 DoD 1 and 5.  The computed-goto dispatcher is a SECOND
+  # implementation of the interpreter, so it needs its own lane: a
+  # divergence between the two shows up as a program computing a
+  # different answer, and nothing in the default build would notice.
+  fletch-dispatch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Full suite with computed-goto dispatch, GCC
+        run: make FL_CGOTO=1 test CC=gcc
+      - name: Full suite with computed-goto dispatch, Clang
+        run: |
+          make clean
+          make FL_CGOTO=1 test CC=clang
+      - name: Byte-compare the executed-opcode traces of both dispatchers
+        run: |
+          make clean
+          make fl-dispatch-parity
+      - name: Perf smoke, numbers only (s33 owns the gates)
+        run: make fl-perf-smoke
+
   pty:
     runs-on: ubuntu-latest
     steps:
