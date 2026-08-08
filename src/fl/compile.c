@@ -14,6 +14,9 @@
  * confines it to gc.c, and the compiler builds into scratch and
  * copies to the arena at final size. */
 VEC_DECL(FlConstVec, FlValue);
+/* Top-level binding names, for the redeclaration check that locals get
+ * from the FlLocal array and globals would otherwise lose. */
+VEC_DECL(FlNameVec, u32);
 VEC_DECL(FlLineVec, FlLineRun);
 
 enum { FL_MAX_LOOPS = 64, FL_MAX_BREAKS = 64 };
@@ -39,6 +42,7 @@ struct Compiler {
 
     Bytebuf code;
     FlConstVec consts;
+    FlNameVec globals;
     FlLineVec lines;
 
     FlLocal locals[FL_MAX_LOCALS];
@@ -648,13 +652,53 @@ static void comp_motion_block(Compiler *c, const FlNode *n)
 /* Statements                                                       */
 /* ---------------------------------------------------------------- */
 
+/*
+ * NIL_N exists so `let a\nlet b\nlet c` costs one instruction instead
+ * of three.  The run is detected HERE rather than in comp_stmt because
+ * a single-pass compiler cannot see the next statement from inside the
+ * current one, and coalescing is the only reason the opcode is in the
+ * set.  Returns how many statements it consumed (0 = not a run).
+ */
+static u32 comp_nil_run(Compiler *c, FlNode *const *items, u32 n, u32 at)
+{
+    u32 run = 0U;
+    u32 i;
+
+    while (at + run < n) {
+        const FlNode *s = items[at + run];
+
+        if (s == NULL || (FlAstKind)s->kind != FL_A_LET ||
+            s->as.let.init != NULL)
+            break;
+        run++;
+    }
+    /* A run of one is cheaper as a bare NIL: two bytes against one. */
+    if (run < 2U || run > 255U)
+        return 0U;
+    for (i = 0U; i < run; i++) {
+        add_local(c, items[at + i]->as.let.name, items[at + i]->sp);
+        mark_initialized(c);
+    }
+    emit_op(c, FL_OP_NIL_N, items[at]->sp);
+    emit_u8(c, (u8)run);
+    push_depth(c, (int)run);
+    return run;
+}
+
 static void comp_block(Compiler *c, const FlNode *n)
 {
     u32 i;
 
     begin_scope(c);
-    for (i = 0U; i < n->as.list.n; i++)
+    for (i = 0U; i < n->as.list.n; i++) {
+        u32 run = comp_nil_run(c, n->as.list.items, n->as.list.n, i);
+
+        if (run != 0U) {
+            i += run - 1U;
+            continue;
+        }
         comp_stmt(c, n->as.list.items[i]);
+    }
     end_scope(c, n->sp);
 }
 
@@ -897,12 +941,58 @@ static void comp_assign_target(Compiler *c, const FlNode *tgt,
     }
 }
 
+/*
+ * Spec §6: "a module's top-level let, fn and macro bindings are its
+ * GLOBALS."  Not a naming detail -- s31 resolves imports by looking a
+ * name up in the exporting module's global map, and s32's REPL compiles
+ * each line as its own chunk, so a top-level binding held in a frame
+ * slot would vanish between lines and export as nothing.
+ */
+static bool at_module_top(const Compiler *c)
+{
+    /* scope_depth 0 is the module body; a `let` inside ANY block --
+     * including an `if` arm at the top of the file -- is a local. */
+    return c->enclosing == NULL && c->scope_depth == 0;
+}
+
+/*
+ * Declares a module global, refusing a duplicate.  Locals get this from
+ * the FlLocal array; globals live in a runtime map that happily
+ * overwrites, so without this a second `let x` in one file would
+ * silently replace the first instead of naming the mistake.
+ */
+static void declare_global(Compiler *c, u32 name, FlSpan sp)
+{
+    size_t i;
+
+    for (i = 0U; i < c->globals.len; i++) {
+        if (c->globals.data[i] == name) {
+            cerror(c, sp, "'%s' is already declared in this module",
+                   sag_intern_str(c->vm->in, name));
+            return;
+        }
+    }
+    FlNameVec_push(&c->globals, name);
+}
+
 static void comp_stmt(Compiler *c, const FlNode *n)
 {
     if (n == NULL || c->failed)
         return;
     switch ((FlAstKind)n->kind) {
     case FL_A_LET:
+        if (at_module_top(c)) {
+            u32 k = name_const(c, n->as.let.name, n->sp);
+
+            declare_global(c, n->as.let.name, n->sp);
+            if (n->as.let.init != NULL)
+                comp_expr(c, n->as.let.init);
+            else
+                emit_op(c, FL_OP_NIL, n->sp);
+            emit_op(c, FL_OP_DEF_GLOBAL, n->sp);
+            emit_u16(c, (u16)k);
+            return;
+        }
         add_local(c, n->as.let.name, n->sp);
         if (n->as.let.init != NULL)
             comp_expr(c, n->as.let.init);
@@ -975,8 +1065,15 @@ static void comp_stmt(Compiler *c, const FlNode *n)
         u32 k;
         u32 i;
 
-        add_local(c, n->as.fn.name, n->sp);
-        mark_initialized(c);
+        /* A top-level fn is a global (see at_module_top); a nested one
+         * is a local.  Either way the name is bound BEFORE the body
+         * compiles, so a function can call itself. */
+        if (at_module_top(c))
+            declare_global(c, n->as.fn.name, n->sp);
+        else {
+            add_local(c, n->as.fn.name, n->sp);
+            mark_initialized(c);
+        }
         fn = comp_function(c, n, n->as.fn.name, false);
         if (fn == NULL)
             return;
@@ -987,15 +1084,26 @@ static void comp_stmt(Compiler *c, const FlNode *n)
             emit_u8(c, c->upvals[i].is_local ? 1U : 0U);
             emit_u8(c, c->upvals[i].index);
         }
+        if (at_module_top(c)) {
+            emit_op(c, FL_OP_DEF_GLOBAL, n->sp);
+            emit_u16(c, (u16)name_const(c, n->as.fn.name, n->sp));
+        }
         return;
     }
     case FL_A_MACRO: {
         /* §4: `macro name = @[...]` is `let name = fn() @[...]`.  No
          * separate node handling and no separate opcode -- the sugar is
          * resolved here so nothing downstream has to know about it. */
-        add_local(c, n->as.macro.name, n->sp);
-        mark_initialized(c);
+        if (!at_module_top(c)) {
+            add_local(c, n->as.macro.name, n->sp);
+            mark_initialized(c);
+            comp_motion_block(c, n->as.macro.body);
+            return;
+        }
+        declare_global(c, n->as.macro.name, n->sp);
         comp_motion_block(c, n->as.macro.body);
+        emit_op(c, FL_OP_DEF_GLOBAL, n->sp);
+        emit_u16(c, (u16)name_const(c, n->as.macro.name, n->sp));
         return;
     }
     case FL_A_EDIT:
@@ -1057,11 +1165,22 @@ FlFn *fl_compile(FlVm *vm, DiagCtx *dc, const FlProgram *p,
 
     for (i = 0U; i < p->n; i++)
         comp_stmt(&top, p->stmts[i]);
+    /*
+     * The trailing HALT belongs to the last statement's line, not to
+     * line 0.  A zero here is not cosmetic: s32's traceback reads the
+     * line runs, and an error unwinding to the module frame would
+     * print `file:0:0`, which no editor can jump to.
+     */
+    if (p->n != 0U)
+        end = p->stmts[p->n - 1U]->sp;
+    else
+        end.line = end.col = 1U;
     emit_op(&top, FL_OP_HALT, end);
 
     if (top.failed) {
         bytebuf_free(&top.code);
         FlConstVec_free(&top.consts);
+        FlNameVec_free(&top.globals);
         FlLineVec_free(&top.lines);
         return NULL;
     }
@@ -1092,6 +1211,7 @@ FlFn *fl_compile(FlVm *vm, DiagCtx *dc, const FlProgram *p,
     fn->origin = origin;
     bytebuf_free(&top.code);
     FlConstVec_free(&top.consts);
+    FlNameVec_free(&top.globals);
     FlLineVec_free(&top.lines);
     return fn;
 }
