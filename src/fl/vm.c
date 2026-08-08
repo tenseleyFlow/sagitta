@@ -333,6 +333,31 @@ bool fl_vm_run(FlVm *vm, FlFn *entry, FlValue *out)
                 bytebuf_append(&bb, y->b, y->len);
                 *vm->sp++ = FL_OBJ_V(FL_STR, fl_str_take(vm, &bb));
                 bytebuf_free(&bb);
+            } else if (a.t == (u8)FL_LIST && b.t == (u8)FL_LIST) {
+                /*
+                 * §5: '+' concatenates list+list into a NEW list --
+                 * neither operand is mutated, which is what lets
+                 * `acc = acc + [x]` in a loop stay correct when a
+                 * closure captured an earlier acc.
+                 *
+                 * a and b were popped, so nothing roots them across
+                 * the allocations below; rule 2's temp stack does.
+                 */
+                const FlList *x = (const FlList *)a.as.o;
+                const FlList *y = (const FlList *)b.as.o;
+                FlList *out;
+                u32 i;
+
+                fl_gc_protect(vm, a);
+                fl_gc_protect(vm, b);
+                out = fl_list_new(vm);
+                fl_gc_protect(vm, FL_OBJ_V(FL_LIST, out));
+                for (i = 0U; i < x->n; i++)
+                    (void)fl_list_push(vm, out, x->v[i]);
+                for (i = 0U; i < y->n; i++)
+                    (void)fl_list_push(vm, out, y->v[i]);
+                fl_gc_release(vm, 3U);
+                *vm->sp++ = FL_OBJ_V(FL_LIST, out);
             } else if ((a.t == (u8)FL_INT || a.t == (u8)FL_FLOAT) &&
                        (b.t == (u8)FL_INT || b.t == (u8)FL_FLOAT)) {
                 double x = a.t == (u8)FL_INT ? (double)a.as.i : a.as.f;
