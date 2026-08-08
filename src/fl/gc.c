@@ -317,6 +317,7 @@ static void sweep(FlVm *vm)
 
 void fl_gc_collect(FlVm *vm)
 {
+    vm->gc.collections++;
     vm->gc.pending = false;
     vm->gc.ngray = 0U;
     mark_roots(vm);

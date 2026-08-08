@@ -61,6 +61,11 @@ typedef struct FlGc {
      * covers, which is exactly the situation rule 1 exists to describe.
      */
     bool pending;
+    /* How many collections have run.  Observable state, because "the
+     * collector ran during this program" is otherwise only inferable
+     * from byte deltas -- and DoD 5 needs to assert it per dispatch
+     * mode, where a wrong answer means the cgoto build has no GC. */
+    u64 collections;
 } FlGc;
 
 /* Floor for next_gc.  Sprint 33 gates config load under 1 ms, and a

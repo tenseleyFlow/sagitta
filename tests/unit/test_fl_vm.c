@@ -464,6 +464,53 @@ void test_fl_vm_gc_stress_runs_a_whole_program(void)
     vf_close(&f);
 }
 
+void test_fl_vm_instruction_boundary_work_happens(void)
+{
+    VmFix f;
+    FlValue out;
+    size_t before;
+
+    /*
+     * DoD 5's real content, and the one thing a "both modes exit 0" run
+     * cannot show.  The switch dispatcher reaches the top of its loop
+     * between instructions and the computed-goto one does not, so if
+     * the boundary work lives at the loop top the cgoto build never
+     * collects and never enforces the step limit -- and every GC test
+     * passes it by not having a GC.  Both are asserted here, so
+     * whichever dispatcher this binary was built with has to do them.
+     */
+    vf_open(&f);
+    f.vm.step_limit = 200U;
+    /* A loop that cannot finish inside the limit: it must be CUT, not
+     * run to completion and not run forever. */
+    SAG_ASSERT(!vf_run(&f, "let n = 0\nwhile n < 100000 { n = n + 1 }\n"
+                           "return n\n", &out));
+    SAG_ASSERT(f.vm.steps > 200U);
+    vf_close(&f);
+
+    /*
+     * And the collector runs DURING the program, not only at teardown.
+     * The loop allocates well past the 256 KiB first-collection floor,
+     * so a dispatcher that honours gc.pending collects several times
+     * and one that ignores it collects zero times.
+     */
+    vf_open(&f);
+    SAG_ASSERT(vf_run(&f,
+                      "let n = 0\n"
+                      "while n < 20000 { let s = [n, n, n]\nn = n + 1 }\n"
+                      "return n\n", &out));
+    SAG_ASSERT_EQ_I64(out.as.i, 20000);
+    if (f.vm.gc.collections == 0U)
+        (void)fprintf(stderr, "the collector never ran: gc.pending is "
+                              "not honoured on this dispatch path\n");
+    SAG_ASSERT(f.vm.gc.collections != 0U);
+    /* Live set stays bounded: the dead lists are actually reclaimed,
+     * not merely counted. */
+    before = f.vm.gc.bytes;
+    SAG_ASSERT(before < 512U * 1024U);
+    vf_close(&f);
+}
+
 /* ---------------------------------------------------------------- */
 /* DoD 4: the spec §14 example, asserted                            */
 /* ---------------------------------------------------------------- */

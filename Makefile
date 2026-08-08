@@ -87,6 +87,28 @@ CFLAGS := -std=c11 -pedantic -Wall -Wextra -Werror -Wvla -g -O2 \
           -DSAG_WITH_AI=$(if $(filter ai,$(MODULES)),1,0) \
           -DSAG_WITH_FUSS=$(if $(filter fuss,$(MODULES)),1,0) \
           -DSAG_WITH_PLUGINS=$(if $(filter plugins,$(MODULES)),1,0)
+
+# Sprint 30 DoD 1: the Fletch VM's computed-goto dispatcher.  The label
+# table is a GNU extension, so -pedantic rejects it under -std=c11 --
+# and dropping the whole tree to gnu11 to accommodate one file would
+# stop the other 200 from being checked against the standard we claim.
+# So the relaxation is scoped to vm.c and nothing else, applied as a
+# target-specific override below.
+#
+# -std=gnu11 alone is NOT enough: gcc's -pedantic still rejects `&&label`
+# under it ("taking the address of a label is non-standard"), so vm.o
+# also drops -pedantic in this lane.  Everything else -- -Wall -Wextra
+# -Werror -Wvla -- still applies to it, and the default FL_CGOTO=0 build
+# compiles the same file fully pedantic, so nothing goes unchecked.
+#
+# Off by default.  Both modes must produce identical results (DoD 5),
+# which is what makes this an optimisation rather than a second
+# semantics: `make FL_CGOTO=1 test` is a CI lane, not a build people
+# have to choose between.
+ifeq ($(FL_CGOTO),1)
+CFLAGS += -DFL_COMPUTED_GOTO=1
+endif
+
 LDFLAGS :=
 HOST_OS := $(shell uname -s)
 ifeq ($(HOST_OS),Darwin)
@@ -840,6 +862,15 @@ $(BUILD)/mods.stamp: FORCE | dirs
 		rm -f $(OBJ) $(OBJ:.o=.d) $(UNIT_OBJ) $(UNIT_OBJ:.o=.d); \
 		printf '%s\n' '$(MODULES)' > $@; \
 	fi
+
+# The one file allowed out of the C11 box, and only when the
+# computed-goto dispatcher is on.  Deferred to here so it overrides the
+# FINAL CFLAGS: a target-specific `:=` earlier in the file would snapshot
+# the value before the sanitizer lane has added its own flags.
+ifeq ($(FL_CGOTO),1)
+$(BUILD)/src/fl/vm.o: CFLAGS := \
+  $(subst -std=c11,-std=gnu11,$(CFLAGS)) -Wno-pedantic
+endif
 
 $(BUILD)/%.o: %.c $(BUILD)/mods.stamp $(MODULE_FORCE) | dirs
 	$(CC) $(CFLAGS) -c -o $@ $<

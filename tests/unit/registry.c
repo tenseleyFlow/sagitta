@@ -852,6 +852,7 @@ const SagTest sag_tests[] = {
     T(fl_parse_literal_accepts_the_value_grammar),
     T(fl_parse_literal_rejects_the_negative_list),
     T(fl_parse_literal_accepts_a_workspace_state_document),
+    T(fl_vm_instruction_boundary_work_happens),
     T(fl_vm_arithmetic_and_precedence),
     T(fl_vm_truthiness_is_nil_and_false_only),
     T(fl_vm_equality_crosses_the_numeric_tower),

@@ -166,9 +166,45 @@ static void close_upvals(FlVm *vm, const FlValue *floor)
 /* Dispatch                                                         */
 /* ---------------------------------------------------------------- */
 
+/*
+ * THE INSTRUCTION BOUNDARY, written once and used by both dispatchers.
+ *
+ * The switch loop reaches the top of `for (;;)` between instructions;
+ * the computed-goto path never does -- `goto *dispatch[*ip++]` lands on
+ * the next opcode's label directly, which is the entire point of it.
+ * So the boundary work cannot live at the loop top, or the cgoto build
+ * silently never collects and never enforces the step limit: a build
+ * that passes the GC-stress tests by not having a GC.
+ *
+ * Both paths therefore expand THIS macro, for the same reason
+ * opcodes.def is one file: a second copy of the rule is a second thing
+ * to keep in step, and DoD 5 requires the two modes to be identical.
+ */
+#define VM_BOUNDARY()                                                     \
+    do {                                                                  \
+        /*                                                                \
+         * Collection happens HERE and only here.  Mid-instruction the    \
+         * VM holds object pointers in C locals that no root covers, so   \
+         * fl_gc_alloc only ever sets the flag and this is where it is    \
+         * safe to honour it.                                             \
+         */                                                               \
+        if (vm->gc.pending) {                                             \
+            frame->ip = ip;                                               \
+            fl_gc_collect(vm);                                            \
+        }                                                                 \
+        if (vm->step_limit != 0U && ++vm->steps > vm->step_limit) {       \
+            fl_raise(vm, "limit", "step limit exceeded");                 \
+            goto raised;                                                  \
+        }                                                                 \
+    } while (0)
+
 #if FL_COMPUTED_GOTO
 #  define VM_CASE(N)  L_##N:
-#  define VM_NEXT()   goto *dispatch[*ip++]
+#  define VM_NEXT()                                                       \
+    do {                                                                  \
+        VM_BOUNDARY();                                                    \
+        goto *dispatch[*ip++];                                            \
+    } while (0)
 #else
 #  define VM_CASE(N)  case FL_OP_##N:
 #  define VM_NEXT()   break
@@ -220,20 +256,7 @@ bool fl_vm_run(FlVm *vm, FlFn *entry, FlValue *out)
     for (;;) {
         u8 op;
 
-        /*
-         * Collection happens HERE and only here.  Mid-instruction the
-         * VM holds object pointers in C locals that no root covers, so
-         * fl_gc_alloc only ever sets the flag and the boundary is where
-         * it is safe to honour it.
-         */
-        if (vm->gc.pending) {
-            frame->ip = ip;
-            fl_gc_collect(vm);
-        }
-        if (vm->step_limit != 0U && ++vm->steps > vm->step_limit) {
-            fl_raise(vm, "limit", "step limit exceeded");
-            goto raised;
-        }
+        VM_BOUNDARY();
         op = *ip++;
 #if FL_COMPUTED_GOTO
         goto *dispatch[op];
