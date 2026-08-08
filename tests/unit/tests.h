@@ -879,7 +879,7 @@ void test_fl_lex_motion_insert_del_esc(void);
 void test_fl_lex_motion_words_are_ordinary_identifiers_outside(void);
 void test_fl_lex_motion_count_bounds(void);
 void test_fl_lex_motion_block_may_span_lines(void);
-void test_fl_lex_unterminated_motion_block(void);
+void test_fl_lex_unterminated_motion_block_is_eof_not_an_error(void);
 void test_fl_lex_invalid_utf8_reports_once(void);
 void test_fl_lex_caret_block_renders_the_source_line(void);
 void test_fl_lex_spellings_cover_every_kind(void);

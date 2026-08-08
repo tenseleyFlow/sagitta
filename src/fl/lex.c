@@ -667,9 +667,21 @@ static FlTok lex_motion(FlLexer *lx)
         break;
     }
     if (at_end(lx)) {
-        FlSpan sp = span_at(lx, lx->line, lx->col, lx->at);
-
-        return fail(lx, sp, "unterminated motion block; expected ']'");
+        /*
+         * END OF INPUT INSIDE A BLOCK IS EOF, AND SILENT.
+         *
+         * Returning an error token here consumed no bytes, so a caller
+         * draining to EOF got the same token at the same offset
+         * forever -- fuzz_fl_lex found the hang on the two-byte input
+         * `@[`.  Leaving the mode and reporting EOF terminates, and
+         * saying nothing is also the right answer: §1.2 makes an
+         * unclosed `@[` a CONTINUATION, so the parser turns this into
+         * `incomplete` and the Sprint 32 REPL asks for another line.
+         * A diagnostic here would make that impossible, because an
+         * error and `incomplete` are mutually exclusive.
+         */
+        lx->motion_depth = 0U;
+        return make(FL_T_EOF, span_at(lx, lx->line, lx->col, lx->at));
     }
     {
         u32 line = lx->line;

@@ -873,7 +873,7 @@ const SagTest sag_tests[] = {
     T(fl_lex_motion_words_are_ordinary_identifiers_outside),
     T(fl_lex_motion_count_bounds),
     T(fl_lex_motion_block_may_span_lines),
-    T(fl_lex_unterminated_motion_block),
+    T(fl_lex_unterminated_motion_block_is_eof_not_an_error),
     T(fl_lex_invalid_utf8_reports_once),
     T(fl_lex_caret_block_renders_the_source_line),
     T(fl_lex_spellings_cover_every_kind),

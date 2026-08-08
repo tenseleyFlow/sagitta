@@ -77,6 +77,17 @@ typedef struct DiagCtx {
     u32 nwarnings;
     FlDiagSink sink;
     void *sink_ctx;
+    /*
+     * Emit nothing more.
+     *
+     * The parser's error cap cannot be enforced by the parser alone:
+     * the LEXER reports straight through this context, and one
+     * advance() drains a whole run of bad bytes, so a burst emits
+     * several more diagnostics after the parser has decided to stop.
+     * Muting the sink is what makes the cap a bound rather than an
+     * intention.  Scoped to one parse -- each entry point clears it.
+     */
+    bool muted;
 } DiagCtx;
 
 void fl_diag_init(DiagCtx *dc, Arena *arena);

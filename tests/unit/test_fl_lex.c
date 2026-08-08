@@ -595,16 +595,35 @@ void test_fl_lex_motion_block_may_span_lines(void)
     lf_close(&f);
 }
 
-void test_fl_lex_unterminated_motion_block(void)
+void test_fl_lex_unterminated_motion_block_is_eof_not_an_error(void)
 {
     LexFix f;
 
+    /*
+     * The block simply ran out, which §1.2 calls a CONTINUATION -- so
+     * the lexer leaves the mode and reports EOF, saying nothing.  The
+     * parser turns that into `incomplete` and the Sprint 32 REPL asks
+     * for another line; a diagnostic here would rule that out, since an
+     * error and `incomplete` are mutually exclusive.
+     *
+     * It also has to TERMINATE.  Returning an error token consumed no
+     * bytes, so a caller draining to EOF saw the same token at the same
+     * offset forever; fuzz_fl_lex found that hang on `@[`.
+     */
     lf_open(&f, "@[2>");
     (void)expect_kind(&f, FL_T_ATBRACKET);
     (void)expect_kind(&f, FL_M_COUNT);
     (void)expect_kind(&f, FL_M_ARROW);
-    (void)expect_kind(&f, FL_T_ERROR);
-    SAG_ASSERT(strstr(f.msg, "']'") != NULL);
+    (void)expect_kind(&f, FL_T_EOF);
+    (void)expect_kind(&f, FL_T_EOF);   /* and EOF stays EOF */
+    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    lf_close(&f);
+
+    /* The bare two-byte case the fuzzer minimised to. */
+    lf_open(&f, "@[");
+    (void)expect_kind(&f, FL_T_ATBRACKET);
+    (void)expect_kind(&f, FL_T_EOF);
+    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
     lf_close(&f);
 }
 

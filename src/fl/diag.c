@@ -140,7 +140,7 @@ void fl_diag_vemit(DiagCtx *dc, FlDiagLevel level, FlSpan sp,
     char msg[512];
     Bytebuf rendered;
 
-    if (dc == NULL)
+    if (dc == NULL || dc->muted)
         return;
     (void)vsnprintf(msg, sizeof(msg), fmt == NULL ? "" : fmt, ap);
     if (level == FL_DIAG_ERROR)

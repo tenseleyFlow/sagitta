@@ -266,6 +266,8 @@ FUZZ_FUZZY_OBJ := $(BUILD)/tests/fuzz/fuzz_fuzzy.o
 FUZZ_STATE_OBJ := $(BUILD)/tests/fuzz/fuzz_state.o
 FUZZ_GITIGNORE_OBJ := $(BUILD)/tests/fuzz/fuzz_gitignore.o
 FUZZ_MOUSE_OBJ := $(BUILD)/tests/fuzz/fuzz_mouse.o
+FUZZ_FLLEX_OBJ := $(BUILD)/tests/fuzz/fuzz_fl_lex.o
+FUZZ_FLPARSE_OBJ := $(BUILD)/tests/fuzz/fuzz_fl_parse.o
 RE_REF_OBJ := $(BUILD)/tests/fuzz/re_ref.o
 FUZZ_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 FUZZ_LINK_OBJ := $(FUZZ_CORE_OBJ) $(FUZZ_LIB_OBJ)
@@ -395,6 +397,14 @@ $(BUILD)/fuzz_units: $(FUZZ_CORE_OBJ) $(FUZZ_UNITS_OBJ)
 $(BUILD)/fuzz_multicursor: $(FUZZ_LINK_OBJ) $(FUZZ_MULTICURSOR_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_MULTICURSOR_OBJ)
+
+$(BUILD)/fuzz_fl_lex: $(FUZZ_LINK_OBJ) $(FUZZ_FLLEX_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
+		$(FUZZ_FLLEX_OBJ)
+
+$(BUILD)/fuzz_fl_parse: $(FUZZ_LINK_OBJ) $(FUZZ_FLPARSE_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
+		$(FUZZ_FLPARSE_OBJ)
 
 $(BUILD)/fuzz_tabs: $(FUZZ_LINK_OBJ) $(FUZZ_TABS_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
@@ -549,6 +559,7 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
       $(BUILD)/fuzz_panes $(BUILD)/fuzz_tabs \
       $(BUILD)/fuzz_fuzzy $(BUILD)/fuzz_state \
       $(BUILD)/fuzz_gitignore \
+      $(BUILD)/fuzz_fl_lex $(BUILD)/fuzz_fl_parse \
       fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse \
       fuzz-mouse fuzz-groups
 	$(BUILD)/fuzz_utf8 --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
@@ -566,6 +577,8 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
 	$(BUILD)/fuzz_fuzzy --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_state --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_gitignore --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+	$(BUILD)/fuzz_fl_lex --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+	$(BUILD)/fuzz_fl_parse --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	@if [ -n "$(FUZZ_SECONDS)" ]; then \
 		$(BUILD)/fuzz_input --seconds=$(FUZZ_SECONDS) --seed=$(FUZZ_SEED); \
 	fi

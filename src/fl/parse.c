@@ -103,8 +103,28 @@ static void advance(Parser *p)
              * keeps the 20-error cap honest without re-reporting. */
             p->had_error = true;
             p->nerrors++;
-            if (p->nerrors >= FL_PARSE_MAX_ERRORS)
+            if (p->nerrors >= FL_PARSE_MAX_ERRORS) {
                 p->gave_up = true;
+                /*
+                 * Mute HERE too, not only in verror.
+                 *
+                 * These diagnostics come from the lexer, which reports
+                 * through the context directly, and this loop drains a
+                 * whole run of them in one call -- so a burst of bad
+                 * bytes sailed past the cap that the parser thought it
+                 * was enforcing.  fuzz_fl_parse counted 23 against a
+                 * cap of 20.
+                 */
+                if (p->dc != NULL && !p->dc->muted) {
+                    p->dc->muted = true;
+                    /* Unmute for one message so the reason is visible,
+                     * then close the sink for good. */
+                    p->dc->muted = false;
+                    fl_diag_emit(p->dc, FL_DIAG_ERROR, p->cur.sp,
+                                 "too many errors, giving up");
+                    p->dc->muted = true;
+                }
+            }
             continue;
         }
         if (p->cur.kind == FL_T_NEWLINE && !nl_terminates(p))
@@ -144,6 +164,10 @@ static void verror(Parser *p, FlSpan sp, const char *fmt, va_list ap)
         p->gave_up = true;
         fl_diag_vemit(p->dc, FL_DIAG_ERROR, sp, fmt, ap);
         fl_diag_emit(p->dc, FL_DIAG_ERROR, sp, "too many errors, giving up");
+        /* Past here the lexer would keep reporting through the same
+         * context; the cap is only a cap once the sink is closed. */
+        if (p->dc != NULL)
+            p->dc->muted = true;
         return;
     }
     fl_diag_vemit(p->dc, FL_DIAG_ERROR, sp, fmt, ap);
@@ -1111,6 +1135,10 @@ static void parser_init(Parser *p, Arena *a, DiagCtx *dc, Interner *in,
     p->dc = dc;
     p->in = in;
     p->prev_kind = FL_T_NEWLINE;
+    /* Muting is per-parse: a context reused for a second entry point
+     * must not inherit the first one's silence. */
+    if (dc != NULL)
+        dc->muted = false;
     fl_lex_init(&p->lx, a, dc, in, src, len, file_id);
     advance(p);
 }
