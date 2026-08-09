@@ -17,6 +17,15 @@
 #include <stdlib.h>
 #include <string.h>
 
+/* Both default to off and are reported in the §9 bug line, so a paste
+ * from a crash says which build produced it. */
+#ifndef FL_COMPUTED_GOTO
+#  define FL_COMPUTED_GOTO 0
+#endif
+#ifndef FL_VM_CHECKS
+#  define FL_VM_CHECKS 0
+#endif
+
 #include "fl/compile.h"
 #include "fl/gc.h"
 #include "fl/opcodes.h"
@@ -273,6 +282,93 @@ const char *fl_deferred_msg(const char *name)
 }
 
 /* ---------------------------------------------------------------- */
+/* Sprint 32 §9: internal invariants                                */
+/* ---------------------------------------------------------------- */
+
+/*
+ * THE LINE BETWEEN A BUG AND AN ERROR is one question: can a Fletch
+ * program cause this?  If yes it raises a catchable value -- kind
+ * "limit" for resource exhaustion -- and if no it is a bug in sagitta
+ * and gets the structured exit-4 report.  Never a bare crash, and never
+ * a silent recovery.
+ *
+ * THE REPORT IS BUILT IN A STATIC BUFFER with no allocation and no
+ * FlValue formatting.  This may fire mid-collection, when the heap is
+ * not a thing you may touch and half the objects are unmarked -- so
+ * nothing here walks a value, and nothing here calls malloc.  One line
+ * per fact, so a paste into an issue is complete.
+ */
+static const char *dump_bad_chunk(const FlFn *fn, const Interner *in)
+{
+    /* Read from the environment rather than a flag, because the moment
+     * you want this is the moment you already have a crash and cannot
+     * add an argument to whatever produced it. */
+    const char *path = getenv("SAG_FL_DUMP_BAD_CHUNK");
+    Bytebuf bb;
+    FILE *fp;
+
+    if (path == NULL || path[0] == '\0' || fn == NULL)
+        return NULL;
+    /* Allocating here is a risk taken deliberately and last: the report
+     * is already built, and a dump that fails costs nothing. */
+    bytebuf_init(&bb);
+    fl_disasm_chunk(&bb, &fn->ch, in);
+    fp = fopen(path, "wb");
+    if (fp != NULL) {
+        (void)fwrite(bb.data, 1U, bb.len, fp);
+        (void)fclose(fp);
+    }
+    bytebuf_free(&bb);
+    return path;
+}
+
+_Noreturn static void vm_bug(FlVm *vm, const char *file, int line,
+                             const FlFrame *frame, const u8 *ip,
+                             const char *what)
+{
+    static char report[4096];
+    const FlFn *fn = frame == NULL ? NULL : frame->cl->fn;
+    const char *nm = NULL;
+    const char *dumped;
+    u32 pc = 0U;
+    u8 op = 0U;
+    size_t at = 0U;
+
+    if (fn != NULL && ip != NULL && ip > fn->ch.code) {
+        pc = (u32)(ip - fn->ch.code) - 1U;
+        op = fn->ch.code[pc];
+    }
+    if (fn != NULL && fn->name_id != 0U)
+        nm = sag_intern_str(vm->in, fn->name_id);
+    at += (size_t)snprintf(report + at, sizeof(report) - at, "%s\n", what);
+    at += (size_t)snprintf(report + at, sizeof(report) - at,
+                           "  opcode : %s (0x%02X) at pc 0x%04X\n",
+                           fl_op_name((FlOp)op), (unsigned)op, (unsigned)pc);
+    at += (size_t)snprintf(report + at, sizeof(report) - at,
+                           "  fn     : %s/%u  file_id %u\n",
+                           nm == NULL ? "<fn>" : nm,
+                           fn == NULL ? 0U : (unsigned)fn->arity,
+                           fn == NULL ? 0U : (unsigned)fn->ch.file_id);
+    at += (size_t)snprintf(report + at, sizeof(report) - at,
+                           "  frames : %u (depth cap %d)   sp offset: %ld   "
+                           "handlers: %u\n",
+                           (unsigned)vm->nframes, FL_FRAMES_MAX,
+                           (long)(vm->sp - vm->stack),
+                           (unsigned)vm->nhandlers);
+    at += (size_t)snprintf(report + at, sizeof(report) - at,
+                           "  build  : %s cgoto=%d checks=%d\n",
+                           SAG_VERSION, FL_COMPUTED_GOTO, FL_VM_CHECKS);
+    dumped = dump_bad_chunk(fn, vm->in);
+    (void)snprintf(report + at, sizeof(report) - at, "  hint   : %s\n",
+                   dumped == NULL
+                       ? "SAG_FL_DUMP_BAD_CHUNK=<path> writes a disassembly"
+                       : "disassembly written to SAG_FL_DUMP_BAD_CHUNK");
+    sag_bug(file, line, "%s", report);
+}
+
+#define VM_BUG(what) vm_bug(vm, __FILE__, __LINE__, frame, ip, (what))
+
+/* ---------------------------------------------------------------- */
 /* Upvalues                                                         */
 /* ---------------------------------------------------------------- */
 
@@ -334,8 +430,29 @@ static void close_upvals(FlVm *vm, const FlValue *floor)
  * opcodes.def is one file: a second copy of the rule is a second thing
  * to keep in step, and DoD 5 requires the two modes to be identical.
  */
+/*
+ * §9's per-instruction invariants.  OFF by default: these are on the
+ * hot path and 02-fletch.md req 7 has no room for them, so they ride
+ * with FL_VM_CHECKS in the sanitize and fuzz lanes -- which is where a
+ * compiler bug should be caught anyway.
+ */
+#if FL_VM_CHECKS
+#  define VM_CHECK_BOUNDARY()                                             \
+    do {                                                                  \
+        if (vm->sp < frame->slots)                                        \
+            VM_BUG("fl vm: stack underflow");                             \
+        if (vm->sp > vm->stack + FL_STACK_MAX)                            \
+            VM_BUG("fl vm: stack pointer past the top");                  \
+        if (vm->nhandlers > (u32)FL_HANDLERS_MAX)                         \
+            VM_BUG("fl vm: handler stack overflow");                      \
+    } while (0)
+#else
+#  define VM_CHECK_BOUNDARY() do { } while (0)
+#endif
+
 #define VM_BOUNDARY()                                                     \
     do {                                                                  \
+        VM_CHECK_BOUNDARY();                                              \
         /*                                                                \
          * Collection happens HERE and only here.  Mid-instruction the    \
          * VM holds object pointers in C locals that no root covers, so   \
@@ -832,6 +949,8 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
         VM_CASE(RETURN) {
             FlValue result = *--vm->sp;
 
+            if (vm->nframes == 0U)
+                VM_BUG("fl vm: frame underflow on RETURN");
             close_upvals(vm, frame->slots);
             vm->nframes--;
             if (vm->nframes == base) {
@@ -846,6 +965,8 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
             VM_NEXT();
         }
         VM_CASE(RETURN_NIL) {
+            if (vm->nframes == 0U)
+                VM_BUG("fl vm: frame underflow on RETURN_NIL");
             close_upvals(vm, frame->slots);
             vm->nframes--;
             if (vm->nframes == base) {
@@ -1190,8 +1311,12 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
             VM_NEXT();
         }
         VM_CASE(TRY_POP) {
-            if (vm->nhandlers != 0U)
-                vm->nhandlers--;
+            /* A TRY_POP with no handler means the compiler emitted one
+             * without its TRY_PUSH -- not something a program can ask
+             * for, so it is a bug and not a raise. */
+            if (vm->nhandlers == 0U)
+                VM_BUG("fl vm: handler stack underflow");
+            vm->nhandlers--;
             VM_NEXT();
         }
 
@@ -1241,12 +1366,10 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
 
 #if FL_COMPUTED_GOTO
         L_BAD_OP:
-            SAG_BUG("fl vm: opcode %u at pc %u", (unsigned)op,
-                    (unsigned)(ip - frame->cl->fn->ch.code - 1));
+            VM_BUG("fl vm: unknown opcode");
 #else
         default:
-            SAG_BUG("fl vm: opcode %u at pc %u", (unsigned)op,
-                    (unsigned)(ip - frame->cl->fn->ch.code - 1));
+            VM_BUG("fl vm: unknown opcode");
         }
 #endif
         continue;

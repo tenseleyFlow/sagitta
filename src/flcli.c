@@ -473,10 +473,43 @@ static int run_expr(const char *expr)
     return rc;
 }
 
+/*
+ * Sprint 32 §9's exit-4 row, driven for real rather than described.
+ *
+ * A chunk is corrupted with an opcode the table does not have and then
+ * run, so the report comes out of the VM's own invariant path instead
+ * of a mock -- the thing being tested is that a broken VM produces a
+ * structured report and exit 4, and a mock would test the mock.
+ *
+ * Hidden, and named for what it is: nothing but the smoke script and a
+ * developer chasing the report format should ever call it.
+ */
+static int selftest_bug(void)
+{
+    FlRun r;
+    FlFn *fn;
+    FlValue out = FL_NIL_V;
+    static const char *const src = "return 1\n";
+
+    run_open(&r);
+    fn = cli_compile(&r, "<selftest>", src, strlen(src));
+    if (fn == NULL) {
+        run_close(&r);
+        return SAG_EXIT_ERR;
+    }
+    fn->ch.code[0] = 0xFEU;          /* no such opcode */
+    (void)fl_vm_run(&r.vm, fn, &out);
+    /* Unreachable: the VM exits 4 through sag_bug. */
+    run_close(&r);
+    return SAG_EXIT_ERR;
+}
+
 int sag_fl_main(int argc, char **argv)
 {
     if (argc == 1)
         return isatty(0) ? sag_fl_repl() : run_stdin();
+    if (argc == 2 && strcmp(argv[1], "--selftest-fl-bug") == 0)
+        return selftest_bug();
     if (argc == 2 && strcmp(argv[1], "--list-natives") == 0)
         return list_natives();
     if (argc == 2 && strcmp(argv[1], "--help") == 0) {

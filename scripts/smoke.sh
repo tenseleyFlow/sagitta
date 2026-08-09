@@ -244,3 +244,22 @@ for form in -e -c --dump-ast --dump-bytecode --list-natives; do
     grep -F -- "$form" "$out" >/dev/null || fail "fl --help omits $form"
 done
 echo "smoke: fl --help ok"
+
+# Sprint 32 §9: an internal VM invariant break is a structured report
+# and exit 4, never a bare crash.
+run_capture "$bin" fl --selftest-fl-bug
+expect_rc 4 "fl exit 4 (internal)"
+for field in "opcode :" "fn     :" "frames :" "build  :" "hint   :"; do
+    grep -F "$field" "$err" >/dev/null || fail "fl bug report lacks $field"
+done
+grep -F "please report this internal error" "$err" >/dev/null || \
+    fail "fl bug report lacks the reporting line"
+echo "smoke: fl exit 4 ok"
+
+# ...and SAG_FL_DUMP_BAD_CHUNK writes a disassembly the reader accepts.
+SAG_FL_DUMP_BAD_CHUNK=$tmp/badchunk.txt "$bin" fl --selftest-fl-bug \
+    >"$out" 2>"$err" || :
+[ -s "$tmp/badchunk.txt" ] || fail "SAG_FL_DUMP_BAD_CHUNK wrote nothing"
+grep -E '^[0-9]{4}  [0-9]+:[0-9]+  [A-Z_]+' "$tmp/badchunk.txt" >/dev/null || \
+    fail "SAG_FL_DUMP_BAD_CHUNK output is not a disassembly"
+echo "smoke: fl bad-chunk dump ok"

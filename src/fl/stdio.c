@@ -465,9 +465,11 @@ static bool io_env(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     name = path_of(vm, s);
     if (name == NULL)
         return false;
-    /* The ONE getenv in src/fl/.  Environment reads are ambient
+    /* The one getenv A SCRIPT can reach.  Environment reads are ambient
      * authority by another name, so they go through a capability and
-     * through one function that a reviewer can find. */
+     * through one function a reviewer can find; the VM's own two --
+     * FL_GC_STRESS and SAG_FL_DUMP_BAD_CHUNK -- are developer switches
+     * no Fletch program can name. */
     v = getenv(name);
     free(name);
     *out = v == NULL ? FL_NIL_V
