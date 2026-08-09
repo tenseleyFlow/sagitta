@@ -109,6 +109,13 @@ ifeq ($(FL_CGOTO),1)
 CFLAGS += -DFL_COMPUTED_GOTO=1
 endif
 
+# The executed-opcode trace, for the differential-dispatch gate only.
+# Compiled out by default: a push per instruction is not something the
+# release VM carries so a test can watch it.
+ifeq ($(CFLAGS_FL_TRACE),1)
+CFLAGS += -DFL_VM_TRACE=1
+endif
+
 LDFLAGS :=
 HOST_OS := $(shell uname -s)
 ifeq ($(HOST_OS),Darwin)
@@ -309,6 +316,7 @@ PERF_SEARCHLAT_OBJ := $(BUILD)/tests/perf/search_latency.o
 PERF_UNITS_OBJ := $(BUILD)/tests/perf/perf_units.o
 PERF_MULTICURSOR_OBJ := $(BUILD)/tests/perf/multicursor.o
 PERF_CMDCOMP_OBJ := $(BUILD)/tests/perf/perf_cmdcomp.o
+FL_SMOKE_OBJ := $(BUILD)/tests/perf/fl_smoke.o
 PERF_STATE_OBJ := $(BUILD)/tests/perf/perf_state.o
 PERF_FINDER_OBJ := $(BUILD)/tests/perf/finder.o
 PERF_MOUSE_OBJ := $(BUILD)/tests/perf/mouse.o
@@ -532,6 +540,9 @@ $(BUILD)/perf_cmdcomp: $(PERF_CORE_OBJ) $(PERF_CMDCOMP_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(PERF_CMDCOMP_OBJ)
 
+$(BUILD)/fl_smoke: $(PERF_CORE_OBJ) $(FL_SMOKE_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(FL_SMOKE_OBJ)
+
 $(BUILD)/perf_state: $(PERF_CORE_OBJ) $(PERF_STATE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(PERF_STATE_OBJ)
@@ -704,6 +715,42 @@ perf-multicursor: $(BUILD)/perf_multicursor
 
 perf-cmdcomp: $(BUILD)/perf_cmdcomp
 	$(BUILD)/perf_cmdcomp
+
+#
+# Sprint 30 DoD 12: the Fletch perf smoke.  NUMBERS ONLY -- there is no
+# comparison against a baseline here, because s33 owns the gates and a
+# gate invented a sprint early is a gate tuned to this laptop.
+#
+fl-perf-smoke: $(BUILD)/fl_smoke
+	$(BUILD)/fl_smoke --perf
+
+#
+# Sprint 30 DoD 5: the differential-dispatch gate.
+#
+# Builds the trace driver under BOTH dispatch settings and byte-compares
+# the executed-opcode streams.  The two builds cannot share $(BUILD):
+# their objects differ by a -D, and mixing them produces a binary whose
+# dispatch mode depends on what happened to be stale.
+#
+# The `# dispatch:` header is the one line allowed to differ, so it is
+# stripped before the diff rather than special-cased inside the diff.
+#
+fl-dispatch-parity:
+	@rm -rf $(BUILD)-fl-sw $(BUILD)-fl-cg
+	$(MAKE) --no-print-directory BUILD=$(BUILD)-fl-sw FL_CGOTO=0 \
+		CFLAGS_FL_TRACE=1 $(BUILD)-fl-sw/fl_smoke
+	$(MAKE) --no-print-directory BUILD=$(BUILD)-fl-cg FL_CGOTO=1 \
+		CFLAGS_FL_TRACE=1 $(BUILD)-fl-cg/fl_smoke
+	$(BUILD)-fl-sw/fl_smoke --trace | grep -v '^# dispatch:' \
+		> $(BUILD)-fl-sw/trace.txt
+	$(BUILD)-fl-cg/fl_smoke --trace | grep -v '^# dispatch:' \
+		> $(BUILD)-fl-cg/trace.txt
+	@if diff -u $(BUILD)-fl-sw/trace.txt $(BUILD)-fl-cg/trace.txt; then \
+		echo "fl-dispatch-parity: traces identical"; \
+	else \
+		echo "fl-dispatch-parity: THE TWO DISPATCHERS DISAGREE"; \
+		exit 1; \
+	fi
 
 perf-state: $(BUILD)/perf_state
 	$(BUILD)/perf_state

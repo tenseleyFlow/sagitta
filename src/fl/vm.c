@@ -71,6 +71,9 @@ bool fl_vm_init(FlVm *vm, Arena *a, Interner *in, DiagCtx *dc)
     vm->host = &fl_host_null;
     vm->sp = vm->stack;
     fl_gc_init(&vm->gc);
+#if FL_VM_TRACE
+    bytebuf_init(&vm->trace);
+#endif
     vm->globals = fl_map_new(vm);
     vm->modules = fl_map_new(vm);
     vm->err = FL_NIL_V;
@@ -81,6 +84,9 @@ void fl_vm_free(FlVm *vm)
 {
     /* The handle table is Sprint 34's; it is rooted and empty here, so
      * there is nothing of ours to release beyond the heap itself. */
+#if FL_VM_TRACE
+    bytebuf_free(&vm->trace);
+#endif
     fl_gc_free_all(vm);
 }
 
@@ -198,12 +204,27 @@ static void close_upvals(FlVm *vm, const FlValue *floor)
         }                                                                 \
     } while (0)
 
+/*
+ * Every instruction is fetched at exactly two places -- the switch
+ * loop's head and the cgoto VM_NEXT -- so tracing both covers the whole
+ * stream in either mode with no per-arm bookkeeping.
+ */
+#if FL_VM_TRACE
+#  define VM_TRACE(op) bytebuf_push_u8(&vm->trace, (u8)(op))
+#else
+#  define VM_TRACE(op) ((void)0)
+#endif
+
 #if FL_COMPUTED_GOTO
 #  define VM_CASE(N)  L_##N:
 #  define VM_NEXT()                                                       \
     do {                                                                  \
+        u8 next_op;                                                       \
+                                                                          \
         VM_BOUNDARY();                                                    \
-        goto *dispatch[*ip++];                                            \
+        next_op = *ip++;                                                  \
+        VM_TRACE(next_op);                                                \
+        goto *dispatch[next_op];                                          \
     } while (0)
 #else
 #  define VM_CASE(N)  case FL_OP_##N:
@@ -258,6 +279,7 @@ bool fl_vm_run(FlVm *vm, FlFn *entry, FlValue *out)
 
         VM_BOUNDARY();
         op = *ip++;
+        VM_TRACE(op);
 #if FL_COMPUTED_GOTO
         goto *dispatch[op];
 #else

@@ -95,6 +95,16 @@ struct FlVm {
     DiagCtx *dc;
     u64 steps;
     u64 step_limit;              /* 0 = unlimited; Sprint 32 uses it      */
+#if FL_VM_TRACE
+    /*
+     * DoD 5's differential-dispatch driver: every executed opcode byte,
+     * in order.  Compiled out entirely by default -- a trace push in the
+     * hot loop is exactly the kind of cost invariant 4 does not have
+     * room for, and a runtime `if (tracing)` would leave the branch
+     * behind in the release build.
+     */
+    Bytebuf trace;
+#endif
     FlValue err;                 /* the in-flight raised value            */
 };
 
