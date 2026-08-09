@@ -3886,6 +3886,17 @@ static void spawn_repl(PtyCtx *c)
 
 /* Asserts a run of bytes appears in what the child wrote. */
 #define REPL_SAW(c, lit) ptc_expect_output((c), (lit), sizeof(lit) - 1U)
+/*
+ * sizeof, NEVER a hand-counted length.
+ *
+ * The two calls that used to spell the length out were both wrong:
+ * one passed 10 for an eleven-byte literal, so it rejected a
+ * truncated prefix and quietly asserted something narrower than it
+ * says, and the other passed 10 for a FIVE-byte literal and read six
+ * bytes past the end of a string constant -- a global-buffer-overflow
+ * ASan caught on the first sanitize run after it landed.
+ */
+#define REPL_NEVER(c, lit) ptc_reject_output((c), (lit), sizeof(lit) - 1U)
 
 static void case_s32_repl_session(PtyCtx *c)
 {
@@ -3939,7 +3950,7 @@ static void case_s32_repl_session(PtyCtx *c)
     REPL_SAW(c, "  1 | doubel(1)\r\n");  /* the trace's source line     */
     /* `let` prints nothing: a binding evaluates to nothing, and a
      * prompt that echoed one would be unreadable. */
-    ptc_reject_output(c, "[1, 2, 3]\r\n", 10U);
+    REPL_NEVER(c, "[1, 2, 3]\r\n");
 }
 
 /*
@@ -3980,7 +3991,7 @@ static void case_s33_hello_world_repl(PtyCtx *c)
     REPL_SAW(c, "hello, world\r\n");
     /* io.print returns nil, and the prompt does not echo a nil result
      * -- a session that printed `nil` after every print is unusable. */
-    ptc_reject_output(c, "nil\r\n", 10U);
+    REPL_NEVER(c, "nil\r\n");
 }
 
 /*

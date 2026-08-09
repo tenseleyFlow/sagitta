@@ -24,6 +24,11 @@
 #
 # Sprint 56 re-calibrates every row on the reference hardware.  The
 # gate mechanism does not change, only the numbers.
+#
+# MEASURED: ubuntu-latest came in 19% over this file on
+# strbuild_concat while clearing every absolute budget by 3x to 45x.
+# That is why CI runs --gate-budgets and why the relative gate needs a
+# per-runner baseline file, the way perf-textbuf uses PERF_RUNNER_ID.
 # ---------------------------------------------------------------------
 #
 # The three hard-gated rows and their budgets:
