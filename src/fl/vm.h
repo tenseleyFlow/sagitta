@@ -7,6 +7,7 @@
 
 #include "fl/diag.h"
 #include "fl/gc.h"
+#include "fl/module.h"
 #include "fl/value.h"
 #include "util/arena.h"
 #include "util/base.h"
@@ -76,7 +77,14 @@ struct FlVm {
     u32 nhandlers;
     FlUpval *open_upvals;        /* descending slot order                 */
     FlMap *globals;
-    FlMap *modules;              /* Sprint 31 fills; rooted now           */
+    /*
+     * Root 5: every loaded module's exports, keyed by its index in
+     * `mods`.  The map exists to ROOT them -- lookup is `mods`, which
+     * carries the (realpath, origin kind) key the cache is really on
+     * and the importer chain a cycle message walks.
+     */
+    FlMap *modules;
+    FlModTab mods;
     FlHandleTab handles;         /* Sprint 34 fills; rooted now           */
     FlValue temp[FL_TEMP_MAX];
     u32 ntemp;
@@ -154,6 +162,16 @@ bool fl_raise(FlVm *vm, const char *kind, const char *fmt, ...);
  * Call a Fletch value from C.  Used by the stdlib's higher-order
  * functions; false means it raised and vm->err holds the error.
  */
+/*
+ * The message an unbound name gets.  Names the SPRINT that owes the
+ * surface when there is one -- `bind lands in Sprint 34` -- and reads
+ * `undefined name 'x'` otherwise.  Exported so the tests can assert the
+ * deferral without going through a raise.
+ *
+ * The returned string is a static buffer, valid until the next call.
+ */
+const char *fl_deferred_msg(const char *name);
+
 bool fl_call(FlVm *vm, FlValue callee, const FlValue *args, u32 nargs,
              FlValue *out);
 bool fl_vm_run(FlVm *vm, FlFn *entry, FlValue *out);   /* false = raised */

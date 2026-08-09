@@ -154,6 +154,12 @@ static void blacken(FlVm *vm, FlObj *o)
         u32 i;
 
         mark_obj(vm, (FlObj *)c->fn);
+        /* The module globals the closure reads.  A module's map is
+         * reachable ONLY through the closures that were made inside it
+         * once the load finishes, so missing this line collects a live
+         * module's globals the first time the collector runs after an
+         * import. */
+        mark_obj(vm, (FlObj *)c->globals);
         for (i = 0U; i < c->nup; i++)
             mark_obj(vm, (FlObj *)c->up[i]);
         return;

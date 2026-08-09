@@ -29,6 +29,26 @@ char *sag_xdg_state_dir(void)
     return path;
 }
 
+char *sag_xdg_config_dir(void)
+{
+    const char *root = getenv("XDG_CONFIG_HOME");
+    const char *suffix = "/sagitta";
+    size_t len;
+    char *path;
+
+    if (root == NULL || root[0] == '\0') {
+        root = getenv("HOME");
+        suffix = "/.config/sagitta";
+    }
+    if (root == NULL || root[0] == '\0')
+        return NULL;
+    len = strlen(root) + strlen(suffix);
+    path = sag_xmalloc(len + 1U);
+    (void)memcpy(path, root, strlen(root));
+    (void)memcpy(path + strlen(root), suffix, strlen(suffix) + 1U);
+    return path;
+}
+
 static bool sag_mkdir_one(const char *path, mode_t mode)
 {
     struct stat st;

@@ -16,6 +16,7 @@
 #include "fl/gc.h"
 #include "fl/opcodes.h"
 #include "fl/parse.h"
+#include "fl/std.h"
 #include "fl/vm.h"
 #include "util/arena.h"
 #include "util/intern.h"
@@ -50,6 +51,10 @@ static void vf_open(VmFix *f)
     fl_diag_init(&f->dc, &f->arena);
     fl_diag_set_sink(&f->dc, vcapture, f);
     fl_vm_init(&f->vm, &f->arena, &f->in, &f->dc);
+    /* Sprint 31: the builtin modules must exist for `import str` to
+     * resolve, and the §14 example is exactly a program that needs
+     * them. */
+    fl_std_register(&f->vm);
 }
 
 static void vf_close(VmFix *f)
@@ -630,24 +635,37 @@ void test_fl_vm_deep_recursion_raises_rather_than_overflowing(void)
                 "return hit + g()\n"), 4);
 }
 
-void test_fl_vm_import_names_its_sprint(void)
+void test_fl_vm_deferred_surfaces_name_their_sprint(void)
 {
     VmFix f;
     FlValue out;
     FlValue got;
 
     /*
-     * DoD 10, and the project's no-silent-stubs rule: the opcode exists
-     * so the compiler can emit it, and running it must say which sprint
-     * owes the behaviour rather than quietly returning nil.
+     * Sprint 31 DoD 11, and the project's no-silent-stubs rule: an
+     * editor surface that has not landed says WHICH SPRINT owes it.
+     * Reporting `bind` as a typo would send the author of a config
+     * looking for a spelling mistake that is not there.
+     *
+     * `import io` used to raise here; now it resolves, so the same test
+     * asserts both halves of the boundary at once.
      */
     vf_open(&f);
-    SAG_ASSERT(!vf_run(&f, "import io\nreturn 0\n", &out));
+    SAG_ASSERT(vf_run(&f, "import io\nreturn 0\n", &out));
+    vf_close(&f);
+
+    vf_open(&f);
+    SAG_ASSERT(!vf_run(&f, "bind(\"<C-p>\", 1)\n", &out));
     SAG_ASSERT(fl_map_get((FlMap *)out.as.o,
                           FL_OBJ_V(FL_STR, fl_str_new(&f.vm, "msg", 3U)),
                           &got));
-    SAG_ASSERT_NOT_NULL(strstr(((FlStr *)got.as.o)->b, "Sprint 31"));
+    SAG_ASSERT_NOT_NULL(strstr(((FlStr *)got.as.o)->b, "Sprint 34"));
     vf_close(&f);
+
+    SAG_ASSERT_EQ_I64(strcmp(fl_deferred_msg("set"),
+                             "set lands in Sprint 34"), 0);
+    SAG_ASSERT_EQ_I64(strcmp(fl_deferred_msg("nope"),
+                             "undefined name 'nope'"), 0);
 }
 
 void test_fl_vm_reserved_handle_tags_are_named_not_constructible(void)
@@ -716,7 +734,7 @@ void test_fl_vm_spec_14_counter_yields_9_then_10(void)
     SAG_ASSERT_EQ_I64(run_int(src), 10);
 }
 
-void test_fl_vm_spec_14_program_compiles_and_defers_visibly(void)
+void test_fl_vm_spec_14_program_runs_and_shouts(void)
 {
     VmFix f;
     FlValue out;
@@ -751,32 +769,35 @@ void test_fl_vm_spec_14_program_compiles_and_defers_visibly(void)
         "return total\n";
 
     /*
-     * DoD 4 has four claims and this sprint can meet three: `total`,
-     * and both of `counter`'s values, are asserted above.  The fourth
-     * -- `shout` returning "MOTION" -- needs `str.upper`, and the whole
-     * `str` module is Sprint 31's.
+     * §14.1's FOURTH claim, the one Sprint 30 could only defer.
      *
-     * So what is asserted here is that the deferral is VISIBLE: the
-     * example parses and compiles clean today, every construct in it
-     * including `macro` and the motion literal, and running it stops at
-     * `import str` with a message naming the sprint that owes the
-     * behaviour.  That is the project's no-silent-stubs rule doing its
-     * job, and it is the difference between "not done yet" and "returns
-     * nil and nobody notices".
+     * `shout` returns "MOTION" -- str.upper of the kind the null host
+     * raises -- and that needed the `str` module and a working
+     * `import`, both of which are this sprint's.  So the example now
+     * runs end to end: it returns `total`, and a second run returns
+     * what shout gives.
      */
     vf_open(&f);
-    SAG_ASSERT(!vf_run(&f, src, &out));
-    SAG_ASSERT_EQ_U64((u64)out.t, (u64)FL_MAP);
-    SAG_ASSERT(fl_map_get((FlMap *)out.as.o,
-                          FL_OBJ_V(FL_STR, fl_str_new(&f.vm, "kind", 4U)),
-                          &got));
-    SAG_ASSERT_EQ_I64(memcmp(((FlStr *)got.as.o)->b, "import", 6U), 0);
-    SAG_ASSERT(fl_map_get((FlMap *)out.as.o,
-                          FL_OBJ_V(FL_STR, fl_str_new(&f.vm, "msg", 3U)),
-                          &got));
-    SAG_ASSERT_NOT_NULL(strstr(((FlStr *)got.as.o)->b, "Sprint 31"));
-    /* Compiled clean: the failure was at RUN time, not a diagnostic. */
+    SAG_ASSERT(vf_run(&f, src, &out));
+    SAG_ASSERT_EQ_U64((u64)out.t, (u64)FL_INT);
+    SAG_ASSERT_EQ_I64(out.as.i, 17);
+    /* Clean: no diagnostic, at compile time or after. */
     SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    vf_close(&f);
+
+    vf_open(&f);
+    {
+        char shouting[4096];
+
+        (void)snprintf(shouting, sizeof(shouting), "%.*s%s",
+                       (int)(strstr(src, "return total") - src), src,
+                       "return shout(\"x\")\n");
+        SAG_ASSERT(vf_run(&f, shouting, &out));
+        SAG_ASSERT_EQ_U64((u64)out.t, (u64)FL_STR);
+        got = out;
+        SAG_ASSERT_EQ_U64((u64)((FlStr *)got.as.o)->len, 6U);
+        SAG_ASSERT_EQ_I64(memcmp(((FlStr *)got.as.o)->b, "MOTION", 6U), 0);
+    }
     vf_close(&f);
 }
 

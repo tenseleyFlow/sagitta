@@ -223,6 +223,22 @@ typedef struct FlClosure {
     FlFn *fn;
     FlUpval **up;
     u32 nup;
+    /*
+     * The GLOBALS MAP THIS FUNCTION SEES.
+     *
+     * Spec §7 makes a top-level binding a global and §11 makes a
+     * module's non-underscore ones its exports, so "global" has to mean
+     * "global to the module" -- with one shared map, module B defining
+     * `helper` overwrites module A's the moment A imports B.
+     *
+     * It lives on the CLOSURE rather than on FlFn because the map is
+     * created when a module RUNS, long after its functions were
+     * compiled; a nested closure inherits it from the closure that
+     * made it, which is exactly the lexical answer.  Without this, a
+     * function defined in a module and called from its importer looked
+     * its own imports up in the CALLER's globals and found nothing.
+     */
+    FlMap *globals;
 } FlClosure;
 
 /* One motion word, preassembled.  §11: a whole block is ONE dispatch,

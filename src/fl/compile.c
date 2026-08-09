@@ -65,6 +65,19 @@ struct Compiler {
     u32 name_id;
     u8 arity;
     bool failed;
+    /*
+     * The defining module's origin, inherited by every nested
+     * function.
+     *
+     * fl_cap_origin treats a FL_ORIGIN_BUILTIN frame as TRANSPARENT so
+     * that `list.map(f, io.read)` checks f's grants; a nested function
+     * left with a zeroed origin reads as builtin and is therefore
+     * transparent too -- which means a plugin's own helper would
+     * launder whatever called it.  §13 says the grant comes from the
+     * DEFINING module, so the defining module's origin has to reach
+     * every function the module defines.
+     */
+    FlOrigin origin;
 };
 
 static void comp_expr(Compiler *c, const FlNode *n);
@@ -828,6 +841,7 @@ static FlFn *comp_function(Compiler *enclosing, const FlNode *n,
     sub.vm = enclosing->vm;
     sub.dc = enclosing->dc;
     sub.file_id = enclosing->file_id;
+    sub.origin = enclosing->origin;
     sub.name_id = name_id;
     sub.arity = (u8)n->as.fn.nparams;
     bytebuf_init(&sub.code);
@@ -896,6 +910,7 @@ static FlFn *comp_function(Compiler *enclosing, const FlNode *n,
                      sub.lines.len * sizeof(FlLineRun));
     }
     fn->ch.file_id = sub.file_id;
+    fn->origin = sub.origin;
     fn->name_id = name_id;
     fn->arity = sub.arity;
     fn->nup = (u8)sub.nupvals;
@@ -1100,19 +1115,54 @@ static void comp_stmt(Compiler *c, const FlNode *n)
         return;
     }
     case FL_A_MACRO: {
-        /* §4: `macro name = @[...]` is `let name = fn() @[...]`.  No
-         * separate node handling and no separate opcode -- the sugar is
-         * resolved here so nothing downstream has to know about it. */
-        if (!at_module_top(c)) {
+        /*
+         * §4: `macro name = @[...]` is `let name = fn() @[...]`.
+         *
+         * A FUNCTION, not the block itself.  Compiling the motion block
+         * inline bound the name to the block's RESULT and ran the
+         * motions at definition time -- so `macro dup = @[...]` at the
+         * top of a config fired against the buffer the moment the file
+         * loaded, and against the null host it raised "motion" before
+         * anything else in the file could run.  That is what §14's
+         * example found the day `import` started working.
+         *
+         * The sugar is resolved by handing comp_function a synthesised
+         * zero-parameter fn node whose body is the block, so nothing
+         * downstream needs to know macros exist and the closure,
+         * upvalue and origin handling are all the ones fn already has.
+         */
+        FlNode syn;
+        FlFn *mf;
+        u32 k;
+        u32 i;
+
+        (void)memset(&syn, 0, sizeof(syn));
+        syn.kind = (u8)FL_A_FN;
+        syn.sp = n->sp;
+        syn.as.fn.body = n->as.macro.body;
+        syn.as.fn.params = NULL;
+        syn.as.fn.nparams = 0U;
+        syn.as.fn.name = n->as.macro.name;
+        if (at_module_top(c))
+            declare_global(c, n->as.macro.name, n->sp);
+        else {
             add_local(c, n->as.macro.name, n->sp);
             mark_initialized(c);
-            comp_motion_block(c, n->as.macro.body);
-            return;
         }
-        declare_global(c, n->as.macro.name, n->sp);
-        comp_motion_block(c, n->as.macro.body);
-        emit_op(c, FL_OP_DEF_GLOBAL, n->sp);
-        emit_u16(c, (u16)name_const(c, n->as.macro.name, n->sp));
+        mf = comp_function(c, &syn, n->as.macro.name, false);
+        if (mf == NULL)
+            return;
+        k = add_const(c, FL_OBJ_V(FL_FN, mf), n->sp);
+        emit_op(c, FL_OP_CLOSURE, n->sp);
+        emit_u16(c, (u16)k);
+        for (i = 0U; i < (u32)mf->nup; i++) {
+            emit_u8(c, c->upvals[i].is_local ? 1U : 0U);
+            emit_u8(c, c->upvals[i].index);
+        }
+        if (at_module_top(c)) {
+            emit_op(c, FL_OP_DEF_GLOBAL, n->sp);
+            emit_u16(c, (u16)name_const(c, n->as.macro.name, n->sp));
+        }
         return;
     }
     case FL_A_EDIT:
@@ -1140,11 +1190,32 @@ static void comp_stmt(Compiler *c, const FlNode *n)
         patch_jump(c, end_site, n->sp);
         return;
     }
-    case FL_A_IMPORT:
+    case FL_A_IMPORT: {
+        /*
+         * The constant carries what to RESOLVE -- the bare name, or the
+         * quoted path -- and the byte says which.  The binding uses
+         * `name` either way, so `import "lib/x.fl" as x` binds x.
+         */
+        u32 what = n->as.import.is_string ? n->as.import.path
+                                          : n->as.import.name;
+
         emit_op(c, FL_OP_IMPORT, n->sp);
-        emit_u16(c, (u16)name_const(c, n->as.import.name, n->sp));
-        emit_op(c, FL_OP_POP, n->sp);
+        emit_u16(c, (u16)name_const(c, what, n->sp));
+        emit_u8(c, n->as.import.is_string ? 1U : 0U);
+        if (at_module_top(c)) {
+            u32 nk = name_const(c, n->as.import.name, n->sp);
+
+            declare_global(c, n->as.import.name, n->sp);
+            emit_op(c, FL_OP_DEF_GLOBAL, n->sp);
+            emit_u16(c, (u16)nk);
+            return;
+        }
+        /* §11: import is a statement, so it is legal inside a block --
+         * there it binds a local and hits the same cache. */
+        add_local(c, n->as.import.name, n->sp);
+        mark_initialized(c);
         return;
+    }
     default:
         comp_expr(c, n);
         emit_op(c, FL_OP_POP, n->sp);
@@ -1169,6 +1240,7 @@ FlFn *fl_compile(FlVm *vm, DiagCtx *dc, const FlProgram *p,
     top.vm = vm;
     top.dc = dc;
     top.file_id = file_id;
+    top.origin = origin;
     bytebuf_init(&top.code);
     add_hidden_local(&top, end);   /* slot 0: the top-level "callee" */
     push_depth(&top, 1);

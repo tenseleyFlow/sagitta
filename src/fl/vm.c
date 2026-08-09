@@ -105,6 +105,7 @@ void fl_vm_free(FlVm *vm)
      * program depends on the pattern and nothing else -- so it is not
      * ours to own, only ours to leave empty. */
     fl_re_cache_clear();
+    fl_mod_free(vm);
     fl_gc_free_all(vm);
 }
 
@@ -124,7 +125,15 @@ static FlValue make_str(FlVm *vm, const char *s)
  */
 bool fl_raise(FlVm *vm, const char *kind, const char *fmt, ...)
 {
-    char buf[256];
+    /*
+     * 1 KiB, not 256.  An import cycle names every file in the chain and
+     * an io error names a full path; at 256 the four-line cycle message
+     * DoD 7 asks for was cut off in the middle of its last path, which
+     * is precisely the part a reader needs.  A raise is not on any hot
+     * path, and a kilobyte of stack is cheaper than a message that
+     * stops before its point.
+     */
+    char buf[1024];
     va_list ap;
     FlMap *m;
 
@@ -141,6 +150,47 @@ bool fl_raise(FlVm *vm, const char *kind, const char *fmt, ...)
     fl_gc_release(vm, 1U);
     vm->err = FL_OBJ_V(FL_MAP, m);
     return false;      /* so a native can `return fl_raise(...)` */
+}
+
+/*
+ * The message for an unbound name.
+ *
+ * DEFERRED SURFACES ARE NAMED, NEVER SILENT (invariant 3, and the same
+ * discipline s13's SAG_CMD_DEFERRED gives commands).  A config that
+ * writes `bind("<C-p>", ...)` today must be told the feature is coming
+ * in Sprint 34, not that `bind` is a typo -- the second answer sends
+ * the author looking for a spelling mistake that is not there.
+ *
+ * Kept as a table of names rather than as registered natives because a
+ * module body runs against a FRESH globals map: a native installed at
+ * VM init would be visible to the top-level program and invisible to
+ * every module it imported, which is worse than not having it.
+ */
+static const char *deferred_sprint(const char *name)
+{
+    static const char *const S34[] = {"bind", "set", "on", "buf", "win"};
+    size_t i;
+
+    if (name == NULL)
+        return NULL;
+    for (i = 0U; i < SAG_ARRAY_LEN(S34); i++) {
+        if (strcmp(name, S34[i]) == 0)
+            return "Sprint 34";
+    }
+    return NULL;
+}
+
+const char *fl_deferred_msg(const char *name)
+{
+    static char buf[128];
+    const char *sprint = deferred_sprint(name);
+
+    if (sprint != NULL)
+        (void)snprintf(buf, sizeof(buf), "%s lands in %s", name, sprint);
+    else
+        (void)snprintf(buf, sizeof(buf), "undefined name '%s'",
+                       name == NULL ? "?" : name);
+    return buf;
 }
 
 /* ---------------------------------------------------------------- */
@@ -358,12 +408,13 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
             FlValue name = frame->cl->fn->ch.consts[k];
             FlValue got;
 
-            if (!fl_map_get(vm->globals, name, &got)) {
+            if (!fl_map_get(frame->cl->globals, name, &got)) {
                 /* §4: no implicit globals.  A miss is an error, not
                  * nil, because "typo yields nil" is how a config file
                  * silently does nothing. */
-                fl_raise(vm, "name", "undefined name '%s'",
-                         sag_intern_str(vm->in, (u32)name.as.i));
+                fl_raise(vm, "name", "%s",
+                         fl_deferred_msg(sag_intern_str(vm->in,
+                                                        (u32)name.as.i)));
                 goto raised;
             }
             *vm->sp++ = got;
@@ -373,18 +424,19 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
             u16 k = read_u16(&ip);
             FlValue name = frame->cl->fn->ch.consts[k];
 
-            if (!fl_map_get(vm->globals, name, NULL)) {
-                fl_raise(vm, "name", "undefined name '%s'",
-                         sag_intern_str(vm->in, (u32)name.as.i));
+            if (!fl_map_get(frame->cl->globals, name, NULL)) {
+                fl_raise(vm, "name", "%s",
+                         fl_deferred_msg(sag_intern_str(vm->in,
+                                                        (u32)name.as.i)));
                 goto raised;
             }
-            (void)fl_map_set(vm, vm->globals, name, *--vm->sp);
+            (void)fl_map_set(vm, frame->cl->globals, name, *--vm->sp);
             VM_NEXT();
         }
         VM_CASE(DEF_GLOBAL) {
             u16 k = read_u16(&ip);
 
-            (void)fl_map_set(vm, vm->globals,
+            (void)fl_map_set(vm, frame->cl->globals,
                              frame->cl->fn->ch.consts[k], *--vm->sp);
             VM_NEXT();
         }
@@ -718,6 +770,9 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
             u32 i;
 
             made->fn = fn;
+            /* Inherited, so a nested function sees its module's
+             * globals and not whoever ends up calling it. */
+            made->globals = frame->cl->globals;
             made->nup = fn->nup;
             if (fn->nup != 0U)
                 made->up = fl_gc_upvals(vm, fn->nup);
@@ -974,14 +1029,20 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
         }
         VM_CASE(IMPORT) {
             u16 k = read_u16(&ip);
-            FlValue name = frame->cl->fn->ch.consts[k];
+            u8 is_path = *ip++;
+            FlValue what = frame->cl->fn->ch.consts[k];
+            FlValue mod = FL_NIL_V;
 
-            /* No silent stub: the opcode exists so the compiler can
-             * emit it, and it says which sprint owes the behaviour. */
-            fl_raise(vm, "import",
-                     "import of '%s' is not implemented until Sprint 31",
-                     sag_intern_str(vm->in, (u32)name.as.i));
-            goto raised;
+            /* A module body runs through fl_call, so this instruction
+             * can re-enter the dispatcher: frame->ip must be current
+             * before we leave, exactly as a native call does it. */
+            frame->ip = ip;
+            if (!fl_import(vm, (u32)what.as.i, is_path != 0U, &mod))
+                goto raised;
+            frame = &vm->frames[vm->nframes - 1U];
+            ip = frame->ip;
+            *vm->sp++ = mod;
+            VM_NEXT();
         }
         VM_CASE(EDIT_BEGIN) {
             FlErr e = {0U, FL_NIL_V};
@@ -1021,9 +1082,32 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
         }
 
         VM_CASE(HALT) {
-            if (out != NULL)
-                *out = FL_NIL_V;
-            return true;
+            /*
+             * Running off the end of a chunk is `return nil` -- and it
+             * must POP ITS FRAME to say so.
+             *
+             * Sprint 30 could get away with leaving the frame in place,
+             * because the top-level program was the only chunk HALT
+             * ever ended and the VM was finished with afterwards.  A
+             * module body is CALLED: with the frame left standing,
+             * fl_call returned to the IMPORT instruction, which read
+             * `frames[nframes - 1]` and found the MODULE's frame, and
+             * the importer carried on executing the module's bytecode.
+             * Every program after the first file import returned nil,
+             * which is how this was found.
+             */
+            close_upvals(vm, frame->slots);
+            vm->nframes--;
+            if (vm->nframes == base) {
+                if (out != NULL)
+                    *out = FL_NIL_V;
+                return true;
+            }
+            vm->sp = frame->slots;
+            *vm->sp++ = FL_NIL_V;
+            frame = &vm->frames[vm->nframes - 1U];
+            ip = frame->ip;
+            VM_NEXT();
         }
         VM_CASE(LIST_APPEND) {
             u8 s = *ip++;
@@ -1094,7 +1178,22 @@ bool fl_vm_run(FlVm *vm, FlFn *entry, FlValue *out)
     cl->fn = entry;
     cl->up = NULL;
     cl->nup = 0U;
+    cl->globals = vm->globals;
 
+    /*
+     * A FRESH top-level execution: frames, handlers and open upvalues
+     * all reset, not just the stack pointer.
+     *
+     * An unhandled raise returns false WITHOUT popping frames -- which
+     * is right for a nested execution, because the caller unwinds
+     * further -- so the outermost entry point is the one that has to
+     * clear them.  Without this, a second program run in the same VM
+     * pushed its frame above the wreckage of the first and RETURN
+     * "returned" into a dead chunk.
+     */
+    vm->nframes = 0U;
+    vm->nhandlers = 0U;
+    vm->open_upvals = NULL;
     vm->sp = vm->stack;
     *vm->sp++ = FL_OBJ_V(FL_CLOSURE, cl);
     vm->frames[vm->nframes].cl = cl;
@@ -1160,6 +1259,9 @@ bool fl_call(FlVm *vm, FlValue callee, const FlValue *args, u32 nargs,
         vm->frames[vm->nframes].slots = slots;
         vm->nframes++;
         if (!vm_exec(vm, base, out)) {
+            /* The callee's frames go too.  A native that swallows the
+             * failure must not be left standing on them. */
+            vm->nframes = base;
             vm->sp = slots;
             return false;
         }

@@ -93,7 +93,7 @@ FL_OP(ITER_NEXT2,   "bw",  +2,          "for k, v in ...")
 
 /* --- editor and modules ------------------------------------------- */
 FL_OP(MOTION,       "w",   +1,          "run consts[k] on the host, push nil")
-FL_OP(IMPORT,       "w",   +1,          "Sprint 31; hard-errors here rather than doing nothing")
+FL_OP(IMPORT,       "wb",  +1,          "name-or-path const, then 1 when it is a quoted path")
 FL_OP(EDIT_BEGIN,   "",     0,          "spec 10 transaction open; the null host is a no-op")
 FL_OP(EDIT_END,     "",     0,          "")
 
