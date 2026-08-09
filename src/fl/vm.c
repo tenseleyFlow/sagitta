@@ -253,11 +253,28 @@ static u16 read_u16(const u8 **ip)
     return v;
 }
 
-bool fl_vm_run(FlVm *vm, FlFn *entry, FlValue *out)
+bool fl_vm_run(FlVm *vm, FlFn *entry, FlValue *out);
+
+/*
+ * The dispatch loop, re-entrant.
+ *
+ * `base` is the frame count this execution started at: RETURN hands
+ * control back when the frame stack drops to it, rather than only at
+ * zero.  That is what lets a native call back into Fletch --
+ * list.map's callback, re.replace_fn's replacement -- without a second
+ * interpreter or a longjmp.
+ *
+ * An unwind must ALSO respect `base`: a handler established outside
+ * this execution belongs to the loop that owns it, so we return false
+ * and let the native's caller propagate.  Catching it here would
+ * resume the outer function's code inside the inner loop, with the
+ * outer loop still sitting in its own frame -- two dispatchers running
+ * one frame stack.
+ */
+static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
 {
     FlFrame *frame;
     const u8 *ip;
-    FlClosure *cl;
 
 #if FL_COMPUTED_GOTO
     /*
@@ -275,17 +292,8 @@ bool fl_vm_run(FlVm *vm, FlFn *entry, FlValue *out)
     };
 #endif
 
-    cl = fl_gc_alloc(vm, sizeof(*cl), FL_CLOSURE);
-    cl->fn = entry;
-    cl->up = NULL;
-    cl->nup = 0U;
-
-    vm->sp = vm->stack;
-    *vm->sp++ = FL_OBJ_V(FL_CLOSURE, cl);
-    frame = &vm->frames[vm->nframes++];
-    frame->cl = cl;
-    frame->ip = entry->ch.code;
-    frame->slots = vm->stack;
+    /* Resume from whatever frame the caller set up. */
+    frame = &vm->frames[vm->nframes - 1U];
     ip = frame->ip;
 
     for (;;) {
@@ -673,7 +681,7 @@ bool fl_vm_run(FlVm *vm, FlFn *entry, FlValue *out)
 
             close_upvals(vm, frame->slots);
             vm->nframes--;
-            if (vm->nframes == 0U) {
+            if (vm->nframes == base) {
                 if (out != NULL)
                     *out = result;
                 return true;
@@ -687,7 +695,7 @@ bool fl_vm_run(FlVm *vm, FlFn *entry, FlValue *out)
         VM_CASE(RETURN_NIL) {
             close_upvals(vm, frame->slots);
             vm->nframes--;
-            if (vm->nframes == 0U) {
+            if (vm->nframes == base) {
                 if (out != NULL)
                     *out = FL_NIL_V;
                 return true;
@@ -1031,7 +1039,11 @@ bool fl_vm_run(FlVm *vm, FlFn *entry, FlValue *out)
          * leaves a closure pointing at a slot the handler is about to
          * overwrite, or restores sp from a frame that no longer exists.
          */
-        if (vm->nhandlers == 0U) {
+        if (vm->nhandlers == 0U ||
+            vm->handlers[vm->nhandlers - 1U].frame <= base) {
+            /* No handler of OURS.  Hand the raise back; if we are a
+             * nested execution the native returns false and the outer
+             * loop unwinds into its own handler. */
             if (out != NULL)
                 *out = vm->err;
             return false;
@@ -1047,5 +1059,90 @@ bool fl_vm_run(FlVm *vm, FlFn *entry, FlValue *out)
             vm->err = FL_NIL_V;
             ip = frame->cl->fn->ch.code + h->pc;
         }
+    }
+}
+
+/* ---------------------------------------------------------------- */
+/* Entry points                                                     */
+/* ---------------------------------------------------------------- */
+
+bool fl_vm_run(FlVm *vm, FlFn *entry, FlValue *out)
+{
+    FlClosure *cl = fl_gc_alloc(vm, sizeof(*cl), FL_CLOSURE);
+
+    cl->fn = entry;
+    cl->up = NULL;
+    cl->nup = 0U;
+
+    vm->sp = vm->stack;
+    *vm->sp++ = FL_OBJ_V(FL_CLOSURE, cl);
+    vm->frames[vm->nframes].cl = cl;
+    vm->frames[vm->nframes].ip = entry->ch.code;
+    vm->frames[vm->nframes].slots = vm->stack;
+    vm->nframes++;
+    return vm_exec(vm, 0U, out);
+}
+
+/*
+ * Call a Fletch value from C -- list.map's callback, re.replace_fn's
+ * replacement, and Sprint 34's editor hooks.
+ *
+ * The arguments are pushed onto the VM stack rather than kept in a C
+ * array, so they are covered by root 1 for the whole call: a callback
+ * that allocates would otherwise collect its own arguments out from
+ * under itself, which is gc.h rule 1 with a callback in the middle.
+ */
+bool fl_call(FlVm *vm, FlValue callee, const FlValue *args, u32 nargs,
+             FlValue *out)
+{
+    u32 base = vm->nframes;
+    FlValue *slots;
+    u32 i;
+
+    if (callee.t == (u8)FL_NATIVE) {
+        FlNative *nat = (FlNative *)callee.as.o;
+
+        if (nargs < nat->min_ar ||
+            (nat->max_ar != 255U && nargs > nat->max_ar))
+            return fl_raise(vm, "arity", "%s got %u arguments",
+                            sag_intern_str(vm->in, nat->name_id),
+                            (unsigned)nargs);
+        vm->cur_native = nat->name_id;
+        /* argv must live on the stack for rule 1, same as a CALL. */
+        slots = vm->sp;
+        for (i = 0U; i < nargs; i++)
+            *vm->sp++ = args[i];
+        {
+            bool ok = nat->fn(vm, slots, nargs, out);
+
+            vm->sp = slots;
+            return ok;
+        }
+    }
+    if (callee.t != (u8)FL_CLOSURE)
+        return fl_raise(vm, "type", "cannot call %s",
+                        fl_type_name((FlType)callee.t));
+    {
+        FlClosure *cl = (FlClosure *)callee.as.o;
+
+        if (nargs != cl->fn->arity)
+            return fl_raise(vm, "arity", "expected %u arguments, got %u",
+                            (unsigned)cl->fn->arity, (unsigned)nargs);
+        if (vm->nframes >= (u32)FL_FRAMES_MAX)
+            return fl_raise(vm, "limit", "call depth exceeded");
+        slots = vm->sp;
+        *vm->sp++ = callee;
+        for (i = 0U; i < nargs; i++)
+            *vm->sp++ = args[i];
+        vm->frames[vm->nframes].cl = cl;
+        vm->frames[vm->nframes].ip = cl->fn->ch.code;
+        vm->frames[vm->nframes].slots = slots;
+        vm->nframes++;
+        if (!vm_exec(vm, base, out)) {
+            vm->sp = slots;
+            return false;
+        }
+        vm->sp = slots;
+        return true;
     }
 }

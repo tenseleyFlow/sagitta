@@ -149,6 +149,13 @@ bool fl_vm_init(FlVm *vm, Arena *a, Interner *in, DiagCtx *dc);
  * The kind must be one of spec §9's twelve (§16-A1 added "limit").
  */
 bool fl_raise(FlVm *vm, const char *kind, const char *fmt, ...);
+
+/*
+ * Call a Fletch value from C.  Used by the stdlib's higher-order
+ * functions; false means it raised and vm->err holds the error.
+ */
+bool fl_call(FlVm *vm, FlValue callee, const FlValue *args, u32 nargs,
+             FlValue *out);
 bool fl_vm_run(FlVm *vm, FlFn *entry, FlValue *out);   /* false = raised */
 void fl_vm_free(FlVm *vm);
 
