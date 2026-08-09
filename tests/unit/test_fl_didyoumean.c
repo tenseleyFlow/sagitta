@@ -113,6 +113,19 @@ void test_fl_didyoumean_real_typos(void)
     CHECK("slcie", "did you mean 'slice'?", "slice");
     CHECK("uper", "did you mean 'upper'?", "upper");
     CHECK("splt", "did you mean 'split'?", "split");
+    /* The four shapes the OSA metric exists to catch, one row each, on
+     * names long enough that the threshold admits them. */
+    CHECK("stirng", "did you mean 'string'?", "string");   /* transpose */
+    CHECK("conatins", "did you mean 'contains'?", "contains");
+    CHECK("startswith", "did you mean 'starts_with'?", "starts_with");
+    CHECK("upPer", "did you mean 'upper'?", "upper");      /* case only */
+    /* ALL CAPS is NOT a near miss: seven half-cost substitutions still
+     * sum past the threshold for a seven-byte name.  That is the metric
+     * working -- a shouted word is a different word, not a typo. */
+    CHECK("REPLACE", "", "replace");
+    /* A typo in the FIRST byte still resolves: a prefix-keyed matcher
+     * would miss every one of these. */
+    CHECK("wpper", "did you mean 'upper'?", "upper");
     /* An exact match is not a typo: the caller has a different problem
      * and a suggestion would be nonsense. */
     CHECK("length", "", "length");

@@ -132,8 +132,12 @@ static bool check_fl_vm(const u8 *data, size_t len, char *why, size_t why_cap)
 
     (void)fl_diag_add_file(&dc, "fuzz.fl", (const char *)data, len);
     p = fl_parse(&arena, &dc, &in, (const char *)data, len, 0U);
-    if (counter.n > (u32)FL_PARSE_MAX_ERRORS) {
-        (void)snprintf(why, why_cap, "%u diagnostics, cap is %d",
+    /* The cap is FL_PARSE_MAX_ERRORS PLUS the one that says it gave
+     * up, which is what s29 pins and what fuzz_fl_parse asserts.  This
+     * read the bare cap and a nest of bad `@[` blocks tripped it at 21
+     * -- the parser was right and the bound was wrong. */
+    if (counter.n > (u32)FL_PARSE_MAX_ERRORS + 1U) {
+        (void)snprintf(why, why_cap, "%u diagnostics, cap is %d + 1",
                        (unsigned)counter.n, FL_PARSE_MAX_ERRORS);
         ok = false;
         goto done;
