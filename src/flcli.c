@@ -60,7 +60,9 @@
 
 static const char fl_usage[] =
     "Usage:\n"
-    "  sag fl                  Read a script from stdin (not a tty).\n"
+    "  sag fl                  On a terminal, start the prompt (:help\n"
+    "                          for its commands, :quit to leave).\n"
+    "                          Otherwise read a script from stdin.\n"
     "  sag fl FILE             Evaluate FILE.\n"
     "  sag fl -e EXPR          Evaluate EXPR; print its value if non-nil.\n"
     "  sag fl -c FILE          Parse and compile only; do not run.\n"
