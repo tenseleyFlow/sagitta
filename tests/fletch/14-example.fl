@@ -1,0 +1,92 @@
+# fletch-spec §14 — one of everything
+import str
+
+let greet = "hi\tthere\n"                 # string escapes
+let nums  = [1, 2.5, 0x10]                # list, int, float, hex
+let cfg   = { tabwidth: 4, wrap: false, name: nil }
+
+fn clamp(x, lo, hi) {
+    if x < lo { return lo }
+    else if x > hi { return hi }
+    return x
+}
+
+fn counter(start) {                       # closure captures by reference
+    let n = start
+    return fn() { n = n + 1; return n }
+}
+
+let next = counter(clamp(9, 0, 8))
+while next() < 10 { }                     # while (runs twice)
+
+let total = 0
+for x in nums {
+    if x == 2.5 { continue }
+    total = total + x
+}
+
+macro dup = @[ l< H(lv) yank v paste esc ]    # terse layer
+
+fn shout(s) {
+    try { edit { @[ 2v i"!" del ] } }
+    catch e { return str.upper(e.kind) or "?" }
+}
+
+# ---------------------------------------------------------------------
+# Everything above this line is the spec's §14 block, BYTE FOR BYTE.
+# The runner extracts the fenced block from .docs/fletch-spec.md and
+# requires this file to start with it exactly, so the worked example
+# cannot rot into something the spec no longer shows.  Edit the spec,
+# not this prefix.
+#
+# Below are §14.1's normative results, asserted.
+#
+# SPEC: §14
+# COVERS: fn_decl fn_expr macro_decl import_stmt edit_stmt try_stmt
+# COVERS: str.upper
+# COVERS: op:CALL op:RETURN op:CLOSURE op:GET_UPVAL op:SET_UPVAL
+# COVERS: op:CLOSE_UPVALS op:EDIT_BEGIN op:EDIT_END op:TRY_PUSH
+# COVERS: op:TRY_POP op:MOTION op:IMPORT
+import io
+
+# `nums` is [1, 2.5, 16] -- 0x10 is 16 -- and `continue` skips the 2.5.
+# OUT: 17
+io.print(total)
+
+# The while loop above already consumed 9 and 10, so a fresh counter
+# is built to assert the sequence itself: clamp(9, 0, 8) is 8 because
+# 9 > hi, so the first call returns 9 and the second 10.  The closure
+# captured `n` BY REFERENCE, which is the only reason the second call
+# does not return 9 again.
+let n2 = counter(clamp(9, 0, 8))
+# OUT: 9
+io.print(n2())
+# OUT: 10
+io.print(n2())
+
+# `macro` is sugar for a zero-argument function (§8), so `dup` is
+# defined and is a value.
+# OUT: true
+io.print(dup != nil)
+
+# Headless, the motion block raises kind "motion" (§3.1); `catch`
+# binds it and str.upper("motion") is "MOTION".  This is the fourth
+# normative claim, and the one that needs no editor to be true.
+# OUT: MOTION
+io.print(shout("anything"))
+
+# clamp's three branches, since §14 defines it and 14.1 only exercises
+# the high one.
+# OUT: 0 5 8
+io.print(clamp(-1, 0, 8), clamp(5, 0, 8), clamp(9, 0, 8))
+
+# The literals at the top are values, not decoration.
+# OUT: 4 false nil
+io.print(cfg.tabwidth, cfg.wrap, cfg.name)
+# OUT: [1, 2.5, 16]
+io.print(nums)
+# The escapes are real bytes: a tab and a newline, so 9 characters.
+# (`str` is already imported by the spec block above -- a second
+# `import str` is a compile error, not a no-op.)
+# OUT: 9
+io.print(str.len(greet))

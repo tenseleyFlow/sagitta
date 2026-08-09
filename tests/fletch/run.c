@@ -1439,6 +1439,65 @@ static void emit_ledger(FILE *f)
 }
 
 /*
+ * DoD 5: 14-example.fl must START WITH the spec's §14 fenced block,
+ * byte for byte.
+ *
+ * A PREFIX rather than the whole file, because the same DoD also
+ * requires the file to assert §14.1's normative results and a file
+ * that is only the block asserts nothing.  Everything after the block
+ * is this suite's; everything up to it belongs to the spec, and the
+ * worked example therefore cannot rot into something the spec no
+ * longer shows.
+ */
+static size_t check_example(void)
+{
+    const char *p = strstr(g_spec_src, "## \302\24714 Worked example");
+    const char *open_fence;
+    const char *body;
+    const char *close_fence;
+    char path[512];
+    char *file;
+    size_t len = 0U;
+    size_t bad = 0U;
+
+    if (p == NULL) {
+        (void)printf("check 6: no '## \302\24714' heading in %s\n", g_spec);
+        return 1U;
+    }
+    open_fence = strstr(p, "```fletch\n");
+    if (open_fence == NULL) {
+        (void)printf("check 6: \302\24714 has no ```fletch block in %s\n", g_spec);
+        return 1U;
+    }
+    body = open_fence + strlen("```fletch\n");
+    close_fence = strstr(body, "\n```");
+    if (close_fence == NULL) {
+        (void)printf("check 6: \302\24714's block is unterminated in %s\n", g_spec);
+        return 1U;
+    }
+    (void)snprintf(path, sizeof(path), "%s/14-example.fl", g_root);
+    file = slurp(path, &len);
+    if (file == NULL) {
+        (void)printf("check 6: %s does not exist\n", path);
+        return 1U;
+    }
+    {
+        size_t want = (size_t)(close_fence - body) + 1U;   /* keep the \n */
+
+        if (len < want || memcmp(file, body, want) != 0) {
+            (void)printf("check 6: %s does not start with the spec's "
+                         "\302\24714 "
+                         "block byte for byte (regenerate its prefix from "
+                         "%s, or amend the spec -- do not edit only one)\n",
+                         path, g_spec);
+            bad = 1U;
+        }
+    }
+    free(file);
+    return bad;
+}
+
+/*
  * Checks 1-6.  Check 7 (the committed ledger is current) is the shell
  * wrapper's, because it is a git diff.
  *
@@ -1532,6 +1591,8 @@ static size_t run_checks(void)
                      conf.v[i]);
         bad++;
     }
+
+    bad += check_example();
 
     set_free(&prods);
     set_free(&kinds);
