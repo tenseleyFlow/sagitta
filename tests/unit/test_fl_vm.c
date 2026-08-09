@@ -401,6 +401,24 @@ void test_fl_vm_control_flow(void)
         run_int("let t = 0\n"
                 "for x in [1,2,3] { if x == 2 { continue } t = t + x }\n"
                 "return t\n"), 4);
+    /*
+     * A STRING iterates by GRAPHEME, the third clause of §6's sentence
+     * and the third one that was not implemented.  The subject here is
+     * one ASCII byte, one eight-byte emoji-plus-modifier cluster, and
+     * one more ASCII byte: a codepoint walk returns 4 and a byte walk
+     * returns 10, so this length distinguishes all three readings.
+     */
+    SAG_ASSERT_EQ_I64(
+        run_int("import list\nlet g = []\n"
+                "for c in \"a\\u{1F44D}\\u{1F3FD}b\" { list.push(g, c) }\n"
+                "return list.len(g)\n"), 3);
+    /* The cluster comes back whole, not split at its first codepoint. */
+    SAG_ASSERT_EQ_I64(
+        run_int("import str\nlet n = 0\n"
+                "for c in \"a\\u{1F44D}\\u{1F3FD}b\" "
+                "{ n = n + str.len_bytes(c) }\nreturn n\n"), 10);
+    SAG_ASSERT_EQ_I64(
+        run_int("let n = 0\nfor c in \"\" { n = n + 1 }\nreturn n\n"), 0);
     /* Two-variable for walks a map in insertion order. */
     SAG_ASSERT_EQ_I64(
         run_int("let m = {a: 1, b: 2, c: 3}\n"

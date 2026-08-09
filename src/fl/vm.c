@@ -32,6 +32,7 @@
 #include "fl/std.h"
 #include "fl/suggest.h"
 #include "fl/trace.h"
+#include "unicode/grapheme.h"
 #include "util/log.h"
 
 /* ---------------------------------------------------------------- */
@@ -1202,6 +1203,34 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
                 }
                 frame->slots[base + 1] = FL_INT_V((i64)cur);
                 *vm->sp++ = k;
+            } else if (subject.t == (u8)FL_STR) {
+                /*
+                 * A STRING ITERATES BY GRAPHEME, which §6 requires:
+                 * "`for x in expr` iterates a list's values, a map's
+                 * keys, OR A STRING'S GRAPHEMES".  This arm did not
+                 * exist and every string raised; Sprint 33's suite
+                 * found it.
+                 *
+                 * The cursor is a BYTE offset, not a cluster index, so
+                 * advancing is O(1) per step rather than a rescan from
+                 * the start -- and a string is immutable, so there is
+                 * no mods counter to guard.
+                 */
+                const FlStr *s = (const FlStr *)subject.as.o;
+                size_t at = (size_t)cursor;
+                size_t nx;
+
+                if (at >= (size_t)s->len) {
+                    ip += d;
+                    VM_NEXT();
+                }
+                nx = sag_gb_next_bytes((const u8 *)s->b, (size_t)s->len, at);
+                if (nx <= at)
+                    nx = at + 1U;         /* never stall on a bad byte */
+                frame->slots[base + 1] = FL_INT_V((i64)nx);
+                *vm->sp++ = FL_OBJ_V(FL_STR,
+                                     fl_str_new(vm, s->b + at,
+                                                (u32)(nx - at)));
             } else {
                 fl_raise(vm, "type", "cannot iterate %s",
                          fl_type_name((FlType)subject.t));

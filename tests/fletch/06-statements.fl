@@ -9,6 +9,7 @@
 # COVERS: op:TRACE_LINE op:HALT op:NOT_NIL
 import io
 import list
+import fmt
 
 # -- let, with and without an initialiser ----------------------------
 let a = 1
@@ -92,7 +93,7 @@ io.print(pairs)
 # -- for over a map is KEY, VALUE, in insertion order -----------------
 let ks = []
 for k, v in {z: 1, a: 2} {
-    list.push(ks, k + "=" + fmtnum(v))
+    list.push(ks, k + "=" + fmt.int(v))
 }
 # OUT: ["z=1", "a=2"]
 io.print(ks)
@@ -123,12 +124,3 @@ io.print(got)
 1 + 1
 io.print("expression statement did not disturb the stack")
 # CHECK: expression statement did not disturb the stack
-
-fn fmtnum(n) {
-    return "" + fmt_int(n)
-}
-
-fn fmt_int(n) {
-    import fmt
-    return fmt.int(n)
-}
