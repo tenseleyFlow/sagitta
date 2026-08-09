@@ -69,6 +69,14 @@ static const char fl_usage[] =
     "                          Disassemble every function.\n"
     "  sag fl --list-natives   List every builtin, one per line.\n"
     "\n"
+    "Options, before any of the above:\n"
+    "  --caps SPEC             Grants for the entry script: 'all',\n"
+    "                          'none', or a comma-separated list of\n"
+    "                          fs.read, fs.write, shell, net.\n"
+    "  --origin KIND           cli (default), config, workspace, plugin.\n"
+    "                          Lowers what the script may reach; §13\n"
+    "                          decides the rest from the module it is in.\n"
+    "\n"
     "Exit: 0 ran, 1 compile or runtime error, 3 unreadable file or a\n"
     "denied capability, 4 internal error.\n"
     "\n"
@@ -142,6 +150,82 @@ static char *slurp(const char *path, size_t *len, Arena *arena)
     return copy;
 }
 
+/*
+ * The entry script's grants and origin, settable by --caps/--origin.
+ *
+ * Defaults are §13's CLI row: the user typed the command, so this
+ * grants what they already have a shell for.  The options only ever
+ * LOWER what a run can reach in practice, and they exist because the
+ * Sprint 33 conformance suite has to drive the capability-denial path
+ * from outside -- a suite that can only run as the CLI cannot test
+ * §13 at all, and the alternative was a test-only backdoor.
+ */
+static u32 g_caps = (u32)FL_CAP_FS_READ | (u32)FL_CAP_FS_WRITE |
+                    (u32)FL_CAP_SHELL | (u32)FL_CAP_NET;
+static FlOriginKind g_origin = FL_ORIGIN_CLI;
+
+/* "all" | "none" | fs.read,fs.write,shell,net.  False on an unknown
+ * name, which is a usage error rather than a silently empty grant. */
+static bool parse_caps(const char *s, u32 *out)
+{
+    static const struct { const char *name; u32 bit; } tab[] = {
+        { "fs.read",  (u32)FL_CAP_FS_READ  },
+        { "fs.write", (u32)FL_CAP_FS_WRITE },
+        { "shell",    (u32)FL_CAP_SHELL    },
+        { "net",      (u32)FL_CAP_NET      }
+    };
+    u32 got = 0U;
+
+    if (strcmp(s, "none") == 0) {
+        *out = 0U;
+        return true;
+    }
+    if (strcmp(s, "all") == 0) {
+        *out = (u32)FL_CAP_FS_READ | (u32)FL_CAP_FS_WRITE |
+               (u32)FL_CAP_SHELL | (u32)FL_CAP_NET;
+        return true;
+    }
+    while (*s != '\0') {
+        const char *comma = strchr(s, ',');
+        size_t n = comma == NULL ? strlen(s) : (size_t)(comma - s);
+        size_t i;
+        bool hit = false;
+
+        for (i = 0U; i < SAG_ARRAY_LEN(tab); i++) {
+            if (strlen(tab[i].name) == n &&
+                strncmp(s, tab[i].name, n) == 0) {
+                got |= tab[i].bit;
+                hit = true;
+                break;
+            }
+        }
+        if (!hit)
+            return false;
+        s = comma == NULL ? s + n : comma + 1;
+    }
+    *out = got;
+    return true;
+}
+
+static bool parse_origin(const char *s, FlOriginKind *out)
+{
+    static const struct { const char *name; FlOriginKind k; } tab[] = {
+        { "cli",       FL_ORIGIN_CLI       },
+        { "config",    FL_ORIGIN_CONFIG    },
+        { "workspace", FL_ORIGIN_WORKSPACE },
+        { "plugin",    FL_ORIGIN_PLUGIN    }
+    };
+    size_t i;
+
+    for (i = 0U; i < SAG_ARRAY_LEN(tab); i++) {
+        if (strcmp(s, tab[i].name) == 0) {
+            *out = tab[i].k;
+            return true;
+        }
+    }
+    return false;
+}
+
 /* Everything the four file-reading modes share. */
 typedef struct FlRun {
     Arena arena;
@@ -177,12 +261,11 @@ static void run_open(FlRun *r)
     fl_diag_set_sink(&r->dc, cli_count, r);
     fl_vm_init(&r->vm, &r->arena, &r->in, &r->dc);
     fl_std_register(&r->vm);
-    r->origin.kind = (u8)FL_ORIGIN_CLI;
+    r->origin.kind = (u8)g_origin;
     r->origin.path_id = 0U;
     /* §13: all four.  The user typed the command, so this grants what
      * they already have a shell for. */
-    r->origin.caps = (u32)FL_CAP_FS_READ | (u32)FL_CAP_FS_WRITE |
-                     (u32)FL_CAP_SHELL | (u32)FL_CAP_NET;
+    r->origin.caps = g_caps;
 }
 
 static void run_close(FlRun *r)
@@ -506,6 +589,26 @@ static int selftest_bug(void)
 
 int sag_fl_main(int argc, char **argv)
 {
+    /*
+     * --caps/--origin are stripped first so every form below keeps its
+     * exact argc shape.  They are deliberately NOT accepted after the
+     * script name: `sag fl x.fl --caps none` reads like an argument to
+     * the script, and scripts take no arguments until Sprint 37.
+     */
+    while (argc >= 3 && (strcmp(argv[1], "--caps") == 0 ||
+                         strcmp(argv[1], "--origin") == 0)) {
+        bool ok = strcmp(argv[1], "--caps") == 0
+                      ? parse_caps(argv[2], &g_caps)
+                      : parse_origin(argv[2], &g_origin);
+
+        if (!ok) {
+            (void)fprintf(stderr, "sagitta: bad %s value '%s'\n",
+                          argv[1], argv[2]);
+            return SAG_EXIT_ERR;
+        }
+        argv += 2;
+        argc -= 2;
+    }
     if (argc == 1)
         return isatty(0) ? sag_fl_repl() : run_stdin();
     if (argc == 2 && strcmp(argv[1], "--selftest-fl-bug") == 0) {
