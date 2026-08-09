@@ -66,6 +66,18 @@ typedef struct FlGc {
      * from byte deltas -- and DoD 5 needs to assert it per dispatch
      * mode, where a wrong answer means the cgoto build has no GC. */
     u64 collections;
+    /*
+     * Monotone allocation counter, stamped into FlObj.aux for every
+     * non-string object.  list.sort orders otherwise-incomparable
+     * objects by it, because ordering them by ADDRESS would differ
+     * between runs and break invariant 5 -- the same script would sort
+     * a mixed list differently on two machines.
+     *
+     * u32, so it wraps after four billion allocations in one VM; two
+     * objects could then compare equal and the sort stays STABLE
+     * between them, which is a defined answer rather than a wrong one.
+     */
+    u32 next_seq;
 } FlGc;
 
 /* Floor for next_gc.  Sprint 33 gates config load under 1 ms, and a

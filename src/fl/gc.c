@@ -39,7 +39,9 @@ void *fl_gc_alloc(FlVm *vm, size_t n, FlType t)
     o->t = (u8)t;
     o->mark = 0U;
     o->oflags = 0U;
-    o->aux = 0U;
+    /* Strings overwrite this with their hash in fl_str_new; for
+     * everything else it is the insertion sequence number. */
+    o->aux = ++vm->gc.next_seq;
     o->gc_next = vm->gc.objects;
     vm->gc.objects = o;
     vm->gc.bytes += n;

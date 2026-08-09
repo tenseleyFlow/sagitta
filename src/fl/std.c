@@ -13,6 +13,7 @@
 /* Each module's table lives in its own translation unit and is pulled
  * in here, so registration order is a single readable list rather than
  * a scatter of per-file init hooks. */
+extern const FlModuleDef fl_mod_list;
 extern const FlModuleDef fl_mod_math;
 
 /*
@@ -26,10 +27,10 @@ extern const FlModuleDef fl_mod_math;
  * with empties: a registered module with no functions would answer
  * `import` successfully and then fail every call with a bare "name"
  * error, which reads like a broken stdlib rather than an unfinished
- * one.  Still to come this sprint: str, list, map, fmt, io, re.
+ * one.  Still to come this sprint: str, map, fmt, io, re.
  */
 static const FlModuleDef *const FL_MODULES[] = {
-    &fl_mod_math
+    &fl_mod_list, &fl_mod_math
 };
 
 /* ---------------------------------------------------------------- */
@@ -72,9 +73,10 @@ static void register_module(FlVm *vm, const FlModuleDef *md)
         (void)fl_map_set(vm, m, key_str(vm, md->consts[i].name),
                          md->consts[i].v);
     /*
-     * Frozen last, not first: fl_map_set refuses a frozen map, so
-     * freezing before the fields are in would produce an empty module
-     * and no error anywhere.
+     * Frozen once the fields are in.  The flag is what the VM's
+     * FIELD_SET and INDEX_SET consult -- fl_map_set itself does not
+     * check it, because the collector and the module loader both need
+     * to write maps that a script may not.
      */
     m->h.oflags |= (u16)FL_OF_FROZEN;
     (void)fl_map_set(vm, vm->builtins, key_str(vm, md->name),
