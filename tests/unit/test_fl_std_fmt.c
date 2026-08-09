@@ -15,6 +15,7 @@
  * fmt.str   scalars, bare str  fmt_str_is_display_and_never_raises
  * fmt.str   containers, cycles fmt_str_is_display_and_never_raises
  * fmt.repr  round-trips        fmt_repr_round_trips_through_the_literal_parser
+ * fmt.repr  500 generated, deep fmt_repr_round_trips_500_generated_values
  * fmt.repr  escapes            fmt_repr_escapes_exactly_the_s25_table
  * fmt.repr  pretty form        fmt_repr_pretty_is_the_s25_workspace_format
  * fmt.repr  "type"             fmt_repr_raises_on_what_12_cannot_spell
@@ -31,7 +32,9 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "fl/gc.h"
 #include "fl/parse.h"
+#include "util/intern.h"
 
 #define P "import fmt\n"
 
@@ -376,5 +379,270 @@ void test_fl_fmt_pad_pads_in_cells(void)
           "!type: fmt.pad: fill must be one grapheme cluster");
     FL_EQ(&f, P "return fmt.pad(\"ab\", 99999999)\n",
           "!limit: fmt.pad: width must be 0..1048576, found 99999999");
+    flfix_close(&f);
+}
+
+/* ---------------------------------------------------------------- */
+/* DoD 8: 500 generated values, compared DEEPLY                     */
+/* ---------------------------------------------------------------- */
+
+/*
+ * xorshift64*, seeded fixed.  A generator taken from the clock would
+ * make a failure unreproducible, and a round-trip bug found once and
+ * never again is a bug still in the tree.
+ */
+static u64 gen_state = 0x9E3779B97F4A7C15ULL;
+
+static u64 gen_next(void)
+{
+    gen_state ^= gen_state >> 12;
+    gen_state ^= gen_state << 25;
+    gen_state ^= gen_state >> 27;
+    return gen_state * 0x2545F4914F6CDD1DULL;
+}
+
+static u32 gen_below(u32 n) { return (u32)(gen_next() % (u64)n); }
+
+/* A random string, invalid bytes and NULs included -- the escapes are
+ * exactly what the round trip has to survive. */
+static FlValue gen_str(FlVm *vm)
+{
+    char buf[24];
+    u32 n = gen_below((u32)sizeof(buf));
+    u32 i;
+
+    for (i = 0U; i < n; i++)
+        buf[i] = (char)(u8)(gen_next() & 0xFFU);
+    return FL_OBJ_V(FL_STR, fl_str_new(vm, buf, n));
+}
+
+/*
+ * A value inside §12's grammar.
+ *
+ * Deliberately excludes the five shapes repr refuses -- non-finite
+ * floats, INT64_MIN, bool and negative-int map keys, anything callable
+ * -- because those are asserted to RAISE in
+ * fmt_repr_raises_on_what_12_cannot_spell.  Mixing them in here would
+ * test the refusal twice and the round trip not at all.
+ */
+static FlValue gen_value(FlVm *vm, u32 depth)
+{
+    u32 pick = gen_below(depth == 0U ? 5U : 7U);
+
+    switch (pick) {
+    case 0: return FL_NIL_V;
+    case 1: return FL_BOOL_V((gen_next() & 1U) != 0U);
+    case 2: return FL_INT_V((i64)gen_next() | 1);   /* never INT64_MIN */
+    case 3: {
+        double d;
+        u64 bits = gen_next();
+
+        (void)memcpy(&d, &bits, sizeof(d));
+        /* Finite only; repr has no spelling for the rest. */
+        if (d != d || d > 1.7976931348623157e308 ||
+            d < -1.7976931348623157e308)
+            d = (double)(i64)(gen_next() & 0xFFFFU) / 8.0;
+        return FL_FLOAT_V(d);
+    }
+    case 4: return gen_str(vm);
+    case 5: {
+        FlList *l = fl_list_new(vm);
+        u32 n = gen_below(4U);
+        u32 i;
+
+        fl_gc_protect(vm, FL_OBJ_V(FL_LIST, l));
+        for (i = 0U; i < n; i++)
+            (void)fl_list_push(vm, l, gen_value(vm, depth - 1U));
+        fl_gc_release(vm, 1U);
+        return FL_OBJ_V(FL_LIST, l);
+    }
+    default: {
+        FlMap *m = fl_map_new(vm);
+        u32 n = gen_below(4U);
+        u32 i;
+
+        fl_gc_protect(vm, FL_OBJ_V(FL_MAP, m));
+        for (i = 0U; i < n; i++) {
+            /* String and NON-NEGATIVE int keys: §12's pl_entry has no
+             * sign and no bool. */
+            FlValue k = (gen_next() & 1U) != 0U
+                            ? gen_str(vm)
+                            : FL_INT_V((i64)(gen_next() & 0xFFFFU));
+
+            (void)fl_map_set(vm, m, k, gen_value(vm, depth - 1U));
+        }
+        fl_gc_release(vm, 1U);
+        return FL_OBJ_V(FL_MAP, m);
+    }
+    }
+}
+
+/* The parsed literal, back as a value.  Only §12's productions appear,
+ * which is what makes this a dozen lines rather than an evaluator. */
+static bool ast_to_value(FlFix *f, const FlNode *n, FlValue *out)
+{
+    if (n == NULL)
+        return false;
+    switch ((FlAstKind)n->kind) {
+    case FL_A_LIT:
+        switch ((FlLitKind)n->as.lit.lit) {
+        case FL_L_NIL:   *out = FL_NIL_V; return true;
+        case FL_L_BOOL:  *out = FL_BOOL_V(n->as.lit.v.b); return true;
+        case FL_L_INT:   *out = FL_INT_V(n->as.lit.v.i); return true;
+        case FL_L_FLOAT: *out = FL_FLOAT_V(n->as.lit.v.f); return true;
+        default: {
+            u32 id = n->as.lit.v.str_id;
+            const char *b = sag_intern_str(&f->in, id);
+
+            *out = FL_OBJ_V(FL_STR,
+                            fl_str_new(&f->vm, b == NULL ? "" : b,
+                                       (u32)sag_intern_len(&f->in, id)));
+            return true;
+        }
+        }
+    case FL_A_LIST: {
+        FlList *l = fl_list_new(&f->vm);
+        u32 i;
+
+        fl_gc_protect(&f->vm, FL_OBJ_V(FL_LIST, l));
+        for (i = 0U; i < n->as.list.n; i++) {
+            FlValue v;
+
+            if (!ast_to_value(f, n->as.list.items[i], &v)) {
+                fl_gc_release(&f->vm, 1U);
+                return false;
+            }
+            (void)fl_list_push(&f->vm, l, v);
+        }
+        fl_gc_release(&f->vm, 1U);
+        *out = FL_OBJ_V(FL_LIST, l);
+        return true;
+    }
+    case FL_A_MAP: {
+        FlMap *m = fl_map_new(&f->vm);
+        u32 i;
+
+        fl_gc_protect(&f->vm, FL_OBJ_V(FL_MAP, m));
+        for (i = 0U; i < n->as.map.n; i++) {
+            FlValue k;
+            FlValue v;
+
+            if (!ast_to_value(f, n->as.map.keys[i], &k) ||
+                !ast_to_value(f, n->as.map.vals[i], &v)) {
+                fl_gc_release(&f->vm, 1U);
+                return false;
+            }
+            (void)fl_map_set(&f->vm, m, k, v);
+        }
+        fl_gc_release(&f->vm, 1U);
+        *out = FL_OBJ_V(FL_MAP, m);
+        return true;
+    }
+    default:
+        return false;
+    }
+}
+
+/* fl_equal compares containers by REFERENCE, so the round trip needs
+ * its own recursion -- and it checks map ORDER, because insertion order
+ * is part of what repr promises to preserve. */
+static bool deep_equal(FlValue a, FlValue b)
+{
+    if (a.t != b.t)
+        return false;
+    switch ((FlType)a.t) {
+    case FL_LIST: {
+        const FlList *x = (const FlList *)a.as.o;
+        const FlList *y = (const FlList *)b.as.o;
+        u32 i;
+
+        if (x->n != y->n)
+            return false;
+        for (i = 0U; i < x->n; i++) {
+            if (!deep_equal(x->v[i], y->v[i]))
+                return false;
+        }
+        return true;
+    }
+    case FL_MAP: {
+        FlMap *x = (FlMap *)a.as.o;
+        FlMap *y = (FlMap *)b.as.o;
+        u32 cx = 0U;
+        u32 cy = 0U;
+        FlValue kx;
+        FlValue vx;
+        FlValue ky;
+        FlValue vy;
+
+        if (fl_map_count(x) != fl_map_count(y))
+            return false;
+        while (fl_map_iter(x, &cx, &kx, &vx)) {
+            if (!fl_map_iter(y, &cy, &ky, &vy))
+                return false;
+            if (!deep_equal(kx, ky) || !deep_equal(vx, vy))
+                return false;
+        }
+        return true;
+    }
+    case FL_FLOAT: {
+        u64 p;
+        u64 q;
+
+        /* Bit-exact, so -0.0 does not pass for 0.0: repr writes them
+         * differently and the round trip must keep them apart. */
+        (void)memcpy(&p, &a.as.f, sizeof(p));
+        (void)memcpy(&q, &b.as.f, sizeof(q));
+        return p == q;
+    }
+    default:
+        return fl_equal(a, b);
+    }
+}
+
+void test_fl_fmt_repr_round_trips_500_generated_values(void)
+{
+    FlFix f;
+    u32 round;
+
+    flfix_open(&f);
+    gen_state = 0x9E3779B97F4A7C15ULL;
+    for (round = 0U; round < 500U; round++) {
+        FlValue v;
+        FlValue back = FL_NIL_V;
+        FlValue out = FL_NIL_V;
+        FlNode *node;
+        Bytebuf text;
+        u32 before = f.ndiag;
+
+        v = gen_value(&f.vm, 3U);
+        fl_gc_protect(&f.vm, v);
+        bytebuf_init(&text);
+        /* The serializer directly: a Fletch program would have to
+         * escape arbitrary generated bytes into source first, which
+         * would test the escaping rather than the round trip. */
+        if (!fl_fmt_repr(&f.vm, &text, v)) {
+            bytebuf_free(&text);
+            fl_gc_release(&f.vm, 1U);
+            SAG_ASSERT(false);
+            continue;
+        }
+        node = fl_parse_literal(&f.arena, &f.dc, &f.in,
+                                (const char *)text.data, text.len, 0U);
+        if (node == NULL)
+            (void)fprintf(stderr, "round %u did not re-read: %.*s\n",
+                          (unsigned)round, (int)text.len,
+                          (const char *)text.data);
+        SAG_ASSERT_NOT_NULL(node);
+        SAG_ASSERT_EQ_U64((u64)f.ndiag, (u64)before);
+        SAG_ASSERT(ast_to_value(&f, node, &back));
+        if (!deep_equal(v, back))
+            (void)fprintf(stderr, "round %u did not compare equal: %.*s\n",
+                          (unsigned)round, (int)text.len,
+                          (const char *)text.data);
+        SAG_ASSERT(deep_equal(v, back));
+        (void)out;
+        bytebuf_free(&text);
+        fl_gc_release(&f.vm, 1U);
+    }
     flfix_close(&f);
 }

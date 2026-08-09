@@ -868,6 +868,7 @@ const SagTest sag_tests[] = {
     T(fl_vm_upvalues_capture_by_reference),
     T(fl_vm_loop_variable_is_fresh_each_iteration),
     T(fl_vm_lists_and_maps),
+    T(fl_fmt_repr_round_trips_500_generated_values),
     T(fl_re_terminates_on_a_large_subject),
     T(fl_re_replays_the_s20_golden_table),
     T(fl_str_the_s02_corpus_never_splits_a_cluster),

@@ -120,6 +120,16 @@ FlValue fl_split_lines(FlVm *vm, const char *b, u32 n);
 bool fl_fmt_display(FlVm *vm, Bytebuf *out, FlValue v);
 
 /*
+ * fmt.repr's rendering, single-line.
+ *
+ * Exported for DoD 8's round trip, which generates values in C and
+ * needs the SERIALIZER rather than a Fletch program that would have to
+ * escape arbitrary bytes into source first.  Returns false having
+ * raised on a value §12 cannot spell.
+ */
+bool fl_fmt_repr(FlVm *vm, Bytebuf *out, FlValue v);
+
+/*
  * Drops `re`'s compiled-pattern cache and its arena.
  *
  * The cache is a pure function of (pattern bytes, flags) and therefore

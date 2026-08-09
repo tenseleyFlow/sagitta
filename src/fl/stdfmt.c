@@ -606,6 +606,11 @@ bool fl_fmt_display(FlVm *vm, Bytebuf *out, FlValue v)
     return render(vm, out, v, false, 0U);
 }
 
+bool fl_fmt_repr(FlVm *vm, Bytebuf *out, FlValue v)
+{
+    return render(vm, out, v, true, 0U);
+}
+
 /* ---------------------------------------------------------------- */
 /* Padding                                                          */
 /* ---------------------------------------------------------------- */
