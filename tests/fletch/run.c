@@ -687,6 +687,22 @@ static void run_unit(const Unit *u, RunOut *r)
     }
     (void)close(op[0]);
     (void)close(ep[0]);
+    /*
+     * The argv strings, freed on the PARENT side only.
+     *
+     * `u->entry` is the unit's and is not ours; everything before it
+     * came from dupe() for execv's sake, and 36 units x half a dozen
+     * arguments is what LeakSanitizer reported on the first sanitize
+     * run after this file landed.
+     */
+    {
+        size_t k;
+
+        for (k = 0U; k + 1U < na; k++) {
+            if (argv[k] != u->entry)
+                free(argv[k]);
+        }
+    }
     {
         int st = 0;
 
@@ -1042,7 +1058,7 @@ static void collect(const char *dir, const char *relbase)
          */
         if (relbase[0] == '\0' && (strcmp(names[i], "meta") == 0 ||
                                    strcmp(names[i], "roundtrip") == 0)) {
-            free(names[i]);
+            names[i][0] = '\0';      /* freed with the rest, below */
             continue;
         }
         full = joinp(dir, names[i]);
@@ -1102,6 +1118,9 @@ static void collect(const char *dir, const char *relbase)
         free(rel);
         free(full);
     }
+    /* The sorted directory listing is ours; the units took copies. */
+    for (i = 0U; i < nn; i++)
+        free(names[i]);
 }
 
 /* ---------------------------------------------------------------- */
@@ -1713,6 +1732,41 @@ static bool env_on(const char *name)
     return v != NULL && v[0] != '\0' && strcmp(v, "0") != 0;
 }
 
+/*
+ * Everything main() owns, released so the sanitize lane can say
+ * something useful.
+ *
+ * A one-shot tool could exit and let the kernel do it -- but then
+ * LeakSanitizer reports 121 allocations on every run and a REAL leak
+ * introduced later arrives in a list nobody reads.  The teardown is
+ * cheap and it keeps the signal.
+ */
+static void release_all(void)
+{
+    size_t i;
+    size_t j;
+
+    for (i = 0U; i < g_nunits; i++) {
+        Unit *u = &g_units[i];
+
+        for (j = 0U; j < u->ndv; j++)
+            free(u->dv[j].value);
+        for (j = 0U; j < u->nspecs; j++)
+            free(u->specs[j]);
+        for (j = 0U; j < u->ncovers; j++)
+            free(u->covers[j]);
+        free(u->name);
+        free(u->entry);
+    }
+    set_free(&g_cov_prod);
+    set_free(&g_cov_native);
+    set_free(&g_cov_kind);
+    set_free(&g_cov_op);
+    set_free(&g_seen_kinds);
+    free(g_spec_src);
+    free(g_xfail_src);
+}
+
 int main(int argc, char **argv)
 {
     bool ledger_only = false;
@@ -1792,6 +1846,7 @@ int main(int argc, char **argv)
     classify_covers();
     if (ledger_only) {
         emit_ledger(stdout);
+        release_all();
         return ncfg == 0U ? 0 : 1;
     }
     if (check_only) {
@@ -1799,6 +1854,7 @@ int main(int argc, char **argv)
 
         if (bad != 0U)
             (void)printf("fletch: %lu coverage gaps\n", (unsigned long)bad);
+        release_all();
         return bad == 0U && ncfg == 0U ? 0 : 1;
     }
 
@@ -1868,6 +1924,7 @@ int main(int argc, char **argv)
                  (unsigned long)g_nunits, (unsigned long)npass,
                  (unsigned long)nfail, (unsigned long)nskip,
                  (unsigned long)nxfail, (unsigned long)ncfg);
+    release_all();
     if (npass == 0U && nfail == 0U) {
         (void)printf("fletch: no units ran -- an empty suite is not a "
                      "green one\n");
