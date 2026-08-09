@@ -18,12 +18,18 @@
  * re.split       separators drop  re_split_drops_the_separators
  * re.escape      quotes metachars re_escape_round_trips_through_test
  * the LRU past 64 distinct pats   re_the_compile_cache_survives_a_full_cycle
+ * s20's golden table, same spans  re_replays_the_s20_golden_table
+ * empty match over 1 MiB          re_terminates_on_a_large_subject
  *
  * The `arity` kind listed for replace_fn is the VM's, checked at CALL
  * against the native table before the native runs; test_fl_vm covers it
  * once for all ~200 natives rather than once per function.
  */
 #include "flfix.h"
+#include "re_golden.h"
+
+#include <stdio.h>
+#include <string.h>
 
 #define P "import re\n"
 #define PF "import re\nimport fmt\n"
@@ -246,5 +252,100 @@ void test_fl_re_the_compile_cache_survives_a_full_cycle(void)
      * script can regex a binary file without mangling it. */
     FL_EQ(&f, P "return re.replace(\"a\\x80b\", \"a\", \"A\")\n",
           "A\x80" "b");
+    flfix_close(&f);
+}
+
+/* Every byte as \xNN, so a pattern's own backslashes and quotes reach
+ * the engine unmangled by the Fletch lexer on the way. */
+static void re_escape(char *out, size_t cap, const char *b)
+{
+    size_t at = 0U;
+
+    while (*b != '\0' && at + 5U < cap) {
+        at += (size_t)snprintf(out + at, cap - at, "\\x%02x",
+                               (unsigned)(u8)*b);
+        b++;
+    }
+    out[at] = '\0';
+}
+
+/*
+ * DoD 9: s20's golden table, replayed through re.find, with IDENTICAL
+ * spans.
+ *
+ * The same rows the engine itself is checked against -- included from
+ * one header, because "identical" means against one table and not
+ * against a copy of it that drifts.  What this catches is the `re`
+ * module getting the binding wrong: an off-by-one on the subject
+ * window, a flag dropped, a match map built from the wrong group.
+ */
+void test_fl_re_replays_the_s20_golden_table(void)
+{
+    FlFix f;
+    size_t i;
+    size_t replayed = 0U;
+
+    flfix_open(&f);
+    for (i = 0U; i < SAG_ARRAY_LEN(rows); i++) {
+        const ReRow *r = &rows[i];
+        char pat[2048];
+        char inp[2048];
+        char src[8192];
+        char want[256];
+        char flags[8];
+        size_t at = 0U;
+
+        /* The rows carry s20's flag bits; `re` spells them as letters. */
+        if ((r->flags & (u32)SAG_RE_ICASE) != 0U)
+            flags[at++] = 'i';
+        if ((r->flags & (u32)SAG_RE_DOTALL) != 0U)
+            flags[at++] = 's';
+        if ((r->flags & (u32)SAG_RE_LITERAL) != 0U)
+            flags[at++] = 'l';
+        flags[at] = '\0';
+        re_escape(pat, sizeof(pat), r->pat);
+        re_escape(inp, sizeof(inp), r->input);
+        (void)snprintf(src, sizeof(src),
+                       "import re\nimport fmt\n"
+                       "let m = re.find(\"%s\", \"%s\", \"%s\")\n"
+                       "if m == nil { return \"none\" }\n"
+                       "return fmt.f(\"{}..{}\", m.lo, m.hi)\n",
+                       inp, pat, flags);
+        if (r->match)
+            (void)snprintf(want, sizeof(want), "%lld..%lld",
+                           (long long)r->lo, (long long)r->hi);
+        else
+            (void)snprintf(want, sizeof(want), "none");
+        FL_EQ(&f, src, want);
+        replayed++;
+    }
+    /* The table is the contract; s20 keeps it above 130 rows. */
+    SAG_ASSERT(replayed >= 130U);
+    flfix_close(&f);
+}
+
+/*
+ * DoD 9's other half: an empty-matching pattern over a 1 MiB subject
+ * TERMINATES, and loses nothing.
+ *
+ * The rule is tested above on three characters; this is the rule at
+ * size, which is where a scanner that advanced by a byte instead of a
+ * codepoint, or not at all, stops being a hang you can reason about and
+ * becomes one you wait for.
+ */
+void test_fl_re_terminates_on_a_large_subject(void)
+{
+    FlFix f;
+
+    flfix_open(&f);
+    FL_EQ(&f, "import re\nimport str\n"
+              "let s = str.repeat(\"ab\", 524288)\n"
+              "return str.len_bytes(re.replace(s, \"x*\", \"\"))\n",
+          "1048576");
+    /* And with a pattern that matches, over the same 1 MiB. */
+    FL_EQ(&f, "import re\nimport str\n"
+              "let s = str.repeat(\"ab\", 524288)\n"
+              "return str.len_bytes(re.replace(s, \"b\", \"\"))\n",
+          "524288");
     flfix_close(&f);
 }
