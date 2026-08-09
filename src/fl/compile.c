@@ -1229,8 +1229,8 @@ static void comp_stmt(Compiler *c, const FlNode *n)
 /* Entry point                                                      */
 /* ---------------------------------------------------------------- */
 
-FlFn *fl_compile(FlVm *vm, DiagCtx *dc, const FlProgram *p,
-                 u32 file_id, FlOrigin origin)
+static FlFn *compile_program(FlVm *vm, DiagCtx *dc, const FlProgram *p,
+                             u32 file_id, FlOrigin origin, u8 fnkind)
 {
     Compiler top;
     FlFn *fn;
@@ -1247,8 +1247,23 @@ FlFn *fl_compile(FlVm *vm, DiagCtx *dc, const FlProgram *p,
     add_hidden_local(&top, end);   /* slot 0: the top-level "callee" */
     push_depth(&top, 1);
 
-    for (i = 0U; i < p->n; i++)
-        comp_stmt(&top, p->stmts[i]);
+    for (i = 0U; i < p->n; i++) {
+        const FlNode *st = p->stmts[i];
+
+        /*
+         * §2: the prompt's last expression is the entry's VALUE.  Only
+         * the last, and only a bare expression -- `let x = 1` prints
+         * nothing because it evaluates to nothing, which is what makes
+         * a prompt readable.
+         */
+        if (fnkind == (u8)FL_FN_REPL && i + 1U == p->n &&
+            st->kind == FL_A_EXPR_STMT) {
+            comp_expr(&top, st->as.expr_stmt.expr);
+            emit_op(&top, FL_OP_RETURN, st->sp);
+            break;
+        }
+        comp_stmt(&top, st);
+    }
     /*
      * The trailing HALT belongs to the last statement's line, not to
      * line 0.  A zero here is not cosmetic: s32's traceback reads the
@@ -1294,6 +1309,9 @@ FlFn *fl_compile(FlVm *vm, DiagCtx *dc, const FlProgram *p,
     fn->ch.file_id = file_id;
     fn->max_stack = (u16)(top.max_depth < 0 ? 0 : top.max_depth);
     fn->origin = origin;
+    /* s32 §6 names the outermost frame from this: `<script>` for a
+     * file, `<repl>` for one prompt entry. */
+    fn->fnkind = fnkind;
 #if FL_VM_CHECKS
     {
         const char *why = NULL;
@@ -1319,4 +1337,16 @@ FlFn *fl_compile(FlVm *vm, DiagCtx *dc, const FlProgram *p,
     FlNameVec_free(&top.globals);
     FlLineVec_free(&top.lines);
     return fn;
+}
+
+FlFn *fl_compile(FlVm *vm, DiagCtx *dc, const FlProgram *p, u32 file_id,
+                 FlOrigin origin)
+{
+    return compile_program(vm, dc, p, file_id, origin, (u8)FL_FN_SCRIPT);
+}
+
+FlFn *fl_compile_repl(FlVm *vm, DiagCtx *dc, const FlProgram *p, u32 file_id,
+                      FlOrigin origin)
+{
+    return compile_program(vm, dc, p, file_id, origin, (u8)FL_FN_REPL);
 }

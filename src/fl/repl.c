@@ -1,8 +1,12 @@
 /* Sprint 32 §2-§5: the interactive `sag fl` prompt. */
 #include "fl/repl.h"
 
+#include <errno.h>
+#include <poll.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "fl/compile.h"
 #include "fl/gc.h"
@@ -13,6 +17,13 @@
 #include "util/intern.h"
 #include "fl/std.h"
 #include "util/base.h"
+#include "term/input.h"
+#include "term/tty.h"
+#include "text/cursor.h"
+#include "text/edit.h"
+#include "text/piece.h"
+#include "ui/cmdhist.h"
+#include "unicode/width.h"
 
 /* Hand-counting a literal's length is a bug waiting for the next edit
  * to the literal; this file counts nothing. */
@@ -20,6 +31,33 @@ static void put(Bytebuf *b, const char *text)
 {
     bytebuf_append(b, text, strlen(text));
 }
+
+/*
+ * The helpers below are deliberately NOT named cmd_* : that prefix
+ * belongs to Sprint 19's command registry, and scripts/check-cmd-
+ * dispatch.sh requires every cmd_ symbol to appear exactly twice -- a
+ * definition and one registration.  A prompt command is not a registry
+ * command and must not look like one.
+ *
+ * The eight names, in the order `:help` prints them.  One table, so the
+ * help text, the completion list and the did-you-mean candidate set
+ * cannot drift apart -- three copies of eight strings is three chances
+ * to forget one.
+ */
+static const struct {
+    const char *name;
+    const char *arg;
+    const char *doc;
+} REPL_CMDS[] = {
+    {"help",    "[NAME]", "this table, or what NAME is"},
+    {"quit",    "",       "leave; :q is the same"},
+    {"load",    "PATH",   "evaluate PATH here, keeping its globals"},
+    {"reload",  "",       "evaluate the last :load again"},
+    {"globals", "",       "the names you have bound, in order"},
+    {"disasm",  "NAME",   "the bytecode of a function"},
+    {"caps",    "",       "this prompt's origin and its grants"},
+    {"q",       "",       "leave"}
+};
 
 void sag_fl_print_result(FlVm *vm, FlValue v, Bytebuf *out)
 {
@@ -87,49 +125,6 @@ FlReplVerdict sag_fl_repl_classify(Arena *arena, Interner *in,
     return FL_REPL_RUN;
 }
 
-int sag_fl_repl(void)
-{
-    /*
-     * No silent stub: the prompt is Sprint 32 §2-§4 and is not built in
-     * this tree yet.  Naming the section rather than returning a usage
-     * message keeps `sag fl` on a tty from looking like a typo.
-     */
-    (void)fprintf(stderr,
-                  "sagitta: the interactive REPL lands in Sprint 32 §2;\n"
-                  "         `sag fl FILE`, `-e`, and stdin all work today.\n");
-    return SAG_EXIT_ERR;
-}
-
-/* ---------------------------------------------------------------- */
-/* §4: the `:`-commands                                             */
-/* ---------------------------------------------------------------- */
-
-/*
- * The helpers below are deliberately NOT named cmd_* : that prefix
- * belongs to Sprint 19's command registry, and scripts/check-cmd-
- * dispatch.sh requires every cmd_ symbol to appear exactly twice -- a
- * definition and one registration.  A prompt command is not a registry
- * command and must not look like one.
- *
- * The eight names, in the order `:help` prints them.  One table, so the
- * help text, the completion list and the did-you-mean candidate set
- * cannot drift apart -- three copies of eight strings is three chances
- * to forget one.
- */
-static const struct {
-    const char *name;
-    const char *arg;
-    const char *doc;
-} REPL_CMDS[] = {
-    {"help",    "[NAME]", "this table, or what NAME is"},
-    {"quit",    "",       "leave; :q is the same"},
-    {"load",    "PATH",   "evaluate PATH here, keeping its globals"},
-    {"reload",  "",       "evaluate the last :load again"},
-    {"globals", "",       "the names you have bound, in order"},
-    {"disasm",  "NAME",   "the bytecode of a function"},
-    {"caps",    "",       "this prompt's origin and its grants"},
-    {"q",       "",       "leave"}
-};
 
 static void repl_help(Bytebuf *out)
 {
@@ -382,3 +377,511 @@ bool sag_fl_repl_command(FlRepl *r, const char *line, size_t len,
     }
     return true;
 }
+
+/* ---------------------------------------------------------------- */
+/* §2: the line editor, over the ONE text editor                    */
+/* ---------------------------------------------------------------- */
+
+/*
+ * WHAT IS SHARED, AND WHAT IS NOT.
+ *
+ * §2's law is that there is exactly one text editor in this program,
+ * and it holds here at the layer that means it: the prompt's text is a
+ * TextBuf, its caret is a Cursor, its edits go through sag_edit_insert
+ * and sag_edit_delete, and its motion is s02's grapheme-aware
+ * sag_cursor_*.  There is no second buffer type and no char array
+ * pretending to be a line.
+ *
+ * What is NOT shared is COMMAND DISPATCH.  §2 says the only obstacle is
+ * that sag_cmdline_key takes an `Ed *`; in fact the prompt inserts text
+ * by calling sag_ed_invoke(ed, "ed.edit.insert.text", ...) -- the
+ * Sprint 19 registry -- and every editing key is a SAG_MODE_E binding
+ * dispatched the same way.  Reuse needs the registry and the registry
+ * needs an Ed, which `sag fl` does not have and should not grow one
+ * for.  So the key switch below is this prompt's own, and the editing
+ * underneath it is the editor's.
+ *
+ * The EditCtx carries no undo tree and no journal.  edit.c already
+ * treats both as optional, so this is composition rather than a
+ * special case: a prompt line has nothing to journal and nothing to
+ * undo past its own lifetime.
+ */
+typedef struct FlLine {
+    TextBuf *tb;
+    Cursor cur;
+} FlLine;
+
+static EditCtx line_ctx(FlLine *l)
+{
+    EditCtx ec;
+
+    (void)memset(&ec, 0, sizeof(ec));
+    ec.tb = l->tb;
+    return ec;
+}
+
+static void line_open(FlLine *l)
+{
+    l->tb = sag_textbuf_new();
+    (void)memset(&l->cur, 0, sizeof(l->cur));
+}
+
+static void line_close(FlLine *l)
+{
+    sag_textbuf_free(l->tb);
+    l->tb = NULL;
+}
+
+/* The line's bytes, NUL-terminated, caller frees. */
+static char *line_text(const FlLine *l)
+{
+    TextIter it;
+    u64 total = sag_textbuf_len(l->tb);
+    u64 copied = 0U;
+    char *text = sag_xmalloc((size_t)total + 1U);
+
+    if (total != 0U && sag_textiter_begin(&it, l->tb, BYTEOFF(0U))) {
+        while (copied < total) {
+            const u8 *bytes = NULL;
+            size_t n = 0U;
+
+            if (!sag_textiter_chunk(&it, l->tb, &bytes, &n) || n == 0U)
+                break;
+            if ((u64)n > total - copied)
+                n = (size_t)(total - copied);
+            (void)memcpy(text + copied, bytes, n);
+            copied += (u64)n;
+            if (!sag_textiter_advance(&it, l->tb))
+                break;
+        }
+    }
+    text[copied] = '\0';
+    return text;
+}
+
+static void line_insert(FlLine *l, const u8 *bytes, size_t n)
+{
+    EditCtx ec = line_ctx(l);
+
+    if (n == 0U || !sag_edit_insert(&ec, l->cur.pos, bytes, (u64)n))
+        return;
+    l->cur.pos = BYTEOFF(l->cur.pos.v + (u64)n);
+    l->cur.anchor = l->cur.pos;
+}
+
+static void line_delete(FlLine *l, u64 lo, u64 hi)
+{
+    EditCtx ec = line_ctx(l);
+
+    if (hi <= lo || !sag_edit_delete(&ec, (Span){lo, hi}))
+        return;
+    l->cur.pos = BYTEOFF(lo);
+    l->cur.anchor = l->cur.pos;
+}
+
+/* Backspace removes a whole CLUSTER, which is what the user sees --
+ * s02's motion decides where that starts, so an emoji goes in one. */
+static void line_backspace(FlLine *l)
+{
+    Cursor probe = l->cur;
+
+    if (l->cur.pos.v == 0U)
+        return;
+    sag_cursor_left(l->tb, &probe);
+    line_delete(l, probe.pos.v, l->cur.pos.v);
+}
+
+static void line_delete_fwd(FlLine *l)
+{
+    Cursor probe = l->cur;
+
+    if (l->cur.pos.v >= sag_textbuf_len(l->tb))
+        return;
+    sag_cursor_right(l->tb, &probe);
+    line_delete(l, l->cur.pos.v, probe.pos.v);
+}
+
+static void line_set(FlLine *l, const char *text)
+{
+    line_delete(l, 0U, sag_textbuf_len(l->tb));
+    line_insert(l, (const u8 *)text, strlen(text));
+}
+
+/* Word motion, for Ctrl-Left/Right and Ctrl-W. */
+static u64 word_left_of(FlLine *l, u64 from)
+{
+    char *text = line_text(l);
+    u64 at = from;
+
+    while (at > 0U && (text[at - 1U] == ' ' || text[at - 1U] == '\t'))
+        at--;
+    while (at > 0U && text[at - 1U] != ' ' && text[at - 1U] != '\t')
+        at--;
+    free(text);
+    return at;
+}
+
+/* ---------------------------------------------------------------- */
+/* §2: the loop                                                     */
+/* ---------------------------------------------------------------- */
+
+/*
+ * ONE LINE, REDRAWN IN PLACE.  No alternate screen and no grid: the
+ * prompt shares the terminal with whatever came before it, so a
+ * session scrolls like any other program's output and a user can
+ * select and copy it.  Invariant 6 still applies -- the guard restores
+ * the terminal on every exit path, including sag_bug's.
+ */
+/*
+ * Raw mode turns OFF ONLCR, so a bare "\n" drops a row without
+ * returning to column 0 and every line after the first is indented by
+ * the length of the one above it.  Everything the prompt prints goes
+ * through here.
+ */
+static void write_out(const Bytebuf *out)
+{
+    size_t at = 0U;
+
+    while (at < out->len) {
+        size_t run = at;
+
+        while (run < out->len && out->data[run] != (u8)'\n')
+            run++;
+        if (run > at)
+            (void)fwrite(out->data + at, 1U, run - at, stdout);
+        if (run < out->len)
+            (void)fputs("\r\n", stdout);
+        at = run + 1U;
+    }
+    (void)fflush(stdout);
+}
+
+static void redraw(const FlLine *l, const char *prompt)
+{
+    char *text = line_text(l);
+    int cells;
+
+    /* CR, the prompt, the line, then clear to the end: the erase has to
+     * come AFTER the text or a line that just got shorter keeps its
+     * tail. */
+    (void)fprintf(stdout, "\r%s%s\x1b[K", prompt, text);
+    /* Put the caret where the cursor is, measured in CELLS -- a CJK
+     * name is two columns per cluster and a byte count would land the
+     * caret inside it. */
+    cells = sag_str_width((const u8 *)text, (size_t)l->cur.pos.v, 1U);
+    (void)fprintf(stdout, "\r\x1b[%dC",
+                  (int)strlen(prompt) + (cells < 0 ? 0 : cells));
+    (void)fflush(stdout);
+    free(text);
+}
+
+/*
+ * The prompt's diagnostics go into the SAME Bytebuf as its results,
+ * not to stderr.  A prompt redraws the line it is sitting on, so a
+ * complaint that arrived on a different stream would land in the
+ * middle of the caret run and leave the terminal looking corrupt.
+ */
+static void repl_sink(void *ctx, FlDiagLevel level, FlSpan sp,
+                      const char *msg, const char *rendered)
+{
+    Bytebuf *out = ctx;
+
+    (void)level;
+    (void)sp;
+    if (rendered != NULL)
+        put(out, rendered);
+    else if (msg != NULL)
+        bytebuf_printf(out, "sagitta: %s\n", msg);
+}
+
+/*
+ * ONE COMPLETED ENTRY.  `pending` holds everything typed since the last
+ * prompt, newline-terminated per line; it is CLEARED when the entry is
+ * disposed of and LEFT INTACT when more input is wanted, which is the
+ * whole of the continuation protocol.
+ */
+static void handle_entry(FlRepl *r, Bytebuf *pending, Bytebuf *out,
+                         bool *quit)
+{
+    FlProgram p;
+    FlFn *fn;
+    FlValue result;
+    const char *src = (const char *)pending->data;
+    size_t len = pending->len;
+
+    if (len == 0U)
+        return;
+    /* A `:`-command only when nothing is pending before it: inside a
+     * continuation the bytes are source, and source may legitimately
+     * start a line with `:`. */
+    if (sag_fl_repl_command(r, src, len, out, quit)) {
+        pending->len = 0U;
+        return;
+    }
+    switch (sag_fl_repl_classify(r->arena, r->in, src, len)) {
+    case FL_REPL_CONTINUE:
+        return;                       /* keep pending; show `... ` */
+    case FL_REPL_ERROR:
+        break;                        /* fall through and re-parse loud */
+    case FL_REPL_RUN:
+    default:
+        break;
+    }
+    /*
+     * Re-parsed with the REAL sink now that the entry is known to be
+     * disposable -- classify ran silent precisely so this is the only
+     * place a diagnostic can come from.
+     */
+    /* A fresh DiagCtx per entry: the arena outlives the prompt, so
+     * reusing one would accumulate every line's diagnostics for the
+     * length of the session. */
+    fl_diag_init(r->dc, r->arena);
+    fl_diag_set_sink(r->dc, repl_sink, out);
+    (void)fl_diag_add_file(r->dc, "<repl>", src, len);
+    p = fl_parse(r->arena, r->dc, r->in, src, len, 0U);
+    if (p.had_error) {
+        pending->len = 0U;
+        return;
+    }
+    fn = fl_compile_repl(r->vm, r->dc, &p, 0U, r->vm->root_origin);
+    if (fn == NULL) {
+        pending->len = 0U;
+        return;
+    }
+    result = FL_NIL_V;
+    if (fl_vm_run(r->vm, fn, &result)) {
+        sag_fl_print_result(r->vm, result, out);
+    } else {
+        /* §6: the raise renders with its trace, exactly as a script's
+         * uncaught error does -- a prompt that hid the frames would be
+         * the one place the trace was most wanted. */
+        fl_trace_render(r->vm, r->vm->err, out);
+    }
+    pending->len = 0U;
+}
+
+int sag_fl_repl(void)
+{
+    Arena arena;
+    Interner in;
+    DiagCtx dc;
+    FlVm vm;
+    FlRepl r;
+    FlLine line;
+    Tty tty;
+    TtyGuard guard;
+    In input;
+    CmdHist *hist;
+    HistCur hcur;
+    Bytebuf pending;
+    Bytebuf out;
+    bool quit = false;
+    int rc = SAG_EXIT_OK;
+
+    (void)memset(&tty, 0, sizeof(tty));
+    if (!sag_tty_open(&tty))
+        return SAG_EXIT_IO;
+    (void)memset(&guard, 0, sizeof(guard));
+    /* The restore path is installed BEFORE the first byte of output:
+     * invariant 6 applies to `sag fl` exactly as it does to the
+     * editor, and a prompt that died owing a cooked terminal is a
+     * shell nobody can type into. */
+    if (!sag_tty_guard_start(&guard)) {
+        sag_tty_close(&tty);
+        return SAG_EXIT_IO;
+    }
+    /* Raw, but NO alternate screen: a REPL session belongs in the
+     * scrollback with the shell history around it. */
+    if (!sag_tty_raw(&tty)) {
+        (void)sag_tty_guard_finish(&guard);
+        sag_tty_close(&tty);
+        return SAG_EXIT_IO;
+    }
+    arena_init(&arena);
+    interner_init(&in, &arena);
+    fl_diag_init(&dc, &arena);
+    fl_vm_init(&vm, &arena, &in, &dc);
+    fl_std_register(&vm);
+    (void)memset(&r, 0, sizeof(r));
+    r.vm = &vm;
+    r.arena = &arena;
+    r.in = &in;
+    r.dc = &dc;
+    /* §13: the REPL's origin is FL_ORIGIN_REPL with all four grants --
+     * the user is sitting at it. */
+    vm.root_origin.kind = (u8)FL_ORIGIN_REPL;
+    vm.root_origin.path_id = 0U;
+    vm.root_origin.caps = (u32)FL_CAP_FS_READ | (u32)FL_CAP_FS_WRITE |
+                          (u32)FL_CAP_SHELL | (u32)FL_CAP_NET;
+    sag_input_init(&input, &tty.caps);
+    /* A fourth history file beside the editor's three. */
+    hist = sag_hist_open("fl");
+    (void)memset(&hcur, 0, sizeof(hcur));
+    sag_hist_cur_reset(&hcur, "");
+    line_open(&line);
+    bytebuf_init(&pending);
+    bytebuf_init(&out);
+
+    (void)fprintf(stdout,
+                  "sagitta %s -- :help for help, :quit to leave\r\n",
+                  SAG_VERSION);
+    redraw(&line, FL_REPL_PROMPT);
+    for (;;) {
+        u8 buf[1024];
+        struct pollfd pfd;
+        ssize_t got;
+        int ready;
+        Key key;
+
+        /*
+         * POLL, THEN READ.  Raw mode sets VMIN=0, so a bare read()
+         * returns 0 the instant the input queue is empty -- reading
+         * without waiting first would take that for end-of-input and
+         * quit before the user typed a single byte.
+         */
+        pfd.fd = tty.rfd;
+        pfd.events = POLLIN;
+        pfd.revents = 0;
+        ready = poll(&pfd, 1U, -1);
+        if (ready < 0) {
+            if (errno == EINTR)
+                continue;
+            break;
+        }
+        if (ready == 0)
+            continue;
+        got = read(tty.rfd, buf, sizeof(buf));
+        if (got < 0) {
+            if (errno == EINTR)
+                continue;
+            break;                     /* EIO: the terminal hung up */
+        }
+        if (got == 0)
+            break;                     /* readable and empty: hangup */
+        sag_input_feed(&input, buf, (size_t)got);
+        while (sag_input_next(&input, 0, &key)) {
+            bool redraw_now = true;
+            bool ctrl = (key.mods & SAG_MOD_CTRL) != 0U;
+
+            if (key.ev == SAG_KEY_RELEASE)
+                continue;
+            out.len = 0U;
+            if (key.code == SAG_KEY_ENTER) {
+                char *text = line_text(&line);
+
+                (void)fprintf(stdout, "\r\n");
+                if (pending.len == 0U && text[0] != '\0')
+                    sag_hist_add(hist, text);
+                bytebuf_append(&pending, text, strlen(text));
+                bytebuf_push_u8(&pending, (u8)'\n');
+                free(text);
+                line_set(&line, "");
+                handle_entry(&r, &pending, &out, &quit);
+                if (out.len != 0U)
+                    write_out(&out);
+                if (quit)
+                    goto done;
+                redraw(&line, pending.len == 0U ? FL_REPL_PROMPT
+                                                : FL_REPL_CONT);
+                continue;
+            }
+            switch (key.code) {
+            case SAG_KEY_BACKSPACE:
+                line_backspace(&line);
+                break;
+            case SAG_KEY_DELETE:
+                line_delete_fwd(&line);
+                break;
+            case SAG_KEY_LEFT:
+                if ((key.mods & SAG_MOD_CTRL) != 0U)
+                    line.cur.pos = BYTEOFF(word_left_of(&line,
+                                                        line.cur.pos.v));
+                else
+                    sag_cursor_left(line.tb, &line.cur);
+                line.cur.anchor = line.cur.pos;
+                break;
+            case SAG_KEY_RIGHT:
+                sag_cursor_right(line.tb, &line.cur);
+                line.cur.anchor = line.cur.pos;
+                break;
+            case SAG_KEY_HOME:
+                sag_cursor_line_home(line.tb, &line.cur);
+                line.cur.anchor = line.cur.pos;
+                break;
+            case SAG_KEY_END:
+                sag_cursor_line_end(line.tb, &line.cur);
+                line.cur.anchor = line.cur.pos;
+                break;
+            case SAG_KEY_UP:
+            case SAG_KEY_DOWN: {
+                const char *found = key.code == SAG_KEY_UP
+                                        ? sag_hist_prev(hist, &hcur)
+                                        : sag_hist_next(hist, &hcur);
+
+                if (found != NULL)
+                    line_set(&line, found);
+                break;
+            }
+            default:
+                /* s04 decodes control bytes as the LETTER plus a CTRL
+                 * modifier -- Ctrl-C is 'c'+CTRL, never the raw 0x03 --
+                 * so testing the byte would silently match nothing. */
+                if (key.code == (u32)'c' && ctrl) {
+                    /*
+                     * Ctrl-C discards what is being typed and returns
+                     * to a fresh prompt.  It NEVER exits: a REPL that
+                     * quit on Ctrl-C loses the session every time
+                     * someone reflexively cancels a line.
+                     */
+                    pending.len = 0U;
+                    line_set(&line, "");
+                    (void)fprintf(stdout, "\r\n");
+                } else if (key.code == (u32)'d' && ctrl) {
+                    char *text = line_text(&line);
+                    bool empty = text[0] == '\0' && pending.len == 0U;
+
+                    free(text);
+                    if (empty) {
+                        (void)fprintf(stdout, "\r\n");
+                        goto done;
+                    }
+                    /* With something pending, Ctrl-D discards it like
+                     * Ctrl-C rather than leaving. */
+                    pending.len = 0U;
+                    line_set(&line, "");
+                    (void)fprintf(stdout, "\r\n");
+                } else if (key.code == (u32)'l' && ctrl) {
+                    (void)fprintf(stdout, "\x1b[2J\x1b[H");
+                } else if (key.code < SAG_KEY_BASE && key.ntext != 0U &&
+                           (key.mods & (SAG_MOD_ALT | SAG_MOD_CTRL |
+                                        SAG_MOD_SUPER)) == 0U) {
+                    line_insert(&line, key.text, key.ntext);
+                } else {
+                    redraw_now = false;
+                }
+                break;
+            }
+            if (redraw_now)
+                redraw(&line, pending.len == 0U ? FL_REPL_PROMPT
+                                                : FL_REPL_CONT);
+        }
+    }
+done:
+    bytebuf_free(&out);
+    bytebuf_free(&pending);
+    line_close(&line);
+    sag_hist_flush(hist);
+    sag_input_free(&input);
+    fl_vm_free(&vm);
+    interner_free(&in);
+    arena_free_all(&arena);
+    (void)sag_tty_guard_finish(&guard);
+    sag_tty_close(&tty);
+    return rc;
+}
+
+
+/* ---------------------------------------------------------------- */
+/* §4: the `:`-commands                                             */
+/* ---------------------------------------------------------------- */
+

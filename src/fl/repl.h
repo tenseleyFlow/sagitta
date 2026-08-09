@@ -44,6 +44,11 @@ void sag_fl_print_result(FlVm *vm, FlValue v, Bytebuf *out);
  *     REPL reading only `incomplete` waits forever for a `)` the user
  *     already typed wrong.  had_error is checked FIRST.
  */
+/* The two prompts.  `... ` is the same width as `fl> ` so a
+ * continued entry stays column-aligned with the line above it. */
+#define FL_REPL_PROMPT "fl> "
+#define FL_REPL_CONT   "... "
+
 typedef enum {
     FL_REPL_RUN = 0,     /* complete and clean: compile, run, print   */
     FL_REPL_CONTINUE,    /* still open: show the `... ` prompt        */

@@ -41,6 +41,17 @@ typedef struct FlUpvalDesc {
     bool is_local;
 } FlUpvalDesc;
 
+/*
+ * As fl_compile, but for one REPL entry: when the program's LAST
+ * top-level statement is a bare expression, its value is RETURNed
+ * instead of popped, which is the only difference between `1 + 2` at a
+ * prompt and `1 + 2` in a file.  Everything else -- scoping, globals,
+ * capabilities -- is identical, so a line that works at the prompt
+ * works unchanged in a script.
+ */
+FlFn *fl_compile_repl(FlVm *vm, DiagCtx *dc, const FlProgram *p,
+                      u32 file_id, FlOrigin origin);
+
 FlFn *fl_compile(FlVm *vm, DiagCtx *dc, const FlProgram *p,
                  u32 file_id, FlOrigin origin);
 
