@@ -96,6 +96,30 @@ bool fl_arg_fn(FlVm *vm, FlValue *a, u32 i, FlValue *out);/* callable    */
 void fl_std_set_current(FlVm *vm, u32 name_id);
 
 /* ---------------------------------------------------------------- */
+/* Cross-module primitives                                          */
+/* ---------------------------------------------------------------- */
+
+/*
+ * The ONE definition of line splitting: split on `\n`, drop one
+ * trailing `\r` per line, and keep the empty final line a trailing
+ * terminator produces.
+ *
+ * `io.read_lines` is specified as `str.split_lines` of the file's
+ * content, so it calls this rather than growing a second splitter that
+ * would disagree about CRLF the first time one of them was touched.
+ * Returns a list value; raises nothing.
+ */
+FlValue fl_split_lines(FlVm *vm, const char *b, u32 n);
+
+/*
+ * fmt.str's rendering, which `io.print` joins with spaces.  Exported so
+ * printing a value and formatting it cannot drift; returns false having
+ * raised only if the value is one display cannot reach, which today is
+ * none of them.
+ */
+bool fl_fmt_display(FlVm *vm, Bytebuf *out, FlValue v);
+
+/* ---------------------------------------------------------------- */
 /* Capabilities (spec §13)                                          */
 /* ---------------------------------------------------------------- */
 

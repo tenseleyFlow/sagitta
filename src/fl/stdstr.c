@@ -545,36 +545,55 @@ static bool s_split(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     return true;
 }
 
-static bool s_split_lines(FlVm *vm, FlValue *a, u32 n, FlValue *out)
+/*
+ * Shared with io.read_lines, which the sprint defines AS this function
+ * applied to a file's bytes.  One implementation is the only way that
+ * definition stays true.
+ *
+ * A trailing terminator produces a final empty line: "a\r\nb\r\n" is
+ * three lines, the last of them empty.  That is what the sprint's
+ * wording says and it is the reading that round-trips -- join(split(s))
+ * is s only if the terminator is represented.
+ */
+FlValue fl_split_lines(FlVm *vm, const char *b, u32 n)
 {
-    const FlStr *s;
-    FlList *r;
+    FlList *r = fl_list_new(vm);
     size_t at = 0U;
+    Bytebuf piece;
 
-    (void)n;
-    if (!fl_arg_str(vm, a, 0U, &s))
-        return false;
-    r = fl_list_new(vm);
     fl_gc_protect(vm, FL_OBJ_V(FL_LIST, r));
-    while (at <= (size_t)s->len) {
+    while (at <= (size_t)n) {
         size_t nl = at;
         size_t end;
 
-        while (nl < (size_t)s->len && s->b[nl] != '\n')
+        while (nl < (size_t)n && b[nl] != '\n')
             nl++;
         end = nl;
         /* ONE trailing \r per line, so a CRLF file reads the same as a
          * LF one -- and a line that genuinely ends "\r\r" keeps the
          * first, because only the line terminator is ours to remove. */
-        if (end > at && s->b[end - 1U] == '\r')
+        if (end > at && b[end - 1U] == '\r')
             end--;
-        (void)fl_list_push(vm, r, slice_val(vm, s, at, end));
-        if (nl >= (size_t)s->len)
+        bytebuf_init(&piece);
+        if (end > at)
+            bytebuf_append(&piece, b + at, end - at);
+        (void)fl_list_push(vm, r, take(vm, &piece));
+        if (nl >= (size_t)n)
             break;
         at = nl + 1U;
     }
     fl_gc_release(vm, 1U);
-    *out = FL_OBJ_V(FL_LIST, r);
+    return FL_OBJ_V(FL_LIST, r);
+}
+
+static bool s_split_lines(FlVm *vm, FlValue *a, u32 n, FlValue *out)
+{
+    const FlStr *s;
+
+    (void)n;
+    if (!fl_arg_str(vm, a, 0U, &s))
+        return false;
+    *out = fl_split_lines(vm, s->b, s->len);
     return true;
 }
 
