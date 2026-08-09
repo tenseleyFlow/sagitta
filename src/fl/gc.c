@@ -423,7 +423,17 @@ static FlStr *strtab_find(const FlStrTab *t, const char *b, u32 n, u32 hash)
 
         if (s == NULL)
             return NULL;
-        if (s->len == n && s->h.aux == hash && memcmp(s->b, b, n) == 0)
+        /*
+         * The length check comes FIRST and short-circuits the compare.
+         *
+         * memcmp with a null pointer is undefined even for a length of
+         * zero -- the standard attaches nonnull to both arguments -- so
+         * `fl_str_new(vm, NULL, 0)`, which is a perfectly natural way
+         * to ask for the empty string, tripped UBSan here the first
+         * time the stdlib fuzzer handed it a zero-length input.
+         */
+        if (s->len == n && s->h.aux == hash &&
+            (n == 0U || memcmp(s->b, b, n) == 0))
             return s;
         at = (at + 1U) & (t->cap - 1U);
     }
