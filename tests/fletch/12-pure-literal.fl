@@ -1,0 +1,99 @@
+# SPEC: §12, §4
+# COVERS: fmt.f fmt.str fmt.repr fmt.int fmt.float fmt.hex fmt.pad
+# COVERS: pl_file pl_value pl_list pl_map pl_entry
+#
+# §12 and the fmt module that implements its serializer half.
+#
+# THE ROUND-TRIP LAW: `fmt.repr(v)` re-reads through the pure-literal
+# grammar as an equal value, or it raises.  §12's grammar is narrower
+# than §4's value space, and every place they differ is a raise rather
+# than text that will not parse -- which is the only way a workspace
+# file written by Sprint 36 can be trusted to load again.
+import io
+import fmt
+import map
+
+# -- fmt.f: the template form ---------------------------------------
+# OUT: 1 and x
+io.print(fmt.f("{} and {}", 1, "x"))
+# A literal brace is doubled, so a template can contain one.
+# OUT: {} literally
+io.print(fmt.f("{{}} literally"))
+
+# -- fmt.str is the DISPLAY side and never quotes --------------------
+# OUT: q nil true 1.0
+io.print(fmt.str("q"), fmt.str(nil), fmt.str(true), fmt.str(1.0))
+# OUT: [1, 2]
+io.print(fmt.str([1, 2]))
+
+# -- fmt.repr is the ROUND-TRIP side and always quotes ---------------
+# OUT: "q"
+io.print(fmt.repr("q"))
+# An escape is re-emitted as an escape, not as the raw byte: a literal
+# newline inside the quotes would not re-read as one string.
+# OUT: "a\nb"
+io.print(fmt.repr("a\nb"))
+# OUT: [1, "a"]
+io.print(fmt.repr([1, "a"]))
+# OUT: {a: 1, b: [2]}
+io.print(fmt.repr({a: 1, b: [2]}))
+
+# The indented form is the Sprint 25 workspace format, byte for byte.
+# CHECK: {
+# CHECK_NEXT:   a: 1,
+# CHECK_NEXT: }
+io.print(fmt.repr({a: 1}, 2))
+
+# -- the law itself, asserted rather than described ------------------
+# Every value here is written twice: once as a literal and once as the
+# text repr produced for it.  If they differ, the round trip is broken.
+# OUT: true
+io.print(fmt.repr([1, 2.5, "s", true, nil]) == "[1, 2.5, \"s\", true, nil]")
+# OUT: true
+io.print(fmt.repr({k: [1]}) == "{k: [1]}")
+# A key that would not lex back as an identifier is QUOTED, because
+# `{nil: 1}` is a parse error rather than the map it looks like.
+# OUT: {"nil": 1}
+io.print(fmt.repr({"nil": 1}))
+
+# -- §12's five refusals: a cycle is the one that cannot be text -----
+let cyc = [nil]
+cyc[0] = cyc
+try {
+    io.print(fmt.repr(cyc))
+    io.print("repr emitted a cycle")
+} catch e {
+    # OUT: type
+    io.print(e.kind)
+}
+# fmt.str is the display side and does NOT raise on one -- it elides,
+# because a debug print of a cyclic structure must still print.
+# OUT: [[...]]
+io.print(fmt.str(cyc))
+
+# A non-finite float has no §12 spelling, so repr refuses it.
+import math
+try {
+    io.print(fmt.repr(math.inf))
+    io.print("repr emitted a non-finite float")
+} catch e {
+    # OUT: type
+    io.print(e.kind)
+}
+
+# -- number formatting -----------------------------------------------
+# OUT: 255 ff 007
+io.print(fmt.int(255), fmt.int(255, 16), fmt.int(7, 10, 3))
+# OUT: 1.23
+io.print(fmt.float(1.23456, 2))
+# OUT: ff 00ff
+io.print(fmt.hex(255), fmt.hex(255, 4))
+
+# -- fmt.pad aligns by DISPLAY CELLS ---------------------------------
+# OUT: |ab   | |   ab| |.ab..|
+io.print("|" + fmt.pad("ab", 5) + "|",
+         "|" + fmt.pad("ab", 5, ">") + "|",
+         "|" + fmt.pad("ab", 5, "^", ".") + "|")
+# A frozen module map is still a map, and reprs as one.
+# OUT: true
+io.print(map.len(map.freeze({a: 1})) == 1)

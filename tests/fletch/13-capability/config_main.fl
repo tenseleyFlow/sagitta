@@ -1,0 +1,104 @@
+# SPEC: §13, §11
+# ORIGIN: config
+# CAPS: fs.read,fs.write
+# COVERS: io.read io.read_lines io.write io.append io.exists io.is_dir
+# COVERS: io.size io.remove io.mkdir io.glob io.env io.print io.eprint
+# COVERS: kind:io
+#
+# Every io function, run under an explicit GRANT SET rather than as the
+# CLI.  `--caps fs.read,fs.write` is what makes this a §13 test and not
+# just an io test: the same calls under `# CAPS: none` are the denial
+# case in ../errors/cap_denied.fl.
+#
+# Everything is written under a directory this file creates and removes,
+# so the suite leaves nothing behind and two runs cannot collide.
+import io
+import str
+import list
+
+let dir = "build/fletch-tmp-io"
+io.mkdir(dir, true)
+
+# -- write, read back, size ------------------------------------------
+let p = dir + "/a.txt"
+io.write(p, "hello\n")
+# OUT: hello
+io.print(str.trim(io.read(p)))
+# OUT: 6
+io.print(io.size(p))
+
+# -- append is additive, not a second write --------------------------
+io.append(p, "world\n")
+# OUT: ["hello", "world", ""]
+io.print(io.read_lines(p))
+
+# -- existence and kind ----------------------------------------------
+# OUT: true true false
+io.print(io.exists(p), io.is_dir(dir), io.is_dir(p))
+# OUT: false
+io.print(io.exists(dir + "/nope.txt"))
+
+# -- glob sorts the WHOLE result bytewise, not per directory ---------
+# A depth-first walk emits `sub/z.txt` before `a.txt`; bytewise, `.`
+# sorts before `/`, so the flat sort is what the contract says and the
+# walk order is not.
+io.mkdir(dir + "/sub", true)
+io.write(dir + "/sub/z.txt", "z")
+io.write(dir + "/b.txt", "b")
+#
+# THE ROOT IS PASSED EXPLICITLY, and the reason is the asymmetry
+# asserted just below: glob's default root is the importing module's
+# directory (s31: "never the process cwd -- a config must behave the
+# same whatever directory sagitta was launched from"), while io.read
+# and io.write resolve a relative path against the PROCESS CWD.  The
+# same relative string therefore names two different files depending
+# on which function receives it.
+# The results carry the root, so a caller can hand one straight back
+# to io.read without rebuilding the path.
+let g = io.glob("**/*.txt", dir)
+# OUT: ["build/fletch-tmp-io/a.txt", "build/fletch-tmp-io/b.txt", "build/fletch-tmp-io/sub/z.txt"]
+io.print(g)
+# `*` does not cross a slash and `**` does -- that is the whole
+# difference between the two metacharacters.
+# OUT: ["build/fletch-tmp-io/a.txt", "build/fletch-tmp-io/b.txt"]
+io.print(io.glob("*.txt", dir))
+
+# The asymmetry itself, pinned so that changing either half is a
+# deliberate act with a failing test attached rather than a surprise.
+# A pattern with no root looks beside THIS FILE, where nothing was
+# written, so it finds nothing; the identical string handed to
+# io.exists resolves against the cwd and finds the file.
+# OUT: []
+io.print(io.glob(dir + "/*.txt"))
+# OUT: true
+io.print(io.exists(dir + "/b.txt"))
+
+# -- the environment --------------------------------------------------
+# A missing variable is nil, never "": a caller must be able to tell
+# "unset" from "set to empty".
+# OUT: nil
+io.print(io.env("SAG_FLETCH_DEFINITELY_UNSET"))
+
+# -- stderr is a separate stream, and CHECK never sees it ------------
+io.eprint("this goes to stderr")
+# CHECK_NOT: this goes to stderr
+
+# -- a read that cannot succeed is kind "io", and it is catchable ----
+try {
+    io.print(io.read(dir + "/missing.txt"))
+    io.print("read of a missing file succeeded")
+} catch e {
+    # OUT: io
+    io.print(e.kind)
+}
+
+# -- remove, and the directory afterwards ----------------------------
+io.remove(p)
+# OUT: false
+io.print(io.exists(p))
+io.remove(dir + "/b.txt")
+io.remove(dir + "/sub/z.txt")
+io.remove(dir + "/sub")
+io.remove(dir)
+# OUT: false
+io.print(io.exists(dir))
