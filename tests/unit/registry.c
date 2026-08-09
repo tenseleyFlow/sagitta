@@ -873,6 +873,7 @@ const SagTest sag_tests[] = {
     T(fl_vm_gc_collects_only_unreachable_objects),
     T(fl_vm_gc_root_globals_keeps_values_alive),
     T(fl_vm_gc_stress_runs_a_whole_program),
+    T(fl_vm_spec_14_program_compiles_and_defers_visibly),
     T(fl_vm_spec_14_total_is_17),
     T(fl_vm_spec_14_counter_yields_9_then_10),
     T(fl_vm_spec_14_motion_raises_against_the_null_host),

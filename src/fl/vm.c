@@ -14,6 +14,7 @@
 #include "fl/vm.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "fl/compile.h"
@@ -71,6 +72,17 @@ bool fl_vm_init(FlVm *vm, Arena *a, Interner *in, DiagCtx *dc)
     vm->host = &fl_host_null;
     vm->sp = vm->stack;
     fl_gc_init(&vm->gc);
+    /*
+     * The GC-stress lane, per s30 DoD 7.  Read here rather than passed
+     * in, because the point is to run the WHOLE existing suite under
+     * stress without every test learning about it -- a lane that needs
+     * each caller to opt in is a lane that covers whatever people
+     * remembered to change.
+     *
+     * ~30x slower, so it is its own lane and never `make test`.
+     */
+    if (getenv("FL_GC_STRESS") != NULL)
+        vm->gc.stress = true;
 #if FL_VM_TRACE
     bytebuf_init(&vm->trace);
 #endif

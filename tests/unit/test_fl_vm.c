@@ -687,6 +687,70 @@ void test_fl_vm_spec_14_counter_yields_9_then_10(void)
     SAG_ASSERT_EQ_I64(run_int(src), 10);
 }
 
+void test_fl_vm_spec_14_program_compiles_and_defers_visibly(void)
+{
+    VmFix f;
+    FlValue out;
+    FlValue got;
+    /* §14 verbatim, less the comments. */
+    static const char *const src =
+        "import str\n"
+        "let greet = \"hi\\tthere\\n\"\n"
+        "let nums  = [1, 2.5, 0x10]\n"
+        "let cfg   = { tabwidth: 4, wrap: false, name: nil }\n"
+        "fn clamp(x, lo, hi) {\n"
+        "    if x < lo { return lo }\n"
+        "    else if x > hi { return hi }\n"
+        "    return x\n"
+        "}\n"
+        "fn counter(start) {\n"
+        "    let n = start\n"
+        "    return fn() { n = n + 1; return n }\n"
+        "}\n"
+        "let next = counter(clamp(9, 0, 8))\n"
+        "while next() < 10 { }\n"
+        "let total = 0\n"
+        "for x in nums {\n"
+        "    if x == 2.5 { continue }\n"
+        "    total = total + x\n"
+        "}\n"
+        "macro dup = @[ l< H(lv) yank v paste esc ]\n"
+        "fn shout(s) {\n"
+        "    try { edit { @[ 2v i\"!\" del ] } }\n"
+        "    catch e { return str.upper(e.kind) or \"?\" }\n"
+        "}\n"
+        "return total\n";
+
+    /*
+     * DoD 4 has four claims and this sprint can meet three: `total`,
+     * and both of `counter`'s values, are asserted above.  The fourth
+     * -- `shout` returning "MOTION" -- needs `str.upper`, and the whole
+     * `str` module is Sprint 31's.
+     *
+     * So what is asserted here is that the deferral is VISIBLE: the
+     * example parses and compiles clean today, every construct in it
+     * including `macro` and the motion literal, and running it stops at
+     * `import str` with a message naming the sprint that owes the
+     * behaviour.  That is the project's no-silent-stubs rule doing its
+     * job, and it is the difference between "not done yet" and "returns
+     * nil and nobody notices".
+     */
+    vf_open(&f);
+    SAG_ASSERT(!vf_run(&f, src, &out));
+    SAG_ASSERT_EQ_U64((u64)out.t, (u64)FL_MAP);
+    SAG_ASSERT(fl_map_get((FlMap *)out.as.o,
+                          FL_OBJ_V(FL_STR, fl_str_new(&f.vm, "kind", 4U)),
+                          &got));
+    SAG_ASSERT_EQ_I64(memcmp(((FlStr *)got.as.o)->b, "import", 6U), 0);
+    SAG_ASSERT(fl_map_get((FlMap *)out.as.o,
+                          FL_OBJ_V(FL_STR, fl_str_new(&f.vm, "msg", 3U)),
+                          &got));
+    SAG_ASSERT_NOT_NULL(strstr(((FlStr *)got.as.o)->b, "Sprint 31"));
+    /* Compiled clean: the failure was at RUN time, not a diagnostic. */
+    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    vf_close(&f);
+}
+
 void test_fl_vm_spec_14_motion_raises_against_the_null_host(void)
 {
     /*
