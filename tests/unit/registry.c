@@ -868,6 +868,8 @@ const SagTest sag_tests[] = {
     T(fl_vm_upvalues_capture_by_reference),
     T(fl_vm_loop_variable_is_fresh_each_iteration),
     T(fl_vm_lists_and_maps),
+    T(fl_modules_list_natives_is_deterministic),
+    T(fl_gc_root_builtins),
     T(fl_math_keeps_the_type_it_was_given),
     T(fl_math_rounds_toward_the_named_direction),
     T(fl_math_converts_between_int_and_float),

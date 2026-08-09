@@ -1,4 +1,5 @@
 #include "args.h"
+#include "flcli.h"
 #include "edit/cmd.h"
 #include "edit/ed.h"
 #include "mod/mods.h"
@@ -19,6 +20,9 @@ static const char help_text[] =
     "  --version        Show version and compiled modules.\n"
     "  --clean          Ignore user configuration (Sprint 36).\n"
     "  --batch <file>   Run a Fletch batch script (Sprint 37).\n"
+    "\n"
+    "Subcommands:\n"
+    "  sag fl FILE      Run a Fletch script headlessly.\n"
     "\n"
     "Command line:\n"
     "  Lines beginning with a space are not saved in command history.\n"
@@ -110,9 +114,7 @@ static int run_driver(const SagArgs *args)
             "sagitta: error: --clean is not yet implemented: Sprint 36\n");
         return SAG_EXIT_ERR;
     }
-    if (args->nfiles != 0U &&
-        (strcmp(args->files[0], "fl") == 0 ||
-         strcmp(args->files[0], "pkg") == 0)) {
+    if (args->nfiles != 0U && strcmp(args->files[0], "pkg") == 0) {
         (void)fprintf(stderr, "sagitta: error: unknown argument '%s'\n",
             args->files[0]);
         return SAG_EXIT_ERR;
@@ -128,6 +130,15 @@ static int run_driver(const SagArgs *args)
 int main(int argc, char **argv)
 {
     Bytebuf err = {0};
+
+    /*
+     * `sag fl` is handled BEFORE the editor's parser: its options are
+     * not the editor's, and threading --list-natives through one parser
+     * would make it a top-level flag that means nothing anywhere else.
+     */
+    if (argc >= 2 && strcmp(argv[1], "fl") == 0)
+        return sag_fl_main(argc - 1, argv + 1);
+
     SagArgs args;
     int result = sag_args_parse(&args, argc, argv, &err);
 

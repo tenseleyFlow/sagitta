@@ -15,6 +15,7 @@
  * a module keeps its globals  modules_keep_their_own_globals
  * cycle names the whole chain modules_a_cycle_names_the_whole_chain
  * deferred editor surfaces    modules_deferred_surfaces_name_their_sprint
+ * --list-natives, determinism modules_list_natives_is_deterministic
  *
  * The (realpath, origin.kind) key's SECURITY half -- a helper imported
  * by a plugin runs with the plugin's grants -- is tested where it
@@ -27,6 +28,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#include "util/buf.h"
 
 /* The library every case here imports. */
 static void write_lib(FlFix *f)
@@ -210,5 +213,54 @@ void test_fl_modules_deferred_surfaces_name_their_sprint(void)
      * exist for Sprint 54 to prompt for. */
     FL_EQ(&f, "import io\nreturn io.run\n", "!key: no field 'run' on map");
     FL_EQ(&f, "import io\nreturn io.http\n", "!key: no field 'http' on map");
+    flfix_close(&f);
+}
+
+void test_fl_modules_list_natives_is_deterministic(void)
+{
+    FlFix f;
+    Bytebuf a;
+    Bytebuf b;
+    u32 na;
+    u32 nb;
+    size_t i;
+    u32 lines = 0U;
+
+    flfix_open(&f);
+    bytebuf_init(&a);
+    bytebuf_init(&b);
+    /*
+     * DoD 2's hidden flag.  Sprint 33's coverage ledger DIFFS against
+     * this output, so the order has to be a property rather than a
+     * habit: the tables are static and walked in registration order,
+     * which is spec §11's own listing order.
+     */
+    na = fl_std_list_natives(&f.vm, &a);
+    nb = fl_std_list_natives(&f.vm, &b);
+    SAG_ASSERT_EQ_U64((u64)na, (u64)nb);
+    SAG_ASSERT_EQ_U64((u64)a.len, (u64)b.len);
+    SAG_ASSERT_EQ_I64(memcmp(a.data, b.data, a.len), 0);
+    /* §11's order: str first, re last. */
+    SAG_ASSERT_EQ_I64(memcmp(a.data, "str.len\n", 8U), 0);
+    SAG_ASSERT_EQ_I64(memcmp(a.data + a.len - 10U, "re.escape\n", 10U), 0);
+    /* Every line is `module.name`, once. */
+    for (i = 0U; i < a.len; i++) {
+        if (a.data[i] == (u8)'\n')
+            lines++;
+    }
+    SAG_ASSERT_EQ_U64((u64)lines, (u64)na);
+    /*
+     * 117 = 30 str + 19 list + 12 map + 29 math + 7 fmt + 13 io + 7 re,
+     * which is every row of every table in the sprint.  Pinned so a
+     * function added or lost shows up here rather than in s33's ledger
+     * three sprints later.
+     *
+     * DoD 2 asks for 150 and the sprint's own tables define 117; see
+     * the DoD-walk note.  The number below is the tables, not the
+     * target.
+     */
+    SAG_ASSERT_EQ_U64((u64)na, 117U);
+    bytebuf_free(&a);
+    bytebuf_free(&b);
     flfix_close(&f);
 }

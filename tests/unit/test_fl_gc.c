@@ -226,6 +226,42 @@ void test_fl_gc_root_globals_and_modules(void)
 }
 
 /* ---------------------------------------------------------------- */
+/* Root 9: the builtin module maps                                  */
+/* ---------------------------------------------------------------- */
+
+/*
+ * The LAST root in the §9 table to get a drop-test, and the discipline
+ * says every one of them has one: reachable only through the root,
+ * survives a collection, then dies when the root lets go.
+ *
+ * Separate from `modules` because the two are keyed differently --
+ * builtins by IDENT, files by (realpath, origin kind) -- and folding
+ * them into one map would make `import str` and `import "str"` reach
+ * the same object, which spec §11 says they must not.
+ */
+void test_fl_gc_root_builtins(void)
+{
+    GcFix f;
+    FlStr *b;
+    FlValue key;
+
+    gf_open(&f);
+    key = FL_OBJ_V(FL_STR, fl_str_new(&f.vm, "bk", 2U));
+    fl_gc_protect(&f.vm, key);
+    b = witness(&f, "builtin");
+    (void)fl_map_set(&f.vm, f.vm.builtins, key, FL_OBJ_V(FL_STR, b));
+    fl_gc_release(&f.vm, 1U);
+
+    fl_gc_collect(&f.vm);
+    SAG_ASSERT(still_live(&f.vm, b));
+
+    SAG_ASSERT(fl_map_del(f.vm.builtins, key));
+    fl_gc_collect(&f.vm);
+    SAG_ASSERT(!still_live(&f.vm, b));
+    gf_close(&f);
+}
+
+/* ---------------------------------------------------------------- */
 /* Root 6: the handle table (Sprint 34 fills it; rooted now)        */
 /* ---------------------------------------------------------------- */
 
