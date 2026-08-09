@@ -3943,6 +3943,47 @@ static void case_s32_repl_session(PtyCtx *c)
 }
 
 /*
+ * Sprint 33 §6, ARTIFACT 3 OF THE FLETCH HELLO WORLD MILESTONE.
+ *
+ * The interactive half: a prompt, `io.print("hello, world")`, the
+ * output, and `:quit` with a clean exit 0.  The script and -e halves
+ * are in scripts/smoke.sh and the coverage gate is the fourth.
+ *
+ * Kept separate from s32's session case even though both drive the
+ * prompt, because they fail for different reasons and a reader
+ * chasing "did the milestone break" should not have to read an
+ * import-and-closures scenario to find out.
+ */
+static void case_s33_hello_world_repl(PtyCtx *c)
+{
+    spawn_repl(c);
+    /*
+     * `import io` on its own line, as spec §11 requires -- the
+     * builtins are imported, not ambient.  The milestone is the whole
+     * two-line program, not a one-liner that happens to work.
+     */
+    ptc_bytes(c, "import io\r");
+    ptc_settle(c, 60);
+    ptc_bytes(c, "io.print(\"hello, world\")\r");
+    ptc_settle(c, 120);
+    /* Thin by design: the VT grids only the ALTERNATE screen, and the
+     * prompt deliberately stays on the primary one so a session
+     * scrolls into the shell's history.  The grid still pins alt=0 and
+     * the cursor, which IS the assertion that the prompt never took
+     * the screen; the content is asserted against the bytes below. */
+    ptc_snapshot(c, "s33_hello_world_repl");
+    ptc_allow_restore(c);
+    ptc_bytes(c, ":quit\r");
+    ptc_expect_exit(c, 0);
+    /* After the reap, so everything the child wrote is in the log. */
+    REPL_SAW(c, "fl> ");
+    REPL_SAW(c, "hello, world\r\n");
+    /* io.print returns nil, and the prompt does not echo a nil result
+     * -- a session that printed `nil` after every print is unusable. */
+    ptc_reject_output(c, "nil\r\n", 10U);
+}
+
+/*
  * INVARIANT 6 THROUGH sag_bug.  §9's reporter runs from inside the VM
  * with the terminal in raw mode; the restore prehook has to fire before
  * a byte of the report reaches the screen, or the user is left with a
@@ -4266,6 +4307,7 @@ const PtyCase sag_pty_cases[] = {
     C(s27_double_click_mode_chip, modern, 24U, 80U,
       case_s27_double_click_mode_chip),
     C(s32_repl_session, modern, 24U, 80U, case_s32_repl_session),
+    C(s33_hello_world_repl, modern, 24U, 80U, case_s33_hello_world_repl),
     C(s32_bug_restores_the_terminal, modern, 24U, 80U,
       case_s32_bug_restores_the_terminal),
     {NULL, NULL, 0U, 0U, NULL}

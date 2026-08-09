@@ -263,3 +263,32 @@ SAG_FL_DUMP_BAD_CHUNK=$tmp/badchunk.txt "$bin" fl --selftest-fl-bug \
 grep -E '^[0-9]{4}  [0-9]+:[0-9]+  [A-Z_]+' "$tmp/badchunk.txt" >/dev/null || \
     fail "SAG_FL_DUMP_BAD_CHUNK output is not a disassembly"
 echo "smoke: fl bad-chunk dump ok"
+
+# ---------------------------------------------------------------------
+# Sprint 33 §6: THE FLETCH HELLO WORLD MILESTONE.
+#
+# Two of the four artifacts live here -- a script and an -e expression,
+# both printing exactly `hello, world` and exiting 0.  The other two
+# are the REPL pty golden (s06) and `make test-fletch` with its
+# coverage gate.
+#
+# `import io` IS REQUIRED and is part of the milestone rather than
+# noise around it.  Spec §11 makes the builtins imported, not ambient;
+# the sprint's own snippet omits the line, and the spec outranks the
+# sprint (correction C2).  Making `io` implicitly global would be a
+# one-line change and would falsify §11's first sentence.
+hw=$tmp/hello.fl
+printf 'import io\nio.print("hello, world")\n' >"$hw"
+
+run_capture "$bin" fl "$hw"
+expect_rc 0 "fl hello world (script)"
+[ "$(cat "$out")" = "hello, world" ] || \
+    fail "fl hello world printed |$(cat "$out")|"
+[ ! -s "$err" ] || fail "fl hello world wrote to stderr"
+echo "smoke: fl hello world (script) ok"
+
+run_capture "$bin" fl -e 'import io; io.print("hello, world")'
+expect_rc 0 "fl hello world (-e)"
+[ "$(cat "$out")" = "hello, world" ] || \
+    fail "fl -e hello world printed |$(cat "$out")|"
+echo "smoke: fl hello world (-e) ok"

@@ -439,6 +439,13 @@ bool sag_tty_open(Tty *t)
     return true;
 }
 
+static int g_keep_opost;
+
+void sag_tty_set_output_processing(bool keep)
+{
+    g_keep_opost = keep ? 1 : 0;
+}
+
 void sag_tty_rawios(struct termios *io)
 {
     const tcflag_t input_clear = IXON | ICRNL | INLCR | IGNCR | BRKINT |
@@ -446,7 +453,10 @@ void sag_tty_rawios(struct termios *io)
     const tcflag_t local_clear = ECHO | ECHONL | ICANON | ISIG | IEXTEN;
 
     io->c_iflag &= ~input_clear;
-    io->c_oflag &= ~OPOST;
+    if (g_keep_opost)
+        io->c_oflag |= (tcflag_t)(OPOST | ONLCR);
+    else
+        io->c_oflag &= ~OPOST;
     io->c_lflag &= ~local_clear;
     io->c_cflag &= ~(CSIZE | PARENB);
     io->c_cflag |= CS8;
@@ -462,8 +472,12 @@ static bool sag_tty_rawios_equal(const struct termios *left,
     const tcflag_t local = ECHO | ECHONL | ICANON | ISIG | IEXTEN;
     const tcflag_t control = CSIZE | PARENB;
 
+    /* Both sides are compared against g_rawios, which already carries
+     * whatever sag_tty_set_output_processing asked for, so this stays
+     * an exact check rather than becoming a conditional one. */
     return (left->c_iflag & input) == (right->c_iflag & input) &&
-           (left->c_oflag & OPOST) == (right->c_oflag & OPOST) &&
+           (left->c_oflag & (OPOST | ONLCR)) ==
+               (right->c_oflag & (OPOST | ONLCR)) &&
            (left->c_lflag & local) == (right->c_lflag & local) &&
            (left->c_cflag & control) == (right->c_cflag & control) &&
            left->c_cc[VMIN] == right->c_cc[VMIN] &&
@@ -539,6 +553,7 @@ void sag_tty_close(Tty *t)
     if (t == NULL)
         return;
     if (g_owner == t) {
+        g_keep_opost = 0;
         g_resume_raw = 0;
         sag_tty_restore();
         sag_bug_set_prehook(NULL);

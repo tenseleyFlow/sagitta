@@ -11,6 +11,21 @@ durable save paths, and crash journal are in place. Interactive editing and
 Fletch execution land in later sprints; unimplemented surfaces fail with a
 message naming the sprint that provides them.
 
+## Your first Fletch program
+
+```sh
+printf 'import io\nio.print("hello, world")\n' > hello.fl
+sag fl hello.fl                              # hello, world
+sag fl -e 'import io; io.print("hello, world")'
+sag fl                                       # the prompt; :quit to leave
+```
+
+`import io` is not optional: Fletch's builtins are imported rather than
+ambient (spec §11), so a program says what it reaches for. `sag fl --help`
+lists the rest of the surface — `-c` to compile only, `--dump-ast`,
+`--dump-bytecode`, `--list-natives`, and `--caps`/`--origin` to run a script
+with fewer grants than the shell has.
+
 ## Build
 
 ```sh

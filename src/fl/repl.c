@@ -533,26 +533,23 @@ static u64 word_left_of(FlLine *l, u64 from)
  * the terminal on every exit path, including sag_bug's.
  */
 /*
- * Raw mode turns OFF ONLCR, so a bare "\n" drops a row without
- * returning to column 0 and every line after the first is indented by
- * the length of the one above it.  Everything the prompt prints goes
- * through here.
+ * Everything the prompt prints goes through here.
+ *
+ * NO LF->CRLF TRANSLATION: the prompt asks for OPOST|ONLCR to stay on
+ * (sag_tty_set_output_processing), so the kernel does it -- and does
+ * it for `io.print` too, which writes to stdout from inside the VM
+ * and cannot be routed through this function.  Translating here as
+ * well would emit "\r\r\n".
+ *
+ * This used to translate, and io.print's output stair-stepped down
+ * the screen as a result: the prompt's own lines were right and every
+ * line a script printed was wrong, which is a confusing way for the
+ * bug to present.
  */
 static void write_out(const Bytebuf *out)
 {
-    size_t at = 0U;
-
-    while (at < out->len) {
-        size_t run = at;
-
-        while (run < out->len && out->data[run] != (u8)'\n')
-            run++;
-        if (run > at)
-            (void)fwrite(out->data + at, 1U, run - at, stdout);
-        if (run < out->len)
-            (void)fputs("\r\n", stdout);
-        at = run + 1U;
-    }
+    if (out->len != 0U)
+        (void)fwrite(out->data, 1U, out->len, stdout);
     (void)fflush(stdout);
 }
 
@@ -690,8 +687,16 @@ static int repl_main(bool selftest_bug)
         sag_tty_close(&tty);
         return SAG_EXIT_IO;
     }
-    /* Raw, but NO alternate screen: a REPL session belongs in the
-     * scrollback with the shell history around it. */
+    /*
+     * Raw, but NO alternate screen: a REPL session belongs in the
+     * scrollback with the shell history around it.
+     *
+     * And raw WITH output processing, which the editor turns off: the
+     * prompt is line-oriented, so the kernel's LF->CRLF is exactly
+     * what it wants -- for its own output and, more importantly, for
+     * whatever `io.print` writes from inside the VM.
+     */
+    sag_tty_set_output_processing(true);
     if (!sag_tty_raw(&tty)) {
         (void)sag_tty_guard_finish(&guard);
         sag_tty_close(&tty);

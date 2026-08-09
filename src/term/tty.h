@@ -66,6 +66,24 @@ bool sag_tty_guard_finish(TtyGuard *guard);
 bool sag_tty_open(Tty *t);
 bool sag_tty_raw(Tty *t);
 void sag_tty_rawios(struct termios *io);
+
+/*
+ * Keep OPOST|ONLCR while raw, for LINE-ORIENTED programs.
+ *
+ * Full-screen sagitta wants output processing off: it positions the
+ * cursor itself and a kernel that rewrote its bytes would fight it.
+ * The Fletch prompt is the opposite -- it scrolls with the shell, and
+ * with ONLCR off a bare "\n" drops a row without returning to column
+ * 0, so every line after the first is indented by the one above it.
+ *
+ * Doing it in the TERMIOS rather than in the writer is what makes it
+ * uniform: the prompt can translate its own output, but `io.print`
+ * writes to stdout from inside the VM and cannot be reached from
+ * here.  One setting covers every writer.
+ *
+ * Call BEFORE sag_tty_raw; reset by sag_tty_close.
+ */
+void sag_tty_set_output_processing(bool keep);
 void sag_tty_restore(void);
 void sag_tty_close(Tty *t);
 bool sag_tty_winsize(Tty *t);
