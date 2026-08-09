@@ -26,8 +26,20 @@ on:
 # reporting into the same branch.  Cancelling the superseded run costs no
 # coverage: the newest commit is still tested in full.
 #
+#
+# The EVENT is part of the key, not just the ref.
+#
+# With `ci-<ref>` alone, the nightly cron and ordinary pushes shared one
+# group on trunk and cancelled each other: on 2026-08-09 the 04:17
+# schedule killed an in-flight push run, and the next push killed the
+# schedule. Both losses are silent -- a cancelled run reports no
+# failure, so the deep campaigns simply never ran and nobody was told.
+#
+# Keyed by event, a push still supersedes an older push (which is the
+# whole point) while the nightly runs to completion alongside.
+#
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
 
 permissions:
