@@ -90,12 +90,80 @@ static void register_module(FlVm *vm, const FlModuleDef *md)
     fl_gc_release(vm, 1U);
 }
 
+/*
+ * §9: `error(v)` raises.  A STRING argument becomes
+ * `{kind: "user", msg: v}`; a MAP is raised as it stands, so a caller
+ * may add fields of its own and a handler can read them.
+ *
+ * The one name in the prelude, because §9 spells it unqualified and
+ * an `import` requirement would make the only documented way to raise
+ * cost a line of ceremony in every file that validates anything.
+ */
+static bool fl_error(FlVm *vm, FlValue *a, u32 n, FlValue *out)
+{
+    (void)n;
+    (void)out;
+    if (a[0].t == (u8)FL_MAP) {
+        /*
+         * Raised as it stands, but the kind still has to be a string:
+         * `fl_trace_render` and every `e.kind` comparison read it as
+         * one, and `{kind: 7}` would otherwise surface as "?" at the
+         * top of a report with no hint of why.
+         */
+        FlValue k = FL_NIL_V;
+        FlStr *key = fl_str_new(vm, "kind", 4U);
+
+        if (!fl_map_get((FlMap *)a[0].as.o, FL_OBJ_V(FL_STR, key), &k))
+            return fl_raise(vm, "type", "error: the map has no 'kind'");
+        if (k.t != (u8)FL_STR)
+            return fl_raise(vm, "type",
+                            "error: 'kind' must be a str, found %s",
+                            fl_type_name((FlType)k.t));
+        vm->err = a[0];
+        return false;
+    }
+    if (a[0].t != (u8)FL_STR)
+        return fl_raise(vm, "type",
+                        "error: argument 1 must be a str or a map, "
+                        "found %s", fl_type_name((FlType)a[0].t));
+    {
+        const FlStr *s = (const FlStr *)a[0].as.o;
+
+        return fl_raise(vm, "user", "%.*s", (int)s->len, s->b);
+    }
+}
+
+static void register_prelude(FlVm *vm)
+{
+    FlNative *nat = fl_gc_alloc(vm, sizeof(*nat), FL_NATIVE);
+
+    nat->fn = fl_error;
+    nat->name_id = sag_intern(vm->in, "error", 5U);
+    nat->min_ar = 1U;
+    nat->max_ar = 1U;
+    nat->caps = 0U;
+    /* Protected across the set: growing the map allocates, and until
+     * the native is IN the map nothing else points at it (gc.h
+     * rule 2). */
+    fl_gc_protect(vm, FL_OBJ_V(FL_NATIVE, nat));
+    /*
+     * Keyed by INTERNED ID, not by a string: GET_GLOBAL looks the
+     * prelude up with the same constant it uses for globals, and
+     * globals are keyed by id.  Keying this map by string would make
+     * every lookup miss and `error` would stay invisible.
+     */
+    (void)fl_map_set(vm, vm->prelude, FL_INT_V((i64)nat->name_id),
+                     FL_OBJ_V(FL_NATIVE, nat));
+    fl_gc_release(vm, 1U);
+}
+
 void fl_std_register(FlVm *vm)
 {
     size_t i;
 
     for (i = 0U; i < SAG_ARRAY_LEN(FL_MODULES); i++)
         register_module(vm, FL_MODULES[i]);
+    register_prelude(vm);
 }
 
 u32 fl_std_list_natives(const FlVm *vm, Bytebuf *out)

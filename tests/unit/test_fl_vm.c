@@ -327,6 +327,44 @@ void test_fl_vm_upvalues_capture_through_an_intermediate_function(void)
                 "return o()()()()\n"), 21);
 }
 
+void test_fl_vm_error_is_the_prelude_raise(void)
+{
+    char kind[64];
+
+    /*
+     * §9's `error(v)`, which had no implementation at all until
+     * Sprint 33: `kind: "user"` is one of the twelve closed kinds and
+     * there was no way for a program to produce it.
+     *
+     * It lives in the PRELUDE rather than in a module, because §9
+     * spells it unqualified.  The prelude is consulted after the
+     * caller's own globals, so a program may shadow it.
+     */
+    run_kind("error(\"boom\")\n", kind, sizeof(kind));
+    SAG_ASSERT_EQ_STR(kind, "user");
+    /* The string becomes the msg, not the kind. */
+    SAG_ASSERT_EQ_I64(
+        run_int("import str\n"
+                "try { error(\"boom\") }\n"
+                "catch e { return str.len(e.msg) }\n"), 4);
+    /* A MAP is raised as it stands, so a handler can read extra
+     * fields the raiser attached. */
+    SAG_ASSERT_EQ_I64(
+        run_int("try { error({kind: \"user\", msg: \"m\", n: 7}) }\n"
+                "catch e { return e.n }\n"), 7);
+    /* But `kind` must be a string, or every reader of e.kind and the
+     * whole trace renderer sees a value they cannot print. */
+    run_kind("error({kind: 7, msg: \"m\"})\n", kind, sizeof(kind));
+    SAG_ASSERT_EQ_STR(kind, "type");
+    run_kind("error({msg: \"m\"})\n", kind, sizeof(kind));
+    SAG_ASSERT_EQ_STR(kind, "type");
+    run_kind("error(7)\n", kind, sizeof(kind));
+    SAG_ASSERT_EQ_STR(kind, "type");
+    /* Shadowable: a local binding wins over the prelude. */
+    SAG_ASSERT_EQ_I64(
+        run_int("fn error(v) { return 5 }\nreturn error(\"x\")\n"), 5);
+}
+
 void test_fl_vm_loop_variable_is_fresh_each_iteration(void)
 {
     /*

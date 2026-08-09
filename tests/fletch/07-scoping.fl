@@ -55,7 +55,9 @@ let a = counter(0)
 let b = counter(0)
 a()
 a()
-# OUT: 2 1
+# `a` has already been called twice, so its third call is 3; `b` has
+# its own binding and is still on its first.
+# OUT: 3 1
 io.print(a(), b())
 
 # -- a loop variable is fresh per iteration ---------------------------

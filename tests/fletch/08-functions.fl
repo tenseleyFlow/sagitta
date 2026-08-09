@@ -1,0 +1,150 @@
+# SPEC: §8
+# COVERS: fn_decl fn_expr params args return_stmt
+# COVERS: op:CALL op:RETURN op:RETURN_NIL op:POP
+# COVERS: kind:arity
+import io
+import list
+
+# -- a declaration, called by name ------------------------------------
+fn add(a, b) {
+    return a + b
+}
+# OUT: 3
+io.print(add(1, 2))
+
+# -- a function can call itself: the name is bound BEFORE the body ----
+fn fact(n) {
+    if n <= 1 {
+        return 1
+    }
+    return n * fact(n - 1)
+}
+# OUT: 120
+io.print(fact(5))
+
+# -- mutual recursion through globals ---------------------------------
+fn is_even(n) {
+    if n == 0 {
+        return true
+    }
+    return is_odd(n - 1)
+}
+fn is_odd(n) {
+    if n == 0 {
+        return false
+    }
+    return is_even(n - 1)
+}
+# `is_odd` is not defined yet when `is_even` is COMPILED, and that is
+# fine: a global is a runtime map lookup, so only the CALL has to
+# happen after the definition.
+# OUT: true false
+io.print(is_even(4), is_odd(4))
+
+# -- a top-level fn is NOT hoisted; the call must follow it -----------
+try {
+    later()
+    io.print("an undefined global was callable")
+} catch e {
+    # OUT: name
+    io.print(e.kind)
+}
+fn later() {
+    return 1
+}
+# OUT: 1
+io.print(later())
+
+# -- a bare `return` and falling off the end both yield nil -----------
+fn bare() {
+    return
+}
+fn implicit() {
+    let x = 1
+}
+# OUT: nil nil
+io.print(bare(), implicit())
+
+# -- zero parameters ---------------------------------------------------
+fn answer() {
+    return 42
+}
+# OUT: 42
+io.print(answer())
+
+# -- function EXPRESSIONS, both bodies §2 allows ----------------------
+let block_form = fn(x) { return x * 2 }
+let expr_form = fn(x) x * 3
+# OUT: 8 12
+io.print(block_form(4), expr_form(4))
+
+# -- functions are values: passed, returned, stored -------------------
+fn apply(f, v) {
+    return f(v)
+}
+# OUT: 8
+io.print(apply(block_form, 4))
+let table = {double: block_form, triple: expr_form}
+# OUT: 6
+io.print(table.triple(2))
+let fns = [block_form, expr_form]
+# OUT: 4
+io.print(fns[0](2))
+
+# -- arity is CHECKED, both directions --------------------------------
+# A missing argument is an error rather than nil, and an extra one is
+# an error rather than ignored: both silently produce a wrong answer
+# in languages that allow them.
+try {
+    io.print(add(1))
+    io.print("a missing argument was accepted")
+} catch e {
+    # OUT: arity
+    io.print(e.kind)
+}
+try {
+    io.print(add(1, 2, 3))
+    io.print("an extra argument was accepted")
+} catch e {
+    # OUT: arity
+    io.print(e.kind)
+}
+
+# -- calling a non-function is a type error, not a crash --------------
+try {
+    let n = 1
+    io.print(n())
+    io.print("an int was callable")
+} catch e {
+    # OUT: type
+    io.print(e.kind)
+}
+
+# -- arguments evaluate left to right ---------------------------------
+let order = []
+fn note(v) {
+    list.push(order, v)
+    return v
+}
+# OUT: 3
+io.print(add(note(1), note(2)))
+# OUT: [1, 2]
+io.print(order)
+
+# -- recursion has a DEPTH LIMIT, and it is catchable -----------------
+# Unbounded recursion is user-triggerable, so it may not become an
+# abort: kind "limit" exists for exactly this (§9.1, amendment A1).
+fn forever(n) {
+    return forever(n + 1)
+}
+try {
+    io.print(forever(0))
+    io.print("infinite recursion returned")
+} catch e {
+    # OUT: limit
+    io.print(e.kind)
+}
+# And the VM is still usable afterwards -- the frames were unwound,
+# not abandoned.
+# OUT: 120
+io.print(fact(5))

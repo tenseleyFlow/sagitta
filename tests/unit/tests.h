@@ -873,6 +873,7 @@ void test_fl_vm_limit_is_catchable(void);
 void test_fl_vm_try_catch_binds_the_error_map(void);
 void test_fl_vm_upvalues_capture_by_reference(void);
 void test_fl_vm_upvalues_capture_through_an_intermediate_function(void);
+void test_fl_vm_error_is_the_prelude_raise(void);
 void test_fl_vm_loop_variable_is_fresh_each_iteration(void);
 void test_fl_vm_lists_and_maps(void);
 void test_fl_repl_recognises_only_a_leading_colon(void);

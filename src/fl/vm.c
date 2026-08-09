@@ -102,6 +102,7 @@ bool fl_vm_init(FlVm *vm, Arena *a, Interner *in, DiagCtx *dc)
     vm->globals = fl_map_new(vm);
     vm->modules = fl_map_new(vm);
     vm->builtins = fl_map_new(vm);
+    vm->prelude = fl_map_new(vm);
     vm->err = FL_NIL_V;
     return true;
 }
@@ -605,10 +606,15 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
             FlValue name = frame->cl->fn->ch.consts[k];
             FlValue got;
 
-            if (!fl_map_get(frame->cl->globals, name, &got)) {
+            if (!fl_map_get(frame->cl->globals, name, &got) &&
+                !fl_map_get(vm->prelude, name, &got)) {
                 /* §4: no implicit globals.  A miss is an error, not
                  * nil, because "typo yields nil" is how a config file
-                 * silently does nothing. */
+                 * silently does nothing.
+                 *
+                 * The prelude is consulted second, so a program that
+                 * declares its own `error` shadows §9's rather than
+                 * colliding with it. */
                 const char *nm = sag_intern_str(vm->in, (u32)name.as.i);
                 FlSuggest sg;
                 Bytebuf msg;

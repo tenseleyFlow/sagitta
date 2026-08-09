@@ -151,6 +151,19 @@ struct FlVm {
      * they must not.
      */
     FlMap *builtins;
+    /*
+     * Root 10: the PRELUDE -- names visible without an import, which
+     * in 1.0 means §9's `error`.
+     *
+     * A separate map rather than an entry seeded into every globals
+     * map, because `collect_exports` walks a module's globals and
+     * would then re-export `error` from every module that was merely
+     * loaded.  GET_GLOBAL falls back to it on a miss, so a module and
+     * the top-level program see the same one binding, and a script
+     * that declares its own `error` shadows it in its own globals
+     * without disturbing anyone else's.
+     */
+    FlMap *prelude;
     /* The native currently executing, so fl_arg_* can name it without
      * every helper taking it as a parameter. */
     u32 cur_native;

@@ -212,6 +212,8 @@ static void mark_roots(FlVm *vm)
      *     table's eight because it was added by s31; the table in
      *     gc.h lists it. */
     mark_obj(vm, (FlObj *)vm->builtins);
+    /* 5c. the prelude (root 10), added by s33 with §9's `error`. */
+    mark_obj(vm, (FlObj *)vm->prelude);
     /* 6. handles -- Sprint 34 fills this; rooted now */
     for (i = 0U; i < vm->handles.n; i++)
         mark_value(vm, vm->handles.v[i]);

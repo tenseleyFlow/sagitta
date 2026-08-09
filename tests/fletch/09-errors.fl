@@ -1,0 +1,152 @@
+# SPEC: §9, §16
+# COVERS: try_stmt
+# COVERS: op:THROW op:TRY_PUSH op:TRY_POP
+# COVERS: kind:user kind:type kind:index kind:key kind:div kind:arity
+# COVERS: kind:name kind:motion kind:limit
+#
+# §9: the error VALUE, the catching law, and the closed kind set.
+#
+# THE COUNT IS ASSERTED, NOT PRINTED (s28 DoD 8): §9.1 pins twelve
+# kinds after amendment A1 added "limit", and every one of them is
+# raised somewhere in this suite with a `# ERROR_KIND:` or a caught
+# `e.kind` -- check 4 of the coverage gate fails the build if one is
+# not.  The nine reachable from a headless program are raised here;
+# "capability" and "io" need the filesystem and live in
+# 13-capability/, and "import" lives in 11-modules/.
+import io
+import list
+import map
+import str
+
+# -- an error is a MAP with at least kind and msg ---------------------
+try {
+    error("boom")
+} catch e {
+    # A string argument becomes {kind: "user", msg: v}.
+    # OUT: user boom
+    io.print(e.kind, e.msg)
+    # OUT: true true
+    io.print(map.has(e, "kind"), map.has(e, "msg"))
+}
+
+# -- error(map) passes the map through, so a caller can add fields ----
+try {
+    error({kind: "user", msg: "custom", detail: 7})
+} catch e {
+    # OUT: user custom 7
+    io.print(e.kind, e.msg, e.detail)
+}
+
+# -- catch binds; the block runs; execution continues afterwards ------
+let log = []
+try {
+    list.push(log, "before")
+    error("stop")
+    list.push(log, "unreachable")
+} catch e {
+    list.push(log, "caught")
+}
+list.push(log, "after")
+# OUT: ["before", "caught", "after"]
+io.print(log)
+
+# -- a try that does NOT raise runs no catch --------------------------
+let ok = "untouched"
+try {
+    ok = "ran"
+} catch e {
+    ok = "caught"
+}
+# OUT: ran
+io.print(ok)
+
+# -- try nests, and the INNER handler wins ----------------------------
+try {
+    try {
+        error("inner")
+    } catch e {
+        # OUT: inner
+        io.print(e.msg)
+    }
+} catch e {
+    io.print("the outer handler should not have run")
+}
+
+# -- an unhandled raise propagates out of a call ----------------------
+fn deep() {
+    error("from deep")
+}
+fn middle() {
+    deep()
+}
+try {
+    middle()
+} catch e {
+    # OUT: from deep
+    io.print(e.msg)
+}
+
+# -- a raise inside a catch is catchable by an outer try --------------
+try {
+    try {
+        error("first")
+    } catch e {
+        error("second")
+    }
+} catch e {
+    # OUT: second
+    io.print(e.msg)
+}
+
+# -- the nine headless kinds, one raise each --------------------------
+fn kind_of(f) {
+    try {
+        f()
+        return "<no raise>"
+    } catch e {
+        return e.kind
+    }
+}
+
+# OUT: user
+io.print(kind_of(fn() { error("u") }))
+# OUT: type
+io.print(kind_of(fn() { return 1 + "s" }))
+# OUT: index
+io.print(kind_of(fn() { let l = [1]; return l[9] }))
+# OUT: key
+io.print(kind_of(fn() { let m = {}; return map.get(m, "nope") }))
+# OUT: div
+io.print(kind_of(fn() { return 1 / 0 }))
+# OUT: arity
+io.print(kind_of(fn() { return str.len() }))
+# OUT: name
+io.print(kind_of(fn() { return no_such_global }))
+# A motion block against the null host: §3.1, and the claim §14 rests
+# on.  There is no editor here, so this is the only answer available.
+# OUT: motion
+io.print(kind_of(fn() { return @[ 2> ] }))
+# "limit" is CATCHABLE and that is the point of it: infinite recursion
+# is user-triggerable, so it may not become an abort.
+fn spin(n) {
+    return spin(n + 1)
+}
+# OUT: limit
+io.print(kind_of(fn() { return spin(0) }))
+
+# -- §9.3: a COMPILE error is not catchable ---------------------------
+# There is nothing to write here, and that is the assertion: a syntax
+# error never reaches a `catch` because the program never runs at all.
+# errors/compile_error_is_not_catchable.fl is that case, driven as a
+# whole program because it cannot be one statement inside this one.
+
+# -- the trace is attached only when nothing catches ------------------
+# A caught error carries kind and msg; `trace` is added by the VM when
+# the value escapes every frame, which is what the uncaught cases in
+# errors/ assert through `# ERROR:` on stderr.
+try {
+    error("caught here")
+} catch e {
+    # OUT: false
+    io.print(map.has(e, "trace"))
+}
