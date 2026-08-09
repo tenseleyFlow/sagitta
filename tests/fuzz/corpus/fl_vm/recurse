@@ -1,0 +1,2 @@
+fn r(n) { return r(n+1) }
+return r(0)

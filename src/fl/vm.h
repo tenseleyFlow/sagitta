@@ -198,6 +198,17 @@ bool fl_raise(FlVm *vm, const char *kind, const char *fmt, ...);
 const char *fl_deferred_msg(const char *name);
 
 /*
+ * Bound how many instructions a run may execute; 0 removes the bound.
+ *
+ * THE ONE TIMEOUT MECHANISM.  Sprint 32's fuzzer uses it so a
+ * pathological input cannot hang the campaign, and Sprint 54's plugin
+ * sandbox uses it to bound a runaway plugin -- written down here so
+ * nobody adds a second one.  Exceeding it raises kind "limit", which is
+ * catchable: a plugin that budgeted badly should be able to say so.
+ */
+void fl_vm_set_step_limit(FlVm *vm, u64 steps);
+
+/*
  * Sprint 32 §8: THERE IS NO BYTECODE VERIFIER, AND THAT IS A DECISION.
  *
  * Random bytecode never enters the VM because no code path can put it

@@ -96,6 +96,12 @@ bool fl_vm_init(FlVm *vm, Arena *a, Interner *in, DiagCtx *dc)
     return true;
 }
 
+void fl_vm_set_step_limit(FlVm *vm, u64 steps)
+{
+    vm->step_limit = steps;
+    vm->steps = 0U;
+}
+
 void fl_vm_free(FlVm *vm)
 {
     /* The handle table is Sprint 34's; it is rooted and empty here, so
@@ -1329,15 +1335,22 @@ bool fl_vm_run(FlVm *vm, FlFn *entry, FlValue *out)
         bool ok = vm_exec(vm, 0U, out);
 
         /*
-         * The frames do not survive the call EITHER WAY.  A raise that
-         * found no handler leaves them standing -- correct for a nested
-         * execution, since the caller unwinds further -- and a host
-         * that then asks the VM a question, fl_cap_origin most of all,
-         * would read a frame belonging to a program that has finished.
+         * NOTHING survives the call, either way: frames, handlers, open
+         * upvalues AND the stack pointer.
+         *
+         * A raise that found no handler unwinds none of them -- correct
+         * for a nested execution, since the caller unwinds further --
+         * so the outermost entry point is where the VM is made reusable
+         * again.  Leaving `sp` one above the floor is the subtle half:
+         * frames and handlers being clean makes the VM LOOK ready, and
+         * the drift only shows up as a slow leak of stack slots across
+         * many runs.  Sprint 32's VM fuzzer asserts all four on every
+         * input, and found this one on its sixth.
          */
         vm->nframes = 0U;
         vm->nhandlers = 0U;
         vm->open_upvals = NULL;
+        vm->sp = vm->stack;
         return ok;
     }
 }

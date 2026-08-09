@@ -1,0 +1,2 @@
+macro m = @[ 2v ]
+return m()

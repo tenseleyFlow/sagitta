@@ -1,0 +1,2 @@
+fn f(x) { return x }
+return f(1)
