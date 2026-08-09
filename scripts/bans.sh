@@ -52,6 +52,140 @@ scan()
     fi
 }
 
+#
+# Sprint 31 DoD 5: no conversion in src/fl/ may take a format that is not
+# a literal in our own source.
+#
+# fmt.f interprets the §6 directive grammar itself precisely so a user
+# template never reaches a C conversion -- a `%n` in a Fletch template is
+# a percent sign.  That property is only as good as the call sites, so
+# every printf-family call and every fl_raise in src/fl/ has to show a
+# `"` where its format argument belongs.
+#
+# The one shape allowed through is a VARARG FORWARDER: a bounded v-
+# variant whose last argument is the `ap` it was handed.  fl_raise and
+# the diagnostics are exactly that, and they are what make the literal
+# rule enforceable everywhere else.
+#
+# Argument positions differ per function, so the scanner counts
+# top-level commas rather than looking for a quote anywhere on the line
+# -- `snprintf(buf, sizeof(buf), fmt, ap)` has a paren and a comma
+# inside its second argument, and a quote in its fourth would otherwise
+# read as compliance.
+#
+format_literal_hits()
+{
+    fl_list=$1
+    fl_out=$2
+    : >"$fl_out"
+    while IFS= read -r file; do
+        awk '
+        { line[NR] = $0 }
+        function fmt_index(id) {
+            if (id ~ /snprintf$/)  return 2
+            if (id == "fl_raise")  return 2
+            if (id ~ /vprintf$/)   return 0
+            if (id == "printf")    return 0
+            return 1
+        }
+        END {
+            for (i = 1; i <= NR; i++) {
+                # Comment bodies are prose about the rule, not calls --
+                # this file has tripped five grep gates on its own
+                # explanations already.
+                if (line[i] ~ /^[ \t]*(\*|\/\*|\/\/)/)
+                    continue
+                own = length(line[i])
+                buf = line[i] " " line[i+1] " " line[i+2] " " line[i+3]
+                pos = 1
+                while (1) {
+                    rest = substr(buf, pos)
+                    if (!match(rest, /[A-Za-z_][A-Za-z0-9_]*[ \t]*\(/))
+                        break
+                    at = pos + RSTART - 1
+                    tok = substr(buf, at, RLENGTH)
+                    pos = at + RLENGTH
+                    if (at > own)
+                        break
+                    sub(/[ \t]*\($/, "", tok)
+                    if (tok !~ /printf$/ && tok != "fl_raise")
+                        continue
+                    want = fmt_index(tok)
+                    depth = 1
+                    args = 0
+                    k = pos
+                    fmt_at = pos
+                    while (k <= length(buf) && depth > 0) {
+                        ch = substr(buf, k, 1)
+                        if (ch == "(") depth++
+                        else if (ch == ")") depth--
+                        else if (ch == "," && depth == 1) {
+                            args++
+                            if (args == want) fmt_at = k + 1
+                        }
+                        if (depth == 0) break
+                        k++
+                    }
+                    if (args < want)
+                        continue
+                    call = substr(buf, at, k - at + 1)
+                    # A declaration, not a call: every function in this
+                    # family is variadic, so `...` in the argument list
+                    # is the prototype and nothing else.
+                    if (call ~ /\.\.\.[ \t]*\)$/)
+                        continue
+                    if (tok ~ /^v/ && call ~ /,[ \t]*ap[ \t]*\)$/)
+                        continue
+                    tail = substr(buf, fmt_at)
+                    sub(/^[ \t]*/, "", tail)
+                    if (substr(tail, 1, 1) != "\"")
+                        printf "%d:%s\n", i, line[i]
+                }
+            }
+        }' "$file" | sed "s|^|${file#"$repo_dir"/}:|" >>"$fl_out" || :
+    done <"$fl_list"
+}
+
+fl_files=$tmp/fl-files
+while IFS= read -r file; do
+    case ${file#"$repo_dir"/} in
+        src/fl/*) printf '%s\n' "$file" ;;
+    esac
+done <"$source_files" >"$fl_files"
+format_literal_hits "$fl_files" "$tmp/format-literal-hits"
+if [ -s "$tmp/format-literal-hits" ]; then
+    echo "ban: a format in src/fl/ must be a literal in our own source" \
+        >>"$hits"
+    cat "$tmp/format-literal-hits" >>"$hits"
+fi
+
+#
+# The seeded violation.  A rule nobody has watched fire is a rule that
+# may have stopped working; this proves the scanner still catches the
+# thing it exists to catch, and still lets the two compliant shapes
+# through.
+#
+seed_dir=$tmp/seed
+mkdir -p "$seed_dir"
+seed_file=$seed_dir/seeded.c
+{
+    echo 'void a(const char *t) { bytebuf_printf(out, t); }'
+    echo 'void b(const char *t) { (void)snprintf(q, sizeof(q), t, 1); }'
+    echo 'void c(FlVm *vm, const char *t) { (void)fl_raise(vm, "type", t); }'
+    echo 'void d(void) { bytebuf_printf(out, "%d", 1); }'
+    echo 'void e(void) { (void)snprintf(q, sizeof(q), "%s.%s", a, b); }'
+    echo 'void f(va_list ap) { (void)vsnprintf(m, sizeof(m), fmt, ap); }'
+} >"$seed_file"
+printf '%s\n' "$seed_file" >"$tmp/seed-list"
+format_literal_hits "$tmp/seed-list" "$tmp/seed-hits"
+seed_found=$(wc -l <"$tmp/seed-hits" | tr -d ' ')
+if [ "$seed_found" != "3" ]; then
+    echo "ban: the format-literal rule no longer fires on its own seed" \
+        >>"$hits"
+    echo "expected 3 violations in the seed, found $seed_found" >>"$hits"
+    cat "$tmp/seed-hits" >>"$hits"
+fi
+
 scan "qsort is unstable; use sag_sort_stable" \
     '(^|[^[:alnum:]_])qsort[[:space:]]*\(' "$all_files"
 scan "__attribute__ is outside the locked C11 subset" \

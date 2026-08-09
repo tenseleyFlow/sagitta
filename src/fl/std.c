@@ -17,6 +17,7 @@ extern const FlModuleDef fl_mod_str;
 extern const FlModuleDef fl_mod_list;
 extern const FlModuleDef fl_mod_map;
 extern const FlModuleDef fl_mod_math;
+extern const FlModuleDef fl_mod_fmt;
 
 /*
  * REGISTRATION ORDER IS PART OF THE CONTRACT.  fl_std_list_natives
@@ -29,10 +30,10 @@ extern const FlModuleDef fl_mod_math;
  * with empties: a registered module with no functions would answer
  * `import` successfully and then fail every call with a bare "name"
  * error, which reads like a broken stdlib rather than an unfinished
- * one.  Still to come this sprint: fmt, io, re.
+ * one.  Still to come this sprint: io, re.
  */
 static const FlModuleDef *const FL_MODULES[] = {
-    &fl_mod_str, &fl_mod_list, &fl_mod_map, &fl_mod_math
+    &fl_mod_str, &fl_mod_list, &fl_mod_map, &fl_mod_math, &fl_mod_fmt
 };
 
 /* ---------------------------------------------------------------- */

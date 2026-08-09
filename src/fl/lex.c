@@ -61,6 +61,11 @@ bool fl_tok_is_keyword(FlTokKind kind)
     return kind >= FL_T_KW_FIRST && kind <= FL_T_KW_LAST;
 }
 
+bool fl_kw_reserved(const char *s, size_t n)
+{
+    return keyword_at(s, n) != FL_T_IDENT;
+}
+
 const char *fl_tok_spelling(FlTokKind kind)
 {
     if (fl_tok_is_keyword(kind))

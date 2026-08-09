@@ -116,4 +116,15 @@ const char *fl_tok_spelling(FlTokKind kind);
 /* True while `kind` is one of the 22 reserved words. */
 bool fl_tok_is_keyword(FlTokKind kind);
 
+/*
+ * True when the identifier spelling `s`/`n` is one of those 22 words.
+ *
+ * Exported for fmt.repr, which may emit a map key bare only when the
+ * key would lex back as an IDENT -- `{nil: 1}` is not the map it looks
+ * like, it is a parse error.  Reading the table through this predicate
+ * rather than restating the words is what keeps the serializer honest
+ * when §15.1 gains a word.
+ */
+bool fl_kw_reserved(const char *s, size_t n);
+
 #endif /* SAG_FL_LEX_H */
