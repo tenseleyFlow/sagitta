@@ -111,8 +111,42 @@ jobs:
         run: |
           make clean
           make fl-dispatch-parity
+      # s33 DoD 11: the CONFORMANCE SUITE under both dispatchers, which
+      # is a different claim from the opcode-trace parity above -- that
+      # one compares instruction streams, this one compares what the
+      # programs actually printed.
+      - name: Run the conformance suite under both dispatchers
+        run: |
+          make clean
+          make test-fletch-dispatch
       - name: Perf smoke, numbers only (s33 owns the gates)
         run: make fl-perf-smoke
+
+  # Sprint 33: the conformance suite's own lanes.  Separate from `gcc`
+  # because a stress run and a determinism run answer different
+  # questions from a plain green suite, and folding them in would hide
+  # which one failed.
+  fletch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Conformance suite, coverage gate, meta-suite, gate selftest
+        run: make test-fletch
+      - name: The whole suite under the collector's stress mode
+        run: make test-fletch-gc-stress
+      - name: Two runs and two ledgers, byte-compared
+        run: make test-fletch-determinism
+      # UNGATED here: the absolute budgets have 3x-40x headroom on the
+      # dev machine and clear a slower runner, but the two-condition
+      # regression gate compares against dev-machine baselines and
+      # would fail on hardware rather than on a regression.  The perf
+      # lane runs it with PERF_GATE=1; Sprint 56 recalibrates.
+      - name: Benches, absolute budgets enforced
+        run: make bench-fletch
+      - name: The deferrals still hard-error naming their sprint
+        run: |
+          ! make test-fletch-roundtrip
+          ! ./build/sagitta --batch x.fl
 
   pty:
     runs-on: ubuntu-latest
@@ -201,6 +235,8 @@ jobs:
         run: |
           make perf-latency CC=gcc
           make perf-latency-selftest CC=gcc
+      - name: Enforce the Sprint 33 Fletch budgets and regression gate
+        run: make bench-fletch PERF_GATE=1
       - name: Enforce Sprint 18 completion latency budget
         run: make perf-cmdcomp CC=gcc
 
