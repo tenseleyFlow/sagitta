@@ -1,0 +1,117 @@
+# SPEC: §7
+# COVERS: block params
+# COVERS: op:CLOSURE op:GET_UPVAL op:SET_UPVAL op:CLOSE_UPVALS
+#
+# §7: lexical scope, and closures that capture BY REFERENCE.
+#
+# Capture-by-reference is the claim §14.1 rests on and the one that is
+# easy to get subtly wrong: a by-value capture passes every test that
+# only ever reads the variable, so every case here writes it too.
+import io
+import list
+
+# -- a block is a scope; the inner name shadows and does not leak ----
+# There is no BARE block statement: §2's `stmt` reaches `block` only
+# through if/while/for/fn/edit/try, and a leading `{` is a map
+# literal.  The diagnostic says so rather than reporting a mystery.
+let x = "outer"
+if true {
+    let x = "inner"
+    # OUT: inner
+    io.print(x)
+}
+# OUT: outer
+io.print(x)
+
+# -- a closure sees the binding, not a copy of its value --------------
+fn counter(start) {
+    let n = start
+    return fn() {
+        n = n + 1
+        return n
+    }
+}
+let c = counter(0)
+# OUT: 1 2 3
+io.print(c(), c(), c())
+
+# -- two closures over the SAME binding share it ----------------------
+fn pair() {
+    let n = 0
+    let inc = fn() { n = n + 1; return n }
+    let get = fn() { return n }
+    return [inc, get]
+}
+let p = pair()
+let inc = p[0]
+let get = p[1]
+inc()
+inc()
+# OUT: 2
+io.print(get())
+
+# -- two CALLS produce independent bindings ---------------------------
+let a = counter(0)
+let b = counter(0)
+a()
+a()
+# OUT: 2 1
+io.print(a(), b())
+
+# -- a loop variable is fresh per iteration ---------------------------
+# The classic mistake: closures made in a loop all capturing one
+# binding and every one of them reporting the last value.
+let fns = []
+for i in [0, 1, 2] {
+    list.push(fns, fn() { return i })
+}
+# OUT: [0, 1, 2]
+io.print([fns[0](), fns[1](), fns[2]()])
+
+# -- the capture outlives the frame that made it ----------------------
+# This is what CLOSE_UPVALS is for: when `counter` returns, `n` leaves
+# the stack and the upvalue has to take ownership of it.  Without that
+# the closure reads a dead slot, which is the bug the whole mechanism
+# exists to prevent.
+fn make_adder(k) {
+    return fn(v) { return v + k }
+}
+let add5 = make_adder(5)
+let add7 = make_adder(7)
+# OUT: 15 17
+io.print(add5(10), add7(10))
+
+# -- nesting two deep: the inner closure captures through the middle --
+fn outer3() {
+    let n = 1
+    return fn() {
+        return fn() {
+            n = n + 10
+            return n
+        }
+    }
+}
+let mid = outer3()
+let deep = mid()
+# OUT: 11 21
+io.print(deep(), deep())
+
+# -- a parameter is a binding like any other and may be captured ------
+fn hold(v) {
+    return fn() { v = v + 1; return v }
+}
+let h = hold(100)
+# OUT: 101 102
+io.print(h(), h())
+
+# -- functions see globals, and a local shadows a global --------------
+let g = "global"
+fn reads_global() {
+    return g
+}
+fn shadows_global() {
+    let g = "local"
+    return g
+}
+# OUT: global local
+io.print(reads_global(), shadows_global())

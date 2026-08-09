@@ -460,8 +460,15 @@ static FlOp binop_for(u8 tok)
 }
 
 static void comp_motion_block(Compiler *c, const FlNode *n);
+/*
+ * `out_ups` receives the COMPILED FUNCTION'S capture descriptors, so
+ * the caller can emit the pairs that follow its CLOSURE.  It must not
+ * be the enclosing compiler's own `upvals` array -- see the note at
+ * the end of the definition.
+ */
 static FlFn *comp_function(Compiler *enclosing, const FlNode *n,
-                           u32 name_id, bool is_expr);
+                           u32 name_id, bool is_expr,
+                           FlUpvalDesc *out_ups);
 
 static void comp_call(Compiler *c, const FlNode *n)
 {
@@ -572,7 +579,8 @@ static void comp_expr(Compiler *c, const FlNode *n)
         return;
     }
     case FL_A_FN_EXPR: {
-        FlFn *fn = comp_function(c, n, 0U, true);
+        FlUpvalDesc ups[FL_MAX_UPVALS];
+        FlFn *fn = comp_function(c, n, 0U, true, ups);
         u32 k;
         u32 i;
 
@@ -582,8 +590,8 @@ static void comp_expr(Compiler *c, const FlNode *n)
         emit_op(c, FL_OP_CLOSURE, n->sp);
         emit_u16(c, (u16)k);
         for (i = 0U; i < (u32)fn->nup; i++) {
-            emit_u8(c, c->upvals[i].is_local ? 1U : 0U);
-            emit_u8(c, c->upvals[i].index);
+            emit_u8(c, ups[i].is_local ? 1U : 0U);
+            emit_u8(c, ups[i].index);
         }
         return;
     }
@@ -830,7 +838,8 @@ static void comp_for(Compiler *c, const FlNode *n)
 }
 
 static FlFn *comp_function(Compiler *enclosing, const FlNode *n,
-                           u32 name_id, bool is_expr)
+                           u32 name_id, bool is_expr,
+                           FlUpvalDesc *out_ups)
 {
     Compiler sub;
     FlFn *fn;
@@ -916,10 +925,24 @@ static FlFn *comp_function(Compiler *enclosing, const FlNode *n,
     fn->nup = (u8)sub.nupvals;
     fn->max_stack = (u16)(sub.max_depth < 0 ? 0 : sub.max_depth);
 
-    /* The enclosing compiler emits the capture pairs after CLOSURE, so
-     * hand it the descriptors. */
+    /*
+     * The enclosing compiler emits the capture pairs after CLOSURE, so
+     * hand it the descriptors -- INTO ITS OWN BUFFER, not over its
+     * `upvals` array.
+     *
+     * This used to be `enclosing->upvals[i] = sub.upvals[i]`, which
+     * destroyed the enclosing function's own capture descriptors every
+     * time it contained a nested function.  One level deep nothing
+     * noticed, because a function whose only upvalues come from the
+     * child it just compiled has the same descriptors either way.  Two
+     * levels deep the middle function's real descriptor -- "capture
+     * local `n` from the frame below" -- was overwritten by the inner
+     * function's "capture upvalue 0", so the outermost CLOSURE emitted
+     * a pair pointing at an upvalue array that did not exist and the
+     * VM dereferenced NULL.  Sprint 33's §7 file segfaulted on it.
+     */
     for (i = 0U; i < sub.nupvals; i++)
-        enclosing->upvals[i] = sub.upvals[i];
+        out_ups[i] = sub.upvals[i];
 
     bytebuf_free(&sub.code);
     FlConstVec_free(&sub.consts);
@@ -1085,6 +1108,7 @@ static void comp_stmt(Compiler *c, const FlNode *n)
         }
         return;
     case FL_A_FN: {
+        FlUpvalDesc ups[FL_MAX_UPVALS];
         FlFn *fn;
         u32 k;
         u32 i;
@@ -1098,15 +1122,15 @@ static void comp_stmt(Compiler *c, const FlNode *n)
             add_local(c, n->as.fn.name, n->sp);
             mark_initialized(c);
         }
-        fn = comp_function(c, n, n->as.fn.name, false);
+        fn = comp_function(c, n, n->as.fn.name, false, ups);
         if (fn == NULL)
             return;
         k = add_const(c, FL_OBJ_V(FL_FN, fn), n->sp);
         emit_op(c, FL_OP_CLOSURE, n->sp);
         emit_u16(c, (u16)k);
         for (i = 0U; i < (u32)fn->nup; i++) {
-            emit_u8(c, c->upvals[i].is_local ? 1U : 0U);
-            emit_u8(c, c->upvals[i].index);
+            emit_u8(c, ups[i].is_local ? 1U : 0U);
+            emit_u8(c, ups[i].index);
         }
         if (at_module_top(c)) {
             emit_op(c, FL_OP_DEF_GLOBAL, n->sp);
@@ -1131,6 +1155,7 @@ static void comp_stmt(Compiler *c, const FlNode *n)
          * downstream needs to know macros exist and the closure,
          * upvalue and origin handling are all the ones fn already has.
          */
+        FlUpvalDesc ups[FL_MAX_UPVALS];
         FlNode syn;
         FlFn *mf;
         u32 k;
@@ -1149,7 +1174,7 @@ static void comp_stmt(Compiler *c, const FlNode *n)
             add_local(c, n->as.macro.name, n->sp);
             mark_initialized(c);
         }
-        mf = comp_function(c, &syn, n->as.macro.name, false);
+        mf = comp_function(c, &syn, n->as.macro.name, false, ups);
         if (mf == NULL)
             return;
         /* §6: a macro frame prints as `macro m`. */
@@ -1158,8 +1183,8 @@ static void comp_stmt(Compiler *c, const FlNode *n)
         emit_op(c, FL_OP_CLOSURE, n->sp);
         emit_u16(c, (u16)k);
         for (i = 0U; i < (u32)mf->nup; i++) {
-            emit_u8(c, c->upvals[i].is_local ? 1U : 0U);
-            emit_u8(c, c->upvals[i].index);
+            emit_u8(c, ups[i].is_local ? 1U : 0U);
+            emit_u8(c, ups[i].index);
         }
         if (at_module_top(c)) {
             emit_op(c, FL_OP_DEF_GLOBAL, n->sp);

@@ -277,6 +277,56 @@ void test_fl_vm_upvalues_capture_by_reference(void)
                 "return peek()\n"), 2);
 }
 
+void test_fl_vm_upvalues_capture_through_an_intermediate_function(void)
+{
+    /*
+     * A TRANSITIVE capture: the innermost function reads a local of
+     * the OUTERMOST one, so the middle function has to carry an
+     * upvalue it never mentions.
+     *
+     * This segfaulted. comp_function copied the compiled child's
+     * capture descriptors over the ENCLOSING compiler's own `upvals`
+     * array, which is invisible one level deep -- a function whose
+     * only upvalues come from the child it just compiled has the same
+     * descriptors either way -- and fatal two levels deep: the middle
+     * function's real "capture local n" descriptor was replaced by the
+     * inner function's "capture upvalue 0", so the outer CLOSURE
+     * emitted a pair pointing into an upvalue array that did not
+     * exist and the VM dereferenced NULL.
+     *
+     * Read-only first, because the write case allocates an upvalue for
+     * a different reason and could pass while this one crashes.
+     */
+    SAG_ASSERT_EQ_I64(
+        run_int("fn o() {\n"
+                "  let n = 1\n"
+                "  return fn() { return fn() { return n } }\n"
+                "}\n"
+                "return o()()()\n"), 1);
+    /* And the write case: the shared binding must be the outermost
+     * one, so two calls through the same chain accumulate. */
+    SAG_ASSERT_EQ_I64(
+        run_int("fn o() {\n"
+                "  let n = 1\n"
+                "  return fn() { return fn() { n = n + 10\n return n } }\n"
+                "}\n"
+                "let d = o()()\n"
+                "d()\n"
+                "return d()\n"), 21);
+    /* Three deep, and with the middle function ALSO capturing a local
+     * of its own -- the case where clobbering loses a live descriptor
+     * that the middle function still needs for itself. */
+    SAG_ASSERT_EQ_I64(
+        run_int("fn o() {\n"
+                "  let a = 1\n"
+                "  return fn() {\n"
+                "    let b = 20\n"
+                "    return fn() { return fn() { return a + b } }\n"
+                "  }\n"
+                "}\n"
+                "return o()()()()\n"), 21);
+}
+
 void test_fl_vm_loop_variable_is_fresh_each_iteration(void)
 {
     /*
