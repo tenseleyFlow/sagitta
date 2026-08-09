@@ -405,6 +405,32 @@ void test_fl_vm_control_flow(void)
     SAG_ASSERT_EQ_I64(
         run_int("let m = {a: 1, b: 2, c: 3}\n"
                 "let t = 0\nfor k, v in m { t = t + v }\nreturn t\n"), 6);
+    /*
+     * ...and a LIST as index/value pairs, which §6 requires in as many
+     * words and which ITER_NEXT2 refused outright until Sprint 33's
+     * conformance suite asserted the sentence.  The indices are summed
+     * separately from the values so a form that yielded value/value --
+     * the plausible wrong fix -- still fails.
+     */
+    SAG_ASSERT_EQ_I64(
+        run_int("let t = 0\nfor i, v in [10, 20, 30] { t = t + i }\n"
+                "return t\n"), 3);
+    SAG_ASSERT_EQ_I64(
+        run_int("let t = 0\nfor i, v in [10, 20, 30] { t = t + v }\n"
+                "return t\n"), 60);
+    /* Empty list: the loop body never runs and the walk still ends. */
+    SAG_ASSERT_EQ_I64(
+        run_int("let t = 7\nfor i, v in [] { t = 0 }\nreturn t\n"), 7);
+    /* The mods guard applies to the two-variable form too: a list
+     * reshaped mid-walk must report rather than walk a moved buffer. */
+    {
+        char kind[64];
+
+        run_kind("import list\nlet l = [1, 2, 3]\n"
+                 "for i, v in l { list.push(l, 9) }\nreturn 0\n",
+                 kind, sizeof(kind));
+        SAG_ASSERT_EQ_STR(kind, "index");
+    }
 }
 
 /* ---------------------------------------------------------------- */

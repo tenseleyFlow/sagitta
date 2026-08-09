@@ -1,0 +1,131 @@
+# SPEC: §5
+# COVERS: expr or_e and_e eq_e rel_e add_e mul_e unary postfix primary
+# COVERS: args literal
+# COVERS: op:ADD op:SUB op:MUL op:DIV op:MOD op:NEG op:NOT op:EQ op:NE
+# COVERS: op:LT op:LE op:GT op:GE op:OR_JUMP op:AND_JUMP op:INT8
+# COVERS: op:CONST op:TRUE op:FALSE op:NIL op:POP
+# COVERS: kind:div
+#
+# §5's operator cascade, asserted through the RESULTS rather than by
+# reading the parse tree: precedence is only real if `1 + 2 * 3` is 7.
+import io
+
+# -- arithmetic, and the precedence cascade --------------------------
+# OUT: 7
+io.print(1 + 2 * 3)
+# OUT: 9
+io.print((1 + 2) * 3)
+# OUT: 1
+io.print(7 - 2 * 3)
+# Multiplicative binds tighter than additive, and / and % are at the
+# same level as * -- left to right among themselves.
+# OUT: 5
+io.print(1 + 8 / 2)
+# OUT: 2
+io.print(8 % 3)
+# OUT: 4
+io.print(16 / 2 / 2)
+
+# -- int and float division differ, and that is deliberate ------------
+# Integer division truncates toward zero; a float operand makes the
+# whole expression float.  A language that silently promoted would
+# make `7 / 2` return 3.5 where an index was wanted.
+# OUT: 3 3.5
+io.print(7 / 2, 7 / 2.0)
+# OUT: -3
+io.print(-7 / 2)
+
+# -- unary, right-associative -----------------------------------------
+# OUT: -5 5
+io.print(-5, - -5)
+# OUT: false true
+io.print(not true, not not true)
+# `not` IS A UNARY OPERATOR, so it binds TIGHTER than comparison:
+# §2 puts it at the `unary` level, below eq_e.  This parses as
+# `(not 1) == 2`, i.e. `false == 2`, which is false -- not as
+# `not (1 == 2)`, which would be true.  Anyone porting a habit from a
+# language where `not` is lowest-precedence writes this bug once.
+# OUT: false
+io.print(not 1 == 2)
+
+# -- comparison --------------------------------------------------------
+# OUT: true false true false
+io.print(1 == 1, 1 == 2, 1 != 2, 1 != 1)
+# OUT: true true false false
+io.print(1 < 2, 1 <= 1, 2 < 1, 2 <= 1)
+# OUT: true true false false
+io.print(2 > 1, 1 >= 1, 1 > 2, 1 >= 2)
+
+# -- equality is by VALUE for scalars and strings ----------------------
+# OUT: true true
+io.print("ab" == "a" + "b", nil == nil)
+# Different types are never equal; they do not raise either, because
+# `x == nil` is the ordinary way to ask whether something is set.
+# OUT: false false
+io.print(1 == "1", nil == false)
+
+# -- and/or short-circuit, and yield an OPERAND, not a bool ------------
+# The right side of a false `and` must not run at all; if it did, the
+# division below would raise instead of producing false.
+# OUT: false
+io.print(false and 1 / 0 == 0)
+# OUT: true
+io.print(true or 1 / 0 == 0)
+# OUT: 2 nil
+io.print(1 and 2, nil and 2)
+# OUT: 1 2
+io.print(1 or 2, nil or 2)
+
+# -- §5.1 truthiness: only nil and false are falsy ---------------------
+# 0 and "" are TRUTHY, so `if count` cannot silently mean
+# `if count != 0` -- which is the bug §5.1 exists to prevent.
+if 0 {
+    # OUT: 0 is truthy
+    io.print("0 is truthy")
+}
+if "" {
+    # OUT: the empty string is truthy
+    io.print("the empty string is truthy")
+}
+if [] {
+    # OUT: the empty list is truthy
+    io.print("the empty list is truthy")
+}
+if nil {
+    io.print("nil is truthy")
+} else {
+    # OUT: nil is falsy
+    io.print("nil is falsy")
+}
+if false {
+    io.print("false is truthy")
+} else {
+    # OUT: false is falsy
+    io.print("false is falsy")
+}
+# And because 0 is truthy, `and` runs its right side here.
+# OUT: yes
+io.print(0 and "yes" or "no")
+
+# -- postfix: call, index, field ---------------------------------------
+let l = [10, 20]
+let m = {k: 1}
+# OUT: 10 1
+io.print(l[0], m.k)
+# OUT: 20
+io.print(l[l[0] / 10])
+
+# -- division by zero is a catchable error, not a trap -----------------
+try {
+    io.print(1 / 0)
+    io.print("division by zero produced a value")
+} catch e {
+    # OUT: div
+    io.print(e.kind)
+}
+# The float form follows IEEE and does NOT raise: inf is a value §4
+# admits, and refusing it would make float maths inconsistent with the
+# math module's own constants.
+import math
+# OUT: true
+io.print(math.is_inf(1.0 / 0.0))

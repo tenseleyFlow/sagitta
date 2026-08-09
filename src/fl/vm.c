@@ -1218,8 +1218,34 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
             FlValue k;
             FlValue v;
 
+            /*
+             * A LIST yields index/value pairs, which §6 requires in as
+             * many words: "`for k, v in expr` iterates a map's entries
+             * in insertion order, OR A LIST'S INDEX/VALUE PAIRS".  This
+             * arm refused every list until Sprint 33's conformance
+             * suite read the sentence and asserted it.
+             */
+            if (subject.t == (u8)FL_LIST) {
+                FlList *l = (FlList *)subject.as.o;
+                i64 at = frame->slots[base + 1].as.i;
+
+                if ((i64)l->mods != snapshot) {
+                    fl_raise(vm, "index", "list modified during iteration");
+                    goto raised;
+                }
+                if (at >= (i64)l->n) {
+                    ip += d;
+                    VM_NEXT();
+                }
+                frame->slots[base + 1] = FL_INT_V(at + 1);
+                *vm->sp++ = FL_INT_V(at);
+                *vm->sp++ = l->v[at];
+                VM_NEXT();
+            }
             if (subject.t != (u8)FL_MAP) {
-                fl_raise(vm, "type", "two-variable for needs a map");
+                fl_raise(vm, "type",
+                         "two-variable for needs a list or a map, found %s",
+                         fl_type_name((FlType)subject.t));
                 goto raised;
             }
             /*
