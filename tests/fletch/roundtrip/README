@@ -1,0 +1,10 @@
+Sprint 35: the round-trip law harness (invariant 10).
+
+Empty by design.  `make test-fletch-roundtrip` hard-errors naming the
+sprint rather than passing vacuously, because a harness that reports
+green over zero cases is worse than one that refuses to run: the first
+is mistaken for coverage.
+
+The law: a recorded session emitted as Fletch, re-parsed and re-emitted,
+must produce byte-identical text.  Sprint 35 supplies the recorder that
+makes a case writable at all.

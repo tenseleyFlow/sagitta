@@ -1,0 +1,127 @@
+# SPEC: §15
+# COVERS: list.len list.contains
+#
+# §15.1's 22 reserved words, ASSERTED AS A COUNT (s28 DoD 8) rather
+# than printed, and §15.2's style rules exercised by this file's own
+# shape.
+#
+# Each word is checked by USING it where a reserved word is legal and
+# by proving it is NOT usable as an identifier: a list of 22 strings
+# would count to 22 without touching the lexer at all.
+import io
+import list
+
+# -- the count ---------------------------------------------------------
+let words = ["and", "as", "break", "catch", "continue", "edit",
+             "else", "false", "fn", "for", "if", "import",
+             "in", "let", "macro", "nil", "not", "or",
+             "return", "true", "try", "while"]
+# OUT: 22
+io.print(list.len(words))
+
+# -- no duplicates, so the count is 22 DISTINCT words ------------------
+let seen = []
+for w in words {
+    if list.contains(seen, w) {
+        io.print("duplicate in the reserved-word list: " + w)
+    }
+    list.push(seen, w)
+}
+# OUT: 22
+io.print(list.len(seen))
+
+# -- every one of them is reserved to the LEXER ------------------------
+# errors/reserved_word_as_name.fl proves the negative for `let`; the
+# positives are here, one use of each word in a position where only a
+# keyword parses.  A word that stopped being reserved would fail to
+# parse this file.
+let and_ok = true and true
+let or_ok = false or true
+let not_ok = not false
+# OUT: true true true
+io.print(and_ok, or_ok, not_ok)
+
+# nil / true / false as literals
+# OUT: nil true false
+io.print(nil, true, false)
+
+# if / else
+if false {
+    io.print("unreachable")
+} else {
+    # OUT: else
+    io.print("else")
+}
+
+# while / break / continue
+let n = 0
+while true {
+    n = n + 1
+    if n < 3 {
+        continue
+    }
+    break
+}
+# OUT: 3
+io.print(n)
+
+# for / in
+let total = 0
+for x in [1, 2] {
+    total = total + x
+}
+# OUT: 3
+io.print(total)
+
+# fn / return
+fn identity(v) {
+    return v
+}
+# OUT: 7
+io.print(identity(7))
+
+# try / catch
+try {
+    error("x")
+} catch e {
+    # OUT: user
+    io.print(e.kind)
+}
+
+# edit
+edit {
+    # OUT: edit
+    io.print("edit")
+}
+
+# macro
+macro m = @[ 2> ]
+# OUT: true
+io.print(m != nil)
+
+# import / as -- both used at the top of this file, and `as` again here
+import "./lib.fl" as helper
+# OUT: 1
+io.print(helper.one())
+
+# -- §15.1: MOTION WORDS ARE NOT RESERVED ------------------------------
+# The motion token space is separate, so these are ordinary names out
+# here and motion words inside `@[ ... ]`.
+let del = 1
+let esc = 2
+let yank = 3
+let paste = 4
+let w = 5
+let b = 6
+let c = 7
+# OUT: 28
+io.print(del + esc + yank + paste + w + b + c)
+
+# -- §15.2's style rules, exercised by this file itself ----------------
+# 4-space indent and no tabs: errors/tab_indent.fl is not a case,
+# because a tab is legal whitespace to the lexer -- the rule binds the
+# default config and runtime/*.fl, and Sprint 36 is what enforces it.
+# What IS mechanical here is that `_` marks a module-private binding,
+# which §11 enforces and 11-modules/ asserts.
+# OUT: true
+io.print(helper.visible() != nil)

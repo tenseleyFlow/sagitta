@@ -1,0 +1,117 @@
+# SPEC: §4
+# COVERS: literal list_lit map_lit entry
+# COVERS: op:NIL op:TRUE op:FALSE op:CONST op:INT8 op:LIST op:MAP
+# COVERS: op:INDEX_GET op:INDEX_SET op:FIELD_GET op:FIELD_SET
+# COVERS: op:LIST_APPEND op:NOT_NIL op:NIL_N op:DUP op:POPN
+#
+# §4's type table, one section per row, plus the two properties the
+# section states in bold: maps are INSERTION-ORDERED and strings are
+# GRAPHEME-INDEXED.  Both are invariant-5 requirements, so both are
+# asserted rather than described.
+import io
+import str
+import list
+import map
+import math
+
+# -- nil, the absent value ---------------------------------------------
+let absent = nil
+# OUT: nil true false
+io.print(absent, absent == nil, absent == false)
+
+# -- bool ---------------------------------------------------------------
+# OUT: true false
+io.print(true, false)
+
+# -- int is i64 and WRAPS: two's complement, never a silent promotion --
+# OUT: -9223372036854775808
+io.print(math.int_max + 1)
+# OUT: 9223372036854775807
+io.print(math.int_min - 1)
+
+# -- float is f64 -------------------------------------------------------
+# OUT: 2.5 true
+io.print(2.5, 1 == 1.0)
+# int and float are DIFFERENT types even when they compare equal, and
+# the printed form says which is which.
+# OUT: 1 1.0
+io.print(1, 1.0)
+
+# -- string: immutable, UTF-8, GRAPHEME-indexed ------------------------
+let s = "a👍🏽b"
+# Three graphemes, ten bytes: index 1 is the whole cluster.
+# OUT: 3 10 👍🏽
+io.print(str.len(s), str.len_bytes(s), str.at(s, 1))
+# Immutable: every str function returns a NEW string.
+let upper = str.upper("ab")
+# OUT: ab AB
+io.print("ab", upper)
+
+# -- list: ordered, mutable, heterogeneous ------------------------------
+let mixed = [nil, true, 1, 2.5, "s", [1], {a: 1}]
+# OUT: 7
+io.print(list.len(mixed))
+# OUT: nil true 1
+io.print(mixed[0], mixed[1], mixed[2])
+# Mutable in place, and the mutation is visible through every
+# reference to the same list -- lists are not copied on assignment.
+let alias = mixed
+list.push(alias, "new")
+# OUT: 8
+io.print(list.len(mixed))
+
+# -- map: INSERTION-ORDERED; keys are string, int or bool --------------
+# Written in an order no hash would reproduce, and read back in it.
+let ordered = {z: 1, a: 2, m: 3}
+# OUT: ["z", "a", "m"]
+io.print(map.keys(ordered))
+# All three key types §4 allows -- but only two of them have a
+# LITERAL spelling.  §2's `entry` production is
+# `( IDENT | STRING | INT ) ":" expr`, so a bool key is reachable
+# through map.set and not through a map literal; the value space and
+# the literal grammar are deliberately different widths, and §12's is
+# narrower still.
+let keyed = {"str": 1, 7: 2}
+map.set(keyed, true, 3)
+# OUT: 1 2 3
+io.print(keyed["str"], keyed[7], keyed[true])
+# A negative int key is the same story: `-1` is unary minus applied to
+# a literal, not an INT token, so it is not an `entry` key either.
+map.set(keyed, -1, 4)
+# OUT: 4
+io.print(keyed[-1])
+# An int key and the string of that int are DIFFERENT keys.
+let both = {7: "int", "7": "string"}
+# OUT: int string 2
+io.print(both[7], both["7"], map.len(both))
+# Re-inserting an existing key keeps its ORIGINAL position.
+map.set(ordered, "z", 99)
+# OUT: ["z", "a", "m"]
+io.print(map.keys(ordered))
+# A key removed and re-added goes to the END: it is a new insertion.
+map.remove(ordered, "z")
+map.set(ordered, "z", 1)
+# OUT: ["a", "m", "z"]
+io.print(map.keys(ordered))
+
+# -- function: first-class, closes over its environment ----------------
+fn make(k) {
+    return fn() { return k }
+}
+let f = make(5)
+# OUT: 5 true
+io.print(f(), f != nil)
+
+# -- handles are RESERVED here and constructible only from Sprint 34 ---
+# There is no literal for one and no way to make one, which is what
+# 34-editor.fl asserts by calling the deferred surface and requiring a
+# "name" error that says which sprint supplies it.
+
+# -- field and index assignment, on both containers --------------------
+let l2 = [0, 0]
+let m2 = {k: 0}
+l2[1] = 7
+m2.k = 9
+m2["j"] = 8
+# OUT: [0, 7] {k: 9, j: 8}
+io.print(l2, m2)

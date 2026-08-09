@@ -1256,19 +1256,41 @@ static void spec_load(void)
             g_spec);
 }
 
-/* Nonterminals defined in the §2 EBNF block: `^name  = ...`. */
+static void scan_ebnf_block(const char *p, const char *end, StrSet *out);
+
+/*
+ * Every nonterminal the spec DEFINES, from every ```ebnf block:
+ * `^name  = ...`.
+ *
+ * The sprint says "the §2 EBNF block", and §2's is the big one -- but
+ * §12 defines five more (`pl_file` and friends) in a block of its
+ * own, and they are nonterminals of the same language.  Counting the
+ * numerator over all blocks and the denominator over one produced a
+ * ledger reading `productions 42/37`, which is the kind of total that
+ * makes a reader stop trusting the rest of the line.
+ */
 static void spec_productions(StrSet *out)
 {
-    const char *p = strstr(g_spec_src, "```ebnf");
-    const char *end;
+    const char *p = g_spec_src;
 
     set_init(out);
-    if (p == NULL)
+    if (strstr(g_spec_src, "```ebnf") == NULL)
         die("no ```ebnf block in %s", g_spec);
-    p = strchr(p, '\n');
-    end = p == NULL ? NULL : strstr(p, "\n```");
-    if (p == NULL || end == NULL)
-        die("unterminated ```ebnf block in %s", g_spec);
+    while ((p = strstr(p, "```ebnf")) != NULL) {
+        const char *end;
+
+        p = strchr(p, '\n');
+        end = p == NULL ? NULL : strstr(p, "\n```");
+        if (p == NULL || end == NULL)
+            die("unterminated ```ebnf block in %s", g_spec);
+        scan_ebnf_block(p, end, out);
+        p = end + 4;
+    }
+    set_seal(out);
+}
+
+static void scan_ebnf_block(const char *p, const char *end, StrSet *out)
+{
     while (p < end) {
         const char *nl = strchr(p + 1, '\n');
         const char *q = p + 1;
@@ -1291,7 +1313,6 @@ static void spec_productions(StrSet *out)
             set_add(out, name);
         p = nl;
     }
-    set_seal(out);
 }
 
 /* §9.1's closed kind set, read from the backticked list. */

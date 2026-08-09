@@ -1,0 +1,8 @@
+# SPEC: §9
+# COVERS: kind:index
+# ERROR_KIND: index
+# EXIT: 1
+# Past the end is an ERROR, not nil: a silent nil turns an off-by-one
+# into a wrong answer three statements later.
+let l = [1, 2]
+return l[9]

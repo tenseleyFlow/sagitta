@@ -1,0 +1,8 @@
+# SPEC: §9, §11
+# COVERS: kind:io
+# ERROR_KIND: io
+# EXIT: 3
+# The environment refused, so exit 3 rather than 1 -- the script is
+# not wrong, the file is not there.
+import io
+return io.read("./definitely-not-a-file-9e3f1a.txt")

@@ -1,0 +1,8 @@
+# SPEC: §9
+# COVERS: kind:arity
+# ERROR_KIND: arity
+# EXIT: 1
+fn takes_two(a, b) {
+    return a + b
+}
+return takes_two(1)

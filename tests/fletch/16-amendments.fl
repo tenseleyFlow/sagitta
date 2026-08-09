@@ -1,0 +1,62 @@
+# SPEC: §16
+# COVERS: kind:limit list.len
+#
+# §16 is a registry, not a language feature, so what a conformance
+# file can assert about it is exactly this: THE AMENDMENTS THAT ARE
+# FILED ARE IN EFFECT, and their arithmetic still holds.
+#
+# A1 (Sprint 30) took the error-kind set from 11 to 12 by adding
+# "limit".  A4 (Sprint 30) corrected §7's closure sentence to "9 then
+# 10".  A2 and A3 are RESERVED, not filed -- a reserved row is a
+# promise and must not be observable here.
+import io
+import list
+
+# -- A1: the count is 12, and it is ASSERTED (s28 DoD 8) --------------
+# The list is written out so this file fails if a kind is added or
+# removed without the count moving, and check 4 of the coverage gate
+# separately requires an `# ERROR_KIND:` case for every one of them.
+let kinds = ["type", "arity", "name", "index", "key", "div",
+             "capability", "io", "import", "motion", "user", "limit"]
+# OUT: 12
+io.print(list.len(kinds))
+# OUT: true
+io.print(list.contains(kinds, "limit"))
+
+# -- A1 in effect: "limit" is REACHABLE and CATCHABLE ------------------
+# A row in a table proves nothing.  The kind exists because the VM
+# raises it, and it is catchable because infinite recursion is
+# user-triggerable and must not become an abort.
+fn spin(n) {
+    return spin(n + 1)
+}
+try {
+    spin(0)
+    io.print("unbounded recursion returned")
+} catch e {
+    # OUT: limit
+    io.print(e.kind)
+}
+
+# -- A2 is RESERVED, not filed: "handle" must not exist yet -----------
+# Sprint 34 files it and updates this file in the same commit.  Until
+# then the count above is 12 and nothing raises "handle".
+# OUT: false
+io.print(list.contains(kinds, "handle"))
+
+# -- A4 in effect: §7's closure sentence, which §14.1 is normative for -
+# clamp(9, 0, 8) is 8 because 9 > hi, so the counter yields 9 then 10.
+# The pre-A4 text said "10 then 11", which is what this asserts is no
+# longer true.
+fn clamp(x, lo, hi) {
+    if x < lo { return lo }
+    else if x > hi { return hi }
+    return x
+}
+fn counter(start) {
+    let n = start
+    return fn() { n = n + 1; return n }
+}
+let next = counter(clamp(9, 0, 8))
+# OUT: 9 10
+io.print(next(), next())

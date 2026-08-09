@@ -1,11 +1,125 @@
 # SPEC: §1
-# COVERS: str.len
-# CHECK: hello
-# CHECK_NEXT: 42
-# CHECK_NOT: nope
+# COVERS: str.len str.len_bytes str.bytes
+#
+# §1: comments, terminators, identifiers, numbers, strings, escapes.
+#
+# THE DIRECTIVE-IN-A-STRING CASE LIVES HERE, at the bottom, because
+# this file is where §1.5 is covered and because it is the one thing
+# that makes the whole suite trustworthy: the runner reads directives
+# from the lexer's COMMENT TOKENS, so a `# OUT:` inside a string is a
+# string.  A line-based scanner fires on it and every test that
+# contains a quoted directive silently starts asserting the wrong
+# thing.
 import io
 import str
-io.print("hello")
-io.print(42)
-let s = "# CHECK: nope"
-io.print(str.len(s))
+import list
+
+# -- §1.1 comments run to end of line; there are no block comments ----
+# OUT: 1
+io.print(1)          # a trailing comment is not part of the statement
+#
+# An empty comment and a comment-only line are both fine.
+
+# -- §1.2 a newline ends a statement unless the line is incomplete ----
+let a = 1
+let b = 2
+# OUT: 3
+io.print(a + b)
+# Continued because the line ends on an open bracket...
+let spread = [
+    1,
+    2
+]
+# OUT: [1, 2]
+io.print(spread)
+# ...on a trailing binary operator...
+let sum = 1 +
+    2
+# OUT: 3
+io.print(sum)
+# ...on a trailing comma, and on a trailing `=`.
+let cont =
+    7
+# OUT: 7
+io.print(cont)
+# `;` is an explicit separator and always ends a statement.
+let x = 1; let y = 2
+# OUT: 3
+io.print(x + y)
+
+# -- §1.3 identifiers: letter or _, then letters, digits, _ -----------
+let _leading = 1
+let with_digits_9 = 2
+let CamelCase = 3
+# OUT: 6
+io.print(_leading + with_digits_9 + CamelCase)
+
+# -- §1.4 integers: decimal, hex, and `_` separators ------------------
+# OUT: 255 255 1000000
+io.print(255, 0xFF, 1_000_000)
+# OUT: 65535
+io.print(0xFF_FF)
+# Type is i64, and the bounds are exact rather than approximate.
+import math
+# OUT: 9223372036854775807 -9223372036854775808
+io.print(math.int_max, math.int_min)
+
+# -- §1.4 floats, with and without an exponent ------------------------
+# OUT: 2.5 1000.0 0.001
+io.print(2.5, 1.0e3, 1.0e-3)
+# OUT: 1500.0
+io.print(1.5E3)
+# NO leading-dot float: `.5` would collide with the field accessor, so
+# a float must have digits on both sides of the point.  errors/ has
+# the negative case.
+
+# -- §1.5 strings and every escape §1.5 lists -------------------------
+# \n \t \r \\ \" \0 \xNN \u{...}
+let esc = "a\nb\tc\rd\\e\"f"
+# OUT: 11
+io.print(str.len(esc))
+# \0 is a real NUL byte in the string, not a terminator: the interner
+# keeps lengths, so "a\0b" is three bytes and not one.
+let nul = "a\0b"
+# OUT: 3 [97, 0, 98]
+io.print(str.len_bytes(nul), str.bytes(nul))
+# \xNN is a BYTE and \u{...} is a codepoint.
+# OUT: [65] 1 3
+io.print(str.bytes("\x41"), str.len("\u{20AC}"),
+         str.len_bytes("\u{20AC}"))
+# OUT: A €
+io.print("\x41", "\u{20AC}")
+# A six-digit codepoint, the top of the \u{} range.
+# OUT: 1 4
+io.print(str.len("\u{10FFFF}"), str.len_bytes("\u{10FFFF}"))
+
+# -- source is UTF-8, and a string may hold any of it ------------------
+# OUT: 3 9
+io.print(str.len("héllo👍🏽" ) - 3, str.len_bytes("日本語"))
+
+# -- §1.6 motion words are ordinary identifiers outside `@[ ... ]` ----
+let del = 1
+let esc2 = 2
+# OUT: 3
+io.print(del + esc2)
+
+# -- THE NEGATIVE CASE FOR THE RUNNER ITSELF ---------------------------
+#
+# Four directive-shaped strings.  If the runner scanned raw lines it
+# would find four more directives here and this file would fail; it
+# reads comment tokens, so these are data.
+let d1 = "# OUT: never printed"
+let d2 = "# CHECK: never matched"
+let d3 = "# EXIT: 99"
+let d4 = "# SPEC: 99"
+let quoted = [d1, d2, d3, d4]
+# OUT: 4
+io.print(list.len(quoted))
+# The strings really do contain what they look like, so the test is
+# that the RUNNER ignored them, not that they were mangled.
+# OUT: true
+io.print(str.starts_with(d1, "# OUT:"))
+# And a `#` inside a string does not start a comment either.
+let hashy = "before # after"
+# OUT: 14
+io.print(str.len(hashy))

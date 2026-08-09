@@ -1,0 +1,18 @@
+# SPEC: §4, §16
+# ERROR_KIND: name
+# ERROR: Sprint 34
+# EXIT: 1
+#
+# THE DEFERRAL, TESTED RATHER THAN PROMISED.
+#
+# Invariant 3 says an unimplemented path hard-errors NAMING ITS
+# SPRINT.  That is a claim about behaviour, so it gets a test: `bind`
+# must raise "name" and the message must say Sprint 34, not report a
+# typo.  A user who writes `bind("<C-p>", ...)` today has to be told
+# the feature is coming, because "undefined name 'bind'" sends them
+# looking for a spelling mistake that is not there.
+#
+# WHEN SPRINT 34 LANDS, this file is rewritten into real coverage and
+# the ledger picks it up unchanged -- the `# SPEC:` line is what keys
+# it, not the name.
+bind("H", "s", fn() { return 1 })

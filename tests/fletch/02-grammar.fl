@@ -1,0 +1,160 @@
+# SPEC: §2
+# COVERS: program stmt let_stmt assign_stmt target fn_decl macro_decl
+# COVERS: import_stmt if_stmt while_stmt for_stmt return_stmt edit_stmt
+# COVERS: try_stmt expr_stmt block params expr or_e and_e eq_e rel_e
+# COVERS: add_e mul_e unary postfix primary fn_expr literal list_lit
+# COVERS: map_lit entry motion_block motion motion_word args TERM
+#
+# EVERY NONTERMINAL OF §2's EBNF, exercised positively in one file.
+#
+# The negative cases -- what happens when each production is written
+# wrong -- are one per file under errors/, because a compile error
+# stops the whole program and several of them cannot share one.
+#
+# This file is the ledger's anchor for §2: check 2 of the coverage
+# gate reads the spec's own fenced EBNF and fails the build for any
+# nonterminal that appears in no `# COVERS:` line.
+import io
+import list
+
+# program = { stmt } EOF        -- this file is one.
+# import_stmt = "import" ( IDENT | STRING "as" IDENT ) TERM
+# (both forms; the STRING form is in 11-modules/.)
+
+# let_stmt = "let" IDENT [ "=" expr ] TERM
+let a = 1
+let uninitialised
+
+# assign_stmt = target "=" expr TERM
+# target = IDENT | postfix "[" expr "]" | postfix "." IDENT
+a = 2
+let l = [0]
+let m = {k: 0}
+l[0] = 1
+m.k = 2
+# OUT: 2 [1] {k: 2}
+io.print(a, l, m)
+
+# fn_decl = "fn" IDENT "(" [ params ] ")" block
+# params = IDENT { "," IDENT }
+fn two(p, q) {
+    return p + q
+}
+fn none() {
+    return 0
+}
+# OUT: 3 0
+io.print(two(1, 2), none())
+
+# macro_decl = "macro" IDENT "=" motion_block TERM
+# motion_block = "@[" { motion } "]"
+# motion = [ COUNT ] motion_word
+# motion_word = UNIT | [ "a" ] ARROW | "H" "(" { motion } ")"
+#             | "i" STRING | "del" | "esc" | CMDWORD
+macro every_motion = @[ l 2> a< H(lv) i"x" del esc yank ]
+# OUT: true
+io.print(every_motion != nil)
+
+# if_stmt = "if" expr block { "else" "if" expr block } [ "else" block ]
+if a == 1 {
+    io.print("wrong")
+} else if a == 2 {
+    # OUT: else-if
+    io.print("else-if")
+} else {
+    io.print("wrong")
+}
+
+# while_stmt = "while" expr block
+let n = 0
+while n < 2 {
+    n = n + 1
+}
+# OUT: 2
+io.print(n)
+
+# for_stmt = "for" IDENT [ "," IDENT ] "in" expr block
+let acc = []
+for v in [1, 2] {
+    list.push(acc, v)
+}
+for i, v in [3] {
+    list.push(acc, i + v)
+}
+# OUT: [1, 2, 3]
+io.print(acc)
+
+# return_stmt = "return" [ expr ] TERM   -- both forms
+fn bare_return() {
+    return
+}
+# OUT: nil
+io.print(bare_return())
+
+# edit_stmt = "edit" block
+edit {
+    # OUT: edit
+    io.print("edit")
+}
+
+# try_stmt = "try" block "catch" IDENT block
+try {
+    error("e")
+} catch e {
+    # OUT: user
+    io.print(e.kind)
+}
+
+# expr_stmt = expr TERM
+1 + 1
+
+# block = "{" { stmt } "}"  -- every construct above supplies one.
+
+# TERM = NEWLINE | ";" | EOF   -- all three: newlines throughout,
+# a semicolon here, and EOF at the end of the file.
+let s1 = 1; let s2 = 2
+# OUT: 3
+io.print(s1 + s2)
+
+# expr = or_e ; or_e = and_e { "or" and_e } ; and_e = eq_e { "and" eq_e }
+# eq_e = rel_e { ( "==" | "!=" ) rel_e }
+# rel_e = add_e { ( "<" | "<=" | ">" | ">=" ) add_e }
+# add_e = mul_e { ( "+" | "-" ) mul_e }
+# mul_e = unary { ( "*" | "/" | "%" ) unary }
+# unary = ( "not" | "-" ) unary | postfix
+# The whole cascade in one expression, so a missing level cannot parse.
+# 1 + 2*3 - (4/2)%3 is 1 + 6 - 2, i.e. 5.
+# OUT: 5
+io.print(1 + 2 * 3 - 4 / 2 % 3)
+# OUT: true
+io.print(not false and 1 + 2 * 3 - 4 / 2 % 3 >= 5 or false)
+
+# postfix = primary { "(" [ args ] ")" | "[" expr "]" | "." IDENT }
+# args = expr { "," expr }
+# All three postfixes chained off one primary.
+let obj = {fns: [fn(x, y) { return x * y }]}
+# OUT: 12
+io.print(obj.fns[0](3, 4))
+
+# primary = literal | IDENT | "(" expr ")" | fn_expr | motion_block
+# fn_expr = "fn" "(" [ params ] ")" ( block | expr )
+let block_body = fn(x) { return x + 1 }
+let expr_body = fn(x) x + 2
+# OUT: 2 3 7
+io.print(block_body(1), expr_body(1), (3 + 4))
+
+# literal = "nil" | "true" | "false" | INT | FLOAT | STRING
+#         | list_lit | map_lit
+# list_lit = "[" [ expr { "," expr } [ "," ] ] "]"
+# map_lit = "{" [ entry { "," entry } [ "," ] ] "}"
+# entry = ( IDENT | STRING | INT ) ":" expr
+# Every literal form, including the trailing commas and all three key
+# shapes -- a map keyed by an INT is not the same as one keyed by the
+# string of that int.
+let every = [nil, true, false, 1, 2.5, "s", [1], {a: 1}]
+# OUT: 8
+io.print(list.len(every))
+let trailing = [1, 2,]
+let keys = {ident: 1, "quoted": 2, 3: 4,}
+# OUT: [1, 2] 1 2 4
+io.print(trailing, keys.ident, keys["quoted"], keys[3])

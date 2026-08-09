@@ -1,0 +1,19 @@
+# A support module for 15-style/main.fl.
+#
+# It carries no `# SPEC:` line and needs none: the directory has an
+# entry point, so nothing else in it is a unit.  A support module IS
+# NOT a conformance file, and requiring it to declare a section would
+# make every imported helper look like a test that asserts nothing.
+import io
+
+fn one() {
+    return 1
+}
+
+fn visible() {
+    return "public"
+}
+
+fn _hidden() {
+    return "private"
+}

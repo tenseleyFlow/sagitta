@@ -1,0 +1,6 @@
+# SPEC: §9
+# COVERS: kind:type
+# ERROR_KIND: type
+# EXIT: 1
+# An operator applied across types §5 does not join.
+return 1 + "a"

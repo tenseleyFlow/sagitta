@@ -1,0 +1,6 @@
+# SPEC: §9
+# COVERS: kind:div
+# ERROR_KIND: div
+# EXIT: 1
+# INTEGER division only: 1.0 / 0.0 is inf, which §4 admits as a value.
+return 1 / 0

@@ -1,0 +1,106 @@
+# SPEC: §3
+# COVERS: motion_block motion motion_word macro_decl
+# COVERS: op:MOTION
+# COVERS: kind:motion
+#
+# §3, the terse layer, covered as far as a HEADLESS run can go:
+# lexing, parsing, compilation to FL_OP_MOTION, and the "motion" raise
+# against the null host.  Motion EXECUTION is Sprint 34's, and the
+# `# COVERS:` tokens for the vocabulary are complete now so the ledger
+# does not need re-auditing when the host arrives.
+#
+# What is asserted here is that each spelling COMPILES and reaches the
+# host -- proven by the raise, which only the MOTION opcode produces.
+# A block that failed to parse would be a compile error instead, and a
+# block that compiled to nothing would return nil.
+import io
+
+fn raises_motion(f) {
+    try {
+        f()
+        return "<no raise>"
+    } catch e {
+        return e.kind
+    }
+}
+
+# -- units: l, w, b, c -------------------------------------------------
+# OUT: motion motion motion motion
+io.print(raises_motion(fn() { return @[ l ] }),
+         raises_motion(fn() { return @[ w ] }),
+         raises_motion(fn() { return @[ b ] }),
+         raises_motion(fn() { return @[ c ] }))
+
+# -- arrows, and the `a` (alt) prefix ----------------------------------
+# OUT: motion motion motion motion
+io.print(raises_motion(fn() { return @[ < ] }),
+         raises_motion(fn() { return @[ > ] }),
+         raises_motion(fn() { return @[ ^ ] }),
+         raises_motion(fn() { return @[ v ] }))
+# OUT: motion
+io.print(raises_motion(fn() { return @[ a> ] }))
+
+# -- count prefixes ----------------------------------------------------
+# OUT: motion motion
+io.print(raises_motion(fn() { return @[ 2> ] }),
+         raises_motion(fn() { return @[ 65535> ] }))
+
+# -- H( ... ) nests without leaving motion mode ------------------------
+# `l`, `v` and `del` are motion words INSIDE a block and ordinary
+# identifiers everywhere else, which is why this is a lexer mode: the
+# inner `)` must not drop back to ordinary tokens.
+# OUT: motion
+io.print(raises_motion(fn() { return @[ H(lv) ] }))
+# OUT: motion
+io.print(raises_motion(fn() { return @[ H(2> H(l)) ] }))
+
+# -- insert, del, esc ---------------------------------------------------
+# OUT: motion motion motion
+io.print(raises_motion(fn() { return @[ i"text" ] }),
+         raises_motion(fn() { return @[ del ] }),
+         raises_motion(fn() { return @[ esc ] }))
+
+# -- command words ------------------------------------------------------
+# OUT: motion motion
+io.print(raises_motion(fn() { return @[ yank ] }),
+         raises_motion(fn() { return @[ paste ] }))
+
+# -- a whole sequence, as §14's `dup` writes it -------------------------
+# OUT: motion
+io.print(raises_motion(fn() { return @[ l< H(lv) yank v paste esc ] }))
+
+# -- a block may span lines: §1.2 makes an unclosed `@[` a continuation -
+# OUT: motion
+io.print(raises_motion(fn() {
+    return @[
+        2>
+        del
+    ]
+}))
+
+# -- whitespace inside a block is not significant ----------------------
+# OUT: motion
+io.print(raises_motion(fn() { return @[4>] }))
+
+# -- a comment inside a block is still a comment ------------------------
+# OUT: motion
+io.print(raises_motion(fn() { return @[ 2> # a comment
+    ] }))
+
+# -- `macro` is sugar for a ZERO-ARGUMENT FUNCTION ----------------------
+# The motions must NOT run at definition time.  They used to: a config
+# with a macro in it fired against the buffer as the file loaded, and
+# against the null host raised "motion" before anything else ran.  If
+# that regressed, this file would not reach the line below.
+macro dup = @[ l< H(lv) yank v paste esc ]
+# OUT: true
+io.print(dup != nil)
+# OUT: motion
+io.print(raises_motion(dup))
+
+# -- the words are ordinary identifiers OUTSIDE a block -----------------
+let l = 1
+let v = 2
+let del = 3
+# OUT: 6
+io.print(l + v + del)

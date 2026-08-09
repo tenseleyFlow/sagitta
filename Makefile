@@ -1032,6 +1032,7 @@ test-script:
 # assumed: run.c sorts with strcmp and the ledger is byte-compared.
 test-fletch: $(BUILD)/fletch_run $(BUILD)/sagitta
 	LC_ALL=C $(BUILD)/fletch_run --sagitta $(abspath $(BUILD)/sagitta)
+	BUILD=$(BUILD) scripts/check-fletch-coverage.sh
 
 fletch-ledger: $(BUILD)/fletch_run $(BUILD)/sagitta
 	LC_ALL=C $(BUILD)/fletch_run --ledger \

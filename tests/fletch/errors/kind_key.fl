@@ -1,0 +1,7 @@
+# SPEC: §9
+# COVERS: kind:key
+# ERROR_KIND: key
+# EXIT: 1
+# A missing key is distinguishable from a key whose value IS nil.
+let m = {a: nil}
+return m["b"]

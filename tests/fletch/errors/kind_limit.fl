@@ -1,0 +1,11 @@
+# SPEC: §9, §16
+# COVERS: kind:limit
+# ERROR_KIND: limit
+# EXIT: 1
+# Amendment A1 added "limit" for VM resource exhaustion.  Unbounded
+# recursion is user-triggerable, so it raises a catchable value rather
+# than aborting -- here nothing catches it, so it exits 1.
+fn spin(n) {
+    return spin(n + 1)
+}
+return spin(0)

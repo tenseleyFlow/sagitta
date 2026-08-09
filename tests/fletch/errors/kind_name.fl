@@ -1,0 +1,10 @@
+# SPEC: §9
+# COVERS: kind:name
+# ERROR_KIND: name
+# ERROR: did you mean
+# EXIT: 1
+# A near-miss carries a SUGGESTION (s32 §7); the suggestion is part of
+# the message a user reads, so it is asserted here rather than only in
+# the unit suite.
+let tabwidth = 4
+return tabwith
