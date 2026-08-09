@@ -298,8 +298,18 @@ static bool bare_key(const char *s, u32 n)
 typedef struct Rw {
     FlVm *vm;
     Bytebuf *out;
-    /* repr raises where display elides; see the file header. */
-    bool strict;
+    /*
+     * QUOTING and REFUSING are separate axes, because the REPL wants
+     * one of each: repr's quoting, so a result can be pasted back in,
+     * and display's elision, so a cyclic value prints rather than
+     * raising at the prompt.  Folding them into one `strict` flag made
+     * that combination unreachable.
+     */
+    bool quote;
+    bool refuse;
+    /* Depth past which a container prints as an ellipsis.  fmt's own
+     * entry points pass the backstop; the REPL passes 8. */
+    u32 max_depth;
     u32 indent;              /* spaces per level; 0 = single line       */
     Bytebuf path;            /* ".tabs[0].parent", for the cycle raise  */
     /* The containers between the root and here.  Membership IS the
@@ -341,11 +351,11 @@ static bool rw_enter(Rw *w, const FlObj *o, bool *dup)
             return true;
         }
     }
-    if (w->nopen >= (u32)FMT_MAX_DEPTH) {
-        if (w->strict)
+    if (w->nopen >= w->max_depth) {
+        if (w->refuse)
             return fl_raise(w->vm, "limit",
-                            "fmt.repr: nested deeper than %d",
-                            FMT_MAX_DEPTH);
+                            "fmt.repr: nested deeper than %u",
+                            (unsigned)w->max_depth);
         *dup = true;      /* display gives up quietly rather than lying */
         return true;
     }
@@ -362,7 +372,7 @@ static bool rw_list(Rw *w, FlList *l)
     if (!rw_enter(w, &l->h, &dup))
         return false;
     if (dup) {
-        if (w->strict)
+        if (w->refuse)
             return rw_cycle(w);
         put(w->out, "[...]");
         return true;
@@ -413,7 +423,7 @@ static bool rw_key(Rw *w, FlValue k)
          * spelling, and emitting one would produce a file that fails to
          * load rather than a file that loads wrong.
          */
-        if (w->strict && k.as.i < 0)
+        if (w->refuse && k.as.i < 0)
             return fl_raise(w->vm, "type",
                             "fmt.repr: map key %lld is negative, which "
                             "pure-literal syntax cannot spell",
@@ -421,7 +431,7 @@ static bool rw_key(Rw *w, FlValue k)
         emit_radix(w->out, k.as.i, 10U, false);
         return true;
     case FL_BOOL:
-        if (w->strict)
+        if (w->refuse)
             return fl_raise(w->vm, "type",
                             "fmt.repr: map key %s is a bool, which "
                             "pure-literal syntax cannot spell",
@@ -448,7 +458,7 @@ static bool rw_map(Rw *w, FlMap *m)
     if (!rw_enter(w, &m->h, &dup))
         return false;
     if (dup) {
-        if (w->strict)
+        if (w->refuse)
             return rw_cycle(w);
         put(w->out, "{...}");
         return true;
@@ -498,7 +508,7 @@ static bool rw_uncodeable(Rw *w, FlValue v)
 {
     const char *nm = fl_type_name((FlType)v.t);
 
-    if (w->strict)
+    if (w->refuse)
         return fl_raise(w->vm, "type",
                         "fmt.repr: a %s has no pure-literal form", nm);
     bytebuf_push_u8(w->out, (u8)'<');
@@ -533,7 +543,7 @@ static bool rw_value(Rw *w, FlValue v)
          * INT64_MAX and folds the sign afterwards, so the magnitude
          * 9223372036854775808 is a compile error wherever it appears.
          */
-        if (w->strict && v.as.i == (-9223372036854775807LL - 1LL))
+        if (w->refuse && v.as.i == (-9223372036854775807LL - 1LL))
             return fl_raise(w->vm, "type",
                             "fmt.repr: %lld has no integer literal; its "
                             "magnitude is one past the i64 maximum",
@@ -545,7 +555,7 @@ static bool rw_value(Rw *w, FlValue v)
          * the platform calls them; repr refuses. */
         if (v.as.f != v.as.f || v.as.f > 1.7976931348623157e308 ||
             v.as.f < -1.7976931348623157e308) {
-            if (w->strict)
+            if (w->refuse)
                 return fl_raise(w->vm, "type",
                                 "fmt.repr: %s has no float literal",
                                 v.as.f != v.as.f
@@ -567,7 +577,7 @@ static bool rw_value(Rw *w, FlValue v)
          * `["a", "b"]`, and a display nobody can read back is worth
          * less than two quote characters.
          */
-        if (!w->strict && w->nopen == 0U)
+        if (!w->quote && w->nopen == 0U)
             bytebuf_append(w->out, s->b, (size_t)s->len);
         else
             emit_quoted(w->out, s->b, s->len);
@@ -584,21 +594,28 @@ static bool rw_value(Rw *w, FlValue v)
 
 /* Renders `v` into `out`.  Frees nothing it did not allocate; `out`
  * belongs to the caller either way. */
-static bool render(FlVm *vm, Bytebuf *out, FlValue v, bool strict,
-                   u32 indent)
+static bool render_at(FlVm *vm, Bytebuf *out, FlValue v, bool quote,
+                      bool refuse, u32 indent, u32 max_depth)
 {
     Rw w;
     bool ok;
 
     w.vm = vm;
     w.out = out;
-    w.strict = strict;
+    w.quote = quote;
+    w.refuse = refuse;
+    w.max_depth = max_depth;
     w.indent = indent;
     w.nopen = 0U;
     bytebuf_init(&w.path);
     ok = rw_value(&w, v);
     bytebuf_free(&w.path);
     return ok;
+}
+
+static bool render(FlVm *vm, Bytebuf *out, FlValue v, bool strict, u32 indent)
+{
+    return render_at(vm, out, v, strict, strict, indent, (u32)FMT_MAX_DEPTH);
 }
 
 bool fl_fmt_display(FlVm *vm, Bytebuf *out, FlValue v)
@@ -609,6 +626,16 @@ bool fl_fmt_display(FlVm *vm, Bytebuf *out, FlValue v)
 bool fl_fmt_repr(FlVm *vm, Bytebuf *out, FlValue v)
 {
     return render(vm, out, v, true, 0U);
+}
+
+bool fl_fmt_repl(FlVm *vm, Bytebuf *out, FlValue v, u32 max_depth)
+{
+    /* repr's QUOTING with display's ELISION: at a prompt the difference
+     * between the string "a\nb" and a two-line result is information
+     * the user needs, and a cyclic value must print rather than raise
+     * -- `let l = []` then `list.push(l, l)` is all it takes. */
+    return render_at(vm, out, v, true, false, 0U,
+                     max_depth == 0U ? (u32)FMT_MAX_DEPTH : max_depth);
 }
 
 /* ---------------------------------------------------------------- */

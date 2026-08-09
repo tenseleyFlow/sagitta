@@ -173,3 +173,74 @@ check_deferred_target()
 }
 
 check_deferred_target test-script 37
+
+#
+# Sprint 32 §1: every row of the `sag fl` exit-code contract, driven
+# once.  A contract nobody exercises is a table in a document.
+#
+fl_dir=$tmp/fl
+mkdir "$fl_dir"
+printf 'import io\nio.print("hi")\n' >"$fl_dir/ok.fl"
+printf 'return )\n' >"$fl_dir/syntax.fl"
+printf 'return nope\n' >"$fl_dir/runtime.fl"
+printf 'import io\nio.read("%s/definitely-absent")\n' "$fl_dir" \
+    >"$fl_dir/ioerr.fl"
+
+run_capture "$bin" fl "$fl_dir/ok.fl"
+expect_rc 0 "fl exit 0"
+[ "$(cat "$out")" = "hi" ] || fail "fl exit 0 (stdout)"
+[ ! -s "$err" ] || fail "fl exit 0 (stderr must be quiet)"
+echo "smoke: fl exit 0 ok"
+
+run_capture "$bin" fl "$fl_dir/syntax.fl"
+expect_rc 1 "fl exit 1 (compile)"
+[ ! -s "$out" ] || fail "fl compile error wrote to stdout"
+[ -s "$err" ] || fail "fl compile error said nothing"
+echo "smoke: fl exit 1 compile ok"
+
+run_capture "$bin" fl "$fl_dir/runtime.fl"
+expect_rc 1 "fl exit 1 (runtime)"
+[ ! -s "$out" ] || fail "fl runtime error wrote to stdout"
+echo "smoke: fl exit 1 runtime ok"
+
+run_capture "$bin" fl "$fl_dir/missing.fl"
+expect_rc 3 "fl exit 3 (unreadable)"
+echo "smoke: fl exit 3 unreadable ok"
+
+run_capture "$bin" fl "$fl_dir/ioerr.fl"
+expect_rc 3 "fl exit 3 (io escaping)"
+echo "smoke: fl exit 3 io ok"
+
+# -e prints its value; a nil result prints NOTHING, not a blank line.
+run_capture "$bin" fl -e 'import str
+return str.upper("hi")'
+expect_rc 0 "fl -e"
+[ "$(cat "$out")" = '"HI"' ] || fail "fl -e (want quoted HI)"
+echo "smoke: fl -e ok"
+
+run_capture "$bin" fl -e 'let x = 1'
+expect_rc 0 "fl -e nil"
+[ ! -s "$out" ] || fail "fl -e printed something for nil"
+echo "smoke: fl -e nil prints nothing ok"
+
+# Non-tty stdin is a script, and must not emit escape sequences: a REPL
+# that did is how CI logs become unreadable.
+printf 'import io\nio.print("piped")\n' | "$bin" fl >"$out" 2>"$err" || \
+    fail "fl stdin"
+[ "$(cat "$out")" = "piped" ] || fail "fl stdin (stdout)"
+if od -c "$out" | grep -q '033'; then
+    fail "fl stdin emitted an escape sequence"
+fi
+echo "smoke: fl stdin ok"
+
+run_capture "$bin" fl --list-natives
+expect_rc 0 "fl --list-natives"
+[ "$(wc -l < "$out" | tr -d ' ')" -eq 117 ] || fail "fl --list-natives count"
+echo "smoke: fl --list-natives ok"
+
+run_capture "$bin" fl --help
+expect_rc 0 "fl --help"
+for form in -e -c --dump-ast --dump-bytecode --list-natives; do
+    grep -F -- "$form" "$out" >/dev/null || fail "fl --help omits $form"
+done
+echo "smoke: fl --help ok"

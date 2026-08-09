@@ -130,6 +130,14 @@ bool fl_fmt_display(FlVm *vm, Bytebuf *out, FlValue v);
 bool fl_fmt_repr(FlVm *vm, Bytebuf *out, FlValue v);
 
 /*
+ * What a prompt prints: repr's quoting with display's elision, and a
+ * caller-set depth cap (Sprint 32 §5 pins 8).  A cyclic value elides to
+ * `[...]` rather than raising -- at a REPL, refusing to print a value
+ * the user just built is worse than printing it approximately.
+ */
+bool fl_fmt_repl(FlVm *vm, Bytebuf *out, FlValue v, u32 max_depth);
+
+/*
  * Drops `re`'s compiled-pattern cache and its arena.
  *
  * The cache is a pure function of (pattern bytes, flags) and therefore
