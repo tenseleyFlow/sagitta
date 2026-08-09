@@ -50,6 +50,7 @@
 #include "fl/opcodes.h"
 #include "fl/parse.h"
 #include "fl/repl.h"
+#include "fl/trace.h"
 #include "fl/std.h"
 #include "fl/vm.h"
 #include "util/arena.h"
@@ -231,11 +232,14 @@ static void err_field(FlVm *vm, FlValue err, const char *key, char *out,
 static int report_raise(FlVm *vm, FlValue err)
 {
     char kind[64];
-    char msg[2048];
+    Bytebuf bb;
 
     err_field(vm, err, "kind", kind, sizeof(kind));
-    err_field(vm, err, "msg", msg, sizeof(msg));
-    (void)fprintf(stderr, "error: %s: %s\n", kind, msg);
+    bytebuf_init(&bb);
+    /* The §6 block: the error line, the frames, and the caret. */
+    fl_trace_render(vm, err, &bb);
+    (void)fwrite(bb.data, 1U, bb.len, stderr);
+    bytebuf_free(&bb);
     if (strcmp(kind, "capability") == 0 || strcmp(kind, "io") == 0)
         return SAG_EXIT_IO;
     return SAG_EXIT_ERR;
@@ -273,10 +277,14 @@ static FlFn *cli_compile(FlRun *r, const char *name, const char *src,
                          size_t len)
 {
     FlProgram p;
+    FlFn *fn;
 
     if (!cli_parse(r, name, src, len, &p))
         return NULL;
-    return fl_compile(&r->vm, &r->dc, &p, 0U, r->origin);
+    fn = fl_compile(&r->vm, &r->dc, &p, 0U, r->origin);
+    if (fn != NULL)
+        fn->fnkind = (u8)FL_FN_SCRIPT;
+    return fn;
 }
 
 /* ---------------------------------------------------------------- */

@@ -201,12 +201,29 @@ typedef struct FlOrigin {
     u32 caps;        /* FL_CAP_*                                         */
 } FlOrigin;
 
+/*
+ * What a stack trace calls this function (Sprint 32 §6).
+ *
+ * A closed table, and s33 asserts every row.  It cannot be derived from
+ * what is already here: a module's top-level chunk and a script's are
+ * both anonymous with a path, and only the thing that COMPILED them
+ * knows which is which.
+ */
+typedef enum {
+    FL_FN_NORMAL = 0,   /* `f`, or `<fn>` when name_id is 0            */
+    FL_FN_MACRO,        /* `macro m`                                   */
+    FL_FN_MODULE,       /* `<module init>`                             */
+    FL_FN_SCRIPT,       /* `<script>`                                  */
+    FL_FN_REPL          /* `<repl>`                                    */
+} FlFnKind;
+
 typedef struct FlFn {
     FlObj h;
     FlChunk ch;
     u32 name_id;     /* 0 = anonymous; traces print "<fn>"                */
     u8 arity;
     u8 nup;
+    u8 fnkind;       /* FlFnKind -- what a trace calls this frame         */
     u16 max_stack;   /* computed by the compiler                          */
     FlOrigin origin;
 } FlFn;

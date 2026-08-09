@@ -22,6 +22,7 @@
 #include "fl/opcodes.h"
 #include "fl/std.h"
 #include "fl/suggest.h"
+#include "fl/trace.h"
 #include "util/log.h"
 
 /* ---------------------------------------------------------------- */
@@ -807,7 +808,15 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
                 goto raised;
             }
             frame->ip = ip;
-            frame = &vm->frames[vm->nframes++];
+            {
+                /* The CALL's OWN pc: `ip` is already past the opcode
+                 * and its one operand byte. */
+                u32 site = (u32)(ip - frame->cl->fn->ch.code) - 2U;
+
+                frame = &vm->frames[vm->nframes++];
+                frame->call_pc = site;
+            }
+            frame->via_native = 0U;
             frame->cl = target;
             frame->ip = target->fn->ch.code;
             frame->slots = vm->sp - n - 1;
@@ -1238,6 +1247,21 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
 
     raised:
         /*
+         * The raising instruction's pc, for the innermost trace frame.
+         * Saved here rather than tracked per instruction: a store in
+         * the dispatch loop is a cost invariant 4 has no room for, and
+         * a raise is not on any hot path.
+         */
+        frame->ip = ip;
+        /*
+         * THE TRACE IS BUILT WHEN THE ERROR ESCAPES EVERY FRAME, not at
+         * raise time.  `nhandlers == 0` means no `catch` anywhere in
+         * the VM, so no outer loop can claim it either -- a try/catch
+         * in a tight loop must not pay for formatting it will discard.
+         */
+        if (vm->nhandlers == 0U)
+            fl_trace_attach(vm);
+        /*
          * UNWIND, in this order: close upvalues, truncate frames,
          * restore sp, push the error, jump.  Any other order either
          * leaves a closure pointing at a slot the handler is about to
@@ -1298,6 +1322,8 @@ bool fl_vm_run(FlVm *vm, FlFn *entry, FlValue *out)
     vm->frames[vm->nframes].cl = cl;
     vm->frames[vm->nframes].ip = entry->ch.code;
     vm->frames[vm->nframes].slots = vm->stack;
+    vm->frames[vm->nframes].call_pc = 0U;
+    vm->frames[vm->nframes].via_native = 0U;
     vm->nframes++;
     {
         bool ok = vm_exec(vm, 0U, out);
@@ -1370,6 +1396,11 @@ bool fl_call(FlVm *vm, FlValue callee, const FlValue *args, u32 nargs,
         vm->frames[vm->nframes].cl = cl;
         vm->frames[vm->nframes].ip = cl->fn->ch.code;
         vm->frames[vm->nframes].slots = slots;
+        /* Entered from C: there is no caller chunk, and the native that
+         * called in is what a trace should name between the two Fletch
+         * frames. */
+        vm->frames[vm->nframes].call_pc = 0U;
+        vm->frames[vm->nframes].via_native = vm->cur_native;
         vm->nframes++;
         if (!vm_exec(vm, base, out)) {
             /* The callee's frames go too.  A native that swallows the

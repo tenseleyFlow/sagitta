@@ -67,6 +67,15 @@ void flfix_as(FlFix *f, u8 kind, u32 caps);
  */
 void flfix_run(FlFix *f, const char *src, char *out, size_t cap);
 
+/*
+ * Runs `src` and renders the §6 error block -- the `error:` line, the
+ * `at` frames and the caret -- into `out`.  Empty when the program
+ * completed.  The fnkind of the entry chunk is `kind`, so the naming
+ * table's script/repl/module rows can each be driven.
+ */
+void flfix_run_trace(FlFix *f, const char *src, u8 kind, char *out,
+                     size_t cap);
+
 /* Asserts the rendered outcome.  A macro so the failure names the
  * CALLER's line, which is the line a reader needs. */
 #define FL_EQ(f, src, want)                                                   \

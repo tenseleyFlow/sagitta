@@ -341,6 +341,9 @@ static bool run_body(FlVm *vm, u32 idx, const char *path, const char *src,
     fn = fl_compile(vm, vm->dc, &p, file_id, vm->mods.v[idx].origin);
     if (fn == NULL)
         return fl_raise(vm, "import", "%s did not compile", path);
+    /* §6's frame-naming table: a module's top-level chunk prints as
+     * `<module init>`, which nothing but its compiler can know. */
+    fn->fnkind = (u8)FL_FN_MODULE;
     /*
      * The body's own globals, carried on ITS closure.
      *

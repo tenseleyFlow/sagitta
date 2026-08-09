@@ -24,6 +24,20 @@ typedef struct FlFrame {
     FlClosure *cl;
     const u8 *ip;
     FlValue *slots;
+    /*
+     * The pc, IN THE CALLER'S CHUNK, of the CALL that pushed this
+     * frame -- not the resume point.
+     *
+     * §6's pitfall: `ip` at the moment a frame is pushed already points
+     * PAST the call, so a trace built from it names the next source
+     * line.  That is wrong often enough to be maddening and rarely
+     * enough to survive review, so the call's own pc is recorded here
+     * once, where it is known for free.
+     */
+    u32 call_pc;
+    /* The native that called in, or 0.  `list.map(f, ...)` puts a
+     * native between two Fletch frames and the trace has to show it. */
+    u32 via_native;
 } FlFrame;
 
 typedef struct FlHandler {
@@ -141,6 +155,17 @@ struct FlVm {
      * every helper taking it as a parameter. */
     u32 cur_native;
     FlValue err;                 /* the in-flight raised value            */
+    /*
+     * The caret block for the last error that escaped every frame,
+     * arena-allocated, or NULL.
+     *
+     * It lives on the VM rather than on the error map because it is a
+     * PRESENTATION artifact, not part of the value: spec §9 fixes the
+     * map's shape at kind/msg/trace, and a `catch` handler has no use
+     * for a rendered source line.  It is captured in the unwinder
+     * because that is the last moment the frames still exist.
+     */
+    const char *err_caret;
     /*
      * The origin a capability check falls back to when no Fletch frame
      * is on the stack -- a native invoked directly by the host.  §13:

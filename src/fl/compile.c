@@ -1152,6 +1152,8 @@ static void comp_stmt(Compiler *c, const FlNode *n)
         mf = comp_function(c, &syn, n->as.macro.name, false);
         if (mf == NULL)
             return;
+        /* §6: a macro frame prints as `macro m`. */
+        mf->fnkind = (u8)FL_FN_MACRO;
         k = add_const(c, FL_OBJ_V(FL_FN, mf), n->sp);
         emit_op(c, FL_OP_CLOSURE, n->sp);
         emit_u16(c, (u16)k);

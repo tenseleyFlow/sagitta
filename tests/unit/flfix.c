@@ -11,6 +11,7 @@
 #include "fl/compile.h"
 #include "fl/gc.h"
 #include "fl/parse.h"
+#include "fl/trace.h"
 
 static void flfix_sink(void *ctx, FlDiagLevel level, FlSpan sp,
                        const char *msg, const char *rendered)
@@ -188,4 +189,39 @@ void flfix_run(FlFix *f, const char *src, char *out, size_t cap)
         (void)snprintf(out, cap, "<%s>", fl_type_name((FlType)res.t));
         return;
     }
+}
+
+void flfix_run_trace(FlFix *f, const char *src, u8 kind, char *out,
+                     size_t cap)
+{
+    FlProgram p;
+    FlFn *fn;
+    FlValue res = FL_NIL_V;
+    size_t n = strlen(src);
+    Bytebuf bb;
+    size_t k;
+
+    out[0] = '\0';
+    f->ndiag = 0U;
+    fl_diag_init(&f->dc, &f->arena);
+    fl_diag_set_sink(&f->dc, flfix_sink, f);
+    /* The source is BORROWED by the diag context, and the caret quotes
+     * it -- so it has to be the same bytes the compiler read. */
+    (void)fl_diag_add_file(&f->dc, "t.fl", src, n);
+    p = fl_parse(&f->arena, &f->dc, &f->in, src, n, 0U);
+    if (p.had_error)
+        return;
+    fn = fl_compile(&f->vm, &f->dc, &p, 0U, f->origin);
+    if (fn == NULL)
+        return;
+    fn->fnkind = kind;
+    if (fl_vm_run(&f->vm, fn, &res))
+        return;
+    bytebuf_init(&bb);
+    fl_trace_render(&f->vm, res, &bb);
+    k = bb.len < cap - 1U ? bb.len : cap - 1U;
+    if (k != 0U)
+        (void)memcpy(out, bb.data, k);
+    out[k] = '\0';
+    bytebuf_free(&bb);
 }
