@@ -1,0 +1,95 @@
+# SPEC: §11, §4
+# COVERS: re.test re.find re.find_all re.replace re.replace_fn re.split
+# COVERS: re.escape
+#
+# The `re` module, over the Sprint 20 engine.
+#
+# A match is a MAP with byte offsets and the matched text, not a bare
+# string: `re.find` returning "" would make "matched empty" and "did
+# not match" the same answer, and the whole point of the nil return is
+# that they are not.
+import io
+import re
+import map
+import list
+
+# -- the predicate ---------------------------------------------------
+# OUT: true false
+io.print(re.test("abc", "b"), re.test("abc", "z"))
+# Flags are the third argument; "i" is case-insensitive.
+# OUT: false true
+io.print(re.test("ABC", "b"), re.test("ABC", "b", "i"))
+
+# -- a single match --------------------------------------------------
+# The whole match is group 0, so `groups` is never empty on a hit.
+# OUT: {lo: 2, hi: 4, text: "ll", groups: [{lo: 2, hi: 4, text: "ll"}]}
+io.print(re.find("hello", "l+"))
+# A miss is nil, which is why the return is not a map with a `found`
+# field: `if re.find(...)` is the natural spelling and it works.
+# OUT: nil
+io.print(re.find("hello", "z"))
+# `from` skips a prefix without copying the subject.
+# OUT: 3
+io.print(map.get(re.find("hello", "l", "", 3), "lo"))
+
+# -- every match -----------------------------------------------------
+let all = re.find_all("a1b2", "[0-9]")
+# OUT: 2
+io.print(list.len(all))
+# OUT: 1 2
+io.print(map.get(all[0], "text"), map.get(all[1], "text"))
+# A limit caps the number of matches, not the subject scanned.
+# OUT: 1
+io.print(list.len(re.find_all("a1b2", "[0-9]", "", 1)))
+
+# -- template replacement ---------------------------------------------
+# OUT: a#b#
+io.print(re.replace("a1b2", "[0-9]", "#"))
+# `$1` is a group reference; `$0` is the whole match.
+# OUT: a[1]b[2]
+io.print(re.replace("a1b2", "([0-9])", "[$1]"))
+
+# -- callback replacement, which re-enters the VM ---------------------
+# The callback receives the same match map `re.find` returns, so the
+# two surfaces cannot drift apart.  Re-entering Fletch from inside a
+# scan is why the compiled-pattern cache is pinned for its duration.
+# OUT: a<1>b<2>
+io.print(re.replace_fn("a1b2", "[0-9]", fn(m) {
+    return "<" + map.get(m, "text") + ">"
+}))
+
+# -- splitting ---------------------------------------------------------
+# OUT: ["a", "b", "c"]
+io.print(re.split("a,b;c", "[,;]"))
+#
+# `limit` HERE COUNTS SPLITS; on str.split it counts PIECES.
+#
+# The two are one apart for the same intent: `str.split(s, sep, 2)`
+# and `re.split(s, pat, "", 1)` both yield two pieces.  s31 specified
+# str.split's as "caps parts" and left re.split's unstated, and the
+# landed behaviour is pinned by its own unit test, so this file
+# records the divergence rather than papering over it -- reconciling
+# the two is an API decision, not something a conformance run should
+# decide by rewriting an expectation.
+# OUT: ["a", "b;c"]
+io.print(re.split("a,b;c", "[,;]", "", 1))
+# OUT: ["a", "b", "c"]
+io.print(re.split("a,b;c", "[,;]", "", 2))
+
+# -- escaping ----------------------------------------------------------
+# The escaped text matches itself literally, which is the only property
+# that matters and the one asserted -- not the exact backslashes.
+let lit = "a.b*c"
+# OUT: true
+io.print(re.test(lit, re.escape(lit)))
+# OUT: false
+io.print(re.test("axbxc", re.escape(lit)))
+
+# -- a malformed pattern is a catchable error, not a crash ------------
+try {
+    io.print(re.test("a", "["))
+    io.print("a malformed pattern was accepted")
+} catch e {
+    # OUT: type
+    io.print(e.kind)
+}
