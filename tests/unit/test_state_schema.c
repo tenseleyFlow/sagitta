@@ -458,6 +458,43 @@ void test_state_schema_undo_is_a_reference_only(void)
     sag_ed_free(&ed);
 }
 
+/*
+ * `saved_at` is a wall clock (state_emit.c), so two emissions that
+ * straddle a second boundary differ in that one field and in no other.
+ * Pinning it to 0 is what test_state_corpus.c already does for the
+ * frozen corpus, for the same reason and with the same trade: the
+ * emitter stays honest in production rather than growing a
+ * fake-the-clock hook, and the test asserts the property that actually
+ * holds.
+ *
+ * Without this the test is a coin flip weighted by how long the two
+ * calls take -- which is why it survived for sprints on a fast machine
+ * and then failed in the valgrind lane, where everything runs ~30x
+ * slower and the window between the two emits is wide enough to cross
+ * a tick.
+ */
+static void ss_pin_saved_at(Bytebuf *doc)
+{
+    static const char key[] = "    saved_at: ";
+    char *at;
+    char *end;
+    size_t head;
+
+    bytebuf_push_u8(doc, 0U);
+    doc->len--;
+    at = strstr((char *)doc->data, key);
+    if (at == NULL)
+        return;
+    end = at + sizeof(key) - 1U;
+    while (*end != '\0' && *end != ',')
+        end++;
+    head = (size_t)(at - (char *)doc->data) + sizeof(key) - 1U;
+    (void)memmove(doc->data + head + 1U, (u8 *)end,
+                  doc->len - (size_t)(end - (char *)doc->data));
+    doc->data[head] = (u8)'0';
+    doc->len -= (size_t)(end - (char *)doc->data) - head - 1U;
+}
+
 /* Emitting the same editor twice is byte-identical, and the document
  * re-emits from its parse unchanged (the save->restore->save fixpoint,
  * at the document level). */
@@ -480,6 +517,8 @@ void test_state_schema_emission_is_deterministic(void)
 
     sag_state_emit(&ed, &one);
     sag_state_emit(&ed, &two);
+    ss_pin_saved_at(&one);
+    ss_pin_saved_at(&two);
     SAG_ASSERT_EQ_U64(one.len, two.len);
     SAG_ASSERT_EQ_I64(memcmp(one.data, two.data, one.len), 0);
 
