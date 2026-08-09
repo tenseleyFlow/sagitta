@@ -100,6 +100,20 @@ static bool on_boundary(const FlStr *s, size_t off)
         return true;
     if (off > (size_t)s->len)
         return false;
+    /*
+     * A CODEPOINT boundary FIRST.
+     *
+     * sag_gb_prev_bytes assumes its argument starts a character.  Handed
+     * an offset in the middle of a UTF-8 sequence it walks back from the
+     * wrong place and answers with an offset that is not a boundary at
+     * all -- for a ZWJ family, four of the twenty-four interior offsets
+     * came back as boundaries and str.slice_bytes cut the cluster in
+     * half at each of them.  A truncated sequence renders as a broken
+     * glyph three screens later with nothing in between to blame, which
+     * is the exact failure invariant 2 and DoD 4 exist to prevent.
+     */
+    if (!sag_utf8_is_boundary((const u8 *)s->b, s->len, off))
+        return false;
     prev = sag_gb_prev_bytes((const u8 *)s->b, s->len, off);
     return sag_gb_next_bytes((const u8 *)s->b, s->len, prev) == off;
 }
