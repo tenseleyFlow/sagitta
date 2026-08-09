@@ -21,6 +21,7 @@
 #include "fl/gc.h"
 #include "fl/opcodes.h"
 #include "fl/std.h"
+#include "fl/suggest.h"
 #include "util/log.h"
 
 /* ---------------------------------------------------------------- */
@@ -178,6 +179,77 @@ static const char *deferred_sprint(const char *name)
             return "Sprint 34";
     }
     return NULL;
+}
+
+/*
+ * §7's candidate sets, built PER SITE from what is actually in scope.
+ *
+ * The sprint's table calls the first site a compile-time "undefined
+ * variable", which assumes globals resolve statically; Sprint 30 makes
+ * them a runtime map lookup, so the equivalent site is the GET_GLOBAL
+ * miss and the candidates are the globals the running closure can see
+ * plus the builtin module names.  A local cannot be wrong here -- it
+ * resolved at compile time or the program did not build.
+ *
+ * Reading names out of a map is not "scoring against the interner":
+ * every candidate below is a key the caller could legitimately have
+ * written at this point, which is the whole distinction DoD 7 draws.
+ */
+static void suggest_from_globals(FlVm *vm, FlMap *globals, FlSuggest *sg)
+{
+    u32 cursor = 0U;
+    FlValue k;
+    FlValue v;
+
+    fl_suggest_reset(sg);
+    while (fl_map_iter(globals, &cursor, &k, &v)) {
+        const char *nm;
+
+        if (k.t != (u8)FL_INT)
+            continue;
+        nm = sag_intern_str(vm->in, (u32)k.as.i);
+        if (nm != NULL)
+            fl_suggest_add(sg, nm, (u32)strlen(nm), FL_SCOPE_GLOBAL);
+    }
+    cursor = 0U;
+    while (fl_map_iter(vm->builtins, &cursor, &k, &v)) {
+        if (k.t == (u8)FL_STR)
+            fl_suggest_add(sg, ((const FlStr *)k.as.o)->b,
+                           ((const FlStr *)k.as.o)->len, FL_SCOPE_BUILTIN);
+    }
+}
+
+/* A map's own string keys: the site for a missing field or index. */
+static void suggest_from_map(const FlMap *m, FlSuggest *sg)
+{
+    u32 cursor = 0U;
+    FlValue k;
+    FlValue v;
+
+    fl_suggest_reset(sg);
+    while (fl_map_iter(m, &cursor, &k, &v)) {
+        if (k.t == (u8)FL_STR)
+            fl_suggest_add(sg, ((const FlStr *)k.as.o)->b,
+                           ((const FlStr *)k.as.o)->len, FL_SCOPE_GLOBAL);
+    }
+}
+
+/* `<base>` or `<base>; did you mean 'x'?`, into a caller's buffer. */
+static void with_suggestion(FlSuggest *sg, const char *typo, u32 typolen,
+                            Bytebuf *out, const char *base)
+{
+    bytebuf_append(out, base, strlen(base));
+    if (fl_suggest_render(sg, typo, typolen, out) != 0U) {
+        /* Inserted before the suggestion, which fl_suggest_render has
+         * already appended -- so splice the separator in. */
+        size_t at = strlen(base);
+
+        bytebuf_reserve(out, out->len + 2U);
+        (void)memmove(out->data + at + 2U, out->data + at, out->len - at);
+        out->data[at] = (u8)';';
+        out->data[at + 1U] = (u8)' ';
+        out->len += 2U;
+    }
 }
 
 const char *fl_deferred_msg(const char *name)
@@ -412,9 +484,18 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
                 /* §4: no implicit globals.  A miss is an error, not
                  * nil, because "typo yields nil" is how a config file
                  * silently does nothing. */
-                fl_raise(vm, "name", "%s",
-                         fl_deferred_msg(sag_intern_str(vm->in,
-                                                        (u32)name.as.i)));
+                const char *nm = sag_intern_str(vm->in, (u32)name.as.i);
+                FlSuggest sg;
+                Bytebuf msg;
+
+                bytebuf_init(&msg);
+                suggest_from_globals(vm, frame->cl->globals, &sg);
+                with_suggestion(&sg, nm == NULL ? "" : nm,
+                                nm == NULL ? 0U : (u32)strlen(nm), &msg,
+                                fl_deferred_msg(nm));
+                fl_raise(vm, "name", "%.*s", (int)msg.len,
+                         (const char *)msg.data);
+                bytebuf_free(&msg);
                 goto raised;
             }
             *vm->sp++ = got;
@@ -890,8 +971,26 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
 
             /* §4: `.name` IS `["name"]`, and modules read the same way. */
             if (c.t != (u8)FL_MAP || !fl_map_get((FlMap *)c.as.o, key, &got)) {
-                fl_raise(vm, "key", "no field '%s' on %s",
-                         s == NULL ? "?" : s, fl_type_name((FlType)c.t));
+                char base[160];
+                Bytebuf msg;
+                FlSuggest sg;
+
+                (void)snprintf(base, sizeof(base), "no field '%s' on %s",
+                               s == NULL ? "?" : s, fl_type_name((FlType)c.t));
+                bytebuf_init(&msg);
+                if (c.t == (u8)FL_MAP) {
+                    /* That map's own keys -- a module member typo is
+                     * the second site in §7's table. */
+                    suggest_from_map((const FlMap *)c.as.o, &sg);
+                    with_suggestion(&sg, s == NULL ? "" : s,
+                                    s == NULL ? 0U : (u32)strlen(s), &msg,
+                                    base);
+                } else {
+                    bytebuf_append(&msg, base, strlen(base));
+                }
+                fl_raise(vm, "key", "%.*s", (int)msg.len,
+                         (const char *)msg.data);
+                bytebuf_free(&msg);
                 goto raised;
             }
             *vm->sp++ = got;
