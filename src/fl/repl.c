@@ -911,6 +911,10 @@ done:
     bytebuf_free(&pending);
     line_close(&line);
     sag_hist_flush(hist);
+    /* Both halves: the file-backed list AND the walk cursor, which owns
+     * the stem and draft strings it froze on the first Up. */
+    sag_hist_cur_dispose(&hcur);
+    sag_hist_close(hist);
     sag_input_free(&input);
     fl_vm_free(&vm);
     interner_free(&in);
