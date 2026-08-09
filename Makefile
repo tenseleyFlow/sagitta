@@ -254,10 +254,17 @@ UNIT_RUN := SAG_TEST_INSTRUMENTED=1 $(VALGRIND_RUN) \
 # The editor is spawned by absolute path out of $(BUILD), so skipping the
 # system prefixes leaves it traced and takes /bin/sh and its descendants
 # out.
+#
+# THE TWO EXCLUSIONS ARE BOTH DELIBERATE-DEATH CASES.  Each ends the
+# child on purpose — a SEGV, and s32's injected VM fault — so the process
+# never unwinds and --track-fds reports the terminal's pipes as open at
+# exit.  That is the point of those cases, not a defect in them, and
+# --error-exitcode=99 would overwrite the exit status they exist to
+# assert.  Both still run in every other lane, sanitize included.
 PTY_RUN  := SAG_PTY_BUDGET_MS=$(SAG_PTY_BUDGET_MS) \
             SAG_PTY_CASE_BUDGET_MS=$(SAG_PTY_CASE_BUDGET_MS) \
             SAG_PTY_QUIET_SCALE=$(SAG_PTY_QUIET_SCALE) \
-            SAG_PTY_EXCLUDE=notepad_restore_segv \
+            SAG_PTY_EXCLUDE=notepad_restore_segv,s32_bug_restores_the_terminal \
             valgrind --quiet --error-exitcode=99 --leak-check=full \
             --errors-for-leak-kinds=definite --track-fds=yes \
             --trace-children=yes \

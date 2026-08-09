@@ -3915,6 +3915,15 @@ static void case_s32_repl_session(PtyCtx *c)
      * bytes, which is the right instrument for a scrolling program.
      */
     ptc_snapshot(c, "s32_repl_session");
+    ptc_allow_restore(c);
+    ptc_bytes(c, ":quit\r");
+    ptc_expect_exit(c, 0);
+    /*
+     * Asserted AFTER the child is reaped, so everything it wrote is in
+     * the byte log.  Checking mid-session raced the settles: under
+     * valgrind the prompt is slow enough that a result had not been
+     * written yet when the assertion ran.
+     */
     REPL_SAW(c, "sagitta ");
     REPL_SAW(c, "fl> ");
     REPL_SAW(c, "3\r\n");                /* 1 + 2, printed              */
@@ -3925,9 +3934,6 @@ static void case_s32_repl_session(PtyCtx *c)
     /* `let` prints nothing: a binding evaluates to nothing, and a
      * prompt that echoed one would be unreadable. */
     ptc_reject_output(c, "[1, 2, 3]\r\n", 10U);
-    ptc_allow_restore(c);
-    ptc_bytes(c, ":quit\r");
-    ptc_expect_exit(c, 0);
 }
 
 /*

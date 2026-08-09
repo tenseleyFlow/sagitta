@@ -808,15 +808,25 @@ static int repl_main(bool selftest_bug)
             out.len = 0U;
             if (key.code == SAG_KEY_ENTER) {
                 char *text = line_text(&line);
+                bool opened = pending.len == 0U;
 
                 (void)fprintf(stdout, "\r\n");
-                if (pending.len == 0U && text[0] != '\0')
-                    sag_hist_add(hist, text);
                 bytebuf_append(&pending, text, strlen(text));
                 bytebuf_push_u8(&pending, (u8)'\n');
-                free(text);
                 line_set(&line, "");
                 handle_entry(&r, &pending, &out, &quit);
+                /*
+                 * HISTORY TAKES WHOLE ENTRIES OR NOTHING.  The store is
+                 * line-based, so a multi-line entry cannot go in it --
+                 * and recording only its FIRST line, which is what this
+                 * did at first, means Up recalls `fn f(n) {` and the
+                 * user gets a syntax error from their own history.
+                 * `opened && pending.len == 0` is exactly "this entry
+                 * began and ended on this line".
+                 */
+                if (opened && pending.len == 0U && text[0] != '\0')
+                    sag_hist_add(hist, text);
+                free(text);
                 if (out.len != 0U)
                     write_out(&out);
                 if (quit)
