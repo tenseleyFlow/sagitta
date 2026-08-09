@@ -1,0 +1,11 @@
+# SPEC: §1
+# COVERS: str.len
+# CHECK: hello
+# CHECK_NEXT: 42
+# CHECK_NOT: nope
+import io
+import str
+io.print("hello")
+io.print(42)
+let s = "# CHECK: nope"
+io.print(str.len(s))

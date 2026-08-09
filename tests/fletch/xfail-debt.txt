@@ -1,0 +1,13 @@
+# Known-failing conformance cases, one per line: <XF-id> <reason>
+#
+# A `# XFAIL:` directive naming an id absent from this file is a
+# CONFIGURATION ERROR, not a skip, and a case that passes with an
+# XFAIL on it is a hard failure -- otherwise the debt list rots into
+# a list of things that used to be broken.
+#
+# TRACKED HERE rather than in .docs/audits/xfail-debt.md, which the
+# sprint names: .docs/ is gitignored by project decision, so a gate
+# reading its id list would pass locally and fail in CI on the first
+# XFAIL.  Recorded as correction C1 in s33.
+#
+# (Empty: nothing in the suite is expected to fail.)

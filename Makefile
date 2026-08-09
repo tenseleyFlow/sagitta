@@ -362,6 +362,8 @@ PERF_FINDER_OBJ := $(BUILD)/tests/perf/finder.o
 PERF_MOUSE_OBJ := $(BUILD)/tests/perf/mouse.o
 LIVE_PTY_OBJ := $(BUILD)/tests/support/live_pty.o
 PERF_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
+FLETCH_RUN_OBJ := $(BUILD)/tests/fletch/run.o
+FLETCH_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 GEN_BIGFILE_OBJ := $(BUILD)/scripts/gen-bigfile.o
 
 TORTURE_CHILD_OBJ := $(BUILD)/tests/torture/sag-torture.o
@@ -394,7 +396,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(FUZZ_LIB_OBJ) \
                 $(PERF_CMDCOMP_OBJ) \
                 $(PERF_STATE_OBJ) \
                 $(PERF_FINDER_OBJ) $(PERF_MOUSE_OBJ) \
-                $(GEN_BIGFILE_OBJ) \
+                $(GEN_BIGFILE_OBJ) $(FLETCH_RUN_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) $(FAULTSHIM)))
 
@@ -419,7 +421,8 @@ endif
         perf-undo perf-textbuf perf-huge perf-update perf-baseline-guard \
         perf-gate-selftest perf-latency perf-latency-selftest \
         torture torture-build torture-live-check \
-        fl-perf-smoke fl-dispatch-parity fl-gc-stress
+        fl-perf-smoke fl-dispatch-parity fl-gc-stress \
+        test-fletch test-fletch-roundtrip fletch-ledger
 
 all: $(BUILD)/sagitta $(BUILD)/sag
 
@@ -536,6 +539,10 @@ $(BUILD)/fuzz_mouse: $(FUZZ_LINK_OBJ) $(FUZZ_MOUSE_OBJ)
 $(BUILD)/gen-bigfile: $(GEN_BIGFILE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(GEN_BIGFILE_OBJ) $(LDLIBS)
 
+$(BUILD)/fletch_run: $(FLETCH_CORE_OBJ) $(FLETCH_RUN_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FLETCH_CORE_OBJ) \
+		$(FLETCH_RUN_OBJ) $(LDLIBS)
+
 $(BUILD)/perf_textbuf: $(PERF_CORE_OBJ) $(PERF_TEXTBUF_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(PERF_TEXTBUF_OBJ) $(LDLIBS)
@@ -625,7 +632,7 @@ $(BUILD)/gen-unicode-tables: scripts/gen-unicode-tables.c | dirs
 $(FAKECLIP): tests/unit/fakeclip.c | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
-test: $(BUILD)/unit_tests $(BUILD)/sagitta test-pty torture-build
+test: $(BUILD)/unit_tests $(BUILD)/sagitta test-pty test-fletch torture-build
 	$(UNIT_RUN)
 	scripts/check-cmd-dispatch.sh
 	scripts/check-input.sh
@@ -1021,6 +1028,19 @@ clean:
 test-script:
 	@echo 'error: script-test runner lands in Sprint 37 (sag --batch)'; exit 1
 
+# The conformance suite (Sprint 33).  LC_ALL=C is set rather than
+# assumed: run.c sorts with strcmp and the ledger is byte-compared.
+test-fletch: $(BUILD)/fletch_run $(BUILD)/sagitta
+	LC_ALL=C $(BUILD)/fletch_run --sagitta $(abspath $(BUILD)/sagitta)
+
+fletch-ledger: $(BUILD)/fletch_run $(BUILD)/sagitta
+	LC_ALL=C $(BUILD)/fletch_run --ledger \
+		--sagitta $(abspath $(BUILD)/sagitta) >tests/fletch/ledger.txt
+
+test-fletch-roundtrip:
+	@echo 'error: round-trip law harness lands in Sprint 35 (invariant 10)'; \
+		exit 1
+
 test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/sagitta
 	$(PTY_PREP) $(PTY_RUN) --demo $(abspath $(BUILD)/demo_paint) \
 		--sagitta $(abspath $(BUILD)/sagitta) $(PTY_LOG_REDIRECT)
@@ -1036,6 +1056,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/sagitta
          $(PTY_ORACLE_OBJ:.o=.d) \
          $(PTY_HARNESS_OBJ:.o=.d) $(PTY_REGISTRY_OBJ:.o=.d) \
          $(PTY_RUNNER_OBJ:.o=.d) $(PTY_DEMO_OBJ:.o=.d) \
+         $(FLETCH_RUN_OBJ:.o=.d) \
          $(PERF_UNICODE_OBJ:.o=.d) $(PERF_RENDER_OBJ:.o=.d) \
          $(PERF_PIECE_OBJ:.o=.d) $(PERF_CURSOR_OBJ:.o=.d) \
          $(PERF_UNDO_OBJ:.o=.d) $(PERF_TEXTBUF_OBJ:.o=.d) \
