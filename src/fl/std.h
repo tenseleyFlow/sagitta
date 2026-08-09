@@ -119,6 +119,16 @@ FlValue fl_split_lines(FlVm *vm, const char *b, u32 n);
  */
 bool fl_fmt_display(FlVm *vm, Bytebuf *out, FlValue v);
 
+/*
+ * Drops `re`'s compiled-pattern cache and its arena.
+ *
+ * The cache is a pure function of (pattern bytes, flags) and therefore
+ * process-wide rather than per-VM; this exists so tearing a VM down
+ * leaves nothing behind for the valgrind lane to find.  A no-op while a
+ * scan is walking a program out of it.
+ */
+void fl_re_cache_clear(void);
+
 /* ---------------------------------------------------------------- */
 /* Capabilities (spec §13)                                          */
 /* ---------------------------------------------------------------- */

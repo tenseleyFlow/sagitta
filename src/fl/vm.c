@@ -20,6 +20,7 @@
 #include "fl/compile.h"
 #include "fl/gc.h"
 #include "fl/opcodes.h"
+#include "fl/std.h"
 #include "util/log.h"
 
 /* ---------------------------------------------------------------- */
@@ -100,6 +101,10 @@ void fl_vm_free(FlVm *vm)
 #if FL_VM_TRACE
     bytebuf_free(&vm->trace);
 #endif
+    /* `re`'s compiled-pattern cache is process-wide -- a compiled
+     * program depends on the pattern and nothing else -- so it is not
+     * ours to own, only ours to leave empty. */
+    fl_re_cache_clear();
     fl_gc_free_all(vm);
 }
 
