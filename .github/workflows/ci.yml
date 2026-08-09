@@ -36,12 +36,37 @@ permissions:
 jobs:
   gcc:
     runs-on: ubuntu-latest
+    # SMOKE DEPTH, and the reason is measured, not guessed.
+    #
+    # At full depth this step took 1 h 17 m here and 1 h 47 m in the
+    # sanitize lane -- about three runner-hours per push, on two lanes
+    # that gate every push, for campaigns whose job is EXPLORATION.
+    # Exploration does not belong on the critical path: what a gating
+    # lane needs is that every campaign still runs, so a change that
+    # introduces a crash or a sanitizer finding is caught, and that is
+    # what a tenth of the iterations buys.
+    #
+    # The depth did not disappear -- fuzz-deep-nightly runs exactly
+    # these campaigns at the old budget under both compilers. Dropping
+    # the iterations WITHOUT that job would have been a silent coverage
+    # cut dressed up as a speedup.
+    env:
+      FUZZ_ITERS: 20000
+      CMDPARSE_FUZZ_ITERS: 50000
+      MULTICURSOR_FUZZ_OPS: 10000
+      MULTICURSOR_FUZZ_SEEDS: 1
+      MOUSE_FUZZ_EVENTS: 25000
+      MOUSE_FUZZ_SEEDS: 1
+      GROUPS_FUZZ_SESSIONS: 25
+      GROUPS_FUZZ_SEEDS: 1
+      TEXTBUF_FUZZ_SEEDS: 1
+      UNITS_FUZZ_SEEDS: 1
     steps:
       - uses: actions/checkout@v6
       - run: make CC=gcc
       - run: make test CC=gcc
-      - name: Run the fixed Sprint 11 campaign
-        run: make fuzz CC=gcc FUZZ_ITERS=200000 FUZZ_SEED=1
+      - name: Run the fixed campaigns at smoke depth
+        run: make fuzz CC=gcc FUZZ_SEED=1
 
   clang:
     runs-on: ubuntu-latest
@@ -92,13 +117,27 @@ jobs:
 
   sanitize:
     runs-on: ubuntu-latest
+    # Smoke depth, for the reason spelled out on the gcc lane above.
+    # The sanitized run is the slower of the two (ASan multiplies every
+    # campaign), so it is the one that gains most from the cut -- and
+    # `make test CC=clang SAN=1`, which is what actually validates a
+    # change under ASan and UBSan, is untouched at full strength.
+    env:
+      FUZZ_ITERS: 20000
+      CMDPARSE_FUZZ_ITERS: 50000
+      MULTICURSOR_FUZZ_OPS: 10000
+      MULTICURSOR_FUZZ_SEEDS: 1
+      MOUSE_FUZZ_EVENTS: 25000
+      MOUSE_FUZZ_SEEDS: 1
+      GROUPS_FUZZ_SESSIONS: 25
+      GROUPS_FUZZ_SEEDS: 1
+      TEXTBUF_FUZZ_SEEDS: 1
+      UNITS_FUZZ_SEEDS: 1
     steps:
       - uses: actions/checkout@v6
       - run: make test CC=clang SAN=1 BUILD=build-san
-      - name: Run all fixed campaigns under ASan and UBSan
-        run: |
-          make fuzz CC=clang SAN=1 BUILD=build-san \
-            FUZZ_ITERS=200000 FUZZ_SEED=1 FUZZ_SECONDS=60
+      - name: Run all fixed campaigns under ASan and UBSan, smoke depth
+        run: make fuzz CC=clang SAN=1 BUILD=build-san FUZZ_SEED=1
 
   valgrind:
     runs-on: ubuntu-latest
@@ -274,6 +313,42 @@ jobs:
           for commit in $commits; do
             scripts/perf-baseline-guard.sh --commit "$commit"
           done
+
+  # The depth the gcc and sanitize lanes used to carry on every push.
+  #
+  # Same campaigns, same budget (the Makefile defaults ARE that budget,
+  # so this job passes no overrides and cannot drift from them). Both
+  # compilers, because they find different things: ASan and UBSan catch
+  # what gcc's codegen hides, and gcc's codegen reaches what clang's
+  # does not.
+  #
+  # MEASURED on the run that motivated the split: ~1 h 47 m sanitized
+  # and ~1 h 17 m plain, so roughly 3 h 20 m for the pair against
+  # GitHub's 6 h ceiling. If that margin ever gets thin, split the two
+  # steps into two jobs -- they are independent and would then run in
+  # parallel with their own budgets.
+  fuzz-deep-nightly:
+    if: github.event_name == 'schedule' || inputs.nightly
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Fixed campaigns at full depth under ASan and UBSan
+        run: |
+          make fuzz CC=clang SAN=1 BUILD=build-deep-san \
+            FUZZ_SEED=1 FUZZ_SECONDS=60
+      # No `make clean` between the two: they use different BUILD dirs,
+      # so their objects never meet. Mixing sanitized and plain objects
+      # in one tree is the trap that produces a binary whose behaviour
+      # depends on what happened to be stale.
+      - name: Fixed campaigns at full depth under GCC
+        run: make fuzz CC=gcc FUZZ_SEED=1
+      - name: Attach any minimized findings
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: deep-campaign-traces
+          path: tests/fuzz/crashes/*.trace
+          if-no-files-found: ignore
 
   fuzz-nightly:
     # Nightly by cron, and on demand without waiting for one:
