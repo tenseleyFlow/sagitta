@@ -67,6 +67,17 @@ typedef struct FlGc {
      * mode, where a wrong answer means the cgoto build has no GC. */
     u64 collections;
     /*
+     * The WORST single collection pause, in nanoseconds, and the total.
+     *
+     * Recorded because Sprint 33's bench suite reports it and Sprint 56
+     * turns it into a gate: a collector whose average is fine and whose
+     * p99 is 40 ms fails invariant 4 on exactly the keystroke the user
+     * notices.  Two clock reads per collection, and collections are
+     * rare by construction, so this is not on any hot path.
+     */
+    u64 pause_max_ns;
+    u64 pause_total_ns;
+    /*
      * Monotone allocation counter, stamped into FlObj.aux for every
      * non-string object.  list.sort orders otherwise-incomparable
      * objects by it, because ordering them by ADDRESS would differ

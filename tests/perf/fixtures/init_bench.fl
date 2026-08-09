@@ -1,0 +1,135 @@
+# tests/perf/fixtures/init_bench.fl -- the config-load benchmark's input.
+#
+# A STAND-IN FOR THE SHIPPED DEFAULT CONFIG, and it says so here so
+# nobody mistakes the number for the real one.  Sprint 36 swaps this
+# for the actual default and re-baselines in the same commit; until
+# then this file exists to give `02-fletch.md` requirement 7 --
+# config load < 1 ms -- something of the right SHAPE to measure:
+# an options map, 40 key bindings, a handful of functions, and two
+# imports.
+#
+# `bind` is defined LOCALLY rather than called for real: the editor
+# API lands in Sprint 34 and hard-errors until then, so calling the
+# deferred surface would make this fixture measure a raise 40 times
+# instead of a config load.  The call shape is what matters for the
+# parse-and-compile cost, and that is preserved exactly.
+import str
+import math
+
+let options = {
+    tabwidth: 4,
+    expandtab: true,
+    wrap: false,
+    number: true,
+    relativenumber: false,
+    scrolloff: 3,
+    sidescrolloff: 8,
+    ignorecase: true,
+    smartcase: true,
+    hlsearch: true,
+    incsearch: true,
+    undolevels: 1000,
+    undofile: true,
+    swapfile: false,
+    backup: false,
+    autoread: true,
+    autowrite: false,
+    hidden: true,
+    splitbelow: true,
+    splitright: true,
+    laststatus: 2,
+    showcmd: true,
+    ruler: true,
+    cursorline: true,
+    colorcolumn: 80,
+    foldmethod: "indent",
+    foldlevel: 99,
+    conceallevel: 0,
+    listchars: "tab:>-,trail:.",
+    fillchars: "vert:|,fold:-",
+}
+
+let keymaps = []
+
+fn bind(keys, mode, action) {
+    keymaps = keymaps + [[keys, mode, action]]
+    return nil
+}
+
+fn clamp(x, lo, hi) {
+    if x < lo { return lo }
+    else if x > hi { return hi }
+    return x
+}
+
+fn indent_width(depth) {
+    return clamp(depth * options.tabwidth, 0, 64)
+}
+
+fn describe(name, value) {
+    return str.upper(name) + "=" + name
+}
+
+fn is_wide(cols) {
+    return cols >= options.colorcolumn
+}
+
+fn ratio(a, b) {
+    if b == 0 {
+        return 0.0
+    }
+    return math.float(a) / math.float(b)
+}
+
+# 40 bindings, the shape a real config has.
+bind("<C-a>", "n", fn() { return indent_width(0) })
+bind("<C-b>", "i", fn() { return indent_width(1) })
+bind("<C-c>", "v", fn() { return indent_width(2) })
+bind("<C-d>", "s", fn() { return indent_width(3) })
+bind("<C-e>", "n", fn() { return indent_width(4) })
+bind("<C-f>", "i", fn() { return indent_width(5) })
+bind("<C-g>", "v", fn() { return indent_width(6) })
+bind("<C-h>", "s", fn() { return indent_width(7) })
+bind("<C-j>", "n", fn() { return indent_width(0) })
+bind("<C-k>", "i", fn() { return indent_width(1) })
+bind("<C-l>", "v", fn() { return indent_width(2) })
+bind("<C-n>", "s", fn() { return indent_width(3) })
+bind("<C-o>", "n", fn() { return indent_width(4) })
+bind("<C-p>", "i", fn() { return indent_width(5) })
+bind("<C-q>", "v", fn() { return indent_width(6) })
+bind("<C-r>", "s", fn() { return indent_width(7) })
+bind("<C-s>", "n", fn() { return indent_width(0) })
+bind("<C-t>", "i", fn() { return indent_width(1) })
+bind("<C-u>", "v", fn() { return indent_width(2) })
+bind("<C-v>", "s", fn() { return indent_width(3) })
+bind("<C-w>", "n", fn() { return indent_width(4) })
+bind("<C-x>", "i", fn() { return indent_width(5) })
+bind("<C-y>", "v", fn() { return indent_width(6) })
+bind("<C-z>", "s", fn() { return indent_width(7) })
+bind("<M-a>", "n", fn() { return indent_width(0) })
+bind("<M-b>", "i", fn() { return indent_width(1) })
+bind("<M-c>", "v", fn() { return indent_width(2) })
+bind("<M-d>", "s", fn() { return indent_width(3) })
+bind("<M-e>", "n", fn() { return indent_width(4) })
+bind("<M-f>", "i", fn() { return indent_width(5) })
+bind("<M-g>", "v", fn() { return indent_width(6) })
+bind("<M-h>", "s", fn() { return indent_width(7) })
+bind("<F1>", "n", fn() { return indent_width(0) })
+bind("<F2>", "i", fn() { return indent_width(1) })
+bind("<F3>", "v", fn() { return indent_width(2) })
+bind("<F4>", "s", fn() { return indent_width(3) })
+bind("<F5>", "n", fn() { return indent_width(4) })
+bind("<F6>", "i", fn() { return indent_width(5) })
+bind("<F7>", "v", fn() { return indent_width(6) })
+bind("<F8>", "s", fn() { return indent_width(7) })
+
+# A few derived values, so the file does work rather than only
+# declaring things.
+let widths = []
+for d in [0, 1, 2, 3, 4, 5, 6, 7] {
+    widths = widths + [indent_width(d)]
+}
+
+let summary = describe("tabwidth", options.tabwidth)
+let wide = is_wide(120)
+let r = ratio(3, 4)

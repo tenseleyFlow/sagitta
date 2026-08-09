@@ -5,7 +5,13 @@
  * collector owns the heap; everything else takes memory from the arena
  * or from here.
  */
+/* clock_gettime, for the collection-pause figures Sprint 33's bench
+ * suite reports and Sprint 56 gates on. */
+#define _POSIX_C_SOURCE 200809L
+
 #include "fl/gc.h"
+
+#include <time.h>
 
 #include <stdlib.h>
 #include <string.h>
@@ -329,8 +335,20 @@ static void sweep(FlVm *vm)
     }
 }
 
+/* CLOCK_MONOTONIC, like every other timing in the tree: no rdtsc and
+ * no libc timer that varies by target. */
+static u64 gc_now_ns(void)
+{
+    struct timespec ts;
+
+    (void)clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (u64)ts.tv_sec * 1000000000ULL + (u64)ts.tv_nsec;
+}
+
 void fl_gc_collect(FlVm *vm)
 {
+    u64 t0 = gc_now_ns();
+
     vm->gc.collections++;
     vm->gc.pending = false;
     vm->gc.ngray = 0U;
@@ -355,6 +373,13 @@ void fl_gc_collect(FlVm *vm)
     vm->gc.next_gc = vm->gc.bytes * 2U;
     if (vm->gc.next_gc < (size_t)FL_GC_FIRST)
         vm->gc.next_gc = (size_t)FL_GC_FIRST;
+    {
+        u64 dt = gc_now_ns() - t0;
+
+        vm->gc.pause_total_ns += dt;
+        if (dt > vm->gc.pause_max_ns)
+            vm->gc.pause_max_ns = dt;
+    }
 }
 
 void fl_gc_free_all(FlVm *vm)

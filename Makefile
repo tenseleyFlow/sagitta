@@ -362,6 +362,7 @@ PERF_FINDER_OBJ := $(BUILD)/tests/perf/finder.o
 PERF_MOUSE_OBJ := $(BUILD)/tests/perf/mouse.o
 LIVE_PTY_OBJ := $(BUILD)/tests/support/live_pty.o
 PERF_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
+PERF_FLETCH_OBJ := $(BUILD)/tests/perf/perf_fletch.o
 FLETCH_RUN_OBJ := $(BUILD)/tests/fletch/run.o
 FLETCH_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 GEN_BIGFILE_OBJ := $(BUILD)/scripts/gen-bigfile.o
@@ -397,6 +398,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(FUZZ_LIB_OBJ) \
                 $(PERF_STATE_OBJ) \
                 $(PERF_FINDER_OBJ) $(PERF_MOUSE_OBJ) \
                 $(GEN_BIGFILE_OBJ) $(FLETCH_RUN_OBJ) \
+                $(PERF_FLETCH_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) $(FAULTSHIM)))
 
@@ -422,7 +424,7 @@ endif
         perf-gate-selftest perf-latency perf-latency-selftest \
         torture torture-build torture-live-check \
         fl-perf-smoke fl-dispatch-parity fl-gc-stress \
-        test-fletch test-fletch-roundtrip fletch-ledger
+        test-fletch test-fletch-roundtrip fletch-ledger bench-fletch
 
 all: $(BUILD)/sagitta $(BUILD)/sag
 
@@ -538,6 +540,10 @@ $(BUILD)/fuzz_mouse: $(FUZZ_LINK_OBJ) $(FUZZ_MOUSE_OBJ)
 
 $(BUILD)/gen-bigfile: $(GEN_BIGFILE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(GEN_BIGFILE_OBJ) $(LDLIBS)
+
+$(BUILD)/perf_fletch: $(PERF_CORE_OBJ) $(PERF_FLETCH_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
+		$(PERF_FLETCH_OBJ) $(LDLIBS)
 
 $(BUILD)/fletch_run: $(FLETCH_CORE_OBJ) $(FLETCH_RUN_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FLETCH_CORE_OBJ) \
@@ -1035,6 +1041,14 @@ test-fletch: $(BUILD)/fletch_run $(BUILD)/sagitta
 	BUILD=$(BUILD) scripts/check-fletch-coverage.sh
 	BUILD=$(BUILD) scripts/check-fletch-meta.sh
 	BUILD=$(BUILD) scripts/check-fletch-gate-selftest.sh
+
+# PERF_GATE=1 enforces; every other lane runs it ungated, because a
+# bench that is never executed outside the perf runner rots.
+BASELINE ?= dev
+bench-fletch: $(BUILD)/perf_fletch
+	$(BUILD)/perf_fletch --selftest-gate
+	$(BUILD)/perf_fletch --baseline $(BASELINE) \
+		$(if $(PERF_GATE),--gate,--gate-budgets)
 
 fletch-ledger: $(BUILD)/fletch_run $(BUILD)/sagitta
 	LC_ALL=C $(BUILD)/fletch_run --ledger \
