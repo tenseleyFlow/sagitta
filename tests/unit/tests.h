@@ -874,6 +874,7 @@ void test_fl_vm_try_catch_binds_the_error_map(void);
 void test_fl_vm_upvalues_capture_by_reference(void);
 void test_fl_vm_loop_variable_is_fresh_each_iteration(void);
 void test_fl_vm_lists_and_maps(void);
+void test_fl_vm_string_literal_keeps_an_embedded_nul(void);
 void test_fl_vm_map_iteration_is_insertion_ordered(void);
 void test_fl_vm_control_flow(void);
 void test_fl_vm_gc_collects_only_unreachable_objects(void);

@@ -868,6 +868,7 @@ const SagTest sag_tests[] = {
     T(fl_vm_upvalues_capture_by_reference),
     T(fl_vm_loop_variable_is_fresh_each_iteration),
     T(fl_vm_lists_and_maps),
+    T(fl_vm_string_literal_keeps_an_embedded_nul),
     T(fl_vm_map_iteration_is_insertion_ordered),
     T(fl_vm_control_flow),
     T(fl_vm_gc_collects_only_unreachable_objects),

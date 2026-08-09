@@ -415,8 +415,12 @@ static void comp_literal(Compiler *c, const FlNode *n)
         return;
     default: {
         const char *s = sag_intern_str(c->vm->in, n->as.lit.v.str_id);
+        /* The interned LENGTH, never strlen: §1.5 admits `\0`, and
+         * measuring with strlen truncated "a\0b" to "a" without a word
+         * to anyone. */
         FlStr *o = fl_str_new(c->vm, s == NULL ? "" : s,
-                              s == NULL ? 0U : (u32)strlen(s));
+                              (u32)sag_intern_len(c->vm->in,
+                                                  n->as.lit.v.str_id));
 
         emit_op(c, FL_OP_CONST, n->sp);
         emit_u16(c, (u16)add_const(c, FL_OBJ_V(FL_STR, o), n->sp));

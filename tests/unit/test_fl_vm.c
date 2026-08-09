@@ -309,6 +309,32 @@ void test_fl_vm_lists_and_maps(void)
     assert_kind("let m = {}\nm[1.5] = 1\nreturn m\n", "key");
 }
 
+/*
+ * §1.5 lists `\0` among the escapes, so a Fletch string is BYTES and a
+ * NUL is one of them.
+ *
+ * Found while writing fmt.repr, which turned "a\0b" into "a" and told
+ * nobody: the interner handed the compiler a NUL-terminated copy and
+ * the compiler measured it with strlen.  Invariant 2 is a promise about
+ * a user's bytes, and a string constant is a user's bytes.
+ */
+void test_fl_vm_string_literal_keeps_an_embedded_nul(void)
+{
+    VmFix f;
+    FlValue out;
+    const FlStr *s;
+
+    vf_open(&f);
+    SAG_ASSERT(vf_run(&f, "return \"a\\0b\"\n", &out));
+    SAG_ASSERT_EQ_U64((u64)out.t, (u64)FL_STR);
+    s = (const FlStr *)out.as.o;
+    SAG_ASSERT_EQ_U64((u64)s->len, 3U);
+    SAG_ASSERT_EQ_I64((i64)(u8)s->b[0], (i64)'a');
+    SAG_ASSERT_EQ_I64((i64)(u8)s->b[1], 0);
+    SAG_ASSERT_EQ_I64((i64)(u8)s->b[2], (i64)'b');
+    vf_close(&f);
+}
+
 void test_fl_vm_map_iteration_is_insertion_ordered(void)
 {
     VmFix f;
