@@ -87,8 +87,11 @@ void test_fl_chunkcheck_accepts_what_the_compiler_emits(void)
         "let t = 0\nfor x in [1, 2, 3] { t = t + x }\nreturn t\n",
         "let n = 0\nwhile n < 5 { n = n + 1 }\nreturn n\n",
         "try { return 1 / 0 } catch e { return e.kind }\n",
-        "fn c(s) { let n = s\nreturn fn() { n = n + 1\nreturn n } }\n"
-        "return c(1)()\n",
+        /* Parenthesised: clang's -Wstring-concatenation reads adjacent
+         * literals in an initialiser as a missing comma, and it is
+         * right to -- this one is deliberate. */
+        ("fn c(s) { let n = s\nreturn fn() { n = n + 1\nreturn n } }\n"
+         "return c(1)()\n"),
         "return {a: 1, b: [2, 3]}\n",
         "macro m = @[ 2v ]\nreturn 1\n"
     };
