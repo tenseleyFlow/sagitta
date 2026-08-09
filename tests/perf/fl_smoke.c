@@ -162,7 +162,7 @@ static bool run_fixture(Run *r, const Fixture *f, FlValue *out)
 {
     FlProgram p;
     FlFn *fn;
-    FlOrigin origin = {0U, 0U};
+    FlOrigin origin = {(u8)FL_ORIGIN_CLI, 0U, 0U};
     size_t n = strlen(f->src);
 
     (void)fl_diag_add_file(&r->dc, f->name, f->src, n);

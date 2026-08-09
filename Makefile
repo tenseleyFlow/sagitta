@@ -122,7 +122,18 @@ endif
 # into libc and the flag is then a harmless no-op, while older glibc and
 # the BSDs still need it.
 #
-LDFLAGS := -lm
+LDFLAGS :=
+#
+# LDLIBS, NOT LDFLAGS, and it goes AFTER the objects.
+#
+# The linker resolves a library against the objects that
+# PRECEDE it, so -lm in LDFLAGS -- which every rule expands
+# before -o -- satisfies nothing. It linked anyway on a box
+# whose glibc folds libm into libc (2.34+), and failed on CI,
+# which is the worst possible split: green locally, eight
+# lanes red on push.
+#
+LDLIBS := -lm
 HOST_OS := $(shell uname -s)
 ifeq ($(HOST_OS),Darwin)
 SHARED_FLAG := -dynamiclib
@@ -390,197 +401,198 @@ endif
 all: $(BUILD)/sagitta $(BUILD)/sag
 
 $(BUILD)/sagitta: $(OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJ) $(LDLIBS)
 
 $(BUILD)/sag: $(BUILD)/sagitta
 	ln -sf sagitta $@
 
 $(BUILD)/unit_tests: $(UNIT_LINK_OBJ) $(FAKECLIP)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(UNIT_LINK_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(UNIT_LINK_OBJ) $(LDLIBS)
 
 $(BUILD)/pty_runner: $(PTY_LINK_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PTY_LINK_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PTY_LINK_OBJ) $(LDLIBS)
 
 $(BUILD)/demo_paint: $(PTY_DEMO_LINK_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PTY_DEMO_LINK_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PTY_DEMO_LINK_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_utf8: $(FUZZ_LINK_OBJ) $(FUZZ_UTF8_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) $(FUZZ_UTF8_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) $(FUZZ_UTF8_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_grapheme: $(FUZZ_LINK_OBJ) $(FUZZ_GRAPHEME_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) $(FUZZ_GRAPHEME_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) $(FUZZ_GRAPHEME_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_input: $(FUZZ_LINK_OBJ) $(FUZZ_INPUT_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) $(FUZZ_INPUT_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) $(FUZZ_INPUT_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_grid: $(FUZZ_LINK_OBJ) $(FUZZ_GRID_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) $(FUZZ_GRID_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) $(FUZZ_GRID_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_vt: $(FUZZ_LINK_OBJ) $(PTY_VT_OBJ) $(FUZZ_VT_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) $(PTY_VT_OBJ) \
-		$(FUZZ_VT_OBJ)
+		$(FUZZ_VT_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_undo: $(FUZZ_CORE_OBJ) $(FUZZ_UNDO_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) $(FUZZ_UNDO_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) $(FUZZ_UNDO_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_textbuf: $(FUZZ_CORE_OBJ) $(TEXT_FUZZ_SUPPORT_OBJ) \
                        $(FUZZ_TEXTBUF_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) \
-		$(TEXT_FUZZ_SUPPORT_OBJ) $(FUZZ_TEXTBUF_OBJ)
+		$(TEXT_FUZZ_SUPPORT_OBJ) $(FUZZ_TEXTBUF_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_units: $(FUZZ_CORE_OBJ) $(FUZZ_UNITS_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) $(FUZZ_UNITS_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) $(FUZZ_UNITS_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_multicursor: $(FUZZ_LINK_OBJ) $(FUZZ_MULTICURSOR_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
-		$(FUZZ_MULTICURSOR_OBJ)
+		$(FUZZ_MULTICURSOR_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_fl_lex: $(FUZZ_LINK_OBJ) $(FUZZ_FLLEX_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
-		$(FUZZ_FLLEX_OBJ)
+		$(FUZZ_FLLEX_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_fl_parse: $(FUZZ_LINK_OBJ) $(FUZZ_FLPARSE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
-		$(FUZZ_FLPARSE_OBJ)
+		$(FUZZ_FLPARSE_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_tabs: $(FUZZ_LINK_OBJ) $(FUZZ_TABS_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
-		$(FUZZ_TABS_OBJ)
+		$(FUZZ_TABS_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_groups: $(FUZZ_LINK_OBJ) $(FUZZ_GROUPS_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
-		$(FUZZ_GROUPS_OBJ)
+		$(FUZZ_GROUPS_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_panes: $(FUZZ_LINK_OBJ) $(FUZZ_PANES_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
-		$(FUZZ_PANES_OBJ)
+		$(FUZZ_PANES_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_search: $(FUZZ_LINK_OBJ) $(FUZZ_SEARCH_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
-		$(FUZZ_SEARCH_OBJ)
+		$(FUZZ_SEARCH_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_re_quote: $(FUZZ_LINK_OBJ) $(FUZZ_REQUOTE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
-		$(FUZZ_REQUOTE_OBJ)
+		$(FUZZ_REQUOTE_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_re_compile: $(FUZZ_LINK_OBJ) $(FUZZ_RECOMPILE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
-		$(FUZZ_RECOMPILE_OBJ)
+		$(FUZZ_RECOMPILE_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_re_diff: $(FUZZ_LINK_OBJ) $(FUZZ_REDIFF_OBJ) $(RE_REF_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
-		$(FUZZ_REDIFF_OBJ) $(RE_REF_OBJ)
+		$(FUZZ_REDIFF_OBJ) $(RE_REF_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_cmdparse: $(FUZZ_LINK_OBJ) $(FUZZ_CMDPARSE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
-		$(FUZZ_CMDPARSE_OBJ)
+		$(FUZZ_CMDPARSE_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_fuzzy: $(FUZZ_LINK_OBJ) $(FUZZ_FUZZY_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
-		$(FUZZ_FUZZY_OBJ)
+		$(FUZZ_FUZZY_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_state: $(FUZZ_LINK_OBJ) $(FUZZ_STATE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
-		$(FUZZ_STATE_OBJ)
+		$(FUZZ_STATE_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_gitignore: $(FUZZ_LINK_OBJ) $(FUZZ_GITIGNORE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
-		$(FUZZ_GITIGNORE_OBJ)
+		$(FUZZ_GITIGNORE_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_mouse: $(FUZZ_LINK_OBJ) $(FUZZ_MOUSE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
-		$(FUZZ_MOUSE_OBJ)
+		$(FUZZ_MOUSE_OBJ) $(LDLIBS)
 
 $(BUILD)/gen-bigfile: $(GEN_BIGFILE_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(GEN_BIGFILE_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(GEN_BIGFILE_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_textbuf: $(PERF_CORE_OBJ) $(PERF_TEXTBUF_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
-		$(PERF_TEXTBUF_OBJ)
+		$(PERF_TEXTBUF_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_unicode: $(PERF_CORE_OBJ) $(PERF_UNICODE_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_UNICODE_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_UNICODE_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_render: $(PERF_CORE_OBJ) $(PERF_RENDER_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_RENDER_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_RENDER_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_scroll: $(PERF_CORE_OBJ) $(PERF_SCROLL_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_SCROLL_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_SCROLL_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_piece: $(PERF_CORE_OBJ) $(PERF_PIECE_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_PIECE_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_PIECE_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_cursor: $(PERF_CORE_OBJ) $(PERF_CURSOR_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_CURSOR_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_CURSOR_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_undo: $(PERF_CORE_OBJ) $(PERF_UNDO_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_UNDO_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_UNDO_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_latency: $(PERF_LATENCY_OBJ) $(LIVE_PTY_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_LATENCY_OBJ) \
-		$(LIVE_PTY_OBJ)
+		$(LIVE_PTY_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_re_throughput: $(PERF_RETHRU_OBJ) $(PERF_CORE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_RETHRU_OBJ) \
-		$(PERF_CORE_OBJ)
+		$(PERF_CORE_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_search_latency: $(PERF_SEARCHLAT_OBJ) $(PERF_CORE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_SEARCHLAT_OBJ) \
-		$(PERF_CORE_OBJ)
+		$(PERF_CORE_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_re_pathological: $(PERF_REPATH_OBJ) $(PERF_CORE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_REPATH_OBJ) \
-		$(PERF_CORE_OBJ)
+		$(PERF_CORE_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_jobstream: $(PERF_JOBSTREAM_OBJ) $(LIVE_PTY_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_JOBSTREAM_OBJ) \
-		$(LIVE_PTY_OBJ)
+		$(LIVE_PTY_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_units: $(PERF_CORE_OBJ) $(PERF_UNITS_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_UNITS_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_UNITS_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_multicursor: $(PERF_CORE_OBJ) $(PERF_MULTICURSOR_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
-		$(PERF_MULTICURSOR_OBJ)
+		$(PERF_MULTICURSOR_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_cmdcomp: $(PERF_CORE_OBJ) $(PERF_CMDCOMP_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
-		$(PERF_CMDCOMP_OBJ)
+		$(PERF_CMDCOMP_OBJ) $(LDLIBS)
 
 $(BUILD)/fl_smoke: $(PERF_CORE_OBJ) $(FL_SMOKE_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(FL_SMOKE_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(FL_SMOKE_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_state: $(PERF_CORE_OBJ) $(PERF_STATE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
-		$(PERF_STATE_OBJ)
+		$(PERF_STATE_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_mouse: $(PERF_CORE_OBJ) $(PERF_MOUSE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
-		$(PERF_MOUSE_OBJ)
+		$(PERF_MOUSE_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_finder: $(PERF_CORE_OBJ) $(PERF_FINDER_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
-		$(PERF_FINDER_OBJ)
+		$(PERF_FINDER_OBJ) $(LDLIBS)
 
 $(TORTURE_CHILD): $(TORTURE_CORE_OBJ) $(TORTURE_CHILD_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TORTURE_CORE_OBJ) \
-		$(TORTURE_CHILD_OBJ)
+		$(TORTURE_CHILD_OBJ) $(LDLIBS)
 
 $(TORTURE_DRIVER): $(TORTURE_DRIVER_OBJ)
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TORTURE_DRIVER_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TORTURE_DRIVER_OBJ) $(LDLIBS)
 
 $(TORTURE_LIVE): $(TORTURE_LIVE_OBJ) $(LIVE_PTY_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TORTURE_LIVE_OBJ) \
-		$(LIVE_PTY_OBJ)
+		$(LIVE_PTY_OBJ) $(LDLIBS)
 
 $(FAULTSHIM): tests/torture/faultshim.c | dirs
-	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC $(SHARED_FLAG) -o $@ $< $(DL_LIBS)
+	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC $(SHARED_FLAG) -o $@ $< \
+		$(DL_LIBS) $(LDLIBS)
 
 $(BUILD)/gen-unicode-tables: scripts/gen-unicode-tables.c | dirs
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
 $(FAKECLIP): tests/unit/fakeclip.c | dirs
-	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $<
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
 test: $(BUILD)/unit_tests $(BUILD)/sagitta test-pty torture-build
 	$(UNIT_RUN)
