@@ -1037,8 +1037,15 @@ test-script:
 
 # The conformance suite (Sprint 33).  LC_ALL=C is set rather than
 # assumed: run.c sorts with strcmp and the ledger is byte-compared.
+# The RUNNER goes under valgrind; the `sag fl` children deliberately do
+# not (no --trace-children).  Wrapping 37 subprocess spawns would turn a
+# 0.2 s lane into minutes for a check the sanitize lane already makes
+# with ASan -- and the runner is the part with the file descriptors and
+# the allocation bookkeeping that --track-fds and --leak-check exist to
+# police.
 test-fletch: $(BUILD)/fletch_run $(BUILD)/sagitta
-	LC_ALL=C $(BUILD)/fletch_run --sagitta $(abspath $(BUILD)/sagitta)
+	LC_ALL=C $(if $(filter 1,$(VALGRIND)),$(VALGRIND_RUN),) \
+		$(BUILD)/fletch_run --sagitta $(abspath $(BUILD)/sagitta)
 	BUILD=$(BUILD) scripts/check-fletch-coverage.sh
 	BUILD=$(BUILD) scripts/check-fletch-meta.sh
 	BUILD=$(BUILD) scripts/check-fletch-gate-selftest.sh
