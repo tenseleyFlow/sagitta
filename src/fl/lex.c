@@ -114,6 +114,7 @@ const char *fl_tok_spelling(FlTokKind kind)
     case FL_M_ESC:      return "esc";
     case FL_M_WORD:     return "motion word";
     case FL_M_END:      return "]";
+    case FL_T_COMMENT:  return "comment";
     default:            return "invalid token";
     }
 }
@@ -665,8 +666,18 @@ static FlTok lex_motion(FlLexer *lx)
             continue;
         }
         if (c == '#') {
+            u32 cline = lx->line;
+            u32 ccol = lx->col;
+            size_t cfrom = lx->at;
+
             while (!at_end(lx) && peek(lx) != '\n')
                 (void)bump(lx);
+            /* Kept here too: a directive written inside `@[ ... ]` must
+             * reach the runner rather than vanish, or a conformance file
+             * silently stops asserting what it says it asserts. */
+            if (lx->keep_comments)
+                return make(FL_T_COMMENT,
+                            span_at(lx, cline, ccol, cfrom));
             continue;
         }
         break;
@@ -760,8 +771,15 @@ FlTok fl_lex_next(FlLexer *lx)
         if (c == '#') {
             /* §1.1: to end of line, and the newline still terminates the
              * statement -- swallowing it would join two statements. */
+            u32 cline = lx->line;
+            u32 ccol = lx->col;
+            size_t cfrom = lx->at;
+
             while (!at_end(lx) && peek(lx) != '\n')
                 (void)bump(lx);
+            if (lx->keep_comments)
+                return make(FL_T_COMMENT,
+                            span_at(lx, cline, ccol, cfrom));
             continue;
         }
         break;

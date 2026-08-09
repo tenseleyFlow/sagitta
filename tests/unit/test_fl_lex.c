@@ -672,6 +672,62 @@ void test_fl_lex_caret_block_renders_the_source_line(void)
     lf_close(&f);
 }
 
+void test_fl_lex_keep_comments_is_opt_in(void)
+{
+    LexFix f;
+    FlTok t;
+
+    /*
+     * Sprint 33 §2: the conformance runner reads its directives from
+     * comment TOKENS.  The whole point is the negative case below --
+     * a `# CHECK:` inside a string literal must not be a directive --
+     * so the flag is asserted here rather than only through the runner,
+     * where a regression would surface as tests that pass by asserting
+     * nothing.
+     */
+    lf_open(&f, "# SPEC: 1\nlet s = \"# CHECK: nope\"\n");
+    f.lx.keep_comments = true;
+
+    t = nx(&f);
+    SAG_ASSERT_EQ_I64((i64)t.kind, (i64)FL_T_COMMENT);
+    /* The span stops BEFORE the newline: §1.1 makes the newline the
+     * statement terminator, and swallowing it here would join the
+     * comment's line to the next statement. */
+    SAG_ASSERT_EQ_I64((i64)t.sp.len, (i64)strlen("# SPEC: 1"));
+    SAG_ASSERT_EQ_I64((i64)t.sp.line, 1);
+    SAG_ASSERT_EQ_I64((i64)t.sp.col, 1);
+    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_NEWLINE);
+    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_LET);
+    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_IDENT);
+    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_EQ);
+    /* THE NEGATIVE CASE.  A line-based scanner reports a directive
+     * here; the lexer reports a string, which is what it is. */
+    t = nx(&f);
+    SAG_ASSERT_EQ_I64((i64)t.kind, (i64)FL_T_STRING);
+    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_NEWLINE);
+    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_EOF);
+    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    lf_close(&f);
+
+    /* Default off: every caller on the parser's path is unaffected. */
+    lf_open(&f, "# SPEC: 1\nlet s = 1\n");
+    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_NEWLINE);
+    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_LET);
+    lf_close(&f);
+
+    /* Inside a motion block too, or a directive written there would
+     * vanish and the file would silently stop asserting it. */
+    lf_open(&f, "macro m = @[ # OUT: x\n 2> ]\n");
+    f.lx.keep_comments = true;
+    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_MACRO);
+    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_IDENT);
+    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_EQ);
+    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_ATBRACKET);
+    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_COMMENT);
+    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_M_COUNT);
+    lf_close(&f);
+}
+
 void test_fl_lex_spellings_cover_every_kind(void)
 {
     int k;

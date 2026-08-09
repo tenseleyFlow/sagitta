@@ -55,6 +55,16 @@ typedef enum FlTokKind {
     FL_M_WORD,                    /* CMDWORD -- v.str_id */
     FL_M_END,                     /* "]" closing the block */
 
+    /*
+     * Produced ONLY when `keep_comments` is set, which nothing on the
+     * parser's path does.  Sprint 33's conformance runner reads its
+     * directives from these tokens rather than from raw lines, so
+     * `let s = "# CHECK: nope"` is a string and not a directive.  A
+     * line-based scanner fires on it and the test then passes for the
+     * wrong reason forever.
+     */
+    FL_T_COMMENT,
+
     FL_T_ERROR,
     FL_T_KIND__N
 } FlTokKind;
@@ -101,6 +111,15 @@ typedef struct FlLexer {
      */
     u32 motion_depth;
     bool utf8_reported;              /* one invalid-UTF-8 error per run */
+    /*
+     * Opt-in: emit FL_T_COMMENT instead of skipping.  Set it AFTER
+     * fl_lex_init, which zeroes it -- every existing caller therefore
+     * keeps the old behaviour without being touched.  The span covers
+     * the '#' through the last byte before the newline; the newline
+     * itself still comes back as FL_T_NEWLINE, because §1.1 makes it
+     * the statement terminator.
+     */
+    bool keep_comments;
 } FlLexer;
 
 void fl_lex_init(FlLexer *lx, Arena *a, DiagCtx *dc, Interner *in,
