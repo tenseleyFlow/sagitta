@@ -164,12 +164,41 @@ typedef struct FlChunk {
     u32 file_id;
 } FlChunk;
 
-/* Capability origin (spec §13).  Sprint 31 fills it in when it resolves
- * imports; this sprint only carries it so chunks have somewhere to
- * record where they came from. */
+/*
+ * Capability origin, spec §13.  Every FlFn carries the origin of the
+ * module that DEFINED it, and that is the only thing a capability check
+ * ever reads -- see fl_cap_origin in std.c.
+ *
+ * `kind` and `path_id` are separate on purpose.  The kind decides what
+ * a grant means (a plugin's caps are prompted for, a config's are
+ * implicit); the path is what an error message must name to be
+ * actionable.  Collapsing them into one module index, as Sprint 30's
+ * placeholder did, makes the cache key in §11 -- (realpath, origin
+ * kind) -- inexpressible, and that key is what stops a plugin from
+ * borrowing a config helper's authority.
+ */
+typedef enum {
+    FL_ORIGIN_BUILTIN = 0,   /* the seven modules; transparent to §13    */
+    FL_ORIGIN_CONFIG,
+    FL_ORIGIN_WORKSPACE,
+    FL_ORIGIN_PLUGIN,
+    FL_ORIGIN_CLI,
+    FL_ORIGIN_REPL
+} FlOriginKind;
+
+/* Capability bits (spec §13).  `shell` and `net` have no stdlib surface
+ * in 1.0 -- they exist so Sprint 54 can prompt for them. */
+enum {
+    FL_CAP_FS_READ  = 1U << 0,
+    FL_CAP_FS_WRITE = 1U << 1,
+    FL_CAP_SHELL    = 1U << 2,
+    FL_CAP_NET      = 1U << 3
+};
+
 typedef struct FlOrigin {
-    u32 module_id;
-    u32 caps;
+    u8 kind;         /* FlOriginKind                                     */
+    u32 path_id;     /* interned REALPATH; 0 for builtins                */
+    u32 caps;        /* FL_CAP_*                                         */
 } FlOrigin;
 
 typedef struct FlFn {
@@ -216,8 +245,17 @@ typedef struct FlMotionProg {
 typedef struct FlVm FlVm;
 typedef struct FlErr FlErr;
 
-typedef bool (*FlNativeFn)(FlVm *vm, FlValue *argv, u32 argc, FlValue *out,
-                           FlErr *err);
+/*
+ * A native returns false with vm->err set to raise -- there is no
+ * separate error out-parameter, because a native that wants to raise
+ * calls fl_raise like everything else and two ways to report one thing
+ * is how they drift.
+ *
+ * argv points INTO the VM stack and stays live for the whole call
+ * (gc.h rule 1).  Never copy an FlObj* out of argv into a C local
+ * across an allocation.
+ */
+typedef bool (*FlNativeFn)(FlVm *vm, FlValue *argv, u32 argc, FlValue *out);
 
 typedef struct FlNative {
     FlObj h;

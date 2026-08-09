@@ -200,6 +200,10 @@ static void mark_roots(FlVm *vm)
     mark_obj(vm, (FlObj *)vm->globals);
     /* 5. modules -- Sprint 31 fills this; rooted now */
     mark_obj(vm, (FlObj *)vm->modules);
+    /* 5b. the builtin module maps (root 9).  Numbered after the §9
+     *     table's eight because it was added by s31; the table in
+     *     gc.h lists it. */
+    mark_obj(vm, (FlObj *)vm->builtins);
     /* 6. handles -- Sprint 34 fills this; rooted now */
     for (i = 0U; i < vm->handles.n; i++)
         mark_value(vm, vm->handles.v[i]);

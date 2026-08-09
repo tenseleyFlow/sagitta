@@ -88,6 +88,7 @@ bool fl_vm_init(FlVm *vm, Arena *a, Interner *in, DiagCtx *dc)
 #endif
     vm->globals = fl_map_new(vm);
     vm->modules = fl_map_new(vm);
+    vm->builtins = fl_map_new(vm);
     vm->err = FL_NIL_V;
     return true;
 }
@@ -116,7 +117,7 @@ static FlValue make_str(FlVm *vm, const char *s)
  * adds `trace` when the value escapes every frame; the shape is fixed
  * here so a handler written today keeps working.
  */
-static void fl_raise(FlVm *vm, const char *kind, const char *fmt, ...)
+bool fl_raise(FlVm *vm, const char *kind, const char *fmt, ...)
 {
     char buf[256];
     va_list ap;
@@ -134,6 +135,7 @@ static void fl_raise(FlVm *vm, const char *kind, const char *fmt, ...)
     (void)fl_map_set(vm, m, make_str(vm, "msg"), make_str(vm, buf));
     fl_gc_release(vm, 1U);
     vm->err = FL_OBJ_V(FL_MAP, m);
+    return false;      /* so a native can `return fl_raise(...)` */
 }
 
 /* ---------------------------------------------------------------- */
@@ -590,6 +592,52 @@ bool fl_vm_run(FlVm *vm, FlFn *entry, FlValue *out)
             FlValue callee = vm->sp[-(int)n - 1];
             FlClosure *target;
 
+            /*
+             * Natives push no frame: they run to completion inside this
+             * instruction and leave one value where the callee sat.
+             *
+             * Arity is checked HERE and never inside a native, so all
+             * ~200 of them report it identically and none can forget.
+             * The capability check is the native's own business,
+             * because §13 reads the CALLER's origin and only the native
+             * knows which bit it needs.
+             */
+            if (callee.t == (u8)FL_NATIVE) {
+                FlNative *nat = (FlNative *)callee.as.o;
+                FlValue *argv = vm->sp - (int)n;
+                FlValue res = FL_NIL_V;
+
+                if (n < nat->min_ar ||
+                    (nat->max_ar != 255U && n > nat->max_ar)) {
+                    const char *nm = sag_intern_str(vm->in, nat->name_id);
+
+                    if (nat->max_ar == 255U)
+                        fl_raise(vm, "arity",
+                                 "%s expects at least %u argument%s, got %u",
+                                 nm, (unsigned)nat->min_ar,
+                                 nat->min_ar == 1U ? "" : "s", (unsigned)n);
+                    else if (nat->min_ar == nat->max_ar)
+                        fl_raise(vm, "arity",
+                                 "%s expects %u argument%s, got %u",
+                                 nm, (unsigned)nat->min_ar,
+                                 nat->min_ar == 1U ? "" : "s", (unsigned)n);
+                    else
+                        fl_raise(vm, "arity",
+                                 "%s expects %u..%u arguments, got %u",
+                                 nm, (unsigned)nat->min_ar,
+                                 (unsigned)nat->max_ar, (unsigned)n);
+                    goto raised;
+                }
+                /* frame->ip must be current: a native may raise, and the
+                 * unwind reads it to find the handler. */
+                frame->ip = ip;
+                vm->cur_native = nat->name_id;
+                if (!nat->fn(vm, argv, (u32)n, &res))
+                    goto raised;
+                vm->sp -= (int)n + 1;      /* args and the callee */
+                *vm->sp++ = res;
+                VM_NEXT();
+            }
             if (callee.t != (u8)FL_CLOSURE) {
                 fl_raise(vm, "type", "cannot call %s",
                          fl_type_name((FlType)callee.t));

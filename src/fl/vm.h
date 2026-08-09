@@ -120,10 +120,35 @@ struct FlVm {
      */
     Bytebuf trace;
 #endif
+    /*
+     * Root 9: the seven builtin module maps, keyed by bare name.
+     * Separate from `modules` (root 5) because the two are keyed
+     * differently -- builtins by IDENT, files by (realpath, origin
+     * kind) -- and folding them into one map would make `import str`
+     * and `import "str"` reach the same object, which spec §11 says
+     * they must not.
+     */
+    FlMap *builtins;
+    /* The native currently executing, so fl_arg_* can name it without
+     * every helper taking it as a parameter. */
+    u32 cur_native;
     FlValue err;                 /* the in-flight raised value            */
+    /*
+     * The origin a capability check falls back to when no Fletch frame
+     * is on the stack -- a native invoked directly by the host.  §13:
+     * the host decides what it is granting before it calls in.
+     */
+    FlOrigin root_origin;
 };
 
 bool fl_vm_init(FlVm *vm, Arena *a, Interner *in, DiagCtx *dc);
+
+/*
+ * Builds the {kind, msg} error map into vm->err and RETURNS FALSE, so a
+ * native's failure path reads `return fl_raise(vm, "type", ...)`.
+ * The kind must be one of spec §9's twelve (§16-A1 added "limit").
+ */
+bool fl_raise(FlVm *vm, const char *kind, const char *fmt, ...);
 bool fl_vm_run(FlVm *vm, FlFn *entry, FlValue *out);   /* false = raised */
 void fl_vm_free(FlVm *vm);
 

@@ -116,7 +116,13 @@ ifeq ($(CFLAGS_FL_TRACE),1)
 CFLAGS += -DFL_VM_TRACE=1
 endif
 
-LDFLAGS :=
+#
+# -lm for src/fl/stdmath.c.  libm is part of the C standard library, not
+# a new dependency in the bespoke-first sense -- glibc 2.34+ folds it
+# into libc and the flag is then a harmless no-op, while older glibc and
+# the BSDs still need it.
+#
+LDFLAGS := -lm
 HOST_OS := $(shell uname -s)
 ifeq ($(HOST_OS),Darwin)
 SHARED_FLAG := -dynamiclib

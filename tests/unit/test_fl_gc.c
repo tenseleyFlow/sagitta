@@ -458,7 +458,10 @@ void test_fl_gc_stress_collects_at_every_instruction(void)
     FlProgram p;
     FlFn *fn;
     FlValue out;
-    FlOrigin origin = {0U, 0U};
+    /* CLI origin, no capabilities: these tests never call io,
+     * and a grant nobody needs is a grant nobody notices is
+     * wrong. */
+    FlOrigin origin = {(u8)FL_ORIGIN_CLI, 0U, 0U};
     static const char *const src = "let a = [1]\nlet b = [2]\nreturn 0\n";
 
     /*
@@ -527,7 +530,10 @@ void test_fl_gc_stress_survives_the_whole_pipeline(void)
     FlProgram p;
     FlFn *fn;
     FlValue out;
-    FlOrigin origin = {0U, 0U};
+    /* CLI origin, no capabilities: these tests never call io,
+     * and a grant nobody needs is a grant nobody notices is
+     * wrong. */
+    FlOrigin origin = {(u8)FL_ORIGIN_CLI, 0U, 0U};
     static const char *const src =
         "fn build(n) {\n"
         "    let acc = []\n"
