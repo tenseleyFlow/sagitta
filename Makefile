@@ -424,7 +424,8 @@ endif
         perf-gate-selftest perf-latency perf-latency-selftest \
         torture torture-build torture-live-check \
         fl-perf-smoke fl-dispatch-parity fl-gc-stress \
-        test-fletch test-fletch-roundtrip fletch-ledger bench-fletch
+        test-fletch test-fletch-roundtrip fletch-ledger bench-fletch \
+        test-fletch-dispatch test-fletch-gc-stress test-fletch-determinism
 
 all: $(BUILD)/sagitta $(BUILD)/sag
 
@@ -1053,6 +1054,47 @@ bench-fletch: $(BUILD)/perf_fletch
 fletch-ledger: $(BUILD)/fletch_run $(BUILD)/sagitta
 	LC_ALL=C $(BUILD)/fletch_run --ledger \
 		--sagitta $(abspath $(BUILD)/sagitta) >tests/fletch/ledger.txt
+
+# DoD 11: the whole suite under both dispatchers, outputs byte-compared.
+#
+# Separate BUILD dirs, both from clean.  A reused build directory
+# produces deterministic FALSE results here -- half the objects come
+# from the other setting and the two binaries are then the same binary.
+test-fletch-dispatch:
+	@rm -rf $(BUILD)-flc-sw $(BUILD)-flc-cg
+	$(MAKE) --no-print-directory BUILD=$(BUILD)-flc-sw FL_CGOTO=0 \
+		$(BUILD)-flc-sw/sagitta $(BUILD)-flc-sw/fletch_run
+	$(MAKE) --no-print-directory BUILD=$(BUILD)-flc-cg FL_CGOTO=1 \
+		$(BUILD)-flc-cg/sagitta $(BUILD)-flc-cg/fletch_run
+	LC_ALL=C $(BUILD)-flc-sw/fletch_run \
+		--sagitta $(abspath $(BUILD)-flc-sw/sagitta) \
+		>$(BUILD)-flc-sw/out.txt 2>&1
+	LC_ALL=C $(BUILD)-flc-cg/fletch_run \
+		--sagitta $(abspath $(BUILD)-flc-cg/sagitta) \
+		>$(BUILD)-flc-cg/out.txt 2>&1
+	cmp $(BUILD)-flc-sw/out.txt $(BUILD)-flc-cg/out.txt
+	@echo 'test-fletch-dispatch: both dispatchers agree, byte for byte'
+
+# DoD 11: the whole suite under the collector's stress mode, minus any
+# file carrying a justified `# GC_STRESS: 0`.  The runner prints and
+# asserts the opt-out count, so the escape hatch cannot become the norm.
+test-fletch-gc-stress: $(BUILD)/fletch_run $(BUILD)/sagitta
+	FL_GC_STRESS=1 LC_ALL=C $(BUILD)/fletch_run \
+		--sagitta $(abspath $(BUILD)/sagitta)
+
+# Determinism: the suite twice and the ledger twice, byte-compared.
+test-fletch-determinism: $(BUILD)/fletch_run $(BUILD)/sagitta
+	LC_ALL=C $(BUILD)/fletch_run --sagitta $(abspath $(BUILD)/sagitta) \
+		>$(BUILD)/fletch-run-1.txt 2>&1
+	LC_ALL=C $(BUILD)/fletch_run --sagitta $(abspath $(BUILD)/sagitta) \
+		>$(BUILD)/fletch-run-2.txt 2>&1
+	cmp $(BUILD)/fletch-run-1.txt $(BUILD)/fletch-run-2.txt
+	LC_ALL=C $(BUILD)/fletch_run --ledger \
+		--sagitta $(abspath $(BUILD)/sagitta) >$(BUILD)/fletch-led-1.txt
+	LC_ALL=C $(BUILD)/fletch_run --ledger \
+		--sagitta $(abspath $(BUILD)/sagitta) >$(BUILD)/fletch-led-2.txt
+	cmp $(BUILD)/fletch-led-1.txt $(BUILD)/fletch-led-2.txt
+	@echo 'test-fletch-determinism: two runs identical, ledger stable'
 
 test-fletch-roundtrip:
 	@echo 'error: round-trip law harness lands in Sprint 35 (invariant 10)'; \
