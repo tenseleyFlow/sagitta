@@ -101,6 +101,15 @@ void ptc_settle(PtyCtx *c, i64 quiet_ms);
  * never coming.
  */
 void ptc_no_altscreen(PtyCtx *c);
+/*
+ * Pumps until `bytes` appear in the child's output, or the case
+ * deadline passes.  Use this instead of a settle to synchronise with a
+ * child that has no alternate screen and no probe handshake to wait on:
+ * a blind settle races the child's startup, and under valgrind it loses
+ * -- input typed before the child reaches raw mode is processed by the
+ * TTY instead, which turns CR into LF behind your back.
+ */
+void ptc_wait_output(PtyCtx *c, const void *bytes, size_t len);
 void ptc_wait_kitty_push(PtyCtx *c, u32 flags);
 void ptc_wait_sync_pairs(PtyCtx *c, u32 count);
 void ptc_keys(PtyCtx *c, const char *spec);

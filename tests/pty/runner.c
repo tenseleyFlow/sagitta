@@ -159,6 +159,34 @@ static bool write_file(const char *path, const Bytebuf *data)
     return ok;
 }
 
+/*
+ * SAG_PTY_EXCLUDE is a COMMA-SEPARATED list of substrings.  It was a
+ * single substring, and the valgrind lane silently ran a case it meant
+ * to skip the moment a second name was added -- a skip list that fails
+ * open is worse than no skip list.
+ */
+static bool excluded(const char *name, const char *list)
+{
+    const char *at = list;
+
+    if (list == NULL || *list == '\0')
+        return false;
+    while (*at != '\0') {
+        const char *comma = strchr(at, ',');
+        size_t n = comma == NULL ? strlen(at) : (size_t)(comma - at);
+        size_t i;
+
+        for (i = 0U; n != 0U && name[i] != '\0'; i++) {
+            if (strncmp(name + i, at, n) == 0)
+                return true;
+        }
+        if (comma == NULL)
+            break;
+        at = comma + 1;
+    }
+    return false;
+}
+
 static bool valid_golden_name(const char *name)
 {
     const unsigned char *p = (const unsigned char *)name;
@@ -411,8 +439,7 @@ int main(int argc, char **argv)
     global_deadline = budget > INT64_MAX - global_deadline
                           ? INT64_MAX : global_deadline + budget;
     for (i = 0U; sag_pty_cases[i].name != NULL; i++) {
-        if (exclude != NULL && *exclude != '\0' &&
-            strstr(sag_pty_cases[i].name, exclude) != NULL)
+        if (excluded(sag_pty_cases[i].name, exclude))
             continue;
         if (filter != NULL && *filter != '\0' &&
             strstr(sag_pty_cases[i].name, filter) == NULL)

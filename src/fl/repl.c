@@ -806,7 +806,16 @@ static int repl_main(bool selftest_bug)
             if (key.ev == SAG_KEY_RELEASE)
                 continue;
             out.len = 0U;
-            if (key.code == SAG_KEY_ENTER) {
+            /*
+             * LF SUBMITS TOO.  s04 decodes 0x0D as SAG_KEY_ENTER and
+             * 0x0A as Ctrl-J, and only CR reaches a raw terminal from a
+             * keyboard -- but a PASTE carries LF, and so does anything
+             * typed before raw mode is on, where the tty has already
+             * turned CR into LF.  A prompt that accepted only CR
+             * silently swallowed both.
+             */
+            if (key.code == SAG_KEY_ENTER ||
+                (key.code == (u32)'j' && ctrl)) {
                 char *text = line_text(&line);
                 bool opened = pending.len == 0U;
 

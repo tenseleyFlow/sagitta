@@ -3875,7 +3875,13 @@ static void spawn_repl(PtyCtx *c)
     ptc_allow_primary(c);
     ptc_spawn(c, ptc_sagitta_bin(c), "fl", NULL);
     ptc_no_altscreen(c);
-    ptc_settle(c, 60);
+    /*
+     * Wait for the PROMPT, not a quiet period.  Anything typed before
+     * the child reaches raw mode is handled by the tty instead, which
+     * echoes it and turns CR into LF -- under valgrind the child is
+     * slow enough that a blind settle loses that race every time.
+     */
+    ptc_wait_output(c, "fl> ", 4U);
 }
 
 /* Asserts a run of bytes appears in what the child wrote. */
@@ -3949,7 +3955,7 @@ static void case_s32_bug_restores_the_terminal(PtyCtx *c)
     ptc_allow_restore(c);
     ptc_spawn(c, ptc_sagitta_bin(c), "fl", "--selftest-fl-bug", NULL);
     ptc_no_altscreen(c);
-    ptc_settle(c, 60);
+    ptc_wait_output(c, "fl> ", 4U);
     /* The prompt, before anything breaks.  The report that follows is
      * asserted as bytes below, not frozen into this grid. */
     ptc_snapshot(c, "s32_bug_restores_the_terminal");

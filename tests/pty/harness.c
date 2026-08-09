@@ -575,6 +575,32 @@ void ptc_no_altscreen(PtyCtx *c)
         c->ready = true;
 }
 
+static const u8 *find_bytes(const u8 *hay, size_t nhay,
+                            const u8 *needle, size_t nneedle);
+
+void ptc_wait_output(PtyCtx *c, const void *bytes, size_t len)
+{
+    i64 deadline;
+
+    if (c == NULL || bytes == NULL || !c->spawned || c->failed)
+        return;
+    deadline = case_deadline(c);
+    while (find_bytes(c->raw.data, c->raw.len, bytes, len) == NULL) {
+        if (c->failed)
+            return;
+        if (ptc_now_ms() >= deadline) {
+            c->timed_out = true;
+            ptc_fail(c, "timed out waiting for expected output");
+            return;
+        }
+        if (c->eof) {
+            ptc_fail(c, "child ended before the expected output");
+            return;
+        }
+        pump_quiet(c, 20, false);
+    }
+}
+
 void ptc_settle(PtyCtx *c, i64 quiet_ms)
 {
     pump_quiet(c, quiet_ms, !c->ready);
@@ -990,8 +1016,26 @@ void ptc_expect_output(PtyCtx *c, const void *bytes, size_t len)
 {
     if (c == NULL || bytes == NULL || c->failed)
         return;
-    if (find_bytes(c->raw.data, c->raw.len, bytes, len) == NULL)
-        ptc_fail(c, "expected output bytes were not observed");
+    if (find_bytes(c->raw.data, c->raw.len, bytes, len) == NULL) {
+        /* Name the run.  "bytes were not observed" over seven
+         * assertions in one case says nothing about which. */
+        char shown[64];
+        size_t i;
+        size_t n = len < sizeof(shown) / 4U ? len : sizeof(shown) / 4U - 1U;
+        size_t at = 0U;
+
+        for (i = 0U; i < n; i++) {
+            u8 b = ((const u8 *)bytes)[i];
+
+            if (b >= 0x20U && b < 0x7FU)
+                shown[at++] = (char)b;
+            else
+                at += (size_t)snprintf(shown + at, sizeof(shown) - at,
+                                       "\\x%02x", (unsigned)b);
+        }
+        shown[at] = '\0';
+        ptc_fail(c, "expected output |%s| was not observed", shown);
+    }
 }
 
 void ptc_reject_output(PtyCtx *c, const void *bytes, size_t len)
