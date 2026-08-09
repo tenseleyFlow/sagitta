@@ -882,7 +882,7 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
                 FlList *l = (FlList *)subject.as.o;
 
                 if ((i64)l->mods != snapshot) {
-                    fl_raise(vm, "type", "list changed during iteration");
+                    fl_raise(vm, "index", "list modified during iteration");
                     goto raised;
                 }
                 if (cursor >= (i64)l->n) {
@@ -898,7 +898,7 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
                 FlValue v;
 
                 if ((i64)m->mods != snapshot) {
-                    fl_raise(vm, "type", "map changed during iteration");
+                    fl_raise(vm, "key", "map modified during iteration");
                     goto raised;
                 }
                 if (!fl_map_iter(m, &cur, &k, &v)) {
@@ -919,11 +919,27 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
             u16 d = read_u16(&ip);
             FlValue subject = frame->slots[base];
             u32 cur = (u32)frame->slots[base + 1].as.i;
+            i64 snapshot = frame->slots[base + 2].as.i;
             FlValue k;
             FlValue v;
 
             if (subject.t != (u8)FL_MAP) {
                 fl_raise(vm, "type", "two-variable for needs a map");
+                goto raised;
+            }
+            /*
+             * The same guard ITER_NEXT1 carries.  Without it a
+             * `for k, v in m` body could delete keys and the walk
+             * would keep going over a reshaped entry array -- the
+             * one-variable form refused and the two-variable form
+             * did not, which is the sort of gap nobody finds until a
+             * config does it.
+             *
+             * BEFORE the exhaustion check: a mutation that empties the
+             * map must still report, not end the loop quietly.
+             */
+            if ((i64)((FlMap *)subject.as.o)->mods != snapshot) {
+                fl_raise(vm, "key", "map modified during iteration");
                 goto raised;
             }
             if (!fl_map_iter((FlMap *)subject.as.o, &cur, &k, &v)) {

@@ -14,6 +14,7 @@
  * in here, so registration order is a single readable list rather than
  * a scatter of per-file init hooks. */
 extern const FlModuleDef fl_mod_list;
+extern const FlModuleDef fl_mod_map;
 extern const FlModuleDef fl_mod_math;
 
 /*
@@ -27,10 +28,10 @@ extern const FlModuleDef fl_mod_math;
  * with empties: a registered module with no functions would answer
  * `import` successfully and then fail every call with a bare "name"
  * error, which reads like a broken stdlib rather than an unfinished
- * one.  Still to come this sprint: str, map, fmt, io, re.
+ * one.  Still to come this sprint: str, fmt, io, re.
  */
 static const FlModuleDef *const FL_MODULES[] = {
-    &fl_mod_list, &fl_mod_math
+    &fl_mod_list, &fl_mod_map, &fl_mod_math
 };
 
 /* ---------------------------------------------------------------- */
