@@ -1,0 +1,5 @@
+# SPEC: §1
+# CHECK: this string is never printed
+# EXPECT-META: fail
+import io
+io.print("something else")

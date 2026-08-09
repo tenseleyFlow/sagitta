@@ -215,7 +215,9 @@ typedef struct Unit {
     const char *origin;
     const char *args;
     const char *skip;
+    bool cfg_error;          /* reported at parse time; never run */
     const char *xfail_id;
+    const char *xfail_why;
     const char *error_kind;
     long error_line;
     int exit_code;
@@ -466,7 +468,26 @@ static bool finish_unit(Unit *u, char **cfg_err)
             }
             u->gc_optout = true;
             break;
-        case D_XFAIL:      u->xfail_id = d->value; break;
+        case D_XFAIL:
+            /*
+             * `# XFAIL: <XF-id> <reason>` -- the ID is the first token
+             * and the rest is prose for a human.  Matching the whole
+             * line against the debt list makes every id "unknown" the
+             * moment anyone writes the reason the directive asks for.
+             */
+            {
+                char *sp = strchr(d->value, ' ');
+
+                if (sp != NULL)
+                    *sp = '\0';
+                if (d->value[0] == '\0') {
+                    *cfg_err = dupe("XFAIL needs an id and a reason");
+                    return false;
+                }
+                u->xfail_id = d->value;
+                u->xfail_why = sp == NULL ? "" : trim(sp + 1);
+            }
+            break;
         default: break;
         }
     }
@@ -1009,9 +1030,24 @@ static void collect(const char *dir, const char *relbase)
     sag_sort_stable(names, nn, sizeof(names[0]), cmp_str, NULL);
 
     for (i = 0U; i < nn; i++) {
-        char *full = joinp(dir, names[i]);
-        char *rel = relbase[0] == '\0' ? dupe(names[i])
-                                       : joinp(relbase, names[i]);
+        char *full;
+        char *rel;
+
+        /*
+         * meta/ holds cases that are SUPPOSED to fail -- they are the
+         * runner's own tests -- and roundtrip/ is Sprint 35's empty
+         * placeholder.  Both are reached with an explicit --root, and
+         * collecting them here would make the real suite red by
+         * design.
+         */
+        if (relbase[0] == '\0' && (strcmp(names[i], "meta") == 0 ||
+                                   strcmp(names[i], "roundtrip") == 0)) {
+            free(names[i]);
+            continue;
+        }
+        full = joinp(dir, names[i]);
+        rel = relbase[0] == '\0' ? dupe(names[i])
+                                  : joinp(relbase, names[i]);
 
         if (is_dir(full)) {
             char *entries[16];
@@ -1737,13 +1773,18 @@ int main(int argc, char **argv)
             (void)printf("CONFIG %s: %s\n", u->name, cfg);
             ncfg++;
             free(cfg);
-            u->skip = "configuration error";
+            u->cfg_error = true;
         }
         if (u->xfail_id != NULL && !xfail_known(u->xfail_id)) {
+            /* An unknown id is a CONFIGURATION ERROR, not a skip: the
+             * debt list is the register of what is allowed to fail,
+             * and an id that is not in it is a typo or a stale
+             * entry -- either way nobody reviewed this failure. */
             (void)printf("CONFIG %s: unknown XFAIL id '%s' (add it to "
                          "%s/xfail-debt.txt)\n", u->name, u->xfail_id,
                          g_root);
             ncfg++;
+            u->cfg_error = true;
         }
         free(src);
     }
@@ -1769,6 +1810,8 @@ int main(int argc, char **argv)
         if (filter != NULL && filter[0] != '\0' &&
             strstr(u->name, filter) == NULL)
             continue;
+        if (u->cfg_error)
+            continue;              /* already reported, and not a skip */
         if (u->skip != NULL) {
             /* s01's discipline: a skip is printed, never silent. */
             (void)printf("HARNESS_SKIP %s: %s\n", u->name, u->skip);
@@ -1815,8 +1858,13 @@ int main(int argc, char **argv)
                      (unsigned long)noptout, MAX_GC_OPTOUTS);
         nfail++;
     }
-    (void)printf("fletch: %lu units, %lu pass, %lu fail, %lu skip, "
-                 "%lu xfail, %lu config\n",
+    /*
+     * ONE MACHINE-READABLE LINE, Cgfried-style, because the meta-suite
+     * asserts exact totals and grepping five numbers out of prose is
+     * how a driver ends up matching four of them.
+     */
+    (void)printf("fletch: total=%lu pass=%lu fail=%lu skip=%lu "
+                 "xfail=%lu config=%lu\n",
                  (unsigned long)g_nunits, (unsigned long)npass,
                  (unsigned long)nfail, (unsigned long)nskip,
                  (unsigned long)nxfail, (unsigned long)ncfg);

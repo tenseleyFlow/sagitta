@@ -1,0 +1,12 @@
+# SPEC: §1
+# CHECK: first
+# CHECK_NEXT: third
+# EXPECT-META: fail
+# CHECK_NEXT must match the line IMMEDIATELY after the previous match.
+# "third" is two lines later, so this must not be satisfied -- a
+# CHECK_NEXT that degraded into an ordinary CHECK would pass here and
+# every adjacency assertion in the suite would be worthless.
+import io
+io.print("first")
+io.print("second")
+io.print("third")

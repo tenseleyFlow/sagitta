@@ -1033,6 +1033,8 @@ test-script:
 test-fletch: $(BUILD)/fletch_run $(BUILD)/sagitta
 	LC_ALL=C $(BUILD)/fletch_run --sagitta $(abspath $(BUILD)/sagitta)
 	BUILD=$(BUILD) scripts/check-fletch-coverage.sh
+	BUILD=$(BUILD) scripts/check-fletch-meta.sh
+	BUILD=$(BUILD) scripts/check-fletch-gate-selftest.sh
 
 fletch-ledger: $(BUILD)/fletch_run $(BUILD)/sagitta
 	LC_ALL=C $(BUILD)/fletch_run --ledger \

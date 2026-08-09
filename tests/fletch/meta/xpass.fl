@@ -1,0 +1,9 @@
+# SPEC: §1
+# XFAIL: XF-META-1 asserts that an XFAIL which passes is a hard failure
+# EXPECT-META: fail
+# This program does exactly what the file says, so the XFAIL is stale.
+# XPASS IS A HARD FAILURE: a debt list that keeps entries for things
+# that no longer fail stops being read.
+import io
+# CHECK: works
+io.print("works")

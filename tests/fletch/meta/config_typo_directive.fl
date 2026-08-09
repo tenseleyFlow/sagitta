@@ -1,0 +1,8 @@
+# SPEC: §1
+# CHEK: a typo
+# EXPECT-META: config
+# An ALL_CAPS comment that is not a directive is a CONFIGURATION
+# ERROR, never an ordinary comment: a typo'd directive that degrades
+# into prose is a test that silently stops asserting anything.
+import io
+io.print("hi")

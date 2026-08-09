@@ -1,0 +1,5 @@
+# SPEC: §1
+# XFAIL: XF-999 no such id
+# EXPECT-META: config
+import io
+io.print("hi")

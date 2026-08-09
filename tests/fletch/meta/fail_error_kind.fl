@@ -1,0 +1,5 @@
+# SPEC: §1
+# ERROR_KIND: index
+# EXPECT-META: fail
+# The raise is "user", not "index".
+error("wrong kind")

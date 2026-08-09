@@ -1,0 +1,9 @@
+The runner's own tests.
+
+Every file here is an EXPECTED OUTCOME of tests/fletch/run.c, and most
+of them are supposed to FAIL -- that is the point.  A test runner that
+silently passes is worse than no runner, so the failure paths get the
+same treatment as the language does.
+
+Run by `make test-fletch-meta`, which asserts the exact totals.  The
+real suite never collects this directory.

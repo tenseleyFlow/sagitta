@@ -1,0 +1,9 @@
+# SPEC: §1
+# CHECK: start
+# CHECK_NOT: forbidden
+# CHECK: end
+# EXPECT-META: fail
+import io
+io.print("start")
+io.print("forbidden")
+io.print("end")

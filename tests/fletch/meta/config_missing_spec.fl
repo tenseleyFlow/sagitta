@@ -1,0 +1,6 @@
+# EXPECT-META: config
+# No `# SPEC:` line, so the ledger cannot key this file to a section
+# and the file cannot count towards check 1.  A conformance file that
+# does not say what it conforms to is a configuration error.
+import io
+io.print("hi")

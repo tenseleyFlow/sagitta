@@ -1,0 +1,4 @@
+# The meta-suite's own debt list.  Read from the suite ROOT, so the
+# real suite's list and this one cannot leak into each other -- which
+# is what the config_unknown_xfail case depends on.
+XF-META-1  the xpass meta-case; deliberately stale

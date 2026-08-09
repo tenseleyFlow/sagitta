@@ -1,0 +1,13 @@
+# SPEC: §1
+# CHECK: real
+# EXPECT-META: pass
+# THE CASE THE WHOLE DESIGN EXISTS FOR.  The strings below look like
+# directives and are not: the runner reads the lexer's comment tokens,
+# so a line-based scanner would find `# EXIT: 99` here and fail the
+# file, and would find `# CHECK: never` and pass it for the wrong
+# reason.
+import io
+let a = "# EXIT: 99"
+let b = "# CHECK: never printed"
+let c = "# CHEK: would be a config error"
+io.print("real")

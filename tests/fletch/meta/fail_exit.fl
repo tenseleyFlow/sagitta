@@ -1,0 +1,6 @@
+# SPEC: §1
+# EXIT: 3
+# EXPECT-META: fail
+# The program exits 0; the file says 3.
+import io
+io.print("fine")

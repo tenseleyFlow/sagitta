@@ -1,0 +1,6 @@
+# SPEC: §1
+# SKIP: demonstrates that a skip is announced, never silent
+# EXPECT-META: skip
+# s01's discipline: the runner prints exactly one HARNESS_SKIP line.
+import io
+io.print("never runs")
