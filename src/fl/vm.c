@@ -1200,7 +1200,21 @@ bool fl_vm_run(FlVm *vm, FlFn *entry, FlValue *out)
     vm->frames[vm->nframes].ip = entry->ch.code;
     vm->frames[vm->nframes].slots = vm->stack;
     vm->nframes++;
-    return vm_exec(vm, 0U, out);
+    {
+        bool ok = vm_exec(vm, 0U, out);
+
+        /*
+         * The frames do not survive the call EITHER WAY.  A raise that
+         * found no handler leaves them standing -- correct for a nested
+         * execution, since the caller unwinds further -- and a host
+         * that then asks the VM a question, fl_cap_origin most of all,
+         * would read a frame belonging to a program that has finished.
+         */
+        vm->nframes = 0U;
+        vm->nhandlers = 0U;
+        vm->open_upvals = NULL;
+        return ok;
+    }
 }
 
 /*
