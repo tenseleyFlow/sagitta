@@ -25,6 +25,7 @@
  * pi e inf nan int_max int_min   math_classifies_the_edges
  * math.seed   determinism        math_random_is_deterministic
  * math.random range, int form    math_random_is_deterministic
+ * math.random pinned sequence   math_random_is_deterministic
  *
  * A wrong-typed argument is worded once, by fl_arg_*, and asserted once
  * here rather than twenty-nine times.
@@ -179,6 +180,31 @@ void test_fl_math_random_is_deterministic(void)
     /* No arguments: a float in [0, 1). */
     FL_EQ(&f, P "math.seed(7)\nlet r = math.random()\n"
                 "return r >= 0.0 and r < 1.0\n", "true");
+    /*
+     * THE COMMITTED GOLDEN, DoD 12.
+     *
+     * Same-seed-twice proves the generator is a function of its seed;
+     * only a PINNED SEQUENCE catches a change to the generator itself,
+     * which would silently reshuffle anything a config had recorded.
+     *
+     * Seeded explicitly rather than taken from the default, because
+     * `rng_state` is a file-static and therefore process-global: the
+     * pristine default sequence is only observable in a fresh process,
+     * and this binary has run other tests first.  `sag fl` is where
+     * that form is visible, and seeding here tests the same thing --
+     * the generator's output for a known state.
+     */
+    flfix_close(&f);
+    flfix_open(&f);
+    FL_EQ(&f, P "import list\nimport str\n"
+                "math.seed(1)\n"
+                "let r = []\nlet i = 0\n"
+                "while i < 5 { list.push(r, fmt.float(math.random()))\n"
+                "  i = i + 1 }\n"
+                "return str.join(r, \" \")\n",
+          "0.28083505005035947 0.6711372530266764 0.7258461452833668 "
+          "0.303529299965799 0.056176763098259475");
+
     /* Two arguments: an int in [lo, hi]. */
     FL_EQ(&f, P "math.seed(7)\nlet ok = true\nlet i = 0\n"
                 "while i < 100 {\n"

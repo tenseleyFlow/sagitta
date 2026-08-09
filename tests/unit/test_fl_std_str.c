@@ -33,10 +33,15 @@
  * str.to_int       base, nil      str_converts_to_and_from
  * str.to_float     nil            str_converts_to_and_from
  * str.cmp          bytewise       str_converts_to_and_from
+ * the s02 corpus, cluster law    str_the_s02_corpus_never_splits_a_cluster
+ * the s02 corpus, byte round trip str_the_s02_corpus_never_splits_a_cluster
  */
 #include "flfix.h"
 
+#include <ctype.h>
 #include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
 
 #define P "import str\nimport fmt\n"
 
@@ -256,5 +261,140 @@ void test_fl_str_converts_to_and_from(void)
     FL_EQ(&f, P "return str.cmp(\"b\", \"a\")\n", "1");
     FL_EQ(&f, P "return str.cmp(\"a\", \"a\")\n", "0");
     FL_EQ(&f, P "return str.cmp(\"a\", \"ab\")\n", "-1");
+    flfix_close(&f);
+}
+
+/* Every byte as \xNN, so arbitrary bytes -- NULs and invalid sequences
+ * included -- can be written into a Fletch source string. */
+static void escape_bytes(char *out, size_t cap, const u8 *b, size_t n)
+{
+    size_t i;
+    size_t at = 0U;
+
+    for (i = 0U; i < n && at + 5U < cap; i++)
+        at += (size_t)snprintf(out + at, cap - at, "\\x%02x", (unsigned)b[i]);
+    out[at] = '\0';
+}
+
+/*
+ * DoD 4, over the WHOLE s02 golden corpus rather than one family.
+ *
+ * Two laws, per case:
+ *
+ *   - str.len is the cluster count, and str.slice_bytes succeeds at
+ *     exactly the cluster boundaries and raises "index" at every other
+ *     offset.  A byte-indexed slice that splits a cluster produces a
+ *     string that still "works" and renders as a broken glyph three
+ *     screens later; the corpus is where the shapes that do it live.
+ *   - the byte APIs round-trip every case exactly, which is the
+ *     invalid-byte promise in the form that holds for ALL input.
+ *     (upper/lower legitimately rewrite valid cased bytes, so their
+ *     invalid-byte behaviour is asserted on targeted cases in
+ *     str_case_and_trim_keep_invalid_bytes rather than here.)
+ */
+void test_fl_str_the_s02_corpus_never_splits_a_cluster(void)
+{
+    FlFix f;
+    FILE *fp = fopen("tests/unit/fixtures/unicode/corpus.txt", "r");
+    char line[2048];
+    size_t cases = 0U;
+
+    SAG_ASSERT_NOT_NULL(fp);
+    flfix_open(&f);
+    while (fgets(line, sizeof(line), fp) != NULL) {
+        u8 bytes[256];
+        size_t bounds[256];
+        char esc[2048];
+        char src[8192];
+        char want[256];
+        char *p = line;
+        char *hex;
+        char *lens;
+        size_t nbytes = 0U;
+        size_t nclusters = 0U;
+        size_t at = 0U;
+        size_t off;
+
+        while (isspace((unsigned char)*p))
+            p++;
+        if (*p == '#' || *p == '\0')
+            continue;
+        hex = strchr(p, '|');
+        if (hex == NULL)
+            continue;
+        *hex++ = '\0';
+        lens = strchr(hex, '|');
+        if (lens == NULL)
+            continue;
+        *lens++ = '\0';
+        {
+            char *end = strchr(lens, '|');
+
+            if (end != NULL)
+                *end = '\0';
+        }
+        /* The bytes. */
+        {
+            char *tok = strtok(hex, " \t\n");
+
+            while (tok != NULL && nbytes < sizeof(bytes)) {
+                bytes[nbytes++] = (u8)strtoul(tok, NULL, 16);
+                tok = strtok(NULL, " \t\n");
+            }
+        }
+        /* The cluster boundaries, as cumulative byte offsets. */
+        {
+            char *tok = strtok(lens, ", \t\n");
+
+            while (tok != NULL && nclusters < SAG_ARRAY_LEN(bounds)) {
+                at += (size_t)strtoul(tok, NULL, 10);
+                bounds[nclusters++] = at;
+                tok = strtok(NULL, ", \t\n");
+            }
+        }
+        if (nbytes == 0U || at != nbytes)
+            continue;          /* a malformed row is the corpus's problem */
+        escape_bytes(esc, sizeof(esc), bytes, nbytes);
+
+        (void)snprintf(src, sizeof(src),
+                       "import str\nreturn str.len(\"%s\")\n", esc);
+        (void)snprintf(want, sizeof(want), "%zu", nclusters);
+        FL_EQ(&f, src, want);
+
+        /* The byte APIs carry every case through unchanged. */
+        (void)snprintf(src, sizeof(src),
+                       "import str\n"
+                       "return str.from_bytes(str.bytes(\"%s\")) == \"%s\"\n",
+                       esc, esc);
+        FL_EQ(&f, src, "true");
+
+        /* Boundaries succeed; everything between them is refused. */
+        for (off = 1U; off < nbytes; off++) {
+            bool is_bound = false;
+            size_t i;
+
+            for (i = 0U; i < nclusters; i++) {
+                if (bounds[i] == off)
+                    is_bound = true;
+            }
+            (void)snprintf(src, sizeof(src),
+                           "import str\n"
+                           "return str.len_bytes(str.slice_bytes(\"%s\", 0, "
+                           "%zu))\n", esc, off);
+            if (is_bound) {
+                (void)snprintf(want, sizeof(want), "%zu", off);
+            } else {
+                (void)snprintf(want, sizeof(want),
+                               "!index: str.slice_bytes: offset %zu splits a "
+                               "grapheme cluster", off);
+            }
+            FL_EQ(&f, src, want);
+        }
+        cases++;
+    }
+    (void)fclose(fp);
+    /* A corpus that stopped being read would pass every assertion it
+     * never made. */
+    SAG_ASSERT(cases >= 20U);
     flfix_close(&f);
 }

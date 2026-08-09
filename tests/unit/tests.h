@@ -874,6 +874,7 @@ void test_fl_vm_try_catch_binds_the_error_map(void);
 void test_fl_vm_upvalues_capture_by_reference(void);
 void test_fl_vm_loop_variable_is_fresh_each_iteration(void);
 void test_fl_vm_lists_and_maps(void);
+void test_fl_str_the_s02_corpus_never_splits_a_cluster(void);
 void test_fl_modules_list_natives_is_deterministic(void);
 void test_fl_gc_root_builtins(void);
 void test_fl_math_keeps_the_type_it_was_given(void);
