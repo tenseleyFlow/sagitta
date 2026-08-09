@@ -929,39 +929,63 @@ static char *joinp(const char *a, const char *b)
     return s;
 }
 
-/* A directory is ONE test, entered at main.fl or the single *_main.fl. */
-static char *dir_entry(const char *dir)
+/*
+ * A directory's ENTRY POINTS: `main.fl`, or every `*_main.fl`.
+ *
+ * The sprint says "a directory is one test, entered at main.fl (or the
+ * single *_main.fl)".  Several `*_main.fl` are allowed here because
+ * 13-capability/ needs two scenarios -- a config origin and a plugin
+ * origin -- over one set of helpers, and splitting them into sibling
+ * directories would duplicate helper.fl to no purpose.
+ *
+ * The other half of the rule matters more: when a directory HAS entry
+ * points, nothing else in it is a unit.  Without that, helper.fl and
+ * lib/util.fl are collected as tests of their own, and a support file
+ * with no `# SPEC:` is reported as a configuration error -- which is
+ * the right answer for a conformance file and the wrong one for a
+ * module that exists to be imported.
+ */
+static u32 dir_entries(const char *dir, char **out, u32 cap)
 {
     DIR *d = opendir(dir);
     struct dirent *e;
-    char *found = NULL;
-    char *plain = NULL;
+    char *names[512];
+    u32 nn = 0U;
+    u32 n = 0U;
+    u32 i;
+    bool has_main = false;
 
     if (d == NULL)
-        return NULL;
+        return 0U;
     while ((e = readdir(d)) != NULL) {
-        size_t n = strlen(e->d_name);
+        size_t len = strlen(e->d_name);
 
-        if (n < 3U || strcmp(e->d_name + n - 3U, ".fl") != 0)
+        if (e->d_name[0] == '.' || len < 4U ||
+            strcmp(e->d_name + len - 3U, ".fl") != 0)
             continue;
-        if (strcmp(e->d_name, "main.fl") == 0) {
-            free(plain);
-            plain = joinp(dir, e->d_name);
-        } else if (n > 8U && strcmp(e->d_name + n - 8U, "_main.fl") == 0) {
-            if (found != NULL) {
-                free(found);
-                found = NULL;
-                break;              /* ambiguous; main.fl must decide */
-            }
-            found = joinp(dir, e->d_name);
-        }
+        if (nn == (u32)SAG_ARRAY_LEN(names))
+            die("%s: too many .fl files", dir);
+        names[nn++] = dupe(e->d_name);
     }
     (void)closedir(d);
-    if (plain != NULL) {
-        free(found);
-        return plain;
+    sag_sort_stable(names, nn, sizeof(names[0]), cmp_str, NULL);
+
+    for (i = 0U; i < nn; i++) {
+        if (strcmp(names[i], "main.fl") == 0)
+            has_main = true;
     }
-    return found;
+    for (i = 0U; i < nn; i++) {
+        size_t len = strlen(names[i]);
+        bool is_entry = has_main
+                            ? strcmp(names[i], "main.fl") == 0
+                            : (len > 8U &&
+                               strcmp(names[i] + len - 8U, "_main.fl") == 0);
+
+        if (is_entry && n < cap)
+            out[n++] = joinp(dir, names[i]);
+        free(names[i]);
+    }
+    return n;
 }
 
 static void collect(const char *dir, const char *relbase)
@@ -990,14 +1014,34 @@ static void collect(const char *dir, const char *relbase)
                                        : joinp(relbase, names[i]);
 
         if (is_dir(full)) {
-            char *entry = dir_entry(full);
+            char *entries[16];
+            u32 ne = dir_entries(full, entries, (u32)SAG_ARRAY_LEN(entries));
+            u32 e;
 
-            if (entry != NULL) {
+            if (ne == 1U) {
+                /* One entry point: the DIRECTORY is the test's name. */
                 if (g_nunits == MAX_UNITS)
                     die("more than %d units", MAX_UNITS);
                 g_units[g_nunits].name = rel;
-                g_units[g_nunits].entry = entry;
+                g_units[g_nunits].entry = entries[0];
                 g_nunits++;
+                free(full);
+                continue;
+            }
+            if (ne > 1U) {
+                /* Several scenarios share the directory's helpers, so
+                 * each is named for its own entry file. */
+                for (e = 0U; e < ne; e++) {
+                    const char *base = strrchr(entries[e], '/');
+
+                    if (g_nunits == MAX_UNITS)
+                        die("more than %d units", MAX_UNITS);
+                    g_units[g_nunits].name =
+                        joinp(rel, base == NULL ? entries[e] : base + 1);
+                    g_units[g_nunits].entry = entries[e];
+                    g_nunits++;
+                }
+                free(rel);
                 free(full);
                 continue;
             }

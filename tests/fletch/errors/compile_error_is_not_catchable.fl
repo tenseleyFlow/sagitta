@@ -1,0 +1,17 @@
+# SPEC: §9
+# ERROR: error:
+# CHECK_NOT: caught
+# EXIT: 1
+#
+# §9.3: COMPILE ERRORS ARE DIAGNOSTICS AND ARE NEVER CATCHABLE.
+#
+# The try block below would catch anything the program raised, and it
+# catches nothing -- because the program never runs.  `caught` is
+# therefore never printed, and the exit code is the compile-error 1
+# rather than the 0 a successful catch would produce.
+import io
+try {
+    let x = )
+} catch e {
+    io.print("caught")
+}

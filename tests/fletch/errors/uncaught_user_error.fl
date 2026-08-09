@@ -1,0 +1,11 @@
+# SPEC: §9
+# COVERS: kind:user
+# ERROR: error: user: deliberate
+# ERROR_KIND: user
+# ERROR_LINE: 11
+# EXIT: 1
+#
+# An UNCAUGHT raise, driven as a whole program because that is the
+# only way to see what a caught one never has: the trace, the caret,
+# and the exit code.
+error("deliberate")

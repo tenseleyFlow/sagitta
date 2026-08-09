@@ -1,0 +1,70 @@
+# SPEC: §10
+# COVERS: edit_stmt
+# COVERS: op:EDIT_BEGIN op:EDIT_END
+#
+# §10 in its HEADLESS form.
+#
+# With no editor host an `edit` block is a plain block: begin and end
+# are no-ops, the body runs, and a raise inside it propagates.  The
+# real transaction -- one undo node, all-or-nothing against a buffer --
+# is Sprint 34's, and asserting it here would mean asserting a host
+# that does not exist.  What IS asserted is that the two opcodes are
+# emitted and that control flows through them correctly, so Sprint 34
+# inherits a working shape rather than an untested one.
+import io
+import list
+
+# -- the body runs -----------------------------------------------------
+let log = []
+edit {
+    list.push(log, "inside")
+}
+list.push(log, "after")
+# OUT: ["inside", "after"]
+io.print(log)
+
+# -- an edit block is a SCOPE ------------------------------------------
+let x = "outer"
+edit {
+    let x = "inner"
+    # OUT: inner
+    io.print(x)
+}
+# OUT: outer
+io.print(x)
+
+# -- a raise inside propagates out and is catchable --------------------
+try {
+    edit {
+        error("inside a transaction")
+    }
+    io.print("the raise did not escape the edit block")
+} catch e {
+    # OUT: inside a transaction
+    io.print(e.msg)
+}
+# EDIT_END must still have run on the failing path: the VM is usable.
+edit {
+    # OUT: still working
+    io.print("still working")
+}
+
+# -- edit blocks nest ---------------------------------------------------
+edit {
+    edit {
+        # OUT: nested
+        io.print("nested")
+    }
+}
+
+# -- a motion inside an edit block raises headlessly -------------------
+# This is the §14 `shout` shape, and the reason it returns "MOTION".
+try {
+    edit {
+        let unused = @[ 2v ]
+    }
+    io.print("a motion ran without a host")
+} catch e {
+    # OUT: motion
+    io.print(e.kind)
+}

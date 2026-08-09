@@ -1,0 +1,17 @@
+# A module: its top-level `fn`s and `let`s are its exports.
+let VERSION = 2
+
+fn double(n) {
+    return n * 2
+}
+
+# A name beginning with an underscore is PRIVATE and not exported.
+fn _secret() {
+    return "hidden"
+}
+
+# Proves a module body runs against its OWN globals: `double` here
+# resolves to this file's, whatever the importer happens to define.
+fn twice_double(n) {
+    return double(double(n))
+}

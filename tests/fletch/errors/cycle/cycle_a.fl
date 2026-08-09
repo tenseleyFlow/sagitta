@@ -1,0 +1,2 @@
+import "./cycle_b.fl" as b
+fn a() { return b.b() }

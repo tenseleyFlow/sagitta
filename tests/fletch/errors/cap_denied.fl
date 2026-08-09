@@ -1,0 +1,15 @@
+# SPEC: §13, §9
+# CAPS: none
+# COVERS: kind:capability
+# ERROR_KIND: capability
+# ERROR: fs.read
+# EXIT: 3
+#
+# §13's denial path, driven from OUTSIDE with `--caps none`.
+#
+# EXIT 3, NOT 1.  `capability` and `io` mean the environment refused
+# rather than that the script was wrong, so a caller in a shell
+# conditional can tell a missing grant from a syntax error without
+# parsing stderr.
+import io
+io.print(io.read("/etc/hostname"))

@@ -1,0 +1,47 @@
+# SPEC: §13
+# ORIGIN: plugin
+# CAPS: none
+# COVERS: kind:capability
+#
+# A PLUGIN origin with no grants, importing a helper that also has
+# none.
+#
+# THE DELEGATION HOLE: the grant is read from the DEFINING MODULE of
+# the calling function, never from the stack top and never from a
+# VM-global.  A helper that read the caller's grants would let a
+# plugin launder a capability through any function it could reach --
+# and a nested function whose origin defaulted to zero would count as
+# a builtin, which is TRANSPARENT.  Both are asserted here.
+import io
+import "./helper.fl" as helper
+
+# -- the plugin itself cannot read ------------------------------------
+try {
+    io.print(io.read("/etc/hostname"))
+    io.print("a plugin with no grants read a file")
+} catch e {
+    # OUT: capability
+    io.print(e.kind)
+}
+
+# -- nor can a helper it calls ----------------------------------------
+try {
+    io.print(helper.read_it("/etc/hostname"))
+    io.print("a helper laundered the capability")
+} catch e {
+    # OUT: capability
+    io.print(e.kind)
+}
+
+# -- nor can a NESTED function inside that helper ---------------------
+try {
+    io.print(helper.read_nested("/etc/hostname"))
+    io.print("a nested helper laundered the capability")
+} catch e {
+    # OUT: capability
+    io.print(e.kind)
+}
+
+# -- but everything that needs no capability still works --------------
+# OUT: 4
+io.print(helper.pure(2))

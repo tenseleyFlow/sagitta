@@ -1,0 +1,17 @@
+import io
+
+fn read_it(p) {
+    return io.read(p)
+}
+
+# A function defined INSIDE another one: its origin must be this
+# module's, not a zeroed FL_ORIGIN_BUILTIN, which fl_cap_origin treats
+# as transparent and would therefore inherit whoever called it.
+fn read_nested(p) {
+    let inner = fn() { return io.read(p) }
+    return inner()
+}
+
+fn pure(n) {
+    return n * 2
+}

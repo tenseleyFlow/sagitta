@@ -1,0 +1,40 @@
+# SPEC: §11
+# COVERS: import_stmt
+# COVERS: op:IMPORT
+#
+# §11: the module system.
+#
+# The private-name and own-globals cases are the ones that matter:
+# both pass by accident under a naive "copy the globals" import and
+# fail the moment two files define the same name.
+import io
+import "./lib/util.fl" as util
+
+# -- exports are reachable through the alias -------------------------
+# OUT: 4 2
+io.print(util.double(2), util.VERSION)
+
+# -- an underscore name is PRIVATE ------------------------------------
+try {
+    io.print(util._secret())
+    io.print("a private name was exported")
+} catch e {
+    # OUT: key
+    io.print(e.kind)
+}
+
+# -- a module body runs against ITS OWN globals ------------------------
+# This file defines its own `double` that does something different.
+# `util.twice_double` must keep seeing the module's, not this one's --
+# the bug is invisible until two files share a name, and then it is a
+# module calling a stranger's function.
+fn double(n) {
+    return n + 1000
+}
+# OUT: 8 1002
+io.print(util.twice_double(2), double(2))
+
+# -- the same file imported twice is ONE module ------------------------
+import "./lib/util.fl" as again
+# OUT: true
+io.print(again.VERSION == util.VERSION)

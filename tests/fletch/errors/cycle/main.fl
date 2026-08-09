@@ -1,0 +1,12 @@
+# SPEC: §11, §9
+# COVERS: kind:import
+# ERROR_KIND: import
+# ERROR: cycle
+# EXIT: 1
+#
+# An import CYCLE, three files deep.
+#
+# The message must name every file in the chain, not just the pair
+# that closed it: with only the last edge a reader sees "a imports a"
+# and has no idea which two hops in between made it true.
+import "./cycle_a.fl" as a
