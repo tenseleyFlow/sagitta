@@ -508,8 +508,17 @@ int sag_fl_main(int argc, char **argv)
 {
     if (argc == 1)
         return isatty(0) ? sag_fl_repl() : run_stdin();
-    if (argc == 2 && strcmp(argv[1], "--selftest-fl-bug") == 0)
+    if (argc == 2 && strcmp(argv[1], "--selftest-fl-bug") == 0) {
+        /*
+         * On a TTY the selftest runs THROUGH THE PROMPT, because that
+         * is the only configuration where invariant 6 has anything to
+         * prove: sag_bug's prehook is installed by sag_tty_raw, so a
+         * headless run would restore a terminal it never took.
+         */
+        if (isatty(0))
+            return sag_fl_repl_selftest_bug();
         return selftest_bug();
+    }
     if (argc == 2 && strcmp(argv[1], "--list-natives") == 0)
         return list_natives();
     if (argc == 2 && strcmp(argv[1], "--help") == 0) {

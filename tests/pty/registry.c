@@ -3855,6 +3855,111 @@ static void case_s27_group_menu_over_scrolled_strip(PtyCtx *c)
     s24_fixture_remove();
 }
 
+
+/* ---------------------------------------------------------------- */
+/* Sprint 32: the Fletch prompt                                     */
+/* ---------------------------------------------------------------- */
+
+/*
+ * `sag fl` on a tty owns the terminal like the editor does, so it gets
+ * the same two goldens the editor has: what a session LOOKS like, and
+ * what the terminal looks like AFTER one dies badly.  Note there is no
+ * alternate screen here -- the prompt scrolls in place, which is why
+ * the golden shows the banner still on row 0.
+ */
+static const char report_tail[] =
+    "sagitta: please report this internal error\r\n";
+
+static void spawn_repl(PtyCtx *c)
+{
+    ptc_allow_primary(c);
+    ptc_spawn(c, ptc_sagitta_bin(c), "fl", NULL);
+    ptc_no_altscreen(c);
+    ptc_settle(c, 60);
+}
+
+/* Asserts a run of bytes appears in what the child wrote. */
+#define REPL_SAW(c, lit) ptc_expect_output((c), (lit), sizeof(lit) - 1U)
+
+static void case_s32_repl_session(PtyCtx *c)
+{
+    spawn_repl(c);
+    /*
+     * An import whose binding must survive into a LATER entry, a value,
+     * a binding that prints nothing, a multi-line entry held open by
+     * the brace, and an error with its trace.
+     */
+    ptc_bytes(c, "import list\r");
+    ptc_settle(c, 60);
+    ptc_bytes(c, "1 + 2\r");
+    ptc_settle(c, 60);
+    ptc_bytes(c, "let xs = [1, 2, 3]\r");
+    ptc_settle(c, 60);
+    ptc_bytes(c, "fn double(n) {\r");
+    ptc_settle(c, 60);
+    ptc_bytes(c, "return n * 2\r");
+    ptc_settle(c, 60);
+    ptc_bytes(c, "}\r");
+    ptc_settle(c, 60);
+    ptc_bytes(c, "list.map(xs, double)\r");
+    ptc_settle(c, 60);
+    ptc_bytes(c, "doubel(1)\r");
+    ptc_settle(c, 120);
+    /*
+     * THE SNAPSHOT IS THIN ON PURPOSE.  The harness VT only models the
+     * ALTERNATE screen's grid; a primary-screen child's text goes to a
+     * byte log instead, so this golden pins the properties the grid
+     * still carries -- alt=0, cursor column, no mode changes -- which
+     * is itself the assertion that the prompt never took over the
+     * screen.  The session's CONTENT is pinned below, against the
+     * bytes, which is the right instrument for a scrolling program.
+     */
+    ptc_snapshot(c, "s32_repl_session");
+    REPL_SAW(c, "sagitta ");
+    REPL_SAW(c, "fl> ");
+    REPL_SAW(c, "3\r\n");                /* 1 + 2, printed              */
+    REPL_SAW(c, "... ");                 /* the brace held the entry    */
+    REPL_SAW(c, "[2, 4, 6]\r\n");        /* the closure ran over xs     */
+    REPL_SAW(c, "did you mean 'double'?");
+    REPL_SAW(c, "  1 | doubel(1)\r\n");  /* the trace's source line     */
+    /* `let` prints nothing: a binding evaluates to nothing, and a
+     * prompt that echoed one would be unreadable. */
+    ptc_reject_output(c, "[1, 2, 3]\r\n", 10U);
+    ptc_allow_restore(c);
+    ptc_bytes(c, ":quit\r");
+    ptc_expect_exit(c, 0);
+}
+
+/*
+ * INVARIANT 6 THROUGH sag_bug.  §9's reporter runs from inside the VM
+ * with the terminal in raw mode; the restore prehook has to fire before
+ * a byte of the report reaches the screen, or the user is left with a
+ * dead shell holding a stack dump.  --selftest-fl-bug corrupts a chunk
+ * on purpose to get there.
+ */
+static void case_s32_bug_restores_the_terminal(PtyCtx *c)
+{
+    ptc_allow_primary(c);
+    ptc_allow_restore(c);
+    ptc_spawn(c, ptc_sagitta_bin(c), "fl", "--selftest-fl-bug", NULL);
+    ptc_no_altscreen(c);
+    ptc_settle(c, 60);
+    /* The prompt, before anything breaks.  The report that follows is
+     * asserted as bytes below, not frozen into this grid. */
+    ptc_snapshot(c, "s32_bug_restores_the_terminal");
+    ptc_bytes(c, "x");
+    ptc_expect_exit(c, 4);
+    /*
+     * The restore comes BEFORE the report, not after: sag_bug's prehook
+     * hands the terminal back first so the report itself arrives on a
+     * cooked terminal a user can read and scroll.  Asserting the tail
+     * were the restore blob would pin the opposite -- and wrong --
+     * order.
+     */
+    ptc_expect_output(c, restore_blob, sizeof(restore_blob) - 1U);
+    ptc_expect_tail(c, report_tail, sizeof(report_tail) - 1U);
+}
+
 const PtyCase sag_pty_cases[] = {
     C(s22_click_in_the_right_pane, modern, 24U, 80U,
       case_s22_click_in_the_right_pane),
@@ -4148,6 +4253,9 @@ const PtyCase sag_pty_cases[] = {
       case_s27_group_menu_over_scrolled_strip),
     C(s27_double_click_mode_chip, modern, 24U, 80U,
       case_s27_double_click_mode_chip),
+    C(s32_repl_session, modern, 24U, 80U, case_s32_repl_session),
+    C(s32_bug_restores_the_terminal, modern, 24U, 80U,
+      case_s32_bug_restores_the_terminal),
     {NULL, NULL, 0U, 0U, NULL}
 };
 

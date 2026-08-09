@@ -90,4 +90,12 @@ bool sag_fl_repl_command(FlRepl *r, const char *line, size_t len,
 /* The interactive prompt.  Returns a SAG_EXIT_* code. */
 int sag_fl_repl(void);
 
+/*
+ * Opens the prompt exactly as sag_fl_repl does -- tty, raw mode,
+ * sag_bug prehook -- then breaks a chunk on purpose so §9's report
+ * fires with the terminal live.  Hidden behind --selftest-fl-bug; the
+ * pty golden for invariant 6 is the only caller.
+ */
+int sag_fl_repl_selftest_bug(void);
+
 #endif /* SAG_FL_REPL_H */

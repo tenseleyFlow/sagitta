@@ -569,6 +569,12 @@ void ptc_spawn(PtyCtx *c, const char *bin, ...)
     strv_free(argv);
 }
 
+void ptc_no_altscreen(PtyCtx *c)
+{
+    if (c != NULL)
+        c->ready = true;
+}
+
 void ptc_settle(PtyCtx *c, i64 quiet_ms)
 {
     pump_quiet(c, quiet_ms, !c->ready);

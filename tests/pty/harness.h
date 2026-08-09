@@ -93,6 +93,14 @@ void ptc_env_free(char **envp);
 
 void ptc_spawn(PtyCtx *c, const char *bin, ...);
 void ptc_settle(PtyCtx *c, i64 quiet_ms);
+/*
+ * Declares that this child will never enter the alternate screen, so
+ * ptc_settle must not wait for it.  The Fletch prompt (`sag fl` on a
+ * tty) is the case: it scrolls in place on purpose, and without this
+ * every settle would burn the case budget waiting for a smcup that is
+ * never coming.
+ */
+void ptc_no_altscreen(PtyCtx *c);
 void ptc_wait_kitty_push(PtyCtx *c, u32 flags);
 void ptc_wait_sync_pairs(PtyCtx *c, u32 count);
 void ptc_keys(PtyCtx *c, const char *spec);

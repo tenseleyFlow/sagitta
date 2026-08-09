@@ -660,7 +660,7 @@ static void handle_entry(FlRepl *r, Bytebuf *pending, Bytebuf *out,
     pending->len = 0U;
 }
 
-int sag_fl_repl(void)
+static int repl_main(bool selftest_bug)
 {
     Arena arena;
     Interner in;
@@ -725,6 +725,46 @@ int sag_fl_repl(void)
     (void)fprintf(stdout,
                   "sagitta %s -- :help for help, :quit to leave\r\n",
                   SAG_VERSION);
+    if (selftest_bug) {
+        /*
+         * Raw mode is on and sag_bug's prehook is installed; break a
+         * chunk and let §9's report prove invariant 6 holds through
+         * it.  sag_bug exits, so nothing below this runs.
+         *
+         * It waits for a keypress first so the pty golden can pin the
+         * PROMPT -- which is stable -- while the report, which carries
+         * a vm.c line number, is checked as bytes instead of being
+         * frozen into a grid that would rot on the next vm.c edit.
+         */
+        static const char *const src = "return 1\n";
+        FlProgram sp;
+        FlFn *bad;
+        FlValue v = FL_NIL_V;
+
+        u8 discard[64];
+
+        redraw(&line, FL_REPL_PROMPT);
+        while (read(tty.rfd, discard, sizeof(discard)) <= 0) {
+            struct pollfd wait_fd;
+
+            wait_fd.fd = tty.rfd;
+            wait_fd.events = POLLIN;
+            wait_fd.revents = 0;
+            if (poll(&wait_fd, 1U, -1) < 0 && errno != EINTR)
+                goto done;
+        }
+        (void)fprintf(stdout, "\r\n");
+        (void)fflush(stdout);
+        (void)fl_diag_add_file(&dc, "<selftest>", src, strlen(src));
+        sp = fl_parse(&arena, &dc, &in, src, strlen(src), 0U);
+        bad = fl_compile_repl(&vm, &dc, &sp, 0U, vm.root_origin);
+        if (bad != NULL) {
+            bad->ch.code[0] = 0xFEU;         /* no such opcode */
+            (void)fl_vm_run(&vm, bad, &v);
+        }
+        rc = SAG_EXIT_ERR;
+        goto done;
+    }
     redraw(&line, FL_REPL_PROMPT);
     for (;;) {
         u8 buf[1024];
@@ -885,3 +925,13 @@ done:
 /* §4: the `:`-commands                                             */
 /* ---------------------------------------------------------------- */
 
+
+int sag_fl_repl(void)
+{
+    return repl_main(false);
+}
+
+int sag_fl_repl_selftest_bug(void)
+{
+    return repl_main(true);
+}
