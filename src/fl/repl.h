@@ -28,6 +28,36 @@ enum {
  */
 void sag_fl_print_result(FlVm *vm, FlValue v, Bytebuf *out);
 
+/*
+ * What the accumulated buffer is, after each line.
+ *
+ * Sprint 32 §3, and three pitfalls live in this one decision:
+ *
+ *   - THE WHOLE TEXT IS RE-PARSED, never a line at a time.
+ *     `incomplete` is a property of the full source, and deciding it
+ *     per line makes a `}` on its own line look like an error.
+ *   - THE TRIAL PARSE IS SILENCED.  Printing its diagnostics means
+ *     every multiline entry emits a bogus `unexpected end of input` on
+ *     each line as it is typed.
+ *   - `incomplete` IS NOT TRUSTED ALONE.  s29 pins that a syntax error
+ *     inside an open bracket sets `had_error`, not `incomplete`, so a
+ *     REPL reading only `incomplete` waits forever for a `)` the user
+ *     already typed wrong.  had_error is checked FIRST.
+ */
+typedef enum {
+    FL_REPL_RUN = 0,     /* complete and clean: compile, run, print   */
+    FL_REPL_CONTINUE,    /* still open: show the `... ` prompt        */
+    FL_REPL_ERROR        /* a real syntax error: re-parse loudly      */
+} FlReplVerdict;
+
+/*
+ * Classifies the accumulated text WITHOUT emitting anything.  The
+ * caller re-parses with its printing sink when the verdict is
+ * FL_REPL_ERROR, which is the only path that should produce output.
+ */
+FlReplVerdict sag_fl_repl_classify(Arena *arena, Interner *in,
+                                   const char *text, size_t len);
+
 /* The interactive prompt.  Returns a SAG_EXIT_* code. */
 int sag_fl_repl(void);
 

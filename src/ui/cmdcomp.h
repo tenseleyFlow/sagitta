@@ -91,6 +91,18 @@ typedef struct CompReq {
     const char *stem; /* decoded token text at the cursor */
     Ed *ed;
     /*
+     * Sprint 32 §2: whatever is driving this completion when it is not
+     * an editor.  `sag fl`'s prompt has no Ed and enumerates from an
+     * FlVm, so a source that can serve both reads `ud` and leaves `ed`
+     * alone.
+     *
+     * On the REQUEST rather than on the CompSource, which is where §2
+     * suggested it: the source registry is process-global, and a VM
+     * pointer parked in a global outlives the VM the first time two
+     * of them exist.  A request is scoped to the call that made it.
+     */
+    void *ud;
+    /*
      * Where the returned items' strings are allocated.  Explicit rather
      * than chosen by the source from editor state: §4 resets this arena
      * when it replaces its cached set, and a source that quietly
