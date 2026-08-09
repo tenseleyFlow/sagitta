@@ -162,6 +162,13 @@ static void merge_sort_i64(i64 *values, i64 *work, size_t len)
     }
 }
 
+/*
+ * Why the quit failed, not just that it did.  This lane has flaked
+ * three times with "did not quit" and no way to tell a runner stall
+ * from a non-zero exit status -- which are different bugs.
+ */
+static const char *g_stop_why = "?";
+
 static bool stop_editor(SagLivePty *pty)
 {
     static const char escape = '\033';
@@ -182,14 +189,25 @@ static bool stop_editor(SagLivePty *pty)
     i64 deadline = sag_live_pty_now_ns() + INT64_C(20000000000);
     int code;
 
+    g_stop_why = "escape write timed out";
     if (!sag_live_pty_write(pty, &escape, 1U, deadline))
         return false;
     while (nanosleep(&settle, &settle) != 0 && errno == EINTR)
         ;
-    if (!sag_live_pty_write(pty, quit, sizeof(quit) - 1U, deadline) ||
-        !sag_live_pty_wait_exit(pty, deadline, &code))
+    g_stop_why = "q! write timed out";
+    if (!sag_live_pty_write(pty, quit, sizeof(quit) - 1U, deadline))
         return false;
-    return code == 0;
+    g_stop_why = "editor did not exit within 20 s";
+    if (!sag_live_pty_wait_exit(pty, deadline, &code))
+        return false;
+    if (code != 0) {
+        static char why[64];
+
+        (void)snprintf(why, sizeof(why), "editor exited %d, wanted 0", code);
+        g_stop_why = why;
+        return false;
+    }
+    return true;
 }
 
 static bool measure_cold(const char *binary, const char *path,
@@ -216,8 +234,8 @@ static bool measure_cold(const char *binary, const char *path,
         }
         samples[run] = completed - start;
         if (samples[run] < 0 || !stop_editor(&pty)) {
-            (void)fprintf(stderr, "latency: cold run %zu did not quit\n",
-                          run + 1U);
+            (void)fprintf(stderr, "latency: cold run %zu did not quit: %s\n",
+                          run + 1U, g_stop_why);
             sag_live_pty_close(&pty);
             return false;
         }
