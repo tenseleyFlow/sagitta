@@ -69,6 +69,17 @@ void fl_std_register(FlVm *vm);
  */
 u32 fl_std_list_natives(const FlVm *vm, Bytebuf *out);
 
+/*
+ * The signature a native was registered with -- "(s, i, [i]) -> s" --
+ * looked up by its QUALIFIED name, or NULL.
+ *
+ * Read from the static FlNativeDef tables rather than from FlNative,
+ * which does not carry it: a signature is documentation, and paying a
+ * pointer per native at runtime to hold a string only `:help` reads
+ * would be the wrong trade.
+ */
+const char *fl_std_sig(const char *qualified);
+
 /* ---------------------------------------------------------------- */
 /* Argument helpers                                                 */
 /* ---------------------------------------------------------------- */

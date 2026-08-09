@@ -58,6 +58,30 @@ typedef enum {
 FlReplVerdict sag_fl_repl_classify(Arena *arena, Interner *in,
                                    const char *text, size_t len);
 
+/*
+ * The prompt's own state: the VM it evaluates into, and the one thing a
+ * `:`-command remembers between lines.
+ */
+typedef struct FlRepl {
+    FlVm *vm;
+    Arena *arena;
+    Interner *in;
+    DiagCtx *dc;
+    char last_load[1024];
+    bool has_load;
+} FlRepl;
+
+/*
+ * Handles a `:`-command, appending its output to `out`.
+ *
+ * Returns false when `line` is not one, in which case the caller treats
+ * it as source.  Recognised ONLY when the pending buffer is empty and
+ * the first non-space byte is `:` -- a `.fl` file starting with `:` is
+ * an ordinary syntax error, which is correct and needs no special case.
+ */
+bool sag_fl_repl_command(FlRepl *r, const char *line, size_t len,
+                         Bytebuf *out, bool *quit);
+
 /* The interactive prompt.  Returns a SAG_EXIT_* code. */
 int sag_fl_repl(void);
 

@@ -119,6 +119,28 @@ u32 fl_std_list_natives(const FlVm *vm, Bytebuf *out)
     return n;
 }
 
+const char *fl_std_sig(const char *qualified)
+{
+    size_t i;
+
+    if (qualified == NULL)
+        return NULL;
+    for (i = 0U; i < SAG_ARRAY_LEN(FL_MODULES); i++) {
+        const FlModuleDef *md = FL_MODULES[i];
+        size_t mn = strlen(md->name);
+        u32 k;
+
+        if (strncmp(qualified, md->name, mn) != 0 || qualified[mn] != '.')
+            continue;
+        for (k = 0U; k < md->n; k++) {
+            if (strcmp(qualified + mn + 1U, md->defs[k].name) == 0)
+                return md->defs[k].sig;
+        }
+        return NULL;
+    }
+    return NULL;
+}
+
 /* ---------------------------------------------------------------- */
 /* Argument helpers                                                 */
 /* ---------------------------------------------------------------- */

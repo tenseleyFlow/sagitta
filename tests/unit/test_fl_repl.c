@@ -217,3 +217,212 @@ void test_fl_repl_bounds_what_it_prints(void)
     bytebuf_free(&bb);
     flfix_close(&f);
 }
+
+/* ---------------------------------------------------------------- */
+/* §4: the `:`-commands                                             */
+/* ---------------------------------------------------------------- */
+
+static void cmd(FlFix *f, FlRepl *r, const char *line, char *out, size_t cap,
+                bool *quit)
+{
+    Bytebuf bb;
+    size_t k;
+
+    (void)f;
+    bytebuf_init(&bb);
+    out[0] = '\0';
+    if (!sag_fl_repl_command(r, line, strlen(line), &bb, quit)) {
+        (void)snprintf(out, cap, "<not a command>");
+        bytebuf_free(&bb);
+        return;
+    }
+    k = bb.len < cap - 1U ? bb.len : cap - 1U;
+    if (k != 0U)
+        (void)memcpy(out, bb.data, k);
+    out[k] = '\0';
+    bytebuf_free(&bb);
+}
+
+static void repl_open(FlFix *f, FlRepl *r)
+{
+    flfix_open(f);
+    (void)memset(r, 0, sizeof(*r));
+    r->vm = &f->vm;
+    r->arena = &f->arena;
+    r->in = &f->in;
+    r->dc = &f->dc;
+}
+
+void test_fl_repl_recognises_only_a_leading_colon(void)
+{
+    FlFix f;
+    FlRepl r;
+    char got[4096];
+    bool quit = false;
+
+    repl_open(&f, &r);
+    /*
+     * A `.fl` file starting with `:` is an ordinary syntax error, and
+     * that is correct -- these are REPL-only, so recognition is one
+     * rule and needs no special case anywhere else.
+     */
+    cmd(&f, &r, "1 + 1\n", got, sizeof(got), &quit);
+    SAG_ASSERT_EQ_STR(got, "<not a command>");
+    cmd(&f, &r, "let x = 1\n", got, sizeof(got), &quit);
+    SAG_ASSERT_EQ_STR(got, "<not a command>");
+    /* Leading space is allowed; the colon must be the first byte that
+     * is not one. */
+    cmd(&f, &r, "   :caps\n", got, sizeof(got), &quit);
+    SAG_ASSERT(strstr(got, "origin:") != NULL);
+    flfix_close(&f);
+}
+
+void test_fl_repl_quits_and_helps(void)
+{
+    FlFix f;
+    FlRepl r;
+    char got[4096];
+    bool quit = false;
+
+    repl_open(&f, &r);
+    cmd(&f, &r, ":quit\n", got, sizeof(got), &quit);
+    SAG_ASSERT(quit);
+    quit = false;
+    cmd(&f, &r, ":q\n", got, sizeof(got), &quit);
+    SAG_ASSERT(quit);
+    quit = false;
+
+    cmd(&f, &r, ":help\n", got, sizeof(got), &quit);
+    SAG_ASSERT(!quit);
+    /* Every command names itself in the table -- one list, so the help
+     * text and the dispatcher cannot drift. */
+    SAG_ASSERT(strstr(got, ":help") != NULL);
+    SAG_ASSERT(strstr(got, ":quit") != NULL);
+    SAG_ASSERT(strstr(got, ":load") != NULL);
+    SAG_ASSERT(strstr(got, ":reload") != NULL);
+    SAG_ASSERT(strstr(got, ":globals") != NULL);
+    SAG_ASSERT(strstr(got, ":disasm") != NULL);
+    SAG_ASSERT(strstr(got, ":caps") != NULL);
+    /* And it says there is no debugger, so nobody hunts for a flag. */
+    SAG_ASSERT(strstr(got, "no stepping debugger") != NULL);
+    SAG_ASSERT(strstr(got, "fletch-spec.md") != NULL);
+
+    /* :help NAME reads the registered signature. */
+    cmd(&f, &r, ":help str.slice\n", got, sizeof(got), &quit);
+    SAG_ASSERT(strstr(got, "(s, lo, [hi]) -> s") != NULL);
+    cmd(&f, &r, ":help fmt.repr\n", got, sizeof(got), &quit);
+    SAG_ASSERT(strstr(got, "(v, [indent]) -> str") != NULL);
+    cmd(&f, &r, ":help nope.nope\n", got, sizeof(got), &quit);
+    SAG_ASSERT(strstr(got, "no builtin called") != NULL);
+    flfix_close(&f);
+}
+
+void test_fl_repl_suggests_over_the_command_names(void)
+{
+    FlFix f;
+    FlRepl r;
+    char got[4096];
+    bool quit = false;
+
+    repl_open(&f, &r);
+    /* §7's fourth site: the candidate set is exactly the eight. */
+    cmd(&f, &r, ":gloabls\n", got, sizeof(got), &quit);
+    SAG_ASSERT(strstr(got, "unknown command ':gloabls'") != NULL);
+    SAG_ASSERT(strstr(got, "did you mean 'globals'?") != NULL);
+    cmd(&f, &r, ":relaod\n", got, sizeof(got), &quit);
+    SAG_ASSERT(strstr(got, "did you mean 'reload'?") != NULL);
+    /* Nothing close enough offers nothing, and does not leave a
+     * dangling separator behind. */
+    cmd(&f, &r, ":zzzzzzz\n", got, sizeof(got), &quit);
+    SAG_ASSERT(strstr(got, "unknown command") != NULL);
+    SAG_ASSERT(strstr(got, "did you mean") == NULL);
+    SAG_ASSERT(strstr(got, "; \n") == NULL);
+    flfix_close(&f);
+}
+
+void test_fl_repl_shows_globals_and_caps(void)
+{
+    FlFix f;
+    FlRepl r;
+    char got[4096];
+    bool quit = false;
+    char scratch[8192];
+
+    repl_open(&f, &r);
+    cmd(&f, &r, ":globals\n", got, sizeof(got), &quit);
+    SAG_ASSERT(strstr(got, "(none yet)") != NULL);
+
+    /* Bind two names and import a module: the module must NOT show up,
+     * because ":globals" answers "what have I got" and the seven
+     * builtins are not an answer to that. */
+    flfix_run(&f, "import str\nlet total = 41\nlet name = \"a\"\n",
+              scratch, sizeof(scratch));
+    cmd(&f, &r, ":globals\n", got, sizeof(got), &quit);
+    SAG_ASSERT(strstr(got, "total = 41") != NULL);
+    SAG_ASSERT(strstr(got, "name = \"a\"") != NULL);
+    SAG_ASSERT(strstr(got, "str =") == NULL);
+
+    cmd(&f, &r, ":caps\n", got, sizeof(got), &quit);
+    SAG_ASSERT(strstr(got, "origin:") != NULL);
+    SAG_ASSERT(strstr(got, "(none)") != NULL);
+    flfix_as(&f, (u8)FL_ORIGIN_REPL,
+             (u32)FL_CAP_FS_READ | (u32)FL_CAP_NET);
+    f.vm.root_origin = f.origin;
+    cmd(&f, &r, ":caps\n", got, sizeof(got), &quit);
+    SAG_ASSERT(strstr(got, "fs.read") != NULL);
+    SAG_ASSERT(strstr(got, "net") != NULL);
+    SAG_ASSERT(strstr(got, "fs.write") == NULL);
+    flfix_close(&f);
+}
+
+void test_fl_repl_disassembles_and_loads(void)
+{
+    FlFix f;
+    FlRepl r;
+    char got[8192];
+    char scratch[8192];
+    char line[1024];
+    bool quit = false;
+
+    repl_open(&f, &r);
+    cmd(&f, &r, ":disasm\n", got, sizeof(got), &quit);
+    SAG_ASSERT(strstr(got, "needs a name") != NULL);
+    cmd(&f, &r, ":disasm nope\n", got, sizeof(got), &quit);
+    SAG_ASSERT(strstr(got, "no function called 'nope'") != NULL);
+
+    flfix_run(&f, "fn twice(x) { return x + x }\n", scratch, sizeof(scratch));
+    cmd(&f, &r, ":disasm twice\n", got, sizeof(got), &quit);
+    SAG_ASSERT(strstr(got, "ADD") != NULL);
+    SAG_ASSERT(strstr(got, "RETURN") != NULL);
+
+    /*
+     * :load evaluates into THIS VM and its globals persist -- that is
+     * the whole point of it, and the reason to iterate on a config
+     * from a prompt rather than restarting.
+     */
+    (void)flfix_tmpdir(&f);
+    flfix_write(&f, "cfg.fl", "let tabwidth = 4\n");
+    (void)snprintf(line, sizeof(line), ":load %s/cfg.fl\n",
+                   flfix_tmpdir(&f));
+    cmd(&f, &r, line, got, sizeof(got), &quit);
+    SAG_ASSERT(strstr(got, "loaded") != NULL);
+    cmd(&f, &r, ":globals\n", got, sizeof(got), &quit);
+    SAG_ASSERT(strstr(got, "tabwidth = 4") != NULL);
+
+    /* :reload runs the same path again. */
+    flfix_write(&f, "cfg.fl", "let tabwidth = 8\n");
+    cmd(&f, &r, ":reload\n", got, sizeof(got), &quit);
+    SAG_ASSERT(strstr(got, "loaded") != NULL);
+    cmd(&f, &r, ":globals\n", got, sizeof(got), &quit);
+    SAG_ASSERT(strstr(got, "tabwidth = 8") != NULL);
+
+    cmd(&f, &r, ":load /definitely/not/here.fl\n", got, sizeof(got), &quit);
+    SAG_ASSERT(strstr(got, "cannot read") != NULL);
+    flfix_close(&f);
+
+    /* :reload before any :load says so rather than doing nothing. */
+    repl_open(&f, &r);
+    cmd(&f, &r, ":reload\n", got, sizeof(got), &quit);
+    SAG_ASSERT(strstr(got, "nothing has been") != NULL);
+    flfix_close(&f);
+}
