@@ -2,6 +2,13 @@
 # COVERS: kind:limit
 # ERROR_KIND: limit
 # EXIT: 1
+# TIMEOUT: 30
+#
+# A longer timeout than the default 10 s, because this case's whole
+# job is to run until the VM refuses: under the sanitize and valgrind
+# lanes the descent to the call-depth limit is far slower than it is
+# here, and a case that is KILLED for taking too long reports as a
+# harness failure rather than as the "limit" it was asserting.
 # Amendment A1 added "limit" for VM resource exhaustion.  Unbounded
 # recursion is user-triggerable, so it raises a catchable value rather
 # than aborting -- here nothing catches it, so it exits 1.

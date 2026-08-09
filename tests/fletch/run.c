@@ -610,8 +610,23 @@ static void run_unit(const Unit *u, RunOut *r)
         argv[na++] = dupe(u->origin);
     }
     if (u->args != NULL) {
+        /*
+         * COPIED, like every other argv element the parent owns.
+         *
+         * split_args points into `argbuf`, which is on this frame --
+         * handing those pointers to the free loop below is a free() of
+         * stack memory, which is exactly the "double free or
+         * corruption" the first run of the only `# ARGS:` case
+         * produced.  Every slot before u->entry is now heap and owned.
+         */
+        char *tok[8];
+        size_t nt;
+        size_t k;
+
         (void)snprintf(argbuf, sizeof(argbuf), "%s", u->args);
-        na += split_args(argbuf, argv + na, 8U);
+        nt = split_args(argbuf, tok, SAG_ARRAY_LEN(tok));
+        for (k = 0U; k < nt; k++)
+            argv[na++] = dupe(tok[k]);
     }
     if (u->entry != NULL)
         argv[na++] = u->entry;
@@ -698,7 +713,14 @@ static void run_unit(const Unit *u, RunOut *r)
     {
         size_t k;
 
-        for (k = 0U; k + 1U < na; k++) {
+        /*
+         * `k < na`, not `k + 1U < na`.  The shorter bound assumed the
+         * last slot is always u->entry, which is not ours -- but the
+         * --list-natives probe passes entry == NULL, so its last slot
+         * is an owned flag and leaked.  Comparing against u->entry is
+         * the actual rule; the index is not.
+         */
+        for (k = 0U; k < na; k++) {
             if (argv[k] != u->entry)
                 free(argv[k]);
         }

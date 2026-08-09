@@ -1,0 +1,21 @@
+# SPEC: §9, §2
+# ARGS: -c
+# EXIT: 0
+# CHECK_NOT: SHOULD NOT RUN
+#
+# §9.3's line drawn from the other side: `sag fl -c` parses and
+# compiles and DOES NOT RUN.
+#
+# The program below compiles cleanly and would raise on its first
+# statement. Under `-c` it exits 0 and prints nothing, which is the
+# assertion — a compile-only mode that quietly ran the program would
+# pass every test that only checks the exit code of a VALID program.
+#
+# This is also the suite's only user of `# ARGS:`, and that is the
+# other reason it exists: a directive the runner implements and no
+# file uses is a directive nobody would notice breaking.
+import io
+
+io.print("SHOULD NOT RUN")
+let boom = 1 / 0
+io.print(boom)
