@@ -1,0 +1,64 @@
+# Fletch perf smoke — Sprint 30 DoD 12
+#
+# NUMBERS ONLY. Nothing compares against this file and nothing should
+# until Sprint 33, which owns the Fletch latency gates. It exists so
+# s33 starts from measured ground instead of from a guess, and so a
+# 10x regression landing in s31 or s32 is visible to whoever looks.
+#
+# Reproduce:
+#   make fl-perf-smoke                  # switch dispatch, default build
+#   make BUILD=build-cg FL_CGOTO=1 build-cg/fl_smoke \
+#     && build-cg/fl_smoke --perf 9     # computed-goto
+#
+# "best of N" rather than a mean: the distribution's left edge is the
+# machine's actual capability and everything above it is scheduler
+# noise, so the minimum is both more stable and more meaningful than an
+# average that drifts with system load.
+#
+# ---------------------------------------------------------------------
+# MEASURED ON THIS DEVELOPER MACHINE, NOT ON CI.
+#
+#   Intel Core i7-10870H @ 2.20 GHz, 16 threads
+#   Linux 7.1.5-arch1-2 x86_64, gcc 16.1.1, -O2
+#   2026-08-08, reps=9
+#
+# CI runners are slower and noisier than this box, so s33 must
+# re-measure on the runner before turning any of these into a gate.
+# These are CPU-bound rather than filesystem-bound, so they travel
+# better than the latency baselines do — but "better" is not "the same".
+# ---------------------------------------------------------------------
+
+                 switch      computed-goto
+fib24            7.332 ms     7.776 ms
+map10k           2.111 ms     2.074 ms
+motion100k      29.660 ms    31.521 ms
+
+# Results and collection counts are IDENTICAL across the two modes —
+# 46368 / 10000 / 100000, and gc=0 / gc=0 / gc=155 in both. That
+# equality is the point of recording them side by side: the timings are
+# within noise of each other on this machine, so the interesting column
+# is not the milliseconds but the fact that the two dispatchers agree on
+# what they computed and on how much garbage they made.
+#
+# The byte-level version of that claim is `make fl-dispatch-parity`,
+# which compares the executed-opcode streams themselves.
+
+# What each program exercises, per the sprint:
+#
+#   fib24        fn call, return, recursion, integer compare and
+#                arithmetic — 46368 calls deep in the dispatch loop,
+#                which makes it the CALL/RETURN benchmark.
+#   map10k       10 000-key map build via INDEX_SET, so it measures
+#                the probe sequence, the reindex-on-growth path and the
+#                insertion-order bookkeeping together.
+#   motion100k   100 000 FL_OP_MOTION dispatches against fl_host_null,
+#                each raising and being caught. The null host raises
+#                rather than editing, so this is the cost of the motion
+#                seam plus try/catch, not the cost of a real edit —
+#                s34 re-measures it against a live host.
+#
+# Reading the numbers: motion100k at ~30 ms for 100 000 iterations is
+# ~300 ns per iteration, and each iteration is a TRY_PUSH, an
+# EDIT_BEGIN, a MOTION that raises, an unwind, and a loop step. The
+# 155 collections are the error maps — one map per raise, which is
+# what makes this also the GC's throughput test.
