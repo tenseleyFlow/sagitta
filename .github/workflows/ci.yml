@@ -147,9 +147,13 @@ jobs:
       UNITS_FUZZ_SEEDS: 1
     steps:
       - uses: actions/checkout@v6
-      - run: make test CC=clang SAN=1 BUILD=build-san
+      # FL_CHECKS turns on fl_chunk_check after every compile and the
+      # VM's per-instruction invariant checks.  Off in the gating
+      # lanes because the second group is on the hot path; on here,
+      # which is where a compiler bug should surface.
+      - run: make test CC=clang SAN=1 FL_CHECKS=1 BUILD=build-san
       - name: Run all fixed campaigns under ASan and UBSan, smoke depth
-        run: make fuzz CC=clang SAN=1 BUILD=build-san FUZZ_SEED=1
+        run: make fuzz CC=clang SAN=1 FL_CHECKS=1 BUILD=build-san FUZZ_SEED=1
 
   valgrind:
     runs-on: ubuntu-latest

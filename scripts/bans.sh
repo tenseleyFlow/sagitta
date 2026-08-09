@@ -186,6 +186,30 @@ if [ "$seed_found" != "3" ]; then
     cat "$tmp/seed-hits" >>"$hits"
 fi
 
+#
+# Sprint 32 DoD 10: the VM never aborts and never asserts.
+#
+# An internal invariant break goes through sag_bug -- a structured
+# report and exit 4 -- because a bare abort() gives a reporter a signal
+# and nothing else, and assert() is compiled out under NDEBUG, which
+# turns the one check that mattered into no check at all.
+#
+fl_abort_hits=$tmp/fl-abort-hits
+: >"$fl_abort_hits"
+while IFS= read -r file; do
+    case ${file#"$repo_dir"/} in
+        src/fl/*) ;;
+        *) continue ;;
+    esac
+    grep -nE -e '(^|[^[:alnum:]_])(abort|assert)[[:space:]]*\(' "$file" \
+        2>/dev/null | sed "s|^|${file#"$repo_dir"/}:|" >>"$fl_abort_hits" || :
+done <"$source_files"
+if [ -s "$fl_abort_hits" ]; then
+    echo "ban: src/fl/ reports internal errors through sag_bug, not abort()" \
+        >>"$hits"
+    cat "$fl_abort_hits" >>"$hits"
+fi
+
 scan "qsort is unstable; use sag_sort_stable" \
     '(^|[^[:alnum:]_])qsort[[:space:]]*\(' "$all_files"
 scan "__attribute__ is outside the locked C11 subset" \

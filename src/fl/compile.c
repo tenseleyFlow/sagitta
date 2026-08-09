@@ -1294,6 +1294,17 @@ FlFn *fl_compile(FlVm *vm, DiagCtx *dc, const FlProgram *p,
     fn->ch.file_id = file_id;
     fn->max_stack = (u16)(top.max_depth < 0 ? 0 : top.max_depth);
     fn->origin = origin;
+#if FL_VM_CHECKS
+    {
+        const char *why = NULL;
+
+        /* Our own output, checked in checked builds.  A failure here is
+         * a compiler bug, not a user error, so it is a SAG_BUG. */
+        if (!fl_chunk_check(fn, &why))
+            SAG_BUG("fl compiler emitted a bad chunk: %s",
+                    why == NULL ? "?" : why);
+    }
+#endif
     /*
      * The batch is released here, not per function: a nested function
      * must stay rooted until its PARENT's chunk has reached the arena,

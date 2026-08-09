@@ -197,6 +197,42 @@ bool fl_raise(FlVm *vm, const char *kind, const char *fmt, ...);
  */
 const char *fl_deferred_msg(const char *name);
 
+/*
+ * Sprint 32 §8: THERE IS NO BYTECODE VERIFIER, AND THAT IS A DECISION.
+ *
+ * Random bytecode never enters the VM because no code path can put it
+ * there.  Fletch has no `.flc` format, no compile cache and no
+ * serialization of FlChunk; the only producer is fl_compile, in this
+ * process, from an AST that already parsed.  A load-time verifier would
+ * guard a door that does not exist, cost several hundred lines, and --
+ * worse -- create a SECOND definition of well-formed bytecode that must
+ * be kept in step with the compiler forever.  Two definitions drift,
+ * and the drift is found by the thing they were meant to prevent.
+ *
+ * Defensive dispatch was the other candidate and costs the hot loop:
+ * 02-fletch.md req 7 wants ~1 us motion dispatch, and Sprint 30 already
+ * bought memory safety the right way -- max_stack is computed at
+ * compile time and checked ONCE PER CALL, so pushes need no check.
+ * Source-level fuzzing is the primary line of defence, and it is where
+ * the attack surface actually is: every byte an adversary controls
+ * passes through the parser first.
+ *
+ * THE CONDITION ON THIS DECISION: if sagitta ever grows a bytecode
+ * cache, a `.flc` format, or any other way to load a chunk it did not
+ * just compile, A REAL VERIFIER LANDS IN THE SAME COMMIT.  Nothing may
+ * load foreign bytecode without one.  See s32-repl-and-errors.md §8.
+ *
+ * What ships instead is a compiler assertion.  It validates OUR
+ * output -- jump targets on instruction starts and in range, constant
+ * and slot indices in range, and a terminator at the end -- and a
+ * failure is a SAG_BUG, because it means the compiler is broken, which
+ * is not a user error.  Always compiled so the tests can drive it;
+ * called automatically only under FL_VM_CHECKS.
+ */
+enum { FL_MAX_CHUNK_CHECK = 1U << 20 };
+
+bool fl_chunk_check(const FlFn *fn, const char **why);
+
 bool fl_call(FlVm *vm, FlValue callee, const FlValue *args, u32 nargs,
              FlValue *out);
 bool fl_vm_run(FlVm *vm, FlFn *entry, FlValue *out);   /* false = raised */

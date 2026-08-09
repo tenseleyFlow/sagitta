@@ -117,6 +117,20 @@ CFLAGS += -DFL_VM_TRACE=1
 endif
 
 #
+# Sprint 32 §8/§9: the VM's self-checks.
+#
+# fl_chunk_check after every compile, and the per-instruction invariant
+# checks in the dispatch loop.  OFF by default because the second group
+# is on the hot path and 02-fletch.md req 7 has no room for it; ON in
+# the sanitize and fuzz lanes, which is where a compiler bug should be
+# caught.  The checker itself is always COMPILED so the tests can drive
+# it directly.
+#
+ifeq ($(FL_CHECKS),1)
+CFLAGS += -DFL_VM_CHECKS=1
+endif
+
+#
 # -lm for src/fl/stdmath.c.  libm is part of the C standard library, not
 # a new dependency in the bespoke-first sense -- glibc 2.34+ folds it
 # into libc and the flag is then a harmless no-op, while older glibc and
