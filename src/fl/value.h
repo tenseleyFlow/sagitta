@@ -348,6 +348,10 @@ bool fl_str_eq(const FlStr *a, const FlStr *b);
 
 bool fl_map_get(const FlMap *m, FlValue k, FlValue *out);
 bool fl_map_del(FlMap *m, FlValue k);
+/* Empties in one pass.  Iterating with fl_map_del does NOT work --
+ * deletion compacts, which moves the entries out from under the
+ * cursor.  See the comment in value.c. */
+void fl_map_clear(FlMap *m);
 void fl_map_compact(FlMap *m);
 u32 fl_map_count(const FlMap *m);
 /* Walks live entries in insertion order.  `*cursor` starts at 0. */

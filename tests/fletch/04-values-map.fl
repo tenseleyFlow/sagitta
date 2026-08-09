@@ -1,0 +1,81 @@
+# SPEC: §4, §11
+# COVERS: map.len map.get map.set map.has map.remove map.clear
+# COVERS: map.keys map.values map.entries map.merge map.copy map.freeze
+#
+# Every map function with a checked result.
+#
+# ORDER IS ASSERTED EVERYWHERE, not treated as arbitrary.  Fletch maps
+# are INSERTION-ORDERED (invariant 5): a hash map that happened to
+# iterate in the right order on this machine would pass a set-based
+# test and produce a different `fmt.repr` on the next one, and the
+# determinism lane byte-compares two runs.
+import io
+import map
+
+let m = {b: 1, a: 2}
+
+# -- size and reading ----------------------------------------------
+# The two-argument form is STRICT: a missing key raises rather than
+# returning nil, so a caller cannot confuse "absent" with "present
+# and nil".  The default is what makes the read total.
+# OUT: 2 1 miss
+io.print(map.len(m), map.get(m, "b"), map.get(m, "zz", "miss"))
+try {
+    io.print(map.get(m, "zz"))
+} catch e {
+    # OUT: key
+    io.print(e.kind)
+}
+# OUT: true false
+io.print(map.has(m, "a"), map.has(m, "zz"))
+
+# -- writing keeps insertion order; an UPDATE keeps the old position -
+map.set(m, "c", 3)
+# OUT: {b: 1, a: 2, c: 3}
+io.print(m)
+map.set(m, "b", 9)
+# OUT: {b: 9, a: 2, c: 3}
+io.print(m)
+
+# -- removal --------------------------------------------------------
+# OUT: 2 {b: 9, c: 3}
+io.print(map.remove(m, "a"), m)
+
+# -- views, all three in insertion order ----------------------------
+# OUT: ["b", "c"]
+io.print(map.keys(m))
+# OUT: [9, 3]
+io.print(map.values(m))
+# OUT: [["b", 9], ["c", 3]]
+io.print(map.entries(m))
+
+# -- merge: right wins, and the result is a new map -----------------
+# OUT: {b: 9, c: 3, d: 4}
+io.print(map.merge(m, {d: 4}))
+# OUT: {b: 1, c: 3}
+io.print(map.merge(m, {b: 1}))
+# OUT: {b: 9, c: 3}
+io.print(m)
+
+# -- copy is independent at the top level ---------------------------
+let c = map.copy(m)
+map.set(c, "z", 0)
+# OUT: {b: 9, c: 3} {b: 9, c: 3, z: 0}
+io.print(m, c)
+
+# -- freeze returns a map that refuses to be written ----------------
+let f = map.freeze(map.copy(m))
+# OUT: 2
+io.print(map.len(f))
+try {
+    map.set(f, "x", 1)
+    io.print("frozen map accepted a write")
+} catch e {
+    # OUT: type
+    io.print(e.kind)
+}
+
+# -- clear ----------------------------------------------------------
+map.clear(c)
+# OUT: 0 {}
+io.print(map.len(c), c)

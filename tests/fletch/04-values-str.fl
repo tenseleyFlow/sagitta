@@ -1,0 +1,98 @@
+# SPEC: §4, §11
+# COVERS: str.len str.len_bytes str.is_empty str.at str.slice
+# COVERS: str.slice_bytes str.find str.find_bytes str.rfind str.contains
+# COVERS: str.starts_with str.ends_with str.upper str.lower str.trim
+# COVERS: str.trim_start str.trim_end str.split str.split_lines str.join
+# COVERS: str.replace str.repeat str.pad_start str.pad_end str.width
+# COVERS: str.bytes str.from_bytes str.to_int str.to_float str.cmp
+#
+# Every str function with a CHECKED result (s33 §4).  The non-ASCII
+# rows are the point of several of them: `len` counts GRAPHEMES and
+# `len_bytes` counts bytes, and a suite that only ever passes ASCII
+# cannot tell the two apart.
+#
+# Whitespace-sensitive results are printed between bars, because
+# `  x` and `x` are the same line to a reader and different answers.
+import io
+import str
+
+# -- length and emptiness -----------------------------------------
+# OUT: 5 5 false
+io.print(str.len("hello"), str.len_bytes("hello"), str.is_empty("hello"))
+# A thumbs-up with a skin-tone modifier is ONE grapheme, eight bytes.
+# OUT: 1 8 true
+io.print(str.len("👍🏽"), str.len_bytes("👍🏽"), str.is_empty(""))
+
+# -- indexing and slicing -----------------------------------------
+# OUT: e ell
+io.print(str.at("hello", 1), str.slice("hello", 1, 4))
+# OUT: llo
+io.print(str.slice("hello", 2))
+# slice_bytes is the byte-indexed twin; on ASCII they agree.
+# OUT: ell
+io.print(str.slice_bytes("hello", 1, 4))
+
+# -- searching -----------------------------------------------------
+# OUT: 2 2 -1
+io.print(str.find("hello", "l"), str.find_bytes("hello", "l"),
+         str.find("hello", "z"))
+# OUT: 3 4
+io.print(str.rfind("hello", "l"), str.find("hello", "o", 3))
+# OUT: true true false
+io.print(str.contains("hello", "ell"), str.starts_with("hello", "he"),
+         str.ends_with("hello", "lo!"))
+
+# -- case and trimming ---------------------------------------------
+# OUT: HELLO hello
+io.print(str.upper("Hello"), str.lower("HeLLo"))
+# OUT: |x| |x  | |  x|
+io.print("|" + str.trim("  x  ") + "|",
+         "|" + str.trim_start("  x  ") + "|",
+         "|" + str.trim_end("  x  ") + "|")
+
+# -- splitting and joining -----------------------------------------
+# OUT: ["a", "b", "c"]
+io.print(str.split("a,b,c", ","))
+# The limit caps the number of PIECES, so the tail keeps its separators.
+# OUT: ["a", "b,c"]
+io.print(str.split("a,b,c", ",", 2))
+# split_lines keeps the trailing empty piece after a final newline:
+# "a\nb\n" is two lines and an empty remainder, and dropping it would
+# make the round trip through join lossy.
+# OUT: ["a", "b", ""]
+io.print(str.split_lines("a\nb\n"))
+# OUT: a-b-c
+io.print(str.join(["a", "b", "c"], "-"))
+
+# -- rewriting ------------------------------------------------------
+# OUT: xbxbx aXbXc
+io.print(str.replace("ababa", "a", "x"), str.replace("aXbXc", "X", "X"))
+# OUT: a-b-c ababa
+io.print(str.replace("a,b,c", ",", "-"), str.repeat("ab", 2) + "a")
+
+# -- padding and display width -------------------------------------
+# OUT: |..ab| |ab..|
+io.print("|" + str.pad_start("ab", 4, ".") + "|",
+         "|" + str.pad_end("ab", 4, ".") + "|")
+# Padding is by DISPLAY CELLS, not by bytes or codepoints: a CJK
+# ideograph is two cells wide, so it needs two fewer pad characters.
+# OUT: 2 4
+io.print(str.width("ab"), str.width("字字"))
+
+# -- bytes ----------------------------------------------------------
+# OUT: [104, 105]
+io.print(str.bytes("hi"))
+# OUT: hi
+io.print(str.from_bytes([104, 105]))
+
+# -- parsing --------------------------------------------------------
+# OUT: 42 255 nil
+io.print(str.to_int("42"), str.to_int("ff", 16), str.to_int("nope"))
+# A refusal is nil, never 0: "0" and "not a number" must not be the
+# same answer to a caller that is validating input.
+# OUT: 1.5 nil
+io.print(str.to_float("1.5"), str.to_float("x"))
+
+# -- ordering -------------------------------------------------------
+# OUT: -1 0 1
+io.print(str.cmp("a", "b"), str.cmp("a", "a"), str.cmp("b", "a"))

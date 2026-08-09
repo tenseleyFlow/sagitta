@@ -35,6 +35,26 @@ void test_fl_map_len_counts_live_entries(void)
     FL_EQ(&f, P "let m = {a: 1, b: 2}\nmap.remove(m, \"a\")\n"
                 "map.set(m, \"a\", 9)\nreturn map.len(m)\n", "2");
     FL_EQ(&f, P "let m = {a: 1, b: 2}\nmap.clear(m)\nreturn map.len(m)\n", "0");
+    /*
+     * CLEAR AT SEVERAL SIZES, and this row is why.
+     *
+     * The two-entry case above passed while clear was a walk that
+     * deleted as it went -- fl_map_del compacts once more than half
+     * the entries are dead, which moves live entries down past the
+     * cursor, so the tail survived.  n=2 is the one size where the
+     * arithmetic happens to come out right; n=3 left one behind and
+     * n=5 left two.  Sprint 33's conformance suite found it.
+     */
+    FL_EQ(&f, P "let m = {a: 1, b: 2, c: 3}\nmap.clear(m)\n"
+                "return map.len(m)\n", "0");
+    FL_EQ(&f, P "let m = {a: 1, b: 2, c: 3, d: 4, e: 5}\nmap.clear(m)\n"
+                "return map.len(m)\n", "0");
+    /* Cleared and reusable, not merely counted as empty: the index has
+     * to be cleared with the entries or a stale slot resurrects a key. */
+    FL_EQ(&f, P "let m = {a: 1, b: 2, c: 3}\nmap.clear(m)\n"
+                "map.set(m, \"a\", 7)\nreturn fmt.repr(m)\n", "{a: 7}");
+    FL_EQ(&f, P "let m = {a: 1, b: 2, c: 3}\nmap.clear(m)\n"
+                "return map.has(m, \"c\")\n", "false");
     /* The builtin modules are frozen maps, so `math.pi = 3` and
      * `map.clear(math)` must both be errors a user sees. */
     FL_EQ(&f, P "import math\nreturn map.clear(math)\n",

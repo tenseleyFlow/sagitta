@@ -1,0 +1,93 @@
+# SPEC: §4, §11
+# COVERS: list.len list.push list.pop list.insert list.remove list.clear
+# COVERS: list.get list.index_of list.contains list.slice list.concat
+# COVERS: list.reverse list.copy list.sort list.map list.filter
+# COVERS: list.reduce list.any list.all
+#
+# Every list function with a checked result.  The mutating ones return
+# nil and are checked through the list AFTERWARDS, which is the only
+# way to catch an implementation that returns the right thing and
+# mutates the wrong list.
+import io
+import list
+
+let l = [3, 1, 2]
+
+# -- size, append, remove-from-end ---------------------------------
+# OUT: 3
+io.print(list.len(l))
+list.push(l, 9)
+# OUT: [3, 1, 2, 9]
+io.print(l)
+# OUT: 9 [3, 1, 2]
+io.print(list.pop(l), l)
+
+# -- positional insert and remove ----------------------------------
+list.insert(l, 1, 7)
+# OUT: [3, 7, 1, 2]
+io.print(l)
+# OUT: 7 [3, 1, 2]
+io.print(list.remove(l, 1), l)
+
+# -- reading -------------------------------------------------------
+# The two-argument form is STRICT and the default is what makes it
+# total: `list.get(l, 99)` raises rather than returning nil, so a
+# caller cannot confuse "absent" with "present and nil".
+# OUT: 3 fallback
+io.print(list.get(l, 0), list.get(l, 99, "fallback"))
+try {
+    io.print(list.get(l, 99))
+} catch e {
+    # OUT: index
+    io.print(e.kind)
+}
+# OUT: 1 -1 true false
+io.print(list.index_of(l, 1), list.index_of(l, 42),
+         list.contains(l, 2), list.contains(l, 42))
+
+# -- slicing and concatenation -------------------------------------
+# OUT: [1, 2] [3, 1, 2, 4]
+io.print(list.slice(l, 1), list.concat(l, [4]))
+# concat builds a NEW list; neither argument moves.
+# OUT: [3, 1, 2]
+io.print(l)
+
+# -- copy is shallow but independent at the top level ---------------
+let c = list.copy(l)
+list.push(c, 5)
+# OUT: [3, 1, 2] [3, 1, 2, 5]
+io.print(l, c)
+
+# -- reverse and sort mutate in place -------------------------------
+list.reverse(c)
+# OUT: [5, 2, 1, 3]
+io.print(c)
+list.sort(c)
+# OUT: [1, 2, 3, 5]
+io.print(c)
+# A comparator sorts by whatever it says; this one is descending.
+list.sort(c, fn(a, b) { return b - a })
+# OUT: [5, 3, 2, 1]
+io.print(c)
+# THE SORT IS STABLE, which the determinism lane depends on: equal
+# keys keep the order they were written in, so two runs cannot differ.
+let pairs = [[1, "a"], [0, "b"], [1, "c"], [0, "d"]]
+list.sort(pairs, fn(x, y) { return x[0] - y[0] })
+# OUT: [[0, "b"], [0, "d"], [1, "a"], [1, "c"]]
+io.print(pairs)
+
+# -- the higher-order trio ------------------------------------------
+# OUT: [2, 4, 6]
+io.print(list.map([1, 2, 3], fn(v) { return v * 2 }))
+# OUT: [2, 4]
+io.print(list.filter([1, 2, 3, 4], fn(v) { return v % 2 == 0 }))
+# OUT: 10
+io.print(list.reduce([1, 2, 3, 4], fn(acc, v) { return acc + v }, 0))
+# OUT: true false
+io.print(list.any([1, 2], fn(v) { return v == 2 }),
+         list.all([1, 2], fn(v) { return v == 2 }))
+
+# -- clear ----------------------------------------------------------
+list.clear(c)
+# OUT: 0 []
+io.print(list.len(c), c)

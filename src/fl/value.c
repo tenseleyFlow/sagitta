@@ -251,6 +251,31 @@ void fl_map_compact(FlMap *m)
     fl_map_reindex(m);
 }
 
+/*
+ * Empty the map in one pass.
+ *
+ * NOT expressible as "iterate and delete": fl_map_del compacts once
+ * more than half the entries are dead, and compaction MOVES live
+ * entries down, so a caller's cursor lands past the end and the tail
+ * survives.  Sprint 31's map.clear did exactly that and left
+ * floor(n/2) entries behind for n >= 3; the Sprint 33 conformance
+ * suite is what caught it.
+ *
+ * `mods` moves once, which is enough: an iteration in progress must
+ * notice that the container was reshaped, and it cannot care how many
+ * times.
+ */
+void fl_map_clear(FlMap *m)
+{
+    if (m == NULL)
+        return;
+    m->n = 0U;
+    m->ndead = 0U;
+    m->mods++;
+    if (m->idx != NULL && m->icap != 0U)
+        (void)memset(m->idx, 0, (size_t)m->icap * sizeof(m->idx[0]));
+}
+
 bool fl_map_del(FlMap *m, FlValue k)
 {
     bool found = false;

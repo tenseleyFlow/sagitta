@@ -113,24 +113,20 @@ static bool m_remove(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 static bool m_clear(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     FlMap *m;
-    u32 cursor = 0U;
-    FlValue k;
-    FlValue v;
 
     (void)n;
     if (!fl_arg_map(vm, a, 0U, &m) || !check_writable(vm, m, "map.clear"))
         return false;
     /*
-     * Deleted through fl_map_del rather than by zeroing n, so the
-     * index stays consistent with the entry array and `mods` moves
-     * once per removal -- an iteration in progress must notice.
+     * One primitive, NOT a walk that deletes as it goes.
      *
-     * Deleting during the walk is safe: a tombstone marks the entry
-     * dead in place and moves nothing, so the cursor stays valid and
-     * the pass is O(n).
+     * This used to be `while (fl_map_iter(...)) fl_map_del(...)` on the
+     * theory that a tombstone moves nothing.  It does not, but
+     * fl_map_del COMPACTS once more than half the entries are dead,
+     * and compaction moves live entries down past the cursor: clearing
+     * a three-entry map left one behind.  Sprint 33's suite caught it.
      */
-    while (fl_map_iter(m, &cursor, &k, &v))
-        (void)fl_map_del(m, k);
+    fl_map_clear(m);
     *out = FL_NIL_V;
     return true;
 }
