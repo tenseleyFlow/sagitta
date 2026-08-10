@@ -183,6 +183,13 @@ void sag_record_tap(CmdId id, const CmdCtx *cx)
     rec = &cx->ed->rec;
     if (!rec->active)
         return;
+    /* Prompt teardown can be driven by mouse, Fletch, or native code, so
+     * there is not necessarily another key event to refresh this cache.
+     * Self-heal before deciding whether the incoming resolved command is
+     * prompt-local; otherwise the first post-cancel command is lost. */
+    if (rec->in_prompt && cx->ed->prompt == SAG_PROMPT_NONE &&
+        !cx->ed->cmdline.active)
+        rec->in_prompt = false;
     desc = sag_cmd_desc(id);
     sarg = cx->sarg;
     sarg_len = cx->sarg_len;

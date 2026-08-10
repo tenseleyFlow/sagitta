@@ -34,6 +34,7 @@ static const RtGenCmd gen_cmds[] = {
     {"ed.move.unit.down", RT_GEN_MOTION},
     {"ed.move.unit.next_alt", RT_GEN_MOTION},
     {"ed.move.unit.prev_alt", RT_GEN_MOTION},
+    {"ed.move.buf.end", RT_GEN_MOTION},
     {"ed.move.line.home", RT_GEN_MOTION},
     {"ed.move.line.end", RT_GEN_MOTION},
     {"ed.edit.insert.text", RT_GEN_INSERT},
@@ -205,7 +206,8 @@ static bool append_generated(RtSession *session, u64 *state,
         ev.sarg = store_bytes(session, &modes[rnd(state, 3U)], 1U);
         if (ev.sarg == NULL)
             return false;
-    } else if ((desc->flags & SAG_CMD_REPEATABLE) != 0U) {
+    } else if ((desc->flags &
+                (SAG_CMD_REPEATABLE | SAG_CMD_TAKES_COUNT)) != 0U) {
         count_roll = rnd(state, 100U);
         if (count_roll >= 60U) {
             ev.count_given = true;
@@ -294,7 +296,6 @@ static const RtDenied denied[] = {
     D("ed.move.unit.up_alt", "redundant motion alias"),
     D("ed.move.unit.down_alt", "redundant motion alias"),
     D("ed.move.buf.home", "redundant motion alias"),
-    D("ed.move.buf.end", "TAKES_COUNT has fixture-sensitive semantics"),
     D("ed.move.line.up", "redundant motion alias"),
     D("ed.move.line.down", "redundant motion alias"),
     D("ed.move.line.first_nonblank", "redundant motion alias"),

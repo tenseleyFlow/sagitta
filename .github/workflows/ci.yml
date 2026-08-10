@@ -474,7 +474,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: textbuf-crash-traces
-          path: tests/fuzz/crashes/*.trace
+          path: |
+            tests/fuzz/crashes/*.trace
+            build-nightly/tmp/fail-*.rec
           if-no-files-found: ignore
       - name: Run P6 and P8 at nightly depth
         run: |

@@ -175,6 +175,7 @@ void test_record_tap_drops_replay_source(void)
     cx.sarg_len = 1U;
     cx.source = SAG_SRC_KEY;
     sag_record_tap(sag_cmd_lookup("ed.mode.enter", 13U), &cx);
+    sag_cmdline_open(&f.ed, SAG_PROMPT_CMD, "");
     cx.sarg = "ignored";
     cx.sarg_len = 7U;
     sag_record_tap(sag_cmd_lookup("ed.edit.insert.text", 19U), &cx);
@@ -185,6 +186,7 @@ void test_record_tap_drops_replay_source(void)
     sag_record_tap(sag_cmd_lookup("ed.move.unit.next", 17U), &cx);
     SAG_ASSERT_EQ_U64(f.ed.rec.ev.len, 1U);
     SAG_ASSERT_EQ_U64(f.ed.rec.ev.data[0].src, SAG_SRC_CMDLINE);
+    sag_cmdline_close(&f.ed, false);
     SAG_ASSERT_EQ_I64(sag_record_stop(&f.ed), SAG_CMD_OK);
 
     SAG_ASSERT(sag_record_start(&f.ed, (u8)'f'));
@@ -192,6 +194,8 @@ void test_record_tap_drops_replay_source(void)
     cx.sarg_len = 1U;
     cx.source = SAG_SRC_KEY;
     sag_record_tap(sag_cmd_lookup("ed.mode.enter", 13U), &cx);
+    sag_cmdline_open(&f.ed, SAG_PROMPT_CMD, "");
+    sag_cmdline_close(&f.ed, false);
     /* Cancelling contributes no committed CMDLINE command. */
     SAG_ASSERT_EQ_U64(f.ed.rec.ev.len, 0U);
     SAG_ASSERT_EQ_I64(sag_record_stop(&f.ed), SAG_CMD_OK);
@@ -291,6 +295,29 @@ void test_record_cmdline_accepts_prompt_edits_and_keeps_status_messages(void)
     SAG_ASSERT(!sag_record_active(&f.ed));
     SAG_ASSERT(f.ed.msg.active);
     SAG_ASSERT(strncmp(f.ed.msg.text, "recorded @a (0 events, ", 23U) == 0);
+    rf_close(&f);
+}
+
+void test_record_prompt_close_keeps_the_next_nonkey_dispatch(void)
+{
+    RecordFix f;
+    Key key = {0};
+
+    rf_open(&f);
+    SAG_ASSERT(sag_record_start(&f.ed, (u8)'b'));
+    sag_cmdline_open(&f.ed, SAG_PROMPT_SEARCH_F, "");
+    sag_record_key(&f.ed, key);
+    SAG_ASSERT(f.ed.rec.in_prompt);
+    sag_cmdline_close(&f.ed, false);
+    SAG_ASSERT(!f.ed.cmdline.active);
+
+    SAG_ASSERT_EQ_I64(rf_run(&f, "ed.move.unit.next", NULL, 0U, 1U,
+                             SAG_SRC_MOUSE), SAG_CMD_OK);
+    SAG_ASSERT_EQ_I64(rf_run(&f, "ed.move.unit.prev", NULL, 0U, 1U,
+                             SAG_SRC_FLETCH), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(f.ed.rec.ev.len, 2U);
+    SAG_ASSERT_EQ_U64(f.ed.rec.ev.data[0].src, SAG_SRC_MOUSE);
+    SAG_ASSERT_EQ_U64(f.ed.rec.ev.data[1].src, SAG_SRC_FLETCH);
     rf_close(&f);
 }
 

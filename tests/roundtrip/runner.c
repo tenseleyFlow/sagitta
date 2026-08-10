@@ -478,19 +478,20 @@ done:
     return ok;
 }
 
-static bool corrupt_first_insert(const Bytebuf *source, Bytebuf *out)
+static bool corrupt_takes_count_fold(const Bytebuf *source, Bytebuf *out)
 {
+    static const char needle[] = "buf_end buf_end i\"x\"";
+    static const char pair[] = "buf_end buf_end";
+    static const char folded[] = "2buf_end";
     size_t i;
 
     bytebuf_init(out);
-    for (i = 0U; i + 2U < source->len; i++) {
-        if (source->data[i] == (u8)'i' &&
-            source->data[i + 1U] == (u8)'"' &&
-            source->data[i + 2U] != (u8)'"' &&
-            source->data[i + 2U] != (u8)'\\') {
-            bytebuf_append(out, source->data, i + 2U);
-            bytebuf_append(out, source->data + i + 3U,
-                           source->len - i - 3U);
+    for (i = 0U; i + sizeof(needle) - 1U <= source->len; i++) {
+        if (memcmp(source->data + i, needle, sizeof(needle) - 1U) == 0) {
+            bytebuf_append(out, source->data, i);
+            bytebuf_append(out, folded, sizeof(folded) - 1U);
+            bytebuf_append(out, source->data + i + sizeof(pair) - 1U,
+                           source->len - i - sizeof(pair) + 1U);
             return true;
         }
     }
@@ -535,7 +536,7 @@ static bool p1_diverges(const RtSession *session, u32 prefix, bool corrupt,
         goto fixture_done;
     bytebuf_append(&source, stored->bytes.data, stored->bytes.len);
     if (corrupt) {
-        if (!corrupt_first_insert(&source, &bad_source))
+        if (!corrupt_takes_count_fold(&source, &bad_source))
             goto fixture_done;
     } else {
         bytebuf_append(&bad_source, source.data, source.len);
@@ -598,6 +599,7 @@ static void report_failure(const RtSession *session, bool corrupt)
     Bytebuf source;
     size_t byte_at = SIZE_MAX;
     u32 prefix;
+    u32 op_at;
     char path[512] = "<artifact write failed>";
     const CmdDesc *desc;
 
@@ -613,10 +615,10 @@ static void report_failure(const RtSession *session, bool corrupt)
         (void)p1_diverges(session, prefix, corrupt, &byte_at, &source);
     }
     (void)write_failure_artifact(session, prefix,
-                                 corrupt ? "drop-first-insert-byte" : "none",
+                                 corrupt ? "fold-takes-count" : "none",
                                  path, sizeof(path));
-    desc = prefix == 0U ? NULL :
-           sag_cmd_desc(session->events.data[prefix - 1U].cmd);
+    op_at = corrupt ? 0U : prefix == 0U ? 0U : prefix - 1U;
+    desc = prefix == 0U ? NULL : sag_cmd_desc(session->events.data[op_at].cmd);
     (void)fprintf(stderr,
                   "roundtrip: FAIL seed=%llu fixture=%u property=%s\n"
                   "  diverged at event %u of %u; shrunk from %u\n"
@@ -628,12 +630,13 @@ static void report_failure(const RtSession *session, bool corrupt)
                   (unsigned long long)session->seed,
                   (unsigned)session->fixture,
                   corrupt ? "SELFTEST/P1" : last_property,
-                  prefix == 0U ? 0U : (unsigned)(prefix - 1U),
+                  (unsigned)op_at,
                   (unsigned)prefix, (unsigned)session->events.len,
                   desc == NULL ? "<unknown>" : desc->name,
                   byte_at == SIZE_MAX ? "unavailable " : "",
                   byte_at == SIZE_MAX ? 0U : byte_at,
-                  corrupt ? "emitted insert payload lost one byte" : last_detail,
+                  corrupt ? "TAKES_COUNT run was illegally folded" :
+                            last_detail,
                   path);
     (void)fwrite(source.data, 1U, source.len, stderr);
     (void)fputc('\n', stderr);
@@ -650,6 +653,71 @@ static bool run_one(u64 seed, u32 fixture, u32 len)
          property_session(&session);
     if (!ok && session.events.len != 0U)
         report_failure(&session, false);
+    rt_session_free(&session);
+    return ok;
+}
+
+static bool init_count_folding_session(RtSession *session, u32 length)
+{
+    static const u8 insert[] = {'x'};
+    const char *name;
+    RtEvent event = {0};
+    u32 i;
+
+    if (length < 3U)
+        return false;
+    rt_session_init(session);
+    session->seed = UINT64_C(0x534147434f554e54);
+    session->fixture = 2U;
+    session->generated_len = length;
+    session->start_mode = (u8)SAG_MODE_L;
+
+    event.cmd = sag_cmd_lookup("ed.move.buf.end",
+                               (u32)strlen("ed.move.buf.end"));
+    event.count = 1U;
+    if (event.cmd.v == 0U)
+        goto fail;
+    RtEventVec_push(&session->events, event);
+    RtEventVec_push(&session->events, event);
+
+    event = (RtEvent){0};
+    event.cmd = sag_cmd_lookup("ed.edit.insert.text",
+                               (u32)strlen("ed.edit.insert.text"));
+    event.count = 1U;
+    event.sarg = insert;
+    event.sarg_len = sizeof(insert);
+    if (event.cmd.v == 0U)
+        goto fail;
+    RtEventVec_push(&session->events, event);
+
+    for (i = 3U; i < length; i++) {
+        name = (i & 1U) == 0U ? "ed.move.unit.next" :
+                                "ed.move.unit.prev";
+        event = (RtEvent){0};
+        event.cmd = sag_cmd_lookup(name, (u32)strlen(name));
+        event.count = 1U;
+        if (event.cmd.v == 0U)
+            goto fail;
+        RtEventVec_push(&session->events, event);
+    }
+    return true;
+
+fail:
+    rt_session_free(session);
+    return false;
+}
+
+static bool run_count_folding_sentinel(void)
+{
+    RtSession session;
+    bool ok;
+
+    if (!init_count_folding_session(&session, 3U))
+        return false;
+
+    /* Two uncounted TAKES_COUNT operations must remain two operations.
+     * Folding them into `2buf_end` changes where the following insert lands. */
+    ok = property_session(&session);
     rt_session_free(&session);
     return ok;
 }
@@ -805,34 +873,11 @@ static u64 env_base_seed(void)
 static int run_selftest(void)
 {
     RtSession session;
-    u64 seed;
-    bool found = false;
 
-    /* Find a reproducible 96-event generated session beginning with i"x". */
-    for (seed = 0U; seed < 10000U; seed++) {
-        const CmdDesc *desc;
-
-        rt_session_init(&session);
-        if (!rt_session_generate(&session, seed, 3U, 96U))
-            return 2;
-        if (session.events.len < 96U) {
-            rt_session_free(&session);
-            return 2;
-        }
-        session.events.len = 96U;
-        desc = session.events.len == 0U ? NULL :
-               sag_cmd_desc(session.events.data[0].cmd);
-        found = desc != NULL &&
-                strcmp(desc->name, "ed.edit.insert.text") == 0 &&
-                session.events.data[0].sarg_len == 1U &&
-                session.events.data[0].sarg[0] == (u8)'x';
-        if (found)
-            break;
-        rt_session_free(&session);
-    }
-    if (!found)
+    if (!init_count_folding_session(&session, 96U))
         return 2;
-    /* This mutates real emitted Fletch, then runs it through the real VM. */
+    /* Fold a TAKES_COUNT run in real emitted Fletch, then execute it through
+     * the real VM.  The shortest divergent prefix is exactly three events. */
     report_failure(&session, true);
     rt_session_free(&session);
     return 1;
@@ -863,6 +908,10 @@ int main(int argc, char **argv)
         sag_cmd_shutdown();
         return result;
     }
+    if (!run_count_folding_sentinel()) {
+        sag_cmd_shutdown();
+        return 1;
+    }
     seeds = env_seeds();
     base_seed = env_base_seed();
     for (i = 0U; i < seeds; i++) {
@@ -877,7 +926,7 @@ int main(int argc, char **argv)
     }
     sag_cmd_shutdown();
     (void)printf("roundtrip: ok seeds=%u base=%llu fixtures=6 corpus=%u "
-                 "P1-P5\n", (unsigned)seeds,
+                 "count-sentinel=1 P1-P5\n", (unsigned)seeds,
                  (unsigned long long)base_seed, (unsigned)corpus_count);
     return 0;
 }
