@@ -1,0 +1,15 @@
+# Sprint 38: a compile failure leaves the macro register byte-identical.
+import buf
+import ed
+import span
+let before = "@[ i\"safe\" ]\n"
+let broken = "@[ i\"unterminated ]\n"
+ed.run("ed.reg.set", {iarg: 106, sarg: before})
+ed.run("ed.macro.edit", {sarg: "j"})
+let scratch = buf.current()
+edit { span.replace(buf.span(scratch, 0, buf.len(scratch)), broken) }
+t.raises("type", fn() { return buf.save(scratch) })
+t.reg("j", before, "char")
+t.text(scratch, broken)
+t.eq(buf.dirty(scratch), true)
+

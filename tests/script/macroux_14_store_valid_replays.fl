@@ -1,0 +1,17 @@
+# Sprint 38: saving a valid macro scratch replaces the register and replays.
+import buf
+import ed
+import span
+let before = "@[ i\"x\" ]\n"
+let after = "@[ i\"y\" ]\n"
+ed.run("ed.reg.set", {iarg: 105, sarg: before})
+ed.run("ed.macro.edit", {sarg: "i"})
+let scratch = buf.current()
+edit { span.replace(buf.span(scratch, 0, buf.len(scratch)), after) }
+buf.save(scratch)
+t.reg("i", after, "char")
+t.eq(buf.dirty(scratch), false)
+let target = buf.open(t.fixture("save.txt"))
+ed.run("ed.macro.replay", {sarg: "i"})
+t.text(target, "ybefore\n")
+

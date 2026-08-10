@@ -1,0 +1,15 @@
+# Sprint 38: an unknown motion word is rejected before replacing the register.
+import buf
+import ed
+import span
+let before = "@[ yank ]\n"
+let unknown = "@[ yankk ]\n"
+ed.run("ed.reg.set", {iarg: 107, sarg: before})
+ed.run("ed.macro.edit", {sarg: "k"})
+let scratch = buf.current()
+edit { span.replace(buf.span(scratch, 0, buf.len(scratch)), unknown) }
+t.raises("type", fn() { return buf.save(scratch) })
+t.reg("k", before, "char")
+t.text(scratch, unknown)
+t.eq(buf.dirty(scratch), true)
+

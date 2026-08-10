@@ -1,0 +1,17 @@
+# Sprint 38: macro edit opens an ordinary, undoable Fletch scratch buffer.
+import buf
+import ed
+let source = "@[ i\"x\" ]\n"
+ed.run("ed.reg.set", {iarg: 104, sarg: source})
+ed.run("ed.macro.edit", {sarg: "h"})
+let b = buf.current()
+t.eq(buf.name(b), "*macro h*")
+t.eq(buf.path(b), nil)
+t.eq(buf.lang(b), "fletch")
+t.text(b, source)
+edit { buf.insert(b, buf.len(b), "# editable\n") }
+t.eq(buf.dirty(b), true)
+ed.run("ed.edit.undo", {})
+t.text(b, source)
+t.eq(buf.dirty(b), false)
+
