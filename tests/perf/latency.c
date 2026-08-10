@@ -189,25 +189,62 @@ static bool stop_editor(SagLivePty *pty)
     i64 deadline = sag_live_pty_now_ns() + INT64_C(20000000000);
     int code;
 
-    g_stop_why = "escape write timed out";
-    if (!sag_live_pty_write(pty, &escape, 1U, deadline))
-        return false;
-    while (nanosleep(&settle, &settle) != 0 && errno == EINTR)
-        ;
-    g_stop_why = "q! write timed out";
-    if (!sag_live_pty_write(pty, quit, sizeof(quit) - 1U, deadline))
-        return false;
-    g_stop_why = "editor did not exit within 20 s";
-    if (!sag_live_pty_wait_exit(pty, deadline, &code))
-        return false;
-    if (code != 0) {
-        static char why[64];
+    /*
+     * THE QUIT IS RETRIED, because one attempt is not reliable and the
+     * reason is in the input decoder rather than in the editor.
+     *
+     * The 50 ms gap below buys separation only if the editor performs a
+     * READ between the two writes.  When a loaded runner deschedules it
+     * for longer than that, both writes are already in the pty buffer
+     * and one read drains them together — and input.c then treats
+     * "\033q" as ALT-Q: arm_deadline() only starts the 25 ms
+     * disambiguation window when ESC is the last byte available, so with
+     * `q` already buffered there is no window at all.  Alt-q is bound to
+     * nothing, the following `!` is bound to nothing, and the editor
+     * sits there until this deadline expires.
+     *
+     * That is what "cold run N did not quit" has been, four times.  It
+     * is a property of writing raw bytes at a terminal we are not
+     * synchronised with, so the fix is to try again rather than to widen
+     * the gap a third time: by the next attempt the buffer is drained
+     * and the editor is idle, so its read gets the ESC alone.
+     *
+     * Retrying cannot hide a real hang.  An editor that is genuinely
+     * stuck ignores every attempt and still fails at the same 20 s
+     * bound, with the same message.
+     */
+    while (sag_live_pty_now_ns() < deadline) {
+        i64 give_up;
 
-        (void)snprintf(why, sizeof(why), "editor exited %d, wanted 0", code);
-        g_stop_why = why;
-        return false;
+        g_stop_why = "escape write timed out";
+        if (!sag_live_pty_write(pty, &escape, 1U, deadline))
+            return false;
+        settle.tv_sec = 0;
+        settle.tv_nsec = 50000000L;
+        while (nanosleep(&settle, &settle) != 0 && errno == EINTR)
+            ;
+        g_stop_why = "q! write timed out";
+        if (!sag_live_pty_write(pty, quit, sizeof(quit) - 1U, deadline))
+            return false;
+
+        /* Short per-attempt wait, long overall bound. */
+        give_up = sag_live_pty_now_ns() + INT64_C(2000000000);
+        if (give_up > deadline)
+            give_up = deadline;
+        if (sag_live_pty_wait_exit(pty, give_up, &code)) {
+            if (code != 0) {
+                static char why[64];
+
+                (void)snprintf(why, sizeof(why),
+                               "editor exited %d, wanted 0", code);
+                g_stop_why = why;
+                return false;
+            }
+            return true;
+        }
     }
-    return true;
+    g_stop_why = "editor did not exit within 20 s";
+    return false;
 }
 
 static bool measure_cold(const char *binary, const char *path,
