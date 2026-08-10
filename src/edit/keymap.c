@@ -284,29 +284,45 @@ static bool binding_arity_ok(const CmdDesc *desc, const BindRow *row)
 }
 
 static bool add_row(Keymap *out, ScratchNodeVec *scratch,
-                    const BindRow *row)
+                    const BindRow *row, SagKeymapError *error)
 {
-    KeyId seq[SAG_CHORD_MAX];
-    u32 n = sag_key_parse_seq(row->seq, seq, SAG_CHORD_MAX);
+    KeyId seq[SAG_CHORD_MAX + 1U];
+    u32 n = sag_key_parse_seq(row->seq, seq, SAG_CHORD_MAX + 1U);
     CmdId cmd;
     const CmdDesc *desc;
     u32 node = 0U;
     u32 i;
     Binding binding;
 
-    if (n == 0U)
+    if (n == 0U) {
+        *error = SAG_KEYMAP_ERR_SEQUENCE;
         return false;
+    }
+    if (n > SAG_CHORD_MAX) {
+        *error = SAG_KEYMAP_ERR_TOO_LONG;
+        return false;
+    }
     cmd = sag_cmd_lookup(row->cmd, (u32)strlen(row->cmd));
     desc = sag_cmd_desc(cmd);
-    if (cmd.v == 0U || !desc || !binding_arity_ok(desc, row))
+    if (cmd.v == 0U || !desc) {
+        *error = SAG_KEYMAP_ERR_COMMAND;
         return false;
+    }
+    if (!binding_arity_ok(desc, row)) {
+        *error = SAG_KEYMAP_ERR_ARITY;
+        return false;
+    }
     for (i = 0U; i < n; i++) {
-        if ((u32)(seq[i].v >> 16) == SAG_KEY_ESCAPE && i + 1U < n)
+        if ((u32)(seq[i].v >> 16) == SAG_KEY_ESCAPE && i + 1U < n) {
+            *error = SAG_KEYMAP_ERR_ESCAPE_PREFIX;
             return false;
+        }
         node = scratch_child(scratch, node, seq[i].v);
     }
-    if (scratch->data[node].bind != 0U)
+    if (scratch->data[node].bind != 0U) {
+        *error = SAG_KEYMAP_ERR_DUPLICATE;
         return false;
+    }
     binding.cmd = cmd;
     binding.iarg = row->iarg;
     binding.sarg = row->sarg ? keymap_strdup(row->sarg) : NULL;
@@ -348,8 +364,23 @@ static bool flatten(Keymap *out, ScratchNodeVec *scratch)
     return true;
 }
 
-bool sag_keymap_build(Keymap *km, const char *name,
-                      const BindRow *rows, u32 n)
+const char *sag_keymap_error_string(SagKeymapError error)
+{
+    switch (error) {
+    case SAG_KEYMAP_ERR_SEQUENCE: return "invalid key sequence";
+    case SAG_KEYMAP_ERR_COMMAND: return "unknown command";
+    case SAG_KEYMAP_ERR_DUPLICATE: return "duplicate key sequence";
+    case SAG_KEYMAP_ERR_ARITY: return "command arguments do not match its arity";
+    case SAG_KEYMAP_ERR_ESCAPE_PREFIX: return "<esc> may not be a chord prefix";
+    case SAG_KEYMAP_ERR_TOO_LONG: return "key sequence exceeds eight keys";
+    case SAG_KEYMAP_ERR_NONE: return "no keymap error";
+    }
+    return "unknown keymap error";
+}
+
+bool sag_keymap_build_diag(Keymap *km, const char *name,
+                           const BindRow *rows, u32 n,
+                           SagKeymapDiag *diag)
 {
     Keymap built = {0};
     ScratchNodeVec scratch = {0};
@@ -358,15 +389,27 @@ bool sag_keymap_build(Keymap *km, const char *name,
     u32 i;
     bool ok = false;
 
+    if (diag != NULL)
+        *diag = (SagKeymapDiag){0U, SAG_KEYMAP_ERR_NONE};
+
     if (!km || !name || (n != 0U && !rows))
         return false;
     built.name = name;
     BindingVec_push(&built.binds, reserved);
     ScratchNodeVec_push(&scratch, root);
     for (i = 0U; i < n; i++) {
-        if (!rows[i].seq || !rows[i].cmd || !add_row(&built, &scratch,
-                                                      &rows[i]))
+        SagKeymapError error = SAG_KEYMAP_ERR_NONE;
+
+        if (!rows[i].seq || !rows[i].cmd)
+            error = SAG_KEYMAP_ERR_SEQUENCE;
+        else if (!add_row(&built, &scratch, &rows[i], &error)) {
+            /* `error` is set by every failing validation. */
+        }
+        if (error != SAG_KEYMAP_ERR_NONE) {
+            if (diag != NULL)
+                *diag = (SagKeymapDiag){i, error};
             goto done;
+        }
     }
     if (!flatten(&built, &scratch))
         goto done;
@@ -378,6 +421,12 @@ done:
     scratch_free(&scratch);
     sag_keymap_free(&built);
     return ok;
+}
+
+bool sag_keymap_build(Keymap *km, const char *name,
+                      const BindRow *rows, u32 n)
+{
+    return sag_keymap_build_diag(km, name, rows, n, NULL);
 }
 
 void sag_keymap_free(Keymap *km)

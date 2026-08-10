@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#include "edit/bind.h"
 #include "edit/option.h"
 #include "fl/gc.h"
 #include "util/intern.h"
@@ -250,6 +251,8 @@ static void register_prelude(FlVm *vm)
     register_prelude_one(vm, "record", fl_record, 1U, 1U);
     register_prelude_one(vm, "replay", fl_replay, 1U, 2U);
     register_prelude_one(vm, "set", fl_api_set_options, 1U, 1U);
+    register_prelude_one(vm, "bind", fl_bind_native, 3U, 4U);
+    register_prelude_one(vm, "unbind", fl_unbind_native, 2U, 2U);
 }
 
 void fl_std_register(FlVm *vm)

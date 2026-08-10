@@ -155,6 +155,8 @@ void sag_dispatch_init(Ed *ed)
         SAG_BUG("dispatch init: NULL editor");
     for (i = 0U; i < SAG_MODE__N; i++)
         (void)memset(&ed->mode_keys[i], 0, sizeof(ed->mode_keys[i]));
+    for (i = 0U; i < SAG_MODE__N; i++)
+        (void)memset(&ed->bind_keys[i], 0, sizeof(ed->bind_keys[i]));
     (void)memset(&ed->user_keys, 0, sizeof(ed->user_keys));
     (void)memset(&ed->keys, 0, sizeof(ed->keys));
     (void)memset(&ed->chord, 0, sizeof(ed->chord));
@@ -177,6 +179,8 @@ void sag_dispatch_free(Ed *ed)
 
     for (i = 0U; i < SAG_MODE__N; i++)
         sag_keymap_free(&ed->mode_keys[i]);
+    for (i = 0U; i < SAG_MODE__N; i++)
+        sag_keymap_free(&ed->bind_keys[i]);
     sag_keymap_free(&ed->user_keys);
     (void)memset(&ed->keys, 0, sizeof(ed->keys));
     dispatch_reset_chord(ed);
@@ -374,4 +378,6 @@ void sag_dispatch_set_mode(Ed *ed, Mode mode)
     dispatch_reset_capture(ed);
     ed->mode = mode;
     ed->keys.l[0] = &ed->mode_keys[mode];
+    if (ed->keys.n >= 3U)
+        ed->keys.l[2] = &ed->bind_keys[mode];
 }

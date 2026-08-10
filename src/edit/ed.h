@@ -171,6 +171,8 @@ struct Ed {
     Mode prev_unit;
     Keymap mode_keys[SAG_MODE__N];
     Keymap user_keys;
+    Keymap bind_keys[SAG_MODE__N];
+    struct SagBindings *bindings;
     KeyStack keys;
     Chord chord;
     CmdId capture_cmd;

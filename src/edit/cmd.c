@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "edit/bind.h"
 #include "edit/edit_cmds.h"
 #include "edit/jumplist.h"
 #include "edit/opt.h"
@@ -124,6 +125,8 @@ static const CmdDesc builtins[] = {
      "Set an editor option from E mode", NULL},
     {"ed.fl.eval", sag_fl_cmd_eval, SAG_ARITY_STR, 0U,
      "Evaluate Fletch in the persistent editor runtime", NULL},
+    {"ed.fl.closure", sag_bind_closure_cmd, SAG_ARITY_INT,
+     SAG_CMD_INTERNAL, "Invoke a Fletch closure bound to a key", NULL},
     {"ed.nop", cmd_nop, SAG_ARITY_NONE, 0U, "Do nothing", NULL},
     {"ed.quit", sag_file_cmd_quit, SAG_ARITY_NONE, 0U,
      "Quit, prompting when the buffer is dirty", NULL},
@@ -844,7 +847,7 @@ static bool command_name_valid(const char *name)
         /* Sprint 27 */
         "close_others", "copy_path", "rename", "context_menu", "add_tab",
         "enable", "disable", "at", "span", "unit", "up_alt", "down_alt",
-        "get", "eval", "set_many", "split", "focus"};
+        "get", "eval", "set_many", "split", "focus", "closure"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

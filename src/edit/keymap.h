@@ -50,6 +50,21 @@ typedef struct BindRow {
     const char *sarg;
 } BindRow;
 
+typedef enum SagKeymapError {
+    SAG_KEYMAP_ERR_NONE = 0,
+    SAG_KEYMAP_ERR_SEQUENCE,
+    SAG_KEYMAP_ERR_COMMAND,
+    SAG_KEYMAP_ERR_DUPLICATE,
+    SAG_KEYMAP_ERR_ARITY,
+    SAG_KEYMAP_ERR_ESCAPE_PREFIX,
+    SAG_KEYMAP_ERR_TOO_LONG
+} SagKeymapError;
+
+typedef struct SagKeymapDiag {
+    u32 row;
+    SagKeymapError error;
+} SagKeymapDiag;
+
 typedef struct KeyStack {
     const Keymap *l[SAG_LAYER_MAX];
     u32 n;
@@ -71,6 +86,10 @@ void sag_key_format_seq(const KeyId *seq, u32 n, Bytebuf *out);
 
 bool sag_keymap_build(Keymap *km, const char *name,
                       const BindRow *rows, u32 n);
+bool sag_keymap_build_diag(Keymap *km, const char *name,
+                           const BindRow *rows, u32 n,
+                           SagKeymapDiag *diag);
+const char *sag_keymap_error_string(SagKeymapError error);
 void sag_keymap_free(Keymap *km);
 
 bool sag_keymap_step(const Keymap *km, u32 node, KeyId key, u32 *child);
