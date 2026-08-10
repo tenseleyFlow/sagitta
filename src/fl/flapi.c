@@ -10,6 +10,7 @@
 #include "edit/ed.h"
 #include "edit/opt.h"
 #include "fl/gc.h"
+#include "fl/flruntime.h"
 #include "fl/fltxn.h"
 #include "fl/suggest.h"
 #include "search/regex.h"
@@ -913,7 +914,7 @@ static bool marshal_command(FlVm *vm, const FlBindDesc *d,
         return false;
     cx->win = cx->ed->win;
     cx->count = 1U;
-    cx->source = SAG_SRC_FLETCH;
+    cx->source = fl_runtime_cmd_source(vm);
 
     if (strcmp(d->fl_name, "opt.get") == 0 ||
         strcmp(d->fl_name, "opt.set") == 0) {
@@ -1360,7 +1361,7 @@ bool fl_api_ed_run(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     if (command_caps(desc) != 0U && !fl_cap_check(vm, command_caps(desc)))
         return false;
     cx.ed = vm->ed; cx.win = vm->ed->win; cx.count = 1U;
-    cx.source = SAG_SRC_FLETCH;
+    cx.source = fl_runtime_cmd_source(vm);
     while (fl_map_iter(args, &cursor, &key, &value)) {
         const FlStr *k;
         i64 integer;

@@ -126,6 +126,7 @@ bool sag_fl_runtime_init(Ed *ed)
 {
     FlRuntime *rt;
     FlHookOps ops = {hook_call, hook_masked, hook_notice};
+    u32 i;
 
     if (ed == NULL)
         return false;
@@ -146,6 +147,11 @@ bool sag_fl_runtime_init(Ed *ed)
     fl_std_register(&rt->vm);
     fl_api_init();
     fl_ed_attach(&rt->vm, ed, &fl_host_editor);
+    rt->command_source = SAG_SRC_FLETCH;
+    for (i = 0U; i < (u32)SAG_ARRAY_LEN(rt->macro_cache); i++) {
+        rt->macro_cache[i].fn = FL_NIL_V;
+        fl_gc_host_root_add(&rt->vm, &rt->macro_cache[i].fn);
+    }
     fl_hook_table_init(&ed->hooks, &ops, ed);
     fl_gc_root_provider(&rt->vm, fl_hook_mark, &ed->hooks);
     rt->ready = true;
@@ -178,6 +184,15 @@ FlVm *sag_fl_vm(Ed *ed)
 {
     return ed == NULL || ed->fl == NULL || !ed->fl->ready
                ? NULL : &ed->fl->vm;
+}
+
+CmdSource fl_runtime_cmd_source(const FlVm *vm)
+{
+    const Ed *ed;
+
+    if (vm == NULL || (ed = vm->ed) == NULL || ed->fl == NULL)
+        return SAG_SRC_FLETCH;
+    return ed->fl->command_source;
 }
 
 CmdStatus sag_fl_eval(Ed *ed, const char *source, u32 len)

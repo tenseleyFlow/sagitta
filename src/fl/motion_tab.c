@@ -2,6 +2,7 @@
 
 #include "edit/cmd.h"
 #include "edit/ed.h"
+#include "fl/flruntime.h"
 #include "fl/fltxn.h"
 #include "util/intern.h"
 
@@ -61,7 +62,7 @@ static bool invoke_word(FlVm *vm, Ed *ed, Win *win,
     cx.count_given = count_given;
     cx.sarg = sarg;
     cx.sarg_len = sarg_len;
-    cx.source = SAG_SRC_FLETCH;
+    cx.source = fl_runtime_cmd_source(vm);
     if (changes) {
         ec = sag_ed_edit_ctx_for(ed, win);
         if (!fl_txn_enlist(vm, &ec))
@@ -189,7 +190,7 @@ static bool invoke_op(FlVm *vm, Ed *ed, Win *win,
     return fl_raise(vm, "motion", "invalid motion operation");
 }
 
-static void close_highlights(Ed *ed, Win *win, u32 depth)
+static void close_highlights(FlVm *vm, Ed *ed, Win *win, u32 depth)
 {
     while (depth-- != 0U) {
         CmdId id = sag_cmd_by_word("escape", 6U);
@@ -200,7 +201,7 @@ static void close_highlights(Ed *ed, Win *win, u32 depth)
         cx.ed = ed;
         cx.win = win;
         cx.count = 1U;
-        cx.source = SAG_SRC_FLETCH;
+        cx.source = fl_runtime_cmd_source(vm);
         (void)sag_cmd_invoke(id, &cx);
     }
 }
@@ -221,7 +222,7 @@ bool fl_motion_exec(FlVm *vm, Ed *ed, Win *win,
         while (depth != 0U && i == ends[depth - 1U]) {
             if (!invoke_word(vm, ed, win, "escape", 6U, 1U, false,
                              NULL, 0U)) {
-                close_highlights(ed, win, depth - 1U);
+                close_highlights(vm, ed, win, depth - 1U);
                 return false;
             }
             depth--;
@@ -231,34 +232,34 @@ bool fl_motion_exec(FlVm *vm, Ed *ed, Win *win,
             u32 parent_end = depth == 0U ? prog->n : ends[depth - 1U];
 
             if (depth == FL_MOTION_NEST_MAX) {
-                close_highlights(ed, win, depth);
+                close_highlights(vm, ed, win, depth);
                 return fl_raise(vm, "limit", "motion nesting limit exceeded");
             }
             if (op->arg > parent_end - i - 1U) {
-                close_highlights(ed, win, depth);
+                close_highlights(vm, ed, win, depth);
                 return fl_raise(vm, "motion", "invalid highlight extent");
             }
             if (!invoke_mode(
                     vm, ed, win, 'H', op->count,
                     (op->flags & FL_MOTION_F_COUNT_GIVEN) != 0U)) {
-                close_highlights(ed, win, depth);
+                close_highlights(vm, ed, win, depth);
                 return false;
             }
             ends[depth++] = i + 1U + op->arg;
         } else if (!invoke_op(vm, ed, win, op)) {
-            close_highlights(ed, win, depth);
+            close_highlights(vm, ed, win, depth);
             return false;
         }
         i++;
     }
     while (depth != 0U) {
         if (ends[depth - 1U] != prog->n) {
-            close_highlights(ed, win, depth);
+            close_highlights(vm, ed, win, depth);
             return fl_raise(vm, "motion", "invalid highlight extent");
         }
         if (!invoke_word(vm, ed, win, "escape", 6U, 1U, false,
                          NULL, 0U)) {
-            close_highlights(ed, win, depth - 1U);
+            close_highlights(vm, ed, win, depth - 1U);
             return false;
         }
         depth--;

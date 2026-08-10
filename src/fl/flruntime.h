@@ -24,6 +24,27 @@ FlVm *sag_fl_vm(Ed *ed);
  * so retained closures keep valid trace spans. */
 CmdStatus sag_fl_eval(Ed *ed, const char *source, u32 len);
 
+/* Compile an arena-owned script for later execution.  `label` is copied and
+ * is used only in diagnostics/traces. */
+FlFn *fl_compile_str(FlRuntime *rt, const u8 *source, size_t len,
+                     const char *label);
+
+/* Execute a compiled script in the persistent editor VM.  A call made from
+ * inside Fletch nests without resetting the caller's frames; a host call is
+ * one ordinary outer VM transaction.  The source is visible to every editor
+ * command reached by the chunk for the duration of the call. */
+bool fl_call_chunk(FlRuntime *rt, FlFn *fn, CmdSource source);
+
+/* Sprint 35's bounded register cache.  Registers are lower-case a..z.  A hit
+ * requires byte-identical source, not merely matching register metadata.
+ * Cached functions are GC roots for the lifetime of the runtime. */
+FlFn *fl_macro_compile_cached(FlRuntime *rt, u8 reg,
+                              const u8 *source, size_t len);
+void fl_macro_cache_invalidate(FlRuntime *rt, u8 reg);
+
+/* Command source inherited by Fletch editor bindings and motion blocks. */
+CmdSource fl_runtime_cmd_source(const FlVm *vm);
+
 /* Native behind the global on(event, fn) prelude entry. */
 bool fl_runtime_on(FlVm *vm, FlValue *args, u32 nargs, FlValue *out);
 

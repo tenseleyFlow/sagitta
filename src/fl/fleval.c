@@ -1,6 +1,10 @@
 #include "fl/flruntime_int.h"
 
+#include <stdio.h>
+#include <string.h>
+
 #include "fl/compile.h"
+#include "fl/gc.h"
 #include "fl/parse.h"
 #include "fl/std.h"
 #include "fl/trace.h"
@@ -21,6 +25,118 @@ static const char *eval_first_line(const Bytebuf *text, char *out,
     }
     out[n] = '\0';
     return n == 0U ? "Fletch error" : out;
+}
+
+static FlOrigin runtime_origin(void)
+{
+    return (FlOrigin){(u8)FL_ORIGIN_CONFIG, 0U,
+                      (u32)FL_CAP_FS_READ | (u32)FL_CAP_FS_WRITE |
+                          (u32)FL_CAP_SHELL | (u32)FL_CAP_NET};
+}
+
+FlFn *fl_compile_str(FlRuntime *rt, const u8 *source, size_t len,
+                     const char *label)
+{
+    const char *owned;
+    const char *owned_label;
+    u32 file_id;
+    FlProgram program;
+
+    if (rt == NULL || source == NULL || len > UINT32_MAX)
+        return NULL;
+    if (rt->diag.nfiles >= FL_DIAG_MAX_FILES) {
+        if (rt->ed != NULL)
+            sag_msg(rt->ed, SAG_MSG_ERROR,
+                    "Fletch evaluation source limit reached for this session");
+        return NULL;
+    }
+    owned = arena_strndup(&rt->arena, (const char *)source, len);
+    owned_label = arena_strdup(&rt->arena,
+                               label == NULL ? "<macro>" : label);
+    rt->diag_error = false;
+    rt->diag_message[0] = '\0';
+    file_id = fl_diag_add_file(&rt->diag, owned_label, owned, len);
+    program = fl_parse(&rt->arena, &rt->diag, &rt->interner, owned, len,
+                       file_id);
+    if (program.had_error || program.incomplete)
+        return NULL;
+    return fl_compile(&rt->vm, &rt->diag, &program, file_id,
+                      runtime_origin());
+}
+
+static bool call_chunk_result(FlRuntime *rt, FlFn *fn, CmdSource source,
+                              FlValue *result)
+{
+    CmdSource saved;
+    bool ok;
+
+    if (rt == NULL || fn == NULL || result == NULL || !rt->ready)
+        return false;
+    saved = rt->command_source;
+    rt->command_source = source;
+    if (rt->vm.nframes == 0U) {
+        ok = fl_vm_run(&rt->vm, fn, result);
+    } else {
+        FlClosure *closure = fl_gc_alloc(&rt->vm, sizeof(*closure),
+                                         FL_CLOSURE);
+
+        closure->fn = fn;
+        closure->up = NULL;
+        closure->nup = 0U;
+        closure->globals = rt->vm.globals;
+        ok = fl_call(&rt->vm, FL_OBJ_V(FL_CLOSURE, closure), NULL, 0U,
+                     result);
+    }
+    rt->command_source = saved;
+    return ok;
+}
+
+bool fl_call_chunk(FlRuntime *rt, FlFn *fn, CmdSource source)
+{
+    FlValue result = FL_NIL_V;
+
+    return call_chunk_result(rt, fn, source, &result);
+}
+
+void fl_macro_cache_invalidate(FlRuntime *rt, u8 reg)
+{
+    FlMacroCache *entry;
+
+    if (rt == NULL || reg < (u8)'a' || reg > (u8)'z')
+        return;
+    entry = &rt->macro_cache[reg - (u8)'a'];
+    entry->fn = FL_NIL_V;
+    entry->source = NULL;
+    entry->len = 0U;
+    entry->hash = 0U;
+}
+
+FlFn *fl_macro_compile_cached(FlRuntime *rt, u8 reg,
+                              const u8 *source, size_t len)
+{
+    FlMacroCache *entry;
+    FlFn *fn;
+    u32 hash;
+    char label[16];
+
+    if (rt == NULL || source == NULL || len > UINT32_MAX ||
+        reg < (u8)'a' || reg > (u8)'z')
+        return NULL;
+    entry = &rt->macro_cache[reg - (u8)'a'];
+    hash = fl_hash_bytes((const char *)source, (u32)len);
+    if (entry->fn.t == (u8)FL_FN && entry->hash == hash &&
+        entry->len == len &&
+        (len == 0U || memcmp(entry->source, source, len) == 0))
+        return (FlFn *)entry->fn.as.o;
+    (void)snprintf(label, sizeof(label), "<macro:%c>", (char)reg);
+    fn = fl_compile_str(rt, source, len, label);
+    if (fn == NULL)
+        return NULL;
+    entry->source = (const u8 *)rt->diag.files[rt->diag.nfiles - 1U].src;
+    entry->len = len;
+    entry->hash = hash;
+    entry->fn = FL_OBJ_V(FL_FN, fn);
+    return fn;
 }
 
 CmdStatus fl_runtime_eval(FlRuntime *rt, const char *source, u32 len)
@@ -53,9 +169,7 @@ CmdStatus fl_runtime_eval(FlRuntime *rt, const char *source, u32 len)
                                               rt->diag_message);
         return SAG_CMD_ERR_ARG;
     }
-    origin = (FlOrigin){(u8)FL_ORIGIN_CONFIG, 0U,
-                        (u32)FL_CAP_FS_READ | (u32)FL_CAP_FS_WRITE |
-                            (u32)FL_CAP_SHELL | (u32)FL_CAP_NET};
+    origin = runtime_origin();
     fn = fl_compile_repl(&rt->vm, &rt->diag, &program, file_id, origin);
     if (fn == NULL) {
         sag_msg(ed, SAG_MSG_ERROR, "%s",
@@ -63,7 +177,7 @@ CmdStatus fl_runtime_eval(FlRuntime *rt, const char *source, u32 len)
                                               rt->diag_message);
         return SAG_CMD_ERR_ARG;
     }
-    if (!fl_vm_run(&rt->vm, fn, &result)) {
+    if (!call_chunk_result(rt, fn, SAG_SRC_FLETCH, &result)) {
         Bytebuf trace;
         char line[256];
 
