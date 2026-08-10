@@ -1,0 +1,209 @@
+# sagitta default configuration.  This file IS the keymap: every default
+# binding below is real, and copying a line into your own init.fl and
+# changing it is the whole customization story.
+#
+# Version: Sprint 36 configuration surface.
+# Budget: this file is parsed and run before the first paint and must stay
+# under 1 ms (see Sprint 33's config-load gate).  It imports nothing on
+# purpose -- every import is a file read on the startup path.
+
+# -- 1. options ---------------------------------------------------------
+set({
+    tabwidth: 4,
+    expandtab: false,
+    wrap: false,
+    scrolloff: 3,
+    number: "abs",
+    "statusline.column": "gcol",
+    errorbells: false,
+    ambiguous_wide: false,
+    subword: false,
+    chord_timeout_ms: 500,
+    "undo.break_on_newline": true,
+    "undo.bytes_max": 67108864,
+    "undo.min_nodes": 200,
+    "undo.persist_bytes_max": 16777216,
+    "registers.ring_depth": 32,
+    "registers.ring_bytes_max": 8388608,
+    "registers.clip_read_max": 67108864,
+    "clipboard.sync": "yank",
+    "search.ignorecase": false,
+    "search.smartcase": true,
+    "hooks.error_limit": 5,
+    theme: "quiver-dark",
+    "macro.dir": "",
+})
+
+# -- 2. unit modes (L line, W word, B block) ----------------------------
+bind("L", "<left>", "ed.move.unit.home")
+bind("L", "<right>", "ed.move.unit.end")
+bind("L", "<up>", "ed.move.unit.prev")
+bind("L", "<down>", "ed.move.unit.next")
+bind("L", "A-<left>", "ed.move.unit.home_alt")
+bind("L", "A-<right>", "ed.move.unit.end_alt")
+bind("L", "A-<up>", "ed.move.unit.prev_alt")
+bind("L", "A-<down>", "ed.move.unit.next_alt")
+bind("L", "<home>", "ed.move.unit.home")
+bind("L", "<end>", "ed.move.unit.end")
+bind("L", "<pgup>", "ed.view.page_up")
+bind("L", "<pgdn>", "ed.view.page_down")
+bind("L", "i", "ed.mode.enter", { sarg: "I" })
+bind("L", "a", "ed.edit.insert.after")
+bind("L", "o", "ed.edit.line.open_below")
+bind("L", "O", "ed.edit.line.open_above")
+bind("L", "x", "ed.edit.delete.grapheme")
+bind("L", "d d", "ed.edit.line.delete")
+bind("L", "u", "ed.edit.undo")
+bind("L", "C-r", "ed.edit.redo")
+bind("L", "<esc>", "ed.mode.escape")
+bind("L", "g g", "ed.move.buf.home")
+bind("L", "m", "ed.mark.set")
+bind("L", "'", "ed.mark.jump")
+bind("L", "/", "ed.search.open")
+bind("L", "?", "ed.search.open_back")
+bind("L", "n", "ed.search.next")
+bind("L", "N", "ed.search.prev")
+bind("L", "*", "ed.search.word_next")
+bind("L", "#", "ed.search.word_prev")
+bind("L", "C-o", "ed.jump.back")
+bind("L", "C-i", "ed.jump.fwd")
+bind("L", "g ;", "ed.change.older")
+bind("L", "g ,", "ed.change.newer")
+bind("L", "G", "ed.move.buf.end")
+bind("L", "s", "ed.file.save")
+bind("L", "C-z", "ed.suspend")
+bind("L", "C-l", "ed.redraw")
+bind("L", "C-g", "ed.ui.message_expand")
+bind("L", "0", "ed.move.unit.home")
+bind("L", "w", "ed.mode.enter", { sarg: "W" })
+bind("L", "b", "ed.mode.enter", { sarg: "B" })
+bind("L", "h", "ed.mode.enter", { sarg: "H" })
+bind("L", "e", "ed.mode.enter", { sarg: "E" })
+bind("L", "f", "ed.mode.enter", { sarg: "F" })
+
+bind("W", "<left>", "ed.move.unit.prev")
+bind("W", "<right>", "ed.move.unit.next")
+bind("W", "<up>", "ed.move.line.up")
+bind("W", "<down>", "ed.move.line.down")
+bind("W", "A-<left>", "ed.move.unit.prev_alt")
+bind("W", "A-<right>", "ed.move.unit.next_alt")
+bind("W", "C-<left>", "ed.move.word.sub_prev")
+bind("W", "C-<right>", "ed.move.word.sub_next")
+bind("W", "<home>", "ed.move.unit.home")
+bind("W", "<end>", "ed.move.unit.end")
+bind("W", "h", "ed.mode.enter", { sarg: "H" })
+bind("W", ":", "ed.mode.enter", { sarg: "E" })
+bind("W", "<esc>", "ed.mode.escape")
+bind("W", "C-g", "ed.ui.message_expand")
+
+bind("B", "<left>", "ed.move.unit.home")
+bind("B", "<right>", "ed.move.unit.end")
+bind("B", "<up>", "ed.move.unit.prev")
+bind("B", "<down>", "ed.move.unit.next")
+bind("B", "A-<left>", "ed.move.block.match_prev")
+bind("B", "A-<right>", "ed.move.block.match_next")
+bind("B", "A-<up>", "ed.sel.unit.expand")
+bind("B", "A-<down>", "ed.sel.unit.contract")
+bind("B", "h", "ed.mode.enter", { sarg: "H" })
+bind("B", ":", "ed.mode.enter", { sarg: "E" })
+bind("B", "<esc>", "ed.mode.escape")
+bind("B", "C-g", "ed.ui.message_expand")
+
+# -- 3. I mode ----------------------------------------------------------
+bind("I", "A-h", "ed.mode.enter", { sarg: "H" })
+bind("I", "<esc>", "ed.mode.escape")
+bind("I", "C-g", "ed.ui.message_expand")
+bind("I", "<cr>", "ed.edit.insert.newline")
+bind("I", "<tab>", "ed.edit.insert.tab")
+bind("I", "<bs>", "ed.edit.delete.grapheme_left")
+bind("I", "<del>", "ed.edit.delete.grapheme")
+bind("I", "<left>", "ed.move.unit.prev")
+bind("I", "<right>", "ed.move.unit.next")
+bind("I", "<up>", "ed.move.line.up")
+bind("I", "<down>", "ed.move.line.down")
+bind("I", "<home>", "ed.move.line.home")
+bind("I", "<end>", "ed.move.line.end")
+
+# -- 4. H mode ----------------------------------------------------------
+# H-mode motions remain unit-sensitive: the C motion table is rebuilt when
+# a line, word, block, or character selection enters H.  Its operators are
+# likewise kept in that adaptive table so a config layer cannot mask them.
+
+# -- 5. global navigation and E/F modes ---------------------------------
+bind("L", "C-w s", "ed.pane.split_h")
+bind("L", "C-w v", "ed.pane.split_v")
+bind("L", "C-w c", "ed.pane.close")
+bind("L", "C-w <left>", "ed.pane.focus_left")
+bind("L", "C-w <right>", "ed.pane.focus_right")
+bind("L", "C-w <up>", "ed.pane.focus_up")
+bind("L", "C-w <down>", "ed.pane.focus_down")
+bind("L", "C-w w", "ed.pane.focus_next")
+bind("L", "C-w =", "ed.pane.grow")
+bind("L", "C-w -", "ed.pane.shrink")
+bind("L", "t n", "ed.tab.next")
+bind("L", "t p", "ed.tab.prev")
+bind("L", "t t", "ed.tab.new")
+bind("L", "t c", "ed.tab.close")
+bind("L", "C-<pgdn>", "ed.file.next")
+bind("L", "C-<pgup>", "ed.file.prev")
+bind("L", "t <right>", "ed.file.next")
+bind("L", "t <left>", "ed.file.prev")
+bind("L", "t <down>", "ed.group.enter")
+bind("L", "t <up>", "ed.group.leave")
+bind("L", "t g", "ed.group.new")
+bind("L", "t e", "ed.group.edit")
+bind("L", "t d", "ed.group.dissolve")
+bind("L", "t r", "ed.group.remove_tab")
+bind("L", "t m", "ed.ui.context_menu")
+bind("L", "t l", "ed.group.rename")
+bind("L", "t o", "ed.tab.close_others")
+bind("L", "t y", "ed.tab.copy_path")
+bind("L", "A-1", "ed.tab.goto", { iarg: 1 })
+bind("L", "A-2", "ed.tab.goto", { iarg: 2 })
+bind("L", "A-3", "ed.tab.goto", { iarg: 3 })
+bind("L", "A-4", "ed.tab.goto", { iarg: 4 })
+bind("L", "A-5", "ed.tab.goto", { iarg: 5 })
+bind("L", "A-6", "ed.tab.goto", { iarg: 6 })
+bind("L", "A-7", "ed.tab.goto", { iarg: 7 })
+bind("L", "A-8", "ed.tab.goto", { iarg: 8 })
+bind("L", "A-9", "ed.tab.goto", { iarg: 9 })
+bind("L", "A-0", "ed.tab.goto")
+
+bind("E", "<left>", "ed.move.char.prev")
+bind("E", "<right>", "ed.cmdline.ghost.accept")
+bind("E", "<home>", "ed.move.line.home")
+bind("E", "<end>", "ed.move.line.end")
+bind("E", "C-a", "ed.move.line.home")
+bind("E", "C-e", "ed.move.line.end")
+bind("E", "<bs>", "ed.edit.delete.grapheme_left")
+bind("E", "<del>", "ed.edit.delete.grapheme")
+bind("E", "C-w", "ed.del.word_prev")
+bind("E", "C-u", "ed.del.to_home")
+bind("E", "C-k", "ed.del.to_end")
+bind("E", "<up>", "ed.cmdline.hist_prev")
+bind("E", "<down>", "ed.cmdline.hist_next")
+bind("E", "<tab>", "ed.cmdline.complete_next")
+bind("E", "S-<tab>", "ed.cmdline.complete_prev")
+bind("E", "C-n", "ed.cmdline.complete_next")
+bind("E", "C-p", "ed.cmdline.complete_prev")
+bind("E", "<pgdn>", "ed.cmdline.menu.page_next")
+bind("E", "<pgup>", "ed.cmdline.menu.page_prev")
+bind("E", "C-r", "ed.cmdline.insert_register")
+bind("E", "C-v", "ed.cmdline.literal_next")
+bind("E", "C-z", "ed.edit.undo")
+bind("E", "C-y", "ed.edit.redo")
+bind("E", "C-g", "ed.cmdline.cancel")
+
+bind("F", "<esc>", "ed.mode.escape")
+bind("F", "C-g", "ed.ui.message_expand")
+
+# -- 6. macros ----------------------------------------------------------
+# Macro commands are available to user configuration.  Their final default
+# chords land with Sprint 38's macro browser so quit remains unambiguous.
+
+# -- 7. hooks -----------------------------------------------------------
+# Hooks are intentionally absent by default: examples must not produce
+# messages or mutate options in an otherwise idle editor.
+
+# -- 8. functions -------------------------------------------------------
+# User helpers belong in the personal init.fl above this shipped baseline.
