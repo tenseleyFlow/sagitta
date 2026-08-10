@@ -1,0 +1,18 @@
+# Sprint 38: naming writes user.fl, publishes the function, and keeps @l.
+import buf
+import ed
+import io
+import opt
+import str
+let b = buf.current()
+let source = "@[ i\"n\" ]\n"
+let dir = t.tmpdir() + "/macros"
+edit { opt.set("macro.dir", dir) }
+ed.run("ed.reg.set", {iarg: 108, sarg: source})
+ed.run("ed.macro.name", {sarg: "l dup_line"})
+t.reg("l", source, "char")
+let promoted = io.read(dir + "/user.fl")
+t.eq(str.contains(promoted, "sagitta-macro: 1"), true)
+t.eq(str.contains(promoted, "dup_line"), true)
+ed.run("ed.macro.replay", {sarg: "user.dup_line"})
+t.text(b, "n")

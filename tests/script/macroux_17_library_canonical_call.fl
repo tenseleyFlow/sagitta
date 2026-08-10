@@ -1,0 +1,12 @@
+# Sprint 38: canonical stem.binding library macros are callable headlessly.
+import buf
+import ed
+import io
+import opt
+let b = buf.current()
+io.write("edit.fl", "# sagitta-macro: 1\nmacro add_x = @[ i\"x\" ]\n")
+edit { opt.set("macro.dir", ".") }
+ed.run("ed.macro.replay", {sarg: "edit.add_x"})
+t.text(b, "x")
+t.undo(b, 2)
+

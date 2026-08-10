@@ -1,0 +1,12 @@
+# Sprint 38: a binding equal to its file stem gains the bare alias.
+import buf
+import ed
+import io
+import opt
+let b = buf.current()
+io.write("surround.fl", "# sagitta-macro: 1\nmacro surround = @[ i\"()\" ]\n")
+edit { opt.set("macro.dir", ".") }
+ed.run("ed.macro.replay", {sarg: "surround"})
+t.text(b, "()")
+t.undo(b, 2)
+

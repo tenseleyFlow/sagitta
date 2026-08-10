@@ -1,0 +1,13 @@
+# Sprint 38: explicit reload publishes a changed library file immediately.
+import buf
+import ed
+import io
+import opt
+let b = buf.current()
+io.write("edit.fl", "# sagitta-macro: 1\nmacro mark = @[ i\"x\" ]\n")
+edit { opt.set("macro.dir", ".") }
+ed.run("ed.macro.replay", {sarg: "edit.mark"})
+io.write("edit.fl", "# sagitta-macro: 1\nmacro mark = @[ i\"y\" ]\n")
+ed.run("ed.macro.reload", {})
+ed.run("ed.macro.replay", {sarg: "edit.mark"})
+t.text(b, "xy")
