@@ -1649,6 +1649,25 @@ static void case_s35_macro_record_replay_from_e_mode(PtyCtx *c)
     (void)unlink(path);
 }
 
+static void case_s38_macro_indicator(PtyCtx *c)
+{
+    static const u8 initial[] = "base\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.macro.record a");
+    s18_settle_after_keys(c, "enter");
+    s18_settle_after_keys(c, "i a b c d e f g h i j k l esc");
+    ptc_snapshot(c, c->test->name);
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.macro.stop");
+    s18_settle_after_keys(c, "enter");
+    force_quit(c);
+    (void)unlink(path);
+}
+
 static void case_s18_cmdline_open(PtyCtx *c)
 {
     static const u8 initial[] = "alpha\nbeta\n";
@@ -4151,6 +4170,10 @@ static void case_s37_batch_never_touches_the_terminal(PtyCtx *c)
 const PtyCase sag_pty_cases[] = {
     C(s37_batch_never_touches_the_terminal, modern, 24U, 80U,
       case_s37_batch_never_touches_the_terminal),
+    C(s38_macro_indicator_80, modern, 24U, 80U,
+      case_s38_macro_indicator),
+    C(s38_macro_indicator_40, modern, 24U, 40U,
+      case_s38_macro_indicator),
     C(s35_macro_record_start_message, modern, 24U, 80U,
       case_s35_macro_record_start_message),
     C(s35_macro_record_stop_message, modern, 24U, 80U,
