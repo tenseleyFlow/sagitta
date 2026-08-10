@@ -4092,7 +4092,42 @@ static void case_s32_bug_restores_the_terminal(PtyCtx *c)
     ptc_expect_tail(c, report_tail, sizeof(report_tail) - 1U);
 }
 
+/* ---------------------------------------------------------------- */
+/* Sprint 37: batch mode never owns the terminal                    */
+/* ---------------------------------------------------------------- */
+
+static void case_s37_batch_never_touches_the_terminal(PtyCtx *c)
+{
+    static const u8 script[] = "let running_headless = batch\n";
+    char path[1024];
+    int n;
+
+    n = snprintf(path, sizeof(path), "%s/batch-no-tty.fl", c->state_dir);
+    if (n <= 0 || (size_t)n >= sizeof(path)) {
+        ptc_check(c, false, "Sprint 37 batch script path overflow");
+        return;
+    }
+    if (!write_bytes(path, script, sizeof(script) - 1U)) {
+        ptc_check(c, false, "could not create Sprint 37 batch script");
+        return;
+    }
+
+    /*
+     * Run under a real pty on purpose.  A batch bootstrap that probes,
+     * enters raw mode, paints, or restores will leave bytes in c->raw;
+     * a bootstrap that waits for terminal input will miss expect_exit's
+     * case deadline.  The valid script itself is intentionally silent.
+     */
+    ptc_spawn(c, ptc_sagitta_bin(c), "--clean", "--batch", path, NULL);
+    ptc_expect_exit(c, 0);
+    ptc_check(c, memchr(c->raw.data, '\x1b', c->raw.len) == NULL,
+              "sag --batch emitted terminal setup or restore bytes");
+    ptc_snapshot(c, "s37_batch_no_tty");
+}
+
 const PtyCase sag_pty_cases[] = {
+    C(s37_batch_never_touches_the_terminal, modern, 24U, 80U,
+      case_s37_batch_never_touches_the_terminal),
     C(s35_macro_record_start_message, modern, 24U, 80U,
       case_s35_macro_record_start_message),
     C(s35_macro_record_stop_message, modern, 24U, 80U,
