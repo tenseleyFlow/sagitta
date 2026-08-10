@@ -1546,6 +1546,9 @@ const SagTest sag_tests[] = {
     T(macrolib_scan_order_is_bytewise_and_stable),
     T(macrolib_reload_replaces_entries_and_survives_gc),
     T(macro_header_major_mismatch_warns_but_still_loads),
+    T(macrobrowse_unknown_motion_store_is_atomic_and_points_at_word),
+    T(macrobrowse_valid_store_marks_clean_and_sets_undo_boundary),
+    T(macrobrowse_edit_is_an_ordinary_multicursor_undo_buffer),
 };
 
 const size_t sag_tests_len = SAG_ARRAY_LEN(sag_tests);

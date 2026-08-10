@@ -1583,5 +1583,8 @@ void test_macrolib_unknown_schema_skips_only_that_file(void);
 void test_macrolib_scan_order_is_bytewise_and_stable(void);
 void test_macrolib_reload_replaces_entries_and_survives_gc(void);
 void test_macro_header_major_mismatch_warns_but_still_loads(void);
+void test_macrobrowse_unknown_motion_store_is_atomic_and_points_at_word(void);
+void test_macrobrowse_valid_store_marks_clean_and_sets_undo_boundary(void);
+void test_macrobrowse_edit_is_an_ordinary_multicursor_undo_buffer(void);
 
 #endif
