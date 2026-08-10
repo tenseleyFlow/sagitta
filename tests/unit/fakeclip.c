@@ -29,6 +29,37 @@ static bool write_all(int fd, const void *data, size_t len)
     return true;
 }
 
+/*
+ * Block until the test kills us — OR until the deadline, whichever comes
+ * first.  Never simply pause() forever.
+ *
+ * `hang` and `stay` exist to be killed by the test that spawned them, and
+ * the kill is straight-line code AFTER that test's assertions.  So any
+ * assertion that fails first strands every helper it started, with no
+ * parent left to reap them: they reparent to init and pause() until the
+ * machine reboots.  That is not hypothetical — a developer box
+ * accumulated 500 of these across five runs (728 MB, and the pages went
+ * to swap, which is where it actually hurt).  The commonest trigger is
+ * running build-san/unit_tests directly instead of through `make`, which
+ * skips SAG_TEST_INSTRUMENTED=1 and so holds a sanitizer build to the
+ * uninstrumented 2 ms latency budget.
+ *
+ * Fixing only the test that leaked would leave the next one to rediscover
+ * this, so the guarantee lives HERE, in the process that would otherwise
+ * survive: a fakeclip cannot outlive its usefulness by more than the
+ * deadline no matter how its parent died.  The window is far longer than
+ * any legitimate test needs (they kill within seconds), so it cannot make
+ * a slow machine flaky.
+ */
+enum { FAKECLIP_MAX_LIFE_S = 120U };
+
+static void wait_until_killed(void)
+{
+    (void)alarm(FAKECLIP_MAX_LIFE_S);
+    for (;;)
+        (void)pause();
+}
+
 static int copy_fd(int from, int to)
 {
     unsigned char bytes[4096];
@@ -106,10 +137,8 @@ int main(int argc, char **argv)
     }
     if (strcmp(mode, "exit") == 0)
         return 17;
-    if (strcmp(mode, "hang") == 0) {
-        for (;;)
-            (void)pause();
-    }
+    if (strcmp(mode, "hang") == 0)
+        wait_until_killed();
     if (strcmp(mode, "read-hold") == 0) {
         pid_t holder = fork();
 
@@ -150,6 +179,6 @@ int main(int argc, char **argv)
     if (argc < 4)
         return 2;
     record_pid(argv[3]);
-    for (;;)
-        (void)pause();
+    wait_until_killed();
+    return 0; /* not reached; wait_until_killed only exits via a signal */
 }
