@@ -496,7 +496,8 @@ $(BUILD)/sagitta: $(OBJ)
 $(BUILD)/sag: $(BUILD)/sagitta
 	ln -sf sagitta $@
 
-$(BUILD)/unit_tests: $(UNIT_LINK_OBJ) $(FAKECLIP)
+$(BUILD)/unit_tests: $(UNIT_LINK_OBJ) $(FAKECLIP) $(TORTURE_CHILD) \
+                     $(TORTURE_DRIVER) $(FAULTSHIM)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(UNIT_LINK_OBJ) $(LDLIBS)
 
 $(BUILD)/pty_runner: $(PTY_LINK_OBJ)
