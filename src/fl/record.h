@@ -35,6 +35,7 @@ typedef struct Rec {
     bool active;
     bool in_prompt;
     bool append;
+    bool import_ed;
 } Rec;
 
 typedef struct RecStatus {

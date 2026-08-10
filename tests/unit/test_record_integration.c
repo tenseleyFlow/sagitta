@@ -159,6 +159,33 @@ void test_record_tap_drops_replay_source(void)
     cx.source = SAG_SRC_FLETCH;
     sag_record_tap(sag_cmd_lookup("ed.move.unit.next", 17U), &cx);
     SAG_ASSERT_EQ_U64(f.ed.rec.ev.len, 1U);
+    SAG_ASSERT_EQ_I64(sag_record_stop(&f.ed), SAG_CMD_OK);
+
+    SAG_ASSERT(sag_record_start(&f.ed, (u8)'e'));
+    cx.sarg = "E";
+    cx.sarg_len = 1U;
+    cx.source = SAG_SRC_KEY;
+    sag_record_tap(sag_cmd_lookup("ed.mode.enter", 13U), &cx);
+    cx.sarg = "ignored";
+    cx.sarg_len = 7U;
+    sag_record_tap(sag_cmd_lookup("ed.edit.insert.text", 19U), &cx);
+    SAG_ASSERT_EQ_U64(f.ed.rec.ev.len, 0U);
+    cx.sarg = NULL;
+    cx.sarg_len = 0U;
+    cx.source = SAG_SRC_CMDLINE;
+    sag_record_tap(sag_cmd_lookup("ed.move.unit.next", 17U), &cx);
+    SAG_ASSERT_EQ_U64(f.ed.rec.ev.len, 1U);
+    SAG_ASSERT_EQ_U64(f.ed.rec.ev.data[0].src, SAG_SRC_CMDLINE);
+    SAG_ASSERT_EQ_I64(sag_record_stop(&f.ed), SAG_CMD_OK);
+
+    SAG_ASSERT(sag_record_start(&f.ed, (u8)'f'));
+    cx.sarg = "E";
+    cx.sarg_len = 1U;
+    cx.source = SAG_SRC_KEY;
+    sag_record_tap(sag_cmd_lookup("ed.mode.enter", 13U), &cx);
+    /* Cancelling contributes no committed CMDLINE command. */
+    SAG_ASSERT_EQ_U64(f.ed.rec.ev.len, 0U);
+    SAG_ASSERT_EQ_I64(sag_record_stop(&f.ed), SAG_CMD_OK);
     rf_close(&f);
 }
 
@@ -196,6 +223,7 @@ void test_record_multicursor_dispatch_captures_one_event(void)
 
 void test_record_stop_stores_parseable_source_and_uppercase_appends(void)
 {
+    EditCtx ec;
     RecordFix f;
     RegVal *value;
     size_t first_len;
@@ -220,6 +248,12 @@ void test_record_stop_stores_parseable_source_and_uppercase_appends(void)
     SAG_ASSERT(value->bytes.len > first_len);
     SAG_ASSERT(contains_bytes(&value->bytes, "i\"one\"", 6U));
     SAG_ASSERT(contains_bytes(&value->bytes, "i\"two\"", 6U));
+    ec = sag_ed_edit_ctx(&f.ed);
+    SAG_ASSERT(sag_undo(&ec));
+    SAG_ASSERT(sag_undo(&ec));
+    assert_buffer(&f.ed, "", 0U);
+    SAG_ASSERT_EQ_I64(sag_macro_replay(&f.ed, (u8)'a', 1U), SAG_CMD_OK);
+    assert_buffer(&f.ed, "onetwo", 6U);
     rf_close(&f);
 }
 
@@ -308,14 +342,25 @@ void test_macro_list_reports_only_nonempty_named_registers(void)
 void test_fletch_record_and_replay_prelude_route_through_macro_commands(void)
 {
     static const char start[] = "record(\"a\")";
+    static const char start_in_edit[] = "edit { record(\"c\") }";
+    static const char stop_in_edit[] =
+        "import ed\nedit { ed.run(\"ed.macro.stop\") }";
     static const char nested[] = "record(\"b\")";
     static const char replay[] = "replay(\"a\", 2)";
     EditCtx ec;
     RecordFix f;
 
     rf_open(&f);
+    SAG_ASSERT_EQ_I64(sag_fl_eval(&f.ed, start_in_edit,
+                                  sizeof(start_in_edit) - 1U),
+                      SAG_CMD_ERR_STATE);
+    SAG_ASSERT(!sag_record_active(&f.ed));
     SAG_ASSERT_EQ_I64(sag_fl_eval(&f.ed, start, sizeof(start) - 1U),
                       SAG_CMD_OK);
+    SAG_ASSERT(sag_record_active(&f.ed));
+    SAG_ASSERT_EQ_I64(sag_fl_eval(&f.ed, stop_in_edit,
+                                  sizeof(stop_in_edit) - 1U),
+                      SAG_CMD_ERR_STATE);
     SAG_ASSERT(sag_record_active(&f.ed));
     SAG_ASSERT_EQ_I64(sag_fl_eval(&f.ed, nested, sizeof(nested) - 1U),
                       SAG_CMD_ERR_STATE);
@@ -329,5 +374,9 @@ void test_fletch_record_and_replay_prelude_route_through_macro_commands(void)
     SAG_ASSERT_EQ_I64(sag_fl_eval(&f.ed, replay, sizeof(replay) - 1U),
                       SAG_CMD_OK);
     assert_buffer(&f.ed, "qq", 2U);
+    SAG_ASSERT(sag_undo(&ec));
+    assert_buffer(&f.ed, "q", 1U);
+    SAG_ASSERT(sag_undo(&ec));
+    assert_buffer(&f.ed, "", 0U);
     rf_close(&f);
 }

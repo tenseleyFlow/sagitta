@@ -9,6 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 
+#include "edit/ed.h"
 #include "fl/gc.h"
 #include "util/intern.h"
 
@@ -141,40 +142,112 @@ static bool fl_error(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     }
 }
 
+static bool macro_register_arg(FlVm *vm, FlValue value,
+                               const char *native, const FlStr **out)
+{
+    const FlStr *name = NULL;
+
+    if (value.t != (u8)FL_STR)
+        return fl_raise(vm, "type", "%s: argument 1 must be a str, found %s",
+                        native, fl_type_name((FlType)value.t));
+    name = (const FlStr *)value.as.o;
+    if (name->len != 1U ||
+        !((name->b[0] >= 'a' && name->b[0] <= 'z') ||
+          (name->b[0] >= 'A' && name->b[0] <= 'Z')))
+        return fl_raise(vm, "type", "%s: register must be one letter a-z/A-Z",
+                        native);
+    *out = name;
+    return true;
+}
+
+static bool invoke_macro_command(FlVm *vm, const char *command,
+                                 const FlStr *name, u32 count,
+                                 bool count_given, FlValue *out)
+{
+    CmdCtx cx = {0};
+    CmdId id;
+    CmdStatus status;
+
+    if (vm->ed == NULL)
+        return fl_raise(vm, "handle", "%s: no editor is attached",
+                        command);
+    id = sag_cmd_lookup(command, (u32)strlen(command));
+    if (id.v == 0U)
+        return fl_raise(vm, "name", "%s is unavailable", command);
+    cx.ed = vm->ed;
+    cx.win = vm->ed->win;
+    cx.count = count;
+    cx.count_given = count_given;
+    cx.sarg = name->b;
+    cx.sarg_len = name->len;
+    cx.source = fl_runtime_cmd_source(vm);
+    status = sag_ed_invoke(vm->ed, id, &cx);
+    if (status != SAG_CMD_OK)
+        return fl_raise(vm, "user", "%s failed", command);
+    *out = FL_NIL_V;
+    return true;
+}
+
+static bool fl_record(FlVm *vm, FlValue *a, u32 n, FlValue *out)
+{
+    const FlStr *name = NULL;
+    (void)n;
+
+    if (!macro_register_arg(vm, a[0], "record", &name))
+        return false;
+    return invoke_macro_command(vm, "ed.macro.record", name, 1U, false,
+                                out);
+}
+
+static bool fl_replay(FlVm *vm, FlValue *a, u32 n, FlValue *out)
+{
+    const FlStr *name = NULL;
+    i64 count = 1;
+
+    if (!macro_register_arg(vm, a[0], "replay", &name))
+        return false;
+    if (n == 2U) {
+        if (a[1].t != (u8)FL_INT)
+            return fl_raise(vm, "type",
+                            "replay: argument 2 must be an int, found %s",
+                            fl_type_name((FlType)a[1].t));
+        count = a[1].as.i;
+        if (count < 1 || count > (i64)SAG_COUNT_MAX)
+            return fl_raise(vm, "type", "replay: count must be 1..%u",
+                            (unsigned)SAG_COUNT_MAX);
+    }
+    return invoke_macro_command(vm, "ed.macro.replay", name, (u32)count,
+                                n == 2U, out);
+}
+
+static void register_prelude_one(FlVm *vm, const char *name,
+                                 FlNativeFn fn, u8 min_ar, u8 max_ar)
+{
+    FlNative *native = fl_gc_alloc(vm, sizeof(*native), FL_NATIVE);
+
+    native->fn = fn;
+    native->name_id = sag_intern(vm->in, name, strlen(name));
+    native->min_ar = min_ar;
+    native->max_ar = max_ar;
+    native->caps = 0U;
+    fl_gc_protect(vm, FL_OBJ_V(FL_NATIVE, native));
+    (void)fl_map_set(vm, vm->prelude, FL_INT_V((i64)native->name_id),
+                     FL_OBJ_V(FL_NATIVE, native));
+    fl_gc_release(vm, 1U);
+}
+
 static void register_prelude(FlVm *vm)
 {
-    FlNative *nat = fl_gc_alloc(vm, sizeof(*nat), FL_NATIVE);
-    FlNative *on;
-
-    nat->fn = fl_error;
-    nat->name_id = sag_intern(vm->in, "error", 5U);
-    nat->min_ar = 1U;
-    nat->max_ar = 1U;
-    nat->caps = 0U;
-    /* Protected across the set: growing the map allocates, and until
-     * the native is IN the map nothing else points at it (gc.h
-     * rule 2). */
-    fl_gc_protect(vm, FL_OBJ_V(FL_NATIVE, nat));
     /*
      * Keyed by INTERNED ID, not by a string: GET_GLOBAL looks the
      * prelude up with the same constant it uses for globals, and
      * globals are keyed by id.  Keying this map by string would make
      * every lookup miss and `error` would stay invisible.
      */
-    (void)fl_map_set(vm, vm->prelude, FL_INT_V((i64)nat->name_id),
-                     FL_OBJ_V(FL_NATIVE, nat));
-    fl_gc_release(vm, 1U);
-
-    on = fl_gc_alloc(vm, sizeof(*on), FL_NATIVE);
-    on->fn = fl_runtime_on;
-    on->name_id = sag_intern(vm->in, "on", 2U);
-    on->min_ar = 2U;
-    on->max_ar = 2U;
-    on->caps = 0U;
-    fl_gc_protect(vm, FL_OBJ_V(FL_NATIVE, on));
-    (void)fl_map_set(vm, vm->prelude, FL_INT_V((i64)on->name_id),
-                     FL_OBJ_V(FL_NATIVE, on));
-    fl_gc_release(vm, 1U);
+    register_prelude_one(vm, "error", fl_error, 1U, 1U);
+    register_prelude_one(vm, "on", fl_runtime_on, 2U, 2U);
+    register_prelude_one(vm, "record", fl_record, 1U, 1U);
+    register_prelude_one(vm, "replay", fl_replay, 1U, 2U);
 }
 
 void fl_std_register(FlVm *vm)

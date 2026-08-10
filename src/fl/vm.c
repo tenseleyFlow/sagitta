@@ -210,16 +210,11 @@ static const char *deferred_sprint(const char *name)
      * told "import buf", not "buf lands in Sprint 34", which would send
      * them away from a module that is sitting right there.
      */
-    static const char *const S35[] = {"record", "replay"};
     static const char *const S36[] = {"bind", "unbind", "set"};
     size_t i;
 
     if (name == NULL)
         return NULL;
-    for (i = 0U; i < SAG_ARRAY_LEN(S35); i++) {
-        if (strcmp(name, S35[i]) == 0)
-            return "Sprint 35";
-    }
     for (i = 0U; i < SAG_ARRAY_LEN(S36); i++) {
         if (strcmp(name, S36[i]) == 0)
             return "Sprint 36";

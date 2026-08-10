@@ -34,8 +34,9 @@ static void replay_runtime_close(Ed *ed)
 void test_fl_replay_runtime_propagates_command_source(void)
 {
     static const u8 source[] =
-        "ed.run(\"ed.mode.enter\", {\"sarg\": \"L\"})\n"
-        "@[ > ]\n";
+        "import ed\n"
+        "ed.run(\"ed.mode.enter\", {\"sarg\": \"W\"})\n"
+        "ed.run(\"ed.fl.eval\", {\"sarg\": \"@[ l ]\"})\n";
     Ed ed;
     FlFn *fn;
 

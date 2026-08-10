@@ -8,7 +8,7 @@
 # COVERS: cur.line_span cur.insert cur.is_primary cur.valid span.lo span.hi
 # COVERS: span.len span.text span.lines span.replace span.replace_lines
 # COVERS: span.prepend span.append span.delete span.yank span.valid opt.get opt.set
-# COVERS: ed.run ed.commands
+# COVERS: ed.run ed.commands record replay
 # COVERS: kind:handle
 # ERROR_KIND: handle
 # ERROR: no editor
@@ -163,8 +163,9 @@ try {
 }
 defers("unbind lands in Sprint 36", fn() { unbind("H", "s") })
 defers("set lands in Sprint 36", fn() { set("tabwidth", 4) })
-defers("record lands in Sprint 35", fn() { record("q") })
-defers("replay lands in Sprint 35", fn() { replay("q") })
+refuses("handle", fn() { record("q") })
+refuses("handle", fn() { replay("q") })
+refuses("handle", fn() { replay("q", 2) })
 
 # -- the headless condition is an honest ERROR_KIND case --------------
 # Uncaught on purpose: the directives above prove that the observable

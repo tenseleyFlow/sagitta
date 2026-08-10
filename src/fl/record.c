@@ -9,7 +9,6 @@
 #include "fl/flruntime.h"
 #include "fl/vm.h"
 #include "ui/message.h"
-#include "util/log.h"
 
 static bool named_register(u8 name)
 {
@@ -37,6 +36,7 @@ void sag_record_init(Rec *rec)
         return;
     (void)memset(rec, 0, sizeof(*rec));
     bytebuf_init(&rec->blob);
+    rec->import_ed = true;
 }
 
 void sag_record_free(Rec *rec)
@@ -54,6 +54,11 @@ bool sag_record_start(Ed *ed, u8 reg)
 
     if (ed == NULL || !named_register(reg))
         return false;
+    if (txn_depth(ed) != 0U) {
+        sag_msg(ed, SAG_MSG_ERROR,
+                "cannot start recording inside an edit transaction");
+        return false;
+    }
     rec = &ed->rec;
     if (rec->active) {
         sag_msg(ed, SAG_MSG_WARN, "already recording @%c", (int)rec->reg);
@@ -63,6 +68,13 @@ bool sag_record_start(Ed *ed, u8 reg)
     rec->blob.len = 0U;
     rec->reg = lower_register(reg);
     rec->append = reg >= (u8)'A' && reg <= (u8)'Z';
+    rec->import_ed = true;
+    if (rec->append) {
+        const RegVal *current = sag_reg_get(&ed->regs, rec->reg);
+
+        if (current != NULL && current->bytes.len != 0U)
+            rec->import_ed = false;
+    }
     rec->mode_at_start = (u8)ed->mode;
     rec->txn_depth_at_start = txn_depth(ed);
     rec->in_prompt = false;
@@ -78,6 +90,7 @@ bool sag_record_active(const Ed *ed)
 
 void sag_record_tap(CmdId id, const CmdCtx *cx)
 {
+    const CmdDesc *desc;
     RecEvent event;
     Rec *rec;
 
@@ -86,6 +99,18 @@ void sag_record_tap(CmdId id, const CmdCtx *cx)
     rec = &cx->ed->rec;
     if (!rec->active)
         return;
+    desc = sag_cmd_desc(id);
+    if (cx->source != SAG_SRC_CMDLINE &&
+        ((desc != NULL && (desc->flags & SAG_CMD_PROMPTS) != 0U) ||
+         (desc != NULL && strcmp(desc->name, "ed.mode.enter") == 0 &&
+          cx->sarg_len == 1U && cx->sarg != NULL && cx->sarg[0] == 'E'))) {
+        rec->in_prompt = true;
+        return;
+    }
+    if (rec->in_prompt && cx->source != SAG_SRC_CMDLINE)
+        return;
+    if (cx->source == SAG_SRC_CMDLINE)
+        rec->in_prompt = false;
     if (rec->blob.len > UINT32_MAX ||
         cx->sarg_len > UINT32_MAX - (u32)rec->blob.len)
         SAG_BUG("macro recorder argument storage overflow");
@@ -397,6 +422,8 @@ void sag_record_emit(const Rec *rec, const Ed *ed, Bytebuf *out)
     bytebuf_append(out, "# sagitta-macro: 1\n", 19U);
     bytebuf_printf(out, "# recorded-with: sagitta %s\n", SAG_VERSION);
     bytebuf_append(out, "# keymap: default\n", 18U);
+    if (rec->import_ed)
+        bytebuf_append(out, "import ed\n", sizeof("import ed\n") - 1U);
     bytebuf_append(out, "(fn() {\n", 8U);
     annotate = needs_annotation(rec);
     while (i < rec->ev.len) {
@@ -425,8 +452,11 @@ CmdStatus sag_record_stop(Ed *ed)
 
     if (ed == NULL || !ed->rec.active)
         return SAG_CMD_ERR_STATE;
-    if (txn_depth(ed) != ed->rec.txn_depth_at_start)
-        SAG_BUG("macro recording crossed an unbalanced Fletch transaction");
+    if (txn_depth(ed) != 0U) {
+        sag_msg(ed, SAG_MSG_ERROR,
+                "cannot stop recording inside an edit transaction");
+        return SAG_CMD_ERR_STATE;
+    }
     ed->rec.active = false;
     ed->rec.in_prompt = false;
     bytebuf_init(&source);
@@ -442,6 +472,30 @@ CmdStatus sag_record_stop(Ed *ed)
     }
     bytebuf_free(&source);
     return status;
+}
+
+static bool replay_one(Ed *ed, FlFn *fn)
+{
+    FlVm *vm = sag_fl_vm(ed);
+    bool nested;
+    bool ok;
+
+    if (vm == NULL)
+        return false;
+    nested = vm->txn.entry_active;
+    if (nested) {
+        if (vm->txn.depth != 0U) {
+            sag_msg(ed, SAG_MSG_ERROR,
+                    "cannot replay a macro inside an edit transaction");
+            return false;
+        }
+        if (!vm->host->edit_begin(vm))
+            return false;
+    }
+    ok = fl_call_chunk(ed->fl, fn, SAG_SRC_REPLAY);
+    if (nested && !vm->host->edit_end(vm, ok))
+        ok = false;
+    return ok;
 }
 
 u32 sag_record_status(const Ed *ed, RecStatus *out)
@@ -474,7 +528,7 @@ CmdStatus sag_macro_replay(Ed *ed, u8 reg, u32 count)
     if (fn == NULL)
         return SAG_CMD_ERR_ARG;
     for (i = 0U; i < count; i++)
-        if (!fl_call_chunk(ed->fl, fn, SAG_SRC_REPLAY))
+        if (!replay_one(ed, fn))
             return SAG_CMD_ERR_STATE;
     ed->rec.last_reg = reg;
     return SAG_CMD_OK;

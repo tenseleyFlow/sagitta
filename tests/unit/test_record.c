@@ -130,6 +130,36 @@ void test_record_emit_maps_the_frozen_motion_vocabulary(void)
         assert_parses(&f.out);
         ref_close(&f);
     }
+
+    {
+        RecordEmitFix f;
+        const char *got;
+
+        ref_open(&f, SAG_MODE_L);
+        add_event(&f, "ed.mode.enter", 1U, false, 0, "H", 1U,
+                  SAG_MODE_L, SAG_SRC_KEY);
+        add_event(&f, "ed.move.unit.next", 1U, false, 0, NULL, 0U,
+                  SAG_MODE_H, SAG_SRC_KEY);
+        add_event(&f, "ed.mode.escape", 1U, false, 0, NULL, 0U,
+                  SAG_MODE_H, SAG_SRC_KEY);
+        got = emit(&f);
+        SAG_ASSERT(strstr(got, "H( > )") != NULL);
+        assert_parses(&f.out);
+        ref_close(&f);
+    }
+
+    {
+        RecordEmitFix f;
+        const char *got;
+
+        ref_open(&f, SAG_MODE_H);
+        add_event(&f, "ed.mode.escape", 1U, false, 0, NULL, 0U,
+                  SAG_MODE_H, SAG_SRC_KEY);
+        got = emit(&f);
+        SAG_ASSERT(strstr(got, " esc ") != NULL);
+        assert_parses(&f.out);
+        ref_close(&f);
+    }
 }
 
 void test_record_emit_folds_only_uncounted_repeatable_runs(void)

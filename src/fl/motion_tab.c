@@ -65,10 +65,13 @@ static bool invoke_word(FlVm *vm, Ed *ed, Win *win,
     cx.source = fl_runtime_cmd_source(vm);
     if (changes) {
         ec = sag_ed_edit_ctx_for(ed, win);
+        if (ec.undo != NULL && ec.undo->depth == 0U && ec.cset != NULL &&
+            ec.cset->curs.len > 1U)
+            ec.cset = NULL;
         if (!fl_txn_enlist(vm, &ec))
             return false;
     }
-    status = sag_cmd_invoke(id, &cx);
+    status = sag_ed_dispatch_resolved(ed, id, &cx);
     if (changes) {
         ec = sag_ed_edit_ctx_for(ed, win);
         if (!fl_txn_enlist(vm, &ec))
@@ -202,7 +205,7 @@ static void close_highlights(FlVm *vm, Ed *ed, Win *win, u32 depth)
         cx.win = win;
         cx.count = 1U;
         cx.source = fl_runtime_cmd_source(vm);
-        (void)sag_cmd_invoke(id, &cx);
+        (void)sag_ed_dispatch_resolved(ed, id, &cx);
     }
 }
 
