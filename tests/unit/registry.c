@@ -1538,6 +1538,14 @@ const SagTest sag_tests[] = {
     T(macro_header_unknown_schema_is_skipped),
     T(macro_header_absent_header_still_loads),
     T(macro_header_keymap_is_provenance_not_execution_policy),
+    T(macrolib_exports_dotted_names_and_matching_stem_alias),
+    T(macrolib_excludes_private_and_nonzero_arity_from_macros),
+    T(macrolib_broken_file_is_skipped_without_hiding_valid_files),
+    T(macrolib_rejects_one_character_stem),
+    T(macrolib_unknown_schema_skips_only_that_file),
+    T(macrolib_scan_order_is_bytewise_and_stable),
+    T(macrolib_reload_replaces_entries_and_survives_gc),
+    T(macro_header_major_mismatch_warns_but_still_loads),
 };
 
 const size_t sag_tests_len = SAG_ARRAY_LEN(sag_tests);

@@ -1575,5 +1575,13 @@ void test_macro_header_accepts_missing_optional_fields(void);
 void test_macro_header_unknown_schema_is_skipped(void);
 void test_macro_header_absent_header_still_loads(void);
 void test_macro_header_keymap_is_provenance_not_execution_policy(void);
+void test_macrolib_exports_dotted_names_and_matching_stem_alias(void);
+void test_macrolib_excludes_private_and_nonzero_arity_from_macros(void);
+void test_macrolib_broken_file_is_skipped_without_hiding_valid_files(void);
+void test_macrolib_rejects_one_character_stem(void);
+void test_macrolib_unknown_schema_skips_only_that_file(void);
+void test_macrolib_scan_order_is_bytewise_and_stable(void);
+void test_macrolib_reload_replaces_entries_and_survives_gc(void);
+void test_macro_header_major_mismatch_warns_but_still_loads(void);
 
 #endif
