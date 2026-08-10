@@ -613,34 +613,52 @@ static void cmdline_refilter(Ed *ed)
 }
 
 /*
+ * Is a sliced completion scan waiting for the idle path?
+ *
+ * ONE predicate, because sag_loop_deadline has to stop sleeping on
+ * exactly the condition sag_cmdline_comp_tick will act on.  Two
+ * spellings that disagree give either a menu that stops filling in (the
+ * loop sleeps through work the tick would do) or a busy loop (the
+ * deadline says "work pending" for a state the tick declines to touch).
+ */
+bool sag_cmdline_comp_scanning(const Ed *ed)
+{
+    return ed != NULL && ed->cmdline.active &&
+           ed->cmdline.kind == SAG_PROMPT_CMD && sag_comp_listing_pending();
+}
+
+/*
  * Sprint 26 §7.2's idle-path pattern, applied to the completion scan.
  *
  * Called after input is drained, so a keystroke always wins the race for
- * the iteration (invariant 4) and the menu fills in behind it.  One more
- * slice of readdir, then a refilter so the rows that slice revealed
- * actually reach the screen — advancing the scan without re-ranking
- * would leave the menu showing the first slice until the next keystroke,
- * which is the stale-menu bug this is meant to avoid rather than cause.
+ * the iteration (invariant 4) and the scan finishes behind it.
+ *
+ * ONE repaint, at the END of the scan -- not one per slice.  Re-ranking
+ * after every slice makes the number of frames a function of how many
+ * slices the FILESYSTEM needed, and a pty golden records that count:
+ * s19_badge_while_running went unstable the moment this repainted per
+ * slice, and every case with a path completion in it was next.  The
+ * intermediate slices have nothing to show anyway -- the menu keeps the
+ * first slice's rows until the set it was ranked from is complete, and
+ * then updates once.
  *
  * Returns true while more remains, matching sag_picker_tick.
  */
 bool sag_cmdline_comp_tick(Ed *ed)
 {
-    if (ed == NULL || !ed->cmdline.active ||
-        ed->cmdline.kind != SAG_PROMPT_CMD)
+    if (!sag_cmdline_comp_scanning(ed))
         return false;
-    if (!sag_comp_listing_pending())
-        return false;
-    (void)sag_comp_listing_advance(SAG_CMDLINE_LIVE_BUDGET_US);
+    if (sag_comp_listing_advance(SAG_CMDLINE_LIVE_BUDGET_US))
+        return true;
     /*
-     * The filter caches per (kind, head, pattern) and would hand back the
-     * previous slice's answer unchanged; the listing it was computed from
-     * has grown underneath it, so that cache entry is stale by
+     * Complete.  The filter caches per (kind, head, pattern) and would
+     * hand back the partial slice's answer unchanged; the listing it was
+     * computed from has grown underneath it, so that entry is stale by
      * definition.
      */
     sag_comp_filter_invalidate(&ed->cmdline.filter);
     cmdline_refilter(ed);
-    return sag_comp_listing_pending();
+    return false;
 }
 
 void sag_cmdline_edited(Ed *ed)

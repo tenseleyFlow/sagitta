@@ -416,6 +416,7 @@ const SagTest sag_tests[] = {
     T(snapshot_diff_full_dumps_both_snapshots),
     T(loop_deadline_matrix),
     T(loop_deadline_clamps_poll_range),
+    T(loop_deadline_and_comp_tick_share_one_condition),
     T(timer_heap_stable_equal_deadlines),
     T(timer_cancel_never_fires),
     T(timer_callback_may_add_due_timer),

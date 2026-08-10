@@ -413,6 +413,7 @@ void test_snapshot_diff_reports_changed_legend(void);
 void test_snapshot_diff_full_dumps_both_snapshots(void);
 void test_loop_deadline_matrix(void);
 void test_loop_deadline_clamps_poll_range(void);
+void test_loop_deadline_and_comp_tick_share_one_condition(void);
 void test_timer_heap_stable_equal_deadlines(void);
 void test_timer_cancel_never_fires(void);
 void test_timer_callback_may_add_due_timer(void);

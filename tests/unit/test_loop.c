@@ -1,12 +1,18 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "harness.h"
 
 #include <fcntl.h>
 #include <limits.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 #include "edit/ed.h"
 #include "edit/loop.h"
+#include "ui/cmdcomp.h"
+#include "ui/cmdline.h"
 
 typedef struct TimerTrace {
     u32 values[64];
@@ -215,4 +221,95 @@ void test_timer_callback_may_add_due_timer(void)
     SAG_ASSERT_EQ_U64(trace.values[2], 2U);
     SAG_ASSERT_EQ_U64(timers.len, 0U);
     sag_timers_free(&timers);
+}
+
+/*
+ * The poll deadline and the idle tick must agree on what "work pending"
+ * means.
+ *
+ * sag_loop_deadline returns 0 — do not sleep — while a sliced completion
+ * scan has more to read, because sag_cmdline_comp_tick is going to
+ * advance it on the idle path.  The two conditions have to be the SAME
+ * condition.  When the deadline tested only `cmdline.active` while the
+ * tick also required SAG_PROMPT_CMD, a listing left pending under a
+ * search prompt spun the loop at a zero timeout forever against a tick
+ * that declined to touch it: a hot loop burning a core, with nothing on
+ * screen to show for it.
+ *
+ * Driven with a 1 us budget for the same reason the cmdcomp tests are —
+ * the scan checks its clock every 256 entries, so this leaves a scan
+ * genuinely pending on any filesystem rather than hoping one is slow.
+ */
+void test_loop_deadline_and_comp_tick_share_one_condition(void)
+{
+    char root[] = "/tmp/sagitta-loopcomp-XXXXXX";
+    CompFilter filter;
+    Arena arena;
+    Vec_CompItem out = {0};
+    SagCompQuery q;
+    Ed ed;
+    u32 i;
+
+    SAG_ASSERT_NOT_NULL(mkdtemp(root));
+    for (i = 0U; i < 600U; i++) {
+        char path[512];
+        int fd;
+
+        (void)snprintf(path, sizeof(path), "%s/entry%03u", root,
+                       (unsigned)i);
+        fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
+        SAG_ASSERT(fd >= 0);
+        SAG_ASSERT_EQ_I64(close(fd), 0);
+    }
+
+    loop_ed_init(&ed);
+    arena_init(&ed.arena);
+    ed.ws.dir = root;
+    arena_init(&arena);
+    sag_comp_filter_init(&filter);
+
+    /* Leave a scan genuinely mid-flight. */
+    (void)memset(&q, 0, sizeof(q));
+    q.kind = SAG_COMP_PATH;
+    q.source = sag_comp_source(SAG_COMP_PATH);
+    q.stem = "e";
+    (void)sag_comp_filter_run(&ed, &filter, &arena, &q, 1, &out);
+    SAG_ASSERT(sag_comp_listing_pending());
+
+    /* Nothing pending as far as the LOOP is concerned until a prompt is
+     * up: an idle editor must still be allowed to sleep. */
+    SAG_ASSERT(!ed.cmdline.active);
+    SAG_ASSERT(!sag_cmdline_comp_scanning(&ed));
+    SAG_ASSERT_EQ_I64(sag_loop_deadline(&ed, 1000), -1);
+
+    /* `:` — the tick will act, so the loop must not sleep. */
+    ed.cmdline.active = true;
+    ed.cmdline.kind = SAG_PROMPT_CMD;
+    SAG_ASSERT(sag_cmdline_comp_scanning(&ed));
+    SAG_ASSERT_EQ_I64(sag_loop_deadline(&ed, 1000), 0);
+
+    /*
+     * A search prompt — the tick declines, so the loop MUST be allowed
+     * to sleep.  This is the pair that used to disagree.
+     */
+    ed.cmdline.kind = SAG_PROMPT_SEARCH_F;
+    SAG_ASSERT(!sag_cmdline_comp_scanning(&ed));
+    SAG_ASSERT(!sag_cmdline_comp_tick(&ed));
+    SAG_ASSERT_EQ_I64(sag_loop_deadline(&ed, 1000), -1);
+
+    sag_comp_listing_invalidate();
+    Vec_CompItem_free(&out);
+    sag_comp_filter_free(&filter);
+    arena_free_all(&arena);
+    arena_free_all(&ed.arena);
+    ed.ws.dir = NULL;
+    loop_ed_free(&ed);
+    for (i = 0U; i < 600U; i++) {
+        char path[512];
+
+        (void)snprintf(path, sizeof(path), "%s/entry%03u", root,
+                       (unsigned)i);
+        SAG_ASSERT_EQ_I64(unlink(path), 0);
+    }
+    SAG_ASSERT_EQ_I64(rmdir(root), 0);
 }

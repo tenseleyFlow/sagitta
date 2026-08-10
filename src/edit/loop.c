@@ -229,8 +229,10 @@ int sag_loop_deadline(const Ed *ed, i64 now_ms)
         return 0;
     /* The sliced completion scan is the same kind of pending work, and
      * omitting it here is the same bug: the menu would stop filling in
-     * and only resume when the user happened to press another key. */
-    if (ed->cmdline.active && sag_comp_listing_pending())
+     * and only resume when the user happened to press another key.  The
+     * predicate is shared with the tick deliberately — see its comment
+     * for what a mismatched pair does. */
+    if (sag_cmdline_comp_scanning(ed))
         return 0;
     deadline = absolute_deadline(sag_dispatch_deadline(ed), now_ms);
     deadline = deadline_min(deadline,

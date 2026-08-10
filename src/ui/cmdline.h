@@ -65,8 +65,14 @@ void sag_cmdline_edited(Ed *ed);
  * Continue a sliced completion scan on the idle path; true while more
  * remains.  The loop calls this beside sag_picker_tick, after input is
  * drained, for the reason given there.
+ *
+ * `scanning` is the same condition the tick acts on, exposed so
+ * sag_loop_deadline can refuse to sleep on exactly it.  Use it rather
+ * than re-deriving the test — the two drifting apart is a busy loop in
+ * one direction and a stalled menu in the other.
  */
 bool sag_cmdline_comp_tick(Ed *ed);
+bool sag_cmdline_comp_scanning(const Ed *ed);
 
 CmdStatus sag_cmdline_cmd_hist_prev(CmdCtx *cx);
 CmdStatus sag_cmdline_cmd_hist_next(CmdCtx *cx);
