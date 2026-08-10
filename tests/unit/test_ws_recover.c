@@ -37,6 +37,7 @@
 #include "ui/message.h"
 #include "ui/tabs.h"
 #include "util/arena.h"
+#include "text/file.h"
 #include "ws/state.h"
 #include "ws/workspace.h"
 
@@ -449,37 +450,108 @@ void test_ws_recover_retention_caps_at_five(void)
     rc_remove(&f);
 }
 
+static void rc_write(const char *path, const char *text)
+{
+    FILE *fp = fopen(path, "wb");
+
+    SAG_ASSERT_NOT_NULL(fp);
+    (void)fwrite(text, 1U, strlen(text), fp);
+    (void)fclose(fp);
+}
+
+static void rc_read(const char *path, char *out, size_t cap)
+{
+    FILE *fp = fopen(path, "rb");
+    size_t n;
+
+    SAG_ASSERT_NOT_NULL(fp);
+    n = fread(out, 1U, cap - 1U, fp);
+    out[n] = '\0';
+    (void)fclose(fp);
+}
+
 /*
- * The set-aside REFUSES to clobber.  The stamp has one-second
- * resolution, so two failures inside one second share a name — and
- * plain rename(2) would destroy the first with no record it existed.
+ * The MECHANISM the set-aside stands on, tested without a clock.
+ *
+ * sag_state_set_aside names its copy from time(NULL) at one-second
+ * resolution, so whether two failures collide depends on how fast the
+ * machine is -- which is a property of the runner, not of the code.
+ * The guard itself is s08's move primitive refusing an existing
+ * destination, and that is assertable directly and deterministically.
+ */
+void test_ws_recover_move_aside_refuses_existing(void)
+{
+    char dir[] = "/tmp/sag-rcmove-XXXXXX";
+    char src[PATH_MAX];
+    char dest[PATH_MAX];
+    char body[64];
+
+    SAG_ASSERT_NOT_NULL(mkdtemp(dir));
+    rc_join(src, sizeof(src), dir, "state.fl");
+    rc_join(dest, sizeof(dest), dir, "state.fl.corrupt-stamp");
+    rc_write(src, "second bad document");
+    rc_write(dest, "first bad document");
+
+    SAG_ASSERT(sag_file_move_aside(src, dest) != SAG_SAVE_OK);
+    /* The existing copy is byte-intact... */
+    rc_read(dest, body, sizeof(body));
+    SAG_ASSERT_EQ_STR(body, "first bad document");
+    /* ...and the new one is still where it was, not lost between the
+     * two names.  A refusal that unlinked the source would satisfy
+     * "never overwrites" and still destroy the user's bytes. */
+    rc_read(src, body, sizeof(body));
+    SAG_ASSERT_EQ_STR(body, "second bad document");
+
+    (void)unlink(src);
+    (void)unlink(dest);
+    (void)rmdir(dir);
+}
+
+/*
+ * The set-aside NEVER OVERWRITES, end to end.
+ *
+ * Two failures inside one second share a name and the second is
+ * refused; two that straddle a second boundary get two names and both
+ * are kept.  Which branch runs is the clock's business -- under
+ * valgrind the same pair that collides natively lands in different
+ * seconds -- so the test asserts the invariant that holds in BOTH:
+ * nothing already set aside is overwritten, and nothing is lost.
+ *
+ * Asserting the refusal outright is what this test used to do, and it
+ * failed in CI's valgrind lane for exactly this reason.
  */
 void test_ws_recover_set_aside_never_overwrites(void)
 {
     RcFix f;
     char name[256];
-    char path[PATH_MAX];
+    char first[PATH_MAX];
     char body[64];
-    FILE *fp;
-    size_t n;
+    bool refused;
 
     rc_make(&f);
     rc_plant(&f, "first bad document", 18U);
     SAG_ASSERT(sag_state_set_aside(&f.ed, name, sizeof(name)));
-    rc_join(path, sizeof(path), f.ed.state.key.dir, name);
+    rc_join(first, sizeof(first), f.ed.state.key.dir, name);
 
-    /* A second failure in the same second reuses the name. */
     rc_plant(&f, "second bad document", 19U);
-    /* Refused, so the first copy is untouched... */
-    SAG_ASSERT(!sag_state_set_aside(&f.ed, NULL, 0U));
-    fp = fopen(path, "rb");
-    SAG_ASSERT_NOT_NULL(fp);
-    n = fread(body, 1U, sizeof(body) - 1U, fp);
-    body[n] = '\0';
-    (void)fclose(fp);
+    refused = !sag_state_set_aside(&f.ed, name, sizeof(name));
+
+    /* The first copy is untouched either way. */
+    rc_read(first, body, sizeof(body));
     SAG_ASSERT_EQ_STR(body, "first bad document");
-    /* ...and the second is still at state.fl rather than lost. */
-    SAG_ASSERT(rc_exists(sag_ws_state_path(&f.ed.state.key)));
+    if (refused) {
+        /* Same second: the second document stays at state.fl rather
+         * than being lost to a clobbering rename. */
+        SAG_ASSERT(rc_exists(sag_ws_state_path(&f.ed.state.key)));
+    } else {
+        /* Next second: a second name, and both documents survive. */
+        char second[PATH_MAX];
+
+        rc_join(second, sizeof(second), f.ed.state.key.dir, name);
+        SAG_ASSERT(strcmp(first, second) != 0);
+        rc_read(second, body, sizeof(body));
+        SAG_ASSERT_EQ_STR(body, "second bad document");
+    }
     rc_remove(&f);
 }
 
