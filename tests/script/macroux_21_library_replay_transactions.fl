@@ -1,0 +1,14 @@
+# Sprint 38: each library replay is its own undo transaction.
+import buf
+import ed
+import io
+import opt
+let b = buf.current()
+io.write("repeat.fl", "# sagitta-macro: 1\nmacro add = @[ i\"x\" ]\n")
+edit { opt.set("macro.dir", ".") }
+ed.run("ed.macro.replay", {sarg: "repeat.add"})
+ed.run("ed.macro.replay", {sarg: "repeat.add"})
+t.text(b, "xx")
+t.undo(b, 3)
+ed.run("ed.edit.undo", {})
+t.text(b, "x")
