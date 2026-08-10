@@ -13,6 +13,7 @@
 #include "term/grid.h"
 #include "text/register.h"
 #include "text/file.h"
+#include "text/undo.h"
 #include "ui/cmdline.h"
 #include "ui/message.h"
 #include "ui/picker.h"
@@ -22,11 +23,17 @@
 #include "util/buf.h"
 #include "util/xdg.h"
 
-enum { MACRO_ROWS_MAX = 256, MACRO_LABEL_MAX = 1024 };
+enum {
+    MACRO_ROWS_MAX = 256,
+    /* Picker labels are both display and fuzzy-match storage.  Search spans
+     * the macro name/metadata plus as much normalized source as fits here;
+     * preview still reads the complete source without copying it. */
+    MACRO_MATCH_MAX = 1024
+};
 
 typedef struct MacroBrowse {
     PickItem rows[MACRO_ROWS_MAX];
-    char labels[MACRO_ROWS_MAX][MACRO_LABEL_MAX];
+    char labels[MACRO_ROWS_MAX][MACRO_MATCH_MAX];
     u32 nrows;
     i32 confirm_delete;
 } MacroBrowse;
@@ -153,6 +160,7 @@ CmdStatus sag_macro_store(Ed *ed, Buffer *scratch)
         bytebuf_free(&source);
         return status;
     }
+    sag_undo_boundary(scratch->undo);
     sag_undo_mark_saved(scratch->undo);
     lines = source_lines(source.data, source.len);
     sag_msg(ed, SAG_MSG_INFO, "stored macro @%c (%u lines)",
@@ -190,35 +198,36 @@ static void browser_preview(Ed *ed, void *ctx, i32 payload, Rect r)
 {
     const RegVal *value = payload_reg(ed, payload);
     SagMacroEntryView library;
+    const u8 *source;
+    size_t source_len;
     SagColor fg = {SAG_COLOR_DEFAULT, 0U, 0U, 0U};
     SagColor bg = {SAG_COLOR_DEFAULT, 0U, 0U, 0U};
     size_t at = 0U;
     u16 row = 0U;
 
     (void)ctx;
-    if (value == NULL && payload_library(ed, payload, &library)) {
-        static RegVal view;
-
-        sag_regval_free(&view);
-        sag_regval_init(&view);
-        bytebuf_append(&view.bytes, library.source, library.source_len);
-        value = &view;
-    }
-    if (value == NULL)
+    if (value != NULL) {
+        source = value->bytes.data;
+        source_len = value->bytes.len;
+    } else if (payload_library(ed, payload, &library)) {
+        /* The library owns these bytes for the picker's lifetime. */
+        source = (const u8 *)library.source;
+        source_len = library.source_len;
+    } else {
         return;
-    while (at < value->bytes.len && row < r.h) {
+    }
+    while (at < source_len && row < r.h) {
         size_t end = at;
         int cells = 0;
         size_t fit;
 
-        while (end < value->bytes.len && value->bytes.data[end] != (u8)'\n')
+        while (end < source_len && source[end] != (u8)'\n')
             end++;
-        fit = sag_str_clip(value->bytes.data + at, end - at, (int)r.w,
-                           &cells);
+        fit = sag_str_clip(source + at, end - at, (int)r.w, &cells);
         (void)sag_grid_puts(&ed->grid, (u16)(r.y + row), r.x,
-                            value->bytes.data + at, fit, fg, bg, 0U);
+                            source + at, fit, fg, bg, 0U);
         row++;
-        at = end < value->bytes.len ? end + 1U : end;
+        at = end < source_len ? end + 1U : end;
     }
 }
 
@@ -325,15 +334,15 @@ static void build_register_rows(Ed *ed)
             continue;
         label = mb.labels[mb.nrows];
         events = sag_macro_event_count(value->bytes.data, value->bytes.len);
-        out = (size_t)snprintf(label, MACRO_LABEL_MAX,
+        out = (size_t)snprintf(label, MACRO_MATCH_MAX,
                               "%s %c   %s%u ev   %llu B   ",
                               status.active && status.reg == reg ? "\xE2\x97\x8F" : " ",
                               (int)reg, events == 0U ? "" : "",
                               (unsigned)events,
                               (unsigned long long)value->bytes.len);
-        if (out >= MACRO_LABEL_MAX)
-            out = MACRO_LABEL_MAX - 1U;
-        for (at = 0U; at < value->bytes.len && out + 1U < MACRO_LABEL_MAX;
+        if (out >= MACRO_MATCH_MAX)
+            out = MACRO_MATCH_MAX - 1U;
+        for (at = 0U; at < value->bytes.len && out + 1U < MACRO_MATCH_MAX;
              at++) {
             u8 ch = value->bytes.data[at];
 
@@ -357,14 +366,14 @@ static void build_register_rows(Ed *ed)
             if (!sag_macrolib_at(ed, i, &entry) || !entry.replayable)
                 continue;
             label = mb.labels[mb.nrows];
-            out = (size_t)snprintf(label, MACRO_LABEL_MAX,
+            out = (size_t)snprintf(label, MACRO_MATCH_MAX,
                                    "  %s   %s   %llu B   ", entry.name,
                                    entry.events == 0U ? "\xE2\x80\x94 ev" : "events",
                                    (unsigned long long)entry.source_len);
-            if (out >= MACRO_LABEL_MAX)
-                out = MACRO_LABEL_MAX - 1U;
+            if (out >= MACRO_MATCH_MAX)
+                out = MACRO_MATCH_MAX - 1U;
             for (at = 0U; at < entry.source_len &&
-                         out + 1U < MACRO_LABEL_MAX; at++) {
+                         out + 1U < MACRO_MATCH_MAX; at++) {
                 u8 ch = (u8)entry.source[at];
 
                 label[out++] = ch == (u8)'\n' || ch == (u8)'\r' ||
@@ -624,6 +633,22 @@ static CmdStatus promote_macro(Ed *ed, u8 reg, const char *name,
         return SAG_CMD_ERR_IO;
     }
     (void)sag_macrolib_scan(ed, NULL);
+    {
+        SagMacroEntryView loaded;
+        char *canonical = sag_xmalloc(sizeof("user.") + name_len);
+
+        (void)snprintf(canonical, sizeof("user.") + name_len,
+                       "user.%.*s", (int)name_len, name);
+        if (!sag_macrolib_find(ed, canonical, &loaded) ||
+            !loaded.replayable) {
+            sag_msg(ed, SAG_MSG_ERROR,
+                    "wrote %s but macro %s did not load", path, canonical);
+            free(canonical);
+            free(path);
+            return SAG_CMD_ERR_STATE;
+        }
+        free(canonical);
+    }
     sag_msg(ed, SAG_MSG_INFO, "named macro @%c as %.*s", (int)reg,
             (int)name_len, name);
     free(path);
