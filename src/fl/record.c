@@ -93,6 +93,9 @@ void sag_record_tap(CmdId id, const CmdCtx *cx)
     const CmdDesc *desc;
     RecEvent event;
     Rec *rec;
+    const void *sarg;
+    u32 sarg_len;
+    u8 resolved_reg;
 
     if (cx == NULL || cx->ed == NULL || cx->source == SAG_SRC_REPLAY)
         return;
@@ -100,6 +103,25 @@ void sag_record_tap(CmdId id, const CmdCtx *cx)
     if (!rec->active)
         return;
     desc = sag_cmd_desc(id);
+    sarg = cx->sarg;
+    sarg_len = cx->sarg_len;
+    if (desc != NULL && strcmp(desc->name, "ed.macro.replay_last") == 0) {
+        /*
+         * replay_last is resolved state, not a stable operation.  Capture
+         * the register it means now so stopping this recording (which
+         * changes last_reg) cannot turn the emitted macro into self-replay.
+         */
+        if (!named_register(rec->last_reg))
+            return;
+        resolved_reg = lower_register(rec->last_reg);
+        id = sag_cmd_lookup("ed.macro.replay",
+                            (u32)(sizeof("ed.macro.replay") - 1U));
+        desc = sag_cmd_desc(id);
+        if (id.v == 0U || desc == NULL)
+            SAG_BUG("macro replay command is missing from the registry");
+        sarg = &resolved_reg;
+        sarg_len = 1U;
+    }
     if (cx->source != SAG_SRC_CMDLINE &&
         ((desc != NULL && (desc->flags & SAG_CMD_PROMPTS) != 0U) ||
          (desc != NULL && strcmp(desc->name, "ed.mode.enter") == 0 &&
@@ -112,13 +134,13 @@ void sag_record_tap(CmdId id, const CmdCtx *cx)
     if (cx->source == SAG_SRC_CMDLINE)
         rec->in_prompt = false;
     if (rec->blob.len > UINT32_MAX ||
-        cx->sarg_len > UINT32_MAX - (u32)rec->blob.len)
+        sarg_len > UINT32_MAX - (u32)rec->blob.len)
         SAG_BUG("macro recorder argument storage overflow");
     event = (RecEvent){id, cx->count, cx->count_given, cx->iarg,
-                       (u32)rec->blob.len, cx->sarg_len,
+                       (u32)rec->blob.len, sarg_len,
                        (u8)cx->ed->mode, (u8)cx->source};
-    if (cx->sarg_len != 0U)
-        bytebuf_append(&rec->blob, cx->sarg, cx->sarg_len);
+    if (sarg_len != 0U)
+        bytebuf_append(&rec->blob, sarg, sarg_len);
     RecEventVec_push(&rec->ev, event);
 }
 
@@ -477,13 +499,14 @@ CmdStatus sag_record_stop(Ed *ed)
 static bool replay_one(Ed *ed, FlFn *fn)
 {
     FlVm *vm = sag_fl_vm(ed);
-    bool nested;
+    bool split_run;
     bool ok;
 
     if (vm == NULL)
         return false;
-    nested = vm->txn.entry_active;
-    if (nested) {
+    split_run = vm->txn.entry_active &&
+                fl_runtime_cmd_source(vm) != SAG_SRC_REPLAY;
+    if (split_run) {
         if (vm->txn.depth != 0U) {
             sag_msg(ed, SAG_MSG_ERROR,
                     "cannot replay a macro inside an edit transaction");
@@ -493,7 +516,7 @@ static bool replay_one(Ed *ed, FlFn *fn)
             return false;
     }
     ok = fl_call_chunk(ed->fl, fn, SAG_SRC_REPLAY);
-    if (nested && !vm->host->edit_end(vm, ok))
+    if (split_run && !vm->host->edit_end(vm, ok))
         ok = false;
     return ok;
 }
