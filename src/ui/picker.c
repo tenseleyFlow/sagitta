@@ -40,6 +40,7 @@ typedef struct PickerState {
     FilterState filter;
     FzRanked ranked[SAG_FILTER_TOPK];
     u32 n_ranked;
+    u32 custom_matched;
     u32 total;
     /* A sliced rescan is still running; the footer says ` scanning…`
      * and the idle timer keeps calling sag_picker_tick. */
@@ -86,7 +87,11 @@ u32 sag_picker_shown(const Ed *ed)
     (void)ed;
     /* MATCHES, not drawn rows: the footer says "3/1043" about the
      * filtered set, and only 20 of those are ever on screen. */
-    return pk.active ? sag_filter_matched(&pk.filter_state) : 0U;
+    if (!pk.active)
+        return 0U;
+    return pk.spec.search_score == NULL
+               ? sag_filter_matched(&pk.filter_state)
+               : pk.custom_matched;
 }
 
 u32 sag_picker_total(const Ed *ed)
@@ -195,6 +200,71 @@ static void refresh_window(void)
                                  (u32)SAG_FILTER_TOPK);
 }
 
+static bool custom_better(const PickItem *items, u32 idx, i32 score,
+                          const FzRanked *prev, bool empty_pattern)
+{
+    const char *label;
+    const char *prev_label;
+    size_t len;
+    size_t prev_len;
+
+    if (score != prev->score)
+        return score > prev->score;
+    if (empty_pattern)
+        return false;
+    label = items[idx].label == NULL ? "" : items[idx].label;
+    prev_label = items[prev->idx].label == NULL
+                     ? "" : items[prev->idx].label;
+    len = strlen(label);
+    prev_len = strlen(prev_label);
+    if (len != prev_len)
+        return len < prev_len;
+    return strcmp(label, prev_label) < 0;
+}
+
+/* Small custom-search pickers rank directly into the same bounded visible
+ * window.  The callback owns the searchable representation, so neither the
+ * picker nor the caller has to flatten or duplicate large candidate text. */
+static void custom_refilter(const PickItem *items, u32 n,
+                            const char *pattern, u32 pattern_len)
+{
+    u32 i;
+
+    pk.n_ranked = 0U;
+    pk.custom_matched = 0U;
+    for (i = 0U; i < n; i++) {
+        i32 score = pattern_len == 0U
+                        ? 1
+                        : pk.spec.search_score(pk.spec.ctx,
+                                               items[i].payload,
+                                               pattern, pattern_len);
+        u32 at;
+        u32 k;
+
+        if (score == SAG_FZ_NO_MATCH)
+            continue;
+        pk.custom_matched++;
+        at = pk.n_ranked;
+        while (at > 0U &&
+               custom_better(items, i, score, &pk.ranked[at - 1U],
+                             pattern_len == 0U))
+            at--;
+        if (at >= (u32)SAG_FILTER_TOPK)
+            continue;
+        for (k = pk.n_ranked < (u32)SAG_FILTER_TOPK
+                     ? pk.n_ranked
+                     : (u32)SAG_FILTER_TOPK - 1U;
+             k > at; k--)
+            pk.ranked[k] = pk.ranked[k - 1U];
+        pk.ranked[at].idx = i;
+        pk.ranked[at].score = score;
+        (void)memset(&pk.ranked[at].m, 0, sizeof(pk.ranked[at].m));
+        if (pk.n_ranked < (u32)SAG_FILTER_TOPK)
+            pk.n_ranked++;
+    }
+    pk.scanning = false;
+}
+
 void sag_picker_refilter(Ed *ed)
 {
     const PickItem *items;
@@ -207,6 +277,7 @@ void sag_picker_refilter(Ed *ed)
     pk.total = n;
     if (n == 0U) {
         pk.n_ranked = 0U;
+        pk.custom_matched = 0U;
         pk.has_sel = false;
         pk.scanning = false;
         return;
@@ -215,6 +286,16 @@ void sag_picker_refilter(Ed *ed)
     /* Only OUR line is the pattern.  See PickerState.filter_open. */
     if (pk.filter_open)
         sag_cmdline_text(ed, &pk.text);
+    if (pk.spec.search_score != NULL) {
+        custom_refilter(items, n,
+                        pk.text.data == NULL ? "" :
+                                               (const char *)pk.text.data,
+                        (u32)pk.text.len);
+        if (!pk.has_sel)
+            sel_set_row(0U);
+        pk.scroll = 0U;
+        return;
+    }
     /*
      * An empty Bytebuf has a NULL data pointer, and the scorer reads a
      * NULL pattern as NO MATCH rather than as the empty pattern — so
@@ -254,7 +335,8 @@ bool sag_picker_tick(Ed *ed)
     const PickItem *items;
     u32 n = 0U;
 
-    if (!pk.active || !pk.scanning || ed == NULL)
+    if (!pk.active || !pk.scanning || ed == NULL ||
+        pk.spec.search_score != NULL)
         return false;
     items = pk.spec.items(pk.spec.ctx, &n);
     pk.scanning = sag_filter_step(&pk.filter_state, items,
@@ -722,14 +804,14 @@ void sag_picker_draw(Ed *ed, Rect area)
      */
     if (pk.spec.footer != NULL) {
         (void)snprintf(line, sizeof(line), " %u/%u%s   %s",
-                       (unsigned)sag_filter_matched(&pk.filter_state),
+                       (unsigned)sag_picker_shown(ed),
                        (unsigned)pk.total,
                        pk.scanning ? " scanning..." : "",
                        pk.spec.footer);
     } else {
         (void)snprintf(line, sizeof(line),
                        " %u/%u%s   up/down move . enter open . ^v split . esc",
-                       (unsigned)sag_filter_matched(&pk.filter_state),
+                       (unsigned)sag_picker_shown(ed),
                        (unsigned)pk.total,
                        pk.scanning ? " scanning..." : "");
     }

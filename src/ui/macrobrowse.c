@@ -25,17 +25,15 @@
 
 enum {
     MACRO_ROWS_MAX = 256,
-    /* Picker labels are both display and fuzzy-match storage.  Search spans
-     * the macro name/metadata plus as much normalized source as fits here;
-     * preview still reads the complete source without copying it. */
-    MACRO_MATCH_MAX = 1024
+    MACRO_LABEL_MAX = 256
 };
 
 typedef struct MacroBrowse {
     PickItem rows[MACRO_ROWS_MAX];
-    char labels[MACRO_ROWS_MAX][MACRO_MATCH_MAX];
+    char labels[MACRO_ROWS_MAX][MACRO_LABEL_MAX];
     u32 nrows;
     i32 confirm_delete;
+    Ed *ed;
 } MacroBrowse;
 
 static MacroBrowse mb;
@@ -194,6 +192,119 @@ static bool payload_library(Ed *ed, i32 payload, SagMacroEntryView *out)
     return sag_macrolib_at(ed, index, out);
 }
 
+static char search_byte(const char *name, size_t name_len,
+                        const u8 *source, size_t source_len, size_t at)
+{
+    u8 ch;
+
+    if (at < name_len)
+        return name[at];
+    if (at == name_len)
+        return ' ';
+    at -= name_len + 1U;
+    if (at >= source_len)
+        return '\0';
+    ch = source[at];
+    return ch == (u8)'\n' || ch == (u8)'\r' || ch == (u8)'\t'
+               ? ' ' : (char)ch;
+}
+
+static char search_fold(char ch)
+{
+    return ch >= 'A' && ch <= 'Z' ? (char)(ch + ('a' - 'A')) : ch;
+}
+
+static bool search_boundary(char ch)
+{
+    return ch == '/' || ch == '_' || ch == '-' || ch == '.';
+}
+
+/* Score the virtual `name + space + normalized full source` without
+ * flattening it.  This follows the shared fuzzy scorer's greedy score table;
+ * match highlighting remains confined to the visible metadata label. */
+static i32 score_macro_text(const char *pattern, u32 pattern_len,
+                            const char *name, const u8 *source,
+                            size_t source_len)
+{
+    size_t name_len = strlen(name);
+    size_t total;
+    size_t at;
+    u32 pi = 0U;
+    u32 run = 0U;
+    i64 score = 0;
+    bool started = false;
+    bool prefix;
+
+    if (pattern_len == 0U)
+        return 1;
+    if (source_len > SIZE_MAX - name_len - 1U)
+        return SAG_FZ_NO_MATCH;
+    total = name_len + 1U + source_len;
+    prefix = (size_t)pattern_len <= total;
+    if ((size_t)pattern_len > total)
+        return SAG_FZ_NO_MATCH;
+    for (at = 0U; at < (size_t)pattern_len; at++)
+        if (search_fold(pattern[at]) !=
+            search_fold(search_byte(name, name_len, source, source_len, at))) {
+            prefix = false;
+            break;
+        }
+    if (prefix && (size_t)pattern_len == total)
+        return 10000;
+    if (prefix)
+        return 5000;
+    for (at = 0U; at < total && pi < pattern_len; at++) {
+        char ch = search_byte(name, name_len, source, source_len, at);
+
+        if (search_fold(ch) != search_fold(pattern[pi])) {
+            run = 0U;
+            if (started)
+                score--;
+            continue;
+        }
+        started = true;
+        score += 100;
+        run++;
+        if (run >= 2U)
+            score += 50 * (i64)run;
+        if (at == 0U)
+            score += 200;
+        else if (search_boundary(search_byte(name, name_len, source,
+                                             source_len, at - 1U)))
+            score += 150;
+        pi++;
+    }
+    if (pi < pattern_len)
+        return SAG_FZ_NO_MATCH;
+    score -= (i64)total;
+    if (score <= (i64)SAG_FZ_NO_MATCH)
+        return SAG_FZ_NO_MATCH + 1;
+    return score > (i64)INT32_MAX ? INT32_MAX : (i32)score;
+}
+
+static i32 browser_search_score(void *ctx, i32 payload,
+                                const char *pattern, u32 pattern_len)
+{
+    MacroBrowse *browse = ctx;
+    const RegVal *value;
+    SagMacroEntryView library;
+
+    if (browse == NULL || browse->ed == NULL)
+        return SAG_FZ_NO_MATCH;
+    value = payload_reg(browse->ed, payload);
+    if (value != NULL) {
+        char name[2] = {(char)payload, '\0'};
+
+        return score_macro_text(pattern, pattern_len, name,
+                                value->bytes.data, value->bytes.len);
+    }
+    if (!payload_library(browse->ed, payload, &library))
+        return SAG_FZ_NO_MATCH;
+    return score_macro_text(pattern, pattern_len, library.name,
+                            (const u8 *)library.source,
+                            library.source_len);
+}
+
 static void browser_preview(Ed *ed, void *ctx, i32 payload, Rect r)
 {
     const RegVal *value = payload_reg(ed, payload);
@@ -321,11 +432,12 @@ static void build_register_rows(Ed *ed)
     u8 reg;
 
     (void)memset(&mb, 0, sizeof(mb));
+    mb.ed = ed;
     (void)sag_record_status(ed, &status);
     for (reg = (u8)'a'; reg <= (u8)'z'; reg++) {
         const RegVal *value = sag_reg_get(&ed->regs, reg);
         char *label;
-        size_t at;
+        char event_text[32];
         size_t out;
         u32 events;
 
@@ -334,22 +446,18 @@ static void build_register_rows(Ed *ed)
             continue;
         label = mb.labels[mb.nrows];
         events = sag_macro_event_count(value->bytes.data, value->bytes.len);
-        out = (size_t)snprintf(label, MACRO_MATCH_MAX,
-                              "%s %c   %s%u ev   %llu B   ",
+        if (events == 0U)
+            (void)snprintf(event_text, sizeof(event_text), "\xE2\x80\x94");
+        else
+            (void)snprintf(event_text, sizeof(event_text), "%u ev",
+                           (unsigned)events);
+        out = (size_t)snprintf(label, MACRO_LABEL_MAX,
+                              "%s %c   %s   %llu B",
                               status.active && status.reg == reg ? "\xE2\x97\x8F" : " ",
-                              (int)reg, events == 0U ? "" : "",
-                              (unsigned)events,
+                              (int)reg, event_text,
                               (unsigned long long)value->bytes.len);
-        if (out >= MACRO_MATCH_MAX)
-            out = MACRO_MATCH_MAX - 1U;
-        for (at = 0U; at < value->bytes.len && out + 1U < MACRO_MATCH_MAX;
-             at++) {
-            u8 ch = value->bytes.data[at];
-
-            label[out++] = ch == (u8)'\n' || ch == (u8)'\r' ||
-                                   ch == (u8)'\t' ? ' ' : (char)ch;
-        }
-        label[out] = '\0';
+        if (out >= MACRO_LABEL_MAX)
+            label[MACRO_LABEL_MAX - 1U] = '\0';
         mb.rows[mb.nrows] = (PickItem){label, NULL, (i32)reg, 0U};
         mb.nrows++;
     }
@@ -360,26 +468,24 @@ static void build_register_rows(Ed *ed)
         for (i = 0U; i < count && mb.nrows < MACRO_ROWS_MAX; i++) {
             SagMacroEntryView entry;
             char *label;
+            char event_text[32];
             size_t out;
-            size_t at;
 
             if (!sag_macrolib_at(ed, i, &entry) || !entry.replayable)
                 continue;
             label = mb.labels[mb.nrows];
-            out = (size_t)snprintf(label, MACRO_MATCH_MAX,
-                                   "  %s   %s   %llu B   ", entry.name,
-                                   entry.events == 0U ? "\xE2\x80\x94 ev" : "events",
+            if (entry.events == 0U)
+                (void)snprintf(event_text, sizeof(event_text),
+                               "\xE2\x80\x94");
+            else
+                (void)snprintf(event_text, sizeof(event_text), "%u ev",
+                               (unsigned)entry.events);
+            out = (size_t)snprintf(label, MACRO_LABEL_MAX,
+                                   "  %s   %s   %llu B", entry.name,
+                                   event_text,
                                    (unsigned long long)entry.source_len);
-            if (out >= MACRO_MATCH_MAX)
-                out = MACRO_MATCH_MAX - 1U;
-            for (at = 0U; at < entry.source_len &&
-                         out + 1U < MACRO_MATCH_MAX; at++) {
-                u8 ch = (u8)entry.source[at];
-
-                label[out++] = ch == (u8)'\n' || ch == (u8)'\r' ||
-                                       ch == (u8)'\t' ? ' ' : (char)ch;
-            }
-            label[out] = '\0';
+            if (out >= MACRO_LABEL_MAX)
+                label[MACRO_LABEL_MAX - 1U] = '\0';
             mb.rows[mb.nrows] = (PickItem){label, entry.path,
                                            -(i32)i - 1, 0U};
             mb.nrows++;
@@ -461,6 +567,7 @@ CmdStatus sag_macro_cmd_list(CmdCtx *cx)
     spec.preview = browser_preview;
     spec.accept = browser_accept;
     spec.action = browser_action;
+    spec.search_score = browser_search_score;
     spec.footer = "enter replay . e edit . y yank . d clear . n name . / filter . esc";
     spec.filter_requires_slash = true;
     spec.ctx = &mb;

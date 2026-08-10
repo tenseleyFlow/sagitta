@@ -108,6 +108,12 @@ typedef struct PickerSpec {
     /* Optional picker-specific keys.  Called before printable text is
      * offered to the shared filter line.  Returning true consumes the key. */
     bool (*action)(Ed *ed, void *ctx, i32 payload, const Key *key);
+    /* Optional allocation-free scorer for candidates whose searchable
+     * text is larger or different from the visible label.  Return
+     * SAG_FZ_NO_MATCH to exclude the item.  Existing pickers use the
+     * shared incremental label filter when this is NULL. */
+    i32 (*search_score)(void *ctx, i32 payload,
+                        const char *pattern, u32 pattern_len);
     /* NULL keeps the standard picker footer. */
     const char *footer;
     bool path_mode; /* §2's two-pass basename rule */
