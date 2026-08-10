@@ -64,6 +64,9 @@ enum {
      * SAG_PICKER_MIN_COLS and there is no honest way to draw a list, so
      * the picker refuses rather than drawing a 6-cell box. */
     SAG_PICKER_MAX_W = 80,
+    /* Preview pickers may widen enough to give both columns useful space;
+     * ordinary pickers retain SAG_PICKER_MAX_W's established cap. */
+    SAG_PICKER_PREVIEW_MAX_W = 160,
     SAG_PICKER_MAX_H = 20,
     SAG_PICKER_MIN_COLS = 24,
     SAG_PICKER_MIN_ROWS = 6,

@@ -24,6 +24,7 @@
 #include "term/input.h"
 #include "ui/layout.h"
 #include "ui/picker.h"
+#include "ui/region.h"
 #include "util/arena.h"
 
 /* ---------------------------------------------------------------- */
@@ -48,6 +49,8 @@ static const PickItem *pk_items(void *ctx, u32 *n)
 
 static i32 g_accepted;
 static u8 g_accept_how;
+static u32 g_preview_calls;
+static Rect g_preview_rect;
 
 static bool pk_accept(Ed *ed, void *ctx, i32 payload, u8 how)
 {
@@ -56,6 +59,15 @@ static bool pk_accept(Ed *ed, void *ctx, i32 payload, u8 how)
     g_accepted = payload;
     g_accept_how = how;
     return true;
+}
+
+static void pk_preview(Ed *ed, void *ctx, i32 payload, Rect r)
+{
+    (void)ed;
+    (void)ctx;
+    (void)payload;
+    g_preview_calls++;
+    g_preview_rect = r;
 }
 
 static void pk_make(PkFix *f)
@@ -452,11 +464,48 @@ void test_picker_draw_fits_the_grid(void)
         {"\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e.c", "cjk", 3, 0U}
     };
     PkFix f;
+    PickerSpec spec;
+    Region hit;
 
     pk_make(&f);
+    sag_grid_free(&f.ed.grid);
+    SAG_ASSERT(sag_grid_init(&f.ed.grid, &f.ed.interner, 24U, 200U));
+    sag_layout_compute(f.ed.pane_root, (Rect){0U, 0U, 200U, 24U});
+
+    /* Ordinary pickers preserve the established centered 80-column cap. */
     pk_open(&f, items, 3U, true);
-    sag_picker_draw(&f.ed, (Rect){0U, 0U, 80U, 24U});
+    sag_region_frame_begin();
+    sag_picker_draw(&f.ed, (Rect){0U, 0U, 200U, 24U});
+    hit = sag_region_hit(21U, 2U);
+    SAG_ASSERT_EQ_I64(hit.kind, SAG_REGION_NONE);
+    hit = sag_region_hit(61U, 2U);
+    SAG_ASSERT_EQ_I64(hit.kind, SAG_REGION_BLOCK);
+    sag_picker_close(&f.ed, false);
+
+    /* A preview-enabled picker uses the wider bounded layout and the
+     * callback receives a real slot beside the list. */
+    f.items = items;
+    f.n = 3U;
+    (void)memset(&spec, 0, sizeof(spec));
+    spec.title = "Preview";
+    spec.items = pk_items;
+    spec.preview = pk_preview;
+    spec.accept = pk_accept;
+    spec.path_mode = true;
+    spec.ctx = &f;
+    g_preview_calls = 0U;
+    g_preview_rect = (Rect){0U, 0U, 0U, 0U};
+    sag_picker_open(&f.ed, &spec);
+    sag_region_frame_begin();
+    sag_picker_draw(&f.ed, (Rect){0U, 0U, 200U, 24U});
+    SAG_ASSERT_EQ_U64(g_preview_calls, 1U);
+    SAG_ASSERT_EQ_U64(g_preview_rect.w, 78U);
+    SAG_ASSERT_EQ_U64(g_preview_rect.h, 16U);
+    hit = sag_region_hit(21U, 2U);
+    SAG_ASSERT_EQ_I64(hit.kind, SAG_REGION_BLOCK);
+
     /* And in a narrow box, where the detail column is dropped. */
     sag_picker_draw(&f.ed, (Rect){0U, 0U, 30U, 12U});
+    SAG_ASSERT_EQ_U64(g_preview_calls, 1U);
     pk_remove(&f);
 }

@@ -716,18 +716,29 @@ void sag_picker_draw(Ed *ed, Rect area)
     u16 i;
     u32 cur;
     u16 row_width;
-    char line[SAG_PICKER_MAX_W + 64];
+    char line[SAG_PICKER_PREVIEW_MAX_W + 64];
+    u16 max_w;
 
     if (!pk.active || ed == NULL || area.w == 0U || area.h == 0U)
         return;
     if (!pk.spec.filter_requires_slash || pk.filter_open)
         ensure_filter(ed);
-    w = area.w < (u16)SAG_PICKER_MAX_W ? area.w : (u16)SAG_PICKER_MAX_W;
-    if (w > area.w - 2U)
-        w = (u16)(area.w > 2U ? area.w - 2U : area.w);
+    max_w = pk.spec.preview == NULL ? (u16)SAG_PICKER_MAX_W
+                                     : (u16)SAG_PICKER_PREVIEW_MAX_W;
+    w = area.w < max_w ? area.w : max_w;
+    if (area.w > 2U) {
+        if (w > area.w - 2U)
+            w = (u16)(area.w - 2U);
+    } else {
+        w = area.w;
+    }
     h = area.h < (u16)SAG_PICKER_MAX_H ? area.h : (u16)SAG_PICKER_MAX_H;
-    if (h > area.h - 2U)
-        h = (u16)(area.h > 2U ? area.h - 2U : area.h);
+    if (area.h > 2U) {
+        if (h > area.h - 2U)
+            h = (u16)(area.h - 2U);
+    } else {
+        h = area.h;
+    }
     x0 = (u16)(area.x + (area.w - w) / 2U);
     y0 = (u16)(area.y + (area.h - h) / 2U);
     pk.box = (Rect){x0, y0, w, h};
