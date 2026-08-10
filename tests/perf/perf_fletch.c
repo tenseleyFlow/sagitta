@@ -38,12 +38,14 @@
 
 #include "edit/bind.h"
 #include "edit/ed.h"
+#include "edit/option.h"
 #include "fl/compile.h"
 #include "fl/flapi.h"
 #include "fl/flconf.h"
 #include "fl/gc.h"
 #include "fl/handle.h"
 #include "fl/fltxn.h"
+#include "fl/macrolib.h"
 #include "fl/opcodes.h"
 #include "fl/parse.h"
 #include "fl/std.h"
@@ -66,7 +68,9 @@ enum {
     GATE_STARTUP_NS = 2000000,        /* 2 ms   */
     GATE_CONFIG_NS = 1000000,         /* 1 ms   */
     GATE_CONFIG_RELOAD_NS = 5000000,  /* 5 ms   */
+    GATE_MACROLIB_SCAN_NS = 5000000,  /* 5 ms   */
     CONFIG_RELOAD_BINDS = 500,
+    MACROLIB_FILES = 200,
     MOTION_ITERS = 1000000,
     GATE_MOTION_NS_PER_OP = 1000,     /* 1 us   */
     QUERY_ITERS = 1000000,
@@ -489,6 +493,118 @@ static void make_reload_fixture(char *path)
         (void)fprintf(stderr, "perf_fletch: cannot close reload fixture\n");
         exit(1);
     }
+}
+
+typedef struct MacroLibArg {
+    Ed ed;
+    Arena diag_arena;
+    DiagCtx dc;
+    char root[160];
+    bool ed_initialized;
+    bool arena_initialized;
+} MacroLibArg;
+
+static void macrolib_path(const MacroLibArg *arg, u32 index, char *path,
+                          size_t cap)
+{
+    (void)snprintf(path, cap, "%s/macro%03u.fl", arg->root,
+                   (unsigned)index);
+}
+
+static void macrolib_fixture_close(MacroLibArg *arg)
+{
+    u32 i;
+
+    if (arg->ed_initialized)
+        sag_ed_free(&arg->ed);
+    if (arg->arena_initialized)
+        arena_free_all(&arg->diag_arena);
+    for (i = 0U; i < MACROLIB_FILES; i++) {
+        char path[256];
+
+        macrolib_path(arg, i, path, sizeof(path));
+        (void)unlink(path);
+    }
+    (void)rmdir(arg->root);
+}
+
+static void macrolib_fixture_open(MacroLibArg *arg)
+{
+    static const char source[] = "fn run() { return 1 }\n";
+    OptVal value = {0};
+    const char *err = NULL;
+    u32 i;
+
+    (void)memset(arg, 0, sizeof(*arg));
+    (void)snprintf(arg->root, sizeof(arg->root),
+                   "/tmp/sagitta-perf-macrolib.XXXXXX");
+    if (mkdtemp(arg->root) == NULL) {
+        (void)fprintf(stderr,
+                      "perf_fletch: cannot create macro-library fixture\n");
+        exit(1);
+    }
+    for (i = 0U; i < MACROLIB_FILES; i++) {
+        char path[256];
+        FILE *fp;
+        bool wrote;
+        bool closed;
+
+        macrolib_path(arg, i, path, sizeof(path));
+        fp = fopen(path, "wb");
+        if (fp == NULL) {
+            macrolib_fixture_close(arg);
+            (void)fprintf(stderr,
+                          "perf_fletch: cannot write macro-library fixture\n");
+            exit(1);
+        }
+        wrote = fwrite(source, 1U, sizeof(source) - 1U, fp) ==
+                sizeof(source) - 1U;
+        closed = fclose(fp) == 0;
+        if (!wrote || !closed) {
+            macrolib_fixture_close(arg);
+            (void)fprintf(stderr,
+                          "perf_fletch: cannot write macro-library fixture\n");
+            exit(1);
+        }
+    }
+    arena_init(&arg->diag_arena);
+    arg->arena_initialized = true;
+    fl_diag_init(&arg->dc, &arg->diag_arena);
+    fl_diag_set_sink(&arg->dc, quiet, arg);
+    sag_ed_init(&arg->ed);
+    arg->ed_initialized = true;
+    if (!sag_ed_open_scratch(&arg->ed)) {
+        macrolib_fixture_close(arg);
+        (void)fprintf(stderr, "perf_fletch: cannot open macro scratch\n");
+        exit(1);
+    }
+    value.type = (u8)SAG_OPT_STR;
+    value.as.str.s = arg->root;
+    value.as.str.len = (u32)strlen(arg->root);
+    if (!sag_opt_set(&arg->ed, SAG_OPT_GLOBAL, "macro.dir", 9U, &value,
+                     &err)) {
+        macrolib_fixture_close(arg);
+        (void)fprintf(stderr, "perf_fletch: cannot set macro.dir: %s\n",
+                      err == NULL ? "?" : err);
+        exit(1);
+    }
+}
+
+static u64 sample_macrolib_scan(void *ud)
+{
+    MacroLibArg *arg = ud;
+    u64 t0 = now_ns();
+    u32 loaded = sag_macrolib_scan(&arg->ed, &arg->dc);
+    u64 dt = now_ns() - t0;
+
+    if (loaded != MACROLIB_FILES) {
+        (void)fprintf(stderr,
+                      "perf_fletch: macro scan loaded %u of %u files\n",
+                      (unsigned)loaded, (unsigned)MACROLIB_FILES);
+        macrolib_fixture_close(arg);
+        exit(1);
+    }
+    return dt;
 }
 
 /* ---------------------------------------------------------------- */
@@ -961,6 +1077,17 @@ int main(int argc, char **argv)
                 "real reload with 500 user binds plus shipped defaults");
         measure(b, sample_config_reload, &config);
         (void)unlink(reload_path);
+
+        {
+            MacroLibArg macrolib;
+
+            macrolib_fixture_open(&macrolib);
+            b = add("macrolib_scan_200", true,
+                    (u64)GATE_MACROLIB_SCAN_NS,
+                    "rescan + compile 200 valid macro files");
+            measure(b, sample_macrolib_scan, &macrolib);
+            macrolib_fixture_close(&macrolib);
+        }
 
         a.name = "motion";
         a.src = SRC_MOTION;
