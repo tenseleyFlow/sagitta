@@ -7,6 +7,11 @@
 #include "util/buf.h"
 
 typedef struct {
+    const char *text;
+    size_t name_len;
+} SagGrantArg;
+
+typedef struct {
     bool version;
     bool help;
     bool help_cmds;
@@ -17,10 +22,17 @@ typedef struct {
     const char *batch_script;
     const char **files;
     size_t nfiles;
+    const char **batch_args;
+    size_t nbatch_args;
+    bool test;
+    bool quiet;
+    SagGrantArg *grants;
+    size_t ngrants;
     bool selftest_bug;
 } SagArgs;
 
 /* Return an exit code, or -1 when the driver should proceed. */
 int sag_args_parse(SagArgs *out, int argc, char **argv, Bytebuf *err);
+void sag_args_free(SagArgs *args);
 
 #endif
