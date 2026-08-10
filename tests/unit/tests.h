@@ -1570,4 +1570,10 @@ void test_trust_bare_string_upgrades_and_output_sorts(void);
 void test_trust_truncated_load_does_not_clobber_live_db(void);
 void test_trust_no_tty_never_requests_prompt(void);
 
+void test_macro_header_parses_all_five_fields(void);
+void test_macro_header_accepts_missing_optional_fields(void);
+void test_macro_header_unknown_schema_is_skipped(void);
+void test_macro_header_absent_header_still_loads(void);
+void test_macro_header_keymap_is_provenance_not_execution_policy(void);
+
 #endif
