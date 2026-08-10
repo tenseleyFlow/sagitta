@@ -3,9 +3,9 @@ size 80x24 alt=1 cursor=0,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=5
 --- text
     1 alpha
-    1 beta
-    2 gam New Tab Group 
-    3     name: sag-s24-grp/
+    2 beta
+    3 gam New Tab Group 
+    4     name: sag-s24-grp/
           /tmp/sag-s24-grp
 
               ../

@@ -3,10 +3,10 @@ size 80x24 alt=1 cursor=12,47 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
 --- text
     1 alpha beta gamma
-    1 delta epsilon
-    2 zeta eta theta iota
-    3 kappa
-    4
+    2 delta epsilon
+    3 zeta eta theta iota
+    4 kappa
+    5
 
 
 
@@ -15,10 +15,10 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
 
 ────────────────────────────────────────────────────────────────────────────────
     1 alpha beta gamma                  │      alpha beta gamma
-    1 delta epsilon                     │      delta epsilon
-    2 zeta eta theta iota               │      zeta eta theta iota
-    3 kappa                             │      kappa
-    4                                   │
+    2 delta epsilon                     │      delta epsilon
+    3 zeta eta theta iota               │      zeta eta theta iota
+    4 kappa                             │      kappa
+    5                                   │
                                         │
                                         │
                                         │

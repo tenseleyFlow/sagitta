@@ -3,10 +3,10 @@ size 80x24 alt=1 cursor=0,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=5
 --- text
     1 alpha beta gamma
-    1 delta epsilon
-    2 zet New Tab Group 
-    3 kap name: sag-s24-grp/
-    4     /tmp/sag-s24-grp
+    2 delta epsilon
+    3 zet New Tab Group 
+    4 kap name: sag-s24-grp/
+    5     /tmp/sag-s24-grp
 
               ../
           [x] one.txt

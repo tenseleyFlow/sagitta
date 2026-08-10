@@ -3,8 +3,8 @@ size 80x24 alt=1 cursor=0,14 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- text
     1 a漢 b👨‍👩‍👧‍👦z
-    1 tail
-    2
+    2 tail
+    3
 
 
 

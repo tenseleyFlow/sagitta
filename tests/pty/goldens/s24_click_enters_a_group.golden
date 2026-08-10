@@ -5,7 +5,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=11
 [1: pty-s14-s24_click_en[sag-s24-grp/ (3)]
  one.txt three.txt two.txt
     1 one.txt
-    1
+    2
 
 
 

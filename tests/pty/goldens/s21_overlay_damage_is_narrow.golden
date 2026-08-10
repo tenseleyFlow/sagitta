@@ -3,12 +3,12 @@ size 80x24 alt=1 cursor=23,4 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=3
 --- text
     1 aaa nail one
-    1 bbb two
-    2 ccc three
-    3 ddd four
-    4 eee five
-    5 fff nail six
-    6
+    2 bbb two
+    3 ccc three
+    4 ddd four
+    5 eee five
+    6 fff nail six
+    7
 
 
 

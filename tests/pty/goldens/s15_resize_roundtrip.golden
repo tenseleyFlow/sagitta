@@ -2,29 +2,29 @@
 size 80x24 alt=1 cursor=20,30 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=3
 --- text
-   20 line 05 epsilon
-   19 line 06 zeta
-   18 line 07 eta
-   17 line 08 theta
-   16 line 09 iota
-   15 line 10 kappa
-   14 line 11 lambda
-   13 line 12 mu
-   12 line 13 nu
-   11 line 14 xi
-   10 line 15 omicron
-    9 line 16 pi
-    8 line 17 rho
-    7 line 18 sigma
-    6 line 19 tau
-    5 line 20 upsilon
-    4 line 21 phi
-    3 line 22 chi
-    2 line 23 psi
-    1 line 24 omega
+    5 line 05 epsilon
+    6 line 06 zeta
+    7 line 07 eta
+    8 line 08 theta
+    9 line 09 iota
+   10 line 10 kappa
+   11 line 11 lambda
+   12 line 12 mu
+   13 line 13 nu
+   14 line 14 xi
+   15 line 15 omicron
+   16 line 16 pi
+   17 line 17 rho
+   18 line 18 sigma
+   19 line 19 tau
+   20 line 20 upsilon
+   21 line 21 phi
+   22 line 22 chi
+   23 line 23 psi
+   24 line 24 omega
    25 line 25 漢字 tab    here
-    1 line 26 tail
-    2
+   26 line 26 tail
+   27
  L  pty-s14-s15_resize_roundtrip.txt                       utf-8  lf  25:20  bot
 --- style
 AAAAAAAAAAAAAAAAAAAAA

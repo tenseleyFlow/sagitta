@@ -3,12 +3,12 @@ size 80x24 alt=1 cursor=0,57 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
 --- text
     1 alpha one                                   │a one alpha one
-    1 beta two                                    │ two  beta two
-    2 gamma three                                 │a thregamma three
-    3 delta four                                  │a fourdelta four
-    4 epsilon five                                │lon fiepsilon five
-    5 zeta six                                    │ six  zeta six
-    6                                             │
+    2 beta two                                    │ two  beta two
+    3 gamma three                                 │a thregamma three
+    4 delta four                                  │a fourdelta four
+    5 epsilon five                                │lon fiepsilon five
+    6 zeta six                                    │ six  zeta six
+    7                                             │
                                                   │
                                                   │
                                                   │

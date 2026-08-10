@@ -3,9 +3,9 @@ size 80x24 alt=1 cursor=0,47 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- text
     1 漢字 wide text here               │      漢字 wide text here
-    1 ascii line two                    │      ascii line two
-    2 😀 emoji lead                     │      😀 emoji lead
-    3                                   │
+    2 ascii line two                    │      ascii line two
+    3 😀 emoji lead                     │      😀 emoji lead
+    4                                   │
                                         │
                                         │
                                         │

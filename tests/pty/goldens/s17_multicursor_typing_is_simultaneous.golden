@@ -3,13 +3,13 @@ size 80x24 alt=1 cursor=0,7 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- text
     1 Xaa
-    1 Xbb
-    2 Xcc
-    3 Xdd
-    4 Xee
-    5 Xff
-    6 Xgg
-    7
+    2 Xbb
+    3 Xcc
+    4 Xdd
+    5 Xee
+    6 Xff
+    7 Xgg
+    8
 
 
 

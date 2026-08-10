@@ -3,7 +3,7 @@ size 80x24 alt=0 cursor=0,6 vis=1
 modes - kitty=0 sync_pairs=0
 --- text
     1 signal
-    1
+    2
 
 
 

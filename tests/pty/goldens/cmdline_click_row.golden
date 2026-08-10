@@ -3,7 +3,7 @@ size 80x24 alt=1 cursor=23,10 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=3
 --- text
     1 click fixture
-    1
+    2
 
 
 
@@ -24,7 +24,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=3
   file.next                    Walk to the next open file                       
 > file.open                    Sprint 23: open a file                           
   file.prev                    Walk to the previous open file                   
-  file.save                    Atomically save the active file              3/13
+  file.save                    Atomically save the active file              3/14
 :file.open                                                                      
 --- style
 AAAAAAAAAAAAAAAAAAA

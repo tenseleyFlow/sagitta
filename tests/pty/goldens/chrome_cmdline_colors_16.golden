@@ -3,7 +3,7 @@ size 80x24 alt=1 cursor=23,3 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- text
     1 completion fixture
-    1
+    2
 
 
 
@@ -20,12 +20,12 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 
 
 
+> fl                           fl.eval                                          
   find                         find.file                                        
+  fl.eval                      Evaluate Fletch in the persistent editor runtime 
   file.new                     Create an empty buffer, optionally naming its fil
-  file.next                    Walk to the next open file                       
-  file.open                    Sprint 23: open a file                           
-  file.prev                    Walk to the previous open file                   
-:find                                                                           
+  file.next                    Walk to the next open file                   1/54
+:fl                                                                             
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAA
 AAAAA
@@ -46,16 +46,16 @@ AAAAA
 
 
 BBCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-BBCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-BBCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 DDEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-FGGDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+DDEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+DDEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+DDEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+FGGDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 --- legend
 A fg=default bg=default attrs=----------
-B fg=idx:7 bg=idx:1 attrs=b---------
-C fg=idx:7 bg=idx:1 attrs=b--u------
-D fg=idx:7 bg=idx:1 attrs=bd--------
-E fg=idx:7 bg=idx:1 attrs=bd-u------
+B fg=idx:1 bg=idx:7 attrs=b---------
+C fg=idx:1 bg=idx:7 attrs=b--u------
+D fg=idx:7 bg=idx:1 attrs=b---------
+E fg=idx:7 bg=idx:1 attrs=b--u------
 F fg=idx:0 bg=idx:3 attrs=b---------
 G fg=idx:7 bg=idx:1 attrs=----------

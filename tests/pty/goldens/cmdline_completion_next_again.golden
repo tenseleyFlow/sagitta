@@ -1,9 +1,9 @@
 # sagitta pty golden v1
-size 80x24 alt=1 cursor=23,9 vis=1
+size 80x24 alt=1 cursor=23,8 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
 --- text
     1 completion fixture
-    1
+    2
 
 
 
@@ -20,12 +20,12 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
 
 
 
+  fl                           fl.eval                                          
   find                         find.file                                        
-> file.new                     Create an empty buffer, optionally naming its fil
-  file.next                    Walk to the next open file                       
-  file.open                    Sprint 23: open a file                           
-  file.prev                    Walk to the previous open file               2/21
-:file.new                                                                       
+> fl.eval                      Evaluate Fletch in the persistent editor runtime 
+  file.new                     Create an empty buffer, optionally naming its fil
+  file.next                    Walk to the next open file                   3/54
+:fl.eval                                                                        
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAA
 AAAAA
@@ -45,19 +45,17 @@ AAAAA
 
 
 
-BBCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-DDEEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
-BBCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-FFGGFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
-BBCCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-HIIIIIIIIBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+DDEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+BBCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+FGGGGGGGBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 --- legend
 A fg=default bg=default attrs=----------
 B fg=#f7e0cc bg=#4e2a0f attrs=b---------
 C fg=#f7e0cc bg=#4e2a0f attrs=b--u------
 D fg=#4e2a0f bg=#f7e0cc attrs=b---------
 E fg=#4e2a0f bg=#f7e0cc attrs=b--u------
-F fg=#f7e0cc bg=#4e2a0f attrs=bd--------
-G fg=#f7e0cc bg=#4e2a0f attrs=bd-u------
-H fg=#2f1806 bg=#e77d24 attrs=b---------
-I fg=#f7e0cc bg=#4e2a0f attrs=----------
+F fg=#2f1806 bg=#e77d24 attrs=b---------
+G fg=#f7e0cc bg=#4e2a0f attrs=----------

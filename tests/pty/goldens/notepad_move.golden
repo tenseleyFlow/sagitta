@@ -4,8 +4,8 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- text
     1 alpha
     2 beta
-    1 gamma
-    2
+    3 gamma
+    4
 
 
 

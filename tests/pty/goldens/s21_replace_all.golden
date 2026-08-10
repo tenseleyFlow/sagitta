@@ -3,12 +3,12 @@ size 80x24 alt=1 cursor=0,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=3
 --- text
     1 alpha THREAD one
-    1 beta two
-    2 gamma THREAD three
-    3 delta four
-    4 epsilon five
-    5 zeta THREAD six
-    6
+    2 beta two
+    3 gamma THREAD three
+    4 delta four
+    5 epsilon five
+    6 zeta THREAD six
+    7
 
 
 
@@ -25,7 +25,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=3
 
 
 
- L  pty-s14-s21_replace_all.txt *                            utf-8  lf  1:1  all
+ L 3 replacements on 3 lines                                                    
 --- style
 AAAAAAAAAAAAAAAAAAAAAA
 AAAAAAAAAAAAAA

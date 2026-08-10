@@ -3,7 +3,7 @@ size 80x24 alt=1 cursor=23,3 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- text
     1 completion fixture
-    1
+    2
 
 
 
@@ -20,12 +20,12 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 
 
 
+> fl                           fl.eval                                          
   find                         find.file                                        
+  fl.eval                      Evaluate Fletch in the persistent editor runtime 
   file.new                     Create an empty buffer, optionally naming its fil
-  file.next                    Walk to the next open file                       
-  file.open                    Sprint 23: open a file                           
-  file.prev                    Walk to the previous open file                   
-:find                                                                           
+  file.next                    Walk to the next open file                   1/54
+:fl                                                                             
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAA
 AAAAA
@@ -48,12 +48,10 @@ AAAAA
 BBCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 BBCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 BBCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-DDEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 BBCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-BAADDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BBCBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+BAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 --- legend
 A fg=default bg=default attrs=----------
 B fg=default bg=default attrs=b---------
 C fg=default bg=default attrs=b--u------
-D fg=default bg=default attrs=bd--------
-E fg=default bg=default attrs=bd-u------

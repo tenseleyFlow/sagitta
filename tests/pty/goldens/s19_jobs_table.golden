@@ -3,8 +3,8 @@ size 80x24 alt=1 cursor=0,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
     1  id  state     code  elapsed    bytes  command
-    1   1  exited       0    1.24s        4  printf 'one\n'
-    2
+    2   1  exited       0    1.24s        4  printf 'one\n'
+    3
 
 
 

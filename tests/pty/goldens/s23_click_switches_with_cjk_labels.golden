@@ -4,9 +4,9 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=7
 --- text
 [1: pty-s14-s23_click_sw[2: 漢字.txt][3: 日本.txt]
     1 alpha
-    1 beta
-    2 gamma
-    3
+    2 beta
+    3 gamma
+    4
 
 
 

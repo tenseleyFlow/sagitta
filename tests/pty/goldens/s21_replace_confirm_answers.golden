@@ -2,13 +2,13 @@
 size 80x24 alt=1 cursor=5,17 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=6
 --- text
-    5 alpha thread one
-    4 beta two
+    1 alpha thread one
+    2 beta two
     3 gamma needle three
-    2 delta four
-    1 epsilon five
+    4 delta four
+    5 epsilon five
     6 zeta thread six
-    1
+    7
 
 
 

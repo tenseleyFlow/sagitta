@@ -3,28 +3,28 @@ size 80x24 alt=1 cursor=0,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=3
 --- text
     1 l01                               │      l04
-    1 l02                               │      l05
-    2 l03                               │      l06
-    3 l04                               │      l07
-    4 l05                               │      l08
-    5 l06                               │      l09
-    6 l07                               │      l10
-    7 l08                               │      l11
-    8 l09                               │      l12
-    9 l10                               │      l13
-   10 l11                               │      l14
-   11 l12                               │      l15
-   12 l13                               │      l16
-   13 l14                               │      l17
-   14 l15                               │      l18
-   15 l16                               │      l19
-   16 l17                               │      l20
-   17 l18                               │      l21
-   18 l19                               │      l22
-   19 l20                               │      l23
-   20 l21                               │      l24
-   21 l22                               │      l25
-   22 l23                               │      l26
+    2 l02                               │      l05
+    3 l03                               │      l06
+    4 l04                               │      l07
+    5 l05                               │      l08
+    6 l06                               │      l09
+    7 l07                               │      l10
+    8 l08                               │      l11
+    9 l09                               │      l12
+   10 l10                               │      l13
+   11 l11                               │      l14
+   12 l12                               │      l15
+   13 l13                               │      l16
+   14 l14                               │      l17
+   15 l15                               │      l18
+   16 l16                               │      l19
+   17 l17                               │      l20
+   18 l18                               │      l21
+   19 l19                               │      l22
+   20 l20                               │      l23
+   21 l21                               │      l24
+   22 l22                               │      l25
+   23 l23                               │      l26
  L  pty-s14-s27_wheel_unfocused_pane.txt                     utf-8  lf  1:1  top
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABAAAAAAAAA

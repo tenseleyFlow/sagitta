@@ -3,9 +3,9 @@ size 80x24 alt=1 cursor=0,12 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
 --- text
     1 漢 abcdefghij                     │      漢 abcdefghij
-    1 second line here                  │      second line here
-    2 third line here                   │      third line here
-    3                                   │
+    2 second line here                  │      second line here
+    3 third line here                   │      third line here
+    4                                   │
                                         │
                                         │
                                         │

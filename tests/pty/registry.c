@@ -356,7 +356,24 @@ static void settle_sync_delta(PtyCtx *c, u32 before, u32 delta,
 static void force_quit(PtyCtx *c)
 {
     ptc_allow_restore(c);
-    ptc_keys(c, "esc q !");
+    ptc_keys(c, "esc");
+    ptc_settle(c, 0);
+    ptc_keys(c, ":");
+    ptc_settle(c, 0);
+    ptc_bytes(c, "ed.quit_force");
+    ptc_keys(c, "enter");
+    ptc_expect_exit(c, 0);
+}
+
+static void quit_editor_cleanly(PtyCtx *c)
+{
+    ptc_allow_restore(c);
+    ptc_keys(c, "esc");
+    ptc_settle(c, 0);
+    ptc_keys(c, ":");
+    ptc_settle(c, 0);
+    ptc_bytes(c, "ed.quit");
+    ptc_keys(c, "enter");
     ptc_expect_exit(c, 0);
 }
 
@@ -450,7 +467,7 @@ static void case_notepad_open(PtyCtx *c)
         return;
     spawn_editor(c, path);
     ptc_snapshot(c, "notepad_open");
-    quit_cleanly(c);
+    quit_editor_cleanly(c);
     (void)unlink(path);
 }
 
@@ -465,7 +482,7 @@ static void case_notepad_move(PtyCtx *c)
     ptc_keys(c, "down right");
     ptc_settle(c, 0);
     ptc_snapshot(c, "notepad_move");
-    quit_cleanly(c);
+    quit_editor_cleanly(c);
     (void)unlink(path);
 }
 
@@ -524,7 +541,7 @@ static void case_notepad_save(PtyCtx *c)
     ptc_check(c, file_equals(path, expected, sizeof(expected) - 1U),
               "live save did not write the edited bytes");
     ptc_snapshot(c, "notepad_save");
-    quit_cleanly(c);
+    quit_editor_cleanly(c);
     (void)unlink(path);
 }
 
@@ -565,8 +582,13 @@ static void dirty_prompt(PtyCtx *c, NotepadGolden golden, char answer)
         return;
     spawn_editor(c, path);
     before = c->vt.nsync_pairs;
-    ptc_keys(c, "i X esc q");
-    settle_sync_delta(c, before, 2U, 600);
+    ptc_keys(c, "i X esc");
+    settle_sync_delta(c, before, 1U, 0);
+    ptc_keys(c, ":");
+    ptc_settle(c, 0);
+    ptc_bytes(c, "ed.quit");
+    ptc_keys(c, "enter");
+    ptc_settle(c, 600);
     notepad_snapshot(c, golden);
     if (answer == 'w') {
         ptc_allow_restore(c);
@@ -665,11 +687,11 @@ static void recovery_prompt(PtyCtx *c, NotepadGolden golden, char answer)
     } else if (answer == 'd') {
         ptc_keys(c, answer_spec);
         ptc_settle(c, 0);
-        quit_cleanly(c);
+        quit_editor_cleanly(c);
     } else {
         ptc_keys(c, "esc");
         ptc_settle(c, 0);
-        quit_cleanly(c);
+        quit_editor_cleanly(c);
     }
     (void)unlink(path);
 }
@@ -717,7 +739,7 @@ static void preserve_case(PtyCtx *c, NotepadGolden golden,
     ptc_check(c, file_equals(path, expected, initial_len + 1U),
               "live edit/save did not preserve fixture bytes");
     notepad_snapshot(c, golden);
-    quit_cleanly(c);
+    quit_editor_cleanly(c);
     (void)unlink(path);
     free(expected);
 }
@@ -882,7 +904,7 @@ static void case_live_restore_suspend(PtyCtx *c)
     ptc_check(c, file_equals(path, expected, sizeof(expected) - 1U),
               "editor was not usable after ed.suspend + SIGCONT");
     notepad_snapshot(c, NOTEPAD_RESTORE_SUSPEND);
-    quit_cleanly(c);
+    quit_editor_cleanly(c);
     (void)unlink(path);
 }
 
@@ -1071,7 +1093,7 @@ static void case_s15_mode_l(PtyCtx *c)
         return;
     spawn_editor(c, path);
     ptc_snapshot(c, "s15_mode_l");
-    quit_cleanly(c);
+    quit_editor_cleanly(c);
     (void)unlink(path);
 }
 
@@ -1503,7 +1525,7 @@ static void case_s17_char_delete_matches_highlight(PtyCtx *c)
     ptc_check(c, file_equals(path, expected, sizeof(expected) - 1U),
               "character selection delete disagreed with its highlight");
     ptc_snapshot(c, "s17_char_delete_matches_highlight");
-    quit_cleanly(c);
+    quit_editor_cleanly(c);
     (void)unlink(path);
 }
 
@@ -1522,7 +1544,7 @@ static void case_s17_modal_milestone_saves(PtyCtx *c)
     ptc_check(c, !c->failed && file_contains(path, "X"),
               "L-W-B-H-I-Esc-save milestone did not persist its edit");
     ptc_snapshot(c, "s17_modal_milestone_saves");
-    quit_cleanly(c);
+    quit_editor_cleanly(c);
     (void)unlink(path);
 }
 
@@ -1560,9 +1582,9 @@ static void s18_finish(PtyCtx *c, const char *path)
 }
 
 /*
- * Sprint 35 deliberately has no q/@ bindings (Sprint 36 owns those).
- * Drive the same registry commands through E mode, then compare the saved
- * bytes: the replayed edit must be indistinguishable from typing it once.
+ * Drive the registry commands through E mode so these cases remain about
+ * recorder behavior rather than whichever q/@ bindings the active config
+ * installs.  The replayed edit must be indistinguishable from typing it once.
  */
 static void case_s35_macro_record_start_message(PtyCtx *c)
 {
@@ -1578,7 +1600,7 @@ static void case_s35_macro_record_start_message(PtyCtx *c)
     s18_settle_after_keys(c, ":");
     s18_settle_after_bytes(c, "ed.macro.stop");
     s18_settle_after_keys(c, "enter");
-    quit_cleanly(c);
+    quit_editor_cleanly(c);
     (void)unlink(path);
 }
 
@@ -1596,7 +1618,7 @@ static void case_s35_macro_record_stop_message(PtyCtx *c)
     s18_settle_after_bytes(c, "ed.macro.stop");
     s18_settle_after_keys(c, "enter");
     ptc_snapshot(c, "s35_macro_record_stop_message");
-    quit_cleanly(c);
+    quit_editor_cleanly(c);
     (void)unlink(path);
 }
 
@@ -1623,7 +1645,7 @@ static void case_s35_macro_record_replay_from_e_mode(PtyCtx *c)
     ptc_check(c, file_equals(path, expected, sizeof(expected) - 1U),
               "E-mode macro replay did not reproduce the recorded edit");
     ptc_snapshot(c, "s35_macro_replayed_edit");
-    quit_cleanly(c);
+    quit_editor_cleanly(c);
     (void)unlink(path);
 }
 

@@ -3,7 +3,6 @@ size 80x24 alt=1 cursor=0,7 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- text
      1 x
-     1 x
      2 x
      3 x
      4 x
@@ -25,6 +24,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
     20 x
     21 x
     22 x
+    23 x
  L  pty-s14-s17_lift_lines_draws_thousand_cursors.txt      utf-8  lf  1:1  ×1000
 --- style
 AAAAAAAA

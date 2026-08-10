@@ -2,8 +2,8 @@
 size 80x24 alt=1 cursor=2,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
-    2 done
-    1 [exit 0 in 1.24s]
+    1 done
+    2 [exit 0 in 1.24s]
     3
 
 

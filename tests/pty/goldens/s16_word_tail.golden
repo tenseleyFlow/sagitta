@@ -3,7 +3,7 @@ size 80x24 alt=1 cursor=0,18 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=5
 --- text
     1 foo 漢字 👨‍👩‍👧‍👦 tail
-    1
+    2
 
 
 

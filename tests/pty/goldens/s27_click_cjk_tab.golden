@@ -4,10 +4,10 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=7
 --- text
 [1: pty-s14-s27_click_cj[2: sag-s27-漢字.txt][3: sag-pty-0.txt]
     1 alpha beta gamma
-    1 delta epsilon
-    2 zeta eta theta iota
-    3 kappa
-    4
+    2 delta epsilon
+    3 zeta eta theta iota
+    4 kappa
+    5
 
 
 

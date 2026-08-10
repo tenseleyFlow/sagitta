@@ -2,10 +2,10 @@
 size 80x24 alt=1 cursor=2,13 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- text
-    2 a漢 b😀z
-    1 short
+    1 a漢 b😀z
+    2 short
     3 xy  漢q
-    1
+    4
 
 
 

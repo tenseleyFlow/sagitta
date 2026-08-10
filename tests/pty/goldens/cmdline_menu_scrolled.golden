@@ -3,7 +3,7 @@ size 80x24 alt=1 cursor=23,11 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=3
 --- text
     1 scroll fixture
-    1
+    2
 
 
 
@@ -24,7 +24,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=3
   file.open                    Sprint 23: open a file                           
   file.prev                    Walk to the previous open file                   
   file.save                    Atomically save the active file                  
-> file.close                   Sprint 23: close the active file             6/13
+> file.close                   Sprint 23: close the active file             6/14
 :file.close                                                                     
 --- style
 AAAAAAAAAAAAAAAAAAAA

@@ -3,9 +3,9 @@ size 80x24 alt=1 cursor=0,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=0
 --- text
     1 alpha
-    1 beta
-    2 gamma
-    3
+    2 beta
+    3 gamma
+    4
 
 
 

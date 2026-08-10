@@ -4,11 +4,11 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=3
 --- text
     1 alpha needle one
     2 beta two
-    1 gamma needle three
-    2 delta four
-    3 epsilon five
-    4 zeta needle six
-    5
+    3 gamma needle three
+    4 delta four
+    5 epsilon five
+    6 zeta needle six
+    7
 
 
 
