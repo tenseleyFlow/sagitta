@@ -925,6 +925,27 @@ void sag_ed_insert_barrier(Ed *ed)
     ed->insert_txn = false;
 }
 
+CmdStatus sag_ed_dispatch_resolved(Ed *ed, CmdId id, CmdCtx *cx)
+{
+    const CmdDesc *desc;
+    bool multi;
+
+    if (ed == NULL || cx == NULL)
+        return SAG_CMD_ERR_ARG;
+    desc = sag_cmd_desc(id);
+    if (desc == NULL)
+        return SAG_CMD_ERR_ARG;
+    cx->ed = ed;
+    if (cx->win == NULL)
+        cx->win = ed->win;
+    multi = (desc->flags & SAG_CMD_CHANGES_BUFFER) != 0U &&
+            ed->model_ready && cx->win != NULL &&
+            cx->win->cs.curs.len > 1U && !cx->cursor_given &&
+            cx->range.kind == SAG_RANGE_NONE &&
+            (desc->flags & SAG_CMD_MULTI_AGGREGATE) == 0U;
+    return multi ? sag_mc_run(cx->win, id, cx) : sag_cmd_invoke(id, cx);
+}
+
 CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
 {
     const CmdDesc *desc;
@@ -933,7 +954,6 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     bool changes;
     bool edits_text;
     bool multiple;
-    bool multi;
     bool document_target;
     bool durability_command;
     bool newline;
@@ -954,9 +974,6 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     document_target = cx->win == ed->win;
     multiple = changes && ed->model_ready && cx->win != NULL &&
                cx->win->cs.curs.len > 1U;
-    multi = multiple &&
-            cx->range.kind == SAG_RANGE_NONE &&
-            (desc->flags & SAG_CMD_MULTI_AGGREGATE) == 0U;
     durability_command = document_target && edits_text;
     newline = ed->undo_break_on_newline &&
               strcmp(desc->name, "ed.edit.insert.newline") == 0;
@@ -1003,7 +1020,7 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
         }
     }
 
-    status = multi ? sag_mc_run(cx->win, id, cx) : sag_cmd_invoke(id, cx);
+    status = sag_ed_dispatch_resolved(ed, id, cx);
     if (status == SAG_CMD_OK && document_target && ed->win != NULL &&
         (changes || durability_command ||
          strncmp(desc->name, "ed.move.", 8U) == 0 ||

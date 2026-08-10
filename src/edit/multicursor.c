@@ -871,6 +871,8 @@ CmdStatus sag_mc_run(Win *w, CmdId cmd, CmdCtx *cx)
     McSkip *skips;
     size_t skip_count;
     u32 repeats;
+    SagTxnReason outer_reason;
+    bool macro_txn;
 
     if (w == NULL || w->buf == NULL || w->buf->tb == NULL || cx == NULL ||
         cx->ed == NULL || cx->win != w || w->cs.curs.len < 2U)
@@ -891,8 +893,18 @@ CmdStatus sag_mc_run(Win *w, CmdId cmd, CmdCtx *cx)
      */
     ec = sag_ed_edit_ctx_for(cx->ed, cx->win);
     if (ec.tb != w->buf->tb || ec.cset != &w->cs || ec.undo == NULL ||
-        ec.undo->depth == 0U || ec.undo->pending_reason != SAG_TXN_MULTI)
+        ec.undo->depth == 0U ||
+        (ec.undo->pending_reason != SAG_TXN_MULTI &&
+         ec.undo->pending_reason != SAG_TXN_MACRO))
         return SAG_CMD_ERR_STATE;
+    outer_reason = ec.undo->pending_reason;
+    macro_txn = outer_reason == SAG_TXN_MACRO;
+    /* The text engine's multi-cursor safety gate deliberately recognizes
+     * SAG_TXN_MULTI.  A replay already owns the stronger atomic MACRO
+     * boundary, so lend the fan-out that marker while it mutates and restore
+     * the outer reason before Fletch closes or aborts the transaction. */
+    if (macro_txn)
+        ec.undo->pending_reason = SAG_TXN_MULTI;
 
     before_count = w->cs.curs.len;
     repeats = (desc->flags & SAG_CMD_REPEATABLE) != 0U ? cx->count : 1U;
@@ -931,6 +943,12 @@ CmdStatus sag_mc_run(Win *w, CmdId cmd, CmdCtx *cx)
     w->cs.batch_next = 0U;
     w->cs.active = SAG_MC_ACTIVE_NONE;
     free(skips);
+    if (macro_txn) {
+        if (ec.undo->open != 0U)
+            ec.undo->nodes.data[ec.undo->open - 1U].reason =
+                (u8)SAG_TXN_MACRO;
+        ec.undo->pending_reason = outer_reason;
+    }
     if (status == SAG_CMD_OK) {
         size_t merged;
 

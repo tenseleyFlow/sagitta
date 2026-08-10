@@ -314,6 +314,10 @@ EditCtx sag_ed_edit_ctx_for(Ed *ed, Win *win);
 void sag_ed_finish_edit(Ed *ed, const EditCtx *ec);
 Cursor *sag_ed_cursor(Ed *ed);
 void sag_ed_insert_barrier(Ed *ed);
+/* Dispatch an already-resolved command without opening an editor-owned
+ * transaction.  Fletch uses this after enlisting its outer MACRO
+ * transaction; ordinary editor entry remains sag_ed_invoke(). */
+CmdStatus sag_ed_dispatch_resolved(Ed *ed, CmdId id, CmdCtx *cx);
 CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx);
 CmdStatus sag_ed_invoke_parsed(Ed *ed, CmdId id,
                                const SagCmdInvoke *invoke);

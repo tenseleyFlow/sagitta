@@ -25,8 +25,8 @@
 /*
  * This is the only point in src/fl where an editor effect is invoked.
  * A descriptor is marshalled into CmdCtx, capability-checked, and then
- * handed to sag_cmd_invoke.  No text, cursor, undo or register writer is
- * reachable from this file.
+ * handed to the editor's resolved dispatcher.  No text, cursor, undo or
+ * register writer is reachable from this file.
  */
 
 static Ed *api_ed(FlVm *vm)
@@ -1143,10 +1143,18 @@ static bool invoke_command(FlVm *vm, CmdId id, CmdCtx *cx,
                         "editor mutation during model teardown");
     if (changes) {
         ec = sag_ed_edit_ctx_for(cx->ed, cx->win);
+        /* Opening a MACRO transaction is valid for a multi-cursor replay,
+         * but the undo layer's begin-time cursor check only admits MULTI.
+         * The resolved dispatcher supplies the per-cursor safety marker;
+         * enlist without a begin snapshot, then refresh the full context
+         * after dispatch for commit or rollback. */
+        if (ec.undo != NULL && ec.undo->depth == 0U && ec.cset != NULL &&
+            ec.cset->curs.len > 1U)
+            ec.cset = NULL;
         if (!fl_txn_enlist(vm, &ec))
             return false;
     }
-    *out = sag_cmd_invoke(id, cx);
+    *out = sag_ed_dispatch_resolved(cx->ed, id, cx);
     if (changes) {
         ec = sag_ed_edit_ctx_for(cx->ed, cx->win);
         if (!fl_txn_enlist(vm, &ec))
