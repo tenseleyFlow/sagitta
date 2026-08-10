@@ -240,6 +240,25 @@ scan "clipboard subprocesses must never invoke a shell" \
 scan "OSC 52 clipboard queries are forbidden" \
     '52;[^[:space:]]*\?' "$source_files"
 
+# Sprint 37 DoD 2: all direct terminal-status and terminal-control syscalls
+# stay behind the one poisoned boundary. The product-level smoke drill calls
+# a guarded entry point under --batch; this static half prevents a new direct
+# caller elsewhere in src/ from bypassing that guard entirely.
+tty_syscall_hits=$tmp/tty-syscall-hits
+: >"$tty_syscall_hits"
+while IFS= read -r file; do
+    case ${file#"$repo_dir"/} in
+        src/term/tty.c) continue ;;
+    esac
+    grep -nE -e '(^|[^[:alnum:]_])(tcsetattr|tcgetattr|ioctl|isatty)[[:space:]]*\(' \
+        "$file" 2>/dev/null |
+        sed "s|^|${file#"$repo_dir"/}:|" >>"$tty_syscall_hits" || :
+done <"$source_files"
+if [ -s "$tty_syscall_hits" ]; then
+    echo "ban: terminal syscalls belong only in src/term/tty.c" >>"$hits"
+    cat "$tty_syscall_hits" >>"$hits"
+fi
+
 register_set_hits=$tmp/register-set-hits
 : >"$register_set_hits"
 while IFS= read -r file; do

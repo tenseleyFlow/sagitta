@@ -151,9 +151,17 @@ expect_rc 0 "batch success"
 run_capture "$bin" --batch --clean "$batch_dir/fail.fl"
 expect_rc 2 "batch failure"
 [ "$(cat "$out")" = "before-error" ] || fail "batch failure stdout flush"
-expect_stderr_contains "sagitta: script failed: user: boom" \
-    "batch failure trace"
-expect_stderr_contains "$batch_dir/fail.fl:3" "batch failure caret"
+printf 'sagitta: script failed: user: boom\n  at <script> (%s:3:6)\n\n  3 | error("boom")\n    |      ^\n' \
+    "$batch_dir/fail.fl" >"$tmp/batch-fail.expected"
+cmp -s "$err" "$tmp/batch-fail.expected" || fail "batch failure golden"
+
+rc=0
+SAG_BATCH_SELFTEST_TTY=1 \
+    "$bin" --batch --clean "$batch_dir/ok.fl" >"$out" 2>"$err" || rc=$?
+expect_rc 4 "batch poisoned tty"
+[ "$(cat "$out")" = "batch-ok" ] || fail "batch exit 4 stdout flush"
+expect_stderr_contains \
+    "terminal access in --batch: sag_tty_signal_fd" "batch poisoned tty"
 
 run_capture "$bin" --batch --clean "$batch_dir/dirty.fl"
 expect_rc 0 "batch dirty warning"

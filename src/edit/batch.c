@@ -466,6 +466,12 @@ int sag_batch_run(const BatchOpts *opts)
         result = SAG_EXIT_BATCH;
         goto done;
     }
+    /* Product-level guard drill: the smoke lane seeds the forbidden call
+     * only after script output exists, proving both exit 4 and the stdout
+     * flush contract.  This is intentionally an environment selftest, not
+     * a user-facing batch option. */
+    if (getenv("SAG_BATCH_SELFTEST_TTY") != NULL)
+        (void)sag_tty_signal_fd(&ed.tty);
     result = SAG_EXIT_OK;
 
 done:
