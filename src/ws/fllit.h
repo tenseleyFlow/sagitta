@@ -50,7 +50,7 @@ typedef enum {
     FL_LIT_STR,
     FL_LIT_LIST,
     FL_LIT_MAP
-} FlLitKind;
+} WsFlLitKind;
 
 typedef struct FlLit FlLit;
 
@@ -62,7 +62,7 @@ typedef struct FlLit FlLit;
  * re-emission and break determinism (invariant 5).
  */
 struct FlLit {
-    FlLitKind kind;
+    WsFlLitKind kind;
     /* FL_LIT_BOOL / FL_LIT_INT */
     i64 i;
     /* FL_LIT_STR: bytes, NOT text.  Never validated as UTF-8 — paths are

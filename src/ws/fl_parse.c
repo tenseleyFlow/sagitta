@@ -95,7 +95,7 @@ static void skip_ws(P *p)
     }
 }
 
-static FlLit *node(P *p, FlLitKind kind)
+static FlLit *node(P *p, WsFlLitKind kind)
 {
     FlLit *v;
 

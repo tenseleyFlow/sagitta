@@ -35,12 +35,7 @@
 #include <string.h>
 #include <time.h>
 
-/* ws/fllit.h and fl/ast.h both historically export FlLitKind.  This
- * translation unit intentionally joins the editor and compiler surfaces,
- * so keep the workspace-local typedef out of the compiler namespace. */
-#define FlLitKind WsFlLitKind
 #include "edit/ed.h"
-#undef FlLitKind
 #include "fl/compile.h"
 #include "fl/flapi.h"
 #include "fl/gc.h"
