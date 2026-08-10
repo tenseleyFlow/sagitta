@@ -1,0 +1,9 @@
+# Sprint 38: macro listing works under --batch without consuming registers.
+import ed
+ed.run("ed.reg.set", {iarg: 122, sarg: "@[ i\"z\" ]\n"})
+ed.run("ed.reg.set", {iarg: 97, sarg: "@[ i\"a\" ]\n"})
+ed.run("ed.macro.list", {})
+t.reg("a", "@[ i\"a\" ]\n")
+t.reg("z", "@[ i\"z\" ]\n")
+t.eq(batch, true)
+

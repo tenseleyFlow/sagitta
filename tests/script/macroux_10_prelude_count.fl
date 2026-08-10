@@ -1,0 +1,9 @@
+# Sprint 38: replay(register, count) preserves per-run transactions.
+import buf
+import ed
+let b = buf.current()
+ed.run("ed.reg.set", {iarg: 102, sarg: "@[ i\"f\" ]\n"})
+replay("f", 3)
+t.text(b, "fff")
+t.undo(b, 4)
+

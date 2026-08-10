@@ -1,0 +1,10 @@
+# Sprint 38: replay-last uses the register from the preceding replay.
+import buf
+import ed
+let b = buf.current()
+ed.run("ed.reg.set", {iarg: 98, sarg: "@[ i\"b\" ]\n"})
+ed.run("ed.macro.replay", {sarg: "b"})
+ed.run("ed.macro.replay_last", {})
+t.text(b, "bb")
+t.reg("b", "@[ i\"b\" ]\n")
+

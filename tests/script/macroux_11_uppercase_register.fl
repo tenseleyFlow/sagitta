@@ -1,0 +1,9 @@
+# Sprint 38: uppercase replay addresses the same named macro register.
+import buf
+import ed
+let b = buf.current()
+ed.run("ed.reg.set", {iarg: 103, sarg: "@[ i\"g\" ]\n"})
+replay("G")
+t.text(b, "g")
+t.reg("g", "@[ i\"g\" ]\n")
+

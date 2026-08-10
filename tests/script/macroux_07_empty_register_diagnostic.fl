@@ -1,0 +1,7 @@
+# Sprint 38: replaying an empty register fails without editing.
+import buf
+import ed
+let b = buf.current()
+t.raises("type", fn() { return ed.run("ed.macro.replay", {sarg: "a"}) })
+t.text(b, "")
+t.reg("a", "")

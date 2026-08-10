@@ -1,0 +1,9 @@
+# Sprint 38: a stored register macro replays headlessly.
+import buf
+import ed
+let b = buf.current()
+ed.run("ed.reg.set", {iarg: 97, sarg: "@[ i\"x\" ]\n"})
+ed.run("ed.macro.replay", {sarg: "a"})
+t.reg("a", "@[ i\"x\" ]\n", "char")
+t.text(b, "x")
+t.undo(b, 2)

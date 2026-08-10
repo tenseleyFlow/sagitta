@@ -1,0 +1,8 @@
+# Sprint 38: yanked prose receives the ordinary Fletch compile failure.
+import buf
+import ed
+let b = buf.current()
+ed.run("ed.reg.set", {iarg: 100, sarg: "plain prose"})
+t.raises("type", fn() { return ed.run("ed.macro.replay", {sarg: "d"}) })
+t.reg("d", "plain prose")
+t.text(b, "")

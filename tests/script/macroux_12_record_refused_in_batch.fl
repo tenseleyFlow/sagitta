@@ -1,0 +1,15 @@
+# Sprint 38: recording still refuses under --batch and names its alternative.
+import ed
+import str
+let caught = false
+try {
+    ed.run("ed.macro.record", {sarg: "a"})
+} catch e {
+    caught = true
+    t.eq(e.kind, "capability")
+    t.eq(str.contains(e.msg, "ed.macro.record"), true)
+    t.eq(str.contains(e.msg, "recording needs keys; none exist"), true)
+}
+t.eq(caught, true)
+t.reg("a", "")
+

@@ -1,0 +1,9 @@
+# Sprint 38: the replay prelude remains a headless macro entry point.
+import buf
+import ed
+let b = buf.current()
+ed.run("ed.reg.set", {iarg: 101, sarg: "@[ i\"e\" ]\n"})
+replay("e")
+t.text(b, "e")
+t.undo(b, 2)
+

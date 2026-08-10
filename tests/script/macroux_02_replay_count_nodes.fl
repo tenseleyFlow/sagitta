@@ -1,0 +1,9 @@
+# Sprint 38: a replay count creates one undo node per run.
+import buf
+import ed
+let b = buf.current()
+ed.run("ed.reg.set", {iarg: 97, sarg: "@[ i\"x\" ]\n"})
+ed.run("ed.macro.replay", {sarg: "a", count: 5})
+t.text(b, "xxxxx")
+t.undo(b, 6)
+

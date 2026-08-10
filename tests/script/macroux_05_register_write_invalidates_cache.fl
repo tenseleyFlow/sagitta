@@ -1,0 +1,11 @@
+# Sprint 38: replacing macro source invalidates the replay cache.
+import buf
+import ed
+let b = buf.current()
+ed.run("ed.reg.set", {iarg: 99, sarg: "@[ i\"x\" ]\n"})
+ed.run("ed.macro.replay", {sarg: "c"})
+ed.run("ed.reg.set", {iarg: 99, sarg: "@[ i\"y\" ]\n"})
+ed.run("ed.macro.replay", {sarg: "c"})
+t.text(b, "xy")
+t.reg("c", "@[ i\"y\" ]\n")
+
