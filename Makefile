@@ -434,7 +434,7 @@ MODULE_FORCE := FORCE
 endif
 
 .DEFAULT_GOAL := all
-.PHONY: all test clean install dirs FORCE test-script test-pty fuzz \
+.PHONY: all check test clean install dirs FORCE test-script test-pty fuzz \
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
         fuzz-mouse fuzz-groups \
         fixtures fixtures-quick fixtures-verify \
@@ -664,6 +664,33 @@ $(BUILD)/gen-unicode-tables: scripts/gen-unicode-tables.c | dirs
 
 $(FAKECLIP): tests/unit/fakeclip.c | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
+
+#
+# THE FAST TIER -- what to run before every commit.
+#
+# `make test` is the thorough one and costs several minutes, most of it
+# the 206-case pty suite (132 s) and the torture live-check.  Running
+# that after every edit is how an afternoon disappears, so this is the
+# inner loop: the unit suite, the Fletch conformance corpus and every
+# grep-style gate, which together take about 65 s and catch the large
+# majority of ordinary breakage.
+#
+# WHAT IT DELIBERATELY OMITS, so nobody mistakes green here for green:
+# the pty goldens (any rendering or input change needs `make test-pty`),
+# the torture live-check, the sanitizer lanes, and valgrind.  Run the
+# full `make test` before pushing a chunk, not after every commit -- and
+# see the valgrind job in .github/workflows/ci.yml for when that lane
+# has to be asked for by hand.
+#
+check: $(BUILD)/unit_tests $(BUILD)/sagitta test-fletch
+	$(UNIT_RUN)
+	scripts/check-cmd-dispatch.sh
+	scripts/check-fl-choke.sh
+	scripts/check-input.sh
+	scripts/check-render.sh
+	scripts/check-sigsafe.sh
+	scripts/smoke.sh $(BUILD)/sagitta
+	@echo "check: ok (fast tier -- pty, torture, sanitizers and valgrind NOT run)"
 
 test: $(BUILD)/unit_tests $(BUILD)/sagitta test-pty test-fletch torture-build
 	$(UNIT_RUN)

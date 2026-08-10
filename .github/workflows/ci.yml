@@ -15,6 +15,15 @@ on:
         description: Also run the nightly-only campaigns
         type: boolean
         default: false
+      # Valgrind on demand WITHOUT the rest of the nightly set, because
+      # "run it when you touched src/text" has to be one command or it
+      # will not happen.  A dispatch also lands in its own concurrency
+      # group (see below), so a later push cannot cancel the very lane
+      # you asked for.
+      valgrind:
+        description: Also run the valgrind lane on this push
+        type: boolean
+        default: false
 
 #
 # One run per ref, newest wins.
@@ -190,6 +199,32 @@ jobs:
         run: make fuzz CC=clang SAN=1 FL_CHECKS=1 BUILD=build-san FUZZ_SEED=1
 
   valgrind:
+    #
+    # NOT ON EVERY PUSH -- it was 49 of the run's 50 minutes.
+    #
+    # Ten of the other twelve lanes report inside 9 minutes and the
+    # slowest, sanitize, inside 23; valgrind alone doubled that, and
+    # because the concurrency group cancels in-flight runs, pushing
+    # again threw away the one expensive thing in the run.  The result
+    # was ~50 minutes of serialised waiting per commit.
+    #
+    # WHAT THIS COSTS, stated plainly: a valgrind-only regression can now
+    # sit undetected for up to a day.  That is a real reduction in
+    # coverage per commit, accepted because this lane has caught roughly
+    # one bug per campaign rather than one per commit -- the s17 crash
+    # journal fd left open at exit being the last.
+    #
+    # SO RUN IT DELIBERATELY when the change could plausibly leak, alias
+    # or outlive an object:
+    #
+    #     gh workflow run CI --ref trunk -f valgrind=true
+    #
+    # and always before landing anything that touches src/text/,
+    # src/edit/, src/term/, the handle table, or a teardown path.  ASan
+    # covers much of this per-push, but not fd tracking, not uninitialised
+    # reads, and not the stretched-timing pty behaviour that QUIET_SCALE
+    # exposes.
+    if: github.event_name == 'schedule' || inputs.nightly || inputs.valgrind
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
