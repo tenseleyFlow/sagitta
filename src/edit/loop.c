@@ -235,7 +235,15 @@ int yew_loop_deadline(const Ed *ed, i64 now_ms)
      * for what a mismatched pair does. */
     if (yew_cmdline_comp_scanning(ed))
         return 0;
-    deadline = absolute_deadline(yew_dispatch_deadline(ed), now_ms);
+    /* Syntax propagation is sliced on a 16 ms idle cadence.  It is work,
+     * but unlike picker scans it must not turn an idle editor into a busy
+     * loop while a million-line wave is settling. */
+    if (yew_ed_syn_pending(ed))
+        deadline = 16;
+    else
+        deadline = -1;
+    deadline = deadline_min(
+        deadline, absolute_deadline(yew_dispatch_deadline(ed), now_ms));
     deadline = deadline_min(deadline,
                             yew_input_deadline(&ed->in, now_ms));
     deadline = deadline_min(deadline,
@@ -388,6 +396,7 @@ int yew_loop_run(Ed *ed)
             (fds[1].revents & (POLLERR | POLLHUP | POLLNVAL)) != 0)
             return YEW_EXIT_IO;
         now = yew_now_ms();
+        ed->now_ms = now;
         if ((fds[0].revents & (POLLIN | POLLHUP)) != 0 &&
             loop_read_input(ed) != 0)
             return YEW_EXIT_IO;
@@ -453,6 +462,10 @@ int yew_loop_run(Ed *ed)
             yew_fl_hook_fire(ed, FL_EV_ED_IDLE, NULL, 0U);
             ed->fl_idle_fired = true;
         }
+        if (yew_ed_syn_pending(ed))
+            yew_ed_syn_tick(ed, had_input ? YEW_SYN_FRAME_BUDGET_US :
+                                           YEW_SYN_IDLE_BUDGET_US,
+                            had_input);
         if (ed->quit)
             return ed->exit_code;
         if (ed->layout_dirty)

@@ -4,6 +4,7 @@
 /* The editor's ordinary buffer model. */
 
 #include "edit/jumplist.h"
+#include "syn/engine.h"
 #include "text/edit.h"
 #include "util/strmap.h"
 
@@ -27,6 +28,10 @@ typedef struct Buffer {
     Journal *jrn;
     MarkSet *marks;
     ChangeList changes;
+    /* Owns its retained line state/cache.  Any engine/definition bound
+     * through SynBuf is borrowed and must outlive this Buffer; dispose
+     * detaches syntax before releasing the TextBuf. */
+    SynBuf syn;
     MarkId named[26];
     bool named_set[26];
     u64 pending_marks[26];

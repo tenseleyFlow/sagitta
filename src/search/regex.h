@@ -62,7 +62,9 @@ typedef struct YewReErr {
 } YewReErr;
 
 typedef struct YewReMatch {
-    Span g[YEW_RE_MAX_GROUPS]; /* g[0] is the whole match               */
+    /* g[0] is the whole match; an unmatched optional group has both
+     * endpoints set to UINT64_MAX. */
+    Span g[YEW_RE_MAX_GROUPS];
     u32 ngroups;
 } YewReMatch;
 

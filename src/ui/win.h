@@ -6,6 +6,7 @@
 /* Sprint 22 moved Rect here, as this file said it would. */
 #include "ui/layout.h"
 #include "search/overlay.h"
+#include "syn/engine.h"
 #include "edit/multicursor.h"
 #include "edit/select.h"
 #include "text/coords.h"
@@ -37,6 +38,9 @@ typedef struct Win {
     JumpList jumps;
     /* Sprint 21 $3: match highlighting for THIS view. */
     MatchOverlay overlay;
+    /* Reused by the allocation-free syntax draw path. */
+    SynSpan *syn_spans;
+    u32 syn_spans_cap;
     WrapCache wrap_cache;
     Rect rect;
     NumStyle number_style;

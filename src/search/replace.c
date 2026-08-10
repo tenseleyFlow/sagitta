@@ -227,6 +227,7 @@ static bool repl_walk(Bytebuf *out, const char *tpl, size_t tlen,
                                  "replacement refers to a group the "
                                  "pattern does not have");
             if (out != NULL && m != NULL && in != NULL &&
+                m->g[g].lo != UINT64_MAX &&
                 m->g[g].hi >= m->g[g].lo)
                 emit_span(&e, in, m->g[g]);
             break;
@@ -253,6 +254,7 @@ static bool repl_walk(Bytebuf *out, const char *tpl, size_t tlen,
                                  "replacement refers to a group the "
                                  "pattern does not have");
             if (out != NULL && m != NULL && in != NULL &&
+                m->g[g].lo != UINT64_MAX &&
                 m->g[g].hi >= m->g[g].lo)
                 emit_span(&e, in, m->g[g]);
             break;

@@ -737,6 +737,8 @@ static u8 *copy_live_range(const TextBuf *tb, Span range)
 
 static void replay_insert_span(EditCtx *ec, ByteOff at, u8 src, Span span)
 {
+    LineNo line = yew_textbuf_line_of(ec->tb, at);
+    u64 old_lines = yew_textbuf_line_count(ec->tb);
     u64 len = span.hi - span.lo;
     const u8 *bytes = store_bytes(ec->tb, src, span);
 
@@ -747,6 +749,10 @@ static void replay_insert_span(EditCtx *ec, ByteOff at, u8 src, Span span)
         yew_cset_adjust(ec->cset, YEW_JOURNAL_INS, at, len);
     if (ec->jrnl != NULL)
         yew_journal_record(ec->jrnl, YEW_JOURNAL_INS, at.v, bytes, len);
+    if (ec->on_change != NULL)
+        ec->on_change(ec->on_change_ctx, at, line, 0U,
+                      yew_textbuf_line_count(ec->tb) - old_lines,
+                      ec->now_ms, false);
 }
 
 static void replay_insert_blob(EditCtx *ec, u32 op_index, const UndoOp *op)
@@ -757,6 +763,8 @@ static void replay_insert_blob(EditCtx *ec, u32 op_index, const UndoOp *op)
     if (cache->valid) {
         replay_insert_span(ec, BYTEOFF(op->off), cache->src, cache->span);
     } else {
+        LineNo line = yew_textbuf_line_of(ec->tb, BYTEOFF(op->off));
+        u64 old_lines = yew_textbuf_line_count(ec->tb);
         u64 payload = ec->tb->add.len;
         const u8 *bytes;
         if (op->payload > ut->blobs.len || op->len > ut->blobs.len - op->payload)
@@ -775,17 +783,25 @@ static void replay_insert_blob(EditCtx *ec, u32 op_index, const UndoOp *op)
         cache->src = YEW_STORE_ADD;
         cache->span = (Span){payload, payload + op->len};
         cache->valid = true;
+        if (ec->on_change != NULL)
+            ec->on_change(ec->on_change_ctx, BYTEOFF(op->off), line, 0U,
+                          yew_textbuf_line_count(ec->tb) - old_lines,
+                          ec->now_ms, false);
     }
 }
 
 static void replay_delete(EditCtx *ec, const UndoOp *op)
 {
     Span range = {op->off, op->off + op->len};
+    LineNo line;
+    u64 old_lines;
     u8 *bytes;
 
     if (op->off > yew_textbuf_len(ec->tb) ||
         op->len > yew_textbuf_len(ec->tb) - op->off)
         YEW_BUG("undo replay: delete out of bounds");
+    line = yew_textbuf_line_of(ec->tb, BYTEOFF(op->off));
+    old_lines = yew_textbuf_line_count(ec->tb);
     bytes = copy_live_range(ec->tb, range);
     yew_textbuf_delete(ec->tb, range);
     if (ec->marks != NULL)
@@ -794,6 +810,10 @@ static void replay_delete(EditCtx *ec, const UndoOp *op)
         yew_cset_adjust(ec->cset, YEW_JOURNAL_DEL, BYTEOFF(op->off), op->len);
     if (ec->jrnl != NULL)
         yew_journal_record(ec->jrnl, YEW_JOURNAL_DEL, op->off, bytes, op->len);
+    if (ec->on_change != NULL)
+        ec->on_change(ec->on_change_ctx, BYTEOFF(op->off), line,
+                      old_lines - yew_textbuf_line_count(ec->tb), 0U,
+                      ec->now_ms, false);
     free(bytes);
 }
 

@@ -6,6 +6,7 @@
 #include <string.h>
 
 #include "edit/bind.h"
+#include "edit/buf.h"
 #include "edit/edit_cmds.h"
 #include "edit/jumplist.h"
 #include "edit/opt.h"
@@ -23,6 +24,8 @@
 #include "ui/groupnav.h"
 #include "ui/mouse.h"
 #include "ui/macrobrowse.h"
+#include "ui/message.h"
+#include "ui/win.h"
 #include "ui/grouppicker.h"
 #include "ui/tabs.h"
 #include "util/arena.h"
@@ -49,6 +52,21 @@ static CmdRegistry registry;
 static CmdStatus cmd_nop(CmdCtx *cx)
 {
     (void)cx;
+    return YEW_CMD_OK;
+}
+
+static CmdStatus cmd_syn_status(CmdCtx *cx)
+{
+    Buffer *b;
+    char status[160];
+
+    if (cx == NULL || cx->ed == NULL || cx->win == NULL ||
+        cx->win->buf == NULL || cx->win->buf->tb == NULL)
+        return YEW_CMD_ERR_STATE;
+    b = cx->win->buf;
+    yew_syn_status(&b->syn, yew_textbuf_line_count(b->tb), status,
+                   sizeof(status));
+    yew_msg(cx->ed, YEW_MSG_INFO, "%s", status);
     return YEW_CMD_OK;
 }
 
@@ -136,6 +154,8 @@ static const CmdDesc builtins[] = {
     {"ed.map", yew_bind_cmd_map, YEW_ARITY_NONE, 0U,
      "List configured bindings for the current mode", NULL},
     {"ed.nop", cmd_nop, YEW_ARITY_NONE, 0U, "Do nothing", NULL},
+    {"ed.syn.status", cmd_syn_status, YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN,
+     "Report incremental syntax highlighting progress", NULL},
     {"ed.quit", yew_file_cmd_quit, YEW_ARITY_NONE, 0U,
      "Quit, prompting when the buffer is dirty", NULL},
     {"ed.quit_force", yew_file_cmd_quit_force, YEW_ARITY_NONE, 0U,
@@ -813,7 +833,7 @@ static bool command_name_valid(const char *name)
         "move", "edit", "mode", "sel", "cursor", "view", "ui",
         "file", "buf", "tab", "group", "pane", "win", "reg",
         "search", "macro", "job", "git", "lsp", "ai", "plug",
-        "cmdline", "del", "shell", "opt", "fl", "config",
+        "cmdline", "del", "shell", "opt", "fl", "config", "syn",
         /* Sprint 21 */
         "jump", "change", "mark",
         /* Sprint 18.5: the palette itself is Sprint 38's, but the name has
@@ -869,7 +889,7 @@ static bool command_name_valid(const char *name)
         "close_others", "copy_path", "rename", "context_menu", "add_tab",
         "enable", "disable", "at", "span", "unit", "up_alt", "down_alt",
         "get", "eval", "set_many", "split", "focus", "closure",
-        "reload"};
+        "reload", "status"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

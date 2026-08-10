@@ -13,6 +13,7 @@
 
 #include "edit/ed.h"
 #include "edit/select.h"
+#include "syn/theme.h"
 #include "term/grid.h"
 #include "ui/gutter.h"
 #include "ui/message.h"
@@ -85,6 +86,19 @@ static u16 put_spaces(Grid *grid, u16 row, u16 col, u16 end)
 {
     if (col < end)
         yew_grid_fill(grid, row, col, end, grid->blank);
+    return end;
+}
+
+static u16 put_styled_spaces(Grid *grid, u16 row, u16 col, u16 end,
+                             YewColor fg, YewColor bg, u16 attrs)
+{
+    Cell blank = grid->blank;
+
+    blank.fg = fg;
+    blank.bg = bg;
+    blank.attrs = attrs;
+    if (col < end)
+        yew_grid_fill(grid, row, col, end, blank);
     return end;
 }
 
@@ -341,16 +355,89 @@ static void draw_secondary_rows(Ed *ed, Win *w, u16 lo, u16 hi)
     }
 }
 
-static void draw_span(Grid *grid, const TextBuf *tb, Span span,
-                      u16 row, const Win *w, CCol left)
+static void draw_search_rows(Ed *ed, Win *w, u16 lo, u16 hi)
 {
-    YewColor color = default_color();
+    static const YewColor match_bg = {
+        YEW_COLOR_RGB, 78U, 42U, 15U
+    };
+    static const YewColor current_bg = {
+        YEW_COLOR_RGB, 231U, 125U, 36U
+    };
+    const MatchOverlay *overlay = &w->overlay;
+    size_t i;
+
+    for (i = 0U; i < overlay->spans.len; i++) {
+        const Span match = overlay->spans.data[i];
+        Cell style = ed->grid.blank;
+        u8 fields;
+        u16 screen_row;
+
+        if (ed->render.no_color) {
+            style.attrs = (i32)i == overlay->cur_index ?
+                              (u16)(YEW_ATTR_BOLD | YEW_ATTR_UNDERLINE) :
+                              YEW_ATTR_BOLD;
+            fields = YEW_OVERLAY_ATTRS;
+        } else if (ed->render.tier == YEW_RENDER_TIER_16) {
+            style.attrs = (i32)i == overlay->cur_index ?
+                              (u16)(YEW_ATTR_REVERSE | YEW_ATTR_UNDERLINE) :
+                              YEW_ATTR_REVERSE;
+            fields = YEW_OVERLAY_ATTRS;
+        } else {
+            style.bg = (i32)i == overlay->cur_index ? current_bg : match_bg;
+            fields = YEW_OVERLAY_BG;
+        }
+        for (screen_row = lo;
+             screen_row < hi && screen_row < w->rect.h; screen_row++) {
+            LineNo line;
+            u32 sub;
+            Span displayed;
+
+            if (!yew_vp_line_of_row(w, screen_row, &line, &sub))
+                continue;
+            displayed = w->vp.wrap ? yew_wrap_row(w, line, sub) :
+                                     line_content_span(w->buf->tb, line);
+            if (match.hi <= displayed.lo || match.lo >= displayed.hi)
+                continue;
+            overlay_span(&ed->grid, w, (u16)(w->rect.y + screen_row),
+                         displayed, match, &style, fields);
+        }
+    }
+}
+
+static u8 syn_attr_at(const SynLineOut *syn, u32 relative, u32 *at)
+{
+    while (*at < syn->n) {
+        const SynSpan *span = &syn->spans[*at];
+        u64 end = (u64)span->start + span->len;
+
+        if (end > relative)
+            break;
+        (*at)++;
+    }
+    if (*at < syn->n) {
+        const SynSpan *span = &syn->spans[*at];
+
+        if (relative >= span->start &&
+            (u64)relative < (u64)span->start + span->len &&
+            span->attr < YEW_ATTR__COUNT)
+            return span->attr;
+    }
+    return YEW_ATTR_TEXT;
+}
+
+static void draw_span(Grid *grid, const TextBuf *tb, Span span,
+                      u64 line_start, const SynLineOut *syn, u16 row,
+                      const Win *w, CCol left)
+{
+    YewColor bg = default_color();
+    const ThemeEnt *theme = yew_theme_table();
     u32 tabwidth = draw_tabwidth(w);
     ByteOff start = yew_ccol_to_off(tb, span, left, tabwidth);
     CCol logical = yew_off_to_ccol(tb, span, start, tabwidth);
     u64 pos = start.v;
     u16 col = w->rect.x;
     u16 right = row_right(grid, w);
+    u32 syn_at = 0U;
 
     while (pos < span.hi && col < right) {
         ByteOff next_off = yew_grapheme_next_boundary(tb, BYTEOFF(pos));
@@ -359,6 +446,10 @@ static void draw_span(Grid *grid, const TextBuf *tb, Span span,
         u64 cells;
         u8 local[64];
         u8 *cluster = local;
+        u32 relative = pos - line_start > UINT32_MAX ? UINT32_MAX :
+                       (u32)(pos - line_start);
+        u8 attr = syn_attr_at(syn, relative, &syn_at);
+        ThemeEnt style = theme[attr];
 
         if (next <= pos || next > span.hi)
             YEW_BUG("draw: invalid grapheme boundary");
@@ -382,15 +473,17 @@ static void draw_span(Grid *grid, const TextBuf *tb, Span span,
             u64 target64 = (u64)w->rect.x + relative;
             u16 target = target64 > right ? right : (u16)target64;
 
-            col = put_spaces(grid, row, col, target);
+            col = put_styled_spaces(grid, row, col, target, style.fg, bg,
+                                    style.attrs);
             if (n == 1U && cluster[0] == '\t') {
                 u64 stop64 = (u64)col + cells;
                 u16 stop = stop64 > right ? right : (u16)stop64;
 
-                col = put_spaces(grid, row, col, stop);
+                col = put_styled_spaces(grid, row, col, stop, style.fg, bg,
+                                        style.attrs);
             } else {
                 col = yew_grid_put(grid, row, col, cluster, (size_t)n,
-                                   color, color, 0U);
+                                   style.fg, bg, style.attrs);
             }
         }
         logical.v = cells > UINT64_MAX - logical.v ? UINT64_MAX :
@@ -424,8 +517,23 @@ void yew_draw_document_rows(Ed *ed, Win *w, u16 lo, u16 hi)
             line.v < line_count) {
             Span span = w->vp.wrap ? yew_wrap_row(w, line, sub) :
                                      line_content_span(tb, line);
+            Span line_span = yew_textbuf_line_span(tb, line);
+            SynSpan plain = {0U, 0U, YEW_ATTR_TEXT, 0U};
+            SynLineOut syn;
 
-            draw_span(grid, tb, span, (u16)row32, w,
+            if (w->syn_spans != NULL && w->syn_spans_cap != 0U &&
+                w->buf->syn.entry.len == (size_t)line_count) {
+                syn = (SynLineOut){w->syn_spans, 0U, w->syn_spans_cap,
+                                   YEW_SYN_STATE_UNKNOWN, YEW_SYN_STOP_OK};
+                yew_syn_spans(&w->buf->syn, tb, line, &syn);
+            } else {
+                u64 len = span.hi - line_span.lo;
+
+                plain.len = len > UINT16_MAX ? UINT16_MAX : (u16)len;
+                syn = (SynLineOut){&plain, 1U, 1U, YEW_SYN_STATE_ROOT,
+                                   YEW_SYN_STOP_OK};
+            }
+            draw_span(grid, tb, span, line_span.lo, &syn, (u16)row32, w,
                       w->vp.wrap ? (CCol){0U} : w->vp.left);
         } else {
             (void)put_spaces(grid, (u16)row32, w->rect.x,
@@ -434,6 +542,7 @@ void yew_draw_document_rows(Ed *ed, Win *w, u16 lo, u16 hi)
     }
     yew_gutter_draw(ed, w, lo, hi);
     draw_selection_rows(ed, w, lo, hi);
+    draw_search_rows(ed, w, lo, hi);
     draw_secondary_rows(ed, w, lo, hi);
     if (lo == 0U && hi == w->rect.h) {
         grid->cursor_overlay_signature = cursor_overlay_signature(ed, w);

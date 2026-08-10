@@ -14,6 +14,8 @@
 #include "term/render.h"
 #include "term/tty.h"
 #include "edit/ed.h"
+#include "search/regex.h"
+#include "syn/engine.h"
 #include "text/clipboard.h"
 #include "text/register.h"
 #include "text/undo.h"
@@ -41,6 +43,16 @@ typedef struct Demo {
     bool echo_ready;
     Key echo_key;
 } Demo;
+
+typedef struct DemoSynToy {
+    Arena arena;
+    Arena aux_arena;
+    Interner aux;
+    SynCtx ctxs[4];
+    SynRule rules[10];
+    SynDef def;
+    SynEngine *engine;
+} DemoSynToy;
 
 static i64 now_ms(void)
 {
@@ -80,6 +92,105 @@ static YewColor indexed(u8 index)
     YewColor color = {YEW_COLOR_INDEXED, index, 0U, 0U};
 
     return color;
+}
+
+static void syn_first_add(u8 first[32], u8 byte)
+{
+    first[byte >> 3U] |= (u8)(1U << (byte & 7U));
+}
+
+static void syn_rule_init(DemoSynToy *toy, u32 i, const char *pattern,
+                          u8 attr, u8 op, u16 target)
+{
+    SynRule *rule = &toy->rules[i];
+    YewReErr err = {0U, NULL};
+
+    (void)memset(rule, 0, sizeof(*rule));
+    (void)memset(rule->caps, 0xff, sizeof(rule->caps));
+    rule->re = yew_re_compile(&toy->arena, pattern, strlen(pattern), 0U,
+                              &err);
+    if (rule->re == NULL)
+        YEW_BUG("Sprint 39 PTY toy regex /%s/: %s", pattern,
+                err.msg == NULL ? "compile failed" : err.msg);
+    rule->attr = attr;
+    rule->op = op;
+    rule->target = target;
+}
+
+static void syn_rule_first(DemoSynToy *toy, u32 rule, u32 ctx,
+                           const char *bytes)
+{
+    const u8 *p = (const u8 *)bytes;
+
+    while (*p != 0U) {
+        syn_first_add(toy->rules[rule].first, *p);
+        syn_first_add(toy->ctxs[ctx].first, *p++);
+    }
+}
+
+static void demo_syn_toy_init(DemoSynToy *toy)
+{
+    enum { MAIN, STRING, BLOCK_COMMENT, LINE_COMMENT };
+
+    (void)memset(toy, 0, sizeof(*toy));
+    arena_init(&toy->arena);
+    arena_init(&toy->aux_arena);
+    interner_init(&toy->aux, &toy->aux_arena);
+    toy->ctxs[MAIN] = (SynCtx){.first_rule = 0U, .nrules = 7U,
+                               .dflt_attr = YEW_ATTR_TEXT,
+                               .at_eol = SYN_OP_STAY};
+    toy->ctxs[STRING] = (SynCtx){.first_rule = 7U, .nrules = 2U,
+                                 .dflt_attr = YEW_ATTR_STRING,
+                                 .at_eol = SYN_OP_POP, .eol_nop = 1U};
+    toy->ctxs[BLOCK_COMMENT] =
+        (SynCtx){.first_rule = 9U, .nrules = 1U,
+                 .dflt_attr = YEW_ATTR_COMMENT, .at_eol = SYN_OP_STAY};
+    toy->ctxs[LINE_COMMENT] =
+        (SynCtx){.first_rule = 10U, .nrules = 0U,
+                 .dflt_attr = YEW_ATTR_COMMENT, .at_eol = SYN_OP_POP,
+                 .eol_nop = 1U};
+
+    syn_rule_init(toy, 0U, "//", YEW_ATTR_COMMENT, SYN_OP_PUSH,
+                  LINE_COMMENT);
+    syn_rule_first(toy, 0U, MAIN, "/");
+    syn_rule_init(toy, 1U, "/\\*", YEW_ATTR_COMMENT, SYN_OP_PUSH,
+                  BLOCK_COMMENT);
+    syn_rule_first(toy, 1U, MAIN, "/");
+    syn_rule_init(toy, 2U, "\"", YEW_ATTR_STRING, SYN_OP_PUSH, STRING);
+    syn_rule_first(toy, 2U, MAIN, "\"");
+    syn_rule_init(toy, 3U, "\\b(if|else|while|return)\\b",
+                  YEW_ATTR_KEYWORD_CONTROL, SYN_OP_STAY, 0U);
+    syn_rule_first(toy, 3U, MAIN, "iewr");
+    syn_rule_init(toy, 4U, "[0-9]+", YEW_ATTR_NUMBER, SYN_OP_STAY, 0U);
+    syn_rule_first(toy, 4U, MAIN, "0123456789");
+    syn_rule_init(toy, 5U, "\\b(true|false)\\b", YEW_ATTR_BOOLEAN,
+                  SYN_OP_STAY, 0U);
+    syn_rule_first(toy, 5U, MAIN, "tf");
+    syn_rule_init(toy, 6U, "[+*/=-]+", YEW_ATTR_OPERATOR, SYN_OP_STAY, 0U);
+    syn_rule_first(toy, 6U, MAIN, "+*/=-");
+    syn_rule_init(toy, 7U, "\\\\.", YEW_ATTR_STRING_ESCAPE,
+                  SYN_OP_STAY, 0U);
+    syn_rule_first(toy, 7U, STRING, "\\");
+    syn_rule_init(toy, 8U, "\"", YEW_ATTR_STRING, SYN_OP_POP, 0U);
+    toy->rules[8U].nop = 1U;
+    syn_rule_first(toy, 8U, STRING, "\"");
+    syn_rule_init(toy, 9U, "\\*/", YEW_ATTR_COMMENT, SYN_OP_POP, 0U);
+    toy->rules[9U].nop = 1U;
+    syn_rule_first(toy, 9U, BLOCK_COMMENT, "*");
+
+    toy->def = (SynDef){"pty-toy", MAIN, 4U, 10U,
+                        toy->ctxs, toy->rules, &toy->aux};
+    toy->engine = yew_syn_engine_new(&toy->def);
+    if (toy->engine == NULL)
+        YEW_BUG("allocating Sprint 39 PTY toy engine");
+}
+
+static void demo_syn_toy_free(DemoSynToy *toy)
+{
+    yew_syn_engine_free(toy->engine);
+    interner_free(&toy->aux);
+    arena_free_all(&toy->aux_arena);
+    arena_free_all(&toy->arena);
 }
 
 static const char *demo_getenv(const char *name)
@@ -378,9 +489,93 @@ static void paint_s15(Demo *d)
     bytebuf_free(&text);
 }
 
+/*
+ * Sprint 39 definitions and file detection are deliberately deferred, so
+ * the shipped editor cannot bind the toy language yet.  This PTY-only scene
+ * binds the hand-written definition directly, then goes through the same
+ * SynBuf, viewport, draw, grid and renderer path as the editor.  In
+ * particular, the wide clusters on the carried block-comment line must keep
+ * one syntax attr across every cell of each cluster.
+ */
+static void paint_s39_syntax(Demo *d)
+{
+    static const char head[] =
+        "if 42 return true\n"
+        "name = \"hello\\nworld\"\n"
+        "/* carried comment starts\n"
+        "CJK \xE6\xBC\xA2\xE5\xAD\x97 emoji \xF0\x9F\x98\x80 family "
+        "\xF0\x9F\x91\xA8\xE2\x80\x8D\xF0\x9F\x91\xA9\xE2\x80\x8D"
+        "\xF0\x9F\x91\xA7\xE2\x80\x8D\xF0\x9F\x91\xA6\n"
+        "comment closes */ while false\n";
+    DemoSynToy toy;
+    Ed ed;
+    Buffer buffer;
+    Buffer *bufptrs[1];
+    Win win;
+    Cursor cursor = {BYTEOFF(0U), {0U}, BYTEOFF(0U)};
+    Bytebuf text;
+    SynSettleReport report;
+    u32 line;
+
+    (void)memset(&ed, 0, sizeof(ed));
+    (void)memset(&buffer, 0, sizeof(buffer));
+    (void)memset(&win, 0, sizeof(win));
+    bytebuf_init(&text);
+    bytebuf_append(&text, head, sizeof(head) - 1U);
+    for (line = 5U; line < 40U; line++)
+        bytebuf_printf(&text, "line %02u // stable toy fixture\n", line + 1U);
+
+    demo_syn_toy_init(&toy);
+    buffer.tb = yew_textbuf_from_bytes(text.data, text.len);
+    buffer.undo = yew_undo_new(buffer.tb);
+    yew_undo_mark_saved(buffer.undo);
+    yew_filemeta_init(&buffer.meta);
+    buffer.path = (char *)"s39-toy.toy";
+    yew_syn_buf_init(&buffer.syn);
+    yew_syn_buf_bind(&buffer.syn, toy.engine);
+    yew_syn_attach(&buffer.syn, 1U, buffer.tb);
+    do {
+        yew_syn_settle(&buffer.syn, buffer.tb, LINENO(0U), LINENO(24U),
+                       INT64_MAX, &report);
+    } while (!report.fixpoint);
+
+    win.buf = &buffer;
+    win.syn_spans = calloc(YEW_SYN_MAX_SPANS, sizeof(*win.syn_spans));
+    if (win.syn_spans == NULL)
+        YEW_BUG("allocating Sprint 39 PTY syntax spans");
+    win.syn_spans_cap = YEW_SYN_MAX_SPANS;
+    yew_cset_init(&win.cs, cursor);
+    yew_vp_init(&win);
+    win.number_style = YEW_NUM_ABS;
+
+    ed.grid = d->grid;
+    ed.mode = YEW_MODE_L;
+    ed.prev_unit = YEW_MODE_L;
+    ed.win = &win;
+    bufptrs[0] = &buffer;
+    ed.ws.bufs = bufptrs;
+    ed.ws.nbufs = 1U;
+    yew_layout(&ed);
+    yew_draw_win(&ed, &win);
+    yew_grid_mark_all(&ed.grid);
+    d->grid = ed.grid;
+
+    yew_vp_free(&win);
+    yew_cset_free(&win.cs);
+    free(win.syn_spans);
+    yew_syn_detach(&buffer.syn);
+    yew_undo_free(buffer.undo);
+    yew_textbuf_free(buffer.tb);
+    yew_filemeta_dispose(&buffer.meta);
+    demo_syn_toy_free(&toy);
+    bytebuf_free(&text);
+}
+
 static void paint_scene(Demo *d)
 {
-    if (strncmp(d->scene, "s15_", 4U) == 0)
+    if (strcmp(d->scene, "s39_syntax") == 0)
+        paint_s39_syntax(d);
+    else if (strncmp(d->scene, "s15_", 4U) == 0)
         paint_s15(d);
     else if (strcmp(d->scene, "wide") == 0)
         paint_wide(&d->grid);
@@ -608,6 +803,7 @@ static bool parse_args(int argc, char **argv, const char **scene, bool *crash)
         }
     }
     return strncmp(*scene, "s15_", 4U) == 0 ||
+           strcmp(*scene, "s39_syntax") == 0 ||
            strcmp(*scene, "basic") == 0 || strcmp(*scene, "wide") == 0 ||
            strcmp(*scene, "colors") == 0 ||
            strcmp(*scene, "damage") == 0 ||

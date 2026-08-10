@@ -25,7 +25,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=3
 
 
 
- L recording @a                                                                 
+ L ●REC arecording @a                                                           
 --- style
 AAAAAAAAAA
 AAAAA
@@ -50,8 +50,9 @@ AAAAA
 
 
 
-BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+BBBCCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 --- legend
 A fg=default bg=default attrs=----------
 B fg=#ebf4ff bg=#266eba attrs=b---------
-C fg=#dae5f0 bg=#14304c attrs=----------
+C fg=#2b1f08 bg=#e1a82c attrs=b---------
+D fg=#dae5f0 bg=#14304c attrs=----------

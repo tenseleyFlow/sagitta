@@ -609,8 +609,8 @@ bool yew_re_pike_run_ex(const YewRe *re, const YewReInput *in, u64 start,
             u64 hi = best->slot[g * 2U + 1U];
 
             if (lo == UINT64_MAX || hi == UINT64_MAX) {
-                out->g[g].lo = 0U;
-                out->g[g].hi = 0U;
+                out->g[g].lo = UINT64_MAX;
+                out->g[g].hi = UINT64_MAX;
                 continue;
             }
             out->g[g].lo = lo;

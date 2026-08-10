@@ -174,8 +174,14 @@ void test_fl_cmd_buf_close_primary_retires_id_without_alias(void)
     YEW_ASSERT(!fl_h_alive(&ed.handles, old));
     YEW_ASSERT(ed.buffer.id > old_id);
     YEW_ASSERT_EQ_U64(yew_textbuf_len(ed.buffer.tb), 0U);
+    YEW_ASSERT_EQ_U64(ed.buffer.syn.entry.len,
+                      yew_textbuf_line_count(ed.buffer.tb));
     YEW_ASSERT(yew_ws_buf_by_id(&ed, old_id) == NULL);
     YEW_ASSERT(yew_ws_buf_by_id(&ed, ed.buffer.id) == &ed.buffer);
+    YEW_ASSERT_EQ_I64(invoke(&ed, ed.win, "ed.edit.insert.at", 0, "x\n",
+                             2U, (Span){0U, 0U}, false), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(ed.buffer.syn.entry.len,
+                      yew_textbuf_line_count(ed.buffer.tb));
     yew_ed_free(&ed);
 }
 

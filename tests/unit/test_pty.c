@@ -30,7 +30,8 @@ void test_pty_environment_exact(void)
          * baseline so a case that does not ask for them cannot inherit
          * whatever the developer's shell happens to export. */
         "NO_COLOR=",
-        "YEW_ASCII=0"
+        "YEW_ASCII=0",
+        "YEW_RUNTIME_DIR=/tmp/yew-runtime"
     };
     char *envp[YEW_PTY_ENV_COUNT + 1U] = {0};
     size_t i;
@@ -41,7 +42,7 @@ void test_pty_environment_exact(void)
                       (u64)YEW_PTY_ENV_COUNT);
 
     YEW_ASSERT(ptc_env_build(envp, "truecolor", "/tmp/yew-pty-state",
-                             "", "0"));
+                             "", "0", "/tmp/yew-runtime"));
     for (i = 0U; i < YEW_PTY_ENV_COUNT; i++)
         YEW_ASSERT_EQ_STR(envp[i], expected[i]);
     YEW_ASSERT_NULL(envp[YEW_PTY_ENV_COUNT]);

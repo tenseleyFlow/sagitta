@@ -27,10 +27,10 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=3
 
  L  pty-s14-chrome_search_colors_16.txt              utf-8  lf  1:1  all  [1/12]
 --- style
-AAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAA
+AAAAAABAAACAAAACAACAAC
+AAAAAAAAAACAAAAAAAA
+AAAAAAAAACAAACAAAAACAAAAC
+AAAAAAACAAC
 AAAAA
 
 
@@ -50,8 +50,10 @@ AAAAA
 
 
 
-BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+DDDEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
 --- legend
 A fg=default bg=default attrs=----------
-B fg=idx:15 bg=idx:6 attrs=b---------
-C fg=idx:15 bg=idx:4 attrs=----------
+B fg=default bg=default attrs=---u--r---
+C fg=default bg=default attrs=------r---
+D fg=idx:15 bg=idx:6 attrs=b---------
+E fg=idx:15 bg=idx:4 attrs=----------

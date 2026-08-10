@@ -25,9 +25,15 @@
 #include "fl/macrolib.h"
 #include "util/log.h"
 
+static void ed_syn_init(Buffer *b)
+{
+    yew_syn_buf_init(&b->syn);
+}
+
 /* Tears down everything a buffer owns without touching the list slot. */
 static void ed_buffer_dispose(Buffer *b)
 {
+    yew_syn_detach(&b->syn);
     yew_opt_scope_free(&b->opt_overrides);
     if (b->jrn != NULL) {
         yew_journal_close(b->jrn);
@@ -82,6 +88,9 @@ static void ed_buffer_free(Ed *ed)
     ed->pane_root = NULL;
     ed->focus = NULL;
     yew_overlay_free(&ed->single_win.overlay);
+    free(ed->single_win.syn_spans);
+    ed->single_win.syn_spans = NULL;
+    ed->single_win.syn_spans_cap = 0U;
     yew_vp_free(&ed->single_win);
     yew_cset_free(&ed->single_win.cs);
     yew_opt_scope_free(&ed->single_win.opt_overrides);
@@ -124,9 +133,11 @@ Buffer *yew_ws_scratch_new(Ed *ed, const char *name, u32 flags)
         return NULL;
     b = yew_xcalloc(1U, sizeof(*b));
     b->owner = ed;
+    ed_syn_init(b);
     b->id = ed->ws.next_buf_id++;
     yew_filemeta_init(&b->meta);
     b->tb = yew_textbuf_new();
+    yew_syn_attach(&b->syn, YEW_LANG_NONE, b->tb);
     b->name = arena_strdup(&ed->arena, name);
     b->flags = flags | YEW_BUF_SCRATCH;
     b->tabwidth = YEW_VP_TABWIDTH;
@@ -170,6 +181,7 @@ Buffer *yew_ws_file_buf(Ed *ed, const char *path)
     }
     b = yew_xcalloc(1U, sizeof(*b));
     b->owner = ed;
+    ed_syn_init(b);
     b->id = ed->ws.next_buf_id++;
     yew_filemeta_init(&b->meta);
     b->tabwidth = YEW_VP_TABWIDTH;
@@ -181,6 +193,7 @@ Buffer *yew_ws_file_buf(Ed *ed, const char *path)
          * born loaded and empty.
          */
         b->tb = yew_textbuf_new();
+        yew_syn_attach(&b->syn, YEW_LANG_NONE, b->tb);
         b->undo = yew_undo_new(b->tb);
         yew_undo_mark_saved(b->undo);
         b->marks = yew_marks_new();
@@ -225,6 +238,7 @@ int yew_buf_hydrate(Ed *ed, Buffer *b)
     if (tb == NULL)
         tb = yew_textbuf_new();
     b->tb = tb;
+    yew_syn_attach(&b->syn, YEW_LANG_NONE, b->tb);
     b->undo = yew_undo_new(tb);
     yew_undo_mark_saved(b->undo);
     if (b->marks == NULL)
@@ -270,6 +284,7 @@ void yew_buf_defer(Ed *ed, Buffer *b)
     b->undo = NULL;
     yew_marks_free(b->marks);
     b->marks = NULL;
+    yew_syn_detach(&b->syn);
     yew_textbuf_free(b->tb);
     b->tb = NULL;
 }
@@ -402,6 +417,8 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
 
     ed->buffer.tb = tb;
     ed->buffer.owner = ed;
+    ed_syn_init(&ed->buffer);
+    yew_syn_attach(&ed->buffer.syn, YEW_LANG_NONE, tb);
     ed->buffer.id = ed->ws.next_buf_id++;
     ed->buffer.path = path == NULL ? NULL : arena_strdup(&ed->arena, path);
     ed->buffer.tabwidth = YEW_VP_TABWIDTH;
@@ -450,6 +467,9 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
     }
     yew_reg_bind_context(&ed->regs, ed->buffer.undo, &ed->buffer.meta);
     ed->single_win.id = ed->next_win_id++;
+    ed->single_win.syn_spans = yew_xcalloc(YEW_SYN_MAX_SPANS,
+                                            sizeof(SynSpan));
+    ed->single_win.syn_spans_cap = YEW_SYN_MAX_SPANS;
     yew_cset_init(&ed->single_win.cs, cursor);
     ed->single_win.buf = &ed->buffer;
     yew_vp_init(&ed->single_win);
@@ -683,14 +703,32 @@ Buffer *yew_ed_doc(Ed *ed)
 /* Shim so the text layer can feed the changelist without knowing it
  * exists.  Job output goes to YEW_BUF_NOUNDO scratch buffers, which are
  * not places the user "changed" and so are excluded here. */
-static void ed_on_change(void *ctx, ByteOff at, i64 now_ms)
+static void ed_on_change(void *ctx, ByteOff at, LineNo line,
+                         u64 removed_lines, u64 inserted_lines,
+                         i64 now_ms, bool new_change)
 {
     Buffer *b = ctx;
+    u64 current_lines;
+    u64 prior_lines;
 
-    if (b == NULL || (b->flags & YEW_BUF_NOUNDO) != 0U)
+    if (b == NULL)
         return;
-    yew_change_record(b, at, now_ms);
-    yew_fl_hook_note_change(b->owner, b, at.v);
+    if (new_change && (b->flags & YEW_BUF_NOUNDO) == 0U) {
+        yew_change_record(b, at, now_ms);
+        yew_fl_hook_note_change(b->owner, b, at.v);
+    }
+    current_lines = yew_textbuf_line_count(b->tb);
+    prior_lines = current_lines >= inserted_lines &&
+                          removed_lines <=
+                              UINT64_MAX - (current_lines - inserted_lines)
+                      ? current_lines - inserted_lines + removed_lines
+                      : UINT64_MAX;
+    if (prior_lines == b->syn.entry.len)
+        yew_syn_edit(&b->syn, line, removed_lines, inserted_lines);
+    else
+        yew_syn_attach(&b->syn, b->syn.lang, b->tb);
+    if (b->owner != NULL)
+        b->owner->footer_dirty = true;
 }
 
 bool yew_ed_mark_set(Ed *ed, Buffer *b, u8 name, ByteOff at)
@@ -758,6 +796,8 @@ Win *yew_ed_win_clone(Ed *ed, const Win *src)
     w->rect = src->rect;
     w->number_style = src->number_style;
     w->gutter_width = src->gutter_width;
+    w->syn_spans = yew_xcalloc(YEW_SYN_MAX_SPANS, sizeof(SynSpan));
+    w->syn_spans_cap = YEW_SYN_MAX_SPANS;
     {
         Cursor seed = {BYTEOFF(0U), {0U}, BYTEOFF(0U)};
 
@@ -803,6 +843,7 @@ void yew_ed_win_release(Ed *ed, Win *w)
     if (w == &ed->single_win)
         return;
     yew_overlay_free(&w->overlay);
+    free(w->syn_spans);
     yew_vp_free(w);
     yew_cset_free(&w->cs);
     yew_opt_scope_free(&w->opt_overrides);
@@ -829,6 +870,148 @@ EditCtx yew_ed_edit_ctx_for(Ed *ed, Win *win)
     ec.on_change_ctx = buffer;
     ec.now_ms = ed->now_ms;
     return ec;
+}
+
+static void ed_damage_win_line(Ed *ed, Win *win, LineNo line,
+                               bool line_count_changed);
+
+static u32 ed_syn_visible_leaves(const Ed *ed, Pane **leaves)
+{
+    u32 n = 0U;
+    u32 i;
+
+    if (ed == NULL || ed->pane_root == NULL)
+        return 0U;
+    yew_pane_collect_leaves(ed->pane_root, leaves, YEW_PANE_MAX_LEAVES, &n);
+    for (i = 0U; i < n; i++) {
+        if (leaves[i] == ed->focus) {
+            Pane *focused = leaves[i];
+
+            while (i > 0U) {
+                leaves[i] = leaves[i - 1U];
+                i--;
+            }
+            leaves[0] = focused;
+            break;
+        }
+    }
+    return n;
+}
+
+bool yew_ed_syn_pending(const Ed *ed)
+{
+    Pane *leaves[YEW_PANE_MAX_LEAVES];
+    u32 n;
+    u32 i;
+
+    n = ed_syn_visible_leaves(ed, leaves);
+    for (i = 0U; i < n; i++) {
+        const Win *win = leaves[i]->win;
+
+        if (win != NULL && win->buf != NULL && win->buf->tb != NULL &&
+            win->buf->syn.settling)
+            return true;
+    }
+    return false;
+}
+
+void yew_ed_syn_tick(Ed *ed, i64 budget_us, bool prioritize_focus)
+{
+    Pane *leaves[YEW_PANE_MAX_LEAVES];
+    Buffer *candidates[YEW_PANE_MAX_LEAVES];
+    Win *candidate_views[YEW_PANE_MAX_LEAVES];
+    u32 n;
+    u32 i;
+    u32 ncandidates = 0U;
+    u32 selected = 0U;
+    u32 shown = 0U;
+    Buffer *b;
+    Win *view;
+    LineNo view_lo;
+    LineNo view_hi;
+    SynSettleReport report;
+    bool status_before;
+    bool status_after;
+    bool spec_before;
+    bool provisional_changed;
+
+    n = ed_syn_visible_leaves(ed, leaves);
+    for (i = 0U; i < n; i++) {
+        Win *candidate = leaves[i]->win;
+        u32 j;
+
+        if (candidate == NULL || candidate->buf == NULL ||
+            candidate->buf->tb == NULL || !candidate->buf->syn.settling)
+            continue;
+        for (j = 0U; j < ncandidates; j++) {
+            if (candidates[j] == candidate->buf)
+                break;
+        }
+        if (j != ncandidates)
+            continue;
+        candidates[ncandidates] = candidate->buf;
+        candidate_views[ncandidates] = candidate;
+        ncandidates++;
+    }
+    if (ncandidates == 0U)
+        return;
+    if (!prioritize_focus && ed->syn_rr_last_valid) {
+        for (i = 0U; i < ncandidates; i++) {
+            if (candidates[i]->id == ed->syn_rr_last_buf_id) {
+                selected = (i + 1U) % ncandidates;
+                break;
+            }
+        }
+    }
+    b = candidates[selected];
+    view = candidate_views[selected];
+    ed->syn_rr_last_buf_id = b->id;
+    ed->syn_rr_last_valid = true;
+
+    view_lo = LINENO(UINT64_MAX);
+    view_hi = LINENO(0U);
+    for (i = 0U; i < n; i++) {
+        Win *shown_win = leaves[i]->win;
+        LineNo lo;
+        LineNo hi;
+
+        if (shown_win == NULL || shown_win->buf != b)
+            continue;
+        shown++;
+        lo = yew_win_view_top(shown_win);
+        hi = yew_vp_last_visible_line(shown_win);
+        if (hi.v != UINT64_MAX)
+            hi.v++;
+        if (lo.v < view_lo.v)
+            view_lo = lo;
+        if (hi.v > view_hi.v)
+            view_hi = hi;
+    }
+    status_before = ed->win != NULL && b == ed->win->buf &&
+                    yew_syn_status_visible(&b->syn);
+    spec_before = b->syn.spec_valid;
+    yew_syn_settle(&b->syn, b->tb, view_lo, view_hi, budget_us, &report);
+    provisional_changed = spec_before != b->syn.spec_valid;
+    status_after = ed->win != NULL && b == ed->win->buf &&
+                   yew_syn_status_visible(&b->syn);
+    if ((provisional_changed || report.hit_view) &&
+        (shown > 1U || view != ed->win)) {
+        ed->full_damage = true;
+    } else if (provisional_changed) {
+        yew_ed_damage_document(ed);
+    } else if (report.hit_view) {
+        u64 lo = report.damage_lo.v > view_lo.v ? report.damage_lo.v :
+                                                      view_lo.v;
+        u64 hi = report.damage_hi.v < view_hi.v ? report.damage_hi.v :
+                                                      view_hi.v;
+        u64 line;
+
+        for (line = lo; line < hi; line++)
+            ed_damage_win_line(ed, view, LINENO(line), false);
+    }
+    if (ed->win != NULL && b == ed->win->buf &&
+        (status_before || status_after || report.fixpoint || b->syn.degraded))
+        ed->footer_dirty = true;
 }
 
 EditCtx yew_ed_edit_ctx(Ed *ed)
@@ -907,16 +1090,15 @@ void yew_ed_damage_rows(Ed *ed, u16 lo, u16 hi)
     }
 }
 
-void yew_ed_damage_line(Ed *ed, LineNo line, bool line_count_changed)
+static void ed_damage_win_line(Ed *ed, Win *win, LineNo line,
+                               bool line_count_changed)
 {
-    Win *win;
     LineNo top;
     u16 lo;
     u16 hi;
 
-    if (ed == NULL || ed->win == NULL)
+    if (ed == NULL || win == NULL)
         return;
-    win = ed->win;
     yew_vp_invalidate_from(win, line);
     if (line_count_changed)
         ed->layout_dirty = true;
@@ -934,6 +1116,13 @@ void yew_ed_damage_line(Ed *ed, LineNo line, bool line_count_changed)
         return;
     hi = line_count_changed ? win->rect.h : (u16)(lo + 1U);
     yew_ed_damage_rows(ed, lo, hi);
+}
+
+void yew_ed_damage_line(Ed *ed, LineNo line, bool line_count_changed)
+{
+    if (ed == NULL)
+        return;
+    ed_damage_win_line(ed, ed->win, line, line_count_changed);
 }
 
 Cursor *yew_ed_cursor(Ed *ed)

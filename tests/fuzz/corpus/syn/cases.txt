@@ -1,0 +1,11 @@
+# Sprint 39 syntax-engine seed corpus.  Field two is decoded as hex by fuzzlib.
+plain|69662072657475726e2034323b|
+string_escape|227965775c6e7461625c78343122|
+block_comment|2f2a20544f444f3a20666978202a2f|
+unterminated_string|226f70656e|
+unterminated_comment|2f2a206f70656e|
+zero_width|616161616161|
+valid_utf8|e4b8ade69687f09f8fb9e2808df09f92bb|
+invalid_utf8|80c0afeda080f5ffffff|
+nested_tokens|2f2a2f2a2f2a2f2a2a2f2a2f2a2f2a2f|
+nul_bytes|006966002f2a00222a2f00|

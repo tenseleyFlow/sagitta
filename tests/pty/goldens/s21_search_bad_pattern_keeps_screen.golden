@@ -27,12 +27,12 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=3
 E: unterminated character class                                                 
 /needle[a-                                                                      
 --- style
-AAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAABBBBBBAAAA
 AAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAACCCCCCAAAAAA
 AAAAAAAAAAAAAAAA
 AAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAACCCCCCAAAA
 AAAAA
 
 
@@ -49,11 +49,13 @@ AAAAA
 
 
 
-BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-CDDDDDDDDDEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+DDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+EFFFFFFFFFGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
 --- legend
 A fg=default bg=default attrs=----------
-B fg=idx:196 bg=#4e2a0f attrs=b---------
-C fg=#2f1806 bg=#e77d24 attrs=b---------
-D fg=#f7e0cc bg=#4e2a0f attrs=----------
-E fg=#f7e0cc bg=#4e2a0f attrs=b---------
+B fg=default bg=#e77d24 attrs=----------
+C fg=default bg=#4e2a0f attrs=----------
+D fg=idx:196 bg=#4e2a0f attrs=b---------
+E fg=#2f1806 bg=#e77d24 attrs=b---------
+F fg=#f7e0cc bg=#4e2a0f attrs=----------
+G fg=#f7e0cc bg=#4e2a0f attrs=b---------

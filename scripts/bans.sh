@@ -14,6 +14,7 @@ ci_files=$tmp/ci-files
 pty_files=$tmp/pty-files
 piece_files=$tmp/piece-files
 deterministic_fuzz_files=$tmp/deterministic-fuzz-files
+syn_files=$tmp/syn-files
 hits=$tmp/hits
 : >"$hits"
 
@@ -28,7 +29,11 @@ find "$repo_dir/.github" -type f -print | LC_ALL=C sort >"$ci_files"
 printf '%s\n' "$repo_dir/src/text/piece.c" >"$piece_files"
 find "$repo_dir/tests/fuzz" "$repo_dir/scripts" -type f -print |
     LC_ALL=C sort >"$deterministic_fuzz_files"
+: >"$syn_files"
 while IFS= read -r file; do
+    case ${file#"$repo_dir"/} in
+        src/syn/*) printf '%s\n' "$file" >>"$syn_files" ;;
+    esac
     case ${file#"$repo_dir"/} in
         src/unicode/*) ;;
         *) printf '%s\n' "$file" ;;
@@ -226,6 +231,10 @@ scan "locale-dependent Unicode APIs are forbidden" \
     '(wcwidth|wcswidth|mbrtowc|wchar\.h|setlocale|iconv)' "$source_files"
 scan "Unicode width math belongs only in src/unicode" \
     '(0x1F3FB|0xFE0F|0x200D|EastAsian)' "$non_unicode_files"
+scan "syntax definitions emit semantic attrs, never colors" \
+    '(#[0-9a-fA-F]{6}|[Rr][Gg][Bb]|38;2|48;5)' "$syn_files"
+scan "syntax owns byte spans; width math belongs in src/unicode" \
+    'yew_(cp|str)_width' "$syn_files"
 scan "pty creation must use the audited posix_openpt harness" \
     '(forkpty|openpty|-lutil)' "$pty_files"
 scan "golden updates are forbidden in CI" \

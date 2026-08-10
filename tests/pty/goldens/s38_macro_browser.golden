@@ -10,8 +10,8 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
     a   —   10 B                                             @[ i"A" ]
     b   —   10 B
     c   —   10 B
-    alpha.first   —   43 B              build/pty-s38-macro
-    beta.second   —   44 B              build/pty-s38-macro
+    alpha.first   —   39 B              build/pty-s38-macro
+    beta.second   —   40 B              build/pty-s38-macro
 
 
 

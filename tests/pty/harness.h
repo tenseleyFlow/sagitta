@@ -10,7 +10,7 @@
 #include "util/buf.h"
 #include "vt.h"
 
-#define YEW_PTY_ENV_COUNT 14U
+#define YEW_PTY_ENV_COUNT 15U
 
 typedef struct PtySpec {
     /*
@@ -91,7 +91,8 @@ extern const PtyCase yew_pty_cases[];
 
 bool yew_pty_spawn(Pty *p, const PtySpec *sp);
 bool ptc_env_build(char **envp, const char *colors, const char *state_dir,
-                   const char *no_color, const char *ascii);
+                   const char *no_color, const char *ascii,
+                   const char *runtime_dir);
 void ptc_env_free(char **envp);
 
 void ptc_spawn(PtyCtx *c, const char *bin, ...);

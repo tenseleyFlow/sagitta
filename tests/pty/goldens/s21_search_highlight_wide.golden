@@ -27,9 +27,9 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=3
 
  L  pty-s14-s21_search_highlight_wide.txt             utf-8  lf  1:1  all  [1/4]
 --- style
-AAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAA
+AAAAAABBBBBBAAAAAACCCCCC
+AAAAAAAAAAAAAAAACCCCCC
+AAAAAAAAAAAACCCCCC
 AAAAA
 
 
@@ -50,8 +50,10 @@ AAAAA
 
 
 
-BBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+DDDEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
 --- legend
 A fg=default bg=default attrs=----------
-B fg=#ebf4ff bg=#266eba attrs=b---------
-C fg=#dae5f0 bg=#14304c attrs=----------
+B fg=default bg=#e77d24 attrs=----------
+C fg=default bg=#4e2a0f attrs=----------
+D fg=#ebf4ff bg=#266eba attrs=b---------
+E fg=#dae5f0 bg=#14304c attrs=----------

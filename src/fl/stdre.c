@@ -266,7 +266,7 @@ static FlValue match_map(FlVm *vm, const FlStr *s, const YewReMatch *m,
 
         fl_gc_protect(vm, FL_OBJ_V(FL_LIST, gs));
         for (g = 0U; g < m->ngroups; g++) {
-            bool absent = g != 0U && m->g[g].lo == 0U && m->g[g].hi == 0U;
+            bool absent = g != 0U && m->g[g].lo == UINT64_MAX;
 
             if (absent) {
                 (void)fl_list_push(vm, gs, FL_NIL_V);
@@ -424,10 +424,9 @@ static bool expand(FlVm *vm, Bytebuf *out, const FlStr *tpl, const FlStr *s,
             return fl_raise(vm, "index",
                             "re: the template names group %u, the pattern "
                             "has %u", (unsigned)g, (unsigned)ngroups);
-        /* A group that did not participate expands to nothing -- the
-         * engine reports it as an empty span, and an empty expansion is
-         * what every replace dialect does with it. */
-        if (m != NULL && m->g[g].hi > m->g[g].lo)
+        /* A group that did not participate expands to nothing. */
+        if (m != NULL && m->g[g].lo != UINT64_MAX &&
+            m->g[g].hi > m->g[g].lo)
             bytebuf_append(out, s->b + m->g[g].lo,
                            (size_t)(m->g[g].hi - m->g[g].lo));
     }

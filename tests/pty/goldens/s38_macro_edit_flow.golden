@@ -25,7 +25,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=12
 
 
 
- L  yew/build/pty-s14-s38_macro_edit_flow.txt *          utf-8  lf  1:2  all
+ L  tmp/yew/build/pty-s14-s38_macro_edit_flow.txt *          utf-8  lf  1:2  all
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBB
 CCCCCCCCCCC

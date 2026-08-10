@@ -318,9 +318,10 @@ void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
     size_t path_len;
     char search_badge[40];
     char wrap_badge[8];
+    char syn_badge[8];
     char recording[32];
     RecStatus rec_status;
-    Segment segments[11];
+    Segment segments[12];
     int available;
     int path_cells;
     int dirty_cells;
@@ -462,6 +463,17 @@ void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
         else
             wrap_badge[0] = '\0';
         segments[10] = (Segment){wrap_badge, 2U, show};
+    }
+    {
+        bool show = yew_syn_status_visible(&w->buf->syn);
+
+        if (show)
+            (void)snprintf(syn_badge, sizeof(syn_badge), "%s",
+                           w->buf->syn.degraded ? "syn!" :
+                           "syn\xE2\x80\xA6");
+        else
+            syn_badge[0] = '\0';
+        segments[11] = (Segment){syn_badge, 4U, show};
     }
     path_cells = cells(path);
     dirty_cells = yew_buf_dirty(w->buf) ? 2 : 0;

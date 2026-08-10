@@ -1,0 +1,6 @@
+# yew Sprint 39 syntax engine baselines (median_ns p99_ns)
+# Regressions above 1.2x either committed number fail perf-syn.
+line 7500 12000
+viewport_cold_200 525000 950000
+edit_settle_100k 8000 16000
+line_cap_512k 100 500

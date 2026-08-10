@@ -133,7 +133,7 @@ static void case_paint_resize(PtyCtx *c)
 
 static void case_osc52_frame(PtyCtx *c)
 {
-    static const char sequence[] = "\x1b]52;c;c2FnaXR0YQ==\x1b\\";
+    static const char sequence[] = "\x1b]52;c;eWV3\x1b\\";
 
     spawn_scene(c, "osc52");
     ptc_expect_output(c, sequence, sizeof(sequence) - 1U);
@@ -1697,18 +1697,38 @@ static void case_s38_macro_edit_flow(PtyCtx *c)
 {
     static const u8 initial[] = "base\n";
     static const u8 expected[] = "Ybase\n";
+    static const char fixture_rel[] =
+        "yew/build/pty-s14-s38_macro_edit_flow.txt";
+    static const char fixture_abs[] =
+        "/tmp/yew/build/pty-s14-s38_macro_edit_flow.txt";
     static const char config_source[] =
         "import ed\n"
         "ed.run(\"ed.reg.set\", {iarg: 97, sarg: \"@[ i\\\"\\\" ]\\n\"})\n";
     char config[256];
-    char path[256];
+    char *config_abs = NULL;
     char command[320];
     int n;
 
-    if (!make_fixture(c, initial, sizeof(initial) - 1U, path, sizeof(path)) ||
-        !s38_write_config(c, config_source, config, sizeof(config)))
-        return;
-    s38_spawn_configured(c, config, path);
+    config[0] = '\0';
+    (void)unlink(fixture_abs);
+    (void)rmdir("/tmp/yew/build");
+    (void)rmdir("/tmp/yew");
+    if ((mkdir("/tmp/yew", 0700) != 0 && errno != EEXIST) ||
+        (mkdir("/tmp/yew/build", 0700) != 0 && errno != EEXIST) ||
+        !write_bytes(fixture_abs, initial, sizeof(initial) - 1U) ||
+        !s38_write_config(c, config_source, config, sizeof(config))) {
+        ptc_check(c, false, "could not create Sprint 38 edit fixture");
+        goto cleanup;
+    }
+    config_abs = realpath(config, NULL);
+    if (config_abs == NULL) {
+        ptc_check(c, false, "could not resolve Sprint 38 config path");
+        goto cleanup;
+    }
+    ptc_set_cwd(c, "/tmp");
+    s38_spawn_configured(c, config_abs, fixture_rel);
+    free(config_abs);
+    config_abs = NULL;
 
     /* Q/e opens the register as ordinary Fletch source.  In insert mode,
      * move between the empty quotes and add the one changed character. */
@@ -1720,7 +1740,7 @@ static void case_s38_macro_edit_flow(PtyCtx *c)
     s18_settle_after_bytes(c, "w");
     s18_settle_after_keys(c, "enter");
 
-    n = snprintf(command, sizeof(command), "tabedit %s", path);
+    n = snprintf(command, sizeof(command), "tabedit %s", fixture_rel);
     if (n <= 0 || (size_t)n >= sizeof(command)) {
         ptc_check(c, false, "Sprint 38 tabedit command overflow");
     } else {
@@ -1732,12 +1752,19 @@ static void case_s38_macro_edit_flow(PtyCtx *c)
         s18_settle_after_keys(c, "enter");
         ptc_snapshot(c, "s38_macro_edit_flow");
         s18_settle_after_keys(c, "s");
-        ptc_check(c, file_equals(path, expected, sizeof(expected) - 1U),
+        ptc_check(c, file_equals(fixture_abs, expected,
+                                 sizeof(expected) - 1U),
                   "edited macro replay differed from typing the edit");
     }
     force_quit(c);
-    (void)unlink(config);
-    (void)unlink(path);
+
+cleanup:
+    free(config_abs);
+    if (config[0] != '\0')
+        (void)unlink(config);
+    (void)unlink(fixture_abs);
+    (void)rmdir("/tmp/yew/build");
+    (void)rmdir("/tmp/yew");
 }
 
 static void case_s38_macro_browser(PtyCtx *c)
@@ -4354,6 +4381,70 @@ static void case_s32_bug_restores_the_terminal(PtyCtx *c)
 }
 
 /* ---------------------------------------------------------------- */
+/* Sprint 39: syntax engine PTY contracts                            */
+/* ---------------------------------------------------------------- */
+
+static void case_s39_toy_syntax_80x24(PtyCtx *c)
+{
+    spawn_scene(c, "s39_syntax");
+    ptc_snapshot(c, "s39_toy_syntax_80x24");
+    quit_cleanly(c);
+}
+
+/*
+ * The Sprint 39 engine is built in, but path-to-language selection and
+ * shipped definitions are explicitly Sprint 40/42 deferrals.  Exercise the
+ * real editor with the specified 5,000-line damage shape and pin the honest
+ * deferred behavior: editing remains responsive, no fake settling badge is
+ * shown after 250 ms, and the diagnostic reports a fully settled disabled
+ * highlighter.  The live indicator appear/clear golden replaces this case
+ * once yew_syn_lang_for can return a real language.
+ */
+static void case_s39_deferred_5000_line_wave(PtyCtx *c)
+{
+    Bytebuf fixture;
+    Bytebuf screen;
+    char path[256];
+    u32 line;
+
+    bytebuf_init(&fixture);
+    for (line = 0U; line < 5000U; line++)
+        bytebuf_printf(&fixture, "plain fixture line %04u\n", line + 1U);
+    if (!s18_open(c, fixture.data, fixture.len, path, sizeof(path))) {
+        bytebuf_free(&fixture);
+        return;
+    }
+    bytebuf_free(&fixture);
+
+    s18_settle_after_keys(c, "i");
+    s18_settle_after_bytes(c, "/*");
+    s18_settle_after_keys(c, "esc");
+    bytebuf_init(&screen);
+    snapshot_write(&c->vt, &screen);
+    bytebuf_push_u8(&screen, 0U);
+    ptc_check(c, strstr((const char *)screen.data,
+                        "/*plain fixture line 0001") != NULL,
+              "first frame after 5,000-line edit did not show new bytes");
+    bytebuf_free(&screen);
+
+    ptc_settle(c, 300);
+    bytebuf_init(&screen);
+    snapshot_write(&c->vt, &screen);
+    bytebuf_push_u8(&screen, 0U);
+    ptc_check(c, strstr((const char *)screen.data, "syn\xE2\x80\xA6") == NULL &&
+                     strstr((const char *)screen.data, "syn!") == NULL,
+              "deferred language displayed a false syntax wave badge");
+    bytebuf_free(&screen);
+
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.syn.status");
+    s18_settle_after_keys(c, "enter");
+    ptc_snapshot(c, "s39_deferred_5000_line_wave");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+/* ---------------------------------------------------------------- */
 /* Sprint 37: batch mode never owns the terminal                    */
 /* ---------------------------------------------------------------- */
 
@@ -4388,6 +4479,10 @@ static void case_s37_batch_never_touches_the_terminal(PtyCtx *c)
 }
 
 const PtyCase yew_pty_cases[] = {
+    C(s39_toy_syntax_80x24, modern, 24U, 80U,
+      case_s39_toy_syntax_80x24),
+    C(s39_deferred_5000_line_wave, modern, 24U, 80U,
+      case_s39_deferred_5000_line_wave),
     C(s37_batch_never_touches_the_terminal, modern, 24U, 80U,
       case_s37_batch_never_touches_the_terminal),
     C(s38_macro_indicator_80, modern, 24U, 80U,

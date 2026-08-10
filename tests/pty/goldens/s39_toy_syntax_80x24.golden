@@ -1,0 +1,58 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=0,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
+--- text
+    1 if 42 return true
+    2 name = "hello\nworld"
+    3 /* carried comment starts
+    4 CJK 漢字 emoji 😀 family 👨‍👩‍👧‍👦
+    5 comment closes */ while false
+    6 line 06 // stable toy fixture
+    7 line 07 // stable toy fixture
+    8 line 08 // stable toy fixture
+    9 line 09 // stable toy fixture
+   10 line 10 // stable toy fixture
+   11 line 11 // stable toy fixture
+   12 line 12 // stable toy fixture
+   13 line 13 // stable toy fixture
+   14 line 14 // stable toy fixture
+   15 line 15 // stable toy fixture
+   16 line 16 // stable toy fixture
+   17 line 17 // stable toy fixture
+   18 line 18 // stable toy fixture
+   19 line 19 // stable toy fixture
+   20 line 20 // stable toy fixture
+   21 line 21 // stable toy fixture
+   22 line 22 // stable toy fixture
+   23 line 23 // stable toy fixture
+ L  s39-toy.toy                                              utf-8  lf  1:1  top
+--- style
+AAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAABBBBBBBBBBBBBBBBBBBBBBBBB
+AAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBB
+AAAAAABBBBBBBBBBBBBBBBBAAAAAAAAAAAA
+AAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBB
+AAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBB
+AAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBB
+AAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBB
+AAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBB
+AAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBB
+AAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBB
+AAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBB
+AAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBB
+AAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBB
+AAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBB
+AAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBB
+AAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBB
+AAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBB
+AAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBB
+AAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBB
+AAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBB
+AAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBB
+CCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+--- legend
+A fg=default bg=default attrs=----------
+B fg=default bg=default attrs=-d--------
+C fg=#ebf4ff bg=#266eba attrs=b---------
+D fg=#dae5f0 bg=#14304c attrs=----------

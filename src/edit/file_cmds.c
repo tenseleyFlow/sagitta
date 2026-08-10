@@ -213,12 +213,15 @@ static void close_primary(Ed *ed)
         yew_journal_close(b->jrn);
     yew_marks_free(b->marks);
     yew_undo_free(b->undo);
+    yew_syn_detach(&b->syn);
     yew_textbuf_free(b->tb);
     yew_filemeta_dispose(&b->meta);
     (void)memset(b, 0, sizeof(*b));
     yew_filemeta_init(&b->meta);
     b->id = ed->ws.next_buf_id++;
     b->tb = yew_textbuf_new();
+    yew_syn_buf_init(&b->syn);
+    yew_syn_attach(&b->syn, YEW_LANG_NONE, b->tb);
     b->undo = yew_undo_new(b->tb);
     yew_undo_mark_saved(b->undo);
     b->marks = yew_marks_new();

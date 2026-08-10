@@ -67,6 +67,9 @@ static void require_edit_wrapped(const EditCtx *ec)
 
 bool yew_edit_insert(EditCtx *ec, ByteOff at, const u8 *bytes, u64 len)
 {
+    LineNo line;
+    u64 old_lines;
+    u64 new_lines;
     u64 payload;
 
     edit_require(ec);
@@ -76,6 +79,8 @@ bool yew_edit_insert(EditCtx *ec, ByteOff at, const u8 *bytes, u64 len)
         YEW_BUG("edit insert: NULL payload");
     if (len == 0U)
         return true;
+    line = yew_textbuf_line_of(ec->tb, at);
+    old_lines = yew_textbuf_line_count(ec->tb);
     require_edit_wrapped(ec);
     if (!yew_edit_ensure_journal(ec))
         return false;
@@ -83,6 +88,7 @@ bool yew_edit_insert(EditCtx *ec, ByteOff at, const u8 *bytes, u64 len)
     if (ec->undo != NULL)
         yew_undo_prepare_insert(ec, at, len);
     yew_textbuf_insert(ec->tb, at, bytes, len);
+    new_lines = yew_textbuf_line_count(ec->tb);
     if (ec->marks != NULL)
         yew_marks_adjust(ec->marks, YEW_JOURNAL_INS, at, len);
     if (ec->cset != NULL)
@@ -93,12 +99,16 @@ bool yew_edit_insert(EditCtx *ec, ByteOff at, const u8 *bytes, u64 len)
     if (ec->undo != NULL)
         yew_undo_record_insert(ec, at, len, payload);
     if (ec->on_change != NULL)
-        ec->on_change(ec->on_change_ctx, at, ec->now_ms);
+        ec->on_change(ec->on_change_ctx, at, line, 0U,
+                      new_lines - old_lines, ec->now_ms, true);
     return ec->jrnl == NULL || yew_journal_ok(ec->jrnl);
 }
 
 bool yew_edit_delete(EditCtx *ec, Span range)
 {
+    LineNo line;
+    u64 old_lines;
+    u64 new_lines;
     u8 *removed;
     u64 len;
 
@@ -108,6 +118,8 @@ bool yew_edit_delete(EditCtx *ec, Span range)
     len = range.hi - range.lo;
     if (len == 0U)
         return true;
+    line = yew_textbuf_line_of(ec->tb, BYTEOFF(range.lo));
+    old_lines = yew_textbuf_line_count(ec->tb);
     require_edit_wrapped(ec);
     removed = copy_range(ec->tb, range);
     if (!yew_edit_ensure_journal(ec)) {
@@ -117,6 +129,7 @@ bool yew_edit_delete(EditCtx *ec, Span range)
     if (ec->undo != NULL)
         yew_undo_prepare_delete(ec, range);
     yew_textbuf_delete(ec->tb, range);
+    new_lines = yew_textbuf_line_count(ec->tb);
     if (ec->marks != NULL)
         yew_marks_adjust(ec->marks, YEW_JOURNAL_DEL, BYTEOFF(range.lo), len);
     if (ec->cset != NULL)
@@ -127,7 +140,8 @@ bool yew_edit_delete(EditCtx *ec, Span range)
     if (ec->undo != NULL)
         yew_undo_record_delete(ec, range);
     if (ec->on_change != NULL)
-        ec->on_change(ec->on_change_ctx, BYTEOFF(range.lo), ec->now_ms);
+        ec->on_change(ec->on_change_ctx, BYTEOFF(range.lo), line,
+                      old_lines - new_lines, 0U, ec->now_ms, true);
     free(removed);
     return ec->jrnl == NULL || yew_journal_ok(ec->jrnl);
 }

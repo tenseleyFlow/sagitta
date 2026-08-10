@@ -417,7 +417,8 @@ static const char *ascii_for(const PtyCtx *c)
 }
 
 bool ptc_env_build(char **envp, const char *colors, const char *state_dir,
-                   const char *no_color, const char *ascii)
+                   const char *no_color, const char *ascii,
+                   const char *runtime_dir)
 {
     static const char *const keys[] = {
         "TERM", "YEW_COLORS", "YEW_TTY_PROBE", "YEW_PROBE_TIMEOUT_MS",
@@ -425,7 +426,7 @@ bool ptc_env_build(char **envp, const char *colors, const char *state_dir,
         "YEW_LOG_LEVEL", "YEW_JOB_ELAPSED_MS", "SHELL",
         "YEW_PICKERS_NOW",
         /* Sprint 27 §7's degradation variants. */
-        "NO_COLOR", "YEW_ASCII"
+        "NO_COLOR", "YEW_ASCII", "YEW_RUNTIME_DIR"
     };
     const char *values[] = {
         "xterm-256color", colors, "1", "500", "25", state_dir,
@@ -440,14 +441,14 @@ bool ptc_env_build(char **envp, const char *colors, const char *state_dir,
         "/bin/sh",
         /* Sprint 26: pins the undo picker's relative timestamps. */
         "1700000000",
-        no_color, ascii
+        no_color, ascii, runtime_dir
     };
     size_t i;
 
     _Static_assert(YEW_ARRAY_LEN(keys) == YEW_PTY_ENV_COUNT,
                    "YEW_PTY_ENV_COUNT must match the key table");
     if (envp == NULL || colors == NULL || state_dir == NULL ||
-        no_color == NULL || ascii == NULL)
+        no_color == NULL || ascii == NULL || runtime_dir == NULL)
         return false;
     for (i = 0U; i < YEW_ARRAY_LEN(keys); i++) {
         envp[i] = env_pair(keys[i], values[i]);
@@ -489,6 +490,7 @@ void ptc_spawn(PtyCtx *c, const char *bin, ...)
 {
     char **argv;
     char *envp[YEW_PTY_ENV_COUNT + 1U];
+    char *runtime_dir;
     PtySpec spec;
     va_list ap;
     va_list count_ap;
@@ -523,12 +525,18 @@ void ptc_spawn(PtyCtx *c, const char *bin, ...)
             return;
         }
     }
+    /* A child may chdir into an isolated workspace.  Pin the checked-in
+     * runtime by absolute path so config-bearing cases remain hermetic. */
+    runtime_dir = realpath("runtime", NULL);
     if (!ptc_env_build(envp, color_tier(c), c->state_dir,
-                       no_color_for(c), ascii_for(c))) {
+                       no_color_for(c), ascii_for(c),
+                       runtime_dir == NULL ? "" : runtime_dir)) {
+        free(runtime_dir);
         strv_free(argv);
         ptc_fail(c, "allocating pinned environment");
         return;
     }
+    free(runtime_dir);
     (void)memset(&spec, 0, sizeof(spec));
     spec.path = bin;
     spec.argv = argv;

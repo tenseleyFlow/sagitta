@@ -143,6 +143,10 @@ struct Ed {
     /* The loop's clock, handed in with each key; nothing in the core
      * reads a clock itself (invariant 5). */
     i64 now_ms;
+    /* Last syntax buffer serviced.  Idle settle ticks resume after it;
+     * an input-bearing tick deliberately overrides this with focus. */
+    u32 syn_rr_last_buf_id;
+    bool syn_rr_last_valid;
     TimerHeap timers;
     JobTable jobs;
     Msg msg;
@@ -312,6 +316,8 @@ void yew_ed_handle_paste(Ed *ed, const u8 *bytes, size_t len, bool end);
 void yew_ed_resize(Ed *ed, bool resumed);
 void yew_ed_layout(Ed *ed);
 void yew_ed_render(Ed *ed);
+bool yew_ed_syn_pending(const Ed *ed);
+void yew_ed_syn_tick(Ed *ed, i64 budget_us, bool prioritize_focus);
 void yew_ed_damage_rows(Ed *ed, u16 lo, u16 hi);
 void yew_ed_damage_line(Ed *ed, LineNo line, bool line_count_changed);
 void yew_ed_damage_document(Ed *ed);

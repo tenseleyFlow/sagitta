@@ -393,7 +393,7 @@ void trace_write_c_snippet(const Trace *trace, Bytebuf *out)
                            (unsigned long long)op->a);
         }
     }
-    bytebuf_printf(out, "yew_textbuf_check(tb);\nsag_textbuf_free(tb);\n");
+    bytebuf_printf(out, "yew_textbuf_check(tb);\nyew_textbuf_free(tb);\n");
 }
 
 bool trace_failure_equal(const TraceFailure *a, const TraceFailure *b)
