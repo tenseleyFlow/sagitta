@@ -543,6 +543,7 @@ int yew_syn_main(int argc, char **argv, bool clean)
         at++;
     }
     yew_syn_cache_set_bypass(clean);
+    yew_syn_discovery_set_bypass(clean);
     if (at >= argc || strcmp(argv[at], "--help") == 0) {
         (void)fputs(syn_usage, at >= argc ? stderr : stdout);
         return at >= argc ? YEW_EXIT_ERR : YEW_EXIT_OK;
