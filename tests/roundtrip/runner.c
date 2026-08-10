@@ -27,6 +27,7 @@
 #include "fl/record.h"
 #include "gen.h"
 #include "text/undo.h"
+#include "ui/macrobrowse.h"
 #include "util/arena.h"
 #include "util/buf.h"
 #include "util/intern.h"
@@ -481,6 +482,100 @@ done:
     bytebuf_free(&emitted_b);
     bytebuf_free(&emitted_a);
     bytebuf_free(&fixture);
+    return ok;
+}
+
+/* Sprint 38: recorder output is already editable Fletch.  Exercise the
+ * actual edit/store path with two ordinary edits whose net byte effect is
+ * zero, then pin both the source bytes and parsed AST. */
+static bool run_edit_store_noop_fixture(void)
+{
+    const u64 seed = UINT64_C(0x5341474d4143524f);
+    const u32 fixture_id = 1U;
+    const u8 probe = (u8)'#';
+    RtSession session;
+    Bytebuf fixture;
+    Bytebuf before;
+    Bytebuf after;
+    Bytebuf ast_before;
+    Bytebuf ast_after;
+    Ed ed;
+    Buffer *scratch;
+    const RegVal *stored;
+    EditCtx ec;
+    u64 end;
+    bool opened = false;
+    bool ok = false;
+
+    rt_session_init(&session);
+    bytebuf_init(&fixture);
+    bytebuf_init(&before);
+    bytebuf_init(&after);
+    bytebuf_init(&ast_before);
+    bytebuf_init(&ast_after);
+    if (!rt_session_generate(&session, seed, fixture_id, 32U) ||
+        !fixture_make(fixture_id, &fixture) ||
+        !editor_open(&ed, &fixture, session.start_mode))
+        goto done;
+    opened = true;
+    if (!sag_record_start(&ed, (u8)'a') ||
+        !run_events(&ed, &session) ||
+        sag_record_stop(&ed) != SAG_CMD_OK)
+        goto done;
+    stored = sag_reg_get(&ed.regs, (u8)'a');
+    if (stored == NULL || stored->bytes.len == 0U)
+        goto done;
+    bytebuf_append(&before, stored->bytes.data, stored->bytes.len);
+    if (!parse_dump(&before, &ast_before) ||
+        sag_macro_edit(&ed, (u8)'a') != SAG_CMD_OK)
+        goto done;
+    scratch = ed.win == NULL ? NULL : ed.win->buf;
+    if (scratch == NULL || scratch->macro_reg != (u8)'a')
+        goto done;
+
+    end = sag_textbuf_len(scratch->tb);
+    ec = sag_ed_edit_ctx_for(&ed, ed.win);
+    sag_undo_begin(&ec, SAG_TXN_TYPE);
+    if (!sag_edit_insert(&ec, BYTEOFF(end), &probe, 1U)) {
+        sag_undo_abort(&ec);
+        goto done;
+    }
+    sag_undo_end(&ec);
+    sag_ed_finish_edit(&ed, &ec);
+
+    ec = sag_ed_edit_ctx_for(&ed, ed.win);
+    sag_undo_begin(&ec, SAG_TXN_ERASE);
+    if (!sag_edit_delete(&ec, (Span){end, end + 1U})) {
+        sag_undo_abort(&ec);
+        goto done;
+    }
+    sag_undo_end(&ec);
+    sag_ed_finish_edit(&ed, &ec);
+    if (sag_undo_at_save_point(scratch->undo) ||
+        sag_macro_store(&ed, scratch) != SAG_CMD_OK)
+        goto done;
+
+    stored = sag_reg_get(&ed.regs, (u8)'a');
+    if (stored == NULL)
+        goto done;
+    bytebuf_append(&after, stored->bytes.data, stored->bytes.len);
+    if (!bytes_equal(&before, &after) || !parse_dump(&after, &ast_after) ||
+        !bytes_equal(&ast_before, &ast_after))
+        goto done;
+    ok = true;
+
+done:
+    if (!ok)
+        (void)fprintf(stderr,
+                      "roundtrip: record-edit-store no-op fixture failed\n");
+    if (opened)
+        sag_ed_free(&ed);
+    bytebuf_free(&ast_after);
+    bytebuf_free(&ast_before);
+    bytebuf_free(&after);
+    bytebuf_free(&before);
+    bytebuf_free(&fixture);
+    rt_session_free(&session);
     return ok;
 }
 
@@ -988,6 +1083,10 @@ int main(int argc, char **argv)
         sag_cmd_shutdown();
         return 1;
     }
+    if (!run_edit_store_noop_fixture()) {
+        sag_cmd_shutdown();
+        return 1;
+    }
     seeds = env_seeds();
     base_seed = env_base_seed();
     for (i = 0U; i < seeds; i++) {
@@ -1002,7 +1101,8 @@ int main(int argc, char **argv)
     }
     sag_cmd_shutdown();
     (void)printf("roundtrip: ok seeds=%u base=%llu fixtures=6 corpus=%u "
-                 "count-sentinel=1 P1-P5\n", (unsigned)seeds,
+                 "count-sentinel=1 edit-store-noop=1 P1-P5\n",
+                 (unsigned)seeds,
                  (unsigned long long)base_seed, (unsigned)corpus_count);
     return 0;
 }
