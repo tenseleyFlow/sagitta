@@ -1223,6 +1223,9 @@ install: all
 	install -d $(DESTDIR)$(PREFIX)/share/yew/runtime
 	install -m 0644 runtime/init.fl \
 		$(DESTDIR)$(PREFIX)/share/yew/runtime/init.fl
+	install -d $(DESTDIR)$(PREFIX)/share/yew/runtime/syntax
+	install -m 0644 runtime/syntax/*.fl \
+		$(DESTDIR)$(PREFIX)/share/yew/runtime/syntax/
 
 clean:
 	rm -rf $(BUILD)

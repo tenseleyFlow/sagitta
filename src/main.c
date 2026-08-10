@@ -1,9 +1,11 @@
 #include "args.h"
 #include "flcli.h"
+#include "syncli.h"
 #include "edit/batch.h"
 #include "edit/cmd.h"
 #include "edit/ed.h"
 #include "mod/mods.h"
+#include "syn/defs.h"
 #include "util/base.h"
 #include "util/buf.h"
 #include "util/log.h"
@@ -31,6 +33,7 @@ static const char help_text[] =
     "\n"
     "Subcommands:\n"
     "  yew fl FILE      Run a Fletch script headlessly.\n"
+    "  yew syn COMMAND   Inspect and compile syntax definitions.\n"
     "\n"
     "Command line:\n"
     "  Lines beginning with a space are not saved in command history.\n"
@@ -52,6 +55,7 @@ static const char help_text[] =
     "Environment:\n"
     "  YEW_LOG          Override the log file path.\n"
     "  YEW_LOG_LEVEL    Set debug, info, warn, or error logging.\n"
+    "  YEW_NO_SYN_CACHE Set any value to bypass the syntax table cache.\n"
     "  YEW_TTY_PROBE    Set 0 to disable terminal capability probes.\n"
     "  YEW_PROBE_TIMEOUT_MS  Override the 50 ms probe deadline.\n"
     "  YEW_TRUECOLOR    Set 0 or 1 to override truecolor detection.\n"
@@ -99,6 +103,7 @@ static int run_driver(const YewArgs *args)
 {
     YewEdStartup startup;
 
+    yew_syn_cache_set_bypass(args->clean);
     if (args->selftest_bug) {
         YEW_BUG("selftest");
     }
@@ -158,6 +163,11 @@ int main(int argc, char **argv)
      */
     if (argc >= 2 && strcmp(argv[1], "fl") == 0)
         return yew_fl_main(argc - 1, argv + 1);
+    if (argc >= 2 && strcmp(argv[1], "syn") == 0)
+        return yew_syn_main(argc - 1, argv + 1, false);
+    if (argc >= 3 && strcmp(argv[1], "--clean") == 0 &&
+        strcmp(argv[2], "syn") == 0)
+        return yew_syn_main(argc - 2, argv + 2, true);
 
     YewArgs args;
     int result = yew_args_parse(&args, argc, argv, &err);
