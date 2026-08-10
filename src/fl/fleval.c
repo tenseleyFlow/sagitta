@@ -147,7 +147,7 @@ CmdStatus fl_runtime_eval(FlRuntime *rt, const char *source, u32 len)
     FlFn *fn;
     FlValue result = FL_NIL_V;
     FlOrigin origin;
-    CmdSource cmd_source;
+    CmdSource source_kind;
     Ed *ed;
 
     if (rt == NULL || source == NULL || rt->ed == NULL)
@@ -178,8 +178,8 @@ CmdStatus fl_runtime_eval(FlRuntime *rt, const char *source, u32 len)
                                               rt->diag_message);
         return SAG_CMD_ERR_ARG;
     }
-    cmd_source = rt->vm.nframes == 0U ? SAG_SRC_FLETCH : rt->command_source;
-    if (!call_chunk_result(rt, fn, cmd_source, &result)) {
+    source_kind = rt->vm.nframes == 0U ? SAG_SRC_FLETCH : rt->command_source;
+    if (!call_chunk_result(rt, fn, source_kind, &result)) {
         Bytebuf trace;
         char line[256];
 
