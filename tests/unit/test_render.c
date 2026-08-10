@@ -350,7 +350,8 @@ void test_render_resize_repaint_is_deterministic(void)
     YewColor color = render_default_color();
 
     render_fixture_init(&f, 24u, 80u, false);
-    yew_grid_puts(&f.grid, 0u, 0u, (const u8 *)"yew", 7u,
+    yew_grid_puts(&f.grid, 0u, 0u, (const u8 *)"yew",
+                  sizeof("yew") - 1u,
                   color, color, 0u);
     yew_render_frame(&f.render, &f.grid, &f.out);
     first = malloc((size_t)f.grid.rows * f.grid.cols * sizeof(*first));
@@ -358,12 +359,14 @@ void test_render_resize_repaint_is_deterministic(void)
     memcpy(first, f.grid.back,
            (size_t)f.grid.rows * f.grid.cols * sizeof(*first));
     YEW_ASSERT(yew_grid_resize(&f.grid, 12u, 40u));
-    yew_grid_puts(&f.grid, 0u, 0u, (const u8 *)"yew", 7u,
+    yew_grid_puts(&f.grid, 0u, 0u, (const u8 *)"yew",
+                  sizeof("yew") - 1u,
                   color, color, 0u);
     f.out.len = 0u;
     YEW_ASSERT(yew_render_frame(&f.render, &f.grid, &f.out) != 0u);
     YEW_ASSERT(yew_grid_resize(&f.grid, 24u, 80u));
-    yew_grid_puts(&f.grid, 0u, 0u, (const u8 *)"yew", 7u,
+    yew_grid_puts(&f.grid, 0u, 0u, (const u8 *)"yew",
+                  sizeof("yew") - 1u,
                   color, color, 0u);
     f.out.len = 0u;
     yew_render_frame(&f.render, &f.grid, &f.out);

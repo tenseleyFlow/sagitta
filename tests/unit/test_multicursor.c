@@ -175,6 +175,7 @@ static void mc_ed_init(Ed *ed, Win *win, const u8 *bytes, u64 len)
 
     (void)memset(ed, 0, sizeof(*ed));
     (void)memset(win, 0, sizeof(*win));
+    yew_syn_buf_init(&ed->buffer.syn);
     ed->buffer.tb = yew_textbuf_from_bytes(bytes, len);
     ed->buffer.undo = yew_undo_new(ed->buffer.tb);
     ed->buffer.marks = yew_marks_new();
@@ -190,6 +191,7 @@ static void mc_ed_free(Ed *ed, Win *win)
     yew_msg_clear(ed);
     yew_timers_free(&ed->timers);
     yew_cset_free(&win->cs);
+    yew_syn_detach(&ed->buffer.syn);
     yew_marks_free(ed->buffer.marks);
     yew_undo_free(ed->buffer.undo);
     yew_textbuf_free(ed->buffer.tb);

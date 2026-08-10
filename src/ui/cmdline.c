@@ -164,6 +164,7 @@ static void cmdline_target_free(CmdLineTarget *target)
         return;
     yew_vp_free(&target->win);
     yew_cset_free(&target->win.cs);
+    yew_syn_detach(&target->buffer.syn);
     yew_marks_free(target->buffer.marks);
     yew_undo_free(target->buffer.undo);
     yew_textbuf_free(target->buffer.tb);
@@ -374,6 +375,7 @@ void yew_cmdline_open(Ed *ed, YewPromptKind kind, const char *seed)
     if (seed != NULL)
         sanitize_bytes((const u8 *)seed, strlen(seed), &clean);
     yew_filemeta_init(&target->buffer.meta);
+    yew_syn_buf_init(&target->buffer.syn);
     target->buffer.tb = yew_textbuf_from_bytes(clean.data, clean.len);
     target->buffer.tabwidth = YEW_CMDLINE_TABWIDTH;
     target->buffer.undo = yew_undo_new(target->buffer.tb);

@@ -221,6 +221,7 @@ UNIT_DEATH_EXCLUDES := \
   --exclude multicursor_edit_guard_requires_multi_transaction \
   --exclude multicursor_deferred_guards_name_their_sprints \
   --exclude block_syntax_install_names_sprint40 \
+  --exclude syn_deferred_surfaces_fail_loudly \
   --exclude ctxmenu_a_row_handler_reading_a_payload_is_a_bug \
   --exclude undo_filter_reason_names_sprint19 \
   --exclude undo_replace_reason_names_sprint21 \
@@ -228,6 +229,8 @@ UNIT_DEATH_EXCLUDES := \
   --exclude undo_lsp_reason_names_sprint47 \
   --exclude undo_save_rejects_open_transaction \
   --exclude cmd_registry_rejects_invalid_descriptors \
+  --exclude cmd_registry_enforces_cmdwords \
+  --exclude tty_poisoned_access_is_bug \
   --exclude render_invalid_cells_are_bugs
 ifeq ($(VALGRIND),1)
 # MEASURED, not guessed: the full suite takes 1147 s under valgrind on a
