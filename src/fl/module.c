@@ -360,7 +360,6 @@ static bool run_body(FlVm *vm, u32 idx, const char *path, const char *src,
     cl->up = NULL;
     cl->nup = 0U;
     cl->globals = fresh;
-    fl_gc_release(vm, 1U);
     ok = fl_call(vm, FL_OBJ_V(FL_CLOSURE, cl), NULL, 0U, &ignored);
     if (ok) {
         FlMap *ex = collect_exports(vm, fresh);
@@ -370,7 +369,70 @@ static bool run_body(FlVm *vm, u32 idx, const char *path, const char *src,
         (void)fl_map_set(vm, vm->modules, FL_INT_V((i64)idx),
                          FL_OBJ_V(FL_MAP, ex));
     }
+    fl_gc_release(vm, 1U);
     return ok;
+}
+
+static bool eval_source(FlVm *vm, const char *path, const char *src,
+                        size_t len, FlOrigin origin, FlValue *out)
+{
+    FlProgram p;
+    FlFn *fn;
+    FlMap *fresh;
+    FlClosure *cl;
+    FlValue ignored = FL_NIL_V;
+    u32 file_id;
+    bool ok;
+
+    *out = FL_NIL_V;
+    file_id = fl_diag_add_file(vm->dc, path, src, len);
+    p = fl_parse(vm->arena, vm->dc, vm->in, src, len, file_id);
+    if (p.had_error || p.incomplete)
+        return fl_raise(vm, "import", "%s did not parse", path);
+    fn = fl_compile(vm, vm->dc, &p, file_id, origin);
+    if (fn == NULL)
+        return fl_raise(vm, "import", "%s did not compile", path);
+    fn->fnkind = (u8)FL_FN_MODULE;
+    fresh = fl_map_new(vm);
+    fl_gc_protect(vm, FL_OBJ_V(FL_MAP, fresh));
+    cl = fl_gc_alloc(vm, sizeof(*cl), FL_CLOSURE);
+    cl->fn = fn;
+    cl->up = NULL;
+    cl->nup = 0U;
+    cl->globals = fresh;
+    ok = fl_call(vm, FL_OBJ_V(FL_CLOSURE, cl), NULL, 0U, &ignored);
+    if (ok)
+        *out = FL_OBJ_V(FL_MAP, collect_exports(vm, fresh));
+    fl_gc_release(vm, 1U);
+    return ok;
+}
+
+bool fl_module_eval_source(FlVm *vm, const char *path,
+                           const char *source, size_t len,
+                           FlOrigin origin, FlValue *out)
+{
+    char *owned;
+
+    if (vm == NULL || path == NULL || source == NULL || out == NULL)
+        return false;
+    owned = arena_alloc(vm->arena, len + 1U, 1U);
+    if (len != 0U)
+        (void)memcpy(owned, source, len);
+    owned[len] = '\0';
+    return eval_source(vm, path, owned, len, origin, out);
+}
+
+bool fl_module_eval_path(FlVm *vm, const char *path, FlOrigin origin,
+                         FlValue *out)
+{
+    char *src = NULL;
+    size_t len = 0U;
+
+    if (vm == NULL || path == NULL || out == NULL)
+        return false;
+    if (!read_source(vm, path, &src, &len))
+        return false;
+    return eval_source(vm, path, src, len, origin, out);
 }
 
 /* ---------------------------------------------------------------- */

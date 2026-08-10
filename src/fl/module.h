@@ -61,6 +61,19 @@ typedef struct FlModTab {
  */
 bool fl_import(FlVm *vm, u32 id, bool is_path, FlValue *out);
 
+/*
+ * Evaluates one exact file as an isolated module without consulting or
+ * changing the import cache.  Macro-library rescans use this entry: a reload
+ * must produce fresh closures even when the same real path was loaded by the
+ * preceding scan.  On success `out` is the frozen exports map; the caller
+ * must root it before performing another allocation.
+ */
+bool fl_module_eval_path(FlVm *vm, const char *path, FlOrigin origin,
+                         FlValue *out);
+bool fl_module_eval_source(FlVm *vm, const char *path,
+                           const char *source, size_t len,
+                           FlOrigin origin, FlValue *out);
+
 /* Releases the table itself.  The exports maps are the collector's. */
 void fl_mod_free(FlVm *vm);
 
