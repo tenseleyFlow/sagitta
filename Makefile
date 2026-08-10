@@ -232,6 +232,7 @@ ifeq ($(VALGRIND),1)
 # wall-clock ceiling, not a latency budget: nothing measures against it.
 SAG_PTY_BUDGET_MS ?= 3600000
 SAG_PTY_CASE_BUDGET_MS ?= 60000
+SAG_SCRIPT_BUDGET_MS ?= 600000
 # A settle infers "done" from silence, and valgrind makes the editor
 # silent for far longer than it is idle.  See quiet_scale() in
 # tests/pty/harness.c.
@@ -239,6 +240,8 @@ SAG_PTY_QUIET_SCALE ?= 8
 VALGRIND_RUN := valgrind --quiet --error-exitcode=99 --leak-check=full \
                  --errors-for-leak-kinds=definite --track-fds=yes \
                  --child-silent-after-fork=yes
+VALGRIND_TRACE_SKIP := \
+    --trace-children-skip='/bin/*,/usr/bin/*,/usr/lib/*,/sbin/*'
 UNIT_RUN := SAG_TEST_INSTRUMENTED=1 $(VALGRIND_RUN) \
             $(BUILD)/unit_tests $(UNIT_DEATH_EXCLUDES) && \
             SAG_TORTURE_CLEAN_ONLY=1 $(VALGRIND_RUN) \
@@ -273,7 +276,7 @@ PTY_RUN  := SAG_PTY_BUDGET_MS=$(SAG_PTY_BUDGET_MS) \
             valgrind --quiet --error-exitcode=99 --leak-check=full \
             --errors-for-leak-kinds=definite --track-fds=yes \
             --trace-children=yes \
-            --trace-children-skip='/bin/*,/usr/bin/*,/usr/lib/*,/sbin/*' \
+            $(VALGRIND_TRACE_SKIP) \
             --log-fd=9 $(BUILD)/pty_runner
 PTY_PREP := ulimit -c 0 &&
 PTY_LOG_REDIRECT := 9>&2
@@ -294,6 +297,13 @@ else
 # HANG, not a latency budget — nothing measures against it, and the
 # per-case budget is what bounds a single stuck case.
 SAG_PTY_BUDGET_MS ?= 600000
+ifeq ($(SAN),1)
+# The 10,000-replacement migration case is deliberately CPU-heavy under
+# per-instruction VM checks plus ASan/UBSan; this is a hang ceiling only.
+SAG_SCRIPT_BUDGET_MS ?= 120000
+else
+SAG_SCRIPT_BUDGET_MS ?= 10000
+endif
 endif
 
 ifeq ($(SAN),1)
@@ -1172,13 +1182,15 @@ clean:
 	rm -rf $(BUILD)
 
 test-script: $(BUILD)/script_runner $(BUILD)/sagitta
-	LC_ALL=C $(if $(filter 1,$(VALGRIND)),$(VALGRIND_RUN) \
+	LC_ALL=C SAG_SCRIPT_BUDGET_MS=$(SAG_SCRIPT_BUDGET_MS) \
+		$(if $(filter 1,$(VALGRIND)),$(VALGRIND_RUN) \
 		--trace-children=yes \
-		--trace-children-skip='/bin/*',) \
+		$(VALGRIND_TRACE_SKIP),) \
 		$(BUILD)/script_runner --selftest
-	LC_ALL=C $(if $(filter 1,$(VALGRIND)),$(VALGRIND_RUN) \
+	LC_ALL=C SAG_SCRIPT_BUDGET_MS=$(SAG_SCRIPT_BUDGET_MS) \
+		$(if $(filter 1,$(VALGRIND)),$(VALGRIND_RUN) \
 		--trace-children=yes \
-		--trace-children-skip='/bin/*',) \
+		$(VALGRIND_TRACE_SKIP),) \
 		$(BUILD)/script_runner \
 		--sagitta $(abspath $(BUILD)/sagitta)
 
