@@ -1217,6 +1217,7 @@ test-script-determinism: $(BUILD)/script_runner $(BUILD)/sagitta
 
 test-script-budget: $(BUILD)/perf_script_suite $(BUILD)/script_runner \
                     $(BUILD)/sagitta $(SCRIPT_SUITE_BASELINE)
+	$(BUILD)/perf_script_suite --selftest
 	LC_ALL=C $(BUILD)/perf_script_suite \
 		--runner $(abspath $(BUILD)/script_runner) \
 		--sagitta $(abspath $(BUILD)/sagitta) \
