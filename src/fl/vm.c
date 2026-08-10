@@ -195,7 +195,13 @@ bool fl_raise(FlVm *vm, const char *kind, const char *fmt, ...)
  */
 static const char *deferred_sprint(const char *name)
 {
-    static const char *const S34[] = {"bind", "set", "on", "buf", "win"};
+    /*
+     * `buf` left this list when flapi.c registered it (s34 §3).  A name
+     * that EXISTS must not be reported as deferred: the user needs to be
+     * told "import buf", not "buf lands in Sprint 34", which would send
+     * them away from a module that is sitting right there.
+     */
+    static const char *const S34[] = {"bind", "set", "on", "win"};
     size_t i;
 
     if (name == NULL)

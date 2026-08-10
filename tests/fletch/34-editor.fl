@@ -1,18 +1,60 @@
 # SPEC: §4, §16
+# COVERS: buf.current buf.len buf.path buf.text
 # ERROR_KIND: name
 # ERROR: Sprint 34
 # EXIT: 1
 #
-# THE DEFERRAL, TESTED RATHER THAN PROMISED.
+# THE EDITOR API, AS A HEADLESS SCRIPT SEES IT.
 #
-# Invariant 3 says an unimplemented path hard-errors NAMING ITS
-# SPRINT.  That is a claim about behaviour, so it gets a test: `bind`
-# must raise "name" and the message must say Sprint 34, not report a
-# typo.  A user who writes `bind("<C-p>", ...)` today has to be told
-# the feature is coming, because "undefined name 'bind'" sends them
-# looking for a spelling mistake that is not there.
+# The conformance runner has no editor, and that is the point of this
+# half of the file: `buf` EXISTS -- it is a builtin module like `io` --
+# and every native on it refuses cleanly with spec §9's "handle" rather
+# than being an undefined name.  Invariant 3's rule is that an
+# unavailable path says so; "undefined name 'buf'" would send a user
+# hunting a spelling mistake that is not there.
 #
-# WHEN SPRINT 34 LANDS, this file is rewritten into real coverage and
-# the ledger picks it up unchanged -- the `# SPEC:` line is what keys
-# it, not the name.
+# What an editor-attached run does instead is Sprint 34's pty and unit
+# coverage.  A conformance file cannot assert it, because there is no
+# editor here to attach -- so it asserts the contract that holds
+# EVERYWHERE, which is that the refusal is catchable and typed.
+import io
+import buf
+
+# -- the module is real, and its natives refuse without an editor ------
+try {
+    io.print(buf.current())
+} catch e {
+    # OUT: handle
+    io.print(e.kind)
+}
+
+# -- a non-handle is a TYPE error, not a handle one --------------------
+# The distinction is what amendment A2 exists for: `catch` has to tell
+# "you passed the wrong thing" from "the buffer closed under you".  Only
+# the first is the script's fault.
+try {
+    io.print(buf.len(42))
+} catch e {
+    # OUT: type
+    io.print(e.kind)
+}
+try {
+    io.print(buf.path("not a handle"))
+} catch e {
+    # OUT: type
+    io.print(e.kind)
+}
+try {
+    io.print(buf.text(nil))
+} catch e {
+    # OUT: type
+    io.print(e.kind)
+}
+
+# -- THE DEFERRAL, still tested rather than promised -------------------
+#
+# `bind` has not landed (Sprint 36 owns the config surface), so it must
+# still hard-error NAMING ITS SPRINT.  Uncaught on purpose: the `# EXIT`
+# and `# ERROR` directives above assert the process outcome, which is
+# what a user actually meets.
 bind("H", "s", fn() { return 1 })

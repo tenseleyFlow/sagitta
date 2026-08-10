@@ -403,9 +403,42 @@ bool fl_import(FlVm *vm, u32 id, bool is_path, FlValue *out)
             *out = m;
             return true;
         }
-        return fl_raise(vm, "import",
-                        "there is no builtin module '%s'; they are str, "
-                        "list, map, math, fmt, io and re", text);
+        {
+            /*
+             * GENERATED from vm->builtins, not spelled out.  The list was
+             * a literal, and Sprint 34's `buf` made it wrong the moment
+             * it registered -- the message named seven modules while the
+             * map held eight, so a user was told `buf` did not exist
+             * while `import buf` in the very next line worked.  A message
+             * that has to be kept in step by hand is one that drifts.
+             */
+            Bytebuf names;
+            u32 cursor = 0U;
+            FlValue mk;
+            FlValue mv;
+            bool first = true;
+            bool raised;
+
+            bytebuf_init(&names);
+            while (fl_map_iter(vm->builtins, &cursor, &mk, &mv)) {
+                const FlStr *nm;
+
+                if (mk.t != (u8)FL_STR)
+                    continue;
+                nm = (const FlStr *)mk.as.o;
+                if (!first)
+                    bytebuf_append(&names, ", ", 2U);
+                bytebuf_append(&names, nm->b, (size_t)nm->len);
+                first = false;
+            }
+            raised = fl_raise(vm, "import",
+                              "there is no builtin module '%s'; they are "
+                              "%.*s", text, (int)names.len,
+                              names.data == NULL ? "" :
+                              (const char *)names.data);
+            bytebuf_free(&names);
+            return raised;
+        }
     }
     if (vm->mods.n >= (u32)FL_MOD_MAX_DEPTH * 64U)
         return fl_raise(vm, "limit", "too many modules loaded");

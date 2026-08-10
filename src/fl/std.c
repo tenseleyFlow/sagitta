@@ -2,6 +2,7 @@
  * Sprint 31 deliverable 1: native registration, argument helpers, the
  * capability check.
  */
+#include "fl/flapi.h"
 #include "fl/std.h"
 
 #include <stdio.h>
@@ -36,7 +37,12 @@ extern const FlModuleDef fl_mod_re;
  */
 static const FlModuleDef *const FL_MODULES[] = {
     &fl_mod_str, &fl_mod_list, &fl_mod_map, &fl_mod_math, &fl_mod_fmt,
-    &fl_mod_io, &fl_mod_re
+    &fl_mod_io, &fl_mod_re,
+    /* Sprint 34: the editor API.  Registered unconditionally -- a
+     * headless `sag fl` still sees `buf`, and its natives raise "no
+     * editor" rather than reporting an undefined name for something that
+     * merely has no editor attached (invariant 3). */
+    &fl_mod_buf
 };
 
 /* ---------------------------------------------------------------- */

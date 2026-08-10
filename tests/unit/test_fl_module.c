@@ -51,11 +51,18 @@ void test_fl_modules_bare_name_is_a_builtin_and_only_that(void)
      * A bare IDENT is a builtin and NOTHING else.  Resolving it against
      * the filesystem would let a file called str.fl in the wrong
      * directory shadow the standard library, so the miss names the
-     * seven rather than listing paths it did not try.
+     * modules rather than listing paths it did not try.
+     *
+     * The list is GENERATED from vm->builtins now.  It used to be a
+     * literal in the message, and Sprint 34's `buf` made it wrong the
+     * moment it registered -- the text named seven while the map held
+     * eight, so a user was told a module did not exist while importing
+     * it on the next line worked.  Asserting the full string here is
+     * what keeps the generated version honest.
      */
     FL_EQ(&f, "import nope\nreturn 1\n",
           "!import: there is no builtin module 'nope'; they are str, list, "
-          "map, math, fmt, io and re");
+          "map, math, fmt, io, re, buf");
     flfix_close(&f);
 }
 
@@ -205,8 +212,18 @@ void test_fl_modules_deferred_surfaces_name_their_sprint(void)
     FL_EQ(&f, "return bind\n", "!name: bind lands in Sprint 34");
     FL_EQ(&f, "return set\n", "!name: set lands in Sprint 34");
     FL_EQ(&f, "return on\n", "!name: on lands in Sprint 34");
-    FL_EQ(&f, "return buf\n", "!name: buf lands in Sprint 34");
     FL_EQ(&f, "return win\n", "!name: win lands in Sprint 34");
+    /*
+     * `buf` LEFT this list when flapi.c registered it.  It is now an
+     * ordinary builtin module, so a bare mention is an undefined name --
+     * the fix is `import buf`, and saying "lands in Sprint 34" would
+     * send the reader away from something that is sitting right there.
+     * A deferral that outlives the deferred thing is its own kind of
+     * silent stub.
+     */
+    FL_EQ(&f, "return buf\n", "!name: undefined name 'buf'");
+    FL_EQ(&f, "import buf\nreturn buf.current()\n",
+          "!handle: no editor: this build of the prompt has none");
     /* And an ordinary typo still reads as one. */
     FL_EQ(&f, "return nope\n", "!name: undefined name 'nope'");
     /* There is no io.run and no io.http in 1.0; the shell and net bits
@@ -240,9 +257,15 @@ void test_fl_modules_list_natives_is_deterministic(void)
     SAG_ASSERT_EQ_U64((u64)na, (u64)nb);
     SAG_ASSERT_EQ_U64((u64)a.len, (u64)b.len);
     SAG_ASSERT_EQ_I64(memcmp(a.data, b.data, a.len), 0);
-    /* §11's order: str first, re last. */
+    /*
+     * §11's order: str first, re last OF THE STDLIB -- and then the
+     * editor API after it.  `buf` is spec §4, not §11, so it is
+     * appended rather than folded into the stdlib's listing order; the
+     * seven keep the order §11 gives them and the tail is what moved.
+     */
     SAG_ASSERT_EQ_I64(memcmp(a.data, "str.len\n", 8U), 0);
-    SAG_ASSERT_EQ_I64(memcmp(a.data + a.len - 10U, "re.escape\n", 10U), 0);
+    SAG_ASSERT_NOT_NULL(strstr((const char *)a.data, "re.escape\n"));
+    SAG_ASSERT_EQ_I64(memcmp(a.data + a.len - 9U, "buf.text\n", 9U), 0);
     /* Every line is `module.name`, once. */
     for (i = 0U; i < a.len; i++) {
         if (a.data[i] == (u8)'\n')
@@ -250,16 +273,17 @@ void test_fl_modules_list_natives_is_deterministic(void)
     }
     SAG_ASSERT_EQ_U64((u64)lines, (u64)na);
     /*
-     * 117 = 30 str + 19 list + 12 map + 29 math + 7 fmt + 13 io + 7 re,
-     * which is every row of every table in the sprint.  Pinned so a
+     * 121 = the stdlib's 117 (30 str + 19 list + 12 map + 29 math +
+     * 7 fmt + 13 io + 7 re) plus Sprint 34's 4 on `buf`.  Pinned so a
      * function added or lost shows up here rather than in s33's ledger
-     * three sprints later.
+     * three sprints later -- which is exactly what happened when the
+     * four landed: the conformance gate reported 117/121 natives and
+     * named each one missing a COVERS token.
      *
-     * DoD 2 asks for 150 and the sprint's own tables define 117; see
-     * the DoD-walk note.  The number below is the tables, not the
-     * target.
+     * s31's DoD 2 asks for 150 and its own tables define 117; see the
+     * DoD-walk note.  The number below is the tables, not the target.
      */
-    SAG_ASSERT_EQ_U64((u64)na, 117U);
+    SAG_ASSERT_EQ_U64((u64)na, 121U);
     bytebuf_free(&a);
     bytebuf_free(&b);
     flfix_close(&f);
