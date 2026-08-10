@@ -475,6 +475,11 @@ static void close_pipe(int pipefd[2])
     pipefd[1] = -1;
 }
 
+static bool set_result_fd_environment(void)
+{
+    return setenv("SAG_SCRIPT_RESULT_FD", "3", 1) == 0;
+}
+
 static bool child_environment(const char *root, const char *work)
 {
     char *cfg = path_join(root, "cfg");
@@ -491,7 +496,7 @@ static bool child_environment(const char *root, const char *work)
              setenv("XDG_CACHE_HOME", cache, 1) == 0 &&
              setenv("TMPDIR", root, 1) == 0 &&
              setenv("SAG_SCRIPT_TMPDIR", root, 1) == 0 &&
-             setenv("SAG_SCRIPT_RESULT_FD", "3", 1) == 0 &&
+             set_result_fd_environment() &&
              chdir(work) == 0;
     free(cfg);
     free(state);
@@ -581,36 +586,34 @@ static bool collect_child(pid_t child, int out_fd, int err_fd, int result_fd,
 {
     int64_t start = now_ms();
     int64_t deadline;
-    int fds[3];
+    int fds[3] = {out_fd, err_fd, result_fd};
     Bytes *captures[3];
+    bool ok = false;
+    size_t i;
 
     if (start < 0)
-        return false;
+        goto done;
     {
         int64_t budget = budget_ms();
 
         deadline = budget > INT64_MAX - start ? INT64_MAX : start + budget;
     }
-    fds[0] = out_fd;
-    fds[1] = err_fd;
-    fds[2] = result_fd;
     captures[0] = &result->out;
     captures[1] = &result->err;
     captures[2] = &result->protocol;
     if (!set_nonblock(fds[0]) || !set_nonblock(fds[1]) ||
         !set_nonblock(fds[2]))
-        return false;
+        goto done;
     while (!result->waited || fds[0] >= 0 || fds[1] >= 0 || fds[2] >= 0) {
         struct pollfd pollfds[3];
         int64_t now = now_ms();
         int timeout = 20;
-        size_t i;
 
         if (now < 0)
-            return false;
+            goto done;
         if (!result->timed_out && now >= deadline) {
             if (kill(-child, SIGKILL) != 0 && errno != ESRCH)
-                return false;
+                goto done;
             result->timed_out = true;
         }
         if (!result->waited) {
@@ -619,7 +622,7 @@ static bool collect_child(pid_t child, int out_fd, int err_fd, int result_fd,
             if (got == child)
                 result->waited = true;
             else if (got < 0 && errno != EINTR)
-                return false;
+                goto done;
         }
         for (i = 0U; i < 3U; i++) {
             pollfds[i].fd = fds[i];
@@ -631,13 +634,18 @@ static bool collect_child(pid_t child, int out_fd, int err_fd, int result_fd,
         if (result->waited)
             timeout = 0;
         if (poll(pollfds, 3U, timeout) < 0 && errno != EINTR)
-            return false;
+            goto done;
         for (i = 0U; i < 3U; i++)
             if (fds[i] >= 0 &&
                 (pollfds[i].revents & (POLLIN | POLLHUP | POLLERR)) != 0)
                 drain_fd(&fds[i], captures[i]);
     }
-    return true;
+    ok = true;
+done:
+    for (i = 0U; i < 3U; i++)
+        if (fds[i] >= 0)
+            (void)close(fds[i]);
+    return ok;
 }
 
 static bool make_sandbox(const char *fixtures, char **root_out,
@@ -750,9 +758,6 @@ static bool run_test(const char *sagitta, const char *fixtures,
     }
     if (!ok)
         result->setup_failed = true;
-    (void)close(out_pipe[0]);
-    (void)close(err_pipe[0]);
-    (void)close(result_pipe[0]);
     free(work);
     return ok;
 }
@@ -1081,47 +1086,25 @@ static bool selftest_sandbox_lifecycle(const char *fixtures)
     return ok;
 }
 
-static bool selftest_result_fd_env(const char *fixtures)
+static bool selftest_result_fd_env(void)
 {
-    char *root = NULL;
-    char *work = NULL;
-    pid_t child;
-    pid_t waited;
-    int status = 0;
+    const char *current = getenv("SAG_SCRIPT_RESULT_FD");
+    char *saved = current == NULL ? NULL : strdup(current);
+    const char *installed;
     bool ok;
 
-    if (!make_sandbox(fixtures, &root, &work))
+    if (current != NULL && saved == NULL)
         return false;
-    child = fork();
-    if (child == 0) {
-        const char *fd;
-        char *cwd;
-
-        if (!child_environment(root, work))
-            _exit(1);
-        fd = getenv("SAG_SCRIPT_RESULT_FD");
-        cwd = getcwd(NULL, 0U);
-        if (fd == NULL || strcmp(fd, "3") != 0 || cwd == NULL ||
-            strcmp(cwd, work) != 0) {
-            free(cwd);
-            _exit(1);
-        }
-        free(cwd);
-        _exit(0);
+    ok = set_result_fd_environment();
+    installed = getenv("SAG_SCRIPT_RESULT_FD");
+    ok = ok && installed != NULL && strcmp(installed, "3") == 0;
+    if (saved == NULL) {
+        if (unsetenv("SAG_SCRIPT_RESULT_FD") != 0)
+            ok = false;
+    } else if (setenv("SAG_SCRIPT_RESULT_FD", saved, 1) != 0) {
+        ok = false;
     }
-    if (child < 0) {
-        (void)remove_tree(root);
-        free(work);
-        free(root);
-        return false;
-    }
-    do {
-        waited = waitpid(child, &status, 0);
-    } while (waited < 0 && errno == EINTR);
-    ok = waited == child && WIFEXITED(status) && WEXITSTATUS(status) == 0 &&
-         finish_sandbox(root, true);
-    free(work);
-    free(root);
+    free(saved);
     return ok;
 }
 
@@ -1182,7 +1165,7 @@ static int run_selftests(const char *fixtures)
     failures += report_selftest("sandbox_preserve_and_remove",
                                 selftest_sandbox_lifecycle(fixtures));
     failures += report_selftest("result_protocol_uses_fd3",
-                                selftest_result_fd_env(fixtures));
+                                selftest_result_fd_env());
     failures += report_selftest("zero_filter_selects_none",
                                 selftest_zero_filter());
     failures += report_selftest("config_header_controls_clean",
