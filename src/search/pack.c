@@ -54,6 +54,10 @@ static bool inst_valid(const ReInst *ins, u32 nprog, u32 nclasses,
         return false;
     if (ins->op == RE_SAVE && ins->arg >= ngroups * 2U)
         return false;
+    if (ins->op == RE_CHAR && ins->arg > 0x10FFFFU)
+        return false;
+    if (ins->op == RE_ANY && ins->arg > 1U)
+        return false;
     return true;
 }
 
@@ -158,8 +162,16 @@ YewRe *yew_re_unpack(Arena *a, const u8 *data, size_t len, size_t *used)
     if (re->nprog == 0U || re->nprog > YEW_RE_MAX_PROG ||
         re->nrprog == 0U || re->nrprog > YEW_RE_MAX_PROG ||
         re->nclasses > YEW_RE_MAX_CLASSES || re->ngroups == 0U ||
-        re->ngroups > YEW_RE_MAX_GROUPS || bools > 7U ||
+        re->ngroups > YEW_RE_MAX_GROUPS ||
+        (re->flags & ~(YEW_RE_ICASE | YEW_RE_DOTALL | YEW_RE_LITERAL |
+                       YEW_RE_NOCAPTURE)) != 0U ||
+        (re->max_len != UINT32_MAX && re->max_len < re->min_len) ||
+        bools > 7U ||
         re->lit.kind > RE_LIT_WHOLE || re->lit.n > sizeof(re->lit.s) ||
+        (re->lit.kind == RE_LIT_NONE && re->lit.n != 0U) ||
+        (re->lit.kind == RE_LIT_BYTE && re->lit.n != 1U) ||
+        (re->lit.kind == RE_LIT_BMH && re->lit.n < 2U) ||
+        (re->lit.kind == RE_LIT_WHOLE && re->lit.n == 0U) ||
         get32(data + 48U) > 1U ||
         !take(&at, len, re->nprog, RE_PACK_INST) ||
         !take(&at, len, re->nrprog, RE_PACK_INST))
@@ -211,6 +223,7 @@ YewRe *yew_re_unpack(Arena *a, const u8 *data, size_t len, size_t *used)
             re->classes[i].r[j].lo = get32(p);
             re->classes[i].r[j].hi = get32(p + 4U);
             if (re->classes[i].r[j].lo > re->classes[i].r[j].hi ||
+                re->classes[i].r[j].hi > 0x10FFFFU ||
                 (j != 0U && re->classes[i].r[j - 1U].hi >=
                               re->classes[i].r[j].lo))
                 return NULL;
