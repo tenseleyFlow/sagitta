@@ -1202,7 +1202,8 @@ test-script: $(BUILD)/script_runner $(BUILD)/sagitta
 		--sagitta $(abspath $(BUILD)/sagitta)
 
 test-script-determinism: $(BUILD)/script_runner $(BUILD)/sagitta
-	@tmp=$$(mktemp -d); \
+	@set -e; \
+	tmp=$$(mktemp -d); \
 	trap 'rm -rf "$$tmp"' EXIT HUP INT TERM; \
 	LC_ALL=C $(BUILD)/script_runner --selftest \
 		--sagitta $(abspath $(BUILD)/sagitta) >"$$tmp/run-1" 2>&1; \
