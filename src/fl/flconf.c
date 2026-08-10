@@ -17,6 +17,7 @@
 #include "fl/flruntime_int.h"
 #include "fl/gc.h"
 #include "fl/module.h"
+#include "fl/macrolib.h"
 #include "fl/origin.h"
 #include "fl/parse.h"
 #include "fl/trace.h"
@@ -581,6 +582,7 @@ CfgStatus sag_config_load_all(Ed *ed, DiagCtx *dc)
             overall = status_merge(overall, run_one(ed, &state->unit[i]));
     }
     sag_bind_batch_end(ed);
+    sag_macrolib_enable(ed);
     return overall;
 }
 
@@ -624,6 +626,7 @@ CfgStatus sag_config_reload(Ed *ed, DiagCtx *dc)
     for (i = 0U; i < SAG_CFG_SOURCE_N; i++)
         overall = status_merge(overall, run_one(ed, &candidate->unit[i]));
     sag_bind_batch_end(ed);
+    (void)sag_macrolib_scan(ed, dc);
     ed->layout_dirty = true;
     ed->full_damage = true;
     ed->footer_dirty = true;

@@ -22,6 +22,7 @@
 #include "unicode/width.h"
 #include "fl/fltxn.h"
 #include "fl/record.h"
+#include "fl/macrolib.h"
 #include "util/log.h"
 
 /* Tears down everything a buffer owns without touching the list slot. */
@@ -501,6 +502,9 @@ void sag_ed_init(Ed *ed)
     if (!sag_fl_runtime_init(ed))
         SAG_BUG("editor init: Fletch runtime initialization failed");
     sag_bind_init(ed);
+    ed->macrolib = sag_macrolib_new(ed);
+    if (ed->macrolib == NULL)
+        SAG_BUG("editor init: macro library initialization failed");
     sag_opt_init(ed);
     sag_opt_provider_set(ed, NULL);
     ed->exit_code = SAG_EXIT_OK;
@@ -527,6 +531,8 @@ void sag_ed_free(Ed *ed)
     sag_jobs_free(ed);
     /* Close hooks are the last script-visible point for every buffer. */
     ed_buffer_free(ed);
+    sag_macrolib_free(ed, ed->macrolib);
+    ed->macrolib = NULL;
     sag_bind_free(ed);
     sag_config_free(ed);
     sag_fl_runtime_free(ed);

@@ -8,6 +8,7 @@
 #include "edit/ed.h"
 #include "fl/flruntime.h"
 #include "fl/flhook.h"
+#include "fl/macrolib.h"
 #include "search/searchui.h"
 #include "text/register.h"
 #include "text/undo.h"
@@ -17,6 +18,7 @@
 #include "unicode/width.h"
 #include "util/log.h"
 #include "util/strmap.h"
+#include "util/xdg.h"
 
 struct OptStored {
     OptVal value;
@@ -388,6 +390,8 @@ static void option_changed_target(Ed *ed, const OptDesc *desc,
         ed->search_opts.smartcase = nu->as.b;
     } else if (strcmp(desc->name, "hooks.error_limit") == 0) {
         fl_hook_error_limit(&ed->hooks, (u32)nu->as.i);
+    } else if (strcmp(desc->name, "macro.dir") == 0) {
+        sag_macrolib_option_changed(ed);
     }
     ed->layout_dirty = true;
     ed->full_damage = true;
@@ -409,9 +413,26 @@ void sag_opt_init(Ed *ed)
         return;
     ed->opt_globals = sag_xcalloc(sag_opts_len, sizeof(*ed->opt_globals));
     ed->opt_inflight = sag_xcalloc(sag_opts_len, sizeof(*ed->opt_inflight));
-    for (i = 0U; i < sag_opts_len; i++)
-        if (!stored_assign(&ed->opt_globals[i], &sag_opts[i].dflt))
+    for (i = 0U; i < sag_opts_len; i++) {
+        OptVal value = sag_opts[i].dflt;
+        char *cfg = NULL;
+        char *dir = NULL;
+
+        if (strcmp(sag_opts[i].name, "macro.dir") == 0 &&
+            (cfg = sag_xdg_config_dir()) != NULL) {
+            size_t n = strlen(cfg);
+
+            dir = sag_xmalloc(n + sizeof("/macros"));
+            (void)memcpy(dir, cfg, n);
+            (void)memcpy(dir + n, "/macros", sizeof("/macros"));
+            value.as.str.s = dir;
+            value.as.str.len = (u32)(n + sizeof("/macros") - 1U);
+        }
+        if (!stored_assign(&ed->opt_globals[i], &value))
             SAG_BUG("option default has an invalid string");
+        free(dir);
+        free(cfg);
+    }
     for (i = 0U; i < sag_opts_len; i++)
         if (sag_opts[i].on_change != NULL)
             sag_opts[i].on_change(ed, &sag_opts[i], &sag_opts[i].dflt,
@@ -472,11 +493,26 @@ void sag_opt_reset(Ed *ed)
         reset_tree_windows(ed->tabs.v.data[i].root);
     for (i = 0U; i < sag_opts_len; i++) {
         struct OptStored old = {0};
+        OptVal value = sag_opts[i].dflt;
+        char *cfg = NULL;
+        char *dir = NULL;
 
         if (!stored_assign(&old, &ed->opt_globals[i].value))
             SAG_BUG("option reset could not retain the old value");
-        if (!stored_assign(&ed->opt_globals[i], &sag_opts[i].dflt))
+        if (strcmp(sag_opts[i].name, "macro.dir") == 0 &&
+            (cfg = sag_xdg_config_dir()) != NULL) {
+            size_t n = strlen(cfg);
+
+            dir = sag_xmalloc(n + sizeof("/macros"));
+            (void)memcpy(dir, cfg, n);
+            (void)memcpy(dir + n, "/macros", sizeof("/macros"));
+            value.as.str.s = dir;
+            value.as.str.len = (u32)(n + sizeof("/macros") - 1U);
+        }
+        if (!stored_assign(&ed->opt_globals[i], &value))
             SAG_BUG("option reset has an invalid string");
+        free(dir);
+        free(cfg);
         option_changed(ed, &sag_opts[i], &old.value,
                        &ed->opt_globals[i].value);
         stored_clear(&old);

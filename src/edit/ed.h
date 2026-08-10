@@ -50,6 +50,7 @@ typedef enum {
 } PromptKind;
 
 typedef struct FlRuntime FlRuntime;
+typedef struct MacroLib MacroLib;
 typedef struct OptProvider OptProvider;
 typedef struct SagConfigState SagConfigState;
 typedef struct SagOptHistory SagOptHistory;
@@ -183,6 +184,8 @@ struct Ed {
      * model does not expose VM internals to every translation unit that
      * includes ed.h. */
     FlRuntime *fl;
+    /* Sprint 38: host-owned, reload-safe named macro registry. */
+    MacroLib *macrolib;
     FlHookTable hooks;
     /* Sprint 35: resolved-command macro recorder. */
     Rec rec;
