@@ -220,7 +220,6 @@ UNIT_DEATH_EXCLUDES := \
   --exclude mark_generational_handles \
   --exclude multicursor_edit_guard_requires_multi_transaction \
   --exclude multicursor_deferred_guards_name_their_sprints \
-  --exclude block_syntax_install_names_sprint40 \
   --exclude syn_deferred_surfaces_fail_loudly \
   --exclude ctxmenu_a_row_handler_reading_a_payload_is_a_bug \
   --exclude undo_filter_reason_names_sprint19 \
