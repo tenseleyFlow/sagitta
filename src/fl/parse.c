@@ -759,6 +759,7 @@ static FlNode *parse_one_motion(Parser *p)
     }
     n = node(p, FL_A_MOTION, sp);
     n->as.motion.count = count == 0U ? 1U : count;
+    n->as.motion.count_given = count != 0U;
     switch (p->cur.kind) {
     case FL_M_UNIT:
         n->as.motion.mkind = (u8)FL_MK_UNIT;

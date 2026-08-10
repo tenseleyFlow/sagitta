@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "edit/ed.h"
 #include "term/grid.h"
@@ -102,6 +103,8 @@ static void message_vset(Ed *ed, MsgSev sev, i64 now_ms,
     ed->msg.sev = sev;
     ed->msg.active = true;
     ed->msg.prompt = prompt;
+    if (sev == SAG_MSG_ERROR && ed->errorbells && ed->tty_ready)
+        (void)!write(ed->tty.wfd, "\a", 1U);
     duration = prompt || sev == SAG_MSG_ERROR
                    ? -1
                    : sev == SAG_MSG_INFO ? SAG_MESSAGE_INFO_MS

@@ -40,12 +40,18 @@ typedef struct FlFrame {
     /* The native that called in, or 0.  `list.map(f, ...)` puts a
      * native between two Fletch frames and the trace has to show it. */
     u32 via_native;
+    /* Explicit edit{} depth at entry.  RETURN/HALT close any scopes the
+     * frame opened before control goes back to its caller. */
+    u32 edit_depth;
 } FlFrame;
 
 typedef struct FlHandler {
     u32 pc;
     FlValue *sp;
     u32 frame;
+    /* The edit{} depth where this catch was established.  An error closes
+     * only the edit scopes it crosses on the way to this handler. */
+    u32 edit_depth;
 } FlHandler;
 
 /* Spec §9's raised value, in flight. */
@@ -112,13 +118,27 @@ typedef struct FlMotionProg FlMotionProg;
  * what makes the spec's §14 `shout` example return "MOTION".
  */
 typedef struct FlHost {
-    void *ud;
-    bool (*motion)(void *ud, const FlMotionProg *p, FlErr *err);
-    bool (*edit_begin)(void *ud, FlErr *err);
-    bool (*edit_end)(void *ud, bool ok, FlErr *err);
+    bool (*run_begin)(FlVm *vm);
+    bool (*run_end)(FlVm *vm, bool ok);
+    bool (*motion)(FlVm *vm, const FlMotionProg *p);
+    bool (*edit_begin)(FlVm *vm);
+    bool (*edit_end)(FlVm *vm, bool ok);
 } FlHost;
 
 extern const FlHost fl_host_null;
+
+/*
+ * Editor transaction state kept in the VM so one outer Fletch entry owns
+ * an implicit transaction when it mutates outside explicit edit blocks.
+ * `enlisted` is private to fltxn.c; the VM owns its storage lifetime.
+ */
+typedef struct FlTxn {
+    void *enlisted;
+    u32 n;
+    u32 cap;
+    u32 depth;
+    bool entry_active;
+} FlTxn;
 
 struct FlVm {
     FlValue stack[FL_STACK_MAX];
@@ -167,6 +187,8 @@ struct FlVm {
     u32 ncompiling;
     FlGc gc;
     const FlHost *host;
+    FlTxn txn;
+    u32 edit_depth;
     Arena *arena;
     Interner *in;
     DiagCtx *dc;
@@ -269,7 +291,7 @@ bool fl_raise(FlVm *vm, const char *kind, const char *fmt, ...);
  */
 /*
  * The message an unbound name gets.  Names the SPRINT that owes the
- * surface when there is one -- `bind lands in Sprint 34` -- and reads
+ * surface when there is one -- `bind lands in Sprint 36` -- and reads
  * `undefined name 'x'` otherwise.  Exported so the tests can assert the
  * deferral without going through a raise.
  *

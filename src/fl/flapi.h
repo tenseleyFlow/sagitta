@@ -1,44 +1,70 @@
 #ifndef SAG_FL_FLAPI_H
 #define SAG_FL_FLAPI_H
 
-/*
- * Sprint 34 deliverable 3: the editor API, as seen from Fletch.
- *
- * THIS SLICE IS QUERIES ONLY.  Every native here READS the model and
- * returns a value; not one of them mutates.  That is deliberate
- * sequencing, not an oversight: the mutating half must go through a
- * registered command and sag_cmd_invoke (s34 §3's law, enforced by
- * scripts/check-fl-choke.sh), and the commands it needs -- ed.buf.open,
- * ed.edit.insert.at, ed.cursor.set and the rest of §3's table -- do not
- * exist yet.  Landing the read-only surface first means the choke gate
- * governs the file from its first line rather than being retrofitted
- * around a mutation that predates it.
- *
- * WHAT IT UNBLOCKS.  Until now nothing outside handle.c called the
- * resolvers, so a script could not hold an editor handle at all and
- * spec §9's "handle" kind was unreachable -- which is why amendment A2
- * could not be filed (coverage check 4 wants an `# ERROR_KIND: handle`
- * case, and there was no way to raise one).  With `buf.current()` and a
- * resolver behind it, a script can hold a handle, and the kind becomes
- * reachable the moment a buffer closes under one.
- *
- * NO RECEIVER SUGAR YET either.  Spec §4's `b.len()` is `.` applied to a
- * handle, which is a change to the VM's member-access path; these are
- * free functions on the `buf` module (`buf.len(b)`) until that lands, so
- * the two changes can be reviewed and gated apart.
- */
+/* Sprint 34: the table-driven editor surface. */
 
+#include <stdbool.h>
+
+#include "edit/cmd.h"
+#include "fl/handle.h"
 #include "fl/std.h"
 
-/*
- * The editor modules, registered alongside the seven builtins.
- *
- * Present even when vm->ed is NULL -- a headless `sag fl` still sees
- * `buf`, and every native here raises spec §9's "handle" with "no editor
- * to resolve..." rather than being an undefined name.  A missing module
- * would report a typo for something that is merely unavailable, which is
- * the confusion invariant 3 exists to prevent.
- */
+typedef enum FlArgSlot {
+    FL_ARG_NONE = 0,
+    FL_ARG_BOOL,
+    FL_ARG_INT,
+    FL_ARG_STR,
+    FL_ARG_COUNT,
+    FL_ARG_HANDLE_WIN,
+    FL_ARG_HANDLE_BUF,
+    FL_ARG_HANDLE_CUR,
+    FL_ARG_HANDLE_SPAN,
+    FL_ARG_LIST,
+    FL_ARG_MAP,
+    FL_ARG_VALUE
+} FlArgSlot;
+
+typedef struct FlBindDesc {
+    const char *fl_name;
+    const char *cmd;       /* NULL exactly when query is non-NULL. */
+    CmdId resolved_id;     /* resolved by fl_api_init, never per call */
+    u8 recv;               /* FlHandleKind; FL_H_NONE for a free function */
+    u8 nmin;
+    u8 nmax;
+    u8 argmap[3];
+    u32 caps;
+    FlNativeFn query;
+} FlBindDesc;
+
+extern FlBindDesc fl_api[];
+extern const u32 fl_api_len;
+
 extern const FlModuleDef fl_mod_buf;
+extern const FlModuleDef fl_mod_win;
+extern const FlModuleDef fl_mod_cur;
+extern const FlModuleDef fl_mod_span;
+extern const FlModuleDef fl_mod_opt;
+extern const FlModuleDef fl_mod_ed;
+
+/* Resolve every command row.  A miss is a startup invariant failure. */
+void fl_api_init(void);
+
+/* Attach the typed editor pointer and its VM host as one operation. */
+void fl_ed_attach(FlVm *vm, Ed *ed, const FlHost *host);
+void fl_ed_detach(FlVm *vm);
+
+/* Shared entry points used by module natives and receiver sugar in vm.c. */
+const FlBindDesc *fl_api_find(const char *name, u32 len);
+const FlBindDesc *fl_api_find_receiver(FlValue recv,
+                                       const char *member, u32 len);
+bool fl_api_bind_receiver(FlVm *vm, FlValue recv,
+                          const char *member, u32 len, FlValue *out);
+bool fl_api_invoke(FlVm *vm, const FlBindDesc *d,
+                   FlValue *argv, u32 argc, FlValue *out);
+
+/* Generic registry access; public so the marshalling unit test does not
+ * need to reach through a registered module map. */
+bool fl_api_ed_run(FlVm *vm, FlValue *argv, u32 argc, FlValue *out);
+bool fl_api_ed_commands(FlVm *vm, FlValue *argv, u32 argc, FlValue *out);
 
 #endif /* SAG_FL_FLAPI_H */

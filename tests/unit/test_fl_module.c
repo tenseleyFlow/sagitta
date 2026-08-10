@@ -54,15 +54,15 @@ void test_fl_modules_bare_name_is_a_builtin_and_only_that(void)
      * modules rather than listing paths it did not try.
      *
      * The list is GENERATED from vm->builtins now.  It used to be a
-     * literal in the message, and Sprint 34's `buf` made it wrong the
+     * literal in the message, and Sprint 34's editor modules made it wrong the
      * moment it registered -- the text named seven while the map held
-     * eight, so a user was told a module did not exist while importing
+     * twelve, so a user was told a module did not exist while importing
      * it on the next line worked.  Asserting the full string here is
      * what keeps the generated version honest.
      */
     FL_EQ(&f, "import nope\nreturn 1\n",
           "!import: there is no builtin module 'nope'; they are str, list, "
-          "map, math, fmt, io, re, buf");
+          "map, math, fmt, io, re, buf, win, cur, span, opt, ed");
     flfix_close(&f);
 }
 
@@ -209,10 +209,11 @@ void test_fl_modules_deferred_surfaces_name_their_sprint(void)
      * sends the author of a config looking for a spelling mistake that
      * is not there.
      */
-    FL_EQ(&f, "return bind\n", "!name: bind lands in Sprint 34");
-    FL_EQ(&f, "return set\n", "!name: set lands in Sprint 34");
-    FL_EQ(&f, "return on\n", "!name: on lands in Sprint 34");
-    FL_EQ(&f, "return win\n", "!name: win lands in Sprint 34");
+    FL_EQ(&f, "return bind\n", "!name: bind lands in Sprint 36");
+    FL_EQ(&f, "return unbind\n", "!name: unbind lands in Sprint 36");
+    FL_EQ(&f, "return set\n", "!name: set lands in Sprint 36");
+    FL_EQ(&f, "return record\n", "!name: record lands in Sprint 35");
+    FL_EQ(&f, "return replay\n", "!name: replay lands in Sprint 35");
     /*
      * `buf` LEFT this list when flapi.c registered it.  It is now an
      * ordinary builtin module, so a bare mention is an undefined name --
@@ -223,7 +224,7 @@ void test_fl_modules_deferred_surfaces_name_their_sprint(void)
      */
     FL_EQ(&f, "return buf\n", "!name: undefined name 'buf'");
     FL_EQ(&f, "import buf\nreturn buf.current()\n",
-          "!handle: no editor: this build of the prompt has none");
+          "!handle: no editor is attached");
     /* And an ordinary typo still reads as one. */
     FL_EQ(&f, "return nope\n", "!name: undefined name 'nope'");
     /* There is no io.run and no io.http in 1.0; the shell and net bits
@@ -265,7 +266,7 @@ void test_fl_modules_list_natives_is_deterministic(void)
      */
     SAG_ASSERT_EQ_I64(memcmp(a.data, "str.len\n", 8U), 0);
     SAG_ASSERT_NOT_NULL(strstr((const char *)a.data, "re.escape\n"));
-    SAG_ASSERT_EQ_I64(memcmp(a.data + a.len - 9U, "buf.text\n", 9U), 0);
+    SAG_ASSERT_EQ_I64(memcmp(a.data + a.len - 12U, "ed.commands\n", 12U), 0);
     /* Every line is `module.name`, once. */
     for (i = 0U; i < a.len; i++) {
         if (a.data[i] == (u8)'\n')
@@ -273,17 +274,15 @@ void test_fl_modules_list_natives_is_deterministic(void)
     }
     SAG_ASSERT_EQ_U64((u64)lines, (u64)na);
     /*
-     * 121 = the stdlib's 117 (30 str + 19 list + 12 map + 29 math +
-     * 7 fmt + 13 io + 7 re) plus Sprint 34's 4 on `buf`.  Pinned so a
-     * function added or lost shows up here rather than in s33's ledger
-     * three sprints later -- which is exactly what happened when the
-     * four landed: the conformance gate reported 117/121 natives and
-     * named each one missing a COVERS token.
+     * 176 = the stdlib's 117 (30 str + 19 list + 12 map + 29 math +
+     * 7 fmt + 13 io + 7 re) plus Sprint 34's 59 editor natives.  Pinned so a
+     * function added or lost shows up here and in s33's coverage ledger;
+     * the ledger names every new native missing a COVERS token.
      *
      * s31's DoD 2 asks for 150 and its own tables define 117; see the
      * DoD-walk note.  The number below is the tables, not the target.
      */
-    SAG_ASSERT_EQ_U64((u64)na, 121U);
+    SAG_ASSERT_EQ_U64((u64)na, 176U);
     bytebuf_free(&a);
     bytebuf_free(&b);
     flfix_close(&f);

@@ -167,7 +167,7 @@ FlHandleSlot *fl_h_peek_mut(FlHandleTable *t, FlValue v)
     return resolve_slot(t, v);
 }
 
-bool fl_h_free(FlHandleTable *t, FlValue v)
+static bool slot_free(FlHandleTable *t, FlValue v)
 {
     FlHandleSlot *s = resolve_slot(t, v);
     u32 idx;
@@ -211,12 +211,75 @@ static FlHandleTable *table_of(Ed *ed)
     return &ed->handles;
 }
 
+static FlValue find_buf(const FlHandleTable *t, u32 buf_id)
+{
+    u32 i;
+
+    for (i = 0U; i < t->n; i++) {
+        const FlHandleSlot *s = &t->slots[i];
+
+        if (s->kind == (u8)FL_H_BUF && s->as.buf == buf_id)
+            return encode(FL_H_BUF, i, s->gen);
+    }
+    return FL_NIL_V;
+}
+
+static FlValue find_win(const FlHandleTable *t, u32 win_id)
+{
+    u32 i;
+
+    for (i = 0U; i < t->n; i++) {
+        const FlHandleSlot *s = &t->slots[i];
+
+        if (s->kind == (u8)FL_H_WIN && s->as.win == win_id)
+            return encode(FL_H_WIN, i, s->gen);
+    }
+    return FL_NIL_V;
+}
+
+static FlValue find_cur(const FlHandleTable *t, u32 win_id, u64 stamp)
+{
+    u32 i;
+
+    for (i = 0U; i < t->n; i++) {
+        const FlHandleSlot *s = &t->slots[i];
+
+        if (s->kind == (u8)FL_H_CUR && s->as.cur.win == win_id &&
+            s->as.cur.stamp == stamp)
+            return encode(FL_H_CUR, i, s->gen);
+    }
+    return FL_NIL_V;
+}
+
+static FlValue find_span(const FlHandleTable *t, const Buffer *b,
+                         u64 lo, u64 hi)
+{
+    u32 i;
+
+    for (i = 0U; i < t->n; i++) {
+        const FlHandleSlot *s = &t->slots[i];
+
+        if (s->kind != (u8)FL_H_SPAN || s->as.span.buf != b->id ||
+            !sag_mark_alive(b->marks, s->as.span.lo) ||
+            !sag_mark_alive(b->marks, s->as.span.hi))
+            continue;
+        if (sag_mark_pos(b->marks, s->as.span.lo).v == lo &&
+            sag_mark_pos(b->marks, s->as.span.hi).v == hi)
+            return encode(FL_H_SPAN, i, s->gen);
+    }
+    return FL_NIL_V;
+}
+
 FlValue fl_h_buf_make(Ed *ed, const Buffer *b)
 {
     FlHandleSlot init;
+    FlValue found;
 
     if (b == NULL)
         return FL_NIL_V;
+    found = find_buf(table_of(ed), b->id);
+    if (found.t != (u8)FL_NIL)
+        return found;
     (void)memset(&init, 0, sizeof(init));
     init.as.buf = b->id;
     return fl_h_make(table_of(ed), FL_H_BUF, &init);
@@ -225,9 +288,13 @@ FlValue fl_h_buf_make(Ed *ed, const Buffer *b)
 FlValue fl_h_win_make(Ed *ed, const Win *w)
 {
     FlHandleSlot init;
+    FlValue found;
 
     if (w == NULL)
         return FL_NIL_V;
+    found = find_win(table_of(ed), w->id);
+    if (found.t != (u8)FL_NIL)
+        return found;
     (void)memset(&init, 0, sizeof(init));
     init.as.win = w->id;
     return fl_h_make(table_of(ed), FL_H_WIN, &init);
@@ -236,18 +303,27 @@ FlValue fl_h_win_make(Ed *ed, const Win *w)
 FlValue fl_h_cur_make(Ed *ed, const Win *w, u32 index)
 {
     FlHandleSlot init;
+    FlValue found;
+    u64 stamp;
 
-    if (w == NULL)
+    if (w == NULL || (size_t)index >= w->cs.curs.len ||
+        (size_t)index >= w->cs.stamps.len)
         return FL_NIL_V;
+    stamp = w->cs.stamps.data[index];
+    found = find_cur(table_of(ed), w->id, stamp);
+    if (found.t != (u8)FL_NIL)
+        return found;
     (void)memset(&init, 0, sizeof(init));
     init.as.cur.win = w->id;
     init.as.cur.index = index;
+    init.as.cur.stamp = stamp;
     return fl_h_make(table_of(ed), FL_H_CUR, &init);
 }
 
 FlValue fl_h_span_make(Ed *ed, Buffer *b, u64 lo, u64 hi)
 {
     FlHandleSlot init;
+    FlValue found;
 
     if (b == NULL || b->marks == NULL)
         return FL_NIL_V;
@@ -257,6 +333,9 @@ FlValue fl_h_span_make(Ed *ed, Buffer *b, u64 lo, u64 hi)
         lo = hi;
         hi = t;
     }
+    found = find_span(table_of(ed), b, lo, hi);
+    if (found.t != (u8)FL_NIL)
+        return found;
     (void)memset(&init, 0, sizeof(init));
     init.as.span.buf = b->id;
     /*
@@ -289,28 +368,44 @@ static void drop_span_marks(Buffer *b, FlHandleSlot *s)
 {
     if (b == NULL || b->marks == NULL)
         return;
-    sag_mark_del(b->marks, s->as.span.lo);
-    sag_mark_del(b->marks, s->as.span.hi);
+    if (sag_mark_alive(b->marks, s->as.span.lo))
+        sag_mark_del(b->marks, s->as.span.lo);
+    if (sag_mark_alive(b->marks, s->as.span.hi))
+        sag_mark_del(b->marks, s->as.span.hi);
+}
+
+bool fl_h_free(Ed *ed, FlValue v)
+{
+    FlHandleSlot *s;
+
+    if (ed == NULL)
+        return false;
+    s = resolve_slot(&ed->handles, v);
+    if (s == NULL)
+        return false;
+    if (s->kind == (u8)FL_H_SPAN) {
+        Buffer *b = sag_ws_buf_by_id(ed, s->as.span.buf);
+
+        drop_span_marks(b, s);
+    }
+    return slot_free(&ed->handles, v);
 }
 
 void fl_h_drop_buffer(Ed *ed, u32 buf_id)
 {
     FlHandleTable *t;
-    Buffer *b;
     u32 i;
 
     if (ed == NULL)
         return;
     t = &ed->handles;
-    b = sag_ws_buf_by_id(ed, buf_id);
     for (i = 0U; i < t->n; i++) {
         FlHandleSlot *s = &t->slots[i];
 
         if (s->kind == (u8)FL_H_BUF && s->as.buf == buf_id) {
-            (void)fl_h_free(t, encode(FL_H_BUF, i, s->gen));
+            (void)fl_h_free(ed, encode(FL_H_BUF, i, s->gen));
         } else if (s->kind == (u8)FL_H_SPAN && s->as.span.buf == buf_id) {
-            drop_span_marks(b, s);
-            (void)fl_h_free(t, encode(FL_H_SPAN, i, s->gen));
+            (void)fl_h_free(ed, encode(FL_H_SPAN, i, s->gen));
         }
     }
 }
@@ -327,9 +422,9 @@ void fl_h_drop_window(Ed *ed, u32 win_id)
         FlHandleSlot *s = &t->slots[i];
 
         if (s->kind == (u8)FL_H_WIN && s->as.win == win_id)
-            (void)fl_h_free(t, encode(FL_H_WIN, i, s->gen));
+            (void)fl_h_free(ed, encode(FL_H_WIN, i, s->gen));
         else if (s->kind == (u8)FL_H_CUR && s->as.cur.win == win_id)
-            (void)fl_h_free(t, encode(FL_H_CUR, i, s->gen));
+            (void)fl_h_free(ed, encode(FL_H_CUR, i, s->gen));
     }
 }
 
@@ -423,6 +518,7 @@ Cursor *fl_h_cur(FlVm *vm, FlValue v, Win **out_win)
 {
     FlHandleSlot *s = need(vm, v, FL_H_CUR);
     Win *w;
+    size_t index;
 
     if (s == NULL)
         return NULL;
@@ -431,21 +527,23 @@ Cursor *fl_h_cur(FlVm *vm, FlValue v, Win **out_win)
         (void)h_raise_gone(vm, FL_H_WIN, s->as.cur.win);
         return NULL;
     }
-    /*
-     * A cursor handle is an INDEX into a snapshot, and s17 merges
-     * cursors.  An index past the end is not corruption -- it is the
-     * documented outcome of a merge -- so it raises "handle" like any
-     * other dead reference and `c.valid()` exists to ask first.
-     */
-    if (s->as.cur.index >= w->cs.curs.len) {
+    index = (size_t)s->as.cur.index;
+    if (index >= w->cs.stamps.len ||
+        w->cs.stamps.data[index] != s->as.cur.stamp) {
+        for (index = 0U; index < w->cs.stamps.len; index++) {
+            if (w->cs.stamps.data[index] == s->as.cur.stamp)
+                break;
+        }
+    }
+    if (index >= w->cs.curs.len || index >= w->cs.stamps.len) {
         (void)fl_raise(vm, "handle",
-                       "cursor %lu was merged away",
-                       (unsigned long)s->as.cur.index);
+                       "this cursor was merged away");
         return NULL;
     }
+    s->as.cur.index = (u32)index;
     if (out_win != NULL)
         *out_win = w;
-    return &w->cs.curs.data[s->as.cur.index];
+    return &w->cs.curs.data[index];
 }
 
 bool fl_h_span(FlVm *vm, FlValue v, Buffer **out_buf, Span *out)

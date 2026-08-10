@@ -3,6 +3,7 @@
  * capability check.
  */
 #include "fl/flapi.h"
+#include "fl/flruntime.h"
 #include "fl/std.h"
 
 #include <stdio.h>
@@ -42,7 +43,8 @@ static const FlModuleDef *const FL_MODULES[] = {
      * headless `sag fl` still sees `buf`, and its natives raise "no
      * editor" rather than reporting an undefined name for something that
      * merely has no editor attached (invariant 3). */
-    &fl_mod_buf
+    &fl_mod_buf, &fl_mod_win, &fl_mod_cur, &fl_mod_span, &fl_mod_opt,
+    &fl_mod_ed
 };
 
 /* ---------------------------------------------------------------- */
@@ -142,6 +144,7 @@ static bool fl_error(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 static void register_prelude(FlVm *vm)
 {
     FlNative *nat = fl_gc_alloc(vm, sizeof(*nat), FL_NATIVE);
+    FlNative *on;
 
     nat->fn = fl_error;
     nat->name_id = sag_intern(vm->in, "error", 5U);
@@ -161,12 +164,24 @@ static void register_prelude(FlVm *vm)
     (void)fl_map_set(vm, vm->prelude, FL_INT_V((i64)nat->name_id),
                      FL_OBJ_V(FL_NATIVE, nat));
     fl_gc_release(vm, 1U);
+
+    on = fl_gc_alloc(vm, sizeof(*on), FL_NATIVE);
+    on->fn = fl_runtime_on;
+    on->name_id = sag_intern(vm->in, "on", 2U);
+    on->min_ar = 2U;
+    on->max_ar = 2U;
+    on->caps = 0U;
+    fl_gc_protect(vm, FL_OBJ_V(FL_NATIVE, on));
+    (void)fl_map_set(vm, vm->prelude, FL_INT_V((i64)on->name_id),
+                     FL_OBJ_V(FL_NATIVE, on));
+    fl_gc_release(vm, 1U);
 }
 
 void fl_std_register(FlVm *vm)
 {
     size_t i;
 
+    fl_api_init();
     for (i = 0U; i < SAG_ARRAY_LEN(FL_MODULES); i++)
         register_module(vm, FL_MODULES[i]);
     register_prelude(vm);

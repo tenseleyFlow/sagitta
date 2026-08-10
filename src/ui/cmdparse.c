@@ -881,15 +881,28 @@ static bool finish_body(Parser *p, CmdParse *out, const char *cmdname,
     return true;
 }
 
+/* `:fl` owns the rest of the line as source.  Tokenizing it as E-mode
+ * arguments would split ordinary Fletch expressions at every space and
+ * require shell-style quoting around a language that already has strings. */
+static bool finish_rest(Parser *p, CmdParse *out, const char *cmdname,
+                        Span name_tok)
+{
+    skip_ws(p);
+    if (p->at == p->len) {
+        set_error(p, (size_t)name_tok.lo, (size_t)name_tok.hi,
+                  ":fl needs Fletch source");
+        return false;
+    }
+    return finish_body(p, out, cmdname, name_tok);
+}
+
 static bool deferred_name(Parser *p, const char *name, Span tok)
 {
     const char *msg = NULL;
 
     /* `:s` and `:g` landed in Sprint 21 — `:g` as an explicit rejection
      * naming Sprint 34, which is a command, not a parse deferral. */
-    if (strcmp(name, "fl") == 0)
-        msg = ":fl evaluates Fletch: Sprint 32";
-    else if (strcmp(name, "source") == 0)
+    if (strcmp(name, "source") == 0)
         msg = ":source loads Fletch config: Sprint 36";
     if (msg == NULL)
         return false;
@@ -966,6 +979,8 @@ bool sag_cmd_parse(Ed *ed, const char *line, size_t len, Arena *a,
                   "unknown command '%s' (try Tab)", name);
         return false;
     }
+    if (strcmp(name, "fl") == 0)
+        return finish_rest(&p, out, "ed.fl.eval", out->name_tok);
     if (strcmp(name, "r") == 0) {
         size_t bang = p.at;
 

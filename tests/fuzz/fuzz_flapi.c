@@ -1,10 +1,10 @@
 /*
  * Sprint 34 §8: the editor-API fuzzer.
  *
- * TODAY IT FUZZES HANDLES, which is the half DoD 3 names: "ASan-clean
- * under the crafted-handle fuzzer".  The `ed.run` half arrives with the
- * binding layer; the file is named for the whole deliverable so it grows
- * rather than being replaced.
+ * It attacks both host boundaries owned by Sprint 34: generational handles
+ * and generic `ed.run` marshalling.  The latter deliberately mixes valid
+ * commands, unknown commands, known/unknown map keys, wrong value types and
+ * arbitrary byte strings against a real scratch editor.
  *
  * WHAT AN ADVERSARY ACTUALLY CONTROLS.  A script cannot forge an
  * FlValue's bits — but it can hold a handle across arbitrary editor
@@ -46,9 +46,11 @@
 #include <unistd.h>
 
 #include "edit/ed.h"
+#include "fl/flapi.h"
 #include "fl/handle.h"
 #include "fl/diag.h"
 #include "fl/std.h"
+#include "fl/fltxn.h"
 #include "fl/value.h"
 #include "fl/vm.h"
 #include "util/arena.h"
@@ -72,6 +74,22 @@ static const FlHandleKind FLAPI_KINDS[] = {FL_H_BUF, FL_H_CUR, FL_H_SPAN,
 static bool allowed_kind(const char *k)
 {
     return strcmp(k, "handle") == 0 || strcmp(k, "type") == 0;
+}
+
+static bool spec_kind(const char *k)
+{
+    static const char *const kinds[] = {
+        "type", "arity", "name", "index", "key", "div",
+        "capability", "io", "import", "motion", "user", "limit",
+        "handle"
+    };
+    size_t i;
+
+    for (i = 0U; i < SAG_ARRAY_LEN(kinds); i++) {
+        if (strcmp(k, kinds[i]) == 0)
+            return true;
+    }
+    return false;
 }
 
 static void raised_kind(FlVm *vm, char *out, size_t cap)
@@ -132,19 +150,111 @@ static bool try_resolve(FlVm *vm, FlHandleKind want, FlValue v, char *kind,
  * encoding lives in handle.c and a test that reimplemented it would
  * drift from the thing it is testing.
  */
-static FlValue crafted(FlHandleTable *t, FlHandleKind k, u32 slot, u32 gen)
+static FlValue crafted(Ed *ed, FlHandleKind k, u32 slot, u32 gen)
 {
     FlHandleSlot init;
     FlValue v;
     FlHandle h;
 
     (void)memset(&init, 0, sizeof(init));
-    v = fl_h_make(t, k, &init);
-    (void)fl_h_free(t, v);
+    v = fl_h_make(&ed->handles, k, &init);
+    (void)fl_h_free(ed, v);
     h.slot = slot;
     h.gen = gen;
     (void)memcpy(&v.as, &h, sizeof(h));
     return v;
+}
+
+static FlValue fuzz_str(FlVm *vm, const u8 *data, size_t len, size_t at,
+                        u32 max)
+{
+    u32 n;
+    char bytes[16];
+    u32 i;
+
+    if (len == 0U)
+        return FL_OBJ_V(FL_STR, fl_str_new(vm, "", 0U));
+    if (max > sizeof(bytes))
+        max = sizeof(bytes);
+    n = (u32)data[at % len] % (max + 1U);
+    for (i = 0U; i < n; i++)
+        bytes[i] = (char)data[(at + 1U + i) % len];
+    return FL_OBJ_V(FL_STR, fl_str_new(vm, bytes, n));
+}
+
+static bool fuzz_ed_run(FlVm *vm, Ed *ed, const u8 *data, size_t len,
+                        size_t at, char *why, size_t cap)
+{
+    static const char *const commands[] = {
+        "ed.nop", "ed.edit.insert.at", "ed.repeat", "no.such.command"
+    };
+    static const char *const keys[] = {"count", "iarg", "sarg", "win"};
+    FlMap *map = fl_map_new(vm);
+    FlValue argv[2];
+    FlValue out = FL_NIL_V;
+    u32 entries;
+    u32 i;
+    bool invoked;
+    bool ended;
+    char kind[32];
+
+    fl_gc_protect(vm, FL_OBJ_V(FL_MAP, map));
+    entries = len == 0U ? 0U : (u32)data[at % len] % 5U;
+    for (i = 0U; i < entries; i++) {
+        u8 selector = data[(at + 1U + i * 3U) % len];
+        FlValue key;
+        FlValue value;
+
+        if ((selector & 4U) != 0U)
+            key = fuzz_str(vm, data, len, at + 2U + i * 3U, 8U);
+        else
+            key = FL_OBJ_V(FL_STR, fl_str_new(vm, keys[selector & 3U],
+                                              (u32)strlen(keys[selector & 3U])));
+        switch ((selector >> 3) & 3U) {
+        case 0:
+            value = FL_INT_V((i64)(i8)data[(at + 2U + i * 3U) % len]);
+            break;
+        case 1:
+            value = fuzz_str(vm, data, len, at + 2U + i * 3U, 12U);
+            break;
+        case 2:
+            value = fl_h_win_make(ed, ed->win);
+            break;
+        default:
+            value = FL_NIL_V;
+            break;
+        }
+        (void)fl_map_set(vm, map, key, value);
+    }
+    argv[0] = FL_OBJ_V(FL_STR,
+                       fl_str_new(vm, commands[data[at % len] & 3U],
+                                  (u32)strlen(commands[data[at % len] & 3U])));
+    argv[1] = FL_OBJ_V(FL_MAP, map);
+    fl_gc_protect(vm, argv[0]);
+    vm->err = FL_NIL_V;
+    if (!vm->host->run_begin(vm)) {
+        (void)snprintf(why, cap, "ed.run envelope refused");
+        fl_gc_release(vm, 2U);
+        return false;
+    }
+    invoked = fl_api_ed_run(vm, argv, 2U, &out);
+    ended = vm->host->run_end(vm, invoked);
+    if (!ended) {
+        (void)snprintf(why, cap, "ed.run envelope did not close");
+        fl_gc_release(vm, 2U);
+        return false;
+    }
+    if (!invoked) {
+        raised_kind(vm, kind, sizeof(kind));
+        if (!spec_kind(kind)) {
+            (void)snprintf(why, cap, "ed.run failed with '%s'",
+                           kind[0] == '\0' ? "(none)" : kind);
+            fl_gc_release(vm, 2U);
+            return false;
+        }
+    }
+    fl_gc_release(vm, 2U);
+    return true;
 }
 
 static bool check_flapi(const u8 *data, size_t len, char *why, size_t cap)
@@ -171,7 +281,8 @@ static bool check_flapi(const u8 *data, size_t len, char *why, size_t cap)
         ok = false;
         goto done;
     }
-    vm.ed = &ed;
+    fl_ed_attach(&vm, &ed, &fl_host_editor);
+    fl_api_init();
 
     for (i = 0U; i < len && i < FLAPI_FUZZ_MAX_OPS && ok; i++) {
         u8 op = data[i];
@@ -193,7 +304,7 @@ static bool check_flapi(const u8 *data, size_t len, char *why, size_t cap)
             break;
         case 3: /* Release one, scrambling the free list. */
             if (nlive != 0U)
-                (void)fl_h_free(&ed.handles, live[--nlive]);
+                (void)fl_h_free(&ed, live[--nlive]);
             break;
         case 4: /* Resolve one we still hold: must SUCCEED or raise
                  * cleanly — never anything else. */
@@ -213,7 +324,7 @@ static bool check_flapi(const u8 *data, size_t len, char *why, size_t cap)
             u32 slot = (u32)data[(i + 1U) % len];
             u32 gen = (u32)data[(i + 2U) % len] |
                       ((u32)data[(i + 3U) % len] << 16);
-            FlValue v = crafted(&ed.handles, k, slot, gen);
+            FlValue v = crafted(&ed, k, slot, gen);
             bool got = try_resolve(&vm, k, v, kind, sizeof(kind));
 
             /*
@@ -251,10 +362,12 @@ static bool check_flapi(const u8 *data, size_t len, char *why, size_t cap)
             }
             break;
         }
+        if (ok && !fuzz_ed_run(&vm, &ed, data, len, i, why, cap))
+            ok = false;
     }
 
 done:
-    vm.ed = NULL;
+    fl_ed_detach(&vm);
     sag_ed_free(&ed);
     fl_vm_free(&vm);
     interner_free(&in);

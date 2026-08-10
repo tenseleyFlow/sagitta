@@ -6,6 +6,7 @@
 #include "edit/dispatch.h"
 #include "edit/job.h"
 #include "fl/handle.h"
+#include "fl/flhook.h"
 #include "fl/origin.h"
 #include "edit/jumplist.h"
 #include "edit/pane_cmds.h"
@@ -43,6 +44,15 @@ typedef enum {
     SAG_PROMPT_WS_FORGET
 } PromptKind;
 
+typedef struct FlRuntime FlRuntime;
+typedef struct OptProvider OptProvider;
+
+typedef struct FlPendingChange {
+    u32 buffer_id;
+    u64 lo;
+    u64 hi;
+} FlPendingChange;
+
 enum {
     /* No file behind it: save refuses, the journal never opens.  Sprint 19
      * §4 — job output must never be mistaken for a document. */
@@ -54,6 +64,9 @@ enum {
 };
 
 typedef struct Buffer {
+    /* Owning editor, used only by the text-change callback to enqueue the
+     * coalesced Sprint 34 buf.change event. */
+    struct Ed *owner;
     /*
      * Stable for the buffer's lifetime and never reused.  Workspace
      * indices shift when a buffer is dropped, so anything that outlives
@@ -204,6 +217,22 @@ struct Ed {
     FlOriginReg origins;
     /* Sprint 34 §1: every editor handle a script holds. */
     FlHandleTable handles;
+    /* Persistent editor-side Fletch state.  Kept opaque here so the editor
+     * model does not expose VM internals to every translation unit that
+     * includes ed.h. */
+    FlRuntime *fl;
+    FlHookTable hooks;
+    FlPendingChange *fl_changes;
+    u32 fl_changes_len;
+    u32 fl_changes_cap;
+    i64 fl_idle_since_ms;
+    bool fl_flushing_change;
+    bool fl_idle_fired;
+    bool fl_model_teardown;
+    const OptProvider *opt_provider;
+    bool undo_break_on_newline;
+    bool errorbells;
+    bool ambiguous_wide;
     u32 next_win_id;
 
     bool dispatch_ready;
@@ -223,6 +252,11 @@ int sag_ed_driver(const char *path);
 const char *sag_ws_root(const Ed *ed);
 
 bool sag_buf_dirty(const Buffer *b);
+bool sag_buf_readonly(const Buffer *b);
+u64 sag_buf_len(const Buffer *b);
+u64 sag_buf_line_count(const Buffer *b);
+Span sag_buf_line_span(const Buffer *b, LineNo line);
+LineNo sag_buf_line_of(const Buffer *b, ByteOff off);
 /* THE document: the buffer the focused window is showing.  Everything
  * that writes bytes or names a file asks this, never &ed->buffer — see
  * ed.c for why the two stopped being the same object. */
@@ -282,6 +316,9 @@ CmdStatus sag_ed_invoke_parsed(Ed *ed, CmdId id,
                                const SagCmdInvoke *invoke);
 CmdStatus sag_ed_file_save(Ed *ed, bool force);
 CmdStatus sag_ed_file_write_to(Ed *ed, const char *path, bool force);
+CmdStatus sag_ed_file_save_win(Ed *ed, Win *win, bool force);
+CmdStatus sag_ed_file_write_to_win(Ed *ed, Win *win, const char *path,
+                                   bool force);
 CmdStatus sag_ed_request_quit(Ed *ed, bool force);
 
 void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms);

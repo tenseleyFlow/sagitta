@@ -45,7 +45,10 @@ choke_hits()
             line = $0
             sub(/^[^:]*:[0-9]*:/, "", line)
             sub(/^[ \t]+/, "", line)
-            if (line ~ /^\*/) next
+            # A block-comment continuation starts with `* ` or `*/`.
+            # Do not exempt pointer dereferences such as `*out = call()`;
+            # that spelling used to be able to hide a side door.
+            if (line ~ /^\*([[:space:]]|\/|$)/) next
             if (line ~ /^\/\*/) next
             if (line ~ /^\/\//) next
             print $0
@@ -71,7 +74,7 @@ cat >"$seed_dir/src/fl/flapi.c" <<'SEED'
 /* A comment naming sag_edit_insert must NOT trip the gate. */
 void seeded(void)
 {
-    sag_edit_insert(&ec, at, bytes, len);
+    *out = sag_edit_insert(&ec, at, bytes, len);
 }
 SEED
 if [ -z "$(cd "$seed_dir" && choke_hits src/fl || true)" ]; then

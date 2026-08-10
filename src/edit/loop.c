@@ -16,6 +16,7 @@
 #include "edit/job.h"
 #include "ui/mouse.h"
 #include "edit/shell.h"
+#include "fl/flruntime.h"
 #include "term/input.h"
 #include "term/tty.h"
 #include "util/log.h"
@@ -247,6 +248,11 @@ int sag_loop_deadline(const Ed *ed, i64 now_ms)
      * this the loop would sleep through the 400 ms the dwell is
      * counting. */
     deadline = deadline_min(deadline, sag_mouse_deadline(ed, now_ms));
+    if (ed->fl != NULL && !ed->fl_idle_fired &&
+        ed->fl_idle_since_ms >= 0)
+        deadline = deadline_min(
+            deadline,
+            absolute_deadline(ed->fl_idle_since_ms + 500, now_ms));
     if (!sag_tty_probe_done(&ed->tty))
         deadline = deadline_min(deadline,
                                 sag_tty_probe_deadline(&ed->tty, now_ms));
@@ -356,7 +362,15 @@ int sag_loop_run(Ed *ed)
         bool winch = false;
         bool cont = false;
         bool chld = false;
+        bool had_input = false;
+        Win *burst_win;
+        u64 burst_cursors;
         Key key;
+
+        if (ed->fl_idle_since_ms < 0)
+            ed->fl_idle_since_ms = now;
+        burst_win = ed->win;
+        burst_cursors = sag_fl_cursor_burst_state(burst_win);
 
         /* A completed startup probe may already own typed-ahead bytes. */
         loop_seed_probe(ed);
@@ -407,8 +421,14 @@ int sag_loop_run(Ed *ed)
 
         sag_tty_probe_tick(&ed->tty, now);
         loop_seed_probe(ed);
-        while (sag_input_next(&ed->in, now, &key))
+        while (sag_input_next(&ed->in, now, &key)) {
+            had_input = true;
             loop_dispatch_event(ed, key, now);
+        }
+        if (had_input) {
+            ed->fl_idle_since_ms = now;
+            ed->fl_idle_fired = false;
+        }
 
         /* Deadline work cannot split a queued typeahead burst. */
         sag_dispatch_tick(ed, now);
@@ -424,6 +444,15 @@ int sag_loop_run(Ed *ed)
          * in the same place. */
         (void)sag_cmdline_comp_tick(ed);
         sag_mouse_tick(ed, now);
+        /* Coalesced events run after input and deadline work, never inside
+         * the keypress path.  A paste therefore produces one callback. */
+        sag_fl_hook_flush_change(ed);
+        sag_fl_hook_flush_cursor(ed, burst_win, burst_cursors);
+        if (!ed->fl_idle_fired && ed->fl_idle_since_ms >= 0 &&
+            now - ed->fl_idle_since_ms >= 500) {
+            sag_fl_hook_fire(ed, FL_EV_ED_IDLE, NULL, 0U);
+            ed->fl_idle_fired = true;
+        }
         if (ed->quit)
             return ed->exit_code;
         if (ed->layout_dirty)

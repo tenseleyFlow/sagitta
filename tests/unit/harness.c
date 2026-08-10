@@ -1,3 +1,5 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "harness.h"
 
 #include <setjmp.h>
@@ -19,6 +21,30 @@ static CapturedLog *captured_logs;
 static size_t captured_logs_len;
 static size_t captured_logs_cap;
 static const char *program_path;
+
+static char *env_copy(const char *name)
+{
+    const char *value = getenv(name);
+    size_t len;
+    char *copy;
+
+    if (value == NULL)
+        return NULL;
+    len = strlen(value);
+    copy = sag_xmalloc(len + 1U);
+    (void)memcpy(copy, value, len + 1U);
+    return copy;
+}
+
+static void env_restore(const char *name, const char *saved)
+{
+    if (saved != NULL) {
+        if (setenv(name, saved, 1) != 0)
+            abort();
+    } else if (unsetenv(name) != 0) {
+        abort();
+    }
+}
 
 static void capture_write(void *user, SagLogLevel level, const char *message)
 {
@@ -218,6 +244,7 @@ int sag_test_run(int argc, char **argv)
     size_t failures = 0U;
     size_t i;
     int argi;
+    char *xdg_state;
 
     program_path = argv[0];
     for (argi = 1; argi < argc; argi++) {
@@ -262,13 +289,17 @@ int sag_test_run(int argc, char **argv)
         return 0;
     }
 
+    xdg_state = env_copy("XDG_STATE_HOME");
     for (i = 0U; i < sag_tests_len; i++) {
         if (!sag_test_name_matches(sag_tests[i].name, filter) ||
             test_is_excluded(sag_tests[i].name, excluded, excluded_len))
             continue;
+        env_restore("XDG_STATE_HOME", xdg_state);
         if (!run_one_test(&sag_tests[i]))
             failures++;
     }
+    env_restore("XDG_STATE_HOME", xdg_state);
+    free(xdg_state);
     (void)printf("unit: %zu tests, %zu assertions, %zu failure%s\n",
                  selected, assertion_count, failures,
                  failures == 1U ? "" : "s");

@@ -400,6 +400,18 @@ static void ring_drop_oldest(Registers *r)
     r->ring_len--;
 }
 
+void sag_reg_ring_set_depth(Registers *r, u32 depth)
+{
+    if (r == NULL)
+        SAG_BUG("sag_reg_ring_set_depth: NULL register file");
+    if (depth > SAG_KILL_RING_MAX)
+        SAG_BUG("sag_reg_ring_set_depth: depth exceeds maximum");
+    r->paste_live = false;
+    while (r->ring_len > depth)
+        ring_drop_oldest(r);
+    r->ring_depth = depth;
+}
+
 void sag_reg_ring_push(Registers *r, const RegVal *v)
 {
     u32 depth;

@@ -179,7 +179,13 @@ static void blacken(FlVm *vm, FlObj *o)
         mark_value(vm, uv->closed);
         return;
     }
-    case FL_NATIVE:
+    case FL_NATIVE: {
+        const FlNative *nat = (const FlNative *)o;
+
+        if (nat->has_recv != 0U)
+            mark_value(vm, nat->recv);
+        return;
+    }
     case FL_MOTION_PROG:
         return;
     default:

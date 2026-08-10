@@ -37,6 +37,11 @@ CmdStatus sag_edit_cmd_move_unit_next_alt(CmdCtx *cx);
 CmdStatus sag_edit_cmd_move_unit_prev_alt(CmdCtx *cx);
 CmdStatus sag_edit_cmd_move_unit_home_alt(CmdCtx *cx);
 CmdStatus sag_edit_cmd_move_unit_end_alt(CmdCtx *cx);
+CmdStatus sag_edit_cmd_move_unit_up(CmdCtx *cx);
+CmdStatus sag_edit_cmd_move_unit_down(CmdCtx *cx);
+CmdStatus sag_edit_cmd_move_unit_up_alt(CmdCtx *cx);
+CmdStatus sag_edit_cmd_move_unit_down_alt(CmdCtx *cx);
+CmdStatus sag_edit_cmd_delete_unit(CmdCtx *cx);
 CmdStatus sag_edit_cmd_move_block_match_prev(CmdCtx *cx);
 CmdStatus sag_edit_cmd_move_block_match_next(CmdCtx *cx);
 CmdStatus sag_edit_cmd_move_word_sub_prev(CmdCtx *cx);
@@ -68,5 +73,9 @@ CmdStatus sag_edit_cmd_undo_barrier(CmdCtx *cx);
 
 CmdStatus sag_edit_cmd_mode_enter(CmdCtx *cx);
 CmdStatus sag_edit_cmd_mode_escape(CmdCtx *cx);
+CmdStatus sag_edit_cmd_insert_at(CmdCtx *cx);
+CmdStatus sag_edit_cmd_delete_span(CmdCtx *cx);
+CmdStatus sag_edit_cmd_replace_span(CmdCtx *cx);
+CmdStatus sag_edit_cmd_cursor_set(CmdCtx *cx);
 
 #endif

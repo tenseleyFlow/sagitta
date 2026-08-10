@@ -7,12 +7,15 @@
 #include "edit/ed.h"
 #include "edit/mode.h"
 #include "edit/motion.h"
+#include "edit/sel_actions.h"
 #include "edit/word.h"
 #include "ui/message.h"
 #include "ui/cmdparse.h"
 #include "ui/viewport.h"
 #include "unicode/coords.h"
 #include "util/log.h"
+
+static CmdStatus delete_span(CmdCtx *cx, Span span);
 
 static bool edit_window(CmdCtx *cx, Win **win, TextBuf **tb, Cursor **cursor)
 {
@@ -23,8 +26,11 @@ static bool edit_window(CmdCtx *cx, Win **win, TextBuf **tb, Cursor **cursor)
         cx->win->cs.curs.len == 0U ||
         (size_t)cx->win->cs.primary >= cx->win->cs.curs.len)
         return false;
-    cursor_index = cx->win->cs.primary;
-    if (cx->win->cs.active != SAG_MC_ACTIVE_NONE) {
+    cursor_index = cx->cursor_given ? cx->cursor_index : cx->win->cs.primary;
+    if (cx->cursor_given) {
+        if ((size_t)cursor_index >= cx->win->cs.curs.len)
+            return false;
+    } else if (cx->win->cs.active != SAG_MC_ACTIVE_NONE) {
         if ((size_t)cx->cursor_index >= cx->win->cs.curs.len ||
             cx->cursor_index != cx->win->cs.active)
             return false;
@@ -565,6 +571,7 @@ static CmdStatus move_unit(CmdCtx *cx, UnitMotion motion, bool alt)
     if (!edit_window(cx, &win, &tb, &cursor))
         return SAG_CMD_ERR_STATE;
     ops = cx->ed->mode == SAG_MODE_H ? win->h.unit :
+          cx->ed->prev_unit == SAG_MODE_I ? &sag_unit_char :
           sag_unit_of_mode(cx->ed->mode);
     if (ops == NULL)
         return SAG_CMD_ERR_STATE;
@@ -660,6 +667,50 @@ CmdStatus sag_edit_cmd_move_unit_home_alt(CmdCtx *cx)
 CmdStatus sag_edit_cmd_move_unit_end_alt(CmdCtx *cx)
 {
     return move_unit(cx, UNIT_END, true);
+}
+
+CmdStatus sag_edit_cmd_move_unit_up(CmdCtx *cx)
+{
+    return sag_edit_cmd_move_line_up(cx);
+}
+
+CmdStatus sag_edit_cmd_move_unit_down(CmdCtx *cx)
+{
+    return sag_edit_cmd_move_line_down(cx);
+}
+
+CmdStatus sag_edit_cmd_move_unit_up_alt(CmdCtx *cx)
+{
+    return move_unit(cx, UNIT_PREV, true);
+}
+
+CmdStatus sag_edit_cmd_move_unit_down_alt(CmdCtx *cx)
+{
+    return move_unit(cx, UNIT_NEXT, true);
+}
+
+CmdStatus sag_edit_cmd_delete_unit(CmdCtx *cx)
+{
+    Win *win;
+    TextBuf *tb;
+    Cursor *cursor;
+    const UnitOps *ops;
+    UnitCtx u;
+
+    if (!edit_window(cx, &win, &tb, &cursor))
+        return SAG_CMD_ERR_STATE;
+    if (cx->ed->mode == SAG_MODE_H)
+        return sag_sel_cmd_delete(cx);
+    if (cx->ed->prev_unit == SAG_MODE_I)
+        ops = &sag_unit_char;
+    else
+        ops = sag_unit_of_mode(cx->ed->mode);
+    if (ops == NULL)
+        return SAG_CMD_ERR_STATE;
+    if (ops == &sag_unit_line)
+        return sag_edit_cmd_delete_line(cx);
+    u = (UnitCtx){tb, win->buf, win};
+    return delete_span(cx, ops->span(&u, cursor->pos, false));
 }
 
 static CmdStatus move_block_match(CmdCtx *cx, bool next)
@@ -1227,6 +1278,87 @@ CmdStatus sag_edit_cmd_insert_text(CmdCtx *cx)
     return insert_bytes(cx, (const u8 *)cx->sarg, cx->sarg_len);
 }
 
+CmdStatus sag_edit_cmd_insert_at(CmdCtx *cx)
+{
+    EditCtx ec;
+    if (cx == NULL || cx->ed == NULL || cx->win == NULL ||
+        cx->win->buf == NULL || cx->win->buf->tb == NULL ||
+        cx->sarg == NULL || cx->iarg < 0 ||
+        (u64)cx->iarg > sag_textbuf_len(cx->win->buf->tb))
+        return SAG_CMD_ERR_ARG;
+    ec = sag_ed_edit_ctx_for(cx->ed, cx->win);
+    if (!sag_edit_insert(&ec, BYTEOFF((u64)cx->iarg), (const u8 *)cx->sarg,
+                         cx->sarg_len)) {
+        sag_ed_finish_edit(cx->ed, &ec);
+        return SAG_CMD_ERR_IO;
+    }
+    sag_ed_finish_edit(cx->ed, &ec);
+    sag_ed_damage_document(cx->ed);
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_edit_cmd_delete_span(CmdCtx *cx)
+{
+    EditCtx ec;
+    Span s;
+    if (cx == NULL || cx->ed == NULL || cx->win == NULL ||
+        cx->win->buf == NULL || cx->win->buf->tb == NULL)
+        return SAG_CMD_ERR_STATE;
+    s = cx->range.given ? cx->range.tok :
+                          (Span){(u64)cx->iarg, (u64)cx->iarg};
+    if (s.lo > s.hi || s.hi > sag_textbuf_len(cx->win->buf->tb))
+        return SAG_CMD_ERR_ARG;
+    ec = sag_ed_edit_ctx_for(cx->ed, cx->win);
+    if (!sag_edit_delete(&ec, s)) { sag_ed_finish_edit(cx->ed, &ec); return SAG_CMD_ERR_IO; }
+    sag_ed_finish_edit(cx->ed, &ec);
+    sag_ed_damage_document(cx->ed);
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_edit_cmd_replace_span(CmdCtx *cx)
+{
+    EditCtx ec;
+    Span s;
+    if (cx == NULL || cx->ed == NULL || cx->win == NULL ||
+        cx->win->buf == NULL || cx->win->buf->tb == NULL || cx->sarg == NULL)
+        return SAG_CMD_ERR_ARG;
+    s = cx->range.given ? cx->range.tok :
+                          (Span){(u64)cx->iarg, (u64)cx->iarg};
+    if (s.lo > s.hi || s.hi > sag_textbuf_len(cx->win->buf->tb))
+        return SAG_CMD_ERR_ARG;
+    ec = sag_ed_edit_ctx_for(cx->ed, cx->win);
+    if (!sag_edit_delete(&ec, s) ||
+        !sag_edit_insert(&ec, BYTEOFF(s.lo), (const u8 *)cx->sarg,
+                         cx->sarg_len)) {
+        sag_ed_finish_edit(cx->ed, &ec);
+        return SAG_CMD_ERR_IO;
+    }
+    sag_ed_finish_edit(cx->ed, &ec);
+    sag_ed_damage_document(cx->ed);
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_edit_cmd_cursor_set(CmdCtx *cx)
+{
+    Cursor *c;
+    if (cx == NULL || cx->ed == NULL || cx->win == NULL ||
+        cx->win->buf == NULL || cx->win->buf->tb == NULL ||
+        cx->win->cs.curs.len == 0U ||
+        (cx->cursor_given
+             ? (size_t)cx->cursor_index >= cx->win->cs.curs.len
+             : (size_t)cx->win->cs.primary >= cx->win->cs.curs.len) ||
+        cx->iarg < 0 ||
+        (u64)cx->iarg > sag_textbuf_len(cx->win->buf->tb))
+        return SAG_CMD_ERR_ARG;
+    c = &cx->win->cs.curs.data[cx->cursor_given ? cx->cursor_index :
+                                                   cx->win->cs.primary];
+    cursor_place(cx->win->buf->tb, c, BYTEOFF((u64)cx->iarg));
+    cx->win->wrap_goal_valid = false;
+    sag_win_follow_cursor(cx->win);
+    sag_ed_damage_document(cx->ed);
+    return SAG_CMD_OK;
+}
+
 CmdStatus sag_edit_cmd_insert_newline(CmdCtx *cx)
 {
     const u8 *bytes;
@@ -1492,6 +1624,14 @@ CmdStatus sag_edit_cmd_mode_enter(CmdCtx *cx)
     }
     if (cx->sarg_len != 1U)
         return SAG_CMD_ERR_ARG;
+    if (cx->sarg[0] == 'C') {
+        cx->ed->prev_unit = SAG_MODE_I;
+        if (cx->ed->mode == SAG_MODE_H)
+            return sag_mode_enter_highlight(cx->ed, SAG_MODE_I,
+                                            cx->ed->win->h.sticky);
+        cx->ed->footer_dirty = true;
+        return SAG_CMD_OK;
+    }
     for (mode = SAG_MODE_L; mode < SAG_MODE__N; mode++) {
         if (sag_modes[mode].name[0] == cx->sarg[0] &&
             sag_modes[mode].name[1] == '\0')

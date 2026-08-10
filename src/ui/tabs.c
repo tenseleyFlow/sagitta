@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#include "fl/flruntime.h"
 #include "ui/groupnav.h"
 #include "ui/glyphs.h"
 #include "ui/groups.h"
@@ -254,9 +255,11 @@ bool sag_tab_close(Ed *ed, int idx)
 void sag_tab_switch(Ed *ed, int idx)
 {
     Tab *t;
+    Win *before;
 
     if (ed == NULL)
         return;
+    before = ed->win;
     t = sag_tab_at(ed, idx);
     if (t == NULL) {
         ed->tabs.active = ed->tabs.v.len == 0U ? -1 : ed->tabs.active;
@@ -282,6 +285,8 @@ void sag_tab_switch(Ed *ed, int idx)
     ed->layout_dirty = true;
     ed->full_damage = true;
     sag_state_mark_dirty(ed);
+    if (ed->win != before)
+        sag_fl_hook_window(ed, FL_EV_WIN_FOCUS, ed->win);
 }
 
 int sag_tab_shifted_index(int i, int from, int to)
@@ -424,6 +429,7 @@ int sag_tab_hydrate(Ed *ed, int idx)
                 sag_cset_normalize(b->tb, &leaves[i]->win->cs);
         }
     }
+    sag_fl_hook_buffer(ed, FL_EV_BUF_OPEN, b);
     return 0;
 }
 

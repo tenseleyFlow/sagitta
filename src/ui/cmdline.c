@@ -10,6 +10,7 @@
 #include "edit/ed.h"
 #include "edit/mode.h"
 #include "edit/motion.h"
+#include "fl/flruntime.h"
 #include "term/grid.h"
 #include "text/edit.h"
 #include "text/register.h"
@@ -307,11 +308,13 @@ void sag_cmdline_open(Ed *ed, SagPromptKind kind, const char *seed)
     CmdLineTarget *target;
     Bytebuf clean;
     Cursor cursor;
+    Mode old;
 
     if (ed == NULL)
         return;
     if (ed->cmdline.active)
         sag_cmdline_close(ed, false);
+    old = ed->mode;
     line = &ed->cmdline;
     target = sag_xcalloc(1U, sizeof(*target));
     bytebuf_init(&clean);
@@ -371,7 +374,11 @@ void sag_cmdline_open(Ed *ed, SagPromptKind kind, const char *seed)
     line->err = (CmdErr){0};
     line->scroll = 0U;
     sag_msg_clear(ed);
-    sag_dispatch_set_mode(ed, SAG_MODE_E);
+    if (old != SAG_MODE_E) {
+        sag_fl_hook_mode(ed, FL_EV_MODE_LEAVE, sag_modes[old].name);
+        sag_dispatch_set_mode(ed, SAG_MODE_E);
+        sag_fl_hook_mode(ed, FL_EV_MODE_ENTER, sag_modes[SAG_MODE_E].name);
+    }
     ed->full_damage = true;
     ed->footer_dirty = true;
 }
@@ -412,7 +419,13 @@ void sag_cmdline_close(Ed *ed, bool accepted)
     line->err = (CmdErr){0};
     line->scroll = 0U;
     sag_msg_clear(ed);
-    sag_dispatch_set_mode(ed, restore);
+    if (ed->mode != restore) {
+        Mode old = ed->mode;
+
+        sag_fl_hook_mode(ed, FL_EV_MODE_LEAVE, sag_modes[old].name);
+        sag_dispatch_set_mode(ed, restore);
+        sag_fl_hook_mode(ed, FL_EV_MODE_ENTER, sag_modes[restore].name);
+    }
     ed->full_damage = true;
     ed->footer_dirty = true;
     /* A `:s/../../c` started a confirm run whose question this close

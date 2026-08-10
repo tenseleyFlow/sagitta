@@ -1,5 +1,15 @@
 # SPEC: §4, §16
-# COVERS: buf.current buf.len buf.path buf.text kind:handle
+# COVERS: buf.current buf.list buf.open buf.close buf.save buf.path buf.name
+# COVERS: buf.lang buf.len buf.lines buf.text buf.line buf.span buf.line_span
+# COVERS: buf.insert buf.delete buf.find buf.find_all buf.dirty buf.readonly
+# COVERS: buf.mark win.current win.list win.buf win.cursors win.selection
+# COVERS: win.split win.close win.focus win.viewport win.set_cursors cur.pos
+# COVERS: cur.line cur.col cur.anchor cur.span cur.goto cur.move cur.word
+# COVERS: cur.line_span cur.insert cur.is_primary cur.valid span.lo span.hi
+# COVERS: span.len span.text span.lines span.replace span.replace_lines
+# COVERS: span.prepend span.append span.delete span.yank span.valid opt.get opt.set
+# COVERS: ed.run ed.commands
+# COVERS: kind:handle
 # ERROR_KIND: handle
 # ERROR: no editor
 # EXIT: 1
@@ -19,6 +29,31 @@
 # EVERYWHERE, which is that the refusal is catchable and typed.
 import io
 import buf
+import win
+import cur
+import span
+import opt
+import ed
+import list
+
+fn refuses(kind, thunk) {
+    try {
+        thunk()
+        error("editor native unexpectedly succeeded")
+    } catch e {
+        if e.kind != kind { error("editor native raised the wrong kind") }
+    }
+}
+
+fn defers(msg, thunk) {
+    try {
+        thunk()
+        error("deferred surface unexpectedly succeeded")
+    } catch e {
+        if e.kind != "name" { error("deferred surface raised the wrong kind") }
+        if e.msg != msg { error("deferred surface named the wrong sprint") }
+    }
+}
 
 # -- the module is real, and its natives refuse without an editor ------
 try {
@@ -51,6 +86,71 @@ try {
     io.print(e.kind)
 }
 
+# -- every remaining editor native is present and safely typed ----------
+# These are 47 independent headless scenarios in addition to the four
+# above.  Wrong receiver types must be rejected before any editor pointer
+# can be consulted; free functions must report the unavailable host.
+refuses("handle", fn() { buf.list() })
+refuses("handle", fn() { buf.open("missing") })
+refuses("type", fn() { buf.close(42) })
+refuses("type", fn() { buf.save(42) })
+refuses("type", fn() { buf.name(42) })
+refuses("type", fn() { buf.lang(42) })
+refuses("type", fn() { buf.lines(42) })
+refuses("type", fn() { buf.line(42, 1) })
+refuses("type", fn() { buf.span(42, 0, 0) })
+refuses("type", fn() { buf.line_span(42, 1) })
+refuses("type", fn() { buf.insert(42, 0, "x") })
+refuses("type", fn() { buf.delete(42, nil) })
+refuses("type", fn() { buf.find(42, nil) })
+refuses("type", fn() { buf.find_all(42, nil) })
+refuses("type", fn() { buf.dirty(42) })
+refuses("type", fn() { buf.readonly(42) })
+refuses("type", fn() { buf.mark(42, 0) })
+
+refuses("handle", fn() { win.current() })
+refuses("handle", fn() { win.list() })
+refuses("type", fn() { win.buf(42) })
+refuses("type", fn() { win.cursors(42) })
+refuses("type", fn() { win.selection(42) })
+refuses("type", fn() { win.split(42, "right") })
+refuses("type", fn() { win.close(42) })
+refuses("type", fn() { win.focus(42) })
+refuses("type", fn() { win.viewport(42) })
+refuses("type", fn() { win.set_cursors(42, []) })
+
+refuses("type", fn() { cur.pos(42) })
+refuses("type", fn() { cur.line(42) })
+refuses("type", fn() { cur.col(42) })
+refuses("type", fn() { cur.anchor(42) })
+refuses("type", fn() { cur.span(42) })
+refuses("type", fn() { cur.goto(42, 0) })
+refuses("type", fn() { cur.move(42, "word", "next") })
+refuses("type", fn() { cur.word(42) })
+refuses("type", fn() { cur.line_span(42) })
+refuses("type", fn() { cur.insert(42, "x") })
+refuses("type", fn() { cur.is_primary(42) })
+refuses("type", fn() { cur.valid(42) })
+
+refuses("type", fn() { span.lo(42) })
+refuses("type", fn() { span.hi(42) })
+refuses("type", fn() { span.len(42) })
+refuses("type", fn() { span.text(42) })
+refuses("type", fn() { span.lines(42) })
+refuses("type", fn() { span.replace(42, "x") })
+refuses("type", fn() { span.replace_lines(42, ["x"]) })
+refuses("type", fn() { span.prepend(42, "x") })
+refuses("type", fn() { span.append(42, "x") })
+refuses("type", fn() { span.delete(42) })
+refuses("type", fn() { span.yank(42) })
+refuses("type", fn() { span.valid(42) })
+
+refuses("handle", fn() { opt.get("tabwidth") })
+refuses("handle", fn() { opt.set("tabwidth", 4) })
+
+refuses("handle", fn() { ed.run("ed.mode.normal", {}) })
+if list.len(ed.commands()) == 0 { error("editor command registry is empty") }
+
 # -- THE DEFERRAL, still tested rather than promised ------------------
 # `bind` has not landed (Sprint 36 owns the config surface), so it must
 # still hard-error naming its sprint. Catch it here so the final error
@@ -58,9 +158,13 @@ try {
 try {
     bind("H", "s", fn() { return 1 })
 } catch e {
-    # OUT: name bind lands in Sprint 34
+    # OUT: name bind lands in Sprint 36
     io.print(e.kind, e.msg)
 }
+defers("unbind lands in Sprint 36", fn() { unbind("H", "s") })
+defers("set lands in Sprint 36", fn() { set("tabwidth", 4) })
+defers("record lands in Sprint 35", fn() { record("q") })
+defers("replay lands in Sprint 35", fn() { replay("q") })
 
 # -- the headless condition is an honest ERROR_KIND case --------------
 # Uncaught on purpose: the directives above prove that the observable

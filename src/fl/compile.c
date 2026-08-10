@@ -609,46 +609,52 @@ static void comp_expr(Compiler *c, const FlNode *n)
 /* Motion blocks (deliverable 11)                                   */
 /* ---------------------------------------------------------------- */
 
+static u32 motion_node_count(const FlNode *n)
+{
+    u32 total = 1U;
+    u32 i;
+
+    for (i = 0U; i < n->as.motion.ninner; i++)
+        total += motion_node_count(n->as.motion.inner[i]);
+    return total;
+}
+
 static u32 motion_count(const FlNode *n)
 {
     u32 total = 0U;
     u32 i;
 
-    for (i = 0U; i < n->as.list.n; i++) {
-        const FlNode *m = n->as.list.items[i];
-
-        total++;
-        if ((FlMotionKind)m->as.motion.mkind == FL_MK_HIGHLIGHT)
-            total += m->as.motion.ninner;
-    }
+    for (i = 0U; i < n->as.list.n; i++)
+        total += motion_node_count(n->as.list.items[i]);
     return total;
+}
+
+static void motion_flatten_node(const FlNode *n, FlMotionOp *out, u32 *at)
+{
+    u32 start = *at;
+    FlMotionOp *op = &out[start];
+    u32 i;
+
+    op->kind = n->as.motion.mkind;
+    op->ch = n->as.motion.ch;
+    op->flags = n->as.motion.alt ? FL_MOTION_F_ALT : 0U;
+    if (n->as.motion.count_given)
+        op->flags |= FL_MOTION_F_COUNT_GIVEN;
+    op->count = n->as.motion.count;
+    op->arg = n->as.motion.payload;
+    (*at)++;
+    for (i = 0U; i < n->as.motion.ninner; i++)
+        motion_flatten_node(n->as.motion.inner[i], out, at);
+    if ((FlMotionKind)n->as.motion.mkind == FL_MK_HIGHLIGHT)
+        out[start].arg = *at - start - 1U;
 }
 
 static void motion_flatten(const FlNode *n, FlMotionOp *out, u32 *at)
 {
     u32 i;
 
-    for (i = 0U; i < n->as.list.n; i++) {
-        const FlNode *m = n->as.list.items[i];
-        u32 j;
-
-        out[*at].kind = m->as.motion.mkind;
-        out[*at].ch = m->as.motion.ch;
-        out[*at].flags = m->as.motion.alt ? 1U : 0U;
-        out[*at].count = m->as.motion.count;
-        out[*at].arg = m->as.motion.payload;
-        (*at)++;
-        for (j = 0U; j < m->as.motion.ninner; j++) {
-            const FlNode *inner = m->as.motion.inner[j];
-
-            out[*at].kind = inner->as.motion.mkind;
-            out[*at].ch = inner->as.motion.ch;
-            out[*at].flags = inner->as.motion.alt ? 1U : 0U;
-            out[*at].count = inner->as.motion.count;
-            out[*at].arg = inner->as.motion.payload;
-            (*at)++;
-        }
-    }
+    for (i = 0U; i < n->as.list.n; i++)
+        motion_flatten_node(n->as.list.items[i], out, at);
 }
 
 static void comp_motion_block(Compiler *c, const FlNode *n)

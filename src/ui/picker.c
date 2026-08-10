@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#include "fl/flruntime.h"
 #include "term/grid.h"
 #include "ui/cmdline.h"
 #include "ui/filter.h"
@@ -387,8 +388,10 @@ static bool accept_selected(Ed *ed, u8 how)
             return true;
         }
         ed->focus = nu;
-        if (nu->win != NULL)
+        if (nu->win != NULL) {
             ed->win = nu->win;
+            sag_fl_hook_window(ed, FL_EV_WIN_FOCUS, ed->win);
+        }
     }
     {
         PickerSpec spec = pk.spec;

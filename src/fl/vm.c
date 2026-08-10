@@ -27,6 +27,7 @@
 #endif
 
 #include "fl/compile.h"
+#include "fl/flapi.h"
 #include "fl/gc.h"
 #include "fl/opcodes.h"
 #include "fl/std.h"
@@ -39,37 +40,40 @@
 /* The null host (deliverable 11)                                   */
 /* ---------------------------------------------------------------- */
 
-static bool null_motion(void *ud, const FlMotionProg *p, FlErr *err)
+static bool null_run_begin(FlVm *vm)
 {
-    (void)ud;
-    (void)p;
-    /*
-     * Spec §3.1: a headless VM without an editor host raises kind
-     * "motion".  This is exactly what makes the spec's §14 `shout`
-     * example return "MOTION", and it is a real answer rather than a
-     * stub -- Sprint 34 supplies a host that does the work.
-     */
-    err->kind_id = 0U;      /* filled by the caller, which owns the interner */
-    return false;
+    (void)vm;
+    return true;
 }
 
-static bool null_edit_begin(void *ud, FlErr *err)
+static bool null_run_end(FlVm *vm, bool ok)
 {
-    (void)ud;
-    (void)err;
+    (void)vm;
+    (void)ok;
+    return true;
+}
+
+static bool null_motion(FlVm *vm, const FlMotionProg *p)
+{
+    (void)p;
+    return fl_raise(vm, "motion", "no editor host");
+}
+
+static bool null_edit_begin(FlVm *vm)
+{
+    (void)vm;
     return true;            /* §10: with no host a transaction is a no-op */
 }
 
-static bool null_edit_end(void *ud, bool ok, FlErr *err)
+static bool null_edit_end(FlVm *vm, bool ok)
 {
-    (void)ud;
+    (void)vm;
     (void)ok;
-    (void)err;
     return true;
 }
 
 const FlHost fl_host_null = {
-    NULL, null_motion, null_edit_begin, null_edit_end
+    null_run_begin, null_run_end, null_motion, null_edit_begin, null_edit_end
 };
 
 /* ---------------------------------------------------------------- */
@@ -94,7 +98,8 @@ bool fl_vm_init(FlVm *vm, Arena *a, Interner *in, DiagCtx *dc)
      *
      * ~30x slower, so it is its own lane and never `make test`.
      */
-    if (getenv("FL_GC_STRESS") != NULL)
+    if (getenv("SAG_FL_GC_STRESS") != NULL ||
+        getenv("FL_GC_STRESS") != NULL)
         vm->gc.stress = true;
 #if FL_VM_TRACE
     bytebuf_init(&vm->trace);
@@ -115,6 +120,10 @@ void fl_vm_set_step_limit(FlVm *vm, u64 steps)
 
 void fl_vm_free(FlVm *vm)
 {
+    if (vm->txn.entry_active)
+        (void)vm->host->run_end(vm, false);
+    free(vm->txn.enlisted);
+    vm->txn = (FlTxn){0};
     /*
      * Root 6's registration array.  The SLOTS belong to whoever
      * registered them -- the editor's hook table outlives this VM in a
@@ -201,14 +210,19 @@ static const char *deferred_sprint(const char *name)
      * told "import buf", not "buf lands in Sprint 34", which would send
      * them away from a module that is sitting right there.
      */
-    static const char *const S34[] = {"bind", "set", "on", "win"};
+    static const char *const S35[] = {"record", "replay"};
+    static const char *const S36[] = {"bind", "unbind", "set"};
     size_t i;
 
     if (name == NULL)
         return NULL;
-    for (i = 0U; i < SAG_ARRAY_LEN(S34); i++) {
-        if (strcmp(name, S34[i]) == 0)
-            return "Sprint 34";
+    for (i = 0U; i < SAG_ARRAY_LEN(S35); i++) {
+        if (strcmp(name, S35[i]) == 0)
+            return "Sprint 35";
+    }
+    for (i = 0U; i < SAG_ARRAY_LEN(S36); i++) {
+        if (strcmp(name, S36[i]) == 0)
+            return "Sprint 36";
     }
     return NULL;
 }
@@ -896,6 +910,8 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
             if (callee.t == (u8)FL_NATIVE) {
                 FlNative *nat = (FlNative *)callee.as.o;
                 FlValue *argv = vm->sp - (int)n;
+                FlValue *call_argv = argv;
+                u32 call_n = (u32)n;
                 FlValue res = FL_NIL_V;
 
                 if (n < nat->min_ar ||
@@ -923,7 +939,12 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
                  * unwind reads it to find the handler. */
                 frame->ip = ip;
                 vm->cur_native = nat->name_id;
-                if (!nat->fn(vm, argv, (u32)n, &res))
+                if (nat->has_recv != 0U) {
+                    call_argv--;
+                    *call_argv = nat->recv;
+                    call_n++;
+                }
+                if (!nat->fn(vm, call_argv, call_n, &res))
                     goto raised;
                 vm->sp -= (int)n + 1;      /* args and the callee */
                 *vm->sp++ = res;
@@ -961,6 +982,7 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
                 frame->call_pc = site;
             }
             frame->via_native = 0U;
+            frame->edit_depth = vm->edit_depth;
             frame->cl = target;
             frame->ip = target->fn->ch.code;
             frame->slots = vm->sp - n - 1;
@@ -972,6 +994,11 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
 
             if (vm->nframes == 0U)
                 VM_BUG("fl vm: frame underflow on RETURN");
+            while (vm->edit_depth > frame->edit_depth) {
+                if (!vm->host->edit_end(vm, true))
+                    goto raised;
+                vm->edit_depth--;
+            }
             close_upvals(vm, frame->slots);
             vm->nframes--;
             if (vm->nframes == base) {
@@ -988,6 +1015,11 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
         VM_CASE(RETURN_NIL) {
             if (vm->nframes == 0U)
                 VM_BUG("fl vm: frame underflow on RETURN_NIL");
+            while (vm->edit_depth > frame->edit_depth) {
+                if (!vm->host->edit_end(vm, true))
+                    goto raised;
+                vm->edit_depth--;
+            }
             close_upvals(vm, frame->slots);
             vm->nframes--;
             if (vm->nframes == base) {
@@ -1124,9 +1156,18 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
             FlValue c = *--vm->sp;
             FlValue got;
             const char *s = sag_intern_str(vm->in, (u32)name.as.i);
-            FlValue key = make_str(vm, s == NULL ? "" : s);
+            FlValue key;
 
-            /* §4: `.name` IS `["name"]`, and modules read the same way. */
+            /* Maps retain ordinary field lookup.  Handle fields are
+             * callable sugar: `b.len()` binds b as argument zero of the
+             * same table-driven `buf.len(b)` native. */
+            if (c.t != (u8)FL_MAP &&
+                fl_api_bind_receiver(vm, c, s == NULL ? "" : s,
+                                     s == NULL ? 0U : (u32)strlen(s), &got)) {
+                *vm->sp++ = got;
+                VM_NEXT();
+            }
+            key = make_str(vm, s == NULL ? "" : s);
             if (c.t != (u8)FL_MAP || !fl_map_get((FlMap *)c.as.o, key, &got)) {
                 char base[160];
                 Bytebuf msg;
@@ -1326,14 +1367,8 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
             u16 k = read_u16(&ip);
             FlMotionProg *p =
                 (FlMotionProg *)frame->cl->fn->ch.consts[k].as.o;
-            FlErr e = {0U, FL_NIL_V};
-
-            if (!vm->host->motion(vm->host->ud, p, &e)) {
-                /* The null host lands here every time, which is spec
-                 * §3.1 and what makes §14's shout return "MOTION". */
-                fl_raise(vm, "motion", "no editor host");
+            if (!vm->host->motion(vm, p))
                 goto raised;
-            }
             *vm->sp++ = FL_NIL_V;
             VM_NEXT();
         }
@@ -1355,15 +1390,19 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
             VM_NEXT();
         }
         VM_CASE(EDIT_BEGIN) {
-            FlErr e = {0U, FL_NIL_V};
-
-            (void)vm->host->edit_begin(vm->host->ud, &e);
+            if (!vm->host->edit_begin(vm))
+                goto raised;
+            if (vm->edit_depth == UINT32_MAX)
+                VM_BUG("fl vm: edit depth overflow");
+            vm->edit_depth++;
             VM_NEXT();
         }
         VM_CASE(EDIT_END) {
-            FlErr e = {0U, FL_NIL_V};
-
-            (void)vm->host->edit_end(vm->host->ud, true, &e);
+            if (vm->edit_depth == 0U)
+                VM_BUG("fl vm: edit depth underflow");
+            if (!vm->host->edit_end(vm, true))
+                goto raised;
+            vm->edit_depth--;
             VM_NEXT();
         }
 
@@ -1383,6 +1422,7 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
             h->pc = (u32)(ip - frame->cl->fn->ch.code) + d;
             h->sp = vm->sp;
             h->frame = vm->nframes;
+            h->edit_depth = vm->edit_depth;
             VM_NEXT();
         }
         VM_CASE(TRY_POP) {
@@ -1410,6 +1450,11 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
              * Every program after the first file import returned nil,
              * which is how this was found.
              */
+            while (vm->edit_depth > frame->edit_depth) {
+                if (!vm->host->edit_end(vm, true))
+                    goto raised;
+                vm->edit_depth--;
+            }
             close_upvals(vm, frame->slots);
             vm->nframes--;
             if (vm->nframes == base) {
@@ -1457,6 +1502,18 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
          * a raise is not on any hot path.
          */
         frame->ip = ip;
+        {
+            u32 target_depth =
+                base < vm->nframes ? vm->frames[base].edit_depth : 0U;
+
+            if (vm->nhandlers != 0U &&
+                vm->handlers[vm->nhandlers - 1U].frame > base)
+                target_depth = vm->handlers[vm->nhandlers - 1U].edit_depth;
+            while (vm->edit_depth > target_depth) {
+                (void)vm->host->edit_end(vm, false);
+                vm->edit_depth--;
+            }
+        }
         /*
          * THE TRACE IS BUILT WHEN THE ERROR ESCAPES EVERY FRAME, not at
          * raise time.  `nhandlers == 0` means no `catch` anywhere in
@@ -1521,6 +1578,7 @@ bool fl_vm_run(FlVm *vm, FlFn *entry, FlValue *out)
     vm->nframes = 0U;
     vm->nhandlers = 0U;
     vm->open_upvals = NULL;
+    vm->edit_depth = 0U;
     vm->sp = vm->stack;
     *vm->sp++ = FL_OBJ_V(FL_CLOSURE, cl);
     vm->frames[vm->nframes].cl = cl;
@@ -1528,9 +1586,22 @@ bool fl_vm_run(FlVm *vm, FlFn *entry, FlValue *out)
     vm->frames[vm->nframes].slots = vm->stack;
     vm->frames[vm->nframes].call_pc = 0U;
     vm->frames[vm->nframes].via_native = 0U;
+    vm->frames[vm->nframes].edit_depth = 0U;
     vm->nframes++;
     {
-        bool ok = vm_exec(vm, 0U, out);
+        bool ok;
+
+        if (!vm->host->run_begin(vm)) {
+            vm->nframes = 0U;
+            vm->nhandlers = 0U;
+            vm->open_upvals = NULL;
+            vm->edit_depth = 0U;
+            vm->sp = vm->stack;
+            return false;
+        }
+        ok = vm_exec(vm, 0U, out);
+        if (!vm->host->run_end(vm, ok))
+            ok = false;
 
         /*
          * NOTHING survives the call, either way: frames, handlers, open
@@ -1548,6 +1619,7 @@ bool fl_vm_run(FlVm *vm, FlFn *entry, FlValue *out)
         vm->nframes = 0U;
         vm->nhandlers = 0U;
         vm->open_upvals = NULL;
+        vm->edit_depth = 0U;
         vm->sp = vm->stack;
         return ok;
     }
@@ -1568,38 +1640,75 @@ bool fl_call(FlVm *vm, FlValue callee, const FlValue *args, u32 nargs,
     u32 base = vm->nframes;
     FlValue *slots;
     u32 i;
+    /* A C host may already have opened the editor transaction before
+     * calling into Fletch (hook dispatch does this to isolate failures).
+     * Frame depth alone cannot distinguish that case from a fresh entry. */
+    bool outer = base == 0U && !vm->txn.entry_active;
+
+    if (outer && !vm->host->run_begin(vm))
+        return false;
 
     if (callee.t == (u8)FL_NATIVE) {
         FlNative *nat = (FlNative *)callee.as.o;
+        u32 call_nargs = nargs + (nat->has_recv != 0U ? 1U : 0U);
 
         if (nargs < nat->min_ar ||
             (nat->max_ar != 255U && nargs > nat->max_ar))
-            return fl_raise(vm, "arity", "%s got %u arguments",
-                            sag_intern_str(vm->in, nat->name_id),
-                            (unsigned)nargs);
+            {
+                bool ok = fl_raise(vm, "arity", "%s got %u arguments",
+                                   sag_intern_str(vm->in, nat->name_id),
+                                   (unsigned)nargs);
+
+                if (outer)
+                    (void)vm->host->run_end(vm, false);
+                return ok;
+            }
         vm->cur_native = nat->name_id;
         /* argv must live on the stack for rule 1, same as a CALL. */
         slots = vm->sp;
+        if (nat->has_recv != 0U)
+            *vm->sp++ = nat->recv;
         for (i = 0U; i < nargs; i++)
             *vm->sp++ = args[i];
         {
-            bool ok = nat->fn(vm, slots, nargs, out);
+            bool ok = nat->fn(vm, slots, call_nargs, out);
 
             vm->sp = slots;
+            if (outer && !vm->host->run_end(vm, ok))
+                ok = false;
             return ok;
         }
     }
     if (callee.t != (u8)FL_CLOSURE)
-        return fl_raise(vm, "type", "cannot call %s",
-                        fl_type_name((FlType)callee.t));
+        {
+            bool ok = fl_raise(vm, "type", "cannot call %s",
+                               fl_type_name((FlType)callee.t));
+
+            if (outer)
+                (void)vm->host->run_end(vm, false);
+            return ok;
+        }
     {
         FlClosure *cl = (FlClosure *)callee.as.o;
 
         if (nargs != cl->fn->arity)
-            return fl_raise(vm, "arity", "expected %u arguments, got %u",
-                            (unsigned)cl->fn->arity, (unsigned)nargs);
+            {
+                bool ok = fl_raise(vm, "arity",
+                                   "expected %u arguments, got %u",
+                                   (unsigned)cl->fn->arity, (unsigned)nargs);
+
+                if (outer)
+                    (void)vm->host->run_end(vm, false);
+                return ok;
+            }
         if (vm->nframes >= (u32)FL_FRAMES_MAX)
-            return fl_raise(vm, "limit", "call depth exceeded");
+            {
+                bool ok = fl_raise(vm, "limit", "call depth exceeded");
+
+                if (outer)
+                    (void)vm->host->run_end(vm, false);
+                return ok;
+            }
         slots = vm->sp;
         *vm->sp++ = callee;
         for (i = 0U; i < nargs; i++)
@@ -1612,15 +1721,20 @@ bool fl_call(FlVm *vm, FlValue callee, const FlValue *args, u32 nargs,
          * frames. */
         vm->frames[vm->nframes].call_pc = 0U;
         vm->frames[vm->nframes].via_native = vm->cur_native;
+        vm->frames[vm->nframes].edit_depth = vm->edit_depth;
         vm->nframes++;
         if (!vm_exec(vm, base, out)) {
             /* The callee's frames go too.  A native that swallows the
              * failure must not be left standing on them. */
             vm->nframes = base;
             vm->sp = slots;
+            if (outer)
+                (void)vm->host->run_end(vm, false);
             return false;
         }
         vm->sp = slots;
+        if (outer && !vm->host->run_end(vm, true))
+            return false;
         return true;
     }
 }

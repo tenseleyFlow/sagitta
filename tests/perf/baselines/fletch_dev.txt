@@ -31,15 +31,20 @@
 # per-runner baseline file, the way perf-textbuf uses PERF_RUNNER_ID.
 # ---------------------------------------------------------------------
 #
-# The three hard-gated rows and their budgets:
+# The five hard-gated rows and their budgets:
 #   startup          <= 2 ms    the Fletch share of the 20 ms cold start
 #   config_load      <  1 ms    02-fletch.md req 7
 #   motion_dispatch  <= 1 us/op 02-fletch.md req 7 (1e6 ops => <= 1 s)
+#   motion_editor    <= 1 us/op  s34 live editor host (1e6 ops => <= 1 s)
+#   query_cur_pos    < 300 ms    s34 live handle query, 1e6 calls
 
 startup                   45434        43368  s33 initial; gate 2000000 (2 ms)
 config_load              176934       168130  s33 initial; gate 1000000 (1 ms, 02-fletch req 7)
 parse_only                58397        57303  s33 initial
 motion_dispatch       295694922    291304695  s33 initial; gate 1000000000 (1 us x 1e6 ops)
+motion_editor         253802500    250144585  s34 live editor host; gate 1000000000 (1 us x 1e6 ops)
+query_cur_pos          17562511     17511229  s34 live cursor query; gate 300000000 (1e6 calls)
+insert_100k          1388475386   1388475386  s34 one live transaction; correctness/report-only, no latency budget
 fib27                  34369521     33912209  s33 initial
 strbuild_join           4290759      4136212  s33 initial
 strbuild_concat        56660569     55821215  s33 initial; O(n^2) BY DESIGN, see the ratio assertion

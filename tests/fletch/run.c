@@ -1794,7 +1794,7 @@ int main(int argc, char **argv)
     bool ledger_only = false;
     bool check_only = false;
     const char *filter = getenv("SAG_FLETCH_FILTER");
-    bool gc_stress = env_on("FL_GC_STRESS");
+    bool gc_stress = env_on("SAG_FL_GC_STRESS") || env_on("FL_GC_STRESS");
     size_t i;
     size_t npass = 0U;
     size_t nfail = 0U;

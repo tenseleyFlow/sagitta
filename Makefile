@@ -861,7 +861,7 @@ fl-perf-smoke: $(BUILD)/fl_smoke
 # One without the other finds much less.
 #
 fl-gc-stress: $(UNIT_RUN)
-	FL_GC_STRESS=1 $(UNIT_RUN) $(UNIT_DEATH_EXCLUDES)
+	SAG_FL_GC_STRESS=1 $(UNIT_RUN) $(UNIT_DEATH_EXCLUDES)
 
 #
 # Sprint 30 DoD 5: the differential-dispatch gate.
@@ -1142,7 +1142,7 @@ test-fletch-dispatch:
 # file carrying a justified `# GC_STRESS: 0`.  The runner prints and
 # asserts the opt-out count, so the escape hatch cannot become the norm.
 test-fletch-gc-stress: $(BUILD)/fletch_run $(BUILD)/sagitta
-	FL_GC_STRESS=1 LC_ALL=C $(BUILD)/fletch_run \
+	SAG_FL_GC_STRESS=1 LC_ALL=C $(BUILD)/fletch_run \
 		--sagitta $(abspath $(BUILD)/sagitta)
 
 # Determinism: the suite twice and the ledger twice, byte-compared.
@@ -1173,6 +1173,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/sagitta
          $(FUZZ_VT_OBJ:.o=.d) $(FUZZ_UNDO_OBJ:.o=.d) \
          $(FUZZ_TEXTBUF_OBJ:.o=.d) $(TEXT_FUZZ_SUPPORT_OBJ:.o=.d) \
          $(FUZZ_MULTICURSOR_OBJ:.o=.d) \
+         $(FUZZ_FLAPI_OBJ:.o=.d) \
          $(FUZZ_CMDPARSE_OBJ:.o=.d) $(FUZZ_RECOMPILE_OBJ:.o=.d) \
          $(FUZZ_REDIFF_OBJ:.o=.d) $(RE_REF_OBJ:.o=.d) \
          $(PTY_ORACLE_OBJ:.o=.d) \
@@ -1189,6 +1190,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/sagitta
          $(PERF_CMDCOMP_OBJ:.o=.d) \
          $(PERF_STATE_OBJ:.o=.d) \
          $(PERF_FINDER_OBJ:.o=.d) $(PERF_MOUSE_OBJ:.o=.d) \
+         $(PERF_FLETCH_OBJ:.o=.d) \
          $(GEN_BIGFILE_OBJ:.o=.d) \
          $(TORTURE_CHILD_OBJ:.o=.d) \
 	 $(TORTURE_DRIVER_OBJ:.o=.d) $(TORTURE_LIVE_OBJ:.o=.d)

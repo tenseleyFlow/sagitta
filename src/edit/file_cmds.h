@@ -15,5 +15,7 @@ CmdStatus sag_file_cmd_quit(CmdCtx *cx);
 CmdStatus sag_file_cmd_quit_force(CmdCtx *cx);
 CmdStatus sag_file_cmd_suspend(CmdCtx *cx);
 CmdStatus sag_file_cmd_redraw(CmdCtx *cx);
+CmdStatus sag_file_cmd_buf_open(CmdCtx *cx);
+CmdStatus sag_file_cmd_buf_close(CmdCtx *cx);
 
 #endif

@@ -193,6 +193,20 @@ void test_cmdparse_tokenizer_expansion_matrix(void)
     parse_fixture_free(&f);
 }
 
+void test_cmdparse_fl_preserves_source_as_one_argument(void)
+{
+    ParseFixture f;
+    CmdParse parsed;
+
+    parse_fixture_init(&f);
+    SAG_ASSERT(sag_cmd_parse(&f.ed, ":fl answer + 1", 14U, &f.arena,
+                             &parsed));
+    SAG_ASSERT_EQ_U64(parsed.argv.n, 2U);
+    SAG_ASSERT_EQ_STR(parsed.argv.v[0], "ed.fl.eval");
+    SAG_ASSERT_EQ_STR(parsed.argv.v[1], "answer + 1");
+    parse_fixture_free(&f);
+}
+
 void test_cmdparse_resolution_bang_errors_and_parse_point(void)
 {
     ParseFixture f;
@@ -241,7 +255,7 @@ void test_cmdparse_resolution_bang_errors_and_parse_point(void)
         SAG_ASSERT(sag_cmd_parse(&f.ed, ":g/re/d", 7U, &f.arena, &parsed));
         SAG_ASSERT_EQ_STR(parsed.argv.v[1], "/re/d");
     }
-    assert_error(&f, ":fl", ":fl evaluates Fletch: Sprint 32");
+    assert_error(&f, ":fl", ":fl needs Fletch source");
 
     SAG_ASSERT(sag_cmd_parse_point(&f.ed, ":w \"my fi", 9U, 9U,
                                    &f.arena, &point));

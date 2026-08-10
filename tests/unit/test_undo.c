@@ -397,9 +397,19 @@ void test_undo_replace_reason_is_live(void)
     undo_fixture_free(&f);
 }
 
-void test_undo_macro_reason_names_sprint34(void)
+void test_undo_macro_reason_is_live(void)
 {
-    undo_assert_deferred_reason(SAG_TXN_MACRO, "Sprint 34");
+    UndoFixture f;
+    EditCtx ec;
+
+    undo_fixture_init(&f, (const u8 *)"hello", 5U);
+    ec = f.edit;
+    sag_undo_begin(&ec, SAG_TXN_MACRO);
+    SAG_ASSERT(sag_edit_insert(&ec, BYTEOFF(5U), (const u8 *)"!", 1U));
+    sag_undo_end(&ec);
+    SAG_ASSERT(sag_undo(&ec));
+    SAG_ASSERT_EQ_U64(sag_textbuf_len(f.tb), 5U);
+    undo_fixture_free(&f);
 }
 
 void test_undo_lsp_reason_names_sprint47(void)

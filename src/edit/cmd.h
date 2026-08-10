@@ -8,6 +8,7 @@
 
 typedef struct Ed Ed;
 typedef struct Win Win;
+typedef struct OptVal OptVal;
 
 typedef struct CmdArgv {
     char **v;
@@ -28,6 +29,14 @@ typedef struct CmdRange {
     bool given;
     Span tok;
 } CmdRange;
+
+/* Transient cursor snapshots used by aggregate registry commands.  The
+ * caller owns the array for the duration of sag_cmd_invoke(). */
+typedef struct CmdCursorArg {
+    ByteOff pos;
+    ByteOff anchor;
+    u64 goal_col;
+} CmdCursorArg;
 
 typedef enum {
     SAG_RP_FORBID,
@@ -66,14 +75,27 @@ typedef struct CmdCtx {
     CmdRange range;
     CmdArgv argv;
     u32 cursor_index;
+    bool cursor_given;
     u32 count;
     bool count_given;
     bool bang;
     i64 iarg;
     const char *sarg;
     u32 sarg_len;
+    const CmdCursorArg *cursor_args;
+    u32 cursor_args_len;
+    const OptVal *opt_in;
+    OptVal *opt_out;
+    const char *opt_error_msg;
+    u8 opt_error;
     CmdSource source;
 } CmdCtx;
+
+enum {
+    SAG_OPT_ERROR_NONE = 0,
+    SAG_OPT_ERROR_NAME,
+    SAG_OPT_ERROR_TYPE
+};
 
 typedef enum {
     SAG_CMD_OK = 0,
@@ -106,7 +128,8 @@ enum {
     /* A key binding without sarg captures the next text-producing key. */
     SAG_CMD_CAPTURES_TEXT = 1U << 8,
     /* Keymap plumbing that must not resolve as a typed E command. */
-    SAG_CMD_INTERNAL = 1U << 9
+    SAG_CMD_INTERNAL = 1U << 9,
+    SAG_CMD_INTERACTIVE = 1U << 10
 };
 
 typedef struct CmdDesc {

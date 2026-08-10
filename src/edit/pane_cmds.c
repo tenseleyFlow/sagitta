@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#include "fl/flruntime.h"
 #include "ui/message.h"
 #include "ui/win.h"
 #include "util/log.h"
@@ -20,8 +21,11 @@
  */
 static void pane_refocus(Ed *ed, Pane *want)
 {
+    Win *before;
+
     if (ed == NULL || ed->pane_root == NULL)
         return;
+    before = ed->win;
     if (want != NULL && want->is_leaf) {
         ed->focus = want;
     } else if (ed->focus == NULL || !ed->focus->is_leaf) {
@@ -54,6 +58,8 @@ static void pane_refocus(Ed *ed, Pane *want)
      * here, so this one call covers the whole "active window changed"
      * trigger without three separate ones to keep in sync. */
     sag_state_mark_dirty(ed);
+    if (ed->win != before)
+        sag_fl_hook_window(ed, FL_EV_WIN_FOCUS, ed->win);
 }
 
 static CmdStatus pane_split(CmdCtx *cx, SplitDir dir)
@@ -96,19 +102,43 @@ CmdStatus sag_pane_cmd_split_v(CmdCtx *cx)
 CmdStatus sag_pane_cmd_close(CmdCtx *cx)
 {
     Ed *ed;
+    Tab *tab = NULL;
+    Pane *leaf = NULL;
     Pane *parent;
     Pane *sibling;
+    size_t i;
 
-    if (cx == NULL || cx->ed == NULL || cx->ed->focus == NULL)
+    if (cx == NULL || cx->ed == NULL)
         return SAG_CMD_ERR_STATE;
     ed = cx->ed;
-    parent = ed->focus->parent;
+    if (cx->win == NULL)
+        cx->win = ed->win;
+    for (i = 0U; i < ed->tabs.v.len && leaf == NULL; i++) {
+        Pane *leaves[SAG_PANE_MAX_LEAVES];
+        u32 n = 0U;
+        u32 k;
+
+        sag_pane_collect_leaves(ed->tabs.v.data[i].root, leaves,
+                                SAG_ARRAY_LEN(leaves), &n);
+        for (k = 0U; k < n; k++) {
+            if (leaves[k]->win == cx->win) {
+                leaf = leaves[k];
+                tab = &ed->tabs.v.data[i];
+                break;
+            }
+        }
+    }
+    if (leaf == NULL && ed->focus != NULL && ed->focus->win == cx->win)
+        leaf = ed->focus;
+    if (leaf == NULL)
+        return SAG_CMD_ERR_STATE;
+    parent = leaf->parent;
     if (parent == NULL) {
         sag_msg(ed, SAG_MSG_ERROR,
                 "cannot close the last pane (tabs land in Sprint 23)");
         return SAG_CMD_ERR_STATE;
     }
-    sibling = parent->a == ed->focus ? parent->b : parent->a;
+    sibling = parent->a == leaf ? parent->b : parent->a;
     /*
      * Close collapses the sibling INTO the parent node, so `parent` is
      * the surviving node and `sibling` is freed.  Focus therefore moves
@@ -116,10 +146,19 @@ CmdStatus sag_pane_cmd_close(CmdCtx *cx)
      * pointer, which is about to be gone.
      */
     (void)sibling;
-    if (!sag_pane_close(ed, ed->focus))
+    if (!sag_pane_close(ed, leaf))
         return SAG_CMD_ERR_STATE;
-    ed->focus = NULL;
-    pane_refocus(ed, parent->is_leaf ? parent : NULL);
+    if (tab != NULL && (tab->focus == leaf || tab->focus == sibling))
+        tab->focus = sag_pane_first_leaf(parent);
+    if (tab == NULL || tab == sag_tab_at(ed, ed->tabs.active)) {
+        ed->focus = tab == NULL ? NULL : tab->focus;
+        pane_refocus(ed, ed->focus != NULL ? ed->focus :
+                                               sag_pane_first_leaf(parent));
+    } else {
+        ed->layout_dirty = true;
+        ed->full_damage = true;
+        sag_state_mark_dirty(ed);
+    }
     return SAG_CMD_OK;
 }
 

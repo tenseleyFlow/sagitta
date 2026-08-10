@@ -41,6 +41,14 @@
  * program, because s20's SagRe is arena-owned and immutable.  It is
  * therefore the one place a leak is possible, and the one kind with a
  * bounded-RSS test.
+ *
+ * RESOURCE-LIFETIME LIMIT.  Stable objects and equal live spans are
+ * canonicalized, but two distinct retained span values cannot be merged
+ * or recycled: handles are scalar values, so the GC cannot prove that a
+ * script discarded either one.  Their marks therefore live until explicit
+ * handle release or buffer close.  Reclaiming arbitrary distinct spans
+ * sooner requires a future traced wrapper or a script-visible close law;
+ * guessing would silently invalidate retained values.
  */
 
 #include <stdbool.h>
@@ -81,7 +89,10 @@ typedef struct FlHandleSlot {
     u32 next_free;
     union {
         u32 buf;                                    /* FL_H_BUF          */
-        struct { u32 win; u32 index; } cur;         /* FL_H_CUR          */
+        /* `stamp` is the CursorSet's stable identity.  `index` is only
+         * a resolution hint and is refreshed when normalization moves
+         * the cursor. */
+        struct { u32 win; u32 index; u64 stamp; } cur; /* FL_H_CUR       */
         struct { u32 buf; MarkId lo, hi; } span;    /* FL_H_SPAN         */
         u32 win;                                    /* FL_H_WIN          */
         /*
@@ -112,8 +123,9 @@ void fl_h_table_free(FlHandleTable *t);
  */
 FlValue fl_h_make(FlHandleTable *t, FlHandleKind k,
                   const FlHandleSlot *init);
-/* Explicit close.  False when the value is not a live handle. */
-bool fl_h_free(FlHandleTable *t, FlValue v);
+/* Explicit close.  False when the value is not a live handle.  The
+ * editor is required because closing a span must release its marks. */
+bool fl_h_free(Ed *ed, FlValue v);
 
 /* True for the five handle type tags. */
 bool fl_h_is(FlValue v);
@@ -140,7 +152,9 @@ bool fl_h_span(FlVm *vm, FlValue v, Buffer **out_buf, Span *out);
 const SagRe *fl_h_re(FlVm *vm, FlValue v);
 
 /* Constructors used by the bindings; they take the editor so the table
- * is found the one way. */
+ * is found the one way.  Stable editor identities and equal live spans
+ * are canonicalized: repeated queries return the same scalar handle and
+ * do not grow the handle or mark tables. */
 FlValue fl_h_buf_make(Ed *ed, const Buffer *b);
 FlValue fl_h_win_make(Ed *ed, const Win *w);
 FlValue fl_h_cur_make(Ed *ed, const Win *w, u32 index);

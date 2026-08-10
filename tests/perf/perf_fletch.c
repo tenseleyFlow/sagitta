@@ -22,7 +22,7 @@
  * One noisy sample must not redden the build, and a real regression
  * moves the whole distribution rather than its tail.
  *
- * The three HARD-GATED benches fail additionally and unconditionally
+ * The five HARD-GATED benches fail additionally and unconditionally
  * on their absolute budget whatever the baseline says --
  * 00-decisions.md makes budgets gates, so a baseline that drifted past
  * 1 ms is not a defence.
@@ -35,11 +35,21 @@
 #include <string.h>
 #include <time.h>
 
+/* ws/fllit.h and fl/ast.h both historically export FlLitKind.  This
+ * translation unit intentionally joins the editor and compiler surfaces,
+ * so keep the workspace-local typedef out of the compiler namespace. */
+#define FlLitKind WsFlLitKind
+#include "edit/ed.h"
+#undef FlLitKind
 #include "fl/compile.h"
+#include "fl/flapi.h"
 #include "fl/gc.h"
+#include "fl/handle.h"
+#include "fl/fltxn.h"
 #include "fl/opcodes.h"
 #include "fl/parse.h"
 #include "fl/std.h"
+#include "fl/trace.h"
 #include "fl/vm.h"
 #include "util/arena.h"
 #include "util/buf.h"
@@ -59,6 +69,9 @@ enum {
     GATE_CONFIG_NS = 1000000,         /* 1 ms   */
     MOTION_ITERS = 1000000,
     GATE_MOTION_NS_PER_OP = 1000,     /* 1 us   */
+    QUERY_ITERS = 1000000,
+    GATE_QUERY_NS = 300000000,        /* 300 ms */
+    INSERT_ITERS = 100000,
     /* §10 of the DoD: the quadratic path is DOCUMENTED, not fixed. */
     CONCAT_N = 5000,
     CONCAT_RATIO_MIN = 20
@@ -399,6 +412,174 @@ static u64 sample_startup(void *ud)
 }
 
 /* ---------------------------------------------------------------- */
+/* Live editor API                                                  */
+/* ---------------------------------------------------------------- */
+
+typedef struct EditorEnv {
+    Env fl;
+    Ed ed;
+    FlValue buf;
+    FlValue cur;
+} EditorEnv;
+
+static void editor_env_open(EditorEnv *e)
+{
+    env_open(&e->fl);
+    sag_ed_init(&e->ed);
+    if (!sag_ed_open_scratch(&e->ed)) {
+        (void)fprintf(stderr, "perf_fletch: cannot open scratch editor\n");
+        exit(1);
+    }
+    fl_ed_attach(&e->fl.vm, &e->ed, &fl_host_editor);
+    fl_api_init();
+    e->buf = fl_h_buf_make(&e->ed, sag_ed_doc(&e->ed));
+    e->cur = fl_h_cur_make(&e->ed, e->ed.win, e->ed.win->cs.primary);
+}
+
+static void editor_env_close(EditorEnv *e)
+{
+    fl_ed_detach(&e->fl.vm);
+    sag_ed_free(&e->ed);
+    env_close(&e->fl);
+}
+
+static void editor_fail(EditorEnv *e, const char *msg, u32 iteration)
+{
+    Bytebuf rendered;
+
+    (void)fprintf(stderr, "perf_fletch: %s at %u\n", msg,
+                  (unsigned)iteration);
+    bytebuf_init(&rendered);
+    fl_trace_render(&e->fl.vm, e->fl.vm.err, &rendered);
+    if (rendered.len != 0U)
+        (void)fwrite(rendered.data, 1U, rendered.len, stderr);
+    bytebuf_free(&rendered);
+    exit(1);
+}
+
+static u64 sample_query_cur_pos(void *ud)
+{
+    EditorEnv e;
+    const FlBindDesc *query;
+    FlValue out = FL_NIL_V;
+    u64 t0;
+    u32 i;
+
+    (void)ud;
+    editor_env_open(&e);
+    query = fl_api_find("cur.pos", 7U);
+    if (query == NULL) {
+        (void)fprintf(stderr, "perf_fletch: cur.pos binding is missing\n");
+        exit(1);
+    }
+    t0 = now_ns();
+    for (i = 0U; i < QUERY_ITERS; i++) {
+        if (!fl_api_invoke(&e.fl.vm, query, &e.cur, 1U, &out) ||
+            out.t != (u8)FL_INT) {
+            (void)fprintf(stderr, "perf_fletch: cur.pos query failed\n");
+            exit(1);
+        }
+    }
+    {
+        u64 dt = now_ns() - t0;
+
+        editor_env_close(&e);
+        return dt;
+    }
+}
+
+static u64 sample_insert_100k(void *ud)
+{
+    EditorEnv e;
+    const FlBindDesc *insert;
+    FlValue args[3];
+    FlValue out = FL_NIL_V;
+    u64 t0;
+    u64 dt;
+    u32 i;
+
+    (void)ud;
+    editor_env_open(&e);
+    insert = fl_api_find("buf.insert", 10U);
+    if (insert == NULL) {
+        (void)fprintf(stderr, "perf_fletch: buf.insert binding is missing\n");
+        exit(1);
+    }
+    args[0] = e.buf;
+    args[2] = FL_OBJ_V(FL_STR, fl_str_new(&e.fl.vm, "x", 1U));
+    fl_gc_protect(&e.fl.vm, args[2]);
+    if (!e.fl.vm.host->run_begin(&e.fl.vm)) {
+        (void)fprintf(stderr, "perf_fletch: insert transaction refused\n");
+        exit(1);
+    }
+    t0 = now_ns();
+    for (i = 0U; i < INSERT_ITERS; i++) {
+        args[1] = FL_INT_V((i64)i);
+        if (!fl_api_invoke(&e.fl.vm, insert, args, 3U, &out))
+            editor_fail(&e, "buf.insert failed", i);
+    }
+    if (!e.fl.vm.host->run_end(&e.fl.vm, true)) {
+        (void)fprintf(stderr, "perf_fletch: insert transaction did not close\n");
+        exit(1);
+    }
+    dt = now_ns() - t0;
+    if (sag_textbuf_len(sag_ed_doc(&e.ed)->tb) != INSERT_ITERS ||
+        sag_ed_doc(&e.ed)->undo->nodes.len != 2U) {
+        (void)fprintf(stderr,
+                      "perf_fletch: 100k inserts were not one undo node\n");
+        exit(1);
+    }
+    if (sag_ed_doc(&e.ed)->undo->bytes_live >
+        sag_ed_doc(&e.ed)->undo->bytes_max) {
+        (void)fprintf(stderr,
+                      "perf_fletch: 100k inserts exceeded undo.bytes_max\n");
+        exit(1);
+    }
+    fl_gc_release(&e.fl.vm, 1U);
+    editor_env_close(&e);
+    return dt;
+}
+
+static u64 time_editor_program(const char *name, const char *src)
+{
+    EditorEnv e;
+    FlProgram p;
+    FlFn *fn;
+    FlValue out = FL_NIL_V;
+    FlOrigin origin;
+    u64 t0;
+    u64 dt;
+
+    (void)memset(&origin, 0, sizeof(origin));
+    origin.kind = (u8)FL_ORIGIN_CLI;
+    editor_env_open(&e);
+    (void)fl_diag_add_file(&e.fl.dc, name, src, strlen(src));
+    p = fl_parse(&e.fl.arena, &e.fl.dc, &e.fl.in, src, strlen(src), 0U);
+    fn = p.had_error ? NULL : fl_compile(&e.fl.vm, &e.fl.dc, &p, 0U,
+                                         origin);
+    if (fn == NULL) {
+        (void)fprintf(stderr, "perf_fletch: %s did not compile\n", name);
+        exit(1);
+    }
+    t0 = now_ns();
+    if (!fl_vm_run(&e.fl.vm, fn, &out)) {
+        (void)fprintf(stderr, "perf_fletch: %s raised against editor\n",
+                      name);
+        exit(1);
+    }
+    dt = now_ns() - t0;
+    editor_env_close(&e);
+    return dt;
+}
+
+static u64 sample_editor_motion(void *ud)
+{
+    ProgArg *a = ud;
+
+    return time_editor_program(a->name, a->src);
+}
+
+/* ---------------------------------------------------------------- */
 /* Baselines                                                        */
 /* ---------------------------------------------------------------- */
 
@@ -594,12 +775,14 @@ int main(int argc, char **argv)
             return 2;
         }
     }
-    if (getenv("FL_GC_STRESS") != NULL) {
+    if (getenv("FL_GC_STRESS") != NULL ||
+        getenv("SAG_FL_GC_STRESS") != NULL) {
         /* The stress lane runs the collector on every allocation, so a
          * timing taken under it means nothing.  Refusing is better than
          * publishing a number 30x too slow next to a budget. */
-        (void)fprintf(stderr, "perf_fletch: FL_GC_STRESS is set; these "
-                              "numbers would be meaningless\n");
+        (void)fprintf(stderr,
+                      "perf_fletch: Fletch GC stress is set; these "
+                      "numbers would be meaningless\n");
         return 2;
     }
 
@@ -660,6 +843,23 @@ int main(int argc, char **argv)
                 (u64)GATE_MOTION_NS_PER_OP * (u64)MOTION_ITERS,
                 "1e6 FL_OP_MOTION against fl_host_null; NOT editing");
         measure(b, sample_prog, &a);
+
+        a.name = "motion_editor";
+        a.src = SRC_MOTION;
+        b = add("motion_editor", true,
+                (u64)GATE_MOTION_NS_PER_OP * (u64)MOTION_ITERS,
+                "1e6-word motion block against a live scratch editor");
+        measure(b, sample_editor_motion, &a);
+
+        b = add("query_cur_pos", true, (u64)GATE_QUERY_NS,
+                "1e6 cur.pos() calls against a live cursor handle");
+        measure(b, sample_query_cur_pos, NULL);
+
+        b = add("insert_100k", false, 0U,
+                "100k buf.insert calls; one undo node and bytes in budget");
+        b->report_only = true;
+        b->median = sample_insert_100k(NULL);
+        b->min = b->median;
 
         a.name = "fib27";
         a.src = SRC_FIB27;

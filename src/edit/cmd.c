@@ -7,9 +7,11 @@
 
 #include "edit/edit_cmds.h"
 #include "edit/jumplist.h"
+#include "edit/opt.h"
 #include "edit/pane_cmds.h"
 #include "edit/search_cmds.h"
 #include "edit/file_cmds.h"
+#include "edit/flapi_cmds.h"
 #include "edit/shell_cmds.h"
 #include "edit/sel_actions.h"
 #include "edit/ws_cmds.h"
@@ -70,6 +72,52 @@ static CmdStatus deferred_unreachable(CmdCtx *cx)
     }
 
 static const CmdDesc builtins[] = {
+    {"ed.edit.insert.at", sag_edit_cmd_insert_at, SAG_ARITY_STR,
+     SAG_CMD_CHANGES_BUFFER | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Insert bytes at an offset", "insert_at"},
+    {"ed.edit.delete.span", sag_edit_cmd_delete_span, SAG_ARITY_NONE,
+     SAG_CMD_CHANGES_BUFFER | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Delete the supplied span", "delete_span"},
+    {"ed.edit.replace.span", sag_edit_cmd_replace_span, SAG_ARITY_STR,
+     SAG_CMD_CHANGES_BUFFER | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Replace the supplied span", "replace_span"},
+    {"ed.edit.delete.unit", sag_edit_cmd_delete_unit, SAG_ARITY_NONE,
+     SAG_CMD_CHANGES_BUFFER | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     "Delete the current unit", "delete_unit"},
+    {"ed.move.unit.up", sag_edit_cmd_move_unit_up, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, "Move unit up", "unit_up"},
+    {"ed.move.unit.down", sag_edit_cmd_move_unit_down, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, "Move unit down", "unit_down"},
+    {"ed.move.unit.up_alt", sag_edit_cmd_move_unit_up_alt, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, "Move unit up (alternate)",
+     "unit_up_alt"},
+    {"ed.move.unit.down_alt", sag_edit_cmd_move_unit_down_alt, SAG_ARITY_NONE,
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, "Move unit down (alternate)",
+     "unit_down_alt"},
+    {"ed.buf.open", sag_file_cmd_buf_open, SAG_ARITY_STR, 0U,
+     "Open a buffer", NULL},
+    {"ed.buf.close", sag_file_cmd_buf_close, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN, "Close the current buffer", NULL},
+    {"ed.cursor.set", sag_edit_cmd_cursor_set, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN, "Set the primary cursor offset", NULL},
+    {"ed.cursor.set_many", sag_flapi_cmd_cursor_set_many, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN | SAG_CMD_MULTI_AGGREGATE,
+     "Replace a window's cursor set", NULL},
+    {"ed.cursor.move", sag_flapi_cmd_cursor_move, SAG_ARITY_STR,
+     SAG_CMD_REPEATABLE | SAG_CMD_NEEDS_WIN,
+     "Move one cursor by a named unit and direction", NULL},
+    {"ed.win.split", sag_flapi_cmd_win_split, SAG_ARITY_STR,
+     SAG_CMD_NEEDS_WIN, "Split a window horizontally or vertically", NULL},
+    {"ed.win.focus", sag_flapi_cmd_win_focus, SAG_ARITY_NONE,
+     SAG_CMD_NEEDS_WIN, "Focus a specific window", NULL},
+    {"ed.edit.yank", sag_flapi_cmd_span_yank, SAG_ARITY_OPT_STR,
+     SAG_CMD_NEEDS_WIN, "Yank a supplied span into a register", NULL},
+    {"ed.opt.get", sag_opt_cmd_get, SAG_ARITY_STR, 0U,
+     "Read an editor option", NULL},
+    {"ed.opt.set", sag_opt_cmd_set, SAG_ARITY_STR, 0U,
+     "Set an editor option", NULL},
+    {"ed.fl.eval", sag_fl_cmd_eval, SAG_ARITY_STR, 0U,
+     "Evaluate Fletch in the persistent editor runtime", NULL},
     {"ed.nop", cmd_nop, SAG_ARITY_NONE, 0U, "Do nothing", NULL},
     {"ed.quit", sag_file_cmd_quit, SAG_ARITY_NONE, 0U,
      "Quit, prompting when the buffer is dirty", NULL},
@@ -695,6 +743,7 @@ static const BuiltinMeta builtin_meta[] = {
      * not try to understand `/` inside a regex. */
     {"ed.search.replace", "s", SAG_RP_OPT, "s"},
     {"ed.search.global", "s", SAG_RP_OPT, "g"},
+    {"ed.fl.eval", "s", SAG_RP_FORBID, "fl"},
     {"ed.mark.set", "s", SAG_RP_FORBID, "mark"},
     /* :! carries an arbitrary command line, so its argspec is one string
      * and the range decides run-vs-filter (§5). */
@@ -726,7 +775,7 @@ static bool command_name_valid(const char *name)
         "move", "edit", "mode", "sel", "cursor", "view", "ui",
         "file", "buf", "tab", "group", "pane", "win", "reg",
         "search", "macro", "job", "git", "lsp", "ai", "plug",
-        "cmdline", "del", "shell",
+        "cmdline", "del", "shell", "opt", "fl",
         /* Sprint 21 */
         "jump", "change", "mark",
         /* Sprint 18.5: the palette itself is Sprint 38's, but the name has
@@ -779,7 +828,8 @@ static bool command_name_valid(const char *name)
         "file", "buffer", "branches", "symbol",
         /* Sprint 27 */
         "close_others", "copy_path", "rename", "context_menu", "add_tab",
-        "enable", "disable"};
+        "enable", "disable", "at", "span", "unit", "up_alt", "down_alt",
+        "get", "eval", "set_many", "split", "focus"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;
@@ -883,7 +933,8 @@ static void desc_validate(const CmdDesc *d)
                             SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN |
                             SAG_CMD_CHANGES_BUFFER | SAG_CMD_PROMPTS |
                             SAG_CMD_DEFERRED | SAG_CMD_MULTI_AGGREGATE |
-                            SAG_CMD_CAPTURES_TEXT | SAG_CMD_INTERNAL;
+                            SAG_CMD_CAPTURES_TEXT | SAG_CMD_INTERNAL |
+                            SAG_CMD_INTERACTIVE;
 
     if (d == NULL)
         SAG_BUG("sag_cmd_register: NULL descriptor");
@@ -969,6 +1020,8 @@ static CmdId register_entry(const CmdEntry *entry)
         SAG_BUG("command registry and interner order diverged");
     copy = *entry;
     copy.cmd = *d;
+    if ((copy.cmd.flags & SAG_CMD_PROMPTS) != 0U)
+        copy.cmd.flags |= SAG_CMD_INTERACTIVE;
     copy.cmd.name = sag_intern_str(&registry.names, id);
     copy.cmd.help = arena_strdup(&registry.arena, d->help);
     copy.argspec = arena_strdup(
@@ -1109,12 +1162,12 @@ static bool args_valid(const CmdDesc *d, const CmdCtx *cx)
         return false;
     switch ((CmdArity)d->arity) {
     case SAG_ARITY_NONE:
-        return cx->iarg == 0 && cx->sarg == NULL && cx->sarg_len == 0U;
+        return cx->sarg == NULL && cx->sarg_len == 0U;
     case SAG_ARITY_INT:
     case SAG_ARITY_OPT_INT:
         return cx->sarg == NULL && cx->sarg_len == 0U;
     case SAG_ARITY_STR:
-        return cx->iarg == 0 && cx->sarg != NULL;
+        return cx->sarg != NULL;
     case SAG_ARITY_OPT_STR:
         return cx->iarg == 0;
     }

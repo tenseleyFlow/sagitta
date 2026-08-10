@@ -229,6 +229,12 @@ typedef struct FlClosure {
     FlMap *globals;
 } FlClosure;
 
+/* Motion bytecode flags are a stable compiler/host boundary. */
+enum {
+    FL_MOTION_F_ALT = 1U << 0,
+    FL_MOTION_F_COUNT_GIVEN = 1U << 1
+};
+
 /* One motion word, preassembled.  §11: a whole block is ONE dispatch,
  * because req 7 targets ~1 us per motion op and a 20-word recorded macro
  * must not pay 20 dispatches and 20 constant loads to get there. */
@@ -267,7 +273,13 @@ typedef struct FlNative {
     u32 name_id;
     u8 min_ar;
     u8 max_ar;
+    u8 has_recv;
+    u8 rsv;
     u32 caps;
+    /* Receiver sugar keeps the script-visible handle immediate.  The
+     * callable owns a copy of its {slot, generation} value, never an
+     * editor pointer, so stale-handle checks still happen at invocation. */
+    FlValue recv;
 } FlNative;
 
 /* ---------------------------------------------------------------- */

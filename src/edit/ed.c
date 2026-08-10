@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "ui/ctxmenu.h"
@@ -14,6 +15,10 @@
 #include "ui/picker.h"
 #include "ui/pickers.h"
 #include "ui/viewport.h"
+#include "fl/flruntime.h"
+#include "edit/opt.h"
+#include "unicode/width.h"
+#include "fl/fltxn.h"
 #include "util/log.h"
 
 /* Tears down everything a buffer owns without touching the list slot. */
@@ -49,9 +54,13 @@ static void ed_ws_free(Ed *ed)
 static void ed_buffer_free(Ed *ed)
 {
     Buffer *b = &ed->buffer;
+    u32 i;
 
     if (!ed->model_ready)
         return;
+    ed->fl_model_teardown = true;
+    for (i = 0U; i < ed->ws.nbufs; i++)
+        sag_fl_hook_buffer(ed, FL_EV_BUF_CLOSE, ed->ws.bufs[i]);
     sag_ed_insert_barrier(ed);
     sag_reg_bind_context(&ed->regs, NULL, NULL);
     sag_search_state_free(&ed->search);
@@ -75,6 +84,7 @@ static void ed_buffer_free(Ed *ed)
     (void)memset(&ed->single_win, 0, sizeof(ed->single_win));
     ed->win = NULL;
     ed->model_ready = false;
+    ed->fl_model_teardown = false;
 }
 
 static void ed_ws_push(Ed *ed, Buffer *b)
@@ -107,6 +117,7 @@ Buffer *sag_ws_scratch_new(Ed *ed, const char *name, u32 flags)
     if (ed == NULL || !ed->model_ready || name == NULL)
         return NULL;
     b = sag_xcalloc(1U, sizeof(*b));
+    b->owner = ed;
     b->id = ed->ws.next_buf_id++;
     sag_filemeta_init(&b->meta);
     b->tb = sag_textbuf_new();
@@ -152,6 +163,7 @@ Buffer *sag_ws_file_buf(Ed *ed, const char *path)
         }
     }
     b = sag_xcalloc(1U, sizeof(*b));
+    b->owner = ed;
     b->id = ed->ws.next_buf_id++;
     sag_filemeta_init(&b->meta);
     b->tabwidth = SAG_VP_TABWIDTH;
@@ -303,7 +315,8 @@ Win *sag_ed_win_by_id(Ed *ed, u32 id)
     w = win_by_id_in(ed->pane_root, id);
     if (w != NULL)
         return w;
-    return ed->single_win.id == id ? &ed->single_win : NULL;
+    return ed->pane_root == NULL && ed->single_win.id == id ?
+               &ed->single_win : NULL;
 }
 
 Buffer *sag_ws_scratch_find(Ed *ed, const char *name)
@@ -382,6 +395,7 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
     Cursor cursor = {BYTEOFF(0U), {0U}, BYTEOFF(0U)};
 
     ed->buffer.tb = tb;
+    ed->buffer.owner = ed;
     ed->buffer.id = ed->ws.next_buf_id++;
     ed->buffer.path = path == NULL ? NULL : arena_strdup(&ed->arena, path);
     ed->buffer.tabwidth = SAG_VP_TABWIDTH;
@@ -472,11 +486,22 @@ void sag_ed_init(Ed *ed)
     free(root);
     fl_origin_reg_init(&ed->origins);
     fl_h_table_init(&ed->handles);
+    sag_opt_provider_set(ed, NULL);
+    ed->undo_break_on_newline = true;
+    ed->errorbells = false;
+    ed->ambiguous_wide = false;
+    {
+        SagWidthOpts width_opts = {false};
+
+        sag_width_set_opts(&width_opts);
+    }
     /* Window ids start at 1; 0 is never handed out, so a zeroed Win is
      * distinguishable from window one. */
     ed->next_win_id = 1U;
     sag_dispatch_init(ed);
     ed->dispatch_ready = true;
+    if (!sag_fl_runtime_init(ed))
+        SAG_BUG("editor init: Fletch runtime initialization failed");
     ed->exit_code = SAG_EXIT_OK;
 }
 
@@ -498,7 +523,9 @@ void sag_ed_free(Ed *ed)
     /* Jobs die with the process (never persisted, s25); kill and reap
      * before the buffers they append into go away. */
     sag_jobs_free(ed);
+    /* Close hooks are the last script-visible point for every buffer. */
     ed_buffer_free(ed);
+    sag_fl_runtime_free(ed);
     sag_reg_free(&ed->regs);
     sag_msg_clear(ed);
     if (ed->grid_ready)
@@ -531,7 +558,7 @@ SagLoadErr sag_ed_open(Ed *ed, const char *path)
     TextBuf *tb = NULL;
     SagLoadErr result;
 
-    if (ed == NULL || path == NULL)
+    if (ed == NULL || path == NULL || ed->fl_model_teardown)
         return SAG_LOAD_IO;
     ed_buffer_free(ed);
     sag_filemeta_init(&ed->buffer.meta);
@@ -546,6 +573,7 @@ SagLoadErr sag_ed_open(Ed *ed, const char *path)
     if (ed->buffer.meta.realpath != NULL &&
         sag_journal_probe(ed->buffer.meta.realpath, &ed->buffer.meta))
         sag_ed_prompt(ed, SAG_PROMPT_RECOVER);
+    sag_fl_hook_buffer(ed, FL_EV_BUF_OPEN, &ed->buffer);
     return result;
 }
 
@@ -553,7 +581,7 @@ bool sag_ed_open_scratch(Ed *ed)
 {
     TextBuf *tb;
 
-    if (ed == NULL)
+    if (ed == NULL || ed->fl_model_teardown)
         return false;
     ed_buffer_free(ed);
     sag_filemeta_init(&ed->buffer.meta);
@@ -564,6 +592,37 @@ bool sag_ed_open_scratch(Ed *ed)
 bool sag_buf_dirty(const Buffer *b)
 {
     return b != NULL && b->undo != NULL && !sag_undo_at_save_point(b->undo);
+}
+
+bool sag_buf_readonly(const Buffer *b)
+{
+    mode_t write_bits = S_IWUSR | S_IWGRP | S_IWOTH;
+
+    return b != NULL && b->meta.exists &&
+           (b->meta.mode & write_bits) == 0;
+}
+
+u64 sag_buf_len(const Buffer *b)
+{
+    return b == NULL || b->tb == NULL ? 0U : sag_textbuf_len(b->tb);
+}
+
+u64 sag_buf_line_count(const Buffer *b)
+{
+    return b == NULL || b->tb == NULL ? 0U :
+           sag_textbuf_line_count(b->tb);
+}
+
+Span sag_buf_line_span(const Buffer *b, LineNo line)
+{
+    return b == NULL || b->tb == NULL ? (Span){0U, 0U} :
+           sag_textbuf_line_span(b->tb, line);
+}
+
+LineNo sag_buf_line_of(const Buffer *b, ByteOff off)
+{
+    return b == NULL || b->tb == NULL ? LINENO(0U) :
+           sag_textbuf_line_of(b->tb, off);
 }
 
 /*
@@ -598,6 +657,7 @@ static void ed_on_change(void *ctx, ByteOff at, i64 now_ms)
     if (b == NULL || (b->flags & SAG_BUF_NOUNDO) != 0U)
         return;
     sag_change_record(b, at, now_ms);
+    sag_fl_hook_note_change(b->owner, b, at.v);
 }
 
 bool sag_ed_mark_set(Ed *ed, Buffer *b, u8 name, ByteOff at)
@@ -703,7 +763,10 @@ void sag_ed_win_set_buffer(Ed *ed, Win *w, Buffer *b)
 
 void sag_ed_win_release(Ed *ed, Win *w)
 {
-    if (ed == NULL || w == NULL || w == &ed->single_win)
+    if (ed == NULL || w == NULL)
+        return;
+    fl_h_drop_window(ed, w->id);
+    if (w == &ed->single_win)
         return;
     sag_overlay_free(&w->overlay);
     sag_vp_free(w);
@@ -891,7 +954,8 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
             cx->range.kind == SAG_RANGE_NONE &&
             (desc->flags & SAG_CMD_MULTI_AGGREGATE) == 0U;
     durability_command = document_target && edits_text;
-    newline = strcmp(desc->name, "ed.edit.insert.newline") == 0;
+    newline = ed->undo_break_on_newline &&
+              strcmp(desc->name, "ed.edit.insert.newline") == 0;
     started_in_insert = ed->mode == SAG_MODE_I;
 
     if (durability_command && ed->durability_failed) {
@@ -1062,17 +1126,19 @@ void sag_ed_prompt(Ed *ed, PromptKind prompt)
         ed->msg.prompt = true;
 }
 
-CmdStatus sag_ed_file_save(Ed *ed, bool force)
+CmdStatus sag_ed_file_save_win(Ed *ed, Win *win, bool force)
 {
     EditCtx ec;
     SagSaveErr result;
     Buffer *doc;
+    u32 doc_id;
+    u32 win_id;
     u64 lines;
 
-    if (ed == NULL || !ed->model_ready)
+    if (ed == NULL || !ed->model_ready || win == NULL || win->buf == NULL)
         return SAG_CMD_ERR_STATE;
     sag_ed_insert_barrier(ed);
-    doc = sag_ed_doc(ed);
+    doc = win->buf;
     if (doc == NULL || doc->path == NULL) {
         sag_msg(ed, SAG_MSG_ERROR,
                 "no file name; use :w path");
@@ -1091,7 +1157,19 @@ CmdStatus sag_ed_file_save(Ed *ed, bool force)
         ed->quit_after_save = false;
         return SAG_CMD_ERR_STATE;
     }
-    ec = sag_ed_edit_ctx(ed);
+    if (!fl_txn_prepare_save(sag_fl_vm(ed), doc->undo))
+        return SAG_CMD_ERR_STATE;
+    doc_id = doc->id;
+    win_id = win->id;
+    sag_fl_hook_buffer(ed, FL_EV_BUF_SAVE, doc);
+    win = sag_ed_win_by_id(ed, win_id);
+    doc = win == NULL ? NULL : win->buf;
+    if (doc == NULL || doc->id != doc_id || doc->path == NULL ||
+        doc->tb == NULL)
+        return SAG_CMD_ERR_STATE;
+    if (!fl_txn_prepare_save(sag_fl_vm(ed), doc->undo))
+        return SAG_CMD_ERR_STATE;
+    ec = sag_ed_edit_ctx_for(ed, win);
     if (force) {
         result = sag_file_save_force(ec.tb, ec.meta, doc->path);
         if (result == SAG_SAVE_OK) {
@@ -1120,6 +1198,7 @@ CmdStatus sag_ed_file_save(Ed *ed, bool force)
     lines = sag_textbuf_line_count(doc->tb);
     sag_msg(ed, SAG_MSG_INFO, "wrote %s, %llu lines", doc->path,
             (unsigned long long)lines);
+    sag_fl_hook_buffer(ed, FL_EV_BUF_SAVED, doc);
     if (ed->quit_after_save) {
         ed->quit_after_save = false;
         ed->quit = true;
@@ -1127,7 +1206,14 @@ CmdStatus sag_ed_file_save(Ed *ed, bool force)
     return SAG_CMD_OK;
 }
 
-CmdStatus sag_ed_file_write_to(Ed *ed, const char *path, bool force)
+CmdStatus sag_ed_file_save(Ed *ed, bool force)
+{
+    return ed == NULL ? SAG_CMD_ERR_STATE :
+                        sag_ed_file_save_win(ed, ed->win, force);
+}
+
+CmdStatus sag_ed_file_write_to_win(Ed *ed, Win *win, const char *path,
+                                   bool force)
 {
     FileMeta next;
     TextBuf *existing = NULL;
@@ -1135,16 +1221,32 @@ CmdStatus sag_ed_file_write_to(Ed *ed, const char *path, bool force)
     SagLoadErr load;
     SagSaveErr result;
     Buffer *doc;
+    u32 doc_id;
+    u32 win_id;
+    int tab_index = -1;
+    size_t i;
 
-    if (ed == NULL || !ed->model_ready || path == NULL || path[0] == '\0')
+    if (ed == NULL || !ed->model_ready || win == NULL || win->buf == NULL ||
+        path == NULL || path[0] == '\0')
         return SAG_CMD_ERR_ARG;
     sag_ed_insert_barrier(ed);
-    doc = sag_ed_doc(ed);
+    doc = win->buf;
     /* Nothing to write out under a new name either (§3). */
     if (doc == NULL || doc->tb == NULL) {
         sag_msg(ed, SAG_MSG_ERROR, "nothing loaded; nothing written");
         return SAG_CMD_ERR_STATE;
     }
+    if (!fl_txn_prepare_save(sag_fl_vm(ed), doc->undo))
+        return SAG_CMD_ERR_STATE;
+    doc_id = doc->id;
+    win_id = win->id;
+    sag_fl_hook_buffer(ed, FL_EV_BUF_SAVE, doc);
+    win = sag_ed_win_by_id(ed, win_id);
+    doc = win == NULL ? NULL : win->buf;
+    if (doc == NULL || doc->id != doc_id || doc->tb == NULL)
+        return SAG_CMD_ERR_STATE;
+    if (!fl_txn_prepare_save(sag_fl_vm(ed), doc->undo))
+        return SAG_CMD_ERR_STATE;
     sag_filemeta_init(&next);
     load = sag_file_load(path, &existing, &next);
     sag_textbuf_free(existing);
@@ -1153,7 +1255,7 @@ CmdStatus sag_ed_file_write_to(Ed *ed, const char *path, bool force)
         sag_msg(ed, SAG_MSG_ERROR, "could not inspect %s", path);
         return SAG_CMD_ERR_IO;
     }
-    ec = sag_ed_edit_ctx(ed);
+    ec = sag_ed_edit_ctx_for(ed, win);
     ec.meta = &next;
     result = force ? sag_file_save_force(ec.tb, ec.meta, path) :
                      sag_edit_save(&ec, path);
@@ -1174,9 +1276,11 @@ CmdStatus sag_ed_file_write_to(Ed *ed, const char *path, bool force)
     sag_filemeta_dispose(&doc->meta);
     doc->meta = next;
     doc->path = arena_strdup(&ed->arena, path);
-    sag_search_opts_init(&ed->search_opts);
-    sag_search_state_init(&ed->search);
-    sag_overlay_init(&ed->single_win.overlay);
+    if (ed->win == win) {
+        sag_search_opts_init(&ed->search_opts);
+        sag_search_state_init(&ed->search);
+        sag_overlay_init(&ed->single_win.overlay);
+    }
     /*
      * A save-as RENAMES what the active tab shows.  It does not build a
      * new world.
@@ -1188,12 +1292,27 @@ CmdStatus sag_ed_file_write_to(Ed *ed, const char *path, bool force)
      * the struct.  Nothing about writing bytes to a path justifies
      * touching either tree.
      */
-    sag_tab_set_path(ed, ed->tabs.active, doc->path);
-    sag_reg_bind_context(&ed->regs, doc->undo, &doc->meta);
+    for (i = 0U; i < ed->tabs.v.len; i++) {
+        if (win_by_id_in(ed->tabs.v.data[i].root, win_id) == win) {
+            tab_index = (int)i;
+            break;
+        }
+    }
+    if (tab_index >= 0)
+        sag_tab_set_path(ed, tab_index, doc->path);
+    if (ed->win == win)
+        sag_reg_bind_context(&ed->regs, doc->undo, &doc->meta);
     ed->durability_failed = false;
     sag_msg(ed, SAG_MSG_INFO, "wrote %s, %llu lines", path,
             (unsigned long long)sag_textbuf_line_count(doc->tb));
+    sag_fl_hook_buffer(ed, FL_EV_BUF_SAVED, doc);
     return SAG_CMD_OK;
+}
+
+CmdStatus sag_ed_file_write_to(Ed *ed, const char *path, bool force)
+{
+    return ed == NULL ? SAG_CMD_ERR_ARG :
+                        sag_ed_file_write_to_win(ed, ed->win, path, force);
 }
 
 CmdStatus sag_ed_request_quit(Ed *ed, bool force)
@@ -1626,8 +1745,6 @@ static int ed_driver_inner(const char *path)
     ed.grid_ready = true;
     sag_render_init(&ed.render, &ed.tty.caps, ed_getenv);
     ed.render_ready = true;
-    sag_ed_layout(&ed);
-    sag_ed_render(&ed);
     /*
      * State comes up AFTER the buffers so a restore has somewhere to
      * land, and the lock is claimed before the first change can mark
@@ -1643,7 +1760,14 @@ static int ed_driver_inner(const char *path)
      */
     if (path == NULL)
         (void)sag_ws_restore(&ed);
+    /* The workspace hook sees restored tabs and buffers, and runs before
+     * the first paint.  Startup used to paint once before restore, which
+     * made this ordering impossible and also caused a redundant frame. */
+    sag_fl_hook_workspace(&ed, FL_EV_WS_OPEN);
+    sag_ed_layout(&ed);
+    sag_ed_render(&ed);
     result = ed.quit ? ed.exit_code : sag_loop_run(&ed);
+    sag_fl_hook_workspace(&ed, FL_EV_WS_CLOSE);
     /* Clean quit: the unconditional save, before anything is freed. */
     sag_state_close(&ed);
     sag_ed_free(&ed);

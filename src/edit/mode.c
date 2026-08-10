@@ -6,7 +6,19 @@
 #include "edit/ed.h"
 #include "edit/keys_highlight.h"
 #include "edit/motion.h"
+#include "fl/flruntime.h"
 #include "util/log.h"
+
+static void mode_transition(Ed *ed, Mode mode)
+{
+    Mode old = ed->mode;
+
+    if (old == mode)
+        return;
+    sag_fl_hook_mode(ed, FL_EV_MODE_LEAVE, sag_modes[old].name);
+    sag_dispatch_set_mode(ed, mode);
+    sag_fl_hook_mode(ed, FL_EV_MODE_ENTER, sag_modes[mode].name);
+}
 
 const ModeDesc sag_modes[SAG_MODE__N] = {
     [SAG_MODE_L] = {"L", "line", true, true, SAG_MODE_L},
@@ -49,7 +61,6 @@ CmdStatus sag_mode_enter(Ed *ed, Mode mode)
     }
     if (mode == SAG_MODE_E) {
         const char *seed = NULL;
-
         if (ed->mode == SAG_MODE_I)
             sag_ed_insert_barrier(ed);
         if (ed->mode == SAG_MODE_H && ed->win != NULL &&
@@ -81,7 +92,7 @@ CmdStatus sag_mode_enter(Ed *ed, Mode mode)
     }
     if (sag_modes[mode].is_unit)
         ed->prev_unit = mode;
-    sag_dispatch_set_mode(ed, mode);
+    mode_transition(ed, mode);
     ed->footer_dirty = true;
     return SAG_CMD_OK;
 }
@@ -113,7 +124,7 @@ CmdStatus sag_mode_enter_highlight(Ed *ed, Mode unit, bool sticky)
     ed->win->h.kind = SAG_SEL_CHAR;
     ed->win->h.sticky = sticky;
     sag_keys_highlight_install(ed, unit);
-    sag_dispatch_set_mode(ed, SAG_MODE_H);
+    mode_transition(ed, SAG_MODE_H);
     ed->footer_dirty = true;
     return SAG_CMD_OK;
 }

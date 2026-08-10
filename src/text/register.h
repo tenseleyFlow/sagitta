@@ -99,6 +99,7 @@ void sag_reg_delete(Registers *r, u8 explicit_name, const RegVal *v);
 bool sag_reg_paste(Registers *r, EditCtx *ec, u8 name, bool before,
                    u32 tabw);
 void sag_reg_ring_push(Registers *r, const RegVal *v);
+void sag_reg_ring_set_depth(Registers *r, u32 depth);
 bool sag_reg_ring_cycle(Registers *r, EditCtx *ec, i32 delta);
 u32 sag_reg_ring_list(const Registers *r, RegInfo *out, u32 max);
 

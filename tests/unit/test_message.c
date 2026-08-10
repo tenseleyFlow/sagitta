@@ -1,6 +1,7 @@
 #include "harness.h"
 
 #include <string.h>
+#include <unistd.h>
 
 #include "edit/ed.h"
 #include "edit/loop.h"
@@ -70,6 +71,26 @@ void test_message_expiry_and_replacement_rules(void)
     sag_msg_clear(&ed);
     SAG_ASSERT(!ed.msg.active);
     SAG_ASSERT_EQ_I64(sag_timers_deadline(&ed.timers, 4000), -1);
+    message_ed_free(&ed);
+}
+
+void test_message_errorbells_write_only_for_errors(void)
+{
+    Ed ed;
+    int pipefd[2];
+    char bell = '\0';
+
+    message_ed_init(&ed);
+    SAG_ASSERT(pipe(pipefd) == 0);
+    ed.tty.wfd = pipefd[1];
+    ed.tty_ready = true;
+    ed.errorbells = true;
+    sag_msg_at(&ed, SAG_MSG_WARN, 1000, "warning");
+    sag_msg_at(&ed, SAG_MSG_ERROR, 1000, "error");
+    SAG_ASSERT(read(pipefd[0], &bell, 1U) == 1);
+    SAG_ASSERT_EQ_U64((u8)bell, (u8)'\a');
+    SAG_ASSERT(close(pipefd[1]) == 0);
+    SAG_ASSERT(close(pipefd[0]) == 0);
     message_ed_free(&ed);
 }
 

@@ -31,6 +31,30 @@ void test_kill_ring_depth_evicts_oldest(void)
     sag_reg_free(&r);
 }
 
+void test_kill_ring_shrink_does_not_resurrect_entries(void)
+{
+    Registers r;
+    RegVal a;
+    RegVal b;
+    RegVal c;
+    RegInfo info[3];
+
+    sag_reg_init(&r);
+    r.clipboard_sync = SAG_CLIP_SYNC_OFF;
+    ring_value(&a, "a"); ring_value(&b, "bb"); ring_value(&c, "ccc");
+    sag_reg_ring_push(&r, &a);
+    sag_reg_ring_push(&r, &b);
+    sag_reg_ring_push(&r, &c);
+    sag_reg_ring_set_depth(&r, 1U);
+    SAG_ASSERT_EQ_U64(r.ring_len, 1U);
+    SAG_ASSERT_EQ_U64(r.ring_bytes, 3U);
+    sag_reg_ring_set_depth(&r, 3U);
+    SAG_ASSERT_EQ_U64(sag_reg_ring_list(&r, info, 3U), 1U);
+    SAG_ASSERT_EQ_U64(info[0].bytes, 3U);
+    sag_regval_free(&c); sag_regval_free(&b); sag_regval_free(&a);
+    sag_reg_free(&r);
+}
+
 void test_kill_ring_byte_cap_and_oversized_entry(void)
 {
     Registers r;

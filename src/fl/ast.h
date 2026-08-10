@@ -99,6 +99,7 @@ struct FlNode {
             u8 mkind;         /* FlMotionKind */
             u8 ch;            /* unit/arrow character */
             bool alt;
+            bool count_given; /* source contained an explicit COUNT */
         } motion;
     } as;
 };
