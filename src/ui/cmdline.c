@@ -396,7 +396,9 @@ void sag_cmdline_open(Ed *ed, SagPromptKind kind, const char *seed)
      * no workspace directory to scope to and inventing one would put
      * state where the user asked for none.
      */
-    if (ed->state.ready) {
+    if (ed->clean) {
+        line->history = sag_hist_open_memory();
+    } else if (ed->state.ready) {
         const char *scope =
             sag_state_option_str(ed, "history.scope", "workspace");
 

@@ -50,8 +50,16 @@ typedef enum {
 
 typedef struct FlRuntime FlRuntime;
 typedef struct OptProvider OptProvider;
+typedef struct SagConfigState SagConfigState;
 typedef struct SagOptHistory SagOptHistory;
 struct OptStored;
+
+typedef struct SagEdStartup {
+    const char *config_path;
+    bool clean;
+    bool no_workspace_config;
+    bool trust_workspace;
+} SagEdStartup;
 
 typedef struct FlPendingChange {
     u32 buffer_id;
@@ -248,6 +256,8 @@ struct Ed {
     struct OptStored *opt_globals;
     bool *opt_inflight;
     SagOptHistory *opt_history;
+    SagConfigState *config;
+    bool clean;
     bool undo_break_on_newline;
     bool errorbells;
     bool ambiguous_wide;
@@ -267,6 +277,7 @@ void sag_ed_free(Ed *ed);
 SagLoadErr sag_ed_open(Ed *ed, const char *path);
 bool sag_ed_open_scratch(Ed *ed);
 int sag_ed_driver(const char *path);
+int sag_ed_driver_opts(const char *path, const SagEdStartup *startup);
 const char *sag_ws_root(const Ed *ed);
 
 bool sag_buf_dirty(const Buffer *b);

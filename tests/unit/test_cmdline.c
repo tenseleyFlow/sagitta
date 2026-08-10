@@ -46,6 +46,7 @@ static void cmdline_fixture_init(CmdlineFixture *fixture)
     SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", fixture->state, 1), 0);
     sag_ed_init(&fixture->ed);
     SAG_ASSERT(sag_ed_open_scratch(&fixture->ed));
+    sag_test_load_runtime(&fixture->ed);
 }
 
 static void cmdline_fixture_free(CmdlineFixture *fixture)
@@ -239,7 +240,7 @@ void test_cmdline_e_keymap_leaves_are_registered_editor_commands(void)
     const Keymap *map;
 
     cmdline_fixture_init(&fixture);
-    map = &fixture.ed.mode_keys[SAG_MODE_E];
+    map = &fixture.ed.bind_keys[SAG_MODE_E];
     SAG_ASSERT(sag_keymap_visit(map, cmdline_check_leaf, &check));
     SAG_ASSERT_EQ_U64(check.visited, sag_keymap_binding_count(map));
     SAG_ASSERT(check.visited >= 20U);

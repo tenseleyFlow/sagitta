@@ -23,14 +23,16 @@ static void runtime_diag(void *ctx, FlDiagLevel level, FlSpan span,
 {
     FlRuntime *rt = (FlRuntime *)ctx;
     (void)span;
-    (void)rendered;
     sag_log(level == FL_DIAG_ERROR ? SAG_LOG_ERROR :
             level == FL_DIAG_WARNING ? SAG_LOG_WARN : SAG_LOG_INFO,
-            "Fletch: %s", msg == NULL ? "diagnostic" : msg);
+            "Fletch: %s", rendered == NULL ?
+                (msg == NULL ? "diagnostic" : msg) : rendered);
     if (rt != NULL && level == FL_DIAG_ERROR) {
         rt->diag_error = true;
         (void)snprintf(rt->diag_message, sizeof(rt->diag_message), "%s",
-                       msg == NULL ? "Fletch diagnostic" : msg);
+                       rendered == NULL ?
+                           (msg == NULL ? "Fletch diagnostic" : msg) :
+                           rendered);
     }
 }
 

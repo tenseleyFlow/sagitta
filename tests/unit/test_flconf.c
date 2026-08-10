@@ -247,7 +247,7 @@ void test_flconf_twenty_reloads_leave_no_registry_residue(void)
     SAG_ASSERT_EQ_U64(sag_bind_rebuild_count(&f.ed), rebuilds + 1U);
     ledger_len = f.ed.hooks.ledger.n;
     hook_len = f.ed.hooks.n;
-    for (i = 0U; i < 20U; i++) {
+    for (i = 0U; i < 100U; i++) {
         rebuilds = sag_bind_rebuild_count(&f.ed);
         SAG_ASSERT_EQ_I64(sag_config_reload(&f.ed, NULL), SAG_CFG_OK);
         SAG_ASSERT_EQ_U64(sag_bind_rebuild_count(&f.ed), rebuilds + 1U);
@@ -266,6 +266,7 @@ void test_flconf_reloaded_hook_fires_once(void)
     OptVal off = {SAG_OPT_BOOL, {.b = false}};
     const char *err = NULL;
     u32 active_before;
+    u32 ledger_len;
     u32 i;
 
     startup.no_workspace_config = true;
@@ -281,6 +282,19 @@ void test_flconf_reloaded_hook_fires_once(void)
     sag_fl_hook_workspace(&f.ed, FL_EV_WS_OPEN);
     SAG_ASSERT(cf_opt(&f, "errorbells").as.b);
     SAG_ASSERT_EQ_U64(cf_active_ledger(&f), active_before + 1U);
+    ledger_len = f.ed.hooks.ledger.n;
+    for (i = 0U; i < 20U; i++) {
+        SAG_ASSERT(sag_opt_set(&f.ed, SAG_OPT_GLOBAL, "errorbells", 10U,
+                               &off, &err));
+        sag_fl_hook_workspace(&f.ed, FL_EV_WS_OPEN);
+        SAG_ASSERT(cf_opt(&f, "errorbells").as.b);
+        SAG_ASSERT_EQ_U64(cf_active_ledger(&f), active_before + 1U);
+        SAG_ASSERT_EQ_U64(f.ed.hooks.ledger.n, ledger_len);
+    }
+    SAG_ASSERT(sag_opt_set(&f.ed, SAG_OPT_GLOBAL, "errorbells", 10U, &off,
+                           &err));
+    sag_origin_teardown(&f.ed, FL_ORIGIN_ID_CONFIG);
+    SAG_ASSERT(!cf_opt(&f, "errorbells").as.b);
     cf_free(&f);
 }
 

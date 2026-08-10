@@ -98,6 +98,27 @@ bool fl_call_chunk(FlRuntime *rt, FlFn *fn, CmdSource source)
     return call_chunk_result(rt, fn, source, &result);
 }
 
+bool fl_call_value(FlRuntime *rt, FlValue callable, CmdSource source)
+{
+    FlValue result = FL_NIL_V;
+    FlOrigin saved_origin;
+    CmdSource saved;
+    bool ok;
+
+    if (rt == NULL || !rt->ready ||
+        (callable.t != (u8)FL_CLOSURE && callable.t != (u8)FL_NATIVE))
+        return false;
+    saved = rt->command_source;
+    saved_origin = rt->vm.root_origin;
+    rt->command_source = source;
+    if (callable.t == (u8)FL_CLOSURE)
+        rt->vm.root_origin = ((FlClosure *)callable.as.o)->fn->origin;
+    ok = fl_call(&rt->vm, callable, NULL, 0U, &result);
+    rt->vm.root_origin = saved_origin;
+    rt->command_source = saved;
+    return ok;
+}
+
 void fl_macro_cache_invalidate(FlRuntime *rt, u8 reg)
 {
     FlMacroCache *entry;

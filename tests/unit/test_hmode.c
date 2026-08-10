@@ -24,6 +24,7 @@ static void h_editor(Ed *ed, const char *text)
 {
     sag_ed_init(ed);
     SAG_ASSERT(sag_ed_open_scratch(ed));
+    sag_test_load_runtime(ed);
     if (text != NULL)
         sag_textbuf_insert(ed->win->buf->tb, BYTEOFF(0U),
                            (const u8 *)text, strlen(text));

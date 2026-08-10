@@ -83,8 +83,9 @@ bool sag_opt_set(Ed *ed, u8 scope_hint, const char *name, u32 len,
  * A committed checkpoint is removed by its shared registration-ledger id. */
 u32 sag_opt_checkpoint(Ed *ed, const char *name, u32 len,
                        const char **err);
-u32 sag_opt_commit(Ed *ed, u32 origin_id, u32 checkpoint);
+u32 sag_opt_commit(Ed *ed, u32 origin_id, u32 checkpoint, bool *created);
 void sag_opt_discard(Ed *ed, u32 checkpoint);
+bool sag_opt_rollback(Ed *ed, u32 checkpoint);
 bool sag_opt_remove(Ed *ed, u32 ledger_id);
 u32 sag_opt_list(const char **out, u32 max);
 

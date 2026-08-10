@@ -198,8 +198,9 @@ bind("F", "<esc>", "ed.mode.escape")
 bind("F", "C-g", "ed.ui.message_expand")
 
 # -- 6. macros ----------------------------------------------------------
-# Macro commands are available to user configuration.  Their final default
-# chords land with Sprint 38's macro browser so quit remains unambiguous.
+bind("*", "q", "ed.macro.record")
+bind("*", "@", "ed.macro.replay")
+bind("*", "@ @", "ed.macro.replay_last")
 
 # -- 7. hooks -----------------------------------------------------------
 # Hooks are intentionally absent by default: examples must not produce

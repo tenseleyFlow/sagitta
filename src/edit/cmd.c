@@ -16,6 +16,7 @@
 #include "edit/shell_cmds.h"
 #include "edit/sel_actions.h"
 #include "edit/ws_cmds.h"
+#include "fl/flconf.h"
 #include "fl/record.h"
 #include "ui/pickers.h"
 #include "ui/cmdline.h"
@@ -127,6 +128,12 @@ static const CmdDesc builtins[] = {
      "Evaluate Fletch in the persistent editor runtime", NULL},
     {"ed.fl.closure", sag_bind_closure_cmd, SAG_ARITY_INT,
      SAG_CMD_INTERNAL, "Invoke a Fletch closure bound to a key", NULL},
+    {"ed.config.reload", sag_config_cmd_reload, SAG_ARITY_NONE, 0U,
+     "Reload the runtime, user, and workspace configuration", NULL},
+    {"ed.config.edit", sag_config_cmd_edit, SAG_ARITY_NONE, 0U,
+     "Open the user init.fl", NULL},
+    {"ed.map", sag_bind_cmd_map, SAG_ARITY_NONE, 0U,
+     "List configured bindings for the current mode", NULL},
     {"ed.nop", cmd_nop, SAG_ARITY_NONE, 0U, "Do nothing", NULL},
     {"ed.quit", sag_file_cmd_quit, SAG_ARITY_NONE, 0U,
      "Quit, prompting when the buffer is dirty", NULL},
@@ -674,7 +681,8 @@ static const CmdDesc builtins[] = {
     {"ed.macro.stop", sag_record_cmd_stop, SAG_ARITY_NONE, 0U,
      "Stop recording a command macro", NULL},
     {"ed.macro.replay", sag_record_cmd_replay, SAG_ARITY_STR,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE, "Replay a command macro",
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_CAPTURES_TEXT,
+     "Replay a command macro",
      "replay"},
     {"ed.macro.replay_last", sag_record_cmd_replay_last, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE,
@@ -787,12 +795,13 @@ static bool word_in(const char *word, size_t len, const char *const *words,
 static bool command_name_valid(const char *name)
 {
     static const char *const app_verbs[] = {
-        "quit", "quit_force", "suspend", "redraw", "repeat", "nop"};
+        "quit", "quit_force", "suspend", "redraw", "repeat", "nop",
+        "map"};
     static const char *const domains[] = {
         "move", "edit", "mode", "sel", "cursor", "view", "ui",
         "file", "buf", "tab", "group", "pane", "win", "reg",
         "search", "macro", "job", "git", "lsp", "ai", "plug",
-        "cmdline", "del", "shell", "opt", "fl",
+        "cmdline", "del", "shell", "opt", "fl", "config",
         /* Sprint 21 */
         "jump", "change", "mark",
         /* Sprint 18.5: the palette itself is Sprint 38's, but the name has
@@ -812,7 +821,7 @@ static bool command_name_valid(const char *name)
         "shrink", "expand", "contract", "list", "reload", "cancel",
         "text", "undo", "redo", "escape", "add", "above", "below", "center",
         "message_expand", "split_h", "split_v", "record", "stop",
-        "replay", "replay_last", "stage",
+        "replay", "replay_last", "stage", "map",
         "first_nonblank", "last_nonblank", "half_page_up", "half_page_down",
         "page_up", "page_down", "after", "newline", "tab",
         "grapheme_left", "grapheme", "undo_barrier", "open_above",
@@ -847,7 +856,8 @@ static bool command_name_valid(const char *name)
         /* Sprint 27 */
         "close_others", "copy_path", "rename", "context_menu", "add_tab",
         "enable", "disable", "at", "span", "unit", "up_alt", "down_alt",
-        "get", "eval", "set_many", "split", "focus", "closure"};
+        "get", "eval", "set_many", "split", "focus", "closure",
+        "reload"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

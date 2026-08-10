@@ -204,14 +204,9 @@ void test_fl_modules_deferred_surfaces_name_their_sprint(void)
     FlFix f;
 
     flfix_open(&f);
-    /*
-     * DoD 11 and the no-silent-stubs rule.  Reporting `bind` as a typo
-     * sends the author of a config looking for a spelling mistake that
-     * is not there.
-     */
-    FL_EQ(&f, "return bind\n", "!name: bind lands in Sprint 36");
-    FL_EQ(&f, "return unbind\n", "!name: unbind lands in Sprint 36");
-    /* Sprint 36 promotes set() from the deferral list to the prelude. */
+    /* Sprint 36 promotes all three config functions to the prelude. */
+    FL_EQ(&f, "return bind\n", "<fn>");
+    FL_EQ(&f, "return unbind\n", "<fn>");
     FL_EQ(&f, "return set\n", "<fn>");
     /* Sprint 35 promoted these two names from deferrals to prelude
      * functions; keeping them in this boundary test prevents stale

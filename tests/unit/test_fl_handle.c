@@ -365,7 +365,7 @@ static u64 oracle_delete_pos(u64 pos, u64 at, u64 len)
 }
 
 /*
- * The handle stores MARKS, not the offsets handed to its constructor.
+ * The handle stores MARKS, not the offsets handed to its creation routine.
  * Drive those marks through a thousand deterministic edits and compare
  * every resolution with a deliberately tiny offset oracle.  Boundary
  * inserts matter most: the left-biased low end stays put while the

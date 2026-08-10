@@ -34,6 +34,15 @@ int sag_args_parse(SagArgs *out, int argc, char **argv, Bytebuf *err)
             out->help_cmds = true;
         } else if (strcmp(arg, "--clean") == 0) {
             out->clean = true;
+        } else if (strcmp(arg, "--config") == 0) {
+            if (i + 1 >= argc)
+                return args_error(err, "option '%s' requires an argument",
+                                  arg);
+            out->config_path = argv[++i];
+        } else if (strcmp(arg, "--no-workspace-config") == 0) {
+            out->no_workspace_config = true;
+        } else if (strcmp(arg, "--trust-workspace") == 0) {
+            out->trust_workspace = true;
         } else if (strcmp(arg, "--batch") == 0) {
             if (i + 1 >= argc) {
                 return args_error(err, "option '%s' requires an argument", arg);

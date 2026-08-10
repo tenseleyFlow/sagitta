@@ -139,3 +139,32 @@ void test_args_parse_end_options(void)
     SAG_ASSERT_EQ_STR(args.files[0], "--version");
     bytebuf_free(&err);
 }
+
+void test_args_parse_config_controls(void)
+{
+    char *argv[] = {"sagitta", "--config", "mine.fl",
+                    "--no-workspace-config", "--trust-workspace"};
+    SagArgs args;
+    Bytebuf err;
+
+    bytebuf_init(&err);
+    SAG_ASSERT_EQ_I64(sag_args_parse(&args, 5, argv, &err), -1);
+    SAG_ASSERT_EQ_STR(args.config_path, "mine.fl");
+    SAG_ASSERT(args.no_workspace_config);
+    SAG_ASSERT(args.trust_workspace);
+    SAG_ASSERT_EQ_U64(err.len, 0U);
+    bytebuf_free(&err);
+}
+
+void test_args_parse_config_missing(void)
+{
+    char *argv[] = {"sagitta", "--config"};
+    SagArgs args;
+    Bytebuf err;
+
+    bytebuf_init(&err);
+    SAG_ASSERT_EQ_I64(sag_args_parse(&args, 2, argv, &err), SAG_EXIT_ERR);
+    SAG_ASSERT(buf_equals(&err,
+        "sagitta: error: option '--config' requires an argument\n"));
+    bytebuf_free(&err);
+}

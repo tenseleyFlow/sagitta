@@ -1232,7 +1232,20 @@ typedef struct FlOptStage {
     OptVal value;
     u32 checkpoint;
     u32 ledger_id;
+    bool created;
 } FlOptStage;
+
+static void option_stage_rollback(Ed *ed, FlOptStage *staged, u32 n)
+{
+    while (n != 0U) {
+        FlOptStage *stage = &staged[--n];
+
+        if (stage->created)
+            (void)sag_opt_remove(ed, stage->ledger_id);
+        else
+            (void)sag_opt_rollback(ed, stage->checkpoint);
+    }
+}
 
 static bool option_from_fl(FlVm *vm, FlValue value, OptVal *out)
 {
@@ -1306,12 +1319,7 @@ bool fl_api_set_options(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
             vm->ed, staged[i].name->b, staged[i].name->len, &err);
         if (staged[i].checkpoint == 0U) {
             const FlStr *bad = staged[i].name;
-            u32 rollback = i;
-
-            while (rollback != 0U) {
-                rollback--;
-                (void)sag_opt_remove(vm->ed, staged[rollback].ledger_id);
-            }
+            option_stage_rollback(vm->ed, staged, i);
             free(staged);
             return option_map_error(vm, bad, err);
         }
@@ -1319,21 +1327,20 @@ bool fl_api_set_options(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
                          staged[i].name->b, staged[i].name->len,
                          &staged[i].value, &err)) {
             const FlStr *bad = staged[i].name;
-            u32 rollback = i;
-
             sag_opt_discard(vm->ed, staged[i].checkpoint);
-            while (rollback != 0U) {
-                rollback--;
-                (void)sag_opt_remove(vm->ed, staged[rollback].ledger_id);
-            }
+            option_stage_rollback(vm->ed, staged, i);
             free(staged);
             return option_map_error(vm, bad, err);
         }
         staged[i].ledger_id = sag_opt_commit(vm->ed, origin,
-                                             staged[i].checkpoint);
+                                             staged[i].checkpoint,
+                                             &staged[i].created);
         if (staged[i].ledger_id == 0U)
             SAG_BUG("validated option registration could not commit");
     }
+    for (i = 0U; i < n; i++)
+        if (!staged[i].created)
+            sag_opt_discard(vm->ed, staged[i].checkpoint);
     free(staged);
     *out = FL_NIL_V;
     return true;

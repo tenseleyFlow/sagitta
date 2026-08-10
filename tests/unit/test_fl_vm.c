@@ -791,11 +791,11 @@ void test_fl_vm_deferred_surfaces_name_their_sprint(void)
     SAG_ASSERT(fl_map_get((FlMap *)out.as.o,
                           FL_OBJ_V(FL_STR, fl_str_new(&f.vm, "msg", 3U)),
                           &got));
-    SAG_ASSERT_NOT_NULL(strstr(((FlStr *)got.as.o)->b, "Sprint 36"));
+    SAG_ASSERT_NOT_NULL(strstr(((FlStr *)got.as.o)->b, "expects"));
     vf_close(&f);
 
     SAG_ASSERT_EQ_I64(strcmp(fl_deferred_msg("set"),
-                             "set lands in Sprint 36"), 0);
+                             "undefined name 'set'"), 0);
     SAG_ASSERT_EQ_I64(strcmp(fl_deferred_msg("nope"),
                              "undefined name 'nope'"), 0);
 }

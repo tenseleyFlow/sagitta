@@ -16,6 +16,7 @@
 #include "ui/pickers.h"
 #include "ui/viewport.h"
 #include "fl/flruntime.h"
+#include "fl/flconf.h"
 #include "edit/option.h"
 #include "edit/bind.h"
 #include "unicode/width.h"
@@ -527,6 +528,7 @@ void sag_ed_free(Ed *ed)
     /* Close hooks are the last script-visible point for every buffer. */
     ed_buffer_free(ed);
     sag_bind_free(ed);
+    sag_config_free(ed);
     sag_fl_runtime_free(ed);
     sag_opt_free(ed);
     sag_record_free(&ed->rec);
@@ -1724,7 +1726,7 @@ static const char *ed_getenv(const char *name)
     return getenv(name);
 }
 
-static int ed_driver_inner(const char *path)
+static int ed_driver_inner(const char *path, const SagEdStartup *startup)
 {
     Ed ed;
     SagLoadErr load = SAG_LOAD_OK;
@@ -1733,6 +1735,7 @@ static int ed_driver_inner(const char *path)
     u16 cols;
 
     sag_ed_init(&ed);
+    sag_config_init(&ed, startup);
     errno = 0;
     if (!sag_tty_open(&ed.tty)) {
         result = errno == ENOTTY ? SAG_EXIT_ERR : SAG_EXIT_IO;
@@ -1784,7 +1787,9 @@ static int ed_driver_inner(const char *path)
      * land, and the lock is claimed before the first change can mark
      * anything dirty.
      */
-    sag_state_open(&ed);
+    (void)sag_config_load_all(&ed, NULL);
+    if (!ed.clean)
+        sag_state_open(&ed);
     /*
      * Restored only when no file was named.  `sag sagitta.c` is a
      * request to edit that file, and burying it under forty restored
@@ -1792,7 +1797,7 @@ static int ed_driver_inner(const char *path)
      * when you start the way you left — in the directory, with no
      * argument.
      */
-    if (path == NULL)
+    if (path == NULL && !ed.clean)
         (void)sag_ws_restore(&ed);
     /* The workspace hook sees restored tabs and buffers, and runs before
      * the first paint.  Startup used to paint once before restore, which
@@ -1803,19 +1808,25 @@ static int ed_driver_inner(const char *path)
     result = ed.quit ? ed.exit_code : sag_loop_run(&ed);
     sag_fl_hook_workspace(&ed, FL_EV_WS_CLOSE);
     /* Clean quit: the unconditional save, before anything is freed. */
-    sag_state_close(&ed);
+    if (!ed.clean)
+        sag_state_close(&ed);
     sag_ed_free(&ed);
     return result;
 }
 
 int sag_ed_driver(const char *path)
 {
+    return sag_ed_driver_opts(path, NULL);
+}
+
+int sag_ed_driver_opts(const char *path, const SagEdStartup *startup)
+{
     TtyGuard guard;
     int result;
 
     if (!sag_tty_guard_start(&guard))
         return SAG_EXIT_IO;
-    result = ed_driver_inner(path);
+    result = ed_driver_inner(path, startup);
     if (!sag_tty_guard_finish(&guard) && result == SAG_EXIT_OK)
         result = SAG_EXIT_IO;
     return result;

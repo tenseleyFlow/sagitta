@@ -66,6 +66,7 @@ static void edit_fixture(Ed *ed, const u8 *bytes, size_t len, SagEol eol)
 
     sag_ed_init(ed);
     SAG_ASSERT(sag_ed_open_scratch(ed));
+    sag_test_load_runtime(ed);
     sag_undo_free(ed->buffer.undo);
     sag_textbuf_free(ed->buffer.tb);
     ed->buffer.tb = sag_textbuf_from_bytes(bytes, len);

@@ -13,6 +13,8 @@ typedef struct {
     void (*fn)(void);
 } SagTest;
 
+typedef struct Ed Ed;
+
 extern const SagTest sag_tests[];
 extern const size_t sag_tests_len;
 
@@ -36,6 +38,7 @@ void sag_test_teardown(void);
 
 bool sag_test_name_matches(const char *name, const char *filter);
 const char *sag_test_program_path(void);
+void sag_test_load_runtime(Ed *ed);
 
 #define SAG_ASSERT(cond)                                                      \
     do {                                                                      \

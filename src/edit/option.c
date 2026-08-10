@@ -647,6 +647,7 @@ u32 sag_opt_checkpoint(Ed *ed, const char *name, u32 len,
     OptVal previous;
     Buffer *buffer;
     Win *win;
+    u32 slot;
     u32 want;
 
     if (err != NULL)
@@ -674,7 +675,10 @@ u32 sag_opt_checkpoint(Ed *ed, const char *name, u32 len,
         return 0U;
     }
     history = history_get(ed);
-    if (history->n == history->cap) {
+    for (slot = 0U; slot < history->n; slot++)
+        if (!history->v[slot].pending && !history->v[slot].active)
+            break;
+    if (slot == history->n && history->n == history->cap) {
         want = history->cap == 0U ? 8U : history->cap * 2U;
         history->v = sag_xreallocarray(history->v, want,
                                        sizeof(*history->v));
@@ -682,10 +686,9 @@ u32 sag_opt_checkpoint(Ed *ed, const char *name, u32 len,
                      (size_t)(want - history->cap) * sizeof(*history->v));
         history->cap = want;
     }
-    undo = &history->v[history->n++];
+    undo = &history->v[slot];
     (void)memset(undo, 0, sizeof(*undo));
     if (!stored_assign(&undo->previous, &previous)) {
-        history->n--;
         *err = "could not retain the old option value";
         return 0U;
     }
@@ -694,20 +697,58 @@ u32 sag_opt_checkpoint(Ed *ed, const char *name, u32 len,
     undo->target_id = desc->scope == (u8)SAG_OPT_BUFFER ? buffer->id :
                       desc->scope == (u8)SAG_OPT_WINDOW ? win->id : 0U;
     undo->pending = true;
-    return history->n;
+    if (slot == history->n)
+        history->n++;
+    return slot + 1U;
 }
 
-u32 sag_opt_commit(Ed *ed, u32 origin_id, u32 checkpoint)
+static u32 matching_registration(const Ed *ed, u32 origin_id,
+                                 const SagOptUndo *want)
+{
+    const SagOptHistory *history;
+    u32 i;
+
+    if (ed == NULL || (history = ed->opt_history) == NULL)
+        return 0U;
+    for (i = 0U; i < history->n; i++) {
+        const SagOptUndo *undo = &history->v[i];
+        const FlRegistration *registration;
+
+        if (!undo->active || undo->desc_index != want->desc_index ||
+            undo->scope != want->scope || undo->target_id != want->target_id ||
+            undo->ledger_id == 0U ||
+            undo->ledger_id > ed->hooks.ledger.n)
+            continue;
+        registration = &ed->hooks.ledger.v[undo->ledger_id - 1U];
+        if (registration->active &&
+            registration->kind == (u8)REG_OPTION &&
+            registration->origin_id == origin_id)
+            return undo->ledger_id;
+    }
+    return 0U;
+}
+
+u32 sag_opt_commit(Ed *ed, u32 origin_id, u32 checkpoint, bool *created)
 {
     SagOptUndo *undo = undo_by_checkpoint(ed, checkpoint);
+    u32 existing;
 
+    if (created != NULL)
+        *created = false;
     if (undo == NULL || !undo->pending || undo->active ||
         origin_id == FL_ORIGIN_ID_NONE)
         return 0U;
+    existing = matching_registration(ed, origin_id, undo);
+    if (existing != 0U) {
+        undo->ledger_id = existing;
+        return existing;
+    }
     undo->ledger_id = fl_reg_add(&ed->hooks.ledger, origin_id, REG_OPTION,
                                  checkpoint);
     undo->pending = false;
     undo->active = true;
+    if (created != NULL)
+        *created = true;
     return undo->ledger_id;
 }
 
@@ -755,15 +796,44 @@ static struct OptStored *undo_target(Ed *ed, const SagOptUndo *undo,
     return stored;
 }
 
-bool sag_opt_remove(Ed *ed, u32 ledger_id)
+static void undo_restore(Ed *ed, SagOptUndo *undo)
 {
-    FlRegistration *registration;
-    SagOptUndo *undo;
     const OptDesc *desc;
     struct OptStored current = {0};
     struct OptStored *target;
     Buffer *buffer = NULL;
     Win *win = NULL;
+
+    if (undo->desc_index >= sag_opts_len)
+        SAG_BUG("option rollback has an invalid descriptor");
+    desc = &sag_opts[undo->desc_index];
+    target = undo_target(ed, undo, desc, &buffer, &win);
+    if (target == NULL)
+        return;
+    if (!stored_assign(&current, &target->value))
+        SAG_BUG("option rollback could not retain current value");
+    if (!stored_assign(target, &undo->previous.value))
+        SAG_BUG("option rollback could not restore previous value");
+    option_changed_target(ed, desc, &current.value, &target->value,
+                          buffer, win);
+    stored_clear(&current);
+}
+
+bool sag_opt_rollback(Ed *ed, u32 checkpoint)
+{
+    SagOptUndo *undo = undo_by_checkpoint(ed, checkpoint);
+
+    if (undo == NULL || !undo->pending || undo->active)
+        return false;
+    undo_restore(ed, undo);
+    sag_opt_discard(ed, checkpoint);
+    return true;
+}
+
+bool sag_opt_remove(Ed *ed, u32 ledger_id)
+{
+    FlRegistration *registration;
+    SagOptUndo *undo;
 
     if (ed == NULL || ledger_id == 0U || ledger_id > ed->hooks.ledger.n)
         return false;
@@ -774,17 +844,7 @@ bool sag_opt_remove(Ed *ed, u32 ledger_id)
     if (undo == NULL || !undo->active || undo->ledger_id != ledger_id ||
         undo->desc_index >= sag_opts_len)
         return false;
-    desc = &sag_opts[undo->desc_index];
-    target = undo_target(ed, undo, desc, &buffer, &win);
-    if (target != NULL) {
-        if (!stored_assign(&current, &target->value))
-            SAG_BUG("option teardown could not retain current value");
-        if (!stored_assign(target, &undo->previous.value))
-            SAG_BUG("option teardown could not restore previous value");
-        option_changed_target(ed, desc, &current.value, &target->value,
-                              buffer, win);
-        stored_clear(&current);
-    }
+    undo_restore(ed, undo);
     stored_clear(&undo->previous);
     undo->active = false;
     (void)fl_reg_remove(&ed->hooks.ledger, ledger_id);

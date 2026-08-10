@@ -32,5 +32,6 @@ u32 sag_bind_rebuild_count(const Ed *ed);
 bool fl_bind_native(FlVm *vm, FlValue *args, u32 nargs, FlValue *out);
 bool fl_unbind_native(FlVm *vm, FlValue *args, u32 nargs, FlValue *out);
 CmdStatus sag_bind_closure_cmd(CmdCtx *cx);
+CmdStatus sag_bind_cmd_map(CmdCtx *cx);
 
 #endif /* SAG_EDIT_BIND_H */

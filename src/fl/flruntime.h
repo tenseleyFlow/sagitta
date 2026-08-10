@@ -34,6 +34,9 @@ FlFn *fl_compile_str(FlRuntime *rt, const u8 *source, size_t len,
  * one ordinary outer VM transaction.  The source is visible to every editor
  * command reached by the chunk for the duration of the call. */
 bool fl_call_chunk(FlRuntime *rt, FlFn *fn, CmdSource source);
+/* Execute a retained closure with its own globals map.  Config files use
+ * this entry so each origin can be torn down without sharing globals. */
+bool fl_call_value(FlRuntime *rt, FlValue callable, CmdSource source);
 
 /* Sprint 35's bounded register cache.  Registers are lower-case a..z.  A hit
  * requires byte-identical source, not merely matching register metadata.

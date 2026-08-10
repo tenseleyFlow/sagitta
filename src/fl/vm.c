@@ -204,21 +204,10 @@ bool fl_raise(FlVm *vm, const char *kind, const char *fmt, ...)
  */
 static const char *deferred_sprint(const char *name)
 {
-    /*
-     * `buf` left this list when flapi.c registered it (s34 §3).  A name
-     * that EXISTS must not be reported as deferred: the user needs to be
-     * told "import buf", not "buf lands in Sprint 34", which would send
-     * them away from a module that is sitting right there.
-     */
-    static const char *const S36[] = {"bind", "unbind", "set"};
-    size_t i;
-
-    if (name == NULL)
-        return NULL;
-    for (i = 0U; i < SAG_ARRAY_LEN(S36); i++) {
-        if (strcmp(name, S36[i]) == 0)
-            return "Sprint 36";
-    }
+    /* All formerly deferred prelude names through Sprint 36 are live.
+     * Later deferred product surfaces are editor commands and carry their
+     * sprint in the command registry rather than masquerading as globals. */
+    (void)name;
     return NULL;
 }
 

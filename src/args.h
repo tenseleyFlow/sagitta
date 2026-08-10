@@ -11,6 +11,9 @@ typedef struct {
     bool help;
     bool help_cmds;
     bool clean;
+    const char *config_path;
+    bool no_workspace_config;
+    bool trust_workspace;
     const char *batch_script;
     const char **files;
     size_t nfiles;

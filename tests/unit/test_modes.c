@@ -23,6 +23,7 @@ static void modes_editor(Ed *ed)
 {
     sag_ed_init(ed);
     SAG_ASSERT(sag_ed_open_scratch(ed));
+    sag_test_load_runtime(ed);
     SAG_ASSERT_EQ_U64(ed->mode, SAG_MODE_L);
     SAG_ASSERT_EQ_U64(ed->prev_unit, SAG_MODE_L);
 }

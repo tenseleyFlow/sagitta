@@ -18,7 +18,10 @@ static const char help_text[] =
     "  --help           Show this help.\n"
     "  --help-cmds      List named editor commands.\n"
     "  --version        Show version and compiled modules.\n"
-    "  --clean          Ignore user configuration (Sprint 36).\n"
+    "  --clean          Load only the panic keymap; keep no state/history.\n"
+    "  --config PATH    Use PATH instead of the user init.fl.\n"
+    "  --no-workspace-config  Do not load .sagitta.fl.\n"
+    "  --trust-workspace      Pre-grant this workspace configuration.\n"
     "  --batch <file>   Run a Fletch batch script (Sprint 37).\n"
     "\n"
     "Subcommands:\n"
@@ -89,6 +92,8 @@ static void print_commands(void)
 
 static int run_driver(const SagArgs *args)
 {
+    SagEdStartup startup;
+
     if (args->selftest_bug) {
         SAG_BUG("selftest");
     }
@@ -109,11 +114,6 @@ static int run_driver(const SagArgs *args)
             "sagitta: error: batch mode is not yet implemented: Sprint 37\n");
         return SAG_EXIT_ERR;
     }
-    if (args->clean) {
-        (void)fprintf(stderr,
-            "sagitta: error: --clean is not yet implemented: Sprint 36\n");
-        return SAG_EXIT_ERR;
-    }
     if (args->nfiles != 0U && strcmp(args->files[0], "pkg") == 0) {
         (void)fprintf(stderr, "sagitta: error: unknown argument '%s'\n",
             args->files[0]);
@@ -124,7 +124,11 @@ static int run_driver(const SagArgs *args)
             "sagitta: error: multiple files are not yet implemented: Sprint 23 (tabs)\n");
         return SAG_EXIT_ERR;
     }
-    return sag_ed_driver(args->nfiles == 0U ? NULL : args->files[0]);
+    startup = (SagEdStartup){args->config_path, args->clean,
+                             args->no_workspace_config,
+                             args->trust_workspace};
+    return sag_ed_driver_opts(args->nfiles == 0U ? NULL : args->files[0],
+                              &startup);
 }
 
 int main(int argc, char **argv)

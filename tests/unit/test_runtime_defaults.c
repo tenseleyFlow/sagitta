@@ -10,6 +10,7 @@
 #include "edit/keymap.h"
 #include "edit/option.h"
 #include "fl/flruntime.h"
+#include "fl/record.h"
 #include "util/buf.h"
 
 /* Frozen immediately before the Sprint 36 migration from keys_default.c. */
@@ -112,8 +113,9 @@ static const BindRow frozen_L[] = {
     {"g ,", "ed.change.newer", 0, NULL},
     {"G", "ed.move.buf.end", 0, NULL},
     {"s", "ed.file.save", 0, NULL},
-    {"q", "ed.quit", 0, NULL},
-    {"q !", "ed.quit_force", 0, NULL},
+    {"q", "ed.macro.record", 0, NULL},
+    {"@", "ed.macro.replay", 0, NULL},
+    {"@ @", "ed.macro.replay_last", 0, NULL},
     {"C-z", "ed.suspend", 0, NULL},
     {"C-l", "ed.redraw", 0, NULL},
     {"C-g", "ed.ui.message_expand", 0, NULL},
@@ -141,6 +143,9 @@ static const BindRow frozen_W[] = {
     {":", "ed.mode.enter", 0, "E"},
     {"<esc>", "ed.mode.escape", 0, NULL},
     {"C-g", "ed.ui.message_expand", 0, NULL},
+    {"q", "ed.macro.record", 0, NULL},
+    {"@", "ed.macro.replay", 0, NULL},
+    {"@ @", "ed.macro.replay_last", 0, NULL},
 };
 
 static const BindRow frozen_B[] = {
@@ -156,6 +161,9 @@ static const BindRow frozen_B[] = {
     {":", "ed.mode.enter", 0, "E"},
     {"<esc>", "ed.mode.escape", 0, NULL},
     {"C-g", "ed.ui.message_expand", 0, NULL},
+    {"q", "ed.macro.record", 0, NULL},
+    {"@", "ed.macro.replay", 0, NULL},
+    {"@ @", "ed.macro.replay_last", 0, NULL},
 };
 
 static const BindRow frozen_I[] = {
@@ -313,7 +321,7 @@ void test_runtime_defaults_rebuild_frozen_keymap(void)
                                   (u32)(source.len - 1U)), SAG_CMD_OK);
     sag_bind_batch_end(&ed);
     SAG_ASSERT_EQ_U64(sag_bind_rebuild_count(&ed), rebuilds + 1U);
-    SAG_ASSERT_EQ_U64(sag_bind_active_count(&ed), 148U);
+    SAG_ASSERT_EQ_U64(sag_bind_active_count(&ed), 157U);
     for (mode = 0U; mode < (u32)SAG_MODE__N; mode++) {
         if (mode != (u32)SAG_MODE_H)
             panic_rows += sag_keymap_binding_count(&ed.mode_keys[mode]);

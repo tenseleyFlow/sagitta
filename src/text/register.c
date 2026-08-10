@@ -253,6 +253,18 @@ void sag_reg_set(Registers *r, u8 name, const RegVal *v)
     reg_set_raw(dst, v);
 }
 
+void sag_reg_set_macro(Registers *r, u8 name, const RegVal *v, bool append)
+{
+    if (r == NULL || v == NULL)
+        SAG_BUG("sag_reg_set_macro: NULL argument");
+    if (name < (u8)'a' || name > (u8)'z')
+        SAG_BUG("invalid macro register name 0x%02x", (unsigned)name);
+    if (append)
+        sag_reg_append(r, (u8)(name - (u8)'a' + (u8)'A'), v);
+    else
+        sag_reg_set(r, name, v);
+}
+
 void sag_reg_set_cmdline(Registers *r, const u8 *bytes, size_t len)
 {
     if (r == NULL || (bytes == NULL && len != 0U))

@@ -65,10 +65,21 @@ void fl_hook_error_limit(FlHookTable *t, u32 limit)
 u32 fl_reg_add(FlRegLedger *l, u32 origin_id, RegKind kind, u32 handle)
 {
     FlRegistration *r;
+    u32 i;
     u32 want;
 
     if (l == NULL)
         SAG_BUG("fletch registration ledger: NULL");
+    for (i = 0U; i < l->n; i++) {
+        if (!l->v[i].active) {
+            r = &l->v[i];
+            r->origin_id = origin_id;
+            r->kind = (u8)kind;
+            r->handle = handle;
+            r->active = true;
+            return i + 1U;
+        }
+    }
     if (l->n == l->cap) {
         want = l->cap == 0U ? 8U : l->cap * 2U;
         l->v = (FlRegistration *)sag_xreallocarray(l->v, want,
@@ -100,6 +111,7 @@ bool fl_reg_remove(FlRegLedger *l, u32 ledger_id)
 u32 fl_hook_add(FlHookTable *t, u32 origin, u32 event, FlValue fn)
 {
     FlHook *h;
+    u32 slot;
     u32 want;
     u32 ledger_id;
 
@@ -107,15 +119,18 @@ u32 fl_hook_add(FlHookTable *t, u32 origin, u32 event, FlValue fn)
         SAG_BUG("fletch hooks: invalid add");
     if (fn.t != (u8)FL_CLOSURE && fn.t != (u8)FL_NATIVE)
         SAG_BUG("fletch hooks: callback is not callable");
-    if (t->n == t->cap) {
+    for (slot = 0U; slot < t->n; slot++)
+        if (!t->v[slot].active)
+            break;
+    if (slot == t->n && t->n == t->cap) {
         want = t->cap == 0U ? 8U : t->cap * 2U;
         t->v = (FlHook *)sag_xreallocarray(t->v, want, sizeof(*t->v));
         t->cap = want;
     }
     /* The handle is the insertion index plus one and stays stable because
      * hook slots are tombstoned, never compacted during callback dispatch. */
-    ledger_id = fl_reg_add(&t->ledger, origin, REG_HOOK, t->n + 1U);
-    h = &t->v[t->n++];
+    ledger_id = fl_reg_add(&t->ledger, origin, REG_HOOK, slot + 1U);
+    h = &t->v[slot];
     h->event = event;
     h->origin = origin;
     h->fn = fn;
@@ -123,6 +138,8 @@ u32 fl_hook_add(FlHookTable *t, u32 origin, u32 event, FlValue fn)
     h->disabled = false;
     h->ledger_id = ledger_id;
     h->active = true;
+    if (slot == t->n)
+        t->n++;
     return ledger_id;
 }
 

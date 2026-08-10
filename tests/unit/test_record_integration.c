@@ -2,6 +2,7 @@
 
 #include <string.h>
 
+#include "edit/dispatch.h"
 #include "edit/ed.h"
 #include "edit/flapi_cmds.h"
 #include "fl/flruntime.h"
@@ -295,6 +296,21 @@ void test_record_cmdline_accepts_prompt_edits_and_keeps_status_messages(void)
     SAG_ASSERT(!sag_record_active(&f.ed));
     SAG_ASSERT(f.ed.msg.active);
     SAG_ASSERT(strncmp(f.ed.msg.text, "recorded @a (0 events, ", 23U) == 0);
+
+    SAG_ASSERT_EQ_I64(rf_run(&f, "ed.macro.record", NULL, 0U, 1U,
+                             SAG_SRC_TEST), SAG_CMD_OK);
+    SAG_ASSERT(f.ed.capture_cmd.v != 0U);
+    key.kind = SAG_EV_KEY;
+    key.ev = SAG_KEY_PRESS;
+    key.code = (u32)'b';
+    key.ntext = 1U;
+    key.text[0] = (u8)'b';
+    sag_dispatch_key(&f.ed, key, 0);
+    SAG_ASSERT(sag_record_active(&f.ed));
+    SAG_ASSERT_EQ_U64(f.ed.rec.reg, (u8)'b');
+    SAG_ASSERT_EQ_I64(rf_run(&f, "ed.macro.record", NULL, 0U, 1U,
+                             SAG_SRC_TEST), SAG_CMD_OK);
+    SAG_ASSERT(!sag_record_active(&f.ed));
     rf_close(&f);
 }
 

@@ -18,6 +18,7 @@ static void fixture_init(SelActionFixture *f, const u8 *bytes, size_t len)
 {
     sag_ed_init(&f->ed);
     SAG_ASSERT(sag_ed_open_scratch(&f->ed));
+    sag_test_load_runtime(&f->ed);
     sag_undo_free(f->ed.buffer.undo);
     sag_textbuf_free(f->ed.buffer.tb);
     f->ed.buffer.tb = sag_textbuf_from_bytes(bytes, len);

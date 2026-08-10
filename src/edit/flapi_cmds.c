@@ -234,10 +234,7 @@ CmdStatus sag_flapi_cmd_reg_set(CmdCtx *cx)
     sag_regval_init(&value);
     value.type = SAG_REG_CHARWISE;
     bytebuf_append(&value.bytes, cx->sarg, cx->sarg_len);
-    if (cx->bang)
-        sag_reg_append(&cx->ed->regs, (u8)(name - 'a' + 'A'), &value);
-    else
-        sag_reg_set(&cx->ed->regs, name, &value);
+    sag_reg_set_macro(&cx->ed->regs, name, &value, cx->bang);
     fl_macro_cache_invalidate(cx->ed->fl, name);
     sag_regval_free(&value);
     return SAG_CMD_OK;

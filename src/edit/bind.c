@@ -145,6 +145,25 @@ static SagBindRow *find_sequence(Ed *ed, Mode mode, const char *seq)
     return NULL;
 }
 
+static bool row_is_shadowed(const SagBindings *binds, u32 index,
+                            Mode mode, const char *seq,
+                            const SagBindRow *extra)
+{
+    u32 i;
+
+    if (extra != NULL && extra->mode == mode &&
+        strcmp(extra->seq, seq) == 0)
+        return true;
+    for (i = index + 1U; i < binds->n; i++) {
+        const SagBindRow *later = &binds->v[i];
+
+        if (later->active && later->mode == mode &&
+            strcmp(later->seq, seq) == 0)
+            return true;
+    }
+    return false;
+}
+
 static bool rows_for_mode(Ed *ed, Mode mode, const SagBindRow *extra,
                           BindRow **out, u32 *out_n)
 {
@@ -155,13 +174,15 @@ static bool rows_for_mode(Ed *ed, Mode mode, const SagBindRow *extra,
     u32 at = 0U;
 
     for (i = 0U; i < binds->n; i++)
-        if (binds->v[i].active && binds->v[i].mode == mode)
+        if (binds->v[i].active && binds->v[i].mode == mode &&
+            !row_is_shadowed(binds, i, mode, binds->v[i].seq, extra))
             n++;
     rows = n == 0U ? NULL : sag_xcalloc(n, sizeof(*rows));
     for (i = 0U; i < binds->n; i++) {
         SagBindRow *row = &binds->v[i];
 
-        if (!row->active || row->mode != mode)
+        if (!row->active || row->mode != mode ||
+            row_is_shadowed(binds, i, mode, row->seq, extra))
             continue;
         rows[at++] = (BindRow){row->seq, row->cmd, row->iarg, row->sarg};
     }
@@ -236,6 +257,7 @@ u32 sag_bind_add(Ed *ed, u32 origin, Mode mode, const char *seq,
     SagBindRow candidate = {0};
     SagBindRow *row;
     const CmdDesc *desc;
+    u32 slot;
     u32 want;
 
     if (ed == NULL || (binds = ed->bindings) == NULL ||
@@ -244,14 +266,9 @@ u32 sag_bind_add(Ed *ed, u32 origin, Mode mode, const char *seq,
         return 0U;
     }
     binds->error[0] = '\0';
-    if (find_sequence(ed, mode, seq) != NULL) {
-        SagBindRow *owner = find_sequence(ed, mode, seq);
-
-        if (owner->origin == origin)
-            bind_error(ed, "duplicate key sequence");
-        else
-            bind_error(ed, "sequence is already owned by %s",
-                       fl_origin_label(ed, owner->origin));
+    if (find_sequence(ed, mode, seq) != NULL &&
+        find_sequence(ed, mode, seq)->origin == origin) {
+        bind_error(ed, "duplicate key sequence");
         return 0U;
     }
     if (fn.t == (u8)FL_CLOSURE || fn.t == (u8)FL_NATIVE) {
@@ -275,12 +292,20 @@ u32 sag_bind_add(Ed *ed, u32 origin, Mode mode, const char *seq,
     if (!validate_candidate(ed, mode, &candidate))
         return 0U;
 
-    if (binds->n == binds->cap) {
+    for (slot = 0U; slot < binds->n; slot++)
+        if (!binds->v[slot].active)
+            break;
+    if (slot == binds->n && binds->n == binds->cap) {
         want = binds->cap == 0U ? 16U : binds->cap * 2U;
         binds->v = sag_xreallocarray(binds->v, want, sizeof(*binds->v));
         binds->cap = want;
     }
-    row = &binds->v[binds->n];
+    row = &binds->v[slot];
+    if (slot < binds->n) {
+        free(row->seq);
+        free(row->cmd);
+        free(row->sarg);
+    }
     *row = candidate;
     row->seq = bind_strdup(seq);
     row->cmd = bind_strdup(desc->name);
@@ -288,10 +313,11 @@ u32 sag_bind_add(Ed *ed, u32 origin, Mode mode, const char *seq,
     row->origin = origin;
     row->active = true;
     row->ledger_id = fl_reg_add(&ed->hooks.ledger, origin, REG_BIND,
-                                binds->n + 1U);
+                                slot + 1U);
     if (fn.t == (u8)FL_CLOSURE || fn.t == (u8)FL_NATIVE)
         row->iarg = (i64)row->ledger_id;
-    binds->n++;
+    if (slot == binds->n)
+        binds->n++;
     binds->pending = true;
     if (binds->batch_depth == 0U)
         sag_bind_rebuild(ed);
@@ -377,6 +403,55 @@ u32 sag_bind_rebuild_count(const Ed *ed)
 {
     return ed == NULL || ed->bindings == NULL ? 0U :
            ed->bindings->rebuilds;
+}
+
+typedef struct MapListCtx {
+    Bytebuf out;
+} MapListCtx;
+
+static bool map_list_row(const KeyId *seq, u32 n,
+                         const Binding *binding, void *ctx)
+{
+    MapListCtx *list = ctx;
+    const CmdDesc *desc = sag_cmd_desc(binding->cmd);
+    char number[32];
+
+    sag_key_format_seq(seq, n, &list->out);
+    bytebuf_append(&list->out, "  ", 2U);
+    bytebuf_append(&list->out, desc == NULL ? "<unknown>" : desc->name,
+                   strlen(desc == NULL ? "<unknown>" : desc->name));
+    if (binding->iarg != 0) {
+        int used = snprintf(number, sizeof(number), " %lld",
+                            (long long)binding->iarg);
+
+        if (used > 0)
+            bytebuf_append(&list->out, number, (size_t)used);
+    }
+    if (binding->sarg != NULL) {
+        bytebuf_push_u8(&list->out, (u8)' ');
+        bytebuf_append(&list->out, binding->sarg, strlen(binding->sarg));
+    }
+    bytebuf_push_u8(&list->out, (u8)'\n');
+    return true;
+}
+
+CmdStatus sag_bind_cmd_map(CmdCtx *cx)
+{
+    MapListCtx list;
+
+    if (cx == NULL || cx->ed == NULL || cx->ed->mode >= SAG_MODE__N)
+        return SAG_CMD_ERR_ARG;
+    bytebuf_init(&list.out);
+    (void)sag_keymap_visit(&cx->ed->bind_keys[cx->ed->mode],
+                           map_list_row, &list);
+    if (list.out.len == 0U)
+        sag_msg(cx->ed, SAG_MSG_INFO, "no configured bindings for mode %s",
+                sag_modes[cx->ed->mode].name);
+    else
+        sag_msg(cx->ed, SAG_MSG_INFO, "%.*s", (int)list.out.len,
+                (const char *)list.out.data);
+    bytebuf_free(&list.out);
+    return SAG_CMD_OK;
 }
 
 static bool get_string(FlVm *vm, FlValue v, const char *what,

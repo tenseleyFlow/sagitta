@@ -82,6 +82,7 @@ MODDIR_plugins := plug
 # there.
 CFLAGS := -std=c11 -pedantic -Wall -Wextra -Werror -Wvla -g -O2 \
           -D_FORTIFY_SOURCE=2 \
+          -DSAG_RUNTIME_DIR_DEFAULT='"$(PREFIX)/share/sagitta/runtime"' \
           -MMD -MP -Isrc -Itests -Itests/pty -Itests/fuzz \
           -DSAG_WITH_LSP=$(if $(filter lsp,$(MODULES)),1,0) \
           -DSAG_WITH_AI=$(if $(filter ai,$(MODULES)),1,0) \
@@ -711,6 +712,7 @@ $(FAKECLIP): tests/unit/fakeclip.c | dirs
 #
 check: $(BUILD)/unit_tests $(BUILD)/sagitta test-fletch
 	$(UNIT_RUN)
+	scripts/bans.sh
 	scripts/check-cmd-dispatch.sh
 	scripts/check-fl-choke.sh
 	scripts/check-input.sh
@@ -722,6 +724,7 @@ check: $(BUILD)/unit_tests $(BUILD)/sagitta test-fletch
 test: $(BUILD)/unit_tests $(BUILD)/sagitta test-pty test-fletch \
       test-roundtrip test-record-corpus torture-build
 	$(UNIT_RUN)
+	scripts/bans.sh
 	scripts/check-cmd-dispatch.sh
 	scripts/check-fl-choke.sh
 	scripts/check-input.sh
@@ -1125,6 +1128,9 @@ install: all
 	install -d $(DESTDIR)$(PREFIX)/bin
 	install -m 0755 $(BUILD)/sagitta $(DESTDIR)$(PREFIX)/bin/sagitta
 	ln -sf sagitta $(DESTDIR)$(PREFIX)/bin/sag
+	install -d $(DESTDIR)$(PREFIX)/share/sagitta/runtime
+	install -m 0644 runtime/init.fl \
+		$(DESTDIR)$(PREFIX)/share/sagitta/runtime/init.fl
 
 clean:
 	rm -rf $(BUILD)

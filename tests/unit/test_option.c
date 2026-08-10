@@ -184,9 +184,7 @@ void test_option_fletch_set_map_is_atomic_and_cmdline_is_identical(void)
     SAG_ASSERT_EQ_I64(sag_fl_eval(&ed, later,
                                   (u32)(sizeof(later) - 1U)), SAG_CMD_OK);
     SAG_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 10);
-    SAG_ASSERT_EQ_U64(ed.hooks.ledger.n, before + 3U);
-    SAG_ASSERT(sag_opt_remove(&ed, before + 3U));
-    SAG_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 8);
+    SAG_ASSERT_EQ_U64(ed.hooks.ledger.n, before + 2U);
     SAG_ASSERT(sag_opt_remove(&ed, before + 2U));
     SAG_ASSERT(!opt_get(&ed, "wrap").as.b);
     SAG_ASSERT(sag_opt_remove(&ed, before + 1U));

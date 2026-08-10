@@ -122,6 +122,8 @@ void test_bind_closure_dispatches_from_frozen_mode_layer(void)
     Ed ed;
     KeyId id;
     const Binding *binding = NULL;
+    CmdCtx map = {0};
+    const char *shown;
 
     sag_ed_init(&ed);
     SAG_ASSERT(sag_ed_open_scratch(&ed));
@@ -135,6 +137,10 @@ void test_bind_closure_dispatches_from_frozen_mode_layer(void)
                                         NULL, &binding), SAG_MATCH_FULL);
     SAG_ASSERT_NOT_NULL(binding);
     SAG_ASSERT_EQ_STR(sag_cmd_desc(binding->cmd)->name, "ed.fl.closure");
+    map.ed = &ed;
+    SAG_ASSERT_EQ_I64(sag_bind_cmd_map(&map), SAG_CMD_OK);
+    shown = ed.msg.full == NULL ? ed.msg.text : ed.msg.full;
+    SAG_ASSERT_NOT_NULL(strstr(shown, "Z  ed.fl.closure"));
     sag_ed_handle_key(&ed, bind_key('Z'), 10);
     SAG_ASSERT(ed.errorbells);
     SAG_ASSERT_EQ_U64(ed.dispatch_count, 1U);
@@ -186,5 +192,51 @@ void test_bind_origin_ownership_copies_rows_and_batches_one_rebuild(void)
     SAG_ASSERT(sag_bind_remove(&ed, first));
     SAG_ASSERT(!sag_bind_remove(&ed, first));
     SAG_ASSERT_EQ_U64(sag_bind_active_count(&ed), 1U);
+    sag_ed_free(&ed);
+}
+
+void test_bind_later_origin_shadows_then_teardown_reveals_prior(void)
+{
+    Ed ed;
+    CmdId nop;
+    CmdId enter;
+    u32 builtin;
+    u32 workspace;
+    u32 lower;
+    u32 upper;
+    KeyId key;
+    const Binding *binding = NULL;
+
+    sag_ed_init(&ed);
+    nop = sag_cmd_lookup("ed.nop", 6U);
+    enter = sag_cmd_lookup("ed.mode.enter", 13U);
+    builtin = fl_origin_register(&ed, FL_ORIGIN_BUILTIN,
+                                 "/runtime/init.fl", 0U);
+    workspace = fl_origin_register(&ed, FL_ORIGIN_WORKSPACE,
+                                   "/work/.sagitta.fl", 0U);
+    sag_bind_batch_begin(&ed);
+    lower = sag_bind_add(&ed, builtin, SAG_MODE_L, "Z", nop, 0, NULL,
+                         FL_NIL_V);
+    upper = sag_bind_add(&ed, workspace, SAG_MODE_L, "Z", enter, 0, "W",
+                         FL_NIL_V);
+    sag_bind_batch_end(&ed);
+    SAG_ASSERT(lower != 0U);
+    SAG_ASSERT(upper != 0U);
+    SAG_ASSERT_EQ_U64(sag_bind_active_count(&ed), 2U);
+    SAG_ASSERT_EQ_U64(sag_key_parse_seq("Z", &key, 1U), 1U);
+    SAG_ASSERT_EQ_I64(sag_keymap_lookup(&ed.bind_keys[SAG_MODE_L], &key,
+                                        1U, NULL, &binding),
+                      SAG_MATCH_FULL);
+    SAG_ASSERT_NOT_NULL(binding);
+    SAG_ASSERT_EQ_STR(sag_cmd_desc(binding->cmd)->name, "ed.mode.enter");
+    SAG_ASSERT_EQ_STR(binding->sarg, "W");
+    SAG_ASSERT(sag_bind_remove(&ed, upper));
+    binding = NULL;
+    SAG_ASSERT_EQ_I64(sag_keymap_lookup(&ed.bind_keys[SAG_MODE_L], &key,
+                                        1U, NULL, &binding),
+                      SAG_MATCH_FULL);
+    SAG_ASSERT_NOT_NULL(binding);
+    SAG_ASSERT_EQ_STR(sag_cmd_desc(binding->cmd)->name, "ed.nop");
+    SAG_ASSERT(sag_bind_remove(&ed, lower));
     sag_ed_free(&ed);
 }

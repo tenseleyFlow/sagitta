@@ -256,6 +256,47 @@ if [ -s "$register_set_hits" ]; then
     cat "$register_set_hits" >>"$hits"
 fi
 
+#
+# Sprint 36 DoD 5: every option write goes through the one typed registry
+# choke point.  The registry implementation, its public declaration, and
+# the two specified front doors are the complete allow-list; a new caller
+# anywhere else would create a second origin/on-change policy surface.
+#
+option_set_calls()
+{
+    option_list=$1
+    option_out=$2
+    : >"$option_out"
+    while IFS= read -r file; do
+        case ${file#"$repo_dir"/} in
+            src/edit/option.c|src/edit/option.h|src/fl/flapi.c|src/ui/cmdline.c)
+                continue
+                ;;
+        esac
+        grep -nE -e '(^|[^[:alnum:]_])sag_opt_set[[:space:]]*\(' \
+            "$file" 2>/dev/null |
+            sed "s|^|${file#"$repo_dir"/}:|" >>"$option_out" || :
+    done <"$option_list"
+}
+
+option_set_calls "$source_files" "$tmp/option-set-hits"
+if [ -s "$tmp/option-set-hits" ]; then
+    echo "ban: option writes must use the typed option front doors" >>"$hits"
+    cat "$tmp/option-set-hits" >>"$hits"
+fi
+
+# Prove the allow-list catches the next call site instead of silently
+# becoming decorative as source layout evolves.
+option_seed=$tmp/seeded-option-call.c
+echo 'void seeded(void) { (void)sag_opt_set(ed, 0, "x", 1, v, err); }' \
+    >"$option_seed"
+printf '%s\n' "$option_seed" >"$tmp/option-seed-list"
+option_set_calls "$tmp/option-seed-list" "$tmp/option-seed-hits"
+if [ "$(wc -l <"$tmp/option-seed-hits" | tr -d ' ')" != "1" ]; then
+    echo "ban: the option-routing rule no longer fires on its own seed" \
+        >>"$hits"
+fi
+
 register=$repo_dir/src/text/register.c
 if grep -nE '(unicode/width\.h|sag_(cluster_)?width)' \
         "$register" >"$tmp/register-width-hits" 2>/dev/null; then

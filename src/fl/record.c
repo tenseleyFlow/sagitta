@@ -715,12 +715,24 @@ static bool command_register(const CmdCtx *cx, u8 *reg)
 
 CmdStatus sag_record_cmd_record(CmdCtx *cx)
 {
+    static const char name[] = "ed.macro.record";
+    CmdId id;
     u8 reg;
 
     if (cx == NULL || cx->ed == NULL)
         return SAG_CMD_ERR_ARG;
     if (cx->ed->rec.active && cx->sarg_len == 0U)
         return sag_record_stop(cx->ed);
+    if (cx->sarg_len == 0U) {
+        id = sag_cmd_lookup(name, (u32)(sizeof(name) - 1U));
+        if (id.v == 0U)
+            SAG_BUG("record command is missing from the registry");
+        cx->ed->capture_cmd = id;
+        cx->ed->capture_count = cx->count == 0U ? 1U : cx->count;
+        cx->ed->capture_count_given = cx->count_given;
+        sag_msg(cx->ed, SAG_MSG_INFO, "record register: a-z/A-Z");
+        return SAG_CMD_OK;
+    }
     if (!command_register(cx, &reg)) {
         sag_msg(cx->ed, SAG_MSG_ERROR, "record requires register a-z/A-Z");
         return SAG_CMD_ERR_ARG;

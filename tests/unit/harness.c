@@ -7,6 +7,11 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "edit/bind.h"
+#include "edit/ed.h"
+#include "fl/flruntime.h"
+#include "util/buf.h"
+
 typedef struct {
     SagLogLevel level;
     char *message;
@@ -203,6 +208,27 @@ static bool test_is_excluded(const char *name, const char **excluded,
 const char *sag_test_program_path(void)
 {
     return program_path;
+}
+
+void sag_test_load_runtime(Ed *ed)
+{
+    FILE *fp;
+    Bytebuf source;
+    u8 chunk[4096];
+    size_t n;
+
+    fp = fopen("runtime/init.fl", "rb");
+    SAG_ASSERT_NOT_NULL(fp);
+    bytebuf_init(&source);
+    while ((n = fread(chunk, 1U, sizeof(chunk), fp)) != 0U)
+        bytebuf_append(&source, chunk, n);
+    SAG_ASSERT(!ferror(fp));
+    SAG_ASSERT_EQ_I64(fclose(fp), 0);
+    sag_bind_batch_begin(ed);
+    SAG_ASSERT_EQ_I64(sag_fl_eval(ed, (const char *)source.data,
+                                  (u32)source.len), SAG_CMD_OK);
+    sag_bind_batch_end(ed);
+    bytebuf_free(&source);
 }
 
 static bool run_one_test(const SagTest *test)
