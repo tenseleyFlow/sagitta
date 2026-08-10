@@ -432,6 +432,7 @@ void sag_ed_init(Ed *ed)
         root = getcwd(NULL, 0U);
     ed->ws.dir = arena_strdup(&ed->arena, root == NULL ? "." : root);
     free(root);
+    fl_origin_reg_init(&ed->origins);
     sag_dispatch_init(ed);
     ed->dispatch_ready = true;
     ed->exit_code = SAG_EXIT_OK;
@@ -468,6 +469,7 @@ void sag_ed_free(Ed *ed)
     sag_term_oob_clear();
     if (ed->dispatch_ready)
         sag_dispatch_free(ed);
+    fl_origin_reg_free(&ed->origins);
     sag_timers_free(&ed->timers);
     bytebuf_free(&ed->paste);
     bytebuf_free(&ed->frame);

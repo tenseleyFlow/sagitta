@@ -5,6 +5,7 @@
 
 #include "edit/dispatch.h"
 #include "edit/job.h"
+#include "fl/origin.h"
 #include "edit/jumplist.h"
 #include "edit/pane_cmds.h"
 #include "edit/ws_cmds.h"
@@ -192,6 +193,14 @@ struct Ed {
     LineNo drawn_cursor_line;
     bool drawn_cursor_line_valid;
     bool drawn_top_valid;
+
+    /*
+     * Sprint 34: the origin registry (§2).  A value member rather than
+     * a pointer so a plain sag_ed_init has one -- a capability question
+     * asked of a half-built editor must have an answer, and "the
+     * registry has not been allocated yet" is not one.
+     */
+    FlOriginReg origins;
 
     bool dispatch_ready;
     bool model_ready;

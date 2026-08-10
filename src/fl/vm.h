@@ -13,6 +13,8 @@
 #include "util/base.h"
 #include "util/intern.h"
 
+typedef struct Ed Ed;
+
 enum {
     FL_STACK_MAX = 16384,     /* 256 KiB of FlValue                       */
     FL_FRAMES_MAX = 256,
@@ -185,6 +187,17 @@ struct FlVm {
      * the host decides what it is granting before it calls in.
      */
     FlOrigin root_origin;
+    /*
+     * Sprint 34: the editor this VM drives, or NULL for a headless run.
+     *
+     * A typed field rather than a cast of host->ud, because a void*
+     * that is sometimes an Ed is exactly the cast that goes wrong once
+     * -- and because every editor binding has to ask "is there a host"
+     * before it does anything, so the question deserves an answer that
+     * cannot be got wrong.  Set by fl_ed_attach (flapi.c) alongside
+     * vm->host; the two are never set apart.
+     */
+    Ed *ed;
 };
 
 bool fl_vm_init(FlVm *vm, Arena *a, Interner *in, DiagCtx *dc);

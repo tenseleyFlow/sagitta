@@ -158,26 +158,8 @@ bool fl_fmt_repl(FlVm *vm, Bytebuf *out, FlValue v, u32 max_depth);
  */
 void fl_re_cache_clear(void);
 
-/* ---------------------------------------------------------------- */
-/* Capabilities (spec §13)                                          */
-/* ---------------------------------------------------------------- */
-
-/*
- * The grant is read from the DEFINING MODULE of the calling function --
- * never from the stack top, never from a VM-global "current caps".
- *
- * Builtin frames are transparent, so `list.map(f, io.read)` checks f's
- * origin rather than list's.  That transparency is the whole mechanism:
- * without it, any stdlib function would launder authority for whatever
- * called it, and §13's promise that "a plugin calling a user-config
- * helper gains nothing" would be false.
- */
-FlOrigin fl_cap_origin(const FlVm *vm);
-const char *fl_cap_name(u32 cap);
-const char *fl_origin_name(const FlVm *vm, const FlOrigin *o);
-
-/* True when the caller holds every bit in `need`; otherwise raises kind
- * "capability" and returns false. */
-bool fl_cap_check(FlVm *vm, u32 need);
+/* The capability check (spec §13) moved to fl/origin.h in Sprint 34,
+ * which owns the origin registry it reads.  This header includes it, so
+ * a native that needs fl_cap_check still gets it from std.h. */
 
 #endif /* SAG_FL_STD_H */

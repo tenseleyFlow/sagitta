@@ -16,6 +16,7 @@
 #include <stddef.h>
 
 #include "fl/diag.h"
+#include "fl/origin.h"
 #include "util/base.h"
 #include "util/buf.h"
 
@@ -165,41 +166,11 @@ typedef struct FlChunk {
 } FlChunk;
 
 /*
- * Capability origin, spec §13.  Every FlFn carries the origin of the
- * module that DEFINED it, and that is the only thing a capability check
- * ever reads -- see fl_cap_origin in std.c.
- *
- * `kind` and `path_id` are separate on purpose.  The kind decides what
- * a grant means (a plugin's caps are prompted for, a config's are
- * implicit); the path is what an error message must name to be
- * actionable.  Collapsing them into one module index, as Sprint 30's
- * placeholder did, makes the cache key in §11 -- (realpath, origin
- * kind) -- inexpressible, and that key is what stops a plugin from
- * borrowing a config helper's authority.
+ * FlOriginKind, FlOrigin and the FL_CAP_* bits moved to fl/origin.h in
+ * Sprint 34, which owns the registry built on top of them.  They are
+ * still visible here -- FlFn carries an FlOrigin -- but there is one
+ * declaration, in the file named after it.
  */
-typedef enum {
-    FL_ORIGIN_BUILTIN = 0,   /* the seven modules; transparent to §13    */
-    FL_ORIGIN_CONFIG,
-    FL_ORIGIN_WORKSPACE,
-    FL_ORIGIN_PLUGIN,
-    FL_ORIGIN_CLI,
-    FL_ORIGIN_REPL
-} FlOriginKind;
-
-/* Capability bits (spec §13).  `shell` and `net` have no stdlib surface
- * in 1.0 -- they exist so Sprint 54 can prompt for them. */
-enum {
-    FL_CAP_FS_READ  = 1U << 0,
-    FL_CAP_FS_WRITE = 1U << 1,
-    FL_CAP_SHELL    = 1U << 2,
-    FL_CAP_NET      = 1U << 3
-};
-
-typedef struct FlOrigin {
-    u8 kind;         /* FlOriginKind                                     */
-    u32 path_id;     /* interned REALPATH; 0 for builtins                */
-    u32 caps;        /* FL_CAP_*                                         */
-} FlOrigin;
 
 /*
  * What a stack trace calls this function (Sprint 32 §6).
