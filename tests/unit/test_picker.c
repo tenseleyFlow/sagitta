@@ -51,6 +51,8 @@ static i32 g_accepted;
 static u8 g_accept_how;
 static u32 g_preview_calls;
 static Rect g_preview_rect;
+static const u8 *g_search_text;
+static size_t g_search_text_len;
 
 static bool pk_accept(Ed *ed, void *ctx, i32 payload, u8 how)
 {
@@ -68,6 +70,18 @@ static void pk_preview(Ed *ed, void *ctx, i32 payload, Rect r)
     (void)payload;
     g_preview_calls++;
     g_preview_rect = r;
+}
+
+static bool pk_search_part(void *ctx, i32 payload, u32 part,
+                           const u8 **text, size_t *len)
+{
+    (void)ctx;
+    (void)payload;
+    if (part != 0U)
+        return false;
+    *text = g_search_text;
+    *len = g_search_text_len;
+    return true;
 }
 
 static void pk_make(PkFix *f)
@@ -408,6 +422,49 @@ void test_picker_same_length_filter_change_refilters(void)
     with_ba = sag_picker_selected(&f.ed);
     SAG_ASSERT(with_ab != with_ba);
     pk_remove(&f);
+
+    /* A borrowed custom source is scanned beyond the former 1 KiB label
+     * bound, and one large candidate yields to the idle-tick loop. */
+    {
+        static const PickItem custom_item[] = {
+            {"large macro", NULL, 9, 0U}
+        };
+        static const char needle[] = "needle";
+        PickerSpec spec;
+        u8 *large = sag_xmalloc(8U * 1024U * 1024U);
+        u32 ticks = 0U;
+        size_t i;
+
+        (void)memset(large, 'x', 8U * 1024U * 1024U);
+        (void)memcpy(large + 8U * 1024U * 1024U - sizeof(needle) + 1U,
+                     needle, sizeof(needle) - 1U);
+        g_search_text = large;
+        g_search_text_len = 8U * 1024U * 1024U;
+        pk_make(&f);
+        f.items = custom_item;
+        f.n = 1U;
+        (void)memset(&spec, 0, sizeof(spec));
+        spec.title = "Large";
+        spec.items = pk_items;
+        spec.search_part = pk_search_part;
+        spec.ctx = &f;
+        sag_picker_open(&f.ed, &spec);
+        for (i = 0U; i < sizeof(needle) - 1U; i++)
+            pk_type(&f, needle[i]);
+        SAG_ASSERT(sag_picker_scanning(&f.ed));
+        while (sag_picker_scanning(&f.ed) && ticks < 10000U) {
+            (void)sag_picker_tick(&f.ed);
+            ticks++;
+        }
+        SAG_ASSERT(ticks != 0U);
+        SAG_ASSERT(!sag_picker_scanning(&f.ed));
+        SAG_ASSERT_EQ_U64(sag_picker_shown(&f.ed), 1U);
+        SAG_ASSERT_EQ_I64(sag_picker_selected(&f.ed), 9);
+        pk_remove(&f);
+        free(large);
+        g_search_text = NULL;
+        g_search_text_len = 0U;
+    }
 }
 
 /* Accepting in a split reports HOW, so the instance can open there. */

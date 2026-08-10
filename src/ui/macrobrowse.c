@@ -192,117 +192,38 @@ static bool payload_library(Ed *ed, i32 payload, SagMacroEntryView *out)
     return sag_macrolib_at(ed, index, out);
 }
 
-static char search_byte(const char *name, size_t name_len,
-                        const u8 *source, size_t source_len, size_t at)
+static bool browser_search_part(void *ctx, i32 payload, u32 part,
+                                const u8 **text, size_t *len)
 {
-    u8 ch;
-
-    if (at < name_len)
-        return name[at];
-    if (at == name_len)
-        return ' ';
-    at -= name_len + 1U;
-    if (at >= source_len)
-        return '\0';
-    ch = source[at];
-    return ch == (u8)'\n' || ch == (u8)'\r' || ch == (u8)'\t'
-               ? ' ' : (char)ch;
-}
-
-static char search_fold(char ch)
-{
-    return ch >= 'A' && ch <= 'Z' ? (char)(ch + ('a' - 'A')) : ch;
-}
-
-static bool search_boundary(char ch)
-{
-    return ch == '/' || ch == '_' || ch == '-' || ch == '.';
-}
-
-/* Score the virtual `name + space + normalized full source` without
- * flattening it.  This follows the shared fuzzy scorer's greedy score table;
- * match highlighting remains confined to the visible metadata label. */
-static i32 score_macro_text(const char *pattern, u32 pattern_len,
-                            const char *name, const u8 *source,
-                            size_t source_len)
-{
-    size_t name_len = strlen(name);
-    size_t total;
-    size_t at;
-    u32 pi = 0U;
-    u32 run = 0U;
-    i64 score = 0;
-    bool started = false;
-    bool prefix;
-
-    if (pattern_len == 0U)
-        return 1;
-    if (source_len > SIZE_MAX - name_len - 1U)
-        return SAG_FZ_NO_MATCH;
-    total = name_len + 1U + source_len;
-    prefix = (size_t)pattern_len <= total;
-    if ((size_t)pattern_len > total)
-        return SAG_FZ_NO_MATCH;
-    for (at = 0U; at < (size_t)pattern_len; at++)
-        if (search_fold(pattern[at]) !=
-            search_fold(search_byte(name, name_len, source, source_len, at))) {
-            prefix = false;
-            break;
-        }
-    if (prefix && (size_t)pattern_len == total)
-        return 10000;
-    if (prefix)
-        return 5000;
-    for (at = 0U; at < total && pi < pattern_len; at++) {
-        char ch = search_byte(name, name_len, source, source_len, at);
-
-        if (search_fold(ch) != search_fold(pattern[pi])) {
-            run = 0U;
-            if (started)
-                score--;
-            continue;
-        }
-        started = true;
-        score += 100;
-        run++;
-        if (run >= 2U)
-            score += 50 * (i64)run;
-        if (at == 0U)
-            score += 200;
-        else if (search_boundary(search_byte(name, name_len, source,
-                                             source_len, at - 1U)))
-            score += 150;
-        pi++;
-    }
-    if (pi < pattern_len)
-        return SAG_FZ_NO_MATCH;
-    score -= (i64)total;
-    if (score <= (i64)SAG_FZ_NO_MATCH)
-        return SAG_FZ_NO_MATCH + 1;
-    return score > (i64)INT32_MAX ? INT32_MAX : (i32)score;
-}
-
-static i32 browser_search_score(void *ctx, i32 payload,
-                                const char *pattern, u32 pattern_len)
-{
+    static const char register_names[] = "abcdefghijklmnopqrstuvwxyz";
     MacroBrowse *browse = ctx;
     const RegVal *value;
     SagMacroEntryView library;
 
-    if (browse == NULL || browse->ed == NULL)
-        return SAG_FZ_NO_MATCH;
+    if (browse == NULL || browse->ed == NULL || text == NULL || len == NULL ||
+        part > 1U)
+        return false;
     value = payload_reg(browse->ed, payload);
     if (value != NULL) {
-        char name[2] = {(char)payload, '\0'};
-
-        return score_macro_text(pattern, pattern_len, name,
-                                value->bytes.data, value->bytes.len);
+        if (part == 0U) {
+            *text = (const u8 *)register_names + payload - 'a';
+            *len = 1U;
+        } else {
+            *text = value->bytes.data;
+            *len = value->bytes.len;
+        }
+        return true;
     }
     if (!payload_library(browse->ed, payload, &library))
-        return SAG_FZ_NO_MATCH;
-    return score_macro_text(pattern, pattern_len, library.name,
-                            (const u8 *)library.source,
-                            library.source_len);
+        return false;
+    if (part == 0U) {
+        *text = (const u8 *)library.name;
+        *len = strlen(library.name);
+    } else {
+        *text = (const u8 *)library.source;
+        *len = library.source_len;
+    }
+    return true;
 }
 
 static void browser_preview(Ed *ed, void *ctx, i32 payload, Rect r)
@@ -408,7 +329,8 @@ static bool browser_action(Ed *ed, void *ctx, i32 payload, const Key *key)
                     (int)payload);
             return true;
         }
-        (void)sag_flapi_reg_write(ed, (u8)payload, NULL, 0U, false);
+        (void)sag_flapi_reg_write(ed, (u8)payload, (const u8 *)"", 0U,
+                                  false);
         browse->confirm_delete = 0;
         sag_picker_close(ed, true);
         sag_msg(ed, SAG_MSG_INFO, "cleared macro @%c", (int)payload);
@@ -543,6 +465,18 @@ static CmdStatus macro_porcelain(CmdCtx *cx)
         append_first_line(&out, entry.source, entry.source_len);
         bytebuf_push_u8(&out, (u8)'\n');
     }
+    if (cx->ed->headless) {
+        bool ok = (out.len == 0U ||
+                   fwrite(out.data, 1U, out.len, stdout) == out.len) &&
+                  fflush(stdout) == 0;
+
+        bytebuf_free(&out);
+        if (!ok) {
+            sag_msg(cx->ed, SAG_MSG_ERROR, "cannot write macro list");
+            return SAG_CMD_ERR_IO;
+        }
+        return SAG_CMD_OK;
+    }
     if (out.len != 0U)
         out.len--;
     bytebuf_push_u8(&out, 0U);
@@ -567,7 +501,7 @@ CmdStatus sag_macro_cmd_list(CmdCtx *cx)
     spec.preview = browser_preview;
     spec.accept = browser_accept;
     spec.action = browser_action;
-    spec.search_score = browser_search_score;
+    spec.search_part = browser_search_part;
     spec.footer = "enter replay . e edit . y yank . d clear . n name . / filter . esc";
     spec.filter_requires_slash = true;
     spec.ctx = &mb;

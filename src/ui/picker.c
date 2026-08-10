@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "edit/ed.h"
 #include "fl/flruntime.h"
@@ -27,6 +28,23 @@
  * knowing a list is half-filtered, and the group picker (s24) keeps its
  * state the same way for the same reason.
  */
+typedef struct PickerCustomSearch {
+    const u8 *part_text;
+    size_t part_len;
+    size_t part_off;
+    size_t total;
+    i64 score;
+    u32 item;
+    u32 part;
+    u32 pattern_at;
+    u32 run;
+    bool started;
+    bool prefix;
+    bool part_loaded;
+    bool separator_done;
+    bool invalid;
+} PickerCustomSearch;
+
 typedef struct PickerState {
     PickerSpec spec;
     bool active;
@@ -41,6 +59,7 @@ typedef struct PickerState {
     FzRanked ranked[SAG_FILTER_TOPK];
     u32 n_ranked;
     u32 custom_matched;
+    PickerCustomSearch custom;
     u32 total;
     /* A sliced rescan is still running; the footer says ` scanning…`
      * and the idle timer keeps calling sag_picker_tick. */
@@ -89,7 +108,7 @@ u32 sag_picker_shown(const Ed *ed)
      * filtered set, and only 20 of those are ever on screen. */
     if (!pk.active)
         return 0U;
-    return pk.spec.search_score == NULL
+    return pk.spec.search_part == NULL
                ? sag_filter_matched(&pk.filter_state)
                : pk.custom_matched;
 }
@@ -222,47 +241,196 @@ static bool custom_better(const PickItem *items, u32 idx, i32 score,
     return strcmp(label, prev_label) < 0;
 }
 
-/* Small custom-search pickers rank directly into the same bounded visible
- * window.  The callback owns the searchable representation, so neither the
- * picker nor the caller has to flatten or duplicate large candidate text. */
+static i64 picker_now_us(void)
+{
+    struct timespec ts;
+
+    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
+        return 0;
+    return (i64)ts.tv_sec * 1000000 + (i64)ts.tv_nsec / 1000;
+}
+
+static char custom_fold(char ch)
+{
+    return ch >= 'A' && ch <= 'Z' ? (char)(ch + ('a' - 'A')) : ch;
+}
+
+static bool custom_boundary(char ch)
+{
+    return ch == '/' || ch == '_' || ch == '-' || ch == '.';
+}
+
+static char custom_normalize(u8 ch)
+{
+    return ch == (u8)'\n' || ch == (u8)'\r' || ch == (u8)'\t'
+               ? ' ' : (char)ch;
+}
+
+static void custom_candidate_reset(void)
+{
+    u32 item = pk.custom.item;
+
+    (void)memset(&pk.custom, 0, sizeof(pk.custom));
+    pk.custom.item = item;
+    pk.custom.prefix = true;
+}
+
+static void custom_reset(void)
+{
+    pk.n_ranked = 0U;
+    pk.custom_matched = 0U;
+    (void)memset(&pk.custom, 0, sizeof(pk.custom));
+    pk.custom.prefix = true;
+}
+
+static void custom_rank(const PickItem *items, u32 idx, i32 score,
+                        bool empty_pattern)
+{
+    u32 at = pk.n_ranked;
+    u32 k;
+
+    pk.custom_matched++;
+    while (at > 0U &&
+           custom_better(items, idx, score, &pk.ranked[at - 1U],
+                         empty_pattern))
+        at--;
+    if (at >= (u32)SAG_FILTER_TOPK)
+        return;
+    for (k = pk.n_ranked < (u32)SAG_FILTER_TOPK
+                 ? pk.n_ranked
+                 : (u32)SAG_FILTER_TOPK - 1U;
+         k > at; k--)
+        pk.ranked[k] = pk.ranked[k - 1U];
+    pk.ranked[at].idx = idx;
+    pk.ranked[at].score = score;
+    (void)memset(&pk.ranked[at].m, 0, sizeof(pk.ranked[at].m));
+    if (pk.n_ranked < (u32)SAG_FILTER_TOPK)
+        pk.n_ranked++;
+}
+
+static void custom_consume(char ch, const char *pattern, u32 pattern_len)
+{
+    PickerCustomSearch *s = &pk.custom;
+
+    if (s->total < (size_t)pattern_len &&
+        custom_fold(ch) != custom_fold(pattern[s->total]))
+        s->prefix = false;
+    if (s->pattern_at < pattern_len) {
+        if (custom_fold(ch) != custom_fold(pattern[s->pattern_at])) {
+            s->run = 0U;
+            if (s->started)
+                s->score--;
+        } else {
+            s->started = true;
+            s->score += 100;
+            s->run++;
+            if (s->run >= 2U)
+                s->score += 50 * (i64)s->run;
+            if (s->total == 0U)
+                s->score += 200;
+            else if (s->total != 0U && s->part_off != 0U &&
+                     custom_boundary(custom_normalize(
+                         s->part_text[s->part_off - 1U])))
+                s->score += 150;
+            s->pattern_at++;
+        }
+    }
+    s->total++;
+}
+
+static i32 custom_finish_score(u32 pattern_len)
+{
+    PickerCustomSearch *s = &pk.custom;
+
+    if (s->invalid || s->pattern_at < pattern_len)
+        return SAG_FZ_NO_MATCH;
+    if (s->prefix && (size_t)pattern_len == s->total)
+        return 10000;
+    if (s->prefix && (size_t)pattern_len < s->total)
+        return 5000;
+    s->score -= (i64)s->total;
+    if (s->score <= (i64)SAG_FZ_NO_MATCH)
+        return SAG_FZ_NO_MATCH + 1;
+    return s->score > (i64)INT32_MAX ? INT32_MAX : (i32)s->score;
+}
+
+/* Resume custom candidate text within the same 2 ms budget as the standard
+ * filter.  The clock check every 4096 bytes bounds overhead while ensuring
+ * one 8 MiB source cannot monopolize an input frame. */
+static bool custom_step(const PickItem *items, u32 n,
+                        const char *pattern, u32 pattern_len,
+                        i64 budget_us)
+{
+    i64 started_us = budget_us > 0 ? picker_now_us() : 0;
+    u32 completed = 0U;
+
+    while (pk.custom.item < n) {
+        if (pattern_len == 0U) {
+            custom_rank(items, pk.custom.item, 1, true);
+            pk.custom.item++;
+            completed++;
+            if (budget_us > 0 && (completed & 0xFFU) == 0U &&
+                picker_now_us() - started_us >= budget_us)
+                return false;
+            continue;
+        }
+        if (!pk.custom.part_loaded) {
+            const u8 *text = NULL;
+            size_t len = 0U;
+
+            if (!pk.spec.search_part(pk.spec.ctx,
+                                     items[pk.custom.item].payload,
+                                     pk.custom.part, &text, &len)) {
+                i32 score = custom_finish_score(pattern_len);
+                u32 next = pk.custom.item + 1U;
+
+                if (score != SAG_FZ_NO_MATCH)
+                    custom_rank(items, pk.custom.item, score, false);
+                pk.custom.item = next;
+                custom_candidate_reset();
+                completed++;
+                if (budget_us > 0 && (completed & 0xFFU) == 0U &&
+                    picker_now_us() - started_us >= budget_us)
+                    return false;
+                continue;
+            }
+            pk.custom.part_text = text;
+            pk.custom.part_len = len;
+            pk.custom.part_off = 0U;
+            pk.custom.part_loaded = true;
+            pk.custom.separator_done = pk.custom.part == 0U;
+            if (text == NULL && len != 0U) {
+                pk.custom.invalid = true;
+                pk.custom.part_len = 0U;
+            }
+        }
+        if (!pk.custom.separator_done) {
+            custom_consume(' ', pattern, pattern_len);
+            pk.custom.separator_done = true;
+        }
+        while (pk.custom.part_off < pk.custom.part_len) {
+            custom_consume(custom_normalize(
+                               pk.custom.part_text[pk.custom.part_off]),
+                           pattern, pattern_len);
+            pk.custom.part_off++;
+            if (budget_us > 0 && (pk.custom.total & 0xFFFU) == 0U &&
+                picker_now_us() - started_us >= budget_us)
+                return false;
+        }
+        pk.custom.part++;
+        pk.custom.part_loaded = false;
+        if (budget_us > 0 && picker_now_us() - started_us >= budget_us)
+            return false;
+    }
+    return true;
+}
+
 static void custom_refilter(const PickItem *items, u32 n,
                             const char *pattern, u32 pattern_len)
 {
-    u32 i;
-
-    pk.n_ranked = 0U;
-    pk.custom_matched = 0U;
-    for (i = 0U; i < n; i++) {
-        i32 score = pattern_len == 0U
-                        ? 1
-                        : pk.spec.search_score(pk.spec.ctx,
-                                               items[i].payload,
-                                               pattern, pattern_len);
-        u32 at;
-        u32 k;
-
-        if (score == SAG_FZ_NO_MATCH)
-            continue;
-        pk.custom_matched++;
-        at = pk.n_ranked;
-        while (at > 0U &&
-               custom_better(items, i, score, &pk.ranked[at - 1U],
-                             pattern_len == 0U))
-            at--;
-        if (at >= (u32)SAG_FILTER_TOPK)
-            continue;
-        for (k = pk.n_ranked < (u32)SAG_FILTER_TOPK
-                     ? pk.n_ranked
-                     : (u32)SAG_FILTER_TOPK - 1U;
-             k > at; k--)
-            pk.ranked[k] = pk.ranked[k - 1U];
-        pk.ranked[at].idx = i;
-        pk.ranked[at].score = score;
-        (void)memset(&pk.ranked[at].m, 0, sizeof(pk.ranked[at].m));
-        if (pk.n_ranked < (u32)SAG_FILTER_TOPK)
-            pk.n_ranked++;
-    }
-    pk.scanning = false;
+    custom_reset();
+    pk.scanning = !custom_step(items, n, pattern, pattern_len,
+                               SAG_PICKER_SLICE_US);
 }
 
 void sag_picker_refilter(Ed *ed)
@@ -286,7 +454,7 @@ void sag_picker_refilter(Ed *ed)
     /* Only OUR line is the pattern.  See PickerState.filter_open. */
     if (pk.filter_open)
         sag_cmdline_text(ed, &pk.text);
-    if (pk.spec.search_score != NULL) {
+    if (pk.spec.search_part != NULL) {
         custom_refilter(items, n,
                         pk.text.data == NULL ? "" :
                                                (const char *)pk.text.data,
@@ -335,10 +503,22 @@ bool sag_picker_tick(Ed *ed)
     const PickItem *items;
     u32 n = 0U;
 
-    if (!pk.active || !pk.scanning || ed == NULL ||
-        pk.spec.search_score != NULL)
+    if (!pk.active || !pk.scanning || ed == NULL)
         return false;
     items = pk.spec.items(pk.spec.ctx, &n);
+    if (pk.spec.search_part != NULL) {
+        if (n != pk.total) {
+            pk.total = n;
+            custom_reset();
+        }
+        pk.scanning = !custom_step(
+            items, n, pk.text.data == NULL ? "" : (const char *)pk.text.data,
+            (u32)pk.text.len, SAG_PICKER_SLICE_US);
+        if (!pk.has_sel)
+            sel_set_row(0U);
+        ed->full_damage = true;
+        return pk.scanning;
+    }
     pk.scanning = sag_filter_step(&pk.filter_state, items,
                                   pk.spec.path_mode, SAG_PICKER_SLICE_US);
     refresh_window();
