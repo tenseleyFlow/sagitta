@@ -1,0 +1,3 @@
+# sagitta Sprint 37 script-suite latency baseline v1
+# metric                         hard_limit_ns
+script_suite_wall_ns             20000000000

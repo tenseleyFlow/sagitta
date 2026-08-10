@@ -45,6 +45,7 @@ FIXTURE_MANIFEST ?= tests/perf/fixtures.sha
 PERF_RUNNER_ID ?= local-$(shell uname -m)-$(shell uname -s | tr A-Z a-z)
 PERF_BASELINE ?= tests/perf/baselines/perf-x86_64-linux-gnu.txt
 LATENCY_BASELINE ?= tests/perf/baselines/latency-x86_64-linux-gnu.txt
+SCRIPT_SUITE_BASELINE ?= tests/perf/baselines/script-x86_64-linux-gnu.txt
 PERF_ADVISORY ?= 0
 
 ifneq ($(filter 1,$(SAN)),)
@@ -407,6 +408,7 @@ PERF_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 PERF_FLETCH_OBJ := $(BUILD)/tests/perf/perf_fletch.o
 PERF_RECORD_OBJ := $(BUILD)/tests/perf/perf_record.o
 PERF_BATCH_OBJ := $(BUILD)/tests/perf/batch.o
+PERF_SCRIPT_SUITE_OBJ := $(BUILD)/tests/perf/script_suite.o
 FLETCH_RUN_OBJ := $(BUILD)/tests/fletch/run.o
 SCRIPT_RUNNER_OBJ := $(BUILD)/tests/script/runner.o
 FLETCH_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
@@ -451,6 +453,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(FUZZ_LIB_OBJ) \
                 $(GEN_BIGFILE_OBJ) $(FLETCH_RUN_OBJ) $(SCRIPT_RUNNER_OBJ) \
                 $(ROUNDTRIP_OBJ) \
                 $(PERF_FLETCH_OBJ) $(PERF_RECORD_OBJ) $(PERF_BATCH_OBJ) \
+                $(PERF_SCRIPT_SUITE_OBJ) \
                 $(FUZZ_RECORD_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) \
@@ -618,6 +621,9 @@ $(BUILD)/perf_record: $(PERF_CORE_OBJ) $(PERF_RECORD_OBJ)
 
 $(BUILD)/perf_batch: $(PERF_BATCH_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_BATCH_OBJ) $(LDLIBS)
+
+$(BUILD)/perf_script_suite: $(PERF_SCRIPT_SUITE_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_SCRIPT_SUITE_OBJ) $(LDLIBS)
 
 $(BUILD)/fletch_run: $(FLETCH_CORE_OBJ) $(FLETCH_RUN_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FLETCH_CORE_OBJ) \
@@ -1206,10 +1212,12 @@ test-script-determinism: $(BUILD)/script_runner $(BUILD)/sagitta
 	diff -u "$$tmp/run-1" "$$tmp/run-2"; \
 	echo 'test-script-determinism: ok'
 
-test-script-budget: $(BUILD)/script_runner $(BUILD)/sagitta
-	@timeout 20s env LC_ALL=C $(BUILD)/script_runner \
-		--sagitta $(abspath $(BUILD)/sagitta)
-	@echo 'test-script-budget: <= 20 s'
+test-script-budget: $(BUILD)/perf_script_suite $(BUILD)/script_runner \
+                    $(BUILD)/sagitta $(SCRIPT_SUITE_BASELINE)
+	LC_ALL=C $(BUILD)/perf_script_suite \
+		--runner $(abspath $(BUILD)/script_runner) \
+		--sagitta $(abspath $(BUILD)/sagitta) \
+		--baseline $(SCRIPT_SUITE_BASELINE)
 
 # The conformance suite (Sprint 33).  LC_ALL=C is set rather than
 # assumed: run.c sorts with strcmp and the ledger is byte-compared.
@@ -1317,6 +1325,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/sagitta
          $(PERF_STATE_OBJ:.o=.d) \
          $(PERF_FINDER_OBJ:.o=.d) $(PERF_MOUSE_OBJ:.o=.d) \
          $(PERF_FLETCH_OBJ:.o=.d) $(PERF_BATCH_OBJ:.o=.d) \
+         $(PERF_SCRIPT_SUITE_OBJ:.o=.d) \
          $(GEN_BIGFILE_OBJ:.o=.d) \
          $(TORTURE_CHILD_OBJ:.o=.d) \
 	 $(TORTURE_DRIVER_OBJ:.o=.d) $(TORTURE_LIVE_OBJ:.o=.d) \
