@@ -16,6 +16,7 @@
 
 #include "term/osc52.h"
 #include "term/render.h"
+#include "term/tty.h"
 #include "util/buf.h"
 #include "util/log.h"
 
@@ -207,7 +208,7 @@ static bool clip_available(SagClipBackend backend)
         return false;
 #endif
     case SAG_CLIP_OSC52:
-        return isatty(STDOUT_FILENO) != 0 &&
+        return sag_tty_fd_is_terminal(STDOUT_FILENO) &&
                sag_osc52_mode(NULL) != SAG_OSC52_OFF;
     case SAG_CLIP_CUSTOM:
     case SAG_CLIP_NONE:

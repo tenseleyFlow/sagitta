@@ -131,6 +131,12 @@ int sag_args_parse(SagArgs *out, int argc, char **argv, Bytebuf *err)
                 return rc;
         } else if (strcmp(arg, "--selftest-bug") == 0) {
             out->selftest_bug = true;
+        } else if (strcmp(arg, "--replay") == 0) {
+            return parse_error(out, err,
+                               "option '%s' lands in Sprint 38", arg);
+        } else if (strcmp(arg, "--batch-strict") == 0) {
+            return parse_error(out, err,
+                               "option '%s' lands in Sprint 59", arg);
         } else {
             return parse_error(out, err, "unknown option '%s'", arg);
         }

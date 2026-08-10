@@ -402,11 +402,16 @@ static bool sag_tty_pipe_open(int fds[2])
 static bool sag_tty_not_tty(void)
 {
     static const char message[] =
-        "sagitta: error: stdin is not a terminal (--batch lands in Sprint 37)\n";
+        "sagitta: error: stdin is not a terminal; use --batch SCRIPT for headless execution\n";
 
     (void)!write(STDERR_FILENO, message, sizeof(message) - 1U);
     errno = ENOTTY;
     return false;
+}
+
+bool sag_tty_fd_is_terminal(int fd)
+{
+    return isatty(fd) != 0;
 }
 
 static const char *sag_tty_getenv(const char *name)
@@ -432,7 +437,8 @@ bool sag_tty_open(Tty *t)
     t->sigpipe[1] = -1;
     bytebuf_init(&t->pending);
 
-    if (!isatty(t->rfd) || !isatty(t->wfd))
+    if (!sag_tty_fd_is_terminal(t->rfd) ||
+        !sag_tty_fd_is_terminal(t->wfd))
         return sag_tty_not_tty();
     if (tcgetattr(t->rfd, &t->saved) != 0)
         return false;

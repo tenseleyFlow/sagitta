@@ -48,6 +48,7 @@
 
 #include "fl/compile.h"
 #include "fl/opcodes.h"
+#include "term/tty.h"
 #include "fl/parse.h"
 #include "fl/repl.h"
 #include "fl/trace.h"
@@ -615,7 +616,7 @@ int sag_fl_main(int argc, char **argv)
         argc -= 2;
     }
     if (argc == 1)
-        return isatty(0) ? sag_fl_repl() : run_stdin();
+        return sag_tty_fd_is_terminal(0) ? sag_fl_repl() : run_stdin();
     if (argc == 2 && strcmp(argv[1], "--selftest-fl-bug") == 0) {
         /*
          * On a TTY the selftest runs THROUGH THE PROMPT, because that
@@ -623,7 +624,7 @@ int sag_fl_main(int argc, char **argv)
          * prove: sag_bug's prehook is installed by sag_tty_raw, so a
          * headless run would restore a terminal it never took.
          */
-        if (isatty(0))
+        if (sag_tty_fd_is_terminal(0))
             return sag_fl_repl_selftest_bug();
         return selftest_bug();
     }

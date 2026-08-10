@@ -346,12 +346,17 @@ void test_args_parse_batch_misuse(void)
     char *duplicate[] = {"sagitta", "--batch", "--batch", "run.fl"};
     char *missing_grant[] = {"sagitta", "--batch", "run.fl", "--grant"};
     char *missing_script[] = {"sagitta", "--batch", "--test", "--"};
-    char **cases[] = {duplicate, missing_grant, missing_script};
-    int counts[] = {4, 4, 4};
+    char *replay[] = {"sagitta", "--batch", "--replay", "q", "run.fl"};
+    char *strict[] = {"sagitta", "--batch-strict"};
+    char **cases[] = {duplicate, missing_grant, missing_script, replay,
+                      strict};
+    int counts[] = {4, 4, 4, 5, 2};
     const char *messages[] = {
         "sagitta: error: option '--batch' specified twice\n",
         "sagitta: error: option '--grant' requires an argument\n",
-        "sagitta: error: option '--batch' requires an argument\n"
+        "sagitta: error: option '--batch' requires an argument\n",
+        "sagitta: error: option '--replay' lands in Sprint 38\n",
+        "sagitta: error: option '--batch-strict' lands in Sprint 59\n"
     };
     size_t i;
 

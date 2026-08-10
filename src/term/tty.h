@@ -73,6 +73,7 @@ bool sag_tty_guard_finish(TtyGuard *guard);
  */
 bool sag_tty_open(Tty *t);
 void sag_tty_poison(Tty *t);
+bool sag_tty_fd_is_terminal(int fd);
 bool sag_tty_raw(Tty *t);
 void sag_tty_rawios(struct termios *io);
 

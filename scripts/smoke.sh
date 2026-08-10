@@ -114,7 +114,7 @@ rc=0
 "$bin" "$tmp/file.txt" </dev/null >"$out" 2>"$err" || rc=$?
 expect_rc 1 "file arg without tty"
 expect_stderr_contains \
-    "stdin is not a terminal (--batch lands in Sprint 37)" \
+    "stdin is not a terminal; use --batch SCRIPT" \
     "file arg without tty"
 if grep -F "Sprint 14" "$out" "$err" >/dev/null 2>&1; then
     fail "file arg still deferred to Sprint 14"
@@ -125,7 +125,7 @@ rc=0
 "$bin" </dev/null >"$out" 2>"$err" || rc=$?
 expect_rc 1 "non-tty stdin"
 expect_stderr_contains \
-    "stdin is not a terminal (--batch lands in Sprint 37)" "non-tty stdin"
+    "stdin is not a terminal; use --batch SCRIPT" "non-tty stdin"
 echo "smoke: non-tty stdin ok"
 
 batch_dir=$tmp/batch
@@ -135,6 +135,13 @@ printf 'import io\nio.print("before-error")\nerror("boom")\n' \
     >"$batch_dir/fail.fl"
 printf 'import io\nimport buf\nbuf.insert(buf.current(), 0, "dirty")\nio.print("script-only")\n' \
     >"$batch_dir/dirty.fl"
+printf 'import io\nio.print(io.stdin())\n' >"$batch_dir/stdin.fl"
+printf 'import io\nimport buf\nio.print(buf.text(buf.current()))\n' \
+    >"$batch_dir/dash.fl"
+printf 'import io\nimport list\nimport buf\nif list.len(files) != 2 { error("files") }\nif buf.path(buf.current()) != files[0] { error("order") }\nif list.len(args) != 2 or args[0] != "--flag" or args[1] != "" { error("args") }\nio.print("globals-ok")\n' \
+    >"$batch_dir/globals.fl"
+printf 'one\n' >"$batch_dir/one.txt"
+printf 'two\n' >"$batch_dir/two.txt"
 
 run_capture "$bin" --batch --clean "$batch_dir/ok.fl"
 expect_rc 0 "batch success"
@@ -158,6 +165,32 @@ expect_rc 0 "batch quiet"
 [ "$(cat "$out")" = "script-only" ] || fail "batch quiet stdout"
 [ ! -s "$err" ] || fail "batch quiet stderr"
 
+rc=0
+printf 'stdin-data' | "$bin" --batch --clean "$batch_dir/stdin.fl" \
+    >"$out" 2>"$err" || rc=$?
+expect_rc 0 "batch io.stdin"
+[ "$(cat "$out")" = "stdin-data" ] || fail "batch io.stdin stdout"
+[ ! -s "$err" ] || fail "batch io.stdin stderr"
+
+rc=0
+printf 'buffer-data' | "$bin" --batch --clean "$batch_dir/dash.fl" - \
+    >"$out" 2>"$err" || rc=$?
+expect_rc 0 "batch stdin buffer"
+[ "$(cat "$out")" = "buffer-data" ] || fail "batch stdin buffer stdout"
+
+rc=0
+printf 'claimed' | "$bin" --batch --clean "$batch_dir/stdin.fl" - \
+    >"$out" 2>"$err" || rc=$?
+expect_rc 2 "batch stdin exclusivity"
+expect_stderr_contains "stdin is already the '-' batch file buffer" \
+    "batch stdin exclusivity"
+
+run_capture "$bin" --batch --clean "$batch_dir/globals.fl" \
+    "$batch_dir/one.txt" "$batch_dir/two.txt" -- --flag ""
+expect_rc 0 "batch globals"
+[ "$(cat "$out")" = "globals-ok" ] || fail "batch globals stdout"
+[ ! -s "$err" ] || fail "batch globals stderr"
+
 run_capture "$bin" --batch "$batch_dir/missing.fl"
 expect_rc 1 "batch unreadable script"
 expect_stderr_contains "$batch_dir/missing.fl" "batch unreadable script"
@@ -166,6 +199,14 @@ run_capture "$bin" --batch --clean "$batch_dir/ok.fl" \
     "$batch_dir/missing.txt"
 expect_rc 3 "batch unreadable file"
 expect_stderr_contains "$batch_dir/missing.txt" "batch unreadable file"
+
+run_capture "$bin" --batch --grant formatter:fs.write "$batch_dir/ok.fl"
+expect_rc 1 "batch deferred grant"
+expect_stderr_contains "Sprint 54" "batch deferred grant"
+
+run_capture "$bin" --batch --replay q "$batch_dir/ok.fl"
+expect_rc 1 "batch deferred replay"
+expect_stderr_contains "Sprint 38" "batch deferred replay"
 echo "smoke: batch stdio and exit codes ok"
 
 rc=0
