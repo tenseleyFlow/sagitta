@@ -1452,7 +1452,10 @@ SynDef *yew_syn_def_compile(Arena *a, DiagCtx *dc, const u8 *src, size_t n,
         compile_eol(&c, (u16)i, ctx);
         compile_unit(&c, (u16)i, ctx);
         for (j = 0U; j < expanded[i].len; j++) {
-            rule_spans[total] = expanded[i].data[j].node->sp;
+            FlNode *match = map_find(&c, expanded[i].data[j].node, "match");
+
+            rule_spans[total] = match == NULL ?
+                                expanded[i].data[j].node->sp : match->sp;
             compile_rule(&c, expanded[i].data[j].node, (u16)i,
                          &def->rules[total], &patterns[total], total);
             first_union(ctx->first, def->rules[total].first);

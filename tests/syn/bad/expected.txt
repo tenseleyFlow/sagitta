@@ -11,7 +11,7 @@
 10-depth|error|2|6|context nesting can reach depth 13; the cap is 16 with 4 levels reserved for runtime recursion (see YEW_SYN_DEPTH_MAX)
 11-include-cycle|error|1|70|include cycle reaches 'main'
 12-no-pop|error|1|110|context 'stuck' can never be popped
-13-unreachable-rule|warning|1|68|rule 2 is unreachable: rule 1 has the same pattern
+13-unreachable-rule|warning|1|94|rule 2 is unreachable: rule 1 has the same pattern
 14-unreachable-context|warning|1|82|context 'legacy' is unreachable
 15-error-default|warning|1|70|default: 'error' paints every unmatched byte red; did you mean 'text'?
 16-include-fields|warning|1|101|only 'rules' is used at an include site
