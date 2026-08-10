@@ -12,18 +12,19 @@
 
 #include "fl/diag.h"
 #include "syn/defs.h"
+#include "syn/engine.h"
 #include "util/arena.h"
 #include "util/buf.h"
 
 static const char cache_source_x[] =
     "{ syntax: 1, language: { name: \"cache-fixture\", "
     "extensions: [\"cache\"], }, contexts: { main: { default: \"text\", "
-    "rules: [ { match: \"x\", attr: \"text\" }, ], }, }, }\n";
+    "rules: [ { match: \"x\", attr: \"number\" }, ], }, }, }\n";
 
 static const char cache_source_y[] =
     "{ syntax: 1, language: { name: \"cache-fixture\", "
     "extensions: [\"cache\"], }, contexts: { main: { default: \"text\", "
-    "rules: [ { match: \"y\", attr: \"text\" }, ], }, }, }\n";
+    "rules: [ { match: \"y\", attr: \"number\" }, ], }, }, }\n";
 
 typedef struct CacheFixture {
     char root[64];
@@ -164,6 +165,22 @@ static void loaded_free(LoadedDef *loaded)
     arena_free_all(&loaded->arena);
 }
 
+static void assert_loaded_regex_executes(LoadedDef *loaded, char byte)
+{
+    SynSpan spans[4];
+    SynLineOut out = {spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
+    SynEngine *engine = yew_syn_engine_new(loaded->def);
+
+    YEW_ASSERT_NOT_NULL(engine);
+    yew_syn_line(engine, YEW_SYN_STATE_ROOT, (const u8 *)&byte, 1U, &out);
+    YEW_ASSERT_EQ_U64(out.stop, YEW_SYN_STOP_OK);
+    YEW_ASSERT_EQ_U64(out.n, 1U);
+    YEW_ASSERT_EQ_U64(out.spans[0].start, 0U);
+    YEW_ASSERT_EQ_U64(out.spans[0].len, 1U);
+    YEW_ASSERT_EQ_U64(out.spans[0].attr, YEW_ATTR_NUMBER);
+    yew_syn_engine_free(engine);
+}
+
 static void build_cold_cache(CacheFixture *f)
 {
     LoadedDef loaded;
@@ -248,6 +265,7 @@ void test_syn_cache_cold_write_then_warm_load_avoids_recompile(void)
     loaded = load_def(&f);
     YEW_ASSERT_EQ_U64(yew_syn_compile_count(), 0U);
     YEW_ASSERT_EQ_STR(yew_syn_rule_pattern(loaded.def, 0U), "x");
+    assert_loaded_regex_executes(&loaded, 'x');
     loaded_free(&loaded);
     fixture_free(&f);
 }

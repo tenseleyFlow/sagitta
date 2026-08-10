@@ -1595,6 +1595,437 @@ static u64 get64(const u8 *p)
     return value;
 }
 
+static void blob_u32(Bytebuf *out, u32 value)
+{
+    u8 bytes[4];
+
+    put32(bytes, value);
+    bytebuf_append(out, bytes, sizeof(bytes));
+}
+
+static void blob_u16(Bytebuf *out, u16 value)
+{
+    u8 bytes[2] = {(u8)value, (u8)(value >> 8U)};
+
+    bytebuf_append(out, bytes, sizeof(bytes));
+}
+
+static bool blob_string_n(Bytebuf *out, const char *value, size_t len)
+{
+    if (value == NULL) {
+        blob_u32(out, UINT32_MAX);
+        return true;
+    }
+    if (len > UINT32_MAX)
+        return false;
+    blob_u32(out, (u32)len);
+    bytebuf_append(out, value, len);
+    return true;
+}
+
+static bool blob_string(Bytebuf *out, const char *value)
+{
+    return blob_string_n(out, value, value == NULL ? 0U : strlen(value));
+}
+
+static bool blob_string_array(Bytebuf *out, const char *const *values,
+                              u32 count)
+{
+    u32 i;
+
+    blob_u32(out, count);
+    for (i = 0U; i < count; i++) {
+        if (!blob_string(out, values[i]))
+            return false;
+    }
+    return true;
+}
+
+typedef struct BlobReader {
+    const u8 *data;
+    size_t len;
+    size_t at;
+    bool ok;
+} BlobReader;
+
+static u8 blob_read_u8(BlobReader *r)
+{
+    if (!r->ok || r->at == r->len) {
+        r->ok = false;
+        return 0U;
+    }
+    return r->data[r->at++];
+}
+
+static u16 blob_read_u16(BlobReader *r)
+{
+    u16 value;
+
+    if (!r->ok || r->len - r->at < 2U) {
+        r->ok = false;
+        return 0U;
+    }
+    value = (u16)((u16)r->data[r->at] |
+                  (u16)((u16)r->data[r->at + 1U] << 8U));
+    r->at += 2U;
+    return value;
+}
+
+static u32 blob_read_u32(BlobReader *r)
+{
+    u32 value;
+
+    if (!r->ok || r->len - r->at < 4U) {
+        r->ok = false;
+        return 0U;
+    }
+    value = get32(r->data + r->at);
+    r->at += 4U;
+    return value;
+}
+
+static const u8 *blob_read_bytes(BlobReader *r, size_t len)
+{
+    const u8 *value;
+
+    if (!r->ok || len > r->len - r->at) {
+        r->ok = false;
+        return NULL;
+    }
+    value = r->data + r->at;
+    r->at += len;
+    return value;
+}
+
+static char *blob_read_string(BlobReader *r, Arena *arena, size_t *len_out)
+{
+    u32 len = blob_read_u32(r);
+    const u8 *bytes;
+
+    if (!r->ok || len == UINT32_MAX) {
+        if (len_out != NULL)
+            *len_out = 0U;
+        return NULL;
+    }
+    bytes = blob_read_bytes(r, len);
+    if (bytes == NULL)
+        return NULL;
+    if (len_out != NULL)
+        *len_out = len;
+    return arena_strndup(arena, (const char *)bytes, len);
+}
+
+static const char **blob_read_string_array(BlobReader *r, Arena *arena,
+                                           u32 *count_out)
+{
+    u32 count = blob_read_u32(r);
+    const char **values;
+    u32 i;
+
+    if (!r->ok || count > SYN_DEF_MAX_RULES) {
+        r->ok = false;
+        return NULL;
+    }
+    values = arena_alloc(arena, (size_t)count * sizeof(*values),
+                         _Alignof(const char *));
+    for (i = 0U; i < count; i++) {
+        values[i] = blob_read_string(r, arena, NULL);
+        if (!r->ok || values[i] == NULL) {
+            r->ok = false;
+            return NULL;
+        }
+    }
+    *count_out = count;
+    return values;
+}
+
+static const u8 syn_blob_magic[8] = {'Y', 'E', 'W', 'S', 'Y', 'N', '1', 0};
+
+static bool syn_blob_pack(const SynDef *def, Bytebuf *out)
+{
+    DefMeta *m = meta_for(def);
+    u32 i;
+
+    if (def == NULL || m == NULL || out == NULL || def->nctxs == 0U ||
+        def->root >= def->nctxs || m->aux == NULL)
+        return false;
+    bytebuf_init(out);
+    bytebuf_append(out, syn_blob_magic, sizeof(syn_blob_magic));
+    blob_u32(out, def->root);
+    blob_u32(out, def->nctxs);
+    blob_u32(out, def->nrules);
+    blob_u32(out, m->lang.id);
+    blob_u32(out, (u32)m->lang.priority);
+    if (!blob_string(out, def->name) ||
+        !blob_string_array(out, m->lang.extensions, m->lang.nextensions) ||
+        !blob_string_array(out, m->lang.filenames, m->lang.nfilenames) ||
+        !blob_string_array(out, m->lang.shebangs, m->lang.nshebangs) ||
+        !blob_string(out, m->lang.first_line) ||
+        !blob_string(out, m->lang.comment.line) ||
+        !blob_string(out, m->lang.comment.block_open) ||
+        !blob_string(out, m->lang.comment.block_close))
+        goto fail;
+    {
+        size_t len_at = out->len;
+        size_t re_at;
+
+        blob_u32(out, 0U);
+        re_at = out->len;
+        if (m->first_line_re != NULL &&
+            (!yew_re_pack(m->first_line_re, out) ||
+             out->len - re_at > UINT32_MAX))
+            goto fail;
+        put32(out->data + len_at, (u32)(out->len - re_at));
+    }
+    if (yew_intern_count(m->aux) > UINT32_MAX)
+        goto fail;
+    blob_u32(out, (u32)yew_intern_count(m->aux));
+    for (i = 1U; i <= yew_intern_count(m->aux); i++) {
+        if (!blob_string_n(out, yew_intern_str(m->aux, i),
+                           yew_intern_len(m->aux, i)))
+            goto fail;
+    }
+    for (i = 0U; i < def->nctxs; i++) {
+        const SynCtx *ctx = &def->ctxs[i];
+
+        blob_u32(out, ctx->first_rule);
+        blob_u32(out, ctx->nrules);
+        bytebuf_push_u8(out, ctx->dflt_attr);
+        bytebuf_push_u8(out, ctx->at_eol);
+        bytebuf_push_u8(out, ctx->eol_nop);
+        bytebuf_push_u8(out, ctx->flags);
+        blob_u16(out, ctx->eol_target);
+        bytebuf_append(out, ctx->first, sizeof(ctx->first));
+        if (!blob_string(out, m->ctx_names[i]))
+            goto fail;
+    }
+    for (i = 0U; i < def->nrules; i++) {
+        const SynRule *rule = &def->rules[i];
+        u32 j;
+        size_t len_at;
+        size_t re_at;
+
+        bytebuf_push_u8(out, rule->attr);
+        bytebuf_push_u8(out, rule->op);
+        bytebuf_push_u8(out, rule->nop);
+        bytebuf_push_u8(out, rule->aux_match);
+        blob_u16(out, rule->target);
+        bytebuf_push_u8(out, rule->consume);
+        bytebuf_push_u8(out, rule->flags);
+        bytebuf_append(out, rule->caps, sizeof(rule->caps));
+        bytebuf_push_u8(out, rule->aux_group);
+        bytebuf_push_u8(out, rule->npush);
+        blob_u32(out, rule->aux_pre);
+        blob_u32(out, rule->aux_post);
+        for (j = 0U; j < YEW_ARRAY_LEN(rule->push); j++)
+            blob_u16(out, rule->push[j]);
+        bytebuf_append(out, rule->first, sizeof(rule->first));
+        if (!blob_string(out, m->patterns[i]))
+            goto fail;
+        len_at = out->len;
+        blob_u32(out, 0U);
+        re_at = out->len;
+        if (rule->re != NULL &&
+            (!yew_re_pack(rule->re, out) || out->len - re_at > UINT32_MAX))
+            goto fail;
+        put32(out->data + len_at, (u32)(out->len - re_at));
+    }
+    return out->len <= UINT32_MAX;
+
+fail:
+    bytebuf_free(out);
+    return false;
+}
+
+static bool syn_rule_valid(const SynRule *rule, const SynDef *def,
+                           size_t naux)
+{
+    u32 i;
+
+    if (rule->attr >= YEW_ATTR__COUNT || rule->op > SYN_OP_SET ||
+        rule->nop > 4U || rule->aux_match > SYN_AUXM_INDENT_LT ||
+        rule->consume > 7U || rule->npush > 4U ||
+        rule->aux_group > 7U || rule->aux_pre >= naux ||
+        rule->aux_post >= naux)
+        return false;
+    if ((rule->op == SYN_OP_PUSH && rule->npush == 0U) ||
+        rule->op == SYN_OP_SET) {
+        if (rule->target >= def->nctxs)
+            return false;
+    }
+    for (i = 0U; i < rule->npush; i++) {
+        if (rule->push[i] >= def->nctxs)
+            return false;
+    }
+    for (i = 0U; i < YEW_ARRAY_LEN(rule->caps); i++) {
+        if (rule->caps[i] != UINT8_MAX && rule->caps[i] >= YEW_ATTR__COUNT)
+            return false;
+    }
+    return true;
+}
+
+static SynDef *syn_blob_unpack(Arena *arena, const u8 *data, size_t len,
+                               const char *source)
+{
+    BlobReader r = {data, len, 0U, true};
+    SynDef *def = NULL;
+    DefMeta *m = NULL;
+    Interner *aux = NULL;
+    const u8 *magic = blob_read_bytes(&r, sizeof(syn_blob_magic));
+    u32 root;
+    u32 nctxs;
+    u32 cached_id;
+    u32 priority;
+    u32 naux;
+    u32 i;
+
+    if (magic == NULL || memcmp(magic, syn_blob_magic,
+                                sizeof(syn_blob_magic)) != 0)
+        return NULL;
+    def = arena_alloc(arena, sizeof(*def), _Alignof(SynDef));
+    (void)memset(def, 0, sizeof(*def));
+    root = blob_read_u32(&r);
+    nctxs = blob_read_u32(&r);
+    def->nrules = blob_read_u32(&r);
+    cached_id = blob_read_u32(&r);
+    priority = blob_read_u32(&r);
+    if (!r.ok || nctxs == 0U || nctxs > SYN_DEF_MAX_CONTEXTS ||
+        root >= nctxs || def->nrules > SYN_DEF_MAX_RULES)
+        return NULL;
+    def->root = (u16)root;
+    def->nctxs = (u16)nctxs;
+    m = yew_xcalloc(1U, sizeof(*m));
+    def->name = blob_read_string(&r, arena, NULL);
+    m->lang.name = def->name;
+    m->lang.extensions = blob_read_string_array(&r, arena,
+                                                &m->lang.nextensions);
+    m->lang.filenames = blob_read_string_array(&r, arena,
+                                               &m->lang.nfilenames);
+    m->lang.shebangs = blob_read_string_array(&r, arena,
+                                              &m->lang.nshebangs);
+    m->lang.first_line = blob_read_string(&r, arena, NULL);
+    m->lang.comment.line = blob_read_string(&r, arena, NULL);
+    m->lang.comment.block_open = blob_read_string(&r, arena, NULL);
+    m->lang.comment.block_close = blob_read_string(&r, arena, NULL);
+    m->lang.priority = (i32)priority;
+    m->lang.source = arena_strdup(arena, source);
+    {
+        u32 re_len = blob_read_u32(&r);
+        size_t used = 0U;
+        const u8 *packed = blob_read_bytes(&r, re_len);
+
+        if (re_len != 0U) {
+            m->first_line_re = yew_re_unpack(arena, packed, re_len, &used);
+            if (m->first_line_re == NULL || used != re_len)
+                r.ok = false;
+        }
+    }
+    naux = blob_read_u32(&r);
+    if (!r.ok || naux >= UINT32_MAX || naux > SYN_DEF_MAX_RULES)
+        goto fail;
+    aux = arena_alloc(arena, sizeof(*aux), _Alignof(Interner));
+    interner_init(aux, arena);
+    for (i = 1U; i <= naux; i++) {
+        size_t value_len;
+        char *value = blob_read_string(&r, arena, &value_len);
+
+        if (!r.ok || value == NULL || yew_intern(aux, value, value_len) != i) {
+            r.ok = false;
+            goto fail;
+        }
+    }
+    def->aux = aux;
+    m->aux = aux;
+    def->ctxs = arena_alloc(arena, (size_t)def->nctxs * sizeof(*def->ctxs),
+                            _Alignof(SynCtx));
+    m->ctx_names = arena_alloc(arena,
+                               (size_t)def->nctxs * sizeof(*m->ctx_names),
+                               _Alignof(const char *));
+    for (i = 0U; i < def->nctxs; i++) {
+        SynCtx *ctx = &def->ctxs[i];
+        const u8 *first;
+
+        (void)memset(ctx, 0, sizeof(*ctx));
+        ctx->first_rule = blob_read_u32(&r);
+        ctx->nrules = blob_read_u32(&r);
+        ctx->dflt_attr = blob_read_u8(&r);
+        ctx->at_eol = blob_read_u8(&r);
+        ctx->eol_nop = blob_read_u8(&r);
+        ctx->flags = blob_read_u8(&r);
+        ctx->eol_target = blob_read_u16(&r);
+        first = blob_read_bytes(&r, sizeof(ctx->first));
+        if (first != NULL)
+            (void)memcpy(ctx->first, first, sizeof(ctx->first));
+        m->ctx_names[i] = blob_read_string(&r, arena, NULL);
+        if (!r.ok || m->ctx_names[i] == NULL ||
+            ctx->first_rule > def->nrules ||
+            ctx->nrules > def->nrules - ctx->first_rule ||
+            ctx->dflt_attr >= YEW_ATTR__COUNT || ctx->at_eol > SYN_OP_SET ||
+            ctx->eol_nop > 4U ||
+            (ctx->at_eol == SYN_OP_SET && ctx->eol_target >= def->nctxs))
+            goto fail;
+    }
+    def->rules = arena_alloc(arena,
+                             (size_t)def->nrules * sizeof(*def->rules),
+                             _Alignof(SynRule));
+    m->patterns = arena_alloc(arena,
+                              (size_t)def->nrules * sizeof(*m->patterns),
+                              _Alignof(const char *));
+    for (i = 0U; i < def->nrules; i++) {
+        SynRule *rule = &def->rules[i];
+        const u8 *bytes;
+        u32 j;
+        u32 re_len;
+        size_t used = 0U;
+
+        (void)memset(rule, 0, sizeof(*rule));
+        rule->attr = blob_read_u8(&r);
+        rule->op = blob_read_u8(&r);
+        rule->nop = blob_read_u8(&r);
+        rule->aux_match = blob_read_u8(&r);
+        rule->target = blob_read_u16(&r);
+        rule->consume = blob_read_u8(&r);
+        rule->flags = blob_read_u8(&r);
+        bytes = blob_read_bytes(&r, sizeof(rule->caps));
+        if (bytes != NULL)
+            (void)memcpy(rule->caps, bytes, sizeof(rule->caps));
+        rule->aux_group = blob_read_u8(&r);
+        rule->npush = blob_read_u8(&r);
+        rule->aux_pre = blob_read_u32(&r);
+        rule->aux_post = blob_read_u32(&r);
+        for (j = 0U; j < YEW_ARRAY_LEN(rule->push); j++)
+            rule->push[j] = blob_read_u16(&r);
+        bytes = blob_read_bytes(&r, sizeof(rule->first));
+        if (bytes != NULL)
+            (void)memcpy(rule->first, bytes, sizeof(rule->first));
+        m->patterns[i] = blob_read_string(&r, arena, NULL);
+        re_len = blob_read_u32(&r);
+        bytes = blob_read_bytes(&r, re_len);
+        if (re_len != 0U) {
+            rule->re = yew_re_unpack(arena, bytes, re_len, &used);
+            if (rule->re == NULL || used != re_len)
+                r.ok = false;
+        }
+        if (!r.ok || !syn_rule_valid(rule, def, (size_t)naux + 1U) ||
+            (rule->aux_match == SYN_AUXM_NONE) != (rule->re != NULL))
+            goto fail;
+    }
+    if (!r.ok || r.at != r.len || def->name == NULL)
+        goto fail;
+    m->def = def;
+    m->lang.id = language_id(def->name);
+    (void)cached_id;
+    m->next = metas;
+    metas = m;
+    return def;
+
+fail:
+    if (aux != NULL)
+        interner_free(aux);
+    free(m);
+    return NULL;
+}
+
 static u64 fnv64(const u8 *p, size_t n)
 {
     u64 hash = UINT64_C(14695981039346656037);
@@ -1627,9 +2058,19 @@ static u32 abi_tag(void)
 {
     const u16 one = 1U;
     const u8 little = *(const u8 *)&one;
+    u32 tag = UINT32_C(2166136261);
+    const u32 values[] = {
+        (u32)sizeof(void *), (u32)sizeof(SynCtx), (u32)_Alignof(SynCtx),
+        (u32)sizeof(SynRule), (u32)_Alignof(SynRule),
+        (u32)sizeof(SynDef), (u32)_Alignof(SynDef), (u32)little
+    };
+    u32 i;
 
-    return ((u32)sizeof(void *) << 8U) | ((u32)little << 1U) |
-           (u32)(sizeof(SynRule) & 1U);
+    for (i = 0U; i < YEW_ARRAY_LEN(values); i++) {
+        tag ^= values[i];
+        tag *= UINT32_C(16777619);
+    }
+    return tag;
 }
 
 static bool read_whole(const char *path, Bytebuf *out, struct stat *st)
@@ -1781,14 +2222,15 @@ static bool cache_header_ok(const u8 *p, size_t n, size_t *blob_len)
 }
 
 static bool cache_write(const char *path, const struct stat *st,
-                        const u8 *src, size_t n)
+                        const u8 *src, size_t src_len, const u8 *blob,
+                        size_t blob_len)
 {
     Bytebuf bytes;
     char *dir = yew_syn_cache_dir();
     u8 header[YEW_SYN_CACHE_HEADER_SIZE];
     bool ok;
 
-    if (path == NULL || dir == NULL || n > UINT32_MAX) {
+    if (path == NULL || dir == NULL || blob_len > UINT32_MAX) {
         free(dir);
         return false;
     }
@@ -1805,12 +2247,12 @@ static bool cache_write(const char *path, const struct stat *st,
     put64(header + 24U, (u64)st->st_mtim.tv_sec);
     put64(header + 32U, (u64)st->st_mtim.tv_nsec);
     put64(header + 40U, (u64)st->st_size);
-    put64(header + 48U, fnv64(src, n));
-    put32(header + 56U, (u32)n);
-    put32(header + 60U, crc32_bytes(src, n));
+    put64(header + 48U, fnv64(src, src_len));
+    put32(header + 56U, (u32)blob_len);
+    put32(header + 60U, crc32_bytes(blob, blob_len));
     bytebuf_init(&bytes);
     bytebuf_append(&bytes, header, sizeof(header));
-    bytebuf_append(&bytes, src, n);
+    bytebuf_append(&bytes, blob, blob_len);
     ok = yew_file_write_atomic(path, bytes.data, bytes.len, 0600U) ==
          YEW_SAVE_OK;
     bytebuf_free(&bytes);
@@ -1821,26 +2263,27 @@ SynDef *yew_syn_def_load(Arena *a, DiagCtx *dc, const char *path)
 {
     Bytebuf source;
     Bytebuf cached;
+    Bytebuf packed;
     struct stat src_st;
     struct stat cache_st;
     char *name;
     char *cache_path;
-    const u8 *chosen = NULL;
-    size_t chosen_len = 0U;
     size_t blob_len = 0U;
     bool valid_cache = false;
-    bool from_cache = false;
     bool bypass;
+    bool cache_warned = false;
+    const char *no_cache;
     u32 file_id;
     u32 errors = 0U;
     u32 warnings = 0U;
-    SynDef *def;
+    SynDef *def = NULL;
     char *owned;
 
     if (a == NULL || dc == NULL || path == NULL)
         return NULL;
     bytebuf_init(&source);
     bytebuf_init(&cached);
+    bytebuf_init(&packed);
     if (stat(path, &src_st) != 0) {
         file_id = fl_diag_add_file(dc, path, "", 0U);
         fl_diag_emit(dc, FL_DIAG_ERROR, (FlSpan){file_id, 1U, 1U, 1U},
@@ -1849,65 +2292,87 @@ SynDef *yew_syn_def_load(Arena *a, DiagCtx *dc, const char *path)
     }
     name = heap_stem(path);
     cache_path = yew_syn_cache_path(name);
-    bypass = cache_bypass || getenv("YEW_NO_SYN_CACHE") != NULL;
-    if (!bypass && cache_path != NULL &&
-        read_whole(cache_path, &cached, &cache_st)) {
-        valid_cache = cache_header_ok(cached.data, cached.len, &blob_len);
-        if (!valid_cache) {
+    no_cache = getenv("YEW_NO_SYN_CACHE");
+    bypass = cache_bypass || (no_cache != NULL && strcmp(no_cache, "1") == 0);
+    if (!bypass && cache_path != NULL) {
+        bool exists = access(cache_path, F_OK) == 0;
+
+        if (read_whole(cache_path, &cached, &cache_st)) {
+            valid_cache = cache_header_ok(cached.data, cached.len, &blob_len);
+        } else if (exists) {
+            yew_log(YEW_LOG_WARN, "syntax cache unreadable; recompiling %s",
+                    path);
+            cache_warned = true;
+        }
+        if (cached.len != 0U && !valid_cache) {
             yew_log(YEW_LOG_WARN, "syntax cache corrupt; recompiling %s",
                     path);
-        } else if (get64(cached.data + 24U) == (u64)src_st.st_mtim.tv_sec &&
+            cache_warned = true;
+        } else if (valid_cache &&
+                   get64(cached.data + 24U) == (u64)src_st.st_mtim.tv_sec &&
                    get64(cached.data + 32U) == (u64)src_st.st_mtim.tv_nsec &&
                    get64(cached.data + 40U) == (u64)src_st.st_size) {
-            chosen = cached.data + YEW_SYN_CACHE_HEADER_SIZE;
-            chosen_len = blob_len;
-            from_cache = true;
-        }
-    }
-    if (chosen == NULL) {
-        if (!read_whole(path, &source, &src_st)) {
             file_id = fl_diag_add_file(dc, path, "", 0U);
-            fl_diag_emit(dc, FL_DIAG_ERROR, (FlSpan){file_id, 1U, 1U, 1U},
-                         "cannot read syntax definition: %s", strerror(errno));
-            free(name);
-            free(cache_path);
-            bytebuf_free(&cached);
-            return NULL;
-        }
-        if (valid_cache &&
-            get64(cached.data + 48U) == fnv64(source.data, source.len)) {
-            chosen = cached.data + YEW_SYN_CACHE_HEADER_SIZE;
-            chosen_len = blob_len;
-            from_cache = true;
-            if (!cache_write(cache_path, &src_st, chosen, chosen_len))
-                yew_log(YEW_LOG_WARN, "syntax cache metadata update failed: %s",
-                        cache_path);
-        } else {
-            chosen = source.data;
-            chosen_len = source.len;
+            (void)file_id;
+            def = syn_blob_unpack(a,
+                                  cached.data + YEW_SYN_CACHE_HEADER_SIZE,
+                                  blob_len, path);
+            if (def != NULL)
+                goto done;
+            yew_log(YEW_LOG_WARN,
+                    "syntax cache tables invalid; recompiling %s", path);
+            cache_warned = true;
+            valid_cache = false;
         }
     }
-    owned = arena_strndup(a, (const char *)chosen, chosen_len);
-    file_id = fl_diag_add_file(dc, path, owned, chosen_len);
-    def = yew_syn_def_compile(a, dc, (const u8 *)owned, chosen_len, file_id,
+    if (!read_whole(path, &source, &src_st)) {
+        file_id = fl_diag_add_file(dc, path, "", 0U);
+        fl_diag_emit(dc, FL_DIAG_ERROR, (FlSpan){file_id, 1U, 1U, 1U},
+                     "cannot read syntax definition: %s", strerror(errno));
+        goto done;
+    }
+    if (valid_cache &&
+        get64(cached.data + 48U) == fnv64(source.data, source.len)) {
+        def = syn_blob_unpack(a, cached.data + YEW_SYN_CACHE_HEADER_SIZE,
+                              blob_len, path);
+        if (def != NULL) {
+            if (!cache_write(cache_path, &src_st, source.data, source.len,
+                             cached.data + YEW_SYN_CACHE_HEADER_SIZE,
+                             blob_len))
+                yew_log(YEW_LOG_WARN,
+                        "syntax cache metadata update failed: %s", cache_path);
+            goto done;
+        }
+        if (!cache_warned)
+            yew_log(YEW_LOG_WARN,
+                    "syntax cache tables invalid; recompiling %s", path);
+    }
+    owned = arena_strndup(a, (const char *)source.data, source.len);
+    file_id = fl_diag_add_file(dc, path, owned, source.len);
+    def = yew_syn_def_compile(a, dc, (const u8 *)owned, source.len, file_id,
                               &errors, &warnings);
-    if (from_cache && compile_count != 0U)
-        compile_count--;
     if (def != NULL) {
         DefMeta *m = meta_for(def);
 
         if (m != NULL)
             m->lang.source = arena_strdup(a, path);
-        if (!bypass && !from_cache && cache_path != NULL &&
-            !cache_write(cache_path, &src_st, (const u8 *)owned, chosen_len))
-            yew_log(YEW_LOG_WARN, "syntax cache write failed: %s", cache_path);
+        if (!bypass && cache_path != NULL) {
+            if (!syn_blob_pack(def, &packed) ||
+                !cache_write(cache_path, &src_st, (const u8 *)owned,
+                             source.len, packed.data, packed.len))
+                yew_log(YEW_LOG_WARN, "syntax cache write failed: %s",
+                        cache_path);
+        }
     }
     (void)errors;
     (void)warnings;
+
+done:
     free(name);
     free(cache_path);
     bytebuf_free(&source);
     bytebuf_free(&cached);
+    bytebuf_free(&packed);
     return def;
 }
 

@@ -132,4 +132,9 @@ bool yew_re_forces_case(const YewRe *re);
  * while a false negative would make syntax highlighting incorrect. */
 void yew_re_first_bytes(const YewRe *re, u8 first[32]);
 
+/* Stable, pointer-free compiled form used by the syntax-definition cache.
+ * Unpacking performs bounds/shape validation and never parses a pattern. */
+bool yew_re_pack(const YewRe *re, Bytebuf *out);
+YewRe *yew_re_unpack(Arena *a, const u8 *data, size_t len, size_t *used);
+
 #endif

@@ -202,6 +202,21 @@ static u32 build_prop_ranges(ReParse *p, bool (*pred)(u32), ReRange **out)
     return n;
 }
 
+static u32 build_space_ranges(ReParse *p, ReRange **out)
+{
+    static const ReRange space[] = {
+        {0x0009U, 0x000DU}, {0x0020U, 0x0020U}, {0x0085U, 0x0085U},
+        {0x00A0U, 0x00A0U}, {0x1680U, 0x1680U}, {0x2000U, 0x200AU},
+        {0x2028U, 0x2029U}, {0x202FU, 0x202FU}, {0x205FU, 0x205FU},
+        {0x3000U, 0x3000U}
+    };
+    ReRange *r = arena_alloc(p->arena, sizeof(space), _Alignof(ReRange));
+
+    (void)memcpy(r, space, sizeof(space));
+    *out = r;
+    return YEW_ARRAY_LEN(space);
+}
+
 u32 yew_re_class_perl(ReParse *p, char which)
 {
     ReRange *r = NULL;
@@ -217,7 +232,7 @@ u32 yew_re_class_perl(ReParse *p, char which)
         n = build_prop_ranges(p, yew_re_is_digit, &r);
         break;
     default:
-        n = build_prop_ranges(p, yew_re_is_space, &r);
+        n = build_space_ranges(p, &r);
         break;
     }
     return yew_re_class_intern(p, r, n, negate);
