@@ -19,6 +19,7 @@
 #include "fl/flconf.h"
 #include "edit/option.h"
 #include "edit/bind.h"
+#include "edit/block.h"
 #include "unicode/width.h"
 #include "fl/fltxn.h"
 #include "fl/record.h"
@@ -564,6 +565,7 @@ void yew_ed_init(Ed *ed)
     yew_timers_init(&ed->timers);
     yew_jobs_init(&ed->jobs);
     yew_mouse_init(&ed->mouse);
+    yew_block_provider_syntax_install(true);
     root = realpath(".", NULL);
     if (root == NULL)
         root = getcwd(NULL, 0U);

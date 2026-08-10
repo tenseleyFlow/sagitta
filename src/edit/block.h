@@ -5,8 +5,6 @@
 
 enum { YEW_BLOCK_SCAN_LINES = 2000 };
 
-typedef struct SynEngine SynEngine;
-
 typedef struct BlockProvider {
     const char *name;
     int priority;
@@ -17,7 +15,7 @@ typedef struct BlockProvider {
 
 void yew_block_register(BlockProvider provider);
 bool yew_block_level(UnitCtx *u, ByteOff p, u32 level, Span *out);
-void yew_block_provider_syntax_install(SynEngine *engine);
+void yew_block_provider_syntax_install(bool enabled);
 bool yew_syn_in_string_or_comment(const Buffer *buf, ByteOff off);
 bool yew_block_match(UnitCtx *u, ByteOff p, bool next, ByteOff *out);
 

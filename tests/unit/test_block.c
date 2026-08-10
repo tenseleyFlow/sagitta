@@ -334,7 +334,7 @@ void test_block_syntax_install_accepts_disabled_provider(void)
 
     block_fixture_text(&fixture, text);
     before = block_level(&fixture, text_off(text, "three"), 0U);
-    yew_block_provider_syntax_install(NULL);
+    yew_block_provider_syntax_install(false);
     after = block_level(&fixture, text_off(text, "three"), 0U);
     YEW_ASSERT_EQ_U64(after.lo, before.lo);
     YEW_ASSERT_EQ_U64(after.hi, before.hi);

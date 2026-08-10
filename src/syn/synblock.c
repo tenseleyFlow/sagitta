@@ -319,11 +319,10 @@ static bool syn_enclosing(void *ctx, UnitCtx *u, ByteOff p, Span inner,
     return false;
 }
 
-void yew_block_provider_syntax_install(SynEngine *engine)
+void yew_block_provider_syntax_install(bool enabled)
 {
     BlockProvider provider = {"syntax", 40,
-                              engine == NULL ? NULL : syn_enclosing,
-                              engine};
+                              enabled ? syn_enclosing : NULL, NULL};
 
     yew_block_register(provider);
 }

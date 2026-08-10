@@ -61,12 +61,12 @@ static void fixture_init(SynBlockFixture *f, const char *text)
     YEW_ASSERT(report.fixpoint);
     f->unit.tb = f->buf.tb;
     f->unit.buf = &f->buf;
-    yew_block_provider_syntax_install(f->toy.engine);
+    yew_block_provider_syntax_install(true);
 }
 
 static void fixture_free(SynBlockFixture *f)
 {
-    yew_block_provider_syntax_install(NULL);
+    yew_block_provider_syntax_install(false);
     yew_syn_detach(&f->buf.syn);
     yew_textbuf_free(f->buf.tb);
     syn_toy_free(&f->toy);
@@ -132,7 +132,7 @@ void test_syn_block_unsettled_and_unbound_use_plain_fallback(void)
     YEW_ASSERT(yew_block_level(&f.unit, BYTEOFF(at), 0U, &fallback));
     YEW_ASSERT(fallback.lo <= at && fallback.hi >= at);
     f.buf.syn.lang = 1U;
-    yew_block_provider_syntax_install(NULL);
+    yew_block_provider_syntax_install(false);
     YEW_ASSERT(yew_block_level(&f.unit, BYTEOFF(at), 0U, &fallback));
     YEW_ASSERT(fallback.lo <= at && fallback.hi >= at);
     YEW_ASSERT(exact.lo <= at && exact.hi >= at);
