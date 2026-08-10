@@ -37,7 +37,10 @@ static const RtGenCmd gen_cmds[] = {
     {"ed.move.line.home", RT_GEN_MOTION},
     {"ed.move.line.end", RT_GEN_MOTION},
     {"ed.edit.insert.text", RT_GEN_INSERT},
+    {"ed.edit.insert.at", RT_GEN_INSERT},
     {"ed.edit.delete.unit", RT_GEN_DELETE},
+    {"ed.edit.delete.span", RT_GEN_DELETE},
+    {"ed.edit.replace.span", RT_GEN_INSERT},
     {"ed.mode.enter", RT_GEN_MODE},
     {"ed.mode.escape", RT_GEN_SELECTION},
     {"ed.sel.expand", RT_GEN_SELECTION},
@@ -183,6 +186,18 @@ static bool append_generated(RtSession *session, u64 *state,
         ev.sarg = store_bytes(session, payloads[p].bytes, ev.sarg_len);
         if (ev.sarg == NULL)
             return false;
+        if (strcmp(gc->name, "ed.edit.insert.at") == 0)
+            ev.iarg = 0;
+        if (strcmp(gc->name, "ed.edit.replace.span") == 0) {
+            ev.range.given = true;
+            ev.range.tok = (Span){0U, 0U};
+        }
+    } else if (strcmp(gc->name, "ed.edit.delete.span") == 0) {
+        /* Empty span is valid for every fixture; nonempty range semantics
+         * are locked by the integration suite without making generation
+         * depend on the session's evolving buffer length. */
+        ev.range.given = true;
+        ev.range.tok = (Span){0U, 0U};
     } else if (gc->kind == RT_GEN_MODE) {
         static const u8 modes[] = {'L', 'W', 'B'};
 
@@ -276,9 +291,6 @@ typedef struct RtDenied {
 
 #define D(name_, reason_) {name_, reason_}
 static const RtDenied denied[] = {
-    D("ed.edit.insert.at", "RecEvent has no explicit offset field"),
-    D("ed.edit.delete.span", "RecEvent has no range field"),
-    D("ed.edit.replace.span", "RecEvent has no range field"),
     D("ed.move.unit.up_alt", "redundant motion alias"),
     D("ed.move.unit.down_alt", "redundant motion alias"),
     D("ed.move.buf.home", "redundant motion alias"),

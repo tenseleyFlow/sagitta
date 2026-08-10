@@ -137,6 +137,7 @@ void test_fl_marshal_ed_run_accepts_every_key_and_preserves_sarg_len(void)
     mapv(&f.fl.vm, map, "count", FL_INT_V(1));
     mapv(&f.fl.vm, map, "iarg", FL_INT_V(0));
     mapv(&f.fl.vm, map, "sarg", strv(&f.fl.vm, bytes, sizeof(bytes)));
+    mapv(&f.fl.vm, map, "bang", FL_BOOL_V(true));
     mapv(&f.fl.vm, map, "win", fl_h_win_make(&f.ed, f.ed.win));
     args[0] = strv(&f.fl.vm, "ed.edit.insert.at", 17U);
     args[1] = FL_OBJ_V(FL_MAP, map);
@@ -146,6 +147,18 @@ void test_fl_marshal_ed_run_accepts_every_key_and_preserves_sarg_len(void)
     text = (FlStr *)out.as.o;
     SAG_ASSERT_EQ_U64(text->len, sizeof(bytes));
     SAG_ASSERT_EQ_MEM(text->b, bytes, sizeof(bytes));
+
+    fl_map_clear(map);
+    mapv(&f.fl.vm, map, "range_kind", strv(&f.fl.vm, "span", 4U));
+    mapv(&f.fl.vm, map, "range_given", FL_BOOL_V(true));
+    mapv(&f.fl.vm, map, "range_lo", FL_INT_V(1));
+    mapv(&f.fl.vm, map, "range_hi", FL_INT_V(2));
+    args[0] = strv(&f.fl.vm, "ed.edit.delete.span", 19U);
+    SAG_ASSERT(fl_api_ed_run(&f.fl.vm, args, 2U, &out));
+    SAG_ASSERT(invoke(&f.fl.vm, "buf.text", text_args, 1U, &out));
+    text = (FlStr *)out.as.o;
+    SAG_ASSERT_EQ_U64(text->len, 2U);
+    SAG_ASSERT_EQ_MEM(text->b, "xy", 2U);
     fl_gc_release(&f.fl.vm, 1U);
     mf_close(&f);
 }
@@ -168,6 +181,13 @@ void test_fl_marshal_ed_run_rejects_unknown_key_and_bad_count(void)
     f.fl.vm.err = FL_NIL_V;
     fl_map_clear(map);
     mapv(&f.fl.vm, map, "count", FL_INT_V(0));
+    SAG_ASSERT(!fl_api_ed_run(&f.fl.vm, args, 2U, &out));
+    SAG_ASSERT(error_is(&f.fl.vm, "type"));
+    f.fl.vm.err = FL_NIL_V;
+    fl_map_clear(map);
+    mapv(&f.fl.vm, map, "range_kind", strv(&f.fl.vm, "span", 4U));
+    mapv(&f.fl.vm, map, "range_lo", FL_INT_V(0));
+    mapv(&f.fl.vm, map, "range_hi", FL_INT_V(1));
     SAG_ASSERT(!fl_api_ed_run(&f.fl.vm, args, 2U, &out));
     SAG_ASSERT(error_is(&f.fl.vm, "type"));
     fl_gc_release(&f.fl.vm, 1U);

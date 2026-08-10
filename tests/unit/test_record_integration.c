@@ -123,6 +123,9 @@ void test_record_tap_deep_copies_binary_arguments_and_resolved_context(void)
     cx.count = 7U;
     cx.count_given = true;
     cx.iarg = -42;
+    cx.bang = true;
+    cx.range.given = true;
+    cx.range.tok = (Span){3U, 9U};
     cx.sarg = (const char *)payload;
     cx.sarg_len = sizeof(payload);
     cx.source = SAG_SRC_MOUSE;
@@ -133,6 +136,11 @@ void test_record_tap_deep_copies_binary_arguments_and_resolved_context(void)
     SAG_ASSERT_EQ_U64(event->count, 7U);
     SAG_ASSERT(event->count_given);
     SAG_ASSERT_EQ_I64(event->iarg, -42);
+    SAG_ASSERT(event->bang);
+    SAG_ASSERT_EQ_U64(event->range_kind, SAG_REC_RANGE_SPAN);
+    SAG_ASSERT(event->range_given);
+    SAG_ASSERT_EQ_U64(event->range_lo, 3U);
+    SAG_ASSERT_EQ_U64(event->range_hi, 9U);
     SAG_ASSERT_EQ_U64(event->mode, SAG_MODE_H);
     SAG_ASSERT_EQ_U64(event->src, SAG_SRC_MOUSE);
     SAG_ASSERT_EQ_U64(event->sarg_len, sizeof(payload));
@@ -218,6 +226,71 @@ void test_record_multicursor_dispatch_captures_one_event(void)
                              SAG_SRC_TEST), SAG_CMD_OK);
     SAG_ASSERT_EQ_U64(f.ed.rec.ev.len, 1U);
     SAG_ASSERT_EQ_U64(f.ed.win->cs.curs.len, 2U);
+    rf_close(&f);
+}
+
+void test_record_rejects_nonportable_targets_before_execution(void)
+{
+    static const char payload[] = "x";
+    CmdCtx cx = {0};
+    RecordFix f;
+    Win other = {0};
+
+    rf_open(&f);
+    SAG_ASSERT(sag_record_start(&f.ed, (u8)'g'));
+    cx.ed = &f.ed;
+    cx.win = f.ed.win;
+    cx.count = 1U;
+    cx.sarg = payload;
+    cx.sarg_len = sizeof(payload) - 1U;
+    cx.cursor_given = true;
+    cx.source = SAG_SRC_FLETCH;
+    SAG_ASSERT_EQ_I64(
+        sag_cmd_invoke(sag_cmd_lookup("ed.edit.insert.text", 19U), &cx),
+        SAG_CMD_ERR_STATE);
+    SAG_ASSERT_EQ_U64(f.ed.rec.ev.len, 0U);
+    assert_buffer(&f.ed, "", 0U);
+
+    cx.cursor_given = false;
+    cx.win = &other;
+    SAG_ASSERT_EQ_I64(
+        sag_cmd_invoke(sag_cmd_lookup("ed.edit.insert.text", 19U), &cx),
+        SAG_CMD_ERR_STATE);
+    SAG_ASSERT_EQ_U64(f.ed.rec.ev.len, 0U);
+    assert_buffer(&f.ed, "", 0U);
+    rf_close(&f);
+}
+
+void test_record_range_envelope_replays_the_same_span_edit(void)
+{
+    CmdCtx cx = {0};
+    EditCtx ec;
+    RecordFix f;
+
+    rf_open(&f);
+    SAG_ASSERT_EQ_I64(rf_run(&f, "ed.edit.insert.text", "abcdef", 6U, 1U,
+                             SAG_SRC_TEST), SAG_CMD_OK);
+    SAG_ASSERT(sag_record_start(&f.ed, (u8)'h'));
+    cx.ed = &f.ed;
+    cx.win = f.ed.win;
+    cx.count = 1U;
+    cx.range.given = true;
+    cx.range.tok = (Span){1U, 3U};
+    cx.source = SAG_SRC_FLETCH;
+    SAG_ASSERT_EQ_I64(
+        sag_ed_invoke(&f.ed,
+                      sag_cmd_lookup("ed.edit.delete.span", 19U), &cx),
+        SAG_CMD_OK);
+    assert_buffer(&f.ed, "adef", 4U);
+    SAG_ASSERT_EQ_I64(sag_record_stop(&f.ed), SAG_CMD_OK);
+    SAG_ASSERT_EQ_U64(f.ed.rec.ev.len, 1U);
+    SAG_ASSERT_EQ_U64(f.ed.rec.ev.data[0].range_kind,
+                      SAG_REC_RANGE_SPAN);
+    ec = sag_ed_edit_ctx(&f.ed);
+    SAG_ASSERT(sag_undo(&ec));
+    assert_buffer(&f.ed, "abcdef", 6U);
+    SAG_ASSERT_EQ_I64(sag_macro_replay(&f.ed, (u8)'h', 1U), SAG_CMD_OK);
+    assert_buffer(&f.ed, "adef", 4U);
     rf_close(&f);
 }
 

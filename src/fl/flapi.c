@@ -1354,6 +1354,14 @@ bool fl_api_ed_run(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     CmdCtx cx = {0};
     u32 cursor = 0U;
     FlValue key, value;
+    const FlStr *range_kind = NULL;
+    i64 range_lo = 0;
+    i64 range_hi = 0;
+    bool range_given = false;
+    bool have_range_kind = false;
+    bool have_range_lo = false;
+    bool have_range_hi = false;
+    bool have_range_given = false;
     CmdStatus st;
     const CmdDesc *desc;
     (void)n;
@@ -1392,12 +1400,56 @@ bool fl_api_ed_run(FlVm *vm, FlValue *a, u32 n, FlValue *out)
                                 "%s path contains an embedded NUL",
                                 desc->name);
             cx.sarg = s->b; cx.sarg_len = s->len;
+        } else if (key_is(k, "bang")) {
+            if (!need_bool(vm, value, 1U, &cx.bang)) return false;
+        } else if (key_is(k, "range_kind")) {
+            if (!need_str(vm, value, 1U, &range_kind)) return false;
+            have_range_kind = true;
+        } else if (key_is(k, "range_lo")) {
+            if (!need_int(vm, value, 1U, &range_lo)) return false;
+            have_range_lo = true;
+        } else if (key_is(k, "range_hi")) {
+            if (!need_int(vm, value, 1U, &range_hi)) return false;
+            have_range_hi = true;
+        } else if (key_is(k, "range_given")) {
+            if (!need_bool(vm, value, 1U, &range_given)) return false;
+            have_range_given = true;
         } else if (key_is(k, "win")) {
             cx.win = fl_h_win(vm, value);
             if (cx.win == NULL) return false;
         } else {
             return fl_raise(vm, "key", "ed.run: unknown key %.*s",
                             (int)k->len, k->b);
+        }
+    }
+    if (have_range_kind || have_range_lo || have_range_hi ||
+        have_range_given) {
+        bool endpoints;
+
+        if (!have_range_kind || !have_range_given)
+            return fl_raise(vm, "type",
+                            "ed.run range needs range_kind and range_given");
+        endpoints = key_is(range_kind, "lines") ||
+                    key_is(range_kind, "span");
+        if (endpoints != (have_range_lo && have_range_hi) ||
+            range_lo < 0 || range_hi < range_lo)
+            return fl_raise(vm, "range", "ed.run range is invalid");
+        cx.range.given = range_given;
+        if (key_is(range_kind, "lines")) {
+            cx.range.kind = SAG_RANGE_LINES;
+            cx.range.lo = LINENO((u64)range_lo);
+            cx.range.hi = LINENO((u64)range_hi);
+        } else if (key_is(range_kind, "buffer")) {
+            cx.range.kind = SAG_RANGE_BUFFER;
+        } else if (key_is(range_kind, "selection")) {
+            cx.range.kind = SAG_RANGE_SELECTION;
+        } else if (key_is(range_kind, "span")) {
+            if (!range_given)
+                return fl_raise(vm, "range",
+                                "ed.run span range must be given");
+            cx.range.tok = (Span){(u64)range_lo, (u64)range_hi};
+        } else {
+            return fl_raise(vm, "range", "ed.run range kind is invalid");
         }
     }
     if (!invoke_command(vm, id, &cx, &st))

@@ -1008,6 +1008,8 @@ void test_record_tap_deep_copies_binary_arguments_and_resolved_context(void);
 void test_record_tap_drops_replay_source(void);
 void test_record_dispatch_ignores_nonrecordable_commands(void);
 void test_record_multicursor_dispatch_captures_one_event(void);
+void test_record_rejects_nonportable_targets_before_execution(void);
+void test_record_range_envelope_replays_the_same_span_edit(void);
 void test_record_stop_stores_parseable_source_and_uppercase_appends(void);
 void test_macro_replay_uses_one_undo_node_per_run(void);
 void test_macro_replay_rolls_back_on_runtime_error(void);

@@ -88,6 +88,79 @@ bool sag_record_active(const Ed *ed)
     return ed != NULL && ed->rec.active;
 }
 
+static bool portable_range(const CmdRange *range)
+{
+    if (range == NULL || range->kind > SAG_RANGE_SELECTION)
+        return false;
+    if (range->kind == SAG_RANGE_LINES)
+        return range->lo.v <= range->hi.v && range->hi.v <= INT64_MAX;
+    if (range->kind == SAG_RANGE_NONE && range->given)
+        return range->tok.lo <= range->tok.hi && range->tok.hi <= INT64_MAX;
+    return true;
+}
+
+CmdStatus sag_record_preflight(CmdId id, const CmdCtx *cx)
+{
+    const CmdDesc *desc;
+
+    if (cx == NULL || cx->ed == NULL || !cx->ed->rec.active ||
+        cx->source == SAG_SRC_REPLAY)
+        return SAG_CMD_OK;
+    desc = sag_cmd_desc(id);
+    if (cx->win != NULL && cx->win != cx->ed->win) {
+        sag_msg(cx->ed, SAG_MSG_ERROR,
+                "cannot record %s for a non-current window",
+                desc == NULL ? "command" : desc->name);
+        return SAG_CMD_ERR_STATE;
+    }
+    if (cx->cursor_given) {
+        sag_msg(cx->ed, SAG_MSG_ERROR,
+                "cannot record %s for an explicit cursor",
+                desc == NULL ? "command" : desc->name);
+        return SAG_CMD_ERR_STATE;
+    }
+    if (!portable_range(&cx->range)) {
+        sag_msg(cx->ed, SAG_MSG_ERROR,
+                "cannot record %s with a nonportable range",
+                desc == NULL ? "command" : desc->name);
+        return SAG_CMD_ERR_ARG;
+    }
+    if (cx->cursor_args_len != 0U || cx->opt_in != NULL ||
+        cx->opt_out != NULL || cx->opt_error != SAG_OPT_ERROR_NONE) {
+        sag_msg(cx->ed, SAG_MSG_ERROR,
+                "cannot record %s with internal resolved arguments",
+                desc == NULL ? "command" : desc->name);
+        return SAG_CMD_ERR_ARG;
+    }
+    return SAG_CMD_OK;
+}
+
+static void capture_range(RecEvent *event, const CmdRange *range)
+{
+    event->range_given = range->given;
+    switch (range->kind) {
+    case SAG_RANGE_LINES:
+        event->range_kind = (u8)SAG_REC_RANGE_LINES;
+        event->range_lo = range->lo.v;
+        event->range_hi = range->hi.v;
+        break;
+    case SAG_RANGE_BUFFER:
+        event->range_kind = (u8)SAG_REC_RANGE_BUFFER;
+        break;
+    case SAG_RANGE_SELECTION:
+        event->range_kind = (u8)SAG_REC_RANGE_SELECTION;
+        break;
+    case SAG_RANGE_NONE:
+    default:
+        if (range->given) {
+            event->range_kind = (u8)SAG_REC_RANGE_SPAN;
+            event->range_lo = range->tok.lo;
+            event->range_hi = range->tok.hi;
+        }
+        break;
+    }
+}
+
 void sag_record_tap(CmdId id, const CmdCtx *cx)
 {
     const CmdDesc *desc;
@@ -136,9 +209,17 @@ void sag_record_tap(CmdId id, const CmdCtx *cx)
     if (rec->blob.len > UINT32_MAX ||
         sarg_len > UINT32_MAX - (u32)rec->blob.len)
         SAG_BUG("macro recorder argument storage overflow");
-    event = (RecEvent){id, cx->count, cx->count_given, cx->iarg,
-                       (u32)rec->blob.len, sarg_len,
-                       (u8)cx->ed->mode, (u8)cx->source};
+    event = (RecEvent){0};
+    event.cmd = id;
+    event.count = cx->count;
+    event.count_given = cx->count_given;
+    event.bang = cx->bang;
+    event.iarg = cx->iarg;
+    event.sarg_at = (u32)rec->blob.len;
+    event.sarg_len = sarg_len;
+    event.mode = (u8)cx->ed->mode;
+    event.src = (u8)cx->source;
+    capture_range(&event, &cx->range);
     if (sarg_len != 0U)
         bytebuf_append(&rec->blob, sarg, sarg_len);
     RecEventVec_push(&rec->ev, event);
@@ -217,6 +298,8 @@ static bool special_motion(const Rec *rec, const RecEvent *event)
     const CmdDesc *desc = sag_cmd_desc(event->cmd);
 
     if (desc == NULL || desc->word == NULL)
+        return false;
+    if (event->bang || event->range_kind != (u8)SAG_REC_RANGE_NONE)
         return false;
     if (event_name(event, "ed.edit.insert.text"))
         return true;
@@ -419,6 +502,30 @@ static void emit_run(const Rec *rec, const RecEvent *event, Bytebuf *out)
     if (event->iarg != 0) {
         bytebuf_printf(out, "%s iarg: %lld", need_comma ? "," : "",
                        (long long)event->iarg);
+        need_comma = true;
+    }
+    if (event->bang) {
+        bytebuf_printf(out, "%s bang: true", need_comma ? "," : "");
+        need_comma = true;
+    }
+    if (event->range_kind != (u8)SAG_REC_RANGE_NONE) {
+        const char *kind = event->range_kind == (u8)SAG_REC_RANGE_LINES
+                               ? "lines"
+                           : event->range_kind == (u8)SAG_REC_RANGE_BUFFER
+                               ? "buffer"
+                           : event->range_kind ==
+                                     (u8)SAG_REC_RANGE_SELECTION
+                               ? "selection"
+                               : "span";
+
+        bytebuf_printf(out, "%s range_kind: \"%s\", range_given: %s",
+                       need_comma ? "," : "", kind,
+                       event->range_given ? "true" : "false");
+        if (event->range_kind == (u8)SAG_REC_RANGE_LINES ||
+            event->range_kind == (u8)SAG_REC_RANGE_SPAN)
+            bytebuf_printf(out, ", range_lo: %llu, range_hi: %llu",
+                           (unsigned long long)event->range_lo,
+                           (unsigned long long)event->range_hi);
         need_comma = true;
     }
     if (event_sarg_len(rec, event) != 0U) {

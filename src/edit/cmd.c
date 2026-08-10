@@ -1237,8 +1237,13 @@ CmdStatus sag_cmd_prepare(CmdId id, CmdCtx *cx, const CmdDesc **out)
     if (!args_valid(d, cx))
         return command_fail(d, "invalid arguments", SAG_CMD_ERR_ARG);
     if (registry.record_tap != NULL &&
-        (d->flags & SAG_CMD_RECORDABLE) != 0U)
+        (d->flags & SAG_CMD_RECORDABLE) != 0U) {
+        CmdStatus recordable = sag_record_preflight(id, cx);
+
+        if (recordable != SAG_CMD_OK)
+            return recordable;
         registry.record_tap(id, cx);
+    }
     *out = d;
     return SAG_CMD_OK;
 }

@@ -168,6 +168,8 @@ static bool invoke_event(Ed *ed, const RtEvent *ev)
     cx.win = ed->win;
     cx.count = ev->count;
     cx.count_given = ev->count_given;
+    cx.iarg = ev->iarg;
+    cx.range = ev->range;
     cx.sarg = (const char *)ev->sarg;
     cx.sarg_len = ev->sarg_len;
     cx.source = SAG_SRC_TEST;

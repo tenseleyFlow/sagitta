@@ -11,6 +11,8 @@ typedef struct RtEvent {
     CmdId cmd;
     u32 count;
     bool count_given;
+    i64 iarg;
+    CmdRange range;
     const u8 *sarg;
     u32 sarg_len;
 } RtEvent;

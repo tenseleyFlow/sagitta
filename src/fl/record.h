@@ -12,15 +12,28 @@
 
 typedef struct Ed Ed;
 
+typedef enum RecRangeKind {
+    SAG_REC_RANGE_NONE,
+    SAG_REC_RANGE_LINES,
+    SAG_REC_RANGE_BUFFER,
+    SAG_REC_RANGE_SELECTION,
+    SAG_REC_RANGE_SPAN
+} RecRangeKind;
+
 typedef struct RecEvent {
     CmdId cmd;
     u32 count;
     bool count_given;
+    bool bang;
     i64 iarg;
+    u64 range_lo;
+    u64 range_hi;
     u32 sarg_at;
     u32 sarg_len;
     u8 mode;
     u8 src;
+    u8 range_kind;
+    bool range_given;
 } RecEvent;
 
 VEC_DECL(RecEventVec, RecEvent);
@@ -50,6 +63,7 @@ void sag_record_free(Rec *rec);
 bool sag_record_start(Ed *ed, u8 reg);
 CmdStatus sag_record_stop(Ed *ed);
 bool sag_record_active(const Ed *ed);
+CmdStatus sag_record_preflight(CmdId id, const CmdCtx *cx);
 void sag_record_tap(CmdId id, const CmdCtx *cx);
 void sag_record_key(Ed *ed, Key key);
 void sag_record_emit(const Rec *rec, const Ed *ed, Bytebuf *out);
