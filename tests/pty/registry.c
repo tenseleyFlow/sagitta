@@ -1559,6 +1559,38 @@ static void s18_finish(PtyCtx *c, const char *path)
     (void)unlink(path);
 }
 
+/*
+ * Sprint 35 deliberately has no q/@ bindings (Sprint 36 owns those).
+ * Drive the same registry commands through E mode, then compare the saved
+ * bytes: the replayed edit must be indistinguishable from typing it once.
+ */
+static void case_s35_macro_record_replay_from_e_mode(PtyCtx *c)
+{
+    static const u8 initial[] = "base\n";
+    static const u8 expected[] = "XXbase\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.macro.record a");
+    s18_settle_after_keys(c, "enter");
+
+    s18_settle_after_keys(c, "i X esc");
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.macro.stop");
+    s18_settle_after_keys(c, "enter");
+
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.macro.replay a");
+    s18_settle_after_keys(c, "enter s");
+    ptc_check(c, file_equals(path, expected, sizeof(expected) - 1U),
+              "E-mode macro replay did not reproduce the recorded edit");
+    ptc_snapshot(c, "s35_macro_replayed_edit");
+    quit_cleanly(c);
+    (void)unlink(path);
+}
+
 static void case_s18_cmdline_open(PtyCtx *c)
 {
     static const u8 initial[] = "alpha\nbeta\n";
@@ -4025,6 +4057,8 @@ static void case_s32_bug_restores_the_terminal(PtyCtx *c)
 }
 
 const PtyCase sag_pty_cases[] = {
+    C(s35_macro_record_replay_from_e_mode, modern, 24U, 80U,
+      case_s35_macro_record_replay_from_e_mode),
     C(s22_click_in_the_right_pane, modern, 24U, 80U,
       case_s22_click_in_the_right_pane),
     C(s26_finder_chrome, modern, 24U, 80U, case_s26_finder_chrome),
