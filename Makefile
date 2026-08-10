@@ -647,6 +647,7 @@ $(FAKECLIP): tests/unit/fakeclip.c | dirs
 test: $(BUILD)/unit_tests $(BUILD)/sagitta test-pty test-fletch torture-build
 	$(UNIT_RUN)
 	scripts/check-cmd-dispatch.sh
+	scripts/check-fl-choke.sh
 	scripts/check-input.sh
 	scripts/check-render.sh
 	scripts/check-sigsafe.sh
