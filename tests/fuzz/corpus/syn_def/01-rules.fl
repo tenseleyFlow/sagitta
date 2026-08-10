@@ -1,0 +1,1 @@
+{ syntax: 1, language: { name: "rules", extensions: ["one", "tar.one"] }, contexts: { main: { default: "text", rules: [{ match: "[A-Za-z_][A-Za-z0-9_]*", attr: "variable" }, { match: "[0-9]+", attr: "number" }, { match: "\\S+", attr: "error" }] } } }

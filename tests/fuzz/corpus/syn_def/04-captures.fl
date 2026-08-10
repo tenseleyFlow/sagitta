@@ -1,0 +1,1 @@
+{ syntax: 1, language: { name: "captures", priority: 7 }, contexts: { main: { rules: [{ match: "([A-Za-z_]+)([:=])", attr: "error", captures: { 1: "variable.member", 2: "operator" }, consume: 1 }] } } }

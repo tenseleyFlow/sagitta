@@ -1,0 +1,1 @@
+{ syntax: 1, language: { name: "aux" }, contexts: { main: { rules: [{ match: "([A-Z]+)", set_aux: 1, push: "body" }] }, body: { rules: [{ aux: "line_eq", pop: 1 }] } } }

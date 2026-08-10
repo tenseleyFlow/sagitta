@@ -4,9 +4,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "search/regex.h"
+#include "syn/defs.h"
 #include "syn/engine.h"
 #include "text/piece.h"
 #include "util/arena.h"
@@ -18,8 +21,13 @@ enum {
     PERF_SYN_VIEW_LINES = 200,
     PERF_SYN_EDIT_LINES = 100000,
     PERF_SYN_RULES = 6,
-    PERF_SYN_CTXS = 3
+    PERF_SYN_CTXS = 3,
+    PERF_SYN_DETECT_PATHS = 10000
 };
+
+#define PERF_SYN_DETECT_LIMIT_NS UINT64_C(5000000)
+#define PERF_SYN_COMPILE_LIMIT_NS UINT64_C(3000000)
+#define PERF_SYN_CACHE_LIMIT_NS UINT64_C(200000)
 
 typedef struct SynFixture {
     Arena arena;
@@ -42,6 +50,11 @@ typedef struct PerfCase {
 } PerfCase;
 
 static volatile u64 perf_syn_sink;
+
+typedef struct Source {
+    u8 *data;
+    size_t len;
+} Source;
 
 static bool now_ns(u64 *out)
 {
@@ -96,6 +109,185 @@ static size_t sample_count(void)
     if ((count & 1UL) == 0UL)
         count--;
     return (size_t)count;
+}
+
+static bool read_source(const char *path, Source *source)
+{
+    FILE *file = fopen(path, "rb");
+    long size;
+    bool ok;
+
+    (void)memset(source, 0, sizeof(*source));
+    if (file == NULL || fseek(file, 0L, SEEK_END) != 0 ||
+        (size = ftell(file)) < 0L || fseek(file, 0L, SEEK_SET) != 0) {
+        if (file != NULL)
+            (void)fclose(file);
+        return false;
+    }
+    source->data = malloc(size == 0L ? 1U : (size_t)size);
+    ok = source->data != NULL &&
+         (size == 0L || fread(source->data, 1U, (size_t)size, file) ==
+                        (size_t)size);
+    if (fclose(file) != 0)
+        ok = false;
+    if (!ok) {
+        free(source->data);
+        source->data = NULL;
+        return false;
+    }
+    source->len = (size_t)size;
+    return true;
+}
+
+static bool measure_detect(u64 *samples, size_t count)
+{
+    static const char *const paths[] = {
+        "config.ini", "/tmp/.editorconfig", "unit.service",
+        "archive.tar.xyz", "README", "settings.properties",
+        "unknown.zzz", "desktop.desktop"
+    };
+
+    for (size_t sample = 0U; sample < count; sample++) {
+        u64 start;
+        u64 end;
+
+        if (!now_ns(&start))
+            return false;
+        for (u32 i = 0U; i < PERF_SYN_DETECT_PATHS; i++) {
+            u32 lang = yew_syn_lang_for(paths[i % YEW_ARRAY_LEN(paths)],
+                                        NULL, 0U);
+
+            perf_syn_sink += lang;
+        }
+        if (!now_ns(&end) || end < start)
+            return false;
+        samples[sample] = end - start;
+    }
+    return true;
+}
+
+static bool measure_compile(const Source *source, u64 *samples, size_t count)
+{
+    for (size_t sample = 0U; sample < count; sample++) {
+        Arena arena;
+        DiagCtx dc;
+        SynDef *def;
+        u32 nerr = 0U;
+        u32 nwarn = 0U;
+        u64 start;
+        u64 end;
+
+        arena_init(&arena);
+        fl_diag_init(&dc, &arena);
+        (void)fl_diag_add_file(&dc, "runtime/syntax/ini.fl",
+                               (const char *)source->data, source->len);
+        if (!now_ns(&start)) {
+            arena_free_all(&arena);
+            return false;
+        }
+        def = yew_syn_def_compile(&arena, &dc, source->data, source->len,
+                                  0U, &nerr, &nwarn);
+        if (!now_ns(&end) || end < start || def == NULL || nerr != 0U ||
+            nwarn != 0U) {
+            if (def != NULL)
+                yew_syn_def_dispose(def);
+            arena_free_all(&arena);
+            return false;
+        }
+        samples[sample] = end - start;
+        perf_syn_sink += def->nrules;
+        yew_syn_def_dispose(def);
+        arena_free_all(&arena);
+    }
+    return true;
+}
+
+static void cache_fixture_remove(const char *root)
+{
+    char path[512];
+
+    yew_syn_cache_clear();
+    (void)snprintf(path, sizeof(path), "%s/yew/syn", root);
+    (void)rmdir(path);
+    (void)snprintf(path, sizeof(path), "%s/yew", root);
+    (void)rmdir(path);
+    (void)rmdir(root);
+}
+
+static bool measure_cache(u64 *samples, size_t count)
+{
+    char root[] = "/tmp/yew-perf-syn-XXXXXX";
+    const char *old_root = getenv("XDG_CACHE_HOME");
+    const char *old_bypass = getenv("YEW_NO_SYN_CACHE");
+    char *saved_root = old_root == NULL ? NULL : strdup(old_root);
+    char *saved_bypass = old_bypass == NULL ? NULL : strdup(old_bypass);
+    Arena warm_arena;
+    DiagCtx warm_dc;
+    SynDef *warm = NULL;
+    bool ok = false;
+
+    if ((old_root != NULL && saved_root == NULL) ||
+        (old_bypass != NULL && saved_bypass == NULL) ||
+        mkdtemp(root) == NULL || setenv("XDG_CACHE_HOME", root, 1) != 0 ||
+        unsetenv("YEW_NO_SYN_CACHE") != 0)
+        goto done;
+    yew_syn_cache_set_bypass(false);
+    arena_init(&warm_arena);
+    fl_diag_init(&warm_dc, &warm_arena);
+    warm = yew_syn_def_load(&warm_arena, &warm_dc,
+                            "runtime/syntax/ini.fl");
+    if (warm == NULL)
+        goto warm_done;
+    yew_syn_def_dispose(warm);
+    warm = NULL;
+    arena_free_all(&warm_arena);
+
+    for (size_t sample = 0U; sample < count; sample++) {
+        Arena arena;
+        DiagCtx dc;
+        SynDef *def;
+        u64 start;
+        u64 end;
+
+        arena_init(&arena);
+        fl_diag_init(&dc, &arena);
+        if (!now_ns(&start)) {
+            arena_free_all(&arena);
+            goto done_cache;
+        }
+        def = yew_syn_def_load(&arena, &dc, "runtime/syntax/ini.fl");
+        if (!now_ns(&end) || end < start || def == NULL) {
+            if (def != NULL)
+                yew_syn_def_dispose(def);
+            arena_free_all(&arena);
+            goto done_cache;
+        }
+        samples[sample] = end - start;
+        perf_syn_sink += def->nrules;
+        yew_syn_def_dispose(def);
+        arena_free_all(&arena);
+    }
+    ok = true;
+    goto done_cache;
+
+warm_done:
+    if (warm != NULL)
+        yew_syn_def_dispose(warm);
+    arena_free_all(&warm_arena);
+done_cache:
+    cache_fixture_remove(root);
+done:
+    if (saved_root != NULL)
+        (void)setenv("XDG_CACHE_HOME", saved_root, 1);
+    else
+        (void)unsetenv("XDG_CACHE_HOME");
+    if (saved_bypass != NULL)
+        (void)setenv("YEW_NO_SYN_CACHE", saved_bypass, 1);
+    else
+        (void)unsetenv("YEW_NO_SYN_CACHE");
+    free(saved_root);
+    free(saved_bypass);
+    return ok;
 }
 
 static void first_add(u8 first[32], u8 byte)
@@ -368,13 +560,19 @@ int main(void)
     TextBuf *viewport = line_fixture(PERF_SYN_VIEW_LINES - 1U);
     TextBuf *edit = line_fixture(PERF_SYN_EDIT_LINES - 1U);
     SynFixture fx;
+    Source ini = {NULL, 0U};
+    Timing detect = {0U, 0U};
+    Timing compile = {0U, 0U};
+    Timing cache = {0U, 0U};
     int status = 0;
 
     if (samples == NULL || cap_line == NULL || viewport == NULL ||
-        edit == NULL || !fixture_init(&fx)) {
+        edit == NULL || !read_source("runtime/syntax/ini.fl", &ini) ||
+        !fixture_init(&fx)) {
         (void)fprintf(stderr, "perf_syn: fixture allocation failed\n");
         free(samples);
         free(cap_line);
+        free(ini.data);
         yew_textbuf_free(viewport);
         yew_textbuf_free(edit);
         return 2;
@@ -400,6 +598,21 @@ int main(void)
         status = 2;
     } else if (status == 0)
         cases[3].measured = timing_of(samples, count);
+    if (status == 0 && !measure_detect(samples, count)) {
+        (void)fprintf(stderr, "perf_syn: detection measurement failed\n");
+        status = 2;
+    } else if (status == 0)
+        detect = timing_of(samples, count);
+    if (status == 0 && !measure_compile(&ini, samples, count)) {
+        (void)fprintf(stderr, "perf_syn: definition compile failed\n");
+        status = 2;
+    } else if (status == 0)
+        compile = timing_of(samples, count);
+    if (status == 0 && !measure_cache(samples, count)) {
+        (void)fprintf(stderr, "perf_syn: cache-load measurement failed\n");
+        status = 2;
+    } else if (status == 0)
+        cache = timing_of(samples, count);
 
     if (status == 0 && !load_baselines(cases, YEW_ARRAY_LEN(cases)))
         status = 2;
@@ -418,11 +631,35 @@ int main(void)
         if (regression)
             status = 1;
     }
+    if (status != 2) {
+        bool detect_regression = detect.median > PERF_SYN_DETECT_LIMIT_NS;
+        bool compile_regression = compile.median > PERF_SYN_COMPILE_LIMIT_NS;
+        bool cache_regression = cache.median > PERF_SYN_CACHE_LIMIT_NS;
+
+        (void)printf("syn.%-20s median_ns=%llu p99_ns=%llu%s\n",
+                     "detect_10000",
+                     (unsigned long long)detect.median,
+                     (unsigned long long)detect.p99,
+                     detect_regression ? " REGRESSION" : " ok");
+        (void)printf("syn.%-20s median_ns=%llu p99_ns=%llu%s\n",
+                     "ini_compile_cold",
+                     (unsigned long long)compile.median,
+                     (unsigned long long)compile.p99,
+                     compile_regression ? " REGRESSION" : " ok");
+        (void)printf("syn.%-20s median_ns=%llu p99_ns=%llu%s\n",
+                     "ini_cache_warm",
+                     (unsigned long long)cache.median,
+                     (unsigned long long)cache.p99,
+                     cache_regression ? " REGRESSION" : " ok");
+        if (detect_regression || compile_regression || cache_regression)
+            status = 1;
+    }
     if (status == 2)
         (void)fprintf(stderr, "perf_syn: measurement failed\n");
     fixture_free(&fx);
     yew_textbuf_free(viewport);
     yew_textbuf_free(edit);
+    free(ini.data);
     free(cap_line);
     free(samples);
     return status;

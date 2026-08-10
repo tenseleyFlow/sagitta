@@ -1,0 +1,1 @@
+{ syntax: 1, language: { name: "minimal" }, contexts: { main: { rules: [] } } }

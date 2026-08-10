@@ -1,0 +1,1 @@
+{ syntax: 1, language: { name: "cycle" }, contexts: { main: { rules: ["include:a"] }, a: { rules: ["include:b"] }, b: { rules: ["include:a"] } } }

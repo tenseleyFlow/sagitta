@@ -1,0 +1,1 @@
+{ syntax: 1, language: { name: "detect", extensions: ["det"], filenames: ["Detectfile", "*.detect"], shebangs: ["detect"], first_line: "^detect:[0-9]+$", priority: -2, comment: { line: "#", block: ["begin", "end"] } }, contexts: { main: { rules: [] } } }

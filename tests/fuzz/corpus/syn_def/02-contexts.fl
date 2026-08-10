@@ -1,0 +1,1 @@
+{ syntax: 1, language: { name: "contexts", filenames: ["Contextfile"] }, contexts: { main: { rules: [{ match: "\"", attr: "string", push: "quoted" }] }, quoted: { default: "string", at_eol: "pop", unit: "atom", rules: [{ match: "\\\\.", attr: "string.escape" }, { match: "\"", attr: "string", pop: true }] } } }

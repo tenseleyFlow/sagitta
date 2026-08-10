@@ -1,0 +1,1 @@
+{ syntax: 1, attrs: { kw: "keyword.control", esc: "string.escape" }, language: { name: "alias" }, contexts: { main: { default: "kw", rules: [{ match: "\\\\.", attr: "esc" }] } } }
