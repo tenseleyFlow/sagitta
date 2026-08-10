@@ -60,6 +60,7 @@ static void txn_fix_open(TxnFix *f)
 static void txn_fix_close(TxnFix *f)
 {
     free(f->vm.txn.enlisted);
+    fl_gc_free_all(&f->vm);
 }
 
 static TxnBuf *script_buf;
