@@ -1,5 +1,6 @@
 #include "harness.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 #include "edit/ed.h"
@@ -9,6 +10,7 @@
 #include "text/undo.h"
 #include "ui/cmdcomp.h"
 #include "ui/gutter.h"
+#include "util/xdg.h"
 
 static OptVal opt_get(Ed *ed, const char *name)
 {
@@ -56,9 +58,24 @@ void test_option_table_has_frozen_order_types_scopes_and_defaults(void)
         else if (got.type == (u8)SAG_OPT_INT)
             SAG_ASSERT_EQ_I64(got.as.i, sag_opts[i].dflt.as.i);
         else {
-            SAG_ASSERT_EQ_U64(got.as.str.len, sag_opts[i].dflt.as.str.len);
-            SAG_ASSERT(memcmp(got.as.str.s, sag_opts[i].dflt.as.str.s,
-                              got.as.str.len) == 0);
+            char *config = strcmp(names[i], "macro.dir") == 0 ?
+                           sag_xdg_config_dir() : NULL;
+
+            if (config != NULL) {
+                size_t config_len = strlen(config);
+
+                SAG_ASSERT_EQ_U64(got.as.str.len,
+                                  config_len + sizeof("/macros") - 1U);
+                SAG_ASSERT_EQ_MEM(got.as.str.s, config, config_len);
+                SAG_ASSERT_EQ_MEM(got.as.str.s + config_len, "/macros",
+                                  sizeof("/macros") - 1U);
+            } else {
+                SAG_ASSERT_EQ_U64(got.as.str.len,
+                                  sag_opts[i].dflt.as.str.len);
+                SAG_ASSERT(memcmp(got.as.str.s, sag_opts[i].dflt.as.str.s,
+                                  got.as.str.len) == 0);
+            }
+            free(config);
         }
     }
     SAG_ASSERT_EQ_U64(ed.buffer.tabwidth, 4U);
