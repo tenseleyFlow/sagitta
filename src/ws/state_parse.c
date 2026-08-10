@@ -835,7 +835,7 @@ SagWsResult sag_state_apply(Ed *ed, const u8 *bytes, u64 len)
                        err.msg == NULL ? "parse error" : err.msg);
         return recover(ed, why);
     }
-    if (doc->kind != FL_MAP)
+    if (doc->kind != FL_LIT_MAP)
         return recover(ed, "root is not a map");
     version = sag_fl_int_or(sag_fl_get(doc, "version"), 0);
     if (version != (i64)SAG_STATE_VERSION) {

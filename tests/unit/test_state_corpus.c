@@ -765,7 +765,7 @@ void test_state_corpus_documents_are_valid_v1(void)
         SAG_ASSERT(corpus_read(path, &raw));
         lit = sag_fl_parse(&a, raw.data, raw.len, &err);
         SAG_ASSERT_NOT_NULL(lit);
-        SAG_ASSERT_EQ_I64(lit->kind, FL_MAP);
+        SAG_ASSERT_EQ_I64(lit->kind, FL_LIT_MAP);
         SAG_ASSERT_EQ_I64(sag_fl_int_or(sag_fl_get(lit, "version"), 0), 1);
         SAG_ASSERT_NOT_NULL(sag_fl_get(lit, "tabs"));
         SAG_ASSERT_NOT_NULL(sag_fl_get(lit, "files"));
@@ -920,7 +920,7 @@ void test_state_corpus_noncanonical_documents_parse(void)
                           err.line, err.col,
                           err.msg == NULL ? "?" : err.msg);
         SAG_ASSERT_NOT_NULL(lit);
-        SAG_ASSERT_EQ_I64(lit->kind, FL_MAP);
+        SAG_ASSERT_EQ_I64(lit->kind, FL_LIT_MAP);
         SAG_ASSERT_EQ_I64(sag_fl_int_or(sag_fl_get(lit, "version"), 0), 1);
         arena_free_all(&a);
         bytebuf_free(&raw);
@@ -1067,7 +1067,7 @@ void test_state_corpus_invalid_documents_are_rejected(void)
          * exists so a failure can be attributed to a field name in the
          * log, not so callers have to care.
          */
-        ok = lit != NULL && lit->kind == FL_MAP &&
+        ok = lit != NULL && lit->kind == FL_LIT_MAP &&
              sag_fl_int_or(sag_fl_get(lit, "version"), 0) == 1;
         if (ok)
             (void)fprintf(stderr, "%s: accepted, should not have been\n",

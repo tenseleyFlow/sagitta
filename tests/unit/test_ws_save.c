@@ -1041,7 +1041,7 @@ static bool ws_state_is_whole(const char *path)
     arena_init(&a);
     (void)memset(&err, 0, sizeof(err));
     lit = sag_fl_parse(&a, raw.data, raw.len, &err);
-    ok = lit != NULL && lit->kind == FL_MAP &&
+    ok = lit != NULL && lit->kind == FL_LIT_MAP &&
          sag_fl_int_or(sag_fl_get(lit, "version"), 0) == 1;
     if (!ok)
         (void)fprintf(stderr,

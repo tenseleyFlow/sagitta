@@ -95,7 +95,7 @@ static void skip_ws(P *p)
     }
 }
 
-static FlLit *node(P *p, FlKind kind)
+static FlLit *node(P *p, FlLitKind kind)
 {
     FlLit *v;
 
@@ -120,7 +120,7 @@ static void push_item(P *p, FlLit *c, const char *key, u64 keylen,
         if (c->items != NULL)
             (void)memcpy(items, c->items, (size_t)c->len * sizeof(*items));
         c->items = items;
-        if (c->kind == FL_MAP) {
+        if (c->kind == FL_LIT_MAP) {
             const char **keys =
                 arena_alloc(p->a, (size_t)cap * sizeof(*keys),
                             sizeof(void *));
@@ -138,7 +138,7 @@ static void push_item(P *p, FlLit *c, const char *key, u64 keylen,
         c->cap = cap;
     }
     c->items[c->len] = item;
-    if (c->kind == FL_MAP) {
+    if (c->kind == FL_LIT_MAP) {
         c->keys[c->len] = key;
         c->keylens[c->len] = keylen;
     }
@@ -261,7 +261,7 @@ static FlLit *parse_string(P *p)
             return NULL;
         }
     }
-    v = node(p, FL_STR);
+    v = node(p, FL_LIT_STR);
     if (v == NULL)
         return NULL;
     buf[n] = 0U;
@@ -318,7 +318,7 @@ static bool parse_key(P *p, const char **key, u64 *keylen)
 
 static FlLit *parse_container(P *p, bool is_map)
 {
-    FlLit *c = node(p, is_map ? FL_MAP : FL_LIST);
+    FlLit *c = node(p, is_map ? FL_LIT_MAP : FL_LIT_LIST);
     u8 closer = is_map ? (u8)'}' : (u8)']';
 
     if (c == NULL)
@@ -405,7 +405,7 @@ static FlLit *parse_value(P *p)
     if (c == (u8)'"')
         return parse_string(p);
     if (word_is(p, p->at, "true")) {
-        FlLit *v = node(p, FL_BOOL);
+        FlLit *v = node(p, FL_LIT_BOOL);
 
         p->at += 4U;
         p->col += 4U;
@@ -414,7 +414,7 @@ static FlLit *parse_value(P *p)
         return v;
     }
     if (word_is(p, p->at, "false")) {
-        FlLit *v = node(p, FL_BOOL);
+        FlLit *v = node(p, FL_LIT_BOOL);
 
         p->at += 5U;
         p->col += 5U;
@@ -425,7 +425,7 @@ static FlLit *parse_value(P *p)
     if (word_is(p, p->at, "nil")) {
         p->at += 3U;
         p->col += 3U;
-        return node(p, FL_NIL);
+        return node(p, FL_LIT_NIL);
     }
     if (c == (u8)'-' || (c >= (u8)'0' && c <= (u8)'9')) {
         FlLit *v;
@@ -462,7 +462,7 @@ static FlLit *parse_value(P *p)
             fail(p, "integer out of range");
             return NULL;
         }
-        v = node(p, FL_INT);
+        v = node(p, FL_LIT_INT);
         if (v == NULL)
             return NULL;
         if (neg)
@@ -534,7 +534,7 @@ const FlLit *sag_fl_get(const FlLit *map, const char *key)
     u32 i;
     u64 n;
 
-    if (map == NULL || map->kind != FL_MAP || key == NULL)
+    if (map == NULL || map->kind != FL_LIT_MAP || key == NULL)
         return NULL;
     n = (u64)strlen(key);
     /*
@@ -553,14 +553,14 @@ const FlLit *sag_fl_get(const FlLit *map, const char *key)
 
 u32 sag_fl_len(const FlLit *list)
 {
-    if (list == NULL || (list->kind != FL_LIST && list->kind != FL_MAP))
+    if (list == NULL || (list->kind != FL_LIT_LIST && list->kind != FL_LIT_MAP))
         return 0U;
     return list->len;
 }
 
 const FlLit *sag_fl_at(const FlLit *list, u32 i)
 {
-    if (list == NULL || (list->kind != FL_LIST && list->kind != FL_MAP) ||
+    if (list == NULL || (list->kind != FL_LIT_LIST && list->kind != FL_LIT_MAP) ||
         i >= list->len)
         return NULL;
     return list->items[i];
@@ -568,17 +568,17 @@ const FlLit *sag_fl_at(const FlLit *list, u32 i)
 
 i64 sag_fl_int_or(const FlLit *v, i64 dflt)
 {
-    return v != NULL && v->kind == FL_INT ? v->i : dflt;
+    return v != NULL && v->kind == FL_LIT_INT ? v->i : dflt;
 }
 
 bool sag_fl_bool_or(const FlLit *v, bool dflt)
 {
-    return v != NULL && v->kind == FL_BOOL ? v->i != 0 : dflt;
+    return v != NULL && v->kind == FL_LIT_BOOL ? v->i != 0 : dflt;
 }
 
 const char *sag_fl_str_or(const FlLit *v, const char *dflt, u64 *n)
 {
-    if (v != NULL && v->kind == FL_STR) {
+    if (v != NULL && v->kind == FL_LIT_STR) {
         if (n != NULL)
             *n = v->slen;
         return v->s;

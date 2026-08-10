@@ -89,17 +89,17 @@ static bool lit_eq(const FlLit *a, const FlLit *b, char *why, size_t cap)
         return false;
     }
     switch (a->kind) {
-    case FL_NIL:
+    case FL_LIT_NIL:
         return true;
-    case FL_BOOL:
-    case FL_INT:
+    case FL_LIT_BOOL:
+    case FL_LIT_INT:
         if (a->i != b->i) {
             (void)snprintf(why, cap, "%lld vs %lld", (long long)a->i,
                            (long long)b->i);
             return false;
         }
         return true;
-    case FL_STR:
+    case FL_LIT_STR:
         if (a->slen != b->slen) {
             (void)snprintf(why, cap, "string length %llu vs %llu",
                            (unsigned long long)a->slen,
@@ -113,8 +113,8 @@ static bool lit_eq(const FlLit *a, const FlLit *b, char *why, size_t cap)
             return false;
         }
         return true;
-    case FL_LIST:
-    case FL_MAP:
+    case FL_LIT_LIST:
+    case FL_LIT_MAP:
     default:
         if (a->len != b->len) {
             (void)snprintf(why, cap, "%u vs %u elements", (unsigned)a->len,
@@ -122,7 +122,7 @@ static bool lit_eq(const FlLit *a, const FlLit *b, char *why, size_t cap)
             return false;
         }
         for (i = 0U; i < a->len; i++) {
-            if (a->kind == FL_MAP) {
+            if (a->kind == FL_LIT_MAP) {
                 if (a->keylens[i] != b->keylens[i] ||
                     (a->keylens[i] != 0U &&
                      memcmp(a->keys[i], b->keys[i],

@@ -31,14 +31,26 @@
 #include "util/base.h"
 #include "util/buf.h"
 
+/*
+ * FL_LIT_*, not FL_*, since Sprint 34.
+ *
+ * Sprint 30's FlType spells six of its tags FL_NIL, FL_BOOL, FL_INT,
+ * FL_STR, FL_LIST and FL_MAP -- the same six kinds, the same six
+ * names.  Nothing included both headers until Sprint 34's editor
+ * bindings needed ed.h and fl/value.h in one translation unit, and the
+ * collision was then a hard error in a file that had touched neither.
+ * Prefixing here rather than there: this format is frozen but its
+ * implementation is not (see above), and FlType's spellings are what
+ * `type_of` reports to a user.
+ */
 typedef enum {
-    FL_NIL = 0,
-    FL_BOOL,
-    FL_INT,
-    FL_STR,
-    FL_LIST,
-    FL_MAP
-} FlKind;
+    FL_LIT_NIL = 0,
+    FL_LIT_BOOL,
+    FL_LIT_INT,
+    FL_LIT_STR,
+    FL_LIT_LIST,
+    FL_LIT_MAP
+} FlLitKind;
 
 typedef struct FlLit FlLit;
 
@@ -50,17 +62,17 @@ typedef struct FlLit FlLit;
  * re-emission and break determinism (invariant 5).
  */
 struct FlLit {
-    FlKind kind;
-    /* FL_BOOL / FL_INT */
+    FlLitKind kind;
+    /* FL_LIT_BOOL / FL_LIT_INT */
     i64 i;
-    /* FL_STR: bytes, NOT text.  Never validated as UTF-8 — paths are
+    /* FL_LIT_STR: bytes, NOT text.  Never validated as UTF-8 — paths are
      * bytes, and rejecting an invalid sequence loses exactly the files
      * invariant 2 exists to protect. */
     const char *s;
     u64 slen;
-    /* FL_LIST / FL_MAP */
+    /* FL_LIT_LIST / FL_LIT_MAP */
     FlLit **items;
-    const char **keys; /* FL_MAP only; parallel to items */
+    const char **keys; /* FL_LIT_MAP only; parallel to items */
     u64 *keylens;
     u32 len;
     u32 cap;

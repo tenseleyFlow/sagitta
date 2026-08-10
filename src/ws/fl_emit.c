@@ -204,25 +204,25 @@ void sag_fl_emit_lit(FlEmit *e, const char *key, const FlLit *v)
         return;
     }
     switch (v->kind) {
-    case FL_NIL:
+    case FL_LIT_NIL:
         sag_fl_nil(e, key);
         break;
-    case FL_BOOL:
+    case FL_LIT_BOOL:
         sag_fl_bool(e, key, v->i != 0);
         break;
-    case FL_INT:
+    case FL_LIT_INT:
         sag_fl_int(e, key, v->i);
         break;
-    case FL_STR:
+    case FL_LIT_STR:
         sag_fl_str(e, key, v->s, v->slen);
         break;
-    case FL_LIST:
+    case FL_LIT_LIST:
         sag_fl_list_open(e, key);
         for (i = 0U; i < v->len; i++)
             sag_fl_emit_lit(e, NULL, v->items[i]);
         sag_fl_list_close(e);
         break;
-    case FL_MAP:
+    case FL_LIT_MAP:
     default:
         sag_fl_map_open(e, key);
         /* INSERTION ORDER, which is the order the parser saw and the

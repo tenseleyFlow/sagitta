@@ -439,7 +439,7 @@ void sag_state_emit(const Ed *ed, Bytebuf *out)
      * every change, dropping them once makes it permanent.
      */
     if (ed->state.options != NULL &&
-        ed->state.options->kind == FL_MAP) {
+        ed->state.options->kind == FL_LIT_MAP) {
         sag_fl_emit_lit(&e, "options", ed->state.options);
     } else {
         sag_fl_map_open(&e, "options");

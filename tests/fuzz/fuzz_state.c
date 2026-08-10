@@ -277,12 +277,12 @@ static bool tree_within_caps(const FlLit *v, u32 depth, u64 *nodes,
                        (unsigned)SAG_FL_MAX_DEPTH);
         return false;
     }
-    if (v->kind == FL_STR && v->slen > (u64)SAG_FL_MAX_STRING) {
+    if (v->kind == FL_LIT_STR && v->slen > (u64)SAG_FL_MAX_STRING) {
         (void)snprintf(why, why_cap, "string of %llu bytes past the cap",
                        (unsigned long long)v->slen);
         return false;
     }
-    if (v->kind != FL_LIST && v->kind != FL_MAP)
+    if (v->kind != FL_LIT_LIST && v->kind != FL_LIT_MAP)
         return true;
     for (i = 0U; i < v->len; i++) {
         if (!tree_within_caps(v->items[i], depth + 1U, nodes, why, why_cap))
