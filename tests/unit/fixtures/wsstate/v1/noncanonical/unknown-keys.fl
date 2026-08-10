@@ -1,6 +1,6 @@
 {
   version: 1,
-  writer: "sagitta 99.0.0-from-the-future",
+  writer: "yew 99.0.0-from-the-future",
   workspace: {
     path: "/w",
     saved_at: 0,

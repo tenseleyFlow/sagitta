@@ -2,7 +2,7 @@
  * Sprint 33 §1-§3: the Fletch conformance runner.
  *
  * Walks tests/fletch/ in LC_ALL=C order, runs each unit through
- * `sag fl`, and applies the directives written in its comments.  Also
+ * `yew fl`, and applies the directives written in its comments.  Also
  * generates ledger.txt (--ledger), which the coverage gate diffs.
  *
  * THE DIRECTIVES COME FROM THE LEXER'S COMMENT TOKENS, NOT FROM RAW
@@ -54,7 +54,7 @@ enum {
 /* Small helpers                                                    */
 /* ---------------------------------------------------------------- */
 
-static const char *g_sagitta = "build/sagitta";
+static const char *g_yew = "build/yew";
 static const char *g_root = "tests/fletch";
 static const char *g_spec = ".docs/fletch-spec.md";
 static char *g_spec_src;
@@ -202,7 +202,7 @@ typedef struct Directive {
 
 typedef struct Unit {
     char *name;                    /* path relative to tests/fletch      */
-    char *entry;                   /* file actually handed to sag fl     */
+    char *entry;                   /* file actually handed to yew fl     */
     Directive dv[MAX_DIRECTIVES];
     size_t ndv;
     /* Flattened for convenience; the ordered CHECK stream still walks
@@ -599,7 +599,7 @@ static void run_unit(const Unit *u, RunOut *r)
     if (pipe(op) != 0 || pipe(ep) != 0)
         die("pipe: %s", strerror(errno));
 
-    argv[na++] = dupe(g_sagitta);
+    argv[na++] = dupe(g_yew);
     argv[na++] = dupe("fl");
     if (u->caps != NULL) {
         argv[na++] = dupe("--caps");
@@ -624,7 +624,7 @@ static void run_unit(const Unit *u, RunOut *r)
         size_t k;
 
         (void)snprintf(argbuf, sizeof(argbuf), "%s", u->args);
-        nt = split_args(argbuf, tok, SAG_ARRAY_LEN(tok));
+        nt = split_args(argbuf, tok, YEW_ARRAY_LEN(tok));
         for (k = 0U; k < nt; k++)
             argv[na++] = dupe(tok[k]);
     }
@@ -642,7 +642,7 @@ static void run_unit(const Unit *u, RunOut *r)
         (void)dup2(ep[1], 2);
         (void)close(op[1]);
         (void)close(ep[1]);
-        /* stdin is /dev/null: `sag fl FILE` must not read it, and a
+        /* stdin is /dev/null: `yew fl FILE` must not read it, and a
          * runner that leaves the terminal attached would hand the child
          * a tty and start a REPL. */
         {
@@ -653,7 +653,7 @@ static void run_unit(const Unit *u, RunOut *r)
                 (void)close(devnull);
             }
         }
-        (void)execv(g_sagitta, argv);
+        (void)execv(g_yew, argv);
         _exit(127);
     }
     (void)close(op[1]);
@@ -1022,12 +1022,12 @@ static u32 dir_entries(const char *dir, char **out, u32 cap)
         if (e->d_name[0] == '.' || len < 4U ||
             strcmp(e->d_name + len - 3U, ".fl") != 0)
             continue;
-        if (nn == (u32)SAG_ARRAY_LEN(names))
+        if (nn == (u32)YEW_ARRAY_LEN(names))
             die("%s: too many .fl files", dir);
         names[nn++] = dupe(e->d_name);
     }
     (void)closedir(d);
-    sag_sort_stable(names, nn, sizeof(names[0]), cmp_str, NULL);
+    yew_sort_stable(names, nn, sizeof(names[0]), cmp_str, NULL);
 
     for (i = 0U; i < nn; i++) {
         if (strcmp(names[i], "main.fl") == 0)
@@ -1060,12 +1060,12 @@ static void collect(const char *dir, const char *relbase)
     while ((e = readdir(d)) != NULL) {
         if (e->d_name[0] == '.')
             continue;
-        if (nn == SAG_ARRAY_LEN(names))
+        if (nn == YEW_ARRAY_LEN(names))
             die("%s: too many entries", dir);
         names[nn++] = dupe(e->d_name);
     }
     (void)closedir(d);
-    sag_sort_stable(names, nn, sizeof(names[0]), cmp_str, NULL);
+    yew_sort_stable(names, nn, sizeof(names[0]), cmp_str, NULL);
 
     for (i = 0U; i < nn; i++) {
         char *full;
@@ -1089,7 +1089,7 @@ static void collect(const char *dir, const char *relbase)
 
         if (is_dir(full)) {
             char *entries[16];
-            u32 ne = dir_entries(full, entries, (u32)SAG_ARRAY_LEN(entries));
+            u32 ne = dir_entries(full, entries, (u32)YEW_ARRAY_LEN(entries));
             u32 e;
 
             if (ne == 1U) {
@@ -1182,7 +1182,7 @@ static void spec_sections(void)
         while (line < nl && t + 1U < sizeof(g_sections[0].title))
             g_sections[g_nsections].title[t++] = *line++;
         g_sections[g_nsections].title[t] = '\0';
-        if (g_nsections + 1U == SAG_ARRAY_LEN(g_sections))
+        if (g_nsections + 1U == YEW_ARRAY_LEN(g_sections))
             die("too many spec sections");
         g_nsections++;
     }
@@ -1230,7 +1230,7 @@ static void set_seal(StrSet *s)
 
     if (s->sorted)
         return;
-    sag_sort_stable(s->v, s->n, sizeof(s->v[0]), cmp_str, NULL);
+    yew_sort_stable(s->v, s->n, sizeof(s->v[0]), cmp_str, NULL);
     for (i = 0U; i < s->n; i++) {
         if (i != 0U && strcmp(s->v[i], s->v[w - 1U]) == 0) {
             free(s->v[i]);
@@ -1452,7 +1452,7 @@ static void spec_conformance(StrSet *out)
     set_seal(out);
 }
 
-/* `sag fl --list-natives`, which is check 3's stated source of truth. */
+/* `yew fl --list-natives`, which is check 3's stated source of truth. */
 static void list_natives(StrSet *out)
 {
     Unit probe;
@@ -1468,7 +1468,7 @@ static void list_natives(StrSet *out)
     set_init(out);
     run_unit(&probe, &r);
     if (r.status != 0)
-        die("`sag fl --list-natives` exited %d", r.status);
+        die("`yew fl --list-natives` exited %d", r.status);
     lines_split(&l, &r.out);
     for (i = 0U; i < l.n; i++) {
         if (l.v[i][0] != '\0')
@@ -1793,8 +1793,8 @@ int main(int argc, char **argv)
 {
     bool ledger_only = false;
     bool check_only = false;
-    const char *filter = getenv("SAG_FLETCH_FILTER");
-    bool gc_stress = env_on("SAG_FL_GC_STRESS") || env_on("FL_GC_STRESS");
+    const char *filter = getenv("YEW_FLETCH_FILTER");
+    bool gc_stress = env_on("YEW_FL_GC_STRESS") || env_on("FL_GC_STRESS");
     size_t i;
     size_t npass = 0U;
     size_t nfail = 0U;
@@ -1809,14 +1809,14 @@ int main(int argc, char **argv)
             ledger_only = true;
         } else if (strcmp(argv[argi], "--check") == 0) {
             check_only = true;
-        } else if (strcmp(argv[argi], "--sagitta") == 0 && argi + 1 < argc) {
-            g_sagitta = argv[++argi];
+        } else if (strcmp(argv[argi], "--yew") == 0 && argi + 1 < argc) {
+            g_yew = argv[++argi];
         } else if (strcmp(argv[argi], "--root") == 0 && argi + 1 < argc) {
             g_root = argv[++argi];
         } else if (strcmp(argv[argi], "--spec") == 0 && argi + 1 < argc) {
             g_spec = argv[++argi];
         } else {
-            die("usage: run [--ledger|--check] [--sagitta P] [--root D] "
+            die("usage: run [--ledger|--check] [--yew P] [--root D] "
                 "[--spec F]");
         }
     }
@@ -1824,8 +1824,8 @@ int main(int argc, char **argv)
         die("cannot ignore SIGPIPE: %s", strerror(errno));
     if (!is_dir(g_root))
         die("no such directory: %s", g_root);
-    if (!is_file(g_sagitta))
-        die("no such binary: %s (build it first)", g_sagitta);
+    if (!is_file(g_yew))
+        die("no such binary: %s (build it first)", g_yew);
 
     xfail_load();
     spec_load();

@@ -59,18 +59,18 @@ static void buf_read(const Ed *ed, Bytebuf *out)
     TextIter it;
 
     bytebuf_init(out);
-    if (sag_textbuf_len(ed->buffer.tb) == 0U)
+    if (yew_textbuf_len(ed->buffer.tb) == 0U)
         return;
-    if (!sag_textiter_begin(&it, ed->buffer.tb, BYTEOFF(0U)))
+    if (!yew_textiter_begin(&it, ed->buffer.tb, BYTEOFF(0U)))
         return;
     for (;;) {
         const u8 *chunk = NULL;
         size_t n = 0U;
 
-        if (!sag_textiter_chunk(&it, ed->buffer.tb, &chunk, &n) || n == 0U)
+        if (!yew_textiter_chunk(&it, ed->buffer.tb, &chunk, &n) || n == 0U)
             break;
         bytebuf_append(out, chunk, n);
-        if (!sag_textiter_advance(&it, ed->buffer.tb))
+        if (!yew_textiter_advance(&it, ed->buffer.tb))
             break;
     }
 }
@@ -79,12 +79,12 @@ static void buf_read(const Ed *ed, Bytebuf *out)
  * sequence paints half a character. */
 static bool on_cp_boundary(const Ed *ed, u64 off)
 {
-    SagReInput in = sag_re_input_textbuf(ed->buffer.tb);
+    YewReInput in = yew_re_input_textbuf(ed->buffer.tb);
     u8 b = 0U;
 
-    if (off == 0U || off >= sag_textbuf_len(ed->buffer.tb))
+    if (off == 0U || off >= yew_textbuf_len(ed->buffer.tb))
         return true;
-    if (!sag_re_input_byte(&in, off, &b))
+    if (!yew_re_input_byte(&in, off, &b))
         return true;
     return (b & 0xC0U) != 0x80U;
 }
@@ -92,7 +92,7 @@ static bool on_cp_boundary(const Ed *ed, u64 off)
 static bool check_invariants(Ed *ed, char *why, size_t why_cap)
 {
     const MatchOverlay *ov = &ed->win->overlay;
-    u64 len = sag_textbuf_len(ed->buffer.tb);
+    u64 len = yew_textbuf_len(ed->buffer.tb);
     size_t i;
     u32 j;
 
@@ -121,15 +121,15 @@ static bool check_invariants(Ed *ed, char *why, size_t why_cap)
             return false;
         }
     }
-    for (j = 0U; j < sag_jumplist_len(&ed->win->jumps); j++) {
-        const JumpEntry *je = sag_jumplist_at(&ed->win->jumps, j);
-        Buffer *b = sag_ws_buf_by_id(ed, je->buf_id);
+    for (j = 0U; j < yew_jumplist_len(&ed->win->jumps); j++) {
+        const JumpEntry *je = yew_jumplist_at(&ed->win->jumps, j);
+        Buffer *b = yew_ws_buf_by_id(ed, je->buf_id);
 
         if (b == NULL || b->marks == NULL)
             continue;
-        if (!sag_mark_alive(b->marks, je->mark))
+        if (!yew_mark_alive(b->marks, je->mark))
             continue;
-        if (sag_mark_pos(b->marks, je->mark).v > sag_textbuf_len(b->tb)) {
+        if (yew_mark_pos(b->marks, je->mark).v > yew_textbuf_len(b->tb)) {
             (void)snprintf(why, why_cap,
                            "jumplist entry %u points past the end of its "
                            "buffer", (unsigned)j);
@@ -160,19 +160,19 @@ static bool run_session(const u8 *data, size_t len, char *why,
         for (i = 0U; i < len; i++)
             rng.s = rng.s * 31U + data[i];
     }
-    sag_ed_init(&ed);
-    if (!sag_ed_open_scratch(&ed)) {
+    yew_ed_init(&ed);
+    if (!yew_ed_open_scratch(&ed)) {
         (void)snprintf(why, why_cap, "cannot open a buffer");
         return false;
     }
     ed.win->rect.h = 12U;
     ed.win->rect.w = 80U;
-    sag_search_opts_init(&opts);
+    yew_search_opts_init(&opts);
     ed.search_opts = opts;
     arena_init(&arena);
 
     /* Seed content from the fuzz input so the corpus actually matters. */
-    ec = sag_ed_edit_ctx(&ed);
+    ec = yew_ed_edit_ctx(&ed);
     {
         Bytebuf seed;
         size_t i;
@@ -187,7 +187,7 @@ static bool run_session(const u8 *data, size_t len, char *why,
         }
         if (seed.len == 0U)
             bytebuf_append(&seed, "abc\n", 4U);
-        (void)sag_edit_insert(&ec, BYTEOFF(0U), seed.data, seed.len);
+        (void)yew_edit_insert(&ec, BYTEOFF(0U), seed.data, seed.len);
         bytebuf_free(&seed);
     }
     /*
@@ -205,49 +205,49 @@ static bool run_session(const u8 *data, size_t len, char *why,
         switch (kind) {
         case 0: { /* search and step */
             const char *pat = patterns[rng_below(&rng,
-                                                 SAG_ARRAY_LEN(patterns))];
+                                                 YEW_ARRAY_LEN(patterns))];
 
-            sag_reg_set_search(&ed.regs, (const u8 *)pat, strlen(pat));
+            yew_reg_set_search(&ed.regs, (const u8 *)pat, strlen(pat));
             ed.search.re = NULL;
             ed.search.reverse = rng_below(&rng, 2U) != 0U;
-            (void)sag_search_step(&ed, ed.win, rng_below(&rng, 2U) != 0U,
+            (void)yew_search_step(&ed, ed.win, rng_below(&rng, 2U) != 0U,
                                   1U + rng_below(&rng, 3U));
             break;
         }
         case 1: { /* refresh the overlay */
             const char *pat = patterns[rng_below(&rng,
-                                                 SAG_ARRAY_LEN(patterns))];
-            SagRe *re = sag_search_compile(&arena, pat, strlen(pat), &opts,
+                                                 YEW_ARRAY_LEN(patterns))];
+            YewRe *re = yew_search_compile(&arena, pat, strlen(pat), &opts,
                                            NULL);
 
             if (re != NULL)
-                sag_overlay_refresh(&ed, ed.win, re, (u32)op + 1U,
+                yew_overlay_refresh(&ed, ed.win, re, (u32)op + 1U,
                                     rng_below(&rng, 2U) != 0U ? 1000 : 0);
             break;
         }
         case 2: { /* replace */
             const char *pat = patterns[rng_below(&rng,
-                                                 SAG_ARRAY_LEN(patterns))];
+                                                 YEW_ARRAY_LEN(patterns))];
             const char *tpl = templates[rng_below(&rng,
-                                                  SAG_ARRAY_LEN(templates))];
-            SagRe *re = sag_search_compile(&arena, pat, strlen(pat), &opts,
+                                                  YEW_ARRAY_LEN(templates))];
+            YewRe *re = yew_search_compile(&arena, pat, strlen(pat), &opts,
                                            NULL);
-            SagReplPlan plan;
-            u64 nlines = sag_textbuf_line_count(ed.buffer.tb);
+            YewReplPlan plan;
+            u64 nlines = yew_textbuf_line_count(ed.buffer.tb);
 
             if (re == NULL || nlines == 0U)
                 break;
-            sag_repl_plan_init(&plan);
-            if (sag_repl_plan_build(&plan, re, ed.buffer.tb, LINENO(0U),
+            yew_repl_plan_init(&plan);
+            if (yew_repl_plan_build(&plan, re, ed.buffer.tb, LINENO(0U),
                                     LINENO(nlines - 1U), tpl, strlen(tpl),
-                                    SAG_SUB_GLOBAL, NULL)) {
-                EditCtx rc = sag_ed_edit_ctx(&ed);
+                                    YEW_SUB_GLOBAL, NULL)) {
+                EditCtx rc = yew_ed_edit_ctx(&ed);
                 Bytebuf before;
                 u32 applied;
 
                 buf_read(&ed, &before);
-                applied = sag_repl_plan_apply(&plan, &rc);
-                sag_ed_finish_edit(&ed, &rc);
+                applied = yew_repl_plan_apply(&plan, &rc);
+                yew_ed_finish_edit(&ed, &rc);
                 /*
                  * The one-transaction property, checked HERE rather
                  * than only in the unit tests: whatever else the
@@ -257,10 +257,10 @@ static bool run_session(const u8 *data, size_t len, char *why,
                  */
                 if (applied > 0U) {
                     Bytebuf after;
-                    EditCtx uc = sag_ed_edit_ctx(&ed);
+                    EditCtx uc = yew_ed_edit_ctx(&ed);
 
-                    (void)sag_undo(&uc);
-                    sag_ed_finish_edit(&ed, &uc);
+                    (void)yew_undo(&uc);
+                    yew_ed_finish_edit(&ed, &uc);
                     buf_read(&ed, &after);
                     if (after.len != before.len ||
                         (before.len != 0U &&
@@ -273,24 +273,24 @@ static bool run_session(const u8 *data, size_t len, char *why,
                                        before.len);
                         bytebuf_free(&after);
                         bytebuf_free(&before);
-                        sag_repl_plan_free(&plan);
+                        yew_repl_plan_free(&plan);
                         goto done;
                     }
                     bytebuf_free(&after);
                 }
                 bytebuf_free(&before);
             }
-            sag_repl_plan_free(&plan);
+            yew_repl_plan_free(&plan);
             break;
         }
         case 3: { /* edit */
-            EditCtx wc = sag_ed_edit_ctx(&ed);
+            EditCtx wc = yew_ed_edit_ctx(&ed);
             /* Wrap it, the way every real edit path does.  An unwrapped
              * edit records into an implicit transaction that the next
              * one may merge with, which is right for typing and makes
              * "one undo reverts exactly this" meaningless. */
-            sag_undo_begin(&wc, SAG_TXN_TYPE);
-            u64 blen = sag_textbuf_len(ed.buffer.tb);
+            yew_undo_begin(&wc, YEW_TXN_TYPE);
+            u64 blen = yew_textbuf_len(ed.buffer.tb);
             u64 at = blen == 0U ? 0U : (u64)rng_below(&rng, (u32)blen);
 
             /* Land on a codepoint boundary so the buffer stays
@@ -298,7 +298,7 @@ static bool run_session(const u8 *data, size_t len, char *why,
             while (at > 0U && !on_cp_boundary(&ed, at))
                 at--;
             if (rng_below(&rng, 2U) != 0U) {
-                (void)sag_edit_insert(&wc, BYTEOFF(at),
+                (void)yew_edit_insert(&wc, BYTEOFF(at),
                                       (const u8 *)"needle\n", 7U);
             } else if (blen > 0U) {
                 u64 hi = at + 1U + rng_below(&rng, 8U);
@@ -311,27 +311,27 @@ static bool run_session(const u8 *data, size_t len, char *why,
                 r.lo = at;
                 r.hi = hi;
                 if (r.hi > r.lo)
-                    (void)sag_edit_delete(&wc, r);
+                    (void)yew_edit_delete(&wc, r);
             }
-            sag_undo_end(&wc);
-            sag_ed_finish_edit(&ed, &wc);
+            yew_undo_end(&wc);
+            yew_ed_finish_edit(&ed, &wc);
             break;
         }
         case 4: /* jump */
             if (rng_below(&rng, 2U) != 0U)
-                sag_jump_push(ed.win,
-                              sag_ed_cursor(&ed)->pos,
+                yew_jump_push(ed.win,
+                              yew_ed_cursor(&ed)->pos,
                               (i64)(op * 100U));
             else if (rng_below(&rng, 2U) != 0U)
-                (void)sag_jump_back(&ed, ed.win, 1U);
+                (void)yew_jump_back(&ed, ed.win, 1U);
             else
-                (void)sag_jump_fwd(&ed, ed.win, 1U);
+                (void)yew_jump_fwd(&ed, ed.win, 1U);
             break;
         default: { /* undo */
-            EditCtx uc = sag_ed_edit_ctx(&ed);
+            EditCtx uc = yew_ed_edit_ctx(&ed);
 
-            (void)sag_undo(&uc);
-            sag_ed_finish_edit(&ed, &uc);
+            (void)yew_undo(&uc);
+            yew_ed_finish_edit(&ed, &uc);
             break;
         }
         }
@@ -345,12 +345,12 @@ static bool run_session(const u8 *data, size_t len, char *why,
      * property that makes every other one recoverable.
      */
     {
-        EditCtx uc = sag_ed_edit_ctx(&ed);
+        EditCtx uc = yew_ed_edit_ctx(&ed);
         u32 guard = 0U;
 
-        while (sag_undo(&uc) && guard < 100000U)
+        while (yew_undo(&uc) && guard < 100000U)
             guard++;
-        sag_ed_finish_edit(&ed, &uc);
+        yew_ed_finish_edit(&ed, &uc);
     }
     buf_read(&ed, &replayed);
     if (replayed.len != original.len ||
@@ -367,11 +367,11 @@ static bool run_session(const u8 *data, size_t len, char *why,
 done:
     bytebuf_free(&original);
     arena_free_all(&arena);
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
     return ok;
 }
 
 int main(int argc, char **argv)
 {
-    return sag_fuzz_main(argc, argv, "fuzz_search", NULL, run_session);
+    return yew_fuzz_main(argc, argv, "fuzz_search", NULL, run_session);
 }

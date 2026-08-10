@@ -20,10 +20,10 @@ static void wrap_fixture_init(WrapFixture *f, const u8 *text, size_t len,
 {
     Cursor c = {BYTEOFF(0U), {0U}, BYTEOFF(0U)};
     memset(f, 0, sizeof(*f));
-    f->buffer.tb = sag_textbuf_from_bytes(text, len);
+    f->buffer.tb = yew_textbuf_from_bytes(text, len);
     f->win.buf = &f->buffer;
-    sag_cset_init(&f->win.cs, c);
-    sag_vp_init(&f->win);
+    yew_cset_init(&f->win.cs, c);
+    yew_vp_init(&f->win);
     f->win.vp.rows = 8U;
     f->win.vp.cols = cols;
     f->win.vp.wrap = true;
@@ -31,16 +31,16 @@ static void wrap_fixture_init(WrapFixture *f, const u8 *text, size_t len,
 
 static void wrap_fixture_free(WrapFixture *f)
 {
-    sag_vp_free(&f->win);
-    sag_cset_free(&f->win.cs);
-    sag_textbuf_free(f->buffer.tb);
+    yew_vp_free(&f->win);
+    yew_cset_free(&f->win.cs);
+    yew_textbuf_free(f->buffer.tb);
 }
 
 static void assert_row(WrapFixture *f, u32 sub, u64 lo, u64 hi)
 {
-    Span span = sag_wrap_row(&f->win, LINENO(0U), sub);
-    SAG_ASSERT_EQ_U64(span.lo, lo);
-    SAG_ASSERT_EQ_U64(span.hi, hi);
+    Span span = yew_wrap_row(&f->win, LINENO(0U), sub);
+    YEW_ASSERT_EQ_U64(span.lo, lo);
+    YEW_ASSERT_EQ_U64(span.hi, hi);
 }
 
 void test_wrap_prefers_space_runs_and_absorbs_trailing_space(void)
@@ -50,32 +50,32 @@ void test_wrap_prefers_space_runs_and_absorbs_trailing_space(void)
     size_t pos;
     const char *text = "ab   cd";
     wrap_fixture_init(&f, (const u8 *)text, strlen(text), 5U);
-    SAG_ASSERT_EQ_U64(sag_wrap_rows(&f.win, LINENO(0U)), 2U);
+    YEW_ASSERT_EQ_U64(yew_wrap_rows(&f.win, LINENO(0U)), 2U);
     assert_row(&f, 0U, 0U, 5U);
     assert_row(&f, 1U, 5U, 7U);
     wrap_fixture_free(&f);
 
     wrap_fixture_init(&f, (const u8 *)"ab  c", 5U, 3U);
-    SAG_ASSERT_EQ_U64(sag_wrap_rows(&f.win, LINENO(0U)), 2U);
+    YEW_ASSERT_EQ_U64(yew_wrap_rows(&f.win, LINENO(0U)), 2U);
     assert_row(&f, 0U, 0U, 4U);
     assert_row(&f, 1U, 4U, 5U);
 
     memset(&ed, 0, sizeof(ed));
     arena_init(&ed.arena);
     interner_init(&ed.interner, &ed.arena);
-    SAG_ASSERT(sag_grid_init(&ed.grid, &ed.interner, 2U, 3U));
+    YEW_ASSERT(yew_grid_init(&ed.grid, &ed.interner, 2U, 3U));
     f.win.rect = (Rect){0U, 0U, 3U, 2U};
     for (pos = 0U; pos <= 5U; pos++) {
         Cursor *cursor = &f.win.cs.curs.data[0];
 
         cursor->pos = BYTEOFF(pos);
         cursor->anchor = cursor->pos;
-        sag_draw_cursor(&ed, &f.win);
-        SAG_ASSERT(ed.grid.cur_vis);
-        SAG_ASSERT(ed.grid.cur_row < 2U);
-        SAG_ASSERT(ed.grid.cur_col < 3U);
+        yew_draw_cursor(&ed, &f.win);
+        YEW_ASSERT(ed.grid.cur_vis);
+        YEW_ASSERT(ed.grid.cur_row < 2U);
+        YEW_ASSERT(ed.grid.cur_col < 3U);
     }
-    sag_grid_free(&ed.grid);
+    yew_grid_free(&ed.grid);
     interner_free(&ed.interner);
     arena_free_all(&ed.arena);
     wrap_fixture_free(&f);
@@ -86,7 +86,7 @@ void test_wrap_hard_breaks_long_token(void)
     WrapFixture f;
     const char *text = "abcdefghijkl";
     wrap_fixture_init(&f, (const u8 *)text, strlen(text), 5U);
-    SAG_ASSERT_EQ_U64(sag_wrap_rows(&f.win, LINENO(0U)), 3U);
+    YEW_ASSERT_EQ_U64(yew_wrap_rows(&f.win, LINENO(0U)), 3U);
     assert_row(&f, 0U, 0U, 5U);
     assert_row(&f, 1U, 5U, 10U);
     assert_row(&f, 2U, 10U, 12U);
@@ -109,7 +109,7 @@ void test_wrap_cjk_breaks_without_splitting_clusters(void)
     WrapFixture f;
     static const u8 text[] = "a\xE6\xBC\xA2\xE5\xAD\x97z";
     wrap_fixture_init(&f, text, sizeof(text) - 1U, 3U);
-    SAG_ASSERT_EQ_U64(sag_wrap_rows(&f.win, LINENO(0U)), 2U);
+    YEW_ASSERT_EQ_U64(yew_wrap_rows(&f.win, LINENO(0U)), 2U);
     assert_row(&f, 0U, 0U, 4U);
     assert_row(&f, 1U, 4U, 8U);
     wrap_fixture_free(&f);
@@ -124,9 +124,9 @@ void test_wrap_zwj_family_is_atomic_at_boundary(void)
     Span second;
     wrap_fixture_init(&f, family, sizeof(family) - 1U, 4U);
     assert_row(&f, 0U, 0U, 3U);
-    second = sag_wrap_row(&f.win, LINENO(0U), 1U);
-    SAG_ASSERT_EQ_U64(second.lo, 3U);
-    SAG_ASSERT(second.hi > second.lo + 4U);
+    second = yew_wrap_row(&f.win, LINENO(0U), 1U);
+    YEW_ASSERT_EQ_U64(second.lo, 3U);
+    YEW_ASSERT(second.hi > second.lo + 4U);
     wrap_fixture_free(&f);
 }
 
@@ -137,14 +137,14 @@ void test_wrap_tab_moves_whole_and_width_one_wide_progresses(void)
     static const u8 wide[] = "\xE6\xBC\xA2\xE5\xAD\x97";
 
     wrap_fixture_init(&f, tabbed, sizeof(tabbed) - 1U, 3U);
-    SAG_ASSERT_EQ_U64(sag_wrap_rows(&f.win, LINENO(0U)), 3U);
+    YEW_ASSERT_EQ_U64(yew_wrap_rows(&f.win, LINENO(0U)), 3U);
     assert_row(&f, 0U, 0U, 2U);
     assert_row(&f, 1U, 2U, 3U);
     assert_row(&f, 2U, 3U, 4U);
     wrap_fixture_free(&f);
 
     wrap_fixture_init(&f, wide, sizeof(wide) - 1U, 1U);
-    SAG_ASSERT_EQ_U64(sag_wrap_rows(&f.win, LINENO(0U)), 2U);
+    YEW_ASSERT_EQ_U64(yew_wrap_rows(&f.win, LINENO(0U)), 2U);
     assert_row(&f, 0U, 0U, 3U);
     assert_row(&f, 1U, 3U, 6U);
     wrap_fixture_free(&f);
@@ -163,17 +163,17 @@ void test_wrap_cache_is_bounded_and_generation_aware(void)
         text[at++] = '\n';
     }
     wrap_fixture_init(&f, (const u8 *)text, at, 2U);
-    before = sag_wrap_rows(&f.win, LINENO(0U));
-    SAG_ASSERT_EQ_U64(before, 1U);
-    SAG_ASSERT(f.win.wrap_cache.len <=
-               (size_t)f.win.vp.rows + SAG_VP_WRAP_SLACK + 1U);
-    sag_textbuf_insert(f.buffer.tb, BYTEOFF(1U), (const u8 *)"xyz", 3U);
-    SAG_ASSERT_EQ_U64(sag_wrap_rows(&f.win, LINENO(0U)), 2U);
-    SAG_ASSERT_EQ_U64(f.win.wrap_cache.generation, f.buffer.tb->gen);
-    sag_vp_invalidate_from(&f.win, LINENO(80U));
-    SAG_ASSERT(f.win.wrap_cache.valid);
-    sag_vp_invalidate_from(&f.win, LINENO(0U));
-    SAG_ASSERT(!f.win.wrap_cache.valid);
+    before = yew_wrap_rows(&f.win, LINENO(0U));
+    YEW_ASSERT_EQ_U64(before, 1U);
+    YEW_ASSERT(f.win.wrap_cache.len <=
+               (size_t)f.win.vp.rows + YEW_VP_WRAP_SLACK + 1U);
+    yew_textbuf_insert(f.buffer.tb, BYTEOFF(1U), (const u8 *)"xyz", 3U);
+    YEW_ASSERT_EQ_U64(yew_wrap_rows(&f.win, LINENO(0U)), 2U);
+    YEW_ASSERT_EQ_U64(f.win.wrap_cache.generation, f.buffer.tb->gen);
+    yew_vp_invalidate_from(&f.win, LINENO(80U));
+    YEW_ASSERT(f.win.wrap_cache.valid);
+    yew_vp_invalidate_from(&f.win, LINENO(0U));
+    YEW_ASSERT(!f.win.wrap_cache.valid);
     wrap_fixture_free(&f);
 }
 
@@ -185,22 +185,22 @@ void test_wrap_warm_edit_matches_cold_recompute(void)
     u32 sub;
 
     wrap_fixture_init(&warm, (const u8 *)"ab cd", 5U, 3U);
-    SAG_ASSERT_EQ_U64(sag_wrap_rows(&warm.win, LINENO(0U)), 2U);
-    (void)sag_wrap_row(&warm.win, LINENO(0U), 0U);
-    SAG_ASSERT(warm.win.wrap_cache.spans_valid);
+    YEW_ASSERT_EQ_U64(yew_wrap_rows(&warm.win, LINENO(0U)), 2U);
+    (void)yew_wrap_row(&warm.win, LINENO(0U), 0U);
+    YEW_ASSERT(warm.win.wrap_cache.spans_valid);
 
-    sag_textbuf_insert(warm.buffer.tb, BYTEOFF(2U), (const u8 *)"  ", 2U);
+    yew_textbuf_insert(warm.buffer.tb, BYTEOFF(2U), (const u8 *)"  ", 2U);
     wrap_fixture_init(&cold, (const u8 *)"ab   cd", 7U, 3U);
-    rows = sag_wrap_rows(&cold.win, LINENO(0U));
-    SAG_ASSERT_EQ_U64(sag_wrap_rows(&warm.win, LINENO(0U)), rows);
+    rows = yew_wrap_rows(&cold.win, LINENO(0U));
+    YEW_ASSERT_EQ_U64(yew_wrap_rows(&warm.win, LINENO(0U)), rows);
     for (sub = 0U; sub < rows; sub++) {
-        Span warmed = sag_wrap_row(&warm.win, LINENO(0U), sub);
-        Span recomputed = sag_wrap_row(&cold.win, LINENO(0U), sub);
+        Span warmed = yew_wrap_row(&warm.win, LINENO(0U), sub);
+        Span recomputed = yew_wrap_row(&cold.win, LINENO(0U), sub);
 
-        SAG_ASSERT_EQ_U64(warmed.lo, recomputed.lo);
-        SAG_ASSERT_EQ_U64(warmed.hi, recomputed.hi);
+        YEW_ASSERT_EQ_U64(warmed.lo, recomputed.lo);
+        YEW_ASSERT_EQ_U64(warmed.hi, recomputed.hi);
     }
-    SAG_ASSERT(warm.win.wrap_cache.spans_len <=
+    YEW_ASSERT(warm.win.wrap_cache.spans_len <=
                (size_t)warm.win.vp.rows + 1U);
     wrap_fixture_free(&cold);
     wrap_fixture_free(&warm);
@@ -212,14 +212,14 @@ void test_wrap_empty_lines_are_one_row_and_spans_exclude_eol(void)
     Span row;
 
     wrap_fixture_init(&f, (const u8 *)"\nabc\n", 5U, 3U);
-    SAG_ASSERT_EQ_U64(sag_wrap_rows(&f.win, LINENO(0U)), 1U);
-    row = sag_wrap_row(&f.win, LINENO(0U), 0U);
-    SAG_ASSERT_EQ_U64(row.lo, 0U);
-    SAG_ASSERT_EQ_U64(row.hi, 0U);
-    row = sag_wrap_row(&f.win, LINENO(1U), 0U);
-    SAG_ASSERT_EQ_U64(row.lo, 1U);
-    SAG_ASSERT_EQ_U64(row.hi, 4U);
-    SAG_ASSERT_EQ_U64(sag_wrap_rows(&f.win, LINENO(2U)), 1U);
+    YEW_ASSERT_EQ_U64(yew_wrap_rows(&f.win, LINENO(0U)), 1U);
+    row = yew_wrap_row(&f.win, LINENO(0U), 0U);
+    YEW_ASSERT_EQ_U64(row.lo, 0U);
+    YEW_ASSERT_EQ_U64(row.hi, 0U);
+    row = yew_wrap_row(&f.win, LINENO(1U), 0U);
+    YEW_ASSERT_EQ_U64(row.lo, 1U);
+    YEW_ASSERT_EQ_U64(row.hi, 4U);
+    YEW_ASSERT_EQ_U64(yew_wrap_rows(&f.win, LINENO(2U)), 1U);
     wrap_fixture_free(&f);
 }
 
@@ -259,10 +259,10 @@ static u32 naive_wrap_rows(const u8 *bytes, size_t len, u16 width,
     u32 rows = 0U;
 
     while (pos < len) {
-        SagCluster cluster;
+        YewCluster cluster;
 
-        SAG_ASSERT(count < SAG_ARRAY_LEN(clusters));
-        SAG_ASSERT(sag_cluster_next(bytes, len, &pos, &cluster));
+        YEW_ASSERT(count < YEW_ARRAY_LEN(clusters));
+        YEW_ASSERT(yew_cluster_next(bytes, len, &pos, &cluster));
         clusters[count++] = (OracleCluster){cluster.off,
                                             cluster.off + cluster.len,
                                             cluster.base_cp,
@@ -281,11 +281,11 @@ static u32 naive_wrap_rows(const u8 *bytes, size_t len, u16 width,
             u32 cells;
 
             (*steps)++;
-            SAG_ASSERT(*steps < UINT64_C(2000000));
+            YEW_ASSERT(*steps < UINT64_C(2000000));
             if (oracle_cjk(clusters[i].base_cp) && i > start)
                 opportunity = i;
-            cells = clusters[i].cells == SAG_CLUSTER_TAB
-                        ? sag_tab_cells(used, SAG_VP_TABWIDTH)
+            cells = clusters[i].cells == YEW_CLUSTER_TAB
+                        ? yew_tab_cells(used, YEW_VP_TABWIDTH)
                         : clusters[i].cells;
             if (used.v + cells > limit) {
                 if (clusters[i].base_cp == (u32)' ') {
@@ -311,7 +311,7 @@ static u32 naive_wrap_rows(const u8 *bytes, size_t len, u16 width,
                 opportunity = i + 1U;
             }
         }
-        SAG_ASSERT(next_start > start);
+        YEW_ASSERT(next_start > start);
         start = next_start;
         rows++;
     }
@@ -359,7 +359,7 @@ void test_wrap_randomized_sum_matches_naive_oracle(void)
             bytebuf_append(&text, "\xE6\xBC\xA2", 3U);
         for (token = 0U; token < token_count; token++) {
             const char *part = tokens[wrap_random(&state) %
-                                      SAG_ARRAY_LEN(tokens)];
+                                      YEW_ARRAY_LEN(tokens)];
 
             bytebuf_append(&text, part, strlen(part));
         }
@@ -368,17 +368,17 @@ void test_wrap_randomized_sum_matches_naive_oracle(void)
     }
 
     wrap_fixture_init(&f, text.data, text.len, widths[0]);
-    for (wi = 0U; wi < SAG_ARRAY_LEN(widths); wi++) {
+    for (wi = 0U; wi < YEW_ARRAY_LEN(widths); wi++) {
         f.win.vp.cols = widths[wi];
         for (line = 0U; line < RANDOM_LINES; line++) {
             u32 expected = naive_wrap_rows(text.data + (size_t)starts[line],
                                            (size_t)(ends[line] - starts[line]),
                                            widths[wi], &steps);
 
-            SAG_ASSERT_EQ_U64(sag_wrap_rows(&f.win, LINENO(line)), expected);
+            YEW_ASSERT_EQ_U64(yew_wrap_rows(&f.win, LINENO(line)), expected);
         }
     }
-    SAG_ASSERT(steps != 0U);
+    YEW_ASSERT(steps != 0U);
     wrap_fixture_free(&f);
     bytebuf_free(&text);
 }

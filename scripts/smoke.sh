@@ -3,7 +3,7 @@
 set -eu
 
 if [ "$#" -ne 1 ]; then
-    echo "usage: $0 SAGITTA" >&2
+    echo "usage: $0 YEW" >&2
     exit 2
 fi
 
@@ -32,7 +32,7 @@ fi
 unit_bin=$bin_dir/unit_tests
 script_dir=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 repo_dir=$(dirname "$script_dir")
-tmp=$(umask 077 && mktemp -d "${TMPDIR:-/tmp}/sagitta-smoke.XXXXXX")
+tmp=$(umask 077 && mktemp -d "${TMPDIR:-/tmp}/yew-smoke.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 mkdir "$tmp/state"
 
@@ -75,7 +75,7 @@ expect_stderr_contains()
 
 run_capture "$bin" --version
 expect_rc 0 version
-[ "$(sed -n '1p' "$out")" = "sagitta 1.0.0-dev" ] || fail version
+[ "$(sed -n '1p' "$out")" = "yew 1.0.0-dev" ] || fail version
 [ "$(wc -l < "$out" | tr -d ' ')" -eq 2 ] || fail version
 [ ! -s "$err" ] || fail version
 echo "smoke: version ok"
@@ -87,9 +87,9 @@ echo "smoke: modules ok"
 run_capture "$bin" --help
 expect_rc 0 help
 expect_stdout_contains Usage help
-expect_stdout_contains "SAG_CLIPBOARD" help
-expect_stdout_contains "SAG_OSC52" help
-expect_stdout_contains "SAG_CHORD_TIMEOUT_MS" help
+expect_stdout_contains "YEW_CLIPBOARD" help
+expect_stdout_contains "YEW_OSC52" help
+expect_stdout_contains "YEW_CHORD_TIMEOUT_MS" help
 expect_stdout_contains "plain" help
 echo "smoke: help ok"
 
@@ -151,17 +151,17 @@ expect_rc 0 "batch success"
 run_capture "$bin" --batch --clean "$batch_dir/fail.fl"
 expect_rc 2 "batch failure"
 [ "$(cat "$out")" = "before-error" ] || fail "batch failure stdout flush"
-printf 'sagitta: script failed: user: boom\n  at <script> (%s:3:6)\n\n  3 | error("boom")\n    |      ^\n' \
+printf 'yew: script failed: user: boom\n  at <script> (%s:3:6)\n\n  3 | error("boom")\n    |      ^\n' \
     "$batch_dir/fail.fl" >"$tmp/batch-fail.expected"
 cmp -s "$err" "$tmp/batch-fail.expected" || fail "batch failure golden"
 
 rc=0
-SAG_BATCH_SELFTEST_TTY=1 \
+YEW_BATCH_SELFTEST_TTY=1 \
     "$bin" --batch --clean "$batch_dir/ok.fl" >"$out" 2>"$err" || rc=$?
 expect_rc 4 "batch poisoned tty"
 [ "$(cat "$out")" = "batch-ok" ] || fail "batch exit 4 stdout flush"
 expect_stderr_contains \
-    "terminal access in --batch: sag_tty_signal_fd" "batch poisoned tty"
+    "terminal access in --batch: yew_tty_signal_fd" "batch poisoned tty"
 
 run_capture "$bin" --batch --clean "$batch_dir/dirty.fl"
 expect_rc 0 "batch dirty warning"
@@ -218,29 +218,29 @@ expect_stderr_contains "Sprint 38" "batch deferred replay"
 echo "smoke: batch stdio and exit codes ok"
 
 rc=0
-XDG_STATE_HOME=$tmp/state SAG_LOG=$tmp/state/sagitta.log \
+XDG_STATE_HOME=$tmp/state YEW_LOG=$tmp/state/yew.log \
     "$bin" --selftest-bug >"$out" 2>"$err" || rc=$?
 expect_rc 4 "bug contract"
 expect_stderr_contains "internal error at" "bug contract"
 echo "smoke: bug contract ok"
 
 rc=0
-XDG_STATE_HOME=$tmp/state SAG_LOG=$tmp/state/sagitta.log \
+XDG_STATE_HOME=$tmp/state YEW_LOG=$tmp/state/yew.log \
     "$bin" --version >"$out" 2>"$err" || rc=$?
 expect_rc 0 "quiet terminal"
 [ ! -s "$err" ] || fail "quiet terminal"
-[ "$(sed -n '1p' "$out")" = "sagitta 1.0.0-dev" ] || fail "quiet terminal"
+[ "$(sed -n '1p' "$out")" = "yew 1.0.0-dev" ] || fail "quiet terminal"
 [ "$(sed -n '2p' "$out")" = "modules: $smoke_modules" ] || fail "quiet terminal"
 [ "$(wc -l < "$out" | tr -d ' ')" -eq 2 ] || fail "quiet terminal"
 echo "smoke: quiet terminal ok"
 
-[ -x "$unit_bin" ] || fail "unit runner missing beside sagitta"
+[ -x "$unit_bin" ] || fail "unit runner missing beside yew"
 run_capture "$unit_bin" --list
 expect_rc 0 "unit list"
 [ ! -s "$err" ] || fail "unit list"
 echo "smoke: unit list ok"
 
-run_capture "$unit_bin" --filter sagitta_smoke_deliberate_zero_match
+run_capture "$unit_bin" --filter yew_smoke_deliberate_zero_match
 expect_rc 1 "unit zero-match filter"
 echo "smoke: unit zero-match filter ok"
 
@@ -257,7 +257,7 @@ check_deferred_target()
 }
 
 #
-# Sprint 32 §1: every row of the `sag fl` exit-code contract, driven
+# Sprint 32 §1: every row of the `yew fl` exit-code contract, driven
 # once.  A contract nobody exercises is a table in a document.
 #
 fl_dir=$tmp/fl
@@ -343,12 +343,12 @@ grep -F "please report this internal error" "$err" >/dev/null || \
     fail "fl bug report lacks the reporting line"
 echo "smoke: fl exit 4 ok"
 
-# ...and SAG_FL_DUMP_BAD_CHUNK writes a disassembly the reader accepts.
-SAG_FL_DUMP_BAD_CHUNK=$tmp/badchunk.txt "$bin" fl --selftest-fl-bug \
+# ...and YEW_FL_DUMP_BAD_CHUNK writes a disassembly the reader accepts.
+YEW_FL_DUMP_BAD_CHUNK=$tmp/badchunk.txt "$bin" fl --selftest-fl-bug \
     >"$out" 2>"$err" || :
-[ -s "$tmp/badchunk.txt" ] || fail "SAG_FL_DUMP_BAD_CHUNK wrote nothing"
+[ -s "$tmp/badchunk.txt" ] || fail "YEW_FL_DUMP_BAD_CHUNK wrote nothing"
 grep -E '^[0-9]{4}  [0-9]+:[0-9]+  [A-Z_]+' "$tmp/badchunk.txt" >/dev/null || \
-    fail "SAG_FL_DUMP_BAD_CHUNK output is not a disassembly"
+    fail "YEW_FL_DUMP_BAD_CHUNK output is not a disassembly"
 echo "smoke: fl bad-chunk dump ok"
 
 # ---------------------------------------------------------------------

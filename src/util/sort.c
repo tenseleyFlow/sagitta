@@ -34,7 +34,7 @@ static void merge_runs(unsigned char *dst, const unsigned char *src,
     }
 }
 
-void sag_sort_stable(void *base, size_t n, size_t elem_size,
+void yew_sort_stable(void *base, size_t n, size_t elem_size,
                      int (*cmp)(const void *, const void *, void *), void *ctx)
 {
     unsigned char *items = base;
@@ -44,8 +44,8 @@ void sag_sort_stable(void *base, size_t n, size_t elem_size,
     if (n < 2 || elem_size == 0)
         return;
     if (!cmp)
-        SAG_BUG("sag_sort_stable: NULL comparator");
-    scratch = sag_xreallocarray(NULL, n, elem_size);
+        YEW_BUG("yew_sort_stable: NULL comparator");
+    scratch = yew_xreallocarray(NULL, n, elem_size);
 
     width = 1;
     for (;;) {

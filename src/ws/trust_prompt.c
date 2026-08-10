@@ -10,11 +10,11 @@
 #include "text/undo.h"
 #include "ui/message.h"
 
-static bool trust_reason_prompts(SagTrustDecision reason)
+static bool trust_reason_prompts(YewTrustDecision reason)
 {
-    return reason == SAG_TRUST_PROMPT_NEW ||
-           reason == SAG_TRUST_PROMPT_CHANGED ||
-           reason == SAG_TRUST_PROMPT_REPLACED;
+    return reason == YEW_TRUST_PROMPT_NEW ||
+           reason == YEW_TRUST_PROMPT_CHANGED ||
+           reason == YEW_TRUST_PROMPT_REPLACED;
 }
 
 static void trust_size_text(size_t bytes, char out[32])
@@ -55,42 +55,42 @@ static void trust_age_text(const char *path, char out[48])
 
 static void trust_prompt_show(Ed *ed)
 {
-    SagTrustPrompt *prompt = &ed->trust_prompt;
+    YewTrustPrompt *prompt = &ed->trust_prompt;
     char size[32];
     char age[48];
 
-    ed->prompt = SAG_PROMPT_WORKSPACE_TRUST;
+    ed->prompt = YEW_PROMPT_WORKSPACE_TRUST;
     trust_size_text(prompt->probe->bytes.len, size);
     trust_age_text(prompt->probe->config_path, age);
-    sag_msg(ed, SAG_MSG_WARN,
+    yew_msg(ed, YEW_MSG_WARN,
             "workspace config: %s (%s, modified %s); %s; "
             "[t]rust always [o]nce [n]ever [v]iew [s]kip",
             prompt->probe->config_path, size, age,
-            sag_trust_decision_reason(prompt->reason));
+            yew_trust_decision_reason(prompt->reason));
     ed->msg.prompt = true;
 }
 
-static void trust_prompt_finish(Ed *ed, SagTrustAnswer answer)
+static void trust_prompt_finish(Ed *ed, YewTrustAnswer answer)
 {
-    SagTrustPromptDone done = ed->trust_prompt.done;
+    YewTrustPromptDone done = ed->trust_prompt.done;
     void *ctx = ed->trust_prompt.ctx;
 
     (void)memset(&ed->trust_prompt, 0, sizeof(ed->trust_prompt));
-    ed->prompt = SAG_PROMPT_NONE;
-    sag_msg_clear(ed);
+    ed->prompt = YEW_PROMPT_NONE;
+    yew_msg_clear(ed);
     if (done != NULL)
         done(ed, answer, ctx);
 }
 
-static bool trust_prompt_persist(Ed *ed, SagTrustAnswer answer)
+static bool trust_prompt_persist(Ed *ed, YewTrustAnswer answer)
 {
-    SagTrustPrompt *prompt = &ed->trust_prompt;
+    YewTrustPrompt *prompt = &ed->trust_prompt;
     time_t now = time(NULL);
 
-    if (!sag_trust_answer(prompt->db, prompt->probe, answer, now) ||
-        !sag_trust_db_write(prompt->db, now,
-                            SAG_TRUST_PRUNE_DAYS_DEFAULT)) {
-        sag_msg(ed, SAG_MSG_ERROR,
+    if (!yew_trust_answer(prompt->db, prompt->probe, answer, now) ||
+        !yew_trust_db_write(prompt->db, now,
+                            YEW_TRUST_PRUNE_DAYS_DEFAULT)) {
+        yew_msg(ed, YEW_MSG_ERROR,
                 "could not persist workspace trust decision; "
                 "[t]rust always [o]nce [n]ever [v]iew [s]kip");
         ed->msg.prompt = true;
@@ -101,7 +101,7 @@ static bool trust_prompt_persist(Ed *ed, SagTrustAnswer answer)
 
 static bool trust_prompt_view(Ed *ed)
 {
-    SagTrustPrompt *prompt = &ed->trust_prompt;
+    YewTrustPrompt *prompt = &ed->trust_prompt;
     Buffer *view;
     char name[PATH_MAX + 32U];
 
@@ -109,34 +109,34 @@ static bool trust_prompt_view(Ed *ed)
         return false;
     (void)snprintf(name, sizeof(name), "*trust: %s*",
                    prompt->probe->config_path);
-    view = sag_ws_scratch_new(ed, name,
-                              SAG_BUF_NOUNDO | SAG_BUF_READONLY);
+    view = yew_ws_scratch_new(ed, name,
+                              YEW_BUF_NOUNDO | YEW_BUF_READONLY);
     if (view == NULL)
         return false;
-    sag_textbuf_insert(view->tb, BYTEOFF(0U), prompt->probe->bytes.data,
+    yew_textbuf_insert(view->tb, BYTEOFF(0U), prompt->probe->bytes.data,
                        (u64)prompt->probe->bytes.len);
-    sag_undo_mark_saved(view->undo);
-    if (!sag_ed_show_buffer(ed, view)) {
-        sag_ws_scratch_drop(ed, view);
+    yew_undo_mark_saved(view->undo);
+    if (!yew_ed_show_buffer(ed, view)) {
+        yew_ws_scratch_drop(ed, view);
         return false;
     }
     prompt->viewing = true;
     prompt->view_buffer_id = view->id;
-    ed->prompt = SAG_PROMPT_NONE;
-    sag_msg_clear(ed);
-    sag_msg(ed, SAG_MSG_INFO,
+    ed->prompt = YEW_PROMPT_NONE;
+    yew_msg_clear(ed);
+    yew_msg(ed, YEW_MSG_INFO,
             "viewing workspace config; close this buffer to answer trust prompt");
     return true;
 }
 
-bool sag_trust_prompt_begin(Ed *ed, SagTrustDb *db,
-                            const SagTrustProbe *probe,
-                            SagTrustDecision reason,
-                            SagTrustPromptDone done, void *ctx)
+bool yew_trust_prompt_begin(Ed *ed, YewTrustDb *db,
+                            const YewTrustProbe *probe,
+                            YewTrustDecision reason,
+                            YewTrustPromptDone done, void *ctx)
 {
     if (ed == NULL || db == NULL || probe == NULL || !probe->has_config ||
         !trust_reason_prompts(reason) || ed->trust_prompt.active ||
-        ed->prompt != SAG_PROMPT_NONE)
+        ed->prompt != YEW_PROMPT_NONE)
         return false;
     ed->trust_prompt.db = db;
     ed->trust_prompt.probe = probe;
@@ -148,9 +148,9 @@ bool sag_trust_prompt_begin(Ed *ed, SagTrustDb *db,
     return true;
 }
 
-bool sag_trust_prompt_key(Ed *ed, u8 answer)
+bool yew_trust_prompt_key(Ed *ed, u8 answer)
 {
-    SagTrustPrompt *prompt;
+    YewTrustPrompt *prompt;
 
     if (ed == NULL || !ed->trust_prompt.active ||
         ed->trust_prompt.viewing)
@@ -158,17 +158,17 @@ bool sag_trust_prompt_key(Ed *ed, u8 answer)
     prompt = &ed->trust_prompt;
     switch (answer) {
     case 't':
-        if (trust_prompt_persist(ed, SAG_TRUST_ALWAYS))
-            trust_prompt_finish(ed, SAG_TRUST_ALWAYS);
+        if (trust_prompt_persist(ed, YEW_TRUST_ALWAYS))
+            trust_prompt_finish(ed, YEW_TRUST_ALWAYS);
         return true;
     case 'o':
-        if (sag_trust_answer(prompt->db, prompt->probe, SAG_TRUST_ONCE,
+        if (yew_trust_answer(prompt->db, prompt->probe, YEW_TRUST_ONCE,
                              time(NULL)))
-            trust_prompt_finish(ed, SAG_TRUST_ONCE);
+            trust_prompt_finish(ed, YEW_TRUST_ONCE);
         return true;
     case 'n':
-        if (trust_prompt_persist(ed, SAG_TRUST_NEVER))
-            trust_prompt_finish(ed, SAG_TRUST_NEVER);
+        if (trust_prompt_persist(ed, YEW_TRUST_NEVER))
+            trust_prompt_finish(ed, YEW_TRUST_NEVER);
         return true;
     case 'v':
         if (!trust_prompt_view(ed))
@@ -176,9 +176,9 @@ bool sag_trust_prompt_key(Ed *ed, u8 answer)
         return true;
     case 's':
     case 0x1BU:
-        (void)sag_trust_answer(prompt->db, prompt->probe, SAG_TRUST_SKIP,
+        (void)yew_trust_answer(prompt->db, prompt->probe, YEW_TRUST_SKIP,
                                time(NULL));
-        trust_prompt_finish(ed, SAG_TRUST_SKIP);
+        trust_prompt_finish(ed, YEW_TRUST_SKIP);
         return true;
     default:
         trust_prompt_show(ed);
@@ -186,7 +186,7 @@ bool sag_trust_prompt_key(Ed *ed, u8 answer)
     }
 }
 
-void sag_trust_prompt_buffer_closed(Ed *ed, u32 buffer_id)
+void yew_trust_prompt_buffer_closed(Ed *ed, u32 buffer_id)
 {
     if (ed == NULL || !ed->trust_prompt.active ||
         !ed->trust_prompt.viewing ||
@@ -197,11 +197,11 @@ void sag_trust_prompt_buffer_closed(Ed *ed, u32 buffer_id)
     trust_prompt_show(ed);
 }
 
-void sag_trust_prompt_cancel(Ed *ed)
+void yew_trust_prompt_cancel(Ed *ed)
 {
     if (ed == NULL)
         return;
-    if (ed->prompt == SAG_PROMPT_WORKSPACE_TRUST)
-        ed->prompt = SAG_PROMPT_NONE;
+    if (ed->prompt == YEW_PROMPT_WORKSPACE_TRUST)
+        ed->prompt = YEW_PROMPT_NONE;
     (void)memset(&ed->trust_prompt, 0, sizeof(ed->trust_prompt));
 }

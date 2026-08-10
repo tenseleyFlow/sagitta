@@ -45,17 +45,17 @@
 
 static void ms_fixture(Ed *ed)
 {
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    sag_ed_init(ed);
-    SAG_ASSERT(sag_ed_open_scratch(ed));
-    SAG_ASSERT(sag_grid_init(&ed->grid, &ed->interner, 24U, 80U));
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    yew_ed_init(ed);
+    YEW_ASSERT(yew_ed_open_scratch(ed));
+    YEW_ASSERT(yew_grid_init(&ed->grid, &ed->interner, 24U, 80U));
     ed->grid_ready = true;
     /* The real layout, not a hand-placed rect: the viewport's row and
      * column counts come from it, and a zero-row viewport makes
-     * sag_vp_clamp a no-op — which would let a wheel test pass while
+     * yew_vp_clamp a no-op — which would let a wheel test pass while
      * proving nothing. */
-    sag_ed_layout(ed);
+    yew_ed_layout(ed);
     ed->now_ms = 1000;
 }
 
@@ -64,7 +64,7 @@ static Key ms_ev(u8 button, u8 ev, u16 x, u16 y)
     Key k;
 
     (void)memset(&k, 0, sizeof(k));
-    k.kind = (u16)SAG_EV_MOUSE;
+    k.kind = (u16)YEW_EV_MOUSE;
     k.button = button;
     k.ev = ev;
     k.col = x;
@@ -74,7 +74,7 @@ static Key ms_ev(u8 button, u8 ev, u16 x, u16 y)
 
 static Key ms_wheel(u8 button, u16 x, u16 y, u16 mods)
 {
-    Key k = ms_ev(button, (u8)SAG_KEY_PRESS, x, y);
+    Key k = ms_ev(button, (u8)YEW_KEY_PRESS, x, y);
 
     k.mods = mods;
     return k;
@@ -84,8 +84,8 @@ static Key ms_wheel(u8 button, u16 x, u16 y, u16 mods)
  * layout actually gave it. */
 static void ms_frame_pane(const Pane *leaf, i32 leaf_payload)
 {
-    sag_region_frame_begin();
-    sag_region_add(SAG_REGION_PANE, leaf->rect, leaf_payload);
+    yew_region_frame_begin();
+    yew_region_add(YEW_REGION_PANE, leaf->rect, leaf_payload);
 }
 
 static void ms_fill_lines(Ed *ed, u32 n)
@@ -93,14 +93,14 @@ static void ms_fill_lines(Ed *ed, u32 n)
     u32 i;
 
     for (i = 0U; i < n; i++) {
-        EditCtx ec = sag_ed_edit_ctx(ed);
+        EditCtx ec = yew_ed_edit_ctx(ed);
         char line[64];
 
         (void)snprintf(line, sizeof(line), "line %u padding padding\n",
                        (unsigned)i);
-        sag_edit_insert(&ec, sag_ed_cursor(ed)->pos, (const u8 *)line,
+        yew_edit_insert(&ec, yew_ed_cursor(ed)->pos, (const u8 *)line,
                         strlen(line));
-        sag_ed_finish_edit(ed, &ec);
+        yew_ed_finish_edit(ed, &ec);
     }
 }
 
@@ -114,48 +114,48 @@ void test_mouse_press_arms_and_does_not_drag(void)
     i32 leaf;
 
     ms_fixture(&ed);
-    sag_pane_tables_reset(&ed);
-    leaf = sag_pane_table_add_leaf(&ed, ed.pane_root);
+    yew_pane_tables_reset(&ed);
+    leaf = yew_pane_table_add_leaf(&ed, ed.pane_root);
     ms_frame_pane(ed.pane_root, leaf);
 
-    SAG_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)SAG_MP_IDLE);
+    YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_IDLE);
     {
-        Key press = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_PRESS, 10U, 5U);
+        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS, 10U, 5U);
 
-        sag_mouse_event(&ed, &press);
+        yew_mouse_event(&ed, &press);
     }
-    SAG_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)SAG_MP_ARMED);
-    SAG_ASSERT(ed.mouse.held != 0U);
-    SAG_ASSERT_EQ_U64(ed.mouse.press_x, 10U);
-    SAG_ASSERT_EQ_U64(ed.mouse.press_y, 5U);
+    YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_ARMED);
+    YEW_ASSERT(ed.mouse.held != 0U);
+    YEW_ASSERT_EQ_U64(ed.mouse.press_x, 10U);
+    YEW_ASSERT_EQ_U64(ed.mouse.press_y, 5U);
     /* The region was CAPTURED, not merely hit-tested and thrown away. */
-    SAG_ASSERT_EQ_U64((u64)ed.mouse.press_rgn.kind,
-                      (u64)SAG_REGION_PANE);
+    YEW_ASSERT_EQ_U64((u64)ed.mouse.press_rgn.kind,
+                      (u64)YEW_REGION_PANE);
 
     /* Motion within the pressed cell is still a click, not a drag. */
     {
-        Key motion = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_REPEAT, 10U, 5U);
+        Key motion = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_REPEAT, 10U, 5U);
 
-        sag_mouse_event(&ed, &motion);
+        yew_mouse_event(&ed, &motion);
     }
-    SAG_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)SAG_MP_ARMED);
+    YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_ARMED);
 
     /* One cell away, and it becomes a drag. */
     {
-        Key motion = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_REPEAT, 11U, 5U);
+        Key motion = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_REPEAT, 11U, 5U);
 
-        sag_mouse_event(&ed, &motion);
+        yew_mouse_event(&ed, &motion);
     }
-    SAG_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)SAG_MP_DRAG_SEL);
+    YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_DRAG_SEL);
 
     {
-        Key up = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_RELEASE, 11U, 5U);
+        Key up = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE, 11U, 5U);
 
-        sag_mouse_event(&ed, &up);
+        yew_mouse_event(&ed, &up);
     }
-    SAG_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)SAG_MP_IDLE);
-    SAG_ASSERT_EQ_U64(ed.mouse.held, 0U);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_IDLE);
+    YEW_ASSERT_EQ_U64(ed.mouse.held, 0U);
+    yew_ed_free(&ed);
 }
 
 /*
@@ -171,34 +171,34 @@ void test_mouse_wheel_never_touches_the_phase_machine(void)
 
     ms_fixture(&ed);
     ms_fill_lines(&ed, 60U);
-    sag_pane_tables_reset(&ed);
-    leaf = sag_pane_table_add_leaf(&ed, ed.pane_root);
+    yew_pane_tables_reset(&ed);
+    leaf = yew_pane_table_add_leaf(&ed, ed.pane_root);
     ms_frame_pane(ed.pane_root, leaf);
 
     for (i = 0U; i < 8U; i++) {
-        Key w = ms_wheel(i % 2U == 0U ? (u8)SAG_MB_WHEEL_DOWN
-                                      : (u8)SAG_MB_WHEEL_UP,
+        Key w = ms_wheel(i % 2U == 0U ? (u8)YEW_MB_WHEEL_DOWN
+                                      : (u8)YEW_MB_WHEEL_UP,
                          10U, 5U, 0U);
 
-        sag_mouse_event(&ed, &w);
-        SAG_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)SAG_MP_IDLE);
-        SAG_ASSERT_EQ_U64(ed.mouse.held, 0U);
+        yew_mouse_event(&ed, &w);
+        YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_IDLE);
+        YEW_ASSERT_EQ_U64(ed.mouse.held, 0U);
     }
 
     /* And mid-drag: the drag survives, the wheel changes no phase. */
     {
-        Key press = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_PRESS, 10U, 5U);
-        Key motion = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_REPEAT, 14U, 5U);
-        Key w = ms_wheel((u8)SAG_MB_WHEEL_DOWN, 10U, 5U, 0U);
+        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS, 10U, 5U);
+        Key motion = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_REPEAT, 14U, 5U);
+        Key w = ms_wheel((u8)YEW_MB_WHEEL_DOWN, 10U, 5U, 0U);
 
-        sag_mouse_event(&ed, &press);
-        sag_mouse_event(&ed, &motion);
-        SAG_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)SAG_MP_DRAG_SEL);
-        sag_mouse_event(&ed, &w);
-        SAG_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)SAG_MP_DRAG_SEL);
-        SAG_ASSERT(ed.mouse.held != 0U);
+        yew_mouse_event(&ed, &press);
+        yew_mouse_event(&ed, &motion);
+        YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_DRAG_SEL);
+        yew_mouse_event(&ed, &w);
+        YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_DRAG_SEL);
+        YEW_ASSERT(ed.mouse.held != 0U);
     }
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
 }
 
 void test_mouse_escape_and_focus_out_cancel_a_drag(void)
@@ -207,28 +207,28 @@ void test_mouse_escape_and_focus_out_cancel_a_drag(void)
     i32 leaf;
 
     ms_fixture(&ed);
-    sag_pane_tables_reset(&ed);
-    leaf = sag_pane_table_add_leaf(&ed, ed.pane_root);
+    yew_pane_tables_reset(&ed);
+    leaf = yew_pane_table_add_leaf(&ed, ed.pane_root);
     ms_frame_pane(ed.pane_root, leaf);
     {
-        Key press = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_PRESS, 10U, 5U);
-        Key motion = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_REPEAT, 14U, 5U);
+        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS, 10U, 5U);
+        Key motion = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_REPEAT, 14U, 5U);
 
-        sag_mouse_event(&ed, &press);
-        sag_mouse_event(&ed, &motion);
+        yew_mouse_event(&ed, &press);
+        yew_mouse_event(&ed, &motion);
     }
-    SAG_ASSERT(sag_mouse_gesture_active(&ed));
-    sag_mouse_cancel(&ed);
-    SAG_ASSERT(!sag_mouse_gesture_active(&ed));
-    SAG_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)SAG_MP_IDLE);
+    YEW_ASSERT(yew_mouse_gesture_active(&ed));
+    yew_mouse_cancel(&ed);
+    YEW_ASSERT(!yew_mouse_gesture_active(&ed));
+    YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_IDLE);
 
     /*
      * Cancelling an idle router is a no-op rather than a crash: a
      * FOCUS_OUT arrives whenever the user alt-tabs, drag or no drag.
      */
-    sag_mouse_cancel(&ed);
-    SAG_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)SAG_MP_IDLE);
-    sag_ed_free(&ed);
+    yew_mouse_cancel(&ed);
+    YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_IDLE);
+    yew_ed_free(&ed);
 }
 
 /*
@@ -242,17 +242,17 @@ void test_mouse_release_without_press_is_inert(void)
     i32 leaf;
 
     ms_fixture(&ed);
-    sag_pane_tables_reset(&ed);
-    leaf = sag_pane_table_add_leaf(&ed, ed.pane_root);
+    yew_pane_tables_reset(&ed);
+    leaf = yew_pane_table_add_leaf(&ed, ed.pane_root);
     ms_frame_pane(ed.pane_root, leaf);
     {
-        Key up = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_RELEASE, 10U, 5U);
+        Key up = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE, 10U, 5U);
 
-        sag_mouse_event(&ed, &up);
+        yew_mouse_event(&ed, &up);
     }
-    SAG_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)SAG_MP_IDLE);
-    SAG_ASSERT_EQ_U64(ed.mouse.held, 0U);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_IDLE);
+    YEW_ASSERT_EQ_U64(ed.mouse.held, 0U);
+    yew_ed_free(&ed);
 }
 
 /* ---------------------------------------------------------------- */
@@ -268,36 +268,36 @@ void test_mouse_click_a_pane_focuses_and_places_the_cursor(void)
 
     ms_fixture(&ed);
     ms_fill_lines(&ed, 20U);
-    right = sag_pane_split(&ed, ed.pane_root, SAG_SPLIT_V);
-    SAG_ASSERT_NOT_NULL(right);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 23U});
-    sag_pane_tables_reset(&ed);
-    left_id = sag_pane_table_add_leaf(&ed, ed.focus == right
+    right = yew_pane_split(&ed, ed.pane_root, YEW_SPLIT_V);
+    YEW_ASSERT_NOT_NULL(right);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 23U});
+    yew_pane_tables_reset(&ed);
+    left_id = yew_pane_table_add_leaf(&ed, ed.focus == right
                                                ? ed.pane_root->a
                                                : ed.focus);
-    right_id = sag_pane_table_add_leaf(&ed, right);
-    SAG_ASSERT(left_id >= 0 && right_id >= 0);
+    right_id = yew_pane_table_add_leaf(&ed, right);
+    YEW_ASSERT(left_id >= 0 && right_id >= 0);
 
-    ed.focus = sag_pane_leaf_by_index(&ed, left_id);
+    ed.focus = yew_pane_leaf_by_index(&ed, left_id);
     ed.win = ed.focus->win;
-    sag_region_frame_begin();
-    sag_region_add(SAG_REGION_PANE, right->rect, right_id);
+    yew_region_frame_begin();
+    yew_region_add(YEW_REGION_PANE, right->rect, right_id);
     {
-        Key press = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_PRESS,
+        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS,
                           (u16)(right->rect.x + 2U),
                           (u16)(right->rect.y + 1U));
         Key up = press;
 
-        up.ev = (u8)SAG_KEY_RELEASE;
-        sag_mouse_event(&ed, &press);
-        sag_mouse_event(&ed, &up);
+        up.ev = (u8)YEW_KEY_RELEASE;
+        yew_mouse_event(&ed, &press);
+        yew_mouse_event(&ed, &up);
     }
-    SAG_ASSERT(ed.focus == right);
-    sag_ed_free(&ed);
+    YEW_ASSERT(ed.focus == right);
+    yew_ed_free(&ed);
 }
 
 /*
- * SAG_REGION_BLOCK is what makes a dialog modal to the mouse without
+ * YEW_REGION_BLOCK is what makes a dialog modal to the mouse without
  * any dialog knowing the router exists.  A press on it changes nothing
  * and, crucially, does not reach whatever is underneath.
  */
@@ -308,29 +308,29 @@ void test_mouse_block_region_swallows_everything(void)
     Pane *before;
 
     ms_fixture(&ed);
-    sag_pane_tables_reset(&ed);
-    leaf = sag_pane_table_add_leaf(&ed, ed.pane_root);
+    yew_pane_tables_reset(&ed);
+    leaf = yew_pane_table_add_leaf(&ed, ed.pane_root);
     before = ed.focus;
-    sag_region_frame_begin();
+    yew_region_frame_begin();
     /* The pane first, the block on top: last-added wins (s22). */
-    sag_region_add(SAG_REGION_PANE, ed.pane_root->rect, leaf);
-    sag_region_add(SAG_REGION_BLOCK, ed.pane_root->rect, 0);
+    yew_region_add(YEW_REGION_PANE, ed.pane_root->rect, leaf);
+    yew_region_add(YEW_REGION_BLOCK, ed.pane_root->rect, 0);
     {
-        Key press = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_PRESS, 10U, 5U);
-        Key motion = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_REPEAT, 20U, 9U);
-        Key up = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_RELEASE, 20U, 9U);
+        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS, 10U, 5U);
+        Key motion = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_REPEAT, 20U, 9U);
+        Key up = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE, 20U, 9U);
 
-        sag_mouse_event(&ed, &press);
-        SAG_ASSERT_EQ_U64((u64)ed.mouse.press_rgn.kind,
-                          (u64)SAG_REGION_BLOCK);
-        sag_mouse_event(&ed, &motion);
+        yew_mouse_event(&ed, &press);
+        YEW_ASSERT_EQ_U64((u64)ed.mouse.press_rgn.kind,
+                          (u64)YEW_REGION_BLOCK);
+        yew_mouse_event(&ed, &motion);
         /* No drag begins on a block: there is nothing there to drag. */
-        SAG_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)SAG_MP_ARMED);
-        sag_mouse_event(&ed, &up);
+        YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_ARMED);
+        yew_mouse_event(&ed, &up);
     }
-    SAG_ASSERT(ed.focus == before);
-    SAG_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)SAG_MP_IDLE);
-    sag_ed_free(&ed);
+    YEW_ASSERT(ed.focus == before);
+    YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_IDLE);
+    yew_ed_free(&ed);
 }
 
 /*
@@ -345,19 +345,19 @@ void test_mouse_right_click_in_a_pane_does_nothing(void)
     Pane *before;
 
     ms_fixture(&ed);
-    sag_pane_tables_reset(&ed);
-    leaf = sag_pane_table_add_leaf(&ed, ed.pane_root);
+    yew_pane_tables_reset(&ed);
+    leaf = yew_pane_table_add_leaf(&ed, ed.pane_root);
     before = ed.focus;
     ms_frame_pane(ed.pane_root, leaf);
     {
-        Key press = ms_ev((u8)SAG_MB_RIGHT, (u8)SAG_KEY_PRESS, 10U, 5U);
+        Key press = ms_ev((u8)YEW_MB_RIGHT, (u8)YEW_KEY_PRESS, 10U, 5U);
 
-        sag_mouse_event(&ed, &press);
+        yew_mouse_event(&ed, &press);
     }
-    SAG_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)SAG_MP_IDLE);
-    SAG_ASSERT_EQ_U64(ed.mouse.held, 0U);
-    SAG_ASSERT(ed.focus == before);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_IDLE);
+    YEW_ASSERT_EQ_U64(ed.mouse.held, 0U);
+    YEW_ASSERT(ed.focus == before);
+    yew_ed_free(&ed);
 }
 
 /* Rows the table does not list are ignored, not guessed at. */
@@ -370,21 +370,21 @@ void test_mouse_unlisted_regions_are_inert(void)
     ms_fixture(&ed);
     before = ed.focus;
     dispatches = ed.dispatch_count;
-    sag_region_frame_begin();
-    sag_region_add(SAG_REGION_NONE, ed.pane_root->rect, 0);
+    yew_region_frame_begin();
+    yew_region_add(YEW_REGION_NONE, ed.pane_root->rect, 0);
     {
-        Key press = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_PRESS, 10U, 5U);
-        Key up = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_RELEASE, 10U, 5U);
-        Key w = ms_wheel((u8)SAG_MB_WHEEL_DOWN, 10U, 5U, 0U);
+        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS, 10U, 5U);
+        Key up = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE, 10U, 5U);
+        Key w = ms_wheel((u8)YEW_MB_WHEEL_DOWN, 10U, 5U, 0U);
 
-        sag_mouse_event(&ed, &press);
-        sag_mouse_event(&ed, &up);
-        sag_mouse_event(&ed, &w);
+        yew_mouse_event(&ed, &press);
+        yew_mouse_event(&ed, &up);
+        yew_mouse_event(&ed, &w);
     }
-    SAG_ASSERT(ed.focus == before);
-    SAG_ASSERT_EQ_U64(ed.dispatch_count, dispatches);
-    SAG_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)SAG_MP_IDLE);
-    sag_ed_free(&ed);
+    YEW_ASSERT(ed.focus == before);
+    YEW_ASSERT_EQ_U64(ed.dispatch_count, dispatches);
+    YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_IDLE);
+    yew_ed_free(&ed);
 }
 
 /* ---------------------------------------------------------------- */
@@ -407,40 +407,40 @@ void test_mouse_wheel_scrolls_the_pane_under_the_pointer(void)
 
     ms_fixture(&ed);
     ms_fill_lines(&ed, 80U);
-    right = sag_pane_split(&ed, ed.pane_root, SAG_SPLIT_V);
-    SAG_ASSERT_NOT_NULL(right);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 23U});
+    right = yew_pane_split(&ed, ed.pane_root, YEW_SPLIT_V);
+    YEW_ASSERT_NOT_NULL(right);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 23U});
     left = ed.pane_root->a == right ? ed.pane_root->b : ed.pane_root->a;
     ed.focus = left;
     ed.win = left->win;
-    SAG_ASSERT_NOT_NULL(right->win);
+    YEW_ASSERT_NOT_NULL(right->win);
 
-    sag_pane_tables_reset(&ed);
-    (void)sag_pane_table_add_leaf(&ed, left);
-    right_id = sag_pane_table_add_leaf(&ed, right);
-    sag_region_frame_begin();
-    sag_region_add(SAG_REGION_PANE, right->rect, right_id);
+    yew_pane_tables_reset(&ed);
+    (void)yew_pane_table_add_leaf(&ed, left);
+    right_id = yew_pane_table_add_leaf(&ed, right);
+    yew_region_frame_begin();
+    yew_region_add(YEW_REGION_PANE, right->rect, right_id);
 
-    cursor_before = sag_ed_cursor(&ed)->pos;
+    cursor_before = yew_ed_cursor(&ed)->pos;
     left_top_before = left->win->vp.top;
     {
-        Key w = ms_wheel((u8)SAG_MB_WHEEL_DOWN,
+        Key w = ms_wheel((u8)YEW_MB_WHEEL_DOWN,
                          (u16)(right->rect.x + 2U),
                          (u16)(right->rect.y + 2U), 0U);
 
-        sag_mouse_event(&ed, &w);
+        yew_mouse_event(&ed, &w);
     }
     /* The UNFOCUSED pane moved, by exactly one notch. */
-    SAG_ASSERT_EQ_U64(right->win->vp.top.v, (u64)SAG_WHEEL_ROWS);
+    YEW_ASSERT_EQ_U64(right->win->vp.top.v, (u64)YEW_WHEEL_ROWS);
     /* And nothing else did. */
-    SAG_ASSERT(ed.focus == left);
-    SAG_ASSERT_EQ_U64(left->win->vp.top.v, left_top_before.v);
-    SAG_ASSERT_EQ_U64(sag_ed_cursor(&ed)->pos.v, cursor_before.v);
-    sag_ed_free(&ed);
+    YEW_ASSERT(ed.focus == left);
+    YEW_ASSERT_EQ_U64(left->win->vp.top.v, left_top_before.v);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, cursor_before.v);
+    yew_ed_free(&ed);
 }
 
 /*
- * A notch is exactly SAG_WHEEL_ROWS rows, forever: no acceleration, no
+ * A notch is exactly YEW_WHEEL_ROWS rows, forever: no acceleration, no
  * momentum, no fractional accumulation.  Deterministic (invariant 5)
  * and therefore assertable.
  */
@@ -452,24 +452,24 @@ void test_mouse_wheel_has_no_acceleration(void)
 
     ms_fixture(&ed);
     ms_fill_lines(&ed, 200U);
-    sag_pane_tables_reset(&ed);
-    leaf = sag_pane_table_add_leaf(&ed, ed.pane_root);
+    yew_pane_tables_reset(&ed);
+    leaf = yew_pane_table_add_leaf(&ed, ed.pane_root);
     ms_frame_pane(ed.pane_root, leaf);
     for (i = 1U; i <= 10U; i++) {
-        Key w = ms_wheel((u8)SAG_MB_WHEEL_DOWN, 10U, 5U, 0U);
+        Key w = ms_wheel((u8)YEW_MB_WHEEL_DOWN, 10U, 5U, 0U);
 
-        sag_mouse_event(&ed, &w);
-        SAG_ASSERT_EQ_U64(ed.win->vp.top.v, (u64)(i * SAG_WHEEL_ROWS));
+        yew_mouse_event(&ed, &w);
+        YEW_ASSERT_EQ_U64(ed.win->vp.top.v, (u64)(i * YEW_WHEEL_ROWS));
     }
     /* Symmetric on the way back, and it stops at the top rather than
      * running negative. */
     for (i = 0U; i < 20U; i++) {
-        Key w = ms_wheel((u8)SAG_MB_WHEEL_UP, 10U, 5U, 0U);
+        Key w = ms_wheel((u8)YEW_MB_WHEEL_UP, 10U, 5U, 0U);
 
-        sag_mouse_event(&ed, &w);
+        yew_mouse_event(&ed, &w);
     }
-    SAG_ASSERT_EQ_U64(ed.win->vp.top.v, 0U);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(ed.win->vp.top.v, 0U);
+    yew_ed_free(&ed);
 }
 
 /*
@@ -484,17 +484,17 @@ void test_mouse_ctrl_wheel_is_unbound(void)
 
     ms_fixture(&ed);
     ms_fill_lines(&ed, 60U);
-    sag_pane_tables_reset(&ed);
-    leaf = sag_pane_table_add_leaf(&ed, ed.pane_root);
+    yew_pane_tables_reset(&ed);
+    leaf = yew_pane_table_add_leaf(&ed, ed.pane_root);
     ms_frame_pane(ed.pane_root, leaf);
     {
-        Key w = ms_wheel((u8)SAG_MB_WHEEL_DOWN, 10U, 5U,
-                         (u16)SAG_MOD_CTRL);
+        Key w = ms_wheel((u8)YEW_MB_WHEEL_DOWN, 10U, 5U,
+                         (u16)YEW_MOD_CTRL);
 
-        sag_mouse_event(&ed, &w);
+        yew_mouse_event(&ed, &w);
     }
-    SAG_ASSERT_EQ_U64(ed.win->vp.top.v, 0U);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(ed.win->vp.top.v, 0U);
+    yew_ed_free(&ed);
 }
 
 void test_mouse_shift_wheel_scrolls_sideways_and_not_when_wrapped(void)
@@ -504,40 +504,40 @@ void test_mouse_shift_wheel_scrolls_sideways_and_not_when_wrapped(void)
 
     ms_fixture(&ed);
     {
-        EditCtx ec = sag_ed_edit_ctx(&ed);
+        EditCtx ec = yew_ed_edit_ctx(&ed);
         char wide[400];
 
         (void)memset(wide, 'x', sizeof(wide) - 1U);
         wide[sizeof(wide) - 1U] = '\0';
-        sag_edit_insert(&ec, sag_ed_cursor(&ed)->pos, (const u8 *)wide,
+        yew_edit_insert(&ec, yew_ed_cursor(&ed)->pos, (const u8 *)wide,
                         strlen(wide));
-        sag_ed_finish_edit(&ed, &ec);
+        yew_ed_finish_edit(&ed, &ec);
     }
-    sag_pane_tables_reset(&ed);
-    leaf = sag_pane_table_add_leaf(&ed, ed.pane_root);
+    yew_pane_tables_reset(&ed);
+    leaf = yew_pane_table_add_leaf(&ed, ed.pane_root);
     ms_frame_pane(ed.pane_root, leaf);
 
     ed.win->vp.wrap = false;
     {
-        Key w = ms_wheel((u8)SAG_MB_WHEEL_DOWN, 10U, 5U,
-                         (u16)SAG_MOD_SHIFT);
+        Key w = ms_wheel((u8)YEW_MB_WHEEL_DOWN, 10U, 5U,
+                         (u16)YEW_MOD_SHIFT);
 
-        sag_mouse_event(&ed, &w);
-        SAG_ASSERT_EQ_U64(ed.win->vp.left.v, (u64)SAG_WHEEL_COLS);
-        sag_mouse_event(&ed, &w);
-        SAG_ASSERT_EQ_U64(ed.win->vp.left.v, (u64)(2U * SAG_WHEEL_COLS));
+        yew_mouse_event(&ed, &w);
+        YEW_ASSERT_EQ_U64(ed.win->vp.left.v, (u64)YEW_WHEEL_COLS);
+        yew_mouse_event(&ed, &w);
+        YEW_ASSERT_EQ_U64(ed.win->vp.left.v, (u64)(2U * YEW_WHEEL_COLS));
     }
     {
-        Key w = ms_wheel((u8)SAG_MB_WHEEL_UP, 10U, 5U,
-                         (u16)SAG_MOD_SHIFT);
+        Key w = ms_wheel((u8)YEW_MB_WHEEL_UP, 10U, 5U,
+                         (u16)YEW_MOD_SHIFT);
 
-        sag_mouse_event(&ed, &w);
-        SAG_ASSERT_EQ_U64(ed.win->vp.left.v, (u64)SAG_WHEEL_COLS);
-        sag_mouse_event(&ed, &w);
-        SAG_ASSERT_EQ_U64(ed.win->vp.left.v, 0U);
+        yew_mouse_event(&ed, &w);
+        YEW_ASSERT_EQ_U64(ed.win->vp.left.v, (u64)YEW_WHEEL_COLS);
+        yew_mouse_event(&ed, &w);
+        YEW_ASSERT_EQ_U64(ed.win->vp.left.v, 0U);
         /* It stops at column 0 rather than running negative. */
-        sag_mouse_event(&ed, &w);
-        SAG_ASSERT_EQ_U64(ed.win->vp.left.v, 0U);
+        yew_mouse_event(&ed, &w);
+        YEW_ASSERT_EQ_U64(ed.win->vp.left.v, 0U);
     }
 
     /*
@@ -547,16 +547,16 @@ void test_mouse_shift_wheel_scrolls_sideways_and_not_when_wrapped(void)
      */
     ed.win->vp.wrap = true;
     ed.win->vp.left = (CCol){0U};
-    sag_msg_clear(&ed);
+    yew_msg_clear(&ed);
     {
-        Key w = ms_wheel((u8)SAG_MB_WHEEL_DOWN, 10U, 5U,
-                         (u16)SAG_MOD_SHIFT);
+        Key w = ms_wheel((u8)YEW_MB_WHEEL_DOWN, 10U, 5U,
+                         (u16)YEW_MOD_SHIFT);
 
-        sag_mouse_event(&ed, &w);
+        yew_mouse_event(&ed, &w);
     }
-    SAG_ASSERT_EQ_U64(ed.win->vp.left.v, 0U);
-    SAG_ASSERT(!ed.msg.active);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(ed.win->vp.left.v, 0U);
+    YEW_ASSERT(!ed.msg.active);
+    yew_ed_free(&ed);
 }
 
 void test_mouse_wheel_over_the_strip_scrolls_the_strip(void)
@@ -569,27 +569,27 @@ void test_mouse_wheel_over_the_strip_scrolls_the_strip(void)
     for (i = 0; i < 8; i++) {
         char path[64];
 
-        (void)snprintf(path, sizeof(path), "/tmp/sag-mouse-w%d.txt", i);
-        SAG_ASSERT(sag_tab_open(&ed, path) >= 0);
+        (void)snprintf(path, sizeof(path), "/tmp/yew-mouse-w%d.txt", i);
+        YEW_ASSERT(yew_tab_open(&ed, path) >= 0);
     }
     ed.tabs.scroll = 4;
-    sag_region_frame_begin();
-    sag_region_add(SAG_REGION_TAB, (Rect){0U, 0U, 10U, 1U}, 0);
+    yew_region_frame_begin();
+    yew_region_add(YEW_REGION_TAB, (Rect){0U, 0U, 10U, 1U}, 0);
     {
-        Key w = ms_wheel((u8)SAG_MB_WHEEL_UP, 2U, 0U, 0U);
+        Key w = ms_wheel((u8)YEW_MB_WHEEL_UP, 2U, 0U, 0U);
 
-        sag_mouse_event(&ed, &w);
+        yew_mouse_event(&ed, &w);
     }
-    /* One ENTRY, not SAG_WHEEL_ROWS of them: the strip's unit is a tab,
+    /* One ENTRY, not YEW_WHEEL_ROWS of them: the strip's unit is a tab,
      * and three tabs per notch would overshoot on every bar that fits. */
-    SAG_ASSERT_EQ_I64(ed.tabs.scroll, 3);
+    YEW_ASSERT_EQ_I64(ed.tabs.scroll, 3);
     {
-        Key w = ms_wheel((u8)SAG_MB_WHEEL_DOWN, 2U, 0U, 0U);
+        Key w = ms_wheel((u8)YEW_MB_WHEEL_DOWN, 2U, 0U, 0U);
 
-        sag_mouse_event(&ed, &w);
+        yew_mouse_event(&ed, &w);
     }
-    SAG_ASSERT_EQ_I64(ed.tabs.scroll, 4);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_I64(ed.tabs.scroll, 4);
+    yew_ed_free(&ed);
 }
 
 /* ---------------------------------------------------------------- */
@@ -616,34 +616,34 @@ void test_mouse_press_captures_its_target_across_a_strip_change(void)
     for (i = 0; i < 4; i++) {
         char path[64];
 
-        (void)snprintf(path, sizeof(path), "/tmp/sag-mouse-%d.txt", i);
-        SAG_ASSERT(sag_tab_open(&ed, path) >= 0);
+        (void)snprintf(path, sizeof(path), "/tmp/yew-mouse-%d.txt", i);
+        YEW_ASSERT(yew_tab_open(&ed, path) >= 0);
     }
-    SAG_ASSERT_EQ_U64(sag_tab_count(&ed), 5U);
-    target_id = sag_tab_at(&ed, 3)->tab_id;
-    sag_tab_switch(&ed, 0);
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 5U);
+    target_id = yew_tab_at(&ed, 3)->tab_id;
+    yew_tab_switch(&ed, 0);
 
     /* Frame A: tab 3 occupies cells 20..30 on row 0. */
-    sag_region_frame_begin();
-    sag_region_add(SAG_REGION_TAB, (Rect){20U, 0U, 10U, 1U}, 3);
+    yew_region_frame_begin();
+    yew_region_add(YEW_REGION_TAB, (Rect){20U, 0U, 10U, 1U}, 3);
     {
-        Key press = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_PRESS, 22U, 0U);
+        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS, 22U, 0U);
 
-        sag_mouse_event(&ed, &press);
+        yew_mouse_event(&ed, &press);
     }
-    SAG_ASSERT_EQ_U64(ed.mouse.drag_tab_id, target_id);
+    YEW_ASSERT_EQ_U64(ed.mouse.drag_tab_id, target_id);
 
     /* Frame B: the strip scrolled; those same cells are now tab 1. */
-    sag_region_frame_begin();
-    sag_region_add(SAG_REGION_TAB, (Rect){20U, 0U, 10U, 1U}, 1);
+    yew_region_frame_begin();
+    yew_region_add(YEW_REGION_TAB, (Rect){20U, 0U, 10U, 1U}, 1);
     {
-        Key up = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_RELEASE, 22U, 0U);
+        Key up = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE, 22U, 0U);
 
-        sag_mouse_event(&ed, &up);
+        yew_mouse_event(&ed, &up);
     }
     /* The tab the user AIMED at, resolved by id. */
-    SAG_ASSERT_EQ_I64(ed.tabs.active, sag_tab_index_of_id(&ed, target_id));
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, yew_tab_index_of_id(&ed, target_id));
+    yew_ed_free(&ed);
 }
 
 /*
@@ -663,30 +663,30 @@ void test_mouse_press_on_a_tab_closed_mid_gesture_is_inert(void)
     for (i = 0; i < 4; i++) {
         char path[64];
 
-        (void)snprintf(path, sizeof(path), "/tmp/sag-mouse-c%d.txt", i);
-        SAG_ASSERT(sag_tab_open(&ed, path) >= 0);
+        (void)snprintf(path, sizeof(path), "/tmp/yew-mouse-c%d.txt", i);
+        YEW_ASSERT(yew_tab_open(&ed, path) >= 0);
     }
-    target_id = sag_tab_at(&ed, 3)->tab_id;
-    sag_tab_switch(&ed, 0);
+    target_id = yew_tab_at(&ed, 3)->tab_id;
+    yew_tab_switch(&ed, 0);
     active_before = ed.tabs.active;
 
-    sag_region_frame_begin();
-    sag_region_add(SAG_REGION_TAB, (Rect){20U, 0U, 10U, 1U}, 3);
+    yew_region_frame_begin();
+    yew_region_add(YEW_REGION_TAB, (Rect){20U, 0U, 10U, 1U}, 3);
     {
-        Key press = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_PRESS, 22U, 0U);
+        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS, 22U, 0U);
 
-        sag_mouse_event(&ed, &press);
+        yew_mouse_event(&ed, &press);
     }
-    SAG_ASSERT(sag_tab_close(&ed, sag_tab_index_of_id(&ed, target_id)));
-    sag_tab_switch(&ed, active_before);
-    SAG_ASSERT_EQ_I64(sag_tab_index_of_id(&ed, target_id), -1);
+    YEW_ASSERT(yew_tab_close(&ed, yew_tab_index_of_id(&ed, target_id)));
+    yew_tab_switch(&ed, active_before);
+    YEW_ASSERT_EQ_I64(yew_tab_index_of_id(&ed, target_id), -1);
     {
-        Key up = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_RELEASE, 22U, 0U);
+        Key up = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE, 22U, 0U);
 
-        sag_mouse_event(&ed, &up);
+        yew_mouse_event(&ed, &up);
     }
-    SAG_ASSERT_EQ_I64(ed.tabs.active, active_before);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, active_before);
+    yew_ed_free(&ed);
 }
 
 /*
@@ -703,37 +703,37 @@ void test_mouse_press_on_a_group_entry_captures_the_gid(void)
     for (i = 0; i < 3; i++) {
         char path[64];
 
-        (void)snprintf(path, sizeof(path), "/tmp/sag-mouse-g%d.txt", i);
-        SAG_ASSERT(sag_tab_open(&ed, path) >= 0);
+        (void)snprintf(path, sizeof(path), "/tmp/yew-mouse-g%d.txt", i);
+        YEW_ASSERT(yew_tab_open(&ed, path) >= 0);
     }
-    g = sag_group_create(&ed, "/src", NULL);
-    sag_group_add_member(&ed, g, 2);
-    sag_group_add_member(&ed, g, 3);
-    sag_tab_switch(&ed, 0);
+    g = yew_group_create(&ed, "/src", NULL);
+    yew_group_add_member(&ed, g, 2);
+    yew_group_add_member(&ed, g, 3);
+    yew_tab_switch(&ed, 0);
 
-    sag_region_frame_begin();
-    sag_region_add(SAG_REGION_TAB, (Rect){0U, 0U, 8U, 1U}, -(i32)g);
+    yew_region_frame_begin();
+    yew_region_add(YEW_REGION_TAB, (Rect){0U, 0U, 8U, 1U}, -(i32)g);
     {
-        Key press = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_PRESS, 2U, 0U);
+        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS, 2U, 0U);
 
-        sag_mouse_event(&ed, &press);
+        yew_mouse_event(&ed, &press);
     }
-    SAG_ASSERT_EQ_U64(ed.mouse.drag_gid, g);
-    SAG_ASSERT_EQ_U64(ed.mouse.drag_tab_id, 0U);
+    YEW_ASSERT_EQ_U64(ed.mouse.drag_gid, g);
+    YEW_ASSERT_EQ_U64(ed.mouse.drag_tab_id, 0U);
     /* Nothing has happened yet: a press on a tab entry arms, it does
      * not switch.  Switching on press and then dragging would leave a
      * tab activated that the user only meant to move. */
-    SAG_ASSERT_EQ_U64(sag_active_group_id(&ed), 0U);
+    YEW_ASSERT_EQ_U64(yew_active_group_id(&ed), 0U);
 
-    sag_region_frame_begin();
-    sag_region_add(SAG_REGION_TAB, (Rect){0U, 0U, 8U, 1U}, 1);
+    yew_region_frame_begin();
+    yew_region_add(YEW_REGION_TAB, (Rect){0U, 0U, 8U, 1U}, 1);
     {
-        Key up = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_RELEASE, 2U, 0U);
+        Key up = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE, 2U, 0U);
 
-        sag_mouse_event(&ed, &up);
+        yew_mouse_event(&ed, &up);
     }
-    SAG_ASSERT_EQ_U64(sag_active_group_id(&ed), g);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(yew_active_group_id(&ed), g);
+    yew_ed_free(&ed);
 }
 
 /* ---------------------------------------------------------------- */
@@ -761,18 +761,18 @@ void test_mouse_tab_dropped_on_a_pane_cancels(void)
     for (i = 0; i < 4; i++) {
         char path[64];
 
-        (void)snprintf(path, sizeof(path), "/tmp/sag-mouse-d%d.txt", i);
-        SAG_ASSERT(sag_tab_open(&ed, path) >= 0);
+        (void)snprintf(path, sizeof(path), "/tmp/yew-mouse-d%d.txt", i);
+        YEW_ASSERT(yew_tab_open(&ed, path) >= 0);
     }
-    sag_tab_switch(&ed, 0);
-    sag_ed_layout(&ed);
-    sag_pane_tables_reset(&ed);
-    leaf = sag_pane_table_add_leaf(&ed, ed.pane_root);
-    sag_region_frame_begin();
-    sag_tab_strip_draw(&ed, ed.tab_strip_rect);
-    sag_region_add(SAG_REGION_PANE, ed.pane_root->rect, leaf);
+    yew_tab_switch(&ed, 0);
+    yew_ed_layout(&ed);
+    yew_pane_tables_reset(&ed);
+    leaf = yew_pane_table_add_leaf(&ed, ed.pane_root);
+    yew_region_frame_begin();
+    yew_tab_strip_draw(&ed, ed.tab_strip_rect);
+    yew_region_add(YEW_REGION_PANE, ed.pane_root->rect, leaf);
 
-    held = sag_tab_at(&ed, 0)->tab_id;
+    held = yew_tab_at(&ed, 0)->tab_id;
     at_press = 0;
     {
         u16 x;
@@ -781,23 +781,23 @@ void test_mouse_tab_dropped_on_a_pane_cancels(void)
         Key up;
 
         for (x = 0U; x < 80U; x++) {
-            if (sag_strip_slot_at(x, 0U) == 0)
+            if (yew_strip_slot_at(x, 0U) == 0)
                 break;
         }
-        SAG_ASSERT(x < 80U);
-        press = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_PRESS, x, 0U);
-        motion = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_REPEAT, 40U,
+        YEW_ASSERT(x < 80U);
+        press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS, x, 0U);
+        motion = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_REPEAT, 40U,
                        (u16)(ed.pane_root->rect.y + 5U));
-        up = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_RELEASE, 40U,
+        up = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE, 40U,
                    (u16)(ed.pane_root->rect.y + 5U));
-        sag_mouse_event(&ed, &press);
-        sag_mouse_event(&ed, &motion);
-        sag_mouse_event(&ed, &up);
+        yew_mouse_event(&ed, &press);
+        yew_mouse_event(&ed, &motion);
+        yew_mouse_event(&ed, &up);
     }
     /* Not moved, not opened anywhere, and the gesture is over. */
-    SAG_ASSERT_EQ_I64(sag_tab_index_of_id(&ed, held), at_press);
-    SAG_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)SAG_MP_IDLE);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_I64(yew_tab_index_of_id(&ed, held), at_press);
+    YEW_ASSERT_EQ_U64((u64)ed.mouse.phase, (u64)YEW_MP_IDLE);
+    yew_ed_free(&ed);
 }
 
 /*
@@ -813,27 +813,27 @@ void test_mouse_hover_without_a_button_is_not_an_event(void)
     bool got;
 
     (void)memset(&caps, 0, sizeof(caps));
-    sag_input_init(&in, &caps);
+    yew_input_init(&in, &caps);
     /* cb 35 == motion with no button held, which is what a terminal
      * sends while the pointer is simply moving. */
-    sag_input_feed(&in, (const u8 *)"\x1b[<35;10;5M", 11U);
-    got = sag_input_next(&in, 0, &key);
-    SAG_ASSERT(!got || key.kind != (u16)SAG_EV_MOUSE);
+    yew_input_feed(&in, (const u8 *)"\x1b[<35;10;5M", 11U);
+    got = yew_input_next(&in, 0, &key);
+    YEW_ASSERT(!got || key.kind != (u16)YEW_EV_MOUSE);
     /* And a held-button motion IS decoded, so the test above is about
      * the no-button case rather than about a broken feed. */
-    sag_input_feed(&in, (const u8 *)"\x1b[<32;10;5M", 11U);
-    SAG_ASSERT(sag_input_next(&in, 0, &key));
-    SAG_ASSERT_EQ_U64((u64)key.kind, (u64)SAG_EV_MOUSE);
-    SAG_ASSERT_EQ_U64(key.ev, (u64)SAG_KEY_REPEAT);
-    sag_input_free(&in);
+    yew_input_feed(&in, (const u8 *)"\x1b[<32;10;5M", 11U);
+    YEW_ASSERT(yew_input_next(&in, 0, &key));
+    YEW_ASSERT_EQ_U64((u64)key.kind, (u64)YEW_EV_MOUSE);
+    YEW_ASSERT_EQ_U64(key.ev, (u64)YEW_KEY_REPEAT);
+    yew_input_free(&in);
 }
 
 /*
  * DoD 2, made executable rather than left as a grep somebody ran once.
  *
- * Every mouse event enters through sag_mouse_event.  The decoder
+ * Every mouse event enters through yew_mouse_event.  The decoder
  * produces them, the router consumes them, and the event loop's single
- * `case SAG_EV_MOUSE:` hands one to the other — nothing else in the
+ * `case YEW_EV_MOUSE:` hands one to the other — nothing else in the
  * program may turn a pointer event into an action, because a second
  * route is how a click comes to mean two different things depending on
  * which handler saw it first.
@@ -851,7 +851,7 @@ void test_mouse_the_router_is_the_only_dispatch_site(void)
     u32 handoffs = 0U;
     size_t d;
 
-    for (d = 0U; d < SAG_ARRAY_LEN(dirs); d++) {
+    for (d = 0U; d < YEW_ARRAY_LEN(dirs); d++) {
         DIR *dir = opendir(dirs[d]);
         struct dirent *e;
 
@@ -872,7 +872,7 @@ void test_mouse_the_router_is_the_only_dispatch_site(void)
                 continue;
             (void)snprintf(path, sizeof(path), "%s/%s", dirs[d],
                            e->d_name);
-            for (i = 0U; i < SAG_ARRAY_LEN(allowed); i++) {
+            for (i = 0U; i < YEW_ARRAY_LEN(allowed); i++) {
                 if (strcmp(path, allowed[i]) == 0)
                     skip = true;
             }
@@ -882,14 +882,14 @@ void test_mouse_the_router_is_the_only_dispatch_site(void)
             if (f == NULL)
                 continue;
             while (fgets(line, sizeof(line), f) != NULL) {
-                if (strstr(line, "SAG_EV_MOUSE") == NULL)
+                if (strstr(line, "YEW_EV_MOUSE") == NULL)
                     continue;
                 /*
                  * The ONE legal mention outside those two files: the
                  * loop's hand-off.  Anything else is a second route.
                  */
-                SAG_ASSERT_EQ_STR(path, "src/edit/loop.c");
-                SAG_ASSERT_NOT_NULL(strstr(line, "case SAG_EV_MOUSE:"));
+                YEW_ASSERT_EQ_STR(path, "src/edit/loop.c");
+                YEW_ASSERT_NOT_NULL(strstr(line, "case YEW_EV_MOUSE:"));
                 handoffs++;
             }
             (void)fclose(f);
@@ -898,7 +898,7 @@ void test_mouse_the_router_is_the_only_dispatch_site(void)
     }
     /* Exactly one, and the walk actually found it — a check that
      * scanned nothing would pass silently. */
-    SAG_ASSERT_EQ_U64(handoffs, 1U);
+    YEW_ASSERT_EQ_U64(handoffs, 1U);
 }
 
 /* ---------------------------------------------------------------- */
@@ -930,7 +930,7 @@ static bool ms_pick_accept(Ed *ed, void *ctx, i32 payload, u8 how)
 }
 
 /*
- * SAG_REGION_PICK_ROW: a press SELECTS and a release ACCEPTS, but only
+ * YEW_REGION_PICK_ROW: a press SELECTS and a release ACCEPTS, but only
  * when the release lands on the same row.  A press that slid onto a
  * neighbour before coming up was a mis-aim, and opening the neighbour
  * is the worst available reading of it.
@@ -946,40 +946,40 @@ void test_mouse_pick_row_selects_then_accepts_the_same_row(void)
     spec.items = ms_pick_items;
     spec.accept = ms_pick_accept;
     ms_pick_accepted = -1;
-    sag_picker_open(&ed, &spec);
-    SAG_ASSERT(sag_picker_active(&ed));
+    yew_picker_open(&ed, &spec);
+    YEW_ASSERT(yew_picker_active(&ed));
 
-    sag_region_frame_begin();
-    sag_region_add(SAG_REGION_PICK_ROW, (Rect){10U, 5U, 40U, 1U}, 10);
-    sag_region_add(SAG_REGION_PICK_ROW, (Rect){10U, 6U, 40U, 1U}, 20);
+    yew_region_frame_begin();
+    yew_region_add(YEW_REGION_PICK_ROW, (Rect){10U, 5U, 40U, 1U}, 10);
+    yew_region_add(YEW_REGION_PICK_ROW, (Rect){10U, 6U, 40U, 1U}, 20);
     {
-        Key press = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_PRESS, 12U, 6U);
-        Key elsewhere = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_RELEASE,
+        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS, 12U, 6U);
+        Key elsewhere = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE,
                               12U, 5U);
 
-        sag_mouse_event(&ed, &press);
+        yew_mouse_event(&ed, &press);
         /* Selected by PAYLOAD, so a re-rank between press and release
          * cannot slide it onto a neighbour. */
-        SAG_ASSERT_EQ_I64(sag_picker_selected(&ed), 20);
+        YEW_ASSERT_EQ_I64(yew_picker_selected(&ed), 20);
         /* Released on a DIFFERENT row: nothing is accepted. */
-        sag_mouse_event(&ed, &elsewhere);
-        SAG_ASSERT_EQ_I64(ms_pick_accepted, -1);
-        SAG_ASSERT(sag_picker_active(&ed));
+        yew_mouse_event(&ed, &elsewhere);
+        YEW_ASSERT_EQ_I64(ms_pick_accepted, -1);
+        YEW_ASSERT(yew_picker_active(&ed));
     }
     {
-        Key press = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_PRESS, 12U, 6U);
-        Key up = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_RELEASE, 30U, 6U);
+        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS, 12U, 6U);
+        Key up = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE, 30U, 6U);
 
-        sag_mouse_event(&ed, &press);
-        sag_mouse_event(&ed, &up);
+        yew_mouse_event(&ed, &press);
+        yew_mouse_event(&ed, &up);
     }
-    SAG_ASSERT_EQ_I64(ms_pick_accepted, 20);
-    SAG_ASSERT(!sag_picker_active(&ed));
-    sag_picker_close(&ed, false);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_I64(ms_pick_accepted, 20);
+    YEW_ASSERT(!yew_picker_active(&ed));
+    yew_picker_close(&ed, false);
+    yew_ed_free(&ed);
 }
 
-/* And the wheel over the list moves by SAG_WHEEL_ROWS, without
+/* And the wheel over the list moves by YEW_WHEEL_ROWS, without
  * accepting anything. */
 void test_mouse_wheel_over_a_pick_row_scrolls_the_list(void)
 {
@@ -992,24 +992,24 @@ void test_mouse_wheel_over_a_pick_row_scrolls_the_list(void)
     spec.items = ms_pick_items;
     spec.accept = ms_pick_accept;
     ms_pick_accepted = -1;
-    sag_picker_open(&ed, &spec);
-    sag_region_frame_begin();
-    sag_region_add(SAG_REGION_PICK_ROW, (Rect){10U, 5U, 40U, 1U}, 10);
+    yew_picker_open(&ed, &spec);
+    yew_region_frame_begin();
+    yew_region_add(YEW_REGION_PICK_ROW, (Rect){10U, 5U, 40U, 1U}, 10);
     {
-        Key w = ms_wheel((u8)SAG_MB_WHEEL_DOWN, 12U, 5U, 0U);
+        Key w = ms_wheel((u8)YEW_MB_WHEEL_DOWN, 12U, 5U, 0U);
 
-        SAG_ASSERT_EQ_I64(sag_picker_selected(&ed), 10);
-        sag_mouse_event(&ed, &w);
+        YEW_ASSERT_EQ_I64(yew_picker_selected(&ed), 10);
+        yew_mouse_event(&ed, &w);
         /* Three rows down from row 0 clamps at the last row of three. */
-        SAG_ASSERT_EQ_I64(sag_picker_selected(&ed), 30);
-        SAG_ASSERT_EQ_I64(ms_pick_accepted, -1);
+        YEW_ASSERT_EQ_I64(yew_picker_selected(&ed), 30);
+        YEW_ASSERT_EQ_I64(ms_pick_accepted, -1);
     }
-    sag_picker_close(&ed, false);
-    sag_ed_free(&ed);
+    yew_picker_close(&ed, false);
+    yew_ed_free(&ed);
 }
 
 /*
- * SAG_REGION_GP_ROW / _GP_NAME: the group picker's rows.  The dialog is
+ * YEW_REGION_GP_ROW / _GP_NAME: the group picker's rows.  The dialog is
  * modal, so the press reaches it and nothing under it — its own BLOCK
  * is what guarantees the second half, and this row proves the first.
  */
@@ -1018,41 +1018,41 @@ void test_mouse_gp_rows_reach_the_group_picker(void)
     Ed ed;
 
     ms_fixture(&ed);
-    SAG_ASSERT(sag_gp_show(&ed, "/tmp"));
-    SAG_ASSERT(sag_gp_active());
-    sag_region_frame_begin();
-    sag_gp_draw(&ed);
+    YEW_ASSERT(yew_gp_show(&ed, "/tmp"));
+    YEW_ASSERT(yew_gp_active());
+    yew_region_frame_begin();
+    yew_gp_draw(&ed);
     /* The dialog registered its own rows; find one and click it. */
     {
         u16 y;
         bool found = false;
 
         for (y = 0U; y < 24U && !found; y++) {
-            Region hit = sag_region_hit(20U, y);
+            Region hit = yew_region_hit(20U, y);
 
-            if (hit.kind != SAG_REGION_GP_ROW)
+            if (hit.kind != YEW_REGION_GP_ROW)
                 continue;
             found = true;
             {
-                Key press = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_PRESS,
+                Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS,
                                   20U, y);
-                Key w = ms_wheel((u8)SAG_MB_WHEEL_DOWN, 20U, y, 0U);
+                Key w = ms_wheel((u8)YEW_MB_WHEEL_DOWN, 20U, y, 0U);
 
-                sag_mouse_event(&ed, &press);
-                SAG_ASSERT(sag_gp_active());
+                yew_mouse_event(&ed, &press);
+                YEW_ASSERT(yew_gp_active());
                 /* The wheel is claimed too, and does not close it. */
-                sag_mouse_event(&ed, &w);
-                SAG_ASSERT(sag_gp_active());
+                yew_mouse_event(&ed, &w);
+                YEW_ASSERT(yew_gp_active());
             }
         }
-        SAG_ASSERT(found);
+        YEW_ASSERT(found);
     }
-    sag_gp_close(&ed);
-    sag_ed_free(&ed);
+    yew_gp_close(&ed);
+    yew_ed_free(&ed);
 }
 
 /*
- * SAG_REGION_CTX_ROW: a press HIGHLIGHTS and a release INVOKES — and,
+ * YEW_REGION_CTX_ROW: a press HIGHLIGHTS and a release INVOKES — and,
  * as with the picker, only when the release is on the row the press
  * captured.
  */
@@ -1066,49 +1066,49 @@ void test_mouse_ctx_row_highlights_then_invokes(void)
     for (i = 0; i < 3; i++) {
         char path[64];
 
-        (void)snprintf(path, sizeof(path), "/tmp/sag-mouse-x%d.txt", i);
-        SAG_ASSERT(sag_tab_open(&ed, path) >= 0);
+        (void)snprintf(path, sizeof(path), "/tmp/yew-mouse-x%d.txt", i);
+        YEW_ASSERT(yew_tab_open(&ed, path) >= 0);
     }
-    sag_tab_switch(&ed, 1);
-    target = sag_tab_at(&ed, 1)->tab_id;
-    sag_ed_layout(&ed);
-    SAG_ASSERT(sag_mouse_open_tab_menu(&ed, target, 0U, 2U));
-    sag_region_frame_begin();
-    sag_mouse_menu_draw(&ed);
+    yew_tab_switch(&ed, 1);
+    target = yew_tab_at(&ed, 1)->tab_id;
+    yew_ed_layout(&ed);
+    YEW_ASSERT(yew_mouse_open_tab_menu(&ed, target, 0U, 2U));
+    yew_region_frame_begin();
+    yew_mouse_menu_draw(&ed);
     {
-        Rect box = sag_ctx_box();
-        Key press = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_PRESS,
+        Rect box = yew_ctx_box();
+        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS,
                           (u16)(box.x + 1U), (u16)(box.y + 3U));
-        Key wrong = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_RELEASE,
+        Key wrong = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE,
                           (u16)(box.x + 1U), box.y);
 
-        sag_mouse_event(&ed, &press);
+        yew_mouse_event(&ed, &press);
         /* Row 3 is `Copy Path`; the press highlighted it. */
-        SAG_ASSERT_EQ_I64(sag_ctx_cursor(), 3);
-        SAG_ASSERT(sag_ctx_active());
+        YEW_ASSERT_EQ_I64(yew_ctx_cursor(), 3);
+        YEW_ASSERT(yew_ctx_active());
         /* Released on row 0 instead: nothing is invoked, and the menu
          * stays up rather than acting on the row the pointer drifted
          * onto. */
-        sag_mouse_event(&ed, &wrong);
-        SAG_ASSERT(sag_ctx_active());
+        yew_mouse_event(&ed, &wrong);
+        YEW_ASSERT(yew_ctx_active());
     }
     {
-        Rect box = sag_ctx_box();
-        Key press = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_PRESS,
+        Rect box = yew_ctx_box();
+        Key press = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_PRESS,
                           (u16)(box.x + 1U), (u16)(box.y + 3U));
-        Key up = ms_ev((u8)SAG_MB_LEFT, (u8)SAG_KEY_RELEASE,
+        Key up = ms_ev((u8)YEW_MB_LEFT, (u8)YEW_KEY_RELEASE,
                        (u16)(box.x + 2U), (u16)(box.y + 3U));
 
-        sag_mouse_event(&ed, &press);
-        sag_mouse_event(&ed, &up);
+        yew_mouse_event(&ed, &press);
+        yew_mouse_event(&ed, &up);
     }
-    SAG_ASSERT(!sag_ctx_active());
+    YEW_ASSERT(!yew_ctx_active());
     {
-        RegVal *v = sag_reg_get(&ed.regs, (u8)'+');
+        RegVal *v = yew_reg_get(&ed.regs, (u8)'+');
 
-        SAG_ASSERT_NOT_NULL(v);
-        SAG_ASSERT(v->bytes.len != 0U);
+        YEW_ASSERT_NOT_NULL(v);
+        YEW_ASSERT(v->bytes.len != 0U);
     }
-    sag_ctx_close();
-    sag_ed_free(&ed);
+    yew_ctx_close();
+    yew_ed_free(&ed);
 }

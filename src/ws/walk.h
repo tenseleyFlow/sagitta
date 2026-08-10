@@ -1,5 +1,5 @@
-#ifndef SAG_WS_WALK_H
-#define SAG_WS_WALK_H
+#ifndef YEW_WS_WALK_H
+#define YEW_WS_WALK_H
 
 /*
  * Sprint 26 §3: the workspace file walk.
@@ -27,7 +27,7 @@
  * every pty golden that shows a file list, from depending on the
  * filesystem underneath.
  *
- * BUDGETED.  sag_walk_step does roughly `budget_us` of work and returns,
+ * BUDGETED.  yew_walk_step does roughly `budget_us` of work and returns,
  * so a UI-initiated walk of 100 000 files runs in slices on the idle
  * timer and never blocks a keystroke (invariant 4).
  */
@@ -36,7 +36,7 @@
 #include "util/base.h"
 #include "util/vec.h"
 
-VEC_DECL(SagPathVec, char *);
+VEC_DECL(YewPathVec, char *);
 
 typedef struct WalkOpts {
     bool follow_symlinks; /* default false                    */
@@ -49,13 +49,13 @@ typedef struct WalkOpts {
      * 90 000 entries on a JavaScript checkout.
      */
     bool use_gitignore;
-    u32 max_depth;        /* 0 = SAG_WALK_DEFAULT_DEPTH       */
-    u64 max_entries;      /* 0 = SAG_WALK_DEFAULT_ENTRIES     */
+    u32 max_depth;        /* 0 = YEW_WALK_DEFAULT_DEPTH       */
+    u64 max_entries;      /* 0 = YEW_WALK_DEFAULT_ENTRIES     */
 } WalkOpts;
 
 enum {
-    SAG_WALK_DEFAULT_DEPTH = 64,
-    SAG_WALK_DEFAULT_ENTRIES = 200000
+    YEW_WALK_DEFAULT_DEPTH = 64,
+    YEW_WALK_DEFAULT_ENTRIES = 200000
 };
 
 /*
@@ -65,7 +65,7 @@ enum {
  */
 typedef struct FileList {
     Arena a;
-    SagPathVec paths;
+    YewPathVec paths;
     u64 n_dirs;
     u64 n_files;
     u64 n_ignored;
@@ -77,8 +77,8 @@ typedef struct FileList {
     bool truncated;
 } FileList;
 
-void sag_filelist_init(FileList *fl);
-void sag_filelist_free(FileList *fl);
+void yew_filelist_init(FileList *fl);
+void yew_filelist_free(FileList *fl);
 
 typedef struct WalkState WalkState;
 
@@ -88,9 +88,9 @@ typedef struct WalkState WalkState;
  * an empty list.
  *
  * `out` is reset by this call and owns its results until
- * sag_filelist_free.
+ * yew_filelist_free.
  */
-WalkState *sag_walk_begin(const char *root, const WalkOpts *o,
+WalkState *yew_walk_begin(const char *root, const WalkOpts *o,
                           FileList *out);
 
 /*
@@ -103,16 +103,16 @@ WalkState *sag_walk_begin(const char *root, const WalkOpts *o,
  * pretending otherwise would mean holding a half-read DIR* across
  * frames while the filesystem changes underneath it.
  */
-bool sag_walk_step(WalkState *w, i64 budget_us);
-void sag_walk_end(WalkState *w);
+bool yew_walk_step(WalkState *w, i64 budget_us);
+void yew_walk_end(WalkState *w);
 
 /*
  * Test hooks (DoD 5 counts them): opendir and fstatat calls performed by
  * the walk so far.  Pruning a 5 000-file node_modules must cost one stat
  * and zero opendirs, and counting is the only way to know.
  */
-u64 sag_walk_opendir_count(void);
-u64 sag_walk_statat_count(void);
-void sag_walk_counts_reset(void);
+u64 yew_walk_opendir_count(void);
+u64 yew_walk_statat_count(void);
+void yew_walk_counts_reset(void);
 
 #endif

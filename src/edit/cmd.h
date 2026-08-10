@@ -1,5 +1,5 @@
-#ifndef SAG_EDIT_CMD_H
-#define SAG_EDIT_CMD_H
+#ifndef YEW_EDIT_CMD_H
+#define YEW_EDIT_CMD_H
 
 #include <stdbool.h>
 
@@ -16,14 +16,14 @@ typedef struct CmdArgv {
 } CmdArgv;
 
 typedef enum {
-    SAG_RANGE_NONE,
-    SAG_RANGE_LINES,
-    SAG_RANGE_BUFFER,
-    SAG_RANGE_SELECTION
-} SagRangeKind;
+    YEW_RANGE_NONE,
+    YEW_RANGE_LINES,
+    YEW_RANGE_BUFFER,
+    YEW_RANGE_SELECTION
+} YewRangeKind;
 
 typedef struct CmdRange {
-    SagRangeKind kind;
+    YewRangeKind kind;
     LineNo lo;
     LineNo hi;
     bool given;
@@ -31,7 +31,7 @@ typedef struct CmdRange {
 } CmdRange;
 
 /* Transient cursor snapshots used by aggregate registry commands.  The
- * caller owns the array for the duration of sag_cmd_invoke(). */
+ * caller owns the array for the duration of yew_cmd_invoke(). */
 typedef struct CmdCursorArg {
     ByteOff pos;
     ByteOff anchor;
@@ -39,34 +39,34 @@ typedef struct CmdCursorArg {
 } CmdCursorArg;
 
 typedef enum {
-    SAG_RP_FORBID,
-    SAG_RP_OPT,
-    SAG_RP_LINE,
-    SAG_RP_BUFFER,
-    SAG_RP_REQUIRED
+    YEW_RP_FORBID,
+    YEW_RP_OPT,
+    YEW_RP_LINE,
+    YEW_RP_BUFFER,
+    YEW_RP_REQUIRED
 } CmdRangePolicy;
 
-typedef struct SagCmdInvoke {
+typedef struct YewCmdInvoke {
     CmdRange range;
     CmdArgv argv;
     i64 count;
     bool bang;
     Win *win;
-} SagCmdInvoke;
+} YewCmdInvoke;
 
 typedef struct {
     u32 v;
 } CmdId;
 
-#define SAG_CMD_NONE ((CmdId){0U})
+#define YEW_CMD_NONE ((CmdId){0U})
 
 typedef enum {
-    SAG_SRC_KEY,
-    SAG_SRC_CMDLINE,
-    SAG_SRC_FLETCH,
-    SAG_SRC_REPLAY,
-    SAG_SRC_MOUSE,
-    SAG_SRC_TEST
+    YEW_SRC_KEY,
+    YEW_SRC_CMDLINE,
+    YEW_SRC_FLETCH,
+    YEW_SRC_REPLAY,
+    YEW_SRC_MOUSE,
+    YEW_SRC_TEST
 } CmdSource;
 
 typedef struct CmdCtx {
@@ -92,44 +92,44 @@ typedef struct CmdCtx {
 } CmdCtx;
 
 enum {
-    SAG_OPT_ERROR_NONE = 0,
-    SAG_OPT_ERROR_NAME,
-    SAG_OPT_ERROR_TYPE
+    YEW_OPT_ERROR_NONE = 0,
+    YEW_OPT_ERROR_NAME,
+    YEW_OPT_ERROR_TYPE
 };
 
 typedef enum {
-    SAG_CMD_OK = 0,
-    SAG_CMD_ERR_ARG,
-    SAG_CMD_ERR_STATE,
-    SAG_CMD_ERR_IO,
-    SAG_CMD_ERR_DEFERRED
+    YEW_CMD_OK = 0,
+    YEW_CMD_ERR_ARG,
+    YEW_CMD_ERR_STATE,
+    YEW_CMD_ERR_IO,
+    YEW_CMD_ERR_DEFERRED
 } CmdStatus;
 
 typedef CmdStatus (*CmdFn)(CmdCtx *cx);
 
 typedef enum {
-    SAG_ARITY_NONE,
-    SAG_ARITY_INT,
-    SAG_ARITY_STR,
-    SAG_ARITY_OPT_INT,
-    SAG_ARITY_OPT_STR
+    YEW_ARITY_NONE,
+    YEW_ARITY_INT,
+    YEW_ARITY_STR,
+    YEW_ARITY_OPT_INT,
+    YEW_ARITY_OPT_STR
 } CmdArity;
 
 enum {
-    SAG_CMD_REPEATABLE = 1U << 0,
-    SAG_CMD_TAKES_COUNT = 1U << 1,
-    SAG_CMD_RECORDABLE = 1U << 2,
-    SAG_CMD_NEEDS_WIN = 1U << 3,
-    SAG_CMD_CHANGES_BUFFER = 1U << 4,
-    SAG_CMD_PROMPTS = 1U << 5,
-    SAG_CMD_DEFERRED = 1U << 6,
+    YEW_CMD_REPEATABLE = 1U << 0,
+    YEW_CMD_TAKES_COUNT = 1U << 1,
+    YEW_CMD_RECORDABLE = 1U << 2,
+    YEW_CMD_NEEDS_WIN = 1U << 3,
+    YEW_CMD_CHANGES_BUFFER = 1U << 4,
+    YEW_CMD_PROMPTS = 1U << 5,
+    YEW_CMD_DEFERRED = 1U << 6,
     /* Command consumes the cursor set instead of running per cursor. */
-    SAG_CMD_MULTI_AGGREGATE = 1U << 7,
+    YEW_CMD_MULTI_AGGREGATE = 1U << 7,
     /* A key binding without sarg captures the next text-producing key. */
-    SAG_CMD_CAPTURES_TEXT = 1U << 8,
+    YEW_CMD_CAPTURES_TEXT = 1U << 8,
     /* Keymap plumbing that must not resolve as a typed E command. */
-    SAG_CMD_INTERNAL = 1U << 9,
-    SAG_CMD_INTERACTIVE = 1U << 10
+    YEW_CMD_INTERNAL = 1U << 9,
+    YEW_CMD_INTERACTIVE = 1U << 10
 };
 
 typedef struct CmdDesc {
@@ -143,7 +143,7 @@ typedef struct CmdDesc {
      * or NULL when this command is not one.
      *
      * `[a-z][a-z0-9_]{0,15}`, globally unique, and REQUIRED whenever
-     * SAG_CMD_RECORDABLE is set.  That bijection is what Sprint 35's
+     * YEW_CMD_RECORDABLE is set.  That bijection is what Sprint 35's
      * round-trip law stands on: a recorded macro is a motion block, and
      * a motion block is what the recorder emits, so word -> command and
      * command -> word must be inverse.  Enforcing it at REGISTRATION
@@ -168,22 +168,22 @@ typedef struct CmdEntry {
 
 typedef void (*CmdRecordTap)(CmdId id, const CmdCtx *cx);
 
-void sag_cmd_init(void);
-void sag_cmd_shutdown(void);
-CmdId sag_cmd_register(const CmdDesc *d);
-CmdId sag_cmd_register_entry(const CmdEntry *entry);
-CmdId sag_cmd_lookup(const char *name, u32 len);
+void yew_cmd_init(void);
+void yew_cmd_shutdown(void);
+CmdId yew_cmd_register(const CmdDesc *d);
+CmdId yew_cmd_register_entry(const CmdEntry *entry);
+CmdId yew_cmd_lookup(const char *name, u32 len);
 /*
  * Sprint 34 §8: the motion-space word -> command map, built at
- * registration.  SAG_CMD_NONE when no command carries that word.
+ * registration.  YEW_CMD_NONE when no command carries that word.
  */
-CmdId sag_cmd_by_word(const char *word, u32 len);
-const CmdDesc *sag_cmd_desc(CmdId id);
-const CmdEntry *sag_cmd_entry(CmdId id);
-CmdStatus sag_cmd_prepare(CmdId id, CmdCtx *cx, const CmdDesc **out);
-CmdStatus sag_cmd_invoke(CmdId id, CmdCtx *cx);
-u32 sag_cmd_count(void);
-const CmdDesc *sag_cmd_at(u32 i);
-void sag_cmd_set_record_tap(CmdRecordTap tap);
+CmdId yew_cmd_by_word(const char *word, u32 len);
+const CmdDesc *yew_cmd_desc(CmdId id);
+const CmdEntry *yew_cmd_entry(CmdId id);
+CmdStatus yew_cmd_prepare(CmdId id, CmdCtx *cx, const CmdDesc **out);
+CmdStatus yew_cmd_invoke(CmdId id, CmdCtx *cx);
+u32 yew_cmd_count(void);
+const CmdDesc *yew_cmd_at(u32 i);
+void yew_cmd_set_record_tap(CmdRecordTap tap);
 
 #endif

@@ -1,11 +1,11 @@
-#ifndef SAG_UI_FILTER_H
-#define SAG_UI_FILTER_H
+#ifndef YEW_UI_FILTER_H
+#define YEW_UI_FILTER_H
 
 /*
  * Sprint 26 §7: incremental filtering inside the keystroke budget.
  *
  * THE NUMBERS THIS IS DESIGNED AGAINST.  100 000 candidates, mean path
- * 40 bytes.  sag_fz_score is one allocation-free pass over the text at
+ * 40 bytes.  yew_fz_score is one allocation-free pass over the text at
  * roughly 200 ns per candidate, so a FULL rescan is about 20 ms — four
  * times over the 5 ms keypress-to-paint gate (invariant 4).  Every
  * decision below follows from that one measurement.
@@ -21,7 +21,7 @@
  * THE CANDIDATE SET IS NEVER SORTED.  At most twenty rows are shown, so
  * bounded insertion into a twenty-slot top-k beats sorting 100 000
  * elements by two orders of magnitude, and only the visible window
- * needs an order at all.  sag_fz_rank still exists and still sorts; it
+ * needs an order at all.  yew_fz_rank still exists and still sorts; it
  * is for tests and for callers with a small n.
  *
  * NO strlen IN THE INNER LOOP and no per-candidate allocation: lengths
@@ -35,10 +35,10 @@
 #include "ws/finder.h"
 
 enum {
-    SAG_FILTER_PAT_MAX = 256,
+    YEW_FILTER_PAT_MAX = 256,
     /* The visible window.  Nothing below the top-k is ordered because
      * nothing below it is drawn. */
-    SAG_FILTER_TOPK = 32
+    YEW_FILTER_TOPK = 32
 };
 
 /*
@@ -57,7 +57,7 @@ typedef struct FilterState {
     u32 n_cand;
     u32 cap;
 
-    char pat[SAG_FILTER_PAT_MAX];
+    char pat[YEW_FILTER_PAT_MAX];
     u32 plen;
 
     /*
@@ -89,30 +89,30 @@ typedef struct FilterState {
     bool narrowing;
 } FilterState;
 
-void sag_filter_init(FilterState *f);
-void sag_filter_free(FilterState *f);
+void yew_filter_init(FilterState *f);
+void yew_filter_free(FilterState *f);
 
 /*
  * Points the filter at `n` items and resets it.  Reserves both vectors
  * once, here, so no keystroke ever allocates.
  */
-void sag_filter_reset(FilterState *f, const PickItem *items, u32 n,
+void yew_filter_reset(FilterState *f, const PickItem *items, u32 n,
                       u32 src_gen);
 
 /*
  * Applies `pat`.  Returns true when the result is COMPLETE; false when
  * a sliced rescan is still running and the caller should keep calling
- * sag_filter_step (and show ` scanning…`).
+ * yew_filter_step (and show ` scanning…`).
  *
  * `budget_us` bounds the work done here; 0 means run to completion,
  * which is what tests and small lists use.
  */
-bool sag_filter_apply(FilterState *f, const PickItem *items, u32 n,
+bool yew_filter_apply(FilterState *f, const PickItem *items, u32 n,
                       bool path_mode, const char *pat, u32 plen,
                       i64 budget_us);
 
 /* Continues a sliced rescan.  False when it is finished. */
-bool sag_filter_step(FilterState *f, const PickItem *items,
+bool yew_filter_step(FilterState *f, const PickItem *items,
                      bool path_mode, i64 budget_us);
 
 /*
@@ -120,19 +120,19 @@ bool sag_filter_step(FilterState *f, const PickItem *items,
  * how many — the only place an order is computed, because it is the
  * only place one is seen.
  */
-u32 sag_filter_top(const FilterState *f, const PickItem *items,
+u32 yew_filter_top(const FilterState *f, const PickItem *items,
                    bool path_mode, FzRanked *out, u32 max);
 
 /* Matches found so far.  Meaningful mid-scan, which is why the footer
  * can show a count while ` scanning…` is up. */
-u32 sag_filter_matched(const FilterState *f);
+u32 yew_filter_matched(const FilterState *f);
 
 /*
  * Test hook: candidates SCORED since the last reset.  The narrowing
  * claim is about work avoided, and counting is the only way to tell a
  * narrowed pass from a full one that happened to agree.
  */
-u64 sag_filter_scored(void);
-void sag_filter_scored_reset(void);
+u64 yew_filter_scored(void);
+void yew_filter_scored_reset(void);
 
 #endif

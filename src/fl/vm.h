@@ -1,5 +1,5 @@
-#ifndef SAG_FL_VM_H
-#define SAG_FL_VM_H
+#ifndef YEW_FL_VM_H
+#define YEW_FL_VM_H
 
 /* Sprint 30 deliverables 7 and 11: the VM state and the host seam. */
 
@@ -267,7 +267,7 @@ bool fl_vm_init(FlVm *vm, Arena *a, Interner *in, DiagCtx *dc);
  * have a STABLE ADDRESS for as long as it is registered -- a field of
  * a heap struct that outlives the registration, never an element of a
  * vector that grows.  Registering the same address twice is a bug and
- * a SAG_BUG; removing one that was never added is a no-op, so a
+ * a YEW_BUG; removing one that was never added is a no-op, so a
  * teardown path that runs twice is safe.
  */
 void fl_gc_host_root_add(FlVm *vm, FlValue *slot);
@@ -330,7 +330,7 @@ void fl_vm_set_step_limit(FlVm *vm, u64 steps);
  * the attack surface actually is: every byte an adversary controls
  * passes through the parser first.
  *
- * THE CONDITION ON THIS DECISION: if sagitta ever grows a bytecode
+ * THE CONDITION ON THIS DECISION: if yew ever grows a bytecode
  * cache, a `.flc` format, or any other way to load a chunk it did not
  * just compile, A REAL VERIFIER LANDS IN THE SAME COMMIT.  Nothing may
  * load foreign bytecode without one.  See s32-repl-and-errors.md §8.
@@ -338,7 +338,7 @@ void fl_vm_set_step_limit(FlVm *vm, u64 steps);
  * What ships instead is a compiler assertion.  It validates OUR
  * output -- jump targets on instruction starts and in range, constant
  * and slot indices in range, and a terminator at the end -- and a
- * failure is a SAG_BUG, because it means the compiler is broken, which
+ * failure is a YEW_BUG, because it means the compiler is broken, which
  * is not a user error.  Always compiled so the tests can drive it;
  * called automatically only under FL_VM_CHECKS.
  */
@@ -351,4 +351,4 @@ bool fl_call(FlVm *vm, FlValue callee, const FlValue *args, u32 nargs,
 bool fl_vm_run(FlVm *vm, FlFn *entry, FlValue *out);   /* false = raised */
 void fl_vm_free(FlVm *vm);
 
-#endif /* SAG_FL_VM_H */
+#endif /* YEW_FL_VM_H */

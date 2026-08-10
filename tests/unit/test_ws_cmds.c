@@ -4,7 +4,7 @@
  * ed.ws.forget is the only command in the tree that removes a directory
  * tree, so most of this file is about the three things standing between
  * it and a disaster: it asks first, anything but an explicit `y`
- * cancels, and sag_ws_forget_dir independently refuses a path that is
+ * cancels, and yew_ws_forget_dir independently refuses a path that is
  * not under .../workspaces/ — a guard that cannot fire today and exists
  * for the caller that does not yet exist.
  *
@@ -67,23 +67,23 @@ static void wc_make(WcFix *f)
     if (prev != NULL)
         (void)snprintf(f->saved, sizeof(f->saved), "%s", prev);
     (void)snprintf(f->state_home, sizeof(f->state_home),
-                   "/tmp/sag-wchome-XXXXXX");
-    SAG_ASSERT_NOT_NULL(mkdtemp(f->state_home));
-    (void)snprintf(f->work, sizeof(f->work), "/tmp/sag-wcwork-XXXXXX");
-    SAG_ASSERT_NOT_NULL(mkdtemp(f->work));
-    SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", f->state_home, 1), 0);
+                   "/tmp/yew-wchome-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(f->state_home));
+    (void)snprintf(f->work, sizeof(f->work), "/tmp/yew-wcwork-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(f->work));
+    YEW_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", f->state_home, 1), 0);
 
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    sag_ed_init(&f->ed);
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    yew_ed_init(&f->ed);
     f->ed.ws.dir = arena_strdup(&f->ed.arena, f->work);
-    SAG_ASSERT(sag_ed_open_scratch(&f->ed));
-    sag_layout_compute(f->ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT(yew_ed_open_scratch(&f->ed));
+    yew_layout_compute(f->ed.pane_root, (Rect){0U, 0U, 80U, 24U});
 }
 
 static void wc_remove(WcFix *f)
 {
-    sag_ed_free(&f->ed);
+    yew_ed_free(&f->ed);
     if (f->had_saved)
         (void)setenv("XDG_STATE_HOME", f->saved, 1);
     else
@@ -108,7 +108,7 @@ static void wc_join(char *out, size_t cap, const char *dir, const char *leaf)
 {
     int n = snprintf(out, cap, "%s/%s", dir, leaf);
 
-    SAG_ASSERT(n > 0 && (size_t)n < cap);
+    YEW_ASSERT(n > 0 && (size_t)n < cap);
 }
 
 static CmdStatus wc_run(WcFix *f, CmdStatus (*fn)(CmdCtx *))
@@ -135,19 +135,19 @@ void test_ws_cmds_are_registered(void)
         "ed.ws.forget", "ed.ws.migrate"};
     u32 i;
 
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    for (i = 0U; i < SAG_ARRAY_LEN(names); i++) {
-        CmdId id = sag_cmd_lookup(names[i], (u32)strlen(names[i]));
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
+        CmdId id = yew_cmd_lookup(names[i], (u32)strlen(names[i]));
 
-        SAG_ASSERT(id.v != 0U);
+        YEW_ASSERT(id.v != 0U);
     }
     /* Left INITIALIZED.  Shutting the registry down here and walking
      * away crashes the next test that dispatches a command — which is
      * not the next test in this file, so the failure lands somewhere
      * that has nothing to do with workspaces. */
-    sag_cmd_shutdown();
-    sag_cmd_init();
+    yew_cmd_shutdown();
+    yew_cmd_init();
 }
 
 /*
@@ -160,17 +160,17 @@ void test_ws_cmds_migrate_is_deferred(void)
     CmdId id;
     const CmdDesc *desc;
 
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    id = sag_cmd_lookup("ed.ws.migrate", 13U);
-    SAG_ASSERT(id.v != 0U);
-    desc = sag_cmd_desc(id);
-    SAG_ASSERT_NOT_NULL(desc);
-    SAG_ASSERT((desc->flags & SAG_CMD_DEFERRED) != 0U);
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    id = yew_cmd_lookup("ed.ws.migrate", 13U);
+    YEW_ASSERT(id.v != 0U);
+    desc = yew_cmd_desc(id);
+    YEW_ASSERT_NOT_NULL(desc);
+    YEW_ASSERT((desc->flags & YEW_CMD_DEFERRED) != 0U);
     /* And it names the sprint that owns it. */
-    SAG_ASSERT_NOT_NULL(strstr(desc->help, "Sprint 25"));
-    sag_cmd_shutdown();
-    sag_cmd_init();
+    YEW_ASSERT_NOT_NULL(strstr(desc->help, "Sprint 25"));
+    yew_cmd_shutdown();
+    yew_cmd_init();
 }
 
 /* ---------------------------------------------------------------- */
@@ -183,12 +183,12 @@ void test_ws_cmds_save_state_writes_immediately(void)
     WcFix f;
 
     wc_make(&f);
-    sag_state_open(&f.ed);
-    SAG_ASSERT(f.ed.state.writer);
-    SAG_ASSERT(!wc_exists(sag_ws_state_path(&f.ed.state.key)));
-    SAG_ASSERT_EQ_I64(wc_run(&f, sag_ws_cmd_save_state), SAG_CMD_OK);
-    SAG_ASSERT(wc_exists(sag_ws_state_path(&f.ed.state.key)));
-    SAG_ASSERT_EQ_U64(f.ed.state.writes, 1U);
+    yew_state_open(&f.ed);
+    YEW_ASSERT(f.ed.state.writer);
+    YEW_ASSERT(!wc_exists(yew_ws_state_path(&f.ed.state.key)));
+    YEW_ASSERT_EQ_I64(wc_run(&f, yew_ws_cmd_save_state), YEW_CMD_OK);
+    YEW_ASSERT(wc_exists(yew_ws_state_path(&f.ed.state.key)));
+    YEW_ASSERT_EQ_U64(f.ed.state.writes, 1U);
     wc_remove(&f);
 }
 
@@ -198,16 +198,16 @@ void test_ws_cmds_save_state_refuses_when_stateless(void)
     WcFix f;
 
     wc_make(&f);
-    SAG_ASSERT(!f.ed.state.ready);
-    SAG_ASSERT_EQ_I64(wc_run(&f, sag_ws_cmd_save_state), SAG_CMD_ERR_STATE);
-    SAG_ASSERT(f.ed.msg.active);
+    YEW_ASSERT(!f.ed.state.ready);
+    YEW_ASSERT_EQ_I64(wc_run(&f, yew_ws_cmd_save_state), YEW_CMD_ERR_STATE);
+    YEW_ASSERT(f.ed.msg.active);
     wc_remove(&f);
 }
 
 /*
  * A READER refuses with ERR_STATE, not ERR_IO.
  *
- * Nothing is wrong with the disk; another sagitta owns the workspace.
+ * Nothing is wrong with the disk; another yew owns the workspace.
  * Reporting an I/O error would send someone to check permissions on a
  * directory that is perfectly fine.
  */
@@ -216,11 +216,11 @@ void test_ws_cmds_save_state_refuses_for_a_reader(void)
     WcFix f;
 
     wc_make(&f);
-    sag_state_open(&f.ed);
+    yew_state_open(&f.ed);
     f.ed.state.writer = false;
     f.ed.state.owner_pid = 1;
-    SAG_ASSERT_EQ_I64(wc_run(&f, sag_ws_cmd_save_state), SAG_CMD_ERR_STATE);
-    SAG_ASSERT(!wc_exists(sag_ws_state_path(&f.ed.state.key)));
+    YEW_ASSERT_EQ_I64(wc_run(&f, yew_ws_cmd_save_state), YEW_CMD_ERR_STATE);
+    YEW_ASSERT(!wc_exists(yew_ws_state_path(&f.ed.state.key)));
     wc_remove(&f);
 }
 
@@ -240,27 +240,27 @@ void test_ws_cmds_restore_state_is_additive(void)
     (void)snprintf(pa, sizeof(pa), "%s/a.txt", f.work);
     (void)snprintf(pb, sizeof(pb), "%s/b.txt", f.work);
     fp = fopen(pa, "wb");
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     (void)fputs("alpha\n", fp);
     (void)fclose(fp);
     fp = fopen(pb, "wb");
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     (void)fputs("bravo\n", fp);
     (void)fclose(fp);
 
-    sag_state_open(&f.ed);
-    SAG_ASSERT(sag_tab_open(&f.ed, pa) >= 0);
-    SAG_ASSERT_EQ_I64(wc_run(&f, sag_ws_cmd_save_state), SAG_CMD_OK);
+    yew_state_open(&f.ed);
+    YEW_ASSERT(yew_tab_open(&f.ed, pa) >= 0);
+    YEW_ASSERT_EQ_I64(wc_run(&f, yew_ws_cmd_save_state), YEW_CMD_OK);
     /* A tab opened after the save is NOT in the document. */
-    SAG_ASSERT(sag_tab_open(&f.ed, pb) >= 0);
-    SAG_ASSERT_EQ_I64(sag_tab_count(&f.ed), 3);
+    YEW_ASSERT(yew_tab_open(&f.ed, pb) >= 0);
+    YEW_ASSERT_EQ_I64(yew_tab_count(&f.ed), 3);
 
-    SAG_ASSERT_EQ_I64(wc_run(&f, sag_ws_cmd_restore_state), SAG_CMD_OK);
-    /* a.txt was already open, so sag_tab_open found it rather than
+    YEW_ASSERT_EQ_I64(wc_run(&f, yew_ws_cmd_restore_state), YEW_CMD_OK);
+    /* a.txt was already open, so yew_tab_open found it rather than
      * duplicating it — and b.txt survived the restore untouched. */
-    SAG_ASSERT_EQ_I64(sag_tab_count(&f.ed), 3);
-    SAG_ASSERT(sag_tab_find_by_path(&f.ed, pa) >= 0);
-    SAG_ASSERT(sag_tab_find_by_path(&f.ed, pb) >= 0);
+    YEW_ASSERT_EQ_I64(yew_tab_count(&f.ed), 3);
+    YEW_ASSERT(yew_tab_find_by_path(&f.ed, pa) >= 0);
+    YEW_ASSERT(yew_tab_find_by_path(&f.ed, pb) >= 0);
     wc_remove(&f);
 }
 
@@ -270,9 +270,9 @@ void test_ws_cmds_restore_state_with_no_document_is_ok(void)
     WcFix f;
 
     wc_make(&f);
-    sag_state_open(&f.ed);
-    SAG_ASSERT_EQ_I64(wc_run(&f, sag_ws_cmd_restore_state), SAG_CMD_OK);
-    SAG_ASSERT_EQ_I64(sag_tab_count(&f.ed), 1);
+    yew_state_open(&f.ed);
+    YEW_ASSERT_EQ_I64(wc_run(&f, yew_ws_cmd_restore_state), YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(yew_tab_count(&f.ed), 1);
     wc_remove(&f);
 }
 
@@ -291,16 +291,16 @@ void test_ws_cmds_info_reports_the_key_and_the_owner(void)
     char hex[32];
 
     wc_make(&f);
-    sag_state_open(&f.ed);
-    SAG_ASSERT_EQ_I64(wc_run(&f, sag_ws_cmd_info), SAG_CMD_OK);
-    SAG_ASSERT(f.ed.msg.active);
+    yew_state_open(&f.ed);
+    YEW_ASSERT_EQ_I64(wc_run(&f, yew_ws_cmd_info), YEW_CMD_OK);
+    YEW_ASSERT(f.ed.msg.active);
     (void)snprintf(hex, sizeof(hex), "%016llx",
                    (unsigned long long)f.ed.state.key.hash);
-    SAG_ASSERT_NOT_NULL(strstr(f.ed.msg.text, hex));
+    YEW_ASSERT_NOT_NULL(strstr(f.ed.msg.text, hex));
     /* The path record, which is the whole collision mitigation. */
-    SAG_ASSERT_NOT_NULL(strstr(f.ed.msg.text, f.work));
+    YEW_ASSERT_NOT_NULL(strstr(f.ed.msg.text, f.work));
     /* And who holds the lock. */
-    SAG_ASSERT_NOT_NULL(strstr(f.ed.msg.text, "this session"));
+    YEW_ASSERT_NOT_NULL(strstr(f.ed.msg.text, "this session"));
     wc_remove(&f);
 }
 
@@ -309,11 +309,11 @@ void test_ws_cmds_info_names_a_foreign_owner(void)
     WcFix f;
 
     wc_make(&f);
-    sag_state_open(&f.ed);
+    yew_state_open(&f.ed);
     f.ed.state.writer = false;
     f.ed.state.owner_pid = 4242;
-    SAG_ASSERT_EQ_I64(wc_run(&f, sag_ws_cmd_info), SAG_CMD_OK);
-    SAG_ASSERT_NOT_NULL(strstr(f.ed.msg.text, "pid 4242"));
+    YEW_ASSERT_EQ_I64(wc_run(&f, yew_ws_cmd_info), YEW_CMD_OK);
+    YEW_ASSERT_NOT_NULL(strstr(f.ed.msg.text, "pid 4242"));
     wc_remove(&f);
 }
 
@@ -324,8 +324,8 @@ void test_ws_cmds_info_says_stateless(void)
     WcFix f;
 
     wc_make(&f);
-    SAG_ASSERT_EQ_I64(wc_run(&f, sag_ws_cmd_info), SAG_CMD_OK);
-    SAG_ASSERT_NOT_NULL(strstr(f.ed.msg.text, "stateless"));
+    YEW_ASSERT_EQ_I64(wc_run(&f, yew_ws_cmd_info), YEW_CMD_OK);
+    YEW_ASSERT_NOT_NULL(strstr(f.ed.msg.text, "stateless"));
     wc_remove(&f);
 }
 
@@ -340,18 +340,18 @@ void test_ws_cmds_forget_asks_before_deleting(void)
     char dir[PATH_MAX];
 
     wc_make(&f);
-    sag_state_open(&f.ed);
-    SAG_ASSERT(sag_state_save(&f.ed));
+    yew_state_open(&f.ed);
+    YEW_ASSERT(yew_state_save(&f.ed));
     (void)snprintf(dir, sizeof(dir), "%s", f.ed.state.key.dir);
 
-    SAG_ASSERT_EQ_I64(wc_run(&f, sag_ws_cmd_forget), SAG_CMD_OK);
-    SAG_ASSERT(f.ed.ws_prompt.active);
-    SAG_ASSERT_EQ_I64(f.ed.prompt, SAG_PROMPT_WS_FORGET);
+    YEW_ASSERT_EQ_I64(wc_run(&f, yew_ws_cmd_forget), YEW_CMD_OK);
+    YEW_ASSERT(f.ed.ws_prompt.active);
+    YEW_ASSERT_EQ_I64(f.ed.prompt, YEW_PROMPT_WS_FORGET);
     /* Still there: asking is not doing. */
-    SAG_ASSERT(wc_exists(dir));
+    YEW_ASSERT(wc_exists(dir));
     /* The question names the directory, so nobody deletes one they
      * cannot see. */
-    SAG_ASSERT_NOT_NULL(strstr(f.ed.msg.text, dir));
+    YEW_ASSERT_NOT_NULL(strstr(f.ed.msg.text, dir));
     wc_remove(&f);
 }
 
@@ -364,26 +364,26 @@ void test_ws_cmds_forget_removes_the_tree_on_yes(void)
     FILE *fp;
 
     wc_make(&f);
-    sag_state_open(&f.ed);
-    SAG_ASSERT(sag_state_save(&f.ed));
+    yew_state_open(&f.ed);
+    YEW_ASSERT(yew_state_save(&f.ed));
     (void)snprintf(dir, sizeof(dir), "%s", f.ed.state.key.dir);
     /* A subdirectory with content, as history/ and undo/ are. */
     wc_join(sub, sizeof(sub), dir, "history");
-    SAG_ASSERT(sag_mkdirs(sub, 0700U));
+    YEW_ASSERT(yew_mkdirs(sub, 0700U));
     wc_join(sub, sizeof(sub), dir, "history/cmd");
     fp = fopen(sub, "wb");
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     (void)fputs("w something\n", fp);
     (void)fclose(fp);
 
-    SAG_ASSERT_EQ_I64(wc_run(&f, sag_ws_cmd_forget), SAG_CMD_OK);
-    SAG_ASSERT(sag_ws_prompt_key(&f.ed, (u8)'y'));
-    SAG_ASSERT(!wc_exists(dir));
-    SAG_ASSERT(!f.ed.ws_prompt.active);
-    SAG_ASSERT_EQ_I64(f.ed.prompt, SAG_PROMPT_NONE);
+    YEW_ASSERT_EQ_I64(wc_run(&f, yew_ws_cmd_forget), YEW_CMD_OK);
+    YEW_ASSERT(yew_ws_prompt_key(&f.ed, (u8)'y'));
+    YEW_ASSERT(!wc_exists(dir));
+    YEW_ASSERT(!f.ed.ws_prompt.active);
+    YEW_ASSERT_EQ_I64(f.ed.prompt, YEW_PROMPT_NONE);
     /* The session went stateless rather than holding a key to a
      * directory that no longer exists. */
-    SAG_ASSERT(!f.ed.state.ready);
+    YEW_ASSERT(!f.ed.state.ready);
     wc_remove(&f);
 }
 
@@ -394,19 +394,19 @@ void test_ws_cmds_forget_cancels_on_anything_but_y(void)
     static const u8 answers[] = {0x1BU, (u8)'n', (u8)'Y', (u8)'d', 0U};
     u32 i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(answers); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(answers); i++) {
         WcFix f;
         char dir[PATH_MAX];
 
         wc_make(&f);
-        sag_state_open(&f.ed);
-        SAG_ASSERT(sag_state_save(&f.ed));
+        yew_state_open(&f.ed);
+        YEW_ASSERT(yew_state_save(&f.ed));
         (void)snprintf(dir, sizeof(dir), "%s", f.ed.state.key.dir);
-        SAG_ASSERT_EQ_I64(wc_run(&f, sag_ws_cmd_forget), SAG_CMD_OK);
-        SAG_ASSERT(sag_ws_prompt_key(&f.ed, answers[i]));
-        SAG_ASSERT(wc_exists(dir));
-        SAG_ASSERT(!f.ed.ws_prompt.active);
-        SAG_ASSERT(f.ed.state.ready);
+        YEW_ASSERT_EQ_I64(wc_run(&f, yew_ws_cmd_forget), YEW_CMD_OK);
+        YEW_ASSERT(yew_ws_prompt_key(&f.ed, answers[i]));
+        YEW_ASSERT(wc_exists(dir));
+        YEW_ASSERT(!f.ed.ws_prompt.active);
+        YEW_ASSERT(f.ed.state.ready);
         wc_remove(&f);
     }
 }
@@ -418,15 +418,15 @@ void test_ws_cmds_forget_key_is_not_swallowed_when_idle(void)
     WcFix f;
 
     wc_make(&f);
-    SAG_ASSERT(!sag_ws_prompt_key(&f.ed, (u8)'y'));
+    YEW_ASSERT(!yew_ws_prompt_key(&f.ed, (u8)'y'));
     wc_remove(&f);
 }
 
 /*
- * THE GUARD.  sag_ws_forget_dir refuses a path that is not under
+ * THE GUARD.  yew_ws_forget_dir refuses a path that is not under
  * .../workspaces/, regardless of who calls it.
  *
- * It cannot fire today: every caller hands it a directory sag_ws_key
+ * It cannot fire today: every caller hands it a directory yew_ws_key
  * built.  That is the point — a recursive delete that trusts its
  * argument is one refactor away from being pointed at a home
  * directory, and this test is what makes that refactor fail loudly.
@@ -437,20 +437,20 @@ void test_ws_cmds_forget_dir_refuses_a_path_outside_workspaces(void)
     char probe[256];
     FILE *fp;
 
-    (void)snprintf(dir, sizeof(dir), "/tmp/sag-notaws-XXXXXX");
-    SAG_ASSERT_NOT_NULL(mkdtemp(dir));
+    (void)snprintf(dir, sizeof(dir), "/tmp/yew-notaws-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(dir));
     (void)snprintf(probe, sizeof(probe), "%s/precious", dir);
     fp = fopen(probe, "wb");
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     (void)fputs("do not delete\n", fp);
     (void)fclose(fp);
 
-    SAG_ASSERT(!sag_ws_forget_dir(dir));
-    SAG_ASSERT(wc_exists(probe));
+    YEW_ASSERT(!yew_ws_forget_dir(dir));
+    YEW_ASSERT(wc_exists(probe));
     /* Relative paths and NULL are refused before anything is opened. */
-    SAG_ASSERT(!sag_ws_forget_dir("workspaces/relative"));
-    SAG_ASSERT(!sag_ws_forget_dir(NULL));
-    SAG_ASSERT(!sag_ws_forget_dir(""));
+    YEW_ASSERT(!yew_ws_forget_dir("workspaces/relative"));
+    YEW_ASSERT(!yew_ws_forget_dir(NULL));
+    YEW_ASSERT(!yew_ws_forget_dir(""));
     wc_rm_rf(dir);
 }
 
@@ -468,24 +468,24 @@ void test_ws_cmds_forget_does_not_follow_symlinks(void)
     FILE *fp;
 
     wc_make(&f);
-    sag_state_open(&f.ed);
-    SAG_ASSERT(sag_state_save(&f.ed));
+    yew_state_open(&f.ed);
+    YEW_ASSERT(yew_state_save(&f.ed));
     (void)snprintf(dir, sizeof(dir), "%s", f.ed.state.key.dir);
-    (void)snprintf(outside, sizeof(outside), "/tmp/sag-target-XXXXXX");
-    SAG_ASSERT_NOT_NULL(mkdtemp(outside));
+    (void)snprintf(outside, sizeof(outside), "/tmp/yew-target-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(outside));
     (void)snprintf(target, sizeof(target), "%s/precious", outside);
     fp = fopen(target, "wb");
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     (void)fputs("do not delete\n", fp);
     (void)fclose(fp);
     wc_join(link, sizeof(link), dir, "trap");
-    SAG_ASSERT_EQ_I64(symlink(outside, link), 0);
+    YEW_ASSERT_EQ_I64(symlink(outside, link), 0);
 
-    SAG_ASSERT_EQ_I64(wc_run(&f, sag_ws_cmd_forget), SAG_CMD_OK);
-    SAG_ASSERT(sag_ws_prompt_key(&f.ed, (u8)'y'));
-    SAG_ASSERT(!wc_exists(dir));
+    YEW_ASSERT_EQ_I64(wc_run(&f, yew_ws_cmd_forget), YEW_CMD_OK);
+    YEW_ASSERT(yew_ws_prompt_key(&f.ed, (u8)'y'));
+    YEW_ASSERT(!wc_exists(dir));
     /* The link went; what it pointed at did not. */
-    SAG_ASSERT(wc_exists(target));
+    YEW_ASSERT(wc_exists(target));
     wc_rm_rf(outside);
     wc_remove(&f);
 }

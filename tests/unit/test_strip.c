@@ -35,19 +35,19 @@ void test_strip_lays_entries_left_to_right_without_gaps(void)
     int i;
 
     st_fill(e, 4, "[%d: a]");
-    sag_strip_layout(e, 4, 80U, 0, &scroll, spans, &n_spans, &more_l,
+    yew_strip_layout(e, 4, 80U, 0, &scroll, spans, &n_spans, &more_l,
                      &more_r);
-    SAG_ASSERT_EQ_I64(n_spans, 4);
-    SAG_ASSERT(!more_l);
-    SAG_ASSERT(!more_r);
-    SAG_ASSERT_EQ_U64(spans[0].col0, 0U);
+    YEW_ASSERT_EQ_I64(n_spans, 4);
+    YEW_ASSERT(!more_l);
+    YEW_ASSERT(!more_r);
+    YEW_ASSERT_EQ_U64(spans[0].col0, 0U);
     for (i = 0; i < n_spans; i++) {
-        SAG_ASSERT_EQ_I64(spans[i].idx, i);
-        SAG_ASSERT(spans[i].col1 > spans[i].col0);
+        YEW_ASSERT_EQ_I64(spans[i].idx, i);
+        YEW_ASSERT(spans[i].col1 > spans[i].col0);
         /* Contiguous: no gap and no overlap, so every cell of the strip
          * belongs to exactly one entry. */
         if (i > 0)
-            SAG_ASSERT_EQ_U64(spans[i].col0, spans[i - 1].col1);
+            YEW_ASSERT_EQ_U64(spans[i].col0, spans[i - 1].col1);
     }
 }
 
@@ -67,17 +67,17 @@ void test_strip_measures_cjk_labels_in_cells(void)
     (void)snprintf(e[0].label, sizeof(e[0].label), "ab");
     (void)snprintf(e[1].label, sizeof(e[1].label),
                    "\xE6\xBC\xA2\xE5\xAD\x97");
-    ascii_w = sag_strip_label_cells(e[0].label);
-    cjk_w = sag_strip_label_cells(e[1].label);
-    SAG_ASSERT_EQ_U64(ascii_w, 2U);
-    SAG_ASSERT_EQ_U64(cjk_w, 4U);
-    SAG_ASSERT_EQ_U64(strlen(e[1].label), 6U);
+    ascii_w = yew_strip_label_cells(e[0].label);
+    cjk_w = yew_strip_label_cells(e[1].label);
+    YEW_ASSERT_EQ_U64(ascii_w, 2U);
+    YEW_ASSERT_EQ_U64(cjk_w, 4U);
+    YEW_ASSERT_EQ_U64(strlen(e[1].label), 6U);
 
-    sag_strip_layout(e, 2, 80U, 0, &scroll, spans, &n_spans, NULL, NULL);
-    SAG_ASSERT_EQ_I64(n_spans, 2);
-    SAG_ASSERT_EQ_U64(spans[1].col0, 2U);
+    yew_strip_layout(e, 2, 80U, 0, &scroll, spans, &n_spans, NULL, NULL);
+    YEW_ASSERT_EQ_I64(n_spans, 2);
+    YEW_ASSERT_EQ_U64(spans[1].col0, 2U);
     /* Four cells wide, not six bytes wide. */
-    SAG_ASSERT_EQ_U64(spans[1].col1, 6U);
+    YEW_ASSERT_EQ_U64(spans[1].col1, 6U);
 }
 
 /* Labels clip at 24 cells, so one long path cannot eat the strip. */
@@ -88,8 +88,8 @@ void test_strip_clips_long_labels(void)
     (void)memset(e, 0, sizeof(e));
     (void)snprintf(e[0].label, sizeof(e[0].label),
                    "[1: a-very-long-file-name-that-keeps-going]");
-    SAG_ASSERT_EQ_U64(sag_strip_label_cells(e[0].label),
-                      SAG_STRIP_LABEL_CELLS);
+    YEW_ASSERT_EQ_U64(yew_strip_label_cells(e[0].label),
+                      YEW_STRIP_LABEL_CELLS);
 }
 
 /*
@@ -107,19 +107,19 @@ void test_strip_reports_overflow_on_both_sides(void)
 
     st_fill(e, 10, "[%d: name]");
     /* Each label is 10 cells; 40 columns holds four. */
-    sag_strip_layout(e, 10, 40U, 0, &scroll, spans, &n_spans, &more_l,
+    yew_strip_layout(e, 10, 40U, 0, &scroll, spans, &n_spans, &more_l,
                      &more_r);
-    SAG_ASSERT_EQ_I64(n_spans, 4);
-    SAG_ASSERT(!more_l);
-    SAG_ASSERT(more_r);
+    YEW_ASSERT_EQ_I64(n_spans, 4);
+    YEW_ASSERT(!more_l);
+    YEW_ASSERT(more_r);
 
     /* Scrolled into the middle: both sides have more. */
     scroll = 3;
-    sag_strip_layout(e, 10, 40U, 3, &scroll, spans, &n_spans, &more_l,
+    yew_strip_layout(e, 10, 40U, 3, &scroll, spans, &n_spans, &more_l,
                      &more_r);
-    SAG_ASSERT(more_l);
-    SAG_ASSERT(more_r);
-    SAG_ASSERT_EQ_I64(spans[0].idx, 3);
+    YEW_ASSERT(more_l);
+    YEW_ASSERT(more_r);
+    YEW_ASSERT_EQ_I64(spans[0].idx, 3);
 }
 
 /*
@@ -138,27 +138,27 @@ void test_strip_scrolls_by_exactly_enough(void)
 
     st_fill(e, 10, "[%d: name]");
     /* 40 cells holds four 10-cell entries: 0..3 visible. */
-    sag_strip_layout(e, 10, 40U, 0, &scroll, spans, &n_spans, &more_l,
+    yew_strip_layout(e, 10, 40U, 0, &scroll, spans, &n_spans, &more_l,
                      &more_r);
-    SAG_ASSERT_EQ_I64(scroll, 0);
+    YEW_ASSERT_EQ_I64(scroll, 0);
 
     /* Entry 4 is one past the edge: scrolling by one shows it. */
-    sag_strip_layout(e, 10, 40U, 4, &scroll, spans, &n_spans, &more_l,
+    yew_strip_layout(e, 10, 40U, 4, &scroll, spans, &n_spans, &more_l,
                      &more_r);
-    SAG_ASSERT_EQ_I64(scroll, 1);
-    SAG_ASSERT_EQ_I64(spans[n_spans - 1].idx, 4);
+    YEW_ASSERT_EQ_I64(scroll, 1);
+    YEW_ASSERT_EQ_I64(spans[n_spans - 1].idx, 4);
 
     /* Jumping to entry 9 scrolls to show it and no further. */
-    sag_strip_layout(e, 10, 40U, 9, &scroll, spans, &n_spans, &more_l,
+    yew_strip_layout(e, 10, 40U, 9, &scroll, spans, &n_spans, &more_l,
                      &more_r);
-    SAG_ASSERT_EQ_I64(scroll, 6);
-    SAG_ASSERT_EQ_I64(spans[n_spans - 1].idx, 9);
-    SAG_ASSERT(!more_r);
+    YEW_ASSERT_EQ_I64(scroll, 6);
+    YEW_ASSERT_EQ_I64(spans[n_spans - 1].idx, 9);
+    YEW_ASSERT(!more_r);
 
     /* And back to entry 0 scrolls left to exactly 0. */
-    sag_strip_layout(e, 10, 40U, 0, &scroll, spans, &n_spans, &more_l,
+    yew_strip_layout(e, 10, 40U, 0, &scroll, spans, &n_spans, &more_l,
                      &more_r);
-    SAG_ASSERT_EQ_I64(scroll, 0);
+    YEW_ASSERT_EQ_I64(scroll, 0);
 }
 
 /* An already-visible active entry does not move the strip at all. */
@@ -170,9 +170,9 @@ void test_strip_does_not_scroll_when_active_is_visible(void)
     int scroll = 2;
 
     st_fill(e, 10, "[%d: name]");
-    sag_strip_layout(e, 10, 40U, 3, &scroll, spans, &n_spans, NULL, NULL);
-    SAG_ASSERT_EQ_I64(scroll, 2);
-    SAG_ASSERT_EQ_I64(spans[0].idx, 2);
+    yew_strip_layout(e, 10, 40U, 3, &scroll, spans, &n_spans, NULL, NULL);
+    YEW_ASSERT_EQ_I64(scroll, 2);
+    YEW_ASSERT_EQ_I64(spans[0].idx, 2);
 }
 
 /* An entry wider than the whole strip still places, clipped — placing
@@ -187,10 +187,10 @@ void test_strip_places_an_oversized_entry_clipped(void)
     (void)memset(e, 0, sizeof(e));
     (void)snprintf(e[0].label, sizeof(e[0].label), "[0: aaaaaaaaaaaa]");
     (void)snprintf(e[1].label, sizeof(e[1].label), "[1: b]");
-    sag_strip_layout(e, 2, 6U, 0, &scroll, spans, &n_spans, NULL, NULL);
-    SAG_ASSERT_EQ_I64(n_spans, 1);
-    SAG_ASSERT_EQ_U64(spans[0].col0, 0U);
-    SAG_ASSERT_EQ_U64(spans[0].col1, 6U);
+    yew_strip_layout(e, 2, 6U, 0, &scroll, spans, &n_spans, NULL, NULL);
+    YEW_ASSERT_EQ_I64(n_spans, 1);
+    YEW_ASSERT_EQ_U64(spans[0].col0, 0U);
+    YEW_ASSERT_EQ_U64(spans[0].col1, 6U);
 }
 
 /* Degenerate inputs answer with nothing rather than reading past an
@@ -205,15 +205,15 @@ void test_strip_handles_empty_and_zero_width(void)
     bool more_r = true;
 
     st_fill(e, 2, "[%d]");
-    sag_strip_layout(e, 0, 80U, 0, &scroll, spans, &n_spans, &more_l,
+    yew_strip_layout(e, 0, 80U, 0, &scroll, spans, &n_spans, &more_l,
                      &more_r);
-    SAG_ASSERT_EQ_I64(n_spans, 0);
-    SAG_ASSERT(!more_l);
-    SAG_ASSERT(!more_r);
+    YEW_ASSERT_EQ_I64(n_spans, 0);
+    YEW_ASSERT(!more_l);
+    YEW_ASSERT(!more_r);
 
     n_spans = 7;
-    sag_strip_layout(e, 2, 0U, 0, &scroll, spans, &n_spans, NULL, NULL);
-    SAG_ASSERT_EQ_I64(n_spans, 0);
+    yew_strip_layout(e, 2, 0U, 0, &scroll, spans, &n_spans, NULL, NULL);
+    YEW_ASSERT_EQ_I64(n_spans, 0);
 }
 
 /*
@@ -227,24 +227,24 @@ void test_strip_label_bytes_match_the_clipped_cells(void)
 {
     static const char long_label[] =
         "[1: a-name-long-enough-to-be-clipped.txt]";
-    size_t fit = sag_strip_label_bytes(long_label);
+    size_t fit = yew_strip_label_bytes(long_label);
 
-    SAG_ASSERT_EQ_U64(sag_strip_label_cells(long_label),
-                      SAG_STRIP_LABEL_CELLS);
+    YEW_ASSERT_EQ_U64(yew_strip_label_cells(long_label),
+                      YEW_STRIP_LABEL_CELLS);
     /* Fewer bytes than the whole label, and exactly the clipped cells
      * worth for an ASCII label. */
-    SAG_ASSERT(fit < strlen(long_label));
-    SAG_ASSERT_EQ_U64(fit, SAG_STRIP_LABEL_CELLS);
+    YEW_ASSERT(fit < strlen(long_label));
+    YEW_ASSERT_EQ_U64(fit, YEW_STRIP_LABEL_CELLS);
 
     /* A short label is not clipped at all. */
-    SAG_ASSERT_EQ_U64(sag_strip_label_bytes("[1: a]"), 6U);
+    YEW_ASSERT_EQ_U64(yew_strip_label_bytes("[1: a]"), 6U);
 
     /* CJK: four cells is six BYTES, so a byte-count clip would cut a
      * sequence in half. */
     {
         const char *cjk = "\xE6\xBC\xA2\xE5\xAD\x97";
 
-        SAG_ASSERT_EQ_U64(sag_strip_label_cells(cjk), 4U);
-        SAG_ASSERT_EQ_U64(sag_strip_label_bytes(cjk), 6U);
+        YEW_ASSERT_EQ_U64(yew_strip_label_cells(cjk), 4U);
+        YEW_ASSERT_EQ_U64(yew_strip_label_bytes(cjk), 6U);
     }
 }

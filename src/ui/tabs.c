@@ -20,7 +20,7 @@
 #include "ui/strip.h"
 #include "util/log.h"
 
-void sag_tabs_init(Tabs *t)
+void yew_tabs_init(Tabs *t)
 {
     if (t == NULL)
         return;
@@ -39,21 +39,21 @@ static void tab_destroy(Ed *ed, Tab *t)
      * holding a pointer the other freed.
      */
     if (t->root != NULL) {
-        Pane *leaves[SAG_PANE_MAX_LEAVES * 2];
+        Pane *leaves[YEW_PANE_MAX_LEAVES * 2];
         u32 n = 0U;
         u32 i;
 
-        sag_pane_collect_leaves(t->root, leaves,
-                                SAG_ARRAY_LEN(leaves), &n);
+        yew_pane_collect_leaves(t->root, leaves,
+                                YEW_ARRAY_LEN(leaves), &n);
         for (i = 0U; i < n; i++)
-            sag_ed_win_release(ed, leaves[i]->win);
-        sag_pane_free(ed, t->root);
+            yew_ed_win_release(ed, leaves[i]->win);
+        yew_pane_free(ed, t->root);
     }
     free(t->path);
     (void)memset(t, 0, sizeof(*t));
 }
 
-void sag_tabs_free(Ed *ed)
+void yew_tabs_free(Ed *ed)
 {
     u32 i;
 
@@ -62,22 +62,22 @@ void sag_tabs_free(Ed *ed)
     for (i = 0U; i < ed->tabs.v.len; i++)
         tab_destroy(ed, &ed->tabs.v.data[i]);
     TabVec_free(&ed->tabs.v);
-    sag_tabs_init(&ed->tabs);
+    yew_tabs_init(&ed->tabs);
 }
 
-u32 sag_tab_count(const Ed *ed)
+u32 yew_tab_count(const Ed *ed)
 {
     return ed == NULL ? 0U : (u32)ed->tabs.v.len;
 }
 
-Tab *sag_tab_at(Ed *ed, int idx)
+Tab *yew_tab_at(Ed *ed, int idx)
 {
     if (ed == NULL || idx < 0 || (size_t)idx >= ed->tabs.v.len)
         return NULL;
     return &ed->tabs.v.data[idx];
 }
 
-int sag_tab_index_of_id(const Ed *ed, u32 id)
+int yew_tab_index_of_id(const Ed *ed, u32 id)
 {
     size_t i;
 
@@ -109,12 +109,12 @@ static char *canonical_path(const char *path)
     /* A path that does not exist yet is still a legitimate tab name;
      * keep what the user typed rather than refusing. */
     n = strlen(path) + 1U;
-    out = sag_xmalloc(n);
+    out = yew_xmalloc(n);
     (void)memcpy(out, path, n);
     return out;
 }
 
-int sag_tab_find_by_path(const Ed *ed, const char *path)
+int yew_tab_find_by_path(const Ed *ed, const char *path)
 {
     char *want;
     size_t i;
@@ -137,18 +137,18 @@ int sag_tab_find_by_path(const Ed *ed, const char *path)
     return found;
 }
 
-void sag_tab_set_path(Ed *ed, int idx, const char *path)
+void yew_tab_set_path(Ed *ed, int idx, const char *path)
 {
-    Tab *t = sag_tab_at(ed, idx);
+    Tab *t = yew_tab_at(ed, idx);
 
     if (t == NULL)
         return;
     free(t->path);
     t->path = canonical_path(path);
-    sag_state_mark_dirty(ed);
+    yew_state_mark_dirty(ed);
 }
 
-int sag_tab_open(Ed *ed, const char *path)
+int yew_tab_open(Ed *ed, const char *path)
 {
     Tab t;
     int existing;
@@ -160,19 +160,19 @@ int sag_tab_open(Ed *ed, const char *path)
     if (path != NULL) {
         /* One tab per file.  The same buffer in two PANES is fine; in
          * two tabs it is two claims on one save path. */
-        existing = sag_tab_find_by_path(ed, path);
+        existing = yew_tab_find_by_path(ed, path);
         if (existing >= 0) {
-            sag_tab_switch(ed, existing);
+            yew_tab_switch(ed, existing);
             return existing;
         }
     }
-    if (ed->tabs.v.len >= (size_t)SAG_TAB_MAX) {
-        sag_msg(ed, SAG_MSG_ERROR, "too many tabs (max %d)", SAG_TAB_MAX);
+    if (ed->tabs.v.len >= (size_t)YEW_TAB_MAX) {
+        yew_msg(ed, YEW_MSG_ERROR, "too many tabs (max %d)", YEW_TAB_MAX);
         return -1;
     }
-    win = sag_ed_win_clone(ed, ed->win);
+    win = yew_ed_win_clone(ed, ed->win);
     if (win == NULL) {
-        sag_msg(ed, SAG_MSG_ERROR, "no room for another view");
+        yew_msg(ed, YEW_MSG_ERROR, "no room for another view");
         return -1;
     }
     (void)memset(&t, 0, sizeof(t));
@@ -181,25 +181,25 @@ int sag_tab_open(Ed *ed, const char *path)
     /*
      * The new tab gets its OWN buffer, and a file one is born
      * NON-RESIDENT: opening it costs no read at all.  The read happens
-     * at the first switch, through sag_tab_hydrate.
+     * at the first switch, through yew_tab_hydrate.
      *
      * Sprint 23 pointed every tab at the window it cloned from, so all
      * tabs showed one buffer; that is why the save path could say
      * &ed->buffer and be right.  Both halves changed together.
      */
-    buf = sag_ws_file_buf(ed, t.path);
+    buf = yew_ws_file_buf(ed, t.path);
     if (buf == NULL) {
-        sag_ed_win_release(ed, win);
+        yew_ed_win_release(ed, win);
         free(t.path);
-        sag_msg(ed, SAG_MSG_ERROR, "no room for another buffer");
+        yew_msg(ed, YEW_MSG_ERROR, "no room for another buffer");
         return -1;
     }
-    sag_ed_win_set_buffer(ed, win, buf);
-    t.root = sag_pane_new_leaf(win);
+    yew_ed_win_set_buffer(ed, win, buf);
+    t.root = yew_pane_new_leaf(win);
     t.focus = t.root;
     t.buffer_id = buf->id;
     TabVec_push(&ed->tabs.v, t);
-    sag_state_mark_dirty(ed);
+    yew_state_mark_dirty(ed);
     return (int)ed->tabs.v.len - 1;
 }
 
@@ -224,7 +224,7 @@ static u32 pick_survivor_id(const Ed *ed, int idx)
     return 0U;
 }
 
-bool sag_tab_close(Ed *ed, int idx)
+bool yew_tab_close(Ed *ed, int idx)
 {
     u32 survivor;
 
@@ -237,22 +237,22 @@ bool sag_tab_close(Ed *ed, int idx)
      * tab slid into the slot, and auto-dissolve would count a group
      * that still has members.
      */
-    sag_group_remove_member(ed, idx);
+    yew_group_remove_member(ed, idx);
     tab_destroy(ed, &ed->tabs.v.data[idx]);
     (void)memmove(&ed->tabs.v.data[idx], &ed->tabs.v.data[idx + 1],
                   (ed->tabs.v.len - (size_t)idx - 1U) *
                       sizeof(*ed->tabs.v.data));
     ed->tabs.v.len--;
     /* Resolved AFTER compaction, from the id chosen before it. */
-    ed->tabs.active = sag_tab_index_of_id(ed, survivor);
+    ed->tabs.active = yew_tab_index_of_id(ed, survivor);
     if (ed->tabs.active < 0 && ed->tabs.v.len > 0U)
         ed->tabs.active = 0;
-    sag_tab_switch(ed, ed->tabs.active);
-    sag_state_mark_dirty(ed);
+    yew_tab_switch(ed, ed->tabs.active);
+    yew_state_mark_dirty(ed);
     return true;
 }
 
-void sag_tab_switch(Ed *ed, int idx)
+void yew_tab_switch(Ed *ed, int idx)
 {
     Tab *t;
     Win *before;
@@ -260,7 +260,7 @@ void sag_tab_switch(Ed *ed, int idx)
     if (ed == NULL)
         return;
     before = ed->win;
-    t = sag_tab_at(ed, idx);
+    t = yew_tab_at(ed, idx);
     if (t == NULL) {
         ed->tabs.active = ed->tabs.v.len == 0U ? -1 : ed->tabs.active;
         return;
@@ -271,7 +271,7 @@ void sag_tab_switch(Ed *ed, int idx)
      * here, so this is the one place the read can be guaranteed to
      * happen before anything tries to draw the text (§3).
      */
-    (void)sag_tab_hydrate(ed, idx);
+    (void)yew_tab_hydrate(ed, idx);
     /*
      * Swapping the visible tree is the whole switch.  Each Win owns its
      * cursors and viewport, so there is no save/restore choreography —
@@ -284,12 +284,12 @@ void sag_tab_switch(Ed *ed, int idx)
         ed->win = ed->focus->win;
     ed->layout_dirty = true;
     ed->full_damage = true;
-    sag_state_mark_dirty(ed);
+    yew_state_mark_dirty(ed);
     if (ed->win != before)
-        sag_fl_hook_window(ed, FL_EV_WIN_FOCUS, ed->win);
+        yew_fl_hook_window(ed, FL_EV_WIN_FOCUS, ed->win);
 }
 
-int sag_tab_shifted_index(int i, int from, int to)
+int yew_tab_shifted_index(int i, int from, int to)
 {
     if (i == from)
         return to;
@@ -298,7 +298,7 @@ int sag_tab_shifted_index(int i, int from, int to)
     return (i >= to && i < from) ? i + 1 : i;
 }
 
-void sag_tab_reorder(Ed *ed, int from, int to)
+void yew_tab_reorder(Ed *ed, int from, int to)
 {
     Tab moved;
     int n;
@@ -320,11 +320,11 @@ void sag_tab_reorder(Ed *ed, int from, int to)
     /* Active is a POSITION, so it moves with the shift rather than
      * staying on a number that now names someone else. */
     if (ed->tabs.active >= 0)
-        ed->tabs.active = sag_tab_shifted_index(ed->tabs.active, from, to);
-    sag_state_mark_dirty(ed);
+        ed->tabs.active = yew_tab_shifted_index(ed->tabs.active, from, to);
+    yew_state_mark_dirty(ed);
 }
 
-bool sag_tab_modified(const Ed *ed, int idx)
+bool yew_tab_modified(const Ed *ed, int idx)
 {
     const Tab *t;
     const Win *w;
@@ -341,23 +341,23 @@ bool sag_tab_modified(const Ed *ed, int idx)
      * clear the marker, and every historical bug here is a flag that
      * drifted from the thing it claimed to describe.
      */
-    return w != NULL && sag_buf_dirty(w->buf);
+    return w != NULL && yew_buf_dirty(w->buf);
 }
 
 /* ---------------------------------------------------------------- */
 /* Sprint 24 §3: lazy hydration                                     */
 /* ---------------------------------------------------------------- */
 
-Buffer *sag_tab_buffer(Ed *ed, int idx)
+Buffer *yew_tab_buffer(Ed *ed, int idx)
 {
-    Tab *t = sag_tab_at(ed, idx);
+    Tab *t = yew_tab_at(ed, idx);
 
     if (t == NULL || t->focus == NULL)
         return NULL;
     return t->focus->win == NULL ? NULL : t->focus->win->buf;
 }
 
-bool sag_tab_is_resident(const Ed *ed, int idx)
+bool yew_tab_is_resident(const Ed *ed, int idx)
 {
     /*
      * The question is asked of the ALLOCATION — does this tab's buffer
@@ -365,20 +365,20 @@ bool sag_tab_is_resident(const Ed *ed, int idx)
      * cannot disagree with itself, and every save path ends up asking
      * this same question anyway.
      */
-    return sag_buf_resident(sag_tab_buffer((Ed *)ed, idx));
+    return yew_buf_resident(yew_tab_buffer((Ed *)ed, idx));
 }
 
-int sag_tab_hydrate(Ed *ed, int idx)
+int yew_tab_hydrate(Ed *ed, int idx)
 {
-    Buffer *b = sag_tab_buffer(ed, idx);
-    Tab *t = sag_tab_at(ed, idx);
+    Buffer *b = yew_tab_buffer(ed, idx);
+    Tab *t = yew_tab_at(ed, idx);
 
     if (b == NULL || t == NULL)
         return -1;
     if (b->tb != NULL)
         return 0; /* resident: returns without touching the disk */
-    if (sag_buf_hydrate(ed, b) != 0) {
-        sag_msg(ed, SAG_MSG_ERROR, "could not read %s",
+    if (yew_buf_hydrate(ed, b) != 0) {
+        yew_msg(ed, YEW_MSG_ERROR, "could not read %s",
                 t->path != NULL ? t->path : "untitled");
         return -1;
     }
@@ -399,14 +399,14 @@ int sag_tab_hydrate(Ed *ed, int idx)
         CCol left = w->vp.left;
         bool wrap = w->vp.wrap;
 
-        sag_vp_init(w);
+        yew_vp_init(w);
         w->vp.top = top;
         w->vp.top_sub = top_sub;
         w->vp.left = left;
         w->vp.wrap = wrap;
         /* Restore step 9, deferred to here: clamp, never follow.  The
          * file may have shrunk since the state was written. */
-        sag_vp_clamp(w);
+        yew_vp_clamp(w);
     }
     /*
      * Sprint 25 §6: cursors restored into a deferred tab were never
@@ -416,26 +416,26 @@ int sag_tab_hydrate(Ed *ed, int idx)
      * sit past the end, which every motion and every edit derives from.
      */
     {
-        Pane *leaves[SAG_PANE_MAX_LEAVES * 2];
+        Pane *leaves[YEW_PANE_MAX_LEAVES * 2];
         u32 n = 0U;
         u32 i;
 
         if (t->root != NULL) {
-            sag_pane_collect_leaves(t->root, leaves, SAG_ARRAY_LEN(leaves),
+            yew_pane_collect_leaves(t->root, leaves, YEW_ARRAY_LEN(leaves),
                                     &n);
         }
         for (i = 0U; i < n; i++) {
             if (leaves[i]->win != NULL && leaves[i]->win->buf == b)
-                sag_cset_normalize(b->tb, &leaves[i]->win->cs);
+                yew_cset_normalize(b->tb, &leaves[i]->win->cs);
         }
     }
-    sag_fl_hook_buffer(ed, FL_EV_BUF_OPEN, b);
+    yew_fl_hook_buffer(ed, FL_EV_BUF_OPEN, b);
     return 0;
 }
 
-void sag_tab_defer(Ed *ed, int idx)
+void yew_tab_defer(Ed *ed, int idx)
 {
-    Buffer *b = sag_tab_buffer(ed, idx);
+    Buffer *b = yew_tab_buffer(ed, idx);
 
     if (ed == NULL || b == NULL)
         return;
@@ -443,7 +443,7 @@ void sag_tab_defer(Ed *ed, int idx)
      * at no text with a cursor in it. */
     if (idx == ed->tabs.active)
         return;
-    sag_buf_defer(ed, b);
+    yew_buf_defer(ed, b);
 }
 
 /* ---------------------------------------------------------------- */
@@ -468,19 +468,19 @@ static void tab_label(const Ed *ed, int idx, char *out, size_t cap)
 {
     (void)snprintf(out, cap, "[%d: %s%s]", idx + 1,
                    tab_basename(&ed->tabs.v.data[idx]),
-                   sag_tab_modified(ed, idx)
-                       ? sag_glyph(SAG_GLYPH_MODIFIED) : "");
+                   yew_tab_modified(ed, idx)
+                       ? yew_glyph(YEW_GLYPH_MODIFIED) : "");
 }
 
 /*
  * Orphans — files outside the workspace root — render dim.  Both sides
- * are already canonical (the tab's path from sag_tab_open, the root
+ * are already canonical (the tab's path from yew_tab_open, the root
  * from the workspace), so this is a prefix test rather than a
  * filesystem call on a draw path.  Sprint 25 refines "outside".
  */
 static bool tab_is_orphan(const Ed *ed, int idx)
 {
-    const char *root = sag_ws_root(ed);
+    const char *root = yew_ws_root(ed);
     const char *p = ed->tabs.v.data[idx].path;
 
     /* Sprint 25 §6 refines "outside" as promised: a file that was gone
@@ -492,9 +492,9 @@ static bool tab_is_orphan(const Ed *ed, int idx)
            strncmp(p, root, strlen(root)) != 0;
 }
 
-int sag_tab_row1_entries(const Ed *ed, StripEntry *out, int cap)
+int yew_tab_row1_entries(const Ed *ed, StripEntry *out, int cap)
 {
-    u32 seen[SAG_TAB_MAX];
+    u32 seen[YEW_TAB_MAX];
     int nseen = 0;
     int n = 0;
     size_t i;
@@ -508,7 +508,7 @@ int sag_tab_row1_entries(const Ed *ed, StripEntry *out, int cap)
         if (t->group_id != 0U) {
             /* Two cells shorter than the entry it goes into, so the
              * brackets always fit. */
-            char label[SAG_TAB_LABEL_MAX - 4];
+            char label[YEW_TAB_LABEL_MAX - 4];
             bool dup = false;
             int k;
 
@@ -522,9 +522,9 @@ int sag_tab_row1_entries(const Ed *ed, StripEntry *out, int cap)
              * entry already. */
             if (dup)
                 continue;
-            if (nseen < (int)SAG_ARRAY_LEN(seen))
+            if (nseen < (int)YEW_ARRAY_LEN(seen))
                 seen[nseen++] = t->group_id;
-            sag_group_label(ed, t->group_id, label, sizeof(label));
+            yew_group_label(ed, t->group_id, label, sizeof(label));
             (void)snprintf(out[n].label, sizeof(out[n].label), "[%s]",
                            label);
             /*
@@ -545,14 +545,14 @@ int sag_tab_row1_entries(const Ed *ed, StripEntry *out, int cap)
     return n;
 }
 
-int sag_tab_row1_active(const Ed *ed, const StripEntry *entries, int n)
+int yew_tab_row1_active(const Ed *ed, const StripEntry *entries, int n)
 {
     u32 gid;
     int i;
 
     if (ed == NULL || entries == NULL || ed->tabs.active < 0)
         return -1;
-    gid = sag_active_group_id(ed);
+    gid = yew_active_group_id(ed);
     for (i = 0; i < n; i++) {
         if (gid != 0U) {
             if (entries[i].payload == -(i32)gid)
@@ -564,9 +564,9 @@ int sag_tab_row1_active(const Ed *ed, const StripEntry *entries, int n)
     return -1;
 }
 
-u32 sag_tab_strip_rows(const Ed *ed)
+u32 yew_tab_strip_rows(const Ed *ed)
 {
-    StripEntry entries[SAG_TAB_MAX];
+    StripEntry entries[YEW_TAB_MAX];
     int n;
     u32 rows = 0U;
 
@@ -577,7 +577,7 @@ u32 sag_tab_strip_rows(const Ed *ed)
      */
     if (ed == NULL)
         return 0U;
-    n = sag_tab_row1_entries(ed, entries, (int)SAG_ARRAY_LEN(entries));
+    n = yew_tab_row1_entries(ed, entries, (int)YEW_ARRAY_LEN(entries));
     /* One lone entry needs no strip to choose between. */
     if (n > 1)
         rows = 1U;
@@ -587,11 +587,11 @@ u32 sag_tab_strip_rows(const Ed *ed)
      * members.  A member strip floating with no group above it reads as
      * a different widget every time you enter.
      */
-    if (sag_active_group_id(ed) != 0U)
+    if (yew_active_group_id(ed) != 0U)
         rows = 2U;
     /* Sprint 27 §4: a dwell-opened preview needs the row too, or the
      * drop target it is offering has nowhere to be drawn. */
-    if (sag_mouse_preview_group(ed) != 0U)
+    if (yew_mouse_preview_group(ed) != 0U)
         rows = 2U;
     return rows;
 }
@@ -617,12 +617,12 @@ typedef struct StripPreSlot {
     i32 pre_payload;
 } StripPreSlot;
 
-static StripPreSlot strip_pre[SAG_TAB_MAX];
+static StripPreSlot strip_pre[YEW_TAB_MAX];
 static int strip_pre_n;
 static u16 strip_pre_y;
 static u16 strip_tail_x;
 
-int sag_strip_slot_at(u16 x, u16 y)
+int yew_strip_slot_at(u16 x, u16 y)
 {
     int i;
 
@@ -637,7 +637,7 @@ int sag_strip_slot_at(u16 x, u16 y)
     return -1;
 }
 
-bool sag_strip_pre_payload(int slot, i32 *payload)
+bool yew_strip_pre_payload(int slot, i32 *payload)
 {
     if (slot < 0 || slot >= strip_pre_n || payload == NULL)
         return false;
@@ -645,12 +645,12 @@ bool sag_strip_pre_payload(int slot, i32 *payload)
     return true;
 }
 
-int sag_strip_slot_count(void)
+int yew_strip_slot_count(void)
 {
     return strip_pre_n;
 }
 
-u16 sag_strip_tail_x(void)
+u16 yew_strip_tail_x(void)
 {
     return strip_tail_x;
 }
@@ -665,7 +665,7 @@ u16 sag_strip_tail_x(void)
  * have quietly reordered the strip on the way.
  *
  * Insertion, not swap, so the entries the held one passes keep their
- * relative order — the same rule sag_tab_reorder commits with, applied
+ * relative order — the same rule yew_tab_reorder commits with, applied
  * to the picture so the drop holds no surprise.
  */
 static void apply_drag_preview(const Ed *ed, StripEntry *entries, int n,
@@ -677,7 +677,7 @@ static void apply_drag_preview(const Ed *ed, StripEntry *entries, int n,
     int i;
     StripEntry moved;
 
-    if (!sag_mouse_drag_preview(ed, &held, &to) || n <= 1)
+    if (!yew_mouse_drag_preview(ed, &held, &to) || n <= 1)
         return;
     for (i = 0; i < n; i++) {
         if (entries[i].payload == held) {
@@ -705,7 +705,7 @@ static void apply_drag_preview(const Ed *ed, StripEntry *entries, int n,
     }
     entries[to] = moved;
     if (active_entry != NULL && *active_entry >= 0)
-        *active_entry = sag_tab_shifted_index(*active_entry, from, to);
+        *active_entry = yew_tab_shifted_index(*active_entry, from, to);
 }
 
 static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
@@ -723,11 +723,11 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
 static void strip_render_row1(Ed *ed, Rect rect, StripEntry *entries,
                               int n, int active_entry, int *scroll)
 {
-    StripEntry pre[SAG_TAB_MAX];
+    StripEntry pre[YEW_TAB_MAX];
     int i;
 
-    if (n > (int)SAG_ARRAY_LEN(pre))
-        n = (int)SAG_ARRAY_LEN(pre);
+    if (n > (int)YEW_ARRAY_LEN(pre))
+        n = (int)YEW_ARRAY_LEN(pre);
     if (n > 0)
         (void)memcpy(pre, entries, sizeof(pre[0]) * (size_t)n);
     apply_drag_preview(ed, entries, n, &active_entry);
@@ -749,15 +749,15 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
                          int active_entry, int *scroll, i32 scroll_mag,
                          bool record_slots)
 {
-    StripSpan spans[SAG_TAB_MAX];
+    StripSpan spans[YEW_TAB_MAX];
     int n_spans = 0;
     bool more_left = false;
     bool more_right = false;
     int i;
     u16 avail;
-    SagColor dim = {SAG_COLOR_RGB, 120U, 120U, 120U};
-    SagColor fg = {SAG_COLOR_DEFAULT, 0U, 0U, 0U};
-    SagColor bg = {SAG_COLOR_DEFAULT, 0U, 0U, 0U};
+    YewColor dim = {YEW_COLOR_RGB, 120U, 120U, 120U};
+    YewColor fg = {YEW_COLOR_DEFAULT, 0U, 0U, 0U};
+    YewColor bg = {YEW_COLOR_DEFAULT, 0U, 0U, 0U};
     Cell blank;
 
     if (rect.w == 0U || rect.h == 0U)
@@ -765,7 +765,7 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
     /* Blank the row first: a shorter strip than last frame must not
      * leave the tail of the old one behind. */
     (void)memset(&blank, 0, sizeof(blank));
-    sag_grid_fill(&ed->grid, rect.y, rect.x, (u16)(rect.x + rect.w), blank);
+    yew_grid_fill(&ed->grid, rect.y, rect.x, (u16)(rect.x + rect.w), blank);
     if (n <= 0)
         return;
 
@@ -774,7 +774,7 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
     avail = rect.w;
     if (*scroll > 0 && avail > 1U)
         avail = (u16)(avail - 1U);
-    sag_strip_layout(entries, n, avail, active_entry, scroll, spans,
+    yew_strip_layout(entries, n, avail, active_entry, scroll, spans,
                      &n_spans, &more_left, &more_right);
 
     for (i = 0; i < n_spans; i++) {
@@ -784,15 +784,15 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
         Rect span_rect;
 
         if (idx == active_entry)
-            attrs = SAG_ATTR_REVERSE;
+            attrs = YEW_ATTR_REVERSE;
         else if (entries[idx].dim)
-            attrs = SAG_ATTR_DIM;
+            attrs = YEW_ATTR_DIM;
         /* Draw only the bytes that fit the span the layout gave us.
          * Drawing the whole label writes its tail over the next
          * entry — which is exactly what the golden caught. */
-        (void)sag_grid_puts(&ed->grid, rect.y, x,
+        (void)yew_grid_puts(&ed->grid, rect.y, x,
                             (const u8 *)entries[idx].label,
-                            sag_strip_label_bytes(entries[idx].label),
+                            yew_strip_label_bytes(entries[idx].label),
                             entries[idx].dim ? dim : fg, bg, attrs);
         /*
          * Registered with the SAME cells the layout produced and the
@@ -801,7 +801,7 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
          */
         span_rect = (Rect){x, rect.y,
                            (u16)(spans[i].col1 - spans[i].col0), 1U};
-        sag_region_add(SAG_REGION_TAB, span_rect, entries[idx].payload);
+        yew_region_add(YEW_REGION_TAB, span_rect, entries[idx].payload);
         /*
          * Sprint 27 §4.  The SAME cells, against the pre-drag list —
          * `idx` is a position in the visible strip, and the pre-drag
@@ -819,11 +819,11 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
     if (more_left) {
         Rect r = {rect.x, rect.y, 1U, 1U};
 
-        (void)sag_grid_puts(&ed->grid, rect.y, rect.x,
-                            (const u8 *)sag_glyph(SAG_GLYPH_MORE_LEFT),
-                            sag_glyph_len(SAG_GLYPH_MORE_LEFT), dim, bg,
-                            SAG_ATTR_DIM);
-        sag_region_add(SAG_REGION_TAB_SCROLL, r, -scroll_mag);
+        (void)yew_grid_puts(&ed->grid, rect.y, rect.x,
+                            (const u8 *)yew_glyph(YEW_GLYPH_MORE_LEFT),
+                            yew_glyph_len(YEW_GLYPH_MORE_LEFT), dim, bg,
+                            YEW_ATTR_DIM);
+        yew_region_add(YEW_REGION_TAB_SCROLL, r, -scroll_mag);
     }
     if (more_right) {
         char more[16];
@@ -833,21 +833,21 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
         Rect r;
 
         (void)snprintf(more, sizeof(more), "%s%d",
-                       sag_glyph(SAG_GLYPH_MORE_RIGHT), past);
+                       yew_glyph(YEW_GLYPH_MORE_RIGHT), past);
         w = (u16)strlen(more);
         if (w < rect.w) {
             x = (u16)(rect.x + rect.w - w);
-            (void)sag_grid_puts(&ed->grid, rect.y, x, (const u8 *)more,
-                                strlen(more), dim, bg, SAG_ATTR_DIM);
+            (void)yew_grid_puts(&ed->grid, rect.y, x, (const u8 *)more,
+                                strlen(more), dim, bg, YEW_ATTR_DIM);
             r = (Rect){x, rect.y, w, 1U};
-            sag_region_add(SAG_REGION_TAB_SCROLL, r, scroll_mag);
+            yew_region_add(YEW_REGION_TAB_SCROLL, r, scroll_mag);
         }
     }
 }
 
 /*
  * Row 2: the members of `gid`, one entry each, payload = GLOBAL tab
- * index — so the existing SAG_REGION_TAB click case handles them
+ * index — so the existing YEW_REGION_TAB click case handles them
  * unchanged.  The active member is reversed; the others render dim,
  * which is what makes row 2 read as secondary to row 1.
  *
@@ -855,23 +855,23 @@ static void strip_render(Ed *ed, Rect rect, StripEntry *entries, int n,
  * group the user is only pointing at).  Same function, so the pinned
  * row and the preview cannot disagree.
  */
-void sag_tab_member_strip_draw(Ed *ed, Rect rect, u32 gid)
+void yew_tab_member_strip_draw(Ed *ed, Rect rect, u32 gid)
 {
-    StripEntry entries[SAG_TAB_MAX];
-    int members[SAG_TAB_MAX];
+    StripEntry entries[YEW_TAB_MAX];
+    int members[YEW_TAB_MAX];
     int n;
     int i;
     int active_entry = -1;
 
     if (ed == NULL || gid == 0U)
         return;
-    n = sag_group_members(ed, gid, members, (int)SAG_ARRAY_LEN(members));
+    n = yew_group_members(ed, gid, members, (int)YEW_ARRAY_LEN(members));
     for (i = 0; i < n; i++) {
         (void)memset(&entries[i], 0, sizeof(entries[i]));
         (void)snprintf(entries[i].label, sizeof(entries[i].label), " %s%s",
                        tab_basename(&ed->tabs.v.data[members[i]]),
-                       sag_tab_modified(ed, members[i])
-                           ? sag_glyph(SAG_GLYPH_MODIFIED) : "");
+                       yew_tab_modified(ed, members[i])
+                           ? yew_glyph(YEW_GLYPH_MODIFIED) : "");
         entries[i].payload = members[i];
         entries[i].dim = true;
         if (members[i] == ed->tabs.active)
@@ -881,18 +881,18 @@ void sag_tab_member_strip_draw(Ed *ed, Rect rect, u32 gid)
                  &ed->tabs.member_scroll, 2, false);
 }
 
-void sag_tab_strip_draw(Ed *ed, Rect rect)
+void yew_tab_strip_draw(Ed *ed, Rect rect)
 {
-    StripEntry entries[SAG_TAB_MAX];
+    StripEntry entries[YEW_TAB_MAX];
     int n;
     u32 gid;
 
     if (ed == NULL || rect.w == 0U || rect.h == 0U)
         return;
-    n = sag_tab_row1_entries(ed, entries, (int)SAG_ARRAY_LEN(entries));
+    n = yew_tab_row1_entries(ed, entries, (int)YEW_ARRAY_LEN(entries));
     strip_render_row1(ed, (Rect){rect.x, rect.y, rect.w, 1U}, entries, n,
-                      sag_tab_row1_active(ed, entries, n), &ed->tabs.scroll);
-    gid = sag_active_group_id(ed);
+                      yew_tab_row1_active(ed, entries, n), &ed->tabs.scroll);
+    gid = yew_active_group_id(ed);
     /*
      * Sprint 27 §4: a dwell opens a group's member strip as a drop
      * target, so row 2 shows the PREVIEWED group when there is one.
@@ -900,10 +900,10 @@ void sag_tab_strip_draw(Ed *ed, Rect rect)
      * placement — which is the whole reason s24 wrote it as one
      * function.
      */
-    if (sag_mouse_preview_group(ed) != 0U)
-        gid = sag_mouse_preview_group(ed);
+    if (yew_mouse_preview_group(ed) != 0U)
+        gid = yew_mouse_preview_group(ed);
     if (rect.h >= 2U && gid != 0U)
-        sag_tab_member_strip_draw(ed,
+        yew_tab_member_strip_draw(ed,
                                   (Rect){rect.x, (u16)(rect.y + 1U),
                                          rect.w, 1U},
                                   gid);
@@ -915,14 +915,14 @@ void sag_tab_strip_draw(Ed *ed, Rect rect)
  * the context menu, and a click half-handled here would move a tab the
  * user meant to scroll past.
  */
-bool sag_tab_strip_click(Ed *ed, u16 x, u16 y)
+bool yew_tab_strip_click(Ed *ed, u16 x, u16 y)
 {
     Region hit;
 
     if (ed == NULL)
         return false;
-    hit = sag_region_hit(x, y);
-    if (hit.kind == SAG_REGION_TAB_SCROLL) {
+    hit = yew_region_hit(x, y);
+    if (hit.kind == YEW_REGION_TAB_SCROLL) {
         /* The payload's MAGNITUDE names the row (1 or 2); its sign is
          * the direction.  Without the row, a click on row 2's `>N`
          * would scroll row 1 under the user's pointer. */
@@ -932,7 +932,7 @@ bool sag_tab_strip_click(Ed *ed, u16 x, u16 y)
         int to = *scroll + (hit.payload < 0 ? -1 : 1);
 
         if (row2)
-            limit = sag_group_member_count(ed, sag_active_group_id(ed));
+            limit = yew_group_member_count(ed, yew_active_group_id(ed));
         if (to < 0)
             to = 0;
         if (to >= limit)
@@ -941,7 +941,7 @@ bool sag_tab_strip_click(Ed *ed, u16 x, u16 y)
         ed->full_damage = true;
         return true;
     }
-    if (hit.kind != SAG_REGION_TAB)
+    if (hit.kind != YEW_REGION_TAB)
         return false;
     /*
      * The sign convention region.h wrote down in Sprint 22, now live:
@@ -949,14 +949,14 @@ bool sag_tab_strip_click(Ed *ed, u16 x, u16 y)
      * the renderer and the router read the same rule.
      */
     if (hit.payload < 0) {
-        sag_group_note_position(ed);
+        yew_group_note_position(ed);
         /* Clicking a group's entry is an EXPLICIT entry, so it resumes
          * where the user left off — unlike a mid-walk arrival, which
          * enters from the side it came from. */
-        sag_group_enter(ed, (u32)(-hit.payload));
+        yew_group_enter(ed, (u32)(-hit.payload));
         return true;
     }
-    sag_tab_switch(ed, hit.payload);
+    yew_tab_switch(ed, hit.payload);
     return true;
 }
 
@@ -964,33 +964,33 @@ bool sag_tab_strip_click(Ed *ed, u16 x, u16 y)
 /* Sprint 23 §5/§6: commands and the dirty-close prompt             */
 /* ---------------------------------------------------------------- */
 
-CmdStatus sag_tab_cmd_new(CmdCtx *cx)
+CmdStatus yew_tab_cmd_new(CmdCtx *cx)
 {
     int idx;
 
     if (cx == NULL || cx->ed == NULL)
-        return SAG_CMD_ERR_STATE;
-    idx = sag_tab_open(cx->ed, NULL);
+        return YEW_CMD_ERR_STATE;
+    idx = yew_tab_open(cx->ed, NULL);
     /* The return value is checked at EVERY call site (DoD 6): a silent
      * cap failure is how facsimile loaded a new file into the
      * still-active tab and then wrote it over the old path. */
     if (idx < 0)
-        return SAG_CMD_ERR_STATE;
-    sag_tab_switch(cx->ed, idx);
-    return SAG_CMD_OK;
+        return YEW_CMD_ERR_STATE;
+    yew_tab_switch(cx->ed, idx);
+    return YEW_CMD_OK;
 }
 
-CmdStatus sag_tab_cmd_open(CmdCtx *cx)
+CmdStatus yew_tab_cmd_open(CmdCtx *cx)
 {
     int idx;
 
     if (cx == NULL || cx->ed == NULL || cx->sarg == NULL)
-        return SAG_CMD_ERR_ARG;
-    idx = sag_tab_open(cx->ed, cx->sarg);
+        return YEW_CMD_ERR_ARG;
+    idx = yew_tab_open(cx->ed, cx->sarg);
     if (idx < 0)
-        return SAG_CMD_ERR_STATE;
-    sag_tab_switch(cx->ed, idx);
-    return SAG_CMD_OK;
+        return YEW_CMD_ERR_STATE;
+    yew_tab_switch(cx->ed, idx);
+    return YEW_CMD_OK;
 }
 
 static CmdStatus tab_step(CmdCtx *cx, int delta)
@@ -999,25 +999,25 @@ static CmdStatus tab_step(CmdCtx *cx, int delta)
     int at;
 
     if (cx == NULL || cx->ed == NULL)
-        return SAG_CMD_ERR_STATE;
-    n = (int)sag_tab_count(cx->ed);
+        return YEW_CMD_ERR_STATE;
+    n = (int)yew_tab_count(cx->ed);
     if (n <= 1)
-        return SAG_CMD_OK;
+        return YEW_CMD_OK;
     at = cx->ed->tabs.active + delta;
     /* Cyclic, because next-from-the-last meaning "nothing" is a worse
      * answer than wrapping when there is a strip showing the ring. */
     while (at < 0)
         at += n;
-    sag_tab_switch(cx->ed, at % n);
-    return SAG_CMD_OK;
+    yew_tab_switch(cx->ed, at % n);
+    return YEW_CMD_OK;
 }
 
-CmdStatus sag_tab_cmd_next(CmdCtx *cx)
+CmdStatus yew_tab_cmd_next(CmdCtx *cx)
 {
     return tab_step(cx, 1);
 }
 
-CmdStatus sag_tab_cmd_prev(CmdCtx *cx)
+CmdStatus yew_tab_cmd_prev(CmdCtx *cx)
 {
     return tab_step(cx, -1);
 }
@@ -1036,16 +1036,16 @@ static u32 jump_group;
 static bool jump_on;
 static TimerId jump_timer;
 
-bool sag_tab_jump_armed(void)
+bool yew_tab_jump_armed(void)
 {
     return jump_on;
 }
 
-void sag_tab_jump_clear(Ed *ed)
+void yew_tab_jump_clear(Ed *ed)
 {
-    if (ed != NULL && jump_timer != SAG_TIMER_NONE) {
-        (void)sag_timer_cancel(&ed->timers, jump_timer);
-        jump_timer = SAG_TIMER_NONE;
+    if (ed != NULL && jump_timer != YEW_TIMER_NONE) {
+        (void)yew_timer_cancel(&ed->timers, jump_timer);
+        jump_timer = YEW_TIMER_NONE;
     }
     jump_on = false;
     jump_value = 0;
@@ -1065,9 +1065,9 @@ static void jump_expire(Ed *ed, void *ctx)
     (void)ctx;
     if (ed == NULL || !jump_on)
         return;
-    jump_timer = SAG_TIMER_NONE;
-    sag_tab_jump_clear(ed);
-    sag_msg_clear(ed);
+    jump_timer = YEW_TIMER_NONE;
+    yew_tab_jump_clear(ed);
+    yew_msg_clear(ed);
     ed->footer_dirty = true;
 }
 
@@ -1075,24 +1075,24 @@ static void jump_expire(Ed *ed, void *ctx)
  * like a lost keystroke. */
 static void jump_arm(Ed *ed, int idx)
 {
-    const Tab *t = sag_tab_at(ed, idx);
+    const Tab *t = yew_tab_at(ed, idx);
 
     if (t == NULL)
         return;
-    sag_tab_jump_clear(ed);
+    yew_tab_jump_clear(ed);
     jump_on = true;
     jump_value = idx + 1;
-    jump_deadline_ms = ed->now_ms + SAG_JUMP_WINDOW_MS;
+    jump_deadline_ms = ed->now_ms + YEW_JUMP_WINDOW_MS;
     jump_group = t->group_id;
-    jump_timer = sag_timer_add(&ed->timers, jump_deadline_ms, jump_expire,
+    jump_timer = yew_timer_add(&ed->timers, jump_deadline_ms, jump_expire,
                                NULL);
     if (jump_group != 0U) {
-        int n = sag_group_member_count(ed, jump_group);
+        int n = yew_group_member_count(ed, jump_group);
 
-        sag_msg(ed, SAG_MSG_INFO, "tab %lld — a digit picks a member (1-%d)",
+        yew_msg(ed, YEW_MSG_INFO, "tab %lld — a digit picks a member (1-%d)",
                 (long long)jump_value, n);
     } else {
-        sag_msg(ed, SAG_MSG_INFO, "tab %lld — a digit extends to %lld_",
+        yew_msg(ed, YEW_MSG_INFO, "tab %lld — a digit extends to %lld_",
                 (long long)jump_value, (long long)jump_value);
     }
 }
@@ -1105,13 +1105,13 @@ static int digit_ordinal(u32 code)
     return d == 0 ? 10 : d;
 }
 
-bool sag_tab_jump_key(Ed *ed, Key key)
+bool yew_tab_jump_key(Ed *ed, Key key)
 {
     int digit;
 
     if (ed == NULL || !jump_on)
         return false;
-    if (key.ev == SAG_KEY_RELEASE)
+    if (key.ev == YEW_KEY_RELEASE)
         return false;
     /*
      * Clear FIRST, then let the key dispatch normally.  Returning
@@ -1119,7 +1119,7 @@ bool sag_tab_jump_key(Ed *ed, Key key)
      * continuation of a jump the user has long forgotten.
      */
     if (ed->now_ms >= jump_deadline_ms) {
-        sag_tab_jump_clear(ed);
+        yew_tab_jump_clear(ed);
         return false;
     }
     /*
@@ -1129,25 +1129,25 @@ bool sag_tab_jump_key(Ed *ed, Key key)
      * jump — tab 1 then tab 5, never tab 15.
      */
     if (key.code < (u32)'0' || key.code > (u32)'9') {
-        sag_tab_jump_clear(ed);
+        yew_tab_jump_clear(ed);
         return false;
     }
     digit = digit_ordinal(key.code);
 
     if (jump_group != 0U) {
-        int members[SAG_TAB_MAX];
-        int n = sag_group_members(ed, jump_group, members,
-                                  (int)SAG_ARRAY_LEN(members));
+        int members[YEW_TAB_MAX];
+        int n = yew_group_members(ed, jump_group, members,
+                                  (int)YEW_ARRAY_LEN(members));
 
         /* The digit counts what ROW 2 shows, which is what the user is
          * looking at while counting. */
         if (digit >= 1 && digit <= n) {
-            sag_tab_switch(ed, members[digit - 1]);
-            sag_tab_jump_clear(ed);
-            sag_msg_clear(ed);
+            yew_tab_switch(ed, members[digit - 1]);
+            yew_tab_jump_clear(ed);
+            yew_msg_clear(ed);
         } else {
-            sag_msg(ed, SAG_MSG_ERROR, "this group has %d members", n);
-            sag_tab_jump_clear(ed);
+            yew_msg(ed, YEW_MSG_ERROR, "this group has %d members", n);
+            yew_tab_jump_clear(ed);
         }
         return true;
     }
@@ -1158,13 +1158,13 @@ bool sag_tab_jump_key(Ed *ed, Key key)
         i64 target = jump_value * 10 + (i64)(key.code - (u32)'0');
         int idx = (int)target - 1;
 
-        if (idx >= 0 && idx < (int)sag_tab_count(ed)) {
-            sag_tab_switch(ed, idx);
+        if (idx >= 0 && idx < (int)yew_tab_count(ed)) {
+            yew_tab_switch(ed, idx);
             /* Re-armed, so three digits work. */
             jump_arm(ed, idx);
         } else {
-            sag_msg(ed, SAG_MSG_ERROR, "no tab %lld", (long long)target);
-            sag_tab_jump_clear(ed);
+            yew_msg(ed, YEW_MSG_ERROR, "no tab %lld", (long long)target);
+            yew_tab_jump_clear(ed);
         }
     }
     /*
@@ -1179,13 +1179,13 @@ bool sag_tab_jump_key(Ed *ed, Key key)
  * arming is what lets a second digit supersede it without the first
  * jump having waited for one.
  */
-CmdStatus sag_tab_cmd_goto(CmdCtx *cx)
+CmdStatus yew_tab_cmd_goto(CmdCtx *cx)
 {
     i64 want;
     int idx;
 
     if (cx == NULL || cx->ed == NULL)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     want = cx->iarg;
     if (cx->count_given && cx->count != 0U)
         want = (i64)cx->count;
@@ -1194,35 +1194,35 @@ CmdStatus sag_tab_cmd_goto(CmdCtx *cx)
     if (want == 0)
         want = 10;
     idx = (int)want - 1;
-    if (idx < 0 || idx >= (int)sag_tab_count(cx->ed)) {
-        sag_msg(cx->ed, SAG_MSG_ERROR, "no tab %lld",
+    if (idx < 0 || idx >= (int)yew_tab_count(cx->ed)) {
+        yew_msg(cx->ed, YEW_MSG_ERROR, "no tab %lld",
                 (long long)want);
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     }
-    sag_tab_switch(cx->ed, idx);
+    yew_tab_switch(cx->ed, idx);
     jump_arm(cx->ed, idx);
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
-CmdStatus sag_tab_cmd_move(CmdCtx *cx)
+CmdStatus yew_tab_cmd_move(CmdCtx *cx)
 {
     i64 want;
     int to;
 
     if (cx == NULL || cx->ed == NULL || cx->ed->tabs.active < 0)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     want = cx->iarg;
     if (cx->count_given && cx->count != 0U)
         want = (i64)cx->count;
     to = (int)want - 1;
-    if (to < 0 || to >= (int)sag_tab_count(cx->ed)) {
-        sag_msg(cx->ed, SAG_MSG_ERROR, "no position %lld",
+    if (to < 0 || to >= (int)yew_tab_count(cx->ed)) {
+        yew_msg(cx->ed, YEW_MSG_ERROR, "no position %lld",
                 (long long)want);
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     }
-    sag_tab_reorder(cx->ed, cx->ed->tabs.active, to);
+    yew_tab_reorder(cx->ed, cx->ed->tabs.active, to);
     cx->ed->full_damage = true;
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
 /*
@@ -1236,42 +1236,42 @@ CmdStatus sag_tab_cmd_move(CmdCtx *cx)
  */
 static void tab_prompt_show(Ed *ed)
 {
-    int idx = sag_tab_index_of_id(ed, ed->tab_prompt.tab_id);
+    int idx = yew_tab_index_of_id(ed, ed->tab_prompt.tab_id);
     const Tab *t;
 
     if (idx < 0) {
         ed->tab_prompt.active = false;
         return;
     }
-    t = sag_tab_at(ed, idx);
-    sag_msg(ed, SAG_MSG_INFO,
+    t = yew_tab_at(ed, idx);
+    yew_msg(ed, YEW_MSG_INFO,
             "save changes to %s?  [w]rite  [d]iscard  [esc] cancel",
             t->path != NULL ? t->path : "untitled");
 }
 
-CmdStatus sag_tab_cmd_close(CmdCtx *cx)
+CmdStatus yew_tab_cmd_close(CmdCtx *cx)
 {
     Ed *ed;
     int idx;
 
     if (cx == NULL || cx->ed == NULL)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     ed = cx->ed;
     idx = ed->tabs.active;
     if (idx < 0)
-        return SAG_CMD_ERR_STATE;
-    if (sag_tab_count(ed) <= 1U) {
-        sag_msg(ed, SAG_MSG_ERROR, "cannot close the last tab");
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
+    if (yew_tab_count(ed) <= 1U) {
+        yew_msg(ed, YEW_MSG_ERROR, "cannot close the last tab");
+        return YEW_CMD_ERR_STATE;
     }
-    if (!sag_tab_modified(ed, idx)) {
-        (void)sag_tab_close(ed, idx);
-        return SAG_CMD_OK;
+    if (!yew_tab_modified(ed, idx)) {
+        (void)yew_tab_close(ed, idx);
+        return YEW_CMD_OK;
     }
-    ed->tab_prompt.tab_id = sag_tab_at(ed, idx)->tab_id;
+    ed->tab_prompt.tab_id = yew_tab_at(ed, idx)->tab_id;
     ed->tab_prompt.active = true;
     tab_prompt_show(ed);
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
 /*
@@ -1282,24 +1282,24 @@ CmdStatus sag_tab_cmd_close(CmdCtx *cx)
  * and the key must reach the same code rather than two implementations
  * that drift.
  */
-CmdStatus sag_tab_cmd_close_others(CmdCtx *cx)
+CmdStatus yew_tab_cmd_close_others(CmdCtx *cx)
 {
     Ed *ed;
     u32 keep;
-    u32 doomed[SAG_TAB_MAX];
+    u32 doomed[YEW_TAB_MAX];
     u32 n = 0U;
     u32 i;
 
     if (cx == NULL || cx->ed == NULL)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     ed = cx->ed;
     if (ed->tabs.active < 0)
-        return SAG_CMD_ERR_STATE;
-    if (sag_tab_count(ed) <= 1U) {
-        sag_msg(ed, SAG_MSG_ERROR, "no other tabs");
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
+    if (yew_tab_count(ed) <= 1U) {
+        yew_msg(ed, YEW_MSG_ERROR, "no other tabs");
+        return YEW_CMD_ERR_STATE;
     }
-    keep = sag_tab_at(ed, ed->tabs.active)->tab_id;
+    keep = yew_tab_at(ed, ed->tabs.active)->tab_id;
     /*
      * IDS FIRST, then close.  Every close compacts the array and
      * renumbers the indices above it, so a loop over indices would skip
@@ -1311,74 +1311,74 @@ CmdStatus sag_tab_cmd_close_others(CmdCtx *cx)
             doomed[n++] = ed->tabs.v.data[i].tab_id;
     }
     for (i = 0U; i < n; i++) {
-        int idx = sag_tab_index_of_id(ed, doomed[i]);
+        int idx = yew_tab_index_of_id(ed, doomed[i]);
 
         /* A modified tab needs an answer, and the answer prompt is
          * per tab; refuse the whole gesture rather than closing half of
          * them and leaving a dialog holding the rest. */
         if (idx < 0)
             continue;
-        if (sag_tab_modified(ed, idx)) {
-            sag_msg(ed, SAG_MSG_ERROR,
+        if (yew_tab_modified(ed, idx)) {
+            yew_msg(ed, YEW_MSG_ERROR,
                     "unsaved changes in another tab; save or force first");
-            return SAG_CMD_ERR_STATE;
+            return YEW_CMD_ERR_STATE;
         }
     }
     for (i = 0U; i < n; i++) {
-        int idx = sag_tab_index_of_id(ed, doomed[i]);
+        int idx = yew_tab_index_of_id(ed, doomed[i]);
 
         if (idx >= 0)
-            (void)sag_tab_close(ed, idx);
+            (void)yew_tab_close(ed, idx);
     }
     ed->layout_dirty = true;
     ed->full_damage = true;
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
-CmdStatus sag_tab_cmd_copy_path(CmdCtx *cx)
+CmdStatus yew_tab_cmd_copy_path(CmdCtx *cx)
 {
     Ed *ed;
     const Tab *t;
     RegVal v;
 
     if (cx == NULL || cx->ed == NULL)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     ed = cx->ed;
-    t = sag_tab_at(ed, ed->tabs.active);
+    t = yew_tab_at(ed, ed->tabs.active);
     if (t == NULL || t->path == NULL) {
-        sag_msg(ed, SAG_MSG_ERROR, "this tab has no path");
-        return SAG_CMD_ERR_STATE;
+        yew_msg(ed, YEW_MSG_ERROR, "this tab has no path");
+        return YEW_CMD_ERR_STATE;
     }
     /* The CANONICAL path — which is what Tab.path already holds, set at
      * the one site that establishes a tab's name. */
-    sag_regval_init(&v);
+    yew_regval_init(&v);
     bytebuf_append(&v.bytes, (const u8 *)t->path, strlen(t->path));
-    v.type = (u8)SAG_REG_CHARWISE;
+    v.type = (u8)YEW_REG_CHARWISE;
     /* Register `+` is the system clipboard, so this also travels out
      * through Sprint 12's OSC 52 path. */
-    sag_reg_yank(&ed->regs, (u8)'+', &v);
-    sag_regval_free(&v);
-    sag_msg(ed, SAG_MSG_INFO, "copied %s", t->path);
-    return SAG_CMD_OK;
+    yew_reg_yank(&ed->regs, (u8)'+', &v);
+    yew_regval_free(&v);
+    yew_msg(ed, YEW_MSG_INFO, "copied %s", t->path);
+    return YEW_CMD_OK;
 }
 
-bool sag_tab_prompt_key(Ed *ed, u8 answer)
+bool yew_tab_prompt_key(Ed *ed, u8 answer)
 {
     int idx;
 
     if (ed == NULL || !ed->tab_prompt.active)
         return false;
-    idx = sag_tab_index_of_id(ed, ed->tab_prompt.tab_id);
+    idx = yew_tab_index_of_id(ed, ed->tab_prompt.tab_id);
     if (idx < 0) {
         /* The tab went away while the question was up; the question
          * goes away with it rather than answering for its successor. */
         ed->tab_prompt.active = false;
-        sag_msg_clear(ed);
+        yew_msg_clear(ed);
         return true;
     }
     switch (answer) {
     case 'w': {
-        Tab *t = sag_tab_at(ed, idx);
+        Tab *t = yew_tab_at(ed, idx);
         CmdStatus st;
 
         /*
@@ -1387,19 +1387,19 @@ bool sag_tab_prompt_key(Ed *ed, u8 answer)
          * to keep (invariant 1), so an I/O error aborts the close and
          * leaves the tab and its text exactly as they were.
          */
-        sag_tab_switch(ed, idx);
-        st = sag_ed_file_save(ed, false);
-        if (st != SAG_CMD_OK) {
+        yew_tab_switch(ed, idx);
+        st = yew_ed_file_save(ed, false);
+        if (st != YEW_CMD_OK) {
             ed->tab_prompt.active = false;
             return true; /* the save path already reported why */
         }
-        idx = sag_tab_index_of_id(ed, t->tab_id);
+        idx = yew_tab_index_of_id(ed, t->tab_id);
         if (idx >= 0)
-            (void)sag_tab_close(ed, idx);
+            (void)yew_tab_close(ed, idx);
         break;
     }
     case 'd':
-        (void)sag_tab_close(ed, idx);
+        (void)yew_tab_close(ed, idx);
         break;
     case 0x1BU: /* Esc cancels the close entirely. */
         break;
@@ -1411,6 +1411,6 @@ bool sag_tab_prompt_key(Ed *ed, u8 answer)
         return true;
     }
     ed->tab_prompt.active = false;
-    sag_msg_clear(ed);
+    yew_msg_clear(ed);
     return true;
 }

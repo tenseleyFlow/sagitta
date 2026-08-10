@@ -43,17 +43,17 @@ static void gpt_write(const char *path)
 {
     FILE *f = fopen(path, "w");
 
-    SAG_ASSERT_NOT_NULL(f);
+    YEW_ASSERT_NOT_NULL(f);
     (void)fprintf(f, "contents of %s\n", path);
-    SAG_ASSERT_EQ_I64(fclose(f), 0);
+    YEW_ASSERT_EQ_I64(fclose(f), 0);
 }
 
 static void gpt_make(GpTree *t)
 {
-    (void)snprintf(t->root, sizeof(t->root), "/tmp/sag-gp-XXXXXX");
-    SAG_ASSERT_NOT_NULL(mkdtemp(t->root));
+    (void)snprintf(t->root, sizeof(t->root), "/tmp/yew-gp-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(t->root));
     (void)snprintf(t->sub, sizeof(t->sub), "%s/sub", t->root);
-    SAG_ASSERT_EQ_I64(mkdir(t->sub, 0700), 0);
+    YEW_ASSERT_EQ_I64(mkdir(t->sub, 0700), 0);
     (void)snprintf(t->a, sizeof(t->a), "%s/a.txt", t->root);
     (void)snprintf(t->b, sizeof(t->b), "%s/b.txt", t->root);
     (void)snprintf(t->c, sizeof(t->c), "%s/c.txt", t->sub);
@@ -76,11 +76,11 @@ static void gpt_remove(GpTree *t)
 
 static void gpt_ed(Ed *ed)
 {
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    sag_ed_init(ed);
-    SAG_ASSERT(sag_ed_open_scratch(ed));
-    sag_layout_compute(ed->pane_root, (Rect){0U, 0U, 80U, 24U});
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    yew_ed_init(ed);
+    YEW_ASSERT(yew_ed_open_scratch(ed));
+    yew_layout_compute(ed->pane_root, (Rect){0U, 0U, 80U, 24U});
 }
 
 static Key gpk(u32 code)
@@ -88,8 +88,8 @@ static Key gpk(u32 code)
     Key k;
 
     (void)memset(&k, 0, sizeof(k));
-    k.kind = SAG_EV_KEY;
-    k.ev = SAG_KEY_PRESS;
+    k.kind = YEW_EV_KEY;
+    k.ev = YEW_KEY_PRESS;
     k.code = code;
     if (code >= 0x20U && code < 0x7FU) {
         k.ntext = 1U;
@@ -109,14 +109,14 @@ void test_grouppicker_prefills_the_name_from_the_directory(void)
 
     gpt_make(&t);
     gpt_ed(&ed);
-    SAG_ASSERT(sag_gp_show(&ed, t.sub));
-    SAG_ASSERT(sag_gp_active());
-    SAG_ASSERT_EQ_STR(sag_gp_name(), "sub/");
+    YEW_ASSERT(yew_gp_show(&ed, t.sub));
+    YEW_ASSERT(yew_gp_active());
+    YEW_ASSERT_EQ_STR(yew_gp_name(), "sub/");
     /* Edit mode pre-fills the group's own label instead. */
-    SAG_ASSERT(sag_gp_show_edit(&ed, t.sub, "backend"));
-    SAG_ASSERT_EQ_STR(sag_gp_name(), "backend");
-    sag_gp_close(&ed);
-    sag_ed_free(&ed);
+    YEW_ASSERT(yew_gp_show_edit(&ed, t.sub, "backend"));
+    YEW_ASSERT_EQ_STR(yew_gp_name(), "backend");
+    yew_gp_close(&ed);
+    yew_ed_free(&ed);
     gpt_remove(&t);
 }
 
@@ -138,24 +138,24 @@ void test_grouppicker_ticks_survive_directory_navigation(void)
 
     gpt_make(&t);
     gpt_ed(&ed);
-    SAG_ASSERT(sag_gp_show(&ed, t.root));
+    YEW_ASSERT(yew_gp_show(&ed, t.root));
 
     /* Tick both files in the root by path, then walk into `sub`. */
-    sag_gp_preselect(t.a);
-    sag_gp_preselect(t.b);
+    yew_gp_preselect(t.a);
+    yew_gp_preselect(t.b);
     /* Walking is what a per-row flag cannot survive. */
-    SAG_ASSERT(sag_gp_key(&ed, gpk(SAG_KEY_DOWN)));
-    sag_gp_preselect(t.c);
+    YEW_ASSERT(yew_gp_key(&ed, gpk(YEW_KEY_DOWN)));
+    yew_gp_preselect(t.c);
 
     /* Confirm and read the result back. */
-    SAG_ASSERT(sag_gp_key(&ed, gpk(SAG_KEY_TAB)));  /* focus the name */
-    SAG_ASSERT(sag_gp_key(&ed, gpk(SAG_KEY_ENTER)));
-    SAG_ASSERT_EQ_I64(sag_gp_result(), SAG_GP_CONFIRMED);
-    SAG_ASSERT_EQ_I64(sag_gp_count(), 3);
-    for (i = 0; i < sag_gp_count(); i++) {
-        const char *p = sag_gp_path(i);
+    YEW_ASSERT(yew_gp_key(&ed, gpk(YEW_KEY_TAB)));  /* focus the name */
+    YEW_ASSERT(yew_gp_key(&ed, gpk(YEW_KEY_ENTER)));
+    YEW_ASSERT_EQ_I64(yew_gp_result(), YEW_GP_CONFIRMED);
+    YEW_ASSERT_EQ_I64(yew_gp_count(), 3);
+    for (i = 0; i < yew_gp_count(); i++) {
+        const char *p = yew_gp_path(i);
 
-        SAG_ASSERT_NOT_NULL(p);
+        YEW_ASSERT_NOT_NULL(p);
         if (strstr(p, "a.txt") != NULL)
             seen_a++;
         if (strstr(p, "c.txt") != NULL)
@@ -163,9 +163,9 @@ void test_grouppicker_ticks_survive_directory_navigation(void)
     }
     /* The one from the OTHER directory is still there, and nothing is
      * duplicated. */
-    SAG_ASSERT_EQ_I64(seen_a, 1);
-    SAG_ASSERT_EQ_I64(seen_c, 1);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_I64(seen_a, 1);
+    YEW_ASSERT_EQ_I64(seen_c, 1);
+    yew_ed_free(&ed);
     gpt_remove(&t);
 }
 
@@ -179,14 +179,14 @@ void test_grouppicker_preselect_counts_an_out_of_dir_path(void)
 
     gpt_make(&t);
     gpt_ed(&ed);
-    SAG_ASSERT(sag_gp_show(&ed, t.sub));
+    YEW_ASSERT(yew_gp_show(&ed, t.sub));
     /* a.txt is in the PARENT, not in the listing on screen. */
-    sag_gp_preselect(t.a);
-    sag_gp_preselect(t.c);
-    SAG_ASSERT(sag_gp_key(&ed, gpk(SAG_KEY_TAB)));
-    SAG_ASSERT(sag_gp_key(&ed, gpk(SAG_KEY_ENTER)));
-    SAG_ASSERT_EQ_I64(sag_gp_count(), 2);
-    sag_ed_free(&ed);
+    yew_gp_preselect(t.a);
+    yew_gp_preselect(t.c);
+    YEW_ASSERT(yew_gp_key(&ed, gpk(YEW_KEY_TAB)));
+    YEW_ASSERT(yew_gp_key(&ed, gpk(YEW_KEY_ENTER)));
+    YEW_ASSERT_EQ_I64(yew_gp_count(), 2);
+    yew_ed_free(&ed);
     gpt_remove(&t);
 }
 
@@ -198,14 +198,14 @@ void test_grouppicker_ticks_are_a_set(void)
 
     gpt_make(&t);
     gpt_ed(&ed);
-    SAG_ASSERT(sag_gp_show(&ed, t.root));
-    sag_gp_preselect(t.a);
-    sag_gp_preselect(t.a);
-    sag_gp_preselect(t.a);
-    SAG_ASSERT(sag_gp_key(&ed, gpk(SAG_KEY_TAB)));
-    SAG_ASSERT(sag_gp_key(&ed, gpk(SAG_KEY_ENTER)));
-    SAG_ASSERT_EQ_I64(sag_gp_count(), 1);
-    sag_ed_free(&ed);
+    YEW_ASSERT(yew_gp_show(&ed, t.root));
+    yew_gp_preselect(t.a);
+    yew_gp_preselect(t.a);
+    yew_gp_preselect(t.a);
+    YEW_ASSERT(yew_gp_key(&ed, gpk(YEW_KEY_TAB)));
+    YEW_ASSERT(yew_gp_key(&ed, gpk(YEW_KEY_ENTER)));
+    YEW_ASSERT_EQ_I64(yew_gp_count(), 1);
+    yew_ed_free(&ed);
     gpt_remove(&t);
 }
 
@@ -222,15 +222,15 @@ void test_grouppicker_refuses_an_empty_selection(void)
 
     gpt_make(&t);
     gpt_ed(&ed);
-    SAG_ASSERT(sag_gp_show(&ed, t.root));
-    SAG_ASSERT(sag_gp_key(&ed, gpk(SAG_KEY_TAB)));
-    SAG_ASSERT(sag_gp_key(&ed, gpk(SAG_KEY_ENTER)));
+    YEW_ASSERT(yew_gp_show(&ed, t.root));
+    YEW_ASSERT(yew_gp_key(&ed, gpk(YEW_KEY_TAB)));
+    YEW_ASSERT(yew_gp_key(&ed, gpk(YEW_KEY_ENTER)));
     /* Still up, still pending. */
-    SAG_ASSERT(sag_gp_active());
-    SAG_ASSERT_EQ_I64(sag_gp_result(), SAG_GP_PENDING);
-    SAG_ASSERT_EQ_I64(sag_gp_count(), 0);
-    sag_gp_close(&ed);
-    sag_ed_free(&ed);
+    YEW_ASSERT(yew_gp_active());
+    YEW_ASSERT_EQ_I64(yew_gp_result(), YEW_GP_PENDING);
+    YEW_ASSERT_EQ_I64(yew_gp_count(), 0);
+    yew_gp_close(&ed);
+    yew_ed_free(&ed);
     gpt_remove(&t);
 }
 
@@ -242,15 +242,15 @@ void test_grouppicker_esc_cancels(void)
 
     gpt_make(&t);
     gpt_ed(&ed);
-    SAG_ASSERT(sag_gp_show(&ed, t.root));
-    sag_gp_preselect(t.a);
-    SAG_ASSERT(sag_gp_key(&ed, gpk(SAG_KEY_ESCAPE)));
-    SAG_ASSERT(!sag_gp_active());
-    SAG_ASSERT_EQ_I64(sag_gp_result(), SAG_GP_CANCELLED);
-    sag_gp_apply(&ed);
+    YEW_ASSERT(yew_gp_show(&ed, t.root));
+    yew_gp_preselect(t.a);
+    YEW_ASSERT(yew_gp_key(&ed, gpk(YEW_KEY_ESCAPE)));
+    YEW_ASSERT(!yew_gp_active());
+    YEW_ASSERT_EQ_I64(yew_gp_result(), YEW_GP_CANCELLED);
+    yew_gp_apply(&ed);
     /* No group came into existence. */
-    SAG_ASSERT_EQ_U64(ed.groups.v.len, 0U);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(ed.groups.v.len, 0U);
+    yew_ed_free(&ed);
     gpt_remove(&t);
 }
 
@@ -265,33 +265,33 @@ void test_grouppicker_survives_a_key_storm(void)
 
     gpt_make(&t);
     gpt_ed(&ed);
-    SAG_ASSERT(sag_gp_show(&ed, t.root));
+    YEW_ASSERT(yew_gp_show(&ed, t.root));
     for (op = 0; op < 3000; op++) {
         static const u32 codes[] = {
-            SAG_KEY_UP,   SAG_KEY_DOWN, SAG_KEY_LEFT, SAG_KEY_RIGHT,
-            SAG_KEY_TAB,  SAG_KEY_ENTER, (u32)' ',    (u32)'x',
-            (u32)'/',     SAG_KEY_BACKSPACE
+            YEW_KEY_UP,   YEW_KEY_DOWN, YEW_KEY_LEFT, YEW_KEY_RIGHT,
+            YEW_KEY_TAB,  YEW_KEY_ENTER, (u32)' ',    (u32)'x',
+            (u32)'/',     YEW_KEY_BACKSPACE
         };
 
         seed = seed * 1664525U + 1013904223U;
-        if (!sag_gp_active()) {
+        if (!yew_gp_active()) {
             /* Enter may have confirmed or cancelled it; reopen and keep
              * hammering rather than spinning on a closed dialog. */
-            sag_gp_apply(&ed);
-            SAG_ASSERT(sag_gp_show(&ed, t.root));
+            yew_gp_apply(&ed);
+            YEW_ASSERT(yew_gp_show(&ed, t.root));
         }
-        (void)sag_gp_key(&ed, gpk(codes[(seed >> 16) % 10U]));
+        (void)yew_gp_key(&ed, gpk(codes[(seed >> 16) % 10U]));
     }
     /* Whatever it ended up with, every path in it is a real one under
      * the tree the dialog was pointed at. */
-    if (sag_gp_result() == SAG_GP_CONFIRMED) {
+    if (yew_gp_result() == YEW_GP_CONFIRMED) {
         int i;
 
-        for (i = 0; i < sag_gp_count(); i++)
-            SAG_ASSERT_NOT_NULL(strstr(sag_gp_path(i), t.root));
+        for (i = 0; i < yew_gp_count(); i++)
+            YEW_ASSERT_NOT_NULL(strstr(yew_gp_path(i), t.root));
     }
-    sag_gp_close(&ed);
-    sag_ed_free(&ed);
+    yew_gp_close(&ed);
+    yew_ed_free(&ed);
     gpt_remove(&t);
 }
 
@@ -310,20 +310,20 @@ void test_grouppicker_new_creates_the_group_deferred(void)
 
     gpt_make(&t);
     gpt_ed(&ed);
-    SAG_ASSERT(sag_gp_show(&ed, t.root));
-    sag_gp_preselect(t.a);
-    sag_gp_preselect(t.b);
-    SAG_ASSERT(sag_gp_key(&ed, gpk(SAG_KEY_TAB)));
-    SAG_ASSERT(sag_gp_key(&ed, gpk(SAG_KEY_ENTER)));
+    YEW_ASSERT(yew_gp_show(&ed, t.root));
+    yew_gp_preselect(t.a);
+    yew_gp_preselect(t.b);
+    YEW_ASSERT(yew_gp_key(&ed, gpk(YEW_KEY_TAB)));
+    YEW_ASSERT(yew_gp_key(&ed, gpk(YEW_KEY_ENTER)));
 
-    base = sag_file_load_count();
-    sag_gp_apply(&ed);
-    SAG_ASSERT_EQ_U64(ed.groups.v.len, 1U);
+    base = yew_file_load_count();
+    yew_gp_apply(&ed);
+    YEW_ASSERT_EQ_U64(ed.groups.v.len, 1U);
     gid = ed.groups.v.data[0].id;
-    SAG_ASSERT_EQ_I64(sag_group_member_count(&ed, gid), 2);
+    YEW_ASSERT_EQ_I64(yew_group_member_count(&ed, gid), 2);
     /* Not one file was read to build the group. */
-    SAG_ASSERT_EQ_U64(sag_file_load_count(), base);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(yew_file_load_count(), base);
+    yew_ed_free(&ed);
     gpt_remove(&t);
 }
 
@@ -340,23 +340,23 @@ void test_grouppicker_new_adopts_an_already_open_file(void)
 
     gpt_make(&t);
     gpt_ed(&ed);
-    SAG_ASSERT(sag_tab_open(&ed, t.a) >= 0);
-    before = sag_tab_count(&ed);
+    YEW_ASSERT(yew_tab_open(&ed, t.a) >= 0);
+    before = yew_tab_count(&ed);
 
-    SAG_ASSERT(sag_gp_show(&ed, t.root));
-    sag_gp_preselect(t.a);
-    sag_gp_preselect(t.b);
-    SAG_ASSERT(sag_gp_key(&ed, gpk(SAG_KEY_TAB)));
-    SAG_ASSERT(sag_gp_key(&ed, gpk(SAG_KEY_ENTER)));
-    sag_gp_apply(&ed);
+    YEW_ASSERT(yew_gp_show(&ed, t.root));
+    yew_gp_preselect(t.a);
+    yew_gp_preselect(t.b);
+    YEW_ASSERT(yew_gp_key(&ed, gpk(YEW_KEY_TAB)));
+    YEW_ASSERT(yew_gp_key(&ed, gpk(YEW_KEY_ENTER)));
+    yew_gp_apply(&ed);
 
     /* One new tab for b.txt; a.txt reused the tab it already had. */
-    SAG_ASSERT_EQ_U64(sag_tab_count(&ed), before + 1U);
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), before + 1U);
     gid = ed.groups.v.data[0].id;
-    SAG_ASSERT_EQ_I64(sag_group_member_count(&ed, gid), 2);
-    SAG_ASSERT_EQ_I64(sag_tab_find_by_path(&ed, t.a),
-                      sag_tab_find_by_path(&ed, t.a));
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_I64(yew_group_member_count(&ed, gid), 2);
+    YEW_ASSERT_EQ_I64(yew_tab_find_by_path(&ed, t.a),
+                      yew_tab_find_by_path(&ed, t.a));
+    yew_ed_free(&ed);
     gpt_remove(&t);
 }
 
@@ -375,52 +375,52 @@ void test_grouppicker_edit_diffs_the_membership(void)
     gpt_make(&t);
     gpt_ed(&ed);
     /* Build {a, b} through the New path. */
-    SAG_ASSERT(sag_gp_show(&ed, t.root));
-    sag_gp_preselect(t.a);
-    sag_gp_preselect(t.b);
-    SAG_ASSERT(sag_gp_key(&ed, gpk(SAG_KEY_TAB)));
-    SAG_ASSERT(sag_gp_key(&ed, gpk(SAG_KEY_ENTER)));
-    sag_gp_apply(&ed);
+    YEW_ASSERT(yew_gp_show(&ed, t.root));
+    yew_gp_preselect(t.a);
+    yew_gp_preselect(t.b);
+    YEW_ASSERT(yew_gp_key(&ed, gpk(YEW_KEY_TAB)));
+    YEW_ASSERT(yew_gp_key(&ed, gpk(YEW_KEY_ENTER)));
+    yew_gp_apply(&ed);
     gid = ed.groups.v.data[0].id;
-    SAG_ASSERT_EQ_I64(sag_group_member_count(&ed, gid), 2);
+    YEW_ASSERT_EQ_I64(yew_group_member_count(&ed, gid), 2);
 
     /* Sit inside the group so ed.group.edit has something to edit. */
-    sag_group_enter(&ed, gid);
-    SAG_ASSERT_EQ_U64(sag_active_group_id(&ed), gid);
+    yew_group_enter(&ed, gid);
+    YEW_ASSERT_EQ_U64(yew_active_group_id(&ed), gid);
 
-    id = sag_cmd_lookup("ed.group.edit", 13U);
-    SAG_ASSERT(id.v != 0U);
+    id = yew_cmd_lookup("ed.group.edit", 13U);
+    YEW_ASSERT(id.v != 0U);
     (void)memset(&cx, 0, sizeof(cx));
     cx.ed = &ed;
     cx.win = ed.win;
     cx.count = 1U;
-    cx.source = SAG_SRC_TEST;
-    SAG_ASSERT_EQ_I64(sag_ed_invoke(&ed, id, &cx), SAG_CMD_OK);
+    cx.source = YEW_SRC_TEST;
+    YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, id, &cx), YEW_CMD_OK);
     /* Both current members arrived ticked. */
-    SAG_ASSERT(sag_gp_active());
+    YEW_ASSERT(yew_gp_active());
 
     /* Untick b by toggling it off, and tick c from the subdirectory. */
-    sag_gp_preselect(t.c);
+    yew_gp_preselect(t.c);
     {
         /* Re-open the dialog with exactly {a, c}: the model is a set,
          * so expressing the target directly is the honest way to test
          * the DIFF rather than the keystrokes that produce it. */
-        sag_gp_close(&ed);
-        SAG_ASSERT(sag_gp_show_edit(&ed, t.root, "src/"));
-        sag_gp_preselect(t.a);
-        sag_gp_preselect(t.c);
-        SAG_ASSERT(sag_gp_key(&ed, gpk(SAG_KEY_TAB)));
-        SAG_ASSERT(sag_gp_key(&ed, gpk(SAG_KEY_ENTER)));
-        SAG_ASSERT_EQ_I64(sag_gp_result(), SAG_GP_CONFIRMED);
+        yew_gp_close(&ed);
+        YEW_ASSERT(yew_gp_show_edit(&ed, t.root, "src/"));
+        yew_gp_preselect(t.a);
+        yew_gp_preselect(t.c);
+        YEW_ASSERT(yew_gp_key(&ed, gpk(YEW_KEY_TAB)));
+        YEW_ASSERT(yew_gp_key(&ed, gpk(YEW_KEY_ENTER)));
+        YEW_ASSERT_EQ_I64(yew_gp_result(), YEW_GP_CONFIRMED);
     }
-    sag_gp_apply(&ed);
+    yew_gp_apply(&ed);
 
     /* a stayed, c joined, b left — and b's tab is gone. */
-    SAG_ASSERT_EQ_I64(sag_group_member_count(&ed, gid), 2);
-    SAG_ASSERT(sag_tab_find_by_path(&ed, t.a) >= 0);
-    SAG_ASSERT(sag_tab_find_by_path(&ed, t.c) >= 0);
-    SAG_ASSERT_EQ_I64(sag_tab_find_by_path(&ed, t.b), -1);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_I64(yew_group_member_count(&ed, gid), 2);
+    YEW_ASSERT(yew_tab_find_by_path(&ed, t.a) >= 0);
+    YEW_ASSERT(yew_tab_find_by_path(&ed, t.c) >= 0);
+    YEW_ASSERT_EQ_I64(yew_tab_find_by_path(&ed, t.b), -1);
+    yew_ed_free(&ed);
     gpt_remove(&t);
 }
 
@@ -433,15 +433,15 @@ void test_grouppicker_apply_is_idempotent(void)
 
     gpt_make(&t);
     gpt_ed(&ed);
-    SAG_ASSERT(sag_gp_show(&ed, t.root));
-    sag_gp_preselect(t.a);
-    SAG_ASSERT(sag_gp_key(&ed, gpk(SAG_KEY_TAB)));
-    SAG_ASSERT(sag_gp_key(&ed, gpk(SAG_KEY_ENTER)));
-    sag_gp_apply(&ed);
-    sag_gp_apply(&ed);
-    sag_gp_apply(&ed);
-    SAG_ASSERT_EQ_U64(ed.groups.v.len, 1U);
-    sag_ed_free(&ed);
+    YEW_ASSERT(yew_gp_show(&ed, t.root));
+    yew_gp_preselect(t.a);
+    YEW_ASSERT(yew_gp_key(&ed, gpk(YEW_KEY_TAB)));
+    YEW_ASSERT(yew_gp_key(&ed, gpk(YEW_KEY_ENTER)));
+    yew_gp_apply(&ed);
+    yew_gp_apply(&ed);
+    yew_gp_apply(&ed);
+    YEW_ASSERT_EQ_U64(ed.groups.v.len, 1U);
+    yew_ed_free(&ed);
     gpt_remove(&t);
 }
 
@@ -471,22 +471,22 @@ void test_grouppicker_lists_only_directories_and_regular_files(void)
         return;
     }
     gpt_ed(&ed);
-    SAG_ASSERT(sag_gp_show(&ed, t.root));
+    YEW_ASSERT(yew_gp_show(&ed, t.root));
 
     /* Tick every listed row by walking the list and pressing space;
      * the FIFO must never be among the results. */
     for (i = 0; i < 8; i++)
-        SAG_ASSERT(sag_gp_key(&ed, gpk((u32)' ')));
-    SAG_ASSERT(sag_gp_key(&ed, gpk(SAG_KEY_TAB)));
-    SAG_ASSERT(sag_gp_key(&ed, gpk(SAG_KEY_ENTER)));
-    if (sag_gp_result() == SAG_GP_CONFIRMED) {
-        for (i = 0; i < sag_gp_count(); i++) {
-            if (strstr(sag_gp_path(i), "a-fifo") != NULL)
+        YEW_ASSERT(yew_gp_key(&ed, gpk((u32)' ')));
+    YEW_ASSERT(yew_gp_key(&ed, gpk(YEW_KEY_TAB)));
+    YEW_ASSERT(yew_gp_key(&ed, gpk(YEW_KEY_ENTER)));
+    if (yew_gp_result() == YEW_GP_CONFIRMED) {
+        for (i = 0; i < yew_gp_count(); i++) {
+            if (strstr(yew_gp_path(i), "a-fifo") != NULL)
                 rows_with_fifo++;
         }
     }
-    SAG_ASSERT_EQ_I64(rows_with_fifo, 0);
+    YEW_ASSERT_EQ_I64(rows_with_fifo, 0);
     (void)unlink(fifo);
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
     gpt_remove(&t);
 }

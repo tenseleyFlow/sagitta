@@ -86,13 +86,13 @@ static bool pk_search_part(void *ctx, i32 payload, u32 part,
 
 static void pk_make(PkFix *f)
 {
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    sag_ed_init(&f->ed);
-    SAG_ASSERT(sag_ed_open_scratch(&f->ed));
-    SAG_ASSERT(sag_grid_init(&f->ed.grid, &f->ed.interner, 24U, 80U));
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    yew_ed_init(&f->ed);
+    YEW_ASSERT(yew_ed_open_scratch(&f->ed));
+    YEW_ASSERT(yew_grid_init(&f->ed.grid, &f->ed.interner, 24U, 80U));
     f->ed.grid_ready = true;
-    sag_layout_compute(f->ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    yew_layout_compute(f->ed.pane_root, (Rect){0U, 0U, 80U, 24U});
     g_fix = f;
     g_accepted = -1;
     g_accept_how = 0xFFU;
@@ -100,8 +100,8 @@ static void pk_make(PkFix *f)
 
 static void pk_remove(PkFix *f)
 {
-    sag_picker_close(&f->ed, false);
-    sag_ed_free(&f->ed);
+    yew_picker_close(&f->ed, false);
+    yew_ed_free(&f->ed);
     g_fix = NULL;
 }
 
@@ -117,7 +117,7 @@ static void pk_open(PkFix *f, const PickItem *items, u32 n, bool path_mode)
     spec.accept = pk_accept;
     spec.path_mode = path_mode;
     spec.ctx = f;
-    sag_picker_open(&f->ed, &spec);
+    yew_picker_open(&f->ed, &spec);
 }
 
 /* Types one printable byte into the filter line. */
@@ -129,7 +129,7 @@ static void pk_type(PkFix *f, char c)
     k.code = (u32)(u8)c;
     k.text[0] = (u8)c;
     k.ntext = 1U;
-    SAG_ASSERT(sag_picker_key(&f->ed, &k));
+    YEW_ASSERT(yew_picker_key(&f->ed, &k));
 }
 
 static void pk_press(PkFix *f, u32 code)
@@ -138,7 +138,7 @@ static void pk_press(PkFix *f, u32 code)
 
     (void)memset(&k, 0, sizeof(k));
     k.code = code;
-    SAG_ASSERT(sag_picker_key(&f->ed, &k));
+    YEW_ASSERT(yew_picker_key(&f->ed, &k));
 }
 
 /* ---------------------------------------------------------------- */
@@ -166,22 +166,22 @@ void test_picker_selection_survives_a_refilter(void)
 
     pk_make(&f);
     pk_open(&f, items, 4U, true);
-    SAG_ASSERT_EQ_U64(sag_picker_shown(&f.ed), 4U);
+    YEW_ASSERT_EQ_U64(yew_picker_shown(&f.ed), 4U);
 
     /* Select `beta.c`, which is at row 1 with an empty filter. */
-    pk_press(&f, SAG_KEY_DOWN);
-    SAG_ASSERT_EQ_I64(sag_picker_selected(&f.ed), 200);
+    pk_press(&f, YEW_KEY_DOWN);
+    YEW_ASSERT_EQ_I64(yew_picker_selected(&f.ed), 200);
 
     /* `b` reorders: beta.c scores as a prefix-basename match and rises
      * to row 0, while the two `_b` files rank below it. */
     pk_type(&f, 'b');
-    SAG_ASSERT(sag_picker_shown(&f.ed) >= 1U);
+    YEW_ASSERT(yew_picker_shown(&f.ed) >= 1U);
     /* The SAME item is still selected, wherever it now sits. */
-    SAG_ASSERT_EQ_I64(sag_picker_selected(&f.ed), 200);
+    YEW_ASSERT_EQ_I64(yew_picker_selected(&f.ed), 200);
 
     /* And Enter opens the item that was highlighted, not a row. */
-    pk_press(&f, SAG_KEY_ENTER);
-    SAG_ASSERT_EQ_I64(g_accepted, 200);
+    pk_press(&f, YEW_KEY_ENTER);
+    YEW_ASSERT_EQ_I64(g_accepted, 200);
     pk_remove(&f);
 }
 
@@ -201,16 +201,16 @@ void test_picker_selection_falls_to_row_zero_when_filtered_out(void)
 
     pk_make(&f);
     pk_open(&f, items, 3U, true);
-    pk_press(&f, SAG_KEY_DOWN);
-    SAG_ASSERT_EQ_I64(sag_picker_selected(&f.ed), 200);
+    pk_press(&f, YEW_KEY_DOWN);
+    YEW_ASSERT_EQ_I64(yew_picker_selected(&f.ed), 200);
 
     /* `alp` excludes zulu.c entirely. */
     pk_type(&f, 'a');
     pk_type(&f, 'l');
     pk_type(&f, 'p');
-    SAG_ASSERT(sag_picker_shown(&f.ed) > 0U);
+    YEW_ASSERT(yew_picker_shown(&f.ed) > 0U);
     /* Whatever is now at the top — never the vanished item. */
-    SAG_ASSERT(sag_picker_selected(&f.ed) != 200);
+    YEW_ASSERT(yew_picker_selected(&f.ed) != 200);
     pk_remove(&f);
 }
 
@@ -228,20 +228,20 @@ void test_picker_movement_keys(void)
 
     pk_make(&f);
     pk_open(&f, items, 5U, false);
-    SAG_ASSERT_EQ_I64(sag_picker_selected(&f.ed), 1);
-    pk_press(&f, SAG_KEY_DOWN);
-    SAG_ASSERT_EQ_I64(sag_picker_selected(&f.ed), 2);
-    pk_press(&f, SAG_KEY_END);
-    SAG_ASSERT_EQ_I64(sag_picker_selected(&f.ed), 5);
-    pk_press(&f, SAG_KEY_HOME);
-    SAG_ASSERT_EQ_I64(sag_picker_selected(&f.ed), 1);
+    YEW_ASSERT_EQ_I64(yew_picker_selected(&f.ed), 1);
+    pk_press(&f, YEW_KEY_DOWN);
+    YEW_ASSERT_EQ_I64(yew_picker_selected(&f.ed), 2);
+    pk_press(&f, YEW_KEY_END);
+    YEW_ASSERT_EQ_I64(yew_picker_selected(&f.ed), 5);
+    pk_press(&f, YEW_KEY_HOME);
+    YEW_ASSERT_EQ_I64(yew_picker_selected(&f.ed), 1);
     /* Past the ends: clamped, never wrapped — a list that wraps makes
      * "hold down the arrow" unable to reach an end. */
-    pk_press(&f, SAG_KEY_UP);
-    SAG_ASSERT_EQ_I64(sag_picker_selected(&f.ed), 1);
-    pk_press(&f, SAG_KEY_END);
-    pk_press(&f, SAG_KEY_DOWN);
-    SAG_ASSERT_EQ_I64(sag_picker_selected(&f.ed), 5);
+    pk_press(&f, YEW_KEY_UP);
+    YEW_ASSERT_EQ_I64(yew_picker_selected(&f.ed), 1);
+    pk_press(&f, YEW_KEY_END);
+    pk_press(&f, YEW_KEY_DOWN);
+    YEW_ASSERT_EQ_I64(yew_picker_selected(&f.ed), 5);
     pk_remove(&f);
 }
 
@@ -258,12 +258,12 @@ void test_picker_ctrl_chords_move(void)
     pk_open(&f, items, 3U, false);
     (void)memset(&k, 0, sizeof(k));
     k.code = (u32)'n';
-    k.mods = SAG_MOD_CTRL;
-    SAG_ASSERT(sag_picker_key(&f.ed, &k));
-    SAG_ASSERT_EQ_I64(sag_picker_selected(&f.ed), 2);
+    k.mods = YEW_MOD_CTRL;
+    YEW_ASSERT(yew_picker_key(&f.ed, &k));
+    YEW_ASSERT_EQ_I64(yew_picker_selected(&f.ed), 2);
     k.code = (u32)'p';
-    SAG_ASSERT(sag_picker_key(&f.ed, &k));
-    SAG_ASSERT_EQ_I64(sag_picker_selected(&f.ed), 1);
+    YEW_ASSERT(yew_picker_key(&f.ed, &k));
+    YEW_ASSERT_EQ_I64(yew_picker_selected(&f.ed), 1);
     pk_remove(&f);
 }
 
@@ -283,13 +283,13 @@ void test_picker_counts_shown_and_total(void)
 
     pk_make(&f);
     pk_open(&f, items, 3U, true);
-    SAG_ASSERT_EQ_U64(sag_picker_shown(&f.ed), 3U);
-    SAG_ASSERT_EQ_U64(sag_picker_total(&f.ed), 3U);
+    YEW_ASSERT_EQ_U64(yew_picker_shown(&f.ed), 3U);
+    YEW_ASSERT_EQ_U64(yew_picker_total(&f.ed), 3U);
     pk_type(&f, 'h');
     /* Total never changes with the filter — it is the candidate count,
      * which is what makes "3/1043" meaningful. */
-    SAG_ASSERT_EQ_U64(sag_picker_total(&f.ed), 3U);
-    SAG_ASSERT(sag_picker_shown(&f.ed) < 3U);
+    YEW_ASSERT_EQ_U64(yew_picker_total(&f.ed), 3U);
+    YEW_ASSERT(yew_picker_shown(&f.ed) < 3U);
     pk_remove(&f);
 }
 
@@ -300,13 +300,13 @@ void test_picker_empty_list_is_safe(void)
 
     pk_make(&f);
     pk_open(&f, NULL, 0U, false);
-    SAG_ASSERT_EQ_U64(sag_picker_shown(&f.ed), 0U);
-    SAG_ASSERT_EQ_I64(sag_picker_selected(&f.ed), 0);
-    pk_press(&f, SAG_KEY_DOWN);
-    pk_press(&f, SAG_KEY_ENTER);
+    YEW_ASSERT_EQ_U64(yew_picker_shown(&f.ed), 0U);
+    YEW_ASSERT_EQ_I64(yew_picker_selected(&f.ed), 0);
+    pk_press(&f, YEW_KEY_DOWN);
+    pk_press(&f, YEW_KEY_ENTER);
     /* accept was never called. */
-    SAG_ASSERT_EQ_I64(g_accepted, -1);
-    SAG_ASSERT(sag_picker_active(&f.ed));
+    YEW_ASSERT_EQ_I64(g_accepted, -1);
+    YEW_ASSERT(yew_picker_active(&f.ed));
     pk_remove(&f);
 }
 
@@ -318,10 +318,10 @@ void test_picker_escape_cancels(void)
 
     pk_make(&f);
     pk_open(&f, items, 1U, false);
-    SAG_ASSERT(sag_picker_active(&f.ed));
-    pk_press(&f, SAG_KEY_ESCAPE);
-    SAG_ASSERT(!sag_picker_active(&f.ed));
-    SAG_ASSERT_EQ_I64(g_accepted, -1);
+    YEW_ASSERT(yew_picker_active(&f.ed));
+    pk_press(&f, YEW_KEY_ESCAPE);
+    YEW_ASSERT(!yew_picker_active(&f.ed));
+    YEW_ASSERT_EQ_I64(g_accepted, -1);
     pk_remove(&f);
 }
 
@@ -340,13 +340,13 @@ void test_picker_swallows_unhandled_keys(void)
     pk_make(&f);
     pk_open(&f, items, 1U, false);
     (void)memset(&k, 0, sizeof(k));
-    k.code = (u32)SAG_KEY_F1;
+    k.code = (u32)YEW_KEY_F1;
     /* Consumed, even though the picker does nothing with it. */
-    SAG_ASSERT(sag_picker_key(&f.ed, &k));
+    YEW_ASSERT(yew_picker_key(&f.ed, &k));
     pk_remove(&f);
 
     /* And a CLOSED picker claims nothing. */
-    SAG_ASSERT(!sag_picker_key(&f.ed, &k));
+    YEW_ASSERT(!yew_picker_key(&f.ed, &k));
 }
 
 /*
@@ -365,31 +365,31 @@ void test_picker_filter_line_is_the_cmdline(void)
     PkFix f;
 
     pk_make(&f);
-    SAG_ASSERT(!f.ed.cmdline.active);
+    YEW_ASSERT(!f.ed.cmdline.active);
     pk_open(&f, items, 1U, false);
     /* A draw is enough to bring it up... */
-    sag_picker_draw(&f.ed, (Rect){0U, 0U, 80U, 24U});
-    SAG_ASSERT(f.ed.cmdline.active);
-    sag_picker_close(&f.ed, false);
+    yew_picker_draw(&f.ed, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT(f.ed.cmdline.active);
+    yew_picker_close(&f.ed, false);
 
     /* ...and so is a key, for a picker opened and typed into without an
      * intervening frame. */
     pk_open(&f, items, 1U, false);
-    SAG_ASSERT(!f.ed.cmdline.active);
+    YEW_ASSERT(!f.ed.cmdline.active);
     pk_type(&f, 'a');
-    SAG_ASSERT(f.ed.cmdline.active);
+    YEW_ASSERT(f.ed.cmdline.active);
     /* Typing reaches it, and the text comes back out of it. */
     {
         Bytebuf text;
 
         bytebuf_init(&text);
-        sag_cmdline_text(&f.ed, &text);
-        SAG_ASSERT_EQ_U64(text.len, 1U);
-        SAG_ASSERT_EQ_I64(text.data[0], 'a');
+        yew_cmdline_text(&f.ed, &text);
+        YEW_ASSERT_EQ_U64(text.len, 1U);
+        YEW_ASSERT_EQ_I64(text.data[0], 'a');
         bytebuf_free(&text);
     }
-    sag_picker_close(&f.ed, false);
-    SAG_ASSERT(!f.ed.cmdline.active);
+    yew_picker_close(&f.ed, false);
+    YEW_ASSERT(!f.ed.cmdline.active);
     pk_remove(&f);
 }
 
@@ -413,14 +413,14 @@ void test_picker_same_length_filter_change_refilters(void)
     pk_open(&f, items, 2U, false);
     pk_type(&f, 'a');
     pk_type(&f, 'b');
-    with_ab = sag_picker_selected(&f.ed);
+    with_ab = yew_picker_selected(&f.ed);
     /* Backspace twice, then type the reverse. */
-    pk_press(&f, SAG_KEY_BACKSPACE);
-    pk_press(&f, SAG_KEY_BACKSPACE);
+    pk_press(&f, YEW_KEY_BACKSPACE);
+    pk_press(&f, YEW_KEY_BACKSPACE);
     pk_type(&f, 'b');
     pk_type(&f, 'a');
-    with_ba = sag_picker_selected(&f.ed);
-    SAG_ASSERT(with_ab != with_ba);
+    with_ba = yew_picker_selected(&f.ed);
+    YEW_ASSERT(with_ab != with_ba);
     pk_remove(&f);
 
     /* A borrowed custom source is scanned beyond the former 1 KiB label
@@ -431,7 +431,7 @@ void test_picker_same_length_filter_change_refilters(void)
         };
         static const char needle[] = "needle";
         PickerSpec spec;
-        u8 *large = sag_xmalloc(8U * 1024U * 1024U);
+        u8 *large = yew_xmalloc(8U * 1024U * 1024U);
         u32 ticks = 0U;
         size_t i;
 
@@ -448,18 +448,18 @@ void test_picker_same_length_filter_change_refilters(void)
         spec.items = pk_items;
         spec.search_part = pk_search_part;
         spec.ctx = &f;
-        sag_picker_open(&f.ed, &spec);
+        yew_picker_open(&f.ed, &spec);
         for (i = 0U; i < sizeof(needle) - 1U; i++)
             pk_type(&f, needle[i]);
-        SAG_ASSERT(sag_picker_scanning(&f.ed));
-        while (sag_picker_scanning(&f.ed) && ticks < 10000U) {
-            (void)sag_picker_tick(&f.ed);
+        YEW_ASSERT(yew_picker_scanning(&f.ed));
+        while (yew_picker_scanning(&f.ed) && ticks < 10000U) {
+            (void)yew_picker_tick(&f.ed);
             ticks++;
         }
-        SAG_ASSERT(ticks != 0U);
-        SAG_ASSERT(!sag_picker_scanning(&f.ed));
-        SAG_ASSERT_EQ_U64(sag_picker_shown(&f.ed), 1U);
-        SAG_ASSERT_EQ_I64(sag_picker_selected(&f.ed), 9);
+        YEW_ASSERT(ticks != 0U);
+        YEW_ASSERT(!yew_picker_scanning(&f.ed));
+        YEW_ASSERT_EQ_U64(yew_picker_shown(&f.ed), 1U);
+        YEW_ASSERT_EQ_I64(yew_picker_selected(&f.ed), 9);
         pk_remove(&f);
         free(large);
         g_search_text = NULL;
@@ -478,12 +478,12 @@ void test_picker_accept_in_split_reports_how(void)
     pk_open(&f, items, 1U, false);
     (void)memset(&k, 0, sizeof(k));
     k.code = (u32)'v';
-    k.mods = SAG_MOD_CTRL;
-    SAG_ASSERT(sag_picker_key(&f.ed, &k));
-    SAG_ASSERT_EQ_I64(g_accepted, 42);
-    SAG_ASSERT_EQ_I64(g_accept_how, SAG_PICK_ACCEPT_VSPLIT);
+    k.mods = YEW_MOD_CTRL;
+    YEW_ASSERT(yew_picker_key(&f.ed, &k));
+    YEW_ASSERT_EQ_I64(g_accepted, 42);
+    YEW_ASSERT_EQ_I64(g_accept_how, YEW_PICK_ACCEPT_VSPLIT);
     /* The split really happened. */
-    SAG_ASSERT_EQ_U64(sag_pane_leaf_count(f.ed.pane_root), 2U);
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(f.ed.pane_root), 2U);
     pk_remove(&f);
 }
 
@@ -498,17 +498,17 @@ void test_picker_refuses_a_tiny_terminal(void)
     PickerSpec spec;
 
     pk_make(&f);
-    sag_grid_free(&f.ed.grid);
-    SAG_ASSERT(sag_grid_init(&f.ed.grid, &f.ed.interner, 4U, 20U));
+    yew_grid_free(&f.ed.grid);
+    YEW_ASSERT(yew_grid_init(&f.ed.grid, &f.ed.interner, 4U, 20U));
     f.items = items;
     f.n = 1U;
     (void)memset(&spec, 0, sizeof(spec));
     spec.title = "Tiny";
     spec.items = pk_items;
     spec.ctx = &f;
-    sag_picker_open(&f.ed, &spec);
-    SAG_ASSERT(!sag_picker_active(&f.ed));
-    SAG_ASSERT(f.ed.msg.active);
+    yew_picker_open(&f.ed, &spec);
+    YEW_ASSERT(!yew_picker_active(&f.ed));
+    YEW_ASSERT(f.ed.msg.active);
     pk_remove(&f);
 }
 
@@ -516,7 +516,7 @@ void test_picker_refuses_a_tiny_terminal(void)
 void test_picker_draw_fits_the_grid(void)
 {
     static const PickItem items[] = {
-        {"src/ui/tabs.c", "src/ui", 1, SAG_PICK_MODIFIED},
+        {"src/ui/tabs.c", "src/ui", 1, YEW_PICK_MODIFIED},
         {"src/ui/tabs.h", "src/ui", 2, 0U},
         {"\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e.c", "cjk", 3, 0U}
     };
@@ -525,19 +525,19 @@ void test_picker_draw_fits_the_grid(void)
     Region hit;
 
     pk_make(&f);
-    sag_grid_free(&f.ed.grid);
-    SAG_ASSERT(sag_grid_init(&f.ed.grid, &f.ed.interner, 24U, 200U));
-    sag_layout_compute(f.ed.pane_root, (Rect){0U, 0U, 200U, 24U});
+    yew_grid_free(&f.ed.grid);
+    YEW_ASSERT(yew_grid_init(&f.ed.grid, &f.ed.interner, 24U, 200U));
+    yew_layout_compute(f.ed.pane_root, (Rect){0U, 0U, 200U, 24U});
 
     /* Ordinary pickers preserve the established centered 80-column cap. */
     pk_open(&f, items, 3U, true);
-    sag_region_frame_begin();
-    sag_picker_draw(&f.ed, (Rect){0U, 0U, 200U, 24U});
-    hit = sag_region_hit(21U, 2U);
-    SAG_ASSERT_EQ_I64(hit.kind, SAG_REGION_NONE);
-    hit = sag_region_hit(61U, 2U);
-    SAG_ASSERT_EQ_I64(hit.kind, SAG_REGION_BLOCK);
-    sag_picker_close(&f.ed, false);
+    yew_region_frame_begin();
+    yew_picker_draw(&f.ed, (Rect){0U, 0U, 200U, 24U});
+    hit = yew_region_hit(21U, 2U);
+    YEW_ASSERT_EQ_I64(hit.kind, YEW_REGION_NONE);
+    hit = yew_region_hit(61U, 2U);
+    YEW_ASSERT_EQ_I64(hit.kind, YEW_REGION_BLOCK);
+    yew_picker_close(&f.ed, false);
 
     /* A preview-enabled picker uses the wider bounded layout and the
      * callback receives a real slot beside the list. */
@@ -552,17 +552,17 @@ void test_picker_draw_fits_the_grid(void)
     spec.ctx = &f;
     g_preview_calls = 0U;
     g_preview_rect = (Rect){0U, 0U, 0U, 0U};
-    sag_picker_open(&f.ed, &spec);
-    sag_region_frame_begin();
-    sag_picker_draw(&f.ed, (Rect){0U, 0U, 200U, 24U});
-    SAG_ASSERT_EQ_U64(g_preview_calls, 1U);
-    SAG_ASSERT_EQ_U64(g_preview_rect.w, 78U);
-    SAG_ASSERT_EQ_U64(g_preview_rect.h, 16U);
-    hit = sag_region_hit(21U, 2U);
-    SAG_ASSERT_EQ_I64(hit.kind, SAG_REGION_BLOCK);
+    yew_picker_open(&f.ed, &spec);
+    yew_region_frame_begin();
+    yew_picker_draw(&f.ed, (Rect){0U, 0U, 200U, 24U});
+    YEW_ASSERT_EQ_U64(g_preview_calls, 1U);
+    YEW_ASSERT_EQ_U64(g_preview_rect.w, 78U);
+    YEW_ASSERT_EQ_U64(g_preview_rect.h, 16U);
+    hit = yew_region_hit(21U, 2U);
+    YEW_ASSERT_EQ_I64(hit.kind, YEW_REGION_BLOCK);
 
     /* And in a narrow box, where the detail column is dropped. */
-    sag_picker_draw(&f.ed, (Rect){0U, 0U, 30U, 12U});
-    SAG_ASSERT_EQ_U64(g_preview_calls, 1U);
+    yew_picker_draw(&f.ed, (Rect){0U, 0U, 30U, 12U});
+    YEW_ASSERT_EQ_U64(g_preview_calls, 1U);
     pk_remove(&f);
 }

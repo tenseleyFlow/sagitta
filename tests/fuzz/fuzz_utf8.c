@@ -13,7 +13,7 @@ static bool exhaustive_three_byte_inputs(void)
         u8 input[3];
         u8 encoded[3];
         u32 decoded[3];
-        SagU8Dec incremental;
+        YewU8Dec incremental;
         size_t in_pos = 0U;
         size_t encoded_len = 0U;
         size_t decoded_len = 0U;
@@ -24,11 +24,11 @@ static bool exhaustive_three_byte_inputs(void)
         input[1] = (u8)(value >> 8);
         input[2] = (u8)value;
         while (in_pos < sizeof(input)) {
-            u8 bytes[SAG_UTF8_MAX];
+            u8 bytes[YEW_UTF8_MAX];
             u32 cp;
-            size_t consumed = sag_utf8_decode(
+            size_t consumed = yew_utf8_decode(
                 input + in_pos, sizeof(input) - in_pos, &cp);
-            size_t produced = sag_utf8_encode(cp, bytes);
+            size_t produced = yew_utf8_encode(cp, bytes);
 
             if (consumed == 0U || consumed > sizeof(input) - in_pos ||
                 produced != consumed ||
@@ -43,9 +43,9 @@ static bool exhaustive_three_byte_inputs(void)
             memcmp(encoded, input, sizeof(input)) != 0)
             return false;
 
-        sag_utf8_dec_init(&incremental);
+        yew_utf8_dec_init(&incremental);
         for (i = 0U; i < sizeof(input); i++) {
-            u8 count = sag_utf8_push(&incremental, input[i]);
+            u8 count = yew_utf8_push(&incremental, input[i]);
             u8 j;
 
             for (j = 0U; j < count; j++) {
@@ -55,7 +55,7 @@ static bool exhaustive_three_byte_inputs(void)
             }
         }
         {
-            u8 count = sag_utf8_finish(&incremental);
+            u8 count = yew_utf8_finish(&incremental);
             u8 j;
 
             for (j = 0U; j < count; j++) {
@@ -78,7 +78,7 @@ int main(int argc, char **argv)
         return 1;
     }
     (void)printf("fuzz_utf8: exhaustive-three-byte=16777216 ok\n");
-    return sag_fuzz_main(argc, argv, "fuzz_utf8",
+    return yew_fuzz_main(argc, argv, "fuzz_utf8",
                          "tests/unit/fixtures/unicode",
-                         sag_fuzz_check_utf8);
+                         yew_fuzz_check_utf8);
 }

@@ -1,10 +1,10 @@
-#ifndef SAG_SEARCH_SEARCHUI_H
-#define SAG_SEARCH_SEARCHUI_H
+#ifndef YEW_SEARCH_SEARCHUI_H
+#define YEW_SEARCH_SEARCHUI_H
 
 /*
  * Sprint 21 §1/§2: the search surface over Sprint 20's engine.
  *
- * No pattern logic lives here — every match goes through sag_re_*.
+ * No pattern logic lives here — every match goes through yew_re_*.
  * What this file owns is what the user means: which direction, which
  * case rule, and what to restore when they change their mind.
  */
@@ -33,7 +33,7 @@ typedef struct SearchOpts {
     bool hlsearch;   /* default on  */
 } SearchOpts;
 
-void sag_search_opts_init(SearchOpts *o);
+void yew_search_opts_init(SearchOpts *o);
 
 /*
  * The §2 table, in one place.  Six rows:
@@ -49,16 +49,16 @@ void sag_search_opts_init(SearchOpts *o);
  * question only the parser can answer; deciding it by scanning the
  * pattern text is the bug this signature exists to prevent.
  */
-bool sag_search_wants_icase(const SagRe *probe, const SearchOpts *o);
+bool yew_search_wants_icase(const YewRe *probe, const SearchOpts *o);
 
 /*
  * Compiles `pat` under the smartcase rule.  Compiles once to learn what
- * the pattern contains, then recompiles with SAG_RE_ICASE if the table
+ * the pattern contains, then recompiles with YEW_RE_ICASE if the table
  * says so — the second pass is what folds literals into classes, and it
  * cannot be decided before the first.  Returns NULL with `err` set.
  */
-SagRe *sag_search_compile(Arena *a, const char *pat, size_t len,
-                          const SearchOpts *o, SagReErr *err);
+YewRe *yew_search_compile(Arena *a, const char *pat, size_t len,
+                          const SearchOpts *o, YewReErr *err);
 
 /*
  * Live search state.  `save_*` is the restore point captured when the
@@ -69,7 +69,7 @@ SagRe *sag_search_compile(Arena *a, const char *pat, size_t len,
  */
 typedef struct SearchState {
     Arena arena;      /* owns `re` and `pat` */
-    SagRe *re;        /* last pattern that COMPILED, for highlighting */
+    YewRe *re;        /* last pattern that COMPILED, for highlighting */
     char *pat;
     size_t patlen;
     bool reverse;     /* the direction the search was started with */
@@ -84,23 +84,23 @@ typedef struct SearchState {
     bool active;      /* a prompt is open */
     TimerId count_timer;
     i64 wrap_until_ms; /* the 2 s indicator's deadline; 0 = not shown */
-    SagReErr err;     /* live compile error; err.msg NULL means ok */
+    YewReErr err;     /* live compile error; err.msg NULL means ok */
 } SearchState;
 
-void sag_search_state_init(SearchState *st);
-void sag_search_state_free(SearchState *st);
+void yew_search_state_init(SearchState *st);
+void yew_search_state_free(SearchState *st);
 
-void sag_search_open(Ed *ed, Win *w, bool reverse);
-void sag_search_input(Ed *ed, Win *w);
-void sag_search_accept(Ed *ed, Win *w);
-void sag_search_cancel(Ed *ed, Win *w);
+void yew_search_open(Ed *ed, Win *w, bool reverse);
+void yew_search_input(Ed *ed, Win *w);
+void yew_search_accept(Ed *ed, Win *w);
+void yew_search_cancel(Ed *ed, Win *w);
 /* n / N.  `forward` is relative to the search's own direction, so after
  * `?foo` an `n` goes backwards. */
-bool sag_search_step(Ed *ed, Win *w, bool forward, u32 count);
+bool yew_search_step(Ed *ed, Win *w, bool forward, u32 count);
 /* `*` and `#`: the word under the cursor, quoted and \b-wrapped. */
-bool sag_search_word(Ed *ed, Win *w, bool forward);
+bool yew_search_word(Ed *ed, Win *w, bool forward);
 /* Drops the highlight without disturbing the pattern register. */
-void sag_search_clear_highlight(Ed *ed, Win *w);
+void yew_search_clear_highlight(Ed *ed, Win *w);
 
 /*
  * Schedules the bounded match count and, when a step wrapped, the
@@ -108,8 +108,8 @@ void sag_search_clear_highlight(Ed *ed, Win *w);
  * rather than on the keystroke: counting every match IS a whole-file
  * scan, and a keystroke is not the place to do one.
  */
-void sag_search_schedule_count(Ed *ed, Win *w);
+void yew_search_schedule_count(Ed *ed, Win *w);
 /* Idle deadline for the 2 s wrap indicator; 0 when not showing. */
-i64 sag_search_wrap_until(const Ed *ed);
+i64 yew_search_wrap_until(const Ed *ed);
 
 #endif

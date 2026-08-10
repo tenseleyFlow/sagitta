@@ -157,13 +157,13 @@ static bool load_once(const char *path, u64 *elapsed, u64 *rss_growth)
     u64 after;
     u64 start;
     u64 end;
-    SagLoadErr error;
+    YewLoadErr error;
 
-    sag_filemeta_init(&meta);
+    yew_filemeta_init(&meta);
     if (!rss_bytes(&before) || !now_ns(&start))
         return false;
-    error = sag_file_load(path, &tb, &meta);
-    if (error == SAG_LOAD_OK && getenv("SAG_PERF_INJECT_OPEN_DELAY") != NULL) {
+    error = yew_file_load(path, &tb, &meta);
+    if (error == YEW_LOAD_OK && getenv("YEW_PERF_INJECT_OPEN_DELAY") != NULL) {
         struct timespec delay = {0, 200000000L};
         struct timespec left;
 
@@ -173,16 +173,16 @@ static bool load_once(const char *path, u64 *elapsed, u64 *rss_growth)
             delay = left;
         }
     }
-    if (!now_ns(&end) || error != SAG_LOAD_OK || !rss_bytes(&after)) {
-        sag_textbuf_free(tb);
-        sag_filemeta_dispose(&meta);
+    if (!now_ns(&end) || error != YEW_LOAD_OK || !rss_bytes(&after)) {
+        yew_textbuf_free(tb);
+        yew_filemeta_dispose(&meta);
         return false;
     }
-    sag_textbuf_check(tb);
+    yew_textbuf_check(tb);
     *elapsed = end - start;
     *rss_growth = after > before ? after - before : 0U;
-    sag_textbuf_free(tb);
-    sag_filemeta_dispose(&meta);
+    yew_textbuf_free(tb);
+    yew_filemeta_dispose(&meta);
     return true;
 }
 
@@ -364,7 +364,7 @@ static bool baselines_update(const char *path, const char *runner_id,
     file = fopen(path, "wb");
     if (file == NULL)
         return false;
-    if (fprintf(file, "# sagitta perf baseline v1  runner=%s\n", runner_id) <
+    if (fprintf(file, "# yew perf baseline v1  runner=%s\n", runner_id) <
             0 ||
         fprintf(file,
                 "# metric                         p50_ns        p99_ns"
@@ -396,14 +396,14 @@ static bool load_buffer(const char *dir, const char *profile, TextBuf **tb,
                         FileMeta *meta)
 {
     char *path = fixture_path(dir, profile);
-    SagLoadErr error;
+    YewLoadErr error;
 
     if (path == NULL)
         return false;
-    sag_filemeta_init(meta);
-    error = sag_file_load(path, tb, meta);
+    yew_filemeta_init(meta);
+    error = yew_file_load(path, tb, meta);
     free(path);
-    return error == SAG_LOAD_OK;
+    return error == YEW_LOAD_OK;
 }
 
 static bool measure_queries(const char *dir, const char *profile,
@@ -433,11 +433,11 @@ static bool measure_queries(const char *dir, const char *profile,
         free(of_samples);
         return false;
     }
-    lines = sag_textbuf_line_count(tb);
-    len = sag_textbuf_len(tb);
+    lines = yew_textbuf_line_count(tb);
+    len = yew_textbuf_len(tb);
     for (i = 0U; i < 3U; i++) {
-        sink += sag_textbuf_line_start(tb, LINENO(i % lines)).v;
-        sink += sag_textbuf_line_of(tb, BYTEOFF(i % (len + 1U))).v;
+        sink += yew_textbuf_line_start(tb, LINENO(i % lines)).v;
+        sink += yew_textbuf_line_of(tb, BYTEOFF(i % (len + 1U))).v;
     }
     for (run = 0U; run < PERF_RUNS; run++) {
         for (i = 0U; i < QUERY_SAMPLES; i++) {
@@ -446,14 +446,14 @@ static bool measure_queries(const char *dir, const char *profile,
 
             if (!now_ns(&begin))
                 goto fail;
-            sink += sag_textbuf_line_start(tb,
+            sink += yew_textbuf_line_start(tb,
                 LINENO(random_next(&rng) % lines)).v;
             if (!now_ns(&end))
                 goto fail;
             start_samples[i] = end - begin;
             if (!now_ns(&begin))
                 goto fail;
-            sink += sag_textbuf_line_of(tb,
+            sink += yew_textbuf_line_of(tb,
                 BYTEOFF(random_next(&rng) % (len + 1U))).v;
             if (!now_ns(&end))
                 goto fail;
@@ -483,15 +483,15 @@ static bool measure_queries(const char *dir, const char *profile,
                       (unsigned long long)sink);
     free(start_samples);
     free(of_samples);
-    sag_textbuf_free(tb);
-    sag_filemeta_dispose(&meta);
+    yew_textbuf_free(tb);
+    yew_filemeta_dispose(&meta);
     return true;
 
 fail:
     free(start_samples);
     free(of_samples);
-    sag_textbuf_free(tb);
-    sag_filemeta_dispose(&meta);
+    yew_textbuf_free(tb);
+    yew_filemeta_dispose(&meta);
     return false;
 }
 
@@ -514,24 +514,24 @@ static bool measure_insert(const char *dir, const char *name, bool head,
         return false;
     }
     for (i = 0U; i < 3U; i++) {
-        ByteOff at = head ? BYTEOFF(0U) : BYTEOFF(sag_textbuf_len(tb));
+        ByteOff at = head ? BYTEOFF(0U) : BYTEOFF(yew_textbuf_len(tb));
 
-        sag_textbuf_insert(tb, at, &byte, 1U);
-        sag_textbuf_delete(tb, (Span){at.v, at.v + 1U});
+        yew_textbuf_insert(tb, at, &byte, 1U);
+        yew_textbuf_delete(tb, (Span){at.v, at.v + 1U});
     }
     for (run = 0U; run < PERF_RUNS; run++) {
         for (i = 0U; i < INSERT_SAMPLES; i++) {
             u64 begin;
             u64 end;
-            ByteOff at = head ? BYTEOFF(0U) : BYTEOFF(sag_textbuf_len(tb));
+            ByteOff at = head ? BYTEOFF(0U) : BYTEOFF(yew_textbuf_len(tb));
 
             if (!now_ns(&begin))
                 goto fail;
-            sag_textbuf_insert(tb, at, &byte, 1U);
+            yew_textbuf_insert(tb, at, &byte, 1U);
             if (!now_ns(&end))
                 goto fail;
             samples[i] = end - begin;
-            sag_textbuf_delete(tb, (Span){at.v, at.v + 1U});
+            yew_textbuf_delete(tb, (Span){at.v, at.v + 1U});
         }
         timing = timing_of(samples, INSERT_SAMPLES);
         p50[run] = timing.p50;
@@ -544,14 +544,14 @@ static bool measure_insert(const char *dir, const char *name, bool head,
     *out = (Result){name, p50[1], p99[1], max[1], 0U,
                     50000U, 0U, false};
     free(samples);
-    sag_textbuf_free(tb);
-    sag_filemeta_dispose(&meta);
+    yew_textbuf_free(tb);
+    yew_filemeta_dispose(&meta);
     return true;
 
 fail:
     free(samples);
-    sag_textbuf_free(tb);
-    sag_filemeta_dispose(&meta);
+    yew_textbuf_free(tb);
+    yew_filemeta_dispose(&meta);
     return false;
 }
 
@@ -571,10 +571,10 @@ static bool measure_materialize(const char *dir, Result *out)
 
     if (!load_buffer(dir, "1g-code", &tb, &meta))
         return false;
-    len = sag_textbuf_len(tb);
+    len = yew_textbuf_len(tb);
     if (len > SIZE_MAX) {
-        sag_textbuf_free(tb);
-        sag_filemeta_dispose(&meta);
+        yew_textbuf_free(tb);
+        yew_filemeta_dispose(&meta);
         return false;
     }
     bytes = malloc((size_t)(len == 0U ? 1U : len));
@@ -582,17 +582,17 @@ static bool measure_materialize(const char *dir, Result *out)
         goto fail;
     for (run = 0U; run < 3U + PERF_RUNS; run++) {
         at = 0U;
-        if (!now_ns(&begin) || !sag_textiter_begin(&it, tb, BYTEOFF(0U)))
+        if (!now_ns(&begin) || !yew_textiter_begin(&it, tb, BYTEOFF(0U)))
             goto fail;
         for (;;) {
             const u8 *chunk;
             u64 chunk_len;
 
-            if (!sag_textiter_chunk(&it, tb, &chunk, &chunk_len))
+            if (!yew_textiter_chunk(&it, tb, &chunk, &chunk_len))
                 break;
             (void)memcpy(bytes + at, chunk, (size_t)chunk_len);
             at += chunk_len;
-            if (!sag_textiter_advance(&it, tb))
+            if (!yew_textiter_advance(&it, tb))
                 break;
         }
         if (!now_ns(&end) || at != len)
@@ -604,20 +604,20 @@ static bool measure_materialize(const char *dir, Result *out)
     *out = (Result){"materialize.1g-code", timing.p50, timing.p99,
                     timing.max, 0U, UINT64_C(1000000000), 0U, false};
     free(bytes);
-    sag_textbuf_free(tb);
-    sag_filemeta_dispose(&meta);
+    yew_textbuf_free(tb);
+    yew_filemeta_dispose(&meta);
     return true;
 
 fail:
     free(bytes);
-    sag_textbuf_free(tb);
-    sag_filemeta_dispose(&meta);
+    yew_textbuf_free(tb);
+    yew_filemeta_dispose(&meta);
     return false;
 }
 
 static bool textbuf_bytes(const TextBuf *tb, u8 **out, u64 *out_len)
 {
-    u64 len = sag_textbuf_len(tb);
+    u64 len = yew_textbuf_len(tb);
     u8 *bytes;
     TextIter it;
     u64 at = 0U;
@@ -625,7 +625,7 @@ static bool textbuf_bytes(const TextBuf *tb, u8 **out, u64 *out_len)
     if (len > SIZE_MAX)
         return false;
     bytes = malloc((size_t)(len == 0U ? 1U : len));
-    if (bytes == NULL || !sag_textiter_begin(&it, tb, BYTEOFF(0U))) {
+    if (bytes == NULL || !yew_textiter_begin(&it, tb, BYTEOFF(0U))) {
         free(bytes);
         return false;
     }
@@ -633,11 +633,11 @@ static bool textbuf_bytes(const TextBuf *tb, u8 **out, u64 *out_len)
         const u8 *chunk;
         u64 chunk_len;
 
-        if (!sag_textiter_chunk(&it, tb, &chunk, &chunk_len))
+        if (!yew_textiter_chunk(&it, tb, &chunk, &chunk_len))
             break;
         (void)memcpy(bytes + at, chunk, (size_t)chunk_len);
         at += chunk_len;
-        if (!sag_textiter_advance(&it, tb))
+        if (!yew_textiter_advance(&it, tb))
             break;
     }
     if (at != len) {
@@ -670,35 +670,35 @@ static bool measure_atomic_save(const char *dir, Result *out)
         free(path);
         return false;
     }
-    (void)snprintf(path, path_len, "%s/.sagitta-perf-save-%ld.bin", dir,
+    (void)snprintf(path, path_len, "%s/.yew-perf-save-%ld.bin", dir,
                    (long)getpid());
     if (!textbuf_bytes(source, &bytes, &len) ||
-        sag_file_write_atomic(path, bytes, (size_t)len, 0600) != SAG_SAVE_OK)
+        yew_file_write_atomic(path, bytes, (size_t)len, 0600) != YEW_SAVE_OK)
         goto done_source;
     free(bytes);
     bytes = NULL;
-    sag_textbuf_free(source);
+    yew_textbuf_free(source);
     source = NULL;
-    sag_filemeta_dispose(&source_meta);
-    sag_filemeta_init(&meta);
-    if (sag_file_load(path, &tb, &meta) != SAG_LOAD_OK)
+    yew_filemeta_dispose(&source_meta);
+    yew_filemeta_init(&meta);
+    if (yew_file_load(path, &tb, &meta) != YEW_LOAD_OK)
         goto done;
     for (i = 0U; i < 3U + PERF_RUNS; i++) {
         u64 begin;
         u64 end;
 
-        sag_textbuf_insert(tb, BYTEOFF(sag_textbuf_len(tb)), &dirty, 1U);
-        if (!now_ns(&begin) || sag_file_save(tb, &meta, path) != SAG_SAVE_OK ||
+        yew_textbuf_insert(tb, BYTEOFF(yew_textbuf_len(tb)), &dirty, 1U);
+        if (!now_ns(&begin) || yew_file_save(tb, &meta, path) != YEW_SAVE_OK ||
             !now_ns(&end))
             goto done;
         if (i >= 3U)
             samples[i - 3U] = end - begin;
         if (i + 1U < 3U + PERF_RUNS) {
-            sag_textbuf_free(tb);
+            yew_textbuf_free(tb);
             tb = NULL;
-            sag_filemeta_dispose(&meta);
-            sag_filemeta_init(&meta);
-            if (sag_file_load(path, &tb, &meta) != SAG_LOAD_OK)
+            yew_filemeta_dispose(&meta);
+            yew_filemeta_init(&meta);
+            if (yew_file_load(path, &tb, &meta) != YEW_LOAD_OK)
                 goto done;
         }
     }
@@ -707,16 +707,16 @@ static bool measure_atomic_save(const char *dir, Result *out)
                     timing.max, 0U, UINT64_C(6000000000), 0U, false};
     ok = true;
 done:
-    sag_textbuf_free(tb);
-    sag_filemeta_dispose(&meta);
+    yew_textbuf_free(tb);
+    yew_filemeta_dispose(&meta);
     (void)unlink(path);
     free(path);
     return ok;
 
 done_source:
     free(bytes);
-    sag_textbuf_free(source);
-    sag_filemeta_dispose(&source_meta);
+    yew_textbuf_free(source);
+    yew_filemeta_dispose(&source_meta);
     (void)unlink(path);
     free(path);
     return false;
@@ -738,13 +738,13 @@ static bool measure_both_ends(const char *dir, Result *out)
         return false;
     for (i = 0U; i < INSERT_SAMPLES; i++) {
         ByteOff at = (i & 1U) == 0U ? BYTEOFF(0U)
-                                         : BYTEOFF(sag_textbuf_len(tb));
+                                         : BYTEOFF(yew_textbuf_len(tb));
 
-        sag_textbuf_insert(tb, at, &byte, 1U);
+        yew_textbuf_insert(tb, at, &byte, 1U);
     }
     if (!now_ns(&end) || !rss_bytes(&rss_after)) {
-        sag_textbuf_free(tb);
-        sag_filemeta_dispose(&meta);
+        yew_textbuf_free(tb);
+        yew_filemeta_dispose(&meta);
         return false;
     }
     *out = (Result){"edit.ends.1g-code", end - begin, end - begin,
@@ -752,8 +752,8 @@ static bool measure_both_ends(const char *dir, Result *out)
                     rss_after > rss_before ? rss_after - rss_before : 0U,
                     UINT64_C(1000000000), UINT64_C(8) * 1024U * 1024U,
                     false};
-    sag_textbuf_free(tb);
-    sag_filemeta_dispose(&meta);
+    yew_textbuf_free(tb);
+    yew_filemeta_dispose(&meta);
     return true;
 }
 
@@ -771,10 +771,10 @@ static bool measure_undo(const char *dir, Result *out)
 
     if (!load_buffer(dir, "100m-code", &tb, &meta))
         return false;
-    undo = sag_undo_new(tb);
+    undo = yew_undo_new(tb);
     if (undo == NULL) {
-        sag_textbuf_free(tb);
-        sag_filemeta_dispose(&meta);
+        yew_textbuf_free(tb);
+        yew_filemeta_dispose(&meta);
         return false;
     }
     /* Measure the undo engine, not the file-backed crash journal. */
@@ -782,13 +782,13 @@ static bool measure_undo(const char *dir, Result *out)
     if (!now_ns(&begin))
         goto done;
     for (i = 0U; i < INSERT_SAMPLES; i++) {
-        sag_undo_begin(&edit, SAG_TXN_TYPE);
-        sag_edit_insert(&edit, BYTEOFF(sag_textbuf_len(tb)), &byte, 1U);
-        sag_undo_end(&edit);
-        sag_undo_boundary(undo);
+        yew_undo_begin(&edit, YEW_TXN_TYPE);
+        yew_edit_insert(&edit, BYTEOFF(yew_textbuf_len(tb)), &byte, 1U);
+        yew_undo_end(&edit);
+        yew_undo_boundary(undo);
     }
     for (i = 0U; i < INSERT_SAMPLES; i++) {
-        if (!sag_undo(&edit))
+        if (!yew_undo(&edit))
             goto done;
     }
     if (!now_ns(&end))
@@ -798,9 +798,9 @@ static bool measure_undo(const char *dir, Result *out)
                     UINT64_C(400000000), undo->bytes_max, false};
     ok = true;
 done:
-    sag_undo_free(undo);
-    sag_textbuf_free(tb);
-    sag_filemeta_dispose(&meta);
+    yew_undo_free(undo);
+    yew_textbuf_free(tb);
+    yew_filemeta_dispose(&meta);
     return ok;
 }
 
@@ -886,8 +886,8 @@ int main(int argc, char **argv)
                       "perf_textbuf: baseline unavailable; advisory mode\n");
         advisory = true;
     }
-    if (getenv("SAG_PERF_ADVISORY") != NULL &&
-        strcmp(getenv("SAG_PERF_ADVISORY"), "0") != 0)
+    if (getenv("YEW_PERF_ADVISORY") != NULL &&
+        strcmp(getenv("YEW_PERF_ADVISORY"), "0") != 0)
         advisory = true;
     if (baselines.runner_id[0] == '\0' ||
         strcmp(baselines.runner_id, runner_id) != 0)

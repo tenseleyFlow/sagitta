@@ -3,7 +3,7 @@
  */
 #include "tables.h"
 
-const u16 sag_u_stage1[SAG_TRIE_HI >> SAG_TRIE_SHIFT] = {
+const u16 yew_u_stage1[YEW_TRIE_HI >> YEW_TRIE_SHIFT] = {
     0x0000, 0x0001, 0x0002, 0x0003, 0x0004, 0x0005, 0x0006, 0x0007,
     0x0008, 0x0009, 0x000A, 0x000B, 0x000C, 0x000D, 0x000E, 0x000F,
     0x0010, 0x0011, 0x0012, 0x0013, 0x0014, 0x0015, 0x0016, 0x0017,
@@ -198,7 +198,7 @@ const u16 sag_u_stage1[SAG_TRIE_HI >> SAG_TRIE_SHIFT] = {
     0x0048, 0x0048, 0x0048, 0x0048, 0x0048, 0x0048, 0x0048, 0x00BD
 };
 
-const u8 sag_u_stage2[] = {
+const u8 yew_u_stage2[] = {
     0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 1u, 0u, 0u, 2u, 0u, 0u,
     0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
     3u, 3u, 3u, 4u, 3u, 3u, 3u, 3u, 3u, 3u, 4u, 3u, 3u, 3u, 3u, 3u,
@@ -1721,7 +1721,7 @@ const u8 sag_u_stage2[] = {
     26u, 26u, 26u, 26u, 26u, 26u, 26u, 26u, 26u, 26u, 26u, 26u, 26u, 26u, 5u, 5u
 };
 
-const u16 sag_u_pal[] = {
+const u16 yew_u_pal[] = {
     0x0003, 0x0002, 0x0001, 0x0080, 0x0880, 0x0000, 0x0100, 0x0840,
     0x0503, 0x0940, 0x0534, 0x0434, 0x0407, 0x0403, 0x0008, 0x0020,
     0x0414, 0x0034, 0x0007, 0x0189, 0x040A, 0x040B, 0x0404, 0x0435,
@@ -1730,7 +1730,7 @@ const u16 sag_u_pal[] = {
     0x19B4
 };
 
-const struct SagURange sag_u_hi[] = {
+const struct YewURange yew_u_hi[] = {
     {0x030000u, 0x03FFFDu, 0x0180u},
     {0x0E0000u, 0x0E0000u, 0x0003u},
     {0x0E0001u, 0x0E0001u, 0x0403u},
@@ -1743,26 +1743,26 @@ const struct SagURange sag_u_hi[] = {
     {0x100000u, 0x10FFFDu, 0x0100u}
 };
 
-const u32 sag_u_hi_len = 10u;
+const u32 yew_u_hi_len = 10u;
 
-u16 sag_u_hi_lookup(u32 cp)
+u16 yew_u_hi_lookup(u32 cp)
 {
     size_t lo = 0;
-    size_t hi = sag_u_hi_len;
+    size_t hi = yew_u_hi_len;
     while (lo < hi) {
         size_t mid = lo + (hi - lo) / 2u;
-        if (cp < sag_u_hi[mid].lo)
+        if (cp < yew_u_hi[mid].lo)
             hi = mid;
-        else if (cp > sag_u_hi[mid].hi)
+        else if (cp > yew_u_hi[mid].hi)
             lo = mid + 1u;
         else
-            return sag_u_hi[mid].rec;
+            return yew_u_hi[mid].rec;
     }
     return 0;
 }
 
-_Static_assert(sizeof(sag_u_stage1) + sizeof(sag_u_stage2) +
-               sizeof(sag_u_pal) + sizeof(sag_u_hi) <= 64u * 1024u,
+_Static_assert(sizeof(yew_u_stage1) + sizeof(yew_u_stage2) +
+               sizeof(yew_u_pal) + sizeof(yew_u_hi) <= 64u * 1024u,
                "unicode tables exceed the 64 KiB budget (s02 DoD 2)");
 
 /* UCD 16.0.0; 27594 bytes; 190/1536 unique stage-2 blocks; 87% dedup.

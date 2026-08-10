@@ -6,8 +6,8 @@
 #include "text/edit.h"
 
 enum {
-    SAG_UNDO_FUZZ_MIN_ITERS = 10000,
-    SAG_UNDO_FUZZ_MAX_TEXT = 128
+    YEW_UNDO_FUZZ_MIN_ITERS = 10000,
+    YEW_UNDO_FUZZ_MAX_TEXT = 128
 };
 
 typedef struct {
@@ -147,20 +147,20 @@ static bool text_matches(const TextBuf *tb, const OracleNode *want)
     TextIter iter;
     size_t at = 0U;
 
-    if (sag_textbuf_len(tb) != want->len)
+    if (yew_textbuf_len(tb) != want->len)
         return false;
-    if (!sag_textiter_begin(&iter, tb, BYTEOFF(0U)))
+    if (!yew_textiter_begin(&iter, tb, BYTEOFF(0U)))
         return want->len == 0U;
     do {
         const u8 *bytes;
         u64 len;
 
-        if (!sag_textiter_chunk(&iter, tb, &bytes, &len) ||
+        if (!yew_textiter_chunk(&iter, tb, &bytes, &len) ||
             len > want->len - at ||
             memcmp(bytes, want->bytes + at, (size_t)len) != 0)
             return false;
         at += (size_t)len;
-    } while (sag_textiter_advance(&iter, tb));
+    } while (yew_textiter_advance(&iter, tb));
     return at == want->len;
 }
 
@@ -179,7 +179,7 @@ static void hash_state(Run *run, u32 id)
 
 static bool check_current(Run *run, size_t op)
 {
-    u32 id = sag_undo_current(run->undo);
+    u32 id = yew_undo_current(run->undo);
 
     if ((size_t)id >= run->oracle.cap || !run->oracle.data[id].present ||
         !text_matches(run->tb, &run->oracle.data[id])) {
@@ -188,14 +188,14 @@ static bool check_current(Run *run, size_t op)
                       (unsigned long long)run->rng, op, id);
         return false;
     }
-    sag_textbuf_check(run->tb);
+    yew_textbuf_check(run->tb);
     hash_state(run, id);
     return true;
 }
 
 static bool edit_once(Run *run)
 {
-    u32 parent = sag_undo_current(run->undo);
+    u32 parent = yew_undo_current(run->undo);
     const OracleNode *before = &run->oracle.data[parent];
     size_t at;
     size_t len;
@@ -204,13 +204,13 @@ static bool edit_once(Run *run)
     u32 id;
     size_t i;
     bool insert = before->len == 0U ||
-                  (before->len < SAG_UNDO_FUZZ_MAX_TEXT &&
+                  (before->len < YEW_UNDO_FUZZ_MAX_TEXT &&
                    choose(run, 2U) == 0U);
 
     if (insert) {
         len = 1U + choose(run, sizeof(inserted));
-        if (len > SAG_UNDO_FUZZ_MAX_TEXT - before->len)
-            len = SAG_UNDO_FUZZ_MAX_TEXT - before->len;
+        if (len > YEW_UNDO_FUZZ_MAX_TEXT - before->len)
+            len = YEW_UNDO_FUZZ_MAX_TEXT - before->len;
         at = choose(run, before->len + 1U);
         after = malloc(before->len + len);
         if (after == NULL)
@@ -221,9 +221,9 @@ static bool edit_once(Run *run)
         (void)memcpy(after + at, inserted, len);
         (void)memcpy(after + at + len, before->bytes + at,
                      before->len - at);
-        sag_undo_begin(&run->edit, SAG_TXN_PASTE);
-        sag_edit_insert(&run->edit, BYTEOFF(at), inserted, len);
-        sag_undo_end(&run->edit);
+        yew_undo_begin(&run->edit, YEW_TXN_PASTE);
+        yew_edit_insert(&run->edit, BYTEOFF(at), inserted, len);
+        yew_undo_end(&run->edit);
     } else {
         at = choose(run, before->len);
         len = 1U + choose(run, before->len - at);
@@ -233,11 +233,11 @@ static bool edit_once(Run *run)
         (void)memcpy(after, before->bytes, at);
         (void)memcpy(after + at, before->bytes + at + len,
                      before->len - at - len);
-        sag_undo_begin(&run->edit, SAG_TXN_CUT);
-        sag_edit_delete(&run->edit, (Span){at, at + len});
-        sag_undo_end(&run->edit);
+        yew_undo_begin(&run->edit, YEW_TXN_CUT);
+        yew_edit_delete(&run->edit, (Span){at, at + len});
+        yew_undo_end(&run->edit);
     }
-    id = sag_undo_current(run->undo);
+    id = yew_undo_current(run->undo);
     if (id == 0U || id == parent ||
         ((size_t)id < run->oracle.cap && run->oracle.data[id].present) ||
         (size_t)id > run->undo->nodes.len ||
@@ -255,12 +255,12 @@ static bool edit_once(Run *run)
 
 static bool undo_once(Run *run)
 {
-    u32 current = sag_undo_current(run->undo);
+    u32 current = yew_undo_current(run->undo);
     u32 expected = run->oracle.data[current].parent;
-    bool moved = sag_undo(&run->edit);
+    bool moved = yew_undo(&run->edit);
 
     if ((expected != 0U) != moved ||
-        (moved && sag_undo_current(run->undo) != expected))
+        (moved && yew_undo_current(run->undo) != expected))
         return false;
     if (moved) {
         run->oracle.data[expected].redo_child = current;
@@ -271,12 +271,12 @@ static bool undo_once(Run *run)
 
 static bool redo_once(Run *run)
 {
-    u32 current = sag_undo_current(run->undo);
+    u32 current = yew_undo_current(run->undo);
     u32 expected = run->oracle.data[current].redo_child;
-    bool moved = sag_redo(&run->edit);
+    bool moved = yew_redo(&run->edit);
 
     if ((expected != 0U) != moved ||
-        (moved && sag_undo_current(run->undo) != expected))
+        (moved && yew_undo_current(run->undo) != expected))
         return false;
     if (moved)
         run->redos++;
@@ -285,7 +285,7 @@ static bool redo_once(Run *run)
 
 static bool branch_once(Run *run)
 {
-    u32 current = sag_undo_current(run->undo);
+    u32 current = yew_undo_current(run->undo);
     u32 redo = run->oracle.data[current].redo_child;
     size_t child_count = 0U;
     size_t index = 0U;
@@ -293,7 +293,7 @@ static bool branch_once(Run *run)
     u32 expected = 0U;
     u32 id;
     i32 delta = choose(run, 2U) == 0U ? -1 : 1;
-    u32 selected = sag_undo_branch_cycle(run->undo, delta);
+    u32 selected = yew_undo_branch_cycle(run->undo, delta);
 
     for (id = 1U; (size_t)id < run->oracle.cap; id++) {
         const OracleNode *node = &run->oracle.data[id];
@@ -333,7 +333,7 @@ static bool branch_once(Run *run)
 static bool jump_once(Run *run)
 {
     u32 max = run->undo->nodes.len;
-    u32 from = sag_undo_current(run->undo);
+    u32 from = yew_undo_current(run->undo);
     u32 target;
 
     if (max == 0U)
@@ -342,27 +342,27 @@ static bool jump_once(Run *run)
         target = 1U + (u32)choose(run, max);
     } while ((size_t)target >= run->oracle.cap ||
              !run->oracle.data[target].present);
-    if (!sag_undo_to(&run->edit, target) ||
-        sag_undo_current(run->undo) != target)
+    if (!yew_undo_to(&run->edit, target) ||
+        yew_undo_current(run->undo) != target)
         return false;
     return oracle_note_jump(&run->oracle, from, target);
 }
 
 static bool initialize(Run *run, u64 seed)
 {
-    run->tb = sag_textbuf_new();
+    run->tb = yew_textbuf_new();
     if (run->tb == NULL)
         return false;
-    run->undo = sag_undo_new(run->tb);
+    run->undo = yew_undo_new(run->tb);
     if (run->undo == NULL)
         return false;
     run->edit.tb = run->tb;
     run->edit.undo = run->undo;
     run->rng = seed == 0U ? UINT64_C(0x9e3779b97f4a7c15) : seed;
     run->hash = UINT64_C(1469598103934665603);
-    sag_undo_set_limits(run->undo, UINT64_MAX, 0U,
-                        SAG_UNDO_PERSIST_BYTES_MAX);
-    return oracle_store(&run->oracle, sag_undo_current(run->undo), 0U,
+    yew_undo_set_limits(run->undo, UINT64_MAX, 0U,
+                        YEW_UNDO_PERSIST_BYTES_MAX);
+    return oracle_store(&run->oracle, yew_undo_current(run->undo), 0U,
                         NULL, 0U);
 }
 
@@ -374,15 +374,15 @@ static void dispose(Run *run)
         free(run->oracle.data[i].bytes);
     free(run->oracle.data);
     if (run->undo != NULL)
-        sag_undo_free(run->undo);
+        yew_undo_free(run->undo);
     if (run->tb != NULL)
-        sag_textbuf_free(run->tb);
+        yew_textbuf_free(run->tb);
 }
 
 int main(int argc, char **argv)
 {
     u64 seed = 1U;
-    size_t iterations = SAG_UNDO_FUZZ_MIN_ITERS;
+    size_t iterations = YEW_UNDO_FUZZ_MIN_ITERS;
     Run run;
     size_t op;
     size_t i;
@@ -396,8 +396,8 @@ int main(int argc, char **argv)
                       argv[0]);
         return 2;
     }
-    if (iterations < SAG_UNDO_FUZZ_MIN_ITERS)
-        iterations = SAG_UNDO_FUZZ_MIN_ITERS;
+    if (iterations < YEW_UNDO_FUZZ_MIN_ITERS)
+        iterations = YEW_UNDO_FUZZ_MIN_ITERS;
     (void)memset(&run, 0, sizeof(run));
     if (!initialize(&run, seed)) {
         dispose(&run);

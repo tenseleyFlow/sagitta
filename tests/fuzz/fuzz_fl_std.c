@@ -97,7 +97,7 @@ static bool call_native(FlVm *vm, FlNative *nat, const FlValue *args,
         return true;
     {
         char kind[64];
-        const char *nm = sag_intern_str(vm->in, nat->name_id);
+        const char *nm = yew_intern_str(vm->in, nat->name_id);
 
         err_kind(vm, kind, sizeof(kind));
         if (kind[0] == '\0') {
@@ -366,6 +366,6 @@ static bool check_fl_std(const u8 *data, size_t len, char *why,
 
 int main(int argc, char **argv)
 {
-    return sag_fuzz_main(argc, argv, "fuzz_fl_std",
+    return yew_fuzz_main(argc, argv, "fuzz_fl_std",
                          "tests/fuzz/corpus/fl_std", check_fl_std);
 }

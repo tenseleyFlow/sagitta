@@ -38,7 +38,7 @@ static void want_line(const char *got, const char *needle)
 {
     if (!has(got, needle))
         (void)fprintf(stderr, "trace missing |%s| in:\n%s\n", needle, got);
-    SAG_ASSERT(has(got, needle));
+    YEW_ASSERT(has(got, needle));
 }
 
 void test_fl_trace_names_every_frame_kind(void)
@@ -158,7 +158,7 @@ void test_fl_trace_elides_the_middle_of_a_deep_stack(void)
         ats++;
     if (ats != 32U)
         (void)fprintf(stderr, "printed %u frames:\n%s\n", (unsigned)ats, got);
-    SAG_ASSERT_EQ_U64((u64)ats, 32U);
+    YEW_ASSERT_EQ_U64((u64)ats, 32U);
     flfix_close(&f);
 }
 
@@ -184,7 +184,7 @@ void test_fl_trace_carets_the_innermost_frame(void)
 
         for (p = got; (p = strchr(p, '^')) != NULL; p++)
             carets++;
-        SAG_ASSERT_EQ_U64((u64)carets, 1U);
+        YEW_ASSERT_EQ_U64((u64)carets, 1U);
     }
     flfix_close(&f);
 }
@@ -215,7 +215,7 @@ void test_fl_trace_omits_the_caret_without_source(void)
     f.vm.err_caret = NULL;
     bytebuf_init(&bb);
     fl_trace_render(&f.vm, err, &bb);
-    SAG_ASSERT(bb.len == 0U || strchr((const char *)bb.data, '^') == NULL);
+    YEW_ASSERT(bb.len == 0U || strchr((const char *)bb.data, '^') == NULL);
     bytebuf_free(&bb);
     flfix_close(&f);
 }

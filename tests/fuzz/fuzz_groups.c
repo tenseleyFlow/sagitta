@@ -121,7 +121,7 @@ static bool oracle_agrees(const Ed *ed, const Oracle *o, char *why,
     }
     for (i = 0; i < o->n_groups; i++) {
         int members[FZ_MAX_TABS];
-        int n = sag_group_members(ed, o->gid[i], members, FZ_MAX_TABS);
+        int n = yew_group_members(ed, o->gid[i], members, FZ_MAX_TABS);
 
         /* DoD 10: no live group is ever empty. */
         if (n == 0) {
@@ -134,12 +134,12 @@ static bool oracle_agrees(const Ed *ed, const Oracle *o, char *why,
                            (unsigned)o->gid[i], n, o->n_members[i]);
             return false;
         }
-        if (sag_group_member_count(ed, o->gid[i]) != n) {
+        if (yew_group_member_count(ed, o->gid[i]) != n) {
             (void)snprintf(why, cap, "count disagrees with members()");
             return false;
         }
         for (j = 0; j < n; j++) {
-            const Tab *t = sag_tab_at((Ed *)ed, members[j]);
+            const Tab *t = yew_tab_at((Ed *)ed, members[j]);
 
             if (t == NULL || t->tab_id != o->members[i][j]) {
                 (void)snprintf(why, cap, "group %u member %d mismatch",
@@ -156,8 +156,8 @@ static bool oracle_agrees(const Ed *ed, const Oracle *o, char *why,
         }
     }
     /* No tab points at a group that does not exist. */
-    for (i = 0; i < (int)sag_tab_count(ed); i++) {
-        const Tab *t = sag_tab_at((Ed *)ed, i);
+    for (i = 0; i < (int)yew_tab_count(ed); i++) {
+        const Tab *t = yew_tab_at((Ed *)ed, i);
 
         if (t->group_id == 0U) {
             if (t->group_ordinal != 0U) {
@@ -167,7 +167,7 @@ static bool oracle_agrees(const Ed *ed, const Oracle *o, char *why,
             }
             continue;
         }
-        if (sag_group_find(ed, t->group_id) < 0) {
+        if (yew_group_find(ed, t->group_id) < 0) {
             (void)snprintf(why, cap, "tab %d orphaned on group %u", i,
                            (unsigned)t->group_id);
             return false;
@@ -182,16 +182,16 @@ static bool run_membership(Rng *rng, Ed *ed, Oracle *o, char *why,
     u32 step;
 
     for (step = 0U; step < iters; step++) {
-        int ntabs = (int)sag_tab_count(ed);
+        int ntabs = (int)yew_tab_count(ed);
         int idx = ntabs > 0 ? (int)rng_below(rng, (u32)ntabs) : 0;
 
         switch (rng_below(rng, 6U)) {
         case 0: /* create a group with one member */
             if (o->n_groups < FZ_MAX_GROUPS && ntabs > 0) {
-                u32 g = sag_group_create(ed, "/src", NULL);
-                u32 tid = sag_tab_at(ed, idx)->tab_id;
+                u32 g = yew_group_create(ed, "/src", NULL);
+                u32 tid = yew_tab_at(ed, idx)->tab_id;
 
-                sag_group_add_member(ed, g, idx);
+                yew_group_add_member(ed, g, idx);
                 oracle_remove(o, tid);
                 o->gid[o->n_groups] = g;
                 o->members[o->n_groups][0] = tid;
@@ -203,10 +203,10 @@ static bool run_membership(Rng *rng, Ed *ed, Oracle *o, char *why,
             if (o->n_groups > 0 && ntabs > 0) {
                 int gi = (int)rng_below(rng, (u32)o->n_groups);
                 u32 gid = o->gid[gi];
-                u32 tid = sag_tab_at(ed, idx)->tab_id;
+                u32 tid = yew_tab_at(ed, idx)->tab_id;
 
-                if (sag_tab_at(ed, idx)->group_id != gid) {
-                    sag_group_add_member(ed, gid, idx);
+                if (yew_tab_at(ed, idx)->group_id != gid) {
+                    yew_group_add_member(ed, gid, idx);
                     oracle_remove(o, tid);
                     gi = oracle_find(o, gid);
                     if (gi >= 0)
@@ -216,17 +216,17 @@ static bool run_membership(Rng *rng, Ed *ed, Oracle *o, char *why,
             break;
         case 2: /* leave */
             if (ntabs > 0) {
-                u32 tid = sag_tab_at(ed, idx)->tab_id;
+                u32 tid = yew_tab_at(ed, idx)->tab_id;
 
-                sag_group_remove_member(ed, idx);
+                yew_group_remove_member(ed, idx);
                 oracle_remove(o, tid);
             }
             break;
         case 3: /* close a tab */
             if (ntabs > 1) {
-                u32 tid = sag_tab_at(ed, idx)->tab_id;
+                u32 tid = yew_tab_at(ed, idx)->tab_id;
 
-                (void)sag_tab_close(ed, idx);
+                (void)yew_tab_close(ed, idx);
                 oracle_remove(o, tid);
             }
             break;
@@ -234,24 +234,24 @@ static bool run_membership(Rng *rng, Ed *ed, Oracle *o, char *why,
             if (ntabs < FZ_MAX_TABS - 1) {
                 char path[64];
 
-                (void)snprintf(path, sizeof(path), "/tmp/sag-fz-%u.txt",
+                (void)snprintf(path, sizeof(path), "/tmp/yew-fz-%u.txt",
                                (unsigned)step);
-                (void)sag_tab_open(ed, path);
+                (void)yew_tab_open(ed, path);
             }
             break;
         default: /* reorder within the group */
-            if (ntabs > 0 && sag_tab_at(ed, idx)->group_id != 0U) {
-                u32 gid = sag_tab_at(ed, idx)->group_id;
+            if (ntabs > 0 && yew_tab_at(ed, idx)->group_id != 0U) {
+                u32 gid = yew_tab_at(ed, idx)->group_id;
                 int gi = oracle_find(o, gid);
                 int n = gi >= 0 ? o->n_members[gi] : 0;
 
                 if (n > 0) {
                     int pos = (int)rng_below(rng, (u32)n) + 1;
-                    u32 tid = sag_tab_at(ed, idx)->tab_id;
+                    u32 tid = yew_tab_at(ed, idx)->tab_id;
                     int at = 0;
                     int k;
 
-                    sag_group_set_ordinal(ed, idx, pos);
+                    yew_group_set_ordinal(ed, idx, pos);
                     for (k = 0; k < n; k++) {
                         if (o->members[gi][k] == tid)
                             at = k;
@@ -269,7 +269,7 @@ static bool run_membership(Rng *rng, Ed *ed, Oracle *o, char *why,
             return false;
         /* The walk must survive any shape the storm produces: it is the
          * only way out of a group, so a crash here strands the user. */
-        sag_file_step(ed, rng_below(rng, 2U) == 0U ? 1 : -1);
+        yew_file_step(ed, rng_below(rng, 2U) == 0U ? 1 : -1);
         if (!oracle_agrees(ed, o, why, cap))
             return false;
     }
@@ -290,7 +290,7 @@ static bool tree_make(FzTree *t)
 {
     int i;
 
-    (void)snprintf(t->root, sizeof(t->root), "/tmp/sag-fzgp-XXXXXX");
+    (void)snprintf(t->root, sizeof(t->root), "/tmp/yew-fzgp-XXXXXX");
     if (mkdtemp(t->root) == NULL)
         return false;
     (void)snprintf(t->sub, sizeof(t->sub), "%s/sub", t->root);
@@ -325,38 +325,38 @@ static bool run_picker(Rng *rng, Ed *ed, const FzTree *t, char *why,
                        size_t cap, u32 iters)
 {
     static const u32 codes[] = {
-        SAG_KEY_UP,  SAG_KEY_DOWN,  SAG_KEY_LEFT, SAG_KEY_RIGHT,
-        SAG_KEY_TAB, SAG_KEY_ENTER, (u32)' ',     (u32)'q',
-        (u32)'/',    SAG_KEY_BACKSPACE, SAG_KEY_ESCAPE
+        YEW_KEY_UP,  YEW_KEY_DOWN,  YEW_KEY_LEFT, YEW_KEY_RIGHT,
+        YEW_KEY_TAB, YEW_KEY_ENTER, (u32)' ',     (u32)'q',
+        (u32)'/',    YEW_KEY_BACKSPACE, YEW_KEY_ESCAPE
     };
     u32 step;
 
-    if (!sag_gp_show(ed, t->root)) {
+    if (!yew_gp_show(ed, t->root)) {
         (void)snprintf(why, cap, "picker refused to open");
         return false;
     }
     for (step = 0U; step < iters; step++) {
         Key k;
 
-        if (!sag_gp_active()) {
+        if (!yew_gp_active()) {
             /* Enter confirmed it or Esc cancelled it; apply and reopen
              * rather than hammering a closed dialog. */
-            sag_gp_apply(ed);
-            if (!sag_gp_show(ed, t->root)) {
+            yew_gp_apply(ed);
+            if (!yew_gp_show(ed, t->root)) {
                 (void)snprintf(why, cap, "picker refused to reopen");
                 return false;
             }
         }
         (void)memset(&k, 0, sizeof(k));
-        k.kind = SAG_EV_KEY;
-        k.ev = SAG_KEY_PRESS;
+        k.kind = YEW_EV_KEY;
+        k.ev = YEW_KEY_PRESS;
         k.code = codes[rng_below(rng, (u32)(sizeof(codes) /
                                             sizeof(codes[0])))];
         if (k.code >= 0x20U && k.code < 0x7FU) {
             k.ntext = 1U;
             k.text[0] = (u8)k.code;
         }
-        (void)sag_gp_key(ed, k);
+        (void)yew_gp_key(ed, k);
         /*
          * Every confirmed path must be one the dialog could actually
          * have OFFERED: absolute, canonical, and a regular file that
@@ -369,11 +369,11 @@ static bool run_picker(Rng *rng, Ed *ed, const FzTree *t, char *why,
          * INVENTED path: a truncated join, a directory ticked as a
          * file, or a stale entry surviving a re-list.
          */
-        if (sag_gp_result() == SAG_GP_CONFIRMED) {
+        if (yew_gp_result() == YEW_GP_CONFIRMED) {
             int i;
 
-            for (i = 0; i < sag_gp_count(); i++) {
-                const char *p = sag_gp_path(i);
+            for (i = 0; i < yew_gp_count(); i++) {
+                const char *p = yew_gp_path(i);
                 struct stat st;
                 char *canon;
                 bool same;
@@ -400,9 +400,9 @@ static bool run_picker(Rng *rng, Ed *ed, const FzTree *t, char *why,
                 }
             }
         }
-        sag_gp_apply(ed);
+        yew_gp_apply(ed);
     }
-    sag_gp_close(ed);
+    yew_gp_close(ed);
     return true;
 }
 
@@ -427,19 +427,19 @@ static bool run_session(const u8 *data, size_t len, char *why,
         (void)snprintf(why, why_cap, "cannot build the fixture tree");
         return false;
     }
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    sag_ed_init(&ed);
-    if (!sag_ed_open_scratch(&ed)) {
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    yew_ed_init(&ed);
+    if (!yew_ed_open_scratch(&ed)) {
         (void)snprintf(why, why_cap, "cannot open a scratch buffer");
         goto done;
     }
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
     for (i = 0; i < 6; i++) {
         char path[64];
 
-        (void)snprintf(path, sizeof(path), "/tmp/sag-fzseed-%d.txt", i);
-        (void)sag_tab_open(&ed, path);
+        (void)snprintf(path, sizeof(path), "/tmp/yew-fzseed-%d.txt", i);
+        (void)yew_tab_open(&ed, path);
     }
     if (!run_membership(&rng, &ed, &o, why, why_cap, iters))
         goto done;
@@ -447,13 +447,13 @@ static bool run_session(const u8 *data, size_t len, char *why,
         goto done;
     ok = true;
 done:
-    sag_gp_close(&ed);
-    sag_ed_free(&ed);
+    yew_gp_close(&ed);
+    yew_ed_free(&ed);
     tree_remove(&t);
     return ok;
 }
 
 int main(int argc, char **argv)
 {
-    return sag_fuzz_main(argc, argv, "fuzz_groups", NULL, run_session);
+    return yew_fuzz_main(argc, argv, "fuzz_groups", NULL, run_session);
 }

@@ -25,8 +25,8 @@
 #include "util/log.h"
 
 enum {
-    SAG_CMDLINE_TABWIDTH = 4,
-    SAG_CMDLINE_MENU_ROWS = 5,
+    YEW_CMDLINE_TABWIDTH = 4,
+    YEW_CMDLINE_MENU_ROWS = 5,
     /*
      * Budget for a refilter that runs inside a keystroke.  Tab passes 0
      * (unlimited) because the user asked a question and is waiting for
@@ -41,7 +41,7 @@ enum {
      * the frame is late.  Whatever the slice does not finish, the idle
      * tick picks up.
      */
-    SAG_CMDLINE_LIVE_BUDGET_US = 1500
+    YEW_CMDLINE_LIVE_BUDGET_US = 1500
 };
 
 static bool parse_option_value(const OptDesc *desc, const char *text,
@@ -50,23 +50,23 @@ static bool parse_option_value(const OptDesc *desc, const char *text,
     char *end = NULL;
     long long integer;
 
-    if (desc->type == (u8)SAG_OPT_BOOL) {
+    if (desc->type == (u8)YEW_OPT_BOOL) {
         if (strcmp(text, "true") == 0) {
-            *out = (OptVal){SAG_OPT_BOOL, {.b = true}};
+            *out = (OptVal){YEW_OPT_BOOL, {.b = true}};
             return true;
         }
         if (strcmp(text, "false") == 0) {
-            *out = (OptVal){SAG_OPT_BOOL, {.b = false}};
+            *out = (OptVal){YEW_OPT_BOOL, {.b = false}};
             return true;
         }
         return false;
     }
-    if (desc->type == (u8)SAG_OPT_INT) {
+    if (desc->type == (u8)YEW_OPT_INT) {
         errno = 0;
         integer = strtoll(text, &end, 10);
         if (errno != 0 || end == text || *end != '\0')
             return false;
-        *out = (OptVal){SAG_OPT_INT, {.i = (i64)integer}};
+        *out = (OptVal){YEW_OPT_INT, {.i = (i64)integer}};
         return true;
     }
     *out = (OptVal){desc->type,
@@ -74,25 +74,25 @@ static bool parse_option_value(const OptDesc *desc, const char *text,
     return true;
 }
 
-CmdStatus sag_opt_cmdline_set(CmdCtx *cx)
+CmdStatus yew_opt_cmdline_set(CmdCtx *cx)
 {
     const OptDesc *desc;
     const char *err = NULL;
     OptVal value;
 
     if (cx == NULL || cx->ed == NULL || cx->argv.n != 3U)
-        return SAG_CMD_ERR_ARG;
-    desc = sag_opt_desc(cx->argv.v[1], (u32)strlen(cx->argv.v[1]));
+        return YEW_CMD_ERR_ARG;
+    desc = yew_opt_desc(cx->argv.v[1], (u32)strlen(cx->argv.v[1]));
     if (desc == NULL || !parse_option_value(desc, cx->argv.v[2], &value))
-        return SAG_CMD_ERR_ARG;
-    if (!sag_opt_set(cx->ed, SAG_OPT_SCOPE_DECLARED,
+        return YEW_CMD_ERR_ARG;
+    if (!yew_opt_set(cx->ed, YEW_OPT_SCOPE_DECLARED,
                      cx->argv.v[1], (u32)strlen(cx->argv.v[1]),
                      &value, &err)) {
         if (err != NULL)
-            sag_log(SAG_LOG_ERROR, ":set: %s", err);
-        return SAG_CMD_ERR_ARG;
+            yew_log(YEW_LOG_ERROR, ":set: %s", err);
+        return YEW_CMD_ERR_ARG;
     }
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
 typedef struct CmdLineTarget {
@@ -111,29 +111,29 @@ static CmdLineTarget *cmdline_target(const CmdLine *line)
 static char *text_string(const TextBuf *tb)
 {
     TextIter it;
-    u64 total = sag_textbuf_len(tb);
+    u64 total = yew_textbuf_len(tb);
     u64 copied = 0U;
     char *text;
 
     if (total > (u64)SIZE_MAX - 1U)
-        SAG_BUG("command line exceeds address space");
-    text = sag_xmalloc((size_t)total + 1U);
+        YEW_BUG("command line exceeds address space");
+    text = yew_xmalloc((size_t)total + 1U);
     if (total != 0U) {
-        if (!sag_textiter_begin(&it, tb, BYTEOFF(0U)))
-            SAG_BUG("cannot iterate command line");
+        if (!yew_textiter_begin(&it, tb, BYTEOFF(0U)))
+            YEW_BUG("cannot iterate command line");
         while (copied < total) {
             const u8 *bytes;
             u64 available;
             u64 take;
 
-            if (!sag_textiter_chunk(&it, tb, &bytes, &available) ||
+            if (!yew_textiter_chunk(&it, tb, &bytes, &available) ||
                 available == 0U)
-                SAG_BUG("command line iterator ended early");
+                YEW_BUG("command line iterator ended early");
             take = available < total - copied ? available : total - copied;
             (void)memcpy(text + (size_t)copied, bytes, (size_t)take);
             copied += take;
-            if (copied < total && !sag_textiter_advance(&it, tb))
-                SAG_BUG("command line iterator advance failed");
+            if (copied < total && !yew_textiter_advance(&it, tb))
+                YEW_BUG("command line iterator advance failed");
         }
     }
     text[(size_t)total] = '\0';
@@ -162,12 +162,12 @@ static void cmdline_target_free(CmdLineTarget *target)
 {
     if (target == NULL)
         return;
-    sag_vp_free(&target->win);
-    sag_cset_free(&target->win.cs);
-    sag_marks_free(target->buffer.marks);
-    sag_undo_free(target->buffer.undo);
-    sag_textbuf_free(target->buffer.tb);
-    sag_filemeta_dispose(&target->buffer.meta);
+    yew_vp_free(&target->win);
+    yew_cset_free(&target->win.cs);
+    yew_marks_free(target->buffer.marks);
+    yew_undo_free(target->buffer.undo);
+    yew_textbuf_free(target->buffer.tb);
+    yew_filemeta_dispose(&target->buffer.meta);
     free(target);
 }
 
@@ -176,14 +176,14 @@ static void menu_discard(Ed *ed)
     CmdLine *line = &ed->cmdline;
     bool was_open = line->menu.items.len != 0U || line->menu.sel >= 0;
 
-    sag_menu_dismiss(&line->menu);
+    yew_menu_dismiss(&line->menu);
     /* The cached candidate set's strings live in this arena, so the
      * cache dies with it -- a surviving `valid` flag over freed strings
      * is a use-after-free waiting for the next keystroke. */
-    sag_comp_filter_invalidate(&line->filter);
+    yew_comp_filter_invalidate(&line->filter);
     /* The directory listing outlives individual keystrokes but not the
      * menu: a prompt opened later must see the directory as it is now. */
-    sag_comp_listing_invalidate();
+    yew_comp_listing_invalidate();
     arena_free_all(&line->comp_arena);
     free(line->menu_stem);
     line->menu_stem = NULL;
@@ -199,14 +199,14 @@ static void clear_error(Ed *ed)
         ed->cmdline.err = (CmdErr){0};
         ed->full_damage = true;
     }
-    if (ed->msg.active && ed->msg.sev == SAG_MSG_ERROR)
-        sag_msg_clear(ed);
+    if (ed->msg.active && ed->msg.sev == YEW_MSG_ERROR)
+        yew_msg_clear(ed);
 }
 
 static void set_error(Ed *ed, const CmdErr *error)
 {
     CmdLine *line = &ed->cmdline;
-    u64 len = sag_textbuf_len(line->buf);
+    u64 len = yew_textbuf_len(line->buf);
     u64 at;
 
     /*
@@ -218,7 +218,7 @@ static void set_error(Ed *ed, const CmdErr *error)
      * as typed, so a stale candidate list underneath it is noise: it
      * goes, and the next edit brings the list back.
      */
-    sag_menu_dismiss(&line->menu);
+    yew_menu_dismiss(&line->menu);
     line->err = *error;
     if (len != 0U) {
         if (line->err.tok_lo >= len)
@@ -231,9 +231,9 @@ static void set_error(Ed *ed, const CmdErr *error)
     at = len == 0U ? 0U : line->err.tok_lo;
     line->cur.pos = BYTEOFF(at);
     line->cur.anchor = line->cur.pos;
-    sag_cursor_clamp(line->buf, &line->cur);
+    yew_cursor_clamp(line->buf, &line->cur);
     sync_to_target(line);
-    sag_msg(ed, SAG_MSG_ERROR, "E: %s", line->err.msg);
+    yew_msg(ed, YEW_MSG_ERROR, "E: %s", line->err.msg);
     ed->full_damage = true;
     ed->footer_dirty = true;
 }
@@ -258,17 +258,17 @@ static void sanitize_bytes(const u8 *bytes, size_t len, Bytebuf *out)
 static CmdStatus invoke_prompt_text(Ed *ed, const u8 *bytes, size_t len)
 {
     CmdCtx cx = {0};
-    CmdId id = sag_cmd_lookup("ed.edit.insert.text", 19U);
+    CmdId id = yew_cmd_lookup("ed.edit.insert.text", 19U);
     CmdStatus status;
 
     if (len > UINT32_MAX)
         len = UINT32_MAX;
-    cx.win = sag_cmdline_target(ed);
+    cx.win = yew_cmdline_target(ed);
     cx.count = 1U;
     cx.sarg = (const char *)bytes;
     cx.sarg_len = (u32)len;
-    cx.source = SAG_SRC_KEY;
-    status = sag_ed_invoke(ed, id, &cx);
+    cx.source = YEW_SRC_KEY;
+    status = yew_ed_invoke(ed, id, &cx);
     sync_from_target(&ed->cmdline);
     return status;
 }
@@ -279,9 +279,9 @@ static CmdStatus insert_sanitized(Ed *ed, const u8 *bytes, size_t len)
     CmdStatus status;
 
     if (len != 0U && memchr(bytes, '\0', len) != NULL) {
-        sag_msg(ed, SAG_MSG_ERROR,
+        yew_msg(ed, YEW_MSG_ERROR,
                 "NUL byte is not valid in a command line");
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     }
     bytebuf_init(&clean);
     sanitize_bytes(bytes, len, &clean);
@@ -299,20 +299,20 @@ static bool replace_span(Ed *ed, Span span, const u8 *bytes, size_t len,
     bool ok = true;
 
     if (target == NULL || span.lo > span.hi ||
-        span.hi > sag_textbuf_len(line->buf))
+        span.hi > yew_textbuf_len(line->buf))
         return false;
     sync_to_target(line);
-    ec = sag_ed_edit_ctx_for(ed, &target->win);
-    sag_undo_begin(&ec, SAG_TXN_TYPE);
+    ec = yew_ed_edit_ctx_for(ed, &target->win);
+    yew_undo_begin(&ec, YEW_TXN_TYPE);
     if (span.lo != span.hi)
-        ok = sag_edit_delete(&ec, span);
+        ok = yew_edit_delete(&ec, span);
     if (ok && len != 0U)
-        ok = sag_edit_insert(&ec, BYTEOFF(span.lo), bytes, (u64)len);
+        ok = yew_edit_insert(&ec, BYTEOFF(span.lo), bytes, (u64)len);
     if (ok)
-        sag_undo_end(&ec);
+        yew_undo_end(&ec);
     else
-        sag_undo_abort(&ec);
-    sag_ed_finish_edit(ed, &ec);
+        yew_undo_abort(&ec);
+    yew_ed_finish_edit(ed, &ec);
     if (!ok)
         return false;
     line->cur.pos = BYTEOFF(span.lo + len);
@@ -322,7 +322,7 @@ static bool replace_span(Ed *ed, Span span, const u8 *bytes, size_t len,
     if (reset_history) {
         char *draft = text_string(line->buf);
 
-        sag_hist_cur_reset(&line->hist, draft);
+        yew_hist_cur_reset(&line->hist, draft);
         free(draft);
     }
     clear_error(ed);
@@ -332,30 +332,30 @@ static bool replace_span(Ed *ed, Span span, const u8 *bytes, size_t len,
 
 static bool replace_all(Ed *ed, const char *text, bool reset_history)
 {
-    return replace_span(ed, (Span){0U, sag_textbuf_len(ed->cmdline.buf)},
+    return replace_span(ed, (Span){0U, yew_textbuf_len(ed->cmdline.buf)},
                         (const u8 *)text, strlen(text), reset_history);
 }
 
 static void set_cmd_register(Ed *ed, const char *text)
 {
-    sag_reg_set_cmdline(&ed->regs, (const u8 *)text, strlen(text));
+    yew_reg_set_cmdline(&ed->regs, (const u8 *)text, strlen(text));
 }
 
-static const char *history_kind(SagPromptKind kind)
+static const char *history_kind(YewPromptKind kind)
 {
     switch (kind) {
-    case SAG_PROMPT_CMD:
+    case YEW_PROMPT_CMD:
         return "cmd";
-    case SAG_PROMPT_SEARCH_F:
-    case SAG_PROMPT_SEARCH_B:
+    case YEW_PROMPT_SEARCH_F:
+    case YEW_PROMPT_SEARCH_B:
         return "search";
-    case SAG_PROMPT_INPUT:
+    case YEW_PROMPT_INPUT:
         return "input";
     }
     return "cmd";
 }
 
-void sag_cmdline_open(Ed *ed, SagPromptKind kind, const char *seed)
+void yew_cmdline_open(Ed *ed, YewPromptKind kind, const char *seed)
 {
     CmdLine *line;
     CmdLineTarget *target;
@@ -366,22 +366,22 @@ void sag_cmdline_open(Ed *ed, SagPromptKind kind, const char *seed)
     if (ed == NULL)
         return;
     if (ed->cmdline.active)
-        sag_cmdline_close(ed, false);
+        yew_cmdline_close(ed, false);
     old = ed->mode;
     line = &ed->cmdline;
-    target = sag_xcalloc(1U, sizeof(*target));
+    target = yew_xcalloc(1U, sizeof(*target));
     bytebuf_init(&clean);
     if (seed != NULL)
         sanitize_bytes((const u8 *)seed, strlen(seed), &clean);
-    sag_filemeta_init(&target->buffer.meta);
-    target->buffer.tb = sag_textbuf_from_bytes(clean.data, clean.len);
-    target->buffer.tabwidth = SAG_CMDLINE_TABWIDTH;
-    target->buffer.undo = sag_undo_new(target->buffer.tb);
-    target->buffer.marks = sag_marks_new();
+    yew_filemeta_init(&target->buffer.meta);
+    target->buffer.tb = yew_textbuf_from_bytes(clean.data, clean.len);
+    target->buffer.tabwidth = YEW_CMDLINE_TABWIDTH;
+    target->buffer.undo = yew_undo_new(target->buffer.tb);
+    target->buffer.marks = yew_marks_new();
     cursor = (Cursor){BYTEOFF(clean.len), {0U}, BYTEOFF(clean.len)};
-    sag_cset_init(&target->win.cs, cursor);
+    yew_cset_init(&target->win.cs, cursor);
     target->win.buf = &target->buffer;
-    sag_vp_init(&target->win);
+    yew_vp_init(&target->win);
     bytebuf_free(&clean);
 
     line->kind = kind;
@@ -397,16 +397,16 @@ void sag_cmdline_open(Ed *ed, SagPromptKind kind, const char *seed)
      * state where the user asked for none.
      */
     if (ed->clean) {
-        line->history = sag_hist_open_memory();
+        line->history = yew_hist_open_memory();
     } else if (ed->state.ready) {
         const char *scope =
-            sag_state_option_str(ed, "history.scope", "workspace");
+            yew_state_option_str(ed, "history.scope", "workspace");
 
-        line->history = sag_hist_open_scoped(history_kind(kind),
+        line->history = yew_hist_open_scoped(history_kind(kind),
                                              ed->state.key.dir,
                                              strcmp(scope, "global") != 0);
     } else {
-        line->history = sag_hist_open(history_kind(kind));
+        line->history = yew_hist_open(history_kind(kind));
     }
     {
         /* Inline, five rows, wrapping, detail at column 31 -- the
@@ -414,31 +414,31 @@ void sag_cmdline_open(Ed *ed, SagPromptKind kind, const char *seed)
          * so Sprint 26's picker can pick a different one. */
         MenuSpec spec = {NULL, 5U, true, true, 31U};
 
-        sag_menu_init(&line->menu, &spec);
+        yew_menu_init(&line->menu, &spec);
     }
-    sag_comp_filter_init(&line->filter);
+    yew_comp_filter_init(&line->filter);
     /* -1, not 0: a zeroed field would make the very first click on row 0
      * read as the SECOND click and accept it outright. */
     line->click_row = -1;
     {
         char *draft = text_string(line->buf);
 
-        sag_hist_cur_reset(&line->hist, draft);
+        yew_hist_cur_reset(&line->hist, draft);
         free(draft);
     }
     line->err = (CmdErr){0};
     line->scroll = 0U;
-    sag_msg_clear(ed);
-    if (old != SAG_MODE_E) {
-        sag_fl_hook_mode(ed, FL_EV_MODE_LEAVE, sag_modes[old].name);
-        sag_dispatch_set_mode(ed, SAG_MODE_E);
-        sag_fl_hook_mode(ed, FL_EV_MODE_ENTER, sag_modes[SAG_MODE_E].name);
+    yew_msg_clear(ed);
+    if (old != YEW_MODE_E) {
+        yew_fl_hook_mode(ed, FL_EV_MODE_LEAVE, yew_modes[old].name);
+        yew_dispatch_set_mode(ed, YEW_MODE_E);
+        yew_fl_hook_mode(ed, FL_EV_MODE_ENTER, yew_modes[YEW_MODE_E].name);
     }
     ed->full_damage = true;
     ed->footer_dirty = true;
 }
 
-void sag_cmdline_close(Ed *ed, bool accepted)
+void yew_cmdline_close(Ed *ed, bool accepted)
 {
     CmdLine *line;
     Mode restore;
@@ -450,29 +450,29 @@ void sag_cmdline_close(Ed *ed, bool accepted)
     /* A successful command may have produced the message the user needs to
      * see.  Opening the prompt already cleared older messages, so an active
      * message here belongs to the command that was just accepted. */
-    keep_message = accepted && line->kind == SAG_PROMPT_CMD &&
+    keep_message = accepted && line->kind == YEW_PROMPT_CMD &&
                    ed->msg.active;
-    if (line->kind == SAG_PROMPT_SEARCH_F ||
-        line->kind == SAG_PROMPT_SEARCH_B) {
+    if (line->kind == YEW_PROMPT_SEARCH_F ||
+        line->kind == YEW_PROMPT_SEARCH_B) {
         /* Accept commits the pattern and the jump; cancel restores the
          * view exactly, which is why it happens BEFORE the widget tears
          * down and repaints. */
         if (accepted)
-            sag_search_accept(ed, ed->win);
+            yew_search_accept(ed, ed->win);
         else
-            sag_search_cancel(ed, ed->win);
+            yew_search_cancel(ed, ed->win);
     }
-    restore = line->return_mode < SAG_MODE__N ? (Mode)line->return_mode :
-                                               SAG_MODE_L;
-    if (restore == SAG_MODE_E)
-        restore = SAG_MODE_L;
+    restore = line->return_mode < YEW_MODE__N ? (Mode)line->return_mode :
+                                               YEW_MODE_L;
+    if (restore == YEW_MODE_E)
+        restore = YEW_MODE_L;
     menu_discard(ed);
-    sag_menu_free(&line->menu);
-    sag_comp_filter_free(&line->filter);
-    sag_hist_flush(line->history);
-    sag_hist_close(line->history);
+    yew_menu_free(&line->menu);
+    yew_comp_filter_free(&line->filter);
+    yew_hist_flush(line->history);
+    yew_hist_close(line->history);
     line->history = NULL;
-    sag_hist_cur_dispose(&line->hist);
+    yew_hist_cur_dispose(&line->hist);
     cmdline_target_free(cmdline_target(line));
     line->target = NULL;
     line->buf = NULL;
@@ -480,28 +480,28 @@ void sag_cmdline_close(Ed *ed, bool accepted)
     line->err = (CmdErr){0};
     line->scroll = 0U;
     if (!keep_message)
-        sag_msg_clear(ed);
+        yew_msg_clear(ed);
     if (ed->mode != restore) {
         Mode old = ed->mode;
 
-        sag_fl_hook_mode(ed, FL_EV_MODE_LEAVE, sag_modes[old].name);
-        sag_dispatch_set_mode(ed, restore);
-        sag_fl_hook_mode(ed, FL_EV_MODE_ENTER, sag_modes[restore].name);
+        yew_fl_hook_mode(ed, FL_EV_MODE_LEAVE, yew_modes[old].name);
+        yew_dispatch_set_mode(ed, restore);
+        yew_fl_hook_mode(ed, FL_EV_MODE_ENTER, yew_modes[restore].name);
     }
     ed->full_damage = true;
     ed->footer_dirty = true;
     /* A `:s/../../c` started a confirm run whose question this close
      * just wiped; restate it. */
-    sag_search_confirm_reprompt(ed);
+    yew_search_confirm_reprompt(ed);
 }
 
-void sag_cmdline_dispose(Ed *ed)
+void yew_cmdline_dispose(Ed *ed)
 {
     if (ed != NULL && ed->cmdline.active)
-        sag_cmdline_close(ed, false);
+        yew_cmdline_close(ed, false);
 }
 
-Win *sag_cmdline_target(Ed *ed)
+Win *yew_cmdline_target(Ed *ed)
 {
     CmdLineTarget *target;
 
@@ -592,8 +592,8 @@ static void cmdline_set_hint(Ed *ed, const CmdParsePoint *point)
     line->hint[0] = '\0';
     if (!point->command_known)
         return;
-    desc = sag_cmd_desc(point->command);
-    entry = sag_cmd_entry(point->command);
+    desc = yew_cmd_desc(point->command);
+    entry = yew_cmd_entry(point->command);
     if (desc == NULL || entry == NULL)
         return;
     shown = strncmp(desc->name, "ed.", 3U) == 0 ? desc->name + 3U
@@ -620,10 +620,10 @@ static void cmdline_set_hint(Ed *ed, const CmdParsePoint *point)
      * The user typed the line numbers, so echoing them says nothing; how
      * many lines they resolve to is the part they cannot see.
      */
-    if (point->range.kind == SAG_RANGE_BUFFER)
+    if (point->range.kind == YEW_RANGE_BUFFER)
         (void)snprintf(line->hint + at, sizeof(line->hint) - at,
                        " \xC2\xB7 whole buffer");
-    else if (point->range.kind == SAG_RANGE_SELECTION)
+    else if (point->range.kind == YEW_RANGE_SELECTION)
         (void)snprintf(line->hint + at, sizeof(line->hint) - at,
                        " \xC2\xB7 selection");
     else {
@@ -640,13 +640,13 @@ static void cmdline_refilter(Ed *ed)
     CmdLine *line = &ed->cmdline;
     Arena scratch;
     CmdParsePoint point;
-    SagCompQuery query;
+    YewCompQuery query;
     Vec_CompItem items = {0};
     char *text;
 
     /* Only `:` completes; `/` and `?` carry a pattern, not a command. */
-    if (line->kind != SAG_PROMPT_CMD) {
-        sag_menu_dismiss(&line->menu);
+    if (line->kind != YEW_PROMPT_CMD) {
+        yew_menu_dismiss(&line->menu);
         line->hint[0] = '\0';
         return;
     }
@@ -654,9 +654,9 @@ static void cmdline_refilter(Ed *ed)
     arena_init(&scratch);
     /* ONE tolerant parse per keystroke, read by both the hint and the
      * filter.  Two would drift apart. */
-    if (!sag_cmd_parse_point(ed, text, (size_t)sag_textbuf_len(line->buf),
+    if (!yew_cmd_parse_point(ed, text, (size_t)yew_textbuf_len(line->buf),
                              (size_t)line->cur.pos.v, &scratch, &point)) {
-        sag_menu_dismiss(&line->menu);
+        yew_menu_dismiss(&line->menu);
         line->hint[0] = '\0';
         arena_free_all(&scratch);
         free(text);
@@ -664,23 +664,23 @@ static void cmdline_refilter(Ed *ed)
         return;
     }
     cmdline_set_hint(ed, &point);
-    if (!sag_comp_query_at(ed, &point, &query) ||
+    if (!yew_comp_query_at(ed, &point, &query) ||
         query.replace.hi <= query.replace.lo) {
-        sag_menu_dismiss(&line->menu);
+        yew_menu_dismiss(&line->menu);
         arena_free_all(&scratch);
         free(text);
         ed->full_damage = true;
         return;
     }
-    line->comp_total = sag_comp_filter_run(ed, &line->filter,
+    line->comp_total = yew_comp_filter_run(ed, &line->filter,
                                            &line->comp_arena, &query,
-                                           SAG_CMDLINE_LIVE_BUDGET_US,
+                                           YEW_CMDLINE_LIVE_BUDGET_US,
                                            &items);
     if (items.len == 0U) {
         Vec_CompItem_free(&items);
-        sag_menu_dismiss(&line->menu);
+        yew_menu_dismiss(&line->menu);
     } else {
-        sag_menu_reset(&line->menu, items, line->comp_total, query.replace);
+        yew_menu_reset(&line->menu, items, line->comp_total, query.replace);
     }
     arena_free_all(&scratch);
     free(text);
@@ -690,16 +690,16 @@ static void cmdline_refilter(Ed *ed)
 /*
  * Is a sliced completion scan waiting for the idle path?
  *
- * ONE predicate, because sag_loop_deadline has to stop sleeping on
- * exactly the condition sag_cmdline_comp_tick will act on.  Two
+ * ONE predicate, because yew_loop_deadline has to stop sleeping on
+ * exactly the condition yew_cmdline_comp_tick will act on.  Two
  * spellings that disagree give either a menu that stops filling in (the
  * loop sleeps through work the tick would do) or a busy loop (the
  * deadline says "work pending" for a state the tick declines to touch).
  */
-bool sag_cmdline_comp_scanning(const Ed *ed)
+bool yew_cmdline_comp_scanning(const Ed *ed)
 {
     return ed != NULL && ed->cmdline.active &&
-           ed->cmdline.kind == SAG_PROMPT_CMD && sag_comp_listing_pending();
+           ed->cmdline.kind == YEW_PROMPT_CMD && yew_comp_listing_pending();
 }
 
 /*
@@ -717,13 +717,13 @@ bool sag_cmdline_comp_scanning(const Ed *ed)
  * first slice's rows until the set it was ranked from is complete, and
  * then updates once.
  *
- * Returns true while more remains, matching sag_picker_tick.
+ * Returns true while more remains, matching yew_picker_tick.
  */
-bool sag_cmdline_comp_tick(Ed *ed)
+bool yew_cmdline_comp_tick(Ed *ed)
 {
-    if (!sag_cmdline_comp_scanning(ed))
+    if (!yew_cmdline_comp_scanning(ed))
         return false;
-    if (sag_comp_listing_advance(SAG_CMDLINE_LIVE_BUDGET_US))
+    if (yew_comp_listing_advance(YEW_CMDLINE_LIVE_BUDGET_US))
         return true;
     /*
      * Complete.  The filter caches per (kind, head, pattern) and would
@@ -731,12 +731,12 @@ bool sag_cmdline_comp_tick(Ed *ed)
      * computed from has grown underneath it, so that entry is stale by
      * definition.
      */
-    sag_comp_filter_invalidate(&ed->cmdline.filter);
+    yew_comp_filter_invalidate(&ed->cmdline.filter);
     cmdline_refilter(ed);
     return false;
 }
 
-void sag_cmdline_edited(Ed *ed)
+void yew_cmdline_edited(Ed *ed)
 {
     char *draft;
 
@@ -744,7 +744,7 @@ void sag_cmdline_edited(Ed *ed)
         return;
     sync_from_target(&ed->cmdline);
     draft = text_string(ed->cmdline.buf);
-    sag_hist_cur_reset(&ed->cmdline.hist, draft);
+    yew_hist_cur_reset(&ed->cmdline.hist, draft);
     free(draft);
     clear_error(ed);
     cmdline_refilter(ed);
@@ -752,15 +752,15 @@ void sag_cmdline_edited(Ed *ed)
     /* Search-as-you-type: the `/` and `?` prompts preview on every
      * edit.  This is the one place that hook belongs — the widget is
      * shared, and only these two kinds want it. */
-    if (ed->cmdline.kind == SAG_PROMPT_SEARCH_F ||
-        ed->cmdline.kind == SAG_PROMPT_SEARCH_B)
-        sag_search_input(ed, ed->win);
+    if (ed->cmdline.kind == YEW_PROMPT_SEARCH_F ||
+        ed->cmdline.kind == YEW_PROMPT_SEARCH_B)
+        yew_search_input(ed, ed->win);
 }
 
 /* The prompt's current text.  Sprint 21's search-as-you-type needs it
  * on every edit, and reaching into ed->cmdline.buf from another module
  * would make the widget's internals part of its interface. */
-void sag_cmdline_text(Ed *ed, Bytebuf *out)
+void yew_cmdline_text(Ed *ed, Bytebuf *out)
 {
     char *text;
 
@@ -776,7 +776,7 @@ void sag_cmdline_text(Ed *ed, Bytebuf *out)
     free(text);
 }
 
-void sag_cmdline_sync(Ed *ed)
+void yew_cmdline_sync(Ed *ed)
 {
     if (ed == NULL || !ed->cmdline.active)
         return;
@@ -784,21 +784,21 @@ void sag_cmdline_sync(Ed *ed)
     ed->footer_dirty = true;
 }
 
-bool sag_cmdline_key(Ed *ed, const Key *key)
+bool yew_cmdline_key(Ed *ed, const Key *key)
 {
-    const u16 command_mods = SAG_MOD_ALT | SAG_MOD_CTRL | SAG_MOD_SUPER |
-                             SAG_MOD_HYPER | SAG_MOD_META;
+    const u16 command_mods = YEW_MOD_ALT | YEW_MOD_CTRL | YEW_MOD_SUPER |
+                             YEW_MOD_HYPER | YEW_MOD_META;
 
     if (ed == NULL || key == NULL || !ed->cmdline.active)
         return false;
-    if (key->ev == SAG_KEY_RELEASE)
+    if (key->ev == YEW_KEY_RELEASE)
         return true;
-    if (key->code < SAG_KEY_BASE && key->ntext != 0U &&
+    if (key->code < YEW_KEY_BASE && key->ntext != 0U &&
         (key->mods & command_mods) == 0U) {
         /*
          * §6 inverts Sprint 18's rule: a printable key REFILTERS rather
          * than dismissing.  The insert runs through the registry, which
-         * lands in sag_cmdline_edited, which refilters -- so there is
+         * lands in yew_cmdline_edited, which refilters -- so there is
          * still exactly one place that reacts to a prompt edit.
          */
         (void)insert_sanitized(ed, key->text, key->ntext);
@@ -807,7 +807,7 @@ bool sag_cmdline_key(Ed *ed, const Key *key)
     return false;
 }
 
-void sag_cmdline_paste(Ed *ed, const u8 *bytes, size_t len)
+void yew_cmdline_paste(Ed *ed, const u8 *bytes, size_t len)
 {
     if (ed == NULL || !ed->cmdline.active || bytes == NULL || len == 0U)
         return;
@@ -820,27 +820,27 @@ static CmdStatus history_move(CmdCtx *cx, bool previous)
     const char *found;
 
     if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
-        return SAG_CMD_ERR_STATE;
-    found = previous ? sag_hist_prev(cx->ed->cmdline.history,
+        return YEW_CMD_ERR_STATE;
+    found = previous ? yew_hist_prev(cx->ed->cmdline.history,
                                      &cx->ed->cmdline.hist) :
-                       sag_hist_next(cx->ed->cmdline.history,
+                       yew_hist_next(cx->ed->cmdline.history,
                                      &cx->ed->cmdline.hist);
     if (found == NULL)
-        return SAG_CMD_OK;
+        return YEW_CMD_OK;
     if (!replace_all(cx->ed, found, false))
-        return SAG_CMD_ERR_IO;
+        return YEW_CMD_ERR_IO;
     /* A history jump rewrites the whole line without going through the
      * edit hook, so the menu is refiltered here rather than left stale. */
     cmdline_refilter(cx->ed);
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
-CmdStatus sag_cmdline_cmd_hist_prev(CmdCtx *cx)
+CmdStatus yew_cmdline_cmd_hist_prev(CmdCtx *cx)
 {
     return history_move(cx, true);
 }
 
-CmdStatus sag_cmdline_cmd_hist_next(CmdCtx *cx)
+CmdStatus yew_cmdline_cmd_hist_next(CmdCtx *cx)
 {
     return history_move(cx, false);
 }
@@ -848,7 +848,7 @@ CmdStatus sag_cmdline_cmd_hist_next(CmdCtx *cx)
 static char *heap_slice(const char *text, Span span)
 {
     size_t len = (size_t)(span.hi - span.lo);
-    char *copy = sag_xmalloc(len + 1U);
+    char *copy = yew_xmalloc(len + 1U);
 
     (void)memcpy(copy, text + span.lo, len);
     copy[len] = '\0';
@@ -878,22 +878,22 @@ static CmdStatus completion_cycle(Ed *ed, bool previous)
     CmdLine *line = &ed->cmdline;
     const CompItem *item;
 
-    if (!sag_menu_move(&line->menu, previous ? -1 : 1, false))
-        return SAG_CMD_OK;
-    item = sag_menu_selected(&line->menu);
+    if (!yew_menu_move(&line->menu, previous ? -1 : 1, false))
+        return YEW_CMD_OK;
+    item = yew_menu_selected(&line->menu);
     if (item == NULL)
-        return SAG_CMD_OK;
+        return YEW_CMD_OK;
     if (!insert_completion(ed, line->menu.replace, item, false))
-        return SAG_CMD_ERR_IO;
+        return YEW_CMD_ERR_IO;
     ed->full_damage = true;
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
 static CmdStatus complete(Ed *ed, bool previous)
 {
     CmdLine *line = &ed->cmdline;
     Arena scratch;
-    SagCompQuery query;
+    YewCompQuery query;
     Vec_CompItem items = {0};
     char *text;
     char *lcp;
@@ -908,7 +908,7 @@ static CmdStatus complete(Ed *ed, bool previous)
         return completion_cycle(ed, previous);
     text = text_string(line->buf);
     arena_init(&scratch);
-    if (!sag_comp_query(ed, text, (size_t)sag_textbuf_len(line->buf),
+    if (!yew_comp_query(ed, text, (size_t)yew_textbuf_len(line->buf),
                         (size_t)line->cur.pos.v,
                         &scratch, &query)) {
         arena_free_all(&scratch);
@@ -921,17 +921,17 @@ static CmdStatus complete(Ed *ed, bool previous)
      * budget.  The filter owns comp_arena and resets it only when it
      * actually re-enumerates.
      */
-    line->comp_total = sag_comp_filter_run(ed, &line->filter,
+    line->comp_total = yew_comp_filter_run(ed, &line->filter,
                                            &line->comp_arena, &query, 0,
                                            &items);
     if (items.len == 0U) {
-        sag_msg(ed, SAG_MSG_INFO, "no completions");
+        yew_msg(ed, YEW_MSG_INFO, "no completions");
         ed->full_damage = true;
         ed->footer_dirty = true;
         Vec_CompItem_free(&items);
         arena_free_all(&scratch);
         free(text);
-        return SAG_CMD_OK;
+        return YEW_CMD_OK;
     }
     if (items.len == 1U) {
         bool ok = insert_completion(ed, query.replace, &items.data[0], true);
@@ -940,7 +940,7 @@ static CmdStatus complete(Ed *ed, bool previous)
         arena_free_all(&scratch);
         free(text);
         if (!ok)
-            return SAG_CMD_ERR_IO;
+            return YEW_CMD_ERR_IO;
         /*
          * The line just changed under the live menu, which is still
          * holding rows for the OLD token.  Completion insertion does not
@@ -948,12 +948,12 @@ static CmdStatus complete(Ed *ed, bool previous)
          * leaving stale rows on screen.
          */
         cmdline_refilter(ed);
-        return SAG_CMD_OK;
+        return YEW_CMD_OK;
     }
     free(line->menu_stem);
     line->menu_stem = heap_slice(text, query.replace);
     line->menu_original = query.replace;
-    sag_menu_reset(&line->menu, items, line->comp_total, query.replace);
+    yew_menu_reset(&line->menu, items, line->comp_total, query.replace);
     /*
      * The common prefix is taken over the TIERED rows only -- the ones
      * that matched as an exact or prefix match.  A fuzzy match shares no
@@ -966,10 +966,10 @@ static CmdStatus complete(Ed *ed, bool previous)
         size_t i;
 
         for (i = 0U; i < line->menu.items.len; i++) {
-            if (line->menu.items.data[i].score >= SAG_FZ_BASENAME_TIER)
+            if (line->menu.items.data[i].score >= YEW_FZ_BASENAME_TIER)
                 Vec_CompItem_push(&tiered, line->menu.items.data[i]);
         }
-        lcp = sag_comp_lcp(&scratch, &tiered);
+        lcp = yew_comp_lcp(&scratch, &tiered);
         Vec_CompItem_free(&tiered);
     }
     stem_len = strlen(query.stem);
@@ -982,22 +982,22 @@ static CmdStatus complete(Ed *ed, bool previous)
             menu_discard(ed);
             arena_free_all(&scratch);
             free(text);
-            return SAG_CMD_ERR_IO;
+            return YEW_CMD_ERR_IO;
         }
         line->menu.replace = (Span){query.replace.lo,
                                     query.replace.lo + strlen(lcp)};
     } else {
         /* Nothing left to insert unambiguously, so this Tab is a choice:
          * enter the list (from the far end for S-Tab). */
-        (void)sag_menu_move(&line->menu, previous ? -1 : 1, false);
+        (void)yew_menu_move(&line->menu, previous ? -1 : 1, false);
         {
-            const CompItem *item = sag_menu_selected(&line->menu);
+            const CompItem *item = yew_menu_selected(&line->menu);
 
             if (item != NULL &&
                 !insert_completion(ed, line->menu.replace, item, false)) {
                 arena_free_all(&scratch);
                 free(text);
-                return SAG_CMD_ERR_IO;
+                return YEW_CMD_ERR_IO;
             }
         }
     }
@@ -1005,62 +1005,62 @@ static CmdStatus complete(Ed *ed, bool previous)
     ed->footer_dirty = true;
     arena_free_all(&scratch);
     free(text);
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
 /*
  * Sprint 18.5 §10.  Every menu behaviour is a registered command, so it
  * is rebindable, recordable, and reachable from Fletch (Sprint 34)
  * rather than being a keystroke handled inside a switch.  They all carry
- * SAG_CMD_INTERNAL: they are keymap plumbing, not commands a user types.
+ * YEW_CMD_INTERNAL: they are keymap plumbing, not commands a user types.
  */
 static CmdStatus menu_page(Ed *ed, bool previous)
 {
     CmdLine *line = &ed->cmdline;
     const CompItem *item;
 
-    if (!sag_menu_move(&line->menu, previous ? -1 : 1, true))
-        return SAG_CMD_OK;
-    item = sag_menu_selected(&line->menu);
+    if (!yew_menu_move(&line->menu, previous ? -1 : 1, true))
+        return YEW_CMD_OK;
+    item = yew_menu_selected(&line->menu);
     if (item == NULL)
-        return SAG_CMD_OK;
+        return YEW_CMD_OK;
     if (!insert_completion(ed, line->menu.replace, item, false))
-        return SAG_CMD_ERR_IO;
+        return YEW_CMD_ERR_IO;
     ed->full_damage = true;
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
-CmdStatus sag_cmdline_cmd_menu_page_next(CmdCtx *cx)
+CmdStatus yew_cmdline_cmd_menu_page_next(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     return menu_page(cx->ed, false);
 }
 
-CmdStatus sag_cmdline_cmd_menu_page_prev(CmdCtx *cx)
+CmdStatus yew_cmdline_cmd_menu_page_prev(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     return menu_page(cx->ed, true);
 }
 
 /* No default binding: this is how §8's click and Fletch commit a row. */
-CmdStatus sag_cmdline_cmd_menu_accept(CmdCtx *cx)
+CmdStatus yew_cmdline_cmd_menu_accept(CmdCtx *cx)
 {
     Ed *ed;
     const CompItem *item;
 
     if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     ed = cx->ed;
-    item = sag_menu_selected(&ed->cmdline.menu);
+    item = yew_menu_selected(&ed->cmdline.menu);
     if (item == NULL)
-        return SAG_CMD_OK;
+        return YEW_CMD_OK;
     if (!insert_completion(ed, ed->cmdline.menu.replace, item, true))
-        return SAG_CMD_ERR_IO;
+        return YEW_CMD_ERR_IO;
     menu_discard(ed);
     cmdline_refilter(ed);
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
 /*
@@ -1074,7 +1074,7 @@ CmdStatus sag_cmdline_cmd_menu_accept(CmdCtx *cx)
  * Selection by click is EXPLICIT, exactly as Tab is -- which is what
  * makes §6's Enter rule treat a clicked row as a choice.
  */
-bool sag_cmdline_menu_click(Ed *ed, i32 row)
+bool yew_cmdline_menu_click(Ed *ed, i32 row)
 {
     CmdLine *line;
     CmdCtx cx = {0};
@@ -1082,22 +1082,22 @@ bool sag_cmdline_menu_click(Ed *ed, i32 row)
     if (ed == NULL || !ed->cmdline.active)
         return false;
     line = &ed->cmdline;
-    if (!sag_menu_select(&line->menu, row))
+    if (!yew_menu_select(&line->menu, row))
         return false;
     if (line->click_row == row) {
         line->click_row = -1;
         cx.ed = ed;
-        cx.win = sag_cmdline_target(ed);
+        cx.win = yew_cmdline_target(ed);
         cx.count = 1U;
-        cx.source = SAG_SRC_MOUSE;
-        (void)sag_cmdline_cmd_menu_accept(&cx);
+        cx.source = YEW_SRC_MOUSE;
+        (void)yew_cmdline_cmd_menu_accept(&cx);
         ed->full_damage = true;
         return true;
     }
     line->click_row = row;
     /* Show the choice in the line, the same as Tab does. */
     {
-        const CompItem *item = sag_menu_selected(&line->menu);
+        const CompItem *item = yew_menu_selected(&line->menu);
 
         if (item != NULL)
             (void)insert_completion(ed, line->menu.replace, item, false);
@@ -1106,61 +1106,61 @@ bool sag_cmdline_menu_click(Ed *ed, i32 row)
     return true;
 }
 
-bool sag_cmdline_menu_scroll(Ed *ed, i32 delta)
+bool yew_cmdline_menu_scroll(Ed *ed, i32 delta)
 {
     if (ed == NULL || !ed->cmdline.active || ed->footer_rect.h == 0U)
         return false;
     /* The menu may use every row above the prompt. */
-    if (!sag_menu_scroll(&ed->cmdline.menu, delta, ed->footer_rect.y))
+    if (!yew_menu_scroll(&ed->cmdline.menu, delta, ed->footer_rect.y))
         return false;
     ed->full_damage = true;
     return true;
 }
 
-CmdStatus sag_cmdline_cmd_menu_dismiss(CmdCtx *cx)
+CmdStatus yew_cmdline_cmd_menu_dismiss(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     menu_discard(cx->ed);
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
-CmdStatus sag_cmdline_cmd_complete_next(CmdCtx *cx)
+CmdStatus yew_cmdline_cmd_complete_next(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     return complete(cx->ed, false);
 }
 
-CmdStatus sag_cmdline_cmd_complete_prev(CmdCtx *cx)
+CmdStatus yew_cmdline_cmd_complete_prev(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     return complete(cx->ed, true);
 }
 
-CmdStatus sag_cmdline_cmd_insert_register(CmdCtx *cx)
+CmdStatus yew_cmdline_cmd_insert_register(CmdCtx *cx)
 {
     RegVal *value;
     u8 name;
 
     if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active ||
         cx->sarg == NULL || cx->sarg_len == 0U)
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     name = (u8)cx->sarg[0];
-    value = sag_reg_get(&cx->ed->regs, name);
+    value = yew_reg_get(&cx->ed->regs, name);
     if (value == NULL) {
-        sag_msg(cx->ed, SAG_MSG_ERROR, "unknown register '%c'", name);
-        return SAG_CMD_ERR_ARG;
+        yew_msg(cx->ed, YEW_MSG_ERROR, "unknown register '%c'", name);
+        return YEW_CMD_ERR_ARG;
     }
     return insert_sanitized(cx->ed, value->bytes.data, value->bytes.len);
 }
 
-CmdStatus sag_cmdline_cmd_literal_next(CmdCtx *cx)
+CmdStatus yew_cmdline_cmd_literal_next(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active ||
         cx->sarg == NULL)
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     return insert_sanitized(cx->ed, (const u8 *)cx->sarg, cx->sarg_len);
 }
 
@@ -1170,17 +1170,17 @@ static CmdStatus delete_range(CmdCtx *cx, Span span)
 
     if (cx == NULL || cx->ed == NULL || cx->win == NULL ||
         cx->win->buf == NULL || cx->win->buf->tb == NULL)
-        return SAG_CMD_ERR_STATE;
-    ec = sag_ed_edit_ctx_for(cx->ed, cx->win);
-    if (!sag_edit_delete(&ec, span)) {
-        sag_ed_finish_edit(cx->ed, &ec);
-        return SAG_CMD_ERR_IO;
+        return YEW_CMD_ERR_STATE;
+    ec = yew_ed_edit_ctx_for(cx->ed, cx->win);
+    if (!yew_edit_delete(&ec, span)) {
+        yew_ed_finish_edit(cx->ed, &ec);
+        return YEW_CMD_ERR_IO;
     }
-    sag_ed_finish_edit(cx->ed, &ec);
-    return SAG_CMD_OK;
+    yew_ed_finish_edit(cx->ed, &ec);
+    return YEW_CMD_OK;
 }
 
-CmdStatus sag_cmdline_cmd_delete_word_prev(CmdCtx *cx)
+CmdStatus yew_cmdline_cmd_delete_word_prev(CmdCtx *cx)
 {
     Cursor *cursor;
     UnitCtx unit;
@@ -1188,33 +1188,33 @@ CmdStatus sag_cmdline_cmd_delete_word_prev(CmdCtx *cx)
 
     if (cx == NULL || cx->win == NULL || cx->win->buf == NULL ||
         cx->win->cs.curs.len == 0U)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     cursor = &cx->win->cs.curs.data[cx->win->cs.primary];
     unit = (UnitCtx){cx->win->buf->tb, cx->win->buf, cx->win};
-    previous = sag_unit_word.prev(&unit, cursor->pos, false);
+    previous = yew_unit_word.prev(&unit, cursor->pos, false);
     return delete_range(cx, (Span){previous.v, cursor->pos.v});
 }
 
-CmdStatus sag_cmdline_cmd_delete_to_home(CmdCtx *cx)
+CmdStatus yew_cmdline_cmd_delete_to_home(CmdCtx *cx)
 {
     Cursor *cursor;
 
     if (cx == NULL || cx->win == NULL || cx->win->cs.curs.len == 0U)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     cursor = &cx->win->cs.curs.data[cx->win->cs.primary];
     return delete_range(cx, (Span){0U, cursor->pos.v});
 }
 
-CmdStatus sag_cmdline_cmd_delete_to_end(CmdCtx *cx)
+CmdStatus yew_cmdline_cmd_delete_to_end(CmdCtx *cx)
 {
     Cursor *cursor;
     u64 len;
 
     if (cx == NULL || cx->win == NULL || cx->win->buf == NULL ||
         cx->win->cs.curs.len == 0U)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     cursor = &cx->win->cs.curs.data[cx->win->cs.primary];
-    len = sag_textbuf_len(cx->win->buf->tb);
+    len = yew_textbuf_len(cx->win->buf->tb);
     return delete_range(cx, (Span){cursor->pos.v, len});
 }
 
@@ -1228,7 +1228,7 @@ CmdStatus sag_cmdline_cmd_delete_to_end(CmdCtx *cx)
  *
  * The ghost is NEVER inserted into the prompt's TextBuf.  Putting it
  * there would poison the history draft, hand the parser text the user
- * never typed, and make sag_cmdline_text() -- which Sprint 21's search
+ * never typed, and make yew_cmdline_text() -- which Sprint 21's search
  * reads on every keystroke -- return a pattern with a suggestion glued
  * to it.
  */
@@ -1244,12 +1244,12 @@ static const char *cmdline_ghost(Ed *ed, size_t *len)
     *len = 0U;
     if (line->buf == NULL || line->menu.items.len == 0U)
         return NULL;
-    buf_len = sag_textbuf_len(line->buf);
+    buf_len = yew_textbuf_len(line->buf);
     /* Only at end of line: a suggestion in the middle of a line has no
      * coherent place to go. */
     if (line->cur.pos.v != buf_len || line->menu.replace.hi != buf_len)
         return NULL;
-    item = sag_menu_selected(&line->menu);
+    item = yew_menu_selected(&line->menu);
     if (item == NULL)
         item = &line->menu.items.data[0];
     if (item == NULL || item->text == NULL)
@@ -1270,7 +1270,7 @@ static const char *cmdline_ghost(Ed *ed, size_t *len)
     return item->text + stem_len;
 }
 
-CmdStatus sag_cmdline_cmd_ghost_accept(CmdCtx *cx)
+CmdStatus yew_cmdline_cmd_ghost_accept(CmdCtx *cx)
 {
     Ed *ed;
     const CompItem *item;
@@ -1278,7 +1278,7 @@ CmdStatus sag_cmdline_cmd_ghost_accept(CmdCtx *cx)
     size_t len;
 
     if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     ed = cx->ed;
     ghost = cmdline_ghost(ed, &len);
     if (ghost == NULL) {
@@ -1290,27 +1290,27 @@ CmdStatus sag_cmdline_cmd_ghost_accept(CmdCtx *cx)
          */
         CmdCtx move = {0};
 
-        move.win = sag_cmdline_target(ed);
+        move.win = yew_cmdline_target(ed);
         move.count = 1U;
         move.source = cx->source;
-        return sag_ed_invoke(ed, sag_cmd_lookup("ed.move.char.next", 17U),
+        return yew_ed_invoke(ed, yew_cmd_lookup("ed.move.char.next", 17U),
                              &move);
     }
-    item = sag_menu_selected(&ed->cmdline.menu);
+    item = yew_menu_selected(&ed->cmdline.menu);
     if (item == NULL)
         item = &ed->cmdline.menu.items.data[0];
     /* One accept path, shared with the menu's: a ghost accepted and a
      * row accepted must land byte-identical text. */
     if (!insert_completion(ed, ed->cmdline.menu.replace, item, true))
-        return SAG_CMD_ERR_IO;
+        return YEW_CMD_ERR_IO;
     menu_discard(ed);
     cmdline_refilter(ed);
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
 static void deferred_dispatch_error(Ed *ed, const CmdParse *parsed)
 {
-    const CmdDesc *desc = sag_cmd_desc(parsed->command);
+    const CmdDesc *desc = yew_cmd_desc(parsed->command);
     CmdErr error = {0};
     const char *sprint;
     const char *label;
@@ -1340,18 +1340,18 @@ static void deferred_dispatch_error(Ed *ed, const CmdParse *parsed)
     set_error(ed, &error);
 }
 
-CmdStatus sag_cmdline_cmd_accept(CmdCtx *cx)
+CmdStatus yew_cmdline_cmd_accept(CmdCtx *cx)
 {
     Ed *ed;
     CmdLine *line;
     char *text;
     Arena arena;
     CmdParse parsed;
-    SagCmdInvoke invoke;
+    YewCmdInvoke invoke;
     CmdStatus status;
 
     if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     ed = cx->ed;
     line = &ed->cmdline;
     /*
@@ -1371,47 +1371,47 @@ CmdStatus sag_cmdline_cmd_accept(CmdCtx *cx)
      * out -- still executes.
      */
     if (line->menu.explicit_sel && line->menu.sel >= 0) {
-        const CompItem *item = sag_menu_selected(&line->menu);
+        const CompItem *item = yew_menu_selected(&line->menu);
 
         if (item != NULL && !insert_completion(ed, line->menu.replace, item,
                                                true))
-            return SAG_CMD_ERR_IO;
+            return YEW_CMD_ERR_IO;
         menu_discard(ed);
-        return SAG_CMD_OK;
+        return YEW_CMD_OK;
     }
     text = text_string(line->buf);
-    if (sag_textbuf_len(line->buf) == 0U) {
+    if (yew_textbuf_len(line->buf) == 0U) {
         free(text);
-        sag_cmdline_close(ed, true);
-        return SAG_CMD_OK;
+        yew_cmdline_close(ed, true);
+        return YEW_CMD_OK;
     }
     /*
      * A search prompt's text is a PATTERN, not a command line.  The
-     * preview has already applied it and sag_search_accept commits it;
+     * preview has already applied it and yew_search_accept commits it;
      * handing it to the command parser instead reports the pattern as
      * an unknown command, which is what `/needle` did before this
      * check existed.
      */
-    if (line->kind == SAG_PROMPT_SEARCH_F ||
-        line->kind == SAG_PROMPT_SEARCH_B) {
-        sag_hist_add(line->history, text);
+    if (line->kind == YEW_PROMPT_SEARCH_F ||
+        line->kind == YEW_PROMPT_SEARCH_B) {
+        yew_hist_add(line->history, text);
         free(text);
-        sag_cmdline_close(ed, true);
-        return SAG_CMD_OK;
+        yew_cmdline_close(ed, true);
+        return YEW_CMD_OK;
     }
     arena_init(&arena);
-    if (!sag_cmd_parse(ed, text, (size_t)sag_textbuf_len(line->buf),
+    if (!yew_cmd_parse(ed, text, (size_t)yew_textbuf_len(line->buf),
                        &arena, &parsed)) {
         set_error(ed, &parsed.err);
         arena_free_all(&arena);
         free(text);
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     }
-    invoke = (SagCmdInvoke){parsed.range, parsed.argv, 0, parsed.bang,
+    invoke = (YewCmdInvoke){parsed.range, parsed.argv, 0, parsed.bang,
                             ed->win};
-    status = sag_ed_invoke_parsed(ed, parsed.command, &invoke);
-    if (status != SAG_CMD_OK) {
-        if (status == SAG_CMD_ERR_DEFERRED)
+    status = yew_ed_invoke_parsed(ed, parsed.command, &invoke);
+    if (status != YEW_CMD_OK) {
+        if (status == YEW_CMD_ERR_DEFERRED)
             deferred_dispatch_error(ed, &parsed);
         else {
             CmdErr error = {0};
@@ -1434,20 +1434,20 @@ CmdStatus sag_cmdline_cmd_accept(CmdCtx *cx)
         free(text);
         return status;
     }
-    sag_hist_add(line->history, text);
+    yew_hist_add(line->history, text);
     set_cmd_register(ed, text);
     arena_free_all(&arena);
     free(text);
-    sag_cmdline_close(ed, true);
-    return SAG_CMD_OK;
+    yew_cmdline_close(ed, true);
+    return YEW_CMD_OK;
 }
 
-CmdStatus sag_cmdline_cmd_cancel(CmdCtx *cx)
+CmdStatus yew_cmdline_cmd_cancel(CmdCtx *cx)
 {
     CmdLine *line;
 
     if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     line = &cx->ed->cmdline;
     /*
      * Esc dismisses the MENU only when the user opened or entered it --
@@ -1460,7 +1460,7 @@ CmdStatus sag_cmdline_cmd_cancel(CmdCtx *cx)
     if (line->menu.items.len != 0U &&
         (line->menu.explicit_sel || line->menu_stem != NULL)) {
         char *stem = line->menu_stem == NULL ? NULL :
-                     strcpy(sag_xmalloc(strlen(line->menu_stem) + 1U),
+                     strcpy(yew_xmalloc(strlen(line->menu_stem) + 1U),
                             line->menu_stem);
         Span replace = line->menu.replace;
 
@@ -1470,15 +1470,15 @@ CmdStatus sag_cmdline_cmd_cancel(CmdCtx *cx)
                                    strlen(stem), true);
 
             free(stem);
-            return ok ? SAG_CMD_OK : SAG_CMD_ERR_IO;
+            return ok ? YEW_CMD_OK : YEW_CMD_ERR_IO;
         }
-        return SAG_CMD_OK;
+        return YEW_CMD_OK;
     }
-    sag_cmdline_close(cx->ed, false);
-    return SAG_CMD_OK;
+    yew_cmdline_close(cx->ed, false);
+    return YEW_CMD_OK;
 }
 
-static Cell styled_blank(const SagUiStyle *style)
+static Cell styled_blank(const YewUiStyle *style)
 {
     Cell cell = {0};
 
@@ -1497,24 +1497,24 @@ static void text_copy_span(const TextBuf *tb, Span span, u8 *out)
 
     if (len == 0U)
         return;
-    if (!sag_textiter_begin(&it, tb, BYTEOFF(span.lo)))
-        SAG_BUG("cannot draw command line span");
+    if (!yew_textiter_begin(&it, tb, BYTEOFF(span.lo)))
+        YEW_BUG("cannot draw command line span");
     while (copied < len) {
         const u8 *bytes;
         u64 available;
         u64 take;
 
-        if (!sag_textiter_chunk(&it, tb, &bytes, &available))
-            SAG_BUG("command line draw iterator ended early");
+        if (!yew_textiter_chunk(&it, tb, &bytes, &available))
+            YEW_BUG("command line draw iterator ended early");
         take = available < len - copied ? available : len - copied;
         (void)memcpy(out + copied, bytes, (size_t)take);
         copied += take;
-        if (copied < len && !sag_textiter_advance(&it, tb))
-            SAG_BUG("command line draw iterator advance failed");
+        if (copied < len && !yew_textiter_advance(&it, tb))
+            YEW_BUG("command line draw iterator advance failed");
     }
 }
 
-static void draw_menu(Ed *ed, u16 footer, const SagUiStyle *style)
+static void draw_menu(Ed *ed, u16 footer, const YewUiStyle *style)
 {
     /* Everything above the prompt row is the menu's to use; the widget
      * bottom-aligns itself inside it and registers its own rows. */
@@ -1522,26 +1522,26 @@ static void draw_menu(Ed *ed, u16 footer, const SagUiStyle *style)
 
     if (footer == 0U)
         return;
-    sag_menu_draw(ed, &ed->cmdline.menu, area, style);
+    yew_menu_draw(ed, &ed->cmdline.menu, area, style);
 }
 
 static void draw_prompt_message(Ed *ed, u16 footer,
-                                const SagUiStyle *style)
+                                const YewUiStyle *style)
 {
     char message[sizeof(ed->msg.text) + 4U];
-    SagUiStyle message_style = *style;
+    YewUiStyle message_style = *style;
 
     if (footer == 0U || ed->cmdline.menu.items.len != 0U)
         return;
     if (ed->cmdline.err.msg[0] != '\0') {
-        message_style.row_fg = (SagColor){SAG_COLOR_INDEXED, 196U, 0U, 0U};
-        message_style.attrs |= SAG_ATTR_BOLD;
+        message_style.row_fg = (YewColor){YEW_COLOR_INDEXED, 196U, 0U, 0U};
+        message_style.attrs |= YEW_ATTR_BOLD;
         (void)snprintf(message, sizeof(message), "E: %s",
                        ed->cmdline.err.msg);
     } else if (ed->msg.active) {
-        message_style = sag_message_style(ed);
+        message_style = yew_message_style(ed);
         (void)snprintf(message, sizeof(message),
-                       ed->msg.sev == SAG_MSG_ERROR ? "E: %s" : "%s",
+                       ed->msg.sev == YEW_MSG_ERROR ? "E: %s" : "%s",
                        ed->msg.text);
     } else if (ed->cmdline.hint[0] != '\0') {
         /*
@@ -1550,20 +1550,20 @@ static void draw_prompt_message(Ed *ed, u16 footer,
          * of a half-typed line as a failure is what makes a message line
          * flash through a word being typed.
          */
-        message_style.attrs |= SAG_ATTR_DIM;
+        message_style.attrs |= YEW_ATTR_DIM;
         (void)snprintf(message, sizeof(message), "%s", ed->cmdline.hint);
     } else {
         return;
     }
-    sag_grid_fill(&ed->grid, (u16)(footer - 1U), 0U, ed->grid.cols,
+    yew_grid_fill(&ed->grid, (u16)(footer - 1U), 0U, ed->grid.cols,
                   styled_blank(&message_style));
-    (void)sag_grid_puts(&ed->grid, (u16)(footer - 1U), 0U,
+    (void)yew_grid_puts(&ed->grid, (u16)(footer - 1U), 0U,
                         (const u8 *)message, strlen(message),
                         message_style.row_fg, message_style.row_bg,
                         message_style.attrs);
 }
 
-void sag_cmdline_draw(Ed *ed, Rect rect)
+void yew_cmdline_draw(Ed *ed, Rect rect)
 {
     CmdLine *line;
     Span span;
@@ -1573,7 +1573,7 @@ void sag_cmdline_draw(Ed *ed, Rect rect)
     CCol logical;
     u16 col;
     u16 right;
-    SagUiStyle style;
+    YewUiStyle style;
     char prefix;
 
     if (ed == NULL || !ed->cmdline.active || rect.h == 0U ||
@@ -1581,18 +1581,18 @@ void sag_cmdline_draw(Ed *ed, Rect rect)
         return;
     line = &ed->cmdline;
     sync_from_target(line);
-    style = sag_statusline_mode_style(SAG_MODE_E);
-    sag_grid_fill(&ed->grid, rect.y, rect.x,
+    style = yew_statusline_mode_style(YEW_MODE_E);
+    yew_grid_fill(&ed->grid, rect.y, rect.x,
                   (u16)(rect.x + rect.w), styled_blank(&style));
-    prefix = line->kind == SAG_PROMPT_SEARCH_F ? '/' :
-             line->kind == SAG_PROMPT_SEARCH_B ? '?' : ':';
-    col = sag_grid_put(&ed->grid, rect.y, rect.x, (const u8 *)&prefix, 1U,
+    prefix = line->kind == YEW_PROMPT_SEARCH_F ? '/' :
+             line->kind == YEW_PROMPT_SEARCH_B ? '?' : ':';
+    col = yew_grid_put(&ed->grid, rect.y, rect.x, (const u8 *)&prefix, 1U,
                        style.chip_fg, style.chip_bg, style.attrs);
     right = (u32)rect.x + rect.w > ed->grid.cols ? ed->grid.cols :
                                                    (u16)(rect.x + rect.w);
-    span = (Span){0U, sag_textbuf_len(line->buf)};
-    caret = sag_off_to_ccol(line->buf, span, line->cur.pos,
-                            SAG_CMDLINE_TABWIDTH);
+    span = (Span){0U, yew_textbuf_len(line->buf)};
+    caret = yew_off_to_ccol(line->buf, span, line->cur.pos,
+                            YEW_CMDLINE_TABWIDTH);
     visible = right > col ? (u64)(right - col) : 0U;
     if (caret.v < line->scroll)
         line->scroll = caret.v > UINT16_MAX ? UINT16_MAX : (u16)caret.v;
@@ -1601,40 +1601,40 @@ void sag_cmdline_draw(Ed *ed, Rect rect)
 
         line->scroll = next > UINT16_MAX ? UINT16_MAX : (u16)next;
     }
-    at = sag_ccol_to_off(line->buf, span, (CCol){line->scroll},
-                         SAG_CMDLINE_TABWIDTH);
-    logical = sag_off_to_ccol(line->buf, span, at, SAG_CMDLINE_TABWIDTH);
+    at = yew_ccol_to_off(line->buf, span, (CCol){line->scroll},
+                         YEW_CMDLINE_TABWIDTH);
+    logical = yew_off_to_ccol(line->buf, span, at, YEW_CMDLINE_TABWIDTH);
     if (logical.v > line->scroll && col < right) {
         u64 gap = logical.v - line->scroll;
         u16 take = gap > (u64)(right - col) ? (u16)(right - col) :
                                               (u16)gap;
 
-        sag_grid_fill(&ed->grid, rect.y, col, (u16)(col + take),
+        yew_grid_fill(&ed->grid, rect.y, col, (u16)(col + take),
                       styled_blank(&style));
         col = (u16)(col + take);
     }
     while (at.v < span.hi && col < right) {
-        SagTextCluster cluster;
+        YewTextCluster cluster;
         u64 n;
         u8 local[64];
         u8 *bytes = local;
 
-        if (!sag_text_cluster_next(line->buf, span, at, &cluster))
-            SAG_BUG("cannot decode command line cluster");
+        if (!yew_text_cluster_next(line->buf, span, at, &cluster))
+            YEW_BUG("cannot decode command line cluster");
         n = cluster.bytes.hi - cluster.bytes.lo;
         if (n > sizeof(local))
-            bytes = sag_xmalloc((size_t)n);
+            bytes = yew_xmalloc((size_t)n);
         text_copy_span(line->buf, cluster.bytes, bytes);
         if (cluster.tab) {
-            u32 cells = sag_tab_cells(logical, SAG_CMDLINE_TABWIDTH);
+            u32 cells = yew_tab_cells(logical, YEW_CMDLINE_TABWIDTH);
             u16 take = cells > (u32)(right - col) ? (u16)(right - col) :
                                                     (u16)cells;
 
-            sag_grid_fill(&ed->grid, rect.y, col, (u16)(col + take),
+            yew_grid_fill(&ed->grid, rect.y, col, (u16)(col + take),
                           styled_blank(&style));
             col = (u16)(col + take);
         } else {
-            col = sag_grid_put(&ed->grid, rect.y, col, bytes, (size_t)n,
+            col = yew_grid_put(&ed->grid, rect.y, col, bytes, (size_t)n,
                                style.row_fg, style.row_bg, 0U);
         }
         if (bytes != local)
@@ -1643,12 +1643,12 @@ void sag_cmdline_draw(Ed *ed, Rect rect)
         at = BYTEOFF(cluster.bytes.hi);
     }
     if (line->err.tok_hi > line->err.tok_lo && span.hi != 0U) {
-        CCol lo = sag_off_to_ccol(line->buf, span,
+        CCol lo = yew_off_to_ccol(line->buf, span,
                                   BYTEOFF(line->err.tok_lo),
-                                  SAG_CMDLINE_TABWIDTH);
-        CCol hi = sag_off_to_ccol(line->buf, span,
+                                  YEW_CMDLINE_TABWIDTH);
+        CCol hi = yew_off_to_ccol(line->buf, span,
                                   BYTEOFF(line->err.tok_hi),
-                                  SAG_CMDLINE_TABWIDTH);
+                                  YEW_CMDLINE_TABWIDTH);
         u64 x0v = lo.v > line->scroll ?
                    (u64)(rect.x + 1U) + lo.v - line->scroll :
                    (u64)(rect.x + 1U);
@@ -1658,12 +1658,12 @@ void sag_cmdline_draw(Ed *ed, Rect rect)
         u16 x0 = x0v > right ? right : (u16)x0v;
         u16 x1 = x1v > right ? right : (u16)x1v;
 
-        error_cell.bg = (SagColor){SAG_COLOR_INDEXED, 196U, 0U, 0U};
-        error_cell.attrs |= SAG_ATTR_UNDERLINE;
+        error_cell.bg = (YewColor){YEW_COLOR_INDEXED, 196U, 0U, 0U};
+        error_cell.attrs |= YEW_ATTR_UNDERLINE;
         if (x1 <= x0 && x0 < right)
             x1 = (u16)(x0 + 1U);
-        sag_grid_overlay(&ed->grid, rect.y, x0, x1, &error_cell,
-                         SAG_OVERLAY_BG | SAG_OVERLAY_ATTRS);
+        yew_grid_overlay(&ed->grid, rect.y, x0, x1, &error_cell,
+                         YEW_OVERLAY_BG | YEW_OVERLAY_ATTRS);
     }
     /*
      * §7: the suggestion trails the caret, dim, and is drawn AFTER the
@@ -1677,12 +1677,12 @@ void sag_cmdline_draw(Ed *ed, Rect rect)
         const char *ghost = cmdline_ghost(ed, &ghost_len);
 
         if (ghost != NULL && ghost_len != 0U) {
-            SagUiStyle ghost_style = style;
-            size_t keep = sag_str_clip((const u8 *)ghost, ghost_len,
+            YewUiStyle ghost_style = style;
+            size_t keep = yew_str_clip((const u8 *)ghost, ghost_len,
                                        (int)(right - col), NULL);
 
-            ghost_style.attrs |= SAG_ATTR_DIM;
-            (void)sag_grid_puts(&ed->grid, rect.y, col,
+            ghost_style.attrs |= YEW_ATTR_DIM;
+            (void)yew_grid_puts(&ed->grid, rect.y, col,
                                 (const u8 *)ghost, keep,
                                 ghost_style.row_fg, ghost_style.row_bg,
                                 ghost_style.attrs);
@@ -1697,7 +1697,7 @@ void sag_cmdline_draw(Ed *ed, Rect rect)
         u16 x = cursor_x >= right ? (right == 0U ? 0U :
                                       (u16)(right - 1U)) : (u16)cursor_x;
 
-        sag_grid_cursor_shape(&ed->grid, SAG_CURSOR_BAR);
-        sag_grid_cursor(&ed->grid, rect.y, x, right != 0U);
+        yew_grid_cursor_shape(&ed->grid, YEW_CURSOR_BAR);
+        yew_grid_cursor(&ed->grid, rect.y, x, right != 0U);
     }
 }

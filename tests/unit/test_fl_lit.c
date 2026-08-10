@@ -42,16 +42,16 @@ static void ff_free(FlFix *f)
 static bool ff_round(FlFix *f, const char *src, Bytebuf *out)
 {
     FlParseErr err;
-    FlLit *lit = sag_fl_parse(&f->arena, (const u8 *)src, strlen(src),
+    FlLit *lit = yew_fl_parse(&f->arena, (const u8 *)src, strlen(src),
                               &err);
     FlEmit e;
 
     if (lit == NULL)
         return false;
     out->len = 0U;
-    sag_fl_emit_init(&e, out);
-    sag_fl_emit_lit(&e, NULL, lit);
-    sag_fl_emit_done(&e);
+    yew_fl_emit_init(&e, out);
+    yew_fl_emit_lit(&e, NULL, lit);
+    yew_fl_emit_done(&e);
     bytebuf_push_u8(out, 0U);
     out->len--;
     return true;
@@ -68,7 +68,7 @@ void test_fl_lit_emits_the_canonical_layout(void)
     static const char want[] =
         "{\n"
         "  version: 1,\n"
-        "  writer: \"sagitta\",\n"
+        "  writer: \"yew\",\n"
         "  flag: true,\n"
         "  gone: nil,\n"
         "  list: [\n"
@@ -81,23 +81,23 @@ void test_fl_lit_emits_the_canonical_layout(void)
         "}\n";
 
     ff_make(&f);
-    sag_fl_emit_init(&e, &f.out);
-    sag_fl_map_open(&e, NULL);
-    sag_fl_int(&e, "version", 1);
-    sag_fl_str(&e, "writer", "sagitta", 7U);
-    sag_fl_bool(&e, "flag", true);
-    sag_fl_nil(&e, "gone");
-    sag_fl_list_open(&e, "list");
-    sag_fl_int(&e, NULL, 1);
-    sag_fl_int(&e, NULL, 2);
-    sag_fl_list_close(&e);
-    sag_fl_map_open(&e, "inner");
-    sag_fl_int(&e, "deep", -7);
-    sag_fl_map_close(&e);
-    sag_fl_map_close(&e);
-    sag_fl_emit_done(&e);
+    yew_fl_emit_init(&e, &f.out);
+    yew_fl_map_open(&e, NULL);
+    yew_fl_int(&e, "version", 1);
+    yew_fl_str(&e, "writer", "yew", 3U);
+    yew_fl_bool(&e, "flag", true);
+    yew_fl_nil(&e, "gone");
+    yew_fl_list_open(&e, "list");
+    yew_fl_int(&e, NULL, 1);
+    yew_fl_int(&e, NULL, 2);
+    yew_fl_list_close(&e);
+    yew_fl_map_open(&e, "inner");
+    yew_fl_int(&e, "deep", -7);
+    yew_fl_map_close(&e);
+    yew_fl_map_close(&e);
+    yew_fl_emit_done(&e);
     bytebuf_push_u8(&f.out, 0U);
-    SAG_ASSERT_EQ_STR((const char *)f.out.data, want);
+    YEW_ASSERT_EQ_STR((const char *)f.out.data, want);
     ff_free(&f);
 }
 
@@ -122,15 +122,15 @@ void test_fl_lit_round_trip_is_a_fixpoint(void)
     ff_make(&f);
     bytebuf_init(&a);
     bytebuf_init(&b);
-    SAG_ASSERT(ff_round(&f, src, &a));
+    YEW_ASSERT(ff_round(&f, src, &a));
     /* The canonical form re-parses and re-emits identically. */
-    SAG_ASSERT(ff_round(&f, (const char *)a.data, &b));
-    SAG_ASSERT_EQ_U64(a.len, b.len);
-    SAG_ASSERT_EQ_I64(memcmp(a.data, b.data, a.len), 0);
+    YEW_ASSERT(ff_round(&f, (const char *)a.data, &b));
+    YEW_ASSERT_EQ_U64(a.len, b.len);
+    YEW_ASSERT_EQ_I64(memcmp(a.data, b.data, a.len), 0);
     /* i64 extremes survive exactly — the reason there are no floats. */
-    SAG_ASSERT_NOT_NULL(strstr((const char *)a.data,
+    YEW_ASSERT_NOT_NULL(strstr((const char *)a.data,
                                "-9223372036854775808"));
-    SAG_ASSERT_NOT_NULL(strstr((const char *)a.data,
+    YEW_ASSERT_NOT_NULL(strstr((const char *)a.data,
                                "9223372036854775807"));
     bytebuf_free(&a);
     bytebuf_free(&b);
@@ -152,23 +152,23 @@ void test_fl_lit_escape_table_round_trips(void)
     const char *s;
 
     ff_make(&f);
-    sag_fl_emit_init(&e, &f.out);
-    sag_fl_map_open(&e, NULL);
-    sag_fl_str(&e, "x", raw, sizeof(raw));
-    sag_fl_map_close(&e);
-    sag_fl_emit_done(&e);
+    yew_fl_emit_init(&e, &f.out);
+    yew_fl_map_open(&e, NULL);
+    yew_fl_str(&e, "x", raw, sizeof(raw));
+    yew_fl_map_close(&e);
+    yew_fl_emit_done(&e);
     bytebuf_push_u8(&f.out, 0U);
 
     /* Exactly the pinned spellings, and \x for the rest. */
-    SAG_ASSERT_NOT_NULL(strstr((const char *)f.out.data,
+    YEW_ASSERT_NOT_NULL(strstr((const char *)f.out.data,
                                "\"\\\"\\\\\\n\\t\\r\\0\\x01\\x1f\\x7fz\""));
 
-    lit = sag_fl_parse(&f.arena, f.out.data, f.out.len - 1U, &err);
-    SAG_ASSERT_NOT_NULL(lit);
-    v = sag_fl_get(lit, "x");
-    s = sag_fl_str_or(v, NULL, &n);
-    SAG_ASSERT_EQ_U64(n, sizeof(raw));
-    SAG_ASSERT_EQ_I64(memcmp(s, raw, sizeof(raw)), 0);
+    lit = yew_fl_parse(&f.arena, f.out.data, f.out.len - 1U, &err);
+    YEW_ASSERT_NOT_NULL(lit);
+    v = yew_fl_get(lit, "x");
+    s = yew_fl_str_or(v, NULL, &n);
+    YEW_ASSERT_EQ_U64(n, sizeof(raw));
+    YEW_ASSERT_EQ_I64(memcmp(s, raw, sizeof(raw)), 0);
     ff_free(&f);
 }
 
@@ -191,22 +191,22 @@ void test_fl_lit_carries_invalid_utf8_and_nul_paths(void)
     const char *s;
 
     ff_make(&f);
-    sag_fl_emit_init(&e, &f.out);
-    sag_fl_map_open(&e, NULL);
-    sag_fl_str(&e, "path", (const char *)path, sizeof(path));
-    sag_fl_map_close(&e);
-    sag_fl_emit_done(&e);
+    yew_fl_emit_init(&e, &f.out);
+    yew_fl_map_open(&e, NULL);
+    yew_fl_str(&e, "path", (const char *)path, sizeof(path));
+    yew_fl_map_close(&e);
+    yew_fl_emit_done(&e);
 
     /* The high bytes ride through VERBATIM — not \xNN — so a UTF-8
      * path stays readable in the file. */
-    SAG_ASSERT_NOT_NULL(memchr(f.out.data, 0xC3, f.out.len));
-    SAG_ASSERT_NOT_NULL(memchr(f.out.data, 0xFF, f.out.len));
+    YEW_ASSERT_NOT_NULL(memchr(f.out.data, 0xC3, f.out.len));
+    YEW_ASSERT_NOT_NULL(memchr(f.out.data, 0xFF, f.out.len));
 
-    lit = sag_fl_parse(&f.arena, f.out.data, f.out.len, &err);
-    SAG_ASSERT_NOT_NULL(lit);
-    s = sag_fl_str_or(sag_fl_get(lit, "path"), NULL, &n);
-    SAG_ASSERT_EQ_U64(n, sizeof(path));
-    SAG_ASSERT_EQ_I64(memcmp(s, path, sizeof(path)), 0);
+    lit = yew_fl_parse(&f.arena, f.out.data, f.out.len, &err);
+    YEW_ASSERT_NOT_NULL(lit);
+    s = yew_fl_str_or(yew_fl_get(lit, "path"), NULL, &n);
+    YEW_ASSERT_EQ_U64(n, sizeof(path));
+    YEW_ASSERT_EQ_I64(memcmp(s, path, sizeof(path)), 0);
     ff_free(&f);
 }
 
@@ -226,9 +226,9 @@ void test_fl_lit_accepts_comments_and_drops_them(void)
 
     ff_make(&f);
     bytebuf_init(&out);
-    SAG_ASSERT(ff_round(&f, src, &out));
-    SAG_ASSERT_EQ_STR((const char *)out.data, "{\n  a: 1,\n  b: 2,\n}\n");
-    SAG_ASSERT(strchr((const char *)out.data, '#') == NULL);
+    YEW_ASSERT(ff_round(&f, src, &out));
+    YEW_ASSERT_EQ_STR((const char *)out.data, "{\n  a: 1,\n  b: 2,\n}\n");
+    YEW_ASSERT(strchr((const char *)out.data, '#') == NULL);
     bytebuf_free(&out);
     ff_free(&f);
 }
@@ -236,7 +236,7 @@ void test_fl_lit_accepts_comments_and_drops_them(void)
 /*
  * Unknown keys are PRESERVED across parse -> emit.
  *
- * An older sagitta reading a newer one's state must not silently delete
+ * An older yew reading a newer one's state must not silently delete
  * the settings it does not understand; the next save would hand the
  * user back a file with their preferences quietly removed.
  */
@@ -249,13 +249,13 @@ void test_fl_lit_preserves_unknown_keys_in_order(void)
 
     ff_make(&f);
     bytebuf_init(&out);
-    SAG_ASSERT(ff_round(&f, src, &out));
-    SAG_ASSERT_NOT_NULL(strstr((const char *)out.data, "from_the_future"));
-    SAG_ASSERT_NOT_NULL(strstr((const char *)out.data, "also_new"));
+    YEW_ASSERT(ff_round(&f, src, &out));
+    YEW_ASSERT_NOT_NULL(strstr((const char *)out.data, "from_the_future"));
+    YEW_ASSERT_NOT_NULL(strstr((const char *)out.data, "also_new"));
     /* Insertion order, not hash order — the fixpoint depends on it. */
-    SAG_ASSERT(strstr((const char *)out.data, "known") <
+    YEW_ASSERT(strstr((const char *)out.data, "known") <
                strstr((const char *)out.data, "from_the_future"));
-    SAG_ASSERT(strstr((const char *)out.data, "from_the_future") <
+    YEW_ASSERT(strstr((const char *)out.data, "from_the_future") <
                strstr((const char *)out.data, "also_new"));
     bytebuf_free(&out);
     ff_free(&f);
@@ -271,11 +271,11 @@ void test_fl_lit_accepts_quoted_and_dotted_keys(void)
         "{ \"tabs.group_hover_preview\": true, plain.key: 1, }";
 
     ff_make(&f);
-    lit = sag_fl_parse(&f.arena, (const u8 *)src, strlen(src), &err);
-    SAG_ASSERT_NOT_NULL(lit);
-    SAG_ASSERT(sag_fl_bool_or(sag_fl_get(lit, "tabs.group_hover_preview"),
+    lit = yew_fl_parse(&f.arena, (const u8 *)src, strlen(src), &err);
+    YEW_ASSERT_NOT_NULL(lit);
+    YEW_ASSERT(yew_fl_bool_or(yew_fl_get(lit, "tabs.group_hover_preview"),
                               false));
-    SAG_ASSERT_EQ_I64(sag_fl_int_or(sag_fl_get(lit, "plain.key"), 0), 1);
+    YEW_ASSERT_EQ_I64(yew_fl_int_or(yew_fl_get(lit, "plain.key"), 0), 1);
     ff_free(&f);
 }
 
@@ -290,38 +290,38 @@ void test_fl_lit_caps_are_corruption(void)
 
     ff_make(&f);
     /* Depth 33. */
-    big = sag_xmalloc(256U);
+    big = yew_xmalloc(256U);
     for (i = 0U; i < 33U; i++)
         big[i] = '[';
     for (i = 0U; i < 33U; i++)
         big[33U + i] = ']';
-    SAG_ASSERT_NULL(sag_fl_parse(&f.arena, (const u8 *)big, 66U, &err));
-    SAG_ASSERT_NOT_NULL(err.msg);
+    YEW_ASSERT_NULL(yew_fl_parse(&f.arena, (const u8 *)big, 66U, &err));
+    YEW_ASSERT_NOT_NULL(err.msg);
     free(big);
 
     /* Depth 32 is fine — the cap is a boundary, not an approximation. */
-    big = sag_xmalloc(256U);
+    big = yew_xmalloc(256U);
     for (i = 0U; i < 32U; i++)
         big[i] = '[';
     for (i = 0U; i < 32U; i++)
         big[32U + i] = ']';
-    SAG_ASSERT_NOT_NULL(sag_fl_parse(&f.arena, (const u8 *)big, 64U, &err));
+    YEW_ASSERT_NOT_NULL(yew_fl_parse(&f.arena, (const u8 *)big, 64U, &err));
     free(big);
 
     /* A 4097-byte string. */
     {
         u64 n = 4097U + 16U;
-        char *s = sag_xmalloc((size_t)n);
+        char *s = yew_xmalloc((size_t)n);
 
         s[0] = '"';
         (void)memset(s + 1, 'a', 4097U);
         s[4098] = '"';
-        SAG_ASSERT_NULL(sag_fl_parse(&f.arena, (const u8 *)s, 4099U, &err));
+        YEW_ASSERT_NULL(yew_fl_parse(&f.arena, (const u8 *)s, 4099U, &err));
         free(s);
     }
     /* A document over 8 MiB is rejected without being walked. */
-    SAG_ASSERT_NULL(sag_fl_parse(&f.arena, (const u8 *)"{}",
-                                 (u64)SAG_FL_MAX_BYTES + 1U, &err));
+    YEW_ASSERT_NULL(yew_fl_parse(&f.arena, (const u8 *)"{}",
+                                 (u64)YEW_FL_MAX_BYTES + 1U, &err));
     ff_free(&f);
 }
 
@@ -333,15 +333,15 @@ void test_fl_lit_rejects_unknown_escapes(void)
     FlParseErr err;
 
     ff_make(&f);
-    SAG_ASSERT_NULL(sag_fl_parse(&f.arena, (const u8 *)"\"\\q\"", 4U,
+    YEW_ASSERT_NULL(yew_fl_parse(&f.arena, (const u8 *)"\"\\q\"", 4U,
                                  &err));
-    SAG_ASSERT_NULL(sag_fl_parse(&f.arena, (const u8 *)"\"\\u0041\"", 8U,
+    YEW_ASSERT_NULL(yew_fl_parse(&f.arena, (const u8 *)"\"\\u0041\"", 8U,
                                  &err));
-    SAG_ASSERT_NULL(sag_fl_parse(&f.arena, (const u8 *)"\"\\xZZ\"", 6U,
+    YEW_ASSERT_NULL(yew_fl_parse(&f.arena, (const u8 *)"\"\\xZZ\"", 6U,
                                  &err));
     /* And an unterminated one does not read past the end. */
-    SAG_ASSERT_NULL(sag_fl_parse(&f.arena, (const u8 *)"\"\\", 2U, &err));
-    SAG_ASSERT_NULL(sag_fl_parse(&f.arena, (const u8 *)"\"abc", 4U, &err));
+    YEW_ASSERT_NULL(yew_fl_parse(&f.arena, (const u8 *)"\"\\", 2U, &err));
+    YEW_ASSERT_NULL(yew_fl_parse(&f.arena, (const u8 *)"\"abc", 4U, &err));
     ff_free(&f);
 }
 
@@ -355,14 +355,14 @@ void test_fl_lit_rejects_out_of_range_integers(void)
     static const char way_out[] = "99999999999999999999999";
 
     ff_make(&f);
-    SAG_ASSERT_NULL(sag_fl_parse(&f.arena, (const u8 *)too_big,
+    YEW_ASSERT_NULL(yew_fl_parse(&f.arena, (const u8 *)too_big,
                                  strlen(too_big), &err));
-    SAG_ASSERT_NULL(sag_fl_parse(&f.arena, (const u8 *)too_small,
+    YEW_ASSERT_NULL(yew_fl_parse(&f.arena, (const u8 *)too_small,
                                  strlen(too_small), &err));
-    SAG_ASSERT_NULL(sag_fl_parse(&f.arena, (const u8 *)way_out,
+    YEW_ASSERT_NULL(yew_fl_parse(&f.arena, (const u8 *)way_out,
                                  strlen(way_out), &err));
     /* The exact bounds parse. */
-    SAG_ASSERT_NOT_NULL(sag_fl_parse(&f.arena,
+    YEW_ASSERT_NOT_NULL(yew_fl_parse(&f.arena,
                                      (const u8 *)"-9223372036854775808",
                                      20U, &err));
     ff_free(&f);
@@ -379,15 +379,15 @@ void test_fl_lit_readers_are_type_safe(void)
     static const char src[] = "{ i: \"not an int\", b: 3, s: true, }";
 
     ff_make(&f);
-    lit = sag_fl_parse(&f.arena, (const u8 *)src, strlen(src), &err);
-    SAG_ASSERT_NOT_NULL(lit);
-    SAG_ASSERT_EQ_I64(sag_fl_int_or(sag_fl_get(lit, "i"), 42), 42);
-    SAG_ASSERT(sag_fl_bool_or(sag_fl_get(lit, "b"), true));
-    SAG_ASSERT_EQ_STR(sag_fl_str_or(sag_fl_get(lit, "s"), "dflt", &n),
+    lit = yew_fl_parse(&f.arena, (const u8 *)src, strlen(src), &err);
+    YEW_ASSERT_NOT_NULL(lit);
+    YEW_ASSERT_EQ_I64(yew_fl_int_or(yew_fl_get(lit, "i"), 42), 42);
+    YEW_ASSERT(yew_fl_bool_or(yew_fl_get(lit, "b"), true));
+    YEW_ASSERT_EQ_STR(yew_fl_str_or(yew_fl_get(lit, "s"), "dflt", &n),
                       "dflt");
     /* A missing key is the same as a wrong-typed one. */
-    SAG_ASSERT_EQ_I64(sag_fl_int_or(sag_fl_get(lit, "absent"), -1), -1);
-    SAG_ASSERT_NULL(sag_fl_get(lit, "absent"));
+    YEW_ASSERT_EQ_I64(yew_fl_int_or(yew_fl_get(lit, "absent"), -1), -1);
+    YEW_ASSERT_NULL(yew_fl_get(lit, "absent"));
     ff_free(&f);
 }
 
@@ -405,7 +405,7 @@ void test_fl_lit_rejects_garbage_totally(void)
 
     ff_make(&f);
     for (i = 0U; i < sizeof(bad) / sizeof(bad[0]); i++) {
-        FlLit *lit = sag_fl_parse(&f.arena, (const u8 *)bad[i],
+        FlLit *lit = yew_fl_parse(&f.arena, (const u8 *)bad[i],
                                   (u64)strlen(bad[i]), &err);
 
         /* Some of these are legal ("nilx" is not); what matters is that
@@ -413,6 +413,6 @@ void test_fl_lit_rejects_garbage_totally(void)
         (void)lit;
     }
     /* `nilx` must NOT parse as nil followed by garbage. */
-    SAG_ASSERT_NULL(sag_fl_parse(&f.arena, (const u8 *)"nilx", 4U, &err));
+    YEW_ASSERT_NULL(yew_fl_parse(&f.arena, (const u8 *)"nilx", 4U, &err));
     ff_free(&f);
 }

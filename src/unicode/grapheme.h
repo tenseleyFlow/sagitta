@@ -1,63 +1,63 @@
-#ifndef SAG_UNICODE_GRAPHEME_H
-#define SAG_UNICODE_GRAPHEME_H
+#ifndef YEW_UNICODE_GRAPHEME_H
+#define YEW_UNICODE_GRAPHEME_H
 
 #include "util/base.h"
 
 typedef enum {
-    SAG_GCB_OTHER = 0,
-    SAG_GCB_CR,
-    SAG_GCB_LF,
-    SAG_GCB_CONTROL,
-    SAG_GCB_EXTEND,
-    SAG_GCB_ZWJ,
-    SAG_GCB_RI,
-    SAG_GCB_PREPEND,
-    SAG_GCB_SPACINGMARK,
-    SAG_GCB_L,
-    SAG_GCB_V,
-    SAG_GCB_T,
-    SAG_GCB_LV,
-    SAG_GCB_LVT,
-    SAG_GCB_COUNT
-} SagGcb;
+    YEW_GCB_OTHER = 0,
+    YEW_GCB_CR,
+    YEW_GCB_LF,
+    YEW_GCB_CONTROL,
+    YEW_GCB_EXTEND,
+    YEW_GCB_ZWJ,
+    YEW_GCB_RI,
+    YEW_GCB_PREPEND,
+    YEW_GCB_SPACINGMARK,
+    YEW_GCB_L,
+    YEW_GCB_V,
+    YEW_GCB_T,
+    YEW_GCB_LV,
+    YEW_GCB_LVT,
+    YEW_GCB_COUNT
+} YewGcb;
 
 typedef enum {
-    SAG_INCB_NONE = 0,
-    SAG_INCB_LINKER,
-    SAG_INCB_CONSONANT,
-    SAG_INCB_EXTEND
-} SagIncb;
+    YEW_INCB_NONE = 0,
+    YEW_INCB_LINKER,
+    YEW_INCB_CONSONANT,
+    YEW_INCB_EXTEND
+} YewIncb;
 
 typedef struct {
     u8 prev_gcb;
     u8 flags;
-} SagGbState;
+} YewGbState;
 
 enum {
-    SAG_GBF_RI_ODD = 1u << 0,
-    SAG_GBF_PICT = 1u << 1,
-    SAG_GBF_INCB_C = 1u << 2,
-    SAG_GBF_INCB_L = 1u << 3
+    YEW_GBF_RI_ODD = 1u << 0,
+    YEW_GBF_PICT = 1u << 1,
+    YEW_GBF_INCB_C = 1u << 2,
+    YEW_GBF_INCB_L = 1u << 3
 };
 
-void sag_gb_init(SagGbState *st);
-bool sag_gb_boundary(SagGbState *st, u32 cp);
+void yew_gb_init(YewGbState *st);
+bool yew_gb_boundary(YewGbState *st, u32 cp);
 
-size_t sag_gb_next_bytes(const u8 *s, size_t len, size_t pos);
-size_t sag_gb_prev_bytes(const u8 *s, size_t len, size_t pos);
-size_t sag_gb_count_bytes(const u8 *s, size_t len);
+size_t yew_gb_next_bytes(const u8 *s, size_t len, size_t pos);
+size_t yew_gb_prev_bytes(const u8 *s, size_t len, size_t pos);
+size_t yew_gb_count_bytes(const u8 *s, size_t len);
 
-#define SAG_CLUSTER_TAB 255u
+#define YEW_CLUSTER_TAB 255u
 
 typedef struct {
     size_t off;
     size_t len;
     u32 base_cp;
     u8 cells;
-} SagCluster;
+} YewCluster;
 
-bool sag_cluster_next(const u8 *s, size_t len, size_t *pos,
-                      SagCluster *out);
+bool yew_cluster_next(const u8 *s, size_t len, size_t *pos,
+                      YewCluster *out);
 
 /* TextBuf coordinate wrappers land in Sprint 9. Word_Break lands in
  * Sprint 16; case folding in Sprint 20. Glyph attributes and tab-stop

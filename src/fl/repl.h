@@ -1,8 +1,8 @@
-#ifndef SAG_FL_REPL_H
-#define SAG_FL_REPL_H
+#ifndef YEW_FL_REPL_H
+#define YEW_FL_REPL_H
 
 /*
- * Sprint 32 §2-§5: the interactive `sag fl` prompt.
+ * Sprint 32 §2-§5: the interactive `yew fl` prompt.
  *
  * Result printing lives here rather than in the CLI because `-e` and
  * the prompt must agree about it byte for byte -- they are the same
@@ -26,7 +26,7 @@ enum {
  * two bounds above.  NIL PRINTS NOTHING AT ALL -- not even a blank
  * line, or every `let` and every `io.print` would spam one.
  */
-void sag_fl_print_result(FlVm *vm, FlValue v, Bytebuf *out);
+void yew_fl_print_result(FlVm *vm, FlValue v, Bytebuf *out);
 
 /*
  * What the accumulated buffer is, after each line.
@@ -60,7 +60,7 @@ typedef enum {
  * caller re-parses with its printing sink when the verdict is
  * FL_REPL_ERROR, which is the only path that should produce output.
  */
-FlReplVerdict sag_fl_repl_classify(Arena *arena, Interner *in,
+FlReplVerdict yew_fl_repl_classify(Arena *arena, Interner *in,
                                    const char *text, size_t len);
 
 /*
@@ -84,18 +84,18 @@ typedef struct FlRepl {
  * the first non-space byte is `:` -- a `.fl` file starting with `:` is
  * an ordinary syntax error, which is correct and needs no special case.
  */
-bool sag_fl_repl_command(FlRepl *r, const char *line, size_t len,
+bool yew_fl_repl_command(FlRepl *r, const char *line, size_t len,
                          Bytebuf *out, bool *quit);
 
-/* The interactive prompt.  Returns a SAG_EXIT_* code. */
-int sag_fl_repl(void);
+/* The interactive prompt.  Returns a YEW_EXIT_* code. */
+int yew_fl_repl(void);
 
 /*
- * Opens the prompt exactly as sag_fl_repl does -- tty, raw mode,
- * sag_bug prehook -- then breaks a chunk on purpose so §9's report
+ * Opens the prompt exactly as yew_fl_repl does -- tty, raw mode,
+ * yew_bug prehook -- then breaks a chunk on purpose so §9's report
  * fires with the terminal live.  Hidden behind --selftest-fl-bug; the
  * pty golden for invariant 6 is the only caller.
  */
-int sag_fl_repl_selftest_bug(void);
+int yew_fl_repl_selftest_bug(void);
 
-#endif /* SAG_FL_REPL_H */
+#endif /* YEW_FL_REPL_H */

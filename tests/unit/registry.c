@@ -3,7 +3,7 @@
 
 #define T(n) { #n, test_##n }
 
-const SagTest sag_tests[] = {
+const YewTest yew_tests[] = {
     T(batch_selfcheck_pins_every_uninitialized_subsystem),
     T(batch_selfcheck_rejects_seeded_grid_input_tty_and_timer),
     T(batch_selfcheck_rejects_interactive_installed_binding),
@@ -1387,9 +1387,9 @@ const SagTest sag_tests[] = {
     T(narrow_mid_edit_rescans_everything),
     T(narrow_sliced_rescan_equals_unsliced),
     T(narrow_partial_scan_has_a_usable_count),
-    T(narrow_top_agrees_with_sag_fz_rank),
+    T(narrow_top_agrees_with_yew_fz_rank),
     T(narrow_empty_pattern_keeps_source_order),
-    T(narrow_empty_pattern_agrees_with_sag_fz_rank),
+    T(narrow_empty_pattern_agrees_with_yew_fz_rank),
     T(narrow_item_count_change_forces_a_rescan),
     T(narrow_degenerate_inputs),
     T(typejump_appends_inside_the_window),
@@ -1503,7 +1503,7 @@ const SagTest sag_tests[] = {
     T(degrade_no_color_emits_no_colour_and_stays_legible),
     T(degrade_empty_no_color_is_not_set),
     T(degrade_16_colour_tier_uses_reverse_not_colour),
-    T(degrade_sag_mouse_zero_drops_events),
+    T(degrade_yew_mouse_zero_drops_events),
     T(degrade_tiny_terminals_never_produce_a_bad_rect),
     T(degrade_the_member_strip_sheds_before_the_tab_strip),
     T(degrade_ascii_keeps_every_element_meaningful),
@@ -1551,6 +1551,6 @@ const SagTest sag_tests[] = {
     T(macrobrowse_edit_is_an_ordinary_multicursor_undo_buffer),
 };
 
-const size_t sag_tests_len = SAG_ARRAY_LEN(sag_tests);
+const size_t yew_tests_len = YEW_ARRAY_LEN(yew_tests);
 
 #undef T

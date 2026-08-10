@@ -1,5 +1,5 @@
-#ifndef SAG_UTIL_ARENA_H
-#define SAG_UTIL_ARENA_H
+#ifndef YEW_UTIL_ARENA_H
+#define YEW_UTIL_ARENA_H
 
 #include <stddef.h>
 

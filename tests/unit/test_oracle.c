@@ -19,21 +19,21 @@ static void assert_oracle(const OracleCase *test)
     oracle_init(&oracle, (const u8 *)test->input, (u64)len);
     bytebuf_init(&materialized);
     oracle_materialize(&oracle, &materialized);
-    SAG_ASSERT_EQ_U64(oracle_len(&oracle), len);
-    SAG_ASSERT_EQ_U64(oracle_line_count(&oracle), test->lines);
-    SAG_ASSERT_EQ_U64(materialized.len, strlen(test->expected));
-    SAG_ASSERT_EQ_MEM(materialized.data, test->expected, materialized.len);
+    YEW_ASSERT_EQ_U64(oracle_len(&oracle), len);
+    YEW_ASSERT_EQ_U64(oracle_line_count(&oracle), test->lines);
+    YEW_ASSERT_EQ_U64(materialized.len, strlen(test->expected));
+    YEW_ASSERT_EQ_MEM(materialized.data, test->expected, materialized.len);
     for (line = 0U; line < test->lines; line++) {
         u64 start = oracle_line_start(&oracle, line);
-        SAG_ASSERT(start <= (u64)len);
-        SAG_ASSERT_EQ_U64(oracle_line_of(&oracle, start), line);
+        YEW_ASSERT(start <= (u64)len);
+        YEW_ASSERT_EQ_U64(oracle_line_of(&oracle, start), line);
         if (line != 0U)
-            SAG_ASSERT_EQ_U64((u8)test->input[start - 1U], (u8)'\n');
+            YEW_ASSERT_EQ_U64((u8)test->input[start - 1U], (u8)'\n');
     }
     for (off = 0U; off <= (u64)len; off++) {
         line = oracle_line_of(&oracle, off);
-        SAG_ASSERT(line < test->lines);
-        SAG_ASSERT(oracle_line_start(&oracle, line) <= off);
+        YEW_ASSERT(line < test->lines);
+        YEW_ASSERT(oracle_line_start(&oracle, line) <= off);
     }
     bytebuf_free(&materialized);
     oracle_free(&oracle);
@@ -70,8 +70,8 @@ void test_oracle_hand_cases(void)
     };
     size_t i;
 
-    SAG_ASSERT_EQ_U64(SAG_ARRAY_LEN(cases), 40U);
-    for (i = 0U; i < SAG_ARRAY_LEN(cases); i++)
+    YEW_ASSERT_EQ_U64(YEW_ARRAY_LEN(cases), 40U);
+    for (i = 0U; i < YEW_ARRAY_LEN(cases); i++)
         assert_oracle(&cases[i]);
 }
 
@@ -82,10 +82,10 @@ static void assert_content(Oracle *oracle, const u8 *expected, size_t len,
 
     bytebuf_init(&out);
     oracle_materialize(oracle, &out);
-    SAG_ASSERT_EQ_U64(out.len, len);
-    SAG_ASSERT_EQ_MEM(out.data, expected, len);
-    SAG_ASSERT_EQ_U64(oracle_len(oracle), len);
-    SAG_ASSERT_EQ_U64(oracle_line_count(oracle), lines);
+    YEW_ASSERT_EQ_U64(out.len, len);
+    YEW_ASSERT_EQ_MEM(out.data, expected, len);
+    YEW_ASSERT_EQ_U64(oracle_len(oracle), len);
+    YEW_ASSERT_EQ_U64(oracle_line_count(oracle), lines);
     bytebuf_free(&out);
 }
 
@@ -105,7 +105,7 @@ void test_oracle_edit_cases(void)
     oracle_delete(&oracle, 2U, 7U);
     assert_content(&oracle, expected_delete, sizeof(expected_delete), 2U);
     oracle_insert(&oracle, oracle_len(&oracle), (const u8 *)"\n", 1U);
-    SAG_ASSERT_EQ_U64(oracle_line_count(&oracle), 3U);
+    YEW_ASSERT_EQ_U64(oracle_line_count(&oracle), 3U);
     oracle_delete(&oracle, 1U, oracle_len(&oracle));
     assert_content(&oracle, (const u8 *)"a", 1U, 1U);
     oracle_delete(&oracle, 0U, 1U);

@@ -28,15 +28,15 @@
 /* Tears down everything a buffer owns without touching the list slot. */
 static void ed_buffer_dispose(Buffer *b)
 {
-    sag_opt_scope_free(&b->opt_overrides);
+    yew_opt_scope_free(&b->opt_overrides);
     if (b->jrn != NULL) {
-        sag_journal_close(b->jrn);
+        yew_journal_close(b->jrn);
         b->jrn = NULL;
     }
-    sag_marks_free(b->marks);
-    sag_undo_free(b->undo);
-    sag_textbuf_free(b->tb);
-    sag_filemeta_dispose(&b->meta);
+    yew_marks_free(b->marks);
+    yew_undo_free(b->undo);
+    yew_textbuf_free(b->tb);
+    yew_filemeta_dispose(&b->meta);
     (void)memset(b, 0, sizeof(*b));
 }
 
@@ -65,26 +65,26 @@ static void ed_buffer_free(Ed *ed)
         return;
     ed->fl_model_teardown = true;
     for (i = 0U; i < ed->ws.nbufs; i++)
-        sag_fl_hook_buffer(ed, FL_EV_BUF_CLOSE, ed->ws.bufs[i]);
-    sag_ed_insert_barrier(ed);
-    sag_reg_bind_context(&ed->regs, NULL, NULL);
-    sag_search_state_free(&ed->search);
-    sag_search_confirm_cancel(ed);
+        yew_fl_hook_buffer(ed, FL_EV_BUF_CLOSE, ed->ws.bufs[i]);
+    yew_ed_insert_barrier(ed);
+    yew_reg_bind_context(&ed->regs, NULL, NULL);
+    yew_search_state_free(&ed->search);
+    yew_search_confirm_cancel(ed);
     /*
      * Every tree belongs to a tab, including the first one, and each
      * tab releases its own leaves' views — so this is the ONE owner.
      * Freeing ed->panes here as well double-freed every split view.
      */
-    sag_tabs_free(ed);
+    yew_tabs_free(ed);
     /* After the tabs: dissolving a group walks the tabs array, so the
      * groups outlive the members they are asked about. */
-    sag_groups_free(ed);
+    yew_groups_free(ed);
     ed->pane_root = NULL;
     ed->focus = NULL;
-    sag_overlay_free(&ed->single_win.overlay);
-    sag_vp_free(&ed->single_win);
-    sag_cset_free(&ed->single_win.cs);
-    sag_opt_scope_free(&ed->single_win.opt_overrides);
+    yew_overlay_free(&ed->single_win.overlay);
+    yew_vp_free(&ed->single_win);
+    yew_cset_free(&ed->single_win.cs);
+    yew_opt_scope_free(&ed->single_win.opt_overrides);
     ed_ws_free(ed);
     ed_buffer_dispose(b);
     (void)memset(&ed->single_win, 0, sizeof(ed->single_win));
@@ -99,15 +99,15 @@ static void ed_ws_push(Ed *ed, Buffer *b)
         u32 cap = ed->ws.cap == 0U ? 4U : ed->ws.cap * 2U;
 
         if (cap < ed->ws.cap)
-            SAG_BUG("workspace buffer list overflow");
-        ed->ws.bufs = sag_xreallocarray(ed->ws.bufs, cap,
+            YEW_BUG("workspace buffer list overflow");
+        ed->ws.bufs = yew_xreallocarray(ed->ws.bufs, cap,
                                         sizeof(*ed->ws.bufs));
         ed->ws.cap = cap;
     }
     ed->ws.bufs[ed->ws.nbufs++] = b;
 }
 
-const char *sag_buf_label(const Buffer *b)
+const char *yew_buf_label(const Buffer *b)
 {
     if (b == NULL)
         return "";
@@ -116,25 +116,25 @@ const char *sag_buf_label(const Buffer *b)
     return b->path == NULL ? "[No Name]" : b->path;
 }
 
-Buffer *sag_ws_scratch_new(Ed *ed, const char *name, u32 flags)
+Buffer *yew_ws_scratch_new(Ed *ed, const char *name, u32 flags)
 {
     Buffer *b;
 
     if (ed == NULL || !ed->model_ready || name == NULL)
         return NULL;
-    b = sag_xcalloc(1U, sizeof(*b));
+    b = yew_xcalloc(1U, sizeof(*b));
     b->owner = ed;
     b->id = ed->ws.next_buf_id++;
-    sag_filemeta_init(&b->meta);
-    b->tb = sag_textbuf_new();
+    yew_filemeta_init(&b->meta);
+    b->tb = yew_textbuf_new();
     b->name = arena_strdup(&ed->arena, name);
-    b->flags = flags | SAG_BUF_SCRATCH;
-    b->tabwidth = SAG_VP_TABWIDTH;
+    b->flags = flags | YEW_BUF_SCRATCH;
+    b->tabwidth = YEW_VP_TABWIDTH;
     /* A scratch buffer still carries an undo tree so the edit chokepoint
-     * stays uniform; SAG_BUF_NOUNDO governs whether edits record into it. */
-    b->undo = sag_undo_new(b->tb);
-    sag_undo_mark_saved(b->undo);
-    b->marks = sag_marks_new();
+     * stays uniform; YEW_BUF_NOUNDO governs whether edits record into it. */
+    b->undo = yew_undo_new(b->tb);
+    yew_undo_mark_saved(b->undo);
+    b->marks = yew_marks_new();
     b->jrn = NULL;
     ed_ws_push(ed, b);
     return b;
@@ -150,7 +150,7 @@ Buffer *sag_ws_scratch_new(Ed *ed, const char *name, u32 flags)
  * honest answer is a null pointer rather than a boolean someone has to
  * remember to clear.
  */
-Buffer *sag_ws_file_buf(Ed *ed, const char *path)
+Buffer *yew_ws_file_buf(Ed *ed, const char *path)
 {
     Buffer *b;
     u32 i;
@@ -168,11 +168,11 @@ Buffer *sag_ws_file_buf(Ed *ed, const char *path)
                 return e;
         }
     }
-    b = sag_xcalloc(1U, sizeof(*b));
+    b = yew_xcalloc(1U, sizeof(*b));
     b->owner = ed;
     b->id = ed->ws.next_buf_id++;
-    sag_filemeta_init(&b->meta);
-    b->tabwidth = SAG_VP_TABWIDTH;
+    yew_filemeta_init(&b->meta);
+    b->tabwidth = YEW_VP_TABWIDTH;
     b->path = path == NULL ? NULL : arena_strdup(&ed->arena, path);
     if (path == NULL) {
         /*
@@ -180,26 +180,26 @@ Buffer *sag_ws_file_buf(Ed *ed, const char *path)
          * would mean a buffer that can never become resident.  It is
          * born loaded and empty.
          */
-        b->tb = sag_textbuf_new();
-        b->undo = sag_undo_new(b->tb);
-        sag_undo_mark_saved(b->undo);
-        b->marks = sag_marks_new();
+        b->tb = yew_textbuf_new();
+        b->undo = yew_undo_new(b->tb);
+        yew_undo_mark_saved(b->undo);
+        b->marks = yew_marks_new();
     }
     ed_ws_push(ed, b);
     return b;
 }
 
-bool sag_buf_resident(const Buffer *b)
+bool yew_buf_resident(const Buffer *b)
 {
     /* Asked of the allocation.  DoD 2 greps src/ui for a residency
      * FLAG and must find none. */
     return b != NULL && b->tb != NULL;
 }
 
-int sag_buf_hydrate(Ed *ed, Buffer *b)
+int yew_buf_hydrate(Ed *ed, Buffer *b)
 {
     TextBuf *tb = NULL;
-    SagLoadErr load;
+    YewLoadErr load;
 
     if (ed == NULL || b == NULL)
         return -1;
@@ -208,27 +208,27 @@ int sag_buf_hydrate(Ed *ed, Buffer *b)
     if (b->path == NULL)
         return -1;
     /*
-     * sag_file_load overwrites meta->realpath, which realpath(3)
+     * yew_file_load overwrites meta->realpath, which realpath(3)
      * allocated on the PREVIOUS load -- so re-entering a deferred tab
      * leaked PATH_MAX bytes every time.  Disposing here rather than in
-     * sag_buf_defer keeps the pairing next to the call that overwrites
+     * yew_buf_defer keeps the pairing next to the call that overwrites
      * it; dispose re-inits, so a never-loaded buffer is fine.
      */
-    sag_filemeta_dispose(&b->meta);
-    load = sag_file_load(b->path, &tb, &b->meta);
-    if (load != SAG_LOAD_OK && load != SAG_LOAD_ENOENT) {
-        sag_textbuf_free(tb);
+    yew_filemeta_dispose(&b->meta);
+    load = yew_file_load(b->path, &tb, &b->meta);
+    if (load != YEW_LOAD_OK && load != YEW_LOAD_ENOENT) {
+        yew_textbuf_free(tb);
         return -1;
     }
     /* A path that does not exist yet opens empty, exactly as it does
      * on the command line. */
     if (tb == NULL)
-        tb = sag_textbuf_new();
+        tb = yew_textbuf_new();
     b->tb = tb;
-    b->undo = sag_undo_new(tb);
-    sag_undo_mark_saved(b->undo);
+    b->undo = yew_undo_new(tb);
+    yew_undo_mark_saved(b->undo);
     if (b->marks == NULL)
-        b->marks = sag_marks_new();
+        b->marks = yew_marks_new();
     /*
      * Sprint 25 §6: restored marks become real here, at the first
      * moment there is text to anchor them to.  Clamped to the buffer,
@@ -237,13 +237,13 @@ int sag_buf_hydrate(Ed *ed, Buffer *b)
      */
     {
         u32 i;
-        u64 size = sag_textbuf_len(b->tb);
+        u64 size = yew_textbuf_len(b->tb);
 
         for (i = 0U; i < 26U; i++) {
             if (!b->pending_mark_set[i])
                 continue;
             b->pending_mark_set[i] = false;
-            (void)sag_ed_mark_set(ed, b, (u8)('a' + i),
+            (void)yew_ed_mark_set(ed, b, (u8)('a' + i),
                                   BYTEOFF(b->pending_marks[i] > size
                                               ? size
                                               : b->pending_marks[i]));
@@ -252,13 +252,13 @@ int sag_buf_hydrate(Ed *ed, Buffer *b)
     return 0;
 }
 
-void sag_buf_defer(Ed *ed, Buffer *b)
+void yew_buf_defer(Ed *ed, Buffer *b)
 {
     (void)ed;
     if (b == NULL || b->tb == NULL || b->path == NULL)
         return;
     if (b->jrn != NULL) {
-        sag_journal_close(b->jrn);
+        yew_journal_close(b->jrn);
         b->jrn = NULL;
     }
     /*
@@ -266,15 +266,15 @@ void sag_buf_defer(Ed *ed, Buffer *b)
      * derived from it, so a buffer read from nowhere reports clean
      * without anyone assigning a flag.
      */
-    sag_undo_free(b->undo);
+    yew_undo_free(b->undo);
     b->undo = NULL;
-    sag_marks_free(b->marks);
+    yew_marks_free(b->marks);
     b->marks = NULL;
-    sag_textbuf_free(b->tb);
+    yew_textbuf_free(b->tb);
     b->tb = NULL;
 }
 
-Buffer *sag_ws_buf_by_id(Ed *ed, u32 id)
+Buffer *yew_ws_buf_by_id(Ed *ed, u32 id)
 {
     u32 i;
 
@@ -299,7 +299,7 @@ static Win *win_by_id_in(Pane *p, u32 id)
     return w != NULL ? w : win_by_id_in(p->b, id);
 }
 
-Win *sag_ed_win_by_id(Ed *ed, u32 id)
+Win *yew_ed_win_by_id(Ed *ed, u32 id)
 {
     size_t i;
     Win *w;
@@ -325,7 +325,7 @@ Win *sag_ed_win_by_id(Ed *ed, u32 id)
                &ed->single_win : NULL;
 }
 
-Buffer *sag_ws_scratch_find(Ed *ed, const char *name)
+Buffer *yew_ws_scratch_find(Ed *ed, const char *name)
 {
     u32 i;
 
@@ -340,7 +340,7 @@ Buffer *sag_ws_scratch_find(Ed *ed, const char *name)
     return NULL;
 }
 
-void sag_ws_scratch_drop(Ed *ed, Buffer *b)
+void yew_ws_scratch_drop(Ed *ed, Buffer *b)
 {
     u32 i;
 
@@ -352,7 +352,7 @@ void sag_ws_scratch_drop(Ed *ed, Buffer *b)
         /* Never leave a window pointing at freed memory: a window showing
          * this buffer falls back to the document buffer first. */
         if (ed->win != NULL && ed->win->buf == b)
-            (void)sag_ed_show_buffer(ed, &ed->buffer);
+            (void)yew_ed_show_buffer(ed, &ed->buffer);
         ed_buffer_dispose(b);
         free(b);
         (void)memmove(&ed->ws.bufs[i], &ed->ws.bufs[i + 1U],
@@ -363,7 +363,7 @@ void sag_ws_scratch_drop(Ed *ed, Buffer *b)
     }
 }
 
-bool sag_ed_show_buffer(Ed *ed, Buffer *b)
+bool yew_ed_show_buffer(Ed *ed, Buffer *b)
 {
     Cursor cursor = {BYTEOFF(0U), {0U}, BYTEOFF(0U)};
     u32 i;
@@ -381,13 +381,13 @@ bool sag_ed_show_buffer(Ed *ed, Buffer *b)
         return false;
     if (ed->win->buf == b)
         return true;
-    sag_ed_insert_barrier(ed);
-    sag_vp_free(ed->win);
-    sag_cset_free(&ed->win->cs);
-    sag_cset_init(&ed->win->cs, cursor);
+    yew_ed_insert_barrier(ed);
+    yew_vp_free(ed->win);
+    yew_cset_free(&ed->win->cs);
+    yew_cset_init(&ed->win->cs, cursor);
     ed->win->buf = b;
-    sag_vp_init(ed->win);
-    sag_reg_bind_context(&ed->regs, b->undo, &b->meta);
+    yew_vp_init(ed->win);
+    yew_reg_bind_context(&ed->regs, b->undo, &b->meta);
     ed->layout_dirty = true;
     ed->full_damage = true;
     ed->footer_dirty = true;
@@ -404,25 +404,25 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
     ed->buffer.owner = ed;
     ed->buffer.id = ed->ws.next_buf_id++;
     ed->buffer.path = path == NULL ? NULL : arena_strdup(&ed->arena, path);
-    ed->buffer.tabwidth = SAG_VP_TABWIDTH;
-    ed->buffer.undo = sag_undo_new(tb);
-    sag_undo_mark_saved(ed->buffer.undo);
-    ed->buffer.marks = sag_marks_new();
+    ed->buffer.tabwidth = YEW_VP_TABWIDTH;
+    ed->buffer.undo = yew_undo_new(tb);
+    yew_undo_mark_saved(ed->buffer.undo);
+    ed->buffer.marks = yew_marks_new();
     ed->buffer.jrn = NULL;
-    sag_search_opts_init(&ed->search_opts);
-    sag_search_state_init(&ed->search);
-    sag_overlay_init(&ed->single_win.overlay);
+    yew_search_opts_init(&ed->search_opts);
+    yew_search_state_init(&ed->search);
+    yew_overlay_init(&ed->single_win.overlay);
     /* One leaf holding the document window: the pane tree always
      * exists, so no code path has to ask whether panes are "on". */
-    ed->pane_root = sag_pane_new_leaf(&ed->single_win);
+    ed->pane_root = yew_pane_new_leaf(&ed->single_win);
     ed->focus = ed->pane_root;
     /*
      * Tab 0 owns the tree that already exists rather than cloning a
      * second view of the same buffer: the editor always has exactly one
      * tab, so no code path has to ask whether tabs are "on".
      */
-    sag_tabs_init(&ed->tabs);
-    sag_groups_init(&ed->groups);
+    yew_tabs_init(&ed->tabs);
+    yew_groups_init(&ed->groups);
     {
         Tab first;
 
@@ -442,17 +442,17 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
         if (ed->buffer.path != NULL) {
             size_t n = strlen(ed->buffer.path) + 1U;
 
-            first.path = sag_xmalloc(n);
+            first.path = yew_xmalloc(n);
             (void)memcpy(first.path, ed->buffer.path, n);
         }
         TabVec_push(&ed->tabs.v, first);
         ed->tabs.active = 0;
     }
-    sag_reg_bind_context(&ed->regs, ed->buffer.undo, &ed->buffer.meta);
+    yew_reg_bind_context(&ed->regs, ed->buffer.undo, &ed->buffer.meta);
     ed->single_win.id = ed->next_win_id++;
-    sag_cset_init(&ed->single_win.cs, cursor);
+    yew_cset_init(&ed->single_win.cs, cursor);
     ed->single_win.buf = &ed->buffer;
-    sag_vp_init(&ed->single_win);
+    yew_vp_init(&ed->single_win);
     ed->win = &ed->single_win;
     ed->model_ready = true;
     /* Slot 0 is the document buffer and is never heap-owned. */
@@ -469,22 +469,22 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
     return true;
 }
 
-void sag_ed_init(Ed *ed)
+void yew_ed_init(Ed *ed)
 {
     char *root;
 
     if (ed == NULL)
-        SAG_BUG("editor init: NULL editor");
+        YEW_BUG("editor init: NULL editor");
     (void)memset(ed, 0, sizeof(*ed));
     arena_init(&ed->arena);
     arena_init(&ed->cmdline.comp_arena);
     interner_init(&ed->interner, &ed->arena);
     bytebuf_init(&ed->frame);
     bytebuf_init(&ed->paste);
-    sag_reg_init(&ed->regs);
-    sag_timers_init(&ed->timers);
-    sag_jobs_init(&ed->jobs);
-    sag_mouse_init(&ed->mouse);
+    yew_reg_init(&ed->regs);
+    yew_timers_init(&ed->timers);
+    yew_jobs_init(&ed->jobs);
+    yew_mouse_init(&ed->mouse);
     root = realpath(".", NULL);
     if (root == NULL)
         root = getcwd(NULL, 0U);
@@ -492,116 +492,116 @@ void sag_ed_init(Ed *ed)
     free(root);
     fl_origin_reg_init(&ed->origins);
     fl_h_table_init(&ed->handles);
-    sag_record_init(&ed->rec);
-    sag_cmd_set_record_tap(sag_record_tap);
+    yew_record_init(&ed->rec);
+    yew_cmd_set_record_tap(yew_record_tap);
     /* Window ids start at 1; 0 is never handed out, so a zeroed Win is
      * distinguishable from window one. */
     ed->next_win_id = 1U;
-    sag_dispatch_init(ed);
+    yew_dispatch_init(ed);
     ed->dispatch_ready = true;
-    if (!sag_fl_runtime_init(ed))
-        SAG_BUG("editor init: Fletch runtime initialization failed");
-    sag_bind_init(ed);
-    ed->macrolib = sag_macrolib_new(ed);
+    if (!yew_fl_runtime_init(ed))
+        YEW_BUG("editor init: Fletch runtime initialization failed");
+    yew_bind_init(ed);
+    ed->macrolib = yew_macrolib_new(ed);
     if (ed->macrolib == NULL)
-        SAG_BUG("editor init: macro library initialization failed");
-    sag_opt_init(ed);
-    sag_opt_provider_set(ed, NULL);
-    ed->exit_code = SAG_EXIT_OK;
+        YEW_BUG("editor init: macro library initialization failed");
+    yew_opt_init(ed);
+    yew_opt_provider_set(ed, NULL);
+    ed->exit_code = YEW_EXIT_OK;
 }
 
-const char *sag_ws_root(const Ed *ed)
+const char *yew_ws_root(const Ed *ed)
 {
     return ed == NULL || ed->ws.dir == NULL ? "." : ed->ws.dir;
 }
 
-void sag_ed_free(Ed *ed)
+void yew_ed_free(Ed *ed)
 {
     if (ed == NULL)
         return;
-    sag_trust_prompt_cancel(ed);
-    /* Belt and braces: a path that never reached sag_state_close still
+    yew_trust_prompt_cancel(ed);
+    /* Belt and braces: a path that never reached yew_state_close still
      * must not leave its lock behind.  Dispose saves nothing. */
-    sag_state_dispose(ed);
-    sag_picker_close(ed, false);
-    sag_pickers_dispose();
-    sag_cmdline_dispose(ed);
+    yew_state_dispose(ed);
+    yew_picker_close(ed, false);
+    yew_pickers_dispose();
+    yew_cmdline_dispose(ed);
     /* Jobs die with the process (never persisted, s25); kill and reap
      * before the buffers they append into go away. */
-    sag_jobs_free(ed);
+    yew_jobs_free(ed);
     /* Close hooks are the last script-visible point for every buffer. */
     ed_buffer_free(ed);
-    sag_macrolib_free(ed, ed->macrolib);
+    yew_macrolib_free(ed, ed->macrolib);
     ed->macrolib = NULL;
-    sag_bind_free(ed);
-    sag_config_free(ed);
-    sag_fl_runtime_free(ed);
-    sag_opt_free(ed);
-    sag_record_free(&ed->rec);
-    sag_reg_free(&ed->regs);
-    sag_msg_clear(ed);
+    yew_bind_free(ed);
+    yew_config_free(ed);
+    yew_fl_runtime_free(ed);
+    yew_opt_free(ed);
+    yew_record_free(&ed->rec);
+    yew_reg_free(&ed->regs);
+    yew_msg_clear(ed);
     if (ed->grid_ready)
-        sag_grid_free(&ed->grid);
+        yew_grid_free(&ed->grid);
     if (ed->input_ready) {
         if (ed->tty_ready)
-            sag_input_disable(ed->tty.wfd);
-        sag_input_free(&ed->in);
+            yew_input_disable(ed->tty.wfd);
+        yew_input_free(&ed->in);
     }
-    sag_term_oob_clear();
+    yew_term_oob_clear();
     if (ed->dispatch_ready)
-        sag_dispatch_free(ed);
+        yew_dispatch_free(ed);
     fl_h_table_free(&ed->handles);
     fl_origin_reg_free(&ed->origins);
-    sag_timers_free(&ed->timers);
+    yew_timers_free(&ed->timers);
     bytebuf_free(&ed->paste);
     bytebuf_free(&ed->frame);
     interner_free(&ed->interner);
     arena_free_all(&ed->cmdline.comp_arena);
     arena_free_all(&ed->arena);
     if (ed->tty_ready) {
-        sag_tty_altscreen(&ed->tty, false);
-        sag_tty_close(&ed->tty);
+        yew_tty_altscreen(&ed->tty, false);
+        yew_tty_close(&ed->tty);
     }
     (void)memset(ed, 0, sizeof(*ed));
 }
 
-SagLoadErr sag_ed_open(Ed *ed, const char *path)
+YewLoadErr yew_ed_open(Ed *ed, const char *path)
 {
     TextBuf *tb = NULL;
-    SagLoadErr result;
+    YewLoadErr result;
 
     if (ed == NULL || path == NULL || ed->fl_model_teardown)
-        return SAG_LOAD_IO;
+        return YEW_LOAD_IO;
     ed_buffer_free(ed);
-    sag_filemeta_init(&ed->buffer.meta);
-    result = sag_file_load(path, &tb, &ed->buffer.meta);
-    if (result != SAG_LOAD_OK && result != SAG_LOAD_ENOENT) {
-        sag_filemeta_dispose(&ed->buffer.meta);
+    yew_filemeta_init(&ed->buffer.meta);
+    result = yew_file_load(path, &tb, &ed->buffer.meta);
+    if (result != YEW_LOAD_OK && result != YEW_LOAD_ENOENT) {
+        yew_filemeta_dispose(&ed->buffer.meta);
         return result;
     }
     if (tb == NULL)
-        tb = sag_textbuf_new();
+        tb = yew_textbuf_new();
     (void)ed_model_finish(ed, tb, path);
     if (!ed->headless && ed->buffer.meta.realpath != NULL &&
-        sag_journal_probe(ed->buffer.meta.realpath, &ed->buffer.meta))
-        sag_ed_prompt(ed, SAG_PROMPT_RECOVER);
-    sag_fl_hook_buffer(ed, FL_EV_BUF_OPEN, &ed->buffer);
+        yew_journal_probe(ed->buffer.meta.realpath, &ed->buffer.meta))
+        yew_ed_prompt(ed, YEW_PROMPT_RECOVER);
+    yew_fl_hook_buffer(ed, FL_EV_BUF_OPEN, &ed->buffer);
     return result;
 }
 
-bool sag_ed_open_scratch(Ed *ed)
+bool yew_ed_open_scratch(Ed *ed)
 {
     TextBuf *tb;
 
     if (ed == NULL || ed->fl_model_teardown)
         return false;
     ed_buffer_free(ed);
-    sag_filemeta_init(&ed->buffer.meta);
-    tb = sag_textbuf_new();
+    yew_filemeta_init(&ed->buffer.meta);
+    tb = yew_textbuf_new();
     return ed_model_finish(ed, tb, NULL);
 }
 
-bool sag_ed_open_memory(Ed *ed, const u8 *bytes, size_t len,
+bool yew_ed_open_memory(Ed *ed, const u8 *bytes, size_t len,
                         const char *name)
 {
     TextBuf *tb;
@@ -610,52 +610,52 @@ bool sag_ed_open_memory(Ed *ed, const u8 *bytes, size_t len,
         ed->fl_model_teardown)
         return false;
     ed_buffer_free(ed);
-    sag_filemeta_init(&ed->buffer.meta);
-    tb = sag_textbuf_from_bytes(bytes, (u64)len);
+    yew_filemeta_init(&ed->buffer.meta);
+    tb = yew_textbuf_from_bytes(bytes, (u64)len);
     if (!ed_model_finish(ed, tb, NULL)) {
-        sag_textbuf_free(tb);
+        yew_textbuf_free(tb);
         return false;
     }
     ed->buffer.name = arena_strdup(&ed->arena, name);
-    ed->buffer.flags |= SAG_BUF_SCRATCH;
+    ed->buffer.flags |= YEW_BUF_SCRATCH;
     return true;
 }
 
-bool sag_buf_dirty(const Buffer *b)
+bool yew_buf_dirty(const Buffer *b)
 {
-    return b != NULL && b->undo != NULL && !sag_undo_at_save_point(b->undo);
+    return b != NULL && b->undo != NULL && !yew_undo_at_save_point(b->undo);
 }
 
-bool sag_buf_readonly(const Buffer *b)
+bool yew_buf_readonly(const Buffer *b)
 {
     mode_t write_bits = S_IWUSR | S_IWGRP | S_IWOTH;
 
     return b != NULL &&
-           (((b->flags & SAG_BUF_READONLY) != 0U) ||
+           (((b->flags & YEW_BUF_READONLY) != 0U) ||
             (b->meta.exists && (b->meta.mode & write_bits) == 0));
 }
 
-u64 sag_buf_len(const Buffer *b)
+u64 yew_buf_len(const Buffer *b)
 {
-    return b == NULL || b->tb == NULL ? 0U : sag_textbuf_len(b->tb);
+    return b == NULL || b->tb == NULL ? 0U : yew_textbuf_len(b->tb);
 }
 
-u64 sag_buf_line_count(const Buffer *b)
+u64 yew_buf_line_count(const Buffer *b)
 {
     return b == NULL || b->tb == NULL ? 0U :
-           sag_textbuf_line_count(b->tb);
+           yew_textbuf_line_count(b->tb);
 }
 
-Span sag_buf_line_span(const Buffer *b, LineNo line)
+Span yew_buf_line_span(const Buffer *b, LineNo line)
 {
     return b == NULL || b->tb == NULL ? (Span){0U, 0U} :
-           sag_textbuf_line_span(b->tb, line);
+           yew_textbuf_line_span(b->tb, line);
 }
 
-LineNo sag_buf_line_of(const Buffer *b, ByteOff off)
+LineNo yew_buf_line_of(const Buffer *b, ByteOff off)
 {
     return b == NULL || b->tb == NULL ? LINENO(0U) :
-           sag_textbuf_line_of(b->tb, off);
+           yew_textbuf_line_of(b->tb, off);
 }
 
 /*
@@ -671,7 +671,7 @@ LineNo sag_buf_line_of(const Buffer *b, ByteOff off)
  * The fallback is not decoration: fixtures build an Ed without a window
  * and still expect the primary buffer to answer.
  */
-Buffer *sag_ed_doc(Ed *ed)
+Buffer *yew_ed_doc(Ed *ed)
 {
     if (ed == NULL)
         return NULL;
@@ -681,19 +681,19 @@ Buffer *sag_ed_doc(Ed *ed)
 }
 
 /* Shim so the text layer can feed the changelist without knowing it
- * exists.  Job output goes to SAG_BUF_NOUNDO scratch buffers, which are
+ * exists.  Job output goes to YEW_BUF_NOUNDO scratch buffers, which are
  * not places the user "changed" and so are excluded here. */
 static void ed_on_change(void *ctx, ByteOff at, i64 now_ms)
 {
     Buffer *b = ctx;
 
-    if (b == NULL || (b->flags & SAG_BUF_NOUNDO) != 0U)
+    if (b == NULL || (b->flags & YEW_BUF_NOUNDO) != 0U)
         return;
-    sag_change_record(b, at, now_ms);
-    sag_fl_hook_note_change(b->owner, b, at.v);
+    yew_change_record(b, at, now_ms);
+    yew_fl_hook_note_change(b->owner, b, at.v);
 }
 
-bool sag_ed_mark_set(Ed *ed, Buffer *b, u8 name, ByteOff at)
+bool yew_ed_mark_set(Ed *ed, Buffer *b, u8 name, ByteOff at)
 {
     u32 slot;
 
@@ -703,14 +703,14 @@ bool sag_ed_mark_set(Ed *ed, Buffer *b, u8 name, ByteOff at)
     slot = (u32)(name - 'a');
     /* Re-setting a name drops the old mark: leaking one per keystroke
      * of `ma` would grow the mark set without bound. */
-    if (b->named_set[slot] && sag_mark_alive(b->marks, b->named[slot]))
-        sag_mark_del(b->marks, b->named[slot]);
-    b->named[slot] = sag_mark_add(b->marks, at, SAG_BIAS_LEFT);
+    if (b->named_set[slot] && yew_mark_alive(b->marks, b->named[slot]))
+        yew_mark_del(b->marks, b->named[slot]);
+    b->named[slot] = yew_mark_add(b->marks, at, YEW_BIAS_LEFT);
     b->named_set[slot] = true;
     return true;
 }
 
-bool sag_ed_mark_get(Ed *ed, const Buffer *b, u8 name, ByteOff *out)
+bool yew_ed_mark_get(Ed *ed, const Buffer *b, u8 name, ByteOff *out)
 {
     u32 slot;
 
@@ -718,14 +718,14 @@ bool sag_ed_mark_get(Ed *ed, const Buffer *b, u8 name, ByteOff *out)
     if (b == NULL || b->marks == NULL || name < 'a' || name > 'z')
         return false;
     slot = (u32)(name - 'a');
-    if (!b->named_set[slot] || !sag_mark_alive(b->marks, b->named[slot]))
+    if (!b->named_set[slot] || !yew_mark_alive(b->marks, b->named[slot]))
         return false;
     if (out != NULL)
-        *out = sag_mark_pos(b->marks, b->named[slot]);
+        *out = yew_mark_pos(b->marks, b->named[slot]);
     return true;
 }
 
-struct Pane *sag_ed_pane_root(Ed *ed)
+struct Pane *yew_ed_pane_root(Ed *ed)
 {
     return ed == NULL ? NULL : ed->pane_root;
 }
@@ -736,23 +736,23 @@ struct Pane *sag_ed_pane_root(Ed *ed)
  * at; the jumplist is not, because it is this view's history and a view
  * that has been nowhere has no history (Sprint 21 §5).
  */
-Win *sag_ed_win_clone(Ed *ed, const Win *src)
+Win *yew_ed_win_clone(Ed *ed, const Win *src)
 {
     Win *w;
 
     /*
-     * No cap here.  SAG_PANE_MAX_LEAVES bounds the leaves of ONE tab's
-     * tree, and sag_pane_split enforces it by counting that tree.
+     * No cap here.  YEW_PANE_MAX_LEAVES bounds the leaves of ONE tab's
+     * tree, and yew_pane_split enforces it by counting that tree.
      * Sprint 23 also kept a write-only registry of every cloned Win and
      * capped it with the same constant, which quietly made 16 the limit
      * on tabs-plus-splits for the whole editor — a 40-file group (D3)
      * could not be opened at all, and the refusal surfaced as
-     * sag_tab_open returning -1 for no stated reason.  Nothing ever
+     * yew_tab_open returning -1 for no stated reason.  Nothing ever
      * read the registry: tab trees own their leaves and release them.
      */
     if (ed == NULL || src == NULL)
         return NULL;
-    w = sag_xcalloc(1U, sizeof(*w));
+    w = yew_xcalloc(1U, sizeof(*w));
     w->id = ed->next_win_id++;
     w->buf = src->buf;
     w->rect = src->rect;
@@ -763,14 +763,14 @@ Win *sag_ed_win_clone(Ed *ed, const Win *src)
 
         if (src->cs.curs.len > 0U && src->cs.primary < src->cs.curs.len)
             seed = src->cs.curs.data[src->cs.primary];
-        sag_cset_init(&w->cs, seed);
+        yew_cset_init(&w->cs, seed);
     }
-    sag_vp_init(w);
-    sag_opt_scope_clone(&w->opt_overrides, &src->opt_overrides);
+    yew_vp_init(w);
+    yew_opt_scope_clone(&w->opt_overrides, &src->opt_overrides);
     w->vp.top = src->vp.top;
     w->vp.top_sub = src->vp.top_sub;
-    sag_overlay_init(&w->overlay);
-    sag_jumplist_init(&w->jumps);
+    yew_overlay_init(&w->overlay);
+    yew_jumplist_init(&w->jumps);
     return w;
 }
 
@@ -781,35 +781,35 @@ Win *sag_ed_win_clone(Ed *ed, const Win *src)
  * window it copied, and that offset means nothing in a different file
  * — in a shorter one it is past the end.
  */
-void sag_ed_win_set_buffer(Ed *ed, Win *w, Buffer *b)
+void yew_ed_win_set_buffer(Ed *ed, Win *w, Buffer *b)
 {
     Cursor origin = {BYTEOFF(0U), {0U}, BYTEOFF(0U)};
 
     (void)ed;
     if (w == NULL || b == NULL || w->buf == b)
         return;
-    sag_vp_free(w);
-    sag_cset_free(&w->cs);
-    sag_cset_init(&w->cs, origin);
+    yew_vp_free(w);
+    yew_cset_free(&w->cs);
+    yew_cset_init(&w->cs, origin);
     w->buf = b;
-    sag_vp_init(w);
+    yew_vp_init(w);
 }
 
-void sag_ed_win_release(Ed *ed, Win *w)
+void yew_ed_win_release(Ed *ed, Win *w)
 {
     if (ed == NULL || w == NULL)
         return;
     fl_h_drop_window(ed, w->id);
     if (w == &ed->single_win)
         return;
-    sag_overlay_free(&w->overlay);
-    sag_vp_free(w);
-    sag_cset_free(&w->cs);
-    sag_opt_scope_free(&w->opt_overrides);
+    yew_overlay_free(&w->overlay);
+    yew_vp_free(w);
+    yew_cset_free(&w->cs);
+    yew_opt_scope_free(&w->opt_overrides);
     free(w);
 }
 
-EditCtx sag_ed_edit_ctx_for(Ed *ed, Win *win)
+EditCtx yew_ed_edit_ctx_for(Ed *ed, Win *win)
 {
     EditCtx ec = {0};
     Buffer *buffer;
@@ -831,12 +831,12 @@ EditCtx sag_ed_edit_ctx_for(Ed *ed, Win *win)
     return ec;
 }
 
-EditCtx sag_ed_edit_ctx(Ed *ed)
+EditCtx yew_ed_edit_ctx(Ed *ed)
 {
-    return ed == NULL ? (EditCtx){0} : sag_ed_edit_ctx_for(ed, ed->win);
+    return ed == NULL ? (EditCtx){0} : yew_ed_edit_ctx_for(ed, ed->win);
 }
 
-void sag_ed_finish_edit(Ed *ed, const EditCtx *ec)
+void yew_ed_finish_edit(Ed *ed, const EditCtx *ec)
 {
     if (ed == NULL || ec == NULL)
         return;
@@ -854,7 +854,7 @@ void sag_ed_finish_edit(Ed *ed, const EditCtx *ec)
     if (ed->win != NULL && ed->win->buf != NULL &&
         ed->win->buf->tb == ec->tb &&
         ed->win->overlay.buf_gen != ec->tb->gen)
-        sag_overlay_invalidate(&ed->win->overlay);
+        yew_overlay_invalidate(&ed->win->overlay);
     /*
      * The journal belongs to whichever buffer the edit ran against.
      * Matching on slot 0 alone stopped being right once tabs stopped
@@ -863,21 +863,21 @@ void sag_ed_finish_edit(Ed *ed, const EditCtx *ec)
      * nothing.
      */
     {
-        Buffer *doc = sag_ed_doc(ed);
+        Buffer *doc = yew_ed_doc(ed);
 
         if (doc != NULL && doc->tb == ec->tb)
             doc->jrn = ec->jrnl;
         else if (ed->buffer.tb == ec->tb)
             ed->buffer.jrn = ec->jrnl;
     }
-    if (ec->jrnl != NULL && !sag_journal_ok(ec->jrnl)) {
+    if (ec->jrnl != NULL && !yew_journal_ok(ec->jrnl)) {
         ed->durability_failed = true;
-        sag_msg(ed, SAG_MSG_ERROR,
+        yew_msg(ed, YEW_MSG_ERROR,
                 "crash journal failed; save or q! before continuing");
     }
 }
 
-void sag_ed_damage_document(Ed *ed)
+void yew_ed_damage_document(Ed *ed)
 {
     if (ed == NULL || ed->win == NULL)
         return;
@@ -886,7 +886,7 @@ void sag_ed_damage_document(Ed *ed)
     ed->footer_dirty = true;
 }
 
-void sag_ed_damage_rows(Ed *ed, u16 lo, u16 hi)
+void yew_ed_damage_rows(Ed *ed, u16 lo, u16 hi)
 {
     if (ed == NULL || ed->win == NULL || lo >= hi)
         return;
@@ -907,7 +907,7 @@ void sag_ed_damage_rows(Ed *ed, u16 lo, u16 hi)
     }
 }
 
-void sag_ed_damage_line(Ed *ed, LineNo line, bool line_count_changed)
+void yew_ed_damage_line(Ed *ed, LineNo line, bool line_count_changed)
 {
     Win *win;
     LineNo top;
@@ -917,26 +917,26 @@ void sag_ed_damage_line(Ed *ed, LineNo line, bool line_count_changed)
     if (ed == NULL || ed->win == NULL)
         return;
     win = ed->win;
-    sag_vp_invalidate_from(win, line);
+    yew_vp_invalidate_from(win, line);
     if (line_count_changed)
         ed->layout_dirty = true;
     if (win->vp.wrap) {
-        sag_ed_damage_document(ed);
+        yew_ed_damage_document(ed);
         return;
     }
-    top = sag_win_view_top(win);
+    top = yew_win_view_top(win);
     if (line.v < top.v) {
         if (line_count_changed)
-            sag_ed_damage_document(ed);
+            yew_ed_damage_document(ed);
         return;
     }
-    if (!sag_win_view_row(win, line, &lo))
+    if (!yew_win_view_row(win, line, &lo))
         return;
     hi = line_count_changed ? win->rect.h : (u16)(lo + 1U);
-    sag_ed_damage_rows(ed, lo, hi);
+    yew_ed_damage_rows(ed, lo, hi);
 }
 
-Cursor *sag_ed_cursor(Ed *ed)
+Cursor *yew_ed_cursor(Ed *ed)
 {
     if (ed == NULL || ed->win == NULL || ed->win->cs.curs.len == 0U ||
         (size_t)ed->win->cs.primary >= ed->win->cs.curs.len)
@@ -944,40 +944,40 @@ Cursor *sag_ed_cursor(Ed *ed)
     return &ed->win->cs.curs.data[ed->win->cs.primary];
 }
 
-void sag_ed_insert_barrier(Ed *ed)
+void yew_ed_insert_barrier(Ed *ed)
 {
     EditCtx ec;
 
     if (ed == NULL || !ed->insert_txn)
         return;
-    ec = sag_ed_edit_ctx(ed);
-    sag_undo_end(&ec);
-    sag_ed_finish_edit(ed, &ec);
+    ec = yew_ed_edit_ctx(ed);
+    yew_undo_end(&ec);
+    yew_ed_finish_edit(ed, &ec);
     ed->insert_txn = false;
 }
 
-CmdStatus sag_ed_dispatch_resolved(Ed *ed, CmdId id, CmdCtx *cx)
+CmdStatus yew_ed_dispatch_resolved(Ed *ed, CmdId id, CmdCtx *cx)
 {
     const CmdDesc *desc;
     bool multi;
 
     if (ed == NULL || cx == NULL)
-        return SAG_CMD_ERR_ARG;
-    desc = sag_cmd_desc(id);
+        return YEW_CMD_ERR_ARG;
+    desc = yew_cmd_desc(id);
     if (desc == NULL)
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     cx->ed = ed;
     if (cx->win == NULL)
         cx->win = ed->win;
-    multi = (desc->flags & SAG_CMD_CHANGES_BUFFER) != 0U &&
+    multi = (desc->flags & YEW_CMD_CHANGES_BUFFER) != 0U &&
             ed->model_ready && cx->win != NULL &&
             cx->win->cs.curs.len > 1U && !cx->cursor_given &&
-            cx->range.kind == SAG_RANGE_NONE &&
-            (desc->flags & SAG_CMD_MULTI_AGGREGATE) == 0U;
-    return multi ? sag_mc_run(cx->win, id, cx) : sag_cmd_invoke(id, cx);
+            cx->range.kind == YEW_RANGE_NONE &&
+            (desc->flags & YEW_CMD_MULTI_AGGREGATE) == 0U;
+    return multi ? yew_mc_run(cx->win, id, cx) : yew_cmd_invoke(id, cx);
 }
 
-CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
+CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
 {
     const CmdDesc *desc;
     EditCtx ec;
@@ -992,14 +992,14 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     bool started_in_insert;
 
     if (ed == NULL || cx == NULL)
-        return SAG_CMD_ERR_ARG;
-    desc = sag_cmd_desc(id);
+        return YEW_CMD_ERR_ARG;
+    desc = yew_cmd_desc(id);
     if (desc == NULL)
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     cx->ed = ed;
     if (cx->win == NULL)
         cx->win = ed->win;
-    changes = (desc->flags & SAG_CMD_CHANGES_BUFFER) != 0U;
+    changes = (desc->flags & YEW_CMD_CHANGES_BUFFER) != 0U;
     edits_text = changes || strcmp(desc->name, "ed.edit.undo") == 0 ||
                  strcmp(desc->name, "ed.edit.redo") == 0;
     document_target = cx->win == ed->win;
@@ -1008,22 +1008,22 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     durability_command = document_target && edits_text;
     newline = ed->undo_break_on_newline &&
               strcmp(desc->name, "ed.edit.insert.newline") == 0;
-    started_in_insert = ed->mode == SAG_MODE_I;
+    started_in_insert = ed->mode == YEW_MODE_I;
 
     if (durability_command && ed->durability_failed) {
-        sag_msg(ed, SAG_MSG_ERROR,
+        yew_msg(ed, YEW_MSG_ERROR,
                 "crash journal failed; save or q! before continuing");
-        return SAG_CMD_ERR_IO;
+        return YEW_CMD_ERR_IO;
     }
 
     if (started_in_insert && (!changes || newline))
-        sag_ed_insert_barrier(ed);
+        yew_ed_insert_barrier(ed);
     if (changes && ed->model_ready) {
-        ec = sag_ed_edit_ctx_for(ed, cx->win);
+        ec = yew_ed_edit_ctx_for(ed, cx->win);
         if (started_in_insert && !newline) {
             if (!ed->insert_txn) {
-                sag_undo_begin(&ec,
-                               multiple ? SAG_TXN_MULTI : SAG_TXN_TYPE);
+                yew_undo_begin(&ec,
+                               multiple ? YEW_TXN_MULTI : YEW_TXN_TYPE);
                 ed->insert_txn = true;
                 opened = true;
             }
@@ -1032,76 +1032,76 @@ CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
              * The reason has to describe what the command IS, because
              * a command that opens its own inner transaction must
              * agree with the one wrapped around it — `:s` opens
-             * SAG_TXN_REPLACE inside, and a TYPE wrapper aborts on the
+             * YEW_TXN_REPLACE inside, and a TYPE wrapper aborts on the
              * mismatch.  Reached through the real dispatcher only, so
              * unit tests calling the replace API directly never saw it;
              * the pty golden did.
              */
-            sag_undo_begin(
+            yew_undo_begin(
                 &ec,
-                multiple ? SAG_TXN_MULTI
+                multiple ? YEW_TXN_MULTI
                       : (strcmp(desc->name, "ed.search.replace") == 0
-                             ? SAG_TXN_REPLACE
+                             ? YEW_TXN_REPLACE
                       : (strstr(desc->name, ".delete.") != NULL ||
                                  strcmp(desc->name,
                                         "ed.edit.line.delete") == 0
-                             ? SAG_TXN_ERASE
-                             : SAG_TXN_TYPE)));
+                             ? YEW_TXN_ERASE
+                             : YEW_TXN_TYPE)));
             opened = true;
         }
     }
 
-    status = sag_ed_dispatch_resolved(ed, id, cx);
-    if (status == SAG_CMD_OK && document_target && ed->win != NULL &&
+    status = yew_ed_dispatch_resolved(ed, id, cx);
+    if (status == YEW_CMD_OK && document_target && ed->win != NULL &&
         (changes || durability_command ||
          strncmp(desc->name, "ed.move.", 8U) == 0 ||
          strncmp(desc->name, "ed.view.", 8U) == 0))
-        sag_selstack_clear(ed->win);
+        yew_selstack_clear(ed->win);
     if (changes && ed->model_ready) {
-        ec = sag_ed_edit_ctx_for(ed, cx->win);
-        if (status != SAG_CMD_OK &&
+        ec = yew_ed_edit_ctx_for(ed, cx->win);
+        if (status != YEW_CMD_OK &&
             (opened || (started_in_insert && ed->insert_txn))) {
-            sag_undo_abort(&ec);
+            yew_undo_abort(&ec);
             if (started_in_insert)
                 ed->insert_txn = false;
-        } else if (!started_in_insert && ed->mode == SAG_MODE_I &&
+        } else if (!started_in_insert && ed->mode == YEW_MODE_I &&
                    !newline && opened) {
             /* `o`/`O` create the line and enter I as one editing run. */
             if (ed->win != NULL && ed->win->cs.curs.len > 1U)
-                sag_undo_promote_multi(&ec);
+                yew_undo_promote_multi(&ec);
             ed->insert_txn = true;
         } else if ((!started_in_insert || newline) && opened) {
-            sag_undo_end(&ec);
+            yew_undo_end(&ec);
         }
-        sag_ed_finish_edit(ed, &ec);
+        yew_ed_finish_edit(ed, &ec);
     }
-    if (durability_command && status == SAG_CMD_ERR_IO) {
+    if (durability_command && status == YEW_CMD_ERR_IO) {
         ed->durability_failed = true;
-        sag_msg(ed, SAG_MSG_ERROR,
+        yew_msg(ed, YEW_MSG_ERROR,
                 "crash journal failed; save or q! before continuing");
     }
-    if (ed->cmdline.active && cx->win == sag_cmdline_target(ed)) {
+    if (ed->cmdline.active && cx->win == yew_cmdline_target(ed)) {
         if (edits_text)
-            sag_cmdline_edited(ed);
+            yew_cmdline_edited(ed);
         else
-            sag_cmdline_sync(ed);
+            yew_cmdline_sync(ed);
     }
     ed->footer_dirty = true;
     return status;
 }
 
-CmdStatus sag_ed_invoke_parsed(Ed *ed, CmdId id,
-                               const SagCmdInvoke *invoke)
+CmdStatus yew_ed_invoke_parsed(Ed *ed, CmdId id,
+                               const YewCmdInvoke *invoke)
 {
     const CmdDesc *desc;
     CmdCtx cx = {0};
     const char *arg = NULL;
 
     if (ed == NULL || invoke == NULL)
-        return SAG_CMD_ERR_ARG;
-    desc = sag_cmd_desc(id);
+        return YEW_CMD_ERR_ARG;
+    desc = yew_cmd_desc(id);
     if (desc == NULL || invoke->argv.n == 0U)
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     if (invoke->argv.n > 1U)
         arg = invoke->argv.v[1];
     cx.win = invoke->win;
@@ -1111,19 +1111,19 @@ CmdStatus sag_ed_invoke_parsed(Ed *ed, CmdId id,
                (u32)invoke->count : 1U;
     cx.count_given = invoke->count > 0;
     cx.bang = invoke->bang;
-    cx.source = SAG_SRC_CMDLINE;
+    cx.source = YEW_SRC_CMDLINE;
     switch ((CmdArity)desc->arity) {
-    case SAG_ARITY_NONE:
+    case YEW_ARITY_NONE:
         break;
-    case SAG_ARITY_STR:
-    case SAG_ARITY_OPT_STR:
+    case YEW_ARITY_STR:
+    case YEW_ARITY_OPT_STR:
         cx.sarg = arg;
         cx.sarg_len = arg == NULL ? 0U :
                       strlen(arg) > UINT32_MAX ? UINT32_MAX :
                                                 (u32)strlen(arg);
         break;
-    case SAG_ARITY_INT:
-    case SAG_ARITY_OPT_INT:
+    case YEW_ARITY_INT:
+    case YEW_ARITY_OPT_INT:
         if (arg != NULL) {
             char *end = NULL;
             long long value;
@@ -1131,15 +1131,15 @@ CmdStatus sag_ed_invoke_parsed(Ed *ed, CmdId id,
             errno = 0;
             value = strtoll(arg, &end, 10);
             if (errno != 0 || end == arg || *end != '\0')
-                return SAG_CMD_ERR_ARG;
+                return YEW_CMD_ERR_ARG;
             cx.iarg = (i64)value;
         }
         break;
     }
-    return sag_ed_invoke(ed, id, &cx);
+    return yew_ed_invoke(ed, id, &cx);
 }
 
-void sag_ed_prompt(Ed *ed, PromptKind prompt)
+void yew_ed_prompt(Ed *ed, PromptKind prompt)
 {
     const char *path;
 
@@ -1147,58 +1147,58 @@ void sag_ed_prompt(Ed *ed, PromptKind prompt)
         return;
     ed->prompt = prompt;
     {
-        const Buffer *doc = sag_ed_doc(ed);
+        const Buffer *doc = yew_ed_doc(ed);
 
         path = doc == NULL || doc->path == NULL ? "[no name]" : doc->path;
     }
     switch (prompt) {
-    case SAG_PROMPT_NONE:
-        sag_msg_clear(ed);
+    case YEW_PROMPT_NONE:
+        yew_msg_clear(ed);
         break;
-    case SAG_PROMPT_RECOVER:
-        sag_msg(ed, SAG_MSG_ERROR,
+    case YEW_PROMPT_RECOVER:
+        yew_msg(ed, YEW_MSG_ERROR,
                 "recover unsaved changes to %s? [r]ecover [d]iscard [esc] open as-is",
                 path);
         break;
-    case SAG_PROMPT_QUIT_DIRTY:
-        sag_msg(ed, SAG_MSG_ERROR,
+    case YEW_PROMPT_QUIT_DIRTY:
+        yew_msg(ed, YEW_MSG_ERROR,
                 "save changes to %s? [w]rite [d]iscard [esc] cancel", path);
         break;
-    case SAG_PROMPT_OVERWRITE:
-        sag_msg(ed, SAG_MSG_ERROR,
+    case YEW_PROMPT_OVERWRITE:
+        yew_msg(ed, YEW_MSG_ERROR,
                 "file changed on disk - [o]verwrite [esc] cancel");
         break;
-    case SAG_PROMPT_WS_FORGET:
+    case YEW_PROMPT_WS_FORGET:
         /* ed.ws.forget writes its own question, because it names the
          * directory it is about to remove and this function does not
          * have it. */
         break;
-    case SAG_PROMPT_WORKSPACE_TRUST:
+    case YEW_PROMPT_WORKSPACE_TRUST:
         /* trust_prompt.c owns the path, fingerprint reason, and choices. */
         break;
     }
-    if (prompt != SAG_PROMPT_NONE)
+    if (prompt != YEW_PROMPT_NONE)
         ed->msg.prompt = true;
 }
 
-CmdStatus sag_ed_file_save_win(Ed *ed, Win *win, bool force)
+CmdStatus yew_ed_file_save_win(Ed *ed, Win *win, bool force)
 {
     EditCtx ec;
-    SagSaveErr result;
+    YewSaveErr result;
     Buffer *doc;
     u32 doc_id;
     u32 win_id;
     u64 lines;
 
     if (ed == NULL || !ed->model_ready || win == NULL || win->buf == NULL)
-        return SAG_CMD_ERR_STATE;
-    sag_ed_insert_barrier(ed);
+        return YEW_CMD_ERR_STATE;
+    yew_ed_insert_barrier(ed);
     doc = win->buf;
     if (doc == NULL || doc->path == NULL) {
-        sag_msg(ed, SAG_MSG_ERROR,
+        yew_msg(ed, YEW_MSG_ERROR,
                 "no file name; use :w path");
         ed->quit_after_save = false;
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     }
     /*
      * Sprint 24 §3: a tab that was never read holds no text, so there
@@ -1207,79 +1207,79 @@ CmdStatus sag_ed_file_save_win(Ed *ed, Win *win, bool force)
      * perfectly fine, and writing the empty buffer would destroy it.
      */
     if (doc->tb == NULL) {
-        sag_msg(ed, SAG_MSG_ERROR, "%s was never loaded; nothing written",
+        yew_msg(ed, YEW_MSG_ERROR, "%s was never loaded; nothing written",
                 doc->path);
         ed->quit_after_save = false;
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     }
-    if (!fl_txn_prepare_save(sag_fl_vm(ed), doc->undo))
-        return SAG_CMD_ERR_STATE;
+    if (!fl_txn_prepare_save(yew_fl_vm(ed), doc->undo))
+        return YEW_CMD_ERR_STATE;
     doc_id = doc->id;
     win_id = win->id;
-    sag_fl_hook_buffer(ed, FL_EV_BUF_SAVE, doc);
-    win = sag_ed_win_by_id(ed, win_id);
+    yew_fl_hook_buffer(ed, FL_EV_BUF_SAVE, doc);
+    win = yew_ed_win_by_id(ed, win_id);
     doc = win == NULL ? NULL : win->buf;
     if (doc == NULL || doc->id != doc_id || doc->path == NULL ||
         doc->tb == NULL)
-        return SAG_CMD_ERR_STATE;
-    if (!fl_txn_prepare_save(sag_fl_vm(ed), doc->undo))
-        return SAG_CMD_ERR_STATE;
-    ec = sag_ed_edit_ctx_for(ed, win);
+        return YEW_CMD_ERR_STATE;
+    if (!fl_txn_prepare_save(yew_fl_vm(ed), doc->undo))
+        return YEW_CMD_ERR_STATE;
+    ec = yew_ed_edit_ctx_for(ed, win);
     if (force) {
-        result = sag_file_save_force(ec.tb, ec.meta, doc->path);
-        if (result == SAG_SAVE_OK) {
-            sag_undo_boundary(ec.undo);
-            sag_undo_mark_saved(ec.undo);
+        result = yew_file_save_force(ec.tb, ec.meta, doc->path);
+        if (result == YEW_SAVE_OK) {
+            yew_undo_boundary(ec.undo);
+            yew_undo_mark_saved(ec.undo);
             if (ec.jrnl != NULL) {
-                sag_journal_discard(ec.jrnl);
+                yew_journal_discard(ec.jrnl);
                 ec.jrnl = NULL;
             }
         }
     } else {
-        result = sag_edit_save(&ec, doc->path);
+        result = yew_edit_save(&ec, doc->path);
     }
-    sag_ed_finish_edit(ed, &ec);
-    if (result == SAG_SAVE_CHANGED_ON_DISK) {
+    yew_ed_finish_edit(ed, &ec);
+    if (result == YEW_SAVE_CHANGED_ON_DISK) {
         if (!ed->headless)
-            sag_ed_prompt(ed, SAG_PROMPT_OVERWRITE);
+            yew_ed_prompt(ed, YEW_PROMPT_OVERWRITE);
         else
-            sag_msg(ed, SAG_MSG_ERROR,
+            yew_msg(ed, YEW_MSG_ERROR,
                     "%s changed on disk; pass {force: true} to save",
                     doc->path);
-        return SAG_CMD_ERR_IO;
+        return YEW_CMD_ERR_IO;
     }
-    if (result != SAG_SAVE_OK) {
-        sag_msg(ed, SAG_MSG_ERROR, "could not write %s", doc->path);
+    if (result != YEW_SAVE_OK) {
+        yew_msg(ed, YEW_MSG_ERROR, "could not write %s", doc->path);
         ed->quit_after_save = false;
-        return SAG_CMD_ERR_IO;
+        return YEW_CMD_ERR_IO;
     }
     ed->durability_failed = false;
-    ed->prompt = SAG_PROMPT_NONE;
-    lines = sag_textbuf_line_count(doc->tb);
-    sag_msg(ed, SAG_MSG_INFO, "wrote %s, %llu lines", doc->path,
+    ed->prompt = YEW_PROMPT_NONE;
+    lines = yew_textbuf_line_count(doc->tb);
+    yew_msg(ed, YEW_MSG_INFO, "wrote %s, %llu lines", doc->path,
             (unsigned long long)lines);
-    sag_fl_hook_buffer(ed, FL_EV_BUF_SAVED, doc);
+    yew_fl_hook_buffer(ed, FL_EV_BUF_SAVED, doc);
     if (ed->quit_after_save) {
         ed->quit_after_save = false;
         ed->quit = true;
     }
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
-CmdStatus sag_ed_file_save(Ed *ed, bool force)
+CmdStatus yew_ed_file_save(Ed *ed, bool force)
 {
-    return ed == NULL ? SAG_CMD_ERR_STATE :
-                        sag_ed_file_save_win(ed, ed->win, force);
+    return ed == NULL ? YEW_CMD_ERR_STATE :
+                        yew_ed_file_save_win(ed, ed->win, force);
 }
 
-CmdStatus sag_ed_file_write_to_win(Ed *ed, Win *win, const char *path,
+CmdStatus yew_ed_file_write_to_win(Ed *ed, Win *win, const char *path,
                                    bool force)
 {
     FileMeta next;
     TextBuf *existing = NULL;
     EditCtx ec;
-    SagLoadErr load;
-    SagSaveErr result;
+    YewLoadErr load;
+    YewSaveErr result;
     Buffer *doc;
     u32 doc_id;
     u32 win_id;
@@ -1288,58 +1288,58 @@ CmdStatus sag_ed_file_write_to_win(Ed *ed, Win *win, const char *path,
 
     if (ed == NULL || !ed->model_ready || win == NULL || win->buf == NULL ||
         path == NULL || path[0] == '\0')
-        return SAG_CMD_ERR_ARG;
-    sag_ed_insert_barrier(ed);
+        return YEW_CMD_ERR_ARG;
+    yew_ed_insert_barrier(ed);
     doc = win->buf;
     /* Nothing to write out under a new name either (§3). */
     if (doc == NULL || doc->tb == NULL) {
-        sag_msg(ed, SAG_MSG_ERROR, "nothing loaded; nothing written");
-        return SAG_CMD_ERR_STATE;
+        yew_msg(ed, YEW_MSG_ERROR, "nothing loaded; nothing written");
+        return YEW_CMD_ERR_STATE;
     }
-    if (!fl_txn_prepare_save(sag_fl_vm(ed), doc->undo))
-        return SAG_CMD_ERR_STATE;
+    if (!fl_txn_prepare_save(yew_fl_vm(ed), doc->undo))
+        return YEW_CMD_ERR_STATE;
     doc_id = doc->id;
     win_id = win->id;
-    sag_fl_hook_buffer(ed, FL_EV_BUF_SAVE, doc);
-    win = sag_ed_win_by_id(ed, win_id);
+    yew_fl_hook_buffer(ed, FL_EV_BUF_SAVE, doc);
+    win = yew_ed_win_by_id(ed, win_id);
     doc = win == NULL ? NULL : win->buf;
     if (doc == NULL || doc->id != doc_id || doc->tb == NULL)
-        return SAG_CMD_ERR_STATE;
-    if (!fl_txn_prepare_save(sag_fl_vm(ed), doc->undo))
-        return SAG_CMD_ERR_STATE;
-    sag_filemeta_init(&next);
-    load = sag_file_load(path, &existing, &next);
-    sag_textbuf_free(existing);
-    if (load != SAG_LOAD_OK && load != SAG_LOAD_ENOENT) {
-        sag_filemeta_dispose(&next);
-        sag_msg(ed, SAG_MSG_ERROR, "could not inspect %s", path);
-        return SAG_CMD_ERR_IO;
+        return YEW_CMD_ERR_STATE;
+    if (!fl_txn_prepare_save(yew_fl_vm(ed), doc->undo))
+        return YEW_CMD_ERR_STATE;
+    yew_filemeta_init(&next);
+    load = yew_file_load(path, &existing, &next);
+    yew_textbuf_free(existing);
+    if (load != YEW_LOAD_OK && load != YEW_LOAD_ENOENT) {
+        yew_filemeta_dispose(&next);
+        yew_msg(ed, YEW_MSG_ERROR, "could not inspect %s", path);
+        return YEW_CMD_ERR_IO;
     }
-    ec = sag_ed_edit_ctx_for(ed, win);
+    ec = yew_ed_edit_ctx_for(ed, win);
     ec.meta = &next;
-    result = force ? sag_file_save_force(ec.tb, ec.meta, path) :
-                     sag_edit_save(&ec, path);
-    if (force && result == SAG_SAVE_OK) {
-        sag_undo_boundary(ec.undo);
-        sag_undo_mark_saved(ec.undo);
+    result = force ? yew_file_save_force(ec.tb, ec.meta, path) :
+                     yew_edit_save(&ec, path);
+    if (force && result == YEW_SAVE_OK) {
+        yew_undo_boundary(ec.undo);
+        yew_undo_mark_saved(ec.undo);
         if (ec.jrnl != NULL) {
-            sag_journal_discard(ec.jrnl);
+            yew_journal_discard(ec.jrnl);
             ec.jrnl = NULL;
         }
     }
-    sag_ed_finish_edit(ed, &ec);
-    if (result != SAG_SAVE_OK) {
-        sag_filemeta_dispose(&next);
-        sag_msg(ed, SAG_MSG_ERROR, "could not write %s", path);
-        return SAG_CMD_ERR_IO;
+    yew_ed_finish_edit(ed, &ec);
+    if (result != YEW_SAVE_OK) {
+        yew_filemeta_dispose(&next);
+        yew_msg(ed, YEW_MSG_ERROR, "could not write %s", path);
+        return YEW_CMD_ERR_IO;
     }
-    sag_filemeta_dispose(&doc->meta);
+    yew_filemeta_dispose(&doc->meta);
     doc->meta = next;
     doc->path = arena_strdup(&ed->arena, path);
     if (ed->win == win) {
-        sag_search_opts_init(&ed->search_opts);
-        sag_search_state_init(&ed->search);
-        sag_overlay_init(&ed->single_win.overlay);
+        yew_search_opts_init(&ed->search_opts);
+        yew_search_state_init(&ed->search);
+        yew_overlay_init(&ed->single_win.overlay);
     }
     /*
      * A save-as RENAMES what the active tab shows.  It does not build a
@@ -1348,7 +1348,7 @@ CmdStatus sag_ed_file_write_to_win(Ed *ed, Win *win, const char *path,
      * Sprints 22 and 23 grew a copy of ed_model_finish's tail here, so
      * `:w other` rebuilt the pane tree and reset the tab array to a
      * single entry — silently discarding every split and every other
-     * tab, and leaking all of them, because sag_tabs_init only zeroes
+     * tab, and leaking all of them, because yew_tabs_init only zeroes
      * the struct.  Nothing about writing bytes to a path justifies
      * touching either tree.
      */
@@ -1359,116 +1359,116 @@ CmdStatus sag_ed_file_write_to_win(Ed *ed, Win *win, const char *path,
         }
     }
     if (tab_index >= 0)
-        sag_tab_set_path(ed, tab_index, doc->path);
+        yew_tab_set_path(ed, tab_index, doc->path);
     if (ed->win == win)
-        sag_reg_bind_context(&ed->regs, doc->undo, &doc->meta);
+        yew_reg_bind_context(&ed->regs, doc->undo, &doc->meta);
     ed->durability_failed = false;
-    sag_msg(ed, SAG_MSG_INFO, "wrote %s, %llu lines", path,
-            (unsigned long long)sag_textbuf_line_count(doc->tb));
-    sag_fl_hook_buffer(ed, FL_EV_BUF_SAVED, doc);
-    return SAG_CMD_OK;
+    yew_msg(ed, YEW_MSG_INFO, "wrote %s, %llu lines", path,
+            (unsigned long long)yew_textbuf_line_count(doc->tb));
+    yew_fl_hook_buffer(ed, FL_EV_BUF_SAVED, doc);
+    return YEW_CMD_OK;
 }
 
-CmdStatus sag_ed_file_write_to(Ed *ed, const char *path, bool force)
+CmdStatus yew_ed_file_write_to(Ed *ed, const char *path, bool force)
 {
-    return ed == NULL ? SAG_CMD_ERR_ARG :
-                        sag_ed_file_write_to_win(ed, ed->win, path, force);
+    return ed == NULL ? YEW_CMD_ERR_ARG :
+                        yew_ed_file_write_to_win(ed, ed->win, path, force);
 }
 
-CmdStatus sag_ed_request_quit(Ed *ed, bool force)
+CmdStatus yew_ed_request_quit(Ed *ed, bool force)
 {
     if (ed == NULL || !ed->model_ready)
-        return SAG_CMD_ERR_STATE;
-    sag_ed_insert_barrier(ed);
+        return YEW_CMD_ERR_STATE;
+    yew_ed_insert_barrier(ed);
     if (!force && ed->durability_failed) {
-        sag_msg(ed, SAG_MSG_ERROR,
+        yew_msg(ed, YEW_MSG_ERROR,
                 "crash journal failed; save or q! to discard changes");
-        return SAG_CMD_ERR_IO;
+        return YEW_CMD_ERR_IO;
     }
-    if (!force && sag_buf_dirty(&ed->buffer)) {
-        sag_ed_prompt(ed, SAG_PROMPT_QUIT_DIRTY);
-        return SAG_CMD_OK;
+    if (!force && yew_buf_dirty(&ed->buffer)) {
+        yew_ed_prompt(ed, YEW_PROMPT_QUIT_DIRTY);
+        return YEW_CMD_OK;
     }
     ed->quit = true;
-    ed->exit_code = SAG_EXIT_OK;
-    return SAG_CMD_OK;
+    ed->exit_code = YEW_EXIT_OK;
+    return YEW_CMD_OK;
 }
 
 static bool prompt_key(Ed *ed, Key key)
 {
     u32 code = key.code;
 
-    if (key.ev == SAG_KEY_RELEASE)
+    if (key.ev == YEW_KEY_RELEASE)
         return true;
-    if (ed->prompt == SAG_PROMPT_WORKSPACE_TRUST) {
-        u8 answer = code == SAG_KEY_ESCAPE ? 0x1BU :
+    if (ed->prompt == YEW_PROMPT_WORKSPACE_TRUST) {
+        u8 answer = code == YEW_KEY_ESCAPE ? 0x1BU :
                     (key.mods == 0U && code <= 0x7fU ? (u8)code : 0U);
 
-        return sag_trust_prompt_key(ed, answer);
+        return yew_trust_prompt_key(ed, answer);
     }
-    if (code == SAG_KEY_ESCAPE) {
+    if (code == YEW_KEY_ESCAPE) {
         ed->quit_after_save = false;
-        sag_ed_prompt(ed, SAG_PROMPT_NONE);
+        yew_ed_prompt(ed, YEW_PROMPT_NONE);
         return true;
     }
     if (key.mods != 0U || code > 0x7fU)
         return true;
-    if (ed->prompt == SAG_PROMPT_RECOVER && code == (u32)'r') {
-        EditCtx ec = sag_ed_edit_ctx(ed);
-        Buffer *doc = sag_ed_doc(ed);
-        bool recovered = sag_journal_replay_edit(doc->meta.realpath, &ec,
+    if (ed->prompt == YEW_PROMPT_RECOVER && code == (u32)'r') {
+        EditCtx ec = yew_ed_edit_ctx(ed);
+        Buffer *doc = yew_ed_doc(ed);
+        bool recovered = yew_journal_replay_edit(doc->meta.realpath, &ec,
                                                  &doc->meta);
 
         if (recovered)
-            ec.jrnl = sag_journal_open(doc->meta.realpath, &doc->meta);
-        sag_ed_finish_edit(ed, &ec);
-        sag_ed_prompt(ed, SAG_PROMPT_NONE);
+            ec.jrnl = yew_journal_open(doc->meta.realpath, &doc->meta);
+        yew_ed_finish_edit(ed, &ec);
+        yew_ed_prompt(ed, YEW_PROMPT_NONE);
         if (recovered && ec.jrnl == NULL) {
             ed->durability_failed = true;
-            sag_msg(ed, SAG_MSG_ERROR,
+            yew_msg(ed, YEW_MSG_ERROR,
                     "recovered changes, but crash journal could not reopen; save or q!");
         } else {
-            sag_msg(ed, recovered ? SAG_MSG_WARN : SAG_MSG_ERROR,
+            yew_msg(ed, recovered ? YEW_MSG_WARN : YEW_MSG_ERROR,
                     recovered ? "recovered unsaved changes" :
                                 "could not recover unsaved changes");
         }
         return true;
     }
-    if (ed->prompt == SAG_PROMPT_RECOVER && code == (u32)'d') {
-        Buffer *doc = sag_ed_doc(ed);
-        bool discarded = sag_journal_discard_path(doc->meta.realpath,
+    if (ed->prompt == YEW_PROMPT_RECOVER && code == (u32)'d') {
+        Buffer *doc = yew_ed_doc(ed);
+        bool discarded = yew_journal_discard_path(doc->meta.realpath,
                                                   &doc->meta);
 
-        sag_ed_prompt(ed, SAG_PROMPT_NONE);
+        yew_ed_prompt(ed, YEW_PROMPT_NONE);
         if (!discarded)
-            sag_msg(ed, SAG_MSG_ERROR, "could not discard recovery journal");
+            yew_msg(ed, YEW_MSG_ERROR, "could not discard recovery journal");
         return true;
     }
-    if (ed->prompt == SAG_PROMPT_QUIT_DIRTY && code == (u32)'w') {
+    if (ed->prompt == YEW_PROMPT_QUIT_DIRTY && code == (u32)'w') {
         ed->quit_after_save = true;
-        (void)sag_ed_file_save(ed, false);
+        (void)yew_ed_file_save(ed, false);
         return true;
     }
-    if (ed->prompt == SAG_PROMPT_QUIT_DIRTY && code == (u32)'d') {
-        ed->prompt = SAG_PROMPT_NONE;
+    if (ed->prompt == YEW_PROMPT_QUIT_DIRTY && code == (u32)'d') {
+        ed->prompt = YEW_PROMPT_NONE;
         ed->quit = true;
         return true;
     }
-    if (ed->prompt == SAG_PROMPT_OVERWRITE && code == (u32)'o') {
-        (void)sag_ed_file_save(ed, true);
+    if (ed->prompt == YEW_PROMPT_OVERWRITE && code == (u32)'o') {
+        (void)yew_ed_file_save(ed, true);
         return true;
     }
     return true;
 }
 
-void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms)
+void yew_ed_handle_key(Ed *ed, Key key, i64 now_ms)
 {
-    const u16 command_mods = SAG_MOD_ALT | SAG_MOD_CTRL | SAG_MOD_SUPER |
-                             SAG_MOD_HYPER | SAG_MOD_META;
+    const u16 command_mods = YEW_MOD_ALT | YEW_MOD_CTRL | YEW_MOD_SUPER |
+                             YEW_MOD_HYPER | YEW_MOD_META;
 
-    if (ed == NULL || key.kind != SAG_EV_KEY)
+    if (ed == NULL || key.kind != YEW_EV_KEY)
         return;
-    sag_record_key(ed, key);
+    yew_record_key(ed, key);
     ed->now_ms = now_ms;
     /*
      * Esc mid-gesture cancels it and restores the state the gesture
@@ -1476,8 +1476,8 @@ void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms)
      * on Escape.  Sprint 27 widened this from the border drag alone to
      * every gesture the router owns.
      */
-    if (key.code == SAG_KEY_ESCAPE && sag_mouse_gesture_active(ed)) {
-        sag_mouse_cancel(ed);
+    if (key.code == YEW_KEY_ESCAPE && yew_mouse_gesture_active(ed)) {
+        yew_mouse_cancel(ed);
         return;
     }
     /*
@@ -1486,14 +1486,14 @@ void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms)
      * document behind an open pop-up, the same law s24's and s26's
      * dialogs obey.
      */
-    if (sag_mouse_menu_key(ed, &key))
+    if (yew_mouse_menu_key(ed, &key))
         return;
-    if (key.code == SAG_KEY_ESCAPE &&
+    if (key.code == YEW_KEY_ESCAPE &&
         (ed->chord.n != 0U || ed->chord.count_given)) {
-        sag_dispatch_key(ed, key, now_ms);
+        yew_dispatch_key(ed, key, now_ms);
         return;
     }
-    if (ed->prompt != SAG_PROMPT_NONE) {
+    if (ed->prompt != YEW_PROMPT_NONE) {
         (void)prompt_key(ed, key);
         return;
     }
@@ -1503,8 +1503,8 @@ void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms)
      * not use — a dialog that let unhandled keys through would edit the
      * document behind it.
      */
-    if (sag_gp_key(ed, key)) {
-        sag_gp_apply(ed);
+    if (yew_gp_key(ed, key)) {
+        yew_gp_apply(ed);
         return;
     }
     /*
@@ -1512,11 +1512,11 @@ void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms)
      * group picker is — it swallows what it does not use, so no key
      * reaches the document behind it.
      */
-    if (sag_picker_active(ed) && sag_picker_key(ed, &key))
+    if (yew_picker_active(ed) && yew_picker_key(ed, &key))
         return;
-    if (key.ev != SAG_KEY_RELEASE && sag_msg_dismiss_overlay(ed))
+    if (key.ev != YEW_KEY_RELEASE && yew_msg_dismiss_overlay(ed))
         return;
-    if (ed->cmdline.active && sag_cmdline_key(ed, &key))
+    if (ed->cmdline.active && yew_cmdline_key(ed, &key))
         return;
     /*
      * Sprint 24 §7.  BEFORE the insert-mode text path: a digit arriving
@@ -1524,27 +1524,27 @@ void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms)
      * it fall through would type it into the document while the user
      * was navigating.
      */
-    if (sag_tab_jump_key(ed, key))
+    if (yew_tab_jump_key(ed, key))
         return;
-    if (ed->msg.active && ed->msg.sev == SAG_MSG_ERROR)
-        sag_msg_clear(ed);
-    if (ed->mode == SAG_MODE_I && key.ev != SAG_KEY_RELEASE &&
+    if (ed->msg.active && ed->msg.sev == YEW_MSG_ERROR)
+        yew_msg_clear(ed);
+    if (ed->mode == YEW_MODE_I && key.ev != YEW_KEY_RELEASE &&
         key.ntext != 0U && (key.mods & command_mods) == 0U) {
         CmdCtx cx = {0};
-        CmdId id = sag_cmd_lookup("ed.edit.insert.text", 19U);
+        CmdId id = yew_cmd_lookup("ed.edit.insert.text", 19U);
 
         cx.ed = ed;
         cx.win = ed->win;
         cx.count = 1U;
         cx.sarg = (const char *)key.text;
         cx.sarg_len = key.ntext;
-        cx.source = SAG_SRC_KEY;
+        cx.source = YEW_SRC_KEY;
         ed->last_cmd = id;
-        ed->last_status = sag_ed_invoke(ed, id, &cx);
+        ed->last_status = yew_ed_invoke(ed, id, &cx);
         ed->dispatch_count++;
         return;
     }
-    sag_dispatch_key(ed, key, now_ms);
+    yew_dispatch_key(ed, key, now_ms);
 }
 
 /*
@@ -1553,9 +1553,9 @@ void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms)
  * 27 moved the whole join to ui/mouse.c, so that file is the only place
  * a pointer event becomes an action (its DoD 2).  Nothing in this file
  * routes one, and the event loop's only mouse line hands it straight to
- * sag_mouse_event.
+ * yew_mouse_event.
  */
-void sag_ed_handle_paste(Ed *ed, const u8 *bytes, size_t len, bool end)
+void yew_ed_handle_paste(Ed *ed, const u8 *bytes, size_t len, bool end)
 {
     if (ed == NULL)
         return;
@@ -1572,11 +1572,11 @@ void sag_ed_handle_paste(Ed *ed, const u8 *bytes, size_t len, bool end)
         return;
     }
     if (ed->cmdline.active && ed->paste.len != 0U) {
-        sag_cmdline_paste(ed, ed->paste.data, ed->paste.len);
-    } else if (ed->mode == SAG_MODE_I && ed->prompt == SAG_PROMPT_NONE &&
+        yew_cmdline_paste(ed, ed->paste.data, ed->paste.len);
+    } else if (ed->mode == YEW_MODE_I && ed->prompt == YEW_PROMPT_NONE &&
         ed->paste.len != 0U) {
         CmdCtx cx = {0};
-        CmdId id = sag_cmd_lookup("ed.edit.insert.text", 19U);
+        CmdId id = yew_cmd_lookup("ed.edit.insert.text", 19U);
 
         cx.ed = ed;
         cx.win = ed->win;
@@ -1584,16 +1584,16 @@ void sag_ed_handle_paste(Ed *ed, const u8 *bytes, size_t len, bool end)
         cx.sarg = (const char *)ed->paste.data;
         cx.sarg_len = ed->paste.len > UINT32_MAX ? UINT32_MAX :
                                                     (u32)ed->paste.len;
-        cx.source = SAG_SRC_KEY;
+        cx.source = YEW_SRC_KEY;
         ed->last_cmd = id;
-        ed->last_status = sag_ed_invoke(ed, id, &cx);
+        ed->last_status = yew_ed_invoke(ed, id, &cx);
         ed->dispatch_count++;
     }
     ed->paste.len = 0U;
     ed->paste_active = false;
 }
 
-void sag_ed_resize(Ed *ed, bool resumed)
+void yew_ed_resize(Ed *ed, bool resumed)
 {
     bool resized = false;
 
@@ -1602,23 +1602,23 @@ void sag_ed_resize(Ed *ed, bool resumed)
     if (resumed) {
         if (!ed->tty.raw) {
             ed->quit = true;
-            ed->exit_code = SAG_EXIT_IO;
+            ed->exit_code = YEW_EXIT_IO;
             return;
         }
-        sag_tty_altscreen(&ed->tty, true);
-        sag_input_enable(ed->tty.wfd, &ed->tty.caps);
+        yew_tty_altscreen(&ed->tty, true);
+        yew_input_enable(ed->tty.wfd, &ed->tty.caps);
     }
-    if (sag_tty_winsize(&ed->tty) && ed->grid_ready &&
+    if (yew_tty_winsize(&ed->tty) && ed->grid_ready &&
         (ed->grid.rows != (u16)ed->tty.rows ||
          ed->grid.cols != (u16)ed->tty.cols)) {
-        if (!sag_grid_resize(&ed->grid, (u16)ed->tty.rows,
+        if (!yew_grid_resize(&ed->grid, (u16)ed->tty.rows,
                              (u16)ed->tty.cols)) {
             ed->quit = true;
-            ed->exit_code = SAG_EXIT_IO;
+            ed->exit_code = YEW_EXIT_IO;
             return;
         }
         if (ed->win != NULL)
-            sag_vp_invalidate(ed->win);
+            yew_vp_invalidate(ed->win);
         resized = true;
     }
     if (!resumed && !resized)
@@ -1645,7 +1645,7 @@ static bool write_all(int fd, const u8 *bytes, size_t len)
     return true;
 }
 
-void sag_ed_render(Ed *ed)
+void yew_ed_render(Ed *ed)
 {
     Win *win;
     LineNo cursor_line;
@@ -1655,76 +1655,76 @@ void sag_ed_render(Ed *ed)
         return;
     win = ed->win;
     if (ed->cursor_follow_pending) {
-        sag_win_follow_cursor(win);
+        yew_win_follow_cursor(win);
         ed->cursor_follow_pending = false;
     }
-    cursor_line = sag_textbuf_line_of(win->buf->tb,
-                                      sag_ed_cursor(ed)->pos);
+    cursor_line = yew_textbuf_line_of(win->buf->tb,
+                                      yew_ed_cursor(ed)->pos);
     if (!ed->drawn_top_valid ||
-        ed->drawn_top.v != sag_win_view_top(win).v ||
+        ed->drawn_top.v != yew_win_view_top(win).v ||
         ed->drawn_top_sub != win->vp.top_sub ||
         ed->drawn_left.v != win->vp.left.v ||
         ed->drawn_wrap != win->vp.wrap ||
         !ed->drawn_cursor_line_valid ||
-        ((win->number_style == SAG_NUM_REL ||
-          win->number_style == SAG_NUM_HYBRID) &&
+        ((win->number_style == YEW_NUM_REL ||
+          win->number_style == YEW_NUM_HYBRID) &&
          ed->drawn_cursor_line.v != cursor_line.v))
-        sag_ed_damage_document(ed);
+        yew_ed_damage_document(ed);
     if (ed->full_damage) {
         /*
          * Every leaf plus the borders their splits own.  With a single
          * pane this draws exactly the rows the one-window path drew,
          * which is what keeps the Sprint 6-21 goldens byte-identical.
          */
-        sag_draw_panes(ed);
-        sag_grid_mark_all(&ed->grid);
+        yew_draw_panes(ed);
+        yew_grid_mark_all(&ed->grid);
     } else if (ed->doc_damage_lo < ed->doc_damage_hi) {
-        if (sag_pane_leaf_count(ed->pane_root) > 1U) {
+        if (yew_pane_leaf_count(ed->pane_root) > 1U) {
             /* Partial damage is expressed in the focused pane's rows,
              * and a border or a neighbour may share them; redrawing the
              * tree is correct and still bounded by the screen. */
-            sag_draw_panes(ed);
+            yew_draw_panes(ed);
         } else {
-            sag_draw_document_rows(ed, win, ed->doc_damage_lo,
+            yew_draw_document_rows(ed, win, ed->doc_damage_lo,
                                    ed->doc_damage_hi);
         }
     }
     if (ed->full_damage || ed->footer_dirty)
-        sag_draw_footer(ed, win);
+        yew_draw_footer(ed, win);
     /*
      * The picker draws LAST, after the footer.
      *
      * It is modal and owns its rectangle, and its filter line IS the
-     * command line — so drawing it inside sag_draw_panes meant the
+     * command line — so drawing it inside yew_draw_panes meant the
      * footer then painted the same widget at the bottom of the screen
      * and left the picker's copy blank.  One widget, one place, and the
      * modal thing on top.
      */
-    if (sag_picker_active(ed))
-        sag_picker_draw(ed, (Rect){0U, 0U, ed->grid.cols, ed->grid.rows});
+    if (yew_picker_active(ed))
+        yew_picker_draw(ed, (Rect){0U, 0U, ed->grid.cols, ed->grid.rows});
     /*
      * Sprint 27 §5: the context menu is drawn after everything, for the
      * same reason and with the same consequence — its BLOCK and CTX_ROW
      * regions are added last, and last-added-wins is what makes it
      * shadow whatever is beneath with no z-order machinery.
      */
-    if (sag_ctx_active())
-        sag_mouse_menu_draw(ed);
+    if (yew_ctx_active())
+        yew_mouse_menu_draw(ed);
     if (!ed->cmdline.active)
-        sag_draw_cursor(ed, win);
+        yew_draw_cursor(ed, win);
     ed->frame.len = 0U;
-    (void)sag_render_frame(&ed->render, &ed->grid, &ed->frame);
+    (void)yew_render_frame(&ed->render, &ed->grid, &ed->frame);
     if (!write_all(ed->tty.wfd, ed->frame.data, ed->frame.len)) {
         ed->quit = true;
-        ed->exit_code = SAG_EXIT_IO;
+        ed->exit_code = YEW_EXIT_IO;
         return;
     }
-    sag_grid_flip(&ed->grid);
+    yew_grid_flip(&ed->grid);
     ed->full_damage = false;
     ed->footer_dirty = false;
     ed->doc_damage_lo = ed->grid.rows;
     ed->doc_damage_hi = 0U;
-    ed->drawn_top = sag_win_view_top(win);
+    ed->drawn_top = yew_win_view_top(win);
     ed->drawn_top_sub = win->vp.top_sub;
     ed->drawn_left = win->vp.left;
     ed->drawn_wrap = win->vp.wrap;
@@ -1733,19 +1733,19 @@ void sag_ed_render(Ed *ed)
     ed->drawn_top_valid = true;
 }
 
-static const char *load_error_text(SagLoadErr error)
+static const char *load_error_text(YewLoadErr error)
 {
     switch (error) {
-    case SAG_LOAD_EACCES:
+    case YEW_LOAD_EACCES:
         return "permission denied";
-    case SAG_LOAD_EISDIR:
+    case YEW_LOAD_EISDIR:
         return "directory arguments land in Sprint 25";
-    case SAG_LOAD_TOO_LARGE:
+    case YEW_LOAD_TOO_LARGE:
         return "file is too large";
-    case SAG_LOAD_IO:
+    case YEW_LOAD_IO:
         return "input/output error";
-    case SAG_LOAD_OK:
-    case SAG_LOAD_ENOENT:
+    case YEW_LOAD_OK:
+    case YEW_LOAD_ENOENT:
         break;
     }
     return "unknown load error";
@@ -1756,108 +1756,108 @@ static const char *ed_getenv(const char *name)
     return getenv(name);
 }
 
-static int ed_driver_inner(const char *path, const SagEdStartup *startup)
+static int ed_driver_inner(const char *path, const YewEdStartup *startup)
 {
     Ed ed;
-    SagLoadErr load = SAG_LOAD_OK;
+    YewLoadErr load = YEW_LOAD_OK;
     int result;
     u16 rows;
     u16 cols;
 
-    sag_ed_init(&ed);
-    sag_config_init(&ed, startup);
+    yew_ed_init(&ed);
+    yew_config_init(&ed, startup);
     errno = 0;
-    if (!sag_tty_open(&ed.tty)) {
-        result = errno == ENOTTY ? SAG_EXIT_ERR : SAG_EXIT_IO;
-        sag_tty_close(&ed.tty);
-        sag_ed_free(&ed);
+    if (!yew_tty_open(&ed.tty)) {
+        result = errno == ENOTTY ? YEW_EXIT_ERR : YEW_EXIT_IO;
+        yew_tty_close(&ed.tty);
+        yew_ed_free(&ed);
         return result;
     }
     ed.tty_ready = true;
-    if (!sag_tty_raw(&ed.tty)) {
-        sag_ed_free(&ed);
-        return SAG_EXIT_IO;
+    if (!yew_tty_raw(&ed.tty)) {
+        yew_ed_free(&ed);
+        return YEW_EXIT_IO;
     }
-    sag_tty_altscreen(&ed.tty, true);
+    yew_tty_altscreen(&ed.tty, true);
     if (!ed.tty.alt) {
-        sag_ed_free(&ed);
-        return SAG_EXIT_IO;
+        yew_ed_free(&ed);
+        return YEW_EXIT_IO;
     }
-    sag_tty_probe_start(&ed.tty, sag_now_ms());
-    sag_input_enable(ed.tty.wfd, &ed.tty.caps);
-    sag_input_init(&ed.in, &ed.tty.caps);
+    yew_tty_probe_start(&ed.tty, yew_now_ms());
+    yew_input_enable(ed.tty.wfd, &ed.tty.caps);
+    yew_input_init(&ed.in, &ed.tty.caps);
     ed.input_ready = true;
 
     if (path == NULL) {
-        (void)sag_ed_open_scratch(&ed);
+        (void)yew_ed_open_scratch(&ed);
     } else {
-        load = sag_ed_open(&ed, path);
-        if (load != SAG_LOAD_OK && load != SAG_LOAD_ENOENT) {
+        load = yew_ed_open(&ed, path);
+        if (load != YEW_LOAD_OK && load != YEW_LOAD_ENOENT) {
             const char *message = load_error_text(load);
 
-            sag_ed_free(&ed);
-            (void)fprintf(stderr, "sagitta: error: cannot open %s: %s\n",
+            yew_ed_free(&ed);
+            (void)fprintf(stderr, "yew: error: cannot open %s: %s\n",
                           path, message);
-            return SAG_EXIT_IO;
+            return YEW_EXIT_IO;
         }
     }
     rows = ed.tty.rows > 0 && ed.tty.rows <= UINT16_MAX ?
                (u16)ed.tty.rows : 24U;
     cols = ed.tty.cols > 0 && ed.tty.cols <= UINT16_MAX ?
                (u16)ed.tty.cols : 80U;
-    if (!sag_grid_init(&ed.grid, &ed.interner, rows, cols)) {
-        sag_ed_free(&ed);
-        return SAG_EXIT_IO;
+    if (!yew_grid_init(&ed.grid, &ed.interner, rows, cols)) {
+        yew_ed_free(&ed);
+        return YEW_EXIT_IO;
     }
     ed.grid_ready = true;
-    sag_render_init(&ed.render, &ed.tty.caps, ed_getenv);
+    yew_render_init(&ed.render, &ed.tty.caps, ed_getenv);
     ed.render_ready = true;
     /*
      * State comes up AFTER the buffers so a restore has somewhere to
      * land, and the lock is claimed before the first change can mark
      * anything dirty.
      */
-    (void)sag_config_load_all(&ed, NULL);
+    (void)yew_config_load_all(&ed, NULL);
     if (!ed.clean)
-        sag_state_open(&ed);
+        yew_state_open(&ed);
     /*
-     * Restored only when no file was named.  `sag sagitta.c` is a
+     * Restored only when no file was named.  `yew yew.c` is a
      * request to edit that file, and burying it under forty restored
      * tabs answers a question nobody asked; the arrangement comes back
      * when you start the way you left — in the directory, with no
      * argument.
      */
     if (path == NULL && !ed.clean)
-        (void)sag_ws_restore(&ed);
+        (void)yew_ws_restore(&ed);
     /* The workspace hook sees restored tabs and buffers, and runs before
      * the first paint.  Startup used to paint once before restore, which
      * made this ordering impossible and also caused a redundant frame. */
-    sag_fl_hook_workspace(&ed, FL_EV_WS_OPEN);
-    sag_ed_layout(&ed);
-    sag_ed_render(&ed);
-    result = ed.quit ? ed.exit_code : sag_loop_run(&ed);
-    sag_fl_hook_workspace(&ed, FL_EV_WS_CLOSE);
+    yew_fl_hook_workspace(&ed, FL_EV_WS_OPEN);
+    yew_ed_layout(&ed);
+    yew_ed_render(&ed);
+    result = ed.quit ? ed.exit_code : yew_loop_run(&ed);
+    yew_fl_hook_workspace(&ed, FL_EV_WS_CLOSE);
     /* Clean quit: the unconditional save, before anything is freed. */
     if (!ed.clean)
-        sag_state_close(&ed);
-    sag_ed_free(&ed);
+        yew_state_close(&ed);
+    yew_ed_free(&ed);
     return result;
 }
 
-int sag_ed_driver(const char *path)
+int yew_ed_driver(const char *path)
 {
-    return sag_ed_driver_opts(path, NULL);
+    return yew_ed_driver_opts(path, NULL);
 }
 
-int sag_ed_driver_opts(const char *path, const SagEdStartup *startup)
+int yew_ed_driver_opts(const char *path, const YewEdStartup *startup)
 {
     TtyGuard guard;
     int result;
 
-    if (!sag_tty_guard_start(&guard))
-        return SAG_EXIT_IO;
+    if (!yew_tty_guard_start(&guard))
+        return YEW_EXIT_IO;
     result = ed_driver_inner(path, startup);
-    if (!sag_tty_guard_finish(&guard) && result == SAG_EXIT_OK)
-        result = SAG_EXIT_IO;
+    if (!yew_tty_guard_finish(&guard) && result == YEW_EXIT_OK)
+        result = YEW_EXIT_IO;
     return result;
 }

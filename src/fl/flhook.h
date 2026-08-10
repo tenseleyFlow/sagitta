@@ -1,5 +1,5 @@
-#ifndef SAG_FL_FLHOOK_H
-#define SAG_FL_FLHOOK_H
+#ifndef YEW_FL_FLHOOK_H
+#define YEW_FL_FLHOOK_H
 
 /* Sprint 34: deterministic, contained Fletch hook dispatch. */
 
@@ -28,8 +28,8 @@ typedef enum FlEvent {
 } FlEvent;
 
 enum {
-    SAG_HOOK_DEPTH_MAX = 8,
-    SAG_HOOK_ERROR_LIMIT_DEFAULT = 5
+    YEW_HOOK_DEPTH_MAX = 8,
+    YEW_HOOK_ERROR_LIMIT_DEFAULT = 5
 };
 
 /* Sprint 36 produces the other three kinds; defining them here keeps one
@@ -96,7 +96,7 @@ typedef struct FlHookTable {
     u16 in_flight[FL_EV__N];
     bool warned_reentrant[FL_EV__N];
     u8 depth;
-    u32 active_ledger[SAG_HOOK_DEPTH_MAX];
+    u32 active_ledger[YEW_HOOK_DEPTH_MAX];
     u32 error_limit;
 } FlHookTable;
 
@@ -121,4 +121,4 @@ void fl_hook_fire(FlHookTable *t, FlVm *vm, u32 event,
 /* Root-11 provider: register with fl_gc_root_provider(vm, fl_hook_mark, t). */
 void fl_hook_mark(FlVm *vm, void *ctx);
 
-#endif /* SAG_FL_FLHOOK_H */
+#endif /* YEW_FL_FLHOOK_H */

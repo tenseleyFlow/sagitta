@@ -15,7 +15,7 @@ set -eu
 
 BUILD=${BUILD:-build}
 RUNNER=$(cd "$(dirname "$0")/.." && pwd)/${RUNNER:-$BUILD/fletch_run}
-SAGITTA=$(cd "$(dirname "$0")/.." && pwd)/${SAGITTA:-$BUILD/sagitta}
+YEW=$(cd "$(dirname "$0")/.." && pwd)/${YEW:-$BUILD/yew}
 SPEC=.docs/fletch-spec.md
 
 if [ ! -r "$SPEC" ]; then
@@ -41,7 +41,7 @@ expect_check() {
     want=$1
     what=$2
     out=$(cd "$tmp" && LC_ALL=C "$RUNNER" --check --root tests/fletch \
-                          --spec spec.md --sagitta "$SAGITTA" 2>&1 || true)
+                          --spec spec.md --yew "$YEW" 2>&1 || true)
     if printf '%s\n' "$out" | grep -q "^check $want:"; then
         echo "  ok  check $want fires: $what"
     else
@@ -105,7 +105,7 @@ if cmp -s "$stale" tests/fletch/ledger.txt; then
     fails=$((fails + 1))
 else
     fresh=$(mktemp) || exit 2
-    LC_ALL=C "$RUNNER" --ledger --sagitta "$SAGITTA" >"$fresh"
+    LC_ALL=C "$RUNNER" --ledger --yew "$YEW" >"$fresh"
     if cmp -s "$stale" "$fresh"; then
         echo "  FAIL check 7 did not notice a stale ledger" >&2
         fails=$((fails + 1))

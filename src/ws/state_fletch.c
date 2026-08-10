@@ -191,7 +191,7 @@ static FlLit *state_value_to_lit(Arena *a, FlValue value)
     }
 }
 
-FlLit *sag_fl_parse_fletch(Arena *a, const u8 *src, u64 len,
+FlLit *yew_fl_parse_fletch(Arena *a, const u8 *src, u64 len,
                            FlParseErr *err)
 {
     Interner in;

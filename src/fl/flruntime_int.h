@@ -1,5 +1,5 @@
-#ifndef SAG_FL_FLRUNTIME_INT_H
-#define SAG_FL_FLRUNTIME_INT_H
+#ifndef YEW_FL_FLRUNTIME_INT_H
+#define YEW_FL_FLRUNTIME_INT_H
 
 #include <stdbool.h>
 
@@ -37,4 +37,4 @@ struct FlRuntime {
 
 CmdStatus fl_runtime_eval(FlRuntime *rt, const char *source, u32 len);
 
-#endif /* SAG_FL_FLRUNTIME_INT_H */
+#endif /* YEW_FL_FLRUNTIME_INT_H */

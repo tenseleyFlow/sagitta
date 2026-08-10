@@ -1,5 +1,5 @@
-#ifndef SAG_FL_SUGGEST_H
-#define SAG_FL_SUGGEST_H
+#ifndef YEW_FL_SUGGEST_H
+#define YEW_FL_SUGGEST_H
 
 /*
  * Sprint 32 §7: "did you mean".
@@ -73,7 +73,7 @@ void fl_suggest_add(FlSuggest *s, const char *name, u32 len, FlScopeBand band);
  * many were named.
  *
  * Deterministic: ascending distance, then scope band, then
- * byte-lexicographic through sag_sort_stable.  Sprint 33's determinism
+ * byte-lexicographic through yew_sort_stable.  Sprint 33's determinism
  * lane byte-compares two runs, and suggestion ordering is the part that
  * rots first.
  */
@@ -84,4 +84,4 @@ u32 fl_suggest_render(FlSuggest *s, const char *typo, u32 typolen,
  * U32_MAX when either name is too long to score. */
 u32 fl_suggest_distance(const char *a, u32 alen, const char *b, u32 blen);
 
-#endif /* SAG_FL_SUGGEST_H */
+#endif /* YEW_FL_SUGGEST_H */

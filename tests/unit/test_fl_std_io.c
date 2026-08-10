@@ -239,7 +239,7 @@ static void glob_tree(FlFix *f)
     flfix_write(f, "sub/deep/c.txt", "dc");
     /* A symlink pointing at the root: descending it would loop. */
     (void)snprintf(link, sizeof(link), "%s/sub/loop", flfix_tmpdir(f));
-    SAG_ASSERT_EQ_I64(symlink(flfix_tmpdir(f), link), 0);
+    YEW_ASSERT_EQ_I64(symlink(flfix_tmpdir(f), link), 0);
 }
 
 void test_fl_io_glob_matches_the_documented_syntax(void)
@@ -321,7 +321,7 @@ void test_fl_io_glob_roots_at_the_importing_module(void)
     /*
      * The default root is the importing FILE's directory, never the
      * process cwd.  A config that globbed relative to the cwd would
-     * find its snippets when sagitta was launched from the config
+     * find its snippets when yew was launched from the config
      * directory and find nothing anywhere else, and the user would
      * report it as "plugins load sometimes".
      */
@@ -344,10 +344,10 @@ void test_fl_io_env_is_the_one_getenv(void)
     flfix_as(&f, (u8)FL_ORIGIN_CONFIG, (u32)FL_CAP_FS_READ);
     /* An environment read is ambient authority by another name, so it
      * goes through a capability and through one function. */
-    FL_EQ(&f, P "return io.env(\"SAG_UNSET_FOR_THIS_TEST\")\n", "nil");
-    SAG_ASSERT_EQ_I64(setenv("SAG_SET_FOR_THIS_TEST", "yes", 1), 0);
-    FL_EQ(&f, P "return io.env(\"SAG_SET_FOR_THIS_TEST\")\n", "yes");
-    SAG_ASSERT_EQ_I64(unsetenv("SAG_SET_FOR_THIS_TEST"), 0);
+    FL_EQ(&f, P "return io.env(\"YEW_UNSET_FOR_THIS_TEST\")\n", "nil");
+    YEW_ASSERT_EQ_I64(setenv("YEW_SET_FOR_THIS_TEST", "yes", 1), 0);
+    FL_EQ(&f, P "return io.env(\"YEW_SET_FOR_THIS_TEST\")\n", "yes");
+    YEW_ASSERT_EQ_I64(unsetenv("YEW_SET_FOR_THIS_TEST"), 0);
     flfix_close(&f);
 }
 

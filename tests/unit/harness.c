@@ -13,7 +13,7 @@
 #include "util/buf.h"
 
 typedef struct {
-    SagLogLevel level;
+    YewLogLevel level;
     char *message;
 } CapturedLog;
 
@@ -36,7 +36,7 @@ static char *env_copy(const char *name)
     if (value == NULL)
         return NULL;
     len = strlen(value);
-    copy = sag_xmalloc(len + 1U);
+    copy = yew_xmalloc(len + 1U);
     (void)memcpy(copy, value, len + 1U);
     return copy;
 }
@@ -51,7 +51,7 @@ static void env_restore(const char *name, const char *saved)
     }
 }
 
-static void capture_write(void *user, SagLogLevel level, const char *message)
+static void capture_write(void *user, YewLogLevel level, const char *message)
 {
     CapturedLog *entry;
     size_t len;
@@ -59,13 +59,13 @@ static void capture_write(void *user, SagLogLevel level, const char *message)
     (void)user;
     if (captured_logs_len == captured_logs_cap) {
         size_t cap = captured_logs_cap == 0U ? 8U : captured_logs_cap * 2U;
-        captured_logs = sag_xreallocarray(captured_logs, cap,
+        captured_logs = yew_xreallocarray(captured_logs, cap,
                                           sizeof(*captured_logs));
         captured_logs_cap = cap;
     }
     entry = &captured_logs[captured_logs_len++];
     len = strlen(message);
-    entry->message = sag_xmalloc(len + 1U);
+    entry->message = yew_xmalloc(len + 1U);
     (void)memcpy(entry->message, message, len + 1U);
     entry->level = level;
 }
@@ -82,20 +82,20 @@ static void capture_reset(void)
     captured_logs_cap = 0U;
 }
 
-void sag_test_capture_log(void)
+void yew_test_capture_log(void)
 {
-    static const SagLogSink sink = {capture_write, NULL};
+    static const YewLogSink sink = {capture_write, NULL};
 
     capture_reset();
-    sag_log_set_sink(&sink);
+    yew_log_set_sink(&sink);
 }
 
-size_t sag_test_log_count(void)
+size_t yew_test_log_count(void)
 {
     return captured_logs_len;
 }
 
-bool sag_test_log_contains(SagLogLevel level, const char *substr)
+bool yew_test_log_contains(YewLogLevel level, const char *substr)
 {
     size_t i;
 
@@ -107,13 +107,13 @@ bool sag_test_log_contains(SagLogLevel level, const char *substr)
     return false;
 }
 
-void sag_test_teardown(void)
+void yew_test_teardown(void)
 {
-    sag_log_set_sink(NULL);
+    yew_log_set_sink(NULL);
     capture_reset();
 }
 
-void sag_test_count_assertion(void)
+void yew_test_count_assertion(void)
 {
     assertion_count++;
 }
@@ -128,57 +128,57 @@ static _Noreturn void fail_at(const char *file, int line, const char *detail)
     abort();
 }
 
-_Noreturn void sag_test_fail(const char *file, int line, const char *detail)
+_Noreturn void yew_test_fail(const char *file, int line, const char *detail)
 {
     fail_at(file, line, detail);
 }
 
-_Noreturn void sag_test_fail_i64(const char *file, int line,
+_Noreturn void yew_test_fail_i64(const char *file, int line,
                                  i64 left, i64 right)
 {
     char detail[160];
 
     (void)snprintf(detail, sizeof(detail),
-                   "SAG_ASSERT_EQ_I64 left=%lld right=%lld",
+                   "YEW_ASSERT_EQ_I64 left=%lld right=%lld",
                    (long long)left, (long long)right);
     fail_at(file, line, detail);
 }
 
-_Noreturn void sag_test_fail_u64(const char *file, int line,
+_Noreturn void yew_test_fail_u64(const char *file, int line,
                                  u64 left, u64 right)
 {
     char detail[160];
 
     (void)snprintf(detail, sizeof(detail),
-                   "SAG_ASSERT_EQ_U64 left=%llu right=%llu",
+                   "YEW_ASSERT_EQ_U64 left=%llu right=%llu",
                    (unsigned long long)left, (unsigned long long)right);
     fail_at(file, line, detail);
 }
 
-_Noreturn void sag_test_fail_str(const char *file, int line,
+_Noreturn void yew_test_fail_str(const char *file, int line,
                                  const char *left, const char *right)
 {
     char detail[768];
 
     (void)snprintf(detail, sizeof(detail),
-                   "SAG_ASSERT_EQ_STR left=\"%s\" right=\"%s\"",
+                   "YEW_ASSERT_EQ_STR left=\"%s\" right=\"%s\"",
                    left == NULL ? "(null)" : left,
                    right == NULL ? "(null)" : right);
     fail_at(file, line, detail);
 }
 
-_Noreturn void sag_test_fail_mem(const char *file, int line,
+_Noreturn void yew_test_fail_mem(const char *file, int line,
                                  size_t offset, u8 left, u8 right)
 {
     char detail[192];
 
     (void)snprintf(detail, sizeof(detail),
-                   "SAG_ASSERT_EQ_MEM offset=%zu left=0x%02x right=0x%02x",
+                   "YEW_ASSERT_EQ_MEM offset=%zu left=0x%02x right=0x%02x",
                    offset, (unsigned int)left, (unsigned int)right);
     fail_at(file, line, detail);
 }
 
-_Noreturn void sag_test_fail_pointer(const char *file, int line,
+_Noreturn void yew_test_fail_pointer(const char *file, int line,
                                      const char *macro, bool is_null)
 {
     char detail[128];
@@ -188,7 +188,7 @@ _Noreturn void sag_test_fail_pointer(const char *file, int line,
     fail_at(file, line, detail);
 }
 
-bool sag_test_name_matches(const char *name, const char *filter)
+bool yew_test_name_matches(const char *name, const char *filter)
 {
     return filter == NULL || strstr(name, filter) != NULL;
 }
@@ -205,12 +205,12 @@ static bool test_is_excluded(const char *name, const char **excluded,
     return false;
 }
 
-const char *sag_test_program_path(void)
+const char *yew_test_program_path(void)
 {
     return program_path;
 }
 
-void sag_test_load_runtime(Ed *ed)
+void yew_test_load_runtime(Ed *ed)
 {
     FILE *fp;
     Bytebuf source;
@@ -218,20 +218,20 @@ void sag_test_load_runtime(Ed *ed)
     size_t n;
 
     fp = fopen("runtime/init.fl", "rb");
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     bytebuf_init(&source);
     while ((n = fread(chunk, 1U, sizeof(chunk), fp)) != 0U)
         bytebuf_append(&source, chunk, n);
-    SAG_ASSERT(!ferror(fp));
-    SAG_ASSERT_EQ_I64(fclose(fp), 0);
-    sag_bind_batch_begin(ed);
-    SAG_ASSERT_EQ_I64(sag_fl_eval(ed, (const char *)source.data,
-                                  (u32)source.len), SAG_CMD_OK);
-    sag_bind_batch_end(ed);
+    YEW_ASSERT(!ferror(fp));
+    YEW_ASSERT_EQ_I64(fclose(fp), 0);
+    yew_bind_batch_begin(ed);
+    YEW_ASSERT_EQ_I64(yew_fl_eval(ed, (const char *)source.data,
+                                  (u32)source.len), YEW_CMD_OK);
+    yew_bind_batch_end(ed);
     bytebuf_free(&source);
 }
 
-static bool run_one_test(const SagTest *test)
+static bool run_one_test(const YewTest *test)
 {
     jmp_buf target;
 
@@ -241,26 +241,26 @@ static bool run_one_test(const SagTest *test)
     failure_detail[0] = '\0';
     if (setjmp(target) == 0) {
         test->fn();
-        sag_test_teardown();
+        yew_test_teardown();
         failure_target = NULL;
         (void)printf("PASS %s\n", test->name);
         (void)fflush(stdout);
         return true;
     }
-    sag_test_teardown();
+    yew_test_teardown();
     failure_target = NULL;
     (void)printf("FAIL %s at %s:%d: %s\n", test->name,
                  failure_file, failure_line, failure_detail);
     (void)fflush(stdout);
-    if (getenv("SAG_TEST_SELFCHECK") != NULL) {
-        sag_log(SAG_LOG_INFO, "harness teardown restored default sink");
-        if (sag_test_log_count() != 0U)
+    if (getenv("YEW_TEST_SELFCHECK") != NULL) {
+        yew_log(YEW_LOG_INFO, "harness teardown restored default sink");
+        if (yew_test_log_count() != 0U)
             (void)printf("FAIL harness teardown left capture sink installed\n");
     }
     return false;
 }
 
-int sag_test_run(int argc, char **argv)
+int yew_test_run(int argc, char **argv)
 {
     const char *filter = NULL;
     const char *excluded[32];
@@ -296,9 +296,9 @@ int sag_test_run(int argc, char **argv)
         }
     }
 
-    for (i = 0U; i < sag_tests_len; i++) {
-        if (sag_test_name_matches(sag_tests[i].name, filter) &&
-            !test_is_excluded(sag_tests[i].name, excluded, excluded_len))
+    for (i = 0U; i < yew_tests_len; i++) {
+        if (yew_test_name_matches(yew_tests[i].name, filter) &&
+            !test_is_excluded(yew_tests[i].name, excluded, excluded_len))
             selected++;
     }
     if (selected == 0U) {
@@ -306,22 +306,22 @@ int sag_test_run(int argc, char **argv)
         return 1;
     }
     if (list) {
-        for (i = 0U; i < sag_tests_len; i++) {
-            if (sag_test_name_matches(sag_tests[i].name, filter) &&
-                !test_is_excluded(sag_tests[i].name, excluded,
+        for (i = 0U; i < yew_tests_len; i++) {
+            if (yew_test_name_matches(yew_tests[i].name, filter) &&
+                !test_is_excluded(yew_tests[i].name, excluded,
                                   excluded_len))
-                (void)printf("%s\n", sag_tests[i].name);
+                (void)printf("%s\n", yew_tests[i].name);
         }
         return 0;
     }
 
     xdg_state = env_copy("XDG_STATE_HOME");
-    for (i = 0U; i < sag_tests_len; i++) {
-        if (!sag_test_name_matches(sag_tests[i].name, filter) ||
-            test_is_excluded(sag_tests[i].name, excluded, excluded_len))
+    for (i = 0U; i < yew_tests_len; i++) {
+        if (!yew_test_name_matches(yew_tests[i].name, filter) ||
+            test_is_excluded(yew_tests[i].name, excluded, excluded_len))
             continue;
         env_restore("XDG_STATE_HOME", xdg_state);
-        if (!run_one_test(&sag_tests[i]))
+        if (!run_one_test(&yew_tests[i]))
             failures++;
     }
     env_restore("XDG_STATE_HOME", xdg_state);

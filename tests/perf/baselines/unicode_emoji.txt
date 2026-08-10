@@ -1,4 +1,4 @@
-# Sagitta Sprint 02 advisory Unicode baseline
+# yew Sprint 02 advisory Unicode baseline
 scenario=emoji
 bytes=1048600
 clusters=41944

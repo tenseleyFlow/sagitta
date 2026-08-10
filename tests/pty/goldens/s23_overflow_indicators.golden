@@ -1,8 +1,8 @@
-# sagitta pty golden v1
+# yew pty golden v1
 size 40x24 alt=1 cursor=1,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=18
 --- text
-<[6: sag-pty-4.txt][7: sag-pty-5.txt]
+<[6: yew-pty-4.txt][7: yew-pty-5.txt]
     1
 
 
@@ -25,7 +25,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=18
 
 
 
- L  sag-pty-5.txt    utf-8  lf  1:1  all
+ L  yew-pty-5.txt    utf-8  lf  1:1  all
 --- style
 AAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBB
 CCCCC

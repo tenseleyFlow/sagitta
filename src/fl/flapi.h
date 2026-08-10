@@ -1,5 +1,5 @@
-#ifndef SAG_FL_FLAPI_H
-#define SAG_FL_FLAPI_H
+#ifndef YEW_FL_FLAPI_H
+#define YEW_FL_FLAPI_H
 
 /* Sprint 34: the table-driven editor surface. */
 
@@ -67,4 +67,4 @@ bool fl_api_invoke(FlVm *vm, const FlBindDesc *d,
 bool fl_api_ed_run(FlVm *vm, FlValue *argv, u32 argc, FlValue *out);
 bool fl_api_ed_commands(FlVm *vm, FlValue *argv, u32 argc, FlValue *out);
 
-#endif /* SAG_FL_FLAPI_H */
+#endif /* YEW_FL_FLAPI_H */

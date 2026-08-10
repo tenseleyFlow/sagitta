@@ -75,15 +75,15 @@ static bool buffer_bytes(const TextBuf *tb, RtBytes *out)
     u64 n;
 
     out->b.len = 0U;
-    if (!sag_textiter_begin(&it, tb, BYTEOFF(0U)))
-        return sag_textbuf_len(tb) == 0U;
+    if (!yew_textiter_begin(&it, tb, BYTEOFF(0U)))
+        return yew_textbuf_len(tb) == 0U;
     do {
-        if (!sag_textiter_chunk(&it, tb, &p, &n))
+        if (!yew_textiter_chunk(&it, tb, &p, &n))
             return false;
         if (n > SIZE_MAX)
             return false;
         bytebuf_append(&out->b, p, (size_t)n);
-    } while (sag_textiter_advance(&it, tb));
+    } while (yew_textiter_advance(&it, tb));
     return true;
 }
 
@@ -144,22 +144,22 @@ static bool editor_open(Ed *ed, const Bytebuf *fixture, u8 mode)
 {
     Cursor *cursor;
 
-    sag_ed_init(ed);
-    if (!sag_ed_open_scratch(ed))
+    yew_ed_init(ed);
+    if (!yew_ed_open_scratch(ed))
         return false;
     if (fixture->len != 0U)
-        sag_textbuf_insert(ed->buffer.tb, BYTEOFF(0U), fixture->data,
+        yew_textbuf_insert(ed->buffer.tb, BYTEOFF(0U), fixture->data,
                            (u64)fixture->len);
-    sag_undo_free(ed->buffer.undo);
-    ed->buffer.undo = sag_undo_new(ed->buffer.tb);
-    sag_reg_bind_context(&ed->regs, ed->buffer.undo, &ed->buffer.meta);
-    cursor = sag_ed_cursor(ed);
+    yew_undo_free(ed->buffer.undo);
+    ed->buffer.undo = yew_undo_new(ed->buffer.tb);
+    yew_reg_bind_context(&ed->regs, ed->buffer.undo, &ed->buffer.meta);
+    cursor = yew_ed_cursor(ed);
     if (cursor == NULL)
         return false;
     cursor->pos = BYTEOFF(0U);
     cursor->anchor = BYTEOFF(0U);
     cursor->goal_col = (GCol){0U};
-    return sag_mode_enter(ed, (Mode)mode) == SAG_CMD_OK;
+    return yew_mode_enter(ed, (Mode)mode) == YEW_CMD_OK;
 }
 
 static bool invoke_event(Ed *ed, const RtEvent *ev)
@@ -174,8 +174,8 @@ static bool invoke_event(Ed *ed, const RtEvent *ev)
     cx.range = ev->range;
     cx.sarg = (const char *)ev->sarg;
     cx.sarg_len = ev->sarg_len;
-    cx.source = SAG_SRC_TEST;
-    return sag_ed_invoke(ed, ev->cmd, &cx) == SAG_CMD_OK;
+    cx.source = YEW_SRC_TEST;
+    return yew_ed_invoke(ed, ev->cmd, &cx) == YEW_CMD_OK;
 }
 
 static bool run_events(Ed *ed, const RtSession *session)
@@ -184,7 +184,7 @@ static bool run_events(Ed *ed, const RtSession *session)
 
     for (i = 0U; i < session->events.len; i++) {
         if (!invoke_event(ed, &session->events.data[i])) {
-            const CmdDesc *d = sag_cmd_desc(session->events.data[i].cmd);
+            const CmdDesc *d = yew_cmd_desc(session->events.data[i].cmd);
 
             if (!quiet_probe)
                 (void)fprintf(stderr, "roundtrip: event %u failed: %s\n",
@@ -293,11 +293,11 @@ static bool install_macro(Ed *ed, const Bytebuf *source)
 {
     RegVal value;
 
-    sag_regval_init(&value);
-    value.type = (u8)SAG_REG_CHARWISE;
+    yew_regval_init(&value);
+    value.type = (u8)YEW_REG_CHARWISE;
     bytebuf_append(&value.bytes, source->data, source->len);
-    sag_reg_set(&ed->regs, (u8)'a', &value);
-    sag_regval_free(&value);
+    yew_reg_set(&ed->regs, (u8)'a', &value);
+    yew_regval_free(&value);
     return true;
 }
 
@@ -378,17 +378,17 @@ static bool property_session(const RtSession *session)
     if (!editor_open(&recorded, &fixture, session->start_mode))
         goto done;
     opened_recorded = true;
-    if (!sag_record_start(&recorded, (u8)'a') ||
+    if (!yew_record_start(&recorded, (u8)'a') ||
         !run_events(&recorded, session) ||
-        sag_record_stop(&recorded) != SAG_CMD_OK)
+        yew_record_stop(&recorded) != YEW_CMD_OK)
         goto done;
-    stored = sag_reg_get(&recorded.regs, (u8)'a');
+    stored = yew_reg_get(&recorded.regs, (u8)'a');
     if (stored == NULL)
         goto done;
     bytebuf_append(&emitted_a, stored->bytes.data, stored->bytes.len);
 
     /* P3: emission is a pure deterministic rendering of retained Rec. */
-    sag_record_emit(&recorded.rec, &recorded, &emitted_b);
+    yew_record_emit(&recorded.rec, &recorded, &emitted_b);
     if (!bytes_equal(&emitted_a, &emitted_b)) {
         (void)fail_session(session->seed, session->fixture, "P3",
                            "second emission differs");
@@ -426,7 +426,7 @@ static bool property_session(const RtSession *session)
         goto done;
     opened_replayed = true;
     if (!install_macro(&replayed, &emitted_a) ||
-        sag_macro_replay(&replayed, (u8)'a', 1U) != SAG_CMD_OK)
+        yew_macro_replay(&replayed, (u8)'a', 1U) != YEW_CMD_OK)
         goto done;
     if (!editors_equal(&recorded, &replayed, &why)) {
         (void)fail_session(session->seed, session->fixture, "P1", why);
@@ -434,8 +434,8 @@ static bool property_session(const RtSession *session)
     }
 
     /* P2: replay is one outer transaction, so one undo restores E0. */
-    ec = sag_ed_edit_ctx(&replayed);
-    if (!sag_undo(&ec) || !buffer_bytes(replayed.buffer.tb, &after_undo) ||
+    ec = yew_ed_edit_ctx(&replayed);
+    if (!yew_undo(&ec) || !buffer_bytes(replayed.buffer.tb, &after_undo) ||
         !bytes_equal(&after_undo.b, &fixture)) {
         (void)fail_session(session->seed, session->fixture, "P2",
                            "one undo did not restore E0 bytes");
@@ -450,16 +450,16 @@ static bool property_session(const RtSession *session)
     if (!editor_open(&direct_twice, &fixture, session->start_mode))
         goto done;
     opened_direct_twice = true;
-    if (!sag_record_start(&direct_twice, (u8)'a') ||
+    if (!yew_record_start(&direct_twice, (u8)'a') ||
         !run_events(&direct_twice, session) ||
-        sag_record_stop(&direct_twice) != SAG_CMD_OK ||
+        yew_record_stop(&direct_twice) != YEW_CMD_OK ||
         !run_events(&direct_twice, session))
         goto done;
     if (!editor_open(&replayed_twice, &fixture, session->start_mode))
         goto done;
     opened_replayed_twice = true;
     if (!install_macro(&replayed_twice, &emitted_a) ||
-        sag_macro_replay(&replayed_twice, (u8)'a', 2U) != SAG_CMD_OK)
+        yew_macro_replay(&replayed_twice, (u8)'a', 2U) != YEW_CMD_OK)
         goto done;
     if (!editors_equal(&direct_twice, &replayed_twice, &why)) {
         (void)fail_session(session->seed, session->fixture, "P5", why);
@@ -471,13 +471,13 @@ done:
     if (!quiet_probe && !ok && why[0] != '\0')
         (void)fprintf(stderr, "roundtrip: context: %s\n", why);
     if (opened_replayed_twice)
-        sag_ed_free(&replayed_twice);
+        yew_ed_free(&replayed_twice);
     if (opened_direct_twice)
-        sag_ed_free(&direct_twice);
+        yew_ed_free(&direct_twice);
     if (opened_replayed)
-        sag_ed_free(&replayed);
+        yew_ed_free(&replayed);
     if (opened_recorded)
-        sag_ed_free(&recorded);
+        yew_ed_free(&recorded);
     bytes_free(&after_undo);
     bytebuf_free(&emitted_b);
     bytebuf_free(&emitted_a);
@@ -518,44 +518,44 @@ static bool run_edit_store_noop_fixture(void)
         !editor_open(&ed, &fixture, session.start_mode))
         goto done;
     opened = true;
-    if (!sag_record_start(&ed, (u8)'a') ||
+    if (!yew_record_start(&ed, (u8)'a') ||
         !run_events(&ed, &session) ||
-        sag_record_stop(&ed) != SAG_CMD_OK)
+        yew_record_stop(&ed) != YEW_CMD_OK)
         goto done;
-    stored = sag_reg_get(&ed.regs, (u8)'a');
+    stored = yew_reg_get(&ed.regs, (u8)'a');
     if (stored == NULL || stored->bytes.len == 0U)
         goto done;
     bytebuf_append(&before, stored->bytes.data, stored->bytes.len);
     if (!parse_dump(&before, &ast_before) ||
-        sag_macro_edit(&ed, (u8)'a') != SAG_CMD_OK)
+        yew_macro_edit(&ed, (u8)'a') != YEW_CMD_OK)
         goto done;
     scratch = ed.win == NULL ? NULL : ed.win->buf;
     if (scratch == NULL || scratch->macro_reg != (u8)'a')
         goto done;
 
-    end = sag_textbuf_len(scratch->tb);
-    ec = sag_ed_edit_ctx_for(&ed, ed.win);
-    sag_undo_begin(&ec, SAG_TXN_TYPE);
-    if (!sag_edit_insert(&ec, BYTEOFF(end), &probe, 1U)) {
-        sag_undo_abort(&ec);
+    end = yew_textbuf_len(scratch->tb);
+    ec = yew_ed_edit_ctx_for(&ed, ed.win);
+    yew_undo_begin(&ec, YEW_TXN_TYPE);
+    if (!yew_edit_insert(&ec, BYTEOFF(end), &probe, 1U)) {
+        yew_undo_abort(&ec);
         goto done;
     }
-    sag_undo_end(&ec);
-    sag_ed_finish_edit(&ed, &ec);
+    yew_undo_end(&ec);
+    yew_ed_finish_edit(&ed, &ec);
 
-    ec = sag_ed_edit_ctx_for(&ed, ed.win);
-    sag_undo_begin(&ec, SAG_TXN_ERASE);
-    if (!sag_edit_delete(&ec, (Span){end, end + 1U})) {
-        sag_undo_abort(&ec);
+    ec = yew_ed_edit_ctx_for(&ed, ed.win);
+    yew_undo_begin(&ec, YEW_TXN_ERASE);
+    if (!yew_edit_delete(&ec, (Span){end, end + 1U})) {
+        yew_undo_abort(&ec);
         goto done;
     }
-    sag_undo_end(&ec);
-    sag_ed_finish_edit(&ed, &ec);
-    if (sag_undo_at_save_point(scratch->undo) ||
-        sag_macro_store(&ed, scratch) != SAG_CMD_OK)
+    yew_undo_end(&ec);
+    yew_ed_finish_edit(&ed, &ec);
+    if (yew_undo_at_save_point(scratch->undo) ||
+        yew_macro_store(&ed, scratch) != YEW_CMD_OK)
         goto done;
 
-    stored = sag_reg_get(&ed.regs, (u8)'a');
+    stored = yew_reg_get(&ed.regs, (u8)'a');
     if (stored == NULL)
         goto done;
     bytebuf_append(&after, stored->bytes.data, stored->bytes.len);
@@ -569,7 +569,7 @@ done:
         (void)fprintf(stderr,
                       "roundtrip: record-edit-store no-op fixture failed\n");
     if (opened)
-        sag_ed_free(&ed);
+        yew_ed_free(&ed);
     bytebuf_free(&ast_after);
     bytebuf_free(&ast_before);
     bytebuf_free(&after);
@@ -629,10 +629,10 @@ static bool p1_diverges(const RtSession *session, u32 prefix, bool corrupt,
     if (!editor_open(&direct, &fixture, session->start_mode))
         goto fixture_done;
     direct_open = true;
-    if (!sag_record_start(&direct, (u8)'a') || !run_events(&direct, &view) ||
-        sag_record_stop(&direct) != SAG_CMD_OK)
+    if (!yew_record_start(&direct, (u8)'a') || !run_events(&direct, &view) ||
+        yew_record_stop(&direct) != YEW_CMD_OK)
         goto fixture_done;
-    stored = sag_reg_get(&direct.regs, (u8)'a');
+    stored = yew_reg_get(&direct.regs, (u8)'a');
     if (stored == NULL)
         goto fixture_done;
     bytebuf_append(&source, stored->bytes.data, stored->bytes.len);
@@ -647,7 +647,7 @@ static bool p1_diverges(const RtSession *session, u32 prefix, bool corrupt,
         goto fixture_done;
     replay_open = true;
     if (!install_macro(&replay, &bad_source) ||
-        sag_macro_replay(&replay, (u8)'a', 1U) != SAG_CMD_OK)
+        yew_macro_replay(&replay, (u8)'a', 1U) != YEW_CMD_OK)
         goto fixture_done;
     if (corrupt && !install_macro(&direct, &bad_source))
         goto fixture_done;
@@ -658,9 +658,9 @@ static bool p1_diverges(const RtSession *session, u32 prefix, bool corrupt,
 
 fixture_done:
     if (replay_open)
-        sag_ed_free(&replay);
+        yew_ed_free(&replay);
     if (direct_open)
-        sag_ed_free(&direct);
+        yew_ed_free(&direct);
     bytebuf_free(&fixture);
 done:
     bytes_free(&replay_bytes);
@@ -702,7 +702,7 @@ static bool write_failure_artifact(const RtSession *session, u32 prefix,
                                    const char *fault, char *path,
                                    size_t path_cap)
 {
-    const char *dir = getenv("SAG_RT_TMP");
+    const char *dir = getenv("YEW_RT_TMP");
     FILE *fp;
 
     if (dir == NULL || dir[0] == '\0')
@@ -758,7 +758,7 @@ static void report_failure(const RtSession *session, bool corrupt)
                                  corrupt ? "fold-takes-count" : "none",
                                  path, sizeof(path));
     op_at = corrupt ? 0U : prefix == 0U ? 0U : prefix - 1U;
-    desc = prefix == 0U ? NULL : sag_cmd_desc(session->events.data[op_at].cmd);
+    desc = prefix == 0U ? NULL : yew_cmd_desc(session->events.data[op_at].cmd);
     (void)fprintf(stderr,
                   "roundtrip: FAIL seed=%llu fixture=%u property=%s\n"
                   "  diverged at event %u of %u; shrunk from %u\n"
@@ -809,9 +809,9 @@ static bool init_count_folding_session(RtSession *session, u32 length)
     session->seed = UINT64_C(0x534147434f554e54);
     session->fixture = 2U;
     session->generated_len = length;
-    session->start_mode = (u8)SAG_MODE_L;
+    session->start_mode = (u8)YEW_MODE_L;
 
-    event.cmd = sag_cmd_lookup("ed.move.buf.end",
+    event.cmd = yew_cmd_lookup("ed.move.buf.end",
                                (u32)strlen("ed.move.buf.end"));
     event.count = 1U;
     if (event.cmd.v == 0U)
@@ -820,7 +820,7 @@ static bool init_count_folding_session(RtSession *session, u32 length)
     RtEventVec_push(&session->events, event);
 
     event = (RtEvent){0};
-    event.cmd = sag_cmd_lookup("ed.edit.insert.text",
+    event.cmd = yew_cmd_lookup("ed.edit.insert.text",
                                (u32)strlen("ed.edit.insert.text"));
     event.count = 1U;
     event.sarg = insert;
@@ -833,7 +833,7 @@ static bool init_count_folding_session(RtSession *session, u32 length)
         name = (i & 1U) == 0U ? "ed.move.unit.next" :
                                 "ed.move.unit.prev";
         event = (RtEvent){0};
-        event.cmd = sag_cmd_lookup(name, (u32)strlen(name));
+        event.cmd = yew_cmd_lookup(name, (u32)strlen(name));
         event.count = 1U;
         if (event.cmd.v == 0U)
             goto fail;
@@ -909,10 +909,10 @@ static bool run_corpus(u32 *count_out)
             continue;
         if (names_len == names_cap) {
             names_cap = names_cap == 0U ? 32U : names_cap * 2U;
-            names = sag_xreallocarray(names, names_cap, sizeof(*names));
+            names = yew_xreallocarray(names, names_cap, sizeof(*names));
         }
         n = strlen(entry->d_name);
-        names[names_len] = sag_xmalloc(n + 1U);
+        names[names_len] = yew_xmalloc(n + 1U);
         (void)memcpy(names[names_len], entry->d_name, n + 1U);
         names_len++;
     }
@@ -977,7 +977,7 @@ done:
 
 static u32 env_seeds(void)
 {
-    const char *s = getenv("SAG_RT_SEEDS");
+    const char *s = getenv("YEW_RT_SEEDS");
     char *end;
     unsigned long n;
 
@@ -986,7 +986,7 @@ static u32 env_seeds(void)
     errno = 0;
     n = strtoul(s, &end, 10);
     if (errno != 0 || *end != '\0' || n > UINT32_MAX) {
-        (void)fprintf(stderr, "roundtrip: invalid SAG_RT_SEEDS=%s\n", s);
+        (void)fprintf(stderr, "roundtrip: invalid YEW_RT_SEEDS=%s\n", s);
         exit(2);
     }
     return (u32)n;
@@ -994,7 +994,7 @@ static u32 env_seeds(void)
 
 static u64 env_base_seed(void)
 {
-    const char *s = getenv("SAG_RT_BASE_SEED");
+    const char *s = getenv("YEW_RT_BASE_SEED");
     char *end;
     unsigned long long n;
 
@@ -1003,7 +1003,7 @@ static u64 env_base_seed(void)
     errno = 0;
     n = strtoull(s, &end, 0);
     if (errno != 0 || *end != '\0') {
-        (void)fprintf(stderr, "roundtrip: invalid SAG_RT_BASE_SEED=%s\n", s);
+        (void)fprintf(stderr, "roundtrip: invalid YEW_RT_BASE_SEED=%s\n", s);
         exit(2);
     }
     return (u64)n;
@@ -1017,9 +1017,9 @@ static bool has_count_folding_prefix(const RtSession *session)
 
     if (session->events.len < 3U)
         return false;
-    first = sag_cmd_desc(session->events.data[0].cmd);
-    second = sag_cmd_desc(session->events.data[1].cmd);
-    third = sag_cmd_desc(session->events.data[2].cmd);
+    first = yew_cmd_desc(session->events.data[0].cmd);
+    second = yew_cmd_desc(session->events.data[1].cmd);
+    third = yew_cmd_desc(session->events.data[2].cmd);
     return first != NULL && second != NULL && third != NULL &&
            strcmp(first->name, "ed.move.buf.end") == 0 &&
            strcmp(second->name, "ed.move.buf.end") == 0 &&
@@ -1060,7 +1060,7 @@ int main(int argc, char **argv)
     u32 corpus_count;
     u32 i;
     u64 base_seed;
-    bool coverage = getenv("SAG_RT_COVERAGE") != NULL;
+    bool coverage = getenv("YEW_RT_COVERAGE") != NULL;
 
     if (argc == 2 && strcmp(argv[1], "--coverage") == 0)
         coverage = true;
@@ -1068,38 +1068,38 @@ int main(int argc, char **argv)
         (void)fprintf(stderr, "usage: %s [--coverage]\n", argv[0]);
         return 2;
     }
-    sag_cmd_init();
+    yew_cmd_init();
     if (!rt_generator_coverage(coverage)) {
-        sag_cmd_shutdown();
+        yew_cmd_shutdown();
         return 1;
     }
-    if (getenv("SAG_RT_SELFTEST") != NULL) {
+    if (getenv("YEW_RT_SELFTEST") != NULL) {
         int result = run_selftest();
 
-        sag_cmd_shutdown();
+        yew_cmd_shutdown();
         return result;
     }
     if (!run_count_folding_sentinel()) {
-        sag_cmd_shutdown();
+        yew_cmd_shutdown();
         return 1;
     }
     if (!run_edit_store_noop_fixture()) {
-        sag_cmd_shutdown();
+        yew_cmd_shutdown();
         return 1;
     }
     seeds = env_seeds();
     base_seed = env_base_seed();
     for (i = 0U; i < seeds; i++) {
         if (!run_one(base_seed + i, i % 6U, 0U)) {
-            sag_cmd_shutdown();
+            yew_cmd_shutdown();
             return 1;
         }
     }
     if (!run_corpus(&corpus_count)) {
-        sag_cmd_shutdown();
+        yew_cmd_shutdown();
         return 1;
     }
-    sag_cmd_shutdown();
+    yew_cmd_shutdown();
     (void)printf("roundtrip: ok seeds=%u base=%llu fixtures=6 corpus=%u "
                  "count-sentinel=1 edit-store-noop=1 P1-P5\n",
                  (unsigned)seeds,

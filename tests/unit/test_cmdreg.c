@@ -23,14 +23,14 @@ static CmdStatus probe_repeat(CmdCtx *cx)
 {
     probe_calls++;
     probe_count = cx->count;
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
 static CmdStatus probe_takes_count(CmdCtx *cx)
 {
     probe_calls++;
     probe_count = cx->count;
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
 static void probe_tap(CmdId id, const CmdCtx *cx)
@@ -45,13 +45,13 @@ static void append_registry(Bytebuf *out)
     u32 i;
 
     bytebuf_init(out);
-    for (i = 0U; i < sag_cmd_count(); i++) {
-        const CmdDesc *desc = sag_cmd_at(i);
+    for (i = 0U; i < yew_cmd_count(); i++) {
+        const CmdDesc *desc = yew_cmd_at(i);
 
-        SAG_ASSERT_NOT_NULL(desc);
-        SAG_ASSERT_NOT_NULL(desc->name);
-        SAG_ASSERT_NOT_NULL(desc->help);
-        SAG_ASSERT(desc->help[0] != '\0');
+        YEW_ASSERT_NOT_NULL(desc);
+        YEW_ASSERT_NOT_NULL(desc->name);
+        YEW_ASSERT_NOT_NULL(desc->help);
+        YEW_ASSERT(desc->help[0] != '\0');
         bytebuf_append(out, desc->name, strlen(desc->name) + 1U);
         bytebuf_append(out, desc->help, strlen(desc->help) + 1U);
     }
@@ -63,17 +63,17 @@ void test_cmd_registry_builtins_are_deterministic(void)
     Bytebuf second;
     u32 count;
 
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    count = sag_cmd_count();
-    SAG_ASSERT(count >= 40U);
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    count = yew_cmd_count();
+    YEW_ASSERT(count >= 40U);
     append_registry(&first);
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    SAG_ASSERT_EQ_U64(sag_cmd_count(), count);
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    YEW_ASSERT_EQ_U64(yew_cmd_count(), count);
     append_registry(&second);
-    SAG_ASSERT_EQ_U64(first.len, second.len);
-    SAG_ASSERT_EQ_MEM(first.data, second.data, first.len);
+    YEW_ASSERT_EQ_U64(first.len, second.len);
+    YEW_ASSERT_EQ_MEM(first.data, second.data, first.len);
     bytebuf_free(&second);
     bytebuf_free(&first);
 }
@@ -83,13 +83,13 @@ void test_cmd_registry_invocation_and_deferred(void)
     Ed fake_ed = {0};
     Win fake_win = {0};
     static const CmdDesc repeat_desc = {
-        "ed.ui.toggle", probe_repeat, SAG_ARITY_NONE,
-        SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE, "Toggle the test probe",
+        "ed.ui.toggle", probe_repeat, YEW_ARITY_NONE,
+        YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE, "Toggle the test probe",
         "toggle_probe"
     };
     static const CmdDesc count_desc = {
-        "ed.ui.goto", probe_takes_count, SAG_ARITY_INT,
-        SAG_CMD_TAKES_COUNT, "Send a count to the test probe", NULL
+        "ed.ui.goto", probe_takes_count, YEW_ARITY_INT,
+        YEW_CMD_TAKES_COUNT, "Send a count to the test probe", NULL
     };
     static const struct {
         const char *mode;
@@ -104,55 +104,55 @@ void test_cmd_registry_invocation_and_deferred(void)
     CmdId takes;
     u32 i;
 
-    sag_cmd_shutdown();
-    sag_cmd_init();
+    yew_cmd_shutdown();
+    yew_cmd_init();
     fake_ed.win = &fake_win;
-    repeat = sag_cmd_register(&repeat_desc);
-    takes = sag_cmd_register(&count_desc);
+    repeat = yew_cmd_register(&repeat_desc);
+    takes = yew_cmd_register(&count_desc);
     cx.count = 4U;
     cx.count_given = true;
-    cx.source = SAG_SRC_TEST;
+    cx.source = YEW_SRC_TEST;
     probe_calls = 0U;
     probe_count = 0U;
     tap_calls = 0U;
-    sag_cmd_set_record_tap(probe_tap);
-    SAG_ASSERT_EQ_I64(sag_cmd_invoke(repeat, &cx), SAG_CMD_OK);
-    SAG_ASSERT_EQ_U64(probe_calls, 4U);
-    SAG_ASSERT_EQ_U64(probe_count, 4U);
-    SAG_ASSERT_EQ_U64(tap_calls, 1U);
-    SAG_ASSERT_EQ_U64(tap_id.v, repeat.v);
+    yew_cmd_set_record_tap(probe_tap);
+    YEW_ASSERT_EQ_I64(yew_cmd_invoke(repeat, &cx), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(probe_calls, 4U);
+    YEW_ASSERT_EQ_U64(probe_count, 4U);
+    YEW_ASSERT_EQ_U64(tap_calls, 1U);
+    YEW_ASSERT_EQ_U64(tap_id.v, repeat.v);
 
     cx.iarg = 7;
     probe_calls = 0U;
-    SAG_ASSERT_EQ_I64(sag_cmd_invoke(takes, &cx), SAG_CMD_OK);
-    SAG_ASSERT_EQ_U64(probe_calls, 1U);
-    SAG_ASSERT_EQ_U64(probe_count, 4U);
-    SAG_ASSERT_EQ_U64(tap_calls, 1U);
-    sag_cmd_set_record_tap(NULL);
+    YEW_ASSERT_EQ_I64(yew_cmd_invoke(takes, &cx), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(probe_calls, 1U);
+    YEW_ASSERT_EQ_U64(probe_count, 4U);
+    YEW_ASSERT_EQ_U64(tap_calls, 1U);
+    yew_cmd_set_record_tap(NULL);
 
-    for (i = 0U; i < sag_cmd_count(); i++) {
-        const CmdDesc *desc = sag_cmd_at(i);
+    for (i = 0U; i < yew_cmd_count(); i++) {
+        const CmdDesc *desc = yew_cmd_at(i);
         CmdCtx deferred = {0};
         char fake_win;
 
-        if ((desc->flags & SAG_CMD_DEFERRED) == 0U)
+        if ((desc->flags & YEW_CMD_DEFERRED) == 0U)
             continue;
         deferred.count = 1U;
-        deferred.source = SAG_SRC_TEST;
+        deferred.source = YEW_SRC_TEST;
         deferred.win = (Win *)(void *)&fake_win;
-        if (desc->arity == SAG_ARITY_INT ||
-            desc->arity == SAG_ARITY_OPT_INT)
+        if (desc->arity == YEW_ARITY_INT ||
+            desc->arity == YEW_ARITY_OPT_INT)
             deferred.iarg = 1;
-        if (desc->arity == SAG_ARITY_STR ||
-            desc->arity == SAG_ARITY_OPT_STR) {
+        if (desc->arity == YEW_ARITY_STR ||
+            desc->arity == YEW_ARITY_OPT_STR) {
             deferred.sarg = "x";
             deferred.sarg_len = 1U;
         }
-        sag_test_capture_log();
-        SAG_ASSERT_EQ_I64(sag_cmd_invoke((CmdId){i + 1U}, &deferred),
-                          SAG_CMD_ERR_DEFERRED);
-        SAG_ASSERT(sag_test_log_contains(SAG_LOG_ERROR, desc->name));
-        SAG_ASSERT(sag_test_log_contains(SAG_LOG_ERROR, "Sprint"));
+        yew_test_capture_log();
+        YEW_ASSERT_EQ_I64(yew_cmd_invoke((CmdId){i + 1U}, &deferred),
+                          YEW_CMD_ERR_DEFERRED);
+        YEW_ASSERT(yew_test_log_contains(YEW_LOG_ERROR, desc->name));
+        YEW_ASSERT(yew_test_log_contains(YEW_LOG_ERROR, "Sprint"));
     }
     /*
      * Sprint 18.5 DoD 13 names this one: the sprint ranks command names,
@@ -161,40 +161,40 @@ void test_cmd_registry_invocation_and_deferred(void)
      * "no such command" rather than "not yet".
      */
     {
-        CmdId palette = sag_cmd_lookup("ed.find.command", 15U);
-        const CmdDesc *desc = sag_cmd_desc(palette);
+        CmdId palette = yew_cmd_lookup("ed.find.command", 15U);
+        const CmdDesc *desc = yew_cmd_desc(palette);
 
-        SAG_ASSERT_NOT_NULL(desc);
-        SAG_ASSERT((desc->flags & SAG_CMD_DEFERRED) != 0U);
-        SAG_ASSERT_NOT_NULL(strstr(desc->help, "Sprint 38"));
+        YEW_ASSERT_NOT_NULL(desc);
+        YEW_ASSERT((desc->flags & YEW_CMD_DEFERRED) != 0U);
+        YEW_ASSERT_NOT_NULL(strstr(desc->help, "Sprint 38"));
     }
-    for (i = 0U; i < SAG_ARRAY_LEN(mode_rows); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(mode_rows); i++) {
         CmdCtx mode = {0};
-        CmdId enter = sag_cmd_lookup("ed.mode.enter", 13U);
+        CmdId enter = yew_cmd_lookup("ed.mode.enter", 13U);
 
         mode.count = 1U;
         mode.ed = &fake_ed;
-        mode.source = SAG_SRC_TEST;
+        mode.source = YEW_SRC_TEST;
         mode.sarg = mode_rows[i].mode;
         mode.sarg_len = 1U;
-        sag_test_capture_log();
+        yew_test_capture_log();
         if (i < 5U) {
-            SAG_ASSERT_EQ_I64(sag_cmd_invoke(enter, &mode), SAG_CMD_OK);
-            SAG_ASSERT_EQ_U64(
+            YEW_ASSERT_EQ_I64(yew_cmd_invoke(enter, &mode), YEW_CMD_OK);
+            YEW_ASSERT_EQ_U64(
                 fake_ed.mode,
-                mode_rows[i].mode[0] == 'L' ? SAG_MODE_L :
-                mode_rows[i].mode[0] == 'I' ? SAG_MODE_I :
-                mode_rows[i].mode[0] == 'W' ? SAG_MODE_W :
-                mode_rows[i].mode[0] == 'B' ? SAG_MODE_B : SAG_MODE_H);
+                mode_rows[i].mode[0] == 'L' ? YEW_MODE_L :
+                mode_rows[i].mode[0] == 'I' ? YEW_MODE_I :
+                mode_rows[i].mode[0] == 'W' ? YEW_MODE_W :
+                mode_rows[i].mode[0] == 'B' ? YEW_MODE_B : YEW_MODE_H);
         } else {
-            SAG_ASSERT_EQ_I64(sag_cmd_invoke(enter, &mode),
-                              SAG_CMD_ERR_DEFERRED);
-            SAG_ASSERT(sag_test_log_contains(SAG_LOG_ERROR,
+            YEW_ASSERT_EQ_I64(yew_cmd_invoke(enter, &mode),
+                              YEW_CMD_ERR_DEFERRED);
+            YEW_ASSERT(yew_test_log_contains(YEW_LOG_ERROR,
                                              mode_rows[i].sprint));
         }
     }
-    sag_keymap_free(&fake_ed.mode_keys[SAG_MODE_H]);
-    sag_cmd_shutdown();
+    yew_keymap_free(&fake_ed.mode_keys[YEW_MODE_H]);
+    yew_cmd_shutdown();
 }
 
 static int descriptor_child_exit(const CmdDesc *desc, bool register_twice)
@@ -203,22 +203,22 @@ static int descriptor_child_exit(const CmdDesc *desc, bool register_twice)
     pid_t waited;
     int status;
 
-    SAG_ASSERT_EQ_I64(fflush(NULL), 0);
+    YEW_ASSERT_EQ_I64(fflush(NULL), 0);
     child = fork();
-    SAG_ASSERT(child >= 0);
+    YEW_ASSERT(child >= 0);
     if (child == 0) {
         (void)close(STDERR_FILENO);
-        (void)setenv("SAG_LOG", "/dev/null", 1);
-        (void)sag_cmd_register(desc);
+        (void)setenv("YEW_LOG", "/dev/null", 1);
+        (void)yew_cmd_register(desc);
         if (register_twice)
-            (void)sag_cmd_register(desc);
+            (void)yew_cmd_register(desc);
         _exit(99);
     }
     do {
         waited = waitpid(child, &status, 0);
     } while (waited < 0 && errno == EINTR);
-    SAG_ASSERT_EQ_I64(waited, child);
-    SAG_ASSERT(WIFEXITED(status));
+    YEW_ASSERT_EQ_I64(waited, child);
+    YEW_ASSERT(WIFEXITED(status));
     return WEXITSTATUS(status);
 }
 
@@ -229,27 +229,27 @@ void test_cmd_registry_rejects_invalid_descriptors(void)
         "ed.move.abcdefghijklmnopq", "ed.rogue.open", "ed.ui.unknown",
     };
     CmdDesc desc = {
-        "ed.ui.toggle", probe_repeat, SAG_ARITY_NONE, 0U, "test command", NULL
+        "ed.ui.toggle", probe_repeat, YEW_ARITY_NONE, 0U, "test command", NULL
     };
     size_t i;
 
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    for (i = 0U; i < SAG_ARRAY_LEN(bad_names); i++) {
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    for (i = 0U; i < YEW_ARRAY_LEN(bad_names); i++) {
         desc.name = bad_names[i];
-        SAG_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), SAG_EXIT_BUG);
+        YEW_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), YEW_EXIT_BUG);
     }
     desc.name = "ed.ui.toggle";
-    desc.flags = SAG_CMD_REPEATABLE | SAG_CMD_TAKES_COUNT;
-    SAG_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), SAG_EXIT_BUG);
+    desc.flags = YEW_CMD_REPEATABLE | YEW_CMD_TAKES_COUNT;
+    YEW_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), YEW_EXIT_BUG);
     desc.flags = 0U;
     desc.help = "";
-    SAG_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), SAG_EXIT_BUG);
+    YEW_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), YEW_EXIT_BUG);
     desc.help = "test command";
     desc.fn = NULL;
-    SAG_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), SAG_EXIT_BUG);
+    YEW_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), YEW_EXIT_BUG);
     desc.fn = probe_repeat;
-    SAG_ASSERT_EQ_I64(descriptor_child_exit(&desc, true), SAG_EXIT_BUG);
+    YEW_ASSERT_EQ_I64(descriptor_child_exit(&desc, true), YEW_EXIT_BUG);
 }
 
 /*
@@ -265,44 +265,44 @@ void test_cmd_registry_rejects_invalid_descriptors(void)
 void test_cmd_registry_enforces_cmdwords(void)
 {
     CmdDesc desc = {
-        "ed.ui.toggle", probe_repeat, SAG_ARITY_NONE, SAG_CMD_RECORDABLE,
+        "ed.ui.toggle", probe_repeat, YEW_ARITY_NONE, YEW_CMD_RECORDABLE,
         "test command", NULL
     };
 
-    sag_cmd_shutdown();
-    sag_cmd_init();
+    yew_cmd_shutdown();
+    yew_cmd_init();
     /* Recordable without a word. */
-    SAG_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), SAG_EXIT_BUG);
+    YEW_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), YEW_EXIT_BUG);
     /* A word on a command that is not recordable: the reverse map
      * would then hold a word no recording can ever produce. */
     desc.flags = 0U;
     desc.word = "toggle_it";
-    SAG_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), SAG_EXIT_BUG);
+    YEW_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), YEW_EXIT_BUG);
     /* Bad shapes. */
-    desc.flags = SAG_CMD_RECORDABLE;
+    desc.flags = YEW_CMD_RECORDABLE;
     desc.word = "Toggle";
-    SAG_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), SAG_EXIT_BUG);
+    YEW_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), YEW_EXIT_BUG);
     desc.word = "9lives";
-    SAG_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), SAG_EXIT_BUG);
+    YEW_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), YEW_EXIT_BUG);
     desc.word = "has.dot";
-    SAG_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), SAG_EXIT_BUG);
+    YEW_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), YEW_EXIT_BUG);
     desc.word = "";
-    SAG_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), SAG_EXIT_BUG);
+    YEW_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), YEW_EXIT_BUG);
     desc.word = "abcdefghijklmnopq";      /* 17 */
-    SAG_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), SAG_EXIT_BUG);
+    YEW_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), YEW_EXIT_BUG);
     /* Colliding with a word a builtin already owns. */
     desc.word = "yank";
-    SAG_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), SAG_EXIT_BUG);
+    YEW_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), YEW_EXIT_BUG);
     /* A good one registers, and round-trips. */
     desc.word = "toggle_it";
     {
-        CmdId id = sag_cmd_register(&desc);
+        CmdId id = yew_cmd_register(&desc);
 
-        SAG_ASSERT(id.v != 0U);
-        SAG_ASSERT_EQ_U64(sag_cmd_by_word("toggle_it", 9U).v, id.v);
+        YEW_ASSERT(id.v != 0U);
+        YEW_ASSERT_EQ_U64(yew_cmd_by_word("toggle_it", 9U).v, id.v);
     }
-    sag_cmd_shutdown();
-    sag_cmd_init();
+    yew_cmd_shutdown();
+    yew_cmd_init();
 }
 
 /*
@@ -317,30 +317,30 @@ void test_cmd_registry_word_roundtrip(void)
     u32 recordable = 0U;
     u32 worded = 0U;
 
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    n = sag_cmd_count();
-    SAG_ASSERT(n > 100U);
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    n = yew_cmd_count();
+    YEW_ASSERT(n > 100U);
     for (i = 0U; i < n; i++) {
-        const CmdDesc *d = sag_cmd_at(i);
+        const CmdDesc *d = yew_cmd_at(i);
         CmdId back;
 
-        if ((d->flags & SAG_CMD_RECORDABLE) != 0U) {
+        if ((d->flags & YEW_CMD_RECORDABLE) != 0U) {
             recordable++;
-            SAG_ASSERT_NOT_NULL(d->word);
+            YEW_ASSERT_NOT_NULL(d->word);
         }
         if (d->word == NULL)
             continue;
         worded++;
-        back = sag_cmd_by_word(d->word, (u32)strlen(d->word));
+        back = yew_cmd_by_word(d->word, (u32)strlen(d->word));
         /* Same DESCRIPTOR, not merely a command with that word: an
          * alias pair sharing a word would pass an id comparison
          * against either one. */
-        SAG_ASSERT(sag_cmd_desc(back) == d);
+        YEW_ASSERT(yew_cmd_desc(back) == d);
     }
     /* No unrecordable command carries one, so the two counts agree and
      * the map has no entries a recording could not produce. */
-    SAG_ASSERT_EQ_U64(worded, recordable);
-    SAG_ASSERT_EQ_U64(sag_cmd_by_word("no_such_word", 12U).v, 0U);
-    SAG_ASSERT_EQ_U64(sag_cmd_by_word(NULL, 0U).v, 0U);
+    YEW_ASSERT_EQ_U64(worded, recordable);
+    YEW_ASSERT_EQ_U64(yew_cmd_by_word("no_such_word", 12U).v, 0U);
+    YEW_ASSERT_EQ_U64(yew_cmd_by_word(NULL, 0U).v, 0U);
 }

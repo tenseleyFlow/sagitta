@@ -1,5 +1,5 @@
-#ifndef SAG_TEXT_COORDS_H
-#define SAG_TEXT_COORDS_H
+#ifndef YEW_TEXT_COORDS_H
+#define YEW_TEXT_COORDS_H
 
 #include "util/base.h"
 

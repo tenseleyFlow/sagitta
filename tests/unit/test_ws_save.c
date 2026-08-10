@@ -73,7 +73,7 @@ static void sf_rm_rf(const char *path)
 
 /*
  * A whole editor pointed at a scratch workspace.  `ws.dir` is
- * overwritten directly because sag_ed_init takes it from the process
+ * overwritten directly because yew_ed_init takes it from the process
  * cwd, and a test that chdir'd would leak that into every later test in
  * the same binary.
  */
@@ -85,23 +85,23 @@ static void sf_make(SaveFix *f)
     if (prev != NULL)
         (void)snprintf(f->saved, sizeof(f->saved), "%s", prev);
     (void)snprintf(f->state_home, sizeof(f->state_home),
-                   "/tmp/sag-savehome-XXXXXX");
-    SAG_ASSERT_NOT_NULL(mkdtemp(f->state_home));
-    (void)snprintf(f->work, sizeof(f->work), "/tmp/sag-savework-XXXXXX");
-    SAG_ASSERT_NOT_NULL(mkdtemp(f->work));
-    SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", f->state_home, 1), 0);
+                   "/tmp/yew-savehome-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(f->state_home));
+    (void)snprintf(f->work, sizeof(f->work), "/tmp/yew-savework-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(f->work));
+    YEW_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", f->state_home, 1), 0);
 
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    sag_ed_init(&f->ed);
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    yew_ed_init(&f->ed);
     f->ed.ws.dir = arena_strdup(&f->ed.arena, f->work);
-    SAG_ASSERT(sag_ed_open_scratch(&f->ed));
-    sag_layout_compute(f->ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT(yew_ed_open_scratch(&f->ed));
+    yew_layout_compute(f->ed.pane_root, (Rect){0U, 0U, 80U, 24U});
 }
 
 static void sf_remove(SaveFix *f)
 {
-    sag_ed_free(&f->ed);
+    yew_ed_free(&f->ed);
     if (f->had_saved)
         (void)setenv("XDG_STATE_HOME", f->saved, 1);
     else
@@ -114,7 +114,7 @@ static void sf_remove(SaveFix *f)
 static void sf_tick(SaveFix *f, i64 ms)
 {
     f->ed.now_ms += ms;
-    sag_timers_fire(&f->ed.timers, &f->ed, f->ed.now_ms);
+    yew_timers_fire(&f->ed.timers, &f->ed, f->ed.now_ms);
 }
 
 static bool sf_exists(const char *path)
@@ -132,8 +132,8 @@ static void sf_write_lock(const SaveFix *f, long pid)
     /* Written with plain stdio, deliberately: the production path uses
      * the atomic primitive, and a test that reuses it would not notice
      * if that path stopped writing a pid at all. */
-    fp = fopen(sag_ws_lock_path(&f->ed.state.key), "wb");
-    SAG_ASSERT_NOT_NULL(fp);
+    fp = fopen(yew_ws_lock_path(&f->ed.state.key), "wb");
+    YEW_ASSERT_NOT_NULL(fp);
     (void)snprintf(buf, sizeof(buf), "%ld\n", pid);
     (void)fwrite(buf, 1U, strlen(buf), fp);
     (void)fclose(fp);
@@ -151,7 +151,7 @@ static long sf_dead_pid(void)
 
     if (pid == 0)
         _exit(0);
-    SAG_ASSERT(pid > 0);
+    YEW_ASSERT(pid > 0);
     while (waitpid(pid, &status, 0) < 0)
         ;
     return (long)pid;
@@ -162,9 +162,9 @@ static long sf_dead_pid(void)
 static void sf_key_only(SaveFix *f)
 {
     (void)memset(&f->ed.state, 0, sizeof(f->ed.state));
-    f->ed.state.timer = SAG_TIMER_NONE;
-    SAG_ASSERT(sag_ws_key(&f->ed.state.key, f->work));
-    SAG_ASSERT(sag_ws_ensure_dir(&f->ed.state.key));
+    f->ed.state.timer = YEW_TIMER_NONE;
+    YEW_ASSERT(yew_ws_key(&f->ed.state.key, f->work));
+    YEW_ASSERT(yew_ws_ensure_dir(&f->ed.state.key));
 }
 
 /* ---------------------------------------------------------------- */
@@ -179,17 +179,17 @@ void test_ws_save_open_claims_the_lock(void)
     long held = 0;
 
     sf_make(&f);
-    sag_state_open(&f.ed);
-    SAG_ASSERT(f.ed.state.ready);
-    SAG_ASSERT(f.ed.state.writer);
-    SAG_ASSERT_EQ_I64(f.ed.state.owner_pid, 0);
+    yew_state_open(&f.ed);
+    YEW_ASSERT(f.ed.state.ready);
+    YEW_ASSERT(f.ed.state.writer);
+    YEW_ASSERT_EQ_I64(f.ed.state.owner_pid, 0);
     /* The lock names US, in decimal, on disk. */
-    fp = fopen(sag_ws_lock_path(&f.ed.state.key), "rb");
-    SAG_ASSERT_NOT_NULL(fp);
-    SAG_ASSERT(fgets(buf, (int)sizeof(buf), fp) != NULL);
+    fp = fopen(yew_ws_lock_path(&f.ed.state.key), "rb");
+    YEW_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT(fgets(buf, (int)sizeof(buf), fp) != NULL);
     (void)fclose(fp);
     held = strtol(buf, NULL, 10);
-    SAG_ASSERT_EQ_I64(held, (long)getpid());
+    YEW_ASSERT_EQ_I64(held, (long)getpid());
     sf_remove(&f);
 }
 
@@ -200,18 +200,18 @@ void test_ws_save_dispose_releases_the_lock(void)
     char path[PATH_MAX];
 
     sf_make(&f);
-    sag_state_open(&f.ed);
+    yew_state_open(&f.ed);
     (void)snprintf(path, sizeof(path), "%s",
-                   sag_ws_lock_path(&f.ed.state.key));
-    SAG_ASSERT(sf_exists(path));
-    sag_state_dispose(&f.ed);
-    SAG_ASSERT(!sf_exists(path));
-    SAG_ASSERT(!f.ed.state.writer);
-    SAG_ASSERT(!f.ed.state.ready);
+                   yew_ws_lock_path(&f.ed.state.key));
+    YEW_ASSERT(sf_exists(path));
+    yew_state_dispose(&f.ed);
+    YEW_ASSERT(!sf_exists(path));
+    YEW_ASSERT(!f.ed.state.writer);
+    YEW_ASSERT(!f.ed.state.ready);
     /* Idempotent: a second dispose is not an error and does not
      * unlink anyone else's lock. */
-    sag_state_dispose(&f.ed);
-    SAG_ASSERT(!sf_exists(path));
+    yew_state_dispose(&f.ed);
+    YEW_ASSERT(!sf_exists(path));
     sf_remove(&f);
 }
 
@@ -228,26 +228,26 @@ void test_ws_save_writes_a_parseable_document(void)
     size_t n;
 
     sf_make(&f);
-    sag_state_open(&f.ed);
-    SAG_ASSERT(sag_state_save(&f.ed));
-    SAG_ASSERT_EQ_U64(f.ed.state.writes, 1U);
-    SAG_ASSERT(!f.ed.state.dirty);
+    yew_state_open(&f.ed);
+    YEW_ASSERT(yew_state_save(&f.ed));
+    YEW_ASSERT_EQ_U64(f.ed.state.writes, 1U);
+    YEW_ASSERT(!f.ed.state.dirty);
 
     (void)snprintf(path, sizeof(path), "%s",
-                   sag_ws_state_path(&f.ed.state.key));
-    SAG_ASSERT(sf_exists(path));
+                   yew_ws_state_path(&f.ed.state.key));
+    YEW_ASSERT(sf_exists(path));
     bytebuf_init(&raw);
     fp = fopen(path, "rb");
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     while ((n = fread(chunk, 1U, sizeof(chunk), fp)) > 0U)
         bytebuf_append(&raw, chunk, n);
     (void)fclose(fp);
     /* What landed on disk is what the parser accepts — the emitter
      * being self-consistent in memory is not the same claim. */
     arena_init(&a);
-    lit = sag_fl_parse(&a, raw.data, raw.len, &err);
-    SAG_ASSERT_NOT_NULL(lit);
-    SAG_ASSERT_EQ_I64(sag_fl_int_or(sag_fl_get(lit, "version"), 0), 1);
+    lit = yew_fl_parse(&a, raw.data, raw.len, &err);
+    YEW_ASSERT_NOT_NULL(lit);
+    YEW_ASSERT_EQ_I64(yew_fl_int_or(yew_fl_get(lit, "version"), 0), 1);
     arena_free_all(&a);
     bytebuf_free(&raw);
     sf_remove(&f);
@@ -261,13 +261,13 @@ void test_ws_save_is_byte_identical_when_nothing_changed(void)
     Bytebuf b;
 
     sf_make(&f);
-    sag_state_open(&f.ed);
+    yew_state_open(&f.ed);
     bytebuf_init(&a);
     bytebuf_init(&b);
-    sag_state_emit(&f.ed, &a);
-    sag_state_emit(&f.ed, &b);
-    SAG_ASSERT_EQ_U64(a.len, b.len);
-    SAG_ASSERT_EQ_MEM(a.data, b.data, a.len);
+    yew_state_emit(&f.ed, &a);
+    yew_state_emit(&f.ed, &b);
+    YEW_ASSERT_EQ_U64(a.len, b.len);
+    YEW_ASSERT_EQ_MEM(a.data, b.data, a.len);
     bytebuf_free(&a);
     bytebuf_free(&b);
     sf_remove(&f);
@@ -283,30 +283,30 @@ void test_ws_save_debounce_coalesces_a_burst(void)
     int i;
 
     sf_make(&f);
-    sag_state_open(&f.ed);
+    yew_state_open(&f.ed);
     f.ed.now_ms = 1000;
 
-    sag_state_mark_dirty(&f.ed);
-    SAG_ASSERT(f.ed.state.dirty);
-    SAG_ASSERT(f.ed.state.timer != SAG_TIMER_NONE);
+    yew_state_mark_dirty(&f.ed);
+    YEW_ASSERT(f.ed.state.dirty);
+    YEW_ASSERT(f.ed.state.timer != YEW_TIMER_NONE);
     /* Nine more changes across the window arm nothing new. */
     for (i = 0; i < 9; i++) {
         TimerId before = f.ed.state.timer;
 
         sf_tick(&f, 100);
-        sag_state_mark_dirty(&f.ed);
-        SAG_ASSERT_EQ_U64(f.ed.state.timer, before);
+        yew_state_mark_dirty(&f.ed);
+        YEW_ASSERT_EQ_U64(f.ed.state.timer, before);
     }
-    SAG_ASSERT_EQ_U64(f.ed.state.writes, 0U);
+    YEW_ASSERT_EQ_U64(f.ed.state.writes, 0U);
     /*
      * And the deadline is measured from the FIRST change, not the last:
      * 900 ms of activity plus the remaining window fires here.  A
      * sliding re-arm would still be waiting.
      */
-    sf_tick(&f, SAG_STATE_SAVE_DEBOUNCE_MS - 900);
-    SAG_ASSERT_EQ_U64(f.ed.state.writes, 1U);
-    SAG_ASSERT(!f.ed.state.dirty);
-    SAG_ASSERT_EQ_U64(f.ed.state.timer, SAG_TIMER_NONE);
+    sf_tick(&f, YEW_STATE_SAVE_DEBOUNCE_MS - 900);
+    YEW_ASSERT_EQ_U64(f.ed.state.writes, 1U);
+    YEW_ASSERT(!f.ed.state.dirty);
+    YEW_ASSERT_EQ_U64(f.ed.state.timer, YEW_TIMER_NONE);
     sf_remove(&f);
 }
 
@@ -316,11 +316,11 @@ void test_ws_save_idle_writes_nothing(void)
     SaveFix f;
 
     sf_make(&f);
-    sag_state_open(&f.ed);
-    SAG_ASSERT_EQ_U64(f.ed.state.timer, SAG_TIMER_NONE);
+    yew_state_open(&f.ed);
+    YEW_ASSERT_EQ_U64(f.ed.state.timer, YEW_TIMER_NONE);
     sf_tick(&f, 10000);
-    SAG_ASSERT_EQ_U64(f.ed.state.writes, 0U);
-    SAG_ASSERT(!sf_exists(sag_ws_state_path(&f.ed.state.key)));
+    YEW_ASSERT_EQ_U64(f.ed.state.writes, 0U);
+    YEW_ASSERT(!sf_exists(yew_ws_state_path(&f.ed.state.key)));
     sf_remove(&f);
 }
 
@@ -330,14 +330,14 @@ void test_ws_save_rearms_after_firing(void)
     SaveFix f;
 
     sf_make(&f);
-    sag_state_open(&f.ed);
-    sag_state_mark_dirty(&f.ed);
-    sf_tick(&f, SAG_STATE_SAVE_DEBOUNCE_MS);
-    SAG_ASSERT_EQ_U64(f.ed.state.writes, 1U);
-    sag_state_mark_dirty(&f.ed);
-    SAG_ASSERT(f.ed.state.timer != SAG_TIMER_NONE);
-    sf_tick(&f, SAG_STATE_SAVE_DEBOUNCE_MS);
-    SAG_ASSERT_EQ_U64(f.ed.state.writes, 2U);
+    yew_state_open(&f.ed);
+    yew_state_mark_dirty(&f.ed);
+    sf_tick(&f, YEW_STATE_SAVE_DEBOUNCE_MS);
+    YEW_ASSERT_EQ_U64(f.ed.state.writes, 1U);
+    yew_state_mark_dirty(&f.ed);
+    YEW_ASSERT(f.ed.state.timer != YEW_TIMER_NONE);
+    sf_tick(&f, YEW_STATE_SAVE_DEBOUNCE_MS);
+    YEW_ASSERT_EQ_U64(f.ed.state.writes, 2U);
     sf_remove(&f);
 }
 
@@ -352,16 +352,16 @@ void test_ws_save_close_saves_inside_the_window(void)
     char path[PATH_MAX];
 
     sf_make(&f);
-    sag_state_open(&f.ed);
+    yew_state_open(&f.ed);
     (void)snprintf(path, sizeof(path), "%s",
-                   sag_ws_state_path(&f.ed.state.key));
-    sag_state_mark_dirty(&f.ed);
+                   yew_ws_state_path(&f.ed.state.key));
+    yew_state_mark_dirty(&f.ed);
     sf_tick(&f, 50);
-    SAG_ASSERT(!sf_exists(path));
-    sag_state_close(&f.ed);
-    SAG_ASSERT(sf_exists(path));
+    YEW_ASSERT(!sf_exists(path));
+    yew_state_close(&f.ed);
+    YEW_ASSERT(sf_exists(path));
     /* And the lock went with it. */
-    SAG_ASSERT(!sf_exists(sag_ws_lock_path(&f.ed.state.key)));
+    YEW_ASSERT(!sf_exists(yew_ws_lock_path(&f.ed.state.key)));
     sf_remove(&f);
 }
 
@@ -385,10 +385,10 @@ void test_ws_save_close_of_a_clean_session_still_saves(void)
     SaveFix f;
 
     sf_make(&f);
-    sag_state_open(&f.ed);
-    SAG_ASSERT(!f.ed.state.dirty);
-    sag_state_close(&f.ed);
-    SAG_ASSERT_EQ_U64(f.ed.state.writes, 1U);
+    yew_state_open(&f.ed);
+    YEW_ASSERT(!f.ed.state.dirty);
+    yew_state_close(&f.ed);
+    YEW_ASSERT_EQ_U64(f.ed.state.writes, 1U);
     sf_remove(&f);
 }
 
@@ -410,33 +410,33 @@ void test_ws_save_close_captures_motion_after_the_timer_fired(void)
     FILE *fp;
 
     sf_make(&f);
-    sag_state_open(&f.ed);
+    yew_state_open(&f.ed);
     (void)snprintf(path, sizeof(path), "%s",
-                   sag_ws_state_path(&f.ed.state.key));
-    sag_state_mark_dirty(&f.ed);
-    sf_tick(&f, SAG_STATE_SAVE_DEBOUNCE_MS + 1);
-    SAG_ASSERT_EQ_U64(f.ed.state.writes, 1U);
-    SAG_ASSERT(!f.ed.state.dirty);
+                   yew_ws_state_path(&f.ed.state.key));
+    yew_state_mark_dirty(&f.ed);
+    sf_tick(&f, YEW_STATE_SAVE_DEBOUNCE_MS + 1);
+    YEW_ASSERT_EQ_U64(f.ed.state.writes, 1U);
+    YEW_ASSERT(!f.ed.state.dirty);
     bytebuf_init(&at_timer);
-    sag_state_emit(&f.ed, &at_timer);
+    yew_state_emit(&f.ed, &at_timer);
 
     /* Not triggers, by design — they ride the next save. */
     f.ed.win->cs.curs.data[f.ed.win->cs.primary].pos = BYTEOFF(7U);
     f.ed.win->cs.curs.data[f.ed.win->cs.primary].anchor = BYTEOFF(7U);
     f.ed.win->vp.top = LINENO(3U);
-    SAG_ASSERT(!f.ed.state.dirty);
+    YEW_ASSERT(!f.ed.state.dirty);
 
     bytebuf_init(&at_close);
-    sag_state_emit(&f.ed, &at_close);
+    yew_state_emit(&f.ed, &at_close);
     /* The move has to be visible in the document, or this test would
      * pass on a state format that never recorded it. */
-    SAG_ASSERT(at_close.len != at_timer.len ||
+    YEW_ASSERT(at_close.len != at_timer.len ||
                memcmp(at_close.data, at_timer.data, at_close.len) != 0);
 
-    sag_state_close(&f.ed);
-    SAG_ASSERT_EQ_U64(f.ed.state.writes, 2U);
+    yew_state_close(&f.ed);
+    YEW_ASSERT_EQ_U64(f.ed.state.writes, 2U);
     fp = fopen(path, "rb");
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     {
         Bytebuf on_disk;
         u8 chunk[4096];
@@ -446,8 +446,8 @@ void test_ws_save_close_captures_motion_after_the_timer_fired(void)
         while ((got = fread(chunk, 1U, sizeof(chunk), fp)) != 0U)
             bytebuf_append(&on_disk, chunk, got);
         (void)fclose(fp);
-        SAG_ASSERT_EQ_U64(on_disk.len, at_close.len);
-        SAG_ASSERT_EQ_MEM(on_disk.data, at_close.data, at_close.len);
+        YEW_ASSERT_EQ_U64(on_disk.len, at_close.len);
+        YEW_ASSERT_EQ_MEM(on_disk.data, at_close.data, at_close.len);
         bytebuf_free(&on_disk);
     }
     bytebuf_free(&at_close);
@@ -468,28 +468,28 @@ void test_ws_save_structural_events_mark_dirty(void)
 
     sf_make(&f);
     (void)snprintf(path, sizeof(path), "%s/a.txt", f.work);
-    sag_state_open(&f.ed);
+    yew_state_open(&f.ed);
 
     f.ed.state.dirty = false;
-    tab = sag_tab_open(&f.ed, path);
-    SAG_ASSERT(tab >= 0);
-    SAG_ASSERT(f.ed.state.dirty);
+    tab = yew_tab_open(&f.ed, path);
+    YEW_ASSERT(tab >= 0);
+    YEW_ASSERT(f.ed.state.dirty);
 
     f.ed.state.dirty = false;
-    sag_tab_switch(&f.ed, tab);
-    SAG_ASSERT(f.ed.state.dirty);
+    yew_tab_switch(&f.ed, tab);
+    YEW_ASSERT(f.ed.state.dirty);
 
     f.ed.state.dirty = false;
-    (void)sag_group_create(&f.ed, f.work, "g");
-    SAG_ASSERT(f.ed.state.dirty);
+    (void)yew_group_create(&f.ed, f.work, "g");
+    YEW_ASSERT(f.ed.state.dirty);
 
     f.ed.state.dirty = false;
-    sag_group_add_member(&f.ed, 1U, tab);
-    SAG_ASSERT(f.ed.state.dirty);
+    yew_group_add_member(&f.ed, 1U, tab);
+    YEW_ASSERT(f.ed.state.dirty);
 
     f.ed.state.dirty = false;
-    SAG_ASSERT(sag_tab_close(&f.ed, tab));
-    SAG_ASSERT(f.ed.state.dirty);
+    YEW_ASSERT(yew_tab_close(&f.ed, tab));
+    YEW_ASSERT(f.ed.state.dirty);
     sf_remove(&f);
 }
 
@@ -502,12 +502,12 @@ void test_ws_save_cursor_motion_is_not_a_trigger(void)
     SaveFix f;
 
     sf_make(&f);
-    sag_state_open(&f.ed);
+    yew_state_open(&f.ed);
     f.ed.state.dirty = false;
     f.ed.win->cs.curs.data[f.ed.win->cs.primary].pos = BYTEOFF(0U);
     f.ed.win->vp.top = LINENO(0U);
-    SAG_ASSERT(!f.ed.state.dirty);
-    SAG_ASSERT_EQ_U64(f.ed.state.timer, SAG_TIMER_NONE);
+    YEW_ASSERT(!f.ed.state.dirty);
+    YEW_ASSERT_EQ_U64(f.ed.state.timer, YEW_TIMER_NONE);
     sf_remove(&f);
 }
 
@@ -528,20 +528,20 @@ void test_ws_save_live_lock_demotes_us_to_a_reader(void)
     sf_key_only(&f);
     sf_write_lock(&f, 1L);
     f.ed.state.ready = false;
-    sag_state_open(&f.ed);
-    SAG_ASSERT(f.ed.state.ready);
-    SAG_ASSERT(!f.ed.state.writer);
-    SAG_ASSERT_EQ_I64(f.ed.state.owner_pid, 1);
+    yew_state_open(&f.ed);
+    YEW_ASSERT(f.ed.state.ready);
+    YEW_ASSERT(!f.ed.state.writer);
+    YEW_ASSERT_EQ_I64(f.ed.state.owner_pid, 1);
     /* And it writes nothing, however dirty it gets. */
-    sag_state_mark_dirty(&f.ed);
-    SAG_ASSERT(!f.ed.state.dirty);
-    SAG_ASSERT_EQ_U64(f.ed.state.timer, SAG_TIMER_NONE);
-    SAG_ASSERT(!sag_state_save(&f.ed));
+    yew_state_mark_dirty(&f.ed);
+    YEW_ASSERT(!f.ed.state.dirty);
+    YEW_ASSERT_EQ_U64(f.ed.state.timer, YEW_TIMER_NONE);
+    YEW_ASSERT(!yew_state_save(&f.ed));
     sf_tick(&f, 10000);
-    SAG_ASSERT_EQ_U64(f.ed.state.writes, 0U);
-    SAG_ASSERT(!sf_exists(sag_ws_state_path(&f.ed.state.key)));
-    sag_state_close(&f.ed);
-    SAG_ASSERT(!sf_exists(sag_ws_state_path(&f.ed.state.key)));
+    YEW_ASSERT_EQ_U64(f.ed.state.writes, 0U);
+    YEW_ASSERT(!sf_exists(yew_ws_state_path(&f.ed.state.key)));
+    yew_state_close(&f.ed);
+    YEW_ASSERT(!sf_exists(yew_ws_state_path(&f.ed.state.key)));
     sf_remove(&f);
 }
 
@@ -554,12 +554,12 @@ void test_ws_save_reader_leaves_the_owners_lock_alone(void)
     sf_make(&f);
     sf_key_only(&f);
     (void)snprintf(path, sizeof(path), "%s",
-                   sag_ws_lock_path(&f.ed.state.key));
+                   yew_ws_lock_path(&f.ed.state.key));
     sf_write_lock(&f, 1L);
-    sag_state_open(&f.ed);
-    SAG_ASSERT(!f.ed.state.writer);
-    sag_state_close(&f.ed);
-    SAG_ASSERT(sf_exists(path));
+    yew_state_open(&f.ed);
+    YEW_ASSERT(!f.ed.state.writer);
+    yew_state_close(&f.ed);
+    YEW_ASSERT(sf_exists(path));
     sf_remove(&f);
 }
 
@@ -572,12 +572,12 @@ void test_ws_save_ownership_message_is_shown_once(void)
     sf_make(&f);
     sf_key_only(&f);
     sf_write_lock(&f, 1L);
-    sag_state_open(&f.ed);
-    SAG_ASSERT(!f.ed.state.writer);
-    SAG_ASSERT(!f.ed.state.owner_told);
+    yew_state_open(&f.ed);
+    YEW_ASSERT(!f.ed.state.writer);
+    YEW_ASSERT(!f.ed.state.owner_told);
     for (i = 0; i < 20; i++)
-        sag_state_mark_dirty(&f.ed);
-    SAG_ASSERT(f.ed.state.owner_told);
+        yew_state_mark_dirty(&f.ed);
+    YEW_ASSERT(f.ed.state.owner_told);
     sf_remove(&f);
 }
 
@@ -595,10 +595,10 @@ void test_ws_save_stale_lock_is_taken_over(void)
     sf_key_only(&f);
     dead = sf_dead_pid();
     sf_write_lock(&f, dead);
-    sag_state_open(&f.ed);
-    SAG_ASSERT(f.ed.state.writer);
-    SAG_ASSERT(sag_state_save(&f.ed));
-    SAG_ASSERT_EQ_U64(f.ed.state.writes, 1U);
+    yew_state_open(&f.ed);
+    YEW_ASSERT(f.ed.state.writer);
+    YEW_ASSERT(yew_state_save(&f.ed));
+    YEW_ASSERT_EQ_U64(f.ed.state.writes, 1U);
     sf_remove(&f);
 }
 
@@ -611,8 +611,8 @@ void test_ws_save_own_pid_lock_is_reclaimed(void)
     sf_make(&f);
     sf_key_only(&f);
     sf_write_lock(&f, (long)getpid());
-    sag_state_open(&f.ed);
-    SAG_ASSERT(f.ed.state.writer);
+    yew_state_open(&f.ed);
+    YEW_ASSERT(f.ed.state.writer);
     sf_remove(&f);
 }
 
@@ -625,12 +625,12 @@ void test_ws_save_unparseable_lock_is_taken_over(void)
 
     sf_make(&f);
     sf_key_only(&f);
-    fp = fopen(sag_ws_lock_path(&f.ed.state.key), "wb");
-    SAG_ASSERT_NOT_NULL(fp);
+    fp = fopen(yew_ws_lock_path(&f.ed.state.key), "wb");
+    YEW_ASSERT_NOT_NULL(fp);
     (void)fwrite("not-a-pid\n", 1U, 10U, fp);
     (void)fclose(fp);
-    sag_state_open(&f.ed);
-    SAG_ASSERT(f.ed.state.writer);
+    yew_state_open(&f.ed);
+    YEW_ASSERT(f.ed.state.writer);
     sf_remove(&f);
 }
 
@@ -641,11 +641,11 @@ void test_ws_save_empty_lock_is_taken_over(void)
 
     sf_make(&f);
     sf_key_only(&f);
-    fp = fopen(sag_ws_lock_path(&f.ed.state.key), "wb");
-    SAG_ASSERT_NOT_NULL(fp);
+    fp = fopen(yew_ws_lock_path(&f.ed.state.key), "wb");
+    YEW_ASSERT_NOT_NULL(fp);
     (void)fclose(fp);
-    sag_state_open(&f.ed);
-    SAG_ASSERT(f.ed.state.writer);
+    yew_state_open(&f.ed);
+    YEW_ASSERT(f.ed.state.writer);
     sf_remove(&f);
 }
 
@@ -654,7 +654,7 @@ void test_ws_save_empty_lock_is_taken_over(void)
 /* ---------------------------------------------------------------- */
 
 /*
- * A zeroed WsState — every Ed that never calls sag_state_open — does no
+ * A zeroed WsState — every Ed that never calls yew_state_open — does no
  * filesystem work at all.  Asserted rather than assumed, because the
  * whole unit-test tree depends on it.
  */
@@ -663,15 +663,15 @@ void test_ws_save_stateless_is_a_silent_no_op(void)
     SaveFix f;
 
     sf_make(&f);
-    SAG_ASSERT(!f.ed.state.ready);
-    SAG_ASSERT(!f.ed.state.writer);
-    sag_state_mark_dirty(&f.ed);
-    SAG_ASSERT(!f.ed.state.dirty);
-    SAG_ASSERT_EQ_U64(f.ed.state.timer, SAG_TIMER_NONE);
-    SAG_ASSERT(!sag_state_save(&f.ed));
-    SAG_ASSERT_EQ_U64(f.ed.state.writes, 0U);
-    sag_state_close(&f.ed);
-    sag_state_dispose(&f.ed);
+    YEW_ASSERT(!f.ed.state.ready);
+    YEW_ASSERT(!f.ed.state.writer);
+    yew_state_mark_dirty(&f.ed);
+    YEW_ASSERT(!f.ed.state.dirty);
+    YEW_ASSERT_EQ_U64(f.ed.state.timer, YEW_TIMER_NONE);
+    YEW_ASSERT(!yew_state_save(&f.ed));
+    YEW_ASSERT_EQ_U64(f.ed.state.writes, 0U);
+    yew_state_close(&f.ed);
+    yew_state_dispose(&f.ed);
     sf_remove(&f);
 }
 
@@ -687,15 +687,15 @@ void test_ws_save_unusable_state_home_runs_stateless(void)
     /* A regular FILE where the state tree wants a directory. */
     (void)snprintf(blocked, sizeof(blocked), "%s/blocked", f.state_home);
     fp = fopen(blocked, "wb");
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     (void)fclose(fp);
-    SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", blocked, 1), 0);
-    sag_state_open(&f.ed);
-    SAG_ASSERT(!f.ed.state.ready);
-    SAG_ASSERT(!f.ed.state.writer);
-    sag_state_mark_dirty(&f.ed);
-    SAG_ASSERT(!sag_state_save(&f.ed));
-    SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", f.state_home, 1), 0);
+    YEW_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", blocked, 1), 0);
+    yew_state_open(&f.ed);
+    YEW_ASSERT(!f.ed.state.ready);
+    YEW_ASSERT(!f.ed.state.writer);
+    yew_state_mark_dirty(&f.ed);
+    YEW_ASSERT(!yew_state_save(&f.ed));
+    YEW_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", f.state_home, 1), 0);
     sf_remove(&f);
 }
 
@@ -722,7 +722,7 @@ void test_ws_save_has_no_second_atomic_primitive(void)
     if (fgets(buf, (int)sizeof(buf), p) != NULL)
         n = strtol(buf, NULL, 10);
     (void)pclose(p);
-    SAG_ASSERT_EQ_I64(n, 0);
+    YEW_ASSERT_EQ_I64(n, 0);
 }
 
 /*
@@ -758,34 +758,34 @@ void test_ws_save_leaves_a_git_checkout_clean(void)
         sf_remove(&f);
         return;
     }
-    sag_state_open(&f.ed);
-    SAG_ASSERT(f.ed.state.ready);
+    yew_state_open(&f.ed);
+    YEW_ASSERT(f.ed.state.ready);
     {
         char path[256];
 
         (void)snprintf(path, sizeof(path), "%s/tracked.txt", f.work);
-        SAG_ASSERT(sag_tab_open(&f.ed, path) >= 0);
+        YEW_ASSERT(yew_tab_open(&f.ed, path) >= 0);
     }
-    sag_state_mark_dirty(&f.ed);
-    SAG_ASSERT(sag_state_save(&f.ed));
-    sag_state_close(&f.ed);
+    yew_state_mark_dirty(&f.ed);
+    YEW_ASSERT(yew_state_save(&f.ed));
+    yew_state_close(&f.ed);
 
     (void)snprintf(cmd, sizeof(cmd),
                    "cd '%s' && git status --porcelain | wc -l", f.work);
     p = popen(cmd, "r");
-    SAG_ASSERT_NOT_NULL(p);
+    YEW_ASSERT_NOT_NULL(p);
     clean = fgets(buf, (int)sizeof(buf), p) != NULL &&
             strtol(buf, NULL, 10) == 0;
     (void)pclose(p);
-    SAG_ASSERT(clean);
+    YEW_ASSERT(clean);
 
     /* And not one .fl anywhere under it. */
     (void)snprintf(cmd, sizeof(cmd),
                    "find '%s' -name '*.fl' | wc -l", f.work);
     p = popen(cmd, "r");
-    SAG_ASSERT_NOT_NULL(p);
-    SAG_ASSERT(fgets(buf, (int)sizeof(buf), p) != NULL);
-    SAG_ASSERT_EQ_I64(strtol(buf, NULL, 10), 0);
+    YEW_ASSERT_NOT_NULL(p);
+    YEW_ASSERT(fgets(buf, (int)sizeof(buf), p) != NULL);
+    YEW_ASSERT_EQ_I64(strtol(buf, NULL, 10), 0);
     (void)pclose(p);
     sf_remove(&f);
 }
@@ -801,16 +801,16 @@ void test_ws_save_never_writes_into_the_workspace(void)
     long n = -1;
 
     sf_make(&f);
-    sag_state_open(&f.ed);
-    sag_state_mark_dirty(&f.ed);
-    sag_state_close(&f.ed);
+    yew_state_open(&f.ed);
+    yew_state_mark_dirty(&f.ed);
+    yew_state_close(&f.ed);
     (void)snprintf(cmd, sizeof(cmd), "find '%s' -mindepth 1 | wc -l", f.work);
     p = popen(cmd, "r");
     if (p != NULL) {
         if (fgets(buf, (int)sizeof(buf), p) != NULL)
             n = strtol(buf, NULL, 10);
         (void)pclose(p);
-        SAG_ASSERT_EQ_I64(n, 0);
+        YEW_ASSERT_EQ_I64(n, 0);
     }
     sf_remove(&f);
 }
@@ -840,8 +840,8 @@ static void ws_save_shim_child(void)
     SaveFix f;
 
     sf_make(&f);
-    sag_state_open(&f.ed);
-    SAG_ASSERT(f.ed.state.writer);
+    yew_state_open(&f.ed);
+    YEW_ASSERT(f.ed.state.writer);
     /*
      * The shim logs only while it is ENABLED, so the window is opened
      * around the save and shut immediately after.  Everything else this
@@ -849,15 +849,15 @@ static void ws_save_shim_child(void)
      * tearing down — writes and syncs too, and would bury the four
      * calls the ordering assertion is about.
      */
-    SAG_ASSERT_EQ_I64(setenv("SAG_FAULT_ENABLE", "1", 1), 0);
-    SAG_ASSERT(sag_state_save(&f.ed));
-    SAG_ASSERT_EQ_I64(setenv("SAG_FAULT_ENABLE", "0", 1), 0);
+    YEW_ASSERT_EQ_I64(setenv("YEW_FAULT_ENABLE", "1", 1), 0);
+    YEW_ASSERT(yew_state_save(&f.ed));
+    YEW_ASSERT_EQ_I64(setenv("YEW_FAULT_ENABLE", "0", 1), 0);
     sf_remove(&f);
 }
 
 static void ws_sibling_path(char *out, size_t cap, const char *name)
 {
-    const char *program = sag_test_program_path();
+    const char *program = yew_test_program_path();
     const char *slash = strrchr(program, '/');
     int count;
 
@@ -868,14 +868,14 @@ static void ws_sibling_path(char *out, size_t cap, const char *name)
     else
         count = snprintf(out, cap, "%.*s/%s", (int)(slash - program),
                          program, name);
-    SAG_ASSERT(count > 0 && (size_t)count < cap);
+    YEW_ASSERT(count > 0 && (size_t)count < cap);
 }
 
 static int ws_set_preload(const char *shim)
 {
-#ifdef SAG_ASAN_RUNTIME
+#ifdef YEW_ASAN_RUNTIME
     char joined[PATH_MAX * 2];
-    int n = snprintf(joined, sizeof(joined), "%s:%s", SAG_ASAN_RUNTIME,
+    int n = snprintf(joined, sizeof(joined), "%s:%s", YEW_ASAN_RUNTIME,
                      shim);
 
     if (n <= 0 || (size_t)n >= sizeof(joined))
@@ -908,7 +908,7 @@ static int ws_log_first(const char *path, const char *needle)
 
 void test_ws_save_write_is_atomic_in_order(void)
 {
-    char root[] = "/tmp/sag-ws-atomic-XXXXXX";
+    char root[] = "/tmp/yew-ws-atomic-XXXXXX";
     char log[PATH_MAX];
     char shim[PATH_MAX];
     pid_t child;
@@ -919,48 +919,48 @@ void test_ws_save_write_is_atomic_in_order(void)
     int renamed;
     int fsync_dir;
 
-    if (getenv("SAG_WS_ATOMIC_CHILD") != NULL) {
+    if (getenv("YEW_WS_ATOMIC_CHILD") != NULL) {
         ws_save_shim_child();
         return;
     }
-    SAG_ASSERT_NOT_NULL(mkdtemp(root));
-    SAG_ASSERT(snprintf(log, sizeof(log), "%s/intercept.log", root) > 0);
+    YEW_ASSERT_NOT_NULL(mkdtemp(root));
+    YEW_ASSERT(snprintf(log, sizeof(log), "%s/intercept.log", root) > 0);
     ws_sibling_path(shim, sizeof(shim), "tests/torture/faultshim.so");
 
     child = fork();
-    SAG_ASSERT(child >= 0);
+    YEW_ASSERT(child >= 0);
     if (child == 0) {
-        if (setenv("SAG_WS_ATOMIC_CHILD", "1", 1) != 0 ||
-            setenv("SAG_FAULT_LOG", log, 1) != 0 ||
+        if (setenv("YEW_WS_ATOMIC_CHILD", "1", 1) != 0 ||
+            setenv("YEW_FAULT_LOG", log, 1) != 0 ||
             /* Log only; inject nothing.  This test is about ORDER. */
-            setenv("SAG_FAULT_ENABLE", "0", 1) != 0 ||
-            setenv("SAG_LOG", "/dev/null", 1) != 0 ||
+            setenv("YEW_FAULT_ENABLE", "0", 1) != 0 ||
+            setenv("YEW_LOG", "/dev/null", 1) != 0 ||
             ws_set_preload(shim) != 0)
             _exit(126);
-        execl(sag_test_program_path(), sag_test_program_path(), "--filter",
+        execl(yew_test_program_path(), yew_test_program_path(), "--filter",
               "ws_save_write_is_atomic_in_order", (char *)NULL);
         _exit(126);
     }
     do {
         waited = waitpid(child, &status, 0);
     } while (waited < 0 && errno == EINTR);
-    SAG_ASSERT_EQ_I64(waited, child);
-    SAG_ASSERT(WIFEXITED(status));
-    SAG_ASSERT_EQ_I64(WEXITSTATUS(status), 0);
+    YEW_ASSERT_EQ_I64(waited, child);
+    YEW_ASSERT(WIFEXITED(status));
+    YEW_ASSERT_EQ_I64(WEXITSTATUS(status), 0);
 
     wrote = ws_log_first(log, "write");
     fsync_file = ws_log_first(log, "fsync-file");
     renamed = ws_log_first(log, "rename");
     fsync_dir = ws_log_first(log, "fsync-dir");
     /* Every step happened... */
-    SAG_ASSERT(wrote >= 0);
-    SAG_ASSERT(fsync_file >= 0);
-    SAG_ASSERT(renamed >= 0);
-    SAG_ASSERT(fsync_dir >= 0);
+    YEW_ASSERT(wrote >= 0);
+    YEW_ASSERT(fsync_file >= 0);
+    YEW_ASSERT(renamed >= 0);
+    YEW_ASSERT(fsync_dir >= 0);
     /* ...and in the only order that makes a kill -9 safe. */
-    SAG_ASSERT(wrote < fsync_file);
-    SAG_ASSERT(fsync_file < renamed);
-    SAG_ASSERT(renamed < fsync_dir);
+    YEW_ASSERT(wrote < fsync_file);
+    YEW_ASSERT(fsync_file < renamed);
+    YEW_ASSERT(renamed < fsync_dir);
 
     (void)unlink(log);
     (void)rmdir(root);
@@ -982,24 +982,24 @@ void test_ws_save_write_is_atomic_in_order(void)
  * back.  §7 would catch it and set it aside, but the arrangement would
  * be gone every time.
  *
- * Driven with s08's shim: SAG_FAULT_AT=N _exit(137)s at intercepted
+ * Driven with s08's shim: YEW_FAULT_AT=N _exit(137)s at intercepted
  * call N, so walking N across the save covers the write, the file
  * sync, the rename and the directory sync individually.
  */
 static void ws_torture_child(void)
 {
     Ed ed;
-    const char *work = getenv("SAG_WS_TORTURE_WORK");
+    const char *work = getenv("YEW_WS_TORTURE_WORK");
 
-    SAG_ASSERT_NOT_NULL(work);
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    sag_ed_init(&ed);
+    YEW_ASSERT_NOT_NULL(work);
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    yew_ed_init(&ed);
     ed.ws.dir = arena_strdup(&ed.arena, work);
-    SAG_ASSERT(sag_ed_open_scratch(&ed));
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    sag_state_open(&ed);
-    SAG_ASSERT(ed.state.ready);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    yew_state_open(&ed);
+    YEW_ASSERT(ed.state.ready);
     /* A few tabs, so the document is big enough to span several
      * intercepted writes rather than landing in one. */
     {
@@ -1010,14 +1010,14 @@ static void ws_torture_child(void)
 
             (void)snprintf(path, sizeof(path), "%s/f%02u.txt", work,
                            (unsigned)i);
-            (void)sag_tab_open(&ed, path);
+            (void)yew_tab_open(&ed, path);
         }
     }
-    SAG_ASSERT_EQ_I64(setenv("SAG_FAULT_ENABLE", "1", 1), 0);
-    (void)sag_state_save(&ed);
-    SAG_ASSERT_EQ_I64(setenv("SAG_FAULT_ENABLE", "0", 1), 0);
-    sag_state_dispose(&ed);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_I64(setenv("YEW_FAULT_ENABLE", "1", 1), 0);
+    (void)yew_state_save(&ed);
+    YEW_ASSERT_EQ_I64(setenv("YEW_FAULT_ENABLE", "0", 1), 0);
+    yew_state_dispose(&ed);
+    yew_ed_free(&ed);
 }
 
 /* Absent, or a complete v1 document.  Nothing in between. */
@@ -1040,9 +1040,9 @@ static bool ws_state_is_whole(const char *path)
     (void)fclose(fp);
     arena_init(&a);
     (void)memset(&err, 0, sizeof(err));
-    lit = sag_fl_parse(&a, raw.data, raw.len, &err);
+    lit = yew_fl_parse(&a, raw.data, raw.len, &err);
     ok = lit != NULL && lit->kind == FL_LIT_MAP &&
-         sag_fl_int_or(sag_fl_get(lit, "version"), 0) == 1;
+         yew_fl_int_or(yew_fl_get(lit, "version"), 0) == 1;
     if (!ok)
         (void)fprintf(stderr,
                       "torn state.fl (%llu bytes): %u:%u %s\n",
@@ -1055,8 +1055,8 @@ static bool ws_state_is_whole(const char *path)
 
 void test_ws_save_survives_kill9_at_every_step(void)
 {
-    char state_home[] = "/tmp/sag-wstort-home-XXXXXX";
-    char work[] = "/tmp/sag-wstort-work-XXXXXX";
+    char state_home[] = "/tmp/yew-wstort-home-XXXXXX";
+    char work[] = "/tmp/yew-wstort-work-XXXXXX";
     char shim[PATH_MAX];
     char statefile[PATH_MAX];
     WsKey key;
@@ -1065,18 +1065,18 @@ void test_ws_save_survives_kill9_at_every_step(void)
     /* Enough to walk past the rename; the torture LANE runs longer. */
     const u32 steps = 24U;
 
-    if (getenv("SAG_WS_TORTURE_CHILD") != NULL) {
+    if (getenv("YEW_WS_TORTURE_CHILD") != NULL) {
         ws_torture_child();
         return;
     }
-    SAG_ASSERT_NOT_NULL(mkdtemp(state_home));
-    SAG_ASSERT_NOT_NULL(mkdtemp(work));
+    YEW_ASSERT_NOT_NULL(mkdtemp(state_home));
+    YEW_ASSERT_NOT_NULL(mkdtemp(work));
     ws_sibling_path(shim, sizeof(shim), "tests/torture/faultshim.so");
-    SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", state_home, 1), 0);
-    SAG_ASSERT(sag_ws_key(&key, work));
-    SAG_ASSERT(sag_ws_ensure_dir(&key));
+    YEW_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", state_home, 1), 0);
+    YEW_ASSERT(yew_ws_key(&key, work));
+    YEW_ASSERT(yew_ws_ensure_dir(&key));
     (void)snprintf(statefile, sizeof(statefile), "%s",
-                   sag_ws_state_path(&key));
+                   yew_ws_state_path(&key));
 
     for (at = 1U; at <= steps; at++) {
         char atbuf[32];
@@ -1086,17 +1086,17 @@ void test_ws_save_survives_kill9_at_every_step(void)
 
         (void)snprintf(atbuf, sizeof(atbuf), "%u", (unsigned)at);
         child = fork();
-        SAG_ASSERT(child >= 0);
+        YEW_ASSERT(child >= 0);
         if (child == 0) {
-            if (setenv("SAG_WS_TORTURE_CHILD", "1", 1) != 0 ||
-                setenv("SAG_WS_TORTURE_WORK", work, 1) != 0 ||
+            if (setenv("YEW_WS_TORTURE_CHILD", "1", 1) != 0 ||
+                setenv("YEW_WS_TORTURE_WORK", work, 1) != 0 ||
                 setenv("XDG_STATE_HOME", state_home, 1) != 0 ||
-                setenv("SAG_FAULT_AT", atbuf, 1) != 0 ||
-                setenv("SAG_FAULT_ENABLE", "0", 1) != 0 ||
-                setenv("SAG_LOG", "/dev/null", 1) != 0 ||
+                setenv("YEW_FAULT_AT", atbuf, 1) != 0 ||
+                setenv("YEW_FAULT_ENABLE", "0", 1) != 0 ||
+                setenv("YEW_LOG", "/dev/null", 1) != 0 ||
                 ws_set_preload(shim) != 0)
                 _exit(126);
-            execl(sag_test_program_path(), sag_test_program_path(),
+            execl(yew_test_program_path(), yew_test_program_path(),
                   "--filter", "ws_save_survives_kill9_at_every_step",
                   (char *)NULL);
             _exit(126);
@@ -1104,27 +1104,27 @@ void test_ws_save_survives_kill9_at_every_step(void)
         do {
             waited = waitpid(child, &status, 0);
         } while (waited < 0 && errno == EINTR);
-        SAG_ASSERT_EQ_I64(waited, child);
+        YEW_ASSERT_EQ_I64(waited, child);
         /* The child either finished or was killed at step `at`; both
          * are fine.  What is NOT fine is the file it left behind. */
-        SAG_ASSERT(WIFEXITED(status));
-        SAG_ASSERT(WEXITSTATUS(status) != 126);
+        YEW_ASSERT(WIFEXITED(status));
+        YEW_ASSERT(WEXITSTATUS(status) != 126);
         /* 137 is the shim's _exit at the chosen call. */
         if (WEXITSTATUS(status) == 137)
             killed++;
-        SAG_ASSERT(ws_state_is_whole(statefile));
+        YEW_ASSERT(ws_state_is_whole(statefile));
     }
     /*
-     * The kills have to have HAPPENED.  If SAG_FAULT_AT never matched
+     * The kills have to have HAPPENED.  If YEW_FAULT_AT never matched
      * — a renamed env var, a shim that failed to preload, an enable
      * window that closed too early — every child would run to
      * completion and this test would report success while exercising
      * nothing at all.
      */
-    SAG_ASSERT(killed > 0U);
+    YEW_ASSERT(killed > 0U);
     /* And after all that, the document is still usable — the last
      * completed save survives every interrupted one after it. */
-    SAG_ASSERT(ws_state_is_whole(statefile));
+    YEW_ASSERT(ws_state_is_whole(statefile));
     sf_rm_rf(state_home);
     sf_rm_rf(work);
     (void)unsetenv("XDG_STATE_HOME");

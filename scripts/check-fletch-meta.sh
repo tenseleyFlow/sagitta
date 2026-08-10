@@ -15,12 +15,12 @@ set -eu
 
 BUILD=${BUILD:-build}
 RUNNER=${RUNNER:-$BUILD/fletch_run}
-SAGITTA=${SAGITTA:-$BUILD/sagitta}
+YEW=${YEW:-$BUILD/yew}
 ROOT=tests/fletch/meta
 
 WANT='fletch: total=11 pass=1 fail=6 skip=1 xfail=0 config=3'
 
-out=$(LC_ALL=C "$RUNNER" --root "$ROOT" --sagitta "$SAGITTA" 2>&1 || true)
+out=$(LC_ALL=C "$RUNNER" --root "$ROOT" --yew "$YEW" 2>&1 || true)
 got=$(printf '%s\n' "$out" | grep '^fletch: total=' || true)
 
 if [ "$got" != "$WANT" ]; then

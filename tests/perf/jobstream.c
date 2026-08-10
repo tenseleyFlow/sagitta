@@ -2,7 +2,7 @@
  * Sprint 19 DoD 13: streamed job output must not starve the input loop.
  *
  * A job can emit faster than any terminal can show it (`yes` produces
- * gigabytes per second).  SAG_JOB_READ_BUDGET caps the bytes drained per
+ * gigabytes per second).  YEW_JOB_READ_BUDGET caps the bytes drained per
  * job per loop iteration precisely so keystrokes keep their turn; this
  * gate is what makes that cap load-bearing rather than decorative.
  *
@@ -62,7 +62,7 @@ static bool make_fixture(char *root, size_t root_cap, char *path,
                          size_t path_cap, char *state, size_t state_cap)
 {
     static const char line[] = "streaming fixture line\n";
-    char template[] = "/tmp/sagitta-jobstream-XXXXXX";
+    char template[] = "/tmp/yew-jobstream-XXXXXX";
     char *made;
     int fd;
     int i;
@@ -172,23 +172,23 @@ static bool read_limit(const char *path, i64 *limit_out)
     return *limit_out > 0;
 }
 
-static bool stop_editor(SagLivePty *pty)
+static bool stop_editor(YewLivePty *pty)
 {
     static const char quit[] = "\x1b:q!\r";
-    i64 deadline = sag_live_pty_now_ns() + INT64_C(5000000000);
+    i64 deadline = yew_live_pty_now_ns() + INT64_C(5000000000);
     int code = 0;
 
     /* Quitting kills the job's process group; the editor must not block
      * waiting for a child that is still writing. */
-    if (!sag_live_pty_write(pty, quit, sizeof(quit) - 1U, deadline))
+    if (!yew_live_pty_write(pty, quit, sizeof(quit) - 1U, deadline))
         return false;
-    return sag_live_pty_wait_exit(pty, deadline, &code);
+    return yew_live_pty_wait_exit(pty, deadline, &code);
 }
 
 static bool measure(const char *binary, const char *path, const char *state,
                     size_t count, i64 inject, i64 *p99_out)
 {
-    SagLivePty pty = {0};
+    YewLivePty pty = {0};
     i64 *samples = NULL;
     i64 *work = NULL;
     i64 deadline;
@@ -199,10 +199,10 @@ static bool measure(const char *binary, const char *path, const char *state,
     work = malloc(count * sizeof(*work));
     if (samples == NULL || work == NULL)
         goto done_alloc;
-    deadline = sag_live_pty_now_ns() + INT64_C(5000000000);
-    if (!sag_live_pty_spawn(&pty, binary, path, state, SCREEN_ROWS,
+    deadline = yew_live_pty_now_ns() + INT64_C(5000000000);
+    if (!yew_live_pty_spawn(&pty, binary, path, state, SCREEN_ROWS,
                             SCREEN_COLS) ||
-        !sag_live_pty_wait_frame(&pty, 0U, deadline, NULL)) {
+        !yew_live_pty_wait_frame(&pty, 0U, deadline, NULL)) {
         (void)fprintf(stderr, "jobstream: editor did not paint\n");
         goto done_pty;
     }
@@ -212,10 +212,10 @@ static bool measure(const char *binary, const char *path, const char *state,
     int n = snprintf(command, sizeof(command),
                      ":!yes 0123456789abcdefghijklmnopqrstuvwxyz"
                      "0123456789abcdefghijklmn | head -c %lld\r",
-                     (long long)env_i64("SAG_JOBSTREAM_BYTES",
+                     (long long)env_i64("YEW_JOBSTREAM_BYTES",
                                         STREAM_BYTES_DEFAULT));
-    deadline = sag_live_pty_now_ns() + INT64_C(5000000000);
-    if (n <= 0 || !sag_live_pty_write(&pty, command, (size_t)n, deadline)) {
+    deadline = yew_live_pty_now_ns() + INT64_C(5000000000);
+    if (n <= 0 || !yew_live_pty_write(&pty, command, (size_t)n, deadline)) {
         (void)fprintf(stderr, "jobstream: could not start the job\n");
         goto done_pty;
     }
@@ -225,14 +225,14 @@ static bool measure(const char *binary, const char *path, const char *state,
          * never edited and the samples measure dispatch plus paint. */
         const char *key = (i & 1U) != 0U ? "\x1b[B" : "\x1b[A";
         u64 frame = pty.frames;
-        i64 start = sag_live_pty_now_ns();
+        i64 start = yew_live_pty_now_ns();
         i64 completed;
 
         deadline = start + INT64_C(2000000000);
-        if (start < 0 || !sag_live_pty_write(&pty, key, 3U, deadline))
+        if (start < 0 || !yew_live_pty_write(&pty, key, 3U, deadline))
             goto done_pty;
         delay_ns(inject);
-        if (!sag_live_pty_wait_frame(&pty, frame, deadline, &completed)) {
+        if (!yew_live_pty_wait_frame(&pty, frame, deadline, &completed)) {
             (void)fprintf(stderr,
                           "jobstream: key %zu never reached a frame\n",
                           i + 1U);
@@ -249,7 +249,7 @@ static bool measure(const char *binary, const char *path, const char *state,
     ok = true;
 
 done_pty:
-    sag_live_pty_close(&pty);
+    yew_live_pty_close(&pty);
 done_alloc:
     free(work);
     free(samples);
@@ -263,14 +263,14 @@ int main(int argc, char **argv)
     char state[1024];
     i64 limit = 0;
     i64 p99 = 0;
-    size_t keys = (size_t)env_i64("SAG_JOBSTREAM_KEYS", STREAM_KEYS);
-    i64 inject = env_i64("SAG_JOBSTREAM_INJECT_NS", 0);
+    size_t keys = (size_t)env_i64("YEW_JOBSTREAM_KEYS", STREAM_KEYS);
+    i64 inject = env_i64("YEW_JOBSTREAM_INJECT_NS", 0);
     int status = 0;
 
-    if (argc != 5 || strcmp(argv[1], "--sagitta") != 0 ||
+    if (argc != 5 || strcmp(argv[1], "--yew") != 0 ||
         strcmp(argv[3], "--baseline") != 0) {
         (void)fprintf(stderr,
-                      "usage: perf_jobstream --sagitta BIN --baseline FILE\n");
+                      "usage: perf_jobstream --yew BIN --baseline FILE\n");
         return 2;
     }
     if (!read_limit(argv[4], &limit)) {

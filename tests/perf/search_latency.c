@@ -100,7 +100,7 @@ static bool read_limits(const char *path, u64 *keypress_ns, u64 *step_ns,
 
 /*
  * Insertion sort: a handful of samples, and raw qsort is banned —
- * it is unstable, and this repository's answer is sag_sort_stable or,
+ * it is unstable, and this repository's answer is yew_sort_stable or,
  * for a list this small, the obvious loop the sibling perf gates use.
  */
 static void sort_i64(i64 *v, size_t n)
@@ -121,7 +121,7 @@ static void sort_i64(i64 *v, size_t n)
 
 int main(int argc, char **argv)
 {
-    u64 bytes = env_u64("SAG_SEARCH_LATENCY_BYTES", DEFAULT_BYTES);
+    u64 bytes = env_u64("YEW_SEARCH_LATENCY_BYTES", DEFAULT_BYTES);
     u64 keypress_limit = 0U;
     u64 step_limit = 0U;
     u64 rss_limit = 0U;
@@ -147,8 +147,8 @@ int main(int argc, char **argv)
         return 2;
     }
 
-    sag_ed_init(&ed);
-    if (!sag_ed_open_scratch(&ed)) {
+    yew_ed_init(&ed);
+    if (!yew_ed_open_scratch(&ed)) {
         (void)fprintf(stderr, "search_latency: cannot open a buffer\n");
         return 2;
     }
@@ -164,15 +164,15 @@ int main(int argc, char **argv)
          * find it, and must not go looking. */
         bytebuf_append(&src, "ZQNEEDLE\n", 9U);
     }
-    ec = sag_ed_edit_ctx(&ed);
-    if (!sag_edit_insert(&ec, BYTEOFF(0U), src.data, src.len)) {
+    ec = yew_ed_edit_ctx(&ed);
+    if (!yew_edit_insert(&ec, BYTEOFF(0U), src.data, src.len)) {
         (void)fprintf(stderr, "search_latency: insert failed\n");
         return 2;
     }
     bytebuf_free(&src);
     ed.win->rect.h = 50U;
     ed.win->rect.w = 120U;
-    sag_search_opts_init(&opts);
+    yew_search_opts_init(&opts);
     ed.search_opts = opts;
 
     rss_before = peak_rss();
@@ -186,15 +186,15 @@ int main(int argc, char **argv)
         size_t n;
 
         for (n = 1U; n <= sizeof(typed) - 1U; n++) {
-            SagRe *re;
+            YewRe *re;
             i64 start;
             i64 end;
 
             start = now_ns();
-            re = sag_search_compile(&arena, typed, n, &opts, NULL);
+            re = yew_search_compile(&arena, typed, n, &opts, NULL);
             if (re != NULL)
-                sag_overlay_refresh(&ed, ed.win, re, (u32)n,
-                                    SAG_OVERLAY_BUDGET_US);
+                yew_overlay_refresh(&ed, ed.win, re, (u32)n,
+                                    YEW_OVERLAY_BUDGET_US);
             end = now_ns();
             samples[nsamples++] = end - start;
         }
@@ -219,20 +219,20 @@ int main(int argc, char **argv)
     /* `n` through many matches: each step is one engine search from the
      * cursor, and must not degrade with file size. */
     {
-        SagRe *re = sag_search_compile(&arena, "compute_value", 13U, &opts,
+        YewRe *re = yew_search_compile(&arena, "compute_value", 13U, &opts,
                                        NULL);
         i64 start;
         i64 end;
         u32 steps = 1000U;
         u32 i;
 
-        sag_reg_set_search(&ed.regs, (const u8 *)"compute_value", 13U);
+        yew_reg_set_search(&ed.regs, (const u8 *)"compute_value", 13U);
         ed.search.re = re;
         ed.search.reverse = false;
-        sag_ed_cursor(&ed)->pos = BYTEOFF(0U);
+        yew_ed_cursor(&ed)->pos = BYTEOFF(0U);
         start = now_ns();
         for (i = 0U; i < steps; i++)
-            (void)sag_search_step(&ed, ed.win, true, 1U);
+            (void)yew_search_step(&ed, ed.win, true, 1U);
         end = now_ns();
         {
             i64 mean = (end - start) / (i64)steps;
@@ -266,6 +266,6 @@ int main(int argc, char **argv)
         }
     }
     arena_free_all(&arena);
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
     return status;
 }

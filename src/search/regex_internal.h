@@ -1,5 +1,5 @@
-#ifndef SAG_SEARCH_REGEX_INTERNAL_H
-#define SAG_SEARCH_REGEX_INTERNAL_H
+#ifndef YEW_SEARCH_REGEX_INTERNAL_H
+#define YEW_SEARCH_REGEX_INTERNAL_H
 
 /* Shared between the parser, the compiler and the execution engines. */
 
@@ -59,7 +59,7 @@ typedef struct ReLit {
     bool anchored;
 } ReLit;
 
-struct SagRe {
+struct YewRe {
     ReInst *prog;
     u32 nprog;
     /*
@@ -71,7 +71,7 @@ struct SagRe {
      * end a forward DFA reports.  That composition cannot express our
      * semantics: leftmost beats earliest-end, so on "abcd" /bc|abcd/
      * ends earliest at 3 while the answer is 0..4, and no backward scan
-     * seeded at 3 reaches 0.  sag_re_search instead uses the DFA to
+     * seeded at 3 reaches 0.  yew_re_search instead uses the DFA to
      * bound a REGION and lets the VM produce the span, which is what
      * §6's own with-groups dispatcher row describes.
      *
@@ -141,12 +141,12 @@ typedef struct ReParse {
     size_t len;
     size_t at;
     u32 flags;      /* current (inline flags mutate this)               */
-    u32 base_flags; /* as given to sag_re_compile                       */
+    u32 base_flags; /* as given to yew_re_compile                       */
     u32 ngroups;    /* including group 0                                */
     ReClass *classes;
     u32 nclasses;
     u32 ncap_classes;
-    SagReErr *err;
+    YewReErr *err;
     bool failed;
     /*
      * Sprint 21 §2.  Smartcase asks "did the user type an uppercase
@@ -161,59 +161,59 @@ typedef struct ReParse {
     bool force_case;  /* \C */
 } ReParse;
 
-ReAst *sag_re_parse(ReParse *p);
-void sag_re_fail(ReParse *p, size_t off, const char *msg);
+ReAst *yew_re_parse(ReParse *p);
+void yew_re_fail(ReParse *p, size_t off, const char *msg);
 /* Interns a class, returning its index (or UINT32_MAX on overflow). */
-u32 sag_re_class_intern(ReParse *p, ReRange *ranges, u32 n, bool negate);
+u32 yew_re_class_intern(ReParse *p, ReRange *ranges, u32 n, bool negate);
 /* Builds the class for a Perl shorthand: 'w','d','s' and their negations. */
-u32 sag_re_class_perl(ReParse *p, char which);
+u32 yew_re_class_perl(ReParse *p, char which);
 /*
  * Simple case folding: appends the folded partners of `cp`.
  *
- * `out` must hold SAG_RE_FOLD_MAX.  Named rather than spelled `4` at
+ * `out` must hold YEW_RE_FOLD_MAX.  Named rather than spelled `4` at
  * every call site because the bound is the function's contract: it used
  * to appear as a literal in the declaration, in two stack arrays and in
  * four of the six internal bounds checks -- and the two writes that
  * spelled it nowhere ran off the end of the caller's buffer.
  */
-enum { SAG_RE_FOLD_MAX = 4 };
-u32 sag_re_fold_partners(u32 cp, u32 out[SAG_RE_FOLD_MAX]);
+enum { YEW_RE_FOLD_MAX = 4 };
+u32 yew_re_fold_partners(u32 cp, u32 out[YEW_RE_FOLD_MAX]);
 
-bool sag_re_class_has(const ReClass *c, u32 cp);
+bool yew_re_class_has(const ReClass *c, u32 cp);
 
 /* Literal prefilter (§7). */
-void sag_bmh_build(ReLit *l);
-u64 sag_lit_find(const ReLit *l, const u8 *hay, u64 n);
+void yew_bmh_build(ReLit *l);
+u64 yew_lit_find(const ReLit *l, const u8 *hay, u64 n);
 /* The Pike VM, anchored at `start`: the match must begin exactly there.
  * This is the correctness reference the lazy DFA is checked against. */
-bool sag_re_pike_run(const SagRe *re, const SagReInput *in, u64 start,
-                     SagReMatch *out);
+bool yew_re_pike_run(const YewRe *re, const YewReInput *in, u64 start,
+                     YewReMatch *out);
 /* Unanchored form: seeds a start thread at every position in one pass,
  * which is what keeps an unanchored search O(n*m) instead of O(n^2). */
-bool sag_re_pike_run_ex(const SagRe *re, const SagReInput *in, u64 start,
-                        bool anchored, SagReMatch *out);
+bool yew_re_pike_run_ex(const YewRe *re, const YewReInput *in, u64 start,
+                        bool anchored, YewReMatch *out);
 
 /* Lazy DFA (§6b).  It answers only "is there a match": a state is a set
  * of pcs and knows nothing about which path reached it, so it cannot
  * report captures.  GIVE_UP means the state cache thrashed and the
  * caller should finish on the Pike VM. */
-enum { SAG_DFA_NO = 0, SAG_DFA_YES = 1, SAG_DFA_GIVE_UP = -1 };
-int sag_re_dfa_test(const SagRe *re, const SagReInput *in, u64 from);
+enum { YEW_DFA_NO = 0, YEW_DFA_YES = 1, YEW_DFA_GIVE_UP = -1 };
+int yew_re_dfa_test(const YewRe *re, const YewReInput *in, u64 from);
 /* Ceiling on the §6c skip-ahead window, in bytes.  Bounded so span
  * recovery is O(window) and never O(file). */
-#define SAG_RE_SPAN_WINDOW (64U * 1024U)
+#define YEW_RE_SPAN_WINDOW (64U * 1024U)
 
 /* Where the earliest match ends.  Used to skip the VM ahead over text
  * that provably contains no match. */
-int sag_re_dfa_find_end(const SagRe *re, const SagReInput *in, u64 from,
+int yew_re_dfa_find_end(const YewRe *re, const YewReInput *in, u64 from,
                         u64 *end_out);
 
 /* Character-property predicates, defined off the word-break tables so a
  * search \b and Sprint 16's W-mode word motion agree about what a word
  * is.  A user who selects a word with W and searches \bword\b must not
  * get two different answers. */
-bool sag_re_is_word(u32 cp);
-bool sag_re_is_digit(u32 cp);
-bool sag_re_is_space(u32 cp);
+bool yew_re_is_word(u32 cp);
+bool yew_re_is_digit(u32 cp);
+bool yew_re_is_space(u32 cp);
 
 #endif

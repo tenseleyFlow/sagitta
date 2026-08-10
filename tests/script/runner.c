@@ -522,7 +522,7 @@ static int64_t now_ms(void)
 
 static int64_t budget_ms(void)
 {
-    const char *value = getenv("SAG_SCRIPT_BUDGET_MS");
+    const char *value = getenv("YEW_SCRIPT_BUDGET_MS");
     int64_t parsed = 0;
 
     if (value == NULL || *value == '\0')
@@ -560,7 +560,7 @@ static void close_pipe(int pipefd[2])
 
 static bool set_result_fd_environment(void)
 {
-    return setenv("SAG_SCRIPT_RESULT_FD", "3", 1) == 0;
+    return setenv("YEW_SCRIPT_RESULT_FD", "3", 1) == 0;
 }
 
 static bool child_environment(const char *root, const char *work)
@@ -578,7 +578,7 @@ static bool child_environment(const char *root, const char *work)
              setenv("XDG_DATA_HOME", data, 1) == 0 &&
              setenv("XDG_CACHE_HOME", cache, 1) == 0 &&
              setenv("TMPDIR", root, 1) == 0 &&
-             setenv("SAG_SCRIPT_TMPDIR", root, 1) == 0 &&
+             setenv("YEW_SCRIPT_TMPDIR", root, 1) == 0 &&
              set_result_fd_environment() &&
              chdir(work) == 0;
     free(cfg);
@@ -588,12 +588,12 @@ static bool child_environment(const char *root, const char *work)
     return ok;
 }
 
-static size_t build_child_argv(char **argv, const char *sagitta,
+static size_t build_child_argv(char **argv, const char *yew,
                                const char *script, bool config)
 {
     size_t argc = 0U;
 
-    argv[argc++] = (char *)sagitta;
+    argv[argc++] = (char *)yew;
     argv[argc++] = (char *)"--batch";
     argv[argc++] = (char *)"--test";
     if (!config)
@@ -603,7 +603,7 @@ static size_t build_child_argv(char **argv, const char *sagitta,
     return argc;
 }
 
-static void child_exec(const char *sagitta, const char *script,
+static void child_exec(const char *yew, const char *script,
                        const char *root, const char *work,
                        bool config, int out_pipe[2], int err_pipe[2],
                        int result_pipe[2])
@@ -612,7 +612,7 @@ static void child_exec(const char *sagitta, const char *script,
     size_t i;
     char *child_argv[6];
 
-    (void)build_child_argv(child_argv, sagitta, script, config);
+    (void)build_child_argv(child_argv, yew, script, config);
 
     if (setpgid(0, 0) != 0)
         _exit(126);
@@ -635,9 +635,9 @@ static void child_exec(const char *sagitta, const char *script,
                       strerror(errno));
         _exit(126);
     }
-    execv(sagitta, child_argv);
+    execv(yew, child_argv);
     (void)dprintf(STDERR_FILENO, "script: cannot exec %s: %s\n",
-                  sagitta, strerror(errno));
+                  yew, strerror(errno));
     _exit(127);
 }
 
@@ -746,7 +746,7 @@ static bool make_sandbox(const char *fixtures, char **root_out,
 
     if (tmp == NULL || *tmp == '\0')
         tmp = "/tmp";
-    template = path_join(tmp, "sag-script-XXXXXX");
+    template = path_join(tmp, "yew-script-XXXXXX");
     if (template == NULL || mkdtemp(template) == NULL) {
         free(template);
         return false;
@@ -778,7 +778,7 @@ static bool make_sandbox(const char *fixtures, char **root_out,
     return true;
 }
 
-static bool run_test(const char *sagitta, const char *fixtures,
+static bool run_test(const char *yew, const char *fixtures,
                      const TestFile *test, char **sandbox, RunResult *result)
 {
     int out_pipe[2] = {-1, -1};
@@ -811,7 +811,7 @@ static bool run_test(const char *sagitta, const char *fixtures,
         return false;
     }
     if (child == 0)
-        child_exec(sagitta, test->path, *sandbox, work,
+        child_exec(yew, test->path, *sandbox, work,
                    test->config, out_pipe, err_pipe, result_pipe);
     if (setpgid(child, child) != 0 && errno != EACCES && errno != ESRCH) {
         (void)kill(child, SIGKILL);
@@ -889,7 +889,7 @@ static Protocol parse_protocol(const Bytes *bytes)
             fail_lines++;
             continue;
         }
-        if (strncmp(line, "SAGTEST\t", 8U) == 0 && !saw_summary) {
+        if (strncmp(line, "YEWTEST\t", 8U) == 0 && !saw_summary) {
             char *a = line + 8U;
             char *f = strchr(a, '\t');
             char *s;
@@ -1046,12 +1046,12 @@ static char *absolute_existing(const char *path)
 }
 
 static bool parse_cli(int argc, char **argv, const char **filter,
-                      const char **sagitta, bool *list, bool *selftest)
+                      const char **yew, bool *list, bool *selftest)
 {
     int i;
 
     *filter = NULL;
-    *sagitta = "build/sagitta";
+    *yew = "build/yew";
     *list = false;
     *selftest = false;
     for (i = 1; i < argc; i++) {
@@ -1066,12 +1066,12 @@ static bool parse_cli(int argc, char **argv, const char **filter,
                 return false;
             }
             *filter = argv[i];
-        } else if (strcmp(argv[i], "--sagitta") == 0) {
+        } else if (strcmp(argv[i], "--yew") == 0) {
             if (++i >= argc) {
-                (void)fprintf(stderr, "script: --sagitta requires a path\n");
+                (void)fprintf(stderr, "script: --yew requires a path\n");
                 return false;
             }
-            *sagitta = argv[i];
+            *yew = argv[i];
         } else {
             (void)fprintf(stderr, "script: unknown option '%s'\n", argv[i]);
             return false;
@@ -1100,7 +1100,7 @@ static bool selftest_zero_assertions(void)
     const char *reason;
     bool ok;
 
-    if (!protocol_from_text("SAGTEST\t0\t0\t0\n", &protocol, &result))
+    if (!protocol_from_text("YEWTEST\t0\t0\t0\n", &protocol, &result))
         return false;
     reason = failure_reason(&result, &protocol,
                             reason_buf, sizeof(reason_buf));
@@ -1122,7 +1122,7 @@ static bool selftest_skip_report(void)
     const char *reason;
     bool ok;
 
-    if (!protocol_from_text("SAGTEST\t4\t0\t1\n", &protocol, &result))
+    if (!protocol_from_text("YEWTEST\t4\t0\t1\n", &protocol, &result))
         return false;
     reason = failure_reason(&result, &protocol,
                             reason_buf, sizeof(reason_buf));
@@ -1137,7 +1137,7 @@ static bool selftest_skip_report(void)
 static bool selftest_failure_report(void)
 {
     static const char text[] =
-        "FAIL\tt.text\twant | a\\ngot | b\nSAGTEST\t9\t1\t0\n";
+        "FAIL\tt.text\twant | a\\ngot | b\nYEWTEST\t9\t1\t0\n";
     static const char name[] = "012345678901234567890123456789012345";
     static const char expected[] =
         "FAIL 012345678901234567890123456789012345 "
@@ -1184,7 +1184,7 @@ static bool selftest_sandbox_lifecycle(const char *fixtures)
 
 static bool selftest_result_fd_env(void)
 {
-    const char *current = getenv("SAG_SCRIPT_RESULT_FD");
+    const char *current = getenv("YEW_SCRIPT_RESULT_FD");
     char *saved = current == NULL ? NULL : strdup(current);
     const char *installed;
     bool ok;
@@ -1192,12 +1192,12 @@ static bool selftest_result_fd_env(void)
     if (current != NULL && saved == NULL)
         return false;
     ok = set_result_fd_environment();
-    installed = getenv("SAG_SCRIPT_RESULT_FD");
+    installed = getenv("YEW_SCRIPT_RESULT_FD");
     ok = ok && installed != NULL && strcmp(installed, "3") == 0;
     if (saved == NULL) {
-        if (unsetenv("SAG_SCRIPT_RESULT_FD") != 0)
+        if (unsetenv("YEW_SCRIPT_RESULT_FD") != 0)
             ok = false;
-    } else if (setenv("SAG_SCRIPT_RESULT_FD", saved, 1) != 0) {
+    } else if (setenv("YEW_SCRIPT_RESULT_FD", saved, 1) != 0) {
         ok = false;
     }
     free(saved);
@@ -1248,9 +1248,9 @@ static bool selftest_config_directive(void)
     static const char no_suffix[] = "# CONFIGURE\n";
     char *clean_argv[6];
     char *config_argv[6];
-    size_t clean_argc = build_child_argv(clean_argv, "sag", "test.fl",
+    size_t clean_argc = build_child_argv(clean_argv, "yew", "test.fl",
                                          false);
-    size_t config_argc = build_child_argv(config_argv, "sag", "test.fl",
+    size_t config_argc = build_child_argv(config_argv, "yew", "test.fl",
                                           true);
 
     return config_header_bytes(yes_lf, sizeof(yes_lf) - 1U) &&
@@ -1313,7 +1313,7 @@ static bool protocol_has_all_negative_assertions(const Bytes *protocol)
     return true;
 }
 
-static bool selftest_negative_assertion_host(const char *sagitta,
+static bool selftest_negative_assertion_host(const char *yew,
                                              const char *fixtures,
                                              const char *script_dir)
 {
@@ -1330,7 +1330,7 @@ static bool selftest_negative_assertion_host(const char *sagitta,
 
     if (script != NULL) {
         attempted = true;
-        ran = run_test(sagitta, fixtures, &test, &sandbox, &result);
+        ran = run_test(yew, fixtures, &test, &sandbox, &result);
     }
     if (ran) {
         protocol = parse_protocol(&result.protocol);
@@ -1363,7 +1363,7 @@ static size_t report_selftest(const char *name, bool ok)
     return ok ? 0U : 1U;
 }
 
-static int run_selftests(const char *sagitta, const char *fixtures,
+static int run_selftests(const char *yew, const char *fixtures,
                          const char *script_dir)
 {
     size_t failures = 0U;
@@ -1386,7 +1386,7 @@ static int run_selftests(const char *sagitta, const char *fixtures,
                                 selftest_stdout_expectation_is_byte_exact());
     failures += report_selftest("negative_assertion_host_continues",
                                 selftest_negative_assertion_host(
-                                    sagitta, fixtures, script_dir));
+                                    yew, fixtures, script_dir));
     (void)printf("script-runner-selftest: %zu tests, %zu failure%s\n",
                  (size_t)9U, failures,
                  failures == 1U ? "" : "s");
@@ -1397,13 +1397,13 @@ static int run_selftests(const char *sagitta, const char *fixtures,
 int main(int argc, char **argv)
 {
     const char *filter;
-    const char *sagitta_arg;
+    const char *yew_arg;
     bool list_only;
     bool selftest;
     char *root;
     char *script_dir;
     char *fixtures;
-    char *sagitta;
+    char *yew;
     TestList tests = {0};
     size_t selected = 0U;
     size_t suite_assertions = 0U;
@@ -1411,7 +1411,7 @@ int main(int argc, char **argv)
     size_t suite_skipped = 0U;
     size_t i;
 
-    if (!parse_cli(argc, argv, &filter, &sagitta_arg, &list_only,
+    if (!parse_cli(argc, argv, &filter, &yew_arg, &list_only,
                    &selftest))
         return 1;
     root = getcwd(NULL, 0U);
@@ -1428,19 +1428,19 @@ int main(int argc, char **argv)
     if (selftest) {
         int rc;
 
-        sagitta = absolute_existing(sagitta_arg);
-        if (sagitta == NULL) {
+        yew = absolute_existing(yew_arg);
+        if (yew == NULL) {
             (void)fprintf(stderr,
-                          "script: cannot resolve sagitta '%s': %s\n",
-                          sagitta_arg, strerror(errno));
+                          "script: cannot resolve yew '%s': %s\n",
+                          yew_arg, strerror(errno));
             free(root);
             free(script_dir);
             free(fixtures);
             return 1;
         }
-        rc = run_selftests(sagitta, fixtures, script_dir);
+        rc = run_selftests(yew, fixtures, script_dir);
 
-        free(sagitta);
+        free(yew);
         free(root);
         free(script_dir);
         free(fixtures);
@@ -1474,10 +1474,10 @@ int main(int argc, char **argv)
         list_free(&tests);
         return 0;
     }
-    sagitta = absolute_existing(sagitta_arg);
-    if (sagitta == NULL) {
-        (void)fprintf(stderr, "script: cannot resolve sagitta '%s': %s\n",
-                      sagitta_arg, strerror(errno));
+    yew = absolute_existing(yew_arg);
+    if (yew == NULL) {
+        (void)fprintf(stderr, "script: cannot resolve yew '%s': %s\n",
+                      yew_arg, strerror(errno));
         free(root);
         free(script_dir);
         free(fixtures);
@@ -1487,7 +1487,7 @@ int main(int argc, char **argv)
     if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
         (void)fprintf(stderr, "script: cannot ignore SIGPIPE: %s\n",
                       strerror(errno));
-        free(sagitta);
+        free(yew);
         free(root);
         free(script_dir);
         free(fixtures);
@@ -1506,7 +1506,7 @@ int main(int argc, char **argv)
 
         if (filter != NULL && strstr(tests.data[i].name, filter) == NULL)
             continue;
-        (void)run_test(sagitta, fixtures, &tests.data[i], &sandbox, &result);
+        (void)run_test(yew, fixtures, &tests.data[i], &sandbox, &result);
         protocol = parse_protocol(&result.protocol);
         if (protocol.valid)
             suite_assertions += protocol.assertions;
@@ -1582,7 +1582,7 @@ int main(int argc, char **argv)
                  selected, suite_assertions, suite_failures,
                  suite_failures == 1U ? "" : "s", suite_skipped);
     (void)fflush(stdout);
-    free(sagitta);
+    free(yew);
     free(root);
     free(script_dir);
     free(fixtures);

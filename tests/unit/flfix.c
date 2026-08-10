@@ -70,8 +70,8 @@ const char *flfix_tmpdir(FlFix *f)
 
     if (f->has_tmp)
         return f->tmp;
-    (void)snprintf(f->tmp, sizeof(f->tmp), "/tmp/sag-flfix-XXXXXX");
-    SAG_ASSERT_NOT_NULL(mkdtemp(f->tmp));
+    (void)snprintf(f->tmp, sizeof(f->tmp), "/tmp/yew-flfix-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(f->tmp));
     f->has_tmp = true;
     /*
      * The origin's path is what a relative import and io.glob resolve
@@ -80,7 +80,7 @@ const char *flfix_tmpdir(FlFix *f)
      * need not exist: only its directory is ever read.
      */
     (void)snprintf(init, sizeof(init), "%s/init.fl", f->tmp);
-    f->origin.path_id = sag_intern(&f->in, init, strlen(init));
+    f->origin.path_id = yew_intern(&f->in, init, strlen(init));
     return f->tmp;
 }
 
@@ -91,9 +91,9 @@ void flfix_write(FlFix *f, const char *rel, const char *body)
 
     (void)snprintf(path, sizeof(path), "%s/%s", flfix_tmpdir(f), rel);
     fp = fopen(path, "wb");
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     (void)fwrite(body, 1U, strlen(body), fp);
-    SAG_ASSERT_EQ_I64(fclose(fp), 0);
+    YEW_ASSERT_EQ_I64(fclose(fp), 0);
 }
 
 void flfix_mkdir(FlFix *f, const char *rel)
@@ -101,7 +101,7 @@ void flfix_mkdir(FlFix *f, const char *rel)
     char path[1024];
 
     (void)snprintf(path, sizeof(path), "%s/%s", flfix_tmpdir(f), rel);
-    SAG_ASSERT_EQ_I64(mkdir(path, 0777), 0);
+    YEW_ASSERT_EQ_I64(mkdir(path, 0777), 0);
 }
 
 void flfix_as(FlFix *f, u8 kind, u32 caps)
@@ -138,7 +138,7 @@ void flfix_run(FlFix *f, const char *src, char *out, size_t cap)
     /*
      * The diagnostic context is rebuilt per program.  A fixture that
      * runs forty programs otherwise fills the file table and the
-     * forty-first trips a SAG_BUG about source files, which is a very
+     * forty-first trips a YEW_BUG about source files, which is a very
      * confusing way to learn that a test file grew.
      */
     f->ndiag = 0U;

@@ -1,12 +1,12 @@
-#ifndef SAG_UI_PICKER_H
-#define SAG_UI_PICKER_H
+#ifndef YEW_UI_PICKER_H
+#define YEW_UI_PICKER_H
 
 /*
  * Sprint 26 §5: THE list picker.
  *
  * Every future list in this program is an instance of this widget — the
  * file finder, the buffer switcher, the undo branch picker, and later
- * the LSP symbol list (47), `sag pkg` (55), F-mode fuzzy jump (52) and
+ * the LSP symbol list (47), `yew pkg` (55), F-mode fuzzy jump (52) and
  * the command palette (38).  None of those need new machinery; they
  * need a PickerSpec.
  *
@@ -47,42 +47,42 @@
 typedef struct Ed Ed;
 
 enum {
-    SAG_PICK_MODIFIED = 1U << 0,
-    SAG_PICK_DEFERRED = 1U << 1,
-    SAG_PICK_ORPHAN = 1U << 2
+    YEW_PICK_MODIFIED = 1U << 0,
+    YEW_PICK_DEFERRED = 1U << 1,
+    YEW_PICK_ORPHAN = 1U << 2
 };
 
 /* How an accept was requested; the picker splits before calling. */
 enum {
-    SAG_PICK_ACCEPT_HERE = 0,
-    SAG_PICK_ACCEPT_VSPLIT = 1,
-    SAG_PICK_ACCEPT_HSPLIT = 2
+    YEW_PICK_ACCEPT_HERE = 0,
+    YEW_PICK_ACCEPT_VSPLIT = 1,
+    YEW_PICK_ACCEPT_HSPLIT = 2
 };
 
 enum {
     /* Wider than this and the eye stops tracking rows; narrower than
-     * SAG_PICKER_MIN_COLS and there is no honest way to draw a list, so
+     * YEW_PICKER_MIN_COLS and there is no honest way to draw a list, so
      * the picker refuses rather than drawing a 6-cell box. */
-    SAG_PICKER_MAX_W = 80,
+    YEW_PICKER_MAX_W = 80,
     /* Preview pickers may widen enough to give both columns useful space;
-     * ordinary pickers retain SAG_PICKER_MAX_W's established cap. */
-    SAG_PICKER_PREVIEW_MAX_W = 160,
-    SAG_PICKER_MAX_H = 20,
-    SAG_PICKER_MIN_COLS = 24,
-    SAG_PICKER_MIN_ROWS = 6,
+     * ordinary pickers retain YEW_PICKER_MAX_W's established cap. */
+    YEW_PICKER_PREVIEW_MAX_W = 160,
+    YEW_PICKER_MAX_H = 20,
+    YEW_PICKER_MIN_COLS = 24,
+    YEW_PICKER_MIN_ROWS = 6,
     /* Below this the `detail` column is dropped: two columns in 40
      * cells means neither is readable. */
-    SAG_PICKER_DETAIL_MIN_W = 40,
+    YEW_PICKER_DETAIL_MIN_W = 40,
     /* §7.2: how much of a full rescan happens per frame.  2 ms leaves
      * the rest of the 5 ms keypress budget for drawing. */
-    SAG_PICKER_SLICE_US = 2000,
+    YEW_PICKER_SLICE_US = 2000,
     /*
      * Below this the preview slot is dropped entirely.  Half of a
      * 60-cell box is 30 cells of list and 30 of file contents, and
      * neither is worth reading — the list is what the picker is FOR, so
      * it keeps the space.
      */
-    SAG_PICKER_PREVIEW_MIN_W = 100
+    YEW_PICKER_PREVIEW_MIN_W = 100
 };
 
 typedef struct PickItem {
@@ -131,20 +131,20 @@ typedef struct PickerSpec {
  * Opens the picker.  Refuses, with a message, when the terminal is too
  * small — a dialog that cannot show its list is worse than none.
  */
-void sag_picker_open(Ed *ed, const PickerSpec *s);
+void yew_picker_open(Ed *ed, const PickerSpec *s);
 /* False when the key was not ours, which only happens when the picker
  * is closed: an open picker swallows everything. */
-bool sag_picker_key(Ed *ed, const Key *k);
-void sag_picker_draw(Ed *ed, Rect area);
-void sag_picker_close(Ed *ed, bool accepted);
-bool sag_picker_active(const Ed *ed);
+bool yew_picker_key(Ed *ed, const Key *k);
+void yew_picker_draw(Ed *ed, Rect area);
+void yew_picker_close(Ed *ed, bool accepted);
+bool yew_picker_active(const Ed *ed);
 
 /* Rows currently shown and candidates considered — what the footer
  * prints, and what the tests assert against. */
-u32 sag_picker_shown(const Ed *ed);
-u32 sag_picker_total(const Ed *ed);
+u32 yew_picker_shown(const Ed *ed);
+u32 yew_picker_total(const Ed *ed);
 /* The payload under the cursor; 0 when the list is empty. */
-i32 sag_picker_selected(const Ed *ed);
+i32 yew_picker_selected(const Ed *ed);
 
 /*
  * Sprint 27 §2: the mouse seams.
@@ -153,23 +153,23 @@ i32 sag_picker_selected(const Ed *ed);
  * against the region the renderer registered, and the list may have
  * been re-ranked between the paint and the press.
  */
-void sag_picker_select_payload(Ed *ed, i32 payload);
+void yew_picker_select_payload(Ed *ed, i32 payload);
 /* Accepts what is under the cursor, exactly as Enter does. */
-bool sag_picker_accept(Ed *ed);
+bool yew_picker_accept(Ed *ed);
 /* Wheel.  Moves the SELECTION, because that is what the list's scroll
  * is derived from — there is no independent scroll offset to desync. */
-void sag_picker_scroll(Ed *ed, i32 rows);
+void yew_picker_scroll(Ed *ed, i32 rows);
 
 /* Test seam: re-rank against the current filter text.  The editor calls
  * this from the cmdline's edited hook. */
-void sag_picker_refilter(Ed *ed);
+void yew_picker_refilter(Ed *ed);
 
 /*
  * §7.2: continues a sliced rescan.  True while more remains, so the
  * event loop keeps calling it from the idle timer.
  */
-bool sag_picker_tick(Ed *ed);
+bool yew_picker_tick(Ed *ed);
 /* True while a rescan is in flight — the footer shows ` scanning…`. */
-bool sag_picker_scanning(const Ed *ed);
+bool yew_picker_scanning(const Ed *ed);
 
 #endif

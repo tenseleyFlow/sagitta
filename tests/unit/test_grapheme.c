@@ -14,26 +14,26 @@ static void assert_clusters(const u8 *s, size_t len,
     size_t i;
     size_t pos = 0;
 
-    SAG_ASSERT_EQ_U64(sag_gb_count_bytes(s, len), count);
+    YEW_ASSERT_EQ_U64(yew_gb_count_bytes(s, len), count);
     for (i = 0; i < count; i++) {
         size_t start = pos;
-        size_t next = sag_gb_next_bytes(s, len, pos);
-        SAG_ASSERT_EQ_U64(next - pos, lengths[i]);
+        size_t next = yew_gb_next_bytes(s, len, pos);
+        YEW_ASSERT_EQ_U64(next - pos, lengths[i]);
         pos = next;
-        SAG_ASSERT_EQ_U64(sag_gb_prev_bytes(s, len, pos), start);
+        YEW_ASSERT_EQ_U64(yew_gb_prev_bytes(s, len, pos), start);
     }
-    SAG_ASSERT_EQ_U64(pos, len);
+    YEW_ASSERT_EQ_U64(pos, len);
 }
 
 void test_grapheme_state_size(void)
 {
-    SagGbState st;
+    YewGbState st;
 
     memset(&st, 0xFF, sizeof(st));
-    sag_gb_init(&st);
-    SAG_ASSERT_EQ_U64(sizeof(st), 2);
-    SAG_ASSERT_EQ_U64(st.prev_gcb, SAG_GCB_OTHER);
-    SAG_ASSERT_EQ_U64(st.flags, 0);
+    yew_gb_init(&st);
+    YEW_ASSERT_EQ_U64(sizeof(st), 2);
+    YEW_ASSERT_EQ_U64(st.prev_gcb, YEW_GCB_OTHER);
+    YEW_ASSERT_EQ_U64(st.flags, 0);
 }
 
 void test_grapheme_ascii(void)
@@ -42,7 +42,7 @@ void test_grapheme_ascii(void)
     static const size_t lengths[] = {1, 1, 1, 1, 1};
 
     assert_clusters(text, sizeof(text) - 1, lengths,
-                    SAG_ARRAY_LEN(lengths));
+                    YEW_ARRAY_LEN(lengths));
 }
 
 void test_grapheme_crlf_control(void)
@@ -50,7 +50,7 @@ void test_grapheme_crlf_control(void)
     static const u8 text[] = {'a', '\r', '\n', 0, 'b'};
     static const size_t lengths[] = {1, 2, 1, 1};
 
-    assert_clusters(text, sizeof(text), lengths, SAG_ARRAY_LEN(lengths));
+    assert_clusters(text, sizeof(text), lengths, YEW_ARRAY_LEN(lengths));
 }
 
 void test_grapheme_extend_spacing_prepend(void)
@@ -64,7 +64,7 @@ void test_grapheme_extend_spacing_prepend(void)
     };
     static const size_t lengths[] = {3, 1, 3, 1, 6};
 
-    assert_clusters(text, sizeof(text), lengths, SAG_ARRAY_LEN(lengths));
+    assert_clusters(text, sizeof(text), lengths, YEW_ARRAY_LEN(lengths));
 }
 
 void test_grapheme_hangul(void)
@@ -75,7 +75,7 @@ void test_grapheme_hangul(void)
     };
     static const size_t lengths[] = {9, 1, 6};
 
-    assert_clusters(text, sizeof(text), lengths, SAG_ARRAY_LEN(lengths));
+    assert_clusters(text, sizeof(text), lengths, YEW_ARRAY_LEN(lengths));
 }
 
 void test_grapheme_ri_pairs(void)
@@ -86,7 +86,7 @@ void test_grapheme_ri_pairs(void)
     };
     static const size_t lengths[] = {8, 8};
 
-    assert_clusters(text, sizeof(text), lengths, SAG_ARRAY_LEN(lengths));
+    assert_clusters(text, sizeof(text), lengths, YEW_ARRAY_LEN(lengths));
 }
 
 void test_grapheme_emoji_zwj(void)
@@ -100,7 +100,7 @@ void test_grapheme_emoji_zwj(void)
     static const size_t lengths[] = {25};
 
     assert_clusters(family, sizeof(family), lengths,
-                    SAG_ARRAY_LEN(lengths));
+                    YEW_ARRAY_LEN(lengths));
 }
 
 void test_grapheme_indic_conjunct(void)
@@ -110,7 +110,7 @@ void test_grapheme_indic_conjunct(void)
     };
     static const size_t lengths[] = {9};
 
-    assert_clusters(text, sizeof(text), lengths, SAG_ARRAY_LEN(lengths));
+    assert_clusters(text, sizeof(text), lengths, YEW_ARRAY_LEN(lengths));
 }
 
 void test_grapheme_invalid_bytes(void)
@@ -118,7 +118,7 @@ void test_grapheme_invalid_bytes(void)
     static const u8 text[] = {0xFF, 0x41, 0xED, 0xA0, 0x80};
     static const size_t lengths[] = {1, 1, 1, 1, 1};
 
-    assert_clusters(text, sizeof(text), lengths, SAG_ARRAY_LEN(lengths));
+    assert_clusters(text, sizeof(text), lengths, YEW_ARRAY_LEN(lengths));
 }
 
 void test_grapheme_backward_bound(void)
@@ -128,20 +128,20 @@ void test_grapheme_backward_bound(void)
     size_t i;
 
     for (i = 0; i < 65; i++) {
-        u8 encoded[SAG_UTF8_MAX];
-        size_t n = sag_utf8_encode(0x1F1E6u + (u32)(i % 26), encoded);
+        u8 encoded[YEW_UTF8_MAX];
+        size_t n = yew_utf8_encode(0x1F1E6u + (u32)(i % 26), encoded);
         memcpy(text + pos, encoded, n);
         pos += n;
     }
-    SAG_ASSERT_EQ_U64(pos, sizeof(text));
+    YEW_ASSERT_EQ_U64(pos, sizeof(text));
     /* The bounded restart deliberately sees an even 64-codepoint suffix,
      * so this odd RI run takes the documented parity approximation. */
-    SAG_ASSERT_EQ_U64(sag_gb_prev_bytes(text, sizeof(text), sizeof(text)),
+    YEW_ASSERT_EQ_U64(yew_gb_prev_bytes(text, sizeof(text), sizeof(text)),
                       sizeof(text) - 8);
-    SAG_ASSERT_EQ_U64(
-        sag_gb_next_bytes(
+    YEW_ASSERT_EQ_U64(
+        yew_gb_next_bytes(
             text, sizeof(text),
-            sag_gb_prev_bytes(text, sizeof(text), sizeof(text))),
+            yew_gb_prev_bytes(text, sizeof(text), sizeof(text))),
         sizeof(text));
 }
 
@@ -158,7 +158,7 @@ static size_t parse_hex_bytes(char *field, u8 *out, size_t cap)
         if (*p == '\0')
             break;
         value = strtoul(p, &end, 16);
-        SAG_ASSERT(end != p && value <= 0xFFu && n < cap);
+        YEW_ASSERT(end != p && value <= 0xFFu && n < cap);
         out[n++] = (u8)value;
         p = end;
     }
@@ -173,7 +173,7 @@ static size_t parse_sizes(char *field, size_t *out, size_t cap)
     while (*p != '\0') {
         char *end;
         unsigned long value = strtoul(p, &end, 10);
-        SAG_ASSERT(end != p && n < cap);
+        YEW_ASSERT(end != p && n < cap);
         out[n++] = (size_t)value;
         p = end;
         if (*p == ',')
@@ -188,7 +188,7 @@ void test_grapheme_corpus(void)
     char line[2048];
     size_t cases = 0;
 
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     while (fgets(line, sizeof(line), fp) != NULL) {
         char *fields[4];
         char *p = line;
@@ -206,9 +206,9 @@ void test_grapheme_corpus(void)
         if (*p == '#' || *p == '\0')
             continue;
         fields[0] = p;
-        for (i = 1; i < SAG_ARRAY_LEN(fields); i++) {
+        for (i = 1; i < YEW_ARRAY_LEN(fields); i++) {
             p = strchr(p, '|');
-            SAG_ASSERT_NOT_NULL(p);
+            YEW_ASSERT_NOT_NULL(p);
             *p++ = '\0';
             fields[i] = p;
         }
@@ -218,24 +218,24 @@ void test_grapheme_corpus(void)
 
         byte_len = parse_hex_bytes(fields[1], bytes, sizeof(bytes));
         length_count = parse_sizes(fields[2], lengths,
-                                   SAG_ARRAY_LEN(lengths));
-        width_count = parse_sizes(fields[3], widths, SAG_ARRAY_LEN(widths));
-        SAG_ASSERT_EQ_U64(length_count, width_count);
-        SAG_ASSERT_EQ_U64(sag_gb_count_bytes(bytes, byte_len), length_count);
+                                   YEW_ARRAY_LEN(lengths));
+        width_count = parse_sizes(fields[3], widths, YEW_ARRAY_LEN(widths));
+        YEW_ASSERT_EQ_U64(length_count, width_count);
+        YEW_ASSERT_EQ_U64(yew_gb_count_bytes(bytes, byte_len), length_count);
 
         for (i = 0; i < length_count; i++) {
-            SagCluster cluster;
+            YewCluster cluster;
             size_t start = pos;
-            SAG_ASSERT(sag_cluster_next(bytes, byte_len, &pos, &cluster));
-            SAG_ASSERT_EQ_U64(cluster.off, start);
-            SAG_ASSERT_EQ_U64(cluster.len, lengths[i]);
-            SAG_ASSERT_EQ_U64(cluster.cells, widths[i]);
-            SAG_ASSERT_EQ_U64(sag_gb_prev_bytes(bytes, byte_len, pos), start);
+            YEW_ASSERT(yew_cluster_next(bytes, byte_len, &pos, &cluster));
+            YEW_ASSERT_EQ_U64(cluster.off, start);
+            YEW_ASSERT_EQ_U64(cluster.len, lengths[i]);
+            YEW_ASSERT_EQ_U64(cluster.cells, widths[i]);
+            YEW_ASSERT_EQ_U64(yew_gb_prev_bytes(bytes, byte_len, pos), start);
         }
-        SAG_ASSERT_EQ_U64(pos, byte_len);
+        YEW_ASSERT_EQ_U64(pos, byte_len);
         cases++;
     }
-    SAG_ASSERT(!ferror(fp));
-    SAG_ASSERT_EQ_I64(fclose(fp), 0);
-    SAG_ASSERT(cases >= 40);
+    YEW_ASSERT(!ferror(fp));
+    YEW_ASSERT_EQ_I64(fclose(fp), 0);
+    YEW_ASSERT(cases >= 40);
 }

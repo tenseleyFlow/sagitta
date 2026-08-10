@@ -1,5 +1,5 @@
-#ifndef SAG_TEST_RE_GOLDEN_H
-#define SAG_TEST_RE_GOLDEN_H
+#ifndef YEW_TEST_RE_GOLDEN_H
+#define YEW_TEST_RE_GOLDEN_H
 
 /*
  * Sprint 20's golden match table, shared.
@@ -46,11 +46,11 @@ static const ReRow rows[] = {
     ROW("", "abc", true, 0, 0),
     ROW("a.c", "abc", true, 0, 3),
     ROW("a.c", "a\nc", false, 0, 0),
-    ROWF("a.c", "a\nc", SAG_RE_DOTALL, true, 0, 3),
+    ROWF("a.c", "a\nc", YEW_RE_DOTALL, true, 0, 3),
     ROW(".", "\xC3\xA9", true, 0, 2),          /* one codepoint      */
     ROW("a", "AAA", false, 0, 0),
-    ROWF("a", "xAx", SAG_RE_ICASE, true, 1, 2),
-    ROWF("ABC", "xabcx", SAG_RE_ICASE, true, 1, 4),
+    ROWF("a", "xAx", YEW_RE_ICASE, true, 1, 2),
+    ROWF("ABC", "xabcx", YEW_RE_ICASE, true, 1, 4),
 
     /* --- escapes ---------------------------------------------- */
     ROW("a\\.c", "a.c", true, 0, 3),
@@ -75,7 +75,7 @@ static const ReRow rows[] = {
     ROW("[\\w]", "!a!", true, 1, 2),
     ROW("[^\\d]", "5a", true, 1, 2),
     ROW("[a-c1-3]", "z2", true, 1, 2),
-    ROWF("[a-c]", "B", SAG_RE_ICASE, true, 0, 1),
+    ROWF("[a-c]", "B", YEW_RE_ICASE, true, 0, 1),
 
     /* --- perl classes ----------------------------------------- */
     ROW("\\d+", "ab123cd", true, 2, 5),
@@ -227,10 +227,10 @@ static const ReRow rows[] = {
     ROW("a(?i)b", "Ab", false, 0, 0),
 
     /* --- literal flag ----------------------------------------- */
-    ROWF("a.c", "a.c", SAG_RE_LITERAL, true, 0, 3),
-    ROWF("a.c", "abc", SAG_RE_LITERAL, false, 0, 0),
-    ROWF("a*b", "a*b", SAG_RE_LITERAL, true, 0, 3),
-    ROWF("[x]", "[x]", SAG_RE_LITERAL, true, 0, 3),
+    ROWF("a.c", "a.c", YEW_RE_LITERAL, true, 0, 3),
+    ROWF("a.c", "abc", YEW_RE_LITERAL, false, 0, 0),
+    ROWF("a*b", "a*b", YEW_RE_LITERAL, true, 0, 3),
+    ROWF("[x]", "[x]", YEW_RE_LITERAL, true, 0, 3),
 
     /* --- longer shapes ---------------------------------------- */
     ROW("[a-z]+@[a-z]+", "mail: me@here!", true, 6, 13),
@@ -298,4 +298,4 @@ static const ReRow rows[] = {
     ROW(".*;$", "int x = 1;", true, 0, 10)
 };
 
-#endif /* SAG_TEST_RE_GOLDEN_H */
+#endif /* YEW_TEST_RE_GOLDEN_H */

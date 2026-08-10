@@ -15,12 +15,12 @@
 #include "unicode/coords.h"
 
 enum {
-    SAG_TEXT_FUZZ_DEFAULT_ITERS = 200000,
-    SAG_TEXT_FUZZ_MAX_LIVE = 64 * 1024,
-    SAG_TEXT_FUZZ_MAX_LINES = 8192,
-    SAG_TEXT_FUZZ_SNAPSHOTS = 4,
-    SAG_TEXT_FUZZ_MARKS = 8,
-    SAG_TEXT_FUZZ_CHECK_ARGS = 8
+    YEW_TEXT_FUZZ_DEFAULT_ITERS = 200000,
+    YEW_TEXT_FUZZ_MAX_LIVE = 64 * 1024,
+    YEW_TEXT_FUZZ_MAX_LINES = 8192,
+    YEW_TEXT_FUZZ_SNAPSHOTS = 4,
+    YEW_TEXT_FUZZ_MARKS = 8,
+    YEW_TEXT_FUZZ_CHECK_ARGS = 8
 };
 
 typedef enum {
@@ -49,7 +49,7 @@ typedef struct {
     bool present;
     Bytebuf bytes;
     Cursor cursor;
-    u64 marks[SAG_TEXT_FUZZ_MARKS];
+    u64 marks[YEW_TEXT_FUZZ_MARKS];
 } NodeState;
 
 typedef struct {
@@ -58,11 +58,11 @@ typedef struct {
     EditCtx edit;
     CursorSet cursors;
     MarkSet *marks;
-    MarkId mark_ids[SAG_TEXT_FUZZ_MARKS];
+    MarkId mark_ids[YEW_TEXT_FUZZ_MARKS];
     Oracle oracle;
-    TextSnap snapshots[SAG_TEXT_FUZZ_SNAPSHOTS];
-    Bytebuf snapshot_bytes[SAG_TEXT_FUZZ_SNAPSHOTS];
-    bool snapshot_live[SAG_TEXT_FUZZ_SNAPSHOTS];
+    TextSnap snapshots[YEW_TEXT_FUZZ_SNAPSHOTS];
+    Bytebuf snapshot_bytes[YEW_TEXT_FUZZ_SNAPSHOTS];
+    bool snapshot_live[YEW_TEXT_FUZZ_SNAPSHOTS];
     NodeState *states;
     size_t state_cap;
     u64 clock_ms;
@@ -126,16 +126,16 @@ static void materialize_text(const TextBuf *tb, Bytebuf *out)
     TextIter iter;
 
     out->len = 0U;
-    if (!sag_textiter_begin(&iter, tb, BYTEOFF(0U)))
+    if (!yew_textiter_begin(&iter, tb, BYTEOFF(0U)))
         return;
     do {
         const u8 *bytes;
         u64 len;
 
-        if (!sag_textiter_chunk(&iter, tb, &bytes, &len) || len == 0U)
-            SAG_BUG("fuzz_textbuf: invalid live iterator");
+        if (!yew_textiter_chunk(&iter, tb, &bytes, &len) || len == 0U)
+            YEW_BUG("fuzz_textbuf: invalid live iterator");
         bytebuf_append(out, bytes, (size_t)len);
-    } while (sag_textiter_advance(&iter, tb));
+    } while (yew_textiter_advance(&iter, tb));
 }
 
 static void materialize_snapshot(const TextBuf *tb, const TextSnap *snap,
@@ -144,16 +144,16 @@ static void materialize_snapshot(const TextBuf *tb, const TextSnap *snap,
     TextIter iter;
 
     out->len = 0U;
-    if (!sag_textsnap_iter(&iter, snap, BYTEOFF(0U)))
+    if (!yew_textsnap_iter(&iter, snap, BYTEOFF(0U)))
         return;
     do {
         const u8 *bytes;
         u64 len;
 
-        if (!sag_textiter_chunk(&iter, tb, &bytes, &len) || len == 0U)
-            SAG_BUG("fuzz_textbuf: invalid snapshot iterator");
+        if (!yew_textiter_chunk(&iter, tb, &bytes, &len) || len == 0U)
+            YEW_BUG("fuzz_textbuf: invalid snapshot iterator");
         bytebuf_append(out, bytes, (size_t)len);
-    } while (sag_textiter_advance(&iter, tb));
+    } while (yew_textiter_advance(&iter, tb));
 }
 
 static bool bytes_equal(const Bytebuf *a, const Bytebuf *b)
@@ -171,10 +171,10 @@ static void state_reserve(Replay *run, u32 id)
     cap = run->state_cap == 0U ? 16U : run->state_cap;
     while (cap <= (size_t)id) {
         if (cap > SIZE_MAX / 2U)
-            SAG_BUG("fuzz_textbuf: state table overflow");
+            YEW_BUG("fuzz_textbuf: state table overflow");
         cap *= 2U;
     }
-    run->states = sag_xreallocarray(run->states, cap, sizeof(*run->states));
+    run->states = yew_xreallocarray(run->states, cap, sizeof(*run->states));
     (void)memset(run->states + run->state_cap, 0,
                  (cap - run->state_cap) * sizeof(*run->states));
     run->state_cap = cap;
@@ -194,8 +194,8 @@ static void state_capture(Replay *run, u32 id)
         bytebuf_free(&state->bytes);
     state->bytes = bytes;
     state->cursor = run->cursors.curs.data[run->cursors.primary];
-    for (i = 0U; i < SAG_TEXT_FUZZ_MARKS; i++)
-        state->marks[i] = sag_mark_pos(run->marks, run->mark_ids[i]).v;
+    for (i = 0U; i < YEW_TEXT_FUZZ_MARKS; i++)
+        state->marks[i] = yew_mark_pos(run->marks, run->mark_ids[i]).v;
     state->present = true;
 }
 
@@ -215,7 +215,7 @@ static void state_prune_dead(Replay *run)
             continue;
         }
         node = &run->undo->nodes.data[id - 1U];
-        if (node->id != (u32)id || (node->flags & SAG_TXN_DEAD) != 0U) {
+        if (node->id != (u32)id || (node->flags & YEW_TXN_DEAD) != 0U) {
             bytebuf_free(&state->bytes);
             state->present = false;
         }
@@ -244,8 +244,8 @@ static bool state_restore_oracle(Replay *run, u32 id)
         memcmp(&run->cursors.curs.data[0], &state->cursor,
                sizeof(state->cursor)) != 0)
         return false;
-    for (i = 0U; i < SAG_TEXT_FUZZ_MARKS; i++) {
-        if (sag_mark_pos(run->marks, run->mark_ids[i]).v != state->marks[i])
+    for (i = 0U; i < YEW_TEXT_FUZZ_MARKS; i++) {
+        if (yew_mark_pos(run->marks, run->mark_ids[i]).v != state->marks[i])
             return false;
     }
     return true;
@@ -255,9 +255,9 @@ static void replay_dispose(Replay *run)
 {
     size_t i;
 
-    for (i = 0U; i < SAG_TEXT_FUZZ_SNAPSHOTS; i++) {
+    for (i = 0U; i < YEW_TEXT_FUZZ_SNAPSHOTS; i++) {
         if (run->snapshot_live[i])
-            sag_textsnap_release(run->tb, &run->snapshots[i]);
+            yew_textsnap_release(run->tb, &run->snapshots[i]);
         bytebuf_free(&run->snapshot_bytes[i]);
     }
     for (i = 0U; i < run->state_cap; i++) {
@@ -266,10 +266,10 @@ static void replay_dispose(Replay *run)
     }
     free(run->states);
     oracle_free(&run->oracle);
-    sag_cset_free(&run->cursors);
-    sag_marks_free(run->marks);
-    sag_undo_free(run->undo);
-    sag_textbuf_free(run->tb);
+    yew_cset_free(&run->cursors);
+    yew_marks_free(run->marks);
+    yew_undo_free(run->undo);
+    yew_textbuf_free(run->tb);
     (void)memset(run, 0, sizeof(*run));
 }
 
@@ -310,7 +310,7 @@ static bool replay_base(const char *base, Bytebuf *bytes)
         errno = 0;
         parsed_len = strtoull(base + 4U, &end, 0);
         if (errno != 0 || end == base + 4U || *end != ':' ||
-            parsed_len > SAG_TEXT_FUZZ_MAX_LIVE)
+            parsed_len > YEW_TEXT_FUZZ_MAX_LIVE)
             return false;
         seed_text = end + 1U;
         errno = 0;
@@ -338,22 +338,22 @@ static bool replay_init(Replay *run, const Trace *trace)
         bytebuf_free(&base);
         return false;
     }
-    run->tb = sag_textbuf_from_bytes(base.data, (u64)base.len);
+    run->tb = yew_textbuf_from_bytes(base.data, (u64)base.len);
     if (run->tb == NULL) {
         bytebuf_free(&base);
         return false;
     }
     oracle_init(&run->oracle, base.data, (u64)base.len);
     bytebuf_free(&base);
-    run->marks = sag_marks_new();
-    run->undo = sag_undo_new(run->tb);
+    run->marks = yew_marks_new();
+    run->undo = yew_undo_new(run->tb);
     if (run->marks == NULL || run->undo == NULL)
         goto fail;
-    sag_cset_init(&run->cursors, cursor);
-    for (i = 0U; i < SAG_TEXT_FUZZ_MARKS; i++) {
-        run->mark_ids[i] = sag_mark_add(
+    yew_cset_init(&run->cursors, cursor);
+    for (i = 0U; i < YEW_TEXT_FUZZ_MARKS; i++) {
+        run->mark_ids[i] = yew_mark_add(
             run->marks, BYTEOFF(0U),
-            (i & 1U) == 0U ? SAG_BIAS_LEFT : SAG_BIAS_RIGHT);
+            (i & 1U) == 0U ? YEW_BIAS_LEFT : YEW_BIAS_RIGHT);
     }
     run->edit.tb = run->tb;
     run->edit.marks = run->marks;
@@ -361,20 +361,20 @@ static bool replay_init(Replay *run, const Trace *trace)
     run->edit.undo = run->undo;
     run->clock_ms = 1U;
     run->wall_sec = INT64_C(1700000000);
-    sag_undo_set_clock(run->undo, mono_clock, wall_clock, run);
-    sag_undo_set_limits(run->undo, UINT64_C(1024) * 1024U, 16U,
-                        SAG_UNDO_PERSIST_BYTES_MAX);
-    for (i = 0U; i < SAG_TEXT_FUZZ_SNAPSHOTS; i++)
+    yew_undo_set_clock(run->undo, mono_clock, wall_clock, run);
+    yew_undo_set_limits(run->undo, UINT64_C(1024) * 1024U, 16U,
+                        YEW_UNDO_PERSIST_BYTES_MAX);
+    for (i = 0U; i < YEW_TEXT_FUZZ_SNAPSHOTS; i++)
         bytebuf_init(&run->snapshot_bytes[i]);
-    state_capture(run, sag_undo_current(run->undo));
+    state_capture(run, yew_undo_current(run->undo));
     return true;
 
 fail:
     if (run->undo != NULL)
-        sag_undo_free(run->undo);
+        yew_undo_free(run->undo);
     if (run->marks != NULL)
-        sag_marks_free(run->marks);
-    sag_textbuf_free(run->tb);
+        yew_marks_free(run->marks);
+    yew_textbuf_free(run->tb);
     oracle_free(&run->oracle);
     (void)memset(run, 0, sizeof(*run));
     return false;
@@ -419,19 +419,19 @@ static bool compare_iterator_suffix(const Replay *run, u64 at)
     oracle_materialize(&run->oracle, &expected);
     if (at > expected.len)
         at = expected.len;
-    if (sag_textiter_begin(&iter, run->tb, BYTEOFF(at))) {
+    if (yew_textiter_begin(&iter, run->tb, BYTEOFF(at))) {
         do {
             const u8 *bytes;
             u64 len;
 
-            if (!sag_textiter_chunk(&iter, run->tb, &bytes, &len) ||
+            if (!yew_textiter_chunk(&iter, run->tb, &bytes, &len) ||
                 len == 0U) {
                 bytebuf_free(&actual);
                 bytebuf_free(&expected);
                 return false;
             }
             bytebuf_append(&actual, bytes, (size_t)len);
-        } while (sag_textiter_advance(&iter, run->tb));
+        } while (yew_textiter_advance(&iter, run->tb));
     }
     equal = actual.len == expected.len - (size_t)at &&
             (actual.len == 0U ||
@@ -447,13 +447,13 @@ static bool compare_all_lines(const Replay *run)
     u64 at = 0U;
     size_t line;
 
-    if (sag_textbuf_line_count(run->tb) != run->oracle.lines.len)
+    if (yew_textbuf_line_count(run->tb) != run->oracle.lines.len)
         return false;
     for (line = 0U; line < run->oracle.lines.len; line++) {
         u64 next = at + (u64)run->oracle.lines.data[line].len;
-        Span span = sag_textbuf_line_span(run->tb, LINENO((u64)line));
+        Span span = yew_textbuf_line_span(run->tb, LINENO((u64)line));
 
-        if (sag_textbuf_line_start(run->tb, LINENO((u64)line)).v != at ||
+        if (yew_textbuf_line_start(run->tb, LINENO((u64)line)).v != at ||
             span.lo != at || span.hi != next)
             return false;
         at = next;
@@ -467,7 +467,7 @@ static bool compare_line_queries(const Replay *run, u64 salt)
     u64 lines = oracle_line_count(&run->oracle);
     size_t i;
 
-    for (i = 0U; i < SAG_TEXT_FUZZ_CHECK_ARGS; i++) {
+    for (i = 0U; i < YEW_TEXT_FUZZ_CHECK_ARGS; i++) {
         u64 random = mix64(salt + (u64)i * UINT64_C(0x9e3779b97f4a7c15));
         u64 off = len == UINT64_MAX ? random : random % (len + 1U);
         u64 line = random % lines;
@@ -476,10 +476,10 @@ static bool compare_line_queries(const Replay *run, u64 salt)
         u64 want_hi = line + 1U < lines
                           ? oracle_line_start(&run->oracle, line + 1U)
                           : len;
-        Span actual_span = sag_textbuf_line_span(run->tb, LINENO(line));
+        Span actual_span = yew_textbuf_line_span(run->tb, LINENO(line));
 
-        if (sag_textbuf_line_start(run->tb, LINENO(line)).v != want_start ||
-            sag_textbuf_line_of(run->tb, BYTEOFF(off)).v != want_of ||
+        if (yew_textbuf_line_start(run->tb, LINENO(line)).v != want_start ||
+            yew_textbuf_line_of(run->tb, BYTEOFF(off)).v != want_of ||
             actual_span.lo != want_start || actual_span.hi != want_hi)
             return false;
     }
@@ -488,21 +488,21 @@ static bool compare_line_queries(const Replay *run, u64 salt)
 
 static bool compare_cursor_marks(const Replay *run, CheckId *which)
 {
-    u64 len = sag_textbuf_len(run->tb);
+    u64 len = yew_textbuf_len(run->tb);
     size_t i;
 
-    sag_cset_check(&run->cursors);
+    yew_cset_check(&run->cursors);
     for (i = 0U; i < run->cursors.curs.len; i++) {
         const Cursor *cursor = &run->cursors.curs.data[i];
 
         if (cursor->pos.v > len || cursor->anchor.v > len ||
-            !sag_is_grapheme_boundary(run->tb, cursor->pos)) {
+            !yew_is_grapheme_boundary(run->tb, cursor->pos)) {
             *which = CHECK_CURSOR;
             return false;
         }
     }
-    for (i = 0U; i < SAG_TEXT_FUZZ_MARKS; i++) {
-        if (sag_mark_pos(run->marks, run->mark_ids[i]).v > len) {
+    for (i = 0U; i < YEW_TEXT_FUZZ_MARKS; i++) {
+        if (yew_mark_pos(run->marks, run->mark_ids[i]).v > len) {
             *which = CHECK_MARK;
             return false;
         }
@@ -514,7 +514,7 @@ static bool compare_snapshots(const Replay *run)
 {
     size_t i;
 
-    for (i = 0U; i < SAG_TEXT_FUZZ_SNAPSHOTS; i++) {
+    for (i = 0U; i < YEW_TEXT_FUZZ_SNAPSHOTS; i++) {
         Bytebuf actual;
         bool equal;
 
@@ -538,13 +538,13 @@ static bool check_state(Replay *run, const TraceOp *op, size_t index,
     u64 piece_bound;
     bool deep = run->full_checks || final || ((index + 1U) % 32U) == 0U;
 
-    if (sag_textbuf_len(run->tb) != len)
+    if (yew_textbuf_len(run->tb) != len)
         return fail_at(failure, op, CHECK_LEN);
-    if (sag_textbuf_line_count(run->tb) != oracle_line_count(&run->oracle))
+    if (yew_textbuf_line_count(run->tb) != oracle_line_count(&run->oracle))
         return fail_at(failure, op, CHECK_LINES);
-    sag_textbuf_check(run->tb);
+    yew_textbuf_check(run->tb);
     piece_bound = 2U * (u64)(index + 1U) + 1U;
-    if ((u64)sag_textbuf_piece_count(run->tb) > piece_bound)
+    if ((u64)yew_textbuf_piece_count(run->tb) > piece_bound)
         return fail_at(failure, op, CHECK_PIECES);
     if (!compare_line_queries(run, op->ordinal ^ (u64)index))
         return fail_at(failure, op, CHECK_LINE_QUERY);
@@ -575,7 +575,7 @@ static u32 choose_state_id(const Replay *run, u64 choice)
             count++;
     }
     if (count == 0U)
-        return sag_undo_current(run->undo);
+        return yew_undo_current(run->undo);
     target = (size_t)(choice % (u64)count);
     for (i = 1U; i < run->state_cap; i++) {
         if (!run->states[i].present)
@@ -583,12 +583,12 @@ static u32 choose_state_id(const Replay *run, u64 choice)
         if (target-- == 0U)
             return (u32)i;
     }
-    return sag_undo_current(run->undo);
+    return yew_undo_current(run->undo);
 }
 
 static bool save_reload_compare(const Replay *run)
 {
-    char path[] = "/tmp/sagitta-fuzz-textbuf-XXXXXX";
+    char path[] = "/tmp/yew-fuzz-textbuf-XXXXXX";
     FileMeta saved_meta;
     FileMeta loaded_meta;
     TextBuf *loaded = NULL;
@@ -602,10 +602,10 @@ static bool save_reload_compare(const Replay *run)
         return false;
     if (close(fd) != 0 || unlink(path) != 0)
         goto done;
-    sag_filemeta_init(&saved_meta);
-    sag_filemeta_init(&loaded_meta);
-    if (sag_file_save(run->tb, &saved_meta, path) != SAG_SAVE_OK ||
-        sag_file_load(path, &loaded, &loaded_meta) != SAG_LOAD_OK)
+    yew_filemeta_init(&saved_meta);
+    yew_filemeta_init(&loaded_meta);
+    if (yew_file_save(run->tb, &saved_meta, path) != YEW_SAVE_OK ||
+        yew_file_load(path, &loaded, &loaded_meta) != YEW_LOAD_OK)
         goto dispose_meta;
     bytebuf_init(&expected);
     bytebuf_init(&actual);
@@ -617,9 +617,9 @@ static bool save_reload_compare(const Replay *run)
 
 dispose_meta:
     if (loaded != NULL)
-        sag_textbuf_free(loaded);
-    sag_filemeta_dispose(&loaded_meta);
-    sag_filemeta_dispose(&saved_meta);
+        yew_textbuf_free(loaded);
+    yew_filemeta_dispose(&loaded_meta);
+    yew_filemeta_dispose(&saved_meta);
 done:
     (void)unlink(path);
     return ok;
@@ -627,7 +627,7 @@ done:
 
 static void normalize_generated_cursor(Replay *run)
 {
-    sag_cset_normalize(run->tb, &run->cursors);
+    yew_cset_normalize(run->tb, &run->cursors);
 }
 
 static bool apply_trace_op(Replay *run, const TraceOp *op,
@@ -643,15 +643,15 @@ static bool apply_trace_op(Replay *run, const TraceOp *op,
     switch (op->kind) {
     case TRACE_INS:
         lo = op->a > len ? len : op->a;
-        sag_undo_begin(&run->edit, SAG_TXN_TYPE);
-        sag_edit_insert(&run->edit, BYTEOFF(lo), op->payload.data,
+        yew_undo_begin(&run->edit, YEW_TXN_TYPE);
+        yew_edit_insert(&run->edit, BYTEOFF(lo), op->payload.data,
                         (u64)op->payload.len);
         normalize_generated_cursor(run);
-        sag_undo_end(&run->edit);
+        yew_undo_end(&run->edit);
         oracle_insert(&run->oracle, lo, op->payload.data,
                       (u64)op->payload.len);
         run->mutation_count++;
-        state_capture(run, sag_undo_current(run->undo));
+        state_capture(run, yew_undo_current(run->undo));
         state_prune_dead(run);
         return true;
     case TRACE_DEL:
@@ -663,22 +663,22 @@ static bool apply_trace_op(Replay *run, const TraceOp *op,
             lo = hi;
             hi = swap;
         }
-        sag_undo_begin(&run->edit, SAG_TXN_ERASE);
-        sag_edit_delete(&run->edit, (Span){lo, hi});
+        yew_undo_begin(&run->edit, YEW_TXN_ERASE);
+        yew_edit_delete(&run->edit, (Span){lo, hi});
         normalize_generated_cursor(run);
-        sag_undo_end(&run->edit);
+        yew_undo_end(&run->edit);
         oracle_delete(&run->oracle, lo, hi);
         run->mutation_count++;
-        state_capture(run, sag_undo_current(run->undo));
+        state_capture(run, yew_undo_current(run->undo));
         state_prune_dead(run);
         return true;
     case TRACE_LINE_START:
         lo = op->a % oracle_line_count(&run->oracle);
-        return sag_textbuf_line_start(run->tb, LINENO(lo)).v ==
+        return yew_textbuf_line_start(run->tb, LINENO(lo)).v ==
                oracle_line_start(&run->oracle, lo);
     case TRACE_LINE_OF:
         lo = op->a > len ? len : op->a;
-        return sag_textbuf_line_of(run->tb, BYTEOFF(lo)).v ==
+        return yew_textbuf_line_of(run->tb, BYTEOFF(lo)).v ==
                oracle_line_of(&run->oracle, lo);
     case TRACE_LINE_SPAN: {
         Span actual;
@@ -689,54 +689,54 @@ static bool apply_trace_op(Replay *run, const TraceOp *op,
                       ? oracle_line_start(&run->oracle, line + 1U)
                       : len;
 
-        actual = sag_textbuf_line_span(run->tb, LINENO(line));
+        actual = yew_textbuf_line_span(run->tb, LINENO(line));
         return actual.lo == start && actual.hi == end;
     }
     case TRACE_ITER:
         return compare_iterator_suffix(run, op->a);
     case TRACE_SNAP: {
-        size_t slot = (size_t)(op->a % SAG_TEXT_FUZZ_SNAPSHOTS);
+        size_t slot = (size_t)(op->a % YEW_TEXT_FUZZ_SNAPSHOTS);
 
         if (run->snapshot_live[slot])
             return true;
-        run->snapshots[slot] = sag_textbuf_snap(run->tb);
+        run->snapshots[slot] = yew_textbuf_snap(run->tb);
         run->snapshot_bytes[slot].len = 0U;
         oracle_materialize(&run->oracle, &run->snapshot_bytes[slot]);
         run->snapshot_live[slot] = true;
         return true;
     }
     case TRACE_RELEASE: {
-        size_t slot = (size_t)(op->a % SAG_TEXT_FUZZ_SNAPSHOTS);
+        size_t slot = (size_t)(op->a % YEW_TEXT_FUZZ_SNAPSHOTS);
 
         if (!run->snapshot_live[slot])
             return true;
-        sag_textsnap_release(run->tb, &run->snapshots[slot]);
+        yew_textsnap_release(run->tb, &run->snapshots[slot]);
         run->snapshot_live[slot] = false;
         run->snapshot_bytes[slot].len = 0U;
         return true;
     }
     case TRACE_UNDO:
-        if (sag_undo(&run->edit)) {
-            current = sag_undo_current(run->undo);
+        if (yew_undo(&run->edit)) {
+            current = yew_undo_current(run->undo);
             return state_restore_oracle(run, current);
         }
         return true;
     case TRACE_REDO:
-        if (sag_redo(&run->edit)) {
-            current = sag_undo_current(run->undo);
+        if (yew_redo(&run->edit)) {
+            current = yew_undo_current(run->undo);
             return state_restore_oracle(run, current);
         }
         return true;
     case TRACE_UNDO_BOUNDARY:
-        sag_undo_boundary(run->undo);
+        yew_undo_boundary(run->undo);
         return true;
     case TRACE_UNDO_TO:
         current = op->a < run->state_cap && run->states[op->a].present
                       ? (u32)op->a
                       : choose_state_id(run, op->a);
-        if (current == sag_undo_current(run->undo))
+        if (current == yew_undo_current(run->undo))
             return true;
-        return sag_undo_to(&run->edit, current) &&
+        return yew_undo_to(&run->edit, current) &&
                state_restore_oracle(run, current);
     case TRACE_SAVE:
         return save_reload_compare(run);
@@ -774,7 +774,7 @@ static bool replay_trace(const Trace *trace, bool full_checks,
         hash ^= final.data[i];
         hash *= UINT64_C(1099511628211);
     }
-    hash ^= sag_undo_current(run.undo);
+    hash ^= yew_undo_current(run.undo);
     hash *= UINT64_C(1099511628211);
     bytebuf_free(&final);
     if (hash_out != NULL)
@@ -811,24 +811,24 @@ static u64 node_start_at(const PieceNode *node, u32 ordinal, u64 base)
             node = node->right;
         }
     }
-    SAG_BUG("fuzz_textbuf: seam ordinal out of range");
+    YEW_BUG("fuzz_textbuf: seam ordinal out of range");
 }
 
 /* Test-only seam accessor: Sprint 11 adds no production src surface. */
 static u64 textbuf_seam_at(const TextBuf *tb, u32 seam)
 {
-    u32 pieces = sag_textbuf_piece_count(tb);
+    u32 pieces = yew_textbuf_piece_count(tb);
 
     if (pieces < 2U || seam >= pieces - 1U)
-        SAG_BUG("fuzz_textbuf: seam index out of range");
+        YEW_BUG("fuzz_textbuf: seam index out of range");
     return node_start_at(tb->root, seam + 1U, 0U);
 }
 
 static u64 choose_position(Generator *gen, const Replay *run)
 {
-    u64 len = sag_textbuf_len(run->tb);
+    u64 len = yew_textbuf_len(run->tb);
     size_t bucket = choose(&gen->rng, 100U);
-    u32 pieces = sag_textbuf_piece_count(run->tb);
+    u32 pieces = yew_textbuf_piece_count(run->tb);
 
     if (bucket < 40U)
         return choose(&gen->rng, (size_t)len + 1U);
@@ -837,7 +837,7 @@ static u64 choose_position(Generator *gen, const Replay *run)
                                (u32)choose(&gen->rng, pieces - 1U));
     if (bucket < 80U) {
         static const u8 extremes[] = {0U, 1U, 2U, 3U};
-        u8 which = extremes[choose(&gen->rng, SAG_ARRAY_LEN(extremes))];
+        u8 which = extremes[choose(&gen->rng, YEW_ARRAY_LEN(extremes))];
 
         if (which == 0U)
             return 0U;
@@ -848,12 +848,12 @@ static u64 choose_position(Generator *gen, const Replay *run)
         return len < 1U ? len : 1U;
     }
     if (bucket < 90U) {
-        u64 lines = sag_textbuf_line_count(run->tb);
+        u64 lines = yew_textbuf_line_count(run->tb);
         u64 line = (u64)choose(&gen->rng, (size_t)lines);
 
         if (choose(&gen->rng, 2U) == 0U)
-            return sag_textbuf_line_start(run->tb, LINENO(line)).v;
-        return sag_textbuf_line_span(run->tb, LINENO(line)).hi;
+            return yew_textbuf_line_start(run->tb, LINENO(line)).v;
+        return yew_textbuf_line_span(run->tb, LINENO(line)).hi;
     }
     if (gen->trace.len != 0U) {
         const TraceOp *previous = &gen->trace.ops[gen->trace.len - 1U];
@@ -1004,7 +1004,7 @@ static bool forced_op(Generator *gen, const Replay *run, size_t index)
 {
     Bytebuf payload;
     TraceContentClass class_id;
-    u64 at = sag_textbuf_len(run->tb);
+    u64 at = yew_textbuf_len(run->tb);
 
     bytebuf_init(&payload);
     if (index == 0U) {
@@ -1091,7 +1091,7 @@ static bool generate_insert(Generator *gen, const Replay *run, size_t size_id)
 static bool generate_delete(Generator *gen, const Replay *run,
                             size_t kind)
 {
-    u64 len = sag_textbuf_len(run->tb);
+    u64 len = yew_textbuf_len(run->tb);
     u64 lo;
     u64 hi;
 
@@ -1115,12 +1115,12 @@ static bool generate_delete(Generator *gen, const Replay *run,
 static bool generate_op(Generator *gen, const Replay *run, size_t index)
 {
     size_t choice;
-    u64 len = sag_textbuf_len(run->tb);
+    u64 len = yew_textbuf_len(run->tb);
 
     if (index < 6U)
         return forced_op(gen, run, index);
-    if (len > SAG_TEXT_FUZZ_MAX_LIVE ||
-        sag_textbuf_line_count(run->tb) > SAG_TEXT_FUZZ_MAX_LINES)
+    if (len > YEW_TEXT_FUZZ_MAX_LIVE ||
+        yew_textbuf_line_count(run->tb) > YEW_TEXT_FUZZ_MAX_LINES)
         return push_op(gen, TRACE_DEL, 0U, len, NULL,
                        TRACE_CONTENT_ASCII);
     choice = op_choice(gen, rng_next(&gen->rng));
@@ -1139,7 +1139,7 @@ static bool generate_op(Generator *gen, const Replay *run, size_t index)
     if (choice < 76U) {
         static const TraceOpKind queries[] = {
             TRACE_LINE_START, TRACE_LINE_OF, TRACE_LINE_SPAN};
-        size_t query_index = choose(&gen->rng, SAG_ARRAY_LEN(queries));
+        size_t query_index = choose(&gen->rng, YEW_ARRAY_LEN(queries));
         u64 query_arg = rng_next(&gen->rng);
 
         return push_op(gen, queries[query_index], query_arg, 0U, NULL,
@@ -1153,7 +1153,7 @@ static bool generate_op(Generator *gen, const Replay *run, size_t index)
                                ? TRACE_SNAP : TRACE_RELEASE;
 
         return push_op(gen, kind, choose(&gen->rng,
-                                         SAG_TEXT_FUZZ_SNAPSHOTS),
+                                         YEW_TEXT_FUZZ_SNAPSHOTS),
                        0U, NULL, TRACE_CONTENT_ASCII);
     }
     if (choice < 90U)
@@ -1238,7 +1238,7 @@ static u64 monotonic_ns(void)
     struct timespec now;
 
     if (clock_gettime(CLOCK_MONOTONIC, &now) != 0)
-        SAG_BUG("fuzz_textbuf: CLOCK_MONOTONIC failed");
+        YEW_BUG("fuzz_textbuf: CLOCK_MONOTONIC failed");
     return (u64)now.tv_sec * UINT64_C(1000000000) + (u64)now.tv_nsec;
 }
 
@@ -1380,7 +1380,7 @@ static int run_generated(u64 seed, Mix mix, size_t iterations,
     oracle_materialize(&run.oracle, &final_bytes);
     gen.trace_hash = fnv_bytes(trace_bytes.data, trace_bytes.len);
     final_hash = fnv_bytes(final_bytes.data, final_bytes.len);
-    final_hash ^= sag_undo_current(run.undo);
+    final_hash ^= yew_undo_current(run.undo);
     final_hash *= UINT64_C(1099511628211);
     if (trace_out != NULL &&
         !write_file(trace_out, trace_bytes.data, trace_bytes.len)) {
@@ -1396,8 +1396,8 @@ static int run_generated(u64 seed, Mix mix, size_t iterations,
         "split=%zu huge=%zu\n",
         (unsigned long long)seed, mix_name(mix), gen.trace.len,
         (unsigned long long)gen.trace_hash, (unsigned long long)final_hash,
-        (unsigned long long)sag_textbuf_len(run.tb),
-        sag_textbuf_piece_count(run.tb),
+        (unsigned long long)yew_textbuf_len(run.tb),
+        yew_textbuf_piece_count(run.tb),
         gen.class_counts[TRACE_CONTENT_INVALID],
         gen.class_counts[TRACE_CONTENT_BINARY],
         gen.class_counts[TRACE_CONTENT_CRLF], gen.sequence_splits,
@@ -1463,7 +1463,7 @@ static void usage(const char *program)
 int main(int argc, char **argv)
 {
     u64 seed = UINT64_C(1);
-    u64 iterations_u64 = SAG_TEXT_FUZZ_DEFAULT_ITERS;
+    u64 iterations_u64 = YEW_TEXT_FUZZ_DEFAULT_ITERS;
     u64 seconds = 0U;
     Mix mix = MIX_TYPING;
     const char *trace_out = NULL;
@@ -1471,12 +1471,12 @@ int main(int argc, char **argv)
     const char *env;
     size_t i;
 
-    env = getenv("SAG_FUZZ_SEED");
+    env = getenv("YEW_FUZZ_SEED");
     if (env != NULL && !parse_u64_arg(env, &seed)) {
         usage(argv[0]);
         return 2;
     }
-    env = getenv("SAG_FUZZ_MIX");
+    env = getenv("YEW_FUZZ_MIX");
     if (env != NULL && !parse_mix(env, &mix)) {
         usage(argv[0]);
         return 2;

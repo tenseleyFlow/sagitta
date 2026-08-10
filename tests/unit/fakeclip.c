@@ -41,7 +41,7 @@ static bool write_all(int fd, const void *data, size_t len)
  * accumulated 500 of these across five runs (728 MB, and the pages went
  * to swap, which is where it actually hurt).  The commonest trigger is
  * running build-san/unit_tests directly instead of through `make`, which
- * skips SAG_TEST_INSTRUMENTED=1 and so holds a sanitizer build to the
+ * skips YEW_TEST_INSTRUMENTED=1 and so holds a sanitizer build to the
  * uninstrumented 2 ms latency budget.
  *
  * Fixing only the test that leaked would leave the next one to rediscover
@@ -125,7 +125,7 @@ int main(int argc, char **argv)
     base = strrchr(argv[0], '/');
     base = base != NULL ? base + 1 : argv[0];
     if (strcmp(base, "wl-copy") == 0) {
-        path = getenv("SAG_FAKECLIP_OUTPUT");
+        path = getenv("YEW_FAKECLIP_OUTPUT");
         mode = "write";
         if (path == NULL)
             return 2;

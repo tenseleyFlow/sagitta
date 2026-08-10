@@ -77,9 +77,9 @@ static bool vf_run(VmFix *f, const char *src, FlValue *out)
 
     (void)fl_diag_add_file(&f->dc, "t.fl", src, strlen(src));
     p = fl_parse(&f->arena, &f->dc, &f->in, src, strlen(src), 0U);
-    SAG_ASSERT(!p.had_error);
+    YEW_ASSERT(!p.had_error);
     fn = fl_compile(&f->vm, &f->dc, &p, 0U, origin);
-    SAG_ASSERT_NOT_NULL(fn);
+    YEW_ASSERT_NOT_NULL(fn);
     return fl_vm_run(&f->vm, fn, out);
 }
 
@@ -92,7 +92,7 @@ static i64 run_int(const char *src)
     vf_open(&f);
     if (!vf_run(&f, src, &out))
         (void)fprintf(stderr, "raised: %s\n", src);
-    SAG_ASSERT_EQ_U64((u64)out.t, (u64)FL_INT);
+    YEW_ASSERT_EQ_U64((u64)out.t, (u64)FL_INT);
     got = out.as.i;
     vf_close(&f);
     return got;
@@ -110,8 +110,8 @@ static void run_kind(const char *src, char *kind, size_t cap)
     if (!vf_run(&f, src, &out)) {
         FlValue k = FL_OBJ_V(FL_STR, fl_str_new(&f.vm, "kind", 4U));
 
-        SAG_ASSERT_EQ_U64((u64)out.t, (u64)FL_MAP);
-        SAG_ASSERT(fl_map_get((FlMap *)out.as.o, k, &got));
+        YEW_ASSERT_EQ_U64((u64)out.t, (u64)FL_MAP);
+        YEW_ASSERT(fl_map_get((FlMap *)out.as.o, k, &got));
         (void)snprintf(kind, cap, "%.*s",
                        (int)((FlStr *)got.as.o)->len,
                        ((FlStr *)got.as.o)->b);
@@ -127,7 +127,7 @@ static void assert_kind(const char *src, const char *want)
     if (strcmp(kind, want) != 0)
         (void)fprintf(stderr, "source: %s\n  want kind %s, got '%s'\n",
                       src, want, kind);
-    SAG_ASSERT_EQ_I64(strcmp(kind, want), 0);
+    YEW_ASSERT_EQ_I64(strcmp(kind, want), 0);
 }
 
 /* ---------------------------------------------------------------- */
@@ -136,16 +136,16 @@ static void assert_kind(const char *src, const char *want)
 
 void test_fl_vm_arithmetic_and_precedence(void)
 {
-    SAG_ASSERT_EQ_I64(run_int("return 1 + 2 * 3\n"), 7);
-    SAG_ASSERT_EQ_I64(run_int("return (1 + 2) * 3\n"), 9);
-    SAG_ASSERT_EQ_I64(run_int("return 1 - 2 - 3\n"), -4);
+    YEW_ASSERT_EQ_I64(run_int("return 1 + 2 * 3\n"), 7);
+    YEW_ASSERT_EQ_I64(run_int("return (1 + 2) * 3\n"), 9);
+    YEW_ASSERT_EQ_I64(run_int("return 1 - 2 - 3\n"), -4);
     /* §4: int division truncates TOWARD ZERO, and the modulo takes the
      * sign of the dividend.  Both differ from a floor-division
      * language, so both are pinned. */
-    SAG_ASSERT_EQ_I64(run_int("return 7 / 2\n"), 3);
-    SAG_ASSERT_EQ_I64(run_int("return -7 / 2\n"), -3);
-    SAG_ASSERT_EQ_I64(run_int("return -7 % 2\n"), -1);
-    SAG_ASSERT_EQ_I64(run_int("return 7 % -2\n"), 1);
+    YEW_ASSERT_EQ_I64(run_int("return 7 / 2\n"), 3);
+    YEW_ASSERT_EQ_I64(run_int("return -7 / 2\n"), -3);
+    YEW_ASSERT_EQ_I64(run_int("return -7 % 2\n"), -1);
+    YEW_ASSERT_EQ_I64(run_int("return 7 % -2\n"), 1);
 }
 
 void test_fl_vm_truthiness_is_nil_and_false_only(void)
@@ -155,23 +155,23 @@ void test_fl_vm_truthiness_is_nil_and_false_only(void)
      * written C or Python expects otherwise -- which is exactly why
      * this is a test rather than a comment.
      */
-    SAG_ASSERT_EQ_I64(run_int("if 0 { return 1 }\nreturn 2\n"), 1);
-    SAG_ASSERT_EQ_I64(run_int("if \"\" { return 1 }\nreturn 2\n"), 1);
-    SAG_ASSERT_EQ_I64(run_int("if nil { return 1 }\nreturn 2\n"), 2);
-    SAG_ASSERT_EQ_I64(run_int("if false { return 1 }\nreturn 2\n"), 2);
-    SAG_ASSERT_EQ_I64(run_int("if not nil { return 1 }\nreturn 2\n"), 1);
+    YEW_ASSERT_EQ_I64(run_int("if 0 { return 1 }\nreturn 2\n"), 1);
+    YEW_ASSERT_EQ_I64(run_int("if \"\" { return 1 }\nreturn 2\n"), 1);
+    YEW_ASSERT_EQ_I64(run_int("if nil { return 1 }\nreturn 2\n"), 2);
+    YEW_ASSERT_EQ_I64(run_int("if false { return 1 }\nreturn 2\n"), 2);
+    YEW_ASSERT_EQ_I64(run_int("if not nil { return 1 }\nreturn 2\n"), 1);
 }
 
 void test_fl_vm_equality_crosses_the_numeric_tower(void)
 {
     /* §5.2: 1 == 1.0 holds; a string never equals a number. */
-    SAG_ASSERT_EQ_I64(run_int("if 1 == 1.0 { return 1 }\nreturn 0\n"), 1);
-    SAG_ASSERT_EQ_I64(run_int("if 1 == \"1\" { return 1 }\nreturn 0\n"), 0);
-    SAG_ASSERT_EQ_I64(run_int("if \"a\" == \"a\" { return 1 }\nreturn 0\n"),
+    YEW_ASSERT_EQ_I64(run_int("if 1 == 1.0 { return 1 }\nreturn 0\n"), 1);
+    YEW_ASSERT_EQ_I64(run_int("if 1 == \"1\" { return 1 }\nreturn 0\n"), 0);
+    YEW_ASSERT_EQ_I64(run_int("if \"a\" == \"a\" { return 1 }\nreturn 0\n"),
                       1);
     /* Long strings are equal by CONTENT even though only short ones are
      * interned -- the bug a pointer-only compare would cause. */
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("let a = \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
                 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\"\n"
                 "let b = \"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -183,15 +183,15 @@ void test_fl_vm_short_circuit_yields_the_deciding_value(void)
 {
     /* §5.3: the operators yield the DECIDING OPERAND, not a bool -- so
      * `0 or 9` is 0 (zero is truthy) and `nil and 9` is nil. */
-    SAG_ASSERT_EQ_I64(run_int("return 0 or 9\n"), 0);
-    SAG_ASSERT_EQ_I64(run_int("return nil or 9\n"), 9);
-    SAG_ASSERT_EQ_I64(run_int("return 3 and 9\n"), 9);
-    SAG_ASSERT_EQ_I64(run_int("if (nil and 9) == nil { return 1 }\n"
+    YEW_ASSERT_EQ_I64(run_int("return 0 or 9\n"), 0);
+    YEW_ASSERT_EQ_I64(run_int("return nil or 9\n"), 9);
+    YEW_ASSERT_EQ_I64(run_int("return 3 and 9\n"), 9);
+    YEW_ASSERT_EQ_I64(run_int("if (nil and 9) == nil { return 1 }\n"
                               "return 0\n"), 1);
     /* The right operand is not merely unused, it is NOT EVALUATED --
      * proved by a right side that would raise if it ran. */
-    SAG_ASSERT_EQ_I64(run_int("let x = nil and (1 / 0)\nreturn 1\n"), 1);
-    SAG_ASSERT_EQ_I64(run_int("let x = 3 or (1 / 0)\nreturn 1\n"), 1);
+    YEW_ASSERT_EQ_I64(run_int("let x = nil and (1 / 0)\nreturn 1\n"), 1);
+    YEW_ASSERT_EQ_I64(run_int("let x = 3 or (1 / 0)\nreturn 1\n"), 1);
 }
 
 /* ---------------------------------------------------------------- */
@@ -221,23 +221,23 @@ void test_fl_vm_limit_is_catchable(void)
      */
     assert_kind("fn f(){ return f() }\nreturn f()\n", "limit");
     /* And it really is catchable, not merely named. */
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("fn f(){ return f() }\n"
                 "try { return f() } catch e { return 42 }\n"), 42);
 }
 
 void test_fl_vm_try_catch_binds_the_error_map(void)
 {
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("try { return 1 / 0 } catch e { return 7 }\n"), 7);
     /* The handler sees the map, and `kind` reads back. */
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("try { return 1 / 0 }\n"
                 "catch e { if e.kind == \"div\" { return 1 } return 0 }\n"),
         1);
     /* A block that does not raise runs its body and skips the
      * handler. */
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("try { return 5 } catch e { return 9 }\n"), 5);
 }
 
@@ -252,7 +252,7 @@ void test_fl_vm_upvalues_capture_by_reference(void)
      * capture BY VALUE, which makes every call return the same number
      * because the closure got a copy of `n` rather than the variable.
      */
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("fn counter(start) {\n"
                 "  let n = start\n"
                 "  return fn() { n = n + 1; return n }\n"
@@ -263,7 +263,7 @@ void test_fl_vm_upvalues_capture_by_reference(void)
                 "return b\n"), 10);
     /* Two closures made in the same scope share ONE upvalue: bumping
      * through one is visible through the other. */
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("fn pair() {\n"
                 "  let n = 0\n"
                 "  return [fn() { n = n + 1; return n },\n"
@@ -297,7 +297,7 @@ void test_fl_vm_upvalues_capture_through_an_intermediate_function(void)
      * Read-only first, because the write case allocates an upvalue for
      * a different reason and could pass while this one crashes.
      */
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("fn o() {\n"
                 "  let n = 1\n"
                 "  return fn() { return fn() { return n } }\n"
@@ -305,7 +305,7 @@ void test_fl_vm_upvalues_capture_through_an_intermediate_function(void)
                 "return o()()()\n"), 1);
     /* And the write case: the shared binding must be the outermost
      * one, so two calls through the same chain accumulate. */
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("fn o() {\n"
                 "  let n = 1\n"
                 "  return fn() { return fn() { n = n + 10\n return n } }\n"
@@ -316,7 +316,7 @@ void test_fl_vm_upvalues_capture_through_an_intermediate_function(void)
     /* Three deep, and with the middle function ALSO capturing a local
      * of its own -- the case where clobbering loses a live descriptor
      * that the middle function still needs for itself. */
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("fn o() {\n"
                 "  let a = 1\n"
                 "  return fn() {\n"
@@ -341,27 +341,27 @@ void test_fl_vm_error_is_the_prelude_raise(void)
      * caller's own globals, so a program may shadow it.
      */
     run_kind("error(\"boom\")\n", kind, sizeof(kind));
-    SAG_ASSERT_EQ_STR(kind, "user");
+    YEW_ASSERT_EQ_STR(kind, "user");
     /* The string becomes the msg, not the kind. */
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("import str\n"
                 "try { error(\"boom\") }\n"
                 "catch e { return str.len(e.msg) }\n"), 4);
     /* A MAP is raised as it stands, so a handler can read extra
      * fields the raiser attached. */
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("try { error({kind: \"user\", msg: \"m\", n: 7}) }\n"
                 "catch e { return e.n }\n"), 7);
     /* But `kind` must be a string, or every reader of e.kind and the
      * whole trace renderer sees a value they cannot print. */
     run_kind("error({kind: 7, msg: \"m\"})\n", kind, sizeof(kind));
-    SAG_ASSERT_EQ_STR(kind, "type");
+    YEW_ASSERT_EQ_STR(kind, "type");
     run_kind("error({msg: \"m\"})\n", kind, sizeof(kind));
-    SAG_ASSERT_EQ_STR(kind, "type");
+    YEW_ASSERT_EQ_STR(kind, "type");
     run_kind("error(7)\n", kind, sizeof(kind));
-    SAG_ASSERT_EQ_STR(kind, "type");
+    YEW_ASSERT_EQ_STR(kind, "type");
     /* Shadowable: a local binding wins over the prelude. */
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("fn error(v) { return 5 }\nreturn error(\"x\")\n"), 5);
 }
 
@@ -373,12 +373,12 @@ void test_fl_vm_loop_variable_is_fresh_each_iteration(void)
      * exit, every closure sees the LAST value -- JavaScript's `var`
      * bug, which users file as "closures are broken".
      */
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("let fns = []\n"
                 "for x in [1, 2, 3] { fns = fns + [fn() x] }\n"
                 "let f0 = fns[0]\n"
                 "return f0()\n"), 1);
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("let fns = []\n"
                 "for x in [1, 2, 3] { fns = fns + [fn() x] }\n"
                 "let f2 = fns[2]\n"
@@ -391,12 +391,12 @@ void test_fl_vm_loop_variable_is_fresh_each_iteration(void)
 
 void test_fl_vm_lists_and_maps(void)
 {
-    SAG_ASSERT_EQ_I64(run_int("return [10, 20, 30][1]\n"), 20);
-    SAG_ASSERT_EQ_I64(run_int("let m = {a: 1, b: 2}\nreturn m[\"b\"]\n"), 2);
-    SAG_ASSERT_EQ_I64(run_int("let m = {a: 1}\nreturn m.a\n"), 1);
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(run_int("return [10, 20, 30][1]\n"), 20);
+    YEW_ASSERT_EQ_I64(run_int("let m = {a: 1, b: 2}\nreturn m[\"b\"]\n"), 2);
+    YEW_ASSERT_EQ_I64(run_int("let m = {a: 1}\nreturn m.a\n"), 1);
+    YEW_ASSERT_EQ_I64(
         run_int("let l = [1, 2, 3]\nl[0] = 9\nreturn l[0]\n"), 9);
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("let m = {a: 1}\nm[\"b\"] = 5\nreturn m[\"b\"]\n"), 5);
     /* A float key is refused by kind, not silently rounded. */
     assert_kind("let m = {}\nm[1.5] = 1\nreturn m\n", "key");
@@ -418,13 +418,13 @@ void test_fl_vm_string_literal_keeps_an_embedded_nul(void)
     const FlStr *s;
 
     vf_open(&f);
-    SAG_ASSERT(vf_run(&f, "return \"a\\0b\"\n", &out));
-    SAG_ASSERT_EQ_U64((u64)out.t, (u64)FL_STR);
+    YEW_ASSERT(vf_run(&f, "return \"a\\0b\"\n", &out));
+    YEW_ASSERT_EQ_U64((u64)out.t, (u64)FL_STR);
     s = (const FlStr *)out.as.o;
-    SAG_ASSERT_EQ_U64((u64)s->len, 3U);
-    SAG_ASSERT_EQ_I64((i64)(u8)s->b[0], (i64)'a');
-    SAG_ASSERT_EQ_I64((i64)(u8)s->b[1], 0);
-    SAG_ASSERT_EQ_I64((i64)(u8)s->b[2], (i64)'b');
+    YEW_ASSERT_EQ_U64((u64)s->len, 3U);
+    YEW_ASSERT_EQ_I64((i64)(u8)s->b[0], (i64)'a');
+    YEW_ASSERT_EQ_I64((i64)(u8)s->b[1], 0);
+    YEW_ASSERT_EQ_I64((i64)(u8)s->b[2], (i64)'b');
     vf_close(&f);
 }
 
@@ -450,15 +450,15 @@ void test_fl_vm_map_iteration_is_insertion_ordered(void)
     (void)fl_map_set(&f.vm, m, FL_INT_V(1), FL_INT_V(10));
     (void)fl_map_set(&f.vm, m, FL_INT_V(2), FL_INT_V(20));
     (void)fl_map_set(&f.vm, m, FL_INT_V(3), FL_INT_V(30));
-    SAG_ASSERT(fl_map_del(m, FL_INT_V(1)));
+    YEW_ASSERT(fl_map_del(m, FL_INT_V(1)));
     (void)fl_map_set(&f.vm, m, FL_INT_V(1), FL_INT_V(11));
 
     while (fl_map_iter(m, &cursor, &k, &v) && n < 8U)
         seen[n++] = k.as.i;
-    SAG_ASSERT_EQ_U64(n, 3U);
-    SAG_ASSERT_EQ_I64(seen[0], 2);
-    SAG_ASSERT_EQ_I64(seen[1], 3);
-    SAG_ASSERT_EQ_I64(seen[2], 1);   /* re-inserted: at the end */
+    YEW_ASSERT_EQ_U64(n, 3U);
+    YEW_ASSERT_EQ_I64(seen[0], 2);
+    YEW_ASSERT_EQ_I64(seen[1], 3);
+    YEW_ASSERT_EQ_I64(seen[2], 1);   /* re-inserted: at the end */
 
     /* And a compaction preserves live order rather than reshuffling. */
     fl_map_compact(m);
@@ -466,10 +466,10 @@ void test_fl_vm_map_iteration_is_insertion_ordered(void)
     n = 0U;
     while (fl_map_iter(m, &cursor, &k, &v) && n < 8U)
         seen[n++] = k.as.i;
-    SAG_ASSERT_EQ_U64(n, 3U);
-    SAG_ASSERT_EQ_I64(seen[0], 2);
-    SAG_ASSERT_EQ_I64(seen[1], 3);
-    SAG_ASSERT_EQ_I64(seen[2], 1);
+    YEW_ASSERT_EQ_U64(n, 3U);
+    YEW_ASSERT_EQ_I64(seen[0], 2);
+    YEW_ASSERT_EQ_I64(seen[1], 3);
+    YEW_ASSERT_EQ_I64(seen[2], 1);
     fl_gc_release(&f.vm, 1U);
     (void)out;
     vf_close(&f);
@@ -477,15 +477,15 @@ void test_fl_vm_map_iteration_is_insertion_ordered(void)
 
 void test_fl_vm_control_flow(void)
 {
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("let t = 0\nfor x in [1,2,3] { t = t + x }\nreturn t\n"), 6);
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("let n = 0\nwhile n < 3 { n = n + 1 }\nreturn n\n"), 3);
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("let t = 0\n"
                 "for x in [1,2,3,4] { if x == 3 { break } t = t + x }\n"
                 "return t\n"), 3);
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("let t = 0\n"
                 "for x in [1,2,3] { if x == 2 { continue } t = t + x }\n"
                 "return t\n"), 4);
@@ -496,19 +496,19 @@ void test_fl_vm_control_flow(void)
      * one more ASCII byte: a codepoint walk returns 4 and a byte walk
      * returns 10, so this length distinguishes all three readings.
      */
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("import list\nlet g = []\n"
                 "for c in \"a\\u{1F44D}\\u{1F3FD}b\" { list.push(g, c) }\n"
                 "return list.len(g)\n"), 3);
     /* The cluster comes back whole, not split at its first codepoint. */
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("import str\nlet n = 0\n"
                 "for c in \"a\\u{1F44D}\\u{1F3FD}b\" "
                 "{ n = n + str.len_bytes(c) }\nreturn n\n"), 10);
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("let n = 0\nfor c in \"\" { n = n + 1 }\nreturn n\n"), 0);
     /* Two-variable for walks a map in insertion order. */
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("let m = {a: 1, b: 2, c: 3}\n"
                 "let t = 0\nfor k, v in m { t = t + v }\nreturn t\n"), 6);
     /*
@@ -518,14 +518,14 @@ void test_fl_vm_control_flow(void)
      * separately from the values so a form that yielded value/value --
      * the plausible wrong fix -- still fails.
      */
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("let t = 0\nfor i, v in [10, 20, 30] { t = t + i }\n"
                 "return t\n"), 3);
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("let t = 0\nfor i, v in [10, 20, 30] { t = t + v }\n"
                 "return t\n"), 60);
     /* Empty list: the loop body never runs and the walk still ends. */
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("let t = 7\nfor i, v in [] { t = 0 }\nreturn t\n"), 7);
     /* The mods guard applies to the two-variable form too: a list
      * reshaped mid-walk must report rather than walk a moved buffer. */
@@ -535,7 +535,7 @@ void test_fl_vm_control_flow(void)
         run_kind("import list\nlet l = [1, 2, 3]\n"
                  "for i, v in l { list.push(l, 9) }\nreturn 0\n",
                  kind, sizeof(kind));
-        SAG_ASSERT_EQ_STR(kind, "index");
+        YEW_ASSERT_EQ_STR(kind, "index");
     }
 }
 
@@ -568,16 +568,16 @@ void test_fl_vm_gc_collects_only_unreachable_objects(void)
     before = live_objects(&f.vm);
     fl_gc_collect(&f.vm);
     after = live_objects(&f.vm);
-    SAG_ASSERT(after < before);
+    YEW_ASSERT(after < before);
     /* The protected one is still readable, not merely still listed. */
-    SAG_ASSERT_EQ_U64(kept->len, 25U);
-    SAG_ASSERT_EQ_I64(memcmp(kept->b, "kept-alive-by-a-temp-root", 25U), 0);
+    YEW_ASSERT_EQ_U64(kept->len, 25U);
+    YEW_ASSERT_EQ_I64(memcmp(kept->b, "kept-alive-by-a-temp-root", 25U), 0);
 
     /* DROP IT: release the root and the same object dies. */
     fl_gc_release(&f.vm, 1U);
     before = live_objects(&f.vm);
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(live_objects(&f.vm) < before);
+    YEW_ASSERT(live_objects(&f.vm) < before);
     vf_close(&f);
 }
 
@@ -596,9 +596,9 @@ void test_fl_vm_gc_root_globals_keeps_values_alive(void)
                      FL_OBJ_V(FL_STR, fl_str_new(&f.vm, "a value", 7U)));
     fl_gc_release(&f.vm, 1U);
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(fl_map_get(f.vm.globals, key, &got));
-    SAG_ASSERT_EQ_U64((u64)got.t, (u64)FL_STR);
-    SAG_ASSERT_EQ_I64(memcmp(((FlStr *)got.as.o)->b, "a value", 7U), 0);
+    YEW_ASSERT(fl_map_get(f.vm.globals, key, &got));
+    YEW_ASSERT_EQ_U64((u64)got.t, (u64)FL_STR);
+    YEW_ASSERT_EQ_I64(memcmp(((FlStr *)got.as.o)->b, "a value", 7U), 0);
     vf_close(&f);
 }
 
@@ -616,7 +616,7 @@ void test_fl_vm_gc_stress_runs_a_whole_program(void)
      */
     vf_open(&f);
     f.vm.gc.stress = true;
-    SAG_ASSERT(vf_run(&f,
+    YEW_ASSERT(vf_run(&f,
                       "let acc = []\n"
                       "for x in [1, 2, 3, 4, 5] {\n"
                       "  let m = {n: x, s: \"item\"}\n"
@@ -625,8 +625,8 @@ void test_fl_vm_gc_stress_runs_a_whole_program(void)
                       "let t = 0\n"
                       "for m in acc { t = t + m.n }\n"
                       "return t\n", &out));
-    SAG_ASSERT_EQ_U64((u64)out.t, (u64)FL_INT);
-    SAG_ASSERT_EQ_I64(out.as.i, 15);
+    YEW_ASSERT_EQ_U64((u64)out.t, (u64)FL_INT);
+    YEW_ASSERT_EQ_I64(out.as.i, 15);
     vf_close(&f);
 }
 
@@ -649,9 +649,9 @@ void test_fl_vm_instruction_boundary_work_happens(void)
     f.vm.step_limit = 200U;
     /* A loop that cannot finish inside the limit: it must be CUT, not
      * run to completion and not run forever. */
-    SAG_ASSERT(!vf_run(&f, "let n = 0\nwhile n < 100000 { n = n + 1 }\n"
+    YEW_ASSERT(!vf_run(&f, "let n = 0\nwhile n < 100000 { n = n + 1 }\n"
                            "return n\n", &out));
-    SAG_ASSERT(f.vm.steps > 200U);
+    YEW_ASSERT(f.vm.steps > 200U);
     vf_close(&f);
 
     /*
@@ -661,19 +661,19 @@ void test_fl_vm_instruction_boundary_work_happens(void)
      * and one that ignores it collects zero times.
      */
     vf_open(&f);
-    SAG_ASSERT(vf_run(&f,
+    YEW_ASSERT(vf_run(&f,
                       "let n = 0\n"
                       "while n < 20000 { let s = [n, n, n]\nn = n + 1 }\n"
                       "return n\n", &out));
-    SAG_ASSERT_EQ_I64(out.as.i, 20000);
+    YEW_ASSERT_EQ_I64(out.as.i, 20000);
     if (f.vm.gc.collections == 0U)
         (void)fprintf(stderr, "the collector never ran: gc.pending is "
                               "not honoured on this dispatch path\n");
-    SAG_ASSERT(f.vm.gc.collections != 0U);
+    YEW_ASSERT(f.vm.gc.collections != 0U);
     /* Live set stays bounded: the dead lists are actually reclaimed,
      * not merely counted. */
     before = f.vm.gc.bytes;
-    SAG_ASSERT(before < 512U * 1024U);
+    YEW_ASSERT(before < 512U * 1024U);
     vf_close(&f);
 }
 
@@ -694,7 +694,7 @@ void test_fl_vm_try_restores_the_stack_pointer_exactly(void)
      * it: several operands are already pushed when the raise happens.
      */
     vf_open(&f);
-    SAG_ASSERT(vf_run(&f,
+    YEW_ASSERT(vf_run(&f,
                       "let n = 0\n"
                       "while n < 200 {\n"
                       "  try { let x = 1 + (2 * (3 + (4 / 0))) }\n"
@@ -702,10 +702,10 @@ void test_fl_vm_try_restores_the_stack_pointer_exactly(void)
                       "  n = n + 1\n"
                       "}\n"
                       "return n\n", &out));
-    SAG_ASSERT_EQ_I64(out.as.i, 200);
+    YEW_ASSERT_EQ_I64(out.as.i, 200);
     /* Back to the base of the stack, not merely "not overflowed". */
     sp_before = f.vm.stack;
-    SAG_ASSERT(f.vm.sp <= sp_before + 1);
+    YEW_ASSERT(f.vm.sp <= sp_before + 1);
     vf_close(&f);
 }
 
@@ -719,13 +719,13 @@ void test_fl_vm_handlers_nest(void)
 
     /* The innermost handler wins, and the outer ones neither fire nor
      * are left on the handler stack. */
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("try {\n"
                 "  try { return 1 / 0 } catch inner { return 1 }\n"
                 "} catch outer { return 2 }\n"), 1);
     /* An uncaught raise in the inner block reaches the outer handler
      * rather than escaping. */
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("try {\n"
                 "  try { return 5 } catch inner { return 1 }\n"
                 "  return 1 / 0\n"
@@ -740,10 +740,10 @@ void test_fl_vm_handlers_nest(void)
         at += (size_t)snprintf(src + at, sizeof(src) - at,
                                "} catch e%u { return %u }\n",
                                (unsigned)i, (unsigned)(100U + i));
-    SAG_ASSERT(at < sizeof(src));
+    YEW_ASSERT(at < sizeof(src));
     vf_open(&f);
-    SAG_ASSERT(vf_run(&f, src, &out));
-    SAG_ASSERT_EQ_I64(out.as.i, 7);
+    YEW_ASSERT(vf_run(&f, src, &out));
+    YEW_ASSERT_EQ_I64(out.as.i, 7);
     vf_close(&f);
 }
 
@@ -758,7 +758,7 @@ void test_fl_vm_deep_recursion_raises_rather_than_overflowing(void)
      * VM is still usable afterwards.
      */
     assert_kind("fn f(n) { return f(n + 1) }\nreturn f(0)\n", "limit");
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("fn f(n) { return f(n + 1) }\n"
                 "let hit = 0\n"
                 "try { let x = f(0) } catch e { hit = 1 }\n"
@@ -783,20 +783,20 @@ void test_fl_vm_deferred_surfaces_name_their_sprint(void)
      * asserts both halves of the boundary at once.
      */
     vf_open(&f);
-    SAG_ASSERT(vf_run(&f, "import io\nreturn 0\n", &out));
+    YEW_ASSERT(vf_run(&f, "import io\nreturn 0\n", &out));
     vf_close(&f);
 
     vf_open(&f);
-    SAG_ASSERT(!vf_run(&f, "bind(\"<C-p>\", 1)\n", &out));
-    SAG_ASSERT(fl_map_get((FlMap *)out.as.o,
+    YEW_ASSERT(!vf_run(&f, "bind(\"<C-p>\", 1)\n", &out));
+    YEW_ASSERT(fl_map_get((FlMap *)out.as.o,
                           FL_OBJ_V(FL_STR, fl_str_new(&f.vm, "msg", 3U)),
                           &got));
-    SAG_ASSERT_NOT_NULL(strstr(((FlStr *)got.as.o)->b, "expects"));
+    YEW_ASSERT_NOT_NULL(strstr(((FlStr *)got.as.o)->b, "expects"));
     vf_close(&f);
 
-    SAG_ASSERT_EQ_I64(strcmp(fl_deferred_msg("set"),
+    YEW_ASSERT_EQ_I64(strcmp(fl_deferred_msg("set"),
                              "undefined name 'set'"), 0);
-    SAG_ASSERT_EQ_I64(strcmp(fl_deferred_msg("nope"),
+    YEW_ASSERT_EQ_I64(strcmp(fl_deferred_msg("nope"),
                              "undefined name 'nope'"), 0);
 }
 
@@ -807,16 +807,16 @@ void test_fl_vm_reserved_handle_tags_are_named_not_constructible(void)
      * type_of has to say "buf" the day it starts handing them out --
      * without being reachable from any Fletch program today.
      */
-    SAG_ASSERT_EQ_I64(strcmp(fl_type_name(FL_BUF), "buf"), 0);
-    SAG_ASSERT_EQ_I64(strcmp(fl_type_name(FL_CURSOR), "cursor"), 0);
-    SAG_ASSERT_EQ_I64(strcmp(fl_type_name(FL_SPAN), "span"), 0);
-    SAG_ASSERT_EQ_I64(strcmp(fl_type_name(FL_WIN), "win"), 0);
-    SAG_ASSERT_EQ_I64(strcmp(fl_type_name(FL_REGEX), "regex"), 0);
+    YEW_ASSERT_EQ_I64(strcmp(fl_type_name(FL_BUF), "buf"), 0);
+    YEW_ASSERT_EQ_I64(strcmp(fl_type_name(FL_CURSOR), "cursor"), 0);
+    YEW_ASSERT_EQ_I64(strcmp(fl_type_name(FL_SPAN), "span"), 0);
+    YEW_ASSERT_EQ_I64(strcmp(fl_type_name(FL_WIN), "win"), 0);
+    YEW_ASSERT_EQ_I64(strcmp(fl_type_name(FL_REGEX), "regex"), 0);
     /* Out-of-range stays diagnosable rather than indexing past the
      * table -- the tags are the last five, so this is the guard that
      * keeps a future tag from reading garbage. */
-    SAG_ASSERT_EQ_I64(strcmp(fl_type_name((FlType)FL_TYPE_COUNT), "?"), 0);
-    SAG_ASSERT(FL_TYPE_COUNT <= 32);
+    YEW_ASSERT_EQ_I64(strcmp(fl_type_name((FlType)FL_TYPE_COUNT), "?"), 0);
+    YEW_ASSERT(FL_TYPE_COUNT <= 32);
 }
 
 /* ---------------------------------------------------------------- */
@@ -838,7 +838,7 @@ void test_fl_vm_spec_14_total_is_17(void)
 {
     /* §14.1: nums is [1, 2.5, 16]; 2.5 is skipped by continue; 1 + 16
      * is 17, and 0x10 is 16. */
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("let nums = [1, 2.5, 0x10]\n"
                 "let total = 0\n"
                 "for x in nums {\n"
@@ -858,12 +858,12 @@ void test_fl_vm_spec_14_counter_yields_9_then_10(void)
     (void)snprintf(src, sizeof(src), "%s%s", FL_S14_PROGRAM,
                    "let next = counter(clamp(9, 0, 8))\n"
                    "return next()\n");
-    SAG_ASSERT_EQ_I64(run_int(src), 9);
+    YEW_ASSERT_EQ_I64(run_int(src), 9);
     (void)snprintf(src, sizeof(src), "%s%s", FL_S14_PROGRAM,
                    "let next = counter(clamp(9, 0, 8))\n"
                    "let a = next()\n"
                    "return next()\n");
-    SAG_ASSERT_EQ_I64(run_int(src), 10);
+    YEW_ASSERT_EQ_I64(run_int(src), 10);
 }
 
 void test_fl_vm_spec_14_program_runs_and_shouts(void)
@@ -910,11 +910,11 @@ void test_fl_vm_spec_14_program_runs_and_shouts(void)
      * what shout gives.
      */
     vf_open(&f);
-    SAG_ASSERT(vf_run(&f, src, &out));
-    SAG_ASSERT_EQ_U64((u64)out.t, (u64)FL_INT);
-    SAG_ASSERT_EQ_I64(out.as.i, 17);
+    YEW_ASSERT(vf_run(&f, src, &out));
+    YEW_ASSERT_EQ_U64((u64)out.t, (u64)FL_INT);
+    YEW_ASSERT_EQ_I64(out.as.i, 17);
     /* Clean: no diagnostic, at compile time or after. */
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
     vf_close(&f);
 
     vf_open(&f);
@@ -924,11 +924,11 @@ void test_fl_vm_spec_14_program_runs_and_shouts(void)
         (void)snprintf(shouting, sizeof(shouting), "%.*s%s",
                        (int)(strstr(src, "return total") - src), src,
                        "return shout(\"x\")\n");
-        SAG_ASSERT(vf_run(&f, shouting, &out));
-        SAG_ASSERT_EQ_U64((u64)out.t, (u64)FL_STR);
+        YEW_ASSERT(vf_run(&f, shouting, &out));
+        YEW_ASSERT_EQ_U64((u64)out.t, (u64)FL_STR);
         got = out;
-        SAG_ASSERT_EQ_U64((u64)((FlStr *)got.as.o)->len, 6U);
-        SAG_ASSERT_EQ_I64(memcmp(((FlStr *)got.as.o)->b, "MOTION", 6U), 0);
+        YEW_ASSERT_EQ_U64((u64)((FlStr *)got.as.o)->len, 6U);
+        YEW_ASSERT_EQ_I64(memcmp(((FlStr *)got.as.o)->b, "MOTION", 6U), 0);
     }
     vf_close(&f);
 }
@@ -942,7 +942,7 @@ void test_fl_vm_spec_14_motion_raises_against_the_null_host(void)
      * the null host, and a catch binds it.
      */
     assert_kind("edit { @[ 2v i\"!\" del ] }\n", "motion");
-    SAG_ASSERT_EQ_I64(
+    YEW_ASSERT_EQ_I64(
         run_int("fn shout() {\n"
                 "    try { edit { @[ 2v i\"!\" del ] } }\n"
                 "    catch e { if e.kind == \"motion\" { return 1 } "
@@ -984,17 +984,17 @@ void test_fl_vm_disassembly_is_deterministic(void)
     pb = fl_parse(&b.arena, &b.dc, &b.in, src, strlen(src), 0U);
     fa = fl_compile(&a.vm, &a.dc, &pa, 0U, origin);
     fb = fl_compile(&b.vm, &b.dc, &pb, 0U, origin);
-    SAG_ASSERT_NOT_NULL(fa);
-    SAG_ASSERT_NOT_NULL(fb);
+    YEW_ASSERT_NOT_NULL(fa);
+    YEW_ASSERT_NOT_NULL(fb);
     bytebuf_init(&da);
     bytebuf_init(&db);
     fl_disasm_chunk(&da, &fa->ch, &a.in);
     fl_disasm_chunk(&db, &fb->ch, &b.in);
     /* No pointers and no addresses appear, so two runs match byte for
      * byte -- which is what makes this a golden surface. */
-    SAG_ASSERT_EQ_U64(da.len, db.len);
-    SAG_ASSERT_EQ_I64(memcmp(da.data, db.data, da.len), 0);
-    SAG_ASSERT(da.len != 0U);
+    YEW_ASSERT_EQ_U64(da.len, db.len);
+    YEW_ASSERT_EQ_I64(memcmp(da.data, db.data, da.len), 0);
+    YEW_ASSERT(da.len != 0U);
     bytebuf_free(&db);
     bytebuf_free(&da);
     vf_close(&b);
@@ -1013,12 +1013,12 @@ void test_fl_vm_opcode_table_is_complete(void)
         const char *ops = fl_op_operands((FlOp)k);
         size_t i;
 
-        SAG_ASSERT_NOT_NULL(name);
-        SAG_ASSERT_EQ_I64(strcmp(name, "BAD_OP") == 0, 0);
-        SAG_ASSERT_NOT_NULL(ops);
+        YEW_ASSERT_NOT_NULL(name);
+        YEW_ASSERT_EQ_I64(strcmp(name, "BAD_OP") == 0, 0);
+        YEW_ASSERT_NOT_NULL(ops);
         for (i = 0U; ops[i] != '\0'; i++) {
-            SAG_ASSERT(ops[i] == 'b' || ops[i] == 's' || ops[i] == 'w');
+            YEW_ASSERT(ops[i] == 'b' || ops[i] == 's' || ops[i] == 'w');
         }
     }
-    SAG_ASSERT_EQ_U64((u64)FL_OP__COUNT, 60U);
+    YEW_ASSERT_EQ_U64((u64)FL_OP__COUNT, 60U);
 }

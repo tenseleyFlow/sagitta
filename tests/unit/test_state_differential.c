@@ -11,9 +11,9 @@
  * checking it.
  *
  * ==================================================================
- * SPRINT 36: this is your DoD item.  Define SAG_HAVE_FLETCH_STATE and
- * implement sag_fl_parse_fletch() with the same signature as
- * sag_fl_parse().  Everything below then compares the two arms over
+ * SPRINT 36: this is your DoD item.  Define YEW_HAVE_FLETCH_STATE and
+ * implement yew_fl_parse_fletch() with the same signature as
+ * yew_fl_parse().  Everything below then compares the two arms over
  * every corpus document.  Do not weaken an assertion to make it pass;
  * a disagreement here is a format bug in one of the two parsers, and
  * finding out which is the whole point.
@@ -47,16 +47,16 @@
  * The second arm.
  *
  * Sprint 36 replaces this body with the Fletch VM data path.  The
- * signature is sag_fl_parse's on purpose: a differential test whose two
+ * signature is yew_fl_parse's on purpose: a differential test whose two
  * arms have different shapes ends up comparing the adapters.
  */
-#ifdef SAG_HAVE_FLETCH_STATE
-extern FlLit *sag_fl_parse_fletch(Arena *a, const u8 *src, u64 len,
+#ifdef YEW_HAVE_FLETCH_STATE
+extern FlLit *yew_fl_parse_fletch(Arena *a, const u8 *src, u64 len,
                                   FlParseErr *err);
-#define DIFF_ARM_B sag_fl_parse_fletch
+#define DIFF_ARM_B yew_fl_parse_fletch
 #define DIFF_ARM_B_NAME "fletch"
 #else
-#define DIFF_ARM_B sag_fl_parse
+#define DIFF_ARM_B yew_fl_parse
 #define DIFF_ARM_B_NAME "hand-written (Sprint 36 replaces this arm)"
 #endif
 
@@ -175,7 +175,7 @@ static void diff_list(const char *dir, DiffList *out)
         out->n++;
     }
     (void)closedir(d);
-    sag_sort_stable(out->names, out->n, sizeof(out->names[0]),
+    yew_sort_stable(out->names, out->n, sizeof(out->names[0]),
                     diff_name_cmp, NULL);
 }
 
@@ -197,9 +197,9 @@ static void emit_through(const FlLit *lit, Bytebuf *out)
 {
     FlEmit e;
 
-    sag_fl_emit_init(&e, out);
-    sag_fl_emit_lit(&e, NULL, lit);
-    sag_fl_emit_done(&e);
+    yew_fl_emit_init(&e, out);
+    yew_fl_emit_lit(&e, NULL, lit);
+    yew_fl_emit_done(&e);
 }
 
 /* ---------------------------------------------------------------- */
@@ -220,7 +220,7 @@ static void diff_over(const char *dir, u32 expect_min)
     u32 i;
 
     diff_list(dir, &list);
-    SAG_ASSERT(list.n >= expect_min);
+    YEW_ASSERT(list.n >= expect_min);
     for (i = 0U; i < list.n; i++) {
         char path[256];
         char why[128];
@@ -243,11 +243,11 @@ static void diff_over(const char *dir, u32 expect_min)
          * differential test must not have. */
         arena_init(&arena_a);
         arena_init(&arena_b);
-        SAG_ASSERT(diff_read(path, &raw));
+        YEW_ASSERT(diff_read(path, &raw));
         (void)memset(&err_a, 0, sizeof(err_a));
         (void)memset(&err_b, 0, sizeof(err_b));
 
-        lit_a = sag_fl_parse(&arena_a, raw.data, raw.len, &err_a);
+        lit_a = yew_fl_parse(&arena_a, raw.data, raw.len, &err_a);
         lit_b = DIFF_ARM_B(&arena_b, raw.data, raw.len, &err_b);
 
         /* Agreeing that a document is BAD is agreement too. */
@@ -258,12 +258,12 @@ static void diff_over(const char *dir, u32 expect_min)
                               " %s\n",
                               path, lit_a == NULL ? "rejected" : "accepted",
                               lit_b == NULL ? "rejected" : "accepted");
-            SAG_ASSERT((lit_a == NULL) == (lit_b == NULL));
+            YEW_ASSERT((lit_a == NULL) == (lit_b == NULL));
             /* And they must fault in the same PLACE, or one of them is
              * accepting a prefix the other is not. */
             if (lit_a == NULL) {
-                SAG_ASSERT_EQ_U64(err_a.line, err_b.line);
-                SAG_ASSERT_EQ_U64(err_a.col, err_b.col);
+                YEW_ASSERT_EQ_U64(err_a.line, err_b.line);
+                YEW_ASSERT_EQ_U64(err_a.col, err_b.col);
             }
             goto next;
         }
@@ -271,15 +271,15 @@ static void diff_over(const char *dir, u32 expect_min)
         why[0] = '\0';
         if (!lit_eq(lit_a, lit_b, why, sizeof(why)))
             (void)fprintf(stderr, "%s: trees differ: %s\n", path, why);
-        SAG_ASSERT(lit_eq(lit_a, lit_b, why, sizeof(why)));
+        YEW_ASSERT(lit_eq(lit_a, lit_b, why, sizeof(why)));
 
         emit_through(lit_a, &out_a);
         emit_through(lit_b, &out_b);
         if (out_a.len != out_b.len ||
             memcmp(out_a.data, out_b.data, out_a.len) != 0)
             (void)fprintf(stderr, "%s: re-emitted bytes differ\n", path);
-        SAG_ASSERT_EQ_U64(out_a.len, out_b.len);
-        SAG_ASSERT_EQ_MEM(out_a.data, out_b.data, out_a.len);
+        YEW_ASSERT_EQ_U64(out_a.len, out_b.len);
+        YEW_ASSERT_EQ_MEM(out_a.data, out_b.data, out_a.len);
 
     next:
         arena_free_all(&arena_a);
@@ -337,7 +337,7 @@ void test_state_differential_comparison_detects_differences(void)
     };
     u32 i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(pairs); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(pairs); i++) {
         Arena arena_a;
         Arena arena_b;
         FlParseErr err;
@@ -347,20 +347,20 @@ void test_state_differential_comparison_detects_differences(void)
 
         arena_init(&arena_a);
         arena_init(&arena_b);
-        lit_a = sag_fl_parse(&arena_a, (const u8 *)pairs[i][0],
+        lit_a = yew_fl_parse(&arena_a, (const u8 *)pairs[i][0],
                              (u64)strlen(pairs[i][0]), &err);
-        lit_b = sag_fl_parse(&arena_b, (const u8 *)pairs[i][1],
+        lit_b = yew_fl_parse(&arena_b, (const u8 *)pairs[i][1],
                              (u64)strlen(pairs[i][1]), &err);
-        SAG_ASSERT_NOT_NULL(lit_a);
-        SAG_ASSERT_NOT_NULL(lit_b);
+        YEW_ASSERT_NOT_NULL(lit_a);
+        YEW_ASSERT_NOT_NULL(lit_b);
         why[0] = '\0';
-        SAG_ASSERT(!lit_eq(lit_a, lit_b, why, sizeof(why)));
+        YEW_ASSERT(!lit_eq(lit_a, lit_b, why, sizeof(why)));
         /* And it says WHY, so a real disagreement is diagnosable. */
-        SAG_ASSERT(why[0] != '\0');
+        YEW_ASSERT(why[0] != '\0');
         /* Reflexive, or it would report differences that are not
          * there. */
-        SAG_ASSERT(lit_eq(lit_a, lit_a, why, sizeof(why)));
-        SAG_ASSERT(lit_eq(lit_b, lit_b, why, sizeof(why)));
+        YEW_ASSERT(lit_eq(lit_a, lit_a, why, sizeof(why)));
+        YEW_ASSERT(lit_eq(lit_b, lit_b, why, sizeof(why)));
         arena_free_all(&arena_a);
         arena_free_all(&arena_b);
     }
@@ -383,7 +383,7 @@ void test_state_differential_byte_comparison_is_not_redundant(void)
     u32 i;
 
     bytebuf_init(&canonical);
-    for (i = 0U; i < SAG_ARRAY_LEN(same_tree); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(same_tree); i++) {
         Arena a;
         FlParseErr err;
         FlLit *lit;
@@ -391,9 +391,9 @@ void test_state_differential_byte_comparison_is_not_redundant(void)
 
         arena_init(&a);
         bytebuf_init(&out);
-        lit = sag_fl_parse(&a, (const u8 *)same_tree[i],
+        lit = yew_fl_parse(&a, (const u8 *)same_tree[i],
                            (u64)strlen(same_tree[i]), &err);
-        SAG_ASSERT_NOT_NULL(lit);
+        YEW_ASSERT_NOT_NULL(lit);
         emit_through(lit, &out);
         /*
          * Four different byte sequences, one tree, ONE canonical
@@ -406,8 +406,8 @@ void test_state_differential_byte_comparison_is_not_redundant(void)
         if (i == 0U) {
             bytebuf_append(&canonical, out.data, out.len);
         } else {
-            SAG_ASSERT_EQ_U64(out.len, canonical.len);
-            SAG_ASSERT_EQ_MEM(out.data, canonical.data, canonical.len);
+            YEW_ASSERT_EQ_U64(out.len, canonical.len);
+            YEW_ASSERT_EQ_MEM(out.data, canonical.data, canonical.len);
         }
         arena_free_all(&a);
         bytebuf_free(&out);
@@ -427,12 +427,12 @@ void test_state_differential_names_sprint_36(void)
         "Fletch VM data path; this test compares the two arms over the "
         "frozen v1 corpus.";
 
-    SAG_ASSERT_NOT_NULL(strstr(handover, "Sprint 36"));
-#ifdef SAG_HAVE_FLETCH_STATE
+    YEW_ASSERT_NOT_NULL(strstr(handover, "Sprint 36"));
+#ifdef YEW_HAVE_FLETCH_STATE
     /* s36 is here: both arms are real. */
-    SAG_ASSERT(strcmp(DIFF_ARM_B_NAME, "fletch") == 0);
+    YEW_ASSERT(strcmp(DIFF_ARM_B_NAME, "fletch") == 0);
 #else
     /* Not yet: the second arm is deliberately the first one. */
-    SAG_ASSERT_NOT_NULL(strstr(DIFF_ARM_B_NAME, "Sprint 36"));
+    YEW_ASSERT_NOT_NULL(strstr(DIFF_ARM_B_NAME, "Sprint 36"));
 #endif
 }

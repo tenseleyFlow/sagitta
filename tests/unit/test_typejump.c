@@ -65,18 +65,18 @@ void test_typejump_appends_inside_the_window(void)
     u32 sel = 0U;
     Key k;
 
-    sag_typejump_clear(&tj);
+    yew_typejump_clear(&tj);
     k = tj_char('b');
-    SAG_ASSERT(sag_typejump_key(&tj, &k, 1000, tj_items, 6U, &sel));
-    SAG_ASSERT_EQ_U64(sel, 1U); /* beta.c */
+    YEW_ASSERT(yew_typejump_key(&tj, &k, 1000, tj_items, 6U, &sel));
+    YEW_ASSERT_EQ_U64(sel, 1U); /* beta.c */
 
     /* `e` 100 ms later, inside the 500 ms window: the pattern is `be`,
      * which still selects beta.c. */
     k = tj_char('e');
-    SAG_ASSERT(sag_typejump_key(&tj, &k, 1100, tj_items, 6U, &sel));
-    SAG_ASSERT_EQ_U64(sel, 1U);
-    SAG_ASSERT_EQ_U64(tj.len, 2U);
-    SAG_ASSERT_EQ_MEM(tj.pat, "be", 2U);
+    YEW_ASSERT(yew_typejump_key(&tj, &k, 1100, tj_items, 6U, &sel));
+    YEW_ASSERT_EQ_U64(sel, 1U);
+    YEW_ASSERT_EQ_U64(tj.len, 2U);
+    YEW_ASSERT_EQ_MEM(tj.pat, "be", 2U);
 }
 
 /*
@@ -89,17 +89,17 @@ void test_typejump_replaces_after_the_window(void)
     u32 sel = 0U;
     Key k;
 
-    sag_typejump_clear(&tj);
+    yew_typejump_clear(&tj);
     k = tj_char('s');
-    SAG_ASSERT(sag_typejump_key(&tj, &k, 1000, tj_items, 6U, &sel));
-    SAG_ASSERT_EQ_U64(tj.len, 1U);
+    YEW_ASSERT(yew_typejump_key(&tj, &k, 1000, tj_items, 6U, &sel));
+    YEW_ASSERT_EQ_U64(tj.len, 1U);
 
     /* Exactly at the deadline is OUTSIDE: the window is [t, t+500). */
     k = tj_char('g');
-    SAG_ASSERT(sag_typejump_key(&tj, &k, 1500, tj_items, 6U, &sel));
-    SAG_ASSERT_EQ_U64(tj.len, 1U);
-    SAG_ASSERT_EQ_MEM(tj.pat, "g", 1U);
-    SAG_ASSERT_EQ_U64(sel, 4U); /* gamma.c */
+    YEW_ASSERT(yew_typejump_key(&tj, &k, 1500, tj_items, 6U, &sel));
+    YEW_ASSERT_EQ_U64(tj.len, 1U);
+    YEW_ASSERT_EQ_MEM(tj.pat, "g", 1U);
+    YEW_ASSERT_EQ_U64(sel, 4U); /* gamma.c */
 }
 
 /* One millisecond earlier is INSIDE, which is the other side of the
@@ -110,14 +110,14 @@ void test_typejump_window_boundary_is_exact(void)
     u32 sel = 0U;
     Key k;
 
-    sag_typejump_clear(&tj);
+    yew_typejump_clear(&tj);
     k = tj_char('s');
-    SAG_ASSERT(sag_typejump_key(&tj, &k, 1000, tj_items, 6U, &sel));
+    YEW_ASSERT(yew_typejump_key(&tj, &k, 1000, tj_items, 6U, &sel));
     k = tj_char('i');
-    SAG_ASSERT(sag_typejump_key(&tj, &k, 1499, tj_items, 6U, &sel));
-    SAG_ASSERT_EQ_U64(tj.len, 2U);
-    SAG_ASSERT_EQ_MEM(tj.pat, "si", 2U);
-    SAG_ASSERT_EQ_U64(sel, 5U); /* sigma.c */
+    YEW_ASSERT(yew_typejump_key(&tj, &k, 1499, tj_items, 6U, &sel));
+    YEW_ASSERT_EQ_U64(tj.len, 2U);
+    YEW_ASSERT_EQ_MEM(tj.pat, "si", 2U);
+    YEW_ASSERT_EQ_U64(sel, 5U); /* sigma.c */
 }
 
 /* ---------------------------------------------------------------- */
@@ -142,14 +142,14 @@ void test_typejump_exact_match_under_the_cursor_stays_put(void)
     u32 i;
     i64 now = 1000;
 
-    sag_typejump_clear(&tj);
+    yew_typejump_clear(&tj);
     for (i = 0U; pat[i] != '\0'; i++) {
         k = tj_char(pat[i]);
-        SAG_ASSERT(sag_typejump_key(&tj, &k, now, tj_items, 6U, &sel));
+        YEW_ASSERT(yew_typejump_key(&tj, &k, now, tj_items, 6U, &sel));
         now += 50;
     }
     /* Still on README, never on README.md. */
-    SAG_ASSERT_EQ_U64(sel, 2U);
+    YEW_ASSERT_EQ_U64(sel, 2U);
 }
 
 /* And from somewhere else, the same pattern DOES move — otherwise the
@@ -163,14 +163,14 @@ void test_typejump_moves_when_the_cursor_is_elsewhere(void)
     u32 i;
     i64 now = 1000;
 
-    sag_typejump_clear(&tj);
+    yew_typejump_clear(&tj);
     for (i = 0U; pat[i] != '\0'; i++) {
         k = tj_char(pat[i]);
-        SAG_ASSERT(sag_typejump_key(&tj, &k, now, tj_items, 6U, &sel));
+        YEW_ASSERT(yew_typejump_key(&tj, &k, now, tj_items, 6U, &sel));
         now += 50;
     }
     /* It landed on the exact match rather than the prefix one. */
-    SAG_ASSERT_EQ_U64(sel, 2U);
+    YEW_ASSERT_EQ_U64(sel, 2U);
 }
 
 /* ---------------------------------------------------------------- */
@@ -183,22 +183,22 @@ void test_typejump_non_printable_clears_and_is_not_consumed(void)
     u32 sel = 0U;
     Key k;
 
-    sag_typejump_clear(&tj);
+    yew_typejump_clear(&tj);
     k = tj_char('b');
-    SAG_ASSERT(sag_typejump_key(&tj, &k, 1000, tj_items, 6U, &sel));
-    SAG_ASSERT_EQ_U64(tj.len, 1U);
+    YEW_ASSERT(yew_typejump_key(&tj, &k, 1000, tj_items, 6U, &sel));
+    YEW_ASSERT_EQ_U64(tj.len, 1U);
 
     /* An arrow ends the sequence AND still belongs to the host list. */
-    k = tj_special(SAG_KEY_DOWN);
-    SAG_ASSERT(!sag_typejump_key(&tj, &k, 1050, tj_items, 6U, &sel));
-    SAG_ASSERT_EQ_U64(tj.len, 0U);
+    k = tj_special(YEW_KEY_DOWN);
+    YEW_ASSERT(!yew_typejump_key(&tj, &k, 1050, tj_items, 6U, &sel));
+    YEW_ASSERT_EQ_U64(tj.len, 0U);
 
     /* A letter after it starts a NEW pattern, even though only 10 ms
      * passed — the arrow ended the sequence, not the clock. */
     k = tj_char('g');
-    SAG_ASSERT(sag_typejump_key(&tj, &k, 1060, tj_items, 6U, &sel));
-    SAG_ASSERT_EQ_U64(tj.len, 1U);
-    SAG_ASSERT_EQ_U64(sel, 4U); /* gamma.c */
+    YEW_ASSERT(yew_typejump_key(&tj, &k, 1060, tj_items, 6U, &sel));
+    YEW_ASSERT_EQ_U64(tj.len, 1U);
+    YEW_ASSERT_EQ_U64(sel, 4U); /* gamma.c */
 }
 
 /*
@@ -211,15 +211,15 @@ void test_typejump_ignores_modified_keys(void)
     u32 sel = 0U;
     Key k;
 
-    sag_typejump_clear(&tj);
+    yew_typejump_clear(&tj);
     (void)memset(&k, 0, sizeof(k));
     k.code = (u32)'n';
     k.text[0] = (u8)'n';
     k.ntext = 1U;
-    k.mods = SAG_MOD_CTRL;
-    SAG_ASSERT(!sag_typejump_key(&tj, &k, 1000, tj_items, 6U, &sel));
-    SAG_ASSERT_EQ_U64(tj.len, 0U);
-    SAG_ASSERT_EQ_U64(sel, 0U);
+    k.mods = YEW_MOD_CTRL;
+    YEW_ASSERT(!yew_typejump_key(&tj, &k, 1000, tj_items, 6U, &sel));
+    YEW_ASSERT_EQ_U64(tj.len, 0U);
+    YEW_ASSERT_EQ_U64(sel, 0U);
 }
 
 /* ---------------------------------------------------------------- */
@@ -238,15 +238,15 @@ void test_typejump_hint_expires_without_a_key(void)
     u32 sel = 0U;
     Key k;
 
-    sag_typejump_clear(&tj);
-    SAG_ASSERT(!sag_typejump_active(&tj, 1000));
+    yew_typejump_clear(&tj);
+    YEW_ASSERT(!yew_typejump_active(&tj, 1000));
     k = tj_char('b');
-    SAG_ASSERT(sag_typejump_key(&tj, &k, 1000, tj_items, 6U, &sel));
-    SAG_ASSERT(sag_typejump_active(&tj, 1000));
-    SAG_ASSERT(sag_typejump_active(&tj, 1499));
+    YEW_ASSERT(yew_typejump_key(&tj, &k, 1000, tj_items, 6U, &sel));
+    YEW_ASSERT(yew_typejump_active(&tj, 1000));
+    YEW_ASSERT(yew_typejump_active(&tj, 1499));
     /* At the deadline, with nothing pressed. */
-    SAG_ASSERT(!sag_typejump_active(&tj, 1500));
-    SAG_ASSERT(!sag_typejump_active(&tj, 9999));
+    YEW_ASSERT(!yew_typejump_active(&tj, 1500));
+    YEW_ASSERT(!yew_typejump_active(&tj, 9999));
 }
 
 /* ---------------------------------------------------------------- */
@@ -261,12 +261,12 @@ void test_typejump_no_match_leaves_the_selection(void)
     u32 sel = 3U;
     Key k;
 
-    sag_typejump_clear(&tj);
+    yew_typejump_clear(&tj);
     k = tj_char('z');
-    SAG_ASSERT(sag_typejump_key(&tj, &k, 1000, tj_items, 6U, &sel));
+    YEW_ASSERT(yew_typejump_key(&tj, &k, 1000, tj_items, 6U, &sel));
     k = tj_char('q');
-    SAG_ASSERT(sag_typejump_key(&tj, &k, 1050, tj_items, 6U, &sel));
-    SAG_ASSERT_EQ_U64(sel, 3U);
+    YEW_ASSERT(yew_typejump_key(&tj, &k, 1050, tj_items, 6U, &sel));
+    YEW_ASSERT_EQ_U64(sel, 3U);
 }
 
 void test_typejump_degenerate_inputs(void)
@@ -275,14 +275,14 @@ void test_typejump_degenerate_inputs(void)
     u32 sel = 0U;
     Key k = tj_char('a');
 
-    sag_typejump_clear(&tj);
-    sag_typejump_clear(NULL);
-    SAG_ASSERT(!sag_typejump_key(NULL, &k, 0, tj_items, 6U, &sel));
-    SAG_ASSERT(!sag_typejump_key(&tj, NULL, 0, tj_items, 6U, &sel));
-    SAG_ASSERT(!sag_typejump_key(&tj, &k, 0, NULL, 0U, &sel));
-    SAG_ASSERT(!sag_typejump_key(&tj, &k, 0, tj_items, 0U, &sel));
-    SAG_ASSERT(!sag_typejump_key(&tj, &k, 0, tj_items, 6U, NULL));
-    SAG_ASSERT(!sag_typejump_active(NULL, 0));
+    yew_typejump_clear(&tj);
+    yew_typejump_clear(NULL);
+    YEW_ASSERT(!yew_typejump_key(NULL, &k, 0, tj_items, 6U, &sel));
+    YEW_ASSERT(!yew_typejump_key(&tj, NULL, 0, tj_items, 6U, &sel));
+    YEW_ASSERT(!yew_typejump_key(&tj, &k, 0, NULL, 0U, &sel));
+    YEW_ASSERT(!yew_typejump_key(&tj, &k, 0, tj_items, 0U, &sel));
+    YEW_ASSERT(!yew_typejump_key(&tj, &k, 0, tj_items, 6U, NULL));
+    YEW_ASSERT(!yew_typejump_active(NULL, 0));
 }
 
 /* A pattern longer than the buffer is truncated, not overflowed. */
@@ -292,12 +292,12 @@ void test_typejump_long_pattern_is_bounded(void)
     u32 sel = 0U;
     u32 i;
 
-    sag_typejump_clear(&tj);
+    yew_typejump_clear(&tj);
     for (i = 0U; i < 200U; i++) {
         Key k = tj_char('a');
 
-        SAG_ASSERT(sag_typejump_key(&tj, &k, (i64)(1000 + i), tj_items, 6U,
+        YEW_ASSERT(yew_typejump_key(&tj, &k, (i64)(1000 + i), tj_items, 6U,
                                     &sel));
     }
-    SAG_ASSERT(tj.len < (u32)SAG_TYPEJUMP_PAT_MAX);
+    YEW_ASSERT(tj.len < (u32)YEW_TYPEJUMP_PAT_MAX);
 }

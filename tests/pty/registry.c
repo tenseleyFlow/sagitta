@@ -181,7 +181,7 @@ static void case_osc52_reply(PtyCtx *c)
     spawn_scene(c, "echo");
     ptc_bytes(c, reply);
     ptc_settle(c, 50);
-    n = snprintf(log_path, sizeof(log_path), "%s/sagitta/log",
+    n = snprintf(log_path, sizeof(log_path), "%s/yew/log",
                  c->state_dir);
     ptc_check(c, n > 0 && (size_t)n < sizeof(log_path),
               "OSC 52 reply log path overflow");
@@ -214,7 +214,7 @@ static void case_restore_crash(PtyCtx *c)
         "\x1b[0 q"
         "\x1b[?1049l"
         "\x1b[?25h"
-        "sagitta: fatal signal, terminal restored\r\r\n";
+        "yew: fatal signal, terminal restored\r\r\n";
 
     ptc_allow_primary(c);
     ptc_allow_restore(c);
@@ -341,7 +341,7 @@ static bool make_fixture(PtyCtx *c, const u8 *bytes, size_t len,
 
 static void spawn_editor(PtyCtx *c, const char *path)
 {
-    ptc_spawn(c, ptc_sagitta_bin(c), path, NULL);
+    ptc_spawn(c, ptc_yew_bin(c), path, NULL);
     ptc_settle(c, 0);
     ptc_wait_kitty_push(c, 21U);
 }
@@ -640,20 +640,20 @@ static bool make_recovery_journal(PtyCtx *c, const char *path)
         return false;
     if (setenv("XDG_STATE_HOME", c->state_dir, 1) != 0)
         goto done;
-    sag_filemeta_init(&meta);
-    if (sag_file_load(path, &tb, &meta) != SAG_LOAD_OK)
+    yew_filemeta_init(&meta);
+    if (yew_file_load(path, &tb, &meta) != YEW_LOAD_OK)
         goto dispose_meta;
-    journal = sag_journal_open(meta.realpath, &meta);
+    journal = yew_journal_open(meta.realpath, &meta);
     if (journal == NULL)
         goto dispose_meta;
-    sag_journal_record(journal, SAG_JOURNAL_INS, 0U,
+    yew_journal_record(journal, YEW_JOURNAL_INS, 0U,
                        (const u8 *)"RECOVERED ", 10U);
-    sag_journal_sync(journal);
-    ok = sag_journal_ok(journal);
-    sag_journal_close(journal);
+    yew_journal_sync(journal);
+    ok = yew_journal_ok(journal);
+    yew_journal_close(journal);
 dispose_meta:
-    sag_textbuf_free(tb);
-    sag_filemeta_dispose(&meta);
+    yew_textbuf_free(tb);
+    yew_filemeta_dispose(&meta);
 done:
     if (saved != NULL) {
         if (setenv("XDG_STATE_HOME", saved, 1) != 0)
@@ -1687,7 +1687,7 @@ static bool s38_write_config(PtyCtx *c, const char *source,
 static void s38_spawn_configured(PtyCtx *c, const char *config,
                                  const char *path)
 {
-    ptc_spawn(c, ptc_sagitta_bin(c), "--config", config,
+    ptc_spawn(c, ptc_yew_bin(c), "--config", config,
               "--no-workspace-config", path, NULL);
     ptc_settle(c, 0);
     ptc_wait_kitty_push(c, 21U);
@@ -1744,10 +1744,10 @@ static void case_s38_macro_browser(PtyCtx *c)
 {
     static const u8 initial[] = "base\n";
     static const u8 alpha[] =
-        "# sagitta-macro: 1\n"
+        "# yew-macro: 1\n"
         "macro first = @[ i\"D\" ]\n";
     static const u8 beta[] =
-        "# sagitta-macro: 1\n"
+        "# yew-macro: 1\n"
         "macro second = @[ i\"E\" ]\n";
     static const char macro_dir[] = "build/pty-s38-macro-browser-lib";
     static const char alpha_path[] =
@@ -2222,7 +2222,7 @@ static void case_s18_cmdline_horizontal_scroll(PtyCtx *c)
 
 /* Job output arrives asynchronously, so a snapshot must wait for the
  * frame that carries it rather than for a fixed delay.  Elapsed time is
- * pinned by SAG_JOB_ELAPSED_MS in the pty environment so the exit footer
+ * pinned by YEW_JOB_ELAPSED_MS in the pty environment so the exit footer
  * is byte-stable. */
 static void s19_run_frames(PtyCtx *c, const char *command, u32 frames)
 {
@@ -2313,7 +2313,7 @@ static void case_s19_exit_footer_signal(PtyCtx *c)
 
 /*
  * There is deliberately NO pty golden for an exec failure.  Reaching the
- * genuine SAG_JOB_EXECFAIL path needs a missing *shell*, which `:!` cannot
+ * genuine YEW_JOB_EXECFAIL path needs a missing *shell*, which `:!` cannot
  * produce; a missing command is the shell's own 127, already covered by
  * s19_exit_footer_nonzero.  And the shell's "command not found" goes to
  * stderr while the footer goes to the buffer — two pipes the kernel does
@@ -3024,7 +3024,7 @@ static void s23_open_tabs(PtyCtx *c, int n)
     for (i = 0; i < n; i++) {
         char line[96];
 
-        (void)snprintf(line, sizeof(line), ":tabedit /tmp/sag-pty-%d.txt",
+        (void)snprintf(line, sizeof(line), ":tabedit /tmp/yew-pty-%d.txt",
                        i);
         s18_settle_after_keys(c, ":");
         s18_settle_after_bytes(c, line + 1);
@@ -3160,7 +3160,7 @@ static void case_s23_dirty_close_discard(PtyCtx *c)
 /* Short on purpose: row-1 labels clip at 24 cells, and a long
  * directory name would cut the `(N)` count the golden exists to
  * show. */
-#define S24_DIR "/tmp/sag-s24-grp"
+#define S24_DIR "/tmp/yew-s24-grp"
 
 static void s24_fixture_make(void)
 {
@@ -3326,7 +3326,7 @@ static void case_s24_digit_jump_is_immediate(PtyCtx *c)
 /* Sprint 25 §9 / DoD 2: resume exactness                           */
 /* ---------------------------------------------------------------- */
 
-#define S25_DIR "/tmp/sag-s25-resume"
+#define S25_DIR "/tmp/yew-s25-resume"
 
 /*
  * Six files, one of them CJK so the goal column is not a byte count,
@@ -3338,7 +3338,7 @@ static void s25_fixture_make(void)
                                         "d.txt", "e.txt", "f.txt"};
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(names); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
         char path[256];
 
         (void)snprintf(path, sizeof(path), "%s/%s", S25_DIR, names[i]);
@@ -3346,7 +3346,7 @@ static void s25_fixture_make(void)
     }
     (void)rmdir(S25_DIR);
     (void)mkdir(S25_DIR, 0700);
-    for (i = 0U; i < SAG_ARRAY_LEN(names); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
         char path[256];
         FILE *f;
         u32 line;
@@ -3374,7 +3374,7 @@ static void s25_fixture_remove(void)
                                         "d.txt", "e.txt", "f.txt"};
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(names); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
         char path[256];
 
         (void)snprintf(path, sizeof(path), "%s/%s", S25_DIR, names[i]);
@@ -3385,19 +3385,19 @@ static void s25_fixture_remove(void)
 
 /*
  * Spawned with NO file argument, which is what makes a restore happen:
- * `sag file.c` is a request to edit that file, and burying it under
+ * `yew file.c` is a request to edit that file, and burying it under
  * restored tabs answers a question nobody asked.
  */
 static void s25_spawn_bare(PtyCtx *c)
 {
-    ptc_spawn(c, ptc_sagitta_bin(c), NULL);
+    ptc_spawn(c, ptc_yew_bin(c), NULL);
     ptc_settle(c, 0);
     ptc_wait_kitty_push(c, 21U);
 }
 
 static void s25_resume_bare(PtyCtx *c)
 {
-    ptc_resume(c, ptc_sagitta_bin(c), NULL);
+    ptc_resume(c, ptc_yew_bin(c), NULL);
     ptc_settle(c, 0);
     ptc_wait_kitty_push(c, 21U);
 }
@@ -3537,7 +3537,7 @@ static void case_s25_resume_survives_resize(PtyCtx *c)
  * The existing click case clicks into the LEFT pane, whose rect.x
  * happens to equal its gutter width — so the pane-relative and absolute
  * conversions agree there and it passed either way.  That coincidence
- * is why sag_vp_ccol_of_gridx subtracted the gutter instead of rect.x
+ * is why yew_vp_ccol_of_gridx subtracted the gutter instead of rect.x
  * from Sprint 14 until Sprint 25, putting every click in a right-hand
  * pane rect.x - gutter columns too far along the line.
  *
@@ -3567,7 +3567,7 @@ static void case_s22_click_in_the_right_pane(PtyCtx *c)
 /* Sprint 26: the finder                                            */
 /* ---------------------------------------------------------------- */
 
-#define S26_DIR "/tmp/sag-s26-find"
+#define S26_DIR "/tmp/yew-s26-find"
 
 /*
  * A small tree with a CJK filename, because match highlighting is drawn
@@ -3581,7 +3581,7 @@ static void s26_fixture_make(void)
         "\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e.c"};
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(names); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
         char path[256];
 
         (void)snprintf(path, sizeof(path), "%s/%s", S26_DIR, names[i]);
@@ -3589,7 +3589,7 @@ static void s26_fixture_make(void)
     }
     (void)rmdir(S26_DIR);
     (void)mkdir(S26_DIR, 0700);
-    for (i = 0U; i < SAG_ARRAY_LEN(names); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
         char path[256];
         FILE *f;
 
@@ -3609,7 +3609,7 @@ static void s26_fixture_remove(void)
         "\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e.c"};
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(names); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
         char path[256];
 
         (void)snprintf(path, sizeof(path), "%s/%s", S26_DIR, names[i]);
@@ -3767,7 +3767,7 @@ static void case_s26_buffer_switcher(PtyCtx *c)
 
 /*
  * The undo branch picker over a real tree, with the clock injected
- * through SAG_PICKERS_NOW so "3 minutes ago" is the same string on
+ * through YEW_PICKERS_NOW so "3 minutes ago" is the same string on
  * every run — a golden of relative timestamps is otherwise unpinnable.
  */
 static void case_s26_undo_branches(PtyCtx *c)
@@ -3800,8 +3800,8 @@ static void case_s26_undo_branches(PtyCtx *c)
 /*
  * TWELVE ELEMENTS, FOUR VARIANTS EACH.
  *
- * The variants are truecolor, NO_COLOR=1, SAG_COLORS=16 and
- * SAG_ASCII=1, and they are selected by the case's NAME (see
+ * The variants are truecolor, NO_COLOR=1, YEW_COLORS=16 and
+ * YEW_ASCII=1, and they are selected by the case's NAME (see
  * harness.c's no_color_for / ascii_for).  One name therefore picks the
  * environment, the scene AND the golden, so the three cannot drift
  * apart — which is why every case below snapshots under `c->test->name`
@@ -4061,7 +4061,7 @@ static void case_s27_click_cjk_tab(PtyCtx *c)
         return;
     s18_settle_after_keys(c, ":");
     s18_settle_after_bytes(c,
-                           "tabedit /tmp/sag-s27-\xe6\xbc\xa2\xe5\xad\x97.txt");
+                           "tabedit /tmp/yew-s27-\xe6\xbc\xa2\xe5\xad\x97.txt");
     s18_settle_after_keys(c, "enter");
     s23_open_tabs(c, 1);
     /* Column 3 (1-based in the report) is inside the FIRST entry. */
@@ -4070,7 +4070,7 @@ static void case_s27_click_cjk_tab(PtyCtx *c)
     ptc_snapshot(c, "s27_click_cjk_tab");
     force_quit(c);
     (void)unlink(path);
-    (void)unlink("/tmp/sag-s27-\xe6\xbc\xa2\xe5\xad\x97.txt");
+    (void)unlink("/tmp/yew-s27-\xe6\xbc\xa2\xe5\xad\x97.txt");
 }
 
 /*
@@ -4132,7 +4132,7 @@ static void case_s27_dwell_opens_member_strip(PtyCtx *c)
 /*
  * DoD 6: the mode CHIP after a double-click.
  *
- * The unit tests prove the span equals sag_unit_word.span; this proves
+ * The unit tests prove the span equals yew_unit_word.span; this proves
  * the editor actually ends up in H mode with the word engine borrowed,
  * which is the half a caller can see.  A double-click that produced the
  * right bytes in the wrong mode would leave every H-mode key doing
@@ -4150,10 +4150,10 @@ static void case_s27_double_click_mode_chip(PtyCtx *c)
      * six cells, so text column 8 is screen column 14.
      *
      * All four reports go in ONE write, and that is load-bearing: a
-     * double-click is two clicks within SAG_CLICK_MULTI_MS (400 ms) of
+     * double-click is two clicks within YEW_CLICK_MULTI_MS (400 ms) of
      * each other by the EDITOR's clock, so a settle between them is a
      * race the harness can lose.  It did — under valgrind the settle
-     * scales (SAG_PTY_QUIET_SCALE) past 400 ms, the second click starts
+     * scales (YEW_PTY_QUIET_SCALE) past 400 ms, the second click starts
      * a fresh run, and the case recorded a single click's cursor.
      * Delivering them together is also what a real double-click looks
      * like arriving over a pty.
@@ -4190,19 +4190,19 @@ static void case_s27_group_menu_over_scrolled_strip(PtyCtx *c)
 /* ---------------------------------------------------------------- */
 
 /*
- * `sag fl` on a tty owns the terminal like the editor does, so it gets
+ * `yew fl` on a tty owns the terminal like the editor does, so it gets
  * the same two goldens the editor has: what a session LOOKS like, and
  * what the terminal looks like AFTER one dies badly.  Note there is no
  * alternate screen here -- the prompt scrolls in place, which is why
  * the golden shows the banner still on row 0.
  */
 static const char report_tail[] =
-    "sagitta: please report this internal error\r\n";
+    "yew: please report this internal error\r\n";
 
 static void spawn_repl(PtyCtx *c)
 {
     ptc_allow_primary(c);
-    ptc_spawn(c, ptc_sagitta_bin(c), "fl", NULL);
+    ptc_spawn(c, ptc_yew_bin(c), "fl", NULL);
     ptc_no_altscreen(c);
     /*
      * Wait for the PROMPT, not a quiet period.  Anything typed before
@@ -4270,7 +4270,7 @@ static void case_s32_repl_session(PtyCtx *c)
      * valgrind the prompt is slow enough that a result had not been
      * written yet when the assertion ran.
      */
-    REPL_SAW(c, "sagitta ");
+    REPL_SAW(c, "yew ");
     REPL_SAW(c, "fl> ");
     REPL_SAW(c, "3\r\n");                /* 1 + 2, printed              */
     REPL_SAW(c, "... ");                 /* the brace held the entry    */
@@ -4324,7 +4324,7 @@ static void case_s33_hello_world_repl(PtyCtx *c)
 }
 
 /*
- * INVARIANT 6 THROUGH sag_bug.  §9's reporter runs from inside the VM
+ * INVARIANT 6 THROUGH yew_bug.  §9's reporter runs from inside the VM
  * with the terminal in raw mode; the restore prehook has to fire before
  * a byte of the report reaches the screen, or the user is left with a
  * dead shell holding a stack dump.  --selftest-fl-bug corrupts a chunk
@@ -4334,7 +4334,7 @@ static void case_s32_bug_restores_the_terminal(PtyCtx *c)
 {
     ptc_allow_primary(c);
     ptc_allow_restore(c);
-    ptc_spawn(c, ptc_sagitta_bin(c), "fl", "--selftest-fl-bug", NULL);
+    ptc_spawn(c, ptc_yew_bin(c), "fl", "--selftest-fl-bug", NULL);
     ptc_no_altscreen(c);
     ptc_wait_output(c, "fl> ", 4U);
     /* The prompt, before anything breaks.  The report that follows is
@@ -4343,7 +4343,7 @@ static void case_s32_bug_restores_the_terminal(PtyCtx *c)
     ptc_bytes(c, "x");
     ptc_expect_exit(c, 4);
     /*
-     * The restore comes BEFORE the report, not after: sag_bug's prehook
+     * The restore comes BEFORE the report, not after: yew_bug's prehook
      * hands the terminal back first so the report itself arrives on a
      * cooked terminal a user can read and scroll.  Asserting the tail
      * were the restore blob would pin the opposite -- and wrong --
@@ -4379,15 +4379,15 @@ static void case_s37_batch_never_touches_the_terminal(PtyCtx *c)
      * a bootstrap that waits for terminal input will miss expect_exit's
      * case deadline.  The valid script itself is intentionally silent.
      */
-    ptc_spawn(c, ptc_sagitta_bin(c), "--clean", "--batch", path, NULL);
+    ptc_spawn(c, ptc_yew_bin(c), "--clean", "--batch", path, NULL);
     ptc_expect_exit(c, 0);
     ptc_check_termios_unchanged(c);
     ptc_check(c, memchr(c->raw.data, '\x1b', c->raw.len) == NULL,
-              "sag --batch emitted terminal setup or restore bytes");
+              "yew --batch emitted terminal setup or restore bytes");
     ptc_snapshot(c, "s37_batch_no_tty");
 }
 
-const PtyCase sag_pty_cases[] = {
+const PtyCase yew_pty_cases[] = {
     C(s37_batch_never_touches_the_terminal, modern, 24U, 80U,
       case_s37_batch_never_touches_the_terminal),
     C(s38_macro_indicator_80, modern, 24U, 80U,

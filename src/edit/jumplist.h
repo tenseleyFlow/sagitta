@@ -1,5 +1,5 @@
-#ifndef SAG_EDIT_JUMPLIST_H
-#define SAG_EDIT_JUMPLIST_H
+#ifndef YEW_EDIT_JUMPLIST_H
+#define YEW_EDIT_JUMPLIST_H
 
 /*
  * Sprint 21 §5: navigation history.
@@ -41,10 +41,10 @@ typedef struct JumpEntry {
     u64 stamp_ms;
 } JumpEntry;
 
-#define SAG_JUMPLIST_MAX 100
-#define SAG_CHANGELIST_MAX 100
+#define YEW_JUMPLIST_MAX 100
+#define YEW_CHANGELIST_MAX 100
 /* Consecutive edits within this window collapse into one entry. */
-#define SAG_CHANGE_COALESCE_MS 500
+#define YEW_CHANGE_COALESCE_MS 500
 
 /*
  * Ring, browser-history model.  `head` is one past the newest entry;
@@ -53,13 +53,13 @@ typedef struct JumpEntry {
  * not walking" — the state every walk starts and ends in.
  */
 typedef struct JumpList {
-    JumpEntry e[SAG_JUMPLIST_MAX];
+    JumpEntry e[YEW_JUMPLIST_MAX];
     u32 head, len;
     u32 cur;
 } JumpList;
 
 typedef struct ChangeList {
-    JumpEntry e[SAG_CHANGELIST_MAX];
+    JumpEntry e[YEW_CHANGELIST_MAX];
     u32 head, len, cur;
     /* Coalescing needs the previous record's time and line, which are
      * not recoverable from the entry once its mark has moved. */
@@ -68,8 +68,8 @@ typedef struct ChangeList {
     bool has_last;
 } ChangeList;
 
-void sag_jumplist_init(JumpList *jl);
-void sag_changelist_init(ChangeList *cl);
+void yew_jumplist_init(JumpList *jl);
+void yew_changelist_init(ChangeList *cl);
 
 /*
  * Records `from` as a place worth coming back to, before a jump moves
@@ -78,33 +78,33 @@ void sag_changelist_init(ChangeList *cl);
  * which is what keeps replay deterministic (invariant 5) and what lets
  * the coalescing tests drive the boundaries exactly.
  */
-void sag_jump_push(Win *w, ByteOff from, i64 now_ms);
-bool sag_jump_back(Ed *ed, Win *w, u32 count);
-bool sag_jump_fwd(Ed *ed, Win *w, u32 count);
+void yew_jump_push(Win *w, ByteOff from, i64 now_ms);
+bool yew_jump_back(Ed *ed, Win *w, u32 count);
+bool yew_jump_fwd(Ed *ed, Win *w, u32 count);
 
 /* Fed from the Sprint 9 op stream, not from a parallel notification
  * path: one op stream, N consumers. */
-void sag_change_record(Buffer *b, ByteOff at, i64 now_ms);
-bool sag_change_older(Ed *ed, Win *w, u32 count);
-bool sag_change_newer(Ed *ed, Win *w, u32 count);
+void yew_change_record(Buffer *b, ByteOff at, i64 now_ms);
+bool yew_change_older(Ed *ed, Win *w, u32 count);
+bool yew_change_newer(Ed *ed, Win *w, u32 count);
 
 /* Entry count and logical (oldest-first) indexing, for ed.jump.list and
  * the tests. */
-u32 sag_jumplist_len(const JumpList *jl);
-const JumpEntry *sag_jumplist_at(const JumpList *jl, u32 index);
+u32 yew_jumplist_len(const JumpList *jl);
+const JumpEntry *yew_jumplist_at(const JumpList *jl, u32 index);
 
 /*
  * Sprint 25's schema shape, landed now and called by nobody.  Marks are
  * resolved to line/col at serialize time because a mark handle means
  * nothing in another process.
  */
-void sag_jumplist_serialize(const JumpList *jl, const Ed *ed, Bytebuf *out);
-bool sag_jumplist_deserialize(JumpList *jl, const u8 *bytes, size_t len);
+void yew_jumplist_serialize(const JumpList *jl, const Ed *ed, Bytebuf *out);
+bool yew_jumplist_deserialize(JumpList *jl, const u8 *bytes, size_t len);
 
-CmdStatus sag_jump_cmd_back(CmdCtx *cx);
-CmdStatus sag_jump_cmd_fwd(CmdCtx *cx);
-CmdStatus sag_jump_cmd_list(CmdCtx *cx);
-CmdStatus sag_change_cmd_older(CmdCtx *cx);
-CmdStatus sag_change_cmd_newer(CmdCtx *cx);
+CmdStatus yew_jump_cmd_back(CmdCtx *cx);
+CmdStatus yew_jump_cmd_fwd(CmdCtx *cx);
+CmdStatus yew_jump_cmd_list(CmdCtx *cx);
+CmdStatus yew_change_cmd_older(CmdCtx *cx);
+CmdStatus yew_change_cmd_newer(CmdCtx *cx);
 
 #endif

@@ -1,7 +1,7 @@
-#ifndef SAG_EDIT_BATCH_TEST_H
-#define SAG_EDIT_BATCH_TEST_H
+#ifndef YEW_EDIT_BATCH_TEST_H
+#define YEW_EDIT_BATCH_TEST_H
 
-/* Sprint 37: the assertion host installed by sag --batch --test. */
+/* Sprint 37: the assertion host installed by yew --batch --test. */
 
 #include <stdbool.h>
 
@@ -11,15 +11,15 @@
 
 typedef struct FlVm FlVm;
 
-typedef struct SagBatchTestLog {
+typedef struct YewBatchTestLog {
     char *message;
     u8 level;
-} SagBatchTestLog;
+} YewBatchTestLog;
 
-typedef struct SagBatchTestState {
+typedef struct YewBatchTestState {
     FlVm *vm;
     Bytebuf failure_records;
-    SagBatchTestLog *logs;
+    YewBatchTestLog *logs;
     u32 nlogs;
     u32 caplogs;
     u64 assertions;
@@ -27,16 +27,16 @@ typedef struct SagBatchTestState {
     bool skipped;
     bool installed;
     bool finished;
-} SagBatchTestState;
+} YewBatchTestState;
 
 /* One batch test runs in one process, so only one installed state is active. */
-void sag_batch_test_init(SagBatchTestState *state);
-bool sag_batch_test_install(SagBatchTestState *state, FlVm *vm);
-void sag_batch_test_note_log(SagBatchTestState *state, SagLogLevel level,
+void yew_batch_test_init(YewBatchTestState *state);
+bool yew_batch_test_install(YewBatchTestState *state, FlVm *vm);
+void yew_batch_test_note_log(YewBatchTestState *state, YewLogLevel level,
                              const char *message);
 
-/* Pass fd < 0 to use SAG_SCRIPT_RESULT_FD, falling back to stderr. */
-bool sag_batch_test_finish(SagBatchTestState *state, int fd);
-void sag_batch_test_free(SagBatchTestState *state);
+/* Pass fd < 0 to use YEW_SCRIPT_RESULT_FD, falling back to stderr. */
+bool yew_batch_test_finish(YewBatchTestState *state, int fd);
+void yew_batch_test_free(YewBatchTestState *state);
 
-#endif /* SAG_EDIT_BATCH_TEST_H */
+#endif /* YEW_EDIT_BATCH_TEST_H */

@@ -7,7 +7,7 @@
  * exists because of that number, so this is where the design either
  * holds or it does not:
  *
- *   walk slice      <= 3 ms   no single sag_walk_step blocks a frame
+ *   walk slice      <= 3 ms   no single yew_walk_step blocks a frame
  *   first keystroke <= 5 ms   IN-FRAME; the remainder is sliced
  *   narrowing keys  <= 5 ms   COMPLETE, not sliced — this is the
  *                             common case and it must never slice
@@ -103,8 +103,8 @@ static void corpus_make(u32 n)
     size_t cap = (size_t)n * 80U;
     u32 i;
 
-    g_items = sag_xreallocarray(NULL, n, sizeof(*g_items));
-    g_text = sag_xmalloc(cap);
+    g_items = yew_xreallocarray(NULL, n, sizeof(*g_items));
+    g_text = yew_xmalloc(cap);
     for (i = 0U; i < n; i++) {
         char stem[16];
         u32 k;
@@ -155,17 +155,17 @@ static i64 measure_first_key(void)
         i64 start;
         i64 end;
 
-        sag_filter_init(&f);
-        sag_filter_reset(&f, g_items, (u32)PERF_FINDER_ITEMS, 0U);
+        yew_filter_init(&f);
+        yew_filter_reset(&f, g_items, (u32)PERF_FINDER_ITEMS, 0U);
         start = now_ns();
-        (void)sag_filter_apply(&f, g_items, (u32)PERF_FINDER_ITEMS, true,
-                               "s", 1U, SAG_PICKER_SLICE_US);
+        (void)yew_filter_apply(&f, g_items, (u32)PERF_FINDER_ITEMS, true,
+                               "s", 1U, YEW_PICKER_SLICE_US);
         end = now_ns();
         if (start < 0 || end < 0)
             exit(2);
         if (t >= (u32)PERF_FINDER_WARMUPS)
             samples[t - PERF_FINDER_WARMUPS] = end - start;
-        sag_filter_free(&f);
+        yew_filter_free(&f);
     }
     sort_i64(samples, PERF_FINDER_TRIALS);
     /* p99 of eleven is the max; the budget is a ceiling, not an
@@ -202,14 +202,14 @@ static i64 measure_narrowing(u32 *out_matched, i64 *out_total_ns)
         u32 k;
         i64 trial_total = 0;
 
-        sag_filter_init(&f);
-        sag_filter_reset(&f, g_items, (u32)PERF_FINDER_ITEMS, 0U);
+        yew_filter_init(&f);
+        yew_filter_reset(&f, g_items, (u32)PERF_FINDER_ITEMS, 0U);
         /* The first key, unmeasured: it is the one allowed to slice. */
         pat[plen++] = keys[0];
         pat[plen] = '\0';
-        (void)sag_filter_apply(&f, g_items, (u32)PERF_FINDER_ITEMS, true,
-                               pat, plen, SAG_PICKER_SLICE_US);
-        while (sag_filter_step(&f, g_items, true, SAG_PICKER_SLICE_US))
+        (void)yew_filter_apply(&f, g_items, (u32)PERF_FINDER_ITEMS, true,
+                               pat, plen, YEW_PICKER_SLICE_US);
+        while (yew_filter_step(&f, g_items, true, YEW_PICKER_SLICE_US))
             ;
         for (k = 1U; keys[k] != '\0'; k++) {
             i64 start;
@@ -219,8 +219,8 @@ static i64 measure_narrowing(u32 *out_matched, i64 *out_total_ns)
             pat[plen++] = keys[k];
             pat[plen] = '\0';
             start = now_ns();
-            more = !sag_filter_apply(&f, g_items, (u32)PERF_FINDER_ITEMS,
-                                     true, pat, plen, SAG_PICKER_SLICE_US);
+            more = !yew_filter_apply(&f, g_items, (u32)PERF_FINDER_ITEMS,
+                                     true, pat, plen, YEW_PICKER_SLICE_US);
             end = now_ns();
             if (start < 0 || end < 0)
                 exit(2);
@@ -231,8 +231,8 @@ static i64 measure_narrowing(u32 *out_matched, i64 *out_total_ns)
             while (more) {
                 i64 s2 = now_ns();
 
-                more = sag_filter_step(&f, g_items, true,
-                                       SAG_PICKER_SLICE_US);
+                more = yew_filter_step(&f, g_items, true,
+                                       YEW_PICKER_SLICE_US);
                 trial_total += now_ns() - s2;
                 /* Every slice is a frame's worth, so each must also fit
                  * the slice budget. */
@@ -244,8 +244,8 @@ static i64 measure_narrowing(u32 *out_matched, i64 *out_total_ns)
         if (t >= (u32)PERF_FINDER_WARMUPS && trial_total > total)
             total = trial_total;
         if (out_matched != NULL)
-            *out_matched = sag_filter_matched(&f);
-        sag_filter_free(&f);
+            *out_matched = yew_filter_matched(&f);
+        yew_filter_free(&f);
     }
     if (out_total_ns != NULL)
         *out_total_ns = total;
@@ -263,20 +263,20 @@ static i64 measure_open(void)
 
     for (t = 0U; t < (u32)(PERF_FINDER_TRIALS + PERF_FINDER_WARMUPS); t++) {
         FilterState f;
-        FzRanked top[SAG_FILTER_TOPK];
+        FzRanked top[YEW_FILTER_TOPK];
         i64 start;
         i64 end;
 
-        sag_filter_init(&f);
+        yew_filter_init(&f);
         start = now_ns();
-        sag_filter_reset(&f, g_items, (u32)PERF_FINDER_ITEMS, 0U);
-        (void)sag_filter_top(&f, g_items, true, top, (u32)SAG_FILTER_TOPK);
+        yew_filter_reset(&f, g_items, (u32)PERF_FINDER_ITEMS, 0U);
+        (void)yew_filter_top(&f, g_items, true, top, (u32)YEW_FILTER_TOPK);
         end = now_ns();
         if (start < 0 || end < 0)
             exit(2);
         if (t >= (u32)PERF_FINDER_WARMUPS)
             samples[t - PERF_FINDER_WARMUPS] = end - start;
-        sag_filter_free(&f);
+        yew_filter_free(&f);
     }
     sort_i64(samples, PERF_FINDER_TRIALS);
     return samples[PERF_FINDER_TRIALS - 1U];
@@ -289,15 +289,15 @@ static i64 measure_worst_slice(void)
     i64 worst = 0;
     u32 slices = 0U;
 
-    sag_filter_init(&f);
-    sag_filter_reset(&f, g_items, (u32)PERF_FINDER_ITEMS, 0U);
+    yew_filter_init(&f);
+    yew_filter_reset(&f, g_items, (u32)PERF_FINDER_ITEMS, 0U);
     /* A pattern that is not an extension of anything forces the full
      * sliced path. */
-    (void)sag_filter_apply(&f, g_items, (u32)PERF_FINDER_ITEMS, true, "xq",
-                           2U, SAG_PICKER_SLICE_US);
+    (void)yew_filter_apply(&f, g_items, (u32)PERF_FINDER_ITEMS, true, "xq",
+                           2U, YEW_PICKER_SLICE_US);
     for (;;) {
         i64 start = now_ns();
-        bool more = sag_filter_step(&f, g_items, true, SAG_PICKER_SLICE_US);
+        bool more = yew_filter_step(&f, g_items, true, YEW_PICKER_SLICE_US);
         i64 end = now_ns();
 
         if (start < 0 || end < 0)
@@ -308,7 +308,7 @@ static i64 measure_worst_slice(void)
         if (!more || slices > 100000U)
             break;
     }
-    sag_filter_free(&f);
+    yew_filter_free(&f);
     return worst;
 }
 

@@ -64,15 +64,15 @@ void test_base64_rfc4648_vectors(void)
     };
     size_t i;
 
-    for (i = 0u; i < SAG_ARRAY_LEN(cases); i++) {
+    for (i = 0u; i < YEW_ARRAY_LEN(cases); i++) {
         u64 input_len = (u64)strlen(cases[i].input);
-        u64 encoded_len = sag_base64_len(input_len);
+        u64 encoded_len = yew_base64_len(input_len);
         u8 *encoded = malloc((size_t)(encoded_len == 0u ? 1u : encoded_len));
 
-        SAG_ASSERT_NOT_NULL(encoded);
-        sag_base64_encode((const u8 *)cases[i].input, input_len, encoded);
-        SAG_ASSERT_EQ_U64(encoded_len, strlen(cases[i].encoded));
-        SAG_ASSERT_EQ_MEM(encoded, cases[i].encoded, (size_t)encoded_len);
+        YEW_ASSERT_NOT_NULL(encoded);
+        yew_base64_encode((const u8 *)cases[i].input, input_len, encoded);
+        YEW_ASSERT_EQ_U64(encoded_len, strlen(cases[i].encoded));
+        YEW_ASSERT_EQ_MEM(encoded, cases[i].encoded, (size_t)encoded_len);
         free(encoded);
     }
 }
@@ -85,17 +85,17 @@ void test_base64_lengths_and_alphabet(void)
 
     memset(input, 0xa5, sizeof(input));
     for (n = 0u; n <= sizeof(input); n++) {
-        u64 encoded_len = sag_base64_len(n);
+        u64 encoded_len = yew_base64_len(n);
         u64 i;
 
-        SAG_ASSERT_EQ_U64(encoded_len, 4u * ((n + 2u) / 3u));
-        sag_base64_encode(input, n, encoded);
+        YEW_ASSERT_EQ_U64(encoded_len, 4u * ((n + 2u) / 3u));
+        yew_base64_encode(input, n, encoded);
         for (i = 0u; i < encoded_len; i++) {
             u8 c = encoded[i];
 
-            SAG_ASSERT(base64_value(c) >= 0 || c == (u8)'=');
-            SAG_ASSERT(c != (u8)'\n');
-            SAG_ASSERT(c != (u8)'\r');
+            YEW_ASSERT(base64_value(c) >= 0 || c == (u8)'=');
+            YEW_ASSERT(c != (u8)'\n');
+            YEW_ASSERT(c != (u8)'\r');
         }
     }
 }
@@ -110,15 +110,15 @@ void test_base64_binary_roundtrip_fuzz(void)
 
     for (iteration = 0u; iteration < 10000u; iteration++) {
         size_t n = (size_t)(base64_rng(&state) % (sizeof(input) + 1u));
-        size_t encoded_len = (size_t)sag_base64_len((u64)n);
+        size_t encoded_len = (size_t)yew_base64_len((u64)n);
         size_t i;
         size_t decoded_len;
 
         for (i = 0u; i < n; i++)
             input[i] = (u8)base64_rng(&state);
-        sag_base64_encode(input, (u64)n, encoded);
+        yew_base64_encode(input, (u64)n, encoded);
         decoded_len = base64_decode(encoded, encoded_len, decoded);
-        SAG_ASSERT_EQ_U64(decoded_len, n);
-        SAG_ASSERT_EQ_MEM(decoded, input, n);
+        YEW_ASSERT_EQ_U64(decoded_len, n);
+        YEW_ASSERT_EQ_MEM(decoded, input, n);
     }
 }

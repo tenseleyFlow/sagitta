@@ -1,5 +1,5 @@
-#ifndef SAG_FL_HANDLE_H
-#define SAG_FL_HANDLE_H
+#ifndef YEW_FL_HANDLE_H
+#define YEW_FL_HANDLE_H
 
 /*
  * Sprint 34 deliverable 1: the five editor handle types, spec §4.
@@ -38,7 +38,7 @@
  * for; see gc.h.
  *
  * FL_H_RE is the only OWNING kind: it holds an Arena with the compiled
- * program, because s20's SagRe is arena-owned and immutable.  It is
+ * program, because s20's YewRe is arena-owned and immutable.  It is
  * therefore the one place a leak is possible, and the one kind with a
  * bounded-RSS test.
  *
@@ -63,7 +63,7 @@
 typedef struct Buffer Buffer;
 typedef struct Win Win;
 typedef struct Cursor Cursor;
-typedef struct SagRe SagRe;
+typedef struct YewRe YewRe;
 typedef struct FlVm FlVm;
 
 typedef enum {
@@ -97,11 +97,11 @@ typedef struct FlHandleSlot {
         u32 win;                                    /* FL_H_WIN          */
         /*
          * The arena is held by POINTER, not by value.  The slot array
-         * is reallocated as it grows, and s20 hands out SagRe pointers
+         * is reallocated as it grows, and s20 hands out YewRe pointers
          * INTO the arena's blocks -- an Arena that moves is fine for
          * the blocks but not for anything that took its address.
          */
-        struct { Arena *a; SagRe *re; } re;         /* FL_H_RE: owned    */
+        struct { Arena *a; YewRe *re; } re;         /* FL_H_RE: owned    */
     } as;
 } FlHandleSlot;
 
@@ -149,7 +149,7 @@ Buffer *fl_h_buf(FlVm *vm, FlValue v);
 Win *fl_h_win(FlVm *vm, FlValue v);
 Cursor *fl_h_cur(FlVm *vm, FlValue v, Win **out_win);
 bool fl_h_span(FlVm *vm, FlValue v, Buffer **out_buf, Span *out);
-const SagRe *fl_h_re(FlVm *vm, FlValue v);
+const YewRe *fl_h_re(FlVm *vm, FlValue v);
 
 /* Constructors used by the bindings; they take the editor so the table
  * is found the one way.  Stable editor identities and equal live spans
@@ -162,7 +162,7 @@ FlValue fl_h_cur_make(Ed *ed, const Win *w, u32 index);
  * either end grows the span (s09 bias rules).  A zero-length span at
  * `lo == hi` is legal and is what b.mark(off) hands back. */
 FlValue fl_h_span_make(Ed *ed, Buffer *b, u64 lo, u64 hi);
-FlValue fl_h_re_make(Ed *ed, Arena *own, SagRe *re);
+FlValue fl_h_re_make(Ed *ed, Arena *own, YewRe *re);
 
 /*
  * Releases every handle naming `buf_id` and drops its marks.  Called
@@ -172,4 +172,4 @@ FlValue fl_h_re_make(Ed *ed, Arena *own, SagRe *re);
 void fl_h_drop_buffer(Ed *ed, u32 buf_id);
 void fl_h_drop_window(Ed *ed, u32 win_id);
 
-#endif /* SAG_FL_HANDLE_H */
+#endif /* YEW_FL_HANDLE_H */

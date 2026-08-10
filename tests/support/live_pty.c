@@ -15,7 +15,7 @@
 #include <time.h>
 #include <unistd.h>
 
-static bool suffix(const SagLivePty *pty, const char *text)
+static bool suffix(const YewLivePty *pty, const char *text)
 {
     size_t len = strlen(text);
 
@@ -23,7 +23,7 @@ static bool suffix(const SagLivePty *pty, const char *text)
            memcmp(pty->tail + pty->ntail - len, text, len) == 0;
 }
 
-i64 sag_live_pty_now_ns(void)
+i64 yew_live_pty_now_ns(void)
 {
     struct timespec ts;
 
@@ -34,7 +34,7 @@ i64 sag_live_pty_now_ns(void)
 
 static int timeout_ms(i64 deadline_ns)
 {
-    i64 now = sag_live_pty_now_ns();
+    i64 now = yew_live_pty_now_ns();
     i64 left;
 
     if (now < 0 || now >= deadline_ns)
@@ -45,7 +45,7 @@ static int timeout_ms(i64 deadline_ns)
     return (int)((left + INT64_C(999999)) / INT64_C(1000000));
 }
 
-bool sag_live_pty_open(SagLivePty *pty, char *slave, size_t slave_cap,
+bool yew_live_pty_open(YewLivePty *pty, char *slave, size_t slave_cap,
                        u16 rows, u16 cols)
 {
     const char *name;
@@ -85,7 +85,7 @@ fail:
     return false;
 }
 
-bool sag_live_pty_attach(const SagLivePty *pty, const char *slave,
+bool yew_live_pty_attach(const YewLivePty *pty, const char *slave,
                          u16 rows, u16 cols)
 {
     struct winsize ws;
@@ -121,9 +121,9 @@ bool sag_live_pty_attach(const SagLivePty *pty, const char *slave,
     return true;
 }
 
-void sag_live_pty_exec(const char *binary, const char *path)
+void yew_live_pty_exec(const char *binary, const char *path)
 {
-    if (getenv("SAG_TEST_VALGRIND") != NULL) {
+    if (getenv("YEW_TEST_VALGRIND") != NULL) {
         execlp("valgrind", "valgrind", "--quiet", "--error-exitcode=99",
                "--leak-check=full", "--errors-for-leak-kinds=definite",
                "--track-fds=yes", binary, path, (char *)NULL);
@@ -133,40 +133,40 @@ void sag_live_pty_exec(const char *binary, const char *path)
     _exit(126);
 }
 
-bool sag_live_pty_spawn(SagLivePty *pty, const char *binary,
+bool yew_live_pty_spawn(YewLivePty *pty, const char *binary,
                         const char *path, const char *state_dir,
                         u16 rows, u16 cols)
 {
     char slave[128];
     pid_t pid;
 
-    if (!sag_live_pty_open(pty, slave, sizeof(slave), rows, cols))
+    if (!yew_live_pty_open(pty, slave, sizeof(slave), rows, cols))
         return false;
     pid = fork();
     if (pid < 0) {
-        sag_live_pty_close(pty);
+        yew_live_pty_close(pty);
         return false;
     }
     if (pid == 0) {
         if (setenv("TERM", "xterm-256color", 1) != 0 ||
             setenv("COLORTERM", "truecolor", 1) != 0 ||
-            setenv("SAG_COLORS", "truecolor", 1) != 0 ||
-            setenv("SAG_TTY_PROBE", "1", 1) != 0 ||
-            setenv("SAG_PROBE_TIMEOUT_MS", "500", 1) != 0 ||
-            setenv("SAG_ESC_TIMEOUT_MS", "25", 1) != 0 ||
+            setenv("YEW_COLORS", "truecolor", 1) != 0 ||
+            setenv("YEW_TTY_PROBE", "1", 1) != 0 ||
+            setenv("YEW_PROBE_TIMEOUT_MS", "500", 1) != 0 ||
+            setenv("YEW_ESC_TIMEOUT_MS", "25", 1) != 0 ||
             setenv("LANG", "C.UTF-8", 1) != 0 ||
             setenv("LC_ALL", "C.UTF-8", 1) != 0 ||
             setenv("XDG_STATE_HOME", state_dir, 1) != 0 ||
-            setenv("SAG_LOG", "/dev/null", 1) != 0 ||
-            !sag_live_pty_attach(pty, slave, rows, cols))
+            setenv("YEW_LOG", "/dev/null", 1) != 0 ||
+            !yew_live_pty_attach(pty, slave, rows, cols))
             _exit(126);
-        sag_live_pty_exec(binary, path);
+        yew_live_pty_exec(binary, path);
     }
     pty->pid = pid;
     return true;
 }
 
-bool sag_live_pty_write(SagLivePty *pty, const void *data, size_t len,
+bool yew_live_pty_write(YewLivePty *pty, const void *data, size_t len,
                         i64 deadline_ns)
 {
     const u8 *bytes = data;
@@ -187,19 +187,19 @@ bool sag_live_pty_write(SagLivePty *pty, const void *data, size_t len,
         } else {
             return false;
         }
-        if (sag_live_pty_now_ns() >= deadline_ns)
+        if (yew_live_pty_now_ns() >= deadline_ns)
             return false;
     }
     return true;
 }
 
-static bool reply(SagLivePty *pty, const char *bytes, size_t len,
+static bool reply(YewLivePty *pty, const char *bytes, size_t len,
                   i64 deadline_ns)
 {
-    return sag_live_pty_write(pty, bytes, len, deadline_ns);
+    return yew_live_pty_write(pty, bytes, len, deadline_ns);
 }
 
-static bool consume(SagLivePty *pty, const u8 *bytes, size_t len,
+static bool consume(YewLivePty *pty, const u8 *bytes, size_t len,
                     i64 deadline_ns)
 {
     u8 responses[32];
@@ -249,7 +249,7 @@ static bool consume(SagLivePty *pty, const u8 *bytes, size_t len,
            reply(pty, (const char *)responses, nresponses, deadline_ns);
 }
 
-bool sag_live_pty_wait_frame(SagLivePty *pty, u64 after, i64 deadline_ns,
+bool yew_live_pty_wait_frame(YewLivePty *pty, u64 after, i64 deadline_ns,
                              i64 *completed_ns)
 {
     while (pty->frames <= after) {
@@ -260,7 +260,7 @@ bool sag_live_pty_wait_frame(SagLivePty *pty, u64 after, i64 deadline_ns,
 
         if (result < 0 && errno == EINTR)
             continue;
-        if (result == 0 && sag_live_pty_now_ns() < deadline_ns)
+        if (result == 0 && yew_live_pty_now_ns() < deadline_ns)
             continue;
         if (result <= 0) {
             size_t i;
@@ -303,11 +303,11 @@ bool sag_live_pty_wait_frame(SagLivePty *pty, u64 after, i64 deadline_ns,
             return false;
     }
     if (completed_ns != NULL)
-        *completed_ns = sag_live_pty_now_ns();
+        *completed_ns = yew_live_pty_now_ns();
     return true;
 }
 
-bool sag_live_pty_wait_exit(SagLivePty *pty, i64 deadline_ns, int *code)
+bool yew_live_pty_wait_exit(YewLivePty *pty, i64 deadline_ns, int *code)
 {
     for (;;) {
         int status;
@@ -322,7 +322,7 @@ bool sag_live_pty_wait_exit(SagLivePty *pty, i64 deadline_ns, int *code)
         }
         if (got < 0 && errno != EINTR)
             return false;
-        if (sag_live_pty_now_ns() >= deadline_ns)
+        if (yew_live_pty_now_ns() >= deadline_ns)
             return false;
         {
             struct timespec delay = {0, 1000000};
@@ -332,7 +332,7 @@ bool sag_live_pty_wait_exit(SagLivePty *pty, i64 deadline_ns, int *code)
     }
 }
 
-void sag_live_pty_close(SagLivePty *pty)
+void yew_live_pty_close(YewLivePty *pty)
 {
     if (pty == NULL)
         return;

@@ -43,17 +43,17 @@ static const char *const inputs[] = {
 /* Builds the same content as a piece tree so both backings are covered. */
 static TextBuf *tb_of(const char *text)
 {
-    TextBuf *tb = sag_textbuf_new();
+    TextBuf *tb = yew_textbuf_new();
     size_t i;
     size_t len = strlen(text);
 
     /* Interleaved inserts fragment the tree, which is the shape that
      * catches chunk-boundary bugs in either engine. */
     for (i = 0U; i < len; i += 2U)
-        sag_textbuf_insert(tb, BYTEOFF((u64)(i / 2U)),
+        yew_textbuf_insert(tb, BYTEOFF((u64)(i / 2U)),
                            (const u8 *)text + i, 1U);
     for (i = 1U; i < len; i += 2U)
-        sag_textbuf_insert(tb, BYTEOFF((u64)i), (const u8 *)text + i, 1U);
+        yew_textbuf_insert(tb, BYTEOFF((u64)i), (const u8 *)text + i, 1U);
     return tb;
 }
 
@@ -64,45 +64,45 @@ void test_re_engines_agree_on_match_or_not(void)
     u32 checked = 0U;
     u32 gave_up = 0U;
 
-    for (p = 0U; p < SAG_ARRAY_LEN(patterns); p++) {
+    for (p = 0U; p < YEW_ARRAY_LEN(patterns); p++) {
         Arena arena;
-        SagRe *re;
+        YewRe *re;
 
         arena_init(&arena);
-        re = sag_re_compile(&arena, patterns[p], strlen(patterns[p]), 0U,
+        re = yew_re_compile(&arena, patterns[p], strlen(patterns[p]), 0U,
                             NULL);
-        SAG_ASSERT_NOT_NULL(re);
+        YEW_ASSERT_NOT_NULL(re);
         if (re == NULL) {
             arena_free_all(&arena);
             continue;
         }
-        for (i = 0U; i < SAG_ARRAY_LEN(inputs); i++) {
-            SagReInput in = sag_re_input_bytes((const u8 *)inputs[i],
+        for (i = 0U; i < YEW_ARRAY_LEN(inputs); i++) {
+            YewReInput in = yew_re_input_bytes((const u8 *)inputs[i],
                                                (u64)strlen(inputs[i]));
-            bool vm = sag_re_search(re, &in, BYTEOFF(0U), NULL);
-            int dfa = sag_re_dfa_test(re, &in, 0U);
+            bool vm = yew_re_search(re, &in, BYTEOFF(0U), NULL);
+            int dfa = yew_re_dfa_test(re, &in, 0U);
 
-            if (dfa == SAG_DFA_GIVE_UP) {
+            if (dfa == YEW_DFA_GIVE_UP) {
                 /* A give-up is legal — it means "use the VM" — but it
                  * must be rare on ordinary patterns, so it is counted. */
                 gave_up++;
                 continue;
             }
-            if ((dfa == SAG_DFA_YES) != vm)
+            if ((dfa == YEW_DFA_YES) != vm)
                 (void)fprintf(stderr,
                               "/%s/ on \"%s\": VM says %s, DFA says %s\n",
                               patterns[p], inputs[i],
                               vm ? "match" : "no match",
-                              dfa == SAG_DFA_YES ? "match" : "no match");
-            SAG_ASSERT((dfa == SAG_DFA_YES) == vm);
+                              dfa == YEW_DFA_YES ? "match" : "no match");
+            YEW_ASSERT((dfa == YEW_DFA_YES) == vm);
             checked++;
         }
         arena_free_all(&arena);
     }
     /* The cross product is the point: a handful of cases would not
      * exercise the state cache at all. */
-    SAG_ASSERT(checked > 1000U);
-    SAG_ASSERT_EQ_U64(gave_up, 0U);
+    YEW_ASSERT(checked > 1000U);
+    YEW_ASSERT_EQ_U64(gave_up, 0U);
 }
 
 void test_re_engines_agree_over_piece_trees(void)
@@ -112,26 +112,26 @@ void test_re_engines_agree_over_piece_trees(void)
 
     /* Same agreement, but reading through TextIter, where chunk
      * boundaries fall in the middle of matches. */
-    for (p = 0U; p < SAG_ARRAY_LEN(patterns); p++) {
+    for (p = 0U; p < YEW_ARRAY_LEN(patterns); p++) {
         Arena arena;
-        SagRe *re;
+        YewRe *re;
 
         arena_init(&arena);
-        re = sag_re_compile(&arena, patterns[p], strlen(patterns[p]), 0U,
+        re = yew_re_compile(&arena, patterns[p], strlen(patterns[p]), 0U,
                             NULL);
         if (re == NULL) {
             arena_free_all(&arena);
             continue;
         }
-        for (i = 0U; i < SAG_ARRAY_LEN(inputs); i++) {
+        for (i = 0U; i < YEW_ARRAY_LEN(inputs); i++) {
             TextBuf *tb = tb_of(inputs[i]);
-            SagReInput in = sag_re_input_textbuf(tb);
-            bool vm = sag_re_search(re, &in, BYTEOFF(0U), NULL);
-            int dfa = sag_re_dfa_test(re, &in, 0U);
+            YewReInput in = yew_re_input_textbuf(tb);
+            bool vm = yew_re_search(re, &in, BYTEOFF(0U), NULL);
+            int dfa = yew_re_dfa_test(re, &in, 0U);
 
-            if (dfa != SAG_DFA_GIVE_UP)
-                SAG_ASSERT((dfa == SAG_DFA_YES) == vm);
-            sag_textbuf_free(tb);
+            if (dfa != YEW_DFA_GIVE_UP)
+                YEW_ASSERT((dfa == YEW_DFA_YES) == vm);
+            yew_textbuf_free(tb);
         }
         arena_free_all(&arena);
     }
@@ -141,22 +141,22 @@ void test_re_engines_agree_from_offsets(void)
 {
     static const char text[] = "abc abc abc";
     Arena arena;
-    SagRe *re;
+    YewRe *re;
     u64 from;
 
     /* Agreement must hold from every start offset, not just zero — the
      * DFA rebuilds its context flags at each entry point. */
     arena_init(&arena);
-    re = sag_re_compile(&arena, "\\babc\\b", 7U, 0U, NULL);
-    SAG_ASSERT_NOT_NULL(re);
+    re = yew_re_compile(&arena, "\\babc\\b", 7U, 0U, NULL);
+    YEW_ASSERT_NOT_NULL(re);
     for (from = 0U; from <= strlen(text); from++) {
-        SagReInput in = sag_re_input_bytes((const u8 *)text,
+        YewReInput in = yew_re_input_bytes((const u8 *)text,
                                            (u64)strlen(text));
-        bool vm = sag_re_search(re, &in, BYTEOFF(from), NULL);
-        int dfa = sag_re_dfa_test(re, &in, from);
+        bool vm = yew_re_search(re, &in, BYTEOFF(from), NULL);
+        int dfa = yew_re_dfa_test(re, &in, from);
 
-        if (dfa != SAG_DFA_GIVE_UP)
-            SAG_ASSERT((dfa == SAG_DFA_YES) == vm);
+        if (dfa != YEW_DFA_GIVE_UP)
+            YEW_ASSERT((dfa == YEW_DFA_YES) == vm);
     }
     arena_free_all(&arena);
 }
@@ -164,12 +164,12 @@ void test_re_engines_agree_from_offsets(void)
 void test_re_dfa_survives_cache_pressure(void)
 {
     Arena arena;
-    SagRe *re;
+    YewRe *re;
     char pat[1024];
     size_t at = 0U;
     int i;
     u8 hay[4096];
-    SagReInput in;
+    YewReInput in;
     bool vm;
     int dfa;
 
@@ -184,15 +184,15 @@ void test_re_dfa_survives_cache_pressure(void)
     for (i = 0; i < 60; i++)
         at += (size_t)snprintf(pat + at, sizeof(pat) - at, "[%c-%c]?",
                                'a' + (i % 20), 'a' + (i % 20) + 3);
-    re = sag_re_compile(&arena, pat, at, 0U, NULL);
-    SAG_ASSERT_NOT_NULL(re);
+    re = yew_re_compile(&arena, pat, at, 0U, NULL);
+    YEW_ASSERT_NOT_NULL(re);
     for (i = 0; i < (int)sizeof(hay); i++)
         hay[i] = (u8)('a' + (i % 26));
-    in = sag_re_input_bytes(hay, (u64)sizeof(hay));
-    vm = sag_re_search(re, &in, BYTEOFF(0U), NULL);
-    dfa = sag_re_dfa_test(re, &in, 0U);
+    in = yew_re_input_bytes(hay, (u64)sizeof(hay));
+    vm = yew_re_search(re, &in, BYTEOFF(0U), NULL);
+    dfa = yew_re_dfa_test(re, &in, 0U);
     /* Either it kept up, or it said "use the VM" — never a wrong answer. */
-    SAG_ASSERT(dfa == SAG_DFA_GIVE_UP || (dfa == SAG_DFA_YES) == vm);
+    YEW_ASSERT(dfa == YEW_DFA_GIVE_UP || (dfa == YEW_DFA_YES) == vm);
     arena_free_all(&arena);
 }
 
@@ -204,22 +204,22 @@ void test_re_dfa_handles_pathological_patterns(void)
     size_t p;
     u8 hay[2048];
 
-    /* The DFA must be linear too — it is the engine `sag_re_test` runs,
+    /* The DFA must be linear too — it is the engine `yew_re_test` runs,
      * so a blow-up here would reach the user through Sprint 21's
      * incremental search just as surely as one in the VM. */
     (void)memset(hay, 'a', sizeof(hay));
-    for (p = 0U; p < SAG_ARRAY_LEN(nasty); p++) {
+    for (p = 0U; p < YEW_ARRAY_LEN(nasty); p++) {
         Arena arena;
-        SagRe *re;
-        SagReInput in = sag_re_input_bytes(hay, (u64)sizeof(hay));
+        YewRe *re;
+        YewReInput in = yew_re_input_bytes(hay, (u64)sizeof(hay));
         int dfa;
 
         arena_init(&arena);
-        re = sag_re_compile(&arena, nasty[p], strlen(nasty[p]), 0U, NULL);
-        SAG_ASSERT_NOT_NULL(re);
-        dfa = sag_re_dfa_test(re, &in, 0U);
+        re = yew_re_compile(&arena, nasty[p], strlen(nasty[p]), 0U, NULL);
+        YEW_ASSERT_NOT_NULL(re);
+        dfa = yew_re_dfa_test(re, &in, 0U);
         /* No 'b' anywhere, so the answer is no — and it must arrive. */
-        SAG_ASSERT(dfa == SAG_DFA_NO || dfa == SAG_DFA_GIVE_UP);
+        YEW_ASSERT(dfa == YEW_DFA_NO || dfa == YEW_DFA_GIVE_UP);
         arena_free_all(&arena);
     }
 }
@@ -241,21 +241,21 @@ void test_re_engines_agree_on_spans(void)
     u32 checked = 0U;
     u32 skipped_ahead = 0U;
 
-    for (p = 0U; p < SAG_ARRAY_LEN(patterns); p++) {
+    for (p = 0U; p < YEW_ARRAY_LEN(patterns); p++) {
         Arena arena;
-        SagRe *re;
+        YewRe *re;
 
         arena_init(&arena);
-        re = sag_re_compile(&arena, patterns[p], strlen(patterns[p]), 0U,
+        re = yew_re_compile(&arena, patterns[p], strlen(patterns[p]), 0U,
                             NULL);
-        SAG_ASSERT_NOT_NULL(re);
+        YEW_ASSERT_NOT_NULL(re);
         if (re == NULL) {
             arena_free_all(&arena);
             continue;
         }
         if (re->max_len != UINT32_MAX)
             skipped_ahead++;
-        for (i = 0U; i < SAG_ARRAY_LEN(inputs); i++) {
+        for (i = 0U; i < YEW_ARRAY_LEN(inputs); i++) {
             u64 len = (u64)strlen(inputs[i]);
             u64 from;
 
@@ -263,18 +263,18 @@ void test_re_engines_agree_on_spans(void)
              * its window relative to where the search began, and an
              * off-by-one there would only show up mid-buffer. */
             for (from = 0U; from <= len; from++) {
-                SagReInput in = sag_re_input_bytes((const u8 *)inputs[i],
+                YewReInput in = yew_re_input_bytes((const u8 *)inputs[i],
                                                    len);
-                SagReMatch fast;
-                SagReMatch slow;
+                YewReMatch fast;
+                YewReMatch slow;
                 bool fast_hit;
                 bool slow_hit;
                 u32 g;
 
                 (void)memset(&fast, 0, sizeof(fast));
                 (void)memset(&slow, 0, sizeof(slow));
-                fast_hit = sag_re_search(re, &in, BYTEOFF(from), &fast);
-                slow_hit = sag_re_pike_run_ex(re, &in, from, false, &slow);
+                fast_hit = yew_re_search(re, &in, BYTEOFF(from), &fast);
+                slow_hit = yew_re_pike_run_ex(re, &in, from, false, &slow);
                 if (fast_hit != slow_hit)
                     (void)fprintf(stderr,
                                   "/%s/ on \"%s\" from %llu: search says "
@@ -283,7 +283,7 @@ void test_re_engines_agree_on_spans(void)
                                   (unsigned long long)from,
                                   fast_hit ? "match" : "no match",
                                   slow_hit ? "match" : "no match");
-                SAG_ASSERT_EQ_U64((u64)fast_hit, (u64)slow_hit);
+                YEW_ASSERT_EQ_U64((u64)fast_hit, (u64)slow_hit);
                 if (!slow_hit) {
                     checked++;
                     continue;
@@ -299,20 +299,20 @@ void test_re_engines_agree_on_spans(void)
                                   (unsigned long long)fast.g[0].hi,
                                   (unsigned long long)slow.g[0].lo,
                                   (unsigned long long)slow.g[0].hi);
-                SAG_ASSERT_EQ_U64(fast.g[0].lo, slow.g[0].lo);
-                SAG_ASSERT_EQ_U64(fast.g[0].hi, slow.g[0].hi);
-                SAG_ASSERT_EQ_U64(fast.ngroups, slow.ngroups);
+                YEW_ASSERT_EQ_U64(fast.g[0].lo, slow.g[0].lo);
+                YEW_ASSERT_EQ_U64(fast.g[0].hi, slow.g[0].hi);
+                YEW_ASSERT_EQ_U64(fast.ngroups, slow.ngroups);
                 for (g = 0U; g < slow.ngroups; g++) {
-                    SAG_ASSERT_EQ_U64(fast.g[g].lo, slow.g[g].lo);
-                    SAG_ASSERT_EQ_U64(fast.g[g].hi, slow.g[g].hi);
+                    YEW_ASSERT_EQ_U64(fast.g[g].lo, slow.g[g].lo);
+                    YEW_ASSERT_EQ_U64(fast.g[g].hi, slow.g[g].hi);
                 }
                 checked++;
             }
         }
         arena_free_all(&arena);
     }
-    SAG_ASSERT(checked > 5000U);
+    YEW_ASSERT(checked > 5000U);
     /* If nothing in the corpus were length-bounded the skip-ahead
      * would never run and this test would prove nothing about it. */
-    SAG_ASSERT(skipped_ahead > 5U);
+    YEW_ASSERT(skipped_ahead > 5U);
 }

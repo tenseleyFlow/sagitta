@@ -25,7 +25,7 @@ struct CmdHist {
 
 static char *hist_dup_n(const char *text, size_t len)
 {
-    char *copy = sag_xmalloc(len + 1U);
+    char *copy = yew_xmalloc(len + 1U);
 
     if (len != 0U)
         (void)memcpy(copy, text, len);
@@ -47,7 +47,7 @@ static void hist_reserve(CmdHist *h, size_t need)
     cap = h->cap == 0U ? 16U : h->cap;
     while (cap < need)
         cap *= 2U;
-    h->entries = sag_xreallocarray(h->entries, cap, sizeof(*h->entries));
+    h->entries = yew_xreallocarray(h->entries, cap, sizeof(*h->entries));
     h->cap = cap;
 }
 
@@ -68,8 +68,8 @@ static bool hist_store(CmdHist *h, const char *line, size_t len)
 
     if (len == 0U || line[0] == ' ')
         return false;
-    if (len > SAG_HIST_LINE_MAX)
-        len = SAG_HIST_LINE_MAX;
+    if (len > YEW_HIST_LINE_MAX)
+        len = YEW_HIST_LINE_MAX;
     copy = hist_dup_n(line, len);
     for (i = 0U; i < h->len; i++) {
         if (strcmp(h->entries[i], copy) == 0) {
@@ -83,7 +83,7 @@ static bool hist_store(CmdHist *h, const char *line, size_t len)
     }
     hist_reserve(h, h->len + 1U);
     h->entries[h->len++] = copy;
-    if (h->len > SAG_HIST_MAX)
+    if (h->len > YEW_HIST_MAX)
         hist_remove(h, 0U);
     return true;
 }
@@ -111,19 +111,19 @@ static char *hist_path(const char *kind)
 
     if (!hist_kind_valid(kind))
         return NULL;
-    state = sag_xdg_state_dir();
+    state = yew_xdg_state_dir();
     if (state == NULL)
         return NULL;
     size = strlen(state) + strlen("/history") + 1U;
-    dir = sag_xmalloc(size);
+    dir = yew_xmalloc(size);
     (void)snprintf(dir, size, "%s/history", state);
     free(state);
-    if (!sag_mkdirs(dir, 0700U)) {
+    if (!yew_mkdirs(dir, 0700U)) {
         free(dir);
         return NULL;
     }
     size = strlen(dir) + 1U + strlen(kind) + 1U;
-    path = sag_xmalloc(size);
+    path = yew_xmalloc(size);
     (void)snprintf(path, size, "%s/%s", dir, kind);
     free(dir);
     return path;
@@ -136,8 +136,8 @@ static void hist_escape(Bytebuf *out, const char *line)
     size_t i;
     size_t len = strlen(line);
 
-    if (len > SAG_HIST_LINE_MAX)
-        len = SAG_HIST_LINE_MAX;
+    if (len > YEW_HIST_LINE_MAX)
+        len = YEW_HIST_LINE_MAX;
     for (i = 0U; i < len; i++) {
         u8 byte = p[i];
 
@@ -208,8 +208,8 @@ static char *hist_unescape(const u8 *line, size_t len)
         } else {
             goto corrupt;
         }
-        if (out.len > SAG_HIST_LINE_MAX)
-            out.len = SAG_HIST_LINE_MAX;
+        if (out.len > YEW_HIST_LINE_MAX)
+            out.len = YEW_HIST_LINE_MAX;
     }
     bytebuf_push_u8(&out, 0U);
     text = (char *)out.data;
@@ -225,7 +225,7 @@ static void hist_parse_line(CmdHist *h, const Bytebuf *line)
     char *decoded = hist_unescape(line->data, line->len);
 
     if (decoded == NULL) {
-        sag_log(SAG_LOG_WARN, "dropping corrupt history entry in %s",
+        yew_log(YEW_LOG_WARN, "dropping corrupt history entry in %s",
                 h->path == NULL ? "memory history" : h->path);
         return;
     }
@@ -235,7 +235,7 @@ static void hist_parse_line(CmdHist *h, const Bytebuf *line)
 
 static bool hist_read(CmdHist *h)
 {
-    enum { ENCODED_MAX = SAG_HIST_LINE_MAX * 4 };
+    enum { ENCODED_MAX = YEW_HIST_LINE_MAX * 4 };
     u8 block[4096];
     Bytebuf line;
     bool overlong = false;
@@ -252,7 +252,7 @@ static bool hist_read(CmdHist *h)
         int error = errno;
 
         if (error != ENOENT)
-            sag_log(SAG_LOG_WARN, "cannot read command history %s: %s",
+            yew_log(YEW_LOG_WARN, "cannot read command history %s: %s",
                     h->path, strerror(error));
         return error == ENOENT;
     }
@@ -264,7 +264,7 @@ static bool hist_read(CmdHist *h)
         if (got < 0) {
             if (errno == EINTR)
                 continue;
-            sag_log(SAG_LOG_WARN, "cannot read command history %s: %s",
+            yew_log(YEW_LOG_WARN, "cannot read command history %s: %s",
                     h->path, strerror(errno));
             bytebuf_free(&line);
             (void)close(fd);
@@ -275,7 +275,7 @@ static bool hist_read(CmdHist *h)
         for (i = 0U; i < (size_t)got; i++) {
             if (block[i] == (u8)'\n') {
                 if (overlong) {
-                    sag_log(SAG_LOG_WARN,
+                    yew_log(YEW_LOG_WARN,
                             "dropping overlong history entry in %s", h->path);
                 } else {
                     hist_parse_line(h, &line);
@@ -293,7 +293,7 @@ static bool hist_read(CmdHist *h)
         }
     }
     if (line.len != 0U || overlong) {
-        sag_log(SAG_LOG_WARN, "dropping incomplete history entry in %s",
+        yew_log(YEW_LOG_WARN, "dropping incomplete history entry in %s",
                 h->path);
     }
     bytebuf_free(&line);
@@ -305,7 +305,7 @@ static int hist_lock(const char *path)
 {
     struct flock lock = {0};
     size_t size = strlen(path) + strlen(".lock") + 1U;
-    char *lock_path = sag_xmalloc(size);
+    char *lock_path = yew_xmalloc(size);
     int fd;
 
     (void)snprintf(lock_path, size, "%s.lock", path);
@@ -334,14 +334,14 @@ static void hist_clear(CmdHist *h)
         hist_remove(h, h->len - 1U);
 }
 
-CmdHist *sag_hist_open(const char *kind)
+CmdHist *yew_hist_open(const char *kind)
 {
-    CmdHist *h = sag_xcalloc(1U, sizeof(*h));
+    CmdHist *h = yew_xcalloc(1U, sizeof(*h));
 
     h->path = hist_path(kind);
     h->memory = h->path == NULL;
     if (h->memory) {
-        sag_log(SAG_LOG_WARN,
+        yew_log(YEW_LOG_WARN,
                 "command history unavailable; using in-memory history");
     } else {
         (void)hist_read(h);
@@ -359,23 +359,23 @@ static char *ws_hist_path(const char *kind, const char *ws_dir)
     if (!hist_kind_valid(kind) || ws_dir == NULL || ws_dir[0] == '\0')
         return NULL;
     size = strlen(ws_dir) + strlen("/history") + 1U;
-    dir = sag_xmalloc(size);
+    dir = yew_xmalloc(size);
     (void)snprintf(dir, size, "%s/history", ws_dir);
-    if (!sag_mkdirs(dir, 0700U)) {
+    if (!yew_mkdirs(dir, 0700U)) {
         free(dir);
         return NULL;
     }
     size = strlen(dir) + 1U + strlen(kind) + 1U;
-    path = sag_xmalloc(size);
+    path = yew_xmalloc(size);
     (void)snprintf(path, size, "%s/%s", dir, kind);
     free(dir);
     return path;
 }
 
-CmdHist *sag_hist_open_scoped(const char *kind, const char *ws_dir,
+CmdHist *yew_hist_open_scoped(const char *kind, const char *ws_dir,
                               bool workspace_scope)
 {
-    CmdHist *h = sag_xcalloc(1U, sizeof(*h));
+    CmdHist *h = yew_xcalloc(1U, sizeof(*h));
     char *global = hist_path(kind);
     char *local = ws_hist_path(kind, ws_dir);
 
@@ -396,8 +396,8 @@ CmdHist *sag_hist_open_scoped(const char *kind, const char *ws_dir,
     }
     /*
      * And now the only thing that decides where WRITES go.  The merged
-     * list in memory is never written anywhere as a unit: sag_hist_add
-     * appends one line here, and sag_hist_flush re-reads THIS file and
+     * list in memory is never written anywhere as a unit: yew_hist_add
+     * appends one line here, and yew_hist_flush re-reads THIS file and
      * compacts it, so the merge cannot leak from one scope to the
      * other.
      */
@@ -424,26 +424,26 @@ CmdHist *sag_hist_open_scoped(const char *kind, const char *ws_dir,
     }
     h->memory = h->path == NULL;
     if (h->memory) {
-        sag_log(SAG_LOG_WARN,
+        yew_log(YEW_LOG_WARN,
                 "command history unavailable; using in-memory history");
     }
     return h;
 }
 
-const char *sag_hist_path(const CmdHist *h)
+const char *yew_hist_path(const CmdHist *h)
 {
     return h == NULL ? NULL : h->path;
 }
 
-CmdHist *sag_hist_open_memory(void)
+CmdHist *yew_hist_open_memory(void)
 {
-    CmdHist *h = sag_xcalloc(1U, sizeof(*h));
+    CmdHist *h = yew_xcalloc(1U, sizeof(*h));
 
     h->memory = true;
     return h;
 }
 
-void sag_hist_close(CmdHist *h)
+void yew_hist_close(CmdHist *h)
 {
     if (h == NULL)
         return;
@@ -453,7 +453,7 @@ void sag_hist_close(CmdHist *h)
     free(h);
 }
 
-void sag_hist_add(CmdHist *h, const char *line)
+void yew_hist_add(CmdHist *h, const char *line)
 {
     Bytebuf encoded;
     int lock_fd;
@@ -474,14 +474,14 @@ void sag_hist_add(CmdHist *h, const char *line)
 #endif
               , 0600);
     if (fd < 0) {
-        sag_log(SAG_LOG_WARN, "cannot append command history %s: %s",
+        yew_log(YEW_LOG_WARN, "cannot append command history %s: %s",
                 h->path, strerror(errno));
     } else {
         do {
             wrote = write(fd, encoded.data, encoded.len);
         } while (wrote < 0 && errno == EINTR);
         if (wrote < 0 || (size_t)wrote != encoded.len) {
-            sag_log(SAG_LOG_WARN, "short append to command history %s",
+            yew_log(YEW_LOG_WARN, "short append to command history %s",
                     h->path);
         }
         (void)close(fd);
@@ -491,7 +491,7 @@ void sag_hist_add(CmdHist *h, const char *line)
     bytebuf_free(&encoded);
 }
 
-void sag_hist_flush(CmdHist *h)
+void yew_hist_flush(CmdHist *h)
 {
     CmdHist merged = {0};
     Bytebuf encoded;
@@ -502,7 +502,7 @@ void sag_hist_flush(CmdHist *h)
         return;
     lock_fd = hist_lock(h->path);
     if (lock_fd < 0) {
-        sag_log(SAG_LOG_WARN, "cannot lock command history %s: %s", h->path,
+        yew_log(YEW_LOG_WARN, "cannot lock command history %s: %s", h->path,
                 strerror(errno));
         return;
     }
@@ -518,9 +518,9 @@ void sag_hist_flush(CmdHist *h)
         hist_escape(&encoded, merged.entries[i]);
         bytebuf_push_u8(&encoded, (u8)'\n');
     }
-    if (sag_file_write_atomic(h->path, encoded.data, encoded.len, 0600) !=
-        SAG_SAVE_OK) {
-        sag_log(SAG_LOG_WARN, "cannot compact command history %s: %s",
+    if (yew_file_write_atomic(h->path, encoded.data, encoded.len, 0600) !=
+        YEW_SAVE_OK) {
+        yew_log(YEW_LOG_WARN, "cannot compact command history %s: %s",
                 h->path, strerror(errno));
     } else {
         hist_clear(h);
@@ -538,22 +538,22 @@ void sag_hist_flush(CmdHist *h)
     (void)close(lock_fd);
 }
 
-size_t sag_hist_len(const CmdHist *h)
+size_t yew_hist_len(const CmdHist *h)
 {
     return h == NULL ? 0U : h->len;
 }
 
-const char *sag_hist_at(const CmdHist *h, size_t index)
+const char *yew_hist_at(const CmdHist *h, size_t index)
 {
     return h == NULL || index >= h->len ? NULL : h->entries[index];
 }
 
-bool sag_hist_is_memory(const CmdHist *h)
+bool yew_hist_is_memory(const CmdHist *h)
 {
     return h == NULL || h->memory;
 }
 
-void sag_hist_cur_reset(HistCur *c, const char *draft)
+void yew_hist_cur_reset(HistCur *c, const char *draft)
 {
     if (c == NULL)
         return;
@@ -564,7 +564,7 @@ void sag_hist_cur_reset(HistCur *c, const char *draft)
     c->draft = hist_dup(draft == NULL ? "" : draft);
 }
 
-void sag_hist_cur_dispose(HistCur *c)
+void yew_hist_cur_dispose(HistCur *c)
 {
     if (c == NULL)
         return;
@@ -578,7 +578,7 @@ static bool hist_has_prefix(const char *entry, const char *stem)
     return strncmp(entry, stem, strlen(stem)) == 0;
 }
 
-const char *sag_hist_prev(CmdHist *h, HistCur *c)
+const char *yew_hist_prev(CmdHist *h, HistCur *c)
 {
     i32 i;
 
@@ -598,7 +598,7 @@ const char *sag_hist_prev(CmdHist *h, HistCur *c)
     return NULL;
 }
 
-const char *sag_hist_next(CmdHist *h, HistCur *c)
+const char *yew_hist_next(CmdHist *h, HistCur *c)
 {
     size_t i;
 

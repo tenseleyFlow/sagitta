@@ -26,7 +26,7 @@ static u32 emit(Emit *e, ReOp op, u32 x, u32 y, u32 arg)
      * expands by copying, so `(a{100}){100}` would otherwise allocate a
      * ten-megabyte program before anyone noticed it was too big.
      */
-    if (e->n >= SAG_RE_MAX_PROG) {
+    if (e->n >= YEW_RE_MAX_PROG) {
         e->overflow = true;
         return 0U;
     }
@@ -34,8 +34,8 @@ static u32 emit(Emit *e, ReOp op, u32 x, u32 y, u32 arg)
         u32 cap = e->cap == 0U ? 32U : e->cap * 2U;
         ReInst *grown;
 
-        if (cap > SAG_RE_MAX_PROG)
-            cap = SAG_RE_MAX_PROG;
+        if (cap > YEW_RE_MAX_PROG)
+            cap = YEW_RE_MAX_PROG;
         grown = arena_alloc(e->arena, (size_t)cap * sizeof(*grown),
                             sizeof(u32));
         if (e->n != 0U)
@@ -247,7 +247,7 @@ static void gen(Emit *e, const ReAst *a)
         (void)emit(e, RE_NWORDB, 0U, 0U, 0U);
         break;
     default:
-        SAG_BUG("regex compile: unknown AST node %u", (unsigned)a->kind);
+        YEW_BUG("regex compile: unknown AST node %u", (unsigned)a->kind);
     }
 }
 
@@ -365,8 +365,8 @@ static void collect_literal(const ReAst *a, Bytebuf *out, bool *done)
         return;
     switch ((ReAstKind)a->kind) {
     case RE_A_CHAR: {
-        u8 buf[SAG_UTF8_MAX];
-        size_t n = sag_utf8_encode(a->cp, buf);
+        u8 buf[YEW_UTF8_MAX];
+        size_t n = yew_utf8_encode(a->cp, buf);
 
         if (n == 0U || out->len + n > 32U) {
             *done = true;
@@ -390,7 +390,7 @@ static void collect_literal(const ReAst *a, Bytebuf *out, bool *done)
     *done = true;
 }
 
-static void build_literal(SagRe *re, const ReAst *root, u32 flags)
+static void build_literal(YewRe *re, const ReAst *root, u32 flags)
 {
     Bytebuf buf;
     bool done = false;
@@ -405,7 +405,7 @@ static void build_literal(SagRe *re, const ReAst *root, u32 flags)
      * prefilter that can miss a match is a correctness bug, not a perf
      * regression, so we simply decline.
      */
-    if ((flags & SAG_RE_ICASE) != 0U)
+    if ((flags & YEW_RE_ICASE) != 0U)
         return;
     bytebuf_init(&buf);
     collect_literal(root, &buf, &done);
@@ -414,7 +414,7 @@ static void build_literal(SagRe *re, const ReAst *root, u32 flags)
         return;
     }
     /* Whole-pattern-literal means the VM is never entered at all. */
-    whole = (flags & SAG_RE_LITERAL) != 0U ||
+    whole = (flags & YEW_RE_LITERAL) != 0U ||
             (!done && buf.len != 0U);
     (void)memcpy(re->lit.s, buf.data, buf.len);
     re->lit.n = (u32)buf.len;
@@ -424,17 +424,17 @@ static void build_literal(SagRe *re, const ReAst *root, u32 flags)
         re->lit.kind = RE_LIT_BMH;
     if (whole)
         re->lit.kind = RE_LIT_WHOLE;
-    sag_bmh_build(&re->lit);
+    yew_bmh_build(&re->lit);
     bytebuf_free(&buf);
 }
 
-SagRe *sag_re_compile(Arena *a, const char *pat, size_t len, u32 flags,
-                      SagReErr *err)
+YewRe *yew_re_compile(Arena *a, const char *pat, size_t len, u32 flags,
+                      YewReErr *err)
 {
     ReParse p;
     ReAst *root;
     Emit e;
-    SagRe *re;
+    YewRe *re;
 
     if (err != NULL) {
         err->off = 0U;
@@ -445,9 +445,9 @@ SagRe *sag_re_compile(Arena *a, const char *pat, size_t len, u32 flags,
             err->msg = "no pattern";
         return NULL;
     }
-    if (len > SAG_RE_MAX_PATTERN) {
+    if (len > YEW_RE_MAX_PATTERN) {
         if (err != NULL) {
-            err->off = SAG_RE_MAX_PATTERN;
+            err->off = YEW_RE_MAX_PATTERN;
             err->msg = "pattern too long (max 64 KiB)";
         }
         return NULL;
@@ -460,7 +460,7 @@ SagRe *sag_re_compile(Arena *a, const char *pat, size_t len, u32 flags,
     p.base_flags = flags;
     p.ngroups = 1U; /* group 0 */
     p.err = err;
-    root = sag_re_parse(&p);
+    root = yew_re_parse(&p);
     if (root == NULL || p.failed)
         return NULL;
 
@@ -499,34 +499,34 @@ SagRe *sag_re_compile(Arena *a, const char *pat, size_t len, u32 flags,
     return re;
 }
 
-u32 sag_re_group_count(const SagRe *re)
+u32 yew_re_group_count(const YewRe *re)
 {
     return re == NULL ? 0U : re->ngroups;
 }
 
-bool sag_re_has_upper_literal(const SagRe *re)
+bool yew_re_has_upper_literal(const YewRe *re)
 {
     return re != NULL && re->saw_upper_literal;
 }
 
-bool sag_re_forces_icase(const SagRe *re)
+bool yew_re_forces_icase(const YewRe *re)
 {
     return re != NULL && re->force_icase;
 }
 
-bool sag_re_forces_case(const SagRe *re)
+bool yew_re_forces_case(const YewRe *re)
 {
     return re != NULL && re->force_case;
 }
 
-u32 sag_re_min_len(const SagRe *re)
+u32 yew_re_min_len(const YewRe *re)
 {
     return re == NULL ? 0U : re->min_len;
 }
 
-SagReInput sag_re_input_bytes(const u8 *bytes, u64 len)
+YewReInput yew_re_input_bytes(const u8 *bytes, u64 len)
 {
-    SagReInput in;
+    YewReInput in;
 
     (void)memset(&in, 0, sizeof(in));
     in.bytes = bytes;
@@ -536,13 +536,13 @@ SagReInput sag_re_input_bytes(const u8 *bytes, u64 len)
     return in;
 }
 
-SagReInput sag_re_input_textbuf(const TextBuf *tb)
+YewReInput yew_re_input_textbuf(const TextBuf *tb)
 {
-    SagReInput in;
+    YewReInput in;
 
     (void)memset(&in, 0, sizeof(in));
     in.tb = tb;
-    in.len = sag_textbuf_len(tb);
+    in.len = yew_textbuf_len(tb);
     in.window.lo = 0U;
     in.window.hi = in.len;
     return in;

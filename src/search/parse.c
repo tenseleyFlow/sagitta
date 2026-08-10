@@ -25,28 +25,28 @@
  * therefore disagree about CJK on purpose: motion asks "where does a
  * word end", \w asks "is this a letter".
  */
-bool sag_re_is_word(u32 cp)
+bool yew_re_is_word(u32 cp)
 {
-    u16 rec = sag_cat_rec(cp);
+    u16 rec = yew_cat_rec(cp);
 
-    return (rec & (SAG_CAT_ALPHA | SAG_CAT_ND | SAG_CAT_PC)) != 0U;
+    return (rec & (YEW_CAT_ALPHA | YEW_CAT_ND | YEW_CAT_PC)) != 0U;
 }
 
-bool sag_re_is_digit(u32 cp)
+bool yew_re_is_digit(u32 cp)
 {
-    return (sag_cat_rec(cp) & SAG_CAT_ND) != 0U;
+    return (yew_cat_rec(cp) & YEW_CAT_ND) != 0U;
 }
 
-bool sag_re_is_space(u32 cp)
+bool yew_re_is_space(u32 cp)
 {
-    return sag_unicode_is_white_space(cp);
+    return yew_unicode_is_white_space(cp);
 }
 
 /* ---------------------------------------------------------------- */
 /* Errors                                                           */
 /* ---------------------------------------------------------------- */
 
-void sag_re_fail(ReParse *p, size_t off, const char *msg)
+void yew_re_fail(ReParse *p, size_t off, const char *msg)
 {
     if (p->failed)
         return;
@@ -86,7 +86,7 @@ static u32 normalize(ReParse *p, ReRange *in, u32 n, bool negate,
     u32 i;
 
     if (n != 0U)
-        sag_sort_stable(in, n, sizeof(*in), range_cmp, NULL);
+        yew_sort_stable(in, n, sizeof(*in), range_cmp, NULL);
     tmp = arena_alloc(p->arena, (size_t)(n + 2U) * sizeof(*tmp),
                       sizeof(u32));
     for (i = 0U; i < n; i++) {
@@ -127,13 +127,13 @@ static u32 normalize(ReParse *p, ReRange *in, u32 n, bool negate,
     }
 }
 
-u32 sag_re_class_intern(ReParse *p, ReRange *ranges, u32 n, bool negate)
+u32 yew_re_class_intern(ReParse *p, ReRange *ranges, u32 n, bool negate)
 {
     ReRange *norm = NULL;
     u32 count;
 
-    if (p->nclasses >= SAG_RE_MAX_CLASSES) {
-        sag_re_fail(p, p->at, "too many character classes (max 256)");
+    if (p->nclasses >= YEW_RE_MAX_CLASSES) {
+        yew_re_fail(p, p->at, "too many character classes (max 256)");
         return UINT32_MAX;
     }
     count = normalize(p, ranges, n, negate, &norm);
@@ -154,7 +154,7 @@ u32 sag_re_class_intern(ReParse *p, ReRange *ranges, u32 n, bool negate)
     return p->nclasses++;
 }
 
-bool sag_re_class_has(const ReClass *c, u32 cp)
+bool yew_re_class_has(const ReClass *c, u32 cp)
 {
     u32 lo = 0U;
     u32 hi = c->n;
@@ -190,7 +190,7 @@ static u32 build_prop_ranges(ReParse *p, bool (*pred)(u32), ReRange **out)
             continue;
         }
         if (n == MAX_RUNS)
-            SAG_BUG("regex: property run table overflow");
+            YEW_BUG("regex: property run table overflow");
         r[n].lo = cp;
         while (cp + 1U <= 0x10FFFFU && pred(cp + 1U))
             cp++;
@@ -202,7 +202,7 @@ static u32 build_prop_ranges(ReParse *p, bool (*pred)(u32), ReRange **out)
     return n;
 }
 
-u32 sag_re_class_perl(ReParse *p, char which)
+u32 yew_re_class_perl(ReParse *p, char which)
 {
     ReRange *r = NULL;
     u32 n;
@@ -211,16 +211,16 @@ u32 sag_re_class_perl(ReParse *p, char which)
 
     switch (base) {
     case 'w':
-        n = build_prop_ranges(p, sag_re_is_word, &r);
+        n = build_prop_ranges(p, yew_re_is_word, &r);
         break;
     case 'd':
-        n = build_prop_ranges(p, sag_re_is_digit, &r);
+        n = build_prop_ranges(p, yew_re_is_digit, &r);
         break;
     default:
-        n = build_prop_ranges(p, sag_re_is_space, &r);
+        n = build_prop_ranges(p, yew_re_is_space, &r);
         break;
     }
-    return sag_re_class_intern(p, r, n, negate);
+    return yew_re_class_intern(p, r, n, negate);
 }
 
 /*
@@ -249,11 +249,11 @@ static bool fold_ready;
 
 static u32 fold_canon(u32 cp)
 {
-    u32 mapped[SAG_CASE_MAX_CODEPOINTS];
+    u32 mapped[YEW_CASE_MAX_CODEPOINTS];
 
     /* Single-codepoint uppercase only: a multi-codepoint expansion is
      * full folding, which §3 rules out. */
-    if (sag_case_map(cp, SAG_CASE_UPPER, mapped) == 1U)
+    if (yew_case_map(cp, YEW_CASE_UPPER, mapped) == 1U)
         return mapped[0];
     return cp;
 }
@@ -290,14 +290,14 @@ static void fold_build(void)
         fold_table[fold_len].cp = cp;
         fold_len++;
     }
-    sag_sort_stable(fold_table, fold_len, sizeof(*fold_table), fold_cmp,
+    yew_sort_stable(fold_table, fold_len, sizeof(*fold_table), fold_cmp,
                     NULL);
 }
 
 /*
  * THE ONLY WAY A PARTNER GETS INTO `out`.
  *
- * `out` holds SAG_RE_FOLD_MAX, and sag_re_fold_partners appends from six
+ * `out` holds YEW_RE_FOLD_MAX, and yew_re_fold_partners appends from six
  * places.  Four bounded the write and two did not — the simple lowercase
  * and uppercase maps — so a codepoint whose equivalence class had
  * already filled the array wrote one element past the end of a stack
@@ -345,34 +345,34 @@ static u32 fold_class_members(u32 canon, u32 *out, u32 n, u32 cap)
 
 /* Simple folding only: a length-changing fold (ss -> ß) would break the
  * one-codepoint-per-step invariant the linear-time VM depends on. */
-u32 sag_re_fold_partners(u32 cp, u32 out[SAG_RE_FOLD_MAX])
+u32 yew_re_fold_partners(u32 cp, u32 out[YEW_RE_FOLD_MAX])
 {
     u32 n = 0U;
-    u32 mapped[SAG_CASE_MAX_CODEPOINTS];
+    u32 mapped[YEW_CASE_MAX_CODEPOINTS];
     u32 canon;
     u32 probe;
     u8 got;
 
-    n = fold_push(out, n, SAG_RE_FOLD_MAX, cp);
+    n = fold_push(out, n, YEW_RE_FOLD_MAX, cp);
     fold_build();
     /* The whole equivalence class, found through the shared uppercase
      * form — this is what brings final sigma in. */
     canon = fold_canon(cp);
-    n = fold_push(out, n, SAG_RE_FOLD_MAX, canon);
-    n = fold_class_members(canon, out, n, SAG_RE_FOLD_MAX);
-    got = sag_case_map(cp, SAG_CASE_LOWER, mapped);
+    n = fold_push(out, n, YEW_RE_FOLD_MAX, canon);
+    n = fold_class_members(canon, out, n, YEW_RE_FOLD_MAX);
+    got = yew_case_map(cp, YEW_CASE_LOWER, mapped);
     if (got == 1U)
-        n = fold_push(out, n, SAG_RE_FOLD_MAX, mapped[0]);
-    got = sag_case_map(cp, SAG_CASE_UPPER, mapped);
+        n = fold_push(out, n, YEW_RE_FOLD_MAX, mapped[0]);
+    got = yew_case_map(cp, YEW_CASE_UPPER, mapped);
     if (got == 1U)
-        n = fold_push(out, n, SAG_RE_FOLD_MAX, mapped[0]);
+        n = fold_push(out, n, YEW_RE_FOLD_MAX, mapped[0]);
     /* Kelvin sign and the long s fold onto ASCII letters; the simple
      * maps above do not round-trip them, so probe the two known singles
      * rather than pretend they do not exist. */
     probe = cp == 'k' || cp == 'K' ? 0x212AU :
             (cp == 's' || cp == 'S' ? 0x017FU : 0U);
     if (probe != 0U)
-        n = fold_push(out, n, SAG_RE_FOLD_MAX, probe);
+        n = fold_push(out, n, YEW_RE_FOLD_MAX, probe);
     return n;
 }
 
@@ -407,10 +407,10 @@ static u8 peek_at(const ReParse *p, size_t ahead)
 static u32 take_cp(ReParse *p)
 {
     u32 cp = 0U;
-    size_t n = sag_utf8_decode(p->pat + p->at, p->len - p->at, &cp);
+    size_t n = yew_utf8_decode(p->pat + p->at, p->len - p->at, &cp);
 
     p->at += n == 0U ? 1U : n;
-    if ((sag_cat_rec(cp) & SAG_CAT_UPPER) != 0U)
+    if ((yew_cat_rec(cp) & YEW_CAT_UPPER) != 0U)
         p->saw_upper_literal = true;
     return cp;
 }
@@ -461,7 +461,7 @@ static bool parse_hex_escape(ReParse *p, size_t start, u32 *out)
             u32 one;
 
             if (!parse_hex_digits(p, 1U, &one) || digits >= 6U) {
-                sag_re_fail(p, start, "invalid codepoint escape");
+                yew_re_fail(p, start, "invalid codepoint escape");
                 return false;
             }
             value = value * 16U + one;
@@ -469,7 +469,7 @@ static bool parse_hex_escape(ReParse *p, size_t start, u32 *out)
         }
         if (digits == 0U || at_end(p) || peek(p) != '}' ||
             value > 0x10FFFFU) {
-            sag_re_fail(p, start, "invalid codepoint escape");
+            yew_re_fail(p, start, "invalid codepoint escape");
             return false;
         }
         p->at++;
@@ -477,7 +477,7 @@ static bool parse_hex_escape(ReParse *p, size_t start, u32 *out)
         return true;
     }
     if (!parse_hex_digits(p, 2U, out)) {
-        sag_re_fail(p, start, "invalid codepoint escape");
+        yew_re_fail(p, start, "invalid codepoint escape");
         return false;
     }
     return true;
@@ -492,7 +492,7 @@ static bool parse_escape(ReParse *p, u32 *cp_out, u32 *cls_out)
 
     *cls_out = UINT32_MAX;
     if (at_end(p)) {
-        sag_re_fail(p, start, "trailing backslash");
+        yew_re_fail(p, start, "trailing backslash");
         return false;
     }
     c = peek(p);
@@ -510,7 +510,7 @@ static bool parse_escape(ReParse *p, u32 *cp_out, u32 *cls_out)
         return parse_hex_escape(p, start, cp_out);
     case 'w': case 'W': case 'd': case 'D': case 's': case 'S':
         p->at++;
-        *cls_out = sag_re_class_perl(p, (char)c);
+        *cls_out = yew_re_class_perl(p, (char)c);
         return !p->failed;
     default:
         break;
@@ -527,7 +527,7 @@ static bool parse_escape(ReParse *p, u32 *cp_out, u32 *cls_out)
 
         (void)snprintf(msg, sizeof(msg), "unknown escape '\\%c'",
                        (char)c);
-        sag_re_fail(p, start, msg);
+        yew_re_fail(p, start, msg);
     }
     return false;
 }
@@ -574,9 +574,9 @@ static void cbuf_add_class(ReParse *p, ClassBuf *b, u32 idx)
 
 static void cbuf_add_folded(ReParse *p, ClassBuf *b, u32 cp)
 {
-    if ((p->flags & SAG_RE_ICASE) != 0U) {
-        u32 partners[SAG_RE_FOLD_MAX];
-        u32 n = sag_re_fold_partners(cp, partners);
+    if ((p->flags & YEW_RE_ICASE) != 0U) {
+        u32 partners[YEW_RE_FOLD_MAX];
+        u32 n = yew_re_fold_partners(cp, partners);
         u32 i;
 
         for (i = 0U; i < n; i++)
@@ -587,30 +587,30 @@ static void cbuf_add_folded(ReParse *p, ClassBuf *b, u32 cp)
 }
 
 /* [[:name:]] — only valid inside a bracket expression. */
-static bool posix_alpha(u32 cp)  { return (sag_cat_rec(cp) & SAG_CAT_ALPHA) != 0U; }
-static bool posix_digit(u32 cp)  { return (sag_cat_rec(cp) & SAG_CAT_ND) != 0U; }
+static bool posix_alpha(u32 cp)  { return (yew_cat_rec(cp) & YEW_CAT_ALPHA) != 0U; }
+static bool posix_digit(u32 cp)  { return (yew_cat_rec(cp) & YEW_CAT_ND) != 0U; }
 static bool posix_alnum(u32 cp)
 {
-    return (sag_cat_rec(cp) & (SAG_CAT_ALPHA | SAG_CAT_ND)) != 0U;
+    return (yew_cat_rec(cp) & (YEW_CAT_ALPHA | YEW_CAT_ND)) != 0U;
 }
-static bool posix_upper(u32 cp)  { return (sag_cat_rec(cp) & SAG_CAT_UPPER) != 0U; }
-static bool posix_lower(u32 cp)  { return (sag_cat_rec(cp) & SAG_CAT_LOWER) != 0U; }
-static bool posix_space(u32 cp)  { return sag_re_is_space(cp); }
+static bool posix_upper(u32 cp)  { return (yew_cat_rec(cp) & YEW_CAT_UPPER) != 0U; }
+static bool posix_lower(u32 cp)  { return (yew_cat_rec(cp) & YEW_CAT_LOWER) != 0U; }
+static bool posix_space(u32 cp)  { return yew_re_is_space(cp); }
 static bool posix_blank(u32 cp)
 {
     /* Horizontal whitespace only: tab, space, and the Zs category. */
     return cp == 0x09U || cp == 0x20U ||
-           (sag_cat_rec(cp) & SAG_CAT_ZS) != 0U;
+           (yew_cat_rec(cp) & YEW_CAT_ZS) != 0U;
 }
-static bool posix_punct(u32 cp)  { return (sag_cat_rec(cp) & SAG_CAT_PUNCT) != 0U; }
-static bool posix_cntrl(u32 cp)  { return (sag_cat_rec(cp) & SAG_CAT_CNTRL) != 0U; }
+static bool posix_punct(u32 cp)  { return (yew_cat_rec(cp) & YEW_CAT_PUNCT) != 0U; }
+static bool posix_cntrl(u32 cp)  { return (yew_cat_rec(cp) & YEW_CAT_CNTRL) != 0U; }
 static bool posix_graph(u32 cp)
 {
-    u16 rec = sag_cat_rec(cp);
+    u16 rec = yew_cat_rec(cp);
 
     /* Assigned, not whitespace, not a control. */
-    return (rec & SAG_CAT_ASSIGNED) != 0U &&
-           (rec & SAG_CAT_CNTRL) == 0U && !sag_re_is_space(cp);
+    return (rec & YEW_CAT_ASSIGNED) != 0U &&
+           (rec & YEW_CAT_CNTRL) == 0U && !yew_re_is_space(cp);
 }
 static bool posix_print(u32 cp)
 {
@@ -623,7 +623,7 @@ static bool posix_xdigit(u32 cp)
     return (cp >= '0' && cp <= '9') || (cp >= 'a' && cp <= 'f') ||
            (cp >= 'A' && cp <= 'F');
 }
-static bool posix_word(u32 cp)   { return sag_re_is_word(cp); }
+static bool posix_word(u32 cp)   { return yew_re_is_word(cp); }
 
 static bool parse_posix_class(ReParse *p, ClassBuf *b)
 {
@@ -656,12 +656,12 @@ static bool parse_posix_class(ReParse *p, ClassBuf *b)
     while (!at_end(p) && peek(p) != ':')
         p->at++;
     if (at_end(p) || peek_at(p, 1U) != ']') {
-        sag_re_fail(p, start - 1U, "unterminated character class");
+        yew_re_fail(p, start - 1U, "unterminated character class");
         return false;
     }
     name_len = p->at - name_at;
     end = p->at + 2U;
-    for (i = 0U; i < SAG_ARRAY_LEN(classes); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(classes); i++) {
         ReRange *r = NULL;
         u32 n;
         u32 idx;
@@ -670,7 +670,7 @@ static bool parse_posix_class(ReParse *p, ClassBuf *b)
             memcmp(p->pat + name_at, classes[i].name, name_len) != 0)
             continue;
         n = build_prop_ranges(p, classes[i].pred, &r);
-        idx = sag_re_class_intern(p, r, n, negate);
+        idx = yew_re_class_intern(p, r, n, negate);
         cbuf_add_class(p, b, idx);
         p->at = end;
         return !p->failed;
@@ -681,7 +681,7 @@ static bool parse_posix_class(ReParse *p, ClassBuf *b)
 
         (void)snprintf(msg, sizeof(msg), "unknown POSIX class '[:%.*s:]'",
                        shown, (const char *)(p->pat + name_at));
-        sag_re_fail(p, start - 1U, msg);
+        yew_re_fail(p, start - 1U, msg);
     }
     return false;
 }
@@ -718,7 +718,7 @@ static u32 parse_class(ReParse *p)
             (void)snprintf(msg, sizeof(msg),
                            "[:%.*s:] is only valid inside [...]", shown,
                            (const char *)(p->pat + p->at + 1U));
-            sag_re_fail(p, open, msg);
+            yew_re_fail(p, open, msg);
             return UINT32_MAX;
         }
     }
@@ -727,7 +727,7 @@ static u32 parse_class(ReParse *p)
         u32 lo_cls = UINT32_MAX;
 
         if (at_end(p)) {
-            sag_re_fail(p, open, "unterminated character class");
+            yew_re_fail(p, open, "unterminated character class");
             return UINT32_MAX;
         }
         /* ']' first is a literal, per the syntax table. */
@@ -775,10 +775,10 @@ static u32 parse_class(ReParse *p)
                 hi = take_cp(p);
             }
             if (hi < lo) {
-                sag_re_fail(p, open, "invalid range in character class");
+                yew_re_fail(p, open, "invalid range in character class");
                 return UINT32_MAX;
             }
-            if ((p->flags & SAG_RE_ICASE) != 0U && lo < 0x80U &&
+            if ((p->flags & YEW_RE_ICASE) != 0U && lo < 0x80U &&
                 hi < 0x80U) {
                 u32 c;
 
@@ -795,10 +795,10 @@ static u32 parse_class(ReParse *p)
         cbuf_add_folded(p, &b, lo);
     }
     if (b.n == 0U && !negate) {
-        sag_re_fail(p, open, "empty character class");
+        yew_re_fail(p, open, "empty character class");
         return UINT32_MAX;
     }
-    return sag_re_class_intern(p, b.r, b.n, negate);
+    return yew_re_class_intern(p, b.r, b.n, negate);
 }
 
 /* ---------------------------------------------------------------- */
@@ -811,9 +811,9 @@ static ReAst *literal_node(ReParse *p, u32 cp)
 {
     /* Under ICASE a literal becomes the class of its folded partners, so
      * the VM never does case work per input codepoint. */
-    if ((p->flags & SAG_RE_ICASE) != 0U) {
-        u32 partners[SAG_RE_FOLD_MAX];
-        u32 n = sag_re_fold_partners(cp, partners);
+    if ((p->flags & YEW_RE_ICASE) != 0U) {
+        u32 partners[YEW_RE_FOLD_MAX];
+        u32 n = yew_re_fold_partners(cp, partners);
 
         if (n > 1U) {
             ClassBuf b = {0};
@@ -823,7 +823,7 @@ static ReAst *literal_node(ReParse *p, u32 cp)
             for (i = 0U; i < n; i++)
                 cbuf_add(p, &b, partners[i], partners[i]);
             a = node(p, RE_A_CLASS);
-            a->cls = sag_re_class_intern(p, b.r, b.n, false);
+            a->cls = yew_re_class_intern(p, b.r, b.n, false);
             return a;
         }
     }
@@ -851,7 +851,7 @@ static bool parse_flags(ReParse *p, u32 *scoped_out, bool *is_scoped)
             continue;
         }
         if (c == 'i' || c == 's') {
-            u32 bit = c == 'i' ? (u32)SAG_RE_ICASE : (u32)SAG_RE_DOTALL;
+            u32 bit = c == 'i' ? (u32)YEW_RE_ICASE : (u32)YEW_RE_DOTALL;
 
             if (negate)
                 flags &= ~bit;
@@ -875,7 +875,7 @@ static bool parse_flags(ReParse *p, u32 *scoped_out, bool *is_scoped)
         *is_scoped = false;
         return true;
     }
-    sag_re_fail(p, start - 2U, "unknown group flags");
+    yew_re_fail(p, start - 2U, "unknown group flags");
     return false;
 }
 
@@ -898,21 +898,21 @@ static ReAst *parse_group(ReParse *p)
          * the editor.
          */
         if (k == '>') {
-            sag_re_fail(p, open,
-                        "atomic groups are not supported (sagitta's "
+            yew_re_fail(p, open,
+                        "atomic groups are not supported (yew's "
                         "regex engine is linear-time by design; see man "
-                        "sagitta-regex)");
+                        "yew-regex)");
             return NULL;
         }
         if (k == '=' || k == '!' || k == '<') {
-            sag_re_fail(p, open,
-                        "lookaround is not supported (sagitta's regex "
+            yew_re_fail(p, open,
+                        "lookaround is not supported (yew's regex "
                         "engine is linear-time by design; see man "
-                        "sagitta-regex)");
+                        "yew-regex)");
             return NULL;
         }
         if (k == 'P' || k == '\'') {
-            sag_re_fail(p, open,
+            yew_re_fail(p, open,
                         "named groups are not supported in 1.0");
             return NULL;
         }
@@ -939,8 +939,8 @@ static ReAst *parse_group(ReParse *p)
             body = parse_alt(p);
         }
     } else {
-        if (p->ngroups >= SAG_RE_MAX_GROUPS) {
-            sag_re_fail(p, open, "too many capture groups (max 32)");
+        if (p->ngroups >= YEW_RE_MAX_GROUPS) {
+            yew_re_fail(p, open, "too many capture groups (max 32)");
             return NULL;
         }
         group = p->ngroups++;
@@ -949,7 +949,7 @@ static ReAst *parse_group(ReParse *p)
     if (p->failed)
         return NULL;
     if (at_end(p) || peek(p) != ')') {
-        sag_re_fail(p, open, "unterminated group");
+        yew_re_fail(p, open, "unterminated group");
         return NULL;
     }
     p->at++;
@@ -987,7 +987,7 @@ static ReAst *parse_atom(ReParse *p)
 
         p->at++;
         a = node(p, RE_A_ANY);
-        a->dotall = (p->flags & SAG_RE_DOTALL) != 0U;
+        a->dotall = (p->flags & YEW_RE_DOTALL) != 0U;
         return a;
     }
     case '^':
@@ -997,10 +997,10 @@ static ReAst *parse_atom(ReParse *p)
         p->at++;
         return node(p, RE_A_EOL);
     case ')':
-        sag_re_fail(p, here, "unmatched )");
+        yew_re_fail(p, here, "unmatched )");
         return NULL;
     case '*': case '+': case '?':
-        sag_re_fail(p, here, "nothing to repeat");
+        yew_re_fail(p, here, "nothing to repeat");
         return NULL;
     case '\\': {
         u32 cp = 0U;
@@ -1025,10 +1025,10 @@ static ReAst *parse_atom(ReParse *p)
                   return node(p, RE_A_EMPTY);
         case '1': case '2': case '3': case '4': case '5':
         case '6': case '7': case '8': case '9':
-            sag_re_fail(p, here,
-                        "backreferences are not supported (sagitta's "
+            yew_re_fail(p, here,
+                        "backreferences are not supported (yew's "
                         "regex engine is linear-time by design; see man "
-                        "sagitta-regex)");
+                        "yew-regex)");
             return NULL;
         default:
             break;
@@ -1083,15 +1083,15 @@ static bool parse_repeat_bounds(ReParse *p, u32 *min, u32 *max)
     if (scan >= p->len || p->pat[scan] != '}' || !have_lo)
         return false;
     hi = comma ? (have_hi ? hi_val : UINT32_MAX) : lo;
-    if (lo > SAG_RE_MAX_REPEAT ||
-        (hi != UINT32_MAX && hi > SAG_RE_MAX_REPEAT)) {
+    if (lo > YEW_RE_MAX_REPEAT ||
+        (hi != UINT32_MAX && hi > YEW_RE_MAX_REPEAT)) {
         static char msg[64];
-        u32 shown = lo > SAG_RE_MAX_REPEAT ? lo : hi;
+        u32 shown = lo > YEW_RE_MAX_REPEAT ? lo : hi;
 
         (void)snprintf(msg, sizeof(msg),
                        "repeat count %u exceeds %d", (unsigned)shown,
-                       SAG_RE_MAX_REPEAT);
-        sag_re_fail(p, open, msg);
+                       YEW_RE_MAX_REPEAT);
+        yew_re_fail(p, open, msg);
         return true;
     }
     if (hi != UINT32_MAX && lo > hi) {
@@ -1100,7 +1100,7 @@ static bool parse_repeat_bounds(ReParse *p, u32 *min, u32 *max)
         (void)snprintf(msg, sizeof(msg),
                        "invalid repeat: min %u > max %u", (unsigned)lo,
                        (unsigned)hi);
-        sag_re_fail(p, open, msg);
+        yew_re_fail(p, open, msg);
         return true;
     }
     p->at = scan + 1U;
@@ -1149,14 +1149,14 @@ static ReAst *parse_piece(ReParse *p)
         if (peek(p) == '+') {
             /* a*+ is possessive: it only means something to a
              * backtracker, so name it rather than report the symptom. */
-            sag_re_fail(p, p->at,
+            yew_re_fail(p, p->at,
                         "possessive quantifiers are not supported "
-                        "(sagitta's regex engine is linear-time by "
-                        "design; see man sagitta-regex)");
+                        "(yew's regex engine is linear-time by "
+                        "design; see man yew-regex)");
             return NULL;
         }
         if (peek(p) == '*') {
-            sag_re_fail(p, p->at, "nothing to repeat");
+            yew_re_fail(p, p->at, "nothing to repeat");
             return NULL;
         }
     }
@@ -1207,12 +1207,12 @@ static ReAst *parse_alt(ReParse *p)
     return left;
 }
 
-ReAst *sag_re_parse(ReParse *p)
+ReAst *yew_re_parse(ReParse *p)
 {
     ReAst *root;
 
-    /* SAG_RE_LITERAL: every byte is itself, metacharacters included. */
-    if ((p->base_flags & SAG_RE_LITERAL) != 0U) {
+    /* YEW_RE_LITERAL: every byte is itself, metacharacters included. */
+    if ((p->base_flags & YEW_RE_LITERAL) != 0U) {
         ReAst *left = NULL;
 
         while (!at_end(p)) {
@@ -1237,7 +1237,7 @@ ReAst *sag_re_parse(ReParse *p)
         return NULL;
     if (!at_end(p)) {
         /* parse_alt stops at ')' it did not open. */
-        sag_re_fail(p, p->at, "unmatched )");
+        yew_re_fail(p, p->at, "unmatched )");
         return NULL;
     }
     return root;

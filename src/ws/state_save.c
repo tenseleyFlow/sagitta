@@ -4,7 +4,7 @@
  * Three rules carry this file.
  *
  * THE WRITE IS SOMEONE ELSE'S PRIMITIVE.  Every byte goes through
- * sag_file_write_atomic (s08): write, sync the file, replace the target,
+ * yew_file_write_atomic (s08): write, sync the file, replace the target,
  * sync the directory, in that order.  There is deliberately no second
  * copy of that sequence here — DoD 8 greps src/ws/ for those calls and
  * expects none, because two implementations of atomic replacement is
@@ -92,14 +92,14 @@ static bool lock_write(const char *path, long pid)
 
     if (n <= 0 || (size_t)n >= sizeof(buf))
         return false;
-    return sag_file_write_atomic(path, (const u8 *)buf, (size_t)n, 0600) ==
-           SAG_SAVE_OK;
+    return yew_file_write_atomic(path, (const u8 *)buf, (size_t)n, 0600) ==
+           YEW_SAVE_OK;
 }
 
 /*
  * Claim the lock, or record who owns it.
  *
- * The read-then-write window is real: two sagittas starting in the same
+ * The read-then-write window is real: two yews starting in the same
  * millisecond can both see no owner.  It is closed by READING BACK what
  * we wrote — the loser sees the winner's pid and demotes itself to a
  * reader.  O_EXCL would give real mutual exclusion but only against a
@@ -108,7 +108,7 @@ static bool lock_write(const char *path, long pid)
  */
 static void lock_claim(WsState *s)
 {
-    const char *path = sag_ws_lock_path(&s->key);
+    const char *path = yew_ws_lock_path(&s->key);
     long mine = (long)getpid();
     long held;
 
@@ -119,22 +119,22 @@ static void lock_claim(WsState *s)
     held = lock_read(path);
     if (held != 0 && held != mine && pid_alive(held)) {
         s->owner_pid = held;
-        sag_log(SAG_LOG_INFO,
+        yew_log(YEW_LOG_INFO,
                 "workspace state is owned by pid %ld; this session will not "
                 "save it",
                 held);
         return;
     }
     if (!lock_write(path, mine)) {
-        sag_log(SAG_LOG_WARN, "cannot write %s; this session will not save "
+        yew_log(YEW_LOG_WARN, "cannot write %s; this session will not save "
                               "workspace state", path);
         return;
     }
     held = lock_read(path);
     if (held != mine) {
-        /* Lost the race to a sagitta that started alongside us. */
+        /* Lost the race to a yew that started alongside us. */
         s->owner_pid = held;
-        sag_log(SAG_LOG_INFO,
+        yew_log(YEW_LOG_INFO,
                 "workspace state is owned by pid %ld; this session will not "
                 "save it",
                 held);
@@ -153,12 +153,12 @@ static void lock_release(WsState *s)
     if (!s->writer)
         return;
     s->writer = false;
-    path = sag_ws_lock_path(&s->key);
+    path = yew_ws_lock_path(&s->key);
     if (path != NULL && lock_read(path) == (long)getpid())
         (void)unlink(path);
 }
 
-void sag_state_open(Ed *ed)
+void yew_state_open(Ed *ed)
 {
     WsState *s;
 
@@ -166,42 +166,42 @@ void sag_state_open(Ed *ed)
         return;
     s = &ed->state;
     (void)memset(s, 0, sizeof(*s));
-    s->timer = SAG_TIMER_NONE;
-    if (!sag_ws_key(&s->key, sag_ws_root(ed)))
+    s->timer = YEW_TIMER_NONE;
+    if (!yew_ws_key(&s->key, yew_ws_root(ed)))
         return;
-    if (!sag_ws_ensure_dir(&s->key))
+    if (!yew_ws_ensure_dir(&s->key))
         return;
     s->ready = true;
     lock_claim(s);
 }
 
-bool sag_state_save(Ed *ed)
+bool yew_state_save(Ed *ed)
 {
     WsState *s;
     Bytebuf out;
     const char *path;
-    SagSaveErr err;
+    YewSaveErr err;
 
     if (ed == NULL)
         return false;
     s = &ed->state;
     if (!s->ready || !s->writer)
         return false;
-    path = sag_ws_state_path(&s->key);
+    path = yew_ws_state_path(&s->key);
     if (path == NULL)
         return false;
     bytebuf_init(&out);
-    sag_state_emit(ed, &out);
-    err = sag_file_write_atomic(path, out.data, out.len, 0600);
+    yew_state_emit(ed, &out);
+    err = yew_file_write_atomic(path, out.data, out.len, 0600);
     bytebuf_free(&out);
-    if (err != SAG_SAVE_OK) {
+    if (err != YEW_SAVE_OK) {
         /*
          * A failed state write is not a failed edit.  It is logged and
          * dropped: the dirty flag STAYS set so the next debounce tries
          * again, and nothing on screen interrupts the user over a
          * cache.
          */
-        sag_log(SAG_LOG_WARN, "cannot write %s", path);
+        yew_log(YEW_LOG_WARN, "cannot write %s", path);
         return false;
     }
     s->dirty = false;
@@ -214,12 +214,12 @@ static void state_save_timer(Ed *ed, void *ctx)
     (void)ctx;
     if (ed == NULL)
         return;
-    ed->state.timer = SAG_TIMER_NONE;
+    ed->state.timer = YEW_TIMER_NONE;
     if (ed->state.dirty)
-        (void)sag_state_save(ed);
+        (void)yew_state_save(ed);
 }
 
-void sag_state_mark_dirty(Ed *ed)
+void yew_state_mark_dirty(Ed *ed)
 {
     WsState *s;
 
@@ -237,7 +237,7 @@ void sag_state_mark_dirty(Ed *ed)
          */
         if (!s->owner_told && s->owner_pid > 0) {
             s->owner_told = true;
-            sag_msg(ed, SAG_MSG_WARN,
+            yew_msg(ed, YEW_MSG_WARN,
                     "workspace state is owned by pid %ld; this session will "
                     "not save it",
                     s->owner_pid);
@@ -249,26 +249,26 @@ void sag_state_mark_dirty(Ed *ed)
      * COALESCE, do not slide.  Re-arming on every change means a user
      * who keeps working never crosses the quiet threshold and never
      * gets a save; arming once from the first change guarantees the
-     * document is at most SAG_STATE_SAVE_DEBOUNCE_MS behind, however
+     * document is at most YEW_STATE_SAVE_DEBOUNCE_MS behind, however
      * busy the session is.
      */
-    if (s->timer != SAG_TIMER_NONE)
+    if (s->timer != YEW_TIMER_NONE)
         return;
-    s->timer = sag_timer_add(&ed->timers,
-                             ed->now_ms + SAG_STATE_SAVE_DEBOUNCE_MS,
+    s->timer = yew_timer_add(&ed->timers,
+                             ed->now_ms + YEW_STATE_SAVE_DEBOUNCE_MS,
                              state_save_timer, NULL);
 }
 
-void sag_state_dispose(Ed *ed)
+void yew_state_dispose(Ed *ed)
 {
     WsState *s;
 
     if (ed == NULL)
         return;
     s = &ed->state;
-    if (s->timer != SAG_TIMER_NONE) {
-        (void)sag_timer_cancel(&ed->timers, s->timer);
-        s->timer = SAG_TIMER_NONE;
+    if (s->timer != YEW_TIMER_NONE) {
+        (void)yew_timer_cancel(&ed->timers, s->timer);
+        s->timer = YEW_TIMER_NONE;
     }
     lock_release(s);
     if (s->doc_ready) {
@@ -282,7 +282,7 @@ void sag_state_dispose(Ed *ed)
     s->dirty = false;
 }
 
-void sag_state_close(Ed *ed)
+void yew_state_close(Ed *ed)
 {
     if (ed == NULL)
         return;
@@ -309,6 +309,6 @@ void sag_state_close(Ed *ed)
      * true by construction rather than by every mutation remembering.
      */
     if (ed->state.ready && ed->state.writer)
-        (void)sag_state_save(ed);
-    sag_state_dispose(ed);
+        (void)yew_state_save(ed);
+    yew_state_dispose(ed);
 }

@@ -37,7 +37,7 @@ typedef struct MacroFile {
     char *stem;
     char *source;
     size_t source_len;
-    SagMacroHeader header;
+    YewMacroHeader header;
     FlValue exports;
     bool rejected;
 } MacroFile;
@@ -76,7 +76,7 @@ typedef struct NameVec {
 
 static void registrations_remove(Ed *ed, MacroLib *lib);
 
-static void header_field(SagMacroText *field, const char *s, size_t n)
+static void header_field(YewMacroText *field, const char *s, size_t n)
 {
     while (n != 0U && (*s == ' ' || *s == '\t')) {
         s++;
@@ -102,17 +102,17 @@ static bool header_key(const char *line, size_t n, const char *key,
     return true;
 }
 
-SagMacroHeaderStatus sag_macro_header_parse(const char *source, size_t len,
-                                             SagMacroHeader *out)
+YewMacroHeaderStatus yew_macro_header_parse(const char *source, size_t len,
+                                             YewMacroHeader *out)
 {
     size_t at = 0U;
 
     if (out == NULL)
-        return SAG_MACRO_HEADER_UNSUPPORTED;
+        return YEW_MACRO_HEADER_UNSUPPORTED;
     (void)memset(out, 0, sizeof(*out));
     if (source == NULL)
-        return len == 0U ? SAG_MACRO_HEADER_OK :
-                           SAG_MACRO_HEADER_UNSUPPORTED;
+        return len == 0U ? YEW_MACRO_HEADER_OK :
+                           YEW_MACRO_HEADER_UNSUPPORTED;
     while (at < len) {
         size_t end = at;
         const char *line;
@@ -140,8 +140,8 @@ SagMacroHeaderStatus sag_macro_header_parse(const char *source, size_t len,
             line++;
             n--;
         }
-        if (header_key(line, n, "sagitta-macro:", &value, &value_len)) {
-            SagMacroText schema = {0};
+        if (header_key(line, n, "yew-macro:", &value, &value_len)) {
+            YewMacroText schema = {0};
 
             header_field(&schema, value, value_len);
             out->has_schema = true;
@@ -163,12 +163,12 @@ SagMacroHeaderStatus sag_macro_header_parse(const char *source, size_t len,
         at = end < len ? end + 1U : end;
     }
     return out->has_schema && out->schema != 1U ?
-           SAG_MACRO_HEADER_UNSUPPORTED : SAG_MACRO_HEADER_OK;
+           YEW_MACRO_HEADER_UNSUPPORTED : YEW_MACRO_HEADER_OK;
 }
 
 static char *dup_n(const char *s, size_t n)
 {
-    char *copy = sag_xmalloc(n + 1U);
+    char *copy = yew_xmalloc(n + 1U);
 
     if (n != 0U)
         (void)memcpy(copy, s, n);
@@ -185,7 +185,7 @@ static char *path_join(const char *dir, const char *name)
 
     if (dn > SIZE_MAX - nn - (slash ? 2U : 1U))
         return NULL;
-    path = sag_xmalloc(dn + nn + (slash ? 2U : 1U));
+    path = yew_xmalloc(dn + nn + (slash ? 2U : 1U));
     (void)memcpy(path, dir, dn);
     if (slash)
         path[dn++] = '/';
@@ -195,7 +195,7 @@ static char *path_join(const char *dir, const char *name)
 
 static char *default_dir(void)
 {
-    char *cfg = sag_xdg_config_dir();
+    char *cfg = yew_xdg_config_dir();
     char *dir;
 
     if (cfg == NULL)
@@ -209,8 +209,8 @@ static char *effective_dir(Ed *ed)
 {
     OptVal value;
 
-    if (sag_opt_get(ed, NULL, NULL, "macro.dir", 9U, &value) &&
-        value.type == (u8)SAG_OPT_STR && value.as.str.len != 0U)
+    if (yew_opt_get(ed, NULL, NULL, "macro.dir", 9U, &value) &&
+        value.type == (u8)YEW_OPT_STR && value.as.str.len != 0U)
         return dup_n(value.as.str.s, value.as.str.len);
     return default_dir();
 }
@@ -255,21 +255,21 @@ static void contents_free(MacroLib *lib)
     lib->file_cap = 0U;
 }
 
-MacroLib *sag_macrolib_new(Ed *ed)
+MacroLib *yew_macrolib_new(Ed *ed)
 {
     MacroLib *lib;
-    FlVm *vm = sag_fl_vm(ed);
+    FlVm *vm = yew_fl_vm(ed);
 
     if (vm == NULL)
         return NULL;
-    lib = sag_xcalloc(1U, sizeof(*lib));
+    lib = yew_xcalloc(1U, sizeof(*lib));
     lib->root = FL_NIL_V;
     lib->enabled = true;
     fl_gc_host_root_add(vm, &lib->root);
     return lib;
 }
 
-void sag_macrolib_free(Ed *ed, MacroLib *lib)
+void yew_macrolib_free(Ed *ed, MacroLib *lib)
 {
     FlVm *vm;
 
@@ -277,7 +277,7 @@ void sag_macrolib_free(Ed *ed, MacroLib *lib)
         return;
     if (ed != NULL)
         registrations_remove(ed, lib);
-    vm = sag_fl_vm(ed);
+    vm = yew_fl_vm(ed);
     if (vm != NULL)
         fl_gc_host_root_remove(vm, &lib->root);
     contents_free(lib);
@@ -324,7 +324,7 @@ static bool names_read(const char *dir, NameVec *names)
             continue;
         if (names->n == names->cap) {
             names->cap = names->cap == 0U ? 16U : names->cap * 2U;
-            names->v = sag_xreallocarray(names->v, names->cap,
+            names->v = yew_xreallocarray(names->v, names->cap,
                                           sizeof(*names->v));
         }
         names->v[names->n++] = dup_n(de->d_name, strlen(de->d_name));
@@ -333,7 +333,7 @@ static bool names_read(const char *dir, NameVec *names)
         names_free(names);
         return false;
     }
-    sag_sort_stable(names->v, names->n, sizeof(*names->v), name_cmp, NULL);
+    yew_sort_stable(names->v, names->n, sizeof(*names->v), name_cmp, NULL);
     return true;
 }
 
@@ -390,7 +390,7 @@ static void report(DiagCtx *dc, u32 file_id, FlDiagLevel level,
         va_start(ap, fmt);
         (void)vsnprintf(text, sizeof(text), fmt, ap);
         va_end(ap);
-        sag_log(level == FL_DIAG_ERROR ? SAG_LOG_ERROR : SAG_LOG_WARN,
+        yew_log(level == FL_DIAG_ERROR ? YEW_LOG_ERROR : YEW_LOG_WARN,
                 "%s", text);
     }
 }
@@ -401,7 +401,7 @@ static MacroFile *file_push(MacroLib *lib)
 
     if (lib->nfiles == lib->file_cap) {
         lib->file_cap = lib->file_cap == 0U ? 16U : lib->file_cap * 2U;
-        lib->files = sag_xreallocarray(lib->files, lib->file_cap,
+        lib->files = yew_xreallocarray(lib->files, lib->file_cap,
                                        sizeof(*lib->files));
     }
     file = &lib->files[lib->nfiles++];
@@ -416,7 +416,7 @@ static MacroEntry *entry_push(MacroLib *lib)
 
     if (lib->nentries == lib->entry_cap) {
         lib->entry_cap = lib->entry_cap == 0U ? 32U : lib->entry_cap * 2U;
-        lib->entries = sag_xreallocarray(lib->entries, lib->entry_cap,
+        lib->entries = yew_xreallocarray(lib->entries, lib->entry_cap,
                                          sizeof(*lib->entries));
     }
     entry = &lib->entries[lib->nentries++];
@@ -481,13 +481,13 @@ static bool preflight_exports(MacroLib *candidate, u32 file_index)
         } else {
             continue;
         }
-        binding = sag_intern_str(&in, name_id);
+        binding = yew_intern_str(&in, name_id);
         if (binding == NULL || binding[0] == '_')
             continue;
-        bn = sag_intern_len(&in, name_id);
+        bn = yew_intern_len(&in, name_id);
         sn = strlen(file->stem);
         entry = entry_push(candidate);
-        entry->name = sag_xmalloc(sn + 1U + bn + 1U);
+        entry->name = yew_xmalloc(sn + 1U + bn + 1U);
         (void)memcpy(entry->name, file->stem, sn);
         entry->name[sn] = '.';
         (void)memcpy(entry->name + sn + 1U, binding, bn);
@@ -542,7 +542,7 @@ static bool bind_exports(MacroLib *candidate, u32 file_index, FlMap *exports)
     return matched == expected;
 }
 
-static bool recorded_major_mismatch(const SagMacroHeader *header)
+static bool recorded_major_mismatch(const YewMacroHeader *header)
 {
     const char *s;
     u32 n;
@@ -553,9 +553,9 @@ static bool recorded_major_mismatch(const SagMacroHeader *header)
         return false;
     s = header->recorded_with.s;
     n = header->recorded_with.len;
-    if (n >= 8U && memcmp(s, "sagitta ", 8U) == 0) {
-        s += 8U;
-        n -= 8U;
+    if (n >= 4U && memcmp(s, "yew ", 4U) == 0) {
+        s += 4U;
+        n -= 4U;
     }
     while (n != 0U && *s >= '0' && *s <= '9') {
         digit = true;
@@ -667,9 +667,9 @@ static void registration_remove(Ed *ed, u32 id)
     if (reg->kind == (u8)REG_HOOK)
         (void)fl_hook_remove(&ed->hooks, id);
     else if (reg->kind == (u8)REG_BIND)
-        (void)sag_bind_remove(ed, id);
+        (void)yew_bind_remove(ed, id);
     else if (reg->kind == (u8)REG_OPTION)
-        (void)sag_opt_remove(ed, id);
+        (void)yew_opt_remove(ed, id);
     else
         (void)fl_reg_remove(ledger, id);
 }
@@ -694,7 +694,7 @@ static void registrations_capture(MacroLib *lib, const FlRegLedger *ledger,
         if (lib->nledger == lib->ledger_cap) {
             lib->ledger_cap = lib->ledger_cap == 0U ? 8U :
                                                     lib->ledger_cap * 2U;
-            lib->ledger_ids = sag_xreallocarray(lib->ledger_ids,
+            lib->ledger_ids = yew_xreallocarray(lib->ledger_ids,
                                                  lib->ledger_cap,
                                                  sizeof(*lib->ledger_ids));
         }
@@ -702,7 +702,7 @@ static void registrations_capture(MacroLib *lib, const FlRegLedger *ledger,
     }
 }
 
-u32 sag_macrolib_scan(Ed *ed, DiagCtx *dc)
+u32 yew_macrolib_scan(Ed *ed, DiagCtx *dc)
 {
     MacroLib candidate = {0};
     MacroLib *live;
@@ -714,7 +714,7 @@ u32 sag_macrolib_scan(Ed *ed, DiagCtx *dc)
     u32 i;
 
     if (ed == NULL || (live = ed->macrolib) == NULL || live->scanning ||
-        (vm = sag_fl_vm(ed)) == NULL)
+        (vm = yew_fl_vm(ed)) == NULL)
         return 0U;
     live->scanning = true;
     candidate.dir = effective_dir(ed);
@@ -748,20 +748,20 @@ u32 sag_macrolib_scan(Ed *ed, DiagCtx *dc)
             file->rejected = true;
             continue;
         }
-        if (sag_macro_header_parse(file->source, file->source_len,
+        if (yew_macro_header_parse(file->source, file->source_len,
                                    &file->header) ==
-            SAG_MACRO_HEADER_UNSUPPORTED) {
+            YEW_MACRO_HEADER_UNSUPPORTED) {
             report(dc, diag_file, FL_DIAG_WARNING,
-                   "%s: unsupported sagitta-macro schema %lu; skipped",
+                   "%s: unsupported yew-macro schema %lu; skipped",
                    file->path, (unsigned long)file->header.schema);
             file->rejected = true;
             continue;
         }
         if (recorded_major_mismatch(&file->header))
             report(dc, diag_file, FL_DIAG_WARNING,
-                   "%s: recorded-with %.*s has a different major version from sagitta %s; loading anyway",
+                   "%s: recorded-with %.*s has a different major version from yew %s; loading anyway",
                    file->path, (int)file->header.recorded_with.len,
-                   file->header.recorded_with.s, SAG_VERSION);
+                   file->header.recorded_with.s, YEW_VERSION);
         if (!preflight_exports(&candidate, candidate.nfiles - 1U)) {
             report(dc, diag_file, FL_DIAG_ERROR,
                    "%s: macro file did not parse; skipped", file->path);
@@ -783,7 +783,7 @@ u32 sag_macrolib_scan(Ed *ed, DiagCtx *dc)
         if (file->rejected)
             continue;
         origin = (FlOrigin){(u8)FL_ORIGIN_CONFIG,
-                  sag_intern(vm->in, file->path, strlen(file->path)),
+                  yew_intern(vm->in, file->path, strlen(file->path)),
                   (u32)FL_CAP_FS_READ | (u32)FL_CAP_FS_WRITE |
                   (u32)FL_CAP_SHELL | (u32)FL_CAP_NET};
         ledger_before = ed->hooks.ledger.n;
@@ -826,23 +826,23 @@ u32 sag_macrolib_scan(Ed *ed, DiagCtx *dc)
     return live->nentries;
 }
 
-u32 sag_macrolib_count(const Ed *ed)
+u32 yew_macrolib_count(const Ed *ed)
 {
     return ed == NULL || ed->macrolib == NULL ? 0U :
                                                 ed->macrolib->nentries;
 }
 
 static void entry_view(const MacroLib *lib, const MacroEntry *entry,
-                       SagMacroEntryView *out)
+                       YewMacroEntryView *out)
 {
     const MacroFile *file = &lib->files[entry->file];
 
-    *out = (SagMacroEntryView){entry->name, entry->alias, entry->binding,
+    *out = (YewMacroEntryView){entry->name, entry->alias, entry->binding,
            file->stem, file->path, file->source, file->source_len,
            file->header, 0U, entry->arity, entry->replayable};
 }
 
-bool sag_macrolib_at(const Ed *ed, u32 index, SagMacroEntryView *out)
+bool yew_macrolib_at(const Ed *ed, u32 index, YewMacroEntryView *out)
 {
     if (ed == NULL || ed->macrolib == NULL || out == NULL ||
         index >= ed->macrolib->nentries)
@@ -867,8 +867,8 @@ static MacroEntry *find_entry(MacroLib *lib, const char *name)
     return NULL;
 }
 
-bool sag_macrolib_find(const Ed *ed, const char *name,
-                       SagMacroEntryView *out)
+bool yew_macrolib_find(const Ed *ed, const char *name,
+                       YewMacroEntryView *out)
 {
     MacroEntry *entry;
 
@@ -879,7 +879,7 @@ bool sag_macrolib_find(const Ed *ed, const char *name,
     return true;
 }
 
-CmdStatus sag_macrolib_call(Ed *ed, const char *name)
+CmdStatus yew_macrolib_call(Ed *ed, const char *name)
 {
     MacroEntry *entry;
     FlVm *vm;
@@ -888,50 +888,50 @@ CmdStatus sag_macrolib_call(Ed *ed, const char *name)
 
     if (ed == NULL || (entry = find_entry(ed->macrolib, name)) == NULL) {
         if (ed != NULL)
-            sag_msg(ed, SAG_MSG_ERROR, "no macro named %s",
+            yew_msg(ed, YEW_MSG_ERROR, "no macro named %s",
                     name == NULL ? "" : name);
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     }
     if (!entry->replayable) {
-        sag_msg(ed, SAG_MSG_ERROR, "%s takes %u argument%s", entry->name,
+        yew_msg(ed, YEW_MSG_ERROR, "%s takes %u argument%s", entry->name,
                 (unsigned)entry->arity, entry->arity == 1U ? "" : "s");
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     }
-    vm = sag_fl_vm(ed);
+    vm = yew_fl_vm(ed);
     if (vm == NULL)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     split_run = vm->txn.entry_active &&
-                fl_runtime_cmd_source(vm) != SAG_SRC_REPLAY;
+                fl_runtime_cmd_source(vm) != YEW_SRC_REPLAY;
     if (split_run) {
         if (vm->txn.depth != 0U) {
-            sag_msg(ed, SAG_MSG_ERROR,
+            yew_msg(ed, YEW_MSG_ERROR,
                     "cannot replay a macro inside an edit transaction");
-            return SAG_CMD_ERR_STATE;
+            return YEW_CMD_ERR_STATE;
         }
         if (!vm->host->edit_begin(vm))
-            return SAG_CMD_ERR_STATE;
+            return YEW_CMD_ERR_STATE;
     }
-    ok = fl_call_value(ed->fl, entry->callable, SAG_SRC_REPLAY);
+    ok = fl_call_value(ed->fl, entry->callable, YEW_SRC_REPLAY);
     if (split_run && !vm->host->edit_end(vm, ok))
         ok = false;
-    return ok ? SAG_CMD_OK : SAG_CMD_ERR_STATE;
+    return ok ? YEW_CMD_OK : YEW_CMD_ERR_STATE;
 }
 
-const char *sag_macrolib_dir(const Ed *ed)
+const char *yew_macrolib_dir(const Ed *ed)
 {
     return ed == NULL || ed->macrolib == NULL ? NULL : ed->macrolib->dir;
 }
 
-void sag_macrolib_enable(Ed *ed)
+void yew_macrolib_enable(Ed *ed)
 {
     if (ed == NULL || ed->macrolib == NULL)
         return;
     ed->macrolib->enabled = true;
-    (void)sag_macrolib_scan(ed, NULL);
+    (void)yew_macrolib_scan(ed, NULL);
 }
 
-void sag_macrolib_option_changed(Ed *ed)
+void yew_macrolib_option_changed(Ed *ed)
 {
     if (ed != NULL && ed->macrolib != NULL && ed->macrolib->enabled)
-        (void)sag_macrolib_scan(ed, NULL);
+        (void)yew_macrolib_scan(ed, NULL);
 }

@@ -98,7 +98,7 @@ static void make_fixture(Bytebuf *fixture)
             continue;
         }
         bytebuf_printf(fixture,
-                       "static int sagitta_scroll_%05u(void) { return %u; }"
+                       "static int yew_scroll_%05u(void) { return %u; }"
                        "\t/* \xE6\xBC\xA2\xE5\xAD\x97 /viewport/statusline/benchmark */\n",
                        line, line);
     }
@@ -125,50 +125,50 @@ static bool measure(const ScrollCase *pc, const Bytebuf *fixture,
     arena_init(&ed.arena);
     interner_init(&ed.interner, &ed.arena);
     bytebuf_init(&ed.frame);
-    if (!sag_grid_init(&ed.grid, &ed.interner, pc->rows, pc->cols))
+    if (!yew_grid_init(&ed.grid, &ed.interner, pc->rows, pc->cols))
         goto done_arena;
 
-    buffer.tb = sag_textbuf_from_bytes(fixture->data, fixture->len);
-    buffer.undo = sag_undo_new(buffer.tb);
-    sag_undo_mark_saved(buffer.undo);
-    sag_filemeta_init(&buffer.meta);
+    buffer.tb = yew_textbuf_from_bytes(fixture->data, fixture->len);
+    buffer.undo = yew_undo_new(buffer.tb);
+    yew_undo_mark_saved(buffer.undo);
+    yew_filemeta_init(&buffer.meta);
     buffer.path = (char *)"tests/perf/scroll-fixture.c";
 
-    cursor.pos = sag_textbuf_line_start(buffer.tb,
+    cursor.pos = yew_textbuf_line_start(buffer.tb,
                                         LINENO(SCROLL_LINES / 2U));
     cursor.anchor = cursor.pos;
     cursor.goal_col = (GCol){0U};
     win.buf = &buffer;
-    sag_cset_init(&win.cs, cursor);
-    sag_vp_init(&win);
-    win.number_style = SAG_NUM_HYBRID;
+    yew_cset_init(&win.cs, cursor);
+    yew_vp_init(&win);
+    win.number_style = YEW_NUM_HYBRID;
     win.vp.wrap = pc->wrap;
 
-    ed.mode = SAG_MODE_L;
-    ed.prev_unit = SAG_MODE_L;
+    ed.mode = YEW_MODE_L;
+    ed.prev_unit = YEW_MODE_L;
     ed.win = &win;
     bufptrs[0] = &buffer;
     ed.ws.bufs = bufptrs;
     ed.ws.nbufs = 1U;
-    sag_render_init(&ed.render, &caps, NULL);
-    sag_layout(&ed);
-    sag_draw_win(&ed, &win);
-    sag_grid_mark_all(&ed.grid);
-    (void)sag_render_frame(&ed.render, &ed.grid, &ed.frame);
-    sag_grid_flip(&ed.grid);
+    yew_render_init(&ed.render, &caps, NULL);
+    yew_layout(&ed);
+    yew_draw_win(&ed, &win);
+    yew_grid_mark_all(&ed.grid);
+    (void)yew_render_frame(&ed.render, &ed.grid, &ed.frame);
+    yew_grid_flip(&ed.grid);
 
     if (!now_ns(&start))
         goto done_model;
     for (frame = 0U; frame < SCROLL_FRAMES; frame++) {
-        sag_vp_scroll(&win, 1);
-        sag_vp_push_cursor(&win);
-        sag_draw_win(&ed, &win);
-        sag_grid_mark_all(&ed.grid);
+        yew_vp_scroll(&win, 1);
+        yew_vp_push_cursor(&win);
+        yew_draw_win(&ed, &win);
+        yew_grid_mark_all(&ed.grid);
         ed.frame.len = 0U;
-        scroll_sink ^= (u64)sag_render_frame(&ed.render, &ed.grid,
+        scroll_sink ^= (u64)yew_render_frame(&ed.render, &ed.grid,
                                              &ed.frame);
         scroll_sink ^= (u64)ed.frame.len;
-        sag_grid_flip(&ed.grid);
+        yew_grid_flip(&ed.grid);
     }
     if (!now_ns(&end) || end <= start)
         goto done_model;
@@ -176,12 +176,12 @@ static bool measure(const ScrollCase *pc, const Bytebuf *fixture,
     ok = true;
 
 done_model:
-    sag_vp_free(&win);
-    sag_cset_free(&win.cs);
-    sag_undo_free(buffer.undo);
-    sag_textbuf_free(buffer.tb);
-    sag_filemeta_dispose(&buffer.meta);
-    sag_grid_free(&ed.grid);
+    yew_vp_free(&win);
+    yew_cset_free(&win.cs);
+    yew_undo_free(buffer.undo);
+    yew_textbuf_free(buffer.tb);
+    yew_filemeta_dispose(&buffer.meta);
+    yew_grid_free(&ed.grid);
 done_arena:
     bytebuf_free(&ed.frame);
     interner_free(&ed.interner);
@@ -201,10 +201,10 @@ int main(void)
     size_t i;
     int status = 0;
 
-    if (!load_baselines(cases, SAG_ARRAY_LEN(cases)))
+    if (!load_baselines(cases, YEW_ARRAY_LEN(cases)))
         return 2;
     make_fixture(&fixture);
-    for (i = 0U; i < SAG_ARRAY_LEN(cases); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(cases); i++) {
         double fps;
 
         if (!measure(&cases[i], &fixture, &fps)) {

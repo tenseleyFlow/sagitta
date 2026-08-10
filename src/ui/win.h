@@ -1,5 +1,5 @@
-#ifndef SAG_UI_WIN_H
-#define SAG_UI_WIN_H
+#ifndef YEW_UI_WIN_H
+#define YEW_UI_WIN_H
 
 #include "edit/motion.h"
 #include "edit/jumplist.h"
@@ -47,13 +47,13 @@ typedef struct Win {
     Strmap opt_overrides;
 } Win;
 
-/* Sprint 14 compatibility names; new code uses the sag_vp_* API. */
-void sag_win_follow_cursor(Win *w);
-LineNo sag_win_view_top(const Win *w);
-bool sag_win_view_row(const Win *w, LineNo line, u16 *row);
+/* Sprint 14 compatibility names; new code uses the yew_vp_* API. */
+void yew_win_follow_cursor(Win *w);
+LineNo yew_win_view_top(const Win *w);
+bool yew_win_view_row(const Win *w, LineNo line, u16 *row);
 
 /* Sprint 22 §7: click-to-focus lands the cursor on the clicked
  * grapheme.  Conversions go through src/unicode/, never here. */
-void sag_win_click_to_cursor(Win *w, u16 grid_x, u16 grid_y);
+void yew_win_click_to_cursor(Win *w, u16 grid_x, u16 grid_y);
 
 #endif

@@ -1,4 +1,4 @@
-{ version: 1, writer: "sagitta",
+{ version: 1, writer: "yew",
       workspace: { path: "/w", saved_at: 0, },
   options: {},
 groups: [],

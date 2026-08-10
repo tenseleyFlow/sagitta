@@ -24,7 +24,7 @@ typedef struct {
 
 typedef struct {
     u32 cp;
-    u8 bytes[SAG_UTF8_MAX];
+    u8 bytes[YEW_UTF8_MAX];
     u8 len;
     u64 start;
     u64 end;
@@ -45,15 +45,15 @@ typedef struct {
 static void require_span(const TextBuf *tb, Span line)
 {
     if (tb == NULL)
-        SAG_BUG("unicode coordinates: NULL text buffer");
-    if (line.lo > line.hi || line.hi > sag_textbuf_len(tb))
-        SAG_BUG("unicode coordinates: invalid line span");
+        YEW_BUG("unicode coordinates: NULL text buffer");
+    if (line.lo > line.hi || line.hi > yew_textbuf_len(tb))
+        YEW_BUG("unicode coordinates: invalid line span");
 }
 
 static void require_pos(Span line, ByteOff pos)
 {
     if (pos.v < line.lo || pos.v > line.hi)
-        SAG_BUG("unicode coordinates: offset outside line span");
+        YEW_BUG("unicode coordinates: offset outside line span");
 }
 
 static void reader_init(TextReader *reader, const TextBuf *tb,
@@ -66,11 +66,11 @@ static void reader_init(TextReader *reader, const TextBuf *tb,
     reader->off = start;
     reader->end = end;
     reader->active = start < end &&
-                     sag_textiter_begin(&reader->it, tb, BYTEOFF(start));
+                     yew_textiter_begin(&reader->it, tb, BYTEOFF(start));
     if (reader->active &&
-        !sag_textiter_chunk(&reader->it, tb, &reader->chunk,
+        !yew_textiter_chunk(&reader->it, tb, &reader->chunk,
                             &reader->chunk_len))
-        SAG_BUG("unicode coordinates: iterator has no first chunk");
+        YEW_BUG("unicode coordinates: iterator has no first chunk");
 }
 
 static bool reader_get(TextReader *reader, u8 *out)
@@ -78,14 +78,14 @@ static bool reader_get(TextReader *reader, u8 *out)
     if (reader->off >= reader->end)
         return false;
     if (!reader->active)
-        SAG_BUG("unicode coordinates: iterator ended early");
+        YEW_BUG("unicode coordinates: iterator ended early");
     while (reader->chunk_pos == reader->chunk_len) {
-        if (!sag_textiter_advance(&reader->it, reader->tb))
-            SAG_BUG("unicode coordinates: iterator ended early");
-        if (!sag_textiter_chunk(&reader->it, reader->tb, &reader->chunk,
+        if (!yew_textiter_advance(&reader->it, reader->tb))
+            YEW_BUG("unicode coordinates: iterator ended early");
+        if (!yew_textiter_chunk(&reader->it, reader->tb, &reader->chunk,
                                 &reader->chunk_len) ||
             reader->chunk_len == 0U)
-            SAG_BUG("unicode coordinates: iterator yielded empty chunk");
+            YEW_BUG("unicode coordinates: iterator yielded empty chunk");
         reader->chunk_pos = 0U;
     }
     *out = reader->chunk[(size_t)reader->chunk_pos++];
@@ -118,18 +118,18 @@ static bool reader_cp(TextReader *reader, StreamCp *out)
     out->start = reader->off;
     probe = *reader;
     if (!reader_get(&probe, &out->bytes[have++]))
-        SAG_BUG("unicode coordinates: decoder made no progress");
+        YEW_BUG("unicode coordinates: decoder made no progress");
     wanted = utf8_candidate_len(out->bytes[0]);
     while (have < wanted && reader_get(&probe, &out->bytes[have]))
         have++;
-    used = sag_utf8_decode(out->bytes, have, &out->cp);
+    used = yew_utf8_decode(out->bytes, have, &out->cp);
     if (used == 0U || used > have)
-        SAG_BUG("unicode coordinates: decoder returned invalid length");
+        YEW_BUG("unicode coordinates: decoder returned invalid length");
     out->len = (u8)used;
     while (used-- != 0U) {
         u8 ignored;
         if (!reader_get(reader, &ignored))
-            SAG_BUG("unicode coordinates: decoder overran stream");
+            YEW_BUG("unicode coordinates: decoder overran stream");
     }
     out->end = reader->off;
     return true;
@@ -149,8 +149,8 @@ static void cluster_reader_free(ClusterReader *reader)
 static bool cluster_next(ClusterReader *reader, StreamCluster *out,
                          bool need_width)
 {
-    SagGbState gb;
-    SagClusterWidthState width;
+    YewGbState gb;
+    YewClusterWidthState width;
     StreamCp cp;
     u32 cp_count = 0U;
     u32 first_cp = 0U;
@@ -161,48 +161,48 @@ static bool cluster_next(ClusterReader *reader, StreamCluster *out,
     out->cells = 0U;
     out->base_cp = 0U;
     out->tab = false;
-    sag_gb_init(&gb);
-    sag_cluster_width_init(&width);
+    yew_gb_init(&gb);
+    yew_cluster_width_init(&width);
     if (!reader_cp(&reader->reader, &cp))
-        SAG_BUG("unicode coordinates: missing cluster head");
-    (void)sag_gb_boundary(&gb, cp.cp);
+        YEW_BUG("unicode coordinates: missing cluster head");
+    (void)yew_gb_boundary(&gb, cp.cp);
     first_cp = cp.cp;
     out->base_cp = first_cp;
     cp_count = 1U;
     if (need_width)
-        sag_cluster_width_push(&width, cp.cp);
+        yew_cluster_width_push(&width, cp.cp);
 
     while (reader->reader.off < reader->reader.end) {
         TextReader probe = reader->reader;
-        SagGbState next_gb = gb;
+        YewGbState next_gb = gb;
 
         if (!reader_cp(&probe, &cp))
             break;
-        if (sag_gb_boundary(&next_gb, cp.cp))
+        if (yew_gb_boundary(&next_gb, cp.cp))
             break;
         reader->reader = probe;
         gb = next_gb;
         if (cp_count != UINT32_MAX)
             cp_count++;
         if (need_width)
-            sag_cluster_width_push(&width, cp.cp);
+            yew_cluster_width_push(&width, cp.cp);
     }
     out->end = reader->reader.off;
     if (need_width) {
         out->tab = cp_count == 1U && first_cp == '\t';
         if (!out->tab) {
-            int cells = sag_cluster_width_finish(&width);
+            int cells = yew_cluster_width_finish(&width);
 
             if (cells < 0)
-                SAG_BUG("unicode coordinates: negative cluster width");
+                YEW_BUG("unicode coordinates: negative cluster width");
             out->cells = (u64)cells;
         }
     }
     return true;
 }
 
-bool sag_text_cluster_next(const TextBuf *tb, Span span, ByteOff at,
-                           SagTextCluster *out)
+bool yew_text_cluster_next(const TextBuf *tb, Span span, ByteOff at,
+                           YewTextCluster *out)
 {
     ClusterReader reader;
     StreamCluster cluster;
@@ -210,15 +210,15 @@ bool sag_text_cluster_next(const TextBuf *tb, Span span, ByteOff at,
     require_span(tb, span);
     require_pos(span, at);
     if (out == NULL)
-        SAG_BUG("sag_text_cluster_next: missing output");
+        YEW_BUG("yew_text_cluster_next: missing output");
     if (at.v == span.hi)
         return false;
     cluster_reader_init(&reader, tb, at.v, span.hi);
     if (!cluster_next(&reader, &cluster, true))
-        SAG_BUG("sag_text_cluster_next: cluster scan made no progress");
+        YEW_BUG("yew_text_cluster_next: cluster scan made no progress");
     cluster_reader_free(&reader);
     if (cluster.end <= cluster.start || cluster.cells > UINT32_MAX)
-        SAG_BUG("sag_text_cluster_next: invalid cluster");
+        YEW_BUG("yew_text_cluster_next: invalid cluster");
     out->bytes = (Span){cluster.start, cluster.end};
     out->base_cp = cluster.base_cp;
     out->cells = (u32)cluster.cells;
@@ -235,13 +235,13 @@ static u64 line_content_end(const TextBuf *tb, Span line)
         return line.hi;
     reader_init(&reader, tb, line.hi - 1U, line.hi);
     if (!reader_get(&reader, &byte))
-        SAG_BUG("unicode coordinates: cannot inspect line ending");
+        YEW_BUG("unicode coordinates: cannot inspect line ending");
     if (byte != '\n')
         return line.hi;
     if (line.hi - line.lo >= 2U) {
         reader_init(&reader, tb, line.hi - 2U, line.hi - 1U);
         if (!reader_get(&reader, &byte))
-            SAG_BUG("unicode coordinates: cannot inspect CRLF ending");
+            YEW_BUG("unicode coordinates: cannot inspect CRLF ending");
         if (byte == '\r')
             return line.hi - 2U;
     }
@@ -249,16 +249,16 @@ static u64 line_content_end(const TextBuf *tb, Span line)
 }
 
 enum {
-    SAG_GCOL_CHECKPOINT_STRIDE = 64,
-    SAG_MOTION_CHECKPOINT_STRIDE = 512,
-    SAG_SIMPLE_ASCII_BYPASS_BYTES = 64 * 1024,
+    YEW_GCOL_CHECKPOINT_STRIDE = 64,
+    YEW_MOTION_CHECKPOINT_STRIDE = 512,
+    YEW_SIMPLE_ASCII_BYPASS_BYTES = 64 * 1024,
     /* Keep the existing 8 MiB first-motion latency gate eager while the
      * 100 MiB open-budget fixtures defer their full Unicode index. */
-    SAG_DEFER_INDEX_BYTES = 16 * 1024 * 1024
+    YEW_DEFER_INDEX_BYTES = 16 * 1024 * 1024
 };
 
 typedef struct {
-    SagGbState gb;
+    YewGbState gb;
     u64 cluster_start;
     u64 gcol;
     bool have_cluster;
@@ -266,17 +266,17 @@ typedef struct {
 } IndexScanState;
 
 typedef struct {
-    SagGraphemeIndex *index;
+    YewGraphemeIndex *index;
     u64 next_motion;
 } IndexBuilder;
 
-static void index_push(SagGraphemeIndex *index, u64 off, u64 gcol)
+static void index_push(YewGraphemeIndex *index, u64 off, u64 gcol)
 {
     if (index->len != 0U) {
         u64 previous = index->data[index->len - 1U].off;
 
         if (off < previous)
-            SAG_BUG("grapheme coordinate index is not ordered");
+            YEW_BUG("grapheme coordinate index is not ordered");
         if (off == previous)
             return;
     }
@@ -284,22 +284,22 @@ static void index_push(SagGraphemeIndex *index, u64 off, u64 gcol)
         size_t cap = index->cap == 0U ? 64U : index->cap * 2U;
 
         if (cap < index->cap)
-            SAG_BUG("grapheme coordinate index capacity overflow");
-        index->data = sag_xreallocarray(index->data, cap,
+            YEW_BUG("grapheme coordinate index capacity overflow");
+        index->data = yew_xreallocarray(index->data, cap,
                                         sizeof(*index->data));
         index->cap = cap;
     }
-    index->data[index->len++] = (SagGraphemeCheckpoint){off, gcol};
+    index->data[index->len++] = (YewGraphemeCheckpoint){off, gcol};
 }
 
-static void motion_index_push(SagGraphemeIndex *index,
-                              SagGraphemeMotionCheckpoint checkpoint)
+static void motion_index_push(YewGraphemeIndex *index,
+                              YewGraphemeMotionCheckpoint checkpoint)
 {
     if (index->motion_len != 0U) {
         u64 previous = index->motion[index->motion_len - 1U].off;
 
         if (checkpoint.off < previous)
-            SAG_BUG("grapheme motion index is not ordered");
+            YEW_BUG("grapheme motion index is not ordered");
         if (checkpoint.off == previous)
             return;
     }
@@ -309,8 +309,8 @@ static void motion_index_push(SagGraphemeIndex *index,
                          : index->motion_cap * 2U;
 
         if (cap < index->motion_cap)
-            SAG_BUG("grapheme motion index capacity overflow");
-        index->motion = sag_xreallocarray(index->motion, cap,
+            YEW_BUG("grapheme motion index capacity overflow");
+        index->motion = yew_xreallocarray(index->motion, cap,
                                           sizeof(*index->motion));
         index->motion_cap = cap;
     }
@@ -319,7 +319,7 @@ static void motion_index_push(SagGraphemeIndex *index,
 
 static void index_scan_init(IndexScanState *state)
 {
-    sag_gb_init(&state->gb);
+    yew_gb_init(&state->gb);
     state->cluster_start = 0U;
     state->gcol = 0U;
     state->have_cluster = false;
@@ -331,7 +331,7 @@ static void index_finalize_cluster(IndexBuilder *builder,
 {
     if (builder == NULL || !state->have_cluster || state->after_lf ||
         state->gcol == 0U ||
-        state->gcol % (u64)SAG_GCOL_CHECKPOINT_STRIDE != 0U)
+        state->gcol % (u64)YEW_GCOL_CHECKPOINT_STRIDE != 0U)
         return;
     index_push(builder->index, state->cluster_start, state->gcol);
 }
@@ -339,7 +339,7 @@ static void index_finalize_cluster(IndexBuilder *builder,
 static void index_motion_maybe(IndexBuilder *builder,
                                const IndexScanState *state, u64 off)
 {
-    SagGraphemeMotionCheckpoint checkpoint;
+    YewGraphemeMotionCheckpoint checkpoint;
 
     if (builder == NULL || off < builder->next_motion)
         return;
@@ -352,16 +352,16 @@ static void index_motion_maybe(IndexBuilder *builder,
     checkpoint.after_lf = state->after_lf;
     motion_index_push(builder->index, checkpoint);
     if (builder->next_motion >
-        UINT64_MAX - (u64)SAG_MOTION_CHECKPOINT_STRIDE)
+        UINT64_MAX - (u64)YEW_MOTION_CHECKPOINT_STRIDE)
         builder->next_motion = UINT64_MAX;
     else
-        builder->next_motion += (u64)SAG_MOTION_CHECKPOINT_STRIDE;
+        builder->next_motion += (u64)YEW_MOTION_CHECKPOINT_STRIDE;
 }
 
 static void index_consume_cp(IndexBuilder *builder, IndexScanState *state,
                              const StreamCp *cp)
 {
-    bool boundary = sag_gb_boundary(&state->gb, cp->cp);
+    bool boundary = yew_gb_boundary(&state->gb, cp->cp);
 
     if (boundary) {
         index_finalize_cluster(builder, state);
@@ -369,14 +369,14 @@ static void index_consume_cp(IndexBuilder *builder, IndexScanState *state,
             state->gcol = 0U;
         } else {
             if (state->gcol == UINT64_MAX)
-                SAG_BUG("grapheme coordinate index column overflow");
+                YEW_BUG("grapheme coordinate index column overflow");
             state->gcol++;
         }
         state->cluster_start = cp->start;
         state->have_cluster = true;
         state->after_lf = false;
     } else if (!state->have_cluster) {
-        SAG_BUG("grapheme index first codepoint was not a boundary");
+        YEW_BUG("grapheme index first codepoint was not a boundary");
     }
     if (cp->cp == '\n')
         state->after_lf = true;
@@ -393,7 +393,7 @@ static void index_scan_part(const TextBuf *tb, u64 start, u64 end,
     while (reader_cp(&reader, &cp))
         index_consume_cp(builder, state, &cp);
     if (reader.off != end)
-        SAG_BUG("grapheme index scan ended early");
+        YEW_BUG("grapheme index scan ended early");
 }
 
 static void index_scan(const TextBuf *tb, u64 start, u64 end,
@@ -438,45 +438,45 @@ static bool range_is_simple_ascii(const TextBuf *tb, u64 start, u64 end)
 
     if (remaining == 0U)
         return true;
-    if (!sag_textiter_begin(&iter, tb, BYTEOFF(start)))
-        SAG_BUG("simple ASCII scan cannot begin");
+    if (!yew_textiter_begin(&iter, tb, BYTEOFF(start)))
+        YEW_BUG("simple ASCII scan cannot begin");
     do {
         const u8 *bytes;
         u64 chunk_len;
         size_t take;
 
-        if (!sag_textiter_chunk(&iter, tb, &bytes, &chunk_len) ||
+        if (!yew_textiter_chunk(&iter, tb, &bytes, &chunk_len) ||
             chunk_len == 0U)
-            SAG_BUG("simple ASCII scan found an empty chunk");
+            YEW_BUG("simple ASCII scan found an empty chunk");
         if (chunk_len > remaining)
             chunk_len = remaining;
         if (chunk_len > SIZE_MAX)
-            SAG_BUG("simple ASCII scan chunk is not addressable");
+            YEW_BUG("simple ASCII scan chunk is not addressable");
         take = (size_t)chunk_len;
         if (!bytes_are_simple_ascii(bytes, take))
             return false;
         remaining -= chunk_len;
         if (remaining == 0U)
             return true;
-    } while (sag_textiter_advance(&iter, tb));
-    SAG_BUG("simple ASCII scan ended early");
+    } while (yew_textiter_advance(&iter, tb));
+    YEW_BUG("simple ASCII scan ended early");
 }
 
 static void pending_clear(TextBuf *tb)
 {
-    SagGraphemePendingJournal *pending = &tb->graphemes.pending;
+    YewGraphemePendingJournal *pending = &tb->graphemes.pending;
     u8 i;
 
     for (i = 0U; i < pending->len; i++) {
         if (pending->edits[i].after.active)
-            sag_textsnap_release(tb, &pending->edits[i].after);
+            yew_textsnap_release(tb, &pending->edits[i].after);
     }
     memset(pending, 0, sizeof(*pending));
 }
 
 static void coords_index_rebuild(TextBuf *tb)
 {
-    SagGraphemeIndex *index = &tb->graphemes;
+    YewGraphemeIndex *index = &tb->graphemes;
     IndexScanState state;
     IndexBuilder builder;
 
@@ -484,29 +484,29 @@ static void coords_index_rebuild(TextBuf *tb)
     index->motion_len = 0U;
     index_scan_init(&state);
     builder.index = index;
-    builder.next_motion = (u64)SAG_MOTION_CHECKPOINT_STRIDE;
-    index_scan(tb, 0U, sag_textbuf_len(tb), &state, &builder);
+    builder.next_motion = (u64)YEW_MOTION_CHECKPOINT_STRIDE;
+    index_scan(tb, 0U, yew_textbuf_len(tb), &state, &builder);
     index->gen = tb->gen;
     index->simple_ascii = range_is_simple_ascii(
-        tb, 0U, sag_textbuf_len(tb));
+        tb, 0U, yew_textbuf_len(tb));
     index->simple_ascii_direct = false;
     index->initialized = true;
     pending_clear(tb);
 }
 
-void sag_coords_index_seed(TextBuf *tb)
+void yew_coords_index_seed(TextBuf *tb)
 {
-    SagGraphemeIndex *index;
+    YewGraphemeIndex *index;
 
     if (tb == NULL)
-        SAG_BUG("sag_coords_index_seed: NULL buffer");
+        YEW_BUG("yew_coords_index_seed: NULL buffer");
     index = &tb->graphemes;
-    if (sag_textbuf_len(tb) >= (u64)SAG_DEFER_INDEX_BYTES) {
+    if (yew_textbuf_len(tb) >= (u64)YEW_DEFER_INDEX_BYTES) {
         index->len = 0U;
         index->motion_len = 0U;
         index->gen = tb->gen;
         index->simple_ascii = range_is_simple_ascii(
-            tb, 0U, sag_textbuf_len(tb));
+            tb, 0U, yew_textbuf_len(tb));
         index->simple_ascii_direct = index->simple_ascii;
         index->initialized = index->simple_ascii;
         pending_clear(tb);
@@ -515,7 +515,7 @@ void sag_coords_index_seed(TextBuf *tb)
     coords_index_rebuild(tb);
 }
 
-void sag_coords_index_dispose(TextBuf *tb)
+void yew_coords_index_dispose(TextBuf *tb)
 {
     if (tb == NULL)
         return;
@@ -525,7 +525,7 @@ void sag_coords_index_dispose(TextBuf *tb)
     memset(&tb->graphemes, 0, sizeof(tb->graphemes));
 }
 
-static size_t motion_lower_bound_off(const SagGraphemeIndex *index, u64 off)
+static size_t motion_lower_bound_off(const YewGraphemeIndex *index, u64 off)
 {
     size_t lo = 0U;
     size_t hi = index->motion_len;
@@ -541,7 +541,7 @@ static size_t motion_lower_bound_off(const SagGraphemeIndex *index, u64 off)
     return lo;
 }
 
-static size_t motion_upper_bound_off(const SagGraphemeIndex *index, u64 off)
+static size_t motion_upper_bound_off(const YewGraphemeIndex *index, u64 off)
 {
     size_t lo = 0U;
     size_t hi = index->motion_len;
@@ -562,7 +562,7 @@ static u64 shifted_offset(u64 off, u64 deleted_len, u64 inserted_len)
     if (deleted_len != 0U)
         return off - deleted_len;
     if (off > UINT64_MAX - inserted_len)
-        SAG_BUG("grapheme index edit offset overflow");
+        YEW_BUG("grapheme index edit offset overflow");
     return off + inserted_len;
 }
 
@@ -572,16 +572,16 @@ static u64 shifted_gcol(u64 gcol, u64 old_gcol, u64 new_gcol)
         u64 add = new_gcol - old_gcol;
 
         if (gcol > UINT64_MAX - add)
-            SAG_BUG("grapheme index edit column overflow");
+            YEW_BUG("grapheme index edit column overflow");
         return gcol + add;
     }
     if (gcol < old_gcol - new_gcol)
-        SAG_BUG("grapheme index edit column underflow");
+        YEW_BUG("grapheme index edit column underflow");
     return gcol - (old_gcol - new_gcol);
 }
 
 static bool scan_state_matches(const IndexScanState *state,
-                               const SagGraphemeMotionCheckpoint *old)
+                               const YewGraphemeMotionCheckpoint *old)
 {
     return state->gb.prev_gcb == old->prev_gcb &&
            state->gb.flags == old->flags &&
@@ -603,32 +603,32 @@ static u64 shifted_cluster_start(u64 off, Span old_range,
 
 static u64 next_motion_threshold(u64 off)
 {
-    u64 stride = (u64)SAG_MOTION_CHECKPOINT_STRIDE;
+    u64 stride = (u64)YEW_MOTION_CHECKPOINT_STRIDE;
     u64 remainder = off % stride;
     u64 add = remainder == 0U ? stride : stride - remainder;
 
     return off > UINT64_MAX - add ? UINT64_MAX : off + add;
 }
 
-static void coords_index_restore_simple_ascii(SagGraphemeIndex *index,
+static void coords_index_restore_simple_ascii(YewGraphemeIndex *index,
                                               u64 len, u64 gen)
 {
-    SagGbState gb;
+    YewGbState gb;
     u64 off;
 
     index->len = 0U;
     index->motion_len = 0U;
-    for (off = (u64)SAG_GCOL_CHECKPOINT_STRIDE; off < len;) {
+    for (off = (u64)YEW_GCOL_CHECKPOINT_STRIDE; off < len;) {
         index_push(index, off, off);
-        if (off > UINT64_MAX - (u64)SAG_GCOL_CHECKPOINT_STRIDE)
+        if (off > UINT64_MAX - (u64)YEW_GCOL_CHECKPOINT_STRIDE)
             break;
-        off += (u64)SAG_GCOL_CHECKPOINT_STRIDE;
+        off += (u64)YEW_GCOL_CHECKPOINT_STRIDE;
     }
-    sag_gb_init(&gb);
-    (void)sag_gb_boundary(&gb, (u32)'x');
-    for (off = (u64)SAG_MOTION_CHECKPOINT_STRIDE; off <= len;
-         off += (u64)SAG_MOTION_CHECKPOINT_STRIDE) {
-        SagGraphemeMotionCheckpoint checkpoint;
+    yew_gb_init(&gb);
+    (void)yew_gb_boundary(&gb, (u32)'x');
+    for (off = (u64)YEW_MOTION_CHECKPOINT_STRIDE; off <= len;
+         off += (u64)YEW_MOTION_CHECKPOINT_STRIDE) {
+        YewGraphemeMotionCheckpoint checkpoint;
 
         checkpoint.off = off;
         checkpoint.cluster_start = off - 1U;
@@ -638,7 +638,7 @@ static void coords_index_restore_simple_ascii(SagGraphemeIndex *index,
         checkpoint.have_cluster = true;
         checkpoint.after_lf = false;
         motion_index_push(index, checkpoint);
-        if (off > UINT64_MAX - (u64)SAG_MOTION_CHECKPOINT_STRIDE)
+        if (off > UINT64_MAX - (u64)YEW_MOTION_CHECKPOINT_STRIDE)
             break;
     }
     index->gen = gen;
@@ -647,12 +647,12 @@ static void coords_index_restore_simple_ascii(SagGraphemeIndex *index,
     index->initialized = true;
 }
 
-static void coords_index_apply_edit(SagGraphemeIndex *old_index,
+static void coords_index_apply_edit(YewGraphemeIndex *old_index,
                                     TextBuf *source,
-                                    const SagGraphemePendingEdit *edit)
+                                    const YewGraphemePendingEdit *edit)
 {
-    SagGraphemeIndex next = {0};
-    SagGraphemeMotionCheckpoint resume;
+    YewGraphemeIndex next = {0};
+    YewGraphemeMotionCheckpoint resume;
     IndexScanState state;
     IndexBuilder builder;
     Span old_range;
@@ -681,11 +681,11 @@ static void coords_index_apply_edit(SagGraphemeIndex *old_index,
     old_affected = edit->affected;
     old_gen = edit->old_gen;
     if (old_index->gen != old_gen || edit->new_gen != source->gen)
-        SAG_BUG("grapheme index pending edit is inconsistent");
+        YEW_BUG("grapheme index pending edit is inconsistent");
     if (old_range.lo > old_range.hi ||
         old_affected.lo > old_range.lo ||
         old_affected.hi < old_range.hi)
-        SAG_BUG("grapheme index pending edit has invalid range");
+        YEW_BUG("grapheme index pending edit has invalid range");
     deleted_len = old_range.hi - old_range.lo;
     motion_first = motion_lower_bound_off(old_index, old_affected.lo);
     motion_after = motion_upper_bound_off(old_index, old_range.lo);
@@ -710,10 +710,10 @@ static void coords_index_apply_edit(SagGraphemeIndex *old_index,
         rebuild_lo = old_affected.lo;
     }
     if (old_affected.hi < deleted_len)
-        SAG_BUG("grapheme index edit span underflow");
+        YEW_BUG("grapheme index edit span underflow");
     scan_end = old_affected.hi - deleted_len;
     if (scan_end > UINT64_MAX - inserted_len)
-        SAG_BUG("grapheme index edit span overflow");
+        YEW_BUG("grapheme index edit span overflow");
     scan_end += inserted_len;
 
     for (i = 0U; i < old_index->len; i++) {
@@ -732,7 +732,7 @@ static void coords_index_apply_edit(SagGraphemeIndex *old_index,
     scan_cursor = scan_start;
     candidate = motion_upper_bound_off(old_index, old_range.hi);
     for (; candidate < old_index->motion_len; candidate++) {
-        const SagGraphemeMotionCheckpoint *checkpoint =
+        const YewGraphemeMotionCheckpoint *checkpoint =
             &old_index->motion[candidate];
         u64 candidate_end;
 
@@ -761,7 +761,7 @@ static void coords_index_apply_edit(SagGraphemeIndex *old_index,
     }
 
     for (i = 0U; i < old_index->len; i++) {
-        SagGraphemeCheckpoint checkpoint = old_index->data[i];
+        YewGraphemeCheckpoint checkpoint = old_index->data[i];
 
         if (converged && checkpoint.off >= convergence_off &&
             checkpoint.off < old_affected.hi) {
@@ -780,7 +780,7 @@ static void coords_index_apply_edit(SagGraphemeIndex *old_index,
         index_push(&next, checkpoint.off, checkpoint.gcol);
     }
     for (i = 0U; i < old_index->motion_len; i++) {
-        SagGraphemeMotionCheckpoint checkpoint = old_index->motion[i];
+        YewGraphemeMotionCheckpoint checkpoint = old_index->motion[i];
 
         if (converged && checkpoint.off >= convergence_off &&
             checkpoint.off <= old_affected.hi) {
@@ -822,16 +822,16 @@ static void coords_index_apply_edit(SagGraphemeIndex *old_index,
 
 static void coords_index_apply_pending(TextBuf *tb, u64 through_gen)
 {
-    SagGraphemeIndex *index = &tb->graphemes;
-    SagGraphemePendingJournal *pending = &index->pending;
+    YewGraphemeIndex *index = &tb->graphemes;
+    YewGraphemePendingJournal *pending = &index->pending;
     u8 i;
 
     if (pending->len == 0U ||
         pending->edits[0].old_gen != index->gen ||
         pending->edits[pending->len - 1U].new_gen != through_gen)
-        SAG_BUG("grapheme index pending journal is inconsistent");
+        YEW_BUG("grapheme index pending journal is inconsistent");
     for (i = 0U; i < pending->len; i++) {
-        SagGraphemePendingEdit *edit = &pending->edits[i];
+        YewGraphemePendingEdit *edit = &pending->edits[i];
         TextBuf source = {0};
 
         source.backing = edit->after.backing;
@@ -840,50 +840,50 @@ static void coords_index_apply_pending(TextBuf *tb, u64 through_gen)
         source.root = edit->after.root;
         source.gen = edit->after.gen;
         coords_index_apply_edit(index, &source, edit);
-        sag_textsnap_release(tb, &edit->after);
+        yew_textsnap_release(tb, &edit->after);
     }
     memset(pending, 0, sizeof(*pending));
 }
 
-void sag_coords_index_note_edit(TextBuf *tb, Span old_range,
+void yew_coords_index_note_edit(TextBuf *tb, Span old_range,
                                 u64 inserted_len, Span old_affected,
                                 u64 old_gen)
 {
-    SagGraphemeIndex *index;
-    SagGraphemePendingJournal *pending;
-    SagGraphemePendingEdit *edit;
+    YewGraphemeIndex *index;
+    YewGraphemePendingJournal *pending;
+    YewGraphemePendingEdit *edit;
     u64 expected_gen;
 
     if (tb == NULL)
-        SAG_BUG("sag_coords_index_note_edit: NULL buffer");
+        YEW_BUG("yew_coords_index_note_edit: NULL buffer");
     index = &tb->graphemes;
     pending = &index->pending;
     if (old_range.lo > old_range.hi ||
         old_affected.lo > old_range.lo ||
         old_affected.hi < old_range.hi)
-        SAG_BUG("sag_coords_index_note_edit: invalid old range");
+        YEW_BUG("yew_coords_index_note_edit: invalid old range");
     if (!index->initialized) {
         if (pending->len != 0U)
-            SAG_BUG("deferred grapheme index has pending edits");
+            YEW_BUG("deferred grapheme index has pending edits");
         index->gen = tb->gen;
         return;
     }
     if (index->simple_ascii) {
-        u64 old_len = sag_textbuf_len(tb) - inserted_len +
+        u64 old_len = yew_textbuf_len(tb) - inserted_len +
                       (old_range.hi - old_range.lo);
         u64 inserted_hi = old_range.lo + inserted_len;
         bool inserted_simple;
 
         if (inserted_hi < old_range.lo ||
-            inserted_hi > sag_textbuf_len(tb))
-            SAG_BUG("simple ASCII edit range overflow");
+            inserted_hi > yew_textbuf_len(tb))
+            YEW_BUG("simple ASCII edit range overflow");
         inserted_simple = range_is_simple_ascii(tb, old_range.lo,
                                                 inserted_hi);
         if (index->simple_ascii_direct && pending->len != 0U)
-            SAG_BUG("direct simple ASCII index has pending edits");
+            YEW_BUG("direct simple ASCII index has pending edits");
         if (inserted_simple && pending->len == 0U &&
             (index->simple_ascii_direct ||
-             old_len >= (u64)SAG_SIMPLE_ASCII_BYPASS_BYTES)) {
+             old_len >= (u64)YEW_SIMPLE_ASCII_BYPASS_BYTES)) {
             index->gen = tb->gen;
             index->simple_ascii_direct = true;
             return;
@@ -901,11 +901,11 @@ void sag_coords_index_note_edit(TextBuf *tb, Span old_range,
                        ? index->gen
                        : pending->edits[pending->len - 1U].new_gen;
     if (expected_gen != old_gen || tb->gen != old_gen + 1U)
-        SAG_BUG("sag_coords_index_note_edit: generation mismatch");
-    if (pending->len == SAG_GRAPHEME_PENDING_MAX) {
+        YEW_BUG("yew_coords_index_note_edit: generation mismatch");
+    if (pending->len == YEW_GRAPHEME_PENDING_MAX) {
         coords_index_apply_pending(tb, old_gen);
         if (index->gen != old_gen)
-            SAG_BUG("sag_coords_index_note_edit: replay ended at wrong generation");
+            YEW_BUG("yew_coords_index_note_edit: replay ended at wrong generation");
     }
     edit = &pending->edits[pending->len++];
     edit->range = old_range;
@@ -913,16 +913,16 @@ void sag_coords_index_note_edit(TextBuf *tb, Span old_range,
     edit->inserted_len = inserted_len;
     edit->old_gen = old_gen;
     edit->new_gen = tb->gen;
-    edit->after = sag_textbuf_snap(tb);
+    edit->after = yew_textbuf_snap(tb);
 }
 
-static const SagGraphemeIndex *coords_index(const TextBuf *tb)
+static const YewGraphemeIndex *coords_index(const TextBuf *tb)
 {
     if (!tb->graphemes.initialized) {
         TextBuf *mutable = (TextBuf *)tb;
 
         if (tb->graphemes.pending.len != 0U)
-            SAG_BUG("deferred grapheme index has pending edits");
+            YEW_BUG("deferred grapheme index has pending edits");
         coords_index_rebuild(mutable);
     } else if (tb->graphemes.gen != tb->gen) {
         TextBuf *mutable = (TextBuf *)tb;
@@ -930,12 +930,12 @@ static const SagGraphemeIndex *coords_index(const TextBuf *tb)
         if (tb->graphemes.pending.len != 0U)
             coords_index_apply_pending(mutable, tb->gen);
         else
-            SAG_BUG("grapheme index generation changed without an edit");
+            YEW_BUG("grapheme index generation changed without an edit");
     }
     return &tb->graphemes;
 }
 
-static size_t index_lower_bound_off(const SagGraphemeIndex *index, u64 off)
+static size_t index_lower_bound_off(const YewGraphemeIndex *index, u64 off)
 {
     size_t lo = 0U;
     size_t hi = index->len;
@@ -951,7 +951,7 @@ static size_t index_lower_bound_off(const SagGraphemeIndex *index, u64 off)
     return lo;
 }
 
-static SagGraphemeCheckpoint index_before_off(const SagGraphemeIndex *index,
+static YewGraphemeCheckpoint index_before_off(const YewGraphemeIndex *index,
                                               Span line, u64 end, u64 off)
 {
     size_t lo = index_lower_bound_off(index, line.lo);
@@ -967,12 +967,12 @@ static SagGraphemeCheckpoint index_before_off(const SagGraphemeIndex *index,
             hi = mid;
     }
     if (lo == first)
-        return (SagGraphemeCheckpoint){line.lo, 0U};
+        return (YewGraphemeCheckpoint){line.lo, 0U};
     return index->data[lo - 1U];
 }
 
-static SagGraphemeCheckpoint index_before_gcol(
-    const SagGraphemeIndex *index, Span line, u64 end, u64 gcol)
+static YewGraphemeCheckpoint index_before_gcol(
+    const YewGraphemeIndex *index, Span line, u64 end, u64 gcol)
 {
     size_t first = index_lower_bound_off(index, line.lo);
     size_t lo = first;
@@ -987,7 +987,7 @@ static SagGraphemeCheckpoint index_before_gcol(
             hi = mid;
     }
     if (lo == first)
-        return (SagGraphemeCheckpoint){line.lo, 0U};
+        return (YewGraphemeCheckpoint){line.lo, 0U};
     return index->data[lo - 1U];
 }
 
@@ -1005,7 +1005,7 @@ static u64 cluster_cells(const StreamCluster *cluster, u64 cells, u32 tabw)
     return (u64)tabw - cells % (u64)tabw;
 }
 
-u32 sag_tab_cells(CCol at, u32 tabw)
+u32 yew_tab_cells(CCol at, u32 tabw)
 {
     if (tabw == 0U)
         tabw = 1U;
@@ -1029,10 +1029,10 @@ static ByteOff simple_col_to_off(Span line, u64 col)
     return BYTEOFF(line.hi - 1U);
 }
 
-GCol sag_off_to_gcol(const TextBuf *tb, Span line, ByteOff pos)
+GCol yew_off_to_gcol(const TextBuf *tb, Span line, ByteOff pos)
 {
-    const SagGraphemeIndex *index;
-    SagGraphemeCheckpoint checkpoint;
+    const YewGraphemeIndex *index;
+    YewGraphemeCheckpoint checkpoint;
     IndexScanState state;
     TextReader stream;
     StreamCp cp;
@@ -1056,7 +1056,7 @@ GCol sag_off_to_gcol(const TextBuf *tb, Span line, ByteOff pos)
     first = motion_lower_bound_off(index, line.lo);
     after = motion_upper_bound_off(index, pos.v);
     if (after > first) {
-        const SagGraphemeMotionCheckpoint *motion =
+        const YewGraphemeMotionCheckpoint *motion =
             &index->motion[after - 1U];
         bool boundary = pos.v == end;
 
@@ -1072,14 +1072,14 @@ GCol sag_off_to_gcol(const TextBuf *tb, Span line, ByteOff pos)
 
             reader_init(&stream, tb, pos.v, end);
             if (!reader_get(&stream, &next))
-                SAG_BUG("unicode coordinates: missing position byte");
+                YEW_BUG("unicode coordinates: missing position byte");
             if ((next & 0xC0U) != 0x80U) {
-                SagGbState probe = state.gb;
+                YewGbState probe = state.gb;
 
                 reader_init(&stream, tb, pos.v, end);
                 if (!reader_cp(&stream, &cp))
-                    SAG_BUG("unicode coordinates: missing next codepoint");
-                boundary = sag_gb_boundary(&probe, cp.cp);
+                    YEW_BUG("unicode coordinates: missing next codepoint");
+                boundary = yew_gb_boundary(&probe, cp.cp);
             }
         }
         if (boundary && state.have_cluster && !state.after_lf &&
@@ -1101,10 +1101,10 @@ GCol sag_off_to_gcol(const TextBuf *tb, Span line, ByteOff pos)
     return (GCol){count};
 }
 
-ByteOff sag_gcol_to_off(const TextBuf *tb, Span line, GCol g)
+ByteOff yew_gcol_to_off(const TextBuf *tb, Span line, GCol g)
 {
-    const SagGraphemeIndex *index;
-    SagGraphemeCheckpoint checkpoint;
+    const YewGraphemeIndex *index;
+    YewGraphemeCheckpoint checkpoint;
     ClusterReader reader;
     StreamCluster cluster;
     u64 end;
@@ -1135,7 +1135,7 @@ ByteOff sag_gcol_to_off(const TextBuf *tb, Span line, GCol g)
     return BYTEOFF(last);
 }
 
-CharCol sag_off_to_charcol(const TextBuf *tb, Span line, ByteOff pos)
+CharCol yew_off_to_charcol(const TextBuf *tb, Span line, ByteOff pos)
 {
     TextReader reader;
     StreamCp cp;
@@ -1159,7 +1159,7 @@ CharCol sag_off_to_charcol(const TextBuf *tb, Span line, ByteOff pos)
     return (CharCol){count};
 }
 
-CCol sag_off_to_ccol(const TextBuf *tb, Span line, ByteOff pos, u32 tabw)
+CCol yew_off_to_ccol(const TextBuf *tb, Span line, ByteOff pos, u32 tabw)
 {
     ClusterReader reader;
     StreamCluster cluster;
@@ -1191,7 +1191,7 @@ CCol sag_off_to_ccol(const TextBuf *tb, Span line, ByteOff pos, u32 tabw)
     return (CCol){cells};
 }
 
-ByteOff sag_ccol_to_off(const TextBuf *tb, Span line, CCol c, u32 tabw)
+ByteOff yew_ccol_to_off(const TextBuf *tb, Span line, CCol c, u32 tabw)
 {
     ClusterReader reader;
     StreamCluster cluster;
@@ -1241,7 +1241,7 @@ ByteOff sag_ccol_to_off(const TextBuf *tb, Span line, CCol c, u32 tabw)
     return BYTEOFF(last);
 }
 
-ByteOff sag_ccol_to_off_padded(const TextBuf *tb, Span line, CCol c,
+ByteOff yew_ccol_to_off_padded(const TextBuf *tb, Span line, CCol c,
                                u32 tabw)
 {
     u64 end;
@@ -1249,35 +1249,35 @@ ByteOff sag_ccol_to_off_padded(const TextBuf *tb, Span line, CCol c,
 
     require_span(tb, line);
     end = line_content_end(tb, line);
-    end_col = sag_off_to_ccol(tb, line, BYTEOFF(end), tabw);
+    end_col = yew_off_to_ccol(tb, line, BYTEOFF(end), tabw);
     if (c.v >= end_col.v)
         return BYTEOFF(end);
-    return sag_ccol_to_off(tb, line, c, tabw);
+    return yew_ccol_to_off(tb, line, c, tabw);
 }
 
-u64 sag_ccol_shortfall(CCol target, CCol landed)
+u64 yew_ccol_shortfall(CCol target, CCol landed)
 {
     if (landed.v > target.v)
-        SAG_BUG("cell-column landing exceeds target");
+        YEW_BUG("cell-column landing exceeds target");
     return target.v - landed.v;
 }
 
-CCol sag_ccol_max(CCol left, CCol right)
+CCol yew_ccol_max(CCol left, CCol right)
 {
     return left.v >= right.v ? left : right;
 }
 
 static Span motion_span(const TextBuf *tb, ByteOff pos, bool previous)
 {
-    LineNo line = sag_textbuf_line_of(tb, pos);
-    Span span = sag_textbuf_line_span(tb, line);
+    LineNo line = yew_textbuf_line_of(tb, pos);
+    Span span = yew_textbuf_line_span(tb, line);
 
     if (previous && pos.v == span.lo && line.v != 0U)
-        span = sag_textbuf_line_span(tb, LINENO(line.v - 1U));
+        span = yew_textbuf_line_span(tb, LINENO(line.v - 1U));
     return span;
 }
 
-ByteOff sag_grapheme_next(const TextBuf *tb, ByteOff pos)
+ByteOff yew_grapheme_next(const TextBuf *tb, ByteOff pos)
 {
     ClusterReader reader;
     StreamCluster cluster;
@@ -1285,8 +1285,8 @@ ByteOff sag_grapheme_next(const TextBuf *tb, ByteOff pos)
     u64 len;
 
     if (tb == NULL)
-        SAG_BUG("sag_grapheme_next: NULL text buffer");
-    len = sag_textbuf_len(tb);
+        YEW_BUG("yew_grapheme_next: NULL text buffer");
+    len = yew_textbuf_len(tb);
     if (pos.v >= len)
         return BYTEOFF(len);
     if (coords_simple_ascii(tb))
@@ -1303,7 +1303,7 @@ ByteOff sag_grapheme_next(const TextBuf *tb, ByteOff pos)
     return BYTEOFF(span.hi);
 }
 
-ByteOff sag_grapheme_next_boundary(const TextBuf *tb, ByteOff pos)
+ByteOff yew_grapheme_next_boundary(const TextBuf *tb, ByteOff pos)
 {
     ClusterReader reader;
     StreamCluster cluster;
@@ -1311,8 +1311,8 @@ ByteOff sag_grapheme_next_boundary(const TextBuf *tb, ByteOff pos)
     u64 len;
 
     if (tb == NULL)
-        SAG_BUG("sag_grapheme_next_boundary: NULL text buffer");
-    len = sag_textbuf_len(tb);
+        YEW_BUG("yew_grapheme_next_boundary: NULL text buffer");
+    len = yew_textbuf_len(tb);
     if (pos.v >= len)
         return BYTEOFF(len);
     if (coords_simple_ascii(tb))
@@ -1320,12 +1320,12 @@ ByteOff sag_grapheme_next_boundary(const TextBuf *tb, ByteOff pos)
     span = motion_span(tb, pos, false);
     cluster_reader_init(&reader, tb, pos.v, span.hi);
     if (!cluster_next(&reader, &cluster, false))
-        SAG_BUG("sag_grapheme_next_boundary: no cluster at offset");
+        YEW_BUG("yew_grapheme_next_boundary: no cluster at offset");
     cluster_reader_free(&reader);
     return BYTEOFF(cluster.end);
 }
 
-ByteOff sag_grapheme_prev(const TextBuf *tb, ByteOff pos)
+ByteOff yew_grapheme_prev(const TextBuf *tb, ByteOff pos)
 {
     ClusterReader reader;
     StreamCluster cluster;
@@ -1334,8 +1334,8 @@ ByteOff sag_grapheme_prev(const TextBuf *tb, ByteOff pos)
     u64 len;
 
     if (tb == NULL)
-        SAG_BUG("sag_grapheme_prev: NULL text buffer");
-    len = sag_textbuf_len(tb);
+        YEW_BUG("yew_grapheme_prev: NULL text buffer");
+    len = yew_textbuf_len(tb);
     if (pos.v > len)
         pos.v = len;
     if (pos.v == 0U)
@@ -1362,9 +1362,9 @@ ByteOff sag_grapheme_prev(const TextBuf *tb, ByteOff pos)
     return BYTEOFF(previous);
 }
 
-ByteOff sag_grapheme_prev_boundary(const TextBuf *tb, ByteOff pos)
+ByteOff yew_grapheme_prev_boundary(const TextBuf *tb, ByteOff pos)
 {
-    const SagGraphemeIndex *index;
+    const YewGraphemeIndex *index;
     IndexScanState state;
     TextReader reader;
     StreamCp cp;
@@ -1377,8 +1377,8 @@ ByteOff sag_grapheme_prev_boundary(const TextBuf *tb, ByteOff pos)
     size_t after;
 
     if (tb == NULL)
-        SAG_BUG("sag_grapheme_prev_boundary: NULL text buffer");
-    len = sag_textbuf_len(tb);
+        YEW_BUG("yew_grapheme_prev_boundary: NULL text buffer");
+    len = yew_textbuf_len(tb);
     if (pos.v > len)
         pos.v = len;
     if (pos.v == 0U)
@@ -1388,13 +1388,13 @@ ByteOff sag_grapheme_prev_boundary(const TextBuf *tb, ByteOff pos)
     span = motion_span(tb, pos, true);
     reader_init(&reader, tb, pos.v - 1U, pos.v);
     if (!reader_get(&reader, &previous))
-        SAG_BUG("sag_grapheme_prev_boundary: cannot inspect byte");
+        YEW_BUG("yew_grapheme_prev_boundary: cannot inspect byte");
     if (previous < 0x80U) {
         if (pos.v - span.lo == 1U)
             return BYTEOFF(pos.v - 1U);
         reader_init(&reader, tb, pos.v - 2U, pos.v - 1U);
         if (!reader_get(&reader, &before_previous))
-            SAG_BUG("sag_grapheme_prev_boundary: cannot inspect prefix");
+            YEW_BUG("yew_grapheme_prev_boundary: cannot inspect prefix");
         if (before_previous < 0x80U) {
             if (previous == '\n' && before_previous == '\r')
                 return BYTEOFF(pos.v - 2U);
@@ -1405,7 +1405,7 @@ ByteOff sag_grapheme_prev_boundary(const TextBuf *tb, ByteOff pos)
     first = motion_lower_bound_off(index, span.lo);
     after = motion_upper_bound_off(index, pos.v);
     if (after > first) {
-        const SagGraphemeMotionCheckpoint *checkpoint =
+        const YewGraphemeMotionCheckpoint *checkpoint =
             &index->motion[after - 1U];
 
         state.gb.prev_gcb = checkpoint->prev_gcb;
@@ -1423,13 +1423,13 @@ ByteOff sag_grapheme_prev_boundary(const TextBuf *tb, ByteOff pos)
     while (reader_cp(&reader, &cp))
         index_consume_cp(NULL, &state, &cp);
     if (reader.off != pos.v)
-        SAG_BUG("sag_grapheme_prev_boundary: checkpoint ended early");
+        YEW_BUG("yew_grapheme_prev_boundary: checkpoint ended early");
     if (!state.have_cluster)
-        SAG_BUG("sag_grapheme_prev_boundary: checkpoint has no cluster");
+        YEW_BUG("yew_grapheme_prev_boundary: checkpoint has no cluster");
     return BYTEOFF(state.cluster_start);
 }
 
-bool sag_is_grapheme_boundary(const TextBuf *tb, ByteOff pos)
+bool yew_is_grapheme_boundary(const TextBuf *tb, ByteOff pos)
 {
     ClusterReader reader;
     StreamCluster cluster;
@@ -1437,8 +1437,8 @@ bool sag_is_grapheme_boundary(const TextBuf *tb, ByteOff pos)
     u64 len;
 
     if (tb == NULL)
-        SAG_BUG("sag_is_grapheme_boundary: NULL text buffer");
-    len = sag_textbuf_len(tb);
+        YEW_BUG("yew_is_grapheme_boundary: NULL text buffer");
+    len = yew_textbuf_len(tb);
     if (pos.v > len)
         return false;
     if (coords_simple_ascii(tb))

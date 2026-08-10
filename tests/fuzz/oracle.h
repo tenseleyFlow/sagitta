@@ -1,5 +1,5 @@
-#ifndef SAG_TEST_FUZZ_ORACLE_H
-#define SAG_TEST_FUZZ_ORACLE_H
+#ifndef YEW_TEST_FUZZ_ORACLE_H
+#define YEW_TEST_FUZZ_ORACLE_H
 
 #include "util/base.h"
 #include "util/buf.h"

@@ -1,4 +1,4 @@
-# sagitta mouse perf baseline v1  (Sprint 27 DoD 13)
+# yew mouse perf baseline v1  (Sprint 27 DoD 13)
 #
 # Recorded on x86_64-linux-gnu, gcc -O2, a live tab-strip drag over an
 # eight-tab bar — the most expensive motion path there is, because it

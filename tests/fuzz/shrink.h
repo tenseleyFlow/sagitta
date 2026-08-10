@@ -1,5 +1,5 @@
-#ifndef SAG_TEST_FUZZ_SHRINK_H
-#define SAG_TEST_FUZZ_SHRINK_H
+#ifndef YEW_TEST_FUZZ_SHRINK_H
+#define YEW_TEST_FUZZ_SHRINK_H
 
 #include <stdbool.h>
 #include <stddef.h>

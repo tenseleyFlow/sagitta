@@ -35,23 +35,23 @@ static void marks_fixture_init(MarkFixture *f, const u8 *bytes, u64 len)
     cursor.pos = BYTEOFF(0U);
     cursor.goal_col = (GCol){0U};
     cursor.anchor = BYTEOFF(0U);
-    f->tb = sag_textbuf_from_bytes(bytes, len);
-    f->marks = sag_marks_new();
-    sag_cset_init(&f->cursors, cursor);
-    f->undo = sag_undo_new(f->tb);
+    f->tb = yew_textbuf_from_bytes(bytes, len);
+    f->marks = yew_marks_new();
+    yew_cset_init(&f->cursors, cursor);
+    f->undo = yew_undo_new(f->tb);
     f->mono = 1000U;
     f->wall = 100;
-    sag_undo_set_clock(f->undo, marks_mono, marks_wall, f);
+    yew_undo_set_clock(f->undo, marks_mono, marks_wall, f);
     f->edit = (EditCtx){f->tb, f->marks, &f->cursors, 0U, NULL, f->undo,
                        NULL, NULL, NULL, 0};
 }
 
 static void marks_fixture_free(MarkFixture *f)
 {
-    sag_undo_free(f->undo);
-    sag_cset_free(&f->cursors);
-    sag_marks_free(f->marks);
-    sag_textbuf_free(f->tb);
+    yew_undo_free(f->undo);
+    yew_cset_free(&f->cursors);
+    yew_marks_free(f->marks);
+    yew_textbuf_free(f->tb);
 }
 
 static u64 marks_random(u64 *state)
@@ -71,9 +71,9 @@ static void marks_oracle_adjust(OracleMark *marks, size_t count, u8 kind,
     size_t i;
 
     for (i = 0U; i < count; i++) {
-        if (kind == SAG_JOURNAL_INS) {
+        if (kind == YEW_JOURNAL_INS) {
             if (marks[i].pos > at ||
-                (marks[i].pos == at && marks[i].bias == SAG_BIAS_RIGHT))
+                (marks[i].pos == at && marks[i].bias == YEW_BIAS_RIGHT))
                 marks[i].pos += len;
         } else if (marks[i].pos < at) {
             continue;
@@ -95,26 +95,26 @@ void test_undo_marks_repairs_each_delete_run_in_transaction(void)
     const UndoRepairRun *run1;
 
     marks_fixture_init(&f, (const u8 *)"abcdefghij", 10U);
-    first = sag_mark_add(f.marks, BYTEOFF(2U), SAG_BIAS_LEFT);
-    second = sag_mark_add(f.marks, BYTEOFF(7U), SAG_BIAS_RIGHT);
-    sag_undo_begin(&f.edit, SAG_TXN_CUT);
-    sag_edit_delete(&f.edit, (Span){1U, 4U});
-    sag_edit_delete(&f.edit, (Span){3U, 5U});
-    sag_undo_end(&f.edit);
+    first = yew_mark_add(f.marks, BYTEOFF(2U), YEW_BIAS_LEFT);
+    second = yew_mark_add(f.marks, BYTEOFF(7U), YEW_BIAS_RIGHT);
+    yew_undo_begin(&f.edit, YEW_TXN_CUT);
+    yew_edit_delete(&f.edit, (Span){1U, 4U});
+    yew_edit_delete(&f.edit, (Span){3U, 5U});
+    yew_undo_end(&f.edit);
     node = &f.undo->nodes.data[f.undo->cur - 1U];
-    SAG_ASSERT_EQ_U64(node->n_ops, 2U);
-    SAG_ASSERT_EQ_U64(node->n_rep, 2U);
-    SAG_ASSERT_EQ_U64(f.undo->repair_runs.len, f.undo->ops.len);
+    YEW_ASSERT_EQ_U64(node->n_ops, 2U);
+    YEW_ASSERT_EQ_U64(node->n_rep, 2U);
+    YEW_ASSERT_EQ_U64(f.undo->repair_runs.len, f.undo->ops.len);
     run0 = &f.undo->repair_runs.data[node->ops_at];
     run1 = &f.undo->repair_runs.data[node->ops_at + 1U];
-    SAG_ASSERT_EQ_U64(run0->len, 1U);
-    SAG_ASSERT_EQ_U64(run1->len, 1U);
-    SAG_ASSERT(run0->at != run1->at);
-    SAG_ASSERT_EQ_U64(sag_mark_pos(f.marks, first).v, 1U);
-    SAG_ASSERT_EQ_U64(sag_mark_pos(f.marks, second).v, 3U);
-    SAG_ASSERT(sag_undo(&f.edit));
-    SAG_ASSERT_EQ_U64(sag_mark_pos(f.marks, first).v, 2U);
-    SAG_ASSERT_EQ_U64(sag_mark_pos(f.marks, second).v, 7U);
+    YEW_ASSERT_EQ_U64(run0->len, 1U);
+    YEW_ASSERT_EQ_U64(run1->len, 1U);
+    YEW_ASSERT(run0->at != run1->at);
+    YEW_ASSERT_EQ_U64(yew_mark_pos(f.marks, first).v, 1U);
+    YEW_ASSERT_EQ_U64(yew_mark_pos(f.marks, second).v, 3U);
+    YEW_ASSERT(yew_undo(&f.edit));
+    YEW_ASSERT_EQ_U64(yew_mark_pos(f.marks, first).v, 2U);
+    YEW_ASSERT_EQ_U64(yew_mark_pos(f.marks, second).v, 7U);
     marks_fixture_free(&f);
 }
 
@@ -125,18 +125,18 @@ void test_undo_marks_stale_generation_skips_repair(void)
     MarkId fresh;
 
     marks_fixture_init(&f, (const u8 *)"abcdef", 6U);
-    stale = sag_mark_add(f.marks, BYTEOFF(3U), SAG_BIAS_LEFT);
-    sag_undo_begin(&f.edit, SAG_TXN_CUT);
-    sag_edit_delete(&f.edit, (Span){2U, 5U});
-    sag_undo_end(&f.edit);
-    sag_mark_del(f.marks, stale);
-    fresh = sag_mark_add(f.marks, BYTEOFF(0U), SAG_BIAS_LEFT);
-    SAG_ASSERT_EQ_U64(fresh.id, stale.id);
-    SAG_ASSERT(fresh.gen != stale.gen);
-    SAG_ASSERT(sag_undo(&f.edit));
-    SAG_ASSERT_EQ_U64(sag_mark_pos(f.marks, fresh).v, 0U);
-    SAG_ASSERT_EQ_U64(sag_textbuf_len(f.tb), 6U);
-    SAG_ASSERT_EQ_U64(f.undo->cur, f.undo->root);
+    stale = yew_mark_add(f.marks, BYTEOFF(3U), YEW_BIAS_LEFT);
+    yew_undo_begin(&f.edit, YEW_TXN_CUT);
+    yew_edit_delete(&f.edit, (Span){2U, 5U});
+    yew_undo_end(&f.edit);
+    yew_mark_del(f.marks, stale);
+    fresh = yew_mark_add(f.marks, BYTEOFF(0U), YEW_BIAS_LEFT);
+    YEW_ASSERT_EQ_U64(fresh.id, stale.id);
+    YEW_ASSERT(fresh.gen != stale.gen);
+    YEW_ASSERT(yew_undo(&f.edit));
+    YEW_ASSERT_EQ_U64(yew_mark_pos(f.marks, fresh).v, 0U);
+    YEW_ASSERT_EQ_U64(yew_textbuf_len(f.tb), 6U);
+    YEW_ASSERT_EQ_U64(f.undo->cur, f.undo->root);
     marks_fixture_free(&f);
 }
 
@@ -149,18 +149,18 @@ void test_undo_marks_insert_records_empty_repair_run(void)
     const UndoRepairRun *run;
 
     marks_fixture_init(&f, (const u8 *)"ab", 2U);
-    left = sag_mark_add(f.marks, BYTEOFF(1U), SAG_BIAS_LEFT);
-    right = sag_mark_add(f.marks, BYTEOFF(1U), SAG_BIAS_RIGHT);
-    sag_edit_insert(&f.edit, BYTEOFF(1U), (const u8 *)"X", 1U);
+    left = yew_mark_add(f.marks, BYTEOFF(1U), YEW_BIAS_LEFT);
+    right = yew_mark_add(f.marks, BYTEOFF(1U), YEW_BIAS_RIGHT);
+    yew_edit_insert(&f.edit, BYTEOFF(1U), (const u8 *)"X", 1U);
     node = &f.undo->nodes.data[f.undo->cur - 1U];
     run = &f.undo->repair_runs.data[node->ops_at];
-    SAG_ASSERT_EQ_U64(run->len, 0U);
-    SAG_ASSERT_EQ_U64(node->n_rep, 0U);
-    SAG_ASSERT_EQ_U64(sag_mark_pos(f.marks, left).v, 1U);
-    SAG_ASSERT_EQ_U64(sag_mark_pos(f.marks, right).v, 2U);
-    SAG_ASSERT(sag_undo(&f.edit));
-    SAG_ASSERT_EQ_U64(sag_mark_pos(f.marks, left).v, 1U);
-    SAG_ASSERT_EQ_U64(sag_mark_pos(f.marks, right).v, 1U);
+    YEW_ASSERT_EQ_U64(run->len, 0U);
+    YEW_ASSERT_EQ_U64(node->n_rep, 0U);
+    YEW_ASSERT_EQ_U64(yew_mark_pos(f.marks, left).v, 1U);
+    YEW_ASSERT_EQ_U64(yew_mark_pos(f.marks, right).v, 2U);
+    YEW_ASSERT(yew_undo(&f.edit));
+    YEW_ASSERT_EQ_U64(yew_mark_pos(f.marks, left).v, 1U);
+    YEW_ASSERT_EQ_U64(yew_mark_pos(f.marks, right).v, 1U);
     marks_fixture_free(&f);
 }
 
@@ -171,19 +171,19 @@ void test_undo_marks_redo_recollapses_repaired_marks(void)
     MarkId b;
 
     marks_fixture_init(&f, (const u8 *)"0123456789", 10U);
-    a = sag_mark_add(f.marks, BYTEOFF(3U), SAG_BIAS_LEFT);
-    b = sag_mark_add(f.marks, BYTEOFF(6U), SAG_BIAS_RIGHT);
-    sag_undo_begin(&f.edit, SAG_TXN_CUT);
-    sag_edit_delete(&f.edit, (Span){2U, 8U});
-    sag_undo_end(&f.edit);
-    SAG_ASSERT_EQ_U64(sag_mark_pos(f.marks, a).v, 2U);
-    SAG_ASSERT_EQ_U64(sag_mark_pos(f.marks, b).v, 2U);
-    SAG_ASSERT(sag_undo(&f.edit));
-    SAG_ASSERT_EQ_U64(sag_mark_pos(f.marks, a).v, 3U);
-    SAG_ASSERT_EQ_U64(sag_mark_pos(f.marks, b).v, 6U);
-    SAG_ASSERT(sag_redo(&f.edit));
-    SAG_ASSERT_EQ_U64(sag_mark_pos(f.marks, a).v, 2U);
-    SAG_ASSERT_EQ_U64(sag_mark_pos(f.marks, b).v, 2U);
+    a = yew_mark_add(f.marks, BYTEOFF(3U), YEW_BIAS_LEFT);
+    b = yew_mark_add(f.marks, BYTEOFF(6U), YEW_BIAS_RIGHT);
+    yew_undo_begin(&f.edit, YEW_TXN_CUT);
+    yew_edit_delete(&f.edit, (Span){2U, 8U});
+    yew_undo_end(&f.edit);
+    YEW_ASSERT_EQ_U64(yew_mark_pos(f.marks, a).v, 2U);
+    YEW_ASSERT_EQ_U64(yew_mark_pos(f.marks, b).v, 2U);
+    YEW_ASSERT(yew_undo(&f.edit));
+    YEW_ASSERT_EQ_U64(yew_mark_pos(f.marks, a).v, 3U);
+    YEW_ASSERT_EQ_U64(yew_mark_pos(f.marks, b).v, 6U);
+    YEW_ASSERT(yew_redo(&f.edit));
+    YEW_ASSERT_EQ_U64(yew_mark_pos(f.marks, a).v, 2U);
+    YEW_ASSERT_EQ_U64(yew_mark_pos(f.marks, b).v, 2U);
     marks_fixture_free(&f);
 }
 
@@ -191,11 +191,11 @@ void test_undo_marks_randomized_oracle_restores_1000_marks(void)
 {
     enum { MARKS = 1000, EDITS = 1000 };
     MarkFixture f;
-    OracleMark *oracle = sag_xmalloc(sizeof(*oracle) * MARKS);
-    u64 *before = sag_xmalloc(sizeof(*before) * MARKS);
+    OracleMark *oracle = yew_xmalloc(sizeof(*oracle) * MARKS);
+    u64 *before = yew_xmalloc(sizeof(*before) * MARKS);
     u64 state = UINT64_C(0xd1b54a32d192ed03);
     u64 text_len = 4096U;
-    u8 *initial = sag_xmalloc((size_t)text_len);
+    u8 *initial = yew_xmalloc((size_t)text_len);
     size_t i;
 
     (void)memset(initial, 'x', (size_t)text_len);
@@ -204,9 +204,9 @@ void test_undo_marks_randomized_oracle_restores_1000_marks(void)
     for (i = 0U; i < MARKS; i++) {
         oracle[i].pos = marks_random(&state) % (text_len + 1U);
         oracle[i].bias = (marks_random(&state) & 1U) != 0U
-                             ? SAG_BIAS_RIGHT
-                             : SAG_BIAS_LEFT;
-        oracle[i].id = sag_mark_add(f.marks, BYTEOFF(oracle[i].pos),
+                             ? YEW_BIAS_RIGHT
+                             : YEW_BIAS_LEFT;
+        oracle[i].id = yew_mark_add(f.marks, BYTEOFF(oracle[i].pos),
                                     oracle[i].bias);
     }
     for (i = 0U; i < EDITS; i++) {
@@ -217,50 +217,50 @@ void test_undo_marks_randomized_oracle_restores_1000_marks(void)
 
         for (j = 0U; j < MARKS; j++)
             before[j] = oracle[j].pos;
-        f.mono += SAG_UNDO_BURST_MS;
-        sag_undo_begin(&f.edit, inserting ? SAG_TXN_PASTE : SAG_TXN_CUT);
+        f.mono += YEW_UNDO_BURST_MS;
+        yew_undo_begin(&f.edit, inserting ? YEW_TXN_PASTE : YEW_TXN_CUT);
         if (inserting) {
             u8 bytes[8];
 
             at = marks_random(&state) % (text_len + 1U);
             len = 1U + marks_random(&state) % sizeof(bytes);
             (void)memset(bytes, (int)(i & 0xffU), (size_t)len);
-            sag_edit_insert(&f.edit, BYTEOFF(at), bytes, len);
-            marks_oracle_adjust(oracle, MARKS, SAG_JOURNAL_INS, at, len);
+            yew_edit_insert(&f.edit, BYTEOFF(at), bytes, len);
+            marks_oracle_adjust(oracle, MARKS, YEW_JOURNAL_INS, at, len);
             text_len += len;
         } else {
             at = marks_random(&state) % text_len;
             len = 1U + marks_random(&state) % (text_len - at);
             if (len > 8U)
                 len = 8U;
-            sag_edit_delete(&f.edit, (Span){at, at + len});
-            marks_oracle_adjust(oracle, MARKS, SAG_JOURNAL_DEL, at, len);
+            yew_edit_delete(&f.edit, (Span){at, at + len});
+            marks_oracle_adjust(oracle, MARKS, YEW_JOURNAL_DEL, at, len);
             text_len -= len;
         }
-        sag_undo_end(&f.edit);
+        yew_undo_end(&f.edit);
         for (j = 0U; j < MARKS; j++)
-            SAG_ASSERT_EQ_U64(sag_mark_pos(f.marks, oracle[j].id).v,
+            YEW_ASSERT_EQ_U64(yew_mark_pos(f.marks, oracle[j].id).v,
                               oracle[j].pos);
-        SAG_ASSERT(sag_undo(&f.edit));
+        YEW_ASSERT(yew_undo(&f.edit));
         for (j = 0U; j < MARKS; j++) {
             oracle[j].pos = before[j];
-            SAG_ASSERT_EQ_U64(sag_mark_pos(f.marks, oracle[j].id).v,
+            YEW_ASSERT_EQ_U64(yew_mark_pos(f.marks, oracle[j].id).v,
                               before[j]);
         }
         if (inserting)
             text_len -= len;
         else {
             text_len += len;
-            SAG_ASSERT(sag_redo(&f.edit));
-            SAG_ASSERT(sag_undo(&f.edit));
+            YEW_ASSERT(yew_redo(&f.edit));
+            YEW_ASSERT(yew_undo(&f.edit));
             for (j = 0U; j < MARKS; j++)
-                SAG_ASSERT_EQ_U64(sag_mark_pos(f.marks, oracle[j].id).v,
+                YEW_ASSERT_EQ_U64(yew_mark_pos(f.marks, oracle[j].id).v,
                                   before[j]);
         }
-        SAG_ASSERT_EQ_U64(sag_textbuf_len(f.tb), text_len);
+        YEW_ASSERT_EQ_U64(yew_textbuf_len(f.tb), text_len);
     }
     for (i = 0U; i < MARKS; i++)
-        SAG_ASSERT(sag_mark_pos(f.marks, oracle[i].id).v <= text_len);
+        YEW_ASSERT(yew_mark_pos(f.marks, oracle[i].id).v <= text_len);
     free(before);
     free(oracle);
     marks_fixture_free(&f);

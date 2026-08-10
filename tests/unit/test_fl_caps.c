@@ -73,8 +73,8 @@ void test_fl_caps_a_plugin_gains_nothing_from_a_helper(void)
     /* Twice, because the key is (realpath, origin.kind) -- and the two
      * instances are DISTINCT objects, or the second would be the first
      * one's authority under a new name. */
-    SAG_ASSERT_EQ_U64((u64)(f.vm.mods.n - before), 2U);
-    SAG_ASSERT(as_config != as_plugin);
+    YEW_ASSERT_EQ_U64((u64)(f.vm.mods.n - before), 2U);
+    YEW_ASSERT(as_config != as_plugin);
     flfix_close(&f);
 }
 
@@ -153,16 +153,16 @@ void test_fl_caps_each_bit_is_granted_and_denied(void)
     f.vm.root_origin.kind = (u8)FL_ORIGIN_PLUGIN;
     f.vm.root_origin.path_id = 0U;
     f.vm.root_origin.caps = (u32)FL_CAP_SHELL;
-    SAG_ASSERT(fl_cap_check(&f.vm, (u32)FL_CAP_SHELL));
-    SAG_ASSERT(!fl_cap_check(&f.vm, (u32)FL_CAP_NET));
+    YEW_ASSERT(fl_cap_check(&f.vm, (u32)FL_CAP_SHELL));
+    YEW_ASSERT(!fl_cap_check(&f.vm, (u32)FL_CAP_NET));
     f.vm.root_origin.caps = (u32)FL_CAP_NET;
-    SAG_ASSERT(fl_cap_check(&f.vm, (u32)FL_CAP_NET));
-    SAG_ASSERT(!fl_cap_check(&f.vm, (u32)FL_CAP_SHELL));
+    YEW_ASSERT(fl_cap_check(&f.vm, (u32)FL_CAP_NET));
+    YEW_ASSERT(!fl_cap_check(&f.vm, (u32)FL_CAP_SHELL));
     /* Both at once, because a check for two bits must want both. */
     f.vm.root_origin.caps = (u32)FL_CAP_SHELL | (u32)FL_CAP_NET;
-    SAG_ASSERT(fl_cap_check(&f.vm, (u32)FL_CAP_SHELL | (u32)FL_CAP_NET));
+    YEW_ASSERT(fl_cap_check(&f.vm, (u32)FL_CAP_SHELL | (u32)FL_CAP_NET));
     f.vm.root_origin.caps = (u32)FL_CAP_SHELL;
-    SAG_ASSERT(!fl_cap_check(&f.vm, (u32)FL_CAP_SHELL | (u32)FL_CAP_NET));
+    YEW_ASSERT(!fl_cap_check(&f.vm, (u32)FL_CAP_SHELL | (u32)FL_CAP_NET));
     flfix_close(&f);
 }
 

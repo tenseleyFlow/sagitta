@@ -1,5 +1,5 @@
-#ifndef SAG_UTIL_STRMAP_H
-#define SAG_UTIL_STRMAP_H
+#ifndef YEW_UTIL_STRMAP_H
+#define YEW_UTIL_STRMAP_H
 
 #include <stdbool.h>
 #include <stddef.h>

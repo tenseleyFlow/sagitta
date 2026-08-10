@@ -1,5 +1,5 @@
-#ifndef SAG_FL_LEX_H
-#define SAG_FL_LEX_H
+#ifndef YEW_FL_LEX_H
+#define YEW_FL_LEX_H
 
 /*
  * Sprint 29: the Fletch lexer.  Implements spec §1 in full, including
@@ -146,4 +146,4 @@ bool fl_tok_is_keyword(FlTokKind kind);
  */
 bool fl_kw_reserved(const char *s, size_t n);
 
-#endif /* SAG_FL_LEX_H */
+#endif /* YEW_FL_LEX_H */

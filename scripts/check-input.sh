@@ -12,10 +12,10 @@ if grep -nE '(read|poll|clock_gettime|clock_getres)[[:space:]]*\(' \
     exit 1
 fi
 
-paste_body=$(sed -n '/^static bool paste_next(/,/^void sag_input_init/p' \
+paste_body=$(sed -n '/^static bool paste_next(/,/^void yew_input_init/p' \
     "$input")
 if printf '%s\n' "$paste_body" |
-    grep -nE '(emit_named|emit_scalar|SAG_EV_KEY)' >/dev/null; then
+    grep -nE '(emit_named|emit_scalar|YEW_EV_KEY)' >/dev/null; then
     echo 'input-check: paste state can emit a key' >&2
     exit 1
 fi

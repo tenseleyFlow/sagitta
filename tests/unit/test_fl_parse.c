@@ -128,9 +128,9 @@ static void ok_dump(const char *src, const char *want)
         (void)fprintf(stderr, "source: %s\n  want: %s\n   got: %s\n",
                       src, want, got);
     }
-    SAG_ASSERT_EQ_I64(strcmp(got, want), 0);
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
-    SAG_ASSERT(!f.had_error);
+    YEW_ASSERT_EQ_I64(strcmp(got, want), 0);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT(!f.had_error);
     pf_close(&f);
 }
 
@@ -314,9 +314,9 @@ static void diag_is(const char *src, const char *want, u32 n)
                               "   got: %s (x%u)\n",
                       src, want, (unsigned)n, f.first, (unsigned)f.ndiag);
     }
-    SAG_ASSERT(strstr(f.first, want) != NULL);
-    SAG_ASSERT_EQ_U64(f.ndiag, n);
-    SAG_ASSERT(f.had_error);
+    YEW_ASSERT(strstr(f.first, want) != NULL);
+    YEW_ASSERT_EQ_U64(f.ndiag, n);
+    YEW_ASSERT(f.had_error);
     pf_close(&f);
 }
 
@@ -344,12 +344,12 @@ void test_fl_parse_expected_found_wording(void)
      * literals as a category. */
     pf_open(&f);
     (void)parse_dump(&f, "f(1\nlet b = 2\n");
-    SAG_ASSERT_EQ_I64(strcmp(f.first, "expected ')', found 'let'"), 0);
+    YEW_ASSERT_EQ_I64(strcmp(f.first, "expected ')', found 'let'"), 0);
     pf_close(&f);
 
     pf_open(&f);
     (void)parse_dump(&f, "let 1 = 2\n");
-    SAG_ASSERT(strstr(f.first, "found 'integer'") != NULL);
+    YEW_ASSERT(strstr(f.first, "found 'integer'") != NULL);
     pf_close(&f);
 }
 
@@ -374,7 +374,7 @@ void test_fl_parse_recovery_one_typo_one_error(void)
     };
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(fix); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(fix); i++) {
         PFix f;
         const char *got;
 
@@ -385,8 +385,8 @@ void test_fl_parse_recovery_one_typo_one_error(void)
                           "recovery fixture %zu: ndiag=%u first=%s\n%s\n",
                           i, (unsigned)f.ndiag, f.first, got);
         }
-        SAG_ASSERT_EQ_U64(f.ndiag, 1U);
-        SAG_ASSERT(strstr(got, fix[i].survives) != NULL);
+        YEW_ASSERT_EQ_U64(f.ndiag, 1U);
+        YEW_ASSERT(strstr(got, fix[i].survives) != NULL);
         pf_close(&f);
     }
 }
@@ -403,8 +403,8 @@ void test_fl_parse_error_cap(void)
         at += (size_t)snprintf(src + at, sizeof(src) - at, "let = %d\n", i);
     pf_open(&f);
     (void)parse_dump(&f, src);
-    SAG_ASSERT(f.ndiag <= (u32)FL_PARSE_MAX_ERRORS + 1U);
-    SAG_ASSERT(f.had_error);
+    YEW_ASSERT(f.ndiag <= (u32)FL_PARSE_MAX_ERRORS + 1U);
+    YEW_ASSERT(f.had_error);
     pf_close(&f);
 }
 
@@ -431,7 +431,7 @@ void test_fl_parse_incomplete_flag(void)
      * bracket that also claimed to be unfinished would make Sprint 32
      * wait forever for a closer that cannot fix it.
      */
-    for (i = 0U; i < SAG_ARRAY_LEN(cases); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(cases); i++) {
         PFix f;
 
         pf_open(&f);
@@ -444,9 +444,9 @@ void test_fl_parse_incomplete_flag(void)
                           (int)cases[i].incomplete, (int)f.had_error,
                           (int)cases[i].had_error);
         }
-        SAG_ASSERT_EQ_U64((u64)f.incomplete, (u64)cases[i].incomplete);
-        SAG_ASSERT_EQ_U64((u64)f.had_error, (u64)cases[i].had_error);
-        SAG_ASSERT(!(f.incomplete && f.had_error));
+        YEW_ASSERT_EQ_U64((u64)f.incomplete, (u64)cases[i].incomplete);
+        YEW_ASSERT_EQ_U64((u64)f.had_error, (u64)cases[i].had_error);
+        YEW_ASSERT(!(f.incomplete && f.had_error));
         pf_close(&f);
     }
 }
@@ -465,7 +465,7 @@ void test_fl_parse_depth_cap(void)
     src[sizeof(src) - 1U] = '\0';
     pf_open(&f);
     (void)parse_dump(&f, src);
-    SAG_ASSERT(f.had_error || f.incomplete);
+    YEW_ASSERT(f.had_error || f.incomplete);
     pf_close(&f);
 }
 
@@ -520,14 +520,14 @@ void test_fl_parse_spec_14_example(void)
     got = parse_dump(&f, FL_SPEC_14);
     if (f.ndiag != 0U)
         (void)fprintf(stderr, "spec 14 diagnostic: %s\n", f.first);
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
-    SAG_ASSERT(!f.had_error);
-    SAG_ASSERT(!f.incomplete);
-    SAG_ASSERT_EQ_U64(f.nstmts, 12U);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT(!f.had_error);
+    YEW_ASSERT(!f.incomplete);
+    YEW_ASSERT_EQ_U64(f.nstmts, 12U);
     /* Spot-check the shapes that the two newline bugs broke. */
-    SAG_ASSERT(strstr(got, "(let \"n\" (id \"start\"))") != NULL);
-    SAG_ASSERT(strstr(got, "catch \"e\"") != NULL);
-    SAG_ASSERT(strstr(got,
+    YEW_ASSERT(strstr(got, "(let \"n\" (id \"start\"))") != NULL);
+    YEW_ASSERT(strstr(got, "catch \"e\"") != NULL);
+    YEW_ASSERT(strstr(got,
                       "(let \"nums\" (list (lit int 1) (lit float 2.5) "
                       "(lit int 16)))") != NULL);
     pf_close(&f);
@@ -547,8 +547,8 @@ void test_fl_parse_dump_is_deterministic(void)
         const char *one = parse_dump(&a, FL_SPEC_14);
         const char *two = parse_dump(&b, FL_SPEC_14);
 
-        SAG_ASSERT_EQ_U64(a.dump.len, b.dump.len);
-        SAG_ASSERT_EQ_I64(strcmp(one, two), 0);
+        YEW_ASSERT_EQ_U64(a.dump.len, b.dump.len);
+        YEW_ASSERT_EQ_I64(strcmp(one, two), 0);
     }
     pf_close(&b);
     pf_close(&a);
@@ -567,15 +567,15 @@ static void pl_ok(const char *src, const char *want)
     pf_open(&f);
     (void)fl_diag_add_file(&f.dc, "d.fl", src, strlen(src));
     v = fl_parse_literal(&f.arena, &f.dc, &f.in, src, strlen(src), 0U);
-    SAG_ASSERT_NOT_NULL(v);
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT_NOT_NULL(v);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
     bytebuf_init(&out);
     fl_ast_dump_node(&out, v, &f.in);
     bytebuf_push_u8(&out, (u8)'\0');
     if (strcmp((const char *)out.data, want) != 0)
         (void)fprintf(stderr, "pl source: %s\n  want: %s\n   got: %s\n",
                       src, want, (const char *)out.data);
-    SAG_ASSERT_EQ_I64(strcmp((const char *)out.data, want), 0);
+    YEW_ASSERT_EQ_I64(strcmp((const char *)out.data, want), 0);
     bytebuf_free(&out);
     pf_close(&f);
 }
@@ -591,11 +591,11 @@ static void pl_rejects(const char *src)
     if (v != NULL || f.ndiag == 0U)
         (void)fprintf(stderr, "pl should reject: %s (ndiag=%u)\n", src,
                       (unsigned)f.ndiag);
-    SAG_ASSERT_NULL(v);
-    SAG_ASSERT(f.ndiag != 0U);
+    YEW_ASSERT_NULL(v);
+    YEW_ASSERT(f.ndiag != 0U);
     /* Every rejection names the mode, so the reader knows the construct
      * is refused HERE rather than invalid everywhere. */
-    SAG_ASSERT(strstr(f.first, "pure-literal mode") != NULL);
+    YEW_ASSERT(strstr(f.first, "pure-literal mode") != NULL);
     pf_close(&f);
 }
 
@@ -659,9 +659,9 @@ void test_fl_parse_literal_accepts_a_workspace_state_document(void)
     v = fl_parse_literal(&f.arena, &f.dc, &f.in, doc, strlen(doc), 0U);
     if (f.ndiag != 0U)
         (void)fprintf(stderr, "state doc diagnostic: %s\n", f.first);
-    SAG_ASSERT_NOT_NULL(v);
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
-    SAG_ASSERT_EQ_U64((u64)v->kind, (u64)FL_A_MAP);
-    SAG_ASSERT_EQ_U64(v->as.map.n, 6U);  /* version root tabs groups options ratio */
+    YEW_ASSERT_NOT_NULL(v);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT_EQ_U64((u64)v->kind, (u64)FL_A_MAP);
+    YEW_ASSERT_EQ_U64(v->as.map.n, 6U);  /* version root tabs groups options ratio */
     pf_close(&f);
 }

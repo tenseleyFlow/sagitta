@@ -21,57 +21,57 @@ enum {
     ATTR_TERMINAL = (1u << 10) - 1u
 };
 
-static Bytebuf sag_oob;
-static bool sag_oob_ready;
+static Bytebuf yew_oob;
+static bool yew_oob_ready;
 
-void sag_term_oob_queue(const u8 *seq, u64 n)
+void yew_term_oob_queue(const u8 *seq, u64 n)
 {
     if (n == 0u)
         return;
     if (seq == NULL)
-        SAG_BUG("terminal OOB queue received NULL bytes");
+        YEW_BUG("terminal OOB queue received NULL bytes");
     if (n > SIZE_MAX)
-        SAG_BUG("terminal OOB sequence exceeds addressable memory");
-    if (!sag_oob_ready) {
-        bytebuf_init(&sag_oob);
-        sag_oob_ready = true;
+        YEW_BUG("terminal OOB sequence exceeds addressable memory");
+    if (!yew_oob_ready) {
+        bytebuf_init(&yew_oob);
+        yew_oob_ready = true;
     }
-    bytebuf_append(&sag_oob, seq, (size_t)n);
+    bytebuf_append(&yew_oob, seq, (size_t)n);
 }
 
-u64 sag_term_oob_pending(void)
+u64 yew_term_oob_pending(void)
 {
-    return sag_oob_ready ? (u64)sag_oob.len : 0u;
+    return yew_oob_ready ? (u64)yew_oob.len : 0u;
 }
 
-size_t sag_term_oob_flush(Bytebuf *out)
+size_t yew_term_oob_flush(Bytebuf *out)
 {
     size_t n;
 
     if (out == NULL)
-        SAG_BUG("terminal OOB flush received NULL output");
-    if (!sag_oob_ready || sag_oob.len == 0u)
+        YEW_BUG("terminal OOB flush received NULL output");
+    if (!yew_oob_ready || yew_oob.len == 0u)
         return 0u;
-    n = sag_oob.len;
-    bytebuf_append(out, sag_oob.data, n);
-    sag_oob.len = 0u;
+    n = yew_oob.len;
+    bytebuf_append(out, yew_oob.data, n);
+    yew_oob.len = 0u;
     return n;
 }
 
-void sag_term_oob_clear(void)
+void yew_term_oob_clear(void)
 {
-    if (sag_oob_ready)
-        bytebuf_free(&sag_oob);
-    sag_oob_ready = false;
+    if (yew_oob_ready)
+        bytebuf_free(&yew_oob);
+    yew_oob_ready = false;
 }
 
 static size_t render_finish(Render *r, Bytebuf *out, size_t start,
                             size_t frame_end)
 {
     if (frame_end < start || frame_end > out->len)
-        SAG_BUG("renderer produced invalid frame bounds");
+        YEW_BUG("renderer produced invalid frame bounds");
     r->bytes += (u64)(frame_end - start);
-    (void)sag_term_oob_flush(out);
+    (void)yew_term_oob_flush(out);
     return out->len - start;
 }
 
@@ -79,7 +79,7 @@ static u16 terminal_attrs(u16 attrs, bool undercurl)
 {
     u16 result = (u16)(attrs & ATTR_TERMINAL);
 
-    if ((attrs & SAG_ATTR_INVALID_BYTE) != 0u)
+    if ((attrs & YEW_ATTR_INVALID_BYTE) != 0u)
         result |= ATTR_REVERSE;
     if ((result & ATTR_UNDERCURL) != 0u) {
         if (undercurl)
@@ -141,7 +141,7 @@ static u32 color_distance(u8 r1, u8 g1, u8 b1, u8 r2, u8 g2, u8 b2)
     return (u32)(2 * dr * dr + 4 * dg * dg + 3 * db * db);
 }
 
-u8 sag_rgb_to_256(u8 r, u8 g, u8 b)
+u8 yew_rgb_to_256(u8 r, u8 g, u8 b)
 {
     u8 ri = cube_index(r);
     u8 gi = cube_index(g);
@@ -163,7 +163,7 @@ u8 sag_rgb_to_256(u8 r, u8 g, u8 b)
     return cube;
 }
 
-u8 sag_rgb_to_16(u8 r, u8 g, u8 b)
+u8 yew_rgb_to_16(u8 r, u8 g, u8 b)
 {
     u8 best = 0;
     u32 best_dist = color_distance(r, g, b, ansi_rgb[0][0],
@@ -201,34 +201,34 @@ static void indexed_rgb(u8 index, u8 *r, u8 *g, u8 *b)
     }
 }
 
-u8 sag_render_tier(const TtyCaps *caps,
+u8 yew_render_tier(const TtyCaps *caps,
                    const char *(*getv)(const char *))
 {
-    const char *forced = getv != NULL ? getv("SAG_COLORS") : NULL;
+    const char *forced = getv != NULL ? getv("YEW_COLORS") : NULL;
     const char *term;
 
     if (forced != NULL) {
         if (strcmp(forced, "truecolor") == 0)
-            return SAG_RENDER_TIER_TRUECOLOR;
+            return YEW_RENDER_TIER_TRUECOLOR;
         if (strcmp(forced, "256") == 0)
-            return SAG_RENDER_TIER_256;
+            return YEW_RENDER_TIER_256;
         if (strcmp(forced, "16") == 0)
-            return SAG_RENDER_TIER_16;
+            return YEW_RENDER_TIER_16;
     }
     if (caps != NULL && caps->truecolor)
-        return SAG_RENDER_TIER_TRUECOLOR;
+        return YEW_RENDER_TIER_TRUECOLOR;
     term = getv != NULL ? getv("TERM") : NULL;
     if (term != NULL &&
         (strstr(term, "256color") != NULL || strstr(term, "direct") != NULL))
-        return SAG_RENDER_TIER_256;
-    return SAG_RENDER_TIER_16;
+        return YEW_RENDER_TIER_256;
+    return YEW_RENDER_TIER_16;
 }
 
-void sag_render_init(Render *r, const TtyCaps *caps,
+void yew_render_init(Render *r, const TtyCaps *caps,
                      const char *(*getv)(const char *))
 {
     memset(r, 0, sizeof(*r));
-    r->tier = sag_render_tier(caps, getv);
+    r->tier = yew_render_tier(caps, getv);
     {
         const char *nc = getv != NULL ? getv("NO_COLOR") : NULL;
 
@@ -240,7 +240,7 @@ void sag_render_init(Render *r, const TtyCaps *caps,
     r->undercurl = caps != NULL && caps->truecolor;
 }
 
-static bool color_equal(SagColor a, SagColor b)
+static bool color_equal(YewColor a, YewColor b)
 {
     if (a.tag != b.tag)
         return false;
@@ -270,7 +270,7 @@ static void param_text(Bytebuf *out, bool *first, const char *value)
     bytes(out, value);
 }
 
-static u8 color_ansi(const SagColor *color)
+static u8 color_ansi(const YewColor *color)
 {
     u8 r;
     u8 g;
@@ -280,12 +280,12 @@ static u8 color_ansi(const SagColor *color)
         if (color->r < 16u)
             return color->r;
         indexed_rgb(color->r, &r, &g, &b);
-        return sag_rgb_to_16(r, g, b);
+        return yew_rgb_to_16(r, g, b);
     }
-    return sag_rgb_to_16(color->r, color->g, color->b);
+    return yew_rgb_to_16(color->r, color->g, color->b);
 }
 
-static void color_param(Bytebuf *out, bool *first, const SagColor *color,
+static void color_param(Bytebuf *out, bool *first, const YewColor *color,
                         bool foreground, u8 tier, bool no_color)
 {
     /*
@@ -313,7 +313,7 @@ static void color_param(Bytebuf *out, bool *first, const SagColor *color,
         param_num(out, first, code);
         return;
     }
-    if (tier == SAG_RENDER_TIER_TRUECOLOR && color->tag == 2u) {
+    if (tier == YEW_RENDER_TIER_TRUECOLOR && color->tag == 2u) {
         param_num(out, first, foreground ? 38u : 48u);
         param_num(out, first, 2u);
         param_num(out, first, color->r);
@@ -321,11 +321,11 @@ static void color_param(Bytebuf *out, bool *first, const SagColor *color,
         param_num(out, first, color->b);
         return;
     }
-    if ((tier == SAG_RENDER_TIER_TRUECOLOR && color->tag == 1u) ||
-        tier == SAG_RENDER_TIER_256) {
+    if ((tier == YEW_RENDER_TIER_TRUECOLOR && color->tag == 1u) ||
+        tier == YEW_RENDER_TIER_256) {
         u8 index = color->tag == 1u
                        ? color->r
-                       : sag_rgb_to_256(color->r, color->g, color->b);
+                       : yew_rgb_to_256(color->r, color->g, color->b);
 
         param_num(out, first, foreground ? 38u : 48u);
         param_num(out, first, 5u);
@@ -443,7 +443,7 @@ static void attrs_delta(Bytebuf *out, bool *first, u16 from, u16 to,
         }
     }
 
-    for (i = 0; i < SAG_ARRAY_LEN(bits); i++) {
+    for (i = 0; i < YEW_ARRAY_LEN(bits); i++) {
         if ((from & bits[i]) != 0u && (to & bits[i]) == 0u)
             param_num(out, first, resets[i]);
         else if ((from & bits[i]) == 0u && (to & bits[i]) != 0u)
@@ -508,10 +508,10 @@ static void cell_bytes(const Grid *g, const Cell *cell, u16 row, u16 col,
     size_t n;
 
     if ((cell->flags & CELL_INTERNED) != 0u) {
-        const char *text = sag_intern_str(g->gi, cell->id);
+        const char *text = yew_intern_str(g->gi, cell->id);
 
         if (text == NULL)
-            SAG_BUG("render cell %u,%u has invalid grapheme intern id %u",
+            YEW_BUG("render cell %u,%u has invalid grapheme intern id %u",
                     row, col, cell->id);
         *data = (const u8 *)text;
         *len = strlen(text);
@@ -537,16 +537,16 @@ static void emit_cell(Render *r, const Grid *g, Bytebuf *out,
 
     set_style(r, out, cell);
     cell_bytes(g, cell, r->row, r->col, &data, &len);
-    if (sag_gb_next_bytes(data, len, 0u) != len)
-        SAG_BUG("render cell %u,%u contains multiple grapheme clusters",
+    if (yew_gb_next_bytes(data, len, 0u) != len)
+        YEW_BUG("render cell %u,%u contains multiple grapheme clusters",
                 r->row, r->col);
     for (i = 0; i < len; i++) {
         if (data[i] < 0x20u || data[i] == 0x7fu)
-            SAG_BUG("render cell %u,%u contains raw control byte 0x%02x",
+            YEW_BUG("render cell %u,%u contains raw control byte 0x%02x",
                     r->row, r->col, data[i]);
     }
-    if (sag_cluster_width(data, len) != (int)cell->w)
-        SAG_BUG("render cell %u,%u has inconsistent grapheme width",
+    if (yew_cluster_width(data, len) != (int)cell->w)
+        YEW_BUG("render cell %u,%u has inconsistent grapheme width",
                 r->row, r->col);
     bytebuf_append(out, data, len);
     if (r->pos_known) {
@@ -659,7 +659,7 @@ static bool has_changes(const Grid *g)
         for (col = c0; col < c1; col++) {
             size_t at = (size_t)row * g->cols + col;
 
-            if (!sag_cell_eq(&g->front[at], &g->back[at]))
+            if (!yew_cell_eq(&g->front[at], &g->back[at]))
                 return true;
         }
     }
@@ -668,17 +668,17 @@ static bool has_changes(const Grid *g)
 
 static void cursor_shape(Render *r, const Grid *g, Bytebuf *out)
 {
-    if (g->cur_shape == SAG_CURSOR_BLOCK)
+    if (g->cur_shape == YEW_CURSOR_BLOCK)
         bytes(out, "\033[2 q");
-    else if (g->cur_shape == SAG_CURSOR_BAR)
+    else if (g->cur_shape == YEW_CURSOR_BAR)
         bytes(out, "\033[6 q");
     else
-        SAG_BUG("renderer received invalid cursor shape");
+        YEW_BUG("renderer received invalid cursor shape");
     r->cursor_shape = g->cur_shape;
     r->cursor_generation = g->cursor_generation;
 }
 
-size_t sag_render_frame(Render *r, Grid *g, Bytebuf *out)
+size_t yew_render_frame(Render *r, Grid *g, Bytebuf *out)
 {
     size_t start = out->len;
     bool cells_changed;
@@ -737,7 +737,7 @@ size_t sag_render_frame(Render *r, Grid *g, Bytebuf *out)
             size_t at = (size_t)row * g->cols + col;
             const Cell *cell = &g->back[at];
 
-            if (sag_cell_eq(&g->front[at], cell) || cell->w == 0u) {
+            if (yew_cell_eq(&g->front[at], cell) || cell->w == 0u) {
                 col++;
                 continue;
             }

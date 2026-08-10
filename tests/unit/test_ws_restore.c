@@ -78,11 +78,11 @@ static void rs_make(RsFix *f)
     if (prev != NULL)
         (void)snprintf(f->saved, sizeof(f->saved), "%s", prev);
     (void)snprintf(f->state_home, sizeof(f->state_home),
-                   "/tmp/sag-rshome-XXXXXX");
-    SAG_ASSERT_NOT_NULL(mkdtemp(f->state_home));
-    (void)snprintf(f->work, sizeof(f->work), "/tmp/sag-rswork-XXXXXX");
-    SAG_ASSERT_NOT_NULL(mkdtemp(f->work));
-    SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", f->state_home, 1), 0);
+                   "/tmp/yew-rshome-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(f->state_home));
+    (void)snprintf(f->work, sizeof(f->work), "/tmp/yew-rswork-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(f->work));
+    YEW_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", f->state_home, 1), 0);
 }
 
 static void rs_remove(RsFix *f)
@@ -103,37 +103,37 @@ static void rs_file(const RsFix *f, const char *name, const char *body,
 
     (void)snprintf(out, cap, "%s/%s", f->work, name);
     fp = fopen(out, "wb");
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     (void)fwrite(body, 1U, strlen(body), fp);
     (void)fclose(fp);
 }
 
 static void rs_ed(RsFix *f, Ed *ed)
 {
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    sag_ed_init(ed);
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    yew_ed_init(ed);
     ed->ws.dir = arena_strdup(&ed->arena, f->work);
-    SAG_ASSERT(sag_ed_open_scratch(ed));
-    sag_layout_compute(ed->pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT(yew_ed_open_scratch(ed));
+    yew_layout_compute(ed->pane_root, (Rect){0U, 0U, 80U, 24U});
 }
 
 /*
  * Applies a document to a second editor.  Steps 8 and 9 are the
- * caller's in sag_state_apply (layout needs a terminal), so the test
- * drives them exactly as sag_ws_restore does.
+ * caller's in yew_state_apply (layout needs a terminal), so the test
+ * drives them exactly as yew_ws_restore does.
  */
-static SagWsResult rs_apply(RsFix *f, Ed *ed, const Bytebuf *doc)
+static YewWsResult rs_apply(RsFix *f, Ed *ed, const Bytebuf *doc)
 {
-    SagWsResult r;
+    YewWsResult r;
 
     rs_ed(f, ed);
-    SAG_ASSERT(sag_ws_key(&ed->state.key, f->work));
-    SAG_ASSERT(sag_ws_ensure_dir(&ed->state.key));
+    YEW_ASSERT(yew_ws_key(&ed->state.key, f->work));
+    YEW_ASSERT(yew_ws_ensure_dir(&ed->state.key));
     ed->state.ready = true;
     ed->state.writer = true;
-    r = sag_state_apply(ed, doc->data, doc->len);
-    sag_layout_compute(ed->pane_root, (Rect){0U, 0U, 80U, 24U});
+    r = yew_state_apply(ed, doc->data, doc->len);
+    yew_layout_compute(ed->pane_root, (Rect){0U, 0U, 80U, 24U});
     return r;
 }
 
@@ -166,43 +166,43 @@ void test_ws_restore_round_trips_tabs_and_groups(void)
     rs_file(&f, "c.txt", "echo\n", pc, sizeof(pc));
 
     rs_ed(&f, &a);
-    t0 = sag_tab_open(&a, pa);
-    t1 = sag_tab_open(&a, pb);
-    t2 = sag_tab_open(&a, pc);
-    SAG_ASSERT(t0 >= 0 && t1 >= 0 && t2 >= 0);
-    gid = sag_group_create(&a, f.work, "grp");
-    sag_group_add_member(&a, gid, t1);
-    sag_group_add_member(&a, gid, t2);
-    sag_tab_switch(&a, t1);
+    t0 = yew_tab_open(&a, pa);
+    t1 = yew_tab_open(&a, pb);
+    t2 = yew_tab_open(&a, pc);
+    YEW_ASSERT(t0 >= 0 && t1 >= 0 && t2 >= 0);
+    gid = yew_group_create(&a, f.work, "grp");
+    yew_group_add_member(&a, gid, t1);
+    yew_group_add_member(&a, gid, t2);
+    yew_tab_switch(&a, t1);
     bytebuf_init(&doc);
-    sag_state_emit(&a, &doc);
+    yew_state_emit(&a, &doc);
 
     (void)rs_apply(&f, &b, &doc);
     /* Three restored tabs, plus the scratch the second editor started
      * with. */
-    SAG_ASSERT_EQ_I64(sag_tab_count(&b), 4);
-    SAG_ASSERT_EQ_STR(sag_tab_at(&b, 1)->path, pa);
-    SAG_ASSERT_EQ_STR(sag_tab_at(&b, 2)->path, pb);
-    SAG_ASSERT_EQ_STR(sag_tab_at(&b, 3)->path, pc);
+    YEW_ASSERT_EQ_I64(yew_tab_count(&b), 4);
+    YEW_ASSERT_EQ_STR(yew_tab_at(&b, 1)->path, pa);
+    YEW_ASSERT_EQ_STR(yew_tab_at(&b, 2)->path, pb);
+    YEW_ASSERT_EQ_STR(yew_tab_at(&b, 3)->path, pc);
     /* One group, with both members and their ordinals. */
-    SAG_ASSERT_EQ_U64(b.groups.v.len, 1U);
-    SAG_ASSERT_EQ_I64(sag_group_member_count(&b, b.groups.v.data[0].id), 2);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&b, 2)->group_id, b.groups.v.data[0].id);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&b, 3)->group_id, b.groups.v.data[0].id);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&b, 2)->group_ordinal, 1U);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&b, 3)->group_ordinal, 2U);
+    YEW_ASSERT_EQ_U64(b.groups.v.len, 1U);
+    YEW_ASSERT_EQ_I64(yew_group_member_count(&b, b.groups.v.data[0].id), 2);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&b, 2)->group_id, b.groups.v.data[0].id);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&b, 3)->group_id, b.groups.v.data[0].id);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&b, 2)->group_ordinal, 1U);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&b, 3)->group_ordinal, 2U);
     /* active_tab resolved through the id map, not by index. */
-    SAG_ASSERT_EQ_STR(sag_tab_at(&b, b.tabs.active)->path, pb);
+    YEW_ASSERT_EQ_STR(yew_tab_at(&b, b.tabs.active)->path, pb);
 
     bytebuf_free(&doc);
-    sag_ed_free(&a);
-    sag_ed_free(&b);
+    yew_ed_free(&a);
+    yew_ed_free(&b);
     rs_remove(&f);
 }
 
 /*
  * LIVE IDS ARE FRESH.  The restored group's id comes from
- * sag_group_create, not from the file — so a document written by a
+ * yew_group_create, not from the file — so a document written by a
  * session that had reached group 7 restores to group 1 here.
  */
 void test_ws_restore_remaps_group_ids(void)
@@ -222,26 +222,26 @@ void test_ws_restore_remaps_group_ids(void)
     rs_ed(&f, &a);
     /* Burn ids so the file carries numbers no fresh editor would mint
      * in the same order. */
-    g1 = sag_group_create(&a, f.work, "g1");
-    g2 = sag_group_create(&a, f.work, "g2");
-    g3 = sag_group_create(&a, f.work, "g3");
-    sag_group_dissolve(&a, g1);
-    sag_group_dissolve(&a, g2);
-    SAG_ASSERT(g3 >= 3U);
-    t0 = sag_tab_open(&a, pa);
-    sag_group_add_member(&a, g3, t0);
+    g1 = yew_group_create(&a, f.work, "g1");
+    g2 = yew_group_create(&a, f.work, "g2");
+    g3 = yew_group_create(&a, f.work, "g3");
+    yew_group_dissolve(&a, g1);
+    yew_group_dissolve(&a, g2);
+    YEW_ASSERT(g3 >= 3U);
+    t0 = yew_tab_open(&a, pa);
+    yew_group_add_member(&a, g3, t0);
     bytebuf_init(&doc);
-    sag_state_emit(&a, &doc);
+    yew_state_emit(&a, &doc);
 
     (void)rs_apply(&f, &b, &doc);
-    SAG_ASSERT_EQ_U64(b.groups.v.len, 1U);
+    YEW_ASSERT_EQ_U64(b.groups.v.len, 1U);
     /* Fresh and monotonic from 1 — emphatically not g3's number. */
-    SAG_ASSERT_EQ_U64(b.groups.v.data[0].id, 1U);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&b, 1)->group_id, 1U);
+    YEW_ASSERT_EQ_U64(b.groups.v.data[0].id, 1U);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&b, 1)->group_id, 1U);
 
     bytebuf_free(&doc);
-    sag_ed_free(&a);
-    sag_ed_free(&b);
+    yew_ed_free(&a);
+    yew_ed_free(&b);
     rs_remove(&f);
 }
 
@@ -269,18 +269,18 @@ void test_ws_restore_missing_group_record_ungroups_the_tab(void)
     bytebuf_append(&doc, (const u8 *)text, strlen(text));
 
     (void)rs_apply(&f, &b, &doc);
-    SAG_ASSERT_EQ_I64(sag_tab_count(&b), 2);
+    YEW_ASSERT_EQ_I64(yew_tab_count(&b), 2);
     /*
      * Group 1 exists and is live.  A "reuse the file's number" reader
      * would resolve 99 to nothing and might fall back to it; this
      * asserts the tab is ungrouped instead.
      */
-    SAG_ASSERT_EQ_U64(sag_tab_at(&b, 1)->group_id, 0U);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&b, 1)->group_id, 0U);
     /* And the empty group did not survive step 7. */
-    SAG_ASSERT_EQ_U64(b.groups.v.len, 0U);
+    YEW_ASSERT_EQ_U64(b.groups.v.len, 0U);
 
     bytebuf_free(&doc);
-    sag_ed_free(&b);
+    yew_ed_free(&b);
     rs_remove(&f);
 }
 
@@ -306,31 +306,31 @@ void test_ws_restore_of_forty_tabs_reads_one_file(void)
 
     rs_make(&f);
     rs_ed(&f, &a);
-    gid = sag_group_create(&a, f.work, "many");
+    gid = yew_group_create(&a, f.work, "many");
     for (i = 0; i < 40; i++) {
         int t;
 
         (void)snprintf(name, sizeof(name), "f%02d.txt", i);
         rs_file(&f, name, "body\n", path, sizeof(path));
-        t = sag_tab_open(&a, path);
-        SAG_ASSERT(t >= 0);
-        sag_group_add_member(&a, gid, t);
+        t = yew_tab_open(&a, path);
+        YEW_ASSERT(t >= 0);
+        yew_group_add_member(&a, gid, t);
     }
     bytebuf_init(&doc);
-    sag_state_emit(&a, &doc);
+    yew_state_emit(&a, &doc);
 
-    sag_file_load_count_reset();
+    yew_file_load_count_reset();
     (void)rs_apply(&f, &b, &doc);
-    reads = sag_file_load_count();
-    SAG_ASSERT_EQ_I64(sag_tab_count(&b), 41);
-    SAG_ASSERT_EQ_U64(reads, 1U);
+    reads = yew_file_load_count();
+    YEW_ASSERT_EQ_I64(yew_tab_count(&b), 41);
+    YEW_ASSERT_EQ_U64(reads, 1U);
     /* And switching to a second member performs the second. */
-    sag_tab_switch(&b, 2);
-    SAG_ASSERT_EQ_U64(sag_file_load_count(), 2U);
+    yew_tab_switch(&b, 2);
+    YEW_ASSERT_EQ_U64(yew_file_load_count(), 2U);
 
     bytebuf_free(&doc);
-    sag_ed_free(&a);
-    sag_ed_free(&b);
+    yew_ed_free(&a);
+    yew_ed_free(&b);
     rs_remove(&f);
 }
 
@@ -352,43 +352,43 @@ void test_ws_restore_rebuilds_the_pane_tree(void)
     rs_make(&f);
     rs_file(&f, "a.txt", "one\ntwo\nthree\nfour\nfive\n", pa, sizeof(pa));
     rs_ed(&f, &a);
-    SAG_ASSERT(sag_tab_open(&a, pa) >= 0);
-    sag_tab_switch(&a, 1);
+    YEW_ASSERT(yew_tab_open(&a, pa) >= 0);
+    yew_tab_switch(&a, 1);
     /* The switch swapped in a tree that has never been laid out, and a
      * split refuses without a rect to divide. */
-    sag_layout_compute(a.pane_root, (Rect){0U, 0U, 80U, 24U});
-    /* sag_pane_split mutates the leaf in place and returns the NEW
+    yew_layout_compute(a.pane_root, (Rect){0U, 0U, 80U, 24U});
+    /* yew_pane_split mutates the leaf in place and returns the NEW
      * leaf, so focus has to follow the return value. */
-    nu = sag_pane_split(&a, a.focus, SAG_SPLIT_H);
-    SAG_ASSERT_NOT_NULL(nu);
+    nu = yew_pane_split(&a, a.focus, YEW_SPLIT_H);
+    YEW_ASSERT_NOT_NULL(nu);
     a.focus = nu;
     a.tabs.v.data[1].focus = nu;
-    SAG_ASSERT(sag_pane_resize(a.tabs.v.data[1].root, 8));
+    YEW_ASSERT(yew_pane_resize(a.tabs.v.data[1].root, 8));
     bytebuf_init(&doc);
-    sag_state_emit(&a, &doc);
+    yew_state_emit(&a, &doc);
 
     (void)rs_apply(&f, &b, &doc);
-    t = sag_tab_at(&b, 1);
-    SAG_ASSERT_NOT_NULL(t);
-    SAG_ASSERT_NOT_NULL(t->root);
-    SAG_ASSERT(!t->root->is_leaf);
-    SAG_ASSERT_EQ_I64(t->root->dir, SAG_SPLIT_H);
-    SAG_ASSERT_EQ_U64(sag_pane_leaf_count(t->root), 2U);
+    t = yew_tab_at(&b, 1);
+    YEW_ASSERT_NOT_NULL(t);
+    YEW_ASSERT_NOT_NULL(t->root);
+    YEW_ASSERT(!t->root->is_leaf);
+    YEW_ASSERT_EQ_I64(t->root->dir, YEW_SPLIT_H);
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(t->root), 2U);
     /*
      * The ratio survives as PERMILLE, so the two sides agree to within
      * a thousandth rather than exactly — which is the whole reason the
      * format has no floats.
      */
-    SAG_ASSERT_EQ_I64(sag_ratio_to_permille(t->root->ratio),
-                      sag_ratio_to_permille(a.tabs.v.data[1].root->ratio));
+    YEW_ASSERT_EQ_I64(yew_ratio_to_permille(t->root->ratio),
+                      yew_ratio_to_permille(a.tabs.v.data[1].root->ratio));
     /* Both leaves show the tab's own buffer, not the scratch. */
-    SAG_ASSERT_NOT_NULL(t->root->a->win);
-    SAG_ASSERT_NOT_NULL(t->root->b->win);
-    SAG_ASSERT(t->root->a->win != t->root->b->win);
+    YEW_ASSERT_NOT_NULL(t->root->a->win);
+    YEW_ASSERT_NOT_NULL(t->root->b->win);
+    YEW_ASSERT(t->root->a->win != t->root->b->win);
 
     bytebuf_free(&doc);
-    sag_ed_free(&a);
-    sag_ed_free(&b);
+    yew_ed_free(&a);
+    yew_ed_free(&b);
     rs_remove(&f);
 }
 
@@ -414,25 +414,25 @@ void test_ws_restore_clamps_the_viewport_without_following(void)
         at += (size_t)snprintf(body + at, sizeof(body) - at, "line %u\n", i);
     rs_file(&f, "a.txt", body, pa, sizeof(pa));
     rs_ed(&f, &a);
-    SAG_ASSERT(sag_tab_open(&a, pa) >= 0);
-    sag_tab_switch(&a, 1);
-    sag_layout_compute(a.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT(yew_tab_open(&a, pa) >= 0);
+    yew_tab_switch(&a, 1);
+    yew_layout_compute(a.pane_root, (Rect){0U, 0U, 80U, 24U});
     /* Cursor at the top, view scrolled far down: a state follow would
      * destroy and clamp preserves. */
     a.win->cs.curs.data[a.win->cs.primary].pos = BYTEOFF(0U);
     a.win->vp.top = LINENO(100U);
     bytebuf_init(&doc);
-    sag_state_emit(&a, &doc);
+    yew_state_emit(&a, &doc);
 
     (void)rs_apply(&f, &b, &doc);
-    w = sag_tab_at(&b, 1)->root->win;
-    SAG_ASSERT_NOT_NULL(w);
-    SAG_ASSERT_EQ_U64(w->vp.top.v, 100U);
-    SAG_ASSERT_EQ_U64(w->cs.curs.data[w->cs.primary].pos.v, 0U);
+    w = yew_tab_at(&b, 1)->root->win;
+    YEW_ASSERT_NOT_NULL(w);
+    YEW_ASSERT_EQ_U64(w->vp.top.v, 100U);
+    YEW_ASSERT_EQ_U64(w->cs.curs.data[w->cs.primary].pos.v, 0U);
 
     bytebuf_free(&doc);
-    sag_ed_free(&a);
-    sag_ed_free(&b);
+    yew_ed_free(&a);
+    yew_ed_free(&b);
     rs_remove(&f);
 }
 
@@ -450,33 +450,33 @@ void test_ws_restore_brings_back_cursors_and_goal(void)
     rs_make(&f);
     rs_file(&f, "a.txt", "alpha\nbravo\ncharlie\ndelta\n", pa, sizeof(pa));
     rs_ed(&f, &a);
-    SAG_ASSERT(sag_tab_open(&a, pa) >= 0);
-    sag_tab_switch(&a, 1);
+    YEW_ASSERT(yew_tab_open(&a, pa) >= 0);
+    yew_tab_switch(&a, 1);
     a.win->cs.curs.data[a.win->cs.primary].pos = BYTEOFF(2U);
     a.win->cs.curs.data[a.win->cs.primary].anchor = BYTEOFF(2U);
-    a.win->cs.curs.data[a.win->cs.primary].goal_col.v = SAG_GCOL_EOL;
+    a.win->cs.curs.data[a.win->cs.primary].goal_col.v = YEW_GCOL_EOL;
     extra.pos = BYTEOFF(8U);
     extra.anchor = BYTEOFF(8U);
     extra.goal_col.v = 3U;
-    SAG_ASSERT(sag_cset_add(&a.win->cs, extra));
+    YEW_ASSERT(yew_cset_add(&a.win->cs, extra));
     bytebuf_init(&doc);
-    sag_state_emit(&a, &doc);
+    yew_state_emit(&a, &doc);
 
     (void)rs_apply(&f, &b, &doc);
-    w = sag_tab_at(&b, 1)->root->win;
-    SAG_ASSERT_NOT_NULL(w);
-    SAG_ASSERT_EQ_U64(w->cs.curs.len, 2U);
-    SAG_ASSERT_EQ_U64(w->cs.curs.data[0].pos.v, 2U);
-    /* -1 in the file, SAG_GCOL_EOL in memory: the one value that does
+    w = yew_tab_at(&b, 1)->root->win;
+    YEW_ASSERT_NOT_NULL(w);
+    YEW_ASSERT_EQ_U64(w->cs.curs.len, 2U);
+    YEW_ASSERT_EQ_U64(w->cs.curs.data[0].pos.v, 2U);
+    /* -1 in the file, YEW_GCOL_EOL in memory: the one value that does
      * not fit i64 and would otherwise force an unsigned special case
      * on every reader. */
-    SAG_ASSERT_EQ_U64(w->cs.curs.data[0].goal_col.v, SAG_GCOL_EOL);
-    SAG_ASSERT_EQ_U64(w->cs.curs.data[1].pos.v, 8U);
-    SAG_ASSERT_EQ_U64(w->cs.curs.data[1].goal_col.v, 3U);
+    YEW_ASSERT_EQ_U64(w->cs.curs.data[0].goal_col.v, YEW_GCOL_EOL);
+    YEW_ASSERT_EQ_U64(w->cs.curs.data[1].pos.v, 8U);
+    YEW_ASSERT_EQ_U64(w->cs.curs.data[1].goal_col.v, 3U);
 
     bytebuf_free(&doc);
-    sag_ed_free(&a);
-    sag_ed_free(&b);
+    yew_ed_free(&a);
+    yew_ed_free(&b);
     rs_remove(&f);
 }
 
@@ -502,25 +502,25 @@ void test_ws_restore_keeps_tabs_whose_files_vanished(void)
     rs_file(&f, "a.txt", "alpha\n", pa, sizeof(pa));
     rs_file(&f, "gone.txt", "bravo\n", pb, sizeof(pb));
     rs_ed(&f, &a);
-    SAG_ASSERT(sag_tab_open(&a, pa) >= 0);
-    t1 = sag_tab_open(&a, pb);
-    SAG_ASSERT(t1 >= 0);
+    YEW_ASSERT(yew_tab_open(&a, pa) >= 0);
+    t1 = yew_tab_open(&a, pb);
+    YEW_ASSERT(t1 >= 0);
     bytebuf_init(&doc);
-    sag_state_emit(&a, &doc);
+    yew_state_emit(&a, &doc);
     /* The file goes away between the save and the restore, which is
      * the ordinary case: a branch switch, a rename, a rebuild. */
-    SAG_ASSERT_EQ_I64(unlink(pb), 0);
+    YEW_ASSERT_EQ_I64(unlink(pb), 0);
 
     (void)rs_apply(&f, &b, &doc);
-    SAG_ASSERT_EQ_I64(sag_tab_count(&b), 3);
-    SAG_ASSERT_EQ_STR(sag_tab_at(&b, 2)->path, pb);
-    SAG_ASSERT(sag_tab_at(&b, 2)->missing_at_restore);
-    SAG_ASSERT(!sag_tab_at(&b, 1)->missing_at_restore);
-    SAG_ASSERT_EQ_U64(b.state.missing_count, 1U);
+    YEW_ASSERT_EQ_I64(yew_tab_count(&b), 3);
+    YEW_ASSERT_EQ_STR(yew_tab_at(&b, 2)->path, pb);
+    YEW_ASSERT(yew_tab_at(&b, 2)->missing_at_restore);
+    YEW_ASSERT(!yew_tab_at(&b, 1)->missing_at_restore);
+    YEW_ASSERT_EQ_U64(b.state.missing_count, 1U);
 
     bytebuf_free(&doc);
-    sag_ed_free(&a);
-    sag_ed_free(&b);
+    yew_ed_free(&a);
+    yew_ed_free(&b);
     rs_remove(&f);
 }
 
@@ -539,22 +539,22 @@ void test_ws_restore_group_survives_a_missing_member(void)
     rs_file(&f, "a.txt", "alpha\n", pa, sizeof(pa));
     rs_file(&f, "gone.txt", "bravo\n", pb, sizeof(pb));
     rs_ed(&f, &a);
-    gid = sag_group_create(&a, f.work, "grp");
-    sag_group_add_member(&a, gid, sag_tab_open(&a, pa));
-    sag_group_add_member(&a, gid, sag_tab_open(&a, pb));
+    gid = yew_group_create(&a, f.work, "grp");
+    yew_group_add_member(&a, gid, yew_tab_open(&a, pa));
+    yew_group_add_member(&a, gid, yew_tab_open(&a, pb));
     bytebuf_init(&doc);
-    sag_state_emit(&a, &doc);
-    SAG_ASSERT_EQ_I64(unlink(pb), 0);
+    yew_state_emit(&a, &doc);
+    YEW_ASSERT_EQ_I64(unlink(pb), 0);
 
     (void)rs_apply(&f, &b, &doc);
-    SAG_ASSERT_EQ_U64(b.groups.v.len, 1U);
-    SAG_ASSERT_EQ_I64(sag_group_member_count(&b, b.groups.v.data[0].id), 2);
-    SAG_ASSERT(sag_tab_at(&b, 2)->missing_at_restore);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&b, 2)->group_ordinal, 2U);
+    YEW_ASSERT_EQ_U64(b.groups.v.len, 1U);
+    YEW_ASSERT_EQ_I64(yew_group_member_count(&b, b.groups.v.data[0].id), 2);
+    YEW_ASSERT(yew_tab_at(&b, 2)->missing_at_restore);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&b, 2)->group_ordinal, 2U);
 
     bytebuf_free(&doc);
-    sag_ed_free(&a);
-    sag_ed_free(&b);
+    yew_ed_free(&a);
+    yew_ed_free(&b);
     rs_remove(&f);
 }
 
@@ -572,20 +572,20 @@ void test_ws_restore_treats_a_directory_as_missing(void)
     rs_file(&f, "a.txt", "alpha\n", pa, sizeof(pa));
     rs_file(&f, "swap.txt", "bravo\n", pb, sizeof(pb));
     rs_ed(&f, &a);
-    SAG_ASSERT(sag_tab_open(&a, pa) >= 0);
-    SAG_ASSERT(sag_tab_open(&a, pb) >= 0);
+    YEW_ASSERT(yew_tab_open(&a, pa) >= 0);
+    YEW_ASSERT(yew_tab_open(&a, pb) >= 0);
     bytebuf_init(&doc);
-    sag_state_emit(&a, &doc);
-    SAG_ASSERT_EQ_I64(unlink(pb), 0);
-    SAG_ASSERT_EQ_I64(mkdir(pb, 0700), 0);
+    yew_state_emit(&a, &doc);
+    YEW_ASSERT_EQ_I64(unlink(pb), 0);
+    YEW_ASSERT_EQ_I64(mkdir(pb, 0700), 0);
 
     (void)rs_apply(&f, &b, &doc);
-    SAG_ASSERT(sag_tab_at(&b, 2)->missing_at_restore);
-    SAG_ASSERT_EQ_U64(b.state.missing_count, 1U);
+    YEW_ASSERT(yew_tab_at(&b, 2)->missing_at_restore);
+    YEW_ASSERT_EQ_U64(b.state.missing_count, 1U);
 
     bytebuf_free(&doc);
-    sag_ed_free(&a);
-    sag_ed_free(&b);
+    yew_ed_free(&a);
+    yew_ed_free(&b);
     rs_remove(&f);
 }
 
@@ -617,22 +617,22 @@ void test_ws_restore_save_restore_save_is_a_fixpoint(void)
     rs_file(&f, "a.txt", "alpha\nbravo\n", pa, sizeof(pa));
     rs_file(&f, "b.txt", "charlie\n", pb, sizeof(pb));
     rs_ed(&f, &a);
-    SAG_ASSERT(sag_tab_open(&a, pa) >= 0);
-    t1 = sag_tab_open(&a, pb);
-    gid = sag_group_create(&a, f.work, "grp");
-    sag_group_add_member(&a, gid, t1);
-    sag_tab_switch(&a, t1);
-    sag_layout_compute(a.pane_root, (Rect){0U, 0U, 80U, 24U});
-    nu = sag_pane_split(&a, a.focus, SAG_SPLIT_V);
-    SAG_ASSERT_NOT_NULL(nu);
+    YEW_ASSERT(yew_tab_open(&a, pa) >= 0);
+    t1 = yew_tab_open(&a, pb);
+    gid = yew_group_create(&a, f.work, "grp");
+    yew_group_add_member(&a, gid, t1);
+    yew_tab_switch(&a, t1);
+    yew_layout_compute(a.pane_root, (Rect){0U, 0U, 80U, 24U});
+    nu = yew_pane_split(&a, a.focus, YEW_SPLIT_V);
+    YEW_ASSERT_NOT_NULL(nu);
     a.focus = nu;
     a.tabs.v.data[t1].focus = nu;
     bytebuf_init(&first);
     bytebuf_init(&second);
-    sag_state_emit(&a, &first);
+    yew_state_emit(&a, &first);
 
     (void)rs_apply(&f, &b, &first);
-    sag_state_emit(&b, &second);
+    yew_state_emit(&b, &second);
     /*
      * The scratch tab the second editor started with has no path, so
      * it is not emitted — the two documents describe the same tabs.
@@ -646,14 +646,14 @@ void test_ws_restore_save_restore_save_is_a_fixpoint(void)
         FlParseErr err;
 
         arena_init(&ar);
-        la = sag_fl_parse(&ar, first.data, first.len, &err);
-        lb = sag_fl_parse(&ar, second.data, second.len, &err);
-        SAG_ASSERT_NOT_NULL(la);
-        SAG_ASSERT_NOT_NULL(lb);
-        SAG_ASSERT_EQ_U64(sag_fl_len(sag_fl_get(la, "tabs")),
-                          sag_fl_len(sag_fl_get(lb, "tabs")));
-        SAG_ASSERT_EQ_U64(sag_fl_len(sag_fl_get(la, "groups")),
-                          sag_fl_len(sag_fl_get(lb, "groups")));
+        la = yew_fl_parse(&ar, first.data, first.len, &err);
+        lb = yew_fl_parse(&ar, second.data, second.len, &err);
+        YEW_ASSERT_NOT_NULL(la);
+        YEW_ASSERT_NOT_NULL(lb);
+        YEW_ASSERT_EQ_U64(yew_fl_len(yew_fl_get(la, "tabs")),
+                          yew_fl_len(yew_fl_get(lb, "tabs")));
+        YEW_ASSERT_EQ_U64(yew_fl_len(yew_fl_get(la, "groups")),
+                          yew_fl_len(yew_fl_get(lb, "groups")));
         arena_free_all(&ar);
     }
     /* And a second emission of the SAME editor is byte-identical. */
@@ -661,16 +661,16 @@ void test_ws_restore_save_restore_save_is_a_fixpoint(void)
         Bytebuf third;
 
         bytebuf_init(&third);
-        sag_state_emit(&b, &third);
-        SAG_ASSERT_EQ_U64(second.len, third.len);
-        SAG_ASSERT_EQ_MEM(second.data, third.data, second.len);
+        yew_state_emit(&b, &third);
+        YEW_ASSERT_EQ_U64(second.len, third.len);
+        YEW_ASSERT_EQ_MEM(second.data, third.data, second.len);
         bytebuf_free(&third);
     }
 
     bytebuf_free(&first);
     bytebuf_free(&second);
-    sag_ed_free(&a);
-    sag_ed_free(&b);
+    yew_ed_free(&a);
+    yew_ed_free(&b);
     rs_remove(&f);
 }
 
@@ -681,7 +681,7 @@ void test_ws_restore_save_restore_save_is_a_fixpoint(void)
 /*
  * Keys this build has never heard of survive parse -> emit.
  *
- * The option model is Sprint 36's.  Until it exists, an older sagitta
+ * The option model is Sprint 36's.  Until it exists, an older yew
  * opening a newer session's workspace must not delete its settings —
  * and since the document is rewritten in full, dropping them once makes
  * it permanent.
@@ -703,20 +703,20 @@ void test_ws_restore_preserves_unknown_options(void)
     bytebuf_append(&doc, (const u8 *)text, strlen(text));
 
     (void)rs_apply(&f, &b, &doc);
-    SAG_ASSERT_NOT_NULL(b.state.options);
-    SAG_ASSERT_EQ_I64(sag_fl_int_or(sag_fl_get(b.state.options,
+    YEW_ASSERT_NOT_NULL(b.state.options);
+    YEW_ASSERT_EQ_I64(yew_fl_int_or(yew_fl_get(b.state.options,
                                                "from.the.future"),
                                     0),
                       42);
-    sag_state_emit(&b, &out);
+    yew_state_emit(&b, &out);
     bytebuf_push_u8(&out, 0U);
     out.len--;
-    SAG_ASSERT_NOT_NULL(strstr((const char *)out.data, "from.the.future"));
-    SAG_ASSERT_NOT_NULL(strstr((const char *)out.data, "42"));
+    YEW_ASSERT_NOT_NULL(strstr((const char *)out.data, "from.the.future"));
+    YEW_ASSERT_NOT_NULL(strstr((const char *)out.data, "42"));
 
     bytebuf_free(&doc);
     bytebuf_free(&out);
-    sag_ed_free(&b);
+    yew_ed_free(&b);
     rs_remove(&f);
 }
 
@@ -744,33 +744,33 @@ void test_ws_restore_marks_cost_no_read_until_hydration(void)
     rs_file(&f, "a.txt", "alpha\n", pa, sizeof(pa));
     rs_file(&f, "b.txt", "bravo\ncharlie\n", pb, sizeof(pb));
     rs_ed(&f, &a);
-    SAG_ASSERT(sag_tab_open(&a, pa) >= 0);
-    SAG_ASSERT(sag_tab_open(&a, pb) >= 0);
-    sag_tab_switch(&a, 2);
-    SAG_ASSERT(sag_ed_mark_set(&a, sag_ed_doc(&a), (u8)'q', BYTEOFF(6U)));
-    sag_tab_switch(&a, 1);
+    YEW_ASSERT(yew_tab_open(&a, pa) >= 0);
+    YEW_ASSERT(yew_tab_open(&a, pb) >= 0);
+    yew_tab_switch(&a, 2);
+    YEW_ASSERT(yew_ed_mark_set(&a, yew_ed_doc(&a), (u8)'q', BYTEOFF(6U)));
+    yew_tab_switch(&a, 1);
     bytebuf_init(&doc);
-    sag_state_emit(&a, &doc);
+    yew_state_emit(&a, &doc);
 
-    sag_file_load_count_reset();
+    yew_file_load_count_reset();
     (void)rs_apply(&f, &b, &doc);
     /* Exactly the active tab's read, even though a mark exists in the
      * other file. */
-    SAG_ASSERT_EQ_U64(sag_file_load_count(), 1U);
-    buf = sag_ws_buf_by_id(&b, sag_tab_at(&b, 2)->buffer_id);
-    SAG_ASSERT_NOT_NULL(buf);
-    SAG_ASSERT(!sag_buf_resident(buf));
-    SAG_ASSERT(buf->pending_mark_set[(u32)('q' - 'a')]);
+    YEW_ASSERT_EQ_U64(yew_file_load_count(), 1U);
+    buf = yew_ws_buf_by_id(&b, yew_tab_at(&b, 2)->buffer_id);
+    YEW_ASSERT_NOT_NULL(buf);
+    YEW_ASSERT(!yew_buf_resident(buf));
+    YEW_ASSERT(buf->pending_mark_set[(u32)('q' - 'a')]);
     /* The read happens on the switch, and the mark becomes real. */
-    sag_tab_switch(&b, 2);
-    SAG_ASSERT(sag_buf_resident(buf));
-    SAG_ASSERT(!buf->pending_mark_set[(u32)('q' - 'a')]);
-    SAG_ASSERT(sag_ed_mark_get(&b, buf, (u8)'q', &at));
-    SAG_ASSERT_EQ_U64(at.v, 6U);
+    yew_tab_switch(&b, 2);
+    YEW_ASSERT(yew_buf_resident(buf));
+    YEW_ASSERT(!buf->pending_mark_set[(u32)('q' - 'a')]);
+    YEW_ASSERT(yew_ed_mark_get(&b, buf, (u8)'q', &at));
+    YEW_ASSERT_EQ_U64(at.v, 6U);
 
     bytebuf_free(&doc);
-    sag_ed_free(&a);
-    sag_ed_free(&b);
+    yew_ed_free(&a);
+    yew_ed_free(&b);
     rs_remove(&f);
 }
 
@@ -778,7 +778,7 @@ void test_ws_restore_marks_cost_no_read_until_hydration(void)
 /* End to end, through the filesystem                               */
 /* ---------------------------------------------------------------- */
 
-/* sag_ws_restore against a document sag_state_save actually wrote. */
+/* yew_ws_restore against a document yew_state_save actually wrote. */
 void test_ws_restore_reads_what_save_wrote(void)
 {
     RsFix f;
@@ -789,25 +789,25 @@ void test_ws_restore_reads_what_save_wrote(void)
     rs_make(&f);
     rs_file(&f, "a.txt", "alpha\n", pa, sizeof(pa));
     rs_ed(&f, &a);
-    sag_state_open(&a);
-    SAG_ASSERT(a.state.writer);
-    SAG_ASSERT(sag_tab_open(&a, pa) >= 0);
-    SAG_ASSERT(sag_state_save(&a));
+    yew_state_open(&a);
+    YEW_ASSERT(a.state.writer);
+    YEW_ASSERT(yew_tab_open(&a, pa) >= 0);
+    YEW_ASSERT(yew_state_save(&a));
     /* Close releases the lock, so the next editor is the writer. */
-    sag_state_close(&a);
+    yew_state_close(&a);
 
     rs_ed(&f, &b);
-    sag_state_open(&b);
-    SAG_ASSERT(b.state.writer);
-    SAG_ASSERT_EQ_I64(sag_ws_restore(&b), SAG_WS_RESTORED);
-    SAG_ASSERT_EQ_I64(sag_tab_count(&b), 2);
-    SAG_ASSERT_EQ_STR(sag_tab_at(&b, 1)->path, pa);
+    yew_state_open(&b);
+    YEW_ASSERT(b.state.writer);
+    YEW_ASSERT_EQ_I64(yew_ws_restore(&b), YEW_WS_RESTORED);
+    YEW_ASSERT_EQ_I64(yew_tab_count(&b), 2);
+    YEW_ASSERT_EQ_STR(yew_tab_at(&b, 1)->path, pa);
     /* A restore is not a change: it must not schedule a save. */
-    SAG_ASSERT(!b.state.dirty);
-    sag_state_close(&b);
+    YEW_ASSERT(!b.state.dirty);
+    yew_state_close(&b);
 
-    sag_ed_free(&a);
-    sag_ed_free(&b);
+    yew_ed_free(&a);
+    yew_ed_free(&b);
     rs_remove(&f);
 }
 
@@ -820,11 +820,11 @@ void test_ws_restore_absent_state_is_fresh(void)
 
     rs_make(&f);
     rs_ed(&f, &b);
-    sag_state_open(&b);
-    SAG_ASSERT_EQ_I64(sag_ws_restore(&b), SAG_WS_FRESH);
-    SAG_ASSERT_EQ_I64(sag_tab_count(&b), 1);
-    sag_state_close(&b);
-    sag_ed_free(&b);
+    yew_state_open(&b);
+    YEW_ASSERT_EQ_I64(yew_ws_restore(&b), YEW_WS_FRESH);
+    YEW_ASSERT_EQ_I64(yew_tab_count(&b), 1);
+    yew_state_close(&b);
+    yew_ed_free(&b);
     rs_remove(&f);
 }
 
@@ -836,8 +836,8 @@ void test_ws_restore_stateless_is_fresh(void)
 
     rs_make(&f);
     rs_ed(&f, &b);
-    SAG_ASSERT(!b.state.ready);
-    SAG_ASSERT_EQ_I64(sag_ws_restore(&b), SAG_WS_FRESH);
-    sag_ed_free(&b);
+    YEW_ASSERT(!b.state.ready);
+    YEW_ASSERT_EQ_I64(yew_ws_restore(&b), YEW_WS_FRESH);
+    yew_ed_free(&b);
     rs_remove(&f);
 }

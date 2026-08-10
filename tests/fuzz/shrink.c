@@ -76,7 +76,7 @@ static void trace_reserve(Trace *trace, size_t need)
         }
         cap *= 2U;
     }
-    trace->ops = sag_xreallocarray(trace->ops, cap, sizeof(*trace->ops));
+    trace->ops = yew_xreallocarray(trace->ops, cap, sizeof(*trace->ops));
     trace->cap = cap;
 }
 
@@ -155,7 +155,7 @@ static bool one_arg_kind(const char *name, TraceOpKind *kind)
     };
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(table); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(table); i++) {
         if (strcmp(name, table[i].name) == 0) {
             *kind = table[i].kind;
             return true;
@@ -176,7 +176,7 @@ static bool no_arg_kind(const char *name, TraceOpKind *kind)
     };
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(table); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(table); i++) {
         if (strcmp(name, table[i].name) == 0) {
             *kind = table[i].kind;
             return true;
@@ -259,7 +259,7 @@ bool trace_parse(Trace *trace, const u8 *text, size_t len,
         set_why(why, why_cap, 1U, "trace too large");
         return false;
     }
-    copy = sag_xmalloc(len + 1U);
+    copy = yew_xmalloc(len + 1U);
     memcpy(copy, text, len);
     copy[len] = '\0';
     cursor = copy;
@@ -279,7 +279,7 @@ bool trace_parse(Trace *trace, const u8 *text, size_t len,
             line[--line_len] = '\0';
         if (line_len == 0U)
             continue;
-        if (strcmp(line, "# sagitta textbuf trace v1") == 0) {
+        if (strcmp(line, "# yew textbuf trace v1") == 0) {
             saw_magic = true;
             continue;
         }
@@ -318,8 +318,8 @@ static const char *op_name(TraceOpKind kind)
         "save", "check"
     };
 
-    if ((size_t)kind >= SAG_ARRAY_LEN(names))
-        SAG_BUG("trace_write: invalid operation kind");
+    if ((size_t)kind >= YEW_ARRAY_LEN(names))
+        YEW_BUG("trace_write: invalid operation kind");
     return names[(size_t)kind];
 }
 
@@ -329,8 +329,8 @@ void trace_write(const Trace *trace, Bytebuf *out)
     size_t i;
 
     if (trace == NULL || out == NULL)
-        SAG_BUG("trace_write: invalid argument");
-    bytebuf_printf(out, "# sagitta textbuf trace v1\n");
+        YEW_BUG("trace_write: invalid argument");
+    bytebuf_printf(out, "# yew textbuf trace v1\n");
     bytebuf_printf(out, "# seed=0x%016llx mix=%s base=%s\n",
                    (unsigned long long)trace->seed, trace->mix, trace->base);
     for (i = 0U; i < trace->len; i++) {
@@ -365,14 +365,14 @@ void trace_write_c_snippet(const Trace *trace, Bytebuf *out)
     size_t i;
 
     if (trace == NULL || out == NULL)
-        SAG_BUG("trace_write_c_snippet: invalid argument");
-    bytebuf_printf(out, "TextBuf *tb = sag_textbuf_from_bytes(NULL, 0U);\n");
+        YEW_BUG("trace_write_c_snippet: invalid argument");
+    bytebuf_printf(out, "TextBuf *tb = yew_textbuf_from_bytes(NULL, 0U);\n");
     for (i = 0U; i < trace->len; i++) {
         const TraceOp *op = &trace->ops[i];
         size_t j;
 
         if (op->kind == TRACE_INS) {
-            bytebuf_printf(out, "sag_textbuf_insert(tb, BYTEOFF(%lluU), ",
+            bytebuf_printf(out, "yew_textbuf_insert(tb, BYTEOFF(%lluU), ",
                            (unsigned long long)op->a);
             if (op->payload.len == 0U) {
                 bytebuf_printf(out, "NULL, 0U);\n");
@@ -385,7 +385,7 @@ void trace_write_c_snippet(const Trace *trace, Bytebuf *out)
             bytebuf_printf(out, "}, %zuU);\n", op->payload.len);
         } else if (op->kind == TRACE_DEL) {
             bytebuf_printf(out,
-                           "sag_textbuf_delete(tb, (Span){%lluU, %lluU});\n",
+                           "yew_textbuf_delete(tb, (Span){%lluU, %lluU});\n",
                            (unsigned long long)op->a,
                            (unsigned long long)op->b);
         } else {
@@ -393,7 +393,7 @@ void trace_write_c_snippet(const Trace *trace, Bytebuf *out)
                            (unsigned long long)op->a);
         }
     }
-    bytebuf_printf(out, "sag_textbuf_check(tb);\nsag_textbuf_free(tb);\n");
+    bytebuf_printf(out, "yew_textbuf_check(tb);\nsag_textbuf_free(tb);\n");
 }
 
 bool trace_failure_equal(const TraceFailure *a, const TraceFailure *b)
@@ -417,7 +417,7 @@ static u64 monotonic_ns(void)
     struct timespec ts;
 
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
-        SAG_BUG("shrinker: CLOCK_MONOTONIC failed");
+        YEW_BUG("shrinker: CLOCK_MONOTONIC failed");
     return (u64)ts.tv_sec * UINT64_C(1000000000) + (u64)ts.tv_nsec;
 }
 

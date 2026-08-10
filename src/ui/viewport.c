@@ -14,14 +14,14 @@
 static TextBuf *vp_text(const Win *w)
 {
     if (w == NULL || w->buf == NULL || w->buf->tb == NULL)
-        SAG_BUG("viewport: missing window buffer");
+        YEW_BUG("viewport: missing window buffer");
     return w->buf->tb;
 }
 
 static Cursor *vp_cursor(Win *w)
 {
     if (w->cs.curs.len == 0U || (size_t)w->cs.primary >= w->cs.curs.len)
-        SAG_BUG("viewport: missing primary cursor");
+        YEW_BUG("viewport: missing primary cursor");
     return &w->cs.curs.data[w->cs.primary];
 }
 
@@ -32,8 +32,8 @@ static u64 sat_add(u64 a, u64 b)
 
 static u64 line_content_hi(const TextBuf *tb, LineNo line, Span span)
 {
-    if (line.v + 1U < sag_textbuf_line_count(tb)) {
-        ByteOff end = sag_grapheme_prev_boundary(tb, BYTEOFF(span.hi));
+    if (line.v + 1U < yew_textbuf_line_count(tb)) {
+        ByteOff end = yew_grapheme_prev_boundary(tb, BYTEOFF(span.hi));
         return end.v;
     }
     return span.hi;
@@ -58,10 +58,10 @@ static bool cp_is_dash_or_slash(u32 cp)
            cp == 0x2014U;
 }
 
-static u32 cluster_cells(const SagTextCluster *cl, CCol at)
+static u32 cluster_cells(const YewTextCluster *cl, CCol at)
 {
     if (cl->tab)
-        return sag_tab_cells(at, SAG_VP_TABWIDTH);
+        return yew_tab_cells(at, YEW_VP_TABWIDTH);
     return cl->cells;
 }
 
@@ -76,11 +76,11 @@ static u64 wrap_next(const TextBuf *tb, Span line, u64 start, u16 cols)
 
     while (pos < line.hi) {
         u64 before = pos;
-        SagTextCluster cl;
+        YewTextCluster cl;
         u32 cells;
 
-        if (!sag_text_cluster_next(tb, line, BYTEOFF(pos), &cl))
-            SAG_BUG("viewport: cluster scan ended early");
+        if (!yew_text_cluster_next(tb, line, BYTEOFF(pos), &cl))
+            YEW_BUG("viewport: cluster scan ended early");
         pos = cl.bytes.hi;
         if (cp_is_cjk(cl.base_cp) && before > start)
             opportunity = before;
@@ -88,11 +88,11 @@ static u64 wrap_next(const TextBuf *tb, Span line, u64 start, u16 cols)
         if (sat_add(used.v, cells) > limit) {
             if (cl.base_cp == (u32)' ') {
                 while (pos < line.hi) {
-                    SagTextCluster next;
+                    YewTextCluster next;
 
-                    if (!sag_text_cluster_next(tb, line, BYTEOFF(pos),
+                    if (!yew_text_cluster_next(tb, line, BYTEOFF(pos),
                                                &next))
-                        SAG_BUG("viewport: space scan ended early");
+                        YEW_BUG("viewport: space scan ended early");
                     if (next.base_cp != (u32)' ')
                         break;
                     pos = next.bytes.hi;
@@ -110,10 +110,10 @@ static u64 wrap_next(const TextBuf *tb, Span line, u64 start, u16 cols)
         if (cp_is_space(cl.base_cp) || cp_is_cjk(cl.base_cp)) {
             opportunity = pos;
         } else if (cp_is_dash_or_slash(cl.base_cp) && pos < line.hi) {
-            SagTextCluster next;
+            YewTextCluster next;
 
-            if (!sag_text_cluster_next(tb, line, BYTEOFF(pos), &next))
-                SAG_BUG("viewport: dash lookahead ended early");
+            if (!yew_text_cluster_next(tb, line, BYTEOFF(pos), &next))
+                YEW_BUG("viewport: dash lookahead ended early");
             if (!cp_is_space(next.base_cp))
                 opportunity = pos;
         }
@@ -123,7 +123,7 @@ static u64 wrap_next(const TextBuf *tb, Span line, u64 start, u16 cols)
 
 static u32 wrap_count_raw(const TextBuf *tb, LineNo line, u16 cols)
 {
-    Span span = sag_textbuf_line_span(tb, line);
+    Span span = yew_textbuf_line_span(tb, line);
     u64 start;
     u32 rows = 0U;
 
@@ -135,10 +135,10 @@ static u32 wrap_count_raw(const TextBuf *tb, LineNo line, u16 cols)
         u64 end = wrap_next(tb, span, start, cols);
 
         if (end <= start)
-            SAG_BUG("viewport: wrap made no progress");
+            YEW_BUG("viewport: wrap made no progress");
         start = end;
         if (rows == UINT32_MAX)
-            SAG_BUG("viewport: too many display rows");
+            YEW_BUG("viewport: too many display rows");
         rows++;
     }
     return rows;
@@ -147,7 +147,7 @@ static u32 wrap_count_raw(const TextBuf *tb, LineNo line, u16 cols)
 static Span wrap_row_raw(const TextBuf *tb, LineNo line, u32 sub,
                          u16 cols)
 {
-    Span content = sag_textbuf_line_span(tb, line);
+    Span content = yew_textbuf_line_span(tb, line);
     u64 start;
     u32 row = 0U;
 
@@ -159,12 +159,12 @@ static Span wrap_row_raw(const TextBuf *tb, LineNo line, u32 sub,
         u64 end = wrap_next(tb, content, start, cols);
 
         if (end <= start)
-            SAG_BUG("viewport: raw wrap made no progress");
+            YEW_BUG("viewport: raw wrap made no progress");
         if (row == sub)
             return (Span){start, end};
         start = end;
         if (row == UINT32_MAX)
-            SAG_BUG("viewport: too many raw display rows");
+            YEW_BUG("viewport: too many raw display rows");
         row++;
     }
     return (Span){content.hi, content.hi};
@@ -173,7 +173,7 @@ static Span wrap_row_raw(const TextBuf *tb, LineNo line, u32 sub,
 static u32 wrap_subrow_raw(const TextBuf *tb, LineNo line, ByteOff pos,
                            u16 cols, Span *row_span)
 {
-    Span content = sag_textbuf_line_span(tb, line);
+    Span content = yew_textbuf_line_span(tb, line);
     u64 start;
     u32 sub = 0U;
 
@@ -187,24 +187,24 @@ static u32 wrap_subrow_raw(const TextBuf *tb, LineNo line, ByteOff pos,
         u64 end = wrap_next(tb, content, start, cols);
 
         if (end <= start)
-            SAG_BUG("viewport: raw wrap made no progress");
+            YEW_BUG("viewport: raw wrap made no progress");
         if (pos.v < end || end == content.hi) {
             *row_span = (Span){start, end};
             return sub;
         }
         start = end;
         if (sub == UINT32_MAX)
-            SAG_BUG("viewport: too many raw display rows");
+            YEW_BUG("viewport: too many raw display rows");
         sub++;
     }
-    SAG_BUG("viewport: position did not map to a raw display row");
+    YEW_BUG("viewport: position did not map to a raw display row");
 }
 
 static void cache_reserve(WrapCache *cache, size_t need)
 {
     if (cache->cap >= need)
         return;
-    cache->rows = sag_xreallocarray(cache->rows, need, sizeof(*cache->rows));
+    cache->rows = yew_xreallocarray(cache->rows, need, sizeof(*cache->rows));
     cache->cap = need;
 }
 
@@ -212,7 +212,7 @@ static void span_cache_reserve(WrapCache *cache, size_t need)
 {
     if (cache->spans_cap >= need)
         return;
-    cache->spans = sag_xreallocarray(cache->spans, need,
+    cache->spans = yew_xreallocarray(cache->spans, need,
                                      sizeof(*cache->spans));
     cache->spans_cap = need;
 }
@@ -221,14 +221,14 @@ static void span_cache_fill(Win *w, LineNo line, u32 first)
 {
     TextBuf *tb = vp_text(w);
     WrapCache *cache = &w->wrap_cache;
-    Span content = sag_textbuf_line_span(tb, line);
+    Span content = yew_textbuf_line_span(tb, line);
     size_t wanted = (size_t)w->vp.rows + 1U;
     u64 start;
     u32 sub = 0U;
 
     content.hi = line_content_hi(tb, line, content);
     if (wanted == 0U)
-        SAG_BUG("viewport: span cache size overflow");
+        YEW_BUG("viewport: span cache size overflow");
     span_cache_reserve(cache, wanted);
     cache->spans_len = 0U;
     cache->spans_line = line;
@@ -248,12 +248,12 @@ static void span_cache_fill(Win *w, LineNo line, u32 first)
         u64 end = wrap_next(tb, content, start, w->vp.cols);
 
         if (end <= start)
-            SAG_BUG("viewport: wrap made no progress");
+            YEW_BUG("viewport: wrap made no progress");
         if (sub >= first)
             cache->spans[cache->spans_len++] = (Span){start, end};
         start = end;
         if (sub == UINT32_MAX)
-            SAG_BUG("viewport: too many display rows");
+            YEW_BUG("viewport: too many display rows");
         sub++;
     }
 }
@@ -262,28 +262,28 @@ static void cache_fill(Win *w, LineNo requested)
 {
     TextBuf *tb = vp_text(w);
     WrapCache *cache = &w->wrap_cache;
-    u64 lines = sag_textbuf_line_count(tb);
+    u64 lines = yew_textbuf_line_count(tb);
     u64 first = w->vp.top.v;
     u64 wanted;
     u64 available;
     size_t i;
 
     if (requested.v < first || requested.v >= sat_add(first,
-            (u64)w->vp.rows + SAG_VP_WRAP_SLACK + 1U))
+            (u64)w->vp.rows + YEW_VP_WRAP_SLACK + 1U))
         first = requested.v;
     if (first >= lines)
         first = lines - 1U;
-    wanted = (u64)w->vp.rows + SAG_VP_WRAP_SLACK + 1U;
+    wanted = (u64)w->vp.rows + YEW_VP_WRAP_SLACK + 1U;
     available = lines - first;
     if (wanted > available)
         wanted = available;
     if (wanted > (u64)SIZE_MAX)
-        SAG_BUG("viewport: wrap cache exceeds address space");
+        YEW_BUG("viewport: wrap cache exceeds address space");
     cache_reserve(cache, (size_t)wanted);
     cache->first = LINENO(first);
     cache->len = (size_t)wanted;
     cache->cols = w->vp.cols;
-    cache->tabwidth = SAG_VP_TABWIDTH;
+    cache->tabwidth = YEW_VP_TABWIDTH;
     cache->generation = tb->gen;
     for (i = 0U; i < cache->len; i++) {
         cache->rows[i] = wrap_count_raw(tb, LINENO(first + (u64)i),
@@ -292,10 +292,10 @@ static void cache_fill(Win *w, LineNo requested)
     cache->valid = true;
 }
 
-void sag_vp_init(Win *w)
+void yew_vp_init(Win *w)
 {
     if (w == NULL)
-        SAG_BUG("viewport init: missing window");
+        YEW_BUG("viewport init: missing window");
     w->vp.top = LINENO(0U);
     w->vp.top_sub = 0U;
     w->vp.left = (CCol){0U};
@@ -304,14 +304,14 @@ void sag_vp_init(Win *w)
     w->vp.scrolloff = 3U;
     w->vp.sidescrolloff = 5U;
     w->vp.wrap = false;
-    w->number_style = SAG_NUM_ABS;
+    w->number_style = YEW_NUM_ABS;
     w->gutter_width = 0U;
     memset(&w->wrap_cache, 0, sizeof(w->wrap_cache));
     w->wrap_goal = (CCol){0U};
     w->wrap_goal_valid = false;
 }
 
-void sag_vp_free(Win *w)
+void yew_vp_free(Win *w)
 {
     if (w == NULL)
         return;
@@ -320,45 +320,45 @@ void sag_vp_free(Win *w)
     memset(&w->wrap_cache, 0, sizeof(w->wrap_cache));
 }
 
-void sag_vp_invalidate(Win *w)
+void yew_vp_invalidate(Win *w)
 {
     if (w == NULL)
-        SAG_BUG("viewport invalidate: missing window");
+        YEW_BUG("viewport invalidate: missing window");
     w->wrap_cache.valid = false;
     w->wrap_cache.len = 0U;
     w->wrap_cache.spans_valid = false;
     w->wrap_cache.spans_len = 0U;
 }
 
-void sag_vp_invalidate_from(Win *w, LineNo line)
+void yew_vp_invalidate_from(Win *w, LineNo line)
 {
     WrapCache *cache;
     u64 end;
 
     if (w == NULL)
-        SAG_BUG("viewport invalidate: missing window");
+        YEW_BUG("viewport invalidate: missing window");
     cache = &w->wrap_cache;
     end = sat_add(cache->first.v, (u64)cache->len);
     if (!cache->valid || line.v < end)
-        sag_vp_invalidate(w);
+        yew_vp_invalidate(w);
     else if (cache->spans_valid && line.v <= cache->spans_line.v) {
         cache->spans_valid = false;
         cache->spans_len = 0U;
     }
 }
 
-u32 sag_wrap_rows(Win *w, LineNo line)
+u32 yew_wrap_rows(Win *w, LineNo line)
 {
     TextBuf *tb = vp_text(w);
     WrapCache *cache = &w->wrap_cache;
     u64 index;
 
-    if (line.v >= sag_textbuf_line_count(tb))
-        SAG_BUG("viewport: wrap line out of range");
+    if (line.v >= yew_textbuf_line_count(tb))
+        YEW_BUG("viewport: wrap line out of range");
     if (!w->vp.wrap)
         return 1U;
     if (!cache->valid || cache->cols != w->vp.cols ||
-        cache->tabwidth != SAG_VP_TABWIDTH || cache->generation != tb->gen ||
+        cache->tabwidth != YEW_VP_TABWIDTH || cache->generation != tb->gen ||
         line.v < cache->first.v ||
         line.v >= sat_add(cache->first.v, (u64)cache->len))
         cache_fill(w, line);
@@ -366,20 +366,20 @@ u32 sag_wrap_rows(Win *w, LineNo line)
     return cache->rows[(size_t)index];
 }
 
-Span sag_wrap_row(Win *w, LineNo line, u32 sub)
+Span yew_wrap_row(Win *w, LineNo line, u32 sub)
 {
     TextBuf *tb = vp_text(w);
     WrapCache *cache = &w->wrap_cache;
     Span span;
     u32 count;
 
-    if (line.v >= sag_textbuf_line_count(tb))
-        SAG_BUG("viewport: wrap line out of range");
-    span = sag_textbuf_line_span(tb, line);
+    if (line.v >= yew_textbuf_line_count(tb))
+        YEW_BUG("viewport: wrap line out of range");
+    span = yew_textbuf_line_span(tb, line);
     span.hi = line_content_hi(tb, line, span);
     if (!w->vp.wrap)
         return sub == 0U ? span : (Span){span.hi, span.hi};
-    count = sag_wrap_rows(w, line);
+    count = yew_wrap_rows(w, line);
     if (sub >= count)
         return (Span){span.hi, span.hi};
     if (!cache->spans_valid || cache->spans_line.v != line.v ||
@@ -389,14 +389,14 @@ Span sag_wrap_row(Win *w, LineNo line, u32 sub)
         span_cache_fill(w, line, sub);
     if (sub < cache->spans_first ||
         (u64)(sub - cache->spans_first) >= (u64)cache->spans_len)
-        SAG_BUG("viewport: requested wrap row was not cached");
+        YEW_BUG("viewport: requested wrap row was not cached");
     return cache->spans[(size_t)(sub - cache->spans_first)];
 }
 
 static void top_step_down(Win *w)
 {
-    u64 lines = sag_textbuf_line_count(vp_text(w));
-    u32 count = sag_wrap_rows(w, w->vp.top);
+    u64 lines = yew_textbuf_line_count(vp_text(w));
+    u32 count = yew_wrap_rows(w, w->vp.top);
 
     if (w->vp.top_sub + 1U < count) {
         w->vp.top_sub++;
@@ -412,7 +412,7 @@ static void top_step_up(Win *w)
         w->vp.top_sub--;
     } else if (w->vp.top.v != 0U) {
         w->vp.top = LINENO(w->vp.top.v - 1U);
-        w->vp.top_sub = sag_wrap_rows(w, w->vp.top) - 1U;
+        w->vp.top_sub = yew_wrap_rows(w, w->vp.top) - 1U;
     }
 }
 
@@ -438,13 +438,13 @@ static void shift_top(Win *w, i64 rows)
 
 static u32 rows_from_top(Win *w, u32 limit)
 {
-    u64 lines = sag_textbuf_line_count(vp_text(w));
+    u64 lines = yew_textbuf_line_count(vp_text(w));
     LineNo line = w->vp.top;
     u32 sub = w->vp.top_sub;
     u32 total = 0U;
 
     while (line.v < lines && total < limit) {
-        u32 add = sag_wrap_rows(w, line) - sub;
+        u32 add = yew_wrap_rows(w, line) - sub;
         if (add > limit - total)
             return limit;
         total += add;
@@ -454,21 +454,21 @@ static u32 rows_from_top(Win *w, u32 limit)
     return total;
 }
 
-bool sag_vp_row_of_line(Win *w, LineNo line, u32 sub, u16 *row)
+bool yew_vp_row_of_line(Win *w, LineNo line, u32 sub, u16 *row)
 {
     u64 screen = 0U;
     LineNo scan;
     u32 scan_sub;
 
     if (row == NULL)
-        SAG_BUG("viewport row conversion: missing output");
+        YEW_BUG("viewport row conversion: missing output");
     if (line.v < w->vp.top.v ||
         (line.v == w->vp.top.v && sub < w->vp.top_sub))
         return false;
     scan = w->vp.top;
     scan_sub = w->vp.top_sub;
     while (scan.v < line.v) {
-        screen += (u64)sag_wrap_rows(w, scan) - scan_sub;
+        screen += (u64)yew_wrap_rows(w, scan) - scan_sub;
         if (screen >= w->vp.rows)
             return false;
         scan = LINENO(scan.v + 1U);
@@ -481,19 +481,19 @@ bool sag_vp_row_of_line(Win *w, LineNo line, u32 sub, u16 *row)
     return true;
 }
 
-bool sag_vp_line_of_row(Win *w, u16 row, LineNo *line, u32 *sub)
+bool yew_vp_line_of_row(Win *w, u16 row, LineNo *line, u32 *sub)
 {
-    u64 lines = sag_textbuf_line_count(vp_text(w));
+    u64 lines = yew_textbuf_line_count(vp_text(w));
     LineNo scan;
     u32 scan_sub;
     u32 left = row;
 
     if (line == NULL || sub == NULL)
-        SAG_BUG("viewport line conversion: missing output");
+        YEW_BUG("viewport line conversion: missing output");
     scan = w->vp.top;
     scan_sub = w->vp.top_sub;
     while (scan.v < lines) {
-        u32 available = sag_wrap_rows(w, scan) - scan_sub;
+        u32 available = yew_wrap_rows(w, scan) - scan_sub;
         if (left < available) {
             *line = scan;
             *sub = scan_sub + left;
@@ -509,27 +509,27 @@ bool sag_vp_line_of_row(Win *w, u16 row, LineNo *line, u32 *sub)
 /*
  * ABSOLUTE grid x of a content column.
  *
- * `w->rect.x` is the CONTENT origin: sag_layout_win sets it to
+ * `w->rect.x` is the CONTENT origin: yew_layout_win sets it to
  * `leaf->rect.x + gutter`, so the gutter is already inside it and must
  * not be added again.
  *
  * This returned `gutter + relative` until Sprint 25 — right only by
  * coincidence, because with one full-width window leaf->rect.x is 0 and
  * therefore rect.x == gutter.  The moment Sprint 22 gave panes an x
- * offset the coincidence broke, and the one caller, sag_draw_cursor,
+ * offset the coincidence broke, and the one caller, yew_draw_cursor,
  * compares the result against w->rect.x and row_right(), which are
  * absolute.  For any pane not at column 0 the cursor was judged to be
  * outside its own rect and hidden: SPLIT THE WINDOW AND THE CURSOR
  * DISAPPEARS, frozen into s22_split_h.golden and five siblings as
  * `cursor=0,0 vis=0`.
  */
-u16 sag_vp_gridx_of_ccol(const Win *w, CCol col)
+u16 yew_vp_gridx_of_ccol(const Win *w, CCol col)
 {
     u64 relative;
     u64 x;
 
     if (w == NULL)
-        SAG_BUG("viewport grid conversion: missing window");
+        YEW_BUG("viewport grid conversion: missing window");
     if (col.v < w->vp.left.v)
         return w->rect.x;
     relative = col.v - w->vp.left.v;
@@ -545,7 +545,7 @@ u16 sag_vp_gridx_of_ccol(const Win *w, CCol col)
 /*
  * The inverse, and it has to use the same origin.
  *
- * `grid_x` arrives ABSOLUTE — sag_win_click_to_cursor gets it from the
+ * `grid_x` arrives ABSOLUTE — yew_win_click_to_cursor gets it from the
  * mouse and checks grid_y against w->rect.y — so the column to subtract
  * is w->rect.x, which already contains the gutter.  Subtracting
  * gutter_width instead was the same coincidence as its counterpart
@@ -553,22 +553,22 @@ u16 sag_vp_gridx_of_ccol(const Win *w, CCol col)
  * it made every click land the cursor rect.x - gutter columns too far
  * to the right.
  */
-CCol sag_vp_ccol_of_gridx(const Win *w, u16 grid_x)
+CCol yew_vp_ccol_of_gridx(const Win *w, u16 grid_x)
 {
     if (w == NULL)
-        SAG_BUG("viewport cell conversion: missing window");
+        YEW_BUG("viewport cell conversion: missing window");
     if (grid_x <= w->rect.x)
         return w->vp.left;
     return (CCol){sat_add(w->vp.left.v, (u64)(grid_x - w->rect.x))};
 }
 
-u32 sag_vp_cursor_subrow(Win *w)
+u32 yew_vp_cursor_subrow(Win *w)
 {
     TextBuf *tb = vp_text(w);
     WrapCache *cache = &w->wrap_cache;
     Cursor *cursor = vp_cursor(w);
-    LineNo line = sag_textbuf_line_of(tb, cursor->pos);
-    Span content = sag_textbuf_line_span(tb, line);
+    LineNo line = yew_textbuf_line_of(tb, cursor->pos);
+    Span content = yew_textbuf_line_span(tb, line);
     u64 start;
     u32 sub = 0U;
     size_t i;
@@ -597,10 +597,10 @@ u32 sag_vp_cursor_subrow(Win *w)
             return sub;
         start = end;
         if (sub == UINT32_MAX)
-            SAG_BUG("viewport: too many display rows");
+            YEW_BUG("viewport: too many display rows");
         sub++;
     }
-    SAG_BUG("viewport: cursor did not map to a display row");
+    YEW_BUG("viewport: cursor did not map to a display row");
 }
 
 static void follow_vertical(Win *w, LineNo line, u32 sub)
@@ -616,7 +616,7 @@ static void follow_vertical(Win *w, LineNo line, u32 sub)
         return;
     }
     margin = w->vp.scrolloff;
-    visible = sag_vp_row_of_line(w, line, sub, &row);
+    visible = yew_vp_row_of_line(w, line, sub, &row);
     if ((u32)w->vp.rows <= 2U * (u32)margin) {
         u16 center = (u16)(w->vp.rows / 2U);
 
@@ -648,12 +648,12 @@ static void follow_vertical(Win *w, LineNo line, u32 sub)
 static void follow_horizontal(Win *w, Span line, ByteOff pos)
 {
     TextBuf *tb = vp_text(w);
-    CCol start = sag_off_to_ccol(tb, line, pos, SAG_VP_TABWIDTH);
-    ByteOff next = pos.v < line_content_hi(tb, sag_textbuf_line_of(tb, pos),
+    CCol start = yew_off_to_ccol(tb, line, pos, YEW_VP_TABWIDTH);
+    ByteOff next = pos.v < line_content_hi(tb, yew_textbuf_line_of(tb, pos),
                                            line)
-                       ? sag_grapheme_next_boundary(tb, pos)
+                       ? yew_grapheme_next_boundary(tb, pos)
                        : pos;
-    CCol end = sag_off_to_ccol(tb, line, next, SAG_VP_TABWIDTH);
+    CCol end = yew_off_to_ccol(tb, line, next, YEW_VP_TABWIDTH);
     u64 side = w->vp.sidescrolloff;
     u64 inner;
 
@@ -672,16 +672,16 @@ static void follow_horizontal(Win *w, Span line, ByteOff pos)
         w->vp.left = start;
 }
 
-void sag_vp_follow(Win *w)
+void yew_vp_follow(Win *w)
 {
     TextBuf *tb = vp_text(w);
     Cursor *cursor = vp_cursor(w);
-    LineNo line = sag_textbuf_line_of(tb, cursor->pos);
-    Span span = sag_textbuf_line_span(tb, line);
+    LineNo line = yew_textbuf_line_of(tb, cursor->pos);
+    Span span = yew_textbuf_line_span(tb, line);
 
-    sag_vp_clamp(w);
-    follow_vertical(w, line, w->vp.wrap ? sag_vp_cursor_subrow(w) : 0U);
-    sag_vp_clamp(w);
+    yew_vp_clamp(w);
+    follow_vertical(w, line, w->vp.wrap ? yew_vp_cursor_subrow(w) : 0U);
+    yew_vp_clamp(w);
     if (w->vp.wrap) {
         w->vp.left = (CCol){0U};
     } else {
@@ -689,62 +689,62 @@ void sag_vp_follow(Win *w)
     }
 }
 
-void sag_vp_scroll(Win *w, i32 rows)
+void yew_vp_scroll(Win *w, i32 rows)
 {
     (void)vp_text(w);
     shift_top(w, rows);
-    sag_vp_clamp(w);
+    yew_vp_clamp(w);
 }
 
 static void cursor_to_row(Win *w, u16 target)
 {
     TextBuf *tb = vp_text(w);
     Cursor *cursor = vp_cursor(w);
-    LineNo old_line = sag_textbuf_line_of(tb, cursor->pos);
-    u32 old_sub = w->vp.wrap ? sag_vp_cursor_subrow(w) : 0U;
+    LineNo old_line = yew_textbuf_line_of(tb, cursor->pos);
+    u32 old_sub = w->vp.wrap ? yew_vp_cursor_subrow(w) : 0U;
     LineNo line;
     u32 sub;
     Span span;
     ByteOff pos;
     bool unselected = cursor->anchor.v == cursor->pos.v;
 
-    while (!sag_vp_line_of_row(w, target, &line, &sub)) {
+    while (!yew_vp_line_of_row(w, target, &line, &sub)) {
         if (target == 0U)
             return;
         target--;
     }
-    span = sag_textbuf_line_span(tb, line);
+    span = yew_textbuf_line_span(tb, line);
     if (w->vp.wrap) {
-        Span old_row = sag_wrap_row(w, old_line, old_sub);
-        Span target_row = sag_wrap_row(w, line, sub);
-        u32 target_rows = sag_wrap_rows(w, line);
+        Span old_row = yew_wrap_row(w, old_line, old_sub);
+        Span target_row = yew_wrap_row(w, line, sub);
+        u32 target_rows = yew_wrap_rows(w, line);
 
         if (!w->wrap_goal_valid) {
-            w->wrap_goal = sag_off_to_ccol(tb, old_row, cursor->pos,
-                                           SAG_VP_TABWIDTH);
+            w->wrap_goal = yew_off_to_ccol(tb, old_row, cursor->pos,
+                                           YEW_VP_TABWIDTH);
             w->wrap_goal_valid = true;
         }
-        pos = sag_ccol_to_off(tb, target_row, w->wrap_goal,
-                              SAG_VP_TABWIDTH);
+        pos = yew_ccol_to_off(tb, target_row, w->wrap_goal,
+                              YEW_VP_TABWIDTH);
         if (pos.v == target_row.hi && sub + 1U < target_rows &&
             target_row.lo < target_row.hi)
-            pos = sag_grapheme_prev_boundary(tb, pos);
+            pos = yew_grapheme_prev_boundary(tb, pos);
     } else {
-        pos = sag_gcol_to_off(tb, span, cursor->goal_col);
+        pos = yew_gcol_to_off(tb, span, cursor->goal_col);
     }
     cursor->pos = pos;
     if (w->vp.wrap)
-        cursor->goal_col = sag_off_to_gcol(tb, span, pos);
+        cursor->goal_col = yew_off_to_gcol(tb, span, pos);
     if (unselected)
         cursor->anchor = pos;
 }
 
-void sag_vp_push_cursor(Win *w)
+void yew_vp_push_cursor(Win *w)
 {
     TextBuf *tb = vp_text(w);
     Cursor *cursor = vp_cursor(w);
-    LineNo line = sag_textbuf_line_of(tb, cursor->pos);
-    u32 sub = w->vp.wrap ? sag_vp_cursor_subrow(w) : 0U;
+    LineNo line = yew_textbuf_line_of(tb, cursor->pos);
+    u32 sub = w->vp.wrap ? yew_vp_cursor_subrow(w) : 0U;
     u16 row;
     u16 target;
     u16 low;
@@ -753,7 +753,7 @@ void sag_vp_push_cursor(Win *w)
 
     if (w->vp.rows == 0U)
         return;
-    visible = sag_vp_row_of_line(w, line, sub, &row);
+    visible = yew_vp_row_of_line(w, line, sub, &row);
     if ((u32)w->vp.rows <= 2U * (u32)w->vp.scrolloff) {
         target = (u16)(w->vp.rows / 2U);
         if (!visible || row != target)
@@ -775,7 +775,7 @@ void sag_vp_push_cursor(Win *w)
     cursor_to_row(w, target);
 }
 
-void sag_vp_page(Win *w, i32 pages)
+void yew_vp_page(Win *w, i32 pages)
 {
     i64 step = w->vp.rows > 2U ? (i64)w->vp.rows - 2 : 1;
     i64 amount = step * (i64)pages;
@@ -783,44 +783,44 @@ void sag_vp_page(Win *w, i32 pages)
         amount = INT32_MAX;
     if (amount < INT32_MIN)
         amount = INT32_MIN;
-    sag_vp_scroll(w, (i32)amount);
+    yew_vp_scroll(w, (i32)amount);
 }
 
 static void place_cursor(Win *w, u16 row)
 {
     Cursor *cursor = vp_cursor(w);
     TextBuf *tb = vp_text(w);
-    LineNo line = sag_textbuf_line_of(tb, cursor->pos);
-    u32 sub = w->vp.wrap ? sag_vp_cursor_subrow(w) : 0U;
+    LineNo line = yew_textbuf_line_of(tb, cursor->pos);
+    u32 sub = w->vp.wrap ? yew_vp_cursor_subrow(w) : 0U;
     w->vp.top = line;
     w->vp.top_sub = sub;
     shift_top(w, -(i64)row);
 }
 
-void sag_vp_center(Win *w)
+void yew_vp_center(Win *w)
 {
     place_cursor(w, w->vp.rows / 2U);
 }
 
-void sag_vp_top(Win *w)
+void yew_vp_top(Win *w)
 {
     place_cursor(w, 0U);
 }
 
-void sag_vp_bottom(Win *w)
+void yew_vp_bottom(Win *w)
 {
     place_cursor(w, w->vp.rows == 0U ? 0U : (u16)(w->vp.rows - 1U));
 }
 
-void sag_vp_clamp(Win *w)
+void yew_vp_clamp(Win *w)
 {
     TextBuf *tb = vp_text(w);
-    u64 lines = sag_textbuf_line_count(tb);
+    u64 lines = yew_textbuf_line_count(tb);
     u32 count;
 
     if (w->vp.top.v >= lines)
         w->vp.top = LINENO(lines - 1U);
-    count = sag_wrap_rows(w, w->vp.top);
+    count = yew_wrap_rows(w, w->vp.top);
     if (w->vp.top_sub >= count)
         w->vp.top_sub = count - 1U;
     if (!w->vp.wrap) {
@@ -835,15 +835,15 @@ void sag_vp_clamp(Win *w)
     }
 }
 
-bool sag_vp_move_display(Win *w, i32 rows)
+bool yew_vp_move_display(Win *w, i32 rows)
 {
     TextBuf *tb = vp_text(w);
     Cursor *cursor = vp_cursor(w);
-    LineNo line = sag_textbuf_line_of(tb, cursor->pos);
-    u32 sub = sag_vp_cursor_subrow(w);
-    Span current = sag_wrap_row(w, line, sub);
-    CCol cursor_col = sag_off_to_ccol(tb, current, cursor->pos,
-                                      SAG_VP_TABWIDTH);
+    LineNo line = yew_textbuf_line_of(tb, cursor->pos);
+    u32 sub = yew_vp_cursor_subrow(w);
+    Span current = yew_wrap_row(w, line, sub);
+    CCol cursor_col = yew_off_to_ccol(tb, current, cursor->pos,
+                                      YEW_VP_TABWIDTH);
     i64 remain = rows;
     ByteOff old = cursor->pos;
     bool unselected = cursor->anchor.v == cursor->pos.v;
@@ -853,9 +853,9 @@ bool sag_vp_move_display(Win *w, i32 rows)
         w->wrap_goal_valid = true;
     }
     while (remain > 0) {
-        if (sub + 1U < sag_wrap_rows(w, line))
+        if (sub + 1U < yew_wrap_rows(w, line))
             sub++;
-        else if (line.v + 1U < sag_textbuf_line_count(tb)) {
+        else if (line.v + 1U < yew_textbuf_line_count(tb)) {
             line = LINENO(line.v + 1U);
             sub = 0U;
         } else
@@ -867,43 +867,43 @@ bool sag_vp_move_display(Win *w, i32 rows)
             sub--;
         else if (line.v != 0U) {
             line = LINENO(line.v - 1U);
-            sub = sag_wrap_rows(w, line) - 1U;
+            sub = yew_wrap_rows(w, line) - 1U;
         } else
             break;
         remain++;
     }
-    current = sag_wrap_row(w, line, sub);
-    cursor->pos = sag_ccol_to_off(tb, current, w->wrap_goal,
-                                  SAG_VP_TABWIDTH);
+    current = yew_wrap_row(w, line, sub);
+    cursor->pos = yew_ccol_to_off(tb, current, w->wrap_goal,
+                                  YEW_VP_TABWIDTH);
     if (cursor->pos.v == current.hi &&
-        sub + 1U < sag_wrap_rows(w, line) && current.lo < current.hi)
-        cursor->pos = sag_grapheme_prev_boundary(tb, cursor->pos);
+        sub + 1U < yew_wrap_rows(w, line) && current.lo < current.hi)
+        cursor->pos = yew_grapheme_prev_boundary(tb, cursor->pos);
     if (unselected)
         cursor->anchor = cursor->pos;
-    sag_vp_follow(w);
+    yew_vp_follow(w);
     return cursor->pos.v != old.v;
 }
 
-CCol sag_vp_display_col(const Win *w, ByteOff pos)
+CCol yew_vp_display_col(const Win *w, ByteOff pos)
 {
     const TextBuf *tb = vp_text(w);
-    LineNo line = sag_textbuf_line_of(tb, pos);
+    LineNo line = yew_textbuf_line_of(tb, pos);
     Span row;
 
     (void)wrap_subrow_raw(tb, line, pos, w->vp.cols, &row);
-    return sag_off_to_ccol(tb, row, pos, SAG_VP_TABWIDTH);
+    return yew_off_to_ccol(tb, row, pos, YEW_VP_TABWIDTH);
 }
 
-ByteOff sag_vp_display_target(const Win *w, ByteOff pos, i32 rows)
+ByteOff yew_vp_display_target(const Win *w, ByteOff pos, i32 rows)
 {
     const TextBuf *tb = vp_text(w);
-    u64 line_count = sag_textbuf_line_count(tb);
-    LineNo line = sag_textbuf_line_of(tb, pos);
+    u64 line_count = yew_textbuf_line_count(tb);
+    LineNo line = yew_textbuf_line_of(tb, pos);
     Span current;
     u32 sub = wrap_subrow_raw(tb, line, pos, w->vp.cols, &current);
     CCol goal = w->wrap_goal_valid
                     ? w->wrap_goal
-                    : sag_off_to_ccol(tb, current, pos, SAG_VP_TABWIDTH);
+                    : yew_off_to_ccol(tb, current, pos, YEW_VP_TABWIDTH);
     i64 remain = rows;
     Span target;
     ByteOff result;
@@ -935,14 +935,14 @@ ByteOff sag_vp_display_target(const Win *w, ByteOff pos, i32 rows)
     }
     target = wrap_row_raw(tb, line, sub, w->vp.cols);
     target_rows = wrap_count_raw(tb, line, w->vp.cols);
-    result = sag_ccol_to_off(tb, target, goal, SAG_VP_TABWIDTH);
+    result = yew_ccol_to_off(tb, target, goal, YEW_VP_TABWIDTH);
     if (result.v == target.hi && sub + 1U < target_rows &&
         target.lo < target.hi)
-        result = sag_grapheme_prev_boundary(tb, result);
+        result = yew_grapheme_prev_boundary(tb, result);
     return result;
 }
 
-LineNo sag_vp_last_visible_line(Win *w)
+LineNo yew_vp_last_visible_line(Win *w)
 {
     LineNo line;
     u32 sub;
@@ -951,7 +951,7 @@ LineNo sag_vp_last_visible_line(Win *w)
     if (w->vp.rows == 0U)
         return w->vp.top;
     row = (u16)(w->vp.rows - 1U);
-    if (sag_vp_line_of_row(w, row, &line, &sub))
+    if (yew_vp_line_of_row(w, row, &line, &sub))
         return line;
-    return LINENO(sag_textbuf_line_count(vp_text(w)) - 1U);
+    return LINENO(yew_textbuf_line_count(vp_text(w)) - 1U);
 }

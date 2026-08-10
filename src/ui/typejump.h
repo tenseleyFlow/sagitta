@@ -1,5 +1,5 @@
-#ifndef SAG_UI_TYPEJUMP_H
-#define SAG_UI_TYPEJUMP_H
+#ifndef YEW_UI_TYPEJUMP_H
+#define YEW_UI_TYPEJUMP_H
 
 /*
  * Sprint 26 §8: type-to-jump, for lists that cannot carry a filter
@@ -33,19 +33,19 @@
 #include "ui/picker.h"
 #include "util/base.h"
 
-#define SAG_TYPEJUMP_RESET_MS 500
+#define YEW_TYPEJUMP_RESET_MS 500
 
 enum {
-    SAG_TYPEJUMP_PAT_MAX = 64
+    YEW_TYPEJUMP_PAT_MAX = 64
 };
 
 typedef struct TypeJump {
-    char pat[SAG_TYPEJUMP_PAT_MAX];
+    char pat[YEW_TYPEJUMP_PAT_MAX];
     u32 len;
     i64 deadline_ms;
 } TypeJump;
 
-void sag_typejump_clear(TypeJump *tj);
+void yew_typejump_clear(TypeJump *tj);
 
 /*
  * Consumes a key, moving `*sel` to the best match.
@@ -54,10 +54,10 @@ void sag_typejump_clear(TypeJump *tj);
  * bindings — a type-to-jump that swallowed every key would make the
  * list it decorates unusable.
  */
-bool sag_typejump_key(TypeJump *tj, const Key *k, i64 now_ms,
+bool yew_typejump_key(TypeJump *tj, const Key *k, i64 now_ms,
                       const PickItem *items, u32 n, u32 *sel);
 
 /* True while a pattern is accumulating, for the status hint. */
-bool sag_typejump_active(const TypeJump *tj, i64 now_ms);
+bool yew_typejump_active(const TypeJump *tj, i64 now_ms);
 
 #endif

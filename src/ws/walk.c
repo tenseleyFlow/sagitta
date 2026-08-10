@@ -29,17 +29,17 @@
 static u64 g_opendirs;
 static u64 g_statats;
 
-u64 sag_walk_opendir_count(void)
+u64 yew_walk_opendir_count(void)
 {
     return g_opendirs;
 }
 
-u64 sag_walk_statat_count(void)
+u64 yew_walk_statat_count(void)
 {
     return g_statats;
 }
 
-void sag_walk_counts_reset(void)
+void yew_walk_counts_reset(void)
 {
     g_opendirs = 0U;
     g_statats = 0U;
@@ -87,7 +87,7 @@ static void seen_init(SeenSet *s)
 {
     s->cap = 256U;
     s->len = 0U;
-    s->slot = sag_xcalloc((size_t)s->cap, sizeof(*s->slot));
+    s->slot = yew_xcalloc((size_t)s->cap, sizeof(*s->slot));
 }
 
 static void seen_free(SeenSet *s)
@@ -130,7 +130,7 @@ static void seen_grow(SeenSet *s)
 
     s->cap *= 2U;
     s->len = 0U;
-    s->slot = sag_xcalloc((size_t)s->cap, sizeof(*s->slot));
+    s->slot = yew_xcalloc((size_t)s->cap, sizeof(*s->slot));
     for (i = 0U; i < old_cap; i++) {
         if (old[i].used)
             (void)seen_add(s, old[i].dev, old[i].ino);
@@ -194,7 +194,7 @@ struct WalkState {
     bool done;
 };
 
-void sag_filelist_init(FileList *fl)
+void yew_filelist_init(FileList *fl)
 {
     if (fl == NULL)
         return;
@@ -202,11 +202,11 @@ void sag_filelist_init(FileList *fl)
     arena_init(&fl->a);
 }
 
-void sag_filelist_free(FileList *fl)
+void yew_filelist_free(FileList *fl)
 {
     if (fl == NULL)
         return;
-    SagPathVec_free(&fl->paths);
+    YewPathVec_free(&fl->paths);
     arena_free_all(&fl->a);
     (void)memset(fl, 0, sizeof(*fl));
 }
@@ -225,7 +225,7 @@ static bool frame_push(WalkState *w, char **names, u32 n, u32 rel_len,
     if (w->depth == w->stack_cap) {
         u32 cap = w->stack_cap == 0U ? 16U : w->stack_cap * 2U;
 
-        w->stack = sag_xreallocarray(w->stack, cap, sizeof(*w->stack));
+        w->stack = yew_xreallocarray(w->stack, cap, sizeof(*w->stack));
         w->stack_cap = cap;
     }
     w->stack[w->depth].names = names;
@@ -277,7 +277,7 @@ static bool read_sorted(WalkState *w, const char *abs, char ***out_names,
      * An empty directory yields no names, and a directory that could
      * not be opened also yields no names — collapsing the two into a
      * NULL return made an empty workspace root indistinguishable from
-     * an unreadable one, so sag_walk_begin refused to walk it at all.
+     * an unreadable one, so yew_walk_begin refused to walk it at all.
      */
     *out_names = NULL;
     *out_n = 0U;
@@ -296,15 +296,15 @@ static bool read_sorted(WalkState *w, const char *abs, char ***out_names,
             continue;
         if (n == cap) {
             cap = cap == 0U ? 32U : cap * 2U;
-            names = sag_xreallocarray(names, cap, sizeof(*names));
+            names = yew_xreallocarray(names, cap, sizeof(*names));
         }
-        names[n] = sag_xmalloc(len + 1U);
+        names[n] = yew_xmalloc(len + 1U);
         (void)memcpy(names[n], ent->d_name, len + 1U);
         n++;
     }
     (void)closedir(d);
     /* THE determinism step.  See walk.h. */
-    sag_sort_stable(names, n, sizeof(*names), name_cmp, NULL);
+    yew_sort_stable(names, n, sizeof(*names), name_cmp, NULL);
     *out_names = names;
     *out_n = n;
     return true;
@@ -319,7 +319,7 @@ static i64 now_us(void)
     return (i64)ts.tv_sec * 1000000 + (i64)ts.tv_nsec / 1000;
 }
 
-WalkState *sag_walk_begin(const char *root, const WalkOpts *o, FileList *out)
+WalkState *yew_walk_begin(const char *root, const WalkOpts *o, FileList *out)
 {
     WalkState *w;
     char **names;
@@ -332,17 +332,17 @@ WalkState *sag_walk_begin(const char *root, const WalkOpts *o, FileList *out)
     rlen = strlen(root);
     if (rlen == 0U || rlen + 2U >= PATH_MAX)
         return NULL;
-    w = sag_xcalloc(1U, sizeof(*w));
+    w = yew_xcalloc(1U, sizeof(*w));
     (void)memcpy(w->root, root, rlen + 1U);
     w->opts = o == NULL ? (WalkOpts){0} : *o;
     if (w->opts.max_depth == 0U)
-        w->opts.max_depth = (u32)SAG_WALK_DEFAULT_DEPTH;
+        w->opts.max_depth = (u32)YEW_WALK_DEFAULT_DEPTH;
     if (w->opts.max_entries == 0U)
-        w->opts.max_entries = (u64)SAG_WALK_DEFAULT_ENTRIES;
+        w->opts.max_entries = (u64)YEW_WALK_DEFAULT_ENTRIES;
     w->out = out;
 
-    sag_filelist_free(out);
-    sag_filelist_init(out);
+    yew_filelist_free(out);
+    yew_filelist_init(out);
 
     (void)memcpy(w->path, root, rlen + 1U);
     w->path_len = (u32)rlen;
@@ -376,8 +376,8 @@ WalkState *sag_walk_begin(const char *root, const WalkOpts *o, FileList *out)
              */
             if (snprintf(excl, sizeof(excl), "%s/.git/info", w->path) <
                 (int)sizeof(excl))
-                root_gi = sag_gi_load(&w->gi_arena, excl, NULL);
-            root_gi = sag_gi_load(&w->gi_arena, w->path, root_gi);
+                root_gi = yew_gi_load(&w->gi_arena, excl, NULL);
+            root_gi = yew_gi_load(&w->gi_arena, w->path, root_gi);
         }
         (void)frame_push(w, names, n, w->path_len, 0U, root_gi, false);
     }
@@ -414,11 +414,11 @@ static void record_file(WalkState *w)
         return;
     }
     rel = arena_strdup(&out->a, w->path + w->rel_base);
-    SagPathVec_push(&out->paths, rel);
+    YewPathVec_push(&out->paths, rel);
     out->n_files++;
 }
 
-bool sag_walk_step(WalkState *w, i64 budget_us)
+bool yew_walk_step(WalkState *w, i64 budget_us)
 {
     i64 started = budget_us > 0 ? now_us() : 0;
 
@@ -467,14 +467,14 @@ bool sag_walk_step(WalkState *w, i64 budget_us)
              * §4.1: PRUNE before opening.  An ignored directory that
              * nothing could re-include from is skipped without an
              * opendir, which is what turns node_modules from 90 000
-             * entries into a single stat.  sag_gi_prunable is
+             * entries into a single stat.  yew_gi_prunable is
              * conservative, so when it says no we descend and filter
              * per file instead.
              */
             if (w->opts.use_gitignore && f->gi != NULL &&
-                sag_gi_match(f->gi, w->path + w->rel_base, true)) {
+                yew_gi_match(f->gi, w->path + w->rel_base, true)) {
                 w->out->n_ignored++;
-                if (sag_gi_prunable(f->gi, w->path + w->rel_base)) {
+                if (yew_gi_prunable(f->gi, w->path + w->rel_base)) {
                     path_truncate(w, saved);
                     continue;
                 }
@@ -499,7 +499,7 @@ bool sag_walk_step(WalkState *w, i64 budget_us)
             /* This directory's own .gitignore, if it has one, layered
              * over everything above it. */
             if (w->opts.use_gitignore)
-                child_gi = sag_gi_load(&w->gi_arena, w->path, f->gi);
+                child_gi = yew_gi_load(&w->gi_arena, w->path, f->gi);
             (void)frame_push(w, names, n, saved, f->depth + 1U, child_gi,
                              child_ignored);
             continue;
@@ -515,11 +515,11 @@ bool sag_walk_step(WalkState *w, i64 budget_us)
                  * that survives `node_modules/`.
                  */
                 if (f->ignored)
-                    skip = sag_gi_match(f->gi, w->path + w->rel_base,
+                    skip = yew_gi_match(f->gi, w->path + w->rel_base,
                                         false) ||
-                           !sag_gi_negated(f->gi, w->path + w->rel_base);
+                           !yew_gi_negated(f->gi, w->path + w->rel_base);
                 else
-                    skip = sag_gi_match(f->gi, w->path + w->rel_base,
+                    skip = yew_gi_match(f->gi, w->path + w->rel_base,
                                         false);
             }
             if (skip)
@@ -537,7 +537,7 @@ bool sag_walk_step(WalkState *w, i64 budget_us)
     return false;
 }
 
-void sag_walk_end(WalkState *w)
+void yew_walk_end(WalkState *w)
 {
     if (w == NULL)
         return;

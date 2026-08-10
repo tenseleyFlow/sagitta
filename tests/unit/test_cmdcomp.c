@@ -22,8 +22,8 @@ typedef struct {
 
 static void fixture_init(CompFixture *fixture)
 {
-    (void)strcpy(fixture->root, "/tmp/sagitta-cmdcomp-XXXXXX");
-    SAG_ASSERT_NOT_NULL(mkdtemp(fixture->root));
+    (void)strcpy(fixture->root, "/tmp/yew-cmdcomp-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(fixture->root));
     (void)memset(&fixture->ed, 0, sizeof(fixture->ed));
     arena_init(&fixture->ed.arena);
     fixture->ed.ws.dir = fixture->root;
@@ -36,8 +36,8 @@ static void fixture_file(const CompFixture *fixture, const char *name)
 
     (void)snprintf(path, sizeof(path), "%s/%s", fixture->root, name);
     fd = open(path, O_WRONLY | O_CREAT | O_EXCL | O_CLOEXEC, 0600);
-    SAG_ASSERT(fd >= 0);
-    SAG_ASSERT_EQ_I64(close(fd), 0);
+    YEW_ASSERT(fd >= 0);
+    YEW_ASSERT_EQ_I64(close(fd), 0);
 }
 
 static void fixture_dir(const CompFixture *fixture, const char *name)
@@ -45,7 +45,7 @@ static void fixture_dir(const CompFixture *fixture, const char *name)
     char path[512];
 
     (void)snprintf(path, sizeof(path), "%s/%s", fixture->root, name);
-    SAG_ASSERT_EQ_I64(mkdir(path, 0700), 0);
+    YEW_ASSERT_EQ_I64(mkdir(path, 0700), 0);
 }
 
 static void fixture_unlink(const CompFixture *fixture, const char *name,
@@ -55,15 +55,15 @@ static void fixture_unlink(const CompFixture *fixture, const char *name,
 
     (void)snprintf(path, sizeof(path), "%s/%s", fixture->root, name);
     if (is_dir)
-        SAG_ASSERT_EQ_I64(rmdir(path), 0);
+        YEW_ASSERT_EQ_I64(rmdir(path), 0);
     else
-        SAG_ASSERT_EQ_I64(unlink(path), 0);
+        YEW_ASSERT_EQ_I64(unlink(path), 0);
 }
 
 static void fixture_dispose(CompFixture *fixture)
 {
     arena_free_all(&fixture->ed.arena);
-    SAG_ASSERT_EQ_I64(rmdir(fixture->root), 0);
+    YEW_ASSERT_EQ_I64(rmdir(fixture->root), 0);
 }
 
 static const CompItem *find_item(const Vec_CompItem *items,
@@ -81,78 +81,78 @@ static const CompItem *find_item(const Vec_CompItem *items,
 void test_cmdcomp_source_selection_and_score(void)
 {
     static const CmdEntry entry = {
-        {"ed.ui.probe", NULL, SAG_ARITY_OPT_STR, 0U, "probe", NULL},
-        "fbov", SAG_RP_FORBID, NULL,
+        {"ed.ui.probe", NULL, YEW_ARITY_OPT_STR, 0U, "probe", NULL},
+        "fbov", YEW_RP_FORBID, NULL,
     };
     static const CmdEntry repeat = {
-        {"ed.ui.probe", NULL, SAG_ARITY_OPT_STR, 0U, "probe", NULL},
-        "f*", SAG_RP_FORBID, NULL,
+        {"ed.ui.probe", NULL, YEW_ARITY_OPT_STR, 0U, "probe", NULL},
+        "f*", YEW_RP_FORBID, NULL,
     };
     static const CmdEntry free_string = {
-        {"ed.ui.probe", NULL, SAG_ARITY_OPT_STR, 0U, "probe", NULL},
-        "s", SAG_RP_FORBID, NULL,
+        {"ed.ui.probe", NULL, YEW_ARITY_OPT_STR, 0U, "probe", NULL},
+        "s", YEW_RP_FORBID, NULL,
     };
-    SagCompKind kind = SAG_COMP_VALUE;
+    YewCompKind kind = YEW_COMP_VALUE;
     Vec_CompItem commands = {0};
     Ed ed = {0};
     Arena scratch;
-    SagCompQuery query;
+    YewCompQuery query;
 
-    SAG_ASSERT(sag_comp_kind_for(NULL, 0U, &kind));
-    SAG_ASSERT_EQ_I64(kind, SAG_COMP_CMD);
-    SAG_ASSERT(sag_comp_kind_for(&entry, 1U, &kind));
-    SAG_ASSERT_EQ_I64(kind, SAG_COMP_PATH);
-    SAG_ASSERT(sag_comp_kind_for(&entry, 2U, &kind));
-    SAG_ASSERT_EQ_I64(kind, SAG_COMP_BUFFER);
-    SAG_ASSERT(sag_comp_kind_for(&entry, 3U, &kind));
-    SAG_ASSERT_EQ_I64(kind, SAG_COMP_OPTION);
-    SAG_ASSERT(sag_comp_kind_for(&entry, 4U, &kind));
-    SAG_ASSERT_EQ_I64(kind, SAG_COMP_VALUE);
-    SAG_ASSERT(!sag_comp_kind_for(&entry, 5U, &kind));
-    SAG_ASSERT(sag_comp_kind_for(&repeat, 1U, &kind));
-    SAG_ASSERT_EQ_I64(kind, SAG_COMP_PATH);
-    SAG_ASSERT(sag_comp_kind_for(&repeat, 9U, &kind));
-    SAG_ASSERT_EQ_I64(kind, SAG_COMP_PATH);
-    SAG_ASSERT(!sag_comp_kind_for(&free_string, 1U, &kind));
+    YEW_ASSERT(yew_comp_kind_for(NULL, 0U, &kind));
+    YEW_ASSERT_EQ_I64(kind, YEW_COMP_CMD);
+    YEW_ASSERT(yew_comp_kind_for(&entry, 1U, &kind));
+    YEW_ASSERT_EQ_I64(kind, YEW_COMP_PATH);
+    YEW_ASSERT(yew_comp_kind_for(&entry, 2U, &kind));
+    YEW_ASSERT_EQ_I64(kind, YEW_COMP_BUFFER);
+    YEW_ASSERT(yew_comp_kind_for(&entry, 3U, &kind));
+    YEW_ASSERT_EQ_I64(kind, YEW_COMP_OPTION);
+    YEW_ASSERT(yew_comp_kind_for(&entry, 4U, &kind));
+    YEW_ASSERT_EQ_I64(kind, YEW_COMP_VALUE);
+    YEW_ASSERT(!yew_comp_kind_for(&entry, 5U, &kind));
+    YEW_ASSERT(yew_comp_kind_for(&repeat, 1U, &kind));
+    YEW_ASSERT_EQ_I64(kind, YEW_COMP_PATH);
+    YEW_ASSERT(yew_comp_kind_for(&repeat, 9U, &kind));
+    YEW_ASSERT_EQ_I64(kind, YEW_COMP_PATH);
+    YEW_ASSERT(!yew_comp_kind_for(&free_string, 1U, &kind));
     /*
-     * Sprint 18.5 §2 closed the sag_comp_score seam; ranking is now
-     * sag_fz_score's.  The sentinel moved from -1 to SAG_FZ_NO_MATCH,
+     * Sprint 18.5 §2 closed the yew_comp_score seam; ranking is now
+     * yew_fz_score's.  The sentinel moved from -1 to YEW_FZ_NO_MATCH,
      * and a genuine match may score NEGATIVE (the length penalty) -- a
      * `< 0` reject here would silently drop the longest real candidates.
      */
-    SAG_ASSERT(sag_fz_score("fop", 3U, "file.open", 9U, NULL) !=
-               SAG_FZ_NO_MATCH);
-    SAG_ASSERT(sag_fz_score("file", 4U, "file.open", 9U, NULL) >
-               sag_fz_score("fop", 3U, "file.open", 9U, NULL));
-    SAG_ASSERT_EQ_I64(sag_fz_score("xyz", 3U, "file.open", 9U, NULL),
-                      SAG_FZ_NO_MATCH);
+    YEW_ASSERT(yew_fz_score("fop", 3U, "file.open", 9U, NULL) !=
+               YEW_FZ_NO_MATCH);
+    YEW_ASSERT(yew_fz_score("file", 4U, "file.open", 9U, NULL) >
+               yew_fz_score("fop", 3U, "file.open", 9U, NULL));
+    YEW_ASSERT_EQ_I64(yew_fz_score("xyz", 3U, "file.open", 9U, NULL),
+                      YEW_FZ_NO_MATCH);
 
     arena_init(&ed.arena);
     arena_init(&scratch);
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    SAG_ASSERT(sag_comp_query(&ed, "file.open al", 12U, 12U, &scratch,
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    YEW_ASSERT(yew_comp_query(&ed, "file.open al", 12U, 12U, &scratch,
                               &query));
-    SAG_ASSERT_EQ_I64(query.kind, SAG_COMP_PATH);
-    SAG_ASSERT_EQ_STR(query.stem, "al");
-    SAG_ASSERT_EQ_U64(query.replace.lo, 10U);
-    SAG_ASSERT_EQ_U64(query.replace.hi, 12U);
-    SAG_ASSERT(!sag_comp_query(&ed, "not_a_command al", 16U, 16U,
+    YEW_ASSERT_EQ_I64(query.kind, YEW_COMP_PATH);
+    YEW_ASSERT_EQ_STR(query.stem, "al");
+    YEW_ASSERT_EQ_U64(query.replace.lo, 10U);
+    YEW_ASSERT_EQ_U64(query.replace.hi, 12U);
+    YEW_ASSERT(!yew_comp_query(&ed, "not_a_command al", 16U, 16U,
                                &scratch, &query));
-    SAG_ASSERT(sag_comp_query(&ed, "file.o", 6U, 6U, &scratch, &query));
-    SAG_ASSERT_EQ_I64(query.kind, SAG_COMP_CMD);
-    SAG_ASSERT_EQ_U64(
-        sag_comp_enumerate(&ed, SAG_COMP_CMD, "cmdline.", &commands), 0U);
-    SAG_ASSERT_EQ_U64(commands.len, 0U);
-    (void)sag_comp_enumerate(&ed, SAG_COMP_CMD, "del.", &commands);
-    SAG_ASSERT_NULL(find_item(&commands, "del.word_prev"));
-    SAG_ASSERT_NULL(find_item(&commands, "del.to_home"));
-    SAG_ASSERT_NULL(find_item(&commands, "del.to_end"));
-    (void)sag_comp_enumerate(&ed, SAG_COMP_CMD, "mode.", &commands);
-    SAG_ASSERT_NULL(find_item(&commands, "mode.enter"));
-    SAG_ASSERT_NULL(find_item(&commands, "mode.escape"));
+    YEW_ASSERT(yew_comp_query(&ed, "file.o", 6U, 6U, &scratch, &query));
+    YEW_ASSERT_EQ_I64(query.kind, YEW_COMP_CMD);
+    YEW_ASSERT_EQ_U64(
+        yew_comp_enumerate(&ed, YEW_COMP_CMD, "cmdline.", &commands), 0U);
+    YEW_ASSERT_EQ_U64(commands.len, 0U);
+    (void)yew_comp_enumerate(&ed, YEW_COMP_CMD, "del.", &commands);
+    YEW_ASSERT_NULL(find_item(&commands, "del.word_prev"));
+    YEW_ASSERT_NULL(find_item(&commands, "del.to_home"));
+    YEW_ASSERT_NULL(find_item(&commands, "del.to_end"));
+    (void)yew_comp_enumerate(&ed, YEW_COMP_CMD, "mode.", &commands);
+    YEW_ASSERT_NULL(find_item(&commands, "mode.enter"));
+    YEW_ASSERT_NULL(find_item(&commands, "mode.escape"));
     Vec_CompItem_free(&commands);
-    sag_cmd_shutdown();
+    yew_cmd_shutdown();
     arena_free_all(&scratch);
     arena_free_all(&ed.arena);
 }
@@ -171,7 +171,7 @@ static u32 stub_enumerate(const CompReq *req, Vec_CompItem *out)
 
 void test_cmdcomp_source_registry_replaces_by_kind(void)
 {
-    CompSource mine = {SAG_COMP_PATH, "stub", stub_enumerate, 0U};
+    CompSource mine = {YEW_COMP_PATH, "stub", stub_enumerate, 0U};
     CompSource saved;
     CompFixture fixture;
     Vec_CompItem items = {0};
@@ -180,28 +180,28 @@ void test_cmdcomp_source_registry_replaces_by_kind(void)
     fixture_file(&fixture, "real");
 
     /* Every kind ships a source; an empty provider is data, not a gap. */
-    SAG_ASSERT_EQ_U64(sag_comp_source_count(), (u64)SAG_COMP_KIND__N);
-    SAG_ASSERT_NOT_NULL(sag_comp_source(SAG_COMP_OPTION));
-    SAG_ASSERT_NULL(sag_comp_source(SAG_COMP_KIND__N));
+    YEW_ASSERT_EQ_U64(yew_comp_source_count(), (u64)YEW_COMP_KIND__N);
+    YEW_ASSERT_NOT_NULL(yew_comp_source(YEW_COMP_OPTION));
+    YEW_ASSERT_NULL(yew_comp_source(YEW_COMP_KIND__N));
 
-    saved = *sag_comp_source(SAG_COMP_PATH);
-    SAG_ASSERT_EQ_STR(saved.name, "path");
-    SAG_ASSERT((saved.flags & SAG_COMP_SRC_SLOW) != 0U);
+    saved = *yew_comp_source(YEW_COMP_PATH);
+    YEW_ASSERT_EQ_STR(saved.name, "path");
+    YEW_ASSERT((saved.flags & YEW_COMP_SRC_SLOW) != 0U);
 
     /* Registration is idempotent by kind: this REPLACES the built-in
      * path source rather than adding a second one fighting over it. */
-    sag_comp_source_register(&mine);
-    SAG_ASSERT_EQ_U64(sag_comp_source_count(), (u64)SAG_COMP_KIND__N);
-    SAG_ASSERT_EQ_STR(sag_comp_source(SAG_COMP_PATH)->name, "stub");
-    SAG_ASSERT_EQ_U64(
-        sag_comp_enumerate(&fixture.ed, SAG_COMP_PATH, "re", &items), 1U);
-    SAG_ASSERT_EQ_STR(items.data[0].text, "stub");
+    yew_comp_source_register(&mine);
+    YEW_ASSERT_EQ_U64(yew_comp_source_count(), (u64)YEW_COMP_KIND__N);
+    YEW_ASSERT_EQ_STR(yew_comp_source(YEW_COMP_PATH)->name, "stub");
+    YEW_ASSERT_EQ_U64(
+        yew_comp_enumerate(&fixture.ed, YEW_COMP_PATH, "re", &items), 1U);
+    YEW_ASSERT_EQ_STR(items.data[0].text, "stub");
 
-    sag_comp_source_register(&saved);
-    SAG_ASSERT_EQ_STR(sag_comp_source(SAG_COMP_PATH)->name, "path");
-    SAG_ASSERT_EQ_U64(
-        sag_comp_enumerate(&fixture.ed, SAG_COMP_PATH, "re", &items), 1U);
-    SAG_ASSERT_EQ_STR(items.data[0].text, "real");
+    yew_comp_source_register(&saved);
+    YEW_ASSERT_EQ_STR(yew_comp_source(YEW_COMP_PATH)->name, "path");
+    YEW_ASSERT_EQ_U64(
+        yew_comp_enumerate(&fixture.ed, YEW_COMP_PATH, "re", &items), 1U);
+    YEW_ASSERT_EQ_STR(items.data[0].text, "real");
 
     Vec_CompItem_free(&items);
     fixture_unlink(&fixture, "real", false);
@@ -213,22 +213,22 @@ void test_cmdcomp_path_head_len_is_the_one_split_rule(void)
     /* §4 keys its cache on this and the path source splits on it; two
      * split rules would let the cache serve one directory's entries
      * while the source read another's. */
-    SAG_ASSERT_EQ_U64(sag_comp_path_head_len("file"), 0U);
-    SAG_ASSERT_EQ_U64(sag_comp_path_head_len("src/file"), 4U);
-    SAG_ASSERT_EQ_U64(sag_comp_path_head_len("src/ui/"), 7U);
-    SAG_ASSERT_EQ_U64(sag_comp_path_head_len("/abs/path"), 5U);
-    SAG_ASSERT_EQ_U64(sag_comp_path_head_len("/"), 1U);
-    SAG_ASSERT_EQ_U64(sag_comp_path_head_len(""), 0U);
-    SAG_ASSERT_EQ_U64(sag_comp_path_head_len(NULL), 0U);
+    YEW_ASSERT_EQ_U64(yew_comp_path_head_len("file"), 0U);
+    YEW_ASSERT_EQ_U64(yew_comp_path_head_len("src/file"), 4U);
+    YEW_ASSERT_EQ_U64(yew_comp_path_head_len("src/ui/"), 7U);
+    YEW_ASSERT_EQ_U64(yew_comp_path_head_len("/abs/path"), 5U);
+    YEW_ASSERT_EQ_U64(yew_comp_path_head_len("/"), 1U);
+    YEW_ASSERT_EQ_U64(yew_comp_path_head_len(""), 0U);
+    YEW_ASSERT_EQ_U64(yew_comp_path_head_len(NULL), 0U);
 }
 
-static SagCompQuery path_query(const char *stem)
+static YewCompQuery path_query(const char *stem)
 {
-    SagCompQuery q;
+    YewCompQuery q;
 
     (void)memset(&q, 0, sizeof(q));
-    q.kind = SAG_COMP_PATH;
-    q.source = sag_comp_source(SAG_COMP_PATH);
+    q.kind = YEW_COMP_PATH;
+    q.source = yew_comp_source(YEW_COMP_PATH);
     q.stem = stem;
     return q;
 }
@@ -239,7 +239,7 @@ void test_cmdcomp_filter_reuses_the_set_while_the_pattern_only_grows(void)
     CompFixture fixture;
     Arena arena;
     Vec_CompItem out = {0};
-    SagCompQuery q;
+    YewCompQuery q;
 
     fixture_init(&fixture);
     fixture_dir(&fixture, "sub");
@@ -247,8 +247,8 @@ void test_cmdcomp_filter_reuses_the_set_while_the_pattern_only_grows(void)
     fixture_file(&fixture, "alpine");
     fixture_file(&fixture, "beta");
     arena_init(&arena);
-    sag_comp_filter_init(&filter);
-    sag_comp_test_reset_enumerate_count();
+    yew_comp_filter_init(&filter);
+    yew_comp_test_reset_enumerate_count();
 
     /* Typing forward: one opendir, then pure re-ranking.  The opendir is
      * the cost that matters, which is why the cache is keyed on the
@@ -256,17 +256,17 @@ void test_cmdcomp_filter_reuses_the_set_while_the_pattern_only_grows(void)
     /* Three, not two: matching is subsequence, so "beta" matches "a"
      * as surely as "alpha" does -- it just scores far below it. */
     q = path_query("a");
-    SAG_ASSERT_EQ_U64(sag_comp_filter_run(&fixture.ed, &filter, &arena, &q,
+    YEW_ASSERT_EQ_U64(yew_comp_filter_run(&fixture.ed, &filter, &arena, &q,
                                           0, &out), 3U);
     q = path_query("al");
-    (void)sag_comp_filter_run(&fixture.ed, &filter, &arena, &q, 0, &out);
+    (void)yew_comp_filter_run(&fixture.ed, &filter, &arena, &q, 0, &out);
     q = path_query("alp");
-    (void)sag_comp_filter_run(&fixture.ed, &filter, &arena, &q, 0, &out);
+    (void)yew_comp_filter_run(&fixture.ed, &filter, &arena, &q, 0, &out);
     q = path_query("alph");
-    SAG_ASSERT_EQ_U64(sag_comp_filter_run(&fixture.ed, &filter, &arena, &q,
+    YEW_ASSERT_EQ_U64(yew_comp_filter_run(&fixture.ed, &filter, &arena, &q,
                                           0, &out), 1U);
-    SAG_ASSERT_EQ_STR(out.data[0].text, "alpha");
-    SAG_ASSERT_EQ_U64(sag_comp_test_enumerate_count(), 1U);
+    YEW_ASSERT_EQ_STR(out.data[0].text, "alpha");
+    YEW_ASSERT_EQ_U64(yew_comp_test_enumerate_count(), 1U);
 
     /*
      * Narrowing is measured against the pattern the set was ENUMERATED
@@ -275,9 +275,9 @@ void test_cmdcomp_filter_reuses_the_set_while_the_pattern_only_grows(void)
      * inside the cached superset is free; only leaving it costs.
      */
     q = path_query("a");
-    SAG_ASSERT_EQ_U64(sag_comp_filter_run(&fixture.ed, &filter, &arena, &q,
+    YEW_ASSERT_EQ_U64(yew_comp_filter_run(&fixture.ed, &filter, &arena, &q,
                                           0, &out), 3U);
-    SAG_ASSERT_EQ_U64(sag_comp_test_enumerate_count(), 1U);
+    YEW_ASSERT_EQ_U64(yew_comp_test_enumerate_count(), 1U);
 
     /*
      * Backspacing PAST it does widen the set: the cached candidates were
@@ -285,17 +285,17 @@ void test_cmdcomp_filter_reuses_the_set_while_the_pattern_only_grows(void)
      * which the cache never held.
      */
     q = path_query("");
-    SAG_ASSERT_EQ_U64(sag_comp_filter_run(&fixture.ed, &filter, &arena, &q,
+    YEW_ASSERT_EQ_U64(yew_comp_filter_run(&fixture.ed, &filter, &arena, &q,
                                           0, &out), 4U);
-    SAG_ASSERT_EQ_U64(sag_comp_test_enumerate_count(), 2U);
+    YEW_ASSERT_EQ_U64(yew_comp_test_enumerate_count(), 2U);
 
     /* A different directory head is a different set entirely. */
     q = path_query("sub/");
-    (void)sag_comp_filter_run(&fixture.ed, &filter, &arena, &q, 0, &out);
-    SAG_ASSERT_EQ_U64(sag_comp_test_enumerate_count(), 3U);
+    (void)yew_comp_filter_run(&fixture.ed, &filter, &arena, &q, 0, &out);
+    YEW_ASSERT_EQ_U64(yew_comp_test_enumerate_count(), 3U);
 
     Vec_CompItem_free(&out);
-    sag_comp_filter_free(&filter);
+    yew_comp_filter_free(&filter);
     arena_free_all(&arena);
     fixture_unlink(&fixture, "beta", false);
     fixture_unlink(&fixture, "alpine", false);
@@ -344,35 +344,35 @@ void test_cmdcomp_filter_narrowing_equals_a_full_reenumerate(void)
         }
         pattern[len] = '\0';
 
-        sag_comp_filter_init(&narrowed);
+        yew_comp_filter_init(&narrowed);
         /* Build the cached set from the first character, then narrow it
          * one character at a time up to the full pattern. */
         for (step = 1U; step <= len; step++) {
             char prefix[8];
-            SagCompQuery q;
+            YewCompQuery q;
 
             (void)memcpy(prefix, pattern, step);
             prefix[step] = '\0';
             q = path_query(prefix);
-            (void)sag_comp_filter_run(&fixture.ed, &narrowed, &arena, &q, 0,
+            (void)yew_comp_filter_run(&fixture.ed, &narrowed, &arena, &q, 0,
                                       &a);
         }
         /* The same final pattern, straight from the source. */
         {
             Arena fresh_arena;
-            SagCompQuery q = path_query(pattern);
+            YewCompQuery q = path_query(pattern);
 
             arena_init(&fresh_arena);
-            sag_comp_filter_init(&fresh);
-            (void)sag_comp_filter_run(&fixture.ed, &fresh, &fresh_arena, &q,
+            yew_comp_filter_init(&fresh);
+            (void)yew_comp_filter_run(&fixture.ed, &fresh, &fresh_arena, &q,
                                       0, &b);
-            SAG_ASSERT_EQ_U64(a.len, b.len);
+            YEW_ASSERT_EQ_U64(a.len, b.len);
             for (i = 0U; i < a.len; i++)
-                SAG_ASSERT_EQ_STR(a.data[i].text, b.data[i].text);
-            sag_comp_filter_free(&fresh);
+                YEW_ASSERT_EQ_STR(a.data[i].text, b.data[i].text);
+            yew_comp_filter_free(&fresh);
             arena_free_all(&fresh_arena);
         }
-        sag_comp_filter_free(&narrowed);
+        yew_comp_filter_free(&narrowed);
         arena_free_all(&arena);
     }
 
@@ -394,25 +394,25 @@ void test_cmdcomp_filter_refuses_to_narrow_a_capped_set(void)
     CompFixture fixture;
     Arena arena;
     Vec_CompItem out = {0};
-    SagCompQuery q;
+    YewCompQuery q;
     char name[32];
     u32 i;
 
     fixture_init(&fixture);
-    /* More matches than SAG_COMP_MAX, so the source has to cap. */
-    for (i = 0U; i < SAG_COMP_MAX + 200U; i++) {
+    /* More matches than YEW_COMP_MAX, so the source has to cap. */
+    for (i = 0U; i < YEW_COMP_MAX + 200U; i++) {
         (void)snprintf(name, sizeof(name), "file%04u", (unsigned)i);
         fixture_file(&fixture, name);
     }
     arena_init(&arena);
-    sag_comp_filter_init(&filter);
-    sag_comp_test_reset_enumerate_count();
+    yew_comp_filter_init(&filter);
+    yew_comp_test_reset_enumerate_count();
 
     q = path_query("file");
-    SAG_ASSERT_EQ_U64(sag_comp_filter_run(&fixture.ed, &filter, &arena, &q,
+    YEW_ASSERT_EQ_U64(yew_comp_filter_run(&fixture.ed, &filter, &arena, &q,
                                           0, &out),
-                      SAG_COMP_MAX + 200U);
-    SAG_ASSERT_EQ_U64(out.len, SAG_COMP_MAX);
+                      YEW_COMP_MAX + 200U);
+    YEW_ASSERT_EQ_U64(out.len, YEW_COMP_MAX);
 
     /*
      * The cached set holds the 500 best matches for "file"; an entry the
@@ -421,8 +421,8 @@ void test_cmdcomp_filter_refuses_to_narrow_a_capped_set(void)
      * instead, and the answer is exact.
      */
     q = path_query("file06");
-    (void)sag_comp_filter_run(&fixture.ed, &filter, &arena, &q, 0, &out);
-    SAG_ASSERT_EQ_U64(sag_comp_test_enumerate_count(), 2U);
+    (void)yew_comp_filter_run(&fixture.ed, &filter, &arena, &q, 0, &out);
+    YEW_ASSERT_EQ_U64(yew_comp_test_enumerate_count(), 2U);
     /*
      * Exactly ten entries have "file06" as a PREFIX and so sit in the
      * basename tier; many more match it as a subsequence ("file0160"
@@ -434,19 +434,19 @@ void test_cmdcomp_filter_refuses_to_narrow_a_capped_set(void)
         u32 tiered = 0U;
 
         for (i = 0U; i < out.len; i++) {
-            if (out.data[i].score >= SAG_FZ_BASENAME_TIER)
+            if (out.data[i].score >= YEW_FZ_BASENAME_TIER)
                 tiered++;
         }
         /* file0600..file0699 -- the fixture stops at 699. */
-        SAG_ASSERT_EQ_U64(tiered, 100U);
+        YEW_ASSERT_EQ_U64(tiered, 100U);
     }
-    SAG_ASSERT_EQ_STR(out.data[0].text, "file0600");
-    SAG_ASSERT_EQ_STR(out.data[9].text, "file0609");
+    YEW_ASSERT_EQ_STR(out.data[0].text, "file0600");
+    YEW_ASSERT_EQ_STR(out.data[9].text, "file0609");
 
     Vec_CompItem_free(&out);
-    sag_comp_filter_free(&filter);
+    yew_comp_filter_free(&filter);
     arena_free_all(&arena);
-    for (i = 0U; i < SAG_COMP_MAX + 200U; i++) {
+    for (i = 0U; i < YEW_COMP_MAX + 200U; i++) {
         (void)snprintf(name, sizeof(name), "file%04u", (unsigned)i);
         fixture_unlink(&fixture, name, false);
     }
@@ -466,27 +466,27 @@ void test_cmdcomp_path_hidden_directory_and_unknown_dtype(void)
     fixture_file(&fixture, ".amber");
     fixture_dir(&fixture, "archive");
 
-    total = sag_comp_enumerate(&fixture.ed, SAG_COMP_PATH, "a", &items);
-    SAG_ASSERT_EQ_U64(total, 3U);
-    SAG_ASSERT_EQ_U64(items.len, 3U);
-    SAG_ASSERT_NULL(find_item(&items, ".amber"));
+    total = yew_comp_enumerate(&fixture.ed, YEW_COMP_PATH, "a", &items);
+    YEW_ASSERT_EQ_U64(total, 3U);
+    YEW_ASSERT_EQ_U64(items.len, 3U);
+    YEW_ASSERT_NULL(find_item(&items, ".amber"));
     dir = find_item(&items, "archive/");
-    SAG_ASSERT_NOT_NULL(dir);
-    SAG_ASSERT(dir->is_dir);
-    SAG_ASSERT_EQ_STR(items.data[0].text, "alpha");
-    SAG_ASSERT_EQ_STR(items.data[1].text, "apricot");
-    SAG_ASSERT_EQ_STR(items.data[2].text, "archive/");
+    YEW_ASSERT_NOT_NULL(dir);
+    YEW_ASSERT(dir->is_dir);
+    YEW_ASSERT_EQ_STR(items.data[0].text, "alpha");
+    YEW_ASSERT_EQ_STR(items.data[1].text, "apricot");
+    YEW_ASSERT_EQ_STR(items.data[2].text, "archive/");
 
-    total = sag_comp_enumerate(&fixture.ed, SAG_COMP_PATH, ".", &items);
-    SAG_ASSERT_EQ_U64(total, 1U);
-    SAG_ASSERT_EQ_STR(items.data[0].text, ".amber");
+    total = yew_comp_enumerate(&fixture.ed, YEW_COMP_PATH, ".", &items);
+    YEW_ASSERT_EQ_U64(total, 1U);
+    YEW_ASSERT_EQ_STR(items.data[0].text, ".amber");
 
-    sag_comp_test_force_dtype_unknown(true);
-    total = sag_comp_enumerate(&fixture.ed, SAG_COMP_PATH, "arch", &items);
-    SAG_ASSERT_EQ_U64(total, 1U);
-    SAG_ASSERT(items.data[0].is_dir);
-    SAG_ASSERT_EQ_U64(sag_comp_test_lstat_count(), 1U);
-    sag_comp_test_force_dtype_unknown(false);
+    yew_comp_test_force_dtype_unknown(true);
+    total = yew_comp_enumerate(&fixture.ed, YEW_COMP_PATH, "arch", &items);
+    YEW_ASSERT_EQ_U64(total, 1U);
+    YEW_ASSERT(items.data[0].is_dir);
+    YEW_ASSERT_EQ_U64(yew_comp_test_lstat_count(), 1U);
+    yew_comp_test_force_dtype_unknown(false);
 
     Vec_CompItem_free(&items);
     fixture_unlink(&fixture, "archive", true);
@@ -509,18 +509,18 @@ void test_cmdcomp_cap_and_deterministic_order(void)
         (void)snprintf(name, sizeof(name), "file%04u", (unsigned)(i - 1U));
         fixture_file(&fixture, name);
     }
-    SAG_ASSERT_EQ_U64(
-        sag_comp_enumerate(&fixture.ed, SAG_COMP_PATH, "file", &first),
+    YEW_ASSERT_EQ_U64(
+        yew_comp_enumerate(&fixture.ed, YEW_COMP_PATH, "file", &first),
         1200U);
-    SAG_ASSERT_EQ_U64(first.len, SAG_COMP_MAX);
-    SAG_ASSERT_EQ_STR(first.data[0].text, "file0000");
-    SAG_ASSERT_EQ_STR(first.data[SAG_COMP_MAX - 1U].text, "file0499");
-    SAG_ASSERT_EQ_U64(
-        sag_comp_enumerate(&fixture.ed, SAG_COMP_PATH, "file", &second),
+    YEW_ASSERT_EQ_U64(first.len, YEW_COMP_MAX);
+    YEW_ASSERT_EQ_STR(first.data[0].text, "file0000");
+    YEW_ASSERT_EQ_STR(first.data[YEW_COMP_MAX - 1U].text, "file0499");
+    YEW_ASSERT_EQ_U64(
+        yew_comp_enumerate(&fixture.ed, YEW_COMP_PATH, "file", &second),
         1200U);
-    SAG_ASSERT_EQ_U64(second.len, first.len);
-    for (i = 0U; i < SAG_COMP_MAX; i++)
-        SAG_ASSERT_EQ_STR(second.data[i].text, first.data[i].text);
+    YEW_ASSERT_EQ_U64(second.len, first.len);
+    for (i = 0U; i < YEW_COMP_MAX; i++)
+        YEW_ASSERT_EQ_STR(second.data[i].text, first.data[i].text);
 
     Vec_CompItem_free(&second);
     Vec_CompItem_free(&first);
@@ -543,54 +543,54 @@ void test_cmdcomp_path_quoting_retokenizes_one_argv(void)
 
     fixture_init(&fixture);
     fixture_file(&fixture, raw);
-    SAG_ASSERT_EQ_U64(
-        sag_comp_enumerate(&fixture.ed, SAG_COMP_PATH, "a", &items), 1U);
-    SAG_ASSERT_EQ_U64(items.len, 1U);
+    YEW_ASSERT_EQ_U64(
+        yew_comp_enumerate(&fixture.ed, YEW_COMP_PATH, "a", &items), 1U);
+    YEW_ASSERT_EQ_U64(items.len, 1U);
     item = &items.data[0];
-    SAG_ASSERT(item->text[0] == '"');
-    SAG_ASSERT(strstr(item->text, "\\\"") != NULL);
-    SAG_ASSERT(strstr(item->text, "\\\\") != NULL);
-    SAG_ASSERT(strstr(item->text, "\\%") != NULL);
-    SAG_ASSERT(strstr(item->text, "\\n") != NULL);
+    YEW_ASSERT(item->text[0] == '"');
+    YEW_ASSERT(strstr(item->text, "\\\"") != NULL);
+    YEW_ASSERT(strstr(item->text, "\\\\") != NULL);
+    YEW_ASSERT(strstr(item->text, "\\%") != NULL);
+    YEW_ASSERT(strstr(item->text, "\\n") != NULL);
     (void)snprintf(line, sizeof(line), "file.open %s", item->text);
     arena_init(&parse_arena);
-    SAG_ASSERT(sag_cmd_parse(&fixture.ed, line, strlen(line), &parse_arena,
+    YEW_ASSERT(yew_cmd_parse(&fixture.ed, line, strlen(line), &parse_arena,
                              &parsed));
-    SAG_ASSERT_EQ_U64(parsed.argv.n, 2U);
-    SAG_ASSERT_EQ_STR(parsed.argv.v[1], raw);
+    YEW_ASSERT_EQ_U64(parsed.argv.n, 2U);
+    YEW_ASSERT_EQ_STR(parsed.argv.v[1], raw);
     arena_free_all(&parse_arena);
 
     arena_init(&parse_arena);
-    SAG_ASSERT(sag_cmd_parse(
+    YEW_ASSERT(yew_cmd_parse(
         &fixture.ed,
         "file.open a\\ space\\\"quote\\'$\\\\percent\\%and\\\nline",
         sizeof("file.open a\\ space\\\"quote\\'$\\\\percent\\%and\\\nline") -
             1U,
         &parse_arena, &parsed));
-    SAG_ASSERT_EQ_U64(parsed.argv.n, 2U);
-    SAG_ASSERT_EQ_STR(parsed.argv.v[0], "ed.file.open");
-    SAG_ASSERT_EQ_STR(parsed.argv.v[1], raw);
+    YEW_ASSERT_EQ_U64(parsed.argv.n, 2U);
+    YEW_ASSERT_EQ_STR(parsed.argv.v[0], "ed.file.open");
+    YEW_ASSERT_EQ_STR(parsed.argv.v[1], raw);
     arena_free_all(&parse_arena);
 
     arena_init(&parse_arena);
-    SAG_ASSERT(sag_cmd_parse(
+    YEW_ASSERT(yew_cmd_parse(
         &fixture.ed,
         "file.open 'a space\"quote'\\''$\\percent%and\nline'",
         sizeof("file.open 'a space\"quote'\\''$\\percent%and\nline'") - 1U,
         &parse_arena, &parsed));
-    SAG_ASSERT_EQ_U64(parsed.argv.n, 2U);
-    SAG_ASSERT_EQ_STR(parsed.argv.v[0], "ed.file.open");
-    SAG_ASSERT_EQ_STR(parsed.argv.v[1], raw);
+    YEW_ASSERT_EQ_U64(parsed.argv.n, 2U);
+    YEW_ASSERT_EQ_STR(parsed.argv.v[0], "ed.file.open");
+    YEW_ASSERT_EQ_STR(parsed.argv.v[1], raw);
     arena_free_all(&parse_arena);
 
     fixture_unlink(&fixture, raw, false);
     fixture_file(&fixture, "cr\rname");
     items.len = 0U;
-    SAG_ASSERT_EQ_U64(
-        sag_comp_enumerate(&fixture.ed, SAG_COMP_PATH, "cr", &items), 1U);
-    SAG_ASSERT_EQ_U64(items.len, 1U);
-    SAG_ASSERT_NULL(strchr(items.data[0].text, '\r'));
-    SAG_ASSERT_NOT_NULL(strstr(items.data[0].text, "cr name"));
+    YEW_ASSERT_EQ_U64(
+        yew_comp_enumerate(&fixture.ed, YEW_COMP_PATH, "cr", &items), 1U);
+    YEW_ASSERT_EQ_U64(items.len, 1U);
+    YEW_ASSERT_NULL(strchr(items.data[0].text, '\r'));
+    YEW_ASSERT_NOT_NULL(strstr(items.data[0].text, "cr name"));
     fixture_unlink(&fixture, "cr\rname", false);
     Vec_CompItem_free(&items);
     fixture_dispose(&fixture);
@@ -607,40 +607,40 @@ void test_cmdcomp_lcp_menu_and_empty_providers(void)
     fixture_init(&fixture);
     fixture_file(&fixture, "alpha");
     fixture_file(&fixture, "alpine");
-    SAG_ASSERT_EQ_U64(
-        sag_comp_enumerate(&fixture.ed, SAG_COMP_PATH, "al", &items), 2U);
+    YEW_ASSERT_EQ_U64(
+        yew_comp_enumerate(&fixture.ed, YEW_COMP_PATH, "al", &items), 2U);
     arena_init(&scratch);
-    lcp = sag_comp_lcp(&scratch, &items);
-    SAG_ASSERT_EQ_STR(lcp, "alp");
-    sag_menu_init(&menu, NULL);
-    SAG_ASSERT_EQ_I64(menu.sel, -1);
-    SAG_ASSERT(!menu.explicit_sel);
-    sag_menu_reset(&menu, items, 2U, (Span){0U, 0U});
+    lcp = yew_comp_lcp(&scratch, &items);
+    YEW_ASSERT_EQ_STR(lcp, "alp");
+    yew_menu_init(&menu, NULL);
+    YEW_ASSERT_EQ_I64(menu.sel, -1);
+    YEW_ASSERT(!menu.explicit_sel);
+    yew_menu_reset(&menu, items, 2U, (Span){0U, 0U});
     items = (Vec_CompItem){0};
-    sag_menu_free(&menu);
-    SAG_ASSERT_EQ_I64(menu.sel, -1);
-    SAG_ASSERT_NULL(menu.items.data);
-    SAG_ASSERT(sag_comp_enumerate(&fixture.ed, SAG_COMP_OPTION,
+    yew_menu_free(&menu);
+    YEW_ASSERT_EQ_I64(menu.sel, -1);
+    YEW_ASSERT_NULL(menu.items.data);
+    YEW_ASSERT(yew_comp_enumerate(&fixture.ed, YEW_COMP_OPTION,
                                   "tab", &items) >= 1U);
-    SAG_ASSERT_EQ_U64(sag_comp_enumerate(&fixture.ed, SAG_COMP_VALUE,
+    YEW_ASSERT_EQ_U64(yew_comp_enumerate(&fixture.ed, YEW_COMP_VALUE,
                                           "4", &items), 0U);
     Vec_CompItem_push(&items,
                       ((CompItem){.text = "\xc3\xa9" "lan",
-                                  .kind = SAG_COMP_VALUE}));
+                                  .kind = YEW_COMP_VALUE}));
     Vec_CompItem_push(&items,
                       ((CompItem){.text = "\xc3\xaa" "tre",
-                                  .kind = SAG_COMP_VALUE}));
-    lcp = sag_comp_lcp(&scratch, &items);
-    SAG_ASSERT_EQ_STR(lcp, "");
+                                  .kind = YEW_COMP_VALUE}));
+    lcp = yew_comp_lcp(&scratch, &items);
+    YEW_ASSERT_EQ_STR(lcp, "");
     items.len = 0U;
     Vec_CompItem_push(&items,
                       ((CompItem){.text = "\xc3\xa9" "clair",
-                                  .kind = SAG_COMP_VALUE}));
+                                  .kind = YEW_COMP_VALUE}));
     Vec_CompItem_push(&items,
                       ((CompItem){.text = "\xc3\xa9" "toile",
-                                  .kind = SAG_COMP_VALUE}));
-    lcp = sag_comp_lcp(&scratch, &items);
-    SAG_ASSERT_EQ_STR(lcp, "\xc3\xa9");
+                                  .kind = YEW_COMP_VALUE}));
+    lcp = yew_comp_lcp(&scratch, &items);
+    YEW_ASSERT_EQ_STR(lcp, "\xc3\xa9");
     arena_free_all(&scratch);
     Vec_CompItem_free(&items);
     fixture_unlink(&fixture, "alpine", false);
@@ -652,7 +652,7 @@ void test_cmdcomp_lcp_menu_and_empty_providers(void)
  * Sprint 18.5 DoD 10: one opendir per directory, however many keystrokes
  * follow.
  *
- * The ranked set caps at SAG_COMP_MAX and a capped set cannot answer a
+ * The ranked set caps at YEW_COMP_MAX and a capped set cannot answer a
  * narrowed pattern, so before the listing cache every keystroke past the
  * directory head rescanned.  This asserts the COUNT, which is what the
  * DoD says; a latency number would pass on a fast disk and hide it.
@@ -678,35 +678,35 @@ void test_cmdcomp_listing_scans_a_directory_once(void)
         fixture_file(&fixture, name);
     }
     arena_init(&arena);
-    sag_comp_filter_init(&filter);
+    yew_comp_filter_init(&filter);
     /* One warm-up so the count excludes whatever the first call loads. */
     {
-        SagCompQuery q = path_query("e");
+        YewCompQuery q = path_query("e");
 
-        (void)sag_comp_filter_run(&fixture.ed, &filter, &arena, &q, 0, &out);
+        (void)yew_comp_filter_run(&fixture.ed, &filter, &arena, &q, 0, &out);
     }
-    before = sag_comp_listing_opendirs();
-    for (i = 0U; i < SAG_ARRAY_LEN(steps); i++) {
-        SagCompQuery q = path_query(steps[i]);
+    before = yew_comp_listing_opendirs();
+    for (i = 0U; i < YEW_ARRAY_LEN(steps); i++) {
+        YewCompQuery q = path_query(steps[i]);
 
-        (void)sag_comp_filter_run(&fixture.ed, &filter, &arena, &q, 0, &out);
+        (void)yew_comp_filter_run(&fixture.ed, &filter, &arena, &q, 0, &out);
     }
-    SAG_ASSERT_EQ_U64(sag_comp_listing_opendirs() - before, 0U);
-    SAG_ASSERT(out.len != 0U);
+    YEW_ASSERT_EQ_U64(yew_comp_listing_opendirs() - before, 0U);
+    YEW_ASSERT(out.len != 0U);
 
     /*
      * And the cache is not allowed to outlive the menu: a directory that
-     * changed between prompts must be seen.  sag_comp_enumerate is the
+     * changed between prompts must be seen.  yew_comp_enumerate is the
      * fresh-read form, so it both rescans and retires the listing.
      */
     fixture_file(&fixture, "zebra");
     out.len = 0U;
-    SAG_ASSERT_EQ_U64(
-        sag_comp_enumerate(&fixture.ed, SAG_COMP_PATH, "zebra", &out), 1U);
+    YEW_ASSERT_EQ_U64(
+        yew_comp_enumerate(&fixture.ed, YEW_COMP_PATH, "zebra", &out), 1U);
     fixture_unlink(&fixture, "zebra", false);
 
     Vec_CompItem_free(&out);
-    sag_comp_filter_free(&filter);
+    yew_comp_filter_free(&filter);
     arena_free_all(&arena);
     for (i = 0U; i < 600U; i++) {
         char name[32];
@@ -742,7 +742,7 @@ void test_cmdcomp_listing_slices_and_resumes_without_rescanning(void)
     Arena fresh_arena;
     Vec_CompItem sliced = {0};
     Vec_CompItem whole = {0};
-    SagCompQuery q;
+    YewCompQuery q;
     u64 before;
     u32 slices = 0U;
     u32 i;
@@ -755,28 +755,28 @@ void test_cmdcomp_listing_slices_and_resumes_without_rescanning(void)
         fixture_file(&fixture, name);
     }
     arena_init(&arena);
-    sag_comp_filter_init(&filter);
+    yew_comp_filter_init(&filter);
 
-    before = sag_comp_listing_opendirs();
+    before = yew_comp_listing_opendirs();
     q = path_query("e");
-    (void)sag_comp_filter_run(&fixture.ed, &filter, &arena, &q, 1, &sliced);
+    (void)yew_comp_filter_run(&fixture.ed, &filter, &arena, &q, 1, &sliced);
     /* Stopped early, with the handle held open for the resume. */
-    SAG_ASSERT(sag_comp_listing_pending());
-    SAG_ASSERT_EQ_U64(sag_comp_listing_opendirs() - before, 1U);
+    YEW_ASSERT(yew_comp_listing_pending());
+    YEW_ASSERT_EQ_U64(yew_comp_listing_opendirs() - before, 1U);
     /* Partial is still USEFUL: the menu shows the best of what was read
      * rather than nothing at all. */
-    SAG_ASSERT(sliced.len != 0U);
+    YEW_ASSERT(sliced.len != 0U);
 
     /* The idle path drains it.  ONE opendir for the whole scan, however
      * many slices it takes -- a resume that reopened would both re-read
      * from the top and never terminate. */
-    while (sag_comp_listing_advance(1)) {
+    while (yew_comp_listing_advance(1)) {
         slices++;
-        SAG_ASSERT(slices < 100U);
+        YEW_ASSERT(slices < 100U);
     }
-    SAG_ASSERT(slices != 0U);
-    SAG_ASSERT(!sag_comp_listing_pending());
-    SAG_ASSERT_EQ_U64(sag_comp_listing_opendirs() - before, 1U);
+    YEW_ASSERT(slices != 0U);
+    YEW_ASSERT(!yew_comp_listing_pending());
+    YEW_ASSERT_EQ_U64(yew_comp_listing_opendirs() - before, 1U);
 
     /*
      * And the finished scan answers exactly what an unsliced one would.
@@ -784,32 +784,32 @@ void test_cmdcomp_listing_slices_and_resumes_without_rescanning(void)
      * count, so a slice boundary that dropped or duplicated an entry
      * shows up as a different set and not merely a different total.
      *
-     * TWO arenas and two filters, because sag_comp_filter_run resets the
+     * TWO arenas and two filters, because yew_comp_filter_run resets the
      * arena it is handed whenever it re-enumerates -- the second result
      * would otherwise free the first one's strings out from under this
      * comparison.  ASan caught exactly that when both shared one arena.
      */
-    sag_comp_filter_invalidate(&filter);
+    yew_comp_filter_invalidate(&filter);
     q = path_query("e");
-    (void)sag_comp_filter_run(&fixture.ed, &filter, &arena, &q, 0, &sliced);
+    (void)yew_comp_filter_run(&fixture.ed, &filter, &arena, &q, 0, &sliced);
 
-    sag_comp_listing_invalidate();
+    yew_comp_listing_invalidate();
     arena_init(&fresh_arena);
-    sag_comp_filter_init(&fresh);
+    yew_comp_filter_init(&fresh);
     q = path_query("e");
-    (void)sag_comp_filter_run(&fixture.ed, &fresh, &fresh_arena, &q, 0,
+    (void)yew_comp_filter_run(&fixture.ed, &fresh, &fresh_arena, &q, 0,
                               &whole);
     /* Tab's unlimited budget finishes in the one call it is given. */
-    SAG_ASSERT(!sag_comp_listing_pending());
-    SAG_ASSERT_EQ_U64(sliced.len, whole.len);
-    SAG_ASSERT(whole.len != 0U);
+    YEW_ASSERT(!yew_comp_listing_pending());
+    YEW_ASSERT_EQ_U64(sliced.len, whole.len);
+    YEW_ASSERT(whole.len != 0U);
     for (i = 0U; i < (u32)sliced.len; i++)
-        SAG_ASSERT_EQ_I64(strcmp(sliced.data[i].text, whole.data[i].text), 0);
+        YEW_ASSERT_EQ_I64(strcmp(sliced.data[i].text, whole.data[i].text), 0);
 
     Vec_CompItem_free(&whole);
     Vec_CompItem_free(&sliced);
-    sag_comp_filter_free(&fresh);
-    sag_comp_filter_free(&filter);
+    yew_comp_filter_free(&fresh);
+    yew_comp_filter_free(&filter);
     arena_free_all(&fresh_arena);
     arena_free_all(&arena);
     for (i = 0U; i < 600U; i++) {
@@ -825,11 +825,11 @@ void test_cmdcomp_listing_slices_and_resumes_without_rescanning(void)
  * Overflowing the hold limit MID-SLICE must not free the cache key it is
  * still being resumed with.
  *
- * sag_comp_listing_advance resumes a scan by passing comp_listing.dir
+ * yew_comp_listing_advance resumes a scan by passing comp_listing.dir
  * straight back to the stepper, so on the overflow path `scan_dir` and
  * the cache's own key are the SAME pointer.  Disposing the listing there
  * and re-duplicating the name reads freed memory — quietly, on a build
- * without a sanitizer, and only for a directory past SAG_COMP_LIST_MAX.
+ * without a sanitizer, and only for a directory past YEW_COMP_LIST_MAX.
  * The limit is lowered here so the path is reachable at 600 entries; the
  * sanitizer lanes are what turn this into a hard failure.
  */
@@ -839,7 +839,7 @@ void test_cmdcomp_listing_overflow_midslice_keeps_its_key(void)
     CompFilter filter;
     Arena arena;
     Vec_CompItem out = {0};
-    SagCompQuery q;
+    YewCompQuery q;
     u32 i;
 
     fixture_init(&fixture);
@@ -850,33 +850,33 @@ void test_cmdcomp_listing_overflow_midslice_keeps_its_key(void)
         fixture_file(&fixture, name);
     }
     arena_init(&arena);
-    sag_comp_filter_init(&filter);
+    yew_comp_filter_init(&filter);
 
     /* Small enough that the fixture overflows it, large enough that the
      * first slice ends before it does. */
-    sag_comp_test_set_list_max(400U);
+    yew_comp_test_set_list_max(400U);
     q = path_query("e");
-    (void)sag_comp_filter_run(&fixture.ed, &filter, &arena, &q, 1, &out);
-    SAG_ASSERT(sag_comp_listing_pending());
+    (void)yew_comp_filter_run(&fixture.ed, &filter, &arena, &q, 1, &out);
+    YEW_ASSERT(yew_comp_listing_pending());
 
     /* Resumes straight into the overflow.  Nothing is cached afterwards,
      * and the scan is over rather than pending. */
-    while (sag_comp_listing_advance(1))
+    while (yew_comp_listing_advance(1))
         ;
-    SAG_ASSERT(!sag_comp_listing_pending());
+    YEW_ASSERT(!yew_comp_listing_pending());
 
     /*
      * And an overflowed directory still COMPLETES, by streaming: the
      * cache declining to hold it is not the menu declining to answer.
      */
-    sag_comp_filter_invalidate(&filter);
+    yew_comp_filter_invalidate(&filter);
     q = path_query("entry1");
-    (void)sag_comp_filter_run(&fixture.ed, &filter, &arena, &q, 0, &out);
-    SAG_ASSERT(out.len != 0U);
+    (void)yew_comp_filter_run(&fixture.ed, &filter, &arena, &q, 0, &out);
+    YEW_ASSERT(out.len != 0U);
 
-    sag_comp_test_set_list_max(0U);
+    yew_comp_test_set_list_max(0U);
     Vec_CompItem_free(&out);
-    sag_comp_filter_free(&filter);
+    yew_comp_filter_free(&filter);
     arena_free_all(&arena);
     for (i = 0U; i < 600U; i++) {
         char name[32];

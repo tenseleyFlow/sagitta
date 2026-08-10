@@ -1,5 +1,5 @@
-#ifndef SAG_FL_FLTXN_H
-#define SAG_FL_FLTXN_H
+#ifndef YEW_FL_FLTXN_H
+#define YEW_FL_FLTXN_H
 
 #include <stdbool.h>
 
@@ -23,7 +23,7 @@ extern const FlHost fl_host_editor;
 bool fl_txn_enlist(FlVm *vm, const EditCtx *ec);
 
 /* Lifecycle/durability guards for editor commands that do not mutate via
- * sag_edit_*.  A buffer whose undo tree is enlisted cannot be destroyed;
+ * yew_edit_*.  A buffer whose undo tree is enlisted cannot be destroyed;
  * a save must first commit any implicit transaction so the saved marker
  * describes the bytes actually written.  Explicit edit{} blocks remain
  * atomic and therefore refuse an in-block save rather than splitting it. */

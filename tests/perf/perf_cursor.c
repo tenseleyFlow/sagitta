@@ -53,12 +53,12 @@ static bool measure(const PerfCase *pc, i64 *worst_out)
     memcpy(cross_bytes, bytes, LONG_LINE_BYTES);
     cross_bytes[LONG_LINE_BYTES] = '\n';
     cross_bytes[LONG_LINE_BYTES + 1U] = 'z';
-    tb = sag_textbuf_from_owned_bytes(bytes, LONG_LINE_BYTES);
-    cross_tb = sag_textbuf_from_owned_bytes(cross_bytes,
+    tb = yew_textbuf_from_owned_bytes(bytes, LONG_LINE_BYTES);
+    cross_tb = yew_textbuf_from_owned_bytes(cross_bytes,
                                              LONG_LINE_BYTES + 2U);
     if (tb == NULL || cross_tb == NULL) {
-        sag_textbuf_free(cross_tb);
-        sag_textbuf_free(tb);
+        yew_textbuf_free(cross_tb);
+        yew_textbuf_free(tb);
         return false;
     }
     clusters = LONG_LINE_BYTES / pc->pattern_len;
@@ -74,11 +74,11 @@ static bool measure(const PerfCase *pc, i64 *worst_out)
         cursor.goal_col = (GCol){clusters - 1U};
         start = now_ns();
         if (start < 0) {
-            sag_textbuf_free(tb);
-            sag_textbuf_free(cross_tb);
+            yew_textbuf_free(tb);
+            yew_textbuf_free(cross_tb);
             return false;
         }
-        sag_cursor_right(tb, &cursor);
+        yew_cursor_right(tb, &cursor);
         elapsed = now_ns() - start;
         if (elapsed < 0 || cursor.pos.v != LONG_LINE_BYTES ||
             cursor.goal_col.v != clusters) {
@@ -88,8 +88,8 @@ static bool measure(const PerfCase *pc, i64 *worst_out)
                           pc->name, round,
                           (unsigned long long)cursor.pos.v,
                           (unsigned long long)cursor.goal_col.v);
-            sag_textbuf_free(tb);
-            sag_textbuf_free(cross_tb);
+            yew_textbuf_free(tb);
+            yew_textbuf_free(cross_tb);
             return false;
         }
         if (elapsed > worst)
@@ -101,17 +101,17 @@ static bool measure(const PerfCase *pc, i64 *worst_out)
         cursor.goal_col = (GCol){clusters};
         start = now_ns();
         if (start < 0) {
-            sag_textbuf_free(tb);
-            sag_textbuf_free(cross_tb);
+            yew_textbuf_free(tb);
+            yew_textbuf_free(cross_tb);
             return false;
         }
-        sag_cursor_left(tb, &cursor);
+        yew_cursor_left(tb, &cursor);
         elapsed = now_ns() - start;
         if (elapsed < 0 ||
             cursor.pos.v != LONG_LINE_BYTES - pc->pattern_len ||
             cursor.goal_col.v != clusters - 1U) {
-            sag_textbuf_free(tb);
-            sag_textbuf_free(cross_tb);
+            yew_textbuf_free(tb);
+            yew_textbuf_free(cross_tb);
             return false;
         }
         if (elapsed > worst)
@@ -119,14 +119,14 @@ static bool measure(const PerfCase *pc, i64 *worst_out)
         perf_cursor_sink = cursor.pos.v + cursor.goal_col.v;
 
         start = now_ns();
-        sag_textbuf_insert(tb, BYTEOFF(LONG_LINE_BYTES), &inserted, 1U);
+        yew_textbuf_insert(tb, BYTEOFF(LONG_LINE_BYTES), &inserted, 1U);
         elapsed = now_ns() - start;
         if (start < 0 || elapsed < 0) {
-            sag_textbuf_delete(tb,
+            yew_textbuf_delete(tb,
                                (Span){LONG_LINE_BYTES,
                                       LONG_LINE_BYTES + 1U});
-            sag_textbuf_free(cross_tb);
-            sag_textbuf_free(tb);
+            yew_textbuf_free(cross_tb);
+            yew_textbuf_free(tb);
             return false;
         }
         if (elapsed > worst)
@@ -136,14 +136,14 @@ static bool measure(const PerfCase *pc, i64 *worst_out)
         cursor.goal_col = (GCol){clusters + 1U};
         start = now_ns();
         if (start < 0) {
-            sag_textbuf_delete(tb,
+            yew_textbuf_delete(tb,
                                (Span){LONG_LINE_BYTES,
                                       LONG_LINE_BYTES + 1U});
-            sag_textbuf_free(cross_tb);
-            sag_textbuf_free(tb);
+            yew_textbuf_free(cross_tb);
+            yew_textbuf_free(tb);
             return false;
         }
-        sag_cursor_left(tb, &cursor);
+        yew_cursor_left(tb, &cursor);
         elapsed = now_ns() - start;
         if (elapsed < 0 || cursor.pos.v != LONG_LINE_BYTES ||
             cursor.goal_col.v != clusters) {
@@ -153,11 +153,11 @@ static bool measure(const PerfCase *pc, i64 *worst_out)
                           pc->name, round,
                           (unsigned long long)cursor.pos.v,
                           (unsigned long long)cursor.goal_col.v);
-            sag_textbuf_delete(tb,
+            yew_textbuf_delete(tb,
                                (Span){LONG_LINE_BYTES,
                                       LONG_LINE_BYTES + 1U});
-            sag_textbuf_free(cross_tb);
-            sag_textbuf_free(tb);
+            yew_textbuf_free(cross_tb);
+            yew_textbuf_free(tb);
             return false;
         }
         if (elapsed > worst)
@@ -165,17 +165,17 @@ static bool measure(const PerfCase *pc, i64 *worst_out)
 
         start = now_ns();
         if (start < 0) {
-            sag_textbuf_delete(tb,
+            yew_textbuf_delete(tb,
                                (Span){LONG_LINE_BYTES,
                                       LONG_LINE_BYTES + 1U});
-            sag_textbuf_free(cross_tb);
-            sag_textbuf_free(tb);
+            yew_textbuf_free(cross_tb);
+            yew_textbuf_free(tb);
             return false;
         }
-        sag_cursor_left(tb, &cursor);
+        yew_cursor_left(tb, &cursor);
         elapsed = now_ns() - start;
         start = now_ns();
-        sag_textbuf_delete(tb,
+        yew_textbuf_delete(tb,
                            (Span){LONG_LINE_BYTES,
                                   LONG_LINE_BYTES + 1U});
         delete_elapsed = now_ns() - start;
@@ -188,8 +188,8 @@ static bool measure(const PerfCase *pc, i64 *worst_out)
                           pc->name, round,
                           (unsigned long long)cursor.pos.v,
                           (unsigned long long)cursor.goal_col.v);
-            sag_textbuf_free(cross_tb);
-            sag_textbuf_free(tb);
+            yew_textbuf_free(cross_tb);
+            yew_textbuf_free(tb);
             return false;
         }
         if (elapsed > worst)
@@ -202,25 +202,25 @@ static bool measure(const PerfCase *pc, i64 *worst_out)
         cursor.anchor = cursor.pos;
         cursor.goal_col = (GCol){0U};
         start = now_ns();
-        sag_cursor_line_end(tb, &cursor);
+        yew_cursor_line_end(tb, &cursor);
         elapsed = now_ns() - start;
         if (elapsed < 0 || cursor.pos.v != LONG_LINE_BYTES ||
-            cursor.goal_col.v != SAG_GCOL_EOL) {
-            sag_textbuf_free(cross_tb);
-            sag_textbuf_free(tb);
+            cursor.goal_col.v != YEW_GCOL_EOL) {
+            yew_textbuf_free(cross_tb);
+            yew_textbuf_free(tb);
             return false;
         }
         if (elapsed > worst)
             worst = elapsed;
 
         start = now_ns();
-        sag_cursor_left(tb, &cursor);
+        yew_cursor_left(tb, &cursor);
         elapsed = now_ns() - start;
         if (elapsed < 0 ||
             cursor.pos.v != LONG_LINE_BYTES - pc->pattern_len ||
             cursor.goal_col.v != clusters - 1U) {
-            sag_textbuf_free(cross_tb);
-            sag_textbuf_free(tb);
+            yew_textbuf_free(cross_tb);
+            yew_textbuf_free(tb);
             return false;
         }
         if (elapsed > worst)
@@ -230,12 +230,12 @@ static bool measure(const PerfCase *pc, i64 *worst_out)
         cursor.anchor = cursor.pos;
         cursor.goal_col = (GCol){0U};
         start = now_ns();
-        sag_cursor_buf_end(tb, &cursor);
+        yew_cursor_buf_end(tb, &cursor);
         elapsed = now_ns() - start;
         if (elapsed < 0 || cursor.pos.v != LONG_LINE_BYTES ||
-            cursor.goal_col.v != SAG_GCOL_EOL) {
-            sag_textbuf_free(cross_tb);
-            sag_textbuf_free(tb);
+            cursor.goal_col.v != YEW_GCOL_EOL) {
+            yew_textbuf_free(cross_tb);
+            yew_textbuf_free(tb);
             return false;
         }
         if (elapsed > worst)
@@ -245,25 +245,25 @@ static bool measure(const PerfCase *pc, i64 *worst_out)
         cursor.anchor = cursor.pos;
         cursor.goal_col = (GCol){0U};
         start = now_ns();
-        sag_cursor_left(cross_tb, &cursor);
+        yew_cursor_left(cross_tb, &cursor);
         elapsed = now_ns() - start;
         if (elapsed < 0 || cursor.pos.v != LONG_LINE_BYTES ||
             cursor.goal_col.v != clusters) {
-            sag_textbuf_free(cross_tb);
-            sag_textbuf_free(tb);
+            yew_textbuf_free(cross_tb);
+            yew_textbuf_free(tb);
             return false;
         }
         if (elapsed > worst)
             worst = elapsed;
 
         start = now_ns();
-        sag_cursor_left(cross_tb, &cursor);
+        yew_cursor_left(cross_tb, &cursor);
         elapsed = now_ns() - start;
         if (elapsed < 0 ||
             cursor.pos.v != LONG_LINE_BYTES - pc->pattern_len ||
             cursor.goal_col.v != clusters - 1U) {
-            sag_textbuf_free(cross_tb);
-            sag_textbuf_free(tb);
+            yew_textbuf_free(cross_tb);
+            yew_textbuf_free(tb);
             return false;
         }
         if (elapsed > worst)
@@ -278,12 +278,12 @@ static bool measure(const PerfCase *pc, i64 *worst_out)
                  worst <= budget_ns ? "" : " OVER-BUDGET");
     if (cursor.pos.v != LONG_LINE_BYTES - pc->pattern_len ||
         cursor.goal_col.v != clusters - 1U || worst > budget_ns) {
-        sag_textbuf_free(cross_tb);
-        sag_textbuf_free(tb);
+        yew_textbuf_free(cross_tb);
+        yew_textbuf_free(tb);
         return false;
     }
-    sag_textbuf_free(cross_tb);
-    sag_textbuf_free(tb);
+    yew_textbuf_free(cross_tb);
+    yew_textbuf_free(tb);
     *worst_out = worst;
     return true;
 }
@@ -306,20 +306,20 @@ static bool measure_contextual_reverse(void)
         return false;
     for (at = 0U; at < LONG_LINE_BYTES; at += sizeof(ri))
         memcpy(bytes + at, ri, sizeof(ri));
-    tb = sag_textbuf_from_owned_bytes(bytes, LONG_LINE_BYTES);
+    tb = yew_textbuf_from_owned_bytes(bytes, LONG_LINE_BYTES);
     cursor.pos = BYTEOFF(LONG_LINE_BYTES);
     cursor.anchor = cursor.pos;
     cursor.goal_col = (GCol){LONG_LINE_BYTES / sizeof(ri) / 2U};
     start = now_ns();
-    sag_cursor_left(tb, &cursor);
+    yew_cursor_left(tb, &cursor);
     ri_elapsed = now_ns() - start;
     if (start < 0 || ri_elapsed < 0 ||
         cursor.pos.v != LONG_LINE_BYTES - 2U * sizeof(ri) ||
         cursor.goal_col.v != LONG_LINE_BYTES / sizeof(ri) / 2U - 1U) {
-        sag_textbuf_free(tb);
+        yew_textbuf_free(tb);
         return false;
     }
-    sag_textbuf_free(tb);
+    yew_textbuf_free(tb);
 
     bytes = malloc(extend_len);
     if (bytes == NULL)
@@ -327,19 +327,19 @@ static bool measure_contextual_reverse(void)
     bytes[0] = 'a';
     for (at = 1U; at < extend_len; at += sizeof(extend))
         memcpy(bytes + at, extend, sizeof(extend));
-    tb = sag_textbuf_from_owned_bytes(bytes, (u64)extend_len);
+    tb = yew_textbuf_from_owned_bytes(bytes, (u64)extend_len);
     cursor.pos = BYTEOFF((u64)extend_len);
     cursor.anchor = cursor.pos;
     cursor.goal_col = (GCol){1U};
     start = now_ns();
-    sag_cursor_left(tb, &cursor);
+    yew_cursor_left(tb, &cursor);
     extend_elapsed = now_ns() - start;
     if (start < 0 || extend_elapsed < 0 || cursor.pos.v != 0U ||
         cursor.goal_col.v != 0U) {
-        sag_textbuf_free(tb);
+        yew_textbuf_free(tb);
         return false;
     }
-    sag_textbuf_free(tb);
+    yew_textbuf_free(tb);
 
     (void)printf("cursor-perf: case=contextual-reverse line_bytes=%u "
                  "ri_us=%lld extend_us=%lld budget_us=5000%s\n",
@@ -371,7 +371,7 @@ static bool measure_edit_position(const PerfCase *pc, u64 at)
     }
     for (fill = 0U; fill < LONG_LINE_BYTES; fill += pc->pattern_len)
         memcpy(bytes + fill, pc->pattern, pc->pattern_len);
-    tb = sag_textbuf_from_owned_bytes(bytes, LONG_LINE_BYTES);
+    tb = yew_textbuf_from_owned_bytes(bytes, LONG_LINE_BYTES);
     if (tb == NULL)
         return false;
 
@@ -379,7 +379,7 @@ static bool measure_edit_position(const PerfCase *pc, u64 at)
         i64 start = now_ns();
         i64 elapsed;
 
-        sag_textbuf_insert(tb, BYTEOFF(at), &inserted, 1U);
+        yew_textbuf_insert(tb, BYTEOFF(at), &inserted, 1U);
         elapsed = now_ns() - start;
         if (start < 0 || elapsed < 0)
             goto fail;
@@ -390,7 +390,7 @@ static bool measure_edit_position(const PerfCase *pc, u64 at)
         cursor.anchor = cursor.pos;
         cursor.goal_col = (GCol){gcol};
         start = now_ns();
-        sag_cursor_right(tb, &cursor);
+        yew_cursor_right(tb, &cursor);
         elapsed = now_ns() - start;
         if (start < 0 || elapsed < 0 || cursor.pos.v != at + 1U ||
             cursor.goal_col.v != gcol + 1U)
@@ -399,7 +399,7 @@ static bool measure_edit_position(const PerfCase *pc, u64 at)
             worst = elapsed;
 
         start = now_ns();
-        sag_textbuf_delete(tb, (Span){at, at + 1U});
+        yew_textbuf_delete(tb, (Span){at, at + 1U});
         elapsed = now_ns() - start;
         if (start < 0 || elapsed < 0)
             goto fail;
@@ -410,7 +410,7 @@ static bool measure_edit_position(const PerfCase *pc, u64 at)
         cursor.anchor = cursor.pos;
         cursor.goal_col = (GCol){gcol};
         start = now_ns();
-        sag_cursor_right(tb, &cursor);
+        yew_cursor_right(tb, &cursor);
         elapsed = now_ns() - start;
         if (start < 0 || elapsed < 0 ||
             cursor.pos.v != at + pc->pattern_len ||
@@ -425,11 +425,11 @@ static bool measure_edit_position(const PerfCase *pc, u64 at)
                  pc->name, (unsigned long long)at, PERF_ROUNDS,
                  (long long)(worst / INT64_C(1000)),
                  worst <= budget_ns ? "" : " OVER-BUDGET");
-    sag_textbuf_free(tb);
+    yew_textbuf_free(tb);
     return worst <= budget_ns;
 
 fail:
-    sag_textbuf_free(tb);
+    yew_textbuf_free(tb);
     return false;
 }
 
@@ -455,7 +455,7 @@ static bool measure_two_deferred_edits(const PerfCase *pc)
     }
     for (fill = 0U; fill < LONG_LINE_BYTES; fill += pc->pattern_len)
         memcpy(bytes + fill, pc->pattern, pc->pattern_len);
-    tb = sag_textbuf_from_owned_bytes(bytes, LONG_LINE_BYTES);
+    tb = yew_textbuf_from_owned_bytes(bytes, LONG_LINE_BYTES);
     if (tb == NULL)
         return false;
 
@@ -464,7 +464,7 @@ static bool measure_two_deferred_edits(const PerfCase *pc)
         i64 elapsed;
 
         start = now_ns();
-        sag_textbuf_insert(tb, BYTEOFF(0U), &first, 1U);
+        yew_textbuf_insert(tb, BYTEOFF(0U), &first, 1U);
         elapsed = now_ns() - start;
         if (start < 0 || elapsed < 0)
             goto fail;
@@ -472,7 +472,7 @@ static bool measure_two_deferred_edits(const PerfCase *pc)
             worst_edit = elapsed;
 
         start = now_ns();
-        sag_textbuf_insert(tb, BYTEOFF(shifted_midpoint), &second, 1U);
+        yew_textbuf_insert(tb, BYTEOFF(shifted_midpoint), &second, 1U);
         elapsed = now_ns() - start;
         if (start < 0 || elapsed < 0)
             goto fail;
@@ -483,7 +483,7 @@ static bool measure_two_deferred_edits(const PerfCase *pc)
         cursor.anchor = cursor.pos;
         cursor.goal_col = (GCol){0U};
         start = now_ns();
-        sag_cursor_left(tb, &cursor);
+        yew_cursor_left(tb, &cursor);
         elapsed = now_ns() - start;
         if (start < 0 || elapsed < 0 ||
             cursor.pos.v != LONG_LINE_BYTES ||
@@ -494,7 +494,7 @@ static bool measure_two_deferred_edits(const PerfCase *pc)
         perf_cursor_sink = cursor.pos.v + cursor.goal_col.v;
 
         start = now_ns();
-        sag_textbuf_delete(tb,
+        yew_textbuf_delete(tb,
                            (Span){shifted_midpoint,
                                   shifted_midpoint + 1U});
         elapsed = now_ns() - start;
@@ -504,15 +504,15 @@ static bool measure_two_deferred_edits(const PerfCase *pc)
             worst_edit = elapsed;
 
         start = now_ns();
-        sag_textbuf_delete(tb, (Span){0U, 1U});
+        yew_textbuf_delete(tb, (Span){0U, 1U});
         elapsed = now_ns() - start;
         if (start < 0 || elapsed < 0 ||
-            sag_textbuf_len(tb) != LONG_LINE_BYTES)
+            yew_textbuf_len(tb) != LONG_LINE_BYTES)
             goto fail;
         if (elapsed > worst_edit)
             worst_edit = elapsed;
 
-        if (sag_grapheme_prev_boundary(tb,
+        if (yew_grapheme_prev_boundary(tb,
                                        BYTEOFF(LONG_LINE_BYTES)).v !=
             LONG_LINE_BYTES - pc->pattern_len)
             goto fail;
@@ -527,11 +527,11 @@ static bool measure_two_deferred_edits(const PerfCase *pc)
                  worst_edit <= budget_ns && worst_left <= budget_ns
                      ? ""
                      : " OVER-BUDGET");
-    sag_textbuf_free(tb);
+    yew_textbuf_free(tb);
     return worst_edit <= budget_ns && worst_left <= budget_ns;
 
 fail:
-    sag_textbuf_free(tb);
+    yew_textbuf_free(tb);
     return false;
 }
 
@@ -553,7 +553,7 @@ static bool measure_deferred_edit_burst(const PerfCase *pc)
         return false;
     for (fill = 0U; fill < LONG_LINE_BYTES; fill += pc->pattern_len)
         memcpy(bytes + fill, pc->pattern, pc->pattern_len);
-    tb = sag_textbuf_from_owned_bytes(bytes, LONG_LINE_BYTES);
+    tb = yew_textbuf_from_owned_bytes(bytes, LONG_LINE_BYTES);
     if (tb == NULL)
         return false;
 
@@ -569,7 +569,7 @@ static bool measure_deferred_edit_burst(const PerfCase *pc)
             original -= original % pc->pattern_len;
             positions[edit] = original + (u64)edit;
             start = now_ns();
-            sag_textbuf_insert(tb, BYTEOFF(positions[edit]),
+            yew_textbuf_insert(tb, BYTEOFF(positions[edit]),
                                &inserted, 1U);
             elapsed = now_ns() - start;
             if (start < 0 || elapsed < 0)
@@ -577,18 +577,18 @@ static bool measure_deferred_edit_burst(const PerfCase *pc)
             if (elapsed > worst_edit)
                 worst_edit = elapsed;
         }
-        if (sag_textbuf_len(tb) !=
+        if (yew_textbuf_len(tb) !=
             LONG_LINE_BYTES + (u64)DEFERRED_EDIT_BURST)
             goto fail;
 
-        cursor.pos = BYTEOFF(sag_textbuf_len(tb));
+        cursor.pos = BYTEOFF(yew_textbuf_len(tb));
         cursor.anchor = cursor.pos;
         cursor.goal_col = (GCol){0U};
         start = now_ns();
-        sag_cursor_left(tb, &cursor);
+        yew_cursor_left(tb, &cursor);
         elapsed = now_ns() - start;
         if (start < 0 || elapsed < 0 ||
-            cursor.pos.v != sag_textbuf_len(tb) - pc->pattern_len ||
+            cursor.pos.v != yew_textbuf_len(tb) - pc->pattern_len ||
             cursor.goal_col.v !=
                 clusters + (u64)DEFERRED_EDIT_BURST - 1U)
             goto fail;
@@ -598,7 +598,7 @@ static bool measure_deferred_edit_burst(const PerfCase *pc)
 
         for (edit = DEFERRED_EDIT_BURST - 1; edit >= 0; edit--) {
             start = now_ns();
-            sag_textbuf_delete(tb,
+            yew_textbuf_delete(tb,
                                (Span){positions[edit],
                                       positions[edit] + 1U});
             elapsed = now_ns() - start;
@@ -607,10 +607,10 @@ static bool measure_deferred_edit_burst(const PerfCase *pc)
             if (elapsed > worst_edit)
                 worst_edit = elapsed;
         }
-        if (sag_textbuf_len(tb) != LONG_LINE_BYTES)
+        if (yew_textbuf_len(tb) != LONG_LINE_BYTES)
             goto fail;
         start = now_ns();
-        if (sag_grapheme_prev_boundary(tb,
+        if (yew_grapheme_prev_boundary(tb,
                                        BYTEOFF(LONG_LINE_BYTES)).v !=
             LONG_LINE_BYTES - pc->pattern_len)
             goto fail;
@@ -630,11 +630,11 @@ static bool measure_deferred_edit_burst(const PerfCase *pc)
                  worst_edit <= budget_ns && worst_query <= budget_ns
                      ? ""
                      : " OVER-BUDGET");
-    sag_textbuf_free(tb);
+    yew_textbuf_free(tb);
     return worst_edit <= budget_ns && worst_query <= budget_ns;
 
 fail:
-    sag_textbuf_free(tb);
+    yew_textbuf_free(tb);
     return false;
 }
 
@@ -654,17 +654,17 @@ static bool measure_ascii_context_transition(void)
     if (bytes == NULL)
         return false;
     memset(bytes, 'x', LONG_LINE_BYTES);
-    tb = sag_textbuf_from_owned_bytes(bytes, LONG_LINE_BYTES);
+    tb = yew_textbuf_from_owned_bytes(bytes, LONG_LINE_BYTES);
     if (tb == NULL)
         return false;
-    sag_textbuf_insert(tb, BYTEOFF(0U), &inserted, 1U);
-    sag_textbuf_delete(tb, (Span){0U, 1U});
+    yew_textbuf_insert(tb, BYTEOFF(0U), &inserted, 1U);
+    yew_textbuf_delete(tb, (Span){0U, 1U});
 
     for (round = 0; round < PERF_ROUNDS; round++) {
         i64 start = now_ns();
         i64 elapsed;
 
-        sag_textbuf_insert(tb, BYTEOFF(midpoint), accent, sizeof(accent));
+        yew_textbuf_insert(tb, BYTEOFF(midpoint), accent, sizeof(accent));
         elapsed = now_ns() - start;
         if (start < 0 || elapsed < 0)
             goto fail;
@@ -675,7 +675,7 @@ static bool measure_ascii_context_transition(void)
         cursor.anchor = cursor.pos;
         cursor.goal_col = (GCol){0U};
         start = now_ns();
-        sag_cursor_left(tb, &cursor);
+        yew_cursor_left(tb, &cursor);
         elapsed = now_ns() - start;
         if (start < 0 || elapsed < 0 ||
             cursor.pos.v != LONG_LINE_BYTES + sizeof(accent) - 1U ||
@@ -686,7 +686,7 @@ static bool measure_ascii_context_transition(void)
         perf_cursor_sink = cursor.pos.v + cursor.goal_col.v;
 
         start = now_ns();
-        sag_textbuf_delete(tb,
+        yew_textbuf_delete(tb,
                            (Span){midpoint, midpoint + sizeof(accent)});
         elapsed = now_ns() - start;
         if (start < 0 || elapsed < 0)
@@ -695,7 +695,7 @@ static bool measure_ascii_context_transition(void)
             worst_edit = elapsed;
 
         start = now_ns();
-        if (sag_grapheme_prev_boundary(tb,
+        if (yew_grapheme_prev_boundary(tb,
                                        BYTEOFF(LONG_LINE_BYTES)).v !=
             LONG_LINE_BYTES - 1U)
             goto fail;
@@ -715,11 +715,11 @@ static bool measure_ascii_context_transition(void)
                  worst_edit <= budget_ns && worst_query <= budget_ns
                      ? ""
                      : " OVER-BUDGET");
-    sag_textbuf_free(tb);
+    yew_textbuf_free(tb);
     return worst_edit <= budget_ns && worst_query <= budget_ns;
 
 fail:
-    sag_textbuf_free(tb);
+    yew_textbuf_free(tb);
     return false;
 }
 
@@ -743,7 +743,7 @@ static bool measure_giant_cluster_midpoint_edit(void)
     bytes[0] = 'a';
     for (at = 1U; at < (size_t)len; at += sizeof(extend))
         memcpy(bytes + at, extend, sizeof(extend));
-    tb = sag_textbuf_from_owned_bytes(bytes, len);
+    tb = yew_textbuf_from_owned_bytes(bytes, len);
     if (tb == NULL)
         return false;
 
@@ -752,7 +752,7 @@ static bool measure_giant_cluster_midpoint_edit(void)
         i64 elapsed;
 
         start = now_ns();
-        sag_textbuf_insert(tb, BYTEOFF(midpoint), &inserted, 1U);
+        yew_textbuf_insert(tb, BYTEOFF(midpoint), &inserted, 1U);
         elapsed = now_ns() - start;
         if (start < 0 || elapsed < 0)
             goto fail;
@@ -763,7 +763,7 @@ static bool measure_giant_cluster_midpoint_edit(void)
         cursor.anchor = cursor.pos;
         cursor.goal_col = (GCol){0U};
         start = now_ns();
-        sag_cursor_left(tb, &cursor);
+        yew_cursor_left(tb, &cursor);
         elapsed = now_ns() - start;
         if (start < 0 || elapsed < 0 || cursor.pos.v != midpoint ||
             cursor.goal_col.v != 1U)
@@ -772,9 +772,9 @@ static bool measure_giant_cluster_midpoint_edit(void)
             worst_left = elapsed;
         perf_cursor_sink = cursor.pos.v + cursor.goal_col.v;
 
-        sag_textbuf_delete(tb, (Span){midpoint, midpoint + 1U});
-        if (sag_textbuf_len(tb) != len ||
-            sag_grapheme_prev_boundary(tb, BYTEOFF(len)).v != 0U)
+        yew_textbuf_delete(tb, (Span){midpoint, midpoint + 1U});
+        if (yew_textbuf_len(tb) != len ||
+            yew_grapheme_prev_boundary(tb, BYTEOFF(len)).v != 0U)
             goto fail;
     }
 
@@ -787,11 +787,11 @@ static bool measure_giant_cluster_midpoint_edit(void)
                  worst_edit <= budget_ns && worst_left <= budget_ns
                      ? ""
                      : " OVER-BUDGET");
-    sag_textbuf_free(tb);
+    yew_textbuf_free(tb);
     return worst_edit <= budget_ns && worst_left <= budget_ns;
 
 fail:
-    sag_textbuf_free(tb);
+    yew_textbuf_free(tb);
     return false;
 }
 
@@ -806,7 +806,7 @@ int main(void)
     bool passed = true;
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(cases); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(cases); i++) {
         i64 worst;
 
         if (!measure(&cases[i], &worst))

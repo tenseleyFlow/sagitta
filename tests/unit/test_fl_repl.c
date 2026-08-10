@@ -23,7 +23,7 @@
 
 static FlReplVerdict verdict(FlFix *f, const char *src)
 {
-    return sag_fl_repl_classify(&f->arena, &f->in, src, strlen(src));
+    return yew_fl_repl_classify(&f->arena, &f->in, src, strlen(src));
 }
 
 void test_fl_repl_classifies_the_s29_matrix(void)
@@ -32,28 +32,28 @@ void test_fl_repl_classifies_the_s29_matrix(void)
 
     flfix_open(&f);
     /* Complete and clean. */
-    SAG_ASSERT_EQ_U64((u64)verdict(&f, "1 + 1\n"), (u64)FL_REPL_RUN);
-    SAG_ASSERT_EQ_U64((u64)verdict(&f, "let x = 1\n"), (u64)FL_REPL_RUN);
-    SAG_ASSERT_EQ_U64((u64)verdict(&f, "fn f(x) { return x }\n"),
+    YEW_ASSERT_EQ_U64((u64)verdict(&f, "1 + 1\n"), (u64)FL_REPL_RUN);
+    YEW_ASSERT_EQ_U64((u64)verdict(&f, "let x = 1\n"), (u64)FL_REPL_RUN);
+    YEW_ASSERT_EQ_U64((u64)verdict(&f, "fn f(x) { return x }\n"),
                       (u64)FL_REPL_RUN);
     /* Open brackets keep reading. */
-    SAG_ASSERT_EQ_U64((u64)verdict(&f, "fn f(\n"), (u64)FL_REPL_CONTINUE);
-    SAG_ASSERT_EQ_U64((u64)verdict(&f, "fn f((\n"), (u64)FL_REPL_CONTINUE);
-    SAG_ASSERT_EQ_U64((u64)verdict(&f, "fn f(x) {\n"), (u64)FL_REPL_CONTINUE);
-    SAG_ASSERT_EQ_U64((u64)verdict(&f, "[1, 2\n"), (u64)FL_REPL_CONTINUE);
+    YEW_ASSERT_EQ_U64((u64)verdict(&f, "fn f(\n"), (u64)FL_REPL_CONTINUE);
+    YEW_ASSERT_EQ_U64((u64)verdict(&f, "fn f((\n"), (u64)FL_REPL_CONTINUE);
+    YEW_ASSERT_EQ_U64((u64)verdict(&f, "fn f(x) {\n"), (u64)FL_REPL_CONTINUE);
+    YEW_ASSERT_EQ_U64((u64)verdict(&f, "[1, 2\n"), (u64)FL_REPL_CONTINUE);
     /* A trailing operator is a continuation, per §1.2. */
-    SAG_ASSERT_EQ_U64((u64)verdict(&f, "1 +\n"), (u64)FL_REPL_CONTINUE);
+    YEW_ASSERT_EQ_U64((u64)verdict(&f, "1 +\n"), (u64)FL_REPL_CONTINUE);
     /* ...and the line that finishes it completes the entry. */
-    SAG_ASSERT_EQ_U64((u64)verdict(&f, "1 +\n1\n"), (u64)FL_REPL_RUN);
+    YEW_ASSERT_EQ_U64((u64)verdict(&f, "1 +\n1\n"), (u64)FL_REPL_RUN);
     /*
      * ERROR BEATS INCOMPLETE.  s29 pins that a syntax error inside an
      * open bracket sets had_error, not incomplete -- and a REPL that
      * read incomplete first would sit waiting for a `)` the user
      * already typed wrong.
      */
-    SAG_ASSERT_EQ_U64((u64)verdict(&f, "fn f()}\n"), (u64)FL_REPL_ERROR);
-    SAG_ASSERT_EQ_U64((u64)verdict(&f, "return )\n"), (u64)FL_REPL_ERROR);
-    SAG_ASSERT_EQ_U64((u64)verdict(&f, "let 5 = 1\n"), (u64)FL_REPL_ERROR);
+    YEW_ASSERT_EQ_U64((u64)verdict(&f, "fn f()}\n"), (u64)FL_REPL_ERROR);
+    YEW_ASSERT_EQ_U64((u64)verdict(&f, "return )\n"), (u64)FL_REPL_ERROR);
+    YEW_ASSERT_EQ_U64((u64)verdict(&f, "let 5 = 1\n"), (u64)FL_REPL_ERROR);
     flfix_close(&f);
 }
 
@@ -83,21 +83,21 @@ void test_fl_repl_accumulates_a_nested_entry(void)
 
     flfix_open(&f);
     acc[0] = '\0';
-    for (i = 0U; i < SAG_ARRAY_LEN(lines); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(lines); i++) {
         FlReplVerdict v;
 
         at += (size_t)snprintf(acc + at, sizeof(acc) - at, "%s\n", lines[i]);
-        v = sag_fl_repl_classify(&f.arena, &f.in, acc, at);
-        if (i + 2U < SAG_ARRAY_LEN(lines)) {
+        v = yew_fl_repl_classify(&f.arena, &f.in, acc, at);
+        if (i + 2U < YEW_ARRAY_LEN(lines)) {
             if (v != FL_REPL_CONTINUE)
                 (void)fprintf(stderr, "line %zu of the entry: verdict %d\n",
                               i, (int)v);
-            SAG_ASSERT_EQ_U64((u64)v, (u64)FL_REPL_CONTINUE);
+            YEW_ASSERT_EQ_U64((u64)v, (u64)FL_REPL_CONTINUE);
         }
     }
     /* The closing brace completes the function; the call after it
      * completes the entry. */
-    SAG_ASSERT_EQ_U64((u64)sag_fl_repl_classify(&f.arena, &f.in, acc, at),
+    YEW_ASSERT_EQ_U64((u64)yew_fl_repl_classify(&f.arena, &f.in, acc, at),
                       (u64)FL_REPL_RUN);
     flfix_close(&f);
 }
@@ -122,7 +122,7 @@ void test_fl_repl_classifies_without_emitting(void)
     (void)verdict(&f, "fn f(x) {\n");
     (void)verdict(&f, "return )\n");
     (void)verdict(&f, "let 5 = 1\n");
-    SAG_ASSERT_EQ_U64((u64)f.ndiag, (u64)before);
+    YEW_ASSERT_EQ_U64((u64)f.ndiag, (u64)before);
     flfix_close(&f);
 }
 
@@ -137,21 +137,21 @@ void test_fl_repl_prints_repr_and_nothing_for_nil(void)
      * NIL PRINTS NOTHING AT ALL -- not even a blank line.  Otherwise
      * every `let`, every io.print and every void call spams one.
      */
-    sag_fl_print_result(&f.vm, FL_NIL_V, &bb);
-    SAG_ASSERT_EQ_U64((u64)bb.len, 0U);
+    yew_fl_print_result(&f.vm, FL_NIL_V, &bb);
+    YEW_ASSERT_EQ_U64((u64)bb.len, 0U);
 
     /* repr, not str: at a prompt the difference between the string
      * "a\nb" and a two-line result is information the user needs, and
      * repr output can be pasted straight back in. */
-    sag_fl_print_result(&f.vm,
+    yew_fl_print_result(&f.vm,
                         FL_OBJ_V(FL_STR, fl_str_new(&f.vm, "a\nb", 3U)), &bb);
     /* `"a\nb"` is six characters plus the newline. */
-    SAG_ASSERT_EQ_U64((u64)bb.len, 7U);
-    SAG_ASSERT_EQ_I64(memcmp(bb.data, "\"a\\nb\"\n", 7U), 0);
+    YEW_ASSERT_EQ_U64((u64)bb.len, 7U);
+    YEW_ASSERT_EQ_I64(memcmp(bb.data, "\"a\\nb\"\n", 7U), 0);
 
     bb.len = 0U;
-    sag_fl_print_result(&f.vm, FL_INT_V(42), &bb);
-    SAG_ASSERT_EQ_I64(memcmp(bb.data, "42\n", 3U), 0);
+    yew_fl_print_result(&f.vm, FL_INT_V(42), &bb);
+    YEW_ASSERT_EQ_I64(memcmp(bb.data, "42\n", 3U), 0);
     bytebuf_free(&bb);
     flfix_close(&f);
 }
@@ -168,14 +168,14 @@ void test_fl_repl_bounds_what_it_prints(void)
     /*
      * A CYCLE PRINTS rather than recursing.  `let l = []` and
      * `list.push(l, l)` is all it takes, and without the elision the
-     * prompt would recurse until sag_bug -- which is a spectacular way
+     * prompt would recurse until yew_bug -- which is a spectacular way
      * to lose a session over a two-word mistake.
      */
     l = fl_list_new(&f.vm);
     fl_gc_protect(&f.vm, FL_OBJ_V(FL_LIST, l));
     (void)fl_list_push(&f.vm, l, FL_OBJ_V(FL_LIST, l));
-    sag_fl_print_result(&f.vm, FL_OBJ_V(FL_LIST, l), &bb);
-    SAG_ASSERT_EQ_I64(memcmp(bb.data, "[[...]]\n", 8U), 0);
+    yew_fl_print_result(&f.vm, FL_OBJ_V(FL_LIST, l), &bb);
+    YEW_ASSERT_EQ_I64(memcmp(bb.data, "[[...]]\n", 8U), 0);
     fl_gc_release(&f.vm, 1U);
 
     /* Nested past the depth cap prints the marker rather than the
@@ -192,11 +192,11 @@ void test_fl_repl_bounds_what_it_prints(void)
             (void)fl_list_push(&f.vm, cur, FL_OBJ_V(FL_LIST, next));
             cur = next;
         }
-        sag_fl_print_result(&f.vm, FL_OBJ_V(FL_LIST, deep), &bb);
+        yew_fl_print_result(&f.vm, FL_OBJ_V(FL_LIST, deep), &bb);
         fl_gc_release(&f.vm, 1U);
     }
-    SAG_ASSERT(bb.len < 64U);
-    SAG_ASSERT(strstr((const char *)bb.data, "[...]") != NULL);
+    YEW_ASSERT(bb.len < 64U);
+    YEW_ASSERT(strstr((const char *)bb.data, "[...]") != NULL);
 
     /* And a long result is elided with a byte count, because a prompt
      * that hangs printing is worse than one that truncates. */
@@ -210,10 +210,10 @@ void test_fl_repl_bounds_what_it_prints(void)
             bytebuf_push_u8(&big, (u8)'x');
         s = fl_str_new(&f.vm, (const char *)big.data, (u32)big.len);
         bytebuf_free(&big);
-        sag_fl_print_result(&f.vm, FL_OBJ_V(FL_STR, s), &bb);
+        yew_fl_print_result(&f.vm, FL_OBJ_V(FL_STR, s), &bb);
     }
-    SAG_ASSERT(bb.len < 2200U);
-    SAG_ASSERT(strstr((const char *)bb.data, "more bytes)") != NULL);
+    YEW_ASSERT(bb.len < 2200U);
+    YEW_ASSERT(strstr((const char *)bb.data, "more bytes)") != NULL);
     bytebuf_free(&bb);
     flfix_close(&f);
 }
@@ -231,7 +231,7 @@ static void cmd(FlFix *f, FlRepl *r, const char *line, char *out, size_t cap,
     (void)f;
     bytebuf_init(&bb);
     out[0] = '\0';
-    if (!sag_fl_repl_command(r, line, strlen(line), &bb, quit)) {
+    if (!yew_fl_repl_command(r, line, strlen(line), &bb, quit)) {
         (void)snprintf(out, cap, "<not a command>");
         bytebuf_free(&bb);
         return;
@@ -267,13 +267,13 @@ void test_fl_repl_recognises_only_a_leading_colon(void)
      * rule and needs no special case anywhere else.
      */
     cmd(&f, &r, "1 + 1\n", got, sizeof(got), &quit);
-    SAG_ASSERT_EQ_STR(got, "<not a command>");
+    YEW_ASSERT_EQ_STR(got, "<not a command>");
     cmd(&f, &r, "let x = 1\n", got, sizeof(got), &quit);
-    SAG_ASSERT_EQ_STR(got, "<not a command>");
+    YEW_ASSERT_EQ_STR(got, "<not a command>");
     /* Leading space is allowed; the colon must be the first byte that
      * is not one. */
     cmd(&f, &r, "   :caps\n", got, sizeof(got), &quit);
-    SAG_ASSERT(strstr(got, "origin:") != NULL);
+    YEW_ASSERT(strstr(got, "origin:") != NULL);
     flfix_close(&f);
 }
 
@@ -286,34 +286,34 @@ void test_fl_repl_quits_and_helps(void)
 
     repl_open(&f, &r);
     cmd(&f, &r, ":quit\n", got, sizeof(got), &quit);
-    SAG_ASSERT(quit);
+    YEW_ASSERT(quit);
     quit = false;
     cmd(&f, &r, ":q\n", got, sizeof(got), &quit);
-    SAG_ASSERT(quit);
+    YEW_ASSERT(quit);
     quit = false;
 
     cmd(&f, &r, ":help\n", got, sizeof(got), &quit);
-    SAG_ASSERT(!quit);
+    YEW_ASSERT(!quit);
     /* Every command names itself in the table -- one list, so the help
      * text and the dispatcher cannot drift. */
-    SAG_ASSERT(strstr(got, ":help") != NULL);
-    SAG_ASSERT(strstr(got, ":quit") != NULL);
-    SAG_ASSERT(strstr(got, ":load") != NULL);
-    SAG_ASSERT(strstr(got, ":reload") != NULL);
-    SAG_ASSERT(strstr(got, ":globals") != NULL);
-    SAG_ASSERT(strstr(got, ":disasm") != NULL);
-    SAG_ASSERT(strstr(got, ":caps") != NULL);
+    YEW_ASSERT(strstr(got, ":help") != NULL);
+    YEW_ASSERT(strstr(got, ":quit") != NULL);
+    YEW_ASSERT(strstr(got, ":load") != NULL);
+    YEW_ASSERT(strstr(got, ":reload") != NULL);
+    YEW_ASSERT(strstr(got, ":globals") != NULL);
+    YEW_ASSERT(strstr(got, ":disasm") != NULL);
+    YEW_ASSERT(strstr(got, ":caps") != NULL);
     /* And it says there is no debugger, so nobody hunts for a flag. */
-    SAG_ASSERT(strstr(got, "no stepping debugger") != NULL);
-    SAG_ASSERT(strstr(got, "fletch-spec.md") != NULL);
+    YEW_ASSERT(strstr(got, "no stepping debugger") != NULL);
+    YEW_ASSERT(strstr(got, "fletch-spec.md") != NULL);
 
     /* :help NAME reads the registered signature. */
     cmd(&f, &r, ":help str.slice\n", got, sizeof(got), &quit);
-    SAG_ASSERT(strstr(got, "(s, lo, [hi]) -> s") != NULL);
+    YEW_ASSERT(strstr(got, "(s, lo, [hi]) -> s") != NULL);
     cmd(&f, &r, ":help fmt.repr\n", got, sizeof(got), &quit);
-    SAG_ASSERT(strstr(got, "(v, [indent]) -> str") != NULL);
+    YEW_ASSERT(strstr(got, "(v, [indent]) -> str") != NULL);
     cmd(&f, &r, ":help nope.nope\n", got, sizeof(got), &quit);
-    SAG_ASSERT(strstr(got, "no builtin called") != NULL);
+    YEW_ASSERT(strstr(got, "no builtin called") != NULL);
     flfix_close(&f);
 }
 
@@ -327,16 +327,16 @@ void test_fl_repl_suggests_over_the_command_names(void)
     repl_open(&f, &r);
     /* §7's fourth site: the candidate set is exactly the eight. */
     cmd(&f, &r, ":gloabls\n", got, sizeof(got), &quit);
-    SAG_ASSERT(strstr(got, "unknown command ':gloabls'") != NULL);
-    SAG_ASSERT(strstr(got, "did you mean 'globals'?") != NULL);
+    YEW_ASSERT(strstr(got, "unknown command ':gloabls'") != NULL);
+    YEW_ASSERT(strstr(got, "did you mean 'globals'?") != NULL);
     cmd(&f, &r, ":relaod\n", got, sizeof(got), &quit);
-    SAG_ASSERT(strstr(got, "did you mean 'reload'?") != NULL);
+    YEW_ASSERT(strstr(got, "did you mean 'reload'?") != NULL);
     /* Nothing close enough offers nothing, and does not leave a
      * dangling separator behind. */
     cmd(&f, &r, ":zzzzzzz\n", got, sizeof(got), &quit);
-    SAG_ASSERT(strstr(got, "unknown command") != NULL);
-    SAG_ASSERT(strstr(got, "did you mean") == NULL);
-    SAG_ASSERT(strstr(got, "; \n") == NULL);
+    YEW_ASSERT(strstr(got, "unknown command") != NULL);
+    YEW_ASSERT(strstr(got, "did you mean") == NULL);
+    YEW_ASSERT(strstr(got, "; \n") == NULL);
     flfix_close(&f);
 }
 
@@ -350,7 +350,7 @@ void test_fl_repl_shows_globals_and_caps(void)
 
     repl_open(&f, &r);
     cmd(&f, &r, ":globals\n", got, sizeof(got), &quit);
-    SAG_ASSERT(strstr(got, "(none yet)") != NULL);
+    YEW_ASSERT(strstr(got, "(none yet)") != NULL);
 
     /* Bind two names and import a module: the module must NOT show up,
      * because ":globals" answers "what have I got" and the seven
@@ -358,20 +358,20 @@ void test_fl_repl_shows_globals_and_caps(void)
     flfix_run(&f, "import str\nlet total = 41\nlet name = \"a\"\n",
               scratch, sizeof(scratch));
     cmd(&f, &r, ":globals\n", got, sizeof(got), &quit);
-    SAG_ASSERT(strstr(got, "total = 41") != NULL);
-    SAG_ASSERT(strstr(got, "name = \"a\"") != NULL);
-    SAG_ASSERT(strstr(got, "str =") == NULL);
+    YEW_ASSERT(strstr(got, "total = 41") != NULL);
+    YEW_ASSERT(strstr(got, "name = \"a\"") != NULL);
+    YEW_ASSERT(strstr(got, "str =") == NULL);
 
     cmd(&f, &r, ":caps\n", got, sizeof(got), &quit);
-    SAG_ASSERT(strstr(got, "origin:") != NULL);
-    SAG_ASSERT(strstr(got, "(none)") != NULL);
+    YEW_ASSERT(strstr(got, "origin:") != NULL);
+    YEW_ASSERT(strstr(got, "(none)") != NULL);
     flfix_as(&f, (u8)FL_ORIGIN_REPL,
              (u32)FL_CAP_FS_READ | (u32)FL_CAP_NET);
     f.vm.root_origin = f.origin;
     cmd(&f, &r, ":caps\n", got, sizeof(got), &quit);
-    SAG_ASSERT(strstr(got, "fs.read") != NULL);
-    SAG_ASSERT(strstr(got, "net") != NULL);
-    SAG_ASSERT(strstr(got, "fs.write") == NULL);
+    YEW_ASSERT(strstr(got, "fs.read") != NULL);
+    YEW_ASSERT(strstr(got, "net") != NULL);
+    YEW_ASSERT(strstr(got, "fs.write") == NULL);
     flfix_close(&f);
 }
 
@@ -386,14 +386,14 @@ void test_fl_repl_disassembles_and_loads(void)
 
     repl_open(&f, &r);
     cmd(&f, &r, ":disasm\n", got, sizeof(got), &quit);
-    SAG_ASSERT(strstr(got, "needs a name") != NULL);
+    YEW_ASSERT(strstr(got, "needs a name") != NULL);
     cmd(&f, &r, ":disasm nope\n", got, sizeof(got), &quit);
-    SAG_ASSERT(strstr(got, "no function called 'nope'") != NULL);
+    YEW_ASSERT(strstr(got, "no function called 'nope'") != NULL);
 
     flfix_run(&f, "fn twice(x) { return x + x }\n", scratch, sizeof(scratch));
     cmd(&f, &r, ":disasm twice\n", got, sizeof(got), &quit);
-    SAG_ASSERT(strstr(got, "ADD") != NULL);
-    SAG_ASSERT(strstr(got, "RETURN") != NULL);
+    YEW_ASSERT(strstr(got, "ADD") != NULL);
+    YEW_ASSERT(strstr(got, "RETURN") != NULL);
 
     /*
      * :load evaluates into THIS VM and its globals persist -- that is
@@ -405,24 +405,24 @@ void test_fl_repl_disassembles_and_loads(void)
     (void)snprintf(line, sizeof(line), ":load %s/cfg.fl\n",
                    flfix_tmpdir(&f));
     cmd(&f, &r, line, got, sizeof(got), &quit);
-    SAG_ASSERT(strstr(got, "loaded") != NULL);
+    YEW_ASSERT(strstr(got, "loaded") != NULL);
     cmd(&f, &r, ":globals\n", got, sizeof(got), &quit);
-    SAG_ASSERT(strstr(got, "tabwidth = 4") != NULL);
+    YEW_ASSERT(strstr(got, "tabwidth = 4") != NULL);
 
     /* :reload runs the same path again. */
     flfix_write(&f, "cfg.fl", "let tabwidth = 8\n");
     cmd(&f, &r, ":reload\n", got, sizeof(got), &quit);
-    SAG_ASSERT(strstr(got, "loaded") != NULL);
+    YEW_ASSERT(strstr(got, "loaded") != NULL);
     cmd(&f, &r, ":globals\n", got, sizeof(got), &quit);
-    SAG_ASSERT(strstr(got, "tabwidth = 8") != NULL);
+    YEW_ASSERT(strstr(got, "tabwidth = 8") != NULL);
 
     cmd(&f, &r, ":load /definitely/not/here.fl\n", got, sizeof(got), &quit);
-    SAG_ASSERT(strstr(got, "cannot read") != NULL);
+    YEW_ASSERT(strstr(got, "cannot read") != NULL);
     flfix_close(&f);
 
     /* :reload before any :load says so rather than doing nothing. */
     repl_open(&f, &r);
     cmd(&f, &r, ":reload\n", got, sizeof(got), &quit);
-    SAG_ASSERT(strstr(got, "nothing has been") != NULL);
+    YEW_ASSERT(strstr(got, "nothing has been") != NULL);
     flfix_close(&f);
 }

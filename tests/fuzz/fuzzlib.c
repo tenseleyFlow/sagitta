@@ -16,9 +16,9 @@
 #include "unicode/utf8.h"
 
 enum {
-    SAG_FUZZ_DEFAULT_ITERS = 200000,
-    SAG_FUZZ_MAX_INPUT = 65536,
-    SAG_FUZZ_WHY_CAP = 256
+    YEW_FUZZ_DEFAULT_ITERS = 200000,
+    YEW_FUZZ_MAX_INPUT = 65536,
+    YEW_FUZZ_WHY_CAP = 256
 };
 
 typedef struct {
@@ -48,7 +48,7 @@ typedef struct {
     u64 deadline_ms;
     bool corpus_only;
     const char *target;
-    SagFuzzCheck check;
+    YewFuzzCheck check;
     Corpus corpus;
 } FuzzRun;
 
@@ -78,13 +78,13 @@ static bool check_incremental_utf8(const u8 *data, size_t len,
                                    size_t expected_len,
                                    char *why, size_t why_cap)
 {
-    SagU8Dec dec;
+    YewU8Dec dec;
     size_t out_len = 0U;
     size_t i;
 
-    sag_utf8_dec_init(&dec);
+    yew_utf8_dec_init(&dec);
     for (i = 0U; i < len; i++) {
-        u8 count = sag_utf8_push(&dec, data[i]);
+        u8 count = yew_utf8_push(&dec, data[i]);
         u8 j;
 
         for (j = 0U; j < count; j++) {
@@ -96,7 +96,7 @@ static bool check_incremental_utf8(const u8 *data, size_t len,
         }
     }
     {
-        u8 count = sag_utf8_finish(&dec);
+        u8 count = yew_utf8_finish(&dec);
         u8 j;
 
         for (j = 0U; j < count; j++) {
@@ -113,7 +113,7 @@ static bool check_incremental_utf8(const u8 *data, size_t len,
     return true;
 }
 
-bool sag_fuzz_check_utf8(const u8 *data, size_t len,
+bool yew_fuzz_check_utf8(const u8 *data, size_t len,
                          char *why, size_t why_cap)
 {
     u32 *decoded = xmalloc((len == 0U ? 1U : len) * sizeof(*decoded));
@@ -124,8 +124,8 @@ bool sag_fuzz_check_utf8(const u8 *data, size_t len,
 
     while (pos < len) {
         u32 cp;
-        u8 encoded[SAG_UTF8_MAX];
-        size_t consumed = sag_utf8_decode(data + pos, len - pos, &cp);
+        u8 encoded[YEW_UTF8_MAX];
+        size_t consumed = yew_utf8_decode(data + pos, len - pos, &cp);
         size_t encoded_len;
 
         if (consumed == 0U || consumed > len - pos) {
@@ -134,14 +134,14 @@ bool sag_fuzz_check_utf8(const u8 *data, size_t len,
             return fail_at(why, why_cap,
                            "decoder did not consume valid span", pos);
         }
-        if ((cp >= 0xD800U && cp <= 0xDFFFU && !sag_utf8_is_escape(cp)) ||
+        if ((cp >= 0xD800U && cp <= 0xDFFFU && !yew_utf8_is_escape(cp)) ||
             cp > 0x10FFFFU) {
             free(decoded);
             free(roundtrip);
             return fail_at(why, why_cap,
                            "decoder returned invalid scalar", pos);
         }
-        encoded_len = sag_utf8_encode(cp, encoded);
+        encoded_len = yew_utf8_encode(cp, encoded);
         if (encoded_len == 0U || encoded_len > sizeof(encoded) ||
             roundtrip_len + encoded_len > len) {
             free(decoded);
@@ -149,7 +149,7 @@ bool sag_fuzz_check_utf8(const u8 *data, size_t len,
             return fail_at(why, why_cap,
                            "decoded scalar did not re-encode", pos);
         }
-        if (!sag_utf8_is_escape(cp) && encoded_len != consumed) {
+        if (!yew_utf8_is_escape(cp) && encoded_len != consumed) {
             free(decoded);
             free(roundtrip);
             return fail_at(why, why_cap,
@@ -217,8 +217,8 @@ static void buf_reserve(FuzzBuf *buf, size_t need)
         return;
     cap = buf->cap == 0U ? 32U : buf->cap;
     while (cap < need) {
-        if (cap > SAG_FUZZ_MAX_INPUT / 2U) {
-            cap = SAG_FUZZ_MAX_INPUT;
+        if (cap > YEW_FUZZ_MAX_INPUT / 2U) {
+            cap = YEW_FUZZ_MAX_INPUT;
             break;
         }
         cap *= 2U;
@@ -229,8 +229,8 @@ static void buf_reserve(FuzzBuf *buf, size_t need)
 
 static void buf_assign(FuzzBuf *buf, const u8 *data, size_t len)
 {
-    if (len > SAG_FUZZ_MAX_INPUT)
-        len = SAG_FUZZ_MAX_INPUT;
+    if (len > YEW_FUZZ_MAX_INPUT)
+        len = YEW_FUZZ_MAX_INPUT;
     buf_reserve(buf, len);
     if (len != 0U)
         (void)memcpy(buf->data, data, len);
@@ -241,8 +241,8 @@ static void buf_insert(FuzzBuf *buf, size_t at, const u8 *data, size_t len)
 {
     if (at > buf->len)
         at = buf->len;
-    if (len > SAG_FUZZ_MAX_INPUT - buf->len)
-        len = SAG_FUZZ_MAX_INPUT - buf->len;
+    if (len > YEW_FUZZ_MAX_INPUT - buf->len)
+        len = YEW_FUZZ_MAX_INPUT - buf->len;
     if (len == 0U)
         return;
     buf_reserve(buf, buf->len + len);
@@ -267,8 +267,8 @@ static void corpus_add(Corpus *corpus, const char *name,
 {
     CorpusEntry *entry;
 
-    if (len > SAG_FUZZ_MAX_INPUT)
-        len = SAG_FUZZ_MAX_INPUT;
+    if (len > YEW_FUZZ_MAX_INPUT)
+        len = YEW_FUZZ_MAX_INPUT;
     if (corpus->len == corpus->cap) {
         size_t cap = corpus->cap == 0U ? 16U : corpus->cap * 2U;
         corpus->entries = xrealloc(corpus->entries,
@@ -368,7 +368,7 @@ static int parse_gbtest_line(const char *line, FuzzBuf *out)
     while (*p != 0U) {
         u32 cp = 0U;
         size_t digits = 0U;
-        u8 encoded[SAG_UTF8_MAX];
+        u8 encoded[YEW_UTF8_MAX];
         size_t encoded_len;
         u8 nibble;
 
@@ -390,7 +390,7 @@ static int parse_gbtest_line(const char *line, FuzzBuf *out)
         }
         if (digits == 0U)
             return -1;
-        encoded_len = sag_utf8_encode(cp, encoded);
+        encoded_len = yew_utf8_encode(cp, encoded);
         if (encoded_len == 0U)
             return -1;
         buf_insert(out, out->len, encoded, encoded_len);
@@ -579,8 +579,8 @@ static void mutate_duplicate(FuzzRun *run, FuzzBuf *buf)
         return;
     from = choose(run, buf->len);
     len = 1U + choose(run, buf->len - from);
-    if (len > SAG_FUZZ_MAX_INPUT - buf->len)
-        len = SAG_FUZZ_MAX_INPUT - buf->len;
+    if (len > YEW_FUZZ_MAX_INPUT - buf->len)
+        len = YEW_FUZZ_MAX_INPUT - buf->len;
     copy = xmalloc(len);
     (void)memcpy(copy, buf->data + from, len);
     at = choose(run, buf->len + 1U);
@@ -665,7 +665,7 @@ static void mutate_lead_class(FuzzRun *run, FuzzBuf *buf)
         0x80U, 0xC0U, 0xC2U, 0xE0U, 0xE1U, 0xEDU,
         0xF0U, 0xF1U, 0xF4U, 0xF5U, 0xFFU
     };
-    u8 b = leads[choose(run, SAG_ARRAY_LEN(leads))];
+    u8 b = leads[choose(run, YEW_ARRAY_LEN(leads))];
 
     if (buf->len == 0U)
         buf_insert(buf, 0U, &b, 1U);
@@ -734,7 +734,7 @@ static void watchdog(int signo)
 }
 
 static bool checked(FuzzRun *run, const FuzzBuf *buf,
-                    char why[SAG_FUZZ_WHY_CAP])
+                    char why[YEW_FUZZ_WHY_CAP])
 {
     u8 *exact = xmalloc(buf->len == 0U ? 1U : buf->len);
     bool ok;
@@ -743,7 +743,7 @@ static bool checked(FuzzRun *run, const FuzzBuf *buf,
         (void)memcpy(exact, buf->data, buf->len);
     watchdog_iteration = (sig_atomic_t)run->iteration;
     (void)alarm(5U);
-    ok = run->check(exact, buf->len, why, SAG_FUZZ_WHY_CAP);
+    ok = run->check(exact, buf->len, why, YEW_FUZZ_WHY_CAP);
     (void)alarm(0U);
     free(exact);
     return ok;
@@ -752,7 +752,7 @@ static bool checked(FuzzRun *run, const FuzzBuf *buf,
 static void minimize(FuzzRun *run, FuzzBuf *buf)
 {
     size_t granularity = 2U;
-    char why[SAG_FUZZ_WHY_CAP];
+    char why[YEW_FUZZ_WHY_CAP];
 
     while (buf->len != 0U) {
         size_t chunk = (buf->len + granularity - 1U) / granularity;
@@ -867,7 +867,7 @@ static bool parse_size_option(const char *arg, const char *prefix, size_t *out)
 
 static void add_builtin_corpus(Corpus *corpus)
 {
-    static const u8 ascii[] = "Sagitta\n";
+    static const u8 ascii[] = "yew\n";
     static const u8 valid[] = {0xE2U, 0x82U, 0xACU, 0xF0U, 0x9FU,
                                0x91U, 0x8DU};
     static const u8 invalid[] = {0x80U, 0xC0U, 0x80U, 0xEDU, 0xA0U,
@@ -883,8 +883,8 @@ static void add_builtin_corpus(Corpus *corpus)
     corpus_add(corpus, "builtin/grapheme", grapheme, sizeof(grapheme));
 }
 
-int sag_fuzz_main(int argc, char **argv, const char *target,
-                  const char *corpus_dir, SagFuzzCheck check)
+int yew_fuzz_main(int argc, char **argv, const char *target,
+                  const char *corpus_dir, YewFuzzCheck check)
 {
     FuzzRun run;
     struct sigaction action;
@@ -892,7 +892,7 @@ int sag_fuzz_main(int argc, char **argv, const char *target,
 
     (void)memset(&run, 0, sizeof(run));
     run.seed = 1U;
-    run.iterations = SAG_FUZZ_DEFAULT_ITERS;
+    run.iterations = YEW_FUZZ_DEFAULT_ITERS;
     run.target = target;
     run.check = check;
     for (i = 1U; i < (size_t)argc; i++) {
@@ -953,7 +953,7 @@ int sag_fuzz_main(int argc, char **argv, const char *target,
         for (run.iteration = 0U; run.iteration < run.corpus.len;
              run.iteration++) {
             const CorpusEntry *entry = &run.corpus.entries[run.iteration];
-            char why[SAG_FUZZ_WHY_CAP] = {0};
+            char why[YEW_FUZZ_WHY_CAP] = {0};
 
             if (!checked(&run, &entry->bytes, why)) {
                 (void)fprintf(stderr, "%s: FAIL corpus=%s: %s\n",
@@ -975,7 +975,7 @@ int sag_fuzz_main(int argc, char **argv, const char *target,
         const char *op = "none";
         size_t mutations = 1U + choose(&run, 4U);
         size_t m;
-        char why[SAG_FUZZ_WHY_CAP] = {0};
+        char why[YEW_FUZZ_WHY_CAP] = {0};
 
         if (run.seconds != 0U && run.iteration != 0U &&
             monotonic_ms() >= run.deadline_ms)

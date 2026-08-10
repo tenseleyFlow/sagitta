@@ -1,5 +1,5 @@
-#ifndef SAG_FL_GC_H
-#define SAG_FL_GC_H
+#ifndef YEW_FL_GC_H
+#define YEW_FL_GC_H
 
 /*
  * Sprint 30 deliverable 9: a precise mark-sweep collector with an
@@ -15,7 +15,7 @@
  *      copy an FlObj* into a C local across an allocation.
  *   2. Intermediates are protected: fl_gc_protect(vm, v) ...
  *      fl_gc_release(vm, 1), strictly LIFO, capped at 32.  Overflow is
- *      SAG_BUG -- it means the discipline leaked, not that a user
+ *      YEW_BUG -- it means the discipline leaked, not that a user
  *      program did something interesting.
  *   3. Host callbacks (Sprint 34) take handles by table SLOT, never by
  *      pointer.  A slot lookup fails cleanly against a dead object; a
@@ -126,4 +126,4 @@ FlMap *fl_map_new(FlVm *vm);
  * ordering rules in value.c. */
 bool fl_map_set(FlVm *vm, FlMap *m, FlValue k, FlValue v);
 
-#endif /* SAG_FL_GC_H */
+#endif /* YEW_FL_GC_H */

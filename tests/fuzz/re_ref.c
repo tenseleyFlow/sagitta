@@ -82,15 +82,15 @@ static i32 parse_alt(RefProg *p);
 static bool ref_is_word(u32 cp)
 {
     /* Must match the engine's definition, which is category-based. */
-    extern bool sag_re_is_word(u32 cp);
+    extern bool yew_re_is_word(u32 cp);
 
-    return sag_re_is_word(cp);
+    return yew_re_is_word(cp);
 }
 
 static u32 take_cp(RefProg *p)
 {
     u32 cp = 0U;
-    size_t n = sag_utf8_decode(p->pat + p->at, p->len - p->at, &cp);
+    size_t n = yew_utf8_decode(p->pat + p->at, p->len - p->at, &cp);
 
     p->at += n == 0U ? 1U : n;
     return cp;
@@ -98,7 +98,7 @@ static u32 take_cp(RefProg *p)
 
 static void add_range(RefNode *n, u32 lo, u32 hi)
 {
-    if (n->nranges < SAG_ARRAY_LEN(n->ranges)) {
+    if (n->nranges < YEW_ARRAY_LEN(n->ranges)) {
         n->ranges[n->nranges].lo = lo;
         n->ranges[n->nranges].hi = hi;
         n->nranges++;
@@ -177,7 +177,7 @@ static i32 parse_atom(RefProg *p)
             p->unsupported = true;
             return -1;
         } else {
-            if (p->ngroups >= SAG_REF_MAX_GROUPS) {
+            if (p->ngroups >= YEW_REF_MAX_GROUPS) {
                 p->unsupported = true;
                 return -1;
             }
@@ -346,9 +346,9 @@ typedef struct RefRun {
     const RefProg *p;
     const u8 *hay;
     size_t haylen;
-    u64 lo[SAG_REF_MAX_GROUPS];
-    u64 hi[SAG_REF_MAX_GROUPS];
-    bool set[SAG_REF_MAX_GROUPS];
+    u64 lo[YEW_REF_MAX_GROUPS];
+    u64 hi[YEW_REF_MAX_GROUPS];
+    bool set[YEW_REF_MAX_GROUPS];
     i64 steps;
     bool budget_out;
 } RefRun;
@@ -441,7 +441,7 @@ static u32 decode_at(const RefRun *r, u64 pos, u32 *len)
         *len = 0U;
         return 0U;
     }
-    n = sag_utf8_decode(r->hay + pos, r->haylen - pos, &cp);
+    n = yew_utf8_decode(r->hay + pos, r->haylen - pos, &cp);
     *len = (u32)(n == 0U ? 1U : n);
     return cp;
 }
@@ -596,8 +596,8 @@ static bool match_node(RefRun *r, i32 id, u64 pos, RefCont k, void *ctx)
     return false;
 }
 
-SagRefResult sag_ref_search(const char *pat, size_t patlen, const u8 *hay,
-                            size_t haylen, u64 from, SagRefMatch *out)
+YewRefResult yew_ref_search(const char *pat, size_t patlen, const u8 *hay,
+                            size_t haylen, u64 from, YewRefMatch *out)
 {
     RefProg p;
     RefRun r;
@@ -610,9 +610,9 @@ SagRefResult sag_ref_search(const char *pat, size_t patlen, const u8 *hay,
     p.ngroups = 1U; /* group 0 */
     root = parse_alt(&p);
     if (p.unsupported)
-        return SAG_REF_UNKNOWN;
+        return YEW_REF_UNKNOWN;
     if (root < 0 || p.failed || p.at != patlen)
-        return SAG_REF_UNKNOWN; /* the engine may still reject it */
+        return YEW_REF_UNKNOWN; /* the engine may still reject it */
 
     for (start = from; start <= haylen; start++) {
         u64 end = 0U;
@@ -623,7 +623,7 @@ SagRefResult sag_ref_search(const char *pat, size_t patlen, const u8 *hay,
         r.hay = hay;
         r.haylen = haylen;
         r.steps = REF_STEP_BUDGET;
-        for (g = 0U; g < SAG_REF_MAX_GROUPS; g++) {
+        for (g = 0U; g < YEW_REF_MAX_GROUPS; g++) {
             r.lo[g] = 0U;
             r.hi[g] = 0U;
             r.set[g] = false;
@@ -636,10 +636,10 @@ SagRefResult sag_ref_search(const char *pat, size_t patlen, const u8 *hay,
                 out->hi[0] = end;
                 out->set[0] = true;
             }
-            return SAG_REF_MATCH;
+            return YEW_REF_MATCH;
         }
         if (r.budget_out)
-            return SAG_REF_UNKNOWN;
+            return YEW_REF_UNKNOWN;
         /* Only advance to the next codepoint boundary. */
         if (start < haylen) {
             u32 len = 0U;
@@ -649,5 +649,5 @@ SagRefResult sag_ref_search(const char *pat, size_t patlen, const u8 *hay,
                 start += len - 1U;
         }
     }
-    return SAG_REF_NO_MATCH;
+    return YEW_REF_NO_MATCH;
 }

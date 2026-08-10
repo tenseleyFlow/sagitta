@@ -160,7 +160,7 @@ static bool write_file(const char *path, const Bytebuf *data)
 }
 
 /*
- * SAG_PTY_EXCLUDE is a COMMA-SEPARATED list of substrings.  It was a
+ * YEW_PTY_EXCLUDE is a COMMA-SEPARATED list of substrings.  It was a
  * single substring, and the valgrind lane silently ran a case it meant
  * to skip the moment a second name was added -- a skip list that fails
  * open is worse than no skip list.
@@ -203,7 +203,7 @@ static bool valid_golden_name(const char *name)
 }
 
 static bool run_once(PtyCtx *ctx, const PtyCase *test, unsigned run,
-                     const char *demo, const char *sagitta,
+                     const char *demo, const char *yew,
                      i64 case_budget, i64 global_deadline)
 {
     char state[512];
@@ -213,7 +213,7 @@ static bool run_once(PtyCtx *ctx, const PtyCase *test, unsigned run,
                       test->name, strerror(errno));
         return false;
     }
-    ptc_init(ctx, test, state, demo, sagitta, case_budget,
+    ptc_init(ctx, test, state, demo, yew, case_budget,
              global_deadline);
     test->fn(ctx);
     if (!ctx->failed && !ctx->snapshot_taken)
@@ -269,7 +269,7 @@ static bool compare_golden(const PtyCtx *got, bool update, bool *updated,
         }
         if (!update) {
             bytebuf_printf(diff,
-                           "golden not found: run with SAG_PTY_UPDATE=1");
+                           "golden not found: run with YEW_PTY_UPDATE=1");
             bytebuf_free(&want);
             return false;
         }
@@ -301,7 +301,7 @@ static void preserve_failure(const PtyCtx *ctx)
 }
 
 static bool run_case(const PtyCase *test, const char *demo,
-                     const char *sagitta, i64 case_budget,
+                     const char *yew, i64 case_budget,
                      i64 global_deadline, bool update, bool *any_updated)
 {
     PtyCtx first;
@@ -319,10 +319,10 @@ static bool run_case(const PtyCase *test, const char *demo,
     (void)memset(&second, 0, sizeof(second));
     bytebuf_init(&diff);
     bytebuf_init(&fdmsg);
-    first_ok = run_once(&first, test, 1U, demo, sagitta, case_budget,
+    first_ok = run_once(&first, test, 1U, demo, yew, case_budget,
                         global_deadline);
     if (first_ok && ptc_now_ms() < global_deadline)
-        second_ok = run_once(&second, test, 2U, demo, sagitta, case_budget,
+        second_ok = run_once(&second, test, 2U, demo, yew, case_budget,
                              global_deadline);
     if (first_ok && second_ok) {
         stable = compare_independent(&first, &second, &diff);
@@ -389,43 +389,43 @@ static bool run_case(const PtyCase *test, const char *demo,
 }
 
 static bool parse_cli(int argc, char **argv, const char **demo,
-                      const char **sagitta)
+                      const char **yew)
 {
     int i;
 
     *demo = NULL;
-    *sagitta = NULL;
+    *yew = NULL;
     for (i = 1; i < argc; i += 2) {
         if (i + 1 >= argc)
             return false;
         if (strcmp(argv[i], "--demo") == 0 && *demo == NULL)
             *demo = argv[i + 1];
-        else if (strcmp(argv[i], "--sagitta") == 0 && *sagitta == NULL)
-            *sagitta = argv[i + 1];
+        else if (strcmp(argv[i], "--yew") == 0 && *yew == NULL)
+            *yew = argv[i + 1];
         else
             return false;
     }
-    return *demo != NULL && *sagitta != NULL;
+    return *demo != NULL && *yew != NULL;
 }
 
 int main(int argc, char **argv)
 {
     const char *demo;
-    const char *sagitta;
-    const char *filter = getenv("SAG_PTY_FILTER");
-    const char *exclude = getenv("SAG_PTY_EXCLUDE");
+    const char *yew;
+    const char *filter = getenv("YEW_PTY_FILTER");
+    const char *exclude = getenv("YEW_PTY_EXCLUDE");
     i64 budget;
     i64 case_budget;
     i64 global_deadline;
-    bool update = env_truthy("SAG_PTY_UPDATE");
+    bool update = env_truthy("YEW_PTY_UPDATE");
     bool any_updated = false;
     bool any_selected = false;
     bool ok = true;
     size_t i;
 
-    if (!parse_cli(argc, argv, &demo, &sagitta)) {
+    if (!parse_cli(argc, argv, &demo, &yew)) {
         (void)fprintf(stderr,
-                      "usage: pty_runner --demo <path> --sagitta <path>\n");
+                      "usage: pty_runner --demo <path> --yew <path>\n");
         return 2;
     }
     if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
@@ -433,16 +433,16 @@ int main(int argc, char **argv)
                       strerror(errno));
         return 1;
     }
-    budget = parse_budget("SAG_PTY_BUDGET_MS", RUNNER_BUDGET_MS);
-    case_budget = parse_budget("SAG_PTY_CASE_BUDGET_MS", CASE_BUDGET_MS);
+    budget = parse_budget("YEW_PTY_BUDGET_MS", RUNNER_BUDGET_MS);
+    case_budget = parse_budget("YEW_PTY_CASE_BUDGET_MS", CASE_BUDGET_MS);
     global_deadline = ptc_now_ms();
     global_deadline = budget > INT64_MAX - global_deadline
                           ? INT64_MAX : global_deadline + budget;
-    for (i = 0U; sag_pty_cases[i].name != NULL; i++) {
-        if (excluded(sag_pty_cases[i].name, exclude))
+    for (i = 0U; yew_pty_cases[i].name != NULL; i++) {
+        if (excluded(yew_pty_cases[i].name, exclude))
             continue;
         if (filter != NULL && *filter != '\0' &&
-            strstr(sag_pty_cases[i].name, filter) == NULL)
+            strstr(yew_pty_cases[i].name, filter) == NULL)
             continue;
         any_selected = true;
         if (ptc_now_ms() >= global_deadline) {
@@ -451,7 +451,7 @@ int main(int argc, char **argv)
             ok = false;
             break;
         }
-        if (!run_case(&sag_pty_cases[i], demo, sagitta, case_budget,
+        if (!run_case(&yew_pty_cases[i], demo, yew, case_budget,
                       global_deadline, update, &any_updated))
             ok = false;
     }
@@ -467,7 +467,7 @@ int main(int argc, char **argv)
     if (update) {
         if (!any_updated)
             (void)fprintf(stderr,
-                          "pty: SAG_PTY_UPDATE=1 is review-only and never passes\n");
+                          "pty: YEW_PTY_UPDATE=1 is review-only and never passes\n");
         return 1;
     }
     return ok ? 0 : 1;

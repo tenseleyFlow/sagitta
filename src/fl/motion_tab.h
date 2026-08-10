@@ -1,5 +1,5 @@
-#ifndef SAG_FL_MOTION_TAB_H
-#define SAG_FL_MOTION_TAB_H
+#ifndef YEW_FL_MOTION_TAB_H
+#define YEW_FL_MOTION_TAB_H
 
 #include <stdbool.h>
 
@@ -33,4 +33,4 @@ bool fl_motion_word_validate(const char *word, u32 len, Bytebuf *detail);
 /* FlHost.motion-compatible adapter; uses vm->ed and its focused window. */
 bool fl_motion_host_dispatch(FlVm *vm, const FlMotionProg *prog);
 
-#endif /* SAG_FL_MOTION_TAB_H */
+#endif /* YEW_FL_MOTION_TAB_H */

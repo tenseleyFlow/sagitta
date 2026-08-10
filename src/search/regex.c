@@ -28,7 +28,7 @@ static bool is_ascii_punct(u8 c)
            (c >= '[' && c <= '`') || (c >= '{' && c <= '~');
 }
 
-void sag_re_quote(Bytebuf *out, const u8 *s, size_t n)
+void yew_re_quote(Bytebuf *out, const u8 *s, size_t n)
 {
     static const char hex[] = "0123456789abcdef";
     size_t i;
@@ -37,7 +37,7 @@ void sag_re_quote(Bytebuf *out, const u8 *s, size_t n)
         return;
     /*
      * Quoting the empty literal must still yield a usable buffer.  An
-     * untouched Bytebuf has data == NULL, and sag_re_compile rejects a
+     * untouched Bytebuf has data == NULL, and yew_re_compile rejects a
      * NULL pattern as "no pattern" — so every caller that quoted a word
      * that happened to be empty would get a compile error instead of an
      * empty pattern, and would have to special-case it.  Reserve one

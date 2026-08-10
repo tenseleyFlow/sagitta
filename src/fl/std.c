@@ -43,7 +43,7 @@ static const FlModuleDef *const FL_MODULES[] = {
     &fl_mod_str, &fl_mod_list, &fl_mod_map, &fl_mod_math, &fl_mod_fmt,
     &fl_mod_io, &fl_mod_re,
     /* Sprint 34: the editor API.  Registered unconditionally -- a
-     * headless `sag fl` still sees `buf`, and its natives raise "no
+     * headless `yew fl` still sees `buf`, and its natives raise "no
      * editor" rather than reporting an undefined name for something that
      * merely has no editor attached (invariant 3). */
     &fl_mod_buf, &fl_mod_win, &fl_mod_cur, &fl_mod_span, &fl_mod_opt,
@@ -79,7 +79,7 @@ static void register_module(FlVm *vm, const FlModuleDef *md)
         /* QUALIFIED: every message a native produces names it the way
          * the user wrote it.  "sqrt: argument 1 ..." makes a reader
          * hunt for which module's sqrt. */
-        nat->name_id = sag_intern(vm->in, qual, (size_t)(qn < 0 ? 0 : qn));
+        nat->name_id = yew_intern(vm->in, qual, (size_t)(qn < 0 ? 0 : qn));
         nat->min_ar = d->min_ar;
         nat->max_ar = d->max_ar;
         nat->caps = d->caps;
@@ -173,7 +173,7 @@ static bool invoke_macro_command(FlVm *vm, const char *command,
     if (vm->ed == NULL)
         return fl_raise(vm, "handle", "%s: no editor is attached",
                         command);
-    id = sag_cmd_lookup(command, (u32)strlen(command));
+    id = yew_cmd_lookup(command, (u32)strlen(command));
     if (id.v == 0U)
         return fl_raise(vm, "name", "%s is unavailable", command);
     cx.ed = vm->ed;
@@ -183,8 +183,8 @@ static bool invoke_macro_command(FlVm *vm, const char *command,
     cx.sarg = name->b;
     cx.sarg_len = name->len;
     cx.source = fl_runtime_cmd_source(vm);
-    status = sag_ed_invoke(vm->ed, id, &cx);
-    if (status != SAG_CMD_OK)
+    status = yew_ed_invoke(vm->ed, id, &cx);
+    if (status != YEW_CMD_OK)
         return fl_raise(vm, "user", "%s failed", command);
     *out = FL_NIL_V;
     return true;
@@ -214,9 +214,9 @@ static bool fl_replay(FlVm *vm, FlValue *a, u32 n, FlValue *out)
                             "replay: argument 2 must be an int, found %s",
                             fl_type_name((FlType)a[1].t));
         count = a[1].as.i;
-        if (count < 1 || count > (i64)SAG_COUNT_MAX)
+        if (count < 1 || count > (i64)YEW_COUNT_MAX)
             return fl_raise(vm, "type", "replay: count must be 1..%u",
-                            (unsigned)SAG_COUNT_MAX);
+                            (unsigned)YEW_COUNT_MAX);
     }
     return invoke_macro_command(vm, "ed.macro.replay", name, (u32)count,
                                 n == 2U, out);
@@ -228,7 +228,7 @@ static void register_prelude_one(FlVm *vm, const char *name,
     FlNative *native = fl_gc_alloc(vm, sizeof(*native), FL_NATIVE);
 
     native->fn = fn;
-    native->name_id = sag_intern(vm->in, name, strlen(name));
+    native->name_id = yew_intern(vm->in, name, strlen(name));
     native->min_ar = min_ar;
     native->max_ar = max_ar;
     native->caps = 0U;
@@ -260,7 +260,7 @@ void fl_std_register(FlVm *vm)
     size_t i;
 
     fl_api_init();
-    for (i = 0U; i < SAG_ARRAY_LEN(FL_MODULES); i++)
+    for (i = 0U; i < YEW_ARRAY_LEN(FL_MODULES); i++)
         register_module(vm, FL_MODULES[i]);
     register_prelude(vm);
 }
@@ -271,7 +271,7 @@ u32 fl_std_list_natives(const FlVm *vm, Bytebuf *out)
     u32 n = 0U;
 
     (void)vm;
-    for (i = 0U; i < SAG_ARRAY_LEN(FL_MODULES); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(FL_MODULES); i++) {
         const FlModuleDef *md = FL_MODULES[i];
         u32 k;
 
@@ -292,7 +292,7 @@ const char *fl_std_sig(const char *qualified)
 
     if (qualified == NULL)
         return NULL;
-    for (i = 0U; i < SAG_ARRAY_LEN(FL_MODULES); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(FL_MODULES); i++) {
         const FlModuleDef *md = FL_MODULES[i];
         size_t mn = strlen(md->name);
         u32 k;
@@ -322,7 +322,7 @@ void fl_std_set_current(FlVm *vm, u32 name_id) { vm->cur_native = name_id; }
  */
 static bool arg_type_err(FlVm *vm, u32 i, const char *want, FlValue got)
 {
-    const char *nm = sag_intern_str(vm->in, vm->cur_native);
+    const char *nm = yew_intern_str(vm->in, vm->cur_native);
 
     /* One-based, because that is how a user counts the arguments they
      * wrote -- argv[0] is "argument 1" in every message. */

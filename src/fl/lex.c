@@ -368,8 +368,8 @@ static FlTok lex_number(FlLexer *lx)
  * differently. */
 static void push_cp(Bytebuf *b, u32 cp)
 {
-    u8 enc[SAG_UTF8_MAX];
-    size_t n = sag_utf8_encode(cp, enc);
+    u8 enc[YEW_UTF8_MAX];
+    size_t n = yew_utf8_encode(cp, enc);
 
     bytebuf_append(b, enc, n);
 }
@@ -488,7 +488,7 @@ static FlTok lex_string(FlLexer *lx)
         }
     }
     t = make(FL_T_STRING, span_at(lx, line, col, from));
-    t.v.str_id = sag_intern(lx->in, (const char *)out.data, out.len);
+    t.v.str_id = yew_intern(lx->in, (const char *)out.data, out.len);
     bytebuf_free(&out);
     return t;
 }
@@ -577,7 +577,7 @@ static FlTok lex_motion_word(FlLexer *lx)
             }
             if (!at_end(lx)) {
                 u32 cp = 0U;
-                size_t adv = sag_utf8_decode((const u8 *)lx->src + lx->at,
+                size_t adv = yew_utf8_decode((const u8 *)lx->src + lx->at,
                                              lx->len - lx->at, &cp);
 
                 if (adv != 0U && arrow_alias(cp, &ch)) {
@@ -619,7 +619,7 @@ static FlTok lex_motion_word(FlLexer *lx)
         {
             FlTok t = make(FL_M_WORD, span_at(lx, line, col, from));
 
-            t.v.str_id = sag_intern(lx->in, lx->src + start, n);
+            t.v.str_id = yew_intern(lx->in, lx->src + start, n);
             return t;
         }
     }
@@ -633,7 +633,7 @@ static FlTok lex_motion_word(FlLexer *lx)
     }
     {
         u32 cp = 0U;
-        size_t adv = sag_utf8_decode((const u8 *)lx->src + lx->at,
+        size_t adv = yew_utf8_decode((const u8 *)lx->src + lx->at,
                                      lx->len - lx->at, &cp);
         u8 ch = 0U;
 
@@ -829,7 +829,7 @@ FlTok fl_lex_next(FlLexer *lx)
             {
                 FlTok t = make(FL_T_IDENT, span_at(lx, line, col, from));
 
-                t.v.str_id = sag_intern(lx->in, lx->src + start, n);
+                t.v.str_id = yew_intern(lx->in, lx->src + start, n);
                 return t;
             }
         }
@@ -904,7 +904,7 @@ FlTok fl_lex_next(FlLexer *lx)
          */
         {
             u32 cp = 0U;
-            size_t adv = sag_utf8_decode((const u8 *)lx->src + lx->at,
+            size_t adv = yew_utf8_decode((const u8 *)lx->src + lx->at,
                                          lx->len - lx->at, &cp);
 
             /*
@@ -916,13 +916,13 @@ FlTok fl_lex_next(FlLexer *lx)
              * testing `adv == 0` alone would silently accept it as an
              * ordinary unexpected character.
              */
-            if (adv == 0U || sag_utf8_is_escape(cp)) {
+            if (adv == 0U || yew_utf8_is_escape(cp)) {
                 bool first = !lx->utf8_reported;
 
                 lx->utf8_reported = true;
                 (void)bump(lx);
                 while (!at_end(lx) &&
-                       !sag_utf8_is_boundary((const u8 *)lx->src, lx->len,
+                       !yew_utf8_is_boundary((const u8 *)lx->src, lx->len,
                                              lx->at))
                     (void)bump(lx);
                 if (first)

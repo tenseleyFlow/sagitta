@@ -24,9 +24,9 @@ enum {
 };
 
 static const unsigned char old_bytes[] =
-    "Sagitta batch kill9 fixture: old bytes\n";
+    "yew batch kill9 fixture: old bytes\n";
 static const unsigned char payload_seed[] =
-    "Sagitta batch kill9 fixture: replacement bytes 0123456789abcdef\n";
+    "yew batch kill9 fixture: replacement bytes 0123456789abcdef\n";
 
 static void die(const char *what)
 {
@@ -195,7 +195,7 @@ static void write_scripts(const char *save_path, const char *open_path)
         "import buf\n"
         "import span\n"
         "let b = buf.current()\n"
-        "let payload = \"Sagitta batch kill9 fixture: replacement bytes "
+        "let payload = \"yew batch kill9 fixture: replacement bytes "
         "0123456789abcdef\\n\"\n"
         "let d = 0\n"
         "while d < 10 {\n"
@@ -252,7 +252,7 @@ static void set_child_environment(const char *trial)
         _exit(125);
 }
 
-static pid_t spawn_batch(const char *sagitta, const char *script,
+static pid_t spawn_batch(const char *yew, const char *script,
                          const char *target, const char *trial)
 {
     pid_t pid = fork();
@@ -274,7 +274,7 @@ static pid_t spawn_batch(const char *sagitta, const char *script,
         if (nullfd > STDERR_FILENO)
             (void)close(nullfd);
     }
-    execl(sagitta, sagitta, "--clean", "--batch", script, target,
+    execl(yew, yew, "--clean", "--batch", script, target,
           (char *)NULL);
     _exit(127);
 }
@@ -320,7 +320,7 @@ static bool tree_has_journal(const char *path)
     if (S_ISREG(st.st_mode)) {
         size_t n = strlen(path);
 
-        return n >= 5U && strcmp(path + n - 5U, ".sagj") == 0 &&
+        return n >= 5U && strcmp(path + n - 5U, ".yewj") == 0 &&
                st.st_size > 0;
     }
     if (S_ISDIR(st.st_mode)) {
@@ -357,7 +357,7 @@ static bool exact(const unsigned char *got, size_t got_len,
 static void usage(const char *argv0)
 {
     (void)fprintf(stderr,
-                  "usage: %s --sagitta PATH --checker PATH "
+                  "usage: %s --yew PATH --checker PATH "
                   "[--iterations N] [--seed N] "
                   "[--max-delay-us N]\n",
                   argv0);
@@ -365,12 +365,12 @@ static void usage(const char *argv0)
 
 int main(int argc, char **argv)
 {
-    char root_template[] = "/tmp/sagitta-batch-kill9-XXXXXX";
+    char root_template[] = "/tmp/yew-batch-kill9-XXXXXX";
     char save_script[1024];
     char open_script[1024];
     char old_path[1024];
     char new_path[1024];
-    char *sagitta = NULL;
+    char *yew = NULL;
     char *checker = NULL;
     char *root;
     unsigned char *new_bytes;
@@ -387,15 +387,15 @@ int main(int argc, char **argv)
     int i;
 
     {
-        const char *v = getenv("SAG_BATCH_KILL9_ITERS");
+        const char *v = getenv("YEW_BATCH_KILL9_ITERS");
         if (v != NULL)
-            iterations = parse_count("SAG_BATCH_KILL9_ITERS", v, 200U);
-        v = getenv("SAG_BATCH_KILL9_SEED");
+            iterations = parse_count("YEW_BATCH_KILL9_ITERS", v, 200U);
+        v = getenv("YEW_BATCH_KILL9_SEED");
         if (v != NULL)
-            rng = (uint64_t)parse_count("SAG_BATCH_KILL9_SEED", v, 1U);
-        v = getenv("SAG_BATCH_KILL9_MAX_DELAY_US");
+            rng = (uint64_t)parse_count("YEW_BATCH_KILL9_SEED", v, 1U);
+        v = getenv("YEW_BATCH_KILL9_MAX_DELAY_US");
         if (v != NULL)
-            max_delay_us = parse_count("SAG_BATCH_KILL9_MAX_DELAY_US", v,
+            max_delay_us = parse_count("YEW_BATCH_KILL9_MAX_DELAY_US", v,
                                        1U);
     }
     for (i = 1; i < argc; i++) {
@@ -406,10 +406,10 @@ int main(int argc, char **argv)
             return 2;
         }
         value = argv[++i];
-        if (strcmp(argv[i - 1], "--sagitta") == 0) {
-            free(sagitta);
-            sagitta = realpath(value, NULL);
-            if (sagitta == NULL)
+        if (strcmp(argv[i - 1], "--yew") == 0) {
+            free(yew);
+            yew = realpath(value, NULL);
+            if (yew == NULL)
                 die(value);
         } else if (strcmp(argv[i - 1], "--checker") == 0) {
             free(checker);
@@ -424,14 +424,14 @@ int main(int argc, char **argv)
             max_delay_us = parse_count("--max-delay-us", value, 1U);
         } else {
             usage(argv[0]);
-            free(sagitta);
+            free(yew);
             free(checker);
             return 2;
         }
     }
-    if (sagitta == NULL || checker == NULL) {
+    if (yew == NULL || checker == NULL) {
         usage(argv[0]);
-        free(sagitta);
+        free(yew);
         free(checker);
         return 2;
     }
@@ -473,7 +473,7 @@ int main(int argc, char **argv)
         if (snprintf(target, sizeof(target), "%s/target.txt", trial) < 0)
             die("target path");
         make_file(target, old_bytes, sizeof(old_bytes) - 1U);
-        pid = spawn_batch(sagitta, save_script, target, trial);
+        pid = spawn_batch(yew, save_script, target, trial);
         delay_us = random_next(&rng) % (max_delay_us + 1U);
         delay.tv_sec = (time_t)(delay_us / UINT64_C(1000000));
         delay.tv_nsec = (long)((delay_us % UINT64_C(1000000)) * 1000U);
@@ -513,7 +513,7 @@ int main(int argc, char **argv)
                           killed, got_len);
         }
 
-        pid = spawn_batch(sagitta, open_script, target, trial);
+        pid = spawn_batch(yew, open_script, target, trial);
         if (wait_status(pid, &status) != 0)
             fail_root(root,
                       "batch-kill9: batch reopen failed after trial=%llu "
@@ -539,9 +539,9 @@ int main(int argc, char **argv)
                  killed, attempts, old_seen, new_seen, journal_seen,
                  (unsigned long long)initial_seed);
     free(new_bytes);
-    free(sagitta);
+    free(yew);
     free(checker);
-    if (getenv("SAG_TORTURE_KEEP") != NULL) {
+    if (getenv("YEW_TORTURE_KEEP") != NULL) {
         (void)printf("batch-kill9 root retained: %s\n", root);
     } else if (!remove_tree(root)) {
         die("remove batch-kill9 root");

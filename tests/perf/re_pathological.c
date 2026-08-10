@@ -73,15 +73,15 @@ static bool read_limits(const char *path, i64 *hard_ns, i64 *ratio)
 static bool time_run(const char *pat, size_t n, i64 *ns_out, bool *matched)
 {
     Arena arena;
-    SagReErr err = {0, NULL};
-    SagRe *re;
-    SagReInput in;
+    YewReErr err = {0, NULL};
+    YewRe *re;
+    YewReInput in;
     u8 *hay;
     i64 start;
     i64 end;
 
     arena_init(&arena);
-    re = sag_re_compile(&arena, pat, strlen(pat), 0U, &err);
+    re = yew_re_compile(&arena, pat, strlen(pat), 0U, &err);
     if (re == NULL) {
         (void)fprintf(stderr, "re_pathological: /%s/ did not compile: %s\n",
                       pat, err.msg == NULL ? "?" : err.msg);
@@ -94,9 +94,9 @@ static bool time_run(const char *pat, size_t n, i64 *ns_out, bool *matched)
         return false;
     }
     (void)memset(hay, 'a', n);
-    in = sag_re_input_bytes(hay, (u64)n);
+    in = yew_re_input_bytes(hay, (u64)n);
     start = now_ns();
-    *matched = sag_re_search(re, &in, BYTEOFF(0U), NULL);
+    *matched = yew_re_search(re, &in, BYTEOFF(0U), NULL);
     end = now_ns();
     free(hay);
     arena_free_all(&arena);
@@ -203,7 +203,7 @@ int main(int argc, char **argv)
                       argv[2]);
         return 2;
     }
-    for (i = 0U; i < SAG_ARRAY_LEN(patterns); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(patterns); i++) {
         if (!scaling_case(patterns[i], hard_ns, ratio_limit, &status))
             return 2;
     }
@@ -220,8 +220,8 @@ int main(int argc, char **argv)
     /* The .*.*.*=.* shape: a 10 KiB line with no '=' at all. */
     {
         Arena arena;
-        SagRe *re;
-        SagReInput in;
+        YewRe *re;
+        YewReInput in;
         u8 *hay = malloc(10240U);
         i64 start;
         i64 end;
@@ -230,15 +230,15 @@ int main(int argc, char **argv)
             return 2;
         (void)memset(hay, 'x', 10240U);
         arena_init(&arena);
-        re = sag_re_compile(&arena, ".*.*.*.*=.*", 11U, 0U, NULL);
+        re = yew_re_compile(&arena, ".*.*.*.*=.*", 11U, 0U, NULL);
         if (re == NULL) {
             free(hay);
             arena_free_all(&arena);
             return 2;
         }
-        in = sag_re_input_bytes(hay, 10240U);
+        in = yew_re_input_bytes(hay, 10240U);
         start = now_ns();
-        (void)sag_re_search(re, &in, BYTEOFF(0U), NULL);
+        (void)yew_re_search(re, &in, BYTEOFF(0U), NULL);
         end = now_ns();
         free(hay);
         arena_free_all(&arena);

@@ -256,15 +256,15 @@ void test_fl_compile_synthetic_opcodes_execute(void)
 {
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(OP_SYNTH); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(OP_SYNTH); i++) {
         CFix f;
         FlFn *fn;
         FlValue out;
         bool ok;
 
         /* An empty `why` is the whole point of the field. */
-        SAG_ASSERT_NOT_NULL(OP_SYNTH[i].why);
-        SAG_ASSERT(OP_SYNTH[i].why[0] != '\0');
+        YEW_ASSERT_NOT_NULL(OP_SYNTH[i].why);
+        YEW_ASSERT(OP_SYNTH[i].why[0] != '\0');
 
         cf_open(&f);
         fn = synth_fn(&f, &OP_SYNTH[i]);
@@ -280,20 +280,20 @@ void test_fl_compile_synthetic_opcodes_execute(void)
                 (void)fprintf(stderr, "synth %s: ncode %u, walk ends %u\n",
                               fl_op_name(OP_SYNTH[i].op),
                               (unsigned)fn->ch.ncode, (unsigned)pc);
-            SAG_ASSERT_EQ_U64(pc, fn->ch.ncode);
+            YEW_ASSERT_EQ_U64(pc, fn->ch.ncode);
         }
         ok = fl_vm_run(&f.vm, fn, &out);
         if (ok == OP_SYNTH[i].want_raise)
             (void)fprintf(stderr, "synth %s: raise=%d, wanted raise=%d\n",
                           fl_op_name(OP_SYNTH[i].op), (int)!ok,
                           (int)OP_SYNTH[i].want_raise);
-        SAG_ASSERT_EQ_I64((i64)ok, (i64)!OP_SYNTH[i].want_raise);
-        SAG_ASSERT_EQ_U64((u64)out.t, (u64)FL_INT);
+        YEW_ASSERT_EQ_I64((i64)ok, (i64)!OP_SYNTH[i].want_raise);
+        YEW_ASSERT_EQ_U64((u64)out.t, (u64)FL_INT);
         if (out.as.i != OP_SYNTH[i].want)
             (void)fprintf(stderr, "synth %s: got %lld, want %lld\n",
                           fl_op_name(OP_SYNTH[i].op), (long long)out.as.i,
                           (long long)OP_SYNTH[i].want);
-        SAG_ASSERT_EQ_I64(out.as.i, OP_SYNTH[i].want);
+        YEW_ASSERT_EQ_I64(out.as.i, OP_SYNTH[i].want);
         cf_close(&f);
     }
 }
@@ -305,7 +305,7 @@ void test_fl_compile_synthetic_opcodes_disassemble(void)
     /* DoD 3 asks for "implemented, disassembled, and reached".  This is
      * the disassembled third: every synthetic chunk round-trips through
      * fl_disasm_chunk naming its opcode, with no BAD_OP. */
-    for (i = 0U; i < SAG_ARRAY_LEN(OP_SYNTH); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(OP_SYNTH); i++) {
         CFix f;
         FlFn *fn;
         Bytebuf bb;
@@ -315,9 +315,9 @@ void test_fl_compile_synthetic_opcodes_disassemble(void)
         bytebuf_init(&bb);
         fl_disasm_chunk(&bb, &fn->ch, &f.in);
         bytebuf_append(&bb, "", 1U);
-        SAG_ASSERT_NOT_NULL(strstr((const char *)bb.data,
+        YEW_ASSERT_NOT_NULL(strstr((const char *)bb.data,
                                    fl_op_name(OP_SYNTH[i].op)));
-        SAG_ASSERT(strstr((const char *)bb.data, "BAD_OP") == NULL);
+        YEW_ASSERT(strstr((const char *)bb.data, "BAD_OP") == NULL);
         bytebuf_free(&bb);
         cf_close(&f);
     }
@@ -336,7 +336,7 @@ static void mark_chunk_ops(const FlChunk *ch, bool *seen)
         if ((u32)op >= (u32)FL_OP__COUNT) {
             (void)fprintf(stderr, "bad opcode %u at pc %u\n",
                           (unsigned)op, (unsigned)pc);
-            SAG_ASSERT(false);
+            YEW_ASSERT(false);
             return;
         }
         seen[(u32)op] = true;
@@ -362,7 +362,7 @@ void test_fl_compile_every_opcode_is_covered(void)
      * the first gap turns "which opcodes are unreachable" into a
      * one-per-rebuild guessing game.
      */
-    for (i = 0U; i < SAG_ARRAY_LEN(OP_CORPUS); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(OP_CORPUS); i++) {
         CFix f;
         FlFn *fn;
         bool one[FL_OP__COUNT];
@@ -400,7 +400,7 @@ void test_fl_compile_every_opcode_is_covered(void)
     /* The synthetic rows carry the rest.  Their chunks are EXECUTED by
      * test_fl_compile_synthetic_opcodes_execute; here they only need to
      * close the coverage set. */
-    for (i = 0U; i < SAG_ARRAY_LEN(OP_SYNTH); i++)
+    for (i = 0U; i < YEW_ARRAY_LEN(OP_SYNTH); i++)
         seen[(u32)OP_SYNTH[i].op] = true;
     /* Every NULL-source row must have exactly one synthetic row, and
      * vice versa -- otherwise a row could go NULL and quietly stop
@@ -408,7 +408,7 @@ void test_fl_compile_every_opcode_is_covered(void)
     for (k = 0U; k < (u32)FL_OP__COUNT; k++) {
         u32 nsyn = 0U;
 
-        for (i = 0U; i < SAG_ARRAY_LEN(OP_SYNTH); i++) {
+        for (i = 0U; i < YEW_ARRAY_LEN(OP_SYNTH); i++) {
             if ((u32)OP_SYNTH[i].op == k)
                 nsyn++;
         }
@@ -427,12 +427,12 @@ void test_fl_compile_every_opcode_is_covered(void)
             gaps++;
         }
     }
-    SAG_ASSERT_EQ_U64(bad_rows, 0U);
-    SAG_ASSERT_EQ_U64(gaps, 0U);
+    YEW_ASSERT_EQ_U64(bad_rows, 0U);
+    YEW_ASSERT_EQ_U64(gaps, 0U);
     /* One row per opcode: a duplicate row hides a missing one. */
-    SAG_ASSERT_EQ_U64((u64)SAG_ARRAY_LEN(OP_CORPUS), (u64)FL_OP__COUNT);
-    for (i = 0U; i < SAG_ARRAY_LEN(OP_CORPUS); i++)
-        SAG_ASSERT_EQ_U64((u64)OP_CORPUS[i].op, (u64)i);
+    YEW_ASSERT_EQ_U64((u64)YEW_ARRAY_LEN(OP_CORPUS), (u64)FL_OP__COUNT);
+    for (i = 0U; i < YEW_ARRAY_LEN(OP_CORPUS); i++)
+        YEW_ASSERT_EQ_U64((u64)OP_CORPUS[i].op, (u64)i);
 }
 
 /* ---------------------------------------------------------------- */
@@ -446,12 +446,12 @@ static void assert_compile_error(const char *src, const char *needle)
 
     cf_open(&f);
     fn = cf_compile(&f, src);
-    SAG_ASSERT(fn == NULL);
-    SAG_ASSERT(f.ndiag != 0U);
+    YEW_ASSERT(fn == NULL);
+    YEW_ASSERT(f.ndiag != 0U);
     if (strstr(f.first, needle) == NULL)
         (void)fprintf(stderr, "want '%s' in '%s'\n  source: %s\n",
                       needle, f.first, src);
-    SAG_ASSERT_NOT_NULL(strstr(f.first, needle));
+    YEW_ASSERT_NOT_NULL(strstr(f.first, needle));
     cf_close(&f);
 }
 
@@ -481,9 +481,9 @@ void test_fl_compile_rejects_bad_scopes(void)
         CFix f;
 
         cf_open(&f);
-        SAG_ASSERT_NOT_NULL(cf_compile(&f,
+        YEW_ASSERT_NOT_NULL(cf_compile(&f,
             "let g = 1\nfn h() { let g = 2\nreturn g }\nreturn h()\n"));
-        SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+        YEW_ASSERT_EQ_U64(f.ndiag, 0U);
         cf_close(&f);
     }
 }
@@ -501,7 +501,7 @@ void test_fl_compile_dedupes_constants(void)
      */
     cf_open(&f);
     fn = cf_compile(&f, "let a = 100000\nlet b = 100000\nreturn a + b\n");
-    SAG_ASSERT_NOT_NULL(fn);
+    YEW_ASSERT_NOT_NULL(fn);
     {
         u32 i;
         u32 hits = 0U;
@@ -511,13 +511,13 @@ void test_fl_compile_dedupes_constants(void)
                 fn->ch.consts[i].as.i == 100000)
                 hits++;
         }
-        SAG_ASSERT_EQ_U64(hits, 1U);
+        YEW_ASSERT_EQ_U64(hits, 1U);
     }
     cf_close(&f);
 
     cf_open(&f);
     fn = cf_compile(&f, "let a = 100000\nlet b = 100000.0\nreturn 0\n");
-    SAG_ASSERT_NOT_NULL(fn);
+    YEW_ASSERT_NOT_NULL(fn);
     {
         u32 i;
         u32 ints = 0U;
@@ -530,8 +530,8 @@ void test_fl_compile_dedupes_constants(void)
             if (fn->ch.consts[i].t == (u8)FL_FLOAT)
                 flts++;
         }
-        SAG_ASSERT_EQ_U64(ints, 1U);
-        SAG_ASSERT_EQ_U64(flts, 1U);
+        YEW_ASSERT_EQ_U64(ints, 1U);
+        YEW_ASSERT_EQ_U64(flts, 1U);
     }
     cf_close(&f);
 }
@@ -546,19 +546,19 @@ void test_fl_compile_small_ints_avoid_the_constant_pool(void)
      * that dominate real scripts. */
     cf_open(&f);
     fn = cf_compile(&f, "return 7\n");
-    SAG_ASSERT_NOT_NULL(fn);
+    YEW_ASSERT_NOT_NULL(fn);
     (void)memset(seen, 0, sizeof(seen));
     mark_chunk_ops(&fn->ch, seen);
-    SAG_ASSERT(seen[FL_OP_INT8]);
-    SAG_ASSERT(!seen[FL_OP_CONST]);
+    YEW_ASSERT(seen[FL_OP_INT8]);
+    YEW_ASSERT(!seen[FL_OP_CONST]);
     cf_close(&f);
 
     cf_open(&f);
     fn = cf_compile(&f, "return 100000\n");
-    SAG_ASSERT_NOT_NULL(fn);
+    YEW_ASSERT_NOT_NULL(fn);
     (void)memset(seen, 0, sizeof(seen));
     mark_chunk_ops(&fn->ch, seen);
-    SAG_ASSERT(seen[FL_OP_CONST]);
+    YEW_ASSERT(seen[FL_OP_CONST]);
     cf_close(&f);
 }
 
@@ -574,14 +574,14 @@ void test_fl_compile_tracks_max_stack(void)
      */
     cf_open(&f);
     fn = cf_compile(&f, "return 1 + (2 * (3 - (4 / (5 % 6))))\n");
-    SAG_ASSERT_NOT_NULL(fn);
-    SAG_ASSERT(fn->max_stack >= 6U);
+    YEW_ASSERT_NOT_NULL(fn);
+    YEW_ASSERT(fn->max_stack >= 6U);
     cf_close(&f);
 
     cf_open(&f);
     fn = cf_compile(&f, "return [1, 2, 3, 4, 5, 6, 7, 8]\n");
-    SAG_ASSERT_NOT_NULL(fn);
-    SAG_ASSERT(fn->max_stack >= 2U);
+    YEW_ASSERT_NOT_NULL(fn);
+    YEW_ASSERT(fn->max_stack >= 2U);
     cf_close(&f);
 }
 
@@ -606,8 +606,8 @@ void test_fl_compile_lines_are_recorded_for_every_op(void)
                         "let b = 2\n"
                         "let c = a + b\n"
                         "return c\n");
-    SAG_ASSERT_NOT_NULL(fn);
-    SAG_ASSERT(fn->ch.ncode < SAG_ARRAY_LEN(is_start));
+    YEW_ASSERT_NOT_NULL(fn);
+    YEW_ASSERT(fn->ch.ncode < YEW_ARRAY_LEN(is_start));
     (void)memset(is_start, 0, sizeof(is_start));
     while (pc < fn->ch.ncode) {
         is_start[pc] = true;
@@ -615,20 +615,20 @@ void test_fl_compile_lines_are_recorded_for_every_op(void)
     }
     /* pc lands exactly on the end: no instruction ran off the chunk,
      * which is also what proves fl_op_length agrees with the emitter. */
-    SAG_ASSERT_EQ_U64(pc, fn->ch.ncode);
+    YEW_ASSERT_EQ_U64(pc, fn->ch.ncode);
 
-    SAG_ASSERT(fn->ch.nlines != 0U);
-    SAG_ASSERT_EQ_U64(fn->ch.lines[0].pc, 0U);
+    YEW_ASSERT(fn->ch.nlines != 0U);
+    YEW_ASSERT_EQ_U64(fn->ch.lines[0].pc, 0U);
     for (r = 0U; r < fn->ch.nlines; r++) {
-        SAG_ASSERT(fn->ch.lines[r].pc < fn->ch.ncode);
-        SAG_ASSERT(is_start[fn->ch.lines[r].pc]);
-        SAG_ASSERT(fn->ch.lines[r].line >= 1U);
-        SAG_ASSERT(fn->ch.lines[r].line <= 4U);
-        SAG_ASSERT(fn->ch.lines[r].col >= 1U);
+        YEW_ASSERT(fn->ch.lines[r].pc < fn->ch.ncode);
+        YEW_ASSERT(is_start[fn->ch.lines[r].pc]);
+        YEW_ASSERT(fn->ch.lines[r].line >= 1U);
+        YEW_ASSERT(fn->ch.lines[r].line <= 4U);
+        YEW_ASSERT(fn->ch.lines[r].col >= 1U);
         /* Strictly increasing, so a lookup can binary-search and two
          * runs never disagree about one pc. */
         if (r != 0U)
-            SAG_ASSERT(fn->ch.lines[r].pc > fn->ch.lines[r - 1U].pc);
+            YEW_ASSERT(fn->ch.lines[r].pc > fn->ch.lines[r - 1U].pc);
     }
     cf_close(&f);
 }
@@ -644,7 +644,7 @@ void test_fl_compile_operand_lengths_match_the_emitter(void)
      * the first use and is otherwise found by a crash in a user
      * script.
      */
-    for (i = 0U; i < SAG_ARRAY_LEN(OP_CORPUS); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(OP_CORPUS); i++) {
         CFix f;
         FlFn *fn;
         u32 pc = 0U;
@@ -653,14 +653,14 @@ void test_fl_compile_operand_lengths_match_the_emitter(void)
             continue;
         cf_open(&f);
         fn = cf_compile(&f, OP_CORPUS[i].src);
-        SAG_ASSERT_NOT_NULL(fn);
+        YEW_ASSERT_NOT_NULL(fn);
         while (pc < fn->ch.ncode)
             pc += fl_op_length(&fn->ch, pc);
         if (pc != fn->ch.ncode)
             (void)fprintf(stderr, "row %u (%s) desynced: pc %u n %u\n",
                           (unsigned)i, fl_op_name(OP_CORPUS[i].op),
                           (unsigned)pc, (unsigned)fn->ch.ncode);
-        SAG_ASSERT_EQ_U64(pc, fn->ch.ncode);
+        YEW_ASSERT_EQ_U64(pc, fn->ch.ncode);
         cf_close(&f);
     }
 }
@@ -687,12 +687,12 @@ void test_fl_compile_is_deterministic_across_instances(void)
     cf_open(&b);
     fa = cf_compile(&a, src);
     fb = cf_compile(&b, src);
-    SAG_ASSERT_NOT_NULL(fa);
-    SAG_ASSERT_NOT_NULL(fb);
-    SAG_ASSERT_EQ_U64(fa->ch.ncode, fb->ch.ncode);
-    SAG_ASSERT_EQ_I64(memcmp(fa->ch.code, fb->ch.code, fa->ch.ncode), 0);
-    SAG_ASSERT_EQ_U64(fa->ch.nconsts, fb->ch.nconsts);
-    SAG_ASSERT_EQ_U64(fa->max_stack, fb->max_stack);
+    YEW_ASSERT_NOT_NULL(fa);
+    YEW_ASSERT_NOT_NULL(fb);
+    YEW_ASSERT_EQ_U64(fa->ch.ncode, fb->ch.ncode);
+    YEW_ASSERT_EQ_I64(memcmp(fa->ch.code, fb->ch.code, fa->ch.ncode), 0);
+    YEW_ASSERT_EQ_U64(fa->ch.nconsts, fb->ch.nconsts);
+    YEW_ASSERT_EQ_U64(fa->max_stack, fb->max_stack);
     cf_close(&b);
     cf_close(&a);
 }

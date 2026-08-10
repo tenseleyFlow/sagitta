@@ -19,12 +19,12 @@ static char *dup_str(const char *s)
     if (s == NULL)
         return NULL;
     n = strlen(s) + 1U;
-    out = sag_xmalloc(n);
+    out = yew_xmalloc(n);
     (void)memcpy(out, s, n);
     return out;
 }
 
-void sag_groups_init(Groups *g)
+void yew_groups_init(Groups *g)
 {
     if (g == NULL)
         return;
@@ -42,7 +42,7 @@ static void group_dispose(TabGroup *g)
     (void)memset(g, 0, sizeof(*g));
 }
 
-void sag_groups_free(Ed *ed)
+void yew_groups_free(Ed *ed)
 {
     size_t i;
 
@@ -51,7 +51,7 @@ void sag_groups_free(Ed *ed)
     for (i = 0U; i < ed->groups.v.len; i++)
         group_dispose(&ed->groups.v.data[i]);
     GroupVec_free(&ed->groups.v);
-    sag_groups_init(&ed->groups);
+    yew_groups_init(&ed->groups);
 }
 
 /* `basename(dir)/` — the trailing slash is what makes a group entry
@@ -85,10 +85,10 @@ static void default_label(const char *dir, char *out, size_t cap)
     out[len + 1U] = '\0';
 }
 
-u32 sag_group_create(Ed *ed, const char *dir_path, const char *name)
+u32 yew_group_create(Ed *ed, const char *dir_path, const char *name)
 {
     TabGroup g;
-    char label[SAG_TAB_LABEL_MAX];
+    char label[YEW_TAB_LABEL_MAX];
 
     if (ed == NULL)
         return 0U;
@@ -107,11 +107,11 @@ u32 sag_group_create(Ed *ed, const char *dir_path, const char *name)
      * the caller to invent a temporary member.
      */
     GroupVec_push(&ed->groups.v, g);
-    sag_state_mark_dirty(ed);
+    yew_state_mark_dirty(ed);
     return g.id;
 }
 
-int sag_group_find(const Ed *ed, u32 gid)
+int yew_group_find(const Ed *ed, u32 gid)
 {
     size_t i;
 
@@ -124,14 +124,14 @@ int sag_group_find(const Ed *ed, u32 gid)
     return -1;
 }
 
-TabGroup *sag_group_at(Ed *ed, u32 gid)
+TabGroup *yew_group_at(Ed *ed, u32 gid)
 {
-    int at = sag_group_find(ed, gid);
+    int at = yew_group_find(ed, gid);
 
     return at < 0 ? NULL : &ed->groups.v.data[at];
 }
 
-int sag_group_member_count(const Ed *ed, u32 gid)
+int yew_group_member_count(const Ed *ed, u32 gid)
 {
     size_t i;
     int n = 0;
@@ -164,16 +164,16 @@ static int member_cmp(const void *a, const void *b, void *ctx)
     return 0;
 }
 
-int sag_group_members(const Ed *ed, u32 gid, int *out, int cap)
+int yew_group_members(const Ed *ed, u32 gid, int *out, int cap)
 {
-    MemberRef refs[SAG_TAB_MAX];
+    MemberRef refs[YEW_TAB_MAX];
     size_t i;
     int n = 0;
     int j;
 
     if (ed == NULL || out == NULL || cap <= 0 || gid == 0U)
         return 0;
-    for (i = 0U; i < ed->tabs.v.len && n < (int)SAG_ARRAY_LEN(refs); i++) {
+    for (i = 0U; i < ed->tabs.v.len && n < (int)YEW_ARRAY_LEN(refs); i++) {
         if (ed->tabs.v.data[i].group_id != gid)
             continue;
         refs[n].ordinal = ed->tabs.v.data[i].group_ordinal;
@@ -186,7 +186,7 @@ int sag_group_members(const Ed *ed, u32 gid, int *out, int cap)
      * meant to fill.  A stable sort also keeps equal ordinals in array
      * order, so the answer is deterministic (invariant 5).
      */
-    sag_sort_stable(refs, (size_t)n, sizeof(refs[0]), member_cmp, NULL);
+    yew_sort_stable(refs, (size_t)n, sizeof(refs[0]), member_cmp, NULL);
     if (n > cap)
         n = cap;
     for (j = 0; j < n; j++)
@@ -194,13 +194,13 @@ int sag_group_members(const Ed *ed, u32 gid, int *out, int cap)
     return n;
 }
 
-void sag_group_add_member(Ed *ed, u32 gid, int tab_idx)
+void yew_group_add_member(Ed *ed, u32 gid, int tab_idx)
 {
-    Tab *t = sag_tab_at(ed, tab_idx);
+    Tab *t = yew_tab_at(ed, tab_idx);
     size_t i;
     u32 max = 0U;
 
-    if (t == NULL || gid == 0U || sag_group_find(ed, gid) < 0)
+    if (t == NULL || gid == 0U || yew_group_find(ed, gid) < 0)
         return;
     /* Already here: its ordinal is valid and re-adding would renumber
      * it to the end for no reason. */
@@ -214,7 +214,7 @@ void sag_group_add_member(Ed *ed, u32 gid, int tab_idx)
      * than the truth.
      */
     if (t->group_id != 0U)
-        sag_group_remove_member(ed, tab_idx);
+        yew_group_remove_member(ed, tab_idx);
     for (i = 0U; i < ed->tabs.v.len; i++) {
         const Tab *o = &ed->tabs.v.data[i];
 
@@ -223,12 +223,12 @@ void sag_group_add_member(Ed *ed, u32 gid, int tab_idx)
     }
     t->group_id = gid;
     t->group_ordinal = max + 1U;
-    sag_state_mark_dirty(ed);
+    yew_state_mark_dirty(ed);
 }
 
-void sag_group_remove_member(Ed *ed, int tab_idx)
+void yew_group_remove_member(Ed *ed, int tab_idx)
 {
-    Tab *t = sag_tab_at(ed, tab_idx);
+    Tab *t = yew_tab_at(ed, tab_idx);
     u32 gid;
     u32 vacated;
     size_t i;
@@ -251,19 +251,19 @@ void sag_group_remove_member(Ed *ed, int tab_idx)
      * steps into a hole.  DoD 10 asserts one cannot exist after any op
      * sequence, and this is the only place that guarantee comes from.
      */
-    if (sag_group_member_count(ed, gid) == 0)
-        sag_group_dissolve(ed, gid);
-    sag_state_mark_dirty(ed);
+    if (yew_group_member_count(ed, gid) == 0)
+        yew_group_dissolve(ed, gid);
+    yew_state_mark_dirty(ed);
 }
 
-void sag_group_dissolve(Ed *ed, u32 gid)
+void yew_group_dissolve(Ed *ed, u32 gid)
 {
     int at;
     size_t i;
 
     if (ed == NULL || gid == 0U)
         return;
-    at = sag_group_find(ed, gid);
+    at = yew_group_find(ed, gid);
     if (at < 0)
         return;
     /*
@@ -283,26 +283,26 @@ void sag_group_dissolve(Ed *ed, u32 gid)
     (void)memmove(&ed->groups.v.data[at], &ed->groups.v.data[at + 1],
                   (ed->groups.v.len - (size_t)at - 1U) * sizeof(TabGroup));
     ed->groups.v.len--;
-    sag_state_mark_dirty(ed);
+    yew_state_mark_dirty(ed);
 }
 
-void sag_group_label(const Ed *ed, u32 gid, char *buf, size_t n)
+void yew_group_label(const Ed *ed, u32 gid, char *buf, size_t n)
 {
     int at;
 
     if (buf == NULL || n == 0U)
         return;
     buf[0] = '\0';
-    at = sag_group_find(ed, gid);
+    at = yew_group_find(ed, gid);
     if (at < 0)
         return;
     /* The count is computed HERE, at the moment of display, so a label
      * cannot survive the close that made it wrong. */
     (void)snprintf(buf, n, "%s (%d)", ed->groups.v.data[at].label,
-                   sag_group_member_count(ed, gid));
+                   yew_group_member_count(ed, gid));
 }
 
-u32 sag_active_group_id(const Ed *ed)
+u32 yew_active_group_id(const Ed *ed)
 {
     if (ed == NULL || ed->tabs.active < 0 ||
         (size_t)ed->tabs.active >= ed->tabs.v.len)
@@ -310,7 +310,7 @@ u32 sag_active_group_id(const Ed *ed)
     return ed->tabs.v.data[ed->tabs.active].group_id;
 }
 
-void sag_group_prune_empty(Ed *ed)
+void yew_group_prune_empty(Ed *ed)
 {
     size_t i = 0U;
 
@@ -319,20 +319,20 @@ void sag_group_prune_empty(Ed *ed)
     while (i < ed->groups.v.len) {
         u32 gid = ed->groups.v.data[i].id;
 
-        if (sag_group_member_count(ed, gid) == 0) {
+        if (yew_group_member_count(ed, gid) == 0) {
             /* The vec compacts under `i`, so do not advance. */
-            sag_group_dissolve(ed, gid);
+            yew_group_dissolve(ed, gid);
             continue;
         }
         i++;
     }
 }
 
-void sag_group_set_ordinal(Ed *ed, int tab_idx, int pos)
+void yew_group_set_ordinal(Ed *ed, int tab_idx, int pos)
 {
-    int members[SAG_TAB_MAX];
-    int final_order[SAG_TAB_MAX];
-    Tab *t = sag_tab_at(ed, tab_idx);
+    int members[YEW_TAB_MAX];
+    int final_order[YEW_TAB_MAX];
+    Tab *t = yew_tab_at(ed, tab_idx);
     int n;
     int at = -1;
     int i;
@@ -340,8 +340,8 @@ void sag_group_set_ordinal(Ed *ed, int tab_idx, int pos)
 
     if (t == NULL || t->group_id == 0U)
         return;
-    n = sag_group_members(ed, t->group_id, members,
-                          (int)SAG_ARRAY_LEN(members));
+    n = yew_group_members(ed, t->group_id, members,
+                          (int)YEW_ARRAY_LEN(members));
     for (i = 0; i < n; i++) {
         if (members[i] == tab_idx)
             at = i;
@@ -371,14 +371,14 @@ void sag_group_set_ordinal(Ed *ed, int tab_idx, int pos)
     k++;
     for (i = 0; i < k; i++)
         ed->tabs.v.data[final_order[i]].group_ordinal = (u32)(i + 1);
-    sag_state_mark_dirty(ed);
+    yew_state_mark_dirty(ed);
 }
 
-void sag_group_reorder_block(Ed *ed, u32 gid, int to_idx)
+void yew_group_reorder_block(Ed *ed, u32 gid, int to_idx)
 {
-    u32 order[SAG_TAB_MAX]; /* tab_IDS, in the final array order */
-    u32 others[SAG_TAB_MAX];
-    int members[SAG_TAB_MAX];
+    u32 order[YEW_TAB_MAX]; /* tab_IDS, in the final array order */
+    u32 others[YEW_TAB_MAX];
+    int members[YEW_TAB_MAX];
     int nm;
     int no = 0;
     int n;
@@ -389,7 +389,7 @@ void sag_group_reorder_block(Ed *ed, u32 gid, int to_idx)
     if (ed == NULL || gid == 0U)
         return;
     n = (int)ed->tabs.v.len;
-    nm = sag_group_members(ed, gid, members, (int)SAG_ARRAY_LEN(members));
+    nm = yew_group_members(ed, gid, members, (int)YEW_ARRAY_LEN(members));
     if (nm == 0)
         return;
     for (i = 0; i < n; i++) {
@@ -419,7 +419,7 @@ void sag_group_reorder_block(Ed *ed, u32 gid, int to_idx)
                     ? ed->tabs.v.data[ed->tabs.active].tab_id
                     : 0U;
     for (i = 0; i < k; i++) {
-        int q = sag_tab_index_of_id(ed, order[i]);
+        int q = yew_tab_index_of_id(ed, order[i]);
         Tab tmp;
 
         if (q < 0 || q == i)
@@ -431,33 +431,33 @@ void sag_group_reorder_block(Ed *ed, u32 gid, int to_idx)
     /* Active is a POSITION and the positions all just changed; it is
      * re-resolved from the id it named before the move. */
     if (active_id != 0U)
-        ed->tabs.active = sag_tab_index_of_id(ed, active_id);
-    sag_state_mark_dirty(ed);
+        ed->tabs.active = yew_tab_index_of_id(ed, active_id);
+    yew_state_mark_dirty(ed);
 }
 
-void sag_group_note_position(Ed *ed)
+void yew_group_note_position(Ed *ed)
 {
-    u32 gid = sag_active_group_id(ed);
+    u32 gid = yew_active_group_id(ed);
     TabGroup *g;
     const Tab *t;
 
     if (gid == 0U)
         return;
-    g = sag_group_at(ed, gid);
-    t = sag_tab_at(ed, ed->tabs.active);
+    g = yew_group_at(ed, gid);
+    t = yew_tab_at(ed, ed->tabs.active);
     if (g == NULL || t == NULL || t->path == NULL)
         return;
     free(g->last_active_member);
     g->last_active_member = dup_str(t->path);
 }
 
-void sag_group_set_last_member(Ed *ed, u32 gid, const char *path)
+void yew_group_set_last_member(Ed *ed, u32 gid, const char *path)
 {
-    TabGroup *g = sag_group_at(ed, gid);
+    TabGroup *g = yew_group_at(ed, gid);
 
     if (g == NULL)
         return;
     free(g->last_active_member);
     g->last_active_member = path == NULL ? NULL : dup_str(path);
-    sag_state_mark_dirty(ed);
+    yew_state_mark_dirty(ed);
 }

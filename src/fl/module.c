@@ -16,7 +16,7 @@
  *
  * NOTHING HERE GUESSES.  The quoted path is used verbatim: no extension
  * added, no `~` expanded, no cwd consulted.  A config that resolves
- * differently depending on the directory sagitta was launched from is
+ * differently depending on the directory yew was launched from is
  * unshippable, and "explicit beats magic" is cheaper to explain than
  * any amount of convenience.
  */
@@ -73,7 +73,7 @@ static u32 mod_add(FlVm *vm, u32 path_id, FlOrigin origin, u32 importer)
 
     if (vm->mods.n == vm->mods.cap) {
         vm->mods.cap = vm->mods.cap == 0U ? 8U : vm->mods.cap * 2U;
-        vm->mods.v = sag_xreallocarray(vm->mods.v, vm->mods.cap,
+        vm->mods.v = yew_xreallocarray(vm->mods.v, vm->mods.cap,
                                        sizeof(*vm->mods.v));
     }
     m = &vm->mods.v[vm->mods.n];
@@ -121,7 +121,7 @@ static u32 mod_current(const FlVm *vm)
  */
 static void chain_line(Bytebuf *bb, const FlVm *vm, u32 path_id, bool first)
 {
-    const char *p = sag_intern_str(vm->in, path_id);
+    const char *p = yew_intern_str(vm->in, path_id);
 
     bytebuf_append(bb, "\n  ", 3U);
     if (!first)
@@ -183,7 +183,7 @@ static void join(Bytebuf *bb, const char *dir, const char *rel, size_t rn)
  * file (the CLI and the REPL). */
 static char *importer_dir(FlVm *vm, const FlOrigin *o)
 {
-    const char *p = o->path_id == 0U ? NULL : sag_intern_str(vm->in, o->path_id);
+    const char *p = o->path_id == 0U ? NULL : yew_intern_str(vm->in, o->path_id);
     const char *slash;
     char *dir;
     size_t n;
@@ -194,7 +194,7 @@ static char *importer_dir(FlVm *vm, const FlOrigin *o)
     if (slash == NULL)
         return NULL;
     n = slash == p ? 1U : (size_t)(slash - p);
-    dir = sag_xmalloc(n + 1U);
+    dir = yew_xmalloc(n + 1U);
     (void)memcpy(dir, p, n);
     dir[n] = '\0';
     return dir;
@@ -222,7 +222,7 @@ static char *resolve(FlVm *vm, const FlOrigin *o, const char *rel, size_t rn,
         free(dir);
     }
     if (real == NULL) {
-        cfg = sag_xdg_config_dir();
+        cfg = yew_xdg_config_dir();
         if (cfg != NULL) {
             Bytebuf under;
 
@@ -310,7 +310,7 @@ static FlMap *collect_exports(FlVm *vm, FlMap *globals)
 
         if (k.t != (u8)FL_INT)
             continue;
-        nm = sag_intern_str(vm->in, (u32)k.as.i);
+        nm = yew_intern_str(vm->in, (u32)k.as.i);
         if (nm == NULL || nm[0] == '_')
             continue;
         (void)fl_map_set(vm, ex,
@@ -440,8 +440,8 @@ bool fl_module_eval_path(FlVm *vm, const char *path, FlOrigin origin,
 bool fl_import(FlVm *vm, u32 id, bool is_path, FlValue *out)
 {
     FlOrigin o = fl_cap_origin(vm);
-    const char *text = sag_intern_str(vm->in, id);
-    size_t textlen = sag_intern_len(vm->in, id);
+    const char *text = yew_intern_str(vm->in, id);
+    size_t textlen = yew_intern_len(vm->in, id);
     Bytebuf tried;
     char *real;
     u32 rid;
@@ -514,7 +514,7 @@ bool fl_import(FlVm *vm, u32 id, bool is_path, FlValue *out)
         return ok;
     }
     bytebuf_free(&tried);
-    rid = sag_intern(vm->in, real, strlen(real));
+    rid = yew_intern(vm->in, real, strlen(real));
     idx = mod_find(vm, rid, o.kind);
     if (idx != (u32)-1) {
         if (vm->mods.v[idx].state == (u8)FL_MOD_LOADING) {
@@ -545,7 +545,7 @@ bool fl_import(FlVm *vm, u32 id, bool is_path, FlValue *out)
         idx = mod_add(vm, rid, sub, cur == (u32)-1 ? 0U : cur + 1U);
     }
     {
-        const char *path = sag_intern_str(vm->in, rid);
+        const char *path = yew_intern_str(vm->in, rid);
 
         if (!run_body(vm, idx, path, src, srclen))
             return false;

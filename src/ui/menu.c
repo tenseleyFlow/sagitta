@@ -15,13 +15,13 @@
 #include "util/log.h"
 
 enum {
-    SAG_MENU_DEFAULT_ROWS = 5,
+    YEW_MENU_DEFAULT_ROWS = 5,
     /* Under this many columns the detail text is dropped rather than
      * overlapping the label. */
-    SAG_MENU_DETAIL_MIN_COLS = 40
+    YEW_MENU_DETAIL_MIN_COLS = 40
 };
 
-void sag_menu_init(Menu *m, const MenuSpec *spec)
+void yew_menu_init(Menu *m, const MenuSpec *spec)
 {
     if (m == NULL)
         return;
@@ -31,7 +31,7 @@ void sag_menu_init(Menu *m, const MenuSpec *spec)
     m->sel = -1;
 }
 
-void sag_menu_free(Menu *m)
+void yew_menu_free(Menu *m)
 {
     MenuSpec spec;
 
@@ -41,19 +41,19 @@ void sag_menu_free(Menu *m)
     Vec_CompItem_free(&m->items);
     free(m->stem);
     free(m->held);
-    sag_menu_init(m, &spec);
+    yew_menu_init(m, &spec);
 }
 
 static void menu_hold(Menu *m)
 {
-    const CompItem *item = sag_menu_selected(m);
+    const CompItem *item = yew_menu_selected(m);
 
     free(m->held);
     m->held = NULL;
     if (item != NULL && item->text != NULL) {
         size_t n = strlen(item->text) + 1U;
 
-        m->held = sag_xmalloc(n);
+        m->held = yew_xmalloc(n);
         (void)memcpy(m->held, item->text, n);
     }
 }
@@ -72,7 +72,7 @@ static void menu_scroll_to_selection(Menu *m, u16 rows)
         m->top = m->items.len > rows ? (u32)(m->items.len - rows) : 0U;
 }
 
-void sag_menu_reset(Menu *m, Vec_CompItem items, u32 total, Span replace)
+void yew_menu_reset(Menu *m, Vec_CompItem items, u32 total, Span replace)
 {
     size_t i;
 
@@ -111,13 +111,13 @@ void sag_menu_reset(Menu *m, Vec_CompItem items, u32 total, Span replace)
     }
 }
 
-u16 sag_menu_rows(const Menu *m, u16 height)
+u16 yew_menu_rows(const Menu *m, u16 height)
 {
     u16 want;
 
     if (m == NULL || height == 0U || m->items.len == 0U)
         return 0U;
-    want = m->spec.max_rows == 0U ? (u16)SAG_MENU_DEFAULT_ROWS
+    want = m->spec.max_rows == 0U ? (u16)YEW_MENU_DEFAULT_ROWS
                                   : m->spec.max_rows;
     if (want > height)
         want = height;
@@ -126,7 +126,7 @@ u16 sag_menu_rows(const Menu *m, u16 height)
     return want;
 }
 
-bool sag_menu_move(Menu *m, i32 delta, bool page)
+bool yew_menu_move(Menu *m, i32 delta, bool page)
 {
     i32 count;
     i32 next;
@@ -136,7 +136,7 @@ bool sag_menu_move(Menu *m, i32 delta, bool page)
     count = m->items.len > (size_t)INT32_MAX ? INT32_MAX
                                              : (i32)m->items.len;
     if (page) {
-        u16 rows = m->spec.max_rows == 0U ? (u16)SAG_MENU_DEFAULT_ROWS
+        u16 rows = m->spec.max_rows == 0U ? (u16)YEW_MENU_DEFAULT_ROWS
                                           : m->spec.max_rows;
 
         delta *= (i32)(rows == 0U ? 1U : rows);
@@ -158,7 +158,7 @@ bool sag_menu_move(Menu *m, i32 delta, bool page)
     return true;
 }
 
-bool sag_menu_select(Menu *m, i32 index)
+bool yew_menu_select(Menu *m, i32 index)
 {
     if (m == NULL || index < 0 || (size_t)index >= m->items.len)
         return false;
@@ -168,7 +168,7 @@ bool sag_menu_select(Menu *m, i32 index)
     return true;
 }
 
-bool sag_menu_scroll(Menu *m, i32 delta, u16 height)
+bool yew_menu_scroll(Menu *m, i32 delta, u16 height)
 {
     u16 rows;
     i64 top;
@@ -176,7 +176,7 @@ bool sag_menu_scroll(Menu *m, i32 delta, u16 height)
 
     if (m == NULL || m->items.len == 0U)
         return false;
-    rows = sag_menu_rows(m, height);
+    rows = yew_menu_rows(m, height);
     if (rows == 0U || m->items.len <= rows)
         return false;
     max_top = (i64)m->items.len - (i64)rows;
@@ -191,14 +191,14 @@ bool sag_menu_scroll(Menu *m, i32 delta, u16 height)
     return true;
 }
 
-const CompItem *sag_menu_selected(const Menu *m)
+const CompItem *yew_menu_selected(const Menu *m)
 {
     if (m == NULL || m->sel < 0 || (size_t)m->sel >= m->items.len)
         return NULL;
     return &m->items.data[m->sel];
 }
 
-void sag_menu_dismiss(Menu *m)
+void yew_menu_dismiss(Menu *m)
 {
     if (m == NULL)
         return;
@@ -212,7 +212,7 @@ void sag_menu_dismiss(Menu *m)
     m->scanning = false;
 }
 
-static Cell styled_blank(const SagUiStyle *style)
+static Cell styled_blank(const YewUiStyle *style)
 {
     Cell cell = {0};
 
@@ -237,7 +237,7 @@ static Cell styled_blank(const SagUiStyle *style)
  */
 static void highlight_match(Grid *grid, u16 row, u16 col0, u16 right,
                             const char *text, const FzMatch *m,
-                            const SagUiStyle *style)
+                            const YewUiStyle *style)
 {
     size_t len;
     size_t at = 0U;
@@ -248,9 +248,9 @@ static void highlight_match(Grid *grid, u16 row, u16 col0, u16 right,
         return;
     len = strlen(text);
     accent = styled_blank(style);
-    accent.attrs |= SAG_ATTR_BOLD | SAG_ATTR_UNDERLINE;
+    accent.attrs |= YEW_ATTR_BOLD | YEW_ATTR_UNDERLINE;
     while (at < len && col < right) {
-        size_t next = sag_gb_next_bytes((const u8 *)text, len, at);
+        size_t next = yew_gb_next_bytes((const u8 *)text, len, at);
         int measured;
         u16 cells;
         bool hit = false;
@@ -258,7 +258,7 @@ static void highlight_match(Grid *grid, u16 row, u16 col0, u16 right,
 
         if (next <= at)
             break;
-        measured = sag_cluster_width((const u8 *)text + at, next - at);
+        measured = yew_cluster_width((const u8 *)text + at, next - at);
         cells = measured > 0 ? (u16)measured : 0U;
         for (i = 0U; i < m->n_pos; i++) {
             if ((size_t)m->pos[i] >= at && (size_t)m->pos[i] < next) {
@@ -269,16 +269,16 @@ static void highlight_match(Grid *grid, u16 row, u16 col0, u16 right,
         if (hit && cells != 0U) {
             u32 end = (u32)col + cells;
 
-            sag_grid_overlay(grid, row, col,
+            yew_grid_overlay(grid, row, col,
                              end > right ? right : (u16)end, &accent,
-                             SAG_OVERLAY_ATTRS);
+                             YEW_OVERLAY_ATTRS);
         }
         col = (u32)col + cells > (u32)right ? right : (u16)(col + cells);
         at = next;
     }
 }
 
-void sag_menu_draw(Ed *ed, Menu *m, Rect area, const SagUiStyle *style)
+void yew_menu_draw(Ed *ed, Menu *m, Rect area, const YewUiStyle *style)
 {
     u16 rows;
     u16 first_row;
@@ -287,7 +287,7 @@ void sag_menu_draw(Ed *ed, Menu *m, Rect area, const SagUiStyle *style)
 
     if (ed == NULL || m == NULL || style == NULL)
         return;
-    rows = sag_menu_rows(m, area.h);
+    rows = yew_menu_rows(m, area.h);
     if (rows == 0U)
         return;
     right = (u32)area.x + area.w > ed->grid.cols ? ed->grid.cols
@@ -296,13 +296,13 @@ void sag_menu_draw(Ed *ed, Menu *m, Rect area, const SagUiStyle *style)
     first_row = (u16)(area.y + area.h - rows);
     /* One inert block under the whole list, added FIRST so the per-row
      * regions added after it win the overlap (last-added-wins). */
-    sag_region_add(SAG_REGION_BLOCK,
+    yew_region_add(YEW_REGION_BLOCK,
                    (Rect){area.x, first_row, area.w, rows}, 0);
     for (i = 0U; i < rows; i++) {
         size_t index = m->top + i;
         u16 row = (u16)(first_row + i);
         const CompItem *item;
-        SagUiStyle row_style = *style;
+        YewUiStyle row_style = *style;
         Rect row_rect = {area.x, row, area.w, 1U};
         char label[512];
         char footer[64];
@@ -315,21 +315,21 @@ void sag_menu_draw(Ed *ed, Menu *m, Rect area, const SagUiStyle *style)
         item = &m->items.data[index];
         selected = (i32)index == m->sel;
         if (selected) {
-            SagColor swap = row_style.row_fg;
+            YewColor swap = row_style.row_fg;
 
             row_style.row_fg = row_style.row_bg;
             row_style.row_bg = swap;
-            row_style.attrs |= SAG_ATTR_BOLD;
+            row_style.attrs |= YEW_ATTR_BOLD;
         } else if (item->deferred) {
             /* The command exists but hard-errors naming its sprint, and
              * its detail column already reads "Sprint 23: ...".  Dim is
              * the marker; a second glyph would only repeat the detail. */
-            row_style.attrs |= SAG_ATTR_DIM;
+            row_style.attrs |= YEW_ATTR_DIM;
         }
-        sag_grid_fill(&ed->grid, row, area.x, right, styled_blank(&row_style));
+        yew_grid_fill(&ed->grid, row, area.x, right, styled_blank(&row_style));
         (void)snprintf(label, sizeof(label), "%c %s",
                        selected ? '>' : ' ', item->text);
-        col = sag_grid_puts(&ed->grid, row, area.x, (const u8 *)label,
+        col = yew_grid_puts(&ed->grid, row, area.x, (const u8 *)label,
                             strlen(label), row_style.row_fg,
                             row_style.row_bg, row_style.attrs);
         /* The label starts two cells in, past the selection marker. */
@@ -356,10 +356,10 @@ void sag_menu_draw(Ed *ed, Menu *m, Rect area, const SagUiStyle *style)
                 (void)snprintf(footer, sizeof(footer), "%u/%u",
                                (unsigned)(m->sel + 1), (unsigned)m->total);
             n = strlen(footer);
-            width = n == 0U ? 0 : sag_str_width((const u8 *)footer, n, 1U);
+            width = n == 0U ? 0 : yew_str_width((const u8 *)footer, n, 1U);
             footer_cells = width > 0 ? (u16)width : 0U;
         }
-        if (item->detail != NULL && area.w >= SAG_MENU_DETAIL_MIN_COLS) {
+        if (item->detail != NULL && area.w >= YEW_MENU_DETAIL_MIN_COLS) {
             u16 at = (u16)(area.x + m->spec.detail_col);
             u16 limit = footer_cells != 0U && right > footer_cells + 1U
                             ? (u16)(right - footer_cells - 1U)
@@ -368,19 +368,19 @@ void sag_menu_draw(Ed *ed, Menu *m, Rect area, const SagUiStyle *style)
             if (at < col + 1U)
                 at = (u16)(col + 1U);
             if (at < limit) {
-                size_t keep = sag_str_clip((const u8 *)item->detail,
+                size_t keep = yew_str_clip((const u8 *)item->detail,
                                            strlen(item->detail),
                                            (int)(limit - at), NULL);
 
-                (void)sag_grid_puts(&ed->grid, row, at,
+                (void)yew_grid_puts(&ed->grid, row, at,
                                     (const u8 *)item->detail, keep,
                                     row_style.row_fg, row_style.row_bg,
                                     row_style.attrs);
             }
         }
-        sag_region_add(SAG_REGION_MENU_ROW, row_rect, (i32)index);
+        yew_region_add(YEW_REGION_MENU_ROW, row_rect, (i32)index);
         if (footer_cells != 0U && footer_cells < right)
-            (void)sag_grid_puts(&ed->grid, row,
+            (void)yew_grid_puts(&ed->grid, row,
                                 (u16)(right - footer_cells),
                                 (const u8 *)footer, strlen(footer),
                                 row_style.row_fg, row_style.row_bg,

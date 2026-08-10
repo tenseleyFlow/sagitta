@@ -1,5 +1,5 @@
-#ifndef SAG_EDIT_OPTION_H
-#define SAG_EDIT_OPTION_H
+#ifndef YEW_EDIT_OPTION_H
+#define YEW_EDIT_OPTION_H
 
 /* Sprint 36: the single typed option table shared by Fletch and E mode. */
 
@@ -16,17 +16,17 @@ typedef struct FlValue FlValue;
 typedef struct Win Win;
 
 typedef enum OptValType {
-    SAG_OPT_BOOL = 0,
-    SAG_OPT_INT,
-    SAG_OPT_STR,
-    SAG_OPT_ENUM
+    YEW_OPT_BOOL = 0,
+    YEW_OPT_INT,
+    YEW_OPT_STR,
+    YEW_OPT_ENUM
 } OptValType;
 
 typedef enum OptScope {
-    SAG_OPT_GLOBAL = 0,
-    SAG_OPT_BUFFER,
-    SAG_OPT_WINDOW,
-    SAG_OPT_SCOPE_DECLARED = 255
+    YEW_OPT_GLOBAL = 0,
+    YEW_OPT_BUFFER,
+    YEW_OPT_WINDOW,
+    YEW_OPT_SCOPE_DECLARED = 255
 } OptScope;
 
 typedef struct OptVal {
@@ -55,8 +55,8 @@ typedef struct OptDesc {
     const char *help;
 } OptDesc;
 
-extern const OptDesc sag_opts[];
-extern const u32 sag_opts_len;
+extern const OptDesc yew_opts[];
+extern const u32 yew_opts_len;
 
 /* The Sprint 34 provider remains a narrow compatibility/test seam. */
 typedef struct OptProvider {
@@ -66,38 +66,38 @@ typedef struct OptProvider {
     u32 (*list)(Ed *, const char **out, u32 max);
 } OptProvider;
 
-void sag_opt_init(Ed *ed);
-void sag_opt_free(Ed *ed);
-void sag_opt_scope_free(Strmap *map);
-void sag_opt_scope_clone(Strmap *dst, const Strmap *src);
-void sag_opt_reset(Ed *ed);
+void yew_opt_init(Ed *ed);
+void yew_opt_free(Ed *ed);
+void yew_opt_scope_free(Strmap *map);
+void yew_opt_scope_clone(Strmap *dst, const Strmap *src);
+void yew_opt_reset(Ed *ed);
 
-const OptDesc *sag_opt_desc(const char *name, u32 len);
-bool sag_opt_validate(Ed *ed, u8 scope_hint, const char *name, u32 len,
+const OptDesc *yew_opt_desc(const char *name, u32 len);
+bool yew_opt_validate(Ed *ed, u8 scope_hint, const char *name, u32 len,
                       const OptVal *value, const char **err);
-bool sag_opt_get(Ed *ed, Buffer *buffer, Win *win,
+bool yew_opt_get(Ed *ed, Buffer *buffer, Win *win,
                  const char *name, u32 len, OptVal *out);
-bool sag_opt_set(Ed *ed, u8 scope_hint, const char *name, u32 len,
+bool yew_opt_set(Ed *ed, u8 scope_hint, const char *name, u32 len,
                  const OptVal *value, const char **err);
 /* Snapshot/commit is the transactional registration seam used by set(map).
  * A committed checkpoint is removed by its shared registration-ledger id. */
-u32 sag_opt_checkpoint(Ed *ed, const char *name, u32 len,
+u32 yew_opt_checkpoint(Ed *ed, const char *name, u32 len,
                        const char **err);
-u32 sag_opt_commit(Ed *ed, u32 origin_id, u32 checkpoint, bool *created);
-void sag_opt_discard(Ed *ed, u32 checkpoint);
-bool sag_opt_rollback(Ed *ed, u32 checkpoint);
-bool sag_opt_remove(Ed *ed, u32 ledger_id);
-u32 sag_opt_list(const char **out, u32 max);
+u32 yew_opt_commit(Ed *ed, u32 origin_id, u32 checkpoint, bool *created);
+void yew_opt_discard(Ed *ed, u32 checkpoint);
+bool yew_opt_rollback(Ed *ed, u32 checkpoint);
+bool yew_opt_remove(Ed *ed, u32 ledger_id);
+u32 yew_opt_list(const char **out, u32 max);
 
-void sag_opt_provider_set(Ed *ed, const OptProvider *provider);
-const OptProvider *sag_opt_provider(const Ed *ed);
+void yew_opt_provider_set(Ed *ed, const OptProvider *provider);
+const OptProvider *yew_opt_provider(const Ed *ed);
 
-CmdStatus sag_opt_cmd_get(CmdCtx *cx);
-CmdStatus sag_opt_cmd_set(CmdCtx *cx);
-CmdStatus sag_opt_cmdline_set(CmdCtx *cx);
-CmdStatus sag_fl_cmd_eval(CmdCtx *cx);
+CmdStatus yew_opt_cmd_get(CmdCtx *cx);
+CmdStatus yew_opt_cmd_set(CmdCtx *cx);
+CmdStatus yew_opt_cmdline_set(CmdCtx *cx);
+CmdStatus yew_fl_cmd_eval(CmdCtx *cx);
 
 /* Native behind the unqualified set({...}) Fletch prelude entry. */
 bool fl_api_set_options(FlVm *vm, FlValue *args, u32 nargs, FlValue *out);
 
-#endif /* SAG_EDIT_OPTION_H */
+#endif /* YEW_EDIT_OPTION_H */

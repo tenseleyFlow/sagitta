@@ -1,5 +1,5 @@
-#ifndef SAG_FL_COMPILE_H
-#define SAG_FL_COMPILE_H
+#ifndef YEW_FL_COMPILE_H
+#define YEW_FL_COMPILE_H
 
 /*
  * Sprint 30 deliverable 6: the single-pass AST-to-bytecode compiler.
@@ -55,4 +55,4 @@ FlFn *fl_compile_repl(FlVm *vm, DiagCtx *dc, const FlProgram *p,
 FlFn *fl_compile(FlVm *vm, DiagCtx *dc, const FlProgram *p,
                  u32 file_id, FlOrigin origin);
 
-#endif /* SAG_FL_COMPILE_H */
+#endif /* YEW_FL_COMPILE_H */

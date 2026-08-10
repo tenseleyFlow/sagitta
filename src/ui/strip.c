@@ -8,7 +8,7 @@
 #include "unicode/width.h"
 #include "util/log.h"
 
-u16 sag_strip_label_cells(const char *label)
+u16 yew_strip_label_cells(const char *label)
 {
     int cells = 0;
     size_t len;
@@ -21,22 +21,22 @@ u16 sag_strip_label_cells(const char *label)
      * that knows a character can be two cells wide.  Using strlen here
      * is the multibyte click-shift bug in one line.
      */
-    (void)sag_str_clip((const u8 *)label, len, SAG_STRIP_LABEL_CELLS,
+    (void)yew_str_clip((const u8 *)label, len, YEW_STRIP_LABEL_CELLS,
                        &cells);
     return (u16)(cells < 0 ? 0 : cells);
 }
 
-size_t sag_strip_label_bytes(const char *label)
+size_t yew_strip_label_bytes(const char *label)
 {
     int cells = 0;
 
     if (label == NULL)
         return 0U;
-    return sag_str_clip((const u8 *)label, strlen(label),
-                        SAG_STRIP_LABEL_CELLS, &cells);
+    return yew_str_clip((const u8 *)label, strlen(label),
+                        YEW_STRIP_LABEL_CELLS, &cells);
 }
 
-void sag_strip_layout(const StripEntry *entries, int n, u16 width,
+void yew_strip_layout(const StripEntry *entries, int n, u16 width,
                       int active, int *scroll, StripSpan *spans,
                       int *n_spans, bool *more_left, bool *more_right)
 {
@@ -77,7 +77,7 @@ void sag_strip_layout(const StripEntry *entries, int n, u16 width,
                 bool fits = false;
 
                 for (i = first; i < n; i++) {
-                    u16 w = sag_strip_label_cells(entries[i].label);
+                    u16 w = yew_strip_label_cells(entries[i].label);
 
                     if ((u32)used + w > width)
                         break;
@@ -96,7 +96,7 @@ void sag_strip_layout(const StripEntry *entries, int n, u16 width,
 
     at = 0U;
     for (i = first; i < n; i++) {
-        u16 w = sag_strip_label_cells(entries[i].label);
+        u16 w = yew_strip_label_cells(entries[i].label);
 
         if ((u32)at + w > width)
             break;

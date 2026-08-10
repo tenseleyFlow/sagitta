@@ -37,8 +37,8 @@ static ArenaBlock *arena_new_block(Arena *arena, size_t min_payload)
         cap *= 2;
     }
     if (cap > SIZE_MAX - sizeof(*block))
-        SAG_BUG("arena block size overflow: %zu bytes", cap);
-    block = sag_xmalloc(sizeof(*block) + cap);
+        YEW_BUG("arena block size overflow: %zu bytes", cap);
+    block = yew_xmalloc(sizeof(*block) + cap);
     block->next = arena->head;
     block->cap = cap;
     block->used = 0;
@@ -59,7 +59,7 @@ void *arena_alloc(Arena *arena, size_t size, size_t align)
     uintptr_t end;
 
     if (align == 0 || (align & (align - 1)) != 0)
-        SAG_BUG("arena_alloc: alignment %zu is not a power of two", align);
+        YEW_BUG("arena_alloc: alignment %zu is not a power of two", align);
 
     if (block) {
         base = (uintptr_t)block->payload + block->used;
@@ -75,11 +75,11 @@ void *arena_alloc(Arena *arena, size_t size, size_t align)
     }
 
     if (size > SIZE_MAX - (align - 1))
-        SAG_BUG("arena allocation size overflow: %zu + %zu", size, align - 1);
+        YEW_BUG("arena allocation size overflow: %zu + %zu", size, align - 1);
     block = arena_new_block(arena, size + align - 1);
     base = (uintptr_t)block->payload;
     if (base > UINTPTR_MAX - (align - 1))
-        SAG_BUG("arena address overflow");
+        YEW_BUG("arena address overflow");
     aligned = (base + align - 1) & ~(uintptr_t)(align - 1);
     block->used = (size_t)(aligned - base) + size;
     return (void *)aligned;
@@ -90,7 +90,7 @@ char *arena_strndup(Arena *arena, const char *str, size_t len)
     char *copy;
 
     if (len == SIZE_MAX)
-        SAG_BUG("arena string size overflow");
+        YEW_BUG("arena string size overflow");
     copy = arena_alloc(arena, len + 1, 1);
     if (len)
         memcpy(copy, str, len);

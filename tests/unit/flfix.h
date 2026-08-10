@@ -1,5 +1,5 @@
-#ifndef SAG_TEST_FLFIX_H
-#define SAG_TEST_FLFIX_H
+#ifndef YEW_TEST_FLFIX_H
+#define YEW_TEST_FLFIX_H
 
 /*
  * Sprint 31's shared Fletch test fixture.
@@ -83,7 +83,7 @@ void flfix_run_trace(FlFix *f, const char *src, u8 kind, char *out,
         char flfix_got_[8192];                                                \
                                                                               \
         flfix_run((f), (src), flfix_got_, sizeof(flfix_got_));                \
-        SAG_ASSERT_EQ_STR(flfix_got_, (want));                                \
+        YEW_ASSERT_EQ_STR(flfix_got_, (want));                                \
     } while (0)
 
-#endif /* SAG_TEST_FLFIX_H */
+#endif /* YEW_TEST_FLFIX_H */

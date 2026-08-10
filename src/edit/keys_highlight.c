@@ -82,43 +82,43 @@ static const BindRow keys_H[] = {
     {"C-g", "ed.ui.message_expand", 0, NULL},
 };
 
-void sag_keys_highlight_install(Ed *ed, Mode unit)
+void yew_keys_highlight_install(Ed *ed, Mode unit)
 {
-    BindRow rows[SAG_ARRAY_LEN(keys_H_L) + SAG_ARRAY_LEN(keys_H)];
+    BindRow rows[YEW_ARRAY_LEN(keys_H_L) + YEW_ARRAY_LEN(keys_H)];
     const BindRow *motion = keys_H_L;
-    u32 motion_count = SAG_ARRAY_LEN(keys_H_L);
+    u32 motion_count = YEW_ARRAY_LEN(keys_H_L);
     u32 i;
 
     if (ed == NULL)
-        SAG_BUG("cannot install H bindings without an editor");
+        YEW_BUG("cannot install H bindings without an editor");
     switch (unit) {
-    case SAG_MODE_L:
+    case YEW_MODE_L:
         motion = keys_H_L;
-        motion_count = SAG_ARRAY_LEN(keys_H_L);
+        motion_count = YEW_ARRAY_LEN(keys_H_L);
         break;
-    case SAG_MODE_W:
+    case YEW_MODE_W:
         motion = keys_H_W;
-        motion_count = SAG_ARRAY_LEN(keys_H_W);
+        motion_count = YEW_ARRAY_LEN(keys_H_W);
         break;
-    case SAG_MODE_B:
+    case YEW_MODE_B:
         motion = keys_H_B;
-        motion_count = SAG_ARRAY_LEN(keys_H_B);
+        motion_count = YEW_ARRAY_LEN(keys_H_B);
         break;
-    case SAG_MODE_I:
+    case YEW_MODE_I:
         motion = keys_H_C;
-        motion_count = SAG_ARRAY_LEN(keys_H_C);
+        motion_count = YEW_ARRAY_LEN(keys_H_C);
         break;
-    case SAG_MODE_H:
-    case SAG_MODE_E:
-    case SAG_MODE_F:
-    case SAG_MODE__N:
-        SAG_BUG("invalid H unit mode");
+    case YEW_MODE_H:
+    case YEW_MODE_E:
+    case YEW_MODE_F:
+    case YEW_MODE__N:
+        YEW_BUG("invalid H unit mode");
     }
     for (i = 0U; i < motion_count; i++)
         rows[i] = motion[i];
-    for (i = 0U; i < SAG_ARRAY_LEN(keys_H); i++)
+    for (i = 0U; i < YEW_ARRAY_LEN(keys_H); i++)
         rows[motion_count + i] = keys_H[i];
-    if (!sag_keymap_build(&ed->mode_keys[SAG_MODE_H], "H", rows,
-                          motion_count + SAG_ARRAY_LEN(keys_H)))
-        SAG_BUG("invalid built-in H-mode key table");
+    if (!yew_keymap_build(&ed->mode_keys[YEW_MODE_H], "H", rows,
+                          motion_count + YEW_ARRAY_LEN(keys_H)))
+        YEW_BUG("invalid built-in H-mode key table");
 }

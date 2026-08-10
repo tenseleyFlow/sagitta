@@ -108,7 +108,7 @@ static void hex2(Bytebuf *b, u8 c)
  */
 static const char *me(const FlVm *vm)
 {
-    const char *s = sag_intern_str(vm->in, vm->cur_native);
+    const char *s = yew_intern_str(vm->in, vm->cur_native);
 
     return s == NULL ? "fmt" : s;
 }
@@ -517,7 +517,7 @@ static bool rw_uncodeable(Rw *w, FlValue v)
         u32 id = v.t == (u8)FL_NATIVE
                      ? ((const FlNative *)v.as.o)->name_id
                      : ((const FlClosure *)v.as.o)->fn->name_id;
-        const char *s = id == 0U ? NULL : sag_intern_str(w->vm->in, id);
+        const char *s = id == 0U ? NULL : yew_intern_str(w->vm->in, id);
 
         if (s != NULL) {
             bytebuf_push_u8(w->out, (u8)' ');
@@ -649,7 +649,7 @@ bool fl_fmt_repl(FlVm *vm, Bytebuf *out, FlValue v, u32 max_depth)
  */
 static int cells(const Bytebuf *b)
 {
-    return sag_str_width(b->data, b->len, FMT_TABW);
+    return yew_str_width(b->data, b->len, FMT_TABW);
 }
 
 /*
@@ -660,7 +660,7 @@ static int cells(const Bytebuf *b)
  */
 static void pad_with(Bytebuf *out, const char *fill, u32 filln, int gap)
 {
-    int fw = filln == 0U ? 1 : sag_cluster_width((const u8 *)fill, filln);
+    int fw = filln == 0U ? 1 : yew_cluster_width((const u8 *)fill, filln);
     int i;
 
     if (fw < 1)
@@ -773,7 +773,7 @@ static bool parse_spec(FlVm *vm, const char *s, size_t n, Spec *sp,
 
     memset(sp, 0, sizeof(*sp));
     if (n > 0U) {
-        size_t c1 = sag_gb_next_bytes((const u8 *)s, n, 0U);
+        size_t c1 = yew_gb_next_bytes((const u8 *)s, n, 0U);
 
         if (c1 < n && is_align(s[c1])) {
             sp->fill = s;
@@ -1242,7 +1242,7 @@ static bool f_pad(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     /* A fill of more than one cluster has no single width to tile with,
      * so it is refused rather than silently truncated. */
     if (fill != NULL && fill->len > 0U &&
-        sag_gb_next_bytes((const u8 *)fill->b, fill->len, 0U) !=
+        yew_gb_next_bytes((const u8 *)fill->b, fill->len, 0U) !=
             (size_t)fill->len)
         return fl_raise(vm, "type",
                         "fmt.pad: fill must be one grapheme cluster");
@@ -1272,5 +1272,5 @@ static const FlNativeDef FMT_DEFS[] = {
 };
 
 const FlModuleDef fl_mod_fmt = {
-    "fmt", FMT_DEFS, (u32)SAG_ARRAY_LEN(FMT_DEFS), NULL, 0U
+    "fmt", FMT_DEFS, (u32)YEW_ARRAY_LEN(FMT_DEFS), NULL, 0U
 };

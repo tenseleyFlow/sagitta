@@ -16,7 +16,7 @@ static OptVal opt_get(Ed *ed, const char *name)
 {
     OptVal value = {0};
 
-    SAG_ASSERT(sag_opt_get(ed, sag_ed_doc(ed), ed->win, name,
+    YEW_ASSERT(yew_opt_get(ed, yew_ed_doc(ed), ed->win, name,
                            (u32)strlen(name), &value));
     return value;
 }
@@ -24,7 +24,7 @@ static OptVal opt_get(Ed *ed, const char *name)
 static bool opt_set(Ed *ed, u8 scope, const char *name, OptVal value,
                     const char **err)
 {
-    return sag_opt_set(ed, scope, name, (u32)strlen(name), &value, err);
+    return yew_opt_set(ed, scope, name, (u32)strlen(name), &value, err);
 }
 
 void test_option_table_has_frozen_order_types_scopes_and_defaults(void)
@@ -42,135 +42,135 @@ void test_option_table_has_frozen_order_types_scopes_and_defaults(void)
     Ed ed;
     u32 i;
 
-    sag_ed_init(&ed);
-    SAG_ASSERT(sag_ed_open_scratch(&ed));
-    SAG_ASSERT_EQ_U64(sag_opts_len, SAG_ARRAY_LEN(names));
-    SAG_ASSERT_EQ_U64(sag_opt_list(NULL, 0U), SAG_ARRAY_LEN(names));
-    SAG_ASSERT_EQ_U64(sag_opt_list(listed, SAG_ARRAY_LEN(listed)),
-                      SAG_ARRAY_LEN(names));
-    for (i = 0U; i < sag_opts_len; i++) {
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    YEW_ASSERT_EQ_U64(yew_opts_len, YEW_ARRAY_LEN(names));
+    YEW_ASSERT_EQ_U64(yew_opt_list(NULL, 0U), YEW_ARRAY_LEN(names));
+    YEW_ASSERT_EQ_U64(yew_opt_list(listed, YEW_ARRAY_LEN(listed)),
+                      YEW_ARRAY_LEN(names));
+    for (i = 0U; i < yew_opts_len; i++) {
         OptVal got = opt_get(&ed, names[i]);
 
-        SAG_ASSERT_EQ_STR(sag_opts[i].name, names[i]);
-        SAG_ASSERT_EQ_U64(got.type, sag_opts[i].dflt.type);
-        if (got.type == (u8)SAG_OPT_BOOL)
-            SAG_ASSERT_EQ_U64(got.as.b, sag_opts[i].dflt.as.b);
-        else if (got.type == (u8)SAG_OPT_INT)
-            SAG_ASSERT_EQ_I64(got.as.i, sag_opts[i].dflt.as.i);
+        YEW_ASSERT_EQ_STR(yew_opts[i].name, names[i]);
+        YEW_ASSERT_EQ_U64(got.type, yew_opts[i].dflt.type);
+        if (got.type == (u8)YEW_OPT_BOOL)
+            YEW_ASSERT_EQ_U64(got.as.b, yew_opts[i].dflt.as.b);
+        else if (got.type == (u8)YEW_OPT_INT)
+            YEW_ASSERT_EQ_I64(got.as.i, yew_opts[i].dflt.as.i);
         else {
             char *config = strcmp(names[i], "macro.dir") == 0 ?
-                           sag_xdg_config_dir() : NULL;
+                           yew_xdg_config_dir() : NULL;
 
             if (config != NULL) {
                 size_t config_len = strlen(config);
 
-                SAG_ASSERT_EQ_U64(got.as.str.len,
+                YEW_ASSERT_EQ_U64(got.as.str.len,
                                   config_len + sizeof("/macros") - 1U);
-                SAG_ASSERT_EQ_MEM(got.as.str.s, config, config_len);
-                SAG_ASSERT_EQ_MEM(got.as.str.s + config_len, "/macros",
+                YEW_ASSERT_EQ_MEM(got.as.str.s, config, config_len);
+                YEW_ASSERT_EQ_MEM(got.as.str.s + config_len, "/macros",
                                   sizeof("/macros") - 1U);
             } else {
-                SAG_ASSERT_EQ_U64(got.as.str.len,
-                                  sag_opts[i].dflt.as.str.len);
-                SAG_ASSERT(memcmp(got.as.str.s, sag_opts[i].dflt.as.str.s,
+                YEW_ASSERT_EQ_U64(got.as.str.len,
+                                  yew_opts[i].dflt.as.str.len);
+                YEW_ASSERT(memcmp(got.as.str.s, yew_opts[i].dflt.as.str.s,
                                   got.as.str.len) == 0);
             }
             free(config);
         }
     }
-    SAG_ASSERT_EQ_U64(ed.buffer.tabwidth, 4U);
-    SAG_ASSERT_EQ_U64(ed.win->vp.scrolloff, 3U);
-    SAG_ASSERT_EQ_U64(ed.win->number_style, SAG_NUM_ABS);
-    SAG_ASSERT_EQ_U64(ed.chord_timeout_ms, 500U);
-    SAG_ASSERT_EQ_U64(ed.regs.ring_depth, SAG_KILL_RING_DEPTH_DEFAULT);
-    SAG_ASSERT_EQ_U64(ed.regs.ring_bytes_max, SAG_KILL_RING_BYTES_DEFAULT);
-    SAG_ASSERT_EQ_U64(ed.buffer.undo->bytes_max, SAG_UNDO_BYTES_MAX);
-    SAG_ASSERT_EQ_U64(ed.buffer.undo->min_nodes, SAG_UNDO_MIN_NODES);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(ed.buffer.tabwidth, 4U);
+    YEW_ASSERT_EQ_U64(ed.win->vp.scrolloff, 3U);
+    YEW_ASSERT_EQ_U64(ed.win->number_style, YEW_NUM_ABS);
+    YEW_ASSERT_EQ_U64(ed.chord_timeout_ms, 500U);
+    YEW_ASSERT_EQ_U64(ed.regs.ring_depth, YEW_KILL_RING_DEPTH_DEFAULT);
+    YEW_ASSERT_EQ_U64(ed.regs.ring_bytes_max, YEW_KILL_RING_BYTES_DEFAULT);
+    YEW_ASSERT_EQ_U64(ed.buffer.undo->bytes_max, YEW_UNDO_BYTES_MAX);
+    YEW_ASSERT_EQ_U64(ed.buffer.undo->min_nodes, YEW_UNDO_MIN_NODES);
+    yew_ed_free(&ed);
 }
 
 void test_option_validators_reject_wrong_types_ranges_and_enums(void)
 {
     Ed ed;
     const char *err = NULL;
-    OptVal boolean = {SAG_OPT_BOOL, {.b = true}};
-    OptVal integer = {SAG_OPT_INT, {.i = 1}};
-    OptVal string = {SAG_OPT_STR, {.str = {"bogus", 5U}}};
+    OptVal boolean = {YEW_OPT_BOOL, {.b = true}};
+    OptVal integer = {YEW_OPT_INT, {.i = 1}};
+    OptVal string = {YEW_OPT_STR, {.str = {"bogus", 5U}}};
     u32 i;
 
-    sag_ed_init(&ed);
-    SAG_ASSERT(sag_ed_open_scratch(&ed));
-    for (i = 0U; i < sag_opts_len; i++) {
-        const OptDesc *desc = &sag_opts[i];
-        const OptVal *wrong = desc->type == (u8)SAG_OPT_BOOL ? &integer :
-                              desc->type == (u8)SAG_OPT_INT ? &boolean :
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    for (i = 0U; i < yew_opts_len; i++) {
+        const OptDesc *desc = &yew_opts[i];
+        const OptVal *wrong = desc->type == (u8)YEW_OPT_BOOL ? &integer :
+                              desc->type == (u8)YEW_OPT_INT ? &boolean :
                                                               &integer;
 
         err = NULL;
-        SAG_ASSERT(!opt_set(&ed, SAG_OPT_SCOPE_DECLARED, desc->name,
+        YEW_ASSERT(!opt_set(&ed, YEW_OPT_SCOPE_DECLARED, desc->name,
                             *wrong, &err));
-        SAG_ASSERT_NOT_NULL(err);
-        if (desc->type == (u8)SAG_OPT_INT) {
-            OptVal low = {SAG_OPT_INT, {.i = desc->imin == INT64_MIN ?
+        YEW_ASSERT_NOT_NULL(err);
+        if (desc->type == (u8)YEW_OPT_INT) {
+            OptVal low = {YEW_OPT_INT, {.i = desc->imin == INT64_MIN ?
                                             desc->imax : desc->imin - 1}};
 
             if (desc->imin != INT64_MIN) {
                 err = NULL;
-                SAG_ASSERT(!opt_set(&ed, SAG_OPT_SCOPE_DECLARED,
+                YEW_ASSERT(!opt_set(&ed, YEW_OPT_SCOPE_DECLARED,
                                     desc->name, low, &err));
-                SAG_ASSERT_NOT_NULL(err);
+                YEW_ASSERT_NOT_NULL(err);
             }
             if (desc->imax != INT64_MAX) {
-                OptVal high = {SAG_OPT_INT, {.i = desc->imax + 1}};
+                OptVal high = {YEW_OPT_INT, {.i = desc->imax + 1}};
 
                 err = NULL;
-                SAG_ASSERT(!opt_set(&ed, SAG_OPT_SCOPE_DECLARED,
+                YEW_ASSERT(!opt_set(&ed, YEW_OPT_SCOPE_DECLARED,
                                     desc->name, high, &err));
-                SAG_ASSERT_NOT_NULL(err);
+                YEW_ASSERT_NOT_NULL(err);
             }
-        } else if (desc->type == (u8)SAG_OPT_ENUM) {
+        } else if (desc->type == (u8)YEW_OPT_ENUM) {
             err = NULL;
-            SAG_ASSERT(!opt_set(&ed, SAG_OPT_SCOPE_DECLARED,
+            YEW_ASSERT(!opt_set(&ed, YEW_OPT_SCOPE_DECLARED,
                                 desc->name, string, &err));
-            SAG_ASSERT_NOT_NULL(err);
+            YEW_ASSERT_NOT_NULL(err);
         }
     }
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
 }
 
 void test_option_scope_and_side_effects_share_one_setter(void)
 {
     Ed ed;
     const char *err = NULL;
-    OptVal eight = {SAG_OPT_INT, {.i = 8}};
-    OptVal yes = {SAG_OPT_BOOL, {.b = true}};
-    OptVal both = {SAG_OPT_STR, {.str = {"both", 4U}}};
+    OptVal eight = {YEW_OPT_INT, {.i = 8}};
+    OptVal yes = {YEW_OPT_BOOL, {.b = true}};
+    OptVal both = {YEW_OPT_STR, {.str = {"both", 4U}}};
 
-    sag_ed_init(&ed);
-    SAG_ASSERT(sag_ed_open_scratch(&ed));
-    SAG_ASSERT(!opt_set(&ed, SAG_OPT_GLOBAL, "tabwidth", eight, &err));
-    SAG_ASSERT_NOT_NULL(err);
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    YEW_ASSERT(!opt_set(&ed, YEW_OPT_GLOBAL, "tabwidth", eight, &err));
+    YEW_ASSERT_NOT_NULL(err);
     err = NULL;
-    SAG_ASSERT(!opt_set(&ed, SAG_OPT_BUFFER, "errorbells", yes, &err));
-    SAG_ASSERT_NOT_NULL(err);
-    SAG_ASSERT(opt_set(&ed, SAG_OPT_SCOPE_DECLARED, "tabwidth", eight,
+    YEW_ASSERT(!opt_set(&ed, YEW_OPT_BUFFER, "errorbells", yes, &err));
+    YEW_ASSERT_NOT_NULL(err);
+    YEW_ASSERT(opt_set(&ed, YEW_OPT_SCOPE_DECLARED, "tabwidth", eight,
                        &err));
-    SAG_ASSERT_EQ_U64(ed.buffer.tabwidth, 8U);
-    SAG_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 8);
-    SAG_ASSERT(opt_set(&ed, SAG_OPT_SCOPE_DECLARED, "wrap", yes, &err));
-    SAG_ASSERT(ed.win->vp.wrap);
-    SAG_ASSERT(opt_set(&ed, SAG_OPT_SCOPE_DECLARED, "number", both, &err));
-    SAG_ASSERT_EQ_U64(ed.win->number_style, SAG_NUM_HYBRID);
-    SAG_ASSERT(opt_set(&ed, SAG_OPT_SCOPE_DECLARED, "errorbells", yes,
+    YEW_ASSERT_EQ_U64(ed.buffer.tabwidth, 8U);
+    YEW_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 8);
+    YEW_ASSERT(opt_set(&ed, YEW_OPT_SCOPE_DECLARED, "wrap", yes, &err));
+    YEW_ASSERT(ed.win->vp.wrap);
+    YEW_ASSERT(opt_set(&ed, YEW_OPT_SCOPE_DECLARED, "number", both, &err));
+    YEW_ASSERT_EQ_U64(ed.win->number_style, YEW_NUM_HYBRID);
+    YEW_ASSERT(opt_set(&ed, YEW_OPT_SCOPE_DECLARED, "errorbells", yes,
                        &err));
-    SAG_ASSERT(ed.errorbells);
-    sag_opt_reset(&ed);
-    SAG_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 4);
-    SAG_ASSERT_EQ_U64(ed.buffer.tabwidth, 4U);
-    SAG_ASSERT(!ed.win->vp.wrap);
-    SAG_ASSERT_EQ_U64(ed.win->number_style, SAG_NUM_ABS);
-    SAG_ASSERT(!ed.errorbells);
-    sag_ed_free(&ed);
+    YEW_ASSERT(ed.errorbells);
+    yew_opt_reset(&ed);
+    YEW_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 4);
+    YEW_ASSERT_EQ_U64(ed.buffer.tabwidth, 4U);
+    YEW_ASSERT(!ed.win->vp.wrap);
+    YEW_ASSERT_EQ_U64(ed.win->number_style, YEW_NUM_ABS);
+    YEW_ASSERT(!ed.errorbells);
+    yew_ed_free(&ed);
 }
 
 void test_option_fletch_set_map_is_atomic_and_cmdline_is_identical(void)
@@ -183,36 +183,36 @@ void test_option_fletch_set_map_is_atomic_and_cmdline_is_identical(void)
     char *argv[] = {"ed.opt.set_many", "tabwidth", "6"};
     u32 before;
 
-    sag_ed_init(&ed);
-    SAG_ASSERT(sag_ed_open_scratch(&ed));
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
     before = ed.hooks.ledger.n;
-    SAG_ASSERT(sag_fl_eval(&ed, bad, (u32)(sizeof(bad) - 1U)) !=
-               SAG_CMD_OK);
-    SAG_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 4);
-    SAG_ASSERT_EQ_U64(ed.hooks.ledger.n, before);
-    SAG_ASSERT_EQ_I64(sag_fl_eval(&ed, good, (u32)(sizeof(good) - 1U)),
-                      SAG_CMD_OK);
-    SAG_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 8);
-    SAG_ASSERT(opt_get(&ed, "wrap").as.b);
-    SAG_ASSERT_EQ_U64(ed.hooks.ledger.n, before + 2U);
-    SAG_ASSERT_EQ_U64(ed.hooks.ledger.v[before].kind, REG_OPTION);
-    SAG_ASSERT_EQ_U64(ed.hooks.ledger.v[before].origin_id,
+    YEW_ASSERT(yew_fl_eval(&ed, bad, (u32)(sizeof(bad) - 1U)) !=
+               YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 4);
+    YEW_ASSERT_EQ_U64(ed.hooks.ledger.n, before);
+    YEW_ASSERT_EQ_I64(yew_fl_eval(&ed, good, (u32)(sizeof(good) - 1U)),
+                      YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 8);
+    YEW_ASSERT(opt_get(&ed, "wrap").as.b);
+    YEW_ASSERT_EQ_U64(ed.hooks.ledger.n, before + 2U);
+    YEW_ASSERT_EQ_U64(ed.hooks.ledger.v[before].kind, REG_OPTION);
+    YEW_ASSERT_EQ_U64(ed.hooks.ledger.v[before].origin_id,
                       FL_ORIGIN_ID_CONFIG);
-    SAG_ASSERT_EQ_I64(sag_fl_eval(&ed, later,
-                                  (u32)(sizeof(later) - 1U)), SAG_CMD_OK);
-    SAG_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 10);
-    SAG_ASSERT_EQ_U64(ed.hooks.ledger.n, before + 2U);
-    SAG_ASSERT(sag_opt_remove(&ed, before + 2U));
-    SAG_ASSERT(!opt_get(&ed, "wrap").as.b);
-    SAG_ASSERT(sag_opt_remove(&ed, before + 1U));
-    SAG_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 4);
-    SAG_ASSERT(!sag_opt_remove(&ed, before + 1U));
+    YEW_ASSERT_EQ_I64(yew_fl_eval(&ed, later,
+                                  (u32)(sizeof(later) - 1U)), YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 10);
+    YEW_ASSERT_EQ_U64(ed.hooks.ledger.n, before + 2U);
+    YEW_ASSERT(yew_opt_remove(&ed, before + 2U));
+    YEW_ASSERT(!opt_get(&ed, "wrap").as.b);
+    YEW_ASSERT(yew_opt_remove(&ed, before + 1U));
+    YEW_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 4);
+    YEW_ASSERT(!yew_opt_remove(&ed, before + 1U));
     cx.ed = &ed;
     cx.argv = (CmdArgv){argv, 3U};
-    SAG_ASSERT_EQ_I64(sag_opt_cmdline_set(&cx), SAG_CMD_OK);
-    SAG_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 6);
-    SAG_ASSERT_EQ_U64(ed.buffer.tabwidth, 6U);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_I64(yew_opt_cmdline_set(&cx), YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 6);
+    YEW_ASSERT_EQ_U64(ed.buffer.tabwidth, 6U);
+    yew_ed_free(&ed);
 }
 
 void test_option_completion_uses_declaration_order_inventory(void)
@@ -221,15 +221,15 @@ void test_option_completion_uses_declaration_order_inventory(void)
     Vec_CompItem items = {0};
     u32 total;
 
-    sag_ed_init(&ed);
-    total = sag_comp_enumerate(&ed, SAG_COMP_OPTION, "tab", &items);
-    SAG_ASSERT(total >= 1U);
-    SAG_ASSERT(items.len >= 1U);
-    SAG_ASSERT_EQ_STR(items.data[0].text, "tabwidth");
+    yew_ed_init(&ed);
+    total = yew_comp_enumerate(&ed, YEW_COMP_OPTION, "tab", &items);
+    YEW_ASSERT(total >= 1U);
+    YEW_ASSERT(items.len >= 1U);
+    YEW_ASSERT_EQ_STR(items.data[0].text, "tabwidth");
     Vec_CompItem_free(&items);
-    total = sag_comp_enumerate(&ed, SAG_COMP_VALUE, "gcol", &items);
-    SAG_ASSERT_EQ_U64(total, 2U);
-    SAG_ASSERT(items.len >= 2U);
+    total = yew_comp_enumerate(&ed, YEW_COMP_VALUE, "gcol", &items);
+    YEW_ASSERT_EQ_U64(total, 2U);
+    YEW_ASSERT(items.len >= 2U);
     Vec_CompItem_free(&items);
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
 }

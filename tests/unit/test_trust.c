@@ -23,16 +23,16 @@ static void tf_make(TrustFix *f)
 {
     FILE *fp;
 
-    (void)snprintf(f->root, sizeof(f->root), "/tmp/sag-trust-XXXXXX");
-    SAG_ASSERT_NOT_NULL(mkdtemp(f->root));
+    (void)snprintf(f->root, sizeof(f->root), "/tmp/yew-trust-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(f->root));
     (void)snprintf(f->dbpath, sizeof(f->dbpath), "%s/trust.fl", f->root);
     (void)snprintf(f->work, sizeof(f->work), "%s/work", f->root);
-    SAG_ASSERT_EQ_I64(mkdir(f->work, 0700), 0);
-    (void)snprintf(f->config, sizeof(f->config), "%s/.sagitta.fl", f->work);
+    YEW_ASSERT_EQ_I64(mkdir(f->work, 0700), 0);
+    (void)snprintf(f->config, sizeof(f->config), "%s/.yew.fl", f->work);
     fp = fopen(f->config, "wb");
-    SAG_ASSERT_NOT_NULL(fp);
-    SAG_ASSERT_EQ_U64(fwrite("set({tabwidth: 8})\n", 1U, 19U, fp), 19U);
-    SAG_ASSERT_EQ_I64(fclose(fp), 0);
+    YEW_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_EQ_U64(fwrite("set({tabwidth: 8})\n", 1U, 19U, fp), 19U);
+    YEW_ASSERT_EQ_I64(fclose(fp), 0);
 }
 
 static void tf_remove(const TrustFix *f)
@@ -49,9 +49,9 @@ static void tf_write(const char *path, const char *bytes)
 {
     FILE *fp = fopen(path, "wb");
 
-    SAG_ASSERT_NOT_NULL(fp);
-    SAG_ASSERT_EQ_U64(fwrite(bytes, 1U, strlen(bytes), fp), strlen(bytes));
-    SAG_ASSERT_EQ_I64(fclose(fp), 0);
+    YEW_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_EQ_U64(fwrite(bytes, 1U, strlen(bytes), fp), strlen(bytes));
+    YEW_ASSERT_EQ_I64(fclose(fp), 0);
 }
 
 static char *tf_read(const char *path)
@@ -60,124 +60,124 @@ static char *tf_read(const char *path)
     long n;
     char *out;
 
-    SAG_ASSERT_NOT_NULL(fp);
-    SAG_ASSERT_EQ_I64(fseek(fp, 0L, SEEK_END), 0);
+    YEW_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_EQ_I64(fseek(fp, 0L, SEEK_END), 0);
     n = ftell(fp);
-    SAG_ASSERT(n >= 0L);
-    SAG_ASSERT_EQ_I64(fseek(fp, 0L, SEEK_SET), 0);
-    out = sag_xmalloc((size_t)n + 1U);
-    SAG_ASSERT_EQ_U64(fread(out, 1U, (size_t)n, fp), (size_t)n);
+    YEW_ASSERT(n >= 0L);
+    YEW_ASSERT_EQ_I64(fseek(fp, 0L, SEEK_SET), 0);
+    out = yew_xmalloc((size_t)n + 1U);
+    YEW_ASSERT_EQ_U64(fread(out, 1U, (size_t)n, fp), (size_t)n);
     out[n] = '\0';
-    SAG_ASSERT_EQ_I64(fclose(fp), 0);
+    YEW_ASSERT_EQ_I64(fclose(fp), 0);
     return out;
 }
 
-static void tf_trust(SagTrustDb *db, const char *work, time_t now,
-                     SagTrustProbe *probe)
+static void tf_trust(YewTrustDb *db, const char *work, time_t now,
+                     YewTrustProbe *probe)
 {
-    SAG_ASSERT_EQ_I64(sag_trust_check(db, work, true, false, probe),
-                      SAG_TRUST_PROMPT_NEW);
-    SAG_ASSERT(sag_trust_answer(db, probe, SAG_TRUST_ALWAYS, now));
-    SAG_ASSERT_EQ_I64(sag_trust_check(db, work, true, false, probe),
-                      SAG_TRUST_GRANTED);
+    YEW_ASSERT_EQ_I64(yew_trust_check(db, work, true, false, probe),
+                      YEW_TRUST_PROMPT_NEW);
+    YEW_ASSERT(yew_trust_answer(db, probe, YEW_TRUST_ALWAYS, now));
+    YEW_ASSERT_EQ_I64(yew_trust_check(db, work, true, false, probe),
+                      YEW_TRUST_GRANTED);
 }
 
 void test_trust_content_hash_invalidation_ignores_mtime(void)
 {
     TrustFix f;
-    SagTrustDb db;
-    SagTrustProbe probe;
+    YewTrustDb db;
+    YewTrustProbe probe;
     struct timespec times[2] = {{1234, 0}, {1234, 0}};
 
     tf_make(&f);
-    sag_trust_db_init(&db);
-    sag_trust_probe_init(&probe);
+    yew_trust_db_init(&db);
+    yew_trust_probe_init(&probe);
     tf_trust(&db, f.work, 1000, &probe);
-    SAG_ASSERT_EQ_I64(utimensat(AT_FDCWD, f.config, times, 0), 0);
-    SAG_ASSERT_EQ_I64(sag_trust_check(&db, f.work, true, false, &probe),
-                      SAG_TRUST_GRANTED);
+    YEW_ASSERT_EQ_I64(utimensat(AT_FDCWD, f.config, times, 0), 0);
+    YEW_ASSERT_EQ_I64(yew_trust_check(&db, f.work, true, false, &probe),
+                      YEW_TRUST_GRANTED);
     tf_write(f.config, "set({tabwidth: 4})\n");
-    SAG_ASSERT_EQ_I64(sag_trust_check(&db, f.work, true, false, &probe),
-                      SAG_TRUST_PROMPT_CHANGED);
-    SAG_ASSERT_EQ_STR(sag_trust_decision_reason(SAG_TRUST_PROMPT_CHANGED),
+    YEW_ASSERT_EQ_I64(yew_trust_check(&db, f.work, true, false, &probe),
+                      YEW_TRUST_PROMPT_CHANGED);
+    YEW_ASSERT_EQ_STR(yew_trust_decision_reason(YEW_TRUST_PROMPT_CHANGED),
                       "the config changed since you trusted it");
-    sag_trust_probe_free(&probe);
-    sag_trust_db_free(&db);
+    yew_trust_probe_free(&probe);
+    yew_trust_db_free(&db);
     tf_remove(&f);
 }
 
 void test_trust_realpath_move_and_symlink_do_not_carry_grant(void)
 {
     TrustFix f;
-    SagTrustDb db;
-    SagTrustProbe probe;
+    YewTrustDb db;
+    YewTrustProbe probe;
     char link[192];
     char moved[192];
 
     tf_make(&f);
     (void)snprintf(link, sizeof(link), "%s/link", f.root);
     (void)snprintf(moved, sizeof(moved), "%s/moved", f.root);
-    SAG_ASSERT_EQ_I64(symlink(f.work, link), 0);
-    sag_trust_db_init(&db);
-    sag_trust_probe_init(&probe);
+    YEW_ASSERT_EQ_I64(symlink(f.work, link), 0);
+    yew_trust_db_init(&db);
+    yew_trust_probe_init(&probe);
     tf_trust(&db, link, 1000, &probe);
-    SAG_ASSERT_EQ_I64(sag_trust_check(&db, f.work, true, false, &probe),
-                      SAG_TRUST_GRANTED);
-    SAG_ASSERT_EQ_I64(rename(f.work, moved), 0);
-    SAG_ASSERT_EQ_I64(sag_trust_check(&db, moved, true, false, &probe),
-                      SAG_TRUST_PROMPT_NEW);
-    sag_trust_probe_free(&probe);
-    sag_trust_db_free(&db);
+    YEW_ASSERT_EQ_I64(yew_trust_check(&db, f.work, true, false, &probe),
+                      YEW_TRUST_GRANTED);
+    YEW_ASSERT_EQ_I64(rename(f.work, moved), 0);
+    YEW_ASSERT_EQ_I64(yew_trust_check(&db, moved, true, false, &probe),
+                      YEW_TRUST_PROMPT_NEW);
+    yew_trust_probe_free(&probe);
+    yew_trust_db_free(&db);
     tf_remove(&f);
 }
 
 void test_trust_same_path_new_inode_reprompts(void)
 {
     TrustFix f;
-    SagTrustDb db;
-    SagTrustProbe probe;
+    YewTrustDb db;
+    YewTrustProbe probe;
     char old[192];
 
     tf_make(&f);
-    sag_trust_db_init(&db);
-    sag_trust_probe_init(&probe);
+    yew_trust_db_init(&db);
+    yew_trust_probe_init(&probe);
     tf_trust(&db, f.work, 1000, &probe);
     (void)snprintf(old, sizeof(old), "%s/old", f.root);
-    SAG_ASSERT_EQ_I64(rename(f.work, old), 0);
-    SAG_ASSERT_EQ_I64(mkdir(f.work, 0700), 0);
+    YEW_ASSERT_EQ_I64(rename(f.work, old), 0);
+    YEW_ASSERT_EQ_I64(mkdir(f.work, 0700), 0);
     tf_write(f.config, "set({tabwidth: 8})\n");
-    SAG_ASSERT_EQ_I64(sag_trust_check(&db, f.work, true, false, &probe),
-                      SAG_TRUST_PROMPT_REPLACED);
-    sag_trust_probe_free(&probe);
-    sag_trust_db_free(&db);
+    YEW_ASSERT_EQ_I64(yew_trust_check(&db, f.work, true, false, &probe),
+                      YEW_TRUST_PROMPT_REPLACED);
+    yew_trust_probe_free(&probe);
+    yew_trust_db_free(&db);
     tf_remove(&f);
 }
 
 void test_trust_deleted_config_retains_entry(void)
 {
     TrustFix f;
-    SagTrustDb db;
-    SagTrustProbe probe;
+    YewTrustDb db;
+    YewTrustProbe probe;
 
     tf_make(&f);
-    sag_trust_db_init(&db);
-    sag_trust_probe_init(&probe);
+    yew_trust_db_init(&db);
+    yew_trust_probe_init(&probe);
     tf_trust(&db, f.work, 1000, &probe);
-    SAG_ASSERT_EQ_I64(unlink(f.config), 0);
-    SAG_ASSERT_EQ_I64(sag_trust_check(&db, f.work, true, false, &probe),
-                      SAG_TRUST_NO_CONFIG);
+    YEW_ASSERT_EQ_I64(unlink(f.config), 0);
+    YEW_ASSERT_EQ_I64(yew_trust_check(&db, f.work, true, false, &probe),
+                      YEW_TRUST_NO_CONFIG);
     tf_write(f.config, "set({tabwidth: 8})\n");
-    SAG_ASSERT_EQ_I64(sag_trust_check(&db, f.work, true, false, &probe),
-                      SAG_TRUST_GRANTED);
-    sag_trust_probe_free(&probe);
-    sag_trust_db_free(&db);
+    YEW_ASSERT_EQ_I64(yew_trust_check(&db, f.work, true, false, &probe),
+                      YEW_TRUST_GRANTED);
+    yew_trust_probe_free(&probe);
+    yew_trust_db_free(&db);
     tf_remove(&f);
 }
 
 void test_trust_write_prunes_only_old_missing_dirs(void)
 {
     TrustFix f;
-    SagTrustDb db;
+    YewTrustDb db;
     char doc[2048];
     char *out;
 
@@ -189,23 +189,23 @@ void test_trust_write_prunes_only_old_missing_dirs(void)
         "  \"%s\": {state: \"denied\", at: 1},\n"
         "}}\n", f.work);
     tf_write(f.dbpath, doc);
-    sag_trust_db_init(&db);
-    SAG_ASSERT(sag_trust_db_load_path(&db, f.dbpath));
-    SAG_ASSERT(sag_trust_db_write_path(&db, f.dbpath, 200000, 1U));
+    yew_trust_db_init(&db);
+    YEW_ASSERT(yew_trust_db_load_path(&db, f.dbpath));
+    YEW_ASSERT(yew_trust_db_write_path(&db, f.dbpath, 200000, 1U));
     out = tf_read(f.dbpath);
-    SAG_ASSERT(strstr(out, "/definitely/missing/old") == NULL);
-    SAG_ASSERT_NOT_NULL(strstr(out, "/definitely/missing/new"));
-    SAG_ASSERT_NOT_NULL(strstr(out, f.work));
+    YEW_ASSERT(strstr(out, "/definitely/missing/old") == NULL);
+    YEW_ASSERT_NOT_NULL(strstr(out, "/definitely/missing/new"));
+    YEW_ASSERT_NOT_NULL(strstr(out, f.work));
     free(out);
-    sag_trust_db_free(&db);
+    yew_trust_db_free(&db);
     tf_remove(&f);
 }
 
 void test_trust_bare_string_upgrades_and_output_sorts(void)
 {
     TrustFix f;
-    SagTrustDb db;
-    SagTrustProbe probe;
+    YewTrustDb db;
+    YewTrustProbe probe;
     char doc[1024];
     char *real;
     char *out;
@@ -214,7 +214,7 @@ void test_trust_bare_string_upgrades_and_output_sorts(void)
 
     tf_make(&f);
     real = realpath(f.work, NULL);
-    SAG_ASSERT_NOT_NULL(real);
+    YEW_ASSERT_NOT_NULL(real);
     (void)snprintf(doc, sizeof(doc),
                    "{schema: 1, future: {keep: true}, dirs: {\n"
                    "  \"/z-last\": \"denied\",\n"
@@ -222,67 +222,67 @@ void test_trust_bare_string_upgrades_and_output_sorts(void)
                    "  \"/a-first\": \"denied\",\n"
                    "}}\n", real);
     tf_write(f.dbpath, doc);
-    sag_trust_db_init(&db);
-    sag_trust_probe_init(&probe);
-    SAG_ASSERT(sag_trust_db_load_path(&db, f.dbpath));
-    SAG_ASSERT_EQ_I64(sag_trust_check(&db, f.work, true, false, &probe),
-                      SAG_TRUST_GRANTED);
-    SAG_ASSERT(sag_trust_db_write_path(&db, f.dbpath, 2000, 365U));
+    yew_trust_db_init(&db);
+    yew_trust_probe_init(&probe);
+    YEW_ASSERT(yew_trust_db_load_path(&db, f.dbpath));
+    YEW_ASSERT_EQ_I64(yew_trust_check(&db, f.work, true, false, &probe),
+                      YEW_TRUST_GRANTED);
+    YEW_ASSERT(yew_trust_db_write_path(&db, f.dbpath, 2000, 365U));
     out = tf_read(f.dbpath);
     a = strstr(out, "/a-first");
     z = strstr(out, "/z-last");
-    SAG_ASSERT_NOT_NULL(a);
-    SAG_ASSERT_NOT_NULL(z);
-    SAG_ASSERT(a < z);
-    SAG_ASSERT_NOT_NULL(strstr(out, "future: {"));
-    SAG_ASSERT_NOT_NULL(strstr(out, "hash: \""));
-    SAG_ASSERT_NOT_NULL(strstr(out, "dev:"));
-    SAG_ASSERT_NOT_NULL(strstr(out, "ino:"));
+    YEW_ASSERT_NOT_NULL(a);
+    YEW_ASSERT_NOT_NULL(z);
+    YEW_ASSERT(a < z);
+    YEW_ASSERT_NOT_NULL(strstr(out, "future: {"));
+    YEW_ASSERT_NOT_NULL(strstr(out, "hash: \""));
+    YEW_ASSERT_NOT_NULL(strstr(out, "dev:"));
+    YEW_ASSERT_NOT_NULL(strstr(out, "ino:"));
     free(out);
     free(real);
-    sag_trust_probe_free(&probe);
-    sag_trust_db_free(&db);
+    yew_trust_probe_free(&probe);
+    yew_trust_db_free(&db);
     tf_remove(&f);
 }
 
 void test_trust_truncated_load_does_not_clobber_live_db(void)
 {
     TrustFix f;
-    SagTrustDb db;
+    YewTrustDb db;
     char *out;
 
     tf_make(&f);
     tf_write(f.dbpath,
              "{schema: 1, marker: \"survives\", dirs: {}}\n");
-    sag_trust_db_init(&db);
-    SAG_ASSERT(sag_trust_db_load_path(&db, f.dbpath));
+    yew_trust_db_init(&db);
+    YEW_ASSERT(yew_trust_db_load_path(&db, f.dbpath));
     tf_write(f.dbpath, "{schema: 1, dirs: {");
-    SAG_ASSERT(!sag_trust_db_load_path(&db, f.dbpath));
+    YEW_ASSERT(!yew_trust_db_load_path(&db, f.dbpath));
     out = tf_read(f.dbpath);
-    SAG_ASSERT_EQ_STR(out, "{schema: 1, dirs: {");
+    YEW_ASSERT_EQ_STR(out, "{schema: 1, dirs: {");
     free(out);
-    SAG_ASSERT(sag_trust_db_write_path(&db, f.dbpath, 1000, 365U));
+    YEW_ASSERT(yew_trust_db_write_path(&db, f.dbpath, 1000, 365U));
     out = tf_read(f.dbpath);
-    SAG_ASSERT_NOT_NULL(strstr(out, "marker: \"survives\""));
+    YEW_ASSERT_NOT_NULL(strstr(out, "marker: \"survives\""));
     free(out);
-    sag_trust_db_free(&db);
+    yew_trust_db_free(&db);
     tf_remove(&f);
 }
 
 void test_trust_no_tty_never_requests_prompt(void)
 {
     TrustFix f;
-    SagTrustDb db;
-    SagTrustProbe probe;
+    YewTrustDb db;
+    YewTrustProbe probe;
 
     tf_make(&f);
-    sag_trust_db_init(&db);
-    sag_trust_probe_init(&probe);
-    SAG_ASSERT_EQ_I64(sag_trust_check(&db, f.work, false, false, &probe),
-                      SAG_TRUST_SKIP_NO_TTY);
-    SAG_ASSERT_EQ_I64(sag_trust_check(&db, f.work, false, true, &probe),
-                      SAG_TRUST_GRANTED);
-    sag_trust_probe_free(&probe);
-    sag_trust_db_free(&db);
+    yew_trust_db_init(&db);
+    yew_trust_probe_init(&probe);
+    YEW_ASSERT_EQ_I64(yew_trust_check(&db, f.work, false, false, &probe),
+                      YEW_TRUST_SKIP_NO_TTY);
+    YEW_ASSERT_EQ_I64(yew_trust_check(&db, f.work, false, true, &probe),
+                      YEW_TRUST_GRANTED);
+    yew_trust_probe_free(&probe);
+    yew_trust_db_free(&db);
     tf_remove(&f);
 }

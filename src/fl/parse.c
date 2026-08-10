@@ -520,16 +520,16 @@ static u32 *parse_params(Parser *p, u32 *nparams)
     u32 n = 0U;
 
     while (check(p, FL_T_IDENT)) {
-        if (n < (u32)SAG_ARRAY_LEN(buf))
+        if (n < (u32)YEW_ARRAY_LEN(buf))
             buf[n] = p->cur.v.str_id;
         n++;
         advance(p);
         if (!match(p, FL_T_COMMA))
             break;
     }
-    if (n > (u32)SAG_ARRAY_LEN(buf)) {
-        error_here(p, "too many parameters (max %zu)", SAG_ARRAY_LEN(buf));
-        n = (u32)SAG_ARRAY_LEN(buf);
+    if (n > (u32)YEW_ARRAY_LEN(buf)) {
+        error_here(p, "too many parameters (max %zu)", YEW_ARRAY_LEN(buf));
+        n = (u32)YEW_ARRAY_LEN(buf);
     }
     if (n != 0U) {
         out = arena_alloc(p->arena, (size_t)n * sizeof(*out),

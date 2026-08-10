@@ -16,13 +16,13 @@
 #include "ui/message.h"
 #include "util/log.h"
 
-void sag_jumplist_init(JumpList *jl)
+void yew_jumplist_init(JumpList *jl)
 {
     if (jl != NULL)
         (void)memset(jl, 0, sizeof(*jl));
 }
 
-void sag_changelist_init(ChangeList *cl)
+void yew_changelist_init(ChangeList *cl)
 {
     if (cl != NULL)
         (void)memset(cl, 0, sizeof(*cl));
@@ -40,22 +40,22 @@ static JumpEntry *ring_at(JumpEntry *e, u32 head, u32 len, u32 cap,
     return &e[ring_slot(head, len, cap, index)];
 }
 
-u32 sag_jumplist_len(const JumpList *jl)
+u32 yew_jumplist_len(const JumpList *jl)
 {
     return jl == NULL ? 0U : jl->len;
 }
 
-const JumpEntry *sag_jumplist_at(const JumpList *jl, u32 index)
+const JumpEntry *yew_jumplist_at(const JumpList *jl, u32 index)
 {
     if (jl == NULL || index >= jl->len)
         return NULL;
-    return &jl->e[ring_slot(jl->head, jl->len, SAG_JUMPLIST_MAX, index)];
+    return &jl->e[ring_slot(jl->head, jl->len, YEW_JUMPLIST_MAX, index)];
 }
 
 static void entry_release(Buffer *b, JumpEntry *je)
 {
-    if (b != NULL && b->marks != NULL && sag_mark_alive(b->marks, je->mark))
-        sag_mark_del(b->marks, je->mark);
+    if (b != NULL && b->marks != NULL && yew_mark_alive(b->marks, je->mark))
+        yew_mark_del(b->marks, je->mark);
     (void)memset(je, 0, sizeof(*je));
 }
 
@@ -65,8 +65,8 @@ static JumpEntry entry_make(Buffer *b, ByteOff at, i64 now_ms)
 
     (void)memset(&je, 0, sizeof(je));
     je.buf_id = b->id;
-    je.mark = sag_mark_add(b->marks, at, SAG_BIAS_LEFT);
-    je.line_hint = sag_textbuf_line_of(b->tb, at);
+    je.mark = yew_mark_add(b->marks, at, YEW_BIAS_LEFT);
+    je.line_hint = yew_textbuf_line_of(b->tb, at);
     je.stamp_ms = (u64)(now_ms < 0 ? 0 : now_ms);
     return je;
 }
@@ -79,7 +79,7 @@ static JumpEntry entry_make(Buffer *b, ByteOff at, i64 now_ms)
 static void ring_push(JumpEntry *e, u32 *head, u32 *len, u32 *cur, u32 cap,
                       Buffer *b, ByteOff at, i64 now_ms)
 {
-    LineNo line = sag_textbuf_line_of(b->tb, at);
+    LineNo line = yew_textbuf_line_of(b->tb, at);
 
     /*
      * Rule 4: a push while walking truncates the forward tail.  Vim
@@ -105,9 +105,9 @@ static void ring_push(JumpEntry *e, u32 *head, u32 *len, u32 *cur, u32 cap,
     if (*len > 0U) {
         JumpEntry *newest = ring_at(e, *head, *len, cap, *len - 1U);
 
-        if (sag_mark_alive(b->marks, newest->mark) &&
+        if (yew_mark_alive(b->marks, newest->mark) &&
             newest->buf_id == b->id) {
-            ByteOff pos = sag_mark_pos(b->marks, newest->mark);
+            ByteOff pos = yew_mark_pos(b->marks, newest->mark);
 
             /* Rule 2: pushing the position already on top is a no-op. */
             if (pos.v == at.v) {
@@ -116,7 +116,7 @@ static void ring_push(JumpEntry *e, u32 *head, u32 *len, u32 *cur, u32 cap,
             }
             /* Rule 1: same line replaces, keeping the newer column, so
              * editing around one line does not fill the ring with it. */
-            if (sag_textbuf_line_of(b->tb, pos).v == line.v) {
+            if (yew_textbuf_line_of(b->tb, pos).v == line.v) {
                 entry_release(b, newest);
                 *newest = entry_make(b, at, now_ms);
                 *cur = *len;
@@ -135,26 +135,26 @@ static void ring_push(JumpEntry *e, u32 *head, u32 *len, u32 *cur, u32 cap,
     *cur = *len;
 }
 
-void sag_jump_push(Win *w, ByteOff from, i64 now_ms)
+void yew_jump_push(Win *w, ByteOff from, i64 now_ms)
 {
     if (w == NULL || w->buf == NULL || w->buf->marks == NULL)
         return;
     ring_push(w->jumps.e, &w->jumps.head, &w->jumps.len, &w->jumps.cur,
-              SAG_JUMPLIST_MAX, w->buf, from, now_ms);
+              YEW_JUMPLIST_MAX, w->buf, from, now_ms);
 }
 
 /* Resolves an entry, reporting whether it still names a live position. */
 static bool entry_live(Ed *ed, const JumpEntry *je, Buffer **b_out,
                        ByteOff *pos_out)
 {
-    Buffer *b = sag_ws_buf_by_id(ed, je->buf_id);
+    Buffer *b = yew_ws_buf_by_id(ed, je->buf_id);
 
-    if (b == NULL || b->marks == NULL || !sag_mark_alive(b->marks, je->mark))
+    if (b == NULL || b->marks == NULL || !yew_mark_alive(b->marks, je->mark))
         return false;
     if (b_out != NULL)
         *b_out = b;
     if (pos_out != NULL)
-        *pos_out = sag_mark_pos(b->marks, je->mark);
+        *pos_out = yew_mark_pos(b->marks, je->mark);
     return true;
 }
 
@@ -168,7 +168,7 @@ static bool entry_live(Ed *ed, const JumpEntry *je, Buffer **b_out,
 static void ring_compact(Ed *ed, JumpEntry *e, u32 *head, u32 *len,
                          u32 *cur, u32 cap)
 {
-    JumpEntry kept[SAG_JUMPLIST_MAX];
+    JumpEntry kept[YEW_JUMPLIST_MAX];
     u32 nkept = 0U;
     u32 new_cur = 0U;
     u32 i;
@@ -207,7 +207,7 @@ static bool walk(Ed *ed, Win *w, JumpEntry *e, u32 *head, u32 *len,
         return false;
     ring_compact(ed, e, head, len, cur, cap);
     if (*len == 0U) {
-        sag_msg(ed, SAG_MSG_INFO, "%s", empty_msg);
+        yew_msg(ed, YEW_MSG_INFO, "%s", empty_msg);
         return false;
     }
     if (older && *cur >= *len) {
@@ -218,7 +218,7 @@ static bool walk(Ed *ed, Win *w, JumpEntry *e, u32 *head, u32 *len,
          * newest, and we are standing ON it — hence cur = len-1 with no
          * jump, before the first real step.
          */
-        Cursor *c = sag_ed_cursor(ed);
+        Cursor *c = yew_ed_cursor(ed);
 
         if (c != NULL) {
             ring_push(e, head, len, cur, cap, w->buf, c->pos, 0);
@@ -241,17 +241,17 @@ static bool walk(Ed *ed, Win *w, JumpEntry *e, u32 *head, u32 *len,
         moved++;
     }
     if (moved == 0U) {
-        sag_msg(ed, SAG_MSG_INFO, "%s", empty_msg);
+        yew_msg(ed, YEW_MSG_INFO, "%s", empty_msg);
         return false;
     }
     if (!entry_live(ed, ring_at(e, *head, *len, cap, *cur), &b, &pos)) {
-        sag_msg(ed, SAG_MSG_INFO, "%s", empty_msg);
+        yew_msg(ed, YEW_MSG_INFO, "%s", empty_msg);
         return false;
     }
-    if (b != w->buf && !sag_ed_show_buffer(ed, b))
+    if (b != w->buf && !yew_ed_show_buffer(ed, b))
         return false;
     {
-        Cursor *c = sag_ed_cursor(ed);
+        Cursor *c = yew_ed_cursor(ed);
 
         if (c != NULL) {
             c->pos = pos;
@@ -260,30 +260,30 @@ static bool walk(Ed *ed, Win *w, JumpEntry *e, u32 *head, u32 *len,
             c->goal_col = (GCol){0U};
         }
     }
-    sag_win_follow_cursor(w);
-    sag_ed_damage_document(ed);
+    yew_win_follow_cursor(w);
+    yew_ed_damage_document(ed);
     return true;
 }
 
-bool sag_jump_back(Ed *ed, Win *w, u32 count)
+bool yew_jump_back(Ed *ed, Win *w, u32 count)
 {
     if (w == NULL)
         return false;
     return walk(ed, w, w->jumps.e, &w->jumps.head, &w->jumps.len,
-                &w->jumps.cur, SAG_JUMPLIST_MAX, true,
+                &w->jumps.cur, YEW_JUMPLIST_MAX, true,
                 count == 0U ? 1U : count, "no older jump position");
 }
 
-bool sag_jump_fwd(Ed *ed, Win *w, u32 count)
+bool yew_jump_fwd(Ed *ed, Win *w, u32 count)
 {
     if (w == NULL)
         return false;
     return walk(ed, w, w->jumps.e, &w->jumps.head, &w->jumps.len,
-                &w->jumps.cur, SAG_JUMPLIST_MAX, false,
+                &w->jumps.cur, YEW_JUMPLIST_MAX, false,
                 count == 0U ? 1U : count, "no newer jump position");
 }
 
-void sag_change_record(Buffer *b, ByteOff at, i64 now_ms)
+void yew_change_record(Buffer *b, ByteOff at, i64 now_ms)
 {
     ChangeList *cl;
     LineNo line;
@@ -291,7 +291,7 @@ void sag_change_record(Buffer *b, ByteOff at, i64 now_ms)
     if (b == NULL || b->marks == NULL || b->tb == NULL)
         return;
     cl = &b->changes;
-    line = sag_textbuf_line_of(b->tb, at);
+    line = yew_textbuf_line_of(b->tb, at);
     /*
      * Coalesce a burst into one entry: same line, or close enough in
      * time that it is one act of typing.  Without this, `g;` walks
@@ -301,9 +301,9 @@ void sag_change_record(Buffer *b, ByteOff at, i64 now_ms)
     if (cl->has_last && cl->len > 0U &&
         (cl->last_line.v == line.v ||
          (now_ms >= cl->last_ms &&
-          now_ms - cl->last_ms <= SAG_CHANGE_COALESCE_MS))) {
+          now_ms - cl->last_ms <= YEW_CHANGE_COALESCE_MS))) {
         JumpEntry *newest = ring_at(cl->e, cl->head, cl->len,
-                                    SAG_CHANGELIST_MAX, cl->len - 1U);
+                                    YEW_CHANGELIST_MAX, cl->len - 1U);
 
         entry_release(b, newest);
         *newest = entry_make(b, at, now_ms);
@@ -312,30 +312,30 @@ void sag_change_record(Buffer *b, ByteOff at, i64 now_ms)
         cl->last_line = line;
         return;
     }
-    ring_push(cl->e, &cl->head, &cl->len, &cl->cur, SAG_CHANGELIST_MAX, b,
+    ring_push(cl->e, &cl->head, &cl->len, &cl->cur, YEW_CHANGELIST_MAX, b,
               at, now_ms);
     cl->last_ms = now_ms;
     cl->last_line = line;
     cl->has_last = true;
 }
 
-bool sag_change_older(Ed *ed, Win *w, u32 count)
+bool yew_change_older(Ed *ed, Win *w, u32 count)
 {
     if (w == NULL || w->buf == NULL)
         return false;
     return walk(ed, w, w->buf->changes.e, &w->buf->changes.head,
                 &w->buf->changes.len, &w->buf->changes.cur,
-                SAG_CHANGELIST_MAX, true, count == 0U ? 1U : count,
+                YEW_CHANGELIST_MAX, true, count == 0U ? 1U : count,
                 "no older change position");
 }
 
-bool sag_change_newer(Ed *ed, Win *w, u32 count)
+bool yew_change_newer(Ed *ed, Win *w, u32 count)
 {
     if (w == NULL || w->buf == NULL)
         return false;
     return walk(ed, w, w->buf->changes.e, &w->buf->changes.head,
                 &w->buf->changes.len, &w->buf->changes.cur,
-                SAG_CHANGELIST_MAX, false, count == 0U ? 1U : count,
+                YEW_CHANGELIST_MAX, false, count == 0U ? 1U : count,
                 "no newer change position");
 }
 
@@ -349,7 +349,7 @@ bool sag_change_newer(Ed *ed, Win *w, u32 count)
  * user may have to read or repair by hand, and a version byte plus one
  * record per line survives a schema change that a binary blob does not.
  */
-void sag_jumplist_serialize(const JumpList *jl, const Ed *ed, Bytebuf *out)
+void yew_jumplist_serialize(const JumpList *jl, const Ed *ed, Bytebuf *out)
 {
     u32 i;
 
@@ -357,17 +357,17 @@ void sag_jumplist_serialize(const JumpList *jl, const Ed *ed, Bytebuf *out)
         return;
     bytebuf_printf(out, "jumplist 1\n");
     for (i = 0U; i < jl->len; i++) {
-        const JumpEntry *je = sag_jumplist_at(jl, i);
-        Buffer *b = sag_ws_buf_by_id((Ed *)ed, je->buf_id);
+        const JumpEntry *je = yew_jumplist_at(jl, i);
+        Buffer *b = yew_ws_buf_by_id((Ed *)ed, je->buf_id);
         ByteOff pos = BYTEOFF(0U);
         LineNo line = je->line_hint;
         u64 col = 0U;
 
         if (b != NULL && b->marks != NULL &&
-            sag_mark_alive(b->marks, je->mark)) {
-            pos = sag_mark_pos(b->marks, je->mark);
-            line = sag_textbuf_line_of(b->tb, pos);
-            col = pos.v - sag_textbuf_line_start(b->tb, line).v;
+            yew_mark_alive(b->marks, je->mark)) {
+            pos = yew_mark_pos(b->marks, je->mark);
+            line = yew_textbuf_line_of(b->tb, pos);
+            col = pos.v - yew_textbuf_line_start(b->tb, line).v;
         }
         bytebuf_printf(out, "%s\t%llu\t%llu\t%llu\n",
                        b != NULL && b->path != NULL ? b->path : "",
@@ -377,18 +377,18 @@ void sag_jumplist_serialize(const JumpList *jl, const Ed *ed, Bytebuf *out)
     }
 }
 
-bool sag_jumplist_deserialize(JumpList *jl, const u8 *bytes, size_t len)
+bool yew_jumplist_deserialize(JumpList *jl, const u8 *bytes, size_t len)
 {
     size_t at = 0U;
     u32 count = 0U;
 
     if (jl == NULL || bytes == NULL)
         return false;
-    sag_jumplist_init(jl);
+    yew_jumplist_init(jl);
     if (len < 11U || memcmp(bytes, "jumplist 1\n", 11U) != 0)
         return false;
     at = 11U;
-    while (at < len && count < SAG_JUMPLIST_MAX) {
+    while (at < len && count < YEW_JUMPLIST_MAX) {
         size_t eol = at;
         size_t field = at;
         u64 nums[3];
@@ -416,7 +416,7 @@ bool sag_jumplist_deserialize(JumpList *jl, const u8 *bytes, size_t len)
             je.line_hint = LINENO(nums[0]);
             je.stamp_ms = nums[2];
             jl->e[jl->head] = je;
-            jl->head = (jl->head + 1U) % SAG_JUMPLIST_MAX;
+            jl->head = (jl->head + 1U) % YEW_JUMPLIST_MAX;
             jl->len++;
             count++;
         }
@@ -435,69 +435,69 @@ static u32 jump_count(const CmdCtx *cx)
     return cx->count_given && cx->count != 0U ? cx->count : 1U;
 }
 
-CmdStatus sag_jump_cmd_back(CmdCtx *cx)
+CmdStatus yew_jump_cmd_back(CmdCtx *cx)
 {
     /* A walk with nowhere to go is not an error: walk() has already
      * said so in the message line, and reporting it twice is noise. */
-    (void)sag_jump_back(cx->ed, cx->win, jump_count(cx));
-    return SAG_CMD_OK;
+    (void)yew_jump_back(cx->ed, cx->win, jump_count(cx));
+    return YEW_CMD_OK;
 }
 
-CmdStatus sag_jump_cmd_fwd(CmdCtx *cx)
+CmdStatus yew_jump_cmd_fwd(CmdCtx *cx)
 {
     /* A walk with nowhere to go is not an error: walk() has already
      * said so in the message line, and reporting it twice is noise. */
-    (void)sag_jump_fwd(cx->ed, cx->win, jump_count(cx));
-    return SAG_CMD_OK;
+    (void)yew_jump_fwd(cx->ed, cx->win, jump_count(cx));
+    return YEW_CMD_OK;
 }
 
-CmdStatus sag_change_cmd_older(CmdCtx *cx)
+CmdStatus yew_change_cmd_older(CmdCtx *cx)
 {
     /* A walk with nowhere to go is not an error: walk() has already
      * said so in the message line, and reporting it twice is noise. */
-    (void)sag_change_older(cx->ed, cx->win, jump_count(cx));
-    return SAG_CMD_OK;
+    (void)yew_change_older(cx->ed, cx->win, jump_count(cx));
+    return YEW_CMD_OK;
 }
 
-CmdStatus sag_change_cmd_newer(CmdCtx *cx)
+CmdStatus yew_change_cmd_newer(CmdCtx *cx)
 {
     /* A walk with nowhere to go is not an error: walk() has already
      * said so in the message line, and reporting it twice is noise. */
-    (void)sag_change_newer(cx->ed, cx->win, jump_count(cx));
-    return SAG_CMD_OK;
+    (void)yew_change_newer(cx->ed, cx->win, jump_count(cx));
+    return YEW_CMD_OK;
 }
 
 /* The list itself, newest first, into the message line's overlay. */
-CmdStatus sag_jump_cmd_list(CmdCtx *cx)
+CmdStatus yew_jump_cmd_list(CmdCtx *cx)
 {
     Bytebuf out;
     u32 n;
     u32 i;
 
     if (cx->win == NULL)
-        return SAG_CMD_ERR_STATE;
-    n = sag_jumplist_len(&cx->win->jumps);
+        return YEW_CMD_ERR_STATE;
+    n = yew_jumplist_len(&cx->win->jumps);
     if (n == 0U) {
-        sag_msg(cx->ed, SAG_MSG_INFO, "jumplist is empty");
-        return SAG_CMD_OK;
+        yew_msg(cx->ed, YEW_MSG_INFO, "jumplist is empty");
+        return YEW_CMD_OK;
     }
     bytebuf_init(&out);
     for (i = n; i > 0U; i--) {
-        const JumpEntry *je = sag_jumplist_at(&cx->win->jumps, i - 1U);
-        Buffer *b = sag_ws_buf_by_id(cx->ed, je->buf_id);
+        const JumpEntry *je = yew_jumplist_at(&cx->win->jumps, i - 1U);
+        Buffer *b = yew_ws_buf_by_id(cx->ed, je->buf_id);
         LineNo line = je->line_hint;
 
         if (b != NULL && b->marks != NULL &&
-            sag_mark_alive(b->marks, je->mark))
-            line = sag_textbuf_line_of(b->tb, sag_mark_pos(b->marks,
+            yew_mark_alive(b->marks, je->mark))
+            line = yew_textbuf_line_of(b->tb, yew_mark_pos(b->marks,
                                                            je->mark));
         bytebuf_printf(&out, "%s%3u  %s:%llu",
                        i == n ? "" : "\n", (unsigned)(n - i),
-                       b != NULL ? sag_buf_label(b) : "(closed)",
+                       b != NULL ? yew_buf_label(b) : "(closed)",
                        (unsigned long long)line.v + 1ULL);
     }
-    sag_msg(cx->ed, SAG_MSG_INFO, "%.*s", (int)out.len,
+    yew_msg(cx->ed, YEW_MSG_INFO, "%.*s", (int)out.len,
             (const char *)out.data);
     bytebuf_free(&out);
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }

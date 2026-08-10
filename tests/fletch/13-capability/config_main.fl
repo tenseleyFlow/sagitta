@@ -49,7 +49,7 @@ io.write(dir + "/b.txt", "b")
 # THE ROOT IS PASSED EXPLICITLY, and the reason is the asymmetry
 # asserted just below: glob's default root is the importing module's
 # directory (s31: "never the process cwd -- a config must behave the
-# same whatever directory sagitta was launched from"), while io.read
+# same whatever directory yew was launched from"), while io.read
 # and io.write resolve a relative path against the PROCESS CWD.  The
 # same relative string therefore names two different files depending
 # on which function receives it.
@@ -77,7 +77,7 @@ io.print(io.exists(dir + "/b.txt"))
 # A missing variable is nil, never "": a caller must be able to tell
 # "unset" from "set to empty".
 # OUT: nil
-io.print(io.env("SAG_FLETCH_DEFINITELY_UNSET"))
+io.print(io.env("YEW_FLETCH_DEFINITELY_UNSET"))
 
 # -- stderr is a separate stream, and CHECK never sees it ------------
 io.eprint("this goes to stderr")

@@ -2,7 +2,7 @@
 
 set -eu
 
-tmp=$(umask 077 && mktemp "${TMPDIR:-/tmp}/sagitta-perf-guard.XXXXXX")
+tmp=$(umask 077 && mktemp "${TMPDIR:-/tmp}/yew-perf-guard.XXXXXX")
 trap 'rm -f "$tmp"' EXIT HUP INT TERM
 
 if [ "${1:-}" = "--stdin" ]; then

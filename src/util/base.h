@@ -1,5 +1,5 @@
-#ifndef SAG_UTIL_BASE_H
-#define SAG_UTIL_BASE_H
+#ifndef YEW_UTIL_BASE_H
+#define YEW_UTIL_BASE_H
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -14,17 +14,17 @@ typedef int16_t i16;
 typedef int32_t i32;
 typedef int64_t i64;
 
-#define SAG_ARRAY_LEN(a) (sizeof(a) / sizeof((a)[0]))
+#define YEW_ARRAY_LEN(a) (sizeof(a) / sizeof((a)[0]))
 
 enum {
-    SAG_EXIT_OK = 0,
-    SAG_EXIT_ERR,
-    SAG_EXIT_BATCH,
-    SAG_EXIT_IO,
-    SAG_EXIT_BUG
+    YEW_EXIT_OK = 0,
+    YEW_EXIT_ERR,
+    YEW_EXIT_BATCH,
+    YEW_EXIT_IO,
+    YEW_EXIT_BUG
 };
 
-#define SAG_VERSION "1.0.0-dev"
+#define YEW_VERSION "1.0.0-dev"
 
 /*
  * The ONLY place in the tree allowed to call pipe(): every other site uses
@@ -34,14 +34,14 @@ enum {
  * so there it degrades to pipe() + FD_CLOEXEC.  That fallback is race-free
  * *here* because invariant 8 makes the core single-threaded and nothing
  * forks from a signal handler — the window pipe2() closes needs a
- * concurrent spawn to matter, and sagitta has none.
+ * concurrent spawn to matter, and yew has none.
  */
-bool sag_pipe_cloexec(int fds[2]);
+bool yew_pipe_cloexec(int fds[2]);
 
 /* Allocation failure is an internal error, never a recoverable NULL. */
-void *sag_xmalloc(size_t size);
-void *sag_xrealloc(void *ptr, size_t size);
-void *sag_xcalloc(size_t count, size_t size);
-void *sag_xreallocarray(void *ptr, size_t count, size_t size);
+void *yew_xmalloc(size_t size);
+void *yew_xrealloc(void *ptr, size_t size);
+void *yew_xcalloc(size_t count, size_t size);
+void *yew_xreallocarray(void *ptr, size_t count, size_t size);
 
 #endif

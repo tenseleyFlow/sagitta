@@ -1,5 +1,5 @@
-#ifndef SAG_UTIL_VEC_H
-#define SAG_UTIL_VEC_H
+#ifndef YEW_UTIL_VEC_H
+#define YEW_UTIL_VEC_H
 
 #include <stddef.h>
 #include <stdlib.h>
@@ -27,13 +27,13 @@
             }                                                                  \
             cap *= 2;                                                          \
         }                                                                      \
-        vec->data = sag_xreallocarray(vec->data, cap, sizeof(T));              \
+        vec->data = yew_xreallocarray(vec->data, cap, sizeof(T));              \
         vec->cap = cap;                                                        \
     }                                                                          \
     static inline void Name##_push(Name *vec, T value)                         \
     {                                                                          \
         if (vec->len == SIZE_MAX)                                              \
-            SAG_BUG("vector length overflow");                                \
+            YEW_BUG("vector length overflow");                                \
         Name##_reserve(vec, vec->len + 1);                                     \
         vec->data[vec->len++] = value;                                         \
     }                                                                          \

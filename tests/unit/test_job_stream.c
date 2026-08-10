@@ -1,4 +1,4 @@
-/* Sprint 19 §3 + DoD 4: sag_job_safe_prefix must be chunking-independent.
+/* Sprint 19 §3 + DoD 4: yew_job_safe_prefix must be chunking-independent.
  *
  * A pipe read may split a UTF-8 sequence AND a grapheme cluster, and
  * PIPE_BUF guarantees the reader nothing.  The property that matters is
@@ -66,14 +66,14 @@ static void feed_chunked(const u8 *src, size_t len, size_t chunk,
             total = (u64)take;
         }
         at += take;
-        safe = sag_job_safe_prefix(view, total, false);
-        SAG_ASSERT(safe <= total);
+        safe = yew_job_safe_prefix(view, total, false);
+        YEW_ASSERT(safe <= total);
         bytebuf_append(out, view, (size_t)safe);
         if (safe < total) {
-            u8 tail[SAG_JOB_HOLD_MAX + 32];
+            u8 tail[YEW_JOB_HOLD_MAX + 32];
             u64 rest = total - safe;
 
-            SAG_ASSERT(rest <= sizeof(tail));
+            YEW_ASSERT(rest <= sizeof(tail));
             (void)memcpy(tail, view + safe, (size_t)rest);
             hold.len = 0U;
             bytebuf_append(&hold, tail, (size_t)rest);
@@ -83,9 +83,9 @@ static void feed_chunked(const u8 *src, size_t len, size_t chunk,
     }
     /* EOF flushes everything, invalid tail included (rule 4). */
     if (hold.len != 0U) {
-        u64 safe = sag_job_safe_prefix(hold.data, (u64)hold.len, true);
+        u64 safe = yew_job_safe_prefix(hold.data, (u64)hold.len, true);
 
-        SAG_ASSERT_EQ_U64(safe, (u64)hold.len);
+        YEW_ASSERT_EQ_U64(safe, (u64)hold.len);
         bytebuf_append(out, hold.data, hold.len);
     }
     bytebuf_free(&hold);
@@ -95,7 +95,7 @@ void test_job_stream_split_at_every_offset(void)
 {
     size_t f;
 
-    for (f = 0U; f < SAG_ARRAY_LEN(stream_fixtures); f++) {
+    for (f = 0U; f < YEW_ARRAY_LEN(stream_fixtures); f++) {
         const u8 *src = (const u8 *)stream_fixtures[f];
         size_t len = strlen(stream_fixtures[f]);
         size_t chunk;
@@ -106,9 +106,9 @@ void test_job_stream_split_at_every_offset(void)
             bytebuf_init(&got);
             feed_chunked(src, len, chunk, &got);
             /* The whole point: chunk size must not change the output. */
-            SAG_ASSERT_EQ_U64((u64)got.len, (u64)len);
+            YEW_ASSERT_EQ_U64((u64)got.len, (u64)len);
             if (len != 0U)
-                SAG_ASSERT_EQ_MEM(got.data, src, len);
+                YEW_ASSERT_EQ_MEM(got.data, src, len);
             bytebuf_free(&got);
         }
     }
@@ -119,7 +119,7 @@ void test_job_stream_holds_incomplete_utf8(void)
     /* A 4-byte emoji arriving three bytes at a time holds all three. */
     const u8 partial[] = {0xF0U, 0x9FU, 0x98U};
 
-    SAG_ASSERT_EQ_U64(sag_job_safe_prefix(partial, 3U, false), 0U);
+    YEW_ASSERT_EQ_U64(yew_job_safe_prefix(partial, 3U, false), 0U);
     /* Rules 1 and 2 compose, and the composition is deliberately
      * conservative: the incomplete lead is held, and so is the preceding
      * character.  We cannot yet know whether those pending bytes decode to
@@ -131,19 +131,19 @@ void test_job_stream_holds_incomplete_utf8(void)
     {
         const u8 two[] = {'a', 0xC3U};
 
-        SAG_ASSERT_EQ_U64(sag_job_safe_prefix(two, 2U, false), 0U);
+        YEW_ASSERT_EQ_U64(yew_job_safe_prefix(two, 2U, false), 0U);
     }
     {
         const u8 three[] = {'x', 0xE6U, 0x97U};
 
-        SAG_ASSERT_EQ_U64(sag_job_safe_prefix(three, 3U, false), 0U);
+        YEW_ASSERT_EQ_U64(yew_job_safe_prefix(three, 3U, false), 0U);
     }
     /* Holding is bounded, though: with a completed cluster followed by an
      * incomplete lead, everything before the last cluster still flows. */
     {
         const u8 mixed[] = {'a', 'b', 'c', 0xF0U};
 
-        SAG_ASSERT_EQ_U64(sag_job_safe_prefix(mixed, 4U, false), 2U);
+        YEW_ASSERT_EQ_U64(yew_job_safe_prefix(mixed, 4U, false), 2U);
     }
 }
 
@@ -154,7 +154,7 @@ void test_job_stream_newline_holds_nothing(void)
     const u8 line[] = "some output\n";
     u64 n = (u64)sizeof(line) - 1U;
 
-    SAG_ASSERT_EQ_U64(sag_job_safe_prefix(line, n, false), n);
+    YEW_ASSERT_EQ_U64(yew_job_safe_prefix(line, n, false), n);
 }
 
 void test_job_stream_eof_flushes_invalid_tail(void)
@@ -162,23 +162,23 @@ void test_job_stream_eof_flushes_invalid_tail(void)
     const u8 bad[] = {'o', 'k', 0xFFU, 0xC3U};
 
     /* Not at EOF: the dangling 0xC3 lead is held. */
-    SAG_ASSERT(sag_job_safe_prefix(bad, 4U, false) < 4U);
+    YEW_ASSERT(yew_job_safe_prefix(bad, 4U, false) < 4U);
     /* At EOF everything goes, byte-exact — storage is verbatim. */
-    SAG_ASSERT_EQ_U64(sag_job_safe_prefix(bad, 4U, true), 4U);
+    YEW_ASSERT_EQ_U64(yew_job_safe_prefix(bad, 4U, true), 4U);
 }
 
 void test_job_stream_hold_cap_flushes(void)
 {
     /* A pathological run of combining marks never completes a cluster;
-     * past SAG_JOB_HOLD_MAX we must flush rather than grow forever. */
-    u8 marks[SAG_JOB_HOLD_MAX * 2U];
+     * past YEW_JOB_HOLD_MAX we must flush rather than grow forever. */
+    u8 marks[YEW_JOB_HOLD_MAX * 2U];
     size_t i;
 
     for (i = 0U; i + 1U < sizeof(marks); i += 2U) {
         marks[i] = 0xCCU; /* U+0300 combining grave */
         marks[i + 1U] = 0x80U;
     }
-    SAG_ASSERT_EQ_U64(sag_job_safe_prefix(marks, (u64)sizeof(marks), false),
+    YEW_ASSERT_EQ_U64(yew_job_safe_prefix(marks, (u64)sizeof(marks), false),
                       (u64)sizeof(marks));
 }
 
@@ -186,7 +186,7 @@ void test_job_stream_empty_and_null(void)
 {
     const u8 any[] = {'a'};
 
-    SAG_ASSERT_EQ_U64(sag_job_safe_prefix(NULL, 4U, false), 0U);
-    SAG_ASSERT_EQ_U64(sag_job_safe_prefix(any, 0U, false), 0U);
-    SAG_ASSERT_EQ_U64(sag_job_safe_prefix(any, 0U, true), 0U);
+    YEW_ASSERT_EQ_U64(yew_job_safe_prefix(NULL, 4U, false), 0U);
+    YEW_ASSERT_EQ_U64(yew_job_safe_prefix(any, 0U, false), 0U);
+    YEW_ASSERT_EQ_U64(yew_job_safe_prefix(any, 0U, true), 0U);
 }

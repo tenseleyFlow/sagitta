@@ -34,8 +34,8 @@ static size_t parse_hex_bytes(const char *text, u8 *out, size_t cap)
             break;
         hi = hex_digit((unsigned char)text[0]);
         lo = hex_digit((unsigned char)text[1]);
-        SAG_ASSERT(hi >= 0 && lo >= 0);
-        SAG_ASSERT(len < cap);
+        YEW_ASSERT(hi >= 0 && lo >= 0);
+        YEW_ASSERT(len < cap);
         out[len++] = (u8)((hi << 4) | lo);
         text += 2;
     }
@@ -68,28 +68,28 @@ static size_t split_row(char *line, char **cols, size_t cap)
 
 void test_width_codepoints(void)
 {
-    SagWidthOpts opts = {false};
+    YewWidthOpts opts = {false};
 
-    sag_width_set_opts(&opts);
-    SAG_ASSERT_EQ_I64(sag_cp_width((u32)'A'), 1);
-    SAG_ASSERT_EQ_I64(sag_cp_width(0x0009u), -1);
-    SAG_ASSERT_EQ_I64(sag_cluster_width((const u8 *)"\t", 1u), 0);
-    SAG_ASSERT_EQ_I64(sag_cp_width(0x0000u), 2);
-    SAG_ASSERT_EQ_I64(sag_cp_width(0x007fu), 2);
-    SAG_ASSERT_EQ_I64(sag_cp_width(0x0085u), 4);
-    SAG_ASSERT_EQ_I64(sag_cp_width(0x00adu), 1);
-    SAG_ASSERT_EQ_I64(sag_cp_width(0x0301u), 0);
-    SAG_ASSERT_EQ_I64(sag_cp_width(0x200du), 0);
-    SAG_ASSERT_EQ_I64(sag_cp_width(0x6f22u), 2);
-    SAG_ASSERT_EQ_I64(sag_cp_width(0x1f600u), 2);
-    SAG_ASSERT_EQ_I64(sag_cp_width(0x00a1u), 1);
-    SAG_ASSERT_EQ_I64(sag_cp_width(sag_utf8_escape_of(0xffu)), 4);
+    yew_width_set_opts(&opts);
+    YEW_ASSERT_EQ_I64(yew_cp_width((u32)'A'), 1);
+    YEW_ASSERT_EQ_I64(yew_cp_width(0x0009u), -1);
+    YEW_ASSERT_EQ_I64(yew_cluster_width((const u8 *)"\t", 1u), 0);
+    YEW_ASSERT_EQ_I64(yew_cp_width(0x0000u), 2);
+    YEW_ASSERT_EQ_I64(yew_cp_width(0x007fu), 2);
+    YEW_ASSERT_EQ_I64(yew_cp_width(0x0085u), 4);
+    YEW_ASSERT_EQ_I64(yew_cp_width(0x00adu), 1);
+    YEW_ASSERT_EQ_I64(yew_cp_width(0x0301u), 0);
+    YEW_ASSERT_EQ_I64(yew_cp_width(0x200du), 0);
+    YEW_ASSERT_EQ_I64(yew_cp_width(0x6f22u), 2);
+    YEW_ASSERT_EQ_I64(yew_cp_width(0x1f600u), 2);
+    YEW_ASSERT_EQ_I64(yew_cp_width(0x00a1u), 1);
+    YEW_ASSERT_EQ_I64(yew_cp_width(yew_utf8_escape_of(0xffu)), 4);
 
     opts.ambiguous_wide = true;
-    sag_width_set_opts(&opts);
-    SAG_ASSERT_EQ_I64(sag_cp_width(0x00a1u), 2);
-    SAG_ASSERT_EQ_I64(sag_cp_width((u32)'A'), 1);
-    sag_width_set_opts(NULL);
+    yew_width_set_opts(&opts);
+    YEW_ASSERT_EQ_I64(yew_cp_width(0x00a1u), 2);
+    YEW_ASSERT_EQ_I64(yew_cp_width((u32)'A'), 1);
+    yew_width_set_opts(NULL);
 }
 
 void test_width_golden(void)
@@ -98,7 +98,7 @@ void test_width_golden(void)
     char line[512];
     size_t rows = 0u;
 
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     while (fgets(line, sizeof(line), fp) != NULL) {
         char *cols[4];
         u8 bytes[128];
@@ -106,27 +106,27 @@ void test_width_golden(void)
         size_t len;
         int narrow;
         int wide;
-        SagWidthOpts opts = {false};
+        YewWidthOpts opts = {false};
 
         if (line[0] == '#' || line[0] == '\n' || line[0] == '\r')
             continue;
-        ncols = split_row(line, cols, SAG_ARRAY_LEN(cols));
-        SAG_ASSERT_EQ_U64(ncols, 4u);
+        ncols = split_row(line, cols, YEW_ARRAY_LEN(cols));
+        YEW_ASSERT_EQ_U64(ncols, 4u);
         len = parse_hex_bytes(cols[1], bytes, sizeof(bytes));
         narrow = (int)strtol(cols[2], NULL, 10);
         wide = (int)strtol(cols[3], NULL, 10);
 
-        sag_width_set_opts(&opts);
-        SAG_ASSERT_EQ_I64(sag_cluster_width(bytes, len), narrow);
+        yew_width_set_opts(&opts);
+        YEW_ASSERT_EQ_I64(yew_cluster_width(bytes, len), narrow);
         opts.ambiguous_wide = true;
-        sag_width_set_opts(&opts);
-        SAG_ASSERT_EQ_I64(sag_cluster_width(bytes, len), wide);
+        yew_width_set_opts(&opts);
+        YEW_ASSERT_EQ_I64(yew_cluster_width(bytes, len), wide);
         rows++;
     }
-    SAG_ASSERT(ferror(fp) == 0);
-    SAG_ASSERT_EQ_I64(fclose(fp), 0);
-    SAG_ASSERT(rows >= 60u);
-    sag_width_set_opts(NULL);
+    YEW_ASSERT(ferror(fp) == 0);
+    YEW_ASSERT_EQ_I64(fclose(fp), 0);
+    YEW_ASSERT(rows >= 60u);
+    yew_width_set_opts(NULL);
 }
 
 void test_width_strings(void)
@@ -139,12 +139,12 @@ void test_width_strings(void)
         0xffu
     };
 
-    sag_width_set_opts(NULL);
-    SAG_ASSERT_EQ_I64(sag_str_width(NULL, 12u, 4u), 0);
-    SAG_ASSERT_EQ_I64(sag_str_width(mixed, sizeof(mixed), 4u), 6);
-    SAG_ASSERT_EQ_I64(sag_str_width(mixed, sizeof(mixed), 8u), 10);
-    SAG_ASSERT_EQ_I64(sag_str_width(mixed, sizeof(mixed), 0u), 4);
-    SAG_ASSERT_EQ_I64(sag_str_width(clusters, sizeof(clusters), 4u), 7);
+    yew_width_set_opts(NULL);
+    YEW_ASSERT_EQ_I64(yew_str_width(NULL, 12u, 4u), 0);
+    YEW_ASSERT_EQ_I64(yew_str_width(mixed, sizeof(mixed), 4u), 6);
+    YEW_ASSERT_EQ_I64(yew_str_width(mixed, sizeof(mixed), 8u), 10);
+    YEW_ASSERT_EQ_I64(yew_str_width(mixed, sizeof(mixed), 0u), 4);
+    YEW_ASSERT_EQ_I64(yew_str_width(clusters, sizeof(clusters), 4u), 7);
 }
 
 void test_width_clip(void)
@@ -160,20 +160,20 @@ void test_width_clip(void)
 
     for (max_cells = 0; max_cells <= 7; max_cells++) {
         int out_cells = -1;
-        size_t bytes = sag_str_clip(text, sizeof(text), max_cells,
+        size_t bytes = yew_str_clip(text, sizeof(text), max_cells,
                                     &out_cells);
 
-        SAG_ASSERT_EQ_U64(bytes, kept[max_cells]);
-        SAG_ASSERT_EQ_I64(out_cells, cells[max_cells]);
-        SAG_ASSERT(out_cells <= max_cells);
+        YEW_ASSERT_EQ_U64(bytes, kept[max_cells]);
+        YEW_ASSERT_EQ_I64(out_cells, cells[max_cells]);
+        YEW_ASSERT(out_cells <= max_cells);
     }
     {
         int tab_cells = -1;
 
-        SAG_ASSERT_EQ_U64(sag_str_clip((const u8 *)"\tA", 2u, 1,
+        YEW_ASSERT_EQ_U64(yew_str_clip((const u8 *)"\tA", 2u, 1,
                                        &tab_cells), 1u);
-        SAG_ASSERT_EQ_I64(tab_cells, 1);
+        YEW_ASSERT_EQ_I64(tab_cells, 1);
     }
-    SAG_ASSERT_EQ_U64(sag_str_clip(NULL, 4u, 3, NULL), 0u);
-    SAG_ASSERT_EQ_U64(sag_str_clip(text, sizeof(text), -1, NULL), 0u);
+    YEW_ASSERT_EQ_U64(yew_str_clip(NULL, 4u, 3, NULL), 0u);
+    YEW_ASSERT_EQ_U64(yew_str_clip(text, sizeof(text), -1, NULL), 0u);
 }

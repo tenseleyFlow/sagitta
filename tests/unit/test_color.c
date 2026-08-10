@@ -8,13 +8,13 @@ typedef struct Rgb256Vector {
     u8 r, g, b, want;
 } Rgb256Vector;
 
-static const char *tier_sag_colors;
+static const char *tier_yew_colors;
 static const char *tier_term;
 
 static const char *tier_getenv(const char *name)
 {
-    if (strcmp(name, "SAG_COLORS") == 0)
-        return tier_sag_colors;
+    if (strcmp(name, "YEW_COLORS") == 0)
+        return tier_yew_colors;
     if (strcmp(name, "TERM") == 0)
         return tier_term;
     return NULL;
@@ -36,8 +36,8 @@ void test_color_rgb_to_256_vectors(void)
     };
     size_t i;
 
-    for (i = 0u; i < SAG_ARRAY_LEN(vectors); i++) {
-        SAG_ASSERT_EQ_U64(sag_rgb_to_256(vectors[i].r, vectors[i].g,
+    for (i = 0u; i < YEW_ARRAY_LEN(vectors); i++) {
+        YEW_ASSERT_EQ_U64(yew_rgb_to_256(vectors[i].r, vectors[i].g,
                                         vectors[i].b), vectors[i].want);
     }
 }
@@ -49,14 +49,14 @@ void test_color_grayscale_ramp_roundtrips(void)
     for (i = 0u; i < 24u; i++) {
         u8 value = (u8)(8u + 10u * i);
 
-        SAG_ASSERT_EQ_U64(sag_rgb_to_256(value, value, value), 232u + i);
+        YEW_ASSERT_EQ_U64(yew_rgb_to_256(value, value, value), 232u + i);
     }
 }
 
 void test_color_cube_wins_equal_distance(void)
 {
     /* Black is both cube entry 16 and equidistant from the clamped ramp. */
-    SAG_ASSERT_EQ_U64(sag_rgb_to_256(0u, 0u, 0u), 16u);
+    YEW_ASSERT_EQ_U64(yew_rgb_to_256(0u, 0u, 0u), 16u);
 }
 
 void test_color_rgb_to_16_canonical_and_tie(void)
@@ -74,9 +74,9 @@ void test_color_rgb_to_16_canonical_and_tie(void)
     u8 i;
 
     for (i = 0u; i < 16u; i++)
-        SAG_ASSERT_EQ_U64(sag_rgb_to_16(ansi[i][0], ansi[i][1], ansi[i][2]),
+        YEW_ASSERT_EQ_U64(yew_rgb_to_16(ansi[i][0], ansi[i][1], ansi[i][2]),
                           i);
-    SAG_ASSERT_EQ_U64(sag_rgb_to_16(0u, 0u, 64u), 0u);
+    YEW_ASSERT_EQ_U64(yew_rgb_to_16(0u, 0u, 64u), 0u);
 }
 
 void test_color_render_tier_environment(void)
@@ -102,14 +102,14 @@ void test_color_render_tier_environment(void)
     };
     size_t i;
 
-    for (i = 0u; i < SAG_ARRAY_LEN(vectors); i++) {
+    for (i = 0u; i < YEW_ARRAY_LEN(vectors); i++) {
         TtyCaps caps = {0};
 
         caps.truecolor = vectors[i].cap_truecolor;
-        tier_sag_colors = vectors[i].forced;
+        tier_yew_colors = vectors[i].forced;
         tier_term = vectors[i].term;
-        SAG_ASSERT_EQ_U64(sag_render_tier(&caps, tier_getenv), vectors[i].want);
+        YEW_ASSERT_EQ_U64(yew_render_tier(&caps, tier_getenv), vectors[i].want);
     }
-    tier_sag_colors = NULL;
+    tier_yew_colors = NULL;
     tier_term = NULL;
 }

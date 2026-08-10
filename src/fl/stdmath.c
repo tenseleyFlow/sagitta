@@ -412,6 +412,6 @@ static const FlConstDef MATH_CONSTS[] = {
 };
 
 const FlModuleDef fl_mod_math = {
-    "math", MATH_DEFS, (u32)SAG_ARRAY_LEN(MATH_DEFS),
-    MATH_CONSTS, (u32)SAG_ARRAY_LEN(MATH_CONSTS)
+    "math", MATH_DEFS, (u32)YEW_ARRAY_LEN(MATH_DEFS),
+    MATH_CONSTS, (u32)YEW_ARRAY_LEN(MATH_CONSTS)
 };

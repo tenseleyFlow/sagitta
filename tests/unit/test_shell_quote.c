@@ -1,4 +1,4 @@
-/* Sprint 19 §9 + DoD 10: sag_shell_quote must round-trip every byte
+/* Sprint 19 §9 + DoD 10: yew_shell_quote must round-trip every byte
  * through a real /bin/sh.  The quoting rule is the whole security story
  * for user-composed :! lines carrying s18 %-expansions. */
 #define _POSIX_C_SOURCE 200809L
@@ -24,10 +24,10 @@ static bool sh_roundtrip(const u8 *src, size_t len, Bytebuf *out)
 
     bytebuf_init(&cmd);
     bytebuf_append(&cmd, "printf %s ", 10U);
-    sag_shell_quote(&cmd, src, len);
+    yew_shell_quote(&cmd, src, len);
     bytebuf_push_u8(&cmd, 0U);
 
-    if (!sag_pipe_cloexec(fds)) {
+    if (!yew_pipe_cloexec(fds)) {
         bytebuf_free(&cmd);
         return false;
     }
@@ -76,23 +76,23 @@ void test_shell_quote_algorithm(void)
     Bytebuf out;
 
     bytebuf_init(&out);
-    sag_shell_quote(&out, (const u8 *)"", 0U);
-    SAG_ASSERT_EQ_U64((u64)out.len, 2U);
-    SAG_ASSERT_EQ_MEM(out.data, "''", 2U);
+    yew_shell_quote(&out, (const u8 *)"", 0U);
+    YEW_ASSERT_EQ_U64((u64)out.len, 2U);
+    YEW_ASSERT_EQ_MEM(out.data, "''", 2U);
 
     out.len = 0U;
-    sag_shell_quote(&out, (const u8 *)"plain", 5U);
-    SAG_ASSERT_EQ_MEM(out.data, "'plain'", 7U);
+    yew_shell_quote(&out, (const u8 *)"plain", 5U);
+    YEW_ASSERT_EQ_MEM(out.data, "'plain'", 7U);
 
     /* The one interesting byte: close, escape, reopen. */
     out.len = 0U;
-    sag_shell_quote(&out, (const u8 *)"it's", 4U);
-    SAG_ASSERT_EQ_MEM(out.data, "'it'\\''s'", 9U);
+    yew_shell_quote(&out, (const u8 *)"it's", 4U);
+    YEW_ASSERT_EQ_MEM(out.data, "'it'\\''s'", 9U);
 
     /* Nothing else is escaped — inside '...' sh takes bytes literally. */
     out.len = 0U;
-    sag_shell_quote(&out, (const u8 *)"$x `y` \\z", 9U);
-    SAG_ASSERT_EQ_MEM(out.data, "'$x `y` \\z'", 11U);
+    yew_shell_quote(&out, (const u8 *)"$x `y` \\z", 9U);
+    YEW_ASSERT_EQ_MEM(out.data, "'$x `y` \\z'", 11U);
     bytebuf_free(&out);
 }
 
@@ -130,15 +130,15 @@ void test_shell_quote_roundtrips_hard_cases(void)
     };
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(cases); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(cases); i++) {
         Bytebuf got;
         size_t len = strlen(cases[i]);
 
         bytebuf_init(&got);
-        SAG_ASSERT(sh_roundtrip((const u8 *)cases[i], len, &got));
-        SAG_ASSERT_EQ_U64((u64)got.len, (u64)len);
+        YEW_ASSERT(sh_roundtrip((const u8 *)cases[i], len, &got));
+        YEW_ASSERT_EQ_U64((u64)got.len, (u64)len);
         if (len != 0U)
-            SAG_ASSERT_EQ_MEM(got.data, cases[i], len);
+            YEW_ASSERT_EQ_MEM(got.data, cases[i], len);
         bytebuf_free(&got);
     }
 }
@@ -165,10 +165,10 @@ void test_shell_quote_roundtrips_random_bytes(void)
         }
         seed = seed * 6364136223846793005ULL + 1442695040888963407ULL;
         bytebuf_init(&got);
-        SAG_ASSERT(sh_roundtrip(src, len, &got));
-        SAG_ASSERT_EQ_U64((u64)got.len, (u64)len);
+        YEW_ASSERT(sh_roundtrip(src, len, &got));
+        YEW_ASSERT_EQ_U64((u64)got.len, (u64)len);
         if (len != 0U)
-            SAG_ASSERT_EQ_MEM(got.data, src, len);
+            YEW_ASSERT_EQ_MEM(got.data, src, len);
         bytebuf_free(&got);
     }
 }

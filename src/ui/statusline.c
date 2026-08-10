@@ -25,55 +25,55 @@ typedef struct Segment {
     bool shown;
 } Segment;
 
-SagUiStyle sag_statusline_mode_style(Mode mode)
+YewUiStyle yew_statusline_mode_style(Mode mode)
 {
-    static const SagUiStyle styles[SAG_MODE__N] = {
-        [SAG_MODE_L] = {{SAG_COLOR_RGB, 235U, 244U, 255U},
-                        {SAG_COLOR_RGB, 38U, 110U, 186U},
-                        {SAG_COLOR_RGB, 218U, 229U, 240U},
-                        {SAG_COLOR_RGB, 20U, 48U, 76U}, SAG_ATTR_BOLD},
-        [SAG_MODE_W] = {{SAG_COLOR_RGB, 10U, 35U, 40U},
-                        {SAG_COLOR_RGB, 66U, 190U, 202U},
-                        {SAG_COLOR_RGB, 205U, 235U, 238U},
-                        {SAG_COLOR_RGB, 19U, 62U, 67U}, SAG_ATTR_BOLD},
-        [SAG_MODE_B] = {{SAG_COLOR_RGB, 245U, 238U, 255U},
-                        {SAG_COLOR_RGB, 126U, 87U, 194U},
-                        {SAG_COLOR_RGB, 228U, 218U, 244U},
-                        {SAG_COLOR_RGB, 52U, 37U, 78U}, SAG_ATTR_BOLD},
-        [SAG_MODE_H] = {{SAG_COLOR_RGB, 43U, 31U, 8U},
-                        {SAG_COLOR_RGB, 225U, 168U, 44U},
-                        {SAG_COLOR_RGB, 245U, 229U, 194U},
-                        {SAG_COLOR_RGB, 75U, 57U, 20U}, SAG_ATTR_BOLD},
-        [SAG_MODE_I] = {{SAG_COLOR_RGB, 225U, 247U, 230U},
-                        {SAG_COLOR_RGB, 42U, 145U, 72U},
-                        {SAG_COLOR_RGB, 216U, 238U, 222U},
-                        {SAG_COLOR_RGB, 18U, 64U, 31U}, SAG_ATTR_BOLD},
-        [SAG_MODE_E] = {{SAG_COLOR_RGB, 47U, 24U, 6U},
-                        {SAG_COLOR_RGB, 231U, 125U, 36U},
-                        {SAG_COLOR_RGB, 247U, 224U, 204U},
-                        {SAG_COLOR_RGB, 78U, 42U, 15U}, SAG_ATTR_BOLD},
-        [SAG_MODE_F] = {{SAG_COLOR_RGB, 250U, 235U, 248U},
-                        {SAG_COLOR_RGB, 177U, 61U, 155U},
-                        {SAG_COLOR_RGB, 239U, 215U, 235U},
-                        {SAG_COLOR_RGB, 72U, 27U, 64U}, SAG_ATTR_BOLD},
+    static const YewUiStyle styles[YEW_MODE__N] = {
+        [YEW_MODE_L] = {{YEW_COLOR_RGB, 235U, 244U, 255U},
+                        {YEW_COLOR_RGB, 38U, 110U, 186U},
+                        {YEW_COLOR_RGB, 218U, 229U, 240U},
+                        {YEW_COLOR_RGB, 20U, 48U, 76U}, YEW_ATTR_BOLD},
+        [YEW_MODE_W] = {{YEW_COLOR_RGB, 10U, 35U, 40U},
+                        {YEW_COLOR_RGB, 66U, 190U, 202U},
+                        {YEW_COLOR_RGB, 205U, 235U, 238U},
+                        {YEW_COLOR_RGB, 19U, 62U, 67U}, YEW_ATTR_BOLD},
+        [YEW_MODE_B] = {{YEW_COLOR_RGB, 245U, 238U, 255U},
+                        {YEW_COLOR_RGB, 126U, 87U, 194U},
+                        {YEW_COLOR_RGB, 228U, 218U, 244U},
+                        {YEW_COLOR_RGB, 52U, 37U, 78U}, YEW_ATTR_BOLD},
+        [YEW_MODE_H] = {{YEW_COLOR_RGB, 43U, 31U, 8U},
+                        {YEW_COLOR_RGB, 225U, 168U, 44U},
+                        {YEW_COLOR_RGB, 245U, 229U, 194U},
+                        {YEW_COLOR_RGB, 75U, 57U, 20U}, YEW_ATTR_BOLD},
+        [YEW_MODE_I] = {{YEW_COLOR_RGB, 225U, 247U, 230U},
+                        {YEW_COLOR_RGB, 42U, 145U, 72U},
+                        {YEW_COLOR_RGB, 216U, 238U, 222U},
+                        {YEW_COLOR_RGB, 18U, 64U, 31U}, YEW_ATTR_BOLD},
+        [YEW_MODE_E] = {{YEW_COLOR_RGB, 47U, 24U, 6U},
+                        {YEW_COLOR_RGB, 231U, 125U, 36U},
+                        {YEW_COLOR_RGB, 247U, 224U, 204U},
+                        {YEW_COLOR_RGB, 78U, 42U, 15U}, YEW_ATTR_BOLD},
+        [YEW_MODE_F] = {{YEW_COLOR_RGB, 250U, 235U, 248U},
+                        {YEW_COLOR_RGB, 177U, 61U, 155U},
+                        {YEW_COLOR_RGB, 239U, 215U, 235U},
+                        {YEW_COLOR_RGB, 72U, 27U, 64U}, YEW_ATTR_BOLD},
     };
 
-    if (mode < SAG_MODE_L || mode >= SAG_MODE__N)
-        SAG_BUG("statusline style: invalid mode");
+    if (mode < YEW_MODE_L || mode >= YEW_MODE__N)
+        YEW_BUG("statusline style: invalid mode");
     return styles[mode];
 }
 
 static int cells(const char *text)
 {
-    int width = sag_str_width((const u8 *)text, strlen(text),
+    int width = yew_str_width((const u8 *)text, strlen(text),
                               STATUS_TABWIDTH);
 
     return width < 0 ? 0 : width;
 }
 
-static SagColor indexed_color(u8 index)
+static YewColor indexed_color(u8 index)
 {
-    SagColor color = {SAG_COLOR_INDEXED, index, 0U, 0U};
+    YewColor color = {YEW_COLOR_INDEXED, index, 0U, 0U};
 
     return color;
 }
@@ -139,22 +139,22 @@ static bool read_only(const Buffer *buffer)
     return buffer->meta.exists && (buffer->meta.mode & write_bits) == 0;
 }
 
-static const char *eol_text(SagEol eol)
+static const char *eol_text(YewEol eol)
 {
     switch (eol) {
-    case SAG_EOL_LF:
+    case YEW_EOL_LF:
         return "lf";
-    case SAG_EOL_CRLF:
+    case YEW_EOL_CRLF:
         return "crlf";
-    case SAG_EOL_MIXED:
+    case YEW_EOL_MIXED:
         return "mixed!";
     }
-    SAG_BUG("statusline: invalid EOL kind");
+    YEW_BUG("statusline: invalid EOL kind");
 }
 
 static void percent_text(Win *w, char *dst, size_t cap)
 {
-    u64 lines = sag_textbuf_line_count(w->buf->tb);
+    u64 lines = yew_textbuf_line_count(w->buf->tb);
     u64 rows = w->vp.rows;
     u64 denominator;
     u64 percent;
@@ -167,7 +167,7 @@ static void percent_text(Win *w, char *dst, size_t cap)
         (void)snprintf(dst, cap, "top");
         return;
     }
-    if (sag_vp_last_visible_line(w).v + 1U >= lines) {
+    if (yew_vp_last_visible_line(w).v + 1U >= lines) {
         (void)snprintf(dst, cap, "bot");
         return;
     }
@@ -181,25 +181,25 @@ static void percent_text(Win *w, char *dst, size_t cap)
 
 static const char *highlight_unit(const Win *w)
 {
-    if (w->h.unit == &sag_unit_line)
+    if (w->h.unit == &yew_unit_line)
         return "L";
-    if (w->h.unit == &sag_unit_word)
+    if (w->h.unit == &yew_unit_word)
         return "W";
-    if (w->h.unit == &sag_unit_block)
+    if (w->h.unit == &yew_unit_block)
         return "B";
-    if (w->h.unit == &sag_unit_char)
+    if (w->h.unit == &yew_unit_char)
         return "C";
-    if (w->h.from >= SAG_MODE_L && w->h.from <= SAG_MODE_B)
-        return sag_modes[w->h.from].name;
+    if (w->h.from >= YEW_MODE_L && w->h.from <= YEW_MODE_B)
+        return yew_modes[w->h.from].name;
     return "C";
 }
 
 static void chip_text(const Ed *ed, const Win *w, char *dst, size_t cap)
 {
-    if (ed->mode == SAG_MODE_H) {
+    if (ed->mode == YEW_MODE_H) {
         (void)snprintf(dst, cap, " H\xC2\xB7%s ", highlight_unit(w));
     } else {
-        (void)snprintf(dst, cap, " %s ", sag_modes[ed->mode].name);
+        (void)snprintf(dst, cap, " %s ", yew_modes[ed->mode].name);
     }
 }
 
@@ -270,7 +270,7 @@ static void path_clip(const char *path, int max_cells,
     }
     {
         int used = 0;
-        size_t keep = sag_str_clip((const u8 *)base, strlen(base),
+        size_t keep = yew_str_clip((const u8 *)base, strlen(base),
                                    max_cells - 1, &used);
 
         if (keep >= cap)
@@ -298,7 +298,7 @@ static size_t append_text(char *dst, size_t cap, size_t at,
     return at + len;
 }
 
-void sag_statusline_build(const Ed *ed, Win *w, u16 cols,
+void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
                           StatuslineText *out)
 {
     const Cursor *cursor;
@@ -332,24 +332,24 @@ void sag_statusline_build(const Ed *ed, Win *w, u16 cols,
 
     if (ed == NULL || w == NULL || out == NULL || w->buf == NULL ||
         w->buf->tb == NULL)
-        SAG_BUG("statusline build: missing editor window");
-    if (ed->mode < SAG_MODE_L || ed->mode >= SAG_MODE__N)
-        SAG_BUG("statusline build: invalid mode");
+        YEW_BUG("statusline build: missing editor window");
+    if (ed->mode < YEW_MODE_L || ed->mode >= YEW_MODE__N)
+        YEW_BUG("statusline build: invalid mode");
     if (w->cs.curs.len == 0U || (size_t)w->cs.primary >= w->cs.curs.len)
-        SAG_BUG("statusline build: missing primary cursor");
+        YEW_BUG("statusline build: missing primary cursor");
     memset(out, 0, sizeof(*out));
     path = unambiguous_path(ed, w->buf);
     path_len = strlen(path);
     if (path_len > SIZE_MAX - (size_t)cols - 512U)
-        SAG_BUG("statusline build: text capacity overflow");
+        YEW_BUG("statusline build: text capacity overflow");
     out->body_cap = path_len + (size_t)cols + 512U;
-    out->body = sag_xmalloc(out->body_cap);
+    out->body = yew_xmalloc(out->body_cap);
     out->body[0] = '\0';
     chip_text(ed, w, out->chip, sizeof(out->chip));
     out->chip_len = strlen(out->chip);
     out->chip_cells = (u16)cells(out->chip);
     (void)memset(&rec_status, 0, sizeof(rec_status));
-    (void)sag_record_status(ed, &rec_status);
+    (void)yew_record_status(ed, &rec_status);
     if (rec_status.active) {
         if (rec_status.nevents >= 10U)
             (void)snprintf(recording, sizeof(recording),
@@ -370,18 +370,18 @@ void sag_statusline_build(const Ed *ed, Win *w, u16 cols,
         return;
     available = (int)cols - out->chip_cells - out->recording_cells;
     cursor = &w->cs.curs.data[w->cs.primary];
-    line = sag_textbuf_line_of(w->buf->tb, cursor->pos);
-    line_span = sag_textbuf_line_span(w->buf->tb, line);
-    gcol = sag_off_to_gcol(w->buf->tb, line_span, cursor->pos);
+    line = yew_textbuf_line_of(w->buf->tb, cursor->pos);
+    line_span = yew_textbuf_line_span(w->buf->tb, line);
+    gcol = yew_off_to_gcol(w->buf->tb, line_span, cursor->pos);
     if (w->cs.selstacks.data[w->cs.primary].n == 0U ||
         cursor->anchor.v == cursor->pos.v) {
         (void)snprintf(position, sizeof(position), "%llu:%llu",
                        (unsigned long long)(line.v + 1U),
                        (unsigned long long)(gcol.v + 1U));
     } else {
-        anchor_line = sag_textbuf_line_of(w->buf->tb, cursor->anchor);
-        anchor_span = sag_textbuf_line_span(w->buf->tb, anchor_line);
-        anchor_gcol = sag_off_to_gcol(w->buf->tb, anchor_span,
+        anchor_line = yew_textbuf_line_of(w->buf->tb, cursor->anchor);
+        anchor_span = yew_textbuf_line_span(w->buf->tb, anchor_line);
+        anchor_gcol = yew_off_to_gcol(w->buf->tb, anchor_span,
                                      cursor->anchor);
         (void)snprintf(position, sizeof(position), "%llu:%llu@%llu:%llu",
                        (unsigned long long)(line.v + 1U),
@@ -414,7 +414,7 @@ void sag_statusline_build(const Ed *ed, Win *w, u16 cols,
         /* Sprint 19 §8: the job badge is present iff something is
          * running, and disappears at zero — a badge that lingers at
          * "0 jobs" trains people to ignore it. */
-        u32 running = sag_job_running_count(ed);
+        u32 running = yew_job_running_count(ed);
 
         if (running != 0U)
             (void)snprintf(job_badge, sizeof(job_badge),
@@ -455,7 +455,7 @@ void sag_statusline_build(const Ed *ed, Win *w, u16 cols,
         /* The wrap indicator, for the two seconds after a search came
          * round the other end.  It is a glyph rather than a message so
          * it does not displace whatever the message line is saying. */
-        bool show = sag_search_wrap_until(ed) > ed->now_ms;
+        bool show = yew_search_wrap_until(ed) > ed->now_ms;
 
         if (show)
             (void)snprintf(wrap_badge, sizeof(wrap_badge), "\xE2\x86\xBB");
@@ -464,18 +464,18 @@ void sag_statusline_build(const Ed *ed, Win *w, u16 cols,
         segments[10] = (Segment){wrap_badge, 2U, show};
     }
     path_cells = cells(path);
-    dirty_cells = sag_buf_dirty(w->buf) ? 2 : 0;
-    right_cells = right_width(segments, SAG_ARRAY_LEN(segments));
+    dirty_cells = yew_buf_dirty(w->buf) ? 2 : 0;
+    right_cells = right_width(segments, YEW_ARRAY_LEN(segments));
     min_cells = 1 + path_cells + dirty_cells +
                 (right_cells == 0 ? 0 : 2 + right_cells);
     for (priority = 5U; priority >= 1U && min_cells > available;
          priority--) {
-        drop_priority(segments, SAG_ARRAY_LEN(segments), priority);
-        right_cells = right_width(segments, SAG_ARRAY_LEN(segments));
+        drop_priority(segments, YEW_ARRAY_LEN(segments), priority);
+        right_cells = right_width(segments, YEW_ARRAY_LEN(segments));
         min_cells = 1 + path_cells + dirty_cells +
                     (right_cells == 0 ? 0 : 2 + right_cells);
     }
-    right_cells = right_width(segments, SAG_ARRAY_LEN(segments));
+    right_cells = right_width(segments, YEW_ARRAY_LEN(segments));
     {
         int reserved = 1 + dirty_cells +
                        (right_cells == 0 ? 0 : 2 + right_cells);
@@ -483,13 +483,13 @@ void sag_statusline_build(const Ed *ed, Win *w, u16 cols,
 
         if (path_budget < 0)
             path_budget = 0;
-        clipped_path = sag_xmalloc(path_len + 4U);
+        clipped_path = yew_xmalloc(path_len + 4U);
         path_clip(path, path_budget, clipped_path, path_len + 4U);
     }
     path_cells = cells(clipped_path);
     at = append_text(out->body, out->body_cap, at, " ");
     at = append_text(out->body, out->body_cap, at, clipped_path);
-    if (sag_buf_dirty(w->buf))
+    if (yew_buf_dirty(w->buf))
         at = append_text(out->body, out->body_cap, at, " *");
     if (right_cells != 0) {
         int used = 1 + path_cells + dirty_cells;
@@ -499,7 +499,7 @@ void sag_statusline_build(const Ed *ed, Win *w, u16 cols,
             gap = 2;
         while (gap-- > 0)
             at = append_text(out->body, out->body_cap, at, " ");
-        for (i = 0U; i < SAG_ARRAY_LEN(segments); i++) {
+        for (i = 0U; i < YEW_ARRAY_LEN(segments); i++) {
             if (!segments[i].shown || segments[i].text[0] == '\0')
                 continue;
             if (i != 0U) {
@@ -512,11 +512,11 @@ void sag_statusline_build(const Ed *ed, Win *w, u16 cols,
                 if (prior)
                     at = append_text(out->body, out->body_cap, at, "  ");
             }
-            if (i == 2U && w->buf->meta.eol == SAG_EOL_MIXED)
+            if (i == 2U && w->buf->meta.eol == YEW_EOL_MIXED)
                 out->warn_at = at;
             at = append_text(out->body, out->body_cap, at,
                              segments[i].text);
-            if (i == 2U && w->buf->meta.eol == SAG_EOL_MIXED)
+            if (i == 2U && w->buf->meta.eol == YEW_EOL_MIXED)
                 out->warn_len = at - out->warn_at;
         }
     }
@@ -525,7 +525,7 @@ void sag_statusline_build(const Ed *ed, Win *w, u16 cols,
     free(clipped_path);
 }
 
-void sag_statusline_text_free(StatuslineText *text)
+void yew_statusline_text_free(StatuslineText *text)
 {
     if (text == NULL)
         return;
@@ -533,65 +533,65 @@ void sag_statusline_text_free(StatuslineText *text)
     memset(text, 0, sizeof(*text));
 }
 
-void sag_statusline_draw(Ed *ed, Win *w)
+void yew_statusline_draw(Ed *ed, Win *w)
 {
     StatuslineText text;
-    SagUiStyle style;
-    SagUiStyle recording_style;
+    YewUiStyle style;
+    YewUiStyle recording_style;
     Grid *grid;
     Cell blank;
     u16 row;
     u16 col;
 
     if (ed == NULL || w == NULL)
-        SAG_BUG("statusline draw: missing editor window");
+        YEW_BUG("statusline draw: missing editor window");
     grid = &ed->grid;
     if (ed->footer_rect.h == 0U || ed->footer_rect.y >= grid->rows ||
         grid->cols == 0U)
         return;
     row = ed->footer_rect.y;
-    style = sag_statusline_mode_style(ed->mode);
+    style = yew_statusline_mode_style(ed->mode);
     /* H is the current select/highlight role until named theme roles land. */
-    recording_style = sag_statusline_mode_style(SAG_MODE_H);
-    sag_statusline_build(ed, w, ed->footer_rect.w, &text);
+    recording_style = yew_statusline_mode_style(YEW_MODE_H);
+    yew_statusline_build(ed, w, ed->footer_rect.w, &text);
     blank = grid->blank;
     blank.fg = style.row_fg;
     blank.bg = style.row_bg;
     blank.attrs = 0U;
-    sag_grid_fill(grid, row, ed->footer_rect.x,
+    yew_grid_fill(grid, row, ed->footer_rect.x,
                   (u16)(ed->footer_rect.x + ed->footer_rect.w), blank);
-    col = sag_grid_puts(grid, row, ed->footer_rect.x,
+    col = yew_grid_puts(grid, row, ed->footer_rect.x,
                         (const u8 *)text.chip, text.chip_len,
                         style.chip_fg, style.chip_bg, style.attrs);
     if (col < grid->cols && text.recording_len != 0U)
-        col = sag_grid_puts(grid, row, col,
+        col = yew_grid_puts(grid, row, col,
                             (const u8 *)text.recording,
                             text.recording_len,
                             recording_style.chip_fg,
                             recording_style.chip_bg,
-                            SAG_ATTR_BOLD);
+                            YEW_ATTR_BOLD);
     if (col < grid->cols && text.body_len != 0U) {
         if (text.warn_len == 0U) {
-            (void)sag_grid_puts(grid, row, col, (const u8 *)text.body,
+            (void)yew_grid_puts(grid, row, col, (const u8 *)text.body,
                                 text.body_len, style.row_fg, style.row_bg,
                                 0U);
         } else {
             size_t tail = text.warn_at + text.warn_len;
 
-            col = sag_grid_puts(grid, row, col, (const u8 *)text.body,
+            col = yew_grid_puts(grid, row, col, (const u8 *)text.body,
                                 text.warn_at, style.row_fg, style.row_bg,
                                 0U);
-            col = sag_grid_puts(grid, row, col,
+            col = yew_grid_puts(grid, row, col,
                                 (const u8 *)text.body + text.warn_at,
                                 text.warn_len,
                                 indexed_color(STATUS_WARN_COLOR),
-                                style.row_bg, SAG_ATTR_BOLD);
+                                style.row_bg, YEW_ATTR_BOLD);
             if (tail < text.body_len)
-                (void)sag_grid_puts(grid, row, col,
+                (void)yew_grid_puts(grid, row, col,
                                     (const u8 *)text.body + tail,
                                     text.body_len - tail, style.row_fg,
                                     style.row_bg, 0U);
         }
     }
-    sag_statusline_text_free(&text);
+    yew_statusline_text_free(&text);
 }

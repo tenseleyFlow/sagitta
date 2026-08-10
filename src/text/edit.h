@@ -1,5 +1,5 @@
-#ifndef SAG_TEXT_EDIT_H
-#define SAG_TEXT_EDIT_H
+#ifndef YEW_TEXT_EDIT_H
+#define YEW_TEXT_EDIT_H
 
 #include "edit/multicursor.h"
 #include "text/file.h"
@@ -19,7 +19,7 @@ typedef struct EditCtx {
      * Sprint 21 §5: the changelist is another consumer of this one op
      * stream, not a parallel notification path.  A hook rather than a
      * ChangeList* because the list lives at the edit layer and this is
-     * the text layer; undo replay writes through sag_textbuf_* directly
+     * the text layer; undo replay writes through yew_textbuf_* directly
      * and so never fires it, which is exactly right — replaying an undo
      * is not a new change.
      */
@@ -28,10 +28,10 @@ typedef struct EditCtx {
     i64 now_ms;
 } EditCtx;
 
-bool sag_edit_insert(EditCtx *ec, ByteOff at, const u8 *bytes, u64 len);
-bool sag_edit_delete(EditCtx *ec, Span range);
-SagSaveErr sag_edit_save(EditCtx *ec, const char *path);
+bool yew_edit_insert(EditCtx *ec, ByteOff at, const u8 *bytes, u64 len);
+bool yew_edit_delete(EditCtx *ec, Span range);
+YewSaveErr yew_edit_save(EditCtx *ec, const char *path);
 /* Internal: undo/navigation must establish durability before replay. */
-bool sag_edit_ensure_journal(EditCtx *ec);
+bool yew_edit_ensure_journal(EditCtx *ec);
 
 #endif

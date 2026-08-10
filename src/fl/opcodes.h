@@ -1,5 +1,5 @@
-#ifndef SAG_FL_OPCODES_H
-#define SAG_FL_OPCODES_H
+#ifndef YEW_FL_OPCODES_H
+#define YEW_FL_OPCODES_H
 
 /*
  * Sprint 30 deliverable 5: everything derived from opcodes.def.
@@ -56,4 +56,4 @@ void fl_disasm_chunk(Bytebuf *out, const FlChunk *ch, const Interner *in);
 void fl_disasm_op(Bytebuf *out, const FlChunk *ch, u32 at,
                   const Interner *in);
 
-#endif /* SAG_FL_OPCODES_H */
+#endif /* YEW_FL_OPCODES_H */

@@ -33,7 +33,7 @@ static void node_ref(PieceNode *node)
     if (node == NULL)
         return;
     if (node->refs == UINT32_MAX)
-        SAG_BUG("piece node reference count overflow");
+        YEW_BUG("piece node reference count overflow");
     node->refs++;
 }
 
@@ -46,13 +46,13 @@ static void node_fix(PieceNode *node)
 
     if (bytes > UINT64_MAX - piece_len ||
         bytes + piece_len > UINT64_MAX - node_bytes(node->right))
-        SAG_BUG("piece tree byte count overflow");
+        YEW_BUG("piece tree byte count overflow");
     if (lfs > UINT64_MAX - node->lf_count ||
         lfs + node->lf_count > UINT64_MAX - node_lfs(node->right))
-        SAG_BUG("piece tree newline count overflow");
+        YEW_BUG("piece tree newline count overflow");
     count += node_count(node->right);
     if (count > UINT32_MAX)
-        SAG_BUG("piece tree node count overflow");
+        YEW_BUG("piece tree node count overflow");
     node->sub_bytes = bytes + piece_len + node_bytes(node->right);
     node->sub_lfs = lfs + node->lf_count + node_lfs(node->right);
     node->sub_count = (u32)count;
@@ -60,7 +60,7 @@ static void node_fix(PieceNode *node)
 
 static PieceNode *node_new(Piece piece)
 {
-    PieceNode *node = sag_xmalloc(sizeof(*node));
+    PieceNode *node = yew_xmalloc(sizeof(*node));
 
     node->left = NULL;
     node->right = NULL;
@@ -82,7 +82,7 @@ static PieceNode *node_own(PieceNode *node)
 
     if (node == NULL || node->refs == 1U)
         return node;
-    copy = sag_xmalloc(sizeof(*copy));
+    copy = yew_xmalloc(sizeof(*copy));
     *copy = *node;
     copy->refs = 1U;
     node_ref(copy->left);
@@ -93,7 +93,7 @@ static PieceNode *node_own(PieceNode *node)
 
 static void node_release(PieceNode *root)
 {
-    PieceNode *stack[SAG_PIECE_MAX_DEPTH * 2U];
+    PieceNode *stack[YEW_PIECE_MAX_DEPTH * 2U];
     u32 depth = 0;
 
     if (root == NULL)
@@ -105,7 +105,7 @@ static void node_release(PieceNode *root)
         PieceNode *right;
 
         if (node->refs == 0U)
-            SAG_BUG("piece node reference count underflow");
+            YEW_BUG("piece node reference count underflow");
         node->refs--;
         if (node->refs != 0U)
             continue;
@@ -113,13 +113,13 @@ static void node_release(PieceNode *root)
         right = node->right;
         free(node);
         if (left != NULL) {
-            if (depth == SAG_ARRAY_LEN(stack))
-                SAG_BUG("piece release stack overflow");
+            if (depth == YEW_ARRAY_LEN(stack))
+                YEW_BUG("piece release stack overflow");
             stack[depth++] = left;
         }
         if (right != NULL) {
-            if (depth == SAG_ARRAY_LEN(stack))
-                SAG_BUG("piece release stack overflow");
+            if (depth == YEW_ARRAY_LEN(stack))
+                YEW_BUG("piece release stack overflow");
             stack[depth++] = right;
         }
     }
@@ -130,7 +130,7 @@ static PieceNode *rotate_left(PieceNode *node)
     PieceNode *right = node_own(node->right);
 
     if (right == NULL)
-        SAG_BUG("piece tree left rotation without right child");
+        YEW_BUG("piece tree left rotation without right child");
     node->right = right->left;
     right->left = node;
     node_fix(node);
@@ -143,7 +143,7 @@ static PieceNode *rotate_right(PieceNode *node)
     PieceNode *left = node_own(node->left);
 
     if (left == NULL)
-        SAG_BUG("piece tree right rotation without left child");
+        YEW_BUG("piece tree right rotation without left child");
     node->left = left->right;
     left->right = node;
     node_fix(node);
@@ -157,10 +157,10 @@ static PieceNode *rotate_left_double(PieceNode *node)
     PieceNode *middle;
 
     if (right == NULL)
-        SAG_BUG("piece tree double rotation without right child");
+        YEW_BUG("piece tree double rotation without right child");
     middle = node_own(right->left);
     if (middle == NULL)
-        SAG_BUG("piece tree double rotation without middle child");
+        YEW_BUG("piece tree double rotation without middle child");
     node->right = middle->left;
     right->left = middle->right;
     middle->left = node;
@@ -177,10 +177,10 @@ static PieceNode *rotate_right_double(PieceNode *node)
     PieceNode *middle;
 
     if (left == NULL)
-        SAG_BUG("piece tree double rotation without left child");
+        YEW_BUG("piece tree double rotation without left child");
     middle = node_own(left->right);
     if (middle == NULL)
-        SAG_BUG("piece tree double rotation without middle child");
+        YEW_BUG("piece tree double rotation without middle child");
     node->left = middle->right;
     left->right = middle->left;
     middle->right = node;
@@ -306,7 +306,7 @@ static PieceNode *node_concat(PieceNode *left, PieceNode *right)
         middle = node_take_max(left, &left_rest);
         successor = node_take_min(right, &right_rest);
         if (middle->lf_count > UINT64_MAX - successor->lf_count)
-            SAG_BUG("coalesced piece newline count overflow");
+            YEW_BUG("coalesced piece newline count overflow");
         middle->span.hi = successor->span.hi;
         middle->lf_count += successor->lf_count;
         node_fix(middle);
@@ -334,11 +334,11 @@ static u64 store_lower_bound(const TextStore *store, u64 off)
 
 static const TextStore *text_store(const TextBacking *backing, u8 src)
 {
-    if (src == SAG_STORE_ORIG)
+    if (src == YEW_STORE_ORIG)
         return &backing->orig;
-    if (src == SAG_STORE_ADD)
+    if (src == YEW_STORE_ADD)
         return &backing->add;
-    SAG_BUG("piece references unknown store %u", (unsigned)src);
+    YEW_BUG("piece references unknown store %u", (unsigned)src);
 }
 
 static Piece piece_make(const TextBacking *backing, u8 src, Span span)
@@ -348,7 +348,7 @@ static Piece piece_make(const TextBacking *backing, u8 src, Span span)
     u64 end;
 
     if (span.lo >= span.hi || span.hi > store->len)
-        SAG_BUG("invalid piece span [%llu,%llu) for store length %llu",
+        YEW_BUG("invalid piece span [%llu,%llu) for store length %llu",
                 (unsigned long long)span.lo, (unsigned long long)span.hi,
                 (unsigned long long)store->len);
     piece.src = src;
@@ -377,13 +377,13 @@ static void node_split(TextBuf *tb, PieceNode *root, u64 at,
 
     if (root == NULL) {
         if (at != 0U)
-            SAG_BUG("piece split offset outside empty tree");
+            YEW_BUG("piece split offset outside empty tree");
         *left = NULL;
         *right = NULL;
         return;
     }
     if (at > root->sub_bytes)
-        SAG_BUG("piece split offset outside tree");
+        YEW_BUG("piece split offset outside tree");
     root = node_own(root);
     left_bytes = node_bytes(root->left);
     piece_len = root->span.hi - root->span.lo;
@@ -439,11 +439,11 @@ static PieceNode *node_insert(TextBuf *tb, PieceNode *root, u64 at,
 
     if (root == NULL) {
         if (at != 0U)
-            SAG_BUG("piece insert offset outside empty tree");
+            YEW_BUG("piece insert offset outside empty tree");
         return inserted;
     }
     if (at > root->sub_bytes)
-        SAG_BUG("piece insert offset outside tree");
+        YEW_BUG("piece insert offset outside tree");
     root = node_own(root);
     left_bytes = node_bytes(root->left);
     piece_len = root->span.hi - root->span.lo;
@@ -489,12 +489,12 @@ static void store_append(TextStore *store, const u8 *bytes, u64 len)
     if (len == 0U)
         return;
     if (bytes == NULL)
-        SAG_BUG("text store append with NULL bytes");
+        YEW_BUG("text store append with NULL bytes");
     if (len > UINT64_MAX - store->len)
-        SAG_BUG("text store length overflow");
+        YEW_BUG("text store length overflow");
     need = store->len + len;
     if (need > SIZE_MAX)
-        SAG_BUG("text store exceeds addressable memory");
+        YEW_BUG("text store exceeds addressable memory");
     if (need > store->cap) {
         cap = store->cap != 0U ? store->cap : 64U;
         while (cap < need) {
@@ -504,14 +504,14 @@ static void store_append(TextStore *store, const u8 *bytes, u64 len)
             }
             cap *= 2U;
         }
-        store->bytes = sag_xrealloc(store->bytes, (size_t)cap);
+        store->bytes = yew_xrealloc(store->bytes, (size_t)cap);
         store->cap = cap;
     }
     memcpy(store->bytes + (size_t)old_len, bytes, (size_t)len);
     store->len = need;
     for (i = 0U; i < len; i++) {
         if (bytes[(size_t)i] == (u8)'\n')
-            SagU64Vec_push(&store->lfs, old_len + i);
+            YewU64Vec_push(&store->lfs, old_len + i);
     }
 }
 
@@ -527,14 +527,14 @@ static void store_index_original(TextStore *store)
         if (lf == NULL)
             break;
         off = (size_t)(lf - store->bytes);
-        SagU64Vec_push(&store->lfs, (u64)off);
+        YewU64Vec_push(&store->lfs, (u64)off);
         pos = off + 1U;
         /* memchr is ideal for ordinary sparse newlines, but calling it
          * once per byte makes the all-newline budget fixture needlessly
          * quadratic in call overhead. Consume the adjacent dense run in
          * one linear pass, then resume the memchr sweep. */
         while (pos < size && store->bytes[pos] == (u8)'\n') {
-            SagU64Vec_push(&store->lfs, (u64)pos);
+            YewU64Vec_push(&store->lfs, (u64)pos);
             pos++;
         }
     }
@@ -545,10 +545,10 @@ static void store_init_original(TextStore *store, const u8 *bytes, u64 len)
     if (len == 0U)
         return;
     if (bytes == NULL)
-        SAG_BUG("original text store initialized with NULL bytes");
+        YEW_BUG("original text store initialized with NULL bytes");
     if (len > SIZE_MAX)
-        SAG_BUG("original text store exceeds addressable memory");
-    store->bytes = sag_xmalloc((size_t)len);
+        YEW_BUG("original text store exceeds addressable memory");
+    store->bytes = yew_xmalloc((size_t)len);
     memcpy(store->bytes, bytes, (size_t)len);
     store->len = len;
     store->cap = len;
@@ -558,9 +558,9 @@ static void store_init_original(TextStore *store, const u8 *bytes, u64 len)
 static void store_init_original_owned(TextStore *store, u8 *bytes, u64 len)
 {
     if (len > SIZE_MAX)
-        SAG_BUG("owned original text store exceeds addressable memory");
+        YEW_BUG("owned original text store exceeds addressable memory");
     if (len != 0U && bytes == NULL)
-        SAG_BUG("owned original text store initialized with NULL bytes");
+        YEW_BUG("owned original text store initialized with NULL bytes");
     if (len == 0U) {
         free(bytes);
         return;
@@ -574,13 +574,13 @@ static void store_init_original_owned(TextStore *store, u8 *bytes, u64 len)
 static void store_free(TextStore *store)
 {
     free(store->bytes);
-    SagU64Vec_free(&store->lfs);
+    YewU64Vec_free(&store->lfs);
     memset(store, 0, sizeof(*store));
 }
 
 static TextBacking *backing_new(void)
 {
-    TextBacking *backing = sag_xcalloc(1U, sizeof(*backing));
+    TextBacking *backing = yew_xcalloc(1U, sizeof(*backing));
 
     backing->refs = 1U;
     return backing;
@@ -589,16 +589,16 @@ static TextBacking *backing_new(void)
 static void backing_ref(TextBacking *backing)
 {
     if (backing == NULL || backing->refs == 0U)
-        SAG_BUG("invalid text backing reference");
+        YEW_BUG("invalid text backing reference");
     if (backing->refs == UINT32_MAX)
-        SAG_BUG("text backing reference count overflow");
+        YEW_BUG("text backing reference count overflow");
     backing->refs++;
 }
 
 static void backing_release(TextBacking *backing)
 {
     if (backing == NULL || backing->refs == 0U)
-        SAG_BUG("text backing reference count underflow");
+        YEW_BUG("text backing reference count underflow");
     backing->refs--;
     if (backing->refs != 0U)
         return;
@@ -616,81 +616,81 @@ static void textbuf_sync_store_views(TextBuf *tb)
 static void textbuf_require_edit_generation(const TextBuf *tb)
 {
     if (tb->gen == UINT64_MAX)
-        SAG_BUG("text buffer generation overflow");
+        YEW_BUG("text buffer generation overflow");
 }
 
-TextBuf *sag_textbuf_new(void)
+TextBuf *yew_textbuf_new(void)
 {
-    TextBuf *tb = sag_xcalloc(1U, sizeof(*tb));
+    TextBuf *tb = yew_xcalloc(1U, sizeof(*tb));
 
     tb->backing = backing_new();
     textbuf_sync_store_views(tb);
-    sag_coords_index_seed(tb);
+    yew_coords_index_seed(tb);
     return tb;
 }
 
-TextBuf *sag_textbuf_from_bytes(const u8 *bytes, u64 len)
+TextBuf *yew_textbuf_from_bytes(const u8 *bytes, u64 len)
 {
-    TextBuf *tb = sag_textbuf_new();
+    TextBuf *tb = yew_textbuf_new();
 
     if (len != 0U) {
         Piece piece;
 
         store_init_original(&tb->backing->orig, bytes, len);
         textbuf_sync_store_views(tb);
-        piece = piece_make(tb->backing, SAG_STORE_ORIG, (Span){0U, len});
+        piece = piece_make(tb->backing, YEW_STORE_ORIG, (Span){0U, len});
         tb->root = node_new(piece);
     }
-    sag_coords_index_seed(tb);
+    yew_coords_index_seed(tb);
     return tb;
 }
 
-TextBuf *sag_textbuf_from_owned_bytes(u8 *bytes, u64 len)
+TextBuf *yew_textbuf_from_owned_bytes(u8 *bytes, u64 len)
 {
-    TextBuf *tb = sag_textbuf_new();
+    TextBuf *tb = yew_textbuf_new();
 
     store_init_original_owned(&tb->backing->orig, bytes, len);
     textbuf_sync_store_views(tb);
     if (len != 0U) {
-        Piece piece = piece_make(tb->backing, SAG_STORE_ORIG,
+        Piece piece = piece_make(tb->backing, YEW_STORE_ORIG,
                                  (Span){0U, len});
 
         tb->root = node_new(piece);
     }
-    sag_coords_index_seed(tb);
+    yew_coords_index_seed(tb);
     return tb;
 }
 
-void sag_textbuf_free(TextBuf *tb)
+void yew_textbuf_free(TextBuf *tb)
 {
     if (tb == NULL)
         return;
-    sag_coords_index_dispose(tb);
+    yew_coords_index_dispose(tb);
     node_release(tb->root);
     backing_release(tb->backing);
     free(tb);
 }
 
-u64 sag_textbuf_len(const TextBuf *tb)
+u64 yew_textbuf_len(const TextBuf *tb)
 {
     if (tb == NULL)
-        SAG_BUG("sag_textbuf_len: NULL buffer");
+        YEW_BUG("yew_textbuf_len: NULL buffer");
     return node_bytes(tb->root);
 }
 
-u64 sag_textbuf_line_count(const TextBuf *tb)
+u64 yew_textbuf_line_count(const TextBuf *tb)
 {
     if (tb == NULL)
-        SAG_BUG("sag_textbuf_line_count: NULL buffer");
+        YEW_BUG("yew_textbuf_line_count: NULL buffer");
     if (node_lfs(tb->root) == UINT64_MAX)
-        SAG_BUG("text buffer line count overflow");
+        YEW_BUG("text buffer line count overflow");
     return node_lfs(tb->root) + 1U;
 }
 
-u32 sag_textbuf_piece_count(const TextBuf *tb)
+u32 yew_textbuf_piece_count(const TextBuf *tb)
 {
     if (tb == NULL)
-        SAG_BUG("sag_textbuf_piece_count: NULL buffer");
+        YEW_BUG("yew_textbuf_piece_count: NULL buffer");
     return node_count(tb->root);
 }
 
@@ -712,10 +712,10 @@ static bool node_extend_predecessor(TextBuf *tb, PieceNode **slot, u64 at,
         changed = node_extend_predecessor(tb, &node->left, at,
                                           old_add_len, new_add_len);
     } else if (at == left_bytes + piece_len) {
-        changed = node->src == SAG_STORE_ADD &&
+        changed = node->src == YEW_STORE_ADD &&
                   node->span.hi == old_add_len;
         if (changed) {
-            Piece piece = piece_make(tb->backing, SAG_STORE_ADD,
+            Piece piece = piece_make(tb->backing, YEW_STORE_ADD,
                                      (Span){node->span.lo, new_add_len});
             node->span = piece.span;
             node->lf_first = piece.lf_first;
@@ -765,16 +765,16 @@ static bool payload_aliases_store(const u8 *bytes, u64 len,
     start = (uintptr_t)bytes;
     base = (uintptr_t)store->bytes;
     if (store->len > UINTPTR_MAX - base)
-        SAG_BUG("text store address range overflow");
+        YEW_BUG("text store address range overflow");
     end = base + (uintptr_t)store->len;
     if (start < base || start >= end)
         return false;
     if (len > (u64)(end - start))
-        SAG_BUG("insert payload extends beyond its backing store");
+        YEW_BUG("insert payload extends beyond its backing store");
     return true;
 }
 
-void sag_textbuf_insert(TextBuf *tb, ByteOff at, const u8 *bytes, u64 len)
+void yew_textbuf_insert(TextBuf *tb, ByteOff at, const u8 *bytes, u64 len)
 {
     u64 buffer_len;
     u64 old_add_len;
@@ -785,24 +785,24 @@ void sag_textbuf_insert(TextBuf *tb, ByteOff at, const u8 *bytes, u64 len)
     const u8 *payload = bytes;
 
     if (tb == NULL)
-        SAG_BUG("sag_textbuf_insert: NULL buffer");
+        YEW_BUG("yew_textbuf_insert: NULL buffer");
     buffer_len = node_bytes(tb->root);
     if (at.v > buffer_len)
-        SAG_BUG("insert offset %llu beyond buffer length %llu",
+        YEW_BUG("insert offset %llu beyond buffer length %llu",
                 (unsigned long long)at.v,
                 (unsigned long long)buffer_len);
     if (len == 0U)
         return;
     if (len > UINT64_MAX - buffer_len)
-        SAG_BUG("insert length overflows text buffer");
+        YEW_BUG("insert length overflows text buffer");
     textbuf_require_edit_generation(tb);
     old_gen = tb->gen;
-    old_affected = sag_textbuf_line_span(
-        tb, sag_textbuf_line_of(tb, at));
+    old_affected = yew_textbuf_line_span(
+        tb, yew_textbuf_line_of(tb, at));
     if (payload_aliases_store(bytes, len, &tb->backing->add)) {
         if (len > SIZE_MAX)
-            SAG_BUG("insert payload exceeds addressable memory");
-        staged = sag_xmalloc((size_t)len);
+            YEW_BUG("insert payload exceeds addressable memory");
+        staged = yew_xmalloc((size_t)len);
         memcpy(staged, bytes, (size_t)len);
         payload = staged;
     } else {
@@ -816,24 +816,24 @@ void sag_textbuf_insert(TextBuf *tb, ByteOff at, const u8 *bytes, u64 len)
         node_extend_predecessor(tb, &tb->root, at.v, old_add_len,
                                 tb->backing->add.len)) {
         tb->gen++;
-        sag_coords_index_note_edit(tb, (Span){at.v, at.v}, len,
+        yew_coords_index_note_edit(tb, (Span){at.v, at.v}, len,
                                    old_affected, old_gen);
         tb->add_tail_at = at.v + len;
         tb->add_tail_known = true;
         return;
     }
-    middle = node_new(piece_make(tb->backing, SAG_STORE_ADD,
+    middle = node_new(piece_make(tb->backing, YEW_STORE_ADD,
                                  (Span){old_add_len,
                                         tb->backing->add.len}));
     tb->root = node_insert(tb, tb->root, at.v, middle);
     tb->gen++;
-    sag_coords_index_note_edit(tb, (Span){at.v, at.v}, len,
+    yew_coords_index_note_edit(tb, (Span){at.v, at.v}, len,
                                old_affected, old_gen);
     tb->add_tail_at = at.v + len;
     tb->add_tail_known = true;
 }
 
-void sag_textbuf_insert_span(TextBuf *tb, ByteOff at, u8 src, Span span)
+void yew_textbuf_insert_span(TextBuf *tb, ByteOff at, u8 src, Span span)
 {
     const TextStore *store;
     u64 buffer_len;
@@ -845,15 +845,15 @@ void sag_textbuf_insert_span(TextBuf *tb, ByteOff at, u8 src, Span span)
     PieceNode *middle;
 
     if (tb == NULL)
-        SAG_BUG("sag_textbuf_insert_span: NULL buffer");
+        YEW_BUG("yew_textbuf_insert_span: NULL buffer");
     buffer_len = node_bytes(tb->root);
     if (at.v > buffer_len)
-        SAG_BUG("span insert offset %llu beyond buffer length %llu",
+        YEW_BUG("span insert offset %llu beyond buffer length %llu",
                 (unsigned long long)at.v,
                 (unsigned long long)buffer_len);
     store = text_store(tb->backing, src);
     if (span.lo > span.hi || span.hi > store->len)
-        SAG_BUG("invalid inserted span [%llu,%llu) for store length %llu",
+        YEW_BUG("invalid inserted span [%llu,%llu) for store length %llu",
                 (unsigned long long)span.lo,
                 (unsigned long long)span.hi,
                 (unsigned long long)store->len);
@@ -861,21 +861,21 @@ void sag_textbuf_insert_span(TextBuf *tb, ByteOff at, u8 src, Span span)
     if (inserted_len == 0U)
         return;
     if (inserted_len > UINT64_MAX - buffer_len)
-        SAG_BUG("span insert length overflows text buffer");
+        YEW_BUG("span insert length overflows text buffer");
     textbuf_require_edit_generation(tb);
     old_gen = tb->gen;
-    old_affected = sag_textbuf_line_span(
-        tb, sag_textbuf_line_of(tb, at));
+    old_affected = yew_textbuf_line_span(
+        tb, yew_textbuf_line_of(tb, at));
     middle = node_new(piece_make(tb->backing, src, span));
     node_split(tb, tb->root, at.v, &before, &after);
     tb->root = node_concat(node_concat(before, middle), after);
     tb->gen++;
-    sag_coords_index_note_edit(tb, (Span){at.v, at.v}, inserted_len,
+    yew_coords_index_note_edit(tb, (Span){at.v, at.v}, inserted_len,
                                old_affected, old_gen);
     tb->add_tail_known = false;
 }
 
-void sag_textbuf_delete(TextBuf *tb, Span range)
+void yew_textbuf_delete(TextBuf *tb, Span range)
 {
     PieceNode *before_end;
     PieceNode *after;
@@ -888,10 +888,10 @@ void sag_textbuf_delete(TextBuf *tb, Span range)
     u64 len;
 
     if (tb == NULL)
-        SAG_BUG("sag_textbuf_delete: NULL buffer");
-    len = sag_textbuf_len(tb);
+        YEW_BUG("yew_textbuf_delete: NULL buffer");
+    len = yew_textbuf_len(tb);
     if (range.lo > range.hi || range.hi > len)
-        SAG_BUG("delete range [%llu,%llu) beyond buffer length %llu",
+        YEW_BUG("delete range [%llu,%llu) beyond buffer length %llu",
                 (unsigned long long)range.lo,
                 (unsigned long long)range.hi,
                 (unsigned long long)len);
@@ -899,29 +899,29 @@ void sag_textbuf_delete(TextBuf *tb, Span range)
         return;
     textbuf_require_edit_generation(tb);
     old_gen = tb->gen;
-    first_line = sag_textbuf_line_of(tb, BYTEOFF(range.lo));
-    last_line = sag_textbuf_line_of(tb, BYTEOFF(range.hi));
-    old_affected.lo = sag_textbuf_line_start(tb, first_line).v;
-    old_affected.hi = sag_textbuf_line_span(tb, last_line).hi;
+    first_line = yew_textbuf_line_of(tb, BYTEOFF(range.lo));
+    last_line = yew_textbuf_line_of(tb, BYTEOFF(range.hi));
+    old_affected.lo = yew_textbuf_line_start(tb, first_line).v;
+    old_affected.hi = yew_textbuf_line_span(tb, last_line).hi;
     node_split(tb, tb->root, range.hi, &before_end, &after);
     node_split(tb, before_end, range.lo, &before, &removed);
     node_release(removed);
     tb->root = node_concat(before, after);
     tb->gen++;
-    sag_coords_index_note_edit(tb, range, 0U, old_affected, old_gen);
+    yew_coords_index_note_edit(tb, range, 0U, old_affected, old_gen);
     tb->add_tail_known = false;
 }
 
-ByteOff sag_textbuf_line_start(const TextBuf *tb, LineNo line)
+ByteOff yew_textbuf_line_start(const TextBuf *tb, LineNo line)
 {
     const PieceNode *node;
     u64 remaining;
     u64 before = 0U;
 
     if (tb == NULL)
-        SAG_BUG("sag_textbuf_line_start: NULL buffer");
-    if (line.v >= sag_textbuf_line_count(tb))
-        SAG_BUG("line %llu outside buffer", (unsigned long long)line.v);
+        YEW_BUG("yew_textbuf_line_start: NULL buffer");
+    if (line.v >= yew_textbuf_line_count(tb))
+        YEW_BUG("line %llu outside buffer", (unsigned long long)line.v);
     if (line.v == 0U)
         return BYTEOFF(0U);
     node = tb->root;
@@ -946,19 +946,19 @@ ByteOff sag_textbuf_line_start(const TextBuf *tb, LineNo line)
         before += node->span.hi - node->span.lo;
         node = node->right;
     }
-    SAG_BUG("piece newline index is inconsistent");
+    YEW_BUG("piece newline index is inconsistent");
 }
 
-LineNo sag_textbuf_line_of(const TextBuf *tb, ByteOff off)
+LineNo yew_textbuf_line_of(const TextBuf *tb, ByteOff off)
 {
     const PieceNode *node;
     u64 pos;
     u64 lines = 0U;
 
     if (tb == NULL)
-        SAG_BUG("sag_textbuf_line_of: NULL buffer");
-    if (off.v > sag_textbuf_len(tb))
-        SAG_BUG("offset %llu outside buffer", (unsigned long long)off.v);
+        YEW_BUG("yew_textbuf_line_of: NULL buffer");
+    if (off.v > yew_textbuf_len(tb))
+        YEW_BUG("offset %llu outside buffer", (unsigned long long)off.v);
     node = tb->root;
     pos = off.v;
     while (node != NULL) {
@@ -993,16 +993,16 @@ LineNo sag_textbuf_line_of(const TextBuf *tb, ByteOff off)
     return LINENO(lines);
 }
 
-Span sag_textbuf_line_span(const TextBuf *tb, LineNo line)
+Span yew_textbuf_line_span(const TextBuf *tb, LineNo line)
 {
-    u64 count = sag_textbuf_line_count(tb);
-    ByteOff lo = sag_textbuf_line_start(tb, line);
+    u64 count = yew_textbuf_line_count(tb);
+    ByteOff lo = yew_textbuf_line_start(tb, line);
     ByteOff hi;
 
     if (line.v + 1U < count)
-        hi = sag_textbuf_line_start(tb, LINENO(line.v + 1U));
+        hi = yew_textbuf_line_start(tb, LINENO(line.v + 1U));
     else
-        hi = BYTEOFF(sag_textbuf_len(tb));
+        hi = BYTEOFF(yew_textbuf_len(tb));
     return (Span){lo.v, hi.v};
 }
 
@@ -1019,7 +1019,7 @@ static bool textiter_seek(TextIter *it, const PieceNode *root, u64 len,
     it->gen = gen;
     it->snapshot = snapshot;
     if (at.v > len)
-        SAG_BUG("iterator offset %llu outside text length %llu",
+        YEW_BUG("iterator offset %llu outside text length %llu",
                 (unsigned long long)at.v, (unsigned long long)len);
     if (at.v == len)
         return false;
@@ -1027,8 +1027,8 @@ static bool textiter_seek(TextIter *it, const PieceNode *root, u64 len,
         u64 left_bytes;
         u64 piece_len;
 
-        if (it->depth == SAG_PIECE_MAX_DEPTH)
-            SAG_BUG("piece iterator stack overflow");
+        if (it->depth == YEW_PIECE_MAX_DEPTH)
+            YEW_BUG("piece iterator stack overflow");
         it->stack[it->depth++] = node;
         left_bytes = node_bytes(node->left);
         piece_len = node->span.hi - node->span.lo;
@@ -1042,35 +1042,35 @@ static bool textiter_seek(TextIter *it, const PieceNode *root, u64 len,
             node = node->right;
         }
     }
-    SAG_BUG("piece iterator could not resolve a valid offset");
+    YEW_BUG("piece iterator could not resolve a valid offset");
 }
 
 static void textiter_validate(const TextIter *it, const TextBuf *tb)
 {
     if (it == NULL)
-        SAG_BUG("piece iterator called with NULL iterator");
+        YEW_BUG("piece iterator called with NULL iterator");
     if (it->snapshot) {
         if (it->backing == NULL)
-            SAG_BUG("snapshot iterator has no backing store");
+            YEW_BUG("snapshot iterator has no backing store");
         if (tb != NULL && tb->backing != it->backing)
-            SAG_BUG("snapshot iterator used with a different text buffer");
+            YEW_BUG("snapshot iterator used with a different text buffer");
         return;
     }
     if (tb == NULL || it->owner != tb || it->backing != tb->backing)
-        SAG_BUG("live iterator used with a different text buffer");
+        YEW_BUG("live iterator used with a different text buffer");
     if (it->gen != tb->gen)
-        SAG_BUG("piece iterator invalidated by edit");
+        YEW_BUG("piece iterator invalidated by edit");
 }
 
-bool sag_textiter_begin(TextIter *it, const TextBuf *tb, ByteOff at)
+bool yew_textiter_begin(TextIter *it, const TextBuf *tb, ByteOff at)
 {
     if (it == NULL || tb == NULL)
-        SAG_BUG("sag_textiter_begin: NULL argument");
-    return textiter_seek(it, tb->root, sag_textbuf_len(tb), tb->gen, false,
+        YEW_BUG("yew_textiter_begin: NULL argument");
+    return textiter_seek(it, tb->root, yew_textbuf_len(tb), tb->gen, false,
                          tb, tb->backing, at);
 }
 
-bool sag_textiter_chunk(TextIter *it, const TextBuf *tb,
+bool yew_textiter_chunk(TextIter *it, const TextBuf *tb,
                         const u8 **bytes, u64 *len)
 {
     const PieceNode *node;
@@ -1079,7 +1079,7 @@ bool sag_textiter_chunk(TextIter *it, const TextBuf *tb,
 
     textiter_validate(it, tb);
     if (bytes == NULL || len == NULL)
-        SAG_BUG("sag_textiter_chunk: NULL output");
+        YEW_BUG("yew_textiter_chunk: NULL output");
     if (it->depth == 0U) {
         *bytes = NULL;
         *len = 0U;
@@ -1088,14 +1088,14 @@ bool sag_textiter_chunk(TextIter *it, const TextBuf *tb,
     node = it->stack[it->depth - 1U];
     piece_len = node->span.hi - node->span.lo;
     if (it->skip >= piece_len)
-        SAG_BUG("piece iterator skip outside current piece");
+        YEW_BUG("piece iterator skip outside current piece");
     store = text_store(it->backing, node->src);
     *bytes = store->bytes + (size_t)(node->span.lo + it->skip);
     *len = piece_len - it->skip;
     return true;
 }
 
-bool sag_textiter_advance(TextIter *it, const TextBuf *tb)
+bool yew_textiter_advance(TextIter *it, const TextBuf *tb)
 {
     const PieceNode *node;
     const PieceNode *child;
@@ -1108,8 +1108,8 @@ bool sag_textiter_advance(TextIter *it, const TextBuf *tb)
     if (node->right != NULL) {
         node = node->right;
         for (;;) {
-            if (it->depth == SAG_PIECE_MAX_DEPTH)
-                SAG_BUG("piece iterator stack overflow");
+            if (it->depth == YEW_PIECE_MAX_DEPTH)
+                YEW_BUG("piece iterator stack overflow");
             it->stack[it->depth++] = node;
             if (node->left == NULL)
                 return true;
@@ -1128,73 +1128,73 @@ bool sag_textiter_advance(TextIter *it, const TextBuf *tb)
     return false;
 }
 
-bool sag_lineiter_begin(LineIter *it, const TextBuf *tb, LineNo at)
+bool yew_lineiter_begin(LineIter *it, const TextBuf *tb, LineNo at)
 {
     if (it == NULL || tb == NULL)
-        SAG_BUG("sag_lineiter_begin: NULL argument");
-    if (at.v > sag_textbuf_line_count(tb))
-        SAG_BUG("line iterator starts outside buffer");
+        YEW_BUG("yew_lineiter_begin: NULL argument");
+    if (at.v > yew_textbuf_line_count(tb))
+        YEW_BUG("line iterator starts outside buffer");
     it->owner = tb;
     it->next_line = at.v;
     it->gen = tb->gen;
-    return at.v < sag_textbuf_line_count(tb);
+    return at.v < yew_textbuf_line_count(tb);
 }
 
-bool sag_lineiter_next(LineIter *it, const TextBuf *tb, Span *line)
+bool yew_lineiter_next(LineIter *it, const TextBuf *tb, Span *line)
 {
     if (it == NULL || tb == NULL || line == NULL)
-        SAG_BUG("sag_lineiter_next: NULL argument");
+        YEW_BUG("yew_lineiter_next: NULL argument");
     if (it->owner != tb)
-        SAG_BUG("line iterator used with a different text buffer");
+        YEW_BUG("line iterator used with a different text buffer");
     if (it->gen != tb->gen)
-        SAG_BUG("line iterator invalidated by edit");
-    if (it->next_line >= sag_textbuf_line_count(tb))
+        YEW_BUG("line iterator invalidated by edit");
+    if (it->next_line >= yew_textbuf_line_count(tb))
         return false;
-    *line = sag_textbuf_line_span(tb, LINENO(it->next_line));
+    *line = yew_textbuf_line_span(tb, LINENO(it->next_line));
     it->next_line++;
     return true;
 }
 
-TextSnap sag_textbuf_snap(TextBuf *tb)
+TextSnap yew_textbuf_snap(TextBuf *tb)
 {
     TextSnap snap;
 
     if (tb == NULL)
-        SAG_BUG("sag_textbuf_snap: NULL buffer");
+        YEW_BUG("yew_textbuf_snap: NULL buffer");
     if (tb->backing == NULL || tb->backing->refs == UINT32_MAX ||
         (tb->root != NULL && tb->root->refs == UINT32_MAX))
-        SAG_BUG("text snapshot reference count overflow");
+        YEW_BUG("text snapshot reference count overflow");
     node_ref(tb->root);
     backing_ref(tb->backing);
     snap.root = tb->root;
     snap.backing = tb->backing;
-    snap.len = sag_textbuf_len(tb);
+    snap.len = yew_textbuf_len(tb);
     snap.gen = tb->gen;
     snap.active = true;
     return snap;
 }
 
-void sag_textsnap_release(TextBuf *tb, TextSnap *snap)
+void yew_textsnap_release(TextBuf *tb, TextSnap *snap)
 {
     if (snap == NULL)
-        SAG_BUG("sag_textsnap_release: NULL snapshot");
+        YEW_BUG("yew_textsnap_release: NULL snapshot");
     if (!snap->active)
-        SAG_BUG("sag_textsnap_release: snapshot already released");
+        YEW_BUG("yew_textsnap_release: snapshot already released");
     if (snap->backing == NULL)
-        SAG_BUG("sag_textsnap_release: snapshot has no backing store");
+        YEW_BUG("yew_textsnap_release: snapshot has no backing store");
     if (tb != NULL && snap->backing != tb->backing)
-        SAG_BUG("sag_textsnap_release: snapshot belongs to another buffer");
+        YEW_BUG("yew_textsnap_release: snapshot belongs to another buffer");
     node_release(snap->root);
     backing_release(snap->backing);
     memset(snap, 0, sizeof(*snap));
 }
 
-bool sag_textsnap_iter(TextIter *it, const TextSnap *snap, ByteOff at)
+bool yew_textsnap_iter(TextIter *it, const TextSnap *snap, ByteOff at)
 {
     if (it == NULL || snap == NULL)
-        SAG_BUG("sag_textsnap_iter: NULL argument");
+        YEW_BUG("yew_textsnap_iter: NULL argument");
     if (!snap->active || snap->backing == NULL)
-        SAG_BUG("sag_textsnap_iter: released snapshot");
+        YEW_BUG("yew_textsnap_iter: released snapshot");
     return textiter_seek(it, snap->root, snap->len, snap->gen, true,
                          NULL, snap->backing, at);
 }
@@ -1220,74 +1220,74 @@ static CheckTotals node_check(const TextBuf *tb, const PieceNode *node,
 
     if (node == NULL)
         return (CheckTotals){0U, 0U, 0U};
-    if (depth >= SAG_PIECE_MAX_DEPTH)
-        SAG_BUG("piece tree exceeds maximum depth");
+    if (depth >= YEW_PIECE_MAX_DEPTH)
+        YEW_BUG("piece tree exceeds maximum depth");
     if (node->refs == 0U)
-        SAG_BUG("piece tree contains unreferenced node");
-    if (node->src != SAG_STORE_ORIG && node->src != SAG_STORE_ADD)
-        SAG_BUG("piece tree contains invalid store id");
+        YEW_BUG("piece tree contains unreferenced node");
+    if (node->src != YEW_STORE_ORIG && node->src != YEW_STORE_ADD)
+        YEW_BUG("piece tree contains invalid store id");
     store = text_store(tb->backing, node->src);
     if (node->span.lo >= node->span.hi || node->span.hi > store->len)
-        SAG_BUG("piece tree contains invalid or empty span");
+        YEW_BUG("piece tree contains invalid or empty span");
     first = store_lower_bound(store, node->span.lo);
     end = store_lower_bound(store, node->span.hi);
     if (node->lf_first != first || node->lf_count != end - first)
-        SAG_BUG("piece tree newline metadata mismatch");
+        YEW_BUG("piece tree newline metadata mismatch");
     left = node_check(tb, node->left, depth + 1U);
     right = node_check(tb, node->right, depth + 1U);
     piece_len = node->span.hi - node->span.lo;
     if (left.bytes > UINT64_MAX - piece_len ||
         left.bytes + piece_len > UINT64_MAX - right.bytes)
-        SAG_BUG("piece checker byte count overflow");
+        YEW_BUG("piece checker byte count overflow");
     if (left.lfs > UINT64_MAX - node->lf_count ||
         left.lfs + node->lf_count > UINT64_MAX - right.lfs)
-        SAG_BUG("piece checker newline count overflow");
+        YEW_BUG("piece checker newline count overflow");
     if ((u64)left.count + 1U + right.count > UINT32_MAX)
-        SAG_BUG("piece checker node count overflow");
+        YEW_BUG("piece checker node count overflow");
     total.bytes = left.bytes + piece_len + right.bytes;
     total.lfs = left.lfs + node->lf_count + right.lfs;
     total.count = left.count + 1U + right.count;
     if (node->sub_bytes != total.bytes || node->sub_lfs != total.lfs ||
         node->sub_count != total.count)
-        SAG_BUG("piece tree subtree metadata mismatch");
+        YEW_BUG("piece tree subtree metadata mismatch");
     wl = (u64)left.count + 1U;
     wr = (u64)right.count + 1U;
     if (wl > 3U * wr || wr > 3U * wl)
-        SAG_BUG("piece tree weight-balance invariant violated");
+        YEW_BUG("piece tree weight-balance invariant violated");
     return total;
 }
 
 static void node_check_canonical(const PieceNode *root)
 {
-    const PieceNode *stack[SAG_PIECE_MAX_DEPTH];
+    const PieceNode *stack[YEW_PIECE_MAX_DEPTH];
     const PieceNode *node = root;
     const PieceNode *previous = NULL;
     u32 depth = 0U;
 
     while (node != NULL || depth != 0U) {
         while (node != NULL) {
-            if (depth == SAG_PIECE_MAX_DEPTH)
-                SAG_BUG("piece canonical-check stack overflow");
+            if (depth == YEW_PIECE_MAX_DEPTH)
+                YEW_BUG("piece canonical-check stack overflow");
             stack[depth++] = node;
             node = node->left;
         }
         node = stack[--depth];
         if (previous != NULL && previous->src == node->src &&
             previous->span.hi == node->span.lo)
-            SAG_BUG("piece tree contains coalescible adjacent spans");
+            YEW_BUG("piece tree contains coalescible adjacent spans");
         previous = node;
         node = node->right;
     }
 }
 
-void sag_textbuf_check(const TextBuf *tb)
+void yew_textbuf_check(const TextBuf *tb)
 {
     const PieceNode *add_tail;
 
     if (tb == NULL)
-        SAG_BUG("sag_textbuf_check: NULL buffer");
+        YEW_BUG("yew_textbuf_check: NULL buffer");
     if (tb->backing == NULL || tb->backing->refs == 0U)
-        SAG_BUG("text buffer has no live backing store");
+        YEW_BUG("text buffer has no live backing store");
     if (tb->orig.bytes != tb->backing->orig.bytes ||
         tb->orig.len != tb->backing->orig.len ||
         tb->orig.cap != tb->backing->orig.cap ||
@@ -1300,7 +1300,7 @@ void sag_textbuf_check(const TextBuf *tb)
         tb->add.lfs.data != tb->backing->add.lfs.data ||
         tb->add.lfs.len != tb->backing->add.lfs.len ||
         tb->add.lfs.cap != tb->backing->add.lfs.cap)
-        SAG_BUG("text buffer store views are stale");
+        YEW_BUG("text buffer store views are stale");
     /* The store indexes are append-only and are constructed in ascending
      * order by store_index_original/store_append. Validate the live tree's
      * index windows below; rescanning every historical LF here would make
@@ -1309,10 +1309,10 @@ void sag_textbuf_check(const TextBuf *tb)
     node_check_canonical(tb->root);
     if (tb->add_tail_known) {
         if (tb->add_tail_at > node_bytes(tb->root))
-            SAG_BUG("text buffer add-tail position is outside the tree");
+            YEW_BUG("text buffer add-tail position is outside the tree");
         add_tail = node_ending_at(tb->root, tb->add_tail_at);
-        if (add_tail == NULL || add_tail->src != SAG_STORE_ADD ||
+        if (add_tail == NULL || add_tail->src != YEW_STORE_ADD ||
             add_tail->span.hi != tb->backing->add.len)
-            SAG_BUG("text buffer add-tail cache is stale");
+            YEW_BUG("text buffer add-tail cache is stale");
     }
 }

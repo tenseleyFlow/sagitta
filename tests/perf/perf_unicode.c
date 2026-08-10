@@ -54,7 +54,7 @@ static bool prepare(PerfCase *pc)
 
 static bool scan(const u8 *s, size_t len, size_t *clusters, int *cells)
 {
-    SagGbState state;
+    YewGbState state;
     size_t pos = 0u;
     size_t cluster_start = 0u;
     size_t count = 0u;
@@ -62,22 +62,22 @@ static bool scan(const u8 *s, size_t len, size_t *clusters, int *cells)
     bool have_cluster = false;
     bool simple_ascii = false;
 
-    sag_gb_init(&state);
+    yew_gb_init(&state);
     while (pos < len) {
         u32 cp;
         size_t used;
         bool boundary;
 
-        if (state.prev_gcb == SAG_GCB_OTHER &&
+        if (state.prev_gcb == YEW_GCB_OTHER &&
             s[pos] >= 0x20u && s[pos] <= 0x7eu) {
             if (have_cluster) {
                 width += simple_ascii
                              ? 1
-                             : sag_cluster_width(s + cluster_start,
+                             : yew_cluster_width(s + cluster_start,
                                                  pos - cluster_start);
                 count++;
             }
-            if (!sag_gb_boundary(&state, s[pos]))
+            if (!yew_gb_boundary(&state, s[pos]))
                 return false;
             cluster_start = pos;
             have_cluster = true;
@@ -85,14 +85,14 @@ static bool scan(const u8 *s, size_t len, size_t *clusters, int *cells)
             pos++;
             continue;
         }
-        used = sag_utf8_decode(s + pos, len - pos, &cp);
+        used = yew_utf8_decode(s + pos, len - pos, &cp);
         if (used == 0u || used > len - pos)
             return false;
-        boundary = sag_gb_boundary(&state, cp);
+        boundary = yew_gb_boundary(&state, cp);
         if (boundary && have_cluster) {
             width += simple_ascii
                          ? 1
-                         : sag_cluster_width(s + cluster_start,
+                         : yew_cluster_width(s + cluster_start,
                                              pos - cluster_start);
             count++;
         }
@@ -105,7 +105,7 @@ static bool scan(const u8 *s, size_t len, size_t *clusters, int *cells)
     if (have_cluster) {
         width += simple_ascii
                      ? 1
-                     : sag_cluster_width(s + cluster_start,
+                     : yew_cluster_width(s + cluster_start,
                                          len - cluster_start);
         count++;
     }
@@ -162,7 +162,7 @@ int main(void)
     size_t i;
     int status = 0;
 
-    for (i = 0u; i < SAG_ARRAY_LEN(cases); i++) {
+    for (i = 0u; i < YEW_ARRAY_LEN(cases); i++) {
         if (!prepare(&cases[i]) || !measure(&cases[i])) {
             fprintf(stderr, "unicode-perf: %s failed\n", cases[i].name);
             status = 1;
@@ -175,7 +175,7 @@ int main(void)
         if (i == 0u && cases[i].best_ns > 5000000LL)
             status = 1;
     }
-    for (i = 0u; i < SAG_ARRAY_LEN(cases); i++)
+    for (i = 0u; i < YEW_ARRAY_LEN(cases); i++)
         free(cases[i].data);
     return status;
 }

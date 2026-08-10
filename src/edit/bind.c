@@ -18,7 +18,7 @@
 #include "util/buf.h"
 #include "util/log.h"
 
-typedef struct SagBindRow {
+typedef struct YewBindRow {
     char *seq;
     char *cmd;
     char *sarg;
@@ -28,10 +28,10 @@ typedef struct SagBindRow {
     u32 ledger_id;
     Mode mode;
     bool active;
-} SagBindRow;
+} YewBindRow;
 
-typedef struct SagBindings {
-    SagBindRow *v;
+typedef struct YewBindings {
+    YewBindRow *v;
     u32 n;
     u32 cap;
     u32 free_hint;
@@ -40,12 +40,12 @@ typedef struct SagBindings {
     u32 rebuilds;
     bool pending;
     char error[256];
-} SagBindings;
+} YewBindings;
 
 static char *bind_strdup(const char *s)
 {
     size_t n = strlen(s) + 1U;
-    char *copy = sag_xmalloc(n);
+    char *copy = yew_xmalloc(n);
 
     (void)memcpy(copy, s, n);
     return copy;
@@ -63,10 +63,10 @@ static void bind_error(Ed *ed, const char *fmt, ...)
     va_end(ap);
 }
 
-static SagBindRow *row_by_ledger(Ed *ed, u32 ledger_id)
+static YewBindRow *row_by_ledger(Ed *ed, u32 ledger_id)
 {
     FlRegistration *reg;
-    SagBindings *binds;
+    YewBindings *binds;
     u32 row;
 
     if (ed == NULL || (binds = ed->bindings) == NULL || ledger_id == 0U ||
@@ -82,47 +82,47 @@ static SagBindRow *row_by_ledger(Ed *ed, u32 ledger_id)
     return &binds->v[row];
 }
 
-CmdStatus sag_bind_closure_cmd(CmdCtx *cx)
+CmdStatus yew_bind_closure_cmd(CmdCtx *cx)
 {
-    SagBindRow *row;
+    YewBindRow *row;
     FlVm *vm;
     FlValue ignored = FL_NIL_V;
     Bytebuf trace;
 
     if (cx == NULL || cx->ed == NULL || cx->iarg <= 0 ||
         (u64)cx->iarg > UINT32_MAX)
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     row = row_by_ledger(cx->ed, (u32)cx->iarg);
-    vm = sag_fl_vm(cx->ed);
+    vm = yew_fl_vm(cx->ed);
     if (row == NULL || vm == NULL ||
         (row->fn.t != (u8)FL_CLOSURE && row->fn.t != (u8)FL_NATIVE))
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     if (fl_call(vm, row->fn, NULL, 0U, &ignored))
-        return SAG_CMD_OK;
+        return YEW_CMD_OK;
 
     bytebuf_init(&trace);
     fl_trace_render(vm, vm->err, &trace);
-    sag_log(SAG_LOG_ERROR, "bound Fletch closure failed: %.*s",
+    yew_log(YEW_LOG_ERROR, "bound Fletch closure failed: %.*s",
             (int)trace.len, trace.data == NULL ? "" :
             (const char *)trace.data);
-    sag_msg(cx->ed, SAG_MSG_ERROR, "bound Fletch closure failed");
+    yew_msg(cx->ed, YEW_MSG_ERROR, "bound Fletch closure failed");
     bytebuf_free(&trace);
-    return SAG_CMD_ERR_STATE;
+    return YEW_CMD_ERR_STATE;
 }
 
 static CmdId closure_command_id(void)
 {
-    CmdId id = sag_cmd_lookup("ed.fl.closure", 13U);
+    CmdId id = yew_cmd_lookup("ed.fl.closure", 13U);
 
     if (id.v == 0U)
-        SAG_BUG("ed.fl.closure command is not registered");
+        YEW_BUG("ed.fl.closure command is not registered");
     return id;
 }
 
 static void bind_mark(FlVm *vm, void *ctx)
 {
     Ed *ed = (Ed *)ctx;
-    SagBindings *binds;
+    YewBindings *binds;
     u32 i;
 
     if (vm == NULL || ed == NULL || (binds = ed->bindings) == NULL)
@@ -133,13 +133,13 @@ static void bind_mark(FlVm *vm, void *ctx)
     }
 }
 
-static SagBindRow *find_sequence(Ed *ed, Mode mode, const char *seq)
+static YewBindRow *find_sequence(Ed *ed, Mode mode, const char *seq)
 {
-    SagBindings *binds = ed->bindings;
+    YewBindings *binds = ed->bindings;
     u32 i;
 
     for (i = binds->active_hi; i != 0U; i--) {
-        SagBindRow *row = &binds->v[i - 1U];
+        YewBindRow *row = &binds->v[i - 1U];
 
         if (row->active && row->mode == mode && strcmp(row->seq, seq) == 0)
             return row;
@@ -174,7 +174,7 @@ static bool sequence_set_add(const char **set, size_t cap, const char *seq)
 
 static bool rows_for_mode(Ed *ed, Mode mode, BindRow **out, u32 *out_n)
 {
-    SagBindings *binds = ed->bindings;
+    YewBindings *binds = ed->bindings;
     const char **seen;
     bool *keep;
     BindRow *rows;
@@ -186,14 +186,14 @@ static bool rows_for_mode(Ed *ed, Mode mode, BindRow **out, u32 *out_n)
 
     while ((u64)cap < want) {
         if (cap > SIZE_MAX / 2U)
-            SAG_BUG("binding shadow set exceeds address space");
+            YEW_BUG("binding shadow set exceeds address space");
         cap *= 2U;
     }
-    seen = sag_xcalloc(cap, sizeof(*seen));
+    seen = yew_xcalloc(cap, sizeof(*seen));
     keep = binds->active_hi == 0U ? NULL :
-           sag_xcalloc(binds->active_hi, sizeof(*keep));
+           yew_xcalloc(binds->active_hi, sizeof(*keep));
     for (i = binds->active_hi; i != 0U; i--) {
-        SagBindRow *row = &binds->v[i - 1U];
+        YewBindRow *row = &binds->v[i - 1U];
 
         if (row->active && row->mode == mode &&
             sequence_set_add(seen, cap, row->seq)) {
@@ -201,9 +201,9 @@ static bool rows_for_mode(Ed *ed, Mode mode, BindRow **out, u32 *out_n)
             n++;
         }
     }
-    rows = n == 0U ? NULL : sag_xcalloc(n, sizeof(*rows));
+    rows = n == 0U ? NULL : yew_xcalloc(n, sizeof(*rows));
     for (i = 0U; i < binds->active_hi; i++) {
-        SagBindRow *row = &binds->v[i];
+        YewBindRow *row = &binds->v[i];
 
         if (!keep[i])
             continue;
@@ -216,43 +216,43 @@ static bool rows_for_mode(Ed *ed, Mode mode, BindRow **out, u32 *out_n)
     return true;
 }
 
-static bool validate_candidate(Ed *ed, const SagBindRow *extra)
+static bool validate_candidate(Ed *ed, const YewBindRow *extra)
 {
     BindRow row;
-    SagKeymapError error;
+    YewKeymapError error;
 
     row = (BindRow){extra->seq, extra->cmd, extra->iarg, extra->sarg};
-    error = sag_keymap_validate_row(&row);
-    if (error != SAG_KEYMAP_ERR_NONE)
-        bind_error(ed, "%s", sag_keymap_error_string(error));
-    return error == SAG_KEYMAP_ERR_NONE;
+    error = yew_keymap_validate_row(&row);
+    if (error != YEW_KEYMAP_ERR_NONE)
+        bind_error(ed, "%s", yew_keymap_error_string(error));
+    return error == YEW_KEYMAP_ERR_NONE;
 }
 
-void sag_bind_init(Ed *ed)
+void yew_bind_init(Ed *ed)
 {
     FlVm *vm;
     u32 i;
 
     if (ed == NULL)
-        SAG_BUG("bind init: NULL editor");
+        YEW_BUG("bind init: NULL editor");
     if (ed->bindings != NULL)
         return;
-    ed->bindings = sag_xcalloc(1U, sizeof(*ed->bindings));
+    ed->bindings = yew_xcalloc(1U, sizeof(*ed->bindings));
     (void)closure_command_id();
-    for (i = 0U; i < (u32)SAG_MODE__N; i++) {
-        if (!sag_keymap_build(&ed->bind_keys[i], "config", NULL, 0U))
-            SAG_BUG("cannot build empty config keymap");
+    for (i = 0U; i < (u32)YEW_MODE__N; i++) {
+        if (!yew_keymap_build(&ed->bind_keys[i], "config", NULL, 0U))
+            YEW_BUG("cannot build empty config keymap");
     }
     ed->keys.n = 3U;
     ed->keys.l[2] = &ed->bind_keys[ed->mode];
-    vm = sag_fl_vm(ed);
+    vm = yew_fl_vm(ed);
     if (vm != NULL)
         fl_gc_root_provider(vm, bind_mark, ed);
 }
 
-void sag_bind_free(Ed *ed)
+void yew_bind_free(Ed *ed)
 {
-    SagBindings *binds;
+    YewBindings *binds;
     u32 i;
 
     if (ed == NULL || (binds = ed->bindings) == NULL)
@@ -267,18 +267,18 @@ void sag_bind_free(Ed *ed)
     ed->bindings = NULL;
 }
 
-u32 sag_bind_add(Ed *ed, u32 origin, Mode mode, const char *seq,
+u32 yew_bind_add(Ed *ed, u32 origin, Mode mode, const char *seq,
                  CmdId cmd, i64 iarg, const char *sarg, FlValue fn)
 {
-    SagBindings *binds;
-    SagBindRow candidate = {0};
-    SagBindRow *row;
+    YewBindings *binds;
+    YewBindRow candidate = {0};
+    YewBindRow *row;
     const CmdDesc *desc;
     u32 slot;
     u32 want;
 
     if (ed == NULL || (binds = ed->bindings) == NULL ||
-        mode >= SAG_MODE__N || seq == NULL) {
+        mode >= YEW_MODE__N || seq == NULL) {
         bind_error(ed, "invalid bind arguments");
         return 0U;
     }
@@ -295,7 +295,7 @@ u32 sag_bind_add(Ed *ed, u32 origin, Mode mode, const char *seq,
         bind_error(ed, "binding target is not callable");
         return 0U;
     }
-    desc = sag_cmd_desc(cmd);
+    desc = yew_cmd_desc(cmd);
     if (desc == NULL) {
         bind_error(ed, "unknown command");
         return 0U;
@@ -314,7 +314,7 @@ u32 sag_bind_add(Ed *ed, u32 origin, Mode mode, const char *seq,
             break;
     if (slot == binds->n && binds->n == binds->cap) {
         want = binds->cap == 0U ? 16U : binds->cap * 2U;
-        binds->v = sag_xreallocarray(binds->v, want, sizeof(*binds->v));
+        binds->v = yew_xreallocarray(binds->v, want, sizeof(*binds->v));
         binds->cap = want;
     }
     row = &binds->v[slot];
@@ -343,14 +343,14 @@ u32 sag_bind_add(Ed *ed, u32 origin, Mode mode, const char *seq,
         binds->free_hint++;
     binds->pending = true;
     if (binds->batch_depth == 0U)
-        sag_bind_rebuild(ed);
+        yew_bind_rebuild(ed);
     return row->ledger_id;
 }
 
-bool sag_bind_remove(Ed *ed, u32 ledger_id)
+bool yew_bind_remove(Ed *ed, u32 ledger_id)
 {
-    SagBindRow *row = row_by_ledger(ed, ledger_id);
-    SagBindings *binds;
+    YewBindRow *row = row_by_ledger(ed, ledger_id);
+    YewBindings *binds;
     u32 slot;
 
     if (row == NULL)
@@ -367,24 +367,24 @@ bool sag_bind_remove(Ed *ed, u32 ledger_id)
         binds->active_hi--;
     binds->pending = true;
     if (binds->batch_depth == 0U)
-        sag_bind_rebuild(ed);
+        yew_bind_rebuild(ed);
     return true;
 }
 
-void sag_bind_rebuild(Ed *ed)
+void yew_bind_rebuild(Ed *ed)
 {
-    SagBindings *binds;
+    YewBindings *binds;
     u32 mode;
 
     if (ed == NULL || (binds = ed->bindings) == NULL || !binds->pending)
         return;
-    for (mode = 0U; mode < (u32)SAG_MODE__N; mode++) {
+    for (mode = 0U; mode < (u32)YEW_MODE__N; mode++) {
         BindRow *rows = NULL;
         u32 n = 0U;
 
         (void)rows_for_mode(ed, (Mode)mode, &rows, &n);
-        if (!sag_keymap_build(&ed->bind_keys[mode], "config", rows, n))
-            SAG_BUG("validated config keymap no longer builds");
+        if (!yew_keymap_build(&ed->bind_keys[mode], "config", rows, n))
+            YEW_BUG("validated config keymap no longer builds");
         free(rows);
     }
     binds->pending = false;
@@ -393,32 +393,32 @@ void sag_bind_rebuild(Ed *ed)
     ed->keys.l[2] = &ed->bind_keys[ed->mode];
 }
 
-void sag_bind_batch_begin(Ed *ed)
+void yew_bind_batch_begin(Ed *ed)
 {
     if (ed == NULL || ed->bindings == NULL)
         return;
     if (ed->bindings->batch_depth == UINT32_MAX)
-        SAG_BUG("bind batch depth overflow");
+        YEW_BUG("bind batch depth overflow");
     ed->bindings->batch_depth++;
 }
 
-void sag_bind_batch_end(Ed *ed)
+void yew_bind_batch_end(Ed *ed)
 {
     if (ed == NULL || ed->bindings == NULL ||
         ed->bindings->batch_depth == 0U)
         return;
     ed->bindings->batch_depth--;
     if (ed->bindings->batch_depth == 0U)
-        sag_bind_rebuild(ed);
+        yew_bind_rebuild(ed);
 }
 
-const char *sag_bind_error(const Ed *ed)
+const char *yew_bind_error(const Ed *ed)
 {
     return ed == NULL || ed->bindings == NULL ? "bind subsystem unavailable" :
            ed->bindings->error;
 }
 
-u32 sag_bind_active_count(const Ed *ed)
+u32 yew_bind_active_count(const Ed *ed)
 {
     u32 n = 0U;
     u32 i;
@@ -431,7 +431,7 @@ u32 sag_bind_active_count(const Ed *ed)
     return n;
 }
 
-u32 sag_bind_rebuild_count(const Ed *ed)
+u32 yew_bind_rebuild_count(const Ed *ed)
 {
     return ed == NULL || ed->bindings == NULL ? 0U :
            ed->bindings->rebuilds;
@@ -445,10 +445,10 @@ static bool map_list_row(const KeyId *seq, u32 n,
                          const Binding *binding, void *ctx)
 {
     MapListCtx *list = ctx;
-    const CmdDesc *desc = sag_cmd_desc(binding->cmd);
+    const CmdDesc *desc = yew_cmd_desc(binding->cmd);
     char number[32];
 
-    sag_key_format_seq(seq, n, &list->out);
+    yew_key_format_seq(seq, n, &list->out);
     bytebuf_append(&list->out, "  ", 2U);
     bytebuf_append(&list->out, desc == NULL ? "<unknown>" : desc->name,
                    strlen(desc == NULL ? "<unknown>" : desc->name));
@@ -467,23 +467,23 @@ static bool map_list_row(const KeyId *seq, u32 n,
     return true;
 }
 
-CmdStatus sag_bind_cmd_map(CmdCtx *cx)
+CmdStatus yew_bind_cmd_map(CmdCtx *cx)
 {
     MapListCtx list;
 
-    if (cx == NULL || cx->ed == NULL || cx->ed->mode >= SAG_MODE__N)
-        return SAG_CMD_ERR_ARG;
+    if (cx == NULL || cx->ed == NULL || cx->ed->mode >= YEW_MODE__N)
+        return YEW_CMD_ERR_ARG;
     bytebuf_init(&list.out);
-    (void)sag_keymap_visit(&cx->ed->bind_keys[cx->ed->mode],
+    (void)yew_keymap_visit(&cx->ed->bind_keys[cx->ed->mode],
                            map_list_row, &list);
     if (list.out.len == 0U)
-        sag_msg(cx->ed, SAG_MSG_INFO, "no configured bindings for mode %s",
-                sag_modes[cx->ed->mode].name);
+        yew_msg(cx->ed, YEW_MSG_INFO, "no configured bindings for mode %s",
+                yew_modes[cx->ed->mode].name);
     else
-        sag_msg(cx->ed, SAG_MSG_INFO, "%.*s", (int)list.out.len,
+        yew_msg(cx->ed, YEW_MSG_INFO, "%.*s", (int)list.out.len,
                 (const char *)list.out.data);
     bytebuf_free(&list.out);
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
 static bool get_string(FlVm *vm, FlValue v, const char *what,
@@ -501,9 +501,9 @@ static bool mode_parse(const FlStr *s, Mode *out)
 {
     u32 i;
 
-    for (i = 0U; i < (u32)SAG_MODE__N; i++) {
-        if (s->len == strlen(sag_modes[i].name) &&
-            memcmp(s->b, sag_modes[i].name, s->len) == 0) {
+    for (i = 0U; i < (u32)YEW_MODE__N; i++) {
+        if (s->len == strlen(yew_modes[i].name) &&
+            memcmp(s->b, yew_modes[i].name, s->len) == 0) {
             *out = (Mode)i;
             return true;
         }
@@ -513,7 +513,7 @@ static bool mode_parse(const FlStr *s, Mode *out)
 
 static char *string_copy(const FlStr *s)
 {
-    char *copy = sag_xmalloc((size_t)s->len + 1U);
+    char *copy = yew_xmalloc((size_t)s->len + 1U);
 
     (void)memcpy(copy, s->b, s->len);
     copy[s->len] = '\0';
@@ -585,26 +585,26 @@ static bool add_modes(FlVm *vm, const FlStr *mode_name, const char *seq,
     u32 i;
 
     if (mode_name->len == 1U && mode_name->b[0] == '*') {
-        modes[0] = SAG_MODE_L;
-        modes[1] = SAG_MODE_W;
-        modes[2] = SAG_MODE_B;
+        modes[0] = YEW_MODE_L;
+        modes[1] = YEW_MODE_W;
+        modes[2] = YEW_MODE_B;
         nmode = 3U;
     } else if (!mode_parse(mode_name, &modes[0])) {
         return fl_raise(vm, "name", "unknown editor mode '%.*s'",
                         (int)mode_name->len, mode_name->b);
     }
-    sag_bind_batch_begin(ed);
+    yew_bind_batch_begin(ed);
     for (i = 0U; i < nmode; i++) {
-        ids[i] = sag_bind_add(ed, origin, modes[i], seq, cmd, iarg, sarg,
+        ids[i] = yew_bind_add(ed, origin, modes[i], seq, cmd, iarg, sarg,
                               fn);
         if (ids[i] == 0U) {
             while (i != 0U)
-                (void)sag_bind_remove(ed, ids[--i]);
-            sag_bind_batch_end(ed);
-            return fl_raise(vm, "user", "bind: %s", sag_bind_error(ed));
+                (void)yew_bind_remove(ed, ids[--i]);
+            yew_bind_batch_end(ed);
+            return fl_raise(vm, "user", "bind: %s", yew_bind_error(ed));
         }
     }
-    sag_bind_batch_end(ed);
+    yew_bind_batch_end(ed);
     *out = FL_INT_V((i64)ids[0]);
     return true;
 }
@@ -617,7 +617,7 @@ bool fl_bind_native(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
     char *seq;
     char *name = NULL;
     char *sarg = NULL;
-    CmdId cmd = SAG_CMD_NONE;
+    CmdId cmd = YEW_CMD_NONE;
     FlValue fn = FL_NIL_V;
     i64 iarg = 0;
     u32 origin;
@@ -634,7 +634,7 @@ bool fl_bind_native(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
         if (!get_string(vm, args[2], "bind command", &command))
             return false;
         name = string_copy(command);
-        cmd = sag_cmd_lookup(name, command->len);
+        cmd = yew_cmd_lookup(name, command->len);
         if (cmd.v == 0U) {
             ok = fl_raise(vm, "name", "unknown command '%s'", name);
             free(name);
@@ -674,14 +674,14 @@ static bool remove_modes(FlVm *vm, const FlStr *mode_name, const char *seq,
 {
     Ed *ed = vm->ed;
     Mode modes[3];
-    SagBindRow *rows[3];
+    YewBindRow *rows[3];
     u32 nmode = 1U;
     u32 i;
 
     if (mode_name->len == 1U && mode_name->b[0] == '*') {
-        modes[0] = SAG_MODE_L;
-        modes[1] = SAG_MODE_W;
-        modes[2] = SAG_MODE_B;
+        modes[0] = YEW_MODE_L;
+        modes[1] = YEW_MODE_W;
+        modes[2] = YEW_MODE_B;
         nmode = 3U;
     } else if (!mode_parse(mode_name, &modes[0])) {
         return fl_raise(vm, "name", "unknown editor mode '%.*s'",
@@ -691,15 +691,15 @@ static bool remove_modes(FlVm *vm, const FlStr *mode_name, const char *seq,
         rows[i] = find_sequence(ed, modes[i], seq);
         if (rows[i] == NULL)
             return fl_raise(vm, "name", "no binding for '%s' in mode %s",
-                            seq, sag_modes[modes[i]].name);
+                            seq, yew_modes[modes[i]].name);
         if (rows[i]->origin != origin)
             return fl_raise(vm, "user", "cannot unbind '%s': owned by %s",
                             seq, fl_origin_label(ed, rows[i]->origin));
     }
-    sag_bind_batch_begin(ed);
+    yew_bind_batch_begin(ed);
     for (i = 0U; i < nmode; i++)
-        (void)sag_bind_remove(ed, rows[i]->ledger_id);
-    sag_bind_batch_end(ed);
+        (void)yew_bind_remove(ed, rows[i]->ledger_id);
+    yew_bind_batch_end(ed);
     return true;
 }
 

@@ -19,7 +19,7 @@ static void frame_name(const FlVm *vm, const FlFn *fn, Bytebuf *out)
 {
     const char *nm = fn->name_id == 0U
                          ? NULL
-                         : sag_intern_str(vm->in, fn->name_id);
+                         : yew_intern_str(vm->in, fn->name_id);
 
     switch ((FlFnKind)fn->fnkind) {
     case FL_FN_MACRO:
@@ -262,7 +262,7 @@ void fl_trace_attach(FlVm *vm)
          * real link in the chain and a trace that skipped it would
          * leave an unexplained jump. */
         if (vm->frames[i].via_native != 0U) {
-            const char *nm = sag_intern_str(vm->in, vm->frames[i].via_native);
+            const char *nm = yew_intern_str(vm->in, vm->frames[i].via_native);
 
             bytebuf_printf(&bb, "<native %s>", nm == NULL ? "?" : nm);
             push_line(vm, l, &bb);

@@ -1,4 +1,4 @@
-# Sagitta Sprint 02 advisory Unicode baseline
+# yew Sprint 02 advisory Unicode baseline
 scenario=ascii
 bytes=1048576
 clusters=1048576

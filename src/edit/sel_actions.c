@@ -29,7 +29,7 @@ static bool action_context(CmdCtx *cx, Win **win, TextBuf **tb,
         cx->win->buf == NULL || cx->win->buf->tb == NULL ||
         cx->win->cs.curs.len == 0U)
         return false;
-    index = cx->win->cs.active != SAG_MC_ACTIVE_NONE ?
+    index = cx->win->cs.active != YEW_MC_ACTIVE_NONE ?
                 cx->win->cs.active : cx->win->cs.primary;
     if (index >= cx->win->cs.curs.len)
         return false;
@@ -45,9 +45,9 @@ static u8 text_byte(const TextBuf *tb, u64 off)
     const u8 *bytes;
     u64 len;
 
-    if (!sag_textiter_begin(&it, tb, BYTEOFF(off)) ||
-        !sag_textiter_chunk(&it, tb, &bytes, &len) || len == 0U)
-        SAG_BUG("selection action: cannot read valid byte offset");
+    if (!yew_textiter_begin(&it, tb, BYTEOFF(off)) ||
+        !yew_textiter_chunk(&it, tb, &bytes, &len) || len == 0U)
+        YEW_BUG("selection action: cannot read valid byte offset");
     return bytes[0];
 }
 
@@ -57,25 +57,25 @@ static void append_span(Bytebuf *out, const TextBuf *tb, Span span)
     u64 done = 0U;
     u64 total;
 
-    if (span.lo > span.hi || span.hi > sag_textbuf_len(tb))
-        SAG_BUG("selection action: invalid source span");
+    if (span.lo > span.hi || span.hi > yew_textbuf_len(tb))
+        YEW_BUG("selection action: invalid source span");
     total = span.hi - span.lo;
     if (total == 0U)
         return;
-    if (!sag_textiter_begin(&it, tb, BYTEOFF(span.lo)))
-        SAG_BUG("selection action: cannot start source iterator");
+    if (!yew_textiter_begin(&it, tb, BYTEOFF(span.lo)))
+        YEW_BUG("selection action: cannot start source iterator");
     while (done < total) {
         const u8 *bytes;
         u64 len;
         u64 take;
 
-        if (!sag_textiter_chunk(&it, tb, &bytes, &len))
-            SAG_BUG("selection action: truncated source iterator");
+        if (!yew_textiter_chunk(&it, tb, &bytes, &len))
+            YEW_BUG("selection action: truncated source iterator");
         take = len < total - done ? len : total - done;
         bytebuf_append(out, bytes, (size_t)take);
         done += take;
-        if (done < total && !sag_textiter_advance(&it, tb))
-            SAG_BUG("selection action: truncated source iterator advance");
+        if (done < total && !yew_textiter_advance(&it, tb))
+            YEW_BUG("selection action: truncated source iterator advance");
     }
 }
 
@@ -111,8 +111,8 @@ static SelEdit *edit_push(SelEditVec *edits, Span span)
  * The EditCtx is a COPY, and the journal handle is an OUT parameter of
  * the first edit made through it.
  *
- * sag_edit_delete/insert lazily open the crash journal into ec.jrnl on
- * the first write.  Returning without sag_ed_finish_edit therefore drops
+ * yew_edit_delete/insert lazily open the crash journal into ec.jrnl on
+ * the first write.  Returning without yew_ed_finish_edit therefore drops
  * the only reference to an open journal: the buffer's b->jrn stays NULL,
  * so teardown closes nothing, the file descriptor outlives the buffer
  * that owns it, and — worse than the leak — the next crash recovers
@@ -126,7 +126,7 @@ static SelEdit *edit_push(SelEditVec *edits, Span span)
  */
 static bool apply_edits(CmdCtx *cx, SelEditVec *edits, ByteOff *first)
 {
-    EditCtx ec = sag_ed_edit_ctx_for(cx->ed, cx->win);
+    EditCtx ec = yew_ed_edit_ctx_for(cx->ed, cx->win);
     i64 delta = 0;
     bool ok = true;
     size_t i;
@@ -141,14 +141,14 @@ static bool apply_edits(CmdCtx *cx, SelEditVec *edits, ByteOff *first)
         Span now;
 
         if (delta < 0 && edit->span.lo < (u64)(-delta))
-            SAG_BUG("selection action: edit offset underflow");
+            YEW_BUG("selection action: edit offset underflow");
         now.lo = delta < 0 ? edit->span.lo - (u64)(-delta) :
                             edit->span.lo + (u64)delta;
         now.hi = now.lo + removed;
-        if (removed != 0U && !sag_edit_delete(&ec, now)) {
+        if (removed != 0U && !yew_edit_delete(&ec, now)) {
             ok = false;
         } else if (edit->replacement.len != 0U &&
-                   !sag_edit_insert(&ec, BYTEOFF(now.lo),
+                   !yew_edit_insert(&ec, BYTEOFF(now.lo),
                                     edit->replacement.data,
                                     edit->replacement.len)) {
             ok = false;
@@ -156,7 +156,7 @@ static bool apply_edits(CmdCtx *cx, SelEditVec *edits, ByteOff *first)
             delta += (i64)edit->replacement.len - (i64)removed;
         }
     }
-    sag_ed_finish_edit(cx->ed, &ec);
+    yew_ed_finish_edit(cx->ed, &ec);
     return ok;
 }
 
@@ -173,14 +173,14 @@ static void collapse_all(Win *win)
         cursor->anchor = start;
         cursor->goal_col = (GCol){0U};
     }
-    sag_cset_normalize(win->buf->tb, &win->cs);
+    yew_cset_normalize(win->buf->tb, &win->cs);
 }
 
 static void cursor_place(Win *win, ByteOff at)
 {
     Cursor *cursor;
     Span line;
-    size_t index = win->cs.active != SAG_MC_ACTIVE_NONE ?
+    size_t index = win->cs.active != YEW_MC_ACTIVE_NONE ?
                        win->cs.active : win->cs.primary;
 
     if (index >= win->cs.curs.len)
@@ -188,9 +188,9 @@ static void cursor_place(Win *win, ByteOff at)
     cursor = &win->cs.curs.data[index];
     cursor->pos = at;
     cursor->anchor = at;
-    line = sag_textbuf_line_span(win->buf->tb,
-                                 sag_textbuf_line_of(win->buf->tb, at));
-    cursor->goal_col = sag_off_to_gcol(win->buf->tb, line, at);
+    line = yew_textbuf_line_span(win->buf->tb,
+                                 yew_textbuf_line_of(win->buf->tb, at));
+    cursor->goal_col = yew_off_to_gcol(win->buf->tb, line, at);
 }
 
 static CmdStatus finish_action(CmdCtx *cx, ByteOff at, bool insert)
@@ -198,21 +198,21 @@ static CmdStatus finish_action(CmdCtx *cx, ByteOff at, bool insert)
     cursor_place(cx->win, at);
     collapse_all(cx->win);
     if (insert)
-        return sag_mode_enter(cx->ed, SAG_MODE_I);
-    return sag_mode_enter(cx->ed, SAG_MODE_L);
+        return yew_mode_enter(cx->ed, YEW_MODE_I);
+    return yew_mode_enter(cx->ed, YEW_MODE_L);
 }
 
 static void selection_spans(const Win *win, const Cursor *cursor,
-                            SagSelSpanVec *spans)
+                            YewSelSpanVec *spans)
 {
-    if (win->h.kind == SAG_SEL_RECT) {
-        sag_sel_rect_spans(win, cursor, spans);
+    if (win->h.kind == YEW_SEL_RECT) {
+        yew_sel_rect_spans(win, cursor, spans);
     } else {
-        SagSelSpanVec_push(spans, sag_sel_span(win, cursor));
+        YewSelSpanVec_push(spans, yew_sel_span(win, cursor));
     }
 }
 
-static void all_selection_spans(const Win *win, SagSelSpanVec *spans)
+static void all_selection_spans(const Win *win, YewSelSpanVec *spans)
 {
     size_t i;
 
@@ -222,29 +222,29 @@ static void all_selection_spans(const Win *win, SagSelSpanVec *spans)
 
 static RegType selection_reg_type(SelKind kind)
 {
-    if (kind == SAG_SEL_LINE)
-        return SAG_REG_LINEWISE;
-    if (kind == SAG_SEL_RECT)
-        return SAG_REG_BLOCKWISE;
-    return SAG_REG_CHARWISE;
+    if (kind == YEW_SEL_LINE)
+        return YEW_REG_LINEWISE;
+    if (kind == YEW_SEL_RECT)
+        return YEW_REG_BLOCKWISE;
+    return YEW_REG_CHARWISE;
 }
 
 static void regval_from_rect(RegVal *value, const Win *win,
                              const Cursor *cursor)
 {
-    SagSelSpanVec spans = {0};
+    YewSelSpanVec spans = {0};
     CCol c0 = {0U};
     CCol c1 = {0U};
     Span ignored;
     LineNo first;
     size_t i;
 
-    sag_sel_rect_spans(win, cursor, &spans);
-    first = sag_textbuf_line_of(win->buf->tb,
+    yew_sel_rect_spans(win, cursor, &spans);
+    first = yew_textbuf_line_of(win->buf->tb,
                                cursor->pos.v < cursor->anchor.v ?
                                    cursor->pos : cursor->anchor);
-    (void)sag_sel_rect_row(win, cursor, first, &ignored, &c0, &c1);
-    value->type = SAG_REG_BLOCKWISE;
+    (void)yew_sel_rect_row(win, cursor, first, &ignored, &c0, &c1);
+    value->type = YEW_REG_BLOCKWISE;
     value->width = (u32)(c1.v - c0.v);
     value->ragged = false;
     value->bytes.len = 0U;
@@ -259,9 +259,9 @@ static void regval_from_rect(RegVal *value, const Win *win,
         if (copied == 0U && value->width != 0U)
             value->ragged = true;
         row.hi = value->bytes.len;
-        SagRegRowVec_push(&value->rows, row);
+        YewRegRowVec_push(&value->rows, row);
     }
-    SagSelSpanVec_free(&spans);
+    YewSelSpanVec_free(&spans);
 }
 
 static void capture_selection(RegVal *value, const Win *win)
@@ -269,18 +269,18 @@ static void capture_selection(RegVal *value, const Win *win)
     RegType type = selection_reg_type(win->h.kind);
     size_t i;
 
-    if (type == SAG_REG_BLOCKWISE) {
+    if (type == YEW_REG_BLOCKWISE) {
         for (i = 0U; i < win->cs.curs.len; i++) {
             RegVal part;
             size_t row;
 
-            sag_regval_init(&part);
+            yew_regval_init(&part);
             regval_from_rect(&part, win, &win->cs.curs.data[i]);
             if (value->rows.len != 0U && part.width != value->width)
                 value->ragged = true;
             if (part.width > value->width)
                 value->width = part.width;
-            value->type = SAG_REG_BLOCKWISE;
+            value->type = YEW_REG_BLOCKWISE;
             value->ragged = value->ragged || part.ragged;
             for (row = 0U; row < part.rows.len; row++) {
                 Span source = part.rows.data[row];
@@ -289,26 +289,26 @@ static void capture_selection(RegVal *value, const Win *win)
                 bytebuf_append(&value->bytes, part.bytes.data + source.lo,
                                (size_t)(source.hi - source.lo));
                 target.hi = value->bytes.len;
-                SagRegRowVec_push(&value->rows, target);
+                YewRegRowVec_push(&value->rows, target);
             }
-            sag_regval_free(&part);
+            yew_regval_free(&part);
         }
     } else {
         for (i = 0U; i < win->cs.curs.len; i++) {
             RegVal part;
 
-            sag_regval_init(&part);
-            sag_regval_from_span(&part, win->buf->tb,
-                                 sag_sel_span(win, &win->cs.curs.data[i]),
+            yew_regval_init(&part);
+            yew_regval_from_span(&part, win->buf->tb,
+                                 yew_sel_span(win, &win->cs.curs.data[i]),
                                  type, &win->buf->meta);
             bytebuf_append(&value->bytes, part.bytes.data, part.bytes.len);
             value->type = (u8)type;
-            sag_regval_free(&part);
+            yew_regval_free(&part);
         }
     }
 }
 
-CmdStatus sag_sel_cmd_yank(CmdCtx *cx)
+CmdStatus yew_sel_cmd_yank(CmdCtx *cx)
 {
     Win *win;
     TextBuf *tb;
@@ -316,14 +316,14 @@ CmdStatus sag_sel_cmd_yank(CmdCtx *cx)
     RegVal value;
 
     if (!action_context(cx, &win, &tb, &cursor))
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     (void)tb;
     (void)cursor;
-    sag_regval_init(&value);
+    yew_regval_init(&value);
     capture_selection(&value, win);
-    sag_reg_yank(&cx->ed->regs, 0U, &value);
-    sag_regval_free(&value);
-    return SAG_CMD_OK;
+    yew_reg_yank(&cx->ed->regs, 0U, &value);
+    yew_regval_free(&value);
+    return YEW_CMD_OK;
 }
 
 static CmdStatus delete_or_change(CmdCtx *cx, bool change)
@@ -332,33 +332,33 @@ static CmdStatus delete_or_change(CmdCtx *cx, bool change)
     TextBuf *tb;
     Cursor *cursor;
     RegVal value;
-    SagSelSpanVec spans = {0};
+    YewSelSpanVec spans = {0};
     SelEditVec edits = {0};
     ByteOff first;
     size_t i;
 
     if (!action_context(cx, &win, &tb, &cursor))
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     (void)cursor;
-    sag_regval_init(&value);
+    yew_regval_init(&value);
     capture_selection(&value, win);
     all_selection_spans(win, &spans);
     for (i = 0U; i < spans.len; i++)
         (void)edit_push(&edits, spans.data[i]);
     if (!apply_edits(cx, &edits, &first)) {
         edits_free(&edits);
-        SagSelSpanVec_free(&spans);
-        sag_regval_free(&value);
-        return SAG_CMD_ERR_IO;
+        YewSelSpanVec_free(&spans);
+        yew_regval_free(&value);
+        return YEW_CMD_ERR_IO;
     }
-    sag_reg_delete(&cx->ed->regs, 0U, &value);
+    yew_reg_delete(&cx->ed->regs, 0U, &value);
     edits_free(&edits);
-    if (win->h.kind == SAG_SEL_RECT && change) {
+    if (win->h.kind == YEW_SEL_RECT && change) {
         /* Rectangular change keeps one insertion caret per affected row. */
         Cursor primary = {first, {0U}, first};
         u64 removed = 0U;
 
-        sag_cset_remove_all_but_primary(&win->cs);
+        yew_cset_remove_all_but_primary(&win->cs);
         win->cs.curs.data[0] = primary;
         for (i = 1U; i < spans.len; i++) {
             Cursor extra;
@@ -368,40 +368,40 @@ static CmdStatus delete_or_change(CmdCtx *cx, bool change)
             extra.pos = BYTEOFF(original.lo - removed);
             extra.anchor = extra.pos;
             extra.goal_col = (GCol){0U};
-            (void)sag_cset_add(&win->cs, extra);
+            (void)yew_cset_add(&win->cs, extra);
         }
-        sag_cset_normalize(tb, &win->cs);
-        SagSelSpanVec_free(&spans);
-        sag_regval_free(&value);
-        return sag_mode_enter(cx->ed, SAG_MODE_I);
+        yew_cset_normalize(tb, &win->cs);
+        YewSelSpanVec_free(&spans);
+        yew_regval_free(&value);
+        return yew_mode_enter(cx->ed, YEW_MODE_I);
     }
-    SagSelSpanVec_free(&spans);
-    sag_regval_free(&value);
+    YewSelSpanVec_free(&spans);
+    yew_regval_free(&value);
     return finish_action(cx, first, change);
 }
 
-CmdStatus sag_sel_cmd_delete(CmdCtx *cx)
+CmdStatus yew_sel_cmd_delete(CmdCtx *cx)
 {
     return delete_or_change(cx, false);
 }
 
-CmdStatus sag_sel_cmd_change(CmdCtx *cx)
+CmdStatus yew_sel_cmd_change(CmdCtx *cx)
 {
     return delete_or_change(cx, true);
 }
 
-static CmdStatus change_case(CmdCtx *cx, SagCaseKind kind)
+static CmdStatus change_case(CmdCtx *cx, YewCaseKind kind)
 {
     Win *win;
     TextBuf *tb;
     Cursor *cursor;
-    SagSelSpanVec spans = {0};
+    YewSelSpanVec spans = {0};
     SelEditVec edits = {0};
     ByteOff first;
     size_t i;
 
     if (!action_context(cx, &win, &tb, &cursor))
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     (void)cursor;
     all_selection_spans(win, &spans);
     for (i = 0U; i < spans.len; i++) {
@@ -411,10 +411,10 @@ static CmdStatus change_case(CmdCtx *cx, SagCaseKind kind)
 
         while (at < source.len) {
             u32 cp;
-            u8 mapped[SAG_CASE_MAX_UTF8];
-            size_t used = sag_utf8_decode(source.data + at,
+            u8 mapped[YEW_CASE_MAX_UTF8];
+            size_t used = yew_utf8_decode(source.data + at,
                                           source.len - at, &cp);
-            size_t n = sag_case_map_utf8(cp, kind, mapped);
+            size_t n = yew_case_map_utf8(cp, kind, mapped);
 
             bytebuf_append(&edit->replacement, mapped, n);
             at += used;
@@ -423,27 +423,27 @@ static CmdStatus change_case(CmdCtx *cx, SagCaseKind kind)
     }
     if (!apply_edits(cx, &edits, &first)) {
         edits_free(&edits);
-        SagSelSpanVec_free(&spans);
-        return SAG_CMD_ERR_IO;
+        YewSelSpanVec_free(&spans);
+        return YEW_CMD_ERR_IO;
     }
     edits_free(&edits);
-    SagSelSpanVec_free(&spans);
+    YewSelSpanVec_free(&spans);
     return finish_action(cx, first, false);
 }
 
-CmdStatus sag_sel_cmd_case_upper(CmdCtx *cx)
+CmdStatus yew_sel_cmd_case_upper(CmdCtx *cx)
 {
-    return change_case(cx, SAG_CASE_UPPER);
+    return change_case(cx, YEW_CASE_UPPER);
 }
 
-CmdStatus sag_sel_cmd_case_lower(CmdCtx *cx)
+CmdStatus yew_sel_cmd_case_lower(CmdCtx *cx)
 {
-    return change_case(cx, SAG_CASE_LOWER);
+    return change_case(cx, YEW_CASE_LOWER);
 }
 
-CmdStatus sag_sel_cmd_case_toggle(CmdCtx *cx)
+CmdStatus yew_sel_cmd_case_toggle(CmdCtx *cx)
 {
-    return change_case(cx, SAG_CASE_TOGGLE);
+    return change_case(cx, YEW_CASE_TOGGLE);
 }
 
 static void covered_lines(const Win *win, const Cursor *cursor,
@@ -455,8 +455,8 @@ static void covered_lines(const Win *win, const Cursor *cursor,
     u64 hi = cursor->pos.v > cursor->anchor.v ? cursor->pos.v :
                                                    cursor->anchor.v;
 
-    *first = sag_textbuf_line_of(tb, BYTEOFF(lo));
-    *last = sag_textbuf_line_of(tb, BYTEOFF(hi));
+    *first = yew_textbuf_line_of(tb, BYTEOFF(lo));
+    *last = yew_textbuf_line_of(tb, BYTEOFF(hi));
 }
 
 static CmdStatus indent_action(CmdCtx *cx, bool dedent)
@@ -481,10 +481,10 @@ static CmdStatus indent_action(CmdCtx *cx, bool dedent)
     ByteOff collapse;
 
     if (!action_context(cx, &win, &tb, &cursor))
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     (void)cursor;
-    line_count = sag_textbuf_line_count(tb);
-    covered = sag_xcalloc((size_t)line_count, sizeof(*covered));
+    line_count = yew_textbuf_line_count(tb);
+    covered = yew_xcalloc((size_t)line_count, sizeof(*covered));
     first = LINENO(line_count);
     last = LINENO(0U);
     for (ci = 0U; ci < win->cs.curs.len; ci++) {
@@ -501,7 +501,7 @@ static CmdStatus indent_action(CmdCtx *cx, bool dedent)
     }
     tabwidth = win->buf->tabwidth == 0U ? 4U : win->buf->tabwidth;
     for (line = first.v; line <= last.v; line++) {
-        Span span = sag_textbuf_line_span(tb, LINENO(line));
+        Span span = yew_textbuf_line_span(tb, LINENO(line));
         SelEdit *edit;
 
         if (!covered[line])
@@ -537,30 +537,30 @@ static CmdStatus indent_action(CmdCtx *cx, bool dedent)
             }
         }
     }
-    collapse = sag_textbuf_line_start(tb, first);
+    collapse = yew_textbuf_line_start(tb, first);
     if (!apply_edits(cx, &edits, NULL)) {
         free(covered);
         edits_free(&edits);
-        return SAG_CMD_ERR_IO;
+        return YEW_CMD_ERR_IO;
     }
     free(covered);
     edits_free(&edits);
     return finish_action(cx, collapse, false);
 }
 
-CmdStatus sag_sel_cmd_indent(CmdCtx *cx)
+CmdStatus yew_sel_cmd_indent(CmdCtx *cx)
 {
     return indent_action(cx, false);
 }
 
-CmdStatus sag_sel_cmd_dedent(CmdCtx *cx)
+CmdStatus yew_sel_cmd_dedent(CmdCtx *cx)
 {
     return indent_action(cx, true);
 }
 
 static ByteOff line_content_end(const TextBuf *tb, LineNo line)
 {
-    Span span = sag_textbuf_line_span(tb, line);
+    Span span = yew_textbuf_line_span(tb, line);
     ByteOff end = BYTEOFF(span.hi);
 
     if (end.v != span.lo && text_byte(tb, end.v - 1U) == (u8)'\n') {
@@ -577,7 +577,7 @@ static bool join_punct(u8 byte)
            byte == (u8)';';
 }
 
-CmdStatus sag_sel_cmd_join(CmdCtx *cx)
+CmdStatus yew_sel_cmd_join(CmdCtx *cx)
 {
     Win *win;
     TextBuf *tb;
@@ -587,7 +587,7 @@ CmdStatus sag_sel_cmd_join(CmdCtx *cx)
     size_t i;
 
     if (!action_context(cx, &win, &tb, &cursor))
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     (void)cursor;
     for (i = 0U; i < win->cs.curs.len; i++) {
         LineNo first;
@@ -601,7 +601,7 @@ CmdStatus sag_sel_cmd_join(CmdCtx *cx)
         covered_lines(win, &win->cs.curs.data[i], &first, &last);
         if (first.v == last.v)
             continue;
-        joined.lo = sag_textbuf_line_start(tb, first).v;
+        joined.lo = yew_textbuf_line_start(tb, first).v;
         joined.hi = line_content_end(tb, last).v;
         if (edits.len != 0U && joined.lo < edits.data[edits.len - 1U].span.hi)
             continue;
@@ -628,27 +628,27 @@ CmdStatus sag_sel_cmd_join(CmdCtx *cx)
         collapse = win->cs.curs.data[win->cs.primary].pos;
     if (!apply_edits(cx, &edits, NULL)) {
         edits_free(&edits);
-        return SAG_CMD_ERR_IO;
+        return YEW_CMD_ERR_IO;
     }
     edits_free(&edits);
     return finish_action(cx, collapse, false);
 }
 
-CmdStatus sag_sel_cmd_replace_char(CmdCtx *cx)
+CmdStatus yew_sel_cmd_replace_char(CmdCtx *cx)
 {
     Win *win;
     TextBuf *tb;
     Cursor *cursor;
-    SagSelSpanVec spans = {0};
+    YewSelSpanVec spans = {0};
     SelEditVec edits = {0};
     ByteOff first;
     size_t i;
 
     if (!action_context(cx, &win, &tb, &cursor) || cx->sarg == NULL ||
         cx->sarg_len == 0U ||
-        sag_gb_next_bytes((const u8 *)cx->sarg, cx->sarg_len, 0U) !=
+        yew_gb_next_bytes((const u8 *)cx->sarg, cx->sarg_len, 0U) !=
             cx->sarg_len)
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     (void)cursor;
     all_selection_spans(win, &spans);
     for (i = 0U; i < spans.len; i++) {
@@ -657,7 +657,7 @@ CmdStatus sag_sel_cmd_replace_char(CmdCtx *cx)
         size_t at = 0U;
 
         while (at < source.len) {
-            size_t next = sag_gb_next_bytes(source.data, source.len, at);
+            size_t next = yew_gb_next_bytes(source.data, source.len, at);
 
             bytebuf_append(&edit->replacement, cx->sarg, cx->sarg_len);
             at = next;
@@ -666,11 +666,11 @@ CmdStatus sag_sel_cmd_replace_char(CmdCtx *cx)
     }
     if (!apply_edits(cx, &edits, &first)) {
         edits_free(&edits);
-        SagSelSpanVec_free(&spans);
-        return SAG_CMD_ERR_IO;
+        YewSelSpanVec_free(&spans);
+        return YEW_CMD_ERR_IO;
     }
     edits_free(&edits);
-    SagSelSpanVec_free(&spans);
+    YewSelSpanVec_free(&spans);
     return finish_action(cx, first, false);
 }
 
@@ -684,38 +684,38 @@ static CmdStatus shift_char_or_line(CmdCtx *cx, bool right)
     size_t i;
 
     if (!action_context(cx, &win, &tb, &cursor))
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     (void)cursor;
     for (i = 0U; i < win->cs.curs.len; i++) {
         Cursor *item = &win->cs.curs.data[i];
-        Span selected = sag_sel_span(win, item);
+        Span selected = yew_sel_span(win, item);
         Span whole;
         Span neighbor;
         SelEdit *edit;
 
         if (selected.lo == selected.hi)
             continue;
-        if (win->h.kind == SAG_SEL_LINE) {
+        if (win->h.kind == YEW_SEL_LINE) {
             LineNo first;
             LineNo last;
-            u64 line_count = sag_textbuf_line_count(tb);
+            u64 line_count = yew_textbuf_line_count(tb);
 
             covered_lines(win, item, &first, &last);
             if ((!right && first.v == 0U) ||
                 (right && last.v + 1U >= line_count))
                 continue;
             neighbor = right ?
-                sag_textbuf_line_span(tb, LINENO(last.v + 1U)) :
-                sag_textbuf_line_span(tb, LINENO(first.v - 1U));
+                yew_textbuf_line_span(tb, LINENO(last.v + 1U)) :
+                yew_textbuf_line_span(tb, LINENO(first.v - 1U));
         } else if (right) {
-            if (selected.hi >= sag_textbuf_len(tb))
+            if (selected.hi >= yew_textbuf_len(tb))
                 continue;
             neighbor = (Span){selected.hi,
-                sag_grapheme_next_boundary(tb, BYTEOFF(selected.hi)).v};
+                yew_grapheme_next_boundary(tb, BYTEOFF(selected.hi)).v};
         } else {
             if (selected.lo == 0U)
                 continue;
-            neighbor = (Span){sag_grapheme_prev_boundary(
+            neighbor = (Span){yew_grapheme_prev_boundary(
                                   tb, BYTEOFF(selected.lo)).v,
                               selected.lo};
         }
@@ -739,7 +739,7 @@ static CmdStatus shift_char_or_line(CmdCtx *cx, bool right)
         collapse = win->cs.curs.data[win->cs.primary].pos;
     if (!apply_edits(cx, &edits, NULL)) {
         edits_free(&edits);
-        return SAG_CMD_ERR_IO;
+        return YEW_CMD_ERR_IO;
     }
     edits_free(&edits);
     return finish_action(cx, collapse, false);
@@ -750,13 +750,13 @@ static CmdStatus shift_rect(CmdCtx *cx, bool right)
     Win *win;
     TextBuf *tb;
     Cursor *cursor;
-    SagSelSpanVec spans = {0};
+    YewSelSpanVec spans = {0};
     SelEditVec edits = {0};
     ByteOff first;
     size_t i;
 
     if (!action_context(cx, &win, &tb, &cursor))
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     (void)cursor;
     all_selection_spans(win, &spans);
     for (i = 0U; i < spans.len; i++) {
@@ -764,7 +764,7 @@ static CmdStatus shift_rect(CmdCtx *cx, bool right)
         Span neighbor;
         Span whole;
         SelEdit *edit;
-        LineNo line = sag_textbuf_line_of(tb, BYTEOFF(selected.lo));
+        LineNo line = yew_textbuf_line_of(tb, BYTEOFF(selected.lo));
         ByteOff end = line_content_end(tb, line);
 
         if (selected.lo == selected.hi)
@@ -773,13 +773,13 @@ static CmdStatus shift_rect(CmdCtx *cx, bool right)
             if (selected.hi >= end.v)
                 continue;
             neighbor = (Span){selected.hi,
-                sag_grapheme_next_boundary(tb, BYTEOFF(selected.hi)).v};
+                yew_grapheme_next_boundary(tb, BYTEOFF(selected.hi)).v};
             whole = (Span){selected.lo, neighbor.hi};
         } else {
-            ByteOff start = sag_textbuf_line_start(tb, line);
+            ByteOff start = yew_textbuf_line_start(tb, line);
             if (selected.lo <= start.v)
                 continue;
-            neighbor = (Span){sag_grapheme_prev_boundary(
+            neighbor = (Span){yew_grapheme_prev_boundary(
                                   tb, BYTEOFF(selected.lo)).v,
                               selected.lo};
             whole = (Span){neighbor.lo, selected.hi};
@@ -796,24 +796,24 @@ static CmdStatus shift_rect(CmdCtx *cx, bool right)
     first = BYTEOFF(spans.len == 0U ? cursor->pos.v : spans.data[0].lo);
     if (!apply_edits(cx, &edits, NULL)) {
         edits_free(&edits);
-        SagSelSpanVec_free(&spans);
-        return SAG_CMD_ERR_IO;
+        YewSelSpanVec_free(&spans);
+        return YEW_CMD_ERR_IO;
     }
     edits_free(&edits);
-    SagSelSpanVec_free(&spans);
+    YewSelSpanVec_free(&spans);
     return finish_action(cx, first, false);
 }
 
-CmdStatus sag_sel_cmd_shift_left(CmdCtx *cx)
+CmdStatus yew_sel_cmd_shift_left(CmdCtx *cx)
 {
-    if (cx != NULL && cx->win != NULL && cx->win->h.kind == SAG_SEL_RECT)
+    if (cx != NULL && cx->win != NULL && cx->win->h.kind == YEW_SEL_RECT)
         return shift_rect(cx, false);
     return shift_char_or_line(cx, false);
 }
 
-CmdStatus sag_sel_cmd_shift_right(CmdCtx *cx)
+CmdStatus yew_sel_cmd_shift_right(CmdCtx *cx)
 {
-    if (cx != NULL && cx->win != NULL && cx->win->h.kind == SAG_SEL_RECT)
+    if (cx != NULL && cx->win != NULL && cx->win->h.kind == YEW_SEL_RECT)
         return shift_rect(cx, true);
     return shift_char_or_line(cx, true);
 }
@@ -830,38 +830,38 @@ static CmdStatus rect_carets(CmdCtx *cx, bool append)
     TextBuf *tb;
     Cursor *cursor;
     SelEditVec pads = {0};
-    SagCursorVec carets = {0};
+    YewCursorVec carets = {0};
     u32 tabwidth;
     size_t i;
     size_t ci;
     i64 delta = 0;
 
     if (!action_context(cx, &win, &tb, &cursor) ||
-        win->h.kind != SAG_SEL_RECT)
-        return SAG_CMD_ERR_STATE;
+        win->h.kind != YEW_SEL_RECT)
+        return YEW_CMD_ERR_STATE;
     (void)cursor;
     tabwidth = win->buf->tabwidth == 0U ? 4U : win->buf->tabwidth;
     for (ci = 0U; ci < win->cs.curs.len; ci++) {
         Cursor *item = &win->cs.curs.data[ci];
-        SagSelSpanVec spans = {0};
+        YewSelSpanVec spans = {0};
         CCol c0 = {0U};
         CCol c1 = {0U};
         CCol target;
         Span ignored;
-        LineNo first_line = sag_textbuf_line_of(tb,
+        LineNo first_line = yew_textbuf_line_of(tb,
             item->pos.v < item->anchor.v ? item->pos : item->anchor);
 
-        sag_sel_rect_spans(win, item, &spans);
-        if (!sag_sel_rect_row(win, item, first_line, &ignored, &c0, &c1)) {
-            SagSelSpanVec_free(&spans);
+        yew_sel_rect_spans(win, item, &spans);
+        if (!yew_sel_rect_row(win, item, first_line, &ignored, &c0, &c1)) {
+            YewSelSpanVec_free(&spans);
             continue;
         }
         target = append ? c1 : c0;
         for (i = 0U; i < spans.len; i++) {
             LineNo line = LINENO(first_line.v + i);
-            Span row = sag_textbuf_line_span(tb, line);
+            Span row = yew_textbuf_line_span(tb, line);
             ByteOff end = line_content_end(tb, line);
-            CCol end_col = sag_off_to_ccol(tb, row, end, tabwidth);
+            CCol end_col = yew_off_to_ccol(tb, row, end, tabwidth);
             u64 pad = target.v > end_col.v ? target.v - end_col.v : 0U;
             Cursor caret;
 
@@ -882,35 +882,35 @@ static CmdStatus rect_carets(CmdCtx *cx, bool append)
             }
             caret.anchor = caret.pos;
             caret.goal_col = (GCol){0U};
-            SagCursorVec_push(&carets, caret);
+            YewCursorVec_push(&carets, caret);
         }
-        SagSelSpanVec_free(&spans);
+        YewSelSpanVec_free(&spans);
     }
     if (!apply_edits(cx, &pads, NULL)) {
         edits_free(&pads);
-        SagCursorVec_free(&carets);
-        return SAG_CMD_ERR_IO;
+        YewCursorVec_free(&carets);
+        return YEW_CMD_ERR_IO;
     }
     edits_free(&pads);
     if (carets.len == 0U) {
-        SagCursorVec_free(&carets);
-        return SAG_CMD_ERR_STATE;
+        YewCursorVec_free(&carets);
+        return YEW_CMD_ERR_STATE;
     }
-    sag_cset_remove_all_but_primary(&win->cs);
+    yew_cset_remove_all_but_primary(&win->cs);
     win->cs.curs.data[0] = carets.data[0];
     for (i = 1U; i < carets.len; i++)
-        (void)sag_cset_add(&win->cs, carets.data[i]);
-    SagCursorVec_free(&carets);
-    sag_cset_normalize(tb, &win->cs);
-    return sag_mode_enter(cx->ed, SAG_MODE_I);
+        (void)yew_cset_add(&win->cs, carets.data[i]);
+    YewCursorVec_free(&carets);
+    yew_cset_normalize(tb, &win->cs);
+    return yew_mode_enter(cx->ed, YEW_MODE_I);
 }
 
-CmdStatus sag_sel_cmd_rect_insert(CmdCtx *cx)
+CmdStatus yew_sel_cmd_rect_insert(CmdCtx *cx)
 {
     return rect_carets(cx, false);
 }
 
-CmdStatus sag_sel_cmd_rect_append(CmdCtx *cx)
+CmdStatus yew_sel_cmd_rect_append(CmdCtx *cx)
 {
     return rect_carets(cx, true);
 }

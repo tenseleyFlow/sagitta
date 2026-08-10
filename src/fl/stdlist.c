@@ -401,7 +401,7 @@ static bool l_sort(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     fl_gc_protect(vm, FL_OBJ_V(FL_LIST, scratch));
     for (i = 0U; i < l->n; i++)
         (void)fl_list_push(vm, scratch, l->v[i]);
-    sag_sort_stable(scratch->v, scratch->n, sizeof(scratch->v[0]),
+    yew_sort_stable(scratch->v, scratch->n, sizeof(scratch->v[0]),
                     sort_cmp, &sc);
     if (!sc.raised) {
         for (i = 0U; i < l->n; i++)
@@ -578,5 +578,5 @@ static const FlNativeDef LIST_DEFS[] = {
 };
 
 const FlModuleDef fl_mod_list = {
-    "list", LIST_DEFS, (u32)SAG_ARRAY_LEN(LIST_DEFS), NULL, 0U
+    "list", LIST_DEFS, (u32)YEW_ARRAY_LEN(LIST_DEFS), NULL, 0U
 };

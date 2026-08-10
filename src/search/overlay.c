@@ -14,7 +14,7 @@
 #include "unicode/coords.h"
 #include "util/log.h"
 
-void sag_overlay_init(MatchOverlay *ov)
+void yew_overlay_init(MatchOverlay *ov)
 {
     if (ov == NULL)
         return;
@@ -22,7 +22,7 @@ void sag_overlay_init(MatchOverlay *ov)
     ov->cur_index = -1;
 }
 
-void sag_overlay_free(MatchOverlay *ov)
+void yew_overlay_free(MatchOverlay *ov)
 {
     if (ov == NULL)
         return;
@@ -31,7 +31,7 @@ void sag_overlay_free(MatchOverlay *ov)
     ov->cur_index = -1;
 }
 
-void sag_overlay_invalidate(MatchOverlay *ov)
+void yew_overlay_invalidate(MatchOverlay *ov)
 {
     if (ov == NULL)
         return;
@@ -72,9 +72,9 @@ static i64 now_us(void)
  */
 static Span visible_window(const Win *w, const TextBuf *tb)
 {
-    u64 len = sag_textbuf_len(tb);
-    u64 nlines = sag_textbuf_line_count(tb);
-    LineNo top = sag_win_view_top(w);
+    u64 len = yew_textbuf_len(tb);
+    u64 nlines = yew_textbuf_line_count(tb);
+    LineNo top = yew_win_view_top(w);
     u64 height = w->rect.h == 0U ? 1U : (u64)w->rect.h;
     u64 last = top.v + height;
     Span vis;
@@ -96,18 +96,18 @@ static Span visible_window(const Win *w, const TextBuf *tb)
     last = top.v + height;
     if (last >= nlines)
         last = nlines - 1U;
-    vis.lo = sag_textbuf_line_start(tb, top).v;
+    vis.lo = yew_textbuf_line_start(tb, top).v;
     vis.hi = last + 1U < nlines
-             ? sag_textbuf_line_start(tb, LINENO(last + 1U)).v
+             ? yew_textbuf_line_start(tb, LINENO(last + 1U)).v
              : len;
     return vis;
 }
 
 static Span scan_window(const Win *w, const TextBuf *tb)
 {
-    u64 len = sag_textbuf_len(tb);
-    u64 nlines = sag_textbuf_line_count(tb);
-    LineNo top = sag_win_view_top(w);
+    u64 len = yew_textbuf_len(tb);
+    u64 nlines = yew_textbuf_line_count(tb);
+    LineNo top = yew_win_view_top(w);
     u64 height = w->rect.h == 0U ? 1U : (u64)w->rect.h;
     u64 last = top.v + height;
     Span vis;
@@ -124,13 +124,13 @@ static Span scan_window(const Win *w, const TextBuf *tb)
     last = top.v + height;
     if (last >= nlines)
         last = nlines - 1U;
-    vis.lo = sag_textbuf_line_start(tb, top).v;
-    vis.hi = last + 1U < nlines ? sag_textbuf_line_start(tb,
+    vis.lo = yew_textbuf_line_start(tb, top).v;
+    vis.hi = last + 1U < nlines ? yew_textbuf_line_start(tb,
                                                          LINENO(last + 1U)).v
                                 : len;
     look = vis.hi > vis.lo ? (vis.hi - vis.lo) * 2U : 0U;
-    if (look > (u64)SAG_SEARCH_LOOKAHEAD_MAX)
-        look = SAG_SEARCH_LOOKAHEAD_MAX;
+    if (look > (u64)YEW_SEARCH_LOOKAHEAD_MAX)
+        look = YEW_SEARCH_LOOKAHEAD_MAX;
     out.lo = vis.lo > look ? vis.lo - look : 0U;
     out.hi = vis.hi + look < len ? vis.hi + look : len;
     return out;
@@ -139,14 +139,14 @@ static Span scan_window(const Win *w, const TextBuf *tb)
 /* Damages every line touched by `span`. */
 static void damage_span(Ed *ed, const TextBuf *tb, Span span)
 {
-    LineNo lo = sag_textbuf_line_of(tb, BYTEOFF(span.lo));
-    LineNo hi = sag_textbuf_line_of(tb, BYTEOFF(span.hi > span.lo
+    LineNo lo = yew_textbuf_line_of(tb, BYTEOFF(span.lo));
+    LineNo hi = yew_textbuf_line_of(tb, BYTEOFF(span.hi > span.lo
                                                 ? span.hi - 1U
                                                 : span.lo));
     u64 line;
 
     for (line = lo.v; line <= hi.v; line++)
-        sag_ed_damage_line(ed, LINENO(line), false);
+        yew_ed_damage_line(ed, LINENO(line), false);
 }
 
 /*
@@ -190,7 +190,7 @@ static void damage_diff(Ed *ed, const TextBuf *tb, const SpanVec *before,
  */
 static void overlay_track_cursor(Ed *ed, MatchOverlay *ov)
 {
-    const Cursor *c = sag_ed_cursor(ed);
+    const Cursor *c = yew_ed_cursor(ed);
     size_t i;
 
     ov->cur_index = -1;
@@ -211,12 +211,12 @@ static void overlay_track_cursor(Ed *ed, MatchOverlay *ov)
     }
 }
 
-void sag_overlay_refresh(Ed *ed, Win *w, const SagRe *re, u32 pat_gen,
+void yew_overlay_refresh(Ed *ed, Win *w, const YewRe *re, u32 pat_gen,
                          i64 budget_us)
 {
     MatchOverlay *ov;
     const TextBuf *tb;
-    SagReInput in;
+    YewReInput in;
     Span want;
     SpanVec before;
     i64 deadline;
@@ -232,7 +232,7 @@ void sag_overlay_refresh(Ed *ed, Win *w, const SagRe *re, u32 pat_gen,
             SpanVec empty = {0};
 
             damage_diff(ed, tb, &ov->spans, &empty);
-            sag_overlay_invalidate(ov);
+            yew_overlay_invalidate(ov);
         }
         return;
     }
@@ -269,17 +269,17 @@ void sag_overlay_refresh(Ed *ed, Win *w, const SagRe *re, u32 pat_gen,
     before.len = ov->spans.len;
 
     ov->spans.len = 0U;
-    in = sag_re_input_textbuf(tb);
+    in = yew_re_input_textbuf(tb);
     deadline = budget_us > 0 ? now_us() + budget_us : 0;
     at = want.lo;
     /*
      * Start at a line boundary: a scan that begins mid-line would judge
      * `^` against the window edge rather than the line, the same trap
-     * the Sprint 20 dispatcher hit.  sag_re_search keeps the window at
+     * the Sprint 20 dispatcher hit.  yew_re_search keeps the window at
      * the whole buffer, so anchors stay correct; only the loop is
      * bounded.
      */
-    at = sag_textbuf_line_start(tb, sag_textbuf_line_of(tb,
+    at = yew_textbuf_line_start(tb, yew_textbuf_line_of(tb,
                                                         BYTEOFF(at))).v;
     ov->scanned.lo = at;
     ov->complete = true;
@@ -299,15 +299,15 @@ void sag_overlay_refresh(Ed *ed, Win *w, const SagRe *re, u32 pat_gen,
      * believe text ends early, which affects `$` and `\z` at exactly
      * that offset — handled below.
      */
-    if (want.hi < sag_textbuf_len(tb))
+    if (want.hi < yew_textbuf_len(tb))
         in.window.hi = want.hi;
     for (;;) {
-        SagReMatch m;
+        YewReMatch m;
 
         (void)memset(&m, 0, sizeof(m));
-        if (at > sag_textbuf_len(tb))
+        if (at > yew_textbuf_len(tb))
             break;
-        if (!sag_re_search(re, &in, BYTEOFF(at), &m))
+        if (!yew_re_search(re, &in, BYTEOFF(at), &m))
             break;
         if (m.g[0].lo >= want.hi)
             break;
@@ -319,12 +319,12 @@ void sag_overlay_refresh(Ed *ed, Win *w, const SagRe *re, u32 pat_gen,
          * that brings it into view rescans with a wider window and
          * finds it honestly.
          */
-        if (m.g[0].hi == want.hi && want.hi < sag_textbuf_len(tb))
+        if (m.g[0].hi == want.hi && want.hi < yew_textbuf_len(tb))
             break;
         SpanVec_push(&ov->spans, m.g[0]);
         scanned_bytes = m.g[0].hi > want.lo ? m.g[0].hi - want.lo : 0U;
         if (m.g[0].hi == m.g[0].lo) {
-            ByteOff next = sag_grapheme_next(tb, BYTEOFF(m.g[0].hi));
+            ByteOff next = yew_grapheme_next(tb, BYTEOFF(m.g[0].hi));
 
             if (next.v <= m.g[0].hi)
                 break;
@@ -338,7 +338,7 @@ void sag_overlay_refresh(Ed *ed, Win *w, const SagRe *re, u32 pat_gen,
          * An exhausted budget keeps what was found, marks the overlay
          * incomplete, and lets the idle timer finish the rest.
          */
-        if (scanned_bytes >= (u64)SAG_OVERLAY_BUDGET_BYTES ||
+        if (scanned_bytes >= (u64)YEW_OVERLAY_BUDGET_BYTES ||
             (deadline != 0 && now_us() >= deadline)) {
             ov->complete = false;
             break;
@@ -351,10 +351,10 @@ void sag_overlay_refresh(Ed *ed, Win *w, const SagRe *re, u32 pat_gen,
     overlay_track_cursor(ed, ov);
 }
 
-void sag_overlay_count(MatchOverlay *ov, const SagRe *re, const TextBuf *tb,
+void yew_overlay_count(MatchOverlay *ov, const YewRe *re, const TextBuf *tb,
                        i64 budget_us)
 {
-    SagReInput in;
+    YewReInput in;
     i64 deadline;
     u64 at = 0U;
     u32 n = 0U;
@@ -363,15 +363,15 @@ void sag_overlay_count(MatchOverlay *ov, const SagRe *re, const TextBuf *tb,
         return;
     ov->count_total = 0U;
     ov->count_capped = false;
-    in = sag_re_input_textbuf(tb);
+    in = yew_re_input_textbuf(tb);
     deadline = budget_us > 0 ? now_us() + budget_us : 0;
     for (;;) {
-        SagReMatch m;
+        YewReMatch m;
 
         (void)memset(&m, 0, sizeof(m));
-        if (at > sag_textbuf_len(tb))
+        if (at > yew_textbuf_len(tb))
             break;
-        if (!sag_re_search(re, &in, BYTEOFF(at), &m))
+        if (!yew_re_search(re, &in, BYTEOFF(at), &m))
             break;
         n++;
         /*
@@ -379,7 +379,7 @@ void sag_overlay_count(MatchOverlay *ov, const SagRe *re, const TextBuf *tb,
          * feature that makes a big-file editor feel broken: the number
          * nobody reads past "lots" costs a full scan to produce.
          */
-        if (n >= (u32)SAG_SEARCH_COUNT_MAX) {
+        if (n >= (u32)YEW_SEARCH_COUNT_MAX) {
             ov->count_capped = true;
             break;
         }
@@ -388,7 +388,7 @@ void sag_overlay_count(MatchOverlay *ov, const SagRe *re, const TextBuf *tb,
             break;
         }
         if (m.g[0].hi == m.g[0].lo) {
-            ByteOff next = sag_grapheme_next(tb, BYTEOFF(m.g[0].hi));
+            ByteOff next = yew_grapheme_next(tb, BYTEOFF(m.g[0].hi));
 
             if (next.v <= m.g[0].hi)
                 break;

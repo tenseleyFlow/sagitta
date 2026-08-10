@@ -22,9 +22,9 @@
 #include "util/base.h"
 #include "util/log.h"
 
-#define SAG_FILE_NORMAL_MAX (UINT64_C(256) * 1024U * 1024U)
-#define SAG_FILE_MAX (UINT64_C(2) * 1024U * 1024U * 1024U)
-#define SAG_BINARY_SCAN_MAX 8192U
+#define YEW_FILE_NORMAL_MAX (UINT64_C(256) * 1024U * 1024U)
+#define YEW_FILE_MAX (UINT64_C(2) * 1024U * 1024U * 1024U)
+#define YEW_BINARY_SCAN_MAX 8192U
 
 static const u8 bom[] = {0xEFU, 0xBBU, 0xBFU};
 static const u8 lf[] = {'\n'};
@@ -48,38 +48,38 @@ static bool timespec_equal(struct timespec a, struct timespec b)
 static char *string_copy(const char *s)
 {
     size_t n = strlen(s) + 1U;
-    char *copy = sag_xmalloc(n);
+    char *copy = yew_xmalloc(n);
 
     (void)memcpy(copy, s, n);
     return copy;
 }
 
-void sag_filemeta_init(FileMeta *meta)
+void yew_filemeta_init(FileMeta *meta)
 {
     if (meta == NULL)
-        SAG_BUG("sag_filemeta_init: NULL metadata");
+        YEW_BUG("yew_filemeta_init: NULL metadata");
     (void)memset(meta, 0, sizeof(*meta));
-    meta->eol = SAG_EOL_LF;
-    meta->dominant_eol = SAG_EOL_LF;
+    meta->eol = YEW_EOL_LF;
+    meta->dominant_eol = YEW_EOL_LF;
 }
 
-void sag_filemeta_dispose(FileMeta *meta)
+void yew_filemeta_dispose(FileMeta *meta)
 {
     if (meta == NULL)
         return;
     free(meta->realpath);
-    sag_filemeta_init(meta);
+    yew_filemeta_init(meta);
 }
 
-void sag_filemeta_eol_bytes(const FileMeta *meta, const u8 **bytes,
+void yew_filemeta_eol_bytes(const FileMeta *meta, const u8 **bytes,
                             size_t *len)
 {
-    SagEol style;
+    YewEol style;
 
     if (meta == NULL || bytes == NULL || len == NULL)
-        SAG_BUG("sag_filemeta_eol_bytes: NULL argument");
-    style = meta->eol == SAG_EOL_MIXED ? meta->dominant_eol : meta->eol;
-    if (style == SAG_EOL_CRLF) {
+        YEW_BUG("yew_filemeta_eol_bytes: NULL argument");
+    style = meta->eol == YEW_EOL_MIXED ? meta->dominant_eol : meta->eol;
+    if (style == YEW_EOL_CRLF) {
         *bytes = crlf;
         *len = sizeof(crlf);
     } else {
@@ -88,15 +88,15 @@ void sag_filemeta_eol_bytes(const FileMeta *meta, const u8 **bytes,
     }
 }
 
-static SagLoadErr load_errno(int error)
+static YewLoadErr load_errno(int error)
 {
     if (error == ENOENT)
-        return SAG_LOAD_ENOENT;
+        return YEW_LOAD_ENOENT;
     if (error == EACCES || error == EPERM)
-        return SAG_LOAD_EACCES;
+        return YEW_LOAD_EACCES;
     if (error == EISDIR)
-        return SAG_LOAD_EISDIR;
-    return SAG_LOAD_IO;
+        return YEW_LOAD_EISDIR;
+    return YEW_LOAD_IO;
 }
 
 static bool read_exact_file(int fd, u8 *bytes, size_t len)
@@ -122,15 +122,15 @@ static void classify_bytes(const u8 *bytes, size_t len, FileMeta *meta,
 {
     const u8 *at;
     const u8 *end = bytes + len;
-    size_t binary_len = len < SAG_BINARY_SCAN_MAX ? len : SAG_BINARY_SCAN_MAX;
+    size_t binary_len = len < YEW_BINARY_SCAN_MAX ? len : YEW_BINARY_SCAN_MAX;
     u32 crlf_count = 0U;
     u32 bare_lf_count = 0U;
 
     meta->binary = memchr(bytes, 0, binary_len) != NULL;
     *content_at = 0U;
     if (meta->binary) {
-        meta->eol = SAG_EOL_LF;
-        meta->dominant_eol = SAG_EOL_LF;
+        meta->eol = YEW_EOL_LF;
+        meta->dominant_eol = YEW_EOL_LF;
         meta->missing_final_nl = len != 0U && bytes[len - 1U] != '\n';
         return;
     }
@@ -153,14 +153,14 @@ static void classify_bytes(const u8 *bytes, size_t len, FileMeta *meta,
     meta->crlf_count = crlf_count;
     meta->lf_count = bare_lf_count;
     meta->dominant_eol = crlf_count > bare_lf_count
-                             ? SAG_EOL_CRLF
-                             : SAG_EOL_LF;
+                             ? YEW_EOL_CRLF
+                             : YEW_EOL_LF;
     if (crlf_count != 0U && bare_lf_count != 0U)
-        meta->eol = SAG_EOL_MIXED;
+        meta->eol = YEW_EOL_MIXED;
     else
         meta->eol = meta->dominant_eol;
     meta->had_invalid_utf8 =
-        sag_utf8_validate(bytes + *content_at, len - *content_at) !=
+        yew_utf8_validate(bytes + *content_at, len - *content_at) !=
         len - *content_at;
     meta->missing_final_nl =
         len != *content_at && bytes[len - 1U] != '\n';
@@ -184,7 +184,7 @@ static char *canonical_new_path(const char *path)
         const char *base = path_basename(path);
         size_t n = strlen(resolved_dir) + strlen(base) + 2U;
 
-        result = sag_xmalloc(n);
+        result = yew_xmalloc(n);
         (void)snprintf(result, n, "%s/%s", resolved_dir, base);
     }
     free(resolved_dir);
@@ -223,7 +223,7 @@ static char *resolve_save_target_at(const char *path, unsigned int depth)
     } else {
         cap = (size_t)PATH_MAX + 2U;
     }
-    link_text = sag_xmalloc(cap);
+    link_text = yew_xmalloc(cap);
     len = readlink(path, link_text, cap - 1U);
     if (len < 0 || (size_t)len >= cap - 1U) {
         int saved_errno = len < 0 ? errno : ENAMETOOLONG;
@@ -239,7 +239,7 @@ static char *resolve_save_target_at(const char *path, unsigned int depth)
         char *dir = path_dirname(path);
         size_t next_len = strlen(dir) + strlen(link_text) + 2U;
 
-        next = sag_xmalloc(next_len);
+        next = yew_xmalloc(next_len);
         (void)snprintf(next, next_len, "%s/%s", dir, link_text);
         free(dir);
         free(link_text);
@@ -258,17 +258,17 @@ static void warn_temp_leftovers(const char *path)
 {
     char *dir = path_dirname(path);
     const char *base = path_basename(path);
-    size_t prefix_len = strlen(base) + strlen(".sag--") + 1U;
-    char *prefix = sag_xmalloc(prefix_len);
+    size_t prefix_len = strlen(base) + strlen(".yew--") + 1U;
+    char *prefix = yew_xmalloc(prefix_len);
     DIR *stream;
     struct dirent *entry;
 
-    (void)snprintf(prefix, prefix_len, ".sag-%s-", base);
+    (void)snprintf(prefix, prefix_len, ".yew-%s-", base);
     stream = opendir(dir);
     if (stream != NULL) {
         while ((entry = readdir(stream)) != NULL) {
             if (strncmp(entry->d_name, prefix, strlen(prefix)) == 0)
-                sag_log(SAG_LOG_WARN, "save temporary remains: %s/%s", dir,
+                yew_log(YEW_LOG_WARN, "save temporary remains: %s/%s", dir,
                         entry->d_name);
         }
         (void)closedir(stream);
@@ -287,17 +287,17 @@ static void warn_temp_leftovers(const char *path)
  */
 static u64 file_load_calls;
 
-u64 sag_file_load_count(void)
+u64 yew_file_load_count(void)
 {
     return file_load_calls;
 }
 
-void sag_file_load_count_reset(void)
+void yew_file_load_count_reset(void)
 {
     file_load_calls = 0U;
 }
 
-SagLoadErr sag_file_load(const char *path, TextBuf **out, FileMeta *meta)
+YewLoadErr yew_file_load(const char *path, TextBuf **out, FileMeta *meta)
 {
     struct stat link_st;
     struct stat st;
@@ -309,32 +309,32 @@ SagLoadErr sag_file_load(const char *path, TextBuf **out, FileMeta *meta)
     int saved_errno;
 
     if (path == NULL || out == NULL || meta == NULL)
-        SAG_BUG("sag_file_load: NULL argument");
+        YEW_BUG("yew_file_load: NULL argument");
     file_load_calls++;
     *out = NULL;
-    sag_filemeta_init(meta);
+    yew_filemeta_init(meta);
     warn_temp_leftovers(path);
     if (lstat(path, &link_st) == 0) {
         meta->via_symlink = S_ISLNK(link_st.st_mode);
         if (S_ISDIR(link_st.st_mode))
-            return SAG_LOAD_EISDIR;
+            return YEW_LOAD_EISDIR;
         if (!S_ISREG(link_st.st_mode) && !S_ISLNK(link_st.st_mode))
-            return SAG_LOAD_IO;
+            return YEW_LOAD_IO;
     } else if (errno != ENOENT) {
         return load_errno(errno);
     }
     fd = open(path, O_RDONLY);
     if (fd < 0) {
-        SagLoadErr error = load_errno(errno);
+        YewLoadErr error = load_errno(errno);
 
-        if (error == SAG_LOAD_ENOENT) {
-            *out = sag_textbuf_new();
+        if (error == YEW_LOAD_ENOENT) {
+            *out = yew_textbuf_new();
             meta->realpath = meta->via_symlink ? resolve_save_target(path)
                                                : canonical_new_path(path);
             if (meta->realpath == NULL) {
-                sag_textbuf_free(*out);
+                yew_textbuf_free(*out);
                 *out = NULL;
-                return SAG_LOAD_IO;
+                return YEW_LOAD_IO;
             }
             meta->mode = 0666U;
         }
@@ -347,37 +347,37 @@ SagLoadErr sag_file_load(const char *path, TextBuf **out, FileMeta *meta)
     }
     if (S_ISDIR(st.st_mode)) {
         (void)close(fd);
-        return SAG_LOAD_EISDIR;
+        return YEW_LOAD_EISDIR;
     }
     if (!S_ISREG(st.st_mode)) {
         (void)close(fd);
-        return SAG_LOAD_IO;
+        return YEW_LOAD_IO;
     }
-    if (st.st_size < 0 || (u64)st.st_size > SAG_FILE_MAX) {
+    if (st.st_size < 0 || (u64)st.st_size > YEW_FILE_MAX) {
         (void)close(fd);
-        return SAG_LOAD_TOO_LARGE;
+        return YEW_LOAD_TOO_LARGE;
     }
     size = (size_t)st.st_size;
-    bytes = sag_xmalloc(size);
+    bytes = yew_xmalloc(size);
     if (!read_exact_file(fd, bytes, size)) {
         saved_errno = errno;
         free(bytes);
         (void)close(fd);
-        return saved_errno == EACCES ? SAG_LOAD_EACCES : SAG_LOAD_IO;
+        return saved_errno == EACCES ? YEW_LOAD_EACCES : YEW_LOAD_IO;
     }
     if (fstat(fd, &after) != 0 || after.st_dev != st.st_dev ||
         after.st_ino != st.st_ino || after.st_size != st.st_size ||
         !timespec_equal(stat_mtime(&after), stat_mtime(&st))) {
         free(bytes);
         (void)close(fd);
-        return SAG_LOAD_IO;
+        return YEW_LOAD_IO;
     }
     if (close(fd) != 0) {
         free(bytes);
-        return SAG_LOAD_IO;
+        return YEW_LOAD_IO;
     }
-    if ((u64)size > SAG_FILE_NORMAL_MAX)
-        sag_log(SAG_LOG_INFO, "loading large file: %llu bytes",
+    if ((u64)size > YEW_FILE_NORMAL_MAX)
+        yew_log(YEW_LOG_INFO, "loading large file: %llu bytes",
                 (unsigned long long)size);
 
     meta->exists = true;
@@ -395,8 +395,8 @@ SagLoadErr sag_file_load(const char *path, TextBuf **out, FileMeta *meta)
     classify_bytes(bytes, size, meta, &content_at);
     if (content_at != 0U)
         (void)memmove(bytes, bytes + content_at, size - content_at);
-    *out = sag_textbuf_from_owned_bytes(bytes, (u64)(size - content_at));
-    return SAG_LOAD_OK;
+    *out = yew_textbuf_from_owned_bytes(bytes, (u64)(size - content_at));
+    return YEW_LOAD_OK;
 }
 
 static bool write_full(int fd, const u8 *bytes, size_t len)
@@ -446,7 +446,7 @@ static bool fsync_directory(const char *path)
     return ok;
 }
 
-static SagSaveErr destination_matches(const FileMeta *meta, const char *path,
+static YewSaveErr destination_matches(const FileMeta *meta, const char *path,
                                       bool *needs_inplace)
 {
     struct stat st;
@@ -457,13 +457,13 @@ static SagSaveErr destination_matches(const FileMeta *meta, const char *path,
             st.st_dev != meta->dev || st.st_ino != meta->ino ||
             (u64)st.st_size != meta->size_on_disk ||
             !timespec_equal(stat_mtime(&st), meta->mtime))
-            return SAG_SAVE_CHANGED_ON_DISK;
+            return YEW_SAVE_CHANGED_ON_DISK;
         *needs_inplace = st.st_nlink > 1;
-        return SAG_SAVE_OK;
+        return YEW_SAVE_OK;
     }
     if (errno == ENOENT)
-        return meta->exists ? SAG_SAVE_CHANGED_ON_DISK : SAG_SAVE_OK;
-    return errno == EACCES || errno == EPERM ? SAG_SAVE_PERM : SAG_SAVE_IO;
+        return meta->exists ? YEW_SAVE_CHANGED_ON_DISK : YEW_SAVE_OK;
+    return errno == EACCES || errno == EPERM ? YEW_SAVE_PERM : YEW_SAVE_IO;
 }
 
 static bool stat_matches_meta(const struct stat *st, const FileMeta *meta)
@@ -480,17 +480,17 @@ static bool write_text(int fd, const TextBuf *tb, bool had_bom)
 
     if (had_bom && !write_full(fd, bom, sizeof(bom)))
         return false;
-    if (!sag_textiter_begin(&it, tb, BYTEOFF(0U)))
+    if (!yew_textiter_begin(&it, tb, BYTEOFF(0U)))
         return true;
     do {
         const u8 *bytes;
         u64 len;
 
-        if (!sag_textiter_chunk(&it, tb, &bytes, &len))
+        if (!yew_textiter_chunk(&it, tb, &bytes, &len))
             return false;
         if (len > SIZE_MAX || !write_full(fd, bytes, (size_t)len))
             return false;
-    } while (sag_textiter_advance(&it, tb));
+    } while (yew_textiter_advance(&it, tb));
     return true;
 }
 
@@ -505,7 +505,7 @@ static char *path_dirname(const char *path)
     if (slash == path)
         return string_copy("/");
     len = (size_t)(slash - path);
-    dir = sag_xmalloc(len + 1U);
+    dir = yew_xmalloc(len + 1U);
     (void)memcpy(dir, path, len);
     dir[len] = '\0';
     return dir;
@@ -564,16 +564,16 @@ static char *state_backup_dir(void)
     char *dir;
 
     if (state != NULL && state[0] != '\0') {
-        suffix = "/sagitta/backup";
+        suffix = "/yew/backup";
     } else {
         home = getenv("HOME");
         if (home == NULL || home[0] == '\0')
             return NULL;
         state = home;
-        suffix = "/.local/state/sagitta/backup";
+        suffix = "/.local/state/yew/backup";
     }
     n = strlen(state) + strlen(suffix) + 1U;
-    dir = sag_xmalloc(n);
+    dir = yew_xmalloc(n);
     (void)snprintf(dir, n, "%s%s", state, suffix);
     if (!make_parent_dirs(dir) || !make_dir(dir)) {
         free(dir);
@@ -605,7 +605,7 @@ static char *backup_path(const char *dst)
         return NULL;
     key = realpath(dst, resolved) != NULL ? resolved : dst;
     n = strlen(dir) + 1U + 16U + strlen(".bak") + 1U;
-    path = sag_xmalloc(n);
+    path = yew_xmalloc(n);
     (void)snprintf(path, n, "%s/%016llx.bak", dir,
                    (unsigned long long)fnv64(key));
     free(dir);
@@ -732,7 +732,7 @@ done:
     return ok;
 }
 
-static SagSaveErr inplace_save(const TextBuf *tb, const FileMeta *meta,
+static YewSaveErr inplace_save(const TextBuf *tb, const FileMeta *meta,
                                const char *dst, struct stat *saved_st)
 {
     char *bak = backup_path(dst);
@@ -742,15 +742,15 @@ static SagSaveErr inplace_save(const TextBuf *tb, const FileMeta *meta,
     bool ok;
 
     if (bak == NULL)
-        return SAG_SAVE_IO;
+        return YEW_SAVE_IO;
     if (!copy_path_to_backup(dst, bak, meta)) {
         int saved_errno = errno;
 
         free(bak);
         if (saved_errno == ESTALE)
-            return SAG_SAVE_CHANGED_ON_DISK;
-        return saved_errno == EACCES || saved_errno == EPERM ? SAG_SAVE_PERM
-                                                              : SAG_SAVE_IO;
+            return YEW_SAVE_CHANGED_ON_DISK;
+        return saved_errno == EACCES || saved_errno == EPERM ? YEW_SAVE_PERM
+                                                              : YEW_SAVE_IO;
     }
     fd = open(dst, O_WRONLY
 #ifdef O_NOFOLLOW
@@ -759,13 +759,13 @@ static SagSaveErr inplace_save(const TextBuf *tb, const FileMeta *meta,
     );
     if (fd < 0) {
         free(bak);
-        return errno == EACCES || errno == EPERM ? SAG_SAVE_PERM
-                                                  : SAG_SAVE_IO;
+        return errno == EACCES || errno == EPERM ? YEW_SAVE_PERM
+                                                  : YEW_SAVE_IO;
     }
     if (fstat(fd, &st) != 0 || !stat_matches_meta(&st, meta)) {
         (void)close(fd);
         free(bak);
-        return SAG_SAVE_CHANGED_ON_DISK;
+        return YEW_SAVE_CHANGED_ON_DISK;
     }
     ok = write_text(fd, tb, meta->had_bom);
     end = ok ? lseek(fd, 0, SEEK_CUR) : (off_t)-1;
@@ -777,10 +777,10 @@ static SagSaveErr inplace_save(const TextBuf *tb, const FileMeta *meta,
     if (!ok) {
         (void)restore_backup(bak, dst);
         free(bak);
-        return SAG_SAVE_IO;
+        return YEW_SAVE_IO;
     }
     free(bak);
-    return SAG_SAVE_OK;
+    return YEW_SAVE_OK;
 }
 
 #ifdef __linux__
@@ -792,7 +792,7 @@ static void copy_xattrs(const char *src, int dst)
 
     if (names_len <= 0)
         return;
-    names = sag_xmalloc((size_t)names_len);
+    names = yew_xmalloc((size_t)names_len);
     names_len = listxattr(src, names, (size_t)names_len);
     if (names_len <= 0) {
         free(names);
@@ -804,7 +804,7 @@ static void copy_xattrs(const char *src, int dst)
         ssize_t value_len = getxattr(src, name, NULL, 0U);
 
         if (value_len >= 0) {
-            void *value = sag_xmalloc((size_t)value_len);
+            void *value = yew_xmalloc((size_t)value_len);
 
             value_len = getxattr(src, name, value, (size_t)value_len);
             if (value_len >= 0)
@@ -832,11 +832,11 @@ static int open_temp(const char *dir, const char *base, mode_t mode,
         unsigned long long counter =
             (unsigned long long)++temp_counter;
         size_t n = strlen(dir) + strlen(base) + 64U;
-        char *path = sag_xmalloc(n);
+        char *path = yew_xmalloc(n);
         int flags = O_WRONLY | O_CREAT | O_EXCL;
         int fd;
 
-        (void)snprintf(path, n, "%s/.sag-%s-%ld-%llu", dir, base,
+        (void)snprintf(path, n, "%s/.yew-%s-%ld-%llu", dir, base,
                        (long)getpid(), counter);
 #ifdef O_CLOEXEC
         flags |= O_CLOEXEC;
@@ -864,7 +864,7 @@ static bool commit_temp(const char *tmp, const char *dst, const char *dir)
     return fsync_directory(dir);
 }
 
-SagSaveErr sag_file_write_atomic(const char *path, const u8 *bytes,
+YewSaveErr yew_file_write_atomic(const char *path, const u8 *bytes,
                                  size_t len, mode_t mode)
 {
     char *dir;
@@ -874,7 +874,7 @@ SagSaveErr sag_file_write_atomic(const char *path, const u8 *bytes,
 
     if (path == NULL || (bytes == NULL && len != 0U)) {
         errno = EINVAL;
-        return SAG_SAVE_IO;
+        return YEW_SAVE_IO;
     }
     dir = path_dirname(path);
     fd = open_temp(dir, path_basename(path), mode, &tmp);
@@ -891,7 +891,7 @@ SagSaveErr sag_file_write_atomic(const char *path, const u8 *bytes,
         goto fail;
     free(tmp);
     free(dir);
-    return SAG_SAVE_OK;
+    return YEW_SAVE_OK;
 
 fail:
     saved_errno = errno == 0 ? EIO : errno;
@@ -902,15 +902,15 @@ fail:
     free(tmp);
     free(dir);
     errno = saved_errno;
-    return saved_errno == EACCES || saved_errno == EPERM ? SAG_SAVE_PERM
-                                                          : SAG_SAVE_IO;
+    return saved_errno == EACCES || saved_errno == EPERM ? YEW_SAVE_PERM
+                                                          : YEW_SAVE_IO;
 }
 
-SagSaveErr sag_file_move_aside(const char *from, const char *to)
+YewSaveErr yew_file_move_aside(const char *from, const char *to)
 {
     if (from == NULL || to == NULL) {
         errno = EINVAL;
-        return SAG_SAVE_IO;
+        return YEW_SAVE_IO;
     }
     /*
      * link + unlink, NOT rename.
@@ -923,18 +923,18 @@ SagSaveErr sag_file_move_aside(const char *from, const char *to)
      * instead, which is the answer the caller can act on.
      */
     if (link(from, to) != 0) {
-        return errno == EACCES || errno == EPERM ? SAG_SAVE_PERM
-                                                 : SAG_SAVE_IO;
+        return errno == EACCES || errno == EPERM ? YEW_SAVE_PERM
+                                                 : YEW_SAVE_IO;
     }
     if (unlink(from) != 0) {
         /* The copy is in place; failing to remove the original leaves
          * two names for one inode, which is untidy but loses nothing. */
-        return SAG_SAVE_IO;
+        return YEW_SAVE_IO;
     }
-    return SAG_SAVE_OK;
+    return YEW_SAVE_OK;
 }
 
-static SagSaveErr atomic_save(const TextBuf *tb, const FileMeta *meta,
+static YewSaveErr atomic_save(const TextBuf *tb, const FileMeta *meta,
                               const char *dst, struct stat *saved_st)
 {
     char *dir = path_dirname(dst);
@@ -943,15 +943,15 @@ static SagSaveErr atomic_save(const TextBuf *tb, const FileMeta *meta,
     int fd = open_temp(dir, path_basename(dst), mode, &tmp);
     bool foreign_owner;
     int saved_errno;
-    SagSaveErr match;
+    YewSaveErr match;
     bool needs_inplace;
 
     if (fd < 0) {
         saved_errno = errno;
         free(dir);
         return saved_errno == EACCES || saved_errno == EPERM
-                   ? SAG_SAVE_PERM
-                   : SAG_SAVE_IO;
+                   ? YEW_SAVE_PERM
+                   : YEW_SAVE_IO;
     }
     if (!write_text(fd, tb, meta->had_bom) || !fsync_full(fd))
         goto fail;
@@ -976,7 +976,7 @@ static SagSaveErr atomic_save(const TextBuf *tb, const FileMeta *meta,
     }
     fd = -1;
     match = destination_matches(meta, dst, &needs_inplace);
-    if (match != SAG_SAVE_OK) {
+    if (match != YEW_SAVE_OK) {
         (void)unlink(tmp);
         free(tmp);
         free(dir);
@@ -996,12 +996,12 @@ static SagSaveErr atomic_save(const TextBuf *tb, const FileMeta *meta,
         if (saved_errno == EXDEV)
             return inplace_save(tb, meta, dst, saved_st);
         return saved_errno == EACCES || saved_errno == EPERM
-                   ? SAG_SAVE_PERM
-                   : SAG_SAVE_IO;
+                   ? YEW_SAVE_PERM
+                   : YEW_SAVE_IO;
     }
     free(tmp);
     free(dir);
-    return SAG_SAVE_OK;
+    return YEW_SAVE_OK;
 
 fail:
     saved_errno = errno;
@@ -1010,8 +1010,8 @@ fail:
     (void)unlink(tmp);
     free(tmp);
     free(dir);
-    return saved_errno == EACCES || saved_errno == EPERM ? SAG_SAVE_PERM
-                                                          : SAG_SAVE_IO;
+    return saved_errno == EACCES || saved_errno == EPERM ? YEW_SAVE_PERM
+                                                          : YEW_SAVE_IO;
 }
 
 static void refresh_saved_meta(FileMeta *meta, const struct stat *st,
@@ -1031,13 +1031,13 @@ static void refresh_saved_meta(FileMeta *meta, const struct stat *st,
     meta->size_on_disk = (u64)st->st_size;
 }
 
-static SagSaveErr accept_destination(FileMeta *accepted, const char *path)
+static YewSaveErr accept_destination(FileMeta *accepted, const char *path)
 {
     struct stat st;
 
     if (stat(path, &st) == 0) {
         if (!S_ISREG(st.st_mode) || st.st_size < 0)
-            return SAG_SAVE_IO;
+            return YEW_SAVE_IO;
         accepted->exists = true;
         accepted->mode = st.st_mode;
         accepted->uid = st.st_uid;
@@ -1047,11 +1047,11 @@ static SagSaveErr accept_destination(FileMeta *accepted, const char *path)
         accepted->ino = st.st_ino;
         accepted->mtime = stat_mtime(&st);
         accepted->size_on_disk = (u64)st.st_size;
-        return SAG_SAVE_OK;
+        return YEW_SAVE_OK;
     }
     if (errno != ENOENT)
-        return errno == EACCES || errno == EPERM ? SAG_SAVE_PERM
-                                                  : SAG_SAVE_IO;
+        return errno == EACCES || errno == EPERM ? YEW_SAVE_PERM
+                                                  : YEW_SAVE_IO;
     accepted->exists = false;
     accepted->mode = 0666U;
     accepted->uid = 0;
@@ -1061,10 +1061,10 @@ static SagSaveErr accept_destination(FileMeta *accepted, const char *path)
     accepted->ino = 0;
     accepted->mtime = (struct timespec){0, 0};
     accepted->size_on_disk = 0U;
-    return SAG_SAVE_OK;
+    return YEW_SAVE_OK;
 }
 
-static SagSaveErr file_save(const TextBuf *tb, FileMeta *meta,
+static YewSaveErr file_save(const TextBuf *tb, FileMeta *meta,
                             const char *path, bool force)
 {
     struct stat link_st;
@@ -1077,39 +1077,39 @@ static SagSaveErr file_save(const TextBuf *tb, FileMeta *meta,
     char *dir;
     bool needs_inplace;
     bool is_symlink = false;
-    SagSaveErr match;
-    SagSaveErr result;
+    YewSaveErr match;
+    YewSaveErr result;
 
     if (tb == NULL || meta == NULL || path == NULL)
-        SAG_BUG("sag_file_save: NULL argument");
+        YEW_BUG("yew_file_save: NULL argument");
     if (lstat(path, &link_st) == 0) {
         is_symlink = S_ISLNK(link_st.st_mode);
     } else if (errno != ENOENT) {
-        return errno == EACCES || errno == EPERM ? SAG_SAVE_PERM
-                                                  : SAG_SAVE_IO;
+        return errno == EACCES || errno == EPERM ? YEW_SAVE_PERM
+                                                  : YEW_SAVE_IO;
     }
     if (is_symlink) {
         resolved = resolve_save_target(path);
         if (resolved == NULL)
-            return SAG_SAVE_IO;
+            return YEW_SAVE_IO;
         if (!force && meta->realpath != NULL &&
             strcmp(resolved, meta->realpath) != 0) {
             free(resolved);
-            return SAG_SAVE_CHANGED_ON_DISK;
+            return YEW_SAVE_CHANGED_ON_DISK;
         }
         dst = resolved;
     }
     if (force) {
         accepted = *meta;
         match = accept_destination(&accepted, dst);
-        if (match != SAG_SAVE_OK) {
+        if (match != YEW_SAVE_OK) {
             free(resolved);
             return match;
         }
         expected = &accepted;
     }
     match = destination_matches(expected, dst, &needs_inplace);
-    if (match != SAG_SAVE_OK) {
+    if (match != YEW_SAVE_OK) {
         free(resolved);
         return match;
     }
@@ -1121,7 +1121,7 @@ static SagSaveErr file_save(const TextBuf *tb, FileMeta *meta,
         result = inplace_save(tb, expected, dst, &saved_st);
     else
         result = atomic_save(tb, expected, dst, &saved_st);
-    if (result == SAG_SAVE_OK) {
+    if (result == YEW_SAVE_OK) {
         refresh_saved_meta(meta, &saved_st, saved_realpath, is_symlink);
         saved_realpath = NULL;
     }
@@ -1131,13 +1131,13 @@ static SagSaveErr file_save(const TextBuf *tb, FileMeta *meta,
     return result;
 }
 
-SagSaveErr sag_file_save(const TextBuf *tb, FileMeta *meta,
+YewSaveErr yew_file_save(const TextBuf *tb, FileMeta *meta,
                          const char *path)
 {
     return file_save(tb, meta, path, false);
 }
 
-SagSaveErr sag_file_save_force(const TextBuf *tb, FileMeta *meta,
+YewSaveErr yew_file_save_force(const TextBuf *tb, FileMeta *meta,
                                const char *path)
 {
     return file_save(tb, meta, path, true);

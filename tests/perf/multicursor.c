@@ -71,7 +71,7 @@ static bool model_init(Ed *ed, Win *win, size_t cursor_count)
     arena_init(&ed->arena);
     interner_init(&ed->interner, &ed->arena);
     bytebuf_init(&ed->frame);
-    if (!sag_grid_init(&ed->grid, &ed->interner, PERF_ROWS, PERF_COLS)) {
+    if (!yew_grid_init(&ed->grid, &ed->interner, PERF_ROWS, PERF_COLS)) {
         interner_free(&ed->interner);
         arena_free_all(&ed->arena);
         bytebuf_free(&ed->frame);
@@ -79,12 +79,12 @@ static bool model_init(Ed *ed, Win *win, size_t cursor_count)
         free(bytes);
         return false;
     }
-    ed->buffer.tb = sag_textbuf_from_owned_bytes(bytes, FIXTURE_LINES * 2U);
-    ed->buffer.undo = sag_undo_new(ed->buffer.tb);
-    ed->buffer.marks = sag_marks_new();
+    ed->buffer.tb = yew_textbuf_from_owned_bytes(bytes, FIXTURE_LINES * 2U);
+    ed->buffer.undo = yew_undo_new(ed->buffer.tb);
+    ed->buffer.marks = yew_marks_new();
     win->buf = &ed->buffer;
-    sag_cset_init(&win->cs, primary);
-    sag_vp_init(win);
+    yew_cset_init(&win->cs, primary);
+    yew_vp_init(win);
     for (i = 1U; i < cursor_count; i++) {
         size_t line = (i * FIXTURE_LINES) / cursor_count;
 
@@ -92,14 +92,14 @@ static bool model_init(Ed *ed, Win *win, size_t cursor_count)
         cursors[i - 1U].anchor = cursors[i - 1U].pos;
         cursors[i - 1U].goal_col = (GCol){0U};
     }
-    if (!sag_cset_add_many(&win->cs, cursors, (u32)cursor_count - 1U)) {
+    if (!yew_cset_add_many(&win->cs, cursors, (u32)cursor_count - 1U)) {
         free(cursors);
-        sag_vp_free(win);
-        sag_cset_free(&win->cs);
-        sag_marks_free(ed->buffer.marks);
-        sag_undo_free(ed->buffer.undo);
-        sag_textbuf_free(ed->buffer.tb);
-        sag_grid_free(&ed->grid);
+        yew_vp_free(win);
+        yew_cset_free(&win->cs);
+        yew_marks_free(ed->buffer.marks);
+        yew_undo_free(ed->buffer.undo);
+        yew_textbuf_free(ed->buffer.tb);
+        yew_grid_free(&ed->grid);
         interner_free(&ed->interner);
         arena_free_all(&ed->arena);
         bytebuf_free(&ed->frame);
@@ -107,26 +107,26 @@ static bool model_init(Ed *ed, Win *win, size_t cursor_count)
     }
     free(cursors);
     ed->win = win;
-    ed->mode = SAG_MODE_L;
-    ed->prev_unit = SAG_MODE_L;
+    ed->mode = YEW_MODE_L;
+    ed->prev_unit = YEW_MODE_L;
     ed->model_ready = true;
-    sag_render_init(&ed->render, &caps, NULL);
-    sag_layout(ed);
-    sag_draw_win(ed, win);
-    sag_grid_mark_all(&ed->grid);
-    (void)sag_render_frame(&ed->render, &ed->grid, &ed->frame);
-    sag_grid_flip(&ed->grid);
+    yew_render_init(&ed->render, &caps, NULL);
+    yew_layout(ed);
+    yew_draw_win(ed, win);
+    yew_grid_mark_all(&ed->grid);
+    (void)yew_render_frame(&ed->render, &ed->grid, &ed->frame);
+    yew_grid_flip(&ed->grid);
     return win->cs.curs.len == cursor_count;
 }
 
 static void model_free(Ed *ed, Win *win)
 {
-    sag_vp_free(win);
-    sag_cset_free(&win->cs);
-    sag_marks_free(ed->buffer.marks);
-    sag_undo_free(ed->buffer.undo);
-    sag_textbuf_free(ed->buffer.tb);
-    sag_grid_free(&ed->grid);
+    yew_vp_free(win);
+    yew_cset_free(&win->cs);
+    yew_marks_free(ed->buffer.marks);
+    yew_undo_free(ed->buffer.undo);
+    yew_textbuf_free(ed->buffer.tb);
+    yew_grid_free(&ed->grid);
     bytebuf_free(&ed->frame);
     interner_free(&ed->interner);
     arena_free_all(&ed->arena);
@@ -136,10 +136,10 @@ static size_t prepare_paint(Ed *ed, Win *win)
 {
     size_t emitted;
 
-    sag_draw_win(ed, win);
+    yew_draw_win(ed, win);
     ed->frame.len = 0U;
-    emitted = sag_render_frame(&ed->render, &ed->grid, &ed->frame);
-    sag_grid_flip(&ed->grid);
+    emitted = yew_render_frame(&ed->render, &ed->grid, &ed->frame);
+    yew_grid_flip(&ed->grid);
     return emitted;
 }
 
@@ -164,35 +164,35 @@ static bool measure(size_t cursor_count, i64 budget_ns)
         cx.count = 1U;
         cx.sarg = "x";
         cx.sarg_len = 1U;
-        cx.source = SAG_SRC_TEST;
-        ec = sag_ed_edit_ctx(&ed);
+        cx.source = YEW_SRC_TEST;
+        ec = yew_ed_edit_ctx(&ed);
         start = now_ns();
         (void)alarm(2U);
-        sag_undo_begin(&ec, SAG_TXN_MULTI);
-        status = sag_mc_run(&win,
-                            sag_cmd_lookup("ed.edit.insert.text", 19U),
+        yew_undo_begin(&ec, YEW_TXN_MULTI);
+        status = yew_mc_run(&win,
+                            yew_cmd_lookup("ed.edit.insert.text", 19U),
                             &cx);
-        if (status == SAG_CMD_OK)
-            sag_undo_end(&ec);
+        if (status == YEW_CMD_OK)
+            yew_undo_end(&ec);
         else
-            sag_undo_abort(&ec);
-        sag_ed_finish_edit(&ed, &ec);
+            yew_undo_abort(&ec);
+        yew_ed_finish_edit(&ed, &ec);
         perf_multicursor_sink ^= (u64)prepare_paint(&ed, &win);
         (void)alarm(0U);
-        if (start < 0 || status != SAG_CMD_OK) {
+        if (start < 0 || status != YEW_CMD_OK) {
             model_free(&ed, &win);
             return false;
         }
         elapsed = now_ns() - start;
         if (elapsed < 0 ||
-            sag_textbuf_len(ed.buffer.tb) != FIXTURE_LINES * 2U +
+            yew_textbuf_len(ed.buffer.tb) != FIXTURE_LINES * 2U +
                                               cursor_count) {
             model_free(&ed, &win);
             return false;
         }
-        sag_cset_check_text(ed.buffer.tb, &win.cs);
+        yew_cset_check_text(ed.buffer.tb, &win.cs);
         samples[round] = elapsed;
-        perf_multicursor_sink ^= sag_textbuf_len(ed.buffer.tb) +
+        perf_multicursor_sink ^= yew_textbuf_len(ed.buffer.tb) +
                                  win.cs.curs.len;
         model_free(&ed, &win);
     }

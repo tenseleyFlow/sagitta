@@ -34,7 +34,7 @@ static void cursor_init(ReCursor *c)
 /* Returns the byte at `off`, refilling the chunk when needed.  The
  * TextIter is forward-only, so a backward step restarts iteration — the
  * VM only walks forward, and the anchored re-match restarts anyway. */
-static bool cursor_byte(ReCursor *c, const SagReInput *in, u64 off, u8 *out)
+static bool cursor_byte(ReCursor *c, const YewReInput *in, u64 off, u8 *out)
 {
     if (off >= in->window.hi)
         return false;
@@ -48,9 +48,9 @@ static bool cursor_byte(ReCursor *c, const SagReInput *in, u64 off, u8 *out)
         *out = c->p[off - c->chunk_at];
         return true;
     }
-    if (!sag_textiter_begin(&c->it, in->tb, BYTEOFF(off)))
+    if (!yew_textiter_begin(&c->it, in->tb, BYTEOFF(off)))
         return false;
-    if (!sag_textiter_chunk(&c->it, in->tb, &c->p, (size_t *)&c->n) ||
+    if (!yew_textiter_chunk(&c->it, in->tb, &c->p, (size_t *)&c->n) ||
         c->n == 0U)
         return false;
     c->chunk_at = off;
@@ -62,15 +62,15 @@ static bool cursor_byte(ReCursor *c, const SagReInput *in, u64 off, u8 *out)
 /* Decodes the codepoint starting at `off`.  Invalid bytes become
  * U+DC80-escapes so a search over a binary file neither crashes nor
  * mangles anything (§3). */
-static u32 cursor_decode(ReCursor *c, const SagReInput *in, u64 off,
+static u32 cursor_decode(ReCursor *c, const YewReInput *in, u64 off,
                          u32 *len_out)
 {
-    u8 buf[SAG_UTF8_MAX];
+    u8 buf[YEW_UTF8_MAX];
     size_t have = 0U;
     u32 cp = 0U;
     size_t used;
 
-    while (have < SAG_UTF8_MAX) {
+    while (have < YEW_UTF8_MAX) {
         u8 b;
 
         if (!cursor_byte(c, in, off + have, &b))
@@ -81,7 +81,7 @@ static u32 cursor_decode(ReCursor *c, const SagReInput *in, u64 off,
         *len_out = 0U;
         return 0U;
     }
-    used = sag_utf8_decode(buf, have, &cp);
+    used = yew_utf8_decode(buf, have, &cp);
     *len_out = (u32)(used == 0U ? 1U : used);
     return cp;
 }
@@ -91,7 +91,7 @@ static u32 cursor_decode(ReCursor *c, const SagReInput *in, u64 off,
 /* ---------------------------------------------------------------- */
 
 /*
- * Slots are sized to the pattern, not to SAG_RE_MAX_GROUPS.  A fixed
+ * Slots are sized to the pattern, not to YEW_RE_MAX_GROUPS.  A fixed
  * 64-slot array means every seed memsets 512 bytes and every
  * copy-on-write copies 512 bytes — and with a start thread seeded at
  * each input position that dominates the whole search.  A two-group
@@ -237,8 +237,8 @@ static void list_mark(ReList *l, u32 pc)
 /* ---------------------------------------------------------------- */
 
 typedef struct ReCtx {
-    const SagRe *re;
-    const SagReInput *in;
+    const YewRe *re;
+    const YewReInput *in;
     ReCursor *cur;
     u64 pos;
     u32 prev_cp;
@@ -247,7 +247,7 @@ typedef struct ReCtx {
 
 static bool is_word_cp(u32 cp)
 {
-    return sag_re_is_word(cp);
+    return yew_re_is_word(cp);
 }
 
 static bool assertion_holds(const ReCtx *x, ReOp op, u32 cp, bool have_cp)
@@ -303,7 +303,7 @@ typedef struct AddFrame {
 } AddFrame;
 
 typedef struct VmState {
-    const SagRe *re;
+    const YewRe *re;
     const ReInst *prog;
     u32 nprog;
     CapPool pool;
@@ -341,14 +341,14 @@ static void addthread(VmState *vm, ReList *l, u32 pc, Caps *caps,
         switch ((ReOp)ins->op) {
         case RE_JMP:
             if (top + 1U > vm->stack_cap)
-                SAG_BUG("regex: addthread stack overflow");
+                YEW_BUG("regex: addthread stack overflow");
             vm->stack[top].pc = ins->x;
             vm->stack[top].caps = caps;
             top++;
             break;
         case RE_SPLIT:
             if (top + 2U > vm->stack_cap)
-                SAG_BUG("regex: addthread stack overflow");
+                YEW_BUG("regex: addthread stack overflow");
             /* Lower priority pushed first so the higher-priority branch
              * pops first — that ordering IS leftmost-first. */
             vm->stack[top].pc = ins->y;
@@ -361,7 +361,7 @@ static void addthread(VmState *vm, ReList *l, u32 pc, Caps *caps,
         case RE_SAVE:
             caps = caps_set(&vm->pool, caps, ins->arg, x->pos);
             if (top + 1U > vm->stack_cap)
-                SAG_BUG("regex: addthread stack overflow");
+                YEW_BUG("regex: addthread stack overflow");
             vm->stack[top].pc = pc + 1U;
             vm->stack[top].caps = caps;
             top++;
@@ -370,7 +370,7 @@ static void addthread(VmState *vm, ReList *l, u32 pc, Caps *caps,
         case RE_WORDB: case RE_NWORDB:
             if (assertion_holds(x, (ReOp)ins->op, cp, have_cp)) {
                 if (top + 1U > vm->stack_cap)
-                    SAG_BUG("regex: addthread stack overflow");
+                    YEW_BUG("regex: addthread stack overflow");
                 vm->stack[top].pc = pc + 1U;
                 vm->stack[top].caps = caps;
                 top++;
@@ -392,14 +392,14 @@ static void addthread(VmState *vm, ReList *l, u32 pc, Caps *caps,
     }
 }
 
-static bool inst_matches(const SagRe *re, const ReInst *ins, u32 cp)
+static bool inst_matches(const YewRe *re, const ReInst *ins, u32 cp)
 {
     switch ((ReOp)ins->op) {
     case RE_CHAR:
         return cp == ins->arg;
     case RE_CLASS:
         return ins->arg < re->nclasses &&
-               sag_re_class_has(&re->classes[ins->arg], cp);
+               yew_re_class_has(&re->classes[ins->arg], cp);
     case RE_ANY:
         return ins->arg != 0U || cp != (u32)'\n';
     default:
@@ -428,17 +428,17 @@ static bool inst_matches(const SagRe *re, const ReInst *ins, u32 cp)
  * threads already in the list, so earlier start positions keep their
  * priority and leftmost semantics hold.
  */
-bool sag_re_pike_run_ex(const SagRe *re, const SagReInput *in, u64 start,
-                        bool anchored, SagReMatch *out);
+bool yew_re_pike_run_ex(const YewRe *re, const YewReInput *in, u64 start,
+                        bool anchored, YewReMatch *out);
 
-bool sag_re_pike_run(const SagRe *re, const SagReInput *in, u64 start,
-                     SagReMatch *out)
+bool yew_re_pike_run(const YewRe *re, const YewReInput *in, u64 start,
+                     YewReMatch *out)
 {
-    return sag_re_pike_run_ex(re, in, start, true, out);
+    return yew_re_pike_run_ex(re, in, start, true, out);
 }
 
-bool sag_re_pike_run_ex(const SagRe *re, const SagReInput *in, u64 start,
-                        bool anchored, SagReMatch *out)
+bool yew_re_pike_run_ex(const YewRe *re, const YewReInput *in, u64 start,
+                        bool anchored, YewReMatch *out)
 {
     Arena arena;
     VmState vm;
@@ -462,8 +462,8 @@ bool sag_re_pike_run_ex(const SagRe *re, const SagReInput *in, u64 start,
     vm.pool.arena = &arena;
     /* Only the slots this pattern can actually write. */
     vm.pool.nslots = re->ngroups * 2U;
-    if (vm.pool.nslots > SAG_RE_MAX_GROUPS * 2U)
-        vm.pool.nslots = SAG_RE_MAX_GROUPS * 2U;
+    if (vm.pool.nslots > YEW_RE_MAX_GROUPS * 2U)
+        vm.pool.nslots = YEW_RE_MAX_GROUPS * 2U;
     /* Each instruction can push at most two frames. */
     vm.stack_cap = re->nprog * 2U + 8U;
     vm.stack = arena_alloc(&arena,
@@ -474,10 +474,10 @@ bool sag_re_pike_run_ex(const SagRe *re, const SagReInput *in, u64 start,
     cursor_init(&cur);
 
     /* The codepoint preceding `start`, needed by \b and ^ without a
-     * second pass.  Scanning back a few bytes is bounded by SAG_UTF8_MAX. */
+     * second pass.  Scanning back a few bytes is bounded by YEW_UTF8_MAX. */
     if (start > in->window.lo) {
-        u64 back = start - in->window.lo > SAG_UTF8_MAX ?
-                   (u64)SAG_UTF8_MAX : start - in->window.lo;
+        u64 back = start - in->window.lo > YEW_UTF8_MAX ?
+                   (u64)YEW_UTF8_MAX : start - in->window.lo;
         u64 probe = start - back;
 
         while (probe < start) {
@@ -604,7 +604,7 @@ bool sag_re_pike_run_ex(const SagRe *re, const SagReInput *in, u64 start,
 
         (void)memset(out, 0, sizeof(*out));
         out->ngroups = re->ngroups;
-        for (g = 0U; g < re->ngroups && g < SAG_RE_MAX_GROUPS; g++) {
+        for (g = 0U; g < re->ngroups && g < YEW_RE_MAX_GROUPS; g++) {
             u64 lo = best->slot[g * 2U];
             u64 hi = best->slot[g * 2U + 1U];
 

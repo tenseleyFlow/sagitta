@@ -34,7 +34,7 @@ static void *xalloc(size_t n)
     void *p = calloc(1U, n == 0U ? 1U : n);
 
     if (p == NULL)
-        SAG_BUG("fletch: out of memory");
+        YEW_BUG("fletch: out of memory");
     return p;
 }
 
@@ -71,14 +71,14 @@ void *fl_gc_alloc(FlVm *vm, size_t n, FlType t)
 void fl_gc_protect(FlVm *vm, FlValue v)
 {
     if (vm->ntemp >= (u32)FL_TEMP_MAX)
-        SAG_BUG("fletch gc: temp-root stack overflow (protection leak)");
+        YEW_BUG("fletch gc: temp-root stack overflow (protection leak)");
     vm->temp[vm->ntemp++] = v;
 }
 
 void fl_gc_release(FlVm *vm, u32 n)
 {
     if (n > vm->ntemp)
-        SAG_BUG("fletch gc: released more temp roots than were protected");
+        YEW_BUG("fletch gc: released more temp roots than were protected");
     vm->ntemp -= n;
 }
 
@@ -93,7 +93,7 @@ static void gray_push(FlVm *vm, FlObj *o)
         FlObj **grown = realloc(vm->gc.gray, (size_t)cap * sizeof(*grown));
 
         if (grown == NULL)
-            SAG_BUG("fletch gc: out of memory growing the gray stack");
+            YEW_BUG("fletch gc: out of memory growing the gray stack");
         vm->gc.gray = grown;
         vm->gc.graycap = cap;
     }
@@ -257,15 +257,15 @@ void fl_gc_host_root_add(FlVm *vm, FlValue *slot)
     u32 i;
 
     if (vm == NULL || slot == NULL)
-        SAG_BUG("fletch gc: NULL host root");
+        YEW_BUG("fletch gc: NULL host root");
     for (i = 0U; i < vm->host_roots.n; i++) {
         if (vm->host_roots.v[i] == slot)
-            SAG_BUG("fletch gc: host root registered twice");
+            YEW_BUG("fletch gc: host root registered twice");
     }
     if (vm->host_roots.n == vm->host_roots.cap) {
         u32 want = vm->host_roots.cap == 0U ? 8U : vm->host_roots.cap * 2U;
 
-        vm->host_roots.v = (FlValue **)sag_xreallocarray(
+        vm->host_roots.v = (FlValue **)yew_xreallocarray(
             vm->host_roots.v, want, sizeof(*vm->host_roots.v));
         vm->host_roots.cap = want;
     }
@@ -296,13 +296,13 @@ void fl_gc_root_provider(FlVm *vm, FlGcMarkFn mark, void *ctx)
     u32 i;
 
     if (vm == NULL || mark == NULL)
-        SAG_BUG("fletch gc: NULL mark provider");
+        YEW_BUG("fletch gc: NULL mark provider");
     for (i = 0U; i < vm->nproviders; i++) {
         if (vm->providers[i].mark == mark && vm->providers[i].ctx == ctx)
             return;                 /* idempotent: re-attach is a no-op */
     }
     if (vm->nproviders == (u32)FL_GC_PROVIDERS_MAX)
-        SAG_BUG("fletch gc: too many mark providers");
+        YEW_BUG("fletch gc: too many mark providers");
     vm->providers[vm->nproviders].mark = mark;
     vm->providers[vm->nproviders].ctx = ctx;
     vm->nproviders++;
@@ -357,7 +357,7 @@ static void strtab_clear_dead(FlStrTab *t)
         return;
     survivors = calloc((size_t)t->cap, sizeof(*survivors));
     if (survivors == NULL)
-        SAG_BUG("fletch gc: out of memory rebuilding the string table");
+        YEW_BUG("fletch gc: out of memory rebuilding the string table");
     for (i = 0U; i < t->cap; i++) {
         if (t->v[i] != NULL && t->v[i]->h.mark != 0U)
             survivors[live++] = t->v[i];
@@ -493,7 +493,7 @@ static void strtab_grow(FlStrTab *t)
     u32 i;
 
     if (v == NULL)
-        SAG_BUG("fletch: out of memory growing the string table");
+        YEW_BUG("fletch: out of memory growing the string table");
     for (i = 0U; i < t->cap; i++) {
         FlStr *s = t->v[i];
         u32 at;
@@ -606,7 +606,7 @@ bool fl_list_push(FlVm *vm, FlList *l, FlValue v)
         FlValue *grown = realloc(l->v, (size_t)cap * sizeof(*grown));
 
         if (grown == NULL)
-            SAG_BUG("fletch: out of memory growing a list");
+            YEW_BUG("fletch: out of memory growing a list");
         l->v = grown;
         l->cap = cap;
         vm->gc.bytes += (size_t)(cap - l->n) * sizeof(*grown);
@@ -621,7 +621,7 @@ FlUpval **fl_gc_upvals(FlVm *vm, u32 n)
     FlUpval **up = calloc((size_t)n, sizeof(*up));
 
     if (up == NULL)
-        SAG_BUG("fletch: out of memory allocating upvalues");
+        YEW_BUG("fletch: out of memory allocating upvalues");
     vm->gc.bytes += (size_t)n * sizeof(*up);
     return up;
 }
@@ -637,7 +637,7 @@ static void map_grow_index(FlVm *vm, FlMap *m)
     u32 *idx = calloc((size_t)cap, sizeof(*idx));
 
     if (idx == NULL)
-        SAG_BUG("fletch: out of memory growing a map index");
+        YEW_BUG("fletch: out of memory growing a map index");
     free(m->idx);
     m->idx = idx;
     m->icap = cap;
@@ -670,7 +670,7 @@ bool fl_map_set(FlVm *vm, FlMap *m, FlValue k, FlValue v)
         FlMapEnt *grown = realloc(m->ent, (size_t)cap * sizeof(*grown));
 
         if (grown == NULL)
-            SAG_BUG("fletch: out of memory growing a map");
+            YEW_BUG("fletch: out of memory growing a map");
         m->ent = grown;
         m->cap = cap;
         vm->gc.bytes += (size_t)cap * sizeof(*grown);

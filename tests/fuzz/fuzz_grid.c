@@ -130,7 +130,7 @@ static bool grid_invariants(const Grid *g, char *why, size_t why_cap,
         for (col = 0u; col < g->cols; col++) {
             size_t index = (size_t)row * g->cols + col;
             const Cell *cell = &g->back[index];
-            bool differs = !sag_cell_eq(&g->front[index], cell);
+            bool differs = !yew_cell_eq(&g->front[index], cell);
             bool covered = row >= g->dmg_lo && row < g->dmg_hi &&
                            col >= g->dmg[row].lo && col < g->dmg[row].hi;
 
@@ -162,9 +162,9 @@ static bool grid_invariants(const Grid *g, char *why, size_t why_cap,
     return true;
 }
 
-static SagColor fuzz_color(u8 a, u8 b, u8 c)
+static YewColor fuzz_color(u8 a, u8 b, u8 c)
 {
-    SagColor color;
+    YewColor color;
 
     memset(&color, 0, sizeof(color));
     color.tag = (u8)(a % 3u);
@@ -175,7 +175,7 @@ static SagColor fuzz_color(u8 a, u8 b, u8 c)
 }
 
 static void put_choice(Grid *g, u16 row, u16 col, u8 choice,
-                       SagColor fg, SagColor bg, u16 attrs)
+                       YewColor fg, YewColor bg, u16 attrs)
 {
     static const u8 ascii[] = {'x'};
     static const u8 cjk[] = {0xe6u, 0xbcu, 0xa2u};
@@ -198,7 +198,7 @@ static void put_choice(Grid *g, u16 row, u16 col, u8 choice,
     case 5u: text = zwj; len = sizeof(zwj); break;
     default: break;
     }
-    (void)sag_grid_put(g, row, col, text, len, fg, bg, attrs);
+    (void)yew_grid_put(g, row, col, text, len, fg, bg, attrs);
 }
 
 static bool check_grid(const u8 *data, size_t len,
@@ -216,7 +216,7 @@ static bool check_grid(const u8 *data, size_t len,
 
     arena_init(&arena);
     interner_init(&interner, &arena);
-    if (!sag_grid_init(&grid, &interner, 8u, 16u)) {
+    if (!yew_grid_init(&grid, &interner, 8u, 16u)) {
         interner_free(&interner);
         arena_free_all(&arena);
         return fail(why, why_cap, "grid init failed", 0u);
@@ -224,7 +224,7 @@ static bool check_grid(const u8 *data, size_t len,
     memset(&caps, 0, sizeof(caps));
     caps.truecolor = true;
     caps.sync_output = true;
-    sag_render_init(&render, &caps, NULL);
+    yew_render_init(&render, &caps, NULL);
     bytebuf_init(&output);
 
     while (pos < len && ops < MAX_OPS) {
@@ -234,8 +234,8 @@ static bool check_grid(const u8 *data, size_t len,
         u8 c = pos < len ? data[pos++] : (u8)(op * 31u);
         u16 row = (u16)(a % grid.rows);
         u16 col = (u16)(b % grid.cols);
-        SagColor fg = fuzz_color(a, b, c);
-        SagColor bg = fuzz_color(c, a, b);
+        YewColor fg = fuzz_color(a, b, c);
+        YewColor bg = fuzz_color(c, a, b);
         u16 attrs = (u16)(((u16)a << 8u | b) & 0x03ffu);
         VtCounts counts;
         size_t emitted;
@@ -246,7 +246,7 @@ static bool check_grid(const u8 *data, size_t len,
             break;
         case 1u: {
             static const u8 text[] = "ab\xe6\xbc\xa2\xf0\x9f\x98\x80";
-            (void)sag_grid_puts(&grid, row, col, text, sizeof(text) - 1u,
+            (void)yew_grid_puts(&grid, row, col, text, sizeof(text) - 1u,
                                 fg, bg, attrs);
             break;
         }
@@ -257,15 +257,15 @@ static bool check_grid(const u8 *data, size_t len,
             fill.bg = bg;
             fill.attrs = attrs;
             fill.utf8[0] = (u8)('a' + c % 26u);
-            sag_grid_fill(&grid, row, col,
+            yew_grid_fill(&grid, row, col,
                           (u16)(col + 1u + c % (grid.cols - col)), fill);
             break;
         }
         case 3u:
-            sag_grid_cursor(&grid, row, col, (c & 1u) != 0u);
+            yew_grid_cursor(&grid, row, col, (c & 1u) != 0u);
             break;
         default:
-            if (!sag_grid_resize(&grid, (u16)(1u + a % 12u),
+            if (!yew_grid_resize(&grid, (u16)(1u + a % 12u),
                                  (u16)(1u + b % 20u))) {
                 ok = fail(why, why_cap, "grid resize failed", pos);
             }
@@ -276,7 +276,7 @@ static bool check_grid(const u8 *data, size_t len,
             break;
         }
         output.len = 0u;
-        emitted = sag_render_frame(&render, &grid, &output);
+        emitted = yew_render_frame(&render, &grid, &output);
         if (emitted != output.len ||
             !vt_stream_closed(output.data, output.len, &counts,
                               why, why_cap)) {
@@ -289,7 +289,7 @@ static bool check_grid(const u8 *data, size_t len,
             ok = fail(why, why_cap, "unbalanced mode 2026 frame", pos);
             break;
         }
-        sag_grid_flip(&grid);
+        yew_grid_flip(&grid);
         if (!grid_invariants(&grid, why, why_cap, pos)) {
             ok = false;
             break;
@@ -298,7 +298,7 @@ static bool check_grid(const u8 *data, size_t len,
     }
 
     bytebuf_free(&output);
-    sag_grid_free(&grid);
+    yew_grid_free(&grid);
     interner_free(&interner);
     arena_free_all(&arena);
     return ok;
@@ -306,5 +306,5 @@ static bool check_grid(const u8 *data, size_t len,
 
 int main(int argc, char **argv)
 {
-    return sag_fuzz_main(argc, argv, "fuzz_grid", NULL, check_grid);
+    return yew_fuzz_main(argc, argv, "fuzz_grid", NULL, check_grid);
 }

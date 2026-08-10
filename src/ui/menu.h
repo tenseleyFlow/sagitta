@@ -1,5 +1,5 @@
-#ifndef SAG_UI_MENU_H
-#define SAG_UI_MENU_H
+#ifndef YEW_UI_MENU_H
+#define YEW_UI_MENU_H
 
 /*
  * Sprint 18.5 §5: the ranked-list widget.
@@ -57,8 +57,8 @@ typedef struct Menu {
     bool scanning;
 } Menu;
 
-void sag_menu_init(Menu *m, const MenuSpec *spec);
-void sag_menu_free(Menu *m);
+void yew_menu_init(Menu *m, const MenuSpec *spec);
+void yew_menu_free(Menu *m);
 
 /*
  * Install a freshly ranked set.  `items` is taken by value -- the menu
@@ -72,31 +72,31 @@ void sag_menu_free(Menu *m);
  * selected" and NOT to row 0 -- row 0 would be an unexplicit selection
  * that §6's Enter rule would treat as a choice the user never made.
  */
-void sag_menu_reset(Menu *m, Vec_CompItem items, u32 total, Span replace);
+void yew_menu_reset(Menu *m, Vec_CompItem items, u32 total, Span replace);
 
 /* Moves the selection by `delta` rows (or pages), marking it explicit.
  * Returns false when there is nothing to move through. */
-bool sag_menu_move(Menu *m, i32 delta, bool page);
+bool yew_menu_move(Menu *m, i32 delta, bool page);
 /* Selects a row outright -- what a click does.  Explicit, like any other
  * deliberate move.  False when the index is not a row. */
-bool sag_menu_select(Menu *m, i32 index);
+bool yew_menu_select(Menu *m, i32 index);
 /*
  * Scrolls the visible window WITHOUT moving the selection, which is what
  * a wheel does: looking around a list is not the same as choosing in it,
  * and §6's Enter rule turns on that difference.
  */
-bool sag_menu_scroll(Menu *m, i32 delta, u16 height);
+bool yew_menu_scroll(Menu *m, i32 delta, u16 height);
 /* Rows the menu would draw in an area `height` cells tall. */
-u16 sag_menu_rows(const Menu *m, u16 height);
-const CompItem *sag_menu_selected(const Menu *m);
-void sag_menu_dismiss(Menu *m);
+u16 yew_menu_rows(const Menu *m, u16 height);
+const CompItem *yew_menu_selected(const Menu *m);
+void yew_menu_dismiss(Menu *m);
 
 /*
  * Draws bottom-aligned inside `area` and registers one
- * SAG_REGION_MENU_ROW per drawn row from the same Rect it drew with,
- * plus a SAG_REGION_BLOCK over the whole list so a click on a gap does
+ * YEW_REGION_MENU_ROW per drawn row from the same Rect it drew with,
+ * plus a YEW_REGION_BLOCK over the whole list so a click on a gap does
  * not fall through to the pane beneath (Sprint 22's law).
  */
-void sag_menu_draw(Ed *ed, Menu *m, Rect area, const SagUiStyle *style);
+void yew_menu_draw(Ed *ed, Menu *m, Rect area, const YewUiStyle *style);
 
 #endif

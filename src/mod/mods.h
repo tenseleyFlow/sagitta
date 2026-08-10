@@ -1,20 +1,20 @@
-#ifndef SAG_MOD_MODS_H
-#define SAG_MOD_MODS_H
+#ifndef YEW_MOD_MODS_H
+#define YEW_MOD_MODS_H
 
 #include <stdbool.h>
 
 #include "util/base.h"
 
 typedef enum {
-    SAG_MOD_LSP,
-    SAG_MOD_AI,
-    SAG_MOD_FUSS,
-    SAG_MOD_PLUGINS,
-    SAG_MOD_COUNT
-} SagMod;
+    YEW_MOD_LSP,
+    YEW_MOD_AI,
+    YEW_MOD_FUSS,
+    YEW_MOD_PLUGINS,
+    YEW_MOD_COUNT
+} YewMod;
 
-bool sag_mod_enabled(SagMod mod);
-const char *sag_mod_name(SagMod mod);
-bool sag_mod_require(SagMod mod, char *err, size_t errsz);
+bool yew_mod_enabled(YewMod mod);
+const char *yew_mod_name(YewMod mod);
+bool yew_mod_require(YewMod mod, char *err, size_t errsz);
 
 #endif

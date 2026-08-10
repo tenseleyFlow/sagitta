@@ -1,5 +1,5 @@
-#ifndef SAG_UI_GROUPS_H
-#define SAG_UI_GROUPS_H
+#ifndef YEW_UI_GROUPS_H
+#define YEW_UI_GROUPS_H
 
 /*
  * Sprint 24 §1/§2: tab groups, ported from the facsimile model whole.
@@ -51,38 +51,38 @@ typedef struct Groups {
     u32 next_group_id; /* starts at 1 */
 } Groups;
 
-void sag_groups_init(Groups *g);
-void sag_groups_free(Ed *ed);
+void yew_groups_init(Groups *g);
+void yew_groups_free(Ed *ed);
 
 /* 0 when refused.  An empty `name` labels the group `basename(dir)/`. */
-u32 sag_group_create(Ed *ed, const char *dir_path, const char *name);
+u32 yew_group_create(Ed *ed, const char *dir_path, const char *name);
 /* Stragglers are UNGROUPED, never left pointing at an id that no longer
  * resolves — an orphan reads as "grouped" everywhere it is asked. */
-void sag_group_dissolve(Ed *ed, u32 gid);
-int sag_group_find(const Ed *ed, u32 gid); /* index into groups; -1 */
-TabGroup *sag_group_at(Ed *ed, u32 gid);
+void yew_group_dissolve(Ed *ed, u32 gid);
+int yew_group_find(const Ed *ed, u32 gid); /* index into groups; -1 */
+TabGroup *yew_group_at(Ed *ed, u32 gid);
 
 /* Both COMPUTED, every time.  See the header comment. */
-int sag_group_member_count(const Ed *ed, u32 gid);
+int yew_group_member_count(const Ed *ed, u32 gid);
 /* Tab indices ordered by ordinal.  Ordinals are NOT assumed contiguous
  * — mid-removal they have a hole — so this sorts rather than indexes. */
-int sag_group_members(const Ed *ed, u32 gid, int *out, int cap);
+int yew_group_members(const Ed *ed, u32 gid, int *out, int cap);
 
 /* A tab belongs to exactly one group: an already-grouped tab leaves its
  * old group FIRST, so both groups' ordinals stay consistent. */
-void sag_group_add_member(Ed *ed, u32 gid, int tab_idx);
+void yew_group_add_member(Ed *ed, u32 gid, int tab_idx);
 /* Compacts the ordinals above the vacated one, then auto-dissolves the
  * group if that was the last member.  Tab close calls this BEFORE the
  * array compaction, while `tab_idx` still names the right tab. */
-void sag_group_remove_member(Ed *ed, int tab_idx);
+void yew_group_remove_member(Ed *ed, int tab_idx);
 
 /* "src/ (4)" — the count is live, never stored. */
-void sag_group_label(const Ed *ed, u32 gid, char *buf, size_t n);
+void yew_group_label(const Ed *ed, u32 gid, char *buf, size_t n);
 /* DERIVED from the active tab, never stored: the active index is
  * assigned raw in several places and a cached copy drifts away from it
  * silently. */
-u32 sag_active_group_id(const Ed *ed);
-void sag_group_prune_empty(Ed *ed);
+u32 yew_active_group_id(const Ed *ed);
+void yew_group_prune_empty(Ed *ed);
 
 /*
  * `pos` is 1-based in the FINAL list the user sees.
@@ -92,7 +92,7 @@ void sag_group_prune_empty(Ed *ed);
  * vacated slot is still being counted.  Build the final order, then
  * renumber 1..n.
  */
-void sag_group_set_ordinal(Ed *ed, int tab_idx, int pos);
+void yew_group_set_ordinal(Ed *ed, int tab_idx, int pos);
 
 /*
  * A group is ONE row-1 entry but several array entries, so moving it
@@ -104,21 +104,21 @@ void sag_group_set_ordinal(Ed *ed, int tab_idx, int pos);
  * it passed; recording indices instead of ids goes stale after the
  * first move.
  */
-void sag_group_reorder_block(Ed *ed, u32 gid, int to_idx);
+void yew_group_reorder_block(Ed *ed, u32 gid, int to_idx);
 
 /* Records the active tab's path as its group's resume point.  Called
  * when leaving a group, before the switch that changes what "active"
  * means. */
-void sag_group_note_position(Ed *ed);
+void yew_group_note_position(Ed *ed);
 
 /*
  * Sprint 25 §6: restores the remembered member from workspace state.
  *
- * A PATH, not an index, for the same reason sag_group_note_position
+ * A PATH, not an index, for the same reason yew_group_note_position
  * stores one: indices shift, and a dangling path already falls back to
  * the lowest ordinal (s24) — so a member that has since been closed
  * costs nothing rather than resolving to whoever now sits in its slot.
  */
-void sag_group_set_last_member(Ed *ed, u32 gid, const char *path);
+void yew_group_set_last_member(Ed *ed, u32 gid, const char *path);
 
 #endif

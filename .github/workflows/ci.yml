@@ -250,7 +250,7 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y valgrind
       - name: Run properties at the leak-check cadence
-        run: SAG_PROP_N=50 make test VALGRIND=1
+        run: YEW_PROP_N=50 make test VALGRIND=1
 
   performance:
     runs-on: ubuntu-latest
@@ -401,7 +401,7 @@ jobs:
         run: |
           make clean
           make
-          sha256sum build/sagitta > s1
+          sha256sum build/yew > s1
           make clean
           make
           sha256sum -c s1
@@ -488,7 +488,7 @@ jobs:
       - name: Run the Sprint 35 round-trip law at nightly depth
         run: |
           seed=$(date -u +%Y%m%d)
-          SAG_RT_SEEDS=100000 SAG_RT_BASE_SEED="$seed" \
+          YEW_RT_SEEDS=100000 YEW_RT_BASE_SEED="$seed" \
             make test-roundtrip CC=gcc BUILD=build-nightly
       - name: Attach minimized open findings
         if: failure()
@@ -503,9 +503,9 @@ jobs:
         run: |
           make CC=clang SAN=1 BUILD=build-nightly-san \
             build-nightly-san/unit_tests
-          SAG_PROP_N=20000 build-nightly-san/unit_tests \
+          YEW_PROP_N=20000 build-nightly-san/unit_tests \
             --filter textbuf_prop_p6_undo_redo_identity
-          SAG_PROP_N=20000 build-nightly-san/unit_tests \
+          YEW_PROP_N=20000 build-nightly-san/unit_tests \
             --filter textbuf_prop_p8_branch_preservation
       - name: Run the date-seeded 2M legacy campaigns
         run: |

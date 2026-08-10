@@ -1,5 +1,5 @@
-#ifndef SAG_TEST_TESTS_H
-#define SAG_TEST_TESTS_H
+#ifndef YEW_TEST_TESTS_H
+#define YEW_TEST_TESTS_H
 
 void test_batch_selfcheck_pins_every_uninitialized_subsystem(void);
 void test_batch_selfcheck_rejects_seeded_grid_input_tty_and_timer(void);
@@ -1397,9 +1397,9 @@ void test_narrow_backspace_rescans_everything(void);
 void test_narrow_mid_edit_rescans_everything(void);
 void test_narrow_sliced_rescan_equals_unsliced(void);
 void test_narrow_partial_scan_has_a_usable_count(void);
-void test_narrow_top_agrees_with_sag_fz_rank(void);
+void test_narrow_top_agrees_with_yew_fz_rank(void);
 void test_narrow_empty_pattern_keeps_source_order(void);
-void test_narrow_empty_pattern_agrees_with_sag_fz_rank(void);
+void test_narrow_empty_pattern_agrees_with_yew_fz_rank(void);
 void test_narrow_item_count_change_forces_a_rescan(void);
 void test_narrow_degenerate_inputs(void);
 
@@ -1517,7 +1517,7 @@ void test_glyphs_the_vocabulary_is_decided_once(void);
 void test_degrade_no_color_emits_no_colour_and_stays_legible(void);
 void test_degrade_empty_no_color_is_not_set(void);
 void test_degrade_16_colour_tier_uses_reverse_not_colour(void);
-void test_degrade_sag_mouse_zero_drops_events(void);
+void test_degrade_yew_mouse_zero_drops_events(void);
 void test_degrade_tiny_terminals_never_produce_a_bad_rect(void);
 void test_degrade_the_member_strip_sheds_before_the_tab_strip(void);
 void test_degrade_ascii_keeps_every_element_meaningful(void);

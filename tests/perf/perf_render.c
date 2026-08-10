@@ -79,13 +79,13 @@ static void mutate(Grid *grid, PerfKind kind, u8 byte)
     switch (kind) {
     case PERF_FULL:
         for (u16 row = 0u; row < grid->rows; row++)
-            sag_grid_fill(grid, row, 0u, grid->cols, cell);
+            yew_grid_fill(grid, row, 0u, grid->cols, cell);
         break;
     case PERF_CELL:
-        sag_grid_fill(grid, 25u, 100u, 101u, cell);
+        yew_grid_fill(grid, 25u, 100u, 101u, cell);
         break;
     case PERF_ROW:
-        sag_grid_fill(grid, 25u, 0u, grid->cols, cell);
+        yew_grid_fill(grid, 25u, 0u, grid->cols, cell);
         break;
     case PERF_ZERO:
         break;
@@ -146,19 +146,19 @@ static bool measure(PerfCase *pc)
 
     arena_init(&arena);
     interner_init(&interner, &arena);
-    if (!sag_grid_init(&grid, &interner, pc->rows, pc->cols)) {
+    if (!yew_grid_init(&grid, &interner, pc->rows, pc->cols)) {
         interner_free(&interner);
         arena_free_all(&arena);
         return false;
     }
     memset(&caps, 0, sizeof(caps));
-    sag_render_init(&render, &caps, NULL);
+    yew_render_init(&render, &caps, NULL);
     bytebuf_init(&output);
 
     /* Establish a known front buffer before measuring alternating changes. */
     mutate(&grid, pc->kind, (u8)'a');
-    (void)sag_render_frame(&render, &grid, &output);
-    sag_grid_flip(&grid);
+    (void)yew_render_frame(&render, &grid, &output);
+    yew_grid_flip(&grid);
     for (sample = 0u; sample < PERF_SAMPLES; sample++) {
         i64 start;
         i64 elapsed;
@@ -171,7 +171,7 @@ static bool measure(PerfCase *pc)
             ok = false;
             break;
         }
-        emitted = sag_render_frame(&render, &grid, &output);
+        emitted = yew_render_frame(&render, &grid, &output);
         elapsed = now_ns() - start;
         if (elapsed < 0 || emitted != output.len) {
             ok = false;
@@ -188,7 +188,7 @@ static bool measure(PerfCase *pc)
         }
         samples[sample] = elapsed;
         perf_sink += (u64)emitted;
-        sag_grid_flip(&grid);
+        yew_grid_flip(&grid);
     }
     if (ok) {
         stable_sort_i64(samples, PERF_SAMPLES);
@@ -197,7 +197,7 @@ static bool measure(PerfCase *pc)
         pc->bytes = expected_bytes;
     }
     bytebuf_free(&output);
-    sag_grid_free(&grid);
+    yew_grid_free(&grid);
     interner_free(&interner);
     arena_free_all(&arena);
     return ok;
@@ -215,9 +215,9 @@ int main(void)
     size_t i;
     int status = 0;
 
-    if (!load_baselines(cases, SAG_ARRAY_LEN(cases)))
+    if (!load_baselines(cases, YEW_ARRAY_LEN(cases)))
         return 2;
-    for (i = 0u; i < SAG_ARRAY_LEN(cases); i++) {
+    for (i = 0u; i < YEW_ARRAY_LEN(cases); i++) {
         bool over_budget;
         bool over_baseline;
 

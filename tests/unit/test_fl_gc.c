@@ -103,12 +103,12 @@ void test_fl_gc_root_value_stack(void)
     s = witness(&f, "stack");
     *f.vm.sp++ = FL_OBJ_V(FL_STR, s);
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(still_live(&f.vm, s));
-    SAG_ASSERT_EQ_I64(memcmp(s->b, "stack-witness", 13), 0);
+    YEW_ASSERT(still_live(&f.vm, s));
+    YEW_ASSERT_EQ_I64(memcmp(s->b, "stack-witness", 13), 0);
 
     f.vm.sp--;                        /* drop it */
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(!still_live(&f.vm, s));
+    YEW_ASSERT(!still_live(&f.vm, s));
     gf_close(&f);
 }
 
@@ -144,15 +144,15 @@ void test_fl_gc_root_call_frames(void)
     f.vm.frames[f.vm.nframes].slots = f.vm.stack;
     f.vm.nframes++;
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(still_live(&f.vm, cl));
+    YEW_ASSERT(still_live(&f.vm, cl));
     /* And the frame reaches THROUGH the closure to its function: a mark
      * that stopped at the closure would leave the chunk to be swept
      * while the frame is still executing out of it. */
-    SAG_ASSERT(still_live(&f.vm, fn));
+    YEW_ASSERT(still_live(&f.vm, fn));
 
     f.vm.nframes--;                   /* drop it */
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(!still_live(&f.vm, cl));
+    YEW_ASSERT(!still_live(&f.vm, cl));
     gf_close(&f);
 }
 
@@ -179,11 +179,11 @@ void test_fl_gc_root_open_upvalues(void)
     uv->next = NULL;
     f.vm.open_upvals = uv;
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(still_live(&f.vm, uv));
+    YEW_ASSERT(still_live(&f.vm, uv));
 
     f.vm.open_upvals = NULL;          /* drop it */
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(!still_live(&f.vm, uv));
+    YEW_ASSERT(!still_live(&f.vm, uv));
     gf_close(&f);
 }
 
@@ -209,19 +209,19 @@ void test_fl_gc_root_globals_and_modules(void)
     fl_gc_release(&f.vm, 1U);
 
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(still_live(&f.vm, g));
-    SAG_ASSERT(still_live(&f.vm, m));
+    YEW_ASSERT(still_live(&f.vm, g));
+    YEW_ASSERT(still_live(&f.vm, m));
 
     /* Drop them: emptying the maps must let both go, and must not take
      * anything else with it. */
-    SAG_ASSERT(fl_map_del(f.vm.globals, key));
+    YEW_ASSERT(fl_map_del(f.vm.globals, key));
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(!still_live(&f.vm, g));
-    SAG_ASSERT(still_live(&f.vm, m));
+    YEW_ASSERT(!still_live(&f.vm, g));
+    YEW_ASSERT(still_live(&f.vm, m));
 
-    SAG_ASSERT(fl_map_del(f.vm.modules, key));
+    YEW_ASSERT(fl_map_del(f.vm.modules, key));
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(!still_live(&f.vm, m));
+    YEW_ASSERT(!still_live(&f.vm, m));
     gf_close(&f);
 }
 
@@ -253,11 +253,11 @@ void test_fl_gc_root_builtins(void)
     fl_gc_release(&f.vm, 1U);
 
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(still_live(&f.vm, b));
+    YEW_ASSERT(still_live(&f.vm, b));
 
-    SAG_ASSERT(fl_map_del(f.vm.builtins, key));
+    YEW_ASSERT(fl_map_del(f.vm.builtins, key));
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(!still_live(&f.vm, b));
+    YEW_ASSERT(!still_live(&f.vm, b));
     gf_close(&f);
 }
 
@@ -287,28 +287,28 @@ void test_fl_gc_root_handle_table(void)
      * for.  Assert that first, so a root that silently stopped working
      * could not make the rest of this test pass. */
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(!still_live(&f.vm, h));
+    YEW_ASSERT(!still_live(&f.vm, h));
 
     h = witness(&f, "handle two");
     slot = FL_OBJ_V(FL_STR, h);
     fl_gc_host_root_add(&f.vm, &slot);
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(still_live(&f.vm, h));
+    YEW_ASSERT(still_live(&f.vm, h));
 
     /* The root is the SLOT, not the value: writing through it must
      * change what survives, which is what makes replacing a hook safe. */
     slot = FL_NIL_V;
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(!still_live(&f.vm, h));
+    YEW_ASSERT(!still_live(&f.vm, h));
 
     h = witness(&f, "handle three");
     slot = FL_OBJ_V(FL_STR, h);
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(still_live(&f.vm, h));
+    YEW_ASSERT(still_live(&f.vm, h));
 
     fl_gc_host_root_remove(&f.vm, &slot);
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(!still_live(&f.vm, h));
+    YEW_ASSERT(!still_live(&f.vm, h));
     /* Removing twice is a no-op, so a teardown that runs twice is
      * safe -- s36's reload path does exactly that. */
     fl_gc_host_root_remove(&f.vm, &slot);
@@ -353,9 +353,9 @@ void test_fl_gc_root_provider(void)
 
     fl_gc_root_provider(&f.vm, provider_mark, &ctx);
     fl_gc_collect(&f.vm);
-    SAG_ASSERT_EQ_U64(ctx.calls, 1U);
-    SAG_ASSERT(still_live(&f.vm, a));
-    SAG_ASSERT(still_live(&f.vm, b));
+    YEW_ASSERT_EQ_U64(ctx.calls, 1U);
+    YEW_ASSERT(still_live(&f.vm, a));
+    YEW_ASSERT(still_live(&f.vm, b));
 
     /* A provider walks a LIVE collection, so shrinking it drops what
      * it no longer reports -- that is the whole point of the form: the
@@ -363,15 +363,15 @@ void test_fl_gc_root_provider(void)
      * registered. */
     ctx.n = 1U;
     fl_gc_collect(&f.vm);
-    SAG_ASSERT_EQ_U64(ctx.calls, 2U);
-    SAG_ASSERT(still_live(&f.vm, a));
-    SAG_ASSERT(!still_live(&f.vm, b));
+    YEW_ASSERT_EQ_U64(ctx.calls, 2U);
+    YEW_ASSERT(still_live(&f.vm, a));
+    YEW_ASSERT(!still_live(&f.vm, b));
 
     /* Re-attaching the same (fn, ctx) pair is idempotent: boot paths
      * that run twice must not double-mark or exhaust the table. */
     fl_gc_root_provider(&f.vm, provider_mark, &ctx);
     fl_gc_collect(&f.vm);
-    SAG_ASSERT_EQ_U64(ctx.calls, 3U);
+    YEW_ASSERT_EQ_U64(ctx.calls, 3U);
     gf_close(&f);
 }
 
@@ -392,17 +392,17 @@ void test_fl_gc_root_temp_stack(void)
     b = witness(&f, "tempb");
     fl_gc_protect(&f.vm, FL_OBJ_V(FL_STR, b));
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(still_live(&f.vm, a));
-    SAG_ASSERT(still_live(&f.vm, b));
+    YEW_ASSERT(still_live(&f.vm, a));
+    YEW_ASSERT(still_live(&f.vm, b));
 
     fl_gc_release(&f.vm, 1U);         /* drops b, keeps a */
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(still_live(&f.vm, a));
-    SAG_ASSERT(!still_live(&f.vm, b));
+    YEW_ASSERT(still_live(&f.vm, a));
+    YEW_ASSERT(!still_live(&f.vm, b));
 
     fl_gc_release(&f.vm, 1U);
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(!still_live(&f.vm, a));
+    YEW_ASSERT(!still_live(&f.vm, a));
     gf_close(&f);
 }
 
@@ -431,11 +431,11 @@ void test_fl_gc_root_compile_chain(void)
 
     f.vm.compiling[f.vm.ncompiling++] = fn;
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(still_live(&f.vm, fn));
+    YEW_ASSERT(still_live(&f.vm, fn));
 
     f.vm.ncompiling--;                /* drop it */
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(!still_live(&f.vm, fn));
+    YEW_ASSERT(!still_live(&f.vm, fn));
     gf_close(&f);
 }
 
@@ -457,11 +457,11 @@ void test_fl_gc_marks_the_in_flight_error(void)
     e = witness(&f, "err");
     f.vm.err = FL_OBJ_V(FL_STR, e);
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(still_live(&f.vm, e));
+    YEW_ASSERT(still_live(&f.vm, e));
 
     f.vm.err = FL_NIL_V;              /* drop it */
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(!still_live(&f.vm, e));
+    YEW_ASSERT(!still_live(&f.vm, e));
     gf_close(&f);
 }
 
@@ -490,13 +490,13 @@ void test_fl_gc_collects_a_cycle(void)
     (void)fl_list_push(&f.vm, b, FL_OBJ_V(FL_LIST, a));
 
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(still_live(&f.vm, a));
-    SAG_ASSERT(still_live(&f.vm, b));
+    YEW_ASSERT(still_live(&f.vm, a));
+    YEW_ASSERT(still_live(&f.vm, b));
 
     fl_gc_release(&f.vm, 2U);         /* drop both handles */
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(!still_live(&f.vm, a));
-    SAG_ASSERT(!still_live(&f.vm, b));
+    YEW_ASSERT(!still_live(&f.vm, a));
+    YEW_ASSERT(!still_live(&f.vm, b));
     gf_close(&f);
 }
 
@@ -518,14 +518,14 @@ void test_fl_gc_intern_table_is_weak(void)
     fl_gc_protect(&f.vm, FL_OBJ_V(FL_STR, first));
     /* Interning means the same content yields the SAME object. */
     again = fl_str_new(&f.vm, "interned", 8U);
-    SAG_ASSERT(first == again);
+    YEW_ASSERT(first == again);
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(still_live(&f.vm, first));
+    YEW_ASSERT(still_live(&f.vm, first));
 
     fl_gc_release(&f.vm, 1U);
     peak = f.vm.gc.strings.n;
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(!still_live(&f.vm, first));
+    YEW_ASSERT(!still_live(&f.vm, first));
     /*
      * The table gave up its entry rather than keeping a dangling one.
      * Asserting `again != first` would be wrong: malloc is free to hand
@@ -533,11 +533,11 @@ void test_fl_gc_intern_table_is_weak(void)
      * can check is that the ENTRY went away and that re-interning
      * produces a live, correct, freshly-listed object.
      */
-    SAG_ASSERT(f.vm.gc.strings.n < peak);
+    YEW_ASSERT(f.vm.gc.strings.n < peak);
     again = fl_str_new(&f.vm, "interned", 8U);
-    SAG_ASSERT(still_live(&f.vm, again));
-    SAG_ASSERT_EQ_U64(again->len, 8U);
-    SAG_ASSERT_EQ_I64(memcmp(again->b, "interned", 8U), 0);
+    YEW_ASSERT(still_live(&f.vm, again));
+    YEW_ASSERT_EQ_U64(again->len, 8U);
+    YEW_ASSERT_EQ_I64(memcmp(again->b, "interned", 8U), 0);
     gf_close(&f);
 
     /* The table also shrinks back rather than holding its high-water
@@ -553,10 +553,10 @@ void test_fl_gc_intern_table_is_weak(void)
             (void)fl_str_new(&f.vm, b, (u32)n);
         }
         peak = f.vm.gc.strings.n;
-        SAG_ASSERT(peak >= 2000U);
+        YEW_ASSERT(peak >= 2000U);
         fl_gc_collect(&f.vm);
         /* Nothing roots them, so the table empties. */
-        SAG_ASSERT(f.vm.gc.strings.n < peak / 4U);
+        YEW_ASSERT(f.vm.gc.strings.n < peak / 4U);
     }
     gf_close(&f);
 }
@@ -594,17 +594,17 @@ void test_fl_gc_stress_collects_at_every_instruction(void)
     f.vm.gc.stress = true;
     (void)fl_diag_add_file(&f.dc, "t.fl", src, strlen(src));
     p = fl_parse(&f.arena, &f.dc, &f.in, src, strlen(src), 0U);
-    SAG_ASSERT(!p.had_error);
+    YEW_ASSERT(!p.had_error);
     fn = fl_compile(&f.vm, &f.dc, &p, 0U, origin);
-    SAG_ASSERT_NOT_NULL(fn);
-    SAG_ASSERT(fl_vm_run(&f.vm, fn, &out));
+    YEW_ASSERT_NOT_NULL(fn);
+    YEW_ASSERT(fl_vm_run(&f.vm, fn, &out));
     /*
      * Two lists and two DEF_GLOBAL map writes allocate, and under
      * stress each one arms a collection honoured at the next boundary.
      * More than one collection is the claim; the exact count is a
      * codegen detail and pinning it would break on any peephole change.
      */
-    SAG_ASSERT(f.vm.gc.collections > 1U);
+    YEW_ASSERT(f.vm.gc.collections > 1U);
     gf_close(&f);
 }
 
@@ -630,9 +630,9 @@ void test_fl_gc_stress_frees_what_only_a_c_local_holds(void)
     fl_gc_protect(&f.vm, FL_OBJ_V(FL_STR, kept));
     unprotected = witness(&f, "dropped");
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(!still_live(&f.vm, unprotected));
-    SAG_ASSERT(still_live(&f.vm, kept));
-    SAG_ASSERT_EQ_I64(memcmp(kept->b, "kept-witness", 12), 0);
+    YEW_ASSERT(!still_live(&f.vm, unprotected));
+    YEW_ASSERT(still_live(&f.vm, kept));
+    YEW_ASSERT_EQ_I64(memcmp(kept->b, "kept-witness", 12), 0);
     fl_gc_release(&f.vm, 1U);
     gf_close(&f);
 }
@@ -673,12 +673,12 @@ void test_fl_gc_stress_survives_the_whole_pipeline(void)
     f.vm.gc.stress = true;
     (void)fl_diag_add_file(&f.dc, "t.fl", src, strlen(src));
     p = fl_parse(&f.arena, &f.dc, &f.in, src, strlen(src), 0U);
-    SAG_ASSERT(!p.had_error);
+    YEW_ASSERT(!p.had_error);
     fn = fl_compile(&f.vm, &f.dc, &p, 0U, origin);
-    SAG_ASSERT_NOT_NULL(fn);
-    SAG_ASSERT(fl_vm_run(&f.vm, fn, &out));
-    SAG_ASSERT_EQ_U64((u64)out.t, (u64)FL_INT);
-    SAG_ASSERT_EQ_I64(out.as.i, 66);   /* 0+1+...+11 */
+    YEW_ASSERT_NOT_NULL(fn);
+    YEW_ASSERT(fl_vm_run(&f.vm, fn, &out));
+    YEW_ASSERT_EQ_U64((u64)out.t, (u64)FL_INT);
+    YEW_ASSERT_EQ_I64(out.as.i, 66);   /* 0+1+...+11 */
     /*
      * The count is a floor, not a target: it says the collector ran
      * many times across the run rather than once at the end, which is
@@ -689,6 +689,6 @@ void test_fl_gc_stress_survives_the_whole_pipeline(void)
     if (f.vm.gc.collections < 20U)
         (void)fprintf(stderr, "stress ran only %llu collections\n",
                       (unsigned long long)f.vm.gc.collections);
-    SAG_ASSERT(f.vm.gc.collections >= 20U);
+    YEW_ASSERT(f.vm.gc.collections >= 20U);
     gf_close(&f);
 }

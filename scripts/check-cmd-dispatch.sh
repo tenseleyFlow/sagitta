@@ -33,7 +33,7 @@ definitions=$(grep -En \
     src/edit/keys_default.c || :)
 if [ "$(printf '%s\n' "$definitions" | sed '/^$/d' | wc -l | tr -d ' ')" \
     -ne 1 ] || ! printf '%s\n' "$definitions" | \
-    grep -F 'sag_keys_default_install' >/dev/null 2>&1; then
+    grep -F 'yew_keys_default_install' >/dev/null 2>&1; then
     echo "dispatch: keys_default.c must contain data plus one install function" >&2
     printf '%s\n' "$definitions" >&2
     exit 1

@@ -198,7 +198,7 @@ static u64 time_parse_only(const char *name, const char *src)
 }
 
 /* main -> VM initialized -> exit, on an empty script.  This is the
- * Fletch share of the 20 ms cold start: everything `sag` pays before
+ * Fletch share of the 20 ms cold start: everything `yew` pays before
  * a config's first statement runs. */
 static u64 time_startup(void)
 {
@@ -232,7 +232,7 @@ static const char SRC_FIB27[] =
  * VM's share of a motion op -- dispatch, the host seam, the raise and
  * the unwind -- and NOT editing.  It is the right number for
  * 02-fletch.md requirement 7 and the wrong number to quote as
- * "sagitta executes a motion in N ns".  Sprint 34 adds a second row
+ * "yew executes a motion in N ns".  Sprint 34 adds a second row
  * against the real host, which is the one that answers that question.
  */
 static const char SRC_MOTION[] =
@@ -367,9 +367,9 @@ static void measure(Bench *b, Sample fn, void *ud)
         (void)fn(ud);
     for (i = 0; i < REPS; i++)
         v[i] = fn(ud);
-    /* sag_sort_stable, not qsort: raw qsort is banned tree-wide
+    /* yew_sort_stable, not qsort: raw qsort is banned tree-wide
      * because its tie order is unspecified and invariant 5 is not. */
-    sag_sort_stable(v, (size_t)REPS, sizeof(v[0]), cmp_u64, NULL);
+    yew_sort_stable(v, (size_t)REPS, sizeof(v[0]), cmp_u64, NULL);
     b->median = v[REPS / 2];
     b->min = v[0];
 }
@@ -422,7 +422,7 @@ typedef struct ConfigArg {
 static u64 sample_config_reload(void *ud)
 {
     ConfigArg *arg = ud;
-    SagEdStartup startup = {0};
+    YewEdStartup startup = {0};
     Ed ed;
     CfgStatus status;
     u64 t0;
@@ -430,27 +430,27 @@ static u64 sample_config_reload(void *ud)
 
     startup.config_path = arg->user_path;
     startup.no_workspace_config = true;
-    sag_ed_init(&ed);
-    if (!sag_ed_open_scratch(&ed)) {
+    yew_ed_init(&ed);
+    if (!yew_ed_open_scratch(&ed)) {
         (void)fprintf(stderr, "perf_fletch: cannot open config scratch\n");
         exit(1);
     }
-    sag_config_init(&ed, &startup);
-    status = sag_config_load_all(&ed, NULL);
-    if (status != SAG_CFG_OK ||
-        sag_bind_active_count(&ed) < CONFIG_RELOAD_BINDS) {
+    yew_config_init(&ed, &startup);
+    status = yew_config_load_all(&ed, NULL);
+    if (status != YEW_CFG_OK ||
+        yew_bind_active_count(&ed) < CONFIG_RELOAD_BINDS) {
         (void)fprintf(stderr,
                       "perf_fletch: 500-bind config did not load\n");
         exit(1);
     }
     t0 = now_ns();
-    status = sag_config_reload(&ed, NULL);
+    status = yew_config_reload(&ed, NULL);
     dt = now_ns() - t0;
-    if (status != SAG_CFG_OK) {
+    if (status != YEW_CFG_OK) {
         (void)fprintf(stderr, "perf_fletch: config reload failed\n");
         exit(1);
     }
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
     return dt;
 }
 
@@ -516,7 +516,7 @@ static void macrolib_fixture_close(MacroLibArg *arg)
     u32 i;
 
     if (arg->ed_initialized)
-        sag_ed_free(&arg->ed);
+        yew_ed_free(&arg->ed);
     if (arg->arena_initialized)
         arena_free_all(&arg->diag_arena);
     for (i = 0U; i < MACROLIB_FILES; i++) {
@@ -537,7 +537,7 @@ static void macrolib_fixture_open(MacroLibArg *arg)
 
     (void)memset(arg, 0, sizeof(*arg));
     (void)snprintf(arg->root, sizeof(arg->root),
-                   "/tmp/sagitta-perf-macrolib.XXXXXX");
+                   "/tmp/yew-perf-macrolib.XXXXXX");
     if (mkdtemp(arg->root) == NULL) {
         (void)fprintf(stderr,
                       "perf_fletch: cannot create macro-library fixture\n");
@@ -571,17 +571,17 @@ static void macrolib_fixture_open(MacroLibArg *arg)
     arg->arena_initialized = true;
     fl_diag_init(&arg->dc, &arg->diag_arena);
     fl_diag_set_sink(&arg->dc, quiet, arg);
-    sag_ed_init(&arg->ed);
+    yew_ed_init(&arg->ed);
     arg->ed_initialized = true;
-    if (!sag_ed_open_scratch(&arg->ed)) {
+    if (!yew_ed_open_scratch(&arg->ed)) {
         macrolib_fixture_close(arg);
         (void)fprintf(stderr, "perf_fletch: cannot open macro scratch\n");
         exit(1);
     }
-    value.type = (u8)SAG_OPT_STR;
+    value.type = (u8)YEW_OPT_STR;
     value.as.str.s = arg->root;
     value.as.str.len = (u32)strlen(arg->root);
-    if (!sag_opt_set(&arg->ed, SAG_OPT_GLOBAL, "macro.dir", 9U, &value,
+    if (!yew_opt_set(&arg->ed, YEW_OPT_GLOBAL, "macro.dir", 9U, &value,
                      &err)) {
         macrolib_fixture_close(arg);
         (void)fprintf(stderr, "perf_fletch: cannot set macro.dir: %s\n",
@@ -594,7 +594,7 @@ static u64 sample_macrolib_scan(void *ud)
 {
     MacroLibArg *arg = ud;
     u64 t0 = now_ns();
-    u32 loaded = sag_macrolib_scan(&arg->ed, &arg->dc);
+    u32 loaded = yew_macrolib_scan(&arg->ed, &arg->dc);
     u64 dt = now_ns() - t0;
 
     if (loaded != MACROLIB_FILES) {
@@ -621,21 +621,21 @@ typedef struct EditorEnv {
 static void editor_env_open(EditorEnv *e)
 {
     env_open(&e->fl);
-    sag_ed_init(&e->ed);
-    if (!sag_ed_open_scratch(&e->ed)) {
+    yew_ed_init(&e->ed);
+    if (!yew_ed_open_scratch(&e->ed)) {
         (void)fprintf(stderr, "perf_fletch: cannot open scratch editor\n");
         exit(1);
     }
     fl_ed_attach(&e->fl.vm, &e->ed, &fl_host_editor);
     fl_api_init();
-    e->buf = fl_h_buf_make(&e->ed, sag_ed_doc(&e->ed));
+    e->buf = fl_h_buf_make(&e->ed, yew_ed_doc(&e->ed));
     e->cur = fl_h_cur_make(&e->ed, e->ed.win, e->ed.win->cs.primary);
 }
 
 static void editor_env_close(EditorEnv *e)
 {
     fl_ed_detach(&e->fl.vm);
-    sag_ed_free(&e->ed);
+    yew_ed_free(&e->ed);
     env_close(&e->fl);
 }
 
@@ -666,10 +666,10 @@ static u64 sample_config_program(void *ud)
 
     editor_env_open(&e);
     origin = (FlOrigin){(u8)FL_ORIGIN_BUILTIN,
-                        sag_intern(&e.fl.in, arg->name, strlen(arg->name)),
+                        yew_intern(&e.fl.in, arg->name, strlen(arg->name)),
                         (u32)FL_CAP_FS_READ | (u32)FL_CAP_FS_WRITE |
                             (u32)FL_CAP_SHELL | (u32)FL_CAP_NET};
-    sag_bind_batch_begin(&e.ed);
+    yew_bind_batch_begin(&e.ed);
     t0 = now_ns();
     (void)fl_diag_add_file(&e.fl.dc, arg->name, arg->src, strlen(arg->src));
     program = fl_parse(&e.fl.arena, &e.fl.dc, &e.fl.in, arg->src,
@@ -678,7 +678,7 @@ static u64 sample_config_program(void *ud)
          fl_compile(&e.fl.vm, &e.fl.dc, &program, 0U, origin);
     if (fn == NULL || !fl_vm_run(&e.fl.vm, fn, &out))
         editor_fail(&e, "runtime/init.fl failed", 0U);
-    sag_bind_batch_end(&e.ed);
+    yew_bind_batch_end(&e.ed);
     dt = now_ns() - t0;
     editor_env_close(&e);
     return dt;
@@ -750,14 +750,14 @@ static u64 sample_insert_100k(void *ud)
         exit(1);
     }
     dt = now_ns() - t0;
-    if (sag_textbuf_len(sag_ed_doc(&e.ed)->tb) != INSERT_ITERS ||
-        sag_ed_doc(&e.ed)->undo->nodes.len != 2U) {
+    if (yew_textbuf_len(yew_ed_doc(&e.ed)->tb) != INSERT_ITERS ||
+        yew_ed_doc(&e.ed)->undo->nodes.len != 2U) {
         (void)fprintf(stderr,
                       "perf_fletch: 100k inserts were not one undo node\n");
         exit(1);
     }
-    if (sag_ed_doc(&e.ed)->undo->bytes_live >
-        sag_ed_doc(&e.ed)->undo->bytes_max) {
+    if (yew_ed_doc(&e.ed)->undo->bytes_live >
+        yew_ed_doc(&e.ed)->undo->bytes_max) {
         (void)fprintf(stderr,
                       "perf_fletch: 100k inserts exceeded undo.bytes_max\n");
         exit(1);
@@ -837,7 +837,7 @@ static bool load_baseline(const char *path)
             continue;
         if (sscanf(line, "%31s %llu %llu %n", name, &med, &mn, &used) < 3)
             continue;
-        if (g_nbase == SAG_ARRAY_LEN(g_base))
+        if (g_nbase == YEW_ARRAY_LEN(g_base))
             break;
         (void)snprintf(g_base[g_nbase].name, sizeof(g_base[0].name), "%s",
                        name);
@@ -912,7 +912,7 @@ static int selftest_gate(void)
     size_t i;
     size_t bad = 0U;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(CASES); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(CASES); i++) {
         bool got = regressed(CASES[i].med, CASES[i].min, CASES[i].base_med,
                              CASES[i].base_min);
 
@@ -929,7 +929,7 @@ static int selftest_gate(void)
         return 1;
     }
     (void)printf("perf_fletch: the two-condition gate rule behaves "
-                 "(%lu cases)\n", (unsigned long)SAG_ARRAY_LEN(CASES));
+                 "(%lu cases)\n", (unsigned long)YEW_ARRAY_LEN(CASES));
     return 0;
 }
 
@@ -951,7 +951,7 @@ static size_t g_nb;
 
 static Bench *add(const char *name, bool hard, u64 budget, const char *note)
 {
-    if (g_nb == SAG_ARRAY_LEN(g_b))
+    if (g_nb == YEW_ARRAY_LEN(g_b))
         exit(2);
     (void)memset(&g_b[g_nb], 0, sizeof(g_b[0]));
     g_b[g_nb].name = name;
@@ -1003,7 +1003,7 @@ int main(int argc, char **argv)
         }
     }
     if (getenv("FL_GC_STRESS") != NULL ||
-        getenv("SAG_FL_GC_STRESS") != NULL) {
+        getenv("YEW_FL_GC_STRESS") != NULL) {
         /* The stress lane runs the collector on every allocation, so a
          * timing taken under it means nothing.  Refusing is better than
          * publishing a number 30x too slow next to a budget. */
@@ -1017,7 +1017,7 @@ int main(int argc, char **argv)
         ProgArg a;
         ConfigArg config;
         Bench *b;
-        char reload_path[] = "/tmp/sagitta-perf-config.XXXXXX";
+        char reload_path[] = "/tmp/yew-perf-config.XXXXXX";
 
         b = add("startup", true, (u64)GATE_STARTUP_NS,
                 "fl_vm_init + fl_std_register");
@@ -1053,7 +1053,7 @@ int main(int argc, char **argv)
             src[len] = '\0';
             bytebuf_free(&bb);
 
-            if (setenv("SAG_RUNTIME_DIR", "runtime", 1) != 0) {
+            if (setenv("YEW_RUNTIME_DIR", "runtime", 1) != 0) {
                 free(src);
                 (void)fprintf(stderr,
                               "perf_fletch: cannot select runtime directory\n");

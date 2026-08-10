@@ -1,5 +1,5 @@
-#ifndef SAG_EDIT_MOTION_H
-#define SAG_EDIT_MOTION_H
+#ifndef YEW_EDIT_MOTION_H
+#define YEW_EDIT_MOTION_H
 
 #include <stdbool.h>
 
@@ -9,10 +9,10 @@
 typedef struct Buffer Buffer;
 typedef struct Win Win;
 
-enum { SAG_SEL_DEPTH = 16 };
+enum { YEW_SEL_DEPTH = 16 };
 
 typedef struct SelStack {
-    Span s[SAG_SEL_DEPTH];
+    Span s[YEW_SEL_DEPTH];
     u8 n;
 } SelStack;
 
@@ -31,12 +31,12 @@ typedef struct UnitOps {
     Span (*span)(UnitCtx *u, ByteOff p, bool alt);
 } UnitOps;
 
-extern const UnitOps sag_unit_line;
-extern const UnitOps sag_unit_word;
-extern const UnitOps sag_unit_block;
-extern const UnitOps sag_unit_char;
+extern const UnitOps yew_unit_line;
+extern const UnitOps yew_unit_word;
+extern const UnitOps yew_unit_block;
+extern const UnitOps yew_unit_char;
 
-const UnitOps *sag_unit_of_mode(Mode mode);
-void sag_selstack_clear(Win *win);
+const UnitOps *yew_unit_of_mode(Mode mode);
+void yew_selstack_clear(Win *win);
 
 #endif

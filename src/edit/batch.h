@@ -1,5 +1,5 @@
-#ifndef SAG_EDIT_BATCH_H
-#define SAG_EDIT_BATCH_H
+#ifndef YEW_EDIT_BATCH_H
+#define YEW_EDIT_BATCH_H
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -23,15 +23,15 @@ typedef struct BatchOpts {
     bool quiet;
 } BatchOpts;
 
-int sag_batch_run(const BatchOpts *opts);
+int yew_batch_run(const BatchOpts *opts);
 
 /* The predicate exists so the seeded unit regression can name the broken
  * invariant.  The bootstrap always calls the fatal wrapper. */
-bool sag_batch_selfcheck_ok(const Ed *ed, const char **why);
-void sag_batch_selfcheck(Ed *ed);
+bool yew_batch_selfcheck_ok(const Ed *ed, const char **why);
+void yew_batch_selfcheck(Ed *ed);
 
 /* NULL only for a command that is batch-safe. */
-const char *sag_batch_command_alternative(const char *name,
+const char *yew_batch_command_alternative(const char *name,
                                           const CmdCtx *ctx);
 
-#endif /* SAG_EDIT_BATCH_H */
+#endif /* YEW_EDIT_BATCH_H */

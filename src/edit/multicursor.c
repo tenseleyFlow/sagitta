@@ -116,31 +116,31 @@ static void normalize_unclamped(CursorSet *cs)
     size_t i;
 
     if (cs == NULL)
-        SAG_BUG("cursor set: NULL set");
+        YEW_BUG("cursor set: NULL set");
     if (cs->curs.len == 0U)
-        SAG_BUG("cursor set: empty set");
+        YEW_BUG("cursor set: empty set");
     if ((size_t)cs->primary >= cs->curs.len)
-        SAG_BUG("cursor set: primary index out of range");
+        YEW_BUG("cursor set: primary index out of range");
     if (cs->stamps.len != cs->curs.len)
-        SAG_BUG("cursor set: tracking length mismatch");
+        YEW_BUG("cursor set: tracking length mismatch");
     if (cs->selstacks.len != cs->curs.len)
-        SAG_BUG("cursor set: selection-stack length mismatch");
-    if (cs->active != SAG_MC_ACTIVE_NONE &&
+        YEW_BUG("cursor set: selection-stack length mismatch");
+    if (cs->active != YEW_MC_ACTIVE_NONE &&
         (size_t)cs->active >= cs->curs.len)
-        SAG_BUG("cursor set: active index out of range");
+        YEW_BUG("cursor set: active index out of range");
 
     /* The simultaneous-insert hot path preserves strict position order.
      * A collapsed, strictly ordered set has neither intervals nor duplicate
      * points to merge, so the stable-sort normalization would be a no-op. */
     if (collapsed_strictly_sorted(cs)) {
-        sag_cset_check(cs);
+        yew_cset_check(cs);
         return;
     }
 
     item_count = cs->curs.len;
-    items = sag_xreallocarray(NULL, item_count, sizeof(*items));
-    groups = sag_xreallocarray(NULL, item_count, sizeof(*groups));
-    group_stacks = sag_xreallocarray(NULL, item_count,
+    items = yew_xreallocarray(NULL, item_count, sizeof(*items));
+    groups = yew_xreallocarray(NULL, item_count, sizeof(*groups));
+    group_stacks = yew_xreallocarray(NULL, item_count,
                                      sizeof(*group_stacks));
     for (i = 0U; i < item_count; i++) {
         items[i].cursor = cs->curs.data[i];
@@ -152,12 +152,12 @@ static void normalize_unclamped(CursorSet *cs)
     }
 
     /* Position order defines "earlier cursor" and exact-point survivors. */
-    sag_sort_stable(items, item_count, sizeof(*items), cmp_pos, NULL);
+    yew_sort_stable(items, item_count, sizeof(*items), cmp_pos, NULL);
     for (i = 0U; i < item_count; i++)
         items[i].order = i;
 
     /* Interval order makes chained/nested overlap merging a linear sweep. */
-    sag_sort_stable(items, item_count, sizeof(*items), cmp_span_start, NULL);
+    yew_sort_stable(items, item_count, sizeof(*items), cmp_span_start, NULL);
     i = 0U;
     while (i < item_count) {
         CursorItem governing = items[i];
@@ -203,9 +203,9 @@ static void normalize_unclamped(CursorSet *cs)
         i = j;
     }
 
-    sag_sort_stable(groups, group_count, sizeof(*groups), cmp_pos, NULL);
+    yew_sort_stable(groups, group_count, sizeof(*groups), cmp_pos, NULL);
     cs->primary = 0U;
-    cs->active = SAG_MC_ACTIVE_NONE;
+    cs->active = YEW_MC_ACTIVE_NONE;
     for (i = 0U; i < group_count; i++) {
         cs->curs.data[i] = groups[i].cursor;
         cs->stamps.data[i] = groups[i].stamp;
@@ -221,15 +221,15 @@ static void normalize_unclamped(CursorSet *cs)
     free(group_stacks);
     free(groups);
     free(items);
-    sag_cset_check(cs);
+    yew_cset_check(cs);
 }
 
-void sag_cset_init(CursorSet *cs, Cursor primary)
+void yew_cset_init(CursorSet *cs, Cursor primary)
 {
     SelStack empty = {0};
 
     if (cs == NULL)
-        SAG_BUG("sag_cset_init: NULL set");
+        YEW_BUG("yew_cset_init: NULL set");
     cs->curs.data = NULL;
     cs->curs.len = 0U;
     cs->curs.cap = 0U;
@@ -240,79 +240,79 @@ void sag_cset_init(CursorSet *cs, Cursor primary)
     cs->selstacks.len = 0U;
     cs->selstacks.cap = 0U;
     cs->primary = 0U;
-    cs->active = SAG_MC_ACTIVE_NONE;
+    cs->active = YEW_MC_ACTIVE_NONE;
     cs->next_stamp = 2U;
     cs->batch_delta = 0;
     cs->batch_next = 0U;
     cs->batching = false;
-    SagCursorVec_push(&cs->curs, primary);
-    SagCursorStampVec_push(&cs->stamps, 1U);
-    SagSelStackVec_push(&cs->selstacks, empty);
+    YewCursorVec_push(&cs->curs, primary);
+    YewCursorStampVec_push(&cs->stamps, 1U);
+    YewSelStackVec_push(&cs->selstacks, empty);
 }
 
-void sag_cset_free(CursorSet *cs)
+void yew_cset_free(CursorSet *cs)
 {
     if (cs == NULL)
         return;
-    SagCursorVec_free(&cs->curs);
-    SagCursorStampVec_free(&cs->stamps);
-    SagSelStackVec_free(&cs->selstacks);
+    YewCursorVec_free(&cs->curs);
+    YewCursorStampVec_free(&cs->stamps);
+    YewSelStackVec_free(&cs->selstacks);
     cs->primary = 0U;
-    cs->active = SAG_MC_ACTIVE_NONE;
+    cs->active = YEW_MC_ACTIVE_NONE;
     cs->next_stamp = 0U;
     cs->batch_delta = 0;
     cs->batch_next = 0U;
     cs->batching = false;
 }
 
-bool sag_cset_add(CursorSet *cs, Cursor cursor)
+bool yew_cset_add(CursorSet *cs, Cursor cursor)
 {
     size_t old_len;
 
     if (cs == NULL)
-        SAG_BUG("sag_cset_add: NULL set");
+        YEW_BUG("yew_cset_add: NULL set");
     old_len = cs->curs.len;
-    if (!sag_cset_add_many(cs, &cursor, 1U))
+    if (!yew_cset_add_many(cs, &cursor, 1U))
         return false;
     return cs->curs.len > old_len;
 }
 
-bool sag_cset_add_many(CursorSet *cs, const Cursor *cursors, u32 count)
+bool yew_cset_add_many(CursorSet *cs, const Cursor *cursors, u32 count)
 {
     SelStack empty = {0};
     size_t final_len;
     u32 i;
 
     if (cs == NULL || (cursors == NULL && count != 0U))
-        SAG_BUG("sag_cset_add_many: invalid argument");
-    if ((u64)cs->curs.len + count > SAG_MC_MAX)
+        YEW_BUG("yew_cset_add_many: invalid argument");
+    if ((u64)cs->curs.len + count > YEW_MC_MAX)
         return false;
     if (count == 0U)
         return true;
     if (cs->next_stamp == 0U ||
         cs->next_stamp > UINT64_MAX - (u64)count)
-        sag_cset_reseed(cs);
+        yew_cset_reseed(cs);
     final_len = cs->curs.len + count;
-    SagCursorVec_reserve(&cs->curs, final_len);
-    SagCursorStampVec_reserve(&cs->stamps, final_len);
-    SagSelStackVec_reserve(&cs->selstacks, final_len);
+    YewCursorVec_reserve(&cs->curs, final_len);
+    YewCursorStampVec_reserve(&cs->stamps, final_len);
+    YewSelStackVec_reserve(&cs->selstacks, final_len);
     for (i = 0U; i < count; i++) {
-        SagCursorVec_push(&cs->curs, cursors[i]);
-        SagCursorStampVec_push(&cs->stamps, cs->next_stamp++);
-        SagSelStackVec_push(&cs->selstacks, empty);
+        YewCursorVec_push(&cs->curs, cursors[i]);
+        YewCursorStampVec_push(&cs->stamps, cs->next_stamp++);
+        YewSelStackVec_push(&cs->selstacks, empty);
     }
     normalize_unclamped(cs);
     return true;
 }
 
-bool sag_cset_drop_latest(CursorSet *cs)
+bool yew_cset_drop_latest(CursorSet *cs)
 {
     size_t latest;
     size_t i;
 
     if (cs == NULL || cs->curs.len == 0U ||
         (size_t)cs->primary >= cs->curs.len)
-        SAG_BUG("sag_cset_drop_latest: invalid set");
+        YEW_BUG("yew_cset_drop_latest: invalid set");
     if (cs->curs.len == 1U)
         return false;
     latest = (size_t)cs->primary == 0U ? 1U : 0U;
@@ -338,23 +338,23 @@ bool sag_cset_drop_latest(CursorSet *cs)
     cs->selstacks.len--;
     if ((size_t)cs->primary > latest)
         cs->primary--;
-    if (cs->active != SAG_MC_ACTIVE_NONE) {
+    if (cs->active != YEW_MC_ACTIVE_NONE) {
         if ((size_t)cs->active > latest)
             cs->active--;
         else if ((size_t)cs->active == latest)
-            cs->active = SAG_MC_ACTIVE_NONE;
+            cs->active = YEW_MC_ACTIVE_NONE;
     }
-    sag_cset_check(cs);
+    yew_cset_check(cs);
     return true;
 }
 
-void sag_cset_remove_all_but_primary(CursorSet *cs)
+void yew_cset_remove_all_but_primary(CursorSet *cs)
 {
     Cursor primary;
 
     if (cs == NULL || cs->curs.len == 0U ||
         (size_t)cs->primary >= cs->curs.len) {
-        SAG_BUG("sag_cset_remove_all_but_primary: invalid set");
+        YEW_BUG("yew_cset_remove_all_but_primary: invalid set");
     }
     primary = cs->curs.data[cs->primary];
     cs->curs.data[0] = primary;
@@ -364,42 +364,42 @@ void sag_cset_remove_all_but_primary(CursorSet *cs)
     cs->stamps.len = 1U;
     cs->selstacks.len = 1U;
     cs->primary = 0U;
-    cs->active = SAG_MC_ACTIVE_NONE;
+    cs->active = YEW_MC_ACTIVE_NONE;
 }
 
-void sag_cset_reseed(CursorSet *cs)
+void yew_cset_reseed(CursorSet *cs)
 {
     SelStack empty = {0};
     size_t i;
 
-    if (cs == NULL || cs->curs.len == 0U || cs->curs.len > SAG_MC_MAX)
-        SAG_BUG("sag_cset_reseed: invalid set");
-    SagCursorStampVec_reserve(&cs->stamps, cs->curs.len);
+    if (cs == NULL || cs->curs.len == 0U || cs->curs.len > YEW_MC_MAX)
+        YEW_BUG("yew_cset_reseed: invalid set");
+    YewCursorStampVec_reserve(&cs->stamps, cs->curs.len);
     cs->stamps.len = cs->curs.len;
-    SagSelStackVec_reserve(&cs->selstacks, cs->curs.len);
+    YewSelStackVec_reserve(&cs->selstacks, cs->curs.len);
     while (cs->selstacks.len < cs->curs.len)
-        SagSelStackVec_push(&cs->selstacks, empty);
+        YewSelStackVec_push(&cs->selstacks, empty);
     if (cs->selstacks.len > cs->curs.len)
         cs->selstacks.len = cs->curs.len;
     for (i = 0U; i < cs->curs.len; i++)
         cs->stamps.data[i] = (u64)i + 1U;
     cs->next_stamp = (u64)cs->curs.len + 1U;
-    cs->active = SAG_MC_ACTIVE_NONE;
+    cs->active = YEW_MC_ACTIVE_NONE;
     cs->batch_delta = 0;
     cs->batch_next = 0U;
     cs->batching = false;
 }
 
-void sag_cset_normalize(const TextBuf *tb, CursorSet *cs)
+void yew_cset_normalize(const TextBuf *tb, CursorSet *cs)
 {
     size_t i;
 
     if (tb == NULL || cs == NULL)
-        SAG_BUG("sag_cset_normalize: NULL argument");
+        YEW_BUG("yew_cset_normalize: NULL argument");
     for (i = 0U; i < cs->curs.len; i++)
-        sag_cursor_clamp(tb, &cs->curs.data[i]);
+        yew_cursor_clamp(tb, &cs->curs.data[i]);
     normalize_unclamped(cs);
-    sag_cset_check_text(tb, cs);
+    yew_cset_check_text(tb, cs);
 }
 
 static ByteOff adjust_off(ByteOff position, bool right_bias, u8 op,
@@ -407,18 +407,18 @@ static ByteOff adjust_off(ByteOff position, bool right_bias, u8 op,
 {
     u64 end;
 
-    if (op == SAG_JOURNAL_INS) {
+    if (op == YEW_JOURNAL_INS) {
         if (position.v > at.v || (position.v == at.v && right_bias)) {
             if (UINT64_MAX - position.v < len)
-                SAG_BUG("cursor adjustment overflow");
+                YEW_BUG("cursor adjustment overflow");
             position.v += len;
         }
         return position;
     }
-    if (op != SAG_JOURNAL_DEL)
-        SAG_BUG("sag_cset_adjust: unknown edit operation %u", (unsigned)op);
+    if (op != YEW_JOURNAL_DEL)
+        YEW_BUG("yew_cset_adjust: unknown edit operation %u", (unsigned)op);
     if (UINT64_MAX - at.v < len)
-        SAG_BUG("cursor deletion range overflow");
+        YEW_BUG("cursor deletion range overflow");
     end = at.v + len;
     if (end <= position.v)
         position.v -= len;
@@ -434,12 +434,12 @@ static ByteOff add_delta(ByteOff position, i64 delta)
     if (delta >= 0) {
         amount = (u64)delta;
         if (UINT64_MAX - position.v < amount)
-            SAG_BUG("cursor batch adjustment overflow");
+            YEW_BUG("cursor batch adjustment overflow");
         return BYTEOFF(position.v + amount);
     }
     amount = (u64)(-(delta + 1)) + 1U;
     if (position.v < amount)
-        SAG_BUG("cursor batch adjustment underflow");
+        YEW_BUG("cursor batch adjustment underflow");
     return BYTEOFF(position.v - amount);
 }
 
@@ -463,12 +463,12 @@ static void batch_materialize_active(CursorSet *cs)
 {
     Cursor *cursor;
 
-    if (!cs->batching || cs->active == SAG_MC_ACTIVE_NONE)
+    if (!cs->batching || cs->active == YEW_MC_ACTIVE_NONE)
         return;
     if (cs->active < cs->batch_next)
         return;
     if (cs->active != cs->batch_next)
-        SAG_BUG("cursor batch visited out of order");
+        YEW_BUG("cursor batch visited out of order");
     cursor = &cs->curs.data[cs->active];
     cursor->pos = add_delta(cursor->pos, cs->batch_delta);
     cursor->anchor = add_delta(cursor->anchor, cs->batch_delta);
@@ -531,19 +531,19 @@ static bool batch_adjust(CursorSet *cs, u8 op, ByteOff at, u64 len)
     size_t first;
     size_t last;
 
-    if (!cs->batching || cs->active == SAG_MC_ACTIVE_NONE ||
+    if (!cs->batching || cs->active == YEW_MC_ACTIVE_NONE ||
         cs->active >= cs->batch_next || len > (u64)INT64_MAX)
         return false;
     first = cs->batch_next;
     last = first;
-    if (op == SAG_JOURNAL_INS) {
+    if (op == YEW_JOURNAL_INS) {
         if (!batch_delta_fits(cs, (i64)len))
             return false;
-    } else if (op == SAG_JOURNAL_DEL) {
+    } else if (op == YEW_JOURNAL_DEL) {
         u64 end;
 
         if (UINT64_MAX - at.v < len)
-            SAG_BUG("cursor deletion range overflow");
+            YEW_BUG("cursor deletion range overflow");
         end = at.v + len;
         while (last < cs->curs.len) {
             ByteOff pos = add_delta(cs->curs.data[last].pos,
@@ -568,9 +568,9 @@ static bool batch_adjust(CursorSet *cs, u8 op, ByteOff at, u64 len)
     active->anchor = collapsed ? active->pos :
                                 adjust_off(active->anchor, false, op, at,
                                            len);
-    if (op == SAG_JOURNAL_INS)
+    if (op == YEW_JOURNAL_INS)
         return batch_add_delta(cs, (i64)len);
-    if (op == SAG_JOURNAL_DEL) {
+    if (op == YEW_JOURNAL_DEL) {
         batch_remove_future(cs, first, last - first);
         return batch_add_delta(cs, -(i64)len);
     }
@@ -594,7 +594,7 @@ static bool command_original_range(const CmdDesc *desc, const TextBuf *tb,
         at = cursor->pos;
         range->lo = at.v;
         for (i = 0U; i < repeats; i++)
-            at = sag_grapheme_next_boundary(tb, at);
+            at = yew_grapheme_next_boundary(tb, at);
         range->hi = at.v;
         return range->lo != range->hi;
     }
@@ -603,33 +603,33 @@ static bool command_original_range(const CmdDesc *desc, const TextBuf *tb,
         at = cursor->pos;
         range->hi = at.v;
         for (i = 0U; i < repeats; i++)
-            at = sag_grapheme_prev_boundary(tb, at);
+            at = yew_grapheme_prev_boundary(tb, at);
         range->lo = at.v;
         return range->lo != range->hi;
     }
     if (strcmp(desc->name, "ed.edit.line.delete") == 0) {
-        LineNo line = sag_textbuf_line_of(tb, cursor->pos);
-        u64 lines = sag_textbuf_line_count(tb);
+        LineNo line = yew_textbuf_line_of(tb, cursor->pos);
+        u64 lines = yew_textbuf_line_count(tb);
         u64 forward = lines - line.v;
         u64 count = repeats;
 
         if (count < forward) {
-            range->lo = sag_textbuf_line_start(tb, line).v;
-            range->hi = sag_textbuf_line_start(
+            range->lo = yew_textbuf_line_start(tb, line).v;
+            range->hi = yew_textbuf_line_start(
                 tb, LINENO(line.v + count)).v;
         } else {
             u64 extra = count - forward;
 
-            range->hi = sag_textbuf_len(tb);
+            range->hi = yew_textbuf_len(tb);
             if (line.v == 0U) {
                 range->lo = 0U;
             } else if (extra == 0U) {
-                range->lo = sag_grapheme_prev_boundary(
-                    tb, sag_textbuf_line_start(tb, line)).v;
+                range->lo = yew_grapheme_prev_boundary(
+                    tb, yew_textbuf_line_start(tb, line)).v;
             } else {
                 u64 first = extra >= line.v ? 0U : line.v - extra;
 
-                range->lo = sag_textbuf_line_start(tb, LINENO(first)).v;
+                range->lo = yew_textbuf_line_start(tb, LINENO(first)).v;
             }
         }
         return range->lo != range->hi;
@@ -649,7 +649,7 @@ static McSkip *build_skip_plan(const CmdDesc *desc, const TextBuf *tb,
     size_t i;
 
     *skip_count = 0U;
-    skips = sag_xreallocarray(NULL, cs->curs.len, sizeof(*skips));
+    skips = yew_xreallocarray(NULL, cs->curs.len, sizeof(*skips));
     for (i = 0U; i < cs->curs.len; i++) {
         Span range;
 
@@ -694,19 +694,19 @@ static void batch_remove_active(CursorSet *cs, u64 owner_stamp)
     size_t active = cs->active;
     size_t owner;
 
-    if (!cs->batching || cs->active == SAG_MC_ACTIVE_NONE ||
+    if (!cs->batching || cs->active == YEW_MC_ACTIVE_NONE ||
         active >= cs->curs.len || cs->batch_next != active + 1U)
-        SAG_BUG("cursor batch: cannot remove inactive cursor");
+        YEW_BUG("cursor batch: cannot remove inactive cursor");
     for (owner = 0U; owner < cs->stamps.len; owner++) {
         if (cs->stamps.data[owner] == owner_stamp)
             break;
     }
     if (owner == cs->stamps.len) {
-        SAG_BUG("cursor batch: overlap owner stamp %llu disappeared at %zu",
+        YEW_BUG("cursor batch: overlap owner stamp %llu disappeared at %zu",
                 (unsigned long long)owner_stamp, active);
     }
     if (owner >= active) {
-        SAG_BUG("cursor batch: overlap owner %zu was not before active %zu",
+        YEW_BUG("cursor batch: overlap owner %zu was not before active %zu",
                 owner, active);
     }
     if ((size_t)cs->primary == active) {
@@ -734,17 +734,17 @@ static void batch_remove_active(CursorSet *cs, u64 owner_stamp)
     cs->selstacks.len--;
     cs->batch_next--;
     if (active >= cs->curs.len)
-        cs->active = SAG_MC_ACTIVE_NONE;
+        cs->active = YEW_MC_ACTIVE_NONE;
 }
 
-void sag_cset_adjust(CursorSet *cs, u8 op, ByteOff at, u64 len)
+void yew_cset_adjust(CursorSet *cs, u8 op, ByteOff at, u64 len)
 {
     size_t i;
 
     if (cs == NULL)
-        SAG_BUG("sag_cset_adjust: NULL set");
-    if (op != SAG_JOURNAL_INS && op != SAG_JOURNAL_DEL)
-        SAG_BUG("sag_cset_adjust: unknown edit operation %u", (unsigned)op);
+        YEW_BUG("yew_cset_adjust: NULL set");
+    if (op != YEW_JOURNAL_INS && op != YEW_JOURNAL_DEL)
+        YEW_BUG("yew_cset_adjust: unknown edit operation %u", (unsigned)op);
     if (batch_adjust(cs, op, at, len))
         return;
     if (cs->batching) {
@@ -765,7 +765,7 @@ void sag_cset_adjust(CursorSet *cs, u8 op, ByteOff at, u64 len)
     normalize_unclamped(cs);
 }
 
-void sag_cset_check(const CursorSet *cs)
+void yew_cset_check(const CursorSet *cs)
 {
     CursorItem *items;
     u64 lo;
@@ -774,38 +774,38 @@ void sag_cset_check(const CursorSet *cs)
     size_t i;
 
     if (cs == NULL || cs->curs.len == 0U ||
-        cs->curs.len > SAG_MC_MAX ||
+        cs->curs.len > YEW_MC_MAX ||
         (size_t)cs->primary >= cs->curs.len ||
         cs->stamps.len != cs->curs.len ||
         cs->selstacks.len != cs->curs.len ||
-        (cs->active != SAG_MC_ACTIVE_NONE &&
+        (cs->active != YEW_MC_ACTIVE_NONE &&
          (size_t)cs->active >= cs->curs.len)) {
-        SAG_BUG("cursor set invariant: invalid primary or empty set");
+        YEW_BUG("cursor set invariant: invalid primary or empty set");
     }
     for (i = 0U; i < cs->stamps.len; i++) {
         if (cs->stamps.data[i] == 0U)
-            SAG_BUG("cursor set invariant: invalid tracking stamp");
+            YEW_BUG("cursor set invariant: invalid tracking stamp");
     }
     for (i = 1U; i < cs->curs.len; i++) {
         if (cs->curs.data[i - 1U].pos.v > cs->curs.data[i].pos.v)
-            SAG_BUG("cursor set invariant: cursors are not sorted");
+            YEW_BUG("cursor set invariant: cursors are not sorted");
     }
     if (collapsed_strictly_sorted(cs))
         return;
 
-    items = sag_xreallocarray(NULL, cs->curs.len, sizeof(*items));
+    items = yew_xreallocarray(NULL, cs->curs.len, sizeof(*items));
     for (i = 0U; i < cs->curs.len; i++) {
         items[i].cursor = cs->curs.data[i];
         items[i].order = i;
         items[i].primary = i == (size_t)cs->primary;
     }
-    sag_sort_stable(items, cs->curs.len, sizeof(*items), cmp_span_start, NULL);
+    yew_sort_stable(items, cs->curs.len, sizeof(*items), cmp_span_start, NULL);
     lo = cursor_lo(&items[0].cursor);
     hi = cursor_hi(&items[0].cursor);
     selected = cursor_selected(&items[0].cursor);
     for (i = 1U; i < cs->curs.len; i++) {
         if (spans_merge(lo, hi, selected, &items[i].cursor)) {
-            SAG_BUG("cursor set invariant: mergeable cursors remain");
+            YEW_BUG("cursor set invariant: mergeable cursors remain");
         }
         lo = cursor_lo(&items[i].cursor);
         hi = cursor_hi(&items[i].cursor);
@@ -814,109 +814,109 @@ void sag_cset_check(const CursorSet *cs)
     free(items);
 }
 
-void sag_cset_check_text(const TextBuf *tb, const CursorSet *cs)
+void yew_cset_check_text(const TextBuf *tb, const CursorSet *cs)
 {
     size_t i;
     u64 len;
 
     if (tb == NULL)
-        SAG_BUG("cursor set invariant: NULL text buffer");
-    sag_cset_check(cs);
-    len = sag_textbuf_len(tb);
+        YEW_BUG("cursor set invariant: NULL text buffer");
+    yew_cset_check(cs);
+    len = yew_textbuf_len(tb);
     for (i = 0U; i < cs->curs.len; i++) {
         const Cursor *cursor = &cs->curs.data[i];
 
         if (cursor->pos.v > len || cursor->anchor.v > len)
-            SAG_BUG("cursor set invariant: cursor outside text buffer");
-        if (!sag_is_grapheme_boundary(tb, cursor->pos) ||
-            !sag_is_grapheme_boundary(tb, cursor->anchor))
-            SAG_BUG("cursor set invariant: cursor splits grapheme");
+            YEW_BUG("cursor set invariant: cursor outside text buffer");
+        if (!yew_is_grapheme_boundary(tb, cursor->pos) ||
+            !yew_is_grapheme_boundary(tb, cursor->anchor))
+            YEW_BUG("cursor set invariant: cursor splits grapheme");
     }
 }
 
-void sag_cset_require_single_edit(const CursorSet *cs)
+void yew_cset_require_single_edit(const CursorSet *cs)
 {
-    sag_cset_check(cs);
+    yew_cset_check(cs);
     if (cs->curs.len > 1U) {
-        SAG_BUG("multi-cursor edits require a MULTI transaction");
+        YEW_BUG("multi-cursor edits require a MULTI transaction");
     }
 }
 
-void sag_mc_require_literal_lift(bool regex)
+void yew_mc_require_literal_lift(bool regex)
 {
     if (regex)
-        SAG_BUG("regex cursor lift lands in Sprint 21");
+        YEW_BUG("regex cursor lift lands in Sprint 21");
 }
 
-void sag_mc_require_single_completion(const CursorSet *cs)
+void yew_mc_require_single_completion(const CursorSet *cs)
 {
-    sag_cset_check(cs);
+    yew_cset_check(cs);
     if (cs->curs.len > 1U)
-        SAG_BUG("per-cursor completion lands in Sprint 43");
+        YEW_BUG("per-cursor completion lands in Sprint 43");
 }
 
-void sag_mc_require_single_lsp_edit(const CursorSet *cs)
+void yew_mc_require_single_lsp_edit(const CursorSet *cs)
 {
-    sag_cset_check(cs);
+    yew_cset_check(cs);
     if (cs->curs.len > 1U)
-        SAG_BUG("per-cursor LSP edits land in Sprint 47");
+        YEW_BUG("per-cursor LSP edits land in Sprint 47");
 }
 
-CmdStatus sag_mc_run(Win *w, CmdId cmd, CmdCtx *cx)
+CmdStatus yew_mc_run(Win *w, CmdId cmd, CmdCtx *cx)
 {
     const CmdDesc *desc;
     EditCtx ec;
-    CmdStatus status = SAG_CMD_OK;
+    CmdStatus status = YEW_CMD_OK;
     size_t before_count;
     McSkip *skips;
     size_t skip_count;
     u32 repeats;
-    SagTxnReason outer_reason;
+    YewTxnReason outer_reason;
     bool macro_txn;
 
     if (w == NULL || w->buf == NULL || w->buf->tb == NULL || cx == NULL ||
         cx->ed == NULL || cx->win != w || w->cs.curs.len < 2U)
-        return SAG_CMD_ERR_STATE;
-    status = sag_cmd_prepare(cmd, cx, &desc);
-    if (status != SAG_CMD_OK)
+        return YEW_CMD_ERR_STATE;
+    status = yew_cmd_prepare(cmd, cx, &desc);
+    if (status != YEW_CMD_OK)
         return status;
     if (desc == NULL || desc->fn == NULL ||
-        (desc->flags & SAG_CMD_CHANGES_BUFFER) == 0U)
-        return SAG_CMD_ERR_ARG;
-    sag_cset_check_text(w->buf->tb, &w->cs);
+        (desc->flags & YEW_CMD_CHANGES_BUFFER) == 0U)
+        return YEW_CMD_ERR_ARG;
+    yew_cset_check_text(w->buf->tb, &w->cs);
     /*
-     * READ-ONLY, hence no sag_ed_finish_edit: this context exists to
+     * READ-ONLY, hence no yew_ed_finish_edit: this context exists to
      * check that the caller already opened a multi transaction, and is
-     * never handed to sag_edit_*.  A context that IS edited through owns
+     * never handed to yew_edit_*.  A context that IS edited through owns
      * the journal handle those calls open into it and must finish —
      * apply_edits in sel_actions.c says why.
      */
-    ec = sag_ed_edit_ctx_for(cx->ed, cx->win);
+    ec = yew_ed_edit_ctx_for(cx->ed, cx->win);
     if (ec.tb != w->buf->tb || ec.cset != &w->cs || ec.undo == NULL ||
         ec.undo->depth == 0U ||
-        (ec.undo->pending_reason != SAG_TXN_MULTI &&
-         ec.undo->pending_reason != SAG_TXN_MACRO))
-        return SAG_CMD_ERR_STATE;
+        (ec.undo->pending_reason != YEW_TXN_MULTI &&
+         ec.undo->pending_reason != YEW_TXN_MACRO))
+        return YEW_CMD_ERR_STATE;
     outer_reason = ec.undo->pending_reason;
-    macro_txn = outer_reason == SAG_TXN_MACRO;
+    macro_txn = outer_reason == YEW_TXN_MACRO;
     /* The text engine's multi-cursor safety gate deliberately recognizes
-     * SAG_TXN_MULTI.  A replay already owns the stronger atomic MACRO
+     * YEW_TXN_MULTI.  A replay already owns the stronger atomic MACRO
      * boundary, so lend the fan-out that marker while it mutates and restore
      * the outer reason before Fletch closes or aborts the transaction. */
     if (macro_txn)
-        ec.undo->pending_reason = SAG_TXN_MULTI;
+        ec.undo->pending_reason = YEW_TXN_MULTI;
 
     before_count = w->cs.curs.len;
-    repeats = (desc->flags & SAG_CMD_REPEATABLE) != 0U ? cx->count : 1U;
+    repeats = (desc->flags & YEW_CMD_REPEATABLE) != 0U ? cx->count : 1U;
     skips = build_skip_plan(desc, w->buf->tb, &w->cs, repeats,
                             &skip_count);
     w->cs.active = 0U;
     w->cs.batching = true;
     w->cs.batch_delta = 0;
     w->cs.batch_next = 1U;
-    while (w->cs.active != SAG_MC_ACTIVE_NONE &&
+    while (w->cs.active != YEW_MC_ACTIVE_NONE &&
            (size_t)w->cs.active < w->cs.curs.len &&
-           status == SAG_CMD_OK) {
+           status == YEW_CMD_OK) {
         u32 r;
         u64 owner_stamp;
 
@@ -926,14 +926,14 @@ CmdStatus sag_mc_run(Win *w, CmdId cmd, CmdCtx *cx)
             batch_remove_active(&w->cs, owner_stamp);
             continue;
         }
-        for (r = 0U; r < repeats && status == SAG_CMD_OK; r++) {
-            if (w->cs.active == SAG_MC_ACTIVE_NONE ||
+        for (r = 0U; r < repeats && status == YEW_CMD_OK; r++) {
+            if (w->cs.active == YEW_MC_ACTIVE_NONE ||
                 (size_t)w->cs.active >= w->cs.curs.len)
                 break;
             cx->cursor_index = w->cs.active;
             status = desc->fn(cx);
         }
-        if (status == SAG_CMD_OK)
+        if (status == YEW_CMD_OK)
             w->cs.active++;
     }
 
@@ -941,21 +941,21 @@ CmdStatus sag_mc_run(Win *w, CmdId cmd, CmdCtx *cx)
     w->cs.batching = false;
     w->cs.batch_delta = 0;
     w->cs.batch_next = 0U;
-    w->cs.active = SAG_MC_ACTIVE_NONE;
+    w->cs.active = YEW_MC_ACTIVE_NONE;
     free(skips);
     if (macro_txn) {
         if (ec.undo->open != 0U)
             ec.undo->nodes.data[ec.undo->open - 1U].reason =
-                (u8)SAG_TXN_MACRO;
+                (u8)YEW_TXN_MACRO;
         ec.undo->pending_reason = outer_reason;
     }
-    if (status == SAG_CMD_OK) {
+    if (status == YEW_CMD_OK) {
         size_t merged;
 
-        sag_cset_normalize(w->buf->tb, &w->cs);
+        yew_cset_normalize(w->buf->tb, &w->cs);
         merged = before_count - w->cs.curs.len;
         if (merged != 0U) {
-            sag_msg(cx->ed, SAG_MSG_INFO, "%zu cursor%s merged", merged,
+            yew_msg(cx->ed, YEW_MSG_INFO, "%zu cursor%s merged", merged,
                     merged == 1U ? "" : "s");
         }
     }

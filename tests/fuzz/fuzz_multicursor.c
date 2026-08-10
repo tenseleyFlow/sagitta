@@ -44,7 +44,7 @@ static u8 input_byte(const u8 *data, size_t len, size_t at)
 {
     static const u8 fallback[] = {0x17U, 0xA5U, 0x4DU, 0xE3U};
 
-    return len == 0U ? fallback[at % SAG_ARRAY_LEN(fallback)]
+    return len == 0U ? fallback[at % YEW_ARRAY_LEN(fallback)]
                      : data[at % len];
 }
 
@@ -69,7 +69,7 @@ static void make_random_buffer(const u8 *data, size_t len, Bytebuf *out)
     bytebuf_init(out);
     for (i = 0U; i < graphemes; i++) {
         size_t token = input_byte(data, len, i + 2U) %
-                       SAG_ARRAY_LEN(tokens);
+                       YEW_ARRAY_LEN(tokens);
 
         bytebuf_append(out, tokens[token], sizes[token]);
     }
@@ -80,17 +80,17 @@ static bool materialize(const TextBuf *tb, Bytebuf *out)
     TextIter iter;
 
     out->len = 0U;
-    if (!sag_textiter_begin(&iter, tb, BYTEOFF(0U)))
-        return sag_textbuf_len(tb) == 0U;
+    if (!yew_textiter_begin(&iter, tb, BYTEOFF(0U)))
+        return yew_textbuf_len(tb) == 0U;
     do {
         const u8 *bytes;
         u64 len;
 
-        if (!sag_textiter_chunk(&iter, tb, &bytes, &len) || len == 0U)
+        if (!yew_textiter_chunk(&iter, tb, &bytes, &len) || len == 0U)
             return false;
         bytebuf_append(out, bytes, (size_t)len);
-    } while (sag_textiter_advance(&iter, tb));
-    return out->len == sag_textbuf_len(tb);
+    } while (yew_textiter_advance(&iter, tb));
+    return out->len == yew_textbuf_len(tb);
 }
 
 static void oracle_insert(Bytebuf *bytes, size_t at,
@@ -122,24 +122,24 @@ static void model_init(Ed *ed, Win *win, const u8 *bytes, size_t len)
 
     (void)memset(ed, 0, sizeof(*ed));
     (void)memset(win, 0, sizeof(*win));
-    ed->buffer.tb = sag_textbuf_from_bytes(bytes, (u64)len);
-    ed->buffer.undo = sag_undo_new(ed->buffer.tb);
-    ed->buffer.marks = sag_marks_new();
-    sag_timers_init(&ed->timers);
+    ed->buffer.tb = yew_textbuf_from_bytes(bytes, (u64)len);
+    ed->buffer.undo = yew_undo_new(ed->buffer.tb);
+    ed->buffer.marks = yew_marks_new();
+    yew_timers_init(&ed->timers);
     win->buf = &ed->buffer;
-    sag_cset_init(&win->cs, cursor);
+    yew_cset_init(&win->cs, cursor);
     ed->win = win;
     ed->model_ready = true;
 }
 
 static void model_free(Ed *ed, Win *win)
 {
-    sag_msg_clear(ed);
-    sag_timers_free(&ed->timers);
-    sag_cset_free(&win->cs);
-    sag_marks_free(ed->buffer.marks);
-    sag_undo_free(ed->buffer.undo);
-    sag_textbuf_free(ed->buffer.tb);
+    yew_msg_clear(ed);
+    yew_timers_free(&ed->timers);
+    yew_cset_free(&win->cs);
+    yew_marks_free(ed->buffer.marks);
+    yew_undo_free(ed->buffer.undo);
+    yew_textbuf_free(ed->buffer.tb);
 }
 
 static bool collect_boundaries(const TextBuf *tb, ByteOff *boundaries,
@@ -148,10 +148,10 @@ static bool collect_boundaries(const TextBuf *tb, ByteOff *boundaries,
     size_t n = 1U;
 
     boundaries[0] = BYTEOFF(0U);
-    while (boundaries[n - 1U].v < sag_textbuf_len(tb)) {
+    while (boundaries[n - 1U].v < yew_textbuf_len(tb)) {
         if (n == capacity)
             return false;
-        boundaries[n] = sag_grapheme_next_boundary(tb, boundaries[n - 1U]);
+        boundaries[n] = yew_grapheme_next_boundary(tb, boundaries[n - 1U]);
         if (boundaries[n].v <= boundaries[n - 1U].v)
             return false;
         n++;
@@ -194,10 +194,10 @@ static size_t install_random_cursors(CursorSet *set,
         cursors[i].goal_col = (GCol){input_byte(data, len,
                                                 salt + 9U + i)};
     }
-    sag_cset_free(set);
-    sag_cset_init(set, cursors[0]);
+    yew_cset_free(set);
+    yew_cset_init(set, cursors[0]);
     if (requested > 1U &&
-        !sag_cset_add_many(set, cursors + 1U, (u32)requested - 1U))
+        !yew_cset_add_many(set, cursors + 1U, (u32)requested - 1U))
         return 0U;
     if (selections)
         selected_sets++;
@@ -213,11 +213,11 @@ static Span action_range(const TextBuf *tb, const Cursor *cursor,
 
     if (action == MC_ACTION_DELETE_NEXT) {
         for (i = 0U; i < count; i++)
-            at = sag_grapheme_next_boundary(tb, at);
+            at = yew_grapheme_next_boundary(tb, at);
         span.hi = at.v;
     } else if (action == MC_ACTION_DELETE_PREV) {
         for (i = 0U; i < count; i++)
-            at = sag_grapheme_prev_boundary(tb, at);
+            at = yew_grapheme_prev_boundary(tb, at);
         span.lo = at.v;
     }
     return span;
@@ -330,17 +330,17 @@ static bool check_multicursor(const u8 *data, size_t len,
                             &boundary_count))
         goto done;
     commands[MC_ACTION_INSERT] =
-        sag_cmd_lookup("ed.edit.insert.text", 19U);
+        yew_cmd_lookup("ed.edit.insert.text", 19U);
     commands[MC_ACTION_DELETE_NEXT] =
-        sag_cmd_lookup("ed.edit.delete.grapheme", 23U);
+        yew_cmd_lookup("ed.edit.delete.grapheme", 23U);
     commands[MC_ACTION_DELETE_PREV] =
-        sag_cmd_lookup("ed.edit.delete.grapheme_left", 28U);
+        yew_cmd_lookup("ed.edit.delete.grapheme_left", 28U);
     if (commands[0].v == 0U || commands[1].v == 0U ||
         commands[2].v == 0U)
         goto done;
     cx.ed = &ed;
     cx.win = &win;
-    cx.source = SAG_SRC_TEST;
+    cx.source = YEW_SRC_TEST;
     while (case_ops < MC_FUZZ_OPS_PER_CASE) {
         size_t salt = 11U + round * 37U;
         size_t remaining = MC_FUZZ_OPS_PER_CASE - case_ops;
@@ -366,7 +366,7 @@ static bool check_multicursor(const u8 *data, size_t len,
             requested);
         if (cursor_count == 0U)
             goto done;
-        sag_cset_check_text(ed.buffer.tb, &win.cs);
+        yew_cset_check_text(ed.buffer.tb, &win.cs);
         if (cursor_count < min_cursors)
             min_cursors = cursor_count;
         if (cursor_count > max_cursors)
@@ -384,7 +384,7 @@ static bool check_multicursor(const u8 *data, size_t len,
         if (action != MC_ACTION_INSERT && count > 1U)
             counted_actions++;
         payload_index = input_byte(data, len, salt + 8U) %
-                        SAG_ARRAY_LEN(payloads);
+                        YEW_ARRAY_LEN(payloads);
         oracle.len = 0U;
         bytebuf_append(&oracle, initial.data, initial.len);
         oracle_apply(&oracle, ed.buffer.tb, before, cursor_count,
@@ -398,8 +398,8 @@ static bool check_multicursor(const u8 *data, size_t len,
         cx.sarg_len = action == MC_ACTION_INSERT
                           ? payload_lens[payload_index]
                           : 0U;
-        status = sag_ed_invoke(&ed, commands[action], &cx);
-        if (status != SAG_CMD_OK) {
+        status = yew_ed_invoke(&ed, commands[action], &cx);
+        if (status != YEW_CMD_OK) {
             (void)snprintf(why, why_cap,
                            "action %u count %u rejected %zu cursors",
                            (unsigned)action, count, cursor_count);
@@ -408,7 +408,7 @@ static bool check_multicursor(const u8 *data, size_t len,
         cursor_operations += cursor_count;
         action_operations[action] += cursor_count;
         case_ops += cursor_count;
-        sag_cset_check_text(ed.buffer.tb, &win.cs);
+        yew_cset_check_text(ed.buffer.tb, &win.cs);
         if (!materialize(ed.buffer.tb, &actual) ||
             actual.len != oracle.len ||
             memcmp(actual.data, oracle.data, oracle.len) != 0) {
@@ -424,14 +424,14 @@ static bool check_multicursor(const u8 *data, size_t len,
                            actual.len, oracle.len);
             goto done;
         }
-        ec = sag_ed_edit_ctx(&ed);
-        if (!sag_undo(&ec)) {
+        ec = yew_ed_edit_ctx(&ed);
+        if (!yew_undo(&ec)) {
             (void)snprintf(why, why_cap,
                            "undo rejected action %u in round %zu",
                            (unsigned)action, round);
             goto done;
         }
-        sag_ed_finish_edit(&ed, &ec);
+        yew_ed_finish_edit(&ed, &ec);
         if (!materialize(ed.buffer.tb, &actual) ||
             actual.len != initial.len ||
             memcmp(actual.data, initial.data, initial.len) != 0) {
@@ -439,7 +439,7 @@ static bool check_multicursor(const u8 *data, size_t len,
                            "undo changed initial bytes in round %zu", round);
             goto done;
         }
-        sag_cset_check_text(ed.buffer.tb, &win.cs);
+        yew_cset_check_text(ed.buffer.tb, &win.cs);
         if (!cursors_equal(&win.cs, before, cursor_count, primary)) {
             (void)snprintf(why, why_cap,
                            "undo changed cursor set in round %zu", round);
@@ -462,7 +462,7 @@ done:
 
 int main(int argc, char **argv)
 {
-    int status = sag_fuzz_main(argc, argv, "fuzz_multicursor", NULL,
+    int status = yew_fuzz_main(argc, argv, "fuzz_multicursor", NULL,
                                check_multicursor);
 
     if (status == 0)

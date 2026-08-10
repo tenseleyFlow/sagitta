@@ -15,17 +15,17 @@ static void select_fixture_init(SelectFixture *f, const u8 *bytes, u64 len)
     Cursor cursor = {BYTEOFF(0U), {0U}, BYTEOFF(0U)};
 
     (void)memset(f, 0, sizeof(*f));
-    f->buffer.tb = sag_textbuf_from_bytes(bytes, len);
+    f->buffer.tb = yew_textbuf_from_bytes(bytes, len);
     f->buffer.tabwidth = 4U;
     f->win.buf = &f->buffer;
-    f->win.h.kind = SAG_SEL_CHAR;
-    sag_cset_init(&f->win.cs, cursor);
+    f->win.h.kind = YEW_SEL_CHAR;
+    yew_cset_init(&f->win.cs, cursor);
 }
 
 static void select_fixture_free(SelectFixture *f)
 {
-    sag_cset_free(&f->win.cs);
-    sag_textbuf_free(f->buffer.tb);
+    yew_cset_free(&f->win.cs);
+    yew_textbuf_free(f->buffer.tb);
 }
 
 static Cursor selection(u64 anchor, u64 pos)
@@ -37,8 +37,8 @@ static Cursor selection(u64 anchor, u64 pos)
 
 static void assert_span(Span span, u64 lo, u64 hi)
 {
-    SAG_ASSERT_EQ_U64(span.lo, lo);
-    SAG_ASSERT_EQ_U64(span.hi, hi);
+    YEW_ASSERT_EQ_U64(span.lo, lo);
+    YEW_ASSERT_EQ_U64(span.hi, hi);
 }
 
 void test_select_char_span_is_half_open_and_direction_independent(void)
@@ -50,10 +50,10 @@ void test_select_char_span_is_half_open_and_direction_independent(void)
     Cursor caret = selection(3U, 3U);
 
     select_fixture_init(&f, bytes, sizeof(bytes) - 1U);
-    f.win.h.kind = SAG_SEL_CHAR;
-    assert_span(sag_sel_span(&f.win, &forward), 0U, 6U);
-    assert_span(sag_sel_span(&f.win, &backward), 0U, 6U);
-    assert_span(sag_sel_span(&f.win, &caret), 3U, 3U);
+    f.win.h.kind = YEW_SEL_CHAR;
+    assert_span(yew_sel_span(&f.win, &forward), 0U, 6U);
+    assert_span(yew_sel_span(&f.win, &backward), 0U, 6U);
+    assert_span(yew_sel_span(&f.win, &caret), 3U, 3U);
     select_fixture_free(&f);
 }
 
@@ -66,10 +66,10 @@ void test_select_line_span_includes_crlf_lf_and_final_line_bytes(void)
     Cursor final_only = selection(7U, 9U);
 
     select_fixture_init(&f, bytes, sizeof(bytes) - 1U);
-    f.win.h.kind = SAG_SEL_LINE;
-    assert_span(sag_sel_span(&f.win, &first_two), 0U, 6U);
-    assert_span(sag_sel_span(&f.win, &through_final), 0U, 10U);
-    assert_span(sag_sel_span(&f.win, &final_only), 6U, 10U);
+    f.win.h.kind = YEW_SEL_LINE;
+    assert_span(yew_sel_span(&f.win, &first_two), 0U, 6U);
+    assert_span(yew_sel_span(&f.win, &through_final), 0U, 10U);
+    assert_span(yew_sel_span(&f.win, &final_only), 6U, 10U);
     select_fixture_free(&f);
 }
 
@@ -81,8 +81,8 @@ void test_select_rows_counts_both_endpoint_lines_in_either_direction(void)
     Cursor backward = selection(4U, 0U);
 
     select_fixture_init(&f, bytes, sizeof(bytes) - 1U);
-    SAG_ASSERT_EQ_U64(sag_sel_rows(&f.win, &forward), 3U);
-    SAG_ASSERT_EQ_U64(sag_sel_rows(&f.win, &backward), 3U);
+    YEW_ASSERT_EQ_U64(yew_sel_rows(&f.win, &forward), 3U);
+    YEW_ASSERT_EQ_U64(yew_sel_rows(&f.win, &backward), 3U);
     select_fixture_free(&f);
 }
 
@@ -96,31 +96,31 @@ void test_select_rect_widens_cjk_and_tab_left_edges_and_clips_short_lines(void)
         "  end\n";
     SelectFixture f;
     Cursor cursor = selection(2U, 27U);
-    SagSelSpanVec spans = {0};
+    YewSelSpanVec spans = {0};
     Span row;
     CCol c0;
     CCol c1;
 
     select_fixture_init(&f, bytes, sizeof(bytes) - 1U);
-    f.win.h.kind = SAG_SEL_RECT;
-    SAG_ASSERT(sag_sel_rect_row(&f.win, &cursor, LINENO(1U),
+    f.win.h.kind = YEW_SEL_RECT;
+    YEW_ASSERT(yew_sel_rect_row(&f.win, &cursor, LINENO(1U),
                                 &row, &c0, &c1));
     assert_span(row, 7U, 12U);
-    SAG_ASSERT_EQ_U64(c0.v, 2U);
-    SAG_ASSERT_EQ_U64(c1.v, 5U);
-    SAG_ASSERT(sag_sel_rect_row(&f.win, &cursor, LINENO(2U),
+    YEW_ASSERT_EQ_U64(c0.v, 2U);
+    YEW_ASSERT_EQ_U64(c1.v, 5U);
+    YEW_ASSERT(yew_sel_rect_row(&f.win, &cursor, LINENO(2U),
                                 &row, &c0, &c1));
     assert_span(row, 14U, 16U);
-    SAG_ASSERT(sag_sel_rect_row(&f.win, &cursor, LINENO(3U),
+    YEW_ASSERT(yew_sel_rect_row(&f.win, &cursor, LINENO(3U),
                                 &row, &c0, &c1));
     assert_span(row, 21U, 21U);
 
-    sag_sel_rect_spans(&f.win, &cursor, &spans);
-    SAG_ASSERT_EQ_U64(spans.len, 5U);
+    yew_sel_rect_spans(&f.win, &cursor, &spans);
+    YEW_ASSERT_EQ_U64(spans.len, 5U);
     assert_span(spans.data[1], 7U, 12U);
     assert_span(spans.data[2], 14U, 16U);
     assert_span(spans.data[3], 21U, 21U);
-    SagSelSpanVec_free(&spans);
+    YewSelSpanVec_free(&spans);
     select_fixture_free(&f);
 }
 
@@ -139,16 +139,16 @@ void test_select_rect_widens_cjk_emoji_and_tab_right_edges(void)
     CCol c1;
 
     select_fixture_init(&f, bytes, sizeof(bytes) - 1U);
-    f.win.h.kind = SAG_SEL_RECT;
-    SAG_ASSERT(sag_sel_rect_row(&f.win, &cursor, LINENO(1U),
+    f.win.h.kind = YEW_SEL_RECT;
+    YEW_ASSERT(yew_sel_rect_row(&f.win, &cursor, LINENO(1U),
                                 &row, &c0, &c1));
     assert_span(row, 4U, 8U);
-    SAG_ASSERT_EQ_U64(c0.v, 0U);
-    SAG_ASSERT_EQ_U64(c1.v, 2U);
-    SAG_ASSERT(sag_sel_rect_row(&f.win, &cursor, LINENO(2U),
+    YEW_ASSERT_EQ_U64(c0.v, 0U);
+    YEW_ASSERT_EQ_U64(c1.v, 2U);
+    YEW_ASSERT(yew_sel_rect_row(&f.win, &cursor, LINENO(2U),
                                 &row, &c0, &c1));
     assert_span(row, 10U, 15U);
-    SAG_ASSERT(sag_sel_rect_row(&f.win, &cursor, LINENO(3U),
+    YEW_ASSERT(yew_sel_rect_row(&f.win, &cursor, LINENO(3U),
                                 &row, &c0, &c1));
     assert_span(row, 17U, 19U);
     select_fixture_free(&f);
@@ -169,16 +169,16 @@ void test_select_rect_zero_width_carets_land_on_whole_cluster_boundaries(void)
     CCol c1;
 
     select_fixture_init(&f, bytes, sizeof(bytes) - 1U);
-    f.win.h.kind = SAG_SEL_RECT;
-    SAG_ASSERT(sag_sel_rect_row(&f.win, &cursor, LINENO(1U),
+    f.win.h.kind = YEW_SEL_RECT;
+    YEW_ASSERT(yew_sel_rect_row(&f.win, &cursor, LINENO(1U),
                                 &row, &c0, &c1));
     assert_span(row, 5U, 5U);
-    SAG_ASSERT_EQ_U64(c0.v, 2U);
-    SAG_ASSERT_EQ_U64(c1.v, 2U);
-    SAG_ASSERT(sag_sel_rect_row(&f.win, &cursor, LINENO(2U),
+    YEW_ASSERT_EQ_U64(c0.v, 2U);
+    YEW_ASSERT_EQ_U64(c1.v, 2U);
+    YEW_ASSERT(yew_sel_rect_row(&f.win, &cursor, LINENO(2U),
                                 &row, &c0, &c1));
     assert_span(row, 11U, 11U);
-    SAG_ASSERT(sag_sel_rect_row(&f.win, &cursor, LINENO(3U),
+    YEW_ASSERT(yew_sel_rect_row(&f.win, &cursor, LINENO(3U),
                                 &row, &c0, &c1));
     assert_span(row, 15U, 15U);
     select_fixture_free(&f);
@@ -194,10 +194,10 @@ void test_select_rect_row_rejects_lines_outside_selection(void)
     CCol c1 = {99U};
 
     select_fixture_init(&f, bytes, sizeof(bytes) - 1U);
-    f.win.h.kind = SAG_SEL_RECT;
-    SAG_ASSERT(!sag_sel_rect_row(&f.win, &cursor, LINENO(0U),
+    f.win.h.kind = YEW_SEL_RECT;
+    YEW_ASSERT(!yew_sel_rect_row(&f.win, &cursor, LINENO(0U),
                                  &row, &c0, &c1));
-    SAG_ASSERT(!sag_sel_rect_row(&f.win, &cursor, LINENO(2U),
+    YEW_ASSERT(!yew_sel_rect_row(&f.win, &cursor, LINENO(2U),
                                  &row, &c0, &c1));
     select_fixture_free(&f);
 }
@@ -207,15 +207,15 @@ void test_select_rect_spans_exclude_crlf_and_reach_final_unterminated_line(void)
     static const u8 bytes[] = " ab\r\nx\r\nyz";
     SelectFixture f;
     Cursor cursor = selection(1U, 10U);
-    SagSelSpanVec spans = {0};
+    YewSelSpanVec spans = {0};
 
     select_fixture_init(&f, bytes, sizeof(bytes) - 1U);
-    f.win.h.kind = SAG_SEL_RECT;
-    sag_sel_rect_spans(&f.win, &cursor, &spans);
-    SAG_ASSERT_EQ_U64(spans.len, 3U);
+    f.win.h.kind = YEW_SEL_RECT;
+    yew_sel_rect_spans(&f.win, &cursor, &spans);
+    YEW_ASSERT_EQ_U64(spans.len, 3U);
     assert_span(spans.data[0], 1U, 2U);
     assert_span(spans.data[1], 6U, 6U);
     assert_span(spans.data[2], 9U, 10U);
-    SagSelSpanVec_free(&spans);
+    YewSelSpanVec_free(&spans);
     select_fixture_free(&f);
 }

@@ -124,15 +124,15 @@ static double mibs(u64 bytes, i64 ns)
 
 int main(int argc, char **argv)
 {
-    u64 bytes = env_u64("SAG_RE_THROUGHPUT_BYTES", DEFAULT_BYTES);
+    u64 bytes = env_u64("YEW_RE_THROUGHPUT_BYTES", DEFAULT_BYTES);
     u64 lit_limit = 0U;
     u64 dfa_limit = 0U;
     u64 rss_limit = 0U;
     u8 *buf;
     Arena arena;
-    SagRe *lit_re;
-    SagRe *dfa_re;
-    SagReInput in;
+    YewRe *lit_re;
+    YewRe *dfa_re;
+    YewReInput in;
     u64 rss_before;
     u64 rss_after;
     i64 start;
@@ -163,16 +163,16 @@ int main(int argc, char **argv)
 
     arena_init(&arena);
     /* Whole-pattern literal: the VM is never entered. */
-    lit_re = sag_re_compile(&arena, "ZQNEEDLEQZ", 10U, 0U, NULL);
+    lit_re = yew_re_compile(&arena, "ZQNEEDLEQZ", 10U, 0U, NULL);
     /* No extractable literal prefix, so this is the DFA's job. */
-    dfa_re = sag_re_compile(&arena, "[qQ][0-9]+[zZ]", 14U, 0U, NULL);
+    dfa_re = yew_re_compile(&arena, "[qQ][0-9]+[zZ]", 14U, 0U, NULL);
     if (lit_re == NULL || dfa_re == NULL) {
         (void)fprintf(stderr, "re_throughput: patterns did not compile\n");
         free(buf);
         arena_free_all(&arena);
         return 2;
     }
-    in = sag_re_input_bytes(buf, bytes);
+    in = yew_re_input_bytes(buf, bytes);
 
     /* Baseline AFTER the buffer is populated, so its pages are already
      * counted and the delta is the engine's own footprint. */
@@ -180,8 +180,8 @@ int main(int argc, char **argv)
 
     start = now_ns();
     {
-        SagReMatch m;
-        bool found = sag_re_search(lit_re, &in, BYTEOFF(0U), &m);
+        YewReMatch m;
+        bool found = yew_re_search(lit_re, &in, BYTEOFF(0U), &m);
 
         end = now_ns();
         if (!found || m.g[0].lo != bytes - 16U) {
@@ -203,9 +203,9 @@ int main(int argc, char **argv)
     }
 
     start = now_ns();
-    /* sag_re_test routes through the lazy DFA; the pattern never matches,
+    /* yew_re_test routes through the lazy DFA; the pattern never matches,
      * so the scan covers the whole buffer. */
-    (void)sag_re_test(dfa_re, &in, BYTEOFF(0U));
+    (void)yew_re_test(dfa_re, &in, BYTEOFF(0U));
     end = now_ns();
     rate = mibs(bytes, end - start);
     (void)printf("re.throughput non-literal  %8.1f MiB/s (limit %llu)\n",

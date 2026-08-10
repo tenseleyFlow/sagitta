@@ -15,7 +15,7 @@
 #include "ui/win.h"
 #include "unicode/coords.h"
 
-void sag_search_opts_init(SearchOpts *o)
+void yew_search_opts_init(SearchOpts *o)
 {
     if (o == NULL)
         return;
@@ -25,7 +25,7 @@ void sag_search_opts_init(SearchOpts *o)
     o->hlsearch = true;
 }
 
-bool sag_search_wants_icase(const SagRe *probe, const SearchOpts *o)
+bool yew_search_wants_icase(const YewRe *probe, const SearchOpts *o)
 {
     bool ignorecase = o != NULL && o->ignorecase;
     bool smartcase = o == NULL || o->smartcase;
@@ -36,24 +36,24 @@ bool sag_search_wants_icase(const SagRe *probe, const SearchOpts *o)
      * request, and a search that silently widens is the one that
      * surprises.
      */
-    if (sag_re_forces_case(probe))
+    if (yew_re_forces_case(probe))
         return false;
-    if (sag_re_forces_icase(probe))
+    if (yew_re_forces_icase(probe))
         return true;
     if (!ignorecase)
         return false;
     if (!smartcase)
         return true;
-    return !sag_re_has_upper_literal(probe);
+    return !yew_re_has_upper_literal(probe);
 }
 
-SagRe *sag_search_compile(Arena *a, const char *pat, size_t len,
-                          const SearchOpts *o, SagReErr *err)
+YewRe *yew_search_compile(Arena *a, const char *pat, size_t len,
+                          const SearchOpts *o, YewReErr *err)
 {
-    SagRe *probe;
+    YewRe *probe;
 
     if (a == NULL || pat == NULL)
-        return sag_re_compile(a, pat, len, 0U, err);
+        return yew_re_compile(a, pat, len, 0U, err);
     /*
      * Two passes, because the answer to "should this be
      * case-insensitive" is inside the pattern.  The first pass is the
@@ -62,19 +62,19 @@ SagRe *sag_search_compile(Arena *a, const char *pat, size_t len,
      * pattern, which is what makes recompiling per keystroke viable at
      * all.
      */
-    probe = sag_re_compile(a, pat, len, 0U, err);
+    probe = yew_re_compile(a, pat, len, 0U, err);
     if (probe == NULL)
         return NULL;
-    if (!sag_search_wants_icase(probe, o))
+    if (!yew_search_wants_icase(probe, o))
         return probe;
-    return sag_re_compile(a, pat, len, SAG_RE_ICASE, err);
+    return yew_re_compile(a, pat, len, YEW_RE_ICASE, err);
 }
 
 /* ---------------------------------------------------------------- */
 /* Live search                                                      */
 /* ---------------------------------------------------------------- */
 
-void sag_search_state_init(SearchState *st)
+void yew_search_state_init(SearchState *st)
 {
     if (st == NULL)
         return;
@@ -82,7 +82,7 @@ void sag_search_state_init(SearchState *st)
     arena_init(&st->arena);
 }
 
-void sag_search_state_free(SearchState *st)
+void yew_search_state_free(SearchState *st)
 {
     if (st == NULL)
         return;
@@ -92,7 +92,7 @@ void sag_search_state_free(SearchState *st)
 
 static void search_capture_restore_point(Ed *ed, Win *w)
 {
-    const Cursor *c = sag_ed_cursor(ed);
+    const Cursor *c = yew_ed_cursor(ed);
 
     if (c != NULL) {
         ed->search.save_cur = *c;
@@ -102,7 +102,7 @@ static void search_capture_restore_point(Ed *ed, Win *w)
     ed->search.save_top_sub = w->vp.top_sub;
 }
 
-void sag_search_open(Ed *ed, Win *w, bool reverse)
+void yew_search_open(Ed *ed, Win *w, bool reverse)
 {
     if (ed == NULL || w == NULL)
         return;
@@ -111,21 +111,21 @@ void sag_search_open(Ed *ed, Win *w, bool reverse)
     ed->search.wrapped = false;
     ed->search.active = true;
     (void)memset(&ed->search.err, 0, sizeof(ed->search.err));
-    sag_cmdline_open(ed, reverse ? SAG_PROMPT_SEARCH_B : SAG_PROMPT_SEARCH_F,
+    yew_cmdline_open(ed, reverse ? YEW_PROMPT_SEARCH_B : YEW_PROMPT_SEARCH_F,
                      NULL);
 }
 
 /* Moves to `hit`, reporting whether the step wrapped. */
 static void search_go(Ed *ed, Win *w, u64 hit)
 {
-    Cursor *c = sag_ed_cursor(ed);
+    Cursor *c = yew_ed_cursor(ed);
 
     if (c != NULL) {
         c->pos = BYTEOFF(hit);
         c->goal_col = (GCol){0U};
     }
-    sag_win_follow_cursor(w);
-    sag_ed_damage_document(ed);
+    yew_win_follow_cursor(w);
+    yew_ed_damage_document(ed);
 }
 
 /*
@@ -133,35 +133,35 @@ static void search_go(Ed *ed, Win *w, u64 hit)
  * is no match at all; `*wrapped` says whether the answer came from the
  * far end of the buffer.
  */
-static bool search_find(const SagRe *re, const TextBuf *tb, u64 from,
+static bool search_find(const YewRe *re, const TextBuf *tb, u64 from,
                         bool backward, bool wrapscan, u64 *hit,
                         bool *wrapped)
 {
-    SagReInput in = sag_re_input_textbuf(tb);
-    SagReMatch m;
+    YewReInput in = yew_re_input_textbuf(tb);
+    YewReMatch m;
 
     *wrapped = false;
     (void)memset(&m, 0, sizeof(m));
     if (backward) {
-        if (from > 0U && sag_re_search_back(re, &in, BYTEOFF(from), &m)) {
+        if (from > 0U && yew_re_search_back(re, &in, BYTEOFF(from), &m)) {
             *hit = m.g[0].lo;
             return true;
         }
         if (!wrapscan)
             return false;
-        if (!sag_re_search_back(re, &in, BYTEOFF(sag_textbuf_len(tb)), &m))
+        if (!yew_re_search_back(re, &in, BYTEOFF(yew_textbuf_len(tb)), &m))
             return false;
         *wrapped = true;
         *hit = m.g[0].lo;
         return true;
     }
-    if (sag_re_search(re, &in, BYTEOFF(from), &m)) {
+    if (yew_re_search(re, &in, BYTEOFF(from), &m)) {
         *hit = m.g[0].lo;
         return true;
     }
     if (!wrapscan)
         return false;
-    if (!sag_re_search(re, &in, BYTEOFF(0U), &m))
+    if (!yew_re_search(re, &in, BYTEOFF(0U), &m))
         return false;
     *wrapped = true;
     *hit = m.g[0].lo;
@@ -170,7 +170,7 @@ static bool search_find(const SagRe *re, const TextBuf *tb, u64 from,
 
 static void search_report_wrap(Ed *ed, bool backward)
 {
-    sag_msg(ed, SAG_MSG_INFO,
+    yew_msg(ed, YEW_MSG_INFO,
             backward ? "search hit TOP, continuing at BOTTOM"
                      : "search hit BOTTOM, continuing at TOP");
 }
@@ -179,28 +179,28 @@ static void search_report_miss(Ed *ed, bool backward, bool wrapscan,
                                const char *pat, size_t patlen)
 {
     if (!wrapscan) {
-        sag_msg(ed, SAG_MSG_ERROR,
+        yew_msg(ed, YEW_MSG_ERROR,
                 backward ? "search hit TOP without match"
                          : "search hit BOTTOM without match");
         return;
     }
-    sag_msg(ed, SAG_MSG_ERROR, "pattern not found: %.*s", (int)patlen, pat);
+    yew_msg(ed, YEW_MSG_ERROR, "pattern not found: %.*s", (int)patlen, pat);
 }
 
-void sag_search_input(Ed *ed, Win *w)
+void yew_search_input(Ed *ed, Win *w)
 {
     Bytebuf text;
-    SagReErr err;
-    SagRe *re;
+    YewReErr err;
+    YewRe *re;
     u64 hit = 0U;
     bool wrapped = false;
 
     if (ed == NULL || w == NULL || !ed->search.active)
         return;
     bytebuf_init(&text);
-    sag_cmdline_text(ed, &text);
+    yew_cmdline_text(ed, &text);
     (void)memset(&err, 0, sizeof(err));
-    re = sag_search_compile(&ed->search.arena, (const char *)text.data,
+    re = yew_search_compile(&ed->search.arena, (const char *)text.data,
                             text.len, &ed->search_opts, &err);
     if (re == NULL) {
         /*
@@ -211,7 +211,7 @@ void sag_search_input(Ed *ed, Win *w)
          * rule exists to prevent.
          */
         ed->search.err = err;
-        sag_msg(ed, SAG_MSG_ERROR, "%s",
+        yew_msg(ed, YEW_MSG_ERROR, "%s",
                 err.msg != NULL ? err.msg : "bad pattern");
         bytebuf_free(&text);
         return;
@@ -226,7 +226,7 @@ void sag_search_input(Ed *ed, Win *w)
     if (text.len == 0U) {
         /* An empty prompt previews nothing and highlights nothing, but
          * the restore point stays live. */
-        sag_search_clear_highlight(ed, w);
+        yew_search_clear_highlight(ed, w);
         bytebuf_free(&text);
         return;
     }
@@ -235,24 +235,24 @@ void sag_search_input(Ed *ed, Win *w)
                     &wrapped)) {
         ed->search.wrapped = wrapped;
         search_go(ed, w, hit);
-        sag_msg_clear(ed);
+        yew_msg_clear(ed);
     } else {
         /*
          * No match while typing keeps the previously previewed position
          * rather than throwing the user back: they are mid-word, and
          * the next keystroke may well match again.
          */
-        sag_msg(ed, SAG_MSG_ERROR, "pattern not found: %.*s",
+        yew_msg(ed, YEW_MSG_ERROR, "pattern not found: %.*s",
                 (int)text.len, (const char *)text.data);
     }
     if (ed->search_opts.hlsearch)
-        sag_overlay_refresh(ed, w, ed->search.re, ed->search.pat_gen,
-                            SAG_OVERLAY_BUDGET_US);
-    sag_search_schedule_count(ed, w);
+        yew_overlay_refresh(ed, w, ed->search.re, ed->search.pat_gen,
+                            YEW_OVERLAY_BUDGET_US);
+    yew_search_schedule_count(ed, w);
     bytebuf_free(&text);
 }
 
-void sag_search_accept(Ed *ed, Win *w)
+void yew_search_accept(Ed *ed, Win *w)
 {
     if (ed == NULL || w == NULL || !ed->search.active)
         return;
@@ -260,21 +260,21 @@ void sag_search_accept(Ed *ed, Win *w)
     if (ed->search.pat != NULL && ed->search.patlen > 0U) {
         /* Register `/` is the pattern's home; `:s//` and `^R /` read it
          * from there rather than from this struct. */
-        sag_reg_set_search(&ed->regs, (const u8 *)ed->search.pat,
+        yew_reg_set_search(&ed->regs, (const u8 *)ed->search.pat,
                            ed->search.patlen);
         /* The jump is a jump: `origin` becomes a place to come back to. */
-        sag_jump_push(w, ed->search.origin, ed->now_ms);
+        yew_jump_push(w, ed->search.origin, ed->now_ms);
     }
 }
 
-void sag_search_cancel(Ed *ed, Win *w)
+void yew_search_cancel(Ed *ed, Win *w)
 {
     Cursor *c;
 
     if (ed == NULL || w == NULL || !ed->search.active)
         return;
     ed->search.active = false;
-    c = sag_ed_cursor(ed);
+    c = yew_ed_cursor(ed);
     /*
      * Exact restore.  The cursor's goal column comes back too, so a
      * subsequent up/down aims where it did before the search; and the
@@ -285,7 +285,7 @@ void sag_search_cancel(Ed *ed, Win *w)
         *c = ed->search.save_cur;
     w->vp.top = ed->search.save_top;
     w->vp.top_sub = ed->search.save_top_sub;
-    sag_search_clear_highlight(ed, w);
+    yew_search_clear_highlight(ed, w);
     /*
      * Cancel every trace of the preview, including the work that has
      * not happened yet.  A pending count timer would fire after the
@@ -293,9 +293,9 @@ void sag_search_cancel(Ed *ed, Win *w)
      * before the search — which is not "byte-identical", and is exactly
      * what the pty golden compares.
      */
-    if (ed->search.count_timer != SAG_TIMER_NONE) {
-        (void)sag_timer_cancel(&ed->timers, ed->search.count_timer);
-        ed->search.count_timer = SAG_TIMER_NONE;
+    if (ed->search.count_timer != YEW_TIMER_NONE) {
+        (void)yew_timer_cancel(&ed->timers, ed->search.count_timer);
+        ed->search.count_timer = YEW_TIMER_NONE;
     }
     w->overlay.count_total = 0U;
     w->overlay.count_capped = false;
@@ -307,22 +307,22 @@ void sag_search_cancel(Ed *ed, Win *w)
     ed->search.re = NULL;
     ed->search.pat = NULL;
     ed->search.patlen = 0U;
-    sag_msg_clear(ed);
-    sag_ed_damage_document(ed);
+    yew_msg_clear(ed);
+    yew_ed_damage_document(ed);
     ed->full_damage = true;
 }
 
-void sag_search_clear_highlight(Ed *ed, Win *w)
+void yew_search_clear_highlight(Ed *ed, Win *w)
 {
     if (ed == NULL || w == NULL)
         return;
-    sag_overlay_refresh(ed, w, NULL, ed->search.pat_gen, 0);
+    yew_overlay_refresh(ed, w, NULL, ed->search.pat_gen, 0);
 }
 
-bool sag_search_step(Ed *ed, Win *w, bool forward, u32 count)
+bool yew_search_step(Ed *ed, Win *w, bool forward, u32 count)
 {
     const RegVal *slash;
-    SagRe *re;
+    YewRe *re;
     u32 i;
     u32 n = count == 0U ? 1U : count;
     bool any = false;
@@ -333,12 +333,12 @@ bool sag_search_step(Ed *ed, Win *w, bool forward, u32 count)
     if (re == NULL) {
         /* Nothing searched yet this session: fall back to register `/`,
          * which survives across prompts. */
-        slash = sag_reg_get(&ed->regs, (u8)'/');
+        slash = yew_reg_get(&ed->regs, (u8)'/');
         if (slash == NULL || slash->bytes.len == 0U) {
-            sag_msg(ed, SAG_MSG_ERROR, "no previous search pattern");
+            yew_msg(ed, YEW_MSG_ERROR, "no previous search pattern");
             return false;
         }
-        re = sag_search_compile(&ed->search.arena,
+        re = yew_search_compile(&ed->search.arena,
                                 (const char *)slash->bytes.data,
                                 slash->bytes.len, &ed->search_opts, NULL);
         if (re == NULL)
@@ -355,7 +355,7 @@ bool sag_search_step(Ed *ed, Win *w, bool forward, u32 count)
 
         backward = forward ? ed->search.reverse : !ed->search.reverse;
         for (i = 0U; i < n; i++) {
-            const Cursor *c = sag_ed_cursor(ed);
+            const Cursor *c = yew_ed_cursor(ed);
             u64 from;
             u64 hit = 0U;
             bool wrapped = false;
@@ -368,7 +368,7 @@ bool sag_search_step(Ed *ed, Win *w, bool forward, u32 count)
              * nothing.
              */
             from = backward ? c->pos.v
-                            : sag_grapheme_next(w->buf->tb, c->pos).v;
+                            : yew_grapheme_next(w->buf->tb, c->pos).v;
             if (!backward && from <= c->pos.v)
                 from = c->pos.v + 1U;
             if (!search_find(re, w->buf->tb, from, backward,
@@ -388,17 +388,17 @@ bool sag_search_step(Ed *ed, Win *w, bool forward, u32 count)
         }
     }
     if (any && ed->search_opts.hlsearch)
-        sag_overlay_refresh(ed, w, ed->search.re, ed->search.pat_gen,
-                            SAG_OVERLAY_BUDGET_US);
+        yew_overlay_refresh(ed, w, ed->search.re, ed->search.pat_gen,
+                            YEW_OVERLAY_BUDGET_US);
     if (any)
-        sag_search_schedule_count(ed, w);
+        yew_search_schedule_count(ed, w);
     /*
      * Exactly one match, and the cursor is on it: say so rather than
      * appearing to do nothing.  Silence here reads as a broken
      * keybinding.
      */
     if (any && w->overlay.count_total == 1U)
-        sag_msg(ed, SAG_MSG_INFO, "1 match");
+        yew_msg(ed, YEW_MSG_INFO, "1 match");
     return any;
 }
 
@@ -411,7 +411,7 @@ bool sag_search_step(Ed *ed, Win *w, bool forward, u32 count)
  */
 static bool search_word_span(const TextBuf *tb, ByteOff pos, Span *out)
 {
-    u64 len = sag_textbuf_len(tb);
+    u64 len = yew_textbuf_len(tb);
     u64 lo = pos.v;
     u64 hi = pos.v;
 
@@ -419,9 +419,9 @@ static bool search_word_span(const TextBuf *tb, ByteOff pos, Span *out)
         return false;
     if (lo > len)
         lo = len;
-    while (lo > 0U && !sag_word_boundary(tb, BYTEOFF(lo)))
+    while (lo > 0U && !yew_word_boundary(tb, BYTEOFF(lo)))
         lo--;
-    while (hi < len && !sag_word_boundary(tb, BYTEOFF(hi + 1U)))
+    while (hi < len && !yew_word_boundary(tb, BYTEOFF(hi + 1U)))
         hi++;
     if (hi < len)
         hi++;
@@ -441,39 +441,39 @@ static void search_idle(Ed *ed, void *ctx)
 
     if (ed == NULL || w == NULL || ed->search.re == NULL)
         return;
-    ed->search.count_timer = SAG_TIMER_NONE;
+    ed->search.count_timer = YEW_TIMER_NONE;
     if (!w->overlay.complete)
-        sag_overlay_refresh(ed, w, ed->search.re, ed->search.pat_gen, 0);
+        yew_overlay_refresh(ed, w, ed->search.re, ed->search.pat_gen, 0);
     /*
      * 50 ms and 10 000 matches, whichever comes first.  An unbounded
      * counter is the exact feature that makes a big-file editor feel
      * broken, so the number the statusline shows is explicitly a
      * bounded one — `[3/10000+]` rather than a lie or a stall.
      */
-    sag_overlay_count(&w->overlay, ed->search.re, w->buf->tb, 50000);
+    yew_overlay_count(&w->overlay, ed->search.re, w->buf->tb, 50000);
     ed->footer_dirty = true;
 }
 
-void sag_search_schedule_count(Ed *ed, Win *w)
+void yew_search_schedule_count(Ed *ed, Win *w)
 {
     if (ed == NULL || w == NULL || ed->search.re == NULL)
         return;
-    if (ed->search.count_timer != SAG_TIMER_NONE)
-        (void)sag_timer_cancel(&ed->timers, ed->search.count_timer);
+    if (ed->search.count_timer != YEW_TIMER_NONE)
+        (void)yew_timer_cancel(&ed->timers, ed->search.count_timer);
     /* One tick out, so a burst of `n` presses schedules once rather
      * than counting between each. */
-    ed->search.count_timer = sag_timer_add(&ed->timers,
+    ed->search.count_timer = yew_timer_add(&ed->timers,
                                            ed->now_ms + 16, search_idle, w);
     if (ed->search.wrapped)
         ed->search.wrap_until_ms = ed->now_ms + 2000;
 }
 
-i64 sag_search_wrap_until(const Ed *ed)
+i64 yew_search_wrap_until(const Ed *ed)
 {
     return ed == NULL ? 0 : ed->search.wrap_until_ms;
 }
 
-bool sag_search_word(Ed *ed, Win *w, bool forward)
+bool yew_search_word(Ed *ed, Win *w, bool forward)
 {
     Bytebuf pat;
     Span word;
@@ -483,17 +483,17 @@ bool sag_search_word(Ed *ed, Win *w, bool forward)
 
     if (ed == NULL || w == NULL || w->buf == NULL)
         return false;
-    c = sag_ed_cursor(ed);
+    c = yew_ed_cursor(ed);
     if (c == NULL)
         return false;
     if (!search_word_span(w->buf->tb, c->pos, &word)) {
-        sag_msg(ed, SAG_MSG_ERROR, "no word under the cursor");
+        yew_msg(ed, YEW_MSG_ERROR, "no word under the cursor");
         return false;
     }
     bytebuf_init(&pat);
     /*
      * `\b` + the QUOTED word + `\b`.  Quoting goes through the engine's
-     * own sag_re_quote so there is exactly one implementation of
+     * own yew_re_quote so there is exactly one implementation of
      * "escape this literal" — searching for `a.b` must not match `axb`.
      */
     bytebuf_append(&pat, "\\b", 2U);
@@ -504,17 +504,17 @@ bool sag_search_word(Ed *ed, Win *w, bool forward)
         bytebuf_init(&raw);
         for (i = word.lo; i < word.hi; i++) {
             u8 b = 0U;
-            SagReInput in = sag_re_input_textbuf(w->buf->tb);
+            YewReInput in = yew_re_input_textbuf(w->buf->tb);
 
-            if (sag_re_input_byte(&in, i, &b))
+            if (yew_re_input_byte(&in, i, &b))
                 bytebuf_push_u8(&raw, b);
         }
-        sag_re_quote(&pat, raw.data, raw.len);
+        yew_re_quote(&pat, raw.data, raw.len);
         bytebuf_free(&raw);
     }
     bytebuf_append(&pat, "\\b", 2U);
 
-    ed->search.re = sag_search_compile(&ed->search.arena,
+    ed->search.re = yew_search_compile(&ed->search.arena,
                                        (const char *)pat.data, pat.len,
                                        &ed->search_opts, NULL);
     if (ed->search.re != NULL) {
@@ -524,11 +524,11 @@ bool sag_search_word(Ed *ed, Win *w, bool forward)
         ed->search.patlen = pat.len;
         ed->search.pat_gen++;
         ed->search.reverse = !forward;
-        sag_reg_set_search(&ed->regs, pat.data, pat.len);
+        yew_reg_set_search(&ed->regs, pat.data, pat.len);
         /* `*` is a jump, so where we stood is worth coming back to. */
         at = c->pos.v;
-        sag_jump_push(w, BYTEOFF(at), ed->now_ms);
-        ok = sag_search_step(ed, w, true, 1U);
+        yew_jump_push(w, BYTEOFF(at), ed->now_ms);
+        ok = yew_search_step(ed, w, true, 1U);
     }
     bytebuf_free(&pat);
     return ok;

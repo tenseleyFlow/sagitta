@@ -59,7 +59,7 @@ static bool fz_boundary(char c)
 static void fz_fill_prefix_pos(FzMatch *m, u32 plen)
 {
     u32 i;
-    u32 n = plen > (u32)SAG_FZ_MAX_POS ? (u32)SAG_FZ_MAX_POS : plen;
+    u32 n = plen > (u32)YEW_FZ_MAX_POS ? (u32)YEW_FZ_MAX_POS : plen;
 
     if (m == NULL)
         return;
@@ -72,10 +72,10 @@ static i32 fz_no_match(FzMatch *m)
 {
     if (m != NULL)
         m->n_pos = 0U;
-    return SAG_FZ_NO_MATCH;
+    return YEW_FZ_NO_MATCH;
 }
 
-i32 sag_fz_score(const char *pat, u32 plen, const char *text, u32 tlen,
+i32 yew_fz_score(const char *pat, u32 plen, const char *text, u32 tlen,
                  FzMatch *m)
 {
     /*
@@ -124,9 +124,9 @@ i32 sag_fz_score(const char *pat, u32 plen, const char *text, u32 tlen,
         else if (fz_boundary(text[ti - 1U]))
             score += 150;
         /* Positions are u16.  Past 64 KiB of text the honest answer is
-         * "no highlight", the same as past SAG_FZ_MAX_POS -- never a
+         * "no highlight", the same as past YEW_FZ_MAX_POS -- never a
          * truncated offset, which would highlight the wrong byte. */
-        if (m != NULL && m->n_pos < (u16)SAG_FZ_MAX_POS &&
+        if (m != NULL && m->n_pos < (u16)YEW_FZ_MAX_POS &&
             ti <= (u32)UINT16_MAX)
             m->pos[m->n_pos++] = (u16)ti;
         pi++;
@@ -134,8 +134,8 @@ i32 sag_fz_score(const char *pat, u32 plen, const char *text, u32 tlen,
     if (pi < plen)
         return fz_no_match(m);
     score -= (i64)tlen;
-    if (score <= (i64)SAG_FZ_NO_MATCH)
-        return SAG_FZ_NO_MATCH + 1;
+    if (score <= (i64)YEW_FZ_NO_MATCH)
+        return YEW_FZ_NO_MATCH + 1;
     if (score > (i64)INT32_MAX)
         return INT32_MAX;
     return (i32)score;
@@ -226,7 +226,7 @@ static int fz_rank_cmp(const void *left, const void *right, void *ctx)
     return 0;
 }
 
-u32 sag_fz_rank(const char *pat, u32 plen, const char *const *text, u32 n,
+u32 yew_fz_rank(const char *pat, u32 plen, const char *const *text, u32 n,
                 bool path_mode, FzRanked *out)
 {
     FzSortCtx ctx;
@@ -246,7 +246,7 @@ u32 sag_fz_rank(const char *pat, u32 plen, const char *const *text, u32 n,
         u32 boff;
         u32 blen;
         i32 sb;
-        i32 sp = SAG_FZ_NO_MATCH;
+        i32 sp = YEW_FZ_NO_MATCH;
         i32 key;
 
         if (candidate == NULL)
@@ -262,18 +262,18 @@ u32 sag_fz_rank(const char *pat, u32 plen, const char *const *text, u32 n,
             boff = 0U;
             blen = tlen;
         }
-        sb = sag_fz_score(pat, plen, candidate + boff, blen, &base_m);
+        sb = yew_fz_score(pat, plen, candidate + boff, blen, &base_m);
         if (path_mode)
-            sp = sag_fz_score(pat, plen, candidate, tlen, &path_m);
-        if (sb == SAG_FZ_NO_MATCH && sp == SAG_FZ_NO_MATCH)
+            sp = yew_fz_score(pat, plen, candidate, tlen, &path_m);
+        if (sb == YEW_FZ_NO_MATCH && sp == YEW_FZ_NO_MATCH)
             continue;
         if (sb >= 5000) {
-            key = sb > INT32_MAX - SAG_FZ_BASENAME_TIER
+            key = sb > INT32_MAX - YEW_FZ_BASENAME_TIER
                       ? INT32_MAX
-                      : sb + (i32)SAG_FZ_BASENAME_TIER;
+                      : sb + (i32)YEW_FZ_BASENAME_TIER;
             fz_shift_pos(&base_m, boff);
             out[kept].m = base_m;
-        } else if (sb != SAG_FZ_NO_MATCH && sb >= sp) {
+        } else if (sb != YEW_FZ_NO_MATCH && sb >= sp) {
             key = sb;
             fz_shift_pos(&base_m, boff);
             out[kept].m = base_m;
@@ -287,6 +287,6 @@ u32 sag_fz_rank(const char *pat, u32 plen, const char *const *text, u32 n,
     }
     ctx.text = text;
     ctx.empty_pattern = plen == 0U;
-    sag_sort_stable(out, kept, sizeof(*out), fz_rank_cmp, &ctx);
+    yew_sort_stable(out, kept, sizeof(*out), fz_rank_cmp, &ctx);
     return kept;
 }

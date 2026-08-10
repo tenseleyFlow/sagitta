@@ -25,9 +25,9 @@ static void bounded_append(Bytebuf *buf, const void *data, size_t n)
     bytebuf_append(buf, data, n < room ? n : room);
 }
 
-static SagColor default_color(void)
+static YewColor default_color(void)
 {
-    SagColor c = {SAG_COLOR_DEFAULT, 0u, 0u, 0u};
+    YewColor c = {YEW_COLOR_DEFAULT, 0u, 0u, 0u};
 
     return c;
 }
@@ -43,7 +43,7 @@ static VtCell blank_cell(void)
 
 static void text_reset(VtScreen *v)
 {
-    sag_gb_init(&v->gb);
+    yew_gb_init(&v->gb);
     v->cluster_valid = false;
 }
 
@@ -116,7 +116,7 @@ static void cell_store_bytes(VtScreen *v, size_t off, VtCell *cell,
     size_t i;
 
     if (n > sizeof(cell->g)) {
-        owned = sag_xmalloc(n);
+        owned = yew_xmalloc(n);
         memcpy(owned, bytes, n);
         bytes = owned;
     }
@@ -157,7 +157,7 @@ static void write_cluster_start(VtScreen *v, const u8 *bytes, size_t n)
 {
     VtCell head;
     VtCell tail;
-    int width = sag_cluster_width(bytes, n);
+    int width = yew_cluster_width(bytes, n);
     size_t off;
 
     if (!v->alt) {
@@ -236,12 +236,12 @@ static void append_cluster(VtScreen *v, const u8 *bytes, size_t n)
         error_append(v, "grapheme exceeds byte limit", bytes, n);
         return;
     }
-    joined = sag_xmalloc(old_n + n);
+    joined = yew_xmalloc(old_n + n);
     if (old_n != 0u)
         memcpy(joined, old, old_n);
     memcpy(joined + old_n, bytes, n);
     old_width = head->w;
-    width = sag_cluster_width(joined, old_n + n);
+    width = yew_cluster_width(joined, old_n + n);
     if (width == 2 && old_width == 1) {
         size_t tail_off;
         VtCell tail;
@@ -271,11 +271,11 @@ static void append_cluster(VtScreen *v, const u8 *bytes, size_t n)
 
 static void text_cp(VtScreen *v, u32 cp)
 {
-    u8 bytes[SAG_UTF8_MAX];
-    size_t n = sag_utf8_encode(cp, bytes);
+    u8 bytes[YEW_UTF8_MAX];
+    size_t n = yew_utf8_encode(cp, bytes);
     bool boundary;
 
-    if (sag_utf8_is_escape(cp)) {
+    if (yew_utf8_is_escape(cp)) {
         error_append(v, "invalid UTF-8", bytes, n);
         text_reset(v);
         return;
@@ -287,7 +287,7 @@ static void text_cp(VtScreen *v, u32 cp)
             error_append(v, "write to primary screen", bytes, n);
         return;
     }
-    boundary = sag_gb_boundary(&v->gb, cp);
+    boundary = yew_gb_boundary(&v->gb, cp);
     if (boundary)
         write_cluster_start(v, bytes, n);
     else
@@ -297,7 +297,7 @@ static void text_cp(VtScreen *v, u32 cp)
 static void flush_incomplete_utf8(VtScreen *v)
 {
     u8 i;
-    u8 n = sag_utf8_finish(&v->u8dec);
+    u8 n = yew_utf8_finish(&v->u8dec);
 
     for (i = 0u; i < n; i++)
         text_cp(v, v->u8dec.out[i]);
@@ -306,7 +306,7 @@ static void flush_incomplete_utf8(VtScreen *v)
 static void text_byte(VtScreen *v, u8 byte)
 {
     u8 i;
-    u8 n = sag_utf8_push(&v->u8dec, byte);
+    u8 n = yew_utf8_push(&v->u8dec, byte);
 
     for (i = 0u; i < n; i++)
         text_cp(v, v->u8dec.out[i]);
@@ -345,7 +345,7 @@ static bool single_param(const u8 *s, size_t n, unsigned fallback,
 
 static void probe_record(VtScreen *v, u8 probe)
 {
-    if (v->nprobes < SAG_ARRAY_LEN(v->probe_order))
+    if (v->nprobes < YEW_ARRAY_LEN(v->probe_order))
         v->probe_order[v->nprobes++] = probe;
     v->probes |= probe;
 }
@@ -373,8 +373,8 @@ static bool parse_sgr(VtScreen *v, const u8 *s, size_t n)
     size_t np = 0u;
     size_t start = 0u;
     size_t i;
-    SagColor fg = v->fg;
-    SagColor bg = v->bg;
+    YewColor fg = v->fg;
+    YewColor bg = v->bg;
     u16 attrs = v->attrs;
 
     if (n == 0u)
@@ -382,7 +382,7 @@ static bool parse_sgr(VtScreen *v, const u8 *s, size_t n)
     for (i = 0u; i <= n && n != 0u; i++) {
         if (i != n && s[i] != ';')
             continue;
-        if (np >= SAG_ARRAY_LEN(p))
+        if (np >= YEW_ARRAY_LEN(p))
             return false;
         if (i == start)
             p[np++] = 0u;
@@ -397,45 +397,45 @@ static bool parse_sgr(VtScreen *v, const u8 *s, size_t n)
 
         if (x == 0u) {
             fg = default_color(); bg = default_color(); attrs = 0u;
-        } else if (x == 1u) attrs |= SAG_ATTR_BOLD;
-        else if (x == 2u) attrs |= SAG_ATTR_DIM;
-        else if (x == 3u) attrs |= SAG_ATTR_ITALIC;
+        } else if (x == 1u) attrs |= YEW_ATTR_BOLD;
+        else if (x == 2u) attrs |= YEW_ATTR_DIM;
+        else if (x == 3u) attrs |= YEW_ATTR_ITALIC;
         else if (x == 4u) {
-            attrs &= (u16)~SAG_ATTR_UNDERCURL; attrs |= SAG_ATTR_UNDERLINE;
+            attrs &= (u16)~YEW_ATTR_UNDERCURL; attrs |= YEW_ATTR_UNDERLINE;
         } else if (x == 0x403u) {
-            attrs &= (u16)~SAG_ATTR_UNDERLINE; attrs |= SAG_ATTR_UNDERCURL;
-        } else if (x == 5u) attrs |= SAG_ATTR_BLINK;
-        else if (x == 7u) attrs |= SAG_ATTR_REVERSE;
-        else if (x == 8u) attrs |= SAG_ATTR_CONCEAL;
-        else if (x == 9u) attrs |= SAG_ATTR_STRIKE;
-        else if (x == 53u) attrs |= SAG_ATTR_OVERLINE;
-        else if (x == 22u) attrs &= (u16)~(SAG_ATTR_BOLD | SAG_ATTR_DIM);
-        else if (x == 23u) attrs &= (u16)~SAG_ATTR_ITALIC;
-        else if (x == 24u) attrs &= (u16)~(SAG_ATTR_UNDERLINE | SAG_ATTR_UNDERCURL);
-        else if (x == 25u) attrs &= (u16)~SAG_ATTR_BLINK;
-        else if (x == 27u) attrs &= (u16)~SAG_ATTR_REVERSE;
-        else if (x == 28u) attrs &= (u16)~SAG_ATTR_CONCEAL;
-        else if (x == 29u) attrs &= (u16)~SAG_ATTR_STRIKE;
-        else if (x == 55u) attrs &= (u16)~SAG_ATTR_OVERLINE;
+            attrs &= (u16)~YEW_ATTR_UNDERLINE; attrs |= YEW_ATTR_UNDERCURL;
+        } else if (x == 5u) attrs |= YEW_ATTR_BLINK;
+        else if (x == 7u) attrs |= YEW_ATTR_REVERSE;
+        else if (x == 8u) attrs |= YEW_ATTR_CONCEAL;
+        else if (x == 9u) attrs |= YEW_ATTR_STRIKE;
+        else if (x == 53u) attrs |= YEW_ATTR_OVERLINE;
+        else if (x == 22u) attrs &= (u16)~(YEW_ATTR_BOLD | YEW_ATTR_DIM);
+        else if (x == 23u) attrs &= (u16)~YEW_ATTR_ITALIC;
+        else if (x == 24u) attrs &= (u16)~(YEW_ATTR_UNDERLINE | YEW_ATTR_UNDERCURL);
+        else if (x == 25u) attrs &= (u16)~YEW_ATTR_BLINK;
+        else if (x == 27u) attrs &= (u16)~YEW_ATTR_REVERSE;
+        else if (x == 28u) attrs &= (u16)~YEW_ATTR_CONCEAL;
+        else if (x == 29u) attrs &= (u16)~YEW_ATTR_STRIKE;
+        else if (x == 55u) attrs &= (u16)~YEW_ATTR_OVERLINE;
         else if (x >= 30u && x <= 37u)
-            fg = (SagColor){SAG_COLOR_INDEXED, (u8)(x - 30u), 0u, 0u};
+            fg = (YewColor){YEW_COLOR_INDEXED, (u8)(x - 30u), 0u, 0u};
         else if (x >= 90u && x <= 97u)
-            fg = (SagColor){SAG_COLOR_INDEXED, (u8)(x - 82u), 0u, 0u};
+            fg = (YewColor){YEW_COLOR_INDEXED, (u8)(x - 82u), 0u, 0u};
         else if (x >= 40u && x <= 47u)
-            bg = (SagColor){SAG_COLOR_INDEXED, (u8)(x - 40u), 0u, 0u};
+            bg = (YewColor){YEW_COLOR_INDEXED, (u8)(x - 40u), 0u, 0u};
         else if (x >= 100u && x <= 107u)
-            bg = (SagColor){SAG_COLOR_INDEXED, (u8)(x - 92u), 0u, 0u};
+            bg = (YewColor){YEW_COLOR_INDEXED, (u8)(x - 92u), 0u, 0u};
         else if (x == 39u) fg = default_color();
         else if (x == 49u) bg = default_color();
         else if ((x == 38u || x == 48u) && i + 2u < np && p[i + 1u] == 5u &&
                  p[i + 2u] <= 255u) {
-            SagColor color = {SAG_COLOR_INDEXED, (u8)p[i + 2u], 0u, 0u};
+            YewColor color = {YEW_COLOR_INDEXED, (u8)p[i + 2u], 0u, 0u};
             if (x == 38u) fg = color; else bg = color;
             i += 2u;
         } else if ((x == 38u || x == 48u) && i + 4u < np && p[i + 1u] == 2u &&
                    p[i + 2u] <= 255u && p[i + 3u] <= 255u &&
                    p[i + 4u] <= 255u) {
-            SagColor color = {SAG_COLOR_RGB, (u8)p[i + 2u],
+            YewColor color = {YEW_COLOR_RGB, (u8)p[i + 2u],
                               (u8)p[i + 3u], (u8)p[i + 4u]};
             if (x == 38u) fg = color; else bg = color;
             i += 4u;
@@ -520,7 +520,7 @@ static void csi_dispatch(VtScreen *v)
         }
     } else if (final == 'u' && nbody >= 2u && body[0] == '>' &&
                parse_uint(body + 1u, nbody - 1u, &value)) {
-        if (v->ksp >= (int)SAG_ARRAY_LEN(v->kitty))
+        if (v->ksp >= (int)YEW_ARRAY_LEN(v->kitty))
             error_append(v, "kitty stack overflow", v->seq, v->nseq);
         else
             v->kitty[v->ksp++] = value;
@@ -702,8 +702,8 @@ void vt_init(VtScreen *v, int rows, int cols)
     bytebuf_init(&v->replies);
     bytebuf_init(&v->glyphs);
     bytebuf_init(&v->primary);
-    sag_utf8_dec_init(&v->u8dec);
-    sag_gb_init(&v->gb);
+    yew_utf8_dec_init(&v->u8dec);
+    yew_gb_init(&v->gb);
     v->profile = VT_PROFILE_MODERN;
     v->cur_vis = true;
     vt_resize(v, rows, cols);
@@ -736,9 +736,9 @@ void vt_resize(VtScreen *v, int rows, int cols)
 
     if (v == NULL || rows <= 0 || cols <= 0)
         return;
-    cells = sag_xcalloc((size_t)rows * (size_t)cols, sizeof(*cells));
-    glyph_off = sag_xcalloc((size_t)rows * (size_t)cols, sizeof(*glyph_off));
-    glyph_len = sag_xcalloc((size_t)rows * (size_t)cols, sizeof(*glyph_len));
+    cells = yew_xcalloc((size_t)rows * (size_t)cols, sizeof(*cells));
+    glyph_off = yew_xcalloc((size_t)rows * (size_t)cols, sizeof(*glyph_off));
+    glyph_len = yew_xcalloc((size_t)rows * (size_t)cols, sizeof(*glyph_len));
     for (r = 0; r < rows; r++)
         for (c = 0; c < cols; c++)
             cells[(size_t)r * (size_t)cols + (size_t)c] = blank;
@@ -850,7 +850,7 @@ const u8 *vt_cell_bytes(const VtScreen *v, const VtCell *cell, size_t *len)
 }
 
 bool vt_set_cell(VtScreen *v, int row, int col, const u8 *bytes, size_t n,
-                 SagColor fg, SagColor bg, u16 attrs, u8 width)
+                 YewColor fg, YewColor bg, u16 attrs, u8 width)
 {
     VtCell cell;
     size_t off;

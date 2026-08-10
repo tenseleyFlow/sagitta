@@ -26,21 +26,21 @@
 
 static bool is_wheel(u8 button)
 {
-    return button == (u8)SAG_MB_WHEEL_UP ||
-           button == (u8)SAG_MB_WHEEL_DOWN ||
-           button == (u8)SAG_MB_WHEEL_LEFT ||
-           button == (u8)SAG_MB_WHEEL_RIGHT;
+    return button == (u8)YEW_MB_WHEEL_UP ||
+           button == (u8)YEW_MB_WHEEL_DOWN ||
+           button == (u8)YEW_MB_WHEEL_LEFT ||
+           button == (u8)YEW_MB_WHEEL_RIGHT;
 }
 
 static i32 wheel_dir(u8 button)
 {
-    return (button == (u8)SAG_MB_WHEEL_UP ||
-            button == (u8)SAG_MB_WHEEL_LEFT)
+    return (button == (u8)YEW_MB_WHEEL_UP ||
+            button == (u8)YEW_MB_WHEEL_LEFT)
                ? -1
                : 1;
 }
 
-void sag_mouse_init(MouseState *m)
+void yew_mouse_init(MouseState *m)
 {
     if (m == NULL)
         return;
@@ -64,16 +64,16 @@ static void gesture_reset(MouseState *m)
     u16 last_y = m->last_click_y;
     u8 clicks = m->click_n;
 
-    sag_mouse_init(m);
+    yew_mouse_init(m);
     m->last_click_ms = last_ms;
     m->last_click_x = last_x;
     m->last_click_y = last_y;
     m->click_n = clicks;
 }
 
-bool sag_mouse_gesture_active(const Ed *ed)
+bool yew_mouse_gesture_active(const Ed *ed)
 {
-    return ed != NULL && ed->mouse.phase != SAG_MP_IDLE;
+    return ed != NULL && ed->mouse.phase != YEW_MP_IDLE;
 }
 
 /* ---------------------------------------------------------------- */
@@ -81,7 +81,7 @@ bool sag_mouse_gesture_active(const Ed *ed)
 /* ---------------------------------------------------------------- */
 
 /*
- * Gated on cmdline.active because SAG_REGION_BLOCK is not the menu's
+ * Gated on cmdline.active because YEW_REGION_BLOCK is not the menu's
  * alone — Sprint 24's group picker registers one over its own rectangle
  * for the same swallow-the-gap reason.  The two overlays are never open
  * at once, so the prompt's own state is what disambiguates them.
@@ -89,32 +89,32 @@ bool sag_mouse_gesture_active(const Ed *ed)
  * Sprint 27 moved this out of ed.c: DoD 2 is that no mouse event
  * becomes an action anywhere but this file.
  */
-bool sag_mouse_claimed_by_menu(Ed *ed, Key key)
+bool yew_mouse_claimed_by_menu(Ed *ed, Key key)
 {
     Region hit;
 
-    if (ed == NULL || key.kind != (u16)SAG_EV_MOUSE || !ed->cmdline.active)
+    if (ed == NULL || key.kind != (u16)YEW_EV_MOUSE || !ed->cmdline.active)
         return false;
-    hit = sag_region_hit(key.col, key.row);
-    if (hit.kind != SAG_REGION_MENU_ROW && hit.kind != SAG_REGION_BLOCK)
+    hit = yew_region_hit(key.col, key.row);
+    if (hit.kind != YEW_REGION_MENU_ROW && hit.kind != YEW_REGION_BLOCK)
         return false;
-    if (key.button == (u8)SAG_MB_WHEEL_UP ||
-        key.button == (u8)SAG_MB_WHEEL_DOWN) {
+    if (key.button == (u8)YEW_MB_WHEEL_UP ||
+        key.button == (u8)YEW_MB_WHEEL_DOWN) {
         /* Wheeling over the menu scrolls the LIST and deliberately does
          * not move the selection: looking is not choosing. */
-        (void)sag_cmdline_menu_scroll(
-            ed, key.button == (u8)SAG_MB_WHEEL_UP ? -SAG_WHEEL_ROWS
-                                                  : SAG_WHEEL_ROWS);
+        (void)yew_cmdline_menu_scroll(
+            ed, key.button == (u8)YEW_MB_WHEEL_UP ? -YEW_WHEEL_ROWS
+                                                  : YEW_WHEEL_ROWS);
         return true;
     }
-    if (key.button != (u8)SAG_MB_LEFT)
+    if (key.button != (u8)YEW_MB_LEFT)
         return false;
     /* Swallow the release of a press we handled, so it cannot fall
      * through to whatever is underneath. */
-    if (key.ev != SAG_KEY_PRESS)
+    if (key.ev != YEW_KEY_PRESS)
         return true;
-    if (hit.kind == SAG_REGION_MENU_ROW)
-        (void)sag_cmdline_menu_click(ed, hit.payload);
+    if (hit.kind == YEW_REGION_MENU_ROW)
+        (void)yew_cmdline_menu_click(ed, hit.payload);
     /* A BLOCK hit is inert by construction: it exists so a click on a
      * gap in the menu does not land in the pane underneath it. */
     return true;
@@ -147,10 +147,10 @@ static u64 hscroll_limit(Win *w)
         Span span;
         CCol end;
 
-        if (!sag_vp_line_of_row(w, row, &line, &sub))
+        if (!yew_vp_line_of_row(w, row, &line, &sub))
             break;
-        span = sag_textbuf_line_span(tb, line);
-        end = sag_off_to_ccol(tb, span, BYTEOFF(span.hi), SAG_VP_TABWIDTH);
+        span = yew_textbuf_line_span(tb, line);
+        end = yew_off_to_ccol(tb, span, BYTEOFF(span.hi), YEW_VP_TABWIDTH);
         if (end.v > widest)
             widest = end.v;
     }
@@ -192,24 +192,24 @@ static void wheel_horizontal(Win *w, i32 cells)
  * comment describes it rather than spelling it.  That call drags the
  * viewport back around the cursor, which is exactly where it already
  * was; after a wheel it would make an unfocused pane appear not to
- * scroll at all, and a focused one snap back.  sag_vp_scroll already
+ * scroll at all, and a focused one snap back.  yew_vp_scroll already
  * clamps, which is all a wheel needs.  Scrolloff resumes at the next
  * cursor motion, as always.
  */
 static void wheel_pane(Ed *ed, const Region *hit, const Key *k)
 {
-    Pane *leaf = sag_pane_leaf_by_index(ed, hit->payload);
+    Pane *leaf = yew_pane_leaf_by_index(ed, hit->payload);
     Win *w = leaf != NULL ? leaf->win : NULL;
     i32 dir = wheel_dir(k->button);
 
     if (w == NULL || w->buf == NULL || w->buf->tb == NULL)
         return;
-    if ((k->mods & (u16)SAG_MOD_SHIFT) != 0U ||
-        k->button == (u8)SAG_MB_WHEEL_LEFT ||
-        k->button == (u8)SAG_MB_WHEEL_RIGHT)
-        wheel_horizontal(w, dir * SAG_WHEEL_COLS);
+    if ((k->mods & (u16)YEW_MOD_SHIFT) != 0U ||
+        k->button == (u8)YEW_MB_WHEEL_LEFT ||
+        k->button == (u8)YEW_MB_WHEEL_RIGHT)
+        wheel_horizontal(w, dir * YEW_WHEEL_COLS);
     else
-        sag_vp_scroll(w, dir * SAG_WHEEL_ROWS);
+        yew_vp_scroll(w, dir * YEW_WHEEL_ROWS);
     ed->full_damage = true;
 }
 
@@ -228,7 +228,7 @@ static void strip_scroll(Ed *ed, bool row2, i32 delta)
     int to = *scroll + delta;
 
     if (row2)
-        limit = sag_group_member_count(ed, sag_active_group_id(ed));
+        limit = yew_group_member_count(ed, yew_active_group_id(ed));
     if (to < 0)
         to = 0;
     if (to >= limit)
@@ -248,39 +248,39 @@ static void mouse_wheel(Ed *ed, const Key *k)
      * font-size gesture, and stealing it would fight the host
      * application over a key the user does not think of as ours.
      */
-    if ((k->mods & (u16)SAG_MOD_CTRL) != 0U)
+    if ((k->mods & (u16)YEW_MOD_CTRL) != 0U)
         return;
-    if (sag_mouse_claimed_by_menu(ed, *k))
+    if (yew_mouse_claimed_by_menu(ed, *k))
         return;
-    hit = sag_region_hit(k->col, k->row);
+    hit = yew_region_hit(k->col, k->row);
     switch (hit.kind) {
-    case SAG_REGION_PANE:
+    case YEW_REGION_PANE:
         wheel_pane(ed, &hit, k);
         break;
-    case SAG_REGION_TAB:
+    case YEW_REGION_TAB:
         strip_scroll(ed, region_is_member_row(ed, &hit), wheel_dir(k->button));
         break;
-    case SAG_REGION_TAB_SCROLL:
+    case YEW_REGION_TAB_SCROLL:
         strip_scroll(ed, hit.payload == 2 || hit.payload == -2,
                      wheel_dir(k->button));
         break;
-    case SAG_REGION_PICK_ROW:
-        sag_picker_scroll(ed, wheel_dir(k->button) * SAG_WHEEL_ROWS);
+    case YEW_REGION_PICK_ROW:
+        yew_picker_scroll(ed, wheel_dir(k->button) * YEW_WHEEL_ROWS);
         break;
-    case SAG_REGION_GP_ROW:
-    case SAG_REGION_GP_NAME:
-        sag_gp_scroll(ed, wheel_dir(k->button) * SAG_WHEEL_ROWS);
+    case YEW_REGION_GP_ROW:
+    case YEW_REGION_GP_NAME:
+        yew_gp_scroll(ed, wheel_dir(k->button) * YEW_WHEEL_ROWS);
         break;
     /*
      * A wheel over a pane BORDER, a context menu, or a modal's own
      * BLOCK does nothing.  Swallowed rather than passed through: the
      * whole point of BLOCK is that the document underneath is inert.
      */
-    case SAG_REGION_PANE_BORDER:
-    case SAG_REGION_CTX_ROW:
-    case SAG_REGION_BLOCK:
-    case SAG_REGION_MENU_ROW:
-    case SAG_REGION_NONE:
+    case YEW_REGION_PANE_BORDER:
+    case YEW_REGION_CTX_ROW:
+    case YEW_REGION_BLOCK:
+    case YEW_REGION_MENU_ROW:
+    case YEW_REGION_NONE:
     default:
         break;
     }
@@ -316,58 +316,58 @@ static Rect menu_allowed(const Ed *ed)
     return (Rect){0U, 0U, ed->grid.cols, rows};
 }
 
-bool sag_mouse_open_tab_menu(Ed *ed, u32 tab_id, u16 x, u16 y)
+bool yew_mouse_open_tab_menu(Ed *ed, u32 tab_id, u16 x, u16 y)
 {
-    int idx = sag_tab_index_of_id(ed, tab_id);
-    Tab *t = sag_tab_at(ed, idx);
+    int idx = yew_tab_index_of_id(ed, tab_id);
+    Tab *t = yew_tab_at(ed, idx);
 
     if (t == NULL)
         return false;
-    sag_ctx_begin((u32)SAG_CTX_KIND_TAB);
+    yew_ctx_begin((u32)YEW_CTX_KIND_TAB);
     /*
      * The target, captured NOW: the tab_id and the canonical path.
      * Every row re-finds the tab from the id when it is invoked,
      * because the strip can scroll and tabs can close while the menu is
      * up — and then the entry at those cells is a different file.
      */
-    sag_ctx_target(tab_id, t->path);
-    sag_ctx_item("Close Tab", "C-w", CTXA_TAB_CLOSE,
-                 sag_tab_count(ed) > 1U);
+    yew_ctx_target(tab_id, t->path);
+    yew_ctx_item("Close Tab", "C-w", CTXA_TAB_CLOSE,
+                 yew_tab_count(ed) > 1U);
     /* Disabled rows are GREYED, never hidden, so the menu keeps its
      * shape and a row does not move under the pointer between one
      * right-click and the next. */
-    sag_ctx_item("Close Other Tabs", NULL, CTXA_TAB_CLOSE_OTHERS,
-                 sag_tab_count(ed) > 1U);
-    sag_ctx_sep();
-    sag_ctx_item("Copy Path", NULL, CTXA_TAB_COPY_PATH, t->path != NULL);
-    sag_ctx_item("Remove from Group", NULL, CTXA_TAB_LEAVE_GROUP,
+    yew_ctx_item("Close Other Tabs", NULL, CTXA_TAB_CLOSE_OTHERS,
+                 yew_tab_count(ed) > 1U);
+    yew_ctx_sep();
+    yew_ctx_item("Copy Path", NULL, CTXA_TAB_COPY_PATH, t->path != NULL);
+    yew_ctx_item("Remove from Group", NULL, CTXA_TAB_LEAVE_GROUP,
                  t->group_id != 0U);
-    return sag_ctx_show(x, y, menu_allowed(ed));
+    return yew_ctx_show(x, y, menu_allowed(ed));
 }
 
-bool sag_mouse_open_group_menu(Ed *ed, u32 gid, u16 x, u16 y)
+bool yew_mouse_open_group_menu(Ed *ed, u32 gid, u16 x, u16 y)
 {
-    if (sag_group_at(ed, gid) == NULL)
+    if (yew_group_at(ed, gid) == NULL)
         return false;
-    sag_ctx_begin((u32)SAG_CTX_KIND_GROUP);
-    sag_ctx_target(gid, NULL);
-    sag_ctx_item("Edit Group...", NULL, CTXA_GROUP_EDIT, true);
-    sag_ctx_item("Rename Group...", NULL, CTXA_GROUP_RENAME, true);
-    sag_ctx_sep();
-    sag_ctx_item("Dissolve Group", NULL, CTXA_GROUP_DISSOLVE, true);
-    return sag_ctx_show(x, y, menu_allowed(ed));
+    yew_ctx_begin((u32)YEW_CTX_KIND_GROUP);
+    yew_ctx_target(gid, NULL);
+    yew_ctx_item("Edit Group...", NULL, CTXA_GROUP_EDIT, true);
+    yew_ctx_item("Rename Group...", NULL, CTXA_GROUP_RENAME, true);
+    yew_ctx_sep();
+    yew_ctx_item("Dissolve Group", NULL, CTXA_GROUP_DISSOLVE, true);
+    return yew_ctx_show(x, y, menu_allowed(ed));
 }
 
 static void invoke_named(Ed *ed, const char *name)
 {
     CmdCtx cx = {0};
-    CmdId id = sag_cmd_lookup(name, strlen(name));
+    CmdId id = yew_cmd_lookup(name, strlen(name));
 
     cx.ed = ed;
     cx.win = ed->win;
     cx.count = 1U;
-    cx.source = SAG_SRC_KEY;
-    (void)sag_ed_invoke(ed, id, &cx);
+    cx.source = YEW_SRC_KEY;
+    (void)yew_ed_invoke(ed, id, &cx);
 }
 
 /*
@@ -380,14 +380,14 @@ static void invoke_named(Ed *ed, const char *name)
  */
 static void apply_menu_action(Ed *ed)
 {
-    u32 action = sag_ctx_take();
-    u32 kind = sag_ctx_kind();
-    u32 target = sag_ctx_target_id();
+    u32 action = yew_ctx_take();
+    u32 kind = yew_ctx_kind();
+    u32 target = yew_ctx_target_id();
 
     if (action == CTXA_NONE)
         return;
-    sag_region_freeze(true);
-    if (kind == (u32)SAG_CTX_KIND_TAB) {
+    yew_region_freeze(true);
+    if (kind == (u32)YEW_CTX_KIND_TAB) {
         /*
          * The target becomes active first, resolved from its ID.  A
          * right-click on a tab is an act of pointing at it, so acting
@@ -395,10 +395,10 @@ static void apply_menu_action(Ed *ed)
          * be the ordinary registry commands rather than a second
          * implementation that takes a tab argument.
          */
-        int idx = sag_tab_index_of_id(ed, target);
+        int idx = yew_tab_index_of_id(ed, target);
 
         if (idx >= 0) {
-            sag_tab_switch(ed, idx);
+            yew_tab_switch(ed, idx);
             switch (action) {
             case CTXA_TAB_CLOSE:
                 invoke_named(ed, "ed.tab.close");
@@ -416,11 +416,11 @@ static void apply_menu_action(Ed *ed)
                 break;
             }
         }
-    } else if (kind == (u32)SAG_CTX_KIND_GROUP) {
-        u32 was = sag_active_group_id(ed);
+    } else if (kind == (u32)YEW_CTX_KIND_GROUP) {
+        u32 was = yew_active_group_id(ed);
 
         if (was != target)
-            sag_group_enter(ed, target);
+            yew_group_enter(ed, target);
         switch (action) {
         case CTXA_GROUP_EDIT:
             invoke_named(ed, "ed.group.edit");
@@ -435,28 +435,28 @@ static void apply_menu_action(Ed *ed)
             break;
         }
     }
-    sag_region_freeze(false);
+    yew_region_freeze(false);
     ed->layout_dirty = true;
     ed->full_damage = true;
 }
 
 /* The menu is a keymap layer: it takes the key before any mode does,
  * and swallows what it does not use. */
-bool sag_mouse_menu_key(Ed *ed, const Key *k)
+bool yew_mouse_menu_key(Ed *ed, const Key *k)
 {
-    if (ed == NULL || !sag_ctx_active())
+    if (ed == NULL || !yew_ctx_active())
         return false;
-    if (!sag_ctx_key(k))
+    if (!yew_ctx_key(k))
         return false;
     apply_menu_action(ed);
     ed->full_damage = true;
     return true;
 }
 
-void sag_mouse_menu_draw(Ed *ed)
+void yew_mouse_menu_draw(Ed *ed)
 {
     if (ed != NULL)
-        sag_ctx_draw(&ed->grid);
+        yew_ctx_draw(&ed->grid);
 }
 
 /* ---------------------------------------------------------------- */
@@ -471,7 +471,7 @@ void sag_mouse_menu_draw(Ed *ed)
  * WHY THE ENGINES AND NOT A LOCAL SCAN: so the mouse and the keyboard
  * agree on what a word is.  A double-click that selects `foo` where
  * `W`+`H`+`→` selects `foo.bar` is a bug users cannot name and always
- * feel.  Routing through sag_unit_word.span also makes double-click
+ * feel.  Routing through yew_unit_word.span also makes double-click
  * correct for CJK (per-ideograph, WB999), ZWJ emoji, `don't`,
  * `1,000.50` and `foo_bar` FOR FREE, because Sprint 16 already fought
  * those battles and has the conformance corpus.
@@ -498,7 +498,7 @@ static u8 click_advance(Ed *ed, const Key *k)
 {
     MouseState *m = &ed->mouse;
     bool within = m->click_n != 0U &&
-                  ed->now_ms - m->last_click_ms < SAG_CLICK_MULTI_MS &&
+                  ed->now_ms - m->last_click_ms < YEW_CLICK_MULTI_MS &&
                   m->last_click_x == k->col && m->last_click_y == k->row;
 
     m->click_n = within ? (u8)(m->click_n % 3U + 1U) : 1U;
@@ -511,18 +511,18 @@ static u8 click_advance(Ed *ed, const Key *k)
 static void press_pane(Ed *ed, const Region *hit, const Key *k)
 {
     MouseState *m = &ed->mouse;
-    Pane *leaf = sag_pane_leaf_by_index(ed, hit->payload);
+    Pane *leaf = yew_pane_leaf_by_index(ed, hit->payload);
     Win *w;
     /* The SAME `alt` the keyboard's A-← / A-→ pass (s16 §1), so
      * Alt+double-click selects the whitespace-delimited WORD and
      * Alt+triple-click the whole display line. */
-    bool alt = (k->mods & (u16)SAG_MOD_ALT) != 0U;
+    bool alt = (k->mods & (u16)YEW_MOD_ALT) != 0U;
     u8 clicks = click_advance(ed, k);
     ByteOff at;
 
     if (leaf == NULL)
         return;
-    (void)sag_pane_click(ed, k->col, k->row);
+    (void)yew_pane_click(ed, k->col, k->row);
     w = leaf->win;
     if (w == NULL || w->buf == NULL || w->buf->tb == NULL ||
         w->cs.curs.len == 0U)
@@ -536,11 +536,11 @@ static void press_pane(Ed *ed, const Region *hit, const Key *k)
          * selection can never start one cluster away from where the
          * caret visibly landed.
          */
-        m->sel_unit = &sag_unit_char;
+        m->sel_unit = &yew_unit_char;
         m->sel_anchor_span = (Span){at.v, at.v};
         return;
     }
-    m->sel_unit = clicks == 2U ? &sag_unit_word : &sag_unit_line;
+    m->sel_unit = clicks == 2U ? &yew_unit_word : &yew_unit_line;
     m->sel_anchor_span = unit_span_at(w, m->sel_unit, at, alt);
     /*
      * H MODE WITH THE CORRESPONDING UNIT BORROWED — exactly the state
@@ -549,8 +549,8 @@ static void press_pane(Ed *ed, const Region *hit, const Key *k)
      * lift (s17) works, and the recorder (s35) sees ordinary commands
      * rather than a mouse-shaped side door.
      */
-    (void)sag_mode_enter_highlight(ed, clicks == 2U ? SAG_MODE_W
-                                                    : SAG_MODE_L,
+    (void)yew_mode_enter_highlight(ed, clicks == 2U ? YEW_MODE_W
+                                                    : YEW_MODE_L,
                                    false);
     {
         Cursor *c = &w->cs.curs.data[w->cs.primary];
@@ -571,12 +571,12 @@ static void press_pane(Ed *ed, const Region *hit, const Key *k)
  */
 static bool middle_paste_on;
 
-bool sag_mouse_middle_paste(void)
+bool yew_mouse_middle_paste(void)
 {
     return middle_paste_on;
 }
 
-void sag_mouse_set_middle_paste(bool on)
+void yew_mouse_set_middle_paste(bool on)
 {
     middle_paste_on = on;
 }
@@ -585,35 +585,35 @@ static void press_middle(Ed *ed, const Region *hit, const Key *k)
 {
     Pane *leaf;
 
-    if (!middle_paste_on || hit->kind != SAG_REGION_PANE)
+    if (!middle_paste_on || hit->kind != YEW_REGION_PANE)
         return;
-    leaf = sag_pane_leaf_by_index(ed, hit->payload);
+    leaf = yew_pane_leaf_by_index(ed, hit->payload);
     if (leaf == NULL || leaf->win == NULL)
         return;
     /* At the CLICK position, so the paste lands where the user pointed
      * rather than wherever the caret happened to be. */
-    (void)sag_pane_click(ed, k->col, k->row);
+    (void)yew_pane_click(ed, k->col, k->row);
     {
         /* ONE undo transaction, through Sprint 10's edit choke point,
          * so undo takes the whole paste back in a single step rather
          * than unpicking it line by line. */
-        EditCtx ec = sag_ed_edit_ctx(ed);
+        EditCtx ec = yew_ed_edit_ctx(ed);
 
-        (void)sag_reg_paste(&ed->regs, &ec, (u8)'"', false,
-                            SAG_VP_TABWIDTH);
-        sag_ed_finish_edit(ed, &ec);
+        (void)yew_reg_paste(&ed->regs, &ec, (u8)'"', false,
+                            YEW_VP_TABWIDTH);
+        yew_ed_finish_edit(ed, &ec);
     }
     ed->full_damage = true;
 }
 
 static void press_border(Ed *ed, const Region *hit)
 {
-    Pane *split = sag_pane_split_by_index(ed, hit->payload);
+    Pane *split = yew_pane_split_by_index(ed, hit->payload);
 
     if (split == NULL)
         return;
-    sag_pane_drag_begin(ed, split, ed->mouse.press_x, ed->mouse.press_y);
-    ed->mouse.phase = SAG_MP_DRAG_BORDER;
+    yew_pane_drag_begin(ed, split, ed->mouse.press_x, ed->mouse.press_y);
+    ed->mouse.phase = YEW_MP_DRAG_BORDER;
 }
 
 /*
@@ -624,12 +624,12 @@ static void press_border(Ed *ed, const Region *hit)
  */
 static void press_tab(Ed *ed, const Region *hit)
 {
-    ed->mouse.tab_count_at_press = sag_tab_count(ed);
+    ed->mouse.tab_count_at_press = yew_tab_count(ed);
     if (hit->payload < 0) {
         ed->mouse.drag_gid = (u32)(-hit->payload);
         ed->mouse.drag_tab_id = 0U;
     } else {
-        Tab *t = sag_tab_at(ed, hit->payload);
+        Tab *t = yew_tab_at(ed, hit->payload);
 
         ed->mouse.drag_gid = 0U;
         ed->mouse.drag_tab_id = t != NULL ? t->tab_id : 0U;
@@ -641,58 +641,58 @@ static void press_pick_row(Ed *ed, const Region *hit)
     /* Selecting is not accepting.  The accept happens at release, and
      * only when the release lands on the same row — a press that slid
      * off the row was a mis-aim, not a choice. */
-    sag_picker_select_payload(ed, hit->payload);
+    yew_picker_select_payload(ed, hit->payload);
 }
 
 static void mouse_press(Ed *ed, const Key *k)
 {
     MouseState *m = &ed->mouse;
-    Region hit = sag_region_hit(k->col, k->row);
+    Region hit = yew_region_hit(k->col, k->row);
 
-    if (k->button == (u8)SAG_MB_RIGHT) {
+    if (k->button == (u8)YEW_MB_RIGHT) {
         /*
          * §9: a right-click inside a pane is UNBOUND and does nothing.
          * The document context menu is post-1.0 and is named here so
          * nobody invents one; a stub menu would be worse than none.
          */
-        if (sag_ctx_active()) {
+        if (yew_ctx_active()) {
             /* A right-click anywhere closes an open menu — including on
              * the menu itself, which is how every menu everywhere
              * behaves. */
-            sag_ctx_close();
+            yew_ctx_close();
             ed->full_damage = true;
             return;
         }
-        if (hit.kind != SAG_REGION_TAB)
+        if (hit.kind != YEW_REGION_TAB)
             return;
         if (hit.payload < 0) {
-            (void)sag_mouse_open_group_menu(ed, (u32)(-hit.payload),
+            (void)yew_mouse_open_group_menu(ed, (u32)(-hit.payload),
                                             k->col, (u16)(k->row + 1U));
         } else {
-            Tab *t = sag_tab_at(ed, hit.payload);
+            Tab *t = yew_tab_at(ed, hit.payload);
 
             if (t != NULL) {
-                (void)sag_mouse_open_tab_menu(ed, t->tab_id, k->col,
+                (void)yew_mouse_open_tab_menu(ed, t->tab_id, k->col,
                                               (u16)(k->row + 1U));
             }
         }
         ed->full_damage = true;
         return;
     }
-    if (k->button == (u8)SAG_MB_MIDDLE) {
+    if (k->button == (u8)YEW_MB_MIDDLE) {
         press_middle(ed, &hit, k);
         return;
     }
-    if (k->button != (u8)SAG_MB_LEFT)
+    if (k->button != (u8)YEW_MB_LEFT)
         return;
-    if (sag_mouse_claimed_by_menu(ed, *k))
+    if (yew_mouse_claimed_by_menu(ed, *k))
         return;
 
     m->held = (u8)(1U << (k->button - 1U));
     m->press_x = k->col;
     m->press_y = k->row;
     m->press_rgn = hit; /* CAPTURED — see mouse.h */
-    m->phase = SAG_MP_ARMED;
+    m->phase = YEW_MP_ARMED;
     m->drag_tab_id = 0U;
     m->drag_gid = 0U;
     m->drag_to_slot = -1;
@@ -701,45 +701,45 @@ static void mouse_press(Ed *ed, const Key *k)
     m->dwell_since_ms = 0;
 
     switch (hit.kind) {
-    case SAG_REGION_PANE:
+    case YEW_REGION_PANE:
         press_pane(ed, &hit, k);
         break;
-    case SAG_REGION_PANE_BORDER:
+    case YEW_REGION_PANE_BORDER:
         press_border(ed, &hit);
         break;
-    case SAG_REGION_TAB:
+    case YEW_REGION_TAB:
         press_tab(ed, &hit);
         break;
-    case SAG_REGION_TAB_SCROLL:
+    case YEW_REGION_TAB_SCROLL:
         strip_scroll(ed, hit.payload == 2 || hit.payload == -2,
                      hit.payload < 0 ? -1 : 1);
         break;
-    case SAG_REGION_PICK_ROW:
+    case YEW_REGION_PICK_ROW:
         press_pick_row(ed, &hit);
         break;
-    case SAG_REGION_GP_ROW:
-    case SAG_REGION_GP_NAME:
-        if (sag_gp_click(ed, k->col, k->row))
-            sag_gp_apply(ed);
+    case YEW_REGION_GP_ROW:
+    case YEW_REGION_GP_NAME:
+        if (yew_gp_click(ed, k->col, k->row))
+            yew_gp_apply(ed);
         break;
-    case SAG_REGION_BLOCK:
+    case YEW_REGION_BLOCK:
         /* Swallowed by construction.  This is what makes a dialog modal
          * to the mouse without any dialog knowing the router exists. */
         break;
-    case SAG_REGION_CTX_ROW:
+    case YEW_REGION_CTX_ROW:
         /* Highlighting, not invoking: the action fires at release, and
          * only when the release lands on the same row. */
-        sag_ctx_hover(hit.payload);
+        yew_ctx_hover(hit.payload);
         ed->full_damage = true;
         break;
-    case SAG_REGION_MENU_ROW:
-    case SAG_REGION_NONE:
+    case YEW_REGION_MENU_ROW:
+    case YEW_REGION_NONE:
         /* A left-click outside an open menu closes it, and is consumed
          * doing so — the click that dismisses a menu must not also do
          * whatever is underneath. */
-        if (sag_ctx_active()) {
-            sag_ctx_close();
-            m->phase = SAG_MP_IDLE;
+        if (yew_ctx_active()) {
+            yew_ctx_close();
+            m->phase = YEW_MP_IDLE;
             m->held = 0U;
             ed->full_damage = true;
         }
@@ -761,7 +761,7 @@ static void mouse_press(Ed *ed, const Key *k)
 static void drag_select(Ed *ed, const Key *k)
 {
     MouseState *m = &ed->mouse;
-    Pane *leaf = sag_pane_leaf_by_index(ed, m->press_rgn.payload);
+    Pane *leaf = yew_pane_leaf_by_index(ed, m->press_rgn.payload);
     Win *w = leaf != NULL ? leaf->win : NULL;
     Cursor *c;
     Span head;
@@ -769,9 +769,9 @@ static void drag_select(Ed *ed, const Key *k)
     if (w == NULL || w->buf == NULL || w->buf->tb == NULL ||
         w->cs.curs.len == 0U)
         return;
-    sag_win_click_to_cursor(w, k->col, k->row);
+    yew_win_click_to_cursor(w, k->col, k->row);
     c = &w->cs.curs.data[w->cs.primary];
-    if (m->sel_unit == NULL || m->sel_unit == &sag_unit_char) {
+    if (m->sel_unit == NULL || m->sel_unit == &yew_unit_char) {
         /* click_to_cursor collapses the anchor onto the caret; the
          * drag's anchor is the press, so it is written back after. */
         c->anchor = BYTEOFF(m->sel_anchor_span.lo);
@@ -803,7 +803,7 @@ static void begin_drag(Ed *ed)
     MouseState *m = &ed->mouse;
 
     switch (m->press_rgn.kind) {
-    case SAG_REGION_PANE:
+    case YEW_REGION_PANE:
         /*
          * A drag in a pane is a selection, and a selection in this
          * editor IS H mode.  Entering it here rather than at press is
@@ -815,13 +815,13 @@ static void begin_drag(Ed *ed)
          * after a word double-click, which is exactly the feel §6
          * forbids.
          */
-        if (m->sel_unit == NULL || m->sel_unit == &sag_unit_char)
-            (void)sag_mode_enter_highlight(ed, SAG_MODE_I, false);
-        m->phase = SAG_MP_DRAG_SEL;
+        if (m->sel_unit == NULL || m->sel_unit == &yew_unit_char)
+            (void)yew_mode_enter_highlight(ed, YEW_MODE_I, false);
+        m->phase = YEW_MP_DRAG_SEL;
         break;
-    case SAG_REGION_TAB:
-        m->phase = m->press_rgn.payload < 0 ? SAG_MP_DRAG_GROUP
-                                            : SAG_MP_DRAG_TAB;
+    case YEW_REGION_TAB:
+        m->phase = m->press_rgn.payload < 0 ? YEW_MP_DRAG_GROUP
+                                            : YEW_MP_DRAG_TAB;
         break;
     default:
         /* Nothing else has a drag; the gesture stays armed and the
@@ -838,14 +838,14 @@ static void begin_drag(Ed *ed)
  * Resolved from the id, never from the press's index. */
 static u32 held_tab_group(Ed *ed)
 {
-    int idx = sag_tab_index_of_id(ed, ed->mouse.drag_tab_id);
-    Tab *t = sag_tab_at(ed, idx);
+    int idx = yew_tab_index_of_id(ed, ed->mouse.drag_tab_id);
+    Tab *t = yew_tab_at(ed, idx);
 
     return t != NULL ? t->group_id : 0U;
 }
 
 /*
- * PITFALL — the dwell target is not sag_region_hit.
+ * PITFALL — the dwell target is not yew_region_hit.
  *
  * The region table describes the PREVIEWED strip, where the held entry
  * has been moved under the pointer, so hit-testing would always answer
@@ -856,7 +856,7 @@ static u32 held_tab_group(Ed *ed)
  * Arming rather than opening: a drag that merely PASSES over a group on
  * its way somewhere else must not make that group's members flash open,
  * so the clock restarts every time the hovered group changes and the
- * open happens in sag_mouse_tick.
+ * open happens in yew_mouse_tick.
  */
 static void drag_dwell(Ed *ed, int slot)
 {
@@ -866,8 +866,8 @@ static void drag_dwell(Ed *ed, int slot)
 
     /* Only a TAB dwells into a group.  A group dragged into another
      * group is not a thing this model has — groups do not nest. */
-    if (m->phase == SAG_MP_DRAG_TAB && slot >= 0 &&
-        sag_strip_pre_payload(slot, &pre) && pre < 0)
+    if (m->phase == YEW_MP_DRAG_TAB && slot >= 0 &&
+        yew_strip_pre_payload(slot, &pre) && pre < 0)
         gid = (u32)(-pre);
     /* A tab never dwells into the group it is already a member of:
      * there is nothing to join, and opening the strip would offer a
@@ -891,11 +891,11 @@ static void drag_strip_motion(Ed *ed, const Key *k)
      * script — and the target the user aimed at no longer means what it
      * did.  Cancel outright rather than commit against a moved target.
      */
-    if (sag_tab_count(ed) != m->tab_count_at_press) {
-        sag_mouse_cancel(ed);
+    if (yew_tab_count(ed) != m->tab_count_at_press) {
+        yew_mouse_cancel(ed);
         return;
     }
-    slot = sag_strip_slot_at(k->col, k->row);
+    slot = yew_strip_slot_at(k->col, k->row);
     if (slot >= 0) {
         if (!m->drag_to_valid || m->drag_to_slot != slot || m->drag_to_tail) {
             m->drag_to_slot = slot;
@@ -903,9 +903,9 @@ static void drag_strip_motion(Ed *ed, const Key *k)
             m->drag_to_tail = false;
             ed->full_damage = true;
         }
-    } else if (sag_strip_slot_count() > 0 &&
+    } else if (yew_strip_slot_count() > 0 &&
                k->row == ed->tab_strip_rect.y &&
-               k->col >= sag_strip_tail_x()) {
+               k->col >= yew_strip_tail_x()) {
         /*
          * The blank tail past the last entry — row 1's, whatever row
          * the press came from: a member dragged UP out of row 2 aims at
@@ -913,7 +913,7 @@ static void drag_strip_motion(Ed *ed, const Key *k)
          * tail is a drop target.
          */
         if (!m->drag_to_tail) {
-            m->drag_to_slot = sag_strip_slot_count() - 1;
+            m->drag_to_slot = yew_strip_slot_count() - 1;
             m->drag_to_valid = true;
             m->drag_to_tail = true;
             ed->full_damage = true;
@@ -929,14 +929,14 @@ static int slot_to_tab_index(Ed *ed, int slot)
 {
     i32 pre = 0;
 
-    if (!sag_strip_pre_payload(slot, &pre))
+    if (!yew_strip_pre_payload(slot, &pre))
         return -1;
     if (pre >= 0)
         return (int)pre;
     {
-        int members[SAG_TAB_MAX];
-        int n = sag_group_members(ed, (u32)(-pre), members,
-                                  (int)SAG_ARRAY_LEN(members));
+        int members[YEW_TAB_MAX];
+        int n = yew_group_members(ed, (u32)(-pre), members,
+                                  (int)YEW_ARRAY_LEN(members));
         int lowest = -1;
         int i;
 
@@ -951,8 +951,8 @@ static int slot_to_tab_index(Ed *ed, int slot)
 /* Where a group's members begin in the tab array. */
 static int group_block_start(Ed *ed, u32 gid)
 {
-    int members[SAG_TAB_MAX];
-    int n = sag_group_members(ed, gid, members, (int)SAG_ARRAY_LEN(members));
+    int members[YEW_TAB_MAX];
+    int n = yew_group_members(ed, gid, members, (int)YEW_ARRAY_LEN(members));
     int lowest = -1;
     int i;
 
@@ -971,24 +971,24 @@ static int group_block_start(Ed *ed, u32 gid)
  */
 static void drop_into_group(Ed *ed, u32 gid, int pos)
 {
-    int tab_idx = sag_tab_index_of_id(ed, ed->mouse.drag_tab_id);
-    Tab *t = sag_tab_at(ed, tab_idx);
+    int tab_idx = yew_tab_index_of_id(ed, ed->mouse.drag_tab_id);
+    Tab *t = yew_tab_at(ed, tab_idx);
 
     if (t == NULL || gid == 0U)
         return;
     if (t->group_id != 0U)
-        sag_group_remove_member(ed, tab_idx); /* FIRST */
+        yew_group_remove_member(ed, tab_idx); /* FIRST */
     /* The removal can dissolve an emptied group and does not move
      * anything, so the index still names this tab. */
-    sag_group_add_member(ed, gid, tab_idx);
-    sag_group_set_ordinal(ed, tab_idx, pos); /* pos counts in the FINAL list */
+    yew_group_add_member(ed, gid, tab_idx);
+    yew_group_set_ordinal(ed, tab_idx, pos); /* pos counts in the FINAL list */
     {
         int start = group_block_start(ed, gid);
 
         if (start >= 0)
-            sag_group_reorder_block(ed, gid, start); /* keep contiguous */
+            yew_group_reorder_block(ed, gid, start); /* keep contiguous */
     }
-    sag_state_mark_dirty(ed);
+    yew_state_mark_dirty(ed);
 }
 
 /*
@@ -1007,12 +1007,12 @@ static bool drop_target_row2(Ed *ed, const Key *k, u32 *gid, int *pos)
         k->row != (u16)(ed->tab_strip_rect.y + 1U))
         return false;
     *gid = ed->mouse.preview_gid != 0U ? ed->mouse.preview_gid
-                                       : sag_active_group_id(ed);
+                                       : yew_active_group_id(ed);
     if (*gid == 0U)
         return false;
-    hit = sag_region_hit(k->col, k->row);
-    if (hit.kind == SAG_REGION_TAB && hit.payload >= 0) {
-        Tab *t = sag_tab_at(ed, hit.payload);
+    hit = yew_region_hit(k->col, k->row);
+    if (hit.kind == YEW_REGION_TAB && hit.payload >= 0) {
+        Tab *t = yew_tab_at(ed, hit.payload);
 
         if (t != NULL && t->group_id == *gid) {
             *pos = (int)t->group_ordinal;
@@ -1020,7 +1020,7 @@ static bool drop_target_row2(Ed *ed, const Key *k, u32 *gid, int *pos)
         }
     }
     /* The blank tail of row 2: append. */
-    *pos = sag_group_member_count(ed, *gid) + 1;
+    *pos = yew_group_member_count(ed, *gid) + 1;
     return true;
 }
 
@@ -1031,23 +1031,23 @@ static void drag_strip_drop(Ed *ed, const Key *k)
     int pos = 0;
     int to;
 
-    if (sag_tab_count(ed) != m->tab_count_at_press)
+    if (yew_tab_count(ed) != m->tab_count_at_press)
         return; /* cancelled; nothing was mutated on the way */
-    if (m->phase == SAG_MP_DRAG_TAB && drop_target_row2(ed, k, &gid, &pos)) {
+    if (m->phase == YEW_MP_DRAG_TAB && drop_target_row2(ed, k, &gid, &pos)) {
         drop_into_group(ed, gid, pos);
         ed->full_damage = true;
         return;
     }
     if (!m->drag_to_valid)
         return; /* released somewhere with no target: nothing changes */
-    to = m->drag_to_tail ? (int)sag_tab_count(ed) - 1
+    to = m->drag_to_tail ? (int)yew_tab_count(ed) - 1
                          : slot_to_tab_index(ed, m->drag_to_slot);
     if (to < 0)
         return;
-    if (m->phase == SAG_MP_DRAG_GROUP) {
-        sag_group_reorder_block(ed, m->drag_gid, to);
+    if (m->phase == YEW_MP_DRAG_GROUP) {
+        yew_group_reorder_block(ed, m->drag_gid, to);
     } else {
-        int from = sag_tab_index_of_id(ed, m->drag_tab_id);
+        int from = yew_tab_index_of_id(ed, m->drag_tab_id);
 
         if (from < 0)
             return;
@@ -1057,10 +1057,10 @@ static void drag_strip_drop(Ed *ed, const Key *k)
          * entry left to aim at.
          */
         if (m->drag_to_tail && held_tab_group(ed) != 0U)
-            sag_group_remove_member(ed, from);
-        sag_tab_reorder(ed, from, to);
+            yew_group_remove_member(ed, from);
+        yew_tab_reorder(ed, from, to);
     }
-    sag_state_mark_dirty(ed);
+    yew_state_mark_dirty(ed);
     ed->full_damage = true;
 }
 
@@ -1068,33 +1068,33 @@ static void mouse_motion(Ed *ed, const Key *k)
 {
     MouseState *m = &ed->mouse;
 
-    if (m->phase == SAG_MP_IDLE)
+    if (m->phase == YEW_MP_IDLE)
         return;
     m->at_x = k->col;
     m->at_y = k->row;
-    if (m->phase == SAG_MP_ARMED) {
+    if (m->phase == YEW_MP_ARMED) {
         /* The pointer has to leave the pressed CELL.  Cells are the
          * unit of everything here, so there is no pixel radius to
          * tune. */
         if (k->col == m->press_x && k->row == m->press_y)
             return;
         begin_drag(ed);
-        if (m->phase == SAG_MP_ARMED)
+        if (m->phase == YEW_MP_ARMED)
             return;
     }
     switch (m->phase) {
-    case SAG_MP_DRAG_BORDER:
-        sag_pane_drag_motion(ed, k->col, k->row);
+    case YEW_MP_DRAG_BORDER:
+        yew_pane_drag_motion(ed, k->col, k->row);
         break;
-    case SAG_MP_DRAG_SEL:
+    case YEW_MP_DRAG_SEL:
         drag_select(ed, k);
         break;
-    case SAG_MP_DRAG_TAB:
-    case SAG_MP_DRAG_GROUP:
+    case YEW_MP_DRAG_TAB:
+    case YEW_MP_DRAG_GROUP:
         drag_strip_motion(ed, k);
         break;
-    case SAG_MP_IDLE:
-    case SAG_MP_ARMED:
+    case YEW_MP_IDLE:
+    case YEW_MP_ARMED:
     default:
         break;
     }
@@ -1117,17 +1117,17 @@ static void click_tab(Ed *ed)
     MouseState *m = &ed->mouse;
 
     if (m->drag_gid != 0U) {
-        sag_group_note_position(ed);
+        yew_group_note_position(ed);
         /* An EXPLICIT entry resumes where the user left off, unlike a
          * mid-walk arrival which enters from the side it came from. */
-        sag_group_enter(ed, m->drag_gid);
+        yew_group_enter(ed, m->drag_gid);
         return;
     }
     if (m->drag_tab_id != 0U) {
-        int idx = sag_tab_index_of_id(ed, m->drag_tab_id);
+        int idx = yew_tab_index_of_id(ed, m->drag_tab_id);
 
         if (idx >= 0)
-            sag_tab_switch(ed, idx);
+            yew_tab_switch(ed, idx);
     }
 }
 
@@ -1136,48 +1136,48 @@ static void mouse_release(Ed *ed, const Key *k)
     MouseState *m = &ed->mouse;
     MousePhase phase = m->phase;
 
-    if (k->button != (u8)SAG_MB_LEFT)
+    if (k->button != (u8)YEW_MB_LEFT)
         return;
-    if (sag_mouse_claimed_by_menu(ed, *k)) {
+    if (yew_mouse_claimed_by_menu(ed, *k)) {
         gesture_reset(m);
         return;
     }
-    if (phase == SAG_MP_IDLE)
+    if (phase == YEW_MP_IDLE)
         return;
     switch (phase) {
-    case SAG_MP_DRAG_BORDER:
+    case YEW_MP_DRAG_BORDER:
         /* Cells become a ratio ONCE, here — a round-trip per motion
          * event accumulates float error and the border stutters against
          * the pointer (s22's pitfall). */
-        sag_pane_drag_end(ed);
+        yew_pane_drag_end(ed);
         break;
-    case SAG_MP_ARMED:
+    case YEW_MP_ARMED:
         switch (m->press_rgn.kind) {
-        case SAG_REGION_TAB:
+        case YEW_REGION_TAB:
             click_tab(ed);
             break;
-        case SAG_REGION_PICK_ROW:
+        case YEW_REGION_PICK_ROW:
             /*
              * Accept only when the release is in the SAME row.  A press
              * that slid onto a neighbour before coming up was a mis-aim
              * and opening the neighbour is the worst possible reading
              * of it.
              */
-            if (sag_region_hit(k->col, k->row).kind ==
-                    SAG_REGION_PICK_ROW &&
-                sag_region_hit(k->col, k->row).payload ==
+            if (yew_region_hit(k->col, k->row).kind ==
+                    YEW_REGION_PICK_ROW &&
+                yew_region_hit(k->col, k->row).payload ==
                     m->press_rgn.payload)
-                (void)sag_picker_accept(ed);
+                (void)yew_picker_accept(ed);
             break;
-        case SAG_REGION_CTX_ROW: {
-            Region up = sag_region_hit(k->col, k->row);
+        case YEW_REGION_CTX_ROW: {
+            Region up = yew_region_hit(k->col, k->row);
 
             /* Same row, or nothing: a press that slid onto a neighbour
              * before coming up was a mis-aim, and invoking the
              * neighbour is the worst possible reading of it. */
-            if (up.kind == SAG_REGION_CTX_ROW &&
+            if (up.kind == YEW_REGION_CTX_ROW &&
                 up.payload == m->press_rgn.payload) {
-                sag_ctx_invoke(up.payload);
+                yew_ctx_invoke(up.payload);
                 apply_menu_action(ed);
             }
             ed->full_damage = true;
@@ -1187,16 +1187,16 @@ static void mouse_release(Ed *ed, const Key *k)
             break;
         }
         break;
-    case SAG_MP_DRAG_SEL:
+    case YEW_MP_DRAG_SEL:
         /* The selection is already live; release only ends the
          * gesture.  H mode keeps it, which is what makes every H key,
          * the multi-cursor lift and the recorder work on it. */
         break;
-    case SAG_MP_DRAG_TAB:
-    case SAG_MP_DRAG_GROUP:
+    case YEW_MP_DRAG_TAB:
+    case YEW_MP_DRAG_GROUP:
         drag_strip_drop(ed, k);
         break;
-    case SAG_MP_IDLE:
+    case YEW_MP_IDLE:
     default:
         break;
     }
@@ -1214,7 +1214,7 @@ static void mouse_release(Ed *ed, const Key *k)
 /* Cancellation                                                     */
 /* ---------------------------------------------------------------- */
 
-void sag_mouse_cancel(Ed *ed)
+void yew_mouse_cancel(Ed *ed)
 {
     if (ed == NULL)
         return;
@@ -1225,10 +1225,10 @@ void sag_mouse_cancel(Ed *ed)
      */
     ed->mouse.click_n = 0U;
     ed->mouse.last_click_ms = 0;
-    if (ed->mouse.phase == SAG_MP_IDLE)
+    if (ed->mouse.phase == YEW_MP_IDLE)
         return;
-    if (ed->mouse.phase == SAG_MP_DRAG_BORDER)
-        sag_pane_drag_cancel(ed);
+    if (ed->mouse.phase == YEW_MP_DRAG_BORDER)
+        yew_pane_drag_cancel(ed);
     /*
      * A tab or group drag needs nothing undone: Tabs.v was never
      * touched.  That is the whole reason the preview is a picture and
@@ -1241,7 +1241,7 @@ void sag_mouse_cancel(Ed *ed)
     } else if (ed->mouse.drag_to_valid) {
         ed->full_damage = true;
     }
-    sag_mouse_init(&ed->mouse);
+    yew_mouse_init(&ed->mouse);
 }
 
 /* ---------------------------------------------------------------- */
@@ -1250,15 +1250,15 @@ void sag_mouse_cancel(Ed *ed)
 
 static bool drag_over_chevron(Ed *ed, i32 *delta)
 {
-    Region hit = sag_region_hit(ed->mouse.at_x, ed->mouse.at_y);
+    Region hit = yew_region_hit(ed->mouse.at_x, ed->mouse.at_y);
 
-    if (hit.kind != SAG_REGION_TAB_SCROLL)
+    if (hit.kind != YEW_REGION_TAB_SCROLL)
         return false;
     *delta = hit.payload < 0 ? -1 : 1;
     return true;
 }
 
-void sag_mouse_tick(Ed *ed, i64 now_ms)
+void yew_mouse_tick(Ed *ed, i64 now_ms)
 {
     MouseState *m;
     i32 delta = 0;
@@ -1266,11 +1266,11 @@ void sag_mouse_tick(Ed *ed, i64 now_ms)
     if (ed == NULL)
         return;
     m = &ed->mouse;
-    if (m->phase != SAG_MP_DRAG_TAB && m->phase != SAG_MP_DRAG_GROUP)
+    if (m->phase != YEW_MP_DRAG_TAB && m->phase != YEW_MP_DRAG_GROUP)
         return;
     ed->now_ms = now_ms;
     if (m->dwell_gid != 0U && m->preview_gid != m->dwell_gid &&
-        now_ms - m->dwell_since_ms >= SAG_DRAG_DWELL_MS) {
+        now_ms - m->dwell_since_ms >= YEW_DRAG_DWELL_MS) {
         m->preview_gid = m->dwell_gid;
         /* The strip grew a row, so this is a layout change and not a
          * repaint — the pane tree below it has to give the row back. */
@@ -1284,13 +1284,13 @@ void sag_mouse_tick(Ed *ed, i64 now_ms)
      * speed that depends on how the terminal batches its reports.
      */
     if (drag_over_chevron(ed, &delta) &&
-        now_ms - m->autoscroll_ms >= SAG_DRAG_SCROLL_MS) {
+        now_ms - m->autoscroll_ms >= YEW_DRAG_SCROLL_MS) {
         m->autoscroll_ms = now_ms;
         strip_scroll(ed, false, delta);
     }
 }
 
-i64 sag_mouse_deadline(const Ed *ed, i64 now_ms)
+i64 yew_mouse_deadline(const Ed *ed, i64 now_ms)
 {
     const MouseState *m;
     i64 next = -1;
@@ -1298,12 +1298,12 @@ i64 sag_mouse_deadline(const Ed *ed, i64 now_ms)
     if (ed == NULL)
         return -1;
     m = &ed->mouse;
-    if (m->phase != SAG_MP_DRAG_TAB && m->phase != SAG_MP_DRAG_GROUP)
+    if (m->phase != YEW_MP_DRAG_TAB && m->phase != YEW_MP_DRAG_GROUP)
         return -1;
     if (m->dwell_gid != 0U && m->preview_gid != m->dwell_gid)
-        next = m->dwell_since_ms + SAG_DRAG_DWELL_MS;
-    if (sag_region_hit(m->at_x, m->at_y).kind == SAG_REGION_TAB_SCROLL) {
-        i64 at = m->autoscroll_ms + SAG_DRAG_SCROLL_MS;
+        next = m->dwell_since_ms + YEW_DRAG_DWELL_MS;
+    if (yew_region_hit(m->at_x, m->at_y).kind == YEW_REGION_TAB_SCROLL) {
+        i64 at = m->autoscroll_ms + YEW_DRAG_SCROLL_MS;
 
         if (next < 0 || at < next)
             next = at;
@@ -1313,12 +1313,12 @@ i64 sag_mouse_deadline(const Ed *ed, i64 now_ms)
     return next <= now_ms ? 0 : next - now_ms;
 }
 
-bool sag_mouse_drag_preview(const Ed *ed, i32 *payload, int *to_slot)
+bool yew_mouse_drag_preview(const Ed *ed, i32 *payload, int *to_slot)
 {
     if (ed == NULL || payload == NULL || to_slot == NULL)
         return false;
-    if (ed->mouse.phase != SAG_MP_DRAG_TAB &&
-        ed->mouse.phase != SAG_MP_DRAG_GROUP)
+    if (ed->mouse.phase != YEW_MP_DRAG_TAB &&
+        ed->mouse.phase != YEW_MP_DRAG_GROUP)
         return false;
     if (!ed->mouse.drag_to_valid)
         return false;
@@ -1327,7 +1327,7 @@ bool sag_mouse_drag_preview(const Ed *ed, i32 *payload, int *to_slot)
     return true;
 }
 
-u32 sag_mouse_preview_group(const Ed *ed)
+u32 yew_mouse_preview_group(const Ed *ed)
 {
     return ed != NULL ? ed->mouse.preview_gid : 0U;
 }
@@ -1336,9 +1336,9 @@ u32 sag_mouse_preview_group(const Ed *ed)
 /* THE entry point                                                  */
 /* ---------------------------------------------------------------- */
 
-void sag_mouse_event(Ed *ed, const Key *k)
+void yew_mouse_event(Ed *ed, const Key *k)
 {
-    if (ed == NULL || k == NULL || k->kind != (u16)SAG_EV_MOUSE)
+    if (ed == NULL || k == NULL || k->kind != (u16)YEW_EV_MOUSE)
         return;
     /*
      * §9: with the mouse off, events are DROPPED here rather than at
@@ -1346,7 +1346,7 @@ void sag_mouse_event(Ed *ed, const Key *k)
      * sequence — or one that never honoured it — must not be able to
      * move the cursor, and every action still has its keyboard path.
      */
-    if (!sag_mouse_enabled())
+    if (!yew_mouse_enabled())
         return;
     /*
      * BEFORE the phase machine, and never touching it.  A wheel event
@@ -1359,13 +1359,13 @@ void sag_mouse_event(Ed *ed, const Key *k)
         return;
     }
     switch (k->ev) {
-    case SAG_KEY_PRESS:
+    case YEW_KEY_PRESS:
         mouse_press(ed, k);
         break;
-    case SAG_KEY_REPEAT:
+    case YEW_KEY_REPEAT:
         mouse_motion(ed, k);
         break;
-    case SAG_KEY_RELEASE:
+    case YEW_KEY_RELEASE:
         mouse_release(ed, k);
         break;
     default:
@@ -1383,32 +1383,32 @@ void sag_mouse_event(Ed *ed, const Key *k)
  * exist.  Without this the menu rows would be mouse-only, and every one
  * of them would be a feature the keyboard could not reach.
  */
-CmdStatus sag_ui_cmd_context_menu(CmdCtx *cx)
+CmdStatus yew_ui_cmd_context_menu(CmdCtx *cx)
 {
     Ed *ed;
     u32 gid;
     u16 y;
 
     if (cx == NULL || cx->ed == NULL)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     ed = cx->ed;
     if (ed->tabs.active < 0)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     y = (u16)(ed->tab_strip_rect.y + ed->tab_strip_rect.h);
-    gid = sag_active_group_id(ed);
+    gid = yew_active_group_id(ed);
     if (gid != 0U) {
-        if (!sag_mouse_open_group_menu(ed, gid, ed->tab_strip_rect.x, y))
-            return SAG_CMD_ERR_STATE;
+        if (!yew_mouse_open_group_menu(ed, gid, ed->tab_strip_rect.x, y))
+            return YEW_CMD_ERR_STATE;
     } else {
-        Tab *t = sag_tab_at(ed, ed->tabs.active);
+        Tab *t = yew_tab_at(ed, ed->tabs.active);
 
         if (t == NULL ||
-            !sag_mouse_open_tab_menu(ed, t->tab_id, ed->tab_strip_rect.x,
+            !yew_mouse_open_tab_menu(ed, t->tab_id, ed->tab_strip_rect.x,
                                      y))
-            return SAG_CMD_ERR_STATE;
+            return YEW_CMD_ERR_STATE;
     }
     ed->full_damage = true;
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
 /*
@@ -1420,10 +1420,10 @@ CmdStatus sag_ui_cmd_context_menu(CmdCtx *cx)
 static bool mouse_enabled = true;
 static bool mouse_resolved;
 
-bool sag_mouse_enabled(void)
+bool yew_mouse_enabled(void)
 {
     if (!mouse_resolved) {
-        const char *off = getenv("SAG_MOUSE");
+        const char *off = getenv("YEW_MOUSE");
 
         /* Resolved ONCE, and to the same answer term/input.c used when
          * it decided whether to ask the terminal to report at all — two
@@ -1435,31 +1435,31 @@ bool sag_mouse_enabled(void)
     return mouse_enabled;
 }
 
-void sag_mouse_set_enabled(bool on)
+void yew_mouse_set_enabled(bool on)
 {
     mouse_resolved = true;
     mouse_enabled = on;
 }
 
-CmdStatus sag_mouse_cmd_enable(CmdCtx *cx)
+CmdStatus yew_mouse_cmd_enable(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     mouse_enabled = true;
-    sag_msg(cx->ed, SAG_MSG_INFO, "mouse on");
-    return SAG_CMD_OK;
+    yew_msg(cx->ed, YEW_MSG_INFO, "mouse on");
+    return YEW_CMD_OK;
 }
 
-CmdStatus sag_mouse_cmd_disable(CmdCtx *cx)
+CmdStatus yew_mouse_cmd_disable(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     /* Any gesture in flight goes with it: a router that stopped
      * receiving events mid-drag would sit with the button logically
      * down forever. */
-    sag_mouse_cancel(cx->ed);
-    sag_ctx_close();
+    yew_mouse_cancel(cx->ed);
+    yew_ctx_close();
     mouse_enabled = false;
-    sag_msg(cx->ed, SAG_MSG_INFO, "mouse off");
-    return SAG_CMD_OK;
+    yew_msg(cx->ed, YEW_MSG_INFO, "mouse off");
+    return YEW_CMD_OK;
 }

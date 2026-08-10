@@ -59,8 +59,8 @@ static FlValue data_from_node(DataRead *r, const FlNode *n, u32 depth)
         case FL_L_FLOAT:
             return FL_FLOAT_V(n->as.lit.v.f);
         case FL_L_STR: {
-            const char *s = sag_intern_str(r->vm->in, n->as.lit.v.str_id);
-            size_t len = sag_intern_len(r->vm->in, n->as.lit.v.str_id);
+            const char *s = yew_intern_str(r->vm->in, n->as.lit.v.str_id);
+            size_t len = yew_intern_len(r->vm->in, n->as.lit.v.str_id);
 
             if (len > (size_t)FL_DATA_MAX_STRING) {
                 data_error(r, n, "string exceeds the 4096-byte cap");
@@ -132,13 +132,13 @@ static bool data_complete(const char *src, size_t len, u32 *line, u32 *col)
         } else if (c == '"') {
             string = true;
         } else if (c == '{' || c == '[') {
-            if (depth < SAG_ARRAY_LEN(stack))
+            if (depth < YEW_ARRAY_LEN(stack))
                 stack[depth] = c;
             depth++;
         } else if (c == '}' || c == ']') {
             char want = c == '}' ? '{' : '[';
 
-            if (depth == 0U || depth > SAG_ARRAY_LEN(stack) ||
+            if (depth == 0U || depth > YEW_ARRAY_LEN(stack) ||
                 stack[depth - 1U] != want)
                 return true; /* the parser diagnoses mismatched closers */
             depth--;
@@ -274,7 +274,7 @@ static void data_key(Bytebuf *out, FlValue key)
                        key.as.b ? 4U : 5U);
         break;
     default:
-        SAG_BUG("fletch data: unhashable map key reached writer");
+        YEW_BUG("fletch data: unhashable map key reached writer");
     }
 }
 
@@ -356,7 +356,7 @@ static void data_value(Bytebuf *out, FlValue v, u32 depth, bool comma)
         break;
     }
     default:
-        SAG_BUG("fletch data: non-data value '%s'", fl_type_name(v.t));
+        YEW_BUG("fletch data: non-data value '%s'", fl_type_name(v.t));
     }
     if (comma)
         bytebuf_push_u8(out, (u8)',');

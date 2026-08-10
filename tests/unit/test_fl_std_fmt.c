@@ -58,7 +58,7 @@ void test_fl_fmt_f_resolves_arguments_three_ways(void)
     /* Automatic, explicit and named.  The auto counter is independent
      * of the explicit indices, so mixing them is defined. */
     FL_EQ(&f, P "return fmt.f(\"{1} {0}\", \"a\", \"b\")\n", "b a");
-    FL_EQ(&f, P "return fmt.f(\"{name}!\", {name: \"sag\"})\n", "sag!");
+    FL_EQ(&f, P "return fmt.f(\"{name}!\", {name: \"yew\"})\n", "yew!");
     FL_EQ(&f, P "return fmt.f(\"{0}{0}\", \"x\")\n", "xx");
     flfix_close(&f);
 }
@@ -213,12 +213,12 @@ static void repr_parses(FlFix *f, const char *expr)
     (void)snprintf(src, sizeof(src), "import fmt\nreturn fmt.repr(%s)\n",
                    expr);
     flfix_run(f, src, out, sizeof(out));
-    SAG_ASSERT(out[0] != '!');
+    YEW_ASSERT(out[0] != '!');
     n = fl_parse_literal(&f->arena, &f->dc, &f->in, out, strlen(out), 0U);
     if (n == NULL)
         (void)fprintf(stderr, "repr did not re-read: %s\n", out);
-    SAG_ASSERT_NOT_NULL(n);
-    SAG_ASSERT_EQ_U64((u64)f->ndiag, (u64)before);
+    YEW_ASSERT_NOT_NULL(n);
+    YEW_ASSERT_EQ_U64((u64)f->ndiag, (u64)before);
 }
 
 void test_fl_fmt_repr_round_trips_through_the_literal_parser(void)
@@ -492,11 +492,11 @@ static bool ast_to_value(FlFix *f, const FlNode *n, FlValue *out)
         case FL_L_FLOAT: *out = FL_FLOAT_V(n->as.lit.v.f); return true;
         default: {
             u32 id = n->as.lit.v.str_id;
-            const char *b = sag_intern_str(&f->in, id);
+            const char *b = yew_intern_str(&f->in, id);
 
             *out = FL_OBJ_V(FL_STR,
                             fl_str_new(&f->vm, b == NULL ? "" : b,
-                                       (u32)sag_intern_len(&f->in, id)));
+                                       (u32)yew_intern_len(&f->in, id)));
             return true;
         }
         }
@@ -623,7 +623,7 @@ void test_fl_fmt_repr_round_trips_500_generated_values(void)
         if (!fl_fmt_repr(&f.vm, &text, v)) {
             bytebuf_free(&text);
             fl_gc_release(&f.vm, 1U);
-            SAG_ASSERT(false);
+            YEW_ASSERT(false);
             continue;
         }
         node = fl_parse_literal(&f.arena, &f.dc, &f.in,
@@ -632,14 +632,14 @@ void test_fl_fmt_repr_round_trips_500_generated_values(void)
             (void)fprintf(stderr, "round %u did not re-read: %.*s\n",
                           (unsigned)round, (int)text.len,
                           (const char *)text.data);
-        SAG_ASSERT_NOT_NULL(node);
-        SAG_ASSERT_EQ_U64((u64)f.ndiag, (u64)before);
-        SAG_ASSERT(ast_to_value(&f, node, &back));
+        YEW_ASSERT_NOT_NULL(node);
+        YEW_ASSERT_EQ_U64((u64)f.ndiag, (u64)before);
+        YEW_ASSERT(ast_to_value(&f, node, &back));
         if (!deep_equal(v, back))
             (void)fprintf(stderr, "round %u did not compare equal: %.*s\n",
                           (unsigned)round, (int)text.len,
                           (const char *)text.data);
-        SAG_ASSERT(deep_equal(v, back));
+        YEW_ASSERT(deep_equal(v, back));
         (void)out;
         bytebuf_free(&text);
         fl_gc_release(&f.vm, 1U);

@@ -6,29 +6,29 @@
 
 void test_mod_require_message(void)
 {
-    static const bool expected_enabled[SAG_MOD_COUNT] = {
-        SAG_WITH_LSP != 0,
-        SAG_WITH_AI != 0,
-        SAG_WITH_FUSS != 0,
-        SAG_WITH_PLUGINS != 0
+    static const bool expected_enabled[YEW_MOD_COUNT] = {
+        YEW_WITH_LSP != 0,
+        YEW_WITH_AI != 0,
+        YEW_WITH_FUSS != 0,
+        YEW_WITH_PLUGINS != 0
     };
-    SagMod mod;
+    YewMod mod;
 
-    for (mod = SAG_MOD_LSP; mod < SAG_MOD_COUNT; mod++) {
+    for (mod = YEW_MOD_LSP; mod < YEW_MOD_COUNT; mod++) {
         char err[160] = {0};
-        bool result = sag_mod_require(mod, err, sizeof(err));
+        bool result = yew_mod_require(mod, err, sizeof(err));
 
-        SAG_ASSERT(sag_mod_enabled(mod) == expected_enabled[mod]);
-        SAG_ASSERT(result == expected_enabled[mod]);
+        YEW_ASSERT(yew_mod_enabled(mod) == expected_enabled[mod]);
+        YEW_ASSERT(result == expected_enabled[mod]);
         if (expected_enabled[mod]) {
-            SAG_ASSERT_EQ_STR(err, "");
+            YEW_ASSERT_EQ_STR(err, "");
         } else {
             char expected[160];
 
             (void)snprintf(expected, sizeof(expected),
                 "this build has no %s module; rebuild with 'make MODULES=\"… %s\"'",
-                sag_mod_name(mod), sag_mod_name(mod));
-            SAG_ASSERT_EQ_STR(err, expected);
+                yew_mod_name(mod), yew_mod_name(mod));
+            YEW_ASSERT_EQ_STR(err, expected);
         }
     }
 }

@@ -16,9 +16,9 @@
 #include "util/log.h"
 #include "text/edit.h"
 
-#define SAG_JOURNAL_VERSION 1U
-#define SAG_JOURNAL_HEADER_FIXED 36U
-#define SAG_JOURNAL_RECORD_FIXED 21U
+#define YEW_JOURNAL_VERSION 1U
+#define YEW_JOURNAL_HEADER_FIXED 36U
+#define YEW_JOURNAL_RECORD_FIXED 21U
 
 struct Journal {
     int fd;
@@ -34,7 +34,7 @@ static Journal *open_journals;
 
 /* adopt_existing_journal returns this when the file on disk belongs to
  * another version of the document: not an error, a replace. */
-#define SAG_JOURNAL_OBSOLETE (-2)
+#define YEW_JOURNAL_OBSOLETE (-2)
 
 static int adopt_existing_journal(const char *path, const char *realpath,
                                   const FileMeta *meta);
@@ -123,32 +123,32 @@ static void crc32_init(void)
     crc32_ready = true;
 }
 
-u32 sag_crc32_begin(void)
+u32 yew_crc32_begin(void)
 {
     crc32_init();
     return UINT32_MAX;
 }
 
-u32 sag_crc32_add(u32 crc, const u8 *bytes, size_t len)
+u32 yew_crc32_add(u32 crc, const u8 *bytes, size_t len)
 {
     size_t i;
 
     if (bytes == NULL && len != 0U)
-        SAG_BUG("sag_crc32_add: NULL bytes");
+        YEW_BUG("yew_crc32_add: NULL bytes");
     for (i = 0U; i < len; i++) {
         crc = crc32_table[(crc ^ bytes[i]) & 0xffU] ^ (crc >> 8U);
     }
     return crc;
 }
 
-u32 sag_crc32_end(u32 crc)
+u32 yew_crc32_end(u32 crc)
 {
     return crc ^ UINT32_MAX;
 }
 
-u32 sag_crc32(const u8 *bytes, size_t len)
+u32 yew_crc32(const u8 *bytes, size_t len)
 {
-    return sag_crc32_end(sag_crc32_add(sag_crc32_begin(), bytes, len));
+    return yew_crc32_end(yew_crc32_add(yew_crc32_begin(), bytes, len));
 }
 
 static u64 fnv64(const char *path)
@@ -198,19 +198,19 @@ static char *journal_dir(void)
     char *dir;
 
     if (state != NULL && state[0] != '\0') {
-        suffix = "/sagitta/journal";
+        suffix = "/yew/journal";
     } else {
         state = getenv("HOME");
         if (state == NULL || state[0] == '\0') {
             return NULL;
         }
-        suffix = "/.local/state/sagitta/journal";
+        suffix = "/.local/state/yew/journal";
     }
     if (!size_add(strlen(state), strlen(suffix) + 1U, &len)) {
         errno = ENAMETOOLONG;
         return NULL;
     }
-    dir = sag_xmalloc(len);
+    dir = yew_xmalloc(len);
     (void)snprintf(dir, len, "%s%s", state, suffix);
     return dir;
 }
@@ -220,12 +220,12 @@ static char *journal_path(const char *dir, const char *realpath)
     size_t len;
     char *path;
 
-    if (!size_add(strlen(dir), 1U + 16U + sizeof(".sagj"), &len)) {
+    if (!size_add(strlen(dir), 1U + 16U + sizeof(".yewj"), &len)) {
         errno = ENAMETOOLONG;
         return NULL;
     }
-    path = sag_xmalloc(len);
-    (void)snprintf(path, len, "%s/%016" PRIx64 ".sagj", dir,
+    path = yew_xmalloc(len);
+    (void)snprintf(path, len, "%s/%016" PRIx64 ".yewj", dir,
                    fnv64(realpath));
     return path;
 }
@@ -300,24 +300,24 @@ static bool fsync_dir(const char *dir)
 static bool write_header(int fd, const char *realpath, const FileMeta *meta)
 {
     size_t path_len = strlen(realpath);
-    u8 fixed[SAG_JOURNAL_HEADER_FIXED];
+    u8 fixed[YEW_JOURNAL_HEADER_FIXED];
 
     if ((u64)path_len != path_len) {
         errno = EOVERFLOW;
         return false;
     }
-    (void)memcpy(fixed, "SAGJ", 4U);
-    put_u32_le(fixed + 4U, SAG_JOURNAL_VERSION);
+    (void)memcpy(fixed, "YEWJ", 4U);
+    put_u32_le(fixed + 4U, YEW_JOURNAL_VERSION);
     put_u64_le(fixed + 8U, (u64)path_len);
     put_u64_le(fixed + 16U, meta->size_on_disk);
     put_u64_le(fixed + 24U, (u64)(i64)meta->mtime.tv_sec);
     put_u32_le(fixed + 32U, (u32)meta->mtime.tv_nsec);
     return write_all(fd, fixed, 16U) &&
            write_all(fd, (const u8 *)realpath, path_len) &&
-           write_all(fd, fixed + 16U, SAG_JOURNAL_HEADER_FIXED - 16U);
+           write_all(fd, fixed + 16U, YEW_JOURNAL_HEADER_FIXED - 16U);
 }
 
-Journal *sag_journal_open(const char *realpath, const FileMeta *m)
+Journal *yew_journal_open(const char *realpath, const FileMeta *m)
 {
     Journal *journal;
     char *dir;
@@ -332,7 +332,7 @@ Journal *sag_journal_open(const char *realpath, const FileMeta *m)
     }
     dir = journal_dir();
     if (dir == NULL || !make_dirs(dir)) {
-        sag_log(SAG_LOG_ERROR, "cannot create crash journal directory: %s",
+        yew_log(YEW_LOG_ERROR, "cannot create crash journal directory: %s",
                 strerror(errno));
         free(dir);
         return NULL;
@@ -358,7 +358,7 @@ Journal *sag_journal_open(const char *realpath, const FileMeta *m)
     created = fd >= 0;
     if (!created && errno == EEXIST) {
         fd = adopt_existing_journal(path, realpath, m);
-        if (fd == SAG_JOURNAL_OBSOLETE) {
+        if (fd == YEW_JOURNAL_OBSOLETE) {
             /* Start over: truncate the obsolete journal in place and
              * write this file's header into it. */
             int reflags = O_RDWR | O_TRUNC;
@@ -372,13 +372,13 @@ Journal *sag_journal_open(const char *realpath, const FileMeta *m)
             fd = open(path, reflags);
             created = fd >= 0;
             if (created)
-                sag_log(SAG_LOG_WARN,
+                yew_log(YEW_LOG_WARN,
                         "replaced an obsolete crash journal for %s",
                         realpath);
         }
     }
     if (fd < 0) {
-        sag_log(SAG_LOG_ERROR, "cannot open crash journal %s: %s", path,
+        yew_log(YEW_LOG_ERROR, "cannot open crash journal %s: %s", path,
                 strerror(errno));
         free(path);
         free(dir);
@@ -406,7 +406,7 @@ Journal *sag_journal_open(const char *realpath, const FileMeta *m)
         errno = saved_errno;
         return NULL;
     }
-    journal = sag_xcalloc(1U, sizeof(*journal));
+    journal = yew_xcalloc(1U, sizeof(*journal));
     journal->fd = fd;
     journal->path = path;
     journal->dir = dir;
@@ -415,7 +415,7 @@ Journal *sag_journal_open(const char *realpath, const FileMeta *m)
     return journal;
 }
 
-bool sag_journal_record(Journal *j, u8 op, u64 off, const u8 *b, u64 n)
+bool yew_journal_record(Journal *j, u8 op, u64 off, const u8 *b, u64 n)
 {
     u8 fixed[17];
     u8 encoded_crc[4];
@@ -425,32 +425,32 @@ bool sag_journal_record(Journal *j, u8 op, u64 off, const u8 *b, u64 n)
         errno = EIO;
         return false;
     }
-    if ((op != SAG_JOURNAL_INS && op != SAG_JOURNAL_DEL) ||
+    if ((op != YEW_JOURNAL_INS && op != YEW_JOURNAL_DEL) ||
         (n != 0U && b == NULL) || n > SIZE_MAX) {
         j->failed = true;
         errno = EINVAL;
-        sag_log(SAG_LOG_ERROR, "invalid crash journal record");
+        yew_log(YEW_LOG_ERROR, "invalid crash journal record");
         return false;
     }
     fixed[0] = op;
     put_u64_le(fixed + 1U, off);
     put_u64_le(fixed + 9U, n);
-    crc = sag_crc32_begin();
-    crc = sag_crc32_add(crc, fixed, sizeof(fixed));
-    crc = sag_crc32_add(crc, b, (size_t)n);
-    put_u32_le(encoded_crc, sag_crc32_end(crc));
+    crc = yew_crc32_begin();
+    crc = yew_crc32_add(crc, fixed, sizeof(fixed));
+    crc = yew_crc32_add(crc, b, (size_t)n);
+    put_u32_le(encoded_crc, yew_crc32_end(crc));
     if (!write_all(j->fd, fixed, sizeof(fixed)) ||
         !write_all(j->fd, b, (size_t)n) ||
         !write_all(j->fd, encoded_crc, sizeof(encoded_crc))) {
         j->failed = true;
-        sag_log(SAG_LOG_ERROR, "cannot append crash journal %s: %s", j->path,
+        yew_log(YEW_LOG_ERROR, "cannot append crash journal %s: %s", j->path,
                 strerror(errno));
         return false;
     }
     return true;
 }
 
-bool sag_journal_sync(Journal *j)
+bool yew_journal_sync(Journal *j)
 {
     if (j == NULL || j->failed) {
         errno = EIO;
@@ -458,32 +458,32 @@ bool sag_journal_sync(Journal *j)
     }
     if (!fsync_retry(j->fd)) {
         j->failed = true;
-        sag_log(SAG_LOG_ERROR, "cannot sync crash journal %s: %s", j->path,
+        yew_log(YEW_LOG_ERROR, "cannot sync crash journal %s: %s", j->path,
                 strerror(errno));
         return false;
     }
     return true;
 }
 
-bool sag_journal_ok(const Journal *j)
+bool yew_journal_ok(const Journal *j)
 {
     return j != NULL && !j->failed;
 }
 
-void sag_journal_close(Journal *j)
+void yew_journal_close(Journal *j)
 {
     if (j == NULL)
         return;
     journal_unregister(j);
     if (close(j->fd) != 0)
-        sag_log(SAG_LOG_ERROR, "cannot close crash journal %s: %s", j->path,
+        yew_log(YEW_LOG_ERROR, "cannot close crash journal %s: %s", j->path,
                 strerror(errno));
     free(j->path);
     free(j->dir);
     free(j);
 }
 
-void sag_journal_discard(Journal *j)
+void yew_journal_discard(Journal *j)
 {
     int saved_errno = 0;
 
@@ -499,7 +499,7 @@ void sag_journal_discard(Journal *j)
     if (close(j->fd) < 0 && saved_errno == 0)
         saved_errno = errno;
     if (saved_errno != 0) {
-        sag_log(SAG_LOG_ERROR, "cannot discard crash journal %s: %s", j->path,
+        yew_log(YEW_LOG_ERROR, "cannot discard crash journal %s: %s", j->path,
                 strerror(saved_errno));
     }
     free(j->path);
@@ -513,7 +513,7 @@ static bool buffer_matches(const TextBuf *tb, u64 off, const u8 *bytes,
     TextIter it;
     u64 left = len;
 
-    if (!sag_textiter_begin(&it, tb, (ByteOff){off})) {
+    if (!yew_textiter_begin(&it, tb, (ByteOff){off})) {
         return len == 0U;
     }
     while (left != 0U) {
@@ -521,7 +521,7 @@ static bool buffer_matches(const TextBuf *tb, u64 off, const u8 *bytes,
         u64 chunk_len;
         u64 take;
 
-        if (!sag_textiter_chunk(&it, tb, &chunk, &chunk_len)) {
+        if (!yew_textiter_chunk(&it, tb, &chunk, &chunk_len)) {
             return false;
         }
         take = chunk_len < left ? chunk_len : left;
@@ -530,7 +530,7 @@ static bool buffer_matches(const TextBuf *tb, u64 off, const u8 *bytes,
         }
         bytes += (size_t)take;
         left -= take;
-        if (left != 0U && !sag_textiter_advance(&it, tb)) {
+        if (left != 0U && !yew_textiter_advance(&it, tb)) {
             return false;
         }
     }
@@ -541,17 +541,17 @@ static bool apply_record(EditCtx *ec, u8 op, u64 off, const u8 *bytes,
                          u64 len)
 {
     TextBuf *tb = ec->tb;
-    u64 total = sag_textbuf_len(tb);
+    u64 total = yew_textbuf_len(tb);
 
     if (off > total) {
         return false;
     }
-    if (op == SAG_JOURNAL_INS && len <= UINT64_MAX - total) {
-        return sag_edit_insert(ec, (ByteOff){off}, bytes, len);
+    if (op == YEW_JOURNAL_INS && len <= UINT64_MAX - total) {
+        return yew_edit_insert(ec, (ByteOff){off}, bytes, len);
     }
-    if (op == SAG_JOURNAL_DEL && len <= total - off &&
+    if (op == YEW_JOURNAL_DEL && len <= total - off &&
         buffer_matches(tb, off, bytes, len)) {
-        return sag_edit_delete(ec, (Span){off, off + len});
+        return yew_edit_delete(ec, (Span){off, off + len});
     }
     return false;
 }
@@ -570,7 +570,7 @@ static void stale_journal(int fd, const char *path, const char *dir)
         !size_add(strlen(path), sizeof(".stale") + 12U, &len)) {
         return;
     }
-    stale = sag_xmalloc(len);
+    stale = yew_xmalloc(len);
     for (;;) {
         if (suffix == 0U) {
             (void)snprintf(stale, len, "%s.stale", path);
@@ -581,7 +581,7 @@ static void stale_journal(int fd, const char *path, const char *dir)
         if (link(path, stale) == 0)
             break;
         if (errno != EEXIST || suffix == 0U) {
-            sag_log(SAG_LOG_ERROR,
+            yew_log(YEW_LOG_ERROR,
                     "cannot preserve stale crash journal %s: %s", path,
                     strerror(errno));
             free(stale);
@@ -590,14 +590,14 @@ static void stale_journal(int fd, const char *path, const char *dir)
     }
     if (lstat(path, &path_st) != 0 || path_st.st_dev != fd_st.st_dev ||
         path_st.st_ino != fd_st.st_ino) {
-        sag_log(SAG_LOG_ERROR,
+        yew_log(YEW_LOG_ERROR,
                 "crash journal identity changed while preserving %s", path);
         (void)unlink(stale);
     } else if (unlink(path) == 0) {
         fsync_dir(dir);
-        sag_log(SAG_LOG_WARN, "renamed stale crash journal to %s", stale);
+        yew_log(YEW_LOG_WARN, "renamed stale crash journal to %s", stale);
     } else {
-        sag_log(SAG_LOG_ERROR, "cannot preserve stale crash journal %s: %s",
+        yew_log(YEW_LOG_ERROR, "cannot preserve stale crash journal %s: %s",
                 path, strerror(errno));
     }
     free(stale);
@@ -610,8 +610,8 @@ static bool header_matches(const u8 *data, size_t size, const char *realpath,
     size_t path_size;
     size_t tail_at;
 
-    if (size < 16U || memcmp(data, "SAGJ", 4U) != 0 ||
-        get_u32_le(data + 4U) != SAG_JOURNAL_VERSION) {
+    if (size < 16U || memcmp(data, "YEWJ", 4U) != 0 ||
+        get_u32_le(data + 4U) != YEW_JOURNAL_VERSION) {
         return false;
     }
     path_len = get_u64_le(data + 8U);
@@ -650,7 +650,7 @@ static bool journal_fd_valid(int fd, struct stat *st)
 
 static size_t valid_record_prefix(const u8 *data, size_t size, size_t at)
 {
-    while (size - at >= SAG_JOURNAL_RECORD_FIXED) {
+    while (size - at >= YEW_JOURNAL_RECORD_FIXED) {
         const u8 *record = data + at;
         u64 payload_len = get_u64_le(record + 9U);
         size_t payload_size;
@@ -658,8 +658,8 @@ static size_t valid_record_prefix(const u8 *data, size_t size, size_t at)
         u32 expected;
         u32 actual;
 
-        if ((record[0] != SAG_JOURNAL_INS &&
-             record[0] != SAG_JOURNAL_DEL) ||
+        if ((record[0] != YEW_JOURNAL_INS &&
+             record[0] != YEW_JOURNAL_DEL) ||
             payload_len > SIZE_MAX)
             break;
         payload_size = (size_t)payload_len;
@@ -668,7 +668,7 @@ static size_t valid_record_prefix(const u8 *data, size_t size, size_t at)
             record_size > size - at)
             break;
         expected = get_u32_le(record + 17U + payload_size);
-        actual = sag_crc32(record, 17U + payload_size);
+        actual = yew_crc32(record, 17U + payload_size);
         if (actual != expected)
             break;
         at += record_size;
@@ -702,14 +702,14 @@ static int adopt_existing_journal(const char *path, const char *realpath,
     if (!journal_fd_valid(fd, &st))
         goto fail;
     size = (size_t)st.st_size;
-    data = sag_xmalloc(size == 0U ? 1U : size);
+    data = yew_xmalloc(size == 0U ? 1U : size);
     if (!read_all(fd, data, size))
         goto fail;
     if (!header_matches(data, size, realpath, meta, &records_at)) {
         /*
          * The leftover journal describes a DIFFERENT version of this
          * file (or a different file that hashed to the same name).
-         * sag_journal_probe applies this same predicate at open time,
+         * yew_journal_probe applies this same predicate at open time,
          * so the editor has already decided there is nothing here to
          * recover and has told the user nothing.  Reporting a failure
          * now would block every future edit of this path until someone
@@ -720,7 +720,7 @@ static int adopt_existing_journal(const char *path, const char *realpath,
          */
         free(data);
         (void)close(fd);
-        return SAG_JOURNAL_OBSOLETE;
+        return YEW_JOURNAL_OBSOLETE;
     }
     prefix = valid_record_prefix(data, size, records_at);
     if (prefix != size &&
@@ -729,7 +729,7 @@ static int adopt_existing_journal(const char *path, const char *realpath,
     if (lseek(fd, 0, SEEK_END) < 0)
         goto fail;
     if (prefix != size)
-        sag_log(SAG_LOG_WARN,
+        yew_log(YEW_LOG_WARN,
                 "discarded incomplete crash journal tail while adopting %s",
                 path);
     free(data);
@@ -753,7 +753,7 @@ static const char *replay_realpath(const char *path, const FileMeta *meta,
     return *owned != NULL ? *owned : path;
 }
 
-bool sag_journal_probe(const char *path, const FileMeta *m)
+bool yew_journal_probe(const char *path, const FileMeta *m)
 {
     const char *canonical;
     char *owned = NULL;
@@ -792,7 +792,7 @@ bool sag_journal_probe(const char *path, const FileMeta *m)
     if (fd < 0 || !journal_fd_valid(fd, &st))
         goto done;
     size = (size_t)st.st_size;
-    data = sag_xmalloc(size == 0U ? 1U : size);
+    data = yew_xmalloc(size == 0U ? 1U : size);
     if (read_all(fd, data, size))
         matched = header_matches(data, size, canonical, m, &records_at);
 
@@ -806,7 +806,7 @@ done:
     return matched;
 }
 
-bool sag_journal_discard_path(const char *path, const FileMeta *m)
+bool yew_journal_discard_path(const char *path, const FileMeta *m)
 {
     const char *canonical;
     char *owned = NULL;
@@ -846,7 +846,7 @@ bool sag_journal_discard_path(const char *path, const FileMeta *m)
     if (fd < 0 || !lock_journal(fd) || !journal_fd_valid(fd, &st))
         goto done;
     size = (size_t)st.st_size;
-    data = sag_xmalloc(size == 0U ? 1U : size);
+    data = yew_xmalloc(size == 0U ? 1U : size);
     if (!read_all(fd, data, size) ||
         !header_matches(data, size, canonical, m, &records_at))
         goto done;
@@ -917,7 +917,7 @@ static bool journal_replay_edit(const char *path, EditCtx *ec, FileMeta *m,
         goto done;
     }
     size = (size_t)st.st_size;
-    data = sag_xmalloc(size == 0U ? 1U : size);
+    data = yew_xmalloc(size == 0U ? 1U : size);
     if (!read_all(fd, data, size)) {
         goto done;
     }
@@ -927,8 +927,8 @@ static bool journal_replay_edit(const char *path, EditCtx *ec, FileMeta *m,
     }
     matched = true;
     if (external_transaction && ec->undo != NULL)
-        sag_undo_begin(ec, SAG_TXN_EXTERNAL);
-    while (size - at >= SAG_JOURNAL_RECORD_FIXED) {
+        yew_undo_begin(ec, YEW_TXN_EXTERNAL);
+    while (size - at >= YEW_JOURNAL_RECORD_FIXED) {
         const u8 *record = data + at;
         u8 op = record[0];
         u64 off = get_u64_le(record + 1U);
@@ -948,7 +948,7 @@ static bool journal_replay_edit(const char *path, EditCtx *ec, FileMeta *m,
             break;
         }
         expected = get_u32_le(record + 17U + payload_size);
-        actual = sag_crc32(record, 17U + payload_size);
+        actual = yew_crc32(record, 17U + payload_size);
         if (actual != expected ||
             !apply_record(ec, op, off, record + 17U, payload_len)) {
             break;
@@ -956,13 +956,13 @@ static bool journal_replay_edit(const char *path, EditCtx *ec, FileMeta *m,
         at += record_size;
     }
     if (external_transaction && ec->undo != NULL)
-        sag_undo_end(ec);
+        yew_undo_end(ec);
     if (at != size) {
-        sag_log(SAG_LOG_WARN,
+        yew_log(YEW_LOG_WARN,
                 "ignored incomplete or corrupt crash journal tail in %s",
                 jpath);
         if (ftruncate(fd, (off_t)at) != 0 || !fsync_retry(fd))
-            sag_log(SAG_LOG_ERROR,
+            yew_log(YEW_LOG_ERROR,
                     "cannot discard crash journal tail in %s: %s", jpath,
                     strerror(errno));
     }
@@ -978,7 +978,7 @@ done:
     return matched;
 }
 
-bool sag_journal_replay(const char *path, TextBuf *tb, FileMeta *m)
+bool yew_journal_replay(const char *path, TextBuf *tb, FileMeta *m)
 {
     EditCtx ec;
 
@@ -991,7 +991,7 @@ bool sag_journal_replay(const char *path, TextBuf *tb, FileMeta *m)
     return journal_replay_edit(path, &ec, m, false);
 }
 
-bool sag_journal_replay_edit(const char *path, EditCtx *ec, FileMeta *m)
+bool yew_journal_replay_edit(const char *path, EditCtx *ec, FileMeta *m)
 {
     EditCtx replay;
 

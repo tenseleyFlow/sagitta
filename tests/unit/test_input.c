@@ -52,20 +52,20 @@ static void decoded_push(Decoded *d, const Key *key, const In *in)
     if (d->len == d->cap) {
         size_t cap = d->cap == 0U ? 16U : d->cap * 2U;
 
-        d->event = sag_xreallocarray(d->event, cap, sizeof(*d->event));
+        d->event = yew_xreallocarray(d->event, cap, sizeof(*d->event));
         d->cap = cap;
     }
     d->event[d->len++] = *key;
-    if (key->kind == SAG_EV_PASTE_DATA) {
+    if (key->kind == YEW_EV_PASTE_DATA) {
         size_t len;
-        const u8 *chunk = sag_input_paste_chunk(in, &len);
+        const u8 *chunk = yew_input_paste_chunk(in, &len);
 
-        SAG_ASSERT(len <= 4096U);
+        YEW_ASSERT(len <= 4096U);
         if (d->paste_chunks == d->paste_chunk_cap) {
             size_t cap = d->paste_chunk_cap == 0U
                              ? 4U : d->paste_chunk_cap * 2U;
 
-            d->paste_chunk = sag_xreallocarray(d->paste_chunk, cap,
+            d->paste_chunk = yew_xreallocarray(d->paste_chunk, cap,
                                                sizeof(*d->paste_chunk));
             d->paste_chunk_cap = cap;
         }
@@ -79,10 +79,10 @@ static void drain(In *in, i64 now_ms, Decoded *d)
     Key key;
     size_t guard = 0U;
 
-    while (sag_input_next(in, now_ms, &key)) {
+    while (yew_input_next(in, now_ms, &key)) {
         decoded_push(d, &key, in);
         guard++;
-        SAG_ASSERT(guard <= in->buf.len + 2U);
+        YEW_ASSERT(guard <= in->buf.len + 2U);
     }
 }
 
@@ -94,51 +94,51 @@ static void decode_parts(const u8 *bytes, size_t len, size_t split,
     size_t pos = 0U;
 
     caps.kitty_kbd = kitty;
-    sag_input_init(&in, &caps);
+    yew_input_init(&in, &caps);
     if (dribble) {
         while (pos < len) {
-            sag_input_feed(&in, bytes + pos, 1U);
+            yew_input_feed(&in, bytes + pos, 1U);
             drain(&in, 1000 + (i64)pos, d);
             pos++;
         }
     } else {
-        sag_input_feed(&in, bytes, split);
+        yew_input_feed(&in, bytes, split);
         drain(&in, 1000, d);
-        sag_input_feed(&in, bytes + split, len - split);
+        yew_input_feed(&in, bytes + split, len - split);
         drain(&in, 1001, d);
     }
-    sag_input_eof(&in);
+    yew_input_eof(&in);
     drain(&in, 2000, d);
     d->dropped = in.dropped;
-    sag_input_free(&in);
+    yew_input_free(&in);
 }
 
 static void assert_key(const Key *actual, const Expected *expected)
 {
-    SAG_ASSERT_EQ_U64(actual->code, expected->code);
-    SAG_ASSERT_EQ_U64(actual->kind, expected->kind);
-    SAG_ASSERT_EQ_U64(actual->mods, expected->mods);
-    SAG_ASSERT_EQ_U64(actual->col, expected->col);
-    SAG_ASSERT_EQ_U64(actual->row, expected->row);
-    SAG_ASSERT_EQ_U64(actual->ev, expected->ev);
-    SAG_ASSERT_EQ_U64(actual->button, expected->button);
-    SAG_ASSERT_EQ_U64(actual->ntext, expected->ntext);
-    SAG_ASSERT_EQ_MEM(actual->text, expected->text, expected->ntext);
+    YEW_ASSERT_EQ_U64(actual->code, expected->code);
+    YEW_ASSERT_EQ_U64(actual->kind, expected->kind);
+    YEW_ASSERT_EQ_U64(actual->mods, expected->mods);
+    YEW_ASSERT_EQ_U64(actual->col, expected->col);
+    YEW_ASSERT_EQ_U64(actual->row, expected->row);
+    YEW_ASSERT_EQ_U64(actual->ev, expected->ev);
+    YEW_ASSERT_EQ_U64(actual->button, expected->button);
+    YEW_ASSERT_EQ_U64(actual->ntext, expected->ntext);
+    YEW_ASSERT_EQ_MEM(actual->text, expected->text, expected->ntext);
 }
 
 static void assert_decoded_equal(const Decoded *a, const Decoded *b)
 {
     size_t i;
 
-    SAG_ASSERT_EQ_U64(a->len, b->len);
-    SAG_ASSERT_EQ_U64(a->dropped, b->dropped);
-    SAG_ASSERT_EQ_U64(a->paste.len, b->paste.len);
-    SAG_ASSERT_EQ_U64(a->paste_chunks, b->paste_chunks);
-    SAG_ASSERT_EQ_MEM(a->paste.data, b->paste.data, a->paste.len);
-    SAG_ASSERT_EQ_MEM(a->paste_chunk, b->paste_chunk,
+    YEW_ASSERT_EQ_U64(a->len, b->len);
+    YEW_ASSERT_EQ_U64(a->dropped, b->dropped);
+    YEW_ASSERT_EQ_U64(a->paste.len, b->paste.len);
+    YEW_ASSERT_EQ_U64(a->paste_chunks, b->paste_chunks);
+    YEW_ASSERT_EQ_MEM(a->paste.data, b->paste.data, a->paste.len);
+    YEW_ASSERT_EQ_MEM(a->paste_chunk, b->paste_chunk,
                       a->paste_chunks * sizeof(*a->paste_chunk));
     for (i = 0U; i < a->len; i++)
-        SAG_ASSERT_EQ_MEM(&a->event[i], &b->event[i], sizeof(Key));
+        YEW_ASSERT_EQ_MEM(&a->event[i], &b->event[i], sizeof(Key));
 }
 
 static void check_vector(const u8 *bytes, size_t len,
@@ -149,7 +149,7 @@ static void check_vector(const u8 *bytes, size_t len,
 
     decoded_init(&baseline);
     decode_parts(bytes, len, len, false, kitty, &baseline);
-    SAG_ASSERT_EQ_U64(baseline.len, 1U);
+    YEW_ASSERT_EQ_U64(baseline.len, 1U);
     assert_key(&baseline.event[0], expected);
     for (split = 0U; split <= len; split++) {
         Decoded actual;
@@ -176,9 +176,9 @@ static Expected named(u32 code, u16 mods)
     Expected e = {0};
 
     e.code = code;
-    e.kind = SAG_EV_KEY;
+    e.kind = YEW_EV_KEY;
     e.mods = mods;
-    e.ev = SAG_KEY_PRESS;
+    e.ev = YEW_KEY_PRESS;
     return e;
 }
 
@@ -200,25 +200,25 @@ void test_input_legacy_bytes(void)
         Expected e;
 
         if (b == 0x1BU) {
-            e = named(SAG_KEY_ESCAPE, 0U);
+            e = named(YEW_KEY_ESCAPE, 0U);
         } else if (b == 0U) {
-            e = named(' ', SAG_MOD_CTRL);
+            e = named(' ', YEW_MOD_CTRL);
         } else if (b <= 7U) {
-            e = named('a' + b - 1U, SAG_MOD_CTRL);
+            e = named('a' + b - 1U, YEW_MOD_CTRL);
         } else if (b == 8U) {
-            e = named(SAG_KEY_BACKSPACE, SAG_MOD_CTRL);
+            e = named(YEW_KEY_BACKSPACE, YEW_MOD_CTRL);
         } else if (b == 9U) {
-            e = named(SAG_KEY_TAB, 0U);
+            e = named(YEW_KEY_TAB, 0U);
         } else if (b >= 10U && b <= 12U) {
-            e = named('a' + b - 1U, SAG_MOD_CTRL);
+            e = named('a' + b - 1U, YEW_MOD_CTRL);
         } else if (b == 13U) {
-            e = named(SAG_KEY_ENTER, 0U);
+            e = named(YEW_KEY_ENTER, 0U);
         } else if (b <= 26U) {
-            e = named('a' + b - 1U, SAG_MOD_CTRL);
+            e = named('a' + b - 1U, YEW_MOD_CTRL);
         } else if (b <= 31U) {
-            e = named('\\' + b - 28U, SAG_MOD_CTRL);
+            e = named('\\' + b - 28U, YEW_MOD_CTRL);
         } else if (b == 127U) {
-            e = named(SAG_KEY_BACKSPACE, 0U);
+            e = named(YEW_KEY_BACKSPACE, 0U);
         } else {
             e = text_key(b, 0U, &byte, 1U);
         }
@@ -236,7 +236,7 @@ void test_input_legacy_bytes(void)
         };
         size_t i;
 
-        for (i = 0U; i < SAG_ARRAY_LEN(utf8); i++) {
+        for (i = 0U; i < YEW_ARRAY_LEN(utf8); i++) {
             Expected e = text_key(utf8[i].code, 0U, utf8[i].bytes,
                                   utf8[i].len);
 
@@ -250,55 +250,55 @@ void test_input_legacy_bytes(void)
         decoded_init(&d);
         decode_parts(invalid_then_valid, sizeof(invalid_then_valid),
                      1U, false, false, &d);
-        SAG_ASSERT_EQ_U64(d.len, 2U);
-        SAG_ASSERT_EQ_U64(d.event[0].kind, SAG_EV_NONE);
-        SAG_ASSERT_EQ_U64(d.event[1].code, 'x');
-        SAG_ASSERT_EQ_U64(d.dropped, 1U);
+        YEW_ASSERT_EQ_U64(d.len, 2U);
+        YEW_ASSERT_EQ_U64(d.event[0].kind, YEW_EV_NONE);
+        YEW_ASSERT_EQ_U64(d.event[1].code, 'x');
+        YEW_ASSERT_EQ_U64(d.dropped, 1U);
         decoded_free(&d);
     }
-    SAG_ASSERT(fixture_vectors >= 120U);
+    YEW_ASSERT(fixture_vectors >= 120U);
 }
 
 void test_input_csi_keys(void)
 {
     static const struct { char final; u32 code; } finals[] = {
-        {'A', SAG_KEY_UP}, {'B', SAG_KEY_DOWN}, {'C', SAG_KEY_RIGHT},
-        {'D', SAG_KEY_LEFT}, {'E', SAG_KEY_BEGIN}, {'F', SAG_KEY_END},
-        {'H', SAG_KEY_HOME}, {'P', SAG_KEY_F1}, {'Q', SAG_KEY_F2},
-        {'R', SAG_KEY_F3}, {'S', SAG_KEY_F4}
+        {'A', YEW_KEY_UP}, {'B', YEW_KEY_DOWN}, {'C', YEW_KEY_RIGHT},
+        {'D', YEW_KEY_LEFT}, {'E', YEW_KEY_BEGIN}, {'F', YEW_KEY_END},
+        {'H', YEW_KEY_HOME}, {'P', YEW_KEY_F1}, {'Q', YEW_KEY_F2},
+        {'R', YEW_KEY_F3}, {'S', YEW_KEY_F4}
     };
     static const u16 modifier_param[] = {
         1U, 2U, 3U, 4U, 5U, 6U, 7U, 8U, 9U, 17U, 33U, 65U, 129U
     };
     static const struct { unsigned int number; u32 code; } tilde[] = {
-        {1, SAG_KEY_HOME}, {2, SAG_KEY_INSERT}, {3, SAG_KEY_DELETE},
-        {4, SAG_KEY_END}, {5, SAG_KEY_PAGE_UP}, {6, SAG_KEY_PAGE_DOWN},
-        {7, SAG_KEY_HOME}, {8, SAG_KEY_END},
-        {11, SAG_KEY_F1}, {12, SAG_KEY_F2}, {13, SAG_KEY_F3},
-        {14, SAG_KEY_F4}, {15, SAG_KEY_F5}, {17, SAG_KEY_F6},
-        {18, SAG_KEY_F7}, {19, SAG_KEY_F8}, {20, SAG_KEY_F9},
-        {21, SAG_KEY_F10}, {23, SAG_KEY_F11}, {24, SAG_KEY_F12},
-        {25, SAG_KEY_F13}, {26, SAG_KEY_F14}, {28, SAG_KEY_F15},
-        {29, SAG_KEY_F16}, {31, SAG_KEY_F17}, {32, SAG_KEY_F18},
-        {33, SAG_KEY_F19}, {34, SAG_KEY_F20}
+        {1, YEW_KEY_HOME}, {2, YEW_KEY_INSERT}, {3, YEW_KEY_DELETE},
+        {4, YEW_KEY_END}, {5, YEW_KEY_PAGE_UP}, {6, YEW_KEY_PAGE_DOWN},
+        {7, YEW_KEY_HOME}, {8, YEW_KEY_END},
+        {11, YEW_KEY_F1}, {12, YEW_KEY_F2}, {13, YEW_KEY_F3},
+        {14, YEW_KEY_F4}, {15, YEW_KEY_F5}, {17, YEW_KEY_F6},
+        {18, YEW_KEY_F7}, {19, YEW_KEY_F8}, {20, YEW_KEY_F9},
+        {21, YEW_KEY_F10}, {23, YEW_KEY_F11}, {24, YEW_KEY_F12},
+        {25, YEW_KEY_F13}, {26, YEW_KEY_F14}, {28, YEW_KEY_F15},
+        {29, YEW_KEY_F16}, {31, YEW_KEY_F17}, {32, YEW_KEY_F18},
+        {33, YEW_KEY_F19}, {34, YEW_KEY_F20}
     };
     size_t i;
     char seq[32];
 
-    for (i = 0U; i < SAG_ARRAY_LEN(finals); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(finals); i++) {
         int len = snprintf(seq, sizeof(seq), "\x1b[%c", finals[i].final);
         Expected e = named(finals[i].code, 0U);
 
         check_vector((const u8 *)seq, (size_t)len, &e, false);
     }
-    for (i = 0U; i < SAG_ARRAY_LEN(modifier_param); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(modifier_param); i++) {
         int len = snprintf(seq, sizeof(seq), "\x1b[1;%uC",
                            modifier_param[i]);
-        Expected e = named(SAG_KEY_RIGHT, modifier_param[i] - 1U);
+        Expected e = named(YEW_KEY_RIGHT, modifier_param[i] - 1U);
 
         check_vector((const u8 *)seq, (size_t)len, &e, false);
     }
-    for (i = 0U; i < SAG_ARRAY_LEN(tilde); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(tilde); i++) {
         int len = snprintf(seq, sizeof(seq), "\x1b[%u~", tilde[i].number);
         Expected e = named(tilde[i].code, 0U);
 
@@ -306,7 +306,7 @@ void test_input_csi_keys(void)
     }
     {
         static const u8 seq_z[] = "\x1b[Z";
-        Expected e = named(SAG_KEY_TAB, SAG_MOD_SHIFT);
+        Expected e = named(YEW_KEY_TAB, YEW_MOD_SHIFT);
 
         check_vector(seq_z, sizeof(seq_z) - 1U, &e, false);
     }
@@ -319,9 +319,9 @@ static void assert_dropped(const u8 *bytes, size_t len)
 
     decoded_init(&baseline);
     decode_parts(bytes, len, len, false, false, &baseline);
-    SAG_ASSERT_EQ_U64(baseline.len, 1U);
-    SAG_ASSERT_EQ_U64(baseline.event[0].kind, SAG_EV_NONE);
-    SAG_ASSERT_EQ_U64(baseline.dropped, 1U);
+    YEW_ASSERT_EQ_U64(baseline.len, 1U);
+    YEW_ASSERT_EQ_U64(baseline.event[0].kind, YEW_EV_NONE);
+    YEW_ASSERT_EQ_U64(baseline.dropped, 1U);
     for (split = 0U; split <= len; split++) {
         Decoded actual;
 
@@ -353,7 +353,7 @@ void test_input_csi_drops(void)
     char seq[24];
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(gaps); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(gaps); i++) {
         int len = snprintf(seq, sizeof(seq), "\x1b[%u~", gaps[i]);
 
         assert_dropped((const u8 *)seq, (size_t)len);
@@ -369,21 +369,21 @@ void test_input_csi_drops(void)
 void test_input_ss3_keys(void)
 {
     static const struct { char final; u32 code; } table[] = {
-        {'A', SAG_KEY_UP}, {'B', SAG_KEY_DOWN}, {'C', SAG_KEY_RIGHT},
-        {'D', SAG_KEY_LEFT}, {'E', SAG_KEY_BEGIN}, {'F', SAG_KEY_END},
-        {'H', SAG_KEY_HOME}, {'P', SAG_KEY_F1}, {'Q', SAG_KEY_F2},
-        {'R', SAG_KEY_F3}, {'S', SAG_KEY_F4}, {'M', SAG_KEY_KP_ENTER},
-        {'X', SAG_KEY_KP_EQUAL}, {'j', SAG_KEY_KP_MULTIPLY},
-        {'k', SAG_KEY_KP_ADD}, {'l', SAG_KEY_KP_SEPARATOR},
-        {'m', SAG_KEY_KP_SUBTRACT}, {'n', SAG_KEY_KP_DECIMAL},
-        {'o', SAG_KEY_KP_DIVIDE}, {'p', SAG_KEY_KP_0},
-        {'q', SAG_KEY_KP_1}, {'r', SAG_KEY_KP_2}, {'s', SAG_KEY_KP_3},
-        {'t', SAG_KEY_KP_4}, {'u', SAG_KEY_KP_5}, {'v', SAG_KEY_KP_6},
-        {'w', SAG_KEY_KP_7}, {'x', SAG_KEY_KP_8}, {'y', SAG_KEY_KP_9}
+        {'A', YEW_KEY_UP}, {'B', YEW_KEY_DOWN}, {'C', YEW_KEY_RIGHT},
+        {'D', YEW_KEY_LEFT}, {'E', YEW_KEY_BEGIN}, {'F', YEW_KEY_END},
+        {'H', YEW_KEY_HOME}, {'P', YEW_KEY_F1}, {'Q', YEW_KEY_F2},
+        {'R', YEW_KEY_F3}, {'S', YEW_KEY_F4}, {'M', YEW_KEY_KP_ENTER},
+        {'X', YEW_KEY_KP_EQUAL}, {'j', YEW_KEY_KP_MULTIPLY},
+        {'k', YEW_KEY_KP_ADD}, {'l', YEW_KEY_KP_SEPARATOR},
+        {'m', YEW_KEY_KP_SUBTRACT}, {'n', YEW_KEY_KP_DECIMAL},
+        {'o', YEW_KEY_KP_DIVIDE}, {'p', YEW_KEY_KP_0},
+        {'q', YEW_KEY_KP_1}, {'r', YEW_KEY_KP_2}, {'s', YEW_KEY_KP_3},
+        {'t', YEW_KEY_KP_4}, {'u', YEW_KEY_KP_5}, {'v', YEW_KEY_KP_6},
+        {'w', YEW_KEY_KP_7}, {'x', YEW_KEY_KP_8}, {'y', YEW_KEY_KP_9}
     };
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(table); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(table); i++) {
         u8 seq[] = {0x1BU, 'O', (u8)table[i].final};
         Expected e = named(table[i].code, 0U);
 
@@ -394,50 +394,50 @@ void test_input_ss3_keys(void)
 void test_input_kitty_keys(void)
 {
     static const struct { unsigned int wire; u32 code; } functional[] = {
-        {57358, SAG_KEY_CAPS_LOCK}, {57359, SAG_KEY_SCROLL_LOCK},
-        {57360, SAG_KEY_NUM_LOCK}, {57361, SAG_KEY_PRINT_SCREEN},
-        {57362, SAG_KEY_PAUSE}, {57363, SAG_KEY_MENU},
-        {57376, SAG_KEY_F13}, {57398, SAG_KEY_F35},
-        {57399, SAG_KEY_KP_0}, {57408, SAG_KEY_KP_9},
-        {57409, SAG_KEY_KP_DECIMAL}, {57410, SAG_KEY_KP_DIVIDE},
-        {57411, SAG_KEY_KP_MULTIPLY}, {57412, SAG_KEY_KP_SUBTRACT},
-        {57413, SAG_KEY_KP_ADD}, {57414, SAG_KEY_KP_ENTER},
-        {57415, SAG_KEY_KP_EQUAL}, {57416, SAG_KEY_KP_SEPARATOR},
-        {57417, SAG_KEY_KP_LEFT}, {57418, SAG_KEY_KP_RIGHT},
-        {57419, SAG_KEY_KP_UP}, {57420, SAG_KEY_KP_DOWN},
-        {57421, SAG_KEY_KP_PAGE_UP}, {57422, SAG_KEY_KP_PAGE_DOWN},
-        {57423, SAG_KEY_KP_HOME}, {57424, SAG_KEY_KP_END},
-        {57425, SAG_KEY_KP_INSERT}, {57426, SAG_KEY_KP_DELETE},
-        {57427, SAG_KEY_KP_BEGIN}
+        {57358, YEW_KEY_CAPS_LOCK}, {57359, YEW_KEY_SCROLL_LOCK},
+        {57360, YEW_KEY_NUM_LOCK}, {57361, YEW_KEY_PRINT_SCREEN},
+        {57362, YEW_KEY_PAUSE}, {57363, YEW_KEY_MENU},
+        {57376, YEW_KEY_F13}, {57398, YEW_KEY_F35},
+        {57399, YEW_KEY_KP_0}, {57408, YEW_KEY_KP_9},
+        {57409, YEW_KEY_KP_DECIMAL}, {57410, YEW_KEY_KP_DIVIDE},
+        {57411, YEW_KEY_KP_MULTIPLY}, {57412, YEW_KEY_KP_SUBTRACT},
+        {57413, YEW_KEY_KP_ADD}, {57414, YEW_KEY_KP_ENTER},
+        {57415, YEW_KEY_KP_EQUAL}, {57416, YEW_KEY_KP_SEPARATOR},
+        {57417, YEW_KEY_KP_LEFT}, {57418, YEW_KEY_KP_RIGHT},
+        {57419, YEW_KEY_KP_UP}, {57420, YEW_KEY_KP_DOWN},
+        {57421, YEW_KEY_KP_PAGE_UP}, {57422, YEW_KEY_KP_PAGE_DOWN},
+        {57423, YEW_KEY_KP_HOME}, {57424, YEW_KEY_KP_END},
+        {57425, YEW_KEY_KP_INSERT}, {57426, YEW_KEY_KP_DELETE},
+        {57427, YEW_KEY_KP_BEGIN}
     };
     static const struct { const char *seq; Expected e; } examples[] = {
-        {"\x1b[97u", {97, SAG_EV_KEY, 0, 0, 0, SAG_KEY_PRESS, 0, 1, {'a'}}},
-        {"\x1b[97:65;2u", {97, SAG_EV_KEY, SAG_MOD_SHIFT, 0, 0,
-                            SAG_KEY_PRESS, 0, 1, {'A'}}},
-        {"\x1b[97;5u", {97, SAG_EV_KEY, SAG_MOD_CTRL, 0, 0,
-                         SAG_KEY_PRESS, 0, 0, {0}}},
-        {"\x1b[27u", {SAG_KEY_ESCAPE, SAG_EV_KEY, 0, 0, 0,
-                       SAG_KEY_PRESS, 0, 0, {0}}},
-        {"\x1b[13u", {SAG_KEY_ENTER, SAG_EV_KEY, 0, 0, 0,
-                       SAG_KEY_PRESS, 0, 0, {0}}},
-        {"\x1b[9u", {SAG_KEY_TAB, SAG_EV_KEY, 0, 0, 0,
-                      SAG_KEY_PRESS, 0, 0, {0}}},
-        {"\x1b[127u", {SAG_KEY_BACKSPACE, SAG_EV_KEY, 0, 0, 0,
-                        SAG_KEY_PRESS, 0, 0, {0}}},
-        {"\x1b[233;;233u", {233, SAG_EV_KEY, 0, 0, 0, SAG_KEY_PRESS,
+        {"\x1b[97u", {97, YEW_EV_KEY, 0, 0, 0, YEW_KEY_PRESS, 0, 1, {'a'}}},
+        {"\x1b[97:65;2u", {97, YEW_EV_KEY, YEW_MOD_SHIFT, 0, 0,
+                            YEW_KEY_PRESS, 0, 1, {'A'}}},
+        {"\x1b[97;5u", {97, YEW_EV_KEY, YEW_MOD_CTRL, 0, 0,
+                         YEW_KEY_PRESS, 0, 0, {0}}},
+        {"\x1b[27u", {YEW_KEY_ESCAPE, YEW_EV_KEY, 0, 0, 0,
+                       YEW_KEY_PRESS, 0, 0, {0}}},
+        {"\x1b[13u", {YEW_KEY_ENTER, YEW_EV_KEY, 0, 0, 0,
+                       YEW_KEY_PRESS, 0, 0, {0}}},
+        {"\x1b[9u", {YEW_KEY_TAB, YEW_EV_KEY, 0, 0, 0,
+                      YEW_KEY_PRESS, 0, 0, {0}}},
+        {"\x1b[127u", {YEW_KEY_BACKSPACE, YEW_EV_KEY, 0, 0, 0,
+                        YEW_KEY_PRESS, 0, 0, {0}}},
+        {"\x1b[233;;233u", {233, YEW_EV_KEY, 0, 0, 0, YEW_KEY_PRESS,
                              0, 2, {0xC3, 0xA9}}},
-        {"\x1b[97;1:3u", {97, SAG_EV_KEY, 0, 0, 0, SAG_KEY_RELEASE,
+        {"\x1b[97;1:3u", {97, YEW_EV_KEY, 0, 0, 0, YEW_KEY_RELEASE,
                            0, 1, {'a'}}},
-        {"\x1b[65:65:97;2;65u", {97, SAG_EV_KEY, SAG_MOD_SHIFT, 0, 0,
-                                  SAG_KEY_PRESS, 0, 1, {'A'}}}
+        {"\x1b[65:65:97;2;65u", {97, YEW_EV_KEY, YEW_MOD_SHIFT, 0, 0,
+                                  YEW_KEY_PRESS, 0, 1, {'A'}}}
     };
     size_t i;
     char seq[32];
 
-    for (i = 0U; i < SAG_ARRAY_LEN(examples); i++)
+    for (i = 0U; i < YEW_ARRAY_LEN(examples); i++)
         check_vector((const u8 *)examples[i].seq, strlen(examples[i].seq),
                      &examples[i].e, true);
-    for (i = 0U; i < SAG_ARRAY_LEN(functional); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(functional); i++) {
         int len = snprintf(seq, sizeof(seq), "\x1b[%uu", functional[i].wire);
         Expected e = named(functional[i].code, 0U);
 
@@ -445,19 +445,19 @@ void test_input_kitty_keys(void)
     }
     for (i = 0U; i < 23U; i++) {
         int len = snprintf(seq, sizeof(seq), "\x1b[%uu", 57376U + (unsigned)i);
-        Expected e = named(SAG_KEY_F13 + (u32)i, 0U);
+        Expected e = named(YEW_KEY_F13 + (u32)i, 0U);
 
         check_vector((const u8 *)seq, (size_t)len, &e, true);
     }
     for (i = 0U; i < 10U; i++) {
         int len = snprintf(seq, sizeof(seq), "\x1b[%uu", 57399U + (unsigned)i);
-        Expected e = named(SAG_KEY_KP_0 + (u32)i, 0U);
+        Expected e = named(YEW_KEY_KP_0 + (u32)i, 0U);
 
         check_vector((const u8 *)seq, (size_t)len, &e, true);
     }
     for (i = 0U; i < 12U; i++) {
         int len = snprintf(seq, sizeof(seq), "\x1b[%uu", 57441U + (unsigned)i);
-        Expected e = named(SAG_KEY_LEFT_SHIFT + (u32)i, 0U);
+        Expected e = named(YEW_KEY_LEFT_SHIFT + (u32)i, 0U);
 
         check_vector((const u8 *)seq, (size_t)len, &e, true);
     }
@@ -494,11 +494,11 @@ static void assert_paste(const u8 *payload, size_t payload_len,
     bytebuf_append(&stream, end, sizeof(end) - 1U);
     decoded_init(&d);
     decode_parts(stream.data, stream.len, split, dribble, false, &d);
-    SAG_ASSERT(d.len >= 2U);
-    SAG_ASSERT_EQ_U64(d.event[0].kind, SAG_EV_PASTE_BEGIN);
-    SAG_ASSERT_EQ_U64(d.event[d.len - 1U].kind, SAG_EV_PASTE_END);
-    SAG_ASSERT_EQ_U64(d.paste.len, payload_len);
-    SAG_ASSERT_EQ_MEM(d.paste.data, payload, payload_len);
+    YEW_ASSERT(d.len >= 2U);
+    YEW_ASSERT_EQ_U64(d.event[0].kind, YEW_EV_PASTE_BEGIN);
+    YEW_ASSERT_EQ_U64(d.event[d.len - 1U].kind, YEW_EV_PASTE_END);
+    YEW_ASSERT_EQ_U64(d.paste.len, payload_len);
+    YEW_ASSERT_EQ_MEM(d.paste.data, payload, payload_len);
     decoded_free(&d);
     bytebuf_free(&stream);
 }
@@ -517,7 +517,7 @@ void test_input_paste_framing(void)
         enum { PAYLOAD_LEN = 5000 };
         static const u8 begin[] = "\x1b[200~";
         static const u8 end[] = "\x1b[201~";
-        u8 *stream = sag_xmalloc(sizeof(begin) - 1U + PAYLOAD_LEN +
+        u8 *stream = yew_xmalloc(sizeof(begin) - 1U + PAYLOAD_LEN +
                                  sizeof(end) - 1U);
         size_t stream_len = sizeof(begin) - 1U + PAYLOAD_LEN +
                             sizeof(end) - 1U;
@@ -533,9 +533,9 @@ void test_input_paste_framing(void)
         decoded_init(&dribbled);
         decode_parts(stream, stream_len, 0U, true, false, &dribbled);
         assert_decoded_equal(&baseline, &dribbled);
-        SAG_ASSERT_EQ_U64(baseline.paste_chunks, 2U);
-        SAG_ASSERT_EQ_U64(baseline.paste_chunk[0], 4080U);
-        SAG_ASSERT_EQ_U64(baseline.paste_chunk[1], PAYLOAD_LEN - 4080U);
+        YEW_ASSERT_EQ_U64(baseline.paste_chunks, 2U);
+        YEW_ASSERT_EQ_U64(baseline.paste_chunk[0], 4080U);
+        YEW_ASSERT_EQ_U64(baseline.paste_chunk[1], PAYLOAD_LEN - 4080U);
         decoded_free(&dribbled);
         decoded_free(&baseline);
         free(stream);
@@ -548,10 +548,10 @@ void test_input_paste_framing(void)
         decoded_init(&d);
         decode_parts(framed, sizeof(framed) - 1U,
                      sizeof(framed) - 1U, false, false, &d);
-        SAG_ASSERT_EQ_U64(d.paste.len, 1U);
-        SAG_ASSERT_EQ_U64(d.paste.data[0], 'a');
-        SAG_ASSERT_EQ_U64(d.event[d.len - 1U].kind, SAG_EV_KEY);
-        SAG_ASSERT_EQ_U64(d.event[d.len - 1U].code, 'b');
+        YEW_ASSERT_EQ_U64(d.paste.len, 1U);
+        YEW_ASSERT_EQ_U64(d.paste.data[0], 'a');
+        YEW_ASSERT_EQ_U64(d.event[d.len - 1U].kind, YEW_EV_KEY);
+        YEW_ASSERT_EQ_U64(d.event[d.len - 1U].code, 'b');
         decoded_free(&d);
     }
     {
@@ -561,9 +561,9 @@ void test_input_paste_framing(void)
         decoded_init(&d);
         decode_parts(unterminated, sizeof(unterminated) - 1U,
                      sizeof(unterminated) - 1U, false, false, &d);
-        SAG_ASSERT_EQ_U64(d.paste.len, 4U);
-        SAG_ASSERT_EQ_MEM(d.paste.data, "tail", 4U);
-        SAG_ASSERT_EQ_U64(d.event[d.len - 1U].kind, SAG_EV_PASTE_END);
+        YEW_ASSERT_EQ_U64(d.paste.len, 4U);
+        YEW_ASSERT_EQ_MEM(d.paste.data, "tail", 4U);
+        YEW_ASSERT_EQ_U64(d.event[d.len - 1U].kind, YEW_EV_PASTE_END);
         decoded_free(&d);
     }
 }
@@ -571,42 +571,42 @@ void test_input_paste_framing(void)
 void test_input_mouse_and_focus(void)
 {
     static const struct { unsigned cb; char final; u8 button; u16 mods; } rows[] = {
-        {0, 'M', SAG_MB_LEFT, 0}, {1, 'M', SAG_MB_MIDDLE, 0},
-        {2, 'M', SAG_MB_RIGHT, 0}, {0, 'm', SAG_MB_LEFT, 0},
-        {1, 'm', SAG_MB_MIDDLE, 0}, {2, 'm', SAG_MB_RIGHT, 0},
-        {32, 'M', SAG_MB_LEFT, 0}, {33, 'M', SAG_MB_MIDDLE, 0},
-        {34, 'M', SAG_MB_RIGHT, 0}, {64, 'M', SAG_MB_WHEEL_UP, 0},
-        {65, 'M', SAG_MB_WHEEL_DOWN, 0}, {66, 'M', SAG_MB_WHEEL_LEFT, 0},
-        {67, 'M', SAG_MB_WHEEL_RIGHT, 0}, {128, 'M', SAG_MB_BACK, 0},
-        {129, 'M', SAG_MB_FORWARD, 0},
-        {48, 'M', SAG_MB_LEFT, SAG_MOD_CTRL},
-        {40, 'M', SAG_MB_LEFT, SAG_MOD_ALT},
-        {36, 'M', SAG_MB_LEFT, SAG_MOD_SHIFT}
+        {0, 'M', YEW_MB_LEFT, 0}, {1, 'M', YEW_MB_MIDDLE, 0},
+        {2, 'M', YEW_MB_RIGHT, 0}, {0, 'm', YEW_MB_LEFT, 0},
+        {1, 'm', YEW_MB_MIDDLE, 0}, {2, 'm', YEW_MB_RIGHT, 0},
+        {32, 'M', YEW_MB_LEFT, 0}, {33, 'M', YEW_MB_MIDDLE, 0},
+        {34, 'M', YEW_MB_RIGHT, 0}, {64, 'M', YEW_MB_WHEEL_UP, 0},
+        {65, 'M', YEW_MB_WHEEL_DOWN, 0}, {66, 'M', YEW_MB_WHEEL_LEFT, 0},
+        {67, 'M', YEW_MB_WHEEL_RIGHT, 0}, {128, 'M', YEW_MB_BACK, 0},
+        {129, 'M', YEW_MB_FORWARD, 0},
+        {48, 'M', YEW_MB_LEFT, YEW_MOD_CTRL},
+        {40, 'M', YEW_MB_LEFT, YEW_MOD_ALT},
+        {36, 'M', YEW_MB_LEFT, YEW_MOD_SHIFT}
     };
     size_t i;
     char seq[32];
 
-    for (i = 0U; i < SAG_ARRAY_LEN(rows); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(rows); i++) {
         int len = snprintf(seq, sizeof(seq), "\x1b[<%u;1;1%c",
                            rows[i].cb, rows[i].final);
         Expected e = {0};
 
-        e.kind = SAG_EV_MOUSE;
+        e.kind = YEW_EV_MOUSE;
         e.mods = rows[i].mods;
-        e.ev = rows[i].final == 'm' ? SAG_KEY_RELEASE :
+        e.ev = rows[i].final == 'm' ? YEW_KEY_RELEASE :
                (rows[i].cb & 32U) != 0U && (rows[i].cb & 64U) == 0U ?
-                   SAG_KEY_REPEAT : SAG_KEY_PRESS;
+                   YEW_KEY_REPEAT : YEW_KEY_PRESS;
         e.button = rows[i].button;
         check_vector((const u8 *)seq, (size_t)len, &e, false);
     }
     {
         static const u8 focus_in[] = "\x1b[I";
         static const u8 focus_out[] = "\x1b[O";
-        Expected in = named(SAG_KEY_FOCUS_IN, 0U);
-        Expected out = named(SAG_KEY_FOCUS_OUT, 0U);
+        Expected in = named(YEW_KEY_FOCUS_IN, 0U);
+        Expected out = named(YEW_KEY_FOCUS_OUT, 0U);
 
-        in.kind = SAG_EV_FOCUS;
-        out.kind = SAG_EV_FOCUS;
+        in.kind = YEW_EV_FOCUS;
+        out.kind = YEW_EV_FOCUS;
         check_vector(focus_in, sizeof(focus_in) - 1U, &in, false);
         check_vector(focus_out, sizeof(focus_out) - 1U, &out, false);
     }
@@ -614,20 +614,20 @@ void test_input_mouse_and_focus(void)
         const u8 x10[] = {0x1B, '[', 'M', 32, 33, 33};
         Expected e = {0};
 
-        e.kind = SAG_EV_MOUSE;
-        e.ev = SAG_KEY_PRESS;
-        e.button = SAG_MB_LEFT;
+        e.kind = YEW_EV_MOUSE;
+        e.ev = YEW_KEY_PRESS;
+        e.button = YEW_MB_LEFT;
         check_vector(x10, sizeof(x10), &e, false);
     }
     {
         static const u8 max_coord[] = "\x1b[<0;65536;65536M";
         Expected e = {0};
 
-        e.kind = SAG_EV_MOUSE;
+        e.kind = YEW_EV_MOUSE;
         e.col = UINT16_MAX;
         e.row = UINT16_MAX;
-        e.ev = SAG_KEY_PRESS;
-        e.button = SAG_MB_LEFT;
+        e.ev = YEW_KEY_PRESS;
+        e.button = YEW_MB_LEFT;
         check_vector(max_coord, sizeof(max_coord) - 1U, &e, false);
     }
     assert_dropped((const u8 *)"\x1b[<0;;1M",
@@ -671,63 +671,63 @@ void test_input_escape_deadlines(void)
     Key key;
     static const u8 esc = 0x1B;
 
-    sag_input_init(&in, &caps);
-    sag_input_feed(&in, &esc, 1U);
-    SAG_ASSERT(!sag_input_next(&in, 1000, &key));
-    SAG_ASSERT_EQ_I64(sag_input_deadline(&in, 1000), SAG_ESC_TIMEOUT_MS);
-    SAG_ASSERT(sag_input_next(&in, 1000 + SAG_ESC_TIMEOUT_MS, &key));
-    SAG_ASSERT_EQ_U64(key.code, SAG_KEY_ESCAPE);
-    sag_input_free(&in);
+    yew_input_init(&in, &caps);
+    yew_input_feed(&in, &esc, 1U);
+    YEW_ASSERT(!yew_input_next(&in, 1000, &key));
+    YEW_ASSERT_EQ_I64(yew_input_deadline(&in, 1000), YEW_ESC_TIMEOUT_MS);
+    YEW_ASSERT(yew_input_next(&in, 1000 + YEW_ESC_TIMEOUT_MS, &key));
+    YEW_ASSERT_EQ_U64(key.code, YEW_KEY_ESCAPE);
+    yew_input_free(&in);
 
-    sag_input_init(&in, &caps);
-    sag_input_feed(&in, &esc, 1U);
-    SAG_ASSERT(!sag_input_next(&in, 2000, &key));
-    sag_input_feed(&in, (const u8 *)"[A", 2U);
-    SAG_ASSERT(sag_input_next(&in, 2001, &key));
-    SAG_ASSERT_EQ_U64(key.code, SAG_KEY_UP);
-    SAG_ASSERT_EQ_I64(sag_input_deadline(&in, 2001), -1);
-    sag_input_free(&in);
+    yew_input_init(&in, &caps);
+    yew_input_feed(&in, &esc, 1U);
+    YEW_ASSERT(!yew_input_next(&in, 2000, &key));
+    yew_input_feed(&in, (const u8 *)"[A", 2U);
+    YEW_ASSERT(yew_input_next(&in, 2001, &key));
+    YEW_ASSERT_EQ_U64(key.code, YEW_KEY_UP);
+    YEW_ASSERT_EQ_I64(yew_input_deadline(&in, 2001), -1);
+    yew_input_free(&in);
 
-    sag_input_init(&in, &caps);
-    sag_input_feed(&in, (const u8 *)"\x1b" "i", 2U);
-    SAG_ASSERT(sag_input_next(&in, 3000, &key));
-    SAG_ASSERT_EQ_U64(key.code, 'i');
-    SAG_ASSERT_EQ_U64(key.mods, SAG_MOD_ALT);
-    sag_input_free(&in);
+    yew_input_init(&in, &caps);
+    yew_input_feed(&in, (const u8 *)"\x1b" "i", 2U);
+    YEW_ASSERT(yew_input_next(&in, 3000, &key));
+    YEW_ASSERT_EQ_U64(key.code, 'i');
+    YEW_ASSERT_EQ_U64(key.mods, YEW_MOD_ALT);
+    yew_input_free(&in);
 
     caps.kitty_kbd = true;
-    sag_input_init(&in, &caps);
-    sag_input_feed(&in, &esc, 1U);
-    SAG_ASSERT(!sag_input_next(&in, 4000, &key));
-    SAG_ASSERT_EQ_I64(sag_input_deadline(&in, 4000), -1);
-    SAG_ASSERT_EQ_I64(in.deadline, 0);
-    sag_input_free(&in);
+    yew_input_init(&in, &caps);
+    yew_input_feed(&in, &esc, 1U);
+    YEW_ASSERT(!yew_input_next(&in, 4000, &key));
+    YEW_ASSERT_EQ_I64(yew_input_deadline(&in, 4000), -1);
+    YEW_ASSERT_EQ_I64(in.deadline, 0);
+    yew_input_free(&in);
 
     caps.kitty_kbd = false;
-    sag_input_init(&in, &caps);
-    sag_input_feed(&in, &esc, 1U);
-    SAG_ASSERT(!sag_input_next(&in, 4500, &key));
-    sag_input_feed(&in, (const u8 *)"[", 1U);
-    SAG_ASSERT(!sag_input_next(&in, 4510, &key));
-    SAG_ASSERT_EQ_I64(sag_input_deadline(&in, 4510), SAG_ESC_TIMEOUT_MS);
-    sag_input_feed(&in, (const u8 *)"A", 1U);
-    SAG_ASSERT(sag_input_next(&in, 4530, &key));
-    SAG_ASSERT_EQ_U64(key.code, SAG_KEY_UP);
-    SAG_ASSERT_EQ_I64(sag_input_deadline(&in, 4530), -1);
-    sag_input_free(&in);
+    yew_input_init(&in, &caps);
+    yew_input_feed(&in, &esc, 1U);
+    YEW_ASSERT(!yew_input_next(&in, 4500, &key));
+    yew_input_feed(&in, (const u8 *)"[", 1U);
+    YEW_ASSERT(!yew_input_next(&in, 4510, &key));
+    YEW_ASSERT_EQ_I64(yew_input_deadline(&in, 4510), YEW_ESC_TIMEOUT_MS);
+    yew_input_feed(&in, (const u8 *)"A", 1U);
+    YEW_ASSERT(yew_input_next(&in, 4530, &key));
+    YEW_ASSERT_EQ_U64(key.code, YEW_KEY_UP);
+    YEW_ASSERT_EQ_I64(yew_input_deadline(&in, 4530), -1);
+    yew_input_free(&in);
 
-    sag_input_init(&in, &caps);
-    sag_input_feed(&in, (const u8 *)"\x1b[1;", 4U);
-    SAG_ASSERT(!sag_input_next(&in, 5000, &key));
-    SAG_ASSERT(sag_input_next(&in, 5000 + SAG_ESC_TIMEOUT_MS, &key));
-    SAG_ASSERT_EQ_U64(key.code, SAG_KEY_ESCAPE);
-    SAG_ASSERT(sag_input_next(&in, 5000 + SAG_ESC_TIMEOUT_MS, &key));
-    SAG_ASSERT_EQ_U64(key.code, '[');
-    SAG_ASSERT(sag_input_next(&in, 5000 + SAG_ESC_TIMEOUT_MS, &key));
-    SAG_ASSERT_EQ_U64(key.code, '1');
-    SAG_ASSERT(sag_input_next(&in, 5000 + SAG_ESC_TIMEOUT_MS, &key));
-    SAG_ASSERT_EQ_U64(key.code, ';');
-    sag_input_free(&in);
+    yew_input_init(&in, &caps);
+    yew_input_feed(&in, (const u8 *)"\x1b[1;", 4U);
+    YEW_ASSERT(!yew_input_next(&in, 5000, &key));
+    YEW_ASSERT(yew_input_next(&in, 5000 + YEW_ESC_TIMEOUT_MS, &key));
+    YEW_ASSERT_EQ_U64(key.code, YEW_KEY_ESCAPE);
+    YEW_ASSERT(yew_input_next(&in, 5000 + YEW_ESC_TIMEOUT_MS, &key));
+    YEW_ASSERT_EQ_U64(key.code, '[');
+    YEW_ASSERT(yew_input_next(&in, 5000 + YEW_ESC_TIMEOUT_MS, &key));
+    YEW_ASSERT_EQ_U64(key.code, '1');
+    YEW_ASSERT(yew_input_next(&in, 5000 + YEW_ESC_TIMEOUT_MS, &key));
+    YEW_ASSERT_EQ_U64(key.code, ';');
+    yew_input_free(&in);
 }
 
 static void assert_pipe_blob(bool kitty, const u8 *expected, size_t len,
@@ -739,16 +739,16 @@ static void assert_pipe_blob(bool kitty, const u8 *expected, size_t len,
     ssize_t got;
 
     caps.kitty_kbd = kitty;
-    SAG_ASSERT_EQ_I64(pipe(fd), 0);
+    YEW_ASSERT_EQ_I64(pipe(fd), 0);
     if (enable)
-        sag_input_enable(fd[1], &caps);
+        yew_input_enable(fd[1], &caps);
     else
-        sag_input_disable(fd[1]);
-    SAG_ASSERT_EQ_I64(close(fd[1]), 0);
+        yew_input_disable(fd[1]);
+    YEW_ASSERT_EQ_I64(close(fd[1]), 0);
     got = read(fd[0], actual, sizeof(actual));
-    SAG_ASSERT_EQ_I64(got, (i64)len);
-    SAG_ASSERT_EQ_MEM(actual, expected, len);
-    SAG_ASSERT_EQ_I64(close(fd[0]), 0);
+    YEW_ASSERT_EQ_I64(got, (i64)len);
+    YEW_ASSERT_EQ_MEM(actual, expected, len);
+    YEW_ASSERT_EQ_I64(close(fd[0]), 0);
 }
 
 void test_input_enable_blobs(void)
@@ -765,19 +765,19 @@ void test_input_enable_blobs(void)
     assert_pipe_blob(false, disable, sizeof(disable) - 1U, false);
 
     /*
-     * Sprint 27 §8: SAG_MOUSE=0 leaves 1002/1006 UNSENT, and the rest
+     * Sprint 27 §8: YEW_MOUSE=0 leaves 1002/1006 UNSENT, and the rest
      * of the sequence is byte-identical — including its order, which
      * the disable path mirrors.
      */
     {
         static const u8 enable_nomouse[] = "\x1b[?2004h\x1b[?1004h";
 
-        (void)setenv("SAG_MOUSE", "0", 1);
+        (void)setenv("YEW_MOUSE", "0", 1);
         assert_pipe_blob(false, enable_nomouse,
                          sizeof(enable_nomouse) - 1U, true);
-        (void)setenv("SAG_MOUSE", "1", 1);
+        (void)setenv("YEW_MOUSE", "1", 1);
         assert_pipe_blob(false, enable, sizeof(enable) - 1U, true);
-        (void)unsetenv("SAG_MOUSE");
+        (void)unsetenv("YEW_MOUSE");
         assert_pipe_blob(false, enable, sizeof(enable) - 1U, true);
     }
 }
@@ -793,18 +793,18 @@ void test_input_unknown_csi(void)
     bytebuf_init(&bytes);
     for (i = 0U; i < 1000U; i++)
         bytebuf_printf(&bytes, "\x1b[?%zu;999z", i);
-    sag_input_init(&in, &caps);
-    sag_input_feed(&in, bytes.data, bytes.len);
-    while (sag_input_next(&in, 1, &key))
-        SAG_ASSERT_EQ_U64(key.kind, SAG_EV_NONE);
-    SAG_ASSERT_EQ_U64(in.dropped, 1000U);
-    sag_input_free(&in);
+    yew_input_init(&in, &caps);
+    yew_input_feed(&in, bytes.data, bytes.len);
+    while (yew_input_next(&in, 1, &key))
+        YEW_ASSERT_EQ_U64(key.kind, YEW_EV_NONE);
+    YEW_ASSERT_EQ_U64(in.dropped, 1000U);
+    yew_input_free(&in);
     bytebuf_free(&bytes);
 }
 
 void test_input_random_progress(void)
 {
-    u8 *bytes = sag_xmalloc(65536U);
+    u8 *bytes = yew_xmalloc(65536U);
     TtyCaps caps = {0};
     In in;
     Key key;
@@ -816,19 +816,19 @@ void test_input_random_progress(void)
         x = x * 1664525U + 1013904223U;
         bytes[i] = (u8)(x >> 24);
     }
-    sag_input_init(&in, &caps);
-    sag_input_feed(&in, bytes, 65536U);
-    while (sag_input_next(&in, (i64)iterations, &key)) {
+    yew_input_init(&in, &caps);
+    yew_input_feed(&in, bytes, 65536U);
+    while (yew_input_next(&in, (i64)iterations, &key)) {
         iterations++;
-        SAG_ASSERT(iterations <= 65536U);
+        YEW_ASSERT(iterations <= 65536U);
     }
-    sag_input_eof(&in);
-    while (sag_input_next(&in, 100000, &key)) {
+    yew_input_eof(&in);
+    while (yew_input_next(&in, 100000, &key)) {
         iterations++;
-        SAG_ASSERT(iterations <= 65536U);
+        YEW_ASSERT(iterations <= 65536U);
     }
-    SAG_ASSERT(iterations <= 65536U);
-    sag_input_free(&in);
+    YEW_ASSERT(iterations <= 65536U);
+    yew_input_free(&in);
     free(bytes);
 }
 
@@ -843,24 +843,24 @@ void test_input_seed_and_cap(void)
 
     bytebuf_init(&pending);
     bytebuf_append(&pending, pending_bytes, sizeof(pending_bytes) - 1U);
-    sag_input_init(&in, &caps);
-    sag_input_seed(&in, &pending);
-    SAG_ASSERT(sag_input_next(&in, 1, &key));
-    SAG_ASSERT_EQ_U64(key.code, 'x');
-    SAG_ASSERT(sag_input_next(&in, 1, &key));
-    SAG_ASSERT_EQ_U64(key.code, SAG_KEY_UP);
-    SAG_ASSERT_EQ_U64(pending.len, sizeof(pending_bytes) - 1U);
-    SAG_ASSERT_EQ_MEM(pending.data, pending_bytes, pending.len);
-    sag_input_free(&in);
+    yew_input_init(&in, &caps);
+    yew_input_seed(&in, &pending);
+    YEW_ASSERT(yew_input_next(&in, 1, &key));
+    YEW_ASSERT_EQ_U64(key.code, 'x');
+    YEW_ASSERT(yew_input_next(&in, 1, &key));
+    YEW_ASSERT_EQ_U64(key.code, YEW_KEY_UP);
+    YEW_ASSERT_EQ_U64(pending.len, sizeof(pending_bytes) - 1U);
+    YEW_ASSERT_EQ_MEM(pending.data, pending_bytes, pending.len);
+    yew_input_free(&in);
     bytebuf_free(&pending);
 
-    oversized = sag_xmalloc(SAG_IN_MAX_BUFFER + 1U);
-    (void)memset(oversized, 'q', SAG_IN_MAX_BUFFER + 1U);
-    sag_input_init(&in, &caps);
-    sag_input_feed(&in, oversized, SAG_IN_MAX_BUFFER + 1U);
-    SAG_ASSERT_EQ_U64(in.buf.len - in.rd, SAG_IN_MAX_BUFFER);
-    SAG_ASSERT_EQ_U64(in.dropped, 1U);
-    sag_input_free(&in);
+    oversized = yew_xmalloc(YEW_IN_MAX_BUFFER + 1U);
+    (void)memset(oversized, 'q', YEW_IN_MAX_BUFFER + 1U);
+    yew_input_init(&in, &caps);
+    yew_input_feed(&in, oversized, YEW_IN_MAX_BUFFER + 1U);
+    YEW_ASSERT_EQ_U64(in.buf.len - in.rd, YEW_IN_MAX_BUFFER);
+    YEW_ASSERT_EQ_U64(in.dropped, 1U);
+    yew_input_free(&in);
     free(oversized);
 }
 
@@ -879,49 +879,49 @@ void test_input_large_streaming_paste(void)
     size_t peak = 0U;
 
     (void)memset(block, 0xA5, sizeof(block));
-    sag_input_init(&in, &caps);
-    sag_input_feed(&in, begin, sizeof(begin) - 1U);
-    SAG_ASSERT(sag_input_next(&in, 1, &key));
-    SAG_ASSERT_EQ_U64(key.kind, SAG_EV_PASTE_BEGIN);
+    yew_input_init(&in, &caps);
+    yew_input_feed(&in, begin, sizeof(begin) - 1U);
+    YEW_ASSERT(yew_input_next(&in, 1, &key));
+    YEW_ASSERT_EQ_U64(key.kind, YEW_EV_PASTE_BEGIN);
     while (fed < PASTE_SIZE) {
         size_t n = PASTE_SIZE - fed;
 
         if (n > sizeof(block))
             n = sizeof(block);
-        sag_input_feed(&in, block, n);
+        yew_input_feed(&in, block, n);
         fed += n;
-        while (sag_input_next(&in, (i64)fed, &key)) {
-            if (key.kind == SAG_EV_PASTE_DATA) {
+        while (yew_input_next(&in, (i64)fed, &key)) {
+            if (key.kind == YEW_EV_PASTE_DATA) {
                 size_t chunk_len;
-                const u8 *chunk = sag_input_paste_chunk(&in, &chunk_len);
+                const u8 *chunk = yew_input_paste_chunk(&in, &chunk_len);
 
-                SAG_ASSERT(chunk_len <= 4096U);
+                YEW_ASSERT(chunk_len <= 4096U);
                 if (chunk_len != 0U)
-                    SAG_ASSERT_EQ_U64(chunk[0], 0xA5U);
+                    YEW_ASSERT_EQ_U64(chunk[0], 0xA5U);
                 total += chunk_len;
                 chunks++;
             }
         }
         if (in.buf.cap + in.paste.cap > peak)
             peak = in.buf.cap + in.paste.cap;
-        SAG_ASSERT(peak <= 3U * SAG_IN_PASTE_CHUNK);
+        YEW_ASSERT(peak <= 3U * YEW_IN_PASTE_CHUNK);
     }
-    sag_input_feed(&in, end, sizeof(end) - 1U);
-    while (sag_input_next(&in, 999999, &key)) {
-        if (key.kind == SAG_EV_PASTE_DATA) {
+    yew_input_feed(&in, end, sizeof(end) - 1U);
+    while (yew_input_next(&in, 999999, &key)) {
+        if (key.kind == YEW_EV_PASTE_DATA) {
             size_t chunk_len;
 
-            (void)sag_input_paste_chunk(&in, &chunk_len);
+            (void)yew_input_paste_chunk(&in, &chunk_len);
             total += chunk_len;
             chunks++;
         } else {
-            SAG_ASSERT_EQ_U64(key.kind, SAG_EV_PASTE_END);
+            YEW_ASSERT_EQ_U64(key.kind, YEW_EV_PASTE_END);
         }
     }
-    SAG_ASSERT_EQ_U64(total, PASTE_SIZE);
-    SAG_ASSERT(chunks >= (size_t)PASTE_SIZE / 4096U);
-    SAG_ASSERT(peak <= 3U * SAG_IN_PASTE_CHUNK);
-    sag_input_free(&in);
+    YEW_ASSERT_EQ_U64(total, PASTE_SIZE);
+    YEW_ASSERT(chunks >= (size_t)PASTE_SIZE / 4096U);
+    YEW_ASSERT(peak <= 3U * YEW_IN_PASTE_CHUNK);
+    yew_input_free(&in);
 }
 
 void test_input_hostile_strings(void)
@@ -936,14 +936,14 @@ void test_input_hostile_strings(void)
 
     decoded_init(&d);
     decode_parts(stream, sizeof(stream) - 1U, 7U, false, false, &d);
-    SAG_ASSERT_EQ_U64(d.len, 1U);
-    SAG_ASSERT_EQ_U64(d.event[0].code, 'x');
-    SAG_ASSERT_EQ_U64(d.dropped, 5U);
+    YEW_ASSERT_EQ_U64(d.len, 1U);
+    YEW_ASSERT_EQ_U64(d.event[0].code, 'x');
+    YEW_ASSERT_EQ_U64(d.dropped, 5U);
     decoded_free(&d);
 
     {
-        size_t body_len = SAG_IN_STRING_MAX + 1024U;
-        u8 *body = sag_xmalloc(body_len + 6U);
+        size_t body_len = YEW_IN_STRING_MAX + 1024U;
+        u8 *body = yew_xmalloc(body_len + 6U);
 
         body[0] = 0x1BU;
         body[1] = ']';
@@ -955,9 +955,9 @@ void test_input_hostile_strings(void)
         decoded_init(&d);
         decode_parts(body, body_len + 5U, body_len / 2U,
                      false, false, &d);
-        SAG_ASSERT_EQ_U64(d.len, 2U);
-        SAG_ASSERT_EQ_U64(d.event[0].kind, SAG_EV_NONE);
-        SAG_ASSERT_EQ_U64(d.event[1].code, 'x');
+        YEW_ASSERT_EQ_U64(d.len, 2U);
+        YEW_ASSERT_EQ_U64(d.event[0].kind, YEW_EV_NONE);
+        YEW_ASSERT_EQ_U64(d.event[1].code, 'x');
         decoded_free(&d);
         free(body);
     }

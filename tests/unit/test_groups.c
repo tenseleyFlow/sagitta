@@ -28,11 +28,11 @@
 
 static void gp_fixture(Ed *ed)
 {
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    sag_ed_init(ed);
-    SAG_ASSERT(sag_ed_open_scratch(ed));
-    sag_layout_compute(ed->pane_root, (Rect){0U, 0U, 80U, 24U});
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    yew_ed_init(ed);
+    YEW_ASSERT(yew_ed_open_scratch(ed));
+    yew_layout_compute(ed->pane_root, (Rect){0U, 0U, 80U, 24U});
 }
 
 /* Opens `n` extra tabs so the array has 1 + n entries. */
@@ -43,9 +43,9 @@ static void gp_open_many(Ed *ed, u32 n)
     for (i = 0U; i < n; i++) {
         char path[64];
 
-        (void)snprintf(path, sizeof(path), "/tmp/sag-grp-%u.txt",
+        (void)snprintf(path, sizeof(path), "/tmp/yew-grp-%u.txt",
                        (unsigned)i);
-        SAG_ASSERT(sag_tab_open(ed, path) >= 0);
+        YEW_ASSERT(yew_tab_open(ed, path) >= 0);
     }
 }
 
@@ -61,27 +61,27 @@ void test_groups_create_labels_from_the_directory_basename(void)
 
     gp_fixture(&ed);
     /* An empty name means "call it after the directory". */
-    g = sag_group_create(&ed, "/home/u/proj/src", "");
-    SAG_ASSERT(g != 0U);
-    sag_group_label(&ed, g, label, sizeof(label));
+    g = yew_group_create(&ed, "/home/u/proj/src", "");
+    YEW_ASSERT(g != 0U);
+    yew_group_label(&ed, g, label, sizeof(label));
     /* Zero members so far, and the count is live even now. */
-    SAG_ASSERT_EQ_STR(label, "src/ (0)");
+    YEW_ASSERT_EQ_STR(label, "src/ (0)");
 
     /* A trailing slash on the origin must not produce an empty name. */
-    g = sag_group_create(&ed, "/home/u/proj/tests/", NULL);
-    sag_group_label(&ed, g, label, sizeof(label));
-    SAG_ASSERT_EQ_STR(label, "tests/ (0)");
+    g = yew_group_create(&ed, "/home/u/proj/tests/", NULL);
+    yew_group_label(&ed, g, label, sizeof(label));
+    YEW_ASSERT_EQ_STR(label, "tests/ (0)");
 
     /* The root has no basename to take. */
-    g = sag_group_create(&ed, "/", NULL);
-    sag_group_label(&ed, g, label, sizeof(label));
-    SAG_ASSERT_EQ_STR(label, "/ (0)");
+    g = yew_group_create(&ed, "/", NULL);
+    yew_group_label(&ed, g, label, sizeof(label));
+    YEW_ASSERT_EQ_STR(label, "/ (0)");
 
     /* An explicit name wins over the directory. */
-    g = sag_group_create(&ed, "/home/u/proj/src", "backend");
-    sag_group_label(&ed, g, label, sizeof(label));
-    SAG_ASSERT_EQ_STR(label, "backend (0)");
-    sag_ed_free(&ed);
+    g = yew_group_create(&ed, "/home/u/proj/src", "backend");
+    yew_group_label(&ed, g, label, sizeof(label));
+    YEW_ASSERT_EQ_STR(label, "backend (0)");
+    yew_ed_free(&ed);
 }
 
 /* Ids are monotonic and a dissolved one never resolves again — the same
@@ -95,15 +95,15 @@ void test_groups_ids_are_monotonic_and_never_reused(void)
 
     gp_fixture(&ed);
     gp_open_many(&ed, 3U);
-    a = sag_group_create(&ed, "/a", NULL);
-    b = sag_group_create(&ed, "/b", NULL);
-    SAG_ASSERT(b > a);
-    sag_group_dissolve(&ed, a);
-    SAG_ASSERT_EQ_I64(sag_group_find(&ed, a), -1);
-    c = sag_group_create(&ed, "/c", NULL);
-    SAG_ASSERT(c > b);
-    SAG_ASSERT_EQ_I64(sag_group_find(&ed, a), -1);
-    sag_ed_free(&ed);
+    a = yew_group_create(&ed, "/a", NULL);
+    b = yew_group_create(&ed, "/b", NULL);
+    YEW_ASSERT(b > a);
+    yew_group_dissolve(&ed, a);
+    YEW_ASSERT_EQ_I64(yew_group_find(&ed, a), -1);
+    c = yew_group_create(&ed, "/c", NULL);
+    YEW_ASSERT(c > b);
+    YEW_ASSERT_EQ_I64(yew_group_find(&ed, a), -1);
+    yew_ed_free(&ed);
 }
 
 void test_groups_label_count_is_computed_not_stored(void)
@@ -114,17 +114,17 @@ void test_groups_label_count_is_computed_not_stored(void)
 
     gp_fixture(&ed);
     gp_open_many(&ed, 3U);
-    g = sag_group_create(&ed, "/src", NULL);
-    sag_group_add_member(&ed, g, 1);
-    sag_group_add_member(&ed, g, 2);
-    sag_group_label(&ed, g, label, sizeof(label));
-    SAG_ASSERT_EQ_STR(label, "src/ (2)");
+    g = yew_group_create(&ed, "/src", NULL);
+    yew_group_add_member(&ed, g, 1);
+    yew_group_add_member(&ed, g, 2);
+    yew_group_label(&ed, g, label, sizeof(label));
+    YEW_ASSERT_EQ_STR(label, "src/ (2)");
 
     /* Closing a member changes the label with no one telling it to. */
-    SAG_ASSERT(sag_tab_close(&ed, 1));
-    sag_group_label(&ed, g, label, sizeof(label));
-    SAG_ASSERT_EQ_STR(label, "src/ (1)");
-    sag_ed_free(&ed);
+    YEW_ASSERT(yew_tab_close(&ed, 1));
+    yew_group_label(&ed, g, label, sizeof(label));
+    YEW_ASSERT_EQ_STR(label, "src/ (1)");
+    yew_ed_free(&ed);
 }
 
 /* ---------------------------------------------------------------- */
@@ -140,21 +140,21 @@ void test_groups_membership_lives_on_the_tab(void)
 
     gp_fixture(&ed);
     gp_open_many(&ed, 3U);
-    g = sag_group_create(&ed, "/src", NULL);
-    sag_group_add_member(&ed, g, 1);
-    sag_group_add_member(&ed, g, 3);
+    g = yew_group_create(&ed, "/src", NULL);
+    yew_group_add_member(&ed, g, 1);
+    yew_group_add_member(&ed, g, 3);
     /* Ordinals are 1-based and assigned in join order. */
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 1)->group_id, g);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 1)->group_ordinal, 1U);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 3)->group_ordinal, 2U);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 0)->group_id, 0U);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 1)->group_id, g);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 1)->group_ordinal, 1U);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 3)->group_ordinal, 2U);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 0)->group_id, 0U);
 
-    n = sag_group_members(&ed, g, members, 8);
-    SAG_ASSERT_EQ_I64(n, 2);
-    SAG_ASSERT_EQ_I64(members[0], 1);
-    SAG_ASSERT_EQ_I64(members[1], 3);
-    SAG_ASSERT_EQ_I64(sag_group_member_count(&ed, g), 2);
-    sag_ed_free(&ed);
+    n = yew_group_members(&ed, g, members, 8);
+    YEW_ASSERT_EQ_I64(n, 2);
+    YEW_ASSERT_EQ_I64(members[0], 1);
+    YEW_ASSERT_EQ_I64(members[1], 3);
+    YEW_ASSERT_EQ_I64(yew_group_member_count(&ed, g), 2);
+    yew_ed_free(&ed);
 }
 
 /* A tab belongs to exactly one group: joining a second LEAVES the
@@ -167,22 +167,22 @@ void test_groups_a_tab_joins_only_one_group(void)
 
     gp_fixture(&ed);
     gp_open_many(&ed, 4U);
-    a = sag_group_create(&ed, "/a", NULL);
-    b = sag_group_create(&ed, "/b", NULL);
-    sag_group_add_member(&ed, a, 1);
-    sag_group_add_member(&ed, a, 2);
-    sag_group_add_member(&ed, a, 3);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 3)->group_ordinal, 3U);
+    a = yew_group_create(&ed, "/a", NULL);
+    b = yew_group_create(&ed, "/b", NULL);
+    yew_group_add_member(&ed, a, 1);
+    yew_group_add_member(&ed, a, 2);
+    yew_group_add_member(&ed, a, 3);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 3)->group_ordinal, 3U);
 
     /* Tab 2 (ordinal 2) defects to b. */
-    sag_group_add_member(&ed, b, 2);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 2)->group_id, b);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 2)->group_ordinal, 1U);
-    SAG_ASSERT_EQ_I64(sag_group_member_count(&ed, a), 2);
+    yew_group_add_member(&ed, b, 2);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 2)->group_id, b);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 2)->group_ordinal, 1U);
+    YEW_ASSERT_EQ_I64(yew_group_member_count(&ed, a), 2);
     /* a's ordinals closed the hole rather than leaving a gap at 2. */
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 1)->group_ordinal, 1U);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 3)->group_ordinal, 2U);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 1)->group_ordinal, 1U);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 3)->group_ordinal, 2U);
+    yew_ed_free(&ed);
 }
 
 /* Re-adding a member is a no-op, not a renumber to the end. */
@@ -193,14 +193,14 @@ void test_groups_readding_a_member_keeps_its_ordinal(void)
 
     gp_fixture(&ed);
     gp_open_many(&ed, 3U);
-    g = sag_group_create(&ed, "/src", NULL);
-    sag_group_add_member(&ed, g, 1);
-    sag_group_add_member(&ed, g, 2);
-    sag_group_add_member(&ed, g, 1);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 1)->group_ordinal, 1U);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 2)->group_ordinal, 2U);
-    SAG_ASSERT_EQ_I64(sag_group_member_count(&ed, g), 2);
-    sag_ed_free(&ed);
+    g = yew_group_create(&ed, "/src", NULL);
+    yew_group_add_member(&ed, g, 1);
+    yew_group_add_member(&ed, g, 2);
+    yew_group_add_member(&ed, g, 1);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 1)->group_ordinal, 1U);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 2)->group_ordinal, 2U);
+    YEW_ASSERT_EQ_I64(yew_group_member_count(&ed, g), 2);
+    yew_ed_free(&ed);
 }
 
 void test_groups_removing_the_last_member_auto_dissolves(void)
@@ -210,15 +210,15 @@ void test_groups_removing_the_last_member_auto_dissolves(void)
 
     gp_fixture(&ed);
     gp_open_many(&ed, 2U);
-    g = sag_group_create(&ed, "/src", NULL);
-    sag_group_add_member(&ed, g, 1);
-    SAG_ASSERT(sag_group_find(&ed, g) >= 0);
-    sag_group_remove_member(&ed, 1);
+    g = yew_group_create(&ed, "/src", NULL);
+    yew_group_add_member(&ed, g, 1);
+    YEW_ASSERT(yew_group_find(&ed, g) >= 0);
+    yew_group_remove_member(&ed, 1);
     /* Gone, because an empty group is a row-1 entry that resolves to
      * nothing and a walk step into a hole. */
-    SAG_ASSERT_EQ_I64(sag_group_find(&ed, g), -1);
-    SAG_ASSERT_EQ_U64(sag_active_group_id(&ed), 0U);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_I64(yew_group_find(&ed, g), -1);
+    YEW_ASSERT_EQ_U64(yew_active_group_id(&ed), 0U);
+    yew_ed_free(&ed);
 }
 
 /* Closing the last member goes through the same door — tab close calls
@@ -230,11 +230,11 @@ void test_groups_closing_the_last_member_auto_dissolves(void)
 
     gp_fixture(&ed);
     gp_open_many(&ed, 2U);
-    g = sag_group_create(&ed, "/src", NULL);
-    sag_group_add_member(&ed, g, 2);
-    SAG_ASSERT(sag_tab_close(&ed, 2));
-    SAG_ASSERT_EQ_I64(sag_group_find(&ed, g), -1);
-    sag_ed_free(&ed);
+    g = yew_group_create(&ed, "/src", NULL);
+    yew_group_add_member(&ed, g, 2);
+    YEW_ASSERT(yew_tab_close(&ed, 2));
+    YEW_ASSERT_EQ_I64(yew_group_find(&ed, g), -1);
+    yew_ed_free(&ed);
 }
 
 /*
@@ -251,20 +251,20 @@ void test_groups_close_compacts_ordinals_not_indices(void)
 
     gp_fixture(&ed);
     gp_open_many(&ed, 4U);
-    g = sag_group_create(&ed, "/src", NULL);
-    sag_group_add_member(&ed, g, 1);
-    sag_group_add_member(&ed, g, 2);
-    sag_group_add_member(&ed, g, 3);
+    g = yew_group_create(&ed, "/src", NULL);
+    yew_group_add_member(&ed, g, 1);
+    yew_group_add_member(&ed, g, 2);
+    yew_group_add_member(&ed, g, 3);
     /* Close the MIDDLE member: ordinal 2 vacates, ordinal 3 becomes 2,
      * and every index above 2 shifts down by one. */
-    SAG_ASSERT(sag_tab_close(&ed, 2));
-    n = sag_group_members(&ed, g, members, 8);
-    SAG_ASSERT_EQ_I64(n, 2);
-    SAG_ASSERT_EQ_I64(members[0], 1);
-    SAG_ASSERT_EQ_I64(members[1], 2); /* was index 3 */
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 1)->group_ordinal, 1U);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 2)->group_ordinal, 2U);
-    sag_ed_free(&ed);
+    YEW_ASSERT(yew_tab_close(&ed, 2));
+    n = yew_group_members(&ed, g, members, 8);
+    YEW_ASSERT_EQ_I64(n, 2);
+    YEW_ASSERT_EQ_I64(members[0], 1);
+    YEW_ASSERT_EQ_I64(members[1], 2); /* was index 3 */
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 1)->group_ordinal, 1U);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 2)->group_ordinal, 2U);
+    yew_ed_free(&ed);
 }
 
 void test_groups_dissolve_ungroups_stragglers(void)
@@ -275,21 +275,21 @@ void test_groups_dissolve_ungroups_stragglers(void)
 
     gp_fixture(&ed);
     gp_open_many(&ed, 3U);
-    g = sag_group_create(&ed, "/src", NULL);
-    sag_group_add_member(&ed, g, 1);
-    sag_group_add_member(&ed, g, 2);
-    sag_group_dissolve(&ed, g);
+    g = yew_group_create(&ed, "/src", NULL);
+    yew_group_add_member(&ed, g, 1);
+    yew_group_add_member(&ed, g, 2);
+    yew_group_dissolve(&ed, g);
     /*
      * Not one tab may be left naming the dead id: an orphan answers
      * "grouped" to every question and resolves to no group, so row 1
      * skips it as a member and row 2 never lists it — the file becomes
      * unreachable by any navigation.
      */
-    for (i = 0U; i < sag_tab_count(&ed); i++) {
-        SAG_ASSERT_EQ_U64(sag_tab_at(&ed, (int)i)->group_id, 0U);
-        SAG_ASSERT_EQ_U64(sag_tab_at(&ed, (int)i)->group_ordinal, 0U);
+    for (i = 0U; i < yew_tab_count(&ed); i++) {
+        YEW_ASSERT_EQ_U64(yew_tab_at(&ed, (int)i)->group_id, 0U);
+        YEW_ASSERT_EQ_U64(yew_tab_at(&ed, (int)i)->group_ordinal, 0U);
     }
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
 }
 
 void test_groups_prune_empty_removes_only_empty_groups(void)
@@ -300,13 +300,13 @@ void test_groups_prune_empty_removes_only_empty_groups(void)
 
     gp_fixture(&ed);
     gp_open_many(&ed, 2U);
-    a = sag_group_create(&ed, "/a", NULL);
-    b = sag_group_create(&ed, "/b", NULL);
-    sag_group_add_member(&ed, b, 1);
-    sag_group_prune_empty(&ed);
-    SAG_ASSERT_EQ_I64(sag_group_find(&ed, a), -1);
-    SAG_ASSERT(sag_group_find(&ed, b) >= 0);
-    sag_ed_free(&ed);
+    a = yew_group_create(&ed, "/a", NULL);
+    b = yew_group_create(&ed, "/b", NULL);
+    yew_group_add_member(&ed, b, 1);
+    yew_group_prune_empty(&ed);
+    YEW_ASSERT_EQ_I64(yew_group_find(&ed, a), -1);
+    YEW_ASSERT(yew_group_find(&ed, b) >= 0);
+    yew_ed_free(&ed);
 }
 
 void test_groups_active_group_id_is_derived(void)
@@ -316,17 +316,17 @@ void test_groups_active_group_id_is_derived(void)
 
     gp_fixture(&ed);
     gp_open_many(&ed, 3U);
-    g = sag_group_create(&ed, "/src", NULL);
-    sag_group_add_member(&ed, g, 2);
-    sag_tab_switch(&ed, 0);
-    SAG_ASSERT_EQ_U64(sag_active_group_id(&ed), 0U);
-    sag_tab_switch(&ed, 2);
-    SAG_ASSERT_EQ_U64(sag_active_group_id(&ed), g);
+    g = yew_group_create(&ed, "/src", NULL);
+    yew_group_add_member(&ed, g, 2);
+    yew_tab_switch(&ed, 0);
+    YEW_ASSERT_EQ_U64(yew_active_group_id(&ed), 0U);
+    yew_tab_switch(&ed, 2);
+    YEW_ASSERT_EQ_U64(yew_active_group_id(&ed), g);
     /* Assigning the active index RAW — which several call sites do —
      * still gives the right answer, because nothing cached it. */
     ed.tabs.active = 0;
-    SAG_ASSERT_EQ_U64(sag_active_group_id(&ed), 0U);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(yew_active_group_id(&ed), 0U);
+    yew_ed_free(&ed);
 }
 
 /* ---------------------------------------------------------------- */
@@ -349,22 +349,22 @@ void test_groups_set_ordinal_moves_right_by_exactly_one(void)
 
     gp_fixture(&ed);
     gp_open_many(&ed, 3U);
-    g = sag_group_create(&ed, "/src", NULL);
-    sag_group_add_member(&ed, g, 1); /* ordinal 1 */
-    sag_group_add_member(&ed, g, 2); /* ordinal 2 */
-    sag_group_add_member(&ed, g, 3); /* ordinal 3 */
+    g = yew_group_create(&ed, "/src", NULL);
+    yew_group_add_member(&ed, g, 1); /* ordinal 1 */
+    yew_group_add_member(&ed, g, 2); /* ordinal 2 */
+    yew_group_add_member(&ed, g, 3); /* ordinal 3 */
 
     /* Member at ordinal 1 moves to position 2: [1,2,3] -> [2,1,3]. */
-    sag_group_set_ordinal(&ed, 1, 2);
-    SAG_ASSERT_EQ_I64(sag_group_members(&ed, g, members, 8), 3);
-    SAG_ASSERT_EQ_I64(members[0], 2);
-    SAG_ASSERT_EQ_I64(members[1], 1);
-    SAG_ASSERT_EQ_I64(members[2], 3);
+    yew_group_set_ordinal(&ed, 1, 2);
+    YEW_ASSERT_EQ_I64(yew_group_members(&ed, g, members, 8), 3);
+    YEW_ASSERT_EQ_I64(members[0], 2);
+    YEW_ASSERT_EQ_I64(members[1], 1);
+    YEW_ASSERT_EQ_I64(members[2], 3);
     /* Renumbered 1..n with no holes and no duplicates. */
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 2)->group_ordinal, 1U);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 1)->group_ordinal, 2U);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 3)->group_ordinal, 3U);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 2)->group_ordinal, 1U);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 1)->group_ordinal, 2U);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 3)->group_ordinal, 3U);
+    yew_ed_free(&ed);
 }
 
 void test_groups_set_ordinal_moves_left_and_clamps(void)
@@ -375,26 +375,26 @@ void test_groups_set_ordinal_moves_left_and_clamps(void)
 
     gp_fixture(&ed);
     gp_open_many(&ed, 3U);
-    g = sag_group_create(&ed, "/src", NULL);
-    sag_group_add_member(&ed, g, 1);
-    sag_group_add_member(&ed, g, 2);
-    sag_group_add_member(&ed, g, 3);
+    g = yew_group_create(&ed, "/src", NULL);
+    yew_group_add_member(&ed, g, 1);
+    yew_group_add_member(&ed, g, 2);
+    yew_group_add_member(&ed, g, 3);
 
     /* Last to first. */
-    sag_group_set_ordinal(&ed, 3, 1);
-    SAG_ASSERT_EQ_I64(sag_group_members(&ed, g, members, 8), 3);
-    SAG_ASSERT_EQ_I64(members[0], 3);
-    SAG_ASSERT_EQ_I64(members[1], 1);
-    SAG_ASSERT_EQ_I64(members[2], 2);
+    yew_group_set_ordinal(&ed, 3, 1);
+    YEW_ASSERT_EQ_I64(yew_group_members(&ed, g, members, 8), 3);
+    YEW_ASSERT_EQ_I64(members[0], 3);
+    YEW_ASSERT_EQ_I64(members[1], 1);
+    YEW_ASSERT_EQ_I64(members[2], 2);
 
     /* Out of range clamps rather than corrupting the run. */
-    sag_group_set_ordinal(&ed, 3, 99);
-    SAG_ASSERT_EQ_I64(sag_group_members(&ed, g, members, 8), 3);
-    SAG_ASSERT_EQ_I64(members[2], 3);
-    sag_group_set_ordinal(&ed, 3, -4);
-    SAG_ASSERT_EQ_I64(sag_group_members(&ed, g, members, 8), 3);
-    SAG_ASSERT_EQ_I64(members[0], 3);
-    sag_ed_free(&ed);
+    yew_group_set_ordinal(&ed, 3, 99);
+    YEW_ASSERT_EQ_I64(yew_group_members(&ed, g, members, 8), 3);
+    YEW_ASSERT_EQ_I64(members[2], 3);
+    yew_group_set_ordinal(&ed, 3, -4);
+    YEW_ASSERT_EQ_I64(yew_group_members(&ed, g, members, 8), 3);
+    YEW_ASSERT_EQ_I64(members[0], 3);
+    yew_ed_free(&ed);
 }
 
 /* ---------------------------------------------------------------- */
@@ -420,23 +420,23 @@ void test_groups_reorder_block_stays_contiguous_past_other_tabs(void)
     gp_fixture(&ed);
     gp_open_many(&ed, 4U); /* 5 tabs: 0..4 */
     for (i = 0U; i < 5U; i++)
-        ids[i] = sag_tab_at(&ed, (int)i)->tab_id;
-    g = sag_group_create(&ed, "/src", NULL);
-    sag_group_add_member(&ed, g, 0);
-    sag_group_add_member(&ed, g, 1);
+        ids[i] = yew_tab_at(&ed, (int)i)->tab_id;
+    g = yew_group_create(&ed, "/src", NULL);
+    yew_group_add_member(&ed, g, 0);
+    yew_group_add_member(&ed, g, 1);
 
     /* Move the block to the end: the 3 ungrouped tabs slide left and
      * keep their relative order; the members stay adjacent. */
-    sag_group_reorder_block(&ed, g, 3);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 0)->tab_id, ids[2]);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 1)->tab_id, ids[3]);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 2)->tab_id, ids[4]);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 3)->tab_id, ids[0]);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 4)->tab_id, ids[1]);
+    yew_group_reorder_block(&ed, g, 3);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 0)->tab_id, ids[2]);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 1)->tab_id, ids[3]);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 2)->tab_id, ids[4]);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 3)->tab_id, ids[0]);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 4)->tab_id, ids[1]);
     /* Contiguous, and in ordinal order. */
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 3)->group_ordinal, 1U);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 4)->group_ordinal, 2U);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 3)->group_ordinal, 1U);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 4)->group_ordinal, 2U);
+    yew_ed_free(&ed);
 }
 
 void test_groups_reorder_block_keeps_the_active_tab(void)
@@ -447,16 +447,16 @@ void test_groups_reorder_block_keeps_the_active_tab(void)
 
     gp_fixture(&ed);
     gp_open_many(&ed, 4U);
-    g = sag_group_create(&ed, "/src", NULL);
-    sag_group_add_member(&ed, g, 0);
-    sag_group_add_member(&ed, g, 1);
-    sag_tab_switch(&ed, 4);
-    active_id = sag_tab_at(&ed, 4)->tab_id;
+    g = yew_group_create(&ed, "/src", NULL);
+    yew_group_add_member(&ed, g, 0);
+    yew_group_add_member(&ed, g, 1);
+    yew_tab_switch(&ed, 4);
+    active_id = yew_tab_at(&ed, 4)->tab_id;
 
-    sag_group_reorder_block(&ed, g, 3);
+    yew_group_reorder_block(&ed, g, 3);
     /* Active follows the TAB, not the number. */
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, ed.tabs.active)->tab_id, active_id);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, ed.tabs.active)->tab_id, active_id);
+    yew_ed_free(&ed);
 }
 
 void test_groups_reorder_block_clamps_the_destination(void)
@@ -467,18 +467,18 @@ void test_groups_reorder_block_clamps_the_destination(void)
 
     gp_fixture(&ed);
     gp_open_many(&ed, 3U);
-    g = sag_group_create(&ed, "/src", NULL);
-    sag_group_add_member(&ed, g, 2);
-    sag_group_add_member(&ed, g, 3);
-    first = sag_tab_at(&ed, 2)->tab_id;
+    g = yew_group_create(&ed, "/src", NULL);
+    yew_group_add_member(&ed, g, 2);
+    yew_group_add_member(&ed, g, 3);
+    first = yew_tab_at(&ed, 2)->tab_id;
 
     /* Past the end lands the block at the end, not outside the array. */
-    sag_group_reorder_block(&ed, g, 999);
-    SAG_ASSERT_EQ_U64(sag_tab_count(&ed), 4U);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 2)->tab_id, first);
-    sag_group_reorder_block(&ed, g, -5);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, 0)->tab_id, first);
-    sag_ed_free(&ed);
+    yew_group_reorder_block(&ed, g, 999);
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 4U);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 2)->tab_id, first);
+    yew_group_reorder_block(&ed, g, -5);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, 0)->tab_id, first);
+    yew_ed_free(&ed);
 }
 
 /* ---------------------------------------------------------------- */
@@ -565,38 +565,38 @@ static void storm_check(Ed *ed, const Oracle *o)
     int j;
 
     /* Every group the model has, the oracle has — and vice versa. */
-    SAG_ASSERT_EQ_I64((int)ed->groups.v.len, o->n_groups);
+    YEW_ASSERT_EQ_I64((int)ed->groups.v.len, o->n_groups);
     for (i = 0; i < o->n_groups; i++) {
         int members[ORACLE_MAX_TABS];
         int n;
 
-        SAG_ASSERT(sag_group_find(ed, o->gid[i]) >= 0);
-        n = sag_group_members(ed, o->gid[i], members, ORACLE_MAX_TABS);
-        SAG_ASSERT_EQ_I64(n, o->n_members[i]);
-        SAG_ASSERT_EQ_I64(sag_group_member_count(ed, o->gid[i]),
+        YEW_ASSERT(yew_group_find(ed, o->gid[i]) >= 0);
+        n = yew_group_members(ed, o->gid[i], members, ORACLE_MAX_TABS);
+        YEW_ASSERT_EQ_I64(n, o->n_members[i]);
+        YEW_ASSERT_EQ_I64(yew_group_member_count(ed, o->gid[i]),
                           o->n_members[i]);
         /* DoD 10: a live group always has members. */
-        SAG_ASSERT(n > 0);
+        YEW_ASSERT(n > 0);
         for (j = 0; j < n; j++) {
-            const Tab *t = sag_tab_at(ed, members[j]);
+            const Tab *t = yew_tab_at(ed, members[j]);
 
             /* Same members, in the same order. */
-            SAG_ASSERT_EQ_U64(t->tab_id, o->members[i][j]);
+            YEW_ASSERT_EQ_U64(t->tab_id, o->members[i][j]);
             /* Ordinals are exactly 1..n, in order, with no holes. */
-            SAG_ASSERT_EQ_U64(t->group_ordinal, (u32)(j + 1));
-            SAG_ASSERT_EQ_U64(t->group_id, o->gid[i]);
+            YEW_ASSERT_EQ_U64(t->group_ordinal, (u32)(j + 1));
+            YEW_ASSERT_EQ_U64(t->group_id, o->gid[i]);
         }
     }
     /* No tab points at a group that does not exist. */
-    for (i = 0; i < (int)sag_tab_count(ed); i++) {
-        const Tab *t = sag_tab_at(ed, i);
+    for (i = 0; i < (int)yew_tab_count(ed); i++) {
+        const Tab *t = yew_tab_at(ed, i);
 
         if (t->group_id == 0U) {
-            SAG_ASSERT_EQ_U64(t->group_ordinal, 0U);
+            YEW_ASSERT_EQ_U64(t->group_ordinal, 0U);
             continue;
         }
-        SAG_ASSERT(sag_group_find(ed, t->group_id) >= 0);
-        SAG_ASSERT(oracle_find(o, t->group_id) >= 0);
+        YEW_ASSERT(yew_group_find(ed, t->group_id) >= 0);
+        YEW_ASSERT(oracle_find(o, t->group_id) >= 0);
     }
 }
 
@@ -613,23 +613,23 @@ void test_groups_membership_storm_matches_a_naive_oracle(void)
 
     for (op = 0; op < STORM_OPS; op++) {
         u32 r = storm_rand(&seed);
-        int ntabs = (int)sag_tab_count(&ed);
+        int ntabs = (int)yew_tab_count(&ed);
         int idx = ntabs > 0 ? (int)(storm_rand(&seed) % (u32)ntabs) : 0;
 
         switch (r % 6U) {
         case 0: /* create a group */
             if (o.n_groups < ORACLE_MAX_GROUPS) {
-                u32 g = sag_group_create(&ed, "/src", NULL);
+                u32 g = yew_group_create(&ed, "/src", NULL);
 
                 /* An empty group exists only until the next prune or
                  * the first member leaves; the oracle records it once
                  * it has a member, so create alone changes nothing it
                  * tracks.  Add the member immediately to keep the two
                  * models describing the same world. */
-                sag_group_add_member(&ed, g, idx);
-                oracle_remove(&o, sag_tab_at(&ed, idx)->tab_id);
+                yew_group_add_member(&ed, g, idx);
+                oracle_remove(&o, yew_tab_at(&ed, idx)->tab_id);
                 o.gid[o.n_groups] = g;
-                o.members[o.n_groups][0] = sag_tab_at(&ed, idx)->tab_id;
+                o.members[o.n_groups][0] = yew_tab_at(&ed, idx)->tab_id;
                 o.n_members[o.n_groups] = 1;
                 o.n_groups++;
             }
@@ -638,10 +638,10 @@ void test_groups_membership_storm_matches_a_naive_oracle(void)
             if (o.n_groups > 0 && ntabs > 0) {
                 int gi = (int)(storm_rand(&seed) % (u32)o.n_groups);
                 u32 gid = o.gid[gi];
-                u32 tid = sag_tab_at(&ed, idx)->tab_id;
+                u32 tid = yew_tab_at(&ed, idx)->tab_id;
 
-                if (sag_tab_at(&ed, idx)->group_id != gid) {
-                    sag_group_add_member(&ed, gid, idx);
+                if (yew_tab_at(&ed, idx)->group_id != gid) {
+                    yew_group_add_member(&ed, gid, idx);
                     oracle_remove(&o, tid);
                     /* oracle_remove may have dissolved a group and
                      * shifted the table, so re-find the target. */
@@ -655,17 +655,17 @@ void test_groups_membership_storm_matches_a_naive_oracle(void)
             break;
         case 2: /* leave a group */
             if (ntabs > 0) {
-                u32 tid = sag_tab_at(&ed, idx)->tab_id;
+                u32 tid = yew_tab_at(&ed, idx)->tab_id;
 
-                sag_group_remove_member(&ed, idx);
+                yew_group_remove_member(&ed, idx);
                 oracle_remove(&o, tid);
             }
             break;
         case 3: /* close a tab */
             if (ntabs > 1) {
-                u32 tid = sag_tab_at(&ed, idx)->tab_id;
+                u32 tid = yew_tab_at(&ed, idx)->tab_id;
 
-                SAG_ASSERT(sag_tab_close(&ed, idx));
+                YEW_ASSERT(yew_tab_close(&ed, idx));
                 oracle_remove(&o, tid);
             }
             break;
@@ -673,24 +673,24 @@ void test_groups_membership_storm_matches_a_naive_oracle(void)
             if (ntabs < ORACLE_MAX_TABS - 1) {
                 char path[64];
 
-                (void)snprintf(path, sizeof(path), "/tmp/sag-storm-%d.txt",
+                (void)snprintf(path, sizeof(path), "/tmp/yew-storm-%d.txt",
                                op);
-                SAG_ASSERT(sag_tab_open(&ed, path) >= 0);
+                YEW_ASSERT(yew_tab_open(&ed, path) >= 0);
             }
             break;
         default: /* reorder a member within its group */
-            if (ntabs > 0 && sag_tab_at(&ed, idx)->group_id != 0U) {
-                u32 gid = sag_tab_at(&ed, idx)->group_id;
+            if (ntabs > 0 && yew_tab_at(&ed, idx)->group_id != 0U) {
+                u32 gid = yew_tab_at(&ed, idx)->group_id;
                 int gi = oracle_find(&o, gid);
                 int n = gi >= 0 ? o.n_members[gi] : 0;
 
                 if (n > 0) {
                     int pos = (int)(storm_rand(&seed) % (u32)n) + 1;
-                    u32 tid = sag_tab_at(&ed, idx)->tab_id;
+                    u32 tid = yew_tab_at(&ed, idx)->tab_id;
                     int at = 0;
                     int k;
 
-                    sag_group_set_ordinal(&ed, idx, pos);
+                    yew_group_set_ordinal(&ed, idx, pos);
                     /* Mirror it: remove, then insert at pos-1. */
                     for (k = 0; k < n; k++) {
                         if (o.members[gi][k] == tid)
@@ -710,7 +710,7 @@ void test_groups_membership_storm_matches_a_naive_oracle(void)
          * caused it rather than the batch it hid in. */
         storm_check(&ed, &o);
     }
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
 }
 
 /* ---------------------------------------------------------------- */
@@ -735,8 +735,8 @@ static void gp_files_make(GpFiles *f, int n)
 {
     int i;
 
-    (void)snprintf(f->dir, sizeof(f->dir), "/tmp/sag-grp-XXXXXX");
-    SAG_ASSERT_NOT_NULL(mkdtemp(f->dir));
+    (void)snprintf(f->dir, sizeof(f->dir), "/tmp/yew-grp-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(f->dir));
     f->n = n;
     for (i = 0; i < n; i++) {
         FILE *fp;
@@ -748,9 +748,9 @@ static void gp_files_make(GpFiles *f, int n)
         (void)snprintf(path, sizeof(path), "%s/f%02d.txt", f->dir, i);
         (void)snprintf(f->paths[i], sizeof(f->paths[i]), "%s", path);
         fp = fopen(f->paths[i], "w");
-        SAG_ASSERT_NOT_NULL(fp);
+        YEW_ASSERT_NOT_NULL(fp);
         (void)fprintf(fp, "file %d line one\nline two\n", i);
-        SAG_ASSERT_EQ_I64(fclose(fp), 0);
+        YEW_ASSERT_EQ_I64(fclose(fp), 0);
     }
 }
 
@@ -760,7 +760,7 @@ static void gp_files_remove(GpFiles *f)
 
     for (i = 0; i < f->n; i++)
         (void)unlink(f->paths[i]);
-    SAG_ASSERT_EQ_I64(rmdir(f->dir), 0);
+    YEW_ASSERT_EQ_I64(rmdir(f->dir), 0);
 }
 
 /*
@@ -780,35 +780,35 @@ void test_groups_opening_a_forty_file_group_reads_one_file(void)
 
     gp_files_make(&f, 40);
     gp_fixture(&ed);
-    g = sag_group_create(&ed, f.dir, NULL);
+    g = yew_group_create(&ed, f.dir, NULL);
 
-    base = sag_file_load_count();
+    base = yew_file_load_count();
     for (i = 0; i < 40; i++) {
-        int idx = sag_tab_open(&ed, f.paths[i]);
+        int idx = yew_tab_open(&ed, f.paths[i]);
 
-        SAG_ASSERT(idx >= 0);
-        sag_group_add_member(&ed, g, idx);
+        YEW_ASSERT(idx >= 0);
+        yew_group_add_member(&ed, g, idx);
     }
     /* Forty tabs, and not one of them has been read. */
-    SAG_ASSERT_EQ_I64(sag_group_member_count(&ed, g), 40);
-    SAG_ASSERT_EQ_U64(sag_file_load_count(), base);
+    YEW_ASSERT_EQ_I64(yew_group_member_count(&ed, g), 40);
+    YEW_ASSERT_EQ_U64(yew_file_load_count(), base);
     for (i = 0; i < 40; i++)
-        SAG_ASSERT(!sag_tab_is_resident(&ed, sag_tab_count(&ed) - 40U + (u32)i));
+        YEW_ASSERT(!yew_tab_is_resident(&ed, yew_tab_count(&ed) - 40U + (u32)i));
 
     /* Viewing the first member costs exactly one read. */
-    sag_tab_switch(&ed, 1);
-    SAG_ASSERT_EQ_U64(sag_file_load_count(), base + 1U);
-    SAG_ASSERT(sag_tab_is_resident(&ed, 1));
+    yew_tab_switch(&ed, 1);
+    YEW_ASSERT_EQ_U64(yew_file_load_count(), base + 1U);
+    YEW_ASSERT(yew_tab_is_resident(&ed, 1));
 
     /* The second member costs the second. */
-    sag_tab_switch(&ed, 2);
-    SAG_ASSERT_EQ_U64(sag_file_load_count(), base + 2U);
+    yew_tab_switch(&ed, 2);
+    YEW_ASSERT_EQ_U64(yew_file_load_count(), base + 2U);
 
     /* Going back reads nothing: a resident tab returns immediately. */
-    sag_tab_switch(&ed, 1);
-    SAG_ASSERT_EQ_U64(sag_file_load_count(), base + 2U);
+    yew_tab_switch(&ed, 1);
+    YEW_ASSERT_EQ_U64(yew_file_load_count(), base + 2U);
 
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
     gp_files_remove(&f);
 }
 
@@ -821,31 +821,31 @@ void test_groups_defer_and_hydrate_round_trip(void)
 
     gp_files_make(&f, 2);
     gp_fixture(&ed);
-    idx = sag_tab_open(&ed, f.paths[0]);
-    SAG_ASSERT(idx >= 0);
-    SAG_ASSERT(!sag_tab_is_resident(&ed, idx));
+    idx = yew_tab_open(&ed, f.paths[0]);
+    YEW_ASSERT(idx >= 0);
+    YEW_ASSERT(!yew_tab_is_resident(&ed, idx));
 
-    sag_tab_switch(&ed, idx);
-    SAG_ASSERT(sag_tab_is_resident(&ed, idx));
+    yew_tab_switch(&ed, idx);
+    YEW_ASSERT(yew_tab_is_resident(&ed, idx));
 
     /* Deferring the ACTIVE tab is refused: the window would be left
      * pointing at no text with a cursor in it. */
-    sag_tab_defer(&ed, idx);
-    SAG_ASSERT(sag_tab_is_resident(&ed, idx));
+    yew_tab_defer(&ed, idx);
+    YEW_ASSERT(yew_tab_is_resident(&ed, idx));
 
-    sag_tab_switch(&ed, 0);
-    sag_tab_defer(&ed, idx);
-    SAG_ASSERT(!sag_tab_is_resident(&ed, idx));
+    yew_tab_switch(&ed, 0);
+    yew_tab_defer(&ed, idx);
+    YEW_ASSERT(!yew_tab_is_resident(&ed, idx));
     /* A tab read from nowhere cannot be modified. */
-    SAG_ASSERT(!sag_tab_modified(&ed, idx));
+    YEW_ASSERT(!yew_tab_modified(&ed, idx));
 
     /* And it rereads on the way back. */
-    before = sag_file_load_count();
-    sag_tab_switch(&ed, idx);
-    SAG_ASSERT_EQ_U64(sag_file_load_count(), before + 1U);
-    SAG_ASSERT(sag_tab_is_resident(&ed, idx));
+    before = yew_file_load_count();
+    yew_tab_switch(&ed, idx);
+    YEW_ASSERT_EQ_U64(yew_file_load_count(), before + 1U);
+    YEW_ASSERT(yew_tab_is_resident(&ed, idx));
 
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
     gp_files_remove(&f);
 }
 
@@ -864,24 +864,24 @@ void test_groups_save_refuses_a_non_resident_tab(void)
 
     gp_files_make(&f, 1);
     gp_fixture(&ed);
-    idx = sag_tab_open(&ed, f.paths[0]);
-    SAG_ASSERT(idx >= 0);
-    SAG_ASSERT(!sag_tab_is_resident(&ed, idx));
+    idx = yew_tab_open(&ed, f.paths[0]);
+    YEW_ASSERT(idx >= 0);
+    YEW_ASSERT(!yew_tab_is_resident(&ed, idx));
 
     /* Point the editor at the non-resident tab's window WITHOUT going
      * through the switch that would hydrate it — the shape of every
      * historical bug here is a path that skipped hydrate. */
-    ed.win = sag_tab_at(&ed, idx)->focus->win;
-    SAG_ASSERT_EQ_I64(sag_ed_file_save(&ed, false), SAG_CMD_ERR_STATE);
+    ed.win = yew_tab_at(&ed, idx)->focus->win;
+    YEW_ASSERT_EQ_I64(yew_ed_file_save(&ed, false), YEW_CMD_ERR_STATE);
 
     /* The file on disk is untouched — not truncated to nothing. */
     fp = fopen(f.paths[0], "r");
-    SAG_ASSERT_NOT_NULL(fp);
-    SAG_ASSERT_NOT_NULL(fgets(first, sizeof(first), fp));
-    SAG_ASSERT_EQ_I64(fclose(fp), 0);
-    SAG_ASSERT_EQ_STR(first, "file 0 line one\n");
+    YEW_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fgets(first, sizeof(first), fp));
+    YEW_ASSERT_EQ_I64(fclose(fp), 0);
+    YEW_ASSERT_EQ_STR(first, "file 0 line one\n");
 
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
     gp_files_remove(&f);
 }
 
@@ -897,12 +897,12 @@ void test_groups_one_buffer_per_path(void)
 
     gp_files_make(&f, 1);
     gp_fixture(&ed);
-    a = sag_tab_open(&ed, f.paths[0]);
-    b = sag_tab_open(&ed, f.paths[0]);
+    a = yew_tab_open(&ed, f.paths[0]);
+    b = yew_tab_open(&ed, f.paths[0]);
     /* The second open switches to the first tab rather than duplicating
      * it (Sprint 23), so both names resolve to the same tab. */
-    SAG_ASSERT_EQ_I64(a, b);
-    SAG_ASSERT_EQ_U64(sag_tab_count(&ed), 2U);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_I64(a, b);
+    YEW_ASSERT_EQ_U64(yew_tab_count(&ed), 2U);
+    yew_ed_free(&ed);
     gp_files_remove(&f);
 }

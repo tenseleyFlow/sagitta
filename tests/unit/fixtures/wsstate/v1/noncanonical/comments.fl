@@ -5,7 +5,7 @@
 # deciding where they reattach after the thing they annotated moved.
 {
   version: 1,          # the only version there is
-  writer: "sagitta",
+  writer: "yew",
   workspace: {
     path: "/w",
     saved_at: 0,

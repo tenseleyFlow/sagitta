@@ -3,7 +3,7 @@
 
 #include <string.h>
 
-void sag_bmh_build(ReLit *l)
+void yew_bmh_build(ReLit *l)
 {
     u32 i;
 
@@ -16,7 +16,7 @@ void sag_bmh_build(ReLit *l)
         l->skip[l->s[i]] = l->n - 1U - i;
 }
 
-u64 sag_lit_find(const ReLit *l, const u8 *hay, u64 n)
+u64 yew_lit_find(const ReLit *l, const u8 *hay, u64 n)
 {
     u64 at = 0U;
 

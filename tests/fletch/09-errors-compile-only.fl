@@ -3,7 +3,7 @@
 # EXIT: 0
 # CHECK_NOT: SHOULD NOT RUN
 #
-# §9.3's line drawn from the other side: `sag fl -c` parses and
+# §9.3's line drawn from the other side: `yew fl -c` parses and
 # compiles and DOES NOT RUN.
 #
 # The program below compiles cleanly and would raise on its first

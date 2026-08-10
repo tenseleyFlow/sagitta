@@ -43,26 +43,26 @@ static void clip_env_save(ClipEnv *save, const char *name)
     save->had = value != NULL;
     save->old = value != NULL ? strdup(value) : NULL;
     if (value != NULL && save->old == NULL)
-        SAG_BUG("clipboard test environment allocation failed");
+        YEW_BUG("clipboard test environment allocation failed");
 }
 
 static void clip_env_restore(ClipEnv *save)
 {
     if (save->had)
-        SAG_ASSERT_EQ_I64(setenv(save->name, save->old, 1), 0);
+        YEW_ASSERT_EQ_I64(setenv(save->name, save->old, 1), 0);
     else
-        SAG_ASSERT_EQ_I64(unsetenv(save->name), 0);
+        YEW_ASSERT_EQ_I64(unsetenv(save->name), 0);
     free(save->old);
 }
 
 static void clip_clear_environment(void)
 {
-    SAG_ASSERT_EQ_I64(unsetenv("SAG_CLIPBOARD"), 0);
-    SAG_ASSERT_EQ_I64(unsetenv("SAG_OSC52"), 0);
-    SAG_ASSERT_EQ_I64(unsetenv("WAYLAND_DISPLAY"), 0);
-    SAG_ASSERT_EQ_I64(unsetenv("DISPLAY"), 0);
-    SAG_ASSERT_EQ_I64(unsetenv("SSH_TTY"), 0);
-    SAG_ASSERT_EQ_I64(unsetenv("SSH_CONNECTION"), 0);
+    YEW_ASSERT_EQ_I64(unsetenv("YEW_CLIPBOARD"), 0);
+    YEW_ASSERT_EQ_I64(unsetenv("YEW_OSC52"), 0);
+    YEW_ASSERT_EQ_I64(unsetenv("WAYLAND_DISPLAY"), 0);
+    YEW_ASSERT_EQ_I64(unsetenv("DISPLAY"), 0);
+    YEW_ASSERT_EQ_I64(unsetenv("SSH_TTY"), 0);
+    YEW_ASSERT_EQ_I64(unsetenv("SSH_CONNECTION"), 0);
 }
 
 static void clip_path(char *out, size_t cap, const char *dir,
@@ -71,20 +71,20 @@ static void clip_path(char *out, size_t cap, const char *dir,
     int n = snprintf(out, cap, "%s/%s", dir, base);
 
     if (n < 0 || (size_t)n >= cap)
-        SAG_BUG("clipboard test path overflow");
+        YEW_BUG("clipboard test path overflow");
 }
 
 static void clip_fixture_init(ClipFixture *f)
 {
-    const char *program = sag_test_program_path();
+    const char *program = yew_test_program_path();
     const char *slash = strrchr(program, '/');
     size_t dir_len = slash != NULL ? (size_t)(slash - program) : 1U;
-    char template[] = "/tmp/sagitta-clip-XXXXXX";
+    char template[] = "/tmp/yew-clip-XXXXXX";
     char candidate[PATH_MAX];
 
     if (slash != NULL) {
         if (dir_len + sizeof("/fakeclip") > sizeof(candidate))
-            SAG_BUG("clipboard fake path overflow");
+            YEW_BUG("clipboard fake path overflow");
         (void)memcpy(candidate, program, dir_len);
         (void)memcpy(candidate + dir_len, "/fakeclip", sizeof("/fakeclip"));
     } else {
@@ -97,15 +97,15 @@ static void clip_fixture_init(ClipFixture *f)
         int n;
 
         if (getcwd(cwd, sizeof(cwd)) == NULL)
-            SAG_BUG("clipboard test getcwd failed: %s", strerror(errno));
+            YEW_BUG("clipboard test getcwd failed: %s", strerror(errno));
         n = snprintf(f->fake, sizeof(f->fake), "%s/%s", cwd, candidate);
         if (n < 0 || (size_t)n >= sizeof(f->fake))
-            SAG_BUG("clipboard absolute fake path overflow");
+            YEW_BUG("clipboard absolute fake path overflow");
     }
     if (access(f->fake, X_OK) != 0)
-        SAG_BUG("clipboard fake tool missing: %s", strerror(errno));
+        YEW_BUG("clipboard fake tool missing: %s", strerror(errno));
     if (mkdtemp(template) == NULL)
-        SAG_BUG("clipboard test mkdtemp failed: %s", strerror(errno));
+        YEW_BUG("clipboard test mkdtemp failed: %s", strerror(errno));
     (void)snprintf(f->dir, sizeof(f->dir), "%s", template);
     clip_path(f->output, sizeof(f->output), f->dir, "out.bin");
     clip_path(f->input, sizeof(f->input), f->dir, "in.bin");
@@ -118,7 +118,7 @@ static void clip_unlink_name(const ClipFixture *f, const char *name)
 
     clip_path(path, sizeof(path), f->dir, name);
     if (unlink(path) != 0 && errno != ENOENT)
-        SAG_BUG("clipboard test unlink failed: %s", strerror(errno));
+        YEW_BUG("clipboard test unlink failed: %s", strerror(errno));
 }
 
 static void clip_fixture_free(ClipFixture *f)
@@ -134,7 +134,7 @@ static void clip_fixture_free(ClipFixture *f)
     clip_unlink_name(f, "in.bin");
     clip_unlink_name(f, "pids.txt");
     if (rmdir(f->dir) != 0)
-        SAG_BUG("clipboard test rmdir failed: %s", strerror(errno));
+        YEW_BUG("clipboard test rmdir failed: %s", strerror(errno));
 }
 
 static void clip_link(const ClipFixture *f, const char *name)
@@ -142,7 +142,7 @@ static void clip_link(const ClipFixture *f, const char *name)
     char path[PATH_MAX];
 
     clip_path(path, sizeof(path), f->dir, name);
-    SAG_ASSERT_EQ_I64(symlink(f->fake, path), 0);
+    YEW_ASSERT_EQ_I64(symlink(f->fake, path), 0);
 }
 
 static void clip_write_file(const char *path, const u8 *bytes, size_t len)
@@ -151,7 +151,7 @@ static void clip_write_file(const char *path, const u8 *bytes, size_t len)
     size_t off = 0U;
 
     if (fd < 0)
-        SAG_BUG("clipboard test open for write failed: %s", strerror(errno));
+        YEW_BUG("clipboard test open for write failed: %s", strerror(errno));
     while (off < len) {
         ssize_t n = write(fd, bytes + off, len - off);
 
@@ -160,7 +160,7 @@ static void clip_write_file(const char *path, const u8 *bytes, size_t len)
         else if (n < 0 && errno == EINTR)
             continue;
         else
-            SAG_BUG("clipboard test write failed: %s", strerror(errno));
+            YEW_BUG("clipboard test write failed: %s", strerror(errno));
     }
     (void)close(fd);
 }
@@ -207,7 +207,7 @@ static i64 clip_test_now_ms(void)
     struct timespec ts;
 
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
-        SAG_BUG("clipboard test monotonic clock failed: %s", strerror(errno));
+        YEW_BUG("clipboard test monotonic clock failed: %s", strerror(errno));
     return (i64)ts.tv_sec * 1000 + (i64)(ts.tv_nsec / 1000000L);
 }
 
@@ -216,14 +216,14 @@ static u64 clip_test_now_ns(void)
     struct timespec ts;
 
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
-        SAG_BUG("clipboard test monotonic clock failed: %s", strerror(errno));
+        YEW_BUG("clipboard test monotonic clock failed: %s", strerror(errno));
     return (u64)ts.tv_sec * UINT64_C(1000000000) + (u64)ts.tv_nsec;
 }
 
 static void clip_value(RegVal *v, const u8 *bytes, size_t len)
 {
-    sag_regval_init(v);
-    v->type = SAG_REG_CHARWISE;
+    yew_regval_init(v);
+    v->type = YEW_REG_CHARWISE;
     bytebuf_append(&v->bytes, bytes, len);
 }
 
@@ -241,91 +241,91 @@ static void clip_set_custom(const ClipFixture *f, const char *write_mode,
                      f->fake, f->output, write_mode);
     }
     if (n < 0 || (size_t)n >= sizeof(value))
-        SAG_BUG("clipboard custom command overflow");
-    SAG_ASSERT_EQ_I64(setenv("SAG_CLIPBOARD", value, 1), 0);
-    sag_clip_reset();
+        YEW_BUG("clipboard custom command overflow");
+    YEW_ASSERT_EQ_I64(setenv("YEW_CLIPBOARD", value, 1), 0);
+    yew_clip_reset();
 }
 
 static void clip_pump_until_idle(void)
 {
     u32 i;
 
-    for (i = 0U; i < 2000U && sag_clip_busy(); i++) {
-        int fd = sag_clip_write_fd();
+    for (i = 0U; i < 2000U && yew_clip_busy(); i++) {
+        int fd = yew_clip_write_fd();
 
         if (fd >= 0) {
             struct pollfd pfd = {fd, POLLOUT, 0};
             (void)poll(&pfd, 1U, 1);
         }
-        sag_clip_pump(clip_test_now_ms());
+        yew_clip_pump(clip_test_now_ms());
     }
-    SAG_ASSERT(!sag_clip_busy());
+    YEW_ASSERT(!yew_clip_busy());
 }
 
 void test_clipboard_detection_matrix(void)
 {
     static const char *const names[] = {
-        "SAG_CLIPBOARD", "SAG_OSC52", "WAYLAND_DISPLAY", "DISPLAY",
+        "YEW_CLIPBOARD", "YEW_OSC52", "WAYLAND_DISPLAY", "DISPLAY",
         "SSH_TTY", "SSH_CONNECTION", "PATH"
     };
-    ClipEnv saved[SAG_ARRAY_LEN(names)];
+    ClipEnv saved[YEW_ARRAY_LEN(names)];
     ClipFixture f;
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(names); i++)
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++)
         clip_env_save(&saved[i], names[i]);
     clip_fixture_init(&f);
     clip_clear_environment();
-    SAG_ASSERT_EQ_I64(setenv("PATH", f.dir, 1), 0);
-    sag_clip_reset();
-    SAG_ASSERT_EQ_U64(sag_clip_detect(), SAG_CLIP_NONE);
+    YEW_ASSERT_EQ_I64(setenv("PATH", f.dir, 1), 0);
+    yew_clip_reset();
+    YEW_ASSERT_EQ_U64(yew_clip_detect(), YEW_CLIP_NONE);
 
     clip_link(&f, "wl-copy");
-    SAG_ASSERT_EQ_I64(setenv("WAYLAND_DISPLAY", "wayland-1", 1), 0);
-    sag_clip_reset();
-    SAG_ASSERT_EQ_U64(sag_clip_detect(), SAG_CLIP_WL);
+    YEW_ASSERT_EQ_I64(setenv("WAYLAND_DISPLAY", "wayland-1", 1), 0);
+    yew_clip_reset();
+    YEW_ASSERT_EQ_U64(yew_clip_detect(), YEW_CLIP_WL);
 
-    SAG_ASSERT_EQ_I64(unsetenv("WAYLAND_DISPLAY"), 0);
+    YEW_ASSERT_EQ_I64(unsetenv("WAYLAND_DISPLAY"), 0);
     clip_link(&f, "xclip");
-    SAG_ASSERT_EQ_I64(setenv("DISPLAY", ":1", 1), 0);
-    sag_clip_reset();
-    SAG_ASSERT_EQ_U64(sag_clip_detect(), SAG_CLIP_XCLIP);
+    YEW_ASSERT_EQ_I64(setenv("DISPLAY", ":1", 1), 0);
+    yew_clip_reset();
+    YEW_ASSERT_EQ_U64(yew_clip_detect(), YEW_CLIP_XCLIP);
 
     clip_link(&f, "xsel");
-    sag_clip_reset();
-    SAG_ASSERT_EQ_U64(sag_clip_detect(), SAG_CLIP_XCLIP);
+    yew_clip_reset();
+    YEW_ASSERT_EQ_U64(yew_clip_detect(), YEW_CLIP_XCLIP);
     clip_unlink_name(&f, "xclip");
-    sag_clip_reset();
-    SAG_ASSERT_EQ_U64(sag_clip_detect(), SAG_CLIP_XSEL);
+    yew_clip_reset();
+    YEW_ASSERT_EQ_U64(yew_clip_detect(), YEW_CLIP_XSEL);
 
-    SAG_ASSERT_EQ_I64(setenv("WAYLAND_DISPLAY", "wayland-1", 1), 0);
-    sag_clip_reset();
-    SAG_ASSERT_EQ_U64(sag_clip_detect(), SAG_CLIP_WL);
+    YEW_ASSERT_EQ_I64(setenv("WAYLAND_DISPLAY", "wayland-1", 1), 0);
+    yew_clip_reset();
+    YEW_ASSERT_EQ_U64(yew_clip_detect(), YEW_CLIP_WL);
     clip_unlink_name(&f, "wl-copy");
-    sag_clip_reset();
-    SAG_ASSERT_EQ_U64(sag_clip_detect(), SAG_CLIP_XSEL);
+    yew_clip_reset();
+    YEW_ASSERT_EQ_U64(yew_clip_detect(), YEW_CLIP_XSEL);
 
-    SAG_ASSERT_EQ_I64(setenv("SSH_TTY", "/dev/pts/9", 1), 0);
-    sag_clip_reset();
-    SAG_ASSERT_EQ_U64(sag_clip_detect(), SAG_CLIP_NONE);
-    SAG_ASSERT_EQ_U64(sag_clip_detect_read(), SAG_CLIP_XSEL);
-    SAG_ASSERT_EQ_I64(unsetenv("SSH_TTY"), 0);
-    SAG_ASSERT_EQ_I64(setenv("SSH_CONNECTION", "1 2 3 4", 1), 0);
-    sag_clip_reset();
-    SAG_ASSERT_EQ_U64(sag_clip_detect(), SAG_CLIP_NONE);
-    SAG_ASSERT_EQ_U64(sag_clip_detect_read(), SAG_CLIP_XSEL);
+    YEW_ASSERT_EQ_I64(setenv("SSH_TTY", "/dev/pts/9", 1), 0);
+    yew_clip_reset();
+    YEW_ASSERT_EQ_U64(yew_clip_detect(), YEW_CLIP_NONE);
+    YEW_ASSERT_EQ_U64(yew_clip_detect_read(), YEW_CLIP_XSEL);
+    YEW_ASSERT_EQ_I64(unsetenv("SSH_TTY"), 0);
+    YEW_ASSERT_EQ_I64(setenv("SSH_CONNECTION", "1 2 3 4", 1), 0);
+    yew_clip_reset();
+    YEW_ASSERT_EQ_U64(yew_clip_detect(), YEW_CLIP_NONE);
+    YEW_ASSERT_EQ_U64(yew_clip_detect_read(), YEW_CLIP_XSEL);
 
-    SAG_ASSERT_EQ_I64(unsetenv("SSH_CONNECTION"), 0);
-    SAG_ASSERT_EQ_I64(unsetenv("DISPLAY"), 0);
-    sag_clip_reset();
-    SAG_ASSERT_EQ_U64(sag_clip_detect_read(), SAG_CLIP_NONE);
-    SAG_ASSERT_EQ_I64(setenv("SAG_CLIPBOARD", "auto", 1), 0);
-    sag_clip_reset();
-    SAG_ASSERT_EQ_U64(sag_clip_detect(), SAG_CLIP_NONE);
-    SAG_ASSERT_EQ_U64(sag_clip_detect_read(), SAG_CLIP_NONE);
-    sag_clip_shutdown();
+    YEW_ASSERT_EQ_I64(unsetenv("SSH_CONNECTION"), 0);
+    YEW_ASSERT_EQ_I64(unsetenv("DISPLAY"), 0);
+    yew_clip_reset();
+    YEW_ASSERT_EQ_U64(yew_clip_detect_read(), YEW_CLIP_NONE);
+    YEW_ASSERT_EQ_I64(setenv("YEW_CLIPBOARD", "auto", 1), 0);
+    yew_clip_reset();
+    YEW_ASSERT_EQ_U64(yew_clip_detect(), YEW_CLIP_NONE);
+    YEW_ASSERT_EQ_U64(yew_clip_detect_read(), YEW_CLIP_NONE);
+    yew_clip_shutdown();
     clip_fixture_free(&f);
-    for (i = SAG_ARRAY_LEN(names); i != 0U; i--)
+    for (i = YEW_ARRAY_LEN(names); i != 0U; i--)
         clip_env_restore(&saved[i - 1U]);
 }
 
@@ -333,29 +333,29 @@ void test_clipboard_override_matrix(void)
 {
     static const struct {
         const char *value;
-        SagClipBackend write_backend;
-        SagClipBackend read_backend;
+        YewClipBackend write_backend;
+        YewClipBackend read_backend;
     } cases[] = {
-        {"none", SAG_CLIP_NONE, SAG_CLIP_NONE},
-        {"osc52", SAG_CLIP_OSC52, SAG_CLIP_NONE},
-        {"wl", SAG_CLIP_WL, SAG_CLIP_WL},
-        {"xclip", SAG_CLIP_XCLIP, SAG_CLIP_XCLIP},
-        {"xsel", SAG_CLIP_XSEL, SAG_CLIP_XSEL},
-        {"pb", SAG_CLIP_PB, SAG_CLIP_PB},
-        {"cmd:/bin/false", SAG_CLIP_CUSTOM, SAG_CLIP_NONE},
-        {"cmd:/bin/false|/bin/false", SAG_CLIP_CUSTOM, SAG_CLIP_CUSTOM}
+        {"none", YEW_CLIP_NONE, YEW_CLIP_NONE},
+        {"osc52", YEW_CLIP_OSC52, YEW_CLIP_NONE},
+        {"wl", YEW_CLIP_WL, YEW_CLIP_WL},
+        {"xclip", YEW_CLIP_XCLIP, YEW_CLIP_XCLIP},
+        {"xsel", YEW_CLIP_XSEL, YEW_CLIP_XSEL},
+        {"pb", YEW_CLIP_PB, YEW_CLIP_PB},
+        {"cmd:/bin/false", YEW_CLIP_CUSTOM, YEW_CLIP_NONE},
+        {"cmd:/bin/false|/bin/false", YEW_CLIP_CUSTOM, YEW_CLIP_CUSTOM}
     };
     ClipEnv clipboard;
     size_t i;
 
-    clip_env_save(&clipboard, "SAG_CLIPBOARD");
-    for (i = 0U; i < SAG_ARRAY_LEN(cases); i++) {
-        SAG_ASSERT_EQ_I64(setenv("SAG_CLIPBOARD", cases[i].value, 1), 0);
-        sag_clip_reset();
-        SAG_ASSERT_EQ_U64(sag_clip_detect(), cases[i].write_backend);
-        SAG_ASSERT_EQ_U64(sag_clip_detect_read(), cases[i].read_backend);
+    clip_env_save(&clipboard, "YEW_CLIPBOARD");
+    for (i = 0U; i < YEW_ARRAY_LEN(cases); i++) {
+        YEW_ASSERT_EQ_I64(setenv("YEW_CLIPBOARD", cases[i].value, 1), 0);
+        yew_clip_reset();
+        YEW_ASSERT_EQ_U64(yew_clip_detect(), cases[i].write_backend);
+        YEW_ASSERT_EQ_U64(yew_clip_detect_read(), cases[i].read_backend);
     }
-    sag_clip_shutdown();
+    yew_clip_shutdown();
     clip_env_restore(&clipboard);
 }
 
@@ -365,23 +365,23 @@ void test_clipboard_write_defers_backend_detection(void)
     RegVal value;
     Bytebuf terminal;
 
-    clip_env_save(&clipboard, "SAG_CLIPBOARD");
-    SAG_ASSERT_EQ_I64(setenv("SAG_CLIPBOARD", "none", 1), 0);
-    sag_clip_reset();
+    clip_env_save(&clipboard, "YEW_CLIPBOARD");
+    YEW_ASSERT_EQ_I64(setenv("YEW_CLIPBOARD", "none", 1), 0);
+    yew_clip_reset();
     clip_value(&value, (const u8 *)"queued", 6U);
     bytebuf_init(&terminal);
-    sag_test_capture_log();
+    yew_test_capture_log();
 
-    SAG_ASSERT(sag_clip_write(&value, '+'));
-    SAG_ASSERT(sag_clip_pending());
-    SAG_ASSERT(!sag_test_log_contains(SAG_LOG_WARN, "no writable"));
-    sag_clip_after_render(&terminal, clip_test_now_ms());
-    SAG_ASSERT(!sag_clip_pending());
-    SAG_ASSERT(sag_test_log_contains(SAG_LOG_WARN, "no writable"));
+    YEW_ASSERT(yew_clip_write(&value, '+'));
+    YEW_ASSERT(yew_clip_pending());
+    YEW_ASSERT(!yew_test_log_contains(YEW_LOG_WARN, "no writable"));
+    yew_clip_after_render(&terminal, clip_test_now_ms());
+    YEW_ASSERT(!yew_clip_pending());
+    YEW_ASSERT(yew_test_log_contains(YEW_LOG_WARN, "no writable"));
 
     bytebuf_free(&terminal);
-    sag_regval_free(&value);
-    sag_clip_shutdown();
+    yew_regval_free(&value);
+    yew_clip_shutdown();
     clip_env_restore(&clipboard);
 }
 
@@ -398,7 +398,7 @@ void test_clipboard_custom_write_coalesces_binary(void)
     char argv_path[PATH_MAX];
     Bytebuf terminal;
 
-    clip_env_save(&clipboard, "SAG_CLIPBOARD");
+    clip_env_save(&clipboard, "YEW_CLIPBOARD");
     clip_fixture_init(&f);
     clip_set_custom(&f, "write", true);
     clip_value(&a, first, sizeof(first));
@@ -406,27 +406,27 @@ void test_clipboard_custom_write_coalesces_binary(void)
     bytebuf_init(&got);
     bytebuf_init(&argv);
     bytebuf_init(&terminal);
-    SAG_ASSERT(sag_clip_write(&a, '+'));
-    SAG_ASSERT(sag_clip_pending());
-    SAG_ASSERT(sag_clip_write(&b, '*'));
-    sag_clip_after_render(&terminal, clip_test_now_ms());
+    YEW_ASSERT(yew_clip_write(&a, '+'));
+    YEW_ASSERT(yew_clip_pending());
+    YEW_ASSERT(yew_clip_write(&b, '*'));
+    yew_clip_after_render(&terminal, clip_test_now_ms());
     clip_pump_until_idle();
-    SAG_ASSERT_EQ_U64(terminal.len, 0U);
-    SAG_ASSERT(clip_wait_file(f.output, sizeof(latest), &got));
-    SAG_ASSERT_EQ_U64(got.len, sizeof(latest));
-    SAG_ASSERT_EQ_MEM(got.data, latest, sizeof(latest));
+    YEW_ASSERT_EQ_U64(terminal.len, 0U);
+    YEW_ASSERT(clip_wait_file(f.output, sizeof(latest), &got));
+    YEW_ASSERT_EQ_U64(got.len, sizeof(latest));
+    YEW_ASSERT_EQ_MEM(got.data, latest, sizeof(latest));
     clip_path(argv_path, sizeof(argv_path), f.dir, "out.bin.argv");
-    SAG_ASSERT(clip_wait_file(argv_path, 1U, &argv));
+    YEW_ASSERT(clip_wait_file(argv_path, 1U, &argv));
     bytebuf_push_u8(&argv, 0U);
-    SAG_ASSERT(strstr((const char *)argv.data, "write\nalpha\nbeta\n") !=
+    YEW_ASSERT(strstr((const char *)argv.data, "write\nalpha\nbeta\n") !=
                NULL);
-    SAG_ASSERT(!sag_clip_pending());
-    sag_regval_free(&b);
-    sag_regval_free(&a);
+    YEW_ASSERT(!yew_clip_pending());
+    yew_regval_free(&b);
+    yew_regval_free(&a);
     bytebuf_free(&terminal);
     bytebuf_free(&argv);
     bytebuf_free(&got);
-    sag_clip_shutdown();
+    yew_clip_shutdown();
     clip_fixture_free(&f);
     clip_env_restore(&clipboard);
 }
@@ -438,22 +438,22 @@ void test_clipboard_custom_read_binary_and_cap(void)
     ClipFixture f;
     RegVal out;
 
-    clip_env_save(&clipboard, "SAG_CLIPBOARD");
+    clip_env_save(&clipboard, "YEW_CLIPBOARD");
     clip_fixture_init(&f);
     clip_write_file(f.input, payload, sizeof(payload));
     clip_set_custom(&f, "write", true);
-    sag_regval_init(&out);
-    SAG_ASSERT(sag_clip_read(&out, '+'));
-    SAG_ASSERT_EQ_U64(out.type, SAG_REG_CHARWISE);
-    SAG_ASSERT_EQ_U64(out.bytes.len, sizeof(payload));
-    SAG_ASSERT_EQ_MEM(out.bytes.data, payload, sizeof(payload));
-    sag_clip_set_read_max(sizeof(payload) - 1U);
-    sag_test_capture_log();
-    SAG_ASSERT(!sag_clip_read(&out, '*'));
-    SAG_ASSERT(sag_test_log_contains(SAG_LOG_WARN, "exceeds"));
-    SAG_ASSERT_EQ_U64(out.bytes.len, sizeof(payload));
-    sag_regval_free(&out);
-    sag_clip_shutdown();
+    yew_regval_init(&out);
+    YEW_ASSERT(yew_clip_read(&out, '+'));
+    YEW_ASSERT_EQ_U64(out.type, YEW_REG_CHARWISE);
+    YEW_ASSERT_EQ_U64(out.bytes.len, sizeof(payload));
+    YEW_ASSERT_EQ_MEM(out.bytes.data, payload, sizeof(payload));
+    yew_clip_set_read_max(sizeof(payload) - 1U);
+    yew_test_capture_log();
+    YEW_ASSERT(!yew_clip_read(&out, '*'));
+    YEW_ASSERT(yew_test_log_contains(YEW_LOG_WARN, "exceeds"));
+    YEW_ASSERT_EQ_U64(out.bytes.len, sizeof(payload));
+    yew_regval_free(&out);
+    yew_clip_shutdown();
     clip_fixture_free(&f);
     clip_env_restore(&clipboard);
 }
@@ -467,24 +467,24 @@ void test_clipboard_reader_reaped_before_pipe_eof(void)
     char command[PATH_MAX * 4U];
     int n;
 
-    clip_env_save(&clipboard, "SAG_CLIPBOARD");
+    clip_env_save(&clipboard, "YEW_CLIPBOARD");
     clip_fixture_init(&f);
     clip_write_file(f.input, payload, sizeof(payload));
     n = snprintf(command, sizeof(command),
                  "cmd:%s %s write|%s %s read-hold",
                  f.fake, f.output, f.fake, f.input);
     if (n < 0 || (size_t)n >= sizeof(command))
-        SAG_BUG("clipboard held reader command overflow");
-    SAG_ASSERT_EQ_I64(setenv("SAG_CLIPBOARD", command, 1), 0);
-    sag_clip_reset();
-    sag_regval_init(&out);
+        YEW_BUG("clipboard held reader command overflow");
+    YEW_ASSERT_EQ_I64(setenv("YEW_CLIPBOARD", command, 1), 0);
+    yew_clip_reset();
+    yew_regval_init(&out);
 
-    SAG_ASSERT(sag_clip_read(&out, '+'));
-    SAG_ASSERT_EQ_U64(out.bytes.len, sizeof(payload));
-    SAG_ASSERT_EQ_MEM(out.bytes.data, payload, sizeof(payload));
+    YEW_ASSERT(yew_clip_read(&out, '+'));
+    YEW_ASSERT_EQ_U64(out.bytes.len, sizeof(payload));
+    YEW_ASSERT_EQ_MEM(out.bytes.data, payload, sizeof(payload));
 
-    sag_regval_free(&out);
-    sag_clip_shutdown();
+    yew_regval_free(&out);
+    yew_clip_shutdown();
     clip_fixture_free(&f);
     clip_env_restore(&clipboard);
 }
@@ -499,43 +499,43 @@ void test_clipboard_read_failures_are_reported(void)
     char command[PATH_MAX * 4U];
     int n;
 
-    clip_env_save(&clipboard, "SAG_CLIPBOARD");
-    clip_env_save(&timeout, "SAG_CLIPBOARD_TIMEOUT_MS");
+    clip_env_save(&clipboard, "YEW_CLIPBOARD");
+    clip_env_save(&timeout, "YEW_CLIPBOARD_TIMEOUT_MS");
     clip_fixture_init(&f);
     clip_value(&out, keep, sizeof(keep));
 
-    SAG_ASSERT_EQ_I64(setenv("SAG_CLIPBOARD", "none", 1), 0);
-    sag_clip_reset();
-    sag_test_capture_log();
-    SAG_ASSERT(!sag_clip_read(&out, '+'));
-    SAG_ASSERT(sag_test_log_contains(SAG_LOG_WARN, "no readable"));
-    SAG_ASSERT_EQ_MEM(out.bytes.data, keep, sizeof(keep));
+    YEW_ASSERT_EQ_I64(setenv("YEW_CLIPBOARD", "none", 1), 0);
+    yew_clip_reset();
+    yew_test_capture_log();
+    YEW_ASSERT(!yew_clip_read(&out, '+'));
+    YEW_ASSERT(yew_test_log_contains(YEW_LOG_WARN, "no readable"));
+    YEW_ASSERT_EQ_MEM(out.bytes.data, keep, sizeof(keep));
 
     n = snprintf(command, sizeof(command), "cmd:%s %s write|%s %s exit",
                  f.fake, f.output, f.fake, f.input);
     if (n < 0 || (size_t)n >= sizeof(command))
-        SAG_BUG("clipboard exit reader command overflow");
-    SAG_ASSERT_EQ_I64(setenv("SAG_CLIPBOARD", command, 1), 0);
-    sag_clip_reset();
-    sag_test_capture_log();
-    SAG_ASSERT(!sag_clip_read(&out, '+'));
-    SAG_ASSERT(sag_test_log_contains(SAG_LOG_WARN, "status 17"));
-    SAG_ASSERT_EQ_MEM(out.bytes.data, keep, sizeof(keep));
+        YEW_BUG("clipboard exit reader command overflow");
+    YEW_ASSERT_EQ_I64(setenv("YEW_CLIPBOARD", command, 1), 0);
+    yew_clip_reset();
+    yew_test_capture_log();
+    YEW_ASSERT(!yew_clip_read(&out, '+'));
+    YEW_ASSERT(yew_test_log_contains(YEW_LOG_WARN, "status 17"));
+    YEW_ASSERT_EQ_MEM(out.bytes.data, keep, sizeof(keep));
 
     n = snprintf(command, sizeof(command), "cmd:%s %s write|%s %s hang",
                  f.fake, f.output, f.fake, f.input);
     if (n < 0 || (size_t)n >= sizeof(command))
-        SAG_BUG("clipboard hanging reader command overflow");
-    SAG_ASSERT_EQ_I64(setenv("SAG_CLIPBOARD", command, 1), 0);
-    SAG_ASSERT_EQ_I64(setenv("SAG_CLIPBOARD_TIMEOUT_MS", "10", 1), 0);
-    sag_clip_reset();
-    sag_test_capture_log();
-    SAG_ASSERT(!sag_clip_read(&out, '+'));
-    SAG_ASSERT(sag_test_log_contains(SAG_LOG_WARN, "timed out"));
-    SAG_ASSERT_EQ_MEM(out.bytes.data, keep, sizeof(keep));
+        YEW_BUG("clipboard hanging reader command overflow");
+    YEW_ASSERT_EQ_I64(setenv("YEW_CLIPBOARD", command, 1), 0);
+    YEW_ASSERT_EQ_I64(setenv("YEW_CLIPBOARD_TIMEOUT_MS", "10", 1), 0);
+    yew_clip_reset();
+    yew_test_capture_log();
+    YEW_ASSERT(!yew_clip_read(&out, '+'));
+    YEW_ASSERT(yew_test_log_contains(YEW_LOG_WARN, "timed out"));
+    YEW_ASSERT_EQ_MEM(out.bytes.data, keep, sizeof(keep));
 
-    sag_regval_free(&out);
-    sag_clip_shutdown();
+    yew_regval_free(&out);
+    yew_clip_shutdown();
     clip_fixture_free(&f);
     clip_env_restore(&timeout);
     clip_env_restore(&clipboard);
@@ -551,27 +551,27 @@ void test_clipboard_osc52_flushes_after_esu(void)
     RegVal value;
     Bytebuf terminal;
 
-    clip_env_save(&clipboard, "SAG_CLIPBOARD");
-    clip_env_save(&osc52, "SAG_OSC52");
-    SAG_ASSERT_EQ_I64(setenv("SAG_CLIPBOARD", "osc52", 1), 0);
-    SAG_ASSERT_EQ_I64(setenv("SAG_OSC52", "plain", 1), 0);
-    sag_clip_reset();
-    sag_term_oob_clear();
+    clip_env_save(&clipboard, "YEW_CLIPBOARD");
+    clip_env_save(&osc52, "YEW_OSC52");
+    YEW_ASSERT_EQ_I64(setenv("YEW_CLIPBOARD", "osc52", 1), 0);
+    YEW_ASSERT_EQ_I64(setenv("YEW_OSC52", "plain", 1), 0);
+    yew_clip_reset();
+    yew_term_oob_clear();
     clip_value(&value, payload, sizeof(payload));
     bytebuf_init(&terminal);
     bytebuf_append(&terminal, prefix, sizeof(prefix) - 1U);
-    SAG_ASSERT(sag_clip_write(&value, '+'));
-    sag_clip_after_render(&terminal, clip_test_now_ms());
-    SAG_ASSERT_EQ_U64(sag_term_oob_pending(), 0U);
-    SAG_ASSERT_EQ_U64(terminal.len,
+    YEW_ASSERT(yew_clip_write(&value, '+'));
+    yew_clip_after_render(&terminal, clip_test_now_ms());
+    YEW_ASSERT_EQ_U64(yew_term_oob_pending(), 0U);
+    YEW_ASSERT_EQ_U64(terminal.len,
                       sizeof(prefix) - 1U + sizeof(suffix) - 1U);
-    SAG_ASSERT_EQ_MEM(terminal.data, prefix, sizeof(prefix) - 1U);
-    SAG_ASSERT_EQ_MEM(terminal.data + sizeof(prefix) - 1U,
+    YEW_ASSERT_EQ_MEM(terminal.data, prefix, sizeof(prefix) - 1U);
+    YEW_ASSERT_EQ_MEM(terminal.data + sizeof(prefix) - 1U,
                       suffix, sizeof(suffix) - 1U);
     bytebuf_free(&terminal);
-    sag_regval_free(&value);
-    sag_term_oob_clear();
-    sag_clip_shutdown();
+    yew_regval_free(&value);
+    yew_term_oob_clear();
+    yew_clip_shutdown();
     clip_env_restore(&osc52);
     clip_env_restore(&clipboard);
 }
@@ -639,61 +639,61 @@ void test_clipboard_nonexit_100_writes_are_nonblocking(void)
     u32 i;
     int n;
 
-    clip_env_save(&clipboard, "SAG_CLIPBOARD");
+    clip_env_save(&clipboard, "YEW_CLIPBOARD");
     clip_fixture_init(&f);
     n = snprintf(command, sizeof(command), "cmd:%s %s stay %s",
                  f.fake, f.output, f.pidlog);
     if (n < 0 || (size_t)n >= sizeof(command))
-        SAG_BUG("clipboard stay command overflow");
-    SAG_ASSERT_EQ_I64(setenv("SAG_CLIPBOARD", command, 1), 0);
-    sag_clip_reset();
+        YEW_BUG("clipboard stay command overflow");
+    YEW_ASSERT_EQ_I64(setenv("YEW_CLIPBOARD", command, 1), 0);
+    yew_clip_reset();
     clip_value(&value, (const u8 *)"x", 1U);
     bytebuf_init(&log);
     bytebuf_init(&terminal);
     /* Preserve the production budget while allowing instrumentation overhead. */
-    budget_ns = getenv("SAG_TEST_INSTRUMENTED") != NULL ?
+    budget_ns = getenv("YEW_TEST_INSTRUMENTED") != NULL ?
                     UINT64_C(100000000) : UINT64_C(2000000);
     for (i = 0U; i < 100U; i++) {
         u64 start = clip_test_now_ns();
         u64 elapsed;
 
-        SAG_ASSERT(sag_clip_write(&value, '+'));
-        sag_clip_after_render(&terminal, clip_test_now_ms());
+        YEW_ASSERT(yew_clip_write(&value, '+'));
+        yew_clip_after_render(&terminal, clip_test_now_ms());
         elapsed = clip_test_now_ns() - start;
         if (elapsed > slowest)
             slowest = elapsed;
         clip_pump_until_idle();
     }
-    SAG_ASSERT(slowest < budget_ns);
+    YEW_ASSERT(slowest < budget_ns);
     count = 0U;
     for (i = 0U; i < 2000U && count < 100U; i++) {
         struct timespec pause = {0, 1000000L};
 
         if (clip_read_file(f.pidlog, &log))
-            count = clip_parse_pids(&log, pids, SAG_ARRAY_LEN(pids));
+            count = clip_parse_pids(&log, pids, YEW_ARRAY_LEN(pids));
         if (count < 100U)
             (void)nanosleep(&pause, NULL);
     }
-    SAG_ASSERT_EQ_U64(count, 100U);
+    YEW_ASSERT_EQ_U64(count, 100U);
     for (i = 0U; i < count; i++) {
         int status;
 
         errno = 0;
-        SAG_ASSERT_EQ_I64(waitpid(pids[i], &status, WNOHANG), -1);
-        SAG_ASSERT_EQ_I64(errno, ECHILD);
-        SAG_ASSERT_EQ_I64(kill(pids[i], SIGTERM), 0);
+        YEW_ASSERT_EQ_I64(waitpid(pids[i], &status, WNOHANG), -1);
+        YEW_ASSERT_EQ_I64(errno, ECHILD);
+        YEW_ASSERT_EQ_I64(kill(pids[i], SIGTERM), 0);
     }
-    SAG_ASSERT(clip_wait_pids_gone(pids, count));
-    for (i = 0U; i < 200U && sag_clip_owned_children() != 0U; i++) {
+    YEW_ASSERT(clip_wait_pids_gone(pids, count));
+    for (i = 0U; i < 200U && yew_clip_owned_children() != 0U; i++) {
         struct timespec pause = {0, 1000000L};
-        sag_clip_reap();
+        yew_clip_reap();
         (void)nanosleep(&pause, NULL);
     }
-    SAG_ASSERT_EQ_U64(sag_clip_owned_children(), 0U);
+    YEW_ASSERT_EQ_U64(yew_clip_owned_children(), 0U);
     bytebuf_free(&terminal);
     bytebuf_free(&log);
-    sag_regval_free(&value);
-    sag_clip_shutdown();
+    yew_regval_free(&value);
+    yew_clip_shutdown();
     clip_fixture_free(&f);
     clip_env_restore(&clipboard);
 }
@@ -706,29 +706,29 @@ void test_clipboard_epipe_demotes_failed_backend(void)
     Bytebuf terminal;
     u32 i;
 
-    clip_env_save(&clipboard, "SAG_CLIPBOARD");
+    clip_env_save(&clipboard, "YEW_CLIPBOARD");
     clip_fixture_init(&f);
     clip_set_custom(&f, "exit", false);
-    sag_test_capture_log();
-    sag_regval_init(&value);
+    yew_test_capture_log();
+    yew_regval_init(&value);
     bytebuf_reserve(&value.bytes, 1024U * 1024U);
     (void)memset(value.bytes.data, 'x', 1024U * 1024U);
     value.bytes.len = 1024U * 1024U;
     bytebuf_init(&terminal);
-    SAG_ASSERT(sag_clip_write(&value, '+'));
-    sag_clip_after_render(&terminal, clip_test_now_ms());
-    for (i = 0U; i < 2000U && sag_clip_busy(); i++) {
-        struct pollfd pfd = {sag_clip_write_fd(), POLLOUT, 0};
+    YEW_ASSERT(yew_clip_write(&value, '+'));
+    yew_clip_after_render(&terminal, clip_test_now_ms());
+    for (i = 0U; i < 2000U && yew_clip_busy(); i++) {
+        struct pollfd pfd = {yew_clip_write_fd(), POLLOUT, 0};
         (void)poll(&pfd, 1U, 1);
-        sag_clip_pump(clip_test_now_ms());
+        yew_clip_pump(clip_test_now_ms());
     }
-    SAG_ASSERT(!sag_clip_busy());
-    SAG_ASSERT(!sag_clip_pending());
-    SAG_ASSERT_EQ_U64(sag_clip_detect(), SAG_CLIP_NONE);
-    SAG_ASSERT(sag_test_log_contains(SAG_LOG_WARN, "demoting backend"));
+    YEW_ASSERT(!yew_clip_busy());
+    YEW_ASSERT(!yew_clip_pending());
+    YEW_ASSERT_EQ_U64(yew_clip_detect(), YEW_CLIP_NONE);
+    YEW_ASSERT(yew_test_log_contains(YEW_LOG_WARN, "demoting backend"));
     bytebuf_free(&terminal);
-    sag_regval_free(&value);
-    sag_clip_shutdown();
+    yew_regval_free(&value);
+    yew_clip_shutdown();
     clip_fixture_free(&f);
     clip_env_restore(&clipboard);
 }
@@ -739,73 +739,73 @@ void test_clipboard_exec_failure_demotes_small_write(void)
     RegVal value;
     Bytebuf terminal;
 
-    clip_env_save(&clipboard, "SAG_CLIPBOARD");
-    SAG_ASSERT_EQ_I64(
-        setenv("SAG_CLIPBOARD",
-               "cmd:/definitely/not/a/sagitta-clipboard-tool", 1), 0);
-    sag_clip_reset();
+    clip_env_save(&clipboard, "YEW_CLIPBOARD");
+    YEW_ASSERT_EQ_I64(
+        setenv("YEW_CLIPBOARD",
+               "cmd:/definitely/not/a/yew-clipboard-tool", 1), 0);
+    yew_clip_reset();
     clip_value(&value, (const u8 *)"x", 1U);
     bytebuf_init(&terminal);
-    sag_test_capture_log();
-    SAG_ASSERT(sag_clip_write(&value, '+'));
-    sag_clip_after_render(&terminal, clip_test_now_ms());
+    yew_test_capture_log();
+    YEW_ASSERT(yew_clip_write(&value, '+'));
+    yew_clip_after_render(&terminal, clip_test_now_ms());
     clip_pump_until_idle();
-    SAG_ASSERT_EQ_U64(sag_clip_detect(), SAG_CLIP_NONE);
-    SAG_ASSERT(sag_test_log_contains(SAG_LOG_WARN, "exec failed"));
-    SAG_ASSERT(!sag_clip_pending());
+    YEW_ASSERT_EQ_U64(yew_clip_detect(), YEW_CLIP_NONE);
+    YEW_ASSERT(yew_test_log_contains(YEW_LOG_WARN, "exec failed"));
+    YEW_ASSERT(!yew_clip_pending());
     bytebuf_free(&terminal);
-    sag_regval_free(&value);
-    sag_clip_shutdown();
+    yew_regval_free(&value);
+    yew_clip_shutdown();
     clip_env_restore(&clipboard);
 }
 
 void test_clipboard_osc52_over_limit_falls_back_to_subprocess(void)
 {
     static const char *const names[] = {
-        "SAG_CLIPBOARD", "SAG_OSC52", "SAG_OSC52_MAX",
-        "SAG_FAKECLIP_OUTPUT", "WAYLAND_DISPLAY", "SSH_TTY", "PATH"
+        "YEW_CLIPBOARD", "YEW_OSC52", "YEW_OSC52_MAX",
+        "YEW_FAKECLIP_OUTPUT", "WAYLAND_DISPLAY", "SSH_TTY", "PATH"
     };
-    ClipEnv saved[SAG_ARRAY_LEN(names)];
+    ClipEnv saved[YEW_ARRAY_LEN(names)];
     ClipFixture f;
     RegVal value;
     Bytebuf terminal;
     Bytebuf got;
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(names); i++)
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++)
         clip_env_save(&saved[i], names[i]);
     clip_fixture_init(&f);
     clip_link(&f, "wl-copy");
-    SAG_ASSERT_EQ_I64(setenv("SAG_CLIPBOARD", "osc52", 1), 0);
-    SAG_ASSERT_EQ_I64(setenv("SAG_OSC52", "plain", 1), 0);
-    SAG_ASSERT_EQ_I64(setenv("SAG_OSC52_MAX", "1", 1), 0);
-    SAG_ASSERT_EQ_I64(setenv("SAG_FAKECLIP_OUTPUT", f.output, 1), 0);
-    SAG_ASSERT_EQ_I64(setenv("WAYLAND_DISPLAY", "wayland-1", 1), 0);
-    SAG_ASSERT_EQ_I64(setenv("PATH", f.dir, 1), 0);
-    sag_clip_reset();
+    YEW_ASSERT_EQ_I64(setenv("YEW_CLIPBOARD", "osc52", 1), 0);
+    YEW_ASSERT_EQ_I64(setenv("YEW_OSC52", "plain", 1), 0);
+    YEW_ASSERT_EQ_I64(setenv("YEW_OSC52_MAX", "1", 1), 0);
+    YEW_ASSERT_EQ_I64(setenv("YEW_FAKECLIP_OUTPUT", f.output, 1), 0);
+    YEW_ASSERT_EQ_I64(setenv("WAYLAND_DISPLAY", "wayland-1", 1), 0);
+    YEW_ASSERT_EQ_I64(setenv("PATH", f.dir, 1), 0);
+    yew_clip_reset();
     clip_value(&value, (const u8 *)"fallback", 8U);
     bytebuf_init(&terminal);
     bytebuf_init(&got);
-    SAG_ASSERT(sag_clip_write(&value, '+'));
-    sag_clip_after_render(&terminal, clip_test_now_ms());
+    YEW_ASSERT(yew_clip_write(&value, '+'));
+    yew_clip_after_render(&terminal, clip_test_now_ms());
     clip_pump_until_idle();
-    SAG_ASSERT_EQ_U64(terminal.len, 0U);
-    SAG_ASSERT(clip_wait_file(f.output, 8U, &got));
-    SAG_ASSERT_EQ_MEM(got.data, "fallback", 8U);
-    sag_clip_shutdown();
+    YEW_ASSERT_EQ_U64(terminal.len, 0U);
+    YEW_ASSERT(clip_wait_file(f.output, 8U, &got));
+    YEW_ASSERT_EQ_MEM(got.data, "fallback", 8U);
+    yew_clip_shutdown();
     clip_unlink_name(&f, "out.bin");
-    SAG_ASSERT_EQ_I64(setenv("SSH_TTY", "/dev/pts/9", 1), 0);
-    sag_clip_reset();
-    SAG_ASSERT(sag_clip_write(&value, '+'));
-    sag_clip_after_render(&terminal, clip_test_now_ms());
-    SAG_ASSERT(!sag_clip_busy());
-    SAG_ASSERT(!clip_read_file(f.output, &got));
+    YEW_ASSERT_EQ_I64(setenv("SSH_TTY", "/dev/pts/9", 1), 0);
+    yew_clip_reset();
+    YEW_ASSERT(yew_clip_write(&value, '+'));
+    yew_clip_after_render(&terminal, clip_test_now_ms());
+    YEW_ASSERT(!yew_clip_busy());
+    YEW_ASSERT(!clip_read_file(f.output, &got));
     bytebuf_free(&got);
     bytebuf_free(&terminal);
-    sag_regval_free(&value);
-    sag_clip_shutdown();
+    yew_regval_free(&value);
+    yew_clip_shutdown();
     clip_fixture_free(&f);
-    for (i = SAG_ARRAY_LEN(names); i != 0U; i--)
+    for (i = YEW_ARRAY_LEN(names); i != 0U; i--)
         clip_env_restore(&saved[i - 1U]);
 }
 
@@ -818,29 +818,29 @@ void test_clipboard_sync_default_yank_not_delete(void)
     Bytebuf got;
     Bytebuf terminal;
 
-    clip_env_save(&clipboard, "SAG_CLIPBOARD");
+    clip_env_save(&clipboard, "YEW_CLIPBOARD");
     clip_fixture_init(&f);
     clip_set_custom(&f, "write", false);
-    sag_reg_init(&registers);
+    yew_reg_init(&registers);
     clip_value(&value, (const u8 *)"sync", 4U);
     bytebuf_init(&got);
     bytebuf_init(&terminal);
-    SAG_ASSERT_EQ_U64(registers.clipboard_sync, SAG_CLIP_SYNC_YANK);
-    sag_reg_delete(&registers, 0U, &value);
-    SAG_ASSERT(!sag_clip_pending());
-    SAG_ASSERT_EQ_U64(registers.system.bytes.len, 0U);
-    sag_reg_yank(&registers, 0U, &value);
-    SAG_ASSERT(sag_clip_pending());
-    SAG_ASSERT_EQ_U64(registers.system.bytes.len, 4U);
-    sag_clip_after_render(&terminal, clip_test_now_ms());
+    YEW_ASSERT_EQ_U64(registers.clipboard_sync, YEW_CLIP_SYNC_YANK);
+    yew_reg_delete(&registers, 0U, &value);
+    YEW_ASSERT(!yew_clip_pending());
+    YEW_ASSERT_EQ_U64(registers.system.bytes.len, 0U);
+    yew_reg_yank(&registers, 0U, &value);
+    YEW_ASSERT(yew_clip_pending());
+    YEW_ASSERT_EQ_U64(registers.system.bytes.len, 4U);
+    yew_clip_after_render(&terminal, clip_test_now_ms());
     clip_pump_until_idle();
-    SAG_ASSERT(clip_wait_file(f.output, 4U, &got));
-    SAG_ASSERT_EQ_MEM(got.data, "sync", 4U);
+    YEW_ASSERT(clip_wait_file(f.output, 4U, &got));
+    YEW_ASSERT_EQ_MEM(got.data, "sync", 4U);
     bytebuf_free(&terminal);
     bytebuf_free(&got);
-    sag_regval_free(&value);
-    sag_reg_free(&registers);
-    sag_clip_shutdown();
+    yew_regval_free(&value);
+    yew_reg_free(&registers);
+    yew_clip_shutdown();
     clip_fixture_free(&f);
     clip_env_restore(&clipboard);
 }
@@ -852,64 +852,64 @@ void test_clipboard_sync_modes_route_only_documented_writes(void)
     Registers registers;
     RegVal value;
 
-    clip_env_save(&clipboard, "SAG_CLIPBOARD");
+    clip_env_save(&clipboard, "YEW_CLIPBOARD");
     clip_fixture_init(&f);
     clip_set_custom(&f, "write", false);
-    sag_reg_init(&registers);
+    yew_reg_init(&registers);
     clip_value(&value, (const u8 *)"modes", 5U);
 
-    registers.clipboard_sync = SAG_CLIP_SYNC_OFF;
-    sag_reg_yank(&registers, 0U, &value);
-    SAG_ASSERT(!sag_clip_pending());
-    sag_reg_yank(&registers, '+', &value);
-    SAG_ASSERT(sag_clip_pending());
-    sag_clip_reset();
+    registers.clipboard_sync = YEW_CLIP_SYNC_OFF;
+    yew_reg_yank(&registers, 0U, &value);
+    YEW_ASSERT(!yew_clip_pending());
+    yew_reg_yank(&registers, '+', &value);
+    YEW_ASSERT(yew_clip_pending());
+    yew_clip_reset();
 
-    registers.clipboard_sync = SAG_CLIP_SYNC_YANK;
-    sag_reg_delete(&registers, 0U, &value);
-    SAG_ASSERT(!sag_clip_pending());
-    sag_reg_yank(&registers, 0U, &value);
-    SAG_ASSERT(sag_clip_pending());
-    sag_clip_reset();
+    registers.clipboard_sync = YEW_CLIP_SYNC_YANK;
+    yew_reg_delete(&registers, 0U, &value);
+    YEW_ASSERT(!yew_clip_pending());
+    yew_reg_yank(&registers, 0U, &value);
+    YEW_ASSERT(yew_clip_pending());
+    yew_clip_reset();
 
-    registers.clipboard_sync = SAG_CLIP_SYNC_ALL;
-    sag_reg_delete(&registers, 0U, &value);
-    SAG_ASSERT(sag_clip_pending());
-    sag_clip_reset();
+    registers.clipboard_sync = YEW_CLIP_SYNC_ALL;
+    yew_reg_delete(&registers, 0U, &value);
+    YEW_ASSERT(yew_clip_pending());
+    yew_clip_reset();
 
-    registers.clipboard_sync = SAG_CLIP_SYNC_UNNAMED;
-    sag_reg_delete(&registers, 0U, &value);
-    SAG_ASSERT(sag_clip_pending());
-    SAG_ASSERT_EQ_MEM(registers.system.bytes.data, "modes", 5U);
+    registers.clipboard_sync = YEW_CLIP_SYNC_UNNAMED;
+    yew_reg_delete(&registers, 0U, &value);
+    YEW_ASSERT(yew_clip_pending());
+    YEW_ASSERT_EQ_MEM(registers.system.bytes.data, "modes", 5U);
 
-    sag_regval_free(&value);
-    sag_reg_free(&registers);
-    sag_clip_shutdown();
+    yew_regval_free(&value);
+    yew_reg_free(&registers);
+    yew_clip_shutdown();
     clip_fixture_free(&f);
     clip_env_restore(&clipboard);
 }
 
 static const char *clip_captured_read_failure(void)
 {
-    if (sag_test_log_contains(SAG_LOG_WARN, "no readable"))
+    if (yew_test_log_contains(YEW_LOG_WARN, "no readable"))
         return "clipboard read failed: no readable backend";
-    if (sag_test_log_contains(SAG_LOG_WARN, "no read command"))
+    if (yew_test_log_contains(YEW_LOG_WARN, "no read command"))
         return "clipboard read failed: backend has no read command";
-    if (sag_test_log_contains(SAG_LOG_WARN, "cannot start reader"))
+    if (yew_test_log_contains(YEW_LOG_WARN, "cannot start reader"))
         return "clipboard read failed: cannot start reader";
-    if (sag_test_log_contains(SAG_LOG_WARN, "timed out"))
+    if (yew_test_log_contains(YEW_LOG_WARN, "timed out"))
         return "clipboard read failed: reader timed out";
-    if (sag_test_log_contains(SAG_LOG_WARN, "poll failed"))
+    if (yew_test_log_contains(YEW_LOG_WARN, "poll failed"))
         return "clipboard read failed: poll failed";
-    if (sag_test_log_contains(SAG_LOG_WARN, "read exceeds"))
+    if (yew_test_log_contains(YEW_LOG_WARN, "read exceeds"))
         return "clipboard read failed: byte limit exceeded";
-    if (sag_test_log_contains(SAG_LOG_WARN, "pipe failed"))
+    if (yew_test_log_contains(YEW_LOG_WARN, "pipe failed"))
         return "clipboard read failed: pipe read failed";
-    if (sag_test_log_contains(SAG_LOG_WARN, "wait failed"))
+    if (yew_test_log_contains(YEW_LOG_WARN, "wait failed"))
         return "clipboard read failed: waitpid failed";
-    if (sag_test_log_contains(SAG_LOG_WARN, "exited with status"))
+    if (yew_test_log_contains(YEW_LOG_WARN, "exited with status"))
         return "clipboard read failed: reader exited nonzero";
-    if (sag_test_log_contains(SAG_LOG_WARN, "terminated by signal"))
+    if (yew_test_log_contains(YEW_LOG_WARN, "terminated by signal"))
         return "clipboard read failed: reader was signaled";
     return "clipboard read failed without a diagnostic";
 }
@@ -931,49 +931,49 @@ void test_clipboard_unnamed_paste_reads_subprocess(void)
     Bytebuf materialized;
     const char *paste_failure = NULL;
 
-    clip_env_save(&clipboard, "SAG_CLIPBOARD");
+    clip_env_save(&clipboard, "YEW_CLIPBOARD");
     clip_fixture_init(&f);
     clip_write_file(f.input, payload, sizeof(payload));
     clip_set_custom(&f, "write", true);
-    sag_reg_init(&registers);
-    registers.clipboard_sync = SAG_CLIP_SYNC_UNNAMED;
-    tb = sag_textbuf_from_bytes((const u8 *)"a", 1U);
-    sag_cset_init(&cursors, cursor);
-    undo = sag_undo_new(tb);
+    yew_reg_init(&registers);
+    registers.clipboard_sync = YEW_CLIP_SYNC_UNNAMED;
+    tb = yew_textbuf_from_bytes((const u8 *)"a", 1U);
+    yew_cset_init(&cursors, cursor);
+    undo = yew_undo_new(tb);
     edit = (EditCtx){tb, NULL, &cursors, 7U, NULL, undo, NULL,
                      NULL, NULL, 0};
     bytebuf_init(&materialized);
 
-    sag_test_capture_log();
-    sag_test_count_assertion();
-    if (!sag_reg_paste(&registers, &edit, '"', true, 8U)) {
+    yew_test_capture_log();
+    yew_test_count_assertion();
+    if (!yew_reg_paste(&registers, &edit, '"', true, 8U)) {
         paste_failure = clip_captured_read_failure();
         goto cleanup;
     }
-    SAG_ASSERT_EQ_U64(sag_textbuf_len(tb), 3U);
-    SAG_ASSERT(sag_textiter_begin(&iter, tb, BYTEOFF(0U)));
+    YEW_ASSERT_EQ_U64(yew_textbuf_len(tb), 3U);
+    YEW_ASSERT(yew_textiter_begin(&iter, tb, BYTEOFF(0U)));
     while (materialized.len < 3U) {
-        SAG_ASSERT(sag_textiter_chunk(&iter, tb, &bytes, &len));
+        YEW_ASSERT(yew_textiter_chunk(&iter, tb, &bytes, &len));
         bytebuf_append(&materialized, bytes, (size_t)len);
         if (materialized.len < 3U)
-            SAG_ASSERT(sag_textiter_advance(&iter, tb));
+            YEW_ASSERT(yew_textiter_advance(&iter, tb));
     }
-    SAG_ASSERT_EQ_MEM(materialized.data, "\0Qa", 3U);
-    SAG_ASSERT_EQ_U64(registers.system.bytes.len, sizeof(payload));
-    SAG_ASSERT_EQ_MEM(registers.system.bytes.data, payload, sizeof(payload));
-    SAG_ASSERT_EQ_MEM(registers.unnamed.bytes.data, payload, sizeof(payload));
-    SAG_ASSERT_EQ_U64(registers.ring_len, 1U);
-    SAG_ASSERT_EQ_U64(undo->nodes.len, 2U);
+    YEW_ASSERT_EQ_MEM(materialized.data, "\0Qa", 3U);
+    YEW_ASSERT_EQ_U64(registers.system.bytes.len, sizeof(payload));
+    YEW_ASSERT_EQ_MEM(registers.system.bytes.data, payload, sizeof(payload));
+    YEW_ASSERT_EQ_MEM(registers.unnamed.bytes.data, payload, sizeof(payload));
+    YEW_ASSERT_EQ_U64(registers.ring_len, 1U);
+    YEW_ASSERT_EQ_U64(undo->nodes.len, 2U);
 
 cleanup:
     bytebuf_free(&materialized);
-    sag_undo_free(undo);
-    sag_cset_free(&cursors);
-    sag_textbuf_free(tb);
-    sag_reg_free(&registers);
-    sag_clip_shutdown();
+    yew_undo_free(undo);
+    yew_cset_free(&cursors);
+    yew_textbuf_free(tb);
+    yew_reg_free(&registers);
+    yew_clip_shutdown();
     clip_fixture_free(&f);
     clip_env_restore(&clipboard);
     if (paste_failure != NULL)
-        sag_test_fail(__FILE__, __LINE__, paste_failure);
+        yew_test_fail(__FILE__, __LINE__, paste_failure);
 }

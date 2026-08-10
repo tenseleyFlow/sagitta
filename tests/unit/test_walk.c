@@ -53,8 +53,8 @@ static void wk_rm_rf(const char *path)
 
 static void wk_make(WkFix *f)
 {
-    (void)snprintf(f->root, sizeof(f->root), "/tmp/sag-walk-XXXXXX");
-    SAG_ASSERT_NOT_NULL(mkdtemp(f->root));
+    (void)snprintf(f->root, sizeof(f->root), "/tmp/yew-walk-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(f->root));
 }
 
 static void wk_remove(WkFix *f)
@@ -66,7 +66,7 @@ static void wk_join(char *out, size_t cap, const char *dir, const char *leaf)
 {
     int n = snprintf(out, cap, "%s/%s", dir, leaf);
 
-    SAG_ASSERT(n > 0 && (size_t)n < cap);
+    YEW_ASSERT(n > 0 && (size_t)n < cap);
 }
 
 static void wk_file(const WkFix *f, const char *rel)
@@ -76,7 +76,7 @@ static void wk_file(const WkFix *f, const char *rel)
 
     wk_join(path, sizeof(path), f->root, rel);
     fp = fopen(path, "wb");
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     (void)fputs("x\n", fp);
     (void)fclose(fp);
 }
@@ -86,7 +86,7 @@ static void wk_dir(const WkFix *f, const char *rel)
     char path[512];
 
     wk_join(path, sizeof(path), f->root, rel);
-    SAG_ASSERT_EQ_I64(mkdir(path, 0700), 0);
+    YEW_ASSERT_EQ_I64(mkdir(path, 0700), 0);
 }
 
 /* Runs a walk to completion and returns the list. */
@@ -94,12 +94,12 @@ static void wk_walk(const WkFix *f, const WalkOpts *o, FileList *out)
 {
     WalkState *w;
 
-    sag_filelist_init(out);
-    w = sag_walk_begin(f->root, o, out);
-    SAG_ASSERT_NOT_NULL(w);
-    while (sag_walk_step(w, 0))
+    yew_filelist_init(out);
+    w = yew_walk_begin(f->root, o, out);
+    YEW_ASSERT_NOT_NULL(w);
+    while (yew_walk_step(w, 0))
         ;
-    sag_walk_end(w);
+    yew_walk_end(w);
 }
 
 /* The whole list as one newline-joined string, for byte comparison. */
@@ -146,17 +146,17 @@ void test_walk_lists_files_relative_to_the_root(void)
     wk_file(&f, "src/ui/draw.c");
 
     wk_walk(&f, NULL, &fl);
-    SAG_ASSERT_EQ_U64(fl.paths.len, 3U);
-    SAG_ASSERT(wk_has(&fl, "a.txt"));
-    SAG_ASSERT(wk_has(&fl, "src/main.c"));
-    SAG_ASSERT(wk_has(&fl, "src/ui/draw.c"));
+    YEW_ASSERT_EQ_U64(fl.paths.len, 3U);
+    YEW_ASSERT(wk_has(&fl, "a.txt"));
+    YEW_ASSERT(wk_has(&fl, "src/main.c"));
+    YEW_ASSERT(wk_has(&fl, "src/ui/draw.c"));
     /* No leading slash, and no absolute prefix. */
-    SAG_ASSERT(fl.paths.data[0][0] != '/');
-    SAG_ASSERT_NULL(strstr(fl.paths.data[0], "/tmp/"));
-    SAG_ASSERT_EQ_U64(fl.n_files, 3U);
-    SAG_ASSERT_EQ_U64(fl.n_dirs, 2U);
-    SAG_ASSERT(!fl.truncated);
-    sag_filelist_free(&fl);
+    YEW_ASSERT(fl.paths.data[0][0] != '/');
+    YEW_ASSERT_NULL(strstr(fl.paths.data[0], "/tmp/"));
+    YEW_ASSERT_EQ_U64(fl.n_files, 3U);
+    YEW_ASSERT_EQ_U64(fl.n_dirs, 2U);
+    YEW_ASSERT(!fl.truncated);
+    yew_filelist_free(&fl);
     wk_remove(&f);
 }
 
@@ -173,15 +173,15 @@ void test_walk_lists_only_regular_files(void)
     /* A fifo is neither, and must not appear. */
     wk_join(path, sizeof(path), f.root, "afifo");
     if (mkfifo(path, 0600) != 0) {
-        sag_filelist_init(&fl);
-        sag_filelist_free(&fl);
+        yew_filelist_init(&fl);
+        yew_filelist_free(&fl);
         wk_remove(&f);
         return;
     }
     wk_walk(&f, NULL, &fl);
-    SAG_ASSERT_EQ_U64(fl.paths.len, 1U);
-    SAG_ASSERT_EQ_STR(fl.paths.data[0], "real.txt");
-    sag_filelist_free(&fl);
+    YEW_ASSERT_EQ_U64(fl.paths.len, 1U);
+    YEW_ASSERT_EQ_STR(fl.paths.data[0], "real.txt");
+    yew_filelist_free(&fl);
     wk_remove(&f);
 }
 
@@ -224,30 +224,30 @@ void test_walk_is_deterministic_regardless_of_creation_order(void)
     bytebuf_init(&b);
     wk_join_paths(&first, &a);
     wk_join_paths(&second, &b);
-    SAG_ASSERT_EQ_U64(a.len, b.len);
-    SAG_ASSERT_EQ_MEM(a.data, b.data, a.len);
+    YEW_ASSERT_EQ_U64(a.len, b.len);
+    YEW_ASSERT_EQ_MEM(a.data, b.data, a.len);
 
     /* And the order is SORTED, not creation order — which is the claim
      * the byte comparison alone cannot make, since two identical wrong
      * answers are still identical. */
-    SAG_ASSERT_EQ_STR(first.paths.data[0], "aaa.txt");
-    SAG_ASSERT_EQ_STR(first.paths.data[1], "adir/eight.c");
-    SAG_ASSERT_EQ_STR(first.paths.data[2], "adir/nine.c");
-    SAG_ASSERT_EQ_STR(first.paths.data[3], "bbb.txt");
-    SAG_ASSERT_EQ_STR(first.paths.data[4], "mmm.txt");
-    SAG_ASSERT_EQ_STR(first.paths.data[5], "zdir/one.c");
-    SAG_ASSERT_EQ_STR(first.paths.data[6], "zdir/two.c");
-    SAG_ASSERT_EQ_STR(first.paths.data[7], "zzz.txt");
+    YEW_ASSERT_EQ_STR(first.paths.data[0], "aaa.txt");
+    YEW_ASSERT_EQ_STR(first.paths.data[1], "adir/eight.c");
+    YEW_ASSERT_EQ_STR(first.paths.data[2], "adir/nine.c");
+    YEW_ASSERT_EQ_STR(first.paths.data[3], "bbb.txt");
+    YEW_ASSERT_EQ_STR(first.paths.data[4], "mmm.txt");
+    YEW_ASSERT_EQ_STR(first.paths.data[5], "zdir/one.c");
+    YEW_ASSERT_EQ_STR(first.paths.data[6], "zdir/two.c");
+    YEW_ASSERT_EQ_STR(first.paths.data[7], "zzz.txt");
 
     bytebuf_free(&a);
     bytebuf_free(&b);
-    sag_filelist_free(&first);
-    sag_filelist_free(&second);
+    yew_filelist_free(&first);
+    yew_filelist_free(&second);
     wk_remove(&f);
 }
 
 /*
- * A walk sliced across many sag_walk_step calls equals a single-call
+ * A walk sliced across many yew_walk_step calls equals a single-call
  * walk, byte for byte.
  *
  * This is what makes the budget safe to use: if slicing could change
@@ -286,29 +286,29 @@ void test_walk_sliced_equals_unsliced(void)
 
     /* A 1 us budget forces a return after essentially every
      * directory. */
-    sag_filelist_init(&sliced);
-    w = sag_walk_begin(f.root, NULL, &sliced);
-    SAG_ASSERT_NOT_NULL(w);
-    while (sag_walk_step(w, 1)) {
+    yew_filelist_init(&sliced);
+    w = yew_walk_begin(f.root, NULL, &sliced);
+    YEW_ASSERT_NOT_NULL(w);
+    while (yew_walk_step(w, 1)) {
         steps++;
-        SAG_ASSERT(steps < 10000U); /* never loops */
+        YEW_ASSERT(steps < 10000U); /* never loops */
     }
-    sag_walk_end(w);
+    yew_walk_end(w);
     /* It really was sliced, or this proves nothing. */
-    SAG_ASSERT(steps > 1U);
+    YEW_ASSERT(steps > 1U);
 
     bytebuf_init(&a);
     bytebuf_init(&b);
     wk_join_paths(&whole, &a);
     wk_join_paths(&sliced, &b);
-    SAG_ASSERT_EQ_U64(whole.paths.len, 72U);
-    SAG_ASSERT_EQ_U64(a.len, b.len);
-    SAG_ASSERT_EQ_MEM(a.data, b.data, a.len);
+    YEW_ASSERT_EQ_U64(whole.paths.len, 72U);
+    YEW_ASSERT_EQ_U64(a.len, b.len);
+    YEW_ASSERT_EQ_MEM(a.data, b.data, a.len);
 
     bytebuf_free(&a);
     bytebuf_free(&b);
-    sag_filelist_free(&whole);
-    sag_filelist_free(&sliced);
+    yew_filelist_free(&whole);
+    yew_filelist_free(&sliced);
     wk_remove(&f);
 }
 
@@ -343,11 +343,11 @@ void test_walk_symlink_loop_terminates_and_is_counted(void)
     o.follow_symlinks = true;
 
     wk_walk(&f, &o, &fl);
-    SAG_ASSERT_EQ_U64(fl.n_loops, 1U);
-    SAG_ASSERT(wk_has(&fl, "a/inside.txt"));
+    YEW_ASSERT_EQ_U64(fl.n_loops, 1U);
+    YEW_ASSERT(wk_has(&fl, "a/inside.txt"));
     /* The file is listed ONCE, not once per trip around the loop. */
-    SAG_ASSERT_EQ_U64(fl.paths.len, 1U);
-    sag_filelist_free(&fl);
+    YEW_ASSERT_EQ_U64(fl.paths.len, 1U);
+    yew_filelist_free(&fl);
     wk_remove(&f);
 }
 
@@ -378,10 +378,10 @@ void test_walk_does_not_follow_symlinks_by_default(void)
         return;
     }
     wk_walk(&f, NULL, &fl);
-    SAG_ASSERT_EQ_U64(fl.n_loops, 0U);
-    SAG_ASSERT_EQ_U64(fl.paths.len, 1U);
-    SAG_ASSERT(wk_has(&fl, "a/inside.txt"));
-    sag_filelist_free(&fl);
+    YEW_ASSERT_EQ_U64(fl.n_loops, 0U);
+    YEW_ASSERT_EQ_U64(fl.paths.len, 1U);
+    YEW_ASSERT(wk_has(&fl, "a/inside.txt"));
+    yew_filelist_free(&fl);
     wk_remove(&f);
 }
 
@@ -403,17 +403,17 @@ void test_walk_hidden_files_are_opt_in(void)
     wk_file(&f, ".hiddendir/inside.txt");
 
     wk_walk(&f, NULL, &fl);
-    SAG_ASSERT_EQ_U64(fl.paths.len, 1U);
-    SAG_ASSERT(wk_has(&fl, "visible.txt"));
-    sag_filelist_free(&fl);
+    YEW_ASSERT_EQ_U64(fl.paths.len, 1U);
+    YEW_ASSERT(wk_has(&fl, "visible.txt"));
+    yew_filelist_free(&fl);
 
     (void)memset(&o, 0, sizeof(o));
     o.hidden = true;
     wk_walk(&f, &o, &fl);
-    SAG_ASSERT_EQ_U64(fl.paths.len, 3U);
-    SAG_ASSERT(wk_has(&fl, ".hidden"));
-    SAG_ASSERT(wk_has(&fl, ".hiddendir/inside.txt"));
-    sag_filelist_free(&fl);
+    YEW_ASSERT_EQ_U64(fl.paths.len, 3U);
+    YEW_ASSERT(wk_has(&fl, ".hidden"));
+    YEW_ASSERT(wk_has(&fl, ".hiddendir/inside.txt"));
+    yew_filelist_free(&fl);
     wk_remove(&f);
 }
 
@@ -439,9 +439,9 @@ void test_walk_always_skips_dot_git(void)
     (void)memset(&o, 0, sizeof(o));
     o.hidden = true;
     wk_walk(&f, &o, &fl);
-    SAG_ASSERT_EQ_U64(fl.paths.len, 1U);
-    SAG_ASSERT_EQ_STR(fl.paths.data[0], "src.c");
-    sag_filelist_free(&fl);
+    YEW_ASSERT_EQ_U64(fl.paths.len, 1U);
+    YEW_ASSERT_EQ_STR(fl.paths.data[0], "src.c");
+    yew_filelist_free(&fl);
     wk_remove(&f);
 }
 
@@ -463,15 +463,15 @@ void test_walk_truncation_is_flagged(void)
     (void)memset(&o, 0, sizeof(o));
     o.max_entries = 5U;
     wk_walk(&f, &o, &fl);
-    SAG_ASSERT_EQ_U64(fl.paths.len, 5U);
-    SAG_ASSERT(fl.truncated);
-    sag_filelist_free(&fl);
+    YEW_ASSERT_EQ_U64(fl.paths.len, 5U);
+    YEW_ASSERT(fl.truncated);
+    yew_filelist_free(&fl);
 
     /* And without the cap, nothing is flagged. */
     wk_walk(&f, NULL, &fl);
-    SAG_ASSERT_EQ_U64(fl.paths.len, 20U);
-    SAG_ASSERT(!fl.truncated);
-    sag_filelist_free(&fl);
+    YEW_ASSERT_EQ_U64(fl.paths.len, 20U);
+    YEW_ASSERT(!fl.truncated);
+    yew_filelist_free(&fl);
     wk_remove(&f);
 }
 
@@ -494,12 +494,12 @@ void test_walk_max_depth_bounds_the_descent(void)
     (void)memset(&o, 0, sizeof(o));
     o.max_depth = 2U;
     wk_walk(&f, &o, &fl);
-    SAG_ASSERT(wk_has(&fl, "top.txt"));
-    SAG_ASSERT(wk_has(&fl, "one/a.txt"));
+    YEW_ASSERT(wk_has(&fl, "top.txt"));
+    YEW_ASSERT(wk_has(&fl, "one/a.txt"));
     /* Past the bound, and therefore absent. */
-    SAG_ASSERT(!wk_has(&fl, "one/two/b.txt"));
-    SAG_ASSERT(!wk_has(&fl, "one/two/three/c.txt"));
-    sag_filelist_free(&fl);
+    YEW_ASSERT(!wk_has(&fl, "one/two/b.txt"));
+    YEW_ASSERT(!wk_has(&fl, "one/two/three/c.txt"));
+    yew_filelist_free(&fl);
     wk_remove(&f);
 }
 
@@ -525,7 +525,7 @@ void test_walk_deep_tree_does_not_recurse(void)
         int n;
 
         n = snprintf(rel + at, sizeof(rel) - at, "%sd", at == 0U ? "" : "/");
-        SAG_ASSERT(n > 0);
+        YEW_ASSERT(n > 0);
         at += (size_t)n;
         {
             char path[1200];
@@ -539,8 +539,8 @@ void test_walk_deep_tree_does_not_recurse(void)
     o.max_depth = 200U;
     wk_walk(&f, &o, &fl);
     /* No crash, and the walk completed. */
-    SAG_ASSERT(fl.n_dirs > 100U);
-    sag_filelist_free(&fl);
+    YEW_ASSERT(fl.n_dirs > 100U);
+    yew_filelist_free(&fl);
     wk_remove(&f);
 }
 
@@ -551,15 +551,15 @@ void test_walk_missing_root_is_null(void)
     FileList fl;
     WalkState *w;
 
-    sag_filelist_init(&fl);
-    w = sag_walk_begin("/tmp/sag-walk-does-not-exist-xyz", NULL, &fl);
-    SAG_ASSERT_NULL(w);
-    sag_filelist_free(&fl);
+    yew_filelist_init(&fl);
+    w = yew_walk_begin("/tmp/yew-walk-does-not-exist-xyz", NULL, &fl);
+    YEW_ASSERT_NULL(w);
+    yew_filelist_free(&fl);
     /* And degenerate inputs do not crash. */
-    SAG_ASSERT_NULL(sag_walk_begin(NULL, NULL, &fl));
-    SAG_ASSERT_NULL(sag_walk_begin("/tmp", NULL, NULL));
-    SAG_ASSERT(!sag_walk_step(NULL, 0));
-    sag_walk_end(NULL);
+    YEW_ASSERT_NULL(yew_walk_begin(NULL, NULL, &fl));
+    YEW_ASSERT_NULL(yew_walk_begin("/tmp", NULL, NULL));
+    YEW_ASSERT(!yew_walk_step(NULL, 0));
+    yew_walk_end(NULL);
 }
 
 /* An empty directory is an empty list, not a failure. */
@@ -570,10 +570,10 @@ void test_walk_empty_root_is_empty(void)
 
     wk_make(&f);
     wk_walk(&f, NULL, &fl);
-    SAG_ASSERT_EQ_U64(fl.paths.len, 0U);
-    SAG_ASSERT_EQ_U64(fl.n_files, 0U);
-    SAG_ASSERT(!fl.truncated);
-    sag_filelist_free(&fl);
+    YEW_ASSERT_EQ_U64(fl.paths.len, 0U);
+    YEW_ASSERT_EQ_U64(fl.n_files, 0U);
+    YEW_ASSERT(!fl.truncated);
+    yew_filelist_free(&fl);
     wk_remove(&f);
 }
 
@@ -594,17 +594,17 @@ void test_walk_counts_syscalls(void)
     wk_dir(&f, "sub");
     wk_file(&f, "sub/b.txt");
 
-    sag_walk_counts_reset();
-    SAG_ASSERT_EQ_U64(sag_walk_opendir_count(), 0U);
-    SAG_ASSERT_EQ_U64(sag_walk_statat_count(), 0U);
+    yew_walk_counts_reset();
+    YEW_ASSERT_EQ_U64(yew_walk_opendir_count(), 0U);
+    YEW_ASSERT_EQ_U64(yew_walk_statat_count(), 0U);
     wk_walk(&f, NULL, &fl);
-    opendirs = sag_walk_opendir_count();
-    statats = sag_walk_statat_count();
+    opendirs = yew_walk_opendir_count();
+    statats = yew_walk_statat_count();
     /* Root plus one subdirectory. */
-    SAG_ASSERT_EQ_U64(opendirs, 2U);
+    YEW_ASSERT_EQ_U64(opendirs, 2U);
     /* One per entry, plus the root. */
-    SAG_ASSERT(statats >= 3U);
-    sag_filelist_free(&fl);
+    YEW_ASSERT(statats >= 3U);
+    yew_filelist_free(&fl);
     wk_remove(&f);
 }
 
@@ -619,15 +619,15 @@ void test_walk_root_trailing_slash_is_normalized(void)
     wk_make(&f);
     wk_file(&f, "a.txt");
     (void)snprintf(rooted, sizeof(rooted), "%s/", f.root);
-    sag_filelist_init(&fl);
-    w = sag_walk_begin(rooted, NULL, &fl);
-    SAG_ASSERT_NOT_NULL(w);
-    while (sag_walk_step(w, 0))
+    yew_filelist_init(&fl);
+    w = yew_walk_begin(rooted, NULL, &fl);
+    YEW_ASSERT_NOT_NULL(w);
+    while (yew_walk_step(w, 0))
         ;
-    sag_walk_end(w);
-    SAG_ASSERT_EQ_U64(fl.paths.len, 1U);
-    SAG_ASSERT_EQ_STR(fl.paths.data[0], "a.txt");
-    sag_filelist_free(&fl);
+    yew_walk_end(w);
+    YEW_ASSERT_EQ_U64(fl.paths.len, 1U);
+    YEW_ASSERT_EQ_STR(fl.paths.data[0], "a.txt");
+    yew_filelist_free(&fl);
     wk_remove(&f);
 }
 
@@ -651,7 +651,7 @@ static void wk_ignore_file(const WkFix *f, const char *rel_dir,
     {
         FILE *fp = fopen(path, "wb");
 
-        SAG_ASSERT_NOT_NULL(fp);
+        YEW_ASSERT_NOT_NULL(fp);
         (void)fputs(text, fp);
         (void)fclose(fp);
     }
@@ -674,17 +674,17 @@ void test_walk_honours_gitignore(void)
     (void)memset(&o, 0, sizeof(o));
     o.use_gitignore = true;
     wk_walk(&f, &o, &fl);
-    SAG_ASSERT(wk_has(&fl, "main.c"));
-    SAG_ASSERT(!wk_has(&fl, "main.o"));
-    SAG_ASSERT(!wk_has(&fl, "build/out.bin"));
-    SAG_ASSERT(fl.n_ignored > 0U);
-    sag_filelist_free(&fl);
+    YEW_ASSERT(wk_has(&fl, "main.c"));
+    YEW_ASSERT(!wk_has(&fl, "main.o"));
+    YEW_ASSERT(!wk_has(&fl, "build/out.bin"));
+    YEW_ASSERT(fl.n_ignored > 0U);
+    yew_filelist_free(&fl);
 
     /* Off by default: a walk is a walk. */
     wk_walk(&f, NULL, &fl);
-    SAG_ASSERT(wk_has(&fl, "main.o"));
-    SAG_ASSERT(wk_has(&fl, "build/out.bin"));
-    sag_filelist_free(&fl);
+    YEW_ASSERT(wk_has(&fl, "main.o"));
+    YEW_ASSERT(wk_has(&fl, "build/out.bin"));
+    yew_filelist_free(&fl);
     wk_remove(&f);
 }
 
@@ -722,22 +722,22 @@ void test_walk_prunes_an_ignored_directory_without_opening_it(void)
 
     (void)memset(&o, 0, sizeof(o));
     o.use_gitignore = true;
-    sag_walk_counts_reset();
+    yew_walk_counts_reset();
     wk_walk(&f, &o, &fl);
-    opendirs = sag_walk_opendir_count();
-    statats = sag_walk_statat_count();
+    opendirs = yew_walk_opendir_count();
+    statats = yew_walk_statat_count();
 
-    SAG_ASSERT(wk_has(&fl, "app.js"));
-    SAG_ASSERT(!wk_has(&fl, "node_modules/pkg000.js"));
+    YEW_ASSERT(wk_has(&fl, "app.js"));
+    YEW_ASSERT(!wk_has(&fl, "node_modules/pkg000.js"));
     /*
      * The root only.  node_modules was never opened, so none of its 500
      * entries was ever stat'ed either.
      */
-    SAG_ASSERT_EQ_U64(opendirs, 1U);
+    YEW_ASSERT_EQ_U64(opendirs, 1U);
     /* The root, .gitignore, app.js, node_modules — and nothing
      * inside it. */
-    SAG_ASSERT(statats < 10U);
-    sag_filelist_free(&fl);
+    YEW_ASSERT(statats < 10U);
+    yew_filelist_free(&fl);
     wk_remove(&f);
 }
 
@@ -764,17 +764,17 @@ void test_walk_descends_when_a_negation_blocks_pruning(void)
 
     (void)memset(&o, 0, sizeof(o));
     o.use_gitignore = true;
-    sag_walk_counts_reset();
+    yew_walk_counts_reset();
     wk_walk(&f, &o, &fl);
-    opendirs = sag_walk_opendir_count();
+    opendirs = yew_walk_opendir_count();
 
     /* It was opened: root plus node_modules. */
-    SAG_ASSERT_EQ_U64(opendirs, 2U);
-    SAG_ASSERT(wk_has(&fl, "app.js"));
+    YEW_ASSERT_EQ_U64(opendirs, 2U);
+    YEW_ASSERT(wk_has(&fl, "app.js"));
     /* The negation re-includes exactly one file. */
-    SAG_ASSERT(wk_has(&fl, "node_modules/keep.js"));
-    SAG_ASSERT(!wk_has(&fl, "node_modules/other.js"));
-    sag_filelist_free(&fl);
+    YEW_ASSERT(wk_has(&fl, "node_modules/keep.js"));
+    YEW_ASSERT(!wk_has(&fl, "node_modules/other.js"));
+    yew_filelist_free(&fl);
     wk_remove(&f);
 }
 
@@ -797,9 +797,9 @@ void test_walk_nested_gitignore_applies_to_its_subtree(void)
     (void)memset(&o, 0, sizeof(o));
     o.use_gitignore = true;
     wk_walk(&f, &o, &fl);
-    SAG_ASSERT(!wk_has(&fl, "root.log"));
-    SAG_ASSERT(wk_has(&fl, "sub/important.log"));
-    SAG_ASSERT(!wk_has(&fl, "sub/other.log"));
-    sag_filelist_free(&fl);
+    YEW_ASSERT(!wk_has(&fl, "root.log"));
+    YEW_ASSERT(wk_has(&fl, "sub/important.log"));
+    YEW_ASSERT(!wk_has(&fl, "sub/other.log"));
+    yew_filelist_free(&fl);
     wk_remove(&f);
 }

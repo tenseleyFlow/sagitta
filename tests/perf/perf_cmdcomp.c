@@ -8,7 +8,7 @@
  * applied to EACH key of a realistic prefix -- including the one key that
  * pays for the cold opendir of a 10,000-entry directory.
  *
- * Timing sag_cmdline_key + sag_cmdline_draw is deliberate: those are the
+ * Timing yew_cmdline_key + yew_cmdline_draw is deliberate: those are the
  * two calls the event loop makes per key.  Timing the filter alone would
  * pass while the draw blew the budget.
  */
@@ -88,7 +88,7 @@ static bool fixture_create(char root[64])
 {
     u32 i;
 
-    (void)strcpy(root, "/tmp/sagitta-perf-cmdcomp-XXXXXX");
+    (void)strcpy(root, "/tmp/yew-perf-cmdcomp-XXXXXX");
     if (mkdtemp(root) == NULL) {
         (void)fprintf(stderr, "perf_cmdcomp: mkdtemp: %s\n",
                       strerror(errno));
@@ -137,8 +137,8 @@ static Key perf_key(char c)
     Key key = {0};
 
     key.code = (u32)(u8)c;
-    key.kind = SAG_EV_KEY;
-    key.ev = SAG_KEY_PRESS;
+    key.kind = YEW_EV_KEY;
+    key.ev = YEW_KEY_PRESS;
     key.ntext = 1U;
     key.text[0] = (u8)c;
     return key;
@@ -158,21 +158,21 @@ static bool measure_trial(const char *root, i64 *samples, u64 *opendirs)
     u32 i;
     bool ok = false;
 
-    sag_ed_init(&ed);
-    if (!sag_ed_open_scratch(&ed))
+    yew_ed_init(&ed);
+    if (!yew_ed_open_scratch(&ed))
         goto done;
     ed.ws.dir = (char *)root;
-    if (!sag_grid_init(&ed.grid, &ed.interner,
+    if (!yew_grid_init(&ed.grid, &ed.interner,
                        PERF_COMP_ROWS, PERF_COMP_COLS))
         goto done;
     ed.grid_ready = true;
-    ed.mode = SAG_MODE_E;
+    ed.mode = YEW_MODE_E;
     rect.x = 0U;
     rect.y = PERF_COMP_ROWS - 1U;
     rect.w = PERF_COMP_COLS;
     rect.h = 1U;
-    sag_cmdline_open(&ed, SAG_PROMPT_CMD, NULL);
-    before_opendirs = sag_comp_listing_opendirs();
+    yew_cmdline_open(&ed, YEW_PROMPT_CMD, NULL);
+    before_opendirs = yew_comp_listing_opendirs();
 
     for (i = 0U; i < PERF_COMP_KEYS; i++) {
         Key key = perf_key(PERF_COMP_PREFIX[i]);
@@ -181,8 +181,8 @@ static bool measure_trial(const char *root, i64 *samples, u64 *opendirs)
 
         if (start < 0)
             goto done;
-        (void)sag_cmdline_key(&ed, &key);
-        sag_cmdline_draw(&ed, rect);
+        (void)yew_cmdline_key(&ed, &key);
+        yew_cmdline_draw(&ed, rect);
         elapsed = now_ns() - start;
         if (elapsed < 0)
             goto done;
@@ -195,13 +195,13 @@ static bool measure_trial(const char *root, i64 *samples, u64 *opendirs)
         (void)fprintf(stderr, "perf_cmdcomp: menu was empty\n");
         goto done;
     }
-    *opendirs = sag_comp_listing_opendirs() - before_opendirs;
+    *opendirs = yew_comp_listing_opendirs() - before_opendirs;
     ok = true;
 
 done:
-    sag_cmdline_dispose(&ed);
+    yew_cmdline_dispose(&ed);
     ed.ws.dir = NULL;
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
     return ok;
 }
 
@@ -221,7 +221,7 @@ int main(void)
     if (!fixture_create(root)) {
         if (root[0] != '\0')
             (void)fixture_remove(root);
-        sag_cmd_shutdown();
+        yew_cmd_shutdown();
         return 2;
     }
     for (i = 0U; i < PERF_COMP_KEYS; i++)
@@ -296,6 +296,6 @@ done:
         if (status == 0)
             status = 2;
     }
-    sag_cmd_shutdown();
+    yew_cmd_shutdown();
     return status;
 }

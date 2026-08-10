@@ -1,6 +1,6 @@
 {
   version: 1,
-  writer: "sagitta",
+  writer: "yew",
   workspace: {
     path: "/w",
     saved_at: 0,
@@ -91,7 +91,7 @@
         ],
       },
       undo: {
-        file: "521d28c6b57bd972.sagu",
+        file: "521d28c6b57bd972.yewu",
         version: 1,
       },
     },

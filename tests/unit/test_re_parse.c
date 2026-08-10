@@ -2,7 +2,7 @@
  * Sprint 20 DoD 8 + 11: the error table and the emitted program shape.
  *
  * The offsets matter as much as the messages.  Sprint 21's incremental
- * search renders SagReErr.off as a caret under the pattern while the
+ * search renders YewReErr.off as a caret under the pattern while the
  * user is still typing, so an offset that points at the wrong construct
  * is a visible bug — and one that no "did it compile?" test would catch.
  */
@@ -25,8 +25,8 @@ typedef struct ErrRow {
 
 /* The permanent non-goals share one sentence; spelling it once keeps the
  * rows readable and makes a drift in the wording a single-line diff. */
-#define WHY "(sagitta's regex engine is linear-time by design; " \
-            "see man sagitta-regex)"
+#define WHY "(yew's regex engine is linear-time by design; " \
+            "see man yew-regex)"
 
 static const ErrRow errors[] = {
     /* --- §8 table, row for row ------------------------------- */
@@ -75,30 +75,30 @@ static const ErrRow errors[] = {
 static void check_error(const ErrRow *row)
 {
     Arena arena;
-    SagReErr err;
-    SagRe *re;
+    YewReErr err;
+    YewRe *re;
 
     arena_init(&arena);
     (void)memset(&err, 0, sizeof(err));
     err.off = 0xFFFFFFFFU;
-    re = sag_re_compile(&arena, row->pat, strlen(row->pat), row->flags,
+    re = yew_re_compile(&arena, row->pat, strlen(row->pat), row->flags,
                         &err);
     if (re != NULL)
         (void)fprintf(stderr, "/%s/ compiled but should have failed\n",
                       row->pat);
-    SAG_ASSERT_NULL(re);
-    SAG_ASSERT_NOT_NULL(err.msg);
+    YEW_ASSERT_NULL(re);
+    YEW_ASSERT_NOT_NULL(err.msg);
     if (err.msg != NULL && strcmp(err.msg, row->msg) != 0)
         (void)fprintf(stderr, "/%s/ said \"%s\", want \"%s\"\n", row->pat,
                       err.msg, row->msg);
-    SAG_ASSERT_EQ_STR(err.msg, row->msg);
+    YEW_ASSERT_EQ_STR(err.msg, row->msg);
     /* The offset must land inside the pattern no matter what. */
-    SAG_ASSERT(err.off <= (u32)strlen(row->pat));
+    YEW_ASSERT(err.off <= (u32)strlen(row->pat));
     if (row->off != ANY_OFF) {
         if (err.off != (u32)row->off)
             (void)fprintf(stderr, "/%s/ off=%u, want %lld\n", row->pat,
                           (unsigned)err.off, (long long)row->off);
-        SAG_ASSERT_EQ_U64(err.off, (u64)row->off);
+        YEW_ASSERT_EQ_U64(err.off, (u64)row->off);
     }
     arena_free_all(&arena);
 }
@@ -107,7 +107,7 @@ void test_re_error_table(void)
 {
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(errors); i++)
+    for (i = 0U; i < YEW_ARRAY_LEN(errors); i++)
         check_error(&errors[i]);
 }
 
@@ -125,16 +125,16 @@ void test_re_non_goals_are_not_sprint_deferrals(void)
      * on it.  A message naming a sprint would promise a feature that
      * will never arrive.
      */
-    for (i = 0U; i < SAG_ARRAY_LEN(patterns); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(patterns); i++) {
         Arena arena;
-        SagReErr err = {0, NULL};
+        YewReErr err = {0, NULL};
 
         arena_init(&arena);
-        SAG_ASSERT_NULL(sag_re_compile(&arena, patterns[i],
+        YEW_ASSERT_NULL(yew_re_compile(&arena, patterns[i],
                                        strlen(patterns[i]), 0U, &err));
-        SAG_ASSERT_NOT_NULL(err.msg);
-        SAG_ASSERT_NULL(strstr(err.msg, "Sprint"));
-        SAG_ASSERT_NOT_NULL(strstr(err.msg, "linear-time by design"));
+        YEW_ASSERT_NOT_NULL(err.msg);
+        YEW_ASSERT_NULL(strstr(err.msg, "Sprint"));
+        YEW_ASSERT_NOT_NULL(strstr(err.msg, "linear-time by design"));
         arena_free_all(&arena);
     }
 }
@@ -166,7 +166,7 @@ static const char *op_name(u8 op)
 
 /* Renders the forward program as a space-separated opcode sequence so a
  * shape can be asserted as a readable string rather than index math. */
-static void shape_of(const SagRe *re, char *out, size_t cap)
+static void shape_of(const YewRe *re, char *out, size_t cap)
 {
     size_t at = 0U;
     u32 i;
@@ -185,18 +185,18 @@ static void shape_of(const SagRe *re, char *out, size_t cap)
 static void check_shape(const char *pat, u32 flags, const char *want)
 {
     Arena arena;
-    SagRe *re;
+    YewRe *re;
     char got[512];
 
     arena_init(&arena);
-    re = sag_re_compile(&arena, pat, strlen(pat), flags, NULL);
-    SAG_ASSERT_NOT_NULL(re);
+    re = yew_re_compile(&arena, pat, strlen(pat), flags, NULL);
+    YEW_ASSERT_NOT_NULL(re);
     if (re != NULL) {
         shape_of(re, got, sizeof(got));
         if (strcmp(got, want) != 0)
             (void)fprintf(stderr, "/%s/ shape\n  got  %s\n  want %s\n",
                           pat, got, want);
-        SAG_ASSERT_EQ_STR(got, want);
+        YEW_ASSERT_EQ_STR(got, want);
     }
     arena_free_all(&arena);
 }
@@ -234,9 +234,9 @@ void test_re_program_shapes(void)
     check_shape("\\ba\\B", 0U, "SAVE WORDB CHAR NWORDB SAVE MATCH");
     /* ICASE turns a literal into a class at COMPILE time, so the VM does
      * no case work per input codepoint. */
-    check_shape("k", SAG_RE_ICASE, "SAVE CLASS SAVE MATCH");
+    check_shape("k", YEW_RE_ICASE, "SAVE CLASS SAVE MATCH");
     /* A literal-flag pattern is all CHARs, metacharacters included. */
-    check_shape("a*b", SAG_RE_LITERAL, "SAVE CHAR CHAR CHAR SAVE MATCH");
+    check_shape("a*b", YEW_RE_LITERAL, "SAVE CHAR CHAR CHAR SAVE MATCH");
     /* The empty pattern still saves and matches. */
     check_shape("", 0U, "SAVE SAVE MATCH");
 }
@@ -244,7 +244,7 @@ void test_re_program_shapes(void)
 void test_re_reverse_program_swaps_anchors(void)
 {
     Arena arena;
-    SagRe *re;
+    YewRe *re;
 
     /*
      * §6c: the reverse program is the same AST with concatenation
@@ -252,40 +252,40 @@ void test_re_reverse_program_swaps_anchors(void)
      * serves both scan directions.  \b is symmetric and stays put.
      */
     arena_init(&arena);
-    re = sag_re_compile(&arena, "^ab$", 4U, 0U, NULL);
-    SAG_ASSERT_NOT_NULL(re);
-    SAG_ASSERT_EQ_U64(re->nprog, re->nrprog);
+    re = yew_re_compile(&arena, "^ab$", 4U, 0U, NULL);
+    YEW_ASSERT_NOT_NULL(re);
+    YEW_ASSERT_EQ_U64(re->nprog, re->nrprog);
     /* Forward: BOL then CHAR a, CHAR b, then EOL. */
-    SAG_ASSERT_EQ_U64(re->prog[1].op, (u64)RE_BOL);
-    SAG_ASSERT_EQ_U64(re->prog[2].arg, (u64)'a');
-    SAG_ASSERT_EQ_U64(re->prog[3].arg, (u64)'b');
-    SAG_ASSERT_EQ_U64(re->prog[4].op, (u64)RE_EOL);
+    YEW_ASSERT_EQ_U64(re->prog[1].op, (u64)RE_BOL);
+    YEW_ASSERT_EQ_U64(re->prog[2].arg, (u64)'a');
+    YEW_ASSERT_EQ_U64(re->prog[3].arg, (u64)'b');
+    YEW_ASSERT_EQ_U64(re->prog[4].op, (u64)RE_EOL);
     /*
      * Reverse: the forward pattern's LAST element is emitted first, with
      * its anchor swapped.  So `$` (EOL) leads as a BOL, the characters
      * come in the other order, and `^` trails as an EOL.  Reading this
      * as "EOL first" gets it exactly backwards.
      */
-    SAG_ASSERT_EQ_U64(re->rprog[1].op, (u64)RE_BOL);
-    SAG_ASSERT_EQ_U64(re->rprog[2].arg, (u64)'b');
-    SAG_ASSERT_EQ_U64(re->rprog[3].arg, (u64)'a');
-    SAG_ASSERT_EQ_U64(re->rprog[4].op, (u64)RE_EOL);
+    YEW_ASSERT_EQ_U64(re->rprog[1].op, (u64)RE_BOL);
+    YEW_ASSERT_EQ_U64(re->rprog[2].arg, (u64)'b');
+    YEW_ASSERT_EQ_U64(re->rprog[3].arg, (u64)'a');
+    YEW_ASSERT_EQ_U64(re->rprog[4].op, (u64)RE_EOL);
 
-    re = sag_re_compile(&arena, "\\Aa\\z", 5U, 0U, NULL);
-    SAG_ASSERT_NOT_NULL(re);
-    SAG_ASSERT_EQ_U64(re->rprog[1].op, (u64)RE_BOT);
-    SAG_ASSERT_EQ_U64(re->rprog[3].op, (u64)RE_EOT);
+    re = yew_re_compile(&arena, "\\Aa\\z", 5U, 0U, NULL);
+    YEW_ASSERT_NOT_NULL(re);
+    YEW_ASSERT_EQ_U64(re->rprog[1].op, (u64)RE_BOT);
+    YEW_ASSERT_EQ_U64(re->rprog[3].op, (u64)RE_EOT);
 
-    re = sag_re_compile(&arena, "\\ba", 3U, 0U, NULL);
-    SAG_ASSERT_NOT_NULL(re);
-    SAG_ASSERT_EQ_U64(re->rprog[2].op, (u64)RE_WORDB);
+    re = yew_re_compile(&arena, "\\ba", 3U, 0U, NULL);
+    YEW_ASSERT_NOT_NULL(re);
+    YEW_ASSERT_EQ_U64(re->rprog[2].op, (u64)RE_WORDB);
     arena_free_all(&arena);
 }
 
 void test_re_limits_fire_during_emission(void)
 {
     Arena arena;
-    SagReErr err;
+    YewReErr err;
     char big[8192];
     size_t at = 0U;
     int i;
@@ -295,8 +295,8 @@ void test_re_limits_fire_during_emission(void)
     for (i = 0; i < 33; i++)
         at += (size_t)snprintf(big + at, sizeof(big) - at, "(a)");
     (void)memset(&err, 0, sizeof(err));
-    SAG_ASSERT_NULL(sag_re_compile(&arena, big, at, 0U, &err));
-    SAG_ASSERT_EQ_STR(err.msg, "too many capture groups (max 32)");
+    YEW_ASSERT_NULL(yew_re_compile(&arena, big, at, 0U, &err));
+    YEW_ASSERT_EQ_STR(err.msg, "too many capture groups (max 32)");
 
     /*
      * Program limit, checked DURING emission.  a{1000} nested inside
@@ -305,21 +305,21 @@ void test_re_limits_fire_during_emission(void)
      */
     at = (size_t)snprintf(big, sizeof(big), "(a{1000}){1000}");
     (void)memset(&err, 0, sizeof(err));
-    SAG_ASSERT_NULL(sag_re_compile(&arena, big, at, 0U, &err));
-    SAG_ASSERT_EQ_STR(err.msg,
+    YEW_ASSERT_NULL(yew_re_compile(&arena, big, at, 0U, &err));
+    YEW_ASSERT_EQ_STR(err.msg,
                       "pattern too complex (program limit 4096)");
 
     /* Pattern length. */
     {
-        char *huge = malloc(SAG_RE_MAX_PATTERN + 16U);
+        char *huge = malloc(YEW_RE_MAX_PATTERN + 16U);
 
-        SAG_ASSERT_NOT_NULL(huge);
-        (void)memset(huge, 'a', SAG_RE_MAX_PATTERN + 8U);
+        YEW_ASSERT_NOT_NULL(huge);
+        (void)memset(huge, 'a', YEW_RE_MAX_PATTERN + 8U);
         (void)memset(&err, 0, sizeof(err));
-        SAG_ASSERT_NULL(sag_re_compile(&arena, huge,
-                                       SAG_RE_MAX_PATTERN + 8U, 0U,
+        YEW_ASSERT_NULL(yew_re_compile(&arena, huge,
+                                       YEW_RE_MAX_PATTERN + 8U, 0U,
                                        &err));
-        SAG_ASSERT_EQ_STR(err.msg, "pattern too long (max 64 KiB)");
+        YEW_ASSERT_EQ_STR(err.msg, "pattern too long (max 64 KiB)");
         free(huge);
     }
     arena_free_all(&arena);
@@ -329,7 +329,7 @@ void test_re_inst_size_budget(void)
 {
     /* DoD 11.  The program is walked linearly per input codepoint, so
      * instruction size is working-set size. */
-    SAG_ASSERT(sizeof(ReInst) <= 16U);
+    YEW_ASSERT(sizeof(ReInst) <= 16U);
 }
 
 void test_re_error_offsets_are_always_in_range(void)
@@ -342,17 +342,17 @@ void test_re_error_offsets_are_always_in_range(void)
     };
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(bad); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(bad); i++) {
         Arena arena;
-        SagReErr err;
+        YewReErr err;
 
         arena_init(&arena);
         (void)memset(&err, 0, sizeof(err));
         err.off = 0xFFFFFFFFU;
-        if (sag_re_compile(&arena, bad[i], strlen(bad[i]), 0U, &err) ==
+        if (yew_re_compile(&arena, bad[i], strlen(bad[i]), 0U, &err) ==
             NULL) {
-            SAG_ASSERT_NOT_NULL(err.msg);
-            SAG_ASSERT(err.off <= (u32)strlen(bad[i]));
+            YEW_ASSERT_NOT_NULL(err.msg);
+            YEW_ASSERT(err.off <= (u32)strlen(bad[i]));
         }
         arena_free_all(&arena);
     }

@@ -240,32 +240,32 @@ static void read_runtime(Bytebuf *out)
     u8 chunk[4096];
     size_t n;
 
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     bytebuf_init(out);
     while ((n = fread(chunk, 1U, sizeof(chunk), fp)) != 0U)
         bytebuf_append(out, chunk, n);
-    SAG_ASSERT(!ferror(fp));
-    SAG_ASSERT_EQ_I64(fclose(fp), 0);
+    YEW_ASSERT(!ferror(fp));
+    YEW_ASSERT_EQ_I64(fclose(fp), 0);
     bytebuf_push_u8(out, 0U);
 }
 
 static const Binding *effective_binding(const Ed *ed, Mode mode,
                                         const char *seq)
 {
-    KeyId keys[SAG_CHORD_MAX];
+    KeyId keys[YEW_CHORD_MAX];
     const Binding *binding = NULL;
     KeyMatch match;
-    u32 n = sag_key_parse_seq(seq, keys, SAG_CHORD_MAX);
+    u32 n = yew_key_parse_seq(seq, keys, YEW_CHORD_MAX);
 
-    SAG_ASSERT(n != 0U);
-    match = sag_keymap_lookup(&ed->bind_keys[mode], keys, n, NULL,
+    YEW_ASSERT(n != 0U);
+    match = yew_keymap_lookup(&ed->bind_keys[mode], keys, n, NULL,
                               &binding);
-    if (match != SAG_MATCH_FULL && match != SAG_MATCH_FULL_PREFIX) {
-        match = sag_keymap_lookup(&ed->mode_keys[mode], keys, n, NULL,
+    if (match != YEW_MATCH_FULL && match != YEW_MATCH_FULL_PREFIX) {
+        match = yew_keymap_lookup(&ed->mode_keys[mode], keys, n, NULL,
                                   &binding);
     }
-    SAG_ASSERT(match == SAG_MATCH_FULL || match == SAG_MATCH_FULL_PREFIX);
-    SAG_ASSERT_NOT_NULL(binding);
+    YEW_ASSERT(match == YEW_MATCH_FULL || match == YEW_MATCH_FULL_PREFIX);
+    YEW_ASSERT_NOT_NULL(binding);
     return binding;
 }
 
@@ -276,38 +276,38 @@ static void assert_frozen_mode(const Ed *ed, Mode mode,
 
     for (i = 0U; i < n; i++) {
         const Binding *actual = effective_binding(ed, mode, rows[i].seq);
-        const CmdDesc *desc = sag_cmd_desc(actual->cmd);
+        const CmdDesc *desc = yew_cmd_desc(actual->cmd);
 
-        SAG_ASSERT_NOT_NULL(desc);
-        SAG_ASSERT_EQ_STR(desc->name, rows[i].cmd);
-        SAG_ASSERT_EQ_I64(actual->iarg, rows[i].iarg);
-        SAG_ASSERT_EQ_STR(actual->sarg, rows[i].sarg);
+        YEW_ASSERT_NOT_NULL(desc);
+        YEW_ASSERT_EQ_STR(desc->name, rows[i].cmd);
+        YEW_ASSERT_EQ_I64(actual->iarg, rows[i].iarg);
+        YEW_ASSERT_EQ_STR(actual->sarg, rows[i].sarg);
     }
 }
 
 static void assert_default_value(const OptVal *actual, const OptVal *want)
 {
-    SAG_ASSERT_EQ_U64(actual->type, want->type);
-    if (want->type == (u8)SAG_OPT_BOOL) {
-        SAG_ASSERT_EQ_U64(actual->as.b, want->as.b);
-    } else if (want->type == (u8)SAG_OPT_INT) {
-        SAG_ASSERT_EQ_I64(actual->as.i, want->as.i);
+    YEW_ASSERT_EQ_U64(actual->type, want->type);
+    if (want->type == (u8)YEW_OPT_BOOL) {
+        YEW_ASSERT_EQ_U64(actual->as.b, want->as.b);
+    } else if (want->type == (u8)YEW_OPT_INT) {
+        YEW_ASSERT_EQ_I64(actual->as.i, want->as.i);
     } else {
-        SAG_ASSERT_EQ_U64(actual->as.str.len, want->as.str.len);
-        SAG_ASSERT_EQ_MEM(actual->as.str.s, want->as.str.s,
+        YEW_ASSERT_EQ_U64(actual->as.str.len, want->as.str.len);
+        YEW_ASSERT_EQ_MEM(actual->as.str.s, want->as.str.s,
                           want->as.str.len);
     }
 }
 
 void test_runtime_defaults_rebuild_frozen_keymap(void)
 {
-    static const BindRow *const rows[SAG_MODE__N] = {
+    static const BindRow *const rows[YEW_MODE__N] = {
         frozen_L, frozen_W, frozen_B, NULL, frozen_I, frozen_E, frozen_F,
     };
-    static const u32 counts[SAG_MODE__N] = {
-        SAG_ARRAY_LEN(frozen_L), SAG_ARRAY_LEN(frozen_W),
-        SAG_ARRAY_LEN(frozen_B), 0U, SAG_ARRAY_LEN(frozen_I),
-        SAG_ARRAY_LEN(frozen_E), SAG_ARRAY_LEN(frozen_F),
+    static const u32 counts[YEW_MODE__N] = {
+        YEW_ARRAY_LEN(frozen_L), YEW_ARRAY_LEN(frozen_W),
+        YEW_ARRAY_LEN(frozen_B), 0U, YEW_ARRAY_LEN(frozen_I),
+        YEW_ARRAY_LEN(frozen_E), YEW_ARRAY_LEN(frozen_F),
     };
     Bytebuf source;
     Ed ed;
@@ -316,22 +316,22 @@ void test_runtime_defaults_rebuild_frozen_keymap(void)
     u32 rebuilds;
 
     read_runtime(&source);
-    sag_ed_init(&ed);
-    SAG_ASSERT(sag_ed_open_scratch(&ed));
-    rebuilds = sag_bind_rebuild_count(&ed);
-    sag_bind_batch_begin(&ed);
-    SAG_ASSERT_EQ_I64(sag_fl_eval(&ed, (const char *)source.data,
-                                  (u32)(source.len - 1U)), SAG_CMD_OK);
-    sag_bind_batch_end(&ed);
-    SAG_ASSERT_EQ_U64(sag_bind_rebuild_count(&ed), rebuilds + 1U);
-    SAG_ASSERT_EQ_U64(sag_bind_active_count(&ed), 160U);
-    for (mode = 0U; mode < (u32)SAG_MODE__N; mode++) {
-        if (mode != (u32)SAG_MODE_H)
-            panic_rows += sag_keymap_binding_count(&ed.mode_keys[mode]);
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    rebuilds = yew_bind_rebuild_count(&ed);
+    yew_bind_batch_begin(&ed);
+    YEW_ASSERT_EQ_I64(yew_fl_eval(&ed, (const char *)source.data,
+                                  (u32)(source.len - 1U)), YEW_CMD_OK);
+    yew_bind_batch_end(&ed);
+    YEW_ASSERT_EQ_U64(yew_bind_rebuild_count(&ed), rebuilds + 1U);
+    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 160U);
+    for (mode = 0U; mode < (u32)YEW_MODE__N; mode++) {
+        if (mode != (u32)YEW_MODE_H)
+            panic_rows += yew_keymap_binding_count(&ed.mode_keys[mode]);
         assert_frozen_mode(&ed, (Mode)mode, rows[mode], counts[mode]);
     }
-    SAG_ASSERT_EQ_U64(panic_rows, 6U);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(panic_rows, 6U);
+    yew_ed_free(&ed);
     bytebuf_free(&source);
 }
 
@@ -342,25 +342,25 @@ void test_runtime_defaults_parse_run_style_and_options(void)
     u32 i;
 
     read_runtime(&source);
-    SAG_ASSERT(strncmp((const char *)source.data,
-                       "# sagitta default configuration.", 32U) == 0);
-    SAG_ASSERT(strstr((const char *)source.data, "# Budget:") != NULL);
-    SAG_ASSERT(strstr((const char *)source.data, "\nimport ") == NULL);
-    SAG_ASSERT(strstr((const char *)source.data, "# -- 8. functions") !=
+    YEW_ASSERT(strncmp((const char *)source.data,
+                       "# yew default configuration.", 28U) == 0);
+    YEW_ASSERT(strstr((const char *)source.data, "# Budget:") != NULL);
+    YEW_ASSERT(strstr((const char *)source.data, "\nimport ") == NULL);
+    YEW_ASSERT(strstr((const char *)source.data, "# -- 8. functions") !=
                NULL);
-    sag_ed_init(&ed);
-    SAG_ASSERT(sag_ed_open_scratch(&ed));
-    sag_bind_batch_begin(&ed);
-    SAG_ASSERT_EQ_I64(sag_fl_eval(&ed, (const char *)source.data,
-                                  (u32)(source.len - 1U)), SAG_CMD_OK);
-    sag_bind_batch_end(&ed);
-    for (i = 0U; i < sag_opts_len; i++) {
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    yew_bind_batch_begin(&ed);
+    YEW_ASSERT_EQ_I64(yew_fl_eval(&ed, (const char *)source.data,
+                                  (u32)(source.len - 1U)), YEW_CMD_OK);
+    yew_bind_batch_end(&ed);
+    for (i = 0U; i < yew_opts_len; i++) {
         OptVal actual;
 
-        SAG_ASSERT(sag_opt_get(&ed, ed.win->buf, ed.win, sag_opts[i].name,
-                               (u32)strlen(sag_opts[i].name), &actual));
-        assert_default_value(&actual, &sag_opts[i].dflt);
+        YEW_ASSERT(yew_opt_get(&ed, ed.win->buf, ed.win, yew_opts[i].name,
+                               (u32)strlen(yew_opts[i].name), &actual));
+        assert_default_value(&actual, &yew_opts[i].dflt);
     }
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
     bytebuf_free(&source);
 }

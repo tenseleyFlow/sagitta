@@ -45,26 +45,26 @@ void test_state_schema_remaps_group_ids(void)
 {
     IdMapVec m;
 
-    sag_idmap_init(&m);
-    sag_idmap_put(&m, 7U, 1U);
-    sag_idmap_put(&m, 9U, 2U);
-    sag_idmap_put(&m, 12U, 3U);
-    SAG_ASSERT_EQ_U64(sag_idmap_get(&m, 7U), 1U);
-    SAG_ASSERT_EQ_U64(sag_idmap_get(&m, 9U), 2U);
-    SAG_ASSERT_EQ_U64(sag_idmap_get(&m, 12U), 3U);
+    yew_idmap_init(&m);
+    yew_idmap_put(&m, 7U, 1U);
+    yew_idmap_put(&m, 9U, 2U);
+    yew_idmap_put(&m, 12U, 3U);
+    YEW_ASSERT_EQ_U64(yew_idmap_get(&m, 7U), 1U);
+    YEW_ASSERT_EQ_U64(yew_idmap_get(&m, 9U), 2U);
+    YEW_ASSERT_EQ_U64(yew_idmap_get(&m, 12U), 3U);
     /* Ungrouped stays ungrouped without a lookup. */
-    SAG_ASSERT_EQ_U64(sag_idmap_get(&m, 0U), 0U);
+    YEW_ASSERT_EQ_U64(yew_idmap_get(&m, 0U), 0U);
     /*
      * A file id with no record resolves to 0 — UNGROUPED — and
      * emphatically not to a live id that happens to exist.  Note 1, 2
      * and 3 are all live here, so a naive "reuse the number"
      * implementation would return a real group for every one of these.
      */
-    SAG_ASSERT_EQ_U64(sag_idmap_get(&m, 1U), 0U);
-    SAG_ASSERT_EQ_U64(sag_idmap_get(&m, 2U), 0U);
-    SAG_ASSERT_EQ_U64(sag_idmap_get(&m, 3U), 0U);
-    SAG_ASSERT_EQ_U64(sag_idmap_get(&m, 99U), 0U);
-    sag_idmap_free(&m);
+    YEW_ASSERT_EQ_U64(yew_idmap_get(&m, 1U), 0U);
+    YEW_ASSERT_EQ_U64(yew_idmap_get(&m, 2U), 0U);
+    YEW_ASSERT_EQ_U64(yew_idmap_get(&m, 3U), 0U);
+    YEW_ASSERT_EQ_U64(yew_idmap_get(&m, 99U), 0U);
+    yew_idmap_free(&m);
 }
 
 void test_state_schema_id_map_grows(void)
@@ -72,13 +72,13 @@ void test_state_schema_id_map_grows(void)
     IdMapVec m;
     u32 i;
 
-    sag_idmap_init(&m);
+    yew_idmap_init(&m);
     for (i = 1U; i <= 200U; i++)
-        sag_idmap_put(&m, i, i * 10U);
+        yew_idmap_put(&m, i, i * 10U);
     for (i = 1U; i <= 200U; i++)
-        SAG_ASSERT_EQ_U64(sag_idmap_get(&m, i), i * 10U);
-    SAG_ASSERT_EQ_U64(sag_idmap_get(&m, 201U), 0U);
-    sag_idmap_free(&m);
+        YEW_ASSERT_EQ_U64(yew_idmap_get(&m, i), i * 10U);
+    YEW_ASSERT_EQ_U64(yew_idmap_get(&m, 201U), 0U);
+    yew_idmap_free(&m);
 }
 
 /* ---------------------------------------------------------------- */
@@ -90,33 +90,33 @@ void test_state_schema_permille_is_a_fixpoint(void)
 {
     i64 p;
 
-    for (p = SAG_STATE_RATIO_MIN; p <= SAG_STATE_RATIO_MAX; p++) {
-        float r = sag_permille_to_ratio(p);
+    for (p = YEW_STATE_RATIO_MIN; p <= YEW_STATE_RATIO_MAX; p++) {
+        float r = yew_permille_to_ratio(p);
 
-        SAG_ASSERT_EQ_I64(sag_ratio_to_permille(r), p);
+        YEW_ASSERT_EQ_I64(yew_ratio_to_permille(r), p);
     }
     /* Out of range clamps rather than producing a ratio that would
      * make a pane zero cells wide. */
-    SAG_ASSERT_EQ_I64(sag_ratio_to_permille(0.0f), SAG_STATE_RATIO_MIN);
-    SAG_ASSERT_EQ_I64(sag_ratio_to_permille(1.0f), SAG_STATE_RATIO_MAX);
-    SAG_ASSERT_EQ_I64(sag_ratio_to_permille(-5.0f), SAG_STATE_RATIO_MIN);
-    SAG_ASSERT(sag_permille_to_ratio(-1) > 0.0f);
-    SAG_ASSERT(sag_permille_to_ratio(5000) < 1.0f);
+    YEW_ASSERT_EQ_I64(yew_ratio_to_permille(0.0f), YEW_STATE_RATIO_MIN);
+    YEW_ASSERT_EQ_I64(yew_ratio_to_permille(1.0f), YEW_STATE_RATIO_MAX);
+    YEW_ASSERT_EQ_I64(yew_ratio_to_permille(-5.0f), YEW_STATE_RATIO_MIN);
+    YEW_ASSERT(yew_permille_to_ratio(-1) > 0.0f);
+    YEW_ASSERT(yew_permille_to_ratio(5000) < 1.0f);
 }
 
-/* `goal: -1` is SAG_GCOL_EOL, because UINT64_MAX does not fit i64 and
+/* `goal: -1` is YEW_GCOL_EOL, because UINT64_MAX does not fit i64 and
  * would force every reader into an unsigned special case. */
 void test_state_schema_goal_column_round_trips(void)
 {
-    SAG_ASSERT_EQ_I64(sag_goal_to_i64(SAG_GCOL_EOL), -1);
-    SAG_ASSERT_EQ_U64(sag_goal_from_i64(-1), SAG_GCOL_EOL);
-    SAG_ASSERT_EQ_I64(sag_goal_to_i64(0U), 0);
-    SAG_ASSERT_EQ_U64(sag_goal_from_i64(0), 0U);
-    SAG_ASSERT_EQ_I64(sag_goal_to_i64(14U), 14);
-    SAG_ASSERT_EQ_U64(sag_goal_from_i64(14), 14U);
+    YEW_ASSERT_EQ_I64(yew_goal_to_i64(YEW_GCOL_EOL), -1);
+    YEW_ASSERT_EQ_U64(yew_goal_from_i64(-1), YEW_GCOL_EOL);
+    YEW_ASSERT_EQ_I64(yew_goal_to_i64(0U), 0);
+    YEW_ASSERT_EQ_U64(yew_goal_from_i64(0), 0U);
+    YEW_ASSERT_EQ_I64(yew_goal_to_i64(14U), 14);
+    YEW_ASSERT_EQ_U64(yew_goal_from_i64(14), 14U);
     /* Any other unrepresentable value degrades to EOL rather than
      * wrapping into a negative column. */
-    SAG_ASSERT_EQ_I64(sag_goal_to_i64(0x8000000000000000ULL), -1);
+    YEW_ASSERT_EQ_I64(yew_goal_to_i64(0x8000000000000000ULL), -1);
 }
 
 /* ---------------------------------------------------------------- */
@@ -125,11 +125,11 @@ void test_state_schema_goal_column_round_trips(void)
 
 static void ss_fixture(Ed *ed)
 {
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    sag_ed_init(ed);
-    SAG_ASSERT(sag_ed_open_scratch(ed));
-    sag_layout_compute(ed->pane_root, (Rect){0U, 0U, 80U, 24U});
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    yew_ed_init(ed);
+    YEW_ASSERT(yew_ed_open_scratch(ed));
+    yew_layout_compute(ed->pane_root, (Rect){0U, 0U, 80U, 24U});
 }
 
 /* Emits `ed` and parses the result back, NUL-terminated for strstr. */
@@ -139,8 +139,8 @@ static FlLit *ss_emit_parse(Ed *ed, Arena *a, Bytebuf *out)
     FlLit *lit;
 
     out->len = 0U;
-    sag_state_emit(ed, out);
-    lit = sag_fl_parse(a, out->data, out->len, &err);
+    yew_state_emit(ed, out);
+    lit = yew_fl_parse(a, out->data, out->len, &err);
     if (lit == NULL)
         (void)fprintf(stderr, "parse failed at %u:%u: %s\n", err.line,
                       err.col, err.msg == NULL ? "?" : err.msg);
@@ -161,18 +161,18 @@ void test_state_schema_emits_a_parseable_v1_document(void)
     arena_init(&a);
     bytebuf_init(&out);
     lit = ss_emit_parse(&ed, &a, &out);
-    SAG_ASSERT_NOT_NULL(lit);
-    SAG_ASSERT_EQ_I64(sag_fl_int_or(sag_fl_get(lit, "version"), 0), 1);
-    SAG_ASSERT_NOT_NULL(sag_fl_get(lit, "workspace"));
-    SAG_ASSERT_NOT_NULL(sag_fl_get(lit, "options"));
-    SAG_ASSERT_NOT_NULL(sag_fl_get(lit, "groups"));
-    SAG_ASSERT_NOT_NULL(sag_fl_get(lit, "tabs"));
-    SAG_ASSERT_NOT_NULL(sag_fl_get(lit, "files"));
+    YEW_ASSERT_NOT_NULL(lit);
+    YEW_ASSERT_EQ_I64(yew_fl_int_or(yew_fl_get(lit, "version"), 0), 1);
+    YEW_ASSERT_NOT_NULL(yew_fl_get(lit, "workspace"));
+    YEW_ASSERT_NOT_NULL(yew_fl_get(lit, "options"));
+    YEW_ASSERT_NOT_NULL(yew_fl_get(lit, "groups"));
+    YEW_ASSERT_NOT_NULL(yew_fl_get(lit, "tabs"));
+    YEW_ASSERT_NOT_NULL(yew_fl_get(lit, "files"));
     /* One tab, one window, one cursor. */
-    SAG_ASSERT_EQ_U64(sag_fl_len(sag_fl_get(lit, "tabs")), 1U);
+    YEW_ASSERT_EQ_U64(yew_fl_len(yew_fl_get(lit, "tabs")), 1U);
     bytebuf_free(&out);
     arena_free_all(&a);
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
 }
 
 /*
@@ -198,7 +198,7 @@ void test_state_schema_writes_groups_before_tabs(void)
     {
         FlLit *lit = ss_emit_parse(&ed, &a, &out);
 
-        SAG_ASSERT_NOT_NULL(lit);
+        YEW_ASSERT_NOT_NULL(lit);
         /* Key ORDER in the emitted map, not just presence. */
         for (i = 0U; i < lit->len; i++) {
             if (strncmp(lit->keys[i], "groups", lit->keylens[i]) == 0 &&
@@ -209,15 +209,15 @@ void test_state_schema_writes_groups_before_tabs(void)
                 tabs_at = (int)i;
         }
     }
-    SAG_ASSERT(groups_at >= 0);
-    SAG_ASSERT(tabs_at >= 0);
-    SAG_ASSERT(groups_at < tabs_at);
+    YEW_ASSERT(groups_at >= 0);
+    YEW_ASSERT(tabs_at >= 0);
+    YEW_ASSERT(groups_at < tabs_at);
     /* And in the bytes, which is what a reimplementation sees. */
     doc = (const char *)out.data;
-    SAG_ASSERT(strstr(doc, "groups:") < strstr(doc, "tabs:"));
+    YEW_ASSERT(strstr(doc, "groups:") < strstr(doc, "tabs:"));
     bytebuf_free(&out);
     arena_free_all(&a);
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
 }
 
 /* Groups round-trip with their label, origin and resume path. */
@@ -233,37 +233,37 @@ void test_state_schema_emits_groups_with_their_fields(void)
     u32 gid;
 
     ss_fixture(&ed);
-    SAG_ASSERT(sag_tab_open(&ed, "/tmp/sag-ss-a.txt") >= 0);
-    SAG_ASSERT(sag_tab_open(&ed, "/tmp/sag-ss-b.txt") >= 0);
-    gid = sag_group_create(&ed, "/tmp", "src/");
-    sag_group_add_member(&ed, gid, 1);
-    sag_group_add_member(&ed, gid, 2);
+    YEW_ASSERT(yew_tab_open(&ed, "/tmp/yew-ss-a.txt") >= 0);
+    YEW_ASSERT(yew_tab_open(&ed, "/tmp/yew-ss-b.txt") >= 0);
+    gid = yew_group_create(&ed, "/tmp", "src/");
+    yew_group_add_member(&ed, gid, 1);
+    yew_group_add_member(&ed, gid, 2);
 
     arena_init(&a);
     bytebuf_init(&out);
     lit = ss_emit_parse(&ed, &a, &out);
-    SAG_ASSERT_NOT_NULL(lit);
-    groups = sag_fl_get(lit, "groups");
-    SAG_ASSERT_EQ_U64(sag_fl_len(groups), 1U);
-    g0 = sag_fl_at(groups, 0U);
-    SAG_ASSERT_EQ_U64((u64)sag_fl_int_or(sag_fl_get(g0, "id"), 0), gid);
-    SAG_ASSERT_EQ_STR(sag_fl_str_or(sag_fl_get(g0, "label"), "", &n),
+    YEW_ASSERT_NOT_NULL(lit);
+    groups = yew_fl_get(lit, "groups");
+    YEW_ASSERT_EQ_U64(yew_fl_len(groups), 1U);
+    g0 = yew_fl_at(groups, 0U);
+    YEW_ASSERT_EQ_U64((u64)yew_fl_int_or(yew_fl_get(g0, "id"), 0), gid);
+    YEW_ASSERT_EQ_STR(yew_fl_str_or(yew_fl_get(g0, "label"), "", &n),
                       "src/");
-    SAG_ASSERT_EQ_STR(sag_fl_str_or(sag_fl_get(g0, "dir_path"), "", &n),
+    YEW_ASSERT_EQ_STR(yew_fl_str_or(yew_fl_get(g0, "dir_path"), "", &n),
                       "/tmp");
     /* Members carry their group and ordinal on the TAB record. */
     {
-        const FlLit *tabs = sag_fl_get(lit, "tabs");
-        const FlLit *t1 = sag_fl_at(tabs, 1U);
+        const FlLit *tabs = yew_fl_get(lit, "tabs");
+        const FlLit *t1 = yew_fl_at(tabs, 1U);
 
-        SAG_ASSERT_EQ_U64((u64)sag_fl_int_or(sag_fl_get(t1, "group"), 0),
+        YEW_ASSERT_EQ_U64((u64)yew_fl_int_or(yew_fl_get(t1, "group"), 0),
                           gid);
-        SAG_ASSERT_EQ_I64(sag_fl_int_or(sag_fl_get(t1, "group_ordinal"),
+        YEW_ASSERT_EQ_I64(yew_fl_int_or(yew_fl_get(t1, "group_ordinal"),
                                         0), 1);
     }
     bytebuf_free(&out);
     arena_free_all(&a);
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
 }
 
 /*
@@ -276,14 +276,14 @@ void test_state_schema_emits_groups_with_their_fields(void)
  */
 static void collect_win_ids(const FlLit *panes, int *seen, int *n)
 {
-    const FlLit *w = sag_fl_get(panes, "win");
+    const FlLit *w = yew_fl_get(panes, "win");
 
     if (w != NULL) {
-        seen[(*n)++] = (int)sag_fl_int_or(w, -1);
+        seen[(*n)++] = (int)yew_fl_int_or(w, -1);
         return;
     }
-    collect_win_ids(sag_fl_get(panes, "a"), seen, n);
-    collect_win_ids(sag_fl_get(panes, "b"), seen, n);
+    collect_win_ids(yew_fl_get(panes, "a"), seen, n);
+    collect_win_ids(yew_fl_get(panes, "b"), seen, n);
 }
 
 void test_state_schema_pane_win_indices_match_the_wins_list(void)
@@ -293,7 +293,7 @@ void test_state_schema_pane_win_indices_match_the_wins_list(void)
     Bytebuf out;
     FlLit *lit;
     const FlLit *tab0;
-    int seen[SAG_PANE_MAX_LEAVES * 2];
+    int seen[YEW_PANE_MAX_LEAVES * 2];
     int n = 0;
     int i;
     u32 nwins;
@@ -307,46 +307,46 @@ void test_state_schema_pane_win_indices_match_the_wins_list(void)
      * splitting `ed.focus` twice would ask a split node to split.
      */
     {
-        Pane *leaf = sag_pane_split(&ed, ed.focus, SAG_SPLIT_H);
+        Pane *leaf = yew_pane_split(&ed, ed.focus, YEW_SPLIT_H);
 
-        SAG_ASSERT_NOT_NULL(leaf);
+        YEW_ASSERT_NOT_NULL(leaf);
         ed.focus = leaf;
-        sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-        leaf = sag_pane_split(&ed, ed.focus, SAG_SPLIT_V);
-        SAG_ASSERT_NOT_NULL(leaf);
+        yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+        leaf = yew_pane_split(&ed, ed.focus, YEW_SPLIT_V);
+        YEW_ASSERT_NOT_NULL(leaf);
         ed.focus = leaf;
-        sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+        yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
     }
     /* The tab's tree is the live one. */
-    sag_tab_at(&ed, 0)->root = ed.pane_root;
-    sag_tab_at(&ed, 0)->focus = ed.focus;
+    yew_tab_at(&ed, 0)->root = ed.pane_root;
+    yew_tab_at(&ed, 0)->focus = ed.focus;
 
     arena_init(&a);
     bytebuf_init(&out);
     lit = ss_emit_parse(&ed, &a, &out);
-    SAG_ASSERT_NOT_NULL(lit);
-    tab0 = sag_fl_at(sag_fl_get(lit, "tabs"), 0U);
-    nwins = sag_fl_len(sag_fl_get(tab0, "wins"));
-    SAG_ASSERT_EQ_U64(nwins, 3U);
+    YEW_ASSERT_NOT_NULL(lit);
+    tab0 = yew_fl_at(yew_fl_get(lit, "tabs"), 0U);
+    nwins = yew_fl_len(yew_fl_get(tab0, "wins"));
+    YEW_ASSERT_EQ_U64(nwins, 3U);
 
-    collect_win_ids(sag_fl_get(tab0, "panes"), seen, &n);
+    collect_win_ids(yew_fl_get(tab0, "panes"), seen, &n);
     /* One `win` per leaf, and exactly as many leaves as windows. */
-    SAG_ASSERT_EQ_I64(n, (int)nwins);
+    YEW_ASSERT_EQ_I64(n, (int)nwins);
     for (i = 0; i < n; i++) {
         int j;
 
-        SAG_ASSERT(seen[i] >= 0);
-        SAG_ASSERT(seen[i] < (int)nwins);
+        YEW_ASSERT(seen[i] >= 0);
+        YEW_ASSERT(seen[i] < (int)nwins);
         /* No index used twice: two panes sharing a window record is
          * the same corruption seen from the other side. */
         for (j = 0; j < i; j++)
-            SAG_ASSERT(seen[i] != seen[j]);
+            YEW_ASSERT(seen[i] != seen[j]);
     }
     /* Pre-order: the leftmost leaf is window 0. */
-    SAG_ASSERT_EQ_I64(seen[0], 0);
+    YEW_ASSERT_EQ_I64(seen[0], 0);
     bytebuf_free(&out);
     arena_free_all(&a);
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
 }
 
 /* A split records its direction and a permille ratio — never a float. */
@@ -362,32 +362,32 @@ void test_state_schema_splits_carry_permille_not_floats(void)
 
     ss_fixture(&ed);
     {
-        Pane *leaf = sag_pane_split(&ed, ed.focus, SAG_SPLIT_H);
+        Pane *leaf = yew_pane_split(&ed, ed.focus, YEW_SPLIT_H);
 
-        SAG_ASSERT_NOT_NULL(leaf);
+        YEW_ASSERT_NOT_NULL(leaf);
         ed.focus = leaf;
     }
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    sag_tab_at(&ed, 0)->root = ed.pane_root;
-    sag_tab_at(&ed, 0)->focus = ed.focus;
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    yew_tab_at(&ed, 0)->root = ed.pane_root;
+    yew_tab_at(&ed, 0)->focus = ed.focus;
 
     arena_init(&a);
     bytebuf_init(&out);
     lit = ss_emit_parse(&ed, &a, &out);
-    SAG_ASSERT_NOT_NULL(lit);
-    panes = sag_fl_get(sag_fl_at(sag_fl_get(lit, "tabs"), 0U), "panes");
-    SAG_ASSERT_EQ_STR(sag_fl_str_or(sag_fl_get(panes, "split"), "", &n),
+    YEW_ASSERT_NOT_NULL(lit);
+    panes = yew_fl_get(yew_fl_at(yew_fl_get(lit, "tabs"), 0U), "panes");
+    YEW_ASSERT_EQ_STR(yew_fl_str_or(yew_fl_get(panes, "split"), "", &n),
                       "h");
-    permille = sag_fl_int_or(sag_fl_get(panes, "ratio_permille"), 0);
-    SAG_ASSERT(permille >= SAG_STATE_RATIO_MIN);
-    SAG_ASSERT(permille <= SAG_STATE_RATIO_MAX);
+    permille = yew_fl_int_or(yew_fl_get(panes, "ratio_permille"), 0);
+    YEW_ASSERT(permille >= YEW_STATE_RATIO_MIN);
+    YEW_ASSERT(permille <= YEW_STATE_RATIO_MAX);
     /* No decimal point anywhere in the document — a locale that emits
      * `0,5` cannot exist if nothing emits a fraction. */
-    SAG_ASSERT(strstr((const char *)out.data, ".") == NULL ||
+    YEW_ASSERT(strstr((const char *)out.data, ".") == NULL ||
                strstr((const char *)out.data, "0.5") == NULL);
     bytebuf_free(&out);
     arena_free_all(&a);
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
 }
 
 /*
@@ -404,23 +404,23 @@ void test_state_schema_deferred_is_an_instruction(void)
     const FlLit *tabs;
 
     ss_fixture(&ed);
-    SAG_ASSERT(sag_tab_open(&ed, "/tmp/sag-ss-defer.txt") >= 0);
+    YEW_ASSERT(yew_tab_open(&ed, "/tmp/yew-ss-defer.txt") >= 0);
     /* Tab 1 was opened but never viewed, so it holds no buffer. */
-    SAG_ASSERT(!sag_tab_is_resident(&ed, 1));
-    SAG_ASSERT_EQ_I64(ed.tabs.active, 0);
+    YEW_ASSERT(!yew_tab_is_resident(&ed, 1));
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 0);
 
     arena_init(&a);
     bytebuf_init(&out);
     lit = ss_emit_parse(&ed, &a, &out);
-    SAG_ASSERT_NOT_NULL(lit);
-    tabs = sag_fl_get(lit, "tabs");
-    SAG_ASSERT(!sag_fl_bool_or(sag_fl_get(sag_fl_at(tabs, 0U), "deferred"),
+    YEW_ASSERT_NOT_NULL(lit);
+    tabs = yew_fl_get(lit, "tabs");
+    YEW_ASSERT(!yew_fl_bool_or(yew_fl_get(yew_fl_at(tabs, 0U), "deferred"),
                                true));
-    SAG_ASSERT(sag_fl_bool_or(sag_fl_get(sag_fl_at(tabs, 1U), "deferred"),
+    YEW_ASSERT(yew_fl_bool_or(yew_fl_get(yew_fl_at(tabs, 1U), "deferred"),
                               false));
     bytebuf_free(&out);
     arena_free_all(&a);
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
 }
 
 /* Undo is a REFERENCE: the sidecar's name and version, never payload
@@ -434,28 +434,28 @@ void test_state_schema_undo_is_a_reference_only(void)
     const FlLit *files;
 
     ss_fixture(&ed);
-    SAG_ASSERT_EQ_I64(sag_ed_open(&ed, "/tmp/sag-ss-undo.txt"),
-                      SAG_LOAD_ENOENT);
+    YEW_ASSERT_EQ_I64(yew_ed_open(&ed, "/tmp/yew-ss-undo.txt"),
+                      YEW_LOAD_ENOENT);
     arena_init(&a);
     bytebuf_init(&out);
     lit = ss_emit_parse(&ed, &a, &out);
-    SAG_ASSERT_NOT_NULL(lit);
-    files = sag_fl_get(lit, "files");
-    if (sag_fl_len(files) > 0U) {
-        const FlLit *undo = sag_fl_get(sag_fl_at(files, 0U), "undo");
+    YEW_ASSERT_NOT_NULL(lit);
+    files = yew_fl_get(lit, "files");
+    if (yew_fl_len(files) > 0U) {
+        const FlLit *undo = yew_fl_get(yew_fl_at(files, 0U), "undo");
         u64 n = 0U;
-        const char *name = sag_fl_str_or(sag_fl_get(undo, "file"), "", &n);
+        const char *name = yew_fl_str_or(yew_fl_get(undo, "file"), "", &n);
 
-        SAG_ASSERT_NOT_NULL(strstr(name, ".sagu"));
-        SAG_ASSERT_EQ_I64(sag_fl_int_or(sag_fl_get(undo, "version"), 0),
+        YEW_ASSERT_NOT_NULL(strstr(name, ".yewu"));
+        YEW_ASSERT_EQ_I64(yew_fl_int_or(yew_fl_get(undo, "version"), 0),
                           1);
     }
-    /* The only mention of .sagu is the reference — no payload rode
+    /* The only mention of .yewu is the reference — no payload rode
      * along. */
-    SAG_ASSERT(strstr((const char *)out.data, "\\x") == NULL);
+    YEW_ASSERT(strstr((const char *)out.data, "\\x") == NULL);
     bytebuf_free(&out);
     arena_free_all(&a);
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
 }
 
 /*
@@ -509,35 +509,35 @@ void test_state_schema_emission_is_deterministic(void)
     FlEmit e;
 
     ss_fixture(&ed);
-    SAG_ASSERT(sag_tab_open(&ed, "/tmp/sag-ss-det.txt") >= 0);
+    YEW_ASSERT(yew_tab_open(&ed, "/tmp/yew-ss-det.txt") >= 0);
     arena_init(&a);
     bytebuf_init(&one);
     bytebuf_init(&two);
     bytebuf_init(&again);
 
-    sag_state_emit(&ed, &one);
-    sag_state_emit(&ed, &two);
+    yew_state_emit(&ed, &one);
+    yew_state_emit(&ed, &two);
     ss_pin_saved_at(&one);
     ss_pin_saved_at(&two);
-    SAG_ASSERT_EQ_U64(one.len, two.len);
-    SAG_ASSERT_EQ_I64(memcmp(one.data, two.data, one.len), 0);
+    YEW_ASSERT_EQ_U64(one.len, two.len);
+    YEW_ASSERT_EQ_I64(memcmp(one.data, two.data, one.len), 0);
 
     /* parse -> emit lands on the same bytes. */
     {
         FlParseErr err;
 
-        lit = sag_fl_parse(&a, one.data, one.len, &err);
-        SAG_ASSERT_NOT_NULL(lit);
+        lit = yew_fl_parse(&a, one.data, one.len, &err);
+        YEW_ASSERT_NOT_NULL(lit);
     }
-    sag_fl_emit_init(&e, &again);
-    sag_fl_emit_lit(&e, NULL, lit);
-    sag_fl_emit_done(&e);
-    SAG_ASSERT_EQ_U64(again.len, one.len);
-    SAG_ASSERT_EQ_I64(memcmp(again.data, one.data, one.len), 0);
+    yew_fl_emit_init(&e, &again);
+    yew_fl_emit_lit(&e, NULL, lit);
+    yew_fl_emit_done(&e);
+    YEW_ASSERT_EQ_U64(again.len, one.len);
+    YEW_ASSERT_EQ_I64(memcmp(again.data, one.data, one.len), 0);
 
     bytebuf_free(&one);
     bytebuf_free(&two);
     bytebuf_free(&again);
     arena_free_all(&a);
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
 }

@@ -1,5 +1,5 @@
-#ifndef SAG_WS_GITIGNORE_H
-#define SAG_WS_GITIGNORE_H
+#ifndef YEW_WS_GITIGNORE_H
+#define YEW_WS_GITIGNORE_H
 
 /*
  * Sprint 26 §4: the .gitignore matcher — bespoke, and a SUBSET.
@@ -72,7 +72,7 @@ typedef struct GiSet GiSet;
  *
  * Everything is allocated in `a` and dies with it.
  */
-GiSet *sag_gi_load(Arena *a, const char *dir, const GiSet *parent);
+GiSet *yew_gi_load(Arena *a, const char *dir, const GiSet *parent);
 
 /*
  * Compiles one in-memory ignore file, for the root's
@@ -80,7 +80,7 @@ GiSet *sag_gi_load(Arena *a, const char *dir, const GiSet *parent);
  * filesystem.  `base` is the set's directory, workspace-relative ("" at
  * the root).
  */
-GiSet *sag_gi_compile(Arena *a, const char *base, const char *text,
+GiSet *yew_gi_compile(Arena *a, const char *base, const char *text,
                       u64 len, const GiSet *parent);
 
 /*
@@ -90,7 +90,7 @@ GiSet *sag_gi_compile(Arena *a, const char *base, const char *text,
  * The whole chain is consulted, deepest set last, and within a set the
  * LAST matching rule wins, which is what makes `!` work.
  */
-bool sag_gi_match(const GiSet *g, const char *rel, bool is_dir);
+bool yew_gi_match(const GiSet *g, const char *rel, bool is_dir);
 
 /*
  * §4.1: may the walk skip this ignored directory without opening it?
@@ -107,18 +107,18 @@ bool sag_gi_match(const GiSet *g, const char *rel, bool is_dir);
  * descend — a slow correct walk beats a fast one that hides a file the
  * user can see in `git status`.
  */
-bool sag_gi_prunable(const GiSet *g, const char *rel);
+bool yew_gi_prunable(const GiSet *g, const char *rel);
 
 /*
  * Did a `!` rule name this path?
  *
- * Asked separately from sag_gi_match because inside an ignored
+ * Asked separately from yew_gi_match because inside an ignored
  * directory the default reverses: git never descends into one, so
  * everything below is excluded, and only an explicit re-inclusion
- * survives.  sag_gi_match cannot express that on its own — a file under
+ * survives.  yew_gi_match cannot express that on its own — a file under
  * `node_modules/` matches no rule at all, because a directory-only rule
  * does not match files.
  */
-bool sag_gi_negated(const GiSet *g, const char *rel);
+bool yew_gi_negated(const GiSet *g, const char *rel);
 
 #endif

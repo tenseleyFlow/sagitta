@@ -1,7 +1,7 @@
 /* Sprint 19: child processes, nonblocking and budgeted.
  *
  * Every descriptor here is close-on-exec at creation via
- * sag_pipe_cloexec(), so an fd cannot leak into a concurrently spawned
+ * yew_pipe_cloexec(), so an fd cannot leak into a concurrently spawned
  * job (or, once LSP and AI land, into a long-lived server). */
 #define _POSIX_C_SOURCE 200809L
 
@@ -56,7 +56,7 @@ static u64 last_lead(const u8 *b, u64 n)
 {
     u64 back = 0U;
 
-    while (back < SAG_UTF8_MAX && back < n) {
+    while (back < YEW_UTF8_MAX && back < n) {
         u64 at = n - 1U - back;
 
         if (!utf8_is_cont(b[at]))
@@ -66,7 +66,7 @@ static u64 last_lead(const u8 *b, u64 n)
     return n;
 }
 
-u64 sag_job_safe_prefix(const u8 *b, u64 n, bool at_eof)
+u64 yew_job_safe_prefix(const u8 *b, u64 n, bool at_eof)
 {
     u64 cut;
     u64 lead;
@@ -95,25 +95,25 @@ u64 sag_job_safe_prefix(const u8 *b, u64 n, bool at_eof)
     if (cut == n && n != 0U && b[n - 1U] == (u8)'\n')
         return n;
     if (cut != 0U) {
-        u64 prev = (u64)sag_gb_prev_bytes(b, (size_t)cut, (size_t)cut);
+        u64 prev = (u64)yew_gb_prev_bytes(b, (size_t)cut, (size_t)cut);
 
         if (prev < cut)
             cut = prev;
     }
 
-    /* Rule 3: never hold more than SAG_JOB_HOLD_MAX.  A pathological
+    /* Rule 3: never hold more than YEW_JOB_HOLD_MAX.  A pathological
      * stream of combining marks with no boundary must not grow `hold`
      * without bound; at the cap we flush verbatim. */
-    if (n - cut > (u64)SAG_JOB_HOLD_MAX)
+    if (n - cut > (u64)YEW_JOB_HOLD_MAX)
         return n;
     return cut;
 }
 
 /* ------------------------------------------------------------------ */
-/* sag_shell_quote (§9)                                               */
+/* yew_shell_quote (§9)                                               */
 /* ------------------------------------------------------------------ */
 
-void sag_shell_quote(Bytebuf *out, const u8 *s, size_t n)
+void yew_shell_quote(Bytebuf *out, const u8 *s, size_t n)
 {
     size_t i;
 
@@ -136,7 +136,7 @@ void sag_shell_quote(Bytebuf *out, const u8 *s, size_t n)
 /* Table plumbing                                                     */
 /* ------------------------------------------------------------------ */
 
-void sag_jobs_init(JobTable *jt)
+void yew_jobs_init(JobTable *jt)
 {
     if (jt == NULL)
         return;
@@ -152,7 +152,7 @@ static void job_close(int *fd)
     }
 }
 
-static void job_dispose(SagJob *j)
+static void job_dispose(YewJob *j)
 {
     job_close(&j->in_fd);
     job_close(&j->out_fd);
@@ -165,17 +165,17 @@ static void job_dispose(SagJob *j)
     j->in_fd = j->out_fd = j->err_fd = j->exec_fd = -1;
 }
 
-void sag_jobs_free(Ed *ed)
+void yew_jobs_free(Ed *ed)
 {
     u32 i;
 
     if (ed == NULL)
         return;
     for (i = 0U; i < ed->jobs.len; i++) {
-        SagJob *j = &ed->jobs.v[i];
+        YewJob *j = &ed->jobs.v[i];
 
         /* Editor teardown must not leave orphans holding the terminal. */
-        if (j->state == SAG_JOB_RUNNING && j->pgid > 0)
+        if (j->state == YEW_JOB_RUNNING && j->pgid > 0)
             (void)kill(-j->pgid, SIGKILL);
         if (j->pid > 0 && !j->reaped)
             (void)waitpid(j->pid, NULL, 0);
@@ -184,7 +184,7 @@ void sag_jobs_free(Ed *ed)
     ed->jobs.len = 0U;
 }
 
-SagJob *sag_job_find(Ed *ed, u32 id)
+YewJob *yew_job_find(Ed *ed, u32 id)
 {
     u32 i;
 
@@ -197,7 +197,7 @@ SagJob *sag_job_find(Ed *ed, u32 id)
     return NULL;
 }
 
-void sag_job_release(Ed *ed, SagJob *j)
+void yew_job_release(Ed *ed, YewJob *j)
 {
     u32 idx;
 
@@ -207,7 +207,7 @@ void sag_job_release(Ed *ed, SagJob *j)
     if (idx >= ed->jobs.len)
         return;
     /* Never drop a live child: that would orphan it with no way back. */
-    if (j->state == SAG_JOB_RUNNING)
+    if (j->state == YEW_JOB_RUNNING)
         return;
     if (j->pid > 0 && !j->reaped)
         (void)waitpid(j->pid, NULL, WNOHANG);
@@ -218,7 +218,7 @@ void sag_job_release(Ed *ed, SagJob *j)
     ed->jobs.dirty = true;
 }
 
-u32 sag_job_running_count(const Ed *ed)
+u32 yew_job_running_count(const Ed *ed)
 {
     u32 i;
     u32 n = 0U;
@@ -226,26 +226,26 @@ u32 sag_job_running_count(const Ed *ed)
     if (ed == NULL)
         return 0U;
     for (i = 0U; i < ed->jobs.len; i++) {
-        if (ed->jobs.v[i].state == SAG_JOB_RUNNING)
+        if (ed->jobs.v[i].state == YEW_JOB_RUNNING)
             n++;
     }
     return n;
 }
 
-const char *sag_job_state_name(SagJobState state)
+const char *yew_job_state_name(YewJobState state)
 {
     switch (state) {
-    case SAG_JOB_RUNNING:
+    case YEW_JOB_RUNNING:
         return "running";
-    case SAG_JOB_EXITED:
+    case YEW_JOB_EXITED:
         return "exited";
-    case SAG_JOB_SIGNALED:
+    case YEW_JOB_SIGNALED:
         return "signaled";
-    case SAG_JOB_EXECFAIL:
+    case YEW_JOB_EXECFAIL:
         return "exec-fail";
-    case SAG_JOB_TIMEOUT:
+    case YEW_JOB_TIMEOUT:
         return "timeout";
-    case SAG_JOB_CANCELLED:
+    case YEW_JOB_CANCELLED:
         return "cancelled";
     default:
         break;
@@ -257,7 +257,7 @@ const char *sag_job_state_name(SagJobState state)
 /* Spawn (§2)                                                         */
 /* ------------------------------------------------------------------ */
 
-const char *sag_job_shell(void)
+const char *yew_job_shell(void)
 {
     const char *sh = getenv("SHELL");
     struct passwd *pw;
@@ -275,9 +275,9 @@ const char *sag_job_shell(void)
  * into every later job and into the editor itself. */
 static char **job_build_env(Ed *ed, Arena *a)
 {
-    static const char *const drop[] = {"COLUMNS=", "LINES=", "SAG_FILE=",
-                                       "SAG_LINE=", "SAG_COL=",
-                                       "SAG_WORKSPACE=", "SAG_JOB=",
+    static const char *const drop[] = {"COLUMNS=", "LINES=", "YEW_FILE=",
+                                       "YEW_LINE=", "YEW_COL=",
+                                       "YEW_WORKSPACE=", "YEW_JOB=",
                                        "PAGER=", "GIT_PAGER="};
     size_t n = 0U;
     size_t i;
@@ -297,7 +297,7 @@ static char **job_build_env(Ed *ed, Arena *a)
         bool skip = false;
         size_t d;
 
-        for (d = 0U; d < SAG_ARRAY_LEN(drop); d++) {
+        for (d = 0U; d < YEW_ARRAY_LEN(drop); d++) {
             size_t dl = strlen(drop[d]);
 
             if (strncmp(environ[i], drop[d], dl) == 0) {
@@ -312,24 +312,24 @@ static char **job_build_env(Ed *ed, Arena *a)
         ed->win->cs.curs.len != 0U) {
         const Cursor *cur = &ed->win->cs.curs.data[ed->win->cs.primary];
 
-        line = sag_textbuf_line_of(buf->tb, cur->pos);
-        col = sag_off_to_gcol(buf->tb,
-                              sag_textbuf_line_span(buf->tb, line),
+        line = yew_textbuf_line_of(buf->tb, cur->pos);
+        col = yew_off_to_gcol(buf->tb,
+                              yew_textbuf_line_span(buf->tb, line),
                               cur->pos);
     }
-    (void)snprintf(tmp, sizeof(tmp), "SAG_FILE=%s", path);
+    (void)snprintf(tmp, sizeof(tmp), "YEW_FILE=%s", path);
     env[out++] = arena_strdup(a, tmp);
-    (void)snprintf(tmp, sizeof(tmp), "SAG_LINE=%llu",
+    (void)snprintf(tmp, sizeof(tmp), "YEW_LINE=%llu",
                    (unsigned long long)(line.v + 1U));
     env[out++] = arena_strdup(a, tmp);
     /* Grapheme columns, not bytes and not cells: the number the statusline
      * shows, so scripts and the UI agree. */
-    (void)snprintf(tmp, sizeof(tmp), "SAG_COL=%llu",
+    (void)snprintf(tmp, sizeof(tmp), "YEW_COL=%llu",
                    (unsigned long long)((u64)col.v + 1U));
     env[out++] = arena_strdup(a, tmp);
-    (void)snprintf(tmp, sizeof(tmp), "SAG_WORKSPACE=%s", sag_ws_root(ed));
+    (void)snprintf(tmp, sizeof(tmp), "YEW_WORKSPACE=%s", yew_ws_root(ed));
     env[out++] = arena_strdup(a, tmp);
-    env[out++] = arena_strdup(a, "SAG_JOB=1");
+    env[out++] = arena_strdup(a, "YEW_JOB=1");
     /* A job that spawns `less` would wait forever on a stdin it does not
      * own: no output, no exit, no clue. */
     env[out++] = arena_strdup(a, "PAGER=cat");
@@ -348,7 +348,7 @@ static void set_nonblock(int fd)
 
 static bool make_pipe(int p[2], char *err, size_t errsz)
 {
-    if (!sag_pipe_cloexec(p)) {
+    if (!yew_pipe_cloexec(p)) {
         (void)snprintf(err, errsz, "cannot create pipe: %s",
                        strerror(errno));
         p[0] = p[1] = -1;
@@ -359,7 +359,7 @@ static bool make_pipe(int p[2], char *err, size_t errsz)
 
 /* Everything between fork() and execve() must be async-signal-safe: malloc
  * in a forked child can deadlock on an allocator lock the parent held at
- * fork time, and sag_log formats through stdio and opens files.  The
+ * fork time, and yew_log formats through stdio and opens files.  The
  * exec-status pipe is the only diagnostic channel in this window. */
 static void job_child(char **argv, char **envp, const char *cwd,
                       int in_p[2], int out_p[2], int err_p[2],
@@ -393,7 +393,7 @@ static void job_child(char **argv, char **envp, const char *cwd,
      * child returns EPIPE instead of killing the editor, but a child that
      * inherits SIG_IGN never dies from a closed pipe, so `head`-style
      * pipelines inside the command run forever. */
-    for (sig = 0; sig < (int)SAG_ARRAY_LEN(reset_signals); sig++)
+    for (sig = 0; sig < (int)YEW_ARRAY_LEN(reset_signals); sig++)
         (void)signal(reset_signals[sig], SIG_DFL);
     (void)sigemptyset(&empty);
     (void)sigprocmask(SIG_SETMASK, &empty, NULL);
@@ -421,7 +421,7 @@ fail:
     _exit(127);
 }
 
-u32 sag_job_spawn(Ed *ed, const SagJobSpec *spec, char *err, size_t errsz)
+u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
 {
     Arena scratch;
     char **argv;
@@ -432,7 +432,7 @@ u32 sag_job_spawn(Ed *ed, const SagJobSpec *spec, char *err, size_t errsz)
     int err_p[2] = {-1, -1};
     int exec_p[2] = {-1, -1};
     pid_t pid;
-    SagJob *j;
+    YewJob *j;
     const char *cwd;
     const char *display;
     bool want_stdin;
@@ -441,10 +441,10 @@ u32 sag_job_spawn(Ed *ed, const SagJobSpec *spec, char *err, size_t errsz)
         err[0] = '\0';
     if (ed == NULL || spec == NULL)
         return 0U;
-    if (ed->jobs.len >= SAG_JOB_MAX) {
+    if (ed->jobs.len >= YEW_JOB_MAX) {
         (void)snprintf(err, errsz,
                        "too many jobs (%d); finish or kill one first",
-                       SAG_JOB_MAX);
+                       YEW_JOB_MAX);
         return 0U;
     }
     if (spec->argv == NULL && spec->cmdline == NULL) {
@@ -457,14 +457,14 @@ u32 sag_job_spawn(Ed *ed, const SagJobSpec *spec, char *err, size_t errsz)
     if (spec->argv != NULL) {
         argv = spec->argv;
     } else {
-        shell_argv[0] = (char *)sag_job_shell();
+        shell_argv[0] = (char *)yew_job_shell();
         shell_argv[1] = (char *)"-c";
         shell_argv[2] = (char *)spec->cmdline;
         shell_argv[3] = NULL;
         argv = shell_argv;
     }
     envp = job_build_env(ed, &scratch);
-    cwd = spec->cwd != NULL ? spec->cwd : sag_ws_root(ed);
+    cwd = spec->cwd != NULL ? spec->cwd : yew_ws_root(ed);
     want_stdin = spec->in_buf != NULL &&
                  spec->in_span.hi > spec->in_span.lo;
 
@@ -504,12 +504,12 @@ u32 sag_job_spawn(Ed *ed, const SagJobSpec *spec, char *err, size_t errsz)
     j->out_fd = out_p[0];
     j->err_fd = err_p[0];
     j->exec_fd = exec_p[0];
-    j->state = SAG_JOB_RUNNING;
+    j->state = YEW_JOB_RUNNING;
     j->sink = spec->sink;
     j->in_buf = spec->in_buf;
     j->in_span = spec->in_span;
     j->timeout_ms = spec->timeout_ms;
-    j->start_ms = sag_now_ms();
+    j->start_ms = yew_now_ms();
     j->follow_tail = true;
     bytebuf_init(&j->hold);
     bytebuf_init(&j->collect);
@@ -518,7 +518,7 @@ u32 sag_job_spawn(Ed *ed, const SagJobSpec *spec, char *err, size_t errsz)
     {
         size_t dlen = strlen(display);
 
-        j->label = sag_xmalloc(dlen + 1U);
+        j->label = yew_xmalloc(dlen + 1U);
         (void)memcpy(j->label, display, dlen + 1U);
     }
     /* No stdin to write means closing immediately: a child whose read()
@@ -543,16 +543,16 @@ fail:
     return 0U;
 }
 
-bool sag_job_signal(Ed *ed, u32 id, int sig)
+bool yew_job_signal(Ed *ed, u32 id, int sig)
 {
-    SagJob *j = sag_job_find(ed, id);
+    YewJob *j = yew_job_find(ed, id);
 
-    if (j == NULL || j->pgid <= 0 || j->state != SAG_JOB_RUNNING)
+    if (j == NULL || j->pgid <= 0 || j->state != YEW_JOB_RUNNING)
         return false;
     if (kill(-j->pgid, sig) != 0)
         return false;
     if (sig == SIGTERM)
-        j->kill_at_ms = sag_now_ms() + SAG_JOB_TERM_GRACE_MS;
+        j->kill_at_ms = yew_now_ms() + YEW_JOB_TERM_GRACE_MS;
     return true;
 }
 
@@ -560,26 +560,26 @@ bool sag_job_signal(Ed *ed, u32 id, int sig)
 /* Reading (§3)                                                       */
 /* ------------------------------------------------------------------ */
 
-u32 sag_job_pollfd_count(const Ed *ed)
+u32 yew_job_pollfd_count(const Ed *ed)
 {
     /* stdout, stderr, exec-status, stdin: four per job at most. */
     return ed == NULL ? 0U : ed->jobs.len * 4U;
 }
 
-static bool job_wants_stdin(const SagJob *j)
+static bool job_wants_stdin(const YewJob *j)
 {
     return j->in_fd >= 0 && j->in_buf != NULL &&
            j->in_off < j->in_span.hi - j->in_span.lo;
 }
 
-void sag_job_collect_fds(Ed *ed, struct pollfd *pfd, u32 *n)
+void yew_job_collect_fds(Ed *ed, struct pollfd *pfd, u32 *n)
 {
     u32 i;
 
     if (ed == NULL || pfd == NULL || n == NULL)
         return;
     for (i = 0U; i < ed->jobs.len; i++) {
-        SagJob *j = &ed->jobs.v[i];
+        YewJob *j = &ed->jobs.v[i];
 
         if (j->out_fd >= 0) {
             pfd[*n].fd = j->out_fd;
@@ -618,26 +618,26 @@ static short revents_for(const struct pollfd *pfd, u32 n, int fd)
 }
 
 /* Appends `bytes` to wherever this job's sink points. */
-static void job_deliver(Ed *ed, SagJob *j, const u8 *bytes, u64 len,
+static void job_deliver(Ed *ed, YewJob *j, const u8 *bytes, u64 len,
                         bool is_err)
 {
     if (len == 0U)
         return;
     switch (j->sink) {
-    case SAG_SINK_COLLECT:
-        if (j->collect.len + len > SAG_JOB_COLLECT_MAX) {
+    case YEW_SINK_COLLECT:
+        if (j->collect.len + len > YEW_JOB_COLLECT_MAX) {
             if (!j->collect_capped) {
                 j->collect_capped = true;
-                (void)sag_job_signal(ed, j->id, SIGTERM);
+                (void)yew_job_signal(ed, j->id, SIGTERM);
             }
             return;
         }
         bytebuf_append(&j->collect, bytes, (size_t)len);
         break;
-    case SAG_SINK_BUFFER:
-        sag_job_buffer_append(ed, j, bytes, len, is_err);
+    case YEW_SINK_BUFFER:
+        yew_job_buffer_append(ed, j, bytes, len, is_err);
         break;
-    case SAG_SINK_DISCARD:
+    case YEW_SINK_DISCARD:
     default:
         break;
     }
@@ -645,11 +645,11 @@ static void job_deliver(Ed *ed, SagJob *j, const u8 *bytes, u64 len,
 
 /* Drains one fd until EAGAIN or the read budget, whichever comes first.
  * Returns true when the fd reached EOF. */
-static bool job_drain(Ed *ed, SagJob *j, int *fd, bool is_err)
+static bool job_drain(Ed *ed, YewJob *j, int *fd, bool is_err)
 {
     u64 drained = 0U;
 
-    while (drained < SAG_JOB_READ_BUDGET) {
+    while (drained < YEW_JOB_READ_BUDGET) {
         u8 chunk[16384];
         ssize_t got = read(*fd, chunk, sizeof(chunk));
         u64 safe;
@@ -678,11 +678,11 @@ static bool job_drain(Ed *ed, SagJob *j, int *fd, bool is_err)
             view = chunk;
             total = (u64)got;
         }
-        safe = sag_job_safe_prefix(view, total, got == 0);
+        safe = yew_job_safe_prefix(view, total, got == 0);
         job_deliver(ed, j, view, safe, is_err);
         if (safe < total) {
             u64 rest = total - safe;
-            u8 tail[SAG_JOB_HOLD_MAX + 16];
+            u8 tail[YEW_JOB_HOLD_MAX + 16];
 
             (void)memcpy(tail, view + safe, (size_t)rest);
             j->hold.len = 0U;
@@ -699,7 +699,7 @@ static bool job_drain(Ed *ed, SagJob *j, int *fd, bool is_err)
     return false;
 }
 
-static void job_read_exec_status(Ed *ed, SagJob *j)
+static void job_read_exec_status(Ed *ed, YewJob *j)
 {
     int e = 0;
     ssize_t got = read(j->exec_fd, &e, sizeof e);
@@ -709,7 +709,7 @@ static void job_read_exec_status(Ed *ed, SagJob *j)
         /* Without this channel a missing shell and a command exiting 127
          * are indistinguishable. */
         j->exec_errno = e;
-        j->state = SAG_JOB_EXECFAIL;
+        j->state = YEW_JOB_EXECFAIL;
         ed->jobs.dirty = true;
         job_close(&j->exec_fd);
         return;
@@ -719,7 +719,7 @@ static void job_read_exec_status(Ed *ed, SagJob *j)
         job_close(&j->exec_fd); /* closing empty IS the success signal */
 }
 
-static void job_write_stdin(SagJob *j)
+static void job_write_stdin(YewJob *j)
 {
     TextIter it;
     u64 base = j->in_span.lo;
@@ -730,9 +730,9 @@ static void job_write_stdin(SagJob *j)
         size_t chunk_len = 0U;
         ssize_t wrote;
 
-        if (!sag_textiter_begin(&it, j->in_buf, BYTEOFF(base + j->in_off)))
+        if (!yew_textiter_begin(&it, j->in_buf, BYTEOFF(base + j->in_off)))
             break;
-        if (!sag_textiter_chunk(&it, j->in_buf, &chunk, &chunk_len) ||
+        if (!yew_textiter_chunk(&it, j->in_buf, &chunk, &chunk_len) ||
             chunk_len == 0U)
             break;
         if ((u64)chunk_len > total - j->in_off)
@@ -757,14 +757,14 @@ static void job_write_stdin(SagJob *j)
         job_close(&j->in_fd);
 }
 
-void sag_job_pump(Ed *ed, const struct pollfd *pfd, u32 n)
+void yew_job_pump(Ed *ed, const struct pollfd *pfd, u32 n)
 {
     u32 i;
 
     if (ed == NULL || pfd == NULL)
         return;
     for (i = 0U; i < ed->jobs.len; i++) {
-        SagJob *j = &ed->jobs.v[i];
+        YewJob *j = &ed->jobs.v[i];
         short re;
 
         re = revents_for(pfd, n, j->exec_fd);
@@ -786,7 +786,7 @@ void sag_job_pump(Ed *ed, const struct pollfd *pfd, u32 n)
 /* Reaping and deadlines                                              */
 /* ------------------------------------------------------------------ */
 
-void sag_job_reap(Ed *ed)
+void yew_job_reap(Ed *ed)
 {
     for (;;) {
         int status = 0;
@@ -796,23 +796,23 @@ void sag_job_reap(Ed *ed)
         if (pid <= 0)
             return;
         for (i = 0U; i < ed->jobs.len; i++) {
-            SagJob *j = &ed->jobs.v[i];
+            YewJob *j = &ed->jobs.v[i];
 
             if (j->pid != pid)
                 continue;
             j->reaped = true;
-            j->end_ms = sag_now_ms();
+            j->end_ms = yew_now_ms();
             /* A timeout/cancel verdict already recorded why it died; the
              * wait status would only say SIGTERM and lose that. */
-            if (j->state == SAG_JOB_RUNNING) {
+            if (j->state == YEW_JOB_RUNNING) {
                 if (WIFEXITED(status)) {
-                    j->state = SAG_JOB_EXITED;
+                    j->state = YEW_JOB_EXITED;
                     j->exit_code = WEXITSTATUS(status);
                 } else if (WIFSIGNALED(status)) {
-                    j->state = SAG_JOB_SIGNALED;
+                    j->state = YEW_JOB_SIGNALED;
                     j->termsig = WTERMSIG(status);
                 }
-            } else if (j->state == SAG_JOB_EXECFAIL) {
+            } else if (j->state == YEW_JOB_EXECFAIL) {
                 j->exit_code = WIFEXITED(status) ? WEXITSTATUS(status) : 127;
             }
             ed->jobs.dirty = true;
@@ -821,37 +821,37 @@ void sag_job_reap(Ed *ed)
              * whether we have read everything it wrote — a pipe can hold
              * a bufferful past exit, and completing here truncated the
              * output and appended the footer above bytes that had not
-             * arrived.  sag_job_settle finishes it once the pipes EOF.
+             * arrived.  yew_job_settle finishes it once the pipes EOF.
              */
             break;
         }
     }
 }
 
-bool sag_job_pending(const SagJob *j)
+bool yew_job_pending(const YewJob *j)
 {
     if (j == NULL)
         return false;
     return !j->reaped || j->out_fd >= 0 || j->err_fd >= 0;
 }
 
-void sag_job_settle(Ed *ed)
+void yew_job_settle(Ed *ed)
 {
     u32 i;
 
     if (ed == NULL)
         return;
     for (i = 0U; i < ed->jobs.len; i++) {
-        SagJob *j = &ed->jobs.v[i];
+        YewJob *j = &ed->jobs.v[i];
 
-        if (j->drained || sag_job_pending(j))
+        if (j->drained || yew_job_pending(j))
             continue;
         j->drained = true;
-        sag_job_finish(ed, j);
+        yew_job_finish(ed, j);
     }
 }
 
-i64 sag_job_deadline(const Ed *ed, i64 now_ms)
+i64 yew_job_deadline(const Ed *ed, i64 now_ms)
 {
     i64 best = -1;
     u32 i;
@@ -859,10 +859,10 @@ i64 sag_job_deadline(const Ed *ed, i64 now_ms)
     if (ed == NULL)
         return -1;
     for (i = 0U; i < ed->jobs.len; i++) {
-        const SagJob *j = &ed->jobs.v[i];
+        const YewJob *j = &ed->jobs.v[i];
         i64 at = -1;
 
-        if (j->state != SAG_JOB_RUNNING)
+        if (j->state != YEW_JOB_RUNNING)
             continue;
         if (j->kill_at_ms != 0)
             at = j->kill_at_ms;
@@ -878,14 +878,14 @@ i64 sag_job_deadline(const Ed *ed, i64 now_ms)
     return best;
 }
 
-void sag_job_tick(Ed *ed, i64 now_ms)
+void yew_job_tick(Ed *ed, i64 now_ms)
 {
     u32 i;
 
     if (ed == NULL)
         return;
     for (i = 0U; i < ed->jobs.len; i++) {
-        SagJob *j = &ed->jobs.v[i];
+        YewJob *j = &ed->jobs.v[i];
 
         /* Escalation is checked BEFORE the RUNNING guard on purpose: a
          * timed-out or cancelled job has already left RUNNING but is
@@ -896,13 +896,13 @@ void sag_job_tick(Ed *ed, i64 now_ms)
             j->kill_at_ms = 0;
             continue;
         }
-        if (j->state != SAG_JOB_RUNNING)
+        if (j->state != YEW_JOB_RUNNING)
             continue;
         if (j->timeout_ms > 0 && now_ms - j->start_ms >= j->timeout_ms) {
-            j->state = SAG_JOB_TIMEOUT;
+            j->state = YEW_JOB_TIMEOUT;
             ed->jobs.dirty = true;
             (void)kill(-j->pgid, SIGTERM);
-            j->kill_at_ms = now_ms + SAG_JOB_TERM_GRACE_MS;
+            j->kill_at_ms = now_ms + YEW_JOB_TERM_GRACE_MS;
         }
     }
 }

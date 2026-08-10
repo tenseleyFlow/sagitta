@@ -20,15 +20,15 @@
 #include "util/buf.h"
 #include "util/log.h"
 
-#define SAG_CLIP_REAP_MAX 512U
-#define SAG_CLIP_BACKEND_COUNT 7U
+#define YEW_CLIP_REAP_MAX 512U
+#define YEW_CLIP_BACKEND_COUNT 7U
 
-typedef struct SagClipCmd {
+typedef struct YewClipCmd {
     char **argv;
     char *storage;
-} SagClipCmd;
+} YewClipCmd;
 
-typedef struct SagClipboardState {
+typedef struct YewClipboardState {
     RegVal queued;
     RegVal active;
     bool initialized;
@@ -36,9 +36,9 @@ typedef struct SagClipboardState {
     bool active_valid;
     bool write_cached;
     bool read_cached;
-    SagClipBackend write_backend;
-    SagClipBackend read_backend;
-    SagClipBackend active_backend;
+    YewClipBackend write_backend;
+    YewClipBackend read_backend;
+    YewClipBackend active_backend;
     u32 demoted;
     u8 queued_target;
     u8 active_target;
@@ -46,20 +46,20 @@ typedef struct SagClipboardState {
     int pid_fd;
     int exec_fd;
     pid_t tool_pid;
-    pid_t reap[SAG_CLIP_REAP_MAX];
+    pid_t reap[YEW_CLIP_REAP_MAX];
     u32 reap_len;
     size_t written;
     i64 deadline_ms;
     i64 timeout_ms;
     u64 read_max;
     bool exec_ready;
-} SagClipboardState;
+} YewClipboardState;
 
-static SagClipboardState sag_clip;
+static YewClipboardState yew_clip;
 
 static void clip_value_clear(RegVal *v)
 {
-    v->type = SAG_REG_CHARWISE;
+    v->type = YEW_REG_CHARWISE;
     v->ragged = false;
     v->width = 0U;
     v->bytes.len = 0U;
@@ -72,7 +72,7 @@ static i64 clip_now_ms(void)
     struct timespec ts;
 
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
-        SAG_BUG("clipboard: monotonic clock failed");
+        YEW_BUG("clipboard: monotonic clock failed");
     if ((i64)ts.tv_sec > (INT64_MAX - (i64)(ts.tv_nsec / 1000000L)) /
                           1000)
         return INT64_MAX;
@@ -90,7 +90,7 @@ static i64 clip_parse_positive_ms(const char *name, i64 fallback)
     errno = 0;
     value = strtoll(text, &end, 10);
     if (errno != 0 || end == text || *end != '\0' || value <= 0) {
-        sag_log(SAG_LOG_WARN, "clipboard: ignoring invalid %s", name);
+        yew_log(YEW_LOG_WARN, "clipboard: ignoring invalid %s", name);
         return fallback;
     }
     return value > INT64_MAX ? INT64_MAX : (i64)value;
@@ -104,24 +104,24 @@ static void clip_ignore_sigpipe(void)
     action.sa_handler = SIG_IGN;
     (void)sigemptyset(&action.sa_mask);
     if (sigaction(SIGPIPE, &action, NULL) != 0)
-        sag_log(SAG_LOG_WARN, "clipboard: cannot ignore SIGPIPE: %s",
+        yew_log(YEW_LOG_WARN, "clipboard: cannot ignore SIGPIPE: %s",
                 strerror(errno));
 }
 
 static void clip_init(void)
 {
-    if (sag_clip.initialized)
+    if (yew_clip.initialized)
         return;
-    (void)memset(&sag_clip, 0, sizeof(sag_clip));
-    sag_regval_init(&sag_clip.queued);
-    sag_regval_init(&sag_clip.active);
-    sag_clip.write_fd = -1;
-    sag_clip.pid_fd = -1;
-    sag_clip.exec_fd = -1;
-    sag_clip.timeout_ms = clip_parse_positive_ms(
-        "SAG_CLIPBOARD_TIMEOUT_MS", SAG_CLIPBOARD_TIMEOUT_DEFAULT_MS);
-    sag_clip.read_max = SAG_CLIPBOARD_READ_MAX_DEFAULT;
-    sag_clip.initialized = true;
+    (void)memset(&yew_clip, 0, sizeof(yew_clip));
+    yew_regval_init(&yew_clip.queued);
+    yew_regval_init(&yew_clip.active);
+    yew_clip.write_fd = -1;
+    yew_clip.pid_fd = -1;
+    yew_clip.exec_fd = -1;
+    yew_clip.timeout_ms = clip_parse_positive_ms(
+        "YEW_CLIPBOARD_TIMEOUT_MS", YEW_CLIPBOARD_TIMEOUT_DEFAULT_MS);
+    yew_clip.read_max = YEW_CLIPBOARD_READ_MAX_DEFAULT;
+    yew_clip.initialized = true;
     clip_ignore_sigpipe();
 }
 
@@ -160,7 +160,7 @@ static bool clip_path_exec(const char *name)
         const char *colon = strchr(at, ':');
         size_t dir_len = colon != NULL ? (size_t)(colon - at) : strlen(at);
         size_t need = (dir_len == 0U ? 1U : dir_len) + 1U + name_len + 1U;
-        char *candidate = sag_xmalloc(need);
+        char *candidate = yew_xmalloc(need);
         size_t used = 0U;
         bool found;
         struct stat st;
@@ -184,138 +184,138 @@ static bool clip_path_exec(const char *name)
     }
 }
 
-static u32 clip_backend_bit(SagClipBackend backend)
+static u32 clip_backend_bit(YewClipBackend backend)
 {
     return backend < 32 ? UINT32_C(1) << (u32)backend : 0U;
 }
 
-static bool clip_available(SagClipBackend backend)
+static bool clip_available(YewClipBackend backend)
 {
-    if ((sag_clip.demoted & clip_backend_bit(backend)) != 0U)
+    if ((yew_clip.demoted & clip_backend_bit(backend)) != 0U)
         return false;
     switch (backend) {
-    case SAG_CLIP_WL:
+    case YEW_CLIP_WL:
         return clip_nonempty_env("WAYLAND_DISPLAY") &&
                clip_path_exec("wl-copy");
-    case SAG_CLIP_XCLIP:
+    case YEW_CLIP_XCLIP:
         return clip_nonempty_env("DISPLAY") && clip_path_exec("xclip");
-    case SAG_CLIP_XSEL:
+    case YEW_CLIP_XSEL:
         return clip_nonempty_env("DISPLAY") && clip_path_exec("xsel");
-    case SAG_CLIP_PB:
+    case YEW_CLIP_PB:
 #if defined(__APPLE__) && (defined(__aarch64__) || defined(__arm64__))
         return clip_path_exec("pbcopy");
 #else
         return false;
 #endif
-    case SAG_CLIP_OSC52:
-        return sag_tty_fd_is_terminal(STDOUT_FILENO) &&
-               sag_osc52_mode(NULL) != SAG_OSC52_OFF;
-    case SAG_CLIP_CUSTOM:
-    case SAG_CLIP_NONE:
+    case YEW_CLIP_OSC52:
+        return yew_tty_fd_is_terminal(STDOUT_FILENO) &&
+               yew_osc52_mode(NULL) != YEW_OSC52_OFF;
+    case YEW_CLIP_CUSTOM:
+    case YEW_CLIP_NONE:
         return false;
     }
     return false;
 }
 
-static SagClipBackend clip_named_backend(const char *value, bool read_side,
+static YewClipBackend clip_named_backend(const char *value, bool read_side,
                                          bool *recognized)
 {
     const char *bar;
 
     *recognized = true;
     if (strcmp(value, "none") == 0)
-        return SAG_CLIP_NONE;
+        return YEW_CLIP_NONE;
     if (strcmp(value, "osc52") == 0)
-        return read_side || sag_osc52_mode(NULL) == SAG_OSC52_OFF ?
-               SAG_CLIP_NONE : SAG_CLIP_OSC52;
+        return read_side || yew_osc52_mode(NULL) == YEW_OSC52_OFF ?
+               YEW_CLIP_NONE : YEW_CLIP_OSC52;
     if (strcmp(value, "wl") == 0)
-        return SAG_CLIP_WL;
+        return YEW_CLIP_WL;
     if (strcmp(value, "xclip") == 0)
-        return SAG_CLIP_XCLIP;
+        return YEW_CLIP_XCLIP;
     if (strcmp(value, "xsel") == 0)
-        return SAG_CLIP_XSEL;
+        return YEW_CLIP_XSEL;
     if (strcmp(value, "pb") == 0)
-        return SAG_CLIP_PB;
+        return YEW_CLIP_PB;
     if (strncmp(value, "cmd:", 4U) == 0) {
         bar = strchr(value + 4U, '|');
         if (read_side)
-            return bar != NULL && bar[1] != '\0' ? SAG_CLIP_CUSTOM :
-                                                   SAG_CLIP_NONE;
-        return value[4] != '\0' && bar != value + 4U ? SAG_CLIP_CUSTOM :
-                                                       SAG_CLIP_NONE;
+            return bar != NULL && bar[1] != '\0' ? YEW_CLIP_CUSTOM :
+                                                   YEW_CLIP_NONE;
+        return value[4] != '\0' && bar != value + 4U ? YEW_CLIP_CUSTOM :
+                                                       YEW_CLIP_NONE;
     }
     *recognized = false;
-    return SAG_CLIP_NONE;
+    return YEW_CLIP_NONE;
 }
 
-static SagClipBackend clip_detect_direction(bool read_side)
+static YewClipBackend clip_detect_direction(bool read_side)
 {
-    const char *override = getenv("SAG_CLIPBOARD");
+    const char *override = getenv("YEW_CLIPBOARD");
     bool recognized;
 
     if (override != NULL && override[0] != '\0' &&
         strcmp(override, "auto") != 0) {
-        SagClipBackend forced = clip_named_backend(override, read_side,
+        YewClipBackend forced = clip_named_backend(override, read_side,
                                                    &recognized);
 
         if (recognized) {
-            if ((sag_clip.demoted & clip_backend_bit(forced)) != 0U)
-                return SAG_CLIP_NONE;
+            if ((yew_clip.demoted & clip_backend_bit(forced)) != 0U)
+                return YEW_CLIP_NONE;
             return forced;
         }
-        sag_log(SAG_LOG_WARN,
-                "clipboard: ignoring invalid SAG_CLIPBOARD override");
+        yew_log(YEW_LOG_WARN,
+                "clipboard: ignoring invalid YEW_CLIPBOARD override");
     }
     if (!read_side && clip_remote())
-        return clip_available(SAG_CLIP_OSC52) ? SAG_CLIP_OSC52 :
-                                               SAG_CLIP_NONE;
-    if (clip_available(SAG_CLIP_WL))
-        return SAG_CLIP_WL;
-    if (clip_available(SAG_CLIP_XCLIP))
-        return SAG_CLIP_XCLIP;
-    if (clip_available(SAG_CLIP_XSEL))
-        return SAG_CLIP_XSEL;
-    if (clip_available(SAG_CLIP_PB))
-        return SAG_CLIP_PB;
-    if (!read_side && clip_available(SAG_CLIP_OSC52))
-        return SAG_CLIP_OSC52;
-    return SAG_CLIP_NONE;
+        return clip_available(YEW_CLIP_OSC52) ? YEW_CLIP_OSC52 :
+                                               YEW_CLIP_NONE;
+    if (clip_available(YEW_CLIP_WL))
+        return YEW_CLIP_WL;
+    if (clip_available(YEW_CLIP_XCLIP))
+        return YEW_CLIP_XCLIP;
+    if (clip_available(YEW_CLIP_XSEL))
+        return YEW_CLIP_XSEL;
+    if (clip_available(YEW_CLIP_PB))
+        return YEW_CLIP_PB;
+    if (!read_side && clip_available(YEW_CLIP_OSC52))
+        return YEW_CLIP_OSC52;
+    return YEW_CLIP_NONE;
 }
 
-static SagClipBackend clip_detect_subprocess_write(void)
+static YewClipBackend clip_detect_subprocess_write(void)
 {
-    if (clip_available(SAG_CLIP_WL))
-        return SAG_CLIP_WL;
-    if (clip_available(SAG_CLIP_XCLIP))
-        return SAG_CLIP_XCLIP;
-    if (clip_available(SAG_CLIP_XSEL))
-        return SAG_CLIP_XSEL;
-    if (clip_available(SAG_CLIP_PB))
-        return SAG_CLIP_PB;
-    return SAG_CLIP_NONE;
+    if (clip_available(YEW_CLIP_WL))
+        return YEW_CLIP_WL;
+    if (clip_available(YEW_CLIP_XCLIP))
+        return YEW_CLIP_XCLIP;
+    if (clip_available(YEW_CLIP_XSEL))
+        return YEW_CLIP_XSEL;
+    if (clip_available(YEW_CLIP_PB))
+        return YEW_CLIP_PB;
+    return YEW_CLIP_NONE;
 }
 
-SagClipBackend sag_clip_detect(void)
-{
-    clip_init();
-    if (!sag_clip.write_cached) {
-        sag_clip.write_backend = clip_detect_direction(false);
-        sag_clip.write_cached = true;
-    }
-    return sag_clip.write_backend;
-}
-
-SagClipBackend sag_clip_detect_read(void)
+YewClipBackend yew_clip_detect(void)
 {
     clip_init();
-    if (!sag_clip.read_cached) {
-        sag_clip.read_backend = clip_detect_direction(true);
-        sag_clip.read_cached = true;
+    if (!yew_clip.write_cached) {
+        yew_clip.write_backend = clip_detect_direction(false);
+        yew_clip.write_cached = true;
     }
-    return sag_clip.read_backend;
+    return yew_clip.write_backend;
 }
 
-static void clip_cmd_free(SagClipCmd *cmd)
+YewClipBackend yew_clip_detect_read(void)
+{
+    clip_init();
+    if (!yew_clip.read_cached) {
+        yew_clip.read_backend = clip_detect_direction(true);
+        yew_clip.read_cached = true;
+    }
+    return yew_clip.read_backend;
+}
+
+static void clip_cmd_free(YewClipCmd *cmd)
 {
     free(cmd->argv);
     free(cmd->storage);
@@ -323,7 +323,7 @@ static void clip_cmd_free(SagClipCmd *cmd)
     cmd->storage = NULL;
 }
 
-static bool clip_cmd_copy(SagClipCmd *cmd, const char *const *words,
+static bool clip_cmd_copy(YewClipCmd *cmd, const char *const *words,
                           size_t count)
 {
     size_t i;
@@ -334,11 +334,11 @@ static bool clip_cmd_copy(SagClipCmd *cmd, const char *const *words,
     for (i = 0U; i < count; i++) {
         size_t len = strlen(words[i]);
         if (len > SIZE_MAX - total - 1U)
-            SAG_BUG("clipboard command size overflow");
+            YEW_BUG("clipboard command size overflow");
         total += len + 1U;
     }
-    cmd->argv = sag_xcalloc(count + 1U, sizeof(*cmd->argv));
-    cmd->storage = sag_xmalloc(total == 0U ? 1U : total);
+    cmd->argv = yew_xcalloc(count + 1U, sizeof(*cmd->argv));
+    cmd->storage = yew_xmalloc(total == 0U ? 1U : total);
     at = cmd->storage;
     for (i = 0U; i < count; i++) {
         size_t len = strlen(words[i]);
@@ -349,7 +349,7 @@ static bool clip_cmd_copy(SagClipCmd *cmd, const char *const *words,
     return count != 0U;
 }
 
-static bool clip_cmd_parse(SagClipCmd *cmd, const char *begin, size_t len)
+static bool clip_cmd_parse(YewClipCmd *cmd, const char *begin, size_t len)
 {
     size_t count = 0U;
     size_t i = 0U;
@@ -367,10 +367,10 @@ static bool clip_cmd_parse(SagClipCmd *cmd, const char *begin, size_t len)
     }
     if (count == 0U)
         return false;
-    cmd->storage = sag_xmalloc(len + 1U);
+    cmd->storage = yew_xmalloc(len + 1U);
     (void)memcpy(cmd->storage, begin, len);
     cmd->storage[len] = '\0';
-    cmd->argv = sag_xcalloc(count + 1U, sizeof(*cmd->argv));
+    cmd->argv = yew_xcalloc(count + 1U, sizeof(*cmd->argv));
     count = 0U;
     at = cmd->storage;
     while (*at != '\0') {
@@ -385,9 +385,9 @@ static bool clip_cmd_parse(SagClipCmd *cmd, const char *begin, size_t len)
     return true;
 }
 
-static bool clip_custom_cmd(SagClipCmd *cmd, bool read_side)
+static bool clip_custom_cmd(YewClipCmd *cmd, bool read_side)
 {
-    const char *value = getenv("SAG_CLIPBOARD");
+    const char *value = getenv("YEW_CLIPBOARD");
     const char *body;
     const char *bar;
 
@@ -404,7 +404,7 @@ static bool clip_custom_cmd(SagClipCmd *cmd, bool read_side)
                           bar != NULL ? (size_t)(bar - body) : strlen(body));
 }
 
-static bool clip_command(SagClipCmd *cmd, SagClipBackend backend,
+static bool clip_command(YewClipCmd *cmd, YewClipBackend backend,
                          bool read_side, u8 target)
 {
     static const char *const wl_write[] = {
@@ -445,33 +445,33 @@ static bool clip_command(SagClipCmd *cmd, SagClipBackend backend,
     static const char *const pb_read[] = {"pbpaste"};
 
 #define CLIP_COPY_WORDS(words) \
-    clip_cmd_copy(cmd, words, SAG_ARRAY_LEN(words))
+    clip_cmd_copy(cmd, words, YEW_ARRAY_LEN(words))
     switch (backend) {
-    case SAG_CLIP_WL:
+    case YEW_CLIP_WL:
         if (read_side)
             return target == '*' ? CLIP_COPY_WORDS(wl_read_primary) :
                                    CLIP_COPY_WORDS(wl_read);
         return target == '*' ? CLIP_COPY_WORDS(wl_write_primary) :
                                CLIP_COPY_WORDS(wl_write);
-    case SAG_CLIP_XCLIP:
+    case YEW_CLIP_XCLIP:
         if (read_side)
             return target == '*' ? CLIP_COPY_WORDS(xclip_read_primary) :
                                    CLIP_COPY_WORDS(xclip_read);
         return target == '*' ? CLIP_COPY_WORDS(xclip_write_primary) :
                                CLIP_COPY_WORDS(xclip_write);
-    case SAG_CLIP_XSEL:
+    case YEW_CLIP_XSEL:
         if (read_side)
             return target == '*' ? CLIP_COPY_WORDS(xsel_read_primary) :
                                    CLIP_COPY_WORDS(xsel_read);
         return target == '*' ? CLIP_COPY_WORDS(xsel_write_primary) :
                                CLIP_COPY_WORDS(xsel_write);
-    case SAG_CLIP_PB:
+    case YEW_CLIP_PB:
         return read_side ? CLIP_COPY_WORDS(pb_read) :
                            CLIP_COPY_WORDS(pb_write);
-    case SAG_CLIP_CUSTOM:
+    case YEW_CLIP_CUSTOM:
         return clip_custom_cmd(cmd, read_side);
-    case SAG_CLIP_NONE:
-    case SAG_CLIP_OSC52:
+    case YEW_CLIP_NONE:
+    case YEW_CLIP_OSC52:
         break;
     }
 #undef CLIP_COPY_WORDS
@@ -483,7 +483,7 @@ static bool clip_pipe(int fds[2])
 {
     int i;
 
-    if (!sag_pipe_cloexec(fds))
+    if (!yew_pipe_cloexec(fds))
         return false;
     for (i = 0; i < 2; i++) {
         int flags = fcntl(fds[i], F_GETFD);
@@ -522,42 +522,42 @@ static void clip_child_exec_fail(int fd, int error)
 
 static bool clip_reap_track(pid_t pid)
 {
-    if (sag_clip.reap_len >= SAG_CLIP_REAP_MAX) {
-        sag_clip_reap();
-        if (sag_clip.reap_len >= SAG_CLIP_REAP_MAX)
+    if (yew_clip.reap_len >= YEW_CLIP_REAP_MAX) {
+        yew_clip_reap();
+        if (yew_clip.reap_len >= YEW_CLIP_REAP_MAX)
             return false;
     }
-    sag_clip.reap[sag_clip.reap_len++] = pid;
+    yew_clip.reap[yew_clip.reap_len++] = pid;
     return true;
 }
 
-void sag_clip_reap(void)
+void yew_clip_reap(void)
 {
     u32 out = 0U;
     u32 i;
 
-    if (!sag_clip.initialized)
+    if (!yew_clip.initialized)
         return;
-    for (i = 0U; i < sag_clip.reap_len; i++) {
-        pid_t result = waitpid(sag_clip.reap[i], NULL, WNOHANG);
+    for (i = 0U; i < yew_clip.reap_len; i++) {
+        pid_t result = waitpid(yew_clip.reap[i], NULL, WNOHANG);
 
         if (result == 0 || (result < 0 && errno == EINTR))
-            sag_clip.reap[out++] = sag_clip.reap[i];
+            yew_clip.reap[out++] = yew_clip.reap[i];
         else if (result < 0 && errno != ECHILD)
-            sag_log(SAG_LOG_WARN, "clipboard: waitpid failed: %s",
+            yew_log(YEW_LOG_WARN, "clipboard: waitpid failed: %s",
                     strerror(errno));
     }
-    sag_clip.reap_len = out;
+    yew_clip.reap_len = out;
 }
 
-u32 sag_clip_owned_children(void)
+u32 yew_clip_owned_children(void)
 {
-    return sag_clip.initialized ? sag_clip.reap_len : 0U;
+    return yew_clip.initialized ? yew_clip.reap_len : 0U;
 }
 
-static bool clip_spawn_writer(SagClipBackend backend, u8 target, i64 now_ms)
+static bool clip_spawn_writer(YewClipBackend backend, u8 target, i64 now_ms)
 {
-    SagClipCmd cmd;
+    YewClipCmd cmd;
     int data[2] = {-1, -1};
     int pidpipe[2] = {-1, -1};
     int execpipe[2] = {-1, -1};
@@ -577,8 +577,8 @@ static bool clip_spawn_writer(SagClipBackend backend, u8 target, i64 now_ms)
         clip_cmd_free(&cmd);
         return false;
     }
-    sag_clip_reap();
-    if (sag_clip.reap_len >= SAG_CLIP_REAP_MAX ||
+    yew_clip_reap();
+    if (yew_clip.reap_len >= YEW_CLIP_REAP_MAX ||
         !clip_nonblock(data[1]) || !clip_nonblock(pidpipe[0]) ||
         !clip_nonblock(execpipe[0])) {
         (void)close(data[0]);
@@ -649,45 +649,45 @@ static bool clip_spawn_writer(SagClipBackend backend, u8 target, i64 now_ms)
         (void)close(execpipe[0]);
         return false;
     }
-    sag_clip.write_fd = data[1];
-    sag_clip.pid_fd = pidpipe[0];
-    sag_clip.exec_fd = execpipe[0];
-    sag_clip.tool_pid = 0;
-    sag_clip.written = 0U;
-    sag_clip.exec_ready = false;
-    sag_clip.deadline_ms = now_ms > INT64_MAX - sag_clip.timeout_ms ?
-                           INT64_MAX : now_ms + sag_clip.timeout_ms;
+    yew_clip.write_fd = data[1];
+    yew_clip.pid_fd = pidpipe[0];
+    yew_clip.exec_fd = execpipe[0];
+    yew_clip.tool_pid = 0;
+    yew_clip.written = 0U;
+    yew_clip.exec_ready = false;
+    yew_clip.deadline_ms = now_ms > INT64_MAX - yew_clip.timeout_ms ?
+                           INT64_MAX : now_ms + yew_clip.timeout_ms;
     return true;
 }
 
 static void clip_close_active(void)
 {
-    if (sag_clip.write_fd >= 0)
-        (void)close(sag_clip.write_fd);
-    if (sag_clip.pid_fd >= 0)
-        (void)close(sag_clip.pid_fd);
-    if (sag_clip.exec_fd >= 0)
-        (void)close(sag_clip.exec_fd);
-    sag_clip.write_fd = -1;
-    sag_clip.pid_fd = -1;
-    sag_clip.exec_fd = -1;
-    sag_clip.tool_pid = 0;
-    sag_clip.written = 0U;
-    sag_clip.deadline_ms = 0;
-    sag_clip.exec_ready = false;
-    sag_clip.active_valid = false;
-    clip_value_clear(&sag_clip.active);
+    if (yew_clip.write_fd >= 0)
+        (void)close(yew_clip.write_fd);
+    if (yew_clip.pid_fd >= 0)
+        (void)close(yew_clip.pid_fd);
+    if (yew_clip.exec_fd >= 0)
+        (void)close(yew_clip.exec_fd);
+    yew_clip.write_fd = -1;
+    yew_clip.pid_fd = -1;
+    yew_clip.exec_fd = -1;
+    yew_clip.tool_pid = 0;
+    yew_clip.written = 0U;
+    yew_clip.deadline_ms = 0;
+    yew_clip.exec_ready = false;
+    yew_clip.active_valid = false;
+    clip_value_clear(&yew_clip.active);
 }
 
 static void clip_retry_active(void)
 {
-    if (!sag_clip.queued_valid) {
-        sag_regval_copy(&sag_clip.queued, &sag_clip.active);
-        sag_clip.queued_target = sag_clip.active_target;
-        sag_clip.queued_valid = true;
+    if (!yew_clip.queued_valid) {
+        yew_regval_copy(&yew_clip.queued, &yew_clip.active);
+        yew_clip.queued_target = yew_clip.active_target;
+        yew_clip.queued_valid = true;
     }
-    sag_clip.demoted |= clip_backend_bit(sag_clip.active_backend);
-    sag_clip.write_cached = false;
+    yew_clip.demoted |= clip_backend_bit(yew_clip.active_backend);
+    yew_clip.write_cached = false;
     clip_close_active();
 }
 
@@ -696,16 +696,16 @@ static void clip_read_tool_pid(void)
     pid_t pid;
     ssize_t got;
 
-    if (sag_clip.pid_fd < 0 || sag_clip.tool_pid > 0)
+    if (yew_clip.pid_fd < 0 || yew_clip.tool_pid > 0)
         return;
-    got = read(sag_clip.pid_fd, &pid, sizeof(pid));
+    got = read(yew_clip.pid_fd, &pid, sizeof(pid));
     if (got == (ssize_t)sizeof(pid)) {
-        sag_clip.tool_pid = pid;
-        (void)close(sag_clip.pid_fd);
-        sag_clip.pid_fd = -1;
+        yew_clip.tool_pid = pid;
+        (void)close(yew_clip.pid_fd);
+        yew_clip.pid_fd = -1;
     } else if (got == 0) {
-        (void)close(sag_clip.pid_fd);
-        sag_clip.pid_fd = -1;
+        (void)close(yew_clip.pid_fd);
+        yew_clip.pid_fd = -1;
     }
 }
 
@@ -714,17 +714,17 @@ static bool clip_read_exec_status(void)
     int exec_errno;
     ssize_t got;
 
-    if (sag_clip.exec_fd < 0 || sag_clip.exec_ready)
+    if (yew_clip.exec_fd < 0 || yew_clip.exec_ready)
         return true;
-    got = read(sag_clip.exec_fd, &exec_errno, sizeof(exec_errno));
+    got = read(yew_clip.exec_fd, &exec_errno, sizeof(exec_errno));
     if (got == 0) {
-        (void)close(sag_clip.exec_fd);
-        sag_clip.exec_fd = -1;
-        sag_clip.exec_ready = true;
+        (void)close(yew_clip.exec_fd);
+        yew_clip.exec_fd = -1;
+        yew_clip.exec_ready = true;
         return true;
     }
     if (got == (ssize_t)sizeof(exec_errno)) {
-        sag_log(SAG_LOG_WARN,
+        yew_log(YEW_LOG_WARN,
                 "clipboard: writer exec failed: %s; demoting backend",
                 strerror(exec_errno));
         return false;
@@ -732,76 +732,76 @@ static bool clip_read_exec_status(void)
     if (got < 0 && (errno == EAGAIN || errno == EWOULDBLOCK ||
                     errno == EINTR))
         return true;
-    sag_log(SAG_LOG_WARN,
+    yew_log(YEW_LOG_WARN,
             "clipboard: writer exec status failed; demoting backend");
     return false;
 }
 
-bool sag_clip_write(const RegVal *v, u8 target)
+bool yew_clip_write(const RegVal *v, u8 target)
 {
     if (v == NULL)
         return false;
     clip_init();
     if (target != '*')
         target = '+';
-    sag_regval_copy(&sag_clip.queued, v);
-    sag_clip.queued_target = target;
-    sag_clip.queued_valid = true;
+    yew_regval_copy(&yew_clip.queued, v);
+    yew_clip.queued_target = target;
+    yew_clip.queued_valid = true;
     return true;
 }
 
 static void clip_start_queued(i64 now_ms)
 {
     Bytebuf frame;
-    SagClipBackend backend;
+    YewClipBackend backend;
 
-    if (!sag_clip.queued_valid || sag_clip.active_valid)
+    if (!yew_clip.queued_valid || yew_clip.active_valid)
         return;
-    backend = sag_clip_detect();
-    if (backend == SAG_CLIP_NONE) {
-        sag_log(SAG_LOG_WARN,
+    backend = yew_clip_detect();
+    if (backend == YEW_CLIP_NONE) {
+        yew_log(YEW_LOG_WARN,
                 "clipboard: no writable system clipboard backend");
-        sag_clip.queued_valid = false;
-        clip_value_clear(&sag_clip.queued);
+        yew_clip.queued_valid = false;
+        clip_value_clear(&yew_clip.queued);
         return;
     }
-    sag_regval_copy(&sag_clip.active, &sag_clip.queued);
-    sag_clip.active_target = sag_clip.queued_target;
-    sag_clip.active_backend = backend;
-    sag_clip.active_valid = true;
-    sag_clip.queued_valid = false;
-    clip_value_clear(&sag_clip.queued);
+    yew_regval_copy(&yew_clip.active, &yew_clip.queued);
+    yew_clip.active_target = yew_clip.queued_target;
+    yew_clip.active_backend = backend;
+    yew_clip.active_valid = true;
+    yew_clip.queued_valid = false;
+    clip_value_clear(&yew_clip.queued);
 
-    if (backend == SAG_CLIP_OSC52) {
+    if (backend == YEW_CLIP_OSC52) {
         bytebuf_init(&frame);
-        if (sag_osc52_build_env(&frame, sag_clip.active.bytes.data,
-                                sag_clip.active.bytes.len, NULL)) {
-            sag_term_oob_queue(frame.data, frame.len);
+        if (yew_osc52_build_env(&frame, yew_clip.active.bytes.data,
+                                yew_clip.active.bytes.len, NULL)) {
+            yew_term_oob_queue(frame.data, frame.len);
             bytebuf_free(&frame);
             clip_close_active();
             return;
         }
         bytebuf_free(&frame);
         while (!clip_remote()) {
-            SagClipBackend fallback = clip_detect_subprocess_write();
+            YewClipBackend fallback = clip_detect_subprocess_write();
 
-            if (fallback == SAG_CLIP_NONE)
+            if (fallback == YEW_CLIP_NONE)
                 break;
-            sag_clip.active_backend = fallback;
-            if (clip_spawn_writer(fallback, sag_clip.active_target, now_ms))
+            yew_clip.active_backend = fallback;
+            if (clip_spawn_writer(fallback, yew_clip.active_target, now_ms))
                 return;
-            sag_log(SAG_LOG_WARN,
+            yew_log(YEW_LOG_WARN,
                     "clipboard: cannot start fallback writer backend");
-            sag_clip.demoted |= clip_backend_bit(fallback);
-            sag_clip.write_cached = false;
+            yew_clip.demoted |= clip_backend_bit(fallback);
+            yew_clip.write_cached = false;
         }
-        sag_log(SAG_LOG_WARN,
+        yew_log(YEW_LOG_WARN,
                 "clipboard: payload exceeds OSC 52 limit; register + retains it");
         clip_close_active();
         return;
     }
-    if (!clip_spawn_writer(backend, sag_clip.active_target, now_ms)) {
-        sag_log(SAG_LOG_WARN, "clipboard: cannot start writer backend");
+    if (!clip_spawn_writer(backend, yew_clip.active_target, now_ms)) {
+        yew_log(YEW_LOG_WARN, "clipboard: cannot start writer backend");
         clip_retry_active();
     }
 }
@@ -810,49 +810,49 @@ static void clip_start_available(i64 now_ms)
 {
     u32 attempts = 0U;
 
-    while (sag_clip.queued_valid && !sag_clip.active_valid &&
-           attempts++ < SAG_CLIP_BACKEND_COUNT)
+    while (yew_clip.queued_valid && !yew_clip.active_valid &&
+           attempts++ < YEW_CLIP_BACKEND_COUNT)
         clip_start_queued(now_ms);
 }
 
-void sag_clip_after_render(Bytebuf *terminal_out, i64 now_ms)
+void yew_clip_after_render(Bytebuf *terminal_out, i64 now_ms)
 {
     clip_init();
-    sag_clip_reap();
-    sag_clip_pump(now_ms);
+    yew_clip_reap();
+    yew_clip_pump(now_ms);
     clip_start_available(now_ms);
-    sag_clip_pump(now_ms);
+    yew_clip_pump(now_ms);
     if (terminal_out != NULL)
-        (void)sag_term_oob_flush(terminal_out);
+        (void)yew_term_oob_flush(terminal_out);
 }
 
-void sag_clip_pump(i64 now_ms)
+void yew_clip_pump(i64 now_ms)
 {
     u32 fallbacks = 0U;
 
-    if (!sag_clip.initialized)
+    if (!yew_clip.initialized)
         return;
-    sag_clip_reap();
+    yew_clip_reap();
     for (;;) {
-        if (!sag_clip.active_valid)
+        if (!yew_clip.active_valid)
             return;
         clip_read_tool_pid();
         if (!clip_read_exec_status()) {
             clip_retry_active();
-        } else if (now_ms >= sag_clip.deadline_ms) {
-            if (sag_clip.tool_pid > 0)
-                (void)kill(sag_clip.tool_pid, SIGKILL);
-            sag_log(SAG_LOG_WARN, "clipboard: writer timed out");
+        } else if (now_ms >= yew_clip.deadline_ms) {
+            if (yew_clip.tool_pid > 0)
+                (void)kill(yew_clip.tool_pid, SIGKILL);
+            yew_log(YEW_LOG_WARN, "clipboard: writer timed out");
             clip_retry_active();
         } else {
-            while (sag_clip.written < sag_clip.active.bytes.len) {
+            while (yew_clip.written < yew_clip.active.bytes.len) {
                 ssize_t n = write(
-                    sag_clip.write_fd,
-                    sag_clip.active.bytes.data + sag_clip.written,
-                    sag_clip.active.bytes.len - sag_clip.written);
+                    yew_clip.write_fd,
+                    yew_clip.active.bytes.data + yew_clip.written,
+                    yew_clip.active.bytes.len - yew_clip.written);
 
                 if (n > 0) {
-                    sag_clip.written += (size_t)n;
+                    yew_clip.written += (size_t)n;
                     continue;
                 }
                 if (n < 0 && errno == EINTR)
@@ -860,25 +860,25 @@ void sag_clip_pump(i64 now_ms)
                 if (n < 0 && (errno == EAGAIN || errno == EWOULDBLOCK))
                     return;
                 if (n < 0 && errno == EPIPE) {
-                    sag_log(
-                        SAG_LOG_WARN,
+                    yew_log(
+                        YEW_LOG_WARN,
                         "clipboard: writer closed its pipe; demoting backend");
                 } else {
-                    sag_log(SAG_LOG_WARN, "clipboard: write failed: %s",
+                    yew_log(YEW_LOG_WARN, "clipboard: write failed: %s",
                             strerror(errno));
                 }
                 clip_retry_active();
                 break;
             }
-            if (sag_clip.active_valid &&
-                sag_clip.written == sag_clip.active.bytes.len) {
-                if (sag_clip.write_fd >= 0) {
-                    (void)close(sag_clip.write_fd);
-                    sag_clip.write_fd = -1;
+            if (yew_clip.active_valid &&
+                yew_clip.written == yew_clip.active.bytes.len) {
+                if (yew_clip.write_fd >= 0) {
+                    (void)close(yew_clip.write_fd);
+                    yew_clip.write_fd = -1;
                 }
                 if (!clip_read_exec_status()) {
                     clip_retry_active();
-                } else if (sag_clip.exec_ready) {
+                } else if (yew_clip.exec_ready) {
                     clip_close_active();
                     return;
                 } else {
@@ -886,36 +886,36 @@ void sag_clip_pump(i64 now_ms)
                 }
             }
         }
-        if (++fallbacks >= SAG_CLIP_BACKEND_COUNT)
+        if (++fallbacks >= YEW_CLIP_BACKEND_COUNT)
             return;
         clip_start_available(now_ms);
     }
 }
 
-int sag_clip_write_fd(void)
+int yew_clip_write_fd(void)
 {
-    if (!sag_clip.initialized)
+    if (!yew_clip.initialized)
         return -1;
-    return sag_clip.write_fd >= 0 ? sag_clip.write_fd : sag_clip.exec_fd;
+    return yew_clip.write_fd >= 0 ? yew_clip.write_fd : yew_clip.exec_fd;
 }
 
-i64 sag_clip_deadline(void)
+i64 yew_clip_deadline(void)
 {
-    return sag_clip.initialized && sag_clip.active_valid ?
-           sag_clip.deadline_ms : -1;
+    return yew_clip.initialized && yew_clip.active_valid ?
+           yew_clip.deadline_ms : -1;
 }
 
-bool sag_clip_busy(void)
+bool yew_clip_busy(void)
 {
-    return sag_clip.initialized && sag_clip.active_valid;
+    return yew_clip.initialized && yew_clip.active_valid;
 }
 
-bool sag_clip_pending(void)
+bool yew_clip_pending(void)
 {
-    return sag_clip.initialized && sag_clip.queued_valid;
+    return yew_clip.initialized && yew_clip.queued_valid;
 }
 
-static bool clip_spawn_reader(const SagClipCmd *cmd, int *fd, pid_t *pid)
+static bool clip_spawn_reader(const YewClipCmd *cmd, int *fd, pid_t *pid)
 {
     int output[2];
     pid_t child;
@@ -957,10 +957,10 @@ static bool clip_spawn_reader(const SagClipCmd *cmd, int *fd, pid_t *pid)
     return true;
 }
 
-bool sag_clip_read(RegVal *out, u8 target)
+bool yew_clip_read(RegVal *out, u8 target)
 {
-    SagClipBackend backend;
-    SagClipCmd cmd;
+    YewClipBackend backend;
+    YewClipCmd cmd;
     Bytebuf bytes;
     int fd = -1;
     pid_t pid = -1;
@@ -973,19 +973,19 @@ bool sag_clip_read(RegVal *out, u8 target)
     if (out == NULL)
         return false;
     clip_init();
-    backend = sag_clip_detect_read();
-    if (backend == SAG_CLIP_NONE || backend == SAG_CLIP_OSC52) {
-        sag_log(SAG_LOG_WARN,
+    backend = yew_clip_detect_read();
+    if (backend == YEW_CLIP_NONE || backend == YEW_CLIP_OSC52) {
+        yew_log(YEW_LOG_WARN,
                 "clipboard: no readable system clipboard backend");
         return false;
     }
     if (!clip_command(&cmd, backend, true, target == '*' ? '*' : '+')) {
-        sag_log(SAG_LOG_WARN,
+        yew_log(YEW_LOG_WARN,
                 "clipboard: selected backend has no read command");
         return false;
     }
     if (!clip_spawn_reader(&cmd, &fd, &pid)) {
-        sag_log(SAG_LOG_WARN, "clipboard: cannot start reader: %s",
+        yew_log(YEW_LOG_WARN, "clipboard: cannot start reader: %s",
                 strerror(errno));
         clip_cmd_free(&cmd);
         return false;
@@ -993,17 +993,17 @@ bool sag_clip_read(RegVal *out, u8 target)
     clip_cmd_free(&cmd);
     bytebuf_init(&bytes);
     deadline = clip_now_ms();
-    deadline = deadline > INT64_MAX - sag_clip.timeout_ms ? INT64_MAX :
-                                                                deadline + sag_clip.timeout_ms;
+    deadline = deadline > INT64_MAX - yew_clip.timeout_ms ? INT64_MAX :
+                                                                deadline + yew_clip.timeout_ms;
     while ((!reaped || !eof) && !failed) {
         struct pollfd pfd;
         i64 now = clip_now_ms();
         int timeout;
 
         if (now >= deadline) {
-            sag_log(SAG_LOG_WARN,
+            yew_log(YEW_LOG_WARN,
                     "clipboard: reader timed out after %lld ms",
-                    (long long)sag_clip.timeout_ms);
+                    (long long)yew_clip.timeout_ms);
             failed = true;
             break;
         }
@@ -1015,7 +1015,7 @@ bool sag_clip_read(RegVal *out, u8 target)
             int ready = poll(&pfd, 1U, timeout);
 
             if (ready < 0 && errno != EINTR) {
-                sag_log(SAG_LOG_WARN, "clipboard: reader poll failed: %s",
+                yew_log(YEW_LOG_WARN, "clipboard: reader poll failed: %s",
                         strerror(errno));
                 failed = true;
                 break;
@@ -1027,10 +1027,10 @@ bool sag_clip_read(RegVal *out, u8 target)
                     ssize_t n = read(fd, chunk, sizeof(chunk));
 
                     if (n > 0) {
-                        if ((u64)n > sag_clip.read_max - bytes.len) {
-                            sag_log(SAG_LOG_WARN,
+                        if ((u64)n > yew_clip.read_max - bytes.len) {
+                            yew_log(YEW_LOG_WARN,
                                     "clipboard: read exceeds %llu-byte limit",
-                                    (unsigned long long)sag_clip.read_max);
+                                    (unsigned long long)yew_clip.read_max);
                             failed = true;
                             break;
                         }
@@ -1045,7 +1045,7 @@ bool sag_clip_read(RegVal *out, u8 target)
                     } else if (errno == EAGAIN || errno == EWOULDBLOCK) {
                         break;
                     } else {
-                        sag_log(SAG_LOG_WARN,
+                        yew_log(YEW_LOG_WARN,
                                 "clipboard: reader pipe failed: %s",
                                 strerror(errno));
                         failed = true;
@@ -1060,7 +1060,7 @@ bool sag_clip_read(RegVal *out, u8 target)
             if (got == pid)
                 reaped = true;
             else if (got < 0 && errno != EINTR) {
-                sag_log(SAG_LOG_WARN, "clipboard: reader wait failed: %s",
+                yew_log(YEW_LOG_WARN, "clipboard: reader wait failed: %s",
                         strerror(errno));
                 failed = true;
                 reaped = errno == ECHILD;
@@ -1083,53 +1083,53 @@ bool sag_clip_read(RegVal *out, u8 target)
     }
     if (!failed) {
         if (WIFEXITED(status))
-            sag_log(SAG_LOG_WARN,
+            yew_log(YEW_LOG_WARN,
                     "clipboard: reader exited with status %d",
                     WEXITSTATUS(status));
         else if (WIFSIGNALED(status))
-            sag_log(SAG_LOG_WARN,
+            yew_log(YEW_LOG_WARN,
                     "clipboard: reader terminated by signal %d",
                     WTERMSIG(status));
         else
-            sag_log(SAG_LOG_WARN,
+            yew_log(YEW_LOG_WARN,
                     "clipboard: reader did not exit cleanly");
     }
     bytebuf_free(&bytes);
     return false;
 }
 
-void sag_clip_set_read_max(u64 max_bytes)
+void yew_clip_set_read_max(u64 max_bytes)
 {
     clip_init();
-    sag_clip.read_max = max_bytes;
+    yew_clip.read_max = max_bytes;
 }
 
-void sag_clip_shutdown(void)
+void yew_clip_shutdown(void)
 {
     u32 i;
 
-    if (!sag_clip.initialized)
+    if (!yew_clip.initialized)
         return;
     clip_read_tool_pid();
-    if (sag_clip.tool_pid > 0)
-        (void)kill(sag_clip.tool_pid, SIGKILL);
-    if (sag_clip.write_fd >= 0)
-        (void)close(sag_clip.write_fd);
-    if (sag_clip.pid_fd >= 0)
-        (void)close(sag_clip.pid_fd);
-    if (sag_clip.exec_fd >= 0)
-        (void)close(sag_clip.exec_fd);
-    for (i = 0U; i < sag_clip.reap_len; i++) {
-        while (waitpid(sag_clip.reap[i], NULL, 0) < 0 && errno == EINTR)
+    if (yew_clip.tool_pid > 0)
+        (void)kill(yew_clip.tool_pid, SIGKILL);
+    if (yew_clip.write_fd >= 0)
+        (void)close(yew_clip.write_fd);
+    if (yew_clip.pid_fd >= 0)
+        (void)close(yew_clip.pid_fd);
+    if (yew_clip.exec_fd >= 0)
+        (void)close(yew_clip.exec_fd);
+    for (i = 0U; i < yew_clip.reap_len; i++) {
+        while (waitpid(yew_clip.reap[i], NULL, 0) < 0 && errno == EINTR)
             ;
     }
-    sag_regval_free(&sag_clip.queued);
-    sag_regval_free(&sag_clip.active);
-    (void)memset(&sag_clip, 0, sizeof(sag_clip));
+    yew_regval_free(&yew_clip.queued);
+    yew_regval_free(&yew_clip.active);
+    (void)memset(&yew_clip, 0, sizeof(yew_clip));
 }
 
-void sag_clip_reset(void)
+void yew_clip_reset(void)
 {
-    sag_clip_shutdown();
+    yew_clip_shutdown();
     clip_init();
 }

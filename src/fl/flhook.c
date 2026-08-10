@@ -38,12 +38,12 @@ bool fl_event_parse(const char *name, u32 len, u32 *out)
 void fl_hook_table_init(FlHookTable *t, const FlHookOps *ops, void *ctx)
 {
     if (t == NULL)
-        SAG_BUG("fletch hooks: NULL table");
+        YEW_BUG("fletch hooks: NULL table");
     (void)memset(t, 0, sizeof(*t));
     if (ops != NULL)
         t->ops = *ops;
     t->ctx = ctx;
-    t->error_limit = (u32)SAG_HOOK_ERROR_LIMIT_DEFAULT;
+    t->error_limit = (u32)YEW_HOOK_ERROR_LIMIT_DEFAULT;
 }
 
 void fl_hook_table_free(FlHookTable *t)
@@ -58,7 +58,7 @@ void fl_hook_table_free(FlHookTable *t)
 void fl_hook_error_limit(FlHookTable *t, u32 limit)
 {
     if (t == NULL)
-        SAG_BUG("fletch hooks: NULL table");
+        YEW_BUG("fletch hooks: NULL table");
     t->error_limit = limit == 0U ? 1U : limit;
 }
 
@@ -69,7 +69,7 @@ u32 fl_reg_add(FlRegLedger *l, u32 origin_id, RegKind kind, u32 handle)
     u32 want;
 
     if (l == NULL)
-        SAG_BUG("fletch registration ledger: NULL");
+        YEW_BUG("fletch registration ledger: NULL");
     for (i = 0U; i < l->n; i++) {
         if (!l->v[i].active) {
             r = &l->v[i];
@@ -82,7 +82,7 @@ u32 fl_reg_add(FlRegLedger *l, u32 origin_id, RegKind kind, u32 handle)
     }
     if (l->n == l->cap) {
         want = l->cap == 0U ? 8U : l->cap * 2U;
-        l->v = (FlRegistration *)sag_xreallocarray(l->v, want,
+        l->v = (FlRegistration *)yew_xreallocarray(l->v, want,
                                                     sizeof(*l->v));
         l->cap = want;
     }
@@ -116,15 +116,15 @@ u32 fl_hook_add(FlHookTable *t, u32 origin, u32 event, FlValue fn)
     u32 ledger_id;
 
     if (t == NULL || event >= (u32)FL_EV__N)
-        SAG_BUG("fletch hooks: invalid add");
+        YEW_BUG("fletch hooks: invalid add");
     if (fn.t != (u8)FL_CLOSURE && fn.t != (u8)FL_NATIVE)
-        SAG_BUG("fletch hooks: callback is not callable");
+        YEW_BUG("fletch hooks: callback is not callable");
     for (slot = 0U; slot < t->n; slot++)
         if (!t->v[slot].active)
             break;
     if (slot == t->n && t->n == t->cap) {
         want = t->cap == 0U ? 8U : t->cap * 2U;
-        t->v = (FlHook *)sag_xreallocarray(t->v, want, sizeof(*t->v));
+        t->v = (FlHook *)yew_xreallocarray(t->v, want, sizeof(*t->v));
         t->cap = want;
     }
     /* The handle is the insertion index plus one and stays stable because
@@ -201,7 +201,7 @@ static bool default_call(void *ctx, FlVm *vm, FlValue fn,
 
     (void)ctx;
     if (vm == NULL)
-        SAG_BUG("fletch hooks: default call without VM");
+        YEW_BUG("fletch hooks: default call without VM");
     if (fl_call(vm, fn, args, (u32)nargs, &ignored))
         return true;
     if (err != NULL)
@@ -257,7 +257,7 @@ void fl_hook_fire(FlHookTable *t, FlVm *vm, u32 event,
         }
         return;
     }
-    if (t->depth >= (u8)SAG_HOOK_DEPTH_MAX) {
+    if (t->depth >= (u8)YEW_HOOK_DEPTH_MAX) {
         FlHook *caller = hook_by_ledger(t, t->active_ledger[t->depth - 1U]);
 
         if (caller != NULL)
@@ -280,7 +280,7 @@ void fl_hook_mark(FlVm *vm, void *ctx)
     u32 i;
 
     if (vm == NULL || t == NULL)
-        SAG_BUG("fletch hooks: NULL mark provider");
+        YEW_BUG("fletch hooks: NULL mark provider");
     for (i = 0U; i < t->n; i++) {
         if (t->v[i].active)
             fl_gc_mark_value(vm, t->v[i].fn);

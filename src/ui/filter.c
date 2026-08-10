@@ -14,12 +14,12 @@
 
 static u64 g_scored;
 
-u64 sag_filter_scored(void)
+u64 yew_filter_scored(void)
 {
     return g_scored;
 }
 
-void sag_filter_scored_reset(void)
+void yew_filter_scored_reset(void)
 {
     g_scored = 0U;
 }
@@ -33,13 +33,13 @@ static i64 now_us(void)
     return (i64)ts.tv_sec * 1000000 + (i64)ts.tv_nsec / 1000;
 }
 
-void sag_filter_init(FilterState *f)
+void yew_filter_init(FilterState *f)
 {
     if (f != NULL)
         (void)memset(f, 0, sizeof(*f));
 }
 
-void sag_filter_free(FilterState *f)
+void yew_filter_free(FilterState *f)
 {
     if (f == NULL)
         return;
@@ -52,12 +52,12 @@ static void reserve(FilterState *f, u32 n)
 {
     if (f->cap >= n)
         return;
-    f->cand = sag_xreallocarray(f->cand, n, sizeof(*f->cand));
-    f->score = sag_xreallocarray(f->score, n, sizeof(*f->score));
+    f->cand = yew_xreallocarray(f->cand, n, sizeof(*f->cand));
+    f->score = yew_xreallocarray(f->score, n, sizeof(*f->score));
     f->cap = n;
 }
 
-void sag_filter_reset(FilterState *f, const PickItem *items, u32 n,
+void yew_filter_reset(FilterState *f, const PickItem *items, u32 n,
                       u32 src_gen)
 {
     u32 i;
@@ -94,20 +94,20 @@ void sag_filter_reset(FilterState *f, const PickItem *items, u32 n,
 
 /*
  * The scoring key for one candidate: §2's two-pass basename rule,
- * without the sort sag_fz_rank does.
+ * without the sort yew_fz_rank does.
  */
 static i32 score_one(const PickItem *items, const FilterCand *c,
                      bool path_mode, const char *pat, u32 plen)
 {
     const char *text = items[c->idx].label;
     i32 sb;
-    i32 sp = SAG_FZ_NO_MATCH;
+    i32 sp = YEW_FZ_NO_MATCH;
     u32 boff = 0U;
     u32 blen = c->len;
 
     g_scored++;
     if (text == NULL)
-        return SAG_FZ_NO_MATCH;
+        return YEW_FZ_NO_MATCH;
     if (path_mode) {
         u32 end = c->len;
         u32 start;
@@ -120,7 +120,7 @@ static i32 score_one(const PickItem *items, const FilterCand *c,
         boff = start;
         blen = end - start;
     }
-    sb = sag_fz_score(pat, plen, text + boff, blen, NULL);
+    sb = yew_fz_score(pat, plen, text + boff, blen, NULL);
     /*
      * A basename hit at prefix strength or better outranks every fuzzy
      * path match, globally — which is why `src` selects `src/` and not
@@ -129,15 +129,15 @@ static i32 score_one(const PickItem *items, const FilterCand *c,
      * on exactly the candidates that matched best.
      */
     if (sb >= 5000) {
-        return sb > INT32_MAX - (i32)SAG_FZ_BASENAME_TIER
+        return sb > INT32_MAX - (i32)YEW_FZ_BASENAME_TIER
                    ? INT32_MAX
-                   : sb + (i32)SAG_FZ_BASENAME_TIER;
+                   : sb + (i32)YEW_FZ_BASENAME_TIER;
     }
     if (path_mode)
-        sp = sag_fz_score(pat, plen, text, c->len, NULL);
-    if (sb == SAG_FZ_NO_MATCH && sp == SAG_FZ_NO_MATCH)
-        return SAG_FZ_NO_MATCH;
-    if (sb != SAG_FZ_NO_MATCH && sb >= sp)
+        sp = yew_fz_score(pat, plen, text, c->len, NULL);
+    if (sb == YEW_FZ_NO_MATCH && sp == YEW_FZ_NO_MATCH)
+        return YEW_FZ_NO_MATCH;
+    if (sb != YEW_FZ_NO_MATCH && sb >= sp)
         return sb;
     return sp;
 }
@@ -160,7 +160,7 @@ static bool narrow_step(FilterState *f, const PickItem *items,
         i32 s = score_one(items, &f->cand[f->narrow_read], path_mode,
                           f->pat, f->plen);
 
-        if (s != SAG_FZ_NO_MATCH) {
+        if (s != YEW_FZ_NO_MATCH) {
             f->cand[f->n_cand] = f->cand[f->narrow_read];
             f->score[f->n_cand] = s;
             f->n_cand++;
@@ -185,7 +185,7 @@ static bool extends(const FilterState *f, const char *pat, u32 plen)
     return memcmp(f->pat, pat, (size_t)f->plen) == 0;
 }
 
-bool sag_filter_apply(FilterState *f, const PickItem *items, u32 n,
+bool yew_filter_apply(FilterState *f, const PickItem *items, u32 n,
                       bool path_mode, const char *pat, u32 plen,
                       i64 budget_us)
 {
@@ -193,15 +193,15 @@ bool sag_filter_apply(FilterState *f, const PickItem *items, u32 n,
 
     if (f == NULL || items == NULL)
         return true;
-    if (plen > (u32)SAG_FILTER_PAT_MAX - 1U)
-        plen = (u32)SAG_FILTER_PAT_MAX - 1U;
+    if (plen > (u32)YEW_FILTER_PAT_MAX - 1U)
+        plen = (u32)YEW_FILTER_PAT_MAX - 1U;
     /*
      * The item source changed under us, so nothing the old set knew is
      * still true.  Cheaper to notice here than to hand back a list of
      * indices into a table that has moved.
      */
     if (n != f->n_total) {
-        sag_filter_reset(f, items, n, f->src_gen);
+        yew_filter_reset(f, items, n, f->src_gen);
         can_narrow = plen == 0U;
     } else {
         can_narrow = !f->scanning && !f->narrowing &&
@@ -235,10 +235,10 @@ bool sag_filter_apply(FilterState *f, const PickItem *items, u32 n,
     f->scan_at = 0U;
     f->scanning = true;
     f->narrowing = false;
-    return !sag_filter_step(f, items, path_mode, budget_us);
+    return !yew_filter_step(f, items, path_mode, budget_us);
 }
 
-bool sag_filter_step(FilterState *f, const PickItem *items, bool path_mode,
+bool yew_filter_step(FilterState *f, const PickItem *items, bool path_mode,
                      i64 budget_us)
 {
     i64 started;
@@ -263,7 +263,7 @@ bool sag_filter_step(FilterState *f, const PickItem *items, bool path_mode,
                     : (u32)strlen(items[f->scan_at].label);
         s = score_one(items, &c, path_mode, f->pat, f->plen);
         f->scan_at++;
-        if (s != SAG_FZ_NO_MATCH) {
+        if (s != YEW_FZ_NO_MATCH) {
             f->cand[f->n_cand] = c;
             f->score[f->n_cand] = s;
             f->n_cand++;
@@ -282,7 +282,7 @@ bool sag_filter_step(FilterState *f, const PickItem *items, bool path_mode,
     return false;
 }
 
-u32 sag_filter_matched(const FilterState *f)
+u32 yew_filter_matched(const FilterState *f)
 {
     return f == NULL ? 0U : f->n_cand;
 }
@@ -293,7 +293,7 @@ u32 sag_filter_matched(const FilterState *f)
  * Bounded insertion into `max` slots: one pass over the matches, no
  * allocation, and no sort of a set whose tail nobody will ever see.
  */
-u32 sag_filter_top(const FilterState *f, const PickItem *items,
+u32 yew_filter_top(const FilterState *f, const PickItem *items,
                    bool path_mode, FzRanked *out, u32 max)
 {
     u32 held = 0U;
@@ -319,7 +319,7 @@ u32 sag_filter_top(const FilterState *f, const PickItem *items,
                  * THE EMPTY PATTERN PRESERVES SOURCE ORDER.
                  *
                  * Everything scores the same, so any tie-break at all
-                 * would reorder the whole list — and sag_fz_rank has
+                 * would reorder the whole list — and yew_fz_rank has
                  * the same special case for the same reason.  Without
                  * it a freshly opened picker showed its candidates
                  * sorted by length, which put row 0 somewhere the
@@ -330,7 +330,7 @@ u32 sag_filter_top(const FilterState *f, const PickItem *items,
             } else {
                 /*
                  * Ties break by shorter text, then by bytes — the same
-                 * order sag_fz_rank uses, so the two agree.  A tie
+                 * order yew_fz_rank uses, so the two agree.  A tie
                  * broken by array position would depend on walk order
                  * and leak the filesystem into the list (invariant 5).
                  */
@@ -378,7 +378,7 @@ u32 sag_filter_top(const FilterState *f, const PickItem *items,
                 boff = start;
                 blen = end - start;
             }
-            sb = sag_fz_score(f->pat, f->plen, text + boff, blen, &m);
+            sb = yew_fz_score(f->pat, f->plen, text + boff, blen, &m);
             if (sb >= 5000 || !path_mode) {
                 u32 j;
 
@@ -386,7 +386,7 @@ u32 sag_filter_top(const FilterState *f, const PickItem *items,
                     m.pos[j] = (u16)(m.pos[j] + boff);
                 out[at].m = m;
             } else {
-                (void)sag_fz_score(f->pat, f->plen, text, f->cand[i].len,
+                (void)yew_fz_score(f->pat, f->plen, text, f->cand[i].len,
                                    &m);
                 out[at].m = m;
             }

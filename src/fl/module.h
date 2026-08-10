@@ -1,5 +1,5 @@
-#ifndef SAG_FL_MODULE_H
-#define SAG_FL_MODULE_H
+#ifndef YEW_FL_MODULE_H
+#define YEW_FL_MODULE_H
 
 /*
  * Sprint 31 deliverable 9: `import`.
@@ -77,4 +77,4 @@ bool fl_module_eval_source(FlVm *vm, const char *path,
 /* Releases the table itself.  The exports maps are the collector's. */
 void fl_mod_free(FlVm *vm);
 
-#endif /* SAG_FL_MODULE_H */
+#endif /* YEW_FL_MODULE_H */

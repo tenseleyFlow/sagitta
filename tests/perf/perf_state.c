@@ -96,15 +96,15 @@ static i64 median_of(i64 *v, size_t n)
 
 static void ed_open(Ed *ed)
 {
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    sag_ed_init(ed);
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    yew_ed_init(ed);
     ed->ws.dir = arena_strdup(&ed->arena, "/w");
-    if (!sag_ed_open_scratch(ed)) {
+    if (!yew_ed_open_scratch(ed)) {
         (void)fprintf(stderr, "perf_state: cannot open a scratch buffer\n");
         exit(2);
     }
-    sag_layout_compute(ed->pane_root, (Rect){0U, 0U, 240U, 96U});
+    yew_layout_compute(ed->pane_root, (Rect){0U, 0U, 240U, 96U});
 }
 
 /* 512 tabs, the first of them split to 16 leaves — the §9 shape. */
@@ -118,21 +118,21 @@ static void build_maximal(Ed *ed)
 
         (void)snprintf(path, sizeof(path), "/w/max/f%03u.txt",
                        (unsigned)i);
-        if (sag_tab_open(ed, path) < 0)
+        if (yew_tab_open(ed, path) < 0)
             break;
     }
-    sag_tab_switch(ed, 1);
-    sag_layout_compute(ed->pane_root, (Rect){0U, 0U, 240U, 96U});
+    yew_tab_switch(ed, 1);
+    yew_layout_compute(ed->pane_root, (Rect){0U, 0U, 240U, 96U});
     for (i = 1U; i < (u32)PERF_STATE_LEAVES; i++) {
-        Pane *nu = sag_pane_split(ed, ed->focus,
-                                  (i % 2U) == 0U ? SAG_SPLIT_H
-                                                 : SAG_SPLIT_V);
+        Pane *nu = yew_pane_split(ed, ed->focus,
+                                  (i % 2U) == 0U ? YEW_SPLIT_H
+                                                 : YEW_SPLIT_V);
 
         if (nu == NULL)
             break;
         ed->focus = nu;
-        sag_tab_at(ed, 1)->focus = nu;
-        sag_layout_compute(ed->pane_root, (Rect){0U, 0U, 240U, 96U});
+        yew_tab_at(ed, 1)->focus = nu;
+        yew_layout_compute(ed->pane_root, (Rect){0U, 0U, 240U, 96U});
     }
 }
 
@@ -150,7 +150,7 @@ static int measure_emit(const Ed *ed, i64 *out_ns, u64 *out_bytes)
 
         bytebuf_init(&doc);
         start = now_ns();
-        sag_state_emit(ed, &doc);
+        yew_state_emit(ed, &doc);
         end = now_ns();
         if (start < 0 || end < 0)
             return 2;
@@ -177,7 +177,7 @@ static int measure_parse(const Bytebuf *doc, i64 *out_ns)
 
         arena_init(&a);
         start = now_ns();
-        lit = sag_fl_parse(&a, doc->data, doc->len, &err);
+        lit = yew_fl_parse(&a, doc->data, doc->len, &err);
         end = now_ns();
         if (lit == NULL) {
             (void)fprintf(stderr, "perf_state: corpus parse failed\n");
@@ -215,20 +215,20 @@ static int measure_restore(const Bytebuf *doc, i64 *out_ns, u64 *out_reads)
         i64 end;
 
         ed_open(&ed);
-        sag_file_load_count_reset();
+        yew_file_load_count_reset();
         start = now_ns();
-        (void)sag_state_apply(&ed, doc->data, doc->len);
-        sag_ed_layout(&ed);
+        (void)yew_state_apply(&ed, doc->data, doc->len);
+        yew_ed_layout(&ed);
         end = now_ns();
         if (start < 0 || end < 0) {
-            sag_ed_free(&ed);
+            yew_ed_free(&ed);
             return 2;
         }
         if (t >= (u32)PERF_STATE_WARMUPS) {
             samples[t - PERF_STATE_WARMUPS] = end - start;
-            *out_reads = sag_file_load_count();
+            *out_reads = yew_file_load_count();
         }
-        sag_ed_free(&ed);
+        yew_ed_free(&ed);
     }
     *out_ns = median_of(samples, PERF_STATE_TRIALS);
     return 0;
@@ -253,11 +253,11 @@ int main(void)
     bytebuf_init(&big_doc);
     rc = measure_emit(&big, &emit_ns, &bytes);
     if (rc != 0) {
-        sag_ed_free(&big);
+        yew_ed_free(&big);
         return rc;
     }
-    sag_state_emit(&big, &big_doc);
-    sag_ed_free(&big);
+    yew_state_emit(&big, &big_doc);
+    yew_ed_free(&big);
 
     rc = measure_parse(&big_doc, &parse_ns);
     if (rc != 0) {
@@ -273,12 +273,12 @@ int main(void)
         char path[64];
 
         (void)snprintf(path, sizeof(path), "/w/r/f%02u.txt", (unsigned)i);
-        if (sag_tab_open(&forty, path) < 0)
+        if (yew_tab_open(&forty, path) < 0)
             break;
     }
     bytebuf_init(&forty_doc);
-    sag_state_emit(&forty, &forty_doc);
-    sag_ed_free(&forty);
+    yew_state_emit(&forty, &forty_doc);
+    yew_ed_free(&forty);
 
     rc = measure_restore(&forty_doc, &restore_ns, &reads);
     if (rc != 0) {
@@ -320,6 +320,6 @@ int main(void)
 
     bytebuf_free(&big_doc);
     bytebuf_free(&forty_doc);
-    sag_cmd_shutdown();
+    yew_cmd_shutdown();
     return status;
 }

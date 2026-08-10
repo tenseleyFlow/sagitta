@@ -1,5 +1,5 @@
-#ifndef SAG_EDIT_SELECT_H
-#define SAG_EDIT_SELECT_H
+#ifndef YEW_EDIT_SELECT_H
+#define YEW_EDIT_SELECT_H
 
 #include "edit/motion.h"
 #include "text/cursor.h"
@@ -9,9 +9,9 @@
 typedef struct Win Win;
 
 typedef enum {
-    SAG_SEL_CHAR,
-    SAG_SEL_LINE,
-    SAG_SEL_RECT
+    YEW_SEL_CHAR,
+    YEW_SEL_LINE,
+    YEW_SEL_RECT
 } SelKind;
 
 typedef struct HState {
@@ -21,22 +21,22 @@ typedef struct HState {
     bool sticky;
 } HState;
 
-VEC_DECL(SagSelSpanVec, Span);
+VEC_DECL(YewSelSpanVec, Span);
 
 /* CHAR and LINE selections. RECT geometry is row-shaped and must use the
  * row helpers below. */
-Span sag_sel_span(const Win *w, const Cursor *c);
+Span yew_sel_span(const Win *w, const Cursor *c);
 
 /* `c0` and `c1` are the requested visual-cell edges shared by every row.
  * `out` is clipped to line content and widened to whole clusters when an
  * edge lands inside a wide glyph or tab. */
-bool sag_sel_rect_row(const Win *w, const Cursor *c, LineNo line,
+bool yew_sel_rect_row(const Win *w, const Cursor *c, LineNo line,
                       Span *out, CCol *c0, CCol *c1);
-u32 sag_sel_rows(const Win *w, const Cursor *c);
+u32 yew_sel_rows(const Win *w, const Cursor *c);
 
 /* Replaces `out` with one span per selected row, including empty spans.
  * The caller owns the reusable vector and releases it with
- * SagSelSpanVec_free. */
-void sag_sel_rect_spans(const Win *w, const Cursor *c, SagSelSpanVec *out);
+ * YewSelSpanVec_free. */
+void yew_sel_rect_spans(const Win *w, const Cursor *c, YewSelSpanVec *out);
 
 #endif

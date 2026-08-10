@@ -56,7 +56,7 @@ static u32 operand_width(const char *ops)
         case 'b': case 's': n += 1U; break;
         case 'w':           n += 2U; break;
         default:
-            SAG_BUG("fletch: unknown operand shape '%c'", ops[i]);
+            YEW_BUG("fletch: unknown operand shape '%c'", ops[i]);
         }
     }
     return n;
@@ -137,7 +137,7 @@ static void annotate(Bytebuf *out, const FlChunk *ch, FlOp op, u32 k,
     case FL_OP_FIELD_SET:
     case FL_OP_IMPORT:
         if (c->t == (u8)FL_INT && in != NULL) {
-            const char *s = sag_intern_str(in, (u32)c->as.i);
+            const char *s = yew_intern_str(in, (u32)c->as.i);
 
             if (s != NULL)
                 bytebuf_printf(out, " ; %s", s);

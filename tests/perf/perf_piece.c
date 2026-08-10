@@ -98,7 +98,7 @@ int main(void)
             ops[op].bytes[i] = (u8)('a' + next_random(&rng) % 26U);
         expected_len += ops[op].len;
     }
-    tb = sag_textbuf_from_bytes(initial, INITIAL_BYTES);
+    tb = yew_textbuf_from_bytes(initial, INITIAL_BYTES);
     free(initial);
     if (tb == NULL) {
         (void)fprintf(stderr, "perf_piece: buffer construction failed\n");
@@ -108,31 +108,31 @@ int main(void)
     start = now_ns();
     if (start < 0) {
         free(ops);
-        sag_textbuf_free(tb);
+        yew_textbuf_free(tb);
         return 2;
     }
     for (op = 0U; op < INSERT_OPS; op++)
-        sag_textbuf_insert(tb, BYTEOFF(ops[op].at), ops[op].bytes,
+        yew_textbuf_insert(tb, BYTEOFF(ops[op].at), ops[op].bytes,
                            ops[op].len);
     elapsed = now_ns() - start;
     free(ops);
     if (elapsed < 0) {
-        sag_textbuf_free(tb);
+        yew_textbuf_free(tb);
         return 2;
     }
-    sag_textbuf_check(tb);
+    yew_textbuf_check(tb);
     (void)printf("piece-perf: seed=%016llx ops=%u bytes=%llu pieces=%u "
                  "elapsed_ms=%lld budget_ms=%d%s\n",
                  (unsigned long long)seed, INSERT_OPS,
-                 (unsigned long long)sag_textbuf_len(tb),
-                 sag_textbuf_piece_count(tb),
+                 (unsigned long long)yew_textbuf_len(tb),
+                 yew_textbuf_piece_count(tb),
                  (long long)(elapsed / INT64_C(1000000)),
                  PIECE_BUDGET_MS,
                  elapsed < budget_ns ? "" : " OVER-BUDGET");
-    if (sag_textbuf_len(tb) != expected_len || elapsed >= budget_ns) {
-        sag_textbuf_free(tb);
+    if (yew_textbuf_len(tb) != expected_len || elapsed >= budget_ns) {
+        yew_textbuf_free(tb);
         return 1;
     }
-    sag_textbuf_free(tb);
+    yew_textbuf_free(tb);
     return 0;
 }

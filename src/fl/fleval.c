@@ -76,7 +76,7 @@ FlFn *fl_compile_script(FlRuntime *rt, const u8 *source, size_t len,
     if (rt == NULL || realpath_label == NULL)
         return NULL;
     origin = (FlOrigin){(u8)FL_ORIGIN_CLI,
-                        sag_intern(&rt->interner, realpath_label,
+                        yew_intern(&rt->interner, realpath_label,
                                    strlen(realpath_label)),
                         (u32)FL_CAP_FS_READ | (u32)FL_CAP_FS_WRITE |
                             (u32)FL_CAP_SHELL | (u32)FL_CAP_NET};
@@ -192,7 +192,7 @@ CmdStatus fl_runtime_eval(FlRuntime *rt, const char *source, u32 len)
     Ed *ed;
 
     if (rt == NULL || source == NULL || rt->ed == NULL)
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     ed = rt->ed;
     owned = arena_strndup(&rt->arena, source, len);
     rt->diag_error = false;
@@ -203,32 +203,32 @@ CmdStatus fl_runtime_eval(FlRuntime *rt, const char *source, u32 len)
     program = fl_parse(&rt->arena, &rt->diag, &rt->interner, owned, len,
                        file_id);
     if (program.had_error) {
-        sag_msg(ed, SAG_MSG_ERROR, "%s",
+        yew_msg(ed, YEW_MSG_ERROR, "%s",
                 rt->diag_message[0] == '\0' ? "Fletch parse failed" :
                                               rt->diag_message);
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     }
     origin = runtime_origin();
     fn = fl_compile_repl(&rt->vm, &rt->diag, &program, file_id, origin);
     if (fn == NULL) {
-        sag_msg(ed, SAG_MSG_ERROR, "%s",
+        yew_msg(ed, YEW_MSG_ERROR, "%s",
                 rt->diag_message[0] == '\0' ? "Fletch compile failed" :
                                               rt->diag_message);
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     }
-    source_kind = rt->vm.nframes == 0U ? SAG_SRC_FLETCH : rt->command_source;
+    source_kind = rt->vm.nframes == 0U ? YEW_SRC_FLETCH : rt->command_source;
     if (!call_chunk_result(rt, fn, source_kind, &result)) {
         Bytebuf trace;
         char line[256];
 
         bytebuf_init(&trace);
         fl_trace_render(&rt->vm, result, &trace);
-        sag_log(SAG_LOG_ERROR, "Fletch E-mode error: %.*s", (int)trace.len,
+        yew_log(YEW_LOG_ERROR, "Fletch E-mode error: %.*s", (int)trace.len,
                 trace.data == NULL ? "" : (const char *)trace.data);
-        sag_msg(ed, SAG_MSG_ERROR, "%s",
+        yew_msg(ed, YEW_MSG_ERROR, "%s",
                 eval_first_line(&trace, line, sizeof(line)));
         bytebuf_free(&trace);
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     }
     if (result.t != (u8)FL_NIL) {
         Bytebuf rendered;
@@ -236,12 +236,12 @@ CmdStatus fl_runtime_eval(FlRuntime *rt, const char *source, u32 len)
         bytebuf_init(&rendered);
         if (!fl_fmt_repl(&rt->vm, &rendered, result, 8U)) {
             bytebuf_free(&rendered);
-            sag_msg(ed, SAG_MSG_ERROR, "Fletch result could not be rendered");
-            return SAG_CMD_ERR_STATE;
+            yew_msg(ed, YEW_MSG_ERROR, "Fletch result could not be rendered");
+            return YEW_CMD_ERR_STATE;
         }
-        sag_msg(ed, SAG_MSG_INFO, "%.*s", (int)rendered.len,
+        yew_msg(ed, YEW_MSG_INFO, "%.*s", (int)rendered.len,
                 rendered.data == NULL ? "" : (const char *)rendered.data);
         bytebuf_free(&rendered);
     }
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }

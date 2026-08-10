@@ -44,11 +44,11 @@ static void wsf_make(WsFix *f)
     if (prev != NULL)
         (void)snprintf(f->saved, sizeof(f->saved), "%s", prev);
     (void)snprintf(f->state_home, sizeof(f->state_home),
-                   "/tmp/sag-wsstate-XXXXXX");
-    SAG_ASSERT_NOT_NULL(mkdtemp(f->state_home));
-    (void)snprintf(f->work, sizeof(f->work), "/tmp/sag-wswork-XXXXXX");
-    SAG_ASSERT_NOT_NULL(mkdtemp(f->work));
-    SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", f->state_home, 1), 0);
+                   "/tmp/yew-wsstate-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(f->state_home));
+    (void)snprintf(f->work, sizeof(f->work), "/tmp/yew-wswork-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(f->work));
+    YEW_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", f->state_home, 1), 0);
 }
 
 /* Removes the scratch tree; `rm -rf` by hand, since the trees are
@@ -87,17 +87,17 @@ static void wsf_plant(const WsFix *f, u64 hash, unsigned probe,
     FILE *fp;
 
     if (probe == 0U)
-        (void)snprintf(dir, sizeof(dir), "%s/sagitta/workspaces/%016lx",
+        (void)snprintf(dir, sizeof(dir), "%s/yew/workspaces/%016lx",
                        f->state_home, (unsigned long)hash);
     else
-        (void)snprintf(dir, sizeof(dir), "%s/sagitta/workspaces/%016lx-%u",
+        (void)snprintf(dir, sizeof(dir), "%s/yew/workspaces/%016lx-%u",
                        f->state_home, (unsigned long)hash, probe);
-    SAG_ASSERT(sag_mkdirs(dir, 0700U));
+    YEW_ASSERT(yew_mkdirs(dir, 0700U));
     (void)snprintf(record, sizeof(record), "%s/path", dir);
     fp = fopen(record, "w");
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     (void)fprintf(fp, "%s\n", owner);
-    SAG_ASSERT_EQ_I64(fclose(fp), 0);
+    YEW_ASSERT_EQ_I64(fclose(fp), 0);
 }
 
 /* ---------------------------------------------------------------- */
@@ -110,20 +110,20 @@ static void wsf_plant(const WsFix *f, u64 hash, unsigned probe,
  */
 void test_ws_key_hash_matches_the_published_vectors(void)
 {
-    SAG_ASSERT_EQ_U64(sag_fnv1a64((const u8 *)"", 0U),
+    YEW_ASSERT_EQ_U64(yew_fnv1a64((const u8 *)"", 0U),
                       0xcbf29ce484222325ULL);
-    SAG_ASSERT_EQ_U64(sag_fnv1a64((const u8 *)"a", 1U),
+    YEW_ASSERT_EQ_U64(yew_fnv1a64((const u8 *)"a", 1U),
                       0xaf63dc4c8601ec8cULL);
-    SAG_ASSERT_EQ_U64(sag_fnv1a64((const u8 *)"foobar", 6U),
+    YEW_ASSERT_EQ_U64(yew_fnv1a64((const u8 *)"foobar", 6U),
                       0x85944171f73967e8ULL);
     /* Bytes, not text: an invalid UTF-8 sequence hashes without a
      * decoder that could refuse it. */
     {
         static const u8 bad[] = {0xC3U, 0x28U, 0x00U, 0xFFU};
 
-        SAG_ASSERT(sag_fnv1a64(bad, 4U) != 0U);
+        YEW_ASSERT(yew_fnv1a64(bad, 4U) != 0U);
         /* The embedded NUL is part of the input, not a terminator. */
-        SAG_ASSERT(sag_fnv1a64(bad, 4U) != sag_fnv1a64(bad, 2U));
+        YEW_ASSERT(yew_fnv1a64(bad, 4U) != yew_fnv1a64(bad, 2U));
     }
 }
 
@@ -135,12 +135,12 @@ void test_ws_key_is_stable_across_calls(void)
     WsKey b;
 
     wsf_make(&f);
-    SAG_ASSERT(sag_ws_key(&a, f.work));
-    SAG_ASSERT(sag_ws_key(&b, f.work));
-    SAG_ASSERT_EQ_U64(a.hash, b.hash);
-    SAG_ASSERT_EQ_STR(a.dir, b.dir);
-    SAG_ASSERT_EQ_STR(a.realpath, b.realpath);
-    SAG_ASSERT(!a.stateless);
+    YEW_ASSERT(yew_ws_key(&a, f.work));
+    YEW_ASSERT(yew_ws_key(&b, f.work));
+    YEW_ASSERT_EQ_U64(a.hash, b.hash);
+    YEW_ASSERT_EQ_STR(a.dir, b.dir);
+    YEW_ASSERT_EQ_STR(a.realpath, b.realpath);
+    YEW_ASSERT(!a.stateless);
     /* The hash is of the REALPATH, so a non-canonical spelling of the
      * same directory keys identically. */
     {
@@ -148,9 +148,9 @@ void test_ws_key_is_stable_across_calls(void)
         WsKey c;
 
         (void)snprintf(dotted, sizeof(dotted), "%s/./", f.work);
-        SAG_ASSERT(sag_ws_key(&c, dotted));
-        SAG_ASSERT_EQ_U64(c.hash, a.hash);
-        SAG_ASSERT_EQ_STR(c.dir, a.dir);
+        YEW_ASSERT(yew_ws_key(&c, dotted));
+        YEW_ASSERT_EQ_U64(c.hash, a.hash);
+        YEW_ASSERT_EQ_STR(c.dir, a.dir);
     }
     wsf_remove(&f);
 }
@@ -162,15 +162,15 @@ void test_ws_key_paths_hang_off_the_state_dir(void)
     char want[PATH_MAX + 32];
 
     wsf_make(&f);
-    SAG_ASSERT(sag_ws_key(&k, f.work));
+    YEW_ASSERT(yew_ws_key(&k, f.work));
     (void)snprintf(want, sizeof(want), "%sstate.fl", k.dir);
-    SAG_ASSERT_EQ_STR(sag_ws_state_path(&k), want);
+    YEW_ASSERT_EQ_STR(yew_ws_state_path(&k), want);
     (void)snprintf(want, sizeof(want), "%sundo/", k.dir);
-    SAG_ASSERT_EQ_STR(sag_ws_undo_dir(&k), want);
+    YEW_ASSERT_EQ_STR(yew_ws_undo_dir(&k), want);
     (void)snprintf(want, sizeof(want), "%slock", k.dir);
-    SAG_ASSERT_EQ_STR(sag_ws_lock_path(&k), want);
+    YEW_ASSERT_EQ_STR(yew_ws_lock_path(&k), want);
     /* Nothing lands in the workspace itself (DoD 9). */
-    SAG_ASSERT(strstr(sag_ws_state_path(&k), f.work) == NULL);
+    YEW_ASSERT(strstr(yew_ws_state_path(&k), f.work) == NULL);
     wsf_remove(&f);
 }
 
@@ -185,18 +185,18 @@ void test_ws_key_writes_the_path_record(void)
     FILE *fp;
 
     wsf_make(&f);
-    SAG_ASSERT(sag_ws_key(&k, f.work));
-    SAG_ASSERT(sag_ws_ensure_dir(&k));
+    YEW_ASSERT(yew_ws_key(&k, f.work));
+    YEW_ASSERT(yew_ws_ensure_dir(&k));
     (void)snprintf(record, sizeof(record), "%spath", k.dir);
     fp = fopen(record, "r");
-    SAG_ASSERT_NOT_NULL(fp);
-    SAG_ASSERT_NOT_NULL(fgets(line, sizeof(line), fp));
-    SAG_ASSERT_EQ_I64(fclose(fp), 0);
+    YEW_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fgets(line, sizeof(line), fp));
+    YEW_ASSERT_EQ_I64(fclose(fp), 0);
     /* LF-terminated, one line, the realpath bytes. */
-    SAG_ASSERT_EQ_U64(strlen(line), strlen(k.realpath) + 1U);
-    SAG_ASSERT_EQ_I64(line[strlen(line) - 1U], '\n');
+    YEW_ASSERT_EQ_U64(strlen(line), strlen(k.realpath) + 1U);
+    YEW_ASSERT_EQ_I64(line[strlen(line) - 1U], '\n');
     line[strlen(line) - 1U] = '\0';
-    SAG_ASSERT_EQ_STR(line, k.realpath);
+    YEW_ASSERT_EQ_STR(line, k.realpath);
     wsf_remove(&f);
 }
 
@@ -213,20 +213,20 @@ void test_ws_key_walks_past_a_collision(void)
 
     wsf_make(&f);
     /* Learn our own hash first, then plant a squatter on it. */
-    SAG_ASSERT(sag_ws_key(&k, f.work));
-    SAG_ASSERT_EQ_U64(k.probe, 0U);
+    YEW_ASSERT(yew_ws_key(&k, f.work));
+    YEW_ASSERT_EQ_U64(k.probe, 0U);
     wsf_plant(&f, k.hash, 0U, "/some/other/workspace");
 
-    SAG_ASSERT(sag_ws_key(&k, f.work));
-    SAG_ASSERT_EQ_U64(k.probe, 1U);
-    SAG_ASSERT(!k.stateless);
-    SAG_ASSERT_NOT_NULL(strstr(k.dir, "-1/"));
+    YEW_ASSERT(yew_ws_key(&k, f.work));
+    YEW_ASSERT_EQ_U64(k.probe, 1U);
+    YEW_ASSERT(!k.stateless);
+    YEW_ASSERT_NOT_NULL(strstr(k.dir, "-1/"));
 
     /* Planting OUR record at probe 1 makes it a match rather than a
      * collision, so we keep landing there. */
     wsf_plant(&f, k.hash, 1U, k.realpath);
-    SAG_ASSERT(sag_ws_key(&k, f.work));
-    SAG_ASSERT_EQ_U64(k.probe, 1U);
+    YEW_ASSERT(yew_ws_key(&k, f.work));
+    YEW_ASSERT_EQ_U64(k.probe, 1U);
     wsf_remove(&f);
 }
 
@@ -238,11 +238,11 @@ void test_ws_key_takes_the_first_free_probe(void)
     unsigned i;
 
     wsf_make(&f);
-    SAG_ASSERT(sag_ws_key(&k, f.work));
+    YEW_ASSERT(yew_ws_key(&k, f.work));
     for (i = 0U; i <= 3U; i++)
         wsf_plant(&f, k.hash, i, "/not/us");
-    SAG_ASSERT(sag_ws_key(&k, f.work));
-    SAG_ASSERT_EQ_U64(k.probe, 4U);
+    YEW_ASSERT(yew_ws_key(&k, f.work));
+    YEW_ASSERT_EQ_U64(k.probe, 4U);
     wsf_remove(&f);
 }
 
@@ -260,14 +260,14 @@ void test_ws_key_exhausted_probes_run_stateless(void)
     unsigned i;
 
     wsf_make(&f);
-    SAG_ASSERT(sag_ws_key(&k, f.work));
-    for (i = 0U; i <= (unsigned)SAG_WS_PROBE_MAX; i++)
+    YEW_ASSERT(yew_ws_key(&k, f.work));
+    for (i = 0U; i <= (unsigned)YEW_WS_PROBE_MAX; i++)
         wsf_plant(&f, k.hash, i, "/not/us");
-    SAG_ASSERT(!sag_ws_key(&k, f.work));
-    SAG_ASSERT(k.stateless);
+    YEW_ASSERT(!yew_ws_key(&k, f.work));
+    YEW_ASSERT(k.stateless);
     /* And a stateless key hands out no paths to write to. */
-    SAG_ASSERT_EQ_STR(sag_ws_state_path(&k), "");
-    SAG_ASSERT(!sag_ws_ensure_dir(&k));
+    YEW_ASSERT_EQ_STR(yew_ws_state_path(&k), "");
+    YEW_ASSERT(!yew_ws_ensure_dir(&k));
     wsf_remove(&f);
 }
 
@@ -282,17 +282,17 @@ void test_ws_key_empty_path_record_is_free(void)
     FILE *fp;
 
     wsf_make(&f);
-    SAG_ASSERT(sag_ws_key(&k, f.work));
-    (void)snprintf(dir, sizeof(dir), "%s/sagitta/workspaces/%016lx",
+    YEW_ASSERT(yew_ws_key(&k, f.work));
+    (void)snprintf(dir, sizeof(dir), "%s/yew/workspaces/%016lx",
                    f.state_home, (unsigned long)k.hash);
-    SAG_ASSERT(sag_mkdirs(dir, 0700U));
+    YEW_ASSERT(yew_mkdirs(dir, 0700U));
     (void)snprintf(record, sizeof(record), "%s/path", dir);
     fp = fopen(record, "w");
-    SAG_ASSERT_NOT_NULL(fp);
-    SAG_ASSERT_EQ_I64(fclose(fp), 0);
+    YEW_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_EQ_I64(fclose(fp), 0);
 
-    SAG_ASSERT(sag_ws_key(&k, f.work));
-    SAG_ASSERT_EQ_U64(k.probe, 0U);
+    YEW_ASSERT(yew_ws_key(&k, f.work));
+    YEW_ASSERT_EQ_U64(k.probe, 0U);
     wsf_remove(&f);
 }
 
@@ -308,10 +308,10 @@ void test_ws_key_without_a_state_home_is_stateless(void)
     home = getenv("HOME");
     (void)snprintf(saved_home, sizeof(saved_home), "%s",
                    home == NULL ? "" : home);
-    SAG_ASSERT_EQ_I64(unsetenv("XDG_STATE_HOME"), 0);
-    SAG_ASSERT_EQ_I64(unsetenv("HOME"), 0);
-    SAG_ASSERT(!sag_ws_key(&k, f.work));
-    SAG_ASSERT(k.stateless);
+    YEW_ASSERT_EQ_I64(unsetenv("XDG_STATE_HOME"), 0);
+    YEW_ASSERT_EQ_I64(unsetenv("HOME"), 0);
+    YEW_ASSERT(!yew_ws_key(&k, f.work));
+    YEW_ASSERT(k.stateless);
     if (saved_home[0] != '\0')
         (void)setenv("HOME", saved_home, 1);
     wsf_remove(&f);
@@ -325,9 +325,9 @@ void test_ws_key_refuses_an_unresolvable_path(void)
     WsKey k;
 
     wsf_make(&f);
-    SAG_ASSERT(!sag_ws_key(&k, "/tmp/sag-does-not-exist-at-all-12345"));
-    SAG_ASSERT(k.stateless);
-    SAG_ASSERT(!sag_ws_key(&k, NULL));
-    SAG_ASSERT(!sag_ws_key(&k, ""));
+    YEW_ASSERT(!yew_ws_key(&k, "/tmp/yew-does-not-exist-at-all-12345"));
+    YEW_ASSERT(k.stateless);
+    YEW_ASSERT(!yew_ws_key(&k, NULL));
+    YEW_ASSERT(!yew_ws_key(&k, ""));
     wsf_remove(&f);
 }

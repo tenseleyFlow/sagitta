@@ -41,8 +41,8 @@ static struct {
     bool active;
     bool edit_mode;
     GpResult result;
-    char dir[SAG_GP_PATH_MAX];
-    char name[SAG_GP_NAME_MAX];
+    char dir[YEW_GP_PATH_MAX];
+    char name[YEW_GP_NAME_MAX];
     /*
      * THE TICKS.  Keys are canonical paths; the value is unused.  A
      * Strmap because it iterates in INSERTION order, so the confirmed
@@ -65,27 +65,27 @@ static struct {
     Rect box;
 } gp;
 
-bool sag_gp_active(void)
+bool yew_gp_active(void)
 {
     return gp.active;
 }
 
-GpResult sag_gp_result(void)
+GpResult yew_gp_result(void)
 {
     return gp.result;
 }
 
-const char *sag_gp_name(void)
+const char *yew_gp_name(void)
 {
     return gp.name;
 }
 
-int sag_gp_count(void)
+int yew_gp_count(void)
 {
     return gp.n_result;
 }
 
-const char *sag_gp_path(int i)
+const char *yew_gp_path(int i)
 {
     if (i < 0 || i >= gp.n_result)
         return NULL;
@@ -182,18 +182,18 @@ static void gp_untick(const char *path)
     gp.ticked = fresh;
 }
 
-void sag_gp_preselect(const char *path)
+void yew_gp_preselect(const char *path)
 {
-    char canon[SAG_GP_PATH_MAX];
+    char canon[YEW_GP_PATH_MAX];
 
     gp_canonical(path, canon, sizeof(canon));
     if (canon[0] != '\0')
         gp_tick(canon);
 }
 
-void sag_gp_mark_dirty(const char *path)
+void yew_gp_mark_dirty(const char *path)
 {
-    char canon[SAG_GP_PATH_MAX];
+    char canon[YEW_GP_PATH_MAX];
 
     gp_canonical(path, canon, sizeof(canon));
     if (canon[0] != '\0')
@@ -264,7 +264,7 @@ static void gp_list_dir(void)
         return;
     while ((e = readdir(d)) != NULL && gp.n_rows < GP_ROWS_MAX) {
         GpRow *r;
-        char full[SAG_GP_PATH_MAX];
+        char full[YEW_GP_PATH_MAX];
         struct stat st;
 
         if (strcmp(e->d_name, ".") == 0 || strcmp(e->d_name, "..") == 0)
@@ -297,14 +297,14 @@ static void gp_list_dir(void)
     {
         int base = gp.n_rows > 0 && gp.rows[0].is_parent ? 1 : 0;
 
-        sag_sort_stable(&gp.rows[base], (size_t)(gp.n_rows - base),
+        yew_sort_stable(&gp.rows[base], (size_t)(gp.n_rows - base),
                         sizeof(gp.rows[0]), gp_row_cmp, NULL);
     }
 }
 
 static void gp_walk_to(const char *dir)
 {
-    char canon[SAG_GP_PATH_MAX];
+    char canon[YEW_GP_PATH_MAX];
 
     gp_canonical(dir, canon, sizeof(canon));
     if (canon[0] == '\0')
@@ -349,7 +349,7 @@ static bool gp_open(Ed *ed, const char *dir, const char *name, bool edit)
 {
     if (ed == NULL)
         return false;
-    sag_gp_close(ed);
+    yew_gp_close(ed);
     /* A fresh dialog invalidates the last one's answer.  Leaving the
      * old result standing would let an accessor report paths the user
      * chose in a dialog they have since dismissed. */
@@ -358,10 +358,10 @@ static bool gp_open(Ed *ed, const char *dir, const char *name, bool edit)
     strmap_init(&gp.dirty);
     gp.active = true;
     gp.edit_mode = edit;
-    gp.result = SAG_GP_PENDING;
+    gp.result = YEW_GP_PENDING;
     gp.on_name = false;
     gp.note[0] = '\0';
-    gp_walk_to(dir != NULL && dir[0] != '\0' ? dir : sag_ws_root(ed));
+    gp_walk_to(dir != NULL && dir[0] != '\0' ? dir : yew_ws_root(ed));
     if (name != NULL && name[0] != '\0')
         (void)snprintf(gp.name, sizeof(gp.name), "%s", name);
     else
@@ -370,17 +370,17 @@ static bool gp_open(Ed *ed, const char *dir, const char *name, bool edit)
     return true;
 }
 
-bool sag_gp_show(Ed *ed, const char *dir)
+bool yew_gp_show(Ed *ed, const char *dir)
 {
     return gp_open(ed, dir, NULL, false);
 }
 
-bool sag_gp_show_edit(Ed *ed, const char *dir, const char *name)
+bool yew_gp_show_edit(Ed *ed, const char *dir, const char *name)
 {
     return gp_open(ed, dir, name, true);
 }
 
-void sag_gp_close(Ed *ed)
+void yew_gp_close(Ed *ed)
 {
     strmap_free(&gp.ticked);
     strmap_free(&gp.dirty);
@@ -426,13 +426,13 @@ static void gp_confirm(Ed *ed)
     it = strmap_iter(&gp.ticked);
     while (strmap_iter_next(&it, &key, &key_len, &value) &&
            gp.n_result < GP_ROWS_MAX) {
-        char *copy = sag_xmalloc(key_len + 1U);
+        char *copy = yew_xmalloc(key_len + 1U);
 
         (void)memcpy(copy, key, key_len);
         copy[key_len] = '\0';
         gp.result_paths[gp.n_result++] = copy;
     }
-    gp.result = SAG_GP_CONFIRMED;
+    gp.result = YEW_GP_CONFIRMED;
     gp.active = false;
     if (ed != NULL)
         ed->full_damage = true;
@@ -455,8 +455,8 @@ static void gp_cursor_to(int at)
      * needed shifts rows the user was reading. */
     if (gp.cursor < gp.scroll)
         gp.scroll = gp.cursor;
-    if (gp.cursor >= gp.scroll + SAG_GP_VISIBLE_ROWS)
-        gp.scroll = gp.cursor - SAG_GP_VISIBLE_ROWS + 1;
+    if (gp.cursor >= gp.scroll + YEW_GP_VISIBLE_ROWS)
+        gp.scroll = gp.cursor - YEW_GP_VISIBLE_ROWS + 1;
     if (gp.scroll < 0)
         gp.scroll = 0;
 }
@@ -471,7 +471,7 @@ static void gp_cursor_to(int at)
  * reading here: unlike the completion menu, this dialog's cursor is
  * what a click focuses too.
  */
-void sag_gp_scroll(Ed *ed, int rows)
+void yew_gp_scroll(Ed *ed, int rows)
 {
     if (!gp.active || rows == 0)
         return;
@@ -483,7 +483,7 @@ void sag_gp_scroll(Ed *ed, int rows)
 
 static void gp_enter_row(Ed *ed, const GpRow *r)
 {
-    char full[SAG_GP_PATH_MAX];
+    char full[YEW_GP_PATH_MAX];
 
     if (r->is_parent) {
         gp_join(gp.dir, "..", full, sizeof(full));
@@ -499,8 +499,8 @@ static void gp_enter_row(Ed *ed, const GpRow *r)
  * be ticked without moving the other hand. */
 static void gp_toggle_row(Ed *ed, const GpRow *r)
 {
-    char full[SAG_GP_PATH_MAX];
-    char canon[SAG_GP_PATH_MAX];
+    char full[YEW_GP_PATH_MAX];
+    char canon[YEW_GP_PATH_MAX];
 
     /* Directories are WALKED, not ticked: a group is a set of files,
      * and ticking a directory would beg the question of what happens
@@ -524,7 +524,7 @@ static void gp_name_key(Ed *ed, Key key)
     size_t n = strlen(gp.name);
 
     (void)ed;
-    if (key.code == SAG_KEY_BACKSPACE) {
+    if (key.code == YEW_KEY_BACKSPACE) {
         if (n > 0U)
             gp.name[n - 1U] = '\0';
         return;
@@ -538,13 +538,13 @@ static void gp_name_key(Ed *ed, Key key)
     gp.note[0] = '\0';
 }
 
-bool sag_gp_key(Ed *ed, Key key)
+bool yew_gp_key(Ed *ed, Key key)
 {
     const GpRow *r;
 
     if (!gp.active || ed == NULL)
         return false;
-    if (key.ev == SAG_KEY_RELEASE)
+    if (key.ev == YEW_KEY_RELEASE)
         return true;
     /*
      * Any key the dialog takes repaints it.  Without this the picker
@@ -554,21 +554,21 @@ bool sag_gp_key(Ed *ed, Key key)
      */
     ed->full_damage = true;
 
-    if (key.code == SAG_KEY_ESCAPE) {
-        gp.result = SAG_GP_CANCELLED;
-        sag_gp_close(ed);
+    if (key.code == YEW_KEY_ESCAPE) {
+        gp.result = YEW_GP_CANCELLED;
+        yew_gp_close(ed);
         return true;
     }
-    if (key.code == SAG_KEY_TAB) {
+    if (key.code == YEW_KEY_TAB) {
         gp.on_name = !gp.on_name;
         return true;
     }
     if (gp.on_name) {
-        if (key.code == SAG_KEY_ENTER) {
+        if (key.code == YEW_KEY_ENTER) {
             gp_confirm(ed);
             return true;
         }
-        if (key.code == SAG_KEY_DOWN) {
+        if (key.code == YEW_KEY_DOWN) {
             gp.on_name = false;
             return true;
         }
@@ -576,7 +576,7 @@ bool sag_gp_key(Ed *ed, Key key)
         return true;
     }
 
-    if (key.code == SAG_KEY_UP) {
+    if (key.code == YEW_KEY_UP) {
         /* Up off the top returns focus to the name field rather than
          * stopping dead — the field is above the list on screen. */
         if (gp.cursor == 0)
@@ -585,12 +585,12 @@ bool sag_gp_key(Ed *ed, Key key)
             gp_cursor_to(gp.cursor - 1);
         return true;
     }
-    if (key.code == SAG_KEY_DOWN) {
+    if (key.code == YEW_KEY_DOWN) {
         gp_cursor_to(gp.cursor + 1);
         return true;
     }
-    if (key.code == SAG_KEY_LEFT) {
-        char full[SAG_GP_PATH_MAX];
+    if (key.code == YEW_KEY_LEFT) {
+        char full[YEW_GP_PATH_MAX];
 
         gp_join(gp.dir, "..", full, sizeof(full));
         gp_walk_to(full);
@@ -603,7 +603,7 @@ bool sag_gp_key(Ed *ed, Key key)
             gp_toggle_row(ed, r);
         return true;
     }
-    if (key.code == SAG_KEY_ENTER || key.code == SAG_KEY_RIGHT) {
+    if (key.code == YEW_KEY_ENTER || key.code == YEW_KEY_RIGHT) {
         if (r != NULL && r->is_dir)
             gp_enter_row(ed, r);
         else
@@ -634,30 +634,30 @@ static int gp_row_at(u16 y)
     /* box.y + 0 border, +1 title, +2 name field, +3 separator, then
      * rows. */
     rel = (int)y - (int)gp.box.y - 4;
-    if (rel < 0 || rel >= SAG_GP_VISIBLE_ROWS)
+    if (rel < 0 || rel >= YEW_GP_VISIBLE_ROWS)
         return -1;
     rel += gp.scroll;
     return rel < gp.n_rows ? rel : -1;
 }
 
-void sag_gp_draw(Ed *ed)
+void yew_gp_draw(Ed *ed)
 {
     u16 w;
     u16 h;
     u16 x0;
     u16 y0;
     int i;
-    SagColor fg = {SAG_COLOR_DEFAULT, 0U, 0U, 0U};
-    SagColor bg = {SAG_COLOR_DEFAULT, 0U, 0U, 0U};
-    SagColor accent = {SAG_COLOR_RGB, 120U, 180U, 255U};
-    SagColor dim = {SAG_COLOR_RGB, 120U, 120U, 120U};
-    char line[SAG_GP_WIDTH_MAX + 64];
+    YewColor fg = {YEW_COLOR_DEFAULT, 0U, 0U, 0U};
+    YewColor bg = {YEW_COLOR_DEFAULT, 0U, 0U, 0U};
+    YewColor accent = {YEW_COLOR_RGB, 120U, 180U, 255U};
+    YewColor dim = {YEW_COLOR_RGB, 120U, 120U, 120U};
+    char line[YEW_GP_WIDTH_MAX + 64];
 
     if (!gp.active || ed == NULL || ed->grid.cols == 0U)
         return;
-    w = ed->grid.cols < SAG_GP_WIDTH_MAX ? ed->grid.cols
-                                         : (u16)SAG_GP_WIDTH_MAX;
-    h = (u16)(SAG_GP_VISIBLE_ROWS + 7);
+    w = ed->grid.cols < YEW_GP_WIDTH_MAX ? ed->grid.cols
+                                         : (u16)YEW_GP_WIDTH_MAX;
+    h = (u16)(YEW_GP_VISIBLE_ROWS + 7);
     if (h > ed->grid.rows)
         h = ed->grid.rows;
     x0 = (u16)((ed->grid.cols - w) / 2U);
@@ -669,24 +669,24 @@ void sag_gp_draw(Ed *ed)
 
         (void)memset(&blank, 0, sizeof(blank));
         for (i = 0; i < (int)h; i++)
-            sag_grid_fill(&ed->grid, (u16)(y0 + i), x0, (u16)(x0 + w),
+            yew_grid_fill(&ed->grid, (u16)(y0 + i), x0, (u16)(x0 + w),
                           blank);
     }
     /* The dialog owns its rectangle, so a click on it never falls
      * through to the pane underneath. */
-    sag_region_add(SAG_REGION_BLOCK, gp.box, 0);
+    yew_region_add(YEW_REGION_BLOCK, gp.box, 0);
 
     (void)snprintf(line, sizeof(line), " %s ",
                    gp.edit_mode ? "Edit Tab Group" : "New Tab Group");
-    (void)sag_grid_puts(&ed->grid, y0, x0, (const u8 *)line, strlen(line),
-                        fg, bg, SAG_ATTR_BOLD);
+    (void)yew_grid_puts(&ed->grid, y0, x0, (const u8 *)line, strlen(line),
+                        fg, bg, YEW_ATTR_BOLD);
 
     (void)snprintf(line, sizeof(line), " name: %s%s", gp.name,
                    gp.on_name ? "_" : "");
-    (void)sag_grid_puts(&ed->grid, (u16)(y0 + 1U), x0, (const u8 *)line,
+    (void)yew_grid_puts(&ed->grid, (u16)(y0 + 1U), x0, (const u8 *)line,
                         strlen(line), fg, bg,
-                        gp.on_name ? SAG_ATTR_REVERSE : 0U);
-    sag_region_add(SAG_REGION_GP_NAME,
+                        gp.on_name ? YEW_ATTR_REVERSE : 0U);
+    yew_region_add(YEW_REGION_GP_NAME,
                    (Rect){x0, (u16)(y0 + 1U), w, 1U}, 0);
 
     {
@@ -697,19 +697,19 @@ void sag_gp_draw(Ed *ed)
         size_t fit;
         int cells = 0;
 
-        fit = sag_str_clip((const u8 *)gp.dir, strlen(gp.dir),
+        fit = yew_str_clip((const u8 *)gp.dir, strlen(gp.dir),
                            w > 1U ? (int)(w - 1U) : 0, &cells);
-        (void)sag_grid_puts(&ed->grid, (u16)(y0 + 2U), (u16)(x0 + 1U),
+        (void)yew_grid_puts(&ed->grid, (u16)(y0 + 2U), (u16)(x0 + 1U),
                             (const u8 *)gp.dir, fit, dim, bg,
-                            SAG_ATTR_DIM);
+                            YEW_ATTR_DIM);
     }
 
-    for (i = 0; i < SAG_GP_VISIBLE_ROWS; i++) {
+    for (i = 0; i < YEW_GP_VISIBLE_ROWS; i++) {
         int idx = gp.scroll + i;
         u16 y = (u16)(y0 + 4U + i);
         const GpRow *r;
-        char full[SAG_GP_PATH_MAX];
-        char canon[SAG_GP_PATH_MAX];
+        char full[YEW_GP_PATH_MAX];
+        char canon[YEW_GP_PATH_MAX];
         bool ticked = false;
         bool is_dirty = false;
 
@@ -729,19 +729,19 @@ void sag_gp_draw(Ed *ed)
          */
         (void)snprintf(line, sizeof(line), " %s %s%s%s%s",
                        r->is_dir ? "   "
-                                 : sag_glyph(ticked ? SAG_GLYPH_TICKED
-                                                    : SAG_GLYPH_UNTICKED),
+                                 : yew_glyph(ticked ? YEW_GLYPH_TICKED
+                                                    : YEW_GLYPH_UNTICKED),
                        r->is_parent ? "../" : r->name,
                        r->is_dir && !r->is_parent ? "/" : "",
                        ticked && is_dirty ? " " : "",
                        ticked && is_dirty
-                           ? sag_glyph(SAG_GLYPH_DIRTY_TICK) : "");
-        (void)sag_grid_puts(&ed->grid, y, x0, (const u8 *)line,
+                           ? yew_glyph(YEW_GLYPH_DIRTY_TICK) : "");
+        (void)yew_grid_puts(&ed->grid, y, x0, (const u8 *)line,
                             strlen(line), ticked ? accent : fg, bg,
                             idx == gp.cursor && !gp.on_name
-                                ? SAG_ATTR_REVERSE
+                                ? YEW_ATTR_REVERSE
                                 : 0U);
-        sag_region_add(SAG_REGION_GP_ROW, (Rect){x0, y, w, 1U}, idx);
+        yew_region_add(YEW_REGION_GP_ROW, (Rect){x0, y, w, 1U}, idx);
     }
 
     /*
@@ -750,33 +750,33 @@ void sag_gp_draw(Ed *ed)
      * like it loses them.
      */
     (void)snprintf(line, sizeof(line), " %d selected", gp_tick_count());
-    (void)sag_grid_puts(&ed->grid, (u16)(y0 + h - 2U), x0,
+    (void)yew_grid_puts(&ed->grid, (u16)(y0 + h - 2U), x0,
                         (const u8 *)line, strlen(line), fg, bg,
-                        SAG_ATTR_BOLD);
+                        YEW_ATTR_BOLD);
     if (gp.note[0] != '\0')
         (void)snprintf(line, sizeof(line), " %s", gp.note);
     else
         (void)snprintf(line, sizeof(line),
                        " tab focus · space tick · enter %s · esc cancel",
                        gp.edit_mode ? "save" : "create");
-    (void)sag_grid_puts(&ed->grid, (u16)(y0 + h - 1U), x0,
+    (void)yew_grid_puts(&ed->grid, (u16)(y0 + h - 1U), x0,
                         (const u8 *)line, strlen(line), dim, bg,
-                        SAG_ATTR_DIM);
+                        YEW_ATTR_DIM);
 }
 
-bool sag_gp_click(Ed *ed, u16 x, u16 y)
+bool yew_gp_click(Ed *ed, u16 x, u16 y)
 {
     Region hit;
 
     if (!gp.active || ed == NULL)
         return false;
-    hit = sag_region_hit(x, y);
+    hit = yew_region_hit(x, y);
     ed->full_damage = true;
-    if (hit.kind == SAG_REGION_GP_NAME) {
+    if (hit.kind == YEW_REGION_GP_NAME) {
         gp.on_name = true;
         return true;
     }
-    if (hit.kind == SAG_REGION_GP_ROW) {
+    if (hit.kind == YEW_REGION_GP_ROW) {
         /* The same row->index mapping the renderer used, asked for by
          * the same function. */
         int idx = gp_row_at(y);
@@ -789,7 +789,7 @@ bool sag_gp_click(Ed *ed, u16 x, u16 y)
         return true;
     }
     /* Anything else inside the dialog is swallowed by its BLOCK. */
-    return hit.kind == SAG_REGION_BLOCK;
+    return hit.kind == YEW_REGION_BLOCK;
 }
 
 /* ---------------------------------------------------------------- */
@@ -811,29 +811,29 @@ static void gp_apply_new(Ed *ed)
 {
     u32 gid;
     int i;
-    int n = sag_gp_count();
+    int n = yew_gp_count();
 
-    gid = sag_group_create(ed, gp.dir, sag_gp_name());
+    gid = yew_group_create(ed, gp.dir, yew_gp_name());
     if (gid == 0U)
         return;
     for (i = 0; i < n; i++) {
-        const char *path = sag_gp_path(i);
+        const char *path = yew_gp_path(i);
         int idx;
 
         if (path == NULL)
             continue;
-        idx = sag_tab_find_by_path(ed, path);
+        idx = yew_tab_find_by_path(ed, path);
         if (idx < 0) {
             /* Deferred: opening a 40-file group costs one read, not
              * forty (§3). */
-            idx = sag_tab_open(ed, path);
+            idx = yew_tab_open(ed, path);
         }
         if (idx >= 0)
-            sag_group_add_member(ed, gid, idx);
+            yew_group_add_member(ed, gid, idx);
     }
     /* Empty can only happen if every open failed; prune rather than
      * leave a group that resolves to nothing (DoD 10). */
-    sag_group_prune_empty(ed);
+    yew_group_prune_empty(ed);
 }
 
 /*
@@ -845,44 +845,44 @@ static void gp_apply_new(Ed *ed)
  */
 static void gp_apply_edit(Ed *ed)
 {
-    int members[SAG_TAB_MAX];
-    u32 keep_ids[SAG_TAB_MAX];
+    int members[YEW_TAB_MAX];
+    u32 keep_ids[YEW_TAB_MAX];
     int n_keep = 0;
     int n;
     int i;
     int j;
     u32 gid = gp_edit_gid;
 
-    if (sag_group_find(ed, gid) < 0)
+    if (yew_group_find(ed, gid) < 0)
         return;
     /* Additions first, so the group never passes through empty and
      * auto-dissolves out from under the edit. */
-    for (i = 0; i < sag_gp_count(); i++) {
-        const char *path = sag_gp_path(i);
+    for (i = 0; i < yew_gp_count(); i++) {
+        const char *path = yew_gp_path(i);
         int idx;
 
         if (path == NULL)
             continue;
-        idx = sag_tab_find_by_path(ed, path);
+        idx = yew_tab_find_by_path(ed, path);
         if (idx < 0)
-            idx = sag_tab_open(ed, path);
+            idx = yew_tab_open(ed, path);
         if (idx < 0)
             continue;
-        sag_group_add_member(ed, gid, idx);
-        keep_ids[n_keep++] = sag_tab_at(ed, idx)->tab_id;
+        yew_group_add_member(ed, gid, idx);
+        keep_ids[n_keep++] = yew_tab_at(ed, idx)->tab_id;
     }
     /*
      * Removals by tab_ID.  Closing a tab compacts the array, so a list
      * of indices gathered beforehand would name different tabs by the
      * second close.
      */
-    n = sag_group_members(ed, gid, members, (int)SAG_ARRAY_LEN(members));
+    n = yew_group_members(ed, gid, members, (int)YEW_ARRAY_LEN(members));
     {
-        u32 drop_ids[SAG_TAB_MAX];
+        u32 drop_ids[YEW_TAB_MAX];
         int n_drop = 0;
 
         for (i = 0; i < n; i++) {
-            const Tab *t = sag_tab_at(ed, members[i]);
+            const Tab *t = yew_tab_at(ed, members[i]);
             bool keep = false;
 
             if (t == NULL)
@@ -897,28 +897,28 @@ static void gp_apply_edit(Ed *ed)
                 drop_ids[n_drop++] = t->tab_id;
         }
         for (i = 0; i < n_drop; i++) {
-            int idx = sag_tab_index_of_id(ed, drop_ids[i]);
+            int idx = yew_tab_index_of_id(ed, drop_ids[i]);
 
             if (idx < 0)
                 continue;
             /* Never close the last tab out from under the editor. */
-            if (sag_tab_count(ed) <= 1U)
+            if (yew_tab_count(ed) <= 1U)
                 break;
-            sag_group_remove_member(ed, idx);
-            (void)sag_tab_close(ed, idx);
+            yew_group_remove_member(ed, idx);
+            (void)yew_tab_close(ed, idx);
         }
     }
-    sag_group_prune_empty(ed);
+    yew_group_prune_empty(ed);
 }
 
-void sag_gp_apply(Ed *ed)
+void yew_gp_apply(Ed *ed)
 {
-    if (ed == NULL || sag_gp_result() != SAG_GP_CONFIRMED)
+    if (ed == NULL || yew_gp_result() != YEW_GP_CONFIRMED)
         return;
     /* Consumed once: apply runs after every key the dialog took, and a
      * result left CONFIRMED would create the group again on the next
      * keystroke. */
-    gp.result = SAG_GP_PENDING;
+    gp.result = YEW_GP_PENDING;
     if (gp.edit_mode)
         gp_apply_edit(ed);
     else
@@ -928,16 +928,16 @@ void sag_gp_apply(Ed *ed)
     ed->full_damage = true;
 }
 
-CmdStatus sag_gp_cmd_new(CmdCtx *cx)
+CmdStatus yew_gp_cmd_new(CmdCtx *cx)
 {
     const char *dir;
 
     if (cx == NULL || cx->ed == NULL)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     dir = cx->sarg;
     if (dir == NULL || dir[0] == '\0') {
-        const Tab *t = sag_tab_at(cx->ed, cx->ed->tabs.active);
-        static char here[SAG_GP_PATH_MAX];
+        const Tab *t = yew_tab_at(cx->ed, cx->ed->tabs.active);
+        static char here[YEW_GP_PATH_MAX];
 
         /* The active tab's directory, else the workspace root: the
          * files you want are almost always beside the one you are
@@ -955,49 +955,49 @@ CmdStatus sag_gp_cmd_new(CmdCtx *cx)
                 }
             }
         }
-        dir = here[0] != '\0' ? here : sag_ws_root(cx->ed);
+        dir = here[0] != '\0' ? here : yew_ws_root(cx->ed);
     }
     gp_edit_gid = 0U;
-    return sag_gp_show(cx->ed, dir) ? SAG_CMD_OK : SAG_CMD_ERR_STATE;
+    return yew_gp_show(cx->ed, dir) ? YEW_CMD_OK : YEW_CMD_ERR_STATE;
 }
 
-CmdStatus sag_gp_cmd_edit(CmdCtx *cx)
+CmdStatus yew_gp_cmd_edit(CmdCtx *cx)
 {
     Ed *ed;
     u32 gid;
     TabGroup *g;
-    int members[SAG_TAB_MAX];
+    int members[YEW_TAB_MAX];
     int n;
     int i;
 
     if (cx == NULL || cx->ed == NULL)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     ed = cx->ed;
-    gid = sag_active_group_id(ed);
+    gid = yew_active_group_id(ed);
     if (gid == 0U) {
-        sag_msg(ed, SAG_MSG_ERROR, "not in a tab group");
-        return SAG_CMD_ERR_STATE;
+        yew_msg(ed, YEW_MSG_ERROR, "not in a tab group");
+        return YEW_CMD_ERR_STATE;
     }
-    g = sag_group_at(ed, gid);
+    g = yew_group_at(ed, gid);
     if (g == NULL)
-        return SAG_CMD_ERR_STATE;
-    if (!sag_gp_show_edit(ed, g->dir_path, g->label))
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
+    if (!yew_gp_show_edit(ed, g->dir_path, g->label))
+        return YEW_CMD_ERR_STATE;
     gp_edit_gid = gid;
     /*
      * Every current member arrives ticked — including the ones living
      * outside `dir_path`, which is exactly why preselect takes a PATH
      * and not an index into the listing.
      */
-    n = sag_group_members(ed, gid, members, (int)SAG_ARRAY_LEN(members));
+    n = yew_group_members(ed, gid, members, (int)YEW_ARRAY_LEN(members));
     for (i = 0; i < n; i++) {
-        const Tab *t = sag_tab_at(ed, members[i]);
+        const Tab *t = yew_tab_at(ed, members[i]);
 
         if (t == NULL || t->path == NULL)
             continue;
-        sag_gp_preselect(t->path);
-        if (sag_tab_modified(ed, members[i]))
-            sag_gp_mark_dirty(t->path);
+        yew_gp_preselect(t->path);
+        if (yew_tab_modified(ed, members[i]))
+            yew_gp_mark_dirty(t->path);
     }
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }

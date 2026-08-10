@@ -52,13 +52,13 @@ static void state_add(StateEmit *e, const char *key, FlValue value)
         FlStr *k;
 
         if (key == NULL)
-            SAG_BUG("workspace state: map value without a key");
+            YEW_BUG("workspace state: map value without a key");
         k = fl_str_new(&e->vm, key, (u32)strlen(key));
         (void)fl_map_set(&e->vm, (FlMap *)parent.as.o,
                          FL_OBJ_V(FL_STR, k), value);
         return;
     }
-    SAG_BUG("workspace state: value added outside a container");
+    YEW_BUG("workspace state: value added outside a container");
 }
 
 static void state_emit_init(StateEmit *e, Bytebuf *out)
@@ -75,7 +75,7 @@ static void state_emit_init(StateEmit *e, Bytebuf *out)
 static void state_emit_done(StateEmit *e)
 {
     if (e->depth != 0U)
-        SAG_BUG("workspace state: %u data container(s) left open",
+        YEW_BUG("workspace state: %u data container(s) left open",
                 (unsigned)e->depth);
     fl_data_write(e->out, e->root, 0U);
     fl_vm_free(&e->vm);
@@ -85,8 +85,8 @@ static void state_emit_done(StateEmit *e)
 
 static void state_open(StateEmit *e, const char *key, FlValue value)
 {
-    if (e->depth >= SAG_ARRAY_LEN(e->stack))
-        SAG_BUG("workspace state: emitter nesting overflow");
+    if (e->depth >= YEW_ARRAY_LEN(e->stack))
+        YEW_BUG("workspace state: emitter nesting overflow");
     state_add(e, key, value);
     e->stack[e->depth++] = value;
 }
@@ -99,7 +99,7 @@ static void state_map_open(StateEmit *e, const char *key)
 static void state_map_close(StateEmit *e)
 {
     if (e->depth == 0U || e->stack[e->depth - 1U].t != (u8)FL_MAP)
-        SAG_BUG("workspace state: unmatched map close");
+        YEW_BUG("workspace state: unmatched map close");
     e->depth--;
 }
 
@@ -111,7 +111,7 @@ static void state_list_open(StateEmit *e, const char *key)
 static void state_list_close(StateEmit *e)
 {
     if (e->depth == 0U || e->stack[e->depth - 1U].t != (u8)FL_LIST)
-        SAG_BUG("workspace state: unmatched list close");
+        YEW_BUG("workspace state: unmatched list close");
     e->depth--;
 }
 
@@ -122,7 +122,7 @@ static void state_str(StateEmit *e, const char *key, const char *s, u64 n)
         return;
     }
     if (n > (u64)UINT32_MAX)
-        SAG_BUG("workspace state: string too large");
+        YEW_BUG("workspace state: string too large");
     state_add(e, key,
               FL_OBJ_V(FL_STR, fl_str_new(&e->vm, s, (u32)n)));
 }
@@ -176,17 +176,17 @@ static void state_lit(StateEmit *e, const char *key, const FlLit *lit)
         state_map_close(e);
         break;
     default:
-        SAG_BUG("workspace state: unknown retained literal kind");
+        YEW_BUG("workspace state: unknown retained literal kind");
     }
 }
 
-void sag_idmap_init(IdMapVec *m)
+void yew_idmap_init(IdMapVec *m)
 {
     if (m != NULL)
         (void)memset(m, 0, sizeof(*m));
 }
 
-void sag_idmap_free(IdMapVec *m)
+void yew_idmap_free(IdMapVec *m)
 {
     if (m == NULL)
         return;
@@ -194,14 +194,14 @@ void sag_idmap_free(IdMapVec *m)
     (void)memset(m, 0, sizeof(*m));
 }
 
-void sag_idmap_put(IdMapVec *m, u32 file_id, u32 live_id)
+void yew_idmap_put(IdMapVec *m, u32 file_id, u32 live_id)
 {
     if (m == NULL || file_id == 0U)
         return;
     if (m->len == m->cap) {
         u32 cap = m->cap == 0U ? 8U : m->cap * 2U;
 
-        m->data = sag_xreallocarray(m->data, cap, sizeof(*m->data));
+        m->data = yew_xreallocarray(m->data, cap, sizeof(*m->data));
         m->cap = cap;
     }
     m->data[m->len].file_id = file_id;
@@ -209,7 +209,7 @@ void sag_idmap_put(IdMapVec *m, u32 file_id, u32 live_id)
     m->len++;
 }
 
-u32 sag_idmap_get(const IdMapVec *m, u32 file_id)
+u32 yew_idmap_get(const IdMapVec *m, u32 file_id)
 {
     u32 i;
 
@@ -228,42 +228,42 @@ u32 sag_idmap_get(const IdMapVec *m, u32 file_id)
     return 0U;
 }
 
-float sag_permille_to_ratio(i64 permille)
+float yew_permille_to_ratio(i64 permille)
 {
-    if (permille < SAG_STATE_RATIO_MIN)
-        permille = SAG_STATE_RATIO_MIN;
-    if (permille > SAG_STATE_RATIO_MAX)
-        permille = SAG_STATE_RATIO_MAX;
+    if (permille < YEW_STATE_RATIO_MIN)
+        permille = YEW_STATE_RATIO_MIN;
+    if (permille > YEW_STATE_RATIO_MAX)
+        permille = YEW_STATE_RATIO_MAX;
     return (float)permille / 1000.0f;
 }
 
-i64 sag_ratio_to_permille(float ratio)
+i64 yew_ratio_to_permille(float ratio)
 {
     /* Rounded once, here.  s22 keeps exactly one rounding site for
      * cell splits; this is the format's equivalent, and the fixpoint
      * test walks all 999 values through both directions. */
     i64 v = (i64)((double)ratio * 1000.0 + 0.5);
 
-    if (v < SAG_STATE_RATIO_MIN)
-        v = SAG_STATE_RATIO_MIN;
-    if (v > SAG_STATE_RATIO_MAX)
-        v = SAG_STATE_RATIO_MAX;
+    if (v < YEW_STATE_RATIO_MIN)
+        v = YEW_STATE_RATIO_MIN;
+    if (v > YEW_STATE_RATIO_MAX)
+        v = YEW_STATE_RATIO_MAX;
     return v;
 }
 
-i64 sag_goal_to_i64(u64 goal)
+i64 yew_goal_to_i64(u64 goal)
 {
-    /* SAG_GCOL_EOL is UINT64_MAX; -1 is its representable spelling. */
-    if (goal == SAG_GCOL_EOL)
+    /* YEW_GCOL_EOL is UINT64_MAX; -1 is its representable spelling. */
+    if (goal == YEW_GCOL_EOL)
         return -1;
     if (goal > (u64)9223372036854775807ULL)
         return -1;
     return (i64)goal;
 }
 
-u64 sag_goal_from_i64(i64 v)
+u64 yew_goal_from_i64(i64 v)
 {
-    return v < 0 ? SAG_GCOL_EOL : (u64)v;
+    return v < 0 ? YEW_GCOL_EOL : (u64)v;
 }
 
 /* ---------------------------------------------------------------- */
@@ -282,13 +282,13 @@ u64 sag_goal_from_i64(i64 v)
  * So there is ONE pre-order collection, and both sections read it.
  */
 typedef struct WinOrder {
-    Win *wins[SAG_PANE_MAX_LEAVES];
+    Win *wins[YEW_PANE_MAX_LEAVES];
     u32 n;
 } WinOrder;
 
 static void collect_pre_order(Pane *p, WinOrder *o)
 {
-    if (p == NULL || o->n >= (u32)SAG_PANE_MAX_LEAVES)
+    if (p == NULL || o->n >= (u32)YEW_PANE_MAX_LEAVES)
         return;
     if (p->is_leaf) {
         o->wins[o->n++] = p->win;
@@ -324,8 +324,8 @@ static void emit_panes(StateEmit *e, const char *key, const Pane *p,
     if (p->is_leaf) {
         state_int(e, "win", win_index(o, p->win));
     } else {
-        state_str(e, "split", p->dir == SAG_SPLIT_H ? "h" : "v", 1U);
-        state_int(e, "ratio_permille", sag_ratio_to_permille(p->ratio));
+        state_str(e, "split", p->dir == YEW_SPLIT_H ? "h" : "v", 1U);
+        state_int(e, "ratio_permille", yew_ratio_to_permille(p->ratio));
         emit_panes(e, "a", p->a, o);
         emit_panes(e, "b", p->b, o);
     }
@@ -346,16 +346,16 @@ static void emit_panes(StateEmit *e, const char *key, const Pane *p,
  */
 static void emit_ring_entry(StateEmit *e, const Ed *ed, const JumpEntry *je)
 {
-    Buffer *b = sag_ws_buf_by_id((Ed *)ed, je->buf_id);
+    Buffer *b = yew_ws_buf_by_id((Ed *)ed, je->buf_id);
     LineNo line = je->line_hint;
     u64 col = 0U;
 
     if (b != NULL && b->marks != NULL && b->tb != NULL &&
-        sag_mark_alive(b->marks, je->mark)) {
-        ByteOff pos = sag_mark_pos(b->marks, je->mark);
+        yew_mark_alive(b->marks, je->mark)) {
+        ByteOff pos = yew_mark_pos(b->marks, je->mark);
 
-        line = sag_textbuf_line_of(b->tb, pos);
-        col = pos.v - sag_textbuf_line_start(b->tb, line).v;
+        line = yew_textbuf_line_of(b->tb, pos);
+        col = pos.v - yew_textbuf_line_start(b->tb, line).v;
     }
     state_map_open(e, NULL);
     if (b == NULL || b->path == NULL)
@@ -370,11 +370,11 @@ static void emit_ring_entry(StateEmit *e, const Ed *ed, const JumpEntry *je)
 
 static void emit_jumps(StateEmit *e, const Ed *ed, const Win *w)
 {
-    u32 n = sag_jumplist_len(&w->jumps);
+    u32 n = yew_jumplist_len(&w->jumps);
     u32 i;
 
-    if (n > (u32)SAG_STATE_MAX_JUMPS)
-        n = (u32)SAG_STATE_MAX_JUMPS;
+    if (n > (u32)YEW_STATE_MAX_JUMPS)
+        n = (u32)YEW_STATE_MAX_JUMPS;
     state_map_open(e, "jumps");
     /* `cur` is a LOGICAL index and `cur == len` means "standing at now"
      * (s21).  It is written as-is so a session that quit mid-walk
@@ -382,7 +382,7 @@ static void emit_jumps(StateEmit *e, const Ed *ed, const Win *w)
     state_int(e, "cur", (i64)w->jumps.cur);
     state_list_open(e, "entries");
     for (i = 0U; i < n; i++)
-        emit_ring_entry(e, ed, sag_jumplist_at(&w->jumps, i));
+        emit_ring_entry(e, ed, yew_jumplist_at(&w->jumps, i));
     state_list_close(e);
     state_map_close(e);
 }
@@ -393,14 +393,14 @@ static void emit_win(StateEmit *e, const Ed *ed, const Win *w)
 
     state_map_open(e, NULL);
     state_list_open(e, "cursors");
-    for (i = 0U; i < w->cs.curs.len && i < (u32)SAG_STATE_MAX_CURSORS;
+    for (i = 0U; i < w->cs.curs.len && i < (u32)YEW_STATE_MAX_CURSORS;
          i++) {
         const Cursor *c = &w->cs.curs.data[i];
 
         state_map_open(e, NULL);
         state_int(e, "pos", (i64)c->pos.v);
         state_int(e, "anchor", (i64)c->anchor.v);
-        state_int(e, "goal", sag_goal_to_i64(c->goal_col.v));
+        state_int(e, "goal", yew_goal_to_i64(c->goal_col.v));
         state_map_close(e);
     }
     state_list_close(e);
@@ -427,12 +427,12 @@ static bool tab_should_defer(const Ed *ed, int idx)
 {
     if (idx == ed->tabs.active)
         return false;
-    return !sag_tab_is_resident(ed, idx);
+    return !yew_tab_is_resident(ed, idx);
 }
 
 static void emit_tab(StateEmit *e, const Ed *ed, int idx)
 {
-    const Tab *t = sag_tab_at((Ed *)ed, idx);
+    const Tab *t = yew_tab_at((Ed *)ed, idx);
     WinOrder order;
     u32 i;
 
@@ -477,7 +477,7 @@ static void emit_file_records(StateEmit *e, const Ed *ed)
     u32 written = 0U;
 
     state_list_open(e, "files");
-    for (i = 0U; i < ed->ws.nbufs && written < (u32)SAG_STATE_MAX_FILES;
+    for (i = 0U; i < ed->ws.nbufs && written < (u32)YEW_STATE_MAX_FILES;
          i++) {
         const Buffer *b = ed->ws.bufs[i];
         u32 m;
@@ -485,7 +485,7 @@ static void emit_file_records(StateEmit *e, const Ed *ed)
 
         /* Scratch buffers have no file behind them, so there is nothing
          * a file record could be about. */
-        if (b->path == NULL || (b->flags & SAG_BUF_SCRATCH) != 0U)
+        if (b->path == NULL || (b->flags & YEW_BUF_SCRATCH) != 0U)
             continue;
         state_map_open(e, NULL);
         state_str(e, "path", b->path, (u64)strlen(b->path));
@@ -509,7 +509,7 @@ static void emit_file_records(StateEmit *e, const Ed *ed)
             {
                 ByteOff at = BYTEOFF(0U);
 
-                (void)sag_ed_mark_get((Ed *)ed, b, (u8)('a' + m), &at);
+                (void)yew_ed_mark_get((Ed *)ed, b, (u8)('a' + m), &at);
                 state_int(e, "pos", (i64)at.v);
             }
             state_map_close(e);
@@ -528,14 +528,14 @@ static void emit_file_records(StateEmit *e, const Ed *ed)
             u32 c;
             u32 nc = b->changes.len;
 
-            if (nc > (u32)SAG_STATE_MAX_JUMPS)
-                nc = (u32)SAG_STATE_MAX_JUMPS;
+            if (nc > (u32)YEW_STATE_MAX_JUMPS)
+                nc = (u32)YEW_STATE_MAX_JUMPS;
             state_map_open(e, "changes");
             state_int(e, "cur", (i64)b->changes.cur);
             state_list_open(e, "entries");
             for (c = 0U; c < nc; c++) {
-                u32 at = (b->changes.head + SAG_CHANGELIST_MAX -
-                          b->changes.len + c) % SAG_CHANGELIST_MAX;
+                u32 at = (b->changes.head + YEW_CHANGELIST_MAX -
+                          b->changes.len + c) % YEW_CHANGELIST_MAX;
 
                 emit_ring_entry(e, ed, &b->changes.e[at]);
             }
@@ -552,9 +552,9 @@ static void emit_file_records(StateEmit *e, const Ed *ed)
         state_map_open(e, "undo");
         {
             char sidecar[32];
-            u64 h = sag_fnv1a64((const u8 *)b->path, strlen(b->path));
+            u64 h = yew_fnv1a64((const u8 *)b->path, strlen(b->path));
 
-            (void)snprintf(sidecar, sizeof(sidecar), "%016lx.sagu",
+            (void)snprintf(sidecar, sizeof(sidecar), "%016lx.yewu",
                            (unsigned long)h);
             state_str(e, "file", sidecar, (u64)strlen(sidecar));
             state_int(e, "version", 1);
@@ -566,7 +566,7 @@ static void emit_file_records(StateEmit *e, const Ed *ed)
     state_list_close(e);
 }
 
-void sag_state_emit(const Ed *ed, Bytebuf *out)
+void yew_state_emit(const Ed *ed, Bytebuf *out)
 {
     StateEmit e;
     u32 i;
@@ -576,12 +576,12 @@ void sag_state_emit(const Ed *ed, Bytebuf *out)
         return;
     state_emit_init(&e, out);
     state_map_open(&e, NULL);
-    state_int(&e, "version", SAG_STATE_VERSION);
-    state_str(&e, "writer", "sagitta", 7U);
+    state_int(&e, "version", YEW_STATE_VERSION);
+    state_str(&e, "writer", "yew", 3U);
 
     state_map_open(&e, "workspace");
     {
-        const char *root = sag_ws_root(ed);
+        const char *root = yew_ws_root(ed);
 
         state_str(&e, "path", root == NULL ? "" : root,
                    root == NULL ? 0U : (u64)strlen(root));
@@ -592,7 +592,7 @@ void sag_state_emit(const Ed *ed, Bytebuf *out)
 
     /*
      * Options land in Sprint 36.  Until then whatever was READ is
-     * written back unchanged: an older sagitta opening a newer
+     * written back unchanged: an older yew opening a newer
      * session's workspace must not silently delete every key it has
      * never heard of, and since the document is rewritten in full on
      * every change, dropping them once makes it permanent.
@@ -629,15 +629,15 @@ void sag_state_emit(const Ed *ed, Bytebuf *out)
     state_list_close(&e);
 
     state_list_open(&e, "tabs");
-    n = (int)sag_tab_count(ed);
-    if (n > SAG_STATE_MAX_TABS)
-        n = SAG_STATE_MAX_TABS;
+    n = (int)yew_tab_count(ed);
+    if (n > YEW_STATE_MAX_TABS)
+        n = YEW_STATE_MAX_TABS;
     for (i = 0U; i < (u32)n; i++)
         emit_tab(&e, ed, (int)i);
     state_list_close(&e);
 
     {
-        const Tab *active = sag_tab_at((Ed *)ed, ed->tabs.active);
+        const Tab *active = yew_tab_at((Ed *)ed, ed->tabs.active);
 
         state_int(&e, "active_tab", active == NULL ? 0
                                                     : (i64)active->tab_id);

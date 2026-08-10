@@ -1,5 +1,5 @@
-#ifndef SAG_TEST_ROUNDTRIP_GEN_H
-#define SAG_TEST_ROUNDTRIP_GEN_H
+#ifndef YEW_TEST_ROUNDTRIP_GEN_H
+#define YEW_TEST_ROUNDTRIP_GEN_H
 
 #include <stdbool.h>
 
@@ -38,4 +38,4 @@ bool rt_session_generate(RtSession *session, u64 seed, u32 fixture,
 /* Audits both halves of Sprint 35 DoD 9/10. */
 bool rt_generator_coverage(bool verbose);
 
-#endif /* SAG_TEST_ROUNDTRIP_GEN_H */
+#endif /* YEW_TEST_ROUNDTRIP_GEN_H */

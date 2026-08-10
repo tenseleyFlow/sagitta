@@ -49,7 +49,7 @@ static bool make_fixture(char *root, size_t root_cap,
                          char *state, size_t state_cap)
 {
     static const char line[] = "x\n";
-    char template[] = "/tmp/sagitta-latency-XXXXXX";
+    char template[] = "/tmp/yew-latency-XXXXXX";
     char *made;
     int fd;
     int n;
@@ -169,7 +169,7 @@ static void merge_sort_i64(i64 *values, i64 *work, size_t len)
  */
 static const char *g_stop_why = "?";
 
-static bool stop_editor(SagLivePty *pty)
+static bool stop_editor(YewLivePty *pty)
 {
     static const char escape = '\033';
     static const char quit[] = "q!";
@@ -186,7 +186,7 @@ static bool stop_editor(SagLivePty *pty)
      * same measurement passed locally with thirty times the budget to
      * spare.
      */
-    i64 deadline = sag_live_pty_now_ns() + INT64_C(20000000000);
+    i64 deadline = yew_live_pty_now_ns() + INT64_C(20000000000);
     int code;
 
     /*
@@ -213,25 +213,25 @@ static bool stop_editor(SagLivePty *pty)
      * stuck ignores every attempt and still fails at the same 20 s
      * bound, with the same message.
      */
-    while (sag_live_pty_now_ns() < deadline) {
+    while (yew_live_pty_now_ns() < deadline) {
         i64 give_up;
 
         g_stop_why = "escape write timed out";
-        if (!sag_live_pty_write(pty, &escape, 1U, deadline))
+        if (!yew_live_pty_write(pty, &escape, 1U, deadline))
             return false;
         settle.tv_sec = 0;
         settle.tv_nsec = 50000000L;
         while (nanosleep(&settle, &settle) != 0 && errno == EINTR)
             ;
         g_stop_why = "q! write timed out";
-        if (!sag_live_pty_write(pty, quit, sizeof(quit) - 1U, deadline))
+        if (!yew_live_pty_write(pty, quit, sizeof(quit) - 1U, deadline))
             return false;
 
         /* Short per-attempt wait, long overall bound. */
-        give_up = sag_live_pty_now_ns() + INT64_C(2000000000);
+        give_up = yew_live_pty_now_ns() + INT64_C(2000000000);
         if (give_up > deadline)
             give_up = deadline;
-        if (sag_live_pty_wait_exit(pty, give_up, &code)) {
+        if (yew_live_pty_wait_exit(pty, give_up, &code)) {
             if (code != 0) {
                 static char why[64];
 
@@ -255,28 +255,28 @@ static bool measure_cold(const char *binary, const char *path,
     size_t run;
 
     for (run = 0U; run < COLD_RUNS; run++) {
-        SagLivePty pty = {.master = -1, .pid = -1};
-        i64 start = sag_live_pty_now_ns();
+        YewLivePty pty = {.master = -1, .pid = -1};
+        i64 start = yew_live_pty_now_ns();
         i64 completed;
         i64 deadline = start + INT64_C(2000000000);
 
         if (start < 0 ||
-            !sag_live_pty_spawn(&pty, binary, path, state,
+            !yew_live_pty_spawn(&pty, binary, path, state,
                                 SCREEN_ROWS, SCREEN_COLS) ||
-            !sag_live_pty_wait_frame(&pty, 0U, deadline, &completed)) {
+            !yew_live_pty_wait_frame(&pty, 0U, deadline, &completed)) {
             (void)fprintf(stderr, "latency: cold run %zu did not paint\n",
                           run + 1U);
-            sag_live_pty_close(&pty);
+            yew_live_pty_close(&pty);
             return false;
         }
         samples[run] = completed - start;
         if (samples[run] < 0 || !stop_editor(&pty)) {
             (void)fprintf(stderr, "latency: cold run %zu did not quit: %s\n",
                           run + 1U, g_stop_why);
-            sag_live_pty_close(&pty);
+            yew_live_pty_close(&pty);
             return false;
         }
-        sag_live_pty_close(&pty);
+        yew_live_pty_close(&pty);
     }
     merge_sort_i64(samples, work, COLD_RUNS);
     *median_out = samples[COLD_RUNS / 2U];
@@ -285,7 +285,7 @@ static bool measure_cold(const char *binary, const char *path,
 
 static size_t key_count(void)
 {
-    const char *env = getenv("SAG_LATENCY_KEYS");
+    const char *env = getenv("YEW_LATENCY_KEYS");
     char *end;
     unsigned long value;
 
@@ -300,7 +300,7 @@ static size_t key_count(void)
 
 static i64 injected_delay(void)
 {
-    const char *env = getenv("SAG_LATENCY_INJECT_NS");
+    const char *env = getenv("YEW_LATENCY_INJECT_NS");
     char *end;
     long long value;
 
@@ -332,7 +332,7 @@ static bool measure_keys(const char *binary, const char *path,
     i64 inject = injected_delay();
     i64 *samples;
     i64 *work;
-    SagLivePty pty = {.master = -1, .pid = -1};
+    YewLivePty pty = {.master = -1, .pid = -1};
     i64 deadline;
     size_t i;
     bool ok = false;
@@ -343,10 +343,10 @@ static bool measure_keys(const char *binary, const char *path,
     work = malloc(count * sizeof(*work));
     if (samples == NULL || work == NULL)
         goto done_alloc;
-    deadline = sag_live_pty_now_ns() + INT64_C(2000000000);
-    if (!sag_live_pty_spawn(&pty, binary, path, state,
+    deadline = yew_live_pty_now_ns() + INT64_C(2000000000);
+    if (!yew_live_pty_spawn(&pty, binary, path, state,
                             SCREEN_ROWS, SCREEN_COLS) ||
-        !sag_live_pty_wait_frame(&pty, 0U, deadline, NULL)) {
+        !yew_live_pty_wait_frame(&pty, 0U, deadline, NULL)) {
         (void)fprintf(stderr, "latency: key run did not paint initially\n");
         goto done_pty;
     }
@@ -354,9 +354,9 @@ static bool measure_keys(const char *binary, const char *path,
         static const char enter_insert = 'i';
         u64 frame = pty.frames;
 
-        deadline = sag_live_pty_now_ns() + INT64_C(2000000000);
-        if (!sag_live_pty_write(&pty, &enter_insert, 1U, deadline) ||
-            !sag_live_pty_wait_frame(&pty, frame, deadline, NULL)) {
+        deadline = yew_live_pty_now_ns() + INT64_C(2000000000);
+        if (!yew_live_pty_write(&pty, &enter_insert, 1U, deadline) ||
+            !yew_live_pty_wait_frame(&pty, frame, deadline, NULL)) {
             (void)fprintf(stderr, "latency: insert mode did not paint\n");
             goto done_pty;
         }
@@ -364,15 +364,15 @@ static bool measure_keys(const char *binary, const char *path,
     for (i = 0U; i < count; i++) {
         char key = (i & 1U) != 0U ? 'a' : 'b';
         u64 frame = pty.frames;
-        i64 start = sag_live_pty_now_ns();
+        i64 start = yew_live_pty_now_ns();
         i64 completed;
 
         deadline = start + INT64_C(1000000000);
         if (start < 0 ||
-            !sag_live_pty_write(&pty, &key, 1U, deadline))
+            !yew_live_pty_write(&pty, &key, 1U, deadline))
             goto done_pty;
         delay_ns(inject);
-        if (!sag_live_pty_wait_frame(&pty, frame, deadline, &completed)) {
+        if (!yew_live_pty_wait_frame(&pty, frame, deadline, &completed)) {
             (void)fprintf(stderr, "latency: key %zu did not paint\n", i + 1U);
             goto done_pty;
         }
@@ -387,7 +387,7 @@ static bool measure_keys(const char *binary, const char *path,
     ok = true;
 
 done_pty:
-    sag_live_pty_close(&pty);
+    yew_live_pty_close(&pty);
 done_alloc:
     free(work);
     free(samples);
@@ -404,10 +404,10 @@ int main(int argc, char **argv)
     i64 cold;
     int status = 0;
 
-    if (argc != 5 || strcmp(argv[1], "--sagitta") != 0 ||
+    if (argc != 5 || strcmp(argv[1], "--yew") != 0 ||
         strcmp(argv[3], "--baseline") != 0) {
         (void)fprintf(stderr,
-                      "usage: %s --sagitta PATH --baseline PATH\n", argv[0]);
+                      "usage: %s --yew PATH --baseline PATH\n", argv[0]);
         return 2;
     }
     if (!load_limits(argv[4], &limits)) {

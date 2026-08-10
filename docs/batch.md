@@ -1,23 +1,23 @@
 # Headless batch editing
 
-Sagitta can open editor buffers and run a Fletch program without opening a
+yew can open editor buffers and run a Fletch program without opening a
 terminal:
 
 ```text
-sag [OPTION...] --batch SCRIPT.fl [FILE...] [-- ARG...]
+yew [OPTION...] --batch SCRIPT.fl [FILE...] [-- ARG...]
 ```
 
 Batch mode does not initialize a tty, input decoder, terminal grid, or event
 loop. It loads configuration, opens every `FILE` in order, runs `SCRIPT.fl`,
 then exits. `buf.list()` uses the same file order and `buf.current()` is the
-first buffer. With no file operands, Sagitta opens an empty scratch buffer.
+first buffer. With no file operands, yew opens an empty scratch buffer.
 
-Put options before the first `FILE`. The first `--` ends Sagitta's operands;
+Put options before the first `FILE`. The first `--` ends yew's operands;
 everything after it belongs to the script's `args` list, unchanged. For
 example:
 
 ```sh
-sag --clean --batch tools/check.fl one.c two.c -- --warnings-as-errors src/
+yew --clean --batch tools/check.fl one.c two.c -- --warnings-as-errors src/
 ```
 
 This opens `one.c` and `two.c`. The script receives
@@ -27,13 +27,13 @@ This opens `one.c` and `two.c`. The script receives
 
 Configuration finishes before files are opened and before the batch script
 runs. The normal order is the shipped runtime `init.fl`, the user `init.fl`,
-then the workspace `.sagitta.fl` after its trust check.
+then the workspace `.yew.fl` after its trust check.
 
 | Option | Effect |
 |---|---|
 | `--clean` | Skip all file-based configuration and workspace state. Use this for reproducible automation and script tests. |
 | `--config PATH` | Load `PATH` in place of the user's `init.fl`. |
-| `--no-workspace-config` | Do not load the workspace `.sagitta.fl`. |
+| `--no-workspace-config` | Do not load the workspace `.yew.fl`. |
 | `--trust-workspace` | Pre-grant the current workspace configuration. Batch mode never opens a trust prompt. |
 | `--quiet` | Suppress batch warnings and mirrored warning logs. Errors still go to stderr. |
 
@@ -71,7 +71,7 @@ Stdout is flushed on success, script failure, I/O failure, and internal bug
 paths. Redirection is therefore a supported interface:
 
 ```sh
-sag --clean --batch tools/render.fl input.txt >output.txt
+yew --clean --batch tools/render.fl input.txt >output.txt
 ```
 
 Nothing except the script's stdout can enter `output.txt`.
@@ -83,11 +83,11 @@ Nothing except the script's stdout can enter `output.txt`.
 | 0 | The script completed. Modified but unsaved buffers do not change this code. |
 | 1 | Command-line error, unreadable script, or unsupported reserved option. |
 | 2 | The script did not compile or ended with an uncaught Fletch error. |
-| 3 | Sagitta could not open a file operand or another host-side I/O operation failed before the script could handle it. |
-| 4 | Internal Sagitta bug, including any attempted terminal access from batch mode. |
+| 3 | yew could not open a file operand or another host-side I/O operation failed before the script could handle it. |
+| 4 | Internal yew bug, including any attempted terminal access from batch mode. |
 
 An uncaught runtime error starts its stderr report with
-`sagitta: script failed:` and includes the Fletch trace and source location.
+`yew: script failed:` and includes the Fletch trace and source location.
 A compile failure has a caret diagnostic but no runtime frames. Both are exit
 2; neither is a crash.
 
@@ -104,17 +104,17 @@ buf.save(b, {force: true})   # accept a changed-on-disk conflict
 ```
 
 Without `{force: true}`, an mtime or overwrite conflict raises a catchable
-Fletch error with kind `"io"`; batch mode never prompts. Saves use Sagitta's
+Fletch error with kind `"io"`; batch mode never prompts. Saves use yew's
 durable file path.
 
-If the script exits normally with dirty buffers, Sagitta still returns 0 and
+If the script exits normally with dirty buffers, yew still returns 0 and
 writes one warning to stderr, for example:
 
 ```text
 warning: 2 buffers modified and not saved: a.c, b.c
 ```
 
-`--quiet` suppresses this warning. On clean process exit, Sagitta discards
+`--quiet` suppresses this warning. On clean process exit, yew discards
 the run's crash journals. An interrupted run retains recovery information.
 
 ## Commands that require a terminal
@@ -123,7 +123,7 @@ Every command marked interactive refuses under `--batch` with a catchable
 `"capability"` error. The error names the command and the available scripted
 alternative.
 
-| Interactive command | Batch alternative named by Sagitta |
+| Interactive command | Batch alternative named by yew |
 |---|---|
 | `ed.ui.message_expand` | No batch alternative. |
 | `ed.cmdline.accept`, `ed.cmdline.cancel` | Call the intended command directly with `ed.run(name, args)`. |
@@ -163,7 +163,7 @@ buf.save(b)
 ```
 
 ```sh
-sag --clean --batch tools/format.fl source.c
+yew --clean --batch tools/format.fl source.c
 ```
 
 Omitting `buf.save(b)` leaves `source.c` unchanged and produces the dirty
@@ -194,7 +194,7 @@ if failed {
 ```
 
 ```sh
-sag --clean --batch tools/no-tabs.fl src/*.c >findings.txt
+yew --clean --batch tools/no-tabs.fl src/*.c >findings.txt
 ```
 
 ### Rename across a file list
@@ -223,7 +223,7 @@ for b in buf.list() {
 ```
 
 ```sh
-sag --clean --batch tools/rename.fl one.c two.c -- old_name new_name
+yew --clean --batch tools/rename.fl one.c two.c -- old_name new_name
 ```
 
 ## Script tests
@@ -259,7 +259,7 @@ byte-sorts their names, and gives each one a fresh process and filesystem
 sandbox. It runs the equivalent of:
 
 ```sh
-build/sagitta --batch --test --clean tests/script/example.fl
+build/yew --batch --test --clean tests/script/example.fl
 ```
 
 Use the Make target for the normal suite:
@@ -273,10 +273,10 @@ The runner also supports deterministic listing and substring filtering:
 ```sh
 build/script_runner --list
 build/script_runner --filter search_replace
-build/script_runner --sagitta /path/to/sagitta --filter api_
+build/script_runner --yew /path/to/yew --filter api_
 ```
 
-`SAG_SCRIPT_BUDGET_MS` changes the default 10,000 ms wall-clock budget per
+`YEW_SCRIPT_BUDGET_MS` changes the default 10,000 ms wall-clock budget per
 test. Passing sandboxes are removed. A failing, crashing, or timed-out test
 preserves its sandbox and prints its path. The runner exits 0 only when every
 selected test passes or skips; a filter matching no tests exits 1.

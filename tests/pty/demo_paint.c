@@ -68,16 +68,16 @@ static bool write_all(int fd, const u8 *data, size_t len)
     return true;
 }
 
-static SagColor rgb(u8 r, u8 g, u8 b)
+static YewColor rgb(u8 r, u8 g, u8 b)
 {
-    SagColor color = {SAG_COLOR_RGB, r, g, b};
+    YewColor color = {YEW_COLOR_RGB, r, g, b};
 
     return color;
 }
 
-static SagColor indexed(u8 index)
+static YewColor indexed(u8 index)
 {
-    SagColor color = {SAG_COLOR_INDEXED, index, 0U, 0U};
+    YewColor color = {YEW_COLOR_INDEXED, index, 0U, 0U};
 
     return color;
 }
@@ -88,18 +88,18 @@ static const char *demo_getenv(const char *name)
 }
 
 static void put_text(Grid *g, u16 row, u16 col, const char *text,
-                     SagColor fg, SagColor bg, u16 attrs)
+                     YewColor fg, YewColor bg, u16 attrs)
 {
     if (row < g->rows && col < g->cols)
-        (void)sag_grid_puts(g, row, col, (const u8 *)text, strlen(text),
+        (void)yew_grid_puts(g, row, col, (const u8 *)text, strlen(text),
                             fg, bg, attrs);
 }
 
 static void put_bytes(Grid *g, u16 row, u16 col, const u8 *text, size_t n,
-                      SagColor fg, SagColor bg, u16 attrs)
+                      YewColor fg, YewColor bg, u16 attrs)
 {
     if (row < g->rows && col < g->cols)
-        (void)sag_grid_puts(g, row, col, text, n, fg, bg, attrs);
+        (void)yew_grid_puts(g, row, col, text, n, fg, bg, attrs);
 }
 
 static void paint_box(Grid *g)
@@ -110,56 +110,56 @@ static void paint_box(Grid *g)
     static const u8 br[] = {0xe2U, 0x94U, 0x98U};
     static const u8 hz[] = {0xe2U, 0x94U, 0x80U};
     static const u8 vt[] = {0xe2U, 0x94U, 0x82U};
-    SagColor edge = rgb(0x7aU, 0xa2U, 0xf7U);
-    SagColor bg = rgb(0x1aU, 0x1bU, 0x26U);
+    YewColor edge = rgb(0x7aU, 0xa2U, 0xf7U);
+    YewColor bg = rgb(0x1aU, 0x1bU, 0x26U);
     u16 row;
     u16 col;
 
     if (g->rows < 2U || g->cols < 2U)
         return;
-    (void)sag_grid_put(g, 0U, 0U, tl, sizeof(tl), edge, bg, 0U);
-    (void)sag_grid_put(g, 0U, (u16)(g->cols - 1U), tr, sizeof(tr), edge,
+    (void)yew_grid_put(g, 0U, 0U, tl, sizeof(tl), edge, bg, 0U);
+    (void)yew_grid_put(g, 0U, (u16)(g->cols - 1U), tr, sizeof(tr), edge,
                        bg, 0U);
-    (void)sag_grid_put(g, (u16)(g->rows - 1U), 0U, bl, sizeof(bl), edge,
+    (void)yew_grid_put(g, (u16)(g->rows - 1U), 0U, bl, sizeof(bl), edge,
                        bg, 0U);
-    (void)sag_grid_put(g, (u16)(g->rows - 1U), (u16)(g->cols - 1U), br,
+    (void)yew_grid_put(g, (u16)(g->rows - 1U), (u16)(g->cols - 1U), br,
                        sizeof(br), edge, bg, 0U);
     for (col = 1U; col + 1U < g->cols; col++) {
-        (void)sag_grid_put(g, 0U, col, hz, sizeof(hz), edge, bg, 0U);
-        (void)sag_grid_put(g, (u16)(g->rows - 1U), col, hz, sizeof(hz),
+        (void)yew_grid_put(g, 0U, col, hz, sizeof(hz), edge, bg, 0U);
+        (void)yew_grid_put(g, (u16)(g->rows - 1U), col, hz, sizeof(hz),
                            edge, bg, 0U);
     }
     for (row = 1U; row + 1U < g->rows; row++) {
-        (void)sag_grid_put(g, row, 0U, vt, sizeof(vt), edge, bg, 0U);
-        (void)sag_grid_put(g, row, (u16)(g->cols - 1U), vt, sizeof(vt),
+        (void)yew_grid_put(g, row, 0U, vt, sizeof(vt), edge, bg, 0U);
+        (void)yew_grid_put(g, row, (u16)(g->cols - 1U), vt, sizeof(vt),
                            edge, bg, 0U);
     }
 }
 
 static void paint_basic(Grid *g)
 {
-    static const char title[] = "sagitta";
+    static const char title[] = "yew";
     Cell strip = g->blank;
     u16 title_col;
     u16 title_row;
 
-    sag_grid_clear(g);
+    yew_grid_clear(g);
     paint_box(g);
     title_col = g->cols > sizeof(title) - 1U
                     ? (u16)((g->cols - (sizeof(title) - 1U)) / 2U) : 0U;
     title_row = g->rows / 2U;
     put_text(g, title_row, title_col, title,
              rgb(0xc0U, 0xcaU, 0xf5U), rgb(0x1aU, 0x1bU, 0x26U),
-             SAG_ATTR_BOLD);
+             YEW_ATTR_BOLD);
     if (g->rows > 2U) {
         strip.fg = indexed(0U);
         strip.bg = rgb(0x9eU, 0xceU, 0x6aU);
-        sag_grid_fill(g, (u16)(g->rows - 2U), 1U,
+        yew_grid_fill(g, (u16)(g->rows - 2U), 1U,
                       g->cols > 1U ? (u16)(g->cols - 1U) : g->cols, strip);
         put_text(g, (u16)(g->rows - 2U), 3U, "first paint",
-                 indexed(0U), strip.bg, SAG_ATTR_BOLD);
+                 indexed(0U), strip.bg, YEW_ATTR_BOLD);
     }
-    sag_grid_cursor(g, title_row, title_col, true);
+    yew_grid_cursor(g, title_row, title_col, true);
 }
 
 static void paint_wide(Grid *g)
@@ -186,21 +186,21 @@ static void paint_wide(Grid *g)
         0xccU, 0x88U, 0xccU, 0x84U
     };
     static const u8 wide[] = {0xe6U, 0xbcU, 0xa2U};
-    SagColor fg = rgb(0xbbU, 0x9aU, 0xf7U);
-    SagColor bg = {0};
+    YewColor fg = rgb(0xbbU, 0x9aU, 0xf7U);
+    YewColor bg = {0};
 
-    sag_grid_clear(g);
+    yew_grid_clear(g);
     put_bytes(g, 1U, 2U, cjk, sizeof(cjk), fg, bg, 0U);
     put_bytes(g, 3U, 2U, emoji, sizeof(emoji),
               rgb(0xe0U, 0xafU, 0x68U), bg, 0U);
     put_bytes(g, 5U, 2U, family, sizeof(family),
               rgb(0x7dU, 0xcfU, 0xffU), bg, 0U);
     put_bytes(g, 7U, 2U, combining, sizeof(combining),
-              rgb(0x9eU, 0xceU, 0x6aU), bg, SAG_ATTR_UNDERCURL);
+              rgb(0x9eU, 0xceU, 0x6aU), bg, YEW_ATTR_UNDERCURL);
     if (g->rows > 9U && g->cols != 0U)
-        (void)sag_grid_put(g, 9U, (u16)(g->cols - 1U), wide,
+        (void)yew_grid_put(g, 9U, (u16)(g->cols - 1U), wide,
                            sizeof(wide), fg, bg, 0U);
-    sag_grid_cursor(g, 5U < g->rows ? 5U : 0U, 2U < g->cols ? 2U : 0U,
+    yew_grid_cursor(g, 5U < g->rows ? 5U : 0U, 2U < g->cols ? 2U : 0U,
                     true);
 }
 
@@ -210,22 +210,22 @@ static void paint_colors(Grid *g)
     u16 col;
     u16 limit;
 
-    sag_grid_clear(g);
+    yew_grid_clear(g);
     limit = g->cols < 64U ? g->cols : 64U;
     for (col = 0U; col < limit; col++) {
         cell.bg = rgb((u8)(col * 4U), (u8)(255U - col * 4U),
                       (u8)(col * 3U));
-        sag_grid_fill(g, 1U, col, (u16)(col + 1U), cell);
+        yew_grid_fill(g, 1U, col, (u16)(col + 1U), cell);
     }
     for (col = 0U; col < 16U && col < g->cols; col++) {
         cell.bg = indexed((u8)col);
-        sag_grid_fill(g, 3U, col, (u16)(col + 1U), cell);
+        yew_grid_fill(g, 3U, col, (u16)(col + 1U), cell);
     }
-    cell.bg = (SagColor){0};
+    cell.bg = (YewColor){0};
     if (g->rows > 5U)
-        sag_grid_fill(g, 5U, 0U, g->cols, cell);
-    put_text(g, 5U, 1U, "default", (SagColor){0}, (SagColor){0}, 0U);
-    sag_grid_cursor(g, 5U < g->rows ? 5U : 0U, 1U, false);
+        yew_grid_fill(g, 5U, 0U, g->cols, cell);
+    put_text(g, 5U, 1U, "default", (YewColor){0}, (YewColor){0}, 0U);
+    yew_grid_cursor(g, 5U < g->rows ? 5U : 0U, 1U, false);
 }
 
 static void paint_echo(Grid *g, const Key *key)
@@ -244,18 +244,18 @@ static void paint_echo(Grid *g, const Key *key)
                    "kind=%u code=%u mods=%u ev=%u text=%s",
                    (unsigned)key->kind, (unsigned)key->code,
                    (unsigned)key->mods, (unsigned)key->ev, text);
-    sag_grid_clear(g);
-    put_text(g, 2U, 2U, line, rgb(0xc0U, 0xcaU, 0xf5U), (SagColor){0},
-             SAG_ATTR_BOLD);
-    sag_grid_cursor(g, 2U, 2U, true);
+    yew_grid_clear(g);
+    put_text(g, 2U, 2U, line, rgb(0xc0U, 0xcaU, 0xf5U), (YewColor){0},
+             YEW_ATTR_BOLD);
+    yew_grid_cursor(g, 2U, 2U, true);
 }
 
 static void paint_echo_waiting(Grid *g)
 {
-    sag_grid_clear(g);
+    yew_grid_clear(g);
     put_text(g, 2U, 2U, "waiting for key", rgb(0xc0U, 0xcaU, 0xf5U),
-             (SagColor){0}, SAG_ATTR_BOLD);
-    sag_grid_cursor(g, 2U, 2U, true);
+             (YewColor){0}, YEW_ATTR_BOLD);
+    yew_grid_cursor(g, 2U, 2U, true);
 }
 
 static void paint_damage(Demo *d)
@@ -263,8 +263,8 @@ static void paint_damage(Demo *d)
     const u8 glyph = d->damage_flip ? (u8)'X' : (u8)'x';
 
     paint_basic(&d->grid);
-    (void)sag_grid_put(&d->grid, 1U, 1U, &glyph, 1U,
-                       (SagColor){0}, (SagColor){0}, 0U);
+    (void)yew_grid_put(&d->grid, 1U, 1U, &glyph, 1U,
+                       (YewColor){0}, (YewColor){0}, 0U);
 }
 
 static bool s15_scene_is(const Demo *d, const char *suffix)
@@ -313,10 +313,10 @@ static void paint_s15(Demo *d)
     (void)memset(&buffer, 0, sizeof(buffer));
     (void)memset(&win, 0, sizeof(win));
     s15_make_text(d, &text);
-    buffer.tb = sag_textbuf_from_bytes(text.data, text.len);
-    buffer.undo = sag_undo_new(buffer.tb);
-    sag_undo_mark_saved(buffer.undo);
-    sag_filemeta_init(&buffer.meta);
+    buffer.tb = yew_textbuf_from_bytes(text.data, text.len);
+    buffer.undo = yew_undo_new(buffer.tb);
+    yew_undo_mark_saved(buffer.undo);
+    yew_filemeta_init(&buffer.meta);
     buffer.path = (char *)"src/ui/viewport.c";
 
     if (s15_scene_is(d, "gutter_rel_9"))
@@ -325,9 +325,9 @@ static void paint_s15(Demo *d)
         target = LINENO(9U);
     else if (s15_scene_is(d, "gutter_hybrid_100"))
         target = LINENO(99U);
-    cursor.pos = sag_textbuf_line_start(buffer.tb, target);
+    cursor.pos = yew_textbuf_line_start(buffer.tb, target);
     if (s15_scene_is(d, "nowrap_cjk") || s15_scene_is(d, "wrap_cjk")) {
-        Span span = sag_textbuf_line_span(buffer.tb, LINENO(0U));
+        Span span = yew_textbuf_line_span(buffer.tb, LINENO(0U));
 
         cursor.pos = BYTEOFF(span.hi - 1U);
     } else if (s15_scene_is(d, "position_unicode")) {
@@ -337,27 +337,27 @@ static void paint_s15(Demo *d)
     cursor.goal_col = (GCol){0U};
 
     win.buf = &buffer;
-    sag_cset_init(&win.cs, cursor);
-    sag_vp_init(&win);
-    win.number_style = SAG_NUM_HYBRID;
+    yew_cset_init(&win.cs, cursor);
+    yew_vp_init(&win);
+    win.number_style = YEW_NUM_HYBRID;
     if (s15_scene_is(d, "gutter_abs_1"))
-        win.number_style = SAG_NUM_ABS;
+        win.number_style = YEW_NUM_ABS;
     else if (s15_scene_is(d, "gutter_rel_9"))
-        win.number_style = SAG_NUM_REL;
+        win.number_style = YEW_NUM_REL;
     if (s15_scene_is(d, "wrap_cjk"))
         win.vp.wrap = true;
 
     ed.grid = d->grid;
-    ed.mode = s15_scene_is(d, "mode_i") ? SAG_MODE_I : SAG_MODE_L;
-    ed.prev_unit = SAG_MODE_L;
+    ed.mode = s15_scene_is(d, "mode_i") ? YEW_MODE_I : YEW_MODE_L;
+    ed.prev_unit = YEW_MODE_L;
     ed.win = &win;
     bufptrs[0] = &buffer;
     ed.ws.bufs = bufptrs;
     ed.ws.nbufs = 1U;
     if (s15_scene_is(d, "metadata_crlf"))
-        buffer.meta.eol = SAG_EOL_CRLF;
+        buffer.meta.eol = YEW_EOL_CRLF;
     else if (s15_scene_is(d, "metadata_mixed"))
-        buffer.meta.eol = SAG_EOL_MIXED;
+        buffer.meta.eol = YEW_EOL_MIXED;
     else if (s15_scene_is(d, "metadata_bom"))
         buffer.meta.had_bom = true;
     else if (s15_scene_is(d, "metadata_binary_invalid")) {
@@ -365,16 +365,16 @@ static void paint_s15(Demo *d)
         buffer.meta.had_invalid_utf8 = true;
     }
 
-    sag_layout(&ed);
-    sag_draw_win(&ed, &win);
-    sag_grid_mark_all(&ed.grid);
+    yew_layout(&ed);
+    yew_draw_win(&ed, &win);
+    yew_grid_mark_all(&ed.grid);
     d->grid = ed.grid;
 
-    sag_vp_free(&win);
-    sag_cset_free(&win.cs);
-    sag_undo_free(buffer.undo);
-    sag_textbuf_free(buffer.tb);
-    sag_filemeta_dispose(&buffer.meta);
+    yew_vp_free(&win);
+    yew_cset_free(&win.cs);
+    yew_undo_free(buffer.undo);
+    yew_textbuf_free(buffer.tb);
+    yew_filemeta_dispose(&buffer.meta);
     bytebuf_free(&text);
 }
 
@@ -405,7 +405,7 @@ static void invalidate_front(Grid *g)
 
     for (i = 0U; i < count; i++)
         g->front[i].w = 0xffU;
-    sag_grid_mark_all(g);
+    yew_grid_mark_all(g);
 }
 
 static bool emit_frame(Demo *d, size_t *emitted)
@@ -413,16 +413,16 @@ static bool emit_frame(Demo *d, size_t *emitted)
     size_t n;
 
     d->frame.len = 0U;
-    n = sag_render_frame(&d->render, &d->grid, &d->frame);
+    n = yew_render_frame(&d->render, &d->grid, &d->frame);
     if (emitted != NULL)
         *emitted = n;
     if (n != d->frame.len)
         return false;
     if (d->clipboard_after_render)
-        sag_clip_after_render(&d->frame, now_ms());
+        yew_clip_after_render(&d->frame, now_ms());
     if (!write_all(d->tty.wfd, d->frame.data, d->frame.len))
         return false;
-    sag_grid_flip(&d->grid);
+    yew_grid_flip(&d->grid);
     return true;
 }
 
@@ -430,18 +430,18 @@ static bool probe(Demo *d)
 {
     u8 data[1024];
 
-    sag_tty_probe_start(&d->tty, now_ms());
-    while (!sag_tty_probe_done(&d->tty)) {
+    yew_tty_probe_start(&d->tty, now_ms());
+    while (!yew_tty_probe_done(&d->tty)) {
         struct pollfd fds[2];
         i64 now = now_ms();
-        i64 left = sag_tty_probe_deadline(&d->tty, now);
+        i64 left = yew_tty_probe_deadline(&d->tty, now);
         int timeout = left < 0 ? 0 : left > 1000 ? 1000 : (int)left;
         int result;
 
         fds[0].fd = d->tty.rfd;
         fds[0].events = POLLIN;
         fds[0].revents = 0;
-        fds[1].fd = sag_tty_signal_fd(&d->tty);
+        fds[1].fd = yew_tty_signal_fd(&d->tty);
         fds[1].events = POLLIN;
         fds[1].revents = 0;
         result = poll(fds, 2U, timeout);
@@ -449,45 +449,45 @@ static bool probe(Demo *d)
             bool winch;
             bool cont;
 
-            sag_tty_drain_signals(&d->tty, &winch, &cont, NULL);
-            if (!d->tty.raw || (winch && !sag_tty_winsize(&d->tty)))
+            yew_tty_drain_signals(&d->tty, &winch, &cont, NULL);
+            if (!d->tty.raw || (winch && !yew_tty_winsize(&d->tty)))
                 return false;
         }
         if (result > 0 && (fds[0].revents & (POLLIN | POLLHUP)) != 0) {
             ssize_t n = read(fds[0].fd, data, sizeof(data));
 
             if (n > 0)
-                (void)sag_tty_probe_feed(&d->tty, data, (size_t)n);
+                (void)yew_tty_probe_feed(&d->tty, data, (size_t)n);
             else if (n < 0 && errno != EINTR && errno != EAGAIN)
                 return false;
         } else if (result < 0 && errno != EINTR) {
             return false;
         }
-        sag_tty_probe_tick(&d->tty, now_ms());
+        yew_tty_probe_tick(&d->tty, now_ms());
     }
     return true;
 }
 
 static void demo_free(Demo *d)
 {
-    sag_clip_shutdown();
+    yew_clip_shutdown();
     if (d->grid_ready)
-        sag_grid_free(&d->grid);
+        yew_grid_free(&d->grid);
     if (d->input_ready)
-        sag_input_free(&d->input);
+        yew_input_free(&d->input);
     bytebuf_free(&d->frame);
-    sag_term_oob_clear();
+    yew_term_oob_clear();
     interner_free(&d->interner);
     arena_free_all(&d->arena);
     /* Keep close last: its restore blob must be the final terminal output. */
-    sag_tty_close(&d->tty);
+    yew_tty_close(&d->tty);
 }
 
 static bool handle_key(Demo *d, const Key *key, bool *running)
 {
     size_t emitted;
 
-    if (key->kind != SAG_EV_KEY)
+    if (key->kind != YEW_EV_KEY)
         return true;
     if (key->code == (u32)'q' && key->mods == 0U) {
         *running = false;
@@ -503,8 +503,8 @@ static bool handle_key(Demo *d, const Key *key, bool *running)
         const u8 glyph = d->damage_flip ? (u8)'x' : (u8)'X';
 
         d->damage_flip = !d->damage_flip;
-        (void)sag_grid_put(&d->grid, 1U, 1U, &glyph, 1U,
-                           (SagColor){0}, (SagColor){0}, 0U);
+        (void)yew_grid_put(&d->grid, 1U, 1U, &glyph, 1U,
+                           (YewColor){0}, (YewColor){0}, 0U);
         if (!emit_frame(d, &emitted))
             return false;
         if (emitted > 32U)
@@ -519,23 +519,23 @@ static bool handle_signals(Demo *d)
     bool cont;
     bool repaint = false;
 
-    sag_tty_drain_signals(&d->tty, &winch, &cont, NULL);
+    yew_tty_drain_signals(&d->tty, &winch, &cont, NULL);
     if (cont) {
         if (!d->tty.raw)
             return false;
-        sag_tty_altscreen(&d->tty, true);
+        yew_tty_altscreen(&d->tty, true);
         if (!d->tty.alt)
             return false;
-        sag_input_enable(d->tty.wfd, &d->tty.caps);
+        yew_input_enable(d->tty.wfd, &d->tty.caps);
         invalidate_front(&d->grid);
         repaint = true;
     }
     if (winch) {
-        if (!sag_tty_winsize(&d->tty))
+        if (!yew_tty_winsize(&d->tty))
             return false;
         if (d->grid.rows != (u16)d->tty.rows ||
             d->grid.cols != (u16)d->tty.cols) {
-            if (!sag_grid_resize(&d->grid, (u16)d->tty.rows,
+            if (!yew_grid_resize(&d->grid, (u16)d->tty.rows,
                                  (u16)d->tty.cols))
                 return false;
             paint_scene(d);
@@ -552,7 +552,7 @@ static int event_loop(Demo *d)
 
     while (running) {
         struct pollfd fds[2];
-        i64 deadline = sag_input_deadline(&d->input, now_ms());
+        i64 deadline = yew_input_deadline(&d->input, now_ms());
         int timeout = deadline < 0 ? -1 : deadline > 1000 ? 1000
                                                        : (int)deadline;
         int result;
@@ -561,7 +561,7 @@ static int event_loop(Demo *d)
         fds[0].fd = d->tty.rfd;
         fds[0].events = eof ? 0 : POLLIN;
         fds[0].revents = 0;
-        fds[1].fd = sag_tty_signal_fd(&d->tty);
+        fds[1].fd = yew_tty_signal_fd(&d->tty);
         fds[1].events = POLLIN;
         fds[1].revents = 0;
         result = poll(fds, 2U, timeout);
@@ -574,15 +574,15 @@ static int event_loop(Demo *d)
             ssize_t n = read(fds[0].fd, bytes, sizeof(bytes));
 
             if (n > 0)
-                sag_input_feed(&d->input, bytes, (size_t)n);
+                yew_input_feed(&d->input, bytes, (size_t)n);
             else if (n == 0) {
                 eof = true;
-                sag_input_eof(&d->input);
+                yew_input_eof(&d->input);
             } else if (errno != EINTR && errno != EAGAIN) {
                 return 1;
             }
         }
-        while (sag_input_next(&d->input, now_ms(), &key)) {
+        while (yew_input_next(&d->input, now_ms(), &key)) {
             if (!handle_key(d, &key, &running))
                 return 1;
         }
@@ -633,21 +633,21 @@ int main(int argc, char **argv)
     arena_init(&demo.arena);
     interner_init(&demo.interner, &demo.arena);
     bytebuf_init(&demo.frame);
-    if (!sag_tty_open(&demo.tty) || !sag_tty_raw(&demo.tty) ||
+    if (!yew_tty_open(&demo.tty) || !yew_tty_raw(&demo.tty) ||
         !probe(&demo)) {
         demo_free(&demo);
         return 1;
     }
-    sag_tty_altscreen(&demo.tty, true);
+    yew_tty_altscreen(&demo.tty, true);
     if (!demo.tty.alt) {
         demo_free(&demo);
         return 1;
     }
-    sag_input_enable(demo.tty.wfd, &demo.tty.caps);
-    sag_input_init(&demo.input, &demo.tty.caps);
+    yew_input_enable(demo.tty.wfd, &demo.tty.caps);
+    yew_input_init(&demo.input, &demo.tty.caps);
     demo.input_ready = true;
-    sag_input_seed(&demo.input, &demo.tty.pending);
-    if (!sag_grid_init(&demo.grid, &demo.interner, (u16)demo.tty.rows,
+    yew_input_seed(&demo.input, &demo.tty.pending);
+    if (!yew_grid_init(&demo.grid, &demo.interner, (u16)demo.tty.rows,
                        (u16)demo.tty.cols)) {
         demo_free(&demo);
         return 1;
@@ -658,26 +658,26 @@ int main(int argc, char **argv)
      * framing is already exercised by every modern-profile paint scene. */
     if (strcmp(demo.scene, "damage") == 0)
         render_caps.sync_output = false;
-    sag_render_init(&demo.render, &render_caps, demo_getenv);
+    yew_render_init(&demo.render, &render_caps, demo_getenv);
     paint_scene(&demo);
     if (strcmp(demo.scene, "osc52") == 0) {
         Registers registers;
         RegVal value;
 
-        if (setenv("SAG_CLIPBOARD", "osc52", 1) != 0 ||
-            setenv("SAG_OSC52", "plain", 1) != 0 ||
-            setenv("SAG_CLIPBOARD_TARGET", "c", 1) != 0 ||
-            setenv("SAG_OSC52_MAX", "100000", 1) != 0) {
+        if (setenv("YEW_CLIPBOARD", "osc52", 1) != 0 ||
+            setenv("YEW_OSC52", "plain", 1) != 0 ||
+            setenv("YEW_CLIPBOARD_TARGET", "c", 1) != 0 ||
+            setenv("YEW_OSC52_MAX", "100000", 1) != 0) {
             demo_free(&demo);
             return 1;
         }
-        sag_reg_init(&registers);
-        sag_regval_init(&value);
-        bytebuf_append(&value.bytes, "sagitta", 7U);
-        sag_reg_yank(&registers, 0U, &value);
+        yew_reg_init(&registers);
+        yew_regval_init(&value);
+        bytebuf_append(&value.bytes, "yew", 3U);
+        yew_reg_yank(&registers, 0U, &value);
         demo.clipboard_after_render = true;
-        sag_regval_free(&value);
-        sag_reg_free(&registers);
+        yew_regval_free(&value);
+        yew_reg_free(&registers);
     }
     if (!emit_frame(&demo, NULL)) {
         demo_free(&demo);

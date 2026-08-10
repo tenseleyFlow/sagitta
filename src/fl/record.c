@@ -27,12 +27,12 @@ static u8 lower_register(u8 name)
 
 static u32 txn_depth(const Ed *ed)
 {
-    FlVm *vm = sag_fl_vm((Ed *)ed);
+    FlVm *vm = yew_fl_vm((Ed *)ed);
 
     return vm == NULL ? 0U : vm->txn.depth;
 }
 
-void sag_record_init(Rec *rec)
+void yew_record_init(Rec *rec)
 {
     if (rec == NULL)
         return;
@@ -41,7 +41,7 @@ void sag_record_init(Rec *rec)
     rec->import_ed = true;
 }
 
-void sag_record_free(Rec *rec)
+void yew_record_free(Rec *rec)
 {
     if (rec == NULL)
         return;
@@ -50,20 +50,20 @@ void sag_record_free(Rec *rec)
     (void)memset(rec, 0, sizeof(*rec));
 }
 
-bool sag_record_start(Ed *ed, u8 reg)
+bool yew_record_start(Ed *ed, u8 reg)
 {
     Rec *rec;
 
     if (ed == NULL || !named_register(reg))
         return false;
     if (txn_depth(ed) != 0U) {
-        sag_msg(ed, SAG_MSG_ERROR,
+        yew_msg(ed, YEW_MSG_ERROR,
                 "cannot start recording inside an edit transaction");
         return false;
     }
     rec = &ed->rec;
     if (rec->active) {
-        sag_msg(ed, SAG_MSG_WARN, "already recording @%c", (int)rec->reg);
+        yew_msg(ed, YEW_MSG_WARN, "already recording @%c", (int)rec->reg);
         return false;
     }
     rec->ev.len = 0U;
@@ -72,7 +72,7 @@ bool sag_record_start(Ed *ed, u8 reg)
     rec->append = reg >= (u8)'A' && reg <= (u8)'Z';
     rec->import_ed = true;
     if (rec->append) {
-        const RegVal *current = sag_reg_get(&ed->regs, rec->reg);
+        const RegVal *current = yew_reg_get(&ed->regs, rec->reg);
 
         if (current != NULL && current->bytes.len != 0U)
             rec->import_ed = false;
@@ -81,88 +81,88 @@ bool sag_record_start(Ed *ed, u8 reg)
     rec->txn_depth_at_start = txn_depth(ed);
     rec->in_prompt = false;
     rec->active = true;
-    sag_msg(ed, SAG_MSG_INFO, "recording @%c", (int)reg);
+    yew_msg(ed, YEW_MSG_INFO, "recording @%c", (int)reg);
     return true;
 }
 
-bool sag_record_active(const Ed *ed)
+bool yew_record_active(const Ed *ed)
 {
     return ed != NULL && ed->rec.active;
 }
 
 static bool portable_range(const CmdRange *range)
 {
-    if (range == NULL || range->kind > SAG_RANGE_SELECTION)
+    if (range == NULL || range->kind > YEW_RANGE_SELECTION)
         return false;
-    if (range->kind == SAG_RANGE_LINES)
+    if (range->kind == YEW_RANGE_LINES)
         return range->lo.v <= range->hi.v && range->hi.v <= INT64_MAX;
-    if (range->kind == SAG_RANGE_NONE && range->given)
+    if (range->kind == YEW_RANGE_NONE && range->given)
         return range->tok.lo <= range->tok.hi && range->tok.hi <= INT64_MAX;
     return true;
 }
 
-CmdStatus sag_record_preflight(CmdId id, const CmdCtx *cx)
+CmdStatus yew_record_preflight(CmdId id, const CmdCtx *cx)
 {
     const CmdDesc *desc;
 
     if (cx == NULL || cx->ed == NULL || !cx->ed->rec.active ||
-        cx->source == SAG_SRC_REPLAY)
-        return SAG_CMD_OK;
+        cx->source == YEW_SRC_REPLAY)
+        return YEW_CMD_OK;
     /* Editing an open prompt uses the ordinary edit commands against the
      * prompt's private window.  Those keystrokes are intentionally dropped
-     * by sag_record_tap(); let them execute so the committed CMDLINE command
+     * by yew_record_tap(); let them execute so the committed CMDLINE command
      * can be recorded once when the prompt is accepted. */
-    if (cx->ed->rec.in_prompt && cx->source != SAG_SRC_CMDLINE &&
-        cx->ed->cmdline.active && cx->win == sag_cmdline_target(cx->ed))
-        return SAG_CMD_OK;
-    desc = sag_cmd_desc(id);
+    if (cx->ed->rec.in_prompt && cx->source != YEW_SRC_CMDLINE &&
+        cx->ed->cmdline.active && cx->win == yew_cmdline_target(cx->ed))
+        return YEW_CMD_OK;
+    desc = yew_cmd_desc(id);
     if (cx->win != NULL && cx->win != cx->ed->win) {
-        sag_msg(cx->ed, SAG_MSG_ERROR,
+        yew_msg(cx->ed, YEW_MSG_ERROR,
                 "cannot record %s for a non-current window",
                 desc == NULL ? "command" : desc->name);
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     }
     if (cx->cursor_given) {
-        sag_msg(cx->ed, SAG_MSG_ERROR,
+        yew_msg(cx->ed, YEW_MSG_ERROR,
                 "cannot record %s for an explicit cursor",
                 desc == NULL ? "command" : desc->name);
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     }
     if (!portable_range(&cx->range)) {
-        sag_msg(cx->ed, SAG_MSG_ERROR,
+        yew_msg(cx->ed, YEW_MSG_ERROR,
                 "cannot record %s with a nonportable range",
                 desc == NULL ? "command" : desc->name);
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     }
     if (cx->cursor_args_len != 0U || cx->opt_in != NULL ||
-        cx->opt_out != NULL || cx->opt_error != SAG_OPT_ERROR_NONE) {
-        sag_msg(cx->ed, SAG_MSG_ERROR,
+        cx->opt_out != NULL || cx->opt_error != YEW_OPT_ERROR_NONE) {
+        yew_msg(cx->ed, YEW_MSG_ERROR,
                 "cannot record %s with internal resolved arguments",
                 desc == NULL ? "command" : desc->name);
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     }
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
 static void capture_range(RecEvent *event, const CmdRange *range)
 {
     event->range_given = range->given;
     switch (range->kind) {
-    case SAG_RANGE_LINES:
-        event->range_kind = (u8)SAG_REC_RANGE_LINES;
+    case YEW_RANGE_LINES:
+        event->range_kind = (u8)YEW_REC_RANGE_LINES;
         event->range_lo = range->lo.v;
         event->range_hi = range->hi.v;
         break;
-    case SAG_RANGE_BUFFER:
-        event->range_kind = (u8)SAG_REC_RANGE_BUFFER;
+    case YEW_RANGE_BUFFER:
+        event->range_kind = (u8)YEW_REC_RANGE_BUFFER;
         break;
-    case SAG_RANGE_SELECTION:
-        event->range_kind = (u8)SAG_REC_RANGE_SELECTION;
+    case YEW_RANGE_SELECTION:
+        event->range_kind = (u8)YEW_REC_RANGE_SELECTION;
         break;
-    case SAG_RANGE_NONE:
+    case YEW_RANGE_NONE:
     default:
         if (range->given) {
-            event->range_kind = (u8)SAG_REC_RANGE_SPAN;
+            event->range_kind = (u8)YEW_REC_RANGE_SPAN;
             event->range_lo = range->tok.lo;
             event->range_hi = range->tok.hi;
         }
@@ -170,7 +170,7 @@ static void capture_range(RecEvent *event, const CmdRange *range)
     }
 }
 
-void sag_record_tap(CmdId id, const CmdCtx *cx)
+void yew_record_tap(CmdId id, const CmdCtx *cx)
 {
     const CmdDesc *desc;
     RecEvent event;
@@ -179,7 +179,7 @@ void sag_record_tap(CmdId id, const CmdCtx *cx)
     u32 sarg_len;
     u8 resolved_reg;
 
-    if (cx == NULL || cx->ed == NULL || cx->source == SAG_SRC_REPLAY)
+    if (cx == NULL || cx->ed == NULL || cx->source == YEW_SRC_REPLAY)
         return;
     rec = &cx->ed->rec;
     if (!rec->active)
@@ -188,10 +188,10 @@ void sag_record_tap(CmdId id, const CmdCtx *cx)
      * there is not necessarily another key event to refresh this cache.
      * Self-heal before deciding whether the incoming resolved command is
      * prompt-local; otherwise the first post-cancel command is lost. */
-    if (rec->in_prompt && cx->ed->prompt == SAG_PROMPT_NONE &&
+    if (rec->in_prompt && cx->ed->prompt == YEW_PROMPT_NONE &&
         !cx->ed->cmdline.active)
         rec->in_prompt = false;
-    desc = sag_cmd_desc(id);
+    desc = yew_cmd_desc(id);
     sarg = cx->sarg;
     sarg_len = cx->sarg_len;
     if (desc != NULL && strcmp(desc->name, "ed.macro.replay_last") == 0) {
@@ -203,28 +203,28 @@ void sag_record_tap(CmdId id, const CmdCtx *cx)
         if (!named_register(rec->last_reg))
             return;
         resolved_reg = lower_register(rec->last_reg);
-        id = sag_cmd_lookup("ed.macro.replay",
+        id = yew_cmd_lookup("ed.macro.replay",
                             (u32)(sizeof("ed.macro.replay") - 1U));
-        desc = sag_cmd_desc(id);
+        desc = yew_cmd_desc(id);
         if (id.v == 0U || desc == NULL)
-            SAG_BUG("macro replay command is missing from the registry");
+            YEW_BUG("macro replay command is missing from the registry");
         sarg = &resolved_reg;
         sarg_len = 1U;
     }
-    if (cx->source != SAG_SRC_CMDLINE &&
-        ((desc != NULL && (desc->flags & SAG_CMD_PROMPTS) != 0U) ||
+    if (cx->source != YEW_SRC_CMDLINE &&
+        ((desc != NULL && (desc->flags & YEW_CMD_PROMPTS) != 0U) ||
          (desc != NULL && strcmp(desc->name, "ed.mode.enter") == 0 &&
           cx->sarg_len == 1U && cx->sarg != NULL && cx->sarg[0] == 'E'))) {
         rec->in_prompt = true;
         return;
     }
-    if (rec->in_prompt && cx->source != SAG_SRC_CMDLINE)
+    if (rec->in_prompt && cx->source != YEW_SRC_CMDLINE)
         return;
-    if (cx->source == SAG_SRC_CMDLINE)
+    if (cx->source == YEW_SRC_CMDLINE)
         rec->in_prompt = false;
     if (rec->blob.len > UINT32_MAX ||
         sarg_len > UINT32_MAX - (u32)rec->blob.len)
-        SAG_BUG("macro recorder argument storage overflow");
+        YEW_BUG("macro recorder argument storage overflow");
     event = (RecEvent){0};
     event.cmd = id;
     event.count = cx->count;
@@ -246,14 +246,14 @@ void sag_record_tap(CmdId id, const CmdCtx *cx)
         cx->ed->footer_dirty = true;
 }
 
-void sag_record_key(Ed *ed, Key key)
+void yew_record_key(Ed *ed, Key key)
 {
     (void)key;
     if (ed == NULL || !ed->rec.active)
         return;
     /* Prompt keystrokes are deliberately not retained.  The resolved
      * command tap records the committed command exactly once. */
-    ed->rec.in_prompt = ed->prompt != SAG_PROMPT_NONE || ed->cmdline.active;
+    ed->rec.in_prompt = ed->prompt != YEW_PROMPT_NONE || ed->cmdline.active;
 }
 
 static void emit_escaped(Bytebuf *out, const u8 *s, u32 len)
@@ -284,7 +284,7 @@ static void emit_escaped(Bytebuf *out, const u8 *s, u32 len)
 
 static bool event_name(const RecEvent *event, const char *name)
 {
-    const CmdDesc *desc = sag_cmd_desc(event->cmd);
+    const CmdDesc *desc = yew_cmd_desc(event->cmd);
 
     return desc != NULL && strcmp(desc->name, name) == 0;
 }
@@ -316,11 +316,11 @@ static bool sarg_is(const Rec *rec, const RecEvent *event, char ch)
 
 static bool special_motion(const Rec *rec, const RecEvent *event)
 {
-    const CmdDesc *desc = sag_cmd_desc(event->cmd);
+    const CmdDesc *desc = yew_cmd_desc(event->cmd);
 
     if (desc == NULL || desc->word == NULL)
         return false;
-    if (event->bang || event->range_kind != (u8)SAG_REC_RANGE_NONE)
+    if (event->bang || event->range_kind != (u8)YEW_REC_RANGE_NONE)
         return false;
     if (event_name(event, "ed.edit.insert.text"))
         return true;
@@ -379,9 +379,9 @@ static void emit_count(Bytebuf *out, const RecEvent *event, u32 folded)
 
 static bool same_foldable(const RecEvent *a, const RecEvent *b)
 {
-    const CmdDesc *desc = sag_cmd_desc(a->cmd);
+    const CmdDesc *desc = yew_cmd_desc(a->cmd);
 
-    return desc != NULL && (desc->flags & SAG_CMD_REPEATABLE) != 0U &&
+    return desc != NULL && (desc->flags & YEW_CMD_REPEATABLE) != 0U &&
            !a->count_given && !b->count_given && a->cmd.v == b->cmd.v &&
            a->iarg == b->iarg && a->sarg_len == 0U && b->sarg_len == 0U;
 }
@@ -390,7 +390,7 @@ static size_t emit_motion_event(const Rec *rec, size_t at, size_t end,
                                 Bytebuf *out, u32 *highlight_depth)
 {
     const RecEvent *event = &rec->ev.data[at];
-    const CmdDesc *desc = sag_cmd_desc(event->cmd);
+    const CmdDesc *desc = yew_cmd_desc(event->cmd);
     const char *token = fixed_token(rec, event);
     u32 folded = 1U;
 
@@ -461,7 +461,7 @@ static size_t emit_motion_event(const Rec *rec, size_t at, size_t end,
     else if (desc != NULL && desc->word != NULL)
         bytebuf_append(out, desc->word, strlen(desc->word));
     else
-        SAG_BUG("recordable command has no motion word");
+        YEW_BUG("recordable command has no motion word");
     return at + folded;
 }
 
@@ -487,8 +487,8 @@ static void emit_motion_segment(const Rec *rec, size_t lo, size_t hi,
         bytebuf_printf(out, "_%u", (unsigned)segment);
     bytebuf_append(out, " = @[", 5U);
     if (annotate) {
-        const char *unit = rec->mode_at_start == (u8)SAG_MODE_W ? "w" :
-                           rec->mode_at_start == (u8)SAG_MODE_B ? "b" : "l";
+        const char *unit = rec->mode_at_start == (u8)YEW_MODE_W ? "w" :
+                           rec->mode_at_start == (u8)YEW_MODE_B ? "b" : "l";
         bytebuf_push_u8(out, (u8)' ');
         bytebuf_append(out, unit, 1U);
     }
@@ -507,11 +507,11 @@ static void emit_motion_segment(const Rec *rec, size_t lo, size_t hi,
 
 static void emit_run(const Rec *rec, const RecEvent *event, Bytebuf *out)
 {
-    const CmdDesc *desc = sag_cmd_desc(event->cmd);
+    const CmdDesc *desc = yew_cmd_desc(event->cmd);
     bool need_comma = false;
 
     if (desc == NULL)
-        SAG_BUG("macro recorder contains an unknown command id");
+        YEW_BUG("macro recorder contains an unknown command id");
     bytebuf_append(out, "  ed.run(", 9U);
     emit_escaped(out, (const u8 *)desc->name, (u32)strlen(desc->name));
     bytebuf_append(out, ", {", 3U);
@@ -529,21 +529,21 @@ static void emit_run(const Rec *rec, const RecEvent *event, Bytebuf *out)
         bytebuf_printf(out, "%s bang: true", need_comma ? "," : "");
         need_comma = true;
     }
-    if (event->range_kind != (u8)SAG_REC_RANGE_NONE) {
-        const char *kind = event->range_kind == (u8)SAG_REC_RANGE_LINES
+    if (event->range_kind != (u8)YEW_REC_RANGE_NONE) {
+        const char *kind = event->range_kind == (u8)YEW_REC_RANGE_LINES
                                ? "lines"
-                           : event->range_kind == (u8)SAG_REC_RANGE_BUFFER
+                           : event->range_kind == (u8)YEW_REC_RANGE_BUFFER
                                ? "buffer"
                            : event->range_kind ==
-                                     (u8)SAG_REC_RANGE_SELECTION
+                                     (u8)YEW_REC_RANGE_SELECTION
                                ? "selection"
                                : "span";
 
         bytebuf_printf(out, "%s range_kind: \"%s\", range_given: %s",
                        need_comma ? "," : "", kind,
                        event->range_given ? "true" : "false");
-        if (event->range_kind == (u8)SAG_REC_RANGE_LINES ||
-            event->range_kind == (u8)SAG_REC_RANGE_SPAN)
+        if (event->range_kind == (u8)YEW_REC_RANGE_LINES ||
+            event->range_kind == (u8)YEW_REC_RANGE_SPAN)
             bytebuf_printf(out, ", range_lo: %llu, range_hi: %llu",
                            (unsigned long long)event->range_lo,
                            (unsigned long long)event->range_hi);
@@ -560,7 +560,7 @@ static void emit_run(const Rec *rec, const RecEvent *event, Bytebuf *out)
     bytebuf_append(out, " });\n", 5U);
 }
 
-void sag_record_emit(const Rec *rec, const Ed *ed, Bytebuf *out)
+void yew_record_emit(const Rec *rec, const Ed *ed, Bytebuf *out)
 {
     size_t i = 0U;
     u32 segment = 0U;
@@ -569,8 +569,8 @@ void sag_record_emit(const Rec *rec, const Ed *ed, Bytebuf *out)
 
     if (rec == NULL || out == NULL)
         return;
-    bytebuf_append(out, "# sagitta-macro: 1\n", 19U);
-    bytebuf_printf(out, "# recorded-with: sagitta %s\n", SAG_VERSION);
+    bytebuf_append(out, "# yew-macro: 1\n", 15U);
+    bytebuf_printf(out, "# recorded-with: yew %s\n", YEW_VERSION);
     bytebuf_append(out, "# keymap: default\n", 18U);
     /* Folding makes the emitted motion count intentionally differ from the
      * number of resolved commands the user recorded.  Preserve that raw
@@ -598,29 +598,29 @@ void sag_record_emit(const Rec *rec, const Ed *ed, Bytebuf *out)
     bytebuf_append(out, "})();\n", 6U);
 }
 
-CmdStatus sag_record_stop(Ed *ed)
+CmdStatus yew_record_stop(Ed *ed)
 {
     Bytebuf source;
     CmdStatus status;
     u32 nevents;
 
     if (ed == NULL || !ed->rec.active)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     if (txn_depth(ed) != 0U) {
-        sag_msg(ed, SAG_MSG_ERROR,
+        yew_msg(ed, YEW_MSG_ERROR,
                 "cannot stop recording inside an edit transaction");
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     }
     ed->rec.active = false;
     ed->rec.in_prompt = false;
     bytebuf_init(&source);
-    sag_record_emit(&ed->rec, ed, &source);
-    status = sag_flapi_reg_write(ed, ed->rec.reg, source.data,
+    yew_record_emit(&ed->rec, ed, &source);
+    status = yew_flapi_reg_write(ed, ed->rec.reg, source.data,
                                  (u32)source.len, ed->rec.append);
     nevents = (u32)ed->rec.ev.len;
-    if (status == SAG_CMD_OK) {
+    if (status == YEW_CMD_OK) {
         ed->rec.last_reg = ed->rec.reg;
-        sag_msg(ed, SAG_MSG_INFO, "recorded @%c (%u events, %u bytes)",
+        yew_msg(ed, YEW_MSG_INFO, "recorded @%c (%u events, %u bytes)",
                 (int)ed->rec.reg, (unsigned)nevents,
                 (unsigned)source.len);
     }
@@ -630,30 +630,30 @@ CmdStatus sag_record_stop(Ed *ed)
 
 static bool replay_one(Ed *ed, FlFn *fn)
 {
-    FlVm *vm = sag_fl_vm(ed);
+    FlVm *vm = yew_fl_vm(ed);
     bool split_run;
     bool ok;
 
     if (vm == NULL)
         return false;
     split_run = vm->txn.entry_active &&
-                fl_runtime_cmd_source(vm) != SAG_SRC_REPLAY;
+                fl_runtime_cmd_source(vm) != YEW_SRC_REPLAY;
     if (split_run) {
         if (vm->txn.depth != 0U) {
-            sag_msg(ed, SAG_MSG_ERROR,
+            yew_msg(ed, YEW_MSG_ERROR,
                     "cannot replay a macro inside an edit transaction");
             return false;
         }
         if (!vm->host->edit_begin(vm))
             return false;
     }
-    ok = fl_call_chunk(ed->fl, fn, SAG_SRC_REPLAY);
+    ok = fl_call_chunk(ed->fl, fn, YEW_SRC_REPLAY);
     if (split_run && !vm->host->edit_end(vm, ok))
         ok = false;
     return ok;
 }
 
-u32 sag_record_status(const Ed *ed, RecStatus *out)
+u32 yew_record_status(const Ed *ed, RecStatus *out)
 {
     if (ed == NULL || out == NULL)
         return 0U;
@@ -664,32 +664,32 @@ u32 sag_record_status(const Ed *ed, RecStatus *out)
     return 1U;
 }
 
-CmdStatus sag_macro_replay(Ed *ed, u8 reg, u32 count)
+CmdStatus yew_macro_replay(Ed *ed, u8 reg, u32 count)
 {
     const RegVal *value;
     FlFn *fn;
     u32 i;
 
     if (ed == NULL || !named_register(reg) || count == 0U)
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     reg = lower_register(reg);
-    value = sag_reg_get(&ed->regs, reg);
+    value = yew_reg_get(&ed->regs, reg);
     if (value == NULL || value->bytes.len == 0U) {
-        sag_msg(ed, SAG_MSG_ERROR, "macro @%c is empty", (int)reg);
-        return SAG_CMD_ERR_ARG;
+        yew_msg(ed, YEW_MSG_ERROR, "macro @%c is empty", (int)reg);
+        return YEW_CMD_ERR_ARG;
     }
     fn = fl_macro_compile_cached(ed->fl, reg, value->bytes.data,
                                  value->bytes.len);
     if (fn == NULL)
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     for (i = 0U; i < count; i++)
         if (!replay_one(ed, fn))
-            return SAG_CMD_ERR_STATE;
+            return YEW_CMD_ERR_STATE;
     ed->rec.last_reg = reg;
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
-u32 sag_macro_list(const Ed *ed, RegInfo *out, u32 max)
+u32 yew_macro_list(const Ed *ed, RegInfo *out, u32 max)
 {
     u32 found = 0U;
     u8 reg;
@@ -697,7 +697,7 @@ u32 sag_macro_list(const Ed *ed, RegInfo *out, u32 max)
     if (ed == NULL)
         return 0U;
     for (reg = (u8)'a'; reg <= (u8)'z'; reg++) {
-        const RegVal *value = sag_reg_get((Registers *)&ed->regs, reg);
+        const RegVal *value = yew_reg_get((Registers *)&ed->regs, reg);
 
         if (value == NULL || value->bytes.len == 0U)
             continue;
@@ -714,7 +714,7 @@ u32 sag_macro_list(const Ed *ed, RegInfo *out, u32 max)
     return found;
 }
 
-u32 sag_macro_event_count(const u8 *source, size_t len)
+u32 yew_macro_event_count(const u8 *source, size_t len)
 {
     static const char prefix[] = "# events: ";
     size_t at = 0U;
@@ -757,92 +757,92 @@ static bool command_register(const CmdCtx *cx, u8 *reg)
     return true;
 }
 
-CmdStatus sag_record_cmd_record(CmdCtx *cx)
+CmdStatus yew_record_cmd_record(CmdCtx *cx)
 {
     static const char name[] = "ed.macro.record";
     CmdId id;
     u8 reg;
 
     if (cx == NULL || cx->ed == NULL)
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     if (cx->ed->rec.active && cx->sarg_len == 0U)
-        return sag_record_stop(cx->ed);
+        return yew_record_stop(cx->ed);
     if (cx->sarg_len == 0U) {
-        id = sag_cmd_lookup(name, (u32)(sizeof(name) - 1U));
+        id = yew_cmd_lookup(name, (u32)(sizeof(name) - 1U));
         if (id.v == 0U)
-            SAG_BUG("record command is missing from the registry");
+            YEW_BUG("record command is missing from the registry");
         cx->ed->capture_cmd = id;
         cx->ed->capture_count = cx->count == 0U ? 1U : cx->count;
         cx->ed->capture_count_given = cx->count_given;
-        sag_msg(cx->ed, SAG_MSG_INFO, "record register: a-z/A-Z");
-        return SAG_CMD_OK;
+        yew_msg(cx->ed, YEW_MSG_INFO, "record register: a-z/A-Z");
+        return YEW_CMD_OK;
     }
     if (!command_register(cx, &reg)) {
-        sag_msg(cx->ed, SAG_MSG_ERROR, "record requires register a-z/A-Z");
-        return SAG_CMD_ERR_ARG;
+        yew_msg(cx->ed, YEW_MSG_ERROR, "record requires register a-z/A-Z");
+        return YEW_CMD_ERR_ARG;
     }
-    return sag_record_start(cx->ed, reg) ? SAG_CMD_OK : SAG_CMD_ERR_STATE;
+    return yew_record_start(cx->ed, reg) ? YEW_CMD_OK : YEW_CMD_ERR_STATE;
 }
 
-CmdStatus sag_record_cmd_stop(CmdCtx *cx)
+CmdStatus yew_record_cmd_stop(CmdCtx *cx)
 {
-    return cx == NULL || cx->ed == NULL ? SAG_CMD_ERR_ARG
-                                        : sag_record_stop(cx->ed);
+    return cx == NULL || cx->ed == NULL ? YEW_CMD_ERR_ARG
+                                        : yew_record_stop(cx->ed);
 }
 
-CmdStatus sag_record_cmd_replay(CmdCtx *cx)
+CmdStatus yew_record_cmd_replay(CmdCtx *cx)
 {
     u8 reg;
 
     if (cx == NULL || cx->ed == NULL || cx->sarg == NULL ||
         cx->sarg_len == 0U)
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     if (cx->sarg_len != 1U) {
         char *name;
         CmdStatus status;
 
         if (memchr(cx->sarg, '\0', cx->sarg_len) != NULL)
-            return SAG_CMD_ERR_ARG;
-        name = sag_xmalloc((size_t)cx->sarg_len + 1U);
+            return YEW_CMD_ERR_ARG;
+        name = yew_xmalloc((size_t)cx->sarg_len + 1U);
         (void)memcpy(name, cx->sarg, cx->sarg_len);
         name[cx->sarg_len] = '\0';
-        status = sag_macrolib_call(cx->ed, name);
+        status = yew_macrolib_call(cx->ed, name);
         free(name);
         return status;
     }
     if (!command_register(cx, &reg))
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     /* The registry's repeat loop owns count expansion. */
-    return sag_macro_replay(cx->ed, reg, 1U);
+    return yew_macro_replay(cx->ed, reg, 1U);
 }
 
-CmdStatus sag_record_cmd_replay_last(CmdCtx *cx)
+CmdStatus yew_record_cmd_replay_last(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL || cx->ed->rec.last_reg == 0U) {
         if (cx != NULL && cx->ed != NULL)
-            sag_msg(cx->ed, SAG_MSG_ERROR, "no previous macro replay");
-        return SAG_CMD_ERR_STATE;
+            yew_msg(cx->ed, YEW_MSG_ERROR, "no previous macro replay");
+        return YEW_CMD_ERR_STATE;
     }
-    return sag_macro_replay(cx->ed, cx->ed->rec.last_reg, 1U);
+    return yew_macro_replay(cx->ed, cx->ed->rec.last_reg, 1U);
 }
 
-CmdStatus sag_record_cmd_list(CmdCtx *cx)
+CmdStatus yew_record_cmd_list(CmdCtx *cx)
 {
     u32 count;
 
     if (cx == NULL || cx->ed == NULL)
-        return SAG_CMD_ERR_ARG;
-    count = sag_macro_list(cx->ed, NULL, 0U);
-    sag_msg(cx->ed, SAG_MSG_INFO, "%u macro register%s", (unsigned)count,
+        return YEW_CMD_ERR_ARG;
+    count = yew_macro_list(cx->ed, NULL, 0U);
+    yew_msg(cx->ed, YEW_MSG_INFO, "%u macro register%s", (unsigned)count,
             count == 1U ? "" : "s");
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
-CmdStatus sag_record_cmd_repeat(CmdCtx *cx)
+CmdStatus yew_record_cmd_repeat(CmdCtx *cx)
 {
     if (cx != NULL && cx->ed != NULL)
-        sag_msg(cx->ed, SAG_MSG_ERROR,
+        yew_msg(cx->ed, YEW_MSG_ERROR,
                 "ed.repeat requires retained resolved arguments; Sprint 35 "
                 "does not retain them outside recordings");
-    return SAG_CMD_ERR_STATE;
+    return YEW_CMD_ERR_STATE;
 }

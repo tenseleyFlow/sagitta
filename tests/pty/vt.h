@@ -1,5 +1,5 @@
-#ifndef SAG_TEST_PTY_VT_H
-#define SAG_TEST_PTY_VT_H
+#ifndef YEW_TEST_PTY_VT_H
+#define YEW_TEST_PTY_VT_H
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -13,8 +13,8 @@
 typedef struct VtCell {
     u8 g[8];
     u8 nb;
-    SagColor fg;
-    SagColor bg;
+    YewColor fg;
+    YewColor bg;
     u16 attrs;
     u8 w;
 } VtCell;
@@ -83,8 +83,8 @@ typedef struct VtScreen {
     u8 probe_order[3];
     u8 nprobes;
 
-    SagColor fg;
-    SagColor bg;
+    YewColor fg;
+    YewColor bg;
     u16 attrs;
     int saved_r;
     int saved_c;
@@ -93,8 +93,8 @@ typedef struct VtScreen {
     u8 parse_state;
     u8 seq[128];
     size_t nseq;
-    SagU8Dec u8dec;
-    SagGbState gb;
+    YewU8Dec u8dec;
+    YewGbState gb;
     int cluster_r;
     int cluster_c;
     bool cluster_valid;
@@ -122,7 +122,7 @@ void vt_take_replies(VtScreen *v, Bytebuf *out);
 u32 vt_take_queries(VtScreen *v);
 const u8 *vt_cell_bytes(const VtScreen *v, const VtCell *cell, size_t *len);
 bool vt_set_cell(VtScreen *v, int row, int col, const u8 *bytes, size_t n,
-                 SagColor fg, SagColor bg, u16 attrs, u8 width);
+                 YewColor fg, YewColor bg, u16 attrs, u8 width);
 void vt_set_primary_policy(VtScreen *v, bool allow_text);
 void vt_set_restore_policy(VtScreen *v, bool allow_idempotent_restore);
 

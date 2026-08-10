@@ -16,7 +16,7 @@
 
 typedef struct Options {
     const char *runner;
-    const char *sagitta;
+    const char *yew;
     const char *baseline;
 } Options;
 
@@ -52,14 +52,14 @@ static bool parse_options(int argc, char **argv, Options *options)
             return false;
         if (strcmp(argv[i], "--runner") == 0)
             options->runner = argv[i + 1];
-        else if (strcmp(argv[i], "--sagitta") == 0)
-            options->sagitta = argv[i + 1];
+        else if (strcmp(argv[i], "--yew") == 0)
+            options->yew = argv[i + 1];
         else if (strcmp(argv[i], "--baseline") == 0)
             options->baseline = argv[i + 1];
         else
             return false;
     }
-    return options->runner != NULL && options->sagitta != NULL &&
+    return options->runner != NULL && options->yew != NULL &&
            options->baseline != NULL;
 }
 
@@ -89,7 +89,7 @@ static bool load_limit(const char *path, int64_t *limit)
 
 static int64_t injected_delay(void)
 {
-    const char *text = getenv("SAG_SCRIPT_SUITE_INJECT_NS");
+    const char *text = getenv("YEW_SCRIPT_SUITE_INJECT_NS");
     char *end;
     long long value;
 
@@ -116,7 +116,7 @@ static int wait_for_suite(pid_t pid, int64_t deadline, int *status)
         if (now_ns() >= deadline) {
             /*
              * The runner owns a process group containing its current
-             * sagitta child.  Killing only the runner here would leave that
+             * yew child.  Killing only the runner here would leave that
              * child running after the gate returned.
              */
             if (kill(-pid, SIGKILL) != 0 && errno != ESRCH)
@@ -225,7 +225,7 @@ int main(int argc, char **argv)
         return selftest_group_timeout();
     if (!parse_options(argc, argv, &options)) {
         (void)fprintf(stderr,
-                      "usage: %s --runner PATH --sagitta PATH "
+                      "usage: %s --runner PATH --yew PATH "
                       "--baseline PATH | --selftest\n", argv[0]);
         return 2;
     }
@@ -236,7 +236,7 @@ int main(int argc, char **argv)
     }
     if (inject < 0) {
         (void)fprintf(stderr,
-                      "perf-script-suite: invalid SAG_SCRIPT_SUITE_INJECT_NS\n");
+                      "perf-script-suite: invalid YEW_SCRIPT_SUITE_INJECT_NS\n");
         return 2;
     }
     start = now_ns();
@@ -253,7 +253,7 @@ int main(int argc, char **argv)
     if (pid == 0) {
         if (setpgid(0, 0) != 0)
             _exit(126);
-        execl(options.runner, options.runner, "--sagitta", options.sagitta,
+        execl(options.runner, options.runner, "--yew", options.yew,
               (char *)NULL);
         _exit(127);
     }

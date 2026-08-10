@@ -28,11 +28,11 @@ static void txn_finish(FlVm *vm, bool ok)
 
     if (ok) {
         for (i = 0U; i < vm->txn.n; i++)
-            sag_undo_end(&v[i].ec);
+            yew_undo_end(&v[i].ec);
     } else {
         i = vm->txn.n;
         while (i != 0U)
-            sag_undo_abort(&v[--i].ec);
+            yew_undo_abort(&v[--i].ec);
     }
     vm->txn.n = 0U;
 }
@@ -122,13 +122,13 @@ bool fl_txn_enlist(FlVm *vm, const EditCtx *ec)
 
         if (want < vm->txn.cap)
             return fl_raise(vm, "limit", "too many transaction buffers");
-        vm->txn.enlisted = sag_xreallocarray(vm->txn.enlisted, want,
+        vm->txn.enlisted = yew_xreallocarray(vm->txn.enlisted, want,
                                              sizeof(*v));
         vm->txn.cap = want;
         v = entries(vm);
     }
     v[vm->txn.n].ec = *ec;
-    sag_undo_begin(&v[vm->txn.n].ec, SAG_TXN_MACRO);
+    yew_undo_begin(&v[vm->txn.n].ec, YEW_TXN_MACRO);
     vm->txn.n++;
     return true;
 }

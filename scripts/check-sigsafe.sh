@@ -5,7 +5,7 @@ set -eu
 script_dir=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 repo_dir=$(dirname "$script_dir")
 tty=$repo_dir/src/term/tty.c
-tmp=$(umask 077 && mktemp -d "${TMPDIR:-/tmp}/sagitta-sigsafe.XXXXXX")
+tmp=$(umask 077 && mktemp -d "${TMPDIR:-/tmp}/yew-sigsafe.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 
 if [ ! -f "$tty" ]; then
@@ -27,20 +27,20 @@ awk '
     inside { print }
 ' "$tty" >"$region"
 
-if grep -nE '(^|[^[:alnum:]_])(printf|fprintf|snprintf|malloc|calloc|free|sag_log|exit|abort)[[:space:]]*\(' \
+if grep -nE '(^|[^[:alnum:]_])(printf|fprintf|snprintf|malloc|calloc|free|yew_log|exit|abort)[[:space:]]*\(' \
     "$region" >&2; then
     echo "sigsafe: unsafe call in marked handler region" >&2
     exit 1
 fi
 
-if grep -nE 'signal[[:space:]]*\([[:space:]]*SIGTSTP[[:space:]]*,[[:space:]]*sag_tty_tstp' \
+if grep -nE 'signal[[:space:]]*\([[:space:]]*SIGTSTP[[:space:]]*,[[:space:]]*yew_tty_tstp' \
     "$region" >&2; then
     echo "sigsafe: SIGTSTP re-arm must preserve the lifecycle signal mask" >&2
     exit 1
 fi
 
 restore=$tmp/restore
-sed -n '/^void sag_tty_restore(void)$/,/^}$/p' "$tty" >"$restore"
+sed -n '/^void yew_tty_restore(void)$/,/^}$/p' "$tty" >"$restore"
 restore_block_line=$(grep -n 'sigprocmask(SIG_BLOCK' "$restore" |
     cut -d: -f1 || :)
 restore_write_line=$(grep -n 'write(g_wfd' "$restore" | cut -d: -f1 || :)

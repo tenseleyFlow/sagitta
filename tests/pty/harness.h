@@ -1,5 +1,5 @@
-#ifndef SAG_TEST_PTY_HARNESS_H
-#define SAG_TEST_PTY_HARNESS_H
+#ifndef YEW_TEST_PTY_HARNESS_H
+#define YEW_TEST_PTY_HARNESS_H
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -10,7 +10,7 @@
 #include "util/buf.h"
 #include "vt.h"
 
-#define SAG_PTY_ENV_COUNT 14U
+#define YEW_PTY_ENV_COUNT 14U
 
 typedef struct PtySpec {
     /*
@@ -61,7 +61,7 @@ struct PtyCtx {
     char *state_dir;
     char *golden_name;
     const char *demo_bin;
-    const char *sagitta_bin;
+    const char *yew_bin;
     i64 budget_ms;
     i64 global_deadline_ms;
     bool spawned;
@@ -87,9 +87,9 @@ struct PtyCtx {
     char failure[512];
 };
 
-extern const PtyCase sag_pty_cases[];
+extern const PtyCase yew_pty_cases[];
 
-bool sag_pty_spawn(Pty *p, const PtySpec *sp);
+bool yew_pty_spawn(Pty *p, const PtySpec *sp);
 bool ptc_env_build(char **envp, const char *colors, const char *state_dir,
                    const char *no_color, const char *ascii);
 void ptc_env_free(char **envp);
@@ -98,7 +98,7 @@ void ptc_spawn(PtyCtx *c, const char *bin, ...);
 void ptc_settle(PtyCtx *c, i64 quiet_ms);
 /*
  * Declares that this child will never enter the alternate screen, so
- * ptc_settle must not wait for it.  The Fletch prompt (`sag fl` on a
+ * ptc_settle must not wait for it.  The Fletch prompt (`yew fl` on a
  * tty) is the case: it scrolls in place on purpose, and without this
  * every settle would burn the case budget waiting for a smcup that is
  * never coming.
@@ -153,11 +153,11 @@ void ptc_suspend_resume(PtyCtx *c);
 void ptc_command_suspend_resume(PtyCtx *c);
 void ptc_check(PtyCtx *c, bool condition, const char *message);
 const char *ptc_demo_bin(const PtyCtx *c);
-const char *ptc_sagitta_bin(const PtyCtx *c);
+const char *ptc_yew_bin(const PtyCtx *c);
 
 /* Runner-facing lifecycle. */
 void ptc_init(PtyCtx *c, const PtyCase *test, const char *state_dir,
-              const char *demo_bin, const char *sagitta_bin,
+              const char *demo_bin, const char *yew_bin,
               i64 budget_ms, i64 global_deadline_ms);
 void ptc_cleanup(PtyCtx *c);
 void ptc_dispose(PtyCtx *c);

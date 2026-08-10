@@ -16,9 +16,9 @@
 /* Pane tree (Sprint 22 §2)                                         */
 /* ---------------------------------------------------------------- */
 
-Pane *sag_pane_new_leaf(Win *win)
+Pane *yew_pane_new_leaf(Win *win)
 {
-    Pane *p = sag_xcalloc(1U, sizeof(*p));
+    Pane *p = yew_xcalloc(1U, sizeof(*p));
 
     p->is_leaf = true;
     p->win = win;
@@ -47,28 +47,28 @@ static void pane_free_rec(Pane *p)
  * tab freed its tree and left ed->leaf_tab pointing into it, and a
  * mouse event arriving before the next render — the event loop drains a
  * whole input burst before drawing (s14) — read freed memory through
- * sag_pane_leaf_by_index.
+ * yew_pane_leaf_by_index.
  *
  * fuzz_mouse found it as a heap-use-after-free in wheel_pane.  The
  * parameter exists so the next caller cannot forget.
  */
-void sag_pane_free(Ed *ed, Pane *p)
+void yew_pane_free(Ed *ed, Pane *p)
 {
     if (ed != NULL)
-        sag_pane_tables_reset(ed);
+        yew_pane_tables_reset(ed);
     pane_free_rec(p);
 }
 
-u32 sag_pane_leaf_count(const Pane *root)
+u32 yew_pane_leaf_count(const Pane *root)
 {
     if (root == NULL)
         return 0U;
     if (root->is_leaf)
         return 1U;
-    return sag_pane_leaf_count(root->a) + sag_pane_leaf_count(root->b);
+    return yew_pane_leaf_count(root->a) + yew_pane_leaf_count(root->b);
 }
 
-void sag_pane_collect_leaves(Pane *root, Pane **out, u32 cap, u32 *n)
+void yew_pane_collect_leaves(Pane *root, Pane **out, u32 cap, u32 *n)
 {
     if (root == NULL || out == NULL || n == NULL || *n >= cap)
         return;
@@ -76,11 +76,11 @@ void sag_pane_collect_leaves(Pane *root, Pane **out, u32 cap, u32 *n)
         out[(*n)++] = root;
         return;
     }
-    sag_pane_collect_leaves(root->a, out, cap, n);
-    sag_pane_collect_leaves(root->b, out, cap, n);
+    yew_pane_collect_leaves(root->a, out, cap, n);
+    yew_pane_collect_leaves(root->b, out, cap, n);
 }
 
-Pane *sag_pane_first_leaf(Pane *root)
+Pane *yew_pane_first_leaf(Pane *root)
 {
     Pane *at = root;
 
@@ -89,14 +89,14 @@ Pane *sag_pane_first_leaf(Pane *root)
     return at;
 }
 
-void sag_pane_tree_walk(Pane *root, SagPaneVisit fn, void *ctx)
+void yew_pane_tree_walk(Pane *root, YewPaneVisit fn, void *ctx)
 {
     if (root == NULL || fn == NULL)
         return;
     fn(root, ctx);
     if (!root->is_leaf) {
-        sag_pane_tree_walk(root->a, fn, ctx);
-        sag_pane_tree_walk(root->b, fn, ctx);
+        yew_pane_tree_walk(root->a, fn, ctx);
+        yew_pane_tree_walk(root->b, fn, ctx);
     }
 }
 
@@ -144,15 +144,15 @@ static void layout_rec(Pane *p, Rect r)
      * panes on shrink loses user state to a transient window drag, and
      * growing the terminal back has to restore what was there.
      */
-    if (p->dir == SAG_SPLIT_H) {
+    if (p->dir == YEW_SPLIT_H) {
         u16 aw;
 
-        if (r.w < (u16)(SAG_PANE_MIN_W * 2 + 1)) {
+        if (r.w < (u16)(YEW_PANE_MIN_W * 2 + 1)) {
             layout_rec(p->a, r);
             layout_rec(p->b, (Rect){r.x, r.y, 0U, 0U});
             return;
         }
-        aw = split_cells(r.w, p->ratio, SAG_PANE_MIN_W, SAG_PANE_MIN_W);
+        aw = split_cells(r.w, p->ratio, YEW_PANE_MIN_W, YEW_PANE_MIN_W);
         layout_rec(p->a, (Rect){r.x, r.y, aw, r.h});
         /* The border column at r.x + aw belongs to the split node. */
         layout_rec(p->b, (Rect){(u16)(r.x + aw + 1U), r.y,
@@ -160,19 +160,19 @@ static void layout_rec(Pane *p, Rect r)
     } else {
         u16 ah;
 
-        if (r.h < (u16)(SAG_PANE_MIN_H * 2 + 1)) {
+        if (r.h < (u16)(YEW_PANE_MIN_H * 2 + 1)) {
             layout_rec(p->a, r);
             layout_rec(p->b, (Rect){r.x, r.y, 0U, 0U});
             return;
         }
-        ah = split_cells(r.h, p->ratio, SAG_PANE_MIN_H, SAG_PANE_MIN_H);
+        ah = split_cells(r.h, p->ratio, YEW_PANE_MIN_H, YEW_PANE_MIN_H);
         layout_rec(p->a, (Rect){r.x, r.y, r.w, ah});
         layout_rec(p->b, (Rect){r.x, (u16)(r.y + ah + 1U), r.w,
                                 (u16)(r.h - ah - 1U)});
     }
 }
 
-void sag_layout_compute(Pane *root, Rect area)
+void yew_layout_compute(Pane *root, Rect area)
 {
     if (root == NULL)
         return;
@@ -185,21 +185,21 @@ static bool rect_contains(Rect r, u16 x, u16 y)
            y >= r.y && y < (u32)r.y + r.h;
 }
 
-Pane *sag_pane_leaf_at(Pane *root, u16 x, u16 y)
+Pane *yew_pane_leaf_at(Pane *root, u16 x, u16 y)
 {
     if (root == NULL || !rect_contains(root->rect, x, y))
         return NULL;
     if (root->is_leaf)
         return root;
     {
-        Pane *hit = sag_pane_leaf_at(root->a, x, y);
+        Pane *hit = yew_pane_leaf_at(root->a, x, y);
 
         if (hit != NULL)
             return hit;
     }
     /* Falls through to NULL on the border cell, which belongs to the
      * split node and is not a leaf. */
-    return sag_pane_leaf_at(root->b, x, y);
+    return yew_pane_leaf_at(root->b, x, y);
 }
 
 /*
@@ -208,12 +208,12 @@ Pane *sag_pane_leaf_at(Pane *root, u16 x, u16 y)
  */
 static bool split_fits(const Pane *leaf, SplitDir dir)
 {
-    if (dir == SAG_SPLIT_H)
-        return leaf->rect.w >= (u16)(SAG_PANE_MIN_W * 2 + 1);
-    return leaf->rect.h >= (u16)(SAG_PANE_MIN_H * 2 + 1);
+    if (dir == YEW_SPLIT_H)
+        return leaf->rect.w >= (u16)(YEW_PANE_MIN_W * 2 + 1);
+    return leaf->rect.h >= (u16)(YEW_PANE_MIN_H * 2 + 1);
 }
 
-Pane *sag_pane_split(Ed *ed, Pane *leaf, SplitDir dir)
+Pane *yew_pane_split(Ed *ed, Pane *leaf, SplitDir dir)
 {
     Pane *a;
     Pane *b;
@@ -221,16 +221,16 @@ Pane *sag_pane_split(Ed *ed, Pane *leaf, SplitDir dir)
 
     if (ed == NULL || leaf == NULL || !leaf->is_leaf)
         return NULL;
-    if (sag_pane_leaf_count(sag_ed_pane_root(ed)) >=
-        (u32)SAG_PANE_MAX_LEAVES)
+    if (yew_pane_leaf_count(yew_ed_pane_root(ed)) >=
+        (u32)YEW_PANE_MAX_LEAVES)
         return NULL;
     if (!split_fits(leaf, dir))
         return NULL;
-    win = sag_ed_win_clone(ed, leaf->win);
+    win = yew_ed_win_clone(ed, leaf->win);
     if (win == NULL)
         return NULL;
-    a = sag_xcalloc(1U, sizeof(*a));
-    b = sag_xcalloc(1U, sizeof(*b));
+    a = yew_xcalloc(1U, sizeof(*a));
+    b = yew_xcalloc(1U, sizeof(*b));
     /* The existing Win stays in child a; the clone takes b and focus. */
     a->is_leaf = true;
     a->win = leaf->win;
@@ -251,7 +251,7 @@ Pane *sag_pane_split(Ed *ed, Pane *leaf, SplitDir dir)
     return b;
 }
 
-bool sag_pane_close(Ed *ed, Pane *leaf)
+bool yew_pane_close(Ed *ed, Pane *leaf)
 {
     Pane *parent;
     Pane *sibling;
@@ -262,7 +262,7 @@ bool sag_pane_close(Ed *ed, Pane *leaf)
     if (parent == NULL)
         return false; /* the root leaf refuses; Sprint 23 owns this */
     sibling = parent->a == leaf ? parent->b : parent->a;
-    sag_ed_win_release(ed, leaf->win);
+    yew_ed_win_release(ed, leaf->win);
     /*
      * The sibling's CONTENT is moved into the parent node rather than
      * the parent being replaced by the sibling pointer: that keeps the
@@ -288,10 +288,10 @@ bool sag_pane_close(Ed *ed, Pane *leaf)
      * operations.
      */
     if (ed->focus == sibling || ed->focus == leaf)
-        ed->focus = sag_pane_first_leaf(parent);
-    /* Same reason as sag_pane_free's: the per-frame tables address
+        ed->focus = yew_pane_first_leaf(parent);
+    /* Same reason as yew_pane_free's: the per-frame tables address
      * these nodes by index and must not outlive them. */
-    sag_pane_tables_reset(ed);
+    yew_pane_tables_reset(ed);
     free(sibling);
     free(leaf);
     return true;
@@ -302,13 +302,13 @@ bool sag_pane_close(Ed *ed, Pane *leaf)
 /* ---------------------------------------------------------------- */
 
 typedef struct LeafList {
-    Pane *v[SAG_PANE_MAX_LEAVES * 2];
+    Pane *v[YEW_PANE_MAX_LEAVES * 2];
     u32 n;
 } LeafList;
 
 static void collect_leaves(Pane *p, LeafList *out)
 {
-    if (p == NULL || out->n >= SAG_ARRAY_LEN(out->v))
+    if (p == NULL || out->n >= YEW_ARRAY_LEN(out->v))
         return;
     if (p->is_leaf) {
         if (p->rect.w != 0U && p->rect.h != 0U)
@@ -328,7 +328,7 @@ static void collect_leaves(Pane *p, LeafList *out)
  * is a no-op: it never wraps, because wrapping makes a direction key
  * mean two different things depending on where you happen to be.
  */
-Pane *sag_pane_dir(Pane *root, const Pane *from, SagDir dir)
+Pane *yew_pane_dir(Pane *root, const Pane *from, YewDir dir)
 {
     LeafList leaves;
     Pane *best = NULL;
@@ -352,19 +352,19 @@ Pane *sag_pane_dir(Pane *root, const Pane *from, SagDir dir)
         if (c == from)
             continue;
         switch (dir) {
-        case SAG_DIR_LEFT:
+        case YEW_DIR_LEFT:
             if ((i32)c->rect.x + (i32)c->rect.w > cx)
                 continue;
             gap = cx - ((i32)c->rect.x + (i32)c->rect.w);
             off = (i32)c->rect.y + (i32)c->rect.h / 2 - cy;
             break;
-        case SAG_DIR_RIGHT:
+        case YEW_DIR_RIGHT:
             if ((i32)c->rect.x < cx)
                 continue;
             gap = (i32)c->rect.x - cx;
             off = (i32)c->rect.y + (i32)c->rect.h / 2 - cy;
             break;
-        case SAG_DIR_UP:
+        case YEW_DIR_UP:
             if ((i32)c->rect.y + (i32)c->rect.h > cy)
                 continue;
             gap = cy - ((i32)c->rect.y + (i32)c->rect.h);
@@ -389,7 +389,7 @@ Pane *sag_pane_dir(Pane *root, const Pane *from, SagDir dir)
     return best;
 }
 
-Pane *sag_pane_next(Pane *root, const Pane *from)
+Pane *yew_pane_next(Pane *root, const Pane *from)
 {
     LeafList leaves;
     u32 i;
@@ -409,7 +409,7 @@ Pane *sag_pane_next(Pane *root, const Pane *from)
 /* Resize (Sprint 22 §5)                                            */
 /* ---------------------------------------------------------------- */
 
-Pane *sag_pane_ancestor_split(const Pane *leaf, SplitDir axis)
+Pane *yew_pane_ancestor_split(const Pane *leaf, SplitDir axis)
 {
     const Pane *at = leaf;
 
@@ -421,7 +421,7 @@ Pane *sag_pane_ancestor_split(const Pane *leaf, SplitDir axis)
     return NULL;
 }
 
-bool sag_pane_resize(Pane *split, i32 cells)
+bool yew_pane_resize(Pane *split, i32 cells)
 {
     u16 span;
     u16 min;
@@ -431,9 +431,9 @@ bool sag_pane_resize(Pane *split, i32 cells)
 
     if (split == NULL || split->is_leaf)
         return false;
-    span = split->dir == SAG_SPLIT_H ? split->rect.w : split->rect.h;
-    min = split->dir == SAG_SPLIT_H ? (u16)SAG_PANE_MIN_W
-                                    : (u16)SAG_PANE_MIN_H;
+    span = split->dir == YEW_SPLIT_H ? split->rect.w : split->rect.h;
+    min = split->dir == YEW_SPLIT_H ? (u16)YEW_PANE_MIN_W
+                                    : (u16)YEW_PANE_MIN_H;
     usable = (i32)span - 1;
     if (usable <= 0)
         return false;
@@ -474,7 +474,7 @@ static void layout_leaf_win(Ed *ed, Pane *leaf)
     }
     old_cols = w->vp.cols;
     old_gutter = w->gutter_width;
-    gutter = leaf->rect.w < 20U ? 0U : sag_gutter_width(w);
+    gutter = leaf->rect.w < 20U ? 0U : yew_gutter_width(w);
     if (gutter >= leaf->rect.w)
         gutter = 0U;
     w->gutter_width = gutter;
@@ -483,12 +483,12 @@ static void layout_leaf_win(Ed *ed, Pane *leaf)
     w->vp.rows = leaf->rect.h;
     w->vp.cols = w->rect.w;
     if (old_cols != w->vp.cols || old_gutter != gutter) {
-        sag_vp_invalidate(w);
+        yew_vp_invalidate(w);
         ed->full_damage = true;
         ed->footer_dirty = true;
     }
-    sag_vp_clamp(w);
-    sag_vp_follow(w);
+    yew_vp_clamp(w);
+    yew_vp_follow(w);
 }
 
 static void layout_leaf_visit(Pane *p, void *ctx)
@@ -497,13 +497,13 @@ static void layout_leaf_visit(Pane *p, void *ctx)
         layout_leaf_win(ctx, p);
 }
 
-void sag_layout(Ed *ed)
+void yew_layout(Ed *ed)
 {
     u16 content_rows;
     u16 top = 0U;
 
     if (ed == NULL || ed->win == NULL)
-        SAG_BUG("editor layout: missing window");
+        YEW_BUG("editor layout: missing window");
 
     ed->footer_rect = (Rect){0U, 0U, 0U, 0U};
     if (ed->grid.rows >= 2U) {
@@ -519,12 +519,12 @@ void sag_layout(Ed *ed)
      * off the bottom.
      *
      * A NULL root is legal: several fixtures build an Ed directly
-     * rather than through sag_ed_init.  Laying the single window out
+     * rather than through yew_ed_init.  Laying the single window out
      * against the same area keeps them working, and is exactly what the
      * one-leaf tree would compute anyway.
      */
     {
-        u16 strip = (u16)sag_tab_strip_rows(ed);
+        u16 strip = (u16)yew_tab_strip_rows(ed);
 
         if (strip > content_rows)
             strip = content_rows;
@@ -533,9 +533,9 @@ void sag_layout(Ed *ed)
         content_rows = (u16)(content_rows - strip);
     }
     if (ed->pane_root != NULL) {
-        sag_layout_compute(ed->pane_root,
+        yew_layout_compute(ed->pane_root,
                            (Rect){0U, top, ed->grid.cols, content_rows});
-        sag_pane_tree_walk(ed->pane_root, layout_leaf_visit, ed);
+        yew_pane_tree_walk(ed->pane_root, layout_leaf_visit, ed);
     } else {
         Pane solo;
 
@@ -548,7 +548,7 @@ void sag_layout(Ed *ed)
     ed->layout_dirty = false;
 }
 
-void sag_ed_layout(Ed *ed)
+void yew_ed_layout(Ed *ed)
 {
-    sag_layout(ed);
+    yew_layout(ed);
 }

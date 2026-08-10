@@ -1,5 +1,5 @@
-#ifndef SAG_TEST_PTY_SNAPSHOT_H
-#define SAG_TEST_PTY_SNAPSHOT_H
+#ifndef YEW_TEST_PTY_SNAPSHOT_H
+#define YEW_TEST_PTY_SNAPSHOT_H
 
 #include <stdbool.h>
 

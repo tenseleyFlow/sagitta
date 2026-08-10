@@ -13,7 +13,7 @@
 
 static const char help_text[] =
     "Usage:\n"
-    "  sagitta [options] [file ...]\n"
+    "  yew [options] [file ...]\n"
     "\n"
     "Options:\n"
     "  --help           Show this help.\n"
@@ -21,7 +21,7 @@ static const char help_text[] =
     "  --version        Show version and compiled modules.\n"
     "  --clean          Load only the panic keymap; keep no state/history.\n"
     "  --config PATH    Use PATH instead of the user init.fl.\n"
-    "  --no-workspace-config  Do not load .sagitta.fl.\n"
+    "  --no-workspace-config  Do not load .yew.fl.\n"
     "  --trust-workspace      Pre-grant this workspace configuration.\n"
     "  --batch SCRIPT   Run SCRIPT headlessly; no tty or grid.\n"
     "  --test           Add the t.* script-test assertions (batch only).\n"
@@ -30,7 +30,7 @@ static const char help_text[] =
     "  --               Pass every remaining argument to the batch script.\n"
     "\n"
     "Subcommands:\n"
-    "  sag fl FILE      Run a Fletch script headlessly.\n"
+    "  yew fl FILE      Run a Fletch script headlessly.\n"
     "\n"
     "Command line:\n"
     "  Lines beginning with a space are not saved in command history.\n"
@@ -50,29 +50,29 @@ static const char help_text[] =
     "  feature.\n"
     "\n"
     "Environment:\n"
-    "  SAG_LOG          Override the log file path.\n"
-    "  SAG_LOG_LEVEL    Set debug, info, warn, or error logging.\n"
-    "  SAG_TTY_PROBE    Set 0 to disable terminal capability probes.\n"
-    "  SAG_PROBE_TIMEOUT_MS  Override the 50 ms probe deadline.\n"
-    "  SAG_TRUECOLOR    Set 0 or 1 to override truecolor detection.\n"
-    "  SAG_CHORD_TIMEOUT_MS  Set key chord timeout (default 500).\n"
-    "  SAG_CLIPBOARD    Set auto, osc52, wl, xclip, xsel, pb, none,\n"
+    "  YEW_LOG          Override the log file path.\n"
+    "  YEW_LOG_LEVEL    Set debug, info, warn, or error logging.\n"
+    "  YEW_TTY_PROBE    Set 0 to disable terminal capability probes.\n"
+    "  YEW_PROBE_TIMEOUT_MS  Override the 50 ms probe deadline.\n"
+    "  YEW_TRUECOLOR    Set 0 or 1 to override truecolor detection.\n"
+    "  YEW_CHORD_TIMEOUT_MS  Set key chord timeout (default 500).\n"
+    "  YEW_CLIPBOARD    Set auto, osc52, wl, xclip, xsel, pb, none,\n"
     "                   or cmd:<write-argv>[|<read-argv>].\n"
-    "  SAG_CLIPBOARD_TARGET  Set OSC 52 target c, p, or cp.\n"
-    "  SAG_CLIPBOARD_TIMEOUT_MS  Set subprocess timeout (default 1000).\n"
-    "  SAG_OSC52        Set off, plain, tmux, or screen; plain bypasses\n"
+    "  YEW_CLIPBOARD_TARGET  Set OSC 52 target c, p, or cp.\n"
+    "  YEW_CLIPBOARD_TIMEOUT_MS  Set subprocess timeout (default 1000).\n"
+    "  YEW_OSC52        Set off, plain, tmux, or screen; plain bypasses\n"
     "                   multiplexer detection.\n"
-    "  SAG_OSC52_MAX    Set maximum encoded OSC 52 bytes (default 100000).\n";
+    "  YEW_OSC52_MAX    Set maximum encoded OSC 52 bytes (default 100000).\n";
 
 static void print_version(void)
 {
-    SagMod mod;
+    YewMod mod;
     bool any = false;
 
-    (void)printf("sagitta %s\nmodules:", SAG_VERSION);
-    for (mod = SAG_MOD_LSP; mod < SAG_MOD_COUNT; mod++) {
-        if (sag_mod_enabled(mod)) {
-            (void)printf(" %s", sag_mod_name(mod));
+    (void)printf("yew %s\nmodules:", YEW_VERSION);
+    for (mod = YEW_MOD_LSP; mod < YEW_MOD_COUNT; mod++) {
+        if (yew_mod_enabled(mod)) {
+            (void)printf(" %s", yew_mod_name(mod));
             any = true;
         }
     }
@@ -86,63 +86,63 @@ static void print_commands(void)
 {
     u32 i;
 
-    sag_cmd_init();
-    for (i = 0U; i < sag_cmd_count(); i++) {
-        const CmdDesc *desc = sag_cmd_at(i);
+    yew_cmd_init();
+    for (i = 0U; i < yew_cmd_count(); i++) {
+        const CmdDesc *desc = yew_cmd_at(i);
 
         (void)printf("%-32s %s\n", desc->name, desc->help);
     }
-    sag_cmd_shutdown();
+    yew_cmd_shutdown();
 }
 
-static int run_driver(const SagArgs *args)
+static int run_driver(const YewArgs *args)
 {
-    SagEdStartup startup;
+    YewEdStartup startup;
 
     if (args->selftest_bug) {
-        SAG_BUG("selftest");
+        YEW_BUG("selftest");
     }
     if (args->version) {
         print_version();
-        return SAG_EXIT_OK;
+        return YEW_EXIT_OK;
     }
     if (args->help) {
         (void)fputs(help_text, stdout);
-        return SAG_EXIT_OK;
+        return YEW_EXIT_OK;
     }
     if (args->help_cmds) {
         print_commands();
-        return SAG_EXIT_OK;
+        return YEW_EXIT_OK;
     }
     if (args->batch_script != NULL) {
         BatchOpts batch;
 
         if (args->ngrants != 0U) {
             (void)fprintf(stderr,
-                "sagitta: error: --grant enforcement lands in Sprint 54\n");
-            return SAG_EXIT_ERR;
+                "yew: error: --grant enforcement lands in Sprint 54\n");
+            return YEW_EXIT_ERR;
         }
         batch = (BatchOpts){args->batch_script, args->files, args->nfiles,
                             args->batch_args, args->nbatch_args,
                             args->config_path, args->clean,
                             args->no_workspace_config,
                             args->trust_workspace, args->test, args->quiet};
-        return sag_batch_run(&batch);
+        return yew_batch_run(&batch);
     }
     if (args->nfiles != 0U && strcmp(args->files[0], "pkg") == 0) {
-        (void)fprintf(stderr, "sagitta: error: unknown argument '%s'\n",
+        (void)fprintf(stderr, "yew: error: unknown argument '%s'\n",
             args->files[0]);
-        return SAG_EXIT_ERR;
+        return YEW_EXIT_ERR;
     }
     if (args->nfiles > 1U) {
         (void)fprintf(stderr,
-            "sagitta: error: multiple files are not yet implemented: Sprint 23 (tabs)\n");
-        return SAG_EXIT_ERR;
+            "yew: error: multiple files are not yet implemented: Sprint 23 (tabs)\n");
+        return YEW_EXIT_ERR;
     }
-    startup = (SagEdStartup){args->config_path, args->clean,
+    startup = (YewEdStartup){args->config_path, args->clean,
                              args->no_workspace_config,
                              args->trust_workspace};
-    return sag_ed_driver_opts(args->nfiles == 0U ? NULL : args->files[0],
+    return yew_ed_driver_opts(args->nfiles == 0U ? NULL : args->files[0],
                               &startup);
 }
 
@@ -152,30 +152,30 @@ int main(int argc, char **argv)
     int exit_code;
 
     /*
-     * `sag fl` is handled BEFORE the editor's parser: its options are
+     * `yew fl` is handled BEFORE the editor's parser: its options are
      * not the editor's, and threading --list-natives through one parser
      * would make it a top-level flag that means nothing anywhere else.
      */
     if (argc >= 2 && strcmp(argv[1], "fl") == 0)
-        return sag_fl_main(argc - 1, argv + 1);
+        return yew_fl_main(argc - 1, argv + 1);
 
-    SagArgs args;
-    int result = sag_args_parse(&args, argc, argv, &err);
+    YewArgs args;
+    int result = yew_args_parse(&args, argc, argv, &err);
 
     if (result >= 0) {
-        if (result != SAG_EXIT_OK && err.len != 0U) {
+        if (result != YEW_EXIT_OK && err.len != 0U) {
             (void)fwrite(err.data, 1U, err.len, stderr);
         }
         bytebuf_free(&err);
-        if (result != SAG_EXIT_OK) {
+        if (result != YEW_EXIT_OK) {
             return result;
         }
         exit_code = run_driver(&args);
-        sag_args_free(&args);
+        yew_args_free(&args);
         return exit_code;
     }
     bytebuf_free(&err);
     exit_code = run_driver(&args);
-    sag_args_free(&args);
+    yew_args_free(&args);
     return exit_code;
 }

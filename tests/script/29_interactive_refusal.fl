@@ -19,7 +19,7 @@ let alternatives = {
 }
 let seen = 0
 for command in ed.commands() {
-    # SAG_CMD_INTERACTIVE is bit 10. Integer division avoids adding a
+    # YEW_CMD_INTERACTIVE is bit 10. Integer division avoids adding a
     # bitwise language primitive solely for this registry assertion.
     if (command.flags / 1024) % 2 == 1 {
         let caught = false

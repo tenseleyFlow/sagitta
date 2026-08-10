@@ -15,7 +15,7 @@ typedef struct ParseFixture {
 static CmdStatus parse_nop(CmdCtx *cx)
 {
     (void)cx;
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
 static void register_parse_command(const char *name, u8 arity,
@@ -26,7 +26,7 @@ static void register_parse_command(const char *name, u8 arity,
         {name, parse_nop, arity, 0U, "Parser test command", NULL},
         argspec, policy, abbrev};
 
-    (void)sag_cmd_register_entry(&entry);
+    (void)yew_cmd_register_entry(&entry);
 }
 
 static void parse_fixture_init(ParseFixture *f)
@@ -34,31 +34,31 @@ static void parse_fixture_init(ParseFixture *f)
     Cursor cursor = {BYTEOFF(4U), {4U}, BYTEOFF(4U)};
 
     memset(f, 0, sizeof(*f));
-    f->tb = sag_textbuf_from_bytes((const u8 *)"one two\nthree\nlast", 18U);
+    f->tb = yew_textbuf_from_bytes((const u8 *)"one two\nthree\nlast", 18U);
     f->ed.buffer.tb = f->tb;
     f->ed.buffer.path = "/home/u/proj/main.c";
     f->ed.buffer.meta.realpath = "/home/u/proj/main.c";
     f->ed.single_win.buf = &f->ed.buffer;
-    sag_cset_init(&f->ed.single_win.cs, cursor);
+    yew_cset_init(&f->ed.single_win.cs, cursor);
     f->ed.win = &f->ed.single_win;
     f->ed.ws.dir = "/home/u/proj";
     arena_init(&f->arena);
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    register_parse_command("ed.ui.open", SAG_ARITY_STR, "s", SAG_RP_OPT,
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    register_parse_command("ed.ui.open", YEW_ARITY_STR, "s", YEW_RP_OPT,
                            "topen");
-    register_parse_command("ed.ui.grow", SAG_ARITY_NONE, "",
-                           SAG_RP_REQUIRED, "sort");
-    register_parse_command("ed.ui.shrink", SAG_ARITY_NONE, "",
-                           SAG_RP_FORBID, "q");
+    register_parse_command("ed.ui.grow", YEW_ARITY_NONE, "",
+                           YEW_RP_REQUIRED, "sort");
+    register_parse_command("ed.ui.shrink", YEW_ARITY_NONE, "",
+                           YEW_RP_FORBID, "q");
 }
 
 static void parse_fixture_free(ParseFixture *f)
 {
-    sag_cmd_shutdown();
+    yew_cmd_shutdown();
     arena_free_all(&f->arena);
-    sag_cset_free(&f->ed.single_win.cs);
-    sag_textbuf_free(f->tb);
+    yew_cset_free(&f->ed.single_win.cs);
+    yew_textbuf_free(f->tb);
 }
 
 static void assert_arg(ParseFixture *f, const char *line,
@@ -66,11 +66,11 @@ static void assert_arg(ParseFixture *f, const char *line,
 {
     CmdParse parsed;
 
-    SAG_ASSERT(sag_cmd_parse(&f->ed, line, strlen(line), &f->arena,
+    YEW_ASSERT(yew_cmd_parse(&f->ed, line, strlen(line), &f->arena,
                              &parsed));
-    SAG_ASSERT_EQ_U64(parsed.argv.n, 2U);
-    SAG_ASSERT_EQ_STR(parsed.argv.v[0], "ed.file.write");
-    SAG_ASSERT_EQ_STR(parsed.argv.v[1], expected);
+    YEW_ASSERT_EQ_U64(parsed.argv.n, 2U);
+    YEW_ASSERT_EQ_STR(parsed.argv.v[0], "ed.file.write");
+    YEW_ASSERT_EQ_STR(parsed.argv.v[1], expected);
 }
 
 static void assert_error(ParseFixture *f, const char *line,
@@ -79,10 +79,10 @@ static void assert_error(ParseFixture *f, const char *line,
     CmdParse parsed;
     size_t len = strlen(line);
 
-    SAG_ASSERT(!sag_cmd_parse(&f->ed, line, len, &f->arena, &parsed));
-    SAG_ASSERT_EQ_STR(parsed.err.msg, expected);
-    SAG_ASSERT(parsed.err.tok_lo < parsed.err.tok_hi);
-    SAG_ASSERT(parsed.err.tok_hi <= len);
+    YEW_ASSERT(!yew_cmd_parse(&f->ed, line, len, &f->arena, &parsed));
+    YEW_ASSERT_EQ_STR(parsed.err.msg, expected);
+    YEW_ASSERT(parsed.err.tok_lo < parsed.err.tok_hi);
+    YEW_ASSERT(parsed.err.tok_hi <= len);
 }
 
 static void assert_error_span(ParseFixture *f, const char *line,
@@ -90,11 +90,11 @@ static void assert_error_span(ParseFixture *f, const char *line,
 {
     CmdParse parsed;
 
-    SAG_ASSERT(!sag_cmd_parse(&f->ed, line, strlen(line), &f->arena,
+    YEW_ASSERT(!yew_cmd_parse(&f->ed, line, strlen(line), &f->arena,
                               &parsed));
-    SAG_ASSERT_EQ_STR(parsed.err.msg, expected);
-    SAG_ASSERT_EQ_U64(parsed.err.tok_lo, lo);
-    SAG_ASSERT_EQ_U64(parsed.err.tok_hi, hi);
+    YEW_ASSERT_EQ_STR(parsed.err.msg, expected);
+    YEW_ASSERT_EQ_U64(parsed.err.tok_lo, lo);
+    YEW_ASSERT_EQ_U64(parsed.err.tok_hi, hi);
 }
 
 void test_cmdparse_tokenizer_expansion_matrix(void)
@@ -151,8 +151,8 @@ void test_cmdparse_tokenizer_expansion_matrix(void)
     size_t i;
 
     parse_fixture_init(&f);
-    SAG_ASSERT(SAG_ARRAY_LEN(rows) >= 40U);
-    for (i = 0U; i < SAG_ARRAY_LEN(rows); i++)
+    YEW_ASSERT(YEW_ARRAY_LEN(rows) >= 40U);
+    for (i = 0U; i < YEW_ARRAY_LEN(rows); i++)
         assert_arg(&f, rows[i].line, rows[i].arg);
 
     f.ed.single_win.cs.curs.data[0].anchor = BYTEOFF(0U);
@@ -161,8 +161,8 @@ void test_cmdparse_tokenizer_expansion_matrix(void)
     {
         static const u8 binary[] = {'a', '\0', 'b'};
 
-        sag_textbuf_free(f.tb);
-        f.tb = sag_textbuf_from_bytes(binary, sizeof(binary));
+        yew_textbuf_free(f.tb);
+        f.tb = yew_textbuf_from_bytes(binary, sizeof(binary));
         f.ed.buffer.tb = f.tb;
         f.ed.single_win.buf = &f.ed.buffer;
         f.ed.single_win.cs.curs.data[0].anchor = BYTEOFF(0U);
@@ -183,12 +183,12 @@ void test_cmdparse_tokenizer_expansion_matrix(void)
     {
         CmdParse parsed;
 
-        SAG_ASSERT(!sag_cmd_parse(&f.ed, nul_line, sizeof(nul_line) - 1U,
+        YEW_ASSERT(!yew_cmd_parse(&f.ed, nul_line, sizeof(nul_line) - 1U,
                                   &f.arena, &parsed));
-        SAG_ASSERT_EQ_STR(parsed.err.msg,
+        YEW_ASSERT_EQ_STR(parsed.err.msg,
                           "NUL byte is not valid in a command line");
-        SAG_ASSERT_EQ_U64(parsed.err.tok_lo, 4U);
-        SAG_ASSERT_EQ_U64(parsed.err.tok_hi, 5U);
+        YEW_ASSERT_EQ_U64(parsed.err.tok_lo, 4U);
+        YEW_ASSERT_EQ_U64(parsed.err.tok_hi, 5U);
     }
     parse_fixture_free(&f);
 }
@@ -199,11 +199,11 @@ void test_cmdparse_fl_preserves_source_as_one_argument(void)
     CmdParse parsed;
 
     parse_fixture_init(&f);
-    SAG_ASSERT(sag_cmd_parse(&f.ed, ":fl answer + 1", 14U, &f.arena,
+    YEW_ASSERT(yew_cmd_parse(&f.ed, ":fl answer + 1", 14U, &f.arena,
                              &parsed));
-    SAG_ASSERT_EQ_U64(parsed.argv.n, 2U);
-    SAG_ASSERT_EQ_STR(parsed.argv.v[0], "ed.fl.eval");
-    SAG_ASSERT_EQ_STR(parsed.argv.v[1], "answer + 1");
+    YEW_ASSERT_EQ_U64(parsed.argv.n, 2U);
+    YEW_ASSERT_EQ_STR(parsed.argv.v[0], "ed.fl.eval");
+    YEW_ASSERT_EQ_STR(parsed.argv.v[1], "answer + 1");
     parse_fixture_free(&f);
 }
 
@@ -214,12 +214,12 @@ void test_cmdparse_resolution_bang_errors_and_parse_point(void)
     CmdParsePoint point;
 
     parse_fixture_init(&f);
-    SAG_ASSERT(sag_cmd_parse(&f.ed, ":ui.open value", 14U, &f.arena,
+    YEW_ASSERT(yew_cmd_parse(&f.ed, ":ui.open value", 14U, &f.arena,
                              &parsed));
-    SAG_ASSERT(sag_cmd_parse(&f.ed, ":ui.o value", 11U, &f.arena,
+    YEW_ASSERT(yew_cmd_parse(&f.ed, ":ui.o value", 11U, &f.arena,
                              &parsed));
-    SAG_ASSERT(sag_cmd_parse(&f.ed, ":w! value", 9U, &f.arena, &parsed));
-    SAG_ASSERT(parsed.bang);
+    YEW_ASSERT(yew_cmd_parse(&f.ed, ":w! value", 9U, &f.arena, &parsed));
+    YEW_ASSERT(parsed.bang);
     assert_error(&f, ":ui.shrink extra",
                  ":ui.shrink takes no arguments");
     assert_error_span(&f, ":quit extra", ":quit takes no arguments",
@@ -244,31 +244,31 @@ void test_cmdparse_resolution_bang_errors_and_parse_point(void)
     {
         CmdParse parsed;
 
-        SAG_ASSERT(sag_cmd_parse(&f.ed, ":s/a/b/g", 8U, &f.arena,
+        YEW_ASSERT(yew_cmd_parse(&f.ed, ":s/a/b/g", 8U, &f.arena,
                                  &parsed));
-        SAG_ASSERT_EQ_U64(parsed.argv.n, 2U);
-        SAG_ASSERT_EQ_STR(parsed.argv.v[1], "/a/b/g");
-        SAG_ASSERT(sag_cmd_parse(&f.ed, ":%s#a#b#", 8U, &f.arena,
+        YEW_ASSERT_EQ_U64(parsed.argv.n, 2U);
+        YEW_ASSERT_EQ_STR(parsed.argv.v[1], "/a/b/g");
+        YEW_ASSERT(yew_cmd_parse(&f.ed, ":%s#a#b#", 8U, &f.arena,
                                  &parsed));
-        SAG_ASSERT_EQ_STR(parsed.argv.v[1], "#a#b#");
-        SAG_ASSERT_EQ_U64(parsed.range.kind, SAG_RANGE_BUFFER);
-        SAG_ASSERT(sag_cmd_parse(&f.ed, ":g/re/d", 7U, &f.arena, &parsed));
-        SAG_ASSERT_EQ_STR(parsed.argv.v[1], "/re/d");
+        YEW_ASSERT_EQ_STR(parsed.argv.v[1], "#a#b#");
+        YEW_ASSERT_EQ_U64(parsed.range.kind, YEW_RANGE_BUFFER);
+        YEW_ASSERT(yew_cmd_parse(&f.ed, ":g/re/d", 7U, &f.arena, &parsed));
+        YEW_ASSERT_EQ_STR(parsed.argv.v[1], "/re/d");
     }
     assert_error(&f, ":fl", ":fl needs Fletch source");
 
-    SAG_ASSERT(sag_cmd_parse_point(&f.ed, ":w \"my fi", 9U, 9U,
+    YEW_ASSERT(yew_cmd_parse_point(&f.ed, ":w \"my fi", 9U, 9U,
                                    &f.arena, &point));
-    SAG_ASSERT(point.command_known);
-    SAG_ASSERT_EQ_U64(point.token_index, 1U);
-    SAG_ASSERT_EQ_STR(point.stem, "my fi");
-    SAG_ASSERT_EQ_U64(point.token.lo, 3U);
-    SAG_ASSERT_EQ_U64(point.token.hi, 9U);
-    SAG_ASSERT(sag_cmd_parse_point(&f.ed, ":w one ", 7U, 7U,
+    YEW_ASSERT(point.command_known);
+    YEW_ASSERT_EQ_U64(point.token_index, 1U);
+    YEW_ASSERT_EQ_STR(point.stem, "my fi");
+    YEW_ASSERT_EQ_U64(point.token.lo, 3U);
+    YEW_ASSERT_EQ_U64(point.token.hi, 9U);
+    YEW_ASSERT(yew_cmd_parse_point(&f.ed, ":w one ", 7U, 7U,
                                    &f.arena, &point));
-    SAG_ASSERT_EQ_U64(point.token_index, 2U);
-    SAG_ASSERT_EQ_U64(point.token.lo, 7U);
-    SAG_ASSERT_EQ_U64(point.token.hi, 7U);
+    YEW_ASSERT_EQ_U64(point.token_index, 2U);
+    YEW_ASSERT_EQ_U64(point.token.lo, 7U);
+    YEW_ASSERT_EQ_U64(point.token.hi, 7U);
 
     assert_error(&f, ":file.w",
                  "ambiguous: file.write, file.write_quit");

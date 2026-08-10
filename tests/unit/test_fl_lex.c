@@ -64,13 +64,13 @@ static FlTok expect_kind(LexFix *f, FlTokKind want)
 {
     FlTok t = nx(f);
 
-    SAG_ASSERT_EQ_U64((u64)t.kind, (u64)want);
+    YEW_ASSERT_EQ_U64((u64)t.kind, (u64)want);
     return t;
 }
 
 static const char *interned(LexFix *f, u32 id)
 {
-    return sag_intern_str(&f->in, id);
+    return yew_intern_str(&f->in, id);
 }
 
 /* ---------------------------------------------------------------- */
@@ -88,7 +88,7 @@ void test_fl_lex_comment_keeps_its_newline(void)
     (void)expect_kind(&f, FL_T_NEWLINE);
     (void)expect_kind(&f, FL_T_LET);
     (void)expect_kind(&f, FL_T_EOF);
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
     lf_close(&f);
 }
 
@@ -101,13 +101,13 @@ void test_fl_lex_crlf_is_one_newline_and_bare_cr_is_an_error(void)
     (void)expect_kind(&f, FL_T_NEWLINE);
     (void)expect_kind(&f, FL_T_IDENT);
     (void)expect_kind(&f, FL_T_EOF);
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
     lf_close(&f);
 
     lf_open(&f, "a\rb");
     (void)expect_kind(&f, FL_T_IDENT);
     (void)expect_kind(&f, FL_T_ERROR);
-    SAG_ASSERT(strstr(f.msg, "carriage return") != NULL);
+    YEW_ASSERT(strstr(f.msg, "carriage return") != NULL);
     lf_close(&f);
 }
 
@@ -135,8 +135,8 @@ void test_fl_lex_keywords_need_a_terminator(void)
 
     /* Spec §15.1 pins the count at 22 and Sprint 33 asserts it; the
      * table above is the enumeration, so check it here too. */
-    SAG_ASSERT_EQ_U64(SAG_ARRAY_LEN(words), (u64)FL_KEYWORD_COUNT);
-    for (i = 0U; i < SAG_ARRAY_LEN(words); i++) {
+    YEW_ASSERT_EQ_U64(YEW_ARRAY_LEN(words), (u64)FL_KEYWORD_COUNT);
+    for (i = 0U; i < YEW_ARRAY_LEN(words); i++) {
         lf_open(&f, words[i].text);
         (void)expect_kind(&f, words[i].kind);
         (void)expect_kind(&f, FL_T_EOF);
@@ -150,7 +150,7 @@ void test_fl_lex_keywords_need_a_terminator(void)
     (void)expect_kind(&f, FL_T_IDENT);
     (void)expect_kind(&f, FL_T_IDENT);
     (void)expect_kind(&f, FL_T_EOF);
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
     lf_close(&f);
 }
 
@@ -164,14 +164,14 @@ void test_fl_lex_integers_decimal_hex_and_separators(void)
     FlTok t;
 
     lf_open(&f, "0 42 1_000_000 0xFF 0xFF_FF 0X10");
-    t = expect_kind(&f, FL_T_INT); SAG_ASSERT_EQ_I64(t.v.i, 0);
-    t = expect_kind(&f, FL_T_INT); SAG_ASSERT_EQ_I64(t.v.i, 42);
-    t = expect_kind(&f, FL_T_INT); SAG_ASSERT_EQ_I64(t.v.i, 1000000);
-    t = expect_kind(&f, FL_T_INT); SAG_ASSERT_EQ_I64(t.v.i, 255);
-    t = expect_kind(&f, FL_T_INT); SAG_ASSERT_EQ_I64(t.v.i, 65535);
-    t = expect_kind(&f, FL_T_INT); SAG_ASSERT_EQ_I64(t.v.i, 16);
+    t = expect_kind(&f, FL_T_INT); YEW_ASSERT_EQ_I64(t.v.i, 0);
+    t = expect_kind(&f, FL_T_INT); YEW_ASSERT_EQ_I64(t.v.i, 42);
+    t = expect_kind(&f, FL_T_INT); YEW_ASSERT_EQ_I64(t.v.i, 1000000);
+    t = expect_kind(&f, FL_T_INT); YEW_ASSERT_EQ_I64(t.v.i, 255);
+    t = expect_kind(&f, FL_T_INT); YEW_ASSERT_EQ_I64(t.v.i, 65535);
+    t = expect_kind(&f, FL_T_INT); YEW_ASSERT_EQ_I64(t.v.i, 16);
     (void)expect_kind(&f, FL_T_EOF);
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
     lf_close(&f);
 }
 
@@ -181,10 +181,10 @@ void test_fl_lex_underscore_must_separate_digits(void)
     static const char *const bad[] = {"1_", "0x_", "1__0"};
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(bad); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(bad); i++) {
         lf_open(&f, bad[i]);
         (void)expect_kind(&f, FL_T_ERROR);
-        SAG_ASSERT(strstr(f.msg, "separate digits") != NULL);
+        YEW_ASSERT(strstr(f.msg, "separate digits") != NULL);
         lf_close(&f);
     }
     /* `_1` is not a number at all -- it is a perfectly good identifier,
@@ -192,7 +192,7 @@ void test_fl_lex_underscore_must_separate_digits(void)
      * than the parser's. */
     lf_open(&f, "_1");
     (void)expect_kind(&f, FL_T_IDENT);
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
     lf_close(&f);
 }
 
@@ -205,13 +205,13 @@ void test_fl_lex_int_overflow_is_an_error_not_a_wrap(void)
      * never a silent wrap. */
     lf_open(&f, "9223372036854775808");
     (void)expect_kind(&f, FL_T_ERROR);
-    SAG_ASSERT(strstr(f.msg, "i64") != NULL);
+    YEW_ASSERT(strstr(f.msg, "i64") != NULL);
     lf_close(&f);
 
     lf_open(&f, "9223372036854775807");
     t = expect_kind(&f, FL_T_INT);
-    SAG_ASSERT_EQ_I64(t.v.i, INT64_MAX);
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT_EQ_I64(t.v.i, INT64_MAX);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
     lf_close(&f);
 }
 
@@ -221,7 +221,7 @@ void test_fl_lex_hex_needs_a_digit(void)
 
     lf_open(&f, "0x");
     (void)expect_kind(&f, FL_T_ERROR);
-    SAG_ASSERT(strstr(f.msg, "hexadecimal") != NULL);
+    YEW_ASSERT(strstr(f.msg, "hexadecimal") != NULL);
     lf_close(&f);
 }
 
@@ -231,12 +231,12 @@ void test_fl_lex_floats_and_the_dot_rule(void)
     FlTok t;
 
     lf_open(&f, "1.5 2.0e3 7.5E-2 1.0e+1");
-    t = expect_kind(&f, FL_T_FLOAT); SAG_ASSERT(t.v.f > 1.49 && t.v.f < 1.51);
-    t = expect_kind(&f, FL_T_FLOAT); SAG_ASSERT(t.v.f > 1999.0 && t.v.f < 2001.0);
-    t = expect_kind(&f, FL_T_FLOAT); SAG_ASSERT(t.v.f > 0.074 && t.v.f < 0.076);
-    t = expect_kind(&f, FL_T_FLOAT); SAG_ASSERT(t.v.f > 9.9 && t.v.f < 10.1);
+    t = expect_kind(&f, FL_T_FLOAT); YEW_ASSERT(t.v.f > 1.49 && t.v.f < 1.51);
+    t = expect_kind(&f, FL_T_FLOAT); YEW_ASSERT(t.v.f > 1999.0 && t.v.f < 2001.0);
+    t = expect_kind(&f, FL_T_FLOAT); YEW_ASSERT(t.v.f > 0.074 && t.v.f < 0.076);
+    t = expect_kind(&f, FL_T_FLOAT); YEW_ASSERT(t.v.f > 9.9 && t.v.f < 10.1);
     (void)expect_kind(&f, FL_T_EOF);
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
     lf_close(&f);
 
     /*
@@ -247,10 +247,10 @@ void test_fl_lex_floats_and_the_dot_rule(void)
      * literal from lexing as a broken float.
      */
     lf_open(&f, "1.foo");
-    t = expect_kind(&f, FL_T_INT); SAG_ASSERT_EQ_I64(t.v.i, 1);
+    t = expect_kind(&f, FL_T_INT); YEW_ASSERT_EQ_I64(t.v.i, 1);
     (void)expect_kind(&f, FL_T_DOT);
     (void)expect_kind(&f, FL_T_IDENT);
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
     lf_close(&f);
 
     /* `1.` is INT then DOT; `.5` is DOT then INT.  Both are rejected by
@@ -278,22 +278,22 @@ void test_fl_lex_string_escapes(void)
 
     lf_open(&f, "\"a\\nb\\tc\\rd\\\\e\\\"f\"");
     t = expect_kind(&f, FL_T_STRING);
-    SAG_ASSERT_EQ_I64(strcmp(interned(&f, t.v.str_id),
+    YEW_ASSERT_EQ_I64(strcmp(interned(&f, t.v.str_id),
                              "a\nb\tc\rd\\e\"f"), 0);
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
     lf_close(&f);
 
     /* \xNN is a BYTE; \u{...} is a codepoint encoded as UTF-8. */
     lf_open(&f, "\"\\x41\\x7A\"");
     t = expect_kind(&f, FL_T_STRING);
-    SAG_ASSERT_EQ_I64(strcmp(interned(&f, t.v.str_id), "Az"), 0);
+    YEW_ASSERT_EQ_I64(strcmp(interned(&f, t.v.str_id), "Az"), 0);
     lf_close(&f);
 
     lf_open(&f, "\"\\u{48}\\u{1F600}\"");
     t = expect_kind(&f, FL_T_STRING);
-    SAG_ASSERT_EQ_I64(strcmp(interned(&f, t.v.str_id),
+    YEW_ASSERT_EQ_I64(strcmp(interned(&f, t.v.str_id),
                              "H\xF0\x9F\x98\x80"), 0);
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
     lf_close(&f);
 }
 
@@ -309,9 +309,9 @@ void test_fl_lex_unknown_escape_points_at_the_escape(void)
      */
     lf_open(&f, "\"aaaa\\dbbbb\"");
     t = expect_kind(&f, FL_T_ERROR);
-    SAG_ASSERT(strstr(f.msg, "unknown escape") != NULL);
-    SAG_ASSERT_EQ_U64(t.sp.line, 1U);
-    SAG_ASSERT_EQ_U64(t.sp.col, 6U); /* the backslash, 1-based */
+    YEW_ASSERT(strstr(f.msg, "unknown escape") != NULL);
+    YEW_ASSERT_EQ_U64(t.sp.line, 1U);
+    YEW_ASSERT_EQ_U64(t.sp.col, 6U); /* the backslash, 1-based */
     lf_close(&f);
 }
 
@@ -321,35 +321,35 @@ void test_fl_lex_string_error_cases(void)
 
     lf_open(&f, "\"no end");
     (void)expect_kind(&f, FL_T_ERROR);
-    SAG_ASSERT(strstr(f.msg, "unterminated") != NULL);
+    YEW_ASSERT(strstr(f.msg, "unterminated") != NULL);
     lf_close(&f);
 
     /* A newline inside a string is an error; use \n. */
     lf_open(&f, "\"a\nb\"");
     (void)expect_kind(&f, FL_T_ERROR);
-    SAG_ASSERT(strstr(f.msg, "newline in string") != NULL);
+    YEW_ASSERT(strstr(f.msg, "newline in string") != NULL);
     lf_close(&f);
 
     lf_open(&f, "\"\\x4\"");
     (void)expect_kind(&f, FL_T_ERROR);
-    SAG_ASSERT(strstr(f.msg, "two hexadecimal") != NULL);
+    YEW_ASSERT(strstr(f.msg, "two hexadecimal") != NULL);
     lf_close(&f);
 
     lf_open(&f, "\"\\u{}\"");
     (void)expect_kind(&f, FL_T_ERROR);
-    SAG_ASSERT(strstr(f.msg, "hexadecimal digits") != NULL);
+    YEW_ASSERT(strstr(f.msg, "hexadecimal digits") != NULL);
     lf_close(&f);
 
     /* Past the scalar range, and a surrogate: both would put bytes in
      * the string that no decoder accepts back. */
     lf_open(&f, "\"\\u{110000}\"");
     (void)expect_kind(&f, FL_T_ERROR);
-    SAG_ASSERT(strstr(f.msg, "scalar value") != NULL);
+    YEW_ASSERT(strstr(f.msg, "scalar value") != NULL);
     lf_close(&f);
 
     lf_open(&f, "\"\\u{D800}\"");
     (void)expect_kind(&f, FL_T_ERROR);
-    SAG_ASSERT(strstr(f.msg, "scalar value") != NULL);
+    YEW_ASSERT(strstr(f.msg, "scalar value") != NULL);
     lf_close(&f);
 }
 
@@ -372,11 +372,11 @@ void test_fl_lex_operators_and_delimiters(void)
     };
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(ops); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(ops); i++) {
         lf_open(&f, ops[i].text);
         (void)expect_kind(&f, ops[i].kind);
         (void)expect_kind(&f, FL_T_EOF);
-        SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+        YEW_ASSERT_EQ_U64(f.ndiag, 0U);
         lf_close(&f);
     }
 }
@@ -387,13 +387,13 @@ void test_fl_lex_at_without_bracket_names_the_pair(void)
 
     lf_open(&f, "@x");
     (void)expect_kind(&f, FL_T_ERROR);
-    SAG_ASSERT(strstr(f.msg, "@[") != NULL);
+    YEW_ASSERT(strstr(f.msg, "@[") != NULL);
     lf_close(&f);
 
     /* `!` alone points at the operator that does exist. */
     lf_open(&f, "!x");
     (void)expect_kind(&f, FL_T_ERROR);
-    SAG_ASSERT(strstr(f.msg, "not") != NULL);
+    YEW_ASSERT(strstr(f.msg, "not") != NULL);
     lf_close(&f);
 }
 
@@ -408,34 +408,34 @@ void test_fl_lex_motion_units_arrows_and_counts(void)
 
     lf_open(&f, "@[l w b c]");
     (void)expect_kind(&f, FL_T_ATBRACKET);
-    t = expect_kind(&f, FL_M_UNIT); SAG_ASSERT_EQ_U64(t.v.m.ch, (u64)'l');
-    t = expect_kind(&f, FL_M_UNIT); SAG_ASSERT_EQ_U64(t.v.m.ch, (u64)'w');
-    t = expect_kind(&f, FL_M_UNIT); SAG_ASSERT_EQ_U64(t.v.m.ch, (u64)'b');
-    t = expect_kind(&f, FL_M_UNIT); SAG_ASSERT_EQ_U64(t.v.m.ch, (u64)'c');
+    t = expect_kind(&f, FL_M_UNIT); YEW_ASSERT_EQ_U64(t.v.m.ch, (u64)'l');
+    t = expect_kind(&f, FL_M_UNIT); YEW_ASSERT_EQ_U64(t.v.m.ch, (u64)'w');
+    t = expect_kind(&f, FL_M_UNIT); YEW_ASSERT_EQ_U64(t.v.m.ch, (u64)'b');
+    t = expect_kind(&f, FL_M_UNIT); YEW_ASSERT_EQ_U64(t.v.m.ch, (u64)'c');
     (void)expect_kind(&f, FL_M_END);
     (void)expect_kind(&f, FL_T_EOF);
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
     lf_close(&f);
 
     lf_open(&f, "@[< > ^ v]");
     (void)expect_kind(&f, FL_T_ATBRACKET);
-    t = expect_kind(&f, FL_M_ARROW); SAG_ASSERT_EQ_U64(t.v.m.ch, (u64)'<');
-    SAG_ASSERT(!t.v.m.alt);
-    t = expect_kind(&f, FL_M_ARROW); SAG_ASSERT_EQ_U64(t.v.m.ch, (u64)'>');
-    t = expect_kind(&f, FL_M_ARROW); SAG_ASSERT_EQ_U64(t.v.m.ch, (u64)'^');
-    t = expect_kind(&f, FL_M_ARROW); SAG_ASSERT_EQ_U64(t.v.m.ch, (u64)'v');
+    t = expect_kind(&f, FL_M_ARROW); YEW_ASSERT_EQ_U64(t.v.m.ch, (u64)'<');
+    YEW_ASSERT(!t.v.m.alt);
+    t = expect_kind(&f, FL_M_ARROW); YEW_ASSERT_EQ_U64(t.v.m.ch, (u64)'>');
+    t = expect_kind(&f, FL_M_ARROW); YEW_ASSERT_EQ_U64(t.v.m.ch, (u64)'^');
+    t = expect_kind(&f, FL_M_ARROW); YEW_ASSERT_EQ_U64(t.v.m.ch, (u64)'v');
     (void)expect_kind(&f, FL_M_END);
     lf_close(&f);
 
     /* Whitespace-insensitive: `4>` and `4 >` are the same motion. */
     lf_open(&f, "@[4> 12 <]");
     (void)expect_kind(&f, FL_T_ATBRACKET);
-    t = expect_kind(&f, FL_M_COUNT); SAG_ASSERT_EQ_U64(t.v.count, 4U);
+    t = expect_kind(&f, FL_M_COUNT); YEW_ASSERT_EQ_U64(t.v.count, 4U);
     (void)expect_kind(&f, FL_M_ARROW);
-    t = expect_kind(&f, FL_M_COUNT); SAG_ASSERT_EQ_U64(t.v.count, 12U);
+    t = expect_kind(&f, FL_M_COUNT); YEW_ASSERT_EQ_U64(t.v.count, 12U);
     (void)expect_kind(&f, FL_M_ARROW);
     (void)expect_kind(&f, FL_M_END);
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
     lf_close(&f);
 }
 
@@ -448,28 +448,28 @@ void test_fl_lex_motion_alt_prefix_is_longest_match(void)
     lf_open(&f, "@[av a> a< a^]");
     (void)expect_kind(&f, FL_T_ATBRACKET);
     t = expect_kind(&f, FL_M_ARROW);
-    SAG_ASSERT_EQ_U64(t.v.m.ch, (u64)'v'); SAG_ASSERT(t.v.m.alt);
+    YEW_ASSERT_EQ_U64(t.v.m.ch, (u64)'v'); YEW_ASSERT(t.v.m.alt);
     t = expect_kind(&f, FL_M_ARROW);
-    SAG_ASSERT_EQ_U64(t.v.m.ch, (u64)'>'); SAG_ASSERT(t.v.m.alt);
+    YEW_ASSERT_EQ_U64(t.v.m.ch, (u64)'>'); YEW_ASSERT(t.v.m.alt);
     t = expect_kind(&f, FL_M_ARROW);
-    SAG_ASSERT_EQ_U64(t.v.m.ch, (u64)'<'); SAG_ASSERT(t.v.m.alt);
+    YEW_ASSERT_EQ_U64(t.v.m.ch, (u64)'<'); YEW_ASSERT(t.v.m.alt);
     t = expect_kind(&f, FL_M_ARROW);
-    SAG_ASSERT_EQ_U64(t.v.m.ch, (u64)'^'); SAG_ASSERT(t.v.m.alt);
+    YEW_ASSERT_EQ_U64(t.v.m.ch, (u64)'^'); YEW_ASSERT(t.v.m.alt);
     (void)expect_kind(&f, FL_M_END);
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
     lf_close(&f);
 
     /* ...but `avx` is the command word `avx`, and `list` is not `l`. */
     lf_open(&f, "@[avx list yank]");
     (void)expect_kind(&f, FL_T_ATBRACKET);
     t = expect_kind(&f, FL_M_WORD);
-    SAG_ASSERT_EQ_I64(strcmp(interned(&f, t.v.str_id), "avx"), 0);
+    YEW_ASSERT_EQ_I64(strcmp(interned(&f, t.v.str_id), "avx"), 0);
     t = expect_kind(&f, FL_M_WORD);
-    SAG_ASSERT_EQ_I64(strcmp(interned(&f, t.v.str_id), "list"), 0);
+    YEW_ASSERT_EQ_I64(strcmp(interned(&f, t.v.str_id), "list"), 0);
     t = expect_kind(&f, FL_M_WORD);
-    SAG_ASSERT_EQ_I64(strcmp(interned(&f, t.v.str_id), "yank"), 0);
+    YEW_ASSERT_EQ_I64(strcmp(interned(&f, t.v.str_id), "yank"), 0);
     (void)expect_kind(&f, FL_M_END);
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
     lf_close(&f);
 }
 
@@ -481,19 +481,19 @@ void test_fl_lex_motion_unicode_arrow_aliases(void)
     /* §3: accepted on input, never emitted by the recorder. */
     lf_open(&f, "@[\xE2\x86\x92 \xE2\x86\x90 \xE2\x86\x91 \xE2\x86\x93]");
     (void)expect_kind(&f, FL_T_ATBRACKET);
-    t = expect_kind(&f, FL_M_ARROW); SAG_ASSERT_EQ_U64(t.v.m.ch, (u64)'>');
-    t = expect_kind(&f, FL_M_ARROW); SAG_ASSERT_EQ_U64(t.v.m.ch, (u64)'<');
-    t = expect_kind(&f, FL_M_ARROW); SAG_ASSERT_EQ_U64(t.v.m.ch, (u64)'^');
-    t = expect_kind(&f, FL_M_ARROW); SAG_ASSERT_EQ_U64(t.v.m.ch, (u64)'v');
+    t = expect_kind(&f, FL_M_ARROW); YEW_ASSERT_EQ_U64(t.v.m.ch, (u64)'>');
+    t = expect_kind(&f, FL_M_ARROW); YEW_ASSERT_EQ_U64(t.v.m.ch, (u64)'<');
+    t = expect_kind(&f, FL_M_ARROW); YEW_ASSERT_EQ_U64(t.v.m.ch, (u64)'^');
+    t = expect_kind(&f, FL_M_ARROW); YEW_ASSERT_EQ_U64(t.v.m.ch, (u64)'v');
     (void)expect_kind(&f, FL_M_END);
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
     lf_close(&f);
 
     /* The alt prefix works on an alias too. */
     lf_open(&f, "@[a\xE2\x86\x93]");
     (void)expect_kind(&f, FL_T_ATBRACKET);
     t = expect_kind(&f, FL_M_ARROW);
-    SAG_ASSERT_EQ_U64(t.v.m.ch, (u64)'v'); SAG_ASSERT(t.v.m.alt);
+    YEW_ASSERT_EQ_U64(t.v.m.ch, (u64)'v'); YEW_ASSERT(t.v.m.alt);
     (void)expect_kind(&f, FL_M_END);
     lf_close(&f);
 }
@@ -513,13 +513,13 @@ void test_fl_lex_motion_h_nests_without_leaving_the_mode(void)
     (void)expect_kind(&f, FL_T_ATBRACKET);
     (void)expect_kind(&f, FL_M_H);
     (void)expect_kind(&f, FL_M_LPAREN);
-    t = expect_kind(&f, FL_M_COUNT); SAG_ASSERT_EQ_U64(t.v.count, 2U);
+    t = expect_kind(&f, FL_M_COUNT); YEW_ASSERT_EQ_U64(t.v.count, 2U);
     (void)expect_kind(&f, FL_M_ARROW);
     (void)expect_kind(&f, FL_M_RPAREN);
     (void)expect_kind(&f, FL_M_DEL);
     (void)expect_kind(&f, FL_M_END);
     (void)expect_kind(&f, FL_T_EOF);
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
     lf_close(&f);
 }
 
@@ -531,11 +531,11 @@ void test_fl_lex_motion_insert_del_esc(void)
     lf_open(&f, "@[i\"hi\\n\" del esc]");
     (void)expect_kind(&f, FL_T_ATBRACKET);
     t = expect_kind(&f, FL_M_INSERT);
-    SAG_ASSERT_EQ_I64(strcmp(interned(&f, t.v.str_id), "hi\n"), 0);
+    YEW_ASSERT_EQ_I64(strcmp(interned(&f, t.v.str_id), "hi\n"), 0);
     (void)expect_kind(&f, FL_M_DEL);
     (void)expect_kind(&f, FL_M_ESC);
     (void)expect_kind(&f, FL_M_END);
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
     lf_close(&f);
 }
 
@@ -550,7 +550,7 @@ void test_fl_lex_motion_words_are_ordinary_identifiers_outside(void)
     (void)expect_kind(&f, FL_T_IDENT);
     (void)expect_kind(&f, FL_T_IDENT);
     (void)expect_kind(&f, FL_T_EOF);
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
     lf_close(&f);
 }
 
@@ -562,19 +562,19 @@ void test_fl_lex_motion_count_bounds(void)
     lf_open(&f, "@[65535>]");
     (void)expect_kind(&f, FL_T_ATBRACKET);
     t = expect_kind(&f, FL_M_COUNT);
-    SAG_ASSERT_EQ_U64(t.v.count, 65535U);
+    YEW_ASSERT_EQ_U64(t.v.count, 65535U);
     lf_close(&f);
 
     lf_open(&f, "@[65536>]");
     (void)expect_kind(&f, FL_T_ATBRACKET);
     (void)expect_kind(&f, FL_T_ERROR);
-    SAG_ASSERT(strstr(f.msg, "65535") != NULL);
+    YEW_ASSERT(strstr(f.msg, "65535") != NULL);
     lf_close(&f);
 
     lf_open(&f, "@[0>]");
     (void)expect_kind(&f, FL_T_ATBRACKET);
     (void)expect_kind(&f, FL_T_ERROR);
-    SAG_ASSERT(strstr(f.msg, "zero") != NULL);
+    YEW_ASSERT(strstr(f.msg, "zero") != NULL);
     lf_close(&f);
 }
 
@@ -591,7 +591,7 @@ void test_fl_lex_motion_block_may_span_lines(void)
     (void)expect_kind(&f, FL_M_DEL);
     (void)expect_kind(&f, FL_M_END);
     (void)expect_kind(&f, FL_T_EOF);
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
     lf_close(&f);
 }
 
@@ -616,14 +616,14 @@ void test_fl_lex_unterminated_motion_block_is_eof_not_an_error(void)
     (void)expect_kind(&f, FL_M_ARROW);
     (void)expect_kind(&f, FL_T_EOF);
     (void)expect_kind(&f, FL_T_EOF);   /* and EOF stays EOF */
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
     lf_close(&f);
 
     /* The bare two-byte case the fuzzer minimised to. */
     lf_open(&f, "@[");
     (void)expect_kind(&f, FL_T_ATBRACKET);
     (void)expect_kind(&f, FL_T_EOF);
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
     lf_close(&f);
 }
 
@@ -642,10 +642,10 @@ void test_fl_lex_invalid_utf8_reports_once(void)
      */
     lf_open(&f, "\xFF\xFE\xFD\xFC a");
     (void)expect_kind(&f, FL_T_ERROR);
-    SAG_ASSERT(strstr(f.msg, "invalid UTF-8") != NULL);
+    YEW_ASSERT(strstr(f.msg, "invalid UTF-8") != NULL);
     while (fl_lex_next(&f.lx).kind != FL_T_EOF)
         ;
-    SAG_ASSERT_EQ_U64(f.ndiag, 1U);
+    YEW_ASSERT_EQ_U64(f.ndiag, 1U);
     lf_close(&f);
 }
 
@@ -659,15 +659,15 @@ void test_fl_lex_caret_block_renders_the_source_line(void)
      * `path:line:col: error: msg`, the source line, then the caret. */
     lf_open(&f, "let a = 1\nlet b = @x\n");
     while ((t = fl_lex_next(&f.lx)).kind != FL_T_ERROR) {
-        SAG_ASSERT(t.kind != FL_T_EOF);
+        YEW_ASSERT(t.kind != FL_T_EOF);
     }
     bytebuf_init(&out);
     fl_diag_render(&out, &f.dc, FL_DIAG_ERROR, t.sp, "boom");
     bytebuf_push_u8(&out, (u8)'\0');
-    SAG_ASSERT(strstr((const char *)out.data, "t.fl:2:9: error: boom\n")
+    YEW_ASSERT(strstr((const char *)out.data, "t.fl:2:9: error: boom\n")
                != NULL);
-    SAG_ASSERT(strstr((const char *)out.data, "let b = @x\n") != NULL);
-    SAG_ASSERT(strstr((const char *)out.data, "\n        ^") != NULL);
+    YEW_ASSERT(strstr((const char *)out.data, "let b = @x\n") != NULL);
+    YEW_ASSERT(strstr((const char *)out.data, "\n        ^") != NULL);
     bytebuf_free(&out);
     lf_close(&f);
 }
@@ -689,42 +689,42 @@ void test_fl_lex_keep_comments_is_opt_in(void)
     f.lx.keep_comments = true;
 
     t = nx(&f);
-    SAG_ASSERT_EQ_I64((i64)t.kind, (i64)FL_T_COMMENT);
+    YEW_ASSERT_EQ_I64((i64)t.kind, (i64)FL_T_COMMENT);
     /* The span stops BEFORE the newline: §1.1 makes the newline the
      * statement terminator, and swallowing it here would join the
      * comment's line to the next statement. */
-    SAG_ASSERT_EQ_I64((i64)t.sp.len, (i64)strlen("# SPEC: 1"));
-    SAG_ASSERT_EQ_I64((i64)t.sp.line, 1);
-    SAG_ASSERT_EQ_I64((i64)t.sp.col, 1);
-    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_NEWLINE);
-    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_LET);
-    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_IDENT);
-    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_EQ);
+    YEW_ASSERT_EQ_I64((i64)t.sp.len, (i64)strlen("# SPEC: 1"));
+    YEW_ASSERT_EQ_I64((i64)t.sp.line, 1);
+    YEW_ASSERT_EQ_I64((i64)t.sp.col, 1);
+    YEW_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_NEWLINE);
+    YEW_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_LET);
+    YEW_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_IDENT);
+    YEW_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_EQ);
     /* THE NEGATIVE CASE.  A line-based scanner reports a directive
      * here; the lexer reports a string, which is what it is. */
     t = nx(&f);
-    SAG_ASSERT_EQ_I64((i64)t.kind, (i64)FL_T_STRING);
-    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_NEWLINE);
-    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_EOF);
-    SAG_ASSERT_EQ_U64(f.ndiag, 0U);
+    YEW_ASSERT_EQ_I64((i64)t.kind, (i64)FL_T_STRING);
+    YEW_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_NEWLINE);
+    YEW_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_EOF);
+    YEW_ASSERT_EQ_U64(f.ndiag, 0U);
     lf_close(&f);
 
     /* Default off: every caller on the parser's path is unaffected. */
     lf_open(&f, "# SPEC: 1\nlet s = 1\n");
-    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_NEWLINE);
-    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_LET);
+    YEW_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_NEWLINE);
+    YEW_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_LET);
     lf_close(&f);
 
     /* Inside a motion block too, or a directive written there would
      * vanish and the file would silently stop asserting it. */
     lf_open(&f, "macro m = @[ # OUT: x\n 2> ]\n");
     f.lx.keep_comments = true;
-    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_MACRO);
-    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_IDENT);
-    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_EQ);
-    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_ATBRACKET);
-    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_COMMENT);
-    SAG_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_M_COUNT);
+    YEW_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_MACRO);
+    YEW_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_IDENT);
+    YEW_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_EQ);
+    YEW_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_ATBRACKET);
+    YEW_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_T_COMMENT);
+    YEW_ASSERT_EQ_I64((i64)nx(&f).kind, (i64)FL_M_COUNT);
     lf_close(&f);
 }
 
@@ -742,8 +742,8 @@ void test_fl_lex_spellings_cover_every_kind(void)
     for (k = 0; k < (int)FL_T_KIND__N; k++) {
         const char *s = fl_tok_spelling((FlTokKind)k);
 
-        SAG_ASSERT_NOT_NULL(s);
+        YEW_ASSERT_NOT_NULL(s);
         if (k != (int)FL_T_ERROR && k != (int)FL_T_KIND__N)
-            SAG_ASSERT_EQ_I64(strcmp(s, "invalid token") == 0, 0);
+            YEW_ASSERT_EQ_I64(strcmp(s, "invalid token") == 0, 0);
     }
 }

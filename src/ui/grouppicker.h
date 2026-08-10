@@ -1,5 +1,5 @@
-#ifndef SAG_UI_GROUPPICKER_H
-#define SAG_UI_GROUPPICKER_H
+#ifndef YEW_UI_GROUPPICKER_H
+#define YEW_UI_GROUPPICKER_H
 
 /*
  * Sprint 24 §4: the group picker.
@@ -29,50 +29,50 @@
 typedef struct Ed Ed;
 
 typedef enum {
-    SAG_GP_PENDING = 0,
-    SAG_GP_CANCELLED,
-    SAG_GP_CONFIRMED
+    YEW_GP_PENDING = 0,
+    YEW_GP_CANCELLED,
+    YEW_GP_CONFIRMED
 } GpResult;
 
 enum {
-    SAG_GP_WIDTH_MAX = 62,
-    SAG_GP_VISIBLE_ROWS = 12,
-    SAG_GP_PATH_MAX = 1024,
-    SAG_GP_NAME_MAX = 64
+    YEW_GP_WIDTH_MAX = 62,
+    YEW_GP_VISIBLE_ROWS = 12,
+    YEW_GP_PATH_MAX = 1024,
+    YEW_GP_NAME_MAX = 64
 };
 
 /* New mode: the name field is pre-filled `basename(dir)/` so the happy
  * path is Enter-Enter. */
-bool sag_gp_show(Ed *ed, const char *dir);
+bool yew_gp_show(Ed *ed, const char *dir);
 /* Edit mode: same list, current members already ticked. */
-bool sag_gp_show_edit(Ed *ed, const char *dir, const char *name);
-void sag_gp_close(Ed *ed);
-bool sag_gp_active(void);
+bool yew_gp_show_edit(Ed *ed, const char *dir, const char *name);
+void yew_gp_close(Ed *ed);
+bool yew_gp_active(void);
 
 /*
  * Ticks a path WITHOUT listing it.  An edit-mode member may live
  * outside `dir` entirely, and there is no index into the current
  * listing that could express it.
  */
-void sag_gp_preselect(const char *path);
+void yew_gp_preselect(const char *path);
 /* Rows for ticked paths with unsaved changes show a `•`.  In Edit mode
  * unticking closes that member's tab, so the warning has to be readable
  * BEFORE Enter, not in a prompt after. */
-void sag_gp_mark_dirty(const char *path);
+void yew_gp_mark_dirty(const char *path);
 
-GpResult sag_gp_result(void);
-const char *sag_gp_name(void);
-int sag_gp_count(void);
-const char *sag_gp_path(int i);
+GpResult yew_gp_result(void);
+const char *yew_gp_name(void);
+int yew_gp_count(void);
+const char *yew_gp_path(int i);
 
 /* True when the key was consumed by the dialog. */
-bool sag_gp_key(Ed *ed, Key key);
-void sag_gp_draw(Ed *ed);
+bool yew_gp_key(Ed *ed, Key key);
+void yew_gp_draw(Ed *ed);
 /* True when the click was consumed. */
-bool sag_gp_click(Ed *ed, u16 x, u16 y);
+bool yew_gp_click(Ed *ed, u16 x, u16 y);
 /* Sprint 27 §2: the wheel.  Moves the focused row — see grouppicker.c
  * for why there is no separate scroll offset to move instead. */
-void sag_gp_scroll(Ed *ed, int rows);
+void yew_gp_scroll(Ed *ed, int rows);
 
 /*
  * Applies a CONFIRMED result, and does nothing while the dialog is
@@ -82,9 +82,9 @@ void sag_gp_scroll(Ed *ed, int rows);
  * dialog produced a name and a set of paths, and the MEANING of that —
  * create versus diff-against-current-members — lives here.
  */
-void sag_gp_apply(Ed *ed);
+void yew_gp_apply(Ed *ed);
 
-CmdStatus sag_gp_cmd_new(CmdCtx *cx);
-CmdStatus sag_gp_cmd_edit(CmdCtx *cx);
+CmdStatus yew_gp_cmd_new(CmdCtx *cx);
+CmdStatus yew_gp_cmd_edit(CmdCtx *cx);
 
 #endif

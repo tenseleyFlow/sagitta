@@ -85,7 +85,7 @@ static bool spec_kind(const char *k)
     };
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(kinds); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(kinds); i++) {
         if (strcmp(k, kinds[i]) == 0)
             return true;
     }
@@ -275,8 +275,8 @@ static bool check_flapi(const u8 *data, size_t len, char *why, size_t cap)
     interner_init(&in, &arena);
     fl_diag_init(&dc, &arena);
     fl_vm_init(&vm, &arena, &in, &dc);
-    sag_ed_init(&ed);
-    if (!sag_ed_open_scratch(&ed)) {
+    yew_ed_init(&ed);
+    if (!yew_ed_open_scratch(&ed)) {
         (void)snprintf(why, cap, "fixture: no scratch buffer");
         ok = false;
         goto done;
@@ -286,13 +286,13 @@ static bool check_flapi(const u8 *data, size_t len, char *why, size_t cap)
 
     for (i = 0U; i < len && i < FLAPI_FUZZ_MAX_OPS && ok; i++) {
         u8 op = data[i];
-        FlHandleKind k = FLAPI_KINDS[(op >> 3) % SAG_ARRAY_LEN(FLAPI_KINDS)];
+        FlHandleKind k = FLAPI_KINDS[(op >> 3) % YEW_ARRAY_LEN(FLAPI_KINDS)];
         char kind[32];
 
         switch (op & 7U) {
         case 0: /* Take a real handle on a real object. */
             if (nlive < FLAPI_FUZZ_MAX_LIVE)
-                live[nlive++] = fl_h_buf_make(&ed, sag_ed_doc(&ed));
+                live[nlive++] = fl_h_buf_make(&ed, yew_ed_doc(&ed));
             break;
         case 1:
             if (nlive < FLAPI_FUZZ_MAX_LIVE)
@@ -300,7 +300,7 @@ static bool check_flapi(const u8 *data, size_t len, char *why, size_t cap)
             break;
         case 2:
             if (nlive < FLAPI_FUZZ_MAX_LIVE)
-                live[nlive++] = fl_h_span_make(&ed, sag_ed_doc(&ed), 0U, 0U);
+                live[nlive++] = fl_h_span_make(&ed, yew_ed_doc(&ed), 0U, 0U);
             break;
         case 3: /* Release one, scrambling the free list. */
             if (nlive != 0U)
@@ -351,7 +351,7 @@ static bool check_flapi(const u8 *data, size_t len, char *why, size_t cap)
             break;
         }
         case 6: /* Close the objects under every handle taken so far. */
-            fl_h_drop_buffer(&ed, sag_ed_doc(&ed)->id);
+            fl_h_drop_buffer(&ed, yew_ed_doc(&ed)->id);
             break;
         default:
             /* A non-handle value must be a type error, never a crash. */
@@ -368,7 +368,7 @@ static bool check_flapi(const u8 *data, size_t len, char *why, size_t cap)
 
 done:
     fl_ed_detach(&vm);
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
     fl_vm_free(&vm);
     interner_free(&in);
     arena_free_all(&arena);
@@ -377,6 +377,6 @@ done:
 
 int main(int argc, char **argv)
 {
-    return sag_fuzz_main(argc, argv, "fuzz_flapi",
+    return yew_fuzz_main(argc, argv, "fuzz_flapi",
                          "tests/fuzz/corpus/flapi", check_flapi);
 }

@@ -8,7 +8,7 @@
 
 ## Preface
 
-Fletch is the scripting and macro language of the sagitta editor. This
+Fletch is the scripting and macro language of the yew editor. This
 document is its single citable definition. Sprints 29–33 implement
 *sections* of it; the conformance suite (Sprint 33) is organised *by
 section*; every later campaign cites `fletch-spec §N` rather than
@@ -37,7 +37,7 @@ mechanical check a reviewer runs.
 | 4 | **Transactional edits** — a top-level invocation is one undo step; uncaught error rolls back | §10 (the transaction law), §9 (what escaping means) |
 | 5 | **Editor values** — buffer, cursor, span, window, regex are first-class handles | §4 (the handle types, reserved here, constructible from Sprint 34) |
 | 6 | **Data literals** — clean enough to serve as the config, syntax-definition and workspace-state format | §12 (pure-literal mode and its security property), §4 (map ordering), §5 (literal syntax) |
-| 7 | **Embeddable & small** — VM inside sagitta, ~0 start cost | §2 (a grammar with no ambiguity requiring backtracking), §4 (value model sized for a register VM), §11 (import caching) |
+| 7 | **Embeddable & small** — VM inside yew, ~0 start cost | §2 (a grammar with no ambiguity requiring backtracking), §4 (value model sized for a register VM), §11 (import caching) |
 | 8 | **Sandboxable** — fs/shell/net are capabilities granted per script origin | §13 (the capability model and the defining-module rule), §12 (pure-literal grants nothing) |
 
 ### Review sign-off
@@ -452,7 +452,7 @@ one step.
 `import "lib/x.fl" as x` imports a **file**, resolved in this order:
 
 1. relative to the importing file,
-2. `$XDG_CONFIG_HOME/sagitta/fl/`.
+2. `$XDG_CONFIG_HOME/yew/fl/`.
 
 Modules are **cached by realpath**, so a module imported by two paths
 that resolve to one file is one instance.
@@ -521,9 +521,9 @@ module (Sprint 31), the editor API (Sprint 34) and plugins (Sprint 54).
 | Origin | Grant |
 |---|---|
 | user config (`init.fl`) | all |
-| workspace `.sagitta.fl` | all, after the trusted-directory prompt (Sprint 36) |
+| workspace `.yew.fl` | all, after the trusted-directory prompt (Sprint 36) |
 | plugin | per-capability prompt, persisted (Sprint 54) |
-| `sag fl` / `--batch` CLI | all — the user invoked it |
+| `yew fl` / `--batch` CLI | all — the user invoked it |
 | REPL | all |
 | pure-literal data | **none — it never executes** |
 
@@ -655,7 +655,7 @@ it. A reserved row is a promise, not a change to the spec.
 |---|---|---|---|---|---|---|
 | A1 | 30 | 9 / 16 | error kinds 11 → 12, adding `"limit"` | stack/step-limit exhaustion is user-triggerable and fits none of the 11 closed kinds | 2026-08-08 | Sprint 30 implementation review |
 | A2 | 34 | 9 / 16 | error kinds 12 → 13, adding `"handle"` | a stale or closed editor handle is neither a type nor an index error; `catch` must distinguish "wrong argument" from "the buffer closed under you" | 2026-08-10 | Sprint 34 implementation review |
-| A3 | 55 | 11 | import resolution gains a fourth row, `$SAG_RUNTIME_DIR/`, searched **last** | shipped presets must be importable, and searching last lets a user's copy shadow the shipped one | reserved | — |
+| A3 | 55 | 11 | import resolution gains a fourth row, `$YEW_RUNTIME_DIR/`, searched **last** | shipped presets must be importable, and searching last lets a user's copy shadow the shipped one | reserved | — |
 | A4 | 30 | 7 | §7's closure sentence reads "9 then 10", was "10 then 11" | §7 cited §14.1 as normative and then disagreed with it; `clamp(9, 0, 8)` is 8, so the first call yields 9 | 2026-08-08 | Sprint 30 implementation review |
 
 **A4 is out of sprint order, deliberately.** A2 and A3 were reserved

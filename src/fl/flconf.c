@@ -31,16 +31,16 @@
 #include "ws/trust.h"
 #include "ws/trust_prompt.h"
 
-#ifndef SAG_RUNTIME_DIR_DEFAULT
-#define SAG_RUNTIME_DIR_DEFAULT "/usr/local/share/sagitta/runtime"
+#ifndef YEW_RUNTIME_DIR_DEFAULT
+#define YEW_RUNTIME_DIR_DEFAULT "/usr/local/share/yew/runtime"
 #endif
 
 enum {
-    SAG_CFG_BUILTIN = 0,
-    SAG_CFG_USER,
-    SAG_CFG_WORKSPACE,
-    SAG_CFG_SOURCE_N,
-    SAG_CFG_MAX_BYTES = 8U * 1024U * 1024U
+    YEW_CFG_BUILTIN = 0,
+    YEW_CFG_USER,
+    YEW_CFG_WORKSPACE,
+    YEW_CFG_SOURCE_N,
+    YEW_CFG_MAX_BYTES = 8U * 1024U * 1024U
 };
 
 typedef struct CfgUnit {
@@ -52,12 +52,12 @@ typedef struct CfgUnit {
     bool rooted;
 } CfgUnit;
 
-struct SagConfigState {
-    CfgUnit unit[SAG_CFG_SOURCE_N];
+struct YewConfigState {
+    CfgUnit unit[YEW_CFG_SOURCE_N];
     char *config_path;
-    SagTrustDb trust_db;
-    SagTrustProbe trust_probe;
-    u32 spare_file_id[SAG_CFG_SOURCE_N];
+    YewTrustDb trust_db;
+    YewTrustProbe trust_probe;
+    u32 spare_file_id[YEW_CFG_SOURCE_N];
     char once_workspace[PATH_MAX];
     u64 once_hash;
     dev_t once_dev;
@@ -75,7 +75,7 @@ typedef enum ReadStatus {
     CFG_READ_ERROR
 } ReadStatus;
 
-static void trust_prompt_done(Ed *ed, SagTrustAnswer answer, void *ctx);
+static void trust_prompt_done(Ed *ed, YewTrustAnswer answer, void *ctx);
 
 static char *cfg_dup(const char *s)
 {
@@ -85,7 +85,7 @@ static char *cfg_dup(const char *s)
     if (s == NULL)
         return NULL;
     n = strlen(s);
-    copy = sag_xmalloc(n + 1U);
+    copy = yew_xmalloc(n + 1U);
     (void)memcpy(copy, s, n + 1U);
     return copy;
 }
@@ -104,7 +104,7 @@ static char *path_join(const char *dir, const char *tail)
     slash = dn != 0U && dir[dn - 1U] != '/';
     if (dn > SIZE_MAX - tn - (slash ? 2U : 1U))
         return NULL;
-    path = sag_xmalloc(dn + tn + (slash ? 2U : 1U));
+    path = yew_xmalloc(dn + tn + (slash ? 2U : 1U));
     (void)memcpy(path, dir, dn);
     if (slash)
         path[dn++] = '/';
@@ -114,12 +114,12 @@ static char *path_join(const char *dir, const char *tail)
 
 static char *runtime_path(void)
 {
-    const char *dir = getenv("SAG_RUNTIME_DIR");
+    const char *dir = getenv("YEW_RUNTIME_DIR");
     char *path;
 
     if (dir != NULL && dir[0] != '\0')
         return path_join(dir, "init.fl");
-    path = path_join(SAG_RUNTIME_DIR_DEFAULT, "init.fl");
+    path = path_join(YEW_RUNTIME_DIR_DEFAULT, "init.fl");
     if (path != NULL && access(path, R_OK) == 0)
         return path;
     free(path);
@@ -128,17 +128,17 @@ static char *runtime_path(void)
      * prefix first, so this does not weaken the shipped-artifact check. */
     if (access("runtime/init.fl", R_OK) == 0)
         return cfg_dup("runtime/init.fl");
-    return path_join(SAG_RUNTIME_DIR_DEFAULT, "init.fl");
+    return path_join(YEW_RUNTIME_DIR_DEFAULT, "init.fl");
 }
 
-static char *user_path(const SagConfigState *state)
+static char *user_path(const YewConfigState *state)
 {
     char *dir;
     char *path;
 
     if (state != NULL && state->config_path != NULL)
         return cfg_dup(state->config_path);
-    dir = sag_xdg_config_dir();
+    dir = yew_xdg_config_dir();
     if (dir == NULL)
         return NULL;
     path = path_join(dir, "init.fl");
@@ -148,25 +148,25 @@ static char *user_path(const SagConfigState *state)
 
 static char *workspace_path(Ed *ed)
 {
-    return path_join(sag_ws_root(ed), ".sagitta.fl");
+    return path_join(yew_ws_root(ed), ".yew.fl");
 }
 
-static void state_paths(SagConfigState *state, Ed *ed)
+static void state_paths(YewConfigState *state, Ed *ed)
 {
-    state->unit[SAG_CFG_BUILTIN].path = runtime_path();
-    state->unit[SAG_CFG_BUILTIN].kind = (u8)FL_ORIGIN_BUILTIN;
-    state->unit[SAG_CFG_USER].path = user_path(state);
-    state->unit[SAG_CFG_USER].kind = (u8)FL_ORIGIN_CONFIG;
-    state->unit[SAG_CFG_WORKSPACE].path = workspace_path(ed);
-    state->unit[SAG_CFG_WORKSPACE].kind = (u8)FL_ORIGIN_WORKSPACE;
+    state->unit[YEW_CFG_BUILTIN].path = runtime_path();
+    state->unit[YEW_CFG_BUILTIN].kind = (u8)FL_ORIGIN_BUILTIN;
+    state->unit[YEW_CFG_USER].path = user_path(state);
+    state->unit[YEW_CFG_USER].kind = (u8)FL_ORIGIN_CONFIG;
+    state->unit[YEW_CFG_WORKSPACE].path = workspace_path(ed);
+    state->unit[YEW_CFG_WORKSPACE].kind = (u8)FL_ORIGIN_WORKSPACE;
 }
 
-static SagConfigState *state_new(Ed *ed, const SagConfigState *policy)
+static YewConfigState *state_new(Ed *ed, const YewConfigState *policy)
 {
-    SagConfigState *state = sag_xcalloc(1U, sizeof(*state));
+    YewConfigState *state = yew_xcalloc(1U, sizeof(*state));
     u32 i;
 
-    for (i = 0U; i < SAG_CFG_SOURCE_N; i++) {
+    for (i = 0U; i < YEW_CFG_SOURCE_N; i++) {
         state->unit[i].file_id = UINT32_MAX;
         state->spare_file_id[i] = UINT32_MAX;
     }
@@ -183,13 +183,13 @@ static SagConfigState *state_new(Ed *ed, const SagConfigState *policy)
         (void)snprintf(state->once_workspace,
                        sizeof(state->once_workspace), "%s",
                        policy->once_workspace);
-        for (i = 0U; i < SAG_CFG_SOURCE_N; i++)
+        for (i = 0U; i < YEW_CFG_SOURCE_N; i++)
             state->unit[i].file_id = policy->spare_file_id[i];
     }
-    sag_trust_db_init(&state->trust_db);
-    sag_trust_probe_init(&state->trust_probe);
-    if (!sag_trust_db_load(&state->trust_db))
-        sag_log(SAG_LOG_WARN,
+    yew_trust_db_init(&state->trust_db);
+    yew_trust_probe_init(&state->trust_probe);
+    if (!yew_trust_db_load(&state->trust_db))
+        yew_log(YEW_LOG_WARN,
                 "workspace trust database could not be loaded; refusing saved grants");
     state_paths(state, ed);
     return state;
@@ -197,7 +197,7 @@ static SagConfigState *state_new(Ed *ed, const SagConfigState *policy)
 
 static void unit_unroot(Ed *ed, CfgUnit *unit)
 {
-    FlVm *vm = sag_fl_vm(ed);
+    FlVm *vm = yew_fl_vm(ed);
 
     if (unit->rooted && vm != NULL)
         fl_gc_host_root_remove(vm, &unit->closure);
@@ -205,7 +205,7 @@ static void unit_unroot(Ed *ed, CfgUnit *unit)
     unit->closure = FL_NIL_V;
 }
 
-static void state_dispose(Ed *ed, SagConfigState *state)
+static void state_dispose(Ed *ed, YewConfigState *state)
 {
     u32 i;
 
@@ -213,27 +213,27 @@ static void state_dispose(Ed *ed, SagConfigState *state)
         return;
     if (ed != NULL && ed->trust_prompt.active &&
         ed->trust_prompt.ctx == state)
-        sag_trust_prompt_cancel(ed);
-    for (i = 0U; i < SAG_CFG_SOURCE_N; i++) {
+        yew_trust_prompt_cancel(ed);
+    for (i = 0U; i < YEW_CFG_SOURCE_N; i++) {
         unit_unroot(ed, &state->unit[i]);
         free(state->unit[i].path);
     }
-    sag_trust_probe_free(&state->trust_probe);
-    sag_trust_db_free(&state->trust_db);
+    yew_trust_probe_free(&state->trust_probe);
+    yew_trust_db_free(&state->trust_db);
     free(state->config_path);
     free(state);
 }
 
-void sag_config_init(Ed *ed, const SagEdStartup *startup)
+void yew_config_init(Ed *ed, const YewEdStartup *startup)
 {
-    SagConfigState policy = {0};
+    YewConfigState policy = {0};
     u32 i;
 
     if (ed == NULL)
         return;
-    for (i = 0U; i < SAG_CFG_SOURCE_N; i++)
+    for (i = 0U; i < YEW_CFG_SOURCE_N; i++)
         policy.spare_file_id[i] = UINT32_MAX;
-    sag_config_free(ed);
+    yew_config_free(ed);
     if (startup != NULL) {
         policy.config_path = (char *)startup->config_path;
         policy.clean = startup->clean;
@@ -244,7 +244,7 @@ void sag_config_init(Ed *ed, const SagEdStartup *startup)
     ed->config = state_new(ed, &policy);
 }
 
-void sag_config_free(Ed *ed)
+void yew_config_free(Ed *ed)
 {
     if (ed == NULL)
         return;
@@ -268,7 +268,7 @@ static ReadStatus read_file(const char *path, Bytebuf *out)
 
         if (n > 0) {
             bytebuf_append(out, bytes, (size_t)n);
-            if (out->len > (size_t)SAG_CFG_MAX_BYTES) {
+            if (out->len > (size_t)YEW_CFG_MAX_BYTES) {
                 (void)close(fd);
                 bytebuf_free(out);
                 return CFG_READ_ERROR;
@@ -293,7 +293,7 @@ static ReadStatus read_file(const char *path, Bytebuf *out)
 static bool compile_unit(Ed *ed, CfgUnit *unit, const Bytebuf *source)
 {
     FlRuntime *rt = ed->fl;
-    FlVm *vm = sag_fl_vm(ed);
+    FlVm *vm = yew_fl_vm(ed);
     const char *owned;
     const char *path;
     FlProgram program;
@@ -314,13 +314,13 @@ static bool compile_unit(Ed *ed, CfgUnit *unit, const Bytebuf *source)
                                          source->len);
     } else {
         if (unit->file_id >= rt->diag.nfiles)
-            SAG_BUG("config diagnostic slot is outside the file table");
+            YEW_BUG("config diagnostic slot is outside the file table");
         rt->diag.files[unit->file_id] = (FlDiagFile){path, owned,
                                                      source->len};
     }
     file_id = unit->file_id;
     origin = (FlOrigin){unit->kind,
-                        sag_intern(&rt->interner, path, strlen(path)), caps};
+                        yew_intern(&rt->interner, path, strlen(path)), caps};
     unit->origin = unit->kind == (u8)FL_ORIGIN_CONFIG ?
                    FL_ORIGIN_ID_CONFIG :
                    fl_origin_register(ed, (FlOriginKind)unit->kind, path,
@@ -347,37 +347,37 @@ static bool compile_unit(Ed *ed, CfgUnit *unit, const Bytebuf *source)
     return true;
 }
 
-static bool source_enabled(const SagConfigState *state, u32 index)
+static bool source_enabled(const YewConfigState *state, u32 index)
 {
     if (state->clean)
         return false;
-    if (index == SAG_CFG_WORKSPACE && state->no_workspace_config)
+    if (index == YEW_CFG_WORKSPACE && state->no_workspace_config)
         return false;
     return true;
 }
 
-static CfgStatus compile_one(Ed *ed, SagConfigState *state, u32 index)
+static CfgStatus compile_one(Ed *ed, YewConfigState *state, u32 index)
 {
     Bytebuf source;
     ReadStatus read_status;
     bool source_ready = false;
 
     if (!source_enabled(state, index))
-        return SAG_CFG_OK;
-    if (index == SAG_CFG_WORKSPACE) {
-        SagTrustProbe probe;
-        SagTrustDecision decision;
+        return YEW_CFG_OK;
+    if (index == YEW_CFG_WORKSPACE) {
+        YewTrustProbe probe;
+        YewTrustDecision decision;
 
-        sag_trust_probe_init(&probe);
-        decision = sag_trust_check(&state->trust_db, sag_ws_root(ed),
+        yew_trust_probe_init(&probe);
+        decision = yew_trust_check(&state->trust_db, yew_ws_root(ed),
                                    ed->tty.raw, state->trust_workspace,
                                    &probe);
         if (state->workspace_once && probe.has_config &&
             strcmp(state->once_workspace, probe.workspace) == 0 &&
             state->once_hash == probe.hash && state->once_dev == probe.dev &&
             state->once_ino == probe.ino)
-            decision = SAG_TRUST_GRANTED;
-        if (decision == SAG_TRUST_GRANTED) {
+            decision = YEW_TRUST_GRANTED;
+        if (decision == YEW_TRUST_GRANTED) {
             source = probe.bytes;
             bytebuf_init(&probe.bytes);
             source_ready = true;
@@ -385,94 +385,94 @@ static CfgStatus compile_one(Ed *ed, SagConfigState *state, u32 index)
             state->unit[index].path = cfg_dup(probe.config_path);
         }
         if (!source_ready) {
-            if (decision == SAG_TRUST_NO_CONFIG)
-                sag_log(SAG_LOG_INFO, "config missing: %s",
+            if (decision == YEW_TRUST_NO_CONFIG)
+                yew_log(YEW_LOG_INFO, "config missing: %s",
                         state->unit[index].path);
-            else if (decision == SAG_TRUST_SKIP_NO_TTY) {
-                sag_log(SAG_LOG_WARN, "%s: %s",
+            else if (decision == YEW_TRUST_SKIP_NO_TTY) {
+                yew_log(YEW_LOG_WARN, "%s: %s",
                         state->unit[index].path,
-                        sag_trust_decision_reason(decision));
-                (void)fprintf(stderr, "sagitta: warning: %s: %s\n",
+                        yew_trust_decision_reason(decision));
+                (void)fprintf(stderr, "yew: warning: %s: %s\n",
                               state->unit[index].path,
-                              sag_trust_decision_reason(decision));
-            } else if (decision == SAG_TRUST_ERROR)
-                sag_log(SAG_LOG_ERROR, "cannot verify workspace config: %s",
+                              yew_trust_decision_reason(decision));
+            } else if (decision == YEW_TRUST_ERROR)
+                yew_log(YEW_LOG_ERROR, "cannot verify workspace config: %s",
                         state->unit[index].path);
-            else if (decision == SAG_TRUST_PROMPT_NEW ||
-                     decision == SAG_TRUST_PROMPT_CHANGED ||
-                     decision == SAG_TRUST_PROMPT_REPLACED) {
-                sag_trust_probe_free(&state->trust_probe);
+            else if (decision == YEW_TRUST_PROMPT_NEW ||
+                     decision == YEW_TRUST_PROMPT_CHANGED ||
+                     decision == YEW_TRUST_PROMPT_REPLACED) {
+                yew_trust_probe_free(&state->trust_probe);
                 state->trust_probe = probe;
                 bytebuf_init(&probe.bytes);
                 state->trust_probe_ready = true;
-                if (!sag_trust_prompt_begin(ed, &state->trust_db,
+                if (!yew_trust_prompt_begin(ed, &state->trust_db,
                                             &state->trust_probe, decision,
                                             trust_prompt_done, state))
-                    sag_log(SAG_LOG_WARN,
+                    yew_log(YEW_LOG_WARN,
                             "workspace config trust prompt could not be opened: %s",
                             state->unit[index].path);
             }
-            sag_trust_probe_free(&probe);
-            if (decision == SAG_TRUST_NO_CONFIG)
-                return SAG_CFG_MISSING;
-            return decision == SAG_TRUST_ERROR ? SAG_CFG_RUN :
-                                                 SAG_CFG_UNTRUSTED;
+            yew_trust_probe_free(&probe);
+            if (decision == YEW_TRUST_NO_CONFIG)
+                return YEW_CFG_MISSING;
+            return decision == YEW_TRUST_ERROR ? YEW_CFG_RUN :
+                                                 YEW_CFG_UNTRUSTED;
         }
-        sag_trust_probe_free(&probe);
+        yew_trust_probe_free(&probe);
     } else {
         read_status = read_file(state->unit[index].path, &source);
         if (read_status == CFG_READ_MISSING) {
-            sag_log(index == SAG_CFG_BUILTIN ? SAG_LOG_ERROR : SAG_LOG_INFO,
+            yew_log(index == YEW_CFG_BUILTIN ? YEW_LOG_ERROR : YEW_LOG_INFO,
                     "config missing: %s%s", state->unit[index].path == NULL ?
                         "<unresolved>" : state->unit[index].path,
-                    index == SAG_CFG_BUILTIN ?
-                        " (set SAG_RUNTIME_DIR to the shipped runtime directory)" :
+                    index == YEW_CFG_BUILTIN ?
+                        " (set YEW_RUNTIME_DIR to the shipped runtime directory)" :
                         "");
-            return SAG_CFG_MISSING;
+            return YEW_CFG_MISSING;
         }
         if (read_status == CFG_READ_ERROR) {
-            sag_log(SAG_LOG_ERROR, "cannot read config: %s",
+            yew_log(YEW_LOG_ERROR, "cannot read config: %s",
                     state->unit[index].path == NULL ? "<unresolved>" :
                                                      state->unit[index].path);
-            return SAG_CFG_RUN;
+            return YEW_CFG_RUN;
         }
         source_ready = true;
     }
     if (!source_ready)
-        SAG_BUG("config source reached compile without bytes");
+        YEW_BUG("config source reached compile without bytes");
     if (!compile_unit(ed, &state->unit[index], &source)) {
         bytebuf_free(&source);
-        return SAG_CFG_PARSE;
+        return YEW_CFG_PARSE;
     }
     bytebuf_free(&source);
-    return SAG_CFG_OK;
+    return YEW_CFG_OK;
 }
 
 static CfgStatus run_one(Ed *ed, CfgUnit *unit)
 {
     if (!unit->rooted)
-        return SAG_CFG_OK;
-    if (fl_call_value(ed->fl, unit->closure, SAG_SRC_FLETCH))
-        return SAG_CFG_OK;
-    sag_log(SAG_LOG_ERROR, "config runtime error: %s", unit->path);
-    sag_msg(ed, SAG_MSG_ERROR, "config runtime error: %s", unit->path);
-    sag_origin_teardown(ed, unit->origin);
+        return YEW_CFG_OK;
+    if (fl_call_value(ed->fl, unit->closure, YEW_SRC_FLETCH))
+        return YEW_CFG_OK;
+    yew_log(YEW_LOG_ERROR, "config runtime error: %s", unit->path);
+    yew_msg(ed, YEW_MSG_ERROR, "config runtime error: %s", unit->path);
+    yew_origin_teardown(ed, unit->origin);
     unit_unroot(ed, unit);
-    return SAG_CFG_RUN;
+    return YEW_CFG_RUN;
 }
 
-static void trust_prompt_done(Ed *ed, SagTrustAnswer answer, void *ctx)
+static void trust_prompt_done(Ed *ed, YewTrustAnswer answer, void *ctx)
 {
-    SagConfigState *state = ctx;
+    YewConfigState *state = ctx;
     CfgUnit *unit;
-    CfgStatus status = SAG_CFG_UNTRUSTED;
+    CfgStatus status = YEW_CFG_UNTRUSTED;
 
     if (ed == NULL || state == NULL || ed->config != state ||
         !state->trust_probe_ready)
         return;
-    unit = &state->unit[SAG_CFG_WORKSPACE];
-    if (answer == SAG_TRUST_ALWAYS || answer == SAG_TRUST_ONCE) {
-        if (answer == SAG_TRUST_ONCE) {
+    unit = &state->unit[YEW_CFG_WORKSPACE];
+    if (answer == YEW_TRUST_ALWAYS || answer == YEW_TRUST_ONCE) {
+        if (answer == YEW_TRUST_ONCE) {
             state->workspace_once = true;
             state->once_hash = state->trust_probe.hash;
             state->once_dev = state->trust_probe.dev;
@@ -483,24 +483,24 @@ static void trust_prompt_done(Ed *ed, SagTrustAnswer answer, void *ctx)
         }
         free(unit->path);
         unit->path = cfg_dup(state->trust_probe.config_path);
-        sag_bind_batch_begin(ed);
+        yew_bind_batch_begin(ed);
         if (compile_unit(ed, unit, &state->trust_probe.bytes))
             status = run_one(ed, unit);
         else
-            status = SAG_CFG_PARSE;
-        sag_bind_batch_end(ed);
-        if (status == SAG_CFG_OK)
-            sag_msg(ed, SAG_MSG_INFO, "workspace configuration loaded");
+            status = YEW_CFG_PARSE;
+        yew_bind_batch_end(ed);
+        if (status == YEW_CFG_OK)
+            yew_msg(ed, YEW_MSG_INFO, "workspace configuration loaded");
         else
-            sag_msg(ed, SAG_MSG_ERROR,
+            yew_msg(ed, YEW_MSG_ERROR,
                     "workspace configuration failed to load");
     }
-    sag_trust_probe_free(&state->trust_probe);
-    sag_trust_probe_init(&state->trust_probe);
+    yew_trust_probe_free(&state->trust_probe);
+    yew_trust_probe_init(&state->trust_probe);
     state->trust_probe_ready = false;
 }
 
-void sag_origin_teardown(Ed *ed, u32 origin)
+void yew_origin_teardown(Ed *ed, u32 origin)
 {
     FlRegLedger *ledger;
     u32 i;
@@ -517,18 +517,18 @@ void sag_origin_teardown(Ed *ed, u32 origin)
         if (reg->kind == (u8)REG_HOOK)
             (void)fl_hook_remove(&ed->hooks, i);
         else if (reg->kind == (u8)REG_BIND)
-            (void)sag_bind_remove(ed, i);
+            (void)yew_bind_remove(ed, i);
         else if (reg->kind == (u8)REG_OPTION)
-            (void)sag_opt_remove(ed, i);
+            (void)yew_opt_remove(ed, i);
         else
             (void)fl_reg_remove(ledger, i);
     }
     fl_origin_unmask(ed, origin);
 }
 
-static void teardown_state(Ed *ed, SagConfigState *state)
+static void teardown_state(Ed *ed, YewConfigState *state)
 {
-    u32 i = SAG_CFG_SOURCE_N;
+    u32 i = YEW_CFG_SOURCE_N;
 
     if (state == NULL)
         return;
@@ -536,13 +536,13 @@ static void teardown_state(Ed *ed, SagConfigState *state)
         CfgUnit *unit = &state->unit[--i];
 
         if (unit->rooted)
-            sag_origin_teardown(ed, unit->origin);
+            yew_origin_teardown(ed, unit->origin);
     }
 }
 
 static void reset_modules(Ed *ed)
 {
-    FlVm *vm = sag_fl_vm(ed);
+    FlVm *vm = yew_fl_vm(ed);
 
     if (vm == NULL)
         return;
@@ -555,117 +555,117 @@ static CfgStatus status_merge(CfgStatus current, CfgStatus next)
     return next > current ? next : current;
 }
 
-CfgStatus sag_config_load_all(Ed *ed, DiagCtx *dc)
+CfgStatus yew_config_load_all(Ed *ed, DiagCtx *dc)
 {
-    SagConfigState *state;
-    CfgStatus overall = SAG_CFG_OK;
+    YewConfigState *state;
+    CfgStatus overall = YEW_CFG_OK;
     u32 i;
 
     (void)dc;
     if (ed == NULL || ed->fl == NULL)
-        return SAG_CFG_RUN;
+        return YEW_CFG_RUN;
     if (ed->config == NULL)
-        sag_config_init(ed, NULL);
+        yew_config_init(ed, NULL);
     state = ed->config;
     if (state->clean)
-        return SAG_CFG_OK;
-    sag_bind_batch_begin(ed);
-    for (i = 0U; i < SAG_CFG_SOURCE_N; i++) {
+        return YEW_CFG_OK;
+    yew_bind_batch_begin(ed);
+    for (i = 0U; i < YEW_CFG_SOURCE_N; i++) {
         CfgStatus status = compile_one(ed, state, i);
 
-        if (status == SAG_CFG_MISSING && i != SAG_CFG_BUILTIN)
+        if (status == YEW_CFG_MISSING && i != YEW_CFG_BUILTIN)
             continue;
-        if (status == SAG_CFG_UNTRUSTED && i == SAG_CFG_WORKSPACE)
+        if (status == YEW_CFG_UNTRUSTED && i == YEW_CFG_WORKSPACE)
             continue;
         overall = status_merge(overall, status);
-        if (status == SAG_CFG_OK)
+        if (status == YEW_CFG_OK)
             overall = status_merge(overall, run_one(ed, &state->unit[i]));
     }
-    sag_bind_batch_end(ed);
-    sag_macrolib_enable(ed);
+    yew_bind_batch_end(ed);
+    yew_macrolib_enable(ed);
     return overall;
 }
 
-CfgStatus sag_config_reload(Ed *ed, DiagCtx *dc)
+CfgStatus yew_config_reload(Ed *ed, DiagCtx *dc)
 {
-    SagConfigState *candidate;
-    SagConfigState *old;
-    CfgStatus overall = SAG_CFG_OK;
+    YewConfigState *candidate;
+    YewConfigState *old;
+    CfgStatus overall = YEW_CFG_OK;
     u32 i;
 
     (void)dc;
     if (ed == NULL || ed->fl == NULL)
-        return SAG_CFG_RUN;
+        return YEW_CFG_RUN;
     if (ed->config == NULL)
-        sag_config_init(ed, NULL);
+        yew_config_init(ed, NULL);
     old = ed->config;
     if (old->clean)
-        return SAG_CFG_OK;
+        return YEW_CFG_OK;
     candidate = state_new(ed, old);
-    for (i = 0U; i < SAG_CFG_SOURCE_N; i++) {
+    for (i = 0U; i < YEW_CFG_SOURCE_N; i++) {
         CfgStatus status = compile_one(ed, candidate, i);
 
-        if (status == SAG_CFG_MISSING && i != SAG_CFG_BUILTIN)
+        if (status == YEW_CFG_MISSING && i != YEW_CFG_BUILTIN)
             continue;
-        if (status == SAG_CFG_UNTRUSTED && i == SAG_CFG_WORKSPACE)
+        if (status == YEW_CFG_UNTRUSTED && i == YEW_CFG_WORKSPACE)
             continue;
-        if (status != SAG_CFG_OK) {
+        if (status != YEW_CFG_OK) {
             state_dispose(ed, candidate);
             return status;
         }
     }
-    sag_bind_batch_begin(ed);
+    yew_bind_batch_begin(ed);
     teardown_state(ed, old);
-    sag_opt_reset(ed);
+    yew_opt_reset(ed);
     reset_modules(ed);
-    for (i = 0U; i < SAG_CFG_SOURCE_N; i++)
+    for (i = 0U; i < YEW_CFG_SOURCE_N; i++)
         candidate->spare_file_id[i] = old->unit[i].file_id;
     ed->config = candidate;
     state_dispose(ed, old);
-    fl_gc_collect(sag_fl_vm(ed));
-    for (i = 0U; i < SAG_CFG_SOURCE_N; i++)
+    fl_gc_collect(yew_fl_vm(ed));
+    for (i = 0U; i < YEW_CFG_SOURCE_N; i++)
         overall = status_merge(overall, run_one(ed, &candidate->unit[i]));
-    sag_bind_batch_end(ed);
-    (void)sag_macrolib_scan(ed, dc);
+    yew_bind_batch_end(ed);
+    (void)yew_macrolib_scan(ed, dc);
     ed->layout_dirty = true;
     ed->full_damage = true;
     ed->footer_dirty = true;
     return overall;
 }
 
-const char *sag_config_user_path(Ed *ed)
+const char *yew_config_user_path(Ed *ed)
 {
     if (ed == NULL || ed->config == NULL)
         return NULL;
-    return ed->config->unit[SAG_CFG_USER].path;
+    return ed->config->unit[YEW_CFG_USER].path;
 }
 
-CmdStatus sag_config_cmd_reload(CmdCtx *cx)
+CmdStatus yew_config_cmd_reload(CmdCtx *cx)
 {
     CfgStatus status;
 
     if (cx == NULL || cx->ed == NULL)
-        return SAG_CMD_ERR_ARG;
-    status = sag_config_reload(cx->ed, NULL);
-    if (status != SAG_CFG_OK) {
-        sag_msg(cx->ed, SAG_MSG_ERROR, "configuration reload failed");
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_ARG;
+    status = yew_config_reload(cx->ed, NULL);
+    if (status != YEW_CFG_OK) {
+        yew_msg(cx->ed, YEW_MSG_ERROR, "configuration reload failed");
+        return YEW_CMD_ERR_STATE;
     }
-    sag_msg(cx->ed, SAG_MSG_INFO, "configuration reloaded");
-    return SAG_CMD_OK;
+    yew_msg(cx->ed, YEW_MSG_INFO, "configuration reloaded");
+    return YEW_CMD_OK;
 }
 
-CmdStatus sag_config_cmd_edit(CmdCtx *cx)
+CmdStatus yew_config_cmd_edit(CmdCtx *cx)
 {
     const char *path;
-    SagLoadErr load;
+    YewLoadErr load;
 
     if (cx == NULL || cx->ed == NULL)
-        return SAG_CMD_ERR_ARG;
-    path = sag_config_user_path(cx->ed);
+        return YEW_CMD_ERR_ARG;
+    path = yew_config_user_path(cx->ed);
     if (path == NULL)
-        return SAG_CMD_ERR_IO;
-    load = sag_ed_open(cx->ed, path);
-    return load == SAG_LOAD_OK || load == SAG_LOAD_ENOENT ? SAG_CMD_OK :
-                                                            SAG_CMD_ERR_IO;
+        return YEW_CMD_ERR_IO;
+    load = yew_ed_open(cx->ed, path);
+    return load == YEW_LOAD_OK || load == YEW_LOAD_ENOENT ? YEW_CMD_OK :
+                                                            YEW_CMD_ERR_IO;
 }

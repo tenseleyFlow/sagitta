@@ -5,7 +5,7 @@
  * Sprint 25 §9 fuzz: the state parser and the schema layer.
  *
  * WHAT IS BEING DEFENDED.  A workspace state file is the one input
- * sagitta reads at startup that nobody typed on purpose.  It is written
+ * yew reads at startup that nobody typed on purpose.  It is written
  * by a previous session, so it is trusted in exactly the way a file on
  * disk is trusted — which is to say not at all, because a truncated
  * write, a filesystem that lost a block, a `>` from the wrong shell, or
@@ -22,7 +22,7 @@
  *   3. Never allocates past the caps.  8 MiB, a million nodes, depth
  *      32, 4096-byte strings — a document claiming more is corruption,
  *      not an allocation request.
- *   4. Always reaches a SagWsResult.  There is no fifth answer and no
+ *   4. Always reaches a YewWsResult.  There is no fifth answer and no
  *      failure return: §7 says every row ends with "the editor starts".
  *
  * WHY THE MUTATED CORPUS MATTERS MORE THAN RANDOM BYTES.  Random bytes
@@ -268,16 +268,16 @@ static bool tree_within_caps(const FlLit *v, u32 depth, u64 *nodes,
     if (v == NULL)
         return true;
     (*nodes)++;
-    if (*nodes > (u64)SAG_FL_MAX_NODES) {
+    if (*nodes > (u64)YEW_FL_MAX_NODES) {
         (void)snprintf(why, why_cap, "tree exceeds the node cap");
         return false;
     }
-    if (depth > (u32)SAG_FL_MAX_DEPTH) {
+    if (depth > (u32)YEW_FL_MAX_DEPTH) {
         (void)snprintf(why, why_cap, "tree exceeds depth %u",
-                       (unsigned)SAG_FL_MAX_DEPTH);
+                       (unsigned)YEW_FL_MAX_DEPTH);
         return false;
     }
-    if (v->kind == FL_LIT_STR && v->slen > (u64)SAG_FL_MAX_STRING) {
+    if (v->kind == FL_LIT_STR && v->slen > (u64)YEW_FL_MAX_STRING) {
         (void)snprintf(why, why_cap, "string of %llu bytes past the cap",
                        (unsigned long long)v->slen);
         return false;
@@ -298,12 +298,12 @@ static bool run_one(const u8 *bytes, u64 len, char *why, size_t why_cap)
     FlParseErr err;
     FlLit *lit;
     Ed ed;
-    SagWsResult r;
+    YewWsResult r;
     bool ok = false;
 
     arena_init(&a);
     (void)memset(&err, 0, sizeof(err));
-    lit = sag_fl_parse(&a, bytes, len, &err);
+    lit = yew_fl_parse(&a, bytes, len, &err);
     if (lit != NULL) {
         u64 nodes = 0U;
 
@@ -321,39 +321,39 @@ static bool run_one(const u8 *bytes, u64 len, char *why, size_t why_cap)
      * returning cleanly is half the claim; the half that matters is
      * that applying whatever it returned leaves a usable editor.
      */
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    sag_ed_init(&ed);
-    if (!sag_ed_open_scratch(&ed)) {
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    yew_ed_init(&ed);
+    if (!yew_ed_open_scratch(&ed)) {
         (void)snprintf(why, why_cap, "cannot open a scratch buffer");
-        sag_ed_free(&ed);
+        yew_ed_free(&ed);
         goto done;
     }
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    r = sag_state_apply(&ed, bytes, len);
-    if (r != SAG_WS_FRESH && r != SAG_WS_RESTORED && r != SAG_WS_RECOVERED) {
-        (void)snprintf(why, why_cap, "result %d is not a SagWsResult",
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    r = yew_state_apply(&ed, bytes, len);
+    if (r != YEW_WS_FRESH && r != YEW_WS_RESTORED && r != YEW_WS_RECOVERED) {
+        (void)snprintf(why, why_cap, "result %d is not a YewWsResult",
                        (int)r);
-        sag_ed_free(&ed);
+        yew_ed_free(&ed);
         goto done;
     }
     /* Claim 4's teeth: the editor is still usable. */
-    if (sag_tab_count(&ed) < 1) {
+    if (yew_tab_count(&ed) < 1) {
         (void)snprintf(why, why_cap, "no tabs left after apply");
-        sag_ed_free(&ed);
+        yew_ed_free(&ed);
         goto done;
     }
     if (ed.quit) {
         (void)snprintf(why, why_cap, "apply asked the editor to quit");
-        sag_ed_free(&ed);
+        yew_ed_free(&ed);
         goto done;
     }
     if (ed.pane_root == NULL || ed.win == NULL) {
         (void)snprintf(why, why_cap, "apply left no pane tree or window");
-        sag_ed_free(&ed);
+        yew_ed_free(&ed);
         goto done;
     }
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
     ok = true;
 done:
     arena_free_all(&a);
@@ -401,7 +401,7 @@ static bool run_session(const u8 *data, size_t len, char *why,
         const Bytebuf *seed = &g_seeds.doc[rng_below(&rng, g_seeds.n)];
 
         mutate(&rng, seed, &mutated);
-        if (mutated.len > (u64)SAG_FL_MAX_BYTES)
+        if (mutated.len > (u64)YEW_FL_MAX_BYTES)
             continue;
         if (!run_one(mutated.data, mutated.len, why, why_cap)) {
             ok = false;
@@ -414,5 +414,5 @@ static bool run_session(const u8 *data, size_t len, char *why,
 
 int main(int argc, char **argv)
 {
-    return sag_fuzz_main(argc, argv, "fuzz_state", NULL, run_session);
+    return yew_fuzz_main(argc, argv, "fuzz_state", NULL, run_session);
 }

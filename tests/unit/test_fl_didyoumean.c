@@ -51,7 +51,7 @@ static void check(const char *typo, const char *const *names, size_t n,
     if (strcmp(got, want) != 0)
         (void)fprintf(stderr, "typo '%s':\n  want |%s|\n  got  |%s|\n",
                       typo, want, got);
-    SAG_ASSERT_EQ_STR(got, want);
+    YEW_ASSERT_EQ_STR(got, want);
     bytebuf_free(&out);
 }
 
@@ -59,29 +59,29 @@ static void check(const char *typo, const char *const *names, size_t n,
     do {                                                                      \
         static const char *const names_[] = {__VA_ARGS__};                    \
                                                                               \
-        check((typo), names_, SAG_ARRAY_LEN(names_), (want));                 \
+        check((typo), names_, YEW_ARRAY_LEN(names_), (want));                 \
     } while (0)
 
 void test_fl_didyoumean_metric_costs(void)
 {
     /* Scaled by two, so the case-only case can be a half in integers. */
-    SAG_ASSERT_EQ_U64(fl_suggest_distance("abc", 3U, "abc", 3U), 0U);
-    SAG_ASSERT_EQ_U64(fl_suggest_distance("abc", 3U, "abd", 3U), 2U);
-    SAG_ASSERT_EQ_U64(fl_suggest_distance("abc", 3U, "ab", 2U), 2U);
-    SAG_ASSERT_EQ_U64(fl_suggest_distance("ab", 2U, "abc", 3U), 2U);
+    YEW_ASSERT_EQ_U64(fl_suggest_distance("abc", 3U, "abc", 3U), 0U);
+    YEW_ASSERT_EQ_U64(fl_suggest_distance("abc", 3U, "abd", 3U), 2U);
+    YEW_ASSERT_EQ_U64(fl_suggest_distance("abc", 3U, "ab", 2U), 2U);
+    YEW_ASSERT_EQ_U64(fl_suggest_distance("ab", 2U, "abc", 3U), 2U);
     /* A transposition is ONE edit, not two substitutions -- the whole
      * reason this is Damerau and not Levenshtein. */
-    SAG_ASSERT_EQ_U64(fl_suggest_distance("lenght", 6U, "length", 6U), 2U);
-    SAG_ASSERT_EQ_U64(fl_suggest_distance("ab", 2U, "ba", 2U), 2U);
+    YEW_ASSERT_EQ_U64(fl_suggest_distance("lenght", 6U, "length", 6U), 2U);
+    YEW_ASSERT_EQ_U64(fl_suggest_distance("ab", 2U, "ba", 2U), 2U);
     /* Case-only substitution is half. */
-    SAG_ASSERT_EQ_U64(fl_suggest_distance("Abc", 3U, "abc", 3U), 1U);
-    SAG_ASSERT_EQ_U64(fl_suggest_distance("ABC", 3U, "abc", 3U), 3U);
+    YEW_ASSERT_EQ_U64(fl_suggest_distance("Abc", 3U, "abc", 3U), 1U);
+    YEW_ASSERT_EQ_U64(fl_suggest_distance("ABC", 3U, "abc", 3U), 3U);
     /* Longer than the DP bound is not scored at all. */
     {
         char big[FL_SUGGEST_MAX_LEN + 2U];
 
         (void)memset(big, 'a', sizeof(big));
-        SAG_ASSERT_EQ_U64(fl_suggest_distance(big, (u32)sizeof(big), "a", 1U),
+        YEW_ASSERT_EQ_U64(fl_suggest_distance(big, (u32)sizeof(big), "a", 1U),
                           (u64)(u32)-1);
     }
 }
@@ -172,8 +172,8 @@ void test_fl_didyoumean_ignores_out_of_scope_names(void)
     fl_suggest_reset(&s);
     fl_suggest_add(&s, "total", 5U, FL_SCOPE_GLOBAL);
     bytebuf_init(&out);
-    SAG_ASSERT_EQ_U64((u64)fl_suggest_render(&s, "_helpr", 6U, &out), 0U);
-    SAG_ASSERT_EQ_U64((u64)out.len, 0U);
+    YEW_ASSERT_EQ_U64((u64)fl_suggest_render(&s, "_helpr", 6U, &out), 0U);
+    YEW_ASSERT_EQ_U64((u64)out.len, 0U);
     bytebuf_free(&out);
 }
 
@@ -194,12 +194,12 @@ void test_fl_didyoumean_bounds_the_candidate_set(void)
         (void)snprintf(names[i], sizeof(names[i]), "n%04u", (unsigned)i);
         fl_suggest_add(&s, names[i], (u32)strlen(names[i]), FL_SCOPE_GLOBAL);
     }
-    SAG_ASSERT(s.full);
-    SAG_ASSERT_EQ_U64((u64)s.n, (u64)FL_SUGGEST_MAX_CANDIDATES);
+    YEW_ASSERT(s.full);
+    YEW_ASSERT_EQ_U64((u64)s.n, (u64)FL_SUGGEST_MAX_CANDIDATES);
     bytebuf_init(&out);
     /* Every name starts with 'n', so the prefix filter removes nothing
      * and the whole set is refused rather than scored. */
-    SAG_ASSERT_EQ_U64((u64)fl_suggest_render(&s, "n0001x", 6U, &out), 0U);
+    YEW_ASSERT_EQ_U64((u64)fl_suggest_render(&s, "n0001x", 6U, &out), 0U);
     bytebuf_free(&out);
 
     /* With a typo whose first byte matches almost nothing, the filter
@@ -211,6 +211,6 @@ void test_fl_didyoumean_bounds_the_candidate_set(void)
         fl_suggest_add(&s, names[i], (u32)strlen(names[i]), FL_SCOPE_GLOBAL);
     }
     bytebuf_init(&out);
-    SAG_ASSERT_EQ_U64((u64)fl_suggest_render(&s, "z00x", 4U, &out), 1U);
+    YEW_ASSERT_EQ_U64((u64)fl_suggest_render(&s, "z00x", 4U, &out), 1U);
     bytebuf_free(&out);
 }

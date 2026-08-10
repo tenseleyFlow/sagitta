@@ -12,39 +12,39 @@
 #include <time.h>
 #include <unistd.h>
 
-static SagLogSink active_sink;
+static YewLogSink active_sink;
 static bool has_custom_sink;
-static SagLogSink mirror_sink;
+static YewLogSink mirror_sink;
 static bool has_mirror_sink;
 static void (*bug_prehook)(void);
 
-static const char *level_name(SagLogLevel level)
+static const char *level_name(YewLogLevel level)
 {
     static const char *const names[] = {"debug", "info", "warn", "error"};
 
-    if (level < SAG_LOG_DEBUG || level > SAG_LOG_ERROR) {
+    if (level < YEW_LOG_DEBUG || level > YEW_LOG_ERROR) {
         return "error";
     }
     return names[level];
 }
 
-static SagLogLevel configured_level(void)
+static YewLogLevel configured_level(void)
 {
-    const char *value = getenv("SAG_LOG_LEVEL");
+    const char *value = getenv("YEW_LOG_LEVEL");
 
     if (value == NULL || strcmp(value, "info") == 0) {
-        return SAG_LOG_INFO;
+        return YEW_LOG_INFO;
     }
     if (strcmp(value, "debug") == 0) {
-        return SAG_LOG_DEBUG;
+        return YEW_LOG_DEBUG;
     }
     if (strcmp(value, "warn") == 0) {
-        return SAG_LOG_WARN;
+        return YEW_LOG_WARN;
     }
     if (strcmp(value, "error") == 0) {
-        return SAG_LOG_ERROR;
+        return YEW_LOG_ERROR;
     }
-    return SAG_LOG_INFO;
+    return YEW_LOG_INFO;
 }
 
 static bool make_dir(const char *path)
@@ -80,7 +80,7 @@ static bool make_parent_dirs(char *path)
 
 static char *default_log_path(void)
 {
-    const char *override = getenv("SAG_LOG");
+    const char *override = getenv("YEW_LOG");
     const char *state = getenv("XDG_STATE_HOME");
     const char *home;
     const char *suffix;
@@ -89,22 +89,22 @@ static char *default_log_path(void)
 
     if (override != NULL && override[0] != '\0') {
         size = strlen(override) + 1U;
-        path = sag_xmalloc(size);
+        path = yew_xmalloc(size);
         (void)memcpy(path, override, size);
         return path;
     }
     if (state != NULL && state[0] != '\0') {
-        suffix = "/sagitta/log";
+        suffix = "/yew/log";
     } else {
         home = getenv("HOME");
         if (home == NULL || home[0] == '\0') {
             return NULL;
         }
         state = home;
-        suffix = "/.local/state/sagitta/log";
+        suffix = "/.local/state/yew/log";
     }
     size = strlen(state) + strlen(suffix) + 1U;
-    path = sag_xmalloc(size);
+    path = yew_xmalloc(size);
     (void)snprintf(path, size, "%s%s", state, suffix);
     return path;
 }
@@ -124,7 +124,7 @@ static void write_all(int fd, const char *data, size_t len)
     }
 }
 
-static void default_write(SagLogLevel level, const char *msg)
+static void default_write(YewLogLevel level, const char *msg)
 {
     char timestamp[32];
     char *path = default_log_path();
@@ -170,15 +170,15 @@ static char *format_message(const char *fmt, va_list args)
     if (needed < 0) {
         return NULL;
     }
-    message = sag_xmalloc((size_t)needed + 1U);
+    message = yew_xmalloc((size_t)needed + 1U);
     (void)vsnprintf(message, (size_t)needed + 1U, fmt, args);
     return message;
 }
 
-void sag_log_set_sink(const SagLogSink *sink)
+void yew_log_set_sink(const YewLogSink *sink)
 {
     if (sink == NULL) {
-        active_sink = (SagLogSink){0};
+        active_sink = (YewLogSink){0};
         has_custom_sink = false;
     } else {
         active_sink = *sink;
@@ -186,10 +186,10 @@ void sag_log_set_sink(const SagLogSink *sink)
     }
 }
 
-void sag_log_set_mirror(const SagLogSink *sink)
+void yew_log_set_mirror(const YewLogSink *sink)
 {
     if (sink == NULL) {
-        mirror_sink = (SagLogSink){0};
+        mirror_sink = (YewLogSink){0};
         has_mirror_sink = false;
     } else {
         mirror_sink = *sink;
@@ -197,12 +197,12 @@ void sag_log_set_mirror(const SagLogSink *sink)
     }
 }
 
-void sag_bug_set_prehook(void (*fn)(void))
+void yew_bug_set_prehook(void (*fn)(void))
 {
     bug_prehook = fn;
 }
 
-void sag_log(SagLogLevel level, const char *fmt, ...)
+void yew_log(YewLogLevel level, const char *fmt, ...)
 {
     va_list args;
     char *message;
@@ -228,9 +228,9 @@ void sag_log(SagLogLevel level, const char *fmt, ...)
     free(message);
 }
 
-_Noreturn void sag_bug(const char *file, int line, const char *fmt, ...)
+_Noreturn void yew_bug(const char *file, int line, const char *fmt, ...)
 {
-    static const char report[] = "sagitta: please report this internal error";
+    static const char report[] = "yew: please report this internal error";
     va_list args;
     char *detail;
     int needed;
@@ -242,23 +242,23 @@ _Noreturn void sag_bug(const char *file, int line, const char *fmt, ...)
     detail = format_message(fmt, args);
     va_end(args);
     if (detail == NULL) {
-        detail = sag_xmalloc(20U);
+        detail = yew_xmalloc(20U);
         (void)strcpy(detail, "formatting failure");
     }
-    needed = snprintf(NULL, 0U, "sagitta: internal error at %s:%d: %s",
+    needed = snprintf(NULL, 0U, "yew: internal error at %s:%d: %s",
         file, line, detail);
     if (needed < 0) {
         message = detail;
         detail = NULL;
     } else {
-        message = sag_xmalloc((size_t)needed + 1U);
+        message = yew_xmalloc((size_t)needed + 1U);
         (void)snprintf(message, (size_t)needed + 1U,
-            "sagitta: internal error at %s:%d: %s", file, line, detail);
+            "yew: internal error at %s:%d: %s", file, line, detail);
     }
-    sag_log(SAG_LOG_ERROR, "%s", message);
-    sag_log(SAG_LOG_ERROR, "%s", report);
+    yew_log(YEW_LOG_ERROR, "%s", message);
+    yew_log(YEW_LOG_ERROR, "%s", report);
     (void)fprintf(stderr, "%s\n%s\n", message, report);
     free(detail);
     free(message);
-    exit(SAG_EXIT_BUG);
+    exit(YEW_EXIT_BUG);
 }

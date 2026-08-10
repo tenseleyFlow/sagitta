@@ -1,5 +1,5 @@
-#ifndef SAG_FL_ORIGIN_H
-#define SAG_FL_ORIGIN_H
+#ifndef YEW_FL_ORIGIN_H
+#define YEW_FL_ORIGIN_H
 
 /*
  * Sprint 34 deliverable 2: origins and capabilities, spec §13.
@@ -32,7 +32,7 @@
  * Sprint 31 declared FlOriginKind and FlOrigin in value.h for the
  * module cache.  This sprint relocates that declaration here verbatim
  * (value.h includes this header) and builds the registry on top; there
- * is deliberately no parallel SAG_ORIGIN_* spelling.
+ * is deliberately no parallel YEW_ORIGIN_* spelling.
  */
 
 #include <stdbool.h>
@@ -107,7 +107,7 @@ typedef struct FlOriginReg {
     u32 n;
     u32 cap;
     /*
-     * Origins currently being torn down.  sag_hook_fire skips them
+     * Origins currently being torn down.  yew_hook_fire skips them
      * (§7): Sprint 36's config reload and Sprint 54's plugin disable
      * both need a window where a registration still exists -- so the
      * ledger can walk it -- but must not run.
@@ -163,4 +163,4 @@ const char *fl_origin_name(const FlVm *vm, const FlOrigin *o);
  * "capability" and returns false. */
 bool fl_cap_check(FlVm *vm, u32 need);
 
-#endif /* SAG_FL_ORIGIN_H */
+#endif /* YEW_FL_ORIGIN_H */

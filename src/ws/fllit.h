@@ -1,5 +1,5 @@
-#ifndef SAG_WS_FLLIT_H
-#define SAG_WS_FLLIT_H
+#ifndef YEW_WS_FLLIT_H
+#define YEW_WS_FLLIT_H
 
 /*
  * Sprint 25 §2/§4: Fletch pure data literals — the workspace-state
@@ -87,10 +87,10 @@ typedef struct FlParseErr {
 enum {
     /* Whole-document caps.  A breach is CORRUPTION (§7), never a
      * truncation the reader has to notice later. */
-    SAG_FL_MAX_BYTES = 8U * 1024U * 1024U,
-    SAG_FL_MAX_NODES = 1000000U,
-    SAG_FL_MAX_DEPTH = 32U,
-    SAG_FL_MAX_STRING = 4096U
+    YEW_FL_MAX_BYTES = 8U * 1024U * 1024U,
+    YEW_FL_MAX_NODES = 1000000U,
+    YEW_FL_MAX_DEPTH = 32U,
+    YEW_FL_MAX_STRING = 4096U
 };
 
 /*
@@ -101,16 +101,16 @@ enum {
  * be attributed to a field NAME in the log.  A parser that also
  * validated semantics would have to be rewritten wholesale in s36.
  */
-FlLit *sag_fl_parse(Arena *a, const u8 *src, u64 len, FlParseErr *err);
+FlLit *yew_fl_parse(Arena *a, const u8 *src, u64 len, FlParseErr *err);
 
-const FlLit *sag_fl_get(const FlLit *map, const char *key);
-u32 sag_fl_len(const FlLit *list);
-const FlLit *sag_fl_at(const FlLit *list, u32 i);
+const FlLit *yew_fl_get(const FlLit *map, const char *key);
+u32 yew_fl_len(const FlLit *list);
+const FlLit *yew_fl_at(const FlLit *list, u32 i);
 /* Type-safe readers: a wrong-typed value takes its default.  A state
  * file is a cache, and one bad field must not cost the user a layout. */
-i64 sag_fl_int_or(const FlLit *v, i64 dflt);
-bool sag_fl_bool_or(const FlLit *v, bool dflt);
-const char *sag_fl_str_or(const FlLit *v, const char *dflt, u64 *n);
+i64 yew_fl_int_or(const FlLit *v, i64 dflt);
+bool yew_fl_bool_or(const FlLit *v, bool dflt);
+const char *yew_fl_str_or(const FlLit *v, const char *dflt, u64 *n);
 
 /* ---------------------------------------------------------------- */
 /* Emitter                                                          */
@@ -118,7 +118,7 @@ const char *sag_fl_str_or(const FlLit *v, const char *dflt, u64 *n);
 
 /*
  * Depth is tracked HERE, never by callers.  An unbalanced open/close
- * is a SAG_BUG at close time rather than a document that parses into
+ * is a YEW_BUG at close time rather than a document that parses into
  * the wrong shape.
  */
 typedef struct FlEmit {
@@ -128,21 +128,21 @@ typedef struct FlEmit {
     u32 opened;
 } FlEmit;
 
-void sag_fl_emit_init(FlEmit *e, Bytebuf *out);
-void sag_fl_emit_done(const FlEmit *e); /* SAG_BUG if unbalanced */
+void yew_fl_emit_init(FlEmit *e, Bytebuf *out);
+void yew_fl_emit_done(const FlEmit *e); /* YEW_BUG if unbalanced */
 
-void sag_fl_map_open(FlEmit *e, const char *key); /* key NULL at root */
-void sag_fl_map_close(FlEmit *e);
-void sag_fl_list_open(FlEmit *e, const char *key);
-void sag_fl_list_close(FlEmit *e);
-void sag_fl_str(FlEmit *e, const char *key, const char *s, u64 n);
-void sag_fl_int(FlEmit *e, const char *key, i64 v);
-void sag_fl_bool(FlEmit *e, const char *key, bool v);
-void sag_fl_nil(FlEmit *e, const char *key);
+void yew_fl_map_open(FlEmit *e, const char *key); /* key NULL at root */
+void yew_fl_map_close(FlEmit *e);
+void yew_fl_list_open(FlEmit *e, const char *key);
+void yew_fl_list_close(FlEmit *e);
+void yew_fl_str(FlEmit *e, const char *key, const char *s, u64 n);
+void yew_fl_int(FlEmit *e, const char *key, i64 v);
+void yew_fl_bool(FlEmit *e, const char *key, bool v);
+void yew_fl_nil(FlEmit *e, const char *key);
 
 /* Re-emits a parsed tree in canonical form.  This is what makes
  * emit(parse(d)) a fixpoint, and what s36's differential test compares
  * across two independent parsers. */
-void sag_fl_emit_lit(FlEmit *e, const char *key, const FlLit *v);
+void yew_fl_emit_lit(FlEmit *e, const char *key, const FlLit *v);
 
 #endif

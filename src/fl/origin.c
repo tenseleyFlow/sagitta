@@ -22,7 +22,7 @@
 static char *dup_label(const char *s)
 {
     size_t n = strlen(s);
-    char *p = (char *)sag_xmalloc(n + 1U);
+    char *p = (char *)yew_xmalloc(n + 1U);
 
     (void)memcpy(p, s, n + 1U);
     return p;
@@ -34,7 +34,7 @@ static void reg_push(FlOriginReg *r, FlOriginKind k, const char *label,
     if (r->n == r->cap) {
         u32 want = r->cap == 0U ? 4U : r->cap * 2U;
 
-        r->v = (FlOriginRec *)sag_xreallocarray(r->v, want,
+        r->v = (FlOriginRec *)yew_xreallocarray(r->v, want,
                                                 sizeof(*r->v));
         r->cap = want;
     }
@@ -47,7 +47,7 @@ static void reg_push(FlOriginReg *r, FlOriginKind k, const char *label,
 void fl_origin_reg_init(FlOriginReg *r)
 {
     if (r == NULL)
-        SAG_BUG("origin registry: NULL");
+        YEW_BUG("origin registry: NULL");
     (void)memset(r, 0, sizeof(*r));
     /*
      * Slot 0 is the user config, seeded whether or not one is ever
@@ -155,7 +155,7 @@ void fl_origin_mask(Ed *ed, u32 origin_id)
     if (r->nmasked == r->maskcap) {
         u32 want = r->maskcap == 0U ? 4U : r->maskcap * 2U;
 
-        r->masked = (u32 *)sag_xreallocarray(r->masked, want,
+        r->masked = (u32 *)yew_xreallocarray(r->masked, want,
                                              sizeof(*r->masked));
         r->maskcap = want;
     }
@@ -237,7 +237,7 @@ const char *fl_origin_name(const FlVm *vm, const FlOrigin *o)
     /* The PATH when there is one: "denied to plugin" tells a user with
      * four plugins nothing, and the whole point of the message is that
      * they can go and look at the file. */
-    p = o->path_id == 0U ? NULL : sag_intern_str(vm->in, o->path_id);
+    p = o->path_id == 0U ? NULL : yew_intern_str(vm->in, o->path_id);
     if (p != NULL)
         return p;
     switch ((FlOriginKind)o->kind) {

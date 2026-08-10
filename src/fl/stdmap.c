@@ -270,5 +270,5 @@ static const FlNativeDef MAP_DEFS[] = {
 };
 
 const FlModuleDef fl_mod_map = {
-    "map", MAP_DEFS, (u32)SAG_ARRAY_LEN(MAP_DEFS), NULL, 0U
+    "map", MAP_DEFS, (u32)YEW_ARRAY_LEN(MAP_DEFS), NULL, 0U
 };

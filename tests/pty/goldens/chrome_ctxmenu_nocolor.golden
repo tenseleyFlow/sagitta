@@ -1,8 +1,8 @@
-# sagitta pty golden v1
+# yew pty golden v1
 size 80x24 alt=1 cursor=1,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=7
 --- text
-[1: pty-s14-chrome_ctxme[2: sag-pty-0.txt][3: sag-pty-1.txt]
+[1: pty-s14-chrome_ctxme[2: yew-pty-0.txt][3: yew-pty-1.txt]
  Close Tab     C-w
  Close Other Tabs
 -------------------
@@ -25,7 +25,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=7
 
 
 
- L  sag-pty-1.txt                                            utf-8  lf  1:1  all
+ L  yew-pty-1.txt                                            utf-8  lf  1:1  all
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBB
 CBBBBBBBBBCCCCCAAA

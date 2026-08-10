@@ -61,27 +61,27 @@ void test_osc52_plain_targets_and_limit(void)
     size_t i;
 
     bytebuf_init(&out);
-    for (i = 0u; i < SAG_ARRAY_LEN(targets); i++) {
+    for (i = 0u; i < YEW_ARRAY_LEN(targets); i++) {
         out.len = 0u;
-        SAG_ASSERT(sag_osc52_build(&out, (const u8 *)"foo", 3u, targets[i],
-                                   SAG_OSC52_PLAIN, 4u));
-        SAG_ASSERT_EQ_U64(out.len, expected_len[i]);
-        SAG_ASSERT_EQ_MEM(out.data, expected[i], expected_len[i]);
+        YEW_ASSERT(yew_osc52_build(&out, (const u8 *)"foo", 3u, targets[i],
+                                   YEW_OSC52_PLAIN, 4u));
+        YEW_ASSERT_EQ_U64(out.len, expected_len[i]);
+        YEW_ASSERT_EQ_MEM(out.data, expected[i], expected_len[i]);
     }
     out.len = 0u;
-    SAG_ASSERT(sag_osc52_build(&out, NULL, 0u, "c", SAG_OSC52_PLAIN, 0u));
-    SAG_ASSERT_EQ_U64(out.len, sizeof(empty_expected) - 1u);
-    SAG_ASSERT_EQ_MEM(out.data, empty_expected, sizeof(empty_expected) - 1u);
+    YEW_ASSERT(yew_osc52_build(&out, NULL, 0u, "c", YEW_OSC52_PLAIN, 0u));
+    YEW_ASSERT_EQ_U64(out.len, sizeof(empty_expected) - 1u);
+    YEW_ASSERT_EQ_MEM(out.data, empty_expected, sizeof(empty_expected) - 1u);
 
     out.len = 0u;
     bytebuf_append(&out, "sentinel", 8u);
-    SAG_ASSERT(!sag_osc52_build(&out, (const u8 *)"foo", 3u, "c",
-                                SAG_OSC52_PLAIN, 3u));
-    SAG_ASSERT_EQ_U64(out.len, 8u);
-    SAG_ASSERT_EQ_MEM(out.data, "sentinel", 8u);
-    SAG_ASSERT(!sag_osc52_build(&out, (const u8 *)"foo", 3u, "c",
-                                SAG_OSC52_OFF, 100u));
-    SAG_ASSERT_EQ_U64(out.len, 8u);
+    YEW_ASSERT(!yew_osc52_build(&out, (const u8 *)"foo", 3u, "c",
+                                YEW_OSC52_PLAIN, 3u));
+    YEW_ASSERT_EQ_U64(out.len, 8u);
+    YEW_ASSERT_EQ_MEM(out.data, "sentinel", 8u);
+    YEW_ASSERT(!yew_osc52_build(&out, (const u8 *)"foo", 3u, "c",
+                                YEW_OSC52_OFF, 100u));
+    YEW_ASSERT_EQ_U64(out.len, 8u);
     bytebuf_free(&out);
 }
 
@@ -93,11 +93,11 @@ void test_osc52_tmux_escape_doubling_golden(void)
     Bytebuf out;
 
     bytebuf_init(&out);
-    SAG_ASSERT(sag_osc52_build(&out, payload, sizeof(payload), "c",
-                               SAG_OSC52_TMUX, 100u));
-    SAG_ASSERT_EQ_U64(out.len, sizeof(expected) - 1u);
-    SAG_ASSERT_EQ_MEM(out.data, expected, sizeof(expected) - 1u);
-    SAG_ASSERT_EQ_U64(osc_count(&out, (const u8 *)"\033\033", 2u), 2u);
+    YEW_ASSERT(yew_osc52_build(&out, payload, sizeof(payload), "c",
+                               YEW_OSC52_TMUX, 100u));
+    YEW_ASSERT_EQ_U64(out.len, sizeof(expected) - 1u);
+    YEW_ASSERT_EQ_MEM(out.data, expected, sizeof(expected) - 1u);
+    YEW_ASSERT_EQ_U64(osc_count(&out, (const u8 *)"\033\033", 2u), 2u);
     bytebuf_free(&out);
 }
 
@@ -113,83 +113,83 @@ void test_osc52_screen_chunking_golden(void)
 
     memset(payload, 0u, sizeof(payload));
     bytebuf_init(&out);
-    SAG_ASSERT(sag_osc52_build(&out, payload, sizeof(payload), "cp",
-                               SAG_OSC52_SCREEN, 1800u));
-    SAG_ASSERT_EQ_U64(out.len, 1822u);
-    SAG_ASSERT_EQ_U64(osc_count(&out, dcs, sizeof(dcs)), 3u);
-    SAG_ASSERT_EQ_U64(osc_count(&out, osc, sizeof(osc)), 1u);
-    for (i = 0u; i < SAG_ARRAY_LEN(chunk_sizes); i++) {
+    YEW_ASSERT(yew_osc52_build(&out, payload, sizeof(payload), "cp",
+                               YEW_OSC52_SCREEN, 1800u));
+    YEW_ASSERT_EQ_U64(out.len, 1822u);
+    YEW_ASSERT_EQ_U64(osc_count(&out, dcs, sizeof(dcs)), 3u);
+    YEW_ASSERT_EQ_U64(osc_count(&out, osc, sizeof(osc)), 1u);
+    for (i = 0u; i < YEW_ARRAY_LEN(chunk_sizes); i++) {
         size_t j;
 
         if (i == 0u) {
-            SAG_ASSERT_EQ_MEM(out.data + offset, "\033P\033]52;cp;", 10u);
+            YEW_ASSERT_EQ_MEM(out.data + offset, "\033P\033]52;cp;", 10u);
             offset += 10u;
         } else {
-            SAG_ASSERT_EQ_MEM(out.data + offset, "\033P", 2u);
+            YEW_ASSERT_EQ_MEM(out.data + offset, "\033P", 2u);
             offset += 2u;
         }
         for (j = 0u; j < chunk_sizes[i]; j++)
-            SAG_ASSERT(out.data[offset + j] == (u8)'A');
+            YEW_ASSERT(out.data[offset + j] == (u8)'A');
         offset += chunk_sizes[i];
-        if (i + 1u == SAG_ARRAY_LEN(chunk_sizes)) {
-            SAG_ASSERT_EQ_MEM(out.data + offset, "\033\\\033\\", 4u);
+        if (i + 1u == YEW_ARRAY_LEN(chunk_sizes)) {
+            YEW_ASSERT_EQ_MEM(out.data + offset, "\033\\\033\\", 4u);
             offset += 4u;
         } else {
-            SAG_ASSERT_EQ_MEM(out.data + offset, "\033\\", 2u);
+            YEW_ASSERT_EQ_MEM(out.data + offset, "\033\\", 2u);
             offset += 2u;
         }
     }
-    SAG_ASSERT_EQ_U64(offset, out.len);
+    YEW_ASSERT_EQ_U64(offset, out.len);
     bytebuf_free(&out);
 }
 
 void test_osc52_environment_selection(void)
 {
-    static const OscEnvEntry forced_off[] = {{"SAG_OSC52", "off"}};
+    static const OscEnvEntry forced_off[] = {{"YEW_OSC52", "off"}};
     static const OscEnvEntry forced_plain[] = {
-        {"SAG_OSC52", "plain"}, {"TMUX", "/tmp/tmux"}
+        {"YEW_OSC52", "plain"}, {"TMUX", "/tmp/tmux"}
     };
     static const OscEnvEntry tmux[] = {{"TMUX", "/tmp/tmux"}};
     static const OscEnvEntry sty[] = {{"STY", "123.session"}};
     static const OscEnvEntry screen_term[] = {{"TERM", "screen-256color"}};
     static const OscEnvEntry target_limit[] = {
-        {"SAG_CLIPBOARD_TARGET", "cp"}, {"SAG_OSC52_MAX", "4096"}
+        {"YEW_CLIPBOARD_TARGET", "cp"}, {"YEW_OSC52_MAX", "4096"}
     };
     static const OscEnvEntry invalid[] = {
-        {"SAG_OSC52", "wat"}, {"SAG_CLIPBOARD_TARGET", "x"},
-        {"SAG_OSC52_MAX", "12x"}
+        {"YEW_OSC52", "wat"}, {"YEW_CLIPBOARD_TARGET", "x"},
+        {"YEW_OSC52_MAX", "12x"}
     };
     Bytebuf out;
 
-    osc_set_env(forced_off, SAG_ARRAY_LEN(forced_off));
-    SAG_ASSERT_EQ_U64(sag_osc52_mode(osc_test_env), SAG_OSC52_OFF);
-    osc_set_env(forced_plain, SAG_ARRAY_LEN(forced_plain));
-    SAG_ASSERT_EQ_U64(sag_osc52_mode(osc_test_env), SAG_OSC52_PLAIN);
-    osc_set_env(tmux, SAG_ARRAY_LEN(tmux));
-    SAG_ASSERT_EQ_U64(sag_osc52_mode(osc_test_env), SAG_OSC52_TMUX);
-    osc_set_env(sty, SAG_ARRAY_LEN(sty));
-    SAG_ASSERT_EQ_U64(sag_osc52_mode(osc_test_env), SAG_OSC52_SCREEN);
-    osc_set_env(screen_term, SAG_ARRAY_LEN(screen_term));
-    SAG_ASSERT_EQ_U64(sag_osc52_mode(osc_test_env), SAG_OSC52_SCREEN);
+    osc_set_env(forced_off, YEW_ARRAY_LEN(forced_off));
+    YEW_ASSERT_EQ_U64(yew_osc52_mode(osc_test_env), YEW_OSC52_OFF);
+    osc_set_env(forced_plain, YEW_ARRAY_LEN(forced_plain));
+    YEW_ASSERT_EQ_U64(yew_osc52_mode(osc_test_env), YEW_OSC52_PLAIN);
+    osc_set_env(tmux, YEW_ARRAY_LEN(tmux));
+    YEW_ASSERT_EQ_U64(yew_osc52_mode(osc_test_env), YEW_OSC52_TMUX);
+    osc_set_env(sty, YEW_ARRAY_LEN(sty));
+    YEW_ASSERT_EQ_U64(yew_osc52_mode(osc_test_env), YEW_OSC52_SCREEN);
+    osc_set_env(screen_term, YEW_ARRAY_LEN(screen_term));
+    YEW_ASSERT_EQ_U64(yew_osc52_mode(osc_test_env), YEW_OSC52_SCREEN);
     osc_set_env(NULL, 0u);
-    SAG_ASSERT_EQ_U64(sag_osc52_mode(osc_test_env), SAG_OSC52_PLAIN);
+    YEW_ASSERT_EQ_U64(yew_osc52_mode(osc_test_env), YEW_OSC52_PLAIN);
 
-    osc_set_env(target_limit, SAG_ARRAY_LEN(target_limit));
-    SAG_ASSERT_EQ_STR(sag_osc52_target(osc_test_env), "cp");
-    SAG_ASSERT_EQ_U64(sag_osc52_max(osc_test_env), 4096u);
+    osc_set_env(target_limit, YEW_ARRAY_LEN(target_limit));
+    YEW_ASSERT_EQ_STR(yew_osc52_target(osc_test_env), "cp");
+    YEW_ASSERT_EQ_U64(yew_osc52_max(osc_test_env), 4096u);
     bytebuf_init(&out);
-    SAG_ASSERT(sag_osc52_build_env(&out, (const u8 *)"f", 1u,
+    YEW_ASSERT(yew_osc52_build_env(&out, (const u8 *)"f", 1u,
                                    osc_test_env));
-    SAG_ASSERT_EQ_U64(out.len, 14u);
-    SAG_ASSERT_EQ_MEM(out.data, "\033]52;cp;Zg==\033\\", out.len);
+    YEW_ASSERT_EQ_U64(out.len, 14u);
+    YEW_ASSERT_EQ_MEM(out.data, "\033]52;cp;Zg==\033\\", out.len);
     bytebuf_free(&out);
 
-    sag_test_capture_log();
-    osc_set_env(invalid, SAG_ARRAY_LEN(invalid));
-    SAG_ASSERT_EQ_U64(sag_osc52_mode(osc_test_env), SAG_OSC52_PLAIN);
-    SAG_ASSERT_EQ_STR(sag_osc52_target(osc_test_env), "c");
-    SAG_ASSERT_EQ_U64(sag_osc52_max(osc_test_env), SAG_OSC52_DEFAULT_MAX);
-    SAG_ASSERT(sag_test_log_count() >= 3u);
-    SAG_ASSERT(sag_test_log_contains(SAG_LOG_WARN, "invalid SAG_OSC52"));
+    yew_test_capture_log();
+    osc_set_env(invalid, YEW_ARRAY_LEN(invalid));
+    YEW_ASSERT_EQ_U64(yew_osc52_mode(osc_test_env), YEW_OSC52_PLAIN);
+    YEW_ASSERT_EQ_STR(yew_osc52_target(osc_test_env), "c");
+    YEW_ASSERT_EQ_U64(yew_osc52_max(osc_test_env), YEW_OSC52_DEFAULT_MAX);
+    YEW_ASSERT(yew_test_log_count() >= 3u);
+    YEW_ASSERT(yew_test_log_contains(YEW_LOG_WARN, "invalid YEW_OSC52"));
     osc_set_env(NULL, 0u);
 }

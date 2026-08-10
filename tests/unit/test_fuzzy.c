@@ -8,7 +8,7 @@
  * are a differential check and not a screenshot of our own output.  A
  * refactor that drifts the scoring fails here.
  *
- * fuss's 0 means "no match"; our port returns SAG_FZ_NO_MATCH, so a
+ * fuss's 0 means "no match"; our port returns YEW_FZ_NO_MATCH, so a
  * corpus expectation of 0 is mapped on the way in -- except for the one
  * case that proves why the sentinel exists (see the divergence test).
  *
@@ -42,11 +42,11 @@ typedef struct FzCase {
 
 static void check_case(const FzCase *c)
 {
-    i32 want = c->fuss_score == 0 ? SAG_FZ_NO_MATCH : c->fuss_score;
-    i32 got = sag_fz_score(c->pat, (u32)strlen(c->pat), c->text,
+    i32 want = c->fuss_score == 0 ? YEW_FZ_NO_MATCH : c->fuss_score;
+    i32 got = yew_fz_score(c->pat, (u32)strlen(c->pat), c->text,
                            (u32)strlen(c->text), NULL);
 
-    SAG_ASSERT_EQ_I64(got, want);
+    YEW_ASSERT_EQ_I64(got, want);
 }
 
 void test_fuzzy_parity_corpus(void)
@@ -98,9 +98,9 @@ void test_fuzzy_parity_corpus(void)
     };
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(corpus); i++)
+    for (i = 0U; i < YEW_ARRAY_LEN(corpus); i++)
         check_case(&corpus[i]);
-    SAG_ASSERT(SAG_ARRAY_LEN(corpus) >= 30U);
+    YEW_ASSERT(YEW_ARRAY_LEN(corpus) >= 30U);
 }
 
 void test_fuzzy_table_rows(void)
@@ -123,27 +123,27 @@ void test_fuzzy_table_rows(void)
     };
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(rows); i++)
+    for (i = 0U; i < YEW_ARRAY_LEN(rows); i++)
         check_case(&rows[i]);
 
     /* The +200 start-of-text bonus, isolated as a relationship: "ac"
      * matches at byte 0 and pays one gap; "bc" matches consecutively
      * from byte 1 and pays none. */
-    SAG_ASSERT(sag_fz_score("ac", 2U, "abc", 3U, NULL) >
-               sag_fz_score("bc", 2U, "abc", 3U, NULL));
+    YEW_ASSERT(yew_fz_score("ac", 2U, "abc", 3U, NULL) >
+               yew_fz_score("bc", 2U, "abc", 3U, NULL));
     /* The word-boundary bonus, isolated the same way. */
-    SAG_ASSERT(sag_fz_score("b", 1U, "a_b", 3U, NULL) >
-               sag_fz_score("b", 1U, "axb", 3U, NULL));
+    YEW_ASSERT(yew_fz_score("b", 1U, "a_b", 3U, NULL) >
+               yew_fz_score("b", 1U, "axb", 3U, NULL));
     /* The length penalty: the same match in a longer text scores less. */
-    SAG_ASSERT(sag_fz_score("b", 1U, "ab", 2U, NULL) >
-               sag_fz_score("b", 1U, "abcdef", 6U, NULL));
+    YEW_ASSERT(yew_fz_score("b", 1U, "ab", 2U, NULL) >
+               yew_fz_score("b", 1U, "abcdef", 6U, NULL));
 }
 
 /*
  * fuss returns 0 both for "pattern not exhausted" and for a real match
  * whose bonuses were exactly cancelled by its length penalty, so a
  * genuine match vanishes from the list.  This is the case that proves
- * it, and the reason SAG_FZ_NO_MATCH is INT32_MIN.
+ * it, and the reason YEW_FZ_NO_MATCH is INT32_MIN.
  */
 void test_fuzzy_no_match_sentinel_is_distinct_from_score_zero(void)
 {
@@ -155,13 +155,13 @@ void test_fuzzy_no_match_sentinel_is_distinct_from_score_zero(void)
     text[99] = 'z';
     text[100] = '\0';
 
-    matched = sag_fz_score("z", 1U, text, 100U, NULL);
-    missing = sag_fz_score("q", 1U, text, 100U, NULL);
+    matched = yew_fz_score("z", 1U, text, 100U, NULL);
+    missing = yew_fz_score("q", 1U, text, 100U, NULL);
 
     /* fuss scores both of these 0. */
-    SAG_ASSERT_EQ_I64(matched, 0);
-    SAG_ASSERT_EQ_I64(missing, SAG_FZ_NO_MATCH);
-    SAG_ASSERT(matched != missing);
+    YEW_ASSERT_EQ_I64(matched, 0);
+    YEW_ASSERT_EQ_I64(missing, YEW_FZ_NO_MATCH);
+    YEW_ASSERT(matched != missing);
 }
 
 void test_fuzzy_positions_and_cap(void)
@@ -172,31 +172,31 @@ void test_fuzzy_positions_and_cap(void)
     u32 i;
 
     /* Fuzzy match: positions are the matched bytes, ascending. */
-    SAG_ASSERT(sag_fz_score("sfc", 3U, "src/file.c", 10U, &m) !=
-               SAG_FZ_NO_MATCH);
-    SAG_ASSERT_EQ_U64(m.n_pos, 3U);
+    YEW_ASSERT(yew_fz_score("sfc", 3U, "src/file.c", 10U, &m) !=
+               YEW_FZ_NO_MATCH);
+    YEW_ASSERT_EQ_U64(m.n_pos, 3U);
     /* "src/file.c": s@0, then the first 'f' at 4, then the first 'c'
      * after it -- which is the trailing one at 9, not the 'c' at 2. */
-    SAG_ASSERT_EQ_U64(m.pos[0], 0U);
-    SAG_ASSERT_EQ_U64(m.pos[1], 4U);
-    SAG_ASSERT_EQ_U64(m.pos[2], 9U);
+    YEW_ASSERT_EQ_U64(m.pos[0], 0U);
+    YEW_ASSERT_EQ_U64(m.pos[1], 4U);
+    YEW_ASSERT_EQ_U64(m.pos[2], 9U);
 
     /* A prefix match returns before the scan, so positions are filled
      * explicitly -- otherwise the most common row in the menu would
      * highlight nothing. */
-    SAG_ASSERT_EQ_I64(sag_fz_score("fi", 2U, "file.c", 6U, &m), 5000);
-    SAG_ASSERT_EQ_U64(m.n_pos, 2U);
-    SAG_ASSERT_EQ_U64(m.pos[0], 0U);
-    SAG_ASSERT_EQ_U64(m.pos[1], 1U);
+    YEW_ASSERT_EQ_I64(yew_fz_score("fi", 2U, "file.c", 6U, &m), 5000);
+    YEW_ASSERT_EQ_U64(m.n_pos, 2U);
+    YEW_ASSERT_EQ_U64(m.pos[0], 0U);
+    YEW_ASSERT_EQ_U64(m.pos[1], 1U);
 
     /* An exact match likewise. */
-    SAG_ASSERT_EQ_I64(sag_fz_score("abc", 3U, "abc", 3U, &m), 10000);
-    SAG_ASSERT_EQ_U64(m.n_pos, 3U);
+    YEW_ASSERT_EQ_I64(yew_fz_score("abc", 3U, "abc", 3U, &m), 10000);
+    YEW_ASSERT_EQ_U64(m.n_pos, 3U);
 
     /* No match leaves no stale positions behind. */
-    SAG_ASSERT_EQ_I64(sag_fz_score("zz", 2U, "abc", 3U, &m),
-                      SAG_FZ_NO_MATCH);
-    SAG_ASSERT_EQ_U64(m.n_pos, 0U);
+    YEW_ASSERT_EQ_I64(yew_fz_score("zz", 2U, "abc", 3U, &m),
+                      YEW_FZ_NO_MATCH);
+    YEW_ASSERT_EQ_U64(m.n_pos, 0U);
 
     /* The 64-position cap: 70 matched bytes, 64 recorded, tail
      * unhighlighted and never rescored. */
@@ -205,10 +205,10 @@ void test_fuzzy_positions_and_cap(void)
     text[0] = 'b';
     (void)memset(text + 1, 'a', 70U);
     text[71] = '\0';
-    SAG_ASSERT(sag_fz_score(pat, 70U, text, 71U, &m) != SAG_FZ_NO_MATCH);
-    SAG_ASSERT_EQ_U64(m.n_pos, (u64)SAG_FZ_MAX_POS);
+    YEW_ASSERT(yew_fz_score(pat, 70U, text, 71U, &m) != YEW_FZ_NO_MATCH);
+    YEW_ASSERT_EQ_U64(m.n_pos, (u64)YEW_FZ_MAX_POS);
     for (i = 1U; i < m.n_pos; i++)
-        SAG_ASSERT(m.pos[i] > m.pos[i - 1U]);
+        YEW_ASSERT(m.pos[i] > m.pos[i - 1U]);
 }
 
 void test_fuzzy_ascii_fold_only(void)
@@ -218,16 +218,16 @@ void test_fuzzy_ascii_fold_only(void)
     static const char cjk[] = "\xe6\x97\xa5\xe6\x9c\xac"; /* 日本      */
 
     /* Non-ASCII matches itself exactly ... */
-    SAG_ASSERT_EQ_I64(sag_fz_score(cyr_lower, 2U, cyr_lower, 2U, NULL),
+    YEW_ASSERT_EQ_I64(yew_fz_score(cyr_lower, 2U, cyr_lower, 2U, NULL),
                       10000);
-    SAG_ASSERT_EQ_I64(sag_fz_score(cjk, 6U, cjk, 6U, NULL), 10000);
+    YEW_ASSERT_EQ_I64(yew_fz_score(cjk, 6U, cjk, 6U, NULL), 10000);
     /* ... and is NOT case-folded, because folding it correctly would
      * need a normalization pass on every keystroke.  Pinned, tested,
      * and documented rather than discovered. */
-    SAG_ASSERT_EQ_I64(sag_fz_score(cyr_lower, 2U, cyr_upper, 2U, NULL),
-                      SAG_FZ_NO_MATCH);
+    YEW_ASSERT_EQ_I64(yew_fz_score(cyr_lower, 2U, cyr_upper, 2U, NULL),
+                      YEW_FZ_NO_MATCH);
     /* ASCII beside non-ASCII still folds. */
-    SAG_ASSERT_EQ_I64(sag_fz_score("A", 1U, "a", 1U, NULL), 10000);
+    YEW_ASSERT_EQ_I64(yew_fz_score("A", 1U, "a", 1U, NULL), 10000);
 }
 
 void test_fuzzy_rank_basename_tier(void)
@@ -240,17 +240,17 @@ void test_fuzzy_rank_basename_tier(void)
 
     /* The case the tier exists for: `src` selects the directory, not a
      * file inside it. */
-    n = sag_fz_rank("src", 3U, paths, 2U, true, out);
-    SAG_ASSERT_EQ_U64(n, 2U);
-    SAG_ASSERT_EQ_U64(out[0].idx, 1U); /* "src" */
-    SAG_ASSERT(out[0].score >= SAG_FZ_BASENAME_TIER);
-    SAG_ASSERT(out[1].score < SAG_FZ_BASENAME_TIER);
+    n = yew_fz_rank("src", 3U, paths, 2U, true, out);
+    YEW_ASSERT_EQ_U64(n, 2U);
+    YEW_ASSERT_EQ_U64(out[0].idx, 1U); /* "src" */
+    YEW_ASSERT(out[0].score >= YEW_FZ_BASENAME_TIER);
+    YEW_ASSERT(out[1].score < YEW_FZ_BASENAME_TIER);
 
     /* Every prefix-basename match outranks every fuzzy path match. */
-    n = sag_fz_rank("tabs", 4U, deep, 2U, true, out);
-    SAG_ASSERT_EQ_U64(n, 2U);
-    SAG_ASSERT_EQ_U64(out[0].idx, 1U); /* basename "tabs.c" */
-    SAG_ASSERT(out[0].score >= SAG_FZ_BASENAME_TIER);
+    n = yew_fz_rank("tabs", 4U, deep, 2U, true, out);
+    YEW_ASSERT_EQ_U64(n, 2U);
+    YEW_ASSERT_EQ_U64(out[0].idx, 1U); /* basename "tabs.c" */
+    YEW_ASSERT(out[0].score >= YEW_FZ_BASENAME_TIER);
 }
 
 void test_fuzzy_rank_path_mode_off_scores_the_whole_label(void)
@@ -265,17 +265,17 @@ void test_fuzzy_rank_path_mode_off_scores_the_whole_label(void)
      * -- if it were, every *.write command would tie at the exact-match
      * tier and the menu would order them arbitrarily.
      */
-    n = sag_fz_rank("write", 5U, cmds, 2U, false, out);
-    SAG_ASSERT_EQ_U64(n, 2U);
-    SAG_ASSERT_EQ_U64(out[0].idx, 1U); /* "write", exact */
-    SAG_ASSERT(out[0].score >= SAG_FZ_BASENAME_TIER);
-    SAG_ASSERT(out[1].score < SAG_FZ_BASENAME_TIER);
+    n = yew_fz_rank("write", 5U, cmds, 2U, false, out);
+    YEW_ASSERT_EQ_U64(n, 2U);
+    YEW_ASSERT_EQ_U64(out[0].idx, 1U); /* "write", exact */
+    YEW_ASSERT(out[0].score >= YEW_FZ_BASENAME_TIER);
+    YEW_ASSERT(out[1].score < YEW_FZ_BASENAME_TIER);
 
     /* path_mode changes nothing for a label with no '/' ... */
-    n = sag_fz_rank("write", 5U, cmds, 2U, true, out);
-    SAG_ASSERT_EQ_U64(n, 2U);
-    SAG_ASSERT_EQ_U64(out[0].idx, 1U);
-    SAG_ASSERT(out[1].score < SAG_FZ_BASENAME_TIER);
+    n = yew_fz_rank("write", 5U, cmds, 2U, true, out);
+    YEW_ASSERT_EQ_U64(n, 2U);
+    YEW_ASSERT_EQ_U64(out[0].idx, 1U);
+    YEW_ASSERT(out[1].score < YEW_FZ_BASENAME_TIER);
 }
 
 void test_fuzzy_rank_path_mode_changes_ranking_only_for_paths(void)
@@ -286,11 +286,11 @@ void test_fuzzy_rank_path_mode_changes_ranking_only_for_paths(void)
     /* With a '/' present the two modes genuinely differ: path_mode
      * scores the basename "write.c" (a prefix match, tiered), while
      * label mode scores "src/write.c" whole (fuzzy, untiered). */
-    SAG_ASSERT_EQ_U64(sag_fz_rank("write", 5U, items, 1U, true, out), 1U);
-    SAG_ASSERT(out[0].score >= SAG_FZ_BASENAME_TIER);
+    YEW_ASSERT_EQ_U64(yew_fz_rank("write", 5U, items, 1U, true, out), 1U);
+    YEW_ASSERT(out[0].score >= YEW_FZ_BASENAME_TIER);
 
-    SAG_ASSERT_EQ_U64(sag_fz_rank("write", 5U, items, 1U, false, out), 1U);
-    SAG_ASSERT(out[0].score < SAG_FZ_BASENAME_TIER);
+    YEW_ASSERT_EQ_U64(yew_fz_rank("write", 5U, items, 1U, false, out), 1U);
+    YEW_ASSERT(out[0].score < YEW_FZ_BASENAME_TIER);
 }
 
 void test_fuzzy_rank_excludes_and_breaks_ties_deterministically(void)
@@ -305,22 +305,22 @@ void test_fuzzy_rank_excludes_and_breaks_ties_deterministically(void)
 
     /* Non-matching candidates are excluded, not sorted last: the count
      * has to mean "matches" for the footer to be honest. */
-    na = sag_fz_rank("a", 1U, forward, 4U, false, a);
-    SAG_ASSERT_EQ_U64(na, 2U);
+    na = yew_fz_rank("a", 1U, forward, 4U, false, a);
+    YEW_ASSERT_EQ_U64(na, 2U);
     for (i = 0U; i < na; i++)
-        SAG_ASSERT(strcmp(forward[a[i].idx], "zzz_no") != 0);
+        YEW_ASSERT(strcmp(forward[a[i].idx], "zzz_no") != 0);
 
     /* Same set, permuted input, identical output order. */
-    nb = sag_fz_rank("a", 1U, reverse, 4U, false, b);
-    SAG_ASSERT_EQ_U64(nb, na);
+    nb = yew_fz_rank("a", 1U, reverse, 4U, false, b);
+    YEW_ASSERT_EQ_U64(nb, na);
     for (i = 0U; i < na; i++)
-        SAG_ASSERT_EQ_STR(forward[a[i].idx], reverse[b[i].idx]);
+        YEW_ASSERT_EQ_STR(forward[a[i].idx], reverse[b[i].idx]);
 
     /* "aaa" is a prefix match (tiered); "aab" is too.  Equal scores, so
      * the tie breaks by shorter-then-memcmp -- both are length 3, so
      * memcmp decides and "aaa" precedes "aab". */
-    SAG_ASSERT_EQ_STR(forward[a[0].idx], "aaa");
-    SAG_ASSERT_EQ_STR(forward[a[1].idx], "aab");
+    YEW_ASSERT_EQ_STR(forward[a[0].idx], "aaa");
+    YEW_ASSERT_EQ_STR(forward[a[1].idx], "aab");
 }
 
 void test_fuzzy_rank_positions_are_relative_to_the_full_text(void)
@@ -331,11 +331,11 @@ void test_fuzzy_rank_positions_are_relative_to_the_full_text(void)
 
     /* The basename key won, but the renderer draws the whole path, so
      * the positions it gets must index the whole path. */
-    n = sag_fz_rank("tabs", 4U, paths, 1U, true, out);
-    SAG_ASSERT_EQ_U64(n, 1U);
-    SAG_ASSERT_EQ_U64(out[0].m.n_pos, 4U);
-    SAG_ASSERT_EQ_U64(out[0].m.pos[0], 7U); /* "src/ui/" is 7 bytes */
-    SAG_ASSERT_EQ_U64(out[0].m.pos[3], 10U);
+    n = yew_fz_rank("tabs", 4U, paths, 1U, true, out);
+    YEW_ASSERT_EQ_U64(n, 1U);
+    YEW_ASSERT_EQ_U64(out[0].m.n_pos, 4U);
+    YEW_ASSERT_EQ_U64(out[0].m.pos[0], 7U); /* "src/ui/" is 7 bytes */
+    YEW_ASSERT_EQ_U64(out[0].m.pos[3], 10U);
 }
 
 void test_fuzzy_rank_directory_basename_ignores_trailing_slash(void)
@@ -350,10 +350,10 @@ void test_fuzzy_rank_directory_basename_ignores_trailing_slash(void)
      * and the directory the user is typing toward then loses to every
      * file beside it.
      */
-    n = sag_fz_rank("archive", 7U, entries, 2U, true, out);
-    SAG_ASSERT_EQ_U64(n, 2U);
-    SAG_ASSERT_EQ_STR(entries[out[0].idx], "archive/");
-    SAG_ASSERT(out[0].score >= SAG_FZ_BASENAME_TIER);
+    n = yew_fz_rank("archive", 7U, entries, 2U, true, out);
+    YEW_ASSERT_EQ_U64(n, 2U);
+    YEW_ASSERT_EQ_STR(entries[out[0].idx], "archive/");
+    YEW_ASSERT(out[0].score >= YEW_FZ_BASENAME_TIER);
 }
 
 void test_fuzzy_rank_empty_pattern_preserves_source_order(void)
@@ -366,10 +366,10 @@ void test_fuzzy_rank_empty_pattern_preserves_source_order(void)
     /* Every candidate scores 1, so the stable sort must leave them in
      * the order the source produced -- which is what makes an unfiltered
      * menu show the source's own ordering. */
-    n = sag_fz_rank("", 0U, items, 3U, false, out);
-    SAG_ASSERT_EQ_U64(n, 3U);
+    n = yew_fz_rank("", 0U, items, 3U, false, out);
+    YEW_ASSERT_EQ_U64(n, 3U);
     for (i = 0U; i < n; i++)
-        SAG_ASSERT_EQ_U64(out[i].idx, i);
+        YEW_ASSERT_EQ_U64(out[i].idx, i);
 }
 
 void test_fuzzy_handles_degenerate_input(void)
@@ -377,18 +377,18 @@ void test_fuzzy_handles_degenerate_input(void)
     FzRanked out[2];
     static const char *const with_null[] = {NULL, "abc"};
 
-    SAG_ASSERT_EQ_I64(sag_fz_score(NULL, 3U, "abc", 3U, NULL),
-                      SAG_FZ_NO_MATCH);
-    SAG_ASSERT_EQ_I64(sag_fz_score("abc", 3U, NULL, 3U, NULL),
-                      SAG_FZ_NO_MATCH);
-    SAG_ASSERT_EQ_I64(sag_fz_score("", 0U, "", 0U, NULL), 1);
-    SAG_ASSERT_EQ_I64(sag_fz_score("a", 1U, "", 0U, NULL),
-                      SAG_FZ_NO_MATCH);
-    SAG_ASSERT_EQ_U64(sag_fz_rank("a", 1U, NULL, 2U, false, out), 0U);
-    SAG_ASSERT_EQ_U64(sag_fz_rank("a", 1U, with_null, 2U, false, NULL), 0U);
+    YEW_ASSERT_EQ_I64(yew_fz_score(NULL, 3U, "abc", 3U, NULL),
+                      YEW_FZ_NO_MATCH);
+    YEW_ASSERT_EQ_I64(yew_fz_score("abc", 3U, NULL, 3U, NULL),
+                      YEW_FZ_NO_MATCH);
+    YEW_ASSERT_EQ_I64(yew_fz_score("", 0U, "", 0U, NULL), 1);
+    YEW_ASSERT_EQ_I64(yew_fz_score("a", 1U, "", 0U, NULL),
+                      YEW_FZ_NO_MATCH);
+    YEW_ASSERT_EQ_U64(yew_fz_rank("a", 1U, NULL, 2U, false, out), 0U);
+    YEW_ASSERT_EQ_U64(yew_fz_rank("a", 1U, with_null, 2U, false, NULL), 0U);
     /* A NULL candidate is skipped, not dereferenced. */
-    SAG_ASSERT_EQ_U64(sag_fz_rank("a", 1U, with_null, 2U, false, out), 1U);
-    SAG_ASSERT_EQ_U64(out[0].idx, 1U);
+    YEW_ASSERT_EQ_U64(yew_fz_rank("a", 1U, with_null, 2U, false, out), 1U);
+    YEW_ASSERT_EQ_U64(out[0].idx, 1U);
 }
 
 /*
@@ -397,28 +397,28 @@ void test_fuzzy_handles_degenerate_input(void)
  * underline a byte 65536 positions earlier, and §5's highlighter walks
  * grapheme clusters from those offsets.  The score is unaffected: the
  * match is still a match, it just stops being highlightable, exactly as
- * it does past SAG_FZ_MAX_POS.
+ * it does past YEW_FZ_MAX_POS.
  */
 void test_fuzzy_positions_past_64k_are_dropped_not_truncated(void)
 {
     enum { LONG_LEN = 70000 };
-    char *text = sag_xmalloc((size_t)LONG_LEN);
+    char *text = yew_xmalloc((size_t)LONG_LEN);
     FzMatch m;
     i32 score;
 
     (void)memset(text, 'x', (size_t)LONG_LEN);
     text[10] = 'a';
     text[LONG_LEN - 1] = 'b';
-    score = sag_fz_score("ab", 2U, text, (u32)LONG_LEN, &m);
-    SAG_ASSERT(score != SAG_FZ_NO_MATCH);
-    SAG_ASSERT_EQ_U64(m.n_pos, 1U);
-    SAG_ASSERT_EQ_U64(m.pos[0], 10U);
+    score = yew_fz_score("ab", 2U, text, (u32)LONG_LEN, &m);
+    YEW_ASSERT(score != YEW_FZ_NO_MATCH);
+    YEW_ASSERT_EQ_U64(m.n_pos, 1U);
+    YEW_ASSERT_EQ_U64(m.pos[0], 10U);
     /* The same text scored without the far byte keeps both positions,
      * proving the drop is about the OFFSET and not about the pattern. */
     text[70] = 'b';
-    score = sag_fz_score("ab", 2U, text, (u32)LONG_LEN, &m);
-    SAG_ASSERT(score != SAG_FZ_NO_MATCH);
-    SAG_ASSERT_EQ_U64(m.n_pos, 2U);
-    SAG_ASSERT_EQ_U64(m.pos[1], 70U);
+    score = yew_fz_score("ab", 2U, text, (u32)LONG_LEN, &m);
+    YEW_ASSERT(score != YEW_FZ_NO_MATCH);
+    YEW_ASSERT_EQ_U64(m.n_pos, 2U);
+    YEW_ASSERT_EQ_U64(m.pos[1], 70U);
     free(text);
 }

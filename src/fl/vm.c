@@ -98,7 +98,7 @@ bool fl_vm_init(FlVm *vm, Arena *a, Interner *in, DiagCtx *dc)
      *
      * ~30x slower, so it is its own lane and never `make test`.
      */
-    if (getenv("SAG_FL_GC_STRESS") != NULL ||
+    if (getenv("YEW_FL_GC_STRESS") != NULL ||
         getenv("FL_GC_STRESS") != NULL)
         vm->gc.stress = true;
 #if FL_VM_TRACE
@@ -192,7 +192,7 @@ bool fl_raise(FlVm *vm, const char *kind, const char *fmt, ...)
  * The message for an unbound name.
  *
  * DEFERRED SURFACES ARE NAMED, NEVER SILENT (invariant 3, and the same
- * discipline s13's SAG_CMD_DEFERRED gives commands).  A config that
+ * discipline s13's YEW_CMD_DEFERRED gives commands).  A config that
  * writes `bind("<C-p>", ...)` today must be told the feature is coming
  * in Sprint 34, not that `bind` is a typo -- the second answer sends
  * the author looking for a spelling mistake that is not there.
@@ -237,7 +237,7 @@ static void suggest_from_globals(FlVm *vm, FlMap *globals, FlSuggest *sg)
 
         if (k.t != (u8)FL_INT)
             continue;
-        nm = sag_intern_str(vm->in, (u32)k.as.i);
+        nm = yew_intern_str(vm->in, (u32)k.as.i);
         if (nm != NULL)
             fl_suggest_add(sg, nm, (u32)strlen(nm), FL_SCOPE_GLOBAL);
     }
@@ -302,7 +302,7 @@ const char *fl_deferred_msg(const char *name)
 /*
  * THE LINE BETWEEN A BUG AND AN ERROR is one question: can a Fletch
  * program cause this?  If yes it raises a catchable value -- kind
- * "limit" for resource exhaustion -- and if no it is a bug in sagitta
+ * "limit" for resource exhaustion -- and if no it is a bug in yew
  * and gets the structured exit-4 report.  Never a bare crash, and never
  * a silent recovery.
  *
@@ -317,7 +317,7 @@ static const char *dump_bad_chunk(const FlFn *fn, const Interner *in)
     /* Read from the environment rather than a flag, because the moment
      * you want this is the moment you already have a crash and cannot
      * add an argument to whatever produced it. */
-    const char *path = getenv("SAG_FL_DUMP_BAD_CHUNK");
+    const char *path = getenv("YEW_FL_DUMP_BAD_CHUNK");
     Bytebuf bb;
     FILE *fp;
 
@@ -353,7 +353,7 @@ _Noreturn static void vm_bug(FlVm *vm, const char *file, int line,
         op = fn->ch.code[pc];
     }
     if (fn != NULL && fn->name_id != 0U)
-        nm = sag_intern_str(vm->in, fn->name_id);
+        nm = yew_intern_str(vm->in, fn->name_id);
     at += (size_t)snprintf(report + at, sizeof(report) - at, "%s\n", what);
     at += (size_t)snprintf(report + at, sizeof(report) - at,
                            "  opcode : %s (0x%02X) at pc 0x%04X\n",
@@ -371,13 +371,13 @@ _Noreturn static void vm_bug(FlVm *vm, const char *file, int line,
                            (unsigned)vm->nhandlers);
     at += (size_t)snprintf(report + at, sizeof(report) - at,
                            "  build  : %s cgoto=%d checks=%d\n",
-                           SAG_VERSION, FL_COMPUTED_GOTO, FL_VM_CHECKS);
+                           YEW_VERSION, FL_COMPUTED_GOTO, FL_VM_CHECKS);
     dumped = dump_bad_chunk(fn, vm->in);
     (void)snprintf(report + at, sizeof(report) - at, "  hint   : %s\n",
                    dumped == NULL
-                       ? "SAG_FL_DUMP_BAD_CHUNK=<path> writes a disassembly"
-                       : "disassembly written to SAG_FL_DUMP_BAD_CHUNK");
-    sag_bug(file, line, "%s", report);
+                       ? "YEW_FL_DUMP_BAD_CHUNK=<path> writes a disassembly"
+                       : "disassembly written to YEW_FL_DUMP_BAD_CHUNK");
+    yew_bug(file, line, "%s", report);
 }
 
 #define VM_BUG(what) vm_bug(vm, __FILE__, __LINE__, frame, ip, (what))
@@ -627,7 +627,7 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
                  * The prelude is consulted second, so a program that
                  * declares its own `error` shadows §9's rather than
                  * colliding with it. */
-                const char *nm = sag_intern_str(vm->in, (u32)name.as.i);
+                const char *nm = yew_intern_str(vm->in, (u32)name.as.i);
                 FlSuggest sg;
                 Bytebuf msg;
 
@@ -650,7 +650,7 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
 
             if (!fl_map_get(frame->cl->globals, name, NULL)) {
                 fl_raise(vm, "name", "%s",
-                         fl_deferred_msg(sag_intern_str(vm->in,
+                         fl_deferred_msg(yew_intern_str(vm->in,
                                                         (u32)name.as.i)));
                 goto raised;
             }
@@ -900,7 +900,7 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
 
                 if (n < nat->min_ar ||
                     (nat->max_ar != 255U && n > nat->max_ar)) {
-                    const char *nm = sag_intern_str(vm->in, nat->name_id);
+                    const char *nm = yew_intern_str(vm->in, nat->name_id);
 
                     if (nat->max_ar == 255U)
                         fl_raise(vm, "arity",
@@ -946,7 +946,7 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
                 goto raised;
             }
             if (vm->nframes >= (u32)FL_FRAMES_MAX) {
-                /* Catchable "limit", not sag_bug: infinite recursion is
+                /* Catchable "limit", not yew_bug: infinite recursion is
                  * user-triggerable, and §16-A1 exists so it does not
                  * have to be misfiled under one of the other kinds. */
                 fl_raise(vm, "limit", "call depth exceeded");
@@ -1139,7 +1139,7 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
             FlValue name = frame->cl->fn->ch.consts[k];
             FlValue c = *--vm->sp;
             FlValue got;
-            const char *s = sag_intern_str(vm->in, (u32)name.as.i);
+            const char *s = yew_intern_str(vm->in, (u32)name.as.i);
             FlValue key;
 
             /* Maps retain ordinary field lookup.  Handle fields are
@@ -1183,7 +1183,7 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
             FlValue name = frame->cl->fn->ch.consts[k];
             FlValue v = *--vm->sp;
             FlValue c = *--vm->sp;
-            const char *s = sag_intern_str(vm->in, (u32)name.as.i);
+            const char *s = yew_intern_str(vm->in, (u32)name.as.i);
 
             if (c.t != (u8)FL_MAP) {
                 fl_raise(vm, "type", "cannot set a field on %s",
@@ -1269,7 +1269,7 @@ static bool vm_exec(FlVm *vm, u32 base, FlValue *out)
                     ip += d;
                     VM_NEXT();
                 }
-                nx = sag_gb_next_bytes((const u8 *)s->b, (size_t)s->len, at);
+                nx = yew_gb_next_bytes((const u8 *)s->b, (size_t)s->len, at);
                 if (nx <= at)
                     nx = at + 1U;         /* never stall on a bad byte */
                 frame->slots[base + 1] = FL_INT_V((i64)nx);
@@ -1640,7 +1640,7 @@ bool fl_call(FlVm *vm, FlValue callee, const FlValue *args, u32 nargs,
             (nat->max_ar != 255U && nargs > nat->max_ar))
             {
                 bool ok = fl_raise(vm, "arity", "%s got %u arguments",
-                                   sag_intern_str(vm->in, nat->name_id),
+                                   yew_intern_str(vm->in, nat->name_id),
                                    (unsigned)nargs);
 
                 if (outer)

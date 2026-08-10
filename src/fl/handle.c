@@ -32,7 +32,7 @@ static FlType tag_of_kind(FlHandleKind k)
     case FL_H_RE:   return FL_REGEX;
     default:        break;
     }
-    SAG_BUG("fletch handle: no type tag for kind");
+    YEW_BUG("fletch handle: no type tag for kind");
 }
 
 FlHandleKind fl_h_kind_of(FlValue v)
@@ -84,7 +84,7 @@ static FlValue encode(FlHandleKind k, u32 slot, u32 gen)
 void fl_h_table_init(FlHandleTable *t)
 {
     if (t == NULL)
-        SAG_BUG("fletch handle table: NULL");
+        YEW_BUG("fletch handle table: NULL");
     (void)memset(t, 0, sizeof(*t));
 }
 
@@ -116,7 +116,7 @@ FlValue fl_h_make(FlHandleTable *t, FlHandleKind k, const FlHandleSlot *init)
     u32 idx;
 
     if (t == NULL || k == FL_H_NONE || k >= FL_H__N || init == NULL)
-        SAG_BUG("fletch handle: bad make");
+        YEW_BUG("fletch handle: bad make");
     if (t->free_head != 0U) {
         idx = t->free_head - 1U;
         t->free_head = t->slots[idx].next_free;
@@ -124,7 +124,7 @@ FlValue fl_h_make(FlHandleTable *t, FlHandleKind k, const FlHandleSlot *init)
         if (t->n == t->cap) {
             u32 want = t->cap == 0U ? 8U : t->cap * 2U;
 
-            t->slots = (FlHandleSlot *)sag_xreallocarray(t->slots, want,
+            t->slots = (FlHandleSlot *)yew_xreallocarray(t->slots, want,
                                                          sizeof(*t->slots));
             t->cap = want;
         }
@@ -207,7 +207,7 @@ bool fl_h_alive(const FlHandleTable *t, FlValue v)
 static FlHandleTable *table_of(Ed *ed)
 {
     if (ed == NULL)
-        SAG_BUG("fletch handle: no editor");
+        YEW_BUG("fletch handle: no editor");
     return &ed->handles;
 }
 
@@ -260,11 +260,11 @@ static FlValue find_span(const FlHandleTable *t, const Buffer *b,
         const FlHandleSlot *s = &t->slots[i];
 
         if (s->kind != (u8)FL_H_SPAN || s->as.span.buf != b->id ||
-            !sag_mark_alive(b->marks, s->as.span.lo) ||
-            !sag_mark_alive(b->marks, s->as.span.hi))
+            !yew_mark_alive(b->marks, s->as.span.lo) ||
+            !yew_mark_alive(b->marks, s->as.span.hi))
             continue;
-        if (sag_mark_pos(b->marks, s->as.span.lo).v == lo &&
-            sag_mark_pos(b->marks, s->as.span.hi).v == hi)
+        if (yew_mark_pos(b->marks, s->as.span.lo).v == lo &&
+            yew_mark_pos(b->marks, s->as.span.hi).v == hi)
             return encode(FL_H_SPAN, i, s->gen);
     }
     return FL_NIL_V;
@@ -343,12 +343,12 @@ FlValue fl_h_span_make(Ed *ed, Buffer *b, u64 lo, u64 hi)
      * end joins the span.  That is what makes s.prepend("(") then
      * s.append(")") bracket the same text rather than drift off it.
      */
-    init.as.span.lo = sag_mark_add(b->marks, BYTEOFF(lo), SAG_BIAS_LEFT);
-    init.as.span.hi = sag_mark_add(b->marks, BYTEOFF(hi), SAG_BIAS_RIGHT);
+    init.as.span.lo = yew_mark_add(b->marks, BYTEOFF(lo), YEW_BIAS_LEFT);
+    init.as.span.hi = yew_mark_add(b->marks, BYTEOFF(hi), YEW_BIAS_RIGHT);
     return fl_h_make(table_of(ed), FL_H_SPAN, &init);
 }
 
-FlValue fl_h_re_make(Ed *ed, Arena *own, SagRe *re)
+FlValue fl_h_re_make(Ed *ed, Arena *own, YewRe *re)
 {
     FlHandleSlot init;
 
@@ -368,10 +368,10 @@ static void drop_span_marks(Buffer *b, FlHandleSlot *s)
 {
     if (b == NULL || b->marks == NULL)
         return;
-    if (sag_mark_alive(b->marks, s->as.span.lo))
-        sag_mark_del(b->marks, s->as.span.lo);
-    if (sag_mark_alive(b->marks, s->as.span.hi))
-        sag_mark_del(b->marks, s->as.span.hi);
+    if (yew_mark_alive(b->marks, s->as.span.lo))
+        yew_mark_del(b->marks, s->as.span.lo);
+    if (yew_mark_alive(b->marks, s->as.span.hi))
+        yew_mark_del(b->marks, s->as.span.hi);
 }
 
 bool fl_h_free(Ed *ed, FlValue v)
@@ -384,7 +384,7 @@ bool fl_h_free(Ed *ed, FlValue v)
     if (s == NULL)
         return false;
     if (s->kind == (u8)FL_H_SPAN) {
-        Buffer *b = sag_ws_buf_by_id(ed, s->as.span.buf);
+        Buffer *b = yew_ws_buf_by_id(ed, s->as.span.buf);
 
         drop_span_marks(b, s);
     }
@@ -491,7 +491,7 @@ Buffer *fl_h_buf(FlVm *vm, FlValue v)
 
     if (s == NULL)
         return NULL;
-    b = sag_ws_buf_by_id(vm->ed, s->as.buf);
+    b = yew_ws_buf_by_id(vm->ed, s->as.buf);
     if (b == NULL) {
         (void)h_raise_gone(vm, FL_H_BUF, s->as.buf);
         return NULL;
@@ -506,7 +506,7 @@ Win *fl_h_win(FlVm *vm, FlValue v)
 
     if (s == NULL)
         return NULL;
-    w = sag_ed_win_by_id(vm->ed, s->as.win);
+    w = yew_ed_win_by_id(vm->ed, s->as.win);
     if (w == NULL) {
         (void)h_raise_gone(vm, FL_H_WIN, s->as.win);
         return NULL;
@@ -522,7 +522,7 @@ Cursor *fl_h_cur(FlVm *vm, FlValue v, Win **out_win)
 
     if (s == NULL)
         return NULL;
-    w = sag_ed_win_by_id(vm->ed, s->as.cur.win);
+    w = yew_ed_win_by_id(vm->ed, s->as.cur.win);
     if (w == NULL) {
         (void)h_raise_gone(vm, FL_H_WIN, s->as.cur.win);
         return NULL;
@@ -554,18 +554,18 @@ bool fl_h_span(FlVm *vm, FlValue v, Buffer **out_buf, Span *out)
 
     if (s == NULL)
         return false;
-    b = sag_ws_buf_by_id(vm->ed, s->as.span.buf);
+    b = yew_ws_buf_by_id(vm->ed, s->as.span.buf);
     if (b == NULL || b->marks == NULL) {
         (void)h_raise_gone(vm, FL_H_BUF, s->as.span.buf);
         return false;
     }
-    if (!sag_mark_alive(b->marks, s->as.span.lo) ||
-        !sag_mark_alive(b->marks, s->as.span.hi)) {
+    if (!yew_mark_alive(b->marks, s->as.span.lo) ||
+        !yew_mark_alive(b->marks, s->as.span.hi)) {
         (void)fl_raise(vm, "handle", "this span's text was deleted");
         return false;
     }
-    lo = sag_mark_pos(b->marks, s->as.span.lo).v;
-    hi = sag_mark_pos(b->marks, s->as.span.hi).v;
+    lo = yew_mark_pos(b->marks, s->as.span.lo).v;
+    hi = yew_mark_pos(b->marks, s->as.span.hi).v;
     /*
      * A delete that swallowed the span collapses both marks onto the
      * deletion point, and both orders have been observed depending on
@@ -584,7 +584,7 @@ bool fl_h_span(FlVm *vm, FlValue v, Buffer **out_buf, Span *out)
     return true;
 }
 
-const SagRe *fl_h_re(FlVm *vm, FlValue v)
+const YewRe *fl_h_re(FlVm *vm, FlValue v)
 {
     FlHandleSlot *s = need(vm, v, FL_H_RE);
 

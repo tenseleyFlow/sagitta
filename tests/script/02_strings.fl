@@ -2,7 +2,7 @@
 import str
 t.eq(str.len("hello"), 5)
 t.eq(str.len_bytes("hello"), 5)
-t.eq(str.upper("Sagitta"), "SAGITTA")
+t.eq(str.upper("yew"), "YEW")
 t.eq(str.lower("FLETCH"), "fletch")
 t.eq(str.trim("  x  "), "x")
 t.eq(str.starts_with("batch", "bat"), true)

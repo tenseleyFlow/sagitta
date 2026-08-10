@@ -3,7 +3,7 @@
  */
 #include "wordbreak.h"
 
-const u16 sag_wb_stage1[SAG_WB_TRIE_HI >> SAG_WB_TRIE_SHIFT] = {
+const u16 yew_wb_stage1[YEW_WB_TRIE_HI >> YEW_WB_TRIE_SHIFT] = {
     0x0000, 0x0001, 0x0002, 0x0002, 0x0002, 0x0003, 0x0004, 0x0005,
     0x0002, 0x0006, 0x0007, 0x0008, 0x0009, 0x000A, 0x000B, 0x000C,
     0x000D, 0x000E, 0x000F, 0x0010, 0x0011, 0x0012, 0x0013, 0x0014,
@@ -198,7 +198,7 @@ const u16 sag_wb_stage1[SAG_WB_TRIE_HI >> SAG_WB_TRIE_SHIFT] = {
     0x0039, 0x0039, 0x0039, 0x0039, 0x0039, 0x0039, 0x0039, 0x0039
 };
 
-const u8 sag_wb_stage2[] = {
+const u8 yew_wb_stage2[] = {
     0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 32u, 34u, 35u, 35u, 33u, 0u, 0u,
     0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
     39u, 0u, 18u, 0u, 0u, 0u, 0u, 17u, 0u, 0u, 0u, 0u, 15u, 0u, 16u, 0u,
@@ -1753,16 +1753,16 @@ const u8 sag_wb_stage2[] = {
     0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 4u, 4u, 4u, 4u, 4u
 };
 
-const struct SagWbRange sag_wb_hi[] = {
+const struct YewWbRange yew_wb_hi[] = {
     {0x0E0001u, 0x0E0001u, 0x05u},
     {0x0E0020u, 0x0E007Fu, 0x04u},
     {0x0E0100u, 0x0E01EFu, 0x04u}
 };
 
-const u32 sag_wb_hi_len = 3u;
+const u32 yew_wb_hi_len = 3u;
 
-_Static_assert(sizeof(sag_wb_stage1) + sizeof(sag_wb_stage2) +
-               sizeof(sag_wb_hi) <= 64u * 1024u,
+_Static_assert(sizeof(yew_wb_stage1) + sizeof(yew_wb_stage2) +
+               sizeof(yew_wb_hi) <= 64u * 1024u,
                "word-break tables exceed the 64 KiB budget");
 
 /* UCD 16.0.0; 27940 bytes; 194/1536 unique stage-2 blocks; 87% dedup.

@@ -13,26 +13,26 @@ typedef struct {
 } WordMotionCase;
 
 #define WORD_CASE(s, positions)                                               \
-    {(const u8 *)(s), sizeof(s) - 1U, (positions), SAG_ARRAY_LEN(positions)}
+    {(const u8 *)(s), sizeof(s) - 1U, (positions), YEW_ARRAY_LEN(positions)}
 
 static void assert_motion_case(const WordMotionCase *c, bool alt)
 {
-    TextBuf *tb = sag_textbuf_from_bytes(c->text, c->len);
+    TextBuf *tb = yew_textbuf_from_bytes(c->text, c->len);
     UnitCtx u = {tb, NULL, NULL};
     size_t i;
 
-    SAG_ASSERT_NOT_NULL(tb);
-    SAG_ASSERT(c->stop_count >= 2U);
-    SAG_ASSERT_EQ_U64(c->stops[0], 0U);
-    SAG_ASSERT_EQ_U64(c->stops[c->stop_count - 1U], c->len);
+    YEW_ASSERT_NOT_NULL(tb);
+    YEW_ASSERT(c->stop_count >= 2U);
+    YEW_ASSERT_EQ_U64(c->stops[0], 0U);
+    YEW_ASSERT_EQ_U64(c->stops[c->stop_count - 1U], c->len);
     for (i = 1U; i < c->stop_count; i++) {
-        ByteOff next = sag_unit_word.next(&u, BYTEOFF(c->stops[i - 1U]),
+        ByteOff next = yew_unit_word.next(&u, BYTEOFF(c->stops[i - 1U]),
                                           alt);
 
-        SAG_ASSERT_EQ_U64(next.v, c->stops[i]);
-        SAG_ASSERT(sag_is_grapheme_boundary(tb, next));
+        YEW_ASSERT_EQ_U64(next.v, c->stops[i]);
+        YEW_ASSERT(yew_is_grapheme_boundary(tb, next));
     }
-    sag_textbuf_free(tb);
+    yew_textbuf_free(tb);
 }
 
 void test_word_motion_reference_rows(void)
@@ -72,11 +72,11 @@ void test_word_motion_reference_rows(void)
         WORD_CASE("well-known", hyphen),
         WORD_CASE("1,000.50", number),
         {invalid_text, sizeof(invalid_text), invalid,
-         SAG_ARRAY_LEN(invalid)},
+         YEW_ARRAY_LEN(invalid)},
     };
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(cases); i++)
+    for (i = 0U; i < YEW_ARRAY_LEN(cases); i++)
         assert_motion_case(&cases[i], false);
 }
 
@@ -85,7 +85,7 @@ void test_word_motion_word_variant(void)
     static const u8 text[] = "foo.bar  baz-qux\nzap";
     static const u64 stops[] = {0U, 9U, 17U, 20U};
     static const WordMotionCase c = {
-        text, sizeof(text) - 1U, stops, SAG_ARRAY_LEN(stops),
+        text, sizeof(text) - 1U, stops, YEW_ARRAY_LEN(stops),
     };
     TextBuf *tb;
     UnitCtx u;
@@ -93,45 +93,45 @@ void test_word_motion_word_variant(void)
     ByteOff at;
 
     assert_motion_case(&c, true);
-    tb = sag_textbuf_from_bytes(text, sizeof(text) - 1U);
-    SAG_ASSERT_NOT_NULL(tb);
+    tb = yew_textbuf_from_bytes(text, sizeof(text) - 1U);
+    YEW_ASSERT_NOT_NULL(tb);
     u = (UnitCtx){tb, NULL, NULL};
-    span = sag_unit_word.span(&u, BYTEOFF(3U), true);
-    SAG_ASSERT_EQ_U64(span.lo, 0U);
-    SAG_ASSERT_EQ_U64(span.hi, 7U);
-    at = sag_unit_word.prev(&u, BYTEOFF(20U), true);
-    SAG_ASSERT_EQ_U64(at.v, 17U);
-    at = sag_unit_word.prev(&u, at, true);
-    SAG_ASSERT_EQ_U64(at.v, 9U);
-    at = sag_unit_word.prev(&u, at, true);
-    SAG_ASSERT_EQ_U64(at.v, 0U);
-    sag_textbuf_free(tb);
+    span = yew_unit_word.span(&u, BYTEOFF(3U), true);
+    YEW_ASSERT_EQ_U64(span.lo, 0U);
+    YEW_ASSERT_EQ_U64(span.hi, 7U);
+    at = yew_unit_word.prev(&u, BYTEOFF(20U), true);
+    YEW_ASSERT_EQ_U64(at.v, 17U);
+    at = yew_unit_word.prev(&u, at, true);
+    YEW_ASSERT_EQ_U64(at.v, 9U);
+    at = yew_unit_word.prev(&u, at, true);
+    YEW_ASSERT_EQ_U64(at.v, 0U);
+    yew_textbuf_free(tb);
 }
 
 static void assert_subwords(const u8 *text, size_t len,
                             const u64 *stops, size_t stop_count)
 {
-    TextBuf *tb = sag_textbuf_from_bytes(text, len);
+    TextBuf *tb = yew_textbuf_from_bytes(text, len);
     UnitCtx u = {tb, NULL, NULL};
     size_t i;
 
-    SAG_ASSERT_NOT_NULL(tb);
-    SAG_ASSERT(stop_count >= 2U);
-    SAG_ASSERT_EQ_U64(stops[0], 0U);
-    SAG_ASSERT_EQ_U64(stops[stop_count - 1U], len);
+    YEW_ASSERT_NOT_NULL(tb);
+    YEW_ASSERT(stop_count >= 2U);
+    YEW_ASSERT_EQ_U64(stops[0], 0U);
+    YEW_ASSERT_EQ_U64(stops[stop_count - 1U], len);
     for (i = 1U; i < stop_count; i++) {
-        ByteOff next = sag_word_sub_next(&u, BYTEOFF(stops[i - 1U]));
+        ByteOff next = yew_word_sub_next(&u, BYTEOFF(stops[i - 1U]));
 
-        SAG_ASSERT_EQ_U64(next.v, stops[i]);
-        SAG_ASSERT(sag_is_grapheme_boundary(tb, next));
+        YEW_ASSERT_EQ_U64(next.v, stops[i]);
+        YEW_ASSERT(yew_is_grapheme_boundary(tb, next));
     }
     for (i = stop_count - 1U; i > 0U; i--) {
-        ByteOff prev = sag_word_sub_prev(&u, BYTEOFF(stops[i]));
+        ByteOff prev = yew_word_sub_prev(&u, BYTEOFF(stops[i]));
 
-        SAG_ASSERT_EQ_U64(prev.v, stops[i - 1U]);
-        SAG_ASSERT(sag_is_grapheme_boundary(tb, prev));
+        YEW_ASSERT_EQ_U64(prev.v, stops[i - 1U]);
+        YEW_ASSERT(yew_is_grapheme_boundary(tb, prev));
     }
-    sag_textbuf_free(tb);
+    yew_textbuf_free(tb);
 }
 
 void test_word_subword_reference_rows(void)
@@ -144,15 +144,15 @@ void test_word_subword_reference_rows(void)
     static const u64 dunder[] = {0U, 2U, 8U};
 
     assert_subwords((const u8 *)"fooBarBaz", 9U, camel,
-                    SAG_ARRAY_LEN(camel));
+                    YEW_ARRAY_LEN(camel));
     assert_subwords((const u8 *)"HTTPServer", 10U, acronym,
-                    SAG_ARRAY_LEN(acronym));
+                    YEW_ARRAY_LEN(acronym));
     assert_subwords((const u8 *)"snake_case_x", 12U, snake,
-                    SAG_ARRAY_LEN(snake));
+                    YEW_ARRAY_LEN(snake));
     assert_subwords((const u8 *)"kebab-case", 10U, kebab,
-                    SAG_ARRAY_LEN(kebab));
+                    YEW_ARRAY_LEN(kebab));
     assert_subwords((const u8 *)"v2Model3", 8U, digits,
-                    SAG_ARRAY_LEN(digits));
+                    YEW_ARRAY_LEN(digits));
     assert_subwords((const u8 *)"__init__", 8U, dunder,
-                    SAG_ARRAY_LEN(dunder));
+                    YEW_ARRAY_LEN(dunder));
 }

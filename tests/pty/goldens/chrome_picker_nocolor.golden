@@ -1,15 +1,15 @@
-# sagitta pty golden v1
+# yew pty golden v1
 size 80x24 alt=1 cursor=3,2 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=9
 --- text
-[1: pty-s14-chrome_picke[2: sag-pty-0.txt][3: sag-pty-1.txt]
+[1: pty-s14-chrome_picke[2: yew-pty-0.txt][3: yew-pty-1.txt]
     1
 find.buffer                                                                     
  :                                                                             
 
   build/pty-s14-chrome_picker_nocolor.txt                                build
-  /tmp/sag-pty-0.txt                                                      /tmp
-  /tmp/sag-pty-1.txt                                                      /tmp
+  /tmp/yew-pty-0.txt                                                      /tmp
+  /tmp/yew-pty-1.txt                                                      /tmp
 
 
 
@@ -25,7 +25,7 @@ find.buffer
 
   3/3   up/down move . enter open . ^v split . esc
 
- L  sag-pty-1.txt                                            utf-8  lf  1:1  all
+ L  yew-pty-1.txt                                            utf-8  lf  1:1  all
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBB
 CCCCC

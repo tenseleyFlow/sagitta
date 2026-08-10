@@ -1,5 +1,5 @@
-#ifndef SAG_WS_FINDER_H
-#define SAG_WS_FINDER_H
+#ifndef YEW_WS_FINDER_H
+#define YEW_WS_FINDER_H
 
 /*
  * Sprint 18.5 §1: the fuss-derived fuzzy scorer, pulled forward from
@@ -24,27 +24,27 @@
  * INT32_MIN, not 0.  fuss returns 0 both for "the pattern was not
  * exhausted" and, arithmetically, for a long path whose gap and length
  * penalties cancelled its bonuses -- a real match then vanishes from the
- * list.  The sentinel separates the two, and sag_fz_score clamps a
+ * list.  The sentinel separates the two, and yew_fz_score clamps a
  * genuine score away from it so the two can never collide.
  */
-#define SAG_FZ_NO_MATCH INT32_MIN
+#define YEW_FZ_NO_MATCH INT32_MIN
 
 enum {
     /* Matched positions beyond this are unhighlighted, never rescored. */
-    SAG_FZ_MAX_POS = 64,
+    YEW_FZ_MAX_POS = 64,
     /* Lifts every exact-or-prefix basename match above every fuzzy path
-     * match, globally.  See sag_fz_rank. */
-    SAG_FZ_BASENAME_TIER = 100000
+     * match, globally.  See yew_fz_rank. */
+    YEW_FZ_BASENAME_TIER = 100000
 };
 
 /* Byte offsets into the scored text, ascending. */
 typedef struct FzMatch {
     u16 n_pos;
-    u16 pos[SAG_FZ_MAX_POS];
+    u16 pos[YEW_FZ_MAX_POS];
 } FzMatch;
 
 /*
- * Score `text` against `pat`; SAG_FZ_NO_MATCH when `pat` is not a
+ * Score `text` against `pat`; YEW_FZ_NO_MATCH when `pat` is not a
  * subsequence of `text`.  `m` may be NULL when positions are not wanted.
  *
  * The table this implements (every row is a unit case):
@@ -61,12 +61,12 @@ typedef struct FzMatch {
  *
  * Greedy first-match, not an optimal alignment: `abc` against
  * `axbxc_abc` scores the early, worse occurrence.  That is fuss's
- * behaviour and it is O(n) rather than O(n*m); sag_fz_rank's basename
+ * behaviour and it is O(n) rather than O(n*m); yew_fz_rank's basename
  * tier covers the case users actually complain about.  Do not promote it
  * to a dynamic program without re-pinning the table, the parity corpus,
  * and every golden that depends on the ordering.
  */
-i32 sag_fz_score(const char *pat, u32 plen, const char *text, u32 tlen,
+i32 yew_fz_score(const char *pat, u32 plen, const char *text, u32 tlen,
                  FzMatch *m);
 
 typedef struct FzRanked {
@@ -87,16 +87,16 @@ typedef struct FzRanked {
  *
  *   sb  = score(pat, basename(text))
  *   sp  = score(pat, text)                       (path_mode only)
- *   key = (sb >= 5000) ? sb + SAG_FZ_BASENAME_TIER : max(sb, sp)
+ *   key = (sb >= 5000) ? sb + YEW_FZ_BASENAME_TIER : max(sb, sp)
  *
  * which is why `src` selects the directory `src/` and not `src/file.c`.
  *
  * `path_mode == false` (command names, buffer labels) scores the label
  * only.  Ties break by shorter text, then memcmp, through
- * sag_sort_stable -- never qsort, whose tie order differs between glibc
+ * yew_sort_stable -- never qsort, whose tie order differs between glibc
  * and musl and would make the pty goldens libc-dependent (invariant 5).
  */
-u32 sag_fz_rank(const char *pat, u32 plen, const char *const *text, u32 n,
+u32 yew_fz_rank(const char *pat, u32 plen, const char *const *text, u32 n,
                 bool path_mode, FzRanked *out);
 
 #endif

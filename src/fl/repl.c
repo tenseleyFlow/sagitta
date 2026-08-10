@@ -1,4 +1,4 @@
-/* Sprint 32 §2-§5: the interactive `sag fl` prompt. */
+/* Sprint 32 §2-§5: the interactive `yew fl` prompt. */
 #include "fl/repl.h"
 
 #include <errno.h>
@@ -59,7 +59,7 @@ static const struct {
     {"q",       "",       "leave"}
 };
 
-void sag_fl_print_result(FlVm *vm, FlValue v, Bytebuf *out)
+void yew_fl_print_result(FlVm *vm, FlValue v, Bytebuf *out)
 {
     Bytebuf bb;
 
@@ -98,7 +98,7 @@ static void quiet_sink(void *ctx, FlDiagLevel level, FlSpan sp,
         (*n)++;
 }
 
-FlReplVerdict sag_fl_repl_classify(Arena *arena, Interner *in,
+FlReplVerdict yew_fl_repl_classify(Arena *arena, Interner *in,
                                    const char *text, size_t len)
 {
     DiagCtx dc;
@@ -108,7 +108,7 @@ FlReplVerdict sag_fl_repl_classify(Arena *arena, Interner *in,
     /*
      * A THROWAWAY context, not the caller's with its sink swapped:
      * fl_diag_add_file appends, and a prompt that classified forty
-     * lines would fill the caller's file table and trip a SAG_BUG about
+     * lines would fill the caller's file table and trip a YEW_BUG about
      * source files -- a very confusing way to learn that someone typed
      * a lot.
      */
@@ -130,7 +130,7 @@ static void repl_help(Bytebuf *out)
 {
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(REPL_CMDS); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(REPL_CMDS); i++) {
         if (strcmp(REPL_CMDS[i].name, "q") == 0)
             continue;                 /* listed as an alias of :quit */
         bytebuf_printf(out, "  :%-8s %-7s %s\n", REPL_CMDS[i].name,
@@ -183,11 +183,11 @@ static void repl_globals(FlRepl *r, Bytebuf *out)
         }
         if (builtin)
             continue;
-        nm = sag_intern_str(r->in, (u32)k.as.i);
+        nm = yew_intern_str(r->in, (u32)k.as.i);
         if (nm == NULL)
             continue;
         bytebuf_printf(out, "  %s = ", nm);
-        sag_fl_print_result(r->vm, v, out);
+        yew_fl_print_result(r->vm, v, out);
         if (v.t == (u8)FL_NIL)
             put(out, "nil\n");
         shown++;
@@ -207,7 +207,7 @@ static void repl_caps(FlRepl *r, Bytebuf *out)
 
     bytebuf_printf(out, "  origin: %s\n", fl_origin_name(r->vm, &o));
     put(out, "  grants:");
-    for (i = 0U; i < SAG_ARRAY_LEN(BITS); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(BITS); i++) {
         if ((o.caps & BITS[i]) != 0U)
             bytebuf_printf(out, " %s", fl_cap_name(BITS[i]));
     }
@@ -219,7 +219,7 @@ static void repl_caps(FlRepl *r, Bytebuf *out)
 static void repl_disasm(FlRepl *r, Bytebuf *out, const char *name)
 {
     FlValue got = FL_NIL_V;
-    FlValue key = FL_INT_V((i64)sag_intern(r->in, name, strlen(name)));
+    FlValue key = FL_INT_V((i64)yew_intern(r->in, name, strlen(name)));
 
     if (!fl_map_get(r->vm->globals, key, &got) ||
         got.t != (u8)FL_CLOSURE) {
@@ -289,7 +289,7 @@ static void repl_load(FlRepl *r, Bytebuf *out, const char *path)
     bytebuf_printf(out, "  loaded %s\n", path);
 }
 
-bool sag_fl_repl_command(FlRepl *r, const char *line, size_t len,
+bool yew_fl_repl_command(FlRepl *r, const char *line, size_t len,
                          Bytebuf *out, bool *quit)
 {
     char name[64];
@@ -367,7 +367,7 @@ bool sag_fl_repl_command(FlRepl *r, const char *line, size_t len,
 
         bytebuf_printf(out, "  unknown command ':%s'", name);
         fl_suggest_reset(&sg);
-        for (i = 0U; i < SAG_ARRAY_LEN(REPL_CMDS); i++)
+        for (i = 0U; i < YEW_ARRAY_LEN(REPL_CMDS); i++)
             fl_suggest_add(&sg, REPL_CMDS[i].name,
                            (u32)strlen(REPL_CMDS[i].name), FL_SCOPE_LOCAL);
         put(out, "; ");
@@ -387,17 +387,17 @@ bool sag_fl_repl_command(FlRepl *r, const char *line, size_t len,
  *
  * §2's law is that there is exactly one text editor in this program,
  * and it holds here at the layer that means it: the prompt's text is a
- * TextBuf, its caret is a Cursor, its edits go through sag_edit_insert
- * and sag_edit_delete, and its motion is s02's grapheme-aware
- * sag_cursor_*.  There is no second buffer type and no char array
+ * TextBuf, its caret is a Cursor, its edits go through yew_edit_insert
+ * and yew_edit_delete, and its motion is s02's grapheme-aware
+ * yew_cursor_*.  There is no second buffer type and no char array
  * pretending to be a line.
  *
  * What is NOT shared is COMMAND DISPATCH.  §2 says the only obstacle is
- * that sag_cmdline_key takes an `Ed *`; in fact the prompt inserts text
- * by calling sag_ed_invoke(ed, "ed.edit.insert.text", ...) -- the
- * Sprint 19 registry -- and every editing key is a SAG_MODE_E binding
+ * that yew_cmdline_key takes an `Ed *`; in fact the prompt inserts text
+ * by calling yew_ed_invoke(ed, "ed.edit.insert.text", ...) -- the
+ * Sprint 19 registry -- and every editing key is a YEW_MODE_E binding
  * dispatched the same way.  Reuse needs the registry and the registry
- * needs an Ed, which `sag fl` does not have and should not grow one
+ * needs an Ed, which `yew fl` does not have and should not grow one
  * for.  So the key switch below is this prompt's own, and the editing
  * underneath it is the editor's.
  *
@@ -422,13 +422,13 @@ static EditCtx line_ctx(FlLine *l)
 
 static void line_open(FlLine *l)
 {
-    l->tb = sag_textbuf_new();
+    l->tb = yew_textbuf_new();
     (void)memset(&l->cur, 0, sizeof(l->cur));
 }
 
 static void line_close(FlLine *l)
 {
-    sag_textbuf_free(l->tb);
+    yew_textbuf_free(l->tb);
     l->tb = NULL;
 }
 
@@ -436,22 +436,22 @@ static void line_close(FlLine *l)
 static char *line_text(const FlLine *l)
 {
     TextIter it;
-    u64 total = sag_textbuf_len(l->tb);
+    u64 total = yew_textbuf_len(l->tb);
     u64 copied = 0U;
-    char *text = sag_xmalloc((size_t)total + 1U);
+    char *text = yew_xmalloc((size_t)total + 1U);
 
-    if (total != 0U && sag_textiter_begin(&it, l->tb, BYTEOFF(0U))) {
+    if (total != 0U && yew_textiter_begin(&it, l->tb, BYTEOFF(0U))) {
         while (copied < total) {
             const u8 *bytes = NULL;
             size_t n = 0U;
 
-            if (!sag_textiter_chunk(&it, l->tb, &bytes, &n) || n == 0U)
+            if (!yew_textiter_chunk(&it, l->tb, &bytes, &n) || n == 0U)
                 break;
             if ((u64)n > total - copied)
                 n = (size_t)(total - copied);
             (void)memcpy(text + copied, bytes, n);
             copied += (u64)n;
-            if (!sag_textiter_advance(&it, l->tb))
+            if (!yew_textiter_advance(&it, l->tb))
                 break;
         }
     }
@@ -463,7 +463,7 @@ static void line_insert(FlLine *l, const u8 *bytes, size_t n)
 {
     EditCtx ec = line_ctx(l);
 
-    if (n == 0U || !sag_edit_insert(&ec, l->cur.pos, bytes, (u64)n))
+    if (n == 0U || !yew_edit_insert(&ec, l->cur.pos, bytes, (u64)n))
         return;
     l->cur.pos = BYTEOFF(l->cur.pos.v + (u64)n);
     l->cur.anchor = l->cur.pos;
@@ -473,7 +473,7 @@ static void line_delete(FlLine *l, u64 lo, u64 hi)
 {
     EditCtx ec = line_ctx(l);
 
-    if (hi <= lo || !sag_edit_delete(&ec, (Span){lo, hi}))
+    if (hi <= lo || !yew_edit_delete(&ec, (Span){lo, hi}))
         return;
     l->cur.pos = BYTEOFF(lo);
     l->cur.anchor = l->cur.pos;
@@ -487,7 +487,7 @@ static void line_backspace(FlLine *l)
 
     if (l->cur.pos.v == 0U)
         return;
-    sag_cursor_left(l->tb, &probe);
+    yew_cursor_left(l->tb, &probe);
     line_delete(l, probe.pos.v, l->cur.pos.v);
 }
 
@@ -495,15 +495,15 @@ static void line_delete_fwd(FlLine *l)
 {
     Cursor probe = l->cur;
 
-    if (l->cur.pos.v >= sag_textbuf_len(l->tb))
+    if (l->cur.pos.v >= yew_textbuf_len(l->tb))
         return;
-    sag_cursor_right(l->tb, &probe);
+    yew_cursor_right(l->tb, &probe);
     line_delete(l, l->cur.pos.v, probe.pos.v);
 }
 
 static void line_set(FlLine *l, const char *text)
 {
-    line_delete(l, 0U, sag_textbuf_len(l->tb));
+    line_delete(l, 0U, yew_textbuf_len(l->tb));
     line_insert(l, (const u8 *)text, strlen(text));
 }
 
@@ -530,13 +530,13 @@ static u64 word_left_of(FlLine *l, u64 from)
  * prompt shares the terminal with whatever came before it, so a
  * session scrolls like any other program's output and a user can
  * select and copy it.  Invariant 6 still applies -- the guard restores
- * the terminal on every exit path, including sag_bug's.
+ * the terminal on every exit path, including yew_bug's.
  */
 /*
  * Everything the prompt prints goes through here.
  *
  * NO LF->CRLF TRANSLATION: the prompt asks for OPOST|ONLCR to stay on
- * (sag_tty_set_output_processing), so the kernel does it -- and does
+ * (yew_tty_set_output_processing), so the kernel does it -- and does
  * it for `io.print` too, which writes to stdout from inside the VM
  * and cannot be routed through this function.  Translating here as
  * well would emit "\r\r\n".
@@ -565,7 +565,7 @@ static void redraw(const FlLine *l, const char *prompt)
     /* Put the caret where the cursor is, measured in CELLS -- a CJK
      * name is two columns per cluster and a byte count would land the
      * caret inside it. */
-    cells = sag_str_width((const u8 *)text, (size_t)l->cur.pos.v, 1U);
+    cells = yew_str_width((const u8 *)text, (size_t)l->cur.pos.v, 1U);
     (void)fprintf(stdout, "\r\x1b[%dC",
                   (int)strlen(prompt) + (cells < 0 ? 0 : cells));
     (void)fflush(stdout);
@@ -588,7 +588,7 @@ static void repl_sink(void *ctx, FlDiagLevel level, FlSpan sp,
     if (rendered != NULL)
         put(out, rendered);
     else if (msg != NULL)
-        bytebuf_printf(out, "sagitta: %s\n", msg);
+        bytebuf_printf(out, "yew: %s\n", msg);
 }
 
 /*
@@ -611,11 +611,11 @@ static void handle_entry(FlRepl *r, Bytebuf *pending, Bytebuf *out,
     /* A `:`-command only when nothing is pending before it: inside a
      * continuation the bytes are source, and source may legitimately
      * start a line with `:`. */
-    if (sag_fl_repl_command(r, src, len, out, quit)) {
+    if (yew_fl_repl_command(r, src, len, out, quit)) {
         pending->len = 0U;
         return;
     }
-    switch (sag_fl_repl_classify(r->arena, r->in, src, len)) {
+    switch (yew_fl_repl_classify(r->arena, r->in, src, len)) {
     case FL_REPL_CONTINUE:
         return;                       /* keep pending; show `... ` */
     case FL_REPL_ERROR:
@@ -647,7 +647,7 @@ static void handle_entry(FlRepl *r, Bytebuf *pending, Bytebuf *out,
     }
     result = FL_NIL_V;
     if (fl_vm_run(r->vm, fn, &result)) {
-        sag_fl_print_result(r->vm, result, out);
+        yew_fl_print_result(r->vm, result, out);
     } else {
         /* §6: the raise renders with its trace, exactly as a script's
          * uncaught error does -- a prompt that hid the frames would be
@@ -673,19 +673,19 @@ static int repl_main(bool selftest_bug)
     Bytebuf pending;
     Bytebuf out;
     bool quit = false;
-    int rc = SAG_EXIT_OK;
+    int rc = YEW_EXIT_OK;
 
     (void)memset(&tty, 0, sizeof(tty));
-    if (!sag_tty_open(&tty))
-        return SAG_EXIT_IO;
+    if (!yew_tty_open(&tty))
+        return YEW_EXIT_IO;
     (void)memset(&guard, 0, sizeof(guard));
     /* The restore path is installed BEFORE the first byte of output:
-     * invariant 6 applies to `sag fl` exactly as it does to the
+     * invariant 6 applies to `yew fl` exactly as it does to the
      * editor, and a prompt that died owing a cooked terminal is a
      * shell nobody can type into. */
-    if (!sag_tty_guard_start(&guard)) {
-        sag_tty_close(&tty);
-        return SAG_EXIT_IO;
+    if (!yew_tty_guard_start(&guard)) {
+        yew_tty_close(&tty);
+        return YEW_EXIT_IO;
     }
     /*
      * Raw, but NO alternate screen: a REPL session belongs in the
@@ -696,11 +696,11 @@ static int repl_main(bool selftest_bug)
      * what it wants -- for its own output and, more importantly, for
      * whatever `io.print` writes from inside the VM.
      */
-    sag_tty_set_output_processing(true);
-    if (!sag_tty_raw(&tty)) {
-        (void)sag_tty_guard_finish(&guard);
-        sag_tty_close(&tty);
-        return SAG_EXIT_IO;
+    yew_tty_set_output_processing(true);
+    if (!yew_tty_raw(&tty)) {
+        (void)yew_tty_guard_finish(&guard);
+        yew_tty_close(&tty);
+        return YEW_EXIT_IO;
     }
     arena_init(&arena);
     interner_init(&in, &arena);
@@ -718,23 +718,23 @@ static int repl_main(bool selftest_bug)
     vm.root_origin.path_id = 0U;
     vm.root_origin.caps = (u32)FL_CAP_FS_READ | (u32)FL_CAP_FS_WRITE |
                           (u32)FL_CAP_SHELL | (u32)FL_CAP_NET;
-    sag_input_init(&input, &tty.caps);
+    yew_input_init(&input, &tty.caps);
     /* A fourth history file beside the editor's three. */
-    hist = sag_hist_open("fl");
+    hist = yew_hist_open("fl");
     (void)memset(&hcur, 0, sizeof(hcur));
-    sag_hist_cur_reset(&hcur, "");
+    yew_hist_cur_reset(&hcur, "");
     line_open(&line);
     bytebuf_init(&pending);
     bytebuf_init(&out);
 
     (void)fprintf(stdout,
-                  "sagitta %s -- :help for help, :quit to leave\r\n",
-                  SAG_VERSION);
+                  "yew %s -- :help for help, :quit to leave\r\n",
+                  YEW_VERSION);
     if (selftest_bug) {
         /*
-         * Raw mode is on and sag_bug's prehook is installed; break a
+         * Raw mode is on and yew_bug's prehook is installed; break a
          * chunk and let §9's report prove invariant 6 holds through
-         * it.  sag_bug exits, so nothing below this runs.
+         * it.  yew_bug exits, so nothing below this runs.
          *
          * It waits for a keypress first so the pty golden can pin the
          * PROMPT -- which is stable -- while the report, which carries
@@ -767,7 +767,7 @@ static int repl_main(bool selftest_bug)
             bad->ch.code[0] = 0xFEU;         /* no such opcode */
             (void)fl_vm_run(&vm, bad, &v);
         }
-        rc = SAG_EXIT_ERR;
+        rc = YEW_EXIT_ERR;
         goto done;
     }
     redraw(&line, FL_REPL_PROMPT);
@@ -803,23 +803,23 @@ static int repl_main(bool selftest_bug)
         }
         if (got == 0)
             break;                     /* readable and empty: hangup */
-        sag_input_feed(&input, buf, (size_t)got);
-        while (sag_input_next(&input, 0, &key)) {
+        yew_input_feed(&input, buf, (size_t)got);
+        while (yew_input_next(&input, 0, &key)) {
             bool redraw_now = true;
-            bool ctrl = (key.mods & SAG_MOD_CTRL) != 0U;
+            bool ctrl = (key.mods & YEW_MOD_CTRL) != 0U;
 
-            if (key.ev == SAG_KEY_RELEASE)
+            if (key.ev == YEW_KEY_RELEASE)
                 continue;
             out.len = 0U;
             /*
-             * LF SUBMITS TOO.  s04 decodes 0x0D as SAG_KEY_ENTER and
+             * LF SUBMITS TOO.  s04 decodes 0x0D as YEW_KEY_ENTER and
              * 0x0A as Ctrl-J, and only CR reaches a raw terminal from a
              * keyboard -- but a PASTE carries LF, and so does anything
              * typed before raw mode is on, where the tty has already
              * turned CR into LF.  A prompt that accepted only CR
              * silently swallowed both.
              */
-            if (key.code == SAG_KEY_ENTER ||
+            if (key.code == YEW_KEY_ENTER ||
                 (key.code == (u32)'j' && ctrl)) {
                 char *text = line_text(&line);
                 bool opened = pending.len == 0U;
@@ -839,7 +839,7 @@ static int repl_main(bool selftest_bug)
                  * began and ended on this line".
                  */
                 if (opened && pending.len == 0U && text[0] != '\0')
-                    sag_hist_add(hist, text);
+                    yew_hist_add(hist, text);
                 free(text);
                 if (out.len != 0U)
                     write_out(&out);
@@ -850,37 +850,37 @@ static int repl_main(bool selftest_bug)
                 continue;
             }
             switch (key.code) {
-            case SAG_KEY_BACKSPACE:
+            case YEW_KEY_BACKSPACE:
                 line_backspace(&line);
                 break;
-            case SAG_KEY_DELETE:
+            case YEW_KEY_DELETE:
                 line_delete_fwd(&line);
                 break;
-            case SAG_KEY_LEFT:
-                if ((key.mods & SAG_MOD_CTRL) != 0U)
+            case YEW_KEY_LEFT:
+                if ((key.mods & YEW_MOD_CTRL) != 0U)
                     line.cur.pos = BYTEOFF(word_left_of(&line,
                                                         line.cur.pos.v));
                 else
-                    sag_cursor_left(line.tb, &line.cur);
+                    yew_cursor_left(line.tb, &line.cur);
                 line.cur.anchor = line.cur.pos;
                 break;
-            case SAG_KEY_RIGHT:
-                sag_cursor_right(line.tb, &line.cur);
+            case YEW_KEY_RIGHT:
+                yew_cursor_right(line.tb, &line.cur);
                 line.cur.anchor = line.cur.pos;
                 break;
-            case SAG_KEY_HOME:
-                sag_cursor_line_home(line.tb, &line.cur);
+            case YEW_KEY_HOME:
+                yew_cursor_line_home(line.tb, &line.cur);
                 line.cur.anchor = line.cur.pos;
                 break;
-            case SAG_KEY_END:
-                sag_cursor_line_end(line.tb, &line.cur);
+            case YEW_KEY_END:
+                yew_cursor_line_end(line.tb, &line.cur);
                 line.cur.anchor = line.cur.pos;
                 break;
-            case SAG_KEY_UP:
-            case SAG_KEY_DOWN: {
-                const char *found = key.code == SAG_KEY_UP
-                                        ? sag_hist_prev(hist, &hcur)
-                                        : sag_hist_next(hist, &hcur);
+            case YEW_KEY_UP:
+            case YEW_KEY_DOWN: {
+                const char *found = key.code == YEW_KEY_UP
+                                        ? yew_hist_prev(hist, &hcur)
+                                        : yew_hist_next(hist, &hcur);
 
                 if (found != NULL)
                     line_set(&line, found);
@@ -916,9 +916,9 @@ static int repl_main(bool selftest_bug)
                     (void)fprintf(stdout, "\r\n");
                 } else if (key.code == (u32)'l' && ctrl) {
                     (void)fprintf(stdout, "\x1b[2J\x1b[H");
-                } else if (key.code < SAG_KEY_BASE && key.ntext != 0U &&
-                           (key.mods & (SAG_MOD_ALT | SAG_MOD_CTRL |
-                                        SAG_MOD_SUPER)) == 0U) {
+                } else if (key.code < YEW_KEY_BASE && key.ntext != 0U &&
+                           (key.mods & (YEW_MOD_ALT | YEW_MOD_CTRL |
+                                        YEW_MOD_SUPER)) == 0U) {
                     line_insert(&line, key.text, key.ntext);
                 } else {
                     redraw_now = false;
@@ -934,17 +934,17 @@ done:
     bytebuf_free(&out);
     bytebuf_free(&pending);
     line_close(&line);
-    sag_hist_flush(hist);
+    yew_hist_flush(hist);
     /* Both halves: the file-backed list AND the walk cursor, which owns
      * the stem and draft strings it froze on the first Up. */
-    sag_hist_cur_dispose(&hcur);
-    sag_hist_close(hist);
-    sag_input_free(&input);
+    yew_hist_cur_dispose(&hcur);
+    yew_hist_close(hist);
+    yew_input_free(&input);
     fl_vm_free(&vm);
     interner_free(&in);
     arena_free_all(&arena);
-    (void)sag_tty_guard_finish(&guard);
-    sag_tty_close(&tty);
+    (void)yew_tty_guard_finish(&guard);
+    yew_tty_close(&tty);
     return rc;
 }
 
@@ -954,12 +954,12 @@ done:
 /* ---------------------------------------------------------------- */
 
 
-int sag_fl_repl(void)
+int yew_fl_repl(void)
 {
     return repl_main(false);
 }
 
-int sag_fl_repl_selftest_bug(void)
+int yew_fl_repl_selftest_bug(void)
 {
     return repl_main(true);
 }

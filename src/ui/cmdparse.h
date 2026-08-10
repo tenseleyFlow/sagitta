@@ -1,5 +1,5 @@
-#ifndef SAG_UI_CMDPARSE_H
-#define SAG_UI_CMDPARSE_H
+#ifndef YEW_UI_CMDPARSE_H
+#define YEW_UI_CMDPARSE_H
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -38,12 +38,12 @@ typedef struct CmdParsePoint {
     CmdRange range;
 } CmdParsePoint;
 
-bool sag_cmd_parse(Ed *ed, const char *line, size_t len, Arena *a,
+bool yew_cmd_parse(Ed *ed, const char *line, size_t len, Arena *a,
                    CmdParse *out);
-bool sag_cmd_parse_point(Ed *ed, const char *line, size_t len,
+bool yew_cmd_parse_point(Ed *ed, const char *line, size_t len,
                          size_t cursor, Arena *a, CmdParsePoint *out);
 
 /* Converts an already validated inclusive line range to bytes. */
-Span sag_range_span(const TextBuf *tb, const CmdRange *range);
+Span yew_range_span(const TextBuf *tb, const CmdRange *range);
 
 #endif

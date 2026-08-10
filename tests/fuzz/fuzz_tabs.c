@@ -38,7 +38,7 @@ static u32 rng_below(Rng *r, u32 n)
 
 /* The oracle: ids in visible order, plus which one is active. */
 typedef struct Oracle {
-    u32 id[SAG_TAB_MAX];
+    u32 id[YEW_TAB_MAX];
     int n;
     int active;
 } Oracle;
@@ -47,7 +47,7 @@ static void oracle_insert(Oracle *o, int at, u32 id)
 {
     int i;
 
-    if (o->n >= SAG_TAB_MAX)
+    if (o->n >= YEW_TAB_MAX)
         return;
     for (i = o->n; i > at; i--)
         o->id[i] = o->id[i - 1];
@@ -69,13 +69,13 @@ static bool oracle_agrees(const Ed *ed, const Oracle *o, char *why,
 {
     int i;
 
-    if ((int)sag_tab_count((Ed *)ed) != o->n) {
+    if ((int)yew_tab_count((Ed *)ed) != o->n) {
         (void)snprintf(why, cap, "tab count %d, oracle says %d",
-                       (int)sag_tab_count((Ed *)ed), o->n);
+                       (int)yew_tab_count((Ed *)ed), o->n);
         return false;
     }
     for (i = 0; i < o->n; i++) {
-        u32 got = sag_tab_at((Ed *)ed, i)->tab_id;
+        u32 got = yew_tab_at((Ed *)ed, i)->tab_id;
 
         if (got != o->id[i]) {
             (void)snprintf(why, cap,
@@ -93,10 +93,10 @@ static bool oracle_agrees(const Ed *ed, const Oracle *o, char *why,
             (void)snprintf(why, cap, "active index %d out of range", at);
             return false;
         }
-        if (sag_tab_at((Ed *)ed, at)->tab_id != want) {
+        if (yew_tab_at((Ed *)ed, at)->tab_id != want) {
             (void)snprintf(why, cap,
                            "active tab has id %u, oracle says %u",
-                           (unsigned)sag_tab_at((Ed *)ed, at)->tab_id,
+                           (unsigned)yew_tab_at((Ed *)ed, at)->tab_id,
                            (unsigned)want);
             return false;
         }
@@ -121,15 +121,15 @@ static bool run_session(const u8 *data, size_t len, char *why,
         for (i = 0U; i < len; i++)
             rng.s = rng.s * 31U + data[i];
     }
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    sag_ed_init(&ed);
-    if (!sag_ed_open_scratch(&ed)) {
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    yew_ed_init(&ed);
+    if (!yew_ed_open_scratch(&ed)) {
         (void)snprintf(why, why_cap, "cannot open a buffer");
         return false;
     }
     (void)memset(&o, 0, sizeof(o));
-    o.id[0] = sag_tab_at(&ed, 0)->tab_id;
+    o.id[0] = yew_tab_at(&ed, 0)->tab_id;
     o.n = 1;
     o.active = 0;
 
@@ -141,12 +141,12 @@ static bool run_session(const u8 *data, size_t len, char *why,
             char path[64];
             int idx;
 
-            (void)snprintf(path, sizeof(path), "/tmp/sag-fz-%u-%u.txt",
+            (void)snprintf(path, sizeof(path), "/tmp/yew-fz-%u-%u.txt",
                            (unsigned)(rng.s & 0xFFFFU), (unsigned)op);
-            idx = sag_tab_open(&ed, path);
+            idx = yew_tab_open(&ed, path);
             if (idx < 0)
                 break; /* refused at the cap; the oracle does not move */
-            oracle_insert(&o, idx, sag_tab_at(&ed, idx)->tab_id);
+            oracle_insert(&o, idx, yew_tab_at(&ed, idx)->tab_id);
             break;
         }
         case 2: { /* close */
@@ -171,7 +171,7 @@ static bool run_session(const u8 *data, size_t len, char *why,
                     survivor = o.id[at - 1];
                 else
                     survivor = 0U;
-                if (!sag_tab_close(&ed, at)) {
+                if (!yew_tab_close(&ed, at)) {
                     (void)snprintf(why, why_cap, "close(%d) refused", at);
                     goto done;
                 }
@@ -195,7 +195,7 @@ static bool run_session(const u8 *data, size_t len, char *why,
         case 3: { /* switch */
             int at = (int)rng_below(&rng, (u32)o.n);
 
-            sag_tab_switch(&ed, at);
+            yew_tab_switch(&ed, at);
             o.active = at;
             break;
         }
@@ -209,13 +209,13 @@ static bool run_session(const u8 *data, size_t len, char *why,
             to = (int)rng_below(&rng, (u32)o.n);
             if (from == to)
                 break;
-            sag_tab_reorder(&ed, from, to);
+            yew_tab_reorder(&ed, from, to);
             {
                 u32 moved = o.id[from];
 
                 oracle_remove(&o, from);
                 oracle_insert(&o, to, moved);
-                o.active = sag_tab_shifted_index(o.active, from, to);
+                o.active = yew_tab_shifted_index(o.active, from, to);
             }
             break;
         }
@@ -225,11 +225,11 @@ static bool run_session(const u8 *data, size_t len, char *why,
     }
     ok = true;
 done:
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
     return ok;
 }
 
 int main(int argc, char **argv)
 {
-    return sag_fuzz_main(argc, argv, "fuzz_tabs", NULL, run_session);
+    return yew_fuzz_main(argc, argv, "fuzz_tabs", NULL, run_session);
 }

@@ -9,7 +9,7 @@
  * byte-indexed slice that splits a cluster produces a string that still
  * "works" and renders as a broken accent three screens later, with
  * nothing in between to blame.  Every byte offset that crosses this
- * boundary is validated against sag_gb_prev_bytes and refused with kind
+ * boundary is validated against yew_gb_prev_bytes and refused with kind
  * "index" naming cluster splitting, so the message teaches the fix.
  * The honest escape hatch for byte-oriented work is str.bytes and
  * str.from_bytes, which do not pretend to be about text.
@@ -77,7 +77,7 @@ static size_t cluster_off(const FlStr *s, i64 i, size_t count, bool *ok)
     if (want < 0 || want > (i64)count)
         return 0U;
     for (k = 0; k < want; k++)
-        at = sag_gb_next_bytes((const u8 *)s->b, s->len, at);
+        at = yew_gb_next_bytes((const u8 *)s->b, s->len, at);
     *ok = true;
     return at;
 }
@@ -85,7 +85,7 @@ static size_t cluster_off(const FlStr *s, i64 i, size_t count, bool *ok)
 /*
  * True when `off` sits ON a cluster boundary.
  *
- * sag_gb_prev_bytes returns the boundary STRICTLY BEFORE `off`, not the
+ * yew_gb_prev_bytes returns the boundary STRICTLY BEFORE `off`, not the
  * one at it -- so comparing its result against `off` reports every
  * valid interior boundary as a split, which is the opposite of useful.
  * Stepping forward from that boundary lands exactly on `off` when `off`
@@ -103,7 +103,7 @@ static bool on_boundary(const FlStr *s, size_t off)
     /*
      * A CODEPOINT boundary FIRST.
      *
-     * sag_gb_prev_bytes assumes its argument starts a character.  Handed
+     * yew_gb_prev_bytes assumes its argument starts a character.  Handed
      * an offset in the middle of a UTF-8 sequence it walks back from the
      * wrong place and answers with an offset that is not a boundary at
      * all -- for a ZWJ family, four of the twenty-four interior offsets
@@ -112,10 +112,10 @@ static bool on_boundary(const FlStr *s, size_t off)
      * glyph three screens later with nothing in between to blame, which
      * is the exact failure invariant 2 and DoD 4 exist to prevent.
      */
-    if (!sag_utf8_is_boundary((const u8 *)s->b, s->len, off))
+    if (!yew_utf8_is_boundary((const u8 *)s->b, s->len, off))
         return false;
-    prev = sag_gb_prev_bytes((const u8 *)s->b, s->len, off);
-    return sag_gb_next_bytes((const u8 *)s->b, s->len, prev) == off;
+    prev = yew_gb_prev_bytes((const u8 *)s->b, s->len, off);
+    return yew_gb_next_bytes((const u8 *)s->b, s->len, prev) == off;
 }
 
 static bool byte_off(FlVm *vm, const FlStr *s, i64 i, size_t *out,
@@ -143,7 +143,7 @@ static bool is_ws(u32 cp)
         cp == 0x0DU || cp == 0x20U || cp == 0x85U ||
         cp == 0x2028U || cp == 0x2029U)
         return true;
-    return (sag_cat_rec(cp) & (u16)SAG_CAT_ZS) != 0U;
+    return (yew_cat_rec(cp) & (u16)YEW_CAT_ZS) != 0U;
 }
 
 /* ---------------------------------------------------------------- */
@@ -157,7 +157,7 @@ static bool s_len(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     (void)n;
     if (!fl_arg_str(vm, a, 0U, &s))
         return false;
-    *out = FL_INT_V((i64)sag_gb_count_bytes((const u8 *)s->b, s->len));
+    *out = FL_INT_V((i64)yew_gb_count_bytes((const u8 *)s->b, s->len));
     return true;
 }
 
@@ -195,12 +195,12 @@ static bool s_at(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     (void)n;
     if (!fl_arg_str(vm, a, 0U, &s) || !fl_arg_int(vm, a, 1U, &i))
         return false;
-    count = sag_gb_count_bytes((const u8 *)s->b, s->len);
+    count = yew_gb_count_bytes((const u8 *)s->b, s->len);
     lo = cluster_off(s, i, count, &ok);
     if (!ok || lo == (size_t)s->len)
         return fl_raise(vm, "index", "str.at: index %lld out of range",
                         (long long)i);
-    hi = sag_gb_next_bytes((const u8 *)s->b, s->len, lo);
+    hi = yew_gb_next_bytes((const u8 *)s->b, s->len, lo);
     *out = slice_val(vm, s, lo, hi);
     return true;
 }
@@ -217,7 +217,7 @@ static bool s_slice(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 
     if (!fl_arg_str(vm, a, 0U, &s) || !fl_arg_int(vm, a, 1U, &lo))
         return false;
-    count = sag_gb_count_bytes((const u8 *)s->b, s->len);
+    count = yew_gb_count_bytes((const u8 *)s->b, s->len);
     hi = (i64)count;
     if (n >= 3U && !fl_arg_int(vm, a, 2U, &hi))
         return false;
@@ -288,7 +288,7 @@ static bool s_find(FlVm *vm, FlValue *a, u32 n, FlValue *out)
         return false;
     if (n >= 3U && !fl_arg_int(vm, a, 2U, &from))
         return false;
-    count = sag_gb_count_bytes((const u8 *)s->b, s->len);
+    count = yew_gb_count_bytes((const u8 *)s->b, s->len);
     start = cluster_off(s, from, count, &ok);
     if (!ok)
         return fl_raise(vm, "index", "str.find: index %lld out of range",
@@ -305,7 +305,7 @@ static bool s_find(FlVm *vm, FlValue *a, u32 n, FlValue *out)
         i64 ci = 0;
 
         while (off < (size_t)at) {
-            off = sag_gb_next_bytes((const u8 *)s->b, s->len, off);
+            off = yew_gb_next_bytes((const u8 *)s->b, s->len, off);
             ci++;
         }
         *out = FL_INT_V(ci);
@@ -359,7 +359,7 @@ static bool s_rfind(FlVm *vm, FlValue *a, u32 n, FlValue *out)
         i64 ci = 0;
 
         while (off < (size_t)best) {
-            off = sag_gb_next_bytes((const u8 *)s->b, s->len, off);
+            off = yew_gb_next_bytes((const u8 *)s->b, s->len, off);
             ci++;
         }
         *out = FL_INT_V(ci);
@@ -410,7 +410,7 @@ static bool s_ends_with(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 /* Case and trimming                                                */
 /* ---------------------------------------------------------------- */
 
-static bool case_map(FlVm *vm, FlValue *a, FlValue *out, SagCaseKind kind)
+static bool case_map(FlVm *vm, FlValue *a, FlValue *out, YewCaseKind kind)
 {
     const FlStr *s;
     Bytebuf bb;
@@ -421,16 +421,16 @@ static bool case_map(FlVm *vm, FlValue *a, FlValue *out, SagCaseKind kind)
     bytebuf_init(&bb);
     while (at < (size_t)s->len) {
         u32 cp;
-        size_t adv = sag_utf8_decode((const u8 *)s->b + at, s->len - at, &cp);
-        u8 buf[SAG_CASE_MAX_UTF8];
+        size_t adv = yew_utf8_decode((const u8 *)s->b + at, s->len - at, &cp);
+        u8 buf[YEW_CASE_MAX_UTF8];
         size_t got;
 
         if (adv == 0U)
             adv = 1U;
-        /* sag_case_map_utf8 returns the input unchanged for identity
+        /* yew_case_map_utf8 returns the input unchanged for identity
          * mappings, invalid-byte escapes included -- which is what
          * makes DoD 4's round-trip hold without a special case here. */
-        got = sag_case_map_utf8(cp, kind, buf);
+        got = yew_case_map_utf8(cp, kind, buf);
         bytebuf_append(&bb, (const char *)buf, got);
         at += adv;
     }
@@ -441,13 +441,13 @@ static bool case_map(FlVm *vm, FlValue *a, FlValue *out, SagCaseKind kind)
 static bool s_upper(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     (void)n;
-    return case_map(vm, a, out, SAG_CASE_UPPER);
+    return case_map(vm, a, out, YEW_CASE_UPPER);
 }
 
 static bool s_lower(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     (void)n;
-    return case_map(vm, a, out, SAG_CASE_LOWER);
+    return case_map(vm, a, out, YEW_CASE_LOWER);
 }
 
 static bool trim_impl(FlVm *vm, FlValue *a, FlValue *out, bool start,
@@ -463,7 +463,7 @@ static bool trim_impl(FlVm *vm, FlValue *a, FlValue *out, bool start,
     if (start) {
         while (lo < hi) {
             u32 cp;
-            size_t adv = sag_utf8_decode((const u8 *)s->b + lo, hi - lo, &cp);
+            size_t adv = yew_utf8_decode((const u8 *)s->b + lo, hi - lo, &cp);
 
             if (adv == 0U || !is_ws(cp))
                 break;
@@ -472,12 +472,12 @@ static bool trim_impl(FlVm *vm, FlValue *a, FlValue *out, bool start,
     }
     if (end) {
         while (hi > lo) {
-            size_t prev = sag_gb_prev_bytes((const u8 *)s->b, s->len, hi);
+            size_t prev = yew_gb_prev_bytes((const u8 *)s->b, s->len, hi);
             u32 cp;
 
             if (prev >= hi)
                 break;
-            (void)sag_utf8_decode((const u8 *)s->b + prev, hi - prev, &cp);
+            (void)yew_utf8_decode((const u8 *)s->b + prev, hi - prev, &cp);
             if (!is_ws(cp))
                 break;
             hi = prev;
@@ -530,7 +530,7 @@ static bool s_split(FlVm *vm, FlValue *a, u32 n, FlValue *out)
          * whole module is cluster-first and splitting a string into
          * broken halves of an emoji would be the one place it was not. */
         while (at < (size_t)s->len) {
-            size_t nxt = sag_gb_next_bytes((const u8 *)s->b, s->len, at);
+            size_t nxt = yew_gb_next_bytes((const u8 *)s->b, s->len, at);
 
             if (limit > 0 && (i64)r->n == limit - 1) {
                 (void)fl_list_push(vm, r, slice_val(vm, s, at, s->len));
@@ -724,7 +724,7 @@ static bool s_width(FlVm *vm, FlValue *a, u32 n, FlValue *out)
         return false;
     if (tabw < 0 || tabw > 256)
         return fl_raise(vm, "type", "str.width: tabw out of range");
-    *out = FL_INT_V((i64)sag_str_width((const u8 *)s->b, s->len, (u32)tabw));
+    *out = FL_INT_V((i64)yew_str_width((const u8 *)s->b, s->len, (u32)tabw));
     return true;
 }
 
@@ -743,8 +743,8 @@ static bool pad(FlVm *vm, FlValue *a, u32 n, FlValue *out, bool at_start)
         return false;
     /* CELLS, not clusters and not bytes, so padding lines up in a
      * terminal where a CJK cluster occupies two columns. */
-    have = sag_str_width((const u8 *)s->b, s->len, 8U);
-    fw = fill == NULL ? 1 : sag_str_width((const u8 *)fill->b, fill->len, 8U);
+    have = yew_str_width((const u8 *)s->b, s->len, 8U);
+    fw = fill == NULL ? 1 : yew_str_width((const u8 *)fill->b, fill->len, 8U);
     if (fw <= 0 || want <= (i64)have) {
         *out = a[0];
         return true;
@@ -971,5 +971,5 @@ static const FlNativeDef STR_DEFS[] = {
 };
 
 const FlModuleDef fl_mod_str = {
-    "str", STR_DEFS, (u32)SAG_ARRAY_LEN(STR_DEFS), NULL, 0U
+    "str", STR_DEFS, (u32)YEW_ARRAY_LEN(STR_DEFS), NULL, 0U
 };

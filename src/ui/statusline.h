@@ -1,5 +1,5 @@
-#ifndef SAG_UI_STATUSLINE_H
-#define SAG_UI_STATUSLINE_H
+#ifndef YEW_UI_STATUSLINE_H
+#define YEW_UI_STATUSLINE_H
 
 #include <stddef.h>
 
@@ -10,13 +10,13 @@
 typedef struct Ed Ed;
 typedef struct Win Win;
 
-typedef struct SagUiStyle {
-    SagColor chip_fg;
-    SagColor chip_bg;
-    SagColor row_fg;
-    SagColor row_bg;
+typedef struct YewUiStyle {
+    YewColor chip_fg;
+    YewColor chip_bg;
+    YewColor row_fg;
+    YewColor row_bg;
     u16 attrs;
-} SagUiStyle;
+} YewUiStyle;
 
 typedef struct StatuslineText {
     char chip[16];
@@ -33,10 +33,10 @@ typedef struct StatuslineText {
     size_t warn_len;
 } StatuslineText;
 
-SagUiStyle sag_statusline_mode_style(Mode mode);
-void sag_statusline_build(const Ed *ed, Win *w, u16 cols,
+YewUiStyle yew_statusline_mode_style(Mode mode);
+void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
                           StatuslineText *out);
-void sag_statusline_text_free(StatuslineText *text);
-void sag_statusline_draw(Ed *ed, Win *w);
+void yew_statusline_text_free(StatuslineText *text);
+void yew_statusline_draw(Ed *ed, Win *w);
 
 #endif

@@ -7,21 +7,21 @@ static void assert_round_trip(const u8 *input, size_t len)
     size_t pos = 0;
 
     while (pos < len) {
-        u8 encoded[SAG_UTF8_MAX];
+        u8 encoded[YEW_UTF8_MAX];
         u32 cp;
-        size_t consumed = sag_utf8_decode(input + pos, len - pos, &cp);
-        size_t produced = sag_utf8_encode(cp, encoded);
+        size_t consumed = yew_utf8_decode(input + pos, len - pos, &cp);
+        size_t produced = yew_utf8_encode(cp, encoded);
 
         if (consumed == 0 || consumed > len - pos ||
             produced > sizeof(encoded) || produced != consumed) {
-            SAG_ASSERT(false);
+            YEW_ASSERT(false);
             return;
         }
-        SAG_ASSERT_EQ_U64(consumed, produced);
-        SAG_ASSERT_EQ_MEM(input + pos, encoded, produced);
+        YEW_ASSERT_EQ_U64(consumed, produced);
+        YEW_ASSERT_EQ_MEM(input + pos, encoded, produced);
         pos += consumed;
     }
-    SAG_ASSERT_EQ_U64(pos, len);
+    YEW_ASSERT_EQ_U64(pos, len);
 }
 
 static void assert_decodes(const u8 *input, size_t len, u32 expected,
@@ -29,8 +29,8 @@ static void assert_decodes(const u8 *input, size_t len, u32 expected,
 {
     u32 actual;
 
-    SAG_ASSERT_EQ_U64(sag_utf8_decode(input, len, &actual), consumed);
-    SAG_ASSERT_EQ_U64(actual, expected);
+    YEW_ASSERT_EQ_U64(yew_utf8_decode(input, len, &actual), consumed);
+    YEW_ASSERT_EQ_U64(actual, expected);
 }
 
 void test_utf8_valid_decode(void)
@@ -53,7 +53,7 @@ void test_utf8_valid_decode(void)
     };
     size_t i;
 
-    for (i = 0; i < SAG_ARRAY_LEN(cases); i++) {
+    for (i = 0; i < YEW_ARRAY_LEN(cases); i++) {
         assert_decodes(cases[i].bytes, cases[i].len, cases[i].cp,
                        cases[i].len);
         assert_round_trip(cases[i].bytes, cases[i].len);
@@ -78,13 +78,13 @@ void test_utf8_reject_classes(void)
     };
     size_t i;
 
-    for (i = 0; i < SAG_ARRAY_LEN(cases); i++) {
+    for (i = 0; i < YEW_ARRAY_LEN(cases); i++) {
         u32 cp;
 
-        SAG_ASSERT_EQ_U64(sag_utf8_decode(cases[i].bytes, cases[i].len,
+        YEW_ASSERT_EQ_U64(yew_utf8_decode(cases[i].bytes, cases[i].len,
                                           &cp),
                           1);
-        SAG_ASSERT_EQ_U64(cp, sag_utf8_escape_of(cases[i].bytes[0]));
+        YEW_ASSERT_EQ_U64(cp, yew_utf8_escape_of(cases[i].bytes[0]));
         assert_round_trip(cases[i].bytes, cases[i].len);
     }
 }
@@ -111,58 +111,58 @@ void test_utf8_incremental_valid(void)
     static const u8 bytes[] = {0x24, 0xC2, 0xA2, 0xE2, 0x82,
                                0xAC, 0xF0, 0x90, 0x8D, 0x88};
     static const u32 expected[] = {0x24, 0xA2, 0x20AC, 0x10348};
-    SagU8Dec dec;
+    YewU8Dec dec;
     size_t i;
     size_t out_pos = 0;
 
-    sag_utf8_dec_init(&dec);
+    yew_utf8_dec_init(&dec);
     for (i = 0; i < sizeof(bytes); i++) {
-        u8 n = sag_utf8_push(&dec, bytes[i]);
+        u8 n = yew_utf8_push(&dec, bytes[i]);
 
-        SAG_ASSERT(n <= 1);
+        YEW_ASSERT(n <= 1);
         if (n != 0) {
-            SAG_ASSERT_EQ_U64(dec.out[0], expected[out_pos]);
+            YEW_ASSERT_EQ_U64(dec.out[0], expected[out_pos]);
             out_pos++;
         }
     }
-    SAG_ASSERT_EQ_U64(sag_utf8_finish(&dec), 0);
-    SAG_ASSERT_EQ_U64(out_pos, SAG_ARRAY_LEN(expected));
+    YEW_ASSERT_EQ_U64(yew_utf8_finish(&dec), 0);
+    YEW_ASSERT_EQ_U64(out_pos, YEW_ARRAY_LEN(expected));
 }
 
 void test_utf8_incremental_recovery(void)
 {
-    SagU8Dec dec;
+    YewU8Dec dec;
 
-    sag_utf8_dec_init(&dec);
-    SAG_ASSERT_EQ_U64(sag_utf8_push(&dec, 0xE1), 0);
-    SAG_ASSERT_EQ_U64(sag_utf8_push(&dec, 0x41), 2);
-    SAG_ASSERT_EQ_U64(dec.out[0], sag_utf8_escape_of(0xE1));
-    SAG_ASSERT_EQ_U64(dec.out[1], 0x41);
+    yew_utf8_dec_init(&dec);
+    YEW_ASSERT_EQ_U64(yew_utf8_push(&dec, 0xE1), 0);
+    YEW_ASSERT_EQ_U64(yew_utf8_push(&dec, 0x41), 2);
+    YEW_ASSERT_EQ_U64(dec.out[0], yew_utf8_escape_of(0xE1));
+    YEW_ASSERT_EQ_U64(dec.out[1], 0x41);
 
-    sag_utf8_dec_init(&dec);
-    SAG_ASSERT_EQ_U64(sag_utf8_push(&dec, 0xF0), 0);
-    SAG_ASSERT_EQ_U64(sag_utf8_push(&dec, 0x90), 0);
-    SAG_ASSERT_EQ_U64(sag_utf8_push(&dec, 0x80), 0);
-    SAG_ASSERT_EQ_U64(sag_utf8_push(&dec, 0x41), 4);
-    SAG_ASSERT_EQ_U64(dec.out[0], sag_utf8_escape_of(0xF0));
-    SAG_ASSERT_EQ_U64(dec.out[1], sag_utf8_escape_of(0x90));
-    SAG_ASSERT_EQ_U64(dec.out[2], sag_utf8_escape_of(0x80));
-    SAG_ASSERT_EQ_U64(dec.out[3], 0x41);
+    yew_utf8_dec_init(&dec);
+    YEW_ASSERT_EQ_U64(yew_utf8_push(&dec, 0xF0), 0);
+    YEW_ASSERT_EQ_U64(yew_utf8_push(&dec, 0x90), 0);
+    YEW_ASSERT_EQ_U64(yew_utf8_push(&dec, 0x80), 0);
+    YEW_ASSERT_EQ_U64(yew_utf8_push(&dec, 0x41), 4);
+    YEW_ASSERT_EQ_U64(dec.out[0], yew_utf8_escape_of(0xF0));
+    YEW_ASSERT_EQ_U64(dec.out[1], yew_utf8_escape_of(0x90));
+    YEW_ASSERT_EQ_U64(dec.out[2], yew_utf8_escape_of(0x80));
+    YEW_ASSERT_EQ_U64(dec.out[3], 0x41);
 }
 
 void test_utf8_incremental_finish(void)
 {
     static const u8 bytes[] = {0xF1, 0x80, 0x80};
-    SagU8Dec dec;
+    YewU8Dec dec;
     size_t i;
 
-    sag_utf8_dec_init(&dec);
+    yew_utf8_dec_init(&dec);
     for (i = 0; i < sizeof(bytes); i++)
-        SAG_ASSERT_EQ_U64(sag_utf8_push(&dec, bytes[i]), 0);
-    SAG_ASSERT_EQ_U64(sag_utf8_finish(&dec), sizeof(bytes));
+        YEW_ASSERT_EQ_U64(yew_utf8_push(&dec, bytes[i]), 0);
+    YEW_ASSERT_EQ_U64(yew_utf8_finish(&dec), sizeof(bytes));
     for (i = 0; i < sizeof(bytes); i++)
-        SAG_ASSERT_EQ_U64(dec.out[i], sag_utf8_escape_of(bytes[i]));
-    SAG_ASSERT_EQ_U64(sag_utf8_finish(&dec), 0);
+        YEW_ASSERT_EQ_U64(dec.out[i], yew_utf8_escape_of(bytes[i]));
+    YEW_ASSERT_EQ_U64(yew_utf8_finish(&dec), 0);
 }
 
 void test_utf8_decode_prev(void)
@@ -174,18 +174,18 @@ void test_utf8_decode_prev(void)
     static const u32 cps[] = {0x41, 0xA2, 0x20AC, 0x10348, 0xDCFF};
     size_t i;
 
-    for (i = 0; i < SAG_ARRAY_LEN(ends); i++) {
+    for (i = 0; i < YEW_ARRAY_LEN(ends); i++) {
         u32 cp;
 
-        SAG_ASSERT_EQ_U64(sag_utf8_decode_prev(bytes, 1, ends[i], &cp),
+        YEW_ASSERT_EQ_U64(yew_utf8_decode_prev(bytes, 1, ends[i], &cp),
                           lens[i]);
-        SAG_ASSERT_EQ_U64(cp, cps[i]);
+        YEW_ASSERT_EQ_U64(cp, cps[i]);
     }
     {
         u32 cp = 1;
 
-        SAG_ASSERT_EQ_U64(sag_utf8_decode_prev(bytes, 1, 1, &cp), 0);
-        SAG_ASSERT_EQ_U64(cp, 0);
+        YEW_ASSERT_EQ_U64(yew_utf8_decode_prev(bytes, 1, 1, &cp), 0);
+        YEW_ASSERT_EQ_U64(cp, 0);
     }
 }
 
@@ -195,21 +195,21 @@ void test_utf8_encode_edges(void)
                               0xD7FF, 0xE000, 0xFFFF, 0x10000, 0x10FFFF};
     size_t i;
 
-    for (i = 0; i < SAG_ARRAY_LEN(cps); i++) {
-        u8 bytes[SAG_UTF8_MAX];
+    for (i = 0; i < YEW_ARRAY_LEN(cps); i++) {
+        u8 bytes[YEW_UTF8_MAX];
         u32 decoded;
-        size_t n = sag_utf8_encode(cps[i], bytes);
+        size_t n = yew_utf8_encode(cps[i], bytes);
 
-        SAG_ASSERT(n != 0);
-        SAG_ASSERT_EQ_U64(sag_utf8_len(cps[i]), n);
-        SAG_ASSERT_EQ_U64(sag_utf8_decode(bytes, n, &decoded), n);
-        SAG_ASSERT_EQ_U64(decoded, cps[i]);
+        YEW_ASSERT(n != 0);
+        YEW_ASSERT_EQ_U64(yew_utf8_len(cps[i]), n);
+        YEW_ASSERT_EQ_U64(yew_utf8_decode(bytes, n, &decoded), n);
+        YEW_ASSERT_EQ_U64(decoded, cps[i]);
     }
     {
-        u8 bytes[SAG_UTF8_MAX];
+        u8 bytes[YEW_UTF8_MAX];
 
-        SAG_ASSERT_EQ_U64(sag_utf8_encode(0x110000, bytes), 0);
-        SAG_ASSERT_EQ_U64(sag_utf8_len(0xFFFFFFFF), 0);
+        YEW_ASSERT_EQ_U64(yew_utf8_encode(0x110000, bytes), 0);
+        YEW_ASSERT_EQ_U64(yew_utf8_len(0xFFFFFFFF), 0);
     }
 }
 
@@ -217,13 +217,13 @@ void test_utf8_escape_helpers(void)
 {
     unsigned int b;
 
-    SAG_ASSERT(!sag_utf8_is_escape(SAG_CP_ESC_LO - 1));
-    SAG_ASSERT(!sag_utf8_is_escape(SAG_CP_ESC_HI + 1));
+    YEW_ASSERT(!yew_utf8_is_escape(YEW_CP_ESC_LO - 1));
+    YEW_ASSERT(!yew_utf8_is_escape(YEW_CP_ESC_HI + 1));
     for (b = 0x80; b <= 0xFF; b++) {
-        u32 cp = sag_utf8_escape_of((u8)b);
+        u32 cp = yew_utf8_escape_of((u8)b);
 
-        SAG_ASSERT(sag_utf8_is_escape(cp));
-        SAG_ASSERT_EQ_U64(sag_utf8_escape_byte(cp), b);
+        YEW_ASSERT(yew_utf8_is_escape(cp));
+        YEW_ASSERT_EQ_U64(yew_utf8_escape_byte(cp), b);
     }
 }
 
@@ -233,11 +233,11 @@ void test_utf8_validate(void)
     static const u8 invalid[] = {0x41, 0xE1, 0x41};
     static const u8 truncated[] = {0x41, 0xE1, 0x80};
 
-    SAG_ASSERT_EQ_U64(sag_utf8_validate(NULL, 0), 0);
-    SAG_ASSERT_EQ_U64(sag_utf8_validate(valid, sizeof(valid)),
+    YEW_ASSERT_EQ_U64(yew_utf8_validate(NULL, 0), 0);
+    YEW_ASSERT_EQ_U64(yew_utf8_validate(valid, sizeof(valid)),
                       sizeof(valid));
-    SAG_ASSERT_EQ_U64(sag_utf8_validate(invalid, sizeof(invalid)), 1);
-    SAG_ASSERT_EQ_U64(sag_utf8_validate(truncated, sizeof(truncated)), 1);
+    YEW_ASSERT_EQ_U64(yew_utf8_validate(invalid, sizeof(invalid)), 1);
+    YEW_ASSERT_EQ_U64(yew_utf8_validate(truncated, sizeof(truncated)), 1);
 }
 
 void test_utf8_boundaries(void)
@@ -247,10 +247,10 @@ void test_utf8_boundaries(void)
                                     true, true, true};
     size_t i;
 
-    for (i = 0; i < SAG_ARRAY_LEN(expected); i++)
-        SAG_ASSERT(sag_utf8_is_boundary(bytes, sizeof(bytes), i) ==
+    for (i = 0; i < YEW_ARRAY_LEN(expected); i++)
+        YEW_ASSERT(yew_utf8_is_boundary(bytes, sizeof(bytes), i) ==
                    expected[i]);
-    SAG_ASSERT(!sag_utf8_is_boundary(bytes, sizeof(bytes),
+    YEW_ASSERT(!yew_utf8_is_boundary(bytes, sizeof(bytes),
                                      sizeof(bytes) + 1));
 }
 
@@ -259,17 +259,17 @@ void test_utf8_exhaustive_scalars(void)
     u32 cp;
 
     for (cp = 0; cp <= 0x10FFFF; cp++) {
-        u8 bytes[SAG_UTF8_MAX];
+        u8 bytes[YEW_UTF8_MAX];
         u32 decoded;
         size_t n;
 
         if (cp >= 0xD800 && cp <= 0xDFFF)
             continue;
-        n = sag_utf8_encode(cp, bytes);
-        SAG_ASSERT(n != 0);
-        SAG_ASSERT_EQ_U64(sag_utf8_len(cp), n);
-        SAG_ASSERT_EQ_U64(sag_utf8_decode(bytes, n, &decoded), n);
-        SAG_ASSERT_EQ_U64(decoded, cp);
+        n = yew_utf8_encode(cp, bytes);
+        YEW_ASSERT(n != 0);
+        YEW_ASSERT_EQ_U64(yew_utf8_len(cp), n);
+        YEW_ASSERT_EQ_U64(yew_utf8_decode(bytes, n, &decoded), n);
+        YEW_ASSERT_EQ_U64(decoded, cp);
     }
 }
 
@@ -278,14 +278,14 @@ void test_utf8_exhaustive_surrogates(void)
     u32 cp;
 
     for (cp = 0xD800; cp <= 0xDFFF; cp++) {
-        u8 bytes[SAG_UTF8_MAX];
-        size_t n = sag_utf8_encode(cp, bytes);
+        u8 bytes[YEW_UTF8_MAX];
+        size_t n = yew_utf8_encode(cp, bytes);
 
-        if (sag_utf8_is_escape(cp)) {
-            SAG_ASSERT_EQ_U64(n, 1);
-            SAG_ASSERT_EQ_U64(bytes[0], cp - 0xDC00);
+        if (yew_utf8_is_escape(cp)) {
+            YEW_ASSERT_EQ_U64(n, 1);
+            YEW_ASSERT_EQ_U64(bytes[0], cp - 0xDC00);
         } else {
-            SAG_ASSERT_EQ_U64(n, 0);
+            YEW_ASSERT_EQ_U64(n, 0);
         }
     }
 }

@@ -68,22 +68,22 @@ static bool buffer_equals(const TextBuf *tb, const u8 *want, size_t want_len)
     TextIter it;
     size_t off = 0U;
 
-    if (sag_textbuf_len(tb) != (u64)want_len)
+    if (yew_textbuf_len(tb) != (u64)want_len)
         return false;
     if (want_len == 0U)
         return true;
-    if (!sag_textiter_begin(&it, tb, BYTEOFF(0U)))
+    if (!yew_textiter_begin(&it, tb, BYTEOFF(0U)))
         return false;
     do {
         const u8 *chunk;
         u64 chunk_len;
 
-        if (!sag_textiter_chunk(&it, tb, &chunk, &chunk_len) ||
+        if (!yew_textiter_chunk(&it, tb, &chunk, &chunk_len) ||
             chunk_len > SIZE_MAX || off + (size_t)chunk_len > want_len ||
             memcmp(chunk, want + off, (size_t)chunk_len) != 0)
             return false;
         off += (size_t)chunk_len;
-    } while (sag_textiter_advance(&it, tb));
+    } while (yew_textiter_advance(&it, tb));
     return off == want_len;
 }
 
@@ -105,7 +105,7 @@ static int save_case(const char *path, const char *post_path)
     FileMeta meta;
     TextBuf *tb = NULL;
     Journal *journal = NULL;
-    SagSaveErr save_err;
+    YewSaveErr save_err;
     u8 *old_bytes = NULL;
     u8 *post_bytes = NULL;
     size_t old_len = 0U;
@@ -116,20 +116,20 @@ static int save_case(const char *path, const char *post_path)
     if (!slurp(path, &old_bytes, &old_len) ||
         !slurp(post_path, &post_bytes, &post_len))
         goto io_fail;
-    if (sag_file_load(path, &tb, &meta) != SAG_LOAD_OK)
+    if (yew_file_load(path, &tb, &meta) != YEW_LOAD_OK)
         goto io_fail;
-    journal = sag_journal_open(meta.realpath, &meta);
+    journal = yew_journal_open(meta.realpath, &meta);
     if (journal == NULL)
         goto io_fail_loaded;
-    sag_journal_record(journal, SAG_JOURNAL_DEL, 0U, old_bytes, old_len);
-    sag_textbuf_delete(tb, (Span){0U, sag_textbuf_len(tb)});
-    sag_journal_record(journal, SAG_JOURNAL_INS, 0U, post_bytes, post_len);
-    sag_textbuf_insert(tb, BYTEOFF(0U), post_bytes, post_len);
-    sag_journal_sync(journal);
-    if (!sag_journal_ok(journal))
+    yew_journal_record(journal, YEW_JOURNAL_DEL, 0U, old_bytes, old_len);
+    yew_textbuf_delete(tb, (Span){0U, yew_textbuf_len(tb)});
+    yew_journal_record(journal, YEW_JOURNAL_INS, 0U, post_bytes, post_len);
+    yew_textbuf_insert(tb, BYTEOFF(0U), post_bytes, post_len);
+    yew_journal_sync(journal);
+    if (!yew_journal_ok(journal))
         goto io_fail_loaded;
 
-    ready_env = getenv("SAG_TORTURE_READY_FD");
+    ready_env = getenv("YEW_TORTURE_READY_FD");
     if (ready_env != NULL)
         ready_fd = (int)strtol(ready_env, NULL, 10);
     if (ready_fd >= 0) {
@@ -142,24 +142,24 @@ static int save_case(const char *path, const char *post_path)
         if (close(ready_fd) != 0 || written != 1)
             goto io_fail_loaded;
     }
-    if (setenv("SAG_FAULT_ENABLE", "1", 1) != 0)
+    if (setenv("YEW_FAULT_ENABLE", "1", 1) != 0)
         goto io_fail_loaded;
-    if (getenv("SAG_TORTURE_FOREIGN_OWNER") != NULL)
+    if (getenv("YEW_TORTURE_FOREIGN_OWNER") != NULL)
         meta.uid = meta.uid == (uid_t)-1 ? 1U : meta.uid + 1U;
-    save_err = sag_file_save(tb, &meta, path);
-    if (save_err != SAG_SAVE_OK)
+    save_err = yew_file_save(tb, &meta, path);
+    if (save_err != YEW_SAVE_OK)
         _exit(3); /* Retain the durable journal for the parent checker. */
-    sag_journal_discard(journal);
-    sag_textbuf_free(tb);
-    sag_filemeta_dispose(&meta);
+    yew_journal_discard(journal);
+    yew_textbuf_free(tb);
+    yew_filemeta_dispose(&meta);
     free(old_bytes);
     free(post_bytes);
     return 0;
 
 io_fail_loaded:
-    sag_journal_close(journal);
-    sag_textbuf_free(tb);
-    sag_filemeta_dispose(&meta);
+    yew_journal_close(journal);
+    yew_textbuf_free(tb);
+    yew_filemeta_dispose(&meta);
 io_fail:
     free(old_bytes);
     free(post_bytes);
@@ -185,13 +185,13 @@ static int check_case(const char *path, const char *old_path,
         goto done;
     }
     if (!file_equals(path, old_bytes, old_len) ||
-        sag_file_load(path, &tb, &meta) != SAG_LOAD_OK)
+        yew_file_load(path, &tb, &meta) != YEW_LOAD_OK)
         goto done;
-    if (sag_journal_replay(path, tb, &meta) &&
+    if (yew_journal_replay(path, tb, &meta) &&
         buffer_equals(tb, post_bytes, post_len))
         ok = true;
-    sag_textbuf_free(tb);
-    sag_filemeta_dispose(&meta);
+    yew_textbuf_free(tb);
+    yew_filemeta_dispose(&meta);
 done:
     free(old_bytes);
     free(post_bytes);
@@ -226,25 +226,25 @@ static int check_batch_case(const char *path, const char *old_path,
         goto done;
     }
     if (!file_equals(path, old_bytes, old_len) ||
-        sag_file_load(path, &tb, &meta) != SAG_LOAD_OK)
+        yew_file_load(path, &tb, &meta) != YEW_LOAD_OK)
         goto done;
-    undo = sag_undo_new(tb);
+    undo = yew_undo_new(tb);
     edit = (EditCtx){tb, NULL, NULL, 0U, NULL, undo, &meta,
                      NULL, NULL, 0};
-    if (!sag_journal_replay_edit(path, &edit, &meta))
+    if (!yew_journal_replay_edit(path, &edit, &meta))
         goto done_loaded;
     if (buffer_equals(tb, post_bytes, post_len) ||
         buffer_equals(tb, old_bytes, old_len)) {
         ok = true;
-    } else if (sag_undo(&edit) && buffer_equals(tb, old_bytes, old_len)) {
+    } else if (yew_undo(&edit) && buffer_equals(tb, old_bytes, old_len)) {
         ok = true;
     }
 
 done_loaded:
-    sag_journal_close(edit.jrnl);
-    sag_undo_free(undo);
-    sag_filemeta_dispose(&meta);
-    sag_textbuf_free(tb);
+    yew_journal_close(edit.jrnl);
+    yew_undo_free(undo);
+    yew_filemeta_dispose(&meta);
+    yew_textbuf_free(tb);
 done:
     free(old_bytes);
     free(post_bytes);

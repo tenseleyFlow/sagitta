@@ -39,16 +39,16 @@ static bool runtime_probe(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
                              fl_h_span(vm, args[1], &span_buffer, &span) &&
                              span_buffer == buffer && span.lo <= span.hi;
         if (buffer != NULL && runtime_buffer_ids_len <
-                              SAG_ARRAY_LEN(runtime_buffer_ids))
+                              YEW_ARRAY_LEN(runtime_buffer_ids))
             runtime_buffer_ids[runtime_buffer_ids_len++] = buffer->id;
         if (runtime_reentrant_buffer != NULL) {
-            sag_fl_hook_note_change(vm->ed, runtime_reentrant_buffer, 0U);
+            yew_fl_hook_note_change(vm->ed, runtime_reentrant_buffer, 0U);
             runtime_reentrant_buffer = NULL;
         }
     } else if (nargs == 1U && args[0].t == (u8)FL_STR) {
         runtime_payload_ok = true;
         if (runtime_mode_payloads_len <
-                                  SAG_ARRAY_LEN(runtime_mode_payloads)) {
+                                  YEW_ARRAY_LEN(runtime_mode_payloads)) {
             FlStr *s = (FlStr *)args[0].as.o;
             u32 n = s->len < 3U ? s->len : 3U;
 
@@ -63,7 +63,7 @@ static bool runtime_probe(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
         runtime_payload_ok = false;
     }
     if (runtime_reentrant_event)
-        sag_fl_hook_fire(vm->ed, FL_EV_BUF_CHANGE, NULL, 0U);
+        yew_fl_hook_fire(vm->ed, FL_EV_BUF_CHANGE, NULL, 0U);
     *out = FL_NIL_V;
     return true;
 }
@@ -99,7 +99,7 @@ static FlValue runtime_native_fn(FlVm *vm, const char *name,
     FlNative *native = fl_gc_alloc(vm, sizeof(*native), FL_NATIVE);
 
     native->fn = native_fn;
-    native->name_id = sag_intern(vm->in, name, strlen(name));
+    native->name_id = yew_intern(vm->in, name, strlen(name));
     native->min_ar = 0U;
     native->max_ar = UINT8_MAX;
     native->caps = 0U;
@@ -122,11 +122,11 @@ static bool runtime_mutate_then_fail(FlVm *vm, FlValue *args, u32 nargs,
     (void)args;
     (void)nargs;
     (void)out;
-    buffer = sag_ed_doc(vm->ed);
+    buffer = yew_ed_doc(vm->ed);
     if (buffer == NULL || insert == NULL)
         return fl_raise(vm, "user", "hook test has no buffer");
     call[0] = fl_h_buf_make(vm->ed, buffer);
-    call[1] = FL_INT_V((i64)sag_buf_len(buffer));
+    call[1] = FL_INT_V((i64)yew_buf_len(buffer));
     call[2] = FL_OBJ_V(FL_STR, fl_str_new(vm, "x", 1U));
     fl_gc_protect(vm, call[2]);
     if (!fl_api_invoke(vm, insert, call, 3U, &ignored)) {
@@ -149,22 +149,22 @@ void test_fl_runtime_is_persistent_and_on_registers(void)
     runtime_payload_ok = false;
     runtime_buffer_ids_len = 0U;
     runtime_reentrant_buffer = NULL;
-    sag_ed_init(&ed);
-    SAG_ASSERT(sag_ed_open_scratch(&ed));
-    vm = sag_fl_vm(&ed);
-    SAG_ASSERT_NOT_NULL(vm);
-    SAG_ASSERT(vm == sag_fl_vm(&ed));
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    vm = yew_fl_vm(&ed);
+    YEW_ASSERT_NOT_NULL(vm);
+    YEW_ASSERT(vm == yew_fl_vm(&ed));
     vm->root_origin.kind = (u8)FL_ORIGIN_CONFIG;
     args[0] = FL_OBJ_V(FL_STR, fl_str_new(vm, "ws.open", 7U));
     args[1] = runtime_native(vm, "runtime.ws.open");
-    SAG_ASSERT(fl_runtime_on(vm, args, 2U, &out));
-    SAG_ASSERT_EQ_U64(out.t, FL_INT);
-    SAG_ASSERT(out.as.i > 0);
-    sag_fl_hook_workspace(&ed, FL_EV_WS_OPEN);
-    SAG_ASSERT_EQ_U64(runtime_calls, 1U);
-    SAG_ASSERT_EQ_U64(runtime_nargs, 1U);
-    SAG_ASSERT(runtime_payload_ok);
-    sag_ed_free(&ed);
+    YEW_ASSERT(fl_runtime_on(vm, args, 2U, &out));
+    YEW_ASSERT_EQ_U64(out.t, FL_INT);
+    YEW_ASSERT(out.as.i > 0);
+    yew_fl_hook_workspace(&ed, FL_EV_WS_OPEN);
+    YEW_ASSERT_EQ_U64(runtime_calls, 1U);
+    YEW_ASSERT_EQ_U64(runtime_nargs, 1U);
+    YEW_ASSERT(runtime_payload_ok);
+    yew_ed_free(&ed);
 }
 
 void test_fl_runtime_coalesces_buffer_changes(void)
@@ -180,41 +180,41 @@ void test_fl_runtime_coalesces_buffer_changes(void)
     runtime_payload_ok = false;
     runtime_buffer_ids_len = 0U;
     runtime_reentrant_buffer = NULL;
-    sag_ed_init(&ed);
-    SAG_ASSERT(sag_ed_open_scratch(&ed));
-    vm = sag_fl_vm(&ed);
-    SAG_ASSERT_NOT_NULL(vm);
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    vm = yew_fl_vm(&ed);
+    YEW_ASSERT_NOT_NULL(vm);
     (void)fl_hook_add(&ed.hooks, FL_ORIGIN_ID_CONFIG, FL_EV_BUF_CHANGE,
                       runtime_native(vm, "runtime.buf.change"));
-    ec = sag_ed_edit_ctx(&ed);
+    ec = yew_ed_edit_ctx(&ed);
     for (i = 0U; i < 4000U; i++)
-        SAG_ASSERT(sag_edit_insert(&ec, BYTEOFF(i), (const u8 *)"x", 1U));
-    sag_ed_finish_edit(&ed, &ec);
-    SAG_ASSERT_EQ_U64(runtime_calls, 0U);
-    sag_fl_hook_flush_change(&ed);
-    SAG_ASSERT_EQ_U64(runtime_calls, 1U);
-    SAG_ASSERT_EQ_U64(runtime_nargs, 2U);
-    SAG_ASSERT(runtime_payload_ok);
-    sag_fl_hook_flush_change(&ed);
-    SAG_ASSERT_EQ_U64(runtime_calls, 1U);
+        YEW_ASSERT(yew_edit_insert(&ec, BYTEOFF(i), (const u8 *)"x", 1U));
+    yew_ed_finish_edit(&ed, &ec);
+    YEW_ASSERT_EQ_U64(runtime_calls, 0U);
+    yew_fl_hook_flush_change(&ed);
+    YEW_ASSERT_EQ_U64(runtime_calls, 1U);
+    YEW_ASSERT_EQ_U64(runtime_nargs, 2U);
+    YEW_ASSERT(runtime_payload_ok);
+    yew_fl_hook_flush_change(&ed);
+    YEW_ASSERT_EQ_U64(runtime_calls, 1U);
 
     runtime_calls = 0U;
     runtime_payload_ok = false;
     (void)fl_hook_add(&ed.hooks, FL_ORIGIN_ID_CONFIG, FL_EV_CURSOR_MOVE,
                       runtime_native(vm, "runtime.cursor.move"));
-    cursor_before = sag_fl_cursor_burst_state(ed.win);
+    cursor_before = yew_fl_cursor_burst_state(ed.win);
     for (i = 0U; i < 4000U; i++)
         ed.win->cs.curs.data[ed.win->cs.primary].pos =
             BYTEOFF(3999U - i);
-    SAG_ASSERT_EQ_U64(runtime_calls, 0U);
-    sag_fl_hook_flush_cursor(&ed, ed.win, cursor_before);
-    SAG_ASSERT_EQ_U64(runtime_calls, 1U);
-    SAG_ASSERT_EQ_U64(runtime_nargs, 1U);
-    SAG_ASSERT(runtime_payload_ok);
-    sag_fl_hook_flush_cursor(&ed, ed.win,
-                             sag_fl_cursor_burst_state(ed.win));
-    SAG_ASSERT_EQ_U64(runtime_calls, 1U);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(runtime_calls, 0U);
+    yew_fl_hook_flush_cursor(&ed, ed.win, cursor_before);
+    YEW_ASSERT_EQ_U64(runtime_calls, 1U);
+    YEW_ASSERT_EQ_U64(runtime_nargs, 1U);
+    YEW_ASSERT(runtime_payload_ok);
+    yew_fl_hook_flush_cursor(&ed, ed.win,
+                             yew_fl_cursor_burst_state(ed.win));
+    YEW_ASSERT_EQ_U64(runtime_calls, 1U);
+    yew_ed_free(&ed);
 }
 
 void test_fl_runtime_coalesces_each_buffer_in_workspace_order(void)
@@ -226,23 +226,23 @@ void test_fl_runtime_coalesces_each_buffer_in_workspace_order(void)
     runtime_calls = 0U;
     runtime_buffer_ids_len = 0U;
     runtime_reentrant_buffer = NULL;
-    sag_ed_init(&ed);
-    SAG_ASSERT(sag_ed_open_scratch(&ed));
-    second = sag_ws_scratch_new(&ed, "*second*", 0U);
-    SAG_ASSERT_NOT_NULL(second);
-    vm = sag_fl_vm(&ed);
-    SAG_ASSERT_NOT_NULL(vm);
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    second = yew_ws_scratch_new(&ed, "*second*", 0U);
+    YEW_ASSERT_NOT_NULL(second);
+    vm = yew_fl_vm(&ed);
+    YEW_ASSERT_NOT_NULL(vm);
     (void)fl_hook_add(&ed.hooks, FL_ORIGIN_ID_CONFIG, FL_EV_BUF_CHANGE,
                       runtime_native(vm, "runtime.buf.order"));
-    sag_fl_hook_note_change(&ed, second, 8U);
-    sag_fl_hook_note_change(&ed, &ed.buffer, 2U);
-    sag_fl_hook_note_change(&ed, second, 3U);
-    sag_fl_hook_flush_change(&ed);
-    SAG_ASSERT_EQ_U64(runtime_calls, 2U);
-    SAG_ASSERT_EQ_U64(runtime_buffer_ids_len, 2U);
-    SAG_ASSERT_EQ_U64(runtime_buffer_ids[0], ed.buffer.id);
-    SAG_ASSERT_EQ_U64(runtime_buffer_ids[1], second->id);
-    sag_ed_free(&ed);
+    yew_fl_hook_note_change(&ed, second, 8U);
+    yew_fl_hook_note_change(&ed, &ed.buffer, 2U);
+    yew_fl_hook_note_change(&ed, second, 3U);
+    yew_fl_hook_flush_change(&ed);
+    YEW_ASSERT_EQ_U64(runtime_calls, 2U);
+    YEW_ASSERT_EQ_U64(runtime_buffer_ids_len, 2U);
+    YEW_ASSERT_EQ_U64(runtime_buffer_ids[0], ed.buffer.id);
+    YEW_ASSERT_EQ_U64(runtime_buffer_ids[1], second->id);
+    yew_ed_free(&ed);
 }
 
 void test_fl_runtime_drops_reentrant_buffer_change_notifications(void)
@@ -253,45 +253,45 @@ void test_fl_runtime_drops_reentrant_buffer_change_notifications(void)
 
     runtime_calls = 0U;
     runtime_buffer_ids_len = 0U;
-    sag_ed_init(&ed);
-    SAG_ASSERT(sag_ed_open_scratch(&ed));
-    second = sag_ws_scratch_new(&ed, "*second*", 0U);
-    SAG_ASSERT_NOT_NULL(second);
-    vm = sag_fl_vm(&ed);
-    SAG_ASSERT_NOT_NULL(vm);
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    second = yew_ws_scratch_new(&ed, "*second*", 0U);
+    YEW_ASSERT_NOT_NULL(second);
+    vm = yew_fl_vm(&ed);
+    YEW_ASSERT_NOT_NULL(vm);
     (void)fl_hook_add(&ed.hooks, FL_ORIGIN_ID_CONFIG, FL_EV_BUF_CHANGE,
                       runtime_native(vm, "runtime.buf.reentrant"));
     runtime_reentrant_buffer = second;
-    sag_fl_hook_note_change(&ed, &ed.buffer, 1U);
-    sag_fl_hook_flush_change(&ed);
-    SAG_ASSERT_EQ_U64(runtime_calls, 1U);
-    sag_fl_hook_flush_change(&ed);
-    SAG_ASSERT_EQ_U64(runtime_calls, 1U);
+    yew_fl_hook_note_change(&ed, &ed.buffer, 1U);
+    yew_fl_hook_flush_change(&ed);
+    YEW_ASSERT_EQ_U64(runtime_calls, 1U);
+    yew_fl_hook_flush_change(&ed);
+    YEW_ASSERT_EQ_U64(runtime_calls, 1U);
     runtime_reentrant_buffer = NULL;
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
 
     runtime_calls = 0U;
     runtime_reentrant_event = true;
-    sag_ed_init(&ed);
-    SAG_ASSERT(sag_ed_open_scratch(&ed));
-    vm = sag_fl_vm(&ed);
-    SAG_ASSERT_NOT_NULL(vm);
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    vm = yew_fl_vm(&ed);
+    YEW_ASSERT_NOT_NULL(vm);
     (void)fl_hook_add(&ed.hooks, FL_ORIGIN_ID_CONFIG, FL_EV_BUF_CHANGE,
                       runtime_native(vm, "runtime.buf.logdrop"));
-    sag_test_capture_log();
-    sag_fl_hook_fire(&ed, FL_EV_BUF_CHANGE, NULL, 0U);
-    sag_fl_hook_fire(&ed, FL_EV_BUF_CHANGE, NULL, 0U);
-    SAG_ASSERT_EQ_U64(runtime_calls, 2U);
-    SAG_ASSERT_EQ_U64(sag_test_log_count(), 1U);
-    SAG_ASSERT(sag_test_log_contains(
-        SAG_LOG_WARN, "hook \"buf.change\" reentrant fire dropped"));
+    yew_test_capture_log();
+    yew_fl_hook_fire(&ed, FL_EV_BUF_CHANGE, NULL, 0U);
+    yew_fl_hook_fire(&ed, FL_EV_BUF_CHANGE, NULL, 0U);
+    YEW_ASSERT_EQ_U64(runtime_calls, 2U);
+    YEW_ASSERT_EQ_U64(yew_test_log_count(), 1U);
+    YEW_ASSERT(yew_test_log_contains(
+        YEW_LOG_WARN, "hook \"buf.change\" reentrant fire dropped"));
     runtime_reentrant_event = false;
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
 }
 
 void test_fl_runtime_contains_failing_hook_mutations(void)
 {
-    char path[] = "/tmp/sag-fl-hook-save-XXXXXX";
+    char path[] = "/tmp/yew-fl-hook-save-XXXXXX";
     struct stat st;
     Ed ed;
     FlVm *vm;
@@ -299,13 +299,13 @@ void test_fl_runtime_contains_failing_hook_mutations(void)
     int fd;
 
     fd = mkstemp(path);
-    SAG_ASSERT(fd >= 0);
-    SAG_ASSERT_EQ_I64(close(fd), 0);
-    SAG_ASSERT_EQ_I64(unlink(path), 0);
-    sag_ed_init(&ed);
-    SAG_ASSERT(sag_ed_open_scratch(&ed));
-    vm = sag_fl_vm(&ed);
-    SAG_ASSERT_NOT_NULL(vm);
+    YEW_ASSERT(fd >= 0);
+    YEW_ASSERT_EQ_I64(close(fd), 0);
+    YEW_ASSERT_EQ_I64(unlink(path), 0);
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    vm = yew_fl_vm(&ed);
+    YEW_ASSERT_NOT_NULL(vm);
     for (event = 0U; event < (u32)FL_EV__N; event++) {
         u32 id = fl_hook_add(
             &ed.hooks, FL_ORIGIN_ID_CONFIG, event,
@@ -315,12 +315,12 @@ void test_fl_runtime_contains_failing_hook_mutations(void)
         u32 fire;
 
         for (fire = 0U; fire < 6U; fire++)
-            sag_fl_hook_fire(&ed, (FlEvent)event, NULL, 0U);
+            yew_fl_hook_fire(&ed, (FlEvent)event, NULL, 0U);
         hook = &ed.hooks.v[ed.hooks.ledger.v[id - 1U].handle - 1U];
-        SAG_ASSERT(hook->disabled);
-        SAG_ASSERT_EQ_U64(hook->errs, 5U);
-        SAG_ASSERT_EQ_U64(sag_buf_len(sag_ed_doc(&ed)), 0U);
-        SAG_ASSERT_EQ_U64(sag_ed_doc(&ed)->undo->depth, 0U);
+        YEW_ASSERT(hook->disabled);
+        YEW_ASSERT_EQ_U64(hook->errs, 5U);
+        YEW_ASSERT_EQ_U64(yew_buf_len(yew_ed_doc(&ed)), 0U);
+        YEW_ASSERT_EQ_U64(yew_ed_doc(&ed)->undo->depth, 0U);
     }
 
     /* A throwing pre-save hook is contained: its edit rolls back and the
@@ -328,28 +328,28 @@ void test_fl_runtime_contains_failing_hook_mutations(void)
     (void)fl_hook_add(&ed.hooks, FL_ORIGIN_ID_CONFIG, FL_EV_BUF_SAVE,
                       runtime_native_fn(vm, "runtime.save.failure",
                                         runtime_mutate_then_fail));
-    SAG_ASSERT_EQ_U64(sag_ed_file_write_to(&ed, path, false), SAG_CMD_OK);
-    SAG_ASSERT_EQ_I64(stat(path, &st), 0);
-    SAG_ASSERT_EQ_U64((u64)st.st_size, 0U);
-    SAG_ASSERT_EQ_U64(sag_buf_len(sag_ed_doc(&ed)), 0U);
-    SAG_ASSERT_EQ_U64(sag_fl_eval(&ed, "1 + 1", 5U), SAG_CMD_OK);
-    SAG_ASSERT_EQ_STR(ed.msg.text, "2");
-    sag_ed_free(&ed);
-    SAG_ASSERT_EQ_I64(unlink(path), 0);
+    YEW_ASSERT_EQ_U64(yew_ed_file_write_to(&ed, path, false), YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(stat(path, &st), 0);
+    YEW_ASSERT_EQ_U64((u64)st.st_size, 0U);
+    YEW_ASSERT_EQ_U64(yew_buf_len(yew_ed_doc(&ed)), 0U);
+    YEW_ASSERT_EQ_U64(yew_fl_eval(&ed, "1 + 1", 5U), YEW_CMD_OK);
+    YEW_ASSERT_EQ_STR(ed.msg.text, "2");
+    yew_ed_free(&ed);
+    YEW_ASSERT_EQ_I64(unlink(path), 0);
 }
 
 void test_fl_runtime_eval_keeps_globals_between_entries(void)
 {
     Ed ed;
 
-    sag_ed_init(&ed);
-    SAG_ASSERT(sag_ed_open_scratch(&ed));
-    SAG_ASSERT_EQ_U64(sag_fl_eval(&ed, "let answer = 41", 15U),
-                      SAG_CMD_OK);
-    SAG_ASSERT_EQ_U64(sag_fl_eval(&ed, "answer + 1", 10U), SAG_CMD_OK);
-    SAG_ASSERT(ed.msg.active);
-    SAG_ASSERT_EQ_STR(ed.msg.text, "42");
-    sag_ed_free(&ed);
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    YEW_ASSERT_EQ_U64(yew_fl_eval(&ed, "let answer = 41", 15U),
+                      YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(yew_fl_eval(&ed, "answer + 1", 10U), YEW_CMD_OK);
+    YEW_ASSERT(ed.msg.active);
+    YEW_ASSERT_EQ_STR(ed.msg.text, "42");
+    yew_ed_free(&ed);
 }
 
 void test_fl_runtime_cmdline_mode_hooks_fire_once_per_transition(void)
@@ -359,23 +359,23 @@ void test_fl_runtime_cmdline_mode_hooks_fire_once_per_transition(void)
 
     runtime_calls = 0U;
     runtime_mode_payloads_len = 0U;
-    sag_ed_init(&ed);
-    SAG_ASSERT(sag_ed_open_scratch(&ed));
-    vm = sag_fl_vm(&ed);
-    SAG_ASSERT_NOT_NULL(vm);
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    vm = yew_fl_vm(&ed);
+    YEW_ASSERT_NOT_NULL(vm);
     (void)fl_hook_add(&ed.hooks, FL_ORIGIN_ID_CONFIG, FL_EV_MODE_LEAVE,
                       runtime_native(vm, "runtime.mode.leave"));
     (void)fl_hook_add(&ed.hooks, FL_ORIGIN_ID_CONFIG, FL_EV_MODE_ENTER,
                       runtime_native(vm, "runtime.mode.enter"));
-    sag_cmdline_open(&ed, SAG_PROMPT_CMD, NULL);
-    sag_cmdline_close(&ed, false);
-    SAG_ASSERT_EQ_U64(runtime_calls, 4U);
-    SAG_ASSERT_EQ_U64(runtime_mode_payloads_len, 4U);
-    SAG_ASSERT_EQ_STR(runtime_mode_payloads[0], "L");
-    SAG_ASSERT_EQ_STR(runtime_mode_payloads[1], "E");
-    SAG_ASSERT_EQ_STR(runtime_mode_payloads[2], "E");
-    SAG_ASSERT_EQ_STR(runtime_mode_payloads[3], "L");
-    sag_ed_free(&ed);
+    yew_cmdline_open(&ed, YEW_PROMPT_CMD, NULL);
+    yew_cmdline_close(&ed, false);
+    YEW_ASSERT_EQ_U64(runtime_calls, 4U);
+    YEW_ASSERT_EQ_U64(runtime_mode_payloads_len, 4U);
+    YEW_ASSERT_EQ_STR(runtime_mode_payloads[0], "L");
+    YEW_ASSERT_EQ_STR(runtime_mode_payloads[1], "E");
+    YEW_ASSERT_EQ_STR(runtime_mode_payloads[2], "E");
+    YEW_ASSERT_EQ_STR(runtime_mode_payloads[3], "L");
+    yew_ed_free(&ed);
 }
 
 void test_fl_options_cover_builtins_and_raise_name_suggestions(void)
@@ -398,33 +398,33 @@ void test_fl_options_cover_builtins_and_raise_name_suggestions(void)
     OptVal value;
     u32 i;
 
-    sag_ed_init(&ed);
-    SAG_ASSERT(sag_ed_open_scratch(&ed));
-    provider = sag_opt_provider(&ed);
-    SAG_ASSERT_EQ_U64(provider->list(&ed, listed, SAG_ARRAY_LEN(listed)),
-                      SAG_ARRAY_LEN(names));
-    for (i = 0U; i < SAG_ARRAY_LEN(names); i++) {
-        SAG_ASSERT_EQ_STR(listed[i], names[i]);
-        SAG_ASSERT(provider->get(&ed, names[i], (u32)strlen(names[i]),
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    provider = yew_opt_provider(&ed);
+    YEW_ASSERT_EQ_U64(provider->list(&ed, listed, YEW_ARRAY_LEN(listed)),
+                      YEW_ARRAY_LEN(names));
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
+        YEW_ASSERT_EQ_STR(listed[i], names[i]);
+        YEW_ASSERT(provider->get(&ed, names[i], (u32)strlen(names[i]),
                                  &value));
     }
 
-    vm = sag_fl_vm(&ed);
+    vm = yew_fl_vm(&ed);
     args[0] = FL_OBJ_V(FL_STR, fl_str_new(vm, "tabwidth", 8U));
     args[1] = FL_INT_V(7);
-    SAG_ASSERT(fl_api_invoke(vm, fl_api_find("opt.set", 7U), args, 2U,
+    YEW_ASSERT(fl_api_invoke(vm, fl_api_find("opt.set", 7U), args, 2U,
                              &out));
-    SAG_ASSERT_EQ_U64(ed.buffer.tabwidth, 7U);
-    SAG_ASSERT(fl_api_invoke(vm, fl_api_find("opt.get", 7U), args, 1U,
+    YEW_ASSERT_EQ_U64(ed.buffer.tabwidth, 7U);
+    YEW_ASSERT(fl_api_invoke(vm, fl_api_find("opt.get", 7U), args, 1U,
                              &out));
-    SAG_ASSERT_EQ_U64(out.t, FL_INT);
-    SAG_ASSERT_EQ_I64(out.as.i, 7);
+    YEW_ASSERT_EQ_U64(out.t, FL_INT);
+    YEW_ASSERT_EQ_I64(out.as.i, 7);
 
     args[0] = FL_OBJ_V(FL_STR, fl_str_new(vm, "tabwith", 7U));
     vm->err = FL_NIL_V;
-    SAG_ASSERT(!fl_api_invoke(vm, fl_api_find("opt.get", 7U), args, 1U,
+    YEW_ASSERT(!fl_api_invoke(vm, fl_api_find("opt.get", 7U), args, 1U,
                               &out));
-    SAG_ASSERT(runtime_error_field_contains(vm, "kind", "name"));
-    SAG_ASSERT(runtime_error_field_contains(vm, "msg", "tabwidth"));
-    sag_ed_free(&ed);
+    YEW_ASSERT(runtime_error_field_contains(vm, "kind", "name"));
+    YEW_ASSERT(runtime_error_field_contains(vm, "msg", "tabwidth"));
+    yew_ed_free(&ed);
 }

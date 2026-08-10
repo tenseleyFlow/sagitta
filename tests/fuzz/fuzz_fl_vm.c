@@ -185,6 +185,6 @@ done:
 
 int main(int argc, char **argv)
 {
-    return sag_fuzz_main(argc, argv, "fuzz_fl_vm",
+    return yew_fuzz_main(argc, argv, "fuzz_fl_vm",
                          "tests/fuzz/corpus/fl_vm", check_fl_vm);
 }

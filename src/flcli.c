@@ -1,18 +1,18 @@
 /*
- * Sprint 32 §1: `sag fl` -- the Fletch entry point.
+ * Sprint 32 §1: `yew fl` -- the Fletch entry point.
  *
- * Handled BEFORE the editor's own argument parser, because `sag fl`'s
+ * Handled BEFORE the editor's own argument parser, because `yew fl`'s
  * options are not the editor's and threading them through one parser
  * would make `--list-natives` a top-level flag that means nothing
  * outside this subcommand.
  *
- * THE EXIT CODES ARE A CONTRACT (00-decisions.md), and `sag fl` NEVER
+ * THE EXIT CODES ARE A CONTRACT (00-decisions.md), and `yew fl` NEVER
  * returns 2 -- that code belongs to Sprint 37's `--batch`:
  *
  *   0  ran to completion
  *   1  compile diagnostics, or an uncaught runtime error
  *   3  FILE unreadable, or a `capability`/`io` error reaching the top
- *   4  internal VM invariant break, through sag_bug
+ *   4  internal VM invariant break, through yew_bug
  *
  * A `capability` or `io` error is separated from every other uncaught
  * raise because those two mean the ENVIRONMENT refused, not that the
@@ -22,7 +22,7 @@
  * DIAGNOSTICS GO TO STDERR AND io.print GOES TO STDOUT, so a script's
  * data and its complaints never interleave in a pipe.
  *
- * `sag fl FILE` TAKES NO SCRIPT ARGUMENTS this campaign; Sprint 37's
+ * `yew fl FILE` TAKES NO SCRIPT ARGUMENTS this campaign; Sprint 37's
  * `--batch` owns stdio and argv.  Saying so here is cheaper than
  * accepting them and quietly ignoring them.
  *
@@ -31,7 +31,7 @@
  * installs the s03 restore path before its first byte of output.
  *
  * THE ORIGIN CARRIES THE SCRIPT'S REALPATH.  Without it a relative
- * import would resolve against the XDG directory only, and `sag fl
+ * import would resolve against the XDG directory only, and `yew fl
  * ./x.fl` would fail to find the helper sitting next to it.  The CLI
  * gets all four capabilities: the user typed the command, so §13's
  * table grants what they already have a shell for.
@@ -61,16 +61,16 @@
 
 static const char fl_usage[] =
     "Usage:\n"
-    "  sag fl                  On a terminal, start the prompt (:help\n"
+    "  yew fl                  On a terminal, start the prompt (:help\n"
     "                          for its commands, :quit to leave).\n"
     "                          Otherwise read a script from stdin.\n"
-    "  sag fl FILE             Evaluate FILE.\n"
-    "  sag fl -e EXPR          Evaluate EXPR; print its value if non-nil.\n"
-    "  sag fl -c FILE          Parse and compile only; do not run.\n"
-    "  sag fl --dump-ast FILE  Print the AST.\n"
-    "  sag fl --dump-bytecode FILE\n"
+    "  yew fl FILE             Evaluate FILE.\n"
+    "  yew fl -e EXPR          Evaluate EXPR; print its value if non-nil.\n"
+    "  yew fl -c FILE          Parse and compile only; do not run.\n"
+    "  yew fl --dump-ast FILE  Print the AST.\n"
+    "  yew fl --dump-bytecode FILE\n"
     "                          Disassemble every function.\n"
-    "  sag fl --list-natives   List every module builtin as\n"
+    "  yew fl --list-natives   List every module builtin as\n"
     "                          module.name, one per line.  §9's\n"
     "                          `error` is a prelude name, not a\n"
     "                          module's, and is not listed.\n"
@@ -113,7 +113,7 @@ static int list_natives(void)
     fl_vm_free(&vm);
     interner_free(&in);
     arena_free_all(&arena);
-    return SAG_EXIT_OK;
+    return YEW_EXIT_OK;
 }
 
 /* The whole file, or NULL with a message already printed. */
@@ -124,7 +124,7 @@ static char *slurp(const char *path, size_t *len, Arena *arena)
     char *copy;
 
     if (fp == NULL) {
-        (void)fprintf(stderr, "sagitta: cannot read %s\n", path);
+        (void)fprintf(stderr, "yew: cannot read %s\n", path);
         return NULL;
     }
     bytebuf_init(&bb);
@@ -140,7 +140,7 @@ static char *slurp(const char *path, size_t *len, Arena *arena)
     if (ferror(fp) != 0) {
         (void)fclose(fp);
         bytebuf_free(&bb);
-        (void)fprintf(stderr, "sagitta: cannot read %s\n", path);
+        (void)fprintf(stderr, "yew: cannot read %s\n", path);
         return NULL;
     }
     (void)fclose(fp);
@@ -197,7 +197,7 @@ static bool parse_caps(const char *s, u32 *out)
         size_t i;
         bool hit = false;
 
-        for (i = 0U; i < SAG_ARRAY_LEN(tab); i++) {
+        for (i = 0U; i < YEW_ARRAY_LEN(tab); i++) {
             if (strlen(tab[i].name) == n &&
                 strncmp(s, tab[i].name, n) == 0) {
                 got |= tab[i].bit;
@@ -223,7 +223,7 @@ static bool parse_origin(const char *s, FlOriginKind *out)
     };
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(tab); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(tab); i++) {
         if (strcmp(s, tab[i].name) == 0) {
             *out = tab[i].k;
             return true;
@@ -255,7 +255,7 @@ static void cli_count(void *ctx, FlDiagLevel level, FlSpan sp,
     if (rendered != NULL)
         (void)fputs(rendered, stderr);
     else
-        (void)fprintf(stderr, "sagitta: %s\n", msg == NULL ? "error" : msg);
+        (void)fprintf(stderr, "yew: %s\n", msg == NULL ? "error" : msg);
 }
 
 static void run_open(FlRun *r)
@@ -287,7 +287,7 @@ static void run_anchor(FlRun *r, const char *path)
     char *real = realpath(path, NULL);
 
     if (real != NULL) {
-        r->origin.path_id = sag_intern(&r->in, real, strlen(real));
+        r->origin.path_id = yew_intern(&r->in, real, strlen(real));
         free(real);
     }
     r->vm.root_origin = r->origin;
@@ -330,8 +330,8 @@ static int report_raise(FlVm *vm, FlValue err)
     (void)fwrite(bb.data, 1U, bb.len, stderr);
     bytebuf_free(&bb);
     if (strcmp(kind, "capability") == 0 || strcmp(kind, "io") == 0)
-        return SAG_EXIT_IO;
-    return SAG_EXIT_ERR;
+        return YEW_EXIT_IO;
+    return YEW_EXIT_ERR;
 }
 
 /*
@@ -387,7 +387,7 @@ static int mode_eval(FlRun *r, const char *name, const char *src, size_t len,
     FlValue out = FL_NIL_V;
 
     if (fn == NULL)
-        return SAG_EXIT_ERR;
+        return YEW_EXIT_ERR;
     if (!fl_vm_run(&r->vm, fn, &out))
         return report_raise(&r->vm, out);
     /* §5: nil prints NOTHING -- otherwise every let, every io.print and
@@ -396,18 +396,18 @@ static int mode_eval(FlRun *r, const char *name, const char *src, size_t len,
         Bytebuf bb;
 
         bytebuf_init(&bb);
-        sag_fl_print_result(&r->vm, out, &bb);
+        yew_fl_print_result(&r->vm, out, &bb);
         (void)fwrite(bb.data, 1U, bb.len, stdout);
         bytebuf_free(&bb);
     }
-    return SAG_EXIT_OK;
+    return YEW_EXIT_OK;
 }
 
 static int mode_compile_only(FlRun *r, const char *name, const char *src,
                              size_t len)
 {
-    return cli_compile(r, name, src, len) == NULL ? SAG_EXIT_ERR
-                                                  : SAG_EXIT_OK;
+    return cli_compile(r, name, src, len) == NULL ? YEW_EXIT_ERR
+                                                  : YEW_EXIT_OK;
 }
 
 static int mode_dump_ast(FlRun *r, const char *name, const char *src,
@@ -417,12 +417,12 @@ static int mode_dump_ast(FlRun *r, const char *name, const char *src,
     Bytebuf bb;
 
     if (!cli_parse(r, name, src, len, &p))
-        return SAG_EXIT_ERR;
+        return YEW_EXIT_ERR;
     bytebuf_init(&bb);
     fl_ast_dump(&bb, &p, &r->in);
     (void)fwrite(bb.data, 1U, bb.len, stdout);
     bytebuf_free(&bb);
-    return SAG_EXIT_OK;
+    return YEW_EXIT_OK;
 }
 
 /*
@@ -434,7 +434,7 @@ static void disasm_fn(Bytebuf *bb, const FlFn *fn, const Interner *in,
                       u32 depth)
 {
     const char *nm = fn->name_id == 0U ? NULL
-                                       : sag_intern_str(in, fn->name_id);
+                                       : yew_intern_str(in, fn->name_id);
     u32 i;
 
     if (depth > 32U)
@@ -456,12 +456,12 @@ static int mode_dump_bytecode(FlRun *r, const char *name, const char *src,
     Bytebuf bb;
 
     if (fn == NULL)
-        return SAG_EXIT_ERR;
+        return YEW_EXIT_ERR;
     bytebuf_init(&bb);
     disasm_fn(&bb, fn, &r->in, 0U);
     (void)fwrite(bb.data, 1U, bb.len, stdout);
     bytebuf_free(&bb);
-    return SAG_EXIT_OK;
+    return YEW_EXIT_OK;
 }
 
 /* ---------------------------------------------------------------- */
@@ -480,7 +480,7 @@ static int with_file(const char *path, FlMode mode, bool anchor)
     src = slurp(path, &len, &r.arena);
     if (src == NULL) {
         run_close(&r);
-        return SAG_EXIT_IO;
+        return YEW_EXIT_IO;
     }
     if (anchor)
         run_anchor(&r, path);
@@ -512,7 +512,7 @@ static int mode_conly(FlRun *r, const char *n, const char *s, size_t l)
     return mode_compile_only(r, n, s, l);
 }
 
-/* `sag fl` with stdin not a tty: the whole of stdin as one script.
+/* `yew fl` with stdin not a tty: the whole of stdin as one script.
  * No raw mode, no prompt, no history -- a REPL that emitted escape
  * sequences into a pipe is how CI logs become unreadable. */
 static int run_stdin(void)
@@ -536,8 +536,8 @@ static int run_stdin(void)
     if (ferror(stdin) != 0) {
         bytebuf_free(&bb);
         run_close(&r);
-        (void)fprintf(stderr, "sagitta: cannot read stdin\n");
-        return SAG_EXIT_IO;
+        (void)fprintf(stderr, "yew: cannot read stdin\n");
+        return YEW_EXIT_IO;
     }
     src = arena_alloc(&r.arena, bb.len + 1U, 1U);
     if (bb.len != 0U)
@@ -584,21 +584,21 @@ static int selftest_bug(void)
     fn = cli_compile(&r, "<selftest>", src, strlen(src));
     if (fn == NULL) {
         run_close(&r);
-        return SAG_EXIT_ERR;
+        return YEW_EXIT_ERR;
     }
     fn->ch.code[0] = 0xFEU;          /* no such opcode */
     (void)fl_vm_run(&r.vm, fn, &out);
-    /* Unreachable: the VM exits 4 through sag_bug. */
+    /* Unreachable: the VM exits 4 through yew_bug. */
     run_close(&r);
-    return SAG_EXIT_ERR;
+    return YEW_EXIT_ERR;
 }
 
-int sag_fl_main(int argc, char **argv)
+int yew_fl_main(int argc, char **argv)
 {
     /*
      * --caps/--origin are stripped first so every form below keeps its
      * exact argc shape.  They are deliberately NOT accepted after the
-     * script name: `sag fl x.fl --caps none` reads like an argument to
+     * script name: `yew fl x.fl --caps none` reads like an argument to
      * the script, and scripts take no arguments until Sprint 37.
      */
     while (argc >= 3 && (strcmp(argv[1], "--caps") == 0 ||
@@ -608,31 +608,31 @@ int sag_fl_main(int argc, char **argv)
                       : parse_origin(argv[2], &g_origin);
 
         if (!ok) {
-            (void)fprintf(stderr, "sagitta: bad %s value '%s'\n",
+            (void)fprintf(stderr, "yew: bad %s value '%s'\n",
                           argv[1], argv[2]);
-            return SAG_EXIT_ERR;
+            return YEW_EXIT_ERR;
         }
         argv += 2;
         argc -= 2;
     }
     if (argc == 1)
-        return sag_tty_fd_is_terminal(0) ? sag_fl_repl() : run_stdin();
+        return yew_tty_fd_is_terminal(0) ? yew_fl_repl() : run_stdin();
     if (argc == 2 && strcmp(argv[1], "--selftest-fl-bug") == 0) {
         /*
          * On a TTY the selftest runs THROUGH THE PROMPT, because that
          * is the only configuration where invariant 6 has anything to
-         * prove: sag_bug's prehook is installed by sag_tty_raw, so a
+         * prove: yew_bug's prehook is installed by yew_tty_raw, so a
          * headless run would restore a terminal it never took.
          */
-        if (sag_tty_fd_is_terminal(0))
-            return sag_fl_repl_selftest_bug();
+        if (yew_tty_fd_is_terminal(0))
+            return yew_fl_repl_selftest_bug();
         return selftest_bug();
     }
     if (argc == 2 && strcmp(argv[1], "--list-natives") == 0)
         return list_natives();
     if (argc == 2 && strcmp(argv[1], "--help") == 0) {
         (void)fputs(fl_usage, stdout);
-        return SAG_EXIT_OK;
+        return YEW_EXIT_OK;
     }
     if (argc == 3 && strcmp(argv[1], "-e") == 0)
         return run_expr(argv[2]);
@@ -645,5 +645,5 @@ int sag_fl_main(int argc, char **argv)
     if (argc == 2 && argv[1][0] != '-')
         return with_file(argv[1], mode_eval_file, true);
     (void)fputs(fl_usage, stderr);
-    return SAG_EXIT_ERR;
+    return YEW_EXIT_ERR;
 }

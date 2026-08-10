@@ -17,7 +17,7 @@ static void dump_node(Bytebuf *out, const FlNode *n, const Interner *in);
 
 static void dump_str(Bytebuf *out, const Interner *in, u32 id)
 {
-    const char *s = sag_intern_str(in, id);
+    const char *s = yew_intern_str(in, id);
     size_t i;
     size_t len;
 
@@ -28,7 +28,7 @@ static void dump_str(Bytebuf *out, const Interner *in, u32 id)
     /* The interned LENGTH, not strlen: §1.5 admits `\0`, and a dump
      * that stopped there would show a golden two constructs shorter
      * than the program it is describing. */
-    len = sag_intern_len(in, id);
+    len = yew_intern_len(in, id);
     /* Escaped on the way out so a string containing a quote, a newline
      * or a paren cannot forge s-expression structure in a golden. */
     bytebuf_push_u8(out, (u8)'"');

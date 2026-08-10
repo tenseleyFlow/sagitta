@@ -1,5 +1,5 @@
-#ifndef SAG_EDIT_BUF_H
-#define SAG_EDIT_BUF_H
+#ifndef YEW_EDIT_BUF_H
+#define YEW_EDIT_BUF_H
 
 /* The editor's ordinary buffer model. */
 
@@ -8,9 +8,9 @@
 #include "util/strmap.h"
 
 enum {
-    SAG_BUF_SCRATCH = 1U << 0,
-    SAG_BUF_NOUNDO = 1U << 1,
-    SAG_BUF_READONLY = 1U << 2
+    YEW_BUF_SCRATCH = 1U << 0,
+    YEW_BUF_NOUNDO = 1U << 1,
+    YEW_BUF_READONLY = 1U << 2
 };
 
 typedef struct Buffer {
@@ -36,4 +36,4 @@ typedef struct Buffer {
     Strmap opt_overrides;
 } Buffer;
 
-#endif /* SAG_EDIT_BUF_H */
+#endif /* YEW_EDIT_BUF_H */

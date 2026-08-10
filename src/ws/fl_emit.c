@@ -16,7 +16,7 @@
 
 #include "util/log.h"
 
-void sag_fl_emit_init(FlEmit *e, Bytebuf *out)
+void yew_fl_emit_init(FlEmit *e, Bytebuf *out)
 {
     if (e == NULL)
         return;
@@ -25,7 +25,7 @@ void sag_fl_emit_init(FlEmit *e, Bytebuf *out)
     e->opened = 0U;
 }
 
-void sag_fl_emit_done(const FlEmit *e)
+void yew_fl_emit_done(const FlEmit *e)
 {
     if (e == NULL)
         return;
@@ -36,7 +36,7 @@ void sag_fl_emit_done(const FlEmit *e)
      * would be a restore putting a pane's cursor somewhere else.
      */
     if (e->depth != 0U)
-        SAG_BUG("fletch emitter: %u container(s) left open",
+        YEW_BUG("fletch emitter: %u container(s) left open",
                 (unsigned)e->depth);
 }
 
@@ -59,7 +59,7 @@ static void emit_key(FlEmit *e, const char *key)
     bytebuf_append(e->out, (const u8 *)": ", 2U);
 }
 
-void sag_fl_map_open(FlEmit *e, const char *key)
+void yew_fl_map_open(FlEmit *e, const char *key)
 {
     emit_key(e, key);
     bytebuf_append(e->out, (const u8 *)"{\n", 2U);
@@ -76,7 +76,7 @@ void sag_fl_map_open(FlEmit *e, const char *key)
 static void emit_close(FlEmit *e, const char *closer)
 {
     if (e->depth == 0U)
-        SAG_BUG("fletch emitter: close without open");
+        YEW_BUG("fletch emitter: close without open");
     e->depth--;
     emit_indent(e);
     bytebuf_append(e->out, (const u8 *)closer, 1U);
@@ -85,19 +85,19 @@ static void emit_close(FlEmit *e, const char *closer)
     bytebuf_push_u8(e->out, (u8)'\n');
 }
 
-void sag_fl_map_close(FlEmit *e)
+void yew_fl_map_close(FlEmit *e)
 {
     emit_close(e, "}");
 }
 
-void sag_fl_list_open(FlEmit *e, const char *key)
+void yew_fl_list_open(FlEmit *e, const char *key)
 {
     emit_key(e, key);
     bytebuf_append(e->out, (const u8 *)"[\n", 2U);
     e->depth++;
 }
 
-void sag_fl_list_close(FlEmit *e)
+void yew_fl_list_close(FlEmit *e)
 {
     emit_close(e, "]");
 }
@@ -154,7 +154,7 @@ static void emit_escaped(FlEmit *e, const char *s, u64 n)
     bytebuf_push_u8(e->out, (u8)'"');
 }
 
-void sag_fl_str(FlEmit *e, const char *key, const char *s, u64 n)
+void yew_fl_str(FlEmit *e, const char *key, const char *s, u64 n)
 {
     emit_key(e, key);
     if (s == NULL) {
@@ -167,7 +167,7 @@ void sag_fl_str(FlEmit *e, const char *key, const char *s, u64 n)
     bytebuf_append(e->out, (const u8 *)",\n", 2U);
 }
 
-void sag_fl_int(FlEmit *e, const char *key, i64 v)
+void yew_fl_int(FlEmit *e, const char *key, i64 v)
 {
     char buf[32];
     int n;
@@ -180,7 +180,7 @@ void sag_fl_int(FlEmit *e, const char *key, i64 v)
         bytebuf_append(e->out, (const u8 *)buf, (size_t)n);
 }
 
-void sag_fl_bool(FlEmit *e, const char *key, bool v)
+void yew_fl_bool(FlEmit *e, const char *key, bool v)
 {
     emit_key(e, key);
     if (v)
@@ -189,49 +189,49 @@ void sag_fl_bool(FlEmit *e, const char *key, bool v)
         bytebuf_append(e->out, (const u8 *)"false,\n", 7U);
 }
 
-void sag_fl_nil(FlEmit *e, const char *key)
+void yew_fl_nil(FlEmit *e, const char *key)
 {
     emit_key(e, key);
     bytebuf_append(e->out, (const u8 *)"nil,\n", 5U);
 }
 
-void sag_fl_emit_lit(FlEmit *e, const char *key, const FlLit *v)
+void yew_fl_emit_lit(FlEmit *e, const char *key, const FlLit *v)
 {
     u32 i;
 
     if (v == NULL) {
-        sag_fl_nil(e, key);
+        yew_fl_nil(e, key);
         return;
     }
     switch (v->kind) {
     case FL_LIT_NIL:
-        sag_fl_nil(e, key);
+        yew_fl_nil(e, key);
         break;
     case FL_LIT_BOOL:
-        sag_fl_bool(e, key, v->i != 0);
+        yew_fl_bool(e, key, v->i != 0);
         break;
     case FL_LIT_INT:
-        sag_fl_int(e, key, v->i);
+        yew_fl_int(e, key, v->i);
         break;
     case FL_LIT_STR:
-        sag_fl_str(e, key, v->s, v->slen);
+        yew_fl_str(e, key, v->s, v->slen);
         break;
     case FL_LIT_LIST:
-        sag_fl_list_open(e, key);
+        yew_fl_list_open(e, key);
         for (i = 0U; i < v->len; i++)
-            sag_fl_emit_lit(e, NULL, v->items[i]);
-        sag_fl_list_close(e);
+            yew_fl_emit_lit(e, NULL, v->items[i]);
+        yew_fl_list_close(e);
         break;
     case FL_LIT_MAP:
     default:
-        sag_fl_map_open(e, key);
+        yew_fl_map_open(e, key);
         /* INSERTION ORDER, which is the order the parser saw and the
          * order the schema tables define.  Re-emitting in any other
          * order would make save->restore->save stop being a fixpoint
          * and break every golden. */
         for (i = 0U; i < v->len; i++)
-            sag_fl_emit_lit(e, v->keys[i], v->items[i]);
-        sag_fl_map_close(e);
+            yew_fl_emit_lit(e, v->keys[i], v->items[i]);
+        yew_fl_map_close(e);
         break;
     }
 }

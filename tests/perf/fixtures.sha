@@ -1,4 +1,4 @@
-# sagitta deterministic fixture manifest v1
+# yew deterministic fixture manifest v1
 # profile          bytes       seed                  fnv64
 100m-code          104857600   0x9e3779b97f4a7c15    8207be845d7f139b
 100m-utf8          104857600   0x9e3779b97f4a7c15    bbb4e5a165a8b974

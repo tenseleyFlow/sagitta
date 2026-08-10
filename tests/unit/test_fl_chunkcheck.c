@@ -37,9 +37,9 @@ static FlFn *build(FlFix *f, const char *src)
     fl_diag_init(&f->dc, &f->arena);
     (void)fl_diag_add_file(&f->dc, "t.fl", src, n);
     p = fl_parse(&f->arena, &f->dc, &f->in, src, n, 0U);
-    SAG_ASSERT(!p.had_error);
+    YEW_ASSERT(!p.had_error);
     fn = fl_compile(&f->vm, &f->dc, &p, 0U, f->origin);
-    SAG_ASSERT_NOT_NULL(fn);
+    YEW_ASSERT_NOT_NULL(fn);
     return fn;
 }
 
@@ -69,11 +69,11 @@ static void want_reject(FlFn *fn, const char *fragment)
     if (fl_chunk_check(fn, &why))
         (void)fprintf(stderr, "expected a rejection mentioning '%s'\n",
                       fragment);
-    SAG_ASSERT(!fl_chunk_check(fn, &why));
-    SAG_ASSERT_NOT_NULL(why);
+    YEW_ASSERT(!fl_chunk_check(fn, &why));
+    YEW_ASSERT_NOT_NULL(why);
     if (strstr(why, fragment) == NULL)
         (void)fprintf(stderr, "want |%s| in |%s|\n", fragment, why);
-    SAG_ASSERT(strstr(why, fragment) != NULL);
+    YEW_ASSERT(strstr(why, fragment) != NULL);
 }
 
 void test_fl_chunkcheck_accepts_what_the_compiler_emits(void)
@@ -100,13 +100,13 @@ void test_fl_chunkcheck_accepts_what_the_compiler_emits(void)
     flfix_open(&f);
     /* Whatever else the checker does, it must not reject the compiler
      * it exists to check -- every shape the suite already exercises. */
-    for (i = 0U; i < SAG_ARRAY_LEN(progs); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(progs); i++) {
         FlFn *fn = build(&f, progs[i]);
 
         if (!fl_chunk_check(fn, &why))
             (void)fprintf(stderr, "rejected |%s|: %s\n", progs[i],
                           why == NULL ? "?" : why);
-        SAG_ASSERT(fl_chunk_check(fn, &why));
+        YEW_ASSERT(fl_chunk_check(fn, &why));
     }
     flfix_close(&f);
 }
@@ -120,7 +120,7 @@ void test_fl_chunkcheck_rejects_a_bad_jump(void)
     flfix_open(&f);
     fn = build(&f, "let n = 0\nwhile n < 5 { n = n + 1 }\nreturn n\n");
     at = find_op(&fn->ch, FL_OP_JUMP_IF_FALSE);
-    SAG_ASSERT(at < fn->ch.ncode);
+    YEW_ASSERT(at < fn->ch.ncode);
     /* Off the end of the chunk. */
     fn->ch.code[at + 1U] = 0xFFU;
     fn->ch.code[at + 2U] = 0xFFU;
@@ -145,7 +145,7 @@ void test_fl_chunkcheck_rejects_a_bad_index(void)
     flfix_open(&f);
     fn = build(&f, "return \"a\"\n");
     at = find_op(&fn->ch, FL_OP_CONST);
-    SAG_ASSERT(at < fn->ch.ncode);
+    YEW_ASSERT(at < fn->ch.ncode);
     fn->ch.code[at + 1U] = 0xFFU;
     fn->ch.code[at + 2U] = 0xFFU;
     want_reject(fn, "constant index out of range");
@@ -196,7 +196,7 @@ void test_fl_chunkcheck_rejects_a_missing_terminator(void)
      * chunk ends in a terminator, so execution cannot run off the end.
      */
     fn = build(&f, "return 1\n");
-    SAG_ASSERT(fl_chunk_check(fn, &why));
+    YEW_ASSERT(fl_chunk_check(fn, &why));
     fn->ch.code[fn->ch.ncode - 1U] = (u8)FL_OP_POP;
     want_reject(fn, "does not end in a terminator");
 

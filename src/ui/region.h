@@ -1,5 +1,5 @@
-#ifndef SAG_UI_REGION_H
-#define SAG_UI_REGION_H
+#ifndef YEW_UI_REGION_H
+#define YEW_UI_REGION_H
 
 /*
  * Sprint 22 §6: the clickable-region registry.
@@ -21,9 +21,9 @@
 #include "util/base.h"
 
 typedef enum {
-    SAG_REGION_NONE = 0,
-    SAG_REGION_PANE,        /* payload: leaf table index            */
-    SAG_REGION_PANE_BORDER, /* payload: split table index           */
+    YEW_REGION_NONE = 0,
+    YEW_REGION_PANE,        /* payload: leaf table index            */
+    YEW_REGION_PANE_BORDER, /* payload: split table index           */
     /*
      * Sprint 23/24.  The payload sign convention is documented HERE,
      * now, although groups do not land until Sprint 24: the click
@@ -33,17 +33,17 @@ typedef enum {
      *   payload >= 0   tab index
      *   payload <  0   group id, negated
      */
-    SAG_REGION_TAB,
-    SAG_REGION_TAB_SCROLL, /* payload: +1 scroll right, -1 left     */
+    YEW_REGION_TAB,
+    YEW_REGION_TAB_SCROLL, /* payload: +1 scroll right, -1 left     */
     /*
      * Inert: owns its rectangle and means nothing.  A dialog registers
      * one so clicks on it never fall through to the pane underneath.
      */
-    SAG_REGION_BLOCK,
+    YEW_REGION_BLOCK,
     /* Sprint 24 §4: the group picker's name field and its listing rows
      * (payload = index into the listing). */
-    SAG_REGION_GP_NAME,
-    SAG_REGION_GP_ROW,
+    YEW_REGION_GP_NAME,
+    YEW_REGION_GP_ROW,
     /*
      * Sprint 18.5 §5.  Payload is the row's index within the menu's
      * CURRENT item vector -- not a stable id, because the menu has none
@@ -51,17 +51,17 @@ typedef enum {
      * because a region can only be hit during the frame it was
      * registered in; see region.c on clearing at frame BEGIN.
      */
-    SAG_REGION_MENU_ROW,
+    YEW_REGION_MENU_ROW,
     /*
      * Sprint 26 §5.  Payload is the item's PAYLOAD, never the row
      * index — the same law the picker's selection follows, so a click
      * lands on what was pointed at even if the list reordered between
      * the paint and the press.
      */
-    SAG_REGION_PICK_ROW,
+    YEW_REGION_PICK_ROW,
     /*
      * Sprint 27 §5.  Payload is the row's index within the OPEN menu,
-     * which is sound for the same reason SAG_REGION_MENU_ROW's is: a
+     * which is sound for the same reason YEW_REGION_MENU_ROW's is: a
      * region can only be hit during the frame it was registered in, and
      * the menu's row list is fixed for its lifetime.
      *
@@ -71,7 +71,7 @@ typedef enum {
      * re-resolved its target from the cells beneath it would act on a
      * different file than the one the user right-clicked.
      */
-    SAG_REGION_CTX_ROW
+    YEW_REGION_CTX_ROW
 } RegionKind;
 
 typedef struct Region {
@@ -83,30 +83,30 @@ typedef struct Region {
 enum {
     /* A frame with this many regions is a rendering bug, not a growth
      * problem, so the table is fixed and overflow drops. */
-    SAG_REGION_MAX = 256
+    YEW_REGION_MAX = 256
 };
 
 /* Clears the table.  Called at frame BEGIN — see region.c for why the
  * obvious alternative is wrong. */
-void sag_region_frame_begin(void);
-void sag_region_add(RegionKind kind, Rect rect, i32 payload);
+void yew_region_frame_begin(void);
+void yew_region_add(RegionKind kind, Rect rect, i32 payload);
 /* Last-added wins, so overlays drawn after the document shadow it. */
-Region sag_region_hit(u16 x, u16 y);
-u32 sag_region_count(void);
+Region yew_region_hit(u16 x, u16 y);
+u32 yew_region_count(void);
 
 /*
  * Sprint 27 §5: freezes the table.  A hit-test while frozen is a BUG
  * and aborts — see region.c and ui/ctxmenu.h for the rule it enforces.
  * The context menu is the only caller; it wraps a row's action.
  */
-void sag_region_freeze(bool on);
-bool sag_region_frozen(void);
+void yew_region_freeze(bool on);
+bool yew_region_frozen(void);
 
 /*
  * DoD 10: in a debug build, querying between frame_begin and the first
  * add is a bug — it means the input path ran against a frame that never
  * drew anything.  Returns the number of times that happened.
  */
-u32 sag_region_empty_queries(void);
+u32 yew_region_empty_queries(void);
 
 #endif

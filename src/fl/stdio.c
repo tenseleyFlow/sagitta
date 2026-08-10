@@ -296,8 +296,8 @@ static bool io_write(FlVm *vm, FlValue *a, u32 n, FlValue *out)
      * an interrupted write must not lose the old contents, and there is
      * exactly one implementation of that in the tree.
      */
-    if (sag_file_write_atomic(path, (const u8 *)body->b, (size_t)body->len,
-                              0666) != SAG_SAVE_OK) {
+    if (yew_file_write_atomic(path, (const u8 *)body->b, (size_t)body->len,
+                              0666) != YEW_SAVE_OK) {
         bool r = io_err(vm, errno == 0 ? EIO : errno, path);
 
         free(path);
@@ -505,7 +505,7 @@ static bool io_env(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     /* The one getenv A SCRIPT can reach.  Environment reads are ambient
      * authority by another name, so they go through a capability and
      * through one function a reviewer can find; the VM's own two --
-     * FL_GC_STRESS and SAG_FL_DUMP_BAD_CHUNK -- are developer switches
+     * FL_GC_STRESS and YEW_FL_DUMP_BAD_CHUNK -- are developer switches
      * no Fletch program can name. */
     v = getenv(name);
     free(name);
@@ -522,7 +522,7 @@ static bool io_env(FlVm *vm, FlValue *a, u32 n, FlValue *out)
  * Space-joined display forms and a newline.
  *
  * From Sprint 34 the host redirects both streams to the message line
- * and sag_log while the TUI owns the terminal; nothing in src/fl/ ever
+ * and yew_log while the TUI owns the terminal; nothing in src/fl/ ever
  * writes an escape sequence or touches the tty directly.
  */
 static bool print_to(FlVm *vm, FlValue *a, u32 n, FILE *f, FlValue *out)
@@ -717,14 +717,14 @@ static bool names_read(Names *ns, const char *dir)
             continue;
         if (ns->n == ns->cap) {
             ns->cap = ns->cap == 0U ? 16U : ns->cap * 2U;
-            ns->v = sag_xreallocarray(ns->v, ns->cap, sizeof(*ns->v));
+            ns->v = yew_xreallocarray(ns->v, ns->cap, sizeof(*ns->v));
         }
-        copy = sag_xmalloc(strlen(e->d_name) + 1U);
+        copy = yew_xmalloc(strlen(e->d_name) + 1U);
         (void)memcpy(copy, e->d_name, strlen(e->d_name) + 1U);
         ns->v[ns->n++] = copy;
     }
     (void)closedir(d);
-    sag_sort_stable(ns->v, ns->n, sizeof(*ns->v), name_cmp, NULL);
+    yew_sort_stable(ns->v, ns->n, sizeof(*ns->v), name_cmp, NULL);
     return true;
 }
 
@@ -861,7 +861,7 @@ static void sort_unique(FlList *l)
     if (l->n < 2U) {
         return;
     }
-    sag_sort_stable(l->v, l->n, sizeof(*l->v), path_cmp, NULL);
+    yew_sort_stable(l->v, l->n, sizeof(*l->v), path_cmp, NULL);
     for (i = 0U; i < l->n; i++) {
         if (i == 0U || path_cmp(&l->v[keep - 1U], &l->v[i], NULL) != 0)
             l->v[keep++] = l->v[i];
@@ -874,7 +874,7 @@ static void sort_unique(FlList *l)
  * process cwd.
  *
  * Pinned because it is a real bug class: a config that globbed relative
- * to the cwd would find its own snippets when sagitta was launched from
+ * to the cwd would find its own snippets when yew was launched from
  * the config directory and find nothing anywhere else, and the user
  * would report it as "plugins load sometimes".  When the caller has no
  * file -- the CLI and the REPL -- the cwd IS the caller's context, and
@@ -883,7 +883,7 @@ static void sort_unique(FlList *l)
 static void default_root(FlVm *vm, Bytebuf *out)
 {
     FlOrigin o = fl_cap_origin(vm);
-    const char *p = o.path_id == 0U ? NULL : sag_intern_str(vm->in, o.path_id);
+    const char *p = o.path_id == 0U ? NULL : yew_intern_str(vm->in, o.path_id);
     const char *slash;
 
     if (p != NULL) {
@@ -1007,5 +1007,5 @@ static const FlNativeDef IO_DEFS[] = {
 };
 
 const FlModuleDef fl_mod_io = {
-    "io", IO_DEFS, (u32)SAG_ARRAY_LEN(IO_DEFS), NULL, 0U
+    "io", IO_DEFS, (u32)YEW_ARRAY_LEN(IO_DEFS), NULL, 0U
 };

@@ -286,7 +286,7 @@ void test_fl_re_replays_the_s20_golden_table(void)
     size_t replayed = 0U;
 
     flfix_open(&f);
-    for (i = 0U; i < SAG_ARRAY_LEN(rows); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(rows); i++) {
         const ReRow *r = &rows[i];
         char pat[2048];
         char inp[2048];
@@ -296,11 +296,11 @@ void test_fl_re_replays_the_s20_golden_table(void)
         size_t at = 0U;
 
         /* The rows carry s20's flag bits; `re` spells them as letters. */
-        if ((r->flags & (u32)SAG_RE_ICASE) != 0U)
+        if ((r->flags & (u32)YEW_RE_ICASE) != 0U)
             flags[at++] = 'i';
-        if ((r->flags & (u32)SAG_RE_DOTALL) != 0U)
+        if ((r->flags & (u32)YEW_RE_DOTALL) != 0U)
             flags[at++] = 's';
-        if ((r->flags & (u32)SAG_RE_LITERAL) != 0U)
+        if ((r->flags & (u32)YEW_RE_LITERAL) != 0U)
             flags[at++] = 'l';
         flags[at] = '\0';
         re_escape(pat, sizeof(pat), r->pat);
@@ -320,7 +320,7 @@ void test_fl_re_replays_the_s20_golden_table(void)
         replayed++;
     }
     /* The table is the contract; s20 keeps it above 130 rows. */
-    SAG_ASSERT(replayed >= 130U);
+    YEW_ASSERT(replayed >= 130U);
     flfix_close(&f);
 }
 

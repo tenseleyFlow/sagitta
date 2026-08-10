@@ -1,7 +1,7 @@
 /*
- * Sprint 21 DoD 13: the sag_re_quote round-trip law.
+ * Sprint 21 DoD 13: the yew_re_quote round-trip law.
  *
- * For any literal s, compiling sag_re_quote(s) must produce a pattern
+ * For any literal s, compiling yew_re_quote(s) must produce a pattern
  * that matches s -- and matches exactly s, starting at 0 and ending at
  * the end.  "Nothing shorter" is the half that catches a metacharacter
  * escaping into syntax: if a `+` in the middle of s survived unquoted,
@@ -28,15 +28,15 @@ static bool quote_round_trip(const u8 *data, size_t len,
 {
     Arena arena;
     Bytebuf pat;
-    SagReErr err;
-    SagRe *re;
+    YewReErr err;
+    YewRe *re;
     bool ok = false;
 
     bytebuf_init(&pat);
-    sag_re_quote(&pat, data, len);
+    yew_re_quote(&pat, data, len);
     arena_init(&arena);
     (void)memset(&err, 0, sizeof(err));
-    re = sag_re_compile(&arena, (const char *)pat.data, pat.len, 0U, &err);
+    re = yew_re_compile(&arena, (const char *)pat.data, pat.len, 0U, &err);
     if (re == NULL) {
         (void)snprintf(why, why_cap,
                        "quoted literal did not compile at %u: %s",
@@ -45,11 +45,11 @@ static bool quote_round_trip(const u8 *data, size_t len,
         goto done;
     }
     {
-        SagReInput in = sag_re_input_bytes(data, (u64)len);
-        SagReMatch m;
+        YewReInput in = yew_re_input_bytes(data, (u64)len);
+        YewReMatch m;
 
         (void)memset(&m, 0, sizeof(m));
-        if (!sag_re_search(re, &in, BYTEOFF(0U), &m)) {
+        if (!yew_re_search(re, &in, BYTEOFF(0U), &m)) {
             (void)snprintf(why, why_cap,
                            "quoted literal does not match its own text");
             goto done;
@@ -71,8 +71,8 @@ static bool quote_round_trip(const u8 *data, size_t len,
      */
     if (len > 0U) {
         u8 *bent = malloc(len);
-        SagReInput in;
-        SagReMatch m;
+        YewReInput in;
+        YewReMatch m;
 
         if (bent == NULL) {
             (void)snprintf(why, why_cap, "out of memory");
@@ -83,9 +83,9 @@ static bool quote_round_trip(const u8 *data, size_t len,
          * destroying a UTF-8 lead, so the perturbed string stays the
          * same length in bytes. */
         bent[len / 2U] = (u8)(bent[len / 2U] ^ 0x01U);
-        in = sag_re_input_bytes(bent, (u64)len);
+        in = yew_re_input_bytes(bent, (u64)len);
         (void)memset(&m, 0, sizeof(m));
-        if (sag_re_search(re, &in, BYTEOFF(0U), &m) &&
+        if (yew_re_search(re, &in, BYTEOFF(0U), &m) &&
             m.g[0].lo == 0U && m.g[0].hi == (u64)len) {
             (void)snprintf(why, why_cap,
                            "quoted literal also matches a perturbed "
@@ -104,6 +104,6 @@ done:
 
 int main(int argc, char **argv)
 {
-    return sag_fuzz_main(argc, argv, "fuzz_re_quote", NULL,
+    return yew_fuzz_main(argc, argv, "fuzz_re_quote", NULL,
                          quote_round_trip);
 }

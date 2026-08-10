@@ -65,18 +65,18 @@ static void break_pair(Grid *g, u16 row, u16 col, u16 *lo, u16 *hi)
     }
 }
 
-static SagColor color_normalize(SagColor color)
+static YewColor color_normalize(YewColor color)
 {
-    if (color.tag == SAG_COLOR_DEFAULT || color.tag > SAG_COLOR_RGB) {
+    if (color.tag == YEW_COLOR_DEFAULT || color.tag > YEW_COLOR_RGB) {
         memset(&color, 0, sizeof(color));
-    } else if (color.tag == SAG_COLOR_INDEXED) {
+    } else if (color.tag == YEW_COLOR_INDEXED) {
         color.g = 0u;
         color.b = 0u;
     }
     return color;
 }
 
-static Cell cell_make(const u8 *bytes, size_t n, SagColor fg, SagColor bg,
+static Cell cell_make(const u8 *bytes, size_t n, YewColor fg, YewColor bg,
                       u16 attrs, u8 width, Interner *gi)
 {
     Cell c;
@@ -84,13 +84,13 @@ static Cell cell_make(const u8 *bytes, size_t n, SagColor fg, SagColor bg,
     memset(&c, 0, sizeof(c));
     c.fg = color_normalize(fg);
     c.bg = color_normalize(bg);
-    c.attrs = (u16)(attrs & ((SAG_ATTR_INVALID_BYTE << 1) - 1u));
+    c.attrs = (u16)(attrs & ((YEW_ATTR_INVALID_BYTE << 1) - 1u));
     c.w = width;
     if (n <= sizeof(c.utf8)) {
         if (n != 0u)
             memcpy(c.utf8, bytes, n);
     } else {
-        c.id = sag_intern(gi, (const char *)bytes, n);
+        c.id = yew_intern(gi, (const char *)bytes, n);
         c.flags = CELL_INTERNED;
     }
     return c;
@@ -117,14 +117,14 @@ static void append_zero_width(Grid *g, u16 row, u16 col,
     u16 base_col;
 
     if (col == 0u || row >= g->rows || col > g->cols) {
-        sag_log(SAG_LOG_WARN, "dropping zero-width cluster without a base");
+        yew_log(YEW_LOG_WARN, "dropping zero-width cluster without a base");
         return;
     }
     cells = &g->back[(size_t)row * g->cols];
     base_col = (u16)(col - 1u);
     if (cells[base_col].w == 0u) {
         if (base_col == 0u || cells[base_col - 1u].w != 2u) {
-            sag_log(SAG_LOG_WARN,
+            yew_log(YEW_LOG_WARN,
                     "dropping zero-width cluster after orphan continuation");
             return;
         }
@@ -132,18 +132,18 @@ static void append_zero_width(Grid *g, u16 row, u16 col,
     }
     base = &cells[base_col];
     if (base->w != 1u && base->w != 2u) {
-        sag_log(SAG_LOG_WARN, "dropping zero-width cluster without a base");
+        yew_log(YEW_LOG_WARN, "dropping zero-width cluster without a base");
         return;
     }
     if ((base->flags & CELL_INTERNED) == 0u && base->utf8[0] == 0u) {
-        sag_log(SAG_LOG_WARN, "dropping zero-width cluster after a blank");
+        yew_log(YEW_LOG_WARN, "dropping zero-width cluster after a blank");
         return;
     }
     if ((base->flags & CELL_INTERNED) != 0u) {
-        const char *interned = sag_intern_str(g->gi, base->id);
+        const char *interned = yew_intern_str(g->gi, base->id);
 
         if (interned == NULL)
-            SAG_BUG("cell contains invalid grapheme intern id %u", base->id);
+            YEW_BUG("cell contains invalid grapheme intern id %u", base->id);
         old = (const u8 *)interned;
         old_n = strlen(interned);
     } else {
@@ -151,9 +151,9 @@ static void append_zero_width(Grid *g, u16 row, u16 col,
         old_n = inline_len(base);
     }
     if (n > SIZE_MAX - old_n)
-        SAG_BUG("grapheme cluster length overflow");
+        YEW_BUG("grapheme cluster length overflow");
     total = old_n + n;
-    joined = sag_xmalloc(total);
+    joined = yew_xmalloc(total);
     if (old_n != 0u)
         memcpy(joined, old, old_n);
     if (n != 0u)
@@ -163,7 +163,7 @@ static void append_zero_width(Grid *g, u16 row, u16 col,
         memcpy(base->utf8, joined, total);
         base->flags = 0u;
     } else {
-        u32 id = sag_intern(g->gi, (const char *)joined, total);
+        u32 id = yew_intern(g->gi, (const char *)joined, total);
 
         memset(base->utf8, 0, sizeof(base->utf8));
         base->id = id;
@@ -174,13 +174,13 @@ static void append_zero_width(Grid *g, u16 row, u16 col,
 }
 
 static u16 put_ascii_expansion(Grid *g, u16 row, u16 col,
-                               const u8 *bytes, size_t n, SagColor fg,
-                               SagColor bg, u16 attrs)
+                               const u8 *bytes, size_t n, YewColor fg,
+                               YewColor bg, u16 attrs)
 {
     size_t i;
 
     for (i = 0; i < n && col < g->cols; i++)
-        col = sag_grid_put(g, row, col, &bytes[i], 1u, fg, bg, attrs);
+        col = yew_grid_put(g, row, col, &bytes[i], 1u, fg, bg, attrs);
     return col;
 }
 
@@ -190,10 +190,10 @@ static bool control_expansion(const u8 *cluster, size_t n, u8 out[4],
     static const u8 hex[] = "0123456789ABCDEF";
     u32 cp;
 
-    (void)sag_utf8_decode(cluster, n, &cp);
-    *invalid = sag_utf8_is_escape(cp);
+    (void)yew_utf8_decode(cluster, n, &cp);
+    *invalid = yew_utf8_is_escape(cp);
     if (*invalid || (cp >= 0x80u && cp <= 0x9fu)) {
-        u8 byte = *invalid ? sag_utf8_escape_byte(cp) : (u8)cp;
+        u8 byte = *invalid ? yew_utf8_escape_byte(cp) : (u8)cp;
 
         out[0] = '<';
         out[1] = hex[byte >> 4];
@@ -211,18 +211,18 @@ static bool control_expansion(const u8 *cluster, size_t n, u8 out[4],
     return false;
 }
 
-bool sag_grid_init(Grid *g, Interner *gi, u16 rows, u16 cols)
+bool yew_grid_init(Grid *g, Interner *gi, u16 rows, u16 cols)
 {
     if (g == NULL || gi == NULL)
         return false;
     memset(g, 0, sizeof(*g));
     g->gi = gi;
     g->blank.w = 1u;
-    g->cur_shape = SAG_CURSOR_BLOCK;
-    return sag_grid_resize(g, rows, cols);
+    g->cur_shape = YEW_CURSOR_BLOCK;
+    return yew_grid_resize(g, rows, cols);
 }
 
-void sag_grid_free(Grid *g)
+void yew_grid_free(Grid *g)
 {
     if (g == NULL)
         return;
@@ -232,7 +232,7 @@ void sag_grid_free(Grid *g)
     memset(g, 0, sizeof(*g));
 }
 
-bool sag_grid_resize(Grid *g, u16 rows, u16 cols)
+bool yew_grid_resize(Grid *g, u16 rows, u16 cols)
 {
     Cell *front;
     Cell *back;
@@ -243,9 +243,9 @@ bool sag_grid_resize(Grid *g, u16 rows, u16 cols)
     if (g == NULL || g->gi == NULL)
         return false;
     count = (size_t)rows * cols;
-    front = sag_xcalloc(count, sizeof(*front));
-    back = sag_xcalloc(count, sizeof(*back));
-    dmg = sag_xcalloc(rows, sizeof(*dmg));
+    front = yew_xcalloc(count, sizeof(*front));
+    back = yew_xcalloc(count, sizeof(*back));
+    dmg = yew_xcalloc(rows, sizeof(*dmg));
     for (i = 0; i < count; i++) {
         front[i].w = 0xffu;
         back[i] = g->blank;
@@ -267,11 +267,11 @@ bool sag_grid_resize(Grid *g, u16 rows, u16 cols)
     else if (g->cur_col >= cols)
         g->cur_col = (u16)(cols - 1u);
     damage_reset(g);
-    sag_grid_mark_all(g);
+    yew_grid_mark_all(g);
     return true;
 }
 
-void sag_grid_clear(Grid *g)
+void yew_grid_clear(Grid *g)
 {
     size_t count;
     size_t i;
@@ -281,11 +281,11 @@ void sag_grid_clear(Grid *g)
     count = (size_t)g->rows * g->cols;
     for (i = 0; i < count; i++)
         g->back[i] = g->blank;
-    sag_grid_mark_all(g);
+    yew_grid_mark_all(g);
 }
 
-u16 sag_grid_put(Grid *g, u16 row, u16 col, const u8 *cluster, size_t n,
-                 SagColor fg, SagColor bg, u16 attrs)
+u16 yew_grid_put(Grid *g, u16 row, u16 col, const u8 *cluster, size_t n,
+                 YewColor fg, YewColor bg, u16 attrs)
 {
     Cell *cells;
     Cell head;
@@ -300,13 +300,13 @@ u16 sag_grid_put(Grid *g, u16 row, u16 col, const u8 *cluster, size_t n,
         n == 0u)
         return g != NULL && col > g->cols ? g->cols : col;
     if (n == 1u && cluster[0] == '\t') {
-        sag_log(SAG_LOG_WARN, "dropping unresolved tab passed to grid");
+        yew_log(YEW_LOG_WARN, "dropping unresolved tab passed to grid");
         return col;
     }
-    width = sag_cluster_width(cluster, n);
+    width = yew_cluster_width(cluster, n);
     if (control_expansion(cluster, n, expanded, &expanded_n, &invalid)) {
         if (invalid)
-            attrs |= SAG_ATTR_INVALID_BYTE;
+            attrs |= YEW_ATTR_INVALID_BYTE;
         return put_ascii_expansion(g, row, col, expanded, expanded_n, fg, bg,
                                    attrs);
     }
@@ -315,7 +315,7 @@ u16 sag_grid_put(Grid *g, u16 row, u16 col, const u8 *cluster, size_t n,
         return col;
     }
     if (width != 1 && width != 2) {
-        sag_log(SAG_LOG_WARN, "dropping cluster with unsupported width %d",
+        yew_log(YEW_LOG_WARN, "dropping cluster with unsupported width %d",
                 width);
         return col;
     }
@@ -352,25 +352,25 @@ u16 sag_grid_put(Grid *g, u16 row, u16 col, const u8 *cluster, size_t n,
     return (u16)(col + (u16)width);
 }
 
-u16 sag_grid_puts(Grid *g, u16 row, u16 col, const u8 *s, size_t n,
-                  SagColor fg, SagColor bg, u16 attrs)
+u16 yew_grid_puts(Grid *g, u16 row, u16 col, const u8 *s, size_t n,
+                  YewColor fg, YewColor bg, u16 attrs)
 {
     size_t pos = 0u;
 
     if (g == NULL || s == NULL || row >= g->rows)
         return col;
     while (pos < n && col < g->cols) {
-        size_t next = sag_gb_next_bytes(s, n, pos);
+        size_t next = yew_gb_next_bytes(s, n, pos);
 
         if (next <= pos || next > n)
-            SAG_BUG("grapheme iterator returned invalid grid boundary");
-        col = sag_grid_put(g, row, col, s + pos, next - pos, fg, bg, attrs);
+            YEW_BUG("grapheme iterator returned invalid grid boundary");
+        col = yew_grid_put(g, row, col, s + pos, next - pos, fg, bg, attrs);
         pos = next;
     }
     return col;
 }
 
-void sag_grid_fill(Grid *g, u16 row, u16 c0, u16 c1, Cell c)
+void yew_grid_fill(Grid *g, u16 row, u16 c0, u16 c1, Cell c)
 {
     Cell *cells;
     u16 lo;
@@ -388,27 +388,27 @@ void sag_grid_fill(Grid *g, u16 row, u16 c0, u16 c1, Cell c)
     if ((u16)(c1 - 1u) != c0)
         break_pair(g, row, (u16)(c1 - 1u), &lo, &hi);
     if (c.w != 1u) {
-        SagColor fg = c.fg;
-        SagColor bg = c.bg;
+        YewColor fg = c.fg;
+        YewColor bg = c.bg;
         u16 attrs = c.attrs;
 
         c = g->blank;
         c.fg = color_normalize(fg);
         c.bg = color_normalize(bg);
-        c.attrs = (u16)(attrs & ((SAG_ATTR_INVALID_BYTE << 1) - 1u));
+        c.attrs = (u16)(attrs & ((YEW_ATTR_INVALID_BYTE << 1) - 1u));
     } else {
         const u8 *data;
         size_t n;
 
         c.fg = color_normalize(c.fg);
         c.bg = color_normalize(c.bg);
-        c.attrs = (u16)(c.attrs & ((SAG_ATTR_INVALID_BYTE << 1) - 1u));
+        c.attrs = (u16)(c.attrs & ((YEW_ATTR_INVALID_BYTE << 1) - 1u));
         c.flags &= CELL_INTERNED;
         if ((c.flags & CELL_INTERNED) != 0u) {
-            const char *interned = sag_intern_str(g->gi, c.id);
+            const char *interned = yew_intern_str(g->gi, c.id);
 
             if (interned == NULL)
-                SAG_BUG("grid fill contains invalid grapheme intern id %u",
+                YEW_BUG("grid fill contains invalid grapheme intern id %u",
                         c.id);
             data = (const u8 *)interned;
             n = strlen(interned);
@@ -419,16 +419,16 @@ void sag_grid_fill(Grid *g, u16 row, u16 c0, u16 c1, Cell c)
                 memset(c.utf8 + n, 0, sizeof(c.utf8) - n);
         }
         if (n != 0u &&
-            (sag_gb_next_bytes(data, n, 0u) != n ||
-             sag_cluster_width(data, n) != 1))
-            SAG_BUG("grid fill requires one printable width-1 grapheme");
+            (yew_gb_next_bytes(data, n, 0u) != n ||
+             yew_cluster_width(data, n) != 1))
+            YEW_BUG("grid fill requires one printable width-1 grapheme");
     }
     for (col = c0; col < c1; col++)
         cells[col] = c;
     damage_add(g, row, lo, hi);
 }
 
-void sag_grid_overlay(Grid *g, u16 row, u16 c0, u16 c1,
+void yew_grid_overlay(Grid *g, u16 row, u16 c0, u16 c1,
                       const Cell *style, u8 fields)
 {
     Cell *cells;
@@ -445,18 +445,18 @@ void sag_grid_overlay(Grid *g, u16 row, u16 c0, u16 c1,
     if (c1 < g->cols && cells[c1 - 1u].w == 2u)
         c1++;
     for (col = c0; col < c1; col++) {
-        if ((fields & SAG_OVERLAY_FG) != 0u)
+        if ((fields & YEW_OVERLAY_FG) != 0u)
             cells[col].fg = color_normalize(style->fg);
-        if ((fields & SAG_OVERLAY_BG) != 0u)
+        if ((fields & YEW_OVERLAY_BG) != 0u)
             cells[col].bg = color_normalize(style->bg);
-        if ((fields & SAG_OVERLAY_ATTRS) != 0u)
+        if ((fields & YEW_OVERLAY_ATTRS) != 0u)
             cells[col].attrs |= (u16)(style->attrs &
-                                      ((SAG_ATTR_INVALID_BYTE << 1) - 1u));
+                                      ((YEW_ATTR_INVALID_BYTE << 1) - 1u));
     }
     damage_add(g, row, c0, c1);
 }
 
-void sag_grid_cursor(Grid *g, u16 row, u16 col, bool visible)
+void yew_grid_cursor(Grid *g, u16 row, u16 col, bool visible)
 {
     if (g == NULL)
         return;
@@ -477,19 +477,19 @@ void sag_grid_cursor(Grid *g, u16 row, u16 col, bool visible)
     g->cur_vis = visible;
 }
 
-void sag_grid_cursor_shape(Grid *g, SagCursorShape shape)
+void yew_grid_cursor_shape(Grid *g, YewCursorShape shape)
 {
     if (g == NULL)
         return;
-    if (shape != SAG_CURSOR_BLOCK && shape != SAG_CURSOR_BAR)
-        SAG_BUG("grid cursor: invalid shape");
+    if (shape != YEW_CURSOR_BLOCK && shape != YEW_CURSOR_BAR)
+        YEW_BUG("grid cursor: invalid shape");
     if (g->cur_shape == shape)
         return;
     g->cur_shape = shape;
     g->cursor_generation++;
 }
 
-void sag_grid_mark_all(Grid *g)
+void yew_grid_mark_all(Grid *g)
 {
     u16 row;
 
@@ -504,7 +504,7 @@ void sag_grid_mark_all(Grid *g)
     g->cursor_generation++;
 }
 
-void sag_grid_flip(Grid *g)
+void yew_grid_flip(Grid *g)
 {
     u16 row;
 
@@ -524,7 +524,7 @@ void sag_grid_flip(Grid *g)
     damage_reset(g);
 }
 
-bool sag_cell_eq(const Cell *a, const Cell *b)
+bool yew_cell_eq(const Cell *a, const Cell *b)
 {
     return a != NULL && b != NULL && memcmp(a, b, sizeof(*a)) == 0;
 }

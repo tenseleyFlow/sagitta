@@ -35,10 +35,10 @@ static bool invoke_many(Ed *ed, CmdId id, u32 count, u64 *elapsed)
     cx.ed = ed;
     cx.win = ed->win;
     cx.count = 1U;
-    cx.source = SAG_SRC_TEST;
+    cx.source = YEW_SRC_TEST;
     start = now_ns();
     for (i = 0U; i < count; i++) {
-        if (sag_cmd_invoke(id, &cx) != SAG_CMD_OK)
+        if (yew_cmd_invoke(id, &cx) != YEW_CMD_OK)
             return false;
     }
     *elapsed = now_ns() - start;
@@ -103,14 +103,14 @@ int main(int argc, char **argv)
         (void)fprintf(stderr, "usage: perf_record [--gate]\n");
         return 2;
     }
-    sag_ed_init(&ed);
-    if (!sag_ed_open_scratch(&ed)) {
-        sag_ed_free(&ed);
+    yew_ed_init(&ed);
+    if (!yew_ed_open_scratch(&ed)) {
+        yew_ed_free(&ed);
         return 2;
     }
-    escape = sag_cmd_lookup("ed.mode.escape", 14U);
+    escape = yew_cmd_lookup("ed.mode.escape", 14U);
     if (escape.v == 0U) {
-        sag_ed_free(&ed);
+        yew_ed_free(&ed);
         return 2;
     }
     RecEventVec_reserve(&ed.rec.ev, TAP_ITERS);
@@ -118,18 +118,18 @@ int main(int argc, char **argv)
         u64 baseline;
         u64 recorded;
 
-        sag_cmd_set_record_tap(NULL);
+        yew_cmd_set_record_tap(NULL);
         if (!invoke_many(&ed, escape, TAP_ITERS, &baseline)) {
-            sag_ed_free(&ed);
+            yew_ed_free(&ed);
             return 2;
         }
         ed.rec.active = true;
         ed.rec.reg = (u8)'a';
-        ed.rec.mode_at_start = (u8)SAG_MODE_L;
+        ed.rec.mode_at_start = (u8)YEW_MODE_L;
         ed.rec.ev.len = 0U;
-        sag_cmd_set_record_tap(sag_record_tap);
+        yew_cmd_set_record_tap(yew_record_tap);
         if (!invoke_many(&ed, escape, TAP_ITERS, &recorded)) {
-            sag_ed_free(&ed);
+            yew_ed_free(&ed);
             return 2;
         }
         ed.rec.active = false;
@@ -143,16 +143,16 @@ int main(int argc, char **argv)
     cx.ed = &ed;
     cx.win = ed.win;
     cx.count = 1U;
-    cx.source = SAG_SRC_TEST;
+    cx.source = YEW_SRC_TEST;
     ed.rec.active = true;
     for (i = 0U; i < EMIT_EVENTS; i++)
-        sag_record_tap(escape, &cx);
+        yew_record_tap(escape, &cx);
     ed.rec.active = false;
     bytebuf_init(&out);
     for (i = 0U; i < PERF_SAMPLES; i++) {
         out.len = 0U;
         emit_start = now_ns();
-        sag_record_emit(&ed.rec, &ed, &out);
+        yew_record_emit(&ed.rec, &ed, &out);
         emit_samples[i] = now_ns() - emit_start;
     }
     sort_u64(emit_samples, PERF_SAMPLES);
@@ -164,8 +164,8 @@ int main(int argc, char **argv)
     (void)printf("emit_10k_ns %llu budget %u\n",
                  (unsigned long long)emit_elapsed, EMIT_BUDGET_NS);
     bytebuf_free(&out);
-    sag_cmd_set_record_tap(sag_record_tap);
-    sag_ed_free(&ed);
+    yew_cmd_set_record_tap(yew_record_tap);
+    yew_ed_free(&ed);
     if (gate && (overhead > (i64)TAP_BUDGET_NS ||
                  emit_elapsed > EMIT_BUDGET_NS))
         return 1;

@@ -93,7 +93,7 @@ static const u8 *store_bytes(RtSession *session, const u8 *bytes, u32 len)
             else
                 cap *= 2U;
         }
-        session->storage = sag_xrealloc(session->storage, cap);
+        session->storage = yew_xrealloc(session->storage, cap);
         session->storage_cap = cap;
     }
     if (len != 0U)
@@ -111,11 +111,11 @@ static const RtGenCmd *choose_cmd(u64 *state)
                      : roll < 87U ? RT_GEN_SELECTION
                      : roll < 95U ? RT_GEN_YANK
                                    : RT_GEN_MODE;
-    u32 start = rnd(state, (u32)SAG_ARRAY_LEN(gen_cmds));
+    u32 start = rnd(state, (u32)YEW_ARRAY_LEN(gen_cmds));
     u32 i;
 
-    for (i = 0U; i < (u32)SAG_ARRAY_LEN(gen_cmds); i++) {
-        const RtGenCmd *cmd = &gen_cmds[(start + i) % SAG_ARRAY_LEN(gen_cmds)];
+    for (i = 0U; i < (u32)YEW_ARRAY_LEN(gen_cmds); i++) {
+        const RtGenCmd *cmd = &gen_cmds[(start + i) % YEW_ARRAY_LEN(gen_cmds)];
 
         if (cmd->kind == want)
             return cmd;
@@ -128,7 +128,7 @@ static bool append_named(RtSession *session, const char *name,
 {
     RtEvent ev = {0};
 
-    ev.cmd = sag_cmd_lookup(name, (u32)strlen(name));
+    ev.cmd = yew_cmd_lookup(name, (u32)strlen(name));
     ev.count = 1U;
     ev.sarg_len = sarg_len;
     if (sarg_len != 0U) {
@@ -175,13 +175,13 @@ static bool append_generated(RtSession *session, u64 *state,
     const CmdDesc *desc;
     u32 count_roll;
 
-    ev.cmd = sag_cmd_lookup(gc->name, (u32)strlen(gc->name));
-    desc = sag_cmd_desc(ev.cmd);
+    ev.cmd = yew_cmd_lookup(gc->name, (u32)strlen(gc->name));
+    desc = yew_cmd_desc(ev.cmd);
     if (desc == NULL)
         return false;
     ev.count = 1U;
     if (gc->kind == RT_GEN_INSERT) {
-        u32 p = rnd(state, (u32)SAG_ARRAY_LEN(payloads));
+        u32 p = rnd(state, (u32)YEW_ARRAY_LEN(payloads));
 
         ev.sarg_len = payloads[p].len;
         ev.sarg = store_bytes(session, payloads[p].bytes, ev.sarg_len);
@@ -207,7 +207,7 @@ static bool append_generated(RtSession *session, u64 *state,
         if (ev.sarg == NULL)
             return false;
     } else if ((desc->flags &
-                (SAG_CMD_REPEATABLE | SAG_CMD_TAKES_COUNT)) != 0U) {
+                (YEW_CMD_REPEATABLE | YEW_CMD_TAKES_COUNT)) != 0U) {
         count_roll = rnd(state, 100U);
         if (count_roll >= 60U) {
             ev.count_given = true;
@@ -229,10 +229,10 @@ bool rt_session_generate(RtSession *session, u64 seed, u32 fixture,
     session->seed = seed;
     session->fixture = fixture % 6U;
     session->generated_len = target;
-    session->start_mode = (u8)(SAG_MODE_L + rnd(&state, 3U));
+    session->start_mode = (u8)(YEW_MODE_L + rnd(&state, 3U));
     /* Largest generated payload is 11 bytes and sessions cap at 200. */
     session->storage_cap = 4096U;
-    session->storage = sag_xmalloc(session->storage_cap);
+    session->storage = yew_xmalloc(session->storage_cap);
     while (session->events.len + (has_text_insert ? 1U : 2U) < target) {
         const RtGenCmd *chosen = choose_cmd(&state);
         u32 reserve = has_text_insert ? 1U : 2U;
@@ -271,12 +271,12 @@ bool rt_session_generate(RtSession *session, u64 seed, u32 fixture,
         RtEvent restore = {0};
         static const u8 modes[] = {'L', 'W', 'B'};
 
-        restore.cmd = sag_cmd_lookup("ed.mode.enter",
+        restore.cmd = yew_cmd_lookup("ed.mode.enter",
                                      (u32)strlen("ed.mode.enter"));
         restore.count = 1U;
         restore.sarg_len = 1U;
         restore.sarg = store_bytes(session,
-                                   &modes[session->start_mode - SAG_MODE_L],
+                                   &modes[session->start_mode - YEW_MODE_L],
                                    1U);
         if (restore.sarg == NULL)
             return false;
@@ -381,7 +381,7 @@ static const char *deny_reason(const CmdDesc *d)
 {
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(denied); i++)
+    for (i = 0U; i < YEW_ARRAY_LEN(denied); i++)
         if (strcmp(d->name, denied[i].name) == 0)
             return denied[i].reason;
     return NULL;
@@ -391,7 +391,7 @@ static bool is_generated(const char *name)
 {
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(gen_cmds); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(gen_cmds); i++) {
         if (strcmp(name, gen_cmds[i].name) == 0)
             return true;
     }
@@ -403,17 +403,17 @@ bool rt_generator_coverage(bool verbose)
     u32 i;
     bool ok = true;
 
-    for (i = 0U; i < sag_cmd_count(); i++) {
-        const CmdDesc *d = sag_cmd_at(i);
+    for (i = 0U; i < yew_cmd_count(); i++) {
+        const CmdDesc *d = yew_cmd_at(i);
         CmdId id;
         CmdId back;
         const char *reason;
 
-        if (d == NULL || (d->flags & SAG_CMD_RECORDABLE) == 0U)
+        if (d == NULL || (d->flags & YEW_CMD_RECORDABLE) == 0U)
             continue;
-        id = sag_cmd_lookup(d->name, (u32)strlen(d->name));
-        back = d->word == NULL ? SAG_CMD_NONE :
-               sag_cmd_by_word(d->word, (u32)strlen(d->word));
+        id = yew_cmd_lookup(d->name, (u32)strlen(d->name));
+        back = d->word == NULL ? YEW_CMD_NONE :
+               yew_cmd_by_word(d->word, (u32)strlen(d->word));
         if (id.v == 0U || back.v != id.v) {
             (void)fprintf(stderr,
                           "roundtrip: word bijection failed: %s -> %s\n",
@@ -438,7 +438,7 @@ bool rt_generator_coverage(bool verbose)
      * recordable paste command.  Once one lands it is not auto-denied: the
      * exact-table audit above fails until the generator handles it or a
      * specific reviewed exclusion is added. */
-    if (verbose && sag_cmd_by_word("paste", 5U).v == 0U)
+    if (verbose && yew_cmd_by_word("paste", 5U).v == 0U)
         (void)printf("unavailable paste: no recordable registry command\n");
     return ok;
 }

@@ -15,9 +15,9 @@
 #include "text/journal.h"
 #include "util/log.h"
 
-enum { SAGU_VERSION = 1U, SAGU_HEADER_LEN = 64U, SAGU_TRUNCATED = 1U };
+enum { YEWU_VERSION = 1U, YEWU_HEADER_LEN = 64U, YEWU_TRUNCATED = 1U };
 
-VEC_DECL(SagU32Vec, u32);
+VEC_DECL(YewU32Vec, u32);
 
 static void trim_tree(EditCtx *ec);
 static bool is_ancestor(const UndoTree *ut, u32 ancestor, u32 id);
@@ -40,7 +40,7 @@ static const UndoNode *node_get(const UndoTree *ut, u32 id)
 static bool node_live(const UndoTree *ut, u32 id)
 {
     const UndoNode *node = node_get(ut, id);
-    return node != NULL && (node->flags & SAG_TXN_DEAD) == 0U;
+    return node != NULL && (node->flags & YEW_TXN_DEAD) == 0U;
 }
 
 static u64 default_mono(void *ctx)
@@ -48,7 +48,7 @@ static u64 default_mono(void *ctx)
     struct timespec ts;
     (void)ctx;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
-        SAG_BUG("undo: monotonic clock failed");
+        YEW_BUG("undo: monotonic clock failed");
     return (u64)ts.tv_sec * 1000U + (u64)ts.tv_nsec / 1000000U;
 }
 
@@ -57,7 +57,7 @@ static i64 default_wall(void *ctx)
     struct timespec ts;
     (void)ctx;
     if (clock_gettime(CLOCK_REALTIME, &ts) != 0)
-        SAG_BUG("undo: realtime clock failed");
+        YEW_BUG("undo: realtime clock failed");
     return (i64)ts.tv_sec;
 }
 
@@ -76,22 +76,22 @@ static u64 text_hash(const TextBuf *tb)
     TextIter it;
     u64 hash = UINT64_C(14695981039346656037);
 
-    if (!sag_textiter_begin(&it, tb, BYTEOFF(0U)))
+    if (!yew_textiter_begin(&it, tb, BYTEOFF(0U)))
         return hash;
     do {
         const u8 *bytes;
         u64 len;
-        if (!sag_textiter_chunk(&it, tb, &bytes, &len))
-            SAG_BUG("undo: text iterator failed");
+        if (!yew_textiter_chunk(&it, tb, &bytes, &len))
+            YEW_BUG("undo: text iterator failed");
         hash = fnv_add(hash, bytes, (size_t)len);
-    } while (sag_textiter_advance(&it, tb));
+    } while (yew_textiter_advance(&it, tb));
     return hash;
 }
 
 static void require_ctx(const EditCtx *ec)
 {
     if (ec == NULL || ec->tb == NULL || ec->undo == NULL)
-        SAG_BUG("undo: NULL edit context");
+        YEW_BUG("undo: NULL edit context");
 }
 
 static void snapshot_cursors(UndoTree *ut, const CursorSet *cs,
@@ -103,7 +103,7 @@ static void snapshot_cursors(UndoTree *ut, const CursorSet *cs,
     *count = 0U;
     if (cs == NULL)
         return;
-    sag_cset_check(cs);
+    yew_cset_check(cs);
     for (i = 0U; i < cs->curs.len; i++) {
         size_t index = i == 0U ? (size_t)cs->primary
                                : (i <= (size_t)cs->primary ? i - 1U : i);
@@ -112,7 +112,7 @@ static void snapshot_cursors(UndoTree *ut, const CursorSet *cs,
         rec.pos = cursor->pos.v;
         rec.anchor = cursor->anchor.v;
         rec.goal = cursor->goal_col.v;
-        SagCursorRecVec_push(&ut->cursors, rec);
+        YewCursorRecVec_push(&ut->cursors, rec);
         (*count)++;
     }
 }
@@ -125,8 +125,8 @@ static void restore_cursors(EditCtx *ec, u32 at, u32 count)
     if (cs == NULL || count == 0U)
         return;
     if ((size_t)at + count > ec->undo->cursors.len)
-        SAG_BUG("undo: corrupt cursor slice");
-    SagCursorVec_reserve(&cs->curs, count);
+        YEW_BUG("undo: corrupt cursor slice");
+    YewCursorVec_reserve(&cs->curs, count);
     cs->curs.len = count;
     cs->primary = 0U;
     for (i = 0U; i < count; i++) {
@@ -135,32 +135,32 @@ static void restore_cursors(EditCtx *ec, u32 at, u32 count)
         cs->curs.data[i].anchor = BYTEOFF(rec->anchor);
         cs->curs.data[i].goal_col = (GCol){rec->goal};
     }
-    sag_cset_reseed(cs);
+    yew_cset_reseed(cs);
     for (i = 0U; i < count; i++)
         cs->selstacks.data[i].n = 0U;
-    sag_cset_normalize(ec->tb, cs);
+    yew_cset_normalize(ec->tb, cs);
 }
 
-UndoTree *sag_undo_new(const TextBuf *tb)
+UndoTree *yew_undo_new(const TextBuf *tb)
 {
     UndoTree *ut;
     UndoNode root;
 
     if (tb == NULL)
-        SAG_BUG("sag_undo_new: NULL buffer");
-    ut = sag_xcalloc(1U, sizeof(*ut));
+        YEW_BUG("yew_undo_new: NULL buffer");
+    ut = yew_xcalloc(1U, sizeof(*ut));
     bytebuf_init(&ut->blobs);
     ut->root = 1U;
     ut->cur = 1U;
     ut->saved = 0U;
-    ut->bytes_max = SAG_UNDO_BYTES_MAX;
-    ut->persist_bytes_max = SAG_UNDO_PERSIST_BYTES_MAX;
-    ut->min_nodes = SAG_UNDO_MIN_NODES;
-    ut->pending_reason = SAG_TXN_REASON_MAX;
+    ut->bytes_max = YEW_UNDO_BYTES_MAX;
+    ut->persist_bytes_max = YEW_UNDO_PERSIST_BYTES_MAX;
+    ut->min_nodes = YEW_UNDO_MIN_NODES;
+    ut->pending_reason = YEW_TXN_REASON_MAX;
     ut->boundary = true;
     ut->mono_clock = default_mono;
     ut->wall_clock = default_wall;
-    ut->root_len = sag_textbuf_len(tb);
+    ut->root_len = yew_textbuf_len(tb);
     ut->root_hash = text_hash(tb);
     ut->saved_len = ut->root_len;
     ut->saved_hash = ut->root_hash;
@@ -169,62 +169,62 @@ UndoTree *sag_undo_new(const TextBuf *tb)
     root.id = 1U;
     root.t_wall = ut->wall_clock(ut->clock_ctx);
     root.t_last_ms = ut->mono_clock(ut->clock_ctx);
-    SagUndoNodeVec_push(&ut->nodes, root);
+    YewUndoNodeVec_push(&ut->nodes, root);
     ut->bytes_live = sizeof(root);
     return ut;
 }
 
-void sag_undo_free(UndoTree *ut)
+void yew_undo_free(UndoTree *ut)
 {
     if (ut == NULL)
         return;
     if (ut->depth != 0U || ut->open != 0U)
-        SAG_BUG("undo: free with an open transaction");
-    SagUndoNodeVec_free(&ut->nodes);
-    SagUndoOpVec_free(&ut->ops);
-    SagCursorRecVec_free(&ut->cursors);
-    SagMarkRepairVec_free(&ut->repairs);
-    SagUndoRepairRunVec_free(&ut->repair_runs);
-    SagUndoReplaySpanVec_free(&ut->replay_spans);
+        YEW_BUG("undo: free with an open transaction");
+    YewUndoNodeVec_free(&ut->nodes);
+    YewUndoOpVec_free(&ut->ops);
+    YewCursorRecVec_free(&ut->cursors);
+    YewMarkRepairVec_free(&ut->repairs);
+    YewUndoRepairRunVec_free(&ut->repair_runs);
+    YewUndoReplaySpanVec_free(&ut->replay_spans);
     bytebuf_free(&ut->blobs);
     free(ut);
 }
 
-void sag_undo_set_clock(UndoTree *ut, SagUndoMonoClock mono_clock,
-                        SagUndoWallClock wall_clock, void *ctx)
+void yew_undo_set_clock(UndoTree *ut, YewUndoMonoClock mono_clock,
+                        YewUndoWallClock wall_clock, void *ctx)
 {
     if (ut == NULL)
-        SAG_BUG("sag_undo_set_clock: NULL tree");
+        YEW_BUG("yew_undo_set_clock: NULL tree");
     ut->mono_clock = mono_clock != NULL ? mono_clock : default_mono;
     ut->wall_clock = wall_clock != NULL ? wall_clock : default_wall;
     ut->clock_ctx = ctx;
 }
 
-void sag_undo_set_limits(UndoTree *ut, u64 bytes_max, u32 min_nodes,
+void yew_undo_set_limits(UndoTree *ut, u64 bytes_max, u32 min_nodes,
                          u64 persist_bytes_max)
 {
     if (ut == NULL)
-        SAG_BUG("sag_undo_set_limits: NULL tree");
+        YEW_BUG("yew_undo_set_limits: NULL tree");
     ut->bytes_max = bytes_max;
     ut->min_nodes = min_nodes;
     ut->persist_bytes_max = persist_bytes_max;
 }
 
-static void require_reason(EditCtx *ec, SagTxnReason reason)
+static void require_reason(EditCtx *ec, YewTxnReason reason)
 {
-    if (reason >= SAG_TXN_REASON_MAX)
-        SAG_BUG("undo: invalid transaction reason");
-    if (reason == SAG_TXN_LSP)
-        SAG_BUG("LSP transactions land in Sprint 47");
-    if (reason == SAG_TXN_MULTI) {
+    if (reason >= YEW_TXN_REASON_MAX)
+        YEW_BUG("undo: invalid transaction reason");
+    if (reason == YEW_TXN_LSP)
+        YEW_BUG("LSP transactions land in Sprint 47");
+    if (reason == YEW_TXN_MULTI) {
         if (ec->cset == NULL || ec->cset->curs.len < 2U)
-            SAG_BUG("multi-cursor transaction requires multiple cursors");
-        sag_cset_check_text(ec->tb, ec->cset);
+            YEW_BUG("multi-cursor transaction requires multiple cursors");
+        yew_cset_check_text(ec->tb, ec->cset);
     } else if (ec->cset != NULL)
-        sag_cset_require_single_edit(ec->cset);
+        yew_cset_require_single_edit(ec->cset);
 }
 
-void sag_undo_begin(EditCtx *ec, SagTxnReason why)
+void yew_undo_begin(EditCtx *ec, YewTxnReason why)
 {
     UndoTree *ut;
     require_ctx(ec);
@@ -235,14 +235,14 @@ void sag_undo_begin(EditCtx *ec, SagTxnReason why)
         ut->boundary = true;
         ut->reopened = false;
     } else if (ut->pending_reason != why) {
-        SAG_BUG("undo: nested transaction reason mismatch");
+        YEW_BUG("undo: nested transaction reason mismatch");
     }
     if (ut->depth == UINT32_MAX)
-        SAG_BUG("undo: transaction nesting overflow");
+        YEW_BUG("undo: transaction nesting overflow");
     ut->depth++;
 }
 
-void sag_undo_promote_multi(EditCtx *ec)
+void yew_undo_promote_multi(EditCtx *ec)
 {
     UndoTree *ut;
     UndoNode *node;
@@ -250,41 +250,41 @@ void sag_undo_promote_multi(EditCtx *ec)
     require_ctx(ec);
     ut = ec->undo;
     if (ut->depth == 0U || ec->cset == NULL || ec->cset->curs.len < 2U)
-        SAG_BUG("undo: invalid multi-cursor transaction promotion");
-    sag_cset_check_text(ec->tb, ec->cset);
-    if (ut->pending_reason == SAG_TXN_MULTI)
+        YEW_BUG("undo: invalid multi-cursor transaction promotion");
+    yew_cset_check_text(ec->tb, ec->cset);
+    if (ut->pending_reason == YEW_TXN_MULTI)
         return;
-    if (ut->pending_reason != SAG_TXN_TYPE &&
-        ut->pending_reason != SAG_TXN_ERASE)
-        SAG_BUG("undo: cannot promote transaction reason %u",
+    if (ut->pending_reason != YEW_TXN_TYPE &&
+        ut->pending_reason != YEW_TXN_ERASE)
+        YEW_BUG("undo: cannot promote transaction reason %u",
                 (u32)ut->pending_reason);
     node = node_mut(ut, ut->open);
     if (node != NULL)
-        node->reason = SAG_TXN_MULTI;
-    ut->pending_reason = SAG_TXN_MULTI;
+        node->reason = YEW_TXN_MULTI;
+    ut->pending_reason = YEW_TXN_MULTI;
 }
 
-void sag_undo_boundary(UndoTree *ut)
+void yew_undo_boundary(UndoTree *ut)
 {
     if (ut == NULL)
-        SAG_BUG("sag_undo_boundary: NULL tree");
+        YEW_BUG("yew_undo_boundary: NULL tree");
     ut->boundary = true;
 }
 
-static bool reason_mergeable(SagTxnReason reason)
+static bool reason_mergeable(YewTxnReason reason)
 {
-    return reason == SAG_TXN_TYPE || reason == SAG_TXN_ERASE;
+    return reason == YEW_TXN_TYPE || reason == YEW_TXN_ERASE;
 }
 
-static bool op_contiguous(SagTxnReason reason, const UndoOp *prev,
+static bool op_contiguous(YewTxnReason reason, const UndoOp *prev,
                           u8 kind, u64 off, u64 len)
 {
-    if (reason == SAG_TXN_TYPE && kind == SAG_OP_INS &&
-        prev->kind == SAG_OP_INS)
+    if (reason == YEW_TXN_TYPE && kind == YEW_OP_INS &&
+        prev->kind == YEW_OP_INS)
         return prev->off <= UINT64_MAX - prev->len &&
                off == prev->off + prev->len;
-    if (reason == SAG_TXN_ERASE && kind == SAG_OP_DEL &&
-        prev->kind == SAG_OP_DEL)
+    if (reason == YEW_TXN_ERASE && kind == YEW_OP_DEL &&
+        prev->kind == YEW_OP_DEL)
         return off == prev->off ||
                (off <= UINT64_MAX - len && off + len == prev->off);
     return false;
@@ -299,7 +299,7 @@ static u64 node_payload_bytes(const UndoTree *ut, const UndoNode *node)
     return total;
 }
 
-static bool may_merge(UndoTree *ut, SagTxnReason reason, u8 kind,
+static bool may_merge(UndoTree *ut, YewTxnReason reason, u8 kind,
                       u64 off, u64 len, u64 now)
 {
     UndoNode *node;
@@ -311,11 +311,11 @@ static bool may_merge(UndoTree *ut, SagTxnReason reason, u8 kind,
     node = node_mut(ut, ut->cur);
     if (node == NULL || node->reason != (u8)reason || node->n_ops == 0U ||
         node->first_child != 0U || now < node->t_last_ms ||
-        now - node->t_last_ms >= SAG_UNDO_BURST_MS)
+        now - node->t_last_ms >= YEW_UNDO_BURST_MS)
         return false;
     prev = &ut->ops.data[node->ops_at + node->n_ops - 1U];
     return op_contiguous(reason, prev, kind, off, len) &&
-           node_payload_bytes(ut, node) < SAG_UNDO_BURST_BYTES;
+           node_payload_bytes(ut, node) < YEW_UNDO_BURST_BYTES;
 }
 
 static void link_child(UndoTree *ut, UndoNode *node)
@@ -323,7 +323,7 @@ static void link_child(UndoTree *ut, UndoNode *node)
     UndoNode *parent = node_mut(ut, node->parent);
     u32 *link;
     if (parent == NULL)
-        SAG_BUG("undo: missing parent");
+        YEW_BUG("undo: missing parent");
     link = &parent->first_child;
     while (*link != 0U)
         link = &node_mut(ut, *link)->next_sibling;
@@ -331,7 +331,7 @@ static void link_child(UndoTree *ut, UndoNode *node)
     parent->redo_child = node->id;
 }
 
-static UndoNode *open_node(EditCtx *ec, SagTxnReason reason, u8 kind,
+static UndoNode *open_node(EditCtx *ec, YewTxnReason reason, u8 kind,
                            u64 off, u64 len)
 {
     UndoTree *ut = ec->undo;
@@ -351,7 +351,7 @@ static UndoNode *open_node(EditCtx *ec, SagTxnReason reason, u8 kind,
     node.parent = ut->cur;
     parent = node_mut(ut, node.parent);
     if (parent == NULL)
-        SAG_BUG("undo: invalid current node");
+        YEW_BUG("undo: invalid current node");
     node.depth = parent->depth + 1U;
     node.ops_at = (u32)ut->ops.len;
     node.rep_at = (u32)ut->repairs.len;
@@ -363,12 +363,12 @@ static UndoNode *open_node(EditCtx *ec, SagTxnReason reason, u8 kind,
     wall = ut->wall_clock(ut->clock_ctx);
     if (ut->nodes.len != 0U &&
         wall < ut->nodes.data[ut->nodes.len - 1U].t_wall) {
-        sag_log(SAG_LOG_WARN, "undo: wall clock stepped backwards; clamped");
+        yew_log(YEW_LOG_WARN, "undo: wall clock stepped backwards; clamped");
         wall = ut->nodes.data[ut->nodes.len - 1U].t_wall;
     }
     node.t_wall = wall;
     snapshot_cursors(ut, ec->cset, &node.cur_before, &node.n_before);
-    SagUndoNodeVec_push(&ut->nodes, node);
+    YewUndoNodeVec_push(&ut->nodes, node);
     link_child(ut, &ut->nodes.data[ut->nodes.len - 1U]);
     ut->open = node.id;
     ut->boundary = false;
@@ -377,11 +377,11 @@ static UndoNode *open_node(EditCtx *ec, SagTxnReason reason, u8 kind,
     return node_mut(ut, node.id);
 }
 
-static SagTxnReason edit_reason(const UndoTree *ut, u8 kind)
+static YewTxnReason edit_reason(const UndoTree *ut, u8 kind)
 {
     if (ut->depth != 0U)
         return ut->pending_reason;
-    return kind == SAG_OP_INS ? SAG_TXN_TYPE : SAG_TXN_ERASE;
+    return kind == YEW_OP_INS ? YEW_TXN_TYPE : YEW_TXN_ERASE;
 }
 
 static void capture_delete_bytes(UndoTree *ut, const TextBuf *tb, Span range)
@@ -390,19 +390,19 @@ static void capture_delete_bytes(UndoTree *ut, const TextBuf *tb, Span range)
     u64 left = range.hi - range.lo;
     if (left == 0U)
         return;
-    if (!sag_textiter_begin(&it, tb, BYTEOFF(range.lo)))
-        SAG_BUG("undo: cannot capture delete bytes");
+    if (!yew_textiter_begin(&it, tb, BYTEOFF(range.lo)))
+        YEW_BUG("undo: cannot capture delete bytes");
     while (left != 0U) {
         const u8 *bytes;
         u64 len;
         u64 take;
-        if (!sag_textiter_chunk(&it, tb, &bytes, &len))
-            SAG_BUG("undo: delete capture truncated");
+        if (!yew_textiter_chunk(&it, tb, &bytes, &len))
+            YEW_BUG("undo: delete capture truncated");
         take = len < left ? len : left;
         bytebuf_append(&ut->blobs, bytes, (size_t)take);
         left -= take;
-        if (left != 0U && !sag_textiter_advance(&it, tb))
-            SAG_BUG("undo: delete capture advance failed");
+        if (left != 0U && !yew_textiter_advance(&it, tb))
+            YEW_BUG("undo: delete capture advance failed");
     }
 }
 
@@ -418,19 +418,19 @@ static void capture_repair(void *ctx, MarkId id, u64 rel_off)
     repair.mark_id = id.id;
     repair.mark_gen = id.gen;
     repair.rel_off = rel_off;
-    SagMarkRepairVec_push(&capture->ut->repairs, repair);
+    YewMarkRepairVec_push(&capture->ut->repairs, repair);
     (void)capture->base;
 }
 
-void sag_undo_prepare_insert(EditCtx *ec, ByteOff at, u64 len)
+void yew_undo_prepare_insert(EditCtx *ec, ByteOff at, u64 len)
 {
     UndoTree *ut;
     require_ctx(ec);
     ut = ec->undo;
-    (void)open_node(ec, edit_reason(ut, SAG_OP_INS), SAG_OP_INS, at.v, len);
+    (void)open_node(ec, edit_reason(ut, YEW_OP_INS), YEW_OP_INS, at.v, len);
 }
 
-void sag_undo_prepare_delete(EditCtx *ec, Span range)
+void yew_undo_prepare_delete(EditCtx *ec, Span range)
 {
     UndoTree *ut;
     UndoNode *node;
@@ -438,7 +438,7 @@ void sag_undo_prepare_delete(EditCtx *ec, Span range)
 
     require_ctx(ec);
     ut = ec->undo;
-    node = open_node(ec, edit_reason(ut, SAG_OP_DEL), SAG_OP_DEL, range.lo,
+    node = open_node(ec, edit_reason(ut, YEW_OP_DEL), YEW_OP_DEL, range.lo,
                      range.hi - range.lo);
     capture_delete_bytes(ut, ec->tb, range);
     node = node_mut(ut, node->id);
@@ -446,13 +446,13 @@ void sag_undo_prepare_delete(EditCtx *ec, Span range)
     capture.ut = ut;
     capture.base = range.lo;
     if (ec->marks != NULL)
-        sag_marks_observe_collapse(ec->marks, range, capture_repair, &capture);
+        yew_marks_observe_collapse(ec->marks, range, capture_repair, &capture);
 }
 
 static void finish_record(EditCtx *ec, UndoNode *node)
 {
     UndoTree *ut = ec->undo;
-    if (ut->depth != 0U && ut->pending_reason == SAG_TXN_MULTI) {
+    if (ut->depth != 0U && ut->pending_reason == YEW_TXN_MULTI) {
         node->t_last_ms = ut->mono_clock(ut->clock_ctx);
         ut->cur = node->id;
         ut->bytes_live += sizeof(UndoOp) + sizeof(UndoRepairRun) +
@@ -475,7 +475,7 @@ static void finish_record(EditCtx *ec, UndoNode *node)
     if (ut->depth == 0U) {
         ut->open = 0U;
         if (ec->jrnl != NULL)
-            sag_journal_sync(ec->jrnl);
+            yew_journal_sync(ec->jrnl);
         trim_tree(ec);
     }
 }
@@ -500,7 +500,7 @@ static void commit_reopened_snapshot(UndoTree *ut, UndoNode *node)
         return;
     if (node->cur_after < ut->reopen_cur_after + ut->reopen_n_after ||
         (size_t)node->cur_after + node->n_after != ut->cursors.len)
-        SAG_BUG("undo: invalid reopened cursor snapshots");
+        YEW_BUG("undo: invalid reopened cursor snapshots");
     (void)memmove(ut->cursors.data + ut->reopen_cur_after,
                   ut->cursors.data + node->cur_after,
                   (size_t)node->n_after * sizeof(CursorRec));
@@ -509,7 +509,7 @@ static void commit_reopened_snapshot(UndoTree *ut, UndoNode *node)
     ut->bytes_live -= (u64)ut->reopen_n_after * sizeof(CursorRec);
 }
 
-void sag_undo_record_insert(EditCtx *ec, ByteOff at, u64 len, u64 payload)
+void yew_undo_record_insert(EditCtx *ec, ByteOff at, u64 len, u64 payload)
 {
     UndoTree *ut;
     UndoNode *node;
@@ -521,24 +521,24 @@ void sag_undo_record_insert(EditCtx *ec, ByteOff at, u64 len, u64 payload)
     ut = ec->undo;
     node = node_mut(ut, ut->open);
     if (node == NULL)
-        SAG_BUG("undo: insert recorded without prepare");
-    op.kind = SAG_OP_INS;
-    op.src = SAG_STORE_ADD;
+        YEW_BUG("undo: insert recorded without prepare");
+    op.kind = YEW_OP_INS;
+    op.src = YEW_STORE_ADD;
     op.off = at.v;
     op.len = len;
     op.payload = payload;
     run.at = node->rep_at + node->n_rep;
     run.len = 0U;
     (void)memset(&replay, 0, sizeof(replay));
-    SagUndoOpVec_push(&ut->ops, op);
-    SagUndoRepairRunVec_push(&ut->repair_runs, run);
-    SagUndoReplaySpanVec_push(&ut->replay_spans, replay);
+    YewUndoOpVec_push(&ut->ops, op);
+    YewUndoRepairRunVec_push(&ut->repair_runs, run);
+    YewUndoReplaySpanVec_push(&ut->replay_spans, replay);
     node = node_mut(ut, ut->open);
     node->n_ops++;
     finish_record(ec, node);
 }
 
-void sag_undo_record_delete(EditCtx *ec, Span range)
+void yew_undo_record_delete(EditCtx *ec, Span range)
 {
     UndoTree *ut;
     UndoNode *node;
@@ -550,8 +550,8 @@ void sag_undo_record_delete(EditCtx *ec, Span range)
     ut = ec->undo;
     node = node_mut(ut, ut->open);
     if (node == NULL)
-        SAG_BUG("undo: delete recorded without prepare");
-    op.kind = SAG_OP_DEL;
+        YEW_BUG("undo: delete recorded without prepare");
+    op.kind = YEW_OP_DEL;
     op.src = 0U;
     op.off = range.lo;
     op.len = range.hi - range.lo;
@@ -560,9 +560,9 @@ void sag_undo_record_delete(EditCtx *ec, Span range)
     run.len = (u32)ut->repairs.len - run.at;
     node->n_rep += run.len;
     (void)memset(&replay, 0, sizeof(replay));
-    SagUndoOpVec_push(&ut->ops, op);
-    SagUndoRepairRunVec_push(&ut->repair_runs, run);
-    SagUndoReplaySpanVec_push(&ut->replay_spans, replay);
+    YewUndoOpVec_push(&ut->ops, op);
+    YewUndoRepairRunVec_push(&ut->repair_runs, run);
+    YewUndoReplaySpanVec_push(&ut->replay_spans, replay);
     node = node_mut(ut, ut->open);
     node->n_ops++;
     ut->bytes_live += op.len + (u64)run.len * sizeof(MarkRepair);
@@ -572,10 +572,10 @@ void sag_undo_record_delete(EditCtx *ec, Span range)
 static const u8 *store_bytes(const TextBuf *tb, u8 src, Span span)
 {
     const TextStore *store;
-    store = src == SAG_STORE_ORIG ? &tb->orig : &tb->add;
-    if ((src != SAG_STORE_ORIG && src != SAG_STORE_ADD) ||
+    store = src == YEW_STORE_ORIG ? &tb->orig : &tb->add;
+    if ((src != YEW_STORE_ORIG && src != YEW_STORE_ADD) ||
         span.lo > span.hi || span.hi > store->len)
-        SAG_BUG("undo: invalid store span");
+        YEW_BUG("undo: invalid store span");
     return store->bytes + (size_t)span.lo;
 }
 
@@ -585,9 +585,9 @@ typedef struct {
     u64 payload;
 } LastInsertSpan;
 
-VEC_DECL(SagLastInsertSpanVec, LastInsertSpan);
+VEC_DECL(YewLastInsertSpanVec, LastInsertSpan);
 
-static void last_insert_push(SagLastInsertSpanVec *spans, u64 off,
+static void last_insert_push(YewLastInsertSpanVec *spans, u64 off,
                              u64 len, u64 payload)
 {
     LastInsertSpan span;
@@ -597,13 +597,13 @@ static void last_insert_push(SagLastInsertSpanVec *spans, u64 off,
     span.off = off;
     span.len = len;
     span.payload = payload;
-    SagLastInsertSpanVec_push(spans, span);
+    YewLastInsertSpanVec_push(spans, span);
 }
 
-static void last_insert_apply_insert(SagLastInsertSpanVec *spans,
+static void last_insert_apply_insert(YewLastInsertSpanVec *spans,
                                      const UndoOp *op)
 {
-    SagLastInsertSpanVec next = {0};
+    YewLastInsertSpanVec next = {0};
     bool placed = false;
     size_t i;
 
@@ -633,14 +633,14 @@ static void last_insert_apply_insert(SagLastInsertSpanVec *spans,
     }
     if (!placed)
         last_insert_push(&next, op->off, op->len, op->payload);
-    SagLastInsertSpanVec_free(spans);
+    YewLastInsertSpanVec_free(spans);
     *spans = next;
 }
 
-static void last_insert_apply_delete(SagLastInsertSpanVec *spans,
+static void last_insert_apply_delete(YewLastInsertSpanVec *spans,
                                      const UndoOp *op)
 {
-    SagLastInsertSpanVec next = {0};
+    YewLastInsertSpanVec next = {0};
     u64 hi = op->off + op->len;
     size_t i;
 
@@ -662,46 +662,46 @@ static void last_insert_apply_delete(SagLastInsertSpanVec *spans,
                              span.payload + span.len - right);
         }
     }
-    SagLastInsertSpanVec_free(spans);
+    YewLastInsertSpanVec_free(spans);
     *spans = next;
 }
 
-bool sag_undo_last_insert(const UndoTree *ut, Bytebuf *out, i64 *t_wall)
+bool yew_undo_last_insert(const UndoTree *ut, Bytebuf *out, i64 *t_wall)
 {
     size_t at;
 
     if (ut == NULL || out == NULL || ut->owner == NULL)
-        SAG_BUG("sag_undo_last_insert: NULL context");
+        YEW_BUG("yew_undo_last_insert: NULL context");
     out->len = 0U;
     if (t_wall != NULL)
         *t_wall = 0;
     at = ut->nodes.len;
     while (at > 1U) {
         const UndoNode *node = &ut->nodes.data[--at];
-        SagLastInsertSpanVec spans = {0};
+        YewLastInsertSpanVec spans = {0};
         u32 i;
 
-        if (!node_live(ut, node->id) || node->reason != SAG_TXN_TYPE)
+        if (!node_live(ut, node->id) || node->reason != YEW_TXN_TYPE)
             continue;
         for (i = 0U; i < node->n_ops; i++) {
             const UndoOp *op = &ut->ops.data[node->ops_at + i];
 
-            if (op->kind == SAG_OP_INS)
+            if (op->kind == YEW_OP_INS)
                 last_insert_apply_insert(&spans, op);
-            else if (op->kind == SAG_OP_DEL)
+            else if (op->kind == YEW_OP_DEL)
                 last_insert_apply_delete(&spans, op);
             else
-                SAG_BUG("undo: invalid type transaction operation");
+                YEW_BUG("undo: invalid type transaction operation");
         }
         for (i = 0U; i < spans.len; i++) {
             const LastInsertSpan *span = &spans.data[i];
             const u8 *bytes = store_bytes(
-                ut->owner, SAG_STORE_ADD,
+                ut->owner, YEW_STORE_ADD,
                 (Span){span->payload, span->payload + span->len});
 
             bytebuf_append(out, bytes, (size_t)span->len);
         }
-        SagLastInsertSpanVec_free(&spans);
+        YewLastInsertSpanVec_free(&spans);
         if (t_wall != NULL)
             *t_wall = node->t_wall;
         return true;
@@ -714,23 +714,23 @@ static u8 *copy_live_range(const TextBuf *tb, Span range)
     TextIter it;
     u64 done = 0U;
     u64 len = range.hi - range.lo;
-    u8 *bytes = sag_xmalloc(len == 0U ? 1U : (size_t)len);
+    u8 *bytes = yew_xmalloc(len == 0U ? 1U : (size_t)len);
 
     if (len == 0U)
         return bytes;
-    if (!sag_textiter_begin(&it, tb, BYTEOFF(range.lo)))
-        SAG_BUG("undo replay: invalid delete range");
+    if (!yew_textiter_begin(&it, tb, BYTEOFF(range.lo)))
+        YEW_BUG("undo replay: invalid delete range");
     while (done < len) {
         const u8 *chunk;
         u64 avail;
         u64 take;
-        if (!sag_textiter_chunk(&it, tb, &chunk, &avail))
-            SAG_BUG("undo replay: delete iterator failed");
+        if (!yew_textiter_chunk(&it, tb, &chunk, &avail))
+            YEW_BUG("undo replay: delete iterator failed");
         take = avail < len - done ? avail : len - done;
         (void)memcpy(bytes + (size_t)done, chunk, (size_t)take);
         done += take;
-        if (done < len && !sag_textiter_advance(&it, tb))
-            SAG_BUG("undo replay: delete iterator truncated");
+        if (done < len && !yew_textiter_advance(&it, tb))
+            YEW_BUG("undo replay: delete iterator truncated");
     }
     return bytes;
 }
@@ -740,13 +740,13 @@ static void replay_insert_span(EditCtx *ec, ByteOff at, u8 src, Span span)
     u64 len = span.hi - span.lo;
     const u8 *bytes = store_bytes(ec->tb, src, span);
 
-    sag_textbuf_insert_span(ec->tb, at, src, span);
+    yew_textbuf_insert_span(ec->tb, at, src, span);
     if (ec->marks != NULL)
-        sag_marks_adjust(ec->marks, SAG_JOURNAL_INS, at, len);
+        yew_marks_adjust(ec->marks, YEW_JOURNAL_INS, at, len);
     if (ec->cset != NULL)
-        sag_cset_adjust(ec->cset, SAG_JOURNAL_INS, at, len);
+        yew_cset_adjust(ec->cset, YEW_JOURNAL_INS, at, len);
     if (ec->jrnl != NULL)
-        sag_journal_record(ec->jrnl, SAG_JOURNAL_INS, at.v, bytes, len);
+        yew_journal_record(ec->jrnl, YEW_JOURNAL_INS, at.v, bytes, len);
 }
 
 static void replay_insert_blob(EditCtx *ec, u32 op_index, const UndoOp *op)
@@ -760,19 +760,19 @@ static void replay_insert_blob(EditCtx *ec, u32 op_index, const UndoOp *op)
         u64 payload = ec->tb->add.len;
         const u8 *bytes;
         if (op->payload > ut->blobs.len || op->len > ut->blobs.len - op->payload)
-            SAG_BUG("undo: corrupt delete payload");
+            YEW_BUG("undo: corrupt delete payload");
         bytes = ut->blobs.data + (size_t)op->payload;
-        sag_textbuf_insert(ec->tb, BYTEOFF(op->off), bytes, op->len);
+        yew_textbuf_insert(ec->tb, BYTEOFF(op->off), bytes, op->len);
         if (ec->marks != NULL)
-            sag_marks_adjust(ec->marks, SAG_JOURNAL_INS, BYTEOFF(op->off),
+            yew_marks_adjust(ec->marks, YEW_JOURNAL_INS, BYTEOFF(op->off),
                              op->len);
         if (ec->cset != NULL)
-            sag_cset_adjust(ec->cset, SAG_JOURNAL_INS, BYTEOFF(op->off),
+            yew_cset_adjust(ec->cset, YEW_JOURNAL_INS, BYTEOFF(op->off),
                             op->len);
         if (ec->jrnl != NULL)
-            sag_journal_record(ec->jrnl, SAG_JOURNAL_INS, op->off, bytes,
+            yew_journal_record(ec->jrnl, YEW_JOURNAL_INS, op->off, bytes,
                                op->len);
-        cache->src = SAG_STORE_ADD;
+        cache->src = YEW_STORE_ADD;
         cache->span = (Span){payload, payload + op->len};
         cache->valid = true;
     }
@@ -783,17 +783,17 @@ static void replay_delete(EditCtx *ec, const UndoOp *op)
     Span range = {op->off, op->off + op->len};
     u8 *bytes;
 
-    if (op->off > sag_textbuf_len(ec->tb) ||
-        op->len > sag_textbuf_len(ec->tb) - op->off)
-        SAG_BUG("undo replay: delete out of bounds");
+    if (op->off > yew_textbuf_len(ec->tb) ||
+        op->len > yew_textbuf_len(ec->tb) - op->off)
+        YEW_BUG("undo replay: delete out of bounds");
     bytes = copy_live_range(ec->tb, range);
-    sag_textbuf_delete(ec->tb, range);
+    yew_textbuf_delete(ec->tb, range);
     if (ec->marks != NULL)
-        sag_marks_adjust(ec->marks, SAG_JOURNAL_DEL, BYTEOFF(op->off), op->len);
+        yew_marks_adjust(ec->marks, YEW_JOURNAL_DEL, BYTEOFF(op->off), op->len);
     if (ec->cset != NULL)
-        sag_cset_adjust(ec->cset, SAG_JOURNAL_DEL, BYTEOFF(op->off), op->len);
+        yew_cset_adjust(ec->cset, YEW_JOURNAL_DEL, BYTEOFF(op->off), op->len);
     if (ec->jrnl != NULL)
-        sag_journal_record(ec->jrnl, SAG_JOURNAL_DEL, op->off, bytes, op->len);
+        yew_journal_record(ec->jrnl, YEW_JOURNAL_DEL, op->off, bytes, op->len);
     free(bytes);
 }
 
@@ -805,9 +805,9 @@ static void apply_inverse(EditCtx *ec, const UndoNode *node)
     while (i != 0U) {
         u32 index = node->ops_at + --i;
         const UndoOp *op = &ut->ops.data[index];
-        if (op->kind == SAG_OP_INS) {
+        if (op->kind == YEW_OP_INS) {
             replay_delete(ec, op);
-        } else if (op->kind == SAG_OP_DEL) {
+        } else if (op->kind == YEW_OP_DEL) {
             const UndoRepairRun *run;
             u32 r;
             replay_insert_blob(ec, index, op);
@@ -815,14 +815,14 @@ static void apply_inverse(EditCtx *ec, const UndoNode *node)
             for (r = 0U; r < run->len; r++) {
                 const MarkRepair *repair = &ut->repairs.data[run->at + r];
                 if (ec->marks != NULL) {
-                    (void)sag_mark_repair(
+                    (void)yew_mark_repair(
                         ec->marks,
                         (MarkId){repair->mark_id, repair->mark_gen},
                         BYTEOFF(op->off + repair->rel_off));
                 }
             }
         } else {
-            SAG_BUG("undo: invalid operation kind");
+            YEW_BUG("undo: invalid operation kind");
         }
     }
 }
@@ -834,13 +834,13 @@ static void apply_forward(EditCtx *ec, const UndoNode *node)
     for (i = 0U; i < node->n_ops; i++) {
         u32 index = node->ops_at + i;
         const UndoOp *op = &ut->ops.data[index];
-        if (op->kind == SAG_OP_INS) {
+        if (op->kind == YEW_OP_INS) {
             replay_insert_span(ec, BYTEOFF(op->off), op->src,
                                (Span){op->payload, op->payload + op->len});
-        } else if (op->kind == SAG_OP_DEL) {
+        } else if (op->kind == YEW_OP_DEL) {
             replay_delete(ec, op);
         } else {
-            SAG_BUG("redo: invalid operation kind");
+            YEW_BUG("redo: invalid operation kind");
         }
     }
 }
@@ -848,16 +848,16 @@ static void apply_forward(EditCtx *ec, const UndoNode *node)
 static void sync_navigation(EditCtx *ec)
 {
     if (ec->jrnl != NULL)
-        sag_journal_sync(ec->jrnl);
+        yew_journal_sync(ec->jrnl);
 }
 
-void sag_undo_end(EditCtx *ec)
+void yew_undo_end(EditCtx *ec)
 {
     UndoTree *ut;
     require_ctx(ec);
     ut = ec->undo;
     if (ut->depth == 0U)
-        SAG_BUG("undo: unbalanced end");
+        YEW_BUG("undo: unbalanced end");
     ut->depth--;
     if (ut->depth != 0U)
         return;
@@ -865,7 +865,7 @@ void sag_undo_end(EditCtx *ec)
         replace_after_snapshot(ec, node_mut(ut, ut->open));
     if (ut->open != 0U)
         commit_reopened_snapshot(ut, node_mut(ut, ut->open));
-    ut->pending_reason = SAG_TXN_REASON_MAX;
+    ut->pending_reason = YEW_TXN_REASON_MAX;
     ut->open = 0U;
     ut->reopened = false;
     ut->boundary = true;
@@ -878,7 +878,7 @@ static void unlink_child(UndoTree *ut, u32 parent_id, u32 child_id)
     UndoNode *parent = node_mut(ut, parent_id);
     u32 *link;
     if (parent == NULL)
-        SAG_BUG("undo: abort parent missing");
+        YEW_BUG("undo: abort parent missing");
     link = &parent->first_child;
     while (*link != 0U && *link != child_id)
         link = &node_mut(ut, *link)->next_sibling;
@@ -888,7 +888,7 @@ static void unlink_child(UndoTree *ut, u32 parent_id, u32 child_id)
         parent->redo_child = parent->first_child;
 }
 
-void sag_undo_abort(EditCtx *ec)
+void yew_undo_abort(EditCtx *ec)
 {
     UndoTree *ut;
     UndoNode *node;
@@ -896,16 +896,16 @@ void sag_undo_abort(EditCtx *ec)
     require_ctx(ec);
     ut = ec->undo;
     if (ut->depth == 0U)
-        SAG_BUG("undo: abort outside transaction");
+        YEW_BUG("undo: abort outside transaction");
     if (ut->open == 0U) {
         ut->depth = 0U;
-        ut->pending_reason = SAG_TXN_REASON_MAX;
+        ut->pending_reason = YEW_TXN_REASON_MAX;
         ut->boundary = true;
         return;
     }
     node = node_mut(ut, ut->open);
     parent = node->parent;
-    sag_edit_ensure_journal(ec);
+    yew_edit_ensure_journal(ec);
     if (ut->reopened) {
         u32 i = node->n_ops;
 
@@ -913,9 +913,9 @@ void sag_undo_abort(EditCtx *ec)
             u32 index = node->ops_at + --i;
             const UndoOp *op = &ut->ops.data[index];
 
-            if (op->kind == SAG_OP_INS) {
+            if (op->kind == YEW_OP_INS) {
                 replay_delete(ec, op);
-            } else if (op->kind == SAG_OP_DEL) {
+            } else if (op->kind == YEW_OP_DEL) {
                 const UndoRepairRun *run;
                 u32 r;
 
@@ -925,14 +925,14 @@ void sag_undo_abort(EditCtx *ec)
                     const MarkRepair *repair =
                         &ut->repairs.data[run->at + r];
                     if (ec->marks != NULL) {
-                        (void)sag_mark_repair(
+                        (void)yew_mark_repair(
                             ec->marks,
                             (MarkId){repair->mark_id, repair->mark_gen},
                             BYTEOFF(op->off + repair->rel_off));
                     }
                 }
             } else {
-                SAG_BUG("undo: invalid reopened operation kind");
+                YEW_BUG("undo: invalid reopened operation kind");
             }
         }
         restore_cursors(ec, ut->reopen_cur_after, ut->reopen_n_after);
@@ -951,7 +951,7 @@ void sag_undo_abort(EditCtx *ec)
         node->t_last_ms = ut->reopen_t_last_ms;
         ut->open = 0U;
         ut->depth = 0U;
-        ut->pending_reason = SAG_TXN_REASON_MAX;
+        ut->pending_reason = YEW_TXN_REASON_MAX;
         ut->boundary = true;
         ut->reopened = false;
         account_live(ut);
@@ -970,20 +970,20 @@ void sag_undo_abort(EditCtx *ec)
         ut->cursors.len = node->cur_before;
         ut->nodes.len--;
     } else {
-        node->flags |= SAG_TXN_DEAD;
+        node->flags |= YEW_TXN_DEAD;
         ut->bytes_dead += node->blob_hi - node->blob_lo;
     }
     ut->cur = parent;
     ut->open = 0U;
     ut->depth = 0U;
-    ut->pending_reason = SAG_TXN_REASON_MAX;
+    ut->pending_reason = YEW_TXN_REASON_MAX;
     ut->boundary = true;
     ut->reopened = false;
     account_live(ut);
     sync_navigation(ec);
 }
 
-bool sag_undo_reopen(EditCtx *ec, SagTxnReason expect)
+bool yew_undo_reopen(EditCtx *ec, YewTxnReason expect)
 {
     UndoTree *ut;
     UndoNode *node;
@@ -1016,7 +1016,7 @@ bool sag_undo_reopen(EditCtx *ec, SagTxnReason expect)
     return true;
 }
 
-bool sag_undo(EditCtx *ec)
+bool yew_undo(EditCtx *ec)
 {
     UndoTree *ut;
     UndoNode *node;
@@ -1024,14 +1024,14 @@ bool sag_undo(EditCtx *ec)
     require_ctx(ec);
     ut = ec->undo;
     if (ut->depth != 0U)
-        SAG_BUG("undo navigation inside transaction");
+        YEW_BUG("undo navigation inside transaction");
     if (ut->cur == ut->root)
         return false;
-    sag_edit_ensure_journal(ec);
+    yew_edit_ensure_journal(ec);
     node = node_mut(ut, ut->cur);
     parent = node_mut(ut, node->parent);
     if (parent == NULL)
-        SAG_BUG("undo: broken parent chain");
+        YEW_BUG("undo: broken parent chain");
     apply_inverse(ec, node);
     restore_cursors(ec, node->cur_before, node->n_before);
     parent->redo_child = node->id;
@@ -1041,7 +1041,7 @@ bool sag_undo(EditCtx *ec)
     return true;
 }
 
-bool sag_redo(EditCtx *ec)
+bool yew_redo(EditCtx *ec)
 {
     UndoTree *ut;
     UndoNode *parent;
@@ -1049,11 +1049,11 @@ bool sag_redo(EditCtx *ec)
     require_ctx(ec);
     ut = ec->undo;
     if (ut->depth != 0U)
-        SAG_BUG("redo navigation inside transaction");
+        YEW_BUG("redo navigation inside transaction");
     parent = node_mut(ut, ut->cur);
     if (parent == NULL || !node_live(ut, parent->redo_child))
         return false;
-    sag_edit_ensure_journal(ec);
+    yew_edit_ensure_journal(ec);
     child = node_mut(ut, parent->redo_child);
     apply_forward(ec, child);
     restore_cursors(ec, child->cur_after, child->n_after);
@@ -1064,35 +1064,35 @@ bool sag_redo(EditCtx *ec)
     return true;
 }
 
-bool sag_undo_to(EditCtx *ec, u32 target_id)
+bool yew_undo_to(EditCtx *ec, u32 target_id)
 {
     UndoTree *ut;
     u32 from;
     u32 target;
-    SagU32Vec path = {0};
+    YewU32Vec path = {0};
 
     require_ctx(ec);
     ut = ec->undo;
     if (ut->depth != 0U || !node_live(ut, target_id))
         return false;
     if (target_id != ut->cur)
-        sag_edit_ensure_journal(ec);
+        yew_edit_ensure_journal(ec);
     from = ut->cur;
     target = target_id;
     while (node_get(ut, from)->depth > node_get(ut, target)->depth) {
-        if (!sag_undo(ec))
-            SAG_BUG("undo_to: failed ascent");
+        if (!yew_undo(ec))
+            YEW_BUG("undo_to: failed ascent");
         from = ut->cur;
     }
     while (node_get(ut, target)->depth > node_get(ut, from)->depth) {
-        SagU32Vec_push(&path, target);
+        YewU32Vec_push(&path, target);
         target = node_get(ut, target)->parent;
     }
     while (from != target) {
-        SagU32Vec_push(&path, target);
+        YewU32Vec_push(&path, target);
         target = node_get(ut, target)->parent;
-        if (!sag_undo(ec))
-            SAG_BUG("undo_to: failed LCA ascent");
+        if (!yew_undo(ec))
+            YEW_BUG("undo_to: failed LCA ascent");
         from = ut->cur;
     }
     while (path.len != 0U) {
@@ -1103,13 +1103,13 @@ bool sag_undo_to(EditCtx *ec, u32 target_id)
         parent->redo_child = child->id;
         ut->cur = child->id;
     }
-    SagU32Vec_free(&path);
+    YewU32Vec_free(&path);
     ut->boundary = true;
     sync_navigation(ec);
     return true;
 }
 
-bool sag_undo_state(EditCtx *ec, i64 delta)
+bool yew_undo_state(EditCtx *ec, i64 delta)
 {
     UndoTree *ut;
     u32 id;
@@ -1134,10 +1134,10 @@ bool sag_undo_state(EditCtx *ec, i64 delta)
         } while (!node_live(ut, id));
         delta--;
     }
-    return sag_undo_to(ec, id);
+    return yew_undo_to(ec, id);
 }
 
-bool sag_undo_time(EditCtx *ec, i64 wall_secs)
+bool yew_undo_time(EditCtx *ec, i64 wall_secs)
 {
     UndoTree *ut;
     u32 best = 0U;
@@ -1149,7 +1149,7 @@ bool sag_undo_time(EditCtx *ec, i64 wall_secs)
         if (node_live(ut, id) && node->t_wall <= wall_secs)
             best = id;
     }
-    return best != 0U && sag_undo_to(ec, best);
+    return best != 0U && yew_undo_to(ec, best);
 }
 
 static u32 live_count(const UndoTree *ut)
@@ -1208,11 +1208,11 @@ static void account_live(UndoTree *ut)
 
 static void compact_history(UndoTree *ut)
 {
-    SagUndoOpVec ops = {0};
-    SagCursorRecVec cursors = {0};
-    SagMarkRepairVec repairs = {0};
-    SagUndoRepairRunVec repair_runs = {0};
-    SagUndoReplaySpanVec replay_spans = {0};
+    YewUndoOpVec ops = {0};
+    YewCursorRecVec cursors = {0};
+    YewMarkRepairVec repairs = {0};
+    YewUndoRepairRunVec repair_runs = {0};
+    YewUndoReplaySpanVec replay_spans = {0};
     Bytebuf blobs;
     u32 id;
 
@@ -1261,16 +1261,16 @@ static void compact_history(UndoTree *ut)
             node->n_before > ut->cursors.len - old_cur_before ||
             (size_t)old_cur_after > ut->cursors.len ||
             node->n_after > ut->cursors.len - old_cur_after)
-            SAG_BUG("undo compact: corrupt arena slice");
+            YEW_BUG("undo compact: corrupt arena slice");
         if (ops.len > UINT32_MAX || repairs.len > UINT32_MAX ||
             cursors.len > UINT32_MAX)
-            SAG_BUG("undo compact: arena index overflow");
+            YEW_BUG("undo compact: arena index overflow");
         if (node->n_ops > UINT32_MAX - (u32)ops.len ||
             old_n_rep > UINT32_MAX - (u32)repairs.len ||
             node->n_before > UINT32_MAX - (u32)cursors.len ||
             node->n_after >
                 UINT32_MAX - (u32)cursors.len - node->n_before)
-            SAG_BUG("undo compact: arena length overflow");
+            YEW_BUG("undo compact: arena length overflow");
         node->ops_at = (u32)ops.len;
         node->rep_at = (u32)repairs.len;
         node->n_rep = 0U;
@@ -1285,16 +1285,16 @@ static void compact_history(UndoTree *ut)
 
             if (old_run->at != old_rep_at + copied_repairs ||
                 old_run->len > old_n_rep - copied_repairs)
-                SAG_BUG("undo compact: inconsistent repair run");
+                YEW_BUG("undo compact: inconsistent repair run");
             run.at = (u32)repairs.len;
             run.len = old_run->len;
             for (r = 0U; r < old_run->len; r++)
-                SagMarkRepairVec_push(
+                YewMarkRepairVec_push(
                     &repairs, ut->repairs.data[old_run->at + r]);
-            if (op.kind == SAG_OP_DEL) {
+            if (op.kind == YEW_OP_DEL) {
                 if (op.payload > ut->blobs.len ||
                     op.len > ut->blobs.len - op.payload)
-                    SAG_BUG("undo compact: corrupt blob slice");
+                    YEW_BUG("undo compact: corrupt blob slice");
                 {
                     u64 old_payload = op.payload;
 
@@ -1305,36 +1305,36 @@ static void compact_history(UndoTree *ut)
                 }
             }
             if (run.len > UINT32_MAX - node->n_rep)
-                SAG_BUG("undo compact: repair count overflow");
+                YEW_BUG("undo compact: repair count overflow");
             node->n_rep += run.len;
             copied_repairs += run.len;
-            SagUndoOpVec_push(&ops, op);
-            SagUndoRepairRunVec_push(&repair_runs, run);
-            SagUndoReplaySpanVec_push(
+            YewUndoOpVec_push(&ops, op);
+            YewUndoRepairRunVec_push(&repair_runs, run);
+            YewUndoReplaySpanVec_push(
                 &replay_spans, ut->replay_spans.data[old_index]);
         }
         if (copied_repairs != old_n_rep ||
             node->n_rep != (u32)(repairs.len - node->rep_at))
-            SAG_BUG("undo compact: inconsistent repair slice");
+            YEW_BUG("undo compact: inconsistent repair slice");
         node->blob_hi = blobs.len;
         if (cursors.len > UINT32_MAX)
-            SAG_BUG("undo compact: cursor index overflow");
+            YEW_BUG("undo compact: cursor index overflow");
         node->cur_before = (u32)cursors.len;
         for (i = 0U; i < node->n_before; i++)
-            SagCursorRecVec_push(
+            YewCursorRecVec_push(
                 &cursors, ut->cursors.data[old_cur_before + i]);
         if (cursors.len > UINT32_MAX)
-            SAG_BUG("undo compact: cursor index overflow");
+            YEW_BUG("undo compact: cursor index overflow");
         node->cur_after = (u32)cursors.len;
         for (i = 0U; i < node->n_after; i++)
-            SagCursorRecVec_push(
+            YewCursorRecVec_push(
                 &cursors, ut->cursors.data[old_cur_after + i]);
     }
-    SagUndoOpVec_free(&ut->ops);
-    SagCursorRecVec_free(&ut->cursors);
-    SagMarkRepairVec_free(&ut->repairs);
-    SagUndoRepairRunVec_free(&ut->repair_runs);
-    SagUndoReplaySpanVec_free(&ut->replay_spans);
+    YewUndoOpVec_free(&ut->ops);
+    YewCursorRecVec_free(&ut->cursors);
+    YewMarkRepairVec_free(&ut->repairs);
+    YewUndoRepairRunVec_free(&ut->repair_runs);
+    YewUndoReplaySpanVec_free(&ut->replay_spans);
     bytebuf_free(&ut->blobs);
     ut->ops = ops;
     ut->cursors = cursors;
@@ -1368,7 +1368,7 @@ static void tombstone_subtree(UndoTree *ut, u32 root)
         if (!node_live(ut, id) || !is_ancestor(ut, root, id))
             continue;
         node = node_mut(ut, id);
-        node->flags |= SAG_TXN_DEAD;
+        node->flags |= YEW_TXN_DEAD;
         ut->bytes_dead += node_storage_bytes(node);
     }
 }
@@ -1391,13 +1391,13 @@ static void state_identity_at(const EditCtx *ec, u32 target,
                               u64 *len_out, u64 *hash_out)
 {
     const UndoTree *ut = ec->undo;
-    u64 current_len = sag_textbuf_len(ec->tb);
+    u64 current_len = yew_textbuf_len(ec->tb);
     u8 *bytes = copy_live_range(ec->tb, (Span){0U, current_len});
-    TextBuf *scratch = sag_textbuf_from_owned_bytes(bytes, current_len);
+    TextBuf *scratch = yew_textbuf_from_owned_bytes(bytes, current_len);
     u32 id = ut->cur;
 
     if (!is_ancestor(ut, target, id))
-        SAG_BUG("undo: identity target is not on current path");
+        YEW_BUG("undo: identity target is not on current path");
     while (id != target) {
         const UndoNode *node = node_get(ut, id);
         u32 i = node->n_ops;
@@ -1405,31 +1405,31 @@ static void state_identity_at(const EditCtx *ec, u32 target,
         while (i != 0U) {
             const UndoOp *op = &ut->ops.data[node->ops_at + --i];
 
-            if (op->kind == SAG_OP_INS) {
-                u64 scratch_len = sag_textbuf_len(scratch);
+            if (op->kind == YEW_OP_INS) {
+                u64 scratch_len = yew_textbuf_len(scratch);
 
                 if (op->off > scratch_len ||
                     op->len > scratch_len - op->off)
-                    SAG_BUG("undo: invalid insert while hashing state");
-                sag_textbuf_delete(scratch,
+                    YEW_BUG("undo: invalid insert while hashing state");
+                yew_textbuf_delete(scratch,
                                    (Span){op->off, op->off + op->len});
-            } else if (op->kind == SAG_OP_DEL) {
+            } else if (op->kind == YEW_OP_DEL) {
                 if (op->payload > ut->blobs.len ||
                     op->len > ut->blobs.len - op->payload ||
-                    op->off > sag_textbuf_len(scratch))
-                    SAG_BUG("undo: invalid delete while hashing state");
-                sag_textbuf_insert(scratch, BYTEOFF(op->off),
+                    op->off > yew_textbuf_len(scratch))
+                    YEW_BUG("undo: invalid delete while hashing state");
+                yew_textbuf_insert(scratch, BYTEOFF(op->off),
                                    ut->blobs.data + (size_t)op->payload,
                                    op->len);
             } else {
-                SAG_BUG("undo: invalid operation while hashing state");
+                YEW_BUG("undo: invalid operation while hashing state");
             }
         }
         id = node->parent;
     }
-    *len_out = sag_textbuf_len(scratch);
+    *len_out = yew_textbuf_len(scratch);
     *hash_out = text_hash(scratch);
-    sag_textbuf_free(scratch);
+    yew_textbuf_free(scratch);
 }
 
 static bool reroot_one(UndoTree *ut)
@@ -1466,8 +1466,8 @@ static bool reroot_one(UndoTree *ut)
         next->n_rep = 0U;
         next->blob_lo = next->blob_hi;
         next->parent = 0U;
-        next->flags |= SAG_TXN_TRIMMED;
-        root->flags |= SAG_TXN_DEAD;
+        next->flags |= YEW_TXN_TRIMMED;
+        root->flags |= YEW_TXN_DEAD;
         ut->root = child;
         ut->gen++;
     }
@@ -1493,7 +1493,7 @@ static void trim_tree(EditCtx *ec)
             continue;
         }
         if (!ut->over_budget_logged) {
-            sag_log(SAG_LOG_WARN, "undo: over budget, nothing trimmable");
+            yew_log(YEW_LOG_WARN, "undo: over budget, nothing trimmable");
             ut->over_budget_logged = true;
         }
         break;
@@ -1509,7 +1509,7 @@ static void trim_tree(EditCtx *ec)
                 continue;
             node = node_mut(ut, id);
             if (node->depth < depth_base)
-                SAG_BUG("undo trim: descendant depth underflow");
+                YEW_BUG("undo trim: descendant depth underflow");
             node->depth -= depth_base;
         }
         state_identity_at(ec, ut->root, &ut->root_len, &ut->root_hash);
@@ -1517,26 +1517,26 @@ static void trim_tree(EditCtx *ec)
     compact_history(ut);
 }
 
-u32 sag_undo_branch_cycle(UndoTree *ut, i32 delta)
+u32 yew_undo_branch_cycle(UndoTree *ut, i32 delta)
 {
     UndoNode *node;
-    SagU32Vec children = {0};
+    YewU32Vec children = {0};
     u32 child;
     size_t index = 0U;
     size_t i;
 
     if (ut == NULL)
-        SAG_BUG("sag_undo_branch_cycle: NULL tree");
+        YEW_BUG("yew_undo_branch_cycle: NULL tree");
     node = node_mut(ut, ut->cur);
     if (node == NULL)
         return 0U;
     for (child = node->first_child; child != 0U;
          child = node_get(ut, child)->next_sibling) {
         if (node_live(ut, child))
-            SagU32Vec_push(&children, child);
+            YewU32Vec_push(&children, child);
     }
     if (children.len == 0U) {
-        SagU32Vec_free(&children);
+        YewU32Vec_free(&children);
         return 0U;
     }
     for (i = 0U; i < children.len; i++) {
@@ -1553,36 +1553,36 @@ u32 sag_undo_branch_cycle(UndoTree *ut, i32 delta)
     }
     node->redo_child = children.data[index];
     child = node->redo_child;
-    SagU32Vec_free(&children);
+    YewU32Vec_free(&children);
     return child;
 }
 
-u32 sag_undo_current(const UndoTree *ut)
+u32 yew_undo_current(const UndoTree *ut)
 {
     return ut == NULL ? 0U : ut->cur;
 }
 
-bool sag_undo_at_save_point(const UndoTree *ut)
+bool yew_undo_at_save_point(const UndoTree *ut)
 {
     return ut != NULL && ut->saved != 0U && ut->cur == ut->saved;
 }
 
-void sag_undo_mark_saved(UndoTree *ut)
+void yew_undo_mark_saved(UndoTree *ut)
 {
     UndoNode *old;
     UndoNode *node;
     if (ut == NULL)
-        SAG_BUG("sag_undo_mark_saved: NULL tree");
+        YEW_BUG("yew_undo_mark_saved: NULL tree");
     old = node_mut(ut, ut->saved);
     if (old != NULL)
-        old->flags &= (u8)~SAG_TXN_SAVED;
+        old->flags &= (u8)~YEW_TXN_SAVED;
     ut->saved = ut->cur;
     node = node_mut(ut, ut->saved);
     if (node != NULL)
-        node->flags |= SAG_TXN_SAVED;
+        node->flags |= YEW_TXN_SAVED;
     if (ut->owner == NULL)
-        SAG_BUG("undo: save point has no buffer owner");
-    ut->saved_len = sag_textbuf_len(ut->owner);
+        YEW_BUG("undo: save point has no buffer owner");
+    ut->saved_len = yew_textbuf_len(ut->owner);
     ut->saved_hash = text_hash(ut->owner);
     ut->boundary = true;
 }
@@ -1597,12 +1597,12 @@ static bool is_ancestor(const UndoTree *ut, u32 ancestor, u32 id)
     return false;
 }
 
-u32 sag_undo_list(const UndoTree *ut, UndoNodeInfo *out, u32 max)
+u32 yew_undo_list(const UndoTree *ut, UndoNodeInfo *out, u32 max)
 {
     u32 total = 0U;
     u32 id;
     if (ut == NULL)
-        SAG_BUG("sag_undo_list: NULL tree");
+        YEW_BUG("yew_undo_list: NULL tree");
     for (id = 1U; (size_t)id <= ut->nodes.len; id++) {
         const UndoNode *node;
         UndoNodeInfo info;
@@ -1620,7 +1620,7 @@ u32 sag_undo_list(const UndoTree *ut, UndoNodeInfo *out, u32 max)
         info.on_current_path = is_ancestor(ut, id, ut->cur);
         info.is_current = id == ut->cur;
         info.is_saved = id == ut->saved;
-        info.is_trimmed = (node->flags & SAG_TXN_TRIMMED) != 0U;
+        info.is_trimmed = (node->flags & YEW_TXN_TRIMMED) != 0U;
         for (child = node->first_child; child != 0U;
              child = node_get(ut, child)->next_sibling) {
             if (node_live(ut, child))
@@ -1628,7 +1628,7 @@ u32 sag_undo_list(const UndoTree *ut, UndoNodeInfo *out, u32 max)
         }
         for (i = 0U; i < node->n_ops; i++) {
             const UndoOp *op = &ut->ops.data[node->ops_at + i];
-            if (op->kind == SAG_OP_INS)
+            if (op->kind == YEW_OP_INS)
                 info.bytes_ins += op->len;
             else
                 info.bytes_del += op->len;
@@ -1640,7 +1640,7 @@ u32 sag_undo_list(const UndoTree *ut, UndoNodeInfo *out, u32 max)
     return total;
 }
 
-u32 sag_undo_children(const UndoTree *ut, u32 id, u32 *out, u32 max)
+u32 yew_undo_children(const UndoTree *ut, u32 id, u32 *out, u32 max)
 {
     const UndoNode *node;
     u32 total = 0U;
@@ -1661,14 +1661,14 @@ u32 sag_undo_children(const UndoTree *ut, u32 id, u32 *out, u32 max)
 
 static const char *reason_name(u8 reason)
 {
-    static const char *const names[SAG_TXN_REASON_MAX] = {
+    static const char *const names[YEW_TXN_REASON_MAX] = {
         "typed", "erased", "pasted", "cut", "multi", "macro",
         "filtered", "replaced", "lsp", "external"
     };
-    return reason < SAG_TXN_REASON_MAX ? names[reason] : "unknown";
+    return reason < YEW_TXN_REASON_MAX ? names[reason] : "unknown";
 }
 
-void sag_undo_describe(const UndoTree *ut, u32 id, i64 now, char *buf,
+void yew_undo_describe(const UndoTree *ut, u32 id, i64 now, char *buf,
                        u64 len)
 {
     const UndoNode *node;
@@ -1687,7 +1687,7 @@ void sag_undo_describe(const UndoTree *ut, u32 id, i64 now, char *buf,
     node = node_get(ut, id);
     for (i = 0U; i < node->n_ops; i++) {
         const UndoOp *op = &ut->ops.data[node->ops_at + i];
-        if (op->kind == SAG_OP_INS)
+        if (op->kind == YEW_OP_INS)
             bytes_ins += op->len;
         else
             bytes_del += op->len;
@@ -1707,11 +1707,11 @@ void sag_undo_describe(const UndoTree *ut, u32 id, i64 now, char *buf,
                    id == ut->saved ? "  *saved" : "");
 }
 
-void sag_undo_dump(const UndoTree *ut, FILE *out)
+void yew_undo_dump(const UndoTree *ut, FILE *out)
 {
     u32 id;
     if (ut == NULL || out == NULL)
-        SAG_BUG("sag_undo_dump: NULL argument");
+        YEW_BUG("yew_undo_dump: NULL argument");
     (void)fprintf(out, "undo root=%u cur=%u saved=%u gen=%" PRIu64 "\n",
                   ut->root, ut->cur, ut->saved, ut->gen);
     for (id = 1U; (size_t)id <= ut->nodes.len; id++) {
@@ -1781,8 +1781,8 @@ static void write_header(Bytebuf *file, u32 flags, u32 root, u32 cur,
                          u64 anchor_len, u64 anchor_hash,
                          u64 cur_len, u64 cur_hash)
 {
-    bytebuf_append(file, "SAGU", 4U);
-    put_u32(file, SAGU_VERSION);
+    bytebuf_append(file, "YEWU", 4U);
+    put_u32(file, YEWU_VERSION);
     put_u32(file, flags);
     put_u32(file, root);
     put_u32(file, cur);
@@ -1825,14 +1825,14 @@ static u32 write_node_record(EditCtx *ec, Bytebuf *file,
         const u8 *payload;
         u32 r;
 
-        if (op->kind == SAG_OP_INS) {
+        if (op->kind == YEW_OP_INS) {
             payload = store_bytes(ec->tb, op->src,
                                   (Span){op->payload,
                                          op->payload + op->len});
         } else {
             if (op->payload > ut->blobs.len ||
                 op->len > ut->blobs.len - op->payload)
-                SAG_BUG("undo write: corrupt delete payload");
+                YEW_BUG("undo write: corrupt delete payload");
             payload = ut->blobs.data + (size_t)op->payload;
         }
         bytebuf_push_u8(file, op->kind);
@@ -1852,7 +1852,7 @@ static u32 write_node_record(EditCtx *ec, Bytebuf *file,
     put_u32(file, node->n_after);
     for (i = 0U; i < node->n_after; i++)
         put_cursor(file, &ut->cursors.data[node->cur_after + i]);
-    crc = sag_crc32(file->data + record_at, file->len - record_at);
+    crc = yew_crc32(file->data + record_at, file->len - record_at);
     put_u32(file, crc);
     return crc;
 }
@@ -1876,7 +1876,7 @@ static u64 serialized_node_size(const UndoTree *ut, const UndoNode *node,
         if (total > UINT64_MAX - 32U ||
             op->len > UINT64_MAX - total - 32U ||
             repair_size > UINT64_MAX - total - 32U - op->len)
-            SAG_BUG("undo write: serialized node size overflow");
+            YEW_BUG("undo write: serialized node size overflow");
         total += 32U + op->len + repair_size;
     }
     return total;
@@ -1886,7 +1886,7 @@ static bool write_truncated_path(EditCtx *ec, Bytebuf *file,
                                  u64 cur_len, u64 cur_hash)
 {
     UndoTree *ut = ec->undo;
-    SagU32Vec path = {0};
+    YewU32Vec path = {0};
     u64 tail_size = 0U;
     size_t first = SIZE_MAX;
     size_t i;
@@ -1897,13 +1897,13 @@ static bool write_truncated_path(EditCtx *ec, Bytebuf *file,
     u64 root_hash;
 
     while (id != 0U) {
-        SagU32Vec_push(&path, id);
+        YewU32Vec_push(&path, id);
         if (id == ut->root)
             break;
         id = node_get(ut, id)->parent;
     }
     if (path.len == 0U || path.data[path.len - 1U] != ut->root)
-        SAG_BUG("undo write: current path does not reach root");
+        YEW_BUG("undo write: current path does not reach root");
     for (i = 0U; i < path.len / 2U; i++) {
         u32 swap = path.data[i];
         path.data[i] = path.data[path.len - i - 1U];
@@ -1912,7 +1912,7 @@ static bool write_truncated_path(EditCtx *ec, Bytebuf *file,
     for (i = path.len; i != 0U; ) {
         const UndoNode *node = node_get(ut, path.data[--i]);
         u64 root_size = serialized_node_size(ut, node, true);
-        u64 total = SAGU_HEADER_LEN + 8U;
+        u64 total = YEWU_HEADER_LEN + 8U;
 
         if (tail_size <= UINT64_MAX - total - root_size)
             total += root_size + tail_size;
@@ -1929,7 +1929,7 @@ static bool write_truncated_path(EditCtx *ec, Bytebuf *file,
             tail_size += root_size;
     }
     if (first == SIZE_MAX) {
-        SagU32Vec_free(&path);
+        YewU32Vec_free(&path);
         return false;
     }
     if (ut->saved != 0U) {
@@ -1944,8 +1944,8 @@ static bool write_truncated_path(EditCtx *ec, Bytebuf *file,
     bytebuf_free(file);
     bytebuf_init(file);
     if (path.len - first > UINT32_MAX)
-        SAG_BUG("undo write: too many nodes on truncated path");
-    write_header(file, SAGU_TRUNCATED, path.data[first], ut->cur, saved,
+        YEW_BUG("undo write: too many nodes on truncated path");
+    write_header(file, YEWU_TRUNCATED, path.data[first], ut->cur, saved,
                  saved != 0U ? saved : path.data[first],
                  (u32)(path.len - first),
                  saved != 0U ? ut->saved_len : root_len,
@@ -1953,13 +1953,13 @@ static bool write_truncated_path(EditCtx *ec, Bytebuf *file,
                  cur_len, cur_hash);
     for (i = first; i < path.len; i++) {
         const UndoNode *node = node_get(ut, path.data[i]);
-        u8 flags = node->flags & (u8)~SAG_TXN_SAVED;
+        u8 flags = node->flags & (u8)~YEW_TXN_SAVED;
         bool rerooted = i == first;
 
         if (rerooted)
-            flags |= SAG_TXN_TRIMMED;
+            flags |= YEW_TXN_TRIMMED;
         if (node->id == saved)
-            flags |= SAG_TXN_SAVED;
+            flags |= YEW_TXN_SAVED;
         crc_xor ^= write_node_record(
             ec, file, node, rerooted ? 0U : path.data[i - 1U],
             i + 1U < path.len ? path.data[i + 1U] : 0U,
@@ -1967,7 +1967,7 @@ static bool write_truncated_path(EditCtx *ec, Bytebuf *file,
     }
     put_u32(file, crc_xor);
     bytebuf_append(file, "UGAS", 4U);
-    SagU32Vec_free(&path);
+    YewU32Vec_free(&path);
     return (u64)file->len <= ut->persist_bytes_max;
 }
 
@@ -2003,7 +2003,7 @@ static bool write_selected_tree(EditCtx *ec, Bytebuf *file,
     state_identity_at(ec, root, &root_len, &root_hash);
     bytebuf_free(file);
     bytebuf_init(file);
-    write_header(file, SAGU_TRUNCATED, root, ut->cur, saved, anchor, count,
+    write_header(file, YEWU_TRUNCATED, root, ut->cur, saved, anchor, count,
                  saved != 0U ? ut->saved_len : root_len,
                  saved != 0U ? ut->saved_hash : root_hash,
                  cur_len, cur_hash);
@@ -2016,14 +2016,14 @@ static bool write_selected_tree(EditCtx *ec, Bytebuf *file,
             continue;
         node = node_get(ut, id);
         if (node->depth < depth_base)
-            SAG_BUG("undo write: selected depth underflow");
+            YEW_BUG("undo write: selected depth underflow");
         rerooted = id == root && root != ut->root;
         flags = node->flags &
-                (u8)~(SAG_TXN_DEAD | SAG_TXN_SAVED);
+                (u8)~(YEW_TXN_DEAD | YEW_TXN_SAVED);
         if (rerooted)
-            flags |= SAG_TXN_TRIMMED;
+            flags |= YEW_TXN_TRIMMED;
         if (id == saved)
-            flags |= SAG_TXN_SAVED;
+            flags |= YEW_TXN_SAVED;
         crc_xor ^= write_node_record(
             ec, file, node, id == root ? 0U : node->parent,
             selected_redo_child(ut, keep, node),
@@ -2039,12 +2039,12 @@ static bool write_truncated_tree(EditCtx *ec, Bytebuf *file,
 {
     UndoTree *ut = ec->undo;
     size_t slots = ut->nodes.len + 1U;
-    u8 *keep = sag_xcalloc(slots, sizeof(*keep));
-    u8 *protect = sag_xcalloc(slots, sizeof(*protect));
-    u8 *subtree_protected = sag_xcalloc(slots, sizeof(*subtree_protected));
-    u64 *node_sizes = sag_xcalloc(slots, sizeof(*node_sizes));
-    u64 *subtree_sizes = sag_xcalloc(slots, sizeof(*subtree_sizes));
-    u32 *subtree_counts = sag_xcalloc(slots, sizeof(*subtree_counts));
+    u8 *keep = yew_xcalloc(slots, sizeof(*keep));
+    u8 *protect = yew_xcalloc(slots, sizeof(*protect));
+    u8 *subtree_protected = yew_xcalloc(slots, sizeof(*subtree_protected));
+    u64 *node_sizes = yew_xcalloc(slots, sizeof(*node_sizes));
+    u64 *subtree_sizes = yew_xcalloc(slots, sizeof(*subtree_sizes));
+    u32 *subtree_counts = yew_xcalloc(slots, sizeof(*subtree_counts));
     u64 total = full_size;
     u64 root_size;
     u32 count = live_count(ut);
@@ -2102,7 +2102,7 @@ static bool write_truncated_tree(EditCtx *ec, Bytebuf *file,
                     subtree_sizes[parent] += subtree_sizes[id];
                 if (subtree_counts[id] >
                     UINT32_MAX - subtree_counts[parent])
-                    SAG_BUG("undo write: selected node count overflow");
+                    YEW_BUG("undo write: selected node count overflow");
                 subtree_counts[parent] += subtree_counts[id];
                 if (subtree_protected[id] != 0U)
                     subtree_protected[parent] = 1U;
@@ -2123,7 +2123,7 @@ static bool write_truncated_tree(EditCtx *ec, Bytebuf *file,
         if (parent != 0U && subtree_protected[parent] == 0U)
             continue;
         if (subtree_sizes[id] > total || subtree_counts[id] > count)
-            SAG_BUG("undo write: invalid selected subtree accounting");
+            YEW_BUG("undo write: invalid selected subtree accounting");
         total -= subtree_sizes[id];
         count -= subtree_counts[id];
         keep[id] = 0U;
@@ -2162,7 +2162,7 @@ static bool write_truncated_tree(EditCtx *ec, Bytebuf *file,
         new_child_size = serialized_node_size(
             ut, node_get(ut, child), true);
         if (root_size > total || old_child_size > total - root_size)
-            SAG_BUG("undo write: invalid selected root accounting");
+            YEW_BUG("undo write: invalid selected root accounting");
         total -= root_size + old_child_size;
         if (new_child_size > UINT64_MAX - total)
             total = UINT64_MAX;
@@ -2187,7 +2187,7 @@ static bool write_truncated_tree(EditCtx *ec, Bytebuf *file,
 
 static u64 serialized_tree_size(const UndoTree *ut)
 {
-    u64 total = SAGU_HEADER_LEN + 8U;
+    u64 total = YEWU_HEADER_LEN + 8U;
     u32 id;
 
     for (id = 1U; (size_t)id <= ut->nodes.len; id++) {
@@ -2203,7 +2203,7 @@ static u64 serialized_tree_size(const UndoTree *ut)
     return total;
 }
 
-SagUndoWriteResult sag_undo_write(EditCtx *ec, const char *path)
+YewUndoWriteResult yew_undo_write(EditCtx *ec, const char *path)
 {
     UndoTree *ut;
     Bytebuf file;
@@ -2214,15 +2214,15 @@ SagUndoWriteResult sag_undo_write(EditCtx *ec, const char *path)
     u64 serialized_size;
     u64 current_len;
     u64 current_hash;
-    SagSaveErr result;
+    YewSaveErr result;
 
     require_ctx(ec);
     if (path == NULL)
-        SAG_BUG("sag_undo_write: NULL path");
+        YEW_BUG("yew_undo_write: NULL path");
     ut = ec->undo;
     if (ut->depth != 0U)
-        SAG_BUG("undo: serialize inside transaction");
-    current_len = sag_textbuf_len(ec->tb);
+        YEW_BUG("undo: serialize inside transaction");
+    current_len = yew_textbuf_len(ec->tb);
     current_hash = text_hash(ec->tb);
     anchor = ut->saved != 0U ? ut->saved : ut->root;
     count = live_count(ut);
@@ -2234,7 +2234,7 @@ SagUndoWriteResult sag_undo_write(EditCtx *ec, const char *path)
                                   current_len, current_hash) &&
             !write_truncated_path(ec, &file, current_len, current_hash)) {
             bytebuf_free(&file);
-            return SAG_UNDO_WRITE_TOO_LARGE;
+            return YEW_UNDO_WRITE_TOO_LARGE;
         }
     } else {
         write_header(&file, 0U, ut->root, ut->cur, ut->saved, anchor, count,
@@ -2254,24 +2254,24 @@ SagUndoWriteResult sag_undo_write(EditCtx *ec, const char *path)
         put_u32(&file, crc_xor);
         bytebuf_append(&file, "UGAS", 4U);
     }
-    result = sag_file_write_atomic(path, file.data, file.len, 0600);
+    result = yew_file_write_atomic(path, file.data, file.len, 0600);
     bytebuf_free(&file);
-    return result == SAG_SAVE_OK ? SAG_UNDO_WRITE_OK : SAG_UNDO_WRITE_IO;
+    return result == YEW_SAVE_OK ? YEW_UNDO_WRITE_OK : YEW_UNDO_WRITE_IO;
 }
 
 typedef struct {
     const u8 *data;
     size_t len;
     size_t at;
-} SaguReader;
+} YewuReader;
 
 typedef enum {
-    SAGU_FILE_OK = 0,
-    SAGU_FILE_IO,
-    SAGU_FILE_INVALID
-} SaguFileRead;
+    YEWU_FILE_OK = 0,
+    YEWU_FILE_IO,
+    YEWU_FILE_INVALID
+} YewuFileRead;
 
-static bool take(SaguReader *reader, size_t len, const u8 **out)
+static bool take(YewuReader *reader, size_t len, const u8 **out)
 {
     if (reader->at > reader->len || len > reader->len - reader->at)
         return false;
@@ -2280,7 +2280,7 @@ static bool take(SaguReader *reader, size_t len, const u8 **out)
     return true;
 }
 
-static bool get_u16(SaguReader *reader, u16 *out)
+static bool get_u16(YewuReader *reader, u16 *out)
 {
     const u8 *bytes;
     if (!take(reader, 2U, &bytes))
@@ -2289,7 +2289,7 @@ static bool get_u16(SaguReader *reader, u16 *out)
     return true;
 }
 
-static bool get_u32(SaguReader *reader, u32 *out)
+static bool get_u32(YewuReader *reader, u32 *out)
 {
     const u8 *bytes;
     if (!take(reader, 4U, &bytes))
@@ -2299,7 +2299,7 @@ static bool get_u32(SaguReader *reader, u32 *out)
     return true;
 }
 
-static bool get_u64(SaguReader *reader, u64 *out)
+static bool get_u64(YewuReader *reader, u64 *out)
 {
     const u8 *bytes;
     unsigned int i;
@@ -2312,7 +2312,7 @@ static bool get_u64(SaguReader *reader, u64 *out)
     return true;
 }
 
-static SaguFileRead read_file_bytes(const char *path, u64 max_bytes,
+static YewuFileRead read_file_bytes(const char *path, u64 max_bytes,
                                     Bytebuf *buf)
 {
     struct stat path_st;
@@ -2322,13 +2322,13 @@ static SaguFileRead read_file_bytes(const char *path, u64 max_bytes,
     int fd;
     size_t size;
     size_t at = 0U;
-    SaguFileRead result = SAGU_FILE_IO;
+    YewuFileRead result = YEWU_FILE_IO;
 
     bytebuf_init(buf);
     if (lstat(path, &path_st) != 0)
-        return SAGU_FILE_IO;
+        return YEWU_FILE_IO;
     if (!S_ISREG(path_st.st_mode))
-        return SAGU_FILE_INVALID;
+        return YEWU_FILE_INVALID;
 #ifdef O_CLOEXEC
     flags |= O_CLOEXEC;
 #endif
@@ -2337,14 +2337,14 @@ static SaguFileRead read_file_bytes(const char *path, u64 max_bytes,
 #endif
     fd = open(path, flags);
     if (fd < 0)
-        return errno == ELOOP ? SAGU_FILE_INVALID : SAGU_FILE_IO;
+        return errno == ELOOP ? YEWU_FILE_INVALID : YEWU_FILE_IO;
     if (fstat(fd, &before) != 0)
         goto done;
     if (!S_ISREG(before.st_mode) || before.st_dev != path_st.st_dev ||
         before.st_ino != path_st.st_ino || before.st_size < 0 ||
         (u64)before.st_size > max_bytes ||
         (u64)before.st_size > SIZE_MAX) {
-        result = SAGU_FILE_INVALID;
+        result = YEWU_FILE_INVALID;
         goto done;
     }
     size = (size_t)before.st_size;
@@ -2363,12 +2363,12 @@ static SaguFileRead read_file_bytes(const char *path, u64 max_bytes,
     if (fstat(fd, &after) != 0 || before.st_dev != after.st_dev ||
         before.st_ino != after.st_ino || before.st_size != after.st_size)
         goto done;
-    result = SAGU_FILE_OK;
+    result = YEWU_FILE_OK;
 
 done:
-    if (close(fd) != 0 && result == SAGU_FILE_OK)
-        result = SAGU_FILE_IO;
-    if (result != SAGU_FILE_OK)
+    if (close(fd) != 0 && result == YEWU_FILE_OK)
+        result = YEWU_FILE_IO;
+    if (result != YEWU_FILE_OK)
         bytebuf_free(buf);
     return result;
 }
@@ -2377,10 +2377,10 @@ static void init_loaded_tree(UndoTree *ut, const TextBuf *tb)
 {
     (void)memset(ut, 0, sizeof(*ut));
     bytebuf_init(&ut->blobs);
-    ut->bytes_max = SAG_UNDO_BYTES_MAX;
-    ut->persist_bytes_max = SAG_UNDO_PERSIST_BYTES_MAX;
-    ut->min_nodes = SAG_UNDO_MIN_NODES;
-    ut->pending_reason = SAG_TXN_REASON_MAX;
+    ut->bytes_max = YEW_UNDO_BYTES_MAX;
+    ut->persist_bytes_max = YEW_UNDO_PERSIST_BYTES_MAX;
+    ut->min_nodes = YEW_UNDO_MIN_NODES;
+    ut->pending_reason = YEW_TXN_REASON_MAX;
     ut->boundary = true;
     ut->mono_clock = default_mono;
     ut->wall_clock = default_wall;
@@ -2389,23 +2389,23 @@ static void init_loaded_tree(UndoTree *ut, const TextBuf *tb)
 
 static void dispose_loaded_tree(UndoTree *ut)
 {
-    SagUndoNodeVec_free(&ut->nodes);
-    SagUndoOpVec_free(&ut->ops);
-    SagCursorRecVec_free(&ut->cursors);
-    SagMarkRepairVec_free(&ut->repairs);
-    SagUndoRepairRunVec_free(&ut->repair_runs);
-    SagUndoReplaySpanVec_free(&ut->replay_spans);
+    YewUndoNodeVec_free(&ut->nodes);
+    YewUndoOpVec_free(&ut->ops);
+    YewCursorRecVec_free(&ut->cursors);
+    YewMarkRepairVec_free(&ut->repairs);
+    YewUndoRepairRunVec_free(&ut->repair_runs);
+    YewUndoReplaySpanVec_free(&ut->replay_spans);
     bytebuf_free(&ut->blobs);
 }
 
-static bool parse_cursor(SaguReader *reader, CursorRec *cursor)
+static bool parse_cursor(YewuReader *reader, CursorRec *cursor)
 {
     return get_u64(reader, &cursor->pos) &&
            get_u64(reader, &cursor->anchor) &&
            get_u64(reader, &cursor->goal);
 }
 
-static bool parse_repair(SaguReader *reader, MarkRepair *repair)
+static bool parse_repair(YewuReader *reader, MarkRepair *repair)
 {
     return get_u32(reader, &repair->mark_id) &&
            get_u32(reader, &repair->mark_gen) &&
@@ -2415,18 +2415,18 @@ static bool parse_repair(SaguReader *reader, MarkRepair *repair)
 static bool grow_node_ids(UndoTree *ut, u32 id)
 {
     UndoNode dead;
-    const u64 max_ids = SAG_UNDO_PERSIST_BYTES_MAX / 48U;
+    const u64 max_ids = YEW_UNDO_PERSIST_BYTES_MAX / 48U;
 
     if (id == 0U || id > max_ids)
         return false;
     (void)memset(&dead, 0, sizeof(dead));
-    dead.flags = SAG_TXN_DEAD;
+    dead.flags = YEW_TXN_DEAD;
     while (ut->nodes.len < id)
-        SagUndoNodeVec_push(&ut->nodes, dead);
+        YewUndoNodeVec_push(&ut->nodes, dead);
     return true;
 }
 
-static bool parse_node(SaguReader *reader, UndoTree *ut, u32 *crc_xor,
+static bool parse_node(YewuReader *reader, UndoTree *ut, u32 *crc_xor,
                        u32 previous_id)
 {
     size_t record_at = reader->at;
@@ -2452,10 +2452,10 @@ static bool parse_node(SaguReader *reader, UndoTree *ut, u32 *crc_xor,
         node.flags = small[1];
         node.t_wall = (i64)wall;
         if (pad != 0U ||
-            (node.flags & (u8)~(SAG_TXN_TRIMMED | SAG_TXN_SAVED)) != 0U)
+            (node.flags & (u8)~(YEW_TXN_TRIMMED | YEW_TXN_SAVED)) != 0U)
             return false;
     }
-    if (node.id <= previous_id || node.reason >= SAG_TXN_REASON_MAX ||
+    if (node.id <= previous_id || node.reason >= YEW_TXN_REASON_MAX ||
         !grow_node_ids(ut, node.id) ||
         (node.parent != 0U && !node_live(ut, node.parent)) ||
         ut->ops.len > UINT32_MAX || ut->repairs.len > UINT32_MAX ||
@@ -2483,7 +2483,7 @@ static bool parse_node(SaguReader *reader, UndoTree *ut, u32 *crc_xor,
             !take(reader, (size_t)plen, &payload))
             return false;
         op.kind = small[0];
-        if ((op.kind != SAG_OP_INS && op.kind != SAG_OP_DEL) ||
+        if ((op.kind != YEW_OP_INS && op.kind != YEW_OP_DEL) ||
             small[1] != 0U || pad != 0U)
             return false;
         op.payload = ut->blobs.len;
@@ -2492,7 +2492,7 @@ static bool parse_node(SaguReader *reader, UndoTree *ut, u32 *crc_xor,
             repair_count > (reader->len - reader->at) / 16U ||
             repair_count > UINT32_MAX - ut->repairs.len ||
             repair_count > UINT32_MAX - node.n_rep ||
-            (op.kind == SAG_OP_INS && repair_count != 0U))
+            (op.kind == YEW_OP_INS && repair_count != 0U))
             return false;
         run.at = (u32)ut->repairs.len;
         run.len = repair_count;
@@ -2502,13 +2502,13 @@ static bool parse_node(SaguReader *reader, UndoTree *ut, u32 *crc_xor,
                 MarkRepair repair;
                 if (!parse_repair(reader, &repair))
                     return false;
-                SagMarkRepairVec_push(&ut->repairs, repair);
+                YewMarkRepairVec_push(&ut->repairs, repair);
             }
         }
         node.n_rep += repair_count;
-        SagUndoOpVec_push(&ut->ops, op);
-        SagUndoRepairRunVec_push(&ut->repair_runs, run);
-        SagUndoReplaySpanVec_push(&ut->replay_spans, replay);
+        YewUndoOpVec_push(&ut->ops, op);
+        YewUndoRepairRunVec_push(&ut->repair_runs, run);
+        YewUndoReplaySpanVec_push(&ut->replay_spans, replay);
     }
     node.n_ops = n_ops;
     if (!get_u32(reader, &node.n_before) ||
@@ -2521,7 +2521,7 @@ static bool parse_node(SaguReader *reader, UndoTree *ut, u32 *crc_xor,
         CursorRec cursor;
         if (!parse_cursor(reader, &cursor))
             return false;
-        SagCursorRecVec_push(&ut->cursors, cursor);
+        YewCursorRecVec_push(&ut->cursors, cursor);
     }
     if (!get_u32(reader, &node.n_after) ||
         ut->cursors.len > UINT32_MAX ||
@@ -2533,10 +2533,10 @@ static bool parse_node(SaguReader *reader, UndoTree *ut, u32 *crc_xor,
         CursorRec cursor;
         if (!parse_cursor(reader, &cursor))
             return false;
-        SagCursorRecVec_push(&ut->cursors, cursor);
+        YewCursorRecVec_push(&ut->cursors, cursor);
     }
     node.blob_hi = ut->blobs.len;
-    actual_crc = sag_crc32(reader->data + record_at, reader->at - record_at);
+    actual_crc = yew_crc32(reader->data + record_at, reader->at - record_at);
     if (!get_u32(reader, &stored_crc) || actual_crc != stored_crc)
         return false;
     *crc_xor ^= stored_crc;
@@ -2559,11 +2559,11 @@ static bool reverse_node_len(const UndoTree *ut, const UndoNode *node,
     while (i != 0U) {
         const UndoOp *op = &ut->ops.data[node->ops_at + --i];
 
-        if (op->kind == SAG_OP_INS) {
+        if (op->kind == YEW_OP_INS) {
             if (op->off > *len || op->len > *len - op->off)
                 return false;
             *len -= op->len;
-        } else if (op->kind == SAG_OP_DEL) {
+        } else if (op->kind == YEW_OP_DEL) {
             if (op->off > *len || op->len > UINT64_MAX - *len)
                 return false;
             *len += op->len;
@@ -2582,11 +2582,11 @@ static bool forward_node_len(const UndoTree *ut, const UndoNode *node,
     for (i = 0U; i < node->n_ops; i++) {
         const UndoOp *op = &ut->ops.data[node->ops_at + i];
 
-        if (op->kind == SAG_OP_INS) {
+        if (op->kind == YEW_OP_INS) {
             if (op->off > *len || op->len > UINT64_MAX - *len)
                 return false;
             *len += op->len;
-        } else if (op->kind == SAG_OP_DEL) {
+        } else if (op->kind == YEW_OP_DEL) {
             if (op->off > *len || op->len > *len - op->off)
                 return false;
             *len -= op->len;
@@ -2634,7 +2634,7 @@ static bool node_payloads_valid(const UndoTree *ut, const UndoNode *node)
         run = &ut->repair_runs.data[index];
         if ((size_t)run->at > ut->repairs.len ||
             run->len > ut->repairs.len - (size_t)run->at ||
-            (op->kind == SAG_OP_INS && run->len != 0U))
+            (op->kind == YEW_OP_INS && run->len != 0U))
             return false;
         for (r = 0U; r < run->len; r++) {
             if (ut->repairs.data[run->at + r].rel_off > op->len)
@@ -2669,7 +2669,7 @@ static bool validate_loaded(const UndoTree *ut, u32 root, u32 cur, u32 saved,
             return false;
         id = node->parent;
     }
-    lengths = sag_xcalloc(ut->nodes.len, sizeof(*lengths));
+    lengths = yew_xcalloc(ut->nodes.len, sizeof(*lengths));
     for (id = 1U; (size_t)id <= ut->nodes.len; id++) {
         const UndoNode *node;
         u64 before_len;
@@ -2682,7 +2682,7 @@ static bool validate_loaded(const UndoTree *ut, u32 root, u32 cur, u32 saved,
             (id != root &&
              (!node_live(ut, node->parent) || node->parent == 0U ||
               node->depth != node_get(ut, node->parent)->depth + 1U)) ||
-            ((node->flags & SAG_TXN_SAVED) != 0U) != (id == saved) ||
+            ((node->flags & YEW_TXN_SAVED) != 0U) != (id == saved) ||
             !node_payloads_valid(ut, node))
             goto invalid;
         if (node->redo_child != 0U &&
@@ -2719,15 +2719,15 @@ static void materialize_insert_payloads(EditCtx *ec, UndoTree *ut)
         u64 blob_at;
         u64 add_at;
         u64 end;
-        if (op->kind != SAG_OP_INS)
+        if (op->kind != YEW_OP_INS)
             continue;
         blob_at = op->payload;
         add_at = ec->tb->add.len;
-        end = sag_textbuf_len(ec->tb);
-        sag_textbuf_insert(ec->tb, BYTEOFF(end),
+        end = yew_textbuf_len(ec->tb);
+        yew_textbuf_insert(ec->tb, BYTEOFF(end),
                            ut->blobs.data + (size_t)blob_at, op->len);
-        sag_textbuf_delete(ec->tb, (Span){end, end + op->len});
-        op->src = SAG_STORE_ADD;
+        yew_textbuf_delete(ec->tb, (Span){end, end + op->len});
+        op->src = YEW_STORE_ADD;
         op->payload = add_at;
     }
 }
@@ -2747,11 +2747,11 @@ static void retain_delete_payloads(UndoTree *ut)
         for (i = 0U; i < node->n_ops; i++) {
             UndoOp *op = &ut->ops.data[node->ops_at + i];
             u64 old;
-            if (op->kind != SAG_OP_DEL)
+            if (op->kind != YEW_OP_DEL)
                 continue;
             old = op->payload;
             if (old > ut->blobs.len || op->len > ut->blobs.len - old)
-                SAG_BUG("undo read: corrupt materialized delete payload");
+                YEW_BUG("undo read: corrupt materialized delete payload");
             op->payload = deletes.len;
             bytebuf_append(&deletes, ut->blobs.data + (size_t)old,
                            (size_t)op->len);
@@ -2762,10 +2762,10 @@ static void retain_delete_payloads(UndoTree *ut)
     ut->blobs = deletes;
 }
 
-SagUndoReadResult sag_undo_read(EditCtx *ec, const char *path)
+YewUndoReadResult yew_undo_read(EditCtx *ec, const char *path)
 {
     Bytebuf file;
-    SaguReader reader;
+    YewuReader reader;
     UndoTree loaded;
     const u8 *magic;
     u32 version;
@@ -2787,39 +2787,39 @@ SagUndoReadResult sag_undo_read(EditCtx *ec, const char *path)
     u32 previous_id = 0U;
     u64 len;
     u64 hash;
-    SagUndoReadResult outcome;
-    SaguFileRead file_result;
+    YewUndoReadResult outcome;
+    YewuFileRead file_result;
     UndoTree *old;
 
     require_ctx(ec);
     if (path == NULL)
-        SAG_BUG("sag_undo_read: NULL path");
+        YEW_BUG("yew_undo_read: NULL path");
     if (ec->undo->depth != 0U || ec->undo->open != 0U)
-        SAG_BUG("undo: deserialize inside transaction");
+        YEW_BUG("undo: deserialize inside transaction");
     file_result = read_file_bytes(
-        path, ec->undo->persist_bytes_max < SAG_UNDO_PERSIST_BYTES_MAX
+        path, ec->undo->persist_bytes_max < YEW_UNDO_PERSIST_BYTES_MAX
                   ? ec->undo->persist_bytes_max
-                  : SAG_UNDO_PERSIST_BYTES_MAX,
+                  : YEW_UNDO_PERSIST_BYTES_MAX,
         &file);
-    if (file_result == SAGU_FILE_IO)
-        return SAG_UNDO_READ_IO;
-    if (file_result == SAGU_FILE_INVALID) {
-        sag_log(SAG_LOG_WARN, "undo: dropped unsafe or oversized .sagu");
-        return SAG_UNDO_READ_DROPPED;
+    if (file_result == YEWU_FILE_IO)
+        return YEW_UNDO_READ_IO;
+    if (file_result == YEWU_FILE_INVALID) {
+        yew_log(YEW_LOG_WARN, "undo: dropped unsafe or oversized .yewu");
+        return YEW_UNDO_READ_DROPPED;
     }
-    reader = (SaguReader){file.data, file.len, 0U};
+    reader = (YewuReader){file.data, file.len, 0U};
     init_loaded_tree(&loaded, ec->tb);
-    if (!take(&reader, 4U, &magic) || memcmp(magic, "SAGU", 4U) != 0 ||
-        !get_u32(&reader, &version) || version != SAGU_VERSION ||
+    if (!take(&reader, 4U, &magic) || memcmp(magic, "YEWU", 4U) != 0 ||
+        !get_u32(&reader, &version) || version != YEWU_VERSION ||
         !get_u32(&reader, &flags) || !get_u32(&reader, &root) ||
         !get_u32(&reader, &cur) || !get_u32(&reader, &saved) ||
         !get_u32(&reader, &anchor) || !get_u32(&reader, &count) ||
         !get_u64(&reader, &anchor_len) || !get_u64(&reader, &anchor_hash) ||
         !get_u64(&reader, &cur_len) || !get_u64(&reader, &cur_hash) ||
-        reader.at != SAGU_HEADER_LEN ||
-        (flags & (u32)~SAGU_TRUNCATED) != 0U || count == 0U ||
-        reader.len < SAGU_HEADER_LEN + 8U ||
-        count > (reader.len - SAGU_HEADER_LEN - 8U) / 48U) {
+        reader.at != YEWU_HEADER_LEN ||
+        (flags & (u32)~YEWU_TRUNCATED) != 0U || count == 0U ||
+        reader.len < YEWU_HEADER_LEN + 8U ||
+        count > (reader.len - YEWU_HEADER_LEN - 8U) / 48U) {
         goto dropped;
     }
     for (i = 0U; i < count; i++) {
@@ -2836,13 +2836,13 @@ SagUndoReadResult sag_undo_read(EditCtx *ec, const char *path)
         !validate_loaded(&loaded, root, cur, saved, anchor, anchor_len,
                          cur_len, &root_len))
         goto dropped;
-    len = sag_textbuf_len(ec->tb);
+    len = yew_textbuf_len(ec->tb);
     hash = text_hash(ec->tb);
     if (len == cur_len && hash == cur_hash) {
-        outcome = SAG_UNDO_READ_CURRENT;
+        outcome = YEW_UNDO_READ_CURRENT;
         loaded.cur = cur;
     } else if (len == anchor_len && hash == anchor_hash) {
-        outcome = SAG_UNDO_READ_ANCHOR;
+        outcome = YEW_UNDO_READ_ANCHOR;
         loaded.cur = anchor;
     } else {
         goto dropped;
@@ -2868,7 +2868,7 @@ SagUndoReadResult sag_undo_read(EditCtx *ec, const char *path)
         state_identity_at(&identity, root, &root_len, &root_hash);
     }
     if (root_len != loaded.root_len)
-        SAG_BUG("undo read: validated root length changed");
+        YEW_BUG("undo read: validated root length changed");
     loaded.root_hash = root_hash;
     if (saved == 0U)
         loaded.saved_hash = root_hash;
@@ -2882,6 +2882,6 @@ SagUndoReadResult sag_undo_read(EditCtx *ec, const char *path)
 dropped:
     dispose_loaded_tree(&loaded);
     bytebuf_free(&file);
-    sag_log(SAG_LOG_WARN, "undo: dropped invalid or stale .sagu");
-    return SAG_UNDO_READ_DROPPED;
+    yew_log(YEW_LOG_WARN, "undo: dropped invalid or stale .yewu");
+    return YEW_UNDO_READ_DROPPED;
 }

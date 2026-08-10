@@ -97,7 +97,7 @@ static void trust_map_set(TrustImpl *impl, FlMap *map, const char *key,
 
 static TrustImpl *trust_impl_new(void)
 {
-    TrustImpl *impl = sag_xcalloc(1U, sizeof(*impl));
+    TrustImpl *impl = yew_xcalloc(1U, sizeof(*impl));
     FlMap *root;
     FlMap *dirs;
 
@@ -123,13 +123,13 @@ static void trust_impl_free(TrustImpl *impl)
     free(impl);
 }
 
-void sag_trust_db_init(SagTrustDb *db)
+void yew_trust_db_init(YewTrustDb *db)
 {
     if (db != NULL)
         db->impl = trust_impl_new();
 }
 
-void sag_trust_db_free(SagTrustDb *db)
+void yew_trust_db_free(YewTrustDb *db)
 {
     if (db == NULL)
         return;
@@ -194,7 +194,7 @@ static bool trust_valid_root(FlValue root)
     return true;
 }
 
-bool sag_trust_db_load_path(SagTrustDb *db, const char *path)
+bool yew_trust_db_load_path(YewTrustDb *db, const char *path)
 {
     TrustImpl *fresh;
     Bytebuf bytes;
@@ -230,36 +230,36 @@ bool sag_trust_db_load_path(SagTrustDb *db, const char *path)
 
 static char *trust_xdg_path(bool ensure)
 {
-    char *dir = sag_xdg_state_dir();
+    char *dir = yew_xdg_state_dir();
     char *path;
     size_t n;
 
     if (dir == NULL)
         return NULL;
-    if (ensure && !sag_mkdirs(dir, 0700U)) {
+    if (ensure && !yew_mkdirs(dir, 0700U)) {
         free(dir);
         return NULL;
     }
     n = strlen(dir) + sizeof("/trust.fl");
-    path = sag_xmalloc(n);
+    path = yew_xmalloc(n);
     (void)snprintf(path, n, "%s/trust.fl", dir);
     free(dir);
     return path;
 }
 
-bool sag_trust_db_load(SagTrustDb *db)
+bool yew_trust_db_load(YewTrustDb *db)
 {
     char *path = trust_xdg_path(false);
     bool ok;
 
     if (path == NULL)
         return false;
-    ok = sag_trust_db_load_path(db, path);
+    ok = yew_trust_db_load_path(db, path);
     free(path);
     return ok;
 }
 
-void sag_trust_probe_init(SagTrustProbe *probe)
+void yew_trust_probe_init(YewTrustProbe *probe)
 {
     if (probe == NULL)
         return;
@@ -267,7 +267,7 @@ void sag_trust_probe_init(SagTrustProbe *probe)
     bytebuf_init(&probe->bytes);
 }
 
-void sag_trust_probe_free(SagTrustProbe *probe)
+void yew_trust_probe_free(YewTrustProbe *probe)
 {
     if (probe == NULL)
         return;
@@ -341,7 +341,7 @@ static void trust_hash_hex(u64 hash, char out[17])
     (void)snprintf(out, 17U, "%016lx", (unsigned long)hash);
 }
 
-static bool trust_store(TrustImpl *impl, const SagTrustProbe *probe,
+static bool trust_store(TrustImpl *impl, const YewTrustProbe *probe,
                         const char *state, time_t now, bool fingerprint)
 {
     FlValue dirs;
@@ -369,9 +369,9 @@ static bool trust_store(TrustImpl *impl, const SagTrustProbe *probe,
                       FL_OBJ_V(FL_STR, key), FL_OBJ_V(FL_MAP, entry));
 }
 
-SagTrustDecision sag_trust_check(SagTrustDb *db, const char *workspace,
+YewTrustDecision yew_trust_check(YewTrustDb *db, const char *workspace,
                                  bool has_tty, bool pregrant,
-                                 SagTrustProbe *probe)
+                                 YewTrustProbe *probe)
 {
     TrustImpl *impl;
     char *resolved;
@@ -380,93 +380,93 @@ SagTrustDecision sag_trust_check(SagTrustDb *db, const char *workspace,
     FlValue value;
     TrustEntry entry;
     char hash[17];
-    SagTrustDecision prompt = SAG_TRUST_PROMPT_NEW;
+    YewTrustDecision prompt = YEW_TRUST_PROMPT_NEW;
 
     if (db == NULL || db->impl == NULL || workspace == NULL ||
         probe == NULL)
-        return SAG_TRUST_ERROR;
+        return YEW_TRUST_ERROR;
     impl = (TrustImpl *)db->impl;
     probe->bytes.len = 0U;
     probe->has_config = false;
     resolved = realpath(workspace, NULL);
     if (resolved == NULL)
-        return SAG_TRUST_ERROR;
+        return YEW_TRUST_ERROR;
     if (strlen(resolved) >= sizeof(probe->workspace)) {
         free(resolved);
-        return SAG_TRUST_ERROR;
+        return YEW_TRUST_ERROR;
     }
     (void)snprintf(probe->workspace, sizeof(probe->workspace), "%s",
                    resolved);
     free(resolved);
     if (stat(probe->workspace, &st) != 0 || !S_ISDIR(st.st_mode))
-        return SAG_TRUST_ERROR;
+        return YEW_TRUST_ERROR;
     probe->dev = st.st_dev;
     probe->ino = st.st_ino;
     if (snprintf(probe->config_path, sizeof(probe->config_path),
-                 "%s/.sagitta.fl", probe->workspace) >=
+                 "%s/.yew.fl", probe->workspace) >=
         (int)sizeof(probe->config_path))
-        return SAG_TRUST_ERROR;
+        return YEW_TRUST_ERROR;
     if (!trust_read_file(probe->config_path, &probe->bytes, &missing))
-        return missing ? SAG_TRUST_NO_CONFIG : SAG_TRUST_ERROR;
+        return missing ? YEW_TRUST_NO_CONFIG : YEW_TRUST_ERROR;
     probe->has_config = true;
-    probe->hash = sag_fnv1a64(probe->bytes.data, probe->bytes.len);
+    probe->hash = yew_fnv1a64(probe->bytes.data, probe->bytes.len);
     if (pregrant)
-        return SAG_TRUST_GRANTED;
+        return YEW_TRUST_GRANTED;
     if (trust_find_dir(impl, probe->workspace, &value) &&
         trust_entry(value, &entry)) {
         if (trust_state_is(&entry, "denied"))
-            return SAG_TRUST_DENIED;
+            return YEW_TRUST_DENIED;
         if (trust_state_is(&entry, "trusted")) {
             if (!entry.fingerprint) {
                 (void)trust_store(impl, probe, "trusted", time(NULL), true);
-                return SAG_TRUST_GRANTED;
+                return YEW_TRUST_GRANTED;
             }
             trust_hash_hex(probe->hash, hash);
             if (entry.hash_len != 16U ||
                 memcmp(entry.hash, hash, 16U) != 0)
-                prompt = SAG_TRUST_PROMPT_CHANGED;
+                prompt = YEW_TRUST_PROMPT_CHANGED;
             else if (entry.dev != (i64)probe->dev ||
                      entry.ino != (i64)probe->ino)
-                prompt = SAG_TRUST_PROMPT_REPLACED;
+                prompt = YEW_TRUST_PROMPT_REPLACED;
             else
-                return SAG_TRUST_GRANTED;
+                return YEW_TRUST_GRANTED;
         }
     }
-    return has_tty ? prompt : SAG_TRUST_SKIP_NO_TTY;
+    return has_tty ? prompt : YEW_TRUST_SKIP_NO_TTY;
 }
 
-bool sag_trust_answer(SagTrustDb *db, const SagTrustProbe *probe,
-                      SagTrustAnswer answer, time_t now)
+bool yew_trust_answer(YewTrustDb *db, const YewTrustProbe *probe,
+                      YewTrustAnswer answer, time_t now)
 {
     if (db == NULL || db->impl == NULL || probe == NULL ||
         !probe->has_config)
         return false;
     switch (answer) {
-    case SAG_TRUST_ALWAYS:
+    case YEW_TRUST_ALWAYS:
         return trust_store((TrustImpl *)db->impl, probe, "trusted", now,
                            true);
-    case SAG_TRUST_NEVER:
+    case YEW_TRUST_NEVER:
         return trust_store((TrustImpl *)db->impl, probe, "denied", now,
                            false);
-    case SAG_TRUST_ONCE:
-    case SAG_TRUST_VIEW:
-    case SAG_TRUST_SKIP:
+    case YEW_TRUST_ONCE:
+    case YEW_TRUST_VIEW:
+    case YEW_TRUST_SKIP:
         return true;
     default:
         return false;
     }
 }
 
-const char *sag_trust_decision_reason(SagTrustDecision decision)
+const char *yew_trust_decision_reason(YewTrustDecision decision)
 {
     switch (decision) {
-    case SAG_TRUST_PROMPT_CHANGED:
+    case YEW_TRUST_PROMPT_CHANGED:
         return "the config changed since you trusted it";
-    case SAG_TRUST_PROMPT_REPLACED:
+    case YEW_TRUST_PROMPT_REPLACED:
         return "the workspace is a different filesystem object";
-    case SAG_TRUST_PROMPT_NEW:
+    case YEW_TRUST_PROMPT_NEW:
         return "this directory has not been trusted";
-    case SAG_TRUST_SKIP_NO_TTY:
+    case YEW_TRUST_SKIP_NO_TTY:
         return "workspace config skipped because no terminal is available";
     default:
         return "";
@@ -521,7 +521,7 @@ static bool trust_rebuild_sorted(TrustImpl *impl, time_t now, u32 prune_days)
 
     if (!trust_map_get(root, "dirs", &old_dirs))
         return false;
-    rows = sag_xcalloc(fl_map_count((const FlMap *)old_dirs.as.o),
+    rows = yew_xcalloc(fl_map_count((const FlMap *)old_dirs.as.o),
                        sizeof(*rows));
     while (fl_map_iter((const FlMap *)old_dirs.as.o, &cursor, &key, &value)) {
         if (!trust_prune(key, value, now, prune_days)) {
@@ -530,7 +530,7 @@ static bool trust_rebuild_sorted(TrustImpl *impl, time_t now, u32 prune_days)
             n++;
         }
     }
-    sag_sort_stable(rows, n, sizeof(*rows), trust_row_cmp, NULL);
+    yew_sort_stable(rows, n, sizeof(*rows), trust_row_cmp, NULL);
     dirs = fl_map_new(&impl->vm);
     for (i = 0U; i < n; i++)
         (void)fl_map_set(&impl->vm, dirs, rows[i].key, rows[i].value);
@@ -539,11 +539,11 @@ static bool trust_rebuild_sorted(TrustImpl *impl, time_t now, u32 prune_days)
     return true;
 }
 
-bool sag_trust_db_write_path(SagTrustDb *db, const char *path, time_t now,
+bool yew_trust_db_write_path(YewTrustDb *db, const char *path, time_t now,
                              u32 prune_days)
 {
     static const char header[] =
-        "# sagitta trust database — hand-editable; delete a line to be asked again.\n";
+        "# yew trust database — hand-editable; delete a line to be asked again.\n";
     TrustImpl *impl;
     Bytebuf out;
     bool ok;
@@ -556,19 +556,19 @@ bool sag_trust_db_write_path(SagTrustDb *db, const char *path, time_t now,
     bytebuf_init(&out);
     bytebuf_append(&out, (const u8 *)header, sizeof(header) - 1U);
     fl_data_write(&out, impl->root, 0U);
-    ok = sag_file_write_atomic(path, out.data, out.len, 0600) == SAG_SAVE_OK;
+    ok = yew_file_write_atomic(path, out.data, out.len, 0600) == YEW_SAVE_OK;
     bytebuf_free(&out);
     return ok;
 }
 
-bool sag_trust_db_write(SagTrustDb *db, time_t now, u32 prune_days)
+bool yew_trust_db_write(YewTrustDb *db, time_t now, u32 prune_days)
 {
     char *path = trust_xdg_path(true);
     bool ok;
 
     if (path == NULL)
         return false;
-    ok = sag_trust_db_write_path(db, path, now, prune_days);
+    ok = yew_trust_db_write_path(db, path, now, prune_days);
     free(path);
     return ok;
 }

@@ -14,15 +14,15 @@ typedef struct ReceiverFix {
 static void receiver_open(ReceiverFix *f)
 {
     flfix_open(&f->fl);
-    sag_ed_init(&f->ed);
-    SAG_ASSERT(sag_ed_open_scratch(&f->ed));
+    yew_ed_init(&f->ed);
+    YEW_ASSERT(yew_ed_open_scratch(&f->ed));
     fl_ed_attach(&f->fl.vm, &f->ed, NULL);
 }
 
 static void receiver_close(ReceiverFix *f)
 {
     fl_ed_detach(&f->fl.vm);
-    sag_ed_free(&f->ed);
+    yew_ed_free(&f->ed);
     flfix_close(&f->fl);
 }
 
@@ -53,13 +53,13 @@ void test_fl_receiver_headless_call_raises_handle(void)
     FlValue key;
 
     flfix_open(&f);
-    SAG_ASSERT(fl_api_bind_receiver(&f.vm, fake, "len", 3U, &bound));
-    SAG_ASSERT(!fl_call(&f.vm, bound, NULL, 0U, &out));
-    SAG_ASSERT_EQ_U64(f.vm.err.t, FL_MAP);
+    YEW_ASSERT(fl_api_bind_receiver(&f.vm, fake, "len", 3U, &bound));
+    YEW_ASSERT(!fl_call(&f.vm, bound, NULL, 0U, &out));
+    YEW_ASSERT_EQ_U64(f.vm.err.t, FL_MAP);
     key = FL_OBJ_V(FL_STR, fl_str_new(&f.vm, "kind", 4U));
-    SAG_ASSERT(fl_map_get((FlMap *)f.vm.err.as.o, key, &kind));
-    SAG_ASSERT_EQ_U64(kind.t, FL_STR);
-    SAG_ASSERT_EQ_STR(((FlStr *)kind.as.o)->b, "handle");
+    YEW_ASSERT(fl_map_get((FlMap *)f.vm.err.as.o, key, &kind));
+    YEW_ASSERT_EQ_U64(kind.t, FL_STR);
+    YEW_ASSERT_EQ_STR(((FlStr *)kind.as.o)->b, "handle");
     flfix_close(&f);
 }
 
@@ -85,18 +85,18 @@ void test_fl_receiver_survives_collection_without_editor_pointer(void)
     FlNative *native;
 
     receiver_open(&f);
-    handle = fl_h_buf_make(&f.ed, sag_ed_doc(&f.ed));
-    SAG_ASSERT(fl_api_bind_receiver(&f.fl.vm, handle, "len", 3U, &bound));
-    SAG_ASSERT_EQ_U64(bound.t, FL_NATIVE);
+    handle = fl_h_buf_make(&f.ed, yew_ed_doc(&f.ed));
+    YEW_ASSERT(fl_api_bind_receiver(&f.fl.vm, handle, "len", 3U, &bound));
+    YEW_ASSERT_EQ_U64(bound.t, FL_NATIVE);
     native = (FlNative *)bound.as.o;
-    SAG_ASSERT(native->has_recv != 0U);
-    SAG_ASSERT_EQ_U64(native->recv.t, FL_BUF);
-    SAG_ASSERT_EQ_U64(native->recv.as.i, handle.as.i);
+    YEW_ASSERT(native->has_recv != 0U);
+    YEW_ASSERT_EQ_U64(native->recv.t, FL_BUF);
+    YEW_ASSERT_EQ_U64(native->recv.as.i, handle.as.i);
     fl_gc_protect(&f.fl.vm, bound);
     fl_gc_collect(&f.fl.vm);
-    SAG_ASSERT(fl_call(&f.fl.vm, bound, NULL, 0U, &out));
-    SAG_ASSERT_EQ_U64(out.t, FL_INT);
-    SAG_ASSERT_EQ_I64(out.as.i, 0);
+    YEW_ASSERT(fl_call(&f.fl.vm, bound, NULL, 0U, &out));
+    YEW_ASSERT_EQ_U64(out.t, FL_INT);
+    YEW_ASSERT_EQ_I64(out.as.i, 0);
     fl_gc_release(&f.fl.vm, 1U);
     receiver_close(&f);
 }

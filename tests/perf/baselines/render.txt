@@ -1,4 +1,4 @@
-# Sagitta Sprint 05 advisory render baselines (median ns)
+# yew Sprint 05 advisory render baselines (median ns)
 # Timing rows warn at 1.2x through Sprint 55; deterministic byte limits fail.
 full_200x50 150000
 full_80x24 29000

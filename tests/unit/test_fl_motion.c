@@ -26,22 +26,22 @@ static u32 ntaps;
 
 static void motion_tap(CmdId id, const CmdCtx *cx)
 {
-    const CmdDesc *desc = sag_cmd_desc(id);
+    const CmdDesc *desc = yew_cmd_desc(id);
     MotionTap *tap;
     size_t word_len;
 
-    SAG_ASSERT_NOT_NULL(desc);
-    SAG_ASSERT_NOT_NULL(desc->word);
-    SAG_ASSERT(ntaps < SAG_ARRAY_LEN(taps));
+    YEW_ASSERT_NOT_NULL(desc);
+    YEW_ASSERT_NOT_NULL(desc->word);
+    YEW_ASSERT(ntaps < YEW_ARRAY_LEN(taps));
     tap = &taps[ntaps++];
     (void)memset(tap, 0, sizeof(*tap));
     word_len = strlen(desc->word);
-    SAG_ASSERT(word_len < sizeof(tap->word));
+    YEW_ASSERT(word_len < sizeof(tap->word));
     (void)memcpy(tap->word, desc->word, word_len + 1U);
     tap->count = cx->count;
     tap->count_given = cx->count_given;
     tap->sarg_len = cx->sarg_len;
-    SAG_ASSERT(cx->sarg_len <= sizeof(tap->sarg));
+    YEW_ASSERT(cx->sarg_len <= sizeof(tap->sarg));
     if (cx->sarg_len != 0U)
         (void)memcpy(tap->sarg, cx->sarg, cx->sarg_len);
     tap->source = cx->source;
@@ -50,16 +50,16 @@ static void motion_tap(CmdId id, const CmdCtx *cx)
 static void mf_open(MotionFix *f)
 {
     flfix_open(&f->fl);
-    sag_ed_init(&f->ed);
-    SAG_ASSERT(sag_ed_open_scratch(&f->ed));
+    yew_ed_init(&f->ed);
+    YEW_ASSERT(yew_ed_open_scratch(&f->ed));
     ntaps = 0U;
-    sag_cmd_set_record_tap(motion_tap);
+    yew_cmd_set_record_tap(motion_tap);
 }
 
 static void mf_close(MotionFix *f)
 {
-    sag_cmd_set_record_tap(NULL);
-    sag_ed_free(&f->ed);
+    yew_cmd_set_record_tap(NULL);
+    yew_ed_free(&f->ed);
     flfix_close(&f->fl);
 }
 
@@ -77,21 +77,21 @@ static void assert_text(const TextBuf *tb, const u8 *want, u64 want_len)
     TextIter it;
     u64 done = 0U;
 
-    SAG_ASSERT_EQ_U64(sag_textbuf_len(tb), want_len);
+    YEW_ASSERT_EQ_U64(yew_textbuf_len(tb), want_len);
     if (want_len == 0U)
         return;
-    SAG_ASSERT(sag_textiter_begin(&it, tb, BYTEOFF(0U)));
+    YEW_ASSERT(yew_textiter_begin(&it, tb, BYTEOFF(0U)));
     while (done < want_len) {
         const u8 *bytes;
         u64 len;
         u64 take;
 
-        SAG_ASSERT(sag_textiter_chunk(&it, tb, &bytes, &len));
+        YEW_ASSERT(yew_textiter_chunk(&it, tb, &bytes, &len));
         take = len < want_len - done ? len : want_len - done;
-        SAG_ASSERT_EQ_MEM(bytes, want + done, take);
+        YEW_ASSERT_EQ_MEM(bytes, want + done, take);
         done += take;
         if (done < want_len)
-            SAG_ASSERT(sag_textiter_advance(&it, tb));
+            YEW_ASSERT(yew_textiter_advance(&it, tb));
     }
 }
 
@@ -126,24 +126,24 @@ void test_fl_motion_units_arrows_words_and_counts_use_cmdwords(void)
     FlMotionProg prog;
 
     mf_open(&f);
-    ops[6].arg = sag_intern_cstr(&f.fl.in, "line_home");
-    prog = motion_prog(ops, SAG_ARRAY_LEN(ops));
-    SAG_ASSERT(fl_motion_exec(&f.fl.vm, &f.ed, f.ed.win, &prog));
-    SAG_ASSERT_EQ_U64(ntaps, 7U);
-    SAG_ASSERT_EQ_STR(taps[0].word, "mode");
-    SAG_ASSERT_EQ_MEM(taps[0].sarg, "L", 1U);
-    SAG_ASSERT_EQ_MEM(taps[1].sarg, "W", 1U);
-    SAG_ASSERT_EQ_MEM(taps[2].sarg, "B", 1U);
-    SAG_ASSERT_EQ_MEM(taps[3].sarg, "C", 1U);
-    SAG_ASSERT_EQ_STR(taps[4].word, "unit_next");
-    SAG_ASSERT_EQ_U64(taps[4].count, 4U);
-    SAG_ASSERT(taps[4].count_given);
-    SAG_ASSERT_EQ_STR(taps[5].word, "unit_down_alt");
-    SAG_ASSERT_EQ_U64(taps[5].count, 1U);
-    SAG_ASSERT(!taps[5].count_given);
-    SAG_ASSERT_EQ_STR(taps[6].word, "line_home");
-    SAG_ASSERT(taps[6].count_given);
-    SAG_ASSERT_EQ_U64(taps[6].source, SAG_SRC_FLETCH);
+    ops[6].arg = yew_intern_cstr(&f.fl.in, "line_home");
+    prog = motion_prog(ops, YEW_ARRAY_LEN(ops));
+    YEW_ASSERT(fl_motion_exec(&f.fl.vm, &f.ed, f.ed.win, &prog));
+    YEW_ASSERT_EQ_U64(ntaps, 7U);
+    YEW_ASSERT_EQ_STR(taps[0].word, "mode");
+    YEW_ASSERT_EQ_MEM(taps[0].sarg, "L", 1U);
+    YEW_ASSERT_EQ_MEM(taps[1].sarg, "W", 1U);
+    YEW_ASSERT_EQ_MEM(taps[2].sarg, "B", 1U);
+    YEW_ASSERT_EQ_MEM(taps[3].sarg, "C", 1U);
+    YEW_ASSERT_EQ_STR(taps[4].word, "unit_next");
+    YEW_ASSERT_EQ_U64(taps[4].count, 4U);
+    YEW_ASSERT(taps[4].count_given);
+    YEW_ASSERT_EQ_STR(taps[5].word, "unit_down_alt");
+    YEW_ASSERT_EQ_U64(taps[5].count, 1U);
+    YEW_ASSERT(!taps[5].count_given);
+    YEW_ASSERT_EQ_STR(taps[6].word, "line_home");
+    YEW_ASSERT(taps[6].count_given);
+    YEW_ASSERT_EQ_U64(taps[6].source, YEW_SRC_FLETCH);
     mf_close(&f);
 }
 
@@ -155,16 +155,16 @@ void test_fl_motion_highlight_extent_escapes_before_following_word(void)
         {(u8)FL_MOTION_ARROW, (u8)'>', 0U, 1U, 0U},
         {(u8)FL_MOTION_ARROW, (u8)'<', 0U, 1U, 0U}
     };
-    FlMotionProg prog = motion_prog(ops, SAG_ARRAY_LEN(ops));
+    FlMotionProg prog = motion_prog(ops, YEW_ARRAY_LEN(ops));
 
     mf_open(&f);
-    SAG_ASSERT(fl_motion_exec(&f.fl.vm, &f.ed, f.ed.win, &prog));
-    SAG_ASSERT_EQ_U64(ntaps, 4U);
-    SAG_ASSERT_EQ_STR(taps[0].word, "mode");
-    SAG_ASSERT_EQ_MEM(taps[0].sarg, "H", 1U);
-    SAG_ASSERT_EQ_STR(taps[1].word, "unit_next");
-    SAG_ASSERT_EQ_STR(taps[2].word, "escape");
-    SAG_ASSERT_EQ_STR(taps[3].word, "unit_prev");
+    YEW_ASSERT(fl_motion_exec(&f.fl.vm, &f.ed, f.ed.win, &prog));
+    YEW_ASSERT_EQ_U64(ntaps, 4U);
+    YEW_ASSERT_EQ_STR(taps[0].word, "mode");
+    YEW_ASSERT_EQ_MEM(taps[0].sarg, "H", 1U);
+    YEW_ASSERT_EQ_STR(taps[1].word, "unit_next");
+    YEW_ASSERT_EQ_STR(taps[2].word, "escape");
+    YEW_ASSERT_EQ_STR(taps[3].word, "unit_prev");
     mf_close(&f);
 }
 
@@ -176,12 +176,12 @@ void test_fl_motion_insert_is_one_binary_safe_command(void)
     FlMotionProg prog = motion_prog(&op, 1U);
 
     mf_open(&f);
-    op.arg = sag_intern(&f.fl.in, bytes, sizeof(bytes));
-    SAG_ASSERT(fl_motion_exec(&f.fl.vm, &f.ed, f.ed.win, &prog));
-    SAG_ASSERT_EQ_U64(ntaps, 1U);
-    SAG_ASSERT_EQ_STR(taps[0].word, "insert");
-    SAG_ASSERT_EQ_U64(taps[0].sarg_len, sizeof(bytes));
-    SAG_ASSERT_EQ_MEM(taps[0].sarg, bytes, sizeof(bytes));
+    op.arg = yew_intern(&f.fl.in, bytes, sizeof(bytes));
+    YEW_ASSERT(fl_motion_exec(&f.fl.vm, &f.ed, f.ed.win, &prog));
+    YEW_ASSERT_EQ_U64(ntaps, 1U);
+    YEW_ASSERT_EQ_STR(taps[0].word, "insert");
+    YEW_ASSERT_EQ_U64(taps[0].sarg_len, sizeof(bytes));
+    YEW_ASSERT_EQ_MEM(taps[0].sarg, bytes, sizeof(bytes));
     assert_text(f.ed.buffer.tb, (const u8 *)bytes, sizeof(bytes));
     mf_close(&f);
 }
@@ -193,13 +193,13 @@ void test_fl_motion_del_and_esc_route_through_registry(void)
         {(u8)FL_MOTION_DEL, 0U, 0U, 1U, 0U},
         {(u8)FL_MOTION_ESC, 0U, 0U, 1U, 0U}
     };
-    FlMotionProg prog = motion_prog(ops, SAG_ARRAY_LEN(ops));
+    FlMotionProg prog = motion_prog(ops, YEW_ARRAY_LEN(ops));
 
     mf_open(&f);
-    SAG_ASSERT(fl_motion_exec(&f.fl.vm, &f.ed, f.ed.win, &prog));
-    SAG_ASSERT_EQ_U64(ntaps, 2U);
-    SAG_ASSERT_EQ_STR(taps[0].word, "delete_unit");
-    SAG_ASSERT_EQ_STR(taps[1].word, "escape");
+    YEW_ASSERT(fl_motion_exec(&f.fl.vm, &f.ed, f.ed.win, &prog));
+    YEW_ASSERT_EQ_U64(ntaps, 2U);
+    YEW_ASSERT_EQ_STR(taps[0].word, "delete_unit");
+    YEW_ASSERT_EQ_STR(taps[1].word, "escape");
     mf_close(&f);
 }
 
@@ -212,12 +212,12 @@ void test_fl_motion_unknown_word_raises_name(void)
     char msg[128];
 
     mf_open(&f);
-    op.arg = sag_intern_cstr(&f.fl.in, "no_such_word");
-    SAG_ASSERT(!fl_motion_exec(&f.fl.vm, &f.ed, f.ed.win, &prog));
+    op.arg = yew_intern_cstr(&f.fl.in, "no_such_word");
+    YEW_ASSERT(!fl_motion_exec(&f.fl.vm, &f.ed, f.ed.win, &prog));
     error_field(&f.fl.vm, "kind", kind, sizeof(kind));
     error_field(&f.fl.vm, "msg", msg, sizeof(msg));
-    SAG_ASSERT_EQ_STR(kind, "name");
-    SAG_ASSERT_EQ_STR(msg, "no command has word 'no_such_word'");
-    SAG_ASSERT_EQ_U64(ntaps, 0U);
+    YEW_ASSERT_EQ_STR(kind, "name");
+    YEW_ASSERT_EQ_STR(msg, "no command has word 'no_such_word'");
+    YEW_ASSERT_EQ_U64(ntaps, 0U);
     mf_close(&f);
 }

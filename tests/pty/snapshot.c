@@ -7,8 +7,8 @@
 #include "unicode/width.h"
 
 typedef struct SnapStyle {
-    SagColor fg;
-    SagColor bg;
+    YewColor fg;
+    YewColor bg;
     u16 attrs;
 } SnapStyle;
 
@@ -23,13 +23,13 @@ static void put_text(Bytebuf *out, const char *text)
     bytebuf_append(out, text, strlen(text));
 }
 
-static bool color_equal(SagColor a, SagColor b)
+static bool color_equal(YewColor a, YewColor b)
 {
     if (a.tag != b.tag)
         return false;
-    if (a.tag == SAG_COLOR_DEFAULT)
+    if (a.tag == YEW_COLOR_DEFAULT)
         return true;
-    if (a.tag == SAG_COLOR_INDEXED)
+    if (a.tag == YEW_COLOR_INDEXED)
         return a.r == b.r;
     return a.r == b.r && a.g == b.g && a.b == b.b;
 }
@@ -46,8 +46,8 @@ static bool trim_blank(const VtScreen *v, const VtCell *cell)
 
     (void)vt_cell_bytes(v, cell, &glyph_len);
     return glyph_len == 0u && cell->w == 1u &&
-           cell->fg.tag == SAG_COLOR_DEFAULT &&
-           cell->bg.tag == SAG_COLOR_DEFAULT && cell->attrs == 0u;
+           cell->fg.tag == YEW_COLOR_DEFAULT &&
+           cell->bg.tag == YEW_COLOR_DEFAULT && cell->attrs == 0u;
 }
 
 static size_t used_cells(const VtScreen *v, int row)
@@ -96,11 +96,11 @@ static size_t style_index(SnapStyle **styles, size_t *len, size_t *cap,
     return (*len)++;
 }
 
-static void color_write(Bytebuf *out, SagColor color)
+static void color_write(Bytebuf *out, YewColor color)
 {
-    if (color.tag == SAG_COLOR_DEFAULT)
+    if (color.tag == YEW_COLOR_DEFAULT)
         put_text(out, "default");
-    else if (color.tag == SAG_COLOR_INDEXED)
+    else if (color.tag == YEW_COLOR_INDEXED)
         bytebuf_printf(out, "idx:%u", (unsigned)color.r);
     else
         bytebuf_printf(out, "#%02x%02x%02x", (unsigned)color.r,
@@ -110,9 +110,9 @@ static void color_write(Bytebuf *out, SagColor color)
 static void attrs_write(Bytebuf *out, u16 attrs)
 {
     static const u16 bits[10] = {
-        SAG_ATTR_BOLD, SAG_ATTR_DIM, SAG_ATTR_ITALIC, SAG_ATTR_UNDERLINE,
-        SAG_ATTR_UNDERCURL, SAG_ATTR_BLINK, SAG_ATTR_REVERSE,
-        SAG_ATTR_CONCEAL, SAG_ATTR_STRIKE, SAG_ATTR_OVERLINE
+        YEW_ATTR_BOLD, YEW_ATTR_DIM, YEW_ATTR_ITALIC, YEW_ATTR_UNDERLINE,
+        YEW_ATTR_UNDERCURL, YEW_ATTR_BLINK, YEW_ATTR_REVERSE,
+        YEW_ATTR_CONCEAL, YEW_ATTR_STRIKE, YEW_ATTR_OVERLINE
     };
     static const u8 marks[10] = {'b', 'd', 'i', 'u', 'c',
                                  'k', 'r', 'h', 's', 'o'};
@@ -160,7 +160,7 @@ void snapshot_write(const VtScreen *v, Bytebuf *out)
     int row;
     int col;
 
-    put_text(out, "# sagitta pty golden v1\n");
+    put_text(out, "# yew pty golden v1\n");
     bytebuf_printf(out, "size %dx%d alt=%d cursor=%d,%d vis=%d\n",
                    v->cols, v->rows, v->alt ? 1 : 0, v->cur_r, v->cur_c,
                    v->cur_vis ? 1 : 0);
@@ -293,12 +293,12 @@ static size_t display_prefix(const u8 *line, size_t len, size_t byte_col)
     size_t cells = 0u;
 
     while (pos < len && pos < byte_col) {
-        size_t next = sag_gb_next_bytes(line, len, pos);
+        size_t next = yew_gb_next_bytes(line, len, pos);
         int width;
 
         if (next <= pos || next > len || next > byte_col)
             break;
-        width = sag_cluster_width(line + pos, next - pos);
+        width = yew_cluster_width(line + pos, next - pos);
         cells += width > 0 ? (size_t)width : 0u;
         pos = next;
     }
@@ -335,7 +335,7 @@ bool snapshot_compare(const Bytebuf *got, const Bytebuf *want, Bytebuf *msg)
     if (got->len == want->len &&
         (got->len == 0u || memcmp(got->data, want->data, got->len) == 0))
         return true;
-    full = getenv("SAG_PTY_DIFF");
+    full = getenv("YEW_PTY_DIFF");
     if (full != NULL && strcmp(full, "full") == 0) {
         put_text(msg, "snapshot differs\n--- want\n");
         bytebuf_append(msg, want->data, want->len);
@@ -444,17 +444,17 @@ static int hex_value(u8 byte)
     return -1;
 }
 
-static bool color_read(const u8 **p, const u8 *end, SagColor *color)
+static bool color_read(const u8 **p, const u8 *end, YewColor *color)
 {
     unsigned index;
 
-    *color = (SagColor){SAG_COLOR_DEFAULT, 0u, 0u, 0u};
+    *color = (YewColor){YEW_COLOR_DEFAULT, 0u, 0u, 0u};
     if (literal_read(p, end, "default"))
         return true;
     if (literal_read(p, end, "idx:")) {
         if (!uint_read(p, end, &index) || index > 255u)
             return false;
-        color->tag = SAG_COLOR_INDEXED;
+        color->tag = YEW_COLOR_INDEXED;
         color->r = (u8)index;
         return true;
     }
@@ -469,7 +469,7 @@ static bool color_read(const u8 **p, const u8 *end, SagColor *color)
                 return false;
         }
         *p += 6u;
-        color->tag = SAG_COLOR_RGB;
+        color->tag = YEW_COLOR_RGB;
         color->r = (u8)((digits[0] << 4) | digits[1]);
         color->g = (u8)((digits[2] << 4) | digits[3]);
         color->b = (u8)((digits[4] << 4) | digits[5]);
@@ -481,9 +481,9 @@ static bool color_read(const u8 **p, const u8 *end, SagColor *color)
 static bool attrs_read(const u8 **p, const u8 *end, u16 *attrs)
 {
     static const u16 bits[10] = {
-        SAG_ATTR_BOLD, SAG_ATTR_DIM, SAG_ATTR_ITALIC, SAG_ATTR_UNDERLINE,
-        SAG_ATTR_UNDERCURL, SAG_ATTR_BLINK, SAG_ATTR_REVERSE,
-        SAG_ATTR_CONCEAL, SAG_ATTR_STRIKE, SAG_ATTR_OVERLINE
+        YEW_ATTR_BOLD, YEW_ATTR_DIM, YEW_ATTR_ITALIC, YEW_ATTR_UNDERLINE,
+        YEW_ATTR_UNDERCURL, YEW_ATTR_BLINK, YEW_ATTR_REVERSE,
+        YEW_ATTR_CONCEAL, YEW_ATTR_STRIKE, YEW_ATTR_OVERLINE
     };
     static const u8 marks[10] = {'b', 'd', 'i', 'u', 'c',
                                  'k', 'r', 'h', 's', 'o'};
@@ -667,12 +667,12 @@ static bool screen_row_read(VtScreen *out, int row, const u8 *text,
             col++;
             continue;
         }
-        next = sag_gb_next_bytes(text, text_len, pos);
+        next = yew_gb_next_bytes(text, text_len, pos);
         if (next <= pos || next > text_len)
             return false;
         bytes = text + pos;
         len = next - pos;
-        width = sag_cluster_width(bytes, len);
+        width = yew_cluster_width(bytes, len);
         if (width != 1 && width != 2)
             return false;
         if (len == 1u && bytes[0] == ' ')
@@ -719,7 +719,7 @@ bool snapshot_read(const Bytebuf *in, VtScreen *out, Bytebuf *msg)
         else if (line_is(&lines, i, "--- legend")) legend_mark = i;
     }
     if (lines.count < 6u ||
-        !line_is(&lines, 0u, "# sagitta pty golden v1") ||
+        !line_is(&lines, 0u, "# yew pty golden v1") ||
         text_mark != 3u ||
         legend_mark <= style_mark) {
         put_text(msg, "snapshot: malformed golden v1 blocks\n");

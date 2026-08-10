@@ -9,47 +9,47 @@
 
 #include "util/log.h"
 
-char *sag_xdg_state_dir(void)
+char *yew_xdg_state_dir(void)
 {
     const char *root = getenv("XDG_STATE_HOME");
-    const char *suffix = "/sagitta";
+    const char *suffix = "/yew";
     size_t len;
     char *path;
 
     if (root == NULL || root[0] == '\0') {
         root = getenv("HOME");
-        suffix = "/.local/state/sagitta";
+        suffix = "/.local/state/yew";
     }
     if (root == NULL || root[0] == '\0')
         return NULL;
     len = strlen(root) + strlen(suffix);
-    path = sag_xmalloc(len + 1U);
+    path = yew_xmalloc(len + 1U);
     (void)memcpy(path, root, strlen(root));
     (void)memcpy(path + strlen(root), suffix, strlen(suffix) + 1U);
     return path;
 }
 
-char *sag_xdg_config_dir(void)
+char *yew_xdg_config_dir(void)
 {
     const char *root = getenv("XDG_CONFIG_HOME");
-    const char *suffix = "/sagitta";
+    const char *suffix = "/yew";
     size_t len;
     char *path;
 
     if (root == NULL || root[0] == '\0') {
         root = getenv("HOME");
-        suffix = "/.config/sagitta";
+        suffix = "/.config/yew";
     }
     if (root == NULL || root[0] == '\0')
         return NULL;
     len = strlen(root) + strlen(suffix);
-    path = sag_xmalloc(len + 1U);
+    path = yew_xmalloc(len + 1U);
     (void)memcpy(path, root, strlen(root));
     (void)memcpy(path + strlen(root), suffix, strlen(suffix) + 1U);
     return path;
 }
 
-static bool sag_mkdir_one(const char *path, mode_t mode)
+static bool yew_mkdir_one(const char *path, mode_t mode)
 {
     struct stat st;
 
@@ -58,7 +58,7 @@ static bool sag_mkdir_one(const char *path, mode_t mode)
     return errno == EEXIST && stat(path, &st) == 0 && S_ISDIR(st.st_mode);
 }
 
-bool sag_mkdirs(const char *path, unsigned int mode)
+bool yew_mkdirs(const char *path, unsigned int mode)
 {
     char *copy;
     char *p;
@@ -68,20 +68,20 @@ bool sag_mkdirs(const char *path, unsigned int mode)
         errno = EINVAL;
         return false;
     }
-    copy = sag_xmalloc(strlen(path) + 1U);
+    copy = yew_xmalloc(strlen(path) + 1U);
     (void)memcpy(copy, path, strlen(path) + 1U);
     for (p = copy + 1; *p != '\0'; p++) {
         if (*p != '/')
             continue;
         *p = '\0';
-        if (!sag_mkdir_one(copy, (mode_t)mode)) {
+        if (!yew_mkdir_one(copy, (mode_t)mode)) {
             ok = false;
             break;
         }
         *p = '/';
     }
     if (ok)
-        ok = sag_mkdir_one(copy, (mode_t)mode);
+        ok = yew_mkdir_one(copy, (mode_t)mode);
     free(copy);
     return ok;
 }

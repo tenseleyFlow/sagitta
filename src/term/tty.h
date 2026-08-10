@@ -1,5 +1,5 @@
-#ifndef SAG_TERM_TTY_H
-#define SAG_TERM_TTY_H
+#ifndef YEW_TERM_TTY_H
+#define YEW_TERM_TTY_H
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -50,37 +50,37 @@ typedef struct TtyGuard {
     bool active;
 } TtyGuard;
 
-#define SAG_TTY_GUARD(t)                                                     \
+#define YEW_TTY_GUARD(t)                                                     \
     do {                                                                     \
         if ((t)->poisoned)                                                   \
-            SAG_BUG("terminal access in --batch: %s", __func__);           \
+            YEW_BUG("terminal access in --batch: %s", __func__);           \
     } while (0)
 
 /*
  * The editor process cannot handle SIGKILL.  A tiny sibling process keeps
  * the pre-raw termios state and restores it if the editor disappears while
- * raw mode is active.  Start it before sag_tty_open(), and finish it after
- * sag_tty_close().
+ * raw mode is active.  Start it before yew_tty_open(), and finish it after
+ * yew_tty_close().
  */
-bool sag_tty_guard_start(TtyGuard *guard);
-bool sag_tty_guard_finish(TtyGuard *guard);
+bool yew_tty_guard_start(TtyGuard *guard);
+bool yew_tty_guard_finish(TtyGuard *guard);
 
 /*
- * Raw mode is restored on normal close, atexit, and the sag_bug prehook.
+ * Raw mode is restored on normal close, atexit, and the yew_bug prehook.
  * SIGSEGV, SIGBUS, SIGABRT, and SIGTERM restore before being re-raised with
  * their default disposition. This is the terminal-restore guarantee: no exit
  * path that this process can handle leaves its terminal raw.
  */
-bool sag_tty_open(Tty *t);
-void sag_tty_poison(Tty *t);
-bool sag_tty_fd_is_terminal(int fd);
-bool sag_tty_raw(Tty *t);
-void sag_tty_rawios(struct termios *io);
+bool yew_tty_open(Tty *t);
+void yew_tty_poison(Tty *t);
+bool yew_tty_fd_is_terminal(int fd);
+bool yew_tty_raw(Tty *t);
+void yew_tty_rawios(struct termios *io);
 
 /*
  * Keep OPOST|ONLCR while raw, for LINE-ORIENTED programs.
  *
- * Full-screen sagitta wants output processing off: it positions the
+ * Full-screen yew wants output processing off: it positions the
  * cursor itself and a kernel that rewrote its bytes would fight it.
  * The Fletch prompt is the opposite -- it scrolls with the shell, and
  * with ONLCR off a bare "\n" drops a row without returning to column
@@ -91,32 +91,32 @@ void sag_tty_rawios(struct termios *io);
  * writes to stdout from inside the VM and cannot be reached from
  * here.  One setting covers every writer.
  *
- * Call BEFORE sag_tty_raw; reset by sag_tty_close.
+ * Call BEFORE yew_tty_raw; reset by yew_tty_close.
  */
-void sag_tty_set_output_processing(bool keep);
-void sag_tty_restore(void);
-void sag_tty_close(Tty *t);
-bool sag_tty_winsize(Tty *t);
-void sag_tty_altscreen(Tty *t, bool on);
+void yew_tty_set_output_processing(bool keep);
+void yew_tty_restore(void);
+void yew_tty_close(Tty *t);
+bool yew_tty_winsize(Tty *t);
+void yew_tty_altscreen(Tty *t, bool on);
 
-int sag_tty_signal_fd(const Tty *t);
+int yew_tty_signal_fd(const Tty *t);
 /* A cont event reports delivery; t->raw reports whether raw re-entry worked. */
-void sag_tty_drain_signals(Tty *t, bool *winch, bool *cont, bool *chld);
-void sag_tty_suspend(Tty *t);
+void yew_tty_drain_signals(Tty *t, bool *winch, bool *cont, bool *chld);
+void yew_tty_suspend(Tty *t);
 
-void sag_tty_probe_start(Tty *t, i64 now_ms);
-void sag_tty_probe_config(Tty *t, i64 now_ms,
+void yew_tty_probe_start(Tty *t, i64 now_ms);
+void yew_tty_probe_config(Tty *t, i64 now_ms,
                           const char *(*getv)(const char *));
-TtyProbeConfig sag_tty_probe_read_config(
+TtyProbeConfig yew_tty_probe_read_config(
     const char *(*getv)(const char *));
-size_t sag_tty_probe_feed(Tty *t, const u8 *b, size_t n);
-void sag_tty_probe_tick(Tty *t, i64 now_ms);
-bool sag_tty_probe_done(const Tty *t);
-i64 sag_tty_probe_deadline(const Tty *t, i64 now_ms);
+size_t yew_tty_probe_feed(Tty *t, const u8 *b, size_t n);
+void yew_tty_probe_tick(Tty *t, i64 now_ms);
+bool yew_tty_probe_done(const Tty *t);
+i64 yew_tty_probe_deadline(const Tty *t, i64 now_ms);
 
-bool sag_tty_detect_truecolor(const char *(*getv)(const char *));
+bool yew_tty_detect_truecolor(const char *(*getv)(const char *));
 
 /* Pure access for the deterministic restore-blob unit test. */
-const u8 *sag_tty_restore_blob(size_t *len);
+const u8 *yew_tty_restore_blob(size_t *len);
 
 #endif

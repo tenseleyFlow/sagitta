@@ -146,16 +146,16 @@ static bool check_one(Arena *a, const char *pattern, const char *path,
     char text[1200];
 
     (void)snprintf(text, sizeof(text), "%s\n", pattern);
-    g = sag_gi_compile(a, NULL, text, (u64)strlen(text), NULL);
+    g = yew_gi_compile(a, NULL, text, (u64)strlen(text), NULL);
     /* A pattern that compiles to nothing is a legitimate answer — a
      * blank line, a comment, a lone `!`. */
     if (g == NULL)
         return true;
     start = now_ms();
-    (void)sag_gi_match(g, path, false);
-    (void)sag_gi_match(g, path, true);
-    (void)sag_gi_prunable(g, path);
-    (void)sag_gi_negated(g, path);
+    (void)yew_gi_match(g, path, false);
+    (void)yew_gi_match(g, path, true);
+    (void)yew_gi_prunable(g, path);
+    (void)yew_gi_negated(g, path);
     elapsed = now_ms() - start;
     /*
      * 250 ms for four calls against one path is enormous — the real
@@ -208,7 +208,7 @@ static bool run_session(const u8 *data, size_t len, char *why,
 
     /* The adversarial shapes, each against a long path — a short path
      * cannot make a backtracker work hard. */
-    for (i = 0U; ok && i < SAG_ARRAY_LEN(gi_adversarial); i++) {
+    for (i = 0U; ok && i < YEW_ARRAY_LEN(gi_adversarial); i++) {
         static const char long_path[] =
             "aaaaaaaaaa/bbbbbbbbbb/cccccccccc/dddddddddd/eeeeeeeeee/"
             "ffffffffff/gggggggggg/hhhhhhhhhh/iiiiiiiiii/jjjjjjjjjj/"
@@ -244,14 +244,14 @@ static bool run_session(const u8 *data, size_t len, char *why,
             at += (size_t)snprintf(text + at, sizeof(text) - at, "%s\n",
                                    pattern);
         }
-        g = sag_gi_compile(&a, NULL, text, (u64)at, NULL);
+        g = yew_gi_compile(&a, NULL, text, (u64)at, NULL);
         if (g != NULL) {
             i64 start = now_ms();
 
             for (i = 0U; i < 32U; i++) {
                 random_path(&rng, path, sizeof(path));
-                (void)sag_gi_match(g, path, (i & 1U) != 0U);
-                (void)sag_gi_prunable(g, path);
+                (void)yew_gi_match(g, path, (i & 1U) != 0U);
+                (void)yew_gi_prunable(g, path);
             }
             if (now_ms() - start > 1000) {
                 (void)snprintf(why, why_cap,
@@ -268,5 +268,5 @@ static bool run_session(const u8 *data, size_t len, char *why,
 
 int main(int argc, char **argv)
 {
-    return sag_fuzz_main(argc, argv, "fuzz_gitignore", NULL, run_session);
+    return yew_fuzz_main(argc, argv, "fuzz_gitignore", NULL, run_session);
 }

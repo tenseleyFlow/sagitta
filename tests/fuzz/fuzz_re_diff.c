@@ -132,7 +132,7 @@ static bool gen_atom(Gen *g, u32 depth)
         bool nullable;
 
         emit_ch(g, '(');
-        if (g->groups + 1U >= SAG_REF_MAX_GROUPS ||
+        if (g->groups + 1U >= YEW_REF_MAX_GROUPS ||
             rng_below(g->rng, 3U) == 0U)
             emit(g, "?:");
         else
@@ -236,14 +236,14 @@ static size_t gen_input(Rng *rng, u8 *out, size_t cap)
 /* Builds the same bytes as a fragmented piece tree. */
 static TextBuf *tb_of(const u8 *bytes, size_t len, Rng *rng)
 {
-    TextBuf *tb = sag_textbuf_new();
+    TextBuf *tb = yew_textbuf_new();
     size_t i;
 
     for (i = 0U; i < len; i++) {
         /* Insert at a random existing position so pieces interleave. */
         u64 at = (u64)rng_below(rng, (u32)i + 1U);
 
-        sag_textbuf_insert(tb, BYTEOFF(at), bytes + i, 1U);
+        yew_textbuf_insert(tb, BYTEOFF(at), bytes + i, 1U);
     }
     /* The tree now holds a permutation, so read it back as the truth. */
     return tb;
@@ -254,15 +254,15 @@ static void materialize(const TextBuf *tb, u8 *out, size_t cap,
 {
     TextIter it;
     u64 at = 0U;
-    u64 end = sag_textbuf_len(tb);
+    u64 end = yew_textbuf_len(tb);
     size_t n = 0U;
 
     while (at < end && n < cap) {
         const u8 *chunk = NULL;
         size_t got = 0U;
 
-        if (!sag_textiter_begin(&it, tb, BYTEOFF(at)) ||
-            !sag_textiter_chunk(&it, tb, &chunk, &got) || got == 0U)
+        if (!yew_textiter_begin(&it, tb, BYTEOFF(at)) ||
+            !yew_textiter_chunk(&it, tb, &chunk, &got) || got == 0U)
             break;
         if ((u64)got > end - at)
             got = (size_t)(end - at);
@@ -288,11 +288,11 @@ static bool one_case(Rng *rng, char *why, size_t why_cap)
     size_t len;
     TextBuf *tb = tb_of(raw, rawlen, rng);
     Arena arena;
-    SagRe *re;
-    SagReInput in;
-    SagReMatch m;
-    SagRefMatch ref;
-    SagRefResult want;
+    YewRe *re;
+    YewReInput in;
+    YewReMatch m;
+    YewRefMatch ref;
+    YewRefResult want;
     bool got;
 
     /* The piece tree's contents are the permutation, so both engines
@@ -300,34 +300,34 @@ static bool one_case(Rng *rng, char *why, size_t why_cap)
     materialize(tb, text, sizeof(text), &len);
 
     arena_init(&arena);
-    re = sag_re_compile(&arena, pat, patlen, 0U, NULL);
+    re = yew_re_compile(&arena, pat, patlen, 0U, NULL);
     if (re == NULL) {
         /* The generator can emit something the engine rejects (a bare
          * `^*`, say); the oracle is not consulted about those. */
         skipped++;
         arena_free_all(&arena);
-        sag_textbuf_free(tb);
+        yew_textbuf_free(tb);
         return true;
     }
-    want = sag_ref_search(pat, patlen, text, len, 0U, &ref);
-    if (want == SAG_REF_UNKNOWN) {
+    want = yew_ref_search(pat, patlen, text, len, 0U, &ref);
+    if (want == YEW_REF_UNKNOWN) {
         /* Budget exhausted or a construct outside the shared subset —
          * skip, never fail: the oracle running out of road says nothing
          * about the engine. */
         skipped++;
         arena_free_all(&arena);
-        sag_textbuf_free(tb);
+        yew_textbuf_free(tb);
         return true;
     }
 
-    in = sag_re_input_bytes(text, (u64)len);
+    in = yew_re_input_bytes(text, (u64)len);
     (void)memset(&m, 0, sizeof(m));
-    got = sag_re_search(re, &in, BYTEOFF(0U), &m);
-    if (got != (want == SAG_REF_MATCH)) {
+    got = yew_re_search(re, &in, BYTEOFF(0U), &m);
+    if (got != (want == YEW_REF_MATCH)) {
         (void)snprintf(why, why_cap,
                        "/%s/ on %zu bytes: engine says %s, oracle says %s",
                        pat, len, got ? "match" : "no match",
-                       want == SAG_REF_MATCH ? "match" : "no match");
+                       want == YEW_REF_MATCH ? "match" : "no match");
         goto fail;
     }
     if (got) {
@@ -356,7 +356,7 @@ static bool one_case(Rng *rng, char *why, size_t why_cap)
     }
     /* The boolean engines must agree with the span engine. */
     {
-        bool tested = sag_re_test(re, &in, BYTEOFF(0U));
+        bool tested = yew_re_test(re, &in, BYTEOFF(0U));
 
         if (tested != got) {
             (void)snprintf(why, why_cap,
@@ -369,12 +369,12 @@ static bool one_case(Rng *rng, char *why, size_t why_cap)
     /* And the piece-tree backing must agree with the flat one — this is
      * the chunk-carry check. */
     {
-        SagReInput tin = sag_re_input_textbuf(tb);
-        SagReMatch tm;
+        YewReInput tin = yew_re_input_textbuf(tb);
+        YewReMatch tm;
         bool tgot;
 
         (void)memset(&tm, 0, sizeof(tm));
-        tgot = sag_re_search(re, &tin, BYTEOFF(0U), &tm);
+        tgot = yew_re_search(re, &tin, BYTEOFF(0U), &tm);
         if (tgot != got ||
             (got && (tm.g[0].lo != m.g[0].lo || tm.g[0].hi != m.g[0].hi))) {
             (void)snprintf(why, why_cap,
@@ -385,12 +385,12 @@ static bool one_case(Rng *rng, char *why, size_t why_cap)
     }
     compared++;
     arena_free_all(&arena);
-    sag_textbuf_free(tb);
+    yew_textbuf_free(tb);
     return true;
 
 fail:
     arena_free_all(&arena);
-    sag_textbuf_free(tb);
+    yew_textbuf_free(tb);
     return false;
 }
 
@@ -424,7 +424,7 @@ static bool check_re_diff(const u8 *data, size_t len, char *why,
 
 int main(int argc, char **argv)
 {
-    int status = sag_fuzz_main(argc, argv, "fuzz_re_diff", NULL,
+    int status = yew_fuzz_main(argc, argv, "fuzz_re_diff", NULL,
                                check_re_diff);
 
     /* DoD 6 wants the skip rate reported, not hidden: a campaign that

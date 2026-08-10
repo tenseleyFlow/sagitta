@@ -7,9 +7,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-static SagColor snap_default(void)
+static YewColor snap_default(void)
 {
-    SagColor color = {SAG_COLOR_DEFAULT, 0u, 0u, 0u};
+    YewColor color = {YEW_COLOR_DEFAULT, 0u, 0u, 0u};
 
     return color;
 }
@@ -30,7 +30,7 @@ void test_snapshot_golden_v1_format(void)
 {
     static const u8 cjk[] = {0xe6u, 0xbcu, 0xa2u};
     static const char expected[] =
-        "# sagitta pty golden v1\n"
+        "# yew pty golden v1\n"
         "size 3x2 alt=1 cursor=1,2 vis=1\n"
         "modes 2004,1006 kitty=21 sync_pairs=3\n"
         "--- text\n"
@@ -44,9 +44,9 @@ void test_snapshot_golden_v1_format(void)
         "B fg=default bg=default attrs=----------\n";
     VtScreen screen;
     Bytebuf out;
-    SagColor fg = {SAG_COLOR_RGB, 0xc0u, 0xcau, 0xf5u};
-    SagColor bg = {SAG_COLOR_RGB, 0x1au, 0x1bu, 0x26u};
-    SagColor def = snap_default();
+    YewColor fg = {YEW_COLOR_RGB, 0xc0u, 0xcau, 0xf5u};
+    YewColor bg = {YEW_COLOR_RGB, 0x1au, 0x1bu, 0x26u};
+    YewColor def = snap_default();
 
     vt_init(&screen, 2, 3);
     screen.alt = true;
@@ -57,16 +57,16 @@ void test_snapshot_golden_v1_format(void)
     screen.kitty[0] = 21u;
     screen.ksp = 1;
     screen.nsync_pairs = 3u;
-    SAG_ASSERT(vt_set_cell(&screen, 0, 0, (const u8 *)"A", 1u,
-                           fg, bg, SAG_ATTR_BOLD, 1u));
-    SAG_ASSERT(vt_set_cell(&screen, 0, 1, cjk, sizeof(cjk),
+    YEW_ASSERT(vt_set_cell(&screen, 0, 0, (const u8 *)"A", 1u,
+                           fg, bg, YEW_ATTR_BOLD, 1u));
+    YEW_ASSERT(vt_set_cell(&screen, 0, 1, cjk, sizeof(cjk),
                            def, def, 0u, 2u));
-    SAG_ASSERT(vt_set_cell(&screen, 0, 2, NULL, 0u,
+    YEW_ASSERT(vt_set_cell(&screen, 0, 2, NULL, 0u,
                            def, def, 0u, 0u));
     bytebuf_init(&out);
     snapshot_write(&screen, &out);
-    SAG_ASSERT_EQ_U64(out.len, sizeof(expected) - 1u);
-    SAG_ASSERT_EQ_MEM(out.data, expected, sizeof(expected) - 1u);
+    YEW_ASSERT_EQ_U64(out.len, sizeof(expected) - 1u);
+    YEW_ASSERT_EQ_MEM(out.data, expected, sizeof(expected) - 1u);
     bytebuf_free(&out);
     vt_free(&screen);
 }
@@ -78,21 +78,21 @@ void test_snapshot_legend_supports_sixty_styles(void)
         "#0#1#2#3#4#5#6#7\n";
     VtScreen screen;
     Bytebuf out;
-    SagColor def = snap_default();
+    YewColor def = snap_default();
     int col;
 
     vt_init(&screen, 1, 60);
     for (col = 0; col < 60; col++) {
-        SagColor fg = {SAG_COLOR_RGB, (u8)col, (u8)(col * 3),
+        YewColor fg = {YEW_COLOR_RGB, (u8)col, (u8)(col * 3),
                        (u8)(255 - col)};
 
-        SAG_ASSERT(vt_set_cell(&screen, 0, col, (const u8 *)"x", 1u,
+        YEW_ASSERT(vt_set_cell(&screen, 0, col, (const u8 *)"x", 1u,
                                fg, def, 0u, 1u));
     }
     bytebuf_init(&out);
     snapshot_write(&screen, &out);
-    SAG_ASSERT(buf_contains(&out, token_row));
-    SAG_ASSERT(buf_contains(&out,
+    YEW_ASSERT(buf_contains(&out, token_row));
+    YEW_ASSERT(buf_contains(&out,
         "#7 fg=#3bb1c4 bg=default attrs=----------\n"));
     bytebuf_free(&out);
     vt_free(&screen);
@@ -111,30 +111,30 @@ void test_snapshot_trim_reconstructs_roundtrip(void)
     Bytebuf first;
     Bytebuf second;
     Bytebuf error;
-    SagColor def = snap_default();
-    SagColor styled = {SAG_COLOR_INDEXED, 7u, 0u, 0u};
+    YewColor def = snap_default();
+    YewColor styled = {YEW_COLOR_INDEXED, 7u, 0u, 0u};
 
     vt_init(&before, 2, 7);
     before.alt = true;
-    SAG_ASSERT(vt_set_cell(&before, 0, 0, (const u8 *)"x", 1u,
+    YEW_ASSERT(vt_set_cell(&before, 0, 0, (const u8 *)"x", 1u,
                            def, def, 0u, 1u));
-    SAG_ASSERT(vt_set_cell(&before, 0, 1, family, sizeof(family),
-                           def, def, SAG_ATTR_ITALIC, 2u));
-    SAG_ASSERT(vt_set_cell(&before, 0, 2, NULL, 0u,
-                           def, def, SAG_ATTR_ITALIC, 0u));
-    SAG_ASSERT(vt_set_cell(&before, 0, 4, NULL, 0u,
+    YEW_ASSERT(vt_set_cell(&before, 0, 1, family, sizeof(family),
+                           def, def, YEW_ATTR_ITALIC, 2u));
+    YEW_ASSERT(vt_set_cell(&before, 0, 2, NULL, 0u,
+                           def, def, YEW_ATTR_ITALIC, 0u));
+    YEW_ASSERT(vt_set_cell(&before, 0, 4, NULL, 0u,
                            styled, def, 0u, 1u));
     bytebuf_init(&first);
     bytebuf_init(&second);
     bytebuf_init(&error);
     snapshot_write(&before, &first);
-    SAG_ASSERT(snapshot_read(&first, &after, &error));
-    SAG_ASSERT_EQ_U64(error.len, 0u);
+    YEW_ASSERT(snapshot_read(&first, &after, &error));
+    YEW_ASSERT_EQ_U64(error.len, 0u);
     snapshot_write(&after, &second);
-    SAG_ASSERT_EQ_U64(second.len, first.len);
-    SAG_ASSERT_EQ_MEM(second.data, first.data, first.len);
-    SAG_ASSERT(buf_contains(&first, "x"));
-    SAG_ASSERT(!buf_contains(&first, "       \n"));
+    YEW_ASSERT_EQ_U64(second.len, first.len);
+    YEW_ASSERT_EQ_MEM(second.data, first.data, first.len);
+    YEW_ASSERT(buf_contains(&first, "x"));
+    YEW_ASSERT(!buf_contains(&first, "       \n"));
     bytebuf_free(&error);
     bytebuf_free(&second);
     bytebuf_free(&first);
@@ -162,9 +162,9 @@ void test_snapshot_diff_reports_one_cell(void)
     bytebuf_init(&msg);
     bytebuf_append(&want, want_text, sizeof(want_text) - 1u);
     bytebuf_append(&got, got_text, sizeof(got_text) - 1u);
-    SAG_ASSERT(!snapshot_compare(&got, &want, &msg));
-    SAG_ASSERT_EQ_U64(msg.len, sizeof(expected) - 1u);
-    SAG_ASSERT_EQ_MEM(msg.data, expected, sizeof(expected) - 1u);
+    YEW_ASSERT(!snapshot_compare(&got, &want, &msg));
+    YEW_ASSERT_EQ_U64(msg.len, sizeof(expected) - 1u);
+    YEW_ASSERT_EQ_MEM(msg.data, expected, sizeof(expected) - 1u);
     bytebuf_free(&msg);
     bytebuf_free(&got);
     bytebuf_free(&want);
@@ -183,9 +183,9 @@ void test_snapshot_diff_reports_one_row(void)
     bytebuf_init(&msg);
     bytebuf_append(&want, want_text, sizeof(want_text) - 1u);
     bytebuf_append(&got, got_text, sizeof(got_text) - 1u);
-    SAG_ASSERT(!snapshot_compare(&got, &want, &msg));
-    SAG_ASSERT(buf_contains(&msg, "snapshot differs at line 2, column 1\n"));
-    SAG_ASSERT(buf_contains(&msg, "want: b\n got: changed\n      ^\n"));
+    YEW_ASSERT(!snapshot_compare(&got, &want, &msg));
+    YEW_ASSERT(buf_contains(&msg, "snapshot differs at line 2, column 1\n"));
+    YEW_ASSERT(buf_contains(&msg, "want: b\n got: changed\n      ^\n"));
     bytebuf_free(&msg);
     bytebuf_free(&got);
     bytebuf_free(&want);
@@ -206,10 +206,10 @@ void test_snapshot_diff_reports_changed_legend(void)
     bytebuf_init(&msg);
     bytebuf_append(&want, want_text, sizeof(want_text) - 1u);
     bytebuf_append(&got, got_text, sizeof(got_text) - 1u);
-    SAG_ASSERT(!snapshot_compare(&got, &want, &msg));
-    SAG_ASSERT(buf_contains(&msg,
+    YEW_ASSERT(!snapshot_compare(&got, &want, &msg));
+    YEW_ASSERT(buf_contains(&msg,
         "legend want: A fg=default bg=default attrs=----------\n"));
-    SAG_ASSERT(buf_contains(&msg,
+    YEW_ASSERT(buf_contains(&msg,
         "legend got:  A fg=idx:1 bg=default attrs=----------\n"));
     bytebuf_free(&msg);
     bytebuf_free(&got);
@@ -229,11 +229,11 @@ void test_snapshot_diff_full_dumps_both_snapshots(void)
     bytebuf_init(&msg);
     bytebuf_append(&want, "want\n", 5u);
     bytebuf_append(&got, "got\n", 4u);
-    SAG_ASSERT_EQ_I64(setenv("SAG_PTY_DIFF", "full", 1), 0);
-    SAG_ASSERT(!snapshot_compare(&got, &want, &msg));
-    SAG_ASSERT_EQ_I64(unsetenv("SAG_PTY_DIFF"), 0);
-    SAG_ASSERT_EQ_U64(msg.len, sizeof(expected) - 1u);
-    SAG_ASSERT_EQ_MEM(msg.data, expected, sizeof(expected) - 1u);
+    YEW_ASSERT_EQ_I64(setenv("YEW_PTY_DIFF", "full", 1), 0);
+    YEW_ASSERT(!snapshot_compare(&got, &want, &msg));
+    YEW_ASSERT_EQ_I64(unsetenv("YEW_PTY_DIFF"), 0);
+    YEW_ASSERT_EQ_U64(msg.len, sizeof(expected) - 1u);
+    YEW_ASSERT_EQ_MEM(msg.data, expected, sizeof(expected) - 1u);
     bytebuf_free(&msg);
     bytebuf_free(&got);
     bytebuf_free(&want);

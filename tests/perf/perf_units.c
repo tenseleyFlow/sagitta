@@ -38,13 +38,13 @@ static TextBuf *make_fixture(void)
         return NULL;
     for (line = 0U; line < PERF_UNIT_LINES; line++)
         (void)memcpy(bytes + line * row_len, row, row_len);
-    return sag_textbuf_from_owned_bytes(bytes, len);
+    return yew_textbuf_from_owned_bytes(bytes, len);
 }
 
 static bool measure_engine(UnitCtx *u, const UnitOps *ops)
 {
     ByteOff p = BYTEOFF(0U);
-    u64 len = sag_textbuf_len(u->tb);
+    u64 len = yew_textbuf_len(u->tb);
     i64 total_start = now_ns();
     i64 total_elapsed;
     i64 max_elapsed = 0;
@@ -112,7 +112,7 @@ static bool measure_nested(void)
     for (i = 0; i < DEPTH; i++)
         bytes[DEPTH + 1 + i] = (u8)'}';
     bytes[sizeof(bytes) - 1U] = (u8)'\n';
-    tb = sag_textbuf_from_bytes(bytes, sizeof(bytes));
+    tb = yew_textbuf_from_bytes(bytes, sizeof(bytes));
     if (tb == NULL)
         return false;
     buffer.tb = tb;
@@ -121,23 +121,23 @@ static bool measure_nested(void)
     for (i = 0; i < DEPTH; i++) {
         start = now_ns();
         if (start < 0) {
-            sag_textbuf_free(tb);
+            yew_textbuf_free(tb);
             return false;
         }
-        if (!sag_block_level(&u, BYTEOFF(DEPTH), (u32)i, &span)) {
-            sag_textbuf_free(tb);
+        if (!yew_block_level(&u, BYTEOFF(DEPTH), (u32)i, &span)) {
+            yew_textbuf_free(tb);
             return false;
         }
         elapsed = now_ns() - start;
         if (elapsed < 0 || elapsed > PERF_UNIT_KEY_NS) {
-            sag_textbuf_free(tb);
+            yew_textbuf_free(tb);
             return false;
         }
         if (elapsed > max_elapsed)
             max_elapsed = elapsed;
         perf_unit_sink ^= span.lo + span.hi;
     }
-    sag_textbuf_free(tb);
+    yew_textbuf_free(tb);
     (void)printf("perf-units: nested-depth=%d max_ms=%.3f\n", DEPTH,
                  (double)max_elapsed / 1000000.0);
     return true;
@@ -146,7 +146,7 @@ static bool measure_nested(void)
 int main(void)
 {
     static const UnitOps *const engines[] = {
-        &sag_unit_line, &sag_unit_word, &sag_unit_block, &sag_unit_char,
+        &yew_unit_line, &yew_unit_word, &yew_unit_block, &yew_unit_char,
     };
     TextBuf *tb = make_fixture();
     Buffer buffer = {0};
@@ -159,10 +159,10 @@ int main(void)
     buffer.tb = tb;
     buffer.tabwidth = 4U;
     u = (UnitCtx){tb, &buffer, NULL};
-    for (i = 0U; i < SAG_ARRAY_LEN(engines); i++)
+    for (i = 0U; i < YEW_ARRAY_LEN(engines); i++)
         if (!measure_engine(&u, engines[i]))
             ok = false;
-    sag_textbuf_free(tb);
+    yew_textbuf_free(tb);
     if (!measure_nested())
         ok = false;
     if (!ok)

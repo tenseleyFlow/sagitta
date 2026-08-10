@@ -54,15 +54,15 @@ typedef struct HandleFix {
 static void hf_open(HandleFix *f)
 {
     flfix_open(&f->fl);
-    sag_ed_init(&f->ed);
-    SAG_ASSERT(sag_ed_open_scratch(&f->ed));
+    yew_ed_init(&f->ed);
+    YEW_ASSERT(yew_ed_open_scratch(&f->ed));
     f->fl.vm.ed = &f->ed;
 }
 
 static void hf_close(HandleFix *f)
 {
     f->fl.vm.ed = NULL;
-    sag_ed_free(&f->ed);
+    yew_ed_free(&f->ed);
     flfix_close(&f->fl);
 }
 
@@ -123,7 +123,7 @@ static void resolve_kind(HandleFix *f, FlHandleKind kind, FlValue v,
         ok = fl_h_re(vm, v) != NULL;
         break;
     default:
-        SAG_BUG("resolve_kind: not a handle kind");
+        YEW_BUG("resolve_kind: not a handle kind");
     }
     if (ok) {
         (void)snprintf(out, cap, "%s", "");
@@ -146,7 +146,7 @@ static FlValue synthetic(HandleFix *f, FlHandleKind kind)
     case FL_H_CUR:  init.as.cur.win = 4242U; init.as.cur.index = 0U; break;
     case FL_H_SPAN: init.as.span.buf = 4242U; break;
     case FL_H_RE:   init.as.re.a = NULL; init.as.re.re = NULL; break;
-    default:        SAG_BUG("synthetic: not a handle kind");
+    default:        YEW_BUG("synthetic: not a handle kind");
     }
     return fl_h_make(&f->ed.handles, kind, &init);
 }
@@ -202,7 +202,7 @@ void test_fl_handle_dead_matrix_free_and_reuse_all_kinds(void)
     size_t i;
 
     hf_open(&f);
-    for (i = 0U; i < SAG_ARRAY_LEN(kinds); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(kinds); i++) {
         FlHandleKind k = kinds[i];
         FlValue h = synthetic(&f, k);
         FlValue reused;
@@ -210,26 +210,26 @@ void test_fl_handle_dead_matrix_free_and_reuse_all_kinds(void)
         char want[64];
 
         tagged_want(k, "handle", want, sizeof(want));
-        SAG_ASSERT(fl_h_is(h));
-        SAG_ASSERT_EQ_U64((u64)fl_h_kind_of(h), (u64)k);
-        SAG_ASSERT(fl_h_alive(&f.ed.handles, h));
+        YEW_ASSERT(fl_h_is(h));
+        YEW_ASSERT_EQ_U64((u64)fl_h_kind_of(h), (u64)k);
+        YEW_ASSERT(fl_h_alive(&f.ed.handles, h));
 
         /* Row 1: use after free. */
-        SAG_ASSERT(fl_h_free(&f.ed, h));
-        SAG_ASSERT(!fl_h_alive(&f.ed.handles, h));
+        YEW_ASSERT(fl_h_free(&f.ed, h));
+        YEW_ASSERT(!fl_h_alive(&f.ed.handles, h));
         resolve_tagged(&f, k, h, got, sizeof(got));
-        SAG_ASSERT_EQ_STR(got, want);
+        YEW_ASSERT_EQ_STR(got, want);
         /* Freeing twice is a clean false, not a double release. */
-        SAG_ASSERT(!fl_h_free(&f.ed, h));
+        YEW_ASSERT(!fl_h_free(&f.ed, h));
 
         /* Row 2: use after the SLOT is reused, same kind. */
         reused = synthetic(&f, k);
-        SAG_ASSERT_EQ_U64(fl_h_decode(reused).slot, fl_h_decode(h).slot);
-        SAG_ASSERT(fl_h_alive(&f.ed.handles, reused));
-        SAG_ASSERT(!fl_h_alive(&f.ed.handles, h));
+        YEW_ASSERT_EQ_U64(fl_h_decode(reused).slot, fl_h_decode(h).slot);
+        YEW_ASSERT(fl_h_alive(&f.ed.handles, reused));
+        YEW_ASSERT(!fl_h_alive(&f.ed.handles, h));
         resolve_tagged(&f, k, h, got, sizeof(got));
-        SAG_ASSERT_EQ_STR(got, want);
-        SAG_ASSERT(fl_h_free(&f.ed, reused));
+        YEW_ASSERT_EQ_STR(got, want);
+        YEW_ASSERT(fl_h_free(&f.ed, reused));
     }
     hf_close(&f);
 }
@@ -248,7 +248,7 @@ void test_fl_handle_dead_matrix_object_close(void)
     HandleFix f;
     Arena *own;
     Buffer *b;
-    SagRe *re;
+    YewRe *re;
     FlValue hb;
     FlValue hc;
     FlValue hr;
@@ -257,8 +257,8 @@ void test_fl_handle_dead_matrix_object_close(void)
     char kindbuf[32];
 
     hf_open(&f);
-    b = sag_ed_doc(&f.ed);
-    SAG_ASSERT_NOT_NULL(b);
+    b = yew_ed_doc(&f.ed);
+    YEW_ASSERT_NOT_NULL(b);
     hb = fl_h_buf_make(&f.ed, b);
     hw = fl_h_win_make(&f.ed, f.ed.win);
     hc = fl_h_cur_make(&f.ed, f.ed.win, 0U);
@@ -266,17 +266,17 @@ void test_fl_handle_dead_matrix_object_close(void)
 
     /* Every editor-owned kind resolves while its object is open. */
     resolve_kind(&f, FL_H_BUF, hb, kindbuf, sizeof(kindbuf));
-    SAG_ASSERT_EQ_STR(kindbuf, "");
+    YEW_ASSERT_EQ_STR(kindbuf, "");
     resolve_kind(&f, FL_H_WIN, hw, kindbuf, sizeof(kindbuf));
-    SAG_ASSERT_EQ_STR(kindbuf, "");
+    YEW_ASSERT_EQ_STR(kindbuf, "");
     resolve_kind(&f, FL_H_CUR, hc, kindbuf, sizeof(kindbuf));
-    SAG_ASSERT_EQ_STR(kindbuf, "");
+    YEW_ASSERT_EQ_STR(kindbuf, "");
     resolve_kind(&f, FL_H_SPAN, hs, kindbuf, sizeof(kindbuf));
-    SAG_ASSERT_EQ_STR(kindbuf, "");
+    YEW_ASSERT_EQ_STR(kindbuf, "");
     /* The slot is alive in both the before and after cases; only the
      * object goes away.  Stated here so the assertion after the close
      * cannot be read as the generation guard doing the work. */
-    SAG_ASSERT(fl_h_alive(&f.ed.handles, hb));
+    YEW_ASSERT(fl_h_alive(&f.ed.handles, hb));
 
     /*
      * Close the objects the way the editor does.  fl_h_drop_buffer runs
@@ -286,28 +286,28 @@ void test_fl_handle_dead_matrix_object_close(void)
      */
     fl_h_drop_window(&f.ed, f.ed.win->id);
     resolve_kind(&f, FL_H_WIN, hw, kindbuf, sizeof(kindbuf));
-    SAG_ASSERT_EQ_STR(kindbuf, "handle");
+    YEW_ASSERT_EQ_STR(kindbuf, "handle");
     resolve_kind(&f, FL_H_CUR, hc, kindbuf, sizeof(kindbuf));
-    SAG_ASSERT_EQ_STR(kindbuf, "handle");
+    YEW_ASSERT_EQ_STR(kindbuf, "handle");
 
     fl_h_drop_buffer(&f.ed, b->id);
     resolve_kind(&f, FL_H_BUF, hb, kindbuf, sizeof(kindbuf));
-    SAG_ASSERT_EQ_STR(kindbuf, "handle");
+    YEW_ASSERT_EQ_STR(kindbuf, "handle");
     resolve_kind(&f, FL_H_SPAN, hs, kindbuf, sizeof(kindbuf));
-    SAG_ASSERT_EQ_STR(kindbuf, "handle");
+    YEW_ASSERT_EQ_STR(kindbuf, "handle");
 
     /* Regex is the one owning handle kind: closing the object means
      * freeing its handle, which must release the arena and stale the value. */
-    own = sag_xmalloc(sizeof(*own));
+    own = yew_xmalloc(sizeof(*own));
     arena_init(own);
-    re = sag_re_compile(own, "a+", 2U, 0U, NULL);
-    SAG_ASSERT_NOT_NULL(re);
+    re = yew_re_compile(own, "a+", 2U, 0U, NULL);
+    YEW_ASSERT_NOT_NULL(re);
     hr = fl_h_re_make(&f.ed, own, re);
     resolve_kind(&f, FL_H_RE, hr, kindbuf, sizeof(kindbuf));
-    SAG_ASSERT_EQ_STR(kindbuf, "");
-    SAG_ASSERT(fl_h_free(&f.ed, hr));
+    YEW_ASSERT_EQ_STR(kindbuf, "");
+    YEW_ASSERT(fl_h_free(&f.ed, hr));
     resolve_kind(&f, FL_H_RE, hr, kindbuf, sizeof(kindbuf));
-    SAG_ASSERT_EQ_STR(kindbuf, "handle");
+    YEW_ASSERT_EQ_STR(kindbuf, "handle");
 
     /*
      * THE OBJECT-ID GUARD ON ITS OWN.
@@ -316,7 +316,7 @@ void test_fl_handle_dead_matrix_object_close(void)
      * slot — so the generation guard is what actually refused those,
      * and the id indirection could have been missing entirely.  Here
      * the slot stays live and only the object is absent, which is the
-     * one arrangement that reaches sag_ws_buf_by_id's NULL branch.
+     * one arrangement that reaches yew_ws_buf_by_id's NULL branch.
      *
      * That is the "neither guard subsumes the other" claim from
      * handle.h, asserted rather than restated: alive() says yes and the
@@ -325,17 +325,17 @@ void test_fl_handle_dead_matrix_object_close(void)
     {
         FlValue orphan = synthetic(&f, FL_H_BUF);
 
-        SAG_ASSERT(fl_h_alive(&f.ed.handles, orphan));
+        YEW_ASSERT(fl_h_alive(&f.ed.handles, orphan));
         resolve_kind(&f, FL_H_BUF, orphan, kindbuf, sizeof(kindbuf));
-        SAG_ASSERT_EQ_STR(kindbuf, "handle");
+        YEW_ASSERT_EQ_STR(kindbuf, "handle");
 
         /* And the same for a window, whose lookup walks every tab. */
         {
             FlValue worphan = synthetic(&f, FL_H_WIN);
 
-            SAG_ASSERT(fl_h_alive(&f.ed.handles, worphan));
+            YEW_ASSERT(fl_h_alive(&f.ed.handles, worphan));
             resolve_kind(&f, FL_H_WIN, worphan, kindbuf, sizeof(kindbuf));
-            SAG_ASSERT_EQ_STR(kindbuf, "handle");
+            YEW_ASSERT_EQ_STR(kindbuf, "handle");
         }
     }
 
@@ -386,15 +386,15 @@ void test_fl_handle_span_tracks_1000_random_edits(void)
     u32 i;
 
     hf_open(&f);
-    b = sag_ed_doc(&f.ed);
-    SAG_ASSERT_NOT_NULL(b);
+    b = yew_ed_doc(&f.ed);
+    YEW_ASSERT_NOT_NULL(b);
     (void)memset(initial, 'x', sizeof(initial));
-    ec = sag_ed_edit_ctx(&f.ed);
+    ec = yew_ed_edit_ctx(&f.ed);
     /* The mark contract is independent of undo/cursor bookkeeping. */
     ec.undo = NULL;
     ec.cset = NULL;
     ec.on_change = NULL;
-    SAG_ASSERT(sag_edit_insert(&ec, BYTEOFF(0U), initial, sizeof(initial)));
+    YEW_ASSERT(yew_edit_insert(&ec, BYTEOFF(0U), initial, sizeof(initial)));
     hs = fl_h_span_make(&f.ed, b, lo, hi);
 
     for (i = 0U; i < EDITS; i++) {
@@ -416,7 +416,7 @@ void test_fl_handle_span_tracks_1000_random_edits(void)
                 at = handle_random(&state) % (text_len + 1U);
             len = 1U + handle_random(&state) % sizeof(bytes);
             (void)memset(bytes, (int)(i & 0xffU), (size_t)len);
-            SAG_ASSERT(sag_edit_insert(&ec, BYTEOFF(at), bytes, len));
+            YEW_ASSERT(yew_edit_insert(&ec, BYTEOFF(at), bytes, len));
             if (at < lo)
                 lo += len;
             if (at <= hi)
@@ -427,7 +427,7 @@ void test_fl_handle_span_tracks_1000_random_edits(void)
             len = 1U + handle_random(&state) % (text_len - at);
             if (len > 8U)
                 len = 8U;
-            SAG_ASSERT(sag_edit_delete(&ec, (Span){at, at + len}));
+            YEW_ASSERT(yew_edit_delete(&ec, (Span){at, at + len}));
             lo = oracle_delete_pos(lo, at, len);
             hi = oracle_delete_pos(hi, at, len);
             if (lo > hi)
@@ -435,23 +435,23 @@ void test_fl_handle_span_tracks_1000_random_edits(void)
             text_len -= len;
         }
         clear_raise(&f.fl.vm);
-        SAG_ASSERT(fl_h_span(&f.fl.vm, hs, &resolved, &got));
-        SAG_ASSERT(resolved == b);
-        SAG_ASSERT_EQ_U64(got.lo, lo);
-        SAG_ASSERT_EQ_U64(got.hi, hi);
-        SAG_ASSERT(got.hi <= text_len);
+        YEW_ASSERT(fl_h_span(&f.fl.vm, hs, &resolved, &got));
+        YEW_ASSERT(resolved == b);
+        YEW_ASSERT_EQ_U64(got.lo, lo);
+        YEW_ASSERT_EQ_U64(got.hi, hi);
+        YEW_ASSERT(got.hi <= text_len);
     }
     {
         const FlHandleSlot *slot = fl_h_peek(&f.ed.handles, hs);
         MarkId lo_mark;
         MarkId hi_mark;
 
-        SAG_ASSERT_NOT_NULL(slot);
+        YEW_ASSERT_NOT_NULL(slot);
         lo_mark = slot->as.span.lo;
         hi_mark = slot->as.span.hi;
-        SAG_ASSERT(fl_h_free(&f.ed, hs));
-        SAG_ASSERT(!sag_mark_alive(b->marks, lo_mark));
-        SAG_ASSERT(!sag_mark_alive(b->marks, hi_mark));
+        YEW_ASSERT(fl_h_free(&f.ed, hs));
+        YEW_ASSERT(!yew_mark_alive(b->marks, lo_mark));
+        YEW_ASSERT(!yew_mark_alive(b->marks, hi_mark));
     }
     hf_close(&f);
 }
@@ -467,21 +467,21 @@ void test_fl_handle_collapsed_span_resolves_zero_length(void)
     Span got = {0U, 0U};
 
     hf_open(&f);
-    b = sag_ed_doc(&f.ed);
-    SAG_ASSERT_NOT_NULL(b);
-    ec = sag_ed_edit_ctx(&f.ed);
+    b = yew_ed_doc(&f.ed);
+    YEW_ASSERT_NOT_NULL(b);
+    ec = yew_ed_edit_ctx(&f.ed);
     ec.undo = NULL;
     ec.cset = NULL;
     ec.on_change = NULL;
-    SAG_ASSERT(sag_edit_insert(&ec, BYTEOFF(0U), (const u8 *)"0123456789",
+    YEW_ASSERT(yew_edit_insert(&ec, BYTEOFF(0U), (const u8 *)"0123456789",
                                10U));
     hs = fl_h_span_make(&f.ed, b, 2U, 8U);
-    SAG_ASSERT(sag_edit_delete(&ec, (Span){1U, 9U}));
-    SAG_ASSERT(fl_h_span(&f.fl.vm, hs, &resolved, &got));
-    SAG_ASSERT(resolved == b);
-    SAG_ASSERT_EQ_U64(got.lo, 1U);
-    SAG_ASSERT_EQ_U64(got.hi, 1U);
-    SAG_ASSERT_EQ_U64(got.hi - got.lo, 0U);
+    YEW_ASSERT(yew_edit_delete(&ec, (Span){1U, 9U}));
+    YEW_ASSERT(fl_h_span(&f.fl.vm, hs, &resolved, &got));
+    YEW_ASSERT(resolved == b);
+    YEW_ASSERT_EQ_U64(got.lo, 1U);
+    YEW_ASSERT_EQ_U64(got.hi, 1U);
+    YEW_ASSERT_EQ_U64(got.hi - got.lo, 0U);
     hf_close(&f);
 }
 
@@ -500,26 +500,26 @@ void test_fl_handle_regex_10000_cycles_keep_ownership_bounded(void)
 
     hf_open(&f);
     for (i = 0U; i < CYCLES; i++) {
-        Arena *own = sag_xmalloc(sizeof(*own));
-        SagRe *re;
+        Arena *own = yew_xmalloc(sizeof(*own));
+        YewRe *re;
         FlValue h;
         FlHandle decoded;
 
         arena_init(own);
-        re = sag_re_compile(own, "a(b|c)*z", 8U, 0U, NULL);
-        SAG_ASSERT_NOT_NULL(re);
+        re = yew_re_compile(own, "a(b|c)*z", 8U, 0U, NULL);
+        YEW_ASSERT_NOT_NULL(re);
         h = fl_h_re_make(&f.ed, own, re);
         decoded = fl_h_decode(h);
         if (i == 0U)
             slot = decoded.slot;
-        SAG_ASSERT_EQ_U64(decoded.slot, slot);
-        SAG_ASSERT(fl_h_re(&f.fl.vm, h) == re);
-        SAG_ASSERT_EQ_U64(f.ed.handles.live, 1U);
-        SAG_ASSERT(fl_h_free(&f.ed, h));
-        SAG_ASSERT_EQ_U64(f.ed.handles.live, 0U);
-        SAG_ASSERT_EQ_U64(f.ed.handles.n, 1U);
-        SAG_ASSERT_NULL(f.ed.handles.slots[slot].as.re.a);
-        SAG_ASSERT_NULL(f.ed.handles.slots[slot].as.re.re);
+        YEW_ASSERT_EQ_U64(decoded.slot, slot);
+        YEW_ASSERT(fl_h_re(&f.fl.vm, h) == re);
+        YEW_ASSERT_EQ_U64(f.ed.handles.live, 1U);
+        YEW_ASSERT(fl_h_free(&f.ed, h));
+        YEW_ASSERT_EQ_U64(f.ed.handles.live, 0U);
+        YEW_ASSERT_EQ_U64(f.ed.handles.n, 1U);
+        YEW_ASSERT_NULL(f.ed.handles.slots[slot].as.re.a);
+        YEW_ASSERT_NULL(f.ed.handles.slots[slot].as.re.re);
     }
     hf_close(&f);
 }
@@ -540,15 +540,15 @@ void test_fl_handle_wrong_kind_is_a_type_error(void)
     char kindbuf[32];
 
     hf_open(&f);
-    hb = fl_h_buf_make(&f.ed, sag_ed_doc(&f.ed));
+    hb = fl_h_buf_make(&f.ed, yew_ed_doc(&f.ed));
 
     resolve_kind(&f, FL_H_WIN, hb, kindbuf, sizeof(kindbuf));
-    SAG_ASSERT_EQ_STR(kindbuf, "type");
+    YEW_ASSERT_EQ_STR(kindbuf, "type");
     resolve_kind(&f, FL_H_RE, hb, kindbuf, sizeof(kindbuf));
-    SAG_ASSERT_EQ_STR(kindbuf, "type");
+    YEW_ASSERT_EQ_STR(kindbuf, "type");
     /* And a non-handle value is a type error too, not a crash. */
     resolve_kind(&f, FL_H_BUF, FL_NIL_V, kindbuf, sizeof(kindbuf));
-    SAG_ASSERT_EQ_STR(kindbuf, "type");
+    YEW_ASSERT_EQ_STR(kindbuf, "type");
 
     hf_close(&f);
 }
@@ -585,22 +585,22 @@ void test_fl_handle_generation_wraparound_retires_the_slot(void)
      * generation, so the free below runs fl_h_free's real arithmetic
      * rather than a hand-built end state.
      */
-    SAG_ASSERT(fl_h_free(&f.ed, h));
+    YEW_ASSERT(fl_h_free(&f.ed, h));
     s = &f.ed.handles.slots[doomed];
     s->gen = 0xFFFFFFFFU;
 
     /* Reused at the limit, then freed across it. */
     h = synthetic(&f, FL_H_BUF);
-    SAG_ASSERT_EQ_U64(fl_h_decode(h).slot, doomed);
-    SAG_ASSERT_EQ_U64(fl_h_decode(h).gen, 0xFFFFFFFFU);
-    SAG_ASSERT(fl_h_free(&f.ed, h));
-    SAG_ASSERT(!fl_h_alive(&f.ed.handles, h));
+    YEW_ASSERT_EQ_U64(fl_h_decode(h).slot, doomed);
+    YEW_ASSERT_EQ_U64(fl_h_decode(h).gen, 0xFFFFFFFFU);
+    YEW_ASSERT(fl_h_free(&f.ed, h));
+    YEW_ASSERT(!fl_h_alive(&f.ed.handles, h));
 
     /* Retired: the next allocation does NOT come back to this slot. */
     next = synthetic(&f, FL_H_BUF);
-    SAG_ASSERT(fl_h_decode(next).slot != doomed);
-    SAG_ASSERT(fl_h_alive(&f.ed.handles, next));
-    SAG_ASSERT(fl_h_free(&f.ed, next));
+    YEW_ASSERT(fl_h_decode(next).slot != doomed);
+    YEW_ASSERT(fl_h_alive(&f.ed.handles, next));
+    YEW_ASSERT(fl_h_free(&f.ed, next));
 
     hf_close(&f);
 }
@@ -622,29 +622,29 @@ void test_fl_handle_drop_buffer_releases_spans(void)
     u32 i;
 
     hf_open(&f);
-    b = sag_ed_doc(&f.ed);
-    SAG_ASSERT_NOT_NULL(b);
+    b = yew_ed_doc(&f.ed);
+    YEW_ASSERT_NOT_NULL(b);
     span = fl_h_span_make(&f.ed, b, 0U, 0U);
     buf = fl_h_buf_make(&f.ed, b);
     win = fl_h_win_make(&f.ed, f.ed.win);
     cur = fl_h_cur_make(&f.ed, f.ed.win, 0U);
-    SAG_ASSERT(fl_h_alive(&f.ed.handles, span));
-    SAG_ASSERT(fl_h_alive(&f.ed.handles, buf));
+    YEW_ASSERT(fl_h_alive(&f.ed.handles, span));
+    YEW_ASSERT(fl_h_alive(&f.ed.handles, buf));
 
     /* Stable identities and an equal live span are interned.  This is
      * the event/query hot-loop regression: repeated construction must
      * neither allocate slots nor add another pair of marks. */
-    SAG_ASSERT_EQ_U64(f.ed.handles.live, 4U);
+    YEW_ASSERT_EQ_U64(f.ed.handles.live, 4U);
     for (i = 0U; i < REPEATS; i++) {
-        SAG_ASSERT_EQ_I64(fl_h_buf_make(&f.ed, b).as.i, buf.as.i);
-        SAG_ASSERT_EQ_I64(fl_h_win_make(&f.ed, f.ed.win).as.i, win.as.i);
-        SAG_ASSERT_EQ_I64(fl_h_cur_make(&f.ed, f.ed.win, 0U).as.i,
+        YEW_ASSERT_EQ_I64(fl_h_buf_make(&f.ed, b).as.i, buf.as.i);
+        YEW_ASSERT_EQ_I64(fl_h_win_make(&f.ed, f.ed.win).as.i, win.as.i);
+        YEW_ASSERT_EQ_I64(fl_h_cur_make(&f.ed, f.ed.win, 0U).as.i,
                           cur.as.i);
-        SAG_ASSERT_EQ_I64(fl_h_span_make(&f.ed, b, 0U, 0U).as.i,
+        YEW_ASSERT_EQ_I64(fl_h_span_make(&f.ed, b, 0U, 0U).as.i,
                           span.as.i);
     }
-    SAG_ASSERT_EQ_U64(f.ed.handles.live, 4U);
-    SAG_ASSERT_EQ_U64(f.ed.handles.n, 4U);
+    YEW_ASSERT_EQ_U64(f.ed.handles.live, 4U);
+    YEW_ASSERT_EQ_U64(f.ed.handles.n, 4U);
 
     /* Cursor handles follow their stable stamp when normalization moves
      * the cursor to a different index, and never resurrect when another
@@ -656,32 +656,32 @@ void test_fl_handle_drop_buffer_releases_spans(void)
         FlValue removed;
         Cursor *resolved;
 
-        SAG_ASSERT(sag_cset_add(&f.ed.win->cs, at20));
+        YEW_ASSERT(yew_cset_add(&f.ed.win->cs, at20));
         moved = fl_h_cur_make(&f.ed, f.ed.win, 1U);
-        SAG_ASSERT(sag_cset_add(&f.ed.win->cs, at10));
+        YEW_ASSERT(yew_cset_add(&f.ed.win->cs, at10));
         removed = fl_h_cur_make(&f.ed, f.ed.win, 1U);
         clear_raise(&f.fl.vm);
         resolved = fl_h_cur(&f.fl.vm, moved, NULL);
-        SAG_ASSERT_NOT_NULL(resolved);
-        SAG_ASSERT_EQ_U64(resolved->pos.v, 20U);
-        SAG_ASSERT_EQ_U64(fl_h_decode(moved).slot,
+        YEW_ASSERT_NOT_NULL(resolved);
+        YEW_ASSERT_EQ_U64(resolved->pos.v, 20U);
+        YEW_ASSERT_EQ_U64(fl_h_decode(moved).slot,
                           fl_h_decode(fl_h_cur_make(&f.ed, f.ed.win, 2U)).slot);
 
-        SAG_ASSERT(sag_cset_drop_latest(&f.ed.win->cs));
+        YEW_ASSERT(yew_cset_drop_latest(&f.ed.win->cs));
         resolve_kind(&f, FL_H_CUR, removed, kindbuf, sizeof(kindbuf));
-        SAG_ASSERT_EQ_STR(kindbuf, "handle");
-        SAG_ASSERT(sag_cset_add(&f.ed.win->cs, at10));
+        YEW_ASSERT_EQ_STR(kindbuf, "handle");
+        YEW_ASSERT(yew_cset_add(&f.ed.win->cs, at10));
         resolve_kind(&f, FL_H_CUR, removed, kindbuf, sizeof(kindbuf));
-        SAG_ASSERT_EQ_STR(kindbuf, "handle");
+        YEW_ASSERT_EQ_STR(kindbuf, "handle");
     }
 
     fl_h_drop_buffer(&f.ed, b->id);
 
     /* Released outright — not merely unresolvable. */
-    SAG_ASSERT(!fl_h_alive(&f.ed.handles, span));
-    SAG_ASSERT(!fl_h_alive(&f.ed.handles, buf));
+    YEW_ASSERT(!fl_h_alive(&f.ed.handles, span));
+    YEW_ASSERT(!fl_h_alive(&f.ed.handles, buf));
     resolve_kind(&f, FL_H_SPAN, span, kindbuf, sizeof(kindbuf));
-    SAG_ASSERT_EQ_STR(kindbuf, "handle");
+    YEW_ASSERT_EQ_STR(kindbuf, "handle");
 
     hf_close(&f);
 }

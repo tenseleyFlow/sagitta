@@ -1,5 +1,5 @@
-#ifndef SAG_ARGS_H
-#define SAG_ARGS_H
+#ifndef YEW_ARGS_H
+#define YEW_ARGS_H
 
 #include <stdbool.h>
 
@@ -9,7 +9,7 @@
 typedef struct {
     const char *text;
     size_t name_len;
-} SagGrantArg;
+} YewGrantArg;
 
 typedef struct {
     bool version;
@@ -26,13 +26,13 @@ typedef struct {
     size_t nbatch_args;
     bool test;
     bool quiet;
-    SagGrantArg *grants;
+    YewGrantArg *grants;
     size_t ngrants;
     bool selftest_bug;
-} SagArgs;
+} YewArgs;
 
 /* Return an exit code, or -1 when the driver should proceed. */
-int sag_args_parse(SagArgs *out, int argc, char **argv, Bytebuf *err);
-void sag_args_free(SagArgs *args);
+int yew_args_parse(YewArgs *out, int argc, char **argv, Bytebuf *err);
+void yew_args_free(YewArgs *args);
 
 #endif

@@ -1,5 +1,5 @@
-#ifndef SAG_UI_MOUSE_H
-#define SAG_UI_MOUSE_H
+#ifndef YEW_UI_MOUSE_H
+#define YEW_UI_MOUSE_H
 
 /*
  * Sprint 27 §1: THE mouse router.
@@ -18,7 +18,7 @@
  * `tab_id` / `gid` / path, never as an index (Sprint 23's law, applied
  * in the input path).
  *
- * ARMING, NOT DRAGGING.  A press sets SAG_MP_ARMED; the drag begins
+ * ARMING, NOT DRAGGING.  A press sets YEW_MP_ARMED; the drag begins
  * only once the pointer leaves the pressed CELL.  A click that never
  * moves must stay a click, and nothing is drawn or targeted until then.
  *
@@ -41,21 +41,21 @@ enum {
     /* A notch is exactly this many rows, forever: no acceleration, no
      * momentum, no fractional accumulation.  Deterministic (invariant
      * 5) and therefore testable. */
-    SAG_WHEEL_ROWS = 3,
+    YEW_WHEEL_ROWS = 3,
     /* Shift+wheel, when wrap is off. */
-    SAG_WHEEL_COLS = 6,
-    SAG_DRAG_DWELL_MS = 400,
-    SAG_DRAG_SCROLL_MS = 120,
-    SAG_CLICK_MULTI_MS = 400
+    YEW_WHEEL_COLS = 6,
+    YEW_DRAG_DWELL_MS = 400,
+    YEW_DRAG_SCROLL_MS = 120,
+    YEW_CLICK_MULTI_MS = 400
 };
 
 typedef enum {
-    SAG_MP_IDLE = 0,
-    SAG_MP_ARMED,
-    SAG_MP_DRAG_BORDER,
-    SAG_MP_DRAG_TAB,
-    SAG_MP_DRAG_GROUP,
-    SAG_MP_DRAG_SEL
+    YEW_MP_IDLE = 0,
+    YEW_MP_ARMED,
+    YEW_MP_DRAG_BORDER,
+    YEW_MP_DRAG_TAB,
+    YEW_MP_DRAG_GROUP,
+    YEW_MP_DRAG_SEL
 } MousePhase;
 
 typedef struct MouseState {
@@ -114,10 +114,10 @@ typedef struct MouseState {
     bool sel_alt;
 } MouseState;
 
-void sag_mouse_init(MouseState *m);
+void yew_mouse_init(MouseState *m);
 
 /* THE entry point.  Every mouse event in the program arrives here. */
-void sag_mouse_event(Ed *ed, const Key *k);
+void yew_mouse_event(Ed *ed, const Key *k);
 
 /*
  * Did Sprint 18.5's completion menu claim this event (and act on it)?
@@ -127,7 +127,7 @@ void sag_mouse_event(Ed *ed, const Key *k);
  * returns nothing, and a swallowed click by definition changes nothing
  * else.
  */
-bool sag_mouse_claimed_by_menu(Ed *ed, Key key);
+bool yew_mouse_claimed_by_menu(Ed *ed, Key key);
 
 /*
  * Cancels any gesture in flight, restoring the state it started from
@@ -135,12 +135,12 @@ bool sag_mouse_claimed_by_menu(Ed *ed, Key key);
  * Sprint 4's FOCUS_OUT — a drag whose release lands in another window
  * would otherwise hang forever with the button logically down.
  */
-void sag_mouse_cancel(Ed *ed);
+void yew_mouse_cancel(Ed *ed);
 
 /* True while a gesture is armed or dragging.  The renderer asks so it
  * can draw the preview; Esc asks so it can cancel before any mode sees
  * the key. */
-bool sag_mouse_gesture_active(const Ed *ed);
+bool yew_mouse_gesture_active(const Ed *ed);
 
 /*
  * §4: the drag's preview, for the strip renderer.  Returns false when
@@ -148,10 +148,10 @@ bool sag_mouse_gesture_active(const Ed *ed);
  * row-1 payload convention (index, or −gid); `to_slot` is where it is
  * being drawn.
  */
-bool sag_mouse_drag_preview(const Ed *ed, i32 *payload, int *to_slot);
+bool yew_mouse_drag_preview(const Ed *ed, i32 *payload, int *to_slot);
 
 /* §4: the group whose member strip a dwell has opened; 0 when none. */
-u32 sag_mouse_preview_group(const Ed *ed);
+u32 yew_mouse_preview_group(const Ed *ed);
 
 /*
  * Called from the loop's timer path: dwell and auto-scroll are clocks,
@@ -159,28 +159,28 @@ u32 sag_mouse_preview_group(const Ed *ed);
  * a slow one, and a strip that scrolled per report would fly past the
  * target.
  */
-void sag_mouse_tick(Ed *ed, i64 now_ms);
+void yew_mouse_tick(Ed *ed, i64 now_ms);
 /* When the router next needs the clock, or 0 when it does not. */
-i64 sag_mouse_deadline(const Ed *ed, i64 now_ms);
+i64 yew_mouse_deadline(const Ed *ed, i64 now_ms);
 
 /*
  * §5: the two menus.  Built here rather than in ui/ctxmenu.c because
  * WHICH rows exist and what they mean is editor policy, and ctxmenu.c
  * is deliberately ignorant of the editor.
  */
-bool sag_mouse_open_tab_menu(Ed *ed, u32 tab_id, u16 x, u16 y);
-bool sag_mouse_open_group_menu(Ed *ed, u32 gid, u16 x, u16 y);
+bool yew_mouse_open_tab_menu(Ed *ed, u32 tab_id, u16 x, u16 y);
+bool yew_mouse_open_group_menu(Ed *ed, u32 gid, u16 x, u16 y);
 /* The menu's keymap layer, and its draw.  Both no-ops when no menu is
  * open, so the caller does not have to ask first. */
-bool sag_mouse_menu_key(Ed *ed, const Key *k);
-void sag_mouse_menu_draw(Ed *ed);
+bool yew_mouse_menu_key(Ed *ed, const Key *k);
+void yew_mouse_menu_draw(Ed *ed);
 
 /*
  * §9: the runtime toggle.  Sprint 36 owns the option model that makes
  * it persist; this is the session-lifetime half.
  */
-bool sag_mouse_enabled(void);
-void sag_mouse_set_enabled(bool on);
+bool yew_mouse_enabled(void);
+void yew_mouse_set_enabled(bool on);
 
 /*
  * §6: middle-click paste, OFF by default.
@@ -190,12 +190,12 @@ void sag_mouse_set_enabled(bool on);
  * half-thing silently would be worse than the option.  Sprint 36 owns
  * the model that persists it.
  */
-bool sag_mouse_middle_paste(void);
-void sag_mouse_set_middle_paste(bool on);
+bool yew_mouse_middle_paste(void);
+void yew_mouse_set_middle_paste(bool on);
 
-CmdStatus sag_ui_cmd_context_menu(CmdCtx *cx);
-CmdStatus sag_mouse_cmd_enable(CmdCtx *cx);
-CmdStatus sag_mouse_cmd_disable(CmdCtx *cx);
+CmdStatus yew_ui_cmd_context_menu(CmdCtx *cx);
+CmdStatus yew_mouse_cmd_enable(CmdCtx *cx);
+CmdStatus yew_mouse_cmd_disable(CmdCtx *cx);
 
 /*
  * §9 — THE DEFERRALS, named here so nobody invents them.

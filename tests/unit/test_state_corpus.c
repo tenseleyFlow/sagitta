@@ -22,8 +22,8 @@
  *                    allocate past the caps.  The §7 adversarial set.
  *
  * To regenerate the canonical documents after a deliberate format
- * change:  SAG_WSSTATE_UPDATE=1 ./build/unit_tests --filter corpus
- * It refuses to pass in that mode, exactly like SAG_PTY_UPDATE — a
+ * change:  YEW_WSSTATE_UPDATE=1 ./build/unit_tests --filter corpus
+ * It refuses to pass in that mode, exactly like YEW_PTY_UPDATE — a
  * regeneration is a thing you review, not a thing you accept.
  */
 #define _POSIX_C_SOURCE 200809L
@@ -102,7 +102,7 @@ static void corpus_list(const char *dir, CorpusList *out)
         out->n++;
     }
     (void)closedir(d);
-    sag_sort_stable(out->names, out->n, sizeof(out->names[0]), name_cmp,
+    yew_sort_stable(out->names, out->n, sizeof(out->names[0]), name_cmp,
                     NULL);
 }
 
@@ -117,7 +117,7 @@ static void gen_write(const char *name, const Bytebuf *doc)
 
     (void)snprintf(path, sizeof(path), "%s/%s", CORPUS_DIR, name);
     fp = fopen(path, "wb");
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     if (doc->len > 0U)
         (void)fwrite(doc->data, 1U, doc->len, fp);
     (void)fclose(fp);
@@ -132,14 +132,14 @@ typedef struct GenFix {
 
 static void gen_open(GenFix *g)
 {
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    sag_ed_init(&g->ed);
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    yew_ed_init(&g->ed);
     /* A FIXED workspace root, so the documents do not carry a mkdtemp
      * name that changes every run — these are frozen bytes. */
     g->ed.ws.dir = arena_strdup(&g->ed.arena, "/w");
-    SAG_ASSERT(sag_ed_open_scratch(&g->ed));
-    sag_layout_compute(g->ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT(yew_ed_open_scratch(&g->ed));
+    yew_layout_compute(g->ed.pane_root, (Rect){0U, 0U, 80U, 24U});
 }
 
 /*
@@ -176,20 +176,20 @@ static void gen_emit(GenFix *g, const char *name)
     Bytebuf doc;
 
     bytebuf_init(&doc);
-    sag_state_emit(&g->ed, &doc);
+    yew_state_emit(&g->ed, &doc);
     gen_pin_saved_at(&doc);
     gen_write(name, &doc);
     bytebuf_free(&doc);
-    sag_ed_free(&g->ed);
+    yew_ed_free(&g->ed);
 }
 
 /* A tab on a path that is never touched on disk — the corpus must not
  * depend on a filesystem. */
 static int gen_tab(GenFix *g, const char *path)
 {
-    int idx = sag_tab_open(&g->ed, path);
+    int idx = yew_tab_open(&g->ed, path);
 
-    SAG_ASSERT(idx >= 0);
+    YEW_ASSERT(idx >= 0);
     return idx;
 }
 
@@ -218,7 +218,7 @@ static void gen_defaults(void)
 
     gen_open(&g);
     idx = gen_tab(&g, "/w/defaults.txt");
-    sag_tab_switch(&g.ed, idx);
+    yew_tab_switch(&g.ed, idx);
     gen_emit(&g, "03-all-defaults.fl");
 }
 
@@ -235,27 +235,27 @@ static void gen_everything(void)
 
     gen_open(&g);
     idx = gen_tab(&g, "/w/everything.txt");
-    gid = sag_group_create(&g.ed, "/w/src", "src/");
-    sag_group_add_member(&g.ed, gid, idx);
-    sag_group_set_last_member(&g.ed, gid, "/w/everything.txt");
-    sag_tab_switch(&g.ed, idx);
-    w = sag_tab_at(&g.ed, idx)->root->win;
-    SAG_ASSERT_NOT_NULL(w);
+    gid = yew_group_create(&g.ed, "/w/src", "src/");
+    yew_group_add_member(&g.ed, gid, idx);
+    yew_group_set_last_member(&g.ed, gid, "/w/everything.txt");
+    yew_tab_switch(&g.ed, idx);
+    w = yew_tab_at(&g.ed, idx)->root->win;
+    YEW_ASSERT_NOT_NULL(w);
     w->cs.curs.data[w->cs.primary].pos = BYTEOFF(812U);
     w->cs.curs.data[w->cs.primary].anchor = BYTEOFF(800U);
     w->cs.curs.data[w->cs.primary].goal_col.v = 14U;
     extra.pos = BYTEOFF(900U);
     extra.anchor = BYTEOFF(900U);
-    extra.goal_col.v = SAG_GCOL_EOL;
-    SAG_ASSERT(sag_cset_add(&w->cs, extra));
+    extra.goal_col.v = YEW_GCOL_EOL;
+    YEW_ASSERT(yew_cset_add(&w->cs, extra));
     w->vp.top = LINENO(40U);
     w->vp.top_sub = 2U;
     w->vp.left = (CCol){8U};
     w->vp.wrap = true;
     /* Two jumplist entries with a dead mark, which is what a deferred
      * buffer's history always looks like. */
-    b = sag_ws_buf_by_id(&g.ed, sag_tab_at(&g.ed, idx)->buffer_id);
-    SAG_ASSERT_NOT_NULL(b);
+    b = yew_ws_buf_by_id(&g.ed, yew_tab_at(&g.ed, idx)->buffer_id);
+    YEW_ASSERT_NOT_NULL(b);
     {
         u32 j;
 
@@ -267,12 +267,12 @@ static void gen_everything(void)
             je.line_hint = LINENO(10U + j);
             je.stamp_ms = 1753899102U + j;
             w->jumps.e[w->jumps.head] = je;
-            w->jumps.head = (w->jumps.head + 1U) % SAG_JUMPLIST_MAX;
+            w->jumps.head = (w->jumps.head + 1U) % YEW_JUMPLIST_MAX;
             w->jumps.len++;
         }
         w->jumps.cur = w->jumps.len;
         b->changes.e[b->changes.head] = w->jumps.e[0];
-        b->changes.head = (b->changes.head + 1U) % SAG_CHANGELIST_MAX;
+        b->changes.head = (b->changes.head + 1U) % YEW_CHANGELIST_MAX;
         b->changes.len = 1U;
         b->changes.cur = 1U;
     }
@@ -281,7 +281,7 @@ static void gen_everything(void)
     b->pending_mark_set[0] = true;
     b->pending_marks[25] = 4096U;
     b->pending_mark_set[25] = true;
-    SAG_ASSERT(sag_buf_hydrate(&g.ed, b) == 0);
+    YEW_ASSERT(yew_buf_hydrate(&g.ed, b) == 0);
     gen_emit(&g, "04-all-present.fl");
 }
 
@@ -295,14 +295,14 @@ static void gen_gids_7_9_12(void)
     gen_open(&g);
     /* Burn ids 1-6 and 8, 10, 11 so the survivors are 7, 9 and 12. */
     for (i = 1U; i <= 12U; i++) {
-        u32 id = sag_group_create(&g.ed, "/w/d", "d");
+        u32 id = yew_group_create(&g.ed, "/w/d", "d");
 
-        SAG_ASSERT_EQ_U64(id, i);
+        YEW_ASSERT_EQ_U64(id, i);
     }
     for (i = 1U; i <= 12U; i++) {
         if (i == 7U || i == 9U || i == 12U)
             continue;
-        sag_group_dissolve(&g.ed, i);
+        yew_group_dissolve(&g.ed, i);
     }
     ids[0] = 7U;
     ids[1] = 9U;
@@ -311,7 +311,7 @@ static void gen_gids_7_9_12(void)
         char path[64];
 
         (void)snprintf(path, sizeof(path), "/w/g%u.txt", (unsigned)ids[i]);
-        sag_group_add_member(&g.ed, ids[i], gen_tab(&g, path));
+        yew_group_add_member(&g.ed, ids[i], gen_tab(&g, path));
     }
     gen_emit(&g, "05-group-ids-7-9-12.fl");
 }
@@ -376,12 +376,12 @@ static void gen_split(void)
 
     gen_open(&g);
     idx = gen_tab(&g, "/w/split.txt");
-    sag_tab_switch(&g.ed, idx);
-    sag_layout_compute(g.ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    nu = sag_pane_split(&g.ed, g.ed.focus, SAG_SPLIT_H);
-    SAG_ASSERT_NOT_NULL(nu);
+    yew_tab_switch(&g.ed, idx);
+    yew_layout_compute(g.ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    nu = yew_pane_split(&g.ed, g.ed.focus, YEW_SPLIT_H);
+    YEW_ASSERT_NOT_NULL(nu);
     g.ed.focus = nu;
-    sag_tab_at(&g.ed, idx)->focus = nu;
+    yew_tab_at(&g.ed, idx)->focus = nu;
     nu->win->cs.curs.data[0].pos = BYTEOFF(64U);
     nu->win->vp.top = LINENO(12U);
     gen_emit(&g, "09-two-panes.fl");
@@ -397,23 +397,23 @@ static void gen_sixteen_leaves(void)
 
     gen_open(&g);
     idx = gen_tab(&g, "/w/wide.txt");
-    sag_tab_switch(&g.ed, idx);
-    sag_layout_compute(g.ed.pane_root, (Rect){0U, 0U, 240U, 96U});
+    yew_tab_switch(&g.ed, idx);
+    yew_layout_compute(g.ed.pane_root, (Rect){0U, 0U, 240U, 96U});
     for (i = 1U; i < 16U; i++) {
-        Pane *nu = sag_pane_split(&g.ed, g.ed.focus,
-                                  (i % 2U) == 0U ? SAG_SPLIT_H
-                                                 : SAG_SPLIT_V);
+        Pane *nu = yew_pane_split(&g.ed, g.ed.focus,
+                                  (i % 2U) == 0U ? YEW_SPLIT_H
+                                                 : YEW_SPLIT_V);
 
         if (nu == NULL)
             break;
         g.ed.focus = nu;
-        sag_tab_at(&g.ed, idx)->focus = nu;
-        sag_layout_compute(g.ed.pane_root, (Rect){0U, 0U, 240U, 96U});
+        yew_tab_at(&g.ed, idx)->focus = nu;
+        yew_layout_compute(g.ed.pane_root, (Rect){0U, 0U, 240U, 96U});
     }
     gen_emit(&g, "10-sixteen-leaves.fl");
 }
 
-/* A 100-entry jumplist: SAG_JUMPLIST_MAX, and the §3 cap. */
+/* A 100-entry jumplist: YEW_JUMPLIST_MAX, and the §3 cap. */
 static void gen_full_jumplist(void)
 {
     GenFix g;
@@ -424,12 +424,12 @@ static void gen_full_jumplist(void)
 
     gen_open(&g);
     idx = gen_tab(&g, "/w/jumpy.txt");
-    sag_tab_switch(&g.ed, idx);
-    w = sag_tab_at(&g.ed, idx)->root->win;
-    b = sag_ws_buf_by_id(&g.ed, sag_tab_at(&g.ed, idx)->buffer_id);
-    SAG_ASSERT_NOT_NULL(w);
-    SAG_ASSERT_NOT_NULL(b);
-    for (i = 0U; i < (u32)SAG_JUMPLIST_MAX; i++) {
+    yew_tab_switch(&g.ed, idx);
+    w = yew_tab_at(&g.ed, idx)->root->win;
+    b = yew_ws_buf_by_id(&g.ed, yew_tab_at(&g.ed, idx)->buffer_id);
+    YEW_ASSERT_NOT_NULL(w);
+    YEW_ASSERT_NOT_NULL(b);
+    for (i = 0U; i < (u32)YEW_JUMPLIST_MAX; i++) {
         JumpEntry je;
 
         (void)memset(&je, 0, sizeof(je));
@@ -437,7 +437,7 @@ static void gen_full_jumplist(void)
         je.line_hint = LINENO(i);
         je.stamp_ms = 1700000000U + i;
         w->jumps.e[w->jumps.head] = je;
-        w->jumps.head = (w->jumps.head + 1U) % SAG_JUMPLIST_MAX;
+        w->jumps.head = (w->jumps.head + 1U) % YEW_JUMPLIST_MAX;
         w->jumps.len++;
     }
     /* Mid-walk, deliberately: a session that quit while walking back
@@ -461,16 +461,16 @@ static void gen_three_groups(void)
 
         (void)snprintf(dir, sizeof(dir), "/w/d%u", (unsigned)i);
         (void)snprintf(label, sizeof(label), "d%u/", (unsigned)i);
-        gid[i] = sag_group_create(&g.ed, dir, label);
+        gid[i] = yew_group_create(&g.ed, dir, label);
         for (k = 0U; k < 3U; k++) {
             char path[48];
 
             (void)snprintf(path, sizeof(path), "/w/d%u/f%u.txt",
                            (unsigned)i, (unsigned)k);
-            sag_group_add_member(&g.ed, gid[i], gen_tab(&g, path));
+            yew_group_add_member(&g.ed, gid[i], gen_tab(&g, path));
         }
     }
-    sag_tab_switch(&g.ed, 4);
+    yew_tab_switch(&g.ed, 4);
     gen_emit(&g, "12-three-groups.fl");
 }
 
@@ -480,7 +480,7 @@ static void gen_empty_group(void)
     GenFix g;
 
     gen_open(&g);
-    (void)sag_group_create(&g.ed, "/w/empty", "empty/");
+    (void)yew_group_create(&g.ed, "/w/empty", "empty/");
     (void)gen_tab(&g, "/w/ungrouped.txt");
     gen_emit(&g, "13-empty-group.fl");
 }
@@ -494,11 +494,11 @@ static void gen_orphan_file_records(void)
 
     gen_open(&g);
     (void)gen_tab(&g, "/w/open.txt");
-    b = sag_ws_file_buf(&g.ed, "/w/closed.txt");
-    SAG_ASSERT_NOT_NULL(b);
+    b = yew_ws_file_buf(&g.ed, "/w/closed.txt");
+    YEW_ASSERT_NOT_NULL(b);
     b->pending_marks[3] = 77U;
     b->pending_mark_set[3] = true;
-    SAG_ASSERT(sag_buf_hydrate(&g.ed, b) == 0);
+    YEW_ASSERT(yew_buf_hydrate(&g.ed, b) == 0);
     gen_emit(&g, "14-file-record-without-tab.fl");
 }
 
@@ -511,28 +511,28 @@ static void gen_ratio_extremes(void)
 
     gen_open(&g);
     idx = gen_tab(&g, "/w/ratios.txt");
-    sag_tab_switch(&g.ed, idx);
-    sag_layout_compute(g.ed.pane_root, (Rect){0U, 0U, 200U, 60U});
-    nu = sag_pane_split(&g.ed, g.ed.focus, SAG_SPLIT_H);
-    SAG_ASSERT_NOT_NULL(nu);
-    sag_tab_at(&g.ed, idx)->root->ratio = sag_permille_to_ratio(1);
+    yew_tab_switch(&g.ed, idx);
+    yew_layout_compute(g.ed.pane_root, (Rect){0U, 0U, 200U, 60U});
+    nu = yew_pane_split(&g.ed, g.ed.focus, YEW_SPLIT_H);
+    YEW_ASSERT_NOT_NULL(nu);
+    yew_tab_at(&g.ed, idx)->root->ratio = yew_permille_to_ratio(1);
     g.ed.focus = nu;
-    sag_tab_at(&g.ed, idx)->focus = nu;
+    yew_tab_at(&g.ed, idx)->focus = nu;
     gen_emit(&g, "15-ratio-minimum.fl");
 
     gen_open(&g);
     idx = gen_tab(&g, "/w/ratios.txt");
-    sag_tab_switch(&g.ed, idx);
-    sag_layout_compute(g.ed.pane_root, (Rect){0U, 0U, 200U, 60U});
-    nu = sag_pane_split(&g.ed, g.ed.focus, SAG_SPLIT_V);
-    SAG_ASSERT_NOT_NULL(nu);
-    sag_tab_at(&g.ed, idx)->root->ratio = sag_permille_to_ratio(999);
+    yew_tab_switch(&g.ed, idx);
+    yew_layout_compute(g.ed.pane_root, (Rect){0U, 0U, 200U, 60U});
+    nu = yew_pane_split(&g.ed, g.ed.focus, YEW_SPLIT_V);
+    YEW_ASSERT_NOT_NULL(nu);
+    yew_tab_at(&g.ed, idx)->root->ratio = yew_permille_to_ratio(999);
     g.ed.focus = nu;
-    sag_tab_at(&g.ed, idx)->focus = nu;
+    yew_tab_at(&g.ed, idx)->focus = nu;
     gen_emit(&g, "16-ratio-maximum.fl");
 }
 
-/* 1024 cursors: SAG_STATE_MAX_CURSORS, the multicursor cap. */
+/* 1024 cursors: YEW_STATE_MAX_CURSORS, the multicursor cap. */
 static void gen_many_cursors(void)
 {
     GenFix g;
@@ -542,16 +542,16 @@ static void gen_many_cursors(void)
 
     gen_open(&g);
     idx = gen_tab(&g, "/w/many-cursors.txt");
-    sag_tab_switch(&g.ed, idx);
-    w = sag_tab_at(&g.ed, idx)->root->win;
-    SAG_ASSERT_NOT_NULL(w);
+    yew_tab_switch(&g.ed, idx);
+    w = yew_tab_at(&g.ed, idx)->root->win;
+    YEW_ASSERT_NOT_NULL(w);
     for (i = 1U; i < 256U; i++) {
         Cursor c;
 
         c.pos = BYTEOFF((u64)i * 4U);
         c.anchor = c.pos;
         c.goal_col.v = i % 8U;
-        if (!sag_cset_add(&w->cs, c))
+        if (!yew_cset_add(&w->cs, c))
             break;
     }
     gen_emit(&g, "17-many-cursors.fl");
@@ -568,10 +568,10 @@ static void gen_maximal(void)
         char path[48];
 
         (void)snprintf(path, sizeof(path), "/w/max/f%03u.txt", (unsigned)i);
-        if (sag_tab_open(&g.ed, path) < 0)
+        if (yew_tab_open(&g.ed, path) < 0)
             break;
     }
-    sag_tab_switch(&g.ed, 1);
+    yew_tab_switch(&g.ed, 1);
     gen_emit(&g, "18-maximal-512-tabs.fl");
 }
 
@@ -585,7 +585,7 @@ static void gen_untitled(void)
     gen_emit(&g, "19-with-scratch-tab.fl");
 }
 
-/* A goal column of exactly SAG_GCOL_EOL, spelled -1. */
+/* A goal column of exactly YEW_GCOL_EOL, spelled -1. */
 static void gen_goal_eol(void)
 {
     GenFix g;
@@ -594,10 +594,10 @@ static void gen_goal_eol(void)
 
     gen_open(&g);
     idx = gen_tab(&g, "/w/eol.txt");
-    sag_tab_switch(&g.ed, idx);
-    w = sag_tab_at(&g.ed, idx)->root->win;
-    SAG_ASSERT_NOT_NULL(w);
-    w->cs.curs.data[0].goal_col.v = SAG_GCOL_EOL;
+    yew_tab_switch(&g.ed, idx);
+    w = yew_tab_at(&g.ed, idx)->root->win;
+    YEW_ASSERT_NOT_NULL(w);
+    w->cs.curs.data[0].goal_col.v = YEW_GCOL_EOL;
     w->cs.curs.data[0].pos = BYTEOFF(1U);
     gen_emit(&g, "20-goal-eol.fl");
 }
@@ -611,9 +611,9 @@ static void gen_cjk(void)
 
     gen_open(&g);
     idx = gen_tab(&g, "/w/\xe6\x97\xa5\xe6\x9c\xac\xe8\xaa\x9e.txt");
-    sag_tab_switch(&g.ed, idx);
-    w = sag_tab_at(&g.ed, idx)->root->win;
-    SAG_ASSERT_NOT_NULL(w);
+    yew_tab_switch(&g.ed, idx);
+    w = yew_tab_at(&g.ed, idx)->root->win;
+    YEW_ASSERT_NOT_NULL(w);
     w->cs.curs.data[0].goal_col.v = 6U;
     gen_emit(&g, "21-cjk-path.fl");
 }
@@ -627,25 +627,25 @@ static void gen_deep_tree(void)
 
     gen_open(&g);
     idx = gen_tab(&g, "/w/deep.txt");
-    sag_tab_switch(&g.ed, idx);
-    sag_layout_compute(g.ed.pane_root, (Rect){0U, 0U, 240U, 96U});
+    yew_tab_switch(&g.ed, idx);
+    yew_layout_compute(g.ed.pane_root, (Rect){0U, 0U, 240U, 96U});
     /* Always split the SAME leaf, so the tree leans rather than
      * balancing — that is what makes it deep. */
     for (i = 0U; i < 7U; i++) {
-        Pane *nu = sag_pane_split(&g.ed, g.ed.focus, SAG_SPLIT_V);
+        Pane *nu = yew_pane_split(&g.ed, g.ed.focus, YEW_SPLIT_V);
 
         if (nu == NULL)
             break;
         g.ed.focus = nu;
-        sag_tab_at(&g.ed, idx)->focus = nu;
-        sag_layout_compute(g.ed.pane_root, (Rect){0U, 0U, 240U, 96U});
+        yew_tab_at(&g.ed, idx)->focus = nu;
+        yew_layout_compute(g.ed.pane_root, (Rect){0U, 0U, 240U, 96U});
     }
     gen_emit(&g, "22-deep-pane-tree.fl");
 }
 
 void test_state_corpus_regenerate(void)
 {
-    if (getenv("SAG_WSSTATE_UPDATE") == NULL)
+    if (getenv("YEW_WSSTATE_UPDATE") == NULL)
         return;
     gen_minimal();
     gen_one_tab();
@@ -670,7 +670,7 @@ void test_state_corpus_regenerate(void)
     gen_deep_tree();
     /* Never passes in update mode.  Regenerating a frozen artifact is
      * something you review, not something you accept. */
-    SAG_ASSERT(getenv("SAG_WSSTATE_UPDATE") == NULL);
+    YEW_ASSERT(getenv("YEW_WSSTATE_UPDATE") == NULL);
 }
 
 /* ---------------------------------------------------------------- */
@@ -683,7 +683,7 @@ void test_state_corpus_has_at_least_twenty_documents(void)
     CorpusList list;
 
     corpus_list(CORPUS_DIR, &list);
-    SAG_ASSERT(list.n >= 20U);
+    YEW_ASSERT(list.n >= 20U);
 }
 
 /*
@@ -701,7 +701,7 @@ void test_state_corpus_round_trips_byte_for_byte(void)
     u32 i;
 
     corpus_list(CORPUS_DIR, &list);
-    SAG_ASSERT(list.n >= 20U);
+    YEW_ASSERT(list.n >= 20U);
     for (i = 0U; i < list.n; i++) {
         char path[256];
         Bytebuf raw;
@@ -716,18 +716,18 @@ void test_state_corpus_round_trips_byte_for_byte(void)
         bytebuf_init(&raw);
         bytebuf_init(&out);
         arena_init(&a);
-        SAG_ASSERT(corpus_read(path, &raw));
+        YEW_ASSERT(corpus_read(path, &raw));
         (void)memset(&err, 0, sizeof(err));
-        lit = sag_fl_parse(&a, raw.data, raw.len, &err);
+        lit = yew_fl_parse(&a, raw.data, raw.len, &err);
         if (lit == NULL) {
             (void)fprintf(stderr, "%s: parse failed at %u:%u: %s\n", path,
                           err.line, err.col,
                           err.msg == NULL ? "?" : err.msg);
         }
-        SAG_ASSERT_NOT_NULL(lit);
-        sag_fl_emit_init(&e, &out);
-        sag_fl_emit_lit(&e, NULL, lit);
-        sag_fl_emit_done(&e);
+        YEW_ASSERT_NOT_NULL(lit);
+        yew_fl_emit_init(&e, &out);
+        yew_fl_emit_lit(&e, NULL, lit);
+        yew_fl_emit_done(&e);
         if (out.len != raw.len ||
             memcmp(out.data, raw.data, raw.len) != 0) {
             (void)fprintf(stderr,
@@ -735,8 +735,8 @@ void test_state_corpus_round_trips_byte_for_byte(void)
                           (unsigned long long)raw.len,
                           (unsigned long long)out.len);
         }
-        SAG_ASSERT_EQ_U64(out.len, raw.len);
-        SAG_ASSERT_EQ_MEM(out.data, raw.data, raw.len);
+        YEW_ASSERT_EQ_U64(out.len, raw.len);
+        YEW_ASSERT_EQ_MEM(out.data, raw.data, raw.len);
         arena_free_all(&a);
         bytebuf_free(&raw);
         bytebuf_free(&out);
@@ -750,7 +750,7 @@ void test_state_corpus_documents_are_valid_v1(void)
     u32 i;
 
     corpus_list(CORPUS_DIR, &list);
-    SAG_ASSERT(list.n >= 20U);
+    YEW_ASSERT(list.n >= 20U);
     for (i = 0U; i < list.n; i++) {
         char path[256];
         Bytebuf raw;
@@ -762,13 +762,13 @@ void test_state_corpus_documents_are_valid_v1(void)
                        list.names[i]);
         bytebuf_init(&raw);
         arena_init(&a);
-        SAG_ASSERT(corpus_read(path, &raw));
-        lit = sag_fl_parse(&a, raw.data, raw.len, &err);
-        SAG_ASSERT_NOT_NULL(lit);
-        SAG_ASSERT_EQ_I64(lit->kind, FL_LIT_MAP);
-        SAG_ASSERT_EQ_I64(sag_fl_int_or(sag_fl_get(lit, "version"), 0), 1);
-        SAG_ASSERT_NOT_NULL(sag_fl_get(lit, "tabs"));
-        SAG_ASSERT_NOT_NULL(sag_fl_get(lit, "files"));
+        YEW_ASSERT(corpus_read(path, &raw));
+        lit = yew_fl_parse(&a, raw.data, raw.len, &err);
+        YEW_ASSERT_NOT_NULL(lit);
+        YEW_ASSERT_EQ_I64(lit->kind, FL_LIT_MAP);
+        YEW_ASSERT_EQ_I64(yew_fl_int_or(yew_fl_get(lit, "version"), 0), 1);
+        YEW_ASSERT_NOT_NULL(yew_fl_get(lit, "tabs"));
+        YEW_ASSERT_NOT_NULL(yew_fl_get(lit, "files"));
         arena_free_all(&a);
         bytebuf_free(&raw);
     }
@@ -796,7 +796,7 @@ void test_state_corpus_contains_no_floats(void)
         (void)snprintf(path, sizeof(path), "%s/%s", CORPUS_DIR,
                        list.names[i]);
         bytebuf_init(&raw);
-        SAG_ASSERT(corpus_read(path, &raw));
+        YEW_ASSERT(corpus_read(path, &raw));
         for (k = 0U; k + 1U < raw.len; k++) {
             /* A digit next to a `.` or a `,` is what a float looks
              * like.  Inside a quoted path both are ordinary bytes, so
@@ -812,7 +812,7 @@ void test_state_corpus_contains_no_floats(void)
                 continue;
             }
             if (raw.data[k] >= (u8)'0' && raw.data[k] <= (u8)'9')
-                SAG_ASSERT(raw.data[k + 1U] != (u8)'.');
+                YEW_ASSERT(raw.data[k + 1U] != (u8)'.');
         }
         bytebuf_free(&raw);
     }
@@ -841,7 +841,7 @@ void test_state_corpus_source_has_no_float_conversions(void)
     if (fgets(buf, (int)sizeof(buf), p) != NULL)
         n = strtol(buf, NULL, 10);
     (void)pclose(p);
-    SAG_ASSERT_EQ_I64(n, 0);
+    YEW_ASSERT_EQ_I64(n, 0);
 }
 
 /*
@@ -865,17 +865,17 @@ void test_state_corpus_holds_no_undo_payload(void)
         (void)snprintf(path, sizeof(path), "%s/%s", CORPUS_DIR,
                        list.names[i]);
         bytebuf_init(&raw);
-        SAG_ASSERT(corpus_read(path, &raw));
+        YEW_ASSERT(corpus_read(path, &raw));
         bytebuf_push_u8(&raw, 0U);
         raw.len--;
-        found = strstr((const char *)raw.data, ".sagu");
+        found = strstr((const char *)raw.data, ".yewu");
         if (found != NULL) {
-            /* Only ever as `file: "<hash>.sagu"` inside an undo map. */
-            SAG_ASSERT_NOT_NULL(strstr((const char *)raw.data,
+            /* Only ever as `file: "<hash>.yewu"` inside an undo map. */
+            YEW_ASSERT_NOT_NULL(strstr((const char *)raw.data,
                                        "undo: {"));
         }
         /* And never the undo record markers themselves. */
-        SAG_ASSERT_NULL(strstr((const char *)raw.data, "sagu-v"));
+        YEW_ASSERT_NULL(strstr((const char *)raw.data, "yewu-v"));
         bytebuf_free(&raw);
     }
 }
@@ -900,7 +900,7 @@ void test_state_corpus_noncanonical_documents_parse(void)
     u32 i;
 
     corpus_list(CORPUS_DIR "/noncanonical", &list);
-    SAG_ASSERT(list.n >= 4U);
+    YEW_ASSERT(list.n >= 4U);
     for (i = 0U; i < list.n; i++) {
         char path[256];
         Bytebuf raw;
@@ -912,16 +912,16 @@ void test_state_corpus_noncanonical_documents_parse(void)
                        list.names[i]);
         bytebuf_init(&raw);
         arena_init(&a);
-        SAG_ASSERT(corpus_read(path, &raw));
+        YEW_ASSERT(corpus_read(path, &raw));
         (void)memset(&err, 0, sizeof(err));
-        lit = sag_fl_parse(&a, raw.data, raw.len, &err);
+        lit = yew_fl_parse(&a, raw.data, raw.len, &err);
         if (lit == NULL)
             (void)fprintf(stderr, "%s: parse failed at %u:%u: %s\n", path,
                           err.line, err.col,
                           err.msg == NULL ? "?" : err.msg);
-        SAG_ASSERT_NOT_NULL(lit);
-        SAG_ASSERT_EQ_I64(lit->kind, FL_LIT_MAP);
-        SAG_ASSERT_EQ_I64(sag_fl_int_or(sag_fl_get(lit, "version"), 0), 1);
+        YEW_ASSERT_NOT_NULL(lit);
+        YEW_ASSERT_EQ_I64(lit->kind, FL_LIT_MAP);
+        YEW_ASSERT_EQ_I64(yew_fl_int_or(yew_fl_get(lit, "version"), 0), 1);
         arena_free_all(&a);
         bytebuf_free(&raw);
     }
@@ -948,32 +948,32 @@ void test_state_corpus_noncanonical_reemits_to_canonical(void)
     bytebuf_init(&raw);
     bytebuf_init(&out);
     arena_init(&a);
-    SAG_ASSERT(corpus_read(path, &raw));
-    lit = sag_fl_parse(&a, raw.data, raw.len, &err);
-    SAG_ASSERT_NOT_NULL(lit);
-    sag_fl_emit_init(&e, &out);
-    sag_fl_emit_lit(&e, NULL, lit);
-    sag_fl_emit_done(&e);
+    YEW_ASSERT(corpus_read(path, &raw));
+    lit = yew_fl_parse(&a, raw.data, raw.len, &err);
+    YEW_ASSERT_NOT_NULL(lit);
+    yew_fl_emit_init(&e, &out);
+    yew_fl_emit_lit(&e, NULL, lit);
+    yew_fl_emit_done(&e);
     bytebuf_push_u8(&out, 0U);
     out.len--;
     /* The comments are gone... */
-    SAG_ASSERT_NULL(strstr((const char *)out.data, "#"));
-    SAG_ASSERT_NULL(strstr((const char *)out.data, "note to self"));
+    YEW_ASSERT_NULL(strstr((const char *)out.data, "#"));
+    YEW_ASSERT_NULL(strstr((const char *)out.data, "note to self"));
     /* ...and everything they annotated is not. */
-    SAG_ASSERT_NOT_NULL(strstr((const char *)out.data, "/w/a.txt"));
-    SAG_ASSERT_NOT_NULL(strstr((const char *)out.data, "deferred: true,"));
+    YEW_ASSERT_NOT_NULL(strstr((const char *)out.data, "/w/a.txt"));
+    YEW_ASSERT_NOT_NULL(strstr((const char *)out.data, "deferred: true,"));
     /* Canonical means a second pass changes nothing. */
     {
         Bytebuf twice;
 
         bytebuf_init(&twice);
-        lit = sag_fl_parse(&a, out.data, out.len, &err);
-        SAG_ASSERT_NOT_NULL(lit);
-        sag_fl_emit_init(&e, &twice);
-        sag_fl_emit_lit(&e, NULL, lit);
-        sag_fl_emit_done(&e);
-        SAG_ASSERT_EQ_U64(twice.len, out.len);
-        SAG_ASSERT_EQ_MEM(twice.data, out.data, out.len);
+        lit = yew_fl_parse(&a, out.data, out.len, &err);
+        YEW_ASSERT_NOT_NULL(lit);
+        yew_fl_emit_init(&e, &twice);
+        yew_fl_emit_lit(&e, NULL, lit);
+        yew_fl_emit_done(&e);
+        YEW_ASSERT_EQ_U64(twice.len, out.len);
+        YEW_ASSERT_EQ_MEM(twice.data, out.data, out.len);
         bytebuf_free(&twice);
     }
     arena_free_all(&a);
@@ -985,7 +985,7 @@ void test_state_corpus_noncanonical_reemits_to_canonical(void)
  * Unknown keys survive parse -> emit VERBATIM.
  *
  * This is the whole of v1's forward compatibility: there is no
- * migration framework, and the answer to "what does an older sagitta do
+ * migration framework, and the answer to "what does an older yew do
  * with a newer document" is "keeps what it does not understand".  An
  * older build that dropped them would make the loss permanent on its
  * first save.
@@ -1005,22 +1005,22 @@ void test_state_corpus_unknown_keys_survive_reemission(void)
     bytebuf_init(&raw);
     bytebuf_init(&out);
     arena_init(&a);
-    SAG_ASSERT(corpus_read(path, &raw));
-    lit = sag_fl_parse(&a, raw.data, raw.len, &err);
-    SAG_ASSERT_NOT_NULL(lit);
-    sag_fl_emit_init(&e, &out);
-    sag_fl_emit_lit(&e, NULL, lit);
-    sag_fl_emit_done(&e);
+    YEW_ASSERT(corpus_read(path, &raw));
+    lit = yew_fl_parse(&a, raw.data, raw.len, &err);
+    YEW_ASSERT_NOT_NULL(lit);
+    yew_fl_emit_init(&e, &out);
+    yew_fl_emit_lit(&e, NULL, lit);
+    yew_fl_emit_done(&e);
     bytebuf_push_u8(&out, 0U);
     out.len--;
-    SAG_ASSERT_NOT_NULL(strstr((const char *)out.data, "from.the.future"));
-    SAG_ASSERT_NOT_NULL(strstr((const char *)out.data, "editor.theme"));
-    SAG_ASSERT_NOT_NULL(strstr((const char *)out.data, "midnight"));
-    SAG_ASSERT_NOT_NULL(strstr((const char *)out.data,
+    YEW_ASSERT_NOT_NULL(strstr((const char *)out.data, "from.the.future"));
+    YEW_ASSERT_NOT_NULL(strstr((const char *)out.data, "editor.theme"));
+    YEW_ASSERT_NOT_NULL(strstr((const char *)out.data, "midnight"));
+    YEW_ASSERT_NOT_NULL(strstr((const char *)out.data,
                                "a_whole_section_from_v2"));
-    SAG_ASSERT_NOT_NULL(strstr((const char *)out.data,
+    YEW_ASSERT_NOT_NULL(strstr((const char *)out.data,
                                "a_field_this_build_never_heard_of"));
-    SAG_ASSERT_NOT_NULL(strstr((const char *)out.data,
+    YEW_ASSERT_NOT_NULL(strstr((const char *)out.data,
                                "unknown_tab_field"));
     arena_free_all(&a);
     bytebuf_free(&raw);
@@ -1044,7 +1044,7 @@ void test_state_corpus_invalid_documents_are_rejected(void)
     u32 i;
 
     corpus_list(CORPUS_DIR "/invalid", &list);
-    SAG_ASSERT(list.n >= 20U);
+    YEW_ASSERT(list.n >= 20U);
     for (i = 0U; i < list.n; i++) {
         char path[256];
         Bytebuf raw;
@@ -1057,9 +1057,9 @@ void test_state_corpus_invalid_documents_are_rejected(void)
                        list.names[i]);
         bytebuf_init(&raw);
         arena_init(&a);
-        SAG_ASSERT(corpus_read(path, &raw));
+        YEW_ASSERT(corpus_read(path, &raw));
         (void)memset(&err, 0, sizeof(err));
-        lit = sag_fl_parse(&a, raw.data, raw.len, &err);
+        lit = yew_fl_parse(&a, raw.data, raw.len, &err);
         /*
          * Rejected either by the PARSER (syntax) or by the SCHEMA
          * (a v1 document must be a map at version 1).  Both are
@@ -1068,23 +1068,23 @@ void test_state_corpus_invalid_documents_are_rejected(void)
          * log, not so callers have to care.
          */
         ok = lit != NULL && lit->kind == FL_LIT_MAP &&
-             sag_fl_int_or(sag_fl_get(lit, "version"), 0) == 1;
+             yew_fl_int_or(yew_fl_get(lit, "version"), 0) == 1;
         if (ok)
             (void)fprintf(stderr, "%s: accepted, should not have been\n",
                           path);
-        SAG_ASSERT(!ok);
+        YEW_ASSERT(!ok);
         /* A rejection carries a position, or nobody can find the
          * problem in a 350 KB document. */
         if (lit == NULL)
-            SAG_ASSERT(err.line >= 1U);
+            YEW_ASSERT(err.line >= 1U);
         arena_free_all(&a);
         bytebuf_free(&raw);
     }
 }
 
 /*
- * And every one of them is survivable end to end: sag_state_apply
- * reaches a SagWsResult rather than crashing, looping or asserting.
+ * And every one of them is survivable end to end: yew_state_apply
+ * reaches a YewWsResult rather than crashing, looping or asserting.
  */
 void test_state_corpus_invalid_documents_reach_a_result(void)
 {
@@ -1092,29 +1092,29 @@ void test_state_corpus_invalid_documents_reach_a_result(void)
     u32 i;
 
     corpus_list(CORPUS_DIR "/invalid", &list);
-    SAG_ASSERT(list.n >= 20U);
+    YEW_ASSERT(list.n >= 20U);
     for (i = 0U; i < list.n; i++) {
         char path[256];
         Bytebuf raw;
         Ed ed;
-        SagWsResult r;
+        YewWsResult r;
 
         (void)snprintf(path, sizeof(path), "%s/invalid/%s", CORPUS_DIR,
                        list.names[i]);
         bytebuf_init(&raw);
-        SAG_ASSERT(corpus_read(path, &raw));
-        sag_cmd_shutdown();
-        sag_cmd_init();
-        sag_ed_init(&ed);
-        SAG_ASSERT(sag_ed_open_scratch(&ed));
-        sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-        r = sag_state_apply(&ed, raw.data, raw.len);
-        SAG_ASSERT(r == SAG_WS_FRESH || r == SAG_WS_RESTORED ||
-                   r == SAG_WS_RECOVERED);
+        YEW_ASSERT(corpus_read(path, &raw));
+        yew_cmd_shutdown();
+        yew_cmd_init();
+        yew_ed_init(&ed);
+        YEW_ASSERT(yew_ed_open_scratch(&ed));
+        yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+        r = yew_state_apply(&ed, raw.data, raw.len);
+        YEW_ASSERT(r == YEW_WS_FRESH || r == YEW_WS_RESTORED ||
+                   r == YEW_WS_RECOVERED);
         /* The editor is still usable, whatever it decided. */
-        SAG_ASSERT(sag_tab_count(&ed) >= 1);
-        SAG_ASSERT(!ed.quit);
-        sag_ed_free(&ed);
+        YEW_ASSERT(yew_tab_count(&ed) >= 1);
+        YEW_ASSERT(!ed.quit);
+        yew_ed_free(&ed);
         bytebuf_free(&raw);
     }
 }
@@ -1143,19 +1143,19 @@ void test_state_corpus_reemission_is_idempotent(void)
         bytebuf_init(&once);
         bytebuf_init(&twice);
         arena_init(&a);
-        SAG_ASSERT(corpus_read(path, &raw));
-        lit = sag_fl_parse(&a, raw.data, raw.len, &err);
-        SAG_ASSERT_NOT_NULL(lit);
-        sag_fl_emit_init(&e, &once);
-        sag_fl_emit_lit(&e, NULL, lit);
-        sag_fl_emit_done(&e);
-        lit = sag_fl_parse(&a, once.data, once.len, &err);
-        SAG_ASSERT_NOT_NULL(lit);
-        sag_fl_emit_init(&e, &twice);
-        sag_fl_emit_lit(&e, NULL, lit);
-        sag_fl_emit_done(&e);
-        SAG_ASSERT_EQ_U64(twice.len, once.len);
-        SAG_ASSERT_EQ_MEM(twice.data, once.data, once.len);
+        YEW_ASSERT(corpus_read(path, &raw));
+        lit = yew_fl_parse(&a, raw.data, raw.len, &err);
+        YEW_ASSERT_NOT_NULL(lit);
+        yew_fl_emit_init(&e, &once);
+        yew_fl_emit_lit(&e, NULL, lit);
+        yew_fl_emit_done(&e);
+        lit = yew_fl_parse(&a, once.data, once.len, &err);
+        YEW_ASSERT_NOT_NULL(lit);
+        yew_fl_emit_init(&e, &twice);
+        yew_fl_emit_lit(&e, NULL, lit);
+        yew_fl_emit_done(&e);
+        YEW_ASSERT_EQ_U64(twice.len, once.len);
+        YEW_ASSERT_EQ_MEM(twice.data, once.data, once.len);
         arena_free_all(&a);
         bytebuf_free(&raw);
         bytebuf_free(&once);

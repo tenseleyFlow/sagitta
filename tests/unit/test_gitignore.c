@@ -49,7 +49,7 @@ static void gi_remove(GiFix *f)
 
 static GiSet *gi_rules(GiFix *f, const char *text)
 {
-    return sag_gi_compile(&f->a, NULL, text, (u64)strlen(text), NULL);
+    return yew_gi_compile(&f->a, NULL, text, (u64)strlen(text), NULL);
 }
 
 /* ---------------------------------------------------------------- */
@@ -68,11 +68,11 @@ void test_gitignore_blank_lines_and_comments(void)
                  "   \n"
                  "*.o\n"
                  "\t# indented comment\n");
-    SAG_ASSERT(sag_gi_match(g, "a.o", false));
-    SAG_ASSERT(!sag_gi_match(g, "a.c", false));
+    YEW_ASSERT(yew_gi_match(g, "a.o", false));
+    YEW_ASSERT(!yew_gi_match(g, "a.c", false));
     /* The comment text is not a rule. */
-    SAG_ASSERT(!sag_gi_match(g, "a comment", false));
-    SAG_ASSERT(!sag_gi_match(g, "# a comment", false));
+    YEW_ASSERT(!yew_gi_match(g, "a comment", false));
+    YEW_ASSERT(!yew_gi_match(g, "# a comment", false));
     gi_remove(&f);
 }
 
@@ -85,8 +85,8 @@ void test_gitignore_escaped_hash_is_a_literal(void)
 
     gi_make(&f);
     g = gi_rules(&f, "\\#notacomment\n");
-    SAG_ASSERT(sag_gi_match(g, "#notacomment", false));
-    SAG_ASSERT(!sag_gi_match(g, "notacomment", false));
+    YEW_ASSERT(yew_gi_match(g, "#notacomment", false));
+    YEW_ASSERT(!yew_gi_match(g, "notacomment", false));
     gi_remove(&f);
 }
 
@@ -99,13 +99,13 @@ void test_gitignore_trailing_whitespace_is_stripped_unless_escaped(void)
 
     gi_make(&f);
     g = gi_rules(&f, "plain.txt   \n");
-    SAG_ASSERT(sag_gi_match(g, "plain.txt", false));
+    YEW_ASSERT(yew_gi_match(g, "plain.txt", false));
     gi_remove(&f);
 
     gi_make(&f);
     g = gi_rules(&f, "spaced\\ \n");
-    SAG_ASSERT(sag_gi_match(g, "spaced ", false));
-    SAG_ASSERT(!sag_gi_match(g, "spaced", false));
+    YEW_ASSERT(yew_gi_match(g, "spaced ", false));
+    YEW_ASSERT(!yew_gi_match(g, "spaced", false));
     gi_remove(&f);
 }
 
@@ -117,9 +117,9 @@ void test_gitignore_leading_slash_anchors(void)
 
     gi_make(&f);
     g = gi_rules(&f, "/build\n");
-    SAG_ASSERT(sag_gi_match(g, "build", true));
+    YEW_ASSERT(yew_gi_match(g, "build", true));
     /* Anchored, so a `build` further down is NOT ignored. */
-    SAG_ASSERT(!sag_gi_match(g, "src/build", true));
+    YEW_ASSERT(!yew_gi_match(g, "src/build", true));
     gi_remove(&f);
 }
 
@@ -131,10 +131,10 @@ void test_gitignore_unanchored_matches_any_component(void)
 
     gi_make(&f);
     g = gi_rules(&f, "build\n");
-    SAG_ASSERT(sag_gi_match(g, "build", true));
-    SAG_ASSERT(sag_gi_match(g, "src/build", true));
-    SAG_ASSERT(sag_gi_match(g, "a/b/c/build", true));
-    SAG_ASSERT(!sag_gi_match(g, "rebuild", true));
+    YEW_ASSERT(yew_gi_match(g, "build", true));
+    YEW_ASSERT(yew_gi_match(g, "src/build", true));
+    YEW_ASSERT(yew_gi_match(g, "a/b/c/build", true));
+    YEW_ASSERT(!yew_gi_match(g, "rebuild", true));
     gi_remove(&f);
 }
 
@@ -146,9 +146,9 @@ void test_gitignore_trailing_slash_is_directory_only(void)
 
     gi_make(&f);
     g = gi_rules(&f, "logs/\n");
-    SAG_ASSERT(sag_gi_match(g, "logs", true));
+    YEW_ASSERT(yew_gi_match(g, "logs", true));
     /* A FILE named `logs` is not ignored by `logs/`. */
-    SAG_ASSERT(!sag_gi_match(g, "logs", false));
+    YEW_ASSERT(!yew_gi_match(g, "logs", false));
     gi_remove(&f);
 }
 
@@ -160,9 +160,9 @@ void test_gitignore_star_does_not_cross_a_slash(void)
 
     gi_make(&f);
     g = gi_rules(&f, "/src/*.c\n");
-    SAG_ASSERT(sag_gi_match(g, "src/main.c", false));
+    YEW_ASSERT(yew_gi_match(g, "src/main.c", false));
     /* One level deeper: `*` cannot reach it. */
-    SAG_ASSERT(!sag_gi_match(g, "src/ui/draw.c", false));
+    YEW_ASSERT(!yew_gi_match(g, "src/ui/draw.c", false));
     gi_remove(&f);
 }
 
@@ -174,14 +174,14 @@ void test_gitignore_question_matches_one_byte(void)
 
     gi_make(&f);
     g = gi_rules(&f, "/a?.txt\n");
-    SAG_ASSERT(sag_gi_match(g, "ab.txt", false));
-    SAG_ASSERT(!sag_gi_match(g, "a.txt", false));
-    SAG_ASSERT(!sag_gi_match(g, "abc.txt", false));
+    YEW_ASSERT(yew_gi_match(g, "ab.txt", false));
+    YEW_ASSERT(!yew_gi_match(g, "a.txt", false));
+    YEW_ASSERT(!yew_gi_match(g, "abc.txt", false));
     gi_remove(&f);
 
     gi_make(&f);
     g = gi_rules(&f, "/a?b\n");
-    SAG_ASSERT(!sag_gi_match(g, "a/b", false));
+    YEW_ASSERT(!yew_gi_match(g, "a/b", false));
     gi_remove(&f);
 }
 
@@ -192,28 +192,28 @@ void test_gitignore_bracket_sets(void)
 
     gi_make(&f);
     g = gi_rules(&f, "/f[abc].txt\n");
-    SAG_ASSERT(sag_gi_match(g, "fa.txt", false));
-    SAG_ASSERT(sag_gi_match(g, "fc.txt", false));
-    SAG_ASSERT(!sag_gi_match(g, "fd.txt", false));
+    YEW_ASSERT(yew_gi_match(g, "fa.txt", false));
+    YEW_ASSERT(yew_gi_match(g, "fc.txt", false));
+    YEW_ASSERT(!yew_gi_match(g, "fd.txt", false));
     gi_remove(&f);
 
     gi_make(&f);
     g = gi_rules(&f, "/f[a-z].txt\n");
-    SAG_ASSERT(sag_gi_match(g, "fm.txt", false));
-    SAG_ASSERT(!sag_gi_match(g, "fM.txt", false));
+    YEW_ASSERT(yew_gi_match(g, "fm.txt", false));
+    YEW_ASSERT(!yew_gi_match(g, "fM.txt", false));
     gi_remove(&f);
 
     /* Both spellings of negation. */
     gi_make(&f);
     g = gi_rules(&f, "/f[!a-z].txt\n");
-    SAG_ASSERT(sag_gi_match(g, "fM.txt", false));
-    SAG_ASSERT(!sag_gi_match(g, "fm.txt", false));
+    YEW_ASSERT(yew_gi_match(g, "fM.txt", false));
+    YEW_ASSERT(!yew_gi_match(g, "fm.txt", false));
     gi_remove(&f);
 
     gi_make(&f);
     g = gi_rules(&f, "/f[^a-z].txt\n");
-    SAG_ASSERT(sag_gi_match(g, "f0.txt", false));
-    SAG_ASSERT(!sag_gi_match(g, "fq.txt", false));
+    YEW_ASSERT(yew_gi_match(g, "f0.txt", false));
+    YEW_ASSERT(!yew_gi_match(g, "fq.txt", false));
     gi_remove(&f);
 }
 
@@ -226,26 +226,26 @@ void test_gitignore_double_star(void)
     /* Prefix: at any depth. */
     gi_make(&f);
     g = gi_rules(&f, "**/target\n");
-    SAG_ASSERT(sag_gi_match(g, "target", true));
-    SAG_ASSERT(sag_gi_match(g, "a/target", true));
-    SAG_ASSERT(sag_gi_match(g, "a/b/target", true));
+    YEW_ASSERT(yew_gi_match(g, "target", true));
+    YEW_ASSERT(yew_gi_match(g, "a/target", true));
+    YEW_ASSERT(yew_gi_match(g, "a/b/target", true));
     gi_remove(&f);
 
     /* Suffix: everything beneath. */
     gi_make(&f);
     g = gi_rules(&f, "/logs/**\n");
-    SAG_ASSERT(sag_gi_match(g, "logs/a.txt", false));
-    SAG_ASSERT(sag_gi_match(g, "logs/a/b/c.txt", false));
-    SAG_ASSERT(!sag_gi_match(g, "other/a.txt", false));
+    YEW_ASSERT(yew_gi_match(g, "logs/a.txt", false));
+    YEW_ASSERT(yew_gi_match(g, "logs/a/b/c.txt", false));
+    YEW_ASSERT(!yew_gi_match(g, "other/a.txt", false));
     gi_remove(&f);
 
     /* Interior: any number of segments between. */
     gi_make(&f);
     g = gi_rules(&f, "/a/**/b\n");
-    SAG_ASSERT(sag_gi_match(g, "a/b", false));
-    SAG_ASSERT(sag_gi_match(g, "a/x/b", false));
-    SAG_ASSERT(sag_gi_match(g, "a/x/y/z/b", false));
-    SAG_ASSERT(!sag_gi_match(g, "a/x/c", false));
+    YEW_ASSERT(yew_gi_match(g, "a/b", false));
+    YEW_ASSERT(yew_gi_match(g, "a/x/b", false));
+    YEW_ASSERT(yew_gi_match(g, "a/x/y/z/b", false));
+    YEW_ASSERT(!yew_gi_match(g, "a/x/c", false));
     gi_remove(&f);
 }
 
@@ -257,8 +257,8 @@ void test_gitignore_negation_last_match_wins(void)
 
     gi_make(&f);
     g = gi_rules(&f, "*.log\n!keep.log\n");
-    SAG_ASSERT(sag_gi_match(g, "a.log", false));
-    SAG_ASSERT(!sag_gi_match(g, "keep.log", false));
+    YEW_ASSERT(yew_gi_match(g, "a.log", false));
+    YEW_ASSERT(!yew_gi_match(g, "keep.log", false));
     gi_remove(&f);
 
     /* ORDER matters: reversing the two makes everything ignored, which
@@ -266,8 +266,8 @@ void test_gitignore_negation_last_match_wins(void)
      * "any negation wins". */
     gi_make(&f);
     g = gi_rules(&f, "!keep.log\n*.log\n");
-    SAG_ASSERT(sag_gi_match(g, "a.log", false));
-    SAG_ASSERT(sag_gi_match(g, "keep.log", false));
+    YEW_ASSERT(yew_gi_match(g, "a.log", false));
+    YEW_ASSERT(yew_gi_match(g, "keep.log", false));
     gi_remove(&f);
 }
 
@@ -280,13 +280,13 @@ void test_gitignore_nested_sets_deepest_wins(void)
     GiSet *nested;
 
     gi_make(&f);
-    root = sag_gi_compile(&f.a, NULL, "*.log\n", 6U, NULL);
-    nested = sag_gi_compile(&f.a, "sub", "!important.log\n", 15U, root);
+    root = yew_gi_compile(&f.a, NULL, "*.log\n", 6U, NULL);
+    nested = yew_gi_compile(&f.a, "sub", "!important.log\n", 15U, root);
     /* The root rule still applies elsewhere... */
-    SAG_ASSERT(sag_gi_match(nested, "a.log", false));
-    SAG_ASSERT(sag_gi_match(nested, "sub/other.log", false));
+    YEW_ASSERT(yew_gi_match(nested, "a.log", false));
+    YEW_ASSERT(yew_gi_match(nested, "sub/other.log", false));
     /* ...and the deeper file re-includes only inside its own tree. */
-    SAG_ASSERT(!sag_gi_match(nested, "sub/important.log", false));
+    YEW_ASSERT(!yew_gi_match(nested, "sub/important.log", false));
     gi_remove(&f);
 }
 
@@ -298,12 +298,12 @@ void test_gitignore_nested_anchoring_is_relative_to_its_directory(void)
     GiSet *nested;
 
     gi_make(&f);
-    root = sag_gi_compile(&f.a, NULL, "\n", 1U, NULL);
-    nested = sag_gi_compile(&f.a, "sub", "/build\n", 7U, root);
-    SAG_ASSERT(sag_gi_match(nested, "sub/build", true));
+    root = yew_gi_compile(&f.a, NULL, "\n", 1U, NULL);
+    nested = yew_gi_compile(&f.a, "sub", "/build\n", 7U, root);
+    YEW_ASSERT(yew_gi_match(nested, "sub/build", true));
     /* Not the root's `build`, and not a deeper one. */
-    SAG_ASSERT(!sag_gi_match(nested, "build", true));
-    SAG_ASSERT(!sag_gi_match(nested, "sub/x/build", true));
+    YEW_ASSERT(!yew_gi_match(nested, "build", true));
+    YEW_ASSERT(!yew_gi_match(nested, "sub/x/build", true));
     gi_remove(&f);
 }
 
@@ -315,8 +315,8 @@ void test_gitignore_crlf_lines(void)
 
     gi_make(&f);
     g = gi_rules(&f, "*.o\r\nbuild/\r\n");
-    SAG_ASSERT(sag_gi_match(g, "a.o", false));
-    SAG_ASSERT(sag_gi_match(g, "build", true));
+    YEW_ASSERT(yew_gi_match(g, "a.o", false));
+    YEW_ASSERT(yew_gi_match(g, "build", true));
     gi_remove(&f);
 }
 
@@ -347,15 +347,15 @@ void test_gitignore_posix_classes_are_not_supported(void)
     gi_make(&f);
     g = gi_rules(&f, "/f[[:alpha:]].txt\n");
     /* A real POSIX class would match every letter.  None of these. */
-    SAG_ASSERT(!sag_gi_match(g, "fz.txt", false));
-    SAG_ASSERT(!sag_gi_match(g, "fa.txt", false));
-    SAG_ASSERT(!sag_gi_match(g, "fp.txt", false));
+    YEW_ASSERT(!yew_gi_match(g, "fz.txt", false));
+    YEW_ASSERT(!yew_gi_match(g, "fa.txt", false));
+    YEW_ASSERT(!yew_gi_match(g, "fp.txt", false));
     /* What it actually does: one byte from the set, then a literal `]`. */
-    SAG_ASSERT(sag_gi_match(g, "fa].txt", false));
-    SAG_ASSERT(sag_gi_match(g, "f:].txt", false));
-    SAG_ASSERT(sag_gi_match(g, "f[].txt", false));
+    YEW_ASSERT(yew_gi_match(g, "fa].txt", false));
+    YEW_ASSERT(yew_gi_match(g, "f:].txt", false));
+    YEW_ASSERT(yew_gi_match(g, "f[].txt", false));
     /* And a byte outside the set still does not match. */
-    SAG_ASSERT(!sag_gi_match(g, "fz].txt", false));
+    YEW_ASSERT(!yew_gi_match(g, "fz].txt", false));
     gi_remove(&f);
 }
 
@@ -372,10 +372,10 @@ void test_gitignore_matching_is_case_sensitive(void)
 
     gi_make(&f);
     g = gi_rules(&f, "*.log\n");
-    SAG_ASSERT(sag_gi_match(g, "a.log", false));
+    YEW_ASSERT(yew_gi_match(g, "a.log", false));
     /* git with core.ignorecase=true would ignore this one; we do not. */
-    SAG_ASSERT(!sag_gi_match(g, "a.LOG", false));
-    SAG_ASSERT(!sag_gi_match(g, "A.Log", false));
+    YEW_ASSERT(!yew_gi_match(g, "a.LOG", false));
+    YEW_ASSERT(!yew_gi_match(g, "A.Log", false));
     gi_remove(&f);
 }
 
@@ -396,7 +396,7 @@ void test_gitignore_has_no_index_awareness(void)
     g = gi_rules(&f, "config.h\n");
     /* Even if `config.h` were `git add`ed, this still reports ignored:
      * the matcher is a pure function of the rules and the path. */
-    SAG_ASSERT(sag_gi_match(g, "config.h", false));
+    YEW_ASSERT(yew_gi_match(g, "config.h", false));
     gi_remove(&f);
 }
 
@@ -409,8 +409,8 @@ void test_gitignore_unterminated_bracket_is_a_literal(void)
 
     gi_make(&f);
     g = gi_rules(&f, "/a[bc.txt\n");
-    SAG_ASSERT(sag_gi_match(g, "a[bc.txt", false));
-    SAG_ASSERT(!sag_gi_match(g, "ab.txt", false));
+    YEW_ASSERT(yew_gi_match(g, "a[bc.txt", false));
+    YEW_ASSERT(!yew_gi_match(g, "ab.txt", false));
     gi_remove(&f);
 }
 
@@ -430,8 +430,8 @@ void test_gitignore_prunable_when_nothing_could_re_include(void)
 
     gi_make(&f);
     g = gi_rules(&f, "node_modules/\n*.o\n");
-    SAG_ASSERT(sag_gi_match(g, "node_modules", true));
-    SAG_ASSERT(sag_gi_prunable(g, "node_modules"));
+    YEW_ASSERT(yew_gi_match(g, "node_modules", true));
+    YEW_ASSERT(yew_gi_prunable(g, "node_modules"));
     gi_remove(&f);
 }
 
@@ -451,8 +451,8 @@ void test_gitignore_not_prunable_when_a_negation_reaches_inside(void)
 
     gi_make(&f);
     g = gi_rules(&f, "node_modules/\n!node_modules/keep.js\n");
-    SAG_ASSERT(sag_gi_match(g, "node_modules", true));
-    SAG_ASSERT(!sag_gi_prunable(g, "node_modules"));
+    YEW_ASSERT(yew_gi_match(g, "node_modules", true));
+    YEW_ASSERT(!yew_gi_prunable(g, "node_modules"));
     gi_remove(&f);
 }
 
@@ -465,8 +465,8 @@ void test_gitignore_unanchored_negation_blocks_pruning(void)
 
     gi_make(&f);
     g = gi_rules(&f, "build/\n!keep.txt\n");
-    SAG_ASSERT(sag_gi_match(g, "build", true));
-    SAG_ASSERT(!sag_gi_prunable(g, "build"));
+    YEW_ASSERT(yew_gi_match(g, "build", true));
+    YEW_ASSERT(!yew_gi_prunable(g, "build"));
     gi_remove(&f);
 }
 
@@ -478,7 +478,7 @@ void test_gitignore_wildcard_negation_blocks_pruning(void)
 
     gi_make(&f);
     g = gi_rules(&f, "vendor/\n!*.md\n");
-    SAG_ASSERT(!sag_gi_prunable(g, "vendor"));
+    YEW_ASSERT(!yew_gi_prunable(g, "vendor"));
     gi_remove(&f);
 }
 
@@ -491,7 +491,7 @@ void test_gitignore_unignored_directory_is_not_prunable(void)
 
     gi_make(&f);
     g = gi_rules(&f, "node_modules/\n");
-    SAG_ASSERT(!sag_gi_prunable(g, "src"));
+    YEW_ASSERT(!yew_gi_prunable(g, "src"));
     gi_remove(&f);
 }
 
@@ -508,19 +508,19 @@ void test_gitignore_load_reads_a_file(void)
     FILE *fp;
 
     gi_make(&f);
-    (void)snprintf(dir, sizeof(dir), "/tmp/sag-gi-XXXXXX");
-    SAG_ASSERT_NOT_NULL(mkdtemp(dir));
-    SAG_ASSERT(snprintf(path, sizeof(path), "%s/.gitignore", dir) > 0);
+    (void)snprintf(dir, sizeof(dir), "/tmp/yew-gi-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(dir));
+    YEW_ASSERT(snprintf(path, sizeof(path), "%s/.gitignore", dir) > 0);
     fp = fopen(path, "wb");
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     (void)fputs("*.tmp\nbuild/\n", fp);
     (void)fclose(fp);
 
-    g = sag_gi_load(&f.a, dir, NULL);
-    SAG_ASSERT_NOT_NULL(g);
-    SAG_ASSERT(sag_gi_match(g, "x.tmp", false));
-    SAG_ASSERT(sag_gi_match(g, "build", true));
-    SAG_ASSERT(!sag_gi_match(g, "x.c", false));
+    g = yew_gi_load(&f.a, dir, NULL);
+    YEW_ASSERT_NOT_NULL(g);
+    YEW_ASSERT(yew_gi_match(g, "x.tmp", false));
+    YEW_ASSERT(yew_gi_match(g, "build", true));
+    YEW_ASSERT(!yew_gi_match(g, "x.c", false));
 
     (void)unlink(path);
     (void)rmdir(dir);
@@ -539,13 +539,13 @@ void test_gitignore_absent_file_returns_the_parent(void)
     char dir[128];
 
     gi_make(&f);
-    (void)snprintf(dir, sizeof(dir), "/tmp/sag-gi-XXXXXX");
-    SAG_ASSERT_NOT_NULL(mkdtemp(dir));
+    (void)snprintf(dir, sizeof(dir), "/tmp/yew-gi-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(dir));
     parent = gi_rules(&f, "*.o\n");
-    g = sag_gi_load(&f.a, dir, parent);
-    SAG_ASSERT(g == parent);
+    g = yew_gi_load(&f.a, dir, parent);
+    YEW_ASSERT(g == parent);
     /* And a set whose every line is a comment is not a set either. */
-    SAG_ASSERT(sag_gi_compile(&f.a, NULL, "# nothing\n", 10U, parent) ==
+    YEW_ASSERT(yew_gi_compile(&f.a, NULL, "# nothing\n", 10U, parent) ==
                parent);
     (void)rmdir(dir);
     gi_remove(&f);
@@ -558,13 +558,13 @@ void test_gitignore_degenerate_inputs(void)
     GiSet *g;
 
     gi_make(&f);
-    SAG_ASSERT_NULL(sag_gi_load(&f.a, NULL, NULL));
-    SAG_ASSERT_NULL(sag_gi_compile(&f.a, NULL, NULL, 0U, NULL));
-    SAG_ASSERT(!sag_gi_match(NULL, "a.txt", false));
-    SAG_ASSERT(!sag_gi_prunable(NULL, "a"));
+    YEW_ASSERT_NULL(yew_gi_load(&f.a, NULL, NULL));
+    YEW_ASSERT_NULL(yew_gi_compile(&f.a, NULL, NULL, 0U, NULL));
+    YEW_ASSERT(!yew_gi_match(NULL, "a.txt", false));
+    YEW_ASSERT(!yew_gi_prunable(NULL, "a"));
     g = gi_rules(&f, "*.o\n");
-    SAG_ASSERT(!sag_gi_match(g, "", false));
-    SAG_ASSERT(!sag_gi_match(g, NULL, false));
-    SAG_ASSERT(!sag_gi_prunable(g, ""));
+    YEW_ASSERT(!yew_gi_match(g, "", false));
+    YEW_ASSERT(!yew_gi_match(g, NULL, false));
+    YEW_ASSERT(!yew_gi_prunable(g, ""));
     gi_remove(&f);
 }

@@ -92,7 +92,7 @@ static void live_remove(Pty *p)
     }
 }
 
-bool sag_pty_spawn(Pty *p, const PtySpec *sp)
+bool yew_pty_spawn(Pty *p, const PtySpec *sp)
 {
     char sname[128];
     struct termios initial_termios;
@@ -301,7 +301,7 @@ static i64 quiet_scale(void)
     static i64 scale;
 
     if (scale == 0) {
-        const char *v = getenv("SAG_PTY_QUIET_SCALE");
+        const char *v = getenv("YEW_PTY_QUIET_SCALE");
         long parsed = v != NULL ? strtol(v, NULL, 10) : 1;
 
         scale = parsed >= 1 && parsed <= 100 ? (i64)parsed : 1;
@@ -420,12 +420,12 @@ bool ptc_env_build(char **envp, const char *colors, const char *state_dir,
                    const char *no_color, const char *ascii)
 {
     static const char *const keys[] = {
-        "TERM", "SAG_COLORS", "SAG_TTY_PROBE", "SAG_PROBE_TIMEOUT_MS",
-        "SAG_ESC_TIMEOUT_MS", "XDG_STATE_HOME", "LANG", "LC_ALL",
-        "SAG_LOG_LEVEL", "SAG_JOB_ELAPSED_MS", "SHELL",
-        "SAG_PICKERS_NOW",
+        "TERM", "YEW_COLORS", "YEW_TTY_PROBE", "YEW_PROBE_TIMEOUT_MS",
+        "YEW_ESC_TIMEOUT_MS", "XDG_STATE_HOME", "LANG", "LC_ALL",
+        "YEW_LOG_LEVEL", "YEW_JOB_ELAPSED_MS", "SHELL",
+        "YEW_PICKERS_NOW",
         /* Sprint 27 §7's degradation variants. */
-        "NO_COLOR", "SAG_ASCII"
+        "NO_COLOR", "YEW_ASCII"
     };
     const char *values[] = {
         "xterm-256color", colors, "1", "500", "25", state_dir,
@@ -444,12 +444,12 @@ bool ptc_env_build(char **envp, const char *colors, const char *state_dir,
     };
     size_t i;
 
-    _Static_assert(SAG_ARRAY_LEN(keys) == SAG_PTY_ENV_COUNT,
-                   "SAG_PTY_ENV_COUNT must match the key table");
+    _Static_assert(YEW_ARRAY_LEN(keys) == YEW_PTY_ENV_COUNT,
+                   "YEW_PTY_ENV_COUNT must match the key table");
     if (envp == NULL || colors == NULL || state_dir == NULL ||
         no_color == NULL || ascii == NULL)
         return false;
-    for (i = 0U; i < SAG_ARRAY_LEN(keys); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(keys); i++) {
         envp[i] = env_pair(keys[i], values[i]);
         if (envp[i] == NULL) {
             while (i != 0U)
@@ -457,7 +457,7 @@ bool ptc_env_build(char **envp, const char *colors, const char *state_dir,
             return false;
         }
     }
-    envp[SAG_ARRAY_LEN(keys)] = NULL;
+    envp[YEW_ARRAY_LEN(keys)] = NULL;
     return true;
 }
 
@@ -467,11 +467,11 @@ void ptc_env_free(char **envp)
 
     if (envp == NULL)
         return;
-    for (i = 0U; i < SAG_PTY_ENV_COUNT; i++) {
+    for (i = 0U; i < YEW_PTY_ENV_COUNT; i++) {
         free(envp[i]);
         envp[i] = NULL;
     }
-    envp[SAG_PTY_ENV_COUNT] = NULL;
+    envp[YEW_PTY_ENV_COUNT] = NULL;
 }
 
 static void strv_free(char **v)
@@ -488,7 +488,7 @@ static void strv_free(char **v)
 void ptc_spawn(PtyCtx *c, const char *bin, ...)
 {
     char **argv;
-    char *envp[SAG_PTY_ENV_COUNT + 1U];
+    char *envp[YEW_PTY_ENV_COUNT + 1U];
     PtySpec spec;
     va_list ap;
     va_list count_ap;
@@ -536,7 +536,7 @@ void ptc_spawn(PtyCtx *c, const char *bin, ...)
     spec.cwd = c->cwd;
     /*
      * The runner is invoked with a RELATIVE binary path
-     * (`--sagitta build/sagitta`), and the child chdirs before
+     * (`--yew build/yew`), and the child chdirs before
      * execve — so the path has to be resolved here, while we are still
      * in the directory it is relative to.  Without this the child
      * exec'd nothing and exited 127, which surfaced as "child exited
@@ -567,7 +567,7 @@ void ptc_spawn(PtyCtx *c, const char *bin, ...)
     spec.rows = c->test->rows;
     spec.cols = c->test->cols;
     spec.budget_ms = c->budget_ms;
-    if (!sag_pty_spawn(&c->pty, &spec))
+    if (!yew_pty_spawn(&c->pty, &spec))
         ptc_fail(c, "spawn %s: %s", bin, strerror(errno));
     else
         c->spawned = true;
@@ -727,17 +727,17 @@ static bool name_equal(const char *a, size_t na, const char *b)
 static bool token_modifier(const char *s, size_t n, u16 *mods)
 {
     if (name_equal(s, n, "shift"))
-        *mods = (u16)(*mods | SAG_MOD_SHIFT);
+        *mods = (u16)(*mods | YEW_MOD_SHIFT);
     else if (name_equal(s, n, "alt"))
-        *mods = (u16)(*mods | SAG_MOD_ALT);
+        *mods = (u16)(*mods | YEW_MOD_ALT);
     else if (name_equal(s, n, "ctrl"))
-        *mods = (u16)(*mods | SAG_MOD_CTRL);
+        *mods = (u16)(*mods | YEW_MOD_CTRL);
     else if (name_equal(s, n, "super"))
-        *mods = (u16)(*mods | SAG_MOD_SUPER);
+        *mods = (u16)(*mods | YEW_MOD_SUPER);
     else if (name_equal(s, n, "hyper"))
-        *mods = (u16)(*mods | SAG_MOD_HYPER);
+        *mods = (u16)(*mods | YEW_MOD_HYPER);
     else if (name_equal(s, n, "meta"))
-        *mods = (u16)(*mods | SAG_MOD_META);
+        *mods = (u16)(*mods | YEW_MOD_META);
     else
         return false;
     return true;
@@ -768,7 +768,7 @@ static bool key_parse(const char *token, size_t len, u16 *mods,
         *kitty = *scalar;
         return true;
     }
-    for (i = 0U; i < SAG_ARRAY_LEN(key_names); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(key_names); i++) {
         if (name_equal(part, (size_t)(end - part), key_names[i].name)) {
             *kitty = key_names[i].kitty;
             *legacy = key_names[i].legacy;
@@ -846,9 +846,9 @@ static void emit_key(PtyCtx *c, Bytebuf *burst,
         u8 bytes[2];
         size_t nb = 0U;
 
-        if ((mods & SAG_MOD_ALT) != 0U)
+        if ((mods & YEW_MOD_ALT) != 0U)
             bytes[nb++] = 0x1bU;
-        if ((mods & SAG_MOD_CTRL) != 0U &&
+        if ((mods & YEW_MOD_CTRL) != 0U &&
             ((scalar >= 'a' && scalar <= 'z') ||
              (scalar >= 'A' && scalar <= 'Z')))
             bytes[nb++] = (u8)((tolower(scalar) - 'a') + 1);
@@ -1116,7 +1116,7 @@ static bool enter_suspend(PtyCtx *c, bool through_command)
         return false;
     ptc_allow_restore(c);
     raw_before = c->raw.len;
-    restore = sag_tty_restore_blob(&restore_len);
+    restore = yew_tty_restore_blob(&restore_len);
     if (through_command) {
         ptc_keys(c, "ctrl+z");
     } else if (kill(c->pty.pid, SIGTSTP) != 0) {
@@ -1272,13 +1272,13 @@ const char *ptc_demo_bin(const PtyCtx *c)
     return c == NULL ? NULL : c->demo_bin;
 }
 
-const char *ptc_sagitta_bin(const PtyCtx *c)
+const char *ptc_yew_bin(const PtyCtx *c)
 {
-    return c == NULL ? NULL : c->sagitta_bin;
+    return c == NULL ? NULL : c->yew_bin;
 }
 
 void ptc_init(PtyCtx *c, const PtyCase *test, const char *state_dir,
-              const char *demo_bin, const char *sagitta_bin,
+              const char *demo_bin, const char *yew_bin,
               i64 budget_ms, i64 global_deadline_ms)
 {
     VtProfile profile;
@@ -1313,7 +1313,7 @@ void ptc_init(PtyCtx *c, const PtyCase *test, const char *state_dir,
         c->state_dir = copy_string(state_dir);
     }
     c->demo_bin = demo_bin;
-    c->sagitta_bin = sagitta_bin;
+    c->yew_bin = yew_bin;
     c->budget_ms = budget_ms > 0 ? budget_ms : PTC_DEFAULT_BUDGET_MS;
     c->global_deadline_ms = global_deadline_ms;
     bytebuf_init(&c->raw);
@@ -1463,7 +1463,7 @@ void ptc_resume(PtyCtx *c, const char *bin, ...)
     c->pty.reaped = false;
 
     va_start(ap, bin);
-    while (n < SAG_ARRAY_LEN(args) - 1U) {
+    while (n < YEW_ARRAY_LEN(args) - 1U) {
         const char *arg = va_arg(ap, const char *);
 
         if (arg == NULL)

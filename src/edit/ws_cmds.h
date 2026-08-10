@@ -1,5 +1,5 @@
-#ifndef SAG_EDIT_WS_CMDS_H
-#define SAG_EDIT_WS_CMDS_H
+#ifndef YEW_EDIT_WS_CMDS_H
+#define YEW_EDIT_WS_CMDS_H
 
 /*
  * Sprint 25 §9: the workspace-state commands.
@@ -19,7 +19,7 @@ typedef struct Ed Ed;
 
 /*
  * The forget confirmation.  A separate prompt rather than a reuse of
- * SAG_PROMPT_*: those all answer "what about these unsaved bytes", and
+ * YEW_PROMPT_*: those all answer "what about these unsaved bytes", and
  * this one answers "delete a cache", which must never share a keystroke
  * with them.
  */
@@ -28,18 +28,18 @@ typedef struct WsPrompt {
 } WsPrompt;
 
 /* True when the key was consumed by the prompt. */
-bool sag_ws_prompt_key(Ed *ed, u8 answer);
+bool yew_ws_prompt_key(Ed *ed, u8 answer);
 
-CmdStatus sag_ws_cmd_save_state(CmdCtx *cx);
-CmdStatus sag_ws_cmd_restore_state(CmdCtx *cx);
-CmdStatus sag_ws_cmd_info(CmdCtx *cx);
-CmdStatus sag_ws_cmd_forget(CmdCtx *cx);
+CmdStatus yew_ws_cmd_save_state(CmdCtx *cx);
+CmdStatus yew_ws_cmd_restore_state(CmdCtx *cx);
+CmdStatus yew_ws_cmd_info(CmdCtx *cx);
+CmdStatus yew_ws_cmd_forget(CmdCtx *cx);
 
 /*
  * Removes a workspace state directory.  Refuses any path that is not
  * under .../workspaces/, which is the belt to the braces of only ever
- * being handed one computed by sag_ws_key.
+ * being handed one computed by yew_ws_key.
  */
-bool sag_ws_forget_dir(const char *dir);
+bool yew_ws_forget_dir(const char *dir);
 
 #endif

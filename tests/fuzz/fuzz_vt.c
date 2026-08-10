@@ -24,7 +24,7 @@ static bool fuzz_fail(char *why, size_t cap, const char *message, size_t at)
 
 static const char *tier_256(const char *name)
 {
-    return strcmp(name, "SAG_COLORS") == 0 ? "256" : NULL;
+    return strcmp(name, "YEW_COLORS") == 0 ? "256" : NULL;
 }
 
 static const u8 *grid_cell_bytes(const Grid *grid, const Cell *cell,
@@ -33,7 +33,7 @@ static const u8 *grid_cell_bytes(const Grid *grid, const Cell *cell,
     size_t n;
 
     if ((cell->flags & CELL_INTERNED) != 0U) {
-        const char *text = sag_intern_str(grid->gi, cell->id);
+        const char *text = yew_intern_str(grid->gi, cell->id);
 
         if (text == NULL) {
             *len = 0U;
@@ -52,11 +52,11 @@ static const u8 *grid_cell_bytes(const Grid *grid, const Cell *cell,
 
 static u16 expected_attrs(u16 attrs)
 {
-    if ((attrs & SAG_ATTR_INVALID_BYTE) != 0U)
-        attrs |= SAG_ATTR_REVERSE;
+    if ((attrs & YEW_ATTR_INVALID_BYTE) != 0U)
+        attrs |= YEW_ATTR_REVERSE;
     attrs &= 0x03ffU;
-    if ((attrs & SAG_ATTR_UNDERCURL) != 0U)
-        attrs &= (u16)~SAG_ATTR_UNDERLINE;
+    if ((attrs & YEW_ATTR_UNDERCURL) != 0U)
+        attrs &= (u16)~YEW_ATTR_UNDERLINE;
     return attrs;
 }
 
@@ -100,9 +100,9 @@ static bool screens_equal(const Grid *grid, const VtScreen *vt,
     return true;
 }
 
-static SagColor fuzz_indexed(u8 byte)
+static YewColor fuzz_indexed(u8 byte)
 {
-    SagColor color = {SAG_COLOR_INDEXED, byte, 0U, 0U};
+    YewColor color = {YEW_COLOR_INDEXED, byte, 0U, 0U};
 
     if ((byte & 3U) == 0U)
         memset(&color, 0, sizeof(color));
@@ -123,8 +123,8 @@ static void mutate_grid(Grid *grid, const u8 *data, size_t len, size_t *pos)
     u8 c = *pos < len ? data[(*pos)++] : (u8)(op * 31U);
     u16 row = (u16)(a % grid->rows);
     u16 col = (u16)(b % grid->cols);
-    SagColor fg = fuzz_indexed(b);
-    SagColor bg = fuzz_indexed(c);
+    YewColor fg = fuzz_indexed(b);
+    YewColor bg = fuzz_indexed(c);
     u16 attrs = (u16)(((u16)a << 8U | b) & 0x03ffU);
     const u8 *text = ascii;
     size_t text_len = sizeof(ascii) - 1U;
@@ -149,20 +149,20 @@ static void mutate_grid(Grid *grid, const u8 *data, size_t len, size_t *pos)
         fill.bg = bg;
         fill.attrs = attrs;
         fill.utf8[0] = (u8)('a' + c % 26U);
-        sag_grid_fill(grid, row, col,
+        yew_grid_fill(grid, row, col,
                       (u16)(col + 1U + c % (grid->cols - col)), fill);
         return;
     }
     case 4U:
-        sag_grid_cursor(grid, row, col, (c & 1U) != 0U);
+        yew_grid_cursor(grid, row, col, (c & 1U) != 0U);
         return;
     case 5U:
-        sag_grid_clear(grid);
+        yew_grid_clear(grid);
         return;
     default:
         break;
     }
-    (void)sag_grid_puts(grid, row, col, text, text_len, fg, bg, attrs);
+    (void)yew_grid_puts(grid, row, col, text, text_len, fg, bg, attrs);
 }
 
 static bool check_random_parser(const u8 *data, size_t len,
@@ -210,7 +210,7 @@ static bool check_render_roundtrip(const u8 *data, size_t len,
 
     arena_init(&arena);
     interner_init(&interner, &arena);
-    if (!sag_grid_init(&grid, &interner, VT_FUZZ_ROWS, VT_FUZZ_COLS)) {
+    if (!yew_grid_init(&grid, &interner, VT_FUZZ_ROWS, VT_FUZZ_COLS)) {
         interner_free(&interner);
         arena_free_all(&arena);
         return fuzz_fail(why, why_cap, "grid init failed", 0U);
@@ -218,7 +218,7 @@ static bool check_render_roundtrip(const u8 *data, size_t len,
     memset(&caps, 0, sizeof(caps));
     caps.truecolor = true;
     caps.sync_output = true;
-    sag_render_init(&render, &caps, tier_256);
+    yew_render_init(&render, &caps, tier_256);
     bytebuf_init(&output);
     vt_init(&vt, VT_FUZZ_ROWS, VT_FUZZ_COLS);
     vt_feed(&vt, (const u8 *)"\033[?1049h", 8U);
@@ -228,7 +228,7 @@ static bool check_render_roundtrip(const u8 *data, size_t len,
 
         mutate_grid(&grid, data, len, &pos);
         output.len = 0U;
-        emitted = sag_render_frame(&render, &grid, &output);
+        emitted = yew_render_frame(&render, &grid, &output);
         if (emitted != output.len) {
             ok = fuzz_fail(why, why_cap, "renderer byte count differs", pos);
             break;
@@ -242,13 +242,13 @@ static bool check_render_roundtrip(const u8 *data, size_t len,
                 ok = false;
             break;
         }
-        sag_grid_flip(&grid);
+        yew_grid_flip(&grid);
         ops++;
     }
 
     vt_free(&vt);
     bytebuf_free(&output);
-    sag_grid_free(&grid);
+    yew_grid_free(&grid);
     interner_free(&interner);
     arena_free_all(&arena);
     return ok;
@@ -263,5 +263,5 @@ static bool check_vt(const u8 *data, size_t len,
 
 int main(int argc, char **argv)
 {
-    return sag_fuzz_main(argc, argv, "fuzz_vt", NULL, check_vt);
+    return yew_fuzz_main(argc, argv, "fuzz_vt", NULL, check_vt);
 }

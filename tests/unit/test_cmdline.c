@@ -29,7 +29,7 @@ typedef struct CmdlineFixture {
 static char *cmdline_dup(const char *text)
 {
     size_t len = strlen(text) + 1U;
-    char *copy = sag_xmalloc(len);
+    char *copy = yew_xmalloc(len);
 
     (void)memcpy(copy, text, len);
     return copy;
@@ -41,12 +41,12 @@ static void cmdline_fixture_init(CmdlineFixture *fixture)
 
     fixture->saved_state = state == NULL ? NULL : cmdline_dup(state);
     (void)snprintf(fixture->state, sizeof(fixture->state),
-                   "/tmp/sag-cmdline-XXXXXX");
-    SAG_ASSERT_NOT_NULL(mkdtemp(fixture->state));
-    SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", fixture->state, 1), 0);
-    sag_ed_init(&fixture->ed);
-    SAG_ASSERT(sag_ed_open_scratch(&fixture->ed));
-    sag_test_load_runtime(&fixture->ed);
+                   "/tmp/yew-cmdline-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(fixture->state));
+    YEW_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", fixture->state, 1), 0);
+    yew_ed_init(&fixture->ed);
+    YEW_ASSERT(yew_ed_open_scratch(&fixture->ed));
+    yew_test_load_runtime(&fixture->ed);
 }
 
 static void cmdline_fixture_free(CmdlineFixture *fixture)
@@ -55,26 +55,26 @@ static void cmdline_fixture_free(CmdlineFixture *fixture)
     char path[160];
     size_t i;
 
-    sag_ed_free(&fixture->ed);
-    for (i = 0U; i < SAG_ARRAY_LEN(names); i++) {
-        (void)snprintf(path, sizeof(path), "%s/sagitta/history/%s",
+    yew_ed_free(&fixture->ed);
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
+        (void)snprintf(path, sizeof(path), "%s/yew/history/%s",
                        fixture->state, names[i]);
         if (unlink(path) != 0)
-            SAG_ASSERT_EQ_I64(errno, ENOENT);
+            YEW_ASSERT_EQ_I64(errno, ENOENT);
     }
-    (void)snprintf(path, sizeof(path), "%s/sagitta/history",
+    (void)snprintf(path, sizeof(path), "%s/yew/history",
                    fixture->state);
     if (rmdir(path) != 0)
-        SAG_ASSERT_EQ_I64(errno, ENOENT);
-    (void)snprintf(path, sizeof(path), "%s/sagitta", fixture->state);
+        YEW_ASSERT_EQ_I64(errno, ENOENT);
+    (void)snprintf(path, sizeof(path), "%s/yew", fixture->state);
     if (rmdir(path) != 0)
-        SAG_ASSERT_EQ_I64(errno, ENOENT);
-    SAG_ASSERT_EQ_I64(rmdir(fixture->state), 0);
+        YEW_ASSERT_EQ_I64(errno, ENOENT);
+    YEW_ASSERT_EQ_I64(rmdir(fixture->state), 0);
     if (fixture->saved_state != NULL)
-        SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", fixture->saved_state, 1),
+        YEW_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", fixture->saved_state, 1),
                           0);
     else
-        SAG_ASSERT_EQ_I64(unsetenv("XDG_STATE_HOME"), 0);
+        YEW_ASSERT_EQ_I64(unsetenv("XDG_STATE_HOME"), 0);
     free(fixture->saved_state);
 }
 
@@ -84,14 +84,14 @@ static Bytebuf cmdline_text(const CmdLine *line)
     TextIter iter;
 
     bytebuf_init(&out);
-    if (sag_textiter_begin(&iter, line->buf, BYTEOFF(0U))) {
+    if (yew_textiter_begin(&iter, line->buf, BYTEOFF(0U))) {
         do {
             const u8 *bytes;
             u64 len;
 
-            SAG_ASSERT(sag_textiter_chunk(&iter, line->buf, &bytes, &len));
+            YEW_ASSERT(yew_textiter_chunk(&iter, line->buf, &bytes, &len));
             bytebuf_append(&out, bytes, (size_t)len);
-        } while (sag_textiter_advance(&iter, line->buf));
+        } while (yew_textiter_advance(&iter, line->buf));
     }
     bytebuf_push_u8(&out, 0U);
     return out;
@@ -109,13 +109,13 @@ static void cmdline_document(CmdlineFixture *fixture, const char *text)
 {
     Cursor *cursor;
 
-    sag_undo_free(fixture->ed.buffer.undo);
-    sag_textbuf_free(fixture->ed.buffer.tb);
+    yew_undo_free(fixture->ed.buffer.undo);
+    yew_textbuf_free(fixture->ed.buffer.tb);
     fixture->ed.buffer.tb =
-        sag_textbuf_from_bytes((const u8 *)text, strlen(text));
-    fixture->ed.buffer.undo = sag_undo_new(fixture->ed.buffer.tb);
-    cursor = sag_ed_cursor(&fixture->ed);
-    SAG_ASSERT_NOT_NULL(cursor);
+        yew_textbuf_from_bytes((const u8 *)text, strlen(text));
+    fixture->ed.buffer.undo = yew_undo_new(fixture->ed.buffer.tb);
+    cursor = yew_ed_cursor(&fixture->ed);
+    YEW_ASSERT_NOT_NULL(cursor);
     cursor->pos = BYTEOFF(0U);
     cursor->anchor = BYTEOFF(0U);
     cursor->goal_col = (GCol){0U};
@@ -126,8 +126,8 @@ static Key cmdline_key(u32 code)
     Key key = {0};
 
     key.code = code;
-    key.kind = SAG_EV_KEY;
-    key.ev = SAG_KEY_PRESS;
+    key.kind = YEW_EV_KEY;
+    key.ev = YEW_KEY_PRESS;
     if (code < 0x80U) {
         key.ntext = 1U;
         key.text[0] = (u8)code;
@@ -140,15 +140,15 @@ static CmdStatus cmdline_invoke(Ed *ed, CmdStatus (*command)(CmdCtx *))
     CmdCtx context = {0};
 
     context.ed = ed;
-    context.win = sag_cmdline_target(ed);
-    context.source = SAG_SRC_TEST;
+    context.win = yew_cmdline_target(ed);
+    context.source = YEW_SRC_TEST;
     return command(&context);
 }
 
 static CmdStatus cmdline_noop(CmdCtx *context)
 {
     (void)context;
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
 void test_cmdline_reuses_textbuf_and_grapheme_cursor(void)
@@ -157,17 +157,17 @@ void test_cmdline_reuses_textbuf_and_grapheme_cursor(void)
     Win *target;
 
     cmdline_fixture_init(&fixture);
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, FAMILY);
-    target = sag_cmdline_target(&fixture.ed);
-    SAG_ASSERT_NOT_NULL(target);
-    SAG_ASSERT_NOT_NULL(target->buf);
-    SAG_ASSERT_EQ_U64(target->buf->tb, fixture.ed.cmdline.buf);
-    SAG_ASSERT_EQ_U64(sag_textbuf_line_count(fixture.ed.cmdline.buf), 1U);
-    SAG_ASSERT_EQ_U64(fixture.ed.cmdline.cur.pos.v, sizeof(FAMILY) - 1U);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, FAMILY);
+    target = yew_cmdline_target(&fixture.ed);
+    YEW_ASSERT_NOT_NULL(target);
+    YEW_ASSERT_NOT_NULL(target->buf);
+    YEW_ASSERT_EQ_U64(target->buf->tb, fixture.ed.cmdline.buf);
+    YEW_ASSERT_EQ_U64(yew_textbuf_line_count(fixture.ed.cmdline.buf), 1U);
+    YEW_ASSERT_EQ_U64(fixture.ed.cmdline.cur.pos.v, sizeof(FAMILY) - 1U);
 
-    sag_ed_handle_key(&fixture.ed, cmdline_key(SAG_KEY_LEFT), 1);
-    SAG_ASSERT_EQ_U64(fixture.ed.cmdline.cur.pos.v, 0U);
-    SAG_ASSERT_EQ_U64(target->cs.curs.data[target->cs.primary].pos.v, 0U);
+    yew_ed_handle_key(&fixture.ed, cmdline_key(YEW_KEY_LEFT), 1);
+    YEW_ASSERT_EQ_U64(fixture.ed.cmdline.cur.pos.v, 0U);
+    YEW_ASSERT_EQ_U64(target->cs.curs.data[target->cs.primary].pos.v, 0U);
     cmdline_fixture_free(&fixture);
 }
 
@@ -179,37 +179,37 @@ void test_cmdline_sanitizes_seed_paste_and_register_newlines(void)
     Bytebuf text;
 
     cmdline_fixture_init(&fixture);
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, "a\r\n\nb\rc");
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, "a\r\n\nb\rc");
     text = cmdline_text(&fixture.ed.cmdline);
-    SAG_ASSERT_EQ_STR((const char *)text.data, "a b c");
+    YEW_ASSERT_EQ_STR((const char *)text.data, "a b c");
     bytebuf_free(&text);
 
-    sag_cmdline_paste(&fixture.ed, (const u8 *)"x\r\ny\n\nz",
+    yew_cmdline_paste(&fixture.ed, (const u8 *)"x\r\ny\n\nz",
                       sizeof("x\r\ny\n\nz") - 1U);
-    sag_regval_init(&value);
+    yew_regval_init(&value);
     bytebuf_append(&value.bytes, "q\r\n\nr", sizeof("q\r\n\nr") - 1U);
-    sag_reg_set(&fixture.ed.regs, (u8)'a', &value);
-    sag_regval_free(&value);
+    yew_reg_set(&fixture.ed.regs, (u8)'a', &value);
+    yew_regval_free(&value);
     context.ed = &fixture.ed;
-    context.win = sag_cmdline_target(&fixture.ed);
+    context.win = yew_cmdline_target(&fixture.ed);
     context.sarg = "a";
     context.sarg_len = 1U;
-    context.source = SAG_SRC_TEST;
-    SAG_ASSERT_EQ_U64(sag_cmdline_cmd_insert_register(&context), SAG_CMD_OK);
+    context.source = YEW_SRC_TEST;
+    YEW_ASSERT_EQ_U64(yew_cmdline_cmd_insert_register(&context), YEW_CMD_OK);
     text = cmdline_text(&fixture.ed.cmdline);
-    SAG_ASSERT_EQ_STR((const char *)text.data, "a b cx y zq r");
-    SAG_ASSERT_EQ_U64(sag_textbuf_line_count(fixture.ed.cmdline.buf), 1U);
+    YEW_ASSERT_EQ_STR((const char *)text.data, "a b cx y zq r");
+    YEW_ASSERT_EQ_U64(yew_textbuf_line_count(fixture.ed.cmdline.buf), 1U);
     bytebuf_free(&text);
-    sag_regval_init(&value);
+    yew_regval_init(&value);
     bytebuf_append(&value.bytes, "n\0x", 3U);
-    sag_reg_set(&fixture.ed.regs, (u8)'b', &value);
-    sag_regval_free(&value);
+    yew_reg_set(&fixture.ed.regs, (u8)'b', &value);
+    yew_regval_free(&value);
     context.sarg = "b";
-    SAG_ASSERT_EQ_U64(sag_cmdline_cmd_insert_register(&context),
-                      SAG_CMD_ERR_ARG);
+    YEW_ASSERT_EQ_U64(yew_cmdline_cmd_insert_register(&context),
+                      YEW_CMD_ERR_ARG);
     text = cmdline_text(&fixture.ed.cmdline);
-    SAG_ASSERT_EQ_STR((const char *)text.data, "a b cx y zq r");
-    SAG_ASSERT_EQ_STR(fixture.ed.msg.text,
+    YEW_ASSERT_EQ_STR((const char *)text.data, "a b cx y zq r");
+    YEW_ASSERT_EQ_STR(fixture.ed.msg.text,
                       "NUL byte is not valid in a command line");
     bytebuf_free(&text);
     cmdline_fixture_free(&fixture);
@@ -223,12 +223,12 @@ static bool cmdline_check_leaf(const KeyId *keys, u32 key_count,
                                const Binding *binding, void *opaque)
 {
     CmdlineLeafCheck *check = opaque;
-    const CmdDesc *description = sag_cmd_desc(binding->cmd);
+    const CmdDesc *description = yew_cmd_desc(binding->cmd);
 
-    SAG_ASSERT_NOT_NULL(keys);
-    SAG_ASSERT(key_count != 0U);
-    SAG_ASSERT_NOT_NULL(description);
-    SAG_ASSERT(strncmp(description->name, "ed.", 3U) == 0);
+    YEW_ASSERT_NOT_NULL(keys);
+    YEW_ASSERT(key_count != 0U);
+    YEW_ASSERT_NOT_NULL(description);
+    YEW_ASSERT(strncmp(description->name, "ed.", 3U) == 0);
     check->visited++;
     return true;
 }
@@ -240,10 +240,10 @@ void test_cmdline_e_keymap_leaves_are_registered_editor_commands(void)
     const Keymap *map;
 
     cmdline_fixture_init(&fixture);
-    map = &fixture.ed.bind_keys[SAG_MODE_E];
-    SAG_ASSERT(sag_keymap_visit(map, cmdline_check_leaf, &check));
-    SAG_ASSERT_EQ_U64(check.visited, sag_keymap_binding_count(map));
-    SAG_ASSERT(check.visited >= 20U);
+    map = &fixture.ed.bind_keys[YEW_MODE_E];
+    YEW_ASSERT(yew_keymap_visit(map, cmdline_check_leaf, &check));
+    YEW_ASSERT_EQ_U64(check.visited, yew_keymap_binding_count(map));
+    YEW_ASSERT(check.visited >= 20U);
     cmdline_fixture_free(&fixture);
 }
 
@@ -254,19 +254,19 @@ void test_cmdline_highlight_selection_seeds_range(void)
     Bytebuf text;
 
     cmdline_fixture_init(&fixture);
-    sag_textbuf_insert(fixture.ed.buffer.tb, BYTEOFF(0U),
+    yew_textbuf_insert(fixture.ed.buffer.tb, BYTEOFF(0U),
                        (const u8 *)"alpha", 5U);
-    cursor = sag_ed_cursor(&fixture.ed);
-    SAG_ASSERT_NOT_NULL(cursor);
+    cursor = yew_ed_cursor(&fixture.ed);
+    YEW_ASSERT_NOT_NULL(cursor);
     cursor->anchor = BYTEOFF(1U);
     cursor->pos = BYTEOFF(4U);
-    SAG_ASSERT_EQ_U64(sag_mode_enter_highlight(&fixture.ed, SAG_MODE_L,
-                                               false), SAG_CMD_OK);
-    SAG_ASSERT_EQ_U64(sag_mode_enter(&fixture.ed, SAG_MODE_E), SAG_CMD_OK);
+    YEW_ASSERT_EQ_U64(yew_mode_enter_highlight(&fixture.ed, YEW_MODE_L,
+                                               false), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(yew_mode_enter(&fixture.ed, YEW_MODE_E), YEW_CMD_OK);
     text = cmdline_text(&fixture.ed.cmdline);
-    SAG_ASSERT_EQ_STR((const char *)text.data, "'<,'>");
-    SAG_ASSERT_EQ_U64(fixture.ed.cmdline.cur.pos.v, 5U);
-    SAG_ASSERT_EQ_U64(fixture.ed.cmdline.return_mode, SAG_MODE_H);
+    YEW_ASSERT_EQ_STR((const char *)text.data, "'<,'>");
+    YEW_ASSERT_EQ_U64(fixture.ed.cmdline.cur.pos.v, 5U);
+    YEW_ASSERT_EQ_U64(fixture.ed.cmdline.return_mode, YEW_MODE_H);
     bytebuf_free(&text);
     cmdline_fixture_free(&fixture);
 }
@@ -277,27 +277,27 @@ void test_cmdline_escape_restores_completion_stem_before_closing(void)
     Bytebuf text;
 
     cmdline_fixture_init(&fixture);
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, "f");
-    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
-                                     sag_cmdline_cmd_complete_next),
-                      SAG_CMD_OK);
-    SAG_ASSERT(fixture.ed.cmdline.menu.items.len > 1U);
-    SAG_ASSERT_NOT_NULL(fixture.ed.cmdline.comp_arena.head);
-    SAG_ASSERT(fixture.ed.cmdline.active);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, "f");
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                     yew_cmdline_cmd_complete_next),
+                      YEW_CMD_OK);
+    YEW_ASSERT(fixture.ed.cmdline.menu.items.len > 1U);
+    YEW_ASSERT_NOT_NULL(fixture.ed.cmdline.comp_arena.head);
+    YEW_ASSERT(fixture.ed.cmdline.active);
 
-    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, sag_cmdline_cmd_cancel),
-                      SAG_CMD_OK);
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, yew_cmdline_cmd_cancel),
+                      YEW_CMD_OK);
     text = cmdline_text(&fixture.ed.cmdline);
-    SAG_ASSERT_EQ_STR((const char *)text.data, "f");
-    SAG_ASSERT_EQ_U64(fixture.ed.cmdline.menu.items.len, 0U);
-    SAG_ASSERT_NULL(fixture.ed.cmdline.comp_arena.head);
-    SAG_ASSERT(fixture.ed.cmdline.active);
+    YEW_ASSERT_EQ_STR((const char *)text.data, "f");
+    YEW_ASSERT_EQ_U64(fixture.ed.cmdline.menu.items.len, 0U);
+    YEW_ASSERT_NULL(fixture.ed.cmdline.comp_arena.head);
+    YEW_ASSERT(fixture.ed.cmdline.active);
     bytebuf_free(&text);
 
-    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, sag_cmdline_cmd_cancel),
-                      SAG_CMD_OK);
-    SAG_ASSERT(!fixture.ed.cmdline.active);
-    SAG_ASSERT_EQ_U64(fixture.ed.mode, SAG_MODE_L);
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, yew_cmdline_cmd_cancel),
+                      YEW_CMD_OK);
+    YEW_ASSERT(!fixture.ed.cmdline.active);
+    YEW_ASSERT_EQ_U64(fixture.ed.mode, YEW_MODE_L);
     cmdline_fixture_free(&fixture);
 }
 
@@ -306,11 +306,11 @@ void test_cmdline_accepts_registered_command_and_closes(void)
     CmdlineFixture fixture;
 
     cmdline_fixture_init(&fixture);
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, "redraw");
-    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, sag_cmdline_cmd_accept),
-                      SAG_CMD_OK);
-    SAG_ASSERT(!fixture.ed.cmdline.active);
-    SAG_ASSERT_EQ_U64(fixture.ed.mode, SAG_MODE_L);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, "redraw");
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, yew_cmdline_cmd_accept),
+                      YEW_CMD_OK);
+    YEW_ASSERT(!fixture.ed.cmdline.active);
+    YEW_ASSERT_EQ_U64(fixture.ed.mode, YEW_MODE_L);
     cmdline_fixture_free(&fixture);
 }
 
@@ -322,13 +322,13 @@ void test_cmdline_range_executes_once_with_multiple_cursors(void)
 
     cmdline_fixture_init(&fixture);
     cmdline_document(&fixture, "one\ntwo\nthree\n");
-    SAG_ASSERT(sag_cset_add(&fixture.ed.win->cs, second));
-    SAG_ASSERT_EQ_U64(fixture.ed.win->cs.curs.len, 2U);
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, "1,2d");
-    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, sag_cmdline_cmd_accept),
-                      SAG_CMD_OK);
+    YEW_ASSERT(yew_cset_add(&fixture.ed.win->cs, second));
+    YEW_ASSERT_EQ_U64(fixture.ed.win->cs.curs.len, 2U);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, "1,2d");
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, yew_cmdline_cmd_accept),
+                      YEW_CMD_OK);
     text = document_text(&fixture.ed);
-    SAG_ASSERT_EQ_STR((const char *)text.data, "three\n");
+    YEW_ASSERT_EQ_STR((const char *)text.data, "three\n");
     bytebuf_free(&text);
     cmdline_fixture_free(&fixture);
 }
@@ -340,10 +340,10 @@ void test_cmdline_bang_quit_bypasses_durability_failure(void)
     cmdline_fixture_init(&fixture);
     cmdline_document(&fixture, "dirty");
     fixture.ed.durability_failed = true;
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, "q!");
-    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, sag_cmdline_cmd_accept),
-                      SAG_CMD_OK);
-    SAG_ASSERT(fixture.ed.quit);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, "q!");
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, yew_cmdline_cmd_accept),
+                      YEW_CMD_OK);
+    YEW_ASSERT(fixture.ed.quit);
     cmdline_fixture_free(&fixture);
 }
 
@@ -353,20 +353,20 @@ void test_cmdline_parse_error_preserves_text_and_points_at_token(void)
     Bytebuf text;
 
     cmdline_fixture_init(&fixture);
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, "definitely_missing");
-    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, sag_cmdline_cmd_accept),
-                      SAG_CMD_ERR_ARG);
-    SAG_ASSERT(fixture.ed.cmdline.active);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, "definitely_missing");
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, yew_cmdline_cmd_accept),
+                      YEW_CMD_ERR_ARG);
+    YEW_ASSERT(fixture.ed.cmdline.active);
     text = cmdline_text(&fixture.ed.cmdline);
-    SAG_ASSERT_EQ_STR((const char *)text.data, "definitely_missing");
-    SAG_ASSERT_EQ_U64(fixture.ed.cmdline.cur.pos.v,
+    YEW_ASSERT_EQ_STR((const char *)text.data, "definitely_missing");
+    YEW_ASSERT_EQ_U64(fixture.ed.cmdline.cur.pos.v,
                       fixture.ed.cmdline.err.tok_lo);
-    SAG_ASSERT(fixture.ed.cmdline.err.tok_hi >
+    YEW_ASSERT(fixture.ed.cmdline.err.tok_hi >
                fixture.ed.cmdline.err.tok_lo);
-    SAG_ASSERT_EQ_STR(fixture.ed.cmdline.err.msg,
+    YEW_ASSERT_EQ_STR(fixture.ed.cmdline.err.msg,
                       "unknown command 'definitely_missing' (try Tab)");
-    SAG_ASSERT(fixture.ed.msg.active);
-    SAG_ASSERT(strncmp(fixture.ed.msg.text, "E: ", 3U) == 0);
+    YEW_ASSERT(fixture.ed.msg.active);
+    YEW_ASSERT(strncmp(fixture.ed.msg.text, "E: ", 3U) == 0);
     bytebuf_free(&text);
     cmdline_fixture_free(&fixture);
 }
@@ -399,9 +399,9 @@ void test_cmdline_catalogue_errors_preserve_live_prompt(void)
     };
     CmdlineFixture fixture;
     CmdEntry required = {
-        {"ed.ui.grow", cmdline_noop, SAG_ARITY_NONE, 0U,
+        {"ed.ui.grow", cmdline_noop, YEW_ARITY_NONE, 0U,
          "Command-line error test command", NULL},
-        "", SAG_RP_REQUIRED, NULL};
+        "", YEW_RP_REQUIRED, NULL};
     char document[412];
     size_t i;
 
@@ -409,33 +409,33 @@ void test_cmdline_catalogue_errors_preserve_live_prompt(void)
     (void)memset(document, '\n', sizeof(document) - 1U);
     document[sizeof(document) - 1U] = '\0';
     cmdline_document(&fixture, document);
-    (void)sag_cmd_register_entry(&required);
+    (void)yew_cmd_register_entry(&required);
 
-    for (i = 0U; i < SAG_ARRAY_LEN(rows); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(rows); i++) {
         Bytebuf text;
         char expected[sizeof(fixture.ed.msg.text)];
 
-        sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, rows[i].line);
-        SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
-                                         sag_cmdline_cmd_accept),
-                          SAG_CMD_ERR_ARG);
-        SAG_ASSERT(fixture.ed.cmdline.active);
+        yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, rows[i].line);
+        YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                         yew_cmdline_cmd_accept),
+                          YEW_CMD_ERR_ARG);
+        YEW_ASSERT(fixture.ed.cmdline.active);
         text = cmdline_text(&fixture.ed.cmdline);
-        SAG_ASSERT_EQ_STR((const char *)text.data, rows[i].line);
-        SAG_ASSERT_EQ_U64(fixture.ed.cmdline.cur.pos.v, rows[i].lo);
-        SAG_ASSERT_EQ_U64(fixture.ed.cmdline.err.tok_lo, rows[i].lo);
-        SAG_ASSERT_EQ_U64(fixture.ed.cmdline.err.tok_hi, rows[i].hi);
-        SAG_ASSERT_EQ_STR(fixture.ed.cmdline.err.msg, rows[i].message);
-        SAG_ASSERT(fixture.ed.msg.active);
+        YEW_ASSERT_EQ_STR((const char *)text.data, rows[i].line);
+        YEW_ASSERT_EQ_U64(fixture.ed.cmdline.cur.pos.v, rows[i].lo);
+        YEW_ASSERT_EQ_U64(fixture.ed.cmdline.err.tok_lo, rows[i].lo);
+        YEW_ASSERT_EQ_U64(fixture.ed.cmdline.err.tok_hi, rows[i].hi);
+        YEW_ASSERT_EQ_STR(fixture.ed.cmdline.err.msg, rows[i].message);
+        YEW_ASSERT(fixture.ed.msg.active);
         (void)snprintf(expected, sizeof(expected), "E: %s",
                        rows[i].message);
-        SAG_ASSERT_EQ_STR(fixture.ed.msg.text, expected);
+        YEW_ASSERT_EQ_STR(fixture.ed.msg.text, expected);
         bytebuf_free(&text);
-        sag_cmdline_close(&fixture.ed, false);
+        yew_cmdline_close(&fixture.ed, false);
     }
     cmdline_fixture_free(&fixture);
-    sag_cmd_shutdown();
-    sag_cmd_init();
+    yew_cmd_shutdown();
+    yew_cmd_init();
 }
 
 static void cmdline_type(CmdlineFixture *fixture, const char *text)
@@ -443,7 +443,7 @@ static void cmdline_type(CmdlineFixture *fixture, const char *text)
     const char *p;
 
     for (p = text; *p != '\0'; p++)
-        sag_ed_handle_key(&fixture->ed, cmdline_key((u32)(u8)*p), 1);
+        yew_ed_handle_key(&fixture->ed, cmdline_key((u32)(u8)*p), 1);
 }
 
 void test_cmdline_menu_filters_live_while_typing(void)
@@ -451,28 +451,28 @@ void test_cmdline_menu_filters_live_while_typing(void)
     CmdlineFixture fixture;
 
     cmdline_fixture_init(&fixture);
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
     /* A bare `:` has no token to filter on, so no list -- "every command
      * in the registry" is noise, not an answer. */
-    SAG_ASSERT_EQ_U64(fixture.ed.cmdline.menu.items.len, 0U);
+    YEW_ASSERT_EQ_U64(fixture.ed.cmdline.menu.items.len, 0U);
 
     /* Sprint 18 needed a Tab to see anything here. */
     cmdline_type(&fixture, "fil");
-    SAG_ASSERT(fixture.ed.cmdline.menu.items.len > 1U);
+    YEW_ASSERT(fixture.ed.cmdline.menu.items.len > 1U);
     /* Filtering ranked a row first but the user has chosen nothing. */
-    SAG_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, -1);
-    SAG_ASSERT(!fixture.ed.cmdline.menu.explicit_sel);
+    YEW_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, -1);
+    YEW_ASSERT(!fixture.ed.cmdline.menu.explicit_sel);
 
     /* Typing narrows rather than dismissing, which is the inversion of
      * s18's "any printable key closes the menu". */
     cmdline_type(&fixture, "e.wri");
-    SAG_ASSERT(fixture.ed.cmdline.menu.items.len >= 1U);
+    YEW_ASSERT(fixture.ed.cmdline.menu.items.len >= 1U);
 
     /* And a token that matches nothing closes it -- silently. */
     cmdline_type(&fixture, "zzzz");
-    SAG_ASSERT_EQ_U64(fixture.ed.cmdline.menu.items.len, 0U);
-    SAG_ASSERT(!(fixture.ed.msg.active &&
-                 fixture.ed.msg.sev == SAG_MSG_ERROR));
+    YEW_ASSERT_EQ_U64(fixture.ed.cmdline.menu.items.len, 0U);
+    YEW_ASSERT(!(fixture.ed.msg.active &&
+                 fixture.ed.msg.sev == YEW_MSG_ERROR));
     cmdline_fixture_free(&fixture);
 }
 
@@ -481,17 +481,17 @@ void test_cmdline_enter_executes_while_filtering(void)
     CmdlineFixture fixture;
 
     cmdline_fixture_init(&fixture);
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
     cmdline_type(&fixture, "redraw");
     /* The menu is open -- s18's rule taken literally would refuse to
      * execute, and the prompt could never be used with one Enter. */
-    SAG_ASSERT(fixture.ed.cmdline.menu.items.len != 0U);
-    SAG_ASSERT(!fixture.ed.cmdline.menu.explicit_sel);
+    YEW_ASSERT(fixture.ed.cmdline.menu.items.len != 0U);
+    YEW_ASSERT(!fixture.ed.cmdline.menu.explicit_sel);
 
-    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, sag_cmdline_cmd_accept),
-                      SAG_CMD_OK);
-    SAG_ASSERT(!fixture.ed.cmdline.active);
-    SAG_ASSERT_EQ_U64(fixture.ed.mode, SAG_MODE_L);
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, yew_cmdline_cmd_accept),
+                      YEW_CMD_OK);
+    YEW_ASSERT(!fixture.ed.cmdline.active);
+    YEW_ASSERT_EQ_U64(fixture.ed.mode, YEW_MODE_L);
     cmdline_fixture_free(&fixture);
 }
 
@@ -501,42 +501,42 @@ void test_cmdline_enter_accepts_a_chosen_row_without_executing(void)
     Bytebuf text;
 
     cmdline_fixture_init(&fixture);
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
     /* A stem with SEVERAL matches: a single match is inserted outright
      * and never becomes a choice to accept. */
     cmdline_type(&fixture, "fil");
-    SAG_ASSERT(fixture.ed.cmdline.menu.items.len > 1U);
+    YEW_ASSERT(fixture.ed.cmdline.menu.items.len > 1U);
 
     /*
      * The first Tab inserts the prefix every tiered candidate shares
      * (`file.`) and chooses nothing -- there is still an unambiguous
      * completion to offer, so it offers it.
      */
-    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
-                                     sag_cmdline_cmd_complete_next),
-                      SAG_CMD_OK);
-    SAG_ASSERT(!fixture.ed.cmdline.menu.explicit_sel);
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                     yew_cmdline_cmd_complete_next),
+                      YEW_CMD_OK);
+    YEW_ASSERT(!fixture.ed.cmdline.menu.explicit_sel);
 
     /* With nothing left to insert unambiguously, the next Tab IS a
      * choice.  Only Tab, S-Tab, C-n, C-p or a click get here. */
-    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
-                                     sag_cmdline_cmd_complete_next),
-                      SAG_CMD_OK);
-    SAG_ASSERT(fixture.ed.cmdline.menu.explicit_sel);
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                     yew_cmdline_cmd_complete_next),
+                      YEW_CMD_OK);
+    YEW_ASSERT(fixture.ed.cmdline.menu.explicit_sel);
 
     /*
      * Now Enter accepts instead of executing -- the property s18 pinned
      * so `:w /etc/pas` cannot run when the user meant to pick `passwd`.
      */
-    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, sag_cmdline_cmd_accept),
-                      SAG_CMD_OK);
-    SAG_ASSERT(fixture.ed.cmdline.active);
-    SAG_ASSERT_EQ_U64(fixture.ed.cmdline.menu.items.len, 0U);
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, yew_cmdline_cmd_accept),
+                      YEW_CMD_OK);
+    YEW_ASSERT(fixture.ed.cmdline.active);
+    YEW_ASSERT_EQ_U64(fixture.ed.cmdline.menu.items.len, 0U);
     /* The chosen row landed in the line, followed by the separating
      * space that says the argument position is next. */
     text = cmdline_text(&fixture.ed.cmdline);
-    SAG_ASSERT(strncmp((const char *)text.data, "file.", 5U) == 0);
-    SAG_ASSERT_EQ_STR((const char *)text.data +
+    YEW_ASSERT(strncmp((const char *)text.data, "file.", 5U) == 0);
+    YEW_ASSERT_EQ_STR((const char *)text.data +
                           strlen((const char *)text.data) - 1U, " ");
     bytebuf_free(&text);
     cmdline_fixture_free(&fixture);
@@ -547,18 +547,18 @@ void test_cmdline_escape_leaves_a_live_menu_and_closes_the_prompt(void)
     CmdlineFixture fixture;
 
     cmdline_fixture_init(&fixture);
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
     cmdline_type(&fixture, "fil");
-    SAG_ASSERT(fixture.ed.cmdline.menu.items.len != 0U);
+    YEW_ASSERT(fixture.ed.cmdline.menu.items.len != 0U);
 
     /*
      * The user never opened this menu -- it filtered itself open while
      * they typed.  Esc goes past it and closes the prompt, or leaving
      * would take two presses for a list nobody asked for.
      */
-    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, sag_cmdline_cmd_cancel),
-                      SAG_CMD_OK);
-    SAG_ASSERT(!fixture.ed.cmdline.active);
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, yew_cmdline_cmd_cancel),
+                      YEW_CMD_OK);
+    YEW_ASSERT(!fixture.ed.cmdline.active);
     cmdline_fixture_free(&fixture);
 }
 
@@ -572,34 +572,34 @@ void test_cmdline_hint_reports_what_the_parser_understands(void)
     /* An abbreviation is the one case where the user cannot see what
      * will actually run, so it is spelled out -- with the argument the
      * command is waiting for. */
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
     cmdline_type(&fixture, "w");
-    SAG_ASSERT_EQ_STR(fixture.ed.cmdline.hint,
+    YEW_ASSERT_EQ_STR(fixture.ed.cmdline.hint,
                       "w \xE2\x86\x92 file.write \xC2\xB7 <file>");
-    sag_cmdline_close(&fixture.ed, false);
+    yew_cmdline_close(&fixture.ed, false);
 
     /* A full name needs no arrow. */
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
     cmdline_type(&fixture, "redraw");
-    SAG_ASSERT_EQ_STR(fixture.ed.cmdline.hint, "redraw");
-    sag_cmdline_close(&fixture.ed, false);
+    YEW_ASSERT_EQ_STR(fixture.ed.cmdline.hint, "redraw");
+    yew_cmdline_close(&fixture.ed, false);
 
     /*
      * A range reports how many LINES it covers.  The user typed the
      * numbers, so echoing them back says nothing; what they cannot see
      * is what those numbers resolve to.
      */
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
     cmdline_type(&fixture, "1,3d");
-    SAG_ASSERT_EQ_STR(fixture.ed.cmdline.hint,
+    YEW_ASSERT_EQ_STR(fixture.ed.cmdline.hint,
                       "d \xE2\x86\x92 edit.line.delete \xC2\xB7 3 lines");
-    sag_cmdline_close(&fixture.ed, false);
+    yew_cmdline_close(&fixture.ed, false);
 
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
     cmdline_type(&fixture, "%d");
-    SAG_ASSERT_EQ_STR(fixture.ed.cmdline.hint,
+    YEW_ASSERT_EQ_STR(fixture.ed.cmdline.hint,
                       "d \xE2\x86\x92 edit.line.delete \xC2\xB7 whole buffer");
-    sag_cmdline_close(&fixture.ed, false);
+    yew_cmdline_close(&fixture.ed, false);
 
     cmdline_fixture_free(&fixture);
 }
@@ -609,10 +609,10 @@ void test_cmdline_hint_says_nothing_it_does_not_know(void)
     CmdlineFixture fixture;
 
     cmdline_fixture_init(&fixture);
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
 
     /* Nothing typed: nothing understood, nothing said. */
-    SAG_ASSERT_EQ_STR(fixture.ed.cmdline.hint, "");
+    YEW_ASSERT_EQ_STR(fixture.ed.cmdline.hint, "");
 
     /*
      * An unknown command produces NO hint rather than an error line.
@@ -621,9 +621,9 @@ void test_cmdline_hint_says_nothing_it_does_not_know(void)
      * flashing message line Sprint 21's doctrine forbids.
      */
     cmdline_type(&fixture, "zzzzz");
-    SAG_ASSERT_EQ_STR(fixture.ed.cmdline.hint, "");
-    SAG_ASSERT(!(fixture.ed.msg.active &&
-                 fixture.ed.msg.sev == SAG_MSG_ERROR));
+    YEW_ASSERT_EQ_STR(fixture.ed.cmdline.hint, "");
+    YEW_ASSERT(!(fixture.ed.msg.active &&
+                 fixture.ed.msg.sev == YEW_MSG_ERROR));
     cmdline_fixture_free(&fixture);
 }
 
@@ -637,16 +637,16 @@ void test_cmdline_menu_commands_are_registered_and_internal(void)
     };
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(names); i++) {
-        CmdId id = sag_cmd_lookup(names[i], (u32)strlen(names[i]));
-        const CmdDesc *desc = sag_cmd_desc(id);
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
+        CmdId id = yew_cmd_lookup(names[i], (u32)strlen(names[i]));
+        const CmdDesc *desc = yew_cmd_desc(id);
 
-        SAG_ASSERT(id.v != 0U);
-        SAG_ASSERT_NOT_NULL(desc);
-        /* Keymap plumbing, not commands a user types: SAG_CMD_INTERNAL
+        YEW_ASSERT(id.v != 0U);
+        YEW_ASSERT_NOT_NULL(desc);
+        /* Keymap plumbing, not commands a user types: YEW_CMD_INTERNAL
          * is what keeps them out of the `:` menu and out of the
          * E-mode resolver. */
-        SAG_ASSERT((desc->flags & SAG_CMD_INTERNAL) != 0U);
+        YEW_ASSERT((desc->flags & YEW_CMD_INTERNAL) != 0U);
     }
 }
 
@@ -655,28 +655,28 @@ void test_cmdline_menu_page_moves_by_a_page(void)
     CmdlineFixture fixture;
 
     cmdline_fixture_init(&fixture);
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
     cmdline_type(&fixture, "e");
-    SAG_ASSERT(fixture.ed.cmdline.menu.items.len > 5U);
+    YEW_ASSERT(fixture.ed.cmdline.menu.items.len > 5U);
 
     /* Entering the list lands on row 0, the same as Tab does -- a page
      * key should not skip past the best match on its way in. */
-    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
-                                     sag_cmdline_cmd_menu_page_next),
-                      SAG_CMD_OK);
-    SAG_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 0);
-    SAG_ASSERT(fixture.ed.cmdline.menu.explicit_sel);
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                     yew_cmdline_cmd_menu_page_next),
+                      YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 0);
+    YEW_ASSERT(fixture.ed.cmdline.menu.explicit_sel);
 
     /* Now it pages: five visible rows, so row 0 -> row 5. */
-    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
-                                     sag_cmdline_cmd_menu_page_next),
-                      SAG_CMD_OK);
-    SAG_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 5);
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                     yew_cmdline_cmd_menu_page_next),
+                      YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 5);
 
-    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
-                                     sag_cmdline_cmd_menu_page_prev),
-                      SAG_CMD_OK);
-    SAG_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 0);
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                     yew_cmdline_cmd_menu_page_prev),
+                      YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 0);
     cmdline_fixture_free(&fixture);
 }
 
@@ -684,7 +684,7 @@ static Key cmdline_mouse(u8 button, u8 ev, u16 col, u16 row)
 {
     Key key = {0};
 
-    key.kind = SAG_EV_MOUSE;
+    key.kind = YEW_EV_MOUSE;
     key.ev = ev;
     key.button = button;
     key.col = col;
@@ -698,10 +698,10 @@ static void cmdline_fake_menu_regions(u32 rows)
 {
     u32 i;
 
-    sag_region_frame_begin();
-    sag_region_add(SAG_REGION_BLOCK, (Rect){0U, 10U, 80U, (u16)rows}, 0);
+    yew_region_frame_begin();
+    yew_region_add(YEW_REGION_BLOCK, (Rect){0U, 10U, 80U, (u16)rows}, 0);
     for (i = 0U; i < rows; i++)
-        sag_region_add(SAG_REGION_MENU_ROW,
+        yew_region_add(YEW_REGION_MENU_ROW,
                        (Rect){0U, (u16)(10U + i), 80U, 1U}, (i32)i);
 }
 
@@ -711,9 +711,9 @@ void test_cmdline_click_selects_then_accepts_the_same_row(void)
     Bytebuf text;
 
     cmdline_fixture_init(&fixture);
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
     cmdline_type(&fixture, "fil");
-    SAG_ASSERT(fixture.ed.cmdline.menu.items.len > 2U);
+    YEW_ASSERT(fixture.ed.cmdline.menu.items.len > 2U);
     cmdline_fake_menu_regions(5U);
 
     /* First click chooses the row -- explicitly, exactly as Tab does,
@@ -721,23 +721,23 @@ void test_cmdline_click_selects_then_accepts_the_same_row(void)
     {
         Key not_mouse = {0}; /* a key event must not reach the menu */
 
-        SAG_ASSERT(!sag_mouse_claimed_by_menu(&fixture.ed, not_mouse));
+        YEW_ASSERT(!yew_mouse_claimed_by_menu(&fixture.ed, not_mouse));
     }
     {
-        Key press = cmdline_mouse((u8)SAG_MB_LEFT, SAG_KEY_PRESS, 4U, 12U);
+        Key press = cmdline_mouse((u8)YEW_MB_LEFT, YEW_KEY_PRESS, 4U, 12U);
 
-        sag_mouse_event(&fixture.ed, &press);
-        SAG_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 2);
-        SAG_ASSERT(fixture.ed.cmdline.menu.explicit_sel);
-        SAG_ASSERT(fixture.ed.cmdline.active);
+        yew_mouse_event(&fixture.ed, &press);
+        YEW_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 2);
+        YEW_ASSERT(fixture.ed.cmdline.menu.explicit_sel);
+        YEW_ASSERT(fixture.ed.cmdline.active);
 
         /* Second click on the SAME row accepts it and closes the menu. */
-        sag_mouse_event(&fixture.ed, &press);
-        SAG_ASSERT_EQ_U64(fixture.ed.cmdline.menu.items.len, 0U);
-        SAG_ASSERT(fixture.ed.cmdline.active);
+        yew_mouse_event(&fixture.ed, &press);
+        YEW_ASSERT_EQ_U64(fixture.ed.cmdline.menu.items.len, 0U);
+        YEW_ASSERT(fixture.ed.cmdline.active);
     }
     text = cmdline_text(&fixture.ed.cmdline);
-    SAG_ASSERT(strncmp((const char *)text.data, "file.", 5U) == 0);
+    YEW_ASSERT(strncmp((const char *)text.data, "file.", 5U) == 0);
     bytebuf_free(&text);
     cmdline_fixture_free(&fixture);
 }
@@ -750,31 +750,31 @@ void test_cmdline_click_and_keyboard_reach_the_same_state(void)
 
     /* Invariant 9: the mouse is an accelerator, never the only way. */
     cmdline_fixture_init(&fixture);
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
     cmdline_type(&fixture, "fil");
     cmdline_fake_menu_regions(5U);
     {
-        Key press = cmdline_mouse((u8)SAG_MB_LEFT, SAG_KEY_PRESS, 4U, 10U);
+        Key press = cmdline_mouse((u8)YEW_MB_LEFT, YEW_KEY_PRESS, 4U, 10U);
 
-        sag_mouse_event(&fixture.ed, &press);
+        yew_mouse_event(&fixture.ed, &press);
     }
-    SAG_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 0);
+    YEW_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 0);
     clicked = cmdline_text(&fixture.ed.cmdline);
     cmdline_fixture_free(&fixture);
 
     /* The same row, reached with C-n's command instead. */
     cmdline_fixture_init(&fixture);
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
     cmdline_type(&fixture, "fil");
-    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
-                                     sag_cmdline_cmd_complete_next),
-                      SAG_CMD_OK);
-    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
-                                     sag_cmdline_cmd_complete_next),
-                      SAG_CMD_OK);
-    SAG_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 0);
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                     yew_cmdline_cmd_complete_next),
+                      YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                     yew_cmdline_cmd_complete_next),
+                      YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, 0);
     typed = cmdline_text(&fixture.ed.cmdline);
-    SAG_ASSERT_EQ_STR((const char *)clicked.data, (const char *)typed.data);
+    YEW_ASSERT_EQ_STR((const char *)clicked.data, (const char *)typed.data);
     bytebuf_free(&typed);
     bytebuf_free(&clicked);
     cmdline_fixture_free(&fixture);
@@ -786,28 +786,28 @@ void test_cmdline_wheel_scrolls_without_choosing(void)
     Key wheel;
 
     cmdline_fixture_init(&fixture);
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
     cmdline_type(&fixture, "e");
-    SAG_ASSERT(fixture.ed.cmdline.menu.items.len > 8U);
+    YEW_ASSERT(fixture.ed.cmdline.menu.items.len > 8U);
     cmdline_fake_menu_regions(5U);
     /* The prompt row, so the menu has rows above it to scroll within. */
     fixture.ed.footer_rect = (Rect){0U, 23U, 80U, 1U};
 
-    wheel = cmdline_mouse((u8)SAG_MB_WHEEL_DOWN, SAG_KEY_PRESS, 4U, 12U);
-    sag_mouse_event(&fixture.ed, &wheel);
-    SAG_ASSERT_EQ_U64(fixture.ed.cmdline.menu.top, 3U);
+    wheel = cmdline_mouse((u8)YEW_MB_WHEEL_DOWN, YEW_KEY_PRESS, 4U, 12U);
+    yew_mouse_event(&fixture.ed, &wheel);
+    YEW_ASSERT_EQ_U64(fixture.ed.cmdline.menu.top, 3U);
 
     /*
      * Looking is not choosing: the wheel moved the window and left the
      * selection alone, so Enter still EXECUTES rather than accepting a
      * row the user only scrolled past.
      */
-    SAG_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, -1);
-    SAG_ASSERT(!fixture.ed.cmdline.menu.explicit_sel);
+    YEW_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, -1);
+    YEW_ASSERT(!fixture.ed.cmdline.menu.explicit_sel);
 
-    wheel = cmdline_mouse((u8)SAG_MB_WHEEL_UP, SAG_KEY_PRESS, 4U, 12U);
-    sag_mouse_event(&fixture.ed, &wheel);
-    SAG_ASSERT_EQ_U64(fixture.ed.cmdline.menu.top, 0U);
+    wheel = cmdline_mouse((u8)YEW_MB_WHEEL_UP, YEW_KEY_PRESS, 4U, 12U);
+    yew_mouse_event(&fixture.ed, &wheel);
+    YEW_ASSERT_EQ_U64(fixture.ed.cmdline.menu.top, 0U);
     cmdline_fixture_free(&fixture);
 }
 
@@ -817,18 +817,18 @@ void test_cmdline_click_on_a_menu_gap_is_swallowed(void)
     Key press;
 
     cmdline_fixture_init(&fixture);
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
     cmdline_type(&fixture, "fil");
-    sag_region_frame_begin();
+    yew_region_frame_begin();
     /* Only the inert block, as if the row rects did not cover it. */
-    sag_region_add(SAG_REGION_BLOCK, (Rect){0U, 10U, 80U, 5U}, 0);
+    yew_region_add(YEW_REGION_BLOCK, (Rect){0U, 10U, 80U, 5U}, 0);
 
     /* Claimed, so it cannot fall through to the pane underneath -- and
      * claiming it is all that happens: no row was chosen. */
-    press = cmdline_mouse((u8)SAG_MB_LEFT, SAG_KEY_PRESS, 4U, 12U);
-    SAG_ASSERT(sag_mouse_claimed_by_menu(&fixture.ed, press));
-    sag_mouse_event(&fixture.ed, &press);
-    SAG_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, -1);
+    press = cmdline_mouse((u8)YEW_MB_LEFT, YEW_KEY_PRESS, 4U, 12U);
+    YEW_ASSERT(yew_mouse_claimed_by_menu(&fixture.ed, press));
+    yew_mouse_event(&fixture.ed, &press);
+    YEW_ASSERT_EQ_I64(fixture.ed.cmdline.menu.sel, -1);
     cmdline_fixture_free(&fixture);
 }
 
@@ -839,30 +839,30 @@ void test_cmdline_ghost_is_never_in_the_buffer(void)
     Bytebuf via_api;
 
     cmdline_fixture_init(&fixture);
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
     cmdline_type(&fixture, "redr");
     /* A suggestion is showing: `redraw` extends `redr`. */
-    SAG_ASSERT(fixture.ed.cmdline.menu.items.len != 0U);
+    YEW_ASSERT(fixture.ed.cmdline.menu.items.len != 0U);
 
     /*
      * The prompt still holds exactly what was typed.  A ghost in the
      * TextBuf would poison the history draft, hand the parser text the
-     * user never wrote, and make sag_cmdline_text() -- which Sprint 21's
+     * user never wrote, and make yew_cmdline_text() -- which Sprint 21's
      * search reads on every keystroke -- return a pattern with a
      * suggestion glued onto it.
      */
     typed = cmdline_text(&fixture.ed.cmdline);
-    SAG_ASSERT_EQ_STR((const char *)typed.data, "redr");
+    YEW_ASSERT_EQ_STR((const char *)typed.data, "redr");
     bytebuf_free(&typed);
 
     bytebuf_init(&via_api);
-    sag_cmdline_text(&fixture.ed, &via_api);
+    yew_cmdline_text(&fixture.ed, &via_api);
     bytebuf_push_u8(&via_api, 0U);
-    SAG_ASSERT_EQ_STR((const char *)via_api.data, "redr");
+    YEW_ASSERT_EQ_STR((const char *)via_api.data, "redr");
     bytebuf_free(&via_api);
 
     /* And the history draft is the typed text, not the suggestion. */
-    SAG_ASSERT_EQ_STR(fixture.ed.cmdline.hist.draft, "redr");
+    YEW_ASSERT_EQ_STR(fixture.ed.cmdline.hist.draft, "redr");
     cmdline_fixture_free(&fixture);
 }
 
@@ -874,25 +874,25 @@ void test_cmdline_ghost_accept_matches_a_menu_accept(void)
 
     /* Accept the suggestion with Right. */
     cmdline_fixture_init(&fixture);
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
     cmdline_type(&fixture, "redr");
-    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
-                                     sag_cmdline_cmd_ghost_accept),
-                      SAG_CMD_OK);
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                     yew_cmdline_cmd_ghost_accept),
+                      YEW_CMD_OK);
     ghosted = cmdline_text(&fixture.ed.cmdline);
-    SAG_ASSERT_EQ_STR((const char *)ghosted.data, "redraw ");
+    YEW_ASSERT_EQ_STR((const char *)ghosted.data, "redraw ");
     cmdline_fixture_free(&fixture);
 
     /* Accept the same candidate from the menu instead.  One accept path
      * means the two land byte-identical text. */
     cmdline_fixture_init(&fixture);
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
     cmdline_type(&fixture, "redr");
-    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
-                                     sag_cmdline_cmd_complete_next),
-                      SAG_CMD_OK);
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                     yew_cmdline_cmd_complete_next),
+                      YEW_CMD_OK);
     chosen = cmdline_text(&fixture.ed.cmdline);
-    SAG_ASSERT_EQ_STR((const char *)chosen.data,
+    YEW_ASSERT_EQ_STR((const char *)chosen.data,
                       (const char *)ghosted.data);
     bytebuf_free(&chosen);
     bytebuf_free(&ghosted);
@@ -905,20 +905,20 @@ void test_cmdline_ghost_accept_is_a_motion_when_nothing_is_suggested(void)
     Bytebuf text;
 
     cmdline_fixture_init(&fixture);
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, NULL);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, NULL);
     cmdline_type(&fixture, "quit");
-    SAG_ASSERT_EQ_U64(fixture.ed.cmdline.cur.pos.v, 4U);
+    YEW_ASSERT_EQ_U64(fixture.ed.cmdline.cur.pos.v, 4U);
 
     /* Step off the end: no suggestion can be shown mid-line, so Right
      * has to be an ordinary motion.  Driven through the keymap, so the
      * binding is under test too. */
-    sag_ed_handle_key(&fixture.ed, cmdline_key(SAG_KEY_LEFT), 1);
-    SAG_ASSERT_EQ_U64(fixture.ed.cmdline.cur.pos.v, 3U);
-    sag_ed_handle_key(&fixture.ed, cmdline_key(SAG_KEY_RIGHT), 1);
-    SAG_ASSERT_EQ_U64(fixture.ed.cmdline.cur.pos.v, 4U);
+    yew_ed_handle_key(&fixture.ed, cmdline_key(YEW_KEY_LEFT), 1);
+    YEW_ASSERT_EQ_U64(fixture.ed.cmdline.cur.pos.v, 3U);
+    yew_ed_handle_key(&fixture.ed, cmdline_key(YEW_KEY_RIGHT), 1);
+    YEW_ASSERT_EQ_U64(fixture.ed.cmdline.cur.pos.v, 4U);
 
     text = cmdline_text(&fixture.ed.cmdline);
-    SAG_ASSERT_EQ_STR((const char *)text.data, "quit");
+    YEW_ASSERT_EQ_STR((const char *)text.data, "quit");
     bytebuf_free(&text);
     cmdline_fixture_free(&fixture);
 }
@@ -929,19 +929,19 @@ void test_cmdline_printable_edit_resets_history_walk_to_new_draft(void)
     Bytebuf text;
 
     cmdline_fixture_init(&fixture);
-    sag_cmdline_open(&fixture.ed, SAG_PROMPT_CMD, "wr");
-    sag_hist_add(fixture.ed.cmdline.history, "write");
-    SAG_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, sag_cmdline_cmd_hist_prev),
-                      SAG_CMD_OK);
-    SAG_ASSERT_EQ_I64(fixture.ed.cmdline.hist.idx, 0);
-    SAG_ASSERT_EQ_STR(fixture.ed.cmdline.hist.stem, "wr");
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, "wr");
+    yew_hist_add(fixture.ed.cmdline.history, "write");
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, yew_cmdline_cmd_hist_prev),
+                      YEW_CMD_OK);
+    YEW_ASSERT_EQ_I64(fixture.ed.cmdline.hist.idx, 0);
+    YEW_ASSERT_EQ_STR(fixture.ed.cmdline.hist.stem, "wr");
 
-    sag_ed_handle_key(&fixture.ed, cmdline_key((u32)'!'), 1);
+    yew_ed_handle_key(&fixture.ed, cmdline_key((u32)'!'), 1);
     text = cmdline_text(&fixture.ed.cmdline);
-    SAG_ASSERT_EQ_STR((const char *)text.data, "write!");
-    SAG_ASSERT_EQ_I64(fixture.ed.cmdline.hist.idx, -1);
-    SAG_ASSERT_NULL(fixture.ed.cmdline.hist.stem);
-    SAG_ASSERT_EQ_STR(fixture.ed.cmdline.hist.draft, "write!");
+    YEW_ASSERT_EQ_STR((const char *)text.data, "write!");
+    YEW_ASSERT_EQ_I64(fixture.ed.cmdline.hist.idx, -1);
+    YEW_ASSERT_NULL(fixture.ed.cmdline.hist.stem);
+    YEW_ASSERT_EQ_STR(fixture.ed.cmdline.hist.draft, "write!");
     bytebuf_free(&text);
     cmdline_fixture_free(&fixture);
 }

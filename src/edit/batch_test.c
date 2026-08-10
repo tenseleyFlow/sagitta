@@ -26,7 +26,7 @@
 #include "util/intern.h"
 
 /* Sprint 37 pins one VM and one test file per process. */
-static SagBatchTestState *active_test;
+static YewBatchTestState *active_test;
 
 typedef struct TestNativeDef {
     const char *name;
@@ -35,17 +35,17 @@ typedef struct TestNativeDef {
     u8 max_ar;
 } TestNativeDef;
 
-static SagBatchTestState *state_for(FlVm *vm)
+static YewBatchTestState *state_for(FlVm *vm)
 {
     if (active_test == NULL || active_test->vm != vm)
-        SAG_BUG("batch assertion has no installed state");
+        YEW_BUG("batch assertion has no installed state");
     return active_test;
 }
 
 static const char *native_name(const FlVm *vm)
 {
     const char *name = vm == NULL || vm->in == NULL ? NULL :
-                       sag_intern_str(vm->in, vm->cur_native);
+                       yew_intern_str(vm->in, vm->cur_native);
     return name == NULL ? "t.?" : name;
 }
 
@@ -65,7 +65,7 @@ static void escaped(Bytebuf *out, const char *s, size_t n)
 
 static void fail_n(FlVm *vm, const char *text, size_t len)
 {
-    SagBatchTestState *s = state_for(vm);
+    YewBatchTestState *s = state_for(vm);
     const char *name = native_name(vm);
     s->failures++;
     bytebuf_append(&s->failure_records, "FAIL\t", 5U);
@@ -123,19 +123,19 @@ static void text_append(Bytebuf *out, const TextBuf *tb, Span span)
     TextIter it;
     u64 at = span.lo;
     if (span.lo == span.hi) return;
-    if (!sag_textiter_begin(&it, tb, BYTEOFF(span.lo)))
-        SAG_BUG("batch assertion cannot start text iterator");
+    if (!yew_textiter_begin(&it, tb, BYTEOFF(span.lo)))
+        YEW_BUG("batch assertion cannot start text iterator");
     do {
         const u8 *chunk;
         u64 avail;
         u64 take;
-        if (!sag_textiter_chunk(&it, tb, &chunk, &avail))
-            SAG_BUG("batch assertion text iterator truncated");
+        if (!yew_textiter_chunk(&it, tb, &chunk, &avail))
+            YEW_BUG("batch assertion text iterator truncated");
         take = avail < span.hi - at ? avail : span.hi - at;
         bytebuf_append(out, chunk, (size_t)take);
         at += take;
-    } while (at < span.hi && sag_textiter_advance(&it, tb));
-    if (at != span.hi) SAG_BUG("batch assertion text ended early");
+    } while (at < span.hi && yew_textiter_advance(&it, tb));
+    if (at != span.hi) YEW_BUG("batch assertion text ended early");
 }
 
 static size_t first_diff(const u8 *a, size_t an, const u8 *b, size_t bn)
@@ -182,7 +182,7 @@ static bool t_text(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     Buffer *buf; const FlStr *want; (void)n; assertion(vm);
     buf = fl_h_buf(vm, a[0]);
     if (buf == NULL || !fl_arg_str(vm, a, 1U, &want)) return false;
-    return assert_text(vm, buf, (Span){0U, sag_buf_len(buf)}, want, out);
+    return assert_text(vm, buf, (Span){0U, yew_buf_len(buf)}, want, out);
 }
 
 static bool t_line(FlVm *vm, FlValue *a, u32 n, FlValue *out)
@@ -191,11 +191,11 @@ static bool t_line(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     (void)n; assertion(vm); buf = fl_h_buf(vm, a[0]);
     if (buf == NULL || !fl_arg_int(vm, a, 1U, &line) ||
         !fl_arg_str(vm, a, 2U, &want)) return false;
-    if (buf->tb == NULL || line < 1 || (u64)line > sag_buf_line_count(buf)) {
+    if (buf->tb == NULL || line < 1 || (u64)line > yew_buf_line_count(buf)) {
         fail(vm, "requested line is outside the buffer");
         *out = FL_NIL_V; return true;
     }
-    span = sag_buf_line_span(buf, LINENO((u64)line - 1U));
+    span = yew_buf_line_span(buf, LINENO((u64)line - 1U));
     bytebuf_init(&tail);
     if (span.hi > span.lo) {
         text_append(&tail, buf->tb, (Span){span.hi - 1U, span.hi});
@@ -212,10 +212,10 @@ static bool t_line(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 
 static void cursor_pos(const Win *w, const Cursor *c, u64 *line, u64 *col)
 {
-    LineNo ln = sag_buf_line_of(w->buf, c->pos);
-    Span s = sag_buf_line_span(w->buf, ln);
+    LineNo ln = yew_buf_line_of(w->buf, c->pos);
+    Span s = yew_buf_line_span(w->buf, ln);
     *line = ln.v + 1U;
-    *col = sag_off_to_gcol(w->buf->tb, s, c->pos).v;
+    *col = yew_off_to_gcol(w->buf->tb, s, c->pos).v;
 }
 
 static bool t_cursor(FlVm *vm, FlValue *a, u32 n, FlValue *out)
@@ -271,14 +271,14 @@ static bool t_sel(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     if (w == NULL || !fl_arg_str(vm, a, 1U, &want)) return false;
     c = &w->cs.curs.data[w->cs.primary]; bytebuf_init(&got);
     if (c->pos.v != c->anchor.v) {
-        if (w->h.kind == SAG_SEL_RECT) {
-            SagSelSpanVec spans = {0}; size_t i;
-            sag_sel_rect_spans(w, c, &spans);
+        if (w->h.kind == YEW_SEL_RECT) {
+            YewSelSpanVec spans = {0}; size_t i;
+            yew_sel_rect_spans(w, c, &spans);
             for (i = 0U; i < spans.len; i++)
                 text_append(&got, w->buf->tb, spans.data[i]);
-            SagSelSpanVec_free(&spans);
+            YewSelSpanVec_free(&spans);
         } else {
-            text_append(&got, w->buf->tb, sag_sel_span(w, c));
+            text_append(&got, w->buf->tb, yew_sel_span(w, c));
         }
     }
     if (got.len != want->len ||
@@ -293,10 +293,10 @@ static bool reg_type_is(FlValue v, u8 actual)
     if (v.t == (u8)FL_INT) return v.as.i == (i64)actual;
     if (v.t != (u8)FL_STR) return false;
     s = (const FlStr *)v.as.o;
-    if (actual == SAG_REG_CHARWISE)
+    if (actual == YEW_REG_CHARWISE)
         return (s->len == 4U && memcmp(s->b, "char", 4U) == 0) ||
                (s->len == 8U && memcmp(s->b, "charwise", 8U) == 0);
-    if (actual == SAG_REG_LINEWISE)
+    if (actual == YEW_REG_LINEWISE)
         return (s->len == 4U && memcmp(s->b, "line", 4U) == 0) ||
                (s->len == 8U && memcmp(s->b, "linewise", 8U) == 0);
     return (s->len == 5U && memcmp(s->b, "block", 5U) == 0) ||
@@ -313,7 +313,7 @@ static bool t_reg(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     if (!fl_arg_str(vm, a, 0U, &name) ||
         !fl_arg_str(vm, a, 1U, &want)) return false;
     if (name->len != 1U || vm->ed == NULL ||
-        (reg = sag_reg_get(&vm->ed->regs, (u8)name->b[0])) == NULL) {
+        (reg = yew_reg_get(&vm->ed->regs, (u8)name->b[0])) == NULL) {
         fail(vm, "register name is not readable"); *out = FL_NIL_V; return true;
     }
     bytebuf_init(&got); bytebuf_append(&got, reg->bytes.data, reg->bytes.len);
@@ -333,10 +333,10 @@ static bool t_undo(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     if (buf == NULL || !fl_arg_int(vm, a, 1U, &want)) return false;
     if (buf->undo != NULL)
         for (i = 0U; i < buf->undo->nodes.len; i++)
-            if ((buf->undo->nodes.data[i].flags & SAG_TXN_DEAD) == 0U) live++;
+            if ((buf->undo->nodes.data[i].flags & YEW_TXN_DEAD) == 0U) live++;
     /*
      * UndoTree exposes no count helper.  This is the same count
-     * sag_undo_dump prints: every non-DEAD node, including the root.
+     * yew_undo_dump prints: every non-DEAD node, including the root.
      */
     if (want < 0 || live != (u64)want) {
         (void)snprintf(msg, sizeof(msg), "want %lld undo nodes; got %llu",
@@ -371,7 +371,7 @@ static bool t_file(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     if (!fl_arg_str(vm, a, 0U, &path) ||
         !fl_arg_str(vm, a, 1U, &want)) return false;
     if (has_nul(path)) { fail(vm, "file path contains NUL"); *out = FL_NIL_V; return true; }
-    owned = sag_xmalloc((size_t)path->len + 1U);
+    owned = yew_xmalloc((size_t)path->len + 1U);
     (void)memcpy(owned, path->b, path->len); owned[path->len] = '\0';
     bytebuf_init(&got);
     if (!read_path(owned, &got)) {
@@ -421,14 +421,14 @@ static bool t_raises(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     *out = FL_NIL_V; return true;
 }
 
-static bool parse_level(const FlStr *s, SagLogLevel *out)
+static bool parse_level(const FlStr *s, YewLogLevel *out)
 {
     static const char *const names[] = {"debug", "info", "warn", "error"};
     u32 i;
-    for (i = 0U; i < SAG_ARRAY_LEN(names); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
         size_t n = strlen(names[i]);
         if (s->len == n && memcmp(s->b, names[i], n) == 0) {
-            *out = (SagLogLevel)i; return true;
+            *out = (YewLogLevel)i; return true;
         }
     }
     return false;
@@ -447,8 +447,8 @@ static bool contains(const char *haystack, const FlStr *needle)
 
 static bool t_log(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
-    SagBatchTestState *s = state_for(vm); const FlStr *level; const FlStr *sub;
-    SagLogLevel wanted; u32 i; bool found = false; (void)n; assertion(vm);
+    YewBatchTestState *s = state_for(vm); const FlStr *level; const FlStr *sub;
+    YewLogLevel wanted; u32 i; bool found = false; (void)n; assertion(vm);
     if (!fl_arg_str(vm, a, 0U, &level) ||
         !fl_arg_str(vm, a, 1U, &sub)) return false;
     if (!parse_level(level, &wanted)) fail(vm, "unknown log level");
@@ -503,7 +503,7 @@ static bool t_fixture(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     if (cwd == NULL)
         return fl_raise(vm, "io", "t.fixture: cannot read cwd: %s", strerror(errno));
     sn = strlen(cwd) + 11U + name->len; dn = strlen(cwd) + 2U + name->len;
-    source = sag_xmalloc(sn); dest = sag_xmalloc(dn);
+    source = yew_xmalloc(sn); dest = yew_xmalloc(dn);
     (void)snprintf(source, sn, "%s/fixtures/%.*s", cwd, (int)name->len, name->b);
     (void)snprintf(dest, dn, "%s/%.*s", cwd, (int)name->len, name->b);
     ok = copy_path(source, dest); free(source); free(cwd);
@@ -515,7 +515,7 @@ static bool t_fixture(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 
 static bool t_tmpdir(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
-    const char *path = getenv("SAG_SCRIPT_TMPDIR"); (void)a; (void)n;
+    const char *path = getenv("YEW_SCRIPT_TMPDIR"); (void)a; (void)n;
     if (path == NULL || path[0] == '\0') path = getenv("TMPDIR");
     if (path == NULL || path[0] == '\0') path = "/tmp";
     *out = FL_OBJ_V(FL_STR, fl_str_new(vm, path, (u32)strlen(path))); return true;
@@ -539,26 +539,26 @@ static const TestNativeDef TEST_NATIVES[] = {
     {"skip", t_skip, 1U, 1U}
 };
 
-void sag_batch_test_init(SagBatchTestState *s)
+void yew_batch_test_init(YewBatchTestState *s)
 {
-    if (s == NULL) SAG_BUG("batch test init: NULL state");
+    if (s == NULL) YEW_BUG("batch test init: NULL state");
     (void)memset(s, 0, sizeof(*s)); bytebuf_init(&s->failure_records);
 }
 
-bool sag_batch_test_install(SagBatchTestState *s, FlVm *vm)
+bool yew_batch_test_install(YewBatchTestState *s, FlVm *vm)
 {
     FlMap *module; u32 i;
     if (s == NULL || vm == NULL || s->installed ||
         (active_test != NULL && active_test != s)) return false;
     s->vm = vm; active_test = s; module = fl_map_new(vm);
     fl_gc_protect(vm, FL_OBJ_V(FL_MAP, module));
-    for (i = 0U; i < SAG_ARRAY_LEN(TEST_NATIVES); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(TEST_NATIVES); i++) {
         const TestNativeDef *d = &TEST_NATIVES[i];
         FlNative *nat = fl_gc_alloc(vm, sizeof(*nat), FL_NATIVE);
         char qualified[48]; int qn = snprintf(qualified, sizeof(qualified),
                                                "t.%s", d->name);
         nat->fn = d->fn;
-        nat->name_id = sag_intern(vm->in, qualified, (size_t)(qn < 0 ? 0 : qn));
+        nat->name_id = yew_intern(vm->in, qualified, (size_t)(qn < 0 ? 0 : qn));
         nat->min_ar = d->min_ar; nat->max_ar = d->max_ar;
         nat->has_recv = 0U; nat->rsv = 0U; nat->caps = 0U; nat->recv = FL_NIL_V;
         (void)fl_map_set(vm, module,
@@ -568,23 +568,23 @@ bool sag_batch_test_install(SagBatchTestState *s, FlVm *vm)
     }
     module->h.oflags |= (u16)FL_OF_FROZEN;
     (void)fl_map_set(vm, vm->globals,
-                     FL_INT_V((i64)sag_intern(vm->in, "t", 1U)),
+                     FL_INT_V((i64)yew_intern(vm->in, "t", 1U)),
                      FL_OBJ_V(FL_MAP, module));
     fl_gc_release(vm, 1U); s->installed = true; return true;
 }
 
-void sag_batch_test_note_log(SagBatchTestState *s, SagLogLevel level,
+void yew_batch_test_note_log(YewBatchTestState *s, YewLogLevel level,
                              const char *message)
 {
-    SagBatchTestLog *entry; size_t len;
+    YewBatchTestLog *entry; size_t len;
     if (s == NULL || message == NULL || s->finished) return;
     if (s->nlogs == s->caplogs) {
         u32 cap = s->caplogs == 0U ? 16U : s->caplogs * 2U;
-        s->logs = sag_xreallocarray(s->logs, cap, sizeof(*s->logs));
+        s->logs = yew_xreallocarray(s->logs, cap, sizeof(*s->logs));
         s->caplogs = cap;
     }
     entry = &s->logs[s->nlogs++]; len = strlen(message);
-    entry->message = sag_xmalloc(len + 1U);
+    entry->message = yew_xmalloc(len + 1U);
     (void)memcpy(entry->message, message, len + 1U); entry->level = (u8)level;
 }
 
@@ -592,7 +592,7 @@ static int result_fd(int fd)
 {
     const char *v; char *end; long parsed;
     if (fd >= 0) return fd;
-    v = getenv("SAG_SCRIPT_RESULT_FD");
+    v = getenv("YEW_SCRIPT_RESULT_FD");
     if (v == NULL || v[0] == '\0') return STDERR_FILENO;
     errno = 0; end = NULL; parsed = strtol(v, &end, 10);
     if (errno != 0 || end == v || *end != '\0' || parsed < 0 ||
@@ -600,7 +600,7 @@ static int result_fd(int fd)
     return (int)parsed;
 }
 
-bool sag_batch_test_finish(SagBatchTestState *s, int fd)
+bool yew_batch_test_finish(YewBatchTestState *s, int fd)
 {
     Bytebuf summary; u64 failures; bool io_ok = true;
     if (s == NULL || !s->installed) return false;
@@ -613,14 +613,14 @@ bool sag_batch_test_finish(SagBatchTestState *s, int fd)
     if (!s->skipped)
         io_ok = write_all(fd, s->failure_records.data, s->failure_records.len);
     bytebuf_init(&summary);
-    bytebuf_printf(&summary, "SAGTEST\t%llu\t%llu\t%u\n",
+    bytebuf_printf(&summary, "YEWTEST\t%llu\t%llu\t%u\n",
                    (unsigned long long)s->assertions,
                    (unsigned long long)failures, s->skipped ? 1U : 0U);
     if (!write_all(fd, summary.data, summary.len)) io_ok = false;
     bytebuf_free(&summary); return io_ok && (s->skipped || failures == 0U);
 }
 
-void sag_batch_test_free(SagBatchTestState *s)
+void yew_batch_test_free(YewBatchTestState *s)
 {
     u32 i;
     if (s == NULL) return;

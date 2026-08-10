@@ -299,7 +299,7 @@ void test_fl_str_the_s02_corpus_never_splits_a_cluster(void)
     char line[2048];
     size_t cases = 0U;
 
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     flfix_open(&f);
     while (fgets(line, sizeof(line), fp) != NULL) {
         u8 bytes[256];
@@ -346,7 +346,7 @@ void test_fl_str_the_s02_corpus_never_splits_a_cluster(void)
         {
             char *tok = strtok(lens, ", \t\n");
 
-            while (tok != NULL && nclusters < SAG_ARRAY_LEN(bounds)) {
+            while (tok != NULL && nclusters < YEW_ARRAY_LEN(bounds)) {
                 at += (size_t)strtoul(tok, NULL, 10);
                 bounds[nclusters++] = at;
                 tok = strtok(NULL, ", \t\n");
@@ -395,6 +395,6 @@ void test_fl_str_the_s02_corpus_never_splits_a_cluster(void)
     (void)fclose(fp);
     /* A corpus that stopped being read would pass every assertion it
      * never made. */
-    SAG_ASSERT(cases >= 20U);
+    YEW_ASSERT(cases >= 20U);
     flfix_close(&f);
 }

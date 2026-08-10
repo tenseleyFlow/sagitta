@@ -179,7 +179,7 @@ u32 fl_suggest_render(FlSuggest *s, const char *typo, u32 typolen,
     }
     if (keep == 0U)
         return 0U;
-    sag_sort_stable(s->v, keep, sizeof(s->v[0]), cand_cmp, NULL);
+    yew_sort_stable(s->v, keep, sizeof(s->v[0]), cand_cmp, NULL);
     shown = keep < (u32)FL_SUGGEST_MAX_SHOWN ? keep
                                              : (u32)FL_SUGGEST_MAX_SHOWN;
     bytebuf_append(out, "did you mean '", 14U);

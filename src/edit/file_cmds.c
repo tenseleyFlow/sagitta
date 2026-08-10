@@ -14,70 +14,70 @@
 #include "ui/viewport.h"
 #include "ws/trust_prompt.h"
 
-CmdStatus sag_file_cmd_save(Ed *ed, bool force)
+CmdStatus yew_file_cmd_save(Ed *ed, bool force)
 {
     if (ed == NULL)
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     if (ed->win != NULL && ed->win->buf != NULL &&
         ed->win->buf->macro_reg != 0U)
-        return sag_macro_store(ed, ed->win->buf);
-    return sag_ed_file_save(ed, force);
+        return yew_macro_store(ed, ed->win->buf);
+    return yew_ed_file_save(ed, force);
 }
 
-CmdStatus sag_file_cmd_save_current(CmdCtx *cx)
+CmdStatus yew_file_cmd_save_current(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL)
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     if (cx->win != NULL && cx->win->buf != NULL &&
         cx->win->buf->macro_reg != 0U)
-        return sag_macro_store(cx->ed, cx->win->buf);
-    return sag_ed_file_save_win(cx->ed, cx->win, false);
+        return yew_macro_store(cx->ed, cx->win->buf);
+    return yew_ed_file_save_win(cx->ed, cx->win, false);
 }
 
-CmdStatus sag_file_cmd_write(CmdCtx *cx)
+CmdStatus yew_file_cmd_write(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL)
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     if (cx->sarg != NULL &&
         memchr(cx->sarg, '\0', cx->sarg_len) != NULL)
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     if (cx->sarg != NULL && cx->sarg_len != 0U)
-        return sag_ed_file_write_to_win(cx->ed, cx->win, cx->sarg,
+        return yew_ed_file_write_to_win(cx->ed, cx->win, cx->sarg,
                                         cx->bang);
     if (cx->win != NULL && cx->win->buf != NULL &&
         cx->win->buf->macro_reg != 0U)
-        return sag_macro_store(cx->ed, cx->win->buf);
-    return sag_ed_file_save_win(cx->ed, cx->win, cx->bang);
+        return yew_macro_store(cx->ed, cx->win->buf);
+    return yew_ed_file_save_win(cx->ed, cx->win, cx->bang);
 }
 
-CmdStatus sag_file_cmd_write_quit(CmdCtx *cx)
+CmdStatus yew_file_cmd_write_quit(CmdCtx *cx)
 {
-    CmdStatus status = sag_file_cmd_write(cx);
+    CmdStatus status = yew_file_cmd_write(cx);
 
-    if (status != SAG_CMD_OK)
+    if (status != YEW_CMD_OK)
         return status;
-    return sag_ed_request_quit(cx->ed, false);
+    return yew_ed_request_quit(cx->ed, false);
 }
 
-CmdStatus sag_file_cmd_new(CmdCtx *cx)
+CmdStatus yew_file_cmd_new(CmdCtx *cx)
 {
-    SagLoadErr load;
+    YewLoadErr load;
 
     if (cx == NULL || cx->ed == NULL)
-        return SAG_CMD_ERR_ARG;
-    if (sag_buf_dirty(&cx->ed->buffer) && !cx->bang) {
-        sag_msg(cx->ed, SAG_MSG_ERROR,
+        return YEW_CMD_ERR_ARG;
+    if (yew_buf_dirty(&cx->ed->buffer) && !cx->bang) {
+        yew_msg(cx->ed, YEW_MSG_ERROR,
                 "buffer has unsaved changes (use :new!)");
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     }
     if (cx->sarg == NULL || cx->sarg[0] == '\0')
-        return sag_ed_open_scratch(cx->ed) ? SAG_CMD_OK : SAG_CMD_ERR_IO;
-    load = sag_ed_open(cx->ed, cx->sarg);
-    return load == SAG_LOAD_OK || load == SAG_LOAD_ENOENT ? SAG_CMD_OK :
-                                                           SAG_CMD_ERR_IO;
+        return yew_ed_open_scratch(cx->ed) ? YEW_CMD_OK : YEW_CMD_ERR_IO;
+    load = yew_ed_open(cx->ed, cx->sarg);
+    return load == YEW_LOAD_OK || load == YEW_LOAD_ENOENT ? YEW_CMD_OK :
+                                                           YEW_CMD_ERR_IO;
 }
 
-CmdStatus sag_file_cmd_buf_open(CmdCtx *cx)
+CmdStatus yew_file_cmd_buf_open(CmdCtx *cx)
 {
     Buffer *b;
     char *path;
@@ -87,31 +87,31 @@ CmdStatus sag_file_cmd_buf_open(CmdCtx *cx)
     if (cx == NULL || cx->ed == NULL || cx->sarg == NULL ||
         cx->sarg_len == 0U || !cx->ed->model_ready ||
         cx->ed->fl_model_teardown)
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     if (memchr(cx->sarg, '\0', cx->sarg_len) != NULL)
-        return SAG_CMD_ERR_ARG;
-    path = sag_xmalloc((size_t)cx->sarg_len + 1U);
+        return YEW_CMD_ERR_ARG;
+    path = yew_xmalloc((size_t)cx->sarg_len + 1U);
     (void)memcpy(path, cx->sarg, cx->sarg_len);
     path[cx->sarg_len] = '\0';
     old_nbufs = cx->ed->ws.nbufs;
-    b = sag_ws_file_buf(cx->ed, path);
+    b = yew_ws_file_buf(cx->ed, path);
     free(path);
     if (b == NULL)
-        return SAG_CMD_ERR_IO;
+        return YEW_CMD_ERR_IO;
     was_loaded = b->tb != NULL;
-    if (sag_buf_hydrate(cx->ed, b) != 0) {
+    if (yew_buf_hydrate(cx->ed, b) != 0) {
         /* Do not leave a failed first open as an unreachable deferred
          * buffer.  An existing deferred buffer stays registered so a later
          * retry can hydrate the same stable object. */
         if (cx->ed->ws.nbufs != old_nbufs)
-            sag_ws_scratch_drop(cx->ed, b);
-        return SAG_CMD_ERR_IO;
+            yew_ws_scratch_drop(cx->ed, b);
+        return YEW_CMD_ERR_IO;
     }
-    if (!sag_ed_show_buffer(cx->ed, b))
-        return SAG_CMD_ERR_STATE;
+    if (!yew_ed_show_buffer(cx->ed, b))
+        return YEW_CMD_ERR_STATE;
     if (!was_loaded)
-        sag_fl_hook_buffer(cx->ed, FL_EV_BUF_OPEN, b);
-    return SAG_CMD_OK;
+        yew_fl_hook_buffer(cx->ed, FL_EV_BUF_OPEN, b);
+    return YEW_CMD_OK;
 }
 
 static bool job_uses_buffer(const Ed *ed, const Buffer *b)
@@ -119,7 +119,7 @@ static bool job_uses_buffer(const Ed *ed, const Buffer *b)
     u32 i;
 
     for (i = 0U; i < ed->jobs.len; i++) {
-        const SagJob *job = &ed->jobs.v[i];
+        const YewJob *job = &ed->jobs.v[i];
 
         if (job->buf == b || (b->tb != NULL && job->in_buf == b->tb))
             return true;
@@ -129,18 +129,18 @@ static bool job_uses_buffer(const Ed *ed, const Buffer *b)
 
 static void retarget_tree(Ed *ed, Pane *root, Buffer *from, Buffer *to)
 {
-    Pane *leaves[SAG_PANE_MAX_LEAVES];
+    Pane *leaves[YEW_PANE_MAX_LEAVES];
     u32 n = 0U;
     u32 i;
 
     if (root == NULL)
         return;
-    sag_pane_collect_leaves(root, leaves, SAG_ARRAY_LEN(leaves), &n);
+    yew_pane_collect_leaves(root, leaves, YEW_ARRAY_LEN(leaves), &n);
     for (i = 0U; i < n; i++) {
         Win *w = leaves[i]->win;
 
         if (w != NULL && w->buf == from)
-            sag_ed_win_set_buffer(ed, w, to);
+            yew_ed_win_set_buffer(ed, w, to);
     }
 }
 
@@ -148,11 +148,11 @@ static void retarget_buffer(Ed *ed, Buffer *from, Buffer *to)
 {
     size_t i;
 
-    /* sag_ed_show_buffer also repairs the register context for the focused
+    /* yew_ed_show_buffer also repairs the register context for the focused
      * window.  The remaining views are reset through the general window
      * seam below. */
     if (ed->win != NULL && ed->win->buf == from)
-        (void)sag_ed_show_buffer(ed, to);
+        (void)yew_ed_show_buffer(ed, to);
     for (i = 0U; i < ed->tabs.v.len; i++) {
         Tab *tab = &ed->tabs.v.data[i];
 
@@ -164,7 +164,7 @@ static void retarget_buffer(Ed *ed, Buffer *from, Buffer *to)
             if (to->path != NULL) {
                 size_t n = strlen(to->path) + 1U;
 
-                tab->path = sag_xmalloc(n);
+                tab->path = yew_xmalloc(n);
                 (void)memcpy(tab->path, to->path, n);
             }
         }
@@ -178,21 +178,21 @@ static void reset_window_view(Win *w)
 
     if (w == NULL)
         return;
-    sag_vp_free(w);
-    sag_cset_free(&w->cs);
-    sag_cset_init(&w->cs, origin);
-    sag_vp_init(w);
+    yew_vp_free(w);
+    yew_cset_free(&w->cs);
+    yew_cset_init(&w->cs, origin);
+    yew_vp_init(w);
 }
 
 static void reset_primary_tree(Pane *root, Buffer *primary)
 {
-    Pane *leaves[SAG_PANE_MAX_LEAVES];
+    Pane *leaves[YEW_PANE_MAX_LEAVES];
     u32 n = 0U;
     u32 i;
 
     if (root == NULL)
         return;
-    sag_pane_collect_leaves(root, leaves, SAG_ARRAY_LEN(leaves), &n);
+    yew_pane_collect_leaves(root, leaves, YEW_ARRAY_LEN(leaves), &n);
     for (i = 0U; i < n; i++) {
         Win *w = leaves[i]->win;
 
@@ -208,21 +208,21 @@ static void close_primary(Ed *ed)
     size_t i;
 
     fl_h_drop_buffer(ed, old_id);
-    sag_opt_scope_free(&b->opt_overrides);
+    yew_opt_scope_free(&b->opt_overrides);
     if (b->jrn != NULL)
-        sag_journal_close(b->jrn);
-    sag_marks_free(b->marks);
-    sag_undo_free(b->undo);
-    sag_textbuf_free(b->tb);
-    sag_filemeta_dispose(&b->meta);
+        yew_journal_close(b->jrn);
+    yew_marks_free(b->marks);
+    yew_undo_free(b->undo);
+    yew_textbuf_free(b->tb);
+    yew_filemeta_dispose(&b->meta);
     (void)memset(b, 0, sizeof(*b));
-    sag_filemeta_init(&b->meta);
+    yew_filemeta_init(&b->meta);
     b->id = ed->ws.next_buf_id++;
-    b->tb = sag_textbuf_new();
-    b->undo = sag_undo_new(b->tb);
-    sag_undo_mark_saved(b->undo);
-    b->marks = sag_marks_new();
-    b->tabwidth = SAG_VP_TABWIDTH;
+    b->tb = yew_textbuf_new();
+    b->undo = yew_undo_new(b->tb);
+    yew_undo_mark_saved(b->undo);
+    b->marks = yew_marks_new();
+    b->tabwidth = YEW_VP_TABWIDTH;
 
     for (i = 0U; i < ed->tabs.v.len; i++) {
         Tab *tab = &ed->tabs.v.data[i];
@@ -236,113 +236,113 @@ static void close_primary(Ed *ed)
     }
     reset_primary_tree(ed->pane_root, b);
     if (ed->win != NULL && ed->win->buf == b)
-        sag_reg_bind_context(&ed->regs, b->undo, &b->meta);
+        yew_reg_bind_context(&ed->regs, b->undo, &b->meta);
     ed->layout_dirty = true;
     ed->full_damage = true;
     ed->footer_dirty = true;
     ed->drawn_cursor_line_valid = false;
     ed->drawn_top_valid = false;
-    sag_state_mark_dirty(ed);
+    yew_state_mark_dirty(ed);
 }
 
-CmdStatus sag_file_cmd_buf_close(CmdCtx *cx)
+CmdStatus yew_file_cmd_buf_close(CmdCtx *cx)
 {
     Buffer *b;
 
     if (cx == NULL || cx->ed == NULL || !cx->ed->model_ready ||
         cx->ed->fl_model_teardown)
-        return SAG_CMD_ERR_ARG;
-    b = cx->win != NULL ? cx->win->buf : sag_ed_doc(cx->ed);
+        return YEW_CMD_ERR_ARG;
+    b = cx->win != NULL ? cx->win->buf : yew_ed_doc(cx->ed);
     if (b == NULL)
-        return SAG_CMD_ERR_STATE;
-    if (sag_buf_dirty(b) && !cx->bang)
-        return SAG_CMD_ERR_IO;
+        return YEW_CMD_ERR_STATE;
+    if (yew_buf_dirty(b) && !cx->bang)
+        return YEW_CMD_ERR_IO;
     /* A subprocess owns these pointers until its slot is released.  Force
      * means discard unsaved bytes; it never means manufacture a dangling
      * asynchronous sink or input source. */
     if (job_uses_buffer(cx->ed, b))
-        return SAG_CMD_ERR_STATE;
-    if (fl_txn_enlisted(sag_fl_vm(cx->ed), b->undo))
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
+    if (fl_txn_enlisted(yew_fl_vm(cx->ed), b->undo))
+        return YEW_CMD_ERR_STATE;
     cx->ed->fl_model_teardown = true;
-    sag_fl_hook_buffer(cx->ed, FL_EV_BUF_CLOSE, b);
-    if (sag_buf_dirty(b) && !cx->bang) {
+    yew_fl_hook_buffer(cx->ed, FL_EV_BUF_CLOSE, b);
+    if (yew_buf_dirty(b) && !cx->bang) {
         cx->ed->fl_model_teardown = false;
-        return SAG_CMD_ERR_IO;
+        return YEW_CMD_ERR_IO;
     }
-    if (fl_txn_enlisted(sag_fl_vm(cx->ed), b->undo)) {
+    if (fl_txn_enlisted(yew_fl_vm(cx->ed), b->undo)) {
         cx->ed->fl_model_teardown = false;
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     }
     if (b == &cx->ed->buffer) {
         close_primary(cx->ed);
         cx->ed->fl_model_teardown = false;
-        return SAG_CMD_OK;
+        return YEW_CMD_OK;
     }
     retarget_buffer(cx->ed, b, &cx->ed->buffer);
     fl_h_drop_buffer(cx->ed, b->id);
     {
         u32 closed_id = b->id;
 
-        sag_ws_scratch_drop(cx->ed, b);
-        sag_trust_prompt_buffer_closed(cx->ed, closed_id);
+        yew_ws_scratch_drop(cx->ed, b);
+        yew_trust_prompt_buffer_closed(cx->ed, closed_id);
     }
-    sag_state_mark_dirty(cx->ed);
+    yew_state_mark_dirty(cx->ed);
     cx->ed->fl_model_teardown = false;
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
-CmdStatus sag_file_cmd_reload(CmdCtx *cx)
+CmdStatus yew_file_cmd_reload(CmdCtx *cx)
 {
-    SagLoadErr load;
+    YewLoadErr load;
     const char *path;
 
     if (cx == NULL || cx->ed == NULL)
-        return SAG_CMD_ERR_ARG;
-    path = sag_ed_doc(cx->ed)->path;
+        return YEW_CMD_ERR_ARG;
+    path = yew_ed_doc(cx->ed)->path;
     if (path == NULL) {
-        sag_msg(cx->ed, SAG_MSG_ERROR, "buffer has no file name");
-        return SAG_CMD_ERR_STATE;
+        yew_msg(cx->ed, YEW_MSG_ERROR, "buffer has no file name");
+        return YEW_CMD_ERR_STATE;
     }
-    if (sag_buf_dirty(&cx->ed->buffer) && !cx->bang) {
-        sag_msg(cx->ed, SAG_MSG_ERROR,
+    if (yew_buf_dirty(&cx->ed->buffer) && !cx->bang) {
+        yew_msg(cx->ed, YEW_MSG_ERROR,
                 "buffer has unsaved changes (use :reload!)");
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     }
-    load = sag_ed_open(cx->ed, path);
-    return load == SAG_LOAD_OK ? SAG_CMD_OK : SAG_CMD_ERR_IO;
+    load = yew_ed_open(cx->ed, path);
+    return load == YEW_LOAD_OK ? YEW_CMD_OK : YEW_CMD_ERR_IO;
 }
 
-CmdStatus sag_file_cmd_quit(CmdCtx *cx)
+CmdStatus yew_file_cmd_quit(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL)
-        return SAG_CMD_ERR_ARG;
-    return sag_ed_request_quit(cx->ed, cx->bang);
+        return YEW_CMD_ERR_ARG;
+    return yew_ed_request_quit(cx->ed, cx->bang);
 }
 
-CmdStatus sag_file_cmd_quit_force(CmdCtx *cx)
+CmdStatus yew_file_cmd_quit_force(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL)
-        return SAG_CMD_ERR_ARG;
-    return sag_ed_request_quit(cx->ed, true);
+        return YEW_CMD_ERR_ARG;
+    return yew_ed_request_quit(cx->ed, true);
 }
 
-CmdStatus sag_file_cmd_suspend(CmdCtx *cx)
+CmdStatus yew_file_cmd_suspend(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL)
-        return SAG_CMD_ERR_ARG;
-    sag_tty_suspend(&cx->ed->tty);
+        return YEW_CMD_ERR_ARG;
+    yew_tty_suspend(&cx->ed->tty);
     cx->ed->layout_dirty = true;
     cx->ed->full_damage = true;
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
-CmdStatus sag_file_cmd_redraw(CmdCtx *cx)
+CmdStatus yew_file_cmd_redraw(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL)
-        return SAG_CMD_ERR_ARG;
+        return YEW_CMD_ERR_ARG;
     if (cx->ed->win != NULL)
-        sag_vp_invalidate(cx->ed->win);
+        yew_vp_invalidate(cx->ed->win);
     cx->ed->full_damage = true;
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }

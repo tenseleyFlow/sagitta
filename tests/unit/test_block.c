@@ -23,7 +23,7 @@ static void block_fixture_init(BlockFixture *fixture, const u8 *bytes,
                                u64 len)
 {
     (void)memset(fixture, 0, sizeof(*fixture));
-    fixture->buffer.tb = sag_textbuf_from_bytes(bytes, len);
+    fixture->buffer.tb = yew_textbuf_from_bytes(bytes, len);
     fixture->buffer.tabwidth = 4U;
     fixture->unit.tb = fixture->buffer.tb;
     fixture->unit.buf = &fixture->buffer;
@@ -36,14 +36,14 @@ static void block_fixture_text(BlockFixture *fixture, const char *text)
 
 static void block_fixture_free(BlockFixture *fixture)
 {
-    sag_textbuf_free(fixture->buffer.tb);
+    yew_textbuf_free(fixture->buffer.tb);
 }
 
 static u64 text_off(const char *text, const char *needle)
 {
     const char *found = strstr(text, needle);
 
-    SAG_ASSERT_NOT_NULL(found);
+    YEW_ASSERT_NOT_NULL(found);
     return (u64)(found - text);
 }
 
@@ -51,29 +51,29 @@ static Span block_level(BlockFixture *fixture, u64 at, u32 level)
 {
     Span span = {UINT64_MAX, UINT64_MAX};
 
-    SAG_ASSERT(sag_block_level(&fixture->unit, BYTEOFF(at), level, &span));
+    YEW_ASSERT(yew_block_level(&fixture->unit, BYTEOFF(at), level, &span));
     return span;
 }
 
 static void assert_span(Span actual, u64 lo, u64 hi)
 {
-    SAG_ASSERT_EQ_U64(actual.lo, lo);
-    SAG_ASSERT_EQ_U64(actual.hi, hi);
+    YEW_ASSERT_EQ_U64(actual.lo, lo);
+    YEW_ASSERT_EQ_U64(actual.hi, hi);
 }
 
 static void assert_scan_budget(i64 elapsed)
 {
     char detail[128];
 
-    if (getenv("SAG_TEST_INSTRUMENTED") != NULL)
+    if (getenv("YEW_TEST_INSTRUMENTED") != NULL)
         return;
-    sag_test_count_assertion();
+    yew_test_count_assertion();
     if (elapsed < INT64_C(1000000))
         return;
     (void)snprintf(detail, sizeof(detail),
                    "block scan elapsed=%lldns budget=1000000ns",
                    (long long)elapsed);
-    sag_test_fail(__FILE__, __LINE__, detail);
+    yew_test_fail(__FILE__, __LINE__, detail);
 }
 
 void test_block_paragraph_text_and_blank_runs_are_units(void)
@@ -114,12 +114,12 @@ void test_block_indent_absorbs_interior_not_trailing_blank_lines(void)
     block_fixture_text(&fixture, text);
     statement = block_level(&fixture, text_off(text, "one"), 0U);
     suite = block_level(&fixture, text_off(text, "one"), 1U);
-    SAG_ASSERT(statement.lo >= one);
-    SAG_ASSERT(suite.lo <= one);
-    SAG_ASSERT(suite.hi > text_off(text, "two = 2"));
-    SAG_ASSERT_EQ_U64(suite.hi, trailing_blank);
-    SAG_ASSERT(((const u8 *)text)[suite.hi - 1U] != (u8)' ');
-    SAG_ASSERT(suite.hi <= text_off(text, "next = 3"));
+    YEW_ASSERT(statement.lo >= one);
+    YEW_ASSERT(suite.lo <= one);
+    YEW_ASSERT(suite.hi > text_off(text, "two = 2"));
+    YEW_ASSERT_EQ_U64(suite.hi, trailing_blank);
+    YEW_ASSERT(((const u8 *)text)[suite.hi - 1U] != (u8)' ');
+    YEW_ASSERT(suite.hi <= text_off(text, "next = 3"));
     block_fixture_free(&fixture);
 }
 
@@ -147,17 +147,17 @@ void test_block_scope_quote_and_comment_suppression(void)
     span = block_level(&fixture, live, 0U);
     assert_span(span, live - 1U, live + strlen("live") + 1U);
     span = block_level(&fixture, quoted, 0U);
-    SAG_ASSERT(span.lo < text_off(text, "x = 'a"));
-    SAG_ASSERT(span.hi > quoted);
-    SAG_ASSERT(!sag_block_match(&fixture.unit, BYTEOFF(quoted), false,
+    YEW_ASSERT(span.lo < text_off(text, "x = 'a"));
+    YEW_ASSERT(span.hi > quoted);
+    YEW_ASSERT(!yew_block_match(&fixture.unit, BYTEOFF(quoted), false,
                                 &match));
     span = block_level(&fixture, odd, 0U);
     assert_span(span, odd - 1U, odd + strlen("live") + 1U);
-    SAG_ASSERT(sag_block_match(&fixture.unit, BYTEOFF(odd), false, &match));
-    SAG_ASSERT_EQ_U64(match.v, odd - 1U);
+    YEW_ASSERT(yew_block_match(&fixture.unit, BYTEOFF(odd), false, &match));
+    YEW_ASSERT_EQ_U64(match.v, odd - 1U);
     span = block_level(&fixture, comment, 0U);
-    SAG_ASSERT(span.lo < comment - 1U);
-    SAG_ASSERT(!sag_block_match(&fixture.unit, BYTEOFF(comment), false,
+    YEW_ASSERT(span.lo < comment - 1U);
+    YEW_ASSERT(!yew_block_match(&fixture.unit, BYTEOFF(comment), false,
                                 &match));
     span = block_level(&fixture, live2, 0U);
     assert_span(span, live2 - 1U, live2 + strlen("live2") + 1U);
@@ -187,16 +187,16 @@ void test_block_c_fixture_has_four_hand_computed_levels(void)
     u64 at = inner_lo;
 
     block_fixture_text(&fixture, text);
-    for (u32 i = 0U; i < SAG_ARRAY_LEN(levels); i++)
+    for (u32 i = 0U; i < YEW_ARRAY_LEN(levels); i++)
         levels[i] = block_level(&fixture, at, i);
     assert_span(levels[0], inner_lo, inner_hi);
     assert_span(levels[1], outer_lo, outer_hi);
     assert_span(levels[2], function_lo, function_hi);
     assert_span(levels[3], 0U, strlen(text));
-    for (u32 i = 1U; i < SAG_ARRAY_LEN(levels); i++) {
-        SAG_ASSERT(levels[i].lo <= levels[i - 1U].lo);
-        SAG_ASSERT(levels[i].hi >= levels[i - 1U].hi);
-        SAG_ASSERT(levels[i].lo < levels[i - 1U].lo ||
+    for (u32 i = 1U; i < YEW_ARRAY_LEN(levels); i++) {
+        YEW_ASSERT(levels[i].lo <= levels[i - 1U].lo);
+        YEW_ASSERT(levels[i].hi >= levels[i - 1U].hi);
+        YEW_ASSERT(levels[i].lo < levels[i - 1U].lo ||
                    levels[i].hi > levels[i - 1U].hi);
     }
     block_fixture_free(&fixture);
@@ -218,16 +218,16 @@ void test_block_plain_text_has_three_distinct_containment_levels(void)
     u64 at = text_off(text, "detail");
 
     block_fixture_text(&fixture, text);
-    for (u32 i = 0U; i < SAG_ARRAY_LEN(levels); i++)
+    for (u32 i = 0U; i < YEW_ARRAY_LEN(levels); i++)
         levels[i] = block_level(&fixture, at, i);
-    for (u32 i = 1U; i < SAG_ARRAY_LEN(levels); i++) {
-        SAG_ASSERT(levels[i].lo <= levels[i - 1U].lo);
-        SAG_ASSERT(levels[i].hi >= levels[i - 1U].hi);
-        SAG_ASSERT(levels[i].lo < levels[i - 1U].lo ||
+    for (u32 i = 1U; i < YEW_ARRAY_LEN(levels); i++) {
+        YEW_ASSERT(levels[i].lo <= levels[i - 1U].lo);
+        YEW_ASSERT(levels[i].hi >= levels[i - 1U].hi);
+        YEW_ASSERT(levels[i].lo < levels[i - 1U].lo ||
                    levels[i].hi > levels[i - 1U].hi);
     }
-    SAG_ASSERT(levels[0].lo > 0U);
-    SAG_ASSERT(levels[2].hi <= strlen(text));
+    YEW_ASSERT(levels[0].lo > 0U);
+    YEW_ASSERT(levels[2].hi <= strlen(text));
     block_fixture_free(&fixture);
 }
 
@@ -244,7 +244,7 @@ void test_block_scan_budget_falls_through_before_distant_pair(void)
     Span span;
     i64 elapsed;
 
-    SAG_ASSERT_NOT_NULL(text);
+    YEW_ASSERT_NOT_NULL(text);
     for (u64 line = 0U; line < LINES; line++) {
         if (line == CENTER - DISTANCE) {
             text[len++] = (u8)'{';
@@ -259,13 +259,13 @@ void test_block_scan_budget_falls_through_before_distant_pair(void)
         text[len++] = (u8)'\n';
     }
     block_fixture_init(&fixture, text, len);
-    SAG_ASSERT_EQ_I64(clock_gettime(CLOCK_MONOTONIC, &start), 0);
+    YEW_ASSERT_EQ_I64(clock_gettime(CLOCK_MONOTONIC, &start), 0);
     span = block_level(&fixture, target_lo + 1U, 0U);
-    SAG_ASSERT_EQ_I64(clock_gettime(CLOCK_MONOTONIC, &end), 0);
+    YEW_ASSERT_EQ_I64(clock_gettime(CLOCK_MONOTONIC, &end), 0);
     elapsed = (i64)(end.tv_sec - start.tv_sec) * INT64_C(1000000000) +
               (i64)end.tv_nsec - (i64)start.tv_nsec;
     assert_span(span, target_lo, target_hi);
-    SAG_ASSERT(elapsed >= 0);
+    YEW_ASSERT(elapsed >= 0);
     assert_scan_budget(elapsed);
     block_fixture_free(&fixture);
     free(text);
@@ -284,13 +284,13 @@ void test_block_matching_delimiters_ignores_nested_and_suppressed_pairs(void)
     u64 hidden = text_off(text, "hidden");
 
     block_fixture_text(&fixture, text);
-    SAG_ASSERT(sag_block_match(&fixture.unit, BYTEOFF(inner), false,
+    YEW_ASSERT(yew_block_match(&fixture.unit, BYTEOFF(inner), false,
                                &match));
-    SAG_ASSERT_EQ_U64(match.v, open);
-    SAG_ASSERT(sag_block_match(&fixture.unit, BYTEOFF(inner), true,
+    YEW_ASSERT_EQ_U64(match.v, open);
+    YEW_ASSERT(yew_block_match(&fixture.unit, BYTEOFF(inner), true,
                                &match));
-    SAG_ASSERT_EQ_U64(match.v, close);
-    SAG_ASSERT(!sag_block_match(&fixture.unit, BYTEOFF(hidden), false,
+    YEW_ASSERT_EQ_U64(match.v, close);
+    YEW_ASSERT(!yew_block_match(&fixture.unit, BYTEOFF(hidden), false,
                                 &match));
     block_fixture_free(&fixture);
 }
@@ -304,7 +304,7 @@ void test_block_selection_chain_saturates_at_buffer_for_stack_replay(void)
     u64 at = text_off(text, "three");
 
     block_fixture_text(&fixture, text);
-    for (u32 level = 0U; level < SAG_SEL_DEPTH; level++) {
+    for (u32 level = 0U; level < YEW_SEL_DEPTH; level++) {
         next = block_level(&fixture, at, level);
         if (stack.n != 0U &&
             next.lo == stack.s[stack.n - 1U].lo &&
@@ -312,20 +312,20 @@ void test_block_selection_chain_saturates_at_buffer_for_stack_replay(void)
             break;
         stack.s[stack.n++] = next;
     }
-    SAG_ASSERT(stack.n >= 3U);
-    SAG_ASSERT(stack.n <= SAG_SEL_DEPTH);
-    SAG_ASSERT_EQ_U64(stack.s[stack.n - 1U].lo, 0U);
-    SAG_ASSERT_EQ_U64(stack.s[stack.n - 1U].hi, strlen(text));
+    YEW_ASSERT(stack.n >= 3U);
+    YEW_ASSERT(stack.n <= YEW_SEL_DEPTH);
+    YEW_ASSERT_EQ_U64(stack.s[stack.n - 1U].lo, 0U);
+    YEW_ASSERT_EQ_U64(stack.s[stack.n - 1U].hi, strlen(text));
     next = block_level(&fixture, at, stack.n);
     assert_span(next, stack.s[stack.n - 1U].lo,
                 stack.s[stack.n - 1U].hi);
     while (stack.n != 0U) {
         Span replay = stack.s[--stack.n];
 
-        SAG_ASSERT(replay.lo <= at);
-        SAG_ASSERT(replay.hi >= at);
+        YEW_ASSERT(replay.lo <= at);
+        YEW_ASSERT(replay.hi >= at);
     }
-    SAG_ASSERT_EQ_U64(stack.n, 0U);
+    YEW_ASSERT_EQ_U64(stack.n, 0U);
     block_fixture_free(&fixture);
 }
 
@@ -341,17 +341,17 @@ void test_block_syntax_install_names_sprint40(void)
     u8 chunk[256];
 
     bytebuf_init(&output);
-    SAG_ASSERT_EQ_I64(fflush(NULL), 0);
-    SAG_ASSERT_EQ_I64(pipe(pipefd), 0);
+    YEW_ASSERT_EQ_I64(fflush(NULL), 0);
+    YEW_ASSERT_EQ_I64(pipe(pipefd), 0);
     child = fork();
-    SAG_ASSERT(child >= 0);
+    YEW_ASSERT(child >= 0);
     if (child == 0) {
         (void)close(pipefd[0]);
         if (dup2(pipefd[1], STDERR_FILENO) < 0)
             _exit(126);
         (void)close(pipefd[1]);
-        (void)setenv("SAG_LOG", "/dev/null", 1);
-        sag_block_provider_syntax_install(provider);
+        (void)setenv("YEW_LOG", "/dev/null", 1);
+        yew_block_provider_syntax_install(provider);
         _exit(99);
     }
     (void)close(pipefd[1]);
@@ -369,10 +369,10 @@ void test_block_syntax_install_names_sprint40(void)
     do {
         waited = waitpid(child, &status, 0);
     } while (waited < 0 && errno == EINTR);
-    SAG_ASSERT_EQ_I64(waited, child);
-    SAG_ASSERT(WIFEXITED(status));
-    SAG_ASSERT_EQ_I64(WEXITSTATUS(status), SAG_EXIT_BUG);
+    YEW_ASSERT_EQ_I64(waited, child);
+    YEW_ASSERT(WIFEXITED(status));
+    YEW_ASSERT_EQ_I64(WEXITSTATUS(status), YEW_EXIT_BUG);
     bytebuf_append(&output, "", 1U);
-    SAG_ASSERT(strstr((const char *)output.data, "Sprint 40") != NULL);
+    YEW_ASSERT(strstr((const char *)output.data, "Sprint 40") != NULL);
     bytebuf_free(&output);
 }

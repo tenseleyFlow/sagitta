@@ -5,23 +5,23 @@
 
 static int args_error(Bytebuf *err, const char *fmt, const char *arg)
 {
-    bytebuf_printf(err, "sagitta: error: ");
+    bytebuf_printf(err, "yew: error: ");
     bytebuf_printf(err, fmt, arg);
     bytebuf_push_u8(err, (u8)'\n');
-    return SAG_EXIT_ERR;
+    return YEW_EXIT_ERR;
 }
 
-void sag_args_free(SagArgs *args)
+void yew_args_free(YewArgs *args)
 {
     free(args->grants);
     args->grants = NULL;
     args->ngrants = 0U;
 }
 
-static int parse_error(SagArgs *out, Bytebuf *err, const char *fmt,
+static int parse_error(YewArgs *out, Bytebuf *err, const char *fmt,
                        const char *arg)
 {
-    sag_args_free(out);
+    yew_args_free(out);
     return args_error(err, fmt, arg);
 }
 
@@ -36,7 +36,7 @@ static bool grant_valid(const char *text, size_t *name_len)
     return true;
 }
 
-static int add_grant(SagArgs *out, const char *text, Bytebuf *err)
+static int add_grant(YewArgs *out, const char *text, Bytebuf *err)
 {
     size_t name_len;
 
@@ -45,13 +45,13 @@ static int add_grant(SagArgs *out, const char *text, Bytebuf *err)
                            "invalid --grant value '%s' (expected NAME:CAP)",
                            text);
     }
-    out->grants = sag_xreallocarray(out->grants, out->ngrants + 1U,
+    out->grants = yew_xreallocarray(out->grants, out->ngrants + 1U,
                                     sizeof(*out->grants));
-    out->grants[out->ngrants++] = (SagGrantArg){text, name_len};
+    out->grants[out->ngrants++] = (YewGrantArg){text, name_len};
     return -1;
 }
 
-static int require_value(SagArgs *out, int *index, int argc, char **argv,
+static int require_value(YewArgs *out, int *index, int argc, char **argv,
                          Bytebuf *err, const char **value)
 {
     const char *option = argv[*index];
@@ -63,12 +63,12 @@ static int require_value(SagArgs *out, int *index, int argc, char **argv,
     return -1;
 }
 
-int sag_args_parse(SagArgs *out, int argc, char **argv, Bytebuf *err)
+int yew_args_parse(YewArgs *out, int argc, char **argv, Bytebuf *err)
 {
     int i;
     bool batch_requested = false;
 
-    *out = (SagArgs){0};
+    *out = (YewArgs){0};
 
     for (i = 1; i < argc; i++) {
         const char *arg = argv[i];
@@ -159,7 +159,7 @@ int sag_args_parse(SagArgs *out, int argc, char **argv, Bytebuf *err)
     }
 
     if (out->version || out->help || out->help_cmds) {
-        return SAG_EXIT_OK;
+        return YEW_EXIT_OK;
     }
     if (batch_requested && out->batch_script == NULL)
         return parse_error(out, err, "option '%s' requires an argument",

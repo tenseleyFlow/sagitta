@@ -129,7 +129,7 @@ u32 fl_hash_value(FlValue v)
     case FL_BOOL:
         return v.as.b ? 0x9E3779B9U : 0x85EBCA6BU;
     default:
-        SAG_BUG("fletch: hashed an unhashable value");
+        YEW_BUG("fletch: hashed an unhashable value");
     }
 }
 

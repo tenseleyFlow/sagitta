@@ -1,5 +1,5 @@
-#ifndef SAG_TEXT_UNDO_H
-#define SAG_TEXT_UNDO_H
+#ifndef YEW_TEXT_UNDO_H
+#define YEW_TEXT_UNDO_H
 
 #include <stdbool.h>
 #include <stdio.h>
@@ -10,37 +10,37 @@
 #include "util/buf.h"
 #include "util/vec.h"
 
-#define SAG_UNDO_BURST_MS 400U
-#define SAG_UNDO_BURST_BYTES 4096U
-#define SAG_UNDO_BYTES_MAX (UINT64_C(64) * 1024U * 1024U)
-#define SAG_UNDO_MIN_NODES 200U
-#define SAG_UNDO_PERSIST_BYTES_MAX (UINT64_C(16) * 1024U * 1024U)
+#define YEW_UNDO_BURST_MS 400U
+#define YEW_UNDO_BURST_BYTES 4096U
+#define YEW_UNDO_BYTES_MAX (UINT64_C(64) * 1024U * 1024U)
+#define YEW_UNDO_MIN_NODES 200U
+#define YEW_UNDO_PERSIST_BYTES_MAX (UINT64_C(16) * 1024U * 1024U)
 
 typedef struct EditCtx EditCtx;
 
 typedef enum {
-    SAG_OP_INS = 1,
-    SAG_OP_DEL = 2
-} SagOpKind;
+    YEW_OP_INS = 1,
+    YEW_OP_DEL = 2
+} YewOpKind;
 
 typedef enum {
-    SAG_TXN_TYPE = 0,
-    SAG_TXN_ERASE,
-    SAG_TXN_PASTE,
-    SAG_TXN_CUT,
-    SAG_TXN_MULTI,
-    SAG_TXN_MACRO,
-    SAG_TXN_FILTER,
-    SAG_TXN_REPLACE,
-    SAG_TXN_LSP,
-    SAG_TXN_EXTERNAL,
-    SAG_TXN_REASON_MAX
-} SagTxnReason;
+    YEW_TXN_TYPE = 0,
+    YEW_TXN_ERASE,
+    YEW_TXN_PASTE,
+    YEW_TXN_CUT,
+    YEW_TXN_MULTI,
+    YEW_TXN_MACRO,
+    YEW_TXN_FILTER,
+    YEW_TXN_REPLACE,
+    YEW_TXN_LSP,
+    YEW_TXN_EXTERNAL,
+    YEW_TXN_REASON_MAX
+} YewTxnReason;
 
 enum {
-    SAG_TXN_TRIMMED = 1U << 0,
-    SAG_TXN_SAVED = 1U << 1,
-    SAG_TXN_DEAD = 1U << 2
+    YEW_TXN_TRIMMED = 1U << 0,
+    YEW_TXN_SAVED = 1U << 1,
+    YEW_TXN_DEAD = 1U << 2
 };
 
 typedef struct UndoOp {
@@ -102,23 +102,23 @@ typedef struct UndoNode {
     u8 flags;
 } UndoNode;
 
-VEC_DECL(SagUndoNodeVec, UndoNode);
-VEC_DECL(SagUndoOpVec, UndoOp);
-VEC_DECL(SagCursorRecVec, CursorRec);
-VEC_DECL(SagMarkRepairVec, MarkRepair);
-VEC_DECL(SagUndoRepairRunVec, UndoRepairRun);
-VEC_DECL(SagUndoReplaySpanVec, UndoReplaySpan);
+VEC_DECL(YewUndoNodeVec, UndoNode);
+VEC_DECL(YewUndoOpVec, UndoOp);
+VEC_DECL(YewCursorRecVec, CursorRec);
+VEC_DECL(YewMarkRepairVec, MarkRepair);
+VEC_DECL(YewUndoRepairRunVec, UndoRepairRun);
+VEC_DECL(YewUndoReplaySpanVec, UndoReplaySpan);
 
-typedef u64 (*SagUndoMonoClock)(void *ctx);
-typedef i64 (*SagUndoWallClock)(void *ctx);
+typedef u64 (*YewUndoMonoClock)(void *ctx);
+typedef i64 (*YewUndoWallClock)(void *ctx);
 
 typedef struct UndoTree {
-    SagUndoNodeVec nodes;
-    SagUndoOpVec ops;
-    SagCursorRecVec cursors;
-    SagMarkRepairVec repairs;
-    SagUndoRepairRunVec repair_runs;
-    SagUndoReplaySpanVec replay_spans;
+    YewUndoNodeVec nodes;
+    YewUndoOpVec ops;
+    YewCursorRecVec cursors;
+    YewMarkRepairVec repairs;
+    YewUndoRepairRunVec repair_runs;
+    YewUndoReplaySpanVec replay_spans;
     Bytebuf blobs;
     u32 root;
     u32 cur;
@@ -135,7 +135,7 @@ typedef struct UndoTree {
     u64 bytes_max;
     u64 persist_bytes_max;
     u32 min_nodes;
-    SagTxnReason pending_reason;
+    YewTxnReason pending_reason;
     bool boundary;
     bool over_budget_logged;
     bool reopened;
@@ -145,8 +145,8 @@ typedef struct UndoTree {
     u32 reopen_n_after;
     u64 reopen_blob_hi;
     u64 reopen_t_last_ms;
-    SagUndoMonoClock mono_clock;
-    SagUndoWallClock wall_clock;
+    YewUndoMonoClock mono_clock;
+    YewUndoWallClock wall_clock;
     void *clock_ctx;
     const TextBuf *owner;
 } UndoTree;
@@ -167,56 +167,56 @@ typedef struct {
 } UndoNodeInfo;
 
 typedef enum {
-    SAG_UNDO_WRITE_OK = 0,
-    SAG_UNDO_WRITE_IO,
-    SAG_UNDO_WRITE_TOO_LARGE
-} SagUndoWriteResult;
+    YEW_UNDO_WRITE_OK = 0,
+    YEW_UNDO_WRITE_IO,
+    YEW_UNDO_WRITE_TOO_LARGE
+} YewUndoWriteResult;
 
 typedef enum {
-    SAG_UNDO_READ_CURRENT = 0,
-    SAG_UNDO_READ_ANCHOR,
-    SAG_UNDO_READ_DROPPED,
-    SAG_UNDO_READ_IO
-} SagUndoReadResult;
+    YEW_UNDO_READ_CURRENT = 0,
+    YEW_UNDO_READ_ANCHOR,
+    YEW_UNDO_READ_DROPPED,
+    YEW_UNDO_READ_IO
+} YewUndoReadResult;
 
-UndoTree *sag_undo_new(const TextBuf *tb);
-void sag_undo_free(UndoTree *ut);
-void sag_undo_set_clock(UndoTree *ut, SagUndoMonoClock mono_clock,
-                        SagUndoWallClock wall_clock, void *ctx);
-void sag_undo_set_limits(UndoTree *ut, u64 bytes_max, u32 min_nodes,
+UndoTree *yew_undo_new(const TextBuf *tb);
+void yew_undo_free(UndoTree *ut);
+void yew_undo_set_clock(UndoTree *ut, YewUndoMonoClock mono_clock,
+                        YewUndoWallClock wall_clock, void *ctx);
+void yew_undo_set_limits(UndoTree *ut, u64 bytes_max, u32 min_nodes,
                          u64 persist_bytes_max);
 
-void sag_undo_begin(EditCtx *ec, SagTxnReason why);
-void sag_undo_promote_multi(EditCtx *ec);
-void sag_undo_end(EditCtx *ec);
-void sag_undo_boundary(UndoTree *ut);
-void sag_undo_abort(EditCtx *ec);
-bool sag_undo_reopen(EditCtx *ec, SagTxnReason expect);
+void yew_undo_begin(EditCtx *ec, YewTxnReason why);
+void yew_undo_promote_multi(EditCtx *ec);
+void yew_undo_end(EditCtx *ec);
+void yew_undo_boundary(UndoTree *ut);
+void yew_undo_abort(EditCtx *ec);
+bool yew_undo_reopen(EditCtx *ec, YewTxnReason expect);
 
-bool sag_undo(EditCtx *ec);
-bool sag_redo(EditCtx *ec);
-bool sag_undo_to(EditCtx *ec, u32 node_id);
-bool sag_undo_state(EditCtx *ec, i64 delta);
-bool sag_undo_time(EditCtx *ec, i64 wall_secs);
-u32 sag_undo_branch_cycle(UndoTree *ut, i32 delta);
-u32 sag_undo_current(const UndoTree *ut);
-bool sag_undo_at_save_point(const UndoTree *ut);
-void sag_undo_mark_saved(UndoTree *ut);
-bool sag_undo_last_insert(const UndoTree *ut, Bytebuf *out, i64 *t_wall);
+bool yew_undo(EditCtx *ec);
+bool yew_redo(EditCtx *ec);
+bool yew_undo_to(EditCtx *ec, u32 node_id);
+bool yew_undo_state(EditCtx *ec, i64 delta);
+bool yew_undo_time(EditCtx *ec, i64 wall_secs);
+u32 yew_undo_branch_cycle(UndoTree *ut, i32 delta);
+u32 yew_undo_current(const UndoTree *ut);
+bool yew_undo_at_save_point(const UndoTree *ut);
+void yew_undo_mark_saved(UndoTree *ut);
+bool yew_undo_last_insert(const UndoTree *ut, Bytebuf *out, i64 *t_wall);
 
-u32 sag_undo_list(const UndoTree *ut, UndoNodeInfo *out, u32 max);
-u32 sag_undo_children(const UndoTree *ut, u32 id, u32 *out, u32 max);
-void sag_undo_describe(const UndoTree *ut, u32 id, i64 now, char *buf,
+u32 yew_undo_list(const UndoTree *ut, UndoNodeInfo *out, u32 max);
+u32 yew_undo_children(const UndoTree *ut, u32 id, u32 *out, u32 max);
+void yew_undo_describe(const UndoTree *ut, u32 id, i64 now, char *buf,
                        u64 len);
-void sag_undo_dump(const UndoTree *ut, FILE *out);
+void yew_undo_dump(const UndoTree *ut, FILE *out);
 
-SagUndoWriteResult sag_undo_write(EditCtx *ec, const char *path);
-SagUndoReadResult sag_undo_read(EditCtx *ec, const char *path);
+YewUndoWriteResult yew_undo_write(EditCtx *ec, const char *path);
+YewUndoReadResult yew_undo_read(EditCtx *ec, const char *path);
 
 /* Internal edit-choke-point hooks; callers mutate only through edit.c. */
-void sag_undo_prepare_insert(EditCtx *ec, ByteOff at, u64 len);
-void sag_undo_prepare_delete(EditCtx *ec, Span range);
-void sag_undo_record_insert(EditCtx *ec, ByteOff at, u64 len, u64 payload);
-void sag_undo_record_delete(EditCtx *ec, Span range);
+void yew_undo_prepare_insert(EditCtx *ec, ByteOff at, u64 len);
+void yew_undo_prepare_delete(EditCtx *ec, Span range);
+void yew_undo_record_insert(EditCtx *ec, ByteOff at, u64 len, u64 payload);
+void yew_undo_record_delete(EditCtx *ec, Span range);
 
 #endif

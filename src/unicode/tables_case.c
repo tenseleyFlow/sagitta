@@ -6,7 +6,7 @@
 #include "unicode/utf8.h"
 #include "util/log.h"
 
-struct SagCaseRec {
+struct YewCaseRec {
     u32 cp;
     u32 lower_at;
     u32 upper_at;
@@ -14,7 +14,7 @@ struct SagCaseRec {
     u8 upper_len;
 };
 
-static const u32 sag_case_data[] = {
+static const u32 yew_case_data[] = {
     0x000061u, 0x000062u, 0x000063u, 0x000064u, 0x000065u, 0x000066u, 0x000067u, 0x000068u,
     0x000069u, 0x00006Au, 0x00006Bu, 0x00006Cu, 0x00006Du, 0x00006Eu, 0x00006Fu, 0x000070u,
     0x000071u, 0x000072u, 0x000073u, 0x000074u, 0x000075u, 0x000076u, 0x000077u, 0x000078u,
@@ -409,7 +409,7 @@ static const u32 sag_case_data[] = {
     0x01E91Fu, 0x01E920u, 0x01E921u
 };
 
-static const struct SagCaseRec sag_case_recs[] = {
+static const struct YewCaseRec yew_case_recs[] = {
     {0x000041u, 0u, 1u, 1u, 0u},
     {0x000042u, 1u, 2u, 1u, 0u},
     {0x000043u, 2u, 3u, 1u, 0u},
@@ -3393,45 +3393,45 @@ static const struct SagCaseRec sag_case_recs[] = {
     {0x01E943u, 3130u, 3130u, 0u, 1u}
 };
 
-static const struct SagCaseRec *case_record(u32 cp)
+static const struct YewCaseRec *case_record(u32 cp)
 {
     size_t lo = 0U;
-    size_t hi = SAG_ARRAY_LEN(sag_case_recs);
+    size_t hi = YEW_ARRAY_LEN(yew_case_recs);
 
     while (lo < hi) {
         size_t mid = lo + (hi - lo) / 2U;
 
-        if (cp < sag_case_recs[mid].cp)
+        if (cp < yew_case_recs[mid].cp)
             hi = mid;
-        else if (cp > sag_case_recs[mid].cp)
+        else if (cp > yew_case_recs[mid].cp)
             lo = mid + 1U;
         else
-            return &sag_case_recs[mid];
+            return &yew_case_recs[mid];
     }
     return NULL;
 }
 
-u8 sag_case_map(u32 cp, SagCaseKind kind,
-                u32 out[SAG_CASE_MAX_CODEPOINTS])
+u8 yew_case_map(u32 cp, YewCaseKind kind,
+                u32 out[YEW_CASE_MAX_CODEPOINTS])
 {
-    const struct SagCaseRec *rec;
+    const struct YewCaseRec *rec;
     u32 at = 0U;
     u8 len = 0U;
 
     if (out == NULL)
-        SAG_BUG("sag_case_map: NULL output");
+        YEW_BUG("yew_case_map: NULL output");
     rec = case_record(cp);
     if (rec != NULL) {
         switch (kind) {
-        case SAG_CASE_LOWER:
+        case YEW_CASE_LOWER:
             at = rec->lower_at;
             len = rec->lower_len;
             break;
-        case SAG_CASE_UPPER:
+        case YEW_CASE_UPPER:
             at = rec->upper_at;
             len = rec->upper_len;
             break;
-        case SAG_CASE_TOGGLE:
+        case YEW_CASE_TOGGLE:
             if (rec->upper_len != 0U) {
                 at = rec->upper_at;
                 len = rec->upper_len;
@@ -3441,11 +3441,11 @@ u8 sag_case_map(u32 cp, SagCaseKind kind,
             }
             break;
         default:
-            SAG_BUG("sag_case_map: invalid case kind %u",
+            YEW_BUG("yew_case_map: invalid case kind %u",
                     (unsigned)kind);
         }
-    } else if (kind < SAG_CASE_LOWER || kind > SAG_CASE_TOGGLE) {
-        SAG_BUG("sag_case_map: invalid case kind %u",
+    } else if (kind < YEW_CASE_LOWER || kind > YEW_CASE_TOGGLE) {
+        YEW_BUG("yew_case_map: invalid case kind %u",
                 (unsigned)kind);
     }
     if (len == 0U) {
@@ -3453,22 +3453,22 @@ u8 sag_case_map(u32 cp, SagCaseKind kind,
         return 1U;
     }
     for (u8 i = 0U; i < len; i++)
-        out[i] = sag_case_data[(size_t)at + i];
+        out[i] = yew_case_data[(size_t)at + i];
     return len;
 }
 
-size_t sag_case_map_utf8(u32 cp, SagCaseKind kind,
-                         u8 out[SAG_CASE_MAX_UTF8])
+size_t yew_case_map_utf8(u32 cp, YewCaseKind kind,
+                         u8 out[YEW_CASE_MAX_UTF8])
 {
-    u32 mapped[SAG_CASE_MAX_CODEPOINTS];
+    u32 mapped[YEW_CASE_MAX_CODEPOINTS];
     u8 count;
     size_t used = 0U;
 
     if (out == NULL)
-        SAG_BUG("sag_case_map_utf8: NULL output");
-    count = sag_case_map(cp, kind, mapped);
+        YEW_BUG("yew_case_map_utf8: NULL output");
+    count = yew_case_map(cp, kind, mapped);
     for (u8 i = 0U; i < count; i++) {
-        size_t n = sag_utf8_encode(mapped[i], out + used);
+        size_t n = yew_utf8_encode(mapped[i], out + used);
 
         if (n == 0U)
             return 0U;

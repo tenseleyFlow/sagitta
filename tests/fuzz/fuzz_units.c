@@ -55,7 +55,7 @@ static bool fail(const UnitOps *ops, const char *what, u64 op, ByteOff p,
 static bool check_one(FuzzRun *run, UnitCtx *u, const UnitOps *ops,
                       ByteOff p, bool alt, u64 op)
 {
-    u64 len = sag_textbuf_len(u->tb);
+    u64 len = yew_textbuf_len(u->tb);
     u64 gen = u->tb->gen;
     ByteOff next = ops->next(u, p, alt);
     ByteOff prev = ops->prev(u, p, alt);
@@ -68,11 +68,11 @@ static bool check_one(FuzzRun *run, UnitCtx *u, const UnitOps *ops,
 
     if (u->tb->gen != gen)
         return fail(ops, "changed buffer generation", op, p, p, len);
-    for (i = 0U; i < SAG_ARRAY_LEN(values); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(values); i++) {
         if (values[i].v > len)
             return fail(ops, "returned out-of-range offset", op, p,
                         values[i], len);
-        if (!sag_is_grapheme_boundary(u->tb, values[i]))
+        if (!yew_is_grapheme_boundary(u->tb, values[i]))
             return fail(ops, "returned non-grapheme boundary", op, p,
                         values[i], len);
     }
@@ -93,7 +93,7 @@ static bool check_one(FuzzRun *run, UnitCtx *u, const UnitOps *ops,
 
 static bool check_termination(UnitCtx *u, const UnitOps *ops, bool alt)
 {
-    u64 len = sag_textbuf_len(u->tb);
+    u64 len = yew_textbuf_len(u->tb);
     ByteOff p = BYTEOFF(0U);
     u64 steps = 0U;
 
@@ -135,13 +135,13 @@ static TextBuf *random_buffer(FuzzRun *run)
         else
             bytes[i] = (u8)value;
     }
-    return sag_textbuf_from_owned_bytes(bytes, UNIT_FUZZ_BYTES);
+    return yew_textbuf_from_owned_bytes(bytes, UNIT_FUZZ_BYTES);
 }
 
 static bool check_large_single_line(void)
 {
     static const UnitOps *const engines[] = {
-        &sag_unit_line, &sag_unit_word, &sag_unit_block, &sag_unit_char,
+        &yew_unit_line, &yew_unit_word, &yew_unit_block, &yew_unit_char,
     };
     const size_t n = 1024U * 1024U;
     u8 *bytes = malloc(n);
@@ -153,31 +153,31 @@ static bool check_large_single_line(void)
     if (bytes == NULL)
         return false;
     (void)memset(bytes, 'a', n);
-    tb = sag_textbuf_from_owned_bytes(bytes, n);
+    tb = yew_textbuf_from_owned_bytes(bytes, n);
     if (tb == NULL)
         return false;
     buffer.tb = tb;
     buffer.tabwidth = 4U;
     u = (UnitCtx){tb, &buffer, NULL};
-    for (i = 0U; i < SAG_ARRAY_LEN(engines); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(engines); i++) {
         ByteOff next = engines[i]->next(&u, BYTEOFF(0U), false);
         ByteOff prev = engines[i]->prev(&u, BYTEOFF(n), true);
 
         if (next.v == 0U || next.v > n || prev.v >= n ||
-            !sag_is_grapheme_boundary(tb, next) ||
-            !sag_is_grapheme_boundary(tb, prev)) {
-            sag_textbuf_free(tb);
+            !yew_is_grapheme_boundary(tb, next) ||
+            !yew_is_grapheme_boundary(tb, prev)) {
+            yew_textbuf_free(tb);
             return false;
         }
     }
-    sag_textbuf_free(tb);
+    yew_textbuf_free(tb);
     return true;
 }
 
 int main(int argc, char **argv)
 {
     static const UnitOps *const engines[] = {
-        &sag_unit_line, &sag_unit_word, &sag_unit_block, &sag_unit_char,
+        &yew_unit_line, &yew_unit_word, &yew_unit_block, &yew_unit_char,
     };
     u64 seed = 1U;
     u64 iterations = UNIT_FUZZ_MIN_ITERS;
@@ -208,27 +208,27 @@ int main(int argc, char **argv)
     u = (UnitCtx){tb, &buffer, NULL};
     for (op = 0U; op < iterations; op++) {
         const UnitOps *ops = engines[random_next(&run) %
-                                     SAG_ARRAY_LEN(engines)];
+                                     YEW_ARRAY_LEN(engines)];
         ByteOff raw = BYTEOFF(random_next(&run) %
-                              (sag_textbuf_len(tb) + 1U));
-        ByteOff p = sag_is_grapheme_boundary(tb, raw)
+                              (yew_textbuf_len(tb) + 1U));
+        ByteOff p = yew_is_grapheme_boundary(tb, raw)
                         ? raw
-                        : sag_grapheme_prev(tb, raw);
+                        : yew_grapheme_prev(tb, raw);
         bool alt = (random_next(&run) & 1U) != 0U;
 
         if (!check_one(&run, &u, ops, p, alt, op)) {
-            sag_textbuf_free(tb);
+            yew_textbuf_free(tb);
             return 1;
         }
         if ((op & 4095U) == 0U && !check_termination(&u, ops, alt)) {
             (void)fprintf(stderr,
                           "fuzz_units: engine=%s termination failed\n",
                           ops->name);
-            sag_textbuf_free(tb);
+            yew_textbuf_free(tb);
             return 1;
         }
     }
-    sag_textbuf_free(tb);
+    yew_textbuf_free(tb);
     if (!check_large_single_line()) {
         (void)fprintf(stderr, "fuzz_units: 1 MiB single-line check failed\n");
         return 1;

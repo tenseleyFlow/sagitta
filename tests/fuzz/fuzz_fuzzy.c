@@ -1,7 +1,7 @@
 /*
  * Sprint 18.5 §1: the fuzzy scorer under arbitrary bytes.
  *
- * sag_fz_score is the one place in this sprint that takes attacker-shaped
+ * yew_fz_score is the one place in this sprint that takes attacker-shaped
  * input (any pattern against any text) and writes into a FIXED-SIZE array
  * of u16 offsets.  The properties below are exactly the ones §5's
  * highlighting reads: if a position is wrong, the menu underlines the
@@ -37,10 +37,10 @@ static bool check_positions(const char *pat, u32 plen, const char *text,
                             u32 tlen, const FzMatch *m, i32 score,
                             char *why, size_t why_cap)
 {
-    u32 cap = plen > (u32)SAG_FZ_MAX_POS ? (u32)SAG_FZ_MAX_POS : plen;
+    u32 cap = plen > (u32)YEW_FZ_MAX_POS ? (u32)YEW_FZ_MAX_POS : plen;
     u32 i;
 
-    if (score == SAG_FZ_NO_MATCH) {
+    if (score == YEW_FZ_NO_MATCH) {
         if (m->n_pos != 0U) {
             (void)snprintf(why, why_cap,
                            "no-match left %u positions behind",
@@ -85,9 +85,9 @@ static bool check_score(const char *pat, u32 plen, const char *text,
 {
     FzMatch m = {0U, {0U}};
     FzMatch again = {0U, {0U}};
-    i32 score = sag_fz_score(pat, plen, text, tlen, &m);
-    i32 repeat = sag_fz_score(pat, plen, text, tlen, &again);
-    i32 bare = sag_fz_score(pat, plen, text, tlen, NULL);
+    i32 score = yew_fz_score(pat, plen, text, tlen, &m);
+    i32 repeat = yew_fz_score(pat, plen, text, tlen, &again);
+    i32 bare = yew_fz_score(pat, plen, text, tlen, NULL);
 
     /* Determinism is invariant 5's precondition: the menu order is part of
      * the rendered frame, so an unstable score is an unstable frame. */
@@ -104,7 +104,7 @@ static bool check_score(const char *pat, u32 plen, const char *text,
     /* NULL is rejected BEFORE the empty pattern is honoured, so the
      * empty-pattern rule is a property of empty strings, not of NULL. */
     if (pat == NULL || text == NULL) {
-        if (score != SAG_FZ_NO_MATCH) {
+        if (score != YEW_FZ_NO_MATCH) {
             (void)snprintf(why, why_cap, "NULL input scored %d",
                            (int)score);
             return false;
@@ -116,7 +116,7 @@ static bool check_score(const char *pat, u32 plen, const char *text,
                        (int)score);
         return false;
     }
-    if (plen > tlen && score != SAG_FZ_NO_MATCH) {
+    if (plen > tlen && score != YEW_FZ_NO_MATCH) {
         (void)snprintf(why, why_cap,
                        "pattern longer than text scored %d", (int)score);
         return false;
@@ -128,7 +128,7 @@ static bool check_rank(const char *pat, u32 plen, const char *const *text,
                        u32 n, bool path_mode, FzRanked *out,
                        char *why, size_t why_cap)
 {
-    u32 kept = sag_fz_rank(pat, plen, text, n, path_mode, out);
+    u32 kept = yew_fz_rank(pat, plen, text, n, path_mode, out);
     u32 i;
 
     if (kept > n) {
@@ -144,7 +144,7 @@ static bool check_rank(const char *pat, u32 plen, const char *const *text,
                            (unsigned)i, (unsigned)out[i].idx);
             return false;
         }
-        if (out[i].score == SAG_FZ_NO_MATCH) {
+        if (out[i].score == YEW_FZ_NO_MATCH) {
             (void)snprintf(why, why_cap, "rank kept a non-match at %u",
                            (unsigned)i);
             return false;
@@ -213,7 +213,7 @@ static bool check_fuzzy(const u8 *data, size_t len, char *why,
         (void)memcpy(rest, data + 1 + plen, rest_len);
     rest[rest_len] = '\0';
 
-    /* Candidates must be NUL-terminated for sag_fz_rank, so the split
+    /* Candidates must be NUL-terminated for yew_fz_rank, so the split
      * bytes become terminators in place.  Embedded NULs in the input just
      * end a candidate early, which is a legitimate shape to feed. */
     start = 0U;
@@ -244,5 +244,5 @@ static bool check_fuzzy(const u8 *data, size_t len, char *why,
 
 int main(int argc, char **argv)
 {
-    return sag_fuzz_main(argc, argv, "fuzz_fuzzy", NULL, check_fuzzy);
+    return yew_fuzz_main(argc, argv, "fuzz_fuzzy", NULL, check_fuzzy);
 }

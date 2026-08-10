@@ -15,31 +15,31 @@ static void assert_reply_is_quarantined(const u8 *reply, size_t len,
     Key key;
     size_t off = 0U;
 
-    sag_input_init(&in, &caps);
-    sag_test_capture_log();
+    yew_input_init(&in, &caps);
+    yew_test_capture_log();
     while (off < len) {
         size_t n = len - off;
 
         if (n > chunk)
             n = chunk;
-        sag_input_feed(&in, reply + off, n);
+        yew_input_feed(&in, reply + off, n);
         off += n;
-        SAG_ASSERT(!sag_input_next(&in, 0, &key));
-        SAG_ASSERT_EQ_U64(key.kind, SAG_EV_NONE);
+        YEW_ASSERT(!yew_input_next(&in, 0, &key));
+        YEW_ASSERT_EQ_U64(key.kind, YEW_EV_NONE);
     }
-    SAG_ASSERT_EQ_U64(in.dropped, 1U);
-    SAG_ASSERT(sag_test_log_contains(
-        SAG_LOG_WARN, "unsolicited OSC 52 reply discarded"));
+    YEW_ASSERT_EQ_U64(in.dropped, 1U);
+    YEW_ASSERT(yew_test_log_contains(
+        YEW_LOG_WARN, "unsolicited OSC 52 reply discarded"));
 
-    sag_input_feed(&in, visible, sizeof(visible) - 1U);
-    SAG_ASSERT(sag_input_next(&in, 0, &key));
-    SAG_ASSERT_EQ_U64(key.kind, SAG_EV_KEY);
-    SAG_ASSERT_EQ_U64(key.code, (u32)'x');
-    SAG_ASSERT_EQ_U64(key.ntext, 1U);
-    SAG_ASSERT_EQ_U64(key.text[0], (u8)'x');
-    SAG_ASSERT(!sag_input_next(&in, 0, &key));
-    sag_input_free(&in);
-    sag_test_teardown();
+    yew_input_feed(&in, visible, sizeof(visible) - 1U);
+    YEW_ASSERT(yew_input_next(&in, 0, &key));
+    YEW_ASSERT_EQ_U64(key.kind, YEW_EV_KEY);
+    YEW_ASSERT_EQ_U64(key.code, (u32)'x');
+    YEW_ASSERT_EQ_U64(key.ntext, 1U);
+    YEW_ASSERT_EQ_U64(key.text[0], (u8)'x');
+    YEW_ASSERT(!yew_input_next(&in, 0, &key));
+    yew_input_free(&in);
+    yew_test_teardown();
 }
 
 void test_input_osc52_reply_quarantined(void)
@@ -57,10 +57,10 @@ void test_input_osc52_reply_over_cap_quarantined(void)
 {
     static const u8 prefix[] = "\x1b]52;c;";
     static const u8 suffix[] = "\x1b\\z";
-    const size_t body_len = SAG_IN_STRING_MAX + 1024U;
+    const size_t body_len = YEW_IN_STRING_MAX + 1024U;
     const size_t len = sizeof(prefix) - 1U + body_len + sizeof(suffix) - 1U;
     TtyCaps caps = {0};
-    u8 *reply = sag_xmalloc(len);
+    u8 *reply = yew_xmalloc(len);
     In in;
     Key key;
     bool saw_visible = false;
@@ -70,24 +70,24 @@ void test_input_osc52_reply_over_cap_quarantined(void)
     (void)memcpy(reply + sizeof(prefix) - 1U + body_len, suffix,
                  sizeof(suffix) - 1U);
 
-    sag_input_init(&in, &caps);
-    sag_test_capture_log();
-    sag_input_feed(&in, reply, len);
-    while (sag_input_next(&in, 0, &key)) {
-        if (key.kind == SAG_EV_KEY) {
-            SAG_ASSERT_EQ_U64(key.code, (u32)'z');
+    yew_input_init(&in, &caps);
+    yew_test_capture_log();
+    yew_input_feed(&in, reply, len);
+    while (yew_input_next(&in, 0, &key)) {
+        if (key.kind == YEW_EV_KEY) {
+            YEW_ASSERT_EQ_U64(key.code, (u32)'z');
             saw_visible = true;
         } else {
-            SAG_ASSERT_EQ_U64(key.kind, SAG_EV_NONE);
+            YEW_ASSERT_EQ_U64(key.kind, YEW_EV_NONE);
         }
     }
-    SAG_ASSERT(saw_visible);
-    SAG_ASSERT_EQ_U64(in.dropped, 1U);
-    SAG_ASSERT(sag_test_log_contains(
-        SAG_LOG_WARN, "unsolicited OSC 52 reply discarded"));
-    SAG_ASSERT(!sag_test_log_contains(SAG_LOG_WARN, "terminal string cap"));
+    YEW_ASSERT(saw_visible);
+    YEW_ASSERT_EQ_U64(in.dropped, 1U);
+    YEW_ASSERT(yew_test_log_contains(
+        YEW_LOG_WARN, "unsolicited OSC 52 reply discarded"));
+    YEW_ASSERT(!yew_test_log_contains(YEW_LOG_WARN, "terminal string cap"));
 
-    sag_input_free(&in);
-    sag_test_teardown();
+    yew_input_free(&in);
+    yew_test_teardown();
     free(reply);
 }

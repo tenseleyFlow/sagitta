@@ -99,7 +99,7 @@ static FlLit *node(P *p, WsFlLitKind kind)
 {
     FlLit *v;
 
-    if (++p->nodes > (u32)SAG_FL_MAX_NODES) {
+    if (++p->nodes > (u32)YEW_FL_MAX_NODES) {
         fail(p, "node cap exceeded");
         return NULL;
     }
@@ -192,7 +192,7 @@ static FlLit *parse_string(P *p)
         }
         cap = count + 1U;
     }
-    if (cap - 1U > (u64)SAG_FL_MAX_STRING) {
+    if (cap - 1U > (u64)YEW_FL_MAX_STRING) {
         fail(p, "string exceeds the 4096-byte cap");
         return NULL;
     }
@@ -323,7 +323,7 @@ static FlLit *parse_container(P *p, bool is_map)
 
     if (c == NULL)
         return NULL;
-    if (++p->depth > (u32)SAG_FL_MAX_DEPTH) {
+    if (++p->depth > (u32)YEW_FL_MAX_DEPTH) {
         fail(p, "nesting deeper than 32");
         return NULL;
     }
@@ -476,7 +476,7 @@ static FlLit *parse_value(P *p)
     return NULL;
 }
 
-FlLit *sag_fl_parse(Arena *a, const u8 *src, u64 len, FlParseErr *err)
+FlLit *yew_fl_parse(Arena *a, const u8 *src, u64 len, FlParseErr *err)
 {
     P p;
     FlLit *root;
@@ -499,7 +499,7 @@ FlLit *sag_fl_parse(Arena *a, const u8 *src, u64 len, FlParseErr *err)
             return NULL; /* a real caller bug: length without bytes */
         src = &nothing;
     }
-    if (len > (u64)SAG_FL_MAX_BYTES) {
+    if (len > (u64)YEW_FL_MAX_BYTES) {
         if (err != NULL) {
             err->msg = "document exceeds 8 MiB";
             err->line = 1U;
@@ -529,9 +529,9 @@ FlLit *sag_fl_parse(Arena *a, const u8 *src, u64 len, FlParseErr *err)
 /* Accessors                                                        */
 /* ---------------------------------------------------------------- */
 
-#ifndef SAG_STATE_ACCESSORS_EXTERNAL
+#ifndef YEW_STATE_ACCESSORS_EXTERNAL
 
-const FlLit *sag_fl_get(const FlLit *map, const char *key)
+const FlLit *yew_fl_get(const FlLit *map, const char *key)
 {
     u32 i;
     u64 n;
@@ -553,14 +553,14 @@ const FlLit *sag_fl_get(const FlLit *map, const char *key)
     return NULL;
 }
 
-u32 sag_fl_len(const FlLit *list)
+u32 yew_fl_len(const FlLit *list)
 {
     if (list == NULL || (list->kind != FL_LIT_LIST && list->kind != FL_LIT_MAP))
         return 0U;
     return list->len;
 }
 
-const FlLit *sag_fl_at(const FlLit *list, u32 i)
+const FlLit *yew_fl_at(const FlLit *list, u32 i)
 {
     if (list == NULL || (list->kind != FL_LIT_LIST && list->kind != FL_LIT_MAP) ||
         i >= list->len)
@@ -568,17 +568,17 @@ const FlLit *sag_fl_at(const FlLit *list, u32 i)
     return list->items[i];
 }
 
-i64 sag_fl_int_or(const FlLit *v, i64 dflt)
+i64 yew_fl_int_or(const FlLit *v, i64 dflt)
 {
     return v != NULL && v->kind == FL_LIT_INT ? v->i : dflt;
 }
 
-bool sag_fl_bool_or(const FlLit *v, bool dflt)
+bool yew_fl_bool_or(const FlLit *v, bool dflt)
 {
     return v != NULL && v->kind == FL_LIT_BOOL ? v->i != 0 : dflt;
 }
 
-const char *sag_fl_str_or(const FlLit *v, const char *dflt, u64 *n)
+const char *yew_fl_str_or(const FlLit *v, const char *dflt, u64 *n)
 {
     if (v != NULL && v->kind == FL_LIT_STR) {
         if (n != NULL)
@@ -589,4 +589,4 @@ const char *sag_fl_str_or(const FlLit *v, const char *dflt, u64 *n)
         *n = dflt == NULL ? 0U : (u64)strlen(dflt);
     return dflt;
 }
-#endif /* SAG_STATE_ACCESSORS_EXTERNAL */
+#endif /* YEW_STATE_ACCESSORS_EXTERNAL */

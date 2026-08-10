@@ -190,7 +190,7 @@ void test_fl_math_random_is_deterministic(void)
      * Seeded explicitly rather than taken from the default, because
      * `rng_state` is a file-static and therefore process-global: the
      * pristine default sequence is only observable in a fresh process,
-     * and this binary has run other tests first.  `sag fl` is where
+     * and this binary has run other tests first.  `yew fl` is where
      * that form is visible, and seeding here tests the same thing --
      * the generator's output for a known state.
      */

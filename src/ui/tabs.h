@@ -1,5 +1,5 @@
-#ifndef SAG_UI_TABS_H
-#define SAG_UI_TABS_H
+#ifndef YEW_UI_TABS_H
+#define YEW_UI_TABS_H
 
 /*
  * Sprint 23 §1: the tab model.
@@ -28,8 +28,8 @@ typedef struct Buffer Buffer;
 enum {
     /* A directory opened as a group routinely exceeds a small cap, and
      * the failure mode of a small one is worse than the memory. */
-    SAG_TAB_MAX = 512,
-    SAG_TAB_LABEL_MAX = 64
+    YEW_TAB_MAX = 512,
+    YEW_TAB_LABEL_MAX = 64
 };
 
 typedef struct Tab {
@@ -79,32 +79,32 @@ typedef struct Tabs {
     int member_scroll;
 } Tabs;
 
-void sag_tabs_init(Tabs *t);
-void sag_tabs_free(Ed *ed);
+void yew_tabs_init(Tabs *t);
+void yew_tabs_free(Ed *ed);
 
 /* Returns the index, or -1 when refused.  The return value is NOT
  * decoration: a silent cap failure in facsimile made callers load the
  * new file into the still-active tab, and the next save wrote it over
  * the old file's path. */
-int sag_tab_open(Ed *ed, const char *path);
+int yew_tab_open(Ed *ed, const char *path);
 /* False when vetoed — a modified tab needs an answer first. */
-bool sag_tab_close(Ed *ed, int idx);
-int sag_tab_index_of_id(const Ed *ed, u32 id);
+bool yew_tab_close(Ed *ed, int idx);
+int yew_tab_index_of_id(const Ed *ed, u32 id);
 /* Renames what a tab shows — the save-as path.  Canonicalized here, at
  * the one site that establishes a tab's name, so comparators never
  * touch the filesystem. */
-void sag_tab_set_path(Ed *ed, int idx, const char *path);
-int sag_tab_find_by_path(const Ed *ed, const char *path);
-void sag_tab_switch(Ed *ed, int idx);
+void yew_tab_set_path(Ed *ed, int idx, const char *path);
+int yew_tab_find_by_path(const Ed *ed, const char *path);
+void yew_tab_switch(Ed *ed, int idx);
 /* Insertion, not swap: dragging a tab three places right leaves the two
  * it passed in their original relative order. */
-void sag_tab_reorder(Ed *ed, int from, int to);
+void yew_tab_reorder(Ed *ed, int from, int to);
 /* Derived from the undo tree every time it is asked.  There is no
  * stored boolean: a cached flag is a label that can lie, and undoing
  * back to the clean state has to clear the marker. */
-bool sag_tab_modified(const Ed *ed, int idx);
-u32 sag_tab_count(const Ed *ed);
-Tab *sag_tab_at(Ed *ed, int idx);
+bool yew_tab_modified(const Ed *ed, int idx);
+u32 yew_tab_count(const Ed *ed);
+Tab *yew_tab_at(Ed *ed, int idx);
 
 /*
  * Sprint 24 §3: lazy hydration.
@@ -114,8 +114,8 @@ Tab *sag_tab_at(Ed *ed, int idx);
  * tab, so opening a 40-file group costs ONE file read (D4) and the
  * other 39 tabs are a path and no buffer.
  */
-bool sag_tab_is_resident(const Ed *ed, int tab_idx);
-int sag_tab_hydrate(Ed *ed, int tab_idx); /* 0 ok; performs the read */
+bool yew_tab_is_resident(const Ed *ed, int tab_idx);
+int yew_tab_hydrate(Ed *ed, int tab_idx); /* 0 ok; performs the read */
 /*
  * Releases the text.  Refuses the ACTIVE tab: deferring what the user
  * is looking at leaves the window pointing at no text.
@@ -124,12 +124,12 @@ int sag_tab_hydrate(Ed *ed, int tab_idx); /* 0 ok; performs the read */
  * allocates, which makes the tab look resident, after which the real
  * file is never read and the fabricated content is what a save writes.
  */
-void sag_tab_defer(Ed *ed, int tab_idx);
+void yew_tab_defer(Ed *ed, int tab_idx);
 /* The buffer this tab shows; NULL when the tab has no view yet. */
-Buffer *sag_tab_buffer(Ed *ed, int tab_idx);
+Buffer *yew_tab_buffer(Ed *ed, int tab_idx);
 
 /* Where index `i` lands when `from` moves to `to`. */
-int sag_tab_shifted_index(int i, int from, int to);
+int yew_tab_shifted_index(int i, int from, int to);
 
 /*
  * The ROW-1 ENTRY LIST — the one construction of it.
@@ -143,10 +143,10 @@ int sag_tab_shifted_index(int i, int from, int to);
  * row 1" drift, and the drift shows up as left/right skipping an entry
  * the user can see, or as a click landing on the wrong one.
  */
-int sag_tab_row1_entries(const Ed *ed, StripEntry *out, int cap);
+int yew_tab_row1_entries(const Ed *ed, StripEntry *out, int cap);
 /* Index into that list of the entry the active tab belongs to; -1 when
  * there is none. */
-int sag_tab_row1_active(const Ed *ed, const StripEntry *entries, int n);
+int yew_tab_row1_active(const Ed *ed, const StripEntry *entries, int n);
 
 /*
  * Sprint 27 §4: the PRE-DRAG row-1 slot table.
@@ -157,31 +157,31 @@ int sag_tab_row1_active(const Ed *ed, const StripEntry *entries, int n);
  *
  * THE PITFALL THIS EXISTS FOR.  While a tab is being dragged the region
  * table describes the PREVIEWED strip — the held entry has been moved
- * under the pointer — so `sag_region_hit` always answers "you are
+ * under the pointer — so `yew_region_hit` always answers "you are
  * hovering the thing you are holding".  The dwell-over-a-group test
  * needs the other question: what was here before I picked this up.
  * That is this table, and nothing else may answer it.
  */
-int sag_strip_slot_at(u16 x, u16 y);              /* -1 when off row 1 */
-bool sag_strip_pre_payload(int slot, i32 *payload);
+int yew_strip_slot_at(u16 x, u16 y);              /* -1 when off row 1 */
+bool yew_strip_pre_payload(int slot, i32 *payload);
 /* Slots the last row-1 render produced. */
-int sag_strip_slot_count(void);
+int yew_strip_slot_count(void);
 /* The cell just past the last rendered entry — where "the blank tail"
  * begins.  The drop target that carries a tab out of a sole group has
  * nothing else to aim at. */
-u16 sag_strip_tail_x(void);
+u16 yew_strip_tail_x(void);
 
 /* Rows the strip needs; layout reserves them like the footer row. */
-u32 sag_tab_strip_rows(const Ed *ed);
-void sag_tab_strip_draw(Ed *ed, Rect rect);
+u32 yew_tab_strip_rows(const Ed *ed);
+void yew_tab_strip_draw(Ed *ed, Rect rect);
 /*
  * Row 2: the members of `gid`.  Also the hover-preview renderer Sprint
  * 27 calls with a group the pointer is merely over — one function, so
  * the pinned row and the preview cannot disagree about placement.
  */
-void sag_tab_member_strip_draw(Ed *ed, Rect rect, u32 gid);
+void yew_tab_member_strip_draw(Ed *ed, Rect rect, u32 gid);
 /* True when the click was consumed. */
-bool sag_tab_strip_click(Ed *ed, u16 x, u16 y);
+bool yew_tab_strip_click(Ed *ed, u16 x, u16 y);
 
 /*
  * The dirty-close question.  It holds the tab_ID: another event can
@@ -194,7 +194,7 @@ typedef struct TabPrompt {
 } TabPrompt;
 
 /* True when the key was consumed by the prompt. */
-bool sag_tab_prompt_key(Ed *ed, u8 answer);
+bool yew_tab_prompt_key(Ed *ed, u8 answer);
 
 /*
  * Sprint 24 §7: the 500 ms digit-extension window.
@@ -204,30 +204,30 @@ bool sag_tab_prompt_key(Ed *ed, u8 answer);
  * common single-digit case; superseding a jump already made costs
  * nothing.
  *
- * sag_tab_jump_key returns true when it CONSUMED the key.  A digit
+ * yew_tab_jump_key returns true when it CONSUMED the key.  A digit
  * arriving inside the window is part of a chord, so an out-of-range one
  * is swallowed rather than inserted into the document — a surprise edit
  * while navigating is worse than a dropped key.
  */
 enum {
-    SAG_JUMP_WINDOW_MS = 500
+    YEW_JUMP_WINDOW_MS = 500
 };
 
-bool sag_tab_jump_key(Ed *ed, Key key);
-void sag_tab_jump_clear(Ed *ed);
+bool yew_tab_jump_key(Ed *ed, Key key);
+void yew_tab_jump_clear(Ed *ed);
 /* Test seam: how the window currently stands. */
-bool sag_tab_jump_armed(void);
+bool yew_tab_jump_armed(void);
 
-CmdStatus sag_tab_cmd_new(CmdCtx *cx);
-CmdStatus sag_tab_cmd_open(CmdCtx *cx);
-CmdStatus sag_tab_cmd_close(CmdCtx *cx);
-CmdStatus sag_tab_cmd_next(CmdCtx *cx);
-CmdStatus sag_tab_cmd_prev(CmdCtx *cx);
-CmdStatus sag_tab_cmd_goto(CmdCtx *cx);
-CmdStatus sag_tab_cmd_move(CmdCtx *cx);
+CmdStatus yew_tab_cmd_new(CmdCtx *cx);
+CmdStatus yew_tab_cmd_open(CmdCtx *cx);
+CmdStatus yew_tab_cmd_close(CmdCtx *cx);
+CmdStatus yew_tab_cmd_next(CmdCtx *cx);
+CmdStatus yew_tab_cmd_prev(CmdCtx *cx);
+CmdStatus yew_tab_cmd_goto(CmdCtx *cx);
+CmdStatus yew_tab_cmd_move(CmdCtx *cx);
 /* Sprint 27 §5: the tab context menu's rows.  Commands, not menu-only
  * handlers, so the mouse and the keyboard reach the same code. */
-CmdStatus sag_tab_cmd_close_others(CmdCtx *cx);
-CmdStatus sag_tab_cmd_copy_path(CmdCtx *cx);
+CmdStatus yew_tab_cmd_close_others(CmdCtx *cx);
+CmdStatus yew_tab_cmd_copy_path(CmdCtx *cx);
 
 #endif

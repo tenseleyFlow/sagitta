@@ -51,16 +51,16 @@ static bool check_record(const u8 *data, size_t len, char *why,
     size_t nevents;
     size_t i;
 
-    sag_ed_init(&ed);
-    if (!sag_ed_open_scratch(&ed)) {
-        sag_ed_free(&ed);
+    yew_ed_init(&ed);
+    if (!yew_ed_open_scratch(&ed)) {
+        yew_ed_free(&ed);
         (void)snprintf(why, why_cap, "scratch editor initialization failed");
         return false;
     }
-    sag_record_init(&rec);
+    yew_record_init(&rec);
     rec.reg = (u8)'a';
-    rec.mode_at_start = len == 0U ? (u8)SAG_MODE_L :
-        (u8)(data[0] % (u8)SAG_MODE__N);
+    rec.mode_at_start = len == 0U ? (u8)YEW_MODE_L :
+        (u8)(data[0] % (u8)YEW_MODE__N);
     bytebuf_append(&rec.blob, data, len);
     nevents = (len + EVENT_BYTES - 1U) / EVENT_BYTES;
     if (nevents > EVENT_MAX)
@@ -71,24 +71,24 @@ static bool check_record(const u8 *data, size_t len, char *why,
         u32 raw_slice = read_u32(data, len, at + 8U);
         RecEvent event = {0};
 
-        event.cmd.v = sag_cmd_count() == 0U ? 0U :
-            1U + raw_cmd % sag_cmd_count();
+        event.cmd.v = yew_cmd_count() == 0U ? 0U :
+            1U + raw_cmd % yew_cmd_count();
         event.count = 1U + read_u32(data, len, at + 4U) % 100U;
         event.count_given = at + 1U < len && (data[at + 1U] & 1U) != 0U;
         event.iarg = (i64)(i32)read_u32(data, len, at + 12U);
         event.bang = at + 4U < len && (data[at + 4U] & 1U) != 0U;
         event.range_kind = at + 5U < len
                                ? data[at + 5U] %
-                                     ((u8)SAG_REC_RANGE_SPAN + 1U)
-                               : (u8)SAG_REC_RANGE_NONE;
+                                     ((u8)YEW_REC_RANGE_SPAN + 1U)
+                               : (u8)YEW_REC_RANGE_NONE;
         event.range_given = at + 6U < len &&
                             (data[at + 6U] & 1U) != 0U;
         event.range_lo = read_u32(data, len, at + 16U);
         event.range_hi = event.range_lo +
                          read_u32(data, len, at + 20U);
-        event.mode = at + 2U < len ? data[at + 2U] % (u8)SAG_MODE__N : 0U;
+        event.mode = at + 2U < len ? data[at + 2U] % (u8)YEW_MODE__N : 0U;
         event.src = at + 3U < len ? data[at + 3U] %
-            ((u8)SAG_SRC_TEST + 1U) : (u8)SAG_SRC_KEY;
+            ((u8)YEW_SRC_TEST + 1U) : (u8)YEW_SRC_KEY;
         if (len != 0U) {
             event.sarg_at = raw_slice % (u32)(len + 1U);
             event.sarg_len = read_u32(data, len, at + 12U) %
@@ -98,7 +98,7 @@ static bool check_record(const u8 *data, size_t len, char *why,
     }
 
     bytebuf_init(&source);
-    sag_record_emit(&rec, &ed, &source);
+    yew_record_emit(&rec, &ed, &source);
     arena_init(&arena);
     interner_init(&in, &arena);
     fl_diag_init(&dc, &arena);
@@ -112,15 +112,15 @@ static bool check_record(const u8 *data, size_t len, char *why,
                        "emitter produced unparseable source (%u diagnostics)",
                        (unsigned)count.errors);
         bytebuf_free(&source);
-        sag_record_free(&rec);
-        sag_ed_free(&ed);
+        yew_record_free(&rec);
+        yew_ed_free(&ed);
         interner_free(&in);
         arena_free_all(&arena);
         return false;
     }
     bytebuf_free(&source);
-    sag_record_free(&rec);
-    sag_ed_free(&ed);
+    yew_record_free(&rec);
+    yew_ed_free(&ed);
     interner_free(&in);
     arena_free_all(&arena);
     return true;
@@ -128,6 +128,6 @@ static bool check_record(const u8 *data, size_t len, char *why,
 
 int main(int argc, char **argv)
 {
-    return sag_fuzz_main(argc, argv, "fuzz_record",
+    return yew_fuzz_main(argc, argv, "fuzz_record",
                          "tests/fuzz/corpus/record", check_record);
 }

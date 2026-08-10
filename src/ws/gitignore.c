@@ -15,10 +15,10 @@
 
 enum {
     /* A pattern longer than this is not one a human wrote. */
-    SAG_GI_MAX_PATTERN = 1024,
+    YEW_GI_MAX_PATTERN = 1024,
     /* An ignore file larger than this is not one either; the rest is
      * dropped with a log line rather than silently. */
-    SAG_GI_MAX_BYTES = 1U * 1024U * 1024U
+    YEW_GI_MAX_BYTES = 1U * 1024U * 1024U
 };
 
 /*
@@ -220,7 +220,7 @@ static bool rule_match(const GiRule *r, const char *rel, bool is_dir)
     }
 }
 
-bool sag_gi_match(const GiSet *g, const char *rel, bool is_dir)
+bool yew_gi_match(const GiSet *g, const char *rel, bool is_dir)
 {
     const GiSet *chain[64];
     u32 depth = 0U;
@@ -265,13 +265,13 @@ static u32 literal_prefix_len(const char *pat)
     return i;
 }
 
-bool sag_gi_prunable(const GiSet *g, const char *rel)
+bool yew_gi_prunable(const GiSet *g, const char *rel)
 {
     const GiSet *s;
 
     if (g == NULL || rel == NULL || rel[0] == '\0')
         return false;
-    if (!sag_gi_match(g, rel, true))
+    if (!yew_gi_match(g, rel, true))
         return false;
     /*
      * CONSERVATIVE.  Any negation whose literal prefix could name
@@ -339,7 +339,7 @@ bool sag_gi_prunable(const GiSet *g, const char *rel)
 static bool compile_line(Arena *a, const char *base, u32 base_len,
                          const char *line, u64 len, GiRule *out)
 {
-    char buf[SAG_GI_MAX_PATTERN];
+    char buf[YEW_GI_MAX_PATTERN];
     u64 at = 0U;
     u64 i = 0U;
     bool escaped_hash = false;
@@ -412,7 +412,7 @@ static bool compile_line(Arena *a, const char *base, u32 base_len,
     return true;
 }
 
-GiSet *sag_gi_compile(Arena *a, const char *base, const char *text, u64 len,
+GiSet *yew_gi_compile(Arena *a, const char *base, const char *text, u64 len,
                       const GiSet *parent)
 {
     GiSet *g;
@@ -465,7 +465,7 @@ GiSet *sag_gi_compile(Arena *a, const char *base, const char *text, u64 len,
     return g;
 }
 
-GiSet *sag_gi_load(Arena *a, const char *dir, const GiSet *parent)
+GiSet *yew_gi_load(Arena *a, const char *dir, const GiSet *parent)
 {
     char path[PATH_MAX];
     char *text;
@@ -487,9 +487,9 @@ GiSet *sag_gi_load(Arena *a, const char *dir, const GiSet *parent)
         return (GiSet *)parent;
     }
     size = ftell(fp);
-    if (size < 0 || (u64)size > (u64)SAG_GI_MAX_BYTES) {
+    if (size < 0 || (u64)size > (u64)YEW_GI_MAX_BYTES) {
         if (size > 0)
-            sag_log(SAG_LOG_WARN, "%s is too large to read as ignore rules",
+            yew_log(YEW_LOG_WARN, "%s is too large to read as ignore rules",
                     path);
         (void)fclose(fp);
         return (GiSet *)parent;
@@ -502,11 +502,11 @@ GiSet *sag_gi_load(Arena *a, const char *dir, const GiSet *parent)
     got = fread(text, 1U, (size_t)size, fp);
     (void)fclose(fp);
     text[got] = '\0';
-    g = sag_gi_compile(a, NULL, text, (u64)got, parent);
+    g = yew_gi_compile(a, NULL, text, (u64)got, parent);
     return g;
 }
 
-bool sag_gi_negated(const GiSet *g, const char *rel)
+bool yew_gi_negated(const GiSet *g, const char *rel)
 {
     const GiSet *chain[64];
     u32 depth = 0U;
@@ -515,9 +515,9 @@ bool sag_gi_negated(const GiSet *g, const char *rel)
 
     /*
      * "Did a `!` rule name this path?", asked separately from
-     * sag_gi_match because inside an ignored directory the default is
+     * yew_gi_match because inside an ignored directory the default is
      * reversed: everything is out unless something re-includes it, and
-     * sag_gi_match alone cannot express that — a file under
+     * yew_gi_match alone cannot express that — a file under
      * `node_modules/` matches no rule at all, since a directory-only
      * rule does not match files.
      */

@@ -38,7 +38,7 @@ static char *cf_env_copy(const char *name)
 
     if (value == NULL)
         return NULL;
-    copy = sag_xmalloc(strlen(value) + 1U);
+    copy = yew_xmalloc(strlen(value) + 1U);
     (void)memcpy(copy, value, strlen(value) + 1U);
     return copy;
 }
@@ -59,52 +59,52 @@ static void cf_write(const char *path, const char *source)
     size_t len = strlen(source);
 
     if (fp == NULL || fwrite(source, 1U, len, fp) != len || fclose(fp) != 0)
-        SAG_BUG("config test fixture write failed");
+        YEW_BUG("config test fixture write failed");
 }
 
 static void cf_mkdir(const char *path)
 {
     if (mkdir(path, 0700) != 0)
-        SAG_BUG("config test fixture mkdir failed");
+        YEW_BUG("config test fixture mkdir failed");
 }
 
-static void cf_init(ConfigFix *f, const SagEdStartup *startup)
+static void cf_init(ConfigFix *f, const YewEdStartup *startup)
 {
     (void)memset(f, 0, sizeof(*f));
-    (void)snprintf(f->root, sizeof(f->root), "/tmp/sag-flconf-XXXXXX");
+    (void)snprintf(f->root, sizeof(f->root), "/tmp/yew-flconf-XXXXXX");
     if (mkdtemp(f->root) == NULL)
-        SAG_BUG("config test fixture mkdtemp failed");
+        YEW_BUG("config test fixture mkdtemp failed");
     (void)snprintf(f->runtime, sizeof(f->runtime), "%s/runtime", f->root);
     (void)snprintf(f->runtime_init, sizeof(f->runtime_init), "%s/init.fl",
                    f->runtime);
     (void)snprintf(f->xdg_config, sizeof(f->xdg_config), "%s/config",
                    f->root);
-    (void)snprintf(f->user_dir, sizeof(f->user_dir), "%s/sagitta",
+    (void)snprintf(f->user_dir, sizeof(f->user_dir), "%s/yew",
                    f->xdg_config);
     (void)snprintf(f->user_init, sizeof(f->user_init), "%s/init.fl",
                    f->user_dir);
     (void)snprintf(f->xdg_state, sizeof(f->xdg_state), "%s/state", f->root);
     (void)snprintf(f->workspace, sizeof(f->workspace), "%s/work", f->root);
     (void)snprintf(f->workspace_init, sizeof(f->workspace_init),
-                   "%s/.sagitta.fl", f->workspace);
+                   "%s/.yew.fl", f->workspace);
     cf_mkdir(f->runtime);
     cf_mkdir(f->xdg_config);
     cf_mkdir(f->user_dir);
     cf_mkdir(f->xdg_state);
     cf_mkdir(f->workspace);
     cf_write(f->runtime_init, "\n");
-    f->old_runtime = cf_env_copy("SAG_RUNTIME_DIR");
+    f->old_runtime = cf_env_copy("YEW_RUNTIME_DIR");
     f->old_config = cf_env_copy("XDG_CONFIG_HOME");
     f->old_state = cf_env_copy("XDG_STATE_HOME");
-    if (setenv("SAG_RUNTIME_DIR", f->runtime, 1) != 0 ||
+    if (setenv("YEW_RUNTIME_DIR", f->runtime, 1) != 0 ||
         setenv("XDG_CONFIG_HOME", f->xdg_config, 1) != 0 ||
         setenv("XDG_STATE_HOME", f->xdg_state, 1) != 0)
-        SAG_BUG("config test fixture environment failed");
-    sag_ed_init(&f->ed);
+        YEW_BUG("config test fixture environment failed");
+    yew_ed_init(&f->ed);
     f->ed.ws.dir = arena_strdup(&f->ed.arena, f->workspace);
-    if (!sag_ed_open_scratch(&f->ed))
-        SAG_BUG("config test fixture editor failed");
-    sag_config_init(&f->ed, startup);
+    if (!yew_ed_open_scratch(&f->ed))
+        YEW_BUG("config test fixture editor failed");
+    yew_config_init(&f->ed, startup);
 }
 
 static void cf_free(ConfigFix *f)
@@ -112,21 +112,21 @@ static void cf_free(ConfigFix *f)
     char trust_dir[224];
     char trust_file[256];
 
-    sag_ed_free(&f->ed);
+    yew_ed_free(&f->ed);
     (void)unlink(f->workspace_init);
     (void)unlink(f->user_init);
     (void)unlink(f->runtime_init);
     (void)rmdir(f->workspace);
     (void)rmdir(f->user_dir);
     (void)rmdir(f->xdg_config);
-    (void)snprintf(trust_dir, sizeof(trust_dir), "%s/sagitta", f->xdg_state);
+    (void)snprintf(trust_dir, sizeof(trust_dir), "%s/yew", f->xdg_state);
     (void)snprintf(trust_file, sizeof(trust_file), "%s/trust.fl", trust_dir);
     (void)unlink(trust_file);
     (void)rmdir(trust_dir);
     (void)rmdir(f->xdg_state);
     (void)rmdir(f->runtime);
     (void)rmdir(f->root);
-    cf_env_restore("SAG_RUNTIME_DIR", f->old_runtime);
+    cf_env_restore("YEW_RUNTIME_DIR", f->old_runtime);
     cf_env_restore("XDG_CONFIG_HOME", f->old_config);
     cf_env_restore("XDG_STATE_HOME", f->old_state);
 }
@@ -135,7 +135,7 @@ static OptVal cf_opt(ConfigFix *f, const char *name)
 {
     OptVal value = {0};
 
-    SAG_ASSERT(sag_opt_get(&f->ed, sag_ed_doc(&f->ed), f->ed.win, name,
+    YEW_ASSERT(yew_opt_get(&f->ed, yew_ed_doc(&f->ed), f->ed.win, name,
                            (u32)strlen(name), &value));
     return value;
 }
@@ -153,7 +153,7 @@ static u32 cf_active_ledger(const ConfigFix *f)
 
 void test_flconf_loads_builtin_user_workspace_in_precedence_order(void)
 {
-    SagEdStartup startup = {0};
+    YewEdStartup startup = {0};
     ConfigFix f;
 
     startup.trust_workspace = true;
@@ -161,15 +161,15 @@ void test_flconf_loads_builtin_user_workspace_in_precedence_order(void)
     cf_write(f.runtime_init, "set({tabwidth: 5})\n");
     cf_write(f.user_init, "set({tabwidth: 6})\n");
     cf_write(f.workspace_init, "set({tabwidth: 7})\n");
-    SAG_ASSERT_EQ_I64(sag_config_load_all(&f.ed, NULL), SAG_CFG_OK);
-    SAG_ASSERT_EQ_I64(cf_opt(&f, "tabwidth").as.i, 7);
-    SAG_ASSERT_EQ_U64(f.ed.buffer.tabwidth, 7U);
+    YEW_ASSERT_EQ_I64(yew_config_load_all(&f.ed, NULL), YEW_CFG_OK);
+    YEW_ASSERT_EQ_I64(cf_opt(&f, "tabwidth").as.i, 7);
+    YEW_ASSERT_EQ_U64(f.ed.buffer.tabwidth, 7U);
     cf_free(&f);
 }
 
 void test_flconf_parse_error_isolated_to_its_source(void)
 {
-    SagEdStartup startup = {0};
+    YewEdStartup startup = {0};
     ConfigFix f;
 
     startup.trust_workspace = true;
@@ -177,15 +177,15 @@ void test_flconf_parse_error_isolated_to_its_source(void)
     cf_write(f.runtime_init, "fn broken(\n");
     cf_write(f.user_init, "set({errorbells: true})\n");
     cf_write(f.workspace_init, "set({\"search.ignorecase\": true})\n");
-    SAG_ASSERT_EQ_I64(sag_config_load_all(&f.ed, NULL), SAG_CFG_PARSE);
-    SAG_ASSERT(cf_opt(&f, "errorbells").as.b);
-    SAG_ASSERT(cf_opt(&f, "search.ignorecase").as.b);
+    YEW_ASSERT_EQ_I64(yew_config_load_all(&f.ed, NULL), YEW_CFG_PARSE);
+    YEW_ASSERT(cf_opt(&f, "errorbells").as.b);
+    YEW_ASSERT(cf_opt(&f, "search.ignorecase").as.b);
     cf_free(&f);
 }
 
 void test_flconf_reload_parse_error_keeps_old_binding_live(void)
 {
-    SagEdStartup startup = {0};
+    YewEdStartup startup = {0};
     ConfigFix f;
     KeyId key;
     const Binding *binding = NULL;
@@ -195,26 +195,26 @@ void test_flconf_reload_parse_error_keeps_old_binding_live(void)
     startup.no_workspace_config = true;
     cf_init(&f, &startup);
     cf_write(f.user_init, "bind(\"L\", \"Z\", \"ed.nop\")\n");
-    SAG_ASSERT_EQ_I64(sag_config_load_all(&f.ed, NULL), SAG_CFG_OK);
-    binds = sag_bind_active_count(&f.ed);
+    YEW_ASSERT_EQ_I64(yew_config_load_all(&f.ed, NULL), YEW_CFG_OK);
+    binds = yew_bind_active_count(&f.ed);
     ledger = cf_active_ledger(&f);
-    SAG_ASSERT_EQ_U64(binds, 1U);
+    YEW_ASSERT_EQ_U64(binds, 1U);
     cf_write(f.user_init, "bind(\"L\", \"Z\",\n");
-    SAG_ASSERT_EQ_I64(sag_config_reload(&f.ed, NULL), SAG_CFG_PARSE);
-    SAG_ASSERT_EQ_U64(sag_bind_active_count(&f.ed), binds);
-    SAG_ASSERT_EQ_U64(cf_active_ledger(&f), ledger);
-    SAG_ASSERT_EQ_U64(sag_key_parse_seq("Z", &key, 1U), 1U);
-    SAG_ASSERT_EQ_I64(sag_keymap_lookup(&f.ed.bind_keys[SAG_MODE_L], &key,
+    YEW_ASSERT_EQ_I64(yew_config_reload(&f.ed, NULL), YEW_CFG_PARSE);
+    YEW_ASSERT_EQ_U64(yew_bind_active_count(&f.ed), binds);
+    YEW_ASSERT_EQ_U64(cf_active_ledger(&f), ledger);
+    YEW_ASSERT_EQ_U64(yew_key_parse_seq("Z", &key, 1U), 1U);
+    YEW_ASSERT_EQ_I64(yew_keymap_lookup(&f.ed.bind_keys[YEW_MODE_L], &key,
                                         1U, NULL, &binding),
-                      SAG_MATCH_FULL);
-    SAG_ASSERT_NOT_NULL(binding);
-    SAG_ASSERT_EQ_STR(sag_cmd_desc(binding->cmd)->name, "ed.nop");
+                      YEW_MATCH_FULL);
+    YEW_ASSERT_NOT_NULL(binding);
+    YEW_ASSERT_EQ_STR(yew_cmd_desc(binding->cmd)->name, "ed.nop");
     cf_free(&f);
 }
 
 void test_flconf_runtime_error_tears_down_source_and_continues(void)
 {
-    SagEdStartup startup = {0};
+    YewEdStartup startup = {0};
     ConfigFix f;
 
     startup.no_workspace_config = true;
@@ -222,15 +222,15 @@ void test_flconf_runtime_error_tears_down_source_and_continues(void)
     cf_write(f.runtime_init,
              "bind(\"L\", \"Z\", \"ed.nop\")\nerror(\"boom\")\n");
     cf_write(f.user_init, "set({errorbells: true})\n");
-    SAG_ASSERT_EQ_I64(sag_config_load_all(&f.ed, NULL), SAG_CFG_RUN);
-    SAG_ASSERT_EQ_U64(sag_bind_active_count(&f.ed), 0U);
-    SAG_ASSERT(cf_opt(&f, "errorbells").as.b);
+    YEW_ASSERT_EQ_I64(yew_config_load_all(&f.ed, NULL), YEW_CFG_RUN);
+    YEW_ASSERT_EQ_U64(yew_bind_active_count(&f.ed), 0U);
+    YEW_ASSERT(cf_opt(&f, "errorbells").as.b);
     cf_free(&f);
 }
 
 void test_flconf_twenty_reloads_leave_no_registry_residue(void)
 {
-    SagEdStartup startup = {0};
+    YewEdStartup startup = {0};
     ConfigFix f;
     u32 ledger_len;
     u32 hook_len;
@@ -242,28 +242,28 @@ void test_flconf_twenty_reloads_leave_no_registry_residue(void)
     cf_write(f.user_init,
              "bind(\"L\", \"Z\", \"ed.nop\")\n"
              "on(\"ws.open\", fn(ws) set({errorbells: true}))\n");
-    rebuilds = sag_bind_rebuild_count(&f.ed);
-    SAG_ASSERT_EQ_I64(sag_config_load_all(&f.ed, NULL), SAG_CFG_OK);
-    SAG_ASSERT_EQ_U64(sag_bind_rebuild_count(&f.ed), rebuilds + 1U);
+    rebuilds = yew_bind_rebuild_count(&f.ed);
+    YEW_ASSERT_EQ_I64(yew_config_load_all(&f.ed, NULL), YEW_CFG_OK);
+    YEW_ASSERT_EQ_U64(yew_bind_rebuild_count(&f.ed), rebuilds + 1U);
     ledger_len = f.ed.hooks.ledger.n;
     hook_len = f.ed.hooks.n;
     for (i = 0U; i < 100U; i++) {
-        rebuilds = sag_bind_rebuild_count(&f.ed);
-        SAG_ASSERT_EQ_I64(sag_config_reload(&f.ed, NULL), SAG_CFG_OK);
-        SAG_ASSERT_EQ_U64(sag_bind_rebuild_count(&f.ed), rebuilds + 1U);
-        SAG_ASSERT_EQ_U64(f.ed.hooks.ledger.n, ledger_len);
-        SAG_ASSERT_EQ_U64(f.ed.hooks.n, hook_len);
-        SAG_ASSERT_EQ_U64(cf_active_ledger(&f), 2U);
-        SAG_ASSERT_EQ_U64(sag_bind_active_count(&f.ed), 1U);
+        rebuilds = yew_bind_rebuild_count(&f.ed);
+        YEW_ASSERT_EQ_I64(yew_config_reload(&f.ed, NULL), YEW_CFG_OK);
+        YEW_ASSERT_EQ_U64(yew_bind_rebuild_count(&f.ed), rebuilds + 1U);
+        YEW_ASSERT_EQ_U64(f.ed.hooks.ledger.n, ledger_len);
+        YEW_ASSERT_EQ_U64(f.ed.hooks.n, hook_len);
+        YEW_ASSERT_EQ_U64(cf_active_ledger(&f), 2U);
+        YEW_ASSERT_EQ_U64(yew_bind_active_count(&f.ed), 1U);
     }
     cf_free(&f);
 }
 
 void test_flconf_reloaded_hook_fires_once(void)
 {
-    SagEdStartup startup = {0};
+    YewEdStartup startup = {0};
     ConfigFix f;
-    OptVal off = {SAG_OPT_BOOL, {.b = false}};
+    OptVal off = {YEW_OPT_BOOL, {.b = false}};
     const char *err = NULL;
     u32 active_before;
     u32 ledger_len;
@@ -273,50 +273,50 @@ void test_flconf_reloaded_hook_fires_once(void)
     cf_init(&f, &startup);
     cf_write(f.user_init,
              "on(\"ws.open\", fn(ws) set({errorbells: true}))\n");
-    SAG_ASSERT_EQ_I64(sag_config_load_all(&f.ed, NULL), SAG_CFG_OK);
+    YEW_ASSERT_EQ_I64(yew_config_load_all(&f.ed, NULL), YEW_CFG_OK);
     for (i = 0U; i < 20U; i++)
-        SAG_ASSERT_EQ_I64(sag_config_reload(&f.ed, NULL), SAG_CFG_OK);
-    SAG_ASSERT(sag_opt_set(&f.ed, SAG_OPT_GLOBAL, "errorbells", 10U, &off,
+        YEW_ASSERT_EQ_I64(yew_config_reload(&f.ed, NULL), YEW_CFG_OK);
+    YEW_ASSERT(yew_opt_set(&f.ed, YEW_OPT_GLOBAL, "errorbells", 10U, &off,
                            &err));
     active_before = cf_active_ledger(&f);
-    sag_fl_hook_workspace(&f.ed, FL_EV_WS_OPEN);
-    SAG_ASSERT(cf_opt(&f, "errorbells").as.b);
-    SAG_ASSERT_EQ_U64(cf_active_ledger(&f), active_before + 1U);
+    yew_fl_hook_workspace(&f.ed, FL_EV_WS_OPEN);
+    YEW_ASSERT(cf_opt(&f, "errorbells").as.b);
+    YEW_ASSERT_EQ_U64(cf_active_ledger(&f), active_before + 1U);
     ledger_len = f.ed.hooks.ledger.n;
     for (i = 0U; i < 20U; i++) {
-        SAG_ASSERT(sag_opt_set(&f.ed, SAG_OPT_GLOBAL, "errorbells", 10U,
+        YEW_ASSERT(yew_opt_set(&f.ed, YEW_OPT_GLOBAL, "errorbells", 10U,
                                &off, &err));
-        sag_fl_hook_workspace(&f.ed, FL_EV_WS_OPEN);
-        SAG_ASSERT(cf_opt(&f, "errorbells").as.b);
-        SAG_ASSERT_EQ_U64(cf_active_ledger(&f), active_before + 1U);
-        SAG_ASSERT_EQ_U64(f.ed.hooks.ledger.n, ledger_len);
+        yew_fl_hook_workspace(&f.ed, FL_EV_WS_OPEN);
+        YEW_ASSERT(cf_opt(&f, "errorbells").as.b);
+        YEW_ASSERT_EQ_U64(cf_active_ledger(&f), active_before + 1U);
+        YEW_ASSERT_EQ_U64(f.ed.hooks.ledger.n, ledger_len);
     }
-    SAG_ASSERT(sag_opt_set(&f.ed, SAG_OPT_GLOBAL, "errorbells", 10U, &off,
+    YEW_ASSERT(yew_opt_set(&f.ed, YEW_OPT_GLOBAL, "errorbells", 10U, &off,
                            &err));
-    sag_origin_teardown(&f.ed, FL_ORIGIN_ID_CONFIG);
-    SAG_ASSERT(!cf_opt(&f, "errorbells").as.b);
+    yew_origin_teardown(&f.ed, FL_ORIGIN_ID_CONFIG);
+    YEW_ASSERT(!cf_opt(&f, "errorbells").as.b);
     cf_free(&f);
 }
 
 void test_flconf_deleted_set_restores_default_on_reload(void)
 {
-    SagEdStartup startup = {0};
+    YewEdStartup startup = {0};
     ConfigFix f;
 
     startup.no_workspace_config = true;
     cf_init(&f, &startup);
     cf_write(f.user_init, "set({errorbells: true})\n");
-    SAG_ASSERT_EQ_I64(sag_config_load_all(&f.ed, NULL), SAG_CFG_OK);
-    SAG_ASSERT(cf_opt(&f, "errorbells").as.b);
+    YEW_ASSERT_EQ_I64(yew_config_load_all(&f.ed, NULL), YEW_CFG_OK);
+    YEW_ASSERT(cf_opt(&f, "errorbells").as.b);
     cf_write(f.user_init, "\n");
-    SAG_ASSERT_EQ_I64(sag_config_reload(&f.ed, NULL), SAG_CFG_OK);
-    SAG_ASSERT(!cf_opt(&f, "errorbells").as.b);
+    YEW_ASSERT_EQ_I64(yew_config_reload(&f.ed, NULL), YEW_CFG_OK);
+    YEW_ASSERT(!cf_opt(&f, "errorbells").as.b);
     cf_free(&f);
 }
 
 void test_flconf_clean_skips_every_fletch_config_source(void)
 {
-    SagEdStartup startup = {0};
+    YewEdStartup startup = {0};
     ConfigFix f;
     u32 rebuilds;
 
@@ -326,12 +326,12 @@ void test_flconf_clean_skips_every_fletch_config_source(void)
     cf_write(f.runtime_init, "set({errorbells: true})\n");
     cf_write(f.user_init, "bind(\"L\", \"Z\", \"ed.nop\")\n");
     cf_write(f.workspace_init, "set({tabwidth: 9})\n");
-    rebuilds = sag_bind_rebuild_count(&f.ed);
-    SAG_ASSERT_EQ_I64(sag_config_load_all(&f.ed, NULL), SAG_CFG_OK);
-    SAG_ASSERT(!cf_opt(&f, "errorbells").as.b);
-    SAG_ASSERT_EQ_I64(cf_opt(&f, "tabwidth").as.i, 4);
-    SAG_ASSERT_EQ_U64(sag_bind_active_count(&f.ed), 0U);
-    SAG_ASSERT_EQ_U64(cf_active_ledger(&f), 0U);
-    SAG_ASSERT_EQ_U64(sag_bind_rebuild_count(&f.ed), rebuilds);
+    rebuilds = yew_bind_rebuild_count(&f.ed);
+    YEW_ASSERT_EQ_I64(yew_config_load_all(&f.ed, NULL), YEW_CFG_OK);
+    YEW_ASSERT(!cf_opt(&f, "errorbells").as.b);
+    YEW_ASSERT_EQ_I64(cf_opt(&f, "tabwidth").as.i, 4);
+    YEW_ASSERT_EQ_U64(yew_bind_active_count(&f.ed), 0U);
+    YEW_ASSERT_EQ_U64(cf_active_ledger(&f), 0U);
+    YEW_ASSERT_EQ_U64(yew_bind_rebuild_count(&f.ed), rebuilds);
     cf_free(&f);
 }

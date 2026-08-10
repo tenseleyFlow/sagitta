@@ -1,8 +1,8 @@
-# sagitta pty golden v1
+# yew pty golden v1
 size 80x24 alt=1 cursor=2,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=10
 --- text
-[1: pty-s14-s27_group_me[sag-s24-grp/ (3)]
+[1: pty-s14-s27_group_me[yew-s24-grp/ (3)]
  one.txt three.txt two.txt
  Edit Group...
  Rename Group...

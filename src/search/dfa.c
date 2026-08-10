@@ -28,12 +28,12 @@
 #include "util/sort.h"
 
 enum {
-    SAG_DFA_MAX_STATES = 1024,
-    SAG_DFA_MAX_BYTES = 1024U * 1024U,
-    SAG_DFA_BUCKETS = 2048,
+    YEW_DFA_MAX_STATES = 1024,
+    YEW_DFA_MAX_BYTES = 1024U * 1024U,
+    YEW_DFA_BUCKETS = 2048,
     /* Two flushes in one search means the working set does not fit; a
      * third would just be more rebuilding. */
-    SAG_DFA_MAX_FLUSHES = 2
+    YEW_DFA_MAX_FLUSHES = 2
 };
 
 /* Assertion context, folded into the state key: two states with the same
@@ -64,13 +64,13 @@ typedef struct DfaState {
 } DfaState;
 
 typedef struct Dfa {
-    const SagRe *re;
+    const YewRe *re;
     const ReInst *prog;
     u32 nprog;
     Arena arena;
     DfaState *states;
     u32 nstates;
-    i32 buckets[SAG_DFA_BUCKETS];
+    i32 buckets[YEW_DFA_BUCKETS];
     u32 flushes;
     u64 bytes;
     /* Scratch reused by every closure so a step allocates nothing. */
@@ -188,7 +188,7 @@ static void dfa_flush(Dfa *d)
      * no per-state teardown. */
     u32 i;
 
-    for (i = 0U; i < SAG_DFA_BUCKETS; i++)
+    for (i = 0U; i < YEW_DFA_BUCKETS; i++)
         d->buckets[i] = -1;
     d->nstates = 0U;
     d->bytes = 0U;
@@ -205,9 +205,9 @@ static i32 dfa_intern(Dfa *d, u32 n, u8 ctx, bool matched)
     DfaState *st;
 
     if (n != 0U)
-        sag_sort_stable(d->work, n, sizeof(*d->work), cmp_u32, NULL);
+        yew_sort_stable(d->work, n, sizeof(*d->work), cmp_u32, NULL);
     h = hash_pcs(d->work, n, ctx);
-    bucket = h % SAG_DFA_BUCKETS;
+    bucket = h % YEW_DFA_BUCKETS;
     for (at = d->buckets[bucket]; at >= 0; at = d->states[at].next) {
         st = &d->states[at];
         if (st->hash == h && st->ctx == ctx && st->npcs == n &&
@@ -216,12 +216,12 @@ static i32 dfa_intern(Dfa *d, u32 n, u8 ctx, bool matched)
              memcmp(st->pcs, d->work, (size_t)n * sizeof(*st->pcs)) == 0))
             return at;
     }
-    if (d->nstates == SAG_DFA_MAX_STATES ||
-        d->bytes + (u64)n * sizeof(u32) > SAG_DFA_MAX_BYTES) {
-        if (d->flushes >= SAG_DFA_MAX_FLUSHES)
+    if (d->nstates == YEW_DFA_MAX_STATES ||
+        d->bytes + (u64)n * sizeof(u32) > YEW_DFA_MAX_BYTES) {
+        if (d->flushes >= YEW_DFA_MAX_FLUSHES)
             return -1;
         dfa_flush(d);
-        bucket = h % SAG_DFA_BUCKETS;
+        bucket = h % YEW_DFA_BUCKETS;
     }
     st = &d->states[d->nstates];
     st->pcs = n == 0U ? NULL :
@@ -249,14 +249,14 @@ static i32 dfa_intern(Dfa *d, u32 n, u8 ctx, bool matched)
     return (i32)d->nstates++;
 }
 
-static bool inst_takes(const SagRe *re, const ReInst *ins, u32 cp)
+static bool inst_takes(const YewRe *re, const ReInst *ins, u32 cp)
 {
     switch ((ReOp)ins->op) {
     case RE_CHAR:
         return cp == ins->arg;
     case RE_CLASS:
         return ins->arg < re->nclasses &&
-               sag_re_class_has(&re->classes[ins->arg], cp);
+               yew_re_class_has(&re->classes[ins->arg], cp);
     case RE_ANY:
         return ins->arg != 0U || cp != (u32)'\n';
     default:
@@ -267,7 +267,7 @@ static bool inst_takes(const SagRe *re, const ReInst *ins, u32 cp)
 
 /* One byte of input, chunk-aware; the DFA reads through the same
  * iterator discipline as everything else in src/search (§1's law). */
-static bool dfa_byte(const SagReInput *in, u64 off, u8 *out)
+static bool dfa_byte(const YewReInput *in, u64 off, u8 *out)
 {
     TextIter it;
     const u8 *chunk = NULL;
@@ -281,16 +281,16 @@ static bool dfa_byte(const SagReInput *in, u64 off, u8 *out)
         *out = in->bytes[off];
         return true;
     }
-    if (!sag_textiter_begin(&it, in->tb, BYTEOFF(off)) ||
-        !sag_textiter_chunk(&it, in->tb, &chunk, &n) || n == 0U)
+    if (!yew_textiter_begin(&it, in->tb, BYTEOFF(off)) ||
+        !yew_textiter_chunk(&it, in->tb, &chunk, &n) || n == 0U)
         return false;
     *out = chunk[0];
     return true;
 }
 
-static u32 dfa_decode(const SagReInput *in, u64 off, u32 *len_out)
+static u32 dfa_decode(const YewReInput *in, u64 off, u32 *len_out)
 {
-    u8 buf[SAG_UTF8_MAX];
+    u8 buf[YEW_UTF8_MAX];
     size_t have = 0U;
     u32 cp = 0U;
     size_t used;
@@ -304,7 +304,7 @@ static u32 dfa_decode(const SagReInput *in, u64 off, u32 *len_out)
         return in->bytes[off];
     }
 
-    while (have < SAG_UTF8_MAX) {
+    while (have < YEW_UTF8_MAX) {
         u8 b;
 
         if (!dfa_byte(in, off + have, &b))
@@ -315,12 +315,12 @@ static u32 dfa_decode(const SagReInput *in, u64 off, u32 *len_out)
         *len_out = 0U;
         return 0U;
     }
-    used = sag_utf8_decode(buf, have, &cp);
+    used = yew_utf8_decode(buf, have, &cp);
     *len_out = (u32)(used == 0U ? 1U : used);
     return cp;
 }
 
-static u8 ctx_at(const SagReInput *in, u64 pos, u32 prev_cp, bool has_prev,
+static u8 ctx_at(const YewReInput *in, u64 pos, u32 prev_cp, bool has_prev,
                  u32 cp, bool have_cp)
 {
     u8 ctx = 0U;
@@ -333,53 +333,53 @@ static u8 ctx_at(const SagReInput *in, u64 pos, u32 prev_cp, bool has_prev,
         ctx |= (u8)(DFA_AT_EOT | DFA_AT_EOL);
     else if (have_cp && (cp == (u32)'\n' || cp == (u32)'\r'))
         ctx |= DFA_AT_EOL;
-    if (has_prev && sag_re_is_word(prev_cp))
+    if (has_prev && yew_re_is_word(prev_cp))
         ctx |= DFA_AFTER_WORD;
-    if (have_cp && sag_re_is_word(cp))
+    if (have_cp && yew_re_is_word(cp))
         ctx |= DFA_BEFORE_WORD;
     return ctx;
 }
 
 /*
- * Unanchored "does it match at or after `from`".  Returns SAG_DFA_YES,
- * SAG_DFA_NO, or SAG_DFA_GIVE_UP when the cache thrashed and the caller
+ * Unanchored "does it match at or after `from`".  Returns YEW_DFA_YES,
+ * YEW_DFA_NO, or YEW_DFA_GIVE_UP when the cache thrashed and the caller
  * should fall back to the Pike VM.
  */
-static int dfa_scan(const SagRe *re, const SagReInput *in, u64 from,
+static int dfa_scan(const YewRe *re, const YewReInput *in, u64 from,
                     u64 *end_out);
 
-int sag_re_dfa_test(const SagRe *re, const SagReInput *in, u64 from)
+int yew_re_dfa_test(const YewRe *re, const YewReInput *in, u64 from)
 {
     return dfa_scan(re, in, from, NULL);
 }
 
 /* Reports where the earliest match ENDS.  Not where it starts, and not
- * necessarily the end of the leftmost match — see sag_re_search. */
-int sag_re_dfa_find_end(const SagRe *re, const SagReInput *in, u64 from,
+ * necessarily the end of the leftmost match — see yew_re_search. */
+int yew_re_dfa_find_end(const YewRe *re, const YewReInput *in, u64 from,
                         u64 *end_out)
 {
     return dfa_scan(re, in, from, end_out);
 }
 
-static int dfa_scan(const SagRe *re, const SagReInput *in, u64 from,
+static int dfa_scan(const YewRe *re, const YewReInput *in, u64 from,
                     u64 *end_out)
 {
     Dfa d;
     u64 pos;
-    int verdict = SAG_DFA_NO;
+    int verdict = YEW_DFA_NO;
     u32 *cur;
     u32 ncur;
     i32 state;
 
     if (re == NULL || in == NULL || re->nprog == 0U)
-        return SAG_DFA_NO;
+        return YEW_DFA_NO;
     (void)memset(&d, 0, sizeof(d));
     d.re = re;
     d.prog = re->prog;
     d.nprog = re->nprog;
     arena_init(&d.arena);
     d.states = arena_alloc(&d.arena,
-                           SAG_DFA_MAX_STATES * sizeof(*d.states),
+                           YEW_DFA_MAX_STATES * sizeof(*d.states),
                            sizeof(void *));
     d.work = arena_alloc(&d.arena, (size_t)re->nprog * sizeof(u32),
                          sizeof(u32));
@@ -444,11 +444,11 @@ static int dfa_scan(const SagRe *re, const SagReInput *in, u64 from,
          * which reads as "not a line start" — /^$/ over "foo\n" from 4
          * then missed the empty last line, because the DFA could not
          * see the '\n' it was standing behind.  Bounded by
-         * SAG_UTF8_MAX, so this is a few bytes, not a rescan.
+         * YEW_UTF8_MAX, so this is a few bytes, not a rescan.
          */
         if (pos > in->window.lo) {
-            u64 back = pos - in->window.lo > SAG_UTF8_MAX ?
-                       (u64)SAG_UTF8_MAX : pos - in->window.lo;
+            u64 back = pos - in->window.lo > YEW_UTF8_MAX ?
+                       (u64)YEW_UTF8_MAX : pos - in->window.lo;
             u64 probe = pos - back;
 
             while (probe < pos) {
@@ -474,7 +474,7 @@ static int dfa_scan(const SagRe *re, const SagReInput *in, u64 from,
         state = dfa_intern(&d, n0, ctx0, matched0);
         if (state < 0) {
             arena_free_all(&d.arena);
-            return SAG_DFA_GIVE_UP;
+            return YEW_DFA_GIVE_UP;
         }
     }
 
@@ -486,7 +486,7 @@ static int dfa_scan(const SagRe *re, const SagReInput *in, u64 from,
         u32 i;
 
         if (d.states[state].matched) {
-            verdict = SAG_DFA_YES;
+            verdict = YEW_DFA_YES;
             if (end_out != NULL)
                 *end_out = pos;
             break;
@@ -533,7 +533,7 @@ static int dfa_scan(const SagRe *re, const SagReInput *in, u64 from,
             n = closure(&d, d.combined, ncur + 1U, ctx, &matched);
             next = dfa_intern(&d, n, ctx, matched);
             if (next < 0) {
-                verdict = SAG_DFA_GIVE_UP;
+                verdict = YEW_DFA_GIVE_UP;
                 break;
             }
             /* Record the edge we just walked.  A flush may have

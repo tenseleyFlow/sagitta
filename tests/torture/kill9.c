@@ -17,9 +17,9 @@
 #include <unistd.h>
 
 static const unsigned char old_bytes[] =
-    "Sagitta torture fixture: before save\nline two\n";
+    "yew torture fixture: before save\nline two\n";
 static const unsigned char post_bytes[] =
-    "Sagitta torture fixture: AFTER save\n"
+    "yew torture fixture: AFTER save\n"
     "a substantially longer replacement line that forces short writes\n"
     "final line without a newline";
 
@@ -184,16 +184,16 @@ static pid_t start_save(const char *driver, const char *shim,
         die("fork");
     if (pid != 0)
         return pid;
-    if (getenv("SAG_TORTURE_NO_SHIM") == NULL) {
-        const char *prefix = getenv("SAG_TORTURE_PRELOAD_PREFIX");
+    if (getenv("YEW_TORTURE_NO_SHIM") == NULL) {
+        const char *prefix = getenv("YEW_TORTURE_PRELOAD_PREFIX");
         char *preload = NULL;
 
-#ifdef SAG_ASAN_RUNTIME
+#ifdef YEW_ASAN_RUNTIME
         /* Under ASan the runtime has to be preloaded before the shim, or
          * it refuses to install interceptors and the shim never fires.
          * An explicit prefix in the environment still wins. */
         if (prefix == NULL || *prefix == '\0')
-            prefix = SAG_ASAN_RUNTIME;
+            prefix = YEW_ASAN_RUNTIME;
 #endif
 
         if (prefix != NULL && *prefix != '\0') {
@@ -215,19 +215,19 @@ static pid_t start_save(const char *driver, const char *shim,
         free(preload);
     }
     if (
-        setenv("SAG_FAULT_ENABLE", "0", 1) != 0 ||
-        setenv("SAG_FAULT_SHORT", "1", 1) != 0 ||
-        setenv("SAG_FAULT_LOG", log, 1) != 0)
+        setenv("YEW_FAULT_ENABLE", "0", 1) != 0 ||
+        setenv("YEW_FAULT_SHORT", "1", 1) != 0 ||
+        setenv("YEW_FAULT_LOG", log, 1) != 0)
         _exit(126);
-    set_num_env("SAG_FAULT_SEED", seed);
+    set_num_env("YEW_FAULT_SEED", seed);
     if (fault_at >= 0)
-        set_num_env("SAG_FAULT_AT", (unsigned long long)fault_at);
+        set_num_env("YEW_FAULT_AT", (unsigned long long)fault_at);
     else
-        (void)unsetenv("SAG_FAULT_AT");
+        (void)unsetenv("YEW_FAULT_AT");
     if (ready_fd >= 0)
-        set_num_env("SAG_TORTURE_READY_FD", (unsigned long long)ready_fd);
+        set_num_env("YEW_TORTURE_READY_FD", (unsigned long long)ready_fd);
     else
-        (void)unsetenv("SAG_TORTURE_READY_FD");
+        (void)unsetenv("YEW_TORTURE_READY_FD");
     execl(driver, driver, "--save", dst, post, (char *)NULL);
     _exit(126);
 }
@@ -243,9 +243,9 @@ static bool run_check(const char *driver, const char *dst,
         (void)unsetenv("LD_PRELOAD");
         (void)unsetenv("DYLD_INSERT_LIBRARIES");
         (void)unsetenv("DYLD_FORCE_FLAT_NAMESPACE");
-        (void)unsetenv("SAG_FAULT_AT");
-        (void)unsetenv("SAG_FAULT_SHORT");
-        (void)unsetenv("SAG_FAULT_ENABLE");
+        (void)unsetenv("YEW_FAULT_AT");
+        (void)unsetenv("YEW_FAULT_SHORT");
+        (void)unsetenv("YEW_FAULT_ENABLE");
         execl(driver, driver, "--check", dst, old, post, (char *)NULL);
         _exit(126);
     }
@@ -412,7 +412,7 @@ static bool backup_matches(const char *state, const char *dst)
     resolved = realpath(dst, NULL);
     if (resolved == NULL)
         return false;
-    n = snprintf(path, sizeof(path), "%s/sagitta/backup/%016llx.bak",
+    n = snprintf(path, sizeof(path), "%s/yew/backup/%016llx.bak",
                  state, (unsigned long long)path_hash(resolved));
     free(resolved);
     matches = n > 0 && (size_t)n < sizeof(path) &&
@@ -522,15 +522,15 @@ static void injected_fallback(const char *driver, const char *shim,
     make_file(dst, old_bytes, sizeof(old_bytes) - 1U);
     make_file(old, old_bytes, sizeof(old_bytes) - 1U);
     make_file(post, post_bytes, sizeof(post_bytes) - 1U);
-    if (setenv(chown_case ? "SAG_FAULT_FCHOWN_EPERM"
-                          : "SAG_FAULT_RENAME_EXDEV", "1", 1) != 0)
+    if (setenv(chown_case ? "YEW_FAULT_FCHOWN_EPERM"
+                          : "YEW_FAULT_RENAME_EXDEV", "1", 1) != 0)
         die("setenv fallback fault");
-    if (chown_case && setenv("SAG_TORTURE_FOREIGN_OWNER", "1", 1) != 0)
+    if (chown_case && setenv("YEW_TORTURE_FOREIGN_OWNER", "1", 1) != 0)
         die("setenv foreign owner");
     code = wait_child(start_save(driver, shim, dst, post, log, 99U, -1, -1));
-    (void)unsetenv("SAG_FAULT_FCHOWN_EPERM");
-    (void)unsetenv("SAG_FAULT_RENAME_EXDEV");
-    (void)unsetenv("SAG_TORTURE_FOREIGN_OWNER");
+    (void)unsetenv("YEW_FAULT_FCHOWN_EPERM");
+    (void)unsetenv("YEW_FAULT_RENAME_EXDEV");
+    (void)unsetenv("YEW_TORTURE_FOREIGN_OWNER");
     if (code != 0 || !run_check(driver, dst, old, post) ||
         !backup_matches(state, dst)) {
         (void)fprintf(stderr, "torture: injected %s fallback failed\n", kind);
@@ -552,13 +552,13 @@ static void late_hardlink_fallback(const char *driver, const char *shim,
     make_file(dst, old_bytes, sizeof(old_bytes) - 1U);
     make_file(old, old_bytes, sizeof(old_bytes) - 1U);
     make_file(post, post_bytes, sizeof(post_bytes) - 1U);
-    if (setenv("SAG_FAULT_LINK_SOURCE", dst, 1) != 0 ||
-        setenv("SAG_FAULT_LINK_TWIN", twin, 1) != 0)
+    if (setenv("YEW_FAULT_LINK_SOURCE", dst, 1) != 0 ||
+        setenv("YEW_FAULT_LINK_TWIN", twin, 1) != 0)
         die("setenv late hardlink");
     code = wait_child(start_save(driver, shim, dst, post, log, 314159U,
                                  -1, -1));
-    (void)unsetenv("SAG_FAULT_LINK_SOURCE");
-    (void)unsetenv("SAG_FAULT_LINK_TWIN");
+    (void)unsetenv("YEW_FAULT_LINK_SOURCE");
+    (void)unsetenv("YEW_FAULT_LINK_TWIN");
     if (code != 0 || !same_inode(dst, twin) ||
         !file_equals_bytes(dst, post_bytes, sizeof(post_bytes) - 1U) ||
         !file_equals_bytes(twin, post_bytes, sizeof(post_bytes) - 1U) ||
@@ -580,10 +580,10 @@ static void injected_eintr(const char *driver, const char *shim,
     make_file(dst, old_bytes, sizeof(old_bytes) - 1U);
     make_file(old, old_bytes, sizeof(old_bytes) - 1U);
     make_file(post, post_bytes, sizeof(post_bytes) - 1U);
-    if (setenv("SAG_FAULT_EINTR_AT", "0", 1) != 0)
+    if (setenv("YEW_FAULT_EINTR_AT", "0", 1) != 0)
         die("setenv EINTR fault");
     code = wait_child(start_save(driver, shim, dst, post, log, 17U, -1, -1));
-    (void)unsetenv("SAG_FAULT_EINTR_AT");
+    (void)unsetenv("YEW_FAULT_EINTR_AT");
     if (code != 0 || !run_check(driver, dst, old, post)) {
         (void)fprintf(stderr, "torture: EINTR retry lane failed\n");
         exit(1);
@@ -602,10 +602,10 @@ static void clean_child_check(const char *driver, const char *shim,
     make_file(dst, old_bytes, sizeof(old_bytes) - 1U);
     make_file(old, old_bytes, sizeof(old_bytes) - 1U);
     make_file(post, post_bytes, sizeof(post_bytes) - 1U);
-    if (setenv("SAG_TORTURE_NO_SHIM", "1", 1) != 0)
+    if (setenv("YEW_TORTURE_NO_SHIM", "1", 1) != 0)
         die("setenv no shim");
     code = wait_child(start_save(driver, shim, dst, post, log, 1U, -1, -1));
-    (void)unsetenv("SAG_TORTURE_NO_SHIM");
+    (void)unsetenv("YEW_TORTURE_NO_SHIM");
     {
         bool oracle = run_check(driver, dst, old, post);
         bool exact = file_equals_bytes(dst, post_bytes,
@@ -709,11 +709,11 @@ static void external_kills(const char *driver, const char *shim,
         make_file(post, post_bytes, sizeof(post_bytes) - 1U);
         if (pipe(pipefd) != 0)
             die("pipe");
-        if (setenv("SAG_FAULT_DELAY_US", "5000", 1) != 0)
+        if (setenv("YEW_FAULT_DELAY_US", "5000", 1) != 0)
             die("setenv fault delay");
         pid = start_save(driver, shim, dst, post, log, random_next(&rng),
                          -1, pipefd[1]);
-        (void)unsetenv("SAG_FAULT_DELAY_US");
+        (void)unsetenv("YEW_FAULT_DELAY_US");
         (void)close(pipefd[1]);
         do {
             n = read(pipefd[0], &ready, 1U);
@@ -750,7 +750,7 @@ static void external_kills(const char *driver, const char *shim,
 int main(int argc, char **argv)
 {
     static const unsigned long long seeds[] = {1U, 7U, 42U, 8675309U};
-    char root_template[] = "/tmp/sagitta-torture-XXXXXX";
+    char root_template[] = "/tmp/yew-torture-XXXXXX";
     char state[512];
     char *root;
     const char *iterations_env;
@@ -761,11 +761,11 @@ int main(int argc, char **argv)
     size_t i;
 
     if (argc != 3) {
-        (void)fprintf(stderr, "usage: %s SAG_TORTURE FAULTSHIM_SO\n", argv[0]);
+        (void)fprintf(stderr, "usage: %s YEW_TORTURE FAULTSHIM_SO\n", argv[0]);
         return 2;
     }
-    live_editor = getenv("SAG_TORTURE_LANE") != NULL &&
-                  strcmp(getenv("SAG_TORTURE_LANE"), "live-editor") == 0;
+    live_editor = getenv("YEW_TORTURE_LANE") != NULL &&
+                  strcmp(getenv("YEW_TORTURE_LANE"), "live-editor") == 0;
     root = mkdtemp(root_template);
     if (root == NULL)
         die("mkdtemp");
@@ -774,18 +774,18 @@ int main(int argc, char **argv)
         die("mkdir state");
     if (setenv("XDG_STATE_HOME", state, 1) != 0)
         die("setenv XDG_STATE_HOME");
-    iterations_env = getenv("SAG_TORTURE_SIGKILL_ITERS");
+    iterations_env = getenv("YEW_TORTURE_SIGKILL_ITERS");
     if (iterations_env != NULL)
         signal_iterations = strtoull(iterations_env, NULL, 10);
-    if (getenv("SAG_TORTURE_CLEAN_ONLY") != NULL &&
-        strcmp(getenv("SAG_TORTURE_CLEAN_ONLY"), "1") == 0) {
+    if (getenv("YEW_TORTURE_CLEAN_ONLY") != NULL &&
+        strcmp(getenv("YEW_TORTURE_CLEAN_ONLY"), "1") == 0) {
         clean_child_check(argv[1], argv[2], root, &serial);
         if (!remove_tree(root))
             die("remove torture root");
         return 0;
     }
-    if (getenv("SAG_TORTURE_FAULT_BOUNDARIES") != NULL &&
-        strcmp(getenv("SAG_TORTURE_FAULT_BOUNDARIES"), "0") == 0)
+    if (getenv("YEW_TORTURE_FAULT_BOUNDARIES") != NULL &&
+        strcmp(getenv("YEW_TORTURE_FAULT_BOUNDARIES"), "0") == 0)
         fault_boundaries = false;
 
     if (fault_boundaries) {
@@ -810,7 +810,7 @@ int main(int argc, char **argv)
     injected_eintr(argv[1], argv[2], root, &serial);
     determinism_check(argv[1], argv[2], root, &serial);
     external_kills(argv[1], argv[2], root, signal_iterations, &serial);
-    if (getenv("SAG_TORTURE_KEEP") != NULL)
+    if (getenv("YEW_TORTURE_KEEP") != NULL)
         (void)printf("torture root retained for inspection: %s\n", root);
     else if (!remove_tree(root))
         die("remove torture root");

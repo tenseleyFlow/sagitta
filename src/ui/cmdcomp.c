@@ -38,7 +38,7 @@ VEC_DECL(CandidateVec, Candidate);
  * No FzMatch here, deliberately.  Match positions are 130 bytes and the
  * heap sifts by copying whole structs -- carrying them made a 10 000-entry
  * re-rank move ~40 MB through path_candidate_swap, which cost more than
- * the readdir it followed.  Only the <= SAG_COMP_MAX survivors need
+ * the readdir it followed.  Only the <= YEW_COMP_MAX survivors need
  * positions, and rescoring those at finish time is a few hundred scans.
  */
 typedef struct {
@@ -54,7 +54,7 @@ VEC_DECL(PathCandidateVec, PathCandidate);
 static bool force_dtype_unknown;
 static u32 test_lstat_calls;
 /*
- * Test-only override of SAG_COMP_LIST_MAX.  The overflow path is
+ * Test-only override of YEW_COMP_LIST_MAX.  The overflow path is
  * otherwise only reachable with 50 000 entries on disk, which is not a
  * unit test — and it is the path that has to move the cache key across
  * an invalidate rather than free it, so leaving it uncovered would leave
@@ -71,8 +71,8 @@ static bool starts_with(const char *s, const char *prefix)
 
 /*
  * Sprint 18.5 §2: one candidate's rank key, the single-item form of
- * sag_fz_rank's ordering.  The streaming path enumerator cannot hand
- * sag_fz_rank a whole array -- it never holds one -- so the tier rule
+ * yew_fz_rank's ordering.  The streaming path enumerator cannot hand
+ * yew_fz_rank a whole array -- it never holds one -- so the tier rule
  * lives here as well, in one helper both shapes call.
  *
  * `match` is always a bare name (a command name, a buffer label, a
@@ -82,23 +82,23 @@ static bool starts_with(const char *s, const char *prefix)
 static i32 comp_key(const char *stem, size_t stem_len, const char *match,
                     FzMatch *m)
 {
-    i32 score = sag_fz_score(stem, (u32)stem_len, match,
+    i32 score = yew_fz_score(stem, (u32)stem_len, match,
                              (u32)strlen(match), m);
 
-    if (score == SAG_FZ_NO_MATCH)
-        return SAG_FZ_NO_MATCH;
+    if (score == YEW_FZ_NO_MATCH)
+        return YEW_FZ_NO_MATCH;
     if (score >= 5000)
-        return score > INT32_MAX - SAG_FZ_BASENAME_TIER
+        return score > INT32_MAX - YEW_FZ_BASENAME_TIER
                    ? INT32_MAX
-                   : score + (i32)SAG_FZ_BASENAME_TIER;
+                   : score + (i32)YEW_FZ_BASENAME_TIER;
     return score;
 }
 
 /*
- * Descending by key, then shorter-then-memcmp -- sag_fz_rank's tie rule,
+ * Descending by key, then shorter-then-memcmp -- yew_fz_rank's tie rule,
  * so the two orderings cannot drift apart.
  *
- * Unlike sag_fz_rank, ties are broken by name even for the EMPTY stem.
+ * Unlike yew_fz_rank, ties are broken by name even for the EMPTY stem.
  * There the "preserve source order" rule has nothing to preserve:
  * readdir order is filesystem order, it differs between ext4 and xfs and
  * between two identical checkouts, and letting it through would make
@@ -146,17 +146,17 @@ static bool candidate_add(CandidateVec *v, const char *stem,
 
     (void)memset(&item.m, 0, sizeof(item.m));
     score = comp_key(stem, strlen(stem), match, &item.m);
-    /* SAG_FZ_NO_MATCH, not `< 0`: the length penalty makes a genuine
+    /* YEW_FZ_NO_MATCH, not `< 0`: the length penalty makes a genuine
      * match score negative, and a `< 0` test silently drops the longest
      * real candidates. */
-    if (score == SAG_FZ_NO_MATCH)
+    if (score == YEW_FZ_NO_MATCH)
         return false;
-    item.text = sag_xmalloc(strlen(text) + 1U);
+    item.text = yew_xmalloc(strlen(text) + 1U);
     (void)strcpy(item.text, text);
     if (strcmp(match, text) == 0) {
         item.match = item.text;
     } else {
-        item.match = sag_xmalloc(strlen(match) + 1U);
+        item.match = yew_xmalloc(strlen(match) + 1U);
         (void)strcpy(item.match, match);
     }
     item.detail = detail;
@@ -167,7 +167,7 @@ static bool candidate_add(CandidateVec *v, const char *stem,
     return true;
 }
 
-static u32 candidate_finish(const CompReq *req, SagCompKind kind,
+static u32 candidate_finish(const CompReq *req, YewCompKind kind,
                             CandidateVec *matches, Vec_CompItem *out)
 {
     Arena *arena = req->arena;
@@ -175,17 +175,17 @@ static u32 candidate_finish(const CompReq *req, SagCompKind kind,
     size_t keep;
     u32 total = matches->len > UINT32_MAX ? UINT32_MAX : (u32)matches->len;
 
-    sag_sort_stable(matches->data, matches->len, sizeof(matches->data[0]),
+    yew_sort_stable(matches->data, matches->len, sizeof(matches->data[0]),
                     candidate_cmp, NULL);
     out->len = 0U;
-    keep = matches->len < SAG_COMP_MAX ? matches->len : SAG_COMP_MAX;
+    keep = matches->len < YEW_COMP_MAX ? matches->len : YEW_COMP_MAX;
     Vec_CompItem_reserve(out, keep);
     for (i = 0U; i < keep; i++) {
         const Candidate *src = &matches->data[i];
         CompItem item;
 
-        item.text = kind == SAG_COMP_PATH ?
-                    sag_comp_quote(arena, src->text) :
+        item.text = kind == YEW_COMP_PATH ?
+                    yew_comp_quote(arena, src->text) :
                     arena_strdup(arena, src->text);
         item.detail = src->detail == NULL ? NULL :
                       arena_strdup(arena, src->detail);
@@ -200,7 +200,7 @@ static u32 candidate_finish(const CompReq *req, SagCompKind kind,
         item.match = arena_strdup(arena, src->match);
         item.match_off = strcmp(item.text, item.match) == 0
                              ? 0U
-                             : (u16)SAG_COMP_NO_HIGHLIGHT;
+                             : (u16)YEW_COMP_NO_HIGHLIGHT;
         Vec_CompItem_push(out, item);
     }
     candidate_dispose(matches);
@@ -213,30 +213,30 @@ static u32 enumerate_commands(const CompReq *req, Vec_CompItem *out)
     const char *stem = req->stem;
     u32 i;
 
-    for (i = 0U; i < sag_cmd_count(); i++) {
-        const CmdDesc *desc = sag_cmd_at(i);
+    for (i = 0U; i < yew_cmd_count(); i++) {
+        const CmdDesc *desc = yew_cmd_at(i);
         CmdId id;
         const CmdEntry *entry;
         const char *name;
         bool deferred;
 
         if (desc == NULL || !starts_with(desc->name, "ed.") ||
-            (desc->flags & SAG_CMD_INTERNAL) != 0U)
+            (desc->flags & YEW_CMD_INTERNAL) != 0U)
             continue;
         name = desc->name + 3U;
         /* A deferred command's help already reads "Sprint 23: open a
          * file", so the detail column names the sprint for free. */
-        deferred = (desc->flags & SAG_CMD_DEFERRED) != 0U;
+        deferred = (desc->flags & YEW_CMD_DEFERRED) != 0U;
         (void)candidate_add(&matches, stem, name, name, desc->help, false,
                             deferred);
-        id = sag_cmd_lookup(desc->name, (u32)strlen(desc->name));
-        entry = sag_cmd_entry(id);
+        id = yew_cmd_lookup(desc->name, (u32)strlen(desc->name));
+        entry = yew_cmd_entry(id);
         if (entry != NULL && entry->abbrev != NULL &&
             strcmp(entry->abbrev, name) != 0)
             (void)candidate_add(&matches, stem, entry->abbrev,
                                 entry->abbrev, name, false, deferred);
     }
-    return candidate_finish(req, SAG_COMP_CMD, &matches, out);
+    return candidate_finish(req, YEW_COMP_CMD, &matches, out);
 }
 
 static const char *buffer_name(const Buffer *buffer)
@@ -267,7 +267,7 @@ static u32 enumerate_buffers(const CompReq *req, Vec_CompItem *out)
         (void)candidate_add(&matches, stem, number, number, name, false,
                             false);
     }
-    return candidate_finish(req, SAG_COMP_BUFFER, &matches, out);
+    return candidate_finish(req, YEW_COMP_BUFFER, &matches, out);
 }
 
 static bool unsafe_path_byte(unsigned char ch)
@@ -277,7 +277,7 @@ static bool unsafe_path_byte(unsigned char ch)
     return ch < 0x20U || ch == 0x7fU || strchr(unsafe, (int)ch) != NULL;
 }
 
-char *sag_comp_quote(Arena *arena, const char *text)
+char *yew_comp_quote(Arena *arena, const char *text)
 {
     Bytebuf quoted;
     const unsigned char *p;
@@ -325,8 +325,8 @@ static char *join2(const char *left, const char *right)
     char *joined;
 
     if (a > SIZE_MAX - b - 1U)
-        SAG_BUG("completion path size overflow");
-    joined = sag_xmalloc(a + b + 1U);
+        YEW_BUG("completion path size overflow");
+    joined = yew_xmalloc(a + b + 1U);
     (void)memcpy(joined, left, a);
     (void)memcpy(joined + a, right, b + 1U);
     return joined;
@@ -353,7 +353,7 @@ static char *expand_home_head(const char *head)
             home = pw == NULL ? NULL : pw->pw_dir;
         }
     } else {
-        user = sag_xmalloc(user_len + 1U);
+        user = yew_xmalloc(user_len + 1U);
         (void)memcpy(user, head + 1U, user_len);
         user[user_len] = '\0';
         pw = getpwnam(user);
@@ -428,7 +428,7 @@ static void path_candidate_swap(PathCandidate *a, PathCandidate *b)
 }
 
 /* Paths have unique names within one directory.  Keep a worst-first heap of
- * the best SAG_COMP_MAX ranks.  Its filename buffers are reused when the
+ * the best YEW_COMP_MAX ranks.  Its filename buffers are reused when the
  * root is replaced, so a large directory allocates and materializes only the
  * candidates the menu can display. */
 static void path_heap_push(PathCandidateVec *heap, const char *name,
@@ -438,7 +438,7 @@ static void path_heap_push(PathCandidateVec *heap, const char *name,
     size_t at;
     size_t need = strlen(name) + 1U;
 
-    item.name = sag_xmalloc(need);
+    item.name = yew_xmalloc(need);
     (void)memcpy(item.name, name, need);
     item.len = need - 1U;
     item.cap = need;
@@ -465,7 +465,7 @@ static void path_heap_replace_worst(PathCandidateVec *heap, const char *name,
     size_t at = 0U;
 
     if (root->cap < need) {
-        root->name = sag_xrealloc(root->name, need);
+        root->name = yew_xrealloc(root->name, need);
         root->cap = need;
     }
     (void)memcpy(root->name, name, need);
@@ -497,7 +497,7 @@ static bool path_candidate_wanted(const PathCandidateVec *heap,
 {
     PathCandidate preview;
 
-    if (heap->len < SAG_COMP_MAX)
+    if (heap->len < YEW_COMP_MAX)
         return true;
     (void)memset(&preview, 0, sizeof(preview));
     preview.name = (char *)match;
@@ -523,11 +523,11 @@ static void path_candidates_finish(const CompReq *req,
 {
     Arena *arena = req->arena;
     size_t head_len = strlen(head);
-    const char *tail = req->stem + sag_comp_path_head_len(req->stem);
+    const char *tail = req->stem + yew_comp_path_head_len(req->stem);
     size_t tail_len = strlen(tail);
     size_t i;
 
-    sag_sort_stable(paths->data, paths->len, sizeof(paths->data[0]),
+    yew_sort_stable(paths->data, paths->len, sizeof(paths->data[0]),
                     path_candidate_cmp, NULL);
     out->len = 0U;
     Vec_CompItem_reserve(out, paths->len);
@@ -544,9 +544,9 @@ static void path_candidates_finish(const CompReq *req,
         } else {
             raw = shown;
         }
-        item.text = sag_comp_quote(arena, raw);
+        item.text = yew_comp_quote(arena, raw);
         item.detail = NULL;
-        item.kind = SAG_COMP_PATH;
+        item.kind = YEW_COMP_PATH;
         item.is_dir = is_dir;
         item.deferred = false;
         item.score = path->score;
@@ -562,9 +562,9 @@ static void path_candidates_finish(const CompReq *req,
         (void)comp_key(tail, tail_len, path->name, &item.m);
         item.match = arena_strdup(arena, path->name);
         if (strcmp(item.text, raw) != 0 ||
-            head_len >= (size_t)SAG_COMP_NO_HIGHLIGHT) {
+            head_len >= (size_t)YEW_COMP_NO_HIGHLIGHT) {
             item.m.n_pos = 0U;
-            item.match_off = (u16)SAG_COMP_NO_HIGHLIGHT;
+            item.match_off = (u16)YEW_COMP_NO_HIGHLIGHT;
         } else {
             u16 p;
 
@@ -582,7 +582,7 @@ static void path_candidates_finish(const CompReq *req,
     path_candidates_dispose(paths);
 }
 
-size_t sag_comp_path_head_len(const char *stem)
+size_t yew_comp_path_head_len(const char *stem)
 {
     const char *slash;
 
@@ -622,7 +622,7 @@ typedef struct DirListing {
     u8 *dtypes;
     u32 n;
     /*
-     * The directory had more than SAG_COMP_LIST_MAX entries, so the blob
+     * The directory had more than YEW_COMP_LIST_MAX entries, so the blob
      * is a PREFIX of it and narrowing from it would silently lose rows.
      * Nothing is cached in that case; the scan streams as it used to.
      */
@@ -638,7 +638,7 @@ typedef struct DirListing {
      *
      * Moving the read to a different key only moves the spike, so it is
      * SLICED instead: each call reads for at most a time budget and
-     * returns, and sag_cmdline_comp_tick resumes it on the idle path
+     * returns, and yew_cmdline_comp_tick resumes it on the idle path
      * exactly as Sprint 26 §7.2 does for the picker.  `dir` stays open
      * between slices because readdir has no seek that could resume a
      * closed one cheaply, and reopening would re-read from the top.
@@ -659,7 +659,7 @@ static const char *listing_name(const DirListing *l, u32 i)
     return l->blob + l->offs[i];
 }
 
-u64 sag_comp_listing_opendirs(void)
+u64 yew_comp_listing_opendirs(void)
 {
     return comp_opendirs;
 }
@@ -675,7 +675,7 @@ static void listing_dispose(DirListing *l)
     (void)memset(l, 0, sizeof(*l));
 }
 
-void sag_comp_listing_invalidate(void)
+void yew_comp_listing_invalidate(void)
 {
     listing_dispose(&comp_listing);
 }
@@ -683,7 +683,7 @@ void sag_comp_listing_invalidate(void)
 static char *dup_cstr(const char *s)
 {
     size_t len = strlen(s) + 1U;
-    char *copy = sag_xmalloc(len);
+    char *copy = yew_xmalloc(len);
 
     (void)memcpy(copy, s, len);
     return copy;
@@ -697,14 +697,14 @@ static bool listing_push(DirListing *l, const char *name, u8 dtype,
     if (l->n == *cap) {
         u32 next = *cap == 0U ? 256U : *cap * 2U;
         u32 limit = test_list_max != 0U ? test_list_max
-                                        : (u32)SAG_COMP_LIST_MAX;
+                                        : (u32)YEW_COMP_LIST_MAX;
 
         if (next > limit)
             next = limit;
         if (next == *cap)
             return false;
-        l->offs = sag_xrealloc(l->offs, (size_t)next * sizeof(*l->offs));
-        l->dtypes = sag_xrealloc(l->dtypes,
+        l->offs = yew_xrealloc(l->offs, (size_t)next * sizeof(*l->offs));
+        l->dtypes = yew_xrealloc(l->dtypes,
                                  (size_t)next * sizeof(*l->dtypes));
         *cap = next;
     }
@@ -713,10 +713,10 @@ static bool listing_push(DirListing *l, const char *name, u8 dtype,
 
         while (next < l->blob_len + len)
             next *= 2U;
-        l->blob = sag_xrealloc(l->blob, next);
+        l->blob = yew_xrealloc(l->blob, next);
         l->blob_cap = next;
     }
-    /* Offsets are u32; SAG_COMP_LIST_MAX names of any sane length stay
+    /* Offsets are u32; YEW_COMP_LIST_MAX names of any sane length stay
      * far inside that, but a blob past 4 GiB would silently wrap. */
     if (l->blob_len > (size_t)UINT32_MAX)
         return false;
@@ -738,7 +738,7 @@ static i64 comp_now_us(void)
 }
 
 typedef enum ListingState {
-    /* Could not be opened, or held more than SAG_COMP_LIST_MAX entries:
+    /* Could not be opened, or held more than YEW_COMP_LIST_MAX entries:
      * nothing is cached and the caller streams the directory instead. */
     LISTING_UNUSABLE,
     /* Usable as far as it goes, with more still to read. */
@@ -774,7 +774,7 @@ static ListingState listing_step(const char *scan_dir, i64 slice_us)
     } else {
         DIR *dir;
 
-        sag_comp_listing_invalidate();
+        yew_comp_listing_invalidate();
         dir = opendir(scan_dir);
         comp_opendirs++;
         if (dir == NULL)
@@ -798,7 +798,7 @@ static ListingState listing_step(const char *scan_dir, i64 slice_us)
              * from it would silently lose rows.
              *
              * The key is MOVED across the invalidate rather than freed
-             * and re-duplicated: sag_comp_listing_advance resumes by
+             * and re-duplicated: yew_comp_listing_advance resumes by
              * passing comp_listing.dir straight back in, so `scan_dir`
              * can BE this pointer, and disposing it here would leave the
              * re-duplication reading freed memory.
@@ -806,7 +806,7 @@ static ListingState listing_step(const char *scan_dir, i64 slice_us)
             char *keep = comp_listing.dir;
 
             comp_listing.dir = NULL;
-            sag_comp_listing_invalidate();
+            yew_comp_listing_invalidate();
             comp_listing.dir = keep;
             comp_listing.overflow = true;
             comp_listing.complete = true;
@@ -825,16 +825,16 @@ static ListingState listing_step(const char *scan_dir, i64 slice_us)
     return LISTING_COMPLETE;
 }
 
-bool sag_comp_listing_pending(void)
+bool yew_comp_listing_pending(void)
 {
     return comp_listing.dir_handle != NULL && !comp_listing.complete;
 }
 
-bool sag_comp_listing_advance(i64 slice_us)
+bool yew_comp_listing_advance(i64 slice_us)
 {
     char *dir = comp_listing.dir;
 
-    if (!sag_comp_listing_pending())
+    if (!yew_comp_listing_pending())
         return false;
     /* `dir` is the cache's own key, and listing_step compares against it
      * by value; passing it back in is the "same directory, keep going"
@@ -855,13 +855,13 @@ static void path_rank_one(PathCandidateVec *paths, const char *name,
     /* NULL: positions are recomputed for survivors in
      * path_candidates_finish, so the scan never fills one. */
     score = comp_key(tail, tail_len, name, NULL);
-    if (score == SAG_FZ_NO_MATCH)
+    if (score == YEW_FZ_NO_MATCH)
         return;
     if (*total != UINT32_MAX)
         (*total)++;
     if (!path_candidate_wanted(paths, name, score))
         return;
-    if (paths->len < SAG_COMP_MAX)
+    if (paths->len < YEW_COMP_MAX)
         path_heap_push(paths, name, score, dtype);
     else
         path_heap_replace_worst(paths, name, score, dtype);
@@ -872,10 +872,10 @@ static u32 enumerate_paths(const CompReq *req, Vec_CompItem *out)
     PathCandidateVec paths = {0};
     Ed *ed = req->ed;
     const char *stem = req->stem;
-    size_t head_len = sag_comp_path_head_len(stem);
+    size_t head_len = yew_comp_path_head_len(stem);
     const char *tail = stem + head_len;
     size_t tail_len = strlen(tail);
-    char *head = sag_xmalloc(head_len + 1U);
+    char *head = yew_xmalloc(head_len + 1U);
     char *expanded;
     char *scan_dir;
     DIR *dir;
@@ -893,19 +893,19 @@ static u32 enumerate_paths(const CompReq *req, Vec_CompItem *out)
     if (expanded[0] == '/')
         scan_dir = join2("", expanded);
     else {
-        char *root_slash = join2(sag_ws_root(ed), "/");
+        char *root_slash = join2(yew_ws_root(ed), "/");
         scan_dir = join2(root_slash, expanded);
         free(root_slash);
     }
     if (scan_dir[0] == '\0') {
         free(scan_dir);
-        scan_dir = join2("", sag_ws_root(ed));
+        scan_dir = join2("", yew_ws_root(ed));
     }
     /* A fresh request also RETIRES the cache: whoever asked for one did
      * so because the directory may have changed, and a later cached read
      * must not go on trusting the listing they distrusted. */
     if (!req->allow_cache)
-        sag_comp_listing_invalidate();
+        yew_comp_listing_invalidate();
     if (req->allow_cache &&
         listing_step(scan_dir, req->budget_us) != LISTING_UNUSABLE) {
         /*
@@ -914,7 +914,7 @@ static u32 enumerate_paths(const CompReq *req, Vec_CompItem *out)
          *
          * Ranking a PARTIAL listing is deliberate — the menu shows the
          * best of what has been read rather than nothing, and
-         * sag_cmdline_comp_tick brings the rest on the idle path.  The
+         * yew_cmdline_comp_tick brings the rest on the idle path.  The
          * alternative, blocking until the directory is fully read, is
          * the 4 ms keystroke this slicing exists to remove.
          */
@@ -961,10 +961,10 @@ static u32 enumerate_options(const CompReq *req, Vec_CompItem *out)
     CandidateVec matches = {0};
     u32 i;
 
-    for (i = 0U; i < sag_opts_len; i++)
-        (void)candidate_add(&matches, req->stem, sag_opts[i].name,
-                            sag_opts[i].name, sag_opts[i].help, false, false);
-    return candidate_finish(req, SAG_COMP_OPTION, &matches, out);
+    for (i = 0U; i < yew_opts_len; i++)
+        (void)candidate_add(&matches, req->stem, yew_opts[i].name,
+                            yew_opts[i].name, yew_opts[i].help, false, false);
+    return candidate_finish(req, YEW_COMP_OPTION, &matches, out);
 }
 
 static u32 enumerate_option_values(const CompReq *req, Vec_CompItem *out)
@@ -976,87 +976,87 @@ static u32 enumerate_option_values(const CompReq *req, Vec_CompItem *out)
     CandidateVec matches = {0};
     u32 i;
 
-    for (i = 0U; i < (u32)SAG_ARRAY_LEN(values); i++)
+    for (i = 0U; i < (u32)YEW_ARRAY_LEN(values); i++)
         (void)candidate_add(&matches, req->stem, values[i], values[i],
                             "option value", false, false);
-    return candidate_finish(req, SAG_COMP_VALUE, &matches, out);
+    return candidate_finish(req, YEW_COMP_VALUE, &matches, out);
 }
 
 static struct {
-    CompSource v[SAG_COMP_KIND__N];
+    CompSource v[YEW_COMP_KIND__N];
     bool initialized;
 } comp_registry;
 
 static void comp_init(void)
 {
     static const CompSource builtins[] = {
-        {SAG_COMP_CMD, "cmd", enumerate_commands, SAG_COMP_SRC_CACHEABLE},
+        {YEW_COMP_CMD, "cmd", enumerate_commands, YEW_COMP_SRC_CACHEABLE},
         /* SLOW: one opendir of a directory that may hold 10 000 entries,
          * which is why §4 keys its cache on the directory head. */
-        {SAG_COMP_PATH, "path", enumerate_paths,
-         SAG_COMP_SRC_CACHEABLE | SAG_COMP_SRC_SLOW},
-        {SAG_COMP_BUFFER, "buffer", enumerate_buffers,
-         SAG_COMP_SRC_CACHEABLE},
-        {SAG_COMP_OPTION, "option", enumerate_options,
-         SAG_COMP_SRC_CACHEABLE},
-        {SAG_COMP_VALUE, "value", enumerate_option_values,
-         SAG_COMP_SRC_CACHEABLE},
+        {YEW_COMP_PATH, "path", enumerate_paths,
+         YEW_COMP_SRC_CACHEABLE | YEW_COMP_SRC_SLOW},
+        {YEW_COMP_BUFFER, "buffer", enumerate_buffers,
+         YEW_COMP_SRC_CACHEABLE},
+        {YEW_COMP_OPTION, "option", enumerate_options,
+         YEW_COMP_SRC_CACHEABLE},
+        {YEW_COMP_VALUE, "value", enumerate_option_values,
+         YEW_COMP_SRC_CACHEABLE},
     };
     size_t i;
 
     if (comp_registry.initialized)
         return;
     comp_registry.initialized = true;
-    for (i = 0U; i < SAG_ARRAY_LEN(builtins); i++)
-        sag_comp_source_register(&builtins[i]);
+    for (i = 0U; i < YEW_ARRAY_LEN(builtins); i++)
+        yew_comp_source_register(&builtins[i]);
 }
 
-void sag_comp_source_register(const CompSource *src)
+void yew_comp_source_register(const CompSource *src)
 {
     if (src == NULL || src->enumerate == NULL || src->name == NULL)
-        SAG_BUG("completion source needs a name and an enumerator");
-    if ((u32)src->kind >= (u32)SAG_COMP_KIND__N)
-        SAG_BUG("completion source has an invalid kind");
+        YEW_BUG("completion source needs a name and an enumerator");
+    if ((u32)src->kind >= (u32)YEW_COMP_KIND__N)
+        YEW_BUG("completion source has an invalid kind");
     comp_registry.initialized = true;
     comp_registry.v[src->kind] = *src;
 }
 
-const CompSource *sag_comp_source(SagCompKind kind)
+const CompSource *yew_comp_source(YewCompKind kind)
 {
     comp_init();
-    if ((u32)kind >= (u32)SAG_COMP_KIND__N ||
+    if ((u32)kind >= (u32)YEW_COMP_KIND__N ||
         comp_registry.v[kind].enumerate == NULL)
         return NULL;
     return &comp_registry.v[kind];
 }
 
-u32 sag_comp_source_count(void)
+u32 yew_comp_source_count(void)
 {
     u32 n = 0U;
     u32 i;
 
     comp_init();
-    for (i = 0U; i < (u32)SAG_COMP_KIND__N; i++) {
+    for (i = 0U; i < (u32)YEW_COMP_KIND__N; i++) {
         if (comp_registry.v[i].enumerate != NULL)
             n++;
     }
     return n;
 }
 
-u32 sag_comp_request(const CompReq *req, Vec_CompItem *out)
+u32 yew_comp_request(const CompReq *req, Vec_CompItem *out)
 {
     const CompSource *source;
 
     if (req == NULL || out == NULL || req->ed == NULL ||
         req->stem == NULL || req->arena == NULL)
         return 0U;
-    source = sag_comp_source(req->kind);
+    source = yew_comp_source(req->kind);
     if (source == NULL)
         return 0U;
     return source->enumerate(req, out);
 }
 
-u32 sag_comp_enumerate(Ed *ed, SagCompKind kind, const char *stem,
+u32 yew_comp_enumerate(Ed *ed, YewCompKind kind, const char *stem,
                        Vec_CompItem *out)
 {
     CompReq req;
@@ -1067,12 +1067,12 @@ u32 sag_comp_enumerate(Ed *ed, SagCompKind kind, const char *stem,
     req.ed = ed;
     /* The unbudgeted convenience form allocates from the editor arena,
      * which lives as long as the editor -- callers wanting a resettable
-     * lifetime go through sag_comp_filter_run. */
+     * lifetime go through yew_comp_filter_run. */
     req.arena = ed == NULL ? NULL : &ed->arena;
     req.budget_us = 0; /* a Tab: the user is waiting, take the time */
     /* Fresh by construction -- see CompReq.allow_cache. */
     req.allow_cache = false;
-    return sag_comp_request(&req, out);
+    return yew_comp_request(&req, out);
 }
 
 /* ---------------------------------------------------------------- */
@@ -1081,24 +1081,24 @@ u32 sag_comp_enumerate(Ed *ed, SagCompKind kind, const char *stem,
 
 static u32 test_enumerate_calls;
 
-void sag_comp_test_reset_enumerate_count(void)
+void yew_comp_test_reset_enumerate_count(void)
 {
     test_enumerate_calls = 0U;
 }
 
-u32 sag_comp_test_enumerate_count(void)
+u32 yew_comp_test_enumerate_count(void)
 {
     return test_enumerate_calls;
 }
 
-void sag_comp_filter_init(CompFilter *f)
+void yew_comp_filter_init(CompFilter *f)
 {
     if (f == NULL)
         return;
     (void)memset(f, 0, sizeof(*f));
 }
 
-void sag_comp_filter_invalidate(CompFilter *f)
+void yew_comp_filter_invalidate(CompFilter *f)
 {
     if (f == NULL)
         return;
@@ -1114,17 +1114,17 @@ void sag_comp_filter_invalidate(CompFilter *f)
     f->total = 0U;
 }
 
-void sag_comp_filter_free(CompFilter *f)
+void yew_comp_filter_free(CompFilter *f)
 {
     if (f == NULL)
         return;
-    sag_comp_filter_invalidate(f);
+    yew_comp_filter_invalidate(f);
     Vec_CompItem_free(&f->base);
 }
 
 static char *dup_range(const char *s, size_t len)
 {
-    char *copy = sag_xmalloc(len + 1U);
+    char *copy = yew_xmalloc(len + 1U);
 
     if (len != 0U)
         (void)memcpy(copy, s, len);
@@ -1157,7 +1157,7 @@ static int filter_item_cmp(const void *left, const void *right, void *ctx)
  * Re-score the cached set against a longer pattern.
  *
  * Legal only when the base was NOT capped.  A capped base holds the
- * SAG_COMP_MAX best matches for the OLD pattern, and an entry that the
+ * YEW_COMP_MAX best matches for the OLD pattern, and an entry that the
  * cap cut can still be among the best for the new one -- narrowing over
  * it would silently lose rows, which is the exact failure the CompReq
  * budget comment warns about.  So `filter_reusable` refuses, and the
@@ -1176,10 +1176,10 @@ static u32 filter_rerank(CompFilter *f, const char *pattern,
         FzMatch m;
         i32 score = comp_key(pattern, pattern_len, item.match, &m);
 
-        if (score == SAG_FZ_NO_MATCH)
+        if (score == YEW_FZ_NO_MATCH)
             continue;
         item.score = score;
-        if (item.match_off == (u16)SAG_COMP_NO_HIGHLIGHT) {
+        if (item.match_off == (u16)YEW_COMP_NO_HIGHLIGHT) {
             item.m.n_pos = 0U;
         } else {
             u16 p;
@@ -1194,12 +1194,12 @@ static u32 filter_rerank(CompFilter *f, const char *pattern,
         }
         Vec_CompItem_push(out, item);
     }
-    sag_sort_stable(out->data, out->len, sizeof(out->data[0]),
+    yew_sort_stable(out->data, out->len, sizeof(out->data[0]),
                     filter_item_cmp, NULL);
     return out->len > UINT32_MAX ? UINT32_MAX : (u32)out->len;
 }
 
-static bool filter_reusable(const CompFilter *f, SagCompKind kind,
+static bool filter_reusable(const CompFilter *f, YewCompKind kind,
                             const char *head, const char *pattern)
 {
     size_t old_len;
@@ -1218,8 +1218,8 @@ static bool filter_reusable(const CompFilter *f, SagCompKind kind,
     return strncmp(pattern, f->pattern, old_len) == 0;
 }
 
-u32 sag_comp_filter_run(Ed *ed, CompFilter *f, Arena *arena,
-                        const SagCompQuery *q, i64 budget_us,
+u32 yew_comp_filter_run(Ed *ed, CompFilter *f, Arena *arena,
+                        const YewCompQuery *q, i64 budget_us,
                         Vec_CompItem *out)
 {
     size_t head_len;
@@ -1235,10 +1235,10 @@ u32 sag_comp_filter_run(Ed *ed, CompFilter *f, Arena *arena,
     }
     /*
      * Only a path has a directory head; every other source ranks the
-     * whole stem.  sag_comp_path_head_len is the ONE split rule, shared
+     * whole stem.  yew_comp_path_head_len is the ONE split rule, shared
      * with the path source itself.
      */
-    head_len = q->kind == SAG_COMP_PATH ? sag_comp_path_head_len(q->stem)
+    head_len = q->kind == YEW_COMP_PATH ? yew_comp_path_head_len(q->stem)
                                         : 0U;
     pattern = q->stem + head_len;
     head = dup_range(q->stem, head_len);
@@ -1258,7 +1258,7 @@ u32 sag_comp_filter_run(Ed *ed, CompFilter *f, Arena *arena,
         req.budget_us = budget_us;
         req.allow_cache = true;
         test_enumerate_calls++;
-        f->total = sag_comp_request(&req, &f->base);
+        f->total = yew_comp_request(&req, &f->base);
         f->capped = f->base.len < (size_t)f->total;
         free(f->head);
         free(f->pattern);
@@ -1279,8 +1279,8 @@ u32 sag_comp_filter_run(Ed *ed, CompFilter *f, Arena *arena,
     }
 }
 
-bool sag_comp_kind_for(const CmdEntry *entry, u32 token_index,
-                       SagCompKind *kind)
+bool yew_comp_kind_for(const CmdEntry *entry, u32 token_index,
+                       YewCompKind *kind)
 {
     const char *spec;
     size_t len;
@@ -1291,7 +1291,7 @@ bool sag_comp_kind_for(const CmdEntry *entry, u32 token_index,
     if (kind == NULL)
         return false;
     if (token_index == 0U) {
-        *kind = SAG_COMP_CMD;
+        *kind = YEW_COMP_CMD;
         return true;
     }
     if (entry == NULL || entry->argspec == NULL)
@@ -1310,23 +1310,23 @@ bool sag_comp_kind_for(const CmdEntry *entry, u32 token_index,
         code = spec[arg];
     }
     if (code == 'f')
-        *kind = SAG_COMP_PATH;
+        *kind = YEW_COMP_PATH;
     else if (code == 'b')
-        *kind = SAG_COMP_BUFFER;
+        *kind = YEW_COMP_BUFFER;
     else if (code == 'o')
-        *kind = SAG_COMP_OPTION;
+        *kind = YEW_COMP_OPTION;
     else if (code == 'v')
-        *kind = SAG_COMP_VALUE;
+        *kind = YEW_COMP_VALUE;
     else
         return false;
     return true;
 }
 
-bool sag_comp_query_at(Ed *ed, const CmdParsePoint *point,
-                       SagCompQuery *out)
+bool yew_comp_query_at(Ed *ed, const CmdParsePoint *point,
+                       YewCompQuery *out)
 {
     const CmdEntry *entry = NULL;
-    SagCompKind kind;
+    YewCompKind kind;
 
     (void)ed;
     if (out == NULL || point == NULL)
@@ -1334,29 +1334,29 @@ bool sag_comp_query_at(Ed *ed, const CmdParsePoint *point,
     if (point->token_index != 0U) {
         if (!point->command_known)
             return false;
-        entry = sag_cmd_entry(point->command);
+        entry = yew_cmd_entry(point->command);
     }
-    if (!sag_comp_kind_for(entry, point->token_index, &kind))
+    if (!yew_comp_kind_for(entry, point->token_index, &kind))
         return false;
     out->kind = kind;
-    out->source = sag_comp_source(kind);
+    out->source = yew_comp_source(kind);
     out->stem = point->stem;
     out->replace = point->token;
     return true;
 }
 
-bool sag_comp_query(Ed *ed, const char *line, size_t len, size_t cursor,
-                    Arena *scratch, SagCompQuery *out)
+bool yew_comp_query(Ed *ed, const char *line, size_t len, size_t cursor,
+                    Arena *scratch, YewCompQuery *out)
 {
     CmdParsePoint point;
 
     if (out == NULL || scratch == NULL ||
-        !sag_cmd_parse_point(ed, line, len, cursor, scratch, &point))
+        !yew_cmd_parse_point(ed, line, len, cursor, scratch, &point))
         return false;
-    return sag_comp_query_at(ed, &point, out);
+    return yew_comp_query_at(ed, &point, out);
 }
 
-char *sag_comp_lcp(Arena *arena, const Vec_CompItem *items)
+char *yew_comp_lcp(Arena *arena, const Vec_CompItem *items)
 {
     size_t common;
     size_t i;
@@ -1374,25 +1374,25 @@ char *sag_comp_lcp(Arena *arena, const Vec_CompItem *items)
         common = j;
     }
     while (common > 0U &&
-           !sag_utf8_is_boundary((const u8 *)items->data[0].text,
+           !yew_utf8_is_boundary((const u8 *)items->data[0].text,
                                  strlen(items->data[0].text), common))
         common--;
     return arena_strndup(arena, items->data[0].text, common);
 }
 
-void sag_comp_test_set_list_max(u32 max)
+void yew_comp_test_set_list_max(u32 max)
 {
     test_list_max = max;
-    sag_comp_listing_invalidate();
+    yew_comp_listing_invalidate();
 }
 
-void sag_comp_test_force_dtype_unknown(bool force)
+void yew_comp_test_force_dtype_unknown(bool force)
 {
     force_dtype_unknown = force;
     test_lstat_calls = 0U;
 }
 
-u32 sag_comp_test_lstat_count(void)
+u32 yew_comp_test_lstat_count(void)
 {
     return test_lstat_calls;
 }

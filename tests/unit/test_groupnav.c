@@ -37,22 +37,22 @@ static u32 nav_fixture(Ed *ed)
     u32 g;
     int i;
 
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    sag_ed_init(ed);
-    SAG_ASSERT(sag_ed_open_scratch(ed));
-    sag_layout_compute(ed->pane_root, (Rect){0U, 0U, 80U, 24U});
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    yew_ed_init(ed);
+    YEW_ASSERT(yew_ed_open_scratch(ed));
+    yew_layout_compute(ed->pane_root, (Rect){0U, 0U, 80U, 24U});
     for (i = 0; i < 5; i++) {
         char path[64];
 
-        (void)snprintf(path, sizeof(path), "/tmp/sag-nav-%d.txt", i);
-        SAG_ASSERT(sag_tab_open(ed, path) >= 0);
+        (void)snprintf(path, sizeof(path), "/tmp/yew-nav-%d.txt", i);
+        YEW_ASSERT(yew_tab_open(ed, path) >= 0);
     }
-    g = sag_group_create(ed, "/src", NULL);
-    sag_group_add_member(ed, g, 2);
-    sag_group_add_member(ed, g, 3);
-    sag_group_add_member(ed, g, 4);
-    sag_tab_switch(ed, 1);
+    g = yew_group_create(ed, "/src", NULL);
+    yew_group_add_member(ed, g, 2);
+    yew_group_add_member(ed, g, 3);
+    yew_group_add_member(ed, g, 4);
+    yew_tab_switch(ed, 1);
     return g;
 }
 
@@ -68,20 +68,20 @@ void test_groupnav_row1_shows_a_group_once_at_its_first_member(void)
     int n;
 
     g = nav_fixture(&ed);
-    n = sag_tab_row1_entries(&ed, entries, 16);
+    n = yew_tab_row1_entries(&ed, entries, 16);
     /* scratch, t1, G, t2 — the three members collapse into one entry. */
-    SAG_ASSERT_EQ_I64(n, 4);
-    SAG_ASSERT_EQ_I64(entries[0].payload, 0);
-    SAG_ASSERT_EQ_I64(entries[1].payload, 1);
+    YEW_ASSERT_EQ_I64(n, 4);
+    YEW_ASSERT_EQ_I64(entries[0].payload, 0);
+    YEW_ASSERT_EQ_I64(entries[1].payload, 1);
     /* Placed where the FIRST member sits, and carrying -gid. */
-    SAG_ASSERT_EQ_I64(entries[2].payload, -(i32)g);
+    YEW_ASSERT_EQ_I64(entries[2].payload, -(i32)g);
     /* The tab after the group keeps its own index, not a renumbered
      * one — row-1 position and tab index are different things. */
-    SAG_ASSERT_EQ_I64(entries[3].payload, 5);
+    YEW_ASSERT_EQ_I64(entries[3].payload, 5);
     /* The label is bracketed and carries the LIVE count. */
-    SAG_ASSERT_NOT_NULL(strstr(entries[2].label, "src/ (3)"));
-    SAG_ASSERT_EQ_I64(entries[2].label[0], '[');
-    sag_ed_free(&ed);
+    YEW_ASSERT_NOT_NULL(strstr(entries[2].label, "src/ (3)"));
+    YEW_ASSERT_EQ_I64(entries[2].label[0], '[');
+    yew_ed_free(&ed);
 }
 
 void test_groupnav_row1_active_tracks_the_group_not_the_member(void)
@@ -91,16 +91,16 @@ void test_groupnav_row1_active_tracks_the_group_not_the_member(void)
     int n;
 
     (void)nav_fixture(&ed);
-    n = sag_tab_row1_entries(&ed, entries, 16);
+    n = yew_tab_row1_entries(&ed, entries, 16);
     /* On t1, the active entry is t1 itself. */
-    SAG_ASSERT_EQ_I64(sag_tab_row1_active(&ed, entries, n), 1);
+    YEW_ASSERT_EQ_I64(yew_tab_row1_active(&ed, entries, n), 1);
     /* Inside the group, every member reports the GROUP's entry — the
      * members are not on row 1 to be pointed at. */
-    sag_tab_switch(&ed, 3);
-    SAG_ASSERT_EQ_I64(sag_tab_row1_active(&ed, entries, n), 2);
-    sag_tab_switch(&ed, 4);
-    SAG_ASSERT_EQ_I64(sag_tab_row1_active(&ed, entries, n), 2);
-    sag_ed_free(&ed);
+    yew_tab_switch(&ed, 3);
+    YEW_ASSERT_EQ_I64(yew_tab_row1_active(&ed, entries, n), 2);
+    yew_tab_switch(&ed, 4);
+    YEW_ASSERT_EQ_I64(yew_tab_row1_active(&ed, entries, n), 2);
+    yew_ed_free(&ed);
 }
 
 /* The bar is two rows inside a group and one outside — row 2 needs the
@@ -110,12 +110,12 @@ void test_groupnav_strip_reserves_two_rows_inside_a_group(void)
     Ed ed;
 
     (void)nav_fixture(&ed);
-    SAG_ASSERT_EQ_U64(sag_tab_strip_rows(&ed), 1U);
-    sag_tab_switch(&ed, 3);
-    SAG_ASSERT_EQ_U64(sag_tab_strip_rows(&ed), 2U);
-    sag_tab_switch(&ed, 1);
-    SAG_ASSERT_EQ_U64(sag_tab_strip_rows(&ed), 1U);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(yew_tab_strip_rows(&ed), 1U);
+    yew_tab_switch(&ed, 3);
+    YEW_ASSERT_EQ_U64(yew_tab_strip_rows(&ed), 2U);
+    yew_tab_switch(&ed, 1);
+    YEW_ASSERT_EQ_U64(yew_tab_strip_rows(&ed), 1U);
+    yew_ed_free(&ed);
 }
 
 /* ---------------------------------------------------------------- */
@@ -133,12 +133,12 @@ void test_groupnav_walk_visits_every_file_in_order(void)
     int i;
 
     (void)nav_fixture(&ed);
-    SAG_ASSERT_EQ_I64(ed.tabs.active, 1);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 1);
     for (i = 0; i < 6; i++) {
-        sag_file_step(&ed, 1);
-        SAG_ASSERT_EQ_I64(ed.tabs.active, want[i]);
+        yew_file_step(&ed, 1);
+        YEW_ASSERT_EQ_I64(ed.tabs.active, want[i]);
     }
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
 }
 
 /*
@@ -159,22 +159,22 @@ void test_groupnav_walk_is_reversible(void)
 
     (void)nav_fixture(&ed);
     for (i = 0; i < 6; i++) {
-        sag_file_step(&ed, 1);
+        yew_file_step(&ed, 1);
         forward[i] = ed.tabs.active;
     }
     /* Back to where we started after a full lap. */
-    SAG_ASSERT_EQ_I64(ed.tabs.active, 1);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 1);
     for (i = 0; i < 6; i++) {
-        sag_file_step(&ed, -1);
+        yew_file_step(&ed, -1);
         back[i] = ed.tabs.active;
     }
-    SAG_ASSERT_EQ_I64(ed.tabs.active, 1);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 1);
     /* back[i] retraces forward in reverse: the step that took us TO
      * forward[k] must be undone by the step that takes us back to
      * forward[k-1]. */
     for (i = 0; i < 5; i++)
-        SAG_ASSERT_EQ_I64(back[i], forward[4 - i]);
-    sag_ed_free(&ed);
+        YEW_ASSERT_EQ_I64(back[i], forward[4 - i]);
+    yew_ed_free(&ed);
 }
 
 /*
@@ -190,20 +190,20 @@ void test_groupnav_enter_at_edge_depends_on_direction(void)
     (void)nav_fixture(&ed);
     /* Walking LEFT from t2 (index 5) enters the group at its last
      * member (index 4). */
-    sag_tab_switch(&ed, 5);
-    reads = sag_group_resume_reads();
-    sag_file_step(&ed, -1);
-    SAG_ASSERT_EQ_I64(ed.tabs.active, 4);
+    yew_tab_switch(&ed, 5);
+    reads = yew_group_resume_reads();
+    yew_file_step(&ed, -1);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 4);
     /* Not one resume was consulted on the way in. */
-    SAG_ASSERT_EQ_U64(sag_group_resume_reads(), reads);
+    YEW_ASSERT_EQ_U64(yew_group_resume_reads(), reads);
 
     /* Walking RIGHT from t1 enters at the first member. */
-    sag_tab_switch(&ed, 1);
-    reads = sag_group_resume_reads();
-    sag_file_step(&ed, 1);
-    SAG_ASSERT_EQ_I64(ed.tabs.active, 2);
-    SAG_ASSERT_EQ_U64(sag_group_resume_reads(), reads);
-    sag_ed_free(&ed);
+    yew_tab_switch(&ed, 1);
+    reads = yew_group_resume_reads();
+    yew_file_step(&ed, 1);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 2);
+    YEW_ASSERT_EQ_U64(yew_group_resume_reads(), reads);
+    yew_ed_free(&ed);
 }
 
 /* DoD 6, half two: the EXPLICIT enter resumes where the user left. */
@@ -214,13 +214,13 @@ void test_groupnav_explicit_enter_resumes_the_last_member(void)
 
     g = nav_fixture(&ed);
     /* Sit on the middle member, then leave — which records the spot. */
-    sag_tab_switch(&ed, 3);
-    SAG_ASSERT(sag_group_leave(&ed));
-    SAG_ASSERT_EQ_U64(sag_active_group_id(&ed), 0U);
+    yew_tab_switch(&ed, 3);
+    YEW_ASSERT(yew_group_leave(&ed));
+    YEW_ASSERT_EQ_U64(yew_active_group_id(&ed), 0U);
 
-    sag_group_enter(&ed, g);
-    SAG_ASSERT_EQ_I64(ed.tabs.active, 3);
-    sag_ed_free(&ed);
+    yew_group_enter(&ed, g);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 3);
+    yew_ed_free(&ed);
 }
 
 /* A dangling resume path falls back to the lowest ordinal rather than
@@ -231,20 +231,20 @@ void test_groupnav_enter_falls_back_when_the_path_dangles(void)
     u32 g;
 
     g = nav_fixture(&ed);
-    sag_tab_switch(&ed, 3);
-    SAG_ASSERT(sag_group_leave(&ed));
+    yew_tab_switch(&ed, 3);
+    YEW_ASSERT(yew_group_leave(&ed));
     /* Close the member the group is pointing at.  The group survives —
      * it still has two members — but its resume path now names a tab
      * that is gone. */
-    SAG_ASSERT(sag_tab_close(&ed, 3));
-    SAG_ASSERT_EQ_I64(sag_group_member_count(&ed, g), 2);
+    YEW_ASSERT(yew_tab_close(&ed, 3));
+    YEW_ASSERT_EQ_I64(yew_group_member_count(&ed, g), 2);
 
-    sag_tab_switch(&ed, 0);
-    sag_group_enter(&ed, g);
+    yew_tab_switch(&ed, 0);
+    yew_group_enter(&ed, g);
     /* The first member, not a refusal and not a stale index. */
-    SAG_ASSERT_EQ_U64(sag_active_group_id(&ed), g);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&ed, ed.tabs.active)->group_ordinal, 1U);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(yew_active_group_id(&ed), g);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&ed, ed.tabs.active)->group_ordinal, 1U);
+    yew_ed_free(&ed);
 }
 
 /* Leaving from a MIDDLE member lands on the tab after the group, not on
@@ -254,11 +254,11 @@ void test_groupnav_leave_from_the_middle_lands_after_the_group(void)
     Ed ed;
 
     (void)nav_fixture(&ed);
-    sag_tab_switch(&ed, 3);
-    SAG_ASSERT(sag_group_leave(&ed));
-    SAG_ASSERT_EQ_I64(ed.tabs.active, 5);
-    SAG_ASSERT_EQ_U64(sag_active_group_id(&ed), 0U);
-    sag_ed_free(&ed);
+    yew_tab_switch(&ed, 3);
+    YEW_ASSERT(yew_group_leave(&ed));
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 5);
+    YEW_ASSERT_EQ_U64(yew_active_group_id(&ed), 0U);
+    yew_ed_free(&ed);
 }
 
 /* Every tab in one group: leave has nowhere to go and says so rather
@@ -269,21 +269,21 @@ void test_groupnav_leave_refuses_when_everything_is_grouped(void)
     u32 g;
     u32 i;
 
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    sag_ed_init(&ed);
-    SAG_ASSERT(sag_ed_open_scratch(&ed));
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    SAG_ASSERT(sag_tab_open(&ed, "/tmp/sag-nav-all.txt") >= 0);
-    g = sag_group_create(&ed, "/src", NULL);
-    for (i = 0U; i < sag_tab_count(&ed); i++)
-        sag_group_add_member(&ed, g, (int)i);
-    sag_tab_switch(&ed, 0);
-    SAG_ASSERT(!sag_group_leave(&ed));
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT(yew_tab_open(&ed, "/tmp/yew-nav-all.txt") >= 0);
+    g = yew_group_create(&ed, "/src", NULL);
+    for (i = 0U; i < yew_tab_count(&ed); i++)
+        yew_group_add_member(&ed, g, (int)i);
+    yew_tab_switch(&ed, 0);
+    YEW_ASSERT(!yew_group_leave(&ed));
     /* Still inside, still on the same tab. */
-    SAG_ASSERT_EQ_U64(sag_active_group_id(&ed), g);
-    SAG_ASSERT_EQ_I64(ed.tabs.active, 0);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(yew_active_group_id(&ed), g);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 0);
+    yew_ed_free(&ed);
 }
 
 /*
@@ -297,16 +297,16 @@ void test_groupnav_walk_steps_through_a_single_member_group(void)
 
     (void)nav_fixture(&ed);
     /* Shrink the group to one member. */
-    g = sag_active_group_id(&ed);
+    g = yew_active_group_id(&ed);
     (void)g;
-    sag_group_remove_member(&ed, 3);
-    sag_group_remove_member(&ed, 4);
-    sag_tab_switch(&ed, 1);
-    sag_file_step(&ed, 1);
-    SAG_ASSERT_EQ_I64(ed.tabs.active, 2); /* into the group */
-    sag_file_step(&ed, 1);
-    SAG_ASSERT_EQ_I64(ed.tabs.active, 3); /* straight out the far side */
-    sag_ed_free(&ed);
+    yew_group_remove_member(&ed, 3);
+    yew_group_remove_member(&ed, 4);
+    yew_tab_switch(&ed, 1);
+    yew_file_step(&ed, 1);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 2); /* into the group */
+    yew_file_step(&ed, 1);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 3); /* straight out the far side */
+    yew_ed_free(&ed);
 }
 
 /* Every switch passes through hydrate, including the ones the walk
@@ -316,11 +316,11 @@ void test_groupnav_walking_into_a_member_hydrates_it(void)
     Ed ed;
 
     (void)nav_fixture(&ed);
-    SAG_ASSERT(!sag_tab_is_resident(&ed, 2));
-    sag_file_step(&ed, 1);
-    SAG_ASSERT_EQ_I64(ed.tabs.active, 2);
-    SAG_ASSERT(sag_tab_is_resident(&ed, 2));
-    sag_ed_free(&ed);
+    YEW_ASSERT(!yew_tab_is_resident(&ed, 2));
+    yew_file_step(&ed, 1);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 2);
+    YEW_ASSERT(yew_tab_is_resident(&ed, 2));
+    yew_ed_free(&ed);
 }
 
 /* ---------------------------------------------------------------- */
@@ -339,8 +339,8 @@ static Key nav_digit(char c, u16 mods)
     Key k;
 
     (void)memset(&k, 0, sizeof(k));
-    k.kind = SAG_EV_KEY;
-    k.ev = SAG_KEY_PRESS;
+    k.kind = YEW_EV_KEY;
+    k.ev = YEW_KEY_PRESS;
     k.code = (u32)c;
     k.mods = mods;
     k.ntext = 1U;
@@ -350,17 +350,17 @@ static Key nav_digit(char c, u16 mods)
 
 static void nav_goto(Ed *ed, i64 n)
 {
-    CmdId id = sag_cmd_lookup("ed.tab.goto", 11U);
+    CmdId id = yew_cmd_lookup("ed.tab.goto", 11U);
     CmdCtx cx;
 
-    SAG_ASSERT(id.v != 0U);
+    YEW_ASSERT(id.v != 0U);
     (void)memset(&cx, 0, sizeof(cx));
     cx.ed = ed;
     cx.win = ed->win;
     cx.count = 1U;
     cx.iarg = n;
-    cx.source = SAG_SRC_TEST;
-    SAG_ASSERT_EQ_I64(sag_ed_invoke(ed, id, &cx), SAG_CMD_OK);
+    cx.source = YEW_SRC_TEST;
+    YEW_ASSERT_EQ_I64(yew_ed_invoke(ed, id, &cx), YEW_CMD_OK);
 }
 
 /* Opens enough tabs that two-digit jumps have somewhere to land. */
@@ -368,16 +368,16 @@ static void nav_many_tabs(Ed *ed, int n)
 {
     int i;
 
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    sag_ed_init(ed);
-    SAG_ASSERT(sag_ed_open_scratch(ed));
-    sag_layout_compute(ed->pane_root, (Rect){0U, 0U, 80U, 24U});
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    yew_ed_init(ed);
+    YEW_ASSERT(yew_ed_open_scratch(ed));
+    yew_layout_compute(ed->pane_root, (Rect){0U, 0U, 80U, 24U});
     for (i = 1; i < n; i++) {
         char path[64];
 
-        (void)snprintf(path, sizeof(path), "/tmp/sag-jmp-%d.txt", i);
-        SAG_ASSERT(sag_tab_open(ed, path) >= 0);
+        (void)snprintf(path, sizeof(path), "/tmp/yew-jmp-%d.txt", i);
+        YEW_ASSERT(yew_tab_open(ed, path) >= 0);
     }
 }
 
@@ -394,15 +394,15 @@ void test_groupnav_digit_jump_extends_to_two_digits(void)
     nav_goto(&ed, 1);
     /* Already there.  Nothing waited half a second to find out whether
      * a second digit was coming. */
-    SAG_ASSERT_EQ_I64(ed.tabs.active, 0);
-    SAG_ASSERT(sag_tab_jump_armed());
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 0);
+    YEW_ASSERT(yew_tab_jump_armed());
 
     ed.now_ms = 1100;
-    SAG_ASSERT(sag_tab_jump_key(&ed, nav_digit('5', 0U)));
-    SAG_ASSERT_EQ_I64(ed.tabs.active, 14); /* tab 15, 0-based */
+    YEW_ASSERT(yew_tab_jump_key(&ed, nav_digit('5', 0U)));
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 14); /* tab 15, 0-based */
     /* Re-armed, so a third digit works. */
-    SAG_ASSERT(sag_tab_jump_armed());
-    sag_ed_free(&ed);
+    YEW_ASSERT(yew_tab_jump_armed());
+    yew_ed_free(&ed);
 }
 
 /* The modifier may still be held: `alt+1` `alt+5` is the natural way to
@@ -416,14 +416,14 @@ void test_groupnav_digit_jump_accepts_held_modifiers(void)
     ed.now_ms = 1000;
     nav_goto(&ed, 1);
     ed.now_ms = 1100;
-    SAG_ASSERT(sag_tab_jump_key(&ed, nav_digit('5', SAG_MOD_ALT)));
-    SAG_ASSERT_EQ_I64(ed.tabs.active, 14);
+    YEW_ASSERT(yew_tab_jump_key(&ed, nav_digit('5', YEW_MOD_ALT)));
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 14);
 
     nav_goto(&ed, 1);
     ed.now_ms = 1200;
-    SAG_ASSERT(sag_tab_jump_key(&ed, nav_digit('5', SAG_MOD_CTRL)));
-    SAG_ASSERT_EQ_I64(ed.tabs.active, 14);
-    sag_ed_free(&ed);
+    YEW_ASSERT(yew_tab_jump_key(&ed, nav_digit('5', YEW_MOD_CTRL)));
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 14);
+    yew_ed_free(&ed);
 }
 
 /* An expired deadline clears the state BEFORE the key dispatches, so a
@@ -435,15 +435,15 @@ void test_groupnav_digit_jump_expires_on_the_clock(void)
     nav_many_tabs(&ed, 20);
     ed.now_ms = 1000;
     nav_goto(&ed, 1);
-    SAG_ASSERT(sag_tab_jump_armed());
+    YEW_ASSERT(yew_tab_jump_armed());
 
     /* One millisecond past the window. */
-    ed.now_ms = 1000 + SAG_JUMP_WINDOW_MS;
-    SAG_ASSERT(!sag_tab_jump_key(&ed, nav_digit('5', 0U)));
-    SAG_ASSERT(!sag_tab_jump_armed());
+    ed.now_ms = 1000 + YEW_JUMP_WINDOW_MS;
+    YEW_ASSERT(!yew_tab_jump_key(&ed, nav_digit('5', 0U)));
+    YEW_ASSERT(!yew_tab_jump_armed());
     /* Not consumed, and the tab did not move. */
-    SAG_ASSERT_EQ_I64(ed.tabs.active, 0);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 0);
+    yew_ed_free(&ed);
 }
 
 /* A non-digit clears the window first, then dispatches normally. */
@@ -456,9 +456,9 @@ void test_groupnav_digit_jump_releases_a_non_digit(void)
     ed.now_ms = 1000;
     nav_goto(&ed, 1);
     k = nav_digit('j', 0U);
-    SAG_ASSERT(!sag_tab_jump_key(&ed, k));
-    SAG_ASSERT(!sag_tab_jump_armed());
-    sag_ed_free(&ed);
+    YEW_ASSERT(!yew_tab_jump_key(&ed, k));
+    YEW_ASSERT(!yew_tab_jump_armed());
+    yew_ed_free(&ed);
 }
 
 /*
@@ -475,11 +475,11 @@ void test_groupnav_digit_jump_swallows_an_out_of_range_digit(void)
     nav_goto(&ed, 1);
     ed.now_ms = 1100;
     /* Tab 19 does not exist. */
-    SAG_ASSERT(sag_tab_jump_key(&ed, nav_digit('9', 0U)));
+    YEW_ASSERT(yew_tab_jump_key(&ed, nav_digit('9', 0U)));
     /* CONSUMED — so nothing typed a 9 into the document. */
-    SAG_ASSERT(!sag_tab_jump_armed());
-    SAG_ASSERT_EQ_I64(ed.tabs.active, 0); /* the first jump stands */
-    sag_ed_free(&ed);
+    YEW_ASSERT(!yew_tab_jump_armed());
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 0); /* the first jump stands */
+    yew_ed_free(&ed);
 }
 
 /*
@@ -497,14 +497,14 @@ void test_groupnav_digit_jump_picks_a_group_member(void)
     ed.now_ms = 1000;
     /* Tab 3 (1-based) is the group's first member. */
     nav_goto(&ed, 3);
-    SAG_ASSERT_EQ_I64(ed.tabs.active, 2);
-    SAG_ASSERT(sag_tab_jump_armed());
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 2);
+    YEW_ASSERT(yew_tab_jump_armed());
 
     ed.now_ms = 1100;
     /* `2` means the SECOND member, not tab 32. */
-    SAG_ASSERT(sag_tab_jump_key(&ed, nav_digit('2', 0U)));
-    SAG_ASSERT_EQ_I64(ed.tabs.active, 3);
-    sag_ed_free(&ed);
+    YEW_ASSERT(yew_tab_jump_key(&ed, nav_digit('2', 0U)));
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 3);
+    yew_ed_free(&ed);
 }
 
 /* Out of range within a group leaves the first jump standing too. */
@@ -517,10 +517,10 @@ void test_groupnav_digit_jump_group_member_out_of_range(void)
     nav_goto(&ed, 3);
     ed.now_ms = 1100;
     /* The group has three members; there is no ninth. */
-    SAG_ASSERT(sag_tab_jump_key(&ed, nav_digit('9', 0U)));
-    SAG_ASSERT_EQ_I64(ed.tabs.active, 2);
-    SAG_ASSERT(!sag_tab_jump_armed());
-    sag_ed_free(&ed);
+    YEW_ASSERT(yew_tab_jump_key(&ed, nav_digit('9', 0U)));
+    YEW_ASSERT_EQ_I64(ed.tabs.active, 2);
+    YEW_ASSERT(!yew_tab_jump_armed());
+    yew_ed_free(&ed);
 }
 
 /* The deadline is a timer entry, so the hint clears on an idle editor
@@ -532,9 +532,9 @@ void test_groupnav_digit_jump_deadline_is_a_timer(void)
     nav_many_tabs(&ed, 12);
     ed.now_ms = 1000;
     nav_goto(&ed, 1);
-    SAG_ASSERT(sag_tab_jump_armed());
+    YEW_ASSERT(yew_tab_jump_armed());
     /* No keys at all — just the clock reaching the deadline. */
-    sag_timers_fire(&ed.timers, &ed, 1000 + SAG_JUMP_WINDOW_MS);
-    SAG_ASSERT(!sag_tab_jump_armed());
-    sag_ed_free(&ed);
+    yew_timers_fire(&ed.timers, &ed, 1000 + YEW_JUMP_WINDOW_MS);
+    YEW_ASSERT(!yew_tab_jump_armed());
+    yew_ed_free(&ed);
 }

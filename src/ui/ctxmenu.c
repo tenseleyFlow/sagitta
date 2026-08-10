@@ -30,7 +30,7 @@ typedef struct CtxRow {
 } CtxRow;
 
 static struct {
-    CtxRow rows[SAG_CTX_MAX_ROWS];
+    CtxRow rows[YEW_CTX_MAX_ROWS];
     u32 n;
     u32 kind;
     bool active;
@@ -46,7 +46,7 @@ static struct {
 /* Building                                                         */
 /* ---------------------------------------------------------------- */
 
-void sag_ctx_begin(u32 kind)
+void yew_ctx_begin(u32 kind)
 {
     /*
      * Whatever was open is discarded.  Two menus can never both be up:
@@ -60,12 +60,12 @@ void sag_ctx_begin(u32 kind)
     ctx.cursor = -1;
 }
 
-void sag_ctx_item(const char *label, const char *accel, u32 action,
+void yew_ctx_item(const char *label, const char *accel, u32 action,
                   bool enabled)
 {
     CtxRow *r;
 
-    if (ctx.n >= (u32)SAG_CTX_MAX_ROWS || label == NULL)
+    if (ctx.n >= (u32)YEW_CTX_MAX_ROWS || label == NULL)
         return;
     r = &ctx.rows[ctx.n++];
     (void)memset(r, 0, sizeof(*r));
@@ -76,18 +76,18 @@ void sag_ctx_item(const char *label, const char *accel, u32 action,
     r->enabled = enabled;
 }
 
-void sag_ctx_sep(void)
+void yew_ctx_sep(void)
 {
     CtxRow *r;
 
-    if (ctx.n >= (u32)SAG_CTX_MAX_ROWS)
+    if (ctx.n >= (u32)YEW_CTX_MAX_ROWS)
         return;
     r = &ctx.rows[ctx.n++];
     (void)memset(r, 0, sizeof(*r));
     r->separator = true;
 }
 
-void sag_ctx_target(u32 id, const char *path)
+void yew_ctx_target(u32 id, const char *path)
 {
     free(ctx.target_path);
     ctx.target_path = NULL;
@@ -98,17 +98,17 @@ void sag_ctx_target(u32 id, const char *path)
         /* COPIED, not aliased: the tab that owns the original can be
          * closed while the menu is up, and the menu would then hold a
          * pointer into freed memory. */
-        ctx.target_path = sag_xmalloc(n);
+        ctx.target_path = yew_xmalloc(n);
         (void)memcpy(ctx.target_path, path, n);
     }
 }
 
-u32 sag_ctx_target_id(void)
+u32 yew_ctx_target_id(void)
 {
     return ctx.target_id;
 }
 
-const char *sag_ctx_target_path(void)
+const char *yew_ctx_target_path(void)
 {
     return ctx.target_path;
 }
@@ -124,10 +124,10 @@ static u16 row_cells(const CtxRow *r)
 
     if (r->separator)
         return 0U;
-    (void)sag_str_clip((const u8 *)r->label, strlen(r->label), 1000,
+    (void)yew_str_clip((const u8 *)r->label, strlen(r->label), 1000,
                        &label);
     if (r->accel[0] != '\0') {
-        (void)sag_str_clip((const u8 *)r->accel, strlen(r->accel), 1000,
+        (void)yew_str_clip((const u8 *)r->accel, strlen(r->accel), 1000,
                            &accel);
         accel += 2; /* the gap between label and accelerator */
     }
@@ -146,7 +146,7 @@ static u16 menu_width(void)
             widest = w;
     }
     widest = (u16)(widest + CTX_PAD);
-    return widest < (u16)SAG_CTX_MIN_WIDTH ? (u16)SAG_CTX_MIN_WIDTH
+    return widest < (u16)YEW_CTX_MIN_WIDTH ? (u16)YEW_CTX_MIN_WIDTH
                                            : widest;
 }
 
@@ -172,7 +172,7 @@ static i32 next_usable(i32 from, int step)
     return -1;
 }
 
-bool sag_ctx_show(u16 anchor_x, u16 anchor_y, Rect allowed)
+bool yew_ctx_show(u16 anchor_x, u16 anchor_y, Rect allowed)
 {
     u16 w = menu_width();
     u16 h = (u16)ctx.n;
@@ -210,39 +210,39 @@ bool sag_ctx_show(u16 anchor_x, u16 anchor_y, Rect allowed)
     return true;
 }
 
-bool sag_ctx_active(void)
+bool yew_ctx_active(void)
 {
     return ctx.active;
 }
 
-void sag_ctx_close(void)
+void yew_ctx_close(void)
 {
     free(ctx.target_path);
     (void)memset(&ctx, 0, sizeof(ctx));
     ctx.cursor = -1;
 }
 
-Rect sag_ctx_box(void)
+Rect yew_ctx_box(void)
 {
     return ctx.box;
 }
 
-u32 sag_ctx_kind(void)
+u32 yew_ctx_kind(void)
 {
     return ctx.kind;
 }
 
-i32 sag_ctx_cursor(void)
+i32 yew_ctx_cursor(void)
 {
     return ctx.cursor;
 }
 
-u32 sag_ctx_rows(void)
+u32 yew_ctx_rows(void)
 {
     return ctx.n;
 }
 
-bool sag_ctx_row_enabled(u32 row)
+bool yew_ctx_row_enabled(u32 row)
 {
     return row < ctx.n && ctx.rows[row].enabled && !ctx.rows[row].separator;
 }
@@ -251,7 +251,7 @@ bool sag_ctx_row_enabled(u32 row)
 /* Choosing                                                         */
 /* ---------------------------------------------------------------- */
 
-void sag_ctx_hover(i32 row)
+void yew_ctx_hover(i32 row)
 {
     if (!ctx.active || row < 0 || row >= (i32)ctx.n)
         return;
@@ -262,7 +262,7 @@ void sag_ctx_hover(i32 row)
     ctx.cursor = row;
 }
 
-void sag_ctx_invoke(i32 row)
+void yew_ctx_invoke(i32 row)
 {
     if (!ctx.active || row < 0 || row >= (i32)ctx.n)
         return;
@@ -272,7 +272,7 @@ void sag_ctx_invoke(i32 row)
     ctx.active = false;
 }
 
-u32 sag_ctx_take(void)
+u32 yew_ctx_take(void)
 {
     u32 chosen = ctx.chosen;
 
@@ -283,24 +283,24 @@ u32 sag_ctx_take(void)
     return chosen;
 }
 
-bool sag_ctx_key(const Key *k)
+bool yew_ctx_key(const Key *k)
 {
     if (!ctx.active || k == NULL)
         return false;
-    if (k->ev == (u8)SAG_KEY_RELEASE)
+    if (k->ev == (u8)YEW_KEY_RELEASE)
         return true;
     switch (k->code) {
-    case SAG_KEY_ESCAPE:
-        sag_ctx_close();
+    case YEW_KEY_ESCAPE:
+        yew_ctx_close();
         return true;
-    case SAG_KEY_UP:
+    case YEW_KEY_UP:
         ctx.cursor = next_usable(ctx.cursor, -1);
         return true;
-    case SAG_KEY_DOWN:
+    case YEW_KEY_DOWN:
         ctx.cursor = next_usable(ctx.cursor, 1);
         return true;
-    case SAG_KEY_ENTER:
-        sag_ctx_invoke(ctx.cursor);
+    case YEW_KEY_ENTER:
+        yew_ctx_invoke(ctx.cursor);
         return true;
     default:
         break;
@@ -317,11 +317,11 @@ bool sag_ctx_key(const Key *k)
 /* Drawing                                                          */
 /* ---------------------------------------------------------------- */
 
-void sag_ctx_draw(Grid *grid)
+void yew_ctx_draw(Grid *grid)
 {
-    SagColor fg = {SAG_COLOR_DEFAULT, 0U, 0U, 0U};
-    SagColor bg = {SAG_COLOR_DEFAULT, 0U, 0U, 0U};
-    SagColor dim = {SAG_COLOR_RGB, 120U, 120U, 120U};
+    YewColor fg = {YEW_COLOR_DEFAULT, 0U, 0U, 0U};
+    YewColor bg = {YEW_COLOR_DEFAULT, 0U, 0U, 0U};
+    YewColor dim = {YEW_COLOR_RGB, 120U, 120U, 120U};
     Cell blank;
     u32 i;
 
@@ -329,31 +329,31 @@ void sag_ctx_draw(Grid *grid)
         return;
     (void)memset(&blank, 0, sizeof(blank));
     /*
-     * SAG_REGION_BLOCK over the whole box, so the document beneath is
-     * inert, plus one SAG_REGION_CTX_ROW per drawn row from the SAME
+     * YEW_REGION_BLOCK over the whole box, so the document beneath is
+     * inert, plus one YEW_REGION_CTX_ROW per drawn row from the SAME
      * Rect the row was drawn with (the Sprint 22 law).  Last-added-wins
      * makes the menu shadow everything under it with no z-order
      * machinery at all.
      */
-    sag_region_add(SAG_REGION_BLOCK, ctx.box, 0);
+    yew_region_add(YEW_REGION_BLOCK, ctx.box, 0);
     for (i = 0U; i < ctx.n; i++) {
         const CtxRow *r = &ctx.rows[i];
         u16 y = (u16)(ctx.box.y + i);
         Rect row_rect = {ctx.box.x, y, ctx.box.w, 1U};
         u16 attrs = 0U;
-        SagColor colour = fg;
+        YewColor colour = fg;
 
-        sag_grid_fill(grid, y, ctx.box.x, (u16)(ctx.box.x + ctx.box.w),
+        yew_grid_fill(grid, y, ctx.box.x, (u16)(ctx.box.x + ctx.box.w),
                       blank);
         if (r->separator) {
             u16 x;
 
             for (x = 0U; x < ctx.box.w; x++) {
-                (void)sag_grid_puts(grid, y, (u16)(ctx.box.x + x),
+                (void)yew_grid_puts(grid, y, (u16)(ctx.box.x + x),
                                     (const u8 *)"-", 1U, dim, bg,
-                                    SAG_ATTR_DIM);
+                                    YEW_ATTR_DIM);
             }
-            sag_region_add(SAG_REGION_CTX_ROW, row_rect, (i32)i);
+            yew_region_add(YEW_REGION_CTX_ROW, row_rect, (i32)i);
             continue;
         }
         if (!r->enabled) {
@@ -361,27 +361,27 @@ void sag_ctx_draw(Grid *grid)
              * row does not move under the pointer between one
              * right-click and the next. */
             colour = dim;
-            attrs = SAG_ATTR_DIM;
+            attrs = YEW_ATTR_DIM;
         } else if ((i32)i == ctx.cursor) {
-            attrs = SAG_ATTR_REVERSE;
+            attrs = YEW_ATTR_REVERSE;
         }
-        (void)sag_grid_puts(grid, y, (u16)(ctx.box.x + 1U),
+        (void)yew_grid_puts(grid, y, (u16)(ctx.box.x + 1U),
                             (const u8 *)r->label, strlen(r->label),
                             colour, bg, attrs);
         if (r->accel[0] != '\0') {
             int cells = 0;
 
-            (void)sag_str_clip((const u8 *)r->accel, strlen(r->accel),
+            (void)yew_str_clip((const u8 *)r->accel, strlen(r->accel),
                                1000, &cells);
             if ((u16)cells + 1U < ctx.box.w) {
-                (void)sag_grid_puts(grid, y,
+                (void)yew_grid_puts(grid, y,
                                     (u16)(ctx.box.x + ctx.box.w - 1U -
                                           (u16)cells),
                                     (const u8 *)r->accel,
                                     strlen(r->accel), dim, bg,
-                                    SAG_ATTR_DIM);
+                                    YEW_ATTR_DIM);
             }
         }
-        sag_region_add(SAG_REGION_CTX_ROW, row_rect, (i32)i);
+        yew_region_add(YEW_REGION_CTX_ROW, row_rect, (i32)i);
     }
 }

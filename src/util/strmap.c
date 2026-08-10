@@ -54,11 +54,11 @@ static void strmap_grow_slots(Strmap *map)
         new_count = STRMAP_FIRST_SLOTS;
     } else {
         if (map->slot_count > SIZE_MAX / 2)
-            SAG_BUG("string map hash table overflow");
+            YEW_BUG("string map hash table overflow");
         new_count = map->slot_count * 2;
     }
     free(map->slots);
-    map->slots = sag_xcalloc(new_count, sizeof(*map->slots));
+    map->slots = yew_xcalloc(new_count, sizeof(*map->slots));
     map->slot_count = new_count;
     for (i = 0; i < map->len; i++) {
         const StrmapEntry *entry = &map->entries[i];
@@ -73,7 +73,7 @@ void *strmap_put(Strmap *map, const char *key, size_t key_len, void *value)
     StrmapEntry *entry;
 
     if (map->len >= UINT32_MAX)
-        SAG_BUG("string map overflow: more than 2^32-1 entries");
+        YEW_BUG("string map overflow: more than 2^32-1 entries");
     if (map->slot_count == 0 ||
         map->len + 1 >= map->slot_count - map->slot_count / 4)
         strmap_grow_slots(map);
@@ -95,17 +95,17 @@ void *strmap_put(Strmap *map, const char *key, size_t key_len, void *value)
             new_cap = 16;
         else {
             if (map->cap > SIZE_MAX / 2)
-                SAG_BUG("string map entry array overflow");
+                YEW_BUG("string map entry array overflow");
             new_cap = map->cap * 2;
         }
-        map->entries = sag_xreallocarray(map->entries, new_cap,
+        map->entries = yew_xreallocarray(map->entries, new_cap,
                                          sizeof(*map->entries));
         map->cap = new_cap;
     }
     entry = &map->entries[map->len];
     if (key_len == SIZE_MAX)
-        SAG_BUG("string map key size overflow");
-    entry->key = sag_xmalloc(key_len + 1);
+        YEW_BUG("string map key size overflow");
+    entry->key = yew_xmalloc(key_len + 1);
     if (key_len)
         memcpy(entry->key, key, key_len);
     entry->key[key_len] = '\0';

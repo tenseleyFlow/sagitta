@@ -34,10 +34,10 @@ static const UnitFixture unit_fixtures[] = {
 };
 
 static const UnitOps *const unit_engines[] = {
-    &sag_unit_line,
-    &sag_unit_word,
-    &sag_unit_block,
-    &sag_unit_char,
+    &yew_unit_line,
+    &yew_unit_word,
+    &yew_unit_block,
+    &yew_unit_char,
 };
 
 typedef struct {
@@ -49,7 +49,7 @@ typedef struct {
 static void unit_ctx_init(UnitTestCtx *ctx, const UnitFixture *fixture)
 {
     (void)memset(ctx, 0, sizeof(*ctx));
-    ctx->buffer.tb = sag_textbuf_from_bytes(fixture->bytes, fixture->len);
+    ctx->buffer.tb = yew_textbuf_from_bytes(fixture->bytes, fixture->len);
     ctx->buffer.tabwidth = 4U;
     ctx->win.buf = &ctx->buffer;
     ctx->win.vp.rows = 24U;
@@ -61,14 +61,14 @@ static void unit_ctx_init(UnitTestCtx *ctx, const UnitFixture *fixture)
 
 static void unit_ctx_free(UnitTestCtx *ctx)
 {
-    sag_textbuf_free(ctx->buffer.tb);
+    yew_textbuf_free(ctx->buffer.tb);
 }
 
 static ByteOff next_boundary(const TextBuf *tb, ByteOff at)
 {
-    if (at.v == sag_textbuf_len(tb))
+    if (at.v == yew_textbuf_len(tb))
         return at;
-    return sag_grapheme_next_boundary(tb, at);
+    return yew_grapheme_next_boundary(tb, at);
 }
 
 static void assert_roundtrip(const UnitOps *ops, size_t fixture, bool alt,
@@ -84,18 +84,18 @@ static void assert_roundtrip(const UnitOps *ops, size_t fixture, bool alt,
                    ops->name, fixture, alt ? 1U : 0U,
                    (unsigned long long)p.v, (unsigned long long)next.v,
                    (unsigned long long)back.v);
-    sag_test_fail(__FILE__, __LINE__, detail);
+    yew_test_fail(__FILE__, __LINE__, detail);
 }
 
 void test_units_registered_mode_mapping(void)
 {
-    SAG_ASSERT(sag_unit_of_mode(SAG_MODE_L) == &sag_unit_line);
-    SAG_ASSERT(sag_unit_of_mode(SAG_MODE_W) == &sag_unit_word);
-    SAG_ASSERT(sag_unit_of_mode(SAG_MODE_B) == &sag_unit_block);
-    SAG_ASSERT(sag_unit_of_mode(SAG_MODE_I) == &sag_unit_char);
-    SAG_ASSERT_NULL(sag_unit_of_mode(SAG_MODE_H));
-    SAG_ASSERT_NULL(sag_unit_of_mode(SAG_MODE_E));
-    SAG_ASSERT_NULL(sag_unit_of_mode(SAG_MODE_F));
+    YEW_ASSERT(yew_unit_of_mode(YEW_MODE_L) == &yew_unit_line);
+    YEW_ASSERT(yew_unit_of_mode(YEW_MODE_W) == &yew_unit_word);
+    YEW_ASSERT(yew_unit_of_mode(YEW_MODE_B) == &yew_unit_block);
+    YEW_ASSERT(yew_unit_of_mode(YEW_MODE_I) == &yew_unit_char);
+    YEW_ASSERT_NULL(yew_unit_of_mode(YEW_MODE_H));
+    YEW_ASSERT_NULL(yew_unit_of_mode(YEW_MODE_E));
+    YEW_ASSERT_NULL(yew_unit_of_mode(YEW_MODE_F));
 }
 
 void test_units_char_alt_projects_codepoints_to_graphemes(void)
@@ -117,52 +117,52 @@ void test_units_char_alt_projects_codepoints_to_graphemes(void)
     UnitTestCtx ctx;
 
     unit_ctx_init(&ctx, &fixture);
-    for (size_t i = 0U; i + 1U < SAG_ARRAY_LEN(stops); i++) {
+    for (size_t i = 0U; i + 1U < YEW_ARRAY_LEN(stops); i++) {
         ByteOff at = BYTEOFF(stops[i]);
-        ByteOff next = sag_unit_char.next(&ctx.unit, at, true);
-        Span alt_span = sag_unit_char.span(&ctx.unit, at, true);
-        Span plain_span = sag_unit_char.span(&ctx.unit, at, false);
+        ByteOff next = yew_unit_char.next(&ctx.unit, at, true);
+        Span alt_span = yew_unit_char.span(&ctx.unit, at, true);
+        Span plain_span = yew_unit_char.span(&ctx.unit, at, false);
 
-        SAG_ASSERT_EQ_U64(next.v, stops[i + 1U]);
-        SAG_ASSERT_EQ_U64(sag_unit_char.next(&ctx.unit, at, false).v,
+        YEW_ASSERT_EQ_U64(next.v, stops[i + 1U]);
+        YEW_ASSERT_EQ_U64(yew_unit_char.next(&ctx.unit, at, false).v,
                           next.v);
-        SAG_ASSERT_EQ_U64(alt_span.lo, stops[i]);
-        SAG_ASSERT_EQ_U64(alt_span.hi, stops[i + 1U]);
-        SAG_ASSERT_EQ_U64(plain_span.lo, alt_span.lo);
-        SAG_ASSERT_EQ_U64(plain_span.hi, alt_span.hi);
-        SAG_ASSERT(sag_is_grapheme_boundary(ctx.unit.tb, next));
+        YEW_ASSERT_EQ_U64(alt_span.lo, stops[i]);
+        YEW_ASSERT_EQ_U64(alt_span.hi, stops[i + 1U]);
+        YEW_ASSERT_EQ_U64(plain_span.lo, alt_span.lo);
+        YEW_ASSERT_EQ_U64(plain_span.hi, alt_span.hi);
+        YEW_ASSERT(yew_is_grapheme_boundary(ctx.unit.tb, next));
     }
-    for (size_t i = SAG_ARRAY_LEN(stops) - 1U; i != 0U; i--) {
+    for (size_t i = YEW_ARRAY_LEN(stops) - 1U; i != 0U; i--) {
         ByteOff at = BYTEOFF(stops[i]);
-        ByteOff prev = sag_unit_char.prev(&ctx.unit, at, true);
+        ByteOff prev = yew_unit_char.prev(&ctx.unit, at, true);
 
-        SAG_ASSERT_EQ_U64(prev.v, stops[i - 1U]);
-        SAG_ASSERT_EQ_U64(sag_unit_char.prev(&ctx.unit, at, false).v,
+        YEW_ASSERT_EQ_U64(prev.v, stops[i - 1U]);
+        YEW_ASSERT_EQ_U64(yew_unit_char.prev(&ctx.unit, at, false).v,
                           prev.v);
-        SAG_ASSERT(sag_is_grapheme_boundary(ctx.unit.tb, prev));
+        YEW_ASSERT(yew_is_grapheme_boundary(ctx.unit.tb, prev));
     }
     {
-        Span end = sag_unit_char.span(&ctx.unit, BYTEOFF(sizeof(bytes)),
+        Span end = yew_unit_char.span(&ctx.unit, BYTEOFF(sizeof(bytes)),
                                       true);
 
-        SAG_ASSERT_EQ_U64(end.lo, stops[SAG_ARRAY_LEN(stops) - 2U]);
-        SAG_ASSERT_EQ_U64(end.hi, sizeof(bytes));
+        YEW_ASSERT_EQ_U64(end.lo, stops[YEW_ARRAY_LEN(stops) - 2U]);
+        YEW_ASSERT_EQ_U64(end.hi, sizeof(bytes));
     }
-    for (size_t i = 0U; i < SAG_ARRAY_LEN(interiors); i++)
-        SAG_ASSERT(!sag_is_grapheme_boundary(ctx.unit.tb,
+    for (size_t i = 0U; i < YEW_ARRAY_LEN(interiors); i++)
+        YEW_ASSERT(!yew_is_grapheme_boundary(ctx.unit.tb,
                                              BYTEOFF(interiors[i])));
     unit_ctx_free(&ctx);
 }
 
 void test_units_next_prev_are_monotone_and_terminate(void)
 {
-    for (size_t f = 0U; f < SAG_ARRAY_LEN(unit_fixtures); f++) {
+    for (size_t f = 0U; f < YEW_ARRAY_LEN(unit_fixtures); f++) {
         UnitTestCtx ctx;
         u64 len;
 
         unit_ctx_init(&ctx, &unit_fixtures[f]);
-        len = sag_textbuf_len(ctx.unit.tb);
-        for (size_t e = 0U; e < SAG_ARRAY_LEN(unit_engines); e++) {
+        len = yew_textbuf_len(ctx.unit.tb);
+        for (size_t e = 0U; e < YEW_ARRAY_LEN(unit_engines); e++) {
             const UnitOps *ops = unit_engines[e];
 
             for (u8 alt = 0U; alt < 2U; alt++) {
@@ -172,23 +172,23 @@ void test_units_next_prev_are_monotone_and_terminate(void)
                 while (at.v < len) {
                     ByteOff moved = ops->next(&ctx.unit, at, alt != 0U);
 
-                    SAG_ASSERT(moved.v > at.v);
-                    SAG_ASSERT(moved.v <= len);
+                    YEW_ASSERT(moved.v > at.v);
+                    YEW_ASSERT(moved.v <= len);
                     at = moved;
-                    SAG_ASSERT(++steps <= len + 1U);
+                    YEW_ASSERT(++steps <= len + 1U);
                 }
-                SAG_ASSERT_EQ_U64(at.v, len);
+                YEW_ASSERT_EQ_U64(at.v, len);
 
                 at = BYTEOFF(len);
                 steps = 0U;
                 while (at.v != 0U) {
                     ByteOff moved = ops->prev(&ctx.unit, at, alt != 0U);
 
-                    SAG_ASSERT(moved.v < at.v);
+                    YEW_ASSERT(moved.v < at.v);
                     at = moved;
-                    SAG_ASSERT(++steps <= len + 1U);
+                    YEW_ASSERT(++steps <= len + 1U);
                 }
-                SAG_ASSERT_EQ_U64(at.v, 0U);
+                YEW_ASSERT_EQ_U64(at.v, 0U);
             }
         }
         unit_ctx_free(&ctx);
@@ -197,15 +197,15 @@ void test_units_next_prev_are_monotone_and_terminate(void)
 
 void test_units_results_are_boundaries_and_spans_obey_law(void)
 {
-    for (size_t f = 0U; f < SAG_ARRAY_LEN(unit_fixtures); f++) {
+    for (size_t f = 0U; f < YEW_ARRAY_LEN(unit_fixtures); f++) {
         UnitTestCtx ctx;
         ByteOff p = BYTEOFF(0U);
         u64 len;
 
         unit_ctx_init(&ctx, &unit_fixtures[f]);
-        len = sag_textbuf_len(ctx.unit.tb);
+        len = yew_textbuf_len(ctx.unit.tb);
         for (;;) {
-            for (size_t e = 0U; e < SAG_ARRAY_LEN(unit_engines); e++) {
+            for (size_t e = 0U; e < YEW_ARRAY_LEN(unit_engines); e++) {
                 const UnitOps *ops = unit_engines[e];
 
                 for (u8 alt = 0U; alt < 2U; alt++) {
@@ -216,14 +216,14 @@ void test_units_results_are_boundaries_and_spans_obey_law(void)
                     ByteOff prev = ops->prev(&ctx.unit, p, use_alt);
                     Span span = ops->span(&ctx.unit, p, use_alt);
 
-                    SAG_ASSERT(home.v <= p.v);
-                    SAG_ASSERT(end.v >= p.v);
-                    SAG_ASSERT_EQ_U64(span.lo, home.v);
-                    SAG_ASSERT_EQ_U64(span.hi, end.v);
-                    SAG_ASSERT(sag_is_grapheme_boundary(ctx.unit.tb, home));
-                    SAG_ASSERT(sag_is_grapheme_boundary(ctx.unit.tb, end));
-                    SAG_ASSERT(sag_is_grapheme_boundary(ctx.unit.tb, next));
-                    SAG_ASSERT(sag_is_grapheme_boundary(ctx.unit.tb, prev));
+                    YEW_ASSERT(home.v <= p.v);
+                    YEW_ASSERT(end.v >= p.v);
+                    YEW_ASSERT_EQ_U64(span.lo, home.v);
+                    YEW_ASSERT_EQ_U64(span.hi, end.v);
+                    YEW_ASSERT(yew_is_grapheme_boundary(ctx.unit.tb, home));
+                    YEW_ASSERT(yew_is_grapheme_boundary(ctx.unit.tb, end));
+                    YEW_ASSERT(yew_is_grapheme_boundary(ctx.unit.tb, next));
+                    YEW_ASSERT(yew_is_grapheme_boundary(ctx.unit.tb, prev));
                 }
             }
             if (p.v == len)
@@ -236,15 +236,15 @@ void test_units_results_are_boundaries_and_spans_obey_law(void)
 
 void test_units_roundtrip_and_purity_hold_for_every_engine(void)
 {
-    for (size_t f = 0U; f < SAG_ARRAY_LEN(unit_fixtures); f++) {
+    for (size_t f = 0U; f < YEW_ARRAY_LEN(unit_fixtures); f++) {
         UnitTestCtx ctx;
         ByteOff p = BYTEOFF(0U);
         u64 len;
 
         unit_ctx_init(&ctx, &unit_fixtures[f]);
-        len = sag_textbuf_len(ctx.unit.tb);
+        len = yew_textbuf_len(ctx.unit.tb);
         for (;;) {
-            for (size_t e = 0U; e < SAG_ARRAY_LEN(unit_engines); e++) {
+            for (size_t e = 0U; e < YEW_ARRAY_LEN(unit_engines); e++) {
                 const UnitOps *ops = unit_engines[e];
 
                 for (u8 alt = 0U; alt < 2U; alt++) {
@@ -256,14 +256,14 @@ void test_units_roundtrip_and_purity_hold_for_every_engine(void)
                         ByteOff back =
                             ops->prev(&ctx.unit, next, alt != 0U);
 
-                        sag_test_count_assertion();
+                        yew_test_count_assertion();
                         assert_roundtrip(ops, f, alt != 0U, p, next, back);
                     }
                     (void)ops->home(&ctx.unit, p, alt != 0U);
                     (void)ops->end(&ctx.unit, p, alt != 0U);
                     (void)ops->span(&ctx.unit, p, alt != 0U);
-                    SAG_ASSERT_EQ_U64(ctx.unit.tb->gen, gen);
-                    SAG_ASSERT_EQ_MEM(&ctx.win, &before, sizeof(before));
+                    YEW_ASSERT_EQ_U64(ctx.unit.tb->gen, gen);
+                    YEW_ASSERT_EQ_MEM(&ctx.win, &before, sizeof(before));
                 }
             }
             if (p.v == len)
@@ -284,7 +284,7 @@ static ByteOff broken_fixed_next(UnitCtx *u, ByteOff p, bool alt)
 static bool unit_next_contract_holds(const UnitOps *ops, UnitCtx *ctx,
                                      ByteOff p)
 {
-    u64 len = sag_textbuf_len(ctx->tb);
+    u64 len = yew_textbuf_len(ctx->tb);
     ByteOff next = ops->next(ctx, p, false);
 
     return p.v == len ? next.v == len : next.v > p.v && next.v <= len;
@@ -299,6 +299,6 @@ void test_units_conformance_rejects_fixed_point_engine(void)
     UnitTestCtx ctx;
 
     unit_ctx_init(&ctx, &unit_fixtures[0]);
-    SAG_ASSERT(!unit_next_contract_holds(&broken, &ctx.unit, BYTEOFF(0U)));
+    YEW_ASSERT(!unit_next_contract_holds(&broken, &ctx.unit, BYTEOFF(0U)));
     unit_ctx_free(&ctx);
 }

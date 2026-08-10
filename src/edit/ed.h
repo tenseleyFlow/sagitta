@@ -1,5 +1,5 @@
-#ifndef SAG_EDIT_ED_H
-#define SAG_EDIT_ED_H
+#ifndef YEW_EDIT_ED_H
+#define YEW_EDIT_ED_H
 
 #include <stdbool.h>
 
@@ -38,30 +38,30 @@
 #include "ws/trust_prompt.h"
 
 typedef enum {
-    SAG_PROMPT_NONE,
-    SAG_PROMPT_RECOVER,
-    SAG_PROMPT_QUIT_DIRTY,
-    SAG_PROMPT_OVERWRITE,
+    YEW_PROMPT_NONE,
+    YEW_PROMPT_RECOVER,
+    YEW_PROMPT_QUIT_DIRTY,
+    YEW_PROMPT_OVERWRITE,
     /* Sprint 25 §9: ed.ws.forget.  Its own kind because every other
      * prompt here asks about unsaved BYTES, and answering "delete a
      * cache" must never share a keystroke with those. */
-    SAG_PROMPT_WS_FORGET,
-    SAG_PROMPT_WORKSPACE_TRUST
+    YEW_PROMPT_WS_FORGET,
+    YEW_PROMPT_WORKSPACE_TRUST
 } PromptKind;
 
 typedef struct FlRuntime FlRuntime;
 typedef struct MacroLib MacroLib;
 typedef struct OptProvider OptProvider;
-typedef struct SagConfigState SagConfigState;
-typedef struct SagOptHistory SagOptHistory;
+typedef struct YewConfigState YewConfigState;
+typedef struct YewOptHistory YewOptHistory;
 struct OptStored;
 
-typedef struct SagEdStartup {
+typedef struct YewEdStartup {
     const char *config_path;
     bool clean;
     bool no_workspace_config;
     bool trust_workspace;
-} SagEdStartup;
+} YewEdStartup;
 
 typedef struct FlPendingChange {
     u32 buffer_id;
@@ -93,7 +93,7 @@ struct Ed {
 
     Workspace ws;
     /* Sprint 25 §5.  Zeroed = stateless; the driver opts in with
-     * sag_state_open, so nothing that merely builds an Ed touches a
+     * yew_state_open, so nothing that merely builds an Ed touches a
      * filesystem. */
     WsState state;
     Registers regs;
@@ -107,8 +107,8 @@ struct Ed {
     struct Pane *pane_root;
     struct Pane *focus;
     /* Per-frame tables the region payloads index into (§6). */
-    struct Pane *leaf_tab[SAG_PANE_MAX_LEAVES];
-    struct Pane *split_tab[SAG_PANE_MAX_LEAVES];
+    struct Pane *leaf_tab[YEW_PANE_MAX_LEAVES];
+    struct Pane *split_tab[YEW_PANE_MAX_LEAVES];
     u32 nleaf_tab;
     u32 nsplit_tab;
     PaneDrag drag;
@@ -119,16 +119,16 @@ struct Ed {
     Groups groups;
     TabPrompt tab_prompt;
     WsPrompt ws_prompt;
-    SagTrustPrompt trust_prompt;
+    YewTrustPrompt trust_prompt;
     Rect footer_rect;
     Rect tab_strip_rect;
 
     Mode mode;
     Mode prev_unit;
-    Keymap mode_keys[SAG_MODE__N];
+    Keymap mode_keys[YEW_MODE__N];
     Keymap user_keys;
-    Keymap bind_keys[SAG_MODE__N];
-    struct SagBindings *bindings;
+    Keymap bind_keys[YEW_MODE__N];
+    struct YewBindings *bindings;
     KeyStack keys;
     Chord chord;
     CmdId capture_cmd;
@@ -173,7 +173,7 @@ struct Ed {
 
     /*
      * Sprint 34: the origin registry (§2).  A value member rather than
-     * a pointer so a plain sag_ed_init has one -- a capability question
+     * a pointer so a plain yew_ed_init has one -- a capability question
      * asked of a half-built editor must have an answer, and "the
      * registry has not been allocated yet" is not one.
      */
@@ -199,8 +199,8 @@ struct Ed {
     const OptProvider *opt_provider;
     struct OptStored *opt_globals;
     bool *opt_inflight;
-    SagOptHistory *opt_history;
-    SagConfigState *config;
+    YewOptHistory *opt_history;
+    YewConfigState *config;
     bool clean;
     /* Sprint 37: model/runtime without terminal, input, grid, or loop. */
     bool headless;
@@ -219,35 +219,35 @@ struct Ed {
     bool render_ready;
 };
 
-void sag_ed_init(Ed *ed);
-void sag_ed_free(Ed *ed);
-SagLoadErr sag_ed_open(Ed *ed, const char *path);
-bool sag_ed_open_scratch(Ed *ed);
+void yew_ed_init(Ed *ed);
+void yew_ed_free(Ed *ed);
+YewLoadErr yew_ed_open(Ed *ed, const char *path);
+bool yew_ed_open_scratch(Ed *ed);
 /* A byte-exact, initially-clean scratch buffer for `--batch ... -`. */
-bool sag_ed_open_memory(Ed *ed, const u8 *bytes, size_t len,
+bool yew_ed_open_memory(Ed *ed, const u8 *bytes, size_t len,
                         const char *name);
-int sag_ed_driver(const char *path);
-int sag_ed_driver_opts(const char *path, const SagEdStartup *startup);
-const char *sag_ws_root(const Ed *ed);
+int yew_ed_driver(const char *path);
+int yew_ed_driver_opts(const char *path, const YewEdStartup *startup);
+const char *yew_ws_root(const Ed *ed);
 
-bool sag_buf_dirty(const Buffer *b);
-bool sag_buf_readonly(const Buffer *b);
-u64 sag_buf_len(const Buffer *b);
-u64 sag_buf_line_count(const Buffer *b);
-Span sag_buf_line_span(const Buffer *b, LineNo line);
-LineNo sag_buf_line_of(const Buffer *b, ByteOff off);
+bool yew_buf_dirty(const Buffer *b);
+bool yew_buf_readonly(const Buffer *b);
+u64 yew_buf_len(const Buffer *b);
+u64 yew_buf_line_count(const Buffer *b);
+Span yew_buf_line_span(const Buffer *b, LineNo line);
+LineNo yew_buf_line_of(const Buffer *b, ByteOff off);
 /* THE document: the buffer the focused window is showing.  Everything
  * that writes bytes or names a file asks this, never &ed->buffer — see
  * ed.c for why the two stopped being the same object. */
-Buffer *sag_ed_doc(Ed *ed);
-const char *sag_buf_label(const Buffer *b);
+Buffer *yew_ed_doc(Ed *ed);
+const char *yew_buf_label(const Buffer *b);
 
 /* Scratch buffers (Sprint 19: job output and the *jobs* table).  The
  * returned pointer is stable for the buffer's lifetime — windows hold it. */
-Buffer *sag_ws_scratch_new(Ed *ed, const char *name, u32 flags);
-Buffer *sag_ws_scratch_find(Ed *ed, const char *name);
+Buffer *yew_ws_scratch_new(Ed *ed, const char *name, u32 flags);
+Buffer *yew_ws_scratch_find(Ed *ed, const char *name);
 /* NULL when the buffer has been closed since the id was recorded. */
-Buffer *sag_ws_buf_by_id(Ed *ed, u32 id);
+Buffer *yew_ws_buf_by_id(Ed *ed, u32 id);
 /*
  * The same contract for windows (Sprint 34 §1).  Searches every tab's
  * pane tree, not just the active one: a Fletch handle taken in one tab
@@ -255,67 +255,67 @@ Buffer *sag_ws_buf_by_id(Ed *ed, u32 id);
  * walks buf.list() across tabs would otherwise see its own windows
  * vanish.
  */
-Win *sag_ed_win_by_id(Ed *ed, u32 id);
-void sag_ws_scratch_drop(Ed *ed, Buffer *b);
+Win *yew_ed_win_by_id(Ed *ed, u32 id);
+void yew_ws_scratch_drop(Ed *ed, Buffer *b);
 /* Points the focused window at `b` with a fresh cursor set and viewport.
  * Returns false when `b` is not in the workspace. */
-bool sag_ed_show_buffer(Ed *ed, Buffer *b);
+bool yew_ed_show_buffer(Ed *ed, Buffer *b);
 
 /*
  * Sprint 24 §3: deferred file buffers.
  *
- * sag_ws_file_buf returns the buffer for `path`, creating a
+ * yew_ws_file_buf returns the buffer for `path`, creating a
  * NON-RESIDENT one (path, no text) if it is new.  Residency is asked of
  * the allocation — there is no flag to go stale.
  */
-Buffer *sag_ws_file_buf(Ed *ed, const char *path);
-bool sag_buf_resident(const Buffer *b);
-int sag_buf_hydrate(Ed *ed, Buffer *b);  /* 0 ok; performs the read */
-void sag_buf_defer(Ed *ed, Buffer *b);   /* releases text; modified off */
-void sag_ed_win_set_buffer(Ed *ed, Win *w, Buffer *b);
+Buffer *yew_ws_file_buf(Ed *ed, const char *path);
+bool yew_buf_resident(const Buffer *b);
+int yew_buf_hydrate(Ed *ed, Buffer *b);  /* 0 ok; performs the read */
+void yew_buf_defer(Ed *ed, Buffer *b);   /* releases text; modified off */
+void yew_ed_win_set_buffer(Ed *ed, Win *w, Buffer *b);
 /* Named marks.  `name` is 'a'..'z'; returns false for anything else or
  * for a name that has not been set (or whose mark has since died). */
-bool sag_ed_mark_set(Ed *ed, Buffer *b, u8 name, ByteOff at);
-bool sag_ed_mark_get(Ed *ed, const Buffer *b, u8 name, ByteOff *out);
+bool yew_ed_mark_set(Ed *ed, Buffer *b, u8 name, ByteOff at);
+bool yew_ed_mark_get(Ed *ed, const Buffer *b, u8 name, ByteOff *out);
 
 /* Sprint 22 pane plumbing.  A clone shares the BUFFER and copies the
  * view (cursor, viewport); Sprint 21's jumplist is per window and so
  * deliberately starts empty in the new pane. */
-struct Pane *sag_ed_pane_root(Ed *ed);
-Win *sag_ed_win_clone(Ed *ed, const Win *src);
-void sag_ed_win_release(Ed *ed, Win *w);
+struct Pane *yew_ed_pane_root(Ed *ed);
+Win *yew_ed_win_clone(Ed *ed, const Win *src);
+void yew_ed_win_release(Ed *ed, Win *w);
 
-EditCtx sag_ed_edit_ctx(Ed *ed);
-EditCtx sag_ed_edit_ctx_for(Ed *ed, Win *win);
-void sag_ed_finish_edit(Ed *ed, const EditCtx *ec);
-Cursor *sag_ed_cursor(Ed *ed);
-void sag_ed_insert_barrier(Ed *ed);
+EditCtx yew_ed_edit_ctx(Ed *ed);
+EditCtx yew_ed_edit_ctx_for(Ed *ed, Win *win);
+void yew_ed_finish_edit(Ed *ed, const EditCtx *ec);
+Cursor *yew_ed_cursor(Ed *ed);
+void yew_ed_insert_barrier(Ed *ed);
 /* Dispatch an already-resolved command without opening an editor-owned
  * transaction.  Fletch uses this after enlisting its outer MACRO
- * transaction; ordinary editor entry remains sag_ed_invoke(). */
-CmdStatus sag_ed_dispatch_resolved(Ed *ed, CmdId id, CmdCtx *cx);
-CmdStatus sag_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx);
-CmdStatus sag_ed_invoke_parsed(Ed *ed, CmdId id,
-                               const SagCmdInvoke *invoke);
-CmdStatus sag_ed_file_save(Ed *ed, bool force);
-CmdStatus sag_ed_file_write_to(Ed *ed, const char *path, bool force);
-CmdStatus sag_ed_file_save_win(Ed *ed, Win *win, bool force);
-CmdStatus sag_ed_file_write_to_win(Ed *ed, Win *win, const char *path,
+ * transaction; ordinary editor entry remains yew_ed_invoke(). */
+CmdStatus yew_ed_dispatch_resolved(Ed *ed, CmdId id, CmdCtx *cx);
+CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx);
+CmdStatus yew_ed_invoke_parsed(Ed *ed, CmdId id,
+                               const YewCmdInvoke *invoke);
+CmdStatus yew_ed_file_save(Ed *ed, bool force);
+CmdStatus yew_ed_file_write_to(Ed *ed, const char *path, bool force);
+CmdStatus yew_ed_file_save_win(Ed *ed, Win *win, bool force);
+CmdStatus yew_ed_file_write_to_win(Ed *ed, Win *win, const char *path,
                                    bool force);
-CmdStatus sag_ed_request_quit(Ed *ed, bool force);
+CmdStatus yew_ed_request_quit(Ed *ed, bool force);
 
-void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms);
-void sag_ed_handle_paste(Ed *ed, const u8 *bytes, size_t len, bool end);
-/* Mouse events go to sag_mouse_event (ui/mouse.h).  There is deliberately
+void yew_ed_handle_key(Ed *ed, Key key, i64 now_ms);
+void yew_ed_handle_paste(Ed *ed, const u8 *bytes, size_t len, bool end);
+/* Mouse events go to yew_mouse_event (ui/mouse.h).  There is deliberately
  * no editor-level twin: Sprint 27 DoD 2 is that the router is the only
  * place a mouse event becomes an action. */
-void sag_ed_resize(Ed *ed, bool resumed);
-void sag_ed_layout(Ed *ed);
-void sag_ed_render(Ed *ed);
-void sag_ed_damage_rows(Ed *ed, u16 lo, u16 hi);
-void sag_ed_damage_line(Ed *ed, LineNo line, bool line_count_changed);
-void sag_ed_damage_document(Ed *ed);
+void yew_ed_resize(Ed *ed, bool resumed);
+void yew_ed_layout(Ed *ed);
+void yew_ed_render(Ed *ed);
+void yew_ed_damage_rows(Ed *ed, u16 lo, u16 hi);
+void yew_ed_damage_line(Ed *ed, LineNo line, bool line_count_changed);
+void yew_ed_damage_document(Ed *ed);
 
-void sag_ed_prompt(Ed *ed, PromptKind prompt);
+void yew_ed_prompt(Ed *ed, PromptKind prompt);
 
 #endif

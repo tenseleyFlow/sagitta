@@ -1,5 +1,5 @@
-#ifndef SAG_UI_STRIP_H
-#define SAG_UI_STRIP_H
+#ifndef YEW_UI_STRIP_H
+#define YEW_UI_STRIP_H
 
 /*
  * Sprint 23 §3: the strip layout engine.
@@ -21,7 +21,7 @@
 
 enum {
     /* Labels clip here; a long path should not eat the strip. */
-    SAG_STRIP_LABEL_CELLS = 24
+    YEW_STRIP_LABEL_CELLS = 24
 };
 
 typedef struct StripEntry {
@@ -45,19 +45,19 @@ typedef struct StripSpan {
  * `more_left` / `more_right` report whether entries fall outside, so
  * the renderer can draw the `<` and `>N` indicators.
  */
-void sag_strip_layout(const StripEntry *entries, int n, u16 width,
+void yew_strip_layout(const StripEntry *entries, int n, u16 width,
                       int active, int *scroll, StripSpan *spans,
                       int *n_spans, bool *more_left, bool *more_right);
 
 /* Cells a label occupies once clipped — the same measurement the
  * layout used, exposed so a renderer never re-derives it. */
-u16 sag_strip_label_cells(const char *label);
+u16 yew_strip_label_cells(const char *label);
 /*
  * BYTES of the label that fit in those cells.  A renderer must draw
  * this many and no more: measuring the clipped width but drawing the
  * whole string writes the tail past the span, over whatever the layout
  * placed next.
  */
-size_t sag_strip_label_bytes(const char *label);
+size_t yew_strip_label_bytes(const char *label);
 
 #endif

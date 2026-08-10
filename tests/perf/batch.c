@@ -2,14 +2,14 @@
  * Sprint 37 batch-startup gate.
  *
  * Measure the product surface, not an internal bootstrap helper: every
- * sample forks and execs `sagitta --clean --batch empty.fl small.txt`, then
+ * sample forks and execs `yew --clean --batch empty.fl small.txt`, then
  * waits for the process to exit successfully.  The median of 101 warm-cache
  * runs is gated at 8 ms.  A p95 is reported as useful scheduling-noise
  * evidence but is not gated: subprocess tail latency belongs to the host
  * scheduler, while the median makes a stable regression gate for editor
  * startup itself.
  *
- * SAG_BATCH_INJECT_NS delays the child before exec.  It exists only so the
+ * YEW_BATCH_INJECT_NS delays the child before exec.  It exists only so the
  * Makefile selftest can prove that the gate rejects a known regression.
  */
 #define _POSIX_C_SOURCE 200809L
@@ -99,7 +99,7 @@ static bool fixture_open(char *root, size_t root_cap,
         "int main(void) {\n"
         "    return 0;\n"
         "}\n";
-    char template[] = "/tmp/sagitta-batch-perf-XXXXXX";
+    char template[] = "/tmp/yew-batch-perf-XXXXXX";
     char *made = mkdtemp(template);
     int n;
 
@@ -173,7 +173,7 @@ static int64_t env_i64(const char *name, int64_t fallback)
 
 static size_t sample_count(void)
 {
-    int64_t count = env_i64("SAG_BATCH_RUNS", BATCH_SAMPLES);
+    int64_t count = env_i64("YEW_BATCH_RUNS", BATCH_SAMPLES);
 
     if (count < BATCH_MIN_SAMPLES || count > BATCH_MAX_SAMPLES)
         return 0U;
@@ -248,25 +248,25 @@ int main(int argc, char **argv)
     const char *binary;
     bool gate = false;
     size_t count = sample_count();
-    int64_t inject_ns = env_i64("SAG_BATCH_INJECT_NS", 0);
+    int64_t inject_ns = env_i64("YEW_BATCH_INJECT_NS", 0);
     int64_t *samples;
     int64_t median;
     int64_t p95;
     size_t i;
     int result = 2;
 
-    if ((argc != 3 && argc != 4) || strcmp(argv[1], "--sagitta") != 0 ||
+    if ((argc != 3 && argc != 4) || strcmp(argv[1], "--yew") != 0 ||
         (argc == 4 && strcmp(argv[3], "--gate") != 0)) {
         (void)fprintf(stderr,
-                      "usage: %s --sagitta PATH [--gate]\n", argv[0]);
+                      "usage: %s --yew PATH [--gate]\n", argv[0]);
         return 2;
     }
     binary = argv[2];
     gate = argc == 4;
     if (count == 0U || inject_ns < 0) {
         (void)fprintf(stderr,
-                      "perf-batch: SAG_BATCH_RUNS must be 100..1001 and "
-                      "SAG_BATCH_INJECT_NS must be nonnegative\n");
+                      "perf-batch: YEW_BATCH_RUNS must be 100..1001 and "
+                      "YEW_BATCH_INJECT_NS must be nonnegative\n");
         return 2;
     }
     samples = malloc(count * sizeof(*samples));

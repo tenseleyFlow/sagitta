@@ -4,7 +4,7 @@ set -eu
 
 script_dir=$(CDPATH='' cd "$(dirname "$0")" && pwd)
 repo_dir=$(dirname "$script_dir")
-tmp=$(umask 077 && mktemp -d "${TMPDIR:-/tmp}/sagitta-bans.XXXXXX")
+tmp=$(umask 077 && mktemp -d "${TMPDIR:-/tmp}/yew-bans.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 
 all_files=$tmp/all-files
@@ -189,7 +189,7 @@ fi
 #
 # Sprint 32 DoD 10: the VM never aborts and never asserts.
 #
-# An internal invariant break goes through sag_bug -- a structured
+# An internal invariant break goes through yew_bug -- a structured
 # report and exit 4 -- because a bare abort() gives a reporter a signal
 # and nothing else, and assert() is compiled out under NDEBUG, which
 # turns the one check that mattered into no check at all.
@@ -205,12 +205,12 @@ while IFS= read -r file; do
         2>/dev/null | sed "s|^|${file#"$repo_dir"/}:|" >>"$fl_abort_hits" || :
 done <"$source_files"
 if [ -s "$fl_abort_hits" ]; then
-    echo "ban: src/fl/ reports internal errors through sag_bug, not abort()" \
+    echo "ban: src/fl/ reports internal errors through yew_bug, not abort()" \
         >>"$hits"
     cat "$fl_abort_hits" >>"$hits"
 fi
 
-scan "qsort is unstable; use sag_sort_stable" \
+scan "qsort is unstable; use yew_sort_stable" \
     '(^|[^[:alnum:]_])qsort[[:space:]]*\(' "$all_files"
 scan "__attribute__ is outside the locked C11 subset" \
     '__attribute__' "$all_files"
@@ -229,7 +229,7 @@ scan "Unicode width math belongs only in src/unicode" \
 scan "pty creation must use the audited posix_openpt harness" \
     '(forkpty|openpty|-lutil)' "$pty_files"
 scan "golden updates are forbidden in CI" \
-    'SAG_PTY_UPDATE' "$ci_files"
+    'YEW_PTY_UPDATE' "$ci_files"
 scan "piece tree file I/O belongs to Sprint 8" \
     '(^|[^[:alnum:]_])(open|fopen|read)[[:space:]]*\(' "$piece_files"
 scan "generated edit campaigns must use xorshift64*, not libc randomness" \
@@ -265,7 +265,7 @@ while IFS= read -r file; do
     case ${file#"$repo_dir"/} in
         src/text/register.c|src/text/register.h) continue ;;
     esac
-    grep -nE -e '(^|[^[:alnum:]_])sag_reg_set[[:space:]]*\(' \
+    grep -nE -e '(^|[^[:alnum:]_])yew_reg_set[[:space:]]*\(' \
         "$file" 2>/dev/null |
         sed "s|^|${file#"$repo_dir"/}:|" >>"$register_set_hits" || :
 done <"$source_files"
@@ -292,7 +292,7 @@ option_set_calls()
                 continue
                 ;;
         esac
-        grep -nE -e '(^|[^[:alnum:]_])sag_opt_set[[:space:]]*\(' \
+        grep -nE -e '(^|[^[:alnum:]_])yew_opt_set[[:space:]]*\(' \
             "$file" 2>/dev/null |
             sed "s|^|${file#"$repo_dir"/}:|" >>"$option_out" || :
     done <"$option_list"
@@ -307,7 +307,7 @@ fi
 # Prove the allow-list catches the next call site instead of silently
 # becoming decorative as source layout evolves.
 option_seed=$tmp/seeded-option-call.c
-echo 'void seeded(void) { (void)sag_opt_set(ed, 0, "x", 1, v, err); }' \
+echo 'void seeded(void) { (void)yew_opt_set(ed, 0, "x", 1, v, err); }' \
     >"$option_seed"
 printf '%s\n' "$option_seed" >"$tmp/option-seed-list"
 option_set_calls "$tmp/option-seed-list" "$tmp/option-seed-hits"
@@ -317,7 +317,7 @@ if [ "$(wc -l <"$tmp/option-seed-hits" | tr -d ' ')" != "1" ]; then
 fi
 
 register=$repo_dir/src/text/register.c
-if grep -nE '(unicode/width\.h|sag_(cluster_)?width)' \
+if grep -nE '(unicode/width\.h|yew_(cluster_)?width)' \
         "$register" >"$tmp/register-width-hits" 2>/dev/null; then
     echo "ban: register paste width calculations belong in src/unicode" \
         >>"$hits"
@@ -330,15 +330,15 @@ if grep -nE '(column|landed|content_column)\.v' \
     sed 's|^|src/text/register.c:|' \
         "$tmp/register-column-math-hits" >>"$hits"
 fi
-for required in sag_off_to_ccol sag_ccol_to_off_padded \
-                sag_ccol_shortfall sag_ccol_max; do
+for required in yew_off_to_ccol yew_ccol_to_off_padded \
+                yew_ccol_shortfall yew_ccol_max; do
     if ! grep -F "$required" "$register" >/dev/null 2>&1; then
         echo "ban: register paste must route column math through $required" \
             >>"$hits"
     fi
 done
 
-if grep -nE 'sag_textbuf_|piece\.h' \
+if grep -nE 'yew_textbuf_|piece\.h' \
         "$repo_dir/tests/fuzz/oracle.c" >"$tmp/oracle-hits" 2>/dev/null; then
     echo "ban: the text-buffer oracle must remain implementation-independent" \
         >>"$hits"
@@ -352,7 +352,7 @@ if [ ! -f "$tables" ] ||
     echo "ban: src/unicode/tables.c lacks its generated-file marker" >>"$hits"
 fi
 
-# sag_bug is the single audited process-termination site required by the
+# yew_bug is the single audited process-termination site required by the
 # exit-code contract.  No other source file may call exit().
 exit_hits=$tmp/exit
 : >"$exit_hits"
@@ -364,7 +364,7 @@ while IFS= read -r file; do
         sed "s|^|${file#"$repo_dir"/}:|" >>"$exit_hits" || :
 done <"$source_files"
 if [ -s "$exit_hits" ]; then
-    echo "ban: exit() is allowed only in src/util/log.c:sag_bug" >>"$hits"
+    echo "ban: exit() is allowed only in src/util/log.c:yew_bug" >>"$hits"
     cat "$exit_hits" >>"$hits"
 fi
 

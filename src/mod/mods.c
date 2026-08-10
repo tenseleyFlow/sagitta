@@ -2,56 +2,56 @@
 
 #include <stdio.h>
 
-#ifndef SAG_WITH_LSP
-#define SAG_WITH_LSP 0
+#ifndef YEW_WITH_LSP
+#define YEW_WITH_LSP 0
 #endif
-#ifndef SAG_WITH_AI
-#define SAG_WITH_AI 0
+#ifndef YEW_WITH_AI
+#define YEW_WITH_AI 0
 #endif
-#ifndef SAG_WITH_FUSS
-#define SAG_WITH_FUSS 0
+#ifndef YEW_WITH_FUSS
+#define YEW_WITH_FUSS 0
 #endif
-#ifndef SAG_WITH_PLUGINS
-#define SAG_WITH_PLUGINS 0
+#ifndef YEW_WITH_PLUGINS
+#define YEW_WITH_PLUGINS 0
 #endif
 
-bool sag_mod_enabled(SagMod mod)
+bool yew_mod_enabled(YewMod mod)
 {
     switch (mod) {
-    case SAG_MOD_LSP:
-        return SAG_WITH_LSP != 0;
-    case SAG_MOD_AI:
-        return SAG_WITH_AI != 0;
-    case SAG_MOD_FUSS:
-        return SAG_WITH_FUSS != 0;
-    case SAG_MOD_PLUGINS:
-        return SAG_WITH_PLUGINS != 0;
-    case SAG_MOD_COUNT:
+    case YEW_MOD_LSP:
+        return YEW_WITH_LSP != 0;
+    case YEW_MOD_AI:
+        return YEW_WITH_AI != 0;
+    case YEW_MOD_FUSS:
+        return YEW_WITH_FUSS != 0;
+    case YEW_MOD_PLUGINS:
+        return YEW_WITH_PLUGINS != 0;
+    case YEW_MOD_COUNT:
         break;
     }
     return false;
 }
 
-const char *sag_mod_name(SagMod mod)
+const char *yew_mod_name(YewMod mod)
 {
-    static const char *const names[SAG_MOD_COUNT] = {
+    static const char *const names[YEW_MOD_COUNT] = {
         "lsp", "ai", "fuss", "plugins"
     };
 
-    if ((unsigned int)mod >= (unsigned int)SAG_MOD_COUNT) {
+    if ((unsigned int)mod >= (unsigned int)YEW_MOD_COUNT) {
         return "unknown";
     }
     return names[mod];
 }
 
-bool sag_mod_require(SagMod mod, char *err, size_t errsz)
+bool yew_mod_require(YewMod mod, char *err, size_t errsz)
 {
     const char *name;
 
-    if (sag_mod_enabled(mod)) {
+    if (yew_mod_enabled(mod)) {
         return true;
     }
-    name = sag_mod_name(mod);
+    name = yew_mod_name(mod);
     if (err != NULL && errsz != 0U) {
         (void)snprintf(err, errsz,
             "this build has no %s module; rebuild with 'make MODULES=\"… %s\"'",

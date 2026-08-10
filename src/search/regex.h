@@ -1,5 +1,5 @@
-#ifndef SAG_SEARCH_REGEX_H
-#define SAG_SEARCH_REGEX_H
+#ifndef YEW_SEARCH_REGEX_H
+#define YEW_SEARCH_REGEX_H
 
 /*
  * Sprint 20: the bespoke regex engine.
@@ -37,70 +37,70 @@
 #include "util/buf.h"
 
 typedef struct TextBuf TextBuf;
-typedef struct SagRe SagRe; /* arena-owned, immutable once compiled */
+typedef struct YewRe YewRe; /* arena-owned, immutable once compiled */
 
 enum {
-    SAG_RE_ICASE = 1U << 0,     /* simple case folding, s02 tables      */
-    SAG_RE_DOTALL = 1U << 1,    /* '.' also matches '\n'                */
-    SAG_RE_LITERAL = 1U << 2,   /* the whole pattern is literal text    */
-    SAG_RE_NOCAPTURE = 1U << 3  /* caller promises not to read groups   */
+    YEW_RE_ICASE = 1U << 0,     /* simple case folding, s02 tables      */
+    YEW_RE_DOTALL = 1U << 1,    /* '.' also matches '\n'                */
+    YEW_RE_LITERAL = 1U << 2,   /* the whole pattern is literal text    */
+    YEW_RE_NOCAPTURE = 1U << 3  /* caller promises not to read groups   */
 };
 
 enum {
-    SAG_RE_MAX_GROUPS = 32,
-    SAG_RE_MAX_PROG = 4096,
-    SAG_RE_MAX_REPEAT = 1000,
-    SAG_RE_MAX_CLASSES = 256,
-    SAG_RE_MAX_PATTERN = 64U * 1024U
+    YEW_RE_MAX_GROUPS = 32,
+    YEW_RE_MAX_PROG = 4096,
+    YEW_RE_MAX_REPEAT = 1000,
+    YEW_RE_MAX_CLASSES = 256,
+    YEW_RE_MAX_PATTERN = 64U * 1024U
 };
 
 /* `off` is a byte offset into the pattern so Sprint 18's prompt can point
  * a caret at the offending construct while the user is still typing. */
-typedef struct SagReErr {
+typedef struct YewReErr {
     u32 off;
     const char *msg;
-} SagReErr;
+} YewReErr;
 
-typedef struct SagReMatch {
-    Span g[SAG_RE_MAX_GROUPS]; /* g[0] is the whole match               */
+typedef struct YewReMatch {
+    Span g[YEW_RE_MAX_GROUPS]; /* g[0] is the whole match               */
     u32 ngroups;
-} SagReMatch;
+} YewReMatch;
 
 /*
  * One input struct, two backings, no vtable and no allocation: a TextBuf
  * (searched through its iterator) or a flat byte range.  `window` bounds
  * the region under consideration and is what \A and \z anchor to.
  */
-typedef struct SagReInput {
+typedef struct YewReInput {
     const TextBuf *tb; /* NULL => raw bytes                             */
     const u8 *bytes;
     u64 len;
     Span window;
-} SagReInput;
+} YewReInput;
 
-SagRe *sag_re_compile(Arena *a, const char *pat, size_t len, u32 flags,
-                      SagReErr *err);
+YewRe *yew_re_compile(Arena *a, const char *pat, size_t len, u32 flags,
+                      YewReErr *err);
 
 /* Leftmost-first match at or after `from`. */
-bool sag_re_search(const SagRe *re, const SagReInput *in, ByteOff from,
-                   SagReMatch *out);
+bool yew_re_search(const YewRe *re, const YewReInput *in, ByteOff from,
+                   YewReMatch *out);
 /* The last match starting strictly before `before`. */
-bool sag_re_search_back(const SagRe *re, const SagReInput *in,
-                        ByteOff before, SagReMatch *out);
+bool yew_re_search_back(const YewRe *re, const YewReInput *in,
+                        ByteOff before, YewReMatch *out);
 /* Anchored at `at`: the match must start exactly there. */
-bool sag_re_match_at(const SagRe *re, const SagReInput *in, ByteOff at,
-                     SagReMatch *out);
-bool sag_re_test(const SagRe *re, const SagReInput *in, ByteOff from);
-u32 sag_re_group_count(const SagRe *re);
+bool yew_re_match_at(const YewRe *re, const YewReInput *in, ByteOff at,
+                     YewReMatch *out);
+bool yew_re_test(const YewRe *re, const YewReInput *in, ByteOff from);
+u32 yew_re_group_count(const YewRe *re);
 /* Minimum codepoints any match consumes; 0 when a match may be empty. */
-u32 sag_re_min_len(const SagRe *re);
+u32 yew_re_min_len(const YewRe *re);
 
 /* Convenience for callers holding a plain buffer. */
-SagReInput sag_re_input_bytes(const u8 *bytes, u64 len);
-SagReInput sag_re_input_textbuf(const TextBuf *tb);
+YewReInput yew_re_input_bytes(const u8 *bytes, u64 len);
+YewReInput yew_re_input_textbuf(const TextBuf *tb);
 /* One byte, either backing.  Seeks per call: fine for a match-sized
  * span, wrong for a scan. */
-bool sag_re_input_byte(const SagReInput *in, u64 off, u8 *out);
+bool yew_re_input_byte(const YewReInput *in, u64 off, u8 *out);
 
 
 /*
@@ -113,7 +113,7 @@ bool sag_re_input_byte(const SagReInput *in, u64 off, u8 *out);
  * searches for text the user did not type as a pattern must call this
  * rather than roll their own.
  */
-void sag_re_quote(Bytebuf *out, const u8 *s, size_t n);
+void yew_re_quote(Bytebuf *out, const u8 *s, size_t n);
 
 /*
  * Sprint 21 §2 inputs to the smartcase table.  "Uppercase literal" is a
@@ -121,8 +121,8 @@ void sag_re_quote(Bytebuf *out, const u8 *s, size_t n);
  * report false, because none of them is the user asking for case
  * sensitivity.  `\c`/`\C` outrank every option.
  */
-bool sag_re_has_upper_literal(const SagRe *re);
-bool sag_re_forces_icase(const SagRe *re);
-bool sag_re_forces_case(const SagRe *re);
+bool yew_re_has_upper_literal(const YewRe *re);
+bool yew_re_forces_icase(const YewRe *re);
+bool yew_re_forces_case(const YewRe *re);
 
 #endif

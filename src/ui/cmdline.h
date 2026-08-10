@@ -1,5 +1,5 @@
-#ifndef SAG_UI_CMDLINE_H
-#define SAG_UI_CMDLINE_H
+#ifndef YEW_UI_CMDLINE_H
+#define YEW_UI_CMDLINE_H
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -15,14 +15,14 @@
 typedef struct Ed Ed;
 
 typedef enum {
-    SAG_PROMPT_CMD,
-    SAG_PROMPT_SEARCH_F,
-    SAG_PROMPT_SEARCH_B,
-    SAG_PROMPT_INPUT
-} SagPromptKind;
+    YEW_PROMPT_CMD,
+    YEW_PROMPT_SEARCH_F,
+    YEW_PROMPT_SEARCH_B,
+    YEW_PROMPT_INPUT
+} YewPromptKind;
 
 typedef struct CmdLine {
-    SagPromptKind kind;
+    YewPromptKind kind;
     bool active;
     TextBuf *buf;
     Cursor cur;
@@ -49,50 +49,50 @@ typedef struct CmdLine {
     Span menu_original;
 } CmdLine;
 
-void sag_cmdline_open(Ed *ed, SagPromptKind kind, const char *seed);
-void sag_cmdline_close(Ed *ed, bool accepted);
-void sag_cmdline_dispose(Ed *ed);
-bool sag_cmdline_key(Ed *ed, const Key *key);
-void sag_cmdline_paste(Ed *ed, const u8 *bytes, size_t len);
-void sag_cmdline_draw(Ed *ed, Rect rect);
-Win *sag_cmdline_target(Ed *ed);
-void sag_cmdline_sync(Ed *ed);
+void yew_cmdline_open(Ed *ed, YewPromptKind kind, const char *seed);
+void yew_cmdline_close(Ed *ed, bool accepted);
+void yew_cmdline_dispose(Ed *ed);
+bool yew_cmdline_key(Ed *ed, const Key *key);
+void yew_cmdline_paste(Ed *ed, const u8 *bytes, size_t len);
+void yew_cmdline_draw(Ed *ed, Rect rect);
+Win *yew_cmdline_target(Ed *ed);
+void yew_cmdline_sync(Ed *ed);
 /* Appends the prompt's current text to `out`. */
-void sag_cmdline_text(Ed *ed, Bytebuf *out);
-void sag_cmdline_edited(Ed *ed);
+void yew_cmdline_text(Ed *ed, Bytebuf *out);
+void yew_cmdline_edited(Ed *ed);
 
 /*
  * Continue a sliced completion scan on the idle path; true while more
- * remains.  The loop calls this beside sag_picker_tick, after input is
+ * remains.  The loop calls this beside yew_picker_tick, after input is
  * drained, for the reason given there.
  *
  * `scanning` is the same condition the tick acts on, exposed so
- * sag_loop_deadline can refuse to sleep on exactly it.  Use it rather
+ * yew_loop_deadline can refuse to sleep on exactly it.  Use it rather
  * than re-deriving the test — the two drifting apart is a busy loop in
  * one direction and a stalled menu in the other.
  */
-bool sag_cmdline_comp_tick(Ed *ed);
-bool sag_cmdline_comp_scanning(const Ed *ed);
+bool yew_cmdline_comp_tick(Ed *ed);
+bool yew_cmdline_comp_scanning(const Ed *ed);
 
-CmdStatus sag_cmdline_cmd_hist_prev(CmdCtx *cx);
-CmdStatus sag_cmdline_cmd_hist_next(CmdCtx *cx);
-CmdStatus sag_cmdline_cmd_complete_next(CmdCtx *cx);
-CmdStatus sag_cmdline_cmd_complete_prev(CmdCtx *cx);
-CmdStatus sag_cmdline_cmd_insert_register(CmdCtx *cx);
-CmdStatus sag_cmdline_cmd_literal_next(CmdCtx *cx);
+CmdStatus yew_cmdline_cmd_hist_prev(CmdCtx *cx);
+CmdStatus yew_cmdline_cmd_hist_next(CmdCtx *cx);
+CmdStatus yew_cmdline_cmd_complete_next(CmdCtx *cx);
+CmdStatus yew_cmdline_cmd_complete_prev(CmdCtx *cx);
+CmdStatus yew_cmdline_cmd_insert_register(CmdCtx *cx);
+CmdStatus yew_cmdline_cmd_literal_next(CmdCtx *cx);
 /* §8: click selects, a second click on the same row accepts. */
-bool sag_cmdline_menu_click(Ed *ed, i32 row);
-bool sag_cmdline_menu_scroll(Ed *ed, i32 delta);
+bool yew_cmdline_menu_click(Ed *ed, i32 row);
+bool yew_cmdline_menu_scroll(Ed *ed, i32 delta);
 
-CmdStatus sag_cmdline_cmd_menu_page_next(CmdCtx *cx);
-CmdStatus sag_cmdline_cmd_menu_page_prev(CmdCtx *cx);
-CmdStatus sag_cmdline_cmd_menu_accept(CmdCtx *cx);
-CmdStatus sag_cmdline_cmd_menu_dismiss(CmdCtx *cx);
-CmdStatus sag_cmdline_cmd_ghost_accept(CmdCtx *cx);
-CmdStatus sag_cmdline_cmd_accept(CmdCtx *cx);
-CmdStatus sag_cmdline_cmd_cancel(CmdCtx *cx);
-CmdStatus sag_cmdline_cmd_delete_word_prev(CmdCtx *cx);
-CmdStatus sag_cmdline_cmd_delete_to_home(CmdCtx *cx);
-CmdStatus sag_cmdline_cmd_delete_to_end(CmdCtx *cx);
+CmdStatus yew_cmdline_cmd_menu_page_next(CmdCtx *cx);
+CmdStatus yew_cmdline_cmd_menu_page_prev(CmdCtx *cx);
+CmdStatus yew_cmdline_cmd_menu_accept(CmdCtx *cx);
+CmdStatus yew_cmdline_cmd_menu_dismiss(CmdCtx *cx);
+CmdStatus yew_cmdline_cmd_ghost_accept(CmdCtx *cx);
+CmdStatus yew_cmdline_cmd_accept(CmdCtx *cx);
+CmdStatus yew_cmdline_cmd_cancel(CmdCtx *cx);
+CmdStatus yew_cmdline_cmd_delete_word_prev(CmdCtx *cx);
+CmdStatus yew_cmdline_cmd_delete_to_home(CmdCtx *cx);
+CmdStatus yew_cmdline_cmd_delete_to_end(CmdCtx *cx);
 
 #endif

@@ -1,5 +1,5 @@
-#ifndef SAG_EDIT_MODE_H
-#define SAG_EDIT_MODE_H
+#ifndef YEW_EDIT_MODE_H
+#define YEW_EDIT_MODE_H
 
 #include <stdbool.h>
 
@@ -9,14 +9,14 @@
 typedef struct Ed Ed;
 
 typedef enum {
-    SAG_MODE_L,
-    SAG_MODE_W,
-    SAG_MODE_B,
-    SAG_MODE_H,
-    SAG_MODE_I,
-    SAG_MODE_E,
-    SAG_MODE_F,
-    SAG_MODE__N
+    YEW_MODE_L,
+    YEW_MODE_W,
+    YEW_MODE_B,
+    YEW_MODE_H,
+    YEW_MODE_I,
+    YEW_MODE_E,
+    YEW_MODE_F,
+    YEW_MODE__N
 } Mode;
 
 typedef struct ModeDesc {
@@ -27,10 +27,10 @@ typedef struct ModeDesc {
     u8 layer;
 } ModeDesc;
 
-extern const ModeDesc sag_modes[SAG_MODE__N];
+extern const ModeDesc yew_modes[YEW_MODE__N];
 
-CmdStatus sag_mode_enter(Ed *ed, Mode mode);
-CmdStatus sag_mode_enter_highlight(Ed *ed, Mode unit, bool sticky);
-CmdStatus sag_mode_escape(Ed *ed);
+CmdStatus yew_mode_enter(Ed *ed, Mode mode);
+CmdStatus yew_mode_enter_highlight(Ed *ed, Mode unit, bool sticky);
+CmdStatus yew_mode_escape(Ed *ed);
 
 #endif

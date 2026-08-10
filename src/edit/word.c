@@ -10,7 +10,7 @@ typedef struct {
     u64 lo;
     u64 hi;
     u32 cp;
-    SagWb prop;
+    YewWb prop;
 } WordCp;
 
 typedef enum {
@@ -24,16 +24,16 @@ static size_t copy_bytes(const TextBuf *tb, u64 at, u8 *out, size_t cap)
 {
     TextIter it;
     size_t copied = 0U;
-    u64 len = sag_textbuf_len(tb);
+    u64 len = yew_textbuf_len(tb);
 
-    if (at >= len || cap == 0U || !sag_textiter_begin(&it, tb, BYTEOFF(at)))
+    if (at >= len || cap == 0U || !yew_textiter_begin(&it, tb, BYTEOFF(at)))
         return 0U;
     while (copied < cap) {
         const u8 *chunk;
         u64 chunk_len;
         size_t take;
 
-        if (!sag_textiter_chunk(&it, tb, &chunk, &chunk_len))
+        if (!yew_textiter_chunk(&it, tb, &chunk, &chunk_len))
             break;
         take = (size_t)(chunk_len < (u64)(cap - copied)
                             ? chunk_len
@@ -41,7 +41,7 @@ static size_t copy_bytes(const TextBuf *tb, u64 at, u8 *out, size_t cap)
         for (size_t i = 0U; i < take; i++)
             out[copied + i] = chunk[i];
         copied += take;
-        if (copied == cap || !sag_textiter_advance(&it, tb))
+        if (copied == cap || !yew_textiter_advance(&it, tb))
             break;
     }
     return copied;
@@ -49,39 +49,39 @@ static size_t copy_bytes(const TextBuf *tb, u64 at, u8 *out, size_t cap)
 
 static bool cp_next(const TextBuf *tb, u64 at, WordCp *out)
 {
-    u8 bytes[SAG_UTF8_MAX];
+    u8 bytes[YEW_UTF8_MAX];
     size_t have;
     size_t used;
 
-    if (at >= sag_textbuf_len(tb))
+    if (at >= yew_textbuf_len(tb))
         return false;
     have = copy_bytes(tb, at, bytes, sizeof(bytes));
-    used = sag_utf8_decode(bytes, have, &out->cp);
+    used = yew_utf8_decode(bytes, have, &out->cp);
     if (used == 0U)
         return false;
     out->lo = at;
     out->hi = at + (u64)used;
-    out->prop = sag_wb_prop(out->cp);
+    out->prop = yew_wb_prop(out->cp);
     return true;
 }
 
 static bool cp_prev(const TextBuf *tb, u64 at, WordCp *out)
 {
-    u8 bytes[SAG_UTF8_MAX];
+    u8 bytes[YEW_UTF8_MAX];
     size_t back;
     size_t best = 0U;
     u32 best_cp = 0U;
 
     if (at == 0U)
         return false;
-    for (back = 1U; back <= SAG_UTF8_MAX && (u64)back <= at; back++) {
+    for (back = 1U; back <= YEW_UTF8_MAX && (u64)back <= at; back++) {
         size_t have = copy_bytes(tb, at - (u64)back, bytes, back);
         u32 cp;
         size_t used;
 
         if (have != back)
             continue;
-        used = sag_utf8_decode(bytes, have, &cp);
+        used = yew_utf8_decode(bytes, have, &cp);
         if (used == back) {
             best = back;
             best_cp = cp;
@@ -92,14 +92,14 @@ static bool cp_prev(const TextBuf *tb, u64 at, WordCp *out)
     out->lo = at - (u64)best;
     out->hi = at;
     out->cp = best_cp;
-    out->prop = sag_wb_prop(best_cp);
+    out->prop = yew_wb_prop(best_cp);
     return true;
 }
 
 static bool prev_significant(const TextBuf *tb, u64 at, WordCp *out)
 {
     while (cp_prev(tb, at, out)) {
-        if (!sag_wb_is_ignored(out->prop))
+        if (!yew_wb_is_ignored(out->prop))
             return true;
         at = out->lo;
     }
@@ -109,47 +109,47 @@ static bool prev_significant(const TextBuf *tb, u64 at, WordCp *out)
 static bool next_significant(const TextBuf *tb, u64 at, WordCp *out)
 {
     while (cp_next(tb, at, out)) {
-        if (!sag_wb_is_ignored(out->prop))
+        if (!yew_wb_is_ignored(out->prop))
             return true;
         at = out->hi;
     }
     return false;
 }
 
-static bool is_newline(SagWb p)
+static bool is_newline(YewWb p)
 {
-    return p == SAG_WB_CR || p == SAG_WB_LF || p == SAG_WB_NEWLINE;
+    return p == YEW_WB_CR || p == YEW_WB_LF || p == YEW_WB_NEWLINE;
 }
 
-static bool is_ah(SagWb p)
+static bool is_ah(YewWb p)
 {
-    return p == SAG_WB_ALETTER || p == SAG_WB_HEBREW_LETTER;
+    return p == YEW_WB_ALETTER || p == YEW_WB_HEBREW_LETTER;
 }
 
-static bool is_mid_letter(SagWb p)
+static bool is_mid_letter(YewWb p)
 {
-    return p == SAG_WB_MIDLETTER || p == SAG_WB_MIDNUMLET ||
-           p == SAG_WB_SINGLE_QUOTE;
+    return p == YEW_WB_MIDLETTER || p == YEW_WB_MIDNUMLET ||
+           p == YEW_WB_SINGLE_QUOTE;
 }
 
-static bool is_mid_num(SagWb p)
+static bool is_mid_num(YewWb p)
 {
-    return p == SAG_WB_MIDNUM || p == SAG_WB_MIDNUMLET ||
-           p == SAG_WB_SINGLE_QUOTE;
+    return p == YEW_WB_MIDNUM || p == YEW_WB_MIDNUMLET ||
+           p == YEW_WB_SINGLE_QUOTE;
 }
 
-static bool is_ext_glue_left(SagWb p)
+static bool is_ext_glue_left(YewWb p)
 {
-    return is_ah(p) || p == SAG_WB_NUMERIC || p == SAG_WB_KATAKANA ||
-           p == SAG_WB_EXTENDNUMLET;
+    return is_ah(p) || p == YEW_WB_NUMERIC || p == YEW_WB_KATAKANA ||
+           p == YEW_WB_EXTENDNUMLET;
 }
 
-static bool is_ext_glue_right(SagWb p)
+static bool is_ext_glue_right(YewWb p)
 {
-    return is_ah(p) || p == SAG_WB_NUMERIC || p == SAG_WB_KATAKANA;
+    return is_ah(p) || p == YEW_WB_NUMERIC || p == YEW_WB_KATAKANA;
 }
 
-bool sag_word_boundary(const TextBuf *tb, ByteOff pos)
+bool yew_word_boundary(const TextBuf *tb, ByteOff pos)
 {
     WordCp immediate_left;
     WordCp immediate_right;
@@ -165,7 +165,7 @@ bool sag_word_boundary(const TextBuf *tb, ByteOff pos)
 
     if (tb == NULL)
         return true;
-    len = sag_textbuf_len(tb);
+    len = yew_textbuf_len(tb);
     if (pos.v == 0U || pos.v >= len)
         return true;
     if (!cp_prev(tb, pos.v, &immediate_left) ||
@@ -174,21 +174,21 @@ bool sag_word_boundary(const TextBuf *tb, ByteOff pos)
 
     /* WB3, WB3a, WB3b, WB3c and WB3d precede ignored-character
      * normalization and therefore use the adjacent codepoints. */
-    if (immediate_left.prop == SAG_WB_CR &&
-        immediate_right.prop == SAG_WB_LF)
+    if (immediate_left.prop == YEW_WB_CR &&
+        immediate_right.prop == YEW_WB_LF)
         return false;
     if (is_newline(immediate_left.prop) ||
         is_newline(immediate_right.prop))
         return true;
-    if (immediate_left.prop == SAG_WB_ZWJ &&
-        sag_unicode_is_extended_pictographic(immediate_right.cp))
+    if (immediate_left.prop == YEW_WB_ZWJ &&
+        yew_unicode_is_extended_pictographic(immediate_right.cp))
         return false;
-    if (immediate_left.prop == SAG_WB_WSEGSPACE &&
-        immediate_right.prop == SAG_WB_WSEGSPACE)
+    if (immediate_left.prop == YEW_WB_WSEGSPACE &&
+        immediate_right.prop == YEW_WB_WSEGSPACE)
         return false;
 
     /* WB4: ignored codepoints attach to the codepoint before them. */
-    if (sag_wb_is_ignored(immediate_right.prop))
+    if (yew_wb_is_ignored(immediate_right.prop))
         return false;
 
     have_left = prev_significant(tb, pos.v, &left);
@@ -207,48 +207,48 @@ bool sag_word_boundary(const TextBuf *tb, ByteOff pos)
     if (have_left2 && is_ah(left2.prop) && is_mid_letter(left.prop) &&
         is_ah(right.prop))
         return false;
-    if (left.prop == SAG_WB_HEBREW_LETTER &&
-        right.prop == SAG_WB_SINGLE_QUOTE)
+    if (left.prop == YEW_WB_HEBREW_LETTER &&
+        right.prop == YEW_WB_SINGLE_QUOTE)
         return false;
-    if (left.prop == SAG_WB_HEBREW_LETTER &&
-        right.prop == SAG_WB_DOUBLE_QUOTE && have_right2 &&
-        right2.prop == SAG_WB_HEBREW_LETTER)
+    if (left.prop == YEW_WB_HEBREW_LETTER &&
+        right.prop == YEW_WB_DOUBLE_QUOTE && have_right2 &&
+        right2.prop == YEW_WB_HEBREW_LETTER)
         return false;
-    if (have_left2 && left2.prop == SAG_WB_HEBREW_LETTER &&
-        left.prop == SAG_WB_DOUBLE_QUOTE &&
-        right.prop == SAG_WB_HEBREW_LETTER)
+    if (have_left2 && left2.prop == YEW_WB_HEBREW_LETTER &&
+        left.prop == YEW_WB_DOUBLE_QUOTE &&
+        right.prop == YEW_WB_HEBREW_LETTER)
         return false;
 
     /* WB8-WB13: numbers, letters, and Katakana. */
-    if (left.prop == SAG_WB_NUMERIC && right.prop == SAG_WB_NUMERIC)
+    if (left.prop == YEW_WB_NUMERIC && right.prop == YEW_WB_NUMERIC)
         return false;
-    if (is_ah(left.prop) && right.prop == SAG_WB_NUMERIC)
+    if (is_ah(left.prop) && right.prop == YEW_WB_NUMERIC)
         return false;
-    if (left.prop == SAG_WB_NUMERIC && is_ah(right.prop))
+    if (left.prop == YEW_WB_NUMERIC && is_ah(right.prop))
         return false;
-    if (have_left2 && left2.prop == SAG_WB_NUMERIC &&
-        is_mid_num(left.prop) && right.prop == SAG_WB_NUMERIC)
+    if (have_left2 && left2.prop == YEW_WB_NUMERIC &&
+        is_mid_num(left.prop) && right.prop == YEW_WB_NUMERIC)
         return false;
-    if (left.prop == SAG_WB_NUMERIC && is_mid_num(right.prop) &&
-        have_right2 && right2.prop == SAG_WB_NUMERIC)
+    if (left.prop == YEW_WB_NUMERIC && is_mid_num(right.prop) &&
+        have_right2 && right2.prop == YEW_WB_NUMERIC)
         return false;
-    if (left.prop == SAG_WB_KATAKANA && right.prop == SAG_WB_KATAKANA)
+    if (left.prop == YEW_WB_KATAKANA && right.prop == YEW_WB_KATAKANA)
         return false;
     if (is_ext_glue_left(left.prop) &&
-        right.prop == SAG_WB_EXTENDNUMLET)
+        right.prop == YEW_WB_EXTENDNUMLET)
         return false;
-    if (left.prop == SAG_WB_EXTENDNUMLET && is_ext_glue_right(right.prop))
+    if (left.prop == YEW_WB_EXTENDNUMLET && is_ext_glue_right(right.prop))
         return false;
 
     /* WB15/WB16: pair regional indicators from the start of their run. */
-    if (left.prop == SAG_WB_REGIONAL_INDICATOR &&
-        right.prop == SAG_WB_REGIONAL_INDICATOR) {
+    if (left.prop == YEW_WB_REGIONAL_INDICATOR &&
+        right.prop == YEW_WB_REGIONAL_INDICATOR) {
         u64 scan = left.lo;
         u64 count = 1U;
         WordCp prior;
 
         while (prev_significant(tb, scan, &prior) &&
-               prior.prop == SAG_WB_REGIONAL_INDICATOR) {
+               prior.prop == YEW_WB_REGIONAL_INDICATOR) {
             count++;
             scan = prior.lo;
         }
@@ -267,7 +267,7 @@ static bool word_motion_boundary(const TextBuf *tb, ByteOff pos)
     WordCp left;
     WordCp right;
 
-    if (sag_word_boundary(tb, pos))
+    if (yew_word_boundary(tb, pos))
         return true;
     if (!cp_prev(tb, pos.v, &left) || !cp_next(tb, pos.v, &right))
         return true;
@@ -277,12 +277,12 @@ static bool word_motion_boundary(const TextBuf *tb, ByteOff pos)
 
 static ByteOff clamp_grapheme(const TextBuf *tb, ByteOff p)
 {
-    u64 len = sag_textbuf_len(tb);
+    u64 len = yew_textbuf_len(tb);
 
     if (p.v > len)
         p.v = len;
-    if (!sag_is_grapheme_boundary(tb, p))
-        p = sag_grapheme_prev(tb, p);
+    if (!yew_is_grapheme_boundary(tb, p))
+        p = yew_grapheme_prev(tb, p);
     return p;
 }
 
@@ -295,12 +295,12 @@ static bool cluster_white(const TextBuf *tb, ByteOff p)
 {
     WordCp cp;
 
-    return cluster_cp(tb, p, &cp) && sag_unicode_is_white_space(cp.cp);
+    return cluster_cp(tb, p, &cp) && yew_unicode_is_white_space(cp.cp);
 }
 
 static Span uax_span(const TextBuf *tb, ByteOff p)
 {
-    u64 len = sag_textbuf_len(tb);
+    u64 len = yew_textbuf_len(tb);
     ByteOff lo;
     ByteOff hi;
 
@@ -308,13 +308,13 @@ static Span uax_span(const TextBuf *tb, ByteOff p)
     if (len == 0U)
         return (Span){0U, 0U};
     if (p.v == len)
-        p = sag_grapheme_prev_boundary(tb, p);
+        p = yew_grapheme_prev_boundary(tb, p);
     lo = p;
     while (lo.v > 0U && !word_motion_boundary(tb, lo))
-        lo = sag_grapheme_prev_boundary(tb, lo);
-    hi = sag_grapheme_next_boundary(tb, p);
+        lo = yew_grapheme_prev_boundary(tb, lo);
+    hi = yew_grapheme_next_boundary(tb, p);
     while (hi.v < len && !word_motion_boundary(tb, hi))
-        hi = sag_grapheme_next_boundary(tb, hi);
+        hi = yew_grapheme_next_boundary(tb, hi);
     return (Span){lo.v, hi.v};
 }
 
@@ -327,24 +327,24 @@ static Span word_span(const TextBuf *tb, ByteOff p, bool alt)
 
     if (!alt)
         return uax_span(tb, p);
-    len = sag_textbuf_len(tb);
+    len = yew_textbuf_len(tb);
     p = clamp_grapheme(tb, p);
     if (len == 0U)
         return (Span){0U, 0U};
     if (p.v == len)
-        p = sag_grapheme_prev_boundary(tb, p);
+        p = yew_grapheme_prev_boundary(tb, p);
     white = cluster_white(tb, p);
     lo = p;
     while (lo.v > 0U) {
-        ByteOff prior = sag_grapheme_prev_boundary(tb, lo);
+        ByteOff prior = yew_grapheme_prev_boundary(tb, lo);
 
         if (cluster_white(tb, prior) != white)
             break;
         lo = prior;
     }
-    hi = sag_grapheme_next_boundary(tb, p);
+    hi = yew_grapheme_next_boundary(tb, p);
     while (hi.v < len && cluster_white(tb, hi) == white)
-        hi = sag_grapheme_next_boundary(tb, hi);
+        hi = yew_grapheme_next_boundary(tb, hi);
     return (Span){lo.v, hi.v};
 }
 
@@ -356,13 +356,13 @@ static u64 linebreaks_in(const TextBuf *tb, Span span)
     WordCp cp;
 
     while (at < span.hi && cp_next(tb, at, &cp)) {
-        if (cp.prop == SAG_WB_LF) {
+        if (cp.prop == YEW_WB_LF) {
             if (!after_cr)
                 count++;
-        } else if (cp.prop == SAG_WB_CR || cp.prop == SAG_WB_NEWLINE) {
+        } else if (cp.prop == YEW_WB_CR || cp.prop == YEW_WB_NEWLINE) {
             count++;
         }
-        after_cr = cp.prop == SAG_WB_CR;
+        after_cr = cp.prop == YEW_WB_CR;
         at = cp.hi;
     }
     return count;
@@ -370,7 +370,7 @@ static u64 linebreaks_in(const TextBuf *tb, Span span)
 
 static ByteOff word_next(UnitCtx *u, ByteOff p, bool alt)
 {
-    u64 len = sag_textbuf_len(u->tb);
+    u64 len = yew_textbuf_len(u->tb);
     Span current;
     u64 breaks;
     ByteOff at;
@@ -398,7 +398,7 @@ static ByteOff word_next(UnitCtx *u, ByteOff p, bool alt)
 
 static ByteOff word_prev(UnitCtx *u, ByteOff p, bool alt)
 {
-    u64 len = sag_textbuf_len(u->tb);
+    u64 len = yew_textbuf_len(u->tb);
     Span current;
     u64 breaks = 0U;
     ByteOff at;
@@ -413,7 +413,7 @@ static ByteOff word_prev(UnitCtx *u, ByteOff p, bool alt)
     }
     at = p;
     while (at.v > 0U) {
-        ByteOff prior = sag_grapheme_prev_boundary(u->tb, at);
+        ByteOff prior = yew_grapheme_prev_boundary(u->tb, at);
         Span candidate = word_span(u->tb, prior, alt);
 
         if (!cluster_white(u->tb, BYTEOFF(candidate.lo)))
@@ -455,7 +455,7 @@ static SubClass sub_class(u32 cp)
 static bool sub_separator(u32 cp)
 {
     return cp == (u32)'_' || cp == (u32)'-' ||
-           sag_unicode_is_white_space(cp);
+           yew_unicode_is_white_space(cp);
 }
 
 static bool sub_split(SubClass before, SubClass after, SubClass after2)
@@ -469,10 +469,10 @@ static bool sub_split(SubClass before, SubClass after, SubClass after2)
            after2 == SUB_LOWER;
 }
 
-ByteOff sag_word_sub_next(UnitCtx *u, ByteOff p)
+ByteOff yew_word_sub_next(UnitCtx *u, ByteOff p)
 {
     const TextBuf *tb = u->tb;
-    u64 len = sag_textbuf_len(tb);
+    u64 len = yew_textbuf_len(tb);
     ByteOff at;
     WordCp cp;
     SubClass before;
@@ -484,7 +484,7 @@ ByteOff sag_word_sub_next(UnitCtx *u, ByteOff p)
     if (!cluster_cp(tb, at, &cp))
         return BYTEOFF(len);
     while (sub_separator(cp.cp)) {
-        at = sag_grapheme_next_boundary(tb, at);
+        at = yew_grapheme_next_boundary(tb, at);
         if (at.v >= len || !cluster_cp(tb, at, &cp))
             return BYTEOFF(len);
     }
@@ -492,7 +492,7 @@ ByteOff sag_word_sub_next(UnitCtx *u, ByteOff p)
         return at;
     before = sub_class(cp.cp);
     for (;;) {
-        ByteOff next = sag_grapheme_next_boundary(tb, at);
+        ByteOff next = yew_grapheme_next_boundary(tb, at);
         WordCp after_cp;
         SubClass after;
         SubClass after2 = SUB_OTHER;
@@ -504,22 +504,22 @@ ByteOff sag_word_sub_next(UnitCtx *u, ByteOff p)
         if (sub_separator(after_cp.cp)) {
             at = next;
             do {
-                at = sag_grapheme_next_boundary(tb, at);
+                at = yew_grapheme_next_boundary(tb, at);
                 if (at.v >= len || !cluster_cp(tb, at, &after_cp))
                     return BYTEOFF(len);
             } while (sub_separator(after_cp.cp));
             return at;
         }
-        if (sag_word_boundary(tb, next))
+        if (yew_word_boundary(tb, next))
             return next;
         after = sub_class(after_cp.cp);
         {
-            ByteOff after_at = sag_grapheme_next_boundary(tb, next);
+            ByteOff after_at = yew_grapheme_next_boundary(tb, next);
             WordCp after2_cp;
 
             if (after_at.v < len && cluster_cp(tb, after_at, &after2_cp) &&
                 !sub_separator(after2_cp.cp) &&
-                !sag_word_boundary(tb, after_at))
+                !yew_word_boundary(tb, after_at))
                 after2 = sub_class(after2_cp.cp);
         }
         if (sub_split(before, after, after2))
@@ -529,10 +529,10 @@ ByteOff sag_word_sub_next(UnitCtx *u, ByteOff p)
     }
 }
 
-ByteOff sag_word_sub_prev(UnitCtx *u, ByteOff p)
+ByteOff yew_word_sub_prev(UnitCtx *u, ByteOff p)
 {
     const TextBuf *tb = u->tb;
-    u64 len = sag_textbuf_len(tb);
+    u64 len = yew_textbuf_len(tb);
     ByteOff target;
     ByteOff at;
     ByteOff last;
@@ -542,11 +542,11 @@ ByteOff sag_word_sub_prev(UnitCtx *u, ByteOff p)
     if (p.v == 0U || len == 0U)
         return BYTEOFF(0U);
     target = p;
-    at = sag_grapheme_prev_boundary(tb, target);
+    at = yew_grapheme_prev_boundary(tb, target);
     while (cluster_cp(tb, at, &cp) && sub_separator(cp.cp)) {
         if (at.v == 0U)
             return BYTEOFF(0U);
-        at = sag_grapheme_prev_boundary(tb, at);
+        at = yew_grapheme_prev_boundary(tb, at);
     }
 
     /* Replaying next-boundary decisions from the containing UAX unit keeps
@@ -554,7 +554,7 @@ ByteOff sag_word_sub_prev(UnitCtx *u, ByteOff p)
     at = BYTEOFF(uax_span(tb, at).lo);
     last = at;
     while (at.v < target.v) {
-        ByteOff next = sag_word_sub_next(u, at);
+        ByteOff next = yew_word_sub_next(u, at);
 
         if (next.v >= target.v || next.v <= at.v)
             break;
@@ -564,6 +564,6 @@ ByteOff sag_word_sub_prev(UnitCtx *u, ByteOff p)
     return last;
 }
 
-const UnitOps sag_unit_word = {
+const UnitOps yew_unit_word = {
     "word", word_next, word_prev, word_home, word_end, word_unit_span,
 };

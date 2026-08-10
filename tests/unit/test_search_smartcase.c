@@ -27,17 +27,17 @@ typedef struct ScCase {
 static bool sc_icase(const ScCase *c)
 {
     Arena arena;
-    SagRe *re;
+    YewRe *re;
     SearchOpts o;
     bool got;
 
     arena_init(&arena);
-    sag_search_opts_init(&o);
+    yew_search_opts_init(&o);
     o.ignorecase = c->ignorecase;
     o.smartcase = c->smartcase;
-    re = sag_re_compile(&arena, c->pat, strlen(c->pat), 0U, NULL);
-    SAG_ASSERT_NOT_NULL(re);
-    got = sag_search_wants_icase(re, &o);
+    re = yew_re_compile(&arena, c->pat, strlen(c->pat), 0U, NULL);
+    YEW_ASSERT_NOT_NULL(re);
+    got = yew_search_wants_icase(re, &o);
     arena_free_all(&arena);
     return got;
 }
@@ -48,18 +48,18 @@ static bool sc_matches(bool ignorecase, bool smartcase, const char *pat,
 {
     Arena arena;
     SearchOpts o;
-    SagRe *re;
-    SagReInput in;
+    YewRe *re;
+    YewReInput in;
     bool hit;
 
     arena_init(&arena);
-    sag_search_opts_init(&o);
+    yew_search_opts_init(&o);
     o.ignorecase = ignorecase;
     o.smartcase = smartcase;
-    re = sag_search_compile(&arena, pat, strlen(pat), &o, NULL);
-    SAG_ASSERT_NOT_NULL(re);
-    in = sag_re_input_bytes((const u8 *)text, (u64)strlen(text));
-    hit = sag_re_search(re, &in, BYTEOFF(0U), NULL);
+    re = yew_search_compile(&arena, pat, strlen(pat), &o, NULL);
+    YEW_ASSERT_NOT_NULL(re);
+    in = yew_re_input_bytes((const u8 *)text, (u64)strlen(text));
+    hit = yew_re_search(re, &in, BYTEOFF(0U), NULL);
     arena_free_all(&arena);
     return hit;
 }
@@ -86,7 +86,7 @@ void test_search_smartcase_table(void)
     };
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(rows); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(rows); i++) {
         bool got = sc_icase(&rows[i]);
 
         if (got != rows[i].want_icase)
@@ -96,7 +96,7 @@ void test_search_smartcase_table(void)
                           (int)rows[i].smartcase,
                           rows[i].want_icase ? "icase" : "case",
                           got ? "icase" : "case");
-        SAG_ASSERT_EQ_U64((u64)got, (u64)rows[i].want_icase);
+        YEW_ASSERT_EQ_U64((u64)got, (u64)rows[i].want_icase);
     }
 }
 
@@ -118,7 +118,7 @@ void test_search_smartcase_ignores_uppercase_inside_escapes(void)
     };
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(patterns); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(patterns); i++) {
         ScCase c;
 
         c.ignorecase = true;
@@ -130,7 +130,7 @@ void test_search_smartcase_ignores_uppercase_inside_escapes(void)
                           "/%s/ flipped to case-sensitive: an uppercase "
                           "byte inside an escape was counted as a "
                           "literal\n", patterns[i]);
-        SAG_ASSERT(sc_icase(&c));
+        YEW_ASSERT(sc_icase(&c));
     }
 }
 
@@ -139,23 +139,23 @@ void test_search_smartcase_ignores_uppercase_inside_escapes(void)
 void test_search_smartcase_backslash_w_still_matches_capitalized(void)
 {
     /* " Foo" — \W matches the space, foo must match Foo. */
-    SAG_ASSERT(sc_matches(true, true, "\\Wfoo", " Foo"));
+    YEW_ASSERT(sc_matches(true, true, "\\Wfoo", " Foo"));
     /* A real uppercase literal does flip it. */
-    SAG_ASSERT(!sc_matches(true, true, "\\WFoo", " foo"));
-    SAG_ASSERT(sc_matches(true, true, "\\WFoo", " Foo"));
+    YEW_ASSERT(!sc_matches(true, true, "\\WFoo", " foo"));
+    YEW_ASSERT(sc_matches(true, true, "\\WFoo", " Foo"));
 }
 
 void test_search_smartcase_directives_match_end_to_end(void)
 {
     /* \c wins even with ignorecase off and an uppercase literal. */
-    SAG_ASSERT(sc_matches(false, true, "\\cFoo", "FOO"));
-    SAG_ASSERT(sc_matches(false, true, "\\cfoo", "FOO"));
+    YEW_ASSERT(sc_matches(false, true, "\\cFoo", "FOO"));
+    YEW_ASSERT(sc_matches(false, true, "\\cfoo", "FOO"));
     /* \C wins even with ignorecase on. */
-    SAG_ASSERT(!sc_matches(true, false, "\\Cfoo", "FOO"));
-    SAG_ASSERT(sc_matches(true, false, "\\Cfoo", "foo"));
+    YEW_ASSERT(!sc_matches(true, false, "\\Cfoo", "FOO"));
+    YEW_ASSERT(sc_matches(true, false, "\\Cfoo", "foo"));
     /* The directive itself consumes no input: /\cfoo/ is three
      * characters wide, not five. */
-    SAG_ASSERT(sc_matches(false, false, "\\cfoo", "foo"));
+    YEW_ASSERT(sc_matches(false, false, "\\cfoo", "foo"));
 }
 
 void test_search_smartcase_uppercase_is_unicode_not_ascii(void)
@@ -168,11 +168,11 @@ void test_search_smartcase_uppercase_is_unicode_not_ascii(void)
     c.smartcase = true;
     c.pat = "\xD0\x96";
     c.want_icase = false;
-    SAG_ASSERT_EQ_U64((u64)sc_icase(&c), 0U);
+    YEW_ASSERT_EQ_U64((u64)sc_icase(&c), 0U);
 
     /* Its lowercase form does not trip smartcase. */
     c.pat = "\xD0\xB6";
-    SAG_ASSERT_EQ_U64((u64)sc_icase(&c), 1U);
+    YEW_ASSERT_EQ_U64((u64)sc_icase(&c), 1U);
 }
 
 /* Options default to the sprint's stated values: exact case by default,
@@ -181,11 +181,11 @@ void test_search_opts_defaults(void)
 {
     SearchOpts o;
 
-    sag_search_opts_init(&o);
-    SAG_ASSERT(!o.ignorecase);
-    SAG_ASSERT(o.smartcase);
-    SAG_ASSERT(o.wrapscan);
-    SAG_ASSERT(o.hlsearch);
+    yew_search_opts_init(&o);
+    YEW_ASSERT(!o.ignorecase);
+    YEW_ASSERT(o.smartcase);
+    YEW_ASSERT(o.wrapscan);
+    YEW_ASSERT(o.hlsearch);
     /* Defaults alone mean case-sensitive, whatever the pattern says. */
-    SAG_ASSERT(!sc_matches(false, true, "foo", "FOO"));
+    YEW_ASSERT(!sc_matches(false, true, "foo", "FOO"));
 }

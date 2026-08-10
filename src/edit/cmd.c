@@ -49,18 +49,18 @@ static CmdRegistry registry;
 static CmdStatus cmd_nop(CmdCtx *cx)
 {
     (void)cx;
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
 static CmdStatus deferred_unreachable(CmdCtx *cx)
 {
     (void)cx;
-    SAG_BUG("deferred command reached its implementation");
+    YEW_BUG("deferred command reached its implementation");
 }
 
 #define DEFER(name_, arity_, flags_, sprint_, help_)                           \
     {                                                                          \
-        name_, deferred_unreachable, arity_, (flags_) | SAG_CMD_DEFERRED,      \
+        name_, deferred_unreachable, arity_, (flags_) | YEW_CMD_DEFERRED,      \
             "Sprint " #sprint_ ": " help_, NULL                              \
     }
 
@@ -71,511 +71,511 @@ static CmdStatus deferred_unreachable(CmdCtx *cx)
  */
 #define DEFER_W(name_, arity_, flags_, sprint_, help_, word_)                  \
     {                                                                          \
-        name_, deferred_unreachable, arity_, (flags_) | SAG_CMD_DEFERRED,      \
+        name_, deferred_unreachable, arity_, (flags_) | YEW_CMD_DEFERRED,      \
             "Sprint " #sprint_ ": " help_, word_                             \
     }
 
 static const CmdDesc builtins[] = {
-    {"ed.edit.insert.at", sag_edit_cmd_insert_at, SAG_ARITY_STR,
-     SAG_CMD_CHANGES_BUFFER | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.edit.insert.at", yew_edit_cmd_insert_at, YEW_ARITY_STR,
+     YEW_CMD_CHANGES_BUFFER | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Insert bytes at an offset", "insert_at"},
-    {"ed.edit.delete.span", sag_edit_cmd_delete_span, SAG_ARITY_NONE,
-     SAG_CMD_CHANGES_BUFFER | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.edit.delete.span", yew_edit_cmd_delete_span, YEW_ARITY_NONE,
+     YEW_CMD_CHANGES_BUFFER | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Delete the supplied span", "delete_span"},
-    {"ed.edit.replace.span", sag_edit_cmd_replace_span, SAG_ARITY_STR,
-     SAG_CMD_CHANGES_BUFFER | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.edit.replace.span", yew_edit_cmd_replace_span, YEW_ARITY_STR,
+     YEW_CMD_CHANGES_BUFFER | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Replace the supplied span", "replace_span"},
-    {"ed.edit.delete.unit", sag_edit_cmd_delete_unit, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_CHANGES_BUFFER | SAG_CMD_RECORDABLE |
-         SAG_CMD_NEEDS_WIN,
+    {"ed.edit.delete.unit", yew_edit_cmd_delete_unit, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_CHANGES_BUFFER | YEW_CMD_RECORDABLE |
+         YEW_CMD_NEEDS_WIN,
      "Delete the current unit", "delete_unit"},
-    {"ed.move.unit.up", sag_edit_cmd_move_unit_up, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, "Move unit up", "unit_up"},
-    {"ed.move.unit.down", sag_edit_cmd_move_unit_down, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, "Move unit down", "unit_down"},
-    {"ed.move.unit.up_alt", sag_edit_cmd_move_unit_up_alt, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, "Move unit up (alternate)",
+    {"ed.move.unit.up", yew_edit_cmd_move_unit_up, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN, "Move unit up", "unit_up"},
+    {"ed.move.unit.down", yew_edit_cmd_move_unit_down, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN, "Move unit down", "unit_down"},
+    {"ed.move.unit.up_alt", yew_edit_cmd_move_unit_up_alt, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN, "Move unit up (alternate)",
      "unit_up_alt"},
-    {"ed.move.unit.down_alt", sag_edit_cmd_move_unit_down_alt, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, "Move unit down (alternate)",
+    {"ed.move.unit.down_alt", yew_edit_cmd_move_unit_down_alt, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN, "Move unit down (alternate)",
      "unit_down_alt"},
-    {"ed.buf.open", sag_file_cmd_buf_open, SAG_ARITY_STR, 0U,
+    {"ed.buf.open", yew_file_cmd_buf_open, YEW_ARITY_STR, 0U,
      "Open a buffer", NULL},
-    {"ed.buf.close", sag_file_cmd_buf_close, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Close the current buffer", NULL},
-    {"ed.cursor.set", sag_edit_cmd_cursor_set, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Set the primary cursor offset", NULL},
-    {"ed.cursor.set_many", sag_flapi_cmd_cursor_set_many, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN | SAG_CMD_MULTI_AGGREGATE,
+    {"ed.buf.close", yew_file_cmd_buf_close, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Close the current buffer", NULL},
+    {"ed.cursor.set", yew_edit_cmd_cursor_set, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Set the primary cursor offset", NULL},
+    {"ed.cursor.set_many", yew_flapi_cmd_cursor_set_many, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_MULTI_AGGREGATE,
      "Replace a window's cursor set", NULL},
-    {"ed.cursor.move", sag_flapi_cmd_cursor_move, SAG_ARITY_STR,
-     SAG_CMD_REPEATABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.cursor.move", yew_flapi_cmd_cursor_move, YEW_ARITY_STR,
+     YEW_CMD_REPEATABLE | YEW_CMD_NEEDS_WIN,
      "Move one cursor by a named unit and direction", NULL},
-    {"ed.win.split", sag_flapi_cmd_win_split, SAG_ARITY_STR,
-     SAG_CMD_NEEDS_WIN, "Split a window horizontally or vertically", NULL},
-    {"ed.win.focus", sag_flapi_cmd_win_focus, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Focus a specific window", NULL},
-    {"ed.edit.yank", sag_flapi_cmd_span_yank, SAG_ARITY_OPT_STR,
-     SAG_CMD_NEEDS_WIN, "Yank a supplied span into a register", NULL},
-    {"ed.reg.set", sag_flapi_cmd_reg_set, SAG_ARITY_STR,
-     SAG_CMD_INTERNAL, "Set macro source in a named register", NULL},
-    {"ed.opt.get", sag_opt_cmd_get, SAG_ARITY_STR, 0U,
+    {"ed.win.split", yew_flapi_cmd_win_split, YEW_ARITY_STR,
+     YEW_CMD_NEEDS_WIN, "Split a window horizontally or vertically", NULL},
+    {"ed.win.focus", yew_flapi_cmd_win_focus, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Focus a specific window", NULL},
+    {"ed.edit.yank", yew_flapi_cmd_span_yank, YEW_ARITY_OPT_STR,
+     YEW_CMD_NEEDS_WIN, "Yank a supplied span into a register", NULL},
+    {"ed.reg.set", yew_flapi_cmd_reg_set, YEW_ARITY_STR,
+     YEW_CMD_INTERNAL, "Set macro source in a named register", NULL},
+    {"ed.opt.get", yew_opt_cmd_get, YEW_ARITY_STR, 0U,
      "Read an editor option", NULL},
-    {"ed.opt.set", sag_opt_cmd_set, SAG_ARITY_STR, 0U,
+    {"ed.opt.set", yew_opt_cmd_set, YEW_ARITY_STR, 0U,
      "Set an editor option", NULL},
-    {"ed.opt.set_many", sag_opt_cmdline_set, SAG_ARITY_NONE, 0U,
+    {"ed.opt.set_many", yew_opt_cmdline_set, YEW_ARITY_NONE, 0U,
      "Set an editor option from E mode", NULL},
-    {"ed.fl.eval", sag_fl_cmd_eval, SAG_ARITY_STR, 0U,
+    {"ed.fl.eval", yew_fl_cmd_eval, YEW_ARITY_STR, 0U,
      "Evaluate Fletch in the persistent editor runtime", NULL},
-    {"ed.fl.closure", sag_bind_closure_cmd, SAG_ARITY_INT,
-     SAG_CMD_INTERNAL, "Invoke a Fletch closure bound to a key", NULL},
-    {"ed.config.reload", sag_config_cmd_reload, SAG_ARITY_NONE, 0U,
+    {"ed.fl.closure", yew_bind_closure_cmd, YEW_ARITY_INT,
+     YEW_CMD_INTERNAL, "Invoke a Fletch closure bound to a key", NULL},
+    {"ed.config.reload", yew_config_cmd_reload, YEW_ARITY_NONE, 0U,
      "Reload the runtime, user, and workspace configuration", NULL},
-    {"ed.config.edit", sag_config_cmd_edit, SAG_ARITY_NONE, 0U,
+    {"ed.config.edit", yew_config_cmd_edit, YEW_ARITY_NONE, 0U,
      "Open the user init.fl", NULL},
-    {"ed.map", sag_bind_cmd_map, SAG_ARITY_NONE, 0U,
+    {"ed.map", yew_bind_cmd_map, YEW_ARITY_NONE, 0U,
      "List configured bindings for the current mode", NULL},
-    {"ed.nop", cmd_nop, SAG_ARITY_NONE, 0U, "Do nothing", NULL},
-    {"ed.quit", sag_file_cmd_quit, SAG_ARITY_NONE, 0U,
+    {"ed.nop", cmd_nop, YEW_ARITY_NONE, 0U, "Do nothing", NULL},
+    {"ed.quit", yew_file_cmd_quit, YEW_ARITY_NONE, 0U,
      "Quit, prompting when the buffer is dirty", NULL},
-    {"ed.quit_force", sag_file_cmd_quit_force, SAG_ARITY_NONE, 0U,
+    {"ed.quit_force", yew_file_cmd_quit_force, YEW_ARITY_NONE, 0U,
      "Quit without discarding the recovery journal", NULL},
-    {"ed.suspend", sag_file_cmd_suspend, SAG_ARITY_NONE, 0U,
+    {"ed.suspend", yew_file_cmd_suspend, YEW_ARITY_NONE, 0U,
      "Suspend the editor and restore the terminal", NULL},
-    {"ed.redraw", sag_file_cmd_redraw, SAG_ARITY_NONE, 0U,
+    {"ed.redraw", yew_file_cmd_redraw, YEW_ARITY_NONE, 0U,
      "Redraw the complete display", NULL},
-    {"ed.repeat", sag_record_cmd_repeat, SAG_ARITY_NONE, 0U,
+    {"ed.repeat", yew_record_cmd_repeat, YEW_ARITY_NONE, 0U,
      "Unavailable until resolved command arguments are retained", NULL},
 
-    {"ed.move.buf.home", sag_edit_cmd_move_buf_home, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.buf.home", yew_edit_cmd_move_buf_home, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move to the start of the buffer", "buf_home"},
-    {"ed.move.buf.end", sag_edit_cmd_move_buf_end, SAG_ARITY_NONE,
-     SAG_CMD_TAKES_COUNT | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.buf.end", yew_edit_cmd_move_buf_end, YEW_ARITY_NONE,
+     YEW_CMD_TAKES_COUNT | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move to the end of the buffer or a counted line", "buf_end"},
-    {"ed.move.line.home", sag_edit_cmd_move_line_home, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.line.home", yew_edit_cmd_move_line_home, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move to the start of the line", "line_home"},
-    {"ed.move.line.end", sag_edit_cmd_move_line_end, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.line.end", yew_edit_cmd_move_line_end, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move to the end of the line", "line_end"},
-    {"ed.move.line.up", sag_edit_cmd_move_line_up, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.line.up", yew_edit_cmd_move_line_up, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move one line up", "up"},
-    {"ed.move.line.down", sag_edit_cmd_move_line_down, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.line.down", yew_edit_cmd_move_line_down, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move one line down", "down"},
-    {"ed.move.line.first_nonblank", sag_edit_cmd_move_line_first_nonblank,
-     SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.line.first_nonblank", yew_edit_cmd_move_line_first_nonblank,
+     YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move to the first nonblank grapheme", "home_text"},
-    {"ed.move.line.last_nonblank", sag_edit_cmd_move_line_last_nonblank,
-     SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.line.last_nonblank", yew_edit_cmd_move_line_last_nonblank,
+     YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move to the last nonblank grapheme", "end_text"},
-    {"ed.move.line.half_page_up", sag_edit_cmd_move_line_half_page_up,
-     SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.line.half_page_up", yew_edit_cmd_move_line_half_page_up,
+     YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move half a viewport up", "half_up"},
-    {"ed.move.line.half_page_down", sag_edit_cmd_move_line_half_page_down,
-     SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.line.half_page_down", yew_edit_cmd_move_line_half_page_down,
+     YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move half a viewport down", "half_down"},
-    {"ed.move.unit.next", sag_edit_cmd_move_unit_next, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.unit.next", yew_edit_cmd_move_unit_next, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move to the next unit", "unit_next"},
-    {"ed.move.unit.prev", sag_edit_cmd_move_unit_prev, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.unit.prev", yew_edit_cmd_move_unit_prev, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move to the previous unit", "unit_prev"},
-    {"ed.move.unit.home", sag_edit_cmd_move_unit_home, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.unit.home", yew_edit_cmd_move_unit_home, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move to the start of the current unit", "unit_home"},
-    {"ed.move.unit.end", sag_edit_cmd_move_unit_end, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.unit.end", yew_edit_cmd_move_unit_end, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move to the end of the current unit", "unit_end"},
-    {"ed.move.unit.next_alt", sag_edit_cmd_move_unit_next_alt,
-     SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.unit.next_alt", yew_edit_cmd_move_unit_next_alt,
+     YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move to the next alternate unit", "unit_next_alt"},
-    {"ed.move.unit.prev_alt", sag_edit_cmd_move_unit_prev_alt,
-     SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.unit.prev_alt", yew_edit_cmd_move_unit_prev_alt,
+     YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move to the previous alternate unit", "unit_prev_alt"},
-    {"ed.move.unit.home_alt", sag_edit_cmd_move_unit_home_alt,
-     SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.unit.home_alt", yew_edit_cmd_move_unit_home_alt,
+     YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move to the alternate unit start", "unit_home_alt"},
-    {"ed.move.unit.end_alt", sag_edit_cmd_move_unit_end_alt,
-     SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.unit.end_alt", yew_edit_cmd_move_unit_end_alt,
+     YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move to the alternate unit end", "unit_end_alt"},
-    {"ed.move.block.match_prev", sag_edit_cmd_move_block_match_prev,
-     SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.block.match_prev", yew_edit_cmd_move_block_match_prev,
+     YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move to the enclosing opening delimiter", "match_prev"},
-    {"ed.move.block.match_next", sag_edit_cmd_move_block_match_next,
-     SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.block.match_next", yew_edit_cmd_move_block_match_next,
+     YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move to the enclosing closing delimiter", "match_next"},
-    {"ed.move.word.sub_prev", sag_edit_cmd_move_word_sub_prev,
-     SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.word.sub_prev", yew_edit_cmd_move_word_sub_prev,
+     YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move to the previous subword", "subword_prev"},
-    {"ed.move.word.sub_next", sag_edit_cmd_move_word_sub_next,
-     SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.word.sub_next", yew_edit_cmd_move_word_sub_next,
+     YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move to the next subword", "subword_next"},
-    {"ed.move.char.prev", sag_edit_cmd_move_char_prev, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.char.prev", yew_edit_cmd_move_char_prev, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move one grapheme left", "char_prev"},
-    {"ed.move.char.next", sag_edit_cmd_move_char_next, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.char.next", yew_edit_cmd_move_char_next, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move one grapheme right", "char_next"},
-    {"ed.move.char.left", sag_edit_cmd_move_char_prev, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.char.left", yew_edit_cmd_move_char_prev, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Alias for moving one grapheme left", "char_left"},
-    {"ed.move.char.right", sag_edit_cmd_move_char_next, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.move.char.right", yew_edit_cmd_move_char_next, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Alias for moving one grapheme right", "char_right"},
 
-    {"ed.edit.insert.text", sag_edit_cmd_insert_text, SAG_ARITY_STR,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
+    {"ed.edit.insert.text", yew_edit_cmd_insert_text, YEW_ARITY_STR,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER,
      "Insert UTF-8 text at the cursor", "insert"},
-    {"ed.edit.insert.newline", sag_edit_cmd_insert_newline, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
+    {"ed.edit.insert.newline", yew_edit_cmd_insert_newline, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER,
      "Insert the buffer's native line ending", "newline"},
-    {"ed.edit.insert.tab", sag_edit_cmd_insert_tab, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
+    {"ed.edit.insert.tab", yew_edit_cmd_insert_tab, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER,
      "Insert a literal tab", "tab"},
-    {"ed.edit.insert.after", sag_edit_cmd_insert_after, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.edit.insert.after", yew_edit_cmd_insert_after, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Enter insert mode after the current grapheme", "append"},
-    {"ed.edit.line.open_below", sag_edit_cmd_open_below, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
+    {"ed.edit.line.open_below", yew_edit_cmd_open_below, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER,
      "Open a new line below and enter insert mode", "open_below"},
-    {"ed.edit.line.open_above", sag_edit_cmd_open_above, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
+    {"ed.edit.line.open_above", yew_edit_cmd_open_above, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER,
      "Open a new line above and enter insert mode", "open_above"},
-    {"ed.edit.delete.grapheme_left", sag_edit_cmd_delete_grapheme_left,
-     SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN |
-         SAG_CMD_CHANGES_BUFFER,
+    {"ed.edit.delete.grapheme_left", yew_edit_cmd_delete_grapheme_left,
+     YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN |
+         YEW_CMD_CHANGES_BUFFER,
      "Delete the grapheme left of the cursor", "backspace"},
-    {"ed.edit.delete.grapheme", sag_edit_cmd_delete_grapheme,
-     SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN |
-         SAG_CMD_CHANGES_BUFFER,
+    {"ed.edit.delete.grapheme", yew_edit_cmd_delete_grapheme,
+     YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN |
+         YEW_CMD_CHANGES_BUFFER,
      "Delete the grapheme at the cursor", "del_char"},
-    {"ed.edit.line.delete", sag_edit_cmd_delete_line, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN |
-         SAG_CMD_CHANGES_BUFFER,
+    {"ed.edit.line.delete", yew_edit_cmd_delete_line, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN |
+         YEW_CMD_CHANGES_BUFFER,
      "Delete the current logical line", "del_line"},
-    {"ed.edit.delete.prev", sag_edit_cmd_delete_grapheme_left,
-     SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN |
-         SAG_CMD_CHANGES_BUFFER,
+    {"ed.edit.delete.prev", yew_edit_cmd_delete_grapheme_left,
+     YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN |
+         YEW_CMD_CHANGES_BUFFER,
      "Alias for deleting the previous grapheme", "del_prev"},
-    {"ed.edit.delete.next", sag_edit_cmd_delete_grapheme, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN |
-         SAG_CMD_CHANGES_BUFFER,
+    {"ed.edit.delete.next", yew_edit_cmd_delete_grapheme, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN |
+         YEW_CMD_CHANGES_BUFFER,
      "Alias for deleting the next grapheme", "del_next"},
-    {"ed.edit.undo", sag_edit_cmd_undo, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.edit.undo", yew_edit_cmd_undo, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Undo the last edit transaction", "undo"},
-    {"ed.edit.redo", sag_edit_cmd_redo, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.edit.redo", yew_edit_cmd_redo, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Redo the last undone transaction", "redo"},
-    {"ed.edit.undo_barrier", sag_edit_cmd_undo_barrier, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Close the active insert transaction", NULL},
-    {"ed.mode.enter", sag_edit_cmd_mode_enter, SAG_ARITY_STR,
-     SAG_CMD_RECORDABLE | SAG_CMD_INTERNAL,
+    {"ed.edit.undo_barrier", yew_edit_cmd_undo_barrier, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Close the active insert transaction", NULL},
+    {"ed.mode.enter", yew_edit_cmd_mode_enter, YEW_ARITY_STR,
+     YEW_CMD_RECORDABLE | YEW_CMD_INTERNAL,
      "Enter L/W/B/I/H/E; F Sprint 52", "mode"},
-    {"ed.mode.escape", sag_edit_cmd_mode_escape, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_INTERNAL, "Return to line mode", "escape"},
-    {"ed.sel.expand", sag_edit_cmd_sel_unit_expand, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.mode.escape", yew_edit_cmd_mode_escape, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_INTERNAL, "Return to line mode", "escape"},
+    {"ed.sel.expand", yew_edit_cmd_sel_unit_expand, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Expand the selection to the next structural unit", "sel_expand"},
-    {"ed.sel.contract", sag_edit_cmd_sel_unit_contract, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.sel.contract", yew_edit_cmd_sel_unit_contract, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Contract the selection to the previous structural unit", "sel_contract"},
-    {"ed.sel.unit.expand", sag_edit_cmd_sel_unit_expand, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.sel.unit.expand", yew_edit_cmd_sel_unit_expand, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Expand to the next structural unit", "unit_expand"},
-    {"ed.sel.unit.contract", sag_edit_cmd_sel_unit_contract,
-     SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.sel.unit.contract", yew_edit_cmd_sel_unit_contract,
+     YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Contract to the previous structural unit", "unit_contract"},
-    {"ed.sel.kind", sag_edit_cmd_sel_kind, SAG_ARITY_STR,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.sel.kind", yew_edit_cmd_sel_kind, YEW_ARITY_STR,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Choose character, line, or rectangular selection geometry", "sel_kind"},
-    {"ed.sel.swap_ends", sag_edit_cmd_sel_swap_ends, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.sel.swap_ends", yew_edit_cmd_sel_swap_ends, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Exchange the active and anchored ends of each selection", "swap_ends"},
-    {"ed.sel.yank", sag_sel_cmd_yank, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_MULTI_AGGREGATE,
+    {"ed.sel.yank", yew_sel_cmd_yank, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_MULTI_AGGREGATE,
      "Yank the active selections", "yank"},
-    {"ed.sel.delete", sag_sel_cmd_delete, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
-         SAG_CMD_MULTI_AGGREGATE,
+    {"ed.sel.delete", yew_sel_cmd_delete, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
      "Delete the active selections", "sel_delete"},
-    {"ed.sel.change", sag_sel_cmd_change, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
-         SAG_CMD_MULTI_AGGREGATE,
+    {"ed.sel.change", yew_sel_cmd_change, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
      "Change the active selections", "change"},
-    {"ed.sel.case_upper", sag_sel_cmd_case_upper, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
-         SAG_CMD_MULTI_AGGREGATE,
+    {"ed.sel.case_upper", yew_sel_cmd_case_upper, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
      "Uppercase the active selections", "upper"},
-    {"ed.sel.case_lower", sag_sel_cmd_case_lower, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
-         SAG_CMD_MULTI_AGGREGATE,
+    {"ed.sel.case_lower", yew_sel_cmd_case_lower, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
      "Lowercase the active selections", "lower"},
-    {"ed.sel.case_toggle", sag_sel_cmd_case_toggle, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
-         SAG_CMD_MULTI_AGGREGATE,
+    {"ed.sel.case_toggle", yew_sel_cmd_case_toggle, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
      "Toggle case in the active selections", "case_toggle"},
-    {"ed.sel.indent", sag_sel_cmd_indent, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
-         SAG_CMD_MULTI_AGGREGATE,
+    {"ed.sel.indent", yew_sel_cmd_indent, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
      "Indent lines covered by the selection", "indent"},
-    {"ed.sel.dedent", sag_sel_cmd_dedent, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
-         SAG_CMD_MULTI_AGGREGATE,
+    {"ed.sel.dedent", yew_sel_cmd_dedent, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
      "Dedent lines covered by the selection", "dedent"},
-    {"ed.sel.shift_left", sag_sel_cmd_shift_left, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
-         SAG_CMD_MULTI_AGGREGATE,
+    {"ed.sel.shift_left", yew_sel_cmd_shift_left, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
      "Shift selected text left", "shift_left"},
-    {"ed.sel.shift_right", sag_sel_cmd_shift_right, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
-         SAG_CMD_MULTI_AGGREGATE,
+    {"ed.sel.shift_right", yew_sel_cmd_shift_right, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
      "Shift selected text right", "shift_right"},
-    {"ed.sel.join", sag_sel_cmd_join, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
-         SAG_CMD_MULTI_AGGREGATE,
+    {"ed.sel.join", yew_sel_cmd_join, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
      "Join lines covered by the selection", "join"},
-    {"ed.sel.replace_char", sag_sel_cmd_replace_char, SAG_ARITY_STR,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
-         SAG_CMD_MULTI_AGGREGATE | SAG_CMD_CAPTURES_TEXT,
+    {"ed.sel.replace_char", yew_sel_cmd_replace_char, YEW_ARITY_STR,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE | YEW_CMD_CAPTURES_TEXT,
      "Replace selected graphemes with one grapheme", "replace_char"},
-    {"ed.edit.rect.insert", sag_sel_cmd_rect_insert, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
-         SAG_CMD_MULTI_AGGREGATE,
+    {"ed.edit.rect.insert", yew_sel_cmd_rect_insert, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
      "Insert at the left edge of a rectangular selection", "rect_insert"},
-    {"ed.edit.rect.append", sag_sel_cmd_rect_append, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
-         SAG_CMD_MULTI_AGGREGATE,
+    {"ed.edit.rect.append", yew_sel_cmd_rect_append, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
      "Insert at the right edge of a rectangular selection", "rect_append"},
-    {"ed.cursor.lift.lines", sag_edit_cmd_cursor_lift_lines, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.cursor.lift.lines", yew_edit_cmd_cursor_lift_lines, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Lift a selection to one cursor per line", "lift_lines"},
-    {"ed.cursor.lift.matches", sag_edit_cmd_cursor_lift_matches,
-     SAG_ARITY_OPT_STR, SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.cursor.lift.matches", yew_edit_cmd_cursor_lift_matches,
+     YEW_ARITY_OPT_STR, YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Lift literal matches in the selection to cursors", "lift_matches"},
-    {"ed.cursor.lift.ends", sag_edit_cmd_cursor_lift_ends, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.cursor.lift.ends", yew_edit_cmd_cursor_lift_ends, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Lift both ends of each selection to cursors", "lift_ends"},
-    {"ed.cursor.add.above", sag_edit_cmd_cursor_add_above, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.cursor.add.above", yew_edit_cmd_cursor_add_above, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Add a cursor on the preceding line", "cursor_above"},
-    {"ed.cursor.add.below", sag_edit_cmd_cursor_add_below, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.cursor.add.below", yew_edit_cmd_cursor_add_below, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Add a cursor on the following line", "cursor_below"},
-    {"ed.cursor.drop", sag_edit_cmd_cursor_drop, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.cursor.drop", yew_edit_cmd_cursor_drop, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Drop the most recently added cursor", "cursor_drop"},
-    {"ed.cursor.collapse", sag_edit_cmd_cursor_collapse, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.cursor.collapse", yew_edit_cmd_cursor_collapse, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Keep only the primary cursor", "collapse"},
-    {"ed.view.center", sag_edit_cmd_view_center, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, "Center the cursor line", "center"},
-    {"ed.view.top", sag_edit_cmd_view_top, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.view.center", yew_edit_cmd_view_center, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN, "Center the cursor line", "center"},
+    {"ed.view.top", yew_edit_cmd_view_top, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Place the cursor line at the top", "view_top"},
-    {"ed.view.bottom", sag_edit_cmd_view_bottom, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.view.bottom", yew_edit_cmd_view_bottom, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Place the cursor line at the bottom", "view_bottom"},
-    {"ed.view.scroll.up", sag_edit_cmd_view_scroll_up, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.view.scroll.up", yew_edit_cmd_view_scroll_up, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Scroll the active view up one display row", "scroll_up"},
-    {"ed.view.scroll.down", sag_edit_cmd_view_scroll_down, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.view.scroll.down", yew_edit_cmd_view_scroll_down, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Scroll the active view down one display row", "scroll_down"},
-    {"ed.view.up", sag_edit_cmd_view_scroll_up, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.view.up", yew_edit_cmd_view_scroll_up, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Alias for scrolling the active view up", "view_up"},
-    {"ed.view.down", sag_edit_cmd_view_scroll_down, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.view.down", yew_edit_cmd_view_scroll_down, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Alias for scrolling the active view down", "view_down"},
-    {"ed.view.page_up", sag_edit_cmd_view_page_up, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.view.page_up", yew_edit_cmd_view_page_up, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move one viewport up", "page_up"},
-    {"ed.view.page_down", sag_edit_cmd_view_page_down, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.view.page_down", yew_edit_cmd_view_page_down, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move one viewport down", "page_down"},
-    {"ed.view.half_page_up", sag_edit_cmd_view_half_page_up,
-     SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.view.half_page_up", yew_edit_cmd_view_half_page_up,
+     YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Scroll half a viewport up", "view_half_up"},
-    {"ed.view.half_page_down", sag_edit_cmd_view_half_page_down,
-     SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.view.half_page_down", yew_edit_cmd_view_half_page_down,
+     YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Scroll half a viewport down", "view_half_down"},
-    {"ed.view.goto_line", sag_edit_cmd_view_goto_line, SAG_ARITY_NONE,
-     SAG_CMD_TAKES_COUNT | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.view.goto_line", yew_edit_cmd_view_goto_line, YEW_ARITY_NONE,
+     YEW_CMD_TAKES_COUNT | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Go to a counted line and center it", "goto_line"},
-    {"ed.view.toggle_wrap", sag_edit_cmd_view_toggle_wrap, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, "Toggle line wrapping", "toggle_wrap"},
-    {"ed.view.number_style", sag_edit_cmd_view_number_style, SAG_ARITY_STR,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.view.toggle_wrap", yew_edit_cmd_view_toggle_wrap, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN, "Toggle line wrapping", "toggle_wrap"},
+    {"ed.view.number_style", yew_edit_cmd_view_number_style, YEW_ARITY_STR,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Set line numbers to none, abs, rel, or hybrid", "number_style"},
-    {"ed.ui.message_expand", sag_edit_cmd_message_expand, SAG_ARITY_NONE,
-     SAG_CMD_PROMPTS, "Expand the current message", NULL},
-    {"ed.ui.cancel", sag_edit_cmd_ui_cancel, SAG_ARITY_NONE, 0U,
+    {"ed.ui.message_expand", yew_edit_cmd_message_expand, YEW_ARITY_NONE,
+     YEW_CMD_PROMPTS, "Expand the current message", NULL},
+    {"ed.ui.cancel", yew_edit_cmd_ui_cancel, YEW_ARITY_NONE, 0U,
      "Cancel the active prompt or message overlay", NULL},
 
-    {"ed.cmdline.hist_prev", sag_cmdline_cmd_hist_prev, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
+    {"ed.cmdline.hist_prev", yew_cmdline_cmd_hist_prev, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Find the previous matching command-line history entry", NULL},
-    {"ed.cmdline.hist_next", sag_cmdline_cmd_hist_next, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
+    {"ed.cmdline.hist_next", yew_cmdline_cmd_hist_next, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Find the next matching command-line history entry", NULL},
-    {"ed.cmdline.complete_next", sag_cmdline_cmd_complete_next,
-     SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
+    {"ed.cmdline.complete_next", yew_cmdline_cmd_complete_next,
+     YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Open or advance command-line completion", NULL},
-    {"ed.cmdline.complete_prev", sag_cmdline_cmd_complete_prev,
-     SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
+    {"ed.cmdline.complete_prev", yew_cmdline_cmd_complete_prev,
+     YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Open or reverse command-line completion", NULL},
-    {"ed.cmdline.insert_register", sag_cmdline_cmd_insert_register,
-     SAG_ARITY_STR,
-     SAG_CMD_NEEDS_WIN | SAG_CMD_CAPTURES_TEXT | SAG_CMD_INTERNAL,
+    {"ed.cmdline.insert_register", yew_cmdline_cmd_insert_register,
+     YEW_ARITY_STR,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_CAPTURES_TEXT | YEW_CMD_INTERNAL,
      "Insert one named register into the command line", NULL},
-    {"ed.cmdline.literal_next", sag_cmdline_cmd_literal_next,
-     SAG_ARITY_STR,
-     SAG_CMD_NEEDS_WIN | SAG_CMD_CAPTURES_TEXT | SAG_CMD_INTERNAL,
+    {"ed.cmdline.literal_next", yew_cmdline_cmd_literal_next,
+     YEW_ARITY_STR,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_CAPTURES_TEXT | YEW_CMD_INTERNAL,
      "Insert the next text-producing key literally", NULL},
-    {"ed.cmdline.ghost.accept", sag_cmdline_cmd_ghost_accept,
-     SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
+    {"ed.cmdline.ghost.accept", yew_cmdline_cmd_ghost_accept,
+     YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Accept the inline suggestion, or move one grapheme right", NULL},
     /* Sprint 18.5 §10.  complete_next/prev stay as the names the keymap
      * and the goldens already use; these are the same behaviours under
      * the menu's own namespace, plus the two the old menu could not do. */
-    {"ed.cmdline.menu.next", sag_cmdline_cmd_complete_next, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL, "Select the next menu row", NULL},
-    {"ed.cmdline.menu.prev", sag_cmdline_cmd_complete_prev, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
+    {"ed.cmdline.menu.next", yew_cmdline_cmd_complete_next, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL, "Select the next menu row", NULL},
+    {"ed.cmdline.menu.prev", yew_cmdline_cmd_complete_prev, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Select the previous menu row", NULL},
-    {"ed.cmdline.menu.page_next", sag_cmdline_cmd_menu_page_next,
-     SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
+    {"ed.cmdline.menu.page_next", yew_cmdline_cmd_menu_page_next,
+     YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Move one visible page down the menu", NULL},
-    {"ed.cmdline.menu.page_prev", sag_cmdline_cmd_menu_page_prev,
-     SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
+    {"ed.cmdline.menu.page_prev", yew_cmdline_cmd_menu_page_prev,
+     YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Move one visible page up the menu", NULL},
-    {"ed.cmdline.menu.accept", sag_cmdline_cmd_menu_accept, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
+    {"ed.cmdline.menu.accept", yew_cmdline_cmd_menu_accept, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Accept the selected menu row", NULL},
-    {"ed.cmdline.menu.dismiss", sag_cmdline_cmd_menu_dismiss,
-     SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
+    {"ed.cmdline.menu.dismiss", yew_cmdline_cmd_menu_dismiss,
+     YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
      "Close the menu without accepting", NULL},
-    {"ed.cmdline.accept", sag_cmdline_cmd_accept, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN | SAG_CMD_PROMPTS | SAG_CMD_INTERNAL,
+    {"ed.cmdline.accept", yew_cmdline_cmd_accept, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_PROMPTS | YEW_CMD_INTERNAL,
      "Accept the command line", NULL},
-    {"ed.cmdline.cancel", sag_cmdline_cmd_cancel, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN | SAG_CMD_PROMPTS | SAG_CMD_INTERNAL,
+    {"ed.cmdline.cancel", yew_cmdline_cmd_cancel, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_PROMPTS | YEW_CMD_INTERNAL,
      "Cancel the command line or menu", NULL},
-    {"ed.del.word_prev", sag_cmdline_cmd_delete_word_prev, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER | SAG_CMD_INTERNAL,
+    {"ed.del.word_prev", yew_cmdline_cmd_delete_word_prev, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER | YEW_CMD_INTERNAL,
      "Delete to the previous word boundary", NULL},
-    {"ed.del.to_home", sag_cmdline_cmd_delete_to_home, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER | SAG_CMD_INTERNAL,
+    {"ed.del.to_home", yew_cmdline_cmd_delete_to_home, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER | YEW_CMD_INTERNAL,
      "Delete from the cursor to line start", NULL},
-    {"ed.del.to_end", sag_cmdline_cmd_delete_to_end, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER | SAG_CMD_INTERNAL,
+    {"ed.del.to_end", yew_cmdline_cmd_delete_to_end, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER | YEW_CMD_INTERNAL,
      "Delete from the cursor to line end", NULL},
 
-    DEFER("ed.file.open", SAG_ARITY_STR, SAG_CMD_PROMPTS, 23,
+    DEFER("ed.file.open", YEW_ARITY_STR, YEW_CMD_PROMPTS, 23,
           "open a file"),
-    {"ed.file.write", sag_file_cmd_write, SAG_ARITY_OPT_STR,
-     SAG_CMD_NEEDS_WIN, "Write the active buffer, optionally to a path", NULL},
-    {"ed.file.write_quit", sag_file_cmd_write_quit, SAG_ARITY_OPT_STR,
-     SAG_CMD_NEEDS_WIN, "Write the active buffer and quit", NULL},
-    {"ed.file.save", sag_file_cmd_save_current, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Atomically save the active file", NULL},
-    {"ed.file.new", sag_file_cmd_new, SAG_ARITY_OPT_STR, 0U,
+    {"ed.file.write", yew_file_cmd_write, YEW_ARITY_OPT_STR,
+     YEW_CMD_NEEDS_WIN, "Write the active buffer, optionally to a path", NULL},
+    {"ed.file.write_quit", yew_file_cmd_write_quit, YEW_ARITY_OPT_STR,
+     YEW_CMD_NEEDS_WIN, "Write the active buffer and quit", NULL},
+    {"ed.file.save", yew_file_cmd_save_current, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Atomically save the active file", NULL},
+    {"ed.file.new", yew_file_cmd_new, YEW_ARITY_OPT_STR, 0U,
      "Create an empty buffer, optionally naming its file", NULL},
-    {"ed.file.reload", sag_file_cmd_reload, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Reload the active file from disk", NULL},
-    DEFER("ed.file.close", SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN, 23,
+    {"ed.file.reload", yew_file_cmd_reload, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Reload the active file from disk", NULL},
+    DEFER("ed.file.close", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 23,
           "close the active file"),
-    DEFER("ed.buf.next", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 23,
+    DEFER("ed.buf.next", YEW_ARITY_NONE, YEW_CMD_REPEATABLE, 23,
           "activate the next buffer"),
-    DEFER("ed.buf.prev", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 23,
+    DEFER("ed.buf.prev", YEW_ARITY_NONE, YEW_CMD_REPEATABLE, 23,
           "activate the previous buffer"),
-    {"ed.tab.goto", sag_tab_cmd_goto, SAG_ARITY_OPT_INT,
-     SAG_CMD_TAKES_COUNT, "Activate a numbered tab (0 = tab 10)", NULL},
-    {"ed.tab.new", sag_tab_cmd_new, SAG_ARITY_NONE, 0U,
+    {"ed.tab.goto", yew_tab_cmd_goto, YEW_ARITY_OPT_INT,
+     YEW_CMD_TAKES_COUNT, "Activate a numbered tab (0 = tab 10)", NULL},
+    {"ed.tab.new", yew_tab_cmd_new, YEW_ARITY_NONE, 0U,
      "Open an untitled tab", NULL},
-    {"ed.tab.open", sag_tab_cmd_open, SAG_ARITY_STR, 0U,
+    {"ed.tab.open", yew_tab_cmd_open, YEW_ARITY_STR, 0U,
      "Open a path in a new tab", NULL},
-    {"ed.tab.close", sag_tab_cmd_close, SAG_ARITY_NONE, 0U,
+    {"ed.tab.close", yew_tab_cmd_close, YEW_ARITY_NONE, 0U,
      "Close the active tab", NULL},
-    {"ed.tab.next", sag_tab_cmd_next, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE, "Activate the next tab", NULL},
-    {"ed.tab.prev", sag_tab_cmd_prev, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE, "Activate the previous tab", NULL},
-    {"ed.tab.move", sag_tab_cmd_move, SAG_ARITY_OPT_INT,
-     SAG_CMD_TAKES_COUNT, "Move the active tab to position N", NULL},
+    {"ed.tab.next", yew_tab_cmd_next, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE, "Activate the next tab", NULL},
+    {"ed.tab.prev", yew_tab_cmd_prev, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE, "Activate the previous tab", NULL},
+    {"ed.tab.move", yew_tab_cmd_move, YEW_ARITY_OPT_INT,
+     YEW_CMD_TAKES_COUNT, "Move the active tab to position N", NULL},
     /* Sprint 27 §5: the tab context menu's rows.  Commands, because
      * invariant 9 requires a keyboard path for every menu row. */
-    {"ed.tab.close_others", sag_tab_cmd_close_others, SAG_ARITY_NONE, 0U,
+    {"ed.tab.close_others", yew_tab_cmd_close_others, YEW_ARITY_NONE, 0U,
      "Close every tab but the active one", NULL},
-    {"ed.tab.copy_path", sag_tab_cmd_copy_path, SAG_ARITY_NONE, 0U,
+    {"ed.tab.copy_path", yew_tab_cmd_copy_path, YEW_ARITY_NONE, 0U,
      "Copy the active tab's canonical path to the clipboard", NULL},
     /* Sprint 24 §6: the continuous line.  next/prev walk EVERY open
      * file — members of the active group first, then the row-1 entry
      * beside it — so left/right never dead-ends inside a group. */
-    {"ed.file.next", sag_file_cmd_next, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE, "Walk to the next open file", NULL},
-    {"ed.file.prev", sag_file_cmd_prev, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE, "Walk to the previous open file", NULL},
-    {"ed.group.enter", sag_group_cmd_enter, SAG_ARITY_NONE, 0U,
+    {"ed.file.next", yew_file_cmd_next, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE, "Walk to the next open file", NULL},
+    {"ed.file.prev", yew_file_cmd_prev, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE, "Walk to the previous open file", NULL},
+    {"ed.group.enter", yew_group_cmd_enter, YEW_ARITY_NONE, 0U,
      "Enter a tab group, resuming where you left it", NULL},
-    {"ed.group.leave", sag_group_cmd_leave, SAG_ARITY_NONE, 0U,
+    {"ed.group.leave", yew_group_cmd_leave, YEW_ARITY_NONE, 0U,
      "Leave the active tab group", NULL},
-    {"ed.group.dissolve", sag_group_cmd_dissolve, SAG_ARITY_NONE, 0U,
+    {"ed.group.dissolve", yew_group_cmd_dissolve, YEW_ARITY_NONE, 0U,
      "Dissolve the active group; its tabs stay open", NULL},
-    {"ed.group.remove_tab", sag_group_cmd_remove_tab, SAG_ARITY_NONE, 0U,
+    {"ed.group.remove_tab", yew_group_cmd_remove_tab, YEW_ARITY_NONE, 0U,
      "Remove the active tab from its group", NULL},
     /* Sprint 27 §5/§9. */
-    {"ed.ui.context_menu", sag_ui_cmd_context_menu, SAG_ARITY_NONE, 0U,
+    {"ed.ui.context_menu", yew_ui_cmd_context_menu, YEW_ARITY_NONE, 0U,
      "Open the context menu for the focused tab or group", NULL},
-    {"ed.mouse.enable", sag_mouse_cmd_enable, SAG_ARITY_NONE, 0U,
+    {"ed.mouse.enable", yew_mouse_cmd_enable, YEW_ARITY_NONE, 0U,
      "Turn mouse reporting on for this session", NULL},
-    {"ed.mouse.disable", sag_mouse_cmd_disable, SAG_ARITY_NONE, 0U,
+    {"ed.mouse.disable", yew_mouse_cmd_disable, YEW_ARITY_NONE, 0U,
      "Turn mouse reporting off for this session", NULL},
     /* Sprint 27 §8: the keyboard twin of dropping a tab into a group. */
-    {"ed.group.add_tab", sag_group_cmd_add_tab, SAG_ARITY_STR, 0U,
+    {"ed.group.add_tab", yew_group_cmd_add_tab, YEW_ARITY_STR, 0U,
      "Add the active tab to the named group", NULL},
-    {"ed.group.rename", sag_group_cmd_rename, SAG_ARITY_OPT_STR,
-     SAG_CMD_PROMPTS, "Rename the active tab group", NULL},
-    {"ed.group.new", sag_gp_cmd_new, SAG_ARITY_OPT_STR, SAG_CMD_PROMPTS,
+    {"ed.group.rename", yew_group_cmd_rename, YEW_ARITY_OPT_STR,
+     YEW_CMD_PROMPTS, "Rename the active tab group", NULL},
+    {"ed.group.new", yew_gp_cmd_new, YEW_ARITY_OPT_STR, YEW_CMD_PROMPTS,
      "Assemble a new tab group", NULL},
-    {"ed.group.edit", sag_gp_cmd_edit, SAG_ARITY_NONE, SAG_CMD_PROMPTS,
+    {"ed.group.edit", yew_gp_cmd_edit, YEW_ARITY_NONE, YEW_CMD_PROMPTS,
      "Edit the active group's membership", NULL},
-    DEFER("ed.group.from_dir", SAG_ARITY_STR, 0U, 53,
+    DEFER("ed.group.from_dir", YEW_ARITY_STR, 0U, 53,
           "open a directory as a tab group (F-mode)"),
-    DEFER("ed.group.next", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 24,
+    DEFER("ed.group.next", YEW_ARITY_NONE, YEW_CMD_REPEATABLE, 24,
           "activate the next tab group"),
-    DEFER("ed.group.prev", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 24,
+    DEFER("ed.group.prev", YEW_ARITY_NONE, YEW_CMD_REPEATABLE, 24,
           "activate the previous tab group"),
     /* Sprint 25 §9: workspace state. */
-    {"ed.ws.save_state", sag_ws_cmd_save_state, SAG_ARITY_NONE, 0U,
+    {"ed.ws.save_state", yew_ws_cmd_save_state, YEW_ARITY_NONE, 0U,
      "Write this workspace's state now, without waiting for the debounce", NULL},
-    {"ed.ws.restore_state", sag_ws_cmd_restore_state, SAG_ARITY_NONE, 0U,
+    {"ed.ws.restore_state", yew_ws_cmd_restore_state, YEW_ARITY_NONE, 0U,
      "Open what this workspace's saved state names, alongside what is open", NULL},
-    {"ed.ws.info", sag_ws_cmd_info, SAG_ARITY_NONE, 0U,
+    {"ed.ws.info", yew_ws_cmd_info, YEW_ARITY_NONE, 0U,
      "Report the workspace key, state directory, path record and lock owner", NULL},
-    {"ed.ws.forget", sag_ws_cmd_forget, SAG_ARITY_NONE, 0U,
+    {"ed.ws.forget", yew_ws_cmd_forget, YEW_ARITY_NONE, 0U,
      "Delete this workspace's state directory, after confirming", NULL},
     /*
      * v1 is FROZEN and there is no v2, so there is nothing to migrate
@@ -583,7 +583,7 @@ static const CmdDesc builtins[] = {
      * reading as "no such command" (invariant 3); the first sprint that
      * needs v2 builds the framework and takes this over.
      */
-    DEFER("ed.ws.migrate", SAG_ARITY_NONE, 0U, 25,
+    DEFER("ed.ws.migrate", YEW_ARITY_NONE, 0U, 25,
           "migrate workspace state to a newer schema (no v2 exists)"),
     /*
      * Sprint 18.5 ranks command NAMES and declared abbreviations.  The
@@ -592,12 +592,12 @@ static const CmdDesc builtins[] = {
      * absent and reading as "no such command" (invariant 3).
      */
     /* Sprint 26 §6: the three instances. */
-    {"ed.find.file", sag_find_cmd_file, SAG_ARITY_NONE, SAG_CMD_PROMPTS,
+    {"ed.find.file", yew_find_cmd_file, YEW_ARITY_NONE, YEW_CMD_PROMPTS,
      "Find a file in the workspace by fuzzy name", NULL},
-    {"ed.find.buffer", sag_find_cmd_buffer, SAG_ARITY_NONE, SAG_CMD_PROMPTS,
+    {"ed.find.buffer", yew_find_cmd_buffer, YEW_ARITY_NONE, YEW_CMD_PROMPTS,
      "Switch to an open tab by fuzzy name", NULL},
-    {"ed.undo.branches", sag_undo_cmd_branches, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN | SAG_CMD_PROMPTS,
+    {"ed.undo.branches", yew_undo_cmd_branches, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_PROMPTS,
      "Pick an undo state from the branch tree", NULL},
     /*
      * Sprint 26 §9 defers these two, and they must EXIST to say so:
@@ -605,129 +605,129 @@ static const CmdDesc builtins[] = {
      * "not yet" (invariant 3).  Both are PickerSpec values over §5's
      * widget when their sprint arrives — no new machinery.
      */
-    DEFER("ed.find.symbol", SAG_ARITY_NONE, 0U, 47,
+    DEFER("ed.find.symbol", YEW_ARITY_NONE, 0U, 47,
           "pick a symbol from the LSP workspace index"),
-    DEFER("ed.find.command", SAG_ARITY_NONE, 0U, 38,
+    DEFER("ed.find.command", YEW_ARITY_NONE, 0U, 38,
           "open the command palette"),
-    {"ed.pane.split_h", sag_pane_cmd_split_h, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Split the focused pane side by side", NULL},
-    {"ed.pane.split_v", sag_pane_cmd_split_v, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Split the focused pane top and bottom", NULL},
-    {"ed.pane.close", sag_pane_cmd_close, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Close the focused pane", NULL},
-    {"ed.pane.focus_left", sag_pane_cmd_focus_left, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Focus the pane to the left", NULL},
-    {"ed.pane.focus_right", sag_pane_cmd_focus_right, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Focus the pane to the right", NULL},
-    {"ed.pane.focus_up", sag_pane_cmd_focus_up, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Focus the pane above", NULL},
-    {"ed.pane.focus_down", sag_pane_cmd_focus_down, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Focus the pane below", NULL},
-    {"ed.pane.focus_next", sag_pane_cmd_focus_next, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Focus the next pane in tree order", NULL},
-    {"ed.pane.grow", sag_pane_cmd_grow, SAG_ARITY_OPT_INT,
-     SAG_CMD_TAKES_COUNT | SAG_CMD_NEEDS_WIN, "Grow the focused pane", NULL},
-    {"ed.pane.shrink", sag_pane_cmd_shrink, SAG_ARITY_OPT_INT,
-     SAG_CMD_TAKES_COUNT | SAG_CMD_NEEDS_WIN, "Shrink the focused pane", NULL},
-    DEFER("ed.win.next", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 22,
+    {"ed.pane.split_h", yew_pane_cmd_split_h, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Split the focused pane side by side", NULL},
+    {"ed.pane.split_v", yew_pane_cmd_split_v, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Split the focused pane top and bottom", NULL},
+    {"ed.pane.close", yew_pane_cmd_close, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Close the focused pane", NULL},
+    {"ed.pane.focus_left", yew_pane_cmd_focus_left, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Focus the pane to the left", NULL},
+    {"ed.pane.focus_right", yew_pane_cmd_focus_right, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Focus the pane to the right", NULL},
+    {"ed.pane.focus_up", yew_pane_cmd_focus_up, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Focus the pane above", NULL},
+    {"ed.pane.focus_down", yew_pane_cmd_focus_down, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Focus the pane below", NULL},
+    {"ed.pane.focus_next", yew_pane_cmd_focus_next, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Focus the next pane in tree order", NULL},
+    {"ed.pane.grow", yew_pane_cmd_grow, YEW_ARITY_OPT_INT,
+     YEW_CMD_TAKES_COUNT | YEW_CMD_NEEDS_WIN, "Grow the focused pane", NULL},
+    {"ed.pane.shrink", yew_pane_cmd_shrink, YEW_ARITY_OPT_INT,
+     YEW_CMD_TAKES_COUNT | YEW_CMD_NEEDS_WIN, "Shrink the focused pane", NULL},
+    DEFER("ed.win.next", YEW_ARITY_NONE, YEW_CMD_REPEATABLE, 22,
           "focus the next window"),
-    DEFER("ed.win.prev", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 22,
+    DEFER("ed.win.prev", YEW_ARITY_NONE, YEW_CMD_REPEATABLE, 22,
           "focus the previous window"),
 
-    {"ed.search.open", sag_search_cmd_open, SAG_ARITY_OPT_STR,
-     SAG_CMD_PROMPTS | SAG_CMD_NEEDS_WIN, "Open incremental search", NULL},
-    {"ed.search.open_back", sag_search_cmd_open_back, SAG_ARITY_OPT_STR,
-     SAG_CMD_PROMPTS | SAG_CMD_NEEDS_WIN,
+    {"ed.search.open", yew_search_cmd_open, YEW_ARITY_OPT_STR,
+     YEW_CMD_PROMPTS | YEW_CMD_NEEDS_WIN, "Open incremental search", NULL},
+    {"ed.search.open_back", yew_search_cmd_open_back, YEW_ARITY_OPT_STR,
+     YEW_CMD_PROMPTS | YEW_CMD_NEEDS_WIN,
      "Open incremental search, backwards", NULL},
-    {"ed.search.next", sag_search_cmd_next, SAG_ARITY_OPT_INT,
-     SAG_CMD_TAKES_COUNT | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.search.next", yew_search_cmd_next, YEW_ARITY_OPT_INT,
+     YEW_CMD_TAKES_COUNT | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move to the next search match", "search_next"},
-    {"ed.search.prev", sag_search_cmd_prev, SAG_ARITY_OPT_INT,
-     SAG_CMD_TAKES_COUNT | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.search.prev", yew_search_cmd_prev, YEW_ARITY_OPT_INT,
+     YEW_CMD_TAKES_COUNT | YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Move to the previous search match", "search_prev"},
-    {"ed.search.word_next", sag_search_cmd_word_next, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.search.word_next", yew_search_cmd_word_next, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Search forward for the word under the cursor", "word_next"},
-    {"ed.search.word_prev", sag_search_cmd_word_prev, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+    {"ed.search.word_prev", yew_search_cmd_word_prev, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN,
      "Search backward for the word under the cursor", "word_prev"},
-    {"ed.mark.set", sag_mark_cmd_set, SAG_ARITY_STR,
-     SAG_CMD_CAPTURES_TEXT | SAG_CMD_NEEDS_WIN,
+    {"ed.mark.set", yew_mark_cmd_set, YEW_ARITY_STR,
+     YEW_CMD_CAPTURES_TEXT | YEW_CMD_NEEDS_WIN,
      "Set a named mark at the cursor", NULL},
-    {"ed.mark.jump", sag_mark_cmd_jump, SAG_ARITY_STR,
-     SAG_CMD_CAPTURES_TEXT | SAG_CMD_NEEDS_WIN,
+    {"ed.mark.jump", yew_mark_cmd_jump, YEW_ARITY_STR,
+     YEW_CMD_CAPTURES_TEXT | YEW_CMD_NEEDS_WIN,
      "Jump to a named mark", NULL},
-    {"ed.search.clear_highlight", sag_search_cmd_clear_highlight,
-     SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN, "Clear match highlighting", NULL},
-    {"ed.jump.back", sag_jump_cmd_back, SAG_ARITY_OPT_INT,
-     SAG_CMD_TAKES_COUNT | SAG_CMD_NEEDS_WIN,
+    {"ed.search.clear_highlight", yew_search_cmd_clear_highlight,
+     YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, "Clear match highlighting", NULL},
+    {"ed.jump.back", yew_jump_cmd_back, YEW_ARITY_OPT_INT,
+     YEW_CMD_TAKES_COUNT | YEW_CMD_NEEDS_WIN,
      "Jump to an older position in this window's history", NULL},
-    {"ed.jump.fwd", sag_jump_cmd_fwd, SAG_ARITY_OPT_INT,
-     SAG_CMD_TAKES_COUNT | SAG_CMD_NEEDS_WIN,
+    {"ed.jump.fwd", yew_jump_cmd_fwd, YEW_ARITY_OPT_INT,
+     YEW_CMD_TAKES_COUNT | YEW_CMD_NEEDS_WIN,
      "Jump to a newer position in this window's history", NULL},
-    {"ed.jump.list", sag_jump_cmd_list, SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN,
+    {"ed.jump.list", yew_jump_cmd_list, YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN,
      "Show this window's jumplist", NULL},
-    {"ed.change.older", sag_change_cmd_older, SAG_ARITY_OPT_INT,
-     SAG_CMD_TAKES_COUNT | SAG_CMD_NEEDS_WIN,
+    {"ed.change.older", yew_change_cmd_older, YEW_ARITY_OPT_INT,
+     YEW_CMD_TAKES_COUNT | YEW_CMD_NEEDS_WIN,
      "Jump to an older change position in this buffer", NULL},
-    {"ed.change.newer", sag_change_cmd_newer, SAG_ARITY_OPT_INT,
-     SAG_CMD_TAKES_COUNT | SAG_CMD_NEEDS_WIN,
+    {"ed.change.newer", yew_change_cmd_newer, YEW_ARITY_OPT_INT,
+     YEW_CMD_TAKES_COUNT | YEW_CMD_NEEDS_WIN,
      "Jump to a newer change position in this buffer", NULL},
-    {"ed.search.replace", sag_search_cmd_replace, SAG_ARITY_STR,
-     SAG_CMD_CHANGES_BUFFER | SAG_CMD_NEEDS_WIN,
+    {"ed.search.replace", yew_search_cmd_replace, YEW_ARITY_STR,
+     YEW_CMD_CHANGES_BUFFER | YEW_CMD_NEEDS_WIN,
      "Substitute matches of a pattern in a line range", NULL},
-    {"ed.search.global", sag_search_cmd_global, SAG_ARITY_STR, 0U,
+    {"ed.search.global", yew_search_cmd_global, YEW_ARITY_STR, 0U,
      "Rejected: :g is Fletch's query API in Sprint 34", NULL},
-    {"ed.macro.record", sag_record_cmd_record, SAG_ARITY_OPT_STR,
-     SAG_CMD_PROMPTS, "Record a command macro", NULL},
-    {"ed.macro.stop", sag_record_cmd_stop, SAG_ARITY_NONE, 0U,
+    {"ed.macro.record", yew_record_cmd_record, YEW_ARITY_OPT_STR,
+     YEW_CMD_PROMPTS, "Record a command macro", NULL},
+    {"ed.macro.stop", yew_record_cmd_stop, YEW_ARITY_NONE, 0U,
      "Stop recording a command macro", NULL},
-    {"ed.macro.replay", sag_record_cmd_replay, SAG_ARITY_STR,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_CAPTURES_TEXT,
+    {"ed.macro.replay", yew_record_cmd_replay, YEW_ARITY_STR,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE | YEW_CMD_CAPTURES_TEXT,
      "Replay a command macro",
      "replay"},
-    {"ed.macro.replay_last", sag_record_cmd_replay_last, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE,
+    {"ed.macro.replay_last", yew_record_cmd_replay_last, YEW_ARITY_NONE,
+     YEW_CMD_REPEATABLE | YEW_CMD_RECORDABLE,
      "Replay the last command macro", "replay_last"},
-    {"ed.macro.list", sag_macro_cmd_list, SAG_ARITY_NONE, 0U,
+    {"ed.macro.list", yew_macro_cmd_list, YEW_ARITY_NONE, 0U,
      "List registers containing macros", NULL},
-    {"ed.macro.edit", sag_macro_cmd_edit, SAG_ARITY_STR, 0U,
+    {"ed.macro.edit", yew_macro_cmd_edit, YEW_ARITY_STR, 0U,
      "Edit a macro register as Fletch source", NULL},
-    {"ed.macro.name", sag_macro_cmd_name, SAG_ARITY_STR, 0U,
+    {"ed.macro.name", yew_macro_cmd_name, YEW_ARITY_STR, 0U,
      "Promote a macro register into the library", NULL},
-    {"ed.macro.reload", sag_macro_cmd_reload, SAG_ARITY_NONE, 0U,
+    {"ed.macro.reload", yew_macro_cmd_reload, YEW_ARITY_NONE, 0U,
      "Reload the macro library", NULL},
-    {"ed.shell.run", sag_shell_cmd_run, SAG_ARITY_STR,
-     SAG_CMD_RECORDABLE, "Run a shell command, streaming its output", "shell_run"},
-    {"ed.shell.run_bg", sag_shell_cmd_run_bg, SAG_ARITY_STR,
-     SAG_CMD_RECORDABLE, "Run a shell command without stealing focus", "shell_bg"},
-    {"ed.shell.read", sag_shell_cmd_read, SAG_ARITY_STR,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
+    {"ed.shell.run", yew_shell_cmd_run, YEW_ARITY_STR,
+     YEW_CMD_RECORDABLE, "Run a shell command, streaming its output", "shell_run"},
+    {"ed.shell.run_bg", yew_shell_cmd_run_bg, YEW_ARITY_STR,
+     YEW_CMD_RECORDABLE, "Run a shell command without stealing focus", "shell_bg"},
+    {"ed.shell.read", yew_shell_cmd_read, YEW_ARITY_STR,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER,
      "Insert a shell command's output at the cursor", "shell_read"},
-    {"ed.shell.filter", sag_shell_cmd_filter, SAG_ARITY_STR,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
+    {"ed.shell.filter", yew_shell_cmd_filter, YEW_ARITY_STR,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER,
      "Pipe a region through a shell command and replace it", "filter"},
-    {"ed.shell.term", sag_shell_cmd_term, SAG_ARITY_NONE, 0U,
+    {"ed.shell.term", yew_shell_cmd_term, YEW_ARITY_NONE, 0U,
      "Interactive terminals are not a 1.0 feature", NULL},
-    {"ed.job.list", sag_job_cmd_list, SAG_ARITY_NONE, 0U,
+    {"ed.job.list", yew_job_cmd_list, YEW_ARITY_NONE, 0U,
      "Open the job table", NULL},
-    {"ed.job.kill", sag_job_cmd_kill, SAG_ARITY_OPT_INT,
-     SAG_CMD_TAKES_COUNT, "Terminate a job's process group", NULL},
-    {"ed.job.kill_force", sag_job_cmd_kill_force, SAG_ARITY_OPT_INT,
-     SAG_CMD_TAKES_COUNT, "Kill a job's process group", NULL},
-    {"ed.job.jump", sag_job_cmd_jump, SAG_ARITY_OPT_INT,
-     SAG_CMD_TAKES_COUNT, "Focus a job's output buffer", NULL},
-    {"ed.job.clear_finished", sag_job_cmd_clear_finished, SAG_ARITY_NONE,
+    {"ed.job.kill", yew_job_cmd_kill, YEW_ARITY_OPT_INT,
+     YEW_CMD_TAKES_COUNT, "Terminate a job's process group", NULL},
+    {"ed.job.kill_force", yew_job_cmd_kill_force, YEW_ARITY_OPT_INT,
+     YEW_CMD_TAKES_COUNT, "Kill a job's process group", NULL},
+    {"ed.job.jump", yew_job_cmd_jump, YEW_ARITY_OPT_INT,
+     YEW_CMD_TAKES_COUNT, "Focus a job's output buffer", NULL},
+    {"ed.job.clear_finished", yew_job_cmd_clear_finished, YEW_ARITY_NONE,
      0U, "Drop every finished job and its output buffer", NULL},
-    {"ed.job.rerun", sag_job_cmd_rerun, SAG_ARITY_OPT_INT,
-     SAG_CMD_TAKES_COUNT, "Run a job's command line again", NULL},
-    DEFER("ed.git.stage", SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN, 52,
+    {"ed.job.rerun", yew_job_cmd_rerun, YEW_ARITY_OPT_INT,
+     YEW_CMD_TAKES_COUNT, "Run a job's command line again", NULL},
+    DEFER("ed.git.stage", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 52,
           "stage the selected path"),
-    DEFER("ed.lsp.goto", SAG_ARITY_STR, SAG_CMD_NEEDS_WIN, 47,
+    DEFER("ed.lsp.goto", YEW_ARITY_STR, YEW_CMD_NEEDS_WIN, 47,
           "go to an LSP location"),
-    DEFER("ed.ai.open", SAG_ARITY_NONE, SAG_CMD_PROMPTS, 49,
+    DEFER("ed.ai.open", YEW_ARITY_NONE, YEW_CMD_PROMPTS, 49,
           "open the AI prompt"),
-    DEFER("ed.plug.reload", SAG_ARITY_OPT_STR, 0U, 54,
+    DEFER("ed.plug.reload", YEW_ARITY_OPT_STR, 0U, 54,
           "reload a plugin")
 };
 
@@ -741,55 +741,55 @@ typedef struct {
 } BuiltinMeta;
 
 static const BuiltinMeta builtin_meta[] = {
-    {"ed.quit", "", SAG_RP_FORBID, "q"},
-    {"ed.redraw", "", SAG_RP_FORBID, "redraw"},
-    {"ed.edit.line.delete", "", SAG_RP_LINE, "d"},
-    {"ed.file.open", "f", SAG_RP_FORBID, "e"},
-    {"ed.file.write", "f", SAG_RP_FORBID, "w"},
-    {"ed.file.write_quit", "f", SAG_RP_FORBID, "wq"},
-    {"ed.file.new", "f", SAG_RP_FORBID, "new"},
-    {"ed.file.reload", "", SAG_RP_FORBID, "reload"},
-    {"ed.file.close", "", SAG_RP_FORBID, "close"},
-    {"ed.search.open", "s", SAG_RP_FORBID, "search"},
-    {"ed.tab.new", "", SAG_RP_FORBID, "tabnew"},
-    {"ed.tab.open", "f", SAG_RP_FORBID, "tabedit"},
-    {"ed.tab.close", "", SAG_RP_FORBID, "tabclose"},
-    {"ed.group.new", "s", SAG_RP_FORBID, "gnew"},
-    {"ed.group.edit", "", SAG_RP_FORBID, "gedit"},
-    {"ed.group.dissolve", "", SAG_RP_FORBID, "gdissolve"},
-    {"ed.group.rename", "s", SAG_RP_OPT, "grename"},
-    {"ed.group.add_tab", "s", SAG_RP_FORBID, "gadd"},
-    {"ed.tab.close_others", "", SAG_RP_FORBID, "tabonly"},
-    {"ed.tab.copy_path", "", SAG_RP_FORBID, "copypath"},
-    {"ed.group.remove_tab", "", SAG_RP_FORBID, "gremove"},
-    {"ed.group.enter", "", SAG_RP_FORBID, "genter"},
-    {"ed.group.leave", "", SAG_RP_FORBID, "gleave"},
-    {"ed.ws.save_state", "", SAG_RP_FORBID, "wssave"},
-    {"ed.ws.restore_state", "", SAG_RP_FORBID, "wsrestore"},
-    {"ed.ws.info", "", SAG_RP_FORBID, "wsinfo"},
-    {"ed.ws.forget", "", SAG_RP_FORBID, "wsforget"},
-    {"ed.find.file", "", SAG_RP_FORBID, "find"},
-    {"ed.find.buffer", "", SAG_RP_FORBID, "buffers"},
-    {"ed.undo.branches", "", SAG_RP_FORBID, "undolist"},
+    {"ed.quit", "", YEW_RP_FORBID, "q"},
+    {"ed.redraw", "", YEW_RP_FORBID, "redraw"},
+    {"ed.edit.line.delete", "", YEW_RP_LINE, "d"},
+    {"ed.file.open", "f", YEW_RP_FORBID, "e"},
+    {"ed.file.write", "f", YEW_RP_FORBID, "w"},
+    {"ed.file.write_quit", "f", YEW_RP_FORBID, "wq"},
+    {"ed.file.new", "f", YEW_RP_FORBID, "new"},
+    {"ed.file.reload", "", YEW_RP_FORBID, "reload"},
+    {"ed.file.close", "", YEW_RP_FORBID, "close"},
+    {"ed.search.open", "s", YEW_RP_FORBID, "search"},
+    {"ed.tab.new", "", YEW_RP_FORBID, "tabnew"},
+    {"ed.tab.open", "f", YEW_RP_FORBID, "tabedit"},
+    {"ed.tab.close", "", YEW_RP_FORBID, "tabclose"},
+    {"ed.group.new", "s", YEW_RP_FORBID, "gnew"},
+    {"ed.group.edit", "", YEW_RP_FORBID, "gedit"},
+    {"ed.group.dissolve", "", YEW_RP_FORBID, "gdissolve"},
+    {"ed.group.rename", "s", YEW_RP_OPT, "grename"},
+    {"ed.group.add_tab", "s", YEW_RP_FORBID, "gadd"},
+    {"ed.tab.close_others", "", YEW_RP_FORBID, "tabonly"},
+    {"ed.tab.copy_path", "", YEW_RP_FORBID, "copypath"},
+    {"ed.group.remove_tab", "", YEW_RP_FORBID, "gremove"},
+    {"ed.group.enter", "", YEW_RP_FORBID, "genter"},
+    {"ed.group.leave", "", YEW_RP_FORBID, "gleave"},
+    {"ed.ws.save_state", "", YEW_RP_FORBID, "wssave"},
+    {"ed.ws.restore_state", "", YEW_RP_FORBID, "wsrestore"},
+    {"ed.ws.info", "", YEW_RP_FORBID, "wsinfo"},
+    {"ed.ws.forget", "", YEW_RP_FORBID, "wsforget"},
+    {"ed.find.file", "", YEW_RP_FORBID, "find"},
+    {"ed.find.buffer", "", YEW_RP_FORBID, "buffers"},
+    {"ed.undo.branches", "", YEW_RP_FORBID, "undolist"},
     /* The substitution body is ONE opaque string; s18's tokenizer must
      * not try to understand `/` inside a regex. */
-    {"ed.search.replace", "s", SAG_RP_OPT, "s"},
-    {"ed.search.global", "s", SAG_RP_OPT, "g"},
-    {"ed.fl.eval", "s", SAG_RP_FORBID, "fl"},
-    {"ed.opt.set_many", "ov", SAG_RP_FORBID, "set"},
-    {"ed.mark.set", "s", SAG_RP_FORBID, "mark"},
+    {"ed.search.replace", "s", YEW_RP_OPT, "s"},
+    {"ed.search.global", "s", YEW_RP_OPT, "g"},
+    {"ed.fl.eval", "s", YEW_RP_FORBID, "fl"},
+    {"ed.opt.set_many", "ov", YEW_RP_FORBID, "set"},
+    {"ed.mark.set", "s", YEW_RP_FORBID, "mark"},
     /* :! carries an arbitrary command line, so its argspec is one string
      * and the range decides run-vs-filter (§5). */
-    {"ed.shell.run", "s", SAG_RP_OPT, NULL},
-    {"ed.shell.read", "s", SAG_RP_FORBID, NULL},
-    {"ed.shell.filter", "s", SAG_RP_REQUIRED, NULL},
-    {"ed.macro.list", "", SAG_RP_FORBID, "macros"},
-    {"ed.macro.edit", "s", SAG_RP_FORBID, NULL},
-    {"ed.macro.name", "ss", SAG_RP_FORBID, NULL},
-    {"ed.macro.reload", "", SAG_RP_FORBID, NULL},
-    {"ed.job.list", "", SAG_RP_FORBID, "jobs"},
-    {"ed.job.kill", "", SAG_RP_FORBID, NULL},
-    {"ed.shell.term", "", SAG_RP_FORBID, "term"},
+    {"ed.shell.run", "s", YEW_RP_OPT, NULL},
+    {"ed.shell.read", "s", YEW_RP_FORBID, NULL},
+    {"ed.shell.filter", "s", YEW_RP_REQUIRED, NULL},
+    {"ed.macro.list", "", YEW_RP_FORBID, "macros"},
+    {"ed.macro.edit", "s", YEW_RP_FORBID, NULL},
+    {"ed.macro.name", "ss", YEW_RP_FORBID, NULL},
+    {"ed.macro.reload", "", YEW_RP_FORBID, NULL},
+    {"ed.job.list", "", YEW_RP_FORBID, "jobs"},
+    {"ed.job.kill", "", YEW_RP_FORBID, NULL},
+    {"ed.shell.term", "", YEW_RP_FORBID, "term"},
 };
 
 static bool word_in(const char *word, size_t len, const char *const *words,
@@ -882,7 +882,7 @@ static bool command_name_valid(const char *name)
         const char *start = p;
         size_t len;
 
-        if (n == SAG_ARRAY_LEN(segments))
+        if (n == YEW_ARRAY_LEN(segments))
             return false;
         while (*p != '\0' && *p != '.')
             p++;
@@ -908,12 +908,12 @@ static bool command_name_valid(const char *name)
         return false;
     if (n == 2U)
         return word_in(segments[1], lengths[1], app_verbs,
-                       SAG_ARRAY_LEN(app_verbs));
+                       YEW_ARRAY_LEN(app_verbs));
     if ((n != 3U && n != 4U) ||
-        !word_in(segments[1], lengths[1], domains, SAG_ARRAY_LEN(domains)))
+        !word_in(segments[1], lengths[1], domains, YEW_ARRAY_LEN(domains)))
         return false;
     return word_in(segments[n - 1U], lengths[n - 1U], verbs,
-                   SAG_ARRAY_LEN(verbs));
+                   YEW_ARRAY_LEN(verbs));
 }
 
 static bool help_names_sprint(const char *help)
@@ -943,17 +943,17 @@ static void word_validate(const CmdDesc *d)
     const char *w = d->word;
     size_t n;
 
-    if ((d->flags & SAG_CMD_RECORDABLE) != 0U && w == NULL)
-        SAG_BUG("recordable command %s has no CMDWORD", d->name);
+    if ((d->flags & YEW_CMD_RECORDABLE) != 0U && w == NULL)
+        YEW_BUG("recordable command %s has no CMDWORD", d->name);
     if (w == NULL)
         return;
-    if ((d->flags & SAG_CMD_RECORDABLE) == 0U)
-        SAG_BUG("command %s has a CMDWORD but is not recordable", d->name);
+    if ((d->flags & YEW_CMD_RECORDABLE) == 0U)
+        YEW_BUG("command %s has a CMDWORD but is not recordable", d->name);
     n = strlen(w);
     if (n == 0U || n > 16U)
-        SAG_BUG("command %s has a CMDWORD of bad length", d->name);
+        YEW_BUG("command %s has a CMDWORD of bad length", d->name);
     if (w[0] < 'a' || w[0] > 'z')
-        SAG_BUG("command %s CMDWORD must start with a letter", d->name);
+        YEW_BUG("command %s CMDWORD must start with a letter", d->name);
     {
         size_t i;
 
@@ -962,48 +962,48 @@ static void word_validate(const CmdDesc *d)
 
             if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
                   c == '_'))
-                SAG_BUG("command %s has an invalid CMDWORD", d->name);
+                YEW_BUG("command %s has an invalid CMDWORD", d->name);
         }
     }
 }
 
 static void desc_validate(const CmdDesc *d)
 {
-    const u32 known_flags = SAG_CMD_REPEATABLE | SAG_CMD_TAKES_COUNT |
-                            SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN |
-                            SAG_CMD_CHANGES_BUFFER | SAG_CMD_PROMPTS |
-                            SAG_CMD_DEFERRED | SAG_CMD_MULTI_AGGREGATE |
-                            SAG_CMD_CAPTURES_TEXT | SAG_CMD_INTERNAL |
-                            SAG_CMD_INTERACTIVE;
+    const u32 known_flags = YEW_CMD_REPEATABLE | YEW_CMD_TAKES_COUNT |
+                            YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN |
+                            YEW_CMD_CHANGES_BUFFER | YEW_CMD_PROMPTS |
+                            YEW_CMD_DEFERRED | YEW_CMD_MULTI_AGGREGATE |
+                            YEW_CMD_CAPTURES_TEXT | YEW_CMD_INTERNAL |
+                            YEW_CMD_INTERACTIVE;
 
     if (d == NULL)
-        SAG_BUG("sag_cmd_register: NULL descriptor");
+        YEW_BUG("yew_cmd_register: NULL descriptor");
     if (!command_name_valid(d->name))
-        SAG_BUG("invalid command name: %s", d->name ? d->name : "(null)");
+        YEW_BUG("invalid command name: %s", d->name ? d->name : "(null)");
     if (d->fn == NULL)
-        SAG_BUG("command %s has no implementation", d->name);
-    if (d->arity > SAG_ARITY_OPT_STR)
-        SAG_BUG("command %s has invalid arity %u", d->name,
+        YEW_BUG("command %s has no implementation", d->name);
+    if (d->arity > YEW_ARITY_OPT_STR)
+        YEW_BUG("command %s has invalid arity %u", d->name,
                 (unsigned)d->arity);
     if ((d->flags & ~known_flags) != 0U)
-        SAG_BUG("command %s has unknown flags", d->name);
-    if ((d->flags & SAG_CMD_REPEATABLE) != 0U &&
-        (d->flags & SAG_CMD_TAKES_COUNT) != 0U)
-        SAG_BUG("command %s is both REPEATABLE and TAKES_COUNT", d->name);
-    if ((d->flags & SAG_CMD_CAPTURES_TEXT) != 0U &&
-        d->arity != SAG_ARITY_STR)
-        SAG_BUG("command %s captures text without string arity", d->name);
+        YEW_BUG("command %s has unknown flags", d->name);
+    if ((d->flags & YEW_CMD_REPEATABLE) != 0U &&
+        (d->flags & YEW_CMD_TAKES_COUNT) != 0U)
+        YEW_BUG("command %s is both REPEATABLE and TAKES_COUNT", d->name);
+    if ((d->flags & YEW_CMD_CAPTURES_TEXT) != 0U &&
+        d->arity != YEW_ARITY_STR)
+        YEW_BUG("command %s captures text without string arity", d->name);
     if (d->help == NULL || d->help[0] == '\0')
-        SAG_BUG("command %s has empty help", d->name);
-    if ((d->flags & SAG_CMD_DEFERRED) != 0U &&
+        YEW_BUG("command %s has empty help", d->name);
+    if ((d->flags & YEW_CMD_DEFERRED) != 0U &&
         !help_names_sprint(d->help))
-        SAG_BUG("deferred command %s help does not name its sprint", d->name);
+        YEW_BUG("deferred command %s help does not name its sprint", d->name);
     word_validate(d);
 }
 
 static const char *default_argspec(const CmdDesc *d)
 {
-    return d->arity == SAG_ARITY_NONE ? "" : "s";
+    return d->arity == YEW_ARITY_NONE ? "" : "s";
 }
 
 static void entry_validate(const CmdEntry *entry)
@@ -1011,24 +1011,24 @@ static void entry_validate(const CmdEntry *entry)
     const char *p;
 
     if (entry == NULL)
-        SAG_BUG("sag_cmd_register_entry: NULL entry");
+        YEW_BUG("yew_cmd_register_entry: NULL entry");
     desc_validate(&entry->cmd);
-    if (entry->range_policy > SAG_RP_REQUIRED)
-        SAG_BUG("command %s has invalid range policy", entry->cmd.name);
+    if (entry->range_policy > YEW_RP_REQUIRED)
+        YEW_BUG("command %s has invalid range policy", entry->cmd.name);
     p = entry->argspec == NULL ? default_argspec(&entry->cmd) :
                                 entry->argspec;
     while (*p != '\0') {
         if (*p != 'f' && *p != 'b' && *p != 'o' && *p != 'v' &&
             *p != 's' && !(*p == '*' && p[1] == '\0'))
-            SAG_BUG("command %s has invalid argspec", entry->cmd.name);
+            YEW_BUG("command %s has invalid argspec", entry->cmd.name);
         p++;
     }
     if (entry->abbrev != NULL) {
         if (entry->abbrev[0] == '\0')
-            SAG_BUG("command %s has empty abbreviation", entry->cmd.name);
+            YEW_BUG("command %s has empty abbreviation", entry->cmd.name);
         for (p = entry->abbrev; *p != '\0'; p++) {
             if (!(isalnum((unsigned char)*p) || *p == '_'))
-                SAG_BUG("command %s has invalid abbreviation",
+                YEW_BUG("command %s has invalid abbreviation",
                         entry->cmd.name);
         }
     }
@@ -1043,26 +1043,26 @@ static CmdId register_entry(const CmdEntry *entry)
     entry_validate(entry);
     d = &entry->cmd;
     if (strmap_has(&registry.names.map, d->name, strlen(d->name)))
-        SAG_BUG("duplicate command registration: %s", d->name);
+        YEW_BUG("duplicate command registration: %s", d->name);
     if (registry.len == UINT32_MAX)
-        SAG_BUG("command registry overflow");
+        YEW_BUG("command registry overflow");
     if (registry.len == registry.cap) {
         size_t cap = registry.cap ? registry.cap * 2U : 64U;
 
         if (cap < registry.cap)
-            SAG_BUG("command registry allocation overflow");
-        registry.entries = sag_xreallocarray(registry.entries, cap,
+            YEW_BUG("command registry allocation overflow");
+        registry.entries = yew_xreallocarray(registry.entries, cap,
                                              sizeof(*registry.entries));
         registry.cap = cap;
     }
-    id = sag_intern_cstr(&registry.names, d->name);
+    id = yew_intern_cstr(&registry.names, d->name);
     if ((size_t)id != registry.len + 1U)
-        SAG_BUG("command registry and interner order diverged");
+        YEW_BUG("command registry and interner order diverged");
     copy = *entry;
     copy.cmd = *d;
-    if ((copy.cmd.flags & SAG_CMD_PROMPTS) != 0U)
-        copy.cmd.flags |= SAG_CMD_INTERACTIVE;
-    copy.cmd.name = sag_intern_str(&registry.names, id);
+    if ((copy.cmd.flags & YEW_CMD_PROMPTS) != 0U)
+        copy.cmd.flags |= YEW_CMD_INTERACTIVE;
+    copy.cmd.name = yew_intern_str(&registry.names, id);
     copy.cmd.help = arena_strdup(&registry.arena, d->help);
     copy.argspec = arena_strdup(
         &registry.arena,
@@ -1074,7 +1074,7 @@ static CmdId register_entry(const CmdEntry *entry)
         size_t wlen = strlen(copy.cmd.word);
 
         if (strmap_has(&registry.words, copy.cmd.word, wlen))
-            SAG_BUG("duplicate CMDWORD '%s' on %s", copy.cmd.word,
+            YEW_BUG("duplicate CMDWORD '%s' on %s", copy.cmd.word,
                     d->name);
         copy.cmd.word = arena_strdup(&registry.arena, copy.cmd.word);
         registry.entries[registry.len - 1U].cmd.word = copy.cmd.word;
@@ -1089,8 +1089,8 @@ static CmdId register_desc(const CmdDesc *d)
     CmdEntry entry;
 
     if (d == NULL)
-        SAG_BUG("sag_cmd_register: NULL descriptor");
-    entry = (CmdEntry){*d, NULL, SAG_RP_FORBID, NULL};
+        YEW_BUG("yew_cmd_register: NULL descriptor");
+    entry = (CmdEntry){*d, NULL, YEW_RP_FORBID, NULL};
     return register_entry(&entry);
 }
 
@@ -1098,7 +1098,7 @@ static void install_builtin_meta(void)
 {
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(builtin_meta); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(builtin_meta); i++) {
         const BuiltinMeta *meta = &builtin_meta[i];
         void *found = strmap_get(&registry.names.map, meta->name,
                                  strlen(meta->name));
@@ -1106,7 +1106,7 @@ static void install_builtin_meta(void)
         CmdEntry *entry;
 
         if (id == 0U || (size_t)id > registry.len)
-            SAG_BUG("metadata names missing command: %s", meta->name);
+            YEW_BUG("metadata names missing command: %s", meta->name);
         entry = &registry.entries[id - 1U];
         entry->argspec = arena_strdup(&registry.arena, meta->argspec);
         entry->range_policy = meta->range_policy;
@@ -1116,7 +1116,7 @@ static void install_builtin_meta(void)
     }
 }
 
-void sag_cmd_init(void)
+void yew_cmd_init(void)
 {
     size_t i;
 
@@ -1126,12 +1126,12 @@ void sag_cmd_init(void)
     interner_init(&registry.names, &registry.arena);
     strmap_init(&registry.words);
     registry.initialized = true;
-    for (i = 0; i < SAG_ARRAY_LEN(builtins); i++)
+    for (i = 0; i < YEW_ARRAY_LEN(builtins); i++)
         (void)register_desc(&builtins[i]);
     install_builtin_meta();
 }
 
-void sag_cmd_shutdown(void)
+void yew_cmd_shutdown(void)
 {
     if (!registry.initialized)
         return;
@@ -1142,51 +1142,51 @@ void sag_cmd_shutdown(void)
     registry = (CmdRegistry){0};
 }
 
-CmdId sag_cmd_register(const CmdDesc *d)
+CmdId yew_cmd_register(const CmdDesc *d)
 {
-    sag_cmd_init();
+    yew_cmd_init();
     return register_desc(d);
 }
 
-CmdId sag_cmd_register_entry(const CmdEntry *entry)
+CmdId yew_cmd_register_entry(const CmdEntry *entry)
 {
-    sag_cmd_init();
+    yew_cmd_init();
     return register_entry(entry);
 }
 
-CmdId sag_cmd_lookup(const char *name, u32 len)
+CmdId yew_cmd_lookup(const char *name, u32 len)
 {
     void *found;
 
-    sag_cmd_init();
+    yew_cmd_init();
     if (name == NULL)
-        return SAG_CMD_NONE;
+        return YEW_CMD_NONE;
     found = strmap_get(&registry.names.map, name, len);
     return (CmdId){(u32)(uintptr_t)found};
 }
 
-CmdId sag_cmd_by_word(const char *word, u32 len)
+CmdId yew_cmd_by_word(const char *word, u32 len)
 {
     void *found;
 
-    sag_cmd_init();
+    yew_cmd_init();
     if (word == NULL || len == 0U)
-        return SAG_CMD_NONE;
+        return YEW_CMD_NONE;
     found = strmap_get(&registry.words, word, len);
     return (CmdId){(u32)(uintptr_t)found};
 }
 
-const CmdDesc *sag_cmd_desc(CmdId id)
+const CmdDesc *yew_cmd_desc(CmdId id)
 {
-    sag_cmd_init();
+    yew_cmd_init();
     if (id.v == 0U || (size_t)id.v > registry.len)
         return NULL;
     return &registry.entries[id.v - 1U].cmd;
 }
 
-const CmdEntry *sag_cmd_entry(CmdId id)
+const CmdEntry *yew_cmd_entry(CmdId id)
 {
-    sag_cmd_init();
+    yew_cmd_init();
     if (id.v == 0U || (size_t)id.v > registry.len)
         return NULL;
     return &registry.entries[id.v - 1U];
@@ -1194,21 +1194,21 @@ const CmdEntry *sag_cmd_entry(CmdId id)
 
 static bool args_valid(const CmdDesc *d, const CmdCtx *cx)
 {
-    if (cx->source < SAG_SRC_KEY || cx->source > SAG_SRC_TEST)
+    if (cx->source < YEW_SRC_KEY || cx->source > YEW_SRC_TEST)
         return false;
     if (cx->count == 0U)
         return false;
     if (cx->sarg == NULL && cx->sarg_len != 0U)
         return false;
     switch ((CmdArity)d->arity) {
-    case SAG_ARITY_NONE:
+    case YEW_ARITY_NONE:
         return cx->sarg == NULL && cx->sarg_len == 0U;
-    case SAG_ARITY_INT:
-    case SAG_ARITY_OPT_INT:
+    case YEW_ARITY_INT:
+    case YEW_ARITY_OPT_INT:
         return cx->sarg == NULL && cx->sarg_len == 0U;
-    case SAG_ARITY_STR:
+    case YEW_ARITY_STR:
         return cx->sarg != NULL;
-    case SAG_ARITY_OPT_STR:
+    case YEW_ARITY_OPT_STR:
         return cx->iarg == 0;
     }
     return false;
@@ -1217,7 +1217,7 @@ static bool args_valid(const CmdDesc *d, const CmdCtx *cx)
 static CmdStatus command_fail(const CmdDesc *d, const char *reason,
                               CmdStatus status)
 {
-    sag_log(SAG_LOG_ERROR, "command failed: %s: %s", d->name, reason);
+    yew_log(YEW_LOG_ERROR, "command failed: %s: %s", d->name, reason);
     return status;
 }
 
@@ -1241,73 +1241,73 @@ static CmdStatus command_deferred(const CmdDesc *d)
     char number[16];
     const char *sprint = deferred_sprint(d, number, sizeof(number));
 
-    sag_log(SAG_LOG_ERROR,
+    yew_log(YEW_LOG_ERROR,
             "command not implemented yet: %s lands in Sprint %s", d->name,
             sprint);
-    return SAG_CMD_ERR_DEFERRED;
+    return YEW_CMD_ERR_DEFERRED;
 }
 
-CmdStatus sag_cmd_prepare(CmdId id, CmdCtx *cx, const CmdDesc **out)
+CmdStatus yew_cmd_prepare(CmdId id, CmdCtx *cx, const CmdDesc **out)
 {
-    const CmdDesc *d = sag_cmd_desc(id);
+    const CmdDesc *d = yew_cmd_desc(id);
 
     if (out != NULL)
         *out = NULL;
     if (d == NULL || cx == NULL || out == NULL)
-        return SAG_CMD_ERR_ARG;
-    if ((d->flags & SAG_CMD_NEEDS_WIN) != 0U && cx->win == NULL)
-        return command_fail(d, "no window", SAG_CMD_ERR_STATE);
-    if ((d->flags & SAG_CMD_INTERNAL) != 0U &&
-        cx->source == SAG_SRC_CMDLINE)
-        return command_fail(d, "internal E command", SAG_CMD_ERR_ARG);
-    if ((d->flags & SAG_CMD_DEFERRED) != 0U)
+        return YEW_CMD_ERR_ARG;
+    if ((d->flags & YEW_CMD_NEEDS_WIN) != 0U && cx->win == NULL)
+        return command_fail(d, "no window", YEW_CMD_ERR_STATE);
+    if ((d->flags & YEW_CMD_INTERNAL) != 0U &&
+        cx->source == YEW_SRC_CMDLINE)
+        return command_fail(d, "internal E command", YEW_CMD_ERR_ARG);
+    if ((d->flags & YEW_CMD_DEFERRED) != 0U)
         return command_deferred(d);
     if (!args_valid(d, cx))
-        return command_fail(d, "invalid arguments", SAG_CMD_ERR_ARG);
+        return command_fail(d, "invalid arguments", YEW_CMD_ERR_ARG);
     if (registry.record_tap != NULL &&
-        (d->flags & SAG_CMD_RECORDABLE) != 0U) {
-        CmdStatus recordable = sag_record_preflight(id, cx);
+        (d->flags & YEW_CMD_RECORDABLE) != 0U) {
+        CmdStatus recordable = yew_record_preflight(id, cx);
 
-        if (recordable != SAG_CMD_OK)
+        if (recordable != YEW_CMD_OK)
             return recordable;
         registry.record_tap(id, cx);
     }
     *out = d;
-    return SAG_CMD_OK;
+    return YEW_CMD_OK;
 }
 
-CmdStatus sag_cmd_invoke(CmdId id, CmdCtx *cx)
+CmdStatus yew_cmd_invoke(CmdId id, CmdCtx *cx)
 {
     const CmdDesc *d;
     CmdStatus status;
     u32 n;
     u32 i;
 
-    status = sag_cmd_prepare(id, cx, &d);
-    if (status != SAG_CMD_OK)
+    status = yew_cmd_prepare(id, cx, &d);
+    if (status != YEW_CMD_OK)
         return status;
-    n = (d->flags & SAG_CMD_REPEATABLE) != 0U ? cx->count : 1U;
-    for (i = 0; i < n && status == SAG_CMD_OK; i++)
+    n = (d->flags & YEW_CMD_REPEATABLE) != 0U ? cx->count : 1U;
+    for (i = 0; i < n && status == YEW_CMD_OK; i++)
         status = d->fn(cx);
     return status;
 }
 
-u32 sag_cmd_count(void)
+u32 yew_cmd_count(void)
 {
-    sag_cmd_init();
+    yew_cmd_init();
     return (u32)registry.len;
 }
 
-const CmdDesc *sag_cmd_at(u32 i)
+const CmdDesc *yew_cmd_at(u32 i)
 {
-    sag_cmd_init();
+    yew_cmd_init();
     if ((size_t)i >= registry.len)
         return NULL;
     return &registry.entries[i].cmd;
 }
 
-void sag_cmd_set_record_tap(CmdRecordTap tap)
+void yew_cmd_set_record_tap(CmdRecordTap tap)
 {
-    sag_cmd_init();
+    yew_cmd_init();
     registry.record_tap = tap;
 }

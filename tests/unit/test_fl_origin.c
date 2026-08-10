@@ -37,34 +37,34 @@ void test_fl_origin_registry_reserves_config_zero(void)
         "the REPL"
     };
     Ed ed;
-    u32 ids[SAG_ARRAY_LEN(kinds)];
+    u32 ids[YEW_ARRAY_LEN(kinds)];
     size_t i;
     size_t j;
 
     origin_ed_open(&ed);
-    SAG_ASSERT_EQ_U64(ed.origins.n, 1U);
-    SAG_ASSERT_EQ_U64(FL_ORIGIN_ID_CONFIG, 0U);
-    SAG_ASSERT_EQ_STR(fl_origin_label(&ed, FL_ORIGIN_ID_CONFIG),
+    YEW_ASSERT_EQ_U64(ed.origins.n, 1U);
+    YEW_ASSERT_EQ_U64(FL_ORIGIN_ID_CONFIG, 0U);
+    YEW_ASSERT_EQ_STR(fl_origin_label(&ed, FL_ORIGIN_ID_CONFIG),
                       "the user config");
-    SAG_ASSERT_EQ_U64(fl_origin_caps(&ed, FL_ORIGIN_ID_CONFIG), ALL_CAPS);
+    YEW_ASSERT_EQ_U64(fl_origin_caps(&ed, FL_ORIGIN_ID_CONFIG), ALL_CAPS);
 
-    for (i = 0U; i < SAG_ARRAY_LEN(kinds); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(kinds); i++) {
         ids[i] = fl_origin_register(&ed, kinds[i], labels[i], (u32)(1U << i));
-        SAG_ASSERT(ids[i] != FL_ORIGIN_ID_CONFIG);
-        SAG_ASSERT(ids[i] != FL_ORIGIN_ID_NONE);
-        SAG_ASSERT_EQ_U64(ids[i], i + 1U);
-        SAG_ASSERT_EQ_STR(fl_origin_label(&ed, ids[i]), labels[i]);
-        SAG_ASSERT_EQ_U64(fl_origin_caps(&ed, ids[i]), (u32)(1U << i));
+        YEW_ASSERT(ids[i] != FL_ORIGIN_ID_CONFIG);
+        YEW_ASSERT(ids[i] != FL_ORIGIN_ID_NONE);
+        YEW_ASSERT_EQ_U64(ids[i], i + 1U);
+        YEW_ASSERT_EQ_STR(fl_origin_label(&ed, ids[i]), labels[i]);
+        YEW_ASSERT_EQ_U64(fl_origin_caps(&ed, ids[i]), (u32)(1U << i));
         for (j = 0U; j < i; j++)
-            SAG_ASSERT(ids[i] != ids[j]);
+            YEW_ASSERT(ids[i] != ids[j]);
     }
-    SAG_ASSERT_EQ_U64(ed.origins.n, SAG_ARRAY_LEN(kinds) + 1U);
-    SAG_ASSERT_EQ_STR(fl_origin_label(&ed, FL_ORIGIN_ID_NONE),
+    YEW_ASSERT_EQ_U64(ed.origins.n, YEW_ARRAY_LEN(kinds) + 1U);
+    YEW_ASSERT_EQ_STR(fl_origin_label(&ed, FL_ORIGIN_ID_NONE),
                       "an unknown origin");
-    SAG_ASSERT_EQ_U64(fl_origin_caps(&ed, FL_ORIGIN_ID_NONE), 0U);
-    SAG_ASSERT_EQ_STR(fl_origin_label(NULL, 0U), "an unknown origin");
-    SAG_ASSERT_EQ_U64(fl_origin_caps(NULL, 0U), 0U);
-    SAG_ASSERT_EQ_U64(fl_origin_register(NULL, FL_ORIGIN_PLUGIN, "x", 0U),
+    YEW_ASSERT_EQ_U64(fl_origin_caps(&ed, FL_ORIGIN_ID_NONE), 0U);
+    YEW_ASSERT_EQ_STR(fl_origin_label(NULL, 0U), "an unknown origin");
+    YEW_ASSERT_EQ_U64(fl_origin_caps(NULL, 0U), 0U);
+    YEW_ASSERT_EQ_U64(fl_origin_register(NULL, FL_ORIGIN_PLUGIN, "x", 0U),
                       FL_ORIGIN_ID_NONE);
     origin_ed_close(&ed);
 }
@@ -81,31 +81,31 @@ void test_fl_origin_registry_is_idempotent_and_updates_caps(void)
     origin_ed_open(&ed);
     config = fl_origin_register(&ed, FL_ORIGIN_CONFIG, "the user config",
                                 (u32)FL_CAP_FS_READ);
-    SAG_ASSERT_EQ_U64(config, FL_ORIGIN_ID_CONFIG);
-    SAG_ASSERT_EQ_U64(ed.origins.n, 1U);
-    SAG_ASSERT_EQ_U64(fl_origin_caps(&ed, config), FL_CAP_FS_READ);
+    YEW_ASSERT_EQ_U64(config, FL_ORIGIN_ID_CONFIG);
+    YEW_ASSERT_EQ_U64(ed.origins.n, 1U);
+    YEW_ASSERT_EQ_U64(fl_origin_caps(&ed, config), FL_CAP_FS_READ);
     first = fl_origin_register(&ed, FL_ORIGIN_PLUGIN, "same.fl",
                                (u32)FL_CAP_FS_READ);
     again = fl_origin_register(&ed, FL_ORIGIN_PLUGIN, "same.fl",
                                (u32)FL_CAP_NET);
-    SAG_ASSERT_EQ_U64(again, first);
-    SAG_ASSERT_EQ_U64(ed.origins.n, 2U);
-    SAG_ASSERT_EQ_STR(fl_origin_label(&ed, first), "same.fl");
-    SAG_ASSERT_EQ_U64(fl_origin_caps(&ed, first), FL_CAP_NET);
+    YEW_ASSERT_EQ_U64(again, first);
+    YEW_ASSERT_EQ_U64(ed.origins.n, 2U);
+    YEW_ASSERT_EQ_STR(fl_origin_label(&ed, first), "same.fl");
+    YEW_ASSERT_EQ_U64(fl_origin_caps(&ed, first), FL_CAP_NET);
 
     /* Kind is part of identity: the same path under config authority is
      * not the plugin's ledger owner. */
     other_kind = fl_origin_register(&ed, FL_ORIGIN_WORKSPACE, "same.fl",
                                     (u32)FL_CAP_FS_WRITE);
-    SAG_ASSERT(other_kind != first);
-    SAG_ASSERT_EQ_U64(ed.origins.n, 3U);
-    SAG_ASSERT_EQ_STR(fl_origin_label(&ed, other_kind), "same.fl");
-    SAG_ASSERT_EQ_U64(fl_origin_caps(&ed, other_kind), FL_CAP_FS_WRITE);
+    YEW_ASSERT(other_kind != first);
+    YEW_ASSERT_EQ_U64(ed.origins.n, 3U);
+    YEW_ASSERT_EQ_STR(fl_origin_label(&ed, other_kind), "same.fl");
+    YEW_ASSERT_EQ_U64(fl_origin_caps(&ed, other_kind), FL_CAP_FS_WRITE);
 
     unnamed = fl_origin_register(&ed, FL_ORIGIN_PLUGIN, NULL, 0U);
-    SAG_ASSERT(unnamed != FL_ORIGIN_ID_CONFIG);
-    SAG_ASSERT_EQ_STR(fl_origin_label(&ed, unnamed), "an unnamed origin");
-    SAG_ASSERT_EQ_U64(fl_origin_caps(&ed, unnamed), 0U);
+    YEW_ASSERT(unnamed != FL_ORIGIN_ID_CONFIG);
+    YEW_ASSERT_EQ_STR(fl_origin_label(&ed, unnamed), "an unnamed origin");
+    YEW_ASSERT_EQ_U64(fl_origin_caps(&ed, unnamed), 0U);
     origin_ed_close(&ed);
 }
 
@@ -118,30 +118,30 @@ void test_fl_origin_masking_is_idempotent(void)
     origin_ed_open(&ed);
     a = fl_origin_register(&ed, FL_ORIGIN_PLUGIN, "a.fl", 0U);
     b = fl_origin_register(&ed, FL_ORIGIN_PLUGIN, "b.fl", 0U);
-    SAG_ASSERT(!fl_origin_masked(&ed, a));
-    SAG_ASSERT(!fl_origin_masked(&ed, b));
-    SAG_ASSERT(!fl_origin_masked(NULL, a));
+    YEW_ASSERT(!fl_origin_masked(&ed, a));
+    YEW_ASSERT(!fl_origin_masked(&ed, b));
+    YEW_ASSERT(!fl_origin_masked(NULL, a));
 
     fl_origin_mask(&ed, a);
-    SAG_ASSERT(fl_origin_masked(&ed, a));
-    SAG_ASSERT(!fl_origin_masked(&ed, b));
-    SAG_ASSERT_EQ_U64(ed.origins.nmasked, 1U);
+    YEW_ASSERT(fl_origin_masked(&ed, a));
+    YEW_ASSERT(!fl_origin_masked(&ed, b));
+    YEW_ASSERT_EQ_U64(ed.origins.nmasked, 1U);
     fl_origin_mask(&ed, a);
-    SAG_ASSERT_EQ_U64(ed.origins.nmasked, 1U);
+    YEW_ASSERT_EQ_U64(ed.origins.nmasked, 1U);
 
     fl_origin_mask(&ed, b);
-    SAG_ASSERT(fl_origin_masked(&ed, a));
-    SAG_ASSERT(fl_origin_masked(&ed, b));
-    SAG_ASSERT_EQ_U64(ed.origins.nmasked, 2U);
+    YEW_ASSERT(fl_origin_masked(&ed, a));
+    YEW_ASSERT(fl_origin_masked(&ed, b));
+    YEW_ASSERT_EQ_U64(ed.origins.nmasked, 2U);
     fl_origin_unmask(&ed, a);
-    SAG_ASSERT(!fl_origin_masked(&ed, a));
-    SAG_ASSERT(fl_origin_masked(&ed, b));
-    SAG_ASSERT_EQ_U64(ed.origins.nmasked, 1U);
+    YEW_ASSERT(!fl_origin_masked(&ed, a));
+    YEW_ASSERT(fl_origin_masked(&ed, b));
+    YEW_ASSERT_EQ_U64(ed.origins.nmasked, 1U);
     fl_origin_unmask(&ed, a);
-    SAG_ASSERT_EQ_U64(ed.origins.nmasked, 1U);
+    YEW_ASSERT_EQ_U64(ed.origins.nmasked, 1U);
     fl_origin_unmask(&ed, b);
-    SAG_ASSERT(!fl_origin_masked(&ed, b));
-    SAG_ASSERT_EQ_U64(ed.origins.nmasked, 0U);
+    YEW_ASSERT(!fl_origin_masked(&ed, b));
+    YEW_ASSERT_EQ_U64(ed.origins.nmasked, 0U);
     fl_origin_mask(NULL, a);
     fl_origin_unmask(NULL, a);
     origin_ed_close(&ed);
@@ -155,21 +155,21 @@ void test_fl_origin_of_frame_uses_attached_root_origin(void)
     u32 id;
 
     flfix_open(&f);
-    SAG_ASSERT_EQ_U64(fl_origin_of_frame(&f.vm), FL_ORIGIN_ID_NONE);
+    YEW_ASSERT_EQ_U64(fl_origin_of_frame(&f.vm), FL_ORIGIN_ID_NONE);
     origin_ed_open(&ed);
     f.vm.ed = &ed;
-    path = sag_intern(&f.in, "/tmp/root-plugin.fl", 19U);
+    path = yew_intern(&f.in, "/tmp/root-plugin.fl", 19U);
     f.vm.root_origin.kind = (u8)FL_ORIGIN_PLUGIN;
     f.vm.root_origin.path_id = path;
     f.vm.root_origin.caps = (u32)FL_CAP_FS_READ;
 
     id = fl_origin_of_frame(&f.vm);
-    SAG_ASSERT(id != FL_ORIGIN_ID_CONFIG);
-    SAG_ASSERT(id != FL_ORIGIN_ID_NONE);
-    SAG_ASSERT_EQ_STR(fl_origin_label(&ed, id), "/tmp/root-plugin.fl");
-    SAG_ASSERT_EQ_U64(fl_origin_caps(&ed, id), FL_CAP_FS_READ);
-    SAG_ASSERT_EQ_U64(fl_origin_of_frame(&f.vm), id);
-    SAG_ASSERT_EQ_U64(ed.origins.n, 2U);
+    YEW_ASSERT(id != FL_ORIGIN_ID_CONFIG);
+    YEW_ASSERT(id != FL_ORIGIN_ID_NONE);
+    YEW_ASSERT_EQ_STR(fl_origin_label(&ed, id), "/tmp/root-plugin.fl");
+    YEW_ASSERT_EQ_U64(fl_origin_caps(&ed, id), FL_CAP_FS_READ);
+    YEW_ASSERT_EQ_U64(fl_origin_of_frame(&f.vm), id);
+    YEW_ASSERT_EQ_U64(ed.origins.n, 2U);
 
     f.vm.ed = NULL;
     origin_ed_close(&ed);
@@ -214,8 +214,8 @@ void test_fl_origin_plugin_helper_chain_denial_is_catchable(void)
                        "capability:fs.read denied to %s/helper.fl", dir);
         FL_EQ(&f, denied, want);
     }
-    SAG_ASSERT_EQ_U64(f.vm.mods.n, 2U);
-    SAG_ASSERT(f.vm.mods.v[0].exports != f.vm.mods.v[1].exports);
+    YEW_ASSERT_EQ_U64(f.vm.mods.n, 2U);
+    YEW_ASSERT(f.vm.mods.v[0].exports != f.vm.mods.v[1].exports);
 
     flfix_close(&f);
 }
@@ -229,16 +229,16 @@ void test_fl_origin_cap_check_requires_every_requested_bit(void)
     flfix_open(&f);
     f.vm.root_origin.kind = (u8)FL_ORIGIN_PLUGIN;
     f.vm.root_origin.caps = (u32)FL_CAP_FS_READ | (u32)FL_CAP_SHELL;
-    SAG_ASSERT(fl_cap_check(&f.vm, (u32)FL_CAP_FS_READ));
-    SAG_ASSERT(fl_cap_check(&f.vm, (u32)FL_CAP_SHELL));
-    SAG_ASSERT(fl_cap_check(&f.vm,
+    YEW_ASSERT(fl_cap_check(&f.vm, (u32)FL_CAP_FS_READ));
+    YEW_ASSERT(fl_cap_check(&f.vm, (u32)FL_CAP_SHELL));
+    YEW_ASSERT(fl_cap_check(&f.vm,
                             (u32)FL_CAP_FS_READ | (u32)FL_CAP_SHELL));
-    SAG_ASSERT(!fl_cap_check(&f.vm,
+    YEW_ASSERT(!fl_cap_check(&f.vm,
                              (u32)FL_CAP_FS_READ | (u32)FL_CAP_NET));
     key = fl_str_new(&f.vm, "kind", 4U);
-    SAG_ASSERT(fl_map_get((FlMap *)f.vm.err.as.o, FL_OBJ_V(FL_STR, key),
+    YEW_ASSERT(fl_map_get((FlMap *)f.vm.err.as.o, FL_OBJ_V(FL_STR, key),
                           &kind));
-    SAG_ASSERT_EQ_U64(kind.t, FL_STR);
-    SAG_ASSERT_EQ_STR(((FlStr *)kind.as.o)->b, "capability");
+    YEW_ASSERT_EQ_U64(kind.t, FL_STR);
+    YEW_ASSERT_EQ_STR(((FlStr *)kind.as.o)->b, "capability");
     flfix_close(&f);
 }

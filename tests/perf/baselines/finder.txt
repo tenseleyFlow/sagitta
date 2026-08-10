@@ -1,4 +1,4 @@
-# sagitta finder perf baseline v1  (Sprint 26 DoD 6)
+# yew finder perf baseline v1  (Sprint 26 DoD 6)
 #
 # Recorded on x86_64-linux-gnu, gcc -O2, 100 000 synthetic paths with
 # distinct names across 12 directories.  These are CEILINGS the gate

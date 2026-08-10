@@ -83,12 +83,12 @@ MODDIR_plugins := plug
 # there.
 CFLAGS := -std=c11 -pedantic -Wall -Wextra -Werror -Wvla -g -O2 \
           -D_FORTIFY_SOURCE=2 \
-          -DSAG_RUNTIME_DIR_DEFAULT='"$(PREFIX)/share/sagitta/runtime"' \
+          -DYEW_RUNTIME_DIR_DEFAULT='"$(PREFIX)/share/yew/runtime"' \
           -MMD -MP -Isrc -Itests -Itests/pty -Itests/fuzz \
-          -DSAG_WITH_LSP=$(if $(filter lsp,$(MODULES)),1,0) \
-          -DSAG_WITH_AI=$(if $(filter ai,$(MODULES)),1,0) \
-          -DSAG_WITH_FUSS=$(if $(filter fuss,$(MODULES)),1,0) \
-          -DSAG_WITH_PLUGINS=$(if $(filter plugins,$(MODULES)),1,0)
+          -DYEW_WITH_LSP=$(if $(filter lsp,$(MODULES)),1,0) \
+          -DYEW_WITH_AI=$(if $(filter ai,$(MODULES)),1,0) \
+          -DYEW_WITH_FUSS=$(if $(filter fuss,$(MODULES)),1,0) \
+          -DYEW_WITH_PLUGINS=$(if $(filter plugins,$(MODULES)),1,0)
 
 # Sprint 30 DoD 1: the Fletch VM's computed-goto dispatcher.  The label
 # table is a GNU extension, so -pedantic rejects it under -std=c11 --
@@ -194,16 +194,16 @@ else
 ASAN_RT :=
 endif
 ifneq ($(ASAN_RT),)
-CFLAGS  += -DSAG_ASAN_RUNTIME='"$(ASAN_RT)"'
+CFLAGS  += -DYEW_ASAN_RUNTIME='"$(ASAN_RT)"'
 endif
 endif
 
 UNIT_RUN := $(BUILD)/unit_tests
-# Deferred (=, not :=) so $(SAG_PTY_BUDGET_MS) resolves at USE time,
+# Deferred (=, not :=) so $(YEW_PTY_BUDGET_MS) resolves at USE time,
 # after the VALGRIND/else branches below have chosen a value.  Without
 # the prefix the plain lanes passed nothing and silently inherited
 # runner.c's 180 s fallback.
-PTY_RUN   = SAG_PTY_BUDGET_MS=$(SAG_PTY_BUDGET_MS) $(BUILD)/pty_runner
+PTY_RUN   = YEW_PTY_BUDGET_MS=$(YEW_PTY_BUDGET_MS) $(BUILD)/pty_runner
 PTY_PREP :=
 PTY_LOG_REDIRECT :=
 # Plain compiler lanes cover intentional abort contracts. Instrumented lanes
@@ -231,21 +231,21 @@ ifeq ($(VALGRIND),1)
 # is what makes it slow, and is not optional; see quiet_scale()).  CI
 # runners are slower still, so this is roughly 3x headroom.  It is a
 # wall-clock ceiling, not a latency budget: nothing measures against it.
-SAG_PTY_BUDGET_MS ?= 3600000
-SAG_PTY_CASE_BUDGET_MS ?= 60000
-SAG_SCRIPT_BUDGET_MS ?= 600000
+YEW_PTY_BUDGET_MS ?= 3600000
+YEW_PTY_CASE_BUDGET_MS ?= 60000
+YEW_SCRIPT_BUDGET_MS ?= 600000
 # A settle infers "done" from silence, and valgrind makes the editor
 # silent for far longer than it is idle.  See quiet_scale() in
 # tests/pty/harness.c.
-SAG_PTY_QUIET_SCALE ?= 8
+YEW_PTY_QUIET_SCALE ?= 8
 VALGRIND_RUN := valgrind --quiet --error-exitcode=99 --leak-check=full \
                  --errors-for-leak-kinds=definite --track-fds=yes \
                  --child-silent-after-fork=yes
 VALGRIND_TRACE_SKIP := \
     --trace-children-skip='/bin/*,/usr/bin/*,/usr/lib/*,/sbin/*'
-UNIT_RUN := SAG_TEST_INSTRUMENTED=1 $(VALGRIND_RUN) \
+UNIT_RUN := YEW_TEST_INSTRUMENTED=1 $(VALGRIND_RUN) \
             $(BUILD)/unit_tests $(UNIT_DEATH_EXCLUDES) && \
-            SAG_TORTURE_CLEAN_ONLY=1 $(VALGRIND_RUN) \
+            YEW_TORTURE_CLEAN_ONLY=1 $(VALGRIND_RUN) \
             --trace-children=yes $(BUILD)/unit_tests \
             --filter save_fault_shim_contract
 #
@@ -270,10 +270,10 @@ UNIT_RUN := SAG_TEST_INSTRUMENTED=1 $(VALGRIND_RUN) \
 # exit.  That is the point of those cases, not a defect in them, and
 # --error-exitcode=99 would overwrite the exit status they exist to
 # assert.  Both still run in every other lane, sanitize included.
-PTY_RUN  := SAG_PTY_BUDGET_MS=$(SAG_PTY_BUDGET_MS) \
-            SAG_PTY_CASE_BUDGET_MS=$(SAG_PTY_CASE_BUDGET_MS) \
-            SAG_PTY_QUIET_SCALE=$(SAG_PTY_QUIET_SCALE) \
-            SAG_PTY_EXCLUDE=notepad_restore_segv,s32_bug_restores_the_terminal \
+PTY_RUN  := YEW_PTY_BUDGET_MS=$(YEW_PTY_BUDGET_MS) \
+            YEW_PTY_CASE_BUDGET_MS=$(YEW_PTY_CASE_BUDGET_MS) \
+            YEW_PTY_QUIET_SCALE=$(YEW_PTY_QUIET_SCALE) \
+            YEW_PTY_EXCLUDE=notepad_restore_segv,s32_bug_restores_the_terminal \
             valgrind --quiet --error-exitcode=99 --leak-check=full \
             --errors-for-leak-kinds=definite --track-fds=yes \
             --trace-children=yes \
@@ -297,18 +297,18 @@ else
 # 600 s is ~4.5x the measured time.  It is a wall-clock ceiling on a
 # HANG, not a latency budget — nothing measures against it, and the
 # per-case budget is what bounds a single stuck case.
-SAG_PTY_BUDGET_MS ?= 600000
+YEW_PTY_BUDGET_MS ?= 600000
 ifeq ($(SAN),1)
 # The 10,000-replacement migration case is deliberately CPU-heavy under
 # per-instruction VM checks plus ASan/UBSan; this is a hang ceiling only.
-SAG_SCRIPT_BUDGET_MS ?= 120000
+YEW_SCRIPT_BUDGET_MS ?= 120000
 else
-SAG_SCRIPT_BUDGET_MS ?= 10000
+YEW_SCRIPT_BUDGET_MS ?= 10000
 endif
 endif
 
 ifeq ($(SAN),1)
-UNIT_RUN := SAG_TORTURE_CLEAN_ONLY=1 SAG_TEST_INSTRUMENTED=1 \
+UNIT_RUN := YEW_TORTURE_CLEAN_ONLY=1 YEW_TEST_INSTRUMENTED=1 \
             $(BUILD)/unit_tests $(UNIT_DEATH_EXCLUDES)
 endif
 
@@ -333,7 +333,7 @@ STATE_LEGACY_OBJ := $(BUILD)/tests/unit/state_legacy.o
 # Sprint 36: activate the independent Fletch arm in the frozen-corpus
 # differential.  The hand-written parser remains visible only to tests.
 $(BUILD)/tests/unit/test_state_differential.o: CFLAGS += \
-  -DSAG_HAVE_FLETCH_STATE=1
+  -DYEW_HAVE_FLETCH_STATE=1
 FAKECLIP := $(BUILD)/fakeclip
 PTY_VT_OBJ := $(BUILD)/tests/pty/vt.o
 PTY_SNAPSHOT_OBJ := $(BUILD)/tests/pty/snapshot.o
@@ -418,14 +418,14 @@ ROUNDTRIP_LINK_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ)) \
                       $(ROUNDTRIP_OBJ)
 GEN_BIGFILE_OBJ := $(BUILD)/scripts/gen-bigfile.o
 
-TORTURE_CHILD_OBJ := $(BUILD)/tests/torture/sag-torture.o
+TORTURE_CHILD_OBJ := $(BUILD)/tests/torture/yew-torture.o
 TORTURE_DRIVER_OBJ := $(BUILD)/tests/torture/kill9.o
-TORTURE_LIVE_OBJ := $(BUILD)/tests/torture/sag-live-torture.o
+TORTURE_LIVE_OBJ := $(BUILD)/tests/torture/yew-live-torture.o
 TORTURE_BATCH_OBJ := $(BUILD)/tests/torture/batch_kill9.o
 TORTURE_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
-TORTURE_CHILD := $(BUILD)/sag-torture
+TORTURE_CHILD := $(BUILD)/yew-torture
 TORTURE_DRIVER := $(BUILD)/kill9
-TORTURE_LIVE := $(BUILD)/sag-live-torture
+TORTURE_LIVE := $(BUILD)/yew-live-torture
 TORTURE_BATCH := $(BUILD)/batch-kill9
 FAULTSHIM := $(BUILD)/tests/torture/faultshim.so
 
@@ -488,13 +488,10 @@ endif
         bench-fletch \
         test-fletch-dispatch test-fletch-gc-stress test-fletch-determinism
 
-all: $(BUILD)/sagitta $(BUILD)/sag
+all: $(BUILD)/yew
 
-$(BUILD)/sagitta: $(OBJ)
+$(BUILD)/yew: $(OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJ) $(LDLIBS)
-
-$(BUILD)/sag: $(BUILD)/sagitta
-	ln -sf sagitta $@
 
 $(BUILD)/unit_tests: $(UNIT_LINK_OBJ) $(FAKECLIP) $(TORTURE_CHILD) \
                      $(TORTURE_DRIVER) $(FAULTSHIM)
@@ -745,7 +742,7 @@ $(FAKECLIP): tests/unit/fakeclip.c | dirs
 # see the valgrind job in .github/workflows/ci.yml for when that lane
 # has to be asked for by hand.
 #
-check: $(BUILD)/unit_tests $(BUILD)/sagitta test-fletch test-script
+check: $(BUILD)/unit_tests $(BUILD)/yew test-fletch test-script
 	$(UNIT_RUN)
 	scripts/bans.sh
 	scripts/check-cmd-dispatch.sh
@@ -753,10 +750,10 @@ check: $(BUILD)/unit_tests $(BUILD)/sagitta test-fletch test-script
 	scripts/check-input.sh
 	scripts/check-render.sh
 	scripts/check-sigsafe.sh
-	scripts/smoke.sh $(BUILD)/sagitta
+	scripts/smoke.sh $(BUILD)/yew
 	@echo "check: ok (fast tier -- pty, torture, sanitizers and valgrind NOT run)"
 
-test: $(BUILD)/unit_tests $(BUILD)/sagitta test-pty test-fletch test-script \
+test: $(BUILD)/unit_tests $(BUILD)/yew test-pty test-fletch test-script \
       test-roundtrip test-record-corpus torture-build
 	$(UNIT_RUN)
 	scripts/bans.sh
@@ -765,7 +762,7 @@ test: $(BUILD)/unit_tests $(BUILD)/sagitta test-pty test-fletch test-script \
 	scripts/check-input.sh
 	scripts/check-render.sh
 	scripts/check-sigsafe.sh
-	scripts/smoke.sh $(BUILD)/sagitta
+	scripts/smoke.sh $(BUILD)/yew
 	$(MAKE) --no-print-directory torture-live-check BUILD=$(BUILD) \
 		CC=$(CC) SAN=$(SAN) VALGRIND=$(VALGRIND)
 
@@ -914,12 +911,12 @@ perf-cmdcomp: $(BUILD)/perf_cmdcomp
 perf-record: $(BUILD)/perf_record
 	$(BUILD)/perf_record $(if $(PERF_GATE),--gate,)
 
-perf-batch: $(BUILD)/perf_batch $(BUILD)/sagitta
-	$(BUILD)/perf_batch --sagitta $(abspath $(BUILD)/sagitta) --gate
+perf-batch: $(BUILD)/perf_batch $(BUILD)/yew
+	$(BUILD)/perf_batch --yew $(abspath $(BUILD)/yew) --gate
 
-perf-batch-selftest: $(BUILD)/perf_batch $(BUILD)/sagitta
-	@if SAG_BATCH_INJECT_NS=12000000 $(BUILD)/perf_batch \
-		--sagitta $(abspath $(BUILD)/sagitta) --gate; then \
+perf-batch-selftest: $(BUILD)/perf_batch $(BUILD)/yew
+	@if YEW_BATCH_INJECT_NS=12000000 $(BUILD)/perf_batch \
+		--yew $(abspath $(BUILD)/yew) --gate; then \
 		echo 'error: batch startup gate accepted injected delay' >&2; \
 		exit 1; \
 	else \
@@ -948,7 +945,7 @@ fl-perf-smoke: $(BUILD)/fl_smoke
 # One without the other finds much less.
 #
 fl-gc-stress: $(UNIT_RUN)
-	SAG_FL_GC_STRESS=1 $(UNIT_RUN) $(UNIT_DEATH_EXCLUDES)
+	YEW_FL_GC_STRESS=1 $(UNIT_RUN) $(UNIT_DEATH_EXCLUDES)
 
 #
 # Sprint 30 DoD 5: the differential-dispatch gate.
@@ -1003,8 +1000,8 @@ perf-finder: $(BUILD)/perf_finder
 perf-mouse: $(BUILD)/perf_mouse
 	$(BUILD)/perf_mouse
 
-perf-latency: $(BUILD)/perf_latency $(BUILD)/sagitta
-	$(BUILD)/perf_latency --sagitta $(abspath $(BUILD)/sagitta) \
+perf-latency: $(BUILD)/perf_latency $(BUILD)/yew
+	$(BUILD)/perf_latency --yew $(abspath $(BUILD)/yew) \
 		--baseline $(LATENCY_BASELINE)
 
 perf-re-pathological: $(BUILD)/perf_re_pathological
@@ -1016,14 +1013,14 @@ perf-re-throughput: $(BUILD)/perf_re_throughput
 perf-search-latency: $(BUILD)/perf_search_latency
 	$(BUILD)/perf_search_latency --baseline $(PERF_BASELINE)
 
-perf-jobstream: $(BUILD)/perf_jobstream $(BUILD)/sagitta
-	$(BUILD)/perf_jobstream --sagitta $(abspath $(BUILD)/sagitta) \
+perf-jobstream: $(BUILD)/perf_jobstream $(BUILD)/yew
+	$(BUILD)/perf_jobstream --yew $(abspath $(BUILD)/yew) \
 		--baseline $(LATENCY_BASELINE)
 
 # Proves the gate reacts: an injected paint delay must fail it.
-perf-jobstream-selftest: $(BUILD)/perf_jobstream $(BUILD)/sagitta
-	@if SAG_JOBSTREAM_KEYS=60 SAG_JOBSTREAM_INJECT_NS=6000000 \
-		$(BUILD)/perf_jobstream --sagitta $(abspath $(BUILD)/sagitta) \
+perf-jobstream-selftest: $(BUILD)/perf_jobstream $(BUILD)/yew
+	@if YEW_JOBSTREAM_KEYS=60 YEW_JOBSTREAM_INJECT_NS=6000000 \
+		$(BUILD)/perf_jobstream --yew $(abspath $(BUILD)/yew) \
 		--baseline $(LATENCY_BASELINE); then \
 		echo 'error: jobstream gate accepted injected delay' >&2; \
 		exit 1; \
@@ -1031,9 +1028,9 @@ perf-jobstream-selftest: $(BUILD)/perf_jobstream $(BUILD)/sagitta
 		echo 'jobstream selftest: injected delay correctly rejected'; \
 	fi
 
-perf-latency-selftest: $(BUILD)/perf_latency $(BUILD)/sagitta
-	@if SAG_LATENCY_KEYS=100 SAG_LATENCY_INJECT_NS=6000000 \
-		$(BUILD)/perf_latency --sagitta $(abspath $(BUILD)/sagitta) \
+perf-latency-selftest: $(BUILD)/perf_latency $(BUILD)/yew
+	@if YEW_LATENCY_KEYS=100 YEW_LATENCY_INJECT_NS=6000000 \
+		$(BUILD)/perf_latency --yew $(abspath $(BUILD)/yew) \
 		--baseline $(LATENCY_BASELINE); then \
 		echo 'error: latency gate accepted injected paint delay' >&2; \
 		exit 1; \
@@ -1088,17 +1085,17 @@ fixtures-verify: fixtures
 	done
 
 perf-textbuf: $(BUILD)/perf_textbuf fixtures-quick
-	SAG_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_textbuf \
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_textbuf \
 		--fixtures $(FIXTURE_DIR) --baseline $(PERF_BASELINE) \
 		--runner-id $(PERF_RUNNER_ID)
 
 perf-huge: $(BUILD)/perf_textbuf fixtures
-	SAG_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_textbuf \
+	YEW_PERF_ADVISORY=$(PERF_ADVISORY) $(BUILD)/perf_textbuf \
 		--fixtures $(FIXTURE_DIR) --baseline $(PERF_BASELINE) \
 		--runner-id $(PERF_RUNNER_ID) --huge
 
 perf-update: $(BUILD)/perf_textbuf fixtures
-	SAG_PERF_ADVISORY=1 $(BUILD)/perf_textbuf --fixtures $(FIXTURE_DIR) \
+	YEW_PERF_ADVISORY=1 $(BUILD)/perf_textbuf --fixtures $(FIXTURE_DIR) \
 		--baseline $(PERF_BASELINE) --runner-id $(PERF_RUNNER_ID) \
 		--huge --update
 
@@ -1106,7 +1103,7 @@ perf-baseline-guard:
 	scripts/perf-baseline-guard.sh
 
 perf-gate-selftest: $(BUILD)/perf_textbuf fixtures-quick
-	@if SAG_PERF_INJECT_OPEN_DELAY=1 SAG_PERF_ADVISORY=0 \
+	@if YEW_PERF_INJECT_OPEN_DELAY=1 YEW_PERF_ADVISORY=0 \
 		$(BUILD)/perf_textbuf --fixtures $(FIXTURE_DIR) \
 		--baseline $(PERF_BASELINE) \
 		--runner-id perf-x86_64-linux-gnu; then \
@@ -1116,32 +1113,32 @@ perf-gate-selftest: $(BUILD)/perf_textbuf fixtures-quick
 		echo 'perf-gate-selftest: injected delay rejected'; \
 	fi
 
-torture-build: $(BUILD)/sagitta $(TORTURE_CHILD) $(TORTURE_LIVE) \
+torture-build: $(BUILD)/yew $(TORTURE_CHILD) $(TORTURE_LIVE) \
                $(TORTURE_DRIVER) $(TORTURE_BATCH) $(FAULTSHIM)
 
 torture-live-check: torture-build
-	SAG_TORTURE_CLEAN_ONLY=1 \
-	SAG_TORTURE_CHECKER=$(abspath $(TORTURE_CHILD)) \
-	SAG_TORTURE_SAGITTA=$(abspath $(BUILD)/sagitta) \
+	YEW_TORTURE_CLEAN_ONLY=1 \
+	YEW_TORTURE_CHECKER=$(abspath $(TORTURE_CHILD)) \
+	YEW_TORTURE_YEW=$(abspath $(BUILD)/yew) \
 		$(if $(filter 1,$(VALGRIND)),$(VALGRIND_RUN) --trace-children=yes,) \
 		$(TORTURE_DRIVER) $(abspath $(TORTURE_LIVE)) \
 		$(abspath $(FAULTSHIM))
 
 torture-batch: torture-build
-	$(TORTURE_BATCH) --sagitta $(abspath $(BUILD)/sagitta) \
+	$(TORTURE_BATCH) --yew $(abspath $(BUILD)/yew) \
 		--checker $(abspath $(TORTURE_CHILD))
 
 torture: torture-build
-	SAG_TORTURE_SIGKILL_ITERS=$(TORTURE_SIGKILL_ITERS) \
+	YEW_TORTURE_SIGKILL_ITERS=$(TORTURE_SIGKILL_ITERS) \
 		$(TORTURE_DRIVER) $(abspath $(TORTURE_CHILD)) \
 		$(abspath $(FAULTSHIM))
-	SAG_TORTURE_CHECKER=$(abspath $(TORTURE_CHILD)) \
-	SAG_TORTURE_SAGITTA=$(abspath $(BUILD)/sagitta) \
-	SAG_TORTURE_LANE=live-editor \
-	SAG_TORTURE_SIGKILL_ITERS=$(TORTURE_SIGKILL_ITERS) \
+	YEW_TORTURE_CHECKER=$(abspath $(TORTURE_CHILD)) \
+	YEW_TORTURE_YEW=$(abspath $(BUILD)/yew) \
+	YEW_TORTURE_LANE=live-editor \
+	YEW_TORTURE_SIGKILL_ITERS=$(TORTURE_SIGKILL_ITERS) \
 		$(TORTURE_DRIVER) $(abspath $(TORTURE_LIVE)) \
 		$(abspath $(FAULTSHIM))
-	$(TORTURE_BATCH) --sagitta $(abspath $(BUILD)/sagitta) \
+	$(TORTURE_BATCH) --yew $(abspath $(BUILD)/yew) \
 		--checker $(abspath $(TORTURE_CHILD))
 
 unicode-tables: $(BUILD)/gen-unicode-tables
@@ -1172,70 +1169,69 @@ $(BUILD)/%.o: %.c $(BUILD)/mods.stamp $(MODULE_FORCE) | dirs
 
 $(STATE_LEGACY_OBJ): src/ws/state_legacy.c src/ws/fl_parse.c \
                      src/ws/fl_emit.c $(BUILD)/mods.stamp | dirs
-	$(CC) $(CFLAGS) -DSAG_STATE_LEGACY=1 -c -o $@ $<
+	$(CC) $(CFLAGS) -DYEW_STATE_LEGACY=1 -c -o $@ $<
 
 dirs:
 	mkdir -p $(BUILD_DIRS)
 
 install: all
 	install -d $(DESTDIR)$(PREFIX)/bin
-	install -m 0755 $(BUILD)/sagitta $(DESTDIR)$(PREFIX)/bin/sagitta
-	ln -sf sagitta $(DESTDIR)$(PREFIX)/bin/sag
-	install -d $(DESTDIR)$(PREFIX)/share/sagitta/runtime
+	install -m 0755 $(BUILD)/yew $(DESTDIR)$(PREFIX)/bin/yew
+	install -d $(DESTDIR)$(PREFIX)/share/yew/runtime
 	install -m 0644 runtime/init.fl \
-		$(DESTDIR)$(PREFIX)/share/sagitta/runtime/init.fl
+		$(DESTDIR)$(PREFIX)/share/yew/runtime/init.fl
 
 clean:
 	rm -rf $(BUILD)
 
-test-script: $(BUILD)/script_runner $(BUILD)/sagitta
-	LC_ALL=C SAG_SCRIPT_BUDGET_MS=$(SAG_SCRIPT_BUDGET_MS) \
+test-script: $(BUILD)/script_runner $(BUILD)/yew
+	LC_ALL=C YEW_SCRIPT_BUDGET_MS=$(YEW_SCRIPT_BUDGET_MS) \
 		$(if $(filter 1,$(VALGRIND)),$(VALGRIND_RUN) \
 		--trace-children=yes \
 		$(VALGRIND_TRACE_SKIP),) \
 		$(BUILD)/script_runner --selftest \
-		--sagitta $(abspath $(BUILD)/sagitta)
-	LC_ALL=C SAG_SCRIPT_BUDGET_MS=$(SAG_SCRIPT_BUDGET_MS) \
+		--yew $(abspath $(BUILD)/yew)
+	LC_ALL=C YEW_SCRIPT_BUDGET_MS=$(YEW_SCRIPT_BUDGET_MS) \
 		$(if $(filter 1,$(VALGRIND)),$(VALGRIND_RUN) \
 		--trace-children=yes \
 		$(VALGRIND_TRACE_SKIP),) \
 		$(BUILD)/script_runner \
-		--sagitta $(abspath $(BUILD)/sagitta)
+		--yew $(abspath $(BUILD)/yew)
 
-test-script-determinism: $(BUILD)/script_runner $(BUILD)/sagitta
+test-script-determinism: $(BUILD)/script_runner $(BUILD)/yew
 	@set -e; \
 	tmp=$$(mktemp -d); \
 	trap 'rm -rf "$$tmp"' EXIT HUP INT TERM; \
 	LC_ALL=C $(BUILD)/script_runner --selftest \
-		--sagitta $(abspath $(BUILD)/sagitta) >"$$tmp/run-1" 2>&1; \
+		--yew $(abspath $(BUILD)/yew) >"$$tmp/run-1" 2>&1; \
 	LC_ALL=C $(BUILD)/script_runner \
-		--sagitta $(abspath $(BUILD)/sagitta) >>"$$tmp/run-1" 2>&1; \
+		--yew $(abspath $(BUILD)/yew) >>"$$tmp/run-1" 2>&1; \
 	LC_ALL=C $(BUILD)/script_runner --selftest \
-		--sagitta $(abspath $(BUILD)/sagitta) >"$$tmp/run-2" 2>&1; \
+		--yew $(abspath $(BUILD)/yew) >"$$tmp/run-2" 2>&1; \
 	LC_ALL=C $(BUILD)/script_runner \
-		--sagitta $(abspath $(BUILD)/sagitta) >>"$$tmp/run-2" 2>&1; \
+		--yew $(abspath $(BUILD)/yew) >>"$$tmp/run-2" 2>&1; \
 	diff -u "$$tmp/run-1" "$$tmp/run-2"; \
 	echo 'test-script-determinism: ok'
 
 test-script-budget: $(BUILD)/perf_script_suite $(BUILD)/script_runner \
-                    $(BUILD)/sagitta $(SCRIPT_SUITE_BASELINE)
+                    $(BUILD)/yew $(SCRIPT_SUITE_BASELINE)
 	$(BUILD)/perf_script_suite --selftest
 	LC_ALL=C $(BUILD)/perf_script_suite \
 		--runner $(abspath $(BUILD)/script_runner) \
-		--sagitta $(abspath $(BUILD)/sagitta) \
+		--yew $(abspath $(BUILD)/yew) \
 		--baseline $(SCRIPT_SUITE_BASELINE)
 
 # The conformance suite (Sprint 33).  LC_ALL=C is set rather than
 # assumed: run.c sorts with strcmp and the ledger is byte-compared.
-# The RUNNER goes under valgrind; the `sag fl` children deliberately do
+# The RUNNER goes under valgrind; the `yew fl` children deliberately do
 # not (no --trace-children).  Wrapping 37 subprocess spawns would turn a
 # 0.2 s lane into minutes for a check the sanitize lane already makes
 # with ASan -- and the runner is the part with the file descriptors and
 # the allocation bookkeeping that --track-fds and --leak-check exist to
 # police.
-test-fletch: $(BUILD)/fletch_run $(BUILD)/sagitta
+test-fletch: $(BUILD)/fletch_run $(BUILD)/yew
 	LC_ALL=C $(if $(filter 1,$(VALGRIND)),$(VALGRIND_RUN),) \
-		$(BUILD)/fletch_run --sagitta $(abspath $(BUILD)/sagitta)
+		$(BUILD)/fletch_run --yew $(abspath $(BUILD)/yew)
 	BUILD=$(BUILD) scripts/check-fletch-coverage.sh
 	BUILD=$(BUILD) scripts/check-fletch-meta.sh
 	BUILD=$(BUILD) scripts/check-fletch-gate-selftest.sh
@@ -1248,9 +1244,9 @@ bench-fletch: $(BUILD)/perf_fletch
 	$(BUILD)/perf_fletch --baseline $(BASELINE) \
 		$(if $(PERF_GATE),--gate,--gate-budgets)
 
-fletch-ledger: $(BUILD)/fletch_run $(BUILD)/sagitta
+fletch-ledger: $(BUILD)/fletch_run $(BUILD)/yew
 	LC_ALL=C $(BUILD)/fletch_run --ledger \
-		--sagitta $(abspath $(BUILD)/sagitta) >tests/fletch/ledger.txt
+		--yew $(abspath $(BUILD)/yew) >tests/fletch/ledger.txt
 
 # DoD 11: the whole suite under both dispatchers, outputs byte-compared.
 #
@@ -1260,14 +1256,14 @@ fletch-ledger: $(BUILD)/fletch_run $(BUILD)/sagitta
 test-fletch-dispatch:
 	@rm -rf $(BUILD)-flc-sw $(BUILD)-flc-cg
 	$(MAKE) --no-print-directory BUILD=$(BUILD)-flc-sw FL_CGOTO=0 \
-		$(BUILD)-flc-sw/sagitta $(BUILD)-flc-sw/fletch_run
+		$(BUILD)-flc-sw/yew $(BUILD)-flc-sw/fletch_run
 	$(MAKE) --no-print-directory BUILD=$(BUILD)-flc-cg FL_CGOTO=1 \
-		$(BUILD)-flc-cg/sagitta $(BUILD)-flc-cg/fletch_run
+		$(BUILD)-flc-cg/yew $(BUILD)-flc-cg/fletch_run
 	LC_ALL=C $(BUILD)-flc-sw/fletch_run \
-		--sagitta $(abspath $(BUILD)-flc-sw/sagitta) \
+		--yew $(abspath $(BUILD)-flc-sw/yew) \
 		>$(BUILD)-flc-sw/out.txt 2>&1
 	LC_ALL=C $(BUILD)-flc-cg/fletch_run \
-		--sagitta $(abspath $(BUILD)-flc-cg/sagitta) \
+		--yew $(abspath $(BUILD)-flc-cg/yew) \
 		>$(BUILD)-flc-cg/out.txt 2>&1
 	cmp $(BUILD)-flc-sw/out.txt $(BUILD)-flc-cg/out.txt
 	@echo 'test-fletch-dispatch: both dispatchers agree, byte for byte'
@@ -1275,35 +1271,35 @@ test-fletch-dispatch:
 # DoD 11: the whole suite under the collector's stress mode, minus any
 # file carrying a justified `# GC_STRESS: 0`.  The runner prints and
 # asserts the opt-out count, so the escape hatch cannot become the norm.
-test-fletch-gc-stress: $(BUILD)/fletch_run $(BUILD)/sagitta
-	SAG_FL_GC_STRESS=1 LC_ALL=C $(BUILD)/fletch_run \
-		--sagitta $(abspath $(BUILD)/sagitta)
+test-fletch-gc-stress: $(BUILD)/fletch_run $(BUILD)/yew
+	YEW_FL_GC_STRESS=1 LC_ALL=C $(BUILD)/fletch_run \
+		--yew $(abspath $(BUILD)/yew)
 
 # Determinism: the suite twice and the ledger twice, byte-compared.
-test-fletch-determinism: $(BUILD)/fletch_run $(BUILD)/sagitta
-	LC_ALL=C $(BUILD)/fletch_run --sagitta $(abspath $(BUILD)/sagitta) \
+test-fletch-determinism: $(BUILD)/fletch_run $(BUILD)/yew
+	LC_ALL=C $(BUILD)/fletch_run --yew $(abspath $(BUILD)/yew) \
 		>$(BUILD)/fletch-run-1.txt 2>&1
-	LC_ALL=C $(BUILD)/fletch_run --sagitta $(abspath $(BUILD)/sagitta) \
+	LC_ALL=C $(BUILD)/fletch_run --yew $(abspath $(BUILD)/yew) \
 		>$(BUILD)/fletch-run-2.txt 2>&1
 	cmp $(BUILD)/fletch-run-1.txt $(BUILD)/fletch-run-2.txt
 	LC_ALL=C $(BUILD)/fletch_run --ledger \
-		--sagitta $(abspath $(BUILD)/sagitta) >$(BUILD)/fletch-led-1.txt
+		--yew $(abspath $(BUILD)/yew) >$(BUILD)/fletch-led-1.txt
 	LC_ALL=C $(BUILD)/fletch_run --ledger \
-		--sagitta $(abspath $(BUILD)/sagitta) >$(BUILD)/fletch-led-2.txt
+		--yew $(abspath $(BUILD)/yew) >$(BUILD)/fletch-led-2.txt
 	cmp $(BUILD)/fletch-led-1.txt $(BUILD)/fletch-led-2.txt
 	@echo 'test-fletch-determinism: two runs identical, ledger stable'
 
 test-roundtrip: $(BUILD)/roundtrip_runner
-	SAG_RT_TMP=$(BUILD)/tmp LC_ALL=C $(BUILD)/roundtrip_runner
+	YEW_RT_TMP=$(BUILD)/tmp LC_ALL=C $(BUILD)/roundtrip_runner
 
 test-roundtrip-coverage: $(BUILD)/roundtrip_runner
-	SAG_RT_TMP=$(BUILD)/tmp LC_ALL=C $(BUILD)/roundtrip_runner --coverage
+	YEW_RT_TMP=$(BUILD)/tmp LC_ALL=C $(BUILD)/roundtrip_runner --coverage
 
 test-fletch-roundtrip: test-roundtrip
 
-test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/sagitta
+test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew
 	$(PTY_PREP) $(PTY_RUN) --demo $(abspath $(BUILD)/demo_paint) \
-		--sagitta $(abspath $(BUILD)/sagitta) $(PTY_LOG_REDIRECT)
+		--yew $(abspath $(BUILD)/yew) $(PTY_LOG_REDIRECT)
 
 -include $(OBJ:.o=.d) $(UNIT_OBJ:.o=.d) $(STATE_LEGACY_OBJ:.o=.d) \
          $(FUZZ_LIB_OBJ:.o=.d) \

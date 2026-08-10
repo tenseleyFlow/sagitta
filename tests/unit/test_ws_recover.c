@@ -76,25 +76,25 @@ static void rc_make(RcFix *f)
     if (prev != NULL)
         (void)snprintf(f->saved, sizeof(f->saved), "%s", prev);
     (void)snprintf(f->state_home, sizeof(f->state_home),
-                   "/tmp/sag-rchome-XXXXXX");
-    SAG_ASSERT_NOT_NULL(mkdtemp(f->state_home));
-    (void)snprintf(f->work, sizeof(f->work), "/tmp/sag-rcwork-XXXXXX");
-    SAG_ASSERT_NOT_NULL(mkdtemp(f->work));
-    SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", f->state_home, 1), 0);
+                   "/tmp/yew-rchome-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(f->state_home));
+    (void)snprintf(f->work, sizeof(f->work), "/tmp/yew-rcwork-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(f->work));
+    YEW_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", f->state_home, 1), 0);
 
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    sag_ed_init(&f->ed);
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    yew_ed_init(&f->ed);
     f->ed.ws.dir = arena_strdup(&f->ed.arena, f->work);
-    SAG_ASSERT(sag_ed_open_scratch(&f->ed));
-    sag_layout_compute(f->ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    sag_state_open(&f->ed);
-    SAG_ASSERT(f->ed.state.ready);
+    YEW_ASSERT(yew_ed_open_scratch(&f->ed));
+    yew_layout_compute(f->ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    yew_state_open(&f->ed);
+    YEW_ASSERT(f->ed.state.ready);
 }
 
 static void rc_remove(RcFix *f)
 {
-    sag_ed_free(&f->ed);
+    yew_ed_free(&f->ed);
     if (f->had_saved)
         (void)setenv("XDG_STATE_HOME", f->saved, 1);
     else
@@ -106,9 +106,9 @@ static void rc_remove(RcFix *f)
 /* Plants a state.fl with exactly these bytes. */
 static void rc_plant(const RcFix *f, const char *text, size_t len)
 {
-    FILE *fp = fopen(sag_ws_state_path(&f->ed.state.key), "wb");
+    FILE *fp = fopen(yew_ws_state_path(&f->ed.state.key), "wb");
 
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     if (len > 0U)
         (void)fwrite(text, 1U, len, fp);
     (void)fclose(fp);
@@ -131,7 +131,7 @@ static void rc_join(char *out, size_t cap, const char *dir, const char *leaf)
 {
     int n = snprintf(out, cap, "%s/%s", dir, leaf);
 
-    SAG_ASSERT(n > 0 && (size_t)n < cap);
+    YEW_ASSERT(n > 0 && (size_t)n < cap);
 }
 
 /* How many state.fl.corrupt-* files are in the state dir. */
@@ -166,7 +166,7 @@ static bool rc_corrupt_name(const RcFix *f, char *out, size_t cap)
         {
             int n = snprintf(out, cap, "%s", ent->d_name);
 
-            SAG_ASSERT(n > 0 && (size_t)n < cap);
+            YEW_ASSERT(n > 0 && (size_t)n < cap);
         }
         found = true;
     }
@@ -184,10 +184,10 @@ void test_ws_recover_absent_is_silent(void)
     RcFix f;
 
     rc_make(&f);
-    SAG_ASSERT_EQ_I64(sag_ws_restore(&f.ed), SAG_WS_FRESH);
-    SAG_ASSERT_EQ_U64(rc_corrupt_count(&f), 0U);
+    YEW_ASSERT_EQ_I64(yew_ws_restore(&f.ed), YEW_WS_FRESH);
+    YEW_ASSERT_EQ_U64(rc_corrupt_count(&f), 0U);
     /* No message at all: a first run is not an event. */
-    SAG_ASSERT(!f.ed.msg.active);
+    YEW_ASSERT(!f.ed.msg.active);
     rc_remove(&f);
 }
 
@@ -205,16 +205,16 @@ void test_ws_recover_unreadable_is_not_set_aside(void)
     rc_make(&f);
     rc_plant(&f, "{ version: 1, }\n", 16U);
     (void)snprintf(path, sizeof(path), "%s",
-                   sag_ws_state_path(&f.ed.state.key));
+                   yew_ws_state_path(&f.ed.state.key));
     if (chmod(path, 0000) != 0 || geteuid() == 0U) {
         /* root reads anything; the row is untestable as root. */
         rc_remove(&f);
         return;
     }
-    SAG_ASSERT_EQ_I64(sag_ws_restore(&f.ed), SAG_WS_FRESH);
-    SAG_ASSERT_EQ_U64(rc_corrupt_count(&f), 0U);
-    SAG_ASSERT(rc_exists(path));
-    SAG_ASSERT(f.ed.msg.active);
+    YEW_ASSERT_EQ_I64(yew_ws_restore(&f.ed), YEW_WS_FRESH);
+    YEW_ASSERT_EQ_U64(rc_corrupt_count(&f), 0U);
+    YEW_ASSERT(rc_exists(path));
+    YEW_ASSERT(f.ed.msg.active);
     (void)chmod(path, 0600);
     rc_remove(&f);
 }
@@ -228,25 +228,25 @@ void test_ws_recover_parse_error_is_set_aside(void)
 
     rc_make(&f);
     rc_plant(&f, "{ version: 1, tabs: [ { oh no", 28U);
-    SAG_ASSERT_EQ_I64(sag_ws_restore(&f.ed), SAG_WS_RECOVERED);
+    YEW_ASSERT_EQ_I64(yew_ws_restore(&f.ed), YEW_WS_RECOVERED);
     /* state.fl is gone from its own name... */
-    SAG_ASSERT(!rc_exists(sag_ws_state_path(&f.ed.state.key)));
+    YEW_ASSERT(!rc_exists(yew_ws_state_path(&f.ed.state.key)));
     /* ...because it is here, under a UTC stamp.  NOT deleted. */
-    SAG_ASSERT_EQ_U64(rc_corrupt_count(&f), 1U);
-    SAG_ASSERT(rc_corrupt_name(&f, name, sizeof(name)));
+    YEW_ASSERT_EQ_U64(rc_corrupt_count(&f), 1U);
+    YEW_ASSERT(rc_corrupt_name(&f, name, sizeof(name)));
     rc_join(path, sizeof(path), f.ed.state.key.dir, name);
-    SAG_ASSERT(rc_exists(path));
+    YEW_ASSERT(rc_exists(path));
     /* The stamp is %Y%m%dT%H%M%SZ: 8 digits, T, 6 digits, Z. */
-    SAG_ASSERT_EQ_U64(strlen(name), 17U + 16U);
-    SAG_ASSERT_EQ_I64(name[17 + 8], 'T');
-    SAG_ASSERT_EQ_I64(name[17 + 15], 'Z');
+    YEW_ASSERT_EQ_U64(strlen(name), 17U + 16U);
+    YEW_ASSERT_EQ_I64(name[17 + 8], 'T');
+    YEW_ASSERT_EQ_I64(name[17 + 15], 'Z');
     /* One message, and no prompt before the first paint. */
-    SAG_ASSERT(f.ed.msg.active);
-    SAG_ASSERT_EQ_I64(f.ed.prompt, SAG_PROMPT_NONE);
+    YEW_ASSERT(f.ed.msg.active);
+    YEW_ASSERT_EQ_I64(f.ed.prompt, YEW_PROMPT_NONE);
     /* The editor started: a scratch tab, exit code untouched. */
-    SAG_ASSERT_EQ_I64(sag_tab_count(&f.ed), 1);
-    SAG_ASSERT(!f.ed.quit);
-    SAG_ASSERT_EQ_I64(f.ed.exit_code, SAG_EXIT_OK);
+    YEW_ASSERT_EQ_I64(yew_tab_count(&f.ed), 1);
+    YEW_ASSERT(!f.ed.quit);
+    YEW_ASSERT_EQ_I64(f.ed.exit_code, YEW_EXIT_OK);
     rc_remove(&f);
 }
 
@@ -257,9 +257,9 @@ void test_ws_recover_bad_version_is_set_aside(void)
 
     rc_make(&f);
     rc_plant(&f, "{ version: 99, tabs: [ ], }\n", 28U);
-    SAG_ASSERT_EQ_I64(sag_ws_restore(&f.ed), SAG_WS_RECOVERED);
-    SAG_ASSERT_EQ_U64(rc_corrupt_count(&f), 1U);
-    SAG_ASSERT_EQ_I64(sag_tab_count(&f.ed), 1);
+    YEW_ASSERT_EQ_I64(yew_ws_restore(&f.ed), YEW_WS_RECOVERED);
+    YEW_ASSERT_EQ_U64(rc_corrupt_count(&f), 1U);
+    YEW_ASSERT_EQ_I64(yew_tab_count(&f.ed), 1);
     rc_remove(&f);
 }
 
@@ -270,8 +270,8 @@ void test_ws_recover_absent_version_is_set_aside(void)
 
     rc_make(&f);
     rc_plant(&f, "{ tabs: [ ], }\n", 15U);
-    SAG_ASSERT_EQ_I64(sag_ws_restore(&f.ed), SAG_WS_RECOVERED);
-    SAG_ASSERT_EQ_U64(rc_corrupt_count(&f), 1U);
+    YEW_ASSERT_EQ_I64(yew_ws_restore(&f.ed), YEW_WS_RECOVERED);
+    YEW_ASSERT_EQ_U64(rc_corrupt_count(&f), 1U);
     rc_remove(&f);
 }
 
@@ -282,8 +282,8 @@ void test_ws_recover_non_map_root_is_set_aside(void)
 
     rc_make(&f);
     rc_plant(&f, "[ 1, 2, 3, ]\n", 13U);
-    SAG_ASSERT_EQ_I64(sag_ws_restore(&f.ed), SAG_WS_RECOVERED);
-    SAG_ASSERT_EQ_U64(rc_corrupt_count(&f), 1U);
+    YEW_ASSERT_EQ_I64(yew_ws_restore(&f.ed), YEW_WS_RECOVERED);
+    YEW_ASSERT_EQ_U64(rc_corrupt_count(&f), 1U);
     rc_remove(&f);
 }
 
@@ -294,9 +294,9 @@ void test_ws_recover_empty_file_is_set_aside(void)
 
     rc_make(&f);
     rc_plant(&f, "", 0U);
-    SAG_ASSERT_EQ_I64(sag_ws_restore(&f.ed), SAG_WS_RECOVERED);
-    SAG_ASSERT_EQ_U64(rc_corrupt_count(&f), 1U);
-    SAG_ASSERT_EQ_I64(sag_tab_count(&f.ed), 1);
+    YEW_ASSERT_EQ_I64(yew_ws_restore(&f.ed), YEW_WS_RECOVERED);
+    YEW_ASSERT_EQ_U64(rc_corrupt_count(&f), 1U);
+    YEW_ASSERT_EQ_I64(yew_tab_count(&f.ed), 1);
     rc_remove(&f);
 }
 
@@ -312,15 +312,15 @@ void test_ws_recover_oversize_is_set_aside_without_reading(void)
 
     rc_make(&f);
     (void)snprintf(path, sizeof(path), "%s",
-                   sag_ws_state_path(&f.ed.state.key));
+                   yew_ws_state_path(&f.ed.state.key));
     fp = fopen(path, "wb");
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     /* Sparse: 9 MiB of address space, a few blocks of disk. */
-    SAG_ASSERT_EQ_I64(fseek(fp, 9L * 1024L * 1024L, SEEK_SET), 0);
+    YEW_ASSERT_EQ_I64(fseek(fp, 9L * 1024L * 1024L, SEEK_SET), 0);
     (void)fputc('x', fp);
     (void)fclose(fp);
-    SAG_ASSERT_EQ_I64(sag_ws_restore(&f.ed), SAG_WS_RECOVERED);
-    SAG_ASSERT_EQ_U64(rc_corrupt_count(&f), 1U);
+    YEW_ASSERT_EQ_I64(yew_ws_restore(&f.ed), YEW_WS_RECOVERED);
+    YEW_ASSERT_EQ_U64(rc_corrupt_count(&f), 1U);
     rc_remove(&f);
 }
 
@@ -343,11 +343,11 @@ void test_ws_recover_one_bad_tab_record_keeps_the_rest(void)
     (void)snprintf(pa, sizeof(pa), "%s/a.txt", f.work);
     (void)snprintf(pc, sizeof(pc), "%s/c.txt", f.work);
     fp = fopen(pa, "wb");
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     (void)fputs("alpha\n", fp);
     (void)fclose(fp);
     fp = fopen(pc, "wb");
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     (void)fputs("charlie\n", fp);
     (void)fclose(fp);
     /* The middle record has a nil path — structurally fine, nothing to
@@ -360,14 +360,14 @@ void test_ws_recover_one_bad_tab_record_keeps_the_rest(void)
                    "  ],\n  active_tab: 3,\n}\n",
                    pa, pc);
     rc_plant(&f, text, strlen(text));
-    SAG_ASSERT_EQ_I64(sag_ws_restore(&f.ed), SAG_WS_RESTORED);
+    YEW_ASSERT_EQ_I64(yew_ws_restore(&f.ed), YEW_WS_RESTORED);
     /* Scratch plus the two good records. */
-    SAG_ASSERT_EQ_I64(sag_tab_count(&f.ed), 3);
-    SAG_ASSERT_EQ_STR(sag_tab_at(&f.ed, 1)->path, pa);
-    SAG_ASSERT_EQ_STR(sag_tab_at(&f.ed, 2)->path, pc);
+    YEW_ASSERT_EQ_I64(yew_tab_count(&f.ed), 3);
+    YEW_ASSERT_EQ_STR(yew_tab_at(&f.ed, 1)->path, pa);
+    YEW_ASSERT_EQ_STR(yew_tab_at(&f.ed, 2)->path, pc);
     /* And nothing was set aside: a droppable record is not corruption
      * of the document. */
-    SAG_ASSERT_EQ_U64(rc_corrupt_count(&f), 0U);
+    YEW_ASSERT_EQ_U64(rc_corrupt_count(&f), 0U);
     rc_remove(&f);
 }
 
@@ -382,7 +382,7 @@ void test_ws_recover_wrong_typed_fields_take_defaults(void)
     rc_make(&f);
     (void)snprintf(pa, sizeof(pa), "%s/a.txt", f.work);
     fp = fopen(pa, "wb");
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     (void)fputs("alpha\n", fp);
     (void)fclose(fp);
     /* group is a string, group_ordinal is a bool, panes is an int. */
@@ -393,11 +393,11 @@ void test_ws_recover_wrong_typed_fields_take_defaults(void)
                    "  ],\n  active_tab: 1,\n}\n",
                    pa);
     rc_plant(&f, text, strlen(text));
-    SAG_ASSERT_EQ_I64(sag_ws_restore(&f.ed), SAG_WS_RESTORED);
-    SAG_ASSERT_EQ_I64(sag_tab_count(&f.ed), 2);
-    SAG_ASSERT_EQ_U64(sag_tab_at(&f.ed, 1)->group_id, 0U);
-    SAG_ASSERT_NOT_NULL(sag_tab_at(&f.ed, 1)->root);
-    SAG_ASSERT_EQ_U64(rc_corrupt_count(&f), 0U);
+    YEW_ASSERT_EQ_I64(yew_ws_restore(&f.ed), YEW_WS_RESTORED);
+    YEW_ASSERT_EQ_I64(yew_tab_count(&f.ed), 2);
+    YEW_ASSERT_EQ_U64(yew_tab_at(&f.ed, 1)->group_id, 0U);
+    YEW_ASSERT_NOT_NULL(yew_tab_at(&f.ed, 1)->root);
+    YEW_ASSERT_EQ_U64(rc_corrupt_count(&f), 0U);
     rc_remove(&f);
 }
 
@@ -429,7 +429,7 @@ void test_ws_recover_retention_caps_at_five(void)
                        "state.fl.corrupt-2026010%uT000000Z", (unsigned)i);
         rc_join(path, sizeof(path), f.ed.state.key.dir, leaf);
         fp = fopen(path, "wb");
-        SAG_ASSERT_NOT_NULL(fp);
+        YEW_ASSERT_NOT_NULL(fp);
         (void)fputs("old\n", fp);
         (void)fclose(fp);
     }
@@ -437,16 +437,16 @@ void test_ws_recover_retention_caps_at_five(void)
             "state.fl.corrupt-20260100T000000Z");
     rc_join(newest, sizeof(newest), f.ed.state.key.dir,
             "state.fl.corrupt-20260107T000000Z");
-    SAG_ASSERT(rc_exists(oldest));
-    SAG_ASSERT(rc_exists(newest));
+    YEW_ASSERT(rc_exists(oldest));
+    YEW_ASSERT(rc_exists(newest));
 
     /* A ninth failure triggers the prune. */
     rc_plant(&f, "not a document", 14U);
-    SAG_ASSERT_EQ_I64(sag_ws_restore(&f.ed), SAG_WS_RECOVERED);
-    SAG_ASSERT_EQ_U64(rc_corrupt_count(&f), (u32)SAG_STATE_CORRUPT_KEEP);
+    YEW_ASSERT_EQ_I64(yew_ws_restore(&f.ed), YEW_WS_RECOVERED);
+    YEW_ASSERT_EQ_U64(rc_corrupt_count(&f), (u32)YEW_STATE_CORRUPT_KEEP);
     /* The oldest went; a newer one stayed. */
-    SAG_ASSERT(!rc_exists(oldest));
-    SAG_ASSERT(rc_exists(newest));
+    YEW_ASSERT(!rc_exists(oldest));
+    YEW_ASSERT(rc_exists(newest));
     rc_remove(&f);
 }
 
@@ -454,7 +454,7 @@ static void rc_write(const char *path, const char *text)
 {
     FILE *fp = fopen(path, "wb");
 
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     (void)fwrite(text, 1U, strlen(text), fp);
     (void)fclose(fp);
 }
@@ -464,7 +464,7 @@ static void rc_read(const char *path, char *out, size_t cap)
     FILE *fp = fopen(path, "rb");
     size_t n;
 
-    SAG_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_NOT_NULL(fp);
     n = fread(out, 1U, cap - 1U, fp);
     out[n] = '\0';
     (void)fclose(fp);
@@ -473,7 +473,7 @@ static void rc_read(const char *path, char *out, size_t cap)
 /*
  * The MECHANISM the set-aside stands on, tested without a clock.
  *
- * sag_state_set_aside names its copy from time(NULL) at one-second
+ * yew_state_set_aside names its copy from time(NULL) at one-second
  * resolution, so whether two failures collide depends on how fast the
  * machine is -- which is a property of the runner, not of the code.
  * The guard itself is s08's move primitive refusing an existing
@@ -481,26 +481,26 @@ static void rc_read(const char *path, char *out, size_t cap)
  */
 void test_ws_recover_move_aside_refuses_existing(void)
 {
-    char dir[] = "/tmp/sag-rcmove-XXXXXX";
+    char dir[] = "/tmp/yew-rcmove-XXXXXX";
     char src[PATH_MAX];
     char dest[PATH_MAX];
     char body[64];
 
-    SAG_ASSERT_NOT_NULL(mkdtemp(dir));
+    YEW_ASSERT_NOT_NULL(mkdtemp(dir));
     rc_join(src, sizeof(src), dir, "state.fl");
     rc_join(dest, sizeof(dest), dir, "state.fl.corrupt-stamp");
     rc_write(src, "second bad document");
     rc_write(dest, "first bad document");
 
-    SAG_ASSERT(sag_file_move_aside(src, dest) != SAG_SAVE_OK);
+    YEW_ASSERT(yew_file_move_aside(src, dest) != YEW_SAVE_OK);
     /* The existing copy is byte-intact... */
     rc_read(dest, body, sizeof(body));
-    SAG_ASSERT_EQ_STR(body, "first bad document");
+    YEW_ASSERT_EQ_STR(body, "first bad document");
     /* ...and the new one is still where it was, not lost between the
      * two names.  A refusal that unlinked the source would satisfy
      * "never overwrites" and still destroy the user's bytes. */
     rc_read(src, body, sizeof(body));
-    SAG_ASSERT_EQ_STR(body, "second bad document");
+    YEW_ASSERT_EQ_STR(body, "second bad document");
 
     (void)unlink(src);
     (void)unlink(dest);
@@ -530,27 +530,27 @@ void test_ws_recover_set_aside_never_overwrites(void)
 
     rc_make(&f);
     rc_plant(&f, "first bad document", 18U);
-    SAG_ASSERT(sag_state_set_aside(&f.ed, name, sizeof(name)));
+    YEW_ASSERT(yew_state_set_aside(&f.ed, name, sizeof(name)));
     rc_join(first, sizeof(first), f.ed.state.key.dir, name);
 
     rc_plant(&f, "second bad document", 19U);
-    refused = !sag_state_set_aside(&f.ed, name, sizeof(name));
+    refused = !yew_state_set_aside(&f.ed, name, sizeof(name));
 
     /* The first copy is untouched either way. */
     rc_read(first, body, sizeof(body));
-    SAG_ASSERT_EQ_STR(body, "first bad document");
+    YEW_ASSERT_EQ_STR(body, "first bad document");
     if (refused) {
         /* Same second: the second document stays at state.fl rather
          * than being lost to a clobbering rename. */
-        SAG_ASSERT(rc_exists(sag_ws_state_path(&f.ed.state.key)));
+        YEW_ASSERT(rc_exists(yew_ws_state_path(&f.ed.state.key)));
     } else {
         /* Next second: a second name, and both documents survive. */
         char second[PATH_MAX];
 
         rc_join(second, sizeof(second), f.ed.state.key.dir, name);
-        SAG_ASSERT(strcmp(first, second) != 0);
+        YEW_ASSERT(strcmp(first, second) != 0);
         rc_read(second, body, sizeof(body));
-        SAG_ASSERT_EQ_STR(body, "second bad document");
+        YEW_ASSERT_EQ_STR(body, "second bad document");
     }
     rc_remove(&f);
 }
@@ -582,20 +582,20 @@ void test_ws_recover_every_bad_input_still_starts(void)
     };
     u32 i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(inputs); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(inputs); i++) {
         RcFix f;
-        SagWsResult r;
+        YewWsResult r;
 
         rc_make(&f);
         rc_plant(&f, inputs[i], strlen(inputs[i]));
-        r = sag_ws_restore(&f.ed);
+        r = yew_ws_restore(&f.ed);
         /* Whatever it decided, the editor is alive and usable. */
-        SAG_ASSERT(r == SAG_WS_FRESH || r == SAG_WS_RESTORED ||
-                   r == SAG_WS_RECOVERED);
-        SAG_ASSERT(!f.ed.quit);
-        SAG_ASSERT_EQ_I64(f.ed.exit_code, SAG_EXIT_OK);
-        SAG_ASSERT_EQ_I64(f.ed.prompt, SAG_PROMPT_NONE);
-        SAG_ASSERT(sag_tab_count(&f.ed) >= 1);
+        YEW_ASSERT(r == YEW_WS_FRESH || r == YEW_WS_RESTORED ||
+                   r == YEW_WS_RECOVERED);
+        YEW_ASSERT(!f.ed.quit);
+        YEW_ASSERT_EQ_I64(f.ed.exit_code, YEW_EXIT_OK);
+        YEW_ASSERT_EQ_I64(f.ed.prompt, YEW_PROMPT_NONE);
+        YEW_ASSERT(yew_tab_count(&f.ed) >= 1);
         rc_remove(&f);
     }
 }
@@ -616,7 +616,7 @@ void test_ws_recover_a_reader_still_sets_aside(void)
     /* Demote without disturbing the key. */
     f.ed.state.writer = false;
     f.ed.state.owner_pid = 1;
-    SAG_ASSERT_EQ_I64(sag_ws_restore(&f.ed), SAG_WS_RECOVERED);
-    SAG_ASSERT_EQ_U64(rc_corrupt_count(&f), 1U);
+    YEW_ASSERT_EQ_I64(yew_ws_restore(&f.ed), YEW_WS_RECOVERED);
+    YEW_ASSERT_EQ_U64(rc_corrupt_count(&f), 1U);
     rc_remove(&f);
 }

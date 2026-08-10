@@ -9,7 +9,7 @@
  * happens at the CURRENT terminal size because ratios are permille, and
  * the clamp comes last because it needs the rects layout just produced.
  *
- * STEP 9 IS sag_vp_clamp, NOT sag_vp_follow.  The saved viewport
+ * STEP 9 IS yew_vp_clamp, NOT yew_vp_follow.  The saved viewport
  * already satisfies scrolloff; follow would move `top` to centre the
  * cursor and the resumed grid would not be the grid the user quit on —
  * which is the entire claim of DoD 2.  Follow resumes at the first
@@ -55,7 +55,7 @@
 /* §7: setting a bad document aside                                 */
 /* ---------------------------------------------------------------- */
 
-#define SAG_STATE_CORRUPT_PREFIX "state.fl.corrupt-"
+#define YEW_STATE_CORRUPT_PREFIX "state.fl.corrupt-"
 
 /*
  * Newest-first by name, which is newest-first by time because the
@@ -69,7 +69,7 @@ static int corrupt_cmp(const void *a, const void *b, void *ctx)
 }
 
 /*
- * Keeps the newest SAG_STATE_CORRUPT_KEEP and deletes the rest.
+ * Keeps the newest YEW_STATE_CORRUPT_KEEP and deletes the rest.
  *
  * Deleting a *corrupt copy* is not the same as deleting the user's
  * bytes: the copy exists so a bug can be filed against it, and five is
@@ -86,17 +86,17 @@ static void prune_corrupt(const char *dir)
 
     if (d == NULL)
         return;
-    while ((ent = readdir(d)) != NULL && n < SAG_ARRAY_LEN(names)) {
-        if (strncmp(ent->d_name, SAG_STATE_CORRUPT_PREFIX,
-                    strlen(SAG_STATE_CORRUPT_PREFIX)) != 0)
+    while ((ent = readdir(d)) != NULL && n < YEW_ARRAY_LEN(names)) {
+        if (strncmp(ent->d_name, YEW_STATE_CORRUPT_PREFIX,
+                    strlen(YEW_STATE_CORRUPT_PREFIX)) != 0)
             continue;
         names[n] = strdup(ent->d_name);
         n++;
     }
     (void)closedir(d);
-    sag_sort_stable(names, n, sizeof(names[0]), corrupt_cmp, NULL);
+    yew_sort_stable(names, n, sizeof(names[0]), corrupt_cmp, NULL);
     for (i = 0U; i < n; i++) {
-        if (i >= (u32)SAG_STATE_CORRUPT_KEEP) {
+        if (i >= (u32)YEW_STATE_CORRUPT_KEEP) {
             char path[PATH_MAX];
 
             if (snprintf(path, sizeof(path), "%s/%s", dir, names[i]) <
@@ -107,7 +107,7 @@ static void prune_corrupt(const char *dir)
     }
 }
 
-bool sag_state_set_aside(Ed *ed, char *out, size_t cap)
+bool yew_state_set_aside(Ed *ed, char *out, size_t cap)
 {
     char stamp[32];
     char dest[PATH_MAX];
@@ -118,7 +118,7 @@ bool sag_state_set_aside(Ed *ed, char *out, size_t cap)
 
     if (ed == NULL || !ed->state.ready)
         return false;
-    src = sag_ws_state_path(&ed->state.key);
+    src = yew_ws_state_path(&ed->state.key);
     if (src == NULL)
         return false;
     now = time(NULL);
@@ -129,7 +129,7 @@ bool sag_state_set_aside(Ed *ed, char *out, size_t cap)
     if (strftime(stamp, sizeof(stamp), "%Y%m%dT%H%M%SZ", &tm_utc) == 0U)
         return false;
     n = snprintf(dest, sizeof(dest), "%s/%s%s", ed->state.key.dir,
-                 SAG_STATE_CORRUPT_PREFIX, stamp);
+                 YEW_STATE_CORRUPT_PREFIX, stamp);
     if (n <= 0 || (size_t)n >= sizeof(dest))
         return false;
     /*
@@ -139,18 +139,18 @@ bool sag_state_set_aside(Ed *ed, char *out, size_t cap)
      * through s08's primitive, which refuses to clobber an existing
      * destination — two failures in one second share a timestamp.
      */
-    if (sag_file_move_aside(src, dest) != SAG_SAVE_OK) {
-        sag_log(SAG_LOG_WARN, "cannot set aside %s: %s", src,
+    if (yew_file_move_aside(src, dest) != YEW_SAVE_OK) {
+        yew_log(YEW_LOG_WARN, "cannot set aside %s: %s", src,
                 strerror(errno));
         return false;
     }
     prune_corrupt(ed->state.key.dir);
     if (out != NULL && cap > 0U)
-        (void)snprintf(out, cap, "%s%s", SAG_STATE_CORRUPT_PREFIX, stamp);
+        (void)snprintf(out, cap, "%s%s", YEW_STATE_CORRUPT_PREFIX, stamp);
     return true;
 }
 
-const char *sag_state_option_str(const Ed *ed, const char *key,
+const char *yew_state_option_str(const Ed *ed, const char *key,
                                  const char *dflt)
 {
     const char *v;
@@ -158,24 +158,24 @@ const char *sag_state_option_str(const Ed *ed, const char *key,
 
     if (ed == NULL || ed->state.options == NULL)
         return dflt;
-    v = sag_fl_str_or(sag_fl_get(ed->state.options, key), NULL, &n);
+    v = yew_fl_str_or(yew_fl_get(ed->state.options, key), NULL, &n);
     return v == NULL || n == 0U ? dflt : v;
 }
 
 /* One message, exactly once, and never a prompt.  A modal dialog before
  * the first paint, over a CACHE, is user-hostile. */
-static SagWsResult recover(Ed *ed, const char *why)
+static YewWsResult recover(Ed *ed, const char *why)
 {
     char name[64];
 
-    sag_log(SAG_LOG_WARN, "workspace state unusable: %s", why);
-    if (!sag_state_set_aside(ed, name, sizeof(name))) {
-        sag_msg(ed, SAG_MSG_WARN, "workspace state was unreadable");
-        return SAG_WS_RECOVERED;
+    yew_log(YEW_LOG_WARN, "workspace state unusable: %s", why);
+    if (!yew_state_set_aside(ed, name, sizeof(name))) {
+        yew_msg(ed, YEW_MSG_WARN, "workspace state was unreadable");
+        return YEW_WS_RECOVERED;
     }
-    sag_msg(ed, SAG_MSG_WARN, "workspace state was unreadable; saved as %s",
+    yew_msg(ed, YEW_MSG_WARN, "workspace state was unreadable; saved as %s",
             name);
-    return SAG_WS_RECOVERED;
+    return YEW_WS_RECOVERED;
 }
 
 /* ---------------------------------------------------------------- */
@@ -202,14 +202,14 @@ static StateReadErr read_state_file(const char *path, Bytebuf *out)
         return STATE_READ_UNREADABLE;
     /* Checked BEFORE the read, so an 8 GiB file costs a stat rather
      * than 8 GiB of I/O and a rejection afterwards. */
-    if ((u64)st.st_size > (u64)SAG_FL_MAX_BYTES)
+    if ((u64)st.st_size > (u64)YEW_FL_MAX_BYTES)
         return STATE_READ_TOO_BIG;
     f = fopen(path, "rb");
     if (f == NULL)
         return errno == ENOENT ? STATE_READ_ABSENT : STATE_READ_UNREADABLE;
     while ((n = fread(chunk, 1U, sizeof(chunk), f)) > 0U) {
         bytebuf_append(out, chunk, n);
-        if (out->len > (u64)SAG_FL_MAX_BYTES) {
+        if (out->len > (u64)YEW_FL_MAX_BYTES) {
             (void)fclose(f);
             return STATE_READ_TOO_BIG;
         }
@@ -228,29 +228,29 @@ static StateReadErr read_state_file(const char *path, Bytebuf *out)
 
 static void apply_cursors(Win *w, const FlLit *rec)
 {
-    const FlLit *list = sag_fl_get(rec, "cursors");
-    u32 n = sag_fl_len(list);
+    const FlLit *list = yew_fl_get(rec, "cursors");
+    u32 n = yew_fl_len(list);
     u32 i;
     i64 primary;
 
     if (n == 0U)
         return; /* the default one cursor at 0 is already there */
-    if (n > (u32)SAG_STATE_MAX_CURSORS)
-        n = (u32)SAG_STATE_MAX_CURSORS;
+    if (n > (u32)YEW_STATE_MAX_CURSORS)
+        n = (u32)YEW_STATE_MAX_CURSORS;
     for (i = 0U; i < n; i++) {
-        const FlLit *c = sag_fl_at(list, i);
+        const FlLit *c = yew_fl_at(list, i);
         Cursor cur;
 
-        cur.pos = BYTEOFF((u64)sag_fl_int_or(sag_fl_get(c, "pos"), 0));
-        cur.anchor = BYTEOFF((u64)sag_fl_int_or(sag_fl_get(c, "anchor"), 0));
+        cur.pos = BYTEOFF((u64)yew_fl_int_or(yew_fl_get(c, "pos"), 0));
+        cur.anchor = BYTEOFF((u64)yew_fl_int_or(yew_fl_get(c, "anchor"), 0));
         cur.goal_col.v =
-            sag_goal_from_i64(sag_fl_int_or(sag_fl_get(c, "goal"), -1));
+            yew_goal_from_i64(yew_fl_int_or(yew_fl_get(c, "goal"), -1));
         if (i == 0U)
             w->cs.curs.data[w->cs.primary] = cur;
         else
-            (void)sag_cset_add(&w->cs, cur);
+            (void)yew_cset_add(&w->cs, cur);
     }
-    primary = sag_fl_int_or(sag_fl_get(rec, "primary"), 0);
+    primary = yew_fl_int_or(yew_fl_get(rec, "primary"), 0);
     if (primary >= 0 && (u32)primary < w->cs.curs.len)
         w->cs.primary = (u32)primary;
     /*
@@ -261,22 +261,22 @@ static void apply_cursors(Win *w, const FlLit *rec)
      *
      * A deferred tab has no text to check against yet, and reading one
      * here to find out would defeat the deferral for every tab at once.
-     * sag_tab_hydrate does it at the first moment there IS text.
+     * yew_tab_hydrate does it at the first moment there IS text.
      */
     if (w->buf != NULL && w->buf->tb != NULL)
-        sag_cset_normalize(w->buf->tb, &w->cs);
+        yew_cset_normalize(w->buf->tb, &w->cs);
 }
 
 static void apply_view(Win *w, const FlLit *rec)
 {
-    const FlLit *v = sag_fl_get(rec, "view");
+    const FlLit *v = yew_fl_get(rec, "view");
 
     if (v == NULL)
         return;
-    w->vp.top = LINENO((u64)sag_fl_int_or(sag_fl_get(v, "top"), 0));
-    w->vp.top_sub = (u32)sag_fl_int_or(sag_fl_get(v, "top_sub"), 0);
-    w->vp.left.v = (u64)sag_fl_int_or(sag_fl_get(v, "left"), 0);
-    w->vp.wrap = sag_fl_bool_or(sag_fl_get(v, "wrap"), false);
+    w->vp.top = LINENO((u64)yew_fl_int_or(yew_fl_get(v, "top"), 0));
+    w->vp.top_sub = (u32)yew_fl_int_or(yew_fl_get(v, "top_sub"), 0);
+    w->vp.left.v = (u64)yew_fl_int_or(yew_fl_get(v, "left"), 0);
+    w->vp.wrap = yew_fl_bool_or(yew_fl_get(v, "wrap"), false);
 }
 
 /*
@@ -295,21 +295,21 @@ static bool ring_entry(Ed *ed, const FlLit *rec, JumpEntry *out)
     Buffer *b;
 
     (void)memset(out, 0, sizeof(*out));
-    path = sag_fl_str_or(sag_fl_get(rec, "path"), NULL, &plen);
+    path = yew_fl_str_or(yew_fl_get(rec, "path"), NULL, &plen);
     if (path == NULL || plen == 0U)
         return false;
-    b = sag_ws_file_buf(ed, path);
+    b = yew_ws_file_buf(ed, path);
     if (b == NULL)
         return false;
     out->buf_id = b->id;
-    out->line_hint = LINENO((u64)sag_fl_int_or(sag_fl_get(rec, "line"), 0));
-    out->stamp_ms = (u64)sag_fl_int_or(sag_fl_get(rec, "stamp"), 0);
+    out->line_hint = LINENO((u64)yew_fl_int_or(yew_fl_get(rec, "line"), 0));
+    out->stamp_ms = (u64)yew_fl_int_or(yew_fl_get(rec, "stamp"), 0);
     return true;
 }
 
 static void apply_jumps(Ed *ed, Win *w, const FlLit *rec)
 {
-    const FlLit *j = sag_fl_get(rec, "jumps");
+    const FlLit *j = yew_fl_get(rec, "jumps");
     const FlLit *list;
     u32 n;
     u32 i;
@@ -317,23 +317,23 @@ static void apply_jumps(Ed *ed, Win *w, const FlLit *rec)
 
     if (j == NULL)
         return;
-    list = sag_fl_get(j, "entries");
-    n = sag_fl_len(list);
-    if (n > (u32)SAG_STATE_MAX_JUMPS)
-        n = (u32)SAG_STATE_MAX_JUMPS;
+    list = yew_fl_get(j, "entries");
+    n = yew_fl_len(list);
+    if (n > (u32)YEW_STATE_MAX_JUMPS)
+        n = (u32)YEW_STATE_MAX_JUMPS;
     for (i = 0U; i < n; i++) {
         JumpEntry je;
 
-        if (!ring_entry(ed, sag_fl_at(list, i), &je))
+        if (!ring_entry(ed, yew_fl_at(list, i), &je))
             continue;
         w->jumps.e[w->jumps.head] = je;
-        w->jumps.head = (w->jumps.head + 1U) % SAG_JUMPLIST_MAX;
-        if (w->jumps.len < (u32)SAG_JUMPLIST_MAX)
+        w->jumps.head = (w->jumps.head + 1U) % YEW_JUMPLIST_MAX;
+        if (w->jumps.len < (u32)YEW_JUMPLIST_MAX)
             w->jumps.len++;
     }
     /* `cur == len` means "standing at now", and it is also the only
      * safe answer for a value the file disagrees with. */
-    cur = sag_fl_int_or(sag_fl_get(j, "cur"), (i64)w->jumps.len);
+    cur = yew_fl_int_or(yew_fl_get(j, "cur"), (i64)w->jumps.len);
     w->jumps.cur = cur >= 0 && (u32)cur <= w->jumps.len ? (u32)cur
                                                         : w->jumps.len;
 }
@@ -343,7 +343,7 @@ static void apply_jumps(Ed *ed, Win *w, const FlLit *rec)
 /* ---------------------------------------------------------------- */
 
 typedef struct WinSlots {
-    Win *v[SAG_PANE_MAX_LEAVES];
+    Win *v[YEW_PANE_MAX_LEAVES];
     /*
      * A Win may be claimed by exactly ONE leaf.
      *
@@ -353,7 +353,7 @@ typedef struct WinSlots {
      * produce all by itself — therefore frees the same Win twice.
      * fuzz_state found it in a few hundred cases.
      */
-    bool used[SAG_PANE_MAX_LEAVES];
+    bool used[YEW_PANE_MAX_LEAVES];
     u32 n;
     u32 leaves; /* leaves materialized so far, against the s22 cap */
 } WinSlots;
@@ -365,15 +365,15 @@ static Pane *build_panes(const FlLit *m, WinSlots *slots, u32 depth)
     u64 dlen = 0U;
     Pane *p;
 
-    if (m == NULL || depth > (u32)SAG_STATE_MAX_PANE_DEPTH)
+    if (m == NULL || depth > (u32)YEW_STATE_MAX_PANE_DEPTH)
         return NULL;
-    split = sag_fl_get(m, "split");
-    dir = sag_fl_str_or(split, NULL, &dlen);
+    split = yew_fl_get(m, "split");
+    dir = yew_fl_str_or(split, NULL, &dlen);
     if (dir == NULL) {
-        i64 idx = sag_fl_int_or(sag_fl_get(m, "win"), 0);
+        i64 idx = yew_fl_int_or(yew_fl_get(m, "win"), 0);
         Win *w;
 
-        if (slots->leaves >= (u32)SAG_PANE_MAX_LEAVES)
+        if (slots->leaves >= (u32)YEW_PANE_MAX_LEAVES)
             return NULL;
         if (slots->n == 0U)
             return NULL;
@@ -408,15 +408,15 @@ static Pane *build_panes(const FlLit *m, WinSlots *slots, u32 depth)
             return NULL;
         slots->used[idx] = true;
         slots->leaves++;
-        return sag_pane_new_leaf(w);
+        return yew_pane_new_leaf(w);
     }
-    p = sag_xcalloc(1U, sizeof(*p));
+    p = yew_xcalloc(1U, sizeof(*p));
     p->is_leaf = false;
-    p->dir = dlen > 0U && dir[0] == 'v' ? SAG_SPLIT_V : SAG_SPLIT_H;
-    p->ratio = sag_permille_to_ratio(
-        sag_fl_int_or(sag_fl_get(m, "ratio_permille"), 500));
-    p->a = build_panes(sag_fl_get(m, "a"), slots, depth + 1U);
-    p->b = build_panes(sag_fl_get(m, "b"), slots, depth + 1U);
+    p->dir = dlen > 0U && dir[0] == 'v' ? YEW_SPLIT_V : YEW_SPLIT_H;
+    p->ratio = yew_permille_to_ratio(
+        yew_fl_int_or(yew_fl_get(m, "ratio_permille"), 500));
+    p->a = build_panes(yew_fl_get(m, "a"), slots, depth + 1U);
+    p->b = build_panes(yew_fl_get(m, "b"), slots, depth + 1U);
     if (p->a == NULL || p->b == NULL) {
         /*
          * A split with one child is not a tree.  Collapse to whichever
@@ -464,65 +464,65 @@ static bool path_is_readable_file(const char *path)
  */
 static Pane *focus_leaf(Pane *root, const FlLit *rec, const WinSlots *slots)
 {
-    i64 want = sag_fl_int_or(sag_fl_get(rec, "focus"), 0);
-    Pane *leaves[SAG_PANE_MAX_LEAVES * 2];
+    i64 want = yew_fl_int_or(yew_fl_get(rec, "focus"), 0);
+    Pane *leaves[YEW_PANE_MAX_LEAVES * 2];
     u32 n = 0U;
     u32 i;
 
     if (root == NULL)
         return NULL;
     if (want < 0 || (u32)want >= slots->n)
-        return sag_pane_first_leaf(root);
-    sag_pane_collect_leaves(root, leaves, SAG_ARRAY_LEN(leaves), &n);
+        return yew_pane_first_leaf(root);
+    yew_pane_collect_leaves(root, leaves, YEW_ARRAY_LEN(leaves), &n);
     for (i = 0U; i < n; i++) {
         if (leaves[i]->win == slots->v[want])
             return leaves[i];
     }
-    return sag_pane_first_leaf(root);
+    return yew_pane_first_leaf(root);
 }
 
 static void apply_wins(Ed *ed, Tab *t, const FlLit *rec, Buffer *buf)
 {
-    const FlLit *wins = sag_fl_get(rec, "wins");
+    const FlLit *wins = yew_fl_get(rec, "wins");
     WinSlots slots;
-    u32 n = sag_fl_len(wins);
+    u32 n = yew_fl_len(wins);
     u32 i;
     Pane *root;
 
     (void)memset(&slots, 0, sizeof(slots));
     if (n == 0U)
-        return; /* keep the single window sag_tab_open already made */
-    if (n > (u32)SAG_PANE_MAX_LEAVES)
-        n = (u32)SAG_PANE_MAX_LEAVES;
+        return; /* keep the single window yew_tab_open already made */
+    if (n > (u32)YEW_PANE_MAX_LEAVES)
+        n = (u32)YEW_PANE_MAX_LEAVES;
     for (i = 0U; i < n; i++) {
-        Win *w = sag_ed_win_clone(ed, ed->win);
+        Win *w = yew_ed_win_clone(ed, ed->win);
 
         if (w == NULL)
             break;
-        sag_ed_win_set_buffer(ed, w, buf);
+        yew_ed_win_set_buffer(ed, w, buf);
         /* set_buffer is a no-op when the window already shows `buf`,
          * so the view is applied after it either way. */
-        apply_cursors(w, sag_fl_at(wins, i));
-        apply_view(w, sag_fl_at(wins, i));
-        apply_jumps(ed, w, sag_fl_at(wins, i));
+        apply_cursors(w, yew_fl_at(wins, i));
+        apply_view(w, yew_fl_at(wins, i));
+        apply_jumps(ed, w, yew_fl_at(wins, i));
         slots.v[slots.n++] = w;
     }
-    root = build_panes(sag_fl_get(rec, "panes"), &slots, 0U);
+    root = build_panes(yew_fl_get(rec, "panes"), &slots, 0U);
     if (root == NULL) {
         /* Nothing usable: release what we built and keep the tab's
          * original single-leaf tree rather than leaving it rootless. */
         for (i = 0U; i < slots.n; i++)
-            sag_ed_win_release(ed, slots.v[i]);
+            yew_ed_win_release(ed, slots.v[i]);
         return;
     }
     /* Any window the tree did not claim is released here; leaking one
      * would leak its cursor set and viewport with it. */
     {
-        Pane *claimed[SAG_PANE_MAX_LEAVES * 2];
+        Pane *claimed[YEW_PANE_MAX_LEAVES * 2];
         u32 nclaimed = 0U;
         u32 k;
 
-        sag_pane_collect_leaves(root, claimed, SAG_ARRAY_LEN(claimed),
+        yew_pane_collect_leaves(root, claimed, YEW_ARRAY_LEN(claimed),
                                 &nclaimed);
         for (i = 0U; i < slots.n; i++) {
             bool used = false;
@@ -532,32 +532,32 @@ static void apply_wins(Ed *ed, Tab *t, const FlLit *rec, Buffer *buf)
                     used = true;
             }
             if (!used)
-                sag_ed_win_release(ed, slots.v[i]);
+                yew_ed_win_release(ed, slots.v[i]);
         }
     }
     /* The placeholder tree goes only once the replacement is known
      * good — an early free would strand the tab on a dangling root if
      * build_panes had refused. */
     if (t->root != NULL) {
-        Pane *leaves[SAG_PANE_MAX_LEAVES * 2];
+        Pane *leaves[YEW_PANE_MAX_LEAVES * 2];
         u32 nl = 0U;
         /*
          * Is the editor LOOKING at the tree we are about to free?
          *
          * It is whenever restore reuses an already-open tab:
-         * sag_tab_open finds the existing one and switches to it, which
+         * yew_tab_open finds the existing one and switches to it, which
          * points ed->pane_root at this very root.  Freeing it and
-         * walking away leaves the next sag_ed_layout writing rects into
+         * walking away leaves the next yew_ed_layout writing rects into
          * freed memory — a use-after-free that surfaces as a segfault
          * inside calloc several hundred tests later, nowhere near here.
          */
         bool was_live = ed->pane_root == t->root;
 
-        sag_pane_collect_leaves(t->root, leaves, SAG_ARRAY_LEN(leaves),
+        yew_pane_collect_leaves(t->root, leaves, YEW_ARRAY_LEN(leaves),
                                 &nl);
         for (i = 0U; i < nl; i++)
-            sag_ed_win_release(ed, leaves[i]->win);
-        sag_pane_free(ed, t->root);
+            yew_ed_win_release(ed, leaves[i]->win);
+        yew_pane_free(ed, t->root);
         t->root = root;
         t->focus = focus_leaf(root, rec, &slots);
         if (was_live) {
@@ -580,59 +580,59 @@ static void apply_wins(Ed *ed, Tab *t, const FlLit *rec, Buffer *buf)
 
 static void apply_groups(Ed *ed, const FlLit *doc, IdMapVec *gids)
 {
-    const FlLit *list = sag_fl_get(doc, "groups");
-    u32 n = sag_fl_len(list);
+    const FlLit *list = yew_fl_get(doc, "groups");
+    u32 n = yew_fl_len(list);
     u32 i;
 
     for (i = 0U; i < n; i++) {
-        const FlLit *g = sag_fl_at(list, i);
+        const FlLit *g = yew_fl_at(list, i);
         const char *label;
         const char *dir;
         u64 llen = 0U;
         u64 dlen = 0U;
-        u32 file_id = (u32)sag_fl_int_or(sag_fl_get(g, "id"), 0);
+        u32 file_id = (u32)yew_fl_int_or(yew_fl_get(g, "id"), 0);
         u32 live;
 
         if (file_id == 0U)
             continue;
-        dir = sag_fl_str_or(sag_fl_get(g, "dir_path"), "", &dlen);
-        label = sag_fl_str_or(sag_fl_get(g, "label"), NULL, &llen);
-        live = sag_group_create(ed, dir, label);
+        dir = yew_fl_str_or(yew_fl_get(g, "dir_path"), "", &dlen);
+        label = yew_fl_str_or(yew_fl_get(g, "label"), NULL, &llen);
+        live = yew_group_create(ed, dir, label);
         if (live == 0U)
             continue;
         /* The FILE id is the key and the LIVE id is the value; the two
          * are never conflated.  DoD 4 greps for exactly that. */
-        sag_idmap_put(gids, file_id, live);
+        yew_idmap_put(gids, file_id, live);
         {
             const char *last;
             u64 nlen = 0U;
 
-            last = sag_fl_str_or(sag_fl_get(g, "last_active_member"), NULL,
+            last = yew_fl_str_or(yew_fl_get(g, "last_active_member"), NULL,
                                  &nlen);
             if (last != NULL && nlen > 0U)
-                sag_group_set_last_member(ed, live, last);
+                yew_group_set_last_member(ed, live, last);
         }
     }
 }
 
 /* `first_out` receives the index of the first tab this document
  * accounted for, whether it was opened here or already present — see
- * the fallback in sag_state_apply for why length cannot answer that. */
+ * the fallback in yew_state_apply for why length cannot answer that. */
 static void apply_tabs(Ed *ed, const FlLit *doc, const IdMapVec *gids,
                        IdMapVec *tids, int *first_out)
 {
-    const FlLit *list = sag_fl_get(doc, "tabs");
-    u32 n = sag_fl_len(list);
+    const FlLit *list = yew_fl_get(doc, "tabs");
+    u32 n = yew_fl_len(list);
     u32 i;
     u32 dropped = 0U;
 
-    if (n > (u32)SAG_STATE_MAX_TABS) {
-        sag_log(SAG_LOG_WARN, "workspace state lists %u tabs; keeping %d",
-                (unsigned)n, SAG_STATE_MAX_TABS);
-        n = (u32)SAG_STATE_MAX_TABS;
+    if (n > (u32)YEW_STATE_MAX_TABS) {
+        yew_log(YEW_LOG_WARN, "workspace state lists %u tabs; keeping %d",
+                (unsigned)n, YEW_STATE_MAX_TABS);
+        n = (u32)YEW_STATE_MAX_TABS;
     }
     for (i = 0U; i < n; i++) {
-        const FlLit *rec = sag_fl_at(list, i);
+        const FlLit *rec = yew_fl_at(list, i);
         const char *path;
         u64 plen = 0U;
         u32 file_id;
@@ -640,27 +640,27 @@ static void apply_tabs(Ed *ed, const FlLit *doc, const IdMapVec *gids,
         Tab *t;
         Buffer *buf;
 
-        path = sag_fl_str_or(sag_fl_get(rec, "path"), NULL, &plen);
+        path = yew_fl_str_or(yew_fl_get(rec, "path"), NULL, &plen);
         if (path == NULL || plen == 0U) {
             /* nil path = an untitled scratch tab.  Dropped rather than
              * recreated: there is nothing to put in it (§3 table). */
             dropped++;
             continue;
         }
-        idx = sag_tab_open(ed, path);
+        idx = yew_tab_open(ed, path);
         if (idx < 0) {
             dropped++;
             continue;
         }
-        t = sag_tab_at(ed, idx);
+        t = yew_tab_at(ed, idx);
         if (t == NULL) {
             dropped++;
             continue;
         }
         if (*first_out < 0)
             *first_out = idx;
-        file_id = (u32)sag_fl_int_or(sag_fl_get(rec, "id"), 0);
-        sag_idmap_put(tids, file_id, t->tab_id);
+        file_id = (u32)yew_fl_int_or(yew_fl_get(rec, "id"), 0);
+        yew_idmap_put(tids, file_id, t->tab_id);
         /*
          * The file is checked once, here.  A tab is KEPT when its file
          * is gone — the path is the only record of what was being
@@ -671,36 +671,36 @@ static void apply_tabs(Ed *ed, const FlLit *doc, const IdMapVec *gids,
             ed->state.missing_count++;
         }
         {
-            u32 gid = sag_idmap_get(gids, (u32)sag_fl_int_or(
-                                              sag_fl_get(rec, "group"), 0));
+            u32 gid = yew_idmap_get(gids, (u32)yew_fl_int_or(
+                                              yew_fl_get(rec, "group"), 0));
 
             if (gid != 0U) {
-                i64 ord = sag_fl_int_or(sag_fl_get(rec, "group_ordinal"), 0);
+                i64 ord = yew_fl_int_or(yew_fl_get(rec, "group_ordinal"), 0);
 
-                sag_group_add_member(ed, gid, idx);
+                yew_group_add_member(ed, gid, idx);
                 if (ord > 0)
-                    sag_group_set_ordinal(ed, idx, (int)ord);
+                    yew_group_set_ordinal(ed, idx, (int)ord);
             }
         }
-        buf = sag_ws_buf_by_id(ed, t->buffer_id);
+        buf = yew_ws_buf_by_id(ed, t->buffer_id);
         if (buf != NULL)
             apply_wins(ed, t, rec, buf);
     }
     if (dropped > 0U)
-        sag_log(SAG_LOG_INFO, "workspace state: %u tab record(s) dropped",
+        yew_log(YEW_LOG_INFO, "workspace state: %u tab record(s) dropped",
                 (unsigned)dropped);
 }
 
 static void apply_files(Ed *ed, const FlLit *doc)
 {
-    const FlLit *list = sag_fl_get(doc, "files");
-    u32 n = sag_fl_len(list);
+    const FlLit *list = yew_fl_get(doc, "files");
+    u32 n = yew_fl_len(list);
     u32 i;
 
-    if (n > (u32)SAG_STATE_MAX_FILES)
-        n = (u32)SAG_STATE_MAX_FILES;
+    if (n > (u32)YEW_STATE_MAX_FILES)
+        n = (u32)YEW_STATE_MAX_FILES;
     for (i = 0U; i < n; i++) {
-        const FlLit *rec = sag_fl_at(list, i);
+        const FlLit *rec = yew_fl_at(list, i);
         const FlLit *marks;
         const FlLit *changes;
         const char *path;
@@ -708,7 +708,7 @@ static void apply_files(Ed *ed, const FlLit *doc)
         Buffer *b;
         u32 m;
 
-        path = sag_fl_str_or(sag_fl_get(rec, "path"), NULL, &plen);
+        path = yew_fl_str_or(yew_fl_get(rec, "path"), NULL, &plen);
         if (path == NULL || plen == 0U)
             continue;
         /*
@@ -716,50 +716,50 @@ static void apply_files(Ed *ed, const FlLit *doc)
          * file you closed are still yours, and the buffer this creates
          * is non-resident, so keeping them costs no read.
          */
-        b = sag_ws_file_buf(ed, path);
+        b = yew_ws_file_buf(ed, path);
         if (b == NULL)
             continue;
-        marks = sag_fl_get(rec, "marks");
-        for (m = 0U; m < sag_fl_len(marks); m++) {
-            const FlLit *mk = sag_fl_at(marks, m);
+        marks = yew_fl_get(rec, "marks");
+        for (m = 0U; m < yew_fl_len(marks); m++) {
+            const FlLit *mk = yew_fl_at(marks, m);
             const char *name;
             u64 nlen = 0U;
 
-            name = sag_fl_str_or(sag_fl_get(mk, "name"), NULL, &nlen);
+            name = yew_fl_str_or(yew_fl_get(mk, "name"), NULL, &nlen);
             if (name == NULL || nlen != 1U || name[0] < 'a' ||
                 name[0] > 'z')
                 continue;
             /*
              * Recorded as a PENDING offset, not set through
-             * sag_ed_mark_set: that needs a MarkSet, which needs a
+             * yew_ed_mark_set: that needs a MarkSet, which needs a
              * loaded buffer, which is the read deferral exists to
              * avoid.  Hydration materializes them (see ed.c).
              */
             b->pending_marks[name[0] - 'a'] =
-                (u64)sag_fl_int_or(sag_fl_get(mk, "pos"), 0);
+                (u64)yew_fl_int_or(yew_fl_get(mk, "pos"), 0);
             b->pending_mark_set[name[0] - 'a'] = true;
         }
-        changes = sag_fl_get(rec, "changes");
+        changes = yew_fl_get(rec, "changes");
         if (changes != NULL) {
-            const FlLit *entries = sag_fl_get(changes, "entries");
+            const FlLit *entries = yew_fl_get(changes, "entries");
             u32 c;
-            u32 nc = sag_fl_len(entries);
+            u32 nc = yew_fl_len(entries);
             i64 cur;
 
-            if (nc > (u32)SAG_STATE_MAX_JUMPS)
-                nc = (u32)SAG_STATE_MAX_JUMPS;
+            if (nc > (u32)YEW_STATE_MAX_JUMPS)
+                nc = (u32)YEW_STATE_MAX_JUMPS;
             for (c = 0U; c < nc; c++) {
                 JumpEntry je;
 
-                if (!ring_entry(ed, sag_fl_at(entries, c), &je))
+                if (!ring_entry(ed, yew_fl_at(entries, c), &je))
                     continue;
                 b->changes.e[b->changes.head] = je;
                 b->changes.head =
-                    (b->changes.head + 1U) % SAG_CHANGELIST_MAX;
-                if (b->changes.len < (u32)SAG_CHANGELIST_MAX)
+                    (b->changes.head + 1U) % YEW_CHANGELIST_MAX;
+                if (b->changes.len < (u32)YEW_CHANGELIST_MAX)
                     b->changes.len++;
             }
-            cur = sag_fl_int_or(sag_fl_get(changes, "cur"),
+            cur = yew_fl_int_or(yew_fl_get(changes, "cur"),
                                 (i64)b->changes.len);
             b->changes.cur = cur >= 0 && (u32)cur <= b->changes.len
                                  ? (u32)cur
@@ -774,14 +774,14 @@ static void clamp_all(Ed *ed)
     u32 i;
 
     for (i = 0U; i < ed->tabs.v.len; i++) {
-        Pane *leaves[SAG_PANE_MAX_LEAVES * 2];
+        Pane *leaves[YEW_PANE_MAX_LEAVES * 2];
         u32 n = 0U;
         u32 k;
 
         if (ed->tabs.v.data[i].root == NULL)
             continue;
-        sag_pane_collect_leaves(ed->tabs.v.data[i].root, leaves,
-                                SAG_ARRAY_LEN(leaves), &n);
+        yew_pane_collect_leaves(ed->tabs.v.data[i].root, leaves,
+                                YEW_ARRAY_LEN(leaves), &n);
         for (k = 0U; k < n; k++) {
             Win *w = leaves[k]->win;
 
@@ -789,16 +789,16 @@ static void clamp_all(Ed *ed)
              * Only RESIDENT windows.  Clamping asks the buffer how many
              * lines it has, and a deferred one has no text to ask —
              * reading it here to find out would defeat the deferral for
-             * every tab at once.  sag_tab_hydrate clamps at the first
+             * every tab at once.  yew_tab_hydrate clamps at the first
              * moment there is something to clamp against.
              */
             if (w != NULL && w->buf != NULL && w->buf->tb != NULL)
-                sag_vp_clamp(w);
+                yew_vp_clamp(w);
         }
     }
 }
 
-SagWsResult sag_state_apply(Ed *ed, const u8 *bytes, u64 len)
+YewWsResult yew_state_apply(Ed *ed, const u8 *bytes, u64 len)
 {
     FlParseErr err;
     FlLit *doc;
@@ -811,7 +811,7 @@ SagWsResult sag_state_apply(Ed *ed, const u8 *bytes, u64 len)
     static const u8 nothing = 0U;
 
     if (ed == NULL)
-        return SAG_WS_FRESH;
+        return YEW_WS_FRESH;
     /*
      * An EMPTY file is not "nothing to do" — it is a document that does
      * not parse, and §7 sets it aside like any other.  Treating a NULL
@@ -827,7 +827,7 @@ SagWsResult sag_state_apply(Ed *ed, const u8 *bytes, u64 len)
         ed->state.doc_ready = true;
     }
     (void)memset(&err, 0, sizeof(err));
-    doc = sag_fl_parse_fletch(&ed->state.doc, bytes, len, &err);
+    doc = yew_fl_parse_fletch(&ed->state.doc, bytes, len, &err);
     if (doc == NULL) {
         char why[192];
 
@@ -837,12 +837,12 @@ SagWsResult sag_state_apply(Ed *ed, const u8 *bytes, u64 len)
     }
     if (doc->kind != FL_LIT_MAP)
         return recover(ed, "root is not a map");
-    version = sag_fl_int_or(sag_fl_get(doc, "version"), 0);
-    if (version != (i64)SAG_STATE_VERSION) {
+    version = yew_fl_int_or(yew_fl_get(doc, "version"), 0);
+    if (version != (i64)YEW_STATE_VERSION) {
         char why[64];
 
         (void)snprintf(why, sizeof(why), "version %lld, expected %d",
-                       (long long)version, SAG_STATE_VERSION);
+                       (long long)version, YEW_STATE_VERSION);
         return recover(ed, why);
     }
     /*
@@ -854,31 +854,31 @@ SagWsResult sag_state_apply(Ed *ed, const u8 *bytes, u64 len)
     {
         const char *saved;
         u64 slen = 0U;
-        const char *root = sag_ws_root(ed);
+        const char *root = yew_ws_root(ed);
 
-        saved = sag_fl_str_or(sag_fl_get(sag_fl_get(doc, "workspace"),
+        saved = yew_fl_str_or(yew_fl_get(yew_fl_get(doc, "workspace"),
                                          "path"),
                               NULL, &slen);
         if (saved != NULL && root != NULL && strcmp(saved, root) != 0)
-            sag_log(SAG_LOG_INFO,
+            yew_log(YEW_LOG_INFO,
                     "workspace state was written for %s; restoring into %s",
                     saved, root);
     }
     /* Step 2: options kept verbatim for Sprint 36. */
-    ed->state.options = sag_fl_get(doc, "options");
+    ed->state.options = yew_fl_get(doc, "options");
 
-    sag_idmap_init(&gids);
-    sag_idmap_init(&tids);
+    yew_idmap_init(&gids);
+    yew_idmap_init(&tids);
     before = (u32)ed->tabs.v.len;
     first = -1;
     apply_groups(ed, doc, &gids);              /* step 3 */
     apply_tabs(ed, doc, &gids, &tids, &first); /* step 4 */
     apply_files(ed, doc);                      /* step 5 */
     {                                          /* step 6 */
-        u32 live = sag_idmap_get(&tids,
-                                 (u32)sag_fl_int_or(
-                                     sag_fl_get(doc, "active_tab"), 0));
-        int idx = live == 0U ? -1 : sag_tab_index_of_id(ed, live);
+        u32 live = yew_idmap_get(&tids,
+                                 (u32)yew_fl_int_or(
+                                     yew_fl_get(doc, "active_tab"), 0));
+        int idx = live == 0U ? -1 : yew_tab_index_of_id(ed, live);
 
         /*
          * The fallback is the FIRST TAB THIS DOCUMENT NAMED, not the
@@ -892,15 +892,15 @@ SagWsResult sag_state_apply(Ed *ed, const u8 *bytes, u64 len)
         if (idx < 0)
             idx = first;
         if (idx >= 0)
-            sag_tab_switch(ed, idx);
+            yew_tab_switch(ed, idx);
     }
-    sag_idmap_free(&gids);
-    sag_idmap_free(&tids);
-    sag_group_prune_empty(ed);               /* step 7 */
+    yew_idmap_free(&gids);
+    yew_idmap_free(&tids);
+    yew_group_prune_empty(ed);               /* step 7 */
     /*
      * Steps 8 and 9 are the caller's, because layout needs the terminal
      * size and this function is also driven by tests with no terminal.
-     * sag_ws_restore does both; see there.
+     * yew_ws_restore does both; see there.
      */
     /*
      * RESTORED means the document named at least one tab we could
@@ -909,28 +909,28 @@ SagWsResult sag_state_apply(Ed *ed, const u8 *bytes, u64 len)
      * the length and is still a restore.
      */
     (void)before;
-    return first < 0 ? SAG_WS_FRESH : SAG_WS_RESTORED;
+    return first < 0 ? YEW_WS_FRESH : YEW_WS_RESTORED;
 }
 
-SagWsResult sag_ws_restore(Ed *ed)
+YewWsResult yew_ws_restore(Ed *ed)
 {
     Bytebuf raw;
     StateReadErr rd;
-    SagWsResult result;
+    YewWsResult result;
     const char *path;
 
     if (ed == NULL || !ed->state.ready)
-        return SAG_WS_FRESH;
-    path = sag_ws_state_path(&ed->state.key);
+        return YEW_WS_FRESH;
+    path = yew_ws_state_path(&ed->state.key);
     if (path == NULL)
-        return SAG_WS_FRESH;
+        return YEW_WS_FRESH;
     bytebuf_init(&raw);
     rd = read_state_file(path, &raw);
     switch (rd) {
     case STATE_READ_ABSENT:
         /* Silent.  A first run is not an event. */
         bytebuf_free(&raw);
-        return SAG_WS_FRESH;
+        return YEW_WS_FRESH;
     case STATE_READ_UNREADABLE:
         /*
          * NOT set aside.  We could not read it, so we have no grounds
@@ -938,9 +938,9 @@ SagWsResult sag_ws_restore(Ed *ed)
          * permission for would move someone else's data.
          */
         bytebuf_free(&raw);
-        sag_log(SAG_LOG_WARN, "cannot read %s: %s", path, strerror(errno));
-        sag_msg(ed, SAG_MSG_WARN, "workspace state could not be read");
-        return SAG_WS_FRESH;
+        yew_log(YEW_LOG_WARN, "cannot read %s: %s", path, strerror(errno));
+        yew_msg(ed, YEW_MSG_WARN, "workspace state could not be read");
+        return YEW_WS_FRESH;
     case STATE_READ_TOO_BIG:
         bytebuf_free(&raw);
         return recover(ed, "larger than the 8 MiB cap");
@@ -948,12 +948,12 @@ SagWsResult sag_ws_restore(Ed *ed)
     default:
         break;
     }
-    result = sag_state_apply(ed, raw.data, raw.len);
+    result = yew_state_apply(ed, raw.data, raw.len);
     bytebuf_free(&raw);
 
     /* Step 8: at the CURRENT size.  Ratios are permille, so a smaller
      * terminal restores proportionally rather than in stale cells. */
-    sag_ed_layout(ed);
+    yew_ed_layout(ed);
     clamp_all(ed); /* step 9 — clamp, never follow */
 
     /*
@@ -961,10 +961,10 @@ SagWsResult sag_ws_restore(Ed *ed)
      * people to dismiss the next one, which will matter.
      */
     if (ed->state.missing_count == 1U) {
-        sag_msg(ed, SAG_MSG_WARN,
+        yew_msg(ed, YEW_MSG_WARN,
                 "1 file in this workspace is no longer on disk");
     } else if (ed->state.missing_count > 1U) {
-        sag_msg(ed, SAG_MSG_WARN,
+        yew_msg(ed, YEW_MSG_WARN,
                 "%u files in this workspace are no longer on disk",
                 (unsigned)ed->state.missing_count);
     }

@@ -63,14 +63,14 @@ static void hs_make(HsFix *f)
     if (prev != NULL)
         (void)snprintf(f->saved, sizeof(f->saved), "%s", prev);
     (void)snprintf(f->state_home, sizeof(f->state_home),
-                   "/tmp/sag-hshome-XXXXXX");
-    SAG_ASSERT_NOT_NULL(mkdtemp(f->state_home));
-    SAG_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", f->state_home, 1), 0);
-    /* Two workspace state dirs, as sag_ws_ensure_dir would make them. */
+                   "/tmp/yew-hshome-XXXXXX");
+    YEW_ASSERT_NOT_NULL(mkdtemp(f->state_home));
+    YEW_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", f->state_home, 1), 0);
+    /* Two workspace state dirs, as yew_ws_ensure_dir would make them. */
     (void)snprintf(f->ws_a, sizeof(f->ws_a), "%s/wsA", f->state_home);
     (void)snprintf(f->ws_b, sizeof(f->ws_b), "%s/wsB", f->state_home);
-    SAG_ASSERT(sag_mkdirs(f->ws_a, 0700U));
-    SAG_ASSERT(sag_mkdirs(f->ws_b, 0700U));
+    YEW_ASSERT(yew_mkdirs(f->ws_a, 0700U));
+    YEW_ASSERT(yew_mkdirs(f->ws_b, 0700U));
 }
 
 static void hs_remove(HsFix *f)
@@ -116,7 +116,7 @@ static bool hs_file_has(const char *path, const char *needle)
 static void hs_paths(const HsFix *f, const char *ws, char *global,
                      size_t gcap, char *local, size_t lcap)
 {
-    (void)snprintf(global, gcap, "%s/sagitta/history/cmd", f->state_home);
+    (void)snprintf(global, gcap, "%s/yew/history/cmd", f->state_home);
     (void)snprintf(local, lcap, "%s/history/cmd", ws);
 }
 
@@ -125,8 +125,8 @@ static bool hs_has(const CmdHist *h, const char *line)
 {
     size_t i;
 
-    for (i = 0U; i < sag_hist_len(h); i++) {
-        if (strcmp(sag_hist_at(h, i), line) == 0)
+    for (i = 0U; i < yew_hist_len(h); i++) {
+        if (strcmp(yew_hist_at(h, i), line) == 0)
             return true;
     }
     return false;
@@ -146,17 +146,17 @@ void test_ws_history_workspace_scope_writes_locally(void)
 
     hs_make(&f);
     hs_paths(&f, f.ws_a, global, sizeof(global), local, sizeof(local));
-    h = sag_hist_open_scoped("cmd", f.ws_a, true);
-    SAG_ASSERT(!sag_hist_is_memory(h));
-    SAG_ASSERT_EQ_STR(sag_hist_path(h), local);
-    sag_hist_add(h, "w local-one");
-    sag_hist_add(h, "w local-two");
-    sag_hist_close(h);
+    h = yew_hist_open_scoped("cmd", f.ws_a, true);
+    YEW_ASSERT(!yew_hist_is_memory(h));
+    YEW_ASSERT_EQ_STR(yew_hist_path(h), local);
+    yew_hist_add(h, "w local-one");
+    yew_hist_add(h, "w local-two");
+    yew_hist_close(h);
 
-    SAG_ASSERT_EQ_I64(hs_lines(local), 2);
-    SAG_ASSERT(hs_file_has(local, "local-one"));
+    YEW_ASSERT_EQ_I64(hs_lines(local), 2);
+    YEW_ASSERT(hs_file_has(local, "local-one"));
     /* The global file was never created. */
-    SAG_ASSERT_EQ_I64(hs_lines(global), -1);
+    YEW_ASSERT_EQ_I64(hs_lines(global), -1);
     hs_remove(&f);
 }
 
@@ -170,14 +170,14 @@ void test_ws_history_global_scope_writes_globally(void)
 
     hs_make(&f);
     hs_paths(&f, f.ws_a, global, sizeof(global), local, sizeof(local));
-    h = sag_hist_open_scoped("cmd", f.ws_a, false);
-    SAG_ASSERT_EQ_STR(sag_hist_path(h), global);
-    sag_hist_add(h, "w global-one");
-    sag_hist_close(h);
+    h = yew_hist_open_scoped("cmd", f.ws_a, false);
+    YEW_ASSERT_EQ_STR(yew_hist_path(h), global);
+    yew_hist_add(h, "w global-one");
+    yew_hist_close(h);
 
-    SAG_ASSERT_EQ_I64(hs_lines(global), 1);
-    SAG_ASSERT(hs_file_has(global, "global-one"));
-    SAG_ASSERT_EQ_I64(hs_lines(local), -1);
+    YEW_ASSERT_EQ_I64(hs_lines(global), 1);
+    YEW_ASSERT(hs_file_has(global, "global-one"));
+    YEW_ASSERT_EQ_I64(hs_lines(local), -1);
     hs_remove(&f);
 }
 
@@ -197,22 +197,22 @@ void test_ws_history_reads_merge_both_files(void)
     CmdHist *h;
 
     hs_make(&f);
-    g = sag_hist_open_scoped("cmd", f.ws_a, false);
-    sag_hist_add(g, "w from-global");
-    sag_hist_close(g);
+    g = yew_hist_open_scoped("cmd", f.ws_a, false);
+    yew_hist_add(g, "w from-global");
+    yew_hist_close(g);
 
-    h = sag_hist_open_scoped("cmd", f.ws_a, true);
-    sag_hist_add(h, "w from-workspace");
-    SAG_ASSERT(hs_has(h, "w from-global"));
-    SAG_ASSERT(hs_has(h, "w from-workspace"));
-    sag_hist_close(h);
+    h = yew_hist_open_scoped("cmd", f.ws_a, true);
+    yew_hist_add(h, "w from-workspace");
+    YEW_ASSERT(hs_has(h, "w from-global"));
+    YEW_ASSERT(hs_has(h, "w from-workspace"));
+    yew_hist_close(h);
 
     /* Reopening still sees both. */
-    h = sag_hist_open_scoped("cmd", f.ws_a, true);
-    SAG_ASSERT_EQ_U64(sag_hist_len(h), 2U);
-    SAG_ASSERT(hs_has(h, "w from-global"));
-    SAG_ASSERT(hs_has(h, "w from-workspace"));
-    sag_hist_close(h);
+    h = yew_hist_open_scoped("cmd", f.ws_a, true);
+    YEW_ASSERT_EQ_U64(yew_hist_len(h), 2U);
+    YEW_ASSERT(hs_has(h, "w from-global"));
+    YEW_ASSERT(hs_has(h, "w from-workspace"));
+    yew_hist_close(h);
     hs_remove(&f);
 }
 
@@ -227,21 +227,21 @@ void test_ws_history_local_entries_are_newest(void)
     CmdHist *h;
 
     hs_make(&f);
-    g = sag_hist_open_scoped("cmd", f.ws_a, false);
-    sag_hist_add(g, "w g1");
-    sag_hist_add(g, "w g2");
-    sag_hist_close(g);
+    g = yew_hist_open_scoped("cmd", f.ws_a, false);
+    yew_hist_add(g, "w g1");
+    yew_hist_add(g, "w g2");
+    yew_hist_close(g);
 
-    h = sag_hist_open_scoped("cmd", f.ws_a, true);
-    sag_hist_add(h, "w L1");
-    sag_hist_close(h);
+    h = yew_hist_open_scoped("cmd", f.ws_a, true);
+    yew_hist_add(h, "w L1");
+    yew_hist_close(h);
 
-    h = sag_hist_open_scoped("cmd", f.ws_a, true);
-    SAG_ASSERT_EQ_U64(sag_hist_len(h), 3U);
-    SAG_ASSERT_EQ_STR(sag_hist_at(h, 0U), "w g1");
-    SAG_ASSERT_EQ_STR(sag_hist_at(h, 1U), "w g2");
-    SAG_ASSERT_EQ_STR(sag_hist_at(h, 2U), "w L1");
-    sag_hist_close(h);
+    h = yew_hist_open_scoped("cmd", f.ws_a, true);
+    YEW_ASSERT_EQ_U64(yew_hist_len(h), 3U);
+    YEW_ASSERT_EQ_STR(yew_hist_at(h, 0U), "w g1");
+    YEW_ASSERT_EQ_STR(yew_hist_at(h, 1U), "w g2");
+    YEW_ASSERT_EQ_STR(yew_hist_at(h, 2U), "w L1");
+    yew_hist_close(h);
     hs_remove(&f);
 }
 
@@ -257,21 +257,21 @@ void test_ws_history_duplicate_is_deduped_to_the_local_position(void)
     CmdHist *h;
 
     hs_make(&f);
-    g = sag_hist_open_scoped("cmd", f.ws_a, false);
-    sag_hist_add(g, "w shared");
-    sag_hist_add(g, "w only-global");
-    sag_hist_close(g);
+    g = yew_hist_open_scoped("cmd", f.ws_a, false);
+    yew_hist_add(g, "w shared");
+    yew_hist_add(g, "w only-global");
+    yew_hist_close(g);
 
-    h = sag_hist_open_scoped("cmd", f.ws_a, true);
-    sag_hist_add(h, "w shared");
-    sag_hist_close(h);
+    h = yew_hist_open_scoped("cmd", f.ws_a, true);
+    yew_hist_add(h, "w shared");
+    yew_hist_close(h);
 
-    h = sag_hist_open_scoped("cmd", f.ws_a, true);
-    SAG_ASSERT_EQ_U64(sag_hist_len(h), 2U);
-    SAG_ASSERT_EQ_STR(sag_hist_at(h, 0U), "w only-global");
+    h = yew_hist_open_scoped("cmd", f.ws_a, true);
+    YEW_ASSERT_EQ_U64(yew_hist_len(h), 2U);
+    YEW_ASSERT_EQ_STR(yew_hist_at(h, 0U), "w only-global");
     /* Once, and newest — not twice, and not stuck at the global spot. */
-    SAG_ASSERT_EQ_STR(sag_hist_at(h, 1U), "w shared");
-    sag_hist_close(h);
+    YEW_ASSERT_EQ_STR(yew_hist_at(h, 1U), "w shared");
+    yew_hist_close(h);
     hs_remove(&f);
 }
 
@@ -297,29 +297,29 @@ void test_ws_history_merge_never_migrates_into_the_workspace_file(void)
 
     hs_make(&f);
     hs_paths(&f, f.ws_a, global, sizeof(global), local, sizeof(local));
-    g = sag_hist_open_scoped("cmd", f.ws_a, false);
-    sag_hist_add(g, "w g1");
-    sag_hist_add(g, "w g2");
-    sag_hist_close(g);
+    g = yew_hist_open_scoped("cmd", f.ws_a, false);
+    yew_hist_add(g, "w g1");
+    yew_hist_add(g, "w g2");
+    yew_hist_close(g);
 
-    h = sag_hist_open_scoped("cmd", f.ws_a, true);
-    SAG_ASSERT_EQ_U64(sag_hist_len(h), 2U);
-    sag_hist_add(h, "w L1");
-    SAG_ASSERT_EQ_U64(sag_hist_len(h), 3U);
-    sag_hist_close(h);
+    h = yew_hist_open_scoped("cmd", f.ws_a, true);
+    YEW_ASSERT_EQ_U64(yew_hist_len(h), 2U);
+    yew_hist_add(h, "w L1");
+    YEW_ASSERT_EQ_U64(yew_hist_len(h), 3U);
+    yew_hist_close(h);
 
-    SAG_ASSERT_EQ_I64(hs_lines(local), 1);
-    SAG_ASSERT(hs_file_has(local, "L1"));
-    SAG_ASSERT(!hs_file_has(local, "g1"));
-    SAG_ASSERT(!hs_file_has(local, "g2"));
+    YEW_ASSERT_EQ_I64(hs_lines(local), 1);
+    YEW_ASSERT(hs_file_has(local, "L1"));
+    YEW_ASSERT(!hs_file_has(local, "g1"));
+    YEW_ASSERT(!hs_file_has(local, "g2"));
     /* And the global file did not grow the local entry either. */
-    SAG_ASSERT_EQ_I64(hs_lines(global), 2);
-    SAG_ASSERT(!hs_file_has(global, "L1"));
+    YEW_ASSERT_EQ_I64(hs_lines(global), 2);
+    YEW_ASSERT(!hs_file_has(global, "L1"));
     hs_remove(&f);
 }
 
 /*
- * The same, through sag_hist_flush — which COMPACTS, and is the far
+ * The same, through yew_hist_flush — which COMPACTS, and is the far
  * more tempting place to write the merged list, because it already has
  * one in hand.
  */
@@ -333,19 +333,19 @@ void test_ws_history_flush_compacts_only_the_scope_file(void)
 
     hs_make(&f);
     hs_paths(&f, f.ws_a, global, sizeof(global), local, sizeof(local));
-    g = sag_hist_open_scoped("cmd", f.ws_a, false);
-    sag_hist_add(g, "w g1");
-    sag_hist_close(g);
+    g = yew_hist_open_scoped("cmd", f.ws_a, false);
+    yew_hist_add(g, "w g1");
+    yew_hist_close(g);
 
-    h = sag_hist_open_scoped("cmd", f.ws_a, true);
-    sag_hist_add(h, "w L1");
-    sag_hist_add(h, "w L2");
-    sag_hist_flush(h);
-    sag_hist_close(h);
+    h = yew_hist_open_scoped("cmd", f.ws_a, true);
+    yew_hist_add(h, "w L1");
+    yew_hist_add(h, "w L2");
+    yew_hist_flush(h);
+    yew_hist_close(h);
 
-    SAG_ASSERT_EQ_I64(hs_lines(local), 2);
-    SAG_ASSERT(!hs_file_has(local, "g1"));
-    SAG_ASSERT_EQ_I64(hs_lines(global), 1);
+    YEW_ASSERT_EQ_I64(hs_lines(local), 2);
+    YEW_ASSERT(!hs_file_has(local, "g1"));
+    YEW_ASSERT_EQ_I64(hs_lines(global), 1);
     hs_remove(&f);
 }
 
@@ -360,19 +360,19 @@ void test_ws_history_workspaces_are_isolated_from_each_other(void)
     CmdHist *b;
 
     hs_make(&f);
-    a = sag_hist_open_scoped("cmd", f.ws_a, true);
-    sag_hist_add(a, "w in-A");
-    sag_hist_close(a);
+    a = yew_hist_open_scoped("cmd", f.ws_a, true);
+    yew_hist_add(a, "w in-A");
+    yew_hist_close(a);
 
-    b = sag_hist_open_scoped("cmd", f.ws_b, true);
-    SAG_ASSERT(!hs_has(b, "w in-A"));
-    sag_hist_add(b, "w in-B");
-    sag_hist_close(b);
+    b = yew_hist_open_scoped("cmd", f.ws_b, true);
+    YEW_ASSERT(!hs_has(b, "w in-A"));
+    yew_hist_add(b, "w in-B");
+    yew_hist_close(b);
 
-    a = sag_hist_open_scoped("cmd", f.ws_a, true);
-    SAG_ASSERT(hs_has(a, "w in-A"));
-    SAG_ASSERT(!hs_has(a, "w in-B"));
-    sag_hist_close(a);
+    a = yew_hist_open_scoped("cmd", f.ws_a, true);
+    YEW_ASSERT(hs_has(a, "w in-A"));
+    YEW_ASSERT(!hs_has(a, "w in-B"));
+    yew_hist_close(a);
     hs_remove(&f);
 }
 
@@ -384,13 +384,13 @@ void test_ws_history_global_scope_crosses_workspaces(void)
     CmdHist *b;
 
     hs_make(&f);
-    a = sag_hist_open_scoped("cmd", f.ws_a, false);
-    sag_hist_add(a, "w everywhere");
-    sag_hist_close(a);
+    a = yew_hist_open_scoped("cmd", f.ws_a, false);
+    yew_hist_add(a, "w everywhere");
+    yew_hist_close(a);
 
-    b = sag_hist_open_scoped("cmd", f.ws_b, false);
-    SAG_ASSERT(hs_has(b, "w everywhere"));
-    sag_hist_close(b);
+    b = yew_hist_open_scoped("cmd", f.ws_b, false);
+    YEW_ASSERT(hs_has(b, "w everywhere"));
+    yew_hist_close(b);
     hs_remove(&f);
 }
 
@@ -408,14 +408,14 @@ void test_ws_history_null_workspace_is_the_global_history(void)
 
     hs_make(&f);
     hs_paths(&f, f.ws_a, global, sizeof(global), local, sizeof(local));
-    h = sag_hist_open_scoped("cmd", NULL, true);
+    h = yew_hist_open_scoped("cmd", NULL, true);
     /* Asked for workspace scope with no workspace: the only honest
      * answer is the global file, not an in-memory history that
      * silently loses everything at exit. */
-    SAG_ASSERT_EQ_STR(sag_hist_path(h), global);
-    sag_hist_add(h, "w somewhere");
-    sag_hist_close(h);
-    SAG_ASSERT_EQ_I64(hs_lines(global), 1);
+    YEW_ASSERT_EQ_STR(yew_hist_path(h), global);
+    yew_hist_add(h, "w somewhere");
+    yew_hist_close(h);
+    YEW_ASSERT_EQ_I64(hs_lines(global), 1);
     hs_remove(&f);
 }
 
@@ -428,19 +428,19 @@ void test_ws_history_kinds_do_not_share_a_file(void)
     char path[256];
 
     hs_make(&f);
-    c = sag_hist_open_scoped("cmd", f.ws_a, true);
-    sag_hist_add(c, "w a-command");
-    sag_hist_close(c);
-    s = sag_hist_open_scoped("search", f.ws_a, true);
-    SAG_ASSERT(!hs_has(s, "w a-command"));
-    sag_hist_add(s, "w a-pattern");
-    sag_hist_close(s);
+    c = yew_hist_open_scoped("cmd", f.ws_a, true);
+    yew_hist_add(c, "w a-command");
+    yew_hist_close(c);
+    s = yew_hist_open_scoped("search", f.ws_a, true);
+    YEW_ASSERT(!hs_has(s, "w a-command"));
+    yew_hist_add(s, "w a-pattern");
+    yew_hist_close(s);
 
     (void)snprintf(path, sizeof(path), "%s/history/search", f.ws_a);
-    SAG_ASSERT_EQ_I64(hs_lines(path), 1);
-    SAG_ASSERT(hs_file_has(path, "a-pattern"));
+    YEW_ASSERT_EQ_I64(hs_lines(path), 1);
+    YEW_ASSERT(hs_file_has(path, "a-pattern"));
     (void)snprintf(path, sizeof(path), "%s/history/cmd", f.ws_a);
-    SAG_ASSERT(!hs_file_has(path, "a-pattern"));
+    YEW_ASSERT(!hs_file_has(path, "a-pattern"));
     hs_remove(&f);
 }
 
@@ -452,14 +452,14 @@ void test_ws_history_memory_history_writes_nothing(void)
     char path[256];
 
     hs_make(&f);
-    h = sag_hist_open_memory();
-    SAG_ASSERT(sag_hist_is_memory(h));
-    SAG_ASSERT_NULL(sag_hist_path(h));
-    sag_hist_add(h, "w remembered");
-    SAG_ASSERT(hs_has(h, "w remembered"));
-    sag_hist_flush(h);
-    sag_hist_close(h);
+    h = yew_hist_open_memory();
+    YEW_ASSERT(yew_hist_is_memory(h));
+    YEW_ASSERT_NULL(yew_hist_path(h));
+    yew_hist_add(h, "w remembered");
+    YEW_ASSERT(hs_has(h, "w remembered"));
+    yew_hist_flush(h);
+    yew_hist_close(h);
     (void)snprintf(path, sizeof(path), "%s/history/cmd", f.ws_a);
-    SAG_ASSERT_EQ_I64(hs_lines(path), -1);
+    YEW_ASSERT_EQ_I64(hs_lines(path), -1);
     hs_remove(&f);
 }

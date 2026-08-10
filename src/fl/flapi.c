@@ -44,7 +44,7 @@ static Ed *api_ed(FlVm *vm)
 static const char *api_call_name(const FlVm *vm)
 {
     const char *name = vm == NULL || vm->in == NULL ? NULL :
-                       sag_intern_str(vm->in, vm->cur_native);
+                       yew_intern_str(vm->in, vm->cur_native);
     return name == NULL ? "editor API" : name;
 }
 
@@ -98,22 +98,22 @@ static bool text_range(FlVm *vm, const Buffer *b, Span range, FlValue *out)
     u64 at;
 
     if (b == NULL || b->tb == NULL || range.lo > range.hi ||
-        range.hi > sag_buf_len(b))
+        range.hi > yew_buf_len(b))
         return fl_raise(vm, "range", "buffer span is outside the text");
     bytebuf_init(&bytes);
     at = range.lo;
-    if (at < range.hi && sag_textiter_begin(&it, b->tb, BYTEOFF(at))) {
+    if (at < range.hi && yew_textiter_begin(&it, b->tb, BYTEOFF(at))) {
         do {
             const u8 *chunk;
             u64 n;
             u64 take;
 
-            if (!sag_textiter_chunk(&it, b->tb, &chunk, &n))
+            if (!yew_textiter_chunk(&it, b->tb, &chunk, &n))
                 break;
             take = n < range.hi - at ? n : range.hi - at;
             bytebuf_append(&bytes, chunk, (size_t)take);
             at += take;
-        } while (at < range.hi && sag_textiter_advance(&it, b->tb));
+        } while (at < range.hi && yew_textiter_advance(&it, b->tb));
     }
     if (bytes.len > UINT32_MAX) {
         bytebuf_free(&bytes);
@@ -131,12 +131,12 @@ static Win *win_for_buffer(Ed *ed, const Buffer *b)
     if (ed->win != NULL && ed->win->buf == b)
         return ed->win;
     for (i = 0U; i < ed->tabs.v.len; i++) {
-        Pane *leaves[SAG_PANE_MAX_LEAVES];
+        Pane *leaves[YEW_PANE_MAX_LEAVES];
         u32 n = 0U;
         u32 k;
 
-        sag_pane_collect_leaves(ed->tabs.v.data[i].root, leaves,
-                                SAG_ARRAY_LEN(leaves), &n);
+        yew_pane_collect_leaves(ed->tabs.v.data[i].root, leaves,
+                                YEW_ARRAY_LEN(leaves), &n);
         for (k = 0U; k < n; k++)
             if (leaves[k]->win != NULL && leaves[k]->win->buf == b)
                 return leaves[k]->win;
@@ -150,7 +150,7 @@ static bool q_buf_current(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     (void)a; (void)n;
     if (ed == NULL)
         return false;
-    *out = fl_h_buf_make(ed, sag_ed_doc(ed));
+    *out = fl_h_buf_make(ed, yew_ed_doc(ed));
     if (out->t == (u8)FL_NIL)
         return fl_raise(vm, "handle", "no current buffer");
     return true;
@@ -189,7 +189,7 @@ static bool q_buf_name(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     (void)n;
     if (b == NULL)
         return false;
-    *out = api_cstr(vm, sag_buf_label(b));
+    *out = api_cstr(vm, yew_buf_label(b));
     return true;
 }
 
@@ -209,7 +209,7 @@ static bool q_buf_len(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     (void)n;
     if (b == NULL)
         return false;
-    *out = FL_INT_V((i64)sag_buf_len(b));
+    *out = FL_INT_V((i64)yew_buf_len(b));
     return true;
 }
 
@@ -219,7 +219,7 @@ static bool q_buf_lines(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     (void)n;
     if (b == NULL)
         return false;
-    *out = FL_INT_V((i64)sag_buf_line_count(b));
+    *out = FL_INT_V((i64)yew_buf_line_count(b));
     return true;
 }
 
@@ -231,7 +231,7 @@ static bool q_buf_text(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     if (b == NULL)
         return false;
     if (n == 1U)
-        s = (Span){0U, sag_buf_len(b)};
+        s = (Span){0U, yew_buf_len(b)};
     else if (!fl_h_span(vm, a[1], &sb, &s))
         return false;
     else if (sb != b)
@@ -247,11 +247,11 @@ static bool q_buf_line(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     (void)n;
     if (b == NULL || !need_int(vm, a[1], 1U, &line))
         return false;
-    if (line < 1 || (u64)line > sag_buf_line_count(b))
+    if (line < 1 || (u64)line > yew_buf_line_count(b))
         return fl_raise(vm, "range", "line %lld is outside the buffer",
                         (long long)line);
-    s = sag_buf_line_span(b, LINENO((u64)line - 1U));
-    if (s.hi > s.lo && s.hi <= sag_buf_len(b)) {
+    s = yew_buf_line_span(b, LINENO((u64)line - 1U));
+    if (s.hi > s.lo && s.hi <= yew_buf_len(b)) {
         FlValue last;
         if (!text_range(vm, b, (Span){s.hi - 1U, s.hi}, &last))
             return false;
@@ -275,7 +275,7 @@ static bool q_buf_span(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     if (b == NULL || !need_int(vm, a[1], 1U, &lo) ||
         !need_int(vm, a[2], 2U, &hi))
         return false;
-    if (lo < 0 || hi < lo || (u64)hi > sag_buf_len(b))
+    if (lo < 0 || hi < lo || (u64)hi > yew_buf_len(b))
         return fl_raise(vm, "range", "invalid byte span");
     *out = fl_h_span_make(vm->ed, b, (u64)lo, (u64)hi);
     return true;
@@ -289,9 +289,9 @@ static bool q_buf_line_span(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     (void)n;
     if (b == NULL || !need_int(vm, a[1], 1U, &line))
         return false;
-    if (line < 1 || (u64)line > sag_buf_line_count(b))
+    if (line < 1 || (u64)line > yew_buf_line_count(b))
         return fl_raise(vm, "range", "line is outside the buffer");
-    s = sag_buf_line_span(b, LINENO((u64)line - 1U));
+    s = yew_buf_line_span(b, LINENO((u64)line - 1U));
     *out = fl_h_span_make(vm->ed, b, s.lo, s.hi);
     return true;
 }
@@ -302,7 +302,7 @@ static bool q_buf_dirty(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     (void)n;
     if (b == NULL)
         return false;
-    *out = FL_BOOL_V(sag_buf_dirty(b));
+    *out = FL_BOOL_V(yew_buf_dirty(b));
     return true;
 }
 
@@ -312,7 +312,7 @@ static bool q_buf_readonly(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     (void)n;
     if (b == NULL)
         return false;
-    *out = FL_BOOL_V(sag_buf_readonly(b));
+    *out = FL_BOOL_V(yew_buf_readonly(b));
     return true;
 }
 
@@ -323,7 +323,7 @@ static bool q_buf_mark(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     (void)n;
     if (b == NULL || !need_int(vm, a[1], 1U, &at))
         return false;
-    if (at < 0 || (u64)at > sag_buf_len(b))
+    if (at < 0 || (u64)at > yew_buf_len(b))
         return fl_raise(vm, "range", "mark offset is outside the buffer");
     *out = fl_h_span_make(vm->ed, b, (u64)at, (u64)at);
     return true;
@@ -332,9 +332,9 @@ static bool q_buf_mark(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 static bool q_buf_find(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     Buffer *b = fl_h_buf(vm, a[0]);
-    const SagRe *re;
-    SagReInput input;
-    SagReMatch match;
+    const YewRe *re;
+    YewReInput input;
+    YewReMatch match;
     i64 from = 0;
 
     if (b == NULL)
@@ -344,10 +344,10 @@ static bool q_buf_find(FlVm *vm, FlValue *a, u32 n, FlValue *out)
         return false;
     if (n == 3U && !need_int(vm, a[2], 2U, &from))
         return false;
-    if (from < 0 || (u64)from > sag_buf_len(b))
+    if (from < 0 || (u64)from > yew_buf_len(b))
         return fl_raise(vm, "range", "find offset is outside the buffer");
-    input = sag_re_input_textbuf(b->tb);
-    if (!sag_re_search(re, &input, BYTEOFF((u64)from), &match)) {
+    input = yew_re_input_textbuf(b->tb);
+    if (!yew_re_search(re, &input, BYTEOFF((u64)from), &match)) {
         *out = FL_NIL_V;
         return true;
     }
@@ -358,9 +358,9 @@ static bool q_buf_find(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 static bool q_buf_find_all(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     Buffer *b = fl_h_buf(vm, a[0]);
-    const SagRe *re;
-    SagReInput input;
-    SagReMatch match;
+    const YewRe *re;
+    YewReInput input;
+    YewReMatch match;
     FlList *list;
     u64 at = 0U;
     u64 len;
@@ -371,11 +371,11 @@ static bool q_buf_find_all(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     re = fl_h_re(vm, a[1]);
     if (re == NULL)
         return false;
-    len = sag_buf_len(b);
-    input = sag_re_input_textbuf(b->tb);
+    len = yew_buf_len(b);
+    input = yew_re_input_textbuf(b->tb);
     list = fl_list_new(vm);
     fl_gc_protect(vm, FL_OBJ_V(FL_LIST, list));
-    while (at <= len && sag_re_search(re, &input, BYTEOFF(at), &match)) {
+    while (at <= len && yew_re_search(re, &input, BYTEOFF(at), &match)) {
         (void)fl_list_push(vm, list,
                            fl_h_span_make(vm->ed, b, match.g[0].lo,
                                           match.g[0].hi));
@@ -415,11 +415,11 @@ static bool q_win_list(FlVm *vm, FlValue *a, u32 n, FlValue *out)
         if (ed->win != NULL)
             (void)fl_list_push(vm, list, fl_h_win_make(ed, ed->win));
     } else for (i = 0U; i < ed->tabs.v.len; i++) {
-        Pane *leaves[SAG_PANE_MAX_LEAVES];
+        Pane *leaves[YEW_PANE_MAX_LEAVES];
         u32 count = 0U;
         u32 k;
-        sag_pane_collect_leaves(ed->tabs.v.data[i].root, leaves,
-                                SAG_ARRAY_LEN(leaves), &count);
+        yew_pane_collect_leaves(ed->tabs.v.data[i].root, leaves,
+                                YEW_ARRAY_LEN(leaves), &count);
         for (k = 0U; k < count; k++)
             (void)fl_list_push(vm, list,
                                fl_h_win_make(ed, leaves[k]->win));
@@ -540,7 +540,7 @@ static bool q_cur_line(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     Cursor *c; Win *w;
     (void)n;
     if (!cur_value(vm, a[0], &c, &w)) return false;
-    *out = FL_INT_V((i64)sag_buf_line_of(w->buf, c->pos).v + 1);
+    *out = FL_INT_V((i64)yew_buf_line_of(w->buf, c->pos).v + 1);
     return true;
 }
 
@@ -549,8 +549,8 @@ static bool q_cur_col(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     Cursor *c; Win *w; Span line; GCol col;
     (void)n;
     if (!cur_value(vm, a[0], &c, &w)) return false;
-    line = sag_buf_line_span(w->buf, sag_buf_line_of(w->buf, c->pos));
-    col = sag_off_to_gcol(w->buf->tb, line, c->pos);
+    line = yew_buf_line_span(w->buf, yew_buf_line_of(w->buf, c->pos));
+    col = yew_off_to_gcol(w->buf->tb, line, c->pos);
     *out = FL_INT_V((i64)col.v); return true;
 }
 
@@ -570,7 +570,7 @@ static bool q_cur_line_span(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     Cursor *c; Win *w; Span s;
     (void)n;
     if (!cur_value(vm, a[0], &c, &w)) return false;
-    s = sag_buf_line_span(w->buf, sag_buf_line_of(w->buf, c->pos));
+    s = yew_buf_line_span(w->buf, yew_buf_line_of(w->buf, c->pos));
     *out = fl_h_span_make(vm->ed, w->buf, s.lo, s.hi); return true;
 }
 
@@ -580,7 +580,7 @@ static bool q_cur_word(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     (void)n;
     if (!cur_value(vm, a[0], &c, &w)) return false;
     unit.tb = w->buf->tb; unit.buf = w->buf; unit.win = w;
-    s = sag_unit_word.span(&unit, c->pos, false);
+    s = yew_unit_word.span(&unit, c->pos, false);
     *out = fl_h_span_make(vm->ed, w->buf, s.lo, s.hi); return true;
 }
 
@@ -605,10 +605,10 @@ static bool q_span_valid(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     if (api_ed(vm) == NULL) return false;
     s = fl_h_peek(&vm->ed->handles, a[0]);
     b = s == NULL || s->kind != (u8)FL_H_SPAN ? NULL :
-        sag_ws_buf_by_id(vm->ed, s->as.span.buf);
+        yew_ws_buf_by_id(vm->ed, s->as.span.buf);
     *out = FL_BOOL_V(b != NULL && b->marks != NULL &&
-                     sag_mark_alive(b->marks, s->as.span.lo) &&
-                     sag_mark_alive(b->marks, s->as.span.hi));
+                     yew_mark_alive(b->marks, s->as.span.lo) &&
+                     yew_mark_alive(b->marks, s->as.span.hi));
     return true;
 }
 
@@ -747,7 +747,7 @@ FlBindDesc fl_api[] = {
                  FL_ARG_STR, FL_ARG_VALUE, FL_ARG_NONE)
 };
 
-const u32 fl_api_len = (u32)SAG_ARRAY_LEN(fl_api);
+const u32 fl_api_len = (u32)YEW_ARRAY_LEN(fl_api);
 
 void fl_api_init(void)
 {
@@ -762,23 +762,23 @@ void fl_api_init(void)
         u32 mapped;
 
         if (d->nmin > d->nmax || d->nmax < base ||
-            d->nmax - base > SAG_ARRAY_LEN(d->argmap))
-            SAG_BUG("Fletch binding has invalid arity: %s", d->fl_name);
+            d->nmax - base > YEW_ARRAY_LEN(d->argmap))
+            YEW_BUG("Fletch binding has invalid arity: %s", d->fl_name);
         if (d->cmd == NULL) {
             if (d->query == NULL)
-                SAG_BUG("Fletch binding has neither command nor query: %s",
+                YEW_BUG("Fletch binding has neither command nor query: %s",
                         d->fl_name);
             continue;
         }
         if (d->query != NULL)
-            SAG_BUG("Fletch binding has command and query: %s", d->fl_name);
+            YEW_BUG("Fletch binding has command and query: %s", d->fl_name);
         for (mapped = 0U; mapped < d->nmax - base; mapped++)
             if (d->argmap[mapped] == (u8)FL_ARG_NONE)
-                SAG_BUG("Fletch binding lacks argument mapping: %s arg %u",
+                YEW_BUG("Fletch binding lacks argument mapping: %s arg %u",
                         d->fl_name, (unsigned)(mapped + base));
-        d->resolved_id = sag_cmd_lookup(d->cmd, (u32)strlen(d->cmd));
+        d->resolved_id = yew_cmd_lookup(d->cmd, (u32)strlen(d->cmd));
         if (d->resolved_id.v == 0U)
-            SAG_BUG("Fletch binding names unknown command: %s -> %s",
+            YEW_BUG("Fletch binding names unknown command: %s -> %s",
                     d->fl_name, d->cmd);
     }
     initialized = true;
@@ -787,7 +787,7 @@ void fl_api_init(void)
 void fl_ed_attach(FlVm *vm, Ed *ed, const FlHost *host)
 {
     if (vm == NULL)
-        SAG_BUG("fl_ed_attach: NULL VM");
+        YEW_BUG("fl_ed_attach: NULL VM");
     vm->ed = ed;
     vm->host = host == NULL ? &fl_host_null : host;
 }
@@ -849,10 +849,10 @@ bool fl_api_bind_receiver(FlVm *vm, FlValue recv,
     if (d == NULL)
         return false;
     if (d->recv == (u8)FL_H_NONE || d->nmin == 0U || d->nmax == 0U)
-        SAG_BUG("Fletch receiver binding lacks its receiver: %s", d->fl_name);
+        YEW_BUG("Fletch receiver binding lacks its receiver: %s", d->fl_name);
     nat = fl_gc_alloc(vm, sizeof(*nat), FL_NATIVE);
     nat->fn = api_native;
-    nat->name_id = sag_intern(vm->in, d->fl_name, strlen(d->fl_name));
+    nat->name_id = yew_intern(vm->in, d->fl_name, strlen(d->fl_name));
     nat->min_ar = (u8)(d->nmin - 1U);
     nat->max_ar = d->nmax == FL_VARIADIC ? FL_VARIADIC :
                   (u8)(d->nmax - 1U);
@@ -865,19 +865,19 @@ bool fl_api_bind_receiver(FlVm *vm, FlValue recv,
 
 static bool command_error(FlVm *vm, const FlBindDesc *d, CmdStatus st)
 {
-    const CmdDesc *cmd = sag_cmd_desc(d->resolved_id);
+    const CmdDesc *cmd = yew_cmd_desc(d->resolved_id);
     switch (st) {
-    case SAG_CMD_ERR_ARG:
+    case YEW_CMD_ERR_ARG:
         return fl_raise(vm, "type", "%s rejected its arguments", d->fl_name);
-    case SAG_CMD_ERR_STATE:
+    case YEW_CMD_ERR_STATE:
         return fl_raise(vm, "user", "%s is not valid in the current state",
                         d->fl_name);
-    case SAG_CMD_ERR_IO:
+    case YEW_CMD_ERR_IO:
         return fl_raise(vm, "io", "%s failed", d->fl_name);
-    case SAG_CMD_ERR_DEFERRED:
+    case YEW_CMD_ERR_DEFERRED:
         return fl_raise(vm, "name", "%s is deferred: %s", d->cmd,
                         cmd == NULL ? "unknown sprint" : cmd->help);
-    case SAG_CMD_OK:
+    case YEW_CMD_OK:
         break;
     }
     return fl_raise(vm, "user", "%s failed", d->fl_name);
@@ -927,13 +927,13 @@ static bool marshal_command(FlVm *vm, const FlBindDesc *d,
             return true;
         }
         if (a[1].t == (u8)FL_BOOL) {
-            *opt_in = (OptVal){SAG_OPT_BOOL, {.b = a[1].as.b}};
+            *opt_in = (OptVal){YEW_OPT_BOOL, {.b = a[1].as.b}};
         } else if (a[1].t == (u8)FL_INT) {
-            *opt_in = (OptVal){SAG_OPT_INT, {.i = a[1].as.i}};
+            *opt_in = (OptVal){YEW_OPT_INT, {.i = a[1].as.i}};
         } else if (a[1].t == (u8)FL_STR) {
             const FlStr *value = (const FlStr *)a[1].as.o;
 
-            *opt_in = (OptVal){SAG_OPT_STR,
+            *opt_in = (OptVal){YEW_OPT_STR,
                                {.str = {value->b, value->len}}};
         } else {
             return fl_raise(vm, "type",
@@ -986,10 +986,10 @@ static bool marshal_command(FlVm *vm, const FlBindDesc *d,
         if (n == 4U) {
             if (!need_int(vm, a[3], 3U, &integer))
                 return false;
-            if (integer < 1 || integer > SAG_COUNT_MAX)
+            if (integer < 1 || integer > YEW_COUNT_MAX)
                 return fl_raise(vm, "type",
                                 "cur.move count must be 1..%u",
-                                (unsigned)SAG_COUNT_MAX);
+                                (unsigned)YEW_COUNT_MAX);
             cx->count = (u32)integer;
             cx->count_given = true;
         }
@@ -1002,10 +1002,10 @@ static bool marshal_command(FlVm *vm, const FlBindDesc *d,
         if (!need_type(vm, a[1], FL_LIST, 1U))
             return false;
         list = (FlList *)a[1].as.o;
-        if (list->n == 0U || list->n > SAG_MC_MAX)
+        if (list->n == 0U || list->n > YEW_MC_MAX)
             return fl_raise(vm, "range", "win.set_cursors needs 1..%u cursors",
-                            (unsigned)SAG_MC_MAX);
-        *owned_cursors = sag_xcalloc(list->n, sizeof(**owned_cursors));
+                            (unsigned)YEW_MC_MAX);
+        *owned_cursors = yew_xcalloc(list->n, sizeof(**owned_cursors));
         for (i = 0U; i < list->n; i++) {
             Win *source;
             Cursor *cursor = fl_h_cur(vm, list->v[i], &source);
@@ -1032,7 +1032,7 @@ static bool marshal_command(FlVm *vm, const FlBindDesc *d,
         if (!need_type(vm, a[1], FL_LIST, 1U))
             return false;
         list = (FlList *)a[1].as.o;
-        sag_filemeta_eol_bytes(&cx->win->buf->meta, &eol, &eol_len);
+        yew_filemeta_eol_bytes(&cx->win->buf->meta, &eol, &eol_len);
         for (i = 0U; i < list->n; i++) {
             const FlStr *line;
 
@@ -1071,9 +1071,9 @@ static bool marshal_command(FlVm *vm, const FlBindDesc *d,
             break;
         case FL_ARG_COUNT:
             if (!need_int(vm, a[i], i, &integer) || integer < 1 ||
-                integer > SAG_COUNT_MAX)
+                integer > YEW_COUNT_MAX)
                 return fl_raise(vm, "type", "count must be 1..%u",
-                                (unsigned)SAG_COUNT_MAX);
+                                (unsigned)YEW_COUNT_MAX);
             cx->count = (u32)integer; cx->count_given = true;
             break;
         case FL_ARG_HANDLE_WIN:
@@ -1126,7 +1126,7 @@ static bool marshal_command(FlVm *vm, const FlBindDesc *d,
             break;
         case FL_ARG_NONE:
         default:
-            SAG_BUG("Fletch descriptor lacks argmap slot: %s", d->fl_name);
+            YEW_BUG("Fletch descriptor lacks argmap slot: %s", d->fl_name);
         }
     }
 
@@ -1151,18 +1151,18 @@ static bool marshal_command(FlVm *vm, const FlBindDesc *d,
 static bool invoke_command(FlVm *vm, CmdId id, CmdCtx *cx,
                            CmdStatus *out)
 {
-    const CmdDesc *desc = sag_cmd_desc(id);
+    const CmdDesc *desc = yew_cmd_desc(id);
     const char *alternative = desc == NULL ? NULL :
-        sag_batch_command_alternative(desc->name, cx);
+        yew_batch_command_alternative(desc->name, cx);
     bool changes = desc != NULL &&
-                   (desc->flags & SAG_CMD_CHANGES_BUFFER) != 0U;
+                   (desc->flags & YEW_CMD_CHANGES_BUFFER) != 0U;
     EditCtx ec;
 
     if (cx->ed != NULL && cx->ed->headless && desc != NULL &&
-        (((desc->flags & SAG_CMD_INTERACTIVE) != 0U) ||
+        (((desc->flags & YEW_CMD_INTERACTIVE) != 0U) ||
          alternative != NULL)) {
         if (alternative == NULL)
-            SAG_BUG("interactive command lacks a batch refusal: %s",
+            YEW_BUG("interactive command lacks a batch refusal: %s",
                     desc->name);
         return fl_raise(vm, "capability",
                         "\"%s\" requires a terminal and is not available "
@@ -1173,7 +1173,7 @@ static bool invoke_command(FlVm *vm, CmdId id, CmdCtx *cx,
         return fl_raise(vm, "user",
                         "editor mutation during model teardown");
     if (changes) {
-        ec = sag_ed_edit_ctx_for(cx->ed, cx->win);
+        ec = yew_ed_edit_ctx_for(cx->ed, cx->win);
         /* Opening a MACRO transaction is valid for a multi-cursor replay,
          * but the undo layer's begin-time cursor check only admits MULTI.
          * The resolved dispatcher supplies the per-cursor safety marker;
@@ -1185,9 +1185,9 @@ static bool invoke_command(FlVm *vm, CmdId id, CmdCtx *cx,
         if (!fl_txn_enlist(vm, &ec))
             return false;
     }
-    *out = sag_ed_dispatch_resolved(cx->ed, id, cx);
+    *out = yew_ed_dispatch_resolved(cx->ed, id, cx);
     if (changes) {
-        ec = sag_ed_edit_ctx_for(cx->ed, cx->win);
+        ec = yew_ed_edit_ctx_for(cx->ed, cx->win);
         if (!fl_txn_enlist(vm, &ec))
             return false;
     }
@@ -1196,11 +1196,11 @@ static bool invoke_command(FlVm *vm, CmdId id, CmdCtx *cx,
 
 static bool option_command_error(FlVm *vm, const CmdCtx *cx)
 {
-    if (cx->opt_error == SAG_OPT_ERROR_NAME) {
-        const OptProvider *provider = sag_opt_provider(vm->ed);
+    if (cx->opt_error == YEW_OPT_ERROR_NAME) {
+        const OptProvider *provider = yew_opt_provider(vm->ed);
         const char *names[64];
         u32 nname = provider->list(vm->ed, names,
-                                   (u32)SAG_ARRAY_LEN(names));
+                                   (u32)YEW_ARRAY_LEN(names));
         FlSuggest suggest;
         Bytebuf msg;
         u32 i;
@@ -1230,7 +1230,7 @@ static bool option_map_error(FlVm *vm, const FlStr *name, const char *err)
 {
     if (err != NULL && strcmp(err, "unknown option") == 0) {
         const char *names[64];
-        u32 nname = sag_opt_list(names, (u32)SAG_ARRAY_LEN(names));
+        u32 nname = yew_opt_list(names, (u32)YEW_ARRAY_LEN(names));
         FlSuggest suggest;
         Bytebuf msg;
         u32 i;
@@ -1272,26 +1272,26 @@ static void option_stage_rollback(Ed *ed, FlOptStage *staged, u32 n)
         FlOptStage *stage = &staged[--n];
 
         if (stage->created)
-            (void)sag_opt_remove(ed, stage->ledger_id);
+            (void)yew_opt_remove(ed, stage->ledger_id);
         else
-            (void)sag_opt_rollback(ed, stage->checkpoint);
+            (void)yew_opt_rollback(ed, stage->checkpoint);
     }
 }
 
 static bool option_from_fl(FlVm *vm, FlValue value, OptVal *out)
 {
     if (value.t == (u8)FL_BOOL) {
-        *out = (OptVal){SAG_OPT_BOOL, {.b = value.as.b}};
+        *out = (OptVal){YEW_OPT_BOOL, {.b = value.as.b}};
         return true;
     }
     if (value.t == (u8)FL_INT) {
-        *out = (OptVal){SAG_OPT_INT, {.i = value.as.i}};
+        *out = (OptVal){YEW_OPT_INT, {.i = value.as.i}};
         return true;
     }
     if (value.t == (u8)FL_STR) {
         const FlStr *s = (const FlStr *)value.as.o;
 
-        *out = (OptVal){SAG_OPT_STR, {.str = {s->b, s->len}}};
+        *out = (OptVal){YEW_OPT_STR, {.str = {s->b, s->len}}};
         return true;
     }
     return fl_raise(vm, "type",
@@ -1319,7 +1319,7 @@ bool fl_api_set_options(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
     origin = fl_origin_of_frame(vm);
     if (origin == FL_ORIGIN_ID_NONE)
         return fl_raise(vm, "handle", "set: callback has no editor origin");
-    staged = sag_xcalloc(fl_map_count(map) == 0U ? 1U : fl_map_count(map),
+    staged = yew_xcalloc(fl_map_count(map) == 0U ? 1U : fl_map_count(map),
                          sizeof(*staged));
     while (fl_map_iter(map, &cursor, &key, &value)) {
         const char *err = NULL;
@@ -1333,7 +1333,7 @@ bool fl_api_set_options(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
             free(staged);
             return false;
         }
-        if (!sag_opt_validate(vm->ed, SAG_OPT_SCOPE_DECLARED,
+        if (!yew_opt_validate(vm->ed, YEW_OPT_SCOPE_DECLARED,
                               staged[n].name->b, staged[n].name->len,
                               &staged[n].value, &err)) {
             const FlStr *bad = staged[n].name;
@@ -1346,7 +1346,7 @@ bool fl_api_set_options(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
     for (i = 0U; i < n; i++) {
         const char *err = NULL;
 
-        staged[i].checkpoint = sag_opt_checkpoint(
+        staged[i].checkpoint = yew_opt_checkpoint(
             vm->ed, staged[i].name->b, staged[i].name->len, &err);
         if (staged[i].checkpoint == 0U) {
             const FlStr *bad = staged[i].name;
@@ -1354,24 +1354,24 @@ bool fl_api_set_options(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
             free(staged);
             return option_map_error(vm, bad, err);
         }
-        if (!sag_opt_set(vm->ed, SAG_OPT_SCOPE_DECLARED,
+        if (!yew_opt_set(vm->ed, YEW_OPT_SCOPE_DECLARED,
                          staged[i].name->b, staged[i].name->len,
                          &staged[i].value, &err)) {
             const FlStr *bad = staged[i].name;
-            sag_opt_discard(vm->ed, staged[i].checkpoint);
+            yew_opt_discard(vm->ed, staged[i].checkpoint);
             option_stage_rollback(vm->ed, staged, i);
             free(staged);
             return option_map_error(vm, bad, err);
         }
-        staged[i].ledger_id = sag_opt_commit(vm->ed, origin,
+        staged[i].ledger_id = yew_opt_commit(vm->ed, origin,
                                              staged[i].checkpoint,
                                              &staged[i].created);
         if (staged[i].ledger_id == 0U)
-            SAG_BUG("validated option registration could not commit");
+            YEW_BUG("validated option registration could not commit");
     }
     for (i = 0U; i < n; i++)
         if (!staged[i].created)
-            sag_opt_discard(vm->ed, staged[i].checkpoint);
+            yew_opt_discard(vm->ed, staged[i].checkpoint);
     free(staged);
     *out = FL_NIL_V;
     return true;
@@ -1415,20 +1415,20 @@ bool fl_api_invoke(FlVm *vm, const FlBindDesc *d,
         bytebuf_free(&scratch);
         return false;
     }
-    if (st != SAG_CMD_OK && cx.opt_error != SAG_OPT_ERROR_NONE) {
+    if (st != YEW_CMD_OK && cx.opt_error != YEW_OPT_ERROR_NONE) {
         ok = option_command_error(vm, &cx);
         free(owned_cursors);
         bytebuf_free(&scratch);
         return ok;
     }
-    if (st != SAG_CMD_OK) {
+    if (st != YEW_CMD_OK) {
         ok = command_error(vm, d, st);
         free(owned_cursors);
         bytebuf_free(&scratch);
         return ok;
     }
     if (strcmp(d->fl_name, "buf.open") == 0) {
-        Buffer *opened = sag_ed_doc(vm->ed);
+        Buffer *opened = yew_ed_doc(vm->ed);
         if (opened == NULL) {
             ok = fl_raise(vm, "io", "buf.open did not produce a buffer");
             free(owned_cursors);
@@ -1446,14 +1446,14 @@ bool fl_api_invoke(FlVm *vm, const FlBindDesc *d,
         *out = fl_h_win_make(vm->ed, vm->ed->win);
     } else if (strcmp(d->fl_name, "opt.get") == 0) {
         switch ((OptValType)opt_out.type) {
-        case SAG_OPT_BOOL:
+        case YEW_OPT_BOOL:
             *out = FL_BOOL_V(opt_out.as.b);
             break;
-        case SAG_OPT_INT:
+        case YEW_OPT_INT:
             *out = FL_INT_V(opt_out.as.i);
             break;
-        case SAG_OPT_STR:
-        case SAG_OPT_ENUM:
+        case YEW_OPT_STR:
+        case YEW_OPT_ENUM:
             *out = api_str(vm, opt_out.as.str.s, opt_out.as.str.len);
             break;
         default:
@@ -1551,8 +1551,8 @@ bool fl_api_ed_run(FlVm *vm, FlValue *a, u32 n, FlValue *out)
         !need_type(vm, a[1], FL_MAP, 1U))
         return false;
     args = (FlMap *)a[1].as.o;
-    id = sag_cmd_lookup(name->b, name->len);
-    desc = sag_cmd_desc(id);
+    id = yew_cmd_lookup(name->b, name->len);
+    desc = yew_cmd_desc(id);
     if (desc == NULL)
         return fl_raise(vm, "name", "unknown command %.*s", (int)name->len,
                         name->b);
@@ -1567,9 +1567,9 @@ bool fl_api_ed_run(FlVm *vm, FlValue *a, u32 n, FlValue *out)
         k = (const FlStr *)key.as.o;
         if (key_is(k, "count")) {
             if (!need_int(vm, value, 1U, &integer)) return false;
-            if (integer < 1 || integer > SAG_COUNT_MAX)
+            if (integer < 1 || integer > YEW_COUNT_MAX)
                 return fl_raise(vm, "type", "ed.run count must be 1..%u",
-                                (unsigned)SAG_COUNT_MAX);
+                                (unsigned)YEW_COUNT_MAX);
             cx.count = (u32)integer; cx.count_given = true;
         } else if (key_is(k, "iarg")) {
             if (!need_int(vm, value, 1U, &cx.iarg)) return false;
@@ -1618,13 +1618,13 @@ bool fl_api_ed_run(FlVm *vm, FlValue *a, u32 n, FlValue *out)
             return fl_raise(vm, "range", "ed.run range is invalid");
         cx.range.given = range_given;
         if (key_is(range_kind, "lines")) {
-            cx.range.kind = SAG_RANGE_LINES;
+            cx.range.kind = YEW_RANGE_LINES;
             cx.range.lo = LINENO((u64)range_lo);
             cx.range.hi = LINENO((u64)range_hi);
         } else if (key_is(range_kind, "buffer")) {
-            cx.range.kind = SAG_RANGE_BUFFER;
+            cx.range.kind = YEW_RANGE_BUFFER;
         } else if (key_is(range_kind, "selection")) {
-            cx.range.kind = SAG_RANGE_SELECTION;
+            cx.range.kind = YEW_RANGE_SELECTION;
         } else if (key_is(range_kind, "span")) {
             if (!range_given)
                 return fl_raise(vm, "range",
@@ -1636,7 +1636,7 @@ bool fl_api_ed_run(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     }
     if (!invoke_command(vm, id, &cx, &st))
         return false;
-    if (st == SAG_CMD_OK) { *out = FL_NIL_V; return true; }
+    if (st == YEW_CMD_OK) { *out = FL_NIL_V; return true; }
     {
         FlBindDesc dynamic = {"ed.run", desc->name, id, FL_H_NONE,
                               2U, 2U, {0U, 0U, 0U}, 0U, NULL};
@@ -1651,8 +1651,8 @@ bool fl_api_ed_commands(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     (void)a; (void)n;
     list = fl_list_new(vm);
     fl_gc_protect(vm, FL_OBJ_V(FL_LIST, list));
-    for (i = 0U; i < sag_cmd_count(); i++) {
-        const CmdDesc *d = sag_cmd_at(i);
+    for (i = 0U; i < yew_cmd_count(); i++) {
+        const CmdDesc *d = yew_cmd_at(i);
         FlMap *m = fl_map_new(vm);
         fl_gc_protect(vm, FL_OBJ_V(FL_MAP, m));
         (void)map_put(vm, m, "name", api_cstr(vm, d->name));
@@ -1715,9 +1715,9 @@ static const FlNativeDef ED_DEFS[] = {
     {"commands", fl_api_ed_commands, 0U, 0U, 0U, "() -> list"}
 };
 
-const FlModuleDef fl_mod_buf = {"buf", BUF_DEFS, SAG_ARRAY_LEN(BUF_DEFS), NULL, 0U};
-const FlModuleDef fl_mod_win = {"win", WIN_DEFS, SAG_ARRAY_LEN(WIN_DEFS), NULL, 0U};
-const FlModuleDef fl_mod_cur = {"cur", CUR_DEFS, SAG_ARRAY_LEN(CUR_DEFS), NULL, 0U};
-const FlModuleDef fl_mod_span = {"span", SPAN_DEFS, SAG_ARRAY_LEN(SPAN_DEFS), NULL, 0U};
-const FlModuleDef fl_mod_opt = {"opt", OPT_DEFS, SAG_ARRAY_LEN(OPT_DEFS), NULL, 0U};
-const FlModuleDef fl_mod_ed = {"ed", ED_DEFS, SAG_ARRAY_LEN(ED_DEFS), NULL, 0U};
+const FlModuleDef fl_mod_buf = {"buf", BUF_DEFS, YEW_ARRAY_LEN(BUF_DEFS), NULL, 0U};
+const FlModuleDef fl_mod_win = {"win", WIN_DEFS, YEW_ARRAY_LEN(WIN_DEFS), NULL, 0U};
+const FlModuleDef fl_mod_cur = {"cur", CUR_DEFS, YEW_ARRAY_LEN(CUR_DEFS), NULL, 0U};
+const FlModuleDef fl_mod_span = {"span", SPAN_DEFS, YEW_ARRAY_LEN(SPAN_DEFS), NULL, 0U};
+const FlModuleDef fl_mod_opt = {"opt", OPT_DEFS, YEW_ARRAY_LEN(OPT_DEFS), NULL, 0U};
+const FlModuleDef fl_mod_ed = {"ed", ED_DEFS, YEW_ARRAY_LEN(ED_DEFS), NULL, 0U};

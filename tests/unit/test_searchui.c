@@ -22,8 +22,8 @@ static void su_fixture(Ed *ed)
     Bytebuf src;
     u32 i;
 
-    sag_ed_init(ed);
-    SAG_ASSERT(sag_ed_open_scratch(ed));
+    yew_ed_init(ed);
+    YEW_ASSERT(yew_ed_open_scratch(ed));
     bytebuf_init(&src);
     for (i = 0U; i < 40U; i++) {
         if (i == 5U || i == 30U)
@@ -31,8 +31,8 @@ static void su_fixture(Ed *ed)
         else
             bytebuf_printf(&src, "line %u\n", (unsigned)i);
     }
-    ec = sag_ed_edit_ctx(ed);
-    SAG_ASSERT(sag_edit_insert(&ec, BYTEOFF(0U), src.data, src.len));
+    ec = yew_ed_edit_ctx(ed);
+    YEW_ASSERT(yew_edit_insert(&ec, BYTEOFF(0U), src.data, src.len));
     bytebuf_free(&src);
     ed->win->rect.h = 10U;
     ed->win->rect.w = 80U;
@@ -42,7 +42,7 @@ static void su_fixture(Ed *ed)
  * would, then run one input pass. */
 static void su_search(Ed *ed, const char *pat, bool reverse)
 {
-    sag_reg_set_search(&ed->regs, (const u8 *)pat, strlen(pat));
+    yew_reg_set_search(&ed->regs, (const u8 *)pat, strlen(pat));
     ed->search.re = NULL;
     ed->search.reverse = reverse;
     ed->search.pat = NULL;
@@ -63,30 +63,30 @@ void test_searchui_cancel_restores_cursor_goal_and_viewport(void)
     LineNo saved_top;
 
     su_fixture(&ed);
-    c = sag_ed_cursor(&ed);
+    c = yew_ed_cursor(&ed);
     c->pos = BYTEOFF(20U);
     c->goal_col = (GCol){7U};
     ed.win->vp.top = LINENO(2U);
     saved = *c;
     saved_top = ed.win->vp.top;
 
-    sag_search_open(&ed, ed.win, false);
-    SAG_ASSERT(ed.search.active);
+    yew_search_open(&ed, ed.win, false);
+    YEW_ASSERT(ed.search.active);
     /* Move somewhere far away, as a preview would. */
-    sag_ed_cursor(&ed)->pos = BYTEOFF(300U);
-    sag_ed_cursor(&ed)->goal_col = (GCol){0U};
+    yew_ed_cursor(&ed)->pos = BYTEOFF(300U);
+    yew_ed_cursor(&ed)->goal_col = (GCol){0U};
     ed.win->vp.top = LINENO(28U);
 
-    sag_search_cancel(&ed, ed.win);
-    c = sag_ed_cursor(&ed);
-    SAG_ASSERT_EQ_U64(c->pos.v, saved.pos.v);
-    SAG_ASSERT_EQ_U64(c->goal_col.v, saved.goal_col.v);
-    SAG_ASSERT_EQ_U64(c->anchor.v, saved.anchor.v);
-    SAG_ASSERT_EQ_U64(ed.win->vp.top.v, saved_top.v);
-    SAG_ASSERT(!ed.search.active);
+    yew_search_cancel(&ed, ed.win);
+    c = yew_ed_cursor(&ed);
+    YEW_ASSERT_EQ_U64(c->pos.v, saved.pos.v);
+    YEW_ASSERT_EQ_U64(c->goal_col.v, saved.goal_col.v);
+    YEW_ASSERT_EQ_U64(c->anchor.v, saved.anchor.v);
+    YEW_ASSERT_EQ_U64(ed.win->vp.top.v, saved_top.v);
+    YEW_ASSERT(!ed.search.active);
     /* And the highlight is gone. */
-    SAG_ASSERT_EQ_U64(ed.win->overlay.spans.len, 0U);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(ed.win->overlay.spans.len, 0U);
+    yew_ed_free(&ed);
 }
 
 /* Accept leaves the cursor where the preview put it and records the
@@ -97,20 +97,20 @@ void test_searchui_accept_commits_pattern_to_register(void)
     const RegVal *slash;
 
     su_fixture(&ed);
-    sag_search_open(&ed, ed.win, false);
+    yew_search_open(&ed, ed.win, false);
     ed.search.pat = arena_alloc(&ed.search.arena, 7U, 1U);
     (void)memcpy(ed.search.pat, "needle", 7U);
     ed.search.patlen = 6U;
-    sag_search_accept(&ed, ed.win);
+    yew_search_accept(&ed, ed.win);
 
-    slash = sag_reg_get(&ed.regs, (u8)'/');
-    SAG_ASSERT_NOT_NULL(slash);
-    SAG_ASSERT_EQ_U64(slash->bytes.len, 6U);
-    SAG_ASSERT(memcmp(slash->bytes.data, "needle", 6U) == 0);
+    slash = yew_reg_get(&ed.regs, (u8)'/');
+    YEW_ASSERT_NOT_NULL(slash);
+    YEW_ASSERT_EQ_U64(slash->bytes.len, 6U);
+    YEW_ASSERT(memcmp(slash->bytes.data, "needle", 6U) == 0);
     /* Accepting a search is a jump, so where we came from is on the
      * jumplist. */
-    SAG_ASSERT_EQ_U64(sag_jumplist_len(&ed.win->jumps), 1U);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(yew_jumplist_len(&ed.win->jumps), 1U);
+    yew_ed_free(&ed);
 }
 
 void test_searchui_step_finds_successive_matches(void)
@@ -121,20 +121,20 @@ void test_searchui_step_finds_successive_matches(void)
 
     su_fixture(&ed);
     su_search(&ed, "needle", false);
-    sag_ed_cursor(&ed)->pos = BYTEOFF(0U);
+    yew_ed_cursor(&ed)->pos = BYTEOFF(0U);
 
-    SAG_ASSERT(sag_search_step(&ed, ed.win, true, 1U));
-    first = sag_ed_cursor(&ed)->pos.v;
-    SAG_ASSERT(sag_search_step(&ed, ed.win, true, 1U));
-    second = sag_ed_cursor(&ed)->pos.v;
+    YEW_ASSERT(yew_search_step(&ed, ed.win, true, 1U));
+    first = yew_ed_cursor(&ed)->pos.v;
+    YEW_ASSERT(yew_search_step(&ed, ed.win, true, 1U));
+    second = yew_ed_cursor(&ed)->pos.v;
     /* It moved on rather than re-finding the match under the cursor —
      * silence there reads as a broken keybinding. */
-    SAG_ASSERT(second > first);
+    YEW_ASSERT(second > first);
 
     /* And N comes back. */
-    SAG_ASSERT(sag_search_step(&ed, ed.win, false, 1U));
-    SAG_ASSERT_EQ_U64(sag_ed_cursor(&ed)->pos.v, first);
-    sag_ed_free(&ed);
+    YEW_ASSERT(yew_search_step(&ed, ed.win, false, 1U));
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, first);
+    yew_ed_free(&ed);
 }
 
 /*
@@ -151,18 +151,18 @@ void test_searchui_n_is_relative_to_the_search_direction(void)
     su_fixture(&ed);
     su_search(&ed, "needle", true); /* a `?` search */
     /* Stand after both matches so a backwards step has somewhere to go. */
-    sag_ed_cursor(&ed)->pos = BYTEOFF(sag_textbuf_len(ed.buffer.tb));
-    start = sag_ed_cursor(&ed)->pos.v;
+    yew_ed_cursor(&ed)->pos = BYTEOFF(yew_textbuf_len(ed.buffer.tb));
+    start = yew_ed_cursor(&ed)->pos.v;
 
-    SAG_ASSERT(sag_search_step(&ed, ed.win, true, 1U));
-    after_n = sag_ed_cursor(&ed)->pos.v;
-    SAG_ASSERT(after_n < start);
+    YEW_ASSERT(yew_search_step(&ed, ed.win, true, 1U));
+    after_n = yew_ed_cursor(&ed)->pos.v;
+    YEW_ASSERT(after_n < start);
 
     /* N, being the opposite of the search, goes forwards. */
-    sag_ed_cursor(&ed)->pos = BYTEOFF(0U);
-    SAG_ASSERT(sag_search_step(&ed, ed.win, false, 1U));
-    SAG_ASSERT(sag_ed_cursor(&ed)->pos.v > 0U);
-    sag_ed_free(&ed);
+    yew_ed_cursor(&ed)->pos = BYTEOFF(0U);
+    YEW_ASSERT(yew_search_step(&ed, ed.win, false, 1U));
+    YEW_ASSERT(yew_ed_cursor(&ed)->pos.v > 0U);
+    yew_ed_free(&ed);
 }
 
 void test_searchui_count_repeats_the_step(void)
@@ -173,17 +173,17 @@ void test_searchui_count_repeats_the_step(void)
 
     su_fixture(&ed);
     su_search(&ed, "line", false);
-    sag_ed_cursor(&ed)->pos = BYTEOFF(0U);
-    SAG_ASSERT(sag_search_step(&ed, ed.win, true, 1U));
-    one = sag_ed_cursor(&ed)->pos.v;
+    yew_ed_cursor(&ed)->pos = BYTEOFF(0U);
+    YEW_ASSERT(yew_search_step(&ed, ed.win, true, 1U));
+    one = yew_ed_cursor(&ed)->pos.v;
 
-    sag_ed_cursor(&ed)->pos = BYTEOFF(0U);
+    yew_ed_cursor(&ed)->pos = BYTEOFF(0U);
     ed.search.re = NULL;
     su_search(&ed, "line", false);
-    SAG_ASSERT(sag_search_step(&ed, ed.win, true, 3U));
-    two = sag_ed_cursor(&ed)->pos.v;
-    SAG_ASSERT(two > one);
-    sag_ed_free(&ed);
+    YEW_ASSERT(yew_search_step(&ed, ed.win, true, 3U));
+    two = yew_ed_cursor(&ed)->pos.v;
+    YEW_ASSERT(two > one);
+    yew_ed_free(&ed);
 }
 
 /* wrapscan on: running off the end continues at the other one. */
@@ -194,14 +194,14 @@ void test_searchui_wrap_continues_from_the_other_end(void)
     su_fixture(&ed);
     su_search(&ed, "needle", false);
     /* Past the last match: only a wrap can find anything. */
-    sag_ed_cursor(&ed)->pos = BYTEOFF(sag_textbuf_len(ed.buffer.tb) - 1U);
+    yew_ed_cursor(&ed)->pos = BYTEOFF(yew_textbuf_len(ed.buffer.tb) - 1U);
     ed.search_opts.wrapscan = true;
-    SAG_ASSERT(sag_search_step(&ed, ed.win, true, 1U));
-    SAG_ASSERT(ed.search.wrapped);
+    YEW_ASSERT(yew_search_step(&ed, ed.win, true, 1U));
+    YEW_ASSERT(ed.search.wrapped);
     /* It landed on the FIRST match, at line 5. */
-    SAG_ASSERT_EQ_U64(
-        sag_textbuf_line_of(ed.buffer.tb, sag_ed_cursor(&ed)->pos).v, 5U);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(
+        yew_textbuf_line_of(ed.buffer.tb, yew_ed_cursor(&ed)->pos).v, 5U);
+    yew_ed_free(&ed);
 }
 
 /* wrapscan off: the cursor does not move and the message says why. */
@@ -212,12 +212,12 @@ void test_searchui_wrapscan_off_stops_at_the_end(void)
 
     su_fixture(&ed);
     su_search(&ed, "needle", false);
-    sag_ed_cursor(&ed)->pos = BYTEOFF(sag_textbuf_len(ed.buffer.tb) - 1U);
-    before = sag_ed_cursor(&ed)->pos.v;
+    yew_ed_cursor(&ed)->pos = BYTEOFF(yew_textbuf_len(ed.buffer.tb) - 1U);
+    before = yew_ed_cursor(&ed)->pos.v;
     ed.search_opts.wrapscan = false;
-    SAG_ASSERT(!sag_search_step(&ed, ed.win, true, 1U));
-    SAG_ASSERT_EQ_U64(sag_ed_cursor(&ed)->pos.v, before);
-    sag_ed_free(&ed);
+    YEW_ASSERT(!yew_search_step(&ed, ed.win, true, 1U));
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, before);
+    yew_ed_free(&ed);
 }
 
 void test_searchui_no_pattern_reports_rather_than_moving(void)
@@ -226,15 +226,15 @@ void test_searchui_no_pattern_reports_rather_than_moving(void)
     u64 before;
 
     su_fixture(&ed);
-    before = sag_ed_cursor(&ed)->pos.v;
+    before = yew_ed_cursor(&ed)->pos.v;
     /* Nothing searched, and register `/` is empty. */
-    SAG_ASSERT(!sag_search_step(&ed, ed.win, true, 1U));
-    SAG_ASSERT_EQ_U64(sag_ed_cursor(&ed)->pos.v, before);
-    sag_ed_free(&ed);
+    YEW_ASSERT(!yew_search_step(&ed, ed.win, true, 1U));
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, before);
+    yew_ed_free(&ed);
 }
 
 /*
- * `*` builds its pattern through sag_re_quote, so a word containing
+ * `*` builds its pattern through yew_re_quote, so a word containing
  * regex metacharacters searches for itself rather than for a pattern.
  */
 void test_searchui_word_search_quotes_metacharacters(void)
@@ -243,32 +243,32 @@ void test_searchui_word_search_quotes_metacharacters(void)
     EditCtx ec;
     const RegVal *slash;
 
-    sag_ed_init(&ed);
-    SAG_ASSERT(sag_ed_open_scratch(&ed));
-    ec = sag_ed_edit_ctx(&ed);
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    ec = yew_ed_edit_ctx(&ed);
     /* `a.b` must not match `axb`. */
-    SAG_ASSERT(sag_edit_insert(&ec, BYTEOFF(0U),
+    YEW_ASSERT(yew_edit_insert(&ec, BYTEOFF(0U),
                                (const u8 *)"axb\na.b\naxb\n", 12U));
     ed.win->rect.h = 10U;
     ed.win->rect.w = 80U;
-    sag_ed_cursor(&ed)->pos = BYTEOFF(4U); /* inside `a.b` */
+    yew_ed_cursor(&ed)->pos = BYTEOFF(4U); /* inside `a.b` */
 
-    SAG_ASSERT(sag_search_word(&ed, ed.win, true));
-    slash = sag_reg_get(&ed.regs, (u8)'/');
-    SAG_ASSERT_NOT_NULL(slash);
+    YEW_ASSERT(yew_search_word(&ed, ed.win, true));
+    slash = yew_reg_get(&ed.regs, (u8)'/');
+    YEW_ASSERT_NOT_NULL(slash);
     /* The dot is escaped and the word is \b-wrapped. */
-    SAG_ASSERT(memchr(slash->bytes.data, '\\', slash->bytes.len) != NULL);
+    YEW_ASSERT(memchr(slash->bytes.data, '\\', slash->bytes.len) != NULL);
     {
         Bytebuf pat;
 
         bytebuf_init(&pat);
         bytebuf_append(&pat, slash->bytes.data, slash->bytes.len);
         bytebuf_push_u8(&pat, 0U);
-        SAG_ASSERT(strstr((const char *)pat.data, "\\.") != NULL);
-        SAG_ASSERT(strncmp((const char *)pat.data, "\\b", 2U) == 0);
+        YEW_ASSERT(strstr((const char *)pat.data, "\\.") != NULL);
+        YEW_ASSERT(strncmp((const char *)pat.data, "\\b", 2U) == 0);
         bytebuf_free(&pat);
     }
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
 }
 
 /* A pattern that will not compile keeps the last good one highlighting
@@ -276,30 +276,30 @@ void test_searchui_word_search_quotes_metacharacters(void)
 void test_searchui_bad_pattern_keeps_the_last_good_program(void)
 {
     Ed ed;
-    SagRe *good;
+    YewRe *good;
     SearchOpts o;
 
     su_fixture(&ed);
-    sag_search_opts_init(&o);
-    good = sag_search_compile(&ed.search.arena, "needle", 6U, &o, NULL);
-    SAG_ASSERT_NOT_NULL(good);
+    yew_search_opts_init(&o);
+    good = yew_search_compile(&ed.search.arena, "needle", 6U, &o, NULL);
+    YEW_ASSERT_NOT_NULL(good);
     ed.search.re = good;
     ed.search.active = true;
 
     /* `[a-` is a normal intermediate state of typing `[a-z]`. */
     {
-        SagReErr err;
-        SagRe *bad;
+        YewReErr err;
+        YewRe *bad;
 
         (void)memset(&err, 0, sizeof(err));
-        bad = sag_search_compile(&ed.search.arena, "[a-", 3U, &o, &err);
-        SAG_ASSERT_NULL(bad);
-        SAG_ASSERT_NOT_NULL(err.msg);
+        bad = yew_search_compile(&ed.search.arena, "[a-", 3U, &o, &err);
+        YEW_ASSERT_NULL(bad);
+        YEW_ASSERT_NOT_NULL(err.msg);
         /* The caret offset points inside what was typed, so the prompt
          * can draw it under the offending construct. */
-        SAG_ASSERT(err.off <= 3U);
+        YEW_ASSERT(err.off <= 3U);
     }
     /* The last good program is still the one on record. */
-    SAG_ASSERT(ed.search.re == good);
-    sag_ed_free(&ed);
+    YEW_ASSERT(ed.search.re == good);
+    yew_ed_free(&ed);
 }

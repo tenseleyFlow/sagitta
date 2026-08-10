@@ -23,28 +23,28 @@
 #include "ws/walk.h"
 
 enum {
-    SAG_PICKERS_MAX_ITEMS = 4096,
-    SAG_PICKERS_LABEL_MAX = 512,
+    YEW_PICKERS_MAX_ITEMS = 4096,
+    YEW_PICKERS_LABEL_MAX = 512,
     /* One capped read per preview; 64 KiB shows far more than 40 lines
      * of anything a human wrote. */
-    SAG_PREVIEW_BYTES = 64U * 1024U,
-    SAG_PREVIEW_LINES = 40
+    YEW_PREVIEW_BYTES = 64U * 1024U,
+    YEW_PREVIEW_LINES = 40
 };
 
 static i64 g_now;
 static u64 g_preview_reads;
 
-void sag_pickers_set_now(i64 now)
+void yew_pickers_set_now(i64 now)
 {
     g_now = now;
 }
 
-u64 sag_pickers_preview_reads(void)
+u64 yew_pickers_preview_reads(void)
 {
     return g_preview_reads;
 }
 
-void sag_pickers_preview_reset(void)
+void yew_pickers_preview_reset(void)
 {
     g_preview_reads = 0U;
 }
@@ -61,7 +61,7 @@ static i64 pickers_now(void)
      * undo picker's "3 minutes ago" rows to be the same string on every
      * run.  Unset in normal use, which is the wall clock.
      */
-    pinned = getenv("SAG_PICKERS_NOW");
+    pinned = getenv("YEW_PICKERS_NOW");
     if (pinned != NULL && pinned[0] != '\0')
         return (i64)strtoll(pinned, NULL, 10);
     return (i64)time(NULL);
@@ -80,7 +80,7 @@ static i64 pickers_now(void)
  * that the next draw walks straight into.
  */
 typedef struct ItemStore {
-    PickItem items[SAG_PICKERS_MAX_ITEMS];
+    PickItem items[YEW_PICKERS_MAX_ITEMS];
     char *text;
     u64 text_len;
     u64 text_cap;
@@ -116,7 +116,7 @@ static u64 store_str(const char *s)
 
         while (cap < store.text_len + len + 1U)
             cap *= 2U;
-        store.text = sag_xrealloc(store.text, (size_t)cap);
+        store.text = yew_xrealloc(store.text, (size_t)cap);
         store.text_cap = cap;
     }
     if (len > 0U)
@@ -158,15 +158,15 @@ static bool g_files_ready;
  * A preview that creates NOTHING.
  *
  * DoD 11 counts this: 20 previews must be 20 reads and zero buffer
- * allocations.  Going through sag_ws_file_buf would make a deferred tab
+ * allocations.  Going through yew_ws_file_buf would make a deferred tab
  * look resident, which is s24's pitfall 1 — residency is asked of the
  * allocation, so allocating IS the lie.
  */
-void sag_pickers_preview_file(Ed *ed, void *ctx, i32 payload, Rect r)
+void yew_pickers_preview_file(Ed *ed, void *ctx, i32 payload, Rect r)
 {
-    static u8 buf[SAG_PREVIEW_BYTES];
-    SagColor dim = {SAG_COLOR_RGB, 140U, 140U, 140U};
-    SagColor bg = {SAG_COLOR_DEFAULT, 0U, 0U, 0U};
+    static u8 buf[YEW_PREVIEW_BYTES];
+    YewColor dim = {YEW_COLOR_RGB, 140U, 140U, 140U};
+    YewColor bg = {YEW_COLOR_DEFAULT, 0U, 0U, 0U};
     char path[PATH_MAX];
     const char *rel;
     ssize_t got;
@@ -182,7 +182,7 @@ void sag_pickers_preview_file(Ed *ed, void *ctx, i32 payload, Rect r)
     if (r.w == 0U || r.h == 0U)
         return;
     rel = g_files.paths.data[payload];
-    if (snprintf(path, sizeof(path), "%s/%s", sag_ws_root(ed), rel) >=
+    if (snprintf(path, sizeof(path), "%s/%s", yew_ws_root(ed), rel) >=
         (int)sizeof(path))
         return;
     fd = open(path, O_RDONLY);
@@ -206,20 +206,20 @@ void sag_pickers_preview_file(Ed *ed, void *ctx, i32 payload, Rect r)
 
         (void)snprintf(line, sizeof(line), "binary file, %lld bytes",
                        (long long)got);
-        (void)sag_grid_puts(&ed->grid, r.y, r.x, (const u8 *)line,
-                            strlen(line), dim, bg, SAG_ATTR_DIM);
+        (void)yew_grid_puts(&ed->grid, r.y, r.x, (const u8 *)line,
+                            strlen(line), dim, bg, YEW_ATTR_DIM);
         return;
     }
-    while (at < (u64)got && row < r.h && row < (u16)SAG_PREVIEW_LINES) {
+    while (at < (u64)got && row < r.h && row < (u16)YEW_PREVIEW_LINES) {
         u64 eol = at;
         size_t fit;
         int cells = 0;
 
         while (eol < (u64)got && buf[eol] != (u8)'\n')
             eol++;
-        fit = sag_str_clip(buf + at, (size_t)(eol - at), (int)r.w, &cells);
-        (void)sag_grid_puts(&ed->grid, (u16)(r.y + row), r.x, buf + at,
-                            fit, dim, bg, SAG_ATTR_DIM);
+        fit = yew_str_clip(buf + at, (size_t)(eol - at), (int)r.w, &cells);
+        (void)yew_grid_puts(&ed->grid, (u16)(r.y + row), r.x, buf + at,
+                            fit, dim, bg, YEW_ATTR_DIM);
         row++;
         at = eol + 1U;
     }
@@ -233,13 +233,13 @@ static bool find_file_accept(Ed *ed, void *ctx, i32 payload, u8 how)
     (void)how;
     if (ed == NULL || payload < 0 || (u32)payload >= g_files.paths.len)
         return false;
-    if (snprintf(path, sizeof(path), "%s/%s", sag_ws_root(ed),
+    if (snprintf(path, sizeof(path), "%s/%s", yew_ws_root(ed),
                  g_files.paths.data[payload]) >= (int)sizeof(path))
         return false;
-    return sag_tab_open(ed, path) >= 0;
+    return yew_tab_open(ed, path) >= 0;
 }
 
-CmdStatus sag_find_cmd_file(CmdCtx *cx)
+CmdStatus yew_find_cmd_file(CmdCtx *cx)
 {
     Ed *ed = cx == NULL ? NULL : cx->ed;
     PickerSpec spec;
@@ -250,38 +250,38 @@ CmdStatus sag_find_cmd_file(CmdCtx *cx)
     u32 i;
 
     if (ed == NULL)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     if (g_files_ready)
-        sag_filelist_free(&g_files);
-    sag_filelist_init(&g_files);
+        yew_filelist_free(&g_files);
+    yew_filelist_init(&g_files);
     g_files_ready = true;
     (void)memset(&o, 0, sizeof(o));
     o.use_gitignore = true;
-    w = sag_walk_begin(sag_ws_root(ed), &o, &g_files);
+    w = yew_walk_begin(yew_ws_root(ed), &o, &g_files);
     if (w == NULL) {
-        sag_msg(ed, SAG_MSG_ERROR, "cannot read %s", sag_ws_root(ed));
-        return SAG_CMD_ERR_IO;
+        yew_msg(ed, YEW_MSG_ERROR, "cannot read %s", yew_ws_root(ed));
+        return YEW_CMD_ERR_IO;
     }
     /*
      * Walked to completion here rather than sliced.  §7 makes this
      * incremental; until then a blocking walk is honest about what it
      * is, and the perf gate measures it.
      */
-    while (sag_walk_step(w, 0))
+    while (yew_walk_step(w, 0))
         ;
-    sag_walk_end(w);
+    yew_walk_end(w);
     if (g_files.truncated) {
-        sag_msg(ed, SAG_MSG_WARN,
+        yew_msg(ed, YEW_MSG_WARN,
                 "showing the first %llu files; narrow the workspace",
                 (unsigned long long)g_files.paths.len);
     }
 
     store_reset();
-    label_off = sag_xreallocarray(NULL, SAG_PICKERS_MAX_ITEMS,
+    label_off = yew_xreallocarray(NULL, YEW_PICKERS_MAX_ITEMS,
                                   sizeof(*label_off));
-    detail_off = sag_xreallocarray(NULL, SAG_PICKERS_MAX_ITEMS,
+    detail_off = yew_xreallocarray(NULL, YEW_PICKERS_MAX_ITEMS,
                                    sizeof(*detail_off));
-    for (i = 0U; i < g_files.paths.len && store.n < SAG_PICKERS_MAX_ITEMS;
+    for (i = 0U; i < g_files.paths.len && store.n < YEW_PICKERS_MAX_ITEMS;
          i++) {
         const char *rel = g_files.paths.data[i];
         const char *slash = strrchr(rel, '/');
@@ -310,11 +310,11 @@ CmdStatus sag_find_cmd_file(CmdCtx *cx)
     (void)memset(&spec, 0, sizeof(spec));
     spec.title = "Find file";
     spec.items = store_items;
-    spec.preview = sag_pickers_preview_file;
+    spec.preview = yew_pickers_preview_file;
     spec.accept = find_file_accept;
     spec.path_mode = true;
-    sag_picker_open(ed, &spec);
-    return SAG_CMD_OK;
+    yew_picker_open(ed, &spec);
+    return YEW_CMD_OK;
 }
 
 /* ---------------------------------------------------------------- */
@@ -334,16 +334,16 @@ static bool find_buffer_accept(Ed *ed, void *ctx, i32 payload, u8 how)
      * built once and a tab can close while the picker is open (s23's
      * law).  A stale index would switch to whoever slid into the slot.
      */
-    idx = sag_tab_index_of_id(ed, (u32)payload);
+    idx = yew_tab_index_of_id(ed, (u32)payload);
     if (idx < 0)
         return false;
     /* The switch hydrates a deferred tab — accepting one is exactly
      * when its read becomes worth paying for (s24 D3). */
-    sag_tab_switch(ed, idx);
+    yew_tab_switch(ed, idx);
     return true;
 }
 
-CmdStatus sag_find_cmd_buffer(CmdCtx *cx)
+CmdStatus yew_find_cmd_buffer(CmdCtx *cx)
 {
     Ed *ed = cx == NULL ? NULL : cx->ed;
     PickerSpec spec;
@@ -352,13 +352,13 @@ CmdStatus sag_find_cmd_buffer(CmdCtx *cx)
     u32 i;
 
     if (ed == NULL)
-        return SAG_CMD_ERR_STATE;
+        return YEW_CMD_ERR_STATE;
     store_reset();
-    label_off = sag_xreallocarray(NULL, SAG_PICKERS_MAX_ITEMS,
+    label_off = yew_xreallocarray(NULL, YEW_PICKERS_MAX_ITEMS,
                                   sizeof(*label_off));
-    detail_off = sag_xreallocarray(NULL, SAG_PICKERS_MAX_ITEMS,
+    detail_off = yew_xreallocarray(NULL, YEW_PICKERS_MAX_ITEMS,
                                    sizeof(*detail_off));
-    for (i = 0U; i < ed->tabs.v.len && store.n < SAG_PICKERS_MAX_ITEMS;
+    for (i = 0U; i < ed->tabs.v.len && store.n < YEW_PICKERS_MAX_ITEMS;
          i++) {
         const Tab *t = &ed->tabs.v.data[i];
         const char *path = t->path;
@@ -386,7 +386,7 @@ CmdStatus sag_find_cmd_buffer(CmdCtx *cx)
                 /* Sized past PATH_MAX on purpose: `dir` may already be
                  * that long, and a truncating join would silently show
                  * a different directory. */
-                sag_group_label(ed, t->group_id, label, sizeof(label));
+                yew_group_label(ed, t->group_id, label, sizeof(label));
                 (void)snprintf(joined, sizeof(joined), "%s  %s", label,
                                dir);
                 detail_off[store.n] = store_str(joined);
@@ -395,12 +395,12 @@ CmdStatus sag_find_cmd_buffer(CmdCtx *cx)
             }
         }
         /* Derived, never stored: modified comes from undo (s23). */
-        if (sag_tab_modified(ed, (int)i))
-            flags |= (u8)SAG_PICK_MODIFIED;
-        if (!sag_tab_is_resident(ed, (int)i))
-            flags |= (u8)SAG_PICK_DEFERRED;
+        if (yew_tab_modified(ed, (int)i))
+            flags |= (u8)YEW_PICK_MODIFIED;
+        if (!yew_tab_is_resident(ed, (int)i))
+            flags |= (u8)YEW_PICK_DEFERRED;
         if (t->missing_at_restore)
-            flags |= (u8)SAG_PICK_ORPHAN;
+            flags |= (u8)YEW_PICK_ORPHAN;
         store.items[store.n].payload = (i32)t->tab_id;
         store.items[store.n].flags = flags;
         store.n++;
@@ -414,8 +414,8 @@ CmdStatus sag_find_cmd_buffer(CmdCtx *cx)
     spec.items = store_items;
     spec.accept = find_buffer_accept;
     spec.path_mode = true;
-    sag_picker_open(ed, &spec);
-    return SAG_CMD_OK;
+    yew_picker_open(ed, &spec);
+    return YEW_CMD_OK;
 }
 
 /* ---------------------------------------------------------------- */
@@ -432,18 +432,18 @@ static bool undo_branch_accept(Ed *ed, void *ctx, i32 payload, u8 how)
     (void)how;
     if (ed == NULL)
         return false;
-    doc = sag_ed_doc(ed);
+    doc = yew_ed_doc(ed);
     if (doc == NULL || doc->undo == NULL)
         return false;
-    ec = sag_ed_edit_ctx(ed);
-    ok = sag_undo_to(&ec, (u32)payload);
-    sag_ed_finish_edit(ed, &ec);
+    ec = yew_ed_edit_ctx(ed);
+    ok = yew_undo_to(&ec, (u32)payload);
+    yew_ed_finish_edit(ed, &ec);
     if (!ok)
-        sag_msg(ed, SAG_MSG_ERROR, "cannot reach that undo state");
+        yew_msg(ed, YEW_MSG_ERROR, "cannot reach that undo state");
     return ok;
 }
 
-CmdStatus sag_undo_cmd_branches(CmdCtx *cx)
+CmdStatus yew_undo_cmd_branches(CmdCtx *cx)
 {
     Ed *ed = cx == NULL ? NULL : cx->ed;
     PickerSpec spec;
@@ -456,22 +456,22 @@ CmdStatus sag_undo_cmd_branches(CmdCtx *cx)
     i64 now = pickers_now();
 
     if (ed == NULL)
-        return SAG_CMD_ERR_STATE;
-    doc = sag_ed_doc(ed);
+        return YEW_CMD_ERR_STATE;
+    doc = yew_ed_doc(ed);
     if (doc == NULL || doc->undo == NULL) {
-        sag_msg(ed, SAG_MSG_ERROR, "no undo history here");
-        return SAG_CMD_ERR_STATE;
+        yew_msg(ed, YEW_MSG_ERROR, "no undo history here");
+        return YEW_CMD_ERR_STATE;
     }
-    info = sag_xreallocarray(NULL, SAG_PICKERS_MAX_ITEMS, sizeof(*info));
-    n = sag_undo_list(doc->undo, info, SAG_PICKERS_MAX_ITEMS);
+    info = yew_xreallocarray(NULL, YEW_PICKERS_MAX_ITEMS, sizeof(*info));
+    n = yew_undo_list(doc->undo, info, YEW_PICKERS_MAX_ITEMS);
     store_reset();
-    label_off = sag_xreallocarray(NULL, SAG_PICKERS_MAX_ITEMS,
+    label_off = yew_xreallocarray(NULL, YEW_PICKERS_MAX_ITEMS,
                                   sizeof(*label_off));
-    detail_off = sag_xreallocarray(NULL, SAG_PICKERS_MAX_ITEMS,
+    detail_off = yew_xreallocarray(NULL, YEW_PICKERS_MAX_ITEMS,
                                    sizeof(*detail_off));
-    for (i = 0U; i < n && store.n < SAG_PICKERS_MAX_ITEMS; i++) {
+    for (i = 0U; i < n && store.n < YEW_PICKERS_MAX_ITEMS; i++) {
         char desc[192];
-        char label[SAG_PICKERS_LABEL_MAX];
+        char label[YEW_PICKERS_LABEL_MAX];
         char detail[64];
         u32 indent = info[i].depth < 16U ? info[i].depth : 16U;
         u32 k;
@@ -482,7 +482,7 @@ CmdStatus sag_undo_cmd_branches(CmdCtx *cx)
          * what makes "3 minutes ago" reproducible and lets the
          * determinism lane pin these rows (invariant 5).
          */
-        sag_undo_describe(doc->undo, info[i].id, now, desc, sizeof(desc));
+        yew_undo_describe(doc->undo, info[i].id, now, desc, sizeof(desc));
         /* Tree structure as indentation: the list is flat, the shape is
          * the depth. */
         for (k = 0U; k < indent && at + 2U < sizeof(label); k++) {
@@ -502,7 +502,7 @@ CmdStatus sag_undo_cmd_branches(CmdCtx *cx)
         /* On the current path is the bright row; everything else is a
          * branch you left. */
         store.items[store.n].flags =
-            info[i].on_current_path ? 0U : (u8)SAG_PICK_DEFERRED;
+            info[i].on_current_path ? 0U : (u8)YEW_PICK_DEFERRED;
         store.n++;
     }
     store_fixup(label_off, detail_off);
@@ -517,15 +517,15 @@ CmdStatus sag_undo_cmd_branches(CmdCtx *cx)
     /* NOT path_mode: an undo description is prose, and scoring its last
      * `.`-or-`/` segment would rank every row on a fragment. */
     spec.path_mode = false;
-    sag_picker_open(ed, &spec);
-    return SAG_CMD_OK;
+    yew_picker_open(ed, &spec);
+    return YEW_CMD_OK;
 }
 
-void sag_pickers_dispose(void)
+void yew_pickers_dispose(void)
 {
     store_free();
     if (g_files_ready) {
-        sag_filelist_free(&g_files);
+        yew_filelist_free(&g_files);
         g_files_ready = false;
     }
 }

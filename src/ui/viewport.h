@@ -1,5 +1,5 @@
-#ifndef SAG_UI_VIEWPORT_H
-#define SAG_UI_VIEWPORT_H
+#ifndef YEW_UI_VIEWPORT_H
+#define YEW_UI_VIEWPORT_H
 
 #include <stddef.h>
 
@@ -11,8 +11,8 @@
 typedef struct Win Win;
 
 enum {
-    SAG_VP_TABWIDTH = 4,
-    SAG_VP_WRAP_SLACK = 64
+    YEW_VP_TABWIDTH = 4,
+    YEW_VP_WRAP_SLACK = 64
 };
 
 typedef struct Viewport {
@@ -45,33 +45,33 @@ typedef struct WrapCache {
     bool spans_valid;
 } WrapCache;
 
-void sag_vp_init(Win *w);
-void sag_vp_free(Win *w);
-void sag_vp_invalidate(Win *w);
-void sag_vp_invalidate_from(Win *w, LineNo line);
+void yew_vp_init(Win *w);
+void yew_vp_free(Win *w);
+void yew_vp_invalidate(Win *w);
+void yew_vp_invalidate_from(Win *w, LineNo line);
 
-u32 sag_wrap_rows(Win *w, LineNo line);
-Span sag_wrap_row(Win *w, LineNo line, u32 sub);
+u32 yew_wrap_rows(Win *w, LineNo line);
+Span yew_wrap_row(Win *w, LineNo line, u32 sub);
 
-bool sag_vp_row_of_line(Win *w, LineNo line, u32 sub, u16 *row);
-bool sag_vp_line_of_row(Win *w, u16 row, LineNo *line, u32 *sub);
-u16 sag_vp_gridx_of_ccol(const Win *w, CCol col);
-CCol sag_vp_ccol_of_gridx(const Win *w, u16 grid_x);
-u32 sag_vp_cursor_subrow(Win *w);
+bool yew_vp_row_of_line(Win *w, LineNo line, u32 sub, u16 *row);
+bool yew_vp_line_of_row(Win *w, u16 row, LineNo *line, u32 *sub);
+u16 yew_vp_gridx_of_ccol(const Win *w, CCol col);
+CCol yew_vp_ccol_of_gridx(const Win *w, u16 grid_x);
+u32 yew_vp_cursor_subrow(Win *w);
 
-void sag_vp_follow(Win *w);
-void sag_vp_scroll(Win *w, i32 rows);
-void sag_vp_push_cursor(Win *w);
-void sag_vp_page(Win *w, i32 pages);
-void sag_vp_center(Win *w);
-void sag_vp_top(Win *w);
-void sag_vp_bottom(Win *w);
-void sag_vp_clamp(Win *w);
-bool sag_vp_move_display(Win *w, i32 rows);
+void yew_vp_follow(Win *w);
+void yew_vp_scroll(Win *w, i32 rows);
+void yew_vp_push_cursor(Win *w);
+void yew_vp_page(Win *w, i32 pages);
+void yew_vp_center(Win *w);
+void yew_vp_top(Win *w);
+void yew_vp_bottom(Win *w);
+void yew_vp_clamp(Win *w);
+bool yew_vp_move_display(Win *w, i32 rows);
 /* Pure counterparts used by the line unit engine.  They perform no cache,
  * cursor, or viewport writes. */
-CCol sag_vp_display_col(const Win *w, ByteOff pos);
-ByteOff sag_vp_display_target(const Win *w, ByteOff pos, i32 rows);
-LineNo sag_vp_last_visible_line(Win *w);
+CCol yew_vp_display_col(const Win *w, ByteOff pos);
+ByteOff yew_vp_display_target(const Win *w, ByteOff pos, i32 rows);
+LineNo yew_vp_last_visible_line(Win *w);
 
 #endif

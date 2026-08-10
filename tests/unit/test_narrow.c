@@ -61,8 +61,8 @@ static void nw_make(NwFix *f, u32 n, u64 seed)
     size_t cap = (size_t)n * 64U;
 
     f->n = n;
-    f->items = sag_xreallocarray(NULL, n, sizeof(*f->items));
-    f->text = sag_xmalloc(cap);
+    f->items = yew_xreallocarray(NULL, n, sizeof(*f->items));
+    f->text = yew_xmalloc(cap);
     for (i = 0U; i < n; i++) {
         int wrote;
 
@@ -71,7 +71,7 @@ static void nw_make(NwFix *f, u32 n, u64 seed)
                          dirs[(rng >> 33) % 7U], stems[(rng >> 21) % 10U],
                          (unsigned)((rng >> 11) % 1000U),
                          exts[(rng >> 7) % 4U]);
-        SAG_ASSERT(wrote > 0);
+        YEW_ASSERT(wrote > 0);
         (void)memset(&f->items[i], 0, sizeof(f->items[i]));
         f->items[i].label = f->text + at;
         f->items[i].payload = (i32)i;
@@ -86,13 +86,13 @@ static u32 nw_full(NwFix *f, bool path_mode, const char *pat, u32 plen,
     FilterState fresh;
     u32 n;
 
-    sag_filter_init(&fresh);
-    sag_filter_reset(&fresh, f->items, f->n, 0U);
+    yew_filter_init(&fresh);
+    yew_filter_reset(&fresh, f->items, f->n, 0U);
     /* Applied in ONE step from the empty pattern, so it cannot narrow
      * and must scan everything. */
-    (void)sag_filter_apply(&fresh, f->items, f->n, path_mode, pat, plen, 0);
-    n = sag_filter_top(&fresh, f->items, path_mode, out, max);
-    sag_filter_free(&fresh);
+    (void)yew_filter_apply(&fresh, f->items, f->n, path_mode, pat, plen, 0);
+    n = yew_filter_top(&fresh, f->items, path_mode, out, max);
+    yew_filter_free(&fresh);
     return n;
 }
 
@@ -116,13 +116,13 @@ void test_narrow_equals_a_full_rescan(void)
     u32 narrowed_cases = 0U;
 
     nw_make(&f, 5000U, 12345U);
-    sag_filter_init(&fs);
+    yew_filter_init(&fs);
     for (trial = 0U; trial < 10000U; trial++) {
         char pat[8];
         u32 plen;
         u32 k;
-        FzRanked got[SAG_FILTER_TOPK];
-        FzRanked want[SAG_FILTER_TOPK];
+        FzRanked got[YEW_FILTER_TOPK];
+        FzRanked want[YEW_FILTER_TOPK];
         u32 n_got;
         u32 n_want;
         u32 before_append;
@@ -137,15 +137,15 @@ void test_narrow_equals_a_full_rescan(void)
         pat[plen] = '\0';
 
         /* ...applied fresh, then EXTENDED by one character. */
-        sag_filter_reset(&fs, f.items, f.n, 0U);
-        (void)sag_filter_apply(&fs, f.items, f.n, true, pat, plen, 0);
+        yew_filter_reset(&fs, f.items, f.n, 0U);
+        (void)yew_filter_apply(&fs, f.items, f.n, true, pat, plen, 0);
         rng = rng * 6364136223846793005ULL + 1442695040888963407ULL;
         pat[plen] = alphabet[(rng >> 29) % (sizeof(alphabet) - 1U)];
         plen++;
         pat[plen] = '\0';
-        before_append = sag_filter_matched(&fs);
-        sag_filter_scored_reset();
-        (void)sag_filter_apply(&fs, f.items, f.n, true, pat, plen, 0);
+        before_append = yew_filter_matched(&fs);
+        yew_filter_scored_reset();
+        (void)yew_filter_apply(&fs, f.items, f.n, true, pat, plen, 0);
         /*
          * It scored EXACTLY the candidate set — no more, no fewer.
          *
@@ -157,20 +157,20 @@ void test_narrow_equals_a_full_rescan(void)
          * what the optimization actually claims, and still fails
          * loudly against an implementation that quietly rescans.
          */
-        SAG_ASSERT_EQ_U64(sag_filter_scored(), (u64)before_append);
+        YEW_ASSERT_EQ_U64(yew_filter_scored(), (u64)before_append);
         extensions++;
         if (before_append < f.n)
             narrowed_cases++;
 
-        n_got = sag_filter_top(&fs, f.items, true, got, SAG_FILTER_TOPK);
-        n_want = nw_full(&f, true, pat, plen, want, SAG_FILTER_TOPK);
+        n_got = yew_filter_top(&fs, f.items, true, got, YEW_FILTER_TOPK);
+        n_want = nw_full(&f, true, pat, plen, want, YEW_FILTER_TOPK);
 
         if (n_got != n_want) {
             (void)fprintf(stderr,
                           "pattern '%s': narrowed %u rows, full %u\n", pat,
                           (unsigned)n_got, (unsigned)n_want);
         }
-        SAG_ASSERT_EQ_U64(n_got, n_want);
+        YEW_ASSERT_EQ_U64(n_got, n_want);
         for (k = 0U; k < n_got; k++) {
             if (got[k].idx != want[k].idx ||
                 got[k].score != want[k].score) {
@@ -181,8 +181,8 @@ void test_narrow_equals_a_full_rescan(void)
                               (int)got[k].score, (unsigned)want[k].idx,
                               (int)want[k].score);
             }
-            SAG_ASSERT_EQ_U64(got[k].idx, want[k].idx);
-            SAG_ASSERT_EQ_I64(got[k].score, want[k].score);
+            YEW_ASSERT_EQ_U64(got[k].idx, want[k].idx);
+            YEW_ASSERT_EQ_I64(got[k].score, want[k].score);
         }
     }
     /*
@@ -191,9 +191,9 @@ void test_narrow_equals_a_full_rescan(void)
      * above is a statement about NARROWING rather than about two full
      * rescans agreeing with each other.
      */
-    SAG_ASSERT_EQ_U64(extensions, 10000U);
-    SAG_ASSERT(narrowed_cases > 7000U);
-    sag_filter_free(&fs);
+    YEW_ASSERT_EQ_U64(extensions, 10000U);
+    YEW_ASSERT(narrowed_cases > 7000U);
+    yew_filter_free(&fs);
     nw_free(&f);
 }
 
@@ -213,26 +213,26 @@ void test_narrow_append_scores_only_the_candidate_set(void)
     u32 after_first;
 
     nw_make(&f, 5000U, 999U);
-    sag_filter_init(&fs);
-    sag_filter_reset(&fs, f.items, f.n, 0U);
+    yew_filter_init(&fs);
+    yew_filter_reset(&fs, f.items, f.n, 0U);
 
     /* First character: everything is scored, because the empty pattern
      * matched everything. */
-    sag_filter_scored_reset();
-    (void)sag_filter_apply(&fs, f.items, f.n, true, "s", 1U, 0);
-    SAG_ASSERT_EQ_U64(sag_filter_scored(), (u64)f.n);
-    after_first = sag_filter_matched(&fs);
-    SAG_ASSERT(after_first > 0U);
-    SAG_ASSERT(after_first < f.n);
+    yew_filter_scored_reset();
+    (void)yew_filter_apply(&fs, f.items, f.n, true, "s", 1U, 0);
+    YEW_ASSERT_EQ_U64(yew_filter_scored(), (u64)f.n);
+    after_first = yew_filter_matched(&fs);
+    YEW_ASSERT(after_first > 0U);
+    YEW_ASSERT(after_first < f.n);
 
     /* Second: only the survivors. */
-    sag_filter_scored_reset();
-    (void)sag_filter_apply(&fs, f.items, f.n, true, "st", 2U, 0);
-    SAG_ASSERT_EQ_U64(sag_filter_scored(), (u64)after_first);
+    yew_filter_scored_reset();
+    (void)yew_filter_apply(&fs, f.items, f.n, true, "st", 2U, 0);
+    YEW_ASSERT_EQ_U64(yew_filter_scored(), (u64)after_first);
     /* And the set only shrinks. */
-    SAG_ASSERT(sag_filter_matched(&fs) <= after_first);
+    YEW_ASSERT(yew_filter_matched(&fs) <= after_first);
 
-    sag_filter_free(&fs);
+    yew_filter_free(&fs);
     nw_free(&f);
 }
 
@@ -249,18 +249,18 @@ void test_narrow_backspace_rescans_everything(void)
     u32 narrow_matched;
 
     nw_make(&f, 2000U, 4242U);
-    sag_filter_init(&fs);
-    sag_filter_reset(&fs, f.items, f.n, 0U);
-    (void)sag_filter_apply(&fs, f.items, f.n, true, "sta", 3U, 0);
-    narrow_matched = sag_filter_matched(&fs);
+    yew_filter_init(&fs);
+    yew_filter_reset(&fs, f.items, f.n, 0U);
+    (void)yew_filter_apply(&fs, f.items, f.n, true, "sta", 3U, 0);
+    narrow_matched = yew_filter_matched(&fs);
 
-    sag_filter_scored_reset();
-    (void)sag_filter_apply(&fs, f.items, f.n, true, "st", 2U, 0);
+    yew_filter_scored_reset();
+    (void)yew_filter_apply(&fs, f.items, f.n, true, "st", 2U, 0);
     /* The whole set, not the narrowed one. */
-    SAG_ASSERT_EQ_U64(sag_filter_scored(), (u64)f.n);
+    YEW_ASSERT_EQ_U64(yew_filter_scored(), (u64)f.n);
     /* And the list GREW back, which is the observable half. */
-    SAG_ASSERT(sag_filter_matched(&fs) >= narrow_matched);
-    sag_filter_free(&fs);
+    YEW_ASSERT(yew_filter_matched(&fs) >= narrow_matched);
+    yew_filter_free(&fs);
     nw_free(&f);
 }
 
@@ -272,14 +272,14 @@ void test_narrow_mid_edit_rescans_everything(void)
     FilterState fs;
 
     nw_make(&f, 1000U, 7U);
-    sag_filter_init(&fs);
-    sag_filter_reset(&fs, f.items, f.n, 0U);
-    (void)sag_filter_apply(&fs, f.items, f.n, true, "abc", 3U, 0);
-    sag_filter_scored_reset();
+    yew_filter_init(&fs);
+    yew_filter_reset(&fs, f.items, f.n, 0U);
+    (void)yew_filter_apply(&fs, f.items, f.n, true, "abc", 3U, 0);
+    yew_filter_scored_reset();
     /* Same length, different bytes. */
-    (void)sag_filter_apply(&fs, f.items, f.n, true, "abd", 3U, 0);
-    SAG_ASSERT_EQ_U64(sag_filter_scored(), (u64)f.n);
-    sag_filter_free(&fs);
+    (void)yew_filter_apply(&fs, f.items, f.n, true, "abd", 3U, 0);
+    YEW_ASSERT_EQ_U64(yew_filter_scored(), (u64)f.n);
+    yew_filter_free(&fs);
     nw_free(&f);
 }
 
@@ -298,30 +298,30 @@ void test_narrow_sliced_rescan_equals_unsliced(void)
 {
     NwFix f;
     FilterState sliced;
-    FzRanked got[SAG_FILTER_TOPK];
-    FzRanked want[SAG_FILTER_TOPK];
+    FzRanked got[YEW_FILTER_TOPK];
+    FzRanked want[YEW_FILTER_TOPK];
     u32 n_got;
     u32 n_want;
     u32 steps = 0U;
     u32 k;
 
     nw_make(&f, 20000U, 31337U);
-    sag_filter_init(&sliced);
-    sag_filter_reset(&sliced, f.items, f.n, 0U);
+    yew_filter_init(&sliced);
+    yew_filter_reset(&sliced, f.items, f.n, 0U);
     /* A 1 us budget forces many slices. */
-    (void)sag_filter_apply(&sliced, f.items, f.n, true, "sc", 2U, 1);
-    while (sag_filter_step(&sliced, f.items, true, 1)) {
+    (void)yew_filter_apply(&sliced, f.items, f.n, true, "sc", 2U, 1);
+    while (yew_filter_step(&sliced, f.items, true, 1)) {
         steps++;
-        SAG_ASSERT(steps < 100000U);
+        YEW_ASSERT(steps < 100000U);
     }
-    n_got = sag_filter_top(&sliced, f.items, true, got, SAG_FILTER_TOPK);
-    n_want = nw_full(&f, true, "sc", 2U, want, SAG_FILTER_TOPK);
-    SAG_ASSERT_EQ_U64(n_got, n_want);
+    n_got = yew_filter_top(&sliced, f.items, true, got, YEW_FILTER_TOPK);
+    n_want = nw_full(&f, true, "sc", 2U, want, YEW_FILTER_TOPK);
+    YEW_ASSERT_EQ_U64(n_got, n_want);
     for (k = 0U; k < n_got; k++) {
-        SAG_ASSERT_EQ_U64(got[k].idx, want[k].idx);
-        SAG_ASSERT_EQ_I64(got[k].score, want[k].score);
+        YEW_ASSERT_EQ_U64(got[k].idx, want[k].idx);
+        YEW_ASSERT_EQ_I64(got[k].score, want[k].score);
     }
-    sag_filter_free(&sliced);
+    yew_filter_free(&sliced);
     nw_free(&f);
 }
 
@@ -338,8 +338,8 @@ void test_narrow_partial_scan_has_a_usable_count(void)
 {
     NwFix f;
     FilterState fs;
-    FzRanked partial[SAG_FILTER_TOPK];
-    FzRanked whole[SAG_FILTER_TOPK];
+    FzRanked partial[YEW_FILTER_TOPK];
+    FzRanked whole[YEW_FILTER_TOPK];
     u32 seen_partial;
     u32 last = 0U;
     u32 steps = 0U;
@@ -348,58 +348,58 @@ void test_narrow_partial_scan_has_a_usable_count(void)
     u32 k;
 
     nw_make(&f, 50000U, 5U);
-    sag_filter_init(&fs);
-    sag_filter_reset(&fs, f.items, f.n, 0U);
+    yew_filter_init(&fs);
+    yew_filter_reset(&fs, f.items, f.n, 0U);
     /* A 1 us budget stops almost immediately. */
-    if (!sag_filter_apply(&fs, f.items, f.n, true, "s", 1U, 1)) {
-        seen_partial = sag_filter_matched(&fs);
+    if (!yew_filter_apply(&fs, f.items, f.n, true, "s", 1U, 1)) {
+        seen_partial = yew_filter_matched(&fs);
         /* Partway through: a usable count, and never more matches than
          * the corpus holds. */
-        SAG_ASSERT(seen_partial <= f.n);
+        YEW_ASSERT(seen_partial <= f.n);
         /* The window is drawable mid-pass — that is the whole point of
          * showing a partial list rather than a spinner. */
-        n_partial = sag_filter_top(&fs, f.items, true, partial,
-                                   SAG_FILTER_TOPK);
-        SAG_ASSERT(n_partial <= (u32)SAG_FILTER_TOPK);
+        n_partial = yew_filter_top(&fs, f.items, true, partial,
+                                   YEW_FILTER_TOPK);
+        YEW_ASSERT(n_partial <= (u32)YEW_FILTER_TOPK);
         last = seen_partial;
-        while (sag_filter_step(&fs, f.items, true, 1)) {
-            u32 now_matched = sag_filter_matched(&fs);
+        while (yew_filter_step(&fs, f.items, true, 1)) {
+            u32 now_matched = yew_filter_matched(&fs);
 
             /* Monotone: a count that went backwards would make the
              * footer flicker downward as the scan progressed. */
-            SAG_ASSERT(now_matched >= last);
+            YEW_ASSERT(now_matched >= last);
             last = now_matched;
             steps++;
-            SAG_ASSERT(steps < 200000U);
+            YEW_ASSERT(steps < 200000U);
         }
     }
     /* And the finished answer equals an unsliced one. */
-    n_whole = nw_full(&f, true, "s", 1U, whole, SAG_FILTER_TOPK);
-    n_partial = sag_filter_top(&fs, f.items, true, partial,
-                               SAG_FILTER_TOPK);
-    SAG_ASSERT_EQ_U64(n_partial, n_whole);
+    n_whole = nw_full(&f, true, "s", 1U, whole, YEW_FILTER_TOPK);
+    n_partial = yew_filter_top(&fs, f.items, true, partial,
+                               YEW_FILTER_TOPK);
+    YEW_ASSERT_EQ_U64(n_partial, n_whole);
     for (k = 0U; k < n_whole; k++)
-        SAG_ASSERT_EQ_U64(partial[k].idx, whole[k].idx);
-    sag_filter_free(&fs);
+        YEW_ASSERT_EQ_U64(partial[k].idx, whole[k].idx);
+    yew_filter_free(&fs);
     nw_free(&f);
 }
 
 /* ---------------------------------------------------------------- */
-/* Ordering, and agreement with sag_fz_rank                         */
+/* Ordering, and agreement with yew_fz_rank                         */
 /* ---------------------------------------------------------------- */
 
 /*
- * The top-k agrees with sag_fz_rank, which sorts.
+ * The top-k agrees with yew_fz_rank, which sorts.
  *
  * Two orderings of one list is the drift §7 avoids by having only one
  * place that orders anything — so where they overlap they must agree,
  * or the picker and the tests describe different programs.
  */
-void test_narrow_top_agrees_with_sag_fz_rank(void)
+void test_narrow_top_agrees_with_yew_fz_rank(void)
 {
     NwFix f;
     FilterState fs;
-    FzRanked top[SAG_FILTER_TOPK];
+    FzRanked top[YEW_FILTER_TOPK];
     FzRanked *ranked;
     const char **labels;
     u32 n_top;
@@ -407,25 +407,25 @@ void test_narrow_top_agrees_with_sag_fz_rank(void)
     u32 i;
 
     nw_make(&f, 500U, 2024U);
-    sag_filter_init(&fs);
-    sag_filter_reset(&fs, f.items, f.n, 0U);
-    (void)sag_filter_apply(&fs, f.items, f.n, true, "tab", 3U, 0);
-    n_top = sag_filter_top(&fs, f.items, true, top, SAG_FILTER_TOPK);
+    yew_filter_init(&fs);
+    yew_filter_reset(&fs, f.items, f.n, 0U);
+    (void)yew_filter_apply(&fs, f.items, f.n, true, "tab", 3U, 0);
+    n_top = yew_filter_top(&fs, f.items, true, top, YEW_FILTER_TOPK);
 
-    labels = sag_xreallocarray(NULL, f.n, sizeof(*labels));
-    ranked = sag_xreallocarray(NULL, f.n, sizeof(*ranked));
+    labels = yew_xreallocarray(NULL, f.n, sizeof(*labels));
+    ranked = yew_xreallocarray(NULL, f.n, sizeof(*ranked));
     for (i = 0U; i < f.n; i++)
         labels[i] = f.items[i].label;
-    n_rank = sag_fz_rank("tab", 3U, labels, f.n, true, ranked);
+    n_rank = yew_fz_rank("tab", 3U, labels, f.n, true, ranked);
 
-    SAG_ASSERT_EQ_U64(sag_filter_matched(&fs), n_rank);
+    YEW_ASSERT_EQ_U64(yew_filter_matched(&fs), n_rank);
     for (i = 0U; i < n_top; i++) {
-        SAG_ASSERT_EQ_U64(top[i].idx, ranked[i].idx);
-        SAG_ASSERT_EQ_I64(top[i].score, ranked[i].score);
+        YEW_ASSERT_EQ_U64(top[i].idx, ranked[i].idx);
+        YEW_ASSERT_EQ_I64(top[i].score, ranked[i].score);
     }
     free(labels);
     free(ranked);
-    sag_filter_free(&fs);
+    yew_filter_free(&fs);
     nw_free(&f);
 }
 
@@ -443,57 +443,57 @@ void test_narrow_empty_pattern_keeps_source_order(void)
 {
     NwFix f;
     FilterState fs;
-    FzRanked top[SAG_FILTER_TOPK];
+    FzRanked top[YEW_FILTER_TOPK];
     u32 n;
     u32 i;
 
     nw_make(&f, 100U, 11U);
-    sag_filter_init(&fs);
-    sag_filter_reset(&fs, f.items, f.n, 0U);
-    SAG_ASSERT_EQ_U64(sag_filter_matched(&fs), 100U);
-    n = sag_filter_top(&fs, f.items, true, top, SAG_FILTER_TOPK);
-    SAG_ASSERT_EQ_U64(n, (u64)SAG_FILTER_TOPK);
+    yew_filter_init(&fs);
+    yew_filter_reset(&fs, f.items, f.n, 0U);
+    YEW_ASSERT_EQ_U64(yew_filter_matched(&fs), 100U);
+    n = yew_filter_top(&fs, f.items, true, top, YEW_FILTER_TOPK);
+    YEW_ASSERT_EQ_U64(n, (u64)YEW_FILTER_TOPK);
     for (i = 0U; i < n; i++) {
         /* Every score is the empty-pattern score... */
-        SAG_ASSERT_EQ_I64(top[i].score, 1);
+        YEW_ASSERT_EQ_I64(top[i].score, 1);
         /* ...and the order is exactly the order they were given in,
          * which the score assertion alone cannot say. */
-        SAG_ASSERT_EQ_U64(top[i].idx, i);
+        YEW_ASSERT_EQ_U64(top[i].idx, i);
     }
-    sag_filter_free(&fs);
+    yew_filter_free(&fs);
     nw_free(&f);
 }
 
 /*
- * And the empty pattern agrees with sag_fz_rank, which has the same
+ * And the empty pattern agrees with yew_fz_rank, which has the same
  * special case for the same reason — two orderings of one list is the
  * drift §7 exists to avoid.
  */
-void test_narrow_empty_pattern_agrees_with_sag_fz_rank(void)
+void test_narrow_empty_pattern_agrees_with_yew_fz_rank(void)
 {
     NwFix f;
     FilterState fs;
-    FzRanked top[SAG_FILTER_TOPK];
+    FzRanked top[YEW_FILTER_TOPK];
     FzRanked *ranked;
     const char **labels;
     u32 n_top;
     u32 i;
 
     nw_make(&f, 200U, 77U);
-    sag_filter_init(&fs);
-    sag_filter_reset(&fs, f.items, f.n, 0U);
-    n_top = sag_filter_top(&fs, f.items, true, top, SAG_FILTER_TOPK);
+    yew_filter_init(&fs);
+    yew_filter_reset(&fs, f.items, f.n, 0U);
+    n_top = yew_filter_top(&fs, f.items, true, top, YEW_FILTER_TOPK);
 
-    labels = sag_xreallocarray(NULL, f.n, sizeof(*labels));
-    ranked = sag_xreallocarray(NULL, f.n, sizeof(*ranked));
+    labels = yew_xreallocarray(NULL, f.n, sizeof(*labels));
+    ranked = yew_xreallocarray(NULL, f.n, sizeof(*ranked));
     for (i = 0U; i < f.n; i++)
         labels[i] = f.items[i].label;
-    (void)sag_fz_rank("", 0U, labels, f.n, true, ranked);
+    (void)yew_fz_rank("", 0U, labels, f.n, true, ranked);
     for (i = 0U; i < n_top; i++)
-        SAG_ASSERT_EQ_U64(top[i].idx, ranked[i].idx);
+        YEW_ASSERT_EQ_U64(top[i].idx, ranked[i].idx);
     free(labels);
     free(ranked);
-    sag_filter_free(&fs);
+    yew_filter_free(&fs);
     nw_free(&f);
 }
 
@@ -507,15 +507,15 @@ void test_narrow_item_count_change_forces_a_rescan(void)
     FilterState fs;
 
     nw_make(&f, 100U, 3U);
-    sag_filter_init(&fs);
-    sag_filter_reset(&fs, f.items, f.n, 0U);
-    (void)sag_filter_apply(&fs, f.items, f.n, true, "s", 1U, 0);
-    sag_filter_scored_reset();
+    yew_filter_init(&fs);
+    yew_filter_reset(&fs, f.items, f.n, 0U);
+    (void)yew_filter_apply(&fs, f.items, f.n, true, "s", 1U, 0);
+    yew_filter_scored_reset();
     /* Same pattern, fewer items: not an extension of anything. */
-    (void)sag_filter_apply(&fs, f.items, 50U, true, "s", 1U, 0);
-    SAG_ASSERT_EQ_U64(sag_filter_scored(), 50U);
-    SAG_ASSERT(sag_filter_matched(&fs) <= 50U);
-    sag_filter_free(&fs);
+    (void)yew_filter_apply(&fs, f.items, 50U, true, "s", 1U, 0);
+    YEW_ASSERT_EQ_U64(yew_filter_scored(), 50U);
+    YEW_ASSERT(yew_filter_matched(&fs) <= 50U);
+    yew_filter_free(&fs);
     nw_free(&f);
 }
 
@@ -525,14 +525,14 @@ void test_narrow_degenerate_inputs(void)
     FilterState fs;
     FzRanked out[4];
 
-    sag_filter_init(&fs);
-    sag_filter_init(NULL);
-    sag_filter_free(NULL);
-    sag_filter_reset(NULL, NULL, 0U, 0U);
-    sag_filter_reset(&fs, NULL, 0U, 0U);
-    SAG_ASSERT(sag_filter_apply(NULL, NULL, 0U, false, "a", 1U, 0));
-    SAG_ASSERT(!sag_filter_step(NULL, NULL, false, 0));
-    SAG_ASSERT_EQ_U64(sag_filter_matched(NULL), 0U);
-    SAG_ASSERT_EQ_U64(sag_filter_top(NULL, NULL, false, out, 4U), 0U);
-    sag_filter_free(&fs);
+    yew_filter_init(&fs);
+    yew_filter_init(NULL);
+    yew_filter_free(NULL);
+    yew_filter_reset(NULL, NULL, 0U, 0U);
+    yew_filter_reset(&fs, NULL, 0U, 0U);
+    YEW_ASSERT(yew_filter_apply(NULL, NULL, 0U, false, "a", 1U, 0));
+    YEW_ASSERT(!yew_filter_step(NULL, NULL, false, 0));
+    YEW_ASSERT_EQ_U64(yew_filter_matched(NULL), 0U);
+    YEW_ASSERT_EQ_U64(yew_filter_top(NULL, NULL, false, out, 4U), 0U);
+    yew_filter_free(&fs);
 }

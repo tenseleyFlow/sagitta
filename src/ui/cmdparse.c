@@ -69,7 +69,7 @@ static TextBuf *active_text(Ed *ed)
         return NULL;
     if (ed->win != NULL && ed->win->buf != NULL)
         return ed->win->buf->tb;
-    return sag_ed_doc((Ed *)ed)->tb;
+    return yew_ed_doc((Ed *)ed)->tb;
 }
 
 static Buffer *active_buffer(Ed *ed)
@@ -94,21 +94,21 @@ static void append_text(Bytebuf *out, const TextBuf *tb, Span span)
     if (tb == NULL || span.hi <= span.lo)
         return;
     left = span.hi - span.lo;
-    if (!sag_textiter_begin(&it, tb, BYTEOFF(span.lo)))
+    if (!yew_textiter_begin(&it, tb, BYTEOFF(span.lo)))
         return;
     while (left != 0U) {
         const u8 *bytes;
         u64 avail;
         size_t take;
 
-        if (!sag_textiter_chunk(&it, tb, &bytes, &avail))
+        if (!yew_textiter_chunk(&it, tb, &bytes, &avail))
             break;
         if (avail > left)
             avail = left;
         take = avail > SIZE_MAX ? SIZE_MAX : (size_t)avail;
         bytebuf_append(out, bytes, take);
         left -= avail;
-        if (left != 0U && !sag_textiter_advance(&it, tb))
+        if (left != 0U && !yew_textiter_advance(&it, tb))
             break;
     }
 }
@@ -182,13 +182,13 @@ static bool append_expansion(Parser *p, size_t *at, Bytebuf *out)
         if (tb != NULL && win != NULL && win->cs.curs.len != 0U &&
             win->cs.primary < win->cs.curs.len) {
             const Cursor *cur = &win->cs.curs.data[win->cs.primary];
-            LineNo line = sag_textbuf_line_of(tb, cur->pos);
+            LineNo line = yew_textbuf_line_of(tb, cur->pos);
 
             if (code == 'l')
                 value = line.v + 1U;
             else
-                value = sag_off_to_gcol(tb,
-                                        sag_textbuf_line_span(tb, line),
+                value = yew_off_to_gcol(tb,
+                                        yew_textbuf_line_span(tb, line),
                                         cur->pos).v + 1U;
         }
         (void)snprintf(number, sizeof(number), "%llu",
@@ -208,7 +208,7 @@ static bool append_expansion(Parser *p, size_t *at, Bytebuf *out)
             return false;
         }
         append_text(out, tb,
-                    sag_sel_span(win, &win->cs.curs.data[win->cs.primary]));
+                    yew_sel_span(win, &win->cs.curs.data[win->cs.primary]));
         if (memchr(out->data + before, '\0', out->len - before) != NULL) {
             set_error(p, lo, *at,
                       "NUL byte is not valid in a command line");
@@ -392,7 +392,7 @@ static bool cursor_line(Parser *p, i64 *line)
         win->cs.primary >= win->cs.curs.len)
         *line = 0;
     else
-        *line = (i64)sag_textbuf_line_of(
+        *line = (i64)yew_textbuf_line_of(
             tb, win->cs.curs.data[win->cs.primary].pos).v;
     return true;
 }
@@ -402,7 +402,7 @@ static bool parse_address(Parser *p, LineNo *out, Span *tok)
     TextBuf *tb = active_text(p->ed);
     size_t start = p->at;
     size_t base_end;
-    u64 count = tb == NULL ? 1U : sag_textbuf_line_count(tb);
+    u64 count = tb == NULL ? 1U : yew_textbuf_line_count(tb);
     i64 line;
     bool relative = false;
 
@@ -438,11 +438,11 @@ static bool parse_address(Parser *p, LineNo *out, Span *tok)
 
         p->at += 2U;
         if (buf == NULL || tb == NULL ||
-            !sag_ed_mark_get(p->ed, buf, name, &at)) {
+            !yew_ed_mark_get(p->ed, buf, name, &at)) {
             set_error(p, start, p->at, "mark not set");
             return false;
         }
-        line = (i64)sag_textbuf_line_of(tb, at).v;
+        line = (i64)yew_textbuf_line_of(tb, at).v;
     } else if (p->line[p->at] == '/' || p->line[p->at] == '?') {
         /*
          * Sprint 21: `/pat/` and `?pat?` address the next (previous)
@@ -454,7 +454,7 @@ static bool parse_address(Parser *p, LineNo *out, Span *tok)
         size_t pat_hi;
         TextBuf *tb = active_text(p->ed);
         Arena arena;
-        SagRe *re;
+        YewRe *re;
         i64 from_line = 0;
 
         while (p->at < p->len && p->line[p->at] != close) {
@@ -471,7 +471,7 @@ static bool parse_address(Parser *p, LineNo *out, Span *tok)
         }
         (void)cursor_line(p, &from_line);
         arena_init(&arena);
-        re = sag_search_compile(&arena, p->line + pat_lo, pat_hi - pat_lo,
+        re = yew_search_compile(&arena, p->line + pat_lo, pat_hi - pat_lo,
                                 &p->ed->search_opts, NULL);
         if (re == NULL) {
             arena_free_all(&arena);
@@ -479,29 +479,29 @@ static bool parse_address(Parser *p, LineNo *out, Span *tok)
             return false;
         }
         {
-            SagReInput in = sag_re_input_textbuf(tb);
-            SagReMatch m;
-            u64 nlines = sag_textbuf_line_count(tb);
+            YewReInput in = yew_re_input_textbuf(tb);
+            YewReMatch m;
+            u64 nlines = yew_textbuf_line_count(tb);
             bool found;
 
             (void)memset(&m, 0, sizeof(m));
             if (close == '/') {
                 u64 next = (u64)from_line + 1U;
                 u64 at = next < nlines
-                         ? sag_textbuf_line_start(tb, LINENO(next)).v
-                         : sag_textbuf_len(tb);
+                         ? yew_textbuf_line_start(tb, LINENO(next)).v
+                         : yew_textbuf_len(tb);
 
-                found = sag_re_search(re, &in, BYTEOFF(at), &m);
+                found = yew_re_search(re, &in, BYTEOFF(at), &m);
                 if (!found) /* wrap, as a search does */
-                    found = sag_re_search(re, &in, BYTEOFF(0U), &m);
+                    found = yew_re_search(re, &in, BYTEOFF(0U), &m);
             } else {
-                u64 at = sag_textbuf_line_start(tb,
+                u64 at = yew_textbuf_line_start(tb,
                                                 LINENO((u64)from_line)).v;
 
-                found = sag_re_search_back(re, &in, BYTEOFF(at), &m);
+                found = yew_re_search_back(re, &in, BYTEOFF(at), &m);
                 if (!found)
-                    found = sag_re_search_back(re, &in,
-                                               BYTEOFF(sag_textbuf_len(tb)),
+                    found = yew_re_search_back(re, &in,
+                                               BYTEOFF(yew_textbuf_len(tb)),
                                                &m);
             }
             arena_free_all(&arena);
@@ -509,7 +509,7 @@ static bool parse_address(Parser *p, LineNo *out, Span *tok)
                 set_error(p, start, p->at, "pattern not found");
                 return false;
             }
-            line = (i64)sag_textbuf_line_of(tb, BYTEOFF(m.g[0].lo)).v;
+            line = (i64)yew_textbuf_line_of(tb, BYTEOFF(m.g[0].lo)).v;
         }
     } else {
         return false;
@@ -562,15 +562,15 @@ static bool parse_range(Parser *p, CmdRange *range)
     Span lo_tok;
     Span hi_tok;
 
-    *range = (CmdRange){SAG_RANGE_NONE, LINENO(0U), LINENO(0U), false,
+    *range = (CmdRange){YEW_RANGE_NONE, LINENO(0U), LINENO(0U), false,
                         {0U, 0U}};
     if (p->at >= p->len)
         return true;
     if (p->line[p->at] == '%') {
-        u64 count = tb == NULL ? 1U : sag_textbuf_line_count(tb);
+        u64 count = tb == NULL ? 1U : yew_textbuf_line_count(tb);
 
         p->at++;
-        range->kind = SAG_RANGE_BUFFER;
+        range->kind = YEW_RANGE_BUFFER;
         range->lo = LINENO(0U);
         range->hi = LINENO(count == 0U ? 0U : count - 1U);
         range->given = true;
@@ -592,9 +592,9 @@ static bool parse_range(Parser *p, CmdRange *range)
             return false;
         }
         cur = &win->cs.curs.data[win->cs.primary];
-        a = sag_textbuf_line_of(tb, cur->anchor);
-        b = sag_textbuf_line_of(tb, cur->pos);
-        range->kind = SAG_RANGE_SELECTION;
+        a = yew_textbuf_line_of(tb, cur->anchor);
+        b = yew_textbuf_line_of(tb, cur->pos);
+        range->kind = YEW_RANGE_SELECTION;
         range->lo = a.v < b.v ? a : b;
         range->hi = a.v > b.v ? a : b;
         range->given = true;
@@ -608,7 +608,7 @@ static bool parse_range(Parser *p, CmdRange *range)
         return true;
     }
     range->hi = range->lo;
-    range->kind = SAG_RANGE_LINES;
+    range->kind = YEW_RANGE_LINES;
     range->given = true;
     if (p->at < p->len && p->line[p->at] == ',') {
         p->at++;
@@ -636,27 +636,27 @@ static const char *short_name(const char *name)
 
 static CmdId resolve_name(Parser *p, const char *name, Span tok)
 {
-    CmdId exact_abbrev = SAG_CMD_NONE;
-    CmdId exact_full = SAG_CMD_NONE;
-    CmdId prefix = SAG_CMD_NONE;
+    CmdId exact_abbrev = YEW_CMD_NONE;
+    CmdId exact_full = YEW_CMD_NONE;
+    CmdId prefix = YEW_CMD_NONE;
     const char *abbrev_matches[6];
     const char *matches[6];
     u32 nabbrev = 0U;
     u32 nmatch = 0U;
     u32 i;
 
-    for (i = 0U; i < sag_cmd_count(); i++) {
-        const CmdDesc *desc = sag_cmd_at(i);
+    for (i = 0U; i < yew_cmd_count(); i++) {
+        const CmdDesc *desc = yew_cmd_at(i);
         CmdId id = {i + 1U};
-        const CmdEntry *entry = sag_cmd_entry(id);
+        const CmdEntry *entry = yew_cmd_entry(id);
         const char *candidate;
 
         if (desc == NULL || entry == NULL ||
-            (desc->flags & SAG_CMD_INTERNAL) != 0U)
+            (desc->flags & YEW_CMD_INTERNAL) != 0U)
             continue;
         candidate = short_name(desc->name);
         if (entry->abbrev != NULL && strcmp(entry->abbrev, name) == 0) {
-            if (nabbrev < SAG_ARRAY_LEN(abbrev_matches))
+            if (nabbrev < YEW_ARRAY_LEN(abbrev_matches))
                 abbrev_matches[nabbrev] = candidate;
             nabbrev++;
             exact_abbrev = id;
@@ -665,7 +665,7 @@ static CmdId resolve_name(Parser *p, const char *name, Span tok)
             exact_full.v == 0U)
             exact_full = id;
         if (strncmp(candidate, name, strlen(name)) == 0) {
-            if (nmatch < SAG_ARRAY_LEN(matches))
+            if (nmatch < YEW_ARRAY_LEN(matches))
                 matches[nmatch] = candidate;
             nmatch++;
             prefix = id;
@@ -689,7 +689,7 @@ static CmdId resolve_name(Parser *p, const char *name, Span tok)
         set_error(p, (size_t)tok.lo, (size_t)tok.hi, "%s",
                   (const char *)msg.data);
         bytebuf_free(&msg);
-        return SAG_CMD_NONE;
+        return YEW_CMD_NONE;
     }
     if (exact_full.v != 0U)
         return exact_full;
@@ -714,7 +714,7 @@ static CmdId resolve_name(Parser *p, const char *name, Span tok)
         set_error(p, (size_t)tok.lo, (size_t)tok.hi,
                   "unknown command '%s' (try Tab)", name);
     }
-    return SAG_CMD_NONE;
+    return YEW_CMD_NONE;
 }
 
 static const char *command_label(const CmdDesc *desc)
@@ -726,30 +726,30 @@ static bool apply_policy(Parser *p, const CmdEntry *entry, CmdRange *range,
                          Span name_tok)
 {
     TextBuf *tb = active_text(p->ed);
-    u64 count = tb == NULL ? 1U : sag_textbuf_line_count(tb);
+    u64 count = tb == NULL ? 1U : yew_textbuf_line_count(tb);
     i64 current = 0;
     const char *name = command_label(&entry->cmd);
 
     if (range->given) {
-        if (entry->range_policy == SAG_RP_FORBID) {
+        if (entry->range_policy == YEW_RP_FORBID) {
             set_error(p, (size_t)range->tok.lo, (size_t)range->tok.hi,
                       ":%s takes no range", name);
             return false;
         }
         return true;
     }
-    if (entry->range_policy == SAG_RP_REQUIRED) {
+    if (entry->range_policy == YEW_RP_REQUIRED) {
         set_error(p, (size_t)name_tok.lo, (size_t)name_tok.hi,
                   ":%s requires a range", name);
         return false;
     }
-    if (entry->range_policy == SAG_RP_LINE) {
+    if (entry->range_policy == YEW_RP_LINE) {
         (void)cursor_line(p, &current);
-        range->kind = SAG_RANGE_LINES;
+        range->kind = YEW_RANGE_LINES;
         range->lo = LINENO((u64)current);
         range->hi = range->lo;
-    } else if (entry->range_policy == SAG_RP_BUFFER) {
-        range->kind = SAG_RANGE_BUFFER;
+    } else if (entry->range_policy == YEW_RP_BUFFER) {
+        range->kind = YEW_RANGE_BUFFER;
         range->lo = LINENO(0U);
         range->hi = LINENO(count == 0U ? 0U : count - 1U);
     }
@@ -771,12 +771,12 @@ static void argspec_bounds(const CmdEntry *entry, u32 *min, u32 *max)
         *max = repeat ? UINT32_MAX : (u32)n;
     } else {
         switch (entry->cmd.arity) {
-        case SAG_ARITY_NONE:
+        case YEW_ARITY_NONE:
             *min = 0U;
             *max = 0U;
             break;
-        case SAG_ARITY_OPT_INT:
-        case SAG_ARITY_OPT_STR:
+        case YEW_ARITY_OPT_INT:
+        case YEW_ARITY_OPT_STR:
             *min = 0U;
             *max = 1U;
             break;
@@ -822,7 +822,7 @@ static bool finish_bang(Parser *p, CmdParse *out, const char *cmdname)
     size_t rest = p->at + 1U;
     size_t n = p->len - rest;
 
-    out->command = sag_cmd_lookup(cmdname, (u32)strlen(cmdname));
+    out->command = yew_cmd_lookup(cmdname, (u32)strlen(cmdname));
     if (out->command.v == 0U) {
         set_error(p, p->at, p->at + 1U, "%s is not registered", cmdname);
         return false;
@@ -837,7 +837,7 @@ static bool finish_bang(Parser *p, CmdParse *out, const char *cmdname)
         return false;
     }
     /* argv[0] is the command NAME and arguments start at index 1 — that is
-     * the contract sag_ed_invoke_parsed reads.  Putting the shell command
+     * the contract yew_ed_invoke_parsed reads.  Putting the shell command
      * at index 0 makes an ARITY_STR command see no argument at all. */
     out->argv.v = arena_alloc(p->arena, 2U * sizeof(char *),
                               sizeof(char *));
@@ -863,7 +863,7 @@ static bool finish_body(Parser *p, CmdParse *out, const char *cmdname,
     size_t rest = p->at;
     size_t n = p->len - rest;
 
-    out->command = sag_cmd_lookup(cmdname, (u32)strlen(cmdname));
+    out->command = yew_cmd_lookup(cmdname, (u32)strlen(cmdname));
     if (out->command.v == 0U) {
         set_error(p, name_tok.lo, name_tok.hi, "%s is not registered",
                   cmdname);
@@ -910,7 +910,7 @@ static bool deferred_name(Parser *p, const char *name, Span tok)
     return true;
 }
 
-bool sag_cmd_parse(Ed *ed, const char *line, size_t len, Arena *a,
+bool yew_cmd_parse(Ed *ed, const char *line, size_t len, Arena *a,
                    CmdParse *out)
 {
     Parser p;
@@ -1022,7 +1022,7 @@ bool sag_cmd_parse(Ed *ed, const char *line, size_t len, Arena *a,
     if (id.v == 0U)
         return false;
     out->command = id;
-    entry = sag_cmd_entry(id);
+    entry = yew_cmd_entry(id);
     if (entry == NULL)
         return false;
     cap = len / 2U + 2U;
@@ -1084,14 +1084,14 @@ static bool loose_name(Parser *p, size_t cursor, char **name, Span *tok,
     return p->at > start;
 }
 
-bool sag_cmd_parse_point(Ed *ed, const char *line, size_t len,
+bool yew_cmd_parse_point(Ed *ed, const char *line, size_t len,
                          size_t cursor, Arena *a, CmdParsePoint *out)
 {
     Parser p;
     CmdErr ignored = {0};
     char *name = NULL;
     Span name_tok = {0U, 0U};
-    CmdId command = SAG_CMD_NONE;
+    CmdId command = YEW_CMD_NONE;
     u32 index = 0U;
 
     if (line == NULL || a == NULL || out == NULL)
@@ -1155,17 +1155,17 @@ bool sag_cmd_parse_point(Ed *ed, const char *line, size_t len,
     return true;
 }
 
-Span sag_range_span(const TextBuf *tb, const CmdRange *range)
+Span yew_range_span(const TextBuf *tb, const CmdRange *range)
 {
     Span last;
 
-    if (tb == NULL || range == NULL || range->kind == SAG_RANGE_NONE ||
-        sag_textbuf_len(tb) == 0U)
+    if (tb == NULL || range == NULL || range->kind == YEW_RANGE_NONE ||
+        yew_textbuf_len(tb) == 0U)
         return (Span){0U, 0U};
-    if (range->lo.v >= sag_textbuf_line_count(tb) ||
-        range->hi.v >= sag_textbuf_line_count(tb) ||
+    if (range->lo.v >= yew_textbuf_line_count(tb) ||
+        range->hi.v >= yew_textbuf_line_count(tb) ||
         range->lo.v > range->hi.v)
         return (Span){0U, 0U};
-    last = sag_textbuf_line_span(tb, range->hi);
-    return (Span){sag_textbuf_line_start(tb, range->lo).v, last.hi};
+    last = yew_textbuf_line_span(tb, range->hi);
+    return (Span){yew_textbuf_line_start(tb, range->lo).v, last.hi};
 }

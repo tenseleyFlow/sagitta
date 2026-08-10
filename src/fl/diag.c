@@ -22,15 +22,15 @@ u32 fl_diag_add_file(DiagCtx *dc, const char *path, const char *src,
     u32 id;
 
     if (dc == NULL || dc->arena == NULL)
-        SAG_BUG("fletch diag: no context arena");
+        YEW_BUG("fletch diag: no context arena");
     if (dc->nfiles == UINT32_MAX)
-        SAG_BUG("fletch diag: file id overflow");
+        YEW_BUG("fletch diag: file id overflow");
     if (dc->nfiles == dc->capfiles) {
         u32 want = dc->capfiles == 0U ? (u32)FL_DIAG_INITIAL_FILES :
                    dc->capfiles * 2U;
 
         if (want < dc->capfiles)
-            SAG_BUG("fletch diag: file table size overflow");
+            YEW_BUG("fletch diag: file table size overflow");
         grown = arena_alloc(dc->arena, (size_t)want * sizeof(*grown),
                             _Alignof(FlDiagFile));
         if (dc->nfiles != 0U)
@@ -177,12 +177,12 @@ void fl_diag_vemit(DiagCtx *dc, FlDiagLevel level, FlSpan sp,
         dc->sink(dc->sink_ctx, level, sp, msg, (const char *)rendered.data);
     } else {
         /*
-         * No sink: through sag_log, never straight to stderr.  The pty
+         * No sink: through yew_log, never straight to stderr.  The pty
          * goldens are byte-exact, and a compiler that wrote to fd 2
          * behind the harness's back would corrupt whichever screen
          * happened to be under it.
          */
-        sag_log(level == FL_DIAG_ERROR ? SAG_LOG_ERROR : SAG_LOG_WARN,
+        yew_log(level == FL_DIAG_ERROR ? YEW_LOG_ERROR : YEW_LOG_WARN,
                 "%s", (const char *)rendered.data);
     }
     bytebuf_free(&rendered);

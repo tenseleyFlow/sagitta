@@ -1,4 +1,4 @@
-# sagitta pty golden v1
+# yew pty golden v1
 size 80x24 alt=1 cursor=1,7 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=12
 --- text
@@ -25,7 +25,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=12
 
 
 
- L  sagitta/build/pty-s14-s38_macro_edit_flow.txt *          utf-8  lf  1:2  all
+ L  yew/build/pty-s14-s38_macro_edit_flow.txt *          utf-8  lf  1:2  all
 --- style
 AAAAAAAAAAAAAAAAAAAAAAAABBBBBBBBBBBBBBBBBBBBBBBB
 CCCCCCCCCCC

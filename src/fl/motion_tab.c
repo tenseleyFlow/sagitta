@@ -19,12 +19,12 @@ bool fl_motion_word_validate(const char *word, u32 len, Bytebuf *detail)
 
     if (word == NULL || len == 0U || detail == NULL)
         return false;
-    if (sag_cmd_by_word(word, len).v != 0U)
+    if (yew_cmd_by_word(word, len).v != 0U)
         return true;
     bytebuf_printf(detail, "no command has word '%.*s'", (int)len, word);
     fl_suggest_reset(&suggest);
-    for (i = 0U; i < sag_cmd_count(); i++) {
-        const CmdDesc *desc = sag_cmd_at(i);
+    for (i = 0U; i < yew_cmd_count(); i++) {
+        const CmdDesc *desc = yew_cmd_at(i);
 
         if (desc != NULL && desc->word != NULL)
             fl_suggest_add(&suggest, desc->word, (u32)strlen(desc->word),
@@ -45,19 +45,19 @@ static bool motion_fail_status(FlVm *vm, CmdStatus status,
     const char *kind;
 
     switch (status) {
-    case SAG_CMD_ERR_ARG:
+    case YEW_CMD_ERR_ARG:
         kind = "type";
         break;
-    case SAG_CMD_ERR_STATE:
+    case YEW_CMD_ERR_STATE:
         kind = "user";
         break;
-    case SAG_CMD_ERR_IO:
+    case YEW_CMD_ERR_IO:
         kind = "io";
         break;
-    case SAG_CMD_ERR_DEFERRED:
+    case YEW_CMD_ERR_DEFERRED:
         kind = "name";
         break;
-    case SAG_CMD_OK:
+    case YEW_CMD_OK:
         return true;
     default:
         kind = "user";
@@ -71,7 +71,7 @@ static bool invoke_word(FlVm *vm, Ed *ed, Win *win,
                         const char *word, u32 word_len, u32 count,
                         bool count_given, const char *sarg, u32 sarg_len)
 {
-    CmdId id = sag_cmd_by_word(word, word_len);
+    CmdId id = yew_cmd_by_word(word, word_len);
     const CmdDesc *desc;
     CmdCtx cx = {0};
     CmdStatus status;
@@ -81,9 +81,9 @@ static bool invoke_word(FlVm *vm, Ed *ed, Win *win,
     if (id.v == 0U)
         return fl_raise(vm, "name", "no command has word '%.*s'",
                         (int)word_len, word);
-    desc = sag_cmd_desc(id);
+    desc = yew_cmd_desc(id);
     changes = desc != NULL &&
-              (desc->flags & SAG_CMD_CHANGES_BUFFER) != 0U;
+              (desc->flags & YEW_CMD_CHANGES_BUFFER) != 0U;
     if (changes && ed->fl_model_teardown)
         return fl_raise(vm, "user",
                         "editor mutation during model teardown");
@@ -95,16 +95,16 @@ static bool invoke_word(FlVm *vm, Ed *ed, Win *win,
     cx.sarg_len = sarg_len;
     cx.source = fl_runtime_cmd_source(vm);
     if (changes) {
-        ec = sag_ed_edit_ctx_for(ed, win);
+        ec = yew_ed_edit_ctx_for(ed, win);
         if (ec.undo != NULL && ec.undo->depth == 0U && ec.cset != NULL &&
             ec.cset->curs.len > 1U)
             ec.cset = NULL;
         if (!fl_txn_enlist(vm, &ec))
             return false;
     }
-    status = sag_ed_dispatch_resolved(ed, id, &cx);
+    status = yew_ed_dispatch_resolved(ed, id, &cx);
     if (changes) {
-        ec = sag_ed_edit_ctx_for(ed, win);
+        ec = yew_ed_edit_ctx_for(ed, win);
         if (!fl_txn_enlist(vm, &ec))
             return false;
     }
@@ -192,8 +192,8 @@ static bool invoke_op(FlVm *vm, Ed *ed, Win *win,
     case FL_MOTION_ARROW:
         return invoke_arrow(vm, ed, win, op);
     case FL_MOTION_INSERT:
-        arg = sag_intern_str(vm->in, op->arg);
-        arg_len = sag_intern_len(vm->in, op->arg);
+        arg = yew_intern_str(vm->in, op->arg);
+        arg_len = yew_intern_len(vm->in, op->arg);
         if (arg == NULL)
             return fl_raise(vm, "motion", "invalid motion string");
         return invoke_word(vm, ed, win, "insert", 6U, op->count,
@@ -210,8 +210,8 @@ static bool invoke_op(FlVm *vm, Ed *ed, Win *win,
                            (op->flags & FL_MOTION_F_COUNT_GIVEN) != 0U,
                            NULL, 0U);
     case FL_MOTION_WORD:
-        arg = sag_intern_str(vm->in, op->arg);
-        arg_len = sag_intern_len(vm->in, op->arg);
+        arg = yew_intern_str(vm->in, op->arg);
+        arg_len = yew_intern_len(vm->in, op->arg);
         if (arg == NULL)
             return fl_raise(vm, "motion", "invalid command word");
         return invoke_word(vm, ed, win, arg, (u32)arg_len,
@@ -227,7 +227,7 @@ static bool invoke_op(FlVm *vm, Ed *ed, Win *win,
 static void close_highlights(FlVm *vm, Ed *ed, Win *win, u32 depth)
 {
     while (depth-- != 0U) {
-        CmdId id = sag_cmd_by_word("escape", 6U);
+        CmdId id = yew_cmd_by_word("escape", 6U);
         CmdCtx cx = {0};
 
         if (id.v == 0U)
@@ -236,7 +236,7 @@ static void close_highlights(FlVm *vm, Ed *ed, Win *win, u32 depth)
         cx.win = win;
         cx.count = 1U;
         cx.source = fl_runtime_cmd_source(vm);
-        (void)sag_ed_dispatch_resolved(ed, id, &cx);
+        (void)yew_ed_dispatch_resolved(ed, id, &cx);
     }
 }
 

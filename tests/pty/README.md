@@ -10,7 +10,7 @@ Run the suite through `make test-pty`. To deliberately refresh changed or
 missing goldens, run:
 
 ```sh
-SAG_PTY_UPDATE=1 make test-pty
+YEW_PTY_UPDATE=1 make test-pty
 ```
 
 Update mode prints `golden updated: <name>` for every rewritten file and exits
@@ -25,17 +25,17 @@ must fail with `unknown sequence: ESC [ 5 L`; removing the seed must restore a
 green run. Do not make the VT accept a new sequence unless the sprint adding
 that renderer sequence expands the pinned set in the same change.
 
-The timeout cleanup drill is `SAG_PTY_BUDGET_MS=1 make test-pty`. It must fail
+The timeout cleanup drill is `YEW_PTY_BUDGET_MS=1 make test-pty`. It must fail
 within the runner's bounded cleanup path, leave no `demo_paint` child alive,
 and preserve the failing case's state directory. A following ordinary
 `make test-pty` must be green. The focused `pty_timeout_reaps_child` unit also
 runs `/bin/sleep 300` under a 50 ms budget and asserts `SIGKILL`, bounded reap,
 an empty live-child list, and a closed master descriptor.
 
-`SAG_PTY_CASE_BUDGET_MS` overrides the default 5-second per-case deadline.
+`YEW_PTY_CASE_BUDGET_MS` overrides the default 5-second per-case deadline.
 The Valgrind lane uses 15 seconds per case and a 180-second global budget to
 account for instrumentation overhead; ordinary runs retain the strict defaults.
-`SAG_PTY_EXCLUDE` omits cases whose names contain its value. Valgrind excludes
+`YEW_PTY_EXCLUDE` omits cases whose names contain its value. Valgrind excludes
 only `notepad_restore_segv`: compiler and sanitizer PTY lanes cover that
 deliberate fatal-signal contract because Valgrind owns the fatal signal and can
 hold the independently repeated child indefinitely.

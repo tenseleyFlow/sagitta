@@ -1,4 +1,4 @@
-# Sagitta Sprint 15 scroll + full redraw/diff/flip hard gates (frames/second)
+# yew Sprint 15 scroll + full redraw/diff/flip hard gates (frames/second)
 scroll_nowrap_80x24 120
 scroll_wrap_80x24 120
 scroll_nowrap_200x60 120

@@ -19,7 +19,7 @@
  * program.  So a scan pins the cache, and while pinned the arena is
  * never reset -- an evicted entry loses its table slot and keeps its
  * memory until the next unpinned reset.  Bounded, because the pin depth
- * is the call depth and a pattern is capped at SAG_RE_MAX_PATTERN.
+ * is the call depth and a pattern is capped at YEW_RE_MAX_PATTERN.
  *
  * BYTE OFFSETS, EVERYWHERE.  A match map's lo/hi are byte offsets into
  * the subject, because that is what the engine reports and converting to
@@ -53,7 +53,7 @@ typedef struct ReEntry {
     u32 patlen;
     u32 flags;
     u64 used;         /* LRU tick                                       */
-    SagRe *re;
+    YewRe *re;
 } ReEntry;
 
 typedef struct ReCache {
@@ -79,7 +79,7 @@ void fl_re_cache_clear(void)
     (void)memset(&g_cache, 0, sizeof(g_cache));
 }
 
-static SagRe *cache_get(const char *pat, u32 patlen, u32 flags)
+static YewRe *cache_get(const char *pat, u32 patlen, u32 flags)
 {
     u32 i;
 
@@ -95,7 +95,7 @@ static SagRe *cache_get(const char *pat, u32 patlen, u32 flags)
     return NULL;
 }
 
-static void cache_put(char *pat, u32 patlen, u32 flags, SagRe *re)
+static void cache_put(char *pat, u32 patlen, u32 flags, YewRe *re)
 {
     ReEntry *slot;
 
@@ -127,17 +127,17 @@ static void cache_put(char *pat, u32 patlen, u32 flags, SagRe *re)
  * surviving entry is dropped with it, which costs at most 64 recompiles
  * and is why the reset is not attempted mid-scan.
  */
-static SagRe *compile_cached(FlVm *vm, const FlStr *pat, u32 flags)
+static YewRe *compile_cached(FlVm *vm, const FlStr *pat, u32 flags)
 {
-    SagRe *re = cache_get(pat->b, pat->len, flags);
-    SagReErr err = {0U, NULL};
+    YewRe *re = cache_get(pat->b, pat->len, flags);
+    YewReErr err = {0U, NULL};
     char *copy;
 
     if (re != NULL)
         return re;
-    if (pat->len > (u32)SAG_RE_MAX_PATTERN) {
+    if (pat->len > (u32)YEW_RE_MAX_PATTERN) {
         (void)fl_raise(vm, "limit", "regex: the pattern exceeds %d bytes",
-                       SAG_RE_MAX_PATTERN);
+                       YEW_RE_MAX_PATTERN);
         return NULL;
     }
     if (!g_cache.live) {
@@ -148,7 +148,7 @@ static SagRe *compile_cached(FlVm *vm, const FlStr *pat, u32 flags)
         arena_init(&g_cache.arena);
         g_cache.n = 0U;
     }
-    re = sag_re_compile(&g_cache.arena, pat->b, (size_t)pat->len, flags,
+    re = yew_re_compile(&g_cache.arena, pat->b, (size_t)pat->len, flags,
                         &err);
     if (re == NULL) {
         /*
@@ -186,9 +186,9 @@ static bool read_flags(FlVm *vm, FlValue *a, u32 i, u32 argc, u32 *out)
         return false;
     for (k = 0U; k < f->len; k++) {
         switch (f->b[k]) {
-        case 'i': *out |= (u32)SAG_RE_ICASE; break;
-        case 's': *out |= (u32)SAG_RE_DOTALL; break;
-        case 'l': *out |= (u32)SAG_RE_LITERAL; break;
+        case 'i': *out |= (u32)YEW_RE_ICASE; break;
+        case 's': *out |= (u32)YEW_RE_DOTALL; break;
+        case 'l': *out |= (u32)YEW_RE_LITERAL; break;
         default:
             /* Named, not ignored: a typo'd flag that silently did
              * nothing would make a case-insensitive search quietly
@@ -251,7 +251,7 @@ static FlValue slice(FlVm *vm, const FlStr *s, u64 lo, u64 hi)
  * fixing that needs a real sentinel out of s20 and is not this
  * sprint's to change.
  */
-static FlValue match_map(FlVm *vm, const FlStr *s, const SagReMatch *m,
+static FlValue match_map(FlVm *vm, const FlStr *s, const YewReMatch *m,
                          bool with_groups)
 {
     FlMap *r = fl_map_new(vm);
@@ -271,7 +271,7 @@ static FlValue match_map(FlVm *vm, const FlStr *s, const SagReMatch *m,
             if (absent) {
                 (void)fl_list_push(vm, gs, FL_NIL_V);
             } else {
-                SagReMatch one;
+                YewReMatch one;
 
                 (void)memset(&one, 0, sizeof(one));
                 one.g[0] = m->g[g];
@@ -311,15 +311,15 @@ static u64 advance(const FlStr *s, u64 lo, u64 hi, bool *done)
         *done = true;
         return hi;
     }
-    k = sag_utf8_decode((const u8 *)s->b + hi, (size_t)s->len - hi, &cp);
+    k = yew_utf8_decode((const u8 *)s->b + hi, (size_t)s->len - hi, &cp);
     return hi + (u64)(k == 0U ? 1U : k);
 }
 
 typedef struct Scan {
     FlVm *vm;
     const FlStr *s;
-    const SagRe *re;
-    SagReInput in;
+    const YewRe *re;
+    YewReInput in;
     u64 at;
     u64 count;
     u64 limit;
@@ -345,7 +345,7 @@ static bool scan_open(FlVm *vm, FlValue *a, u32 argc, u32 flagi, u32 limiti,
         return false;
     sc->vm = vm;
     sc->s = s;
-    sc->in = sag_re_input_bytes((const u8 *)s->b, (u64)s->len);
+    sc->in = yew_re_input_bytes((const u8 *)s->b, (u64)s->len);
     sc->at = 0U;
     sc->count = 0U;
     /* Pinned for the whole scan: `sc->re` must stay valid even if a
@@ -373,7 +373,7 @@ static void scan_close(void)
  * and the text is wrong.
  */
 static bool expand(FlVm *vm, Bytebuf *out, const FlStr *tpl, const FlStr *s,
-                   const SagReMatch *m, u32 ngroups)
+                   const YewReMatch *m, u32 ngroups)
 {
     size_t i = 0U;
 
@@ -405,7 +405,7 @@ static bool expand(FlVm *vm, Bytebuf *out, const FlStr *tpl, const FlStr *s,
             g = 0U;
             i++;
             while (i < (size_t)tpl->len && tpl->b[i] >= '0' &&
-                   tpl->b[i] <= '9' && g < (u32)SAG_RE_MAX_GROUPS) {
+                   tpl->b[i] <= '9' && g < (u32)YEW_RE_MAX_GROUPS) {
                 g = g * 10U + (u32)(tpl->b[i] - '0');
                 any = true;
                 i++;
@@ -442,8 +442,8 @@ static bool re_test(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     const FlStr *s;
     const FlStr *pat;
-    const SagRe *re;
-    SagReInput in;
+    const YewRe *re;
+    YewReInput in;
     u32 flags;
 
     if (!fl_arg_str(vm, a, 0U, &s) || !fl_arg_str(vm, a, 1U, &pat))
@@ -452,18 +452,18 @@ static bool re_test(FlVm *vm, FlValue *a, u32 n, FlValue *out)
         return false;
     /* NOCAPTURE: the caller asked a yes/no question, and promising not
      * to read groups lets the engine skip the slot bookkeeping. */
-    re = compile_cached(vm, pat, flags | (u32)SAG_RE_NOCAPTURE);
+    re = compile_cached(vm, pat, flags | (u32)YEW_RE_NOCAPTURE);
     if (re == NULL)
         return false;
-    in = sag_re_input_bytes((const u8 *)s->b, (u64)s->len);
-    *out = FL_BOOL_V(sag_re_test(re, &in, BYTEOFF(0)));
+    in = yew_re_input_bytes((const u8 *)s->b, (u64)s->len);
+    *out = FL_BOOL_V(yew_re_test(re, &in, BYTEOFF(0)));
     return true;
 }
 
 static bool re_find(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     Scan sc;
-    SagReMatch m;
+    YewReMatch m;
     i64 from = 0;
 
     if (n >= 4U && a[3].t != (u8)FL_NIL && !fl_arg_int(vm, a, 3U, &from))
@@ -476,7 +476,7 @@ static bool re_find(FlVm *vm, FlValue *a, u32 n, FlValue *out)
                         "re.find: byte %lld is outside a subject of %u bytes",
                         (long long)from, (unsigned)sc.s->len);
     }
-    if (sag_re_search(sc.re, &sc.in, BYTEOFF((u64)from), &m))
+    if (yew_re_search(sc.re, &sc.in, BYTEOFF((u64)from), &m))
         *out = match_map(vm, sc.s, &m, true);
     else
         *out = FL_NIL_V;
@@ -488,7 +488,7 @@ static bool re_find_all(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     Scan sc;
     FlList *r;
-    SagReMatch m;
+    YewReMatch m;
     bool done = false;
 
     if (!scan_open(vm, a, n, 2U, 3U, &sc))
@@ -496,7 +496,7 @@ static bool re_find_all(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     r = fl_list_new(vm);
     fl_gc_protect(vm, FL_OBJ_V(FL_LIST, r));
     while (!done && sc.count < sc.limit &&
-           sag_re_search(sc.re, &sc.in, BYTEOFF(sc.at), &m)) {
+           yew_re_search(sc.re, &sc.in, BYTEOFF(sc.at), &m)) {
         if (r->n >= (u32)RE_MAX_RESULTS) {
             fl_gc_release(vm, 1U);
             scan_close();
@@ -517,7 +517,7 @@ static bool re_replace(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     Scan sc;
     const FlStr *tpl;
-    SagReMatch m;
+    YewReMatch m;
     Bytebuf o;
     bool done = false;
     u32 ngroups;
@@ -526,10 +526,10 @@ static bool re_replace(FlVm *vm, FlValue *a, u32 n, FlValue *out)
         return false;
     if (!scan_open(vm, a, n, 3U, 4U, &sc))
         return false;
-    ngroups = sag_re_group_count(sc.re);
+    ngroups = yew_re_group_count(sc.re);
     bytebuf_init(&o);
     while (!done && sc.count < sc.limit &&
-           sag_re_search(sc.re, &sc.in, BYTEOFF(sc.at), &m)) {
+           yew_re_search(sc.re, &sc.in, BYTEOFF(sc.at), &m)) {
         bytebuf_append(&o, sc.s->b + sc.at, (size_t)(m.g[0].lo - sc.at));
         if (!expand(vm, &o, tpl, sc.s, &m, ngroups)) {
             bytebuf_free(&o);
@@ -558,7 +558,7 @@ static bool re_replace_fn(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     Scan sc;
     FlValue f;
-    SagReMatch m;
+    YewReMatch m;
     Bytebuf o;
     bool done = false;
 
@@ -568,7 +568,7 @@ static bool re_replace_fn(FlVm *vm, FlValue *a, u32 n, FlValue *out)
         return false;
     bytebuf_init(&o);
     while (!done && sc.count < sc.limit &&
-           sag_re_search(sc.re, &sc.in, BYTEOFF(sc.at), &m)) {
+           yew_re_search(sc.re, &sc.in, BYTEOFF(sc.at), &m)) {
         FlValue arg = match_map(vm, sc.s, &m, true);
         FlValue got = FL_NIL_V;
 
@@ -610,7 +610,7 @@ static bool re_split(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     Scan sc;
     FlList *r;
-    SagReMatch m;
+    YewReMatch m;
     bool done = false;
 
     if (!scan_open(vm, a, n, 2U, 3U, &sc))
@@ -618,7 +618,7 @@ static bool re_split(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     r = fl_list_new(vm);
     fl_gc_protect(vm, FL_OBJ_V(FL_LIST, r));
     while (!done && sc.count < sc.limit &&
-           sag_re_search(sc.re, &sc.in, BYTEOFF(sc.at), &m)) {
+           yew_re_search(sc.re, &sc.in, BYTEOFF(sc.at), &m)) {
         u64 next = advance(sc.s, m.g[0].lo, m.g[0].hi, &done);
 
         /* A zero-width match at the very end adds nothing: the tail
@@ -659,7 +659,7 @@ static bool re_escape(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     bytebuf_init(&o);
     /* s21's own escaper, not a second one: `*`, `#`, `:s//` and this
      * all have to agree about what a metacharacter is. */
-    sag_re_quote(&o, (const u8 *)s->b, (size_t)s->len);
+    yew_re_quote(&o, (const u8 *)s->b, (size_t)s->len);
     *out = FL_OBJ_V(FL_STR, fl_str_take(vm, &o));
     bytebuf_free(&o);
     return true;
@@ -683,5 +683,5 @@ static const FlNativeDef RE_DEFS[] = {
 };
 
 const FlModuleDef fl_mod_re = {
-    "re", RE_DEFS, (u32)SAG_ARRAY_LEN(RE_DEFS), NULL, 0U
+    "re", RE_DEFS, (u32)YEW_ARRAY_LEN(RE_DEFS), NULL, 0U
 };

@@ -38,7 +38,7 @@ enum {
 
 static const u8 paste_end[] = "\x1b[201~";
 /*
- * Sprint 27 §8: the mouse sequences are SEPARATE, so SAG_MOUSE=0 can
+ * Sprint 27 §8: the mouse sequences are SEPARATE, so YEW_MOUSE=0 can
  * leave them unsent.  Not merely dropping the events on our side: a
  * terminal that is never asked to report does not steal the user's own
  * selection and copy gestures, which is the whole reason somebody turns
@@ -58,14 +58,14 @@ static const char input_disable[] =
 static const char kitty_enable[] = "\x1b[>21u";
 
 /* Leave a little capacity headroom for the six-byte paste sentinel. */
-#define SAG_PASTE_EMIT 4080U
+#define YEW_PASTE_EMIT 4080U
 
 static void input_append(Bytebuf *buf, const u8 *data, size_t len)
 {
     size_t need = buf->len + len;
 
     if (need > buf->cap) {
-        buf->data = sag_xrealloc(buf->data, need);
+        buf->data = yew_xrealloc(buf->data, need);
         buf->cap = need;
     }
     (void)memcpy(buf->data + buf->len, data, len);
@@ -95,7 +95,7 @@ static void note_drop(In *in, u8 shape, const char *message)
     in->dropped++;
     if ((in->log_mask & shape) == 0U) {
         in->log_mask = (u8)(in->log_mask | shape);
-        sag_log(SAG_LOG_DEBUG, "input: %s (further instances suppressed)",
+        yew_log(YEW_LOG_DEBUG, "input: %s (further instances suppressed)",
                 message);
     }
 }
@@ -119,7 +119,7 @@ static void note_string_drop(In *in, u8 shape, const char *message)
     in->dropped++;
     if ((in->log_mask & LOG_OSC52) == 0U) {
         in->log_mask = (u8)(in->log_mask | LOG_OSC52);
-        sag_log(SAG_LOG_WARN,
+        yew_log(YEW_LOG_WARN,
                 "input: unsolicited OSC 52 reply discarded "
                 "(further instances suppressed)");
     }
@@ -132,10 +132,10 @@ static void clear_key(Key *out)
 
 static void emit_named(Key *out, u32 code, u16 mods)
 {
-    out->kind = SAG_EV_KEY;
+    out->kind = YEW_EV_KEY;
     out->code = code;
     out->mods = mods;
-    out->ev = SAG_KEY_PRESS;
+    out->ev = YEW_KEY_PRESS;
 }
 
 static void emit_scalar(Key *out, u32 cp, u16 mods, const u8 *text,
@@ -156,8 +156,8 @@ static void compact(In *in)
 
     if (in->state != IN_GROUND && in->state != IN_PASTE)
         return;
-    if ((in->state == IN_GROUND && in->rd <= SAG_IN_PASTE_CHUNK) ||
-        (in->state == IN_PASTE && in->rd < SAG_PASTE_EMIT))
+    if ((in->state == IN_GROUND && in->rd <= YEW_IN_PASTE_CHUNK) ||
+        (in->state == IN_PASTE && in->rd < YEW_PASTE_EMIT))
         return;
     consumed = in->rd;
     left = in->buf.len - consumed;
@@ -218,21 +218,21 @@ static bool modifier(const In *in, size_t index, u16 *mods)
 static u32 tilde_code(u32 n)
 {
     switch (n) {
-    case 1: case 7: return SAG_KEY_HOME;
-    case 2: return SAG_KEY_INSERT;
-    case 3: return SAG_KEY_DELETE;
-    case 4: case 8: return SAG_KEY_END;
-    case 5: return SAG_KEY_PAGE_UP;
-    case 6: return SAG_KEY_PAGE_DOWN;
+    case 1: case 7: return YEW_KEY_HOME;
+    case 2: return YEW_KEY_INSERT;
+    case 3: return YEW_KEY_DELETE;
+    case 4: case 8: return YEW_KEY_END;
+    case 5: return YEW_KEY_PAGE_UP;
+    case 6: return YEW_KEY_PAGE_DOWN;
     case 11: case 12: case 13: case 14: case 15:
-        return SAG_KEY_F1 + n - 11U;
+        return YEW_KEY_F1 + n - 11U;
     case 17: case 18: case 19: case 20: case 21:
-        return SAG_KEY_F6 + n - 17U;
-    case 23: case 24: return SAG_KEY_F11 + n - 23U;
-    case 25: case 26: return SAG_KEY_F13 + n - 25U;
-    case 28: case 29: return SAG_KEY_F15 + n - 28U;
+        return YEW_KEY_F6 + n - 17U;
+    case 23: case 24: return YEW_KEY_F11 + n - 23U;
+    case 25: case 26: return YEW_KEY_F13 + n - 25U;
+    case 28: case 29: return YEW_KEY_F15 + n - 28U;
     case 31: case 32: case 33: case 34:
-        return SAG_KEY_F17 + n - 31U;
+        return YEW_KEY_F17 + n - 31U;
     default: return 0U;
     }
 }
@@ -240,30 +240,30 @@ static u32 tilde_code(u32 n)
 static u32 kitty_code(u32 cp)
 {
     if (cp == 27U)
-        return SAG_KEY_ESCAPE;
+        return YEW_KEY_ESCAPE;
     if (cp == 13U)
-        return SAG_KEY_ENTER;
+        return YEW_KEY_ENTER;
     if (cp == 9U)
-        return SAG_KEY_TAB;
+        return YEW_KEY_TAB;
     if (cp == 127U)
-        return SAG_KEY_BACKSPACE;
+        return YEW_KEY_BACKSPACE;
     if (cp >= 57376U && cp <= 57398U)
-        return SAG_KEY_F13 + cp - 57376U;
+        return YEW_KEY_F13 + cp - 57376U;
     if (cp >= 57399U && cp <= 57408U)
-        return SAG_KEY_KP_0 + cp - 57399U;
+        return YEW_KEY_KP_0 + cp - 57399U;
     if (cp >= 57409U && cp <= 57416U)
-        return SAG_KEY_KP_DECIMAL + cp - 57409U;
+        return YEW_KEY_KP_DECIMAL + cp - 57409U;
     if (cp >= 57417U && cp <= 57427U)
-        return SAG_KEY_KP_LEFT + cp - 57417U;
+        return YEW_KEY_KP_LEFT + cp - 57417U;
     if (cp >= 57441U && cp <= 57452U)
-        return SAG_KEY_LEFT_SHIFT + cp - 57441U;
+        return YEW_KEY_LEFT_SHIFT + cp - 57441U;
     switch (cp) {
-    case 57358: return SAG_KEY_CAPS_LOCK;
-    case 57359: return SAG_KEY_SCROLL_LOCK;
-    case 57360: return SAG_KEY_NUM_LOCK;
-    case 57361: return SAG_KEY_PRINT_SCREEN;
-    case 57362: return SAG_KEY_PAUSE;
-    case 57363: return SAG_KEY_MENU;
+    case 57358: return YEW_KEY_CAPS_LOCK;
+    case 57359: return YEW_KEY_SCROLL_LOCK;
+    case 57360: return YEW_KEY_NUM_LOCK;
+    case 57361: return YEW_KEY_PRINT_SCREEN;
+    case 57362: return YEW_KEY_PAUSE;
+    case 57363: return YEW_KEY_MENU;
     default: break;
     }
     if (cp >= 57344U && cp <= 63743U)
@@ -275,8 +275,8 @@ static u32 kitty_code(u32 cp)
 
 static bool append_text_cp(Key *out, u32 cp)
 {
-    u8 encoded[SAG_UTF8_MAX];
-    size_t n = sag_utf8_encode(cp, encoded);
+    u8 encoded[YEW_UTF8_MAX];
+    size_t n = yew_utf8_encode(cp, encoded);
 
     if (n == 0U || out->ntext >= 15U || n > 15U - out->ntext)
         return false;
@@ -290,7 +290,7 @@ static bool dispatch_kitty(In *in, Key *out)
     u32 primary;
     u32 code;
     u16 mods;
-    u32 event = SAG_KEY_PRESS;
+    u32 event = YEW_KEY_PRESS;
     size_t i;
 
     if (in->priv != 0U || in->inter != 0U || in->npar > 3U ||
@@ -305,7 +305,7 @@ static bool dispatch_kitty(In *in, Key *out)
         return false;
     if (in->npar >= 2U && in->xnsub[1] >= 2U && in->xpresent[1][1])
         event = in->xpar[1][1];
-    if (event < SAG_KEY_PRESS || event > SAG_KEY_RELEASE)
+    if (event < YEW_KEY_PRESS || event > YEW_KEY_RELEASE)
         return false;
     for (i = 0U; i < in->xnsub[0]; i++) {
         if (in->xpresent[0][i] && kitty_code(in->xpar[0][i]) == 0U)
@@ -329,9 +329,9 @@ static bool dispatch_kitty(In *in, Key *out)
             if (!append_text_cp(out, in->xpar[2][i]))
                 break;
         }
-    } else if ((mods & (SAG_MOD_CTRL | SAG_MOD_ALT | SAG_MOD_SUPER |
-                        SAG_MOD_HYPER | SAG_MOD_META)) == 0U &&
-               code < SAG_KEY_BASE) {
+    } else if ((mods & (YEW_MOD_CTRL | YEW_MOD_ALT | YEW_MOD_SUPER |
+                        YEW_MOD_HYPER | YEW_MOD_META)) == 0U &&
+               code < YEW_KEY_BASE) {
         u32 produced = in->xnsub[0] >= 2U && in->xpresent[0][1]
                            ? in->xpar[0][1] : in->xpar[0][0];
         (void)append_text_cp(out, produced);
@@ -345,28 +345,28 @@ static bool decode_mouse(Key *out, u32 cb, u32 cx, u32 cy, u8 final)
 
     if (cx == 0U || cy == 0U || cx > 65536U || cy > 65536U)
         return false;
-    out->mods = (u16)(((cb & 4U) ? SAG_MOD_SHIFT : 0U) |
-                      ((cb & 8U) ? SAG_MOD_ALT : 0U) |
-                      ((cb & 16U) ? SAG_MOD_CTRL : 0U));
+    out->mods = (u16)(((cb & 4U) ? YEW_MOD_SHIFT : 0U) |
+                      ((cb & 8U) ? YEW_MOD_ALT : 0U) |
+                      ((cb & 16U) ? YEW_MOD_CTRL : 0U));
     base = cb & ~(4U | 8U | 16U);
-    out->kind = SAG_EV_MOUSE;
+    out->kind = YEW_EV_MOUSE;
     out->code = 0U;
     out->col = (u16)(cx - 1U);
     out->row = (u16)(cy - 1U);
-    out->ev = SAG_KEY_PRESS;
+    out->ev = YEW_KEY_PRESS;
 
     if (final == (u8)'m' && base <= 2U) {
-        out->button = (u8)(SAG_MB_LEFT + base);
-        out->ev = SAG_KEY_RELEASE;
+        out->button = (u8)(YEW_MB_LEFT + base);
+        out->ev = YEW_KEY_RELEASE;
     } else if (final == (u8)'M' && base <= 2U) {
-        out->button = (u8)(SAG_MB_LEFT + base);
+        out->button = (u8)(YEW_MB_LEFT + base);
     } else if (final == (u8)'M' && base >= 32U && base <= 34U) {
-        out->button = (u8)(SAG_MB_LEFT + base - 32U);
-        out->ev = SAG_KEY_REPEAT;
+        out->button = (u8)(YEW_MB_LEFT + base - 32U);
+        out->ev = YEW_KEY_REPEAT;
     } else if (final == (u8)'M' && base >= 64U && base <= 67U) {
-        out->button = (u8)(SAG_MB_WHEEL_UP + base - 64U);
+        out->button = (u8)(YEW_MB_WHEEL_UP + base - 64U);
     } else if (final == (u8)'M' && base >= 128U && base <= 129U) {
-        out->button = (u8)(SAG_MB_BACK + base - 128U);
+        out->button = (u8)(YEW_MB_BACK + base - 128U);
     } else {
         clear_key(out);
         return false;
@@ -385,17 +385,17 @@ static bool simple_csi(In *in, u8 final, Key *out)
         !modifier(in, 1U, &mods))
         return false;
     switch (final) {
-    case 'A': code = SAG_KEY_UP; break;
-    case 'B': code = SAG_KEY_DOWN; break;
-    case 'C': code = SAG_KEY_RIGHT; break;
-    case 'D': code = SAG_KEY_LEFT; break;
-    case 'E': code = SAG_KEY_BEGIN; break;
-    case 'F': code = SAG_KEY_END; break;
-    case 'H': code = SAG_KEY_HOME; break;
-    case 'P': code = SAG_KEY_F1; break;
-    case 'Q': code = SAG_KEY_F2; break;
-    case 'R': code = SAG_KEY_F3; break;
-    case 'S': code = SAG_KEY_F4; break;
+    case 'A': code = YEW_KEY_UP; break;
+    case 'B': code = YEW_KEY_DOWN; break;
+    case 'C': code = YEW_KEY_RIGHT; break;
+    case 'D': code = YEW_KEY_LEFT; break;
+    case 'E': code = YEW_KEY_BEGIN; break;
+    case 'F': code = YEW_KEY_END; break;
+    case 'H': code = YEW_KEY_HOME; break;
+    case 'P': code = YEW_KEY_F1; break;
+    case 'Q': code = YEW_KEY_F2; break;
+    case 'R': code = YEW_KEY_F3; break;
+    case 'S': code = YEW_KEY_F4; break;
     default: return false;
     }
     emit_named(out, code, mods);
@@ -417,14 +417,14 @@ static bool dispatch_csi(In *in, u8 final, Key *out)
         return true;
     if (final == (u8)'Z' && in->priv == 0U && in->inter == 0U &&
         params_empty(in)) {
-        emit_named(out, SAG_KEY_TAB, SAG_MOD_SHIFT);
+        emit_named(out, YEW_KEY_TAB, YEW_MOD_SHIFT);
         return true;
     }
     if ((final == (u8)'I' || final == (u8)'O') && in->priv == 0U &&
         in->inter == 0U && params_empty(in)) {
-        out->kind = SAG_EV_FOCUS;
-        out->code = final == (u8)'I' ? SAG_KEY_FOCUS_IN : SAG_KEY_FOCUS_OUT;
-        out->ev = SAG_KEY_PRESS;
+        out->kind = YEW_EV_FOCUS;
+        out->code = final == (u8)'I' ? YEW_KEY_FOCUS_IN : YEW_KEY_FOCUS_OUT;
+        out->ev = YEW_KEY_PRESS;
         return true;
     }
     if (final == (u8)'~' && in->priv == 0U && in->inter == 0U &&
@@ -434,7 +434,7 @@ static bool dispatch_csi(In *in, u8 final, Key *out)
             in->state = IN_PASTE;
             in->in_paste = true;
             in->rd = in->scan - 1U;
-            out->kind = SAG_EV_PASTE_BEGIN;
+            out->kind = YEW_EV_PASTE_BEGIN;
             return true;
         }
         if (in->xpresent[0][0] && in->xpar[0][0] == 201U &&
@@ -461,28 +461,28 @@ static bool dispatch_ss3(u8 final, Key *out)
     u32 code;
 
     switch (final) {
-    case 'A': code = SAG_KEY_UP; break;
-    case 'B': code = SAG_KEY_DOWN; break;
-    case 'C': code = SAG_KEY_RIGHT; break;
-    case 'D': code = SAG_KEY_LEFT; break;
-    case 'E': code = SAG_KEY_BEGIN; break;
-    case 'F': code = SAG_KEY_END; break;
-    case 'H': code = SAG_KEY_HOME; break;
-    case 'P': code = SAG_KEY_F1; break;
-    case 'Q': code = SAG_KEY_F2; break;
-    case 'R': code = SAG_KEY_F3; break;
-    case 'S': code = SAG_KEY_F4; break;
-    case 'M': code = SAG_KEY_KP_ENTER; break;
-    case 'X': code = SAG_KEY_KP_EQUAL; break;
-    case 'j': code = SAG_KEY_KP_MULTIPLY; break;
-    case 'k': code = SAG_KEY_KP_ADD; break;
-    case 'l': code = SAG_KEY_KP_SEPARATOR; break;
-    case 'm': code = SAG_KEY_KP_SUBTRACT; break;
-    case 'n': code = SAG_KEY_KP_DECIMAL; break;
-    case 'o': code = SAG_KEY_KP_DIVIDE; break;
+    case 'A': code = YEW_KEY_UP; break;
+    case 'B': code = YEW_KEY_DOWN; break;
+    case 'C': code = YEW_KEY_RIGHT; break;
+    case 'D': code = YEW_KEY_LEFT; break;
+    case 'E': code = YEW_KEY_BEGIN; break;
+    case 'F': code = YEW_KEY_END; break;
+    case 'H': code = YEW_KEY_HOME; break;
+    case 'P': code = YEW_KEY_F1; break;
+    case 'Q': code = YEW_KEY_F2; break;
+    case 'R': code = YEW_KEY_F3; break;
+    case 'S': code = YEW_KEY_F4; break;
+    case 'M': code = YEW_KEY_KP_ENTER; break;
+    case 'X': code = YEW_KEY_KP_EQUAL; break;
+    case 'j': code = YEW_KEY_KP_MULTIPLY; break;
+    case 'k': code = YEW_KEY_KP_ADD; break;
+    case 'l': code = YEW_KEY_KP_SEPARATOR; break;
+    case 'm': code = YEW_KEY_KP_SUBTRACT; break;
+    case 'n': code = YEW_KEY_KP_DECIMAL; break;
+    case 'o': code = YEW_KEY_KP_DIVIDE; break;
     case 'p': case 'q': case 'r': case 's': case 't':
     case 'u': case 'v': case 'w': case 'x': case 'y':
-        code = SAG_KEY_KP_0 + final - (u8)'p';
+        code = YEW_KEY_KP_0 + final - (u8)'p';
         break;
     default: return false;
     }
@@ -493,8 +493,8 @@ static bool dispatch_ss3(u8 final, Key *out)
 static void arm_deadline(In *in, i64 now_ms)
 {
     if (!in->caps.kitty_kbd && in->deadline == 0)
-        in->deadline = now_ms > INT64_MAX - SAG_ESC_TIMEOUT_MS
-                           ? INT64_MAX : now_ms + SAG_ESC_TIMEOUT_MS;
+        in->deadline = now_ms > INT64_MAX - YEW_ESC_TIMEOUT_MS
+                           ? INT64_MAX : now_ms + YEW_ESC_TIMEOUT_MS;
 }
 
 static bool deadline_expired(const In *in, i64 now_ms)
@@ -513,7 +513,7 @@ static bool expire_escape(In *in, Key *out)
     in->state = IN_GROUND;
     in->deadline = 0;
     in->pending_mods = 0U;
-    emit_named(out, SAG_KEY_ESCAPE, 0U);
+    emit_named(out, YEW_KEY_ESCAPE, 0U);
     return true;
 }
 
@@ -547,12 +547,12 @@ static bool parse_ground(In *in, Key *out)
             in->utf8_cp = 0U;
             return false;
         }
-        used = sag_utf8_decode(in->buf.data + in->rd, have, &cp);
+        used = yew_utf8_decode(in->buf.data + in->rd, have, &cp);
         in->rd += used;
         in->utf8_state = 0U;
         in->utf8_cp = cp;
         in->pending_mods = 0U;
-        if (sag_utf8_is_escape(cp)) {
+        if (yew_utf8_is_escape(cp)) {
             note_drop(in, LOG_UTF8, "invalid UTF-8 byte");
             return true;
         }
@@ -563,26 +563,26 @@ static bool parse_ground(In *in, Key *out)
     in->rd++;
     in->pending_mods = 0U;
     if (b == 0U) {
-        emit_named(out, (u32)' ', (u16)(mods | SAG_MOD_CTRL));
+        emit_named(out, (u32)' ', (u16)(mods | YEW_MOD_CTRL));
     } else if (b >= 1U && b <= 7U) {
-        emit_named(out, (u32)('a' + b - 1U), (u16)(mods | SAG_MOD_CTRL));
+        emit_named(out, (u32)('a' + b - 1U), (u16)(mods | YEW_MOD_CTRL));
     } else if (b == 8U) {
-        emit_named(out, SAG_KEY_BACKSPACE, (u16)(mods | SAG_MOD_CTRL));
+        emit_named(out, YEW_KEY_BACKSPACE, (u16)(mods | YEW_MOD_CTRL));
     } else if (b == 9U) {
-        emit_named(out, SAG_KEY_TAB, mods);
+        emit_named(out, YEW_KEY_TAB, mods);
     } else if (b == 10U) {
-        emit_named(out, (u32)'j', (u16)(mods | SAG_MOD_CTRL));
+        emit_named(out, (u32)'j', (u16)(mods | YEW_MOD_CTRL));
     } else if (b >= 11U && b <= 12U) {
-        emit_named(out, (u32)('a' + b - 1U), (u16)(mods | SAG_MOD_CTRL));
+        emit_named(out, (u32)('a' + b - 1U), (u16)(mods | YEW_MOD_CTRL));
     } else if (b == 13U) {
-        emit_named(out, SAG_KEY_ENTER, mods);
+        emit_named(out, YEW_KEY_ENTER, mods);
     } else if (b >= 14U && b <= 26U) {
-        emit_named(out, (u32)('a' + b - 1U), (u16)(mods | SAG_MOD_CTRL));
+        emit_named(out, (u32)('a' + b - 1U), (u16)(mods | YEW_MOD_CTRL));
     } else if (b >= 28U && b <= 31U) {
         emit_named(out, (u32)('\\' + b - 28U),
-                   (u16)(mods | SAG_MOD_CTRL));
+                   (u16)(mods | YEW_MOD_CTRL));
     } else if (b == 127U) {
-        emit_named(out, SAG_KEY_BACKSPACE, mods);
+        emit_named(out, YEW_KEY_BACKSPACE, mods);
     } else {
         emit_scalar(out, b, mods, &b, 1U);
     }
@@ -597,68 +597,68 @@ static bool paste_next(In *in, Key *out)
     size_t i;
     size_t emit_len;
 
-    if (search_len > SAG_PASTE_EMIT + marker_len)
-        search_len = SAG_PASTE_EMIT + marker_len;
+    if (search_len > YEW_PASTE_EMIT + marker_len)
+        search_len = YEW_PASTE_EMIT + marker_len;
     for (i = 0U; i + marker_len <= search_len; i++) {
         if (memcmp(in->buf.data + in->scan + i, paste_end, marker_len) == 0)
             break;
     }
     if (i + marker_len <= search_len) {
         if (i != 0U) {
-            emit_len = i < SAG_PASTE_EMIT ? i : SAG_PASTE_EMIT;
+            emit_len = i < YEW_PASTE_EMIT ? i : YEW_PASTE_EMIT;
             bytebuf_append(&in->paste, in->buf.data + in->scan, emit_len);
             in->scan += emit_len;
             in->rd = in->scan;
-            out->kind = SAG_EV_PASTE_DATA;
+            out->kind = YEW_EV_PASTE_DATA;
             return true;
         }
         in->scan += marker_len;
         in->rd = in->scan;
         in->state = IN_GROUND;
         in->in_paste = false;
-        out->kind = SAG_EV_PASTE_END;
+        out->kind = YEW_EV_PASTE_END;
         return true;
     }
     if (in->eof) {
         if (available != 0U) {
-            emit_len = available < SAG_PASTE_EMIT
-                           ? available : SAG_PASTE_EMIT;
+            emit_len = available < YEW_PASTE_EMIT
+                           ? available : YEW_PASTE_EMIT;
             bytebuf_append(&in->paste, in->buf.data + in->scan, emit_len);
             in->scan += emit_len;
             in->rd = in->scan;
-            out->kind = SAG_EV_PASTE_DATA;
+            out->kind = YEW_EV_PASTE_DATA;
             return true;
         }
         in->state = IN_GROUND;
         in->in_paste = false;
         in->rd = in->scan;
-        out->kind = SAG_EV_PASTE_END;
+        out->kind = YEW_EV_PASTE_END;
         return true;
     }
-    if (available < SAG_PASTE_EMIT + marker_len)
+    if (available < YEW_PASTE_EMIT + marker_len)
         return false;
     emit_len = available - marker_len;
-    if (emit_len > SAG_PASTE_EMIT)
-        emit_len = SAG_PASTE_EMIT;
+    if (emit_len > YEW_PASTE_EMIT)
+        emit_len = YEW_PASTE_EMIT;
     bytebuf_append(&in->paste, in->buf.data + in->scan, emit_len);
     in->scan += emit_len;
     in->rd = in->scan;
-    out->kind = SAG_EV_PASTE_DATA;
+    out->kind = YEW_EV_PASTE_DATA;
     return true;
 }
 
-void sag_input_init(In *in, const TtyCaps *caps)
+void yew_input_init(In *in, const TtyCaps *caps)
 {
     (void)memset(in, 0, sizeof(*in));
     bytebuf_init(&in->buf);
     bytebuf_init(&in->paste);
-    in->paste.data = sag_xmalloc(SAG_PASTE_EMIT);
-    in->paste.cap = SAG_PASTE_EMIT;
+    in->paste.data = yew_xmalloc(YEW_PASTE_EMIT);
+    in->paste.cap = YEW_PASTE_EMIT;
     if (caps != NULL)
         in->caps = *caps;
 }
 
-void sag_input_free(In *in)
+void yew_input_free(In *in)
 {
     if (in == NULL)
         return;
@@ -667,14 +667,14 @@ void sag_input_free(In *in)
     (void)memset(in, 0, sizeof(*in));
 }
 
-void sag_input_seed(In *in, const Bytebuf *pending)
+void yew_input_seed(In *in, const Bytebuf *pending)
 {
     if (in == NULL || pending == NULL)
         return;
-    sag_input_feed(in, pending->data, pending->len);
+    yew_input_feed(in, pending->data, pending->len);
 }
 
-void sag_input_feed(In *in, const u8 *b, size_t n)
+void yew_input_feed(In *in, const u8 *b, size_t n)
 {
     size_t retained;
     size_t room;
@@ -683,7 +683,7 @@ void sag_input_feed(In *in, const u8 *b, size_t n)
         return;
     compact(in);
     retained = in->buf.len - in->rd;
-    room = retained < SAG_IN_MAX_BUFFER ? SAG_IN_MAX_BUFFER - retained : 0U;
+    room = retained < YEW_IN_MAX_BUFFER ? YEW_IN_MAX_BUFFER - retained : 0U;
     if (n > room) {
         note_drop(in, LOG_BUFFER_CAP, "input buffer cap exceeded");
         n = room;
@@ -697,7 +697,7 @@ void sag_input_feed(In *in, const u8 *b, size_t n)
     }
 }
 
-bool sag_input_next(In *in, i64 now_ms, Key *out)
+bool yew_input_next(In *in, i64 now_ms, Key *out)
 {
     size_t before;
 
@@ -834,7 +834,7 @@ bool sag_input_next(In *in, i64 now_ms, Key *out)
                 in->string_len = 0U;
                 in->deadline = 0;
             } else if (b == 0x1BU) {
-                emit_named(out, SAG_KEY_ESCAPE, 0U);
+                emit_named(out, YEW_KEY_ESCAPE, 0U);
                 in->rd = in->scan - 1U;
                 in->seq_start = in->rd;
                 in->scan = in->rd + 1U;
@@ -846,7 +846,7 @@ bool sag_input_next(In *in, i64 now_ms, Key *out)
                 in->state = IN_GROUND;
                 in->deadline = 0;
                 in->rd = in->scan - 1U;
-                in->pending_mods = SAG_MOD_ALT;
+                in->pending_mods = YEW_MOD_ALT;
             }
             continue;
         }
@@ -889,7 +889,7 @@ bool sag_input_next(In *in, i64 now_ms, Key *out)
             }
             in->string_len++;
             in->state = b == 0x1BU ? IN_STRING_ESC : IN_STRING;
-            if (in->string_len > SAG_IN_STRING_MAX) {
+            if (in->string_len > YEW_IN_STRING_MAX) {
                 in->rd = in->scan;
                 in->state = b == 0x1BU ? IN_STRING_DROP_ESC
                                        : IN_STRING_DROP;
@@ -974,7 +974,7 @@ bool sag_input_next(In *in, i64 now_ms, Key *out)
     }
 }
 
-i64 sag_input_deadline(const In *in, i64 now_ms)
+i64 yew_input_deadline(const In *in, i64 now_ms)
 {
     i64 left;
 
@@ -984,25 +984,25 @@ i64 sag_input_deadline(const In *in, i64 now_ms)
     return left > 0 ? left : 0;
 }
 
-void sag_input_eof(In *in)
+void yew_input_eof(In *in)
 {
     if (in != NULL)
         in->eof = true;
 }
 
-const u8 *sag_input_paste_chunk(const In *in, size_t *n)
+const u8 *yew_input_paste_chunk(const In *in, size_t *n)
 {
     if (n != NULL)
         *n = in == NULL ? 0U : in->paste.len;
     return in == NULL ? NULL : in->paste.data;
 }
 
-void sag_input_enable(int wfd, const TtyCaps *caps)
+void yew_input_enable(int wfd, const TtyCaps *caps)
 {
-    const char *off = getenv("SAG_MOUSE");
+    const char *off = getenv("YEW_MOUSE");
 
     /*
-     * Emitted in three pieces so SAG_MOUSE=0 can leave the middle one
+     * Emitted in three pieces so YEW_MOUSE=0 can leave the middle one
      * unsent — and in the SAME ORDER as before, because the disable
      * path mirrors it and the pty goldens record the bytes.  Not merely
      * dropping the events on our side: a terminal that is never asked
@@ -1017,7 +1017,7 @@ void sag_input_enable(int wfd, const TtyCaps *caps)
         write_blob(wfd, kitty_enable, sizeof(kitty_enable) - 1U);
 }
 
-void sag_input_disable(int wfd)
+void yew_input_disable(int wfd)
 {
     write_blob(wfd, input_disable, sizeof(input_disable) - 1U);
 }

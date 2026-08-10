@@ -13,19 +13,19 @@
 #include "unicode/width.h"
 
 enum {
-    SAG_MESSAGE_INFO_MS = 4000,
-    SAG_MESSAGE_WARN_MS = 8000,
-    SAG_MESSAGE_OVERLAY_ROWS = 5,
-    SAG_MESSAGE_WARN_COLOR = 214,
-    SAG_MESSAGE_ERROR_COLOR = 196,
-    SAG_MESSAGE_PROMPT_COLOR = 81
+    YEW_MESSAGE_INFO_MS = 4000,
+    YEW_MESSAGE_WARN_MS = 8000,
+    YEW_MESSAGE_OVERLAY_ROWS = 5,
+    YEW_MESSAGE_WARN_COLOR = 214,
+    YEW_MESSAGE_ERROR_COLOR = 196,
+    YEW_MESSAGE_PROMPT_COLOR = 81
 };
 
 static const char ellipsis[] = "\xe2\x80\xa6";
 
-static SagColor indexed_color(u8 index)
+static YewColor indexed_color(u8 index)
 {
-    SagColor color = {SAG_COLOR_INDEXED, index, 0U, 0U};
+    YewColor color = {YEW_COLOR_INDEXED, index, 0U, 0U};
 
     return color;
 }
@@ -53,15 +53,15 @@ static void message_expire(Ed *ed, void *ctx)
         ed->full_damage = true;
 }
 
-void sag_msg_clear(Ed *ed)
+void yew_msg_clear(Ed *ed)
 {
     bool expanded;
 
     if (ed == NULL)
         return;
     expanded = ed->msg.expanded;
-    if (ed->msg.expiry != SAG_TIMER_NONE)
-        (void)sag_timer_cancel(&ed->timers, ed->msg.expiry);
+    if (ed->msg.expiry != YEW_TIMER_NONE)
+        (void)yew_timer_cancel(&ed->timers, ed->msg.expiry);
     free(ed->msg.full);
     (void)memset(&ed->msg, 0, sizeof(ed->msg));
     ed->footer_dirty = true;
@@ -79,14 +79,14 @@ static void message_vset(Ed *ed, MsgSev sev, i64 now_ms,
 
     if (ed == NULL || fmt == NULL)
         return;
-    prompt = ed->prompt != SAG_PROMPT_NONE;
+    prompt = ed->prompt != YEW_PROMPT_NONE;
     if (ed->msg.active && ed->msg.prompt && !prompt)
         return;
-    if (ed->msg.active && ed->msg.sev == SAG_MSG_ERROR &&
-        sev == SAG_MSG_INFO && !prompt)
+    if (ed->msg.active && ed->msg.sev == YEW_MSG_ERROR &&
+        sev == YEW_MSG_INFO && !prompt)
         return;
 
-    sag_msg_clear(ed);
+    yew_msg_clear(ed);
     va_copy(copy, ap);
     needed = vsnprintf(ed->msg.text, sizeof(ed->msg.text), fmt, copy);
     va_end(copy);
@@ -94,7 +94,7 @@ static void message_vset(Ed *ed, MsgSev sev, i64 now_ms,
         ed->msg.text[0] = '\0';
         needed = 0;
     } else if ((size_t)needed >= sizeof(ed->msg.text)) {
-        ed->msg.full = sag_xmalloc((size_t)needed + 1U);
+        ed->msg.full = yew_xmalloc((size_t)needed + 1U);
         va_copy(copy, ap);
         (void)vsnprintf(ed->msg.full, (size_t)needed + 1U, fmt, copy);
         va_end(copy);
@@ -103,16 +103,16 @@ static void message_vset(Ed *ed, MsgSev sev, i64 now_ms,
     ed->msg.sev = sev;
     ed->msg.active = true;
     ed->msg.prompt = prompt;
-    if (sev == SAG_MSG_ERROR && ed->errorbells && ed->tty_ready)
+    if (sev == YEW_MSG_ERROR && ed->errorbells && ed->tty_ready)
         (void)!write(ed->tty.wfd, "\a", 1U);
-    duration = prompt || sev == SAG_MSG_ERROR
+    duration = prompt || sev == YEW_MSG_ERROR
                    ? -1
-                   : sev == SAG_MSG_INFO ? SAG_MESSAGE_INFO_MS
-                                         : SAG_MESSAGE_WARN_MS;
+                   : sev == YEW_MSG_INFO ? YEW_MESSAGE_INFO_MS
+                                         : YEW_MESSAGE_WARN_MS;
     if (duration >= 0) {
         if (now_ms > INT64_MAX - duration)
             now_ms = INT64_MAX - duration;
-        ed->msg.expiry = sag_timer_add(&ed->timers, now_ms + duration,
+        ed->msg.expiry = yew_timer_add(&ed->timers, now_ms + duration,
                                        message_expire, NULL);
     }
     message_damage(ed);
@@ -123,7 +123,7 @@ static const char *message_text(const Msg *msg)
     return msg->full == NULL ? msg->text : msg->full;
 }
 
-void sag_msg_at(Ed *ed, MsgSev sev, i64 now_ms, const char *fmt, ...)
+void yew_msg_at(Ed *ed, MsgSev sev, i64 now_ms, const char *fmt, ...)
 {
     va_list ap;
 
@@ -134,18 +134,18 @@ void sag_msg_at(Ed *ed, MsgSev sev, i64 now_ms, const char *fmt, ...)
     va_end(ap);
 }
 
-void sag_msg(Ed *ed, MsgSev sev, const char *fmt, ...)
+void yew_msg(Ed *ed, MsgSev sev, const char *fmt, ...)
 {
     va_list ap;
 
     if (ed == NULL || fmt == NULL)
         return;
     va_start(ap, fmt);
-    message_vset(ed, sev, sag_now_ms(), fmt, ap);
+    message_vset(ed, sev, yew_now_ms(), fmt, ap);
     va_end(ap);
 }
 
-bool sag_msg_expand(Ed *ed)
+bool yew_msg_expand(Ed *ed)
 {
     if (ed == NULL || !ed->msg.active || !ed->msg.truncated ||
         ed->msg.expanded)
@@ -155,7 +155,7 @@ bool sag_msg_expand(Ed *ed)
     return true;
 }
 
-bool sag_msg_dismiss_overlay(Ed *ed)
+bool yew_msg_dismiss_overlay(Ed *ed)
 {
     if (ed == NULL || !ed->msg.expanded)
         return false;
@@ -164,7 +164,7 @@ bool sag_msg_dismiss_overlay(Ed *ed)
     return true;
 }
 
-size_t sag_message_clip(const char *text, size_t len, u16 max_cells,
+size_t yew_message_clip(const char *text, size_t len, u16 max_cells,
                         char *out, size_t out_cap, bool *truncated)
 {
     const u8 *bytes = (const u8 *)text;
@@ -180,10 +180,10 @@ size_t sag_message_clip(const char *text, size_t len, u16 max_cells,
     if (text == NULL)
         return 0U;
 
-    take = sag_str_clip(bytes, len, (int)max_cells, &cells);
+    take = yew_str_clip(bytes, len, (int)max_cells, &cells);
     cut = take < len;
     if (cut && max_cells != 0U)
-        take = sag_str_clip(bytes, len, (int)max_cells - 1, &cells);
+        take = yew_str_clip(bytes, len, (int)max_cells - 1, &cells);
 
     if (out != NULL && out_cap != 0U) {
         size_t room = out_cap - 1U;
@@ -194,7 +194,7 @@ size_t sag_message_clip(const char *text, size_t len, u16 max_cells,
         if (take > room) {
             written = 0U;
             while (written < take) {
-                next = sag_gb_next_bytes(bytes, take, written);
+                next = yew_gb_next_bytes(bytes, take, written);
                 if (next <= written || next > room)
                     break;
                 written = next;
@@ -217,7 +217,7 @@ size_t sag_message_clip(const char *text, size_t len, u16 max_cells,
     return written;
 }
 
-static Cell styled_blank(SagColor fg, SagColor bg, u16 attrs)
+static Cell styled_blank(YewColor fg, YewColor bg, u16 attrs)
 {
     Cell cell;
 
@@ -229,19 +229,19 @@ static Cell styled_blank(SagColor fg, SagColor bg, u16 attrs)
     return cell;
 }
 
-SagUiStyle sag_message_style(const Ed *ed)
+YewUiStyle yew_message_style(const Ed *ed)
 {
-    SagUiStyle style = sag_statusline_mode_style(ed->mode);
+    YewUiStyle style = yew_statusline_mode_style(ed->mode);
 
     if (ed->msg.prompt) {
-        style.row_fg = indexed_color(SAG_MESSAGE_PROMPT_COLOR);
-        style.attrs = SAG_ATTR_BOLD;
-    } else if (ed->msg.sev == SAG_MSG_WARN) {
-        style.row_fg = indexed_color(SAG_MESSAGE_WARN_COLOR);
-        style.attrs = SAG_ATTR_BOLD;
-    } else if (ed->msg.sev == SAG_MSG_ERROR) {
-        style.row_fg = indexed_color(SAG_MESSAGE_ERROR_COLOR);
-        style.attrs = SAG_ATTR_BOLD;
+        style.row_fg = indexed_color(YEW_MESSAGE_PROMPT_COLOR);
+        style.attrs = YEW_ATTR_BOLD;
+    } else if (ed->msg.sev == YEW_MSG_WARN) {
+        style.row_fg = indexed_color(YEW_MESSAGE_WARN_COLOR);
+        style.attrs = YEW_ATTR_BOLD;
+    } else if (ed->msg.sev == YEW_MSG_ERROR) {
+        style.row_fg = indexed_color(YEW_MESSAGE_ERROR_COLOR);
+        style.attrs = YEW_ATTR_BOLD;
     } else {
         style.attrs = 0U;
     }
@@ -249,22 +249,22 @@ SagUiStyle sag_message_style(const Ed *ed)
 }
 
 static u16 draw_text_row(Grid *grid, u16 row, u16 col, u16 right,
-                         const char *text, size_t len, SagUiStyle style,
+                         const char *text, size_t len, YewUiStyle style,
                          bool ellipsize, bool *was_cut)
 {
     char *clipped;
     size_t clipped_len;
     bool cut = false;
 
-    clipped = sag_xmalloc(len + sizeof(ellipsis));
-    clipped_len = sag_message_clip(text, len, (u16)(right - col), clipped,
+    clipped = yew_xmalloc(len + sizeof(ellipsis));
+    clipped_len = yew_message_clip(text, len, (u16)(right - col), clipped,
                                    len + sizeof(ellipsis),
                                    ellipsize ? &cut : NULL);
-    col = sag_grid_puts(grid, row, col, (const u8 *)clipped, clipped_len,
+    col = yew_grid_puts(grid, row, col, (const u8 *)clipped, clipped_len,
                         style.row_fg, style.row_bg, style.attrs);
     free(clipped);
     if (col < right)
-        sag_grid_fill(grid, row, col, right,
+        yew_grid_fill(grid, row, col, right,
                       styled_blank(style.row_fg, style.row_bg, style.attrs));
     if (was_cut != NULL)
         *was_cut = cut;
@@ -273,15 +273,15 @@ static u16 draw_text_row(Grid *grid, u16 row, u16 col, u16 right,
 
 static size_t row_take(const char *text, size_t len, u16 cells)
 {
-    return sag_str_clip((const u8 *)text, len, (int)cells, NULL);
+    return yew_str_clip((const u8 *)text, len, (int)cells, NULL);
 }
 
-void sag_message_draw(Ed *ed, Win *w)
+void yew_message_draw(Ed *ed, Win *w)
 {
     StatuslineText status;
-    SagUiStyle style;
-    SagUiStyle mode_style;
-    SagUiStyle recording_style;
+    YewUiStyle style;
+    YewUiStyle mode_style;
+    YewUiStyle recording_style;
     Grid *grid;
     size_t text_len;
     size_t pos = 0U;
@@ -302,11 +302,11 @@ void sag_message_draw(Ed *ed, Win *w)
     footer = ed->footer_rect.h != 0U && ed->footer_rect.y < grid->rows
                  ? ed->footer_rect.y
                  : (u16)(grid->rows - 1U);
-    sag_statusline_build(ed, w, grid->cols, &status);
-    mode_style = sag_statusline_mode_style(ed->mode);
-    recording_style = sag_statusline_mode_style(SAG_MODE_H);
-    style = sag_message_style(ed);
-    chip_cells = (u16)sag_str_width((const u8 *)status.chip,
+    yew_statusline_build(ed, w, grid->cols, &status);
+    mode_style = yew_statusline_mode_style(ed->mode);
+    recording_style = yew_statusline_mode_style(YEW_MODE_H);
+    style = yew_message_style(ed);
+    chip_cells = (u16)yew_str_width((const u8 *)status.chip,
                                     status.chip_len, 1U);
     if (chip_cells > grid->cols)
         chip_cells = grid->cols;
@@ -324,7 +324,7 @@ void sag_message_draw(Ed *ed, Win *w)
         size_t scan = 0U;
 
         rows = 0U;
-        while (scan < text_len && rows < SAG_MESSAGE_OVERLAY_ROWS) {
+        while (scan < text_len && rows < YEW_MESSAGE_OVERLAY_ROWS) {
             size_t take = row_take(text + scan, text_len - scan,
                                    available);
 
@@ -346,7 +346,7 @@ void sag_message_draw(Ed *ed, Win *w)
         bool last = i + 1U == rows;
         bool remainder;
 
-        sag_grid_fill(grid, row, 0U, grid->cols,
+        yew_grid_fill(grid, row, 0U, grid->cols,
                       styled_blank(style.row_fg, style.row_bg, style.attrs));
         take = row_take(text + pos, text_len - pos, available);
         remainder = pos + take < text_len;
@@ -356,11 +356,11 @@ void sag_message_draw(Ed *ed, Win *w)
                                 true, NULL);
             pos = text_len;
         } else {
-            col = sag_grid_puts(grid, row, col,
+            col = yew_grid_puts(grid, row, col,
                                 (const u8 *)text + pos, take,
                                 style.row_fg, style.row_bg, style.attrs);
             if (col < grid->cols)
-                sag_grid_fill(grid, row, col, grid->cols,
+                yew_grid_fill(grid, row, col, grid->cols,
                               styled_blank(style.row_fg, style.row_bg,
                                            style.attrs));
             pos += take;
@@ -370,18 +370,18 @@ void sag_message_draw(Ed *ed, Win *w)
     /* The modal anchor remains on the footer even while continuation rows
      * occupy the document area above it. */
     {
-        u16 col = sag_grid_puts(grid, footer, 0U,
+        u16 col = yew_grid_puts(grid, footer, 0U,
                                 (const u8 *)status.chip,
                                 status.chip_len, mode_style.chip_fg,
                                 mode_style.chip_bg, mode_style.attrs);
 
         if (col < grid->cols && status.recording_len != 0U)
-            (void)sag_grid_puts(grid, footer, col,
+            (void)yew_grid_puts(grid, footer, col,
                                 (const u8 *)status.recording,
                                 status.recording_len,
                                 recording_style.chip_fg,
                                 recording_style.chip_bg,
-                                SAG_ATTR_BOLD);
+                                YEW_ATTR_BOLD);
     }
-    sag_statusline_text_free(&status);
+    yew_statusline_text_free(&status);
 }

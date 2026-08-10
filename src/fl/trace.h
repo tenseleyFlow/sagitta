@@ -1,5 +1,5 @@
-#ifndef SAG_FL_TRACE_H
-#define SAG_FL_TRACE_H
+#ifndef YEW_FL_TRACE_H
+#define YEW_FL_TRACE_H
 
 /*
  * Sprint 32 §6: runtime error quality.
@@ -46,4 +46,4 @@ void fl_trace_attach(FlVm *vm);
  */
 void fl_trace_render(FlVm *vm, FlValue err, Bytebuf *out);
 
-#endif /* SAG_FL_TRACE_H */
+#endif /* YEW_FL_TRACE_H */

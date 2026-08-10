@@ -3,7 +3,7 @@
 
 #include <string.h>
 
-const FlLit *sag_fl_get(const FlLit *map, const char *key)
+const FlLit *yew_fl_get(const FlLit *map, const char *key)
 {
     u32 i;
     u64 n;
@@ -19,7 +19,7 @@ const FlLit *sag_fl_get(const FlLit *map, const char *key)
     return NULL;
 }
 
-u32 sag_fl_len(const FlLit *list)
+u32 yew_fl_len(const FlLit *list)
 {
     if (list == NULL ||
         (list->kind != FL_LIT_LIST && list->kind != FL_LIT_MAP))
@@ -27,7 +27,7 @@ u32 sag_fl_len(const FlLit *list)
     return list->len;
 }
 
-const FlLit *sag_fl_at(const FlLit *list, u32 i)
+const FlLit *yew_fl_at(const FlLit *list, u32 i)
 {
     if (list == NULL ||
         (list->kind != FL_LIT_LIST && list->kind != FL_LIT_MAP) ||
@@ -36,17 +36,17 @@ const FlLit *sag_fl_at(const FlLit *list, u32 i)
     return list->items[i];
 }
 
-i64 sag_fl_int_or(const FlLit *v, i64 dflt)
+i64 yew_fl_int_or(const FlLit *v, i64 dflt)
 {
     return v != NULL && v->kind == FL_LIT_INT ? v->i : dflt;
 }
 
-bool sag_fl_bool_or(const FlLit *v, bool dflt)
+bool yew_fl_bool_or(const FlLit *v, bool dflt)
 {
     return v != NULL && v->kind == FL_LIT_BOOL ? v->i != 0 : dflt;
 }
 
-const char *sag_fl_str_or(const FlLit *v, const char *dflt, u64 *n)
+const char *yew_fl_str_or(const FlLit *v, const char *dflt, u64 *n)
 {
     if (v != NULL && v->kind == FL_LIT_STR) {
         if (n != NULL)

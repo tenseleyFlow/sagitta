@@ -30,7 +30,7 @@ static u64 prop_rng(u64 *state)
 
 static u64 prop_cases(void)
 {
-    const char *value = getenv("SAG_PROP_N");
+    const char *value = getenv("YEW_PROP_N");
     char *end;
     unsigned long long parsed;
 
@@ -38,7 +38,7 @@ static u64 prop_cases(void)
         return 500U;
     errno = 0;
     parsed = strtoull(value, &end, 10);
-    SAG_ASSERT(errno == 0 && *end == '\0' && parsed > 0U);
+    YEW_ASSERT(errno == 0 && *end == '\0' && parsed > 0U);
     return (u64)parsed;
 }
 
@@ -56,7 +56,7 @@ static void prop_fill(Bytebuf *buf, u64 *rng, size_t max_len)
     for (i = 0U; i < len; i++) {
         u64 value = prop_rng(rng);
         u8 byte = (value & 3U) == 0U
-                      ? special[(size_t)(value % SAG_ARRAY_LEN(special))]
+                      ? special[(size_t)(value % YEW_ARRAY_LEN(special))]
                       : (u8)value;
 
         bytebuf_append(buf, &byte, 1U);
@@ -69,15 +69,15 @@ static Bytebuf prop_materialize(const TextBuf *tb)
     TextIter it;
 
     bytebuf_init(&out);
-    if (sag_textiter_begin(&it, tb, BYTEOFF(0U))) {
+    if (yew_textiter_begin(&it, tb, BYTEOFF(0U))) {
         do {
             const u8 *bytes;
             u64 len;
 
-            SAG_ASSERT(sag_textiter_chunk(&it, tb, &bytes, &len));
-            SAG_ASSERT(len > 0U);
+            YEW_ASSERT(yew_textiter_chunk(&it, tb, &bytes, &len));
+            YEW_ASSERT(len > 0U);
             bytebuf_append(&out, bytes, (size_t)len);
-        } while (sag_textiter_advance(&it, tb));
+        } while (yew_textiter_advance(&it, tb));
     }
     return out;
 }
@@ -88,14 +88,14 @@ static Bytebuf prop_snap_materialize(const TextBuf *tb, const TextSnap *snap)
     TextIter it;
 
     bytebuf_init(&out);
-    if (sag_textsnap_iter(&it, snap, BYTEOFF(0U))) {
+    if (yew_textsnap_iter(&it, snap, BYTEOFF(0U))) {
         do {
             const u8 *bytes;
             u64 len;
 
-            SAG_ASSERT(sag_textiter_chunk(&it, tb, &bytes, &len));
+            YEW_ASSERT(yew_textiter_chunk(&it, tb, &bytes, &len));
             bytebuf_append(&out, bytes, (size_t)len);
-        } while (sag_textiter_advance(&it, tb));
+        } while (yew_textiter_advance(&it, tb));
     }
     return out;
 }
@@ -104,8 +104,8 @@ static void prop_assert_bytes(const TextBuf *tb, const Bytebuf *want)
 {
     Bytebuf got = prop_materialize(tb);
 
-    SAG_ASSERT_EQ_U64(got.len, want->len);
-    SAG_ASSERT_EQ_MEM(got.data, want->data, want->len);
+    YEW_ASSERT_EQ_U64(got.len, want->len);
+    YEW_ASSERT_EQ_MEM(got.data, want->data, want->len);
     bytebuf_free(&got);
 }
 
@@ -160,47 +160,47 @@ typedef struct {
 
 static void prop_edit_init(PropEdit *f, const u8 *bytes, u64 len)
 {
-    f->tb = sag_textbuf_from_bytes(bytes, len);
-    f->marks = sag_marks_new();
-    sag_cset_init(&f->cursors, prop_cursor(0U, 17U));
-    f->undo = sag_undo_new(f->tb);
+    f->tb = yew_textbuf_from_bytes(bytes, len);
+    f->marks = yew_marks_new();
+    yew_cset_init(&f->cursors, prop_cursor(0U, 17U));
+    f->undo = yew_undo_new(f->tb);
     f->edit = (EditCtx){f->tb, f->marks, &f->cursors, 1U, NULL,
                        f->undo, NULL, NULL, NULL, 0};
 }
 
 static void prop_edit_free(PropEdit *f)
 {
-    sag_undo_free(f->undo);
-    sag_cset_free(&f->cursors);
-    sag_marks_free(f->marks);
-    sag_textbuf_free(f->tb);
+    yew_undo_free(f->undo);
+    yew_cset_free(&f->cursors);
+    yew_marks_free(f->marks);
+    yew_textbuf_free(f->tb);
 }
 
 static void prop_random_edit(PropEdit *f, u64 *rng)
 {
-    u64 len = sag_textbuf_len(f->tb);
+    u64 len = yew_textbuf_len(f->tb);
 
-    sag_undo_boundary(f->undo);
+    yew_undo_boundary(f->undo);
     if (len == 0U || (prop_rng(rng) & 1U) == 0U) {
         u8 bytes[4];
-        u64 n = 1U + prop_rng(rng) % SAG_ARRAY_LEN(bytes);
+        u64 n = 1U + prop_rng(rng) % YEW_ARRAY_LEN(bytes);
         u64 at = prop_rng(rng) % (len + 1U);
         u64 i;
 
         for (i = 0U; i < n; i++)
             bytes[i] = (u8)prop_rng(rng);
-        sag_undo_begin(&f->edit, SAG_TXN_TYPE);
-        sag_edit_insert(&f->edit, BYTEOFF(at), bytes, n);
-        sag_cset_normalize(f->tb, &f->cursors);
-        sag_undo_end(&f->edit);
+        yew_undo_begin(&f->edit, YEW_TXN_TYPE);
+        yew_edit_insert(&f->edit, BYTEOFF(at), bytes, n);
+        yew_cset_normalize(f->tb, &f->cursors);
+        yew_undo_end(&f->edit);
     } else {
         u64 lo = prop_rng(rng) % len;
         u64 hi = lo + 1U + prop_rng(rng) % (len - lo);
 
-        sag_undo_begin(&f->edit, SAG_TXN_ERASE);
-        sag_edit_delete(&f->edit, (Span){lo, hi});
-        sag_cset_normalize(f->tb, &f->cursors);
-        sag_undo_end(&f->edit);
+        yew_undo_begin(&f->edit, YEW_TXN_ERASE);
+        yew_edit_delete(&f->edit, (Span){lo, hi});
+        yew_cset_normalize(f->tb, &f->cursors);
+        yew_undo_end(&f->edit);
     }
 }
 
@@ -209,7 +209,7 @@ void test_textbuf_prop_p1_splice_inverse(void)
     size_t seed_i;
     u64 n = prop_cases();
 
-    for (seed_i = 0U; seed_i < SAG_ARRAY_LEN(prop_seeds); seed_i++) {
+    for (seed_i = 0U; seed_i < YEW_ARRAY_LEN(prop_seeds); seed_i++) {
         u64 rng = prop_seeds[seed_i];
         u64 case_i;
 
@@ -225,17 +225,17 @@ void test_textbuf_prop_p1_splice_inverse(void)
             prop_fill(&payload, &rng, 16U);
             if (payload.len == 0U)
                 bytebuf_append(&payload, "x", 1U);
-            tb = sag_textbuf_from_bytes(base.data, base.len);
+            tb = yew_textbuf_from_bytes(base.data, base.len);
             at = prop_rng(&rng) % (base.len + 1U);
-            pieces = sag_textbuf_piece_count(tb);
-            lines = sag_textbuf_line_count(tb);
-            sag_textbuf_insert(tb, BYTEOFF(at), payload.data, payload.len);
-            sag_textbuf_delete(tb, (Span){at, at + payload.len});
-            sag_textbuf_check(tb);
+            pieces = yew_textbuf_piece_count(tb);
+            lines = yew_textbuf_line_count(tb);
+            yew_textbuf_insert(tb, BYTEOFF(at), payload.data, payload.len);
+            yew_textbuf_delete(tb, (Span){at, at + payload.len});
+            yew_textbuf_check(tb);
             prop_assert_bytes(tb, &base);
-            SAG_ASSERT_EQ_U64(sag_textbuf_line_count(tb), lines);
-            SAG_ASSERT(sag_textbuf_piece_count(tb) <= pieces + 2U);
-            sag_textbuf_free(tb);
+            YEW_ASSERT_EQ_U64(yew_textbuf_line_count(tb), lines);
+            YEW_ASSERT(yew_textbuf_piece_count(tb) <= pieces + 2U);
+            yew_textbuf_free(tb);
             bytebuf_free(&payload);
             bytebuf_free(&base);
         }
@@ -247,7 +247,7 @@ void test_textbuf_prop_p2_delete_inverse(void)
     size_t seed_i;
     u64 n = prop_cases();
 
-    for (seed_i = 0U; seed_i < SAG_ARRAY_LEN(prop_seeds); seed_i++) {
+    for (seed_i = 0U; seed_i < YEW_ARRAY_LEN(prop_seeds); seed_i++) {
         u64 rng = prop_seeds[seed_i];
         u64 case_i;
 
@@ -261,15 +261,15 @@ void test_textbuf_prop_p2_delete_inverse(void)
             prop_fill(&base, &rng, 96U);
             if (base.len == 0U)
                 bytebuf_append(&base, "x", 1U);
-            tb = sag_textbuf_from_bytes(base.data, base.len);
+            tb = yew_textbuf_from_bytes(base.data, base.len);
             lo = prop_rng(&rng) % base.len;
             hi = lo + prop_rng(&rng) % (base.len - lo + 1U);
             prop_copy_range(tb, (Span){lo, hi}, &removed);
-            sag_textbuf_delete(tb, (Span){lo, hi});
-            sag_textbuf_insert(tb, BYTEOFF(lo), removed.data, removed.len);
-            sag_textbuf_check(tb);
+            yew_textbuf_delete(tb, (Span){lo, hi});
+            yew_textbuf_insert(tb, BYTEOFF(lo), removed.data, removed.len);
+            yew_textbuf_check(tb);
             prop_assert_bytes(tb, &base);
-            sag_textbuf_free(tb);
+            yew_textbuf_free(tb);
             bytebuf_free(&removed);
             bytebuf_free(&base);
         }
@@ -283,18 +283,18 @@ static void prop_assert_iter_suffix(const TextBuf *tb, const Bytebuf *all,
     TextIter it;
 
     bytebuf_init(&suffix);
-    if (sag_textiter_begin(&it, tb, BYTEOFF(at))) {
+    if (yew_textiter_begin(&it, tb, BYTEOFF(at))) {
         do {
             const u8 *bytes;
             u64 len;
 
-            SAG_ASSERT(sag_textiter_chunk(&it, tb, &bytes, &len));
+            YEW_ASSERT(yew_textiter_chunk(&it, tb, &bytes, &len));
             bytebuf_append(&suffix, bytes, (size_t)len);
-        } while (sag_textiter_advance(&it, tb));
+        } while (yew_textiter_advance(&it, tb));
     }
-    SAG_ASSERT_EQ_U64(suffix.len, all->len - (size_t)at);
+    YEW_ASSERT_EQ_U64(suffix.len, all->len - (size_t)at);
     if (suffix.len != 0U)
-        SAG_ASSERT_EQ_MEM(suffix.data, all->data + (size_t)at, suffix.len);
+        YEW_ASSERT_EQ_MEM(suffix.data, all->data + (size_t)at, suffix.len);
     bytebuf_free(&suffix);
 }
 
@@ -319,7 +319,7 @@ void test_textbuf_prop_p3_iterator_materialize(void)
     size_t seed_i;
     u64 n = prop_cases();
 
-    for (seed_i = 0U; seed_i < SAG_ARRAY_LEN(prop_seeds); seed_i++) {
+    for (seed_i = 0U; seed_i < YEW_ARRAY_LEN(prop_seeds); seed_i++) {
         u64 rng = prop_seeds[seed_i];
         u64 case_i;
 
@@ -330,23 +330,23 @@ void test_textbuf_prop_p3_iterator_materialize(void)
             u64 i;
 
             prop_fill(&base, &rng, 64U);
-            tb = sag_textbuf_from_bytes(base.data, base.len);
+            tb = yew_textbuf_from_bytes(base.data, base.len);
             for (i = 0U; i < 6U; i++) {
                 u8 byte = (u8)prop_rng(&rng);
-                u64 at = prop_rng(&rng) % (sag_textbuf_len(tb) + 1U);
+                u64 at = prop_rng(&rng) % (yew_textbuf_len(tb) + 1U);
 
-                sag_textbuf_insert(tb, BYTEOFF(at), &byte, 1U);
+                yew_textbuf_insert(tb, BYTEOFF(at), &byte, 1U);
                 prop_oracle_insert(&base, (size_t)at, &byte, 1U);
             }
             all = prop_materialize(tb);
-            SAG_ASSERT_EQ_U64(all.len, base.len);
-            SAG_ASSERT_EQ_MEM(all.data, base.data, base.len);
+            YEW_ASSERT_EQ_U64(all.len, base.len);
+            YEW_ASSERT_EQ_MEM(all.data, base.data, base.len);
             prop_assert_iter_suffix(tb, &all, 0U);
             prop_assert_iter_suffix(tb, &all,
                                     prop_rng(&rng) % (all.len + 1U));
             prop_visit_seams(tb->root, 0U, tb, &all);
             bytebuf_free(&all);
-            sag_textbuf_free(tb);
+            yew_textbuf_free(tb);
             bytebuf_free(&base);
         }
     }
@@ -357,7 +357,7 @@ void test_textbuf_prop_p4_line_index_recount(void)
     size_t seed_i;
     u64 n = prop_cases();
 
-    for (seed_i = 0U; seed_i < SAG_ARRAY_LEN(prop_seeds); seed_i++) {
+    for (seed_i = 0U; seed_i < YEW_ARRAY_LEN(prop_seeds); seed_i++) {
         u64 rng = prop_seeds[seed_i];
         u64 case_i;
 
@@ -368,18 +368,18 @@ void test_textbuf_prop_p4_line_index_recount(void)
             size_t i;
 
             prop_fill(&base, &rng, 128U);
-            tb = sag_textbuf_from_bytes(base.data, base.len);
-            SAG_ASSERT_EQ_U64(sag_textbuf_line_count(tb),
+            tb = yew_textbuf_from_bytes(base.data, base.len);
+            YEW_ASSERT_EQ_U64(yew_textbuf_line_count(tb),
                               prop_count_lfs(&base) + 1U);
-            SAG_ASSERT_EQ_U64(sag_textbuf_line_start(tb, LINENO(0U)).v, 0U);
+            YEW_ASSERT_EQ_U64(yew_textbuf_line_start(tb, LINENO(0U)).v, 0U);
             for (i = 0U; i < base.len; i++) {
                 if (base.data[i] == (u8)'\n') {
                     line++;
-                    SAG_ASSERT_EQ_U64(
-                        sag_textbuf_line_start(tb, LINENO(line)).v, i + 1U);
+                    YEW_ASSERT_EQ_U64(
+                        yew_textbuf_line_start(tb, LINENO(line)).v, i + 1U);
                 }
             }
-            sag_textbuf_free(tb);
+            yew_textbuf_free(tb);
             bytebuf_free(&base);
         }
     }
@@ -390,7 +390,7 @@ void test_textbuf_prop_p5_line_roundtrip(void)
     size_t seed_i;
     u64 n = prop_cases();
 
-    for (seed_i = 0U; seed_i < SAG_ARRAY_LEN(prop_seeds); seed_i++) {
+    for (seed_i = 0U; seed_i < YEW_ARRAY_LEN(prop_seeds); seed_i++) {
         u64 rng = prop_seeds[seed_i];
         u64 case_i;
 
@@ -402,23 +402,23 @@ void test_textbuf_prop_p5_line_roundtrip(void)
             u64 off;
 
             prop_fill(&base, &rng, 96U);
-            tb = sag_textbuf_from_bytes(base.data, base.len);
-            lines = sag_textbuf_line_count(tb);
+            tb = yew_textbuf_from_bytes(base.data, base.len);
+            lines = yew_textbuf_line_count(tb);
             for (line = 0U; line < lines; line++) {
-                ByteOff start = sag_textbuf_line_start(tb, LINENO(line));
+                ByteOff start = yew_textbuf_line_start(tb, LINENO(line));
 
-                SAG_ASSERT_EQ_U64(sag_textbuf_line_of(tb, start).v, line);
+                YEW_ASSERT_EQ_U64(yew_textbuf_line_of(tb, start).v, line);
             }
             for (off = 0U; off <= base.len; off++) {
-                line = sag_textbuf_line_of(tb, BYTEOFF(off)).v;
-                SAG_ASSERT(sag_textbuf_line_start(tb, LINENO(line)).v <= off);
+                line = yew_textbuf_line_of(tb, BYTEOFF(off)).v;
+                YEW_ASSERT(yew_textbuf_line_start(tb, LINENO(line)).v <= off);
                 if (line + 1U < lines)
-                    SAG_ASSERT(off < sag_textbuf_line_start(
+                    YEW_ASSERT(off < yew_textbuf_line_start(
                                          tb, LINENO(line + 1U)).v);
                 else
-                    SAG_ASSERT(off < base.len + 1U);
+                    YEW_ASSERT(off < base.len + 1U);
             }
-            sag_textbuf_free(tb);
+            yew_textbuf_free(tb);
             bytebuf_free(&base);
         }
     }
@@ -429,7 +429,7 @@ void test_textbuf_prop_p6_undo_redo_identity(void)
     size_t seed_i;
     u64 n = prop_cases();
 
-    for (seed_i = 0U; seed_i < SAG_ARRAY_LEN(prop_seeds); seed_i++) {
+    for (seed_i = 0U; seed_i < YEW_ARRAY_LEN(prop_seeds); seed_i++) {
         u64 rng = prop_seeds[seed_i];
         u64 case_i;
 
@@ -446,26 +446,26 @@ void test_textbuf_prop_p6_undo_redo_identity(void)
                 prop_random_edit(&f, &rng);
             final = prop_materialize(f.tb);
             saved = f.cursors.curs.data[f.cursors.primary];
-            node = sag_undo_current(f.undo);
+            node = yew_undo_current(f.undo);
             done = 0U;
-            while (sag_undo(&f.edit))
+            while (yew_undo(&f.edit))
                 done++;
             while (done != 0U) {
-                SAG_ASSERT(sag_redo(&f.edit));
+                YEW_ASSERT(yew_redo(&f.edit));
                 done--;
             }
             prop_assert_bytes(f.tb, &final);
-            SAG_ASSERT_EQ_U64(sag_textbuf_line_count(f.tb),
+            YEW_ASSERT_EQ_U64(yew_textbuf_line_count(f.tb),
                               prop_count_lfs(&final) + 1U);
-            SAG_ASSERT_EQ_U64(f.cursors.curs.data[f.cursors.primary].pos.v,
+            YEW_ASSERT_EQ_U64(f.cursors.curs.data[f.cursors.primary].pos.v,
                               saved.pos.v);
-            SAG_ASSERT_EQ_U64(
+            YEW_ASSERT_EQ_U64(
                 f.cursors.curs.data[f.cursors.primary].anchor.v,
                 saved.anchor.v);
-            SAG_ASSERT_EQ_U64(
+            YEW_ASSERT_EQ_U64(
                 f.cursors.curs.data[f.cursors.primary].goal_col.v,
                 saved.goal_col.v);
-            SAG_ASSERT_EQ_U64(sag_undo_current(f.undo), node);
+            YEW_ASSERT_EQ_U64(yew_undo_current(f.undo), node);
             bytebuf_free(&final);
             prop_edit_free(&f);
         }
@@ -477,7 +477,7 @@ void test_textbuf_prop_p7_undo_to_root(void)
     size_t seed_i;
     u64 n = prop_cases();
 
-    for (seed_i = 0U; seed_i < SAG_ARRAY_LEN(prop_seeds); seed_i++) {
+    for (seed_i = 0U; seed_i < YEW_ARRAY_LEN(prop_seeds); seed_i++) {
         u64 rng = prop_seeds[seed_i];
         u64 case_i;
 
@@ -490,7 +490,7 @@ void test_textbuf_prop_p7_undo_to_root(void)
             prop_edit_init(&f, initial.data, initial.len);
             for (i = 0U; i < 8U; i++)
                 prop_random_edit(&f, &rng);
-            while (sag_undo(&f.edit))
+            while (yew_undo(&f.edit))
                 ;
             prop_assert_bytes(f.tb, &initial);
             prop_edit_free(&f);
@@ -504,7 +504,7 @@ void test_textbuf_prop_p8_branch_preservation(void)
     size_t seed_i;
     u64 n = prop_cases();
 
-    for (seed_i = 0U; seed_i < SAG_ARRAY_LEN(prop_seeds); seed_i++) {
+    for (seed_i = 0U; seed_i < YEW_ARRAY_LEN(prop_seeds); seed_i++) {
         u64 rng = prop_seeds[seed_i];
         u64 case_i;
 
@@ -514,7 +514,7 @@ void test_textbuf_prop_p8_branch_preservation(void)
             u64 depth;
 
             prop_edit_init(&f, NULL, 0U);
-            parent = sag_undo_current(f.undo);
+            parent = yew_undo_current(f.undo);
             for (depth = 0U; depth < 8U; depth++) {
                 Bytebuf branch_text[3];
                 u32 branch[3];
@@ -523,21 +523,21 @@ void test_textbuf_prop_p8_branch_preservation(void)
                 for (width = 0U; width < 3U; width++) {
                     u8 byte = (u8)('A' + depth * 3U + width);
 
-                    SAG_ASSERT(sag_undo_to(&f.edit, parent));
-                    sag_undo_boundary(f.undo);
-                    sag_edit_insert(&f.edit,
-                                    BYTEOFF(sag_textbuf_len(f.tb)),
+                    YEW_ASSERT(yew_undo_to(&f.edit, parent));
+                    yew_undo_boundary(f.undo);
+                    yew_edit_insert(&f.edit,
+                                    BYTEOFF(yew_textbuf_len(f.tb)),
                                     &byte, 1U);
-                    branch[width] = sag_undo_current(f.undo);
+                    branch[width] = yew_undo_current(f.undo);
                     branch_text[width] = prop_materialize(f.tb);
                 }
                 for (width = 0U; width < 3U; width++) {
-                    SAG_ASSERT(sag_undo_to(&f.edit, branch[width]));
+                    YEW_ASSERT(yew_undo_to(&f.edit, branch[width]));
                     prop_assert_bytes(f.tb, &branch_text[width]);
                 }
                 width = (size_t)(prop_rng(&rng) % 3U);
                 parent = branch[width];
-                SAG_ASSERT(sag_undo_to(&f.edit, parent));
+                YEW_ASSERT(yew_undo_to(&f.edit, parent));
                 for (width = 0U; width < 3U; width++)
                     bytebuf_free(&branch_text[width]);
             }
@@ -561,13 +561,13 @@ static PropTree prop_check_tree(const PieceNode *node)
         PropTree right = prop_check_tree(node->right);
         u64 own = node->span.hi - node->span.lo;
 
-        SAG_ASSERT(own > 0U);
+        YEW_ASSERT(own > 0U);
         out.bytes = left.bytes + own + right.bytes;
         out.lfs = left.lfs + node->lf_count + right.lfs;
         out.count = left.count + 1U + right.count;
-        SAG_ASSERT_EQ_U64(node->sub_bytes, out.bytes);
-        SAG_ASSERT_EQ_U64(node->sub_lfs, out.lfs);
-        SAG_ASSERT_EQ_U64(node->sub_count, out.count);
+        YEW_ASSERT_EQ_U64(node->sub_bytes, out.bytes);
+        YEW_ASSERT_EQ_U64(node->sub_lfs, out.lfs);
+        YEW_ASSERT_EQ_U64(node->sub_count, out.count);
     }
     return out;
 }
@@ -577,12 +577,12 @@ void test_textbuf_prop_p9_coalescing_invariants(void)
     size_t seed_i;
     u64 n = prop_cases();
 
-    for (seed_i = 0U; seed_i < SAG_ARRAY_LEN(prop_seeds); seed_i++) {
+    for (seed_i = 0U; seed_i < YEW_ARRAY_LEN(prop_seeds); seed_i++) {
         u64 rng = prop_seeds[seed_i];
         u64 case_i;
 
         for (case_i = 0U; case_i < n; case_i++) {
-            TextBuf *seq = sag_textbuf_new();
+            TextBuf *seq = yew_textbuf_new();
             TextBuf *scattered;
             u8 base[64];
             u64 k = 8U + prop_rng(&rng) % 16U;
@@ -591,23 +591,23 @@ void test_textbuf_prop_p9_coalescing_invariants(void)
 
             (void)memset(base, 'b', sizeof(base));
             for (i = 0U; i < k; i++)
-                sag_textbuf_insert(seq, BYTEOFF(i), (const u8 *)"x", 1U);
-            SAG_ASSERT(sag_textbuf_piece_count(seq) <= 2U);
+                yew_textbuf_insert(seq, BYTEOFF(i), (const u8 *)"x", 1U);
+            YEW_ASSERT(yew_textbuf_piece_count(seq) <= 2U);
             (void)prop_check_tree(seq->root);
-            scattered = sag_textbuf_from_bytes(base, sizeof(base));
-            start = sag_textbuf_piece_count(scattered);
+            scattered = yew_textbuf_from_bytes(base, sizeof(base));
+            start = yew_textbuf_piece_count(scattered);
             for (i = 0U; i < k; i++)
-                sag_textbuf_insert(scattered, BYTEOFF(i * 3U),
+                yew_textbuf_insert(scattered, BYTEOFF(i * 3U),
                                    (const u8 *)"x", 1U);
             /* Each insert can split at most one piece and add one, hence
              * the structural upper bound is 2*ops+1. */
-            SAG_ASSERT(sag_textbuf_piece_count(scattered) <= 2U * k + 1U);
-            SAG_ASSERT(sag_textbuf_piece_count(scattered) - start >= k - 1U);
+            YEW_ASSERT(yew_textbuf_piece_count(scattered) <= 2U * k + 1U);
+            YEW_ASSERT(yew_textbuf_piece_count(scattered) - start >= k - 1U);
             (void)prop_check_tree(scattered->root);
-            sag_textbuf_check(seq);
-            sag_textbuf_check(scattered);
-            sag_textbuf_free(scattered);
-            sag_textbuf_free(seq);
+            yew_textbuf_check(seq);
+            yew_textbuf_check(scattered);
+            yew_textbuf_free(scattered);
+            yew_textbuf_free(seq);
         }
     }
 }
@@ -617,7 +617,7 @@ void test_textbuf_prop_p10_snapshot_immutability(void)
     size_t seed_i;
     u64 n = prop_cases();
 
-    for (seed_i = 0U; seed_i < SAG_ARRAY_LEN(prop_seeds); seed_i++) {
+    for (seed_i = 0U; seed_i < YEW_ARRAY_LEN(prop_seeds); seed_i++) {
         u64 rng = prop_seeds[seed_i];
         u64 case_i;
 
@@ -628,26 +628,26 @@ void test_textbuf_prop_p10_snapshot_immutability(void)
             u64 i;
 
             prop_fill(&initial, &rng, 80U);
-            tb = sag_textbuf_from_bytes(initial.data, initial.len);
-            snap = sag_textbuf_snap(tb);
+            tb = yew_textbuf_from_bytes(initial.data, initial.len);
+            snap = yew_textbuf_snap(tb);
             for (i = 0U; i < 16U; i++) {
                 u8 byte = (u8)prop_rng(&rng);
-                u64 at = prop_rng(&rng) % (sag_textbuf_len(tb) + 1U);
+                u64 at = prop_rng(&rng) % (yew_textbuf_len(tb) + 1U);
 
-                sag_textbuf_insert(tb, BYTEOFF(at), &byte, 1U);
+                yew_textbuf_insert(tb, BYTEOFF(at), &byte, 1U);
             }
             {
                 Bytebuf got = prop_snap_materialize(tb, &snap);
-                SAG_ASSERT_EQ_U64(got.len, initial.len);
-                SAG_ASSERT_EQ_MEM(got.data, initial.data, initial.len);
+                YEW_ASSERT_EQ_U64(got.len, initial.len);
+                YEW_ASSERT_EQ_MEM(got.data, initial.data, initial.len);
                 bytebuf_free(&got);
             }
             if ((case_i & 1U) == 0U) {
-                sag_textsnap_release(tb, &snap);
-                sag_textbuf_free(tb);
+                yew_textsnap_release(tb, &snap);
+                yew_textbuf_free(tb);
             } else {
-                sag_textbuf_free(tb);
-                sag_textsnap_release(NULL, &snap);
+                yew_textbuf_free(tb);
+                yew_textsnap_release(NULL, &snap);
             }
             bytebuf_free(&initial);
         }
@@ -659,12 +659,12 @@ void test_textbuf_prop_p11_save_load_roundtrip(void)
     size_t seed_i;
     u64 n = prop_cases();
 
-    for (seed_i = 0U; seed_i < SAG_ARRAY_LEN(prop_seeds); seed_i++) {
+    for (seed_i = 0U; seed_i < YEW_ARRAY_LEN(prop_seeds); seed_i++) {
         u64 rng = prop_seeds[seed_i];
         u64 case_i;
 
         for (case_i = 0U; case_i < n; case_i++) {
-            char path[] = "/tmp/sag-prop-XXXXXX";
+            char path[] = "/tmp/yew-prop-XXXXXX";
             Bytebuf initial;
             TextBuf *tb;
             TextBuf *loaded = NULL;
@@ -702,21 +702,21 @@ void test_textbuf_prop_p11_save_load_roundtrip(void)
                 initial.data[1] == 0xbbU && initial.data[2] == 0xbfU)
                 initial.data[0] = (u8)'B';
             fd = mkstemp(path);
-            SAG_ASSERT(fd >= 0);
-            SAG_ASSERT_EQ_I64(close(fd), 0);
-            SAG_ASSERT_EQ_I64(unlink(path), 0);
-            tb = sag_textbuf_from_bytes(initial.data, initial.len);
-            sag_filemeta_init(&save_meta);
-            SAG_ASSERT_EQ_U64(sag_file_save(tb, &save_meta, path),
-                              SAG_SAVE_OK);
-            SAG_ASSERT_EQ_U64(sag_file_load(path, &loaded, &load_meta),
-                              SAG_LOAD_OK);
+            YEW_ASSERT(fd >= 0);
+            YEW_ASSERT_EQ_I64(close(fd), 0);
+            YEW_ASSERT_EQ_I64(unlink(path), 0);
+            tb = yew_textbuf_from_bytes(initial.data, initial.len);
+            yew_filemeta_init(&save_meta);
+            YEW_ASSERT_EQ_U64(yew_file_save(tb, &save_meta, path),
+                              YEW_SAVE_OK);
+            YEW_ASSERT_EQ_U64(yew_file_load(path, &loaded, &load_meta),
+                              YEW_LOAD_OK);
             prop_assert_bytes(loaded, &initial);
-            sag_textbuf_free(loaded);
-            sag_filemeta_dispose(&load_meta);
-            sag_textbuf_free(tb);
-            sag_filemeta_dispose(&save_meta);
-            SAG_ASSERT_EQ_I64(unlink(path), 0);
+            yew_textbuf_free(loaded);
+            yew_filemeta_dispose(&load_meta);
+            yew_textbuf_free(tb);
+            yew_filemeta_dispose(&save_meta);
+            YEW_ASSERT_EQ_I64(unlink(path), 0);
             bytebuf_free(&initial);
         }
     }
@@ -727,7 +727,7 @@ void test_textbuf_prop_p12_cursor_mark_invariants(void)
     size_t seed_i;
     u64 n = prop_cases();
 
-    for (seed_i = 0U; seed_i < SAG_ARRAY_LEN(prop_seeds); seed_i++) {
+    for (seed_i = 0U; seed_i < YEW_ARRAY_LEN(prop_seeds); seed_i++) {
         u64 rng = prop_seeds[seed_i];
         u64 case_i;
 
@@ -738,21 +738,21 @@ void test_textbuf_prop_p12_cursor_mark_invariants(void)
             u64 op;
 
             prop_edit_init(&f, (const u8 *)"e\xcc\x81\ntext", 8U);
-            for (mark_i = 0U; mark_i < SAG_ARRAY_LEN(marks); mark_i++) {
-                u64 pos = prop_rng(&rng) % (sag_textbuf_len(f.tb) + 1U);
-                marks[mark_i] = sag_mark_add(
+            for (mark_i = 0U; mark_i < YEW_ARRAY_LEN(marks); mark_i++) {
+                u64 pos = prop_rng(&rng) % (yew_textbuf_len(f.tb) + 1U);
+                marks[mark_i] = yew_mark_add(
                     f.marks, BYTEOFF(pos),
-                    (mark_i & 1U) == 0U ? SAG_BIAS_LEFT : SAG_BIAS_RIGHT);
+                    (mark_i & 1U) == 0U ? YEW_BIAS_LEFT : YEW_BIAS_RIGHT);
             }
             for (op = 0U; op < 24U; op++) {
                 prop_random_edit(&f, &rng);
-                sag_cset_normalize(f.tb, &f.cursors);
-                SAG_ASSERT(sag_is_grapheme_boundary(
+                yew_cset_normalize(f.tb, &f.cursors);
+                YEW_ASSERT(yew_is_grapheme_boundary(
                     f.tb, f.cursors.curs.data[f.cursors.primary].pos));
-                for (mark_i = 0U; mark_i < SAG_ARRAY_LEN(marks); mark_i++)
-                    SAG_ASSERT(sag_mark_pos(f.marks, marks[mark_i]).v <=
-                               sag_textbuf_len(f.tb));
-                sag_textbuf_check(f.tb);
+                for (mark_i = 0U; mark_i < YEW_ARRAY_LEN(marks); mark_i++)
+                    YEW_ASSERT(yew_mark_pos(f.marks, marks[mark_i]).v <=
+                               yew_textbuf_len(f.tb));
+                yew_textbuf_check(f.tb);
             }
             prop_edit_free(&f);
         }

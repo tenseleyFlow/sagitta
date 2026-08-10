@@ -3,7 +3,7 @@
  */
 #include "category.h"
 
-const u16 sag_cat_stage1[SAG_CAT_TRIE_HI >> SAG_CAT_TRIE_SHIFT] = {
+const u16 yew_cat_stage1[YEW_CAT_TRIE_HI >> YEW_CAT_TRIE_SHIFT] = {
     0x0000, 0x0001, 0x0002, 0x0003, 0x0004, 0x0005, 0x0006, 0x0007,
     0x0008, 0x0009, 0x000A, 0x000B, 0x000C, 0x000D, 0x000E, 0x000F,
     0x0010, 0x0011, 0x0012, 0x0013, 0x0014, 0x0015, 0x0016, 0x0017,
@@ -198,7 +198,7 @@ const u16 sag_cat_stage1[SAG_CAT_TRIE_HI >> SAG_CAT_TRIE_SHIFT] = {
     0x0072, 0x0072, 0x0072, 0x0072, 0x0072, 0x0072, 0x0072, 0x0072
 };
 
-const u8 sag_cat_stage2[] = {
+const u8 yew_cat_stage2[] = {
     0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
     0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u, 0u,
     1u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u, 2u,
@@ -2185,12 +2185,12 @@ const u8 sag_cat_stage2[] = {
     9u, 9u, 9u, 9u, 9u, 9u, 9u, 9u, 9u, 9u, 9u, 9u, 9u, 9u, 9u, 9u
 };
 
-const u16 sag_cat_pal[] = {
+const u16 yew_cat_pal[] = {
     0x0120, 0x0140, 0x0110, 0x0102, 0x0105, 0x0190, 0x0109, 0x0100,
     0x0101, 0x0000, 0x0115, 0x0119
 };
 
-const struct SagCatRange sag_cat_hi[] = {
+const struct YewCatRange yew_cat_hi[] = {
     {0x030000u, 0x03134Au, 0x0101u},
     {0x031350u, 0x0323AFu, 0x0101u},
     {0x0E0001u, 0x0E0001u, 0x0100u},
@@ -2200,10 +2200,10 @@ const struct SagCatRange sag_cat_hi[] = {
     {0x100000u, 0x10FFFDu, 0x0100u}
 };
 
-const u32 sag_cat_hi_len = 7u;
+const u32 yew_cat_hi_len = 7u;
 
-_Static_assert(sizeof(sag_cat_stage1) + sizeof(sag_cat_stage2) +
-               sizeof(sag_cat_pal) + sizeof(sag_cat_hi) <=
+_Static_assert(sizeof(yew_cat_stage1) + sizeof(yew_cat_stage2) +
+               sizeof(yew_cat_pal) + sizeof(yew_cat_hi) <=
                64u * 1024u,
                "category tables exceed the 64 KiB budget");
 

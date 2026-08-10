@@ -16,7 +16,7 @@
  *   click is read as the drop of a gesture the user abandoned minutes
  *   ago.  Sprint 4 pinned the wheel case specifically; this fuzzer
  *   asserts the general one, by driving the stream to a quiescent state
- *   and requiring SAG_MP_IDLE.
+ *   and requiring YEW_MP_IDLE.
  *
  *   A MUTATION WITHOUT A RELEASE.  Nothing in Tabs.v may change while a
  *   drag is in flight — that is the whole reason the preview is a
@@ -28,7 +28,7 @@
  *   tabs underneath live gestures and requires the active index to stay
  *   in range.
  *
- * The bytes go through sag_input_next rather than being hand-built into
+ * The bytes go through yew_input_next rather than being hand-built into
  * Key structs: a fuzzer that skipped the decoder would be testing a
  * shape the terminal never produces.
  */
@@ -173,11 +173,11 @@ static Snap snap_take(Ed *ed)
     u32 i;
 
     (void)memset(&s, 0, sizeof(s));
-    s.n = sag_tab_count(ed);
-    if (s.n > (u32)SAG_ARRAY_LEN(s.id))
-        s.n = (u32)SAG_ARRAY_LEN(s.id);
+    s.n = yew_tab_count(ed);
+    if (s.n > (u32)YEW_ARRAY_LEN(s.id))
+        s.n = (u32)YEW_ARRAY_LEN(s.id);
     for (i = 0U; i < s.n; i++)
-        s.id[i] = sag_tab_at(ed, (int)i)->tab_id;
+        s.id[i] = yew_tab_at(ed, (int)i)->tab_id;
     return s;
 }
 
@@ -190,16 +190,16 @@ static bool snap_eq(const Snap *a, const Snap *b)
  * router queried against an empty table is not being tested. */
 static void fz_paint(Ed *ed)
 {
-    sag_region_frame_begin();
+    yew_region_frame_begin();
     if (ed->layout_dirty)
-        sag_ed_layout(ed);
-    sag_tab_strip_draw(ed, ed->tab_strip_rect);
+        yew_ed_layout(ed);
+    yew_tab_strip_draw(ed, ed->tab_strip_rect);
     {
         i32 leaf;
 
-        sag_pane_tables_reset(ed);
-        leaf = sag_pane_table_add_leaf(ed, ed->pane_root);
-        sag_region_add(SAG_REGION_PANE, ed->pane_root->rect, leaf);
+        yew_pane_tables_reset(ed);
+        leaf = yew_pane_table_add_leaf(ed, ed->pane_root);
+        yew_region_add(YEW_REGION_PANE, ed->pane_root->rect, leaf);
     }
 }
 
@@ -222,36 +222,36 @@ static bool run_session(const u8 *data, size_t len, char *why,
     for (k = 0U; k < len; k++)
         rng.s = rng.s * 31U + data[k];
 
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    sag_ed_init(&ed);
-    if (!sag_ed_open_scratch(&ed) ||
-        !sag_grid_init(&ed.grid, &ed.interner, FZ_ROWS, FZ_COLS)) {
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    yew_ed_init(&ed);
+    if (!yew_ed_open_scratch(&ed) ||
+        !yew_grid_init(&ed.grid, &ed.interner, FZ_ROWS, FZ_COLS)) {
         (void)snprintf(why, why_cap, "could not build an editor");
-        sag_ed_free(&ed);
+        yew_ed_free(&ed);
         return false;
     }
     ed.grid_ready = true;
     for (i = 0; i < FZ_TABS; i++) {
         char path[64];
 
-        (void)snprintf(path, sizeof(path), "/tmp/sag-fzmouse-%d.txt", i);
-        (void)sag_tab_open(&ed, path);
+        (void)snprintf(path, sizeof(path), "/tmp/yew-fzmouse-%d.txt", i);
+        (void)yew_tab_open(&ed, path);
     }
     /* A group, so the negative-payload path and the dwell are both
      * reachable from random coordinates. */
     {
-        u32 g = sag_group_create(&ed, "/src", "grp");
+        u32 g = yew_group_create(&ed, "/src", "grp");
 
-        sag_group_add_member(&ed, g, 4);
-        sag_group_add_member(&ed, g, 5);
+        yew_group_add_member(&ed, g, 4);
+        yew_group_add_member(&ed, g, 5);
     }
-    sag_tab_switch(&ed, 0);
-    sag_ed_layout(&ed);
+    yew_tab_switch(&ed, 0);
+    yew_ed_layout(&ed);
     ed.now_ms = 1000;
 
     (void)memset(&caps, 0, sizeof(caps));
-    sag_input_init(&in, &caps);
+    yew_input_init(&in, &caps);
     bytebuf_init(&stream);
 
     while (ok && event < FZ_EVENTS) {
@@ -259,10 +259,10 @@ static bool run_session(const u8 *data, size_t len, char *why,
 
         stream.len = 0U;
         emit_random_event(&rng, &stream);
-        sag_input_feed(&in, stream.data, stream.len);
+        yew_input_feed(&in, stream.data, stream.len);
         fz_paint(&ed);
-        while (sag_input_next(&in, ed.now_ms, &key)) {
-            if (key.kind != (u16)SAG_EV_MOUSE)
+        while (yew_input_next(&in, ed.now_ms, &key)) {
+            if (key.kind != (u16)YEW_EV_MOUSE)
                 continue;
             event++;
             /*
@@ -271,32 +271,32 @@ static bool run_session(const u8 *data, size_t len, char *why,
              * next hit-test, and the abort would be blamed on the
              * click rather than on the row.
              */
-            if (sag_region_frozen()) {
+            if (yew_region_frozen()) {
                 (void)snprintf(why, why_cap,
                                "region table left frozen after event %u",
                                (unsigned)event);
                 ok = false;
                 break;
             }
-            if (key.ev == (u8)SAG_KEY_PRESS &&
-                key.button == (u8)SAG_MB_LEFT) {
+            if (key.ev == (u8)YEW_KEY_PRESS &&
+                key.button == (u8)YEW_MB_LEFT) {
                 held = snap_take(&ed);
                 holding = true;
             }
-            sag_mouse_event(&ed, &key);
+            yew_mouse_event(&ed, &key);
             /* Wheels are impulses: they never leave a button down. */
-            if (key.button >= (u8)SAG_MB_WHEEL_UP &&
-                key.button <= (u8)SAG_MB_WHEEL_RIGHT &&
-                ed.mouse.phase == SAG_MP_IDLE && ed.mouse.held != 0U) {
+            if (key.button >= (u8)YEW_MB_WHEEL_UP &&
+                key.button <= (u8)YEW_MB_WHEEL_RIGHT &&
+                ed.mouse.phase == YEW_MP_IDLE && ed.mouse.held != 0U) {
                 (void)snprintf(why, why_cap,
                                "a wheel notch left a button held");
                 ok = false;
                 break;
             }
             /* Nothing in Tabs.v moves while a drag is in flight. */
-            if (holding && key.ev == (u8)SAG_KEY_REPEAT &&
-                (ed.mouse.phase == SAG_MP_DRAG_TAB ||
-                 ed.mouse.phase == SAG_MP_DRAG_GROUP)) {
+            if (holding && key.ev == (u8)YEW_KEY_REPEAT &&
+                (ed.mouse.phase == YEW_MP_DRAG_TAB ||
+                 ed.mouse.phase == YEW_MP_DRAG_GROUP)) {
                 Snap now = snap_take(&ed);
 
                 if (!snap_eq(&held, &now)) {
@@ -306,16 +306,16 @@ static bool run_session(const u8 *data, size_t len, char *why,
                     break;
                 }
             }
-            if (key.ev == (u8)SAG_KEY_RELEASE)
+            if (key.ev == (u8)YEW_KEY_RELEASE)
                 holding = false;
             /* The active index stays in range, whatever the stream did
              * to the tab set. */
             if (ed.tabs.active < -1 ||
-                ed.tabs.active >= (int)sag_tab_count(&ed)) {
+                ed.tabs.active >= (int)yew_tab_count(&ed)) {
                 (void)snprintf(why, why_cap,
                                "active tab index %d out of range (%u tabs)",
                                ed.tabs.active,
-                               (unsigned)sag_tab_count(&ed));
+                               (unsigned)yew_tab_count(&ed));
                 ok = false;
                 break;
             }
@@ -329,16 +329,16 @@ static bool run_session(const u8 *data, size_t len, char *why,
                 break;
             }
             ed.now_ms += 1 + (i64)rng_below(&rng, 200U);
-            sag_mouse_tick(&ed, ed.now_ms);
+            yew_mouse_tick(&ed, ed.now_ms);
             /* Menus opened by right-clicks are closed again, so the
              * next iteration starts from a comparable state. */
-            if (sag_ctx_active())
-                sag_ctx_close();
+            if (yew_ctx_active())
+                yew_ctx_close();
             /* Occasionally close a tab under the gesture: a click
              * resolved against a freed tab must find nothing. */
-            if (rng_below(&rng, 512U) == 0U && sag_tab_count(&ed) > 1U)
-                (void)sag_tab_close(&ed, (int)rng_below(
-                                             &rng, sag_tab_count(&ed)));
+            if (rng_below(&rng, 512U) == 0U && yew_tab_count(&ed) > 1U)
+                (void)yew_tab_close(&ed, (int)rng_below(
+                                             &rng, yew_tab_count(&ed)));
         }
     }
 
@@ -349,8 +349,8 @@ static bool run_session(const u8 *data, size_t len, char *why,
      * outside would be stuck for the session's lifetime.
      */
     if (ok) {
-        sag_mouse_cancel(&ed);
-        if (ed.mouse.phase != SAG_MP_IDLE || ed.mouse.held != 0U) {
+        yew_mouse_cancel(&ed);
+        if (ed.mouse.phase != YEW_MP_IDLE || ed.mouse.held != 0U) {
             (void)snprintf(why, why_cap,
                            "cancel left phase=%d held=%u",
                            (int)ed.mouse.phase,
@@ -366,13 +366,13 @@ static bool run_session(const u8 *data, size_t len, char *why,
     }
 
     bytebuf_free(&stream);
-    sag_input_free(&in);
-    sag_ctx_close();
-    sag_ed_free(&ed);
+    yew_input_free(&in);
+    yew_ctx_close();
+    yew_ed_free(&ed);
     return ok;
 }
 
 int main(int argc, char **argv)
 {
-    return sag_fuzz_main(argc, argv, "fuzz_mouse", NULL, run_session);
+    return yew_fuzz_main(argc, argv, "fuzz_mouse", NULL, run_session);
 }

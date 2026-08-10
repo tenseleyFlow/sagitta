@@ -10,7 +10,7 @@
 
 #include "ws/finder.h"
 
-void sag_typejump_clear(TypeJump *tj)
+void yew_typejump_clear(TypeJump *tj)
 {
     if (tj == NULL)
         return;
@@ -19,7 +19,7 @@ void sag_typejump_clear(TypeJump *tj)
     tj->deadline_ms = 0;
 }
 
-bool sag_typejump_active(const TypeJump *tj, i64 now_ms)
+bool yew_typejump_active(const TypeJump *tj, i64 now_ms)
 {
     return tj != NULL && tj->len > 0U && now_ms < tj->deadline_ms;
 }
@@ -34,13 +34,13 @@ static bool printable(const Key *k)
 {
     if (k->ntext != 1U)
         return false;
-    if ((k->mods & (SAG_MOD_CTRL | SAG_MOD_ALT | SAG_MOD_SUPER |
-                    SAG_MOD_HYPER | SAG_MOD_META)) != 0U)
+    if ((k->mods & (YEW_MOD_CTRL | YEW_MOD_ALT | YEW_MOD_SUPER |
+                    YEW_MOD_HYPER | YEW_MOD_META)) != 0U)
         return false;
     return k->text[0] >= 0x20U && k->text[0] != 0x7FU;
 }
 
-bool sag_typejump_key(TypeJump *tj, const Key *k, i64 now_ms,
+bool yew_typejump_key(TypeJump *tj, const Key *k, i64 now_ms,
                       const PickItem *items, u32 n, u32 *sel)
 {
     const char **labels;
@@ -56,7 +56,7 @@ bool sag_typejump_key(TypeJump *tj, const Key *k, i64 now_ms,
          * the sequence and still moves the list; a letter typed after
          * it starts a new pattern rather than continuing the old one.
          */
-        sag_typejump_clear(tj);
+        yew_typejump_clear(tj);
         return false;
     }
     if (items == NULL || n == 0U || sel == NULL)
@@ -68,11 +68,11 @@ bool sag_typejump_key(TypeJump *tj, const Key *k, i64 now_ms,
      */
     if (tj->len == 0U || now_ms >= tj->deadline_ms)
         tj->len = 0U;
-    if (tj->len + 1U < (u32)SAG_TYPEJUMP_PAT_MAX) {
+    if (tj->len + 1U < (u32)YEW_TYPEJUMP_PAT_MAX) {
         tj->pat[tj->len++] = (char)k->text[0];
         tj->pat[tj->len] = '\0';
     }
-    tj->deadline_ms = now_ms + (i64)SAG_TYPEJUMP_RESET_MS;
+    tj->deadline_ms = now_ms + (i64)YEW_TYPEJUMP_RESET_MS;
 
     /*
      * Rule 3, checked BEFORE ranking: if what is already selected
@@ -81,22 +81,22 @@ bool sag_typejump_key(TypeJump *tj, const Key *k, i64 now_ms,
      * merely also matched is the behaviour this exists to prevent.
      */
     if (*sel < n && items[*sel].label != NULL) {
-        i32 here = sag_fz_score(tj->pat, tj->len, items[*sel].label,
+        i32 here = yew_fz_score(tj->pat, tj->len, items[*sel].label,
                                 (u32)strlen(items[*sel].label), NULL);
 
         if (here >= 10000)
             return true;
     }
 
-    labels = sag_xreallocarray(NULL, n, sizeof(*labels));
-    ranked = sag_xreallocarray(NULL, n, sizeof(*ranked));
+    labels = yew_xreallocarray(NULL, n, sizeof(*labels));
+    ranked = yew_xreallocarray(NULL, n, sizeof(*ranked));
     for (i = 0U; i < n; i++)
         labels[i] = items[i].label;
     /*
      * path_mode false: these are list labels, and scoring their last
      * `/`-or-`.` segment would rank a directory listing on fragments.
      */
-    matched = sag_fz_rank(tj->pat, tj->len, labels, n, false, ranked);
+    matched = yew_fz_rank(tj->pat, tj->len, labels, n, false, ranked);
     if (matched > 0U)
         *sel = ranked[0].idx;
     free(labels);

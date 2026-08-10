@@ -24,26 +24,26 @@ static const BindRow panic_E[] = {
     {"<esc>", "ed.cmdline.cancel", 0, NULL},
 };
 
-void sag_keys_default_install(Ed *ed)
+void yew_keys_default_install(Ed *ed)
 {
-    static const BindRow *const rows[SAG_MODE__N] = {
+    static const BindRow *const rows[YEW_MODE__N] = {
         panic_L, NULL, NULL, NULL, NULL, panic_E, NULL,
     };
-    static const u32 counts[SAG_MODE__N] = {
-        SAG_ARRAY_LEN(panic_L), 0U, 0U, 0U, 0U,
-        SAG_ARRAY_LEN(panic_E), 0U,
+    static const u32 counts[YEW_MODE__N] = {
+        YEW_ARRAY_LEN(panic_L), 0U, 0U, 0U, 0U,
+        YEW_ARRAY_LEN(panic_E), 0U,
     };
     u32 i;
 
-    for (i = 0U; i < SAG_MODE__N; i++) {
-        if (!sag_keymap_build(&ed->mode_keys[i], sag_modes[i].name,
+    for (i = 0U; i < YEW_MODE__N; i++) {
+        if (!yew_keymap_build(&ed->mode_keys[i], yew_modes[i].name,
                               rows[i], counts[i]))
-            SAG_BUG("invalid panic %s-mode key table", sag_modes[i].name);
+            YEW_BUG("invalid panic %s-mode key table", yew_modes[i].name);
     }
     /* H motions remain unit-dependent and are rebuilt on each H entry. */
-    sag_keys_highlight_install(ed, SAG_MODE_L);
-    if (!sag_keymap_build(&ed->user_keys, "user", NULL, 0U))
-        SAG_BUG("cannot build empty user key table");
+    yew_keys_highlight_install(ed, YEW_MODE_L);
+    if (!yew_keymap_build(&ed->user_keys, "user", NULL, 0U))
+        YEW_BUG("cannot build empty user key table");
     ed->keys.n = 2U;
     ed->keys.l[0] = &ed->mode_keys[ed->mode];
     ed->keys.l[1] = &ed->user_keys;

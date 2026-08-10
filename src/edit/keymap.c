@@ -8,7 +8,7 @@
 #include "util/sort.h"
 
 enum {
-    KEY_MODS = SAG_MOD_CTRL | SAG_MOD_ALT | SAG_MOD_SHIFT | SAG_MOD_SUPER
+    KEY_MODS = YEW_MOD_CTRL | YEW_MOD_ALT | YEW_MOD_SHIFT | YEW_MOD_SUPER
 };
 
 typedef struct {
@@ -31,26 +31,26 @@ typedef struct {
 } KeyName;
 
 static const KeyName key_names[] = {
-    {"left", SAG_KEY_LEFT},       {"right", SAG_KEY_RIGHT},
-    {"up", SAG_KEY_UP},           {"down", SAG_KEY_DOWN},
-    {"esc", SAG_KEY_ESCAPE},      {"cr", SAG_KEY_ENTER},
-    {"tab", SAG_KEY_TAB},         {"bs", SAG_KEY_BACKSPACE},
-    {"del", SAG_KEY_DELETE},      {"space", (u32)' '},
-    {"home", SAG_KEY_HOME},       {"end", SAG_KEY_END},
-    {"pgup", SAG_KEY_PAGE_UP},    {"pgdn", SAG_KEY_PAGE_DOWN},
-    {"ins", SAG_KEY_INSERT},      {"f1", SAG_KEY_F1},
-    {"f2", SAG_KEY_F2},           {"f3", SAG_KEY_F3},
-    {"f4", SAG_KEY_F4},           {"f5", SAG_KEY_F5},
-    {"f6", SAG_KEY_F6},           {"f7", SAG_KEY_F7},
-    {"f8", SAG_KEY_F8},           {"f9", SAG_KEY_F9},
-    {"f10", SAG_KEY_F10},         {"f11", SAG_KEY_F11},
-    {"f12", SAG_KEY_F12},         {"lt", (u32)'<'}
+    {"left", YEW_KEY_LEFT},       {"right", YEW_KEY_RIGHT},
+    {"up", YEW_KEY_UP},           {"down", YEW_KEY_DOWN},
+    {"esc", YEW_KEY_ESCAPE},      {"cr", YEW_KEY_ENTER},
+    {"tab", YEW_KEY_TAB},         {"bs", YEW_KEY_BACKSPACE},
+    {"del", YEW_KEY_DELETE},      {"space", (u32)' '},
+    {"home", YEW_KEY_HOME},       {"end", YEW_KEY_END},
+    {"pgup", YEW_KEY_PAGE_UP},    {"pgdn", YEW_KEY_PAGE_DOWN},
+    {"ins", YEW_KEY_INSERT},      {"f1", YEW_KEY_F1},
+    {"f2", YEW_KEY_F2},           {"f3", YEW_KEY_F3},
+    {"f4", YEW_KEY_F4},           {"f5", YEW_KEY_F5},
+    {"f6", YEW_KEY_F6},           {"f7", YEW_KEY_F7},
+    {"f8", YEW_KEY_F8},           {"f9", YEW_KEY_F9},
+    {"f10", YEW_KEY_F10},         {"f11", YEW_KEY_F11},
+    {"f12", YEW_KEY_F12},         {"lt", (u32)'<'}
 };
 
 static char *keymap_strdup(const char *s)
 {
     size_t n = strlen(s) + 1U;
-    char *copy = sag_xmalloc(n);
+    char *copy = yew_xmalloc(n);
 
     (void)memcpy(copy, s, n);
     return copy;
@@ -61,32 +61,32 @@ static bool code_control(u32 code)
     return code < 32U || code == 127U;
 }
 
-KeyId sag_keyid(Key key)
+KeyId yew_keyid(Key key)
 {
     u32 code = key.code;
     u16 mods = (u16)(key.mods & KEY_MODS);
     KeyId id;
 
-    if (key.ev == SAG_KEY_RELEASE) {
+    if (key.ev == YEW_KEY_RELEASE) {
         id.v = 0U;
         return id;
     }
     if (key.ntext != 0U) {
         u32 text_code;
-        size_t used = sag_utf8_decode(key.text, key.ntext, &text_code);
+        size_t used = yew_utf8_decode(key.text, key.ntext, &text_code);
 
-        if (used == key.ntext && !sag_utf8_is_escape(text_code))
+        if (used == key.ntext && !yew_utf8_is_escape(text_code))
             code = text_code;
     }
     if (code >= 1U && code <= 26U) {
         code = (u32)'a' + code - 1U;
-        mods = (u16)(mods | SAG_MOD_CTRL);
+        mods = (u16)(mods | YEW_MOD_CTRL);
     }
-    if ((mods & SAG_MOD_CTRL) != 0U && code >= (u32)'A' &&
+    if ((mods & YEW_MOD_CTRL) != 0U && code >= (u32)'A' &&
         code <= (u32)'Z')
         code += (u32)'a' - (u32)'A';
     if (key.ntext != 0U && !code_control(code))
-        mods = (u16)(mods & (u16)~SAG_MOD_SHIFT);
+        mods = (u16)(mods & (u16)~YEW_MOD_SHIFT);
     id.v = ((u64)code << 16) | (u64)mods;
     return id;
 }
@@ -95,7 +95,7 @@ static bool key_name_parse(const char *s, size_t n, u32 *code)
 {
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(key_names); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(key_names); i++) {
         size_t name_n = strlen(key_names[i].name);
 
         if (name_n == n && memcmp(key_names[i].name, s, n) == 0) {
@@ -110,7 +110,7 @@ static const char *key_name_format(u32 code)
 {
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(key_names); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(key_names); i++) {
         if (key_names[i].code == code)
             return key_names[i].name;
     }
@@ -122,15 +122,15 @@ static bool parse_atom(const char *s, size_t n, KeyId *out)
     static const struct {
         char letter;
         u16 bit;
-    } prefixes[] = {{'C', SAG_MOD_CTRL}, {'A', SAG_MOD_ALT},
-                    {'S', SAG_MOD_SHIFT}, {'M', SAG_MOD_SUPER}};
+    } prefixes[] = {{'C', YEW_MOD_CTRL}, {'A', YEW_MOD_ALT},
+                    {'S', YEW_MOD_SHIFT}, {'M', YEW_MOD_SUPER}};
     size_t pos = 0U;
     size_t prefix;
     u16 mods = 0U;
     u32 code;
     bool named = false;
 
-    for (prefix = 0U; prefix < SAG_ARRAY_LEN(prefixes); prefix++) {
+    for (prefix = 0U; prefix < YEW_ARRAY_LEN(prefixes); prefix++) {
         if (pos + 2U <= n && s[pos] == prefixes[prefix].letter &&
             s[pos + 1U] == '-') {
             mods = (u16)(mods | prefixes[prefix].bit);
@@ -149,25 +149,25 @@ static bool parse_atom(const char *s, size_t n, KeyId *out)
             return false;
         named = true;
     } else {
-        size_t used = sag_utf8_decode((const u8 *)s + pos, n - pos, &code);
+        size_t used = yew_utf8_decode((const u8 *)s + pos, n - pos, &code);
 
-        if (used != n - pos || sag_utf8_is_escape(code) || code < 33U ||
+        if (used != n - pos || yew_utf8_is_escape(code) || code < 33U ||
             code == 127U || code == (u32)'<')
             return false;
     }
-    if (!named && code < SAG_KEY_BASE && (mods & SAG_MOD_SHIFT) != 0U) {
+    if (!named && code < YEW_KEY_BASE && (mods & YEW_MOD_SHIFT) != 0U) {
         if (code >= (u32)'a' && code <= (u32)'z')
             code -= (u32)'a' - (u32)'A';
-        mods = (u16)(mods & (u16)~SAG_MOD_SHIFT);
+        mods = (u16)(mods & (u16)~YEW_MOD_SHIFT);
     }
-    if ((mods & SAG_MOD_CTRL) != 0U && code >= (u32)'A' &&
+    if ((mods & YEW_MOD_CTRL) != 0U && code >= (u32)'A' &&
         code <= (u32)'Z')
         code += (u32)'a' - (u32)'A';
     out->v = ((u64)code << 16) | (u64)mods;
     return true;
 }
 
-u32 sag_key_parse_seq(const char *s, KeyId *out, u32 max)
+u32 yew_key_parse_seq(const char *s, KeyId *out, u32 max)
 {
     const char *p = s;
     u32 n = 0U;
@@ -191,13 +191,13 @@ u32 sag_key_parse_seq(const char *s, KeyId *out, u32 max)
     return n;
 }
 
-void sag_key_format_seq(const KeyId *seq, u32 n, Bytebuf *out)
+void yew_key_format_seq(const KeyId *seq, u32 n, Bytebuf *out)
 {
     static const struct {
         u16 bit;
         const char *prefix;
-    } prefixes[] = {{SAG_MOD_CTRL, "C-"}, {SAG_MOD_ALT, "A-"},
-                    {SAG_MOD_SHIFT, "S-"}, {SAG_MOD_SUPER, "M-"}};
+    } prefixes[] = {{YEW_MOD_CTRL, "C-"}, {YEW_MOD_ALT, "A-"},
+                    {YEW_MOD_SHIFT, "S-"}, {YEW_MOD_SUPER, "M-"}};
     u32 i;
 
     for (i = 0U; i < n; i++) {
@@ -208,7 +208,7 @@ void sag_key_format_seq(const KeyId *seq, u32 n, Bytebuf *out)
 
         if (i != 0U)
             bytebuf_push_u8(out, (u8)' ');
-        for (j = 0U; j < SAG_ARRAY_LEN(prefixes); j++) {
+        for (j = 0U; j < YEW_ARRAY_LEN(prefixes); j++) {
             if ((mods & prefixes[j].bit) != 0U)
                 bytebuf_append(out, prefixes[j].prefix, 2U);
         }
@@ -218,8 +218,8 @@ void sag_key_format_seq(const KeyId *seq, u32 n, Bytebuf *out)
             bytebuf_append(out, name, strlen(name));
             bytebuf_push_u8(out, (u8)'>');
         } else {
-            u8 encoded[SAG_UTF8_MAX];
-            size_t encoded_n = sag_utf8_encode(code, encoded);
+            u8 encoded[YEW_UTF8_MAX];
+            size_t encoded_n = yew_utf8_encode(code, encoded);
 
             if (encoded_n != 0U)
                 bytebuf_append(out, encoded, encoded_n);
@@ -268,22 +268,22 @@ static void scratch_free(ScratchNodeVec *nodes)
 static bool binding_arity_ok(const CmdDesc *desc, const BindRow *row)
 {
     switch ((CmdArity)desc->arity) {
-    case SAG_ARITY_NONE:
+    case YEW_ARITY_NONE:
         return row->iarg == 0 && row->sarg == NULL;
-    case SAG_ARITY_INT:
-    case SAG_ARITY_OPT_INT:
+    case YEW_ARITY_INT:
+    case YEW_ARITY_OPT_INT:
         return row->sarg == NULL;
-    case SAG_ARITY_STR:
+    case YEW_ARITY_STR:
         return row->iarg == 0 &&
                (row->sarg != NULL ||
-                (desc->flags & SAG_CMD_CAPTURES_TEXT) != 0U);
-    case SAG_ARITY_OPT_STR:
+                (desc->flags & YEW_CMD_CAPTURES_TEXT) != 0U);
+    case YEW_ARITY_OPT_STR:
         return row->iarg == 0;
     }
     return false;
 }
 
-static SagKeymapError validate_row(const BindRow *row, KeyId *seq, u32 *out_n)
+static YewKeymapError validate_row(const BindRow *row, KeyId *seq, u32 *out_n)
 {
     const CmdDesc *desc;
     CmdId cmd;
@@ -291,37 +291,37 @@ static SagKeymapError validate_row(const BindRow *row, KeyId *seq, u32 *out_n)
     u32 i;
 
     if (row == NULL || row->seq == NULL || row->cmd == NULL)
-        return SAG_KEYMAP_ERR_SEQUENCE;
-    n = sag_key_parse_seq(row->seq, seq, SAG_CHORD_MAX + 1U);
+        return YEW_KEYMAP_ERR_SEQUENCE;
+    n = yew_key_parse_seq(row->seq, seq, YEW_CHORD_MAX + 1U);
     if (n == 0U)
-        return SAG_KEYMAP_ERR_SEQUENCE;
-    if (n > SAG_CHORD_MAX)
-        return SAG_KEYMAP_ERR_TOO_LONG;
-    cmd = sag_cmd_lookup(row->cmd, (u32)strlen(row->cmd));
-    desc = sag_cmd_desc(cmd);
+        return YEW_KEYMAP_ERR_SEQUENCE;
+    if (n > YEW_CHORD_MAX)
+        return YEW_KEYMAP_ERR_TOO_LONG;
+    cmd = yew_cmd_lookup(row->cmd, (u32)strlen(row->cmd));
+    desc = yew_cmd_desc(cmd);
     if (cmd.v == 0U || desc == NULL)
-        return SAG_KEYMAP_ERR_COMMAND;
+        return YEW_KEYMAP_ERR_COMMAND;
     if (!binding_arity_ok(desc, row))
-        return SAG_KEYMAP_ERR_ARITY;
+        return YEW_KEYMAP_ERR_ARITY;
     for (i = 0U; i < n; i++)
-        if ((u32)(seq[i].v >> 16U) == SAG_KEY_ESCAPE && i + 1U < n)
-            return SAG_KEYMAP_ERR_ESCAPE_PREFIX;
+        if ((u32)(seq[i].v >> 16U) == YEW_KEY_ESCAPE && i + 1U < n)
+            return YEW_KEYMAP_ERR_ESCAPE_PREFIX;
     *out_n = n;
-    return SAG_KEYMAP_ERR_NONE;
+    return YEW_KEYMAP_ERR_NONE;
 }
 
-SagKeymapError sag_keymap_validate_row(const BindRow *row)
+YewKeymapError yew_keymap_validate_row(const BindRow *row)
 {
-    KeyId seq[SAG_CHORD_MAX + 1U];
+    KeyId seq[YEW_CHORD_MAX + 1U];
     u32 n = 0U;
 
     return validate_row(row, seq, &n);
 }
 
 static bool add_row(Keymap *out, ScratchNodeVec *scratch,
-                    const BindRow *row, SagKeymapError *error)
+                    const BindRow *row, YewKeymapError *error)
 {
-    KeyId seq[SAG_CHORD_MAX + 1U];
+    KeyId seq[YEW_CHORD_MAX + 1U];
     u32 n = 0U;
     CmdId cmd;
     u32 node = 0U;
@@ -329,13 +329,13 @@ static bool add_row(Keymap *out, ScratchNodeVec *scratch,
     Binding binding;
 
     *error = validate_row(row, seq, &n);
-    if (*error != SAG_KEYMAP_ERR_NONE)
+    if (*error != YEW_KEYMAP_ERR_NONE)
         return false;
-    cmd = sag_cmd_lookup(row->cmd, (u32)strlen(row->cmd));
+    cmd = yew_cmd_lookup(row->cmd, (u32)strlen(row->cmd));
     for (i = 0U; i < n; i++)
         node = scratch_child(scratch, node, seq[i].v);
     if (scratch->data[node].bind != 0U) {
-        *error = SAG_KEYMAP_ERR_DUPLICATE;
+        *error = YEW_KEYMAP_ERR_DUPLICATE;
         return false;
     }
     binding.cmd = cmd;
@@ -363,7 +363,7 @@ static bool flatten(Keymap *out, ScratchNodeVec *scratch)
 
         if (out->edges.len > UINT32_MAX || src->edges.len > UINT32_MAX)
             return false;
-        sag_sort_stable(src->edges.data, src->edges.len, sizeof(ScratchEdge),
+        yew_sort_stable(src->edges.data, src->edges.len, sizeof(ScratchEdge),
                         scratch_edge_cmp, NULL);
         dst->edge_lo = (u32)out->edges.len;
         dst->edge_n = (u32)src->edges.len;
@@ -379,23 +379,23 @@ static bool flatten(Keymap *out, ScratchNodeVec *scratch)
     return true;
 }
 
-const char *sag_keymap_error_string(SagKeymapError error)
+const char *yew_keymap_error_string(YewKeymapError error)
 {
     switch (error) {
-    case SAG_KEYMAP_ERR_SEQUENCE: return "invalid key sequence";
-    case SAG_KEYMAP_ERR_COMMAND: return "unknown command";
-    case SAG_KEYMAP_ERR_DUPLICATE: return "duplicate key sequence";
-    case SAG_KEYMAP_ERR_ARITY: return "command arguments do not match its arity";
-    case SAG_KEYMAP_ERR_ESCAPE_PREFIX: return "<esc> may not be a chord prefix";
-    case SAG_KEYMAP_ERR_TOO_LONG: return "key sequence exceeds eight keys";
-    case SAG_KEYMAP_ERR_NONE: return "no keymap error";
+    case YEW_KEYMAP_ERR_SEQUENCE: return "invalid key sequence";
+    case YEW_KEYMAP_ERR_COMMAND: return "unknown command";
+    case YEW_KEYMAP_ERR_DUPLICATE: return "duplicate key sequence";
+    case YEW_KEYMAP_ERR_ARITY: return "command arguments do not match its arity";
+    case YEW_KEYMAP_ERR_ESCAPE_PREFIX: return "<esc> may not be a chord prefix";
+    case YEW_KEYMAP_ERR_TOO_LONG: return "key sequence exceeds eight keys";
+    case YEW_KEYMAP_ERR_NONE: return "no keymap error";
     }
     return "unknown keymap error";
 }
 
-bool sag_keymap_build_diag(Keymap *km, const char *name,
+bool yew_keymap_build_diag(Keymap *km, const char *name,
                            const BindRow *rows, u32 n,
-                           SagKeymapDiag *diag)
+                           YewKeymapDiag *diag)
 {
     Keymap built = {0};
     ScratchNodeVec scratch = {0};
@@ -405,7 +405,7 @@ bool sag_keymap_build_diag(Keymap *km, const char *name,
     bool ok = false;
 
     if (diag != NULL)
-        *diag = (SagKeymapDiag){0U, SAG_KEYMAP_ERR_NONE};
+        *diag = (YewKeymapDiag){0U, YEW_KEYMAP_ERR_NONE};
 
     if (!km || !name || (n != 0U && !rows))
         return false;
@@ -413,38 +413,38 @@ bool sag_keymap_build_diag(Keymap *km, const char *name,
     BindingVec_push(&built.binds, reserved);
     ScratchNodeVec_push(&scratch, root);
     for (i = 0U; i < n; i++) {
-        SagKeymapError error = SAG_KEYMAP_ERR_NONE;
+        YewKeymapError error = YEW_KEYMAP_ERR_NONE;
 
         if (!rows[i].seq || !rows[i].cmd)
-            error = SAG_KEYMAP_ERR_SEQUENCE;
+            error = YEW_KEYMAP_ERR_SEQUENCE;
         else if (!add_row(&built, &scratch, &rows[i], &error)) {
             /* `error` is set by every failing validation. */
         }
-        if (error != SAG_KEYMAP_ERR_NONE) {
+        if (error != YEW_KEYMAP_ERR_NONE) {
             if (diag != NULL)
-                *diag = (SagKeymapDiag){i, error};
+                *diag = (YewKeymapDiag){i, error};
             goto done;
         }
     }
     if (!flatten(&built, &scratch))
         goto done;
-    sag_keymap_free(km);
+    yew_keymap_free(km);
     *km = built;
     (void)memset(&built, 0, sizeof(built));
     ok = true;
 done:
     scratch_free(&scratch);
-    sag_keymap_free(&built);
+    yew_keymap_free(&built);
     return ok;
 }
 
-bool sag_keymap_build(Keymap *km, const char *name,
+bool yew_keymap_build(Keymap *km, const char *name,
                       const BindRow *rows, u32 n)
 {
-    return sag_keymap_build_diag(km, name, rows, n, NULL);
+    return yew_keymap_build_diag(km, name, rows, n, NULL);
 }
 
-void sag_keymap_free(Keymap *km)
+void yew_keymap_free(Keymap *km)
 {
     size_t i;
 
@@ -458,7 +458,7 @@ void sag_keymap_free(Keymap *km)
     km->name = NULL;
 }
 
-bool sag_keymap_step(const Keymap *km, u32 node, KeyId key, u32 *child)
+bool yew_keymap_step(const Keymap *km, u32 node, KeyId key, u32 *child)
 {
     u32 lo;
     u32 hi;
@@ -484,7 +484,7 @@ bool sag_keymap_step(const Keymap *km, u32 node, KeyId key, u32 *child)
     return false;
 }
 
-KeyMatch sag_keymap_node_match(const Keymap *km, u32 node,
+KeyMatch yew_keymap_node_match(const Keymap *km, u32 node,
                                const Binding **binding)
 {
     const KeyNode *found;
@@ -494,22 +494,22 @@ KeyMatch sag_keymap_node_match(const Keymap *km, u32 node,
     if (binding)
         *binding = NULL;
     if (!km || node >= km->nodes.len)
-        return SAG_MATCH_NONE;
+        return YEW_MATCH_NONE;
     found = &km->nodes.data[node];
     full = found->bind != 0U;
     prefix = found->edge_n != 0U;
     if (full && binding)
         *binding = &km->binds.data[found->bind];
     if (full && prefix)
-        return SAG_MATCH_FULL_PREFIX;
+        return YEW_MATCH_FULL_PREFIX;
     if (full)
-        return SAG_MATCH_FULL;
+        return YEW_MATCH_FULL;
     if (prefix)
-        return SAG_MATCH_PREFIX;
-    return SAG_MATCH_NONE;
+        return YEW_MATCH_PREFIX;
+    return YEW_MATCH_NONE;
 }
 
-KeyMatch sag_keymap_lookup(const Keymap *km, const KeyId *seq, u32 n,
+KeyMatch yew_keymap_lookup(const Keymap *km, const KeyId *seq, u32 n,
                            u32 *node, const Binding **binding)
 {
     u32 at = 0U;
@@ -520,17 +520,17 @@ KeyMatch sag_keymap_lookup(const Keymap *km, const KeyId *seq, u32 n,
     if (binding)
         *binding = NULL;
     if (!km || !seq || n == 0U)
-        return SAG_MATCH_NONE;
+        return YEW_MATCH_NONE;
     for (i = 0U; i < n; i++) {
-        if (!sag_keymap_step(km, at, seq[i], &at))
-            return SAG_MATCH_NONE;
+        if (!yew_keymap_step(km, at, seq[i], &at))
+            return YEW_MATCH_NONE;
     }
     if (node)
         *node = at;
-    return sag_keymap_node_match(km, at, binding);
+    return yew_keymap_node_match(km, at, binding);
 }
 
-KeyMatch sag_keystack_lookup(const KeyStack *stack, const KeyId *seq, u32 n,
+KeyMatch yew_keystack_lookup(const KeyStack *stack, const KeyId *seq, u32 n,
                              i32 *layer, u32 *node,
                              const Binding **binding)
 {
@@ -539,26 +539,26 @@ KeyMatch sag_keystack_lookup(const KeyStack *stack, const KeyId *seq, u32 n,
     if (layer)
         *layer = -1;
     if (!stack)
-        return SAG_MATCH_NONE;
+        return YEW_MATCH_NONE;
     for (i = stack->n; i != 0U; i--) {
-        KeyMatch match = sag_keymap_lookup(stack->l[i - 1U], seq, n, node,
+        KeyMatch match = yew_keymap_lookup(stack->l[i - 1U], seq, n, node,
                                            binding);
 
-        if (match != SAG_MATCH_NONE) {
+        if (match != YEW_MATCH_NONE) {
             if (layer)
                 *layer = (i32)(i - 1U);
             return match;
         }
     }
-    return SAG_MATCH_NONE;
+    return YEW_MATCH_NONE;
 }
 
-u32 sag_keymap_binding_count(const Keymap *km)
+u32 yew_keymap_binding_count(const Keymap *km)
 {
     return km && km->binds.len != 0U ? (u32)(km->binds.len - 1U) : 0U;
 }
 
-const Binding *sag_keymap_binding_at(const Keymap *km, u32 index)
+const Binding *yew_keymap_binding_at(const Keymap *km, u32 index)
 {
     if (!km || (size_t)index + 1U >= km->binds.len)
         return NULL;
@@ -566,7 +566,7 @@ const Binding *sag_keymap_binding_at(const Keymap *km, u32 index)
 }
 
 static bool visit_node(const Keymap *km, u32 node, KeyId *seq, u32 depth,
-                       SagKeymapVisitFn visit, void *ctx)
+                       YewKeymapVisitFn visit, void *ctx)
 {
     const KeyNode *at = &km->nodes.data[node];
     u32 i;
@@ -576,7 +576,7 @@ static bool visit_node(const Keymap *km, u32 node, KeyId *seq, u32 depth,
     for (i = 0U; i < at->edge_n; i++) {
         const KeyEdge *edge = &km->edges.data[at->edge_lo + i];
 
-        if (depth >= SAG_CHORD_MAX)
+        if (depth >= YEW_CHORD_MAX)
             return false;
         seq[depth].v = edge->key;
         if (!visit_node(km, edge->child, seq, depth + 1U, visit, ctx))
@@ -585,9 +585,9 @@ static bool visit_node(const Keymap *km, u32 node, KeyId *seq, u32 depth,
     return true;
 }
 
-bool sag_keymap_visit(const Keymap *km, SagKeymapVisitFn visit, void *ctx)
+bool yew_keymap_visit(const Keymap *km, YewKeymapVisitFn visit, void *ctx)
 {
-    KeyId seq[SAG_CHORD_MAX];
+    KeyId seq[YEW_CHORD_MAX];
 
     if (!km || !visit || km->nodes.len == 0U)
         return false;

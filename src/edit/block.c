@@ -8,7 +8,7 @@
 #include "unicode/wordbreak.h"
 #include "util/log.h"
 
-enum { SAG_BLOCK_PROVIDERS_MAX = 16 };
+enum { YEW_BLOCK_PROVIDERS_MAX = 16 };
 
 typedef struct {
     u8 byte;
@@ -27,7 +27,7 @@ typedef struct {
     bool blank;
 } LineInfo;
 
-static BlockProvider providers[SAG_BLOCK_PROVIDERS_MAX];
+static BlockProvider providers[YEW_BLOCK_PROVIDERS_MAX];
 static u8 provider_count;
 static bool providers_ready;
 
@@ -57,9 +57,9 @@ static u64 span_size(Span span)
 static void provider_append(BlockProvider provider)
 {
     if (provider.name == NULL)
-        SAG_BUG("block provider has no name");
-    if (provider_count == SAG_BLOCK_PROVIDERS_MAX)
-        SAG_BUG("block provider registry overflow");
+        YEW_BUG("block provider has no name");
+    if (provider_count == YEW_BLOCK_PROVIDERS_MAX)
+        YEW_BUG("block provider registry overflow");
     providers[provider_count++] = provider;
 }
 
@@ -75,16 +75,16 @@ static void ensure_providers(void)
         (BlockProvider){"paragraph", 10, paragraph_enclosing, NULL});
 }
 
-void sag_block_register(BlockProvider provider)
+void yew_block_register(BlockProvider provider)
 {
     ensure_providers();
     provider_append(provider);
 }
 
-void sag_block_provider_syntax_install(BlockProvider provider)
+void yew_block_provider_syntax_install(BlockProvider provider)
 {
     (void)provider;
-    SAG_BUG("syntax block provider installation lands in Sprint 40");
+    YEW_BUG("syntax block provider installation lands in Sprint 40");
 }
 
 static bool read_span(const TextBuf *tb, Span span, u8 *dst)
@@ -94,14 +94,14 @@ static bool read_span(const TextBuf *tb, Span span, u8 *dst)
 
     if (span.lo == span.hi)
         return true;
-    if (!sag_textiter_begin(&it, tb, BYTEOFF(span.lo)))
+    if (!yew_textiter_begin(&it, tb, BYTEOFF(span.lo)))
         return false;
     while (copied < span.hi - span.lo) {
         const u8 *chunk;
         u64 chunk_len;
         u64 take;
 
-        if (!sag_textiter_chunk(&it, tb, &chunk, &chunk_len))
+        if (!yew_textiter_chunk(&it, tb, &chunk, &chunk_len))
             return false;
         take = span.hi - span.lo - copied;
         if (take > chunk_len)
@@ -109,7 +109,7 @@ static bool read_span(const TextBuf *tb, Span span, u8 *dst)
         for (u64 i = 0U; i < take; i++)
             dst[copied + i] = chunk[i];
         copied += take;
-        if (copied != span.hi - span.lo && !sag_textiter_advance(&it, tb))
+        if (copied != span.hi - span.lo && !yew_textiter_advance(&it, tb))
             return false;
     }
     return true;
@@ -146,15 +146,15 @@ static bool line_ascii_first_nonwhite(const TextBuf *tb, Span span,
     *blank = true;
     if (span.lo == span.hi)
         return true;
-    if (!sag_textiter_begin(&it, tb, BYTEOFF(span.lo)))
-        SAG_BUG("block line classifier cannot start iterator");
+    if (!yew_textiter_begin(&it, tb, BYTEOFF(span.lo)))
+        YEW_BUG("block line classifier cannot start iterator");
     while (consumed < span.hi - span.lo) {
         const u8 *chunk;
         u64 chunk_len;
         u64 take;
 
-        if (!sag_textiter_chunk(&it, tb, &chunk, &chunk_len))
-            SAG_BUG("block line classifier cannot read iterator");
+        if (!yew_textiter_chunk(&it, tb, &chunk, &chunk_len))
+            YEW_BUG("block line classifier cannot read iterator");
         take = span.hi - span.lo - consumed;
         if (take > chunk_len)
             take = chunk_len;
@@ -169,15 +169,15 @@ static bool line_ascii_first_nonwhite(const TextBuf *tb, Span span,
         }
         consumed += take;
         if (consumed != span.hi - span.lo &&
-            !sag_textiter_advance(&it, tb))
-            SAG_BUG("block line classifier iterator ended early");
+            !yew_textiter_advance(&it, tb))
+            YEW_BUG("block line classifier iterator ended early");
     }
     return true;
 }
 
 static bool line_info(UnitCtx *u, LineNo line, LineInfo *out)
 {
-    Span span = sag_textbuf_line_span(u->tb, line);
+    Span span = yew_textbuf_line_span(u->tb, line);
     ByteOff at = BYTEOFF(span.lo);
     ByteOff first = at;
     u32 tabwidth = u->buf != NULL && u->buf->tabwidth != 0U
@@ -190,15 +190,15 @@ static bool line_info(UnitCtx *u, LineNo line, LineInfo *out)
     if (line_ascii_first_nonwhite(u->tb, span, &first, &out->blank)) {
         if (!out->blank && first.v != span.lo)
             out->indent =
-                sag_off_to_ccol(u->tb, span, first, tabwidth).v;
+                yew_off_to_ccol(u->tb, span, first, tabwidth).v;
         return true;
     }
     while (at.v < span.hi) {
-        SagTextCluster cluster;
+        YewTextCluster cluster;
 
-        if (!sag_text_cluster_next(u->tb, span, at, &cluster))
+        if (!yew_text_cluster_next(u->tb, span, at, &cluster))
             break;
-        if (!sag_unicode_is_white_space(cluster.base_cp)) {
+        if (!yew_unicode_is_white_space(cluster.base_cp)) {
             out->blank = false;
             first = at;
             break;
@@ -206,7 +206,7 @@ static bool line_info(UnitCtx *u, LineNo line, LineInfo *out)
         at = BYTEOFF(cluster.bytes.hi);
     }
     if (!out->blank)
-        out->indent = sag_off_to_ccol(u->tb, span, first, tabwidth).v;
+        out->indent = yew_off_to_ccol(u->tb, span, first, tabwidth).v;
     return true;
 }
 
@@ -232,15 +232,15 @@ static bool better_span(Span candidate, int priority, Span best,
            (candidate_size == best_size && priority > best_priority);
 }
 
-bool sag_block_level(UnitCtx *u, ByteOff p, u32 level, Span *out)
+bool yew_block_level(UnitCtx *u, ByteOff p, u32 level, Span *out)
 {
     Span inner;
     u64 len;
 
     if (u == NULL || u->tb == NULL || out == NULL)
-        SAG_BUG("sag_block_level: incomplete context");
+        YEW_BUG("yew_block_level: incomplete context");
     ensure_providers();
-    len = sag_textbuf_len(u->tb);
+    len = yew_textbuf_len(u->tb);
     if (p.v > len)
         p = BYTEOFF(len);
     inner = (Span){p.v, p.v};
@@ -286,7 +286,7 @@ bool sag_block_level(UnitCtx *u, ByteOff p, u32 level, Span *out)
 static bool paragraph_run(UnitCtx *u, u64 line, Span *out,
                           u64 *first_line, u64 *last_line)
 {
-    u64 count = sag_textbuf_line_count(u->tb);
+    u64 count = yew_textbuf_line_count(u->tb);
     bool blank;
     u64 lo;
     u64 hi;
@@ -302,8 +302,8 @@ static bool paragraph_run(UnitCtx *u, u64 line, Span *out,
     hi = line;
     while (hi + 1U < count && line_blank(u, hi + 1U) == blank)
         hi++;
-    *out = (Span){sag_textbuf_line_span(u->tb, LINENO(lo)).lo,
-                  sag_textbuf_line_span(u->tb, LINENO(hi)).hi};
+    *out = (Span){yew_textbuf_line_span(u->tb, LINENO(lo)).lo,
+                  yew_textbuf_line_span(u->tb, LINENO(hi)).hi};
     if (first_line != NULL)
         *first_line = lo;
     if (last_line != NULL)
@@ -313,7 +313,7 @@ static bool paragraph_run(UnitCtx *u, u64 line, Span *out,
 
 static bool paragraph_section(UnitCtx *u, u64 line, Span *out)
 {
-    u64 count = sag_textbuf_line_count(u->tb);
+    u64 count = yew_textbuf_line_count(u->tb);
     u64 lo = 0U;
     u64 hi = count == 0U ? 0U : count - 1U;
     u64 cursor = 0U;
@@ -351,8 +351,8 @@ static bool paragraph_section(UnitCtx *u, u64 line, Span *out)
     }
     if (lo > hi)
         return false;
-    *out = (Span){sag_textbuf_line_span(u->tb, LINENO(lo)).lo,
-                  sag_textbuf_line_span(u->tb, LINENO(hi)).hi};
+    *out = (Span){yew_textbuf_line_span(u->tb, LINENO(lo)).lo,
+                  yew_textbuf_line_span(u->tb, LINENO(hi)).hi};
     return true;
 }
 
@@ -364,7 +364,7 @@ static bool paragraph_enclosing(void *ctx, UnitCtx *u, ByteOff p,
     Span section;
 
     (void)ctx;
-    line = sag_textbuf_line_of(u->tb, p);
+    line = yew_textbuf_line_of(u->tb, p);
     if (!paragraph_run(u, line.v, &run, NULL, NULL))
         return false;
     if (span_strictly_contains(run, inner)) {
@@ -382,7 +382,7 @@ static bool paragraph_enclosing(void *ctx, UnitCtx *u, ByteOff p,
 static bool indent_candidate(UnitCtx *u, u64 target, u64 threshold,
                              bool include_equal, Span *out)
 {
-    u64 count = sag_textbuf_line_count(u->tb);
+    u64 count = yew_textbuf_line_count(u->tb);
     u64 lo = target;
     u64 hi = target;
     u64 committed_hi = target;
@@ -405,8 +405,8 @@ static bool indent_candidate(UnitCtx *u, u64 target, u64 threshold,
             last--;
         }
         if (first < count) {
-            *out = (Span){sag_textbuf_line_span(u->tb, LINENO(first)).lo,
-                          sag_textbuf_line_span(u->tb, LINENO(last)).hi};
+            *out = (Span){yew_textbuf_line_span(u->tb, LINENO(first)).lo,
+                          yew_textbuf_line_span(u->tb, LINENO(last)).hi};
             return true;
         }
     }
@@ -434,16 +434,16 @@ static bool indent_candidate(UnitCtx *u, u64 target, u64 threshold,
         lo++;
     }
     hi = committed_hi;
-    *out = (Span){sag_textbuf_line_span(u->tb, LINENO(lo)).lo,
-                  sag_textbuf_line_span(u->tb, LINENO(hi)).hi};
+    *out = (Span){yew_textbuf_line_span(u->tb, LINENO(lo)).lo,
+                  yew_textbuf_line_span(u->tb, LINENO(hi)).hi};
     return true;
 }
 
 static bool indent_enclosing(void *ctx, UnitCtx *u, ByteOff p, Span inner,
                              Span *out)
 {
-    u64 count = sag_textbuf_line_count(u->tb);
-    u64 line = sag_textbuf_line_of(u->tb, p).v;
+    u64 count = yew_textbuf_line_count(u->tb);
+    u64 line = yew_textbuf_line_of(u->tb, p).v;
     u64 target = line;
     LineInfo target_info;
     Span best = {0U, 0U};
@@ -558,7 +558,7 @@ static bool opener_for(u8 close, u8 *open)
         u8 close;
     } pairs[] = {{'(', ')'}, {'[', ']'}, {'{', '}'}};
 
-    for (size_t i = 0U; i < SAG_ARRAY_LEN(pairs); i++) {
+    for (size_t i = 0U; i < YEW_ARRAY_LEN(pairs); i++) {
         if (pairs[i].close == close) {
             *open = pairs[i].open;
             return true;
@@ -590,8 +590,8 @@ static void scope_push(ScopeStack *stack, ScopeOpen open)
         size_t cap = stack->cap == 0U ? 64U : stack->cap * 2U;
 
         if (cap < stack->cap)
-            SAG_BUG("scope stack capacity overflow");
-        stack->data = sag_xreallocarray(stack->data, cap,
+            YEW_BUG("scope stack capacity overflow");
+        stack->data = yew_xreallocarray(stack->data, cap,
                                         sizeof(*stack->data));
         stack->cap = cap;
     }
@@ -601,12 +601,12 @@ static void scope_push(ScopeStack *stack, ScopeOpen open)
 static bool scope_pair(UnitCtx *u, ByteOff p, Span inner, Span *out,
                        u64 *open_off, u64 *close_off)
 {
-    u64 count = sag_textbuf_line_count(u->tb);
-    u64 center = sag_textbuf_line_of(u->tb, p).v;
-    u64 first = center > SAG_BLOCK_SCAN_LINES
-                    ? center - SAG_BLOCK_SCAN_LINES
+    u64 count = yew_textbuf_line_count(u->tb);
+    u64 center = yew_textbuf_line_of(u->tb, p).v;
+    u64 first = center > YEW_BLOCK_SCAN_LINES
+                    ? center - YEW_BLOCK_SCAN_LINES
                     : 0U;
-    u64 last = center + SAG_BLOCK_SCAN_LINES;
+    u64 last = center + YEW_BLOCK_SCAN_LINES;
     ScopeStack stack = {0};
     Span best = {0U, 0U};
     u64 best_open = 0U;
@@ -620,12 +620,12 @@ static bool scope_pair(UnitCtx *u, ByteOff p, Span inner, Span *out,
 
     if (last >= count || last < center)
         last = count - 1U;
-    window.lo = sag_textbuf_line_span(u->tb, LINENO(first)).lo;
-    window.hi = sag_textbuf_line_span(u->tb, LINENO(last)).hi;
+    window.lo = yew_textbuf_line_span(u->tb, LINENO(first)).lo;
+    window.hi = yew_textbuf_line_span(u->tb, LINENO(last)).hi;
     window_len = window.hi - window.lo;
-    bytes = sag_xmalloc((size_t)(window_len == 0U ? 1U : window_len));
+    bytes = yew_xmalloc((size_t)(window_len == 0U ? 1U : window_len));
     if (!read_span(u->tb, window, bytes))
-        SAG_BUG("scope provider cannot read scan window");
+        YEW_BUG("scope provider cannot read scan window");
     if (!scope_window_has_delimiter(bytes, window_len)) {
         free(bytes);
         return false;
@@ -732,16 +732,16 @@ static bool scope_enclosing(void *ctx, UnitCtx *u, ByteOff p, Span inner,
     return scope_pair(u, p, inner, out, NULL, NULL);
 }
 
-bool sag_block_match(UnitCtx *u, ByteOff p, bool next, ByteOff *out)
+bool yew_block_match(UnitCtx *u, ByteOff p, bool next, ByteOff *out)
 {
     Span pair;
     u64 open_off;
     u64 close_off;
 
     if (u == NULL || u->tb == NULL || out == NULL)
-        SAG_BUG("sag_block_match: incomplete context");
-    if (p.v > sag_textbuf_len(u->tb))
-        p = BYTEOFF(sag_textbuf_len(u->tb));
+        YEW_BUG("yew_block_match: incomplete context");
+    if (p.v > yew_textbuf_len(u->tb))
+        p = BYTEOFF(yew_textbuf_len(u->tb));
     if (!scope_pair(u, p, (Span){p.v, p.v}, &pair, &open_off, &close_off))
         return false;
     (void)pair;
@@ -751,26 +751,26 @@ bool sag_block_match(UnitCtx *u, ByteOff p, bool next, ByteOff *out)
 
 static bool cluster_white_at(const TextBuf *tb, ByteOff at)
 {
-    Span line = sag_textbuf_line_span(tb, sag_textbuf_line_of(tb, at));
-    SagTextCluster cluster;
+    Span line = yew_textbuf_line_span(tb, yew_textbuf_line_of(tb, at));
+    YewTextCluster cluster;
 
-    return sag_text_cluster_next(tb, line, at, &cluster) &&
-           sag_unicode_is_white_space(cluster.base_cp);
+    return yew_text_cluster_next(tb, line, at, &cluster) &&
+           yew_unicode_is_white_space(cluster.base_cp);
 }
 
 static ByteOff skip_white_next(const TextBuf *tb, ByteOff at)
 {
-    u64 len = sag_textbuf_len(tb);
+    u64 len = yew_textbuf_len(tb);
 
     while (at.v < len && cluster_white_at(tb, at))
-        at = sag_grapheme_next_boundary(tb, at);
+        at = yew_grapheme_next_boundary(tb, at);
     return at;
 }
 
 static ByteOff skip_white_prev(const TextBuf *tb, ByteOff at)
 {
     while (at.v != 0U) {
-        ByteOff prev = sag_grapheme_prev_boundary(tb, at);
+        ByteOff prev = yew_grapheme_prev_boundary(tb, at);
 
         if (!cluster_white_at(tb, prev))
             break;
@@ -784,7 +784,7 @@ static Span block_span(UnitCtx *u, ByteOff p, bool alt)
     Span span;
 
     (void)alt;
-    (void)sag_block_level(u, p, 0U, &span);
+    (void)yew_block_level(u, p, 0U, &span);
     return span;
 }
 
@@ -800,7 +800,7 @@ static ByteOff block_end(UnitCtx *u, ByteOff p, bool alt)
 
 static ByteOff block_next(UnitCtx *u, ByteOff p, bool alt)
 {
-    u64 len = sag_textbuf_len(u->tb);
+    u64 len = yew_textbuf_len(u->tb);
     Span current;
     ByteOff probe;
     Span sibling;
@@ -813,10 +813,10 @@ static ByteOff block_next(UnitCtx *u, ByteOff p, bool alt)
     if (current.lo == 0U && current.hi == len)
         return BYTEOFF(len);
     probe = skip_white_next(u->tb, BYTEOFF(current.hi));
-    if (probe.v < len && sag_block_level(u, probe, 0U, &sibling) &&
+    if (probe.v < len && yew_block_level(u, probe, 0U, &sibling) &&
         sibling.lo > p.v)
         return BYTEOFF(sibling.lo);
-    (void)sag_block_level(u, p, 1U, &parent);
+    (void)yew_block_level(u, p, 1U, &parent);
     if (parent.hi > p.v)
         return BYTEOFF(parent.hi);
     return BYTEOFF(len);
@@ -835,12 +835,12 @@ static ByteOff block_prev(UnitCtx *u, ByteOff p, bool alt)
     current = block_span(u, p, false);
     probe = skip_white_prev(u->tb, BYTEOFF(current.lo));
     if (probe.v != 0U) {
-        probe = sag_grapheme_prev_boundary(u->tb, probe);
-        for (u32 level = 0U; level < SAG_SEL_DEPTH; level++) {
+        probe = yew_grapheme_prev_boundary(u->tb, probe);
+        for (u32 level = 0U; level < YEW_SEL_DEPTH; level++) {
             Span sibling;
             ByteOff after;
 
-            if (!sag_block_level(u, probe, level, &sibling) ||
+            if (!yew_block_level(u, probe, level, &sibling) ||
                 sibling.lo >= p.v)
                 break;
             after = skip_white_next(u->tb, BYTEOFF(sibling.hi));
@@ -852,12 +852,12 @@ static ByteOff block_prev(UnitCtx *u, ByteOff p, bool alt)
         if (best.v != UINT64_MAX)
             return best;
     }
-    (void)sag_block_level(u, p, 1U, &parent);
+    (void)yew_block_level(u, p, 1U, &parent);
     if (parent.lo < p.v)
         return BYTEOFF(parent.lo);
     return BYTEOFF(0U);
 }
 
-const UnitOps sag_unit_block = {
+const UnitOps yew_unit_block = {
     "block", block_next, block_prev, block_home, block_end, block_span,
 };

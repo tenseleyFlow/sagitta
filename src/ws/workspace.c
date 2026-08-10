@@ -18,7 +18,7 @@
 #include "util/log.h"
 #include "util/xdg.h"
 
-u64 sag_fnv1a64(const u8 *bytes, size_t len)
+u64 yew_fnv1a64(const u8 *bytes, size_t len)
 {
     /*
      * The published FNV-1a 64 constants, in HEX.
@@ -80,17 +80,17 @@ static const char *join_state(const WsKey *k, int slot, const char *tail)
     return path_scratch[slot];
 }
 
-const char *sag_ws_state_path(const WsKey *k)
+const char *yew_ws_state_path(const WsKey *k)
 {
     return join_state(k, 0, "state.fl");
 }
 
-const char *sag_ws_undo_dir(const WsKey *k)
+const char *yew_ws_undo_dir(const WsKey *k)
 {
     return join_state(k, 1, "undo/");
 }
 
-const char *sag_ws_lock_path(const WsKey *k)
+const char *yew_ws_lock_path(const WsKey *k)
 {
     return join_state(k, 2, "lock");
 }
@@ -127,7 +127,7 @@ static int probe_matches(const char *dir, const char *want)
     return strcmp(line, want) == 0 ? 1 : 0;
 }
 
-bool sag_ws_key(WsKey *k, const char *dir)
+bool yew_ws_key(WsKey *k, const char *dir)
 {
     char *resolved;
     char *state_root;
@@ -145,12 +145,12 @@ bool sag_ws_key(WsKey *k, const char *dir)
         /* A workspace that does not resolve is not an error here — the
          * caller has already established it is a directory — but there
          * is nothing stable to key on, so we keep no state. */
-        sag_log(SAG_LOG_WARN, "workspace %s does not resolve; no state",
+        yew_log(YEW_LOG_WARN, "workspace %s does not resolve; no state",
                 dir);
         return false;
     }
     if (strlen(resolved) >= sizeof(k->realpath)) {
-        sag_log(SAG_LOG_WARN, "workspace path too long; no state");
+        yew_log(YEW_LOG_WARN, "workspace path too long; no state");
         free(resolved);
         return false;
     }
@@ -160,14 +160,14 @@ bool sag_ws_key(WsKey *k, const char *dir)
     /* Hashed over the BYTES.  Paths are bytes, not text: hashing
      * codepoints would need a decoder that could fail, on input that is
      * allowed to be invalid UTF-8. */
-    k->hash = sag_fnv1a64((const u8 *)k->realpath, strlen(k->realpath));
+    k->hash = yew_fnv1a64((const u8 *)k->realpath, strlen(k->realpath));
 
-    /* Already ends in `/sagitta` — appending it again produced
-     * `.../sagitta/sagitta/workspaces/` and a state tree nothing else
+    /* Already ends in `/yew` — appending it again produced
+     * `.../yew/yew/workspaces/` and a state tree nothing else
      * could find. */
-    state_root = sag_xdg_state_dir();
+    state_root = yew_xdg_state_dir();
     if (state_root == NULL) {
-        sag_log(SAG_LOG_WARN,
+        yew_log(YEW_LOG_WARN,
                 "no usable state directory; this session keeps no state");
         return false;
     }
@@ -177,7 +177,7 @@ bool sag_ws_key(WsKey *k, const char *dir)
      * The first probe whose `path` record matches ours, or which has no
      * record at all, is ours.
      */
-    for (probe = 0U; probe <= (u32)SAG_WS_PROBE_MAX; probe++) {
+    for (probe = 0U; probe <= (u32)YEW_WS_PROBE_MAX; probe++) {
         char candidate[PATH_MAX];
         char tail[64];
         int match;
@@ -189,7 +189,7 @@ bool sag_ws_key(WsKey *k, const char *dir)
             (void)snprintf(tail, sizeof(tail), "/workspaces/%016lx-%u/",
                            (unsigned long)k->hash, (unsigned)probe);
         if (!path_cat(candidate, sizeof(candidate), state_root, tail)) {
-            sag_log(SAG_LOG_WARN, "state path too long; no state");
+            yew_log(YEW_LOG_WARN, "state path too long; no state");
             free(state_root);
             return false;
         }
@@ -207,14 +207,14 @@ bool sag_ws_key(WsKey *k, const char *dir)
      * Running stateless loses a cache; writing into a directory that
      * belongs to a different workspace loses that workspace's layout.
      */
-    sag_log(SAG_LOG_WARN,
+    yew_log(YEW_LOG_WARN,
             "workspace key %016lx collided past %d probes; no state",
-            (unsigned long)k->hash, SAG_WS_PROBE_MAX);
+            (unsigned long)k->hash, YEW_WS_PROBE_MAX);
     free(state_root);
     return false;
 }
 
-bool sag_ws_ensure_dir(WsKey *k)
+bool yew_ws_ensure_dir(WsKey *k)
 {
     char record[PATH_MAX];
     char line[PATH_MAX];
@@ -222,8 +222,8 @@ bool sag_ws_ensure_dir(WsKey *k)
 
     if (k == NULL || k->stateless || k->dir[0] == '\0')
         return false;
-    if (!sag_mkdirs(k->dir, 0700U)) {
-        sag_log(SAG_LOG_WARN, "cannot create %s; this session keeps no state",
+    if (!yew_mkdirs(k->dir, 0700U)) {
+        yew_log(YEW_LOG_WARN, "cannot create %s; this session keeps no state",
                 k->dir);
         k->stateless = true;
         return false;
@@ -238,9 +238,9 @@ bool sag_ws_ensure_dir(WsKey *k)
     if (!path_cat(line, sizeof(line), k->realpath, "\n"))
         return false;
     n = (int)strlen(line);
-    if (sag_file_write_atomic(record, (const u8 *)line, (size_t)n,
-                              0600) != SAG_SAVE_OK) {
-        sag_log(SAG_LOG_WARN, "cannot write %s", record);
+    if (yew_file_write_atomic(record, (const u8 *)line, (size_t)n,
+                              0600) != YEW_SAVE_OK) {
+        yew_log(YEW_LOG_WARN, "cannot write %s", record);
         return false;
     }
     return true;

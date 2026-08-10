@@ -23,13 +23,13 @@ static void ly_fixture(Ed *ed)
      * with a reduced set; rebuild the full builtin table so a lookup
      * here does not depend on test order.
      */
-    sag_cmd_shutdown();
-    sag_cmd_init();
-    sag_ed_init(ed);
-    SAG_ASSERT(sag_ed_open_scratch(ed));
-    SAG_ASSERT_NOT_NULL(ed->pane_root);
-    SAG_ASSERT(ed->pane_root->is_leaf);
-    SAG_ASSERT(ed->focus == ed->pane_root);
+    yew_cmd_shutdown();
+    yew_cmd_init();
+    yew_ed_init(ed);
+    YEW_ASSERT(yew_ed_open_scratch(ed));
+    YEW_ASSERT_NOT_NULL(ed->pane_root);
+    YEW_ASSERT(ed->pane_root->is_leaf);
+    YEW_ASSERT(ed->focus == ed->pane_root);
 }
 
 static Rect rect_of(const Pane *p)
@@ -48,10 +48,10 @@ void test_layout_root_leaf_takes_the_whole_area(void)
     Rect area = {0U, 0U, 80U, 24U};
 
     ly_fixture(&ed);
-    sag_layout_compute(ed.pane_root, area);
-    SAG_ASSERT(rect_eq(rect_of(ed.pane_root), area));
-    SAG_ASSERT_EQ_U64(sag_pane_leaf_count(ed.pane_root), 1U);
-    sag_ed_free(&ed);
+    yew_layout_compute(ed.pane_root, area);
+    YEW_ASSERT(rect_eq(rect_of(ed.pane_root), area));
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root), 1U);
+    yew_ed_free(&ed);
 }
 
 /*
@@ -69,20 +69,20 @@ void test_layout_h_split_gives_the_border_column_to_the_split(void)
     /* Layout first: how much room a split has is not knowable before
      * the tree has a size, and in the editor layout always precedes
      * input. */
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    b = sag_pane_split(&ed, ed.pane_root, SAG_SPLIT_H);
-    SAG_ASSERT_NOT_NULL(b);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    b = yew_pane_split(&ed, ed.pane_root, YEW_SPLIT_H);
+    YEW_ASSERT_NOT_NULL(b);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
 
-    SAG_ASSERT(rect_eq(rect_of(ed.pane_root->a),
+    YEW_ASSERT(rect_eq(rect_of(ed.pane_root->a),
                        (Rect){0U, 0U, 40U, 24U}));
     /* Column 40 is the border; b starts at 41. */
-    SAG_ASSERT(rect_eq(rect_of(ed.pane_root->b),
+    YEW_ASSERT(rect_eq(rect_of(ed.pane_root->b),
                        (Rect){41U, 0U, 39U, 24U}));
-    SAG_ASSERT_EQ_U64(ed.pane_root->a->rect.w + ed.pane_root->b->rect.w +
+    YEW_ASSERT_EQ_U64(ed.pane_root->a->rect.w + ed.pane_root->b->rect.w +
                           1U,
                       80U);
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
 }
 
 void test_layout_v_split_gives_the_border_row_to_the_split(void)
@@ -90,14 +90,14 @@ void test_layout_v_split_gives_the_border_row_to_the_split(void)
     Ed ed;
 
     ly_fixture(&ed);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    SAG_ASSERT_NOT_NULL(sag_pane_split(&ed, ed.pane_root, SAG_SPLIT_V));
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    SAG_ASSERT(rect_eq(rect_of(ed.pane_root->a),
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT_NOT_NULL(yew_pane_split(&ed, ed.pane_root, YEW_SPLIT_V));
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT(rect_eq(rect_of(ed.pane_root->a),
                        (Rect){0U, 0U, 80U, 12U}));
-    SAG_ASSERT(rect_eq(rect_of(ed.pane_root->b),
+    YEW_ASSERT(rect_eq(rect_of(ed.pane_root->b),
                        (Rect){0U, 13U, 80U, 11U}));
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
 }
 
 /*
@@ -110,25 +110,25 @@ void test_layout_odd_widths_round_at_one_site(void)
     static const u16 widths[] = {80U, 81U, 120U, 121U};
     size_t i;
 
-    for (i = 0U; i < SAG_ARRAY_LEN(widths); i++) {
+    for (i = 0U; i < YEW_ARRAY_LEN(widths); i++) {
         Ed ed;
         u16 w = widths[i];
         Rect a;
         Rect b;
 
         ly_fixture(&ed);
-        sag_layout_compute(ed.pane_root, (Rect){0U, 0U, w, 24U});
-        SAG_ASSERT_NOT_NULL(sag_pane_split(&ed, ed.pane_root,
-                                           SAG_SPLIT_H));
-        sag_layout_compute(ed.pane_root, (Rect){0U, 0U, w, 24U});
+        yew_layout_compute(ed.pane_root, (Rect){0U, 0U, w, 24U});
+        YEW_ASSERT_NOT_NULL(yew_pane_split(&ed, ed.pane_root,
+                                           YEW_SPLIT_H));
+        yew_layout_compute(ed.pane_root, (Rect){0U, 0U, w, 24U});
         a = ed.pane_root->a->rect;
         b = ed.pane_root->b->rect;
         /* Every column is accounted for exactly once: the two leaves
          * plus the single border column. */
-        SAG_ASSERT_EQ_U64((u64)a.w + b.w + 1U, w);
+        YEW_ASSERT_EQ_U64((u64)a.w + b.w + 1U, w);
         /* And b begins immediately after the border. */
-        SAG_ASSERT_EQ_U64(b.x, (u64)a.x + a.w + 1U);
-        sag_ed_free(&ed);
+        YEW_ASSERT_EQ_U64(b.x, (u64)a.x + a.w + 1U);
+        yew_ed_free(&ed);
     }
 }
 
@@ -141,22 +141,22 @@ void test_layout_is_deterministic(void)
     Rect snap[3];
 
     ly_fixture(&ed);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 81U, 25U});
-    b = sag_pane_split(&ed, ed.pane_root, SAG_SPLIT_H);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 81U, 25U});
-    SAG_ASSERT_NOT_NULL(sag_pane_split(&ed, b, SAG_SPLIT_V));
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 81U, 25U});
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 81U, 25U});
+    b = yew_pane_split(&ed, ed.pane_root, YEW_SPLIT_H);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 81U, 25U});
+    YEW_ASSERT_NOT_NULL(yew_pane_split(&ed, b, YEW_SPLIT_V));
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 81U, 25U});
     snap[0] = ed.pane_root->rect;
     snap[1] = ed.pane_root->a->rect;
     snap[2] = ed.pane_root->b->rect;
 
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 81U, 25U});
-    SAG_ASSERT(memcmp(&snap[0], &ed.pane_root->rect, sizeof(Rect)) == 0);
-    SAG_ASSERT(memcmp(&snap[1], &ed.pane_root->a->rect,
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 81U, 25U});
+    YEW_ASSERT(memcmp(&snap[0], &ed.pane_root->rect, sizeof(Rect)) == 0);
+    YEW_ASSERT(memcmp(&snap[1], &ed.pane_root->a->rect,
                       sizeof(Rect)) == 0);
-    SAG_ASSERT(memcmp(&snap[2], &ed.pane_root->b->rect,
+    YEW_ASSERT(memcmp(&snap[2], &ed.pane_root->b->rect,
                       sizeof(Rect)) == 0);
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
 }
 
 /*
@@ -172,23 +172,23 @@ void test_layout_shrink_then_grow_restores_rects(void)
     Rect after[3];
 
     ly_fixture(&ed);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    b = sag_pane_split(&ed, ed.pane_root, SAG_SPLIT_H);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    SAG_ASSERT_NOT_NULL(sag_pane_split(&ed, b, SAG_SPLIT_V));
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    b = yew_pane_split(&ed, ed.pane_root, YEW_SPLIT_H);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT_NOT_NULL(yew_pane_split(&ed, b, YEW_SPLIT_V));
 
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
     before[0] = ed.pane_root->a->rect;
     before[1] = ed.pane_root->b->a->rect;
     before[2] = ed.pane_root->b->b->rect;
 
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 40U, 12U});
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 40U, 12U});
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
     after[0] = ed.pane_root->a->rect;
     after[1] = ed.pane_root->b->a->rect;
     after[2] = ed.pane_root->b->b->rect;
-    SAG_ASSERT(memcmp(before, after, sizeof(before)) == 0);
-    sag_ed_free(&ed);
+    YEW_ASSERT(memcmp(before, after, sizeof(before)) == 0);
+    yew_ed_free(&ed);
 }
 
 /* A subtree that cannot fit collapses to zero size and is SKIPPED, not
@@ -199,19 +199,19 @@ void test_layout_collapses_rather_than_destroying_on_shrink(void)
     Pane *b;
 
     ly_fixture(&ed);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    b = sag_pane_split(&ed, ed.pane_root, SAG_SPLIT_H);
-    SAG_ASSERT_NOT_NULL(b);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 20U, 24U});
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    b = yew_pane_split(&ed, ed.pane_root, YEW_SPLIT_H);
+    YEW_ASSERT_NOT_NULL(b);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 20U, 24U});
     /* 20 columns cannot hold two 12-column minima plus a border. */
-    SAG_ASSERT_EQ_U64(ed.pane_root->b->rect.w, 0U);
+    YEW_ASSERT_EQ_U64(ed.pane_root->b->rect.w, 0U);
     /* The node is still there, with its window. */
-    SAG_ASSERT_EQ_U64(sag_pane_leaf_count(ed.pane_root), 2U);
-    SAG_ASSERT_NOT_NULL(ed.pane_root->b->win);
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root), 2U);
+    YEW_ASSERT_NOT_NULL(ed.pane_root->b->win);
 
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    SAG_ASSERT(ed.pane_root->b->rect.w >= SAG_PANE_MIN_W);
-    sag_ed_free(&ed);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT(ed.pane_root->b->rect.w >= YEW_PANE_MIN_W);
+    yew_ed_free(&ed);
 }
 
 /* DoD 3: refusal at exactly min*2+1, acceptance at min*2+2. */
@@ -221,15 +221,15 @@ void test_layout_split_refuses_below_minimum(void)
 
     ly_fixture(&ed);
     /* One column short of holding two minima plus a border. */
-    sag_layout_compute(ed.pane_root,
-                       (Rect){0U, 0U, (u16)(SAG_PANE_MIN_W * 2), 24U});
-    SAG_ASSERT_NULL(sag_pane_split(&ed, ed.pane_root, SAG_SPLIT_H));
+    yew_layout_compute(ed.pane_root,
+                       (Rect){0U, 0U, (u16)(YEW_PANE_MIN_W * 2), 24U});
+    YEW_ASSERT_NULL(yew_pane_split(&ed, ed.pane_root, YEW_SPLIT_H));
 
     /* Exactly enough. */
-    sag_layout_compute(ed.pane_root,
-                       (Rect){0U, 0U, (u16)(SAG_PANE_MIN_W * 2 + 1), 24U});
-    SAG_ASSERT_NOT_NULL(sag_pane_split(&ed, ed.pane_root, SAG_SPLIT_H));
-    sag_ed_free(&ed);
+    yew_layout_compute(ed.pane_root,
+                       (Rect){0U, 0U, (u16)(YEW_PANE_MIN_W * 2 + 1), 24U});
+    YEW_ASSERT_NOT_NULL(yew_pane_split(&ed, ed.pane_root, YEW_SPLIT_H));
+    yew_ed_free(&ed);
 }
 
 void test_layout_split_refuses_vertically_below_minimum(void)
@@ -237,20 +237,20 @@ void test_layout_split_refuses_vertically_below_minimum(void)
     Ed ed;
 
     ly_fixture(&ed);
-    sag_layout_compute(ed.pane_root,
-                       (Rect){0U, 0U, 80U, (u16)(SAG_PANE_MIN_H * 2)});
-    SAG_ASSERT_NULL(sag_pane_split(&ed, ed.pane_root, SAG_SPLIT_V));
-    sag_layout_compute(ed.pane_root,
-                       (Rect){0U, 0U, 80U, (u16)(SAG_PANE_MIN_H * 2 + 1)});
-    SAG_ASSERT_NOT_NULL(sag_pane_split(&ed, ed.pane_root, SAG_SPLIT_V));
-    sag_ed_free(&ed);
+    yew_layout_compute(ed.pane_root,
+                       (Rect){0U, 0U, 80U, (u16)(YEW_PANE_MIN_H * 2)});
+    YEW_ASSERT_NULL(yew_pane_split(&ed, ed.pane_root, YEW_SPLIT_V));
+    yew_layout_compute(ed.pane_root,
+                       (Rect){0U, 0U, 80U, (u16)(YEW_PANE_MIN_H * 2 + 1)});
+    YEW_ASSERT_NOT_NULL(yew_pane_split(&ed, ed.pane_root, YEW_SPLIT_V));
+    yew_ed_free(&ed);
 }
 
 void test_layout_split_refuses_past_the_leaf_cap(void)
 {
     Ed ed;
     Rect area = {0U, 0U, 400U, 100U};
-    Pane *leaves[SAG_PANE_MAX_LEAVES * 2];
+    Pane *leaves[YEW_PANE_MAX_LEAVES * 2];
     u32 n;
     u32 round;
 
@@ -261,7 +261,7 @@ void test_layout_split_refuses_past_the_leaf_cap(void)
      * eighth split, so it would hit the minimum-size refusal and never
      * reach the cap this test is about.
      */
-    sag_layout_compute(ed.pane_root, area);
+    yew_layout_compute(ed.pane_root, area);
     leaves[0] = ed.pane_root;
     n = 1U;
     for (round = 0U; round < 4U; round++) {
@@ -269,24 +269,24 @@ void test_layout_split_refuses_past_the_leaf_cap(void)
         u32 i;
 
         for (i = 0U; i < have; i++) {
-            Pane *nu = sag_pane_split(&ed, leaves[i],
-                                      (round & 1U) != 0U ? SAG_SPLIT_V
-                                                         : SAG_SPLIT_H);
+            Pane *nu = yew_pane_split(&ed, leaves[i],
+                                      (round & 1U) != 0U ? YEW_SPLIT_V
+                                                         : YEW_SPLIT_H);
 
-            SAG_ASSERT_NOT_NULL(nu);
+            YEW_ASSERT_NOT_NULL(nu);
             /* The old leaf became the split node; its `a` child is the
              * original view. */
             leaves[i] = leaves[i]->a;
             leaves[n++] = nu;
-            sag_layout_compute(ed.pane_root, area);
+            yew_layout_compute(ed.pane_root, area);
         }
     }
-    SAG_ASSERT_EQ_U64(sag_pane_leaf_count(ed.pane_root),
-                      SAG_PANE_MAX_LEAVES);
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root),
+                      YEW_PANE_MAX_LEAVES);
     /* At the cap, a split with ample room is still refused. */
-    SAG_ASSERT(leaves[0]->rect.w >= (u16)(SAG_PANE_MIN_W * 2 + 1));
-    SAG_ASSERT_NULL(sag_pane_split(&ed, leaves[0], SAG_SPLIT_H));
-    sag_ed_free(&ed);
+    YEW_ASSERT(leaves[0]->rect.w >= (u16)(YEW_PANE_MIN_W * 2 + 1));
+    YEW_ASSERT_NULL(yew_pane_split(&ed, leaves[0], YEW_SPLIT_H));
+    yew_ed_free(&ed);
 }
 
 /* Parent pointers stay right through split and close sequences. */
@@ -297,25 +297,25 @@ void test_layout_tree_invariants_survive_split_and_close(void)
     Pane *c;
 
     ly_fixture(&ed);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 120U, 40U});
-    b = sag_pane_split(&ed, ed.pane_root, SAG_SPLIT_H);
-    SAG_ASSERT_NOT_NULL(b);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 120U, 40U});
-    c = sag_pane_split(&ed, b, SAG_SPLIT_V);
-    SAG_ASSERT_NOT_NULL(c);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 120U, 40U});
+    b = yew_pane_split(&ed, ed.pane_root, YEW_SPLIT_H);
+    YEW_ASSERT_NOT_NULL(b);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 120U, 40U});
+    c = yew_pane_split(&ed, b, YEW_SPLIT_V);
+    YEW_ASSERT_NOT_NULL(c);
 
-    SAG_ASSERT(ed.pane_root->a->parent == ed.pane_root);
-    SAG_ASSERT(ed.pane_root->b->parent == ed.pane_root);
-    SAG_ASSERT(ed.pane_root->b->a->parent == ed.pane_root->b);
-    SAG_ASSERT(ed.pane_root->b->b->parent == ed.pane_root->b);
-    SAG_ASSERT_EQ_U64(sag_pane_leaf_count(ed.pane_root), 3U);
+    YEW_ASSERT(ed.pane_root->a->parent == ed.pane_root);
+    YEW_ASSERT(ed.pane_root->b->parent == ed.pane_root);
+    YEW_ASSERT(ed.pane_root->b->a->parent == ed.pane_root->b);
+    YEW_ASSERT(ed.pane_root->b->b->parent == ed.pane_root->b);
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root), 3U);
 
     /* Closing collapses the parent into the sibling. */
-    SAG_ASSERT(sag_pane_close(&ed, c));
-    SAG_ASSERT_EQ_U64(sag_pane_leaf_count(ed.pane_root), 2U);
-    SAG_ASSERT(ed.pane_root->b->is_leaf);
-    SAG_ASSERT(ed.pane_root->b->parent == ed.pane_root);
-    sag_ed_free(&ed);
+    YEW_ASSERT(yew_pane_close(&ed, c));
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root), 2U);
+    YEW_ASSERT(ed.pane_root->b->is_leaf);
+    YEW_ASSERT(ed.pane_root->b->parent == ed.pane_root);
+    yew_ed_free(&ed);
 }
 
 /* The root leaf refuses to close; Sprint 23 owns that case. */
@@ -324,9 +324,9 @@ void test_layout_root_leaf_refuses_to_close(void)
     Ed ed;
 
     ly_fixture(&ed);
-    SAG_ASSERT(!sag_pane_close(&ed, ed.pane_root));
-    SAG_ASSERT_EQ_U64(sag_pane_leaf_count(ed.pane_root), 1U);
-    sag_ed_free(&ed);
+    YEW_ASSERT(!yew_pane_close(&ed, ed.pane_root));
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root), 1U);
+    yew_ed_free(&ed);
 }
 
 /*
@@ -345,36 +345,36 @@ void test_layout_leaf_at_agrees_with_every_rect(void)
     u32 borders = 0U;
 
     ly_fixture(&ed);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    b = sag_pane_split(&ed, ed.pane_root, SAG_SPLIT_H);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    SAG_ASSERT_NOT_NULL(sag_pane_split(&ed, b, SAG_SPLIT_V));
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    b = yew_pane_split(&ed, ed.pane_root, YEW_SPLIT_H);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT_NOT_NULL(yew_pane_split(&ed, b, YEW_SPLIT_V));
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
 
     for (y = 0U; y < 24U; y++) {
         for (x = 0U; x < 80U; x++) {
-            Pane *leaf = sag_pane_leaf_at(ed.pane_root, x, y);
+            Pane *leaf = yew_pane_leaf_at(ed.pane_root, x, y);
 
             if (leaf == NULL) {
                 borders++;
                 continue;
             }
-            SAG_ASSERT(leaf->is_leaf);
-            SAG_ASSERT(x >= leaf->rect.x);
-            SAG_ASSERT(x < (u32)leaf->rect.x + leaf->rect.w);
-            SAG_ASSERT(y >= leaf->rect.y);
-            SAG_ASSERT(y < (u32)leaf->rect.y + leaf->rect.h);
+            YEW_ASSERT(leaf->is_leaf);
+            YEW_ASSERT(x >= leaf->rect.x);
+            YEW_ASSERT(x < (u32)leaf->rect.x + leaf->rect.w);
+            YEW_ASSERT(y >= leaf->rect.y);
+            YEW_ASSERT(y < (u32)leaf->rect.y + leaf->rect.h);
             covered++;
         }
     }
     /* One border column over the full height, plus one border row
      * across the right-hand pane only. */
-    SAG_ASSERT_EQ_U64(borders, 24U + ed.pane_root->b->rect.w);
-    SAG_ASSERT_EQ_U64(covered + borders, 80U * 24U);
+    YEW_ASSERT_EQ_U64(borders, 24U + ed.pane_root->b->rect.w);
+    YEW_ASSERT_EQ_U64(covered + borders, 80U * 24U);
     /* Off the tree is NULL, not a wild pointer. */
-    SAG_ASSERT_NULL(sag_pane_leaf_at(ed.pane_root, 80U, 0U));
-    SAG_ASSERT_NULL(sag_pane_leaf_at(ed.pane_root, 0U, 24U));
-    sag_ed_free(&ed);
+    YEW_ASSERT_NULL(yew_pane_leaf_at(ed.pane_root, 80U, 0U));
+    YEW_ASSERT_NULL(yew_pane_leaf_at(ed.pane_root, 0U, 24U));
+    yew_ed_free(&ed);
 }
 
 /* Spatial focus on a four-pane grid, against hand-computed answers. */
@@ -388,33 +388,33 @@ void test_layout_focus_on_a_four_pane_grid(void)
     Pane *br;
 
     ly_fixture(&ed);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    right = sag_pane_split(&ed, ed.pane_root, SAG_SPLIT_H);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    SAG_ASSERT_NOT_NULL(sag_pane_split(&ed, ed.pane_root->a,
-                                       SAG_SPLIT_V));
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    SAG_ASSERT_NOT_NULL(sag_pane_split(&ed, right, SAG_SPLIT_V));
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    right = yew_pane_split(&ed, ed.pane_root, YEW_SPLIT_H);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT_NOT_NULL(yew_pane_split(&ed, ed.pane_root->a,
+                                       YEW_SPLIT_V));
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT_NOT_NULL(yew_pane_split(&ed, right, YEW_SPLIT_V));
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
 
     tl = ed.pane_root->a->a;
     bl = ed.pane_root->a->b;
     tr = ed.pane_root->b->a;
     br = ed.pane_root->b->b;
 
-    SAG_ASSERT(sag_pane_dir(ed.pane_root, tl, SAG_DIR_RIGHT) == tr);
-    SAG_ASSERT(sag_pane_dir(ed.pane_root, tr, SAG_DIR_LEFT) == tl);
-    SAG_ASSERT(sag_pane_dir(ed.pane_root, tl, SAG_DIR_DOWN) == bl);
-    SAG_ASSERT(sag_pane_dir(ed.pane_root, bl, SAG_DIR_UP) == tl);
-    SAG_ASSERT(sag_pane_dir(ed.pane_root, br, SAG_DIR_LEFT) == bl);
-    SAG_ASSERT(sag_pane_dir(ed.pane_root, br, SAG_DIR_UP) == tr);
+    YEW_ASSERT(yew_pane_dir(ed.pane_root, tl, YEW_DIR_RIGHT) == tr);
+    YEW_ASSERT(yew_pane_dir(ed.pane_root, tr, YEW_DIR_LEFT) == tl);
+    YEW_ASSERT(yew_pane_dir(ed.pane_root, tl, YEW_DIR_DOWN) == bl);
+    YEW_ASSERT(yew_pane_dir(ed.pane_root, bl, YEW_DIR_UP) == tl);
+    YEW_ASSERT(yew_pane_dir(ed.pane_root, br, YEW_DIR_LEFT) == bl);
+    YEW_ASSERT(yew_pane_dir(ed.pane_root, br, YEW_DIR_UP) == tr);
 
     /* It never wraps: off the edge is a no-op. */
-    SAG_ASSERT_NULL(sag_pane_dir(ed.pane_root, tl, SAG_DIR_LEFT));
-    SAG_ASSERT_NULL(sag_pane_dir(ed.pane_root, tl, SAG_DIR_UP));
-    SAG_ASSERT_NULL(sag_pane_dir(ed.pane_root, br, SAG_DIR_RIGHT));
-    SAG_ASSERT_NULL(sag_pane_dir(ed.pane_root, br, SAG_DIR_DOWN));
-    sag_ed_free(&ed);
+    YEW_ASSERT_NULL(yew_pane_dir(ed.pane_root, tl, YEW_DIR_LEFT));
+    YEW_ASSERT_NULL(yew_pane_dir(ed.pane_root, tl, YEW_DIR_UP));
+    YEW_ASSERT_NULL(yew_pane_dir(ed.pane_root, br, YEW_DIR_RIGHT));
+    YEW_ASSERT_NULL(yew_pane_dir(ed.pane_root, br, YEW_DIR_DOWN));
+    yew_ed_free(&ed);
 }
 
 /* A T layout: one tall pane on the left, two stacked on the right. */
@@ -427,11 +427,11 @@ void test_layout_focus_on_a_three_pane_t(void)
     Pane *br;
 
     ly_fixture(&ed);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    right = sag_pane_split(&ed, ed.pane_root, SAG_SPLIT_H);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    SAG_ASSERT_NOT_NULL(sag_pane_split(&ed, right, SAG_SPLIT_V));
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    right = yew_pane_split(&ed, ed.pane_root, YEW_SPLIT_H);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT_NOT_NULL(yew_pane_split(&ed, right, YEW_SPLIT_V));
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
 
     left = ed.pane_root->a;
     tr = ed.pane_root->b->a;
@@ -440,12 +440,12 @@ void test_layout_focus_on_a_three_pane_t(void)
     /* From the tall left pane, RIGHT picks the nearer facing edge; both
      * are equidistant in x, so the tie breaks on the centre line, which
      * the top pane wins on a 24-row split (12 vs 11). */
-    SAG_ASSERT(sag_pane_dir(ed.pane_root, left, SAG_DIR_RIGHT) == tr);
-    SAG_ASSERT(sag_pane_dir(ed.pane_root, tr, SAG_DIR_LEFT) == left);
-    SAG_ASSERT(sag_pane_dir(ed.pane_root, br, SAG_DIR_LEFT) == left);
-    SAG_ASSERT(sag_pane_dir(ed.pane_root, tr, SAG_DIR_DOWN) == br);
-    SAG_ASSERT(sag_pane_dir(ed.pane_root, br, SAG_DIR_UP) == tr);
-    sag_ed_free(&ed);
+    YEW_ASSERT(yew_pane_dir(ed.pane_root, left, YEW_DIR_RIGHT) == tr);
+    YEW_ASSERT(yew_pane_dir(ed.pane_root, tr, YEW_DIR_LEFT) == left);
+    YEW_ASSERT(yew_pane_dir(ed.pane_root, br, YEW_DIR_LEFT) == left);
+    YEW_ASSERT(yew_pane_dir(ed.pane_root, tr, YEW_DIR_DOWN) == br);
+    YEW_ASSERT(yew_pane_dir(ed.pane_root, br, YEW_DIR_UP) == tr);
+    yew_ed_free(&ed);
 }
 
 void test_layout_focus_next_cycles_in_tree_order(void)
@@ -457,20 +457,20 @@ void test_layout_focus_next_cycles_in_tree_order(void)
     Pane *third;
 
     ly_fixture(&ed);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 120U, 24U});
-    b = sag_pane_split(&ed, ed.pane_root, SAG_SPLIT_H);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 120U, 24U});
-    SAG_ASSERT_NOT_NULL(sag_pane_split(&ed, b, SAG_SPLIT_H));
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 120U, 24U});
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 120U, 24U});
+    b = yew_pane_split(&ed, ed.pane_root, YEW_SPLIT_H);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 120U, 24U});
+    YEW_ASSERT_NOT_NULL(yew_pane_split(&ed, b, YEW_SPLIT_H));
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 120U, 24U});
 
     first = ed.pane_root->a;
     second = ed.pane_root->b->a;
     third = ed.pane_root->b->b;
-    SAG_ASSERT(sag_pane_next(ed.pane_root, first) == second);
-    SAG_ASSERT(sag_pane_next(ed.pane_root, second) == third);
+    YEW_ASSERT(yew_pane_next(ed.pane_root, first) == second);
+    YEW_ASSERT(yew_pane_next(ed.pane_root, second) == third);
     /* And round, which is what a cycle means. */
-    SAG_ASSERT(sag_pane_next(ed.pane_root, third) == first);
-    sag_ed_free(&ed);
+    YEW_ASSERT(yew_pane_next(ed.pane_root, third) == first);
+    yew_ed_free(&ed);
 }
 
 /* Resize moves the boundary by the requested cells, and refuses rather
@@ -482,28 +482,28 @@ void test_layout_resize_moves_by_cells_and_clamps(void)
     u16 before;
 
     ly_fixture(&ed);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    SAG_ASSERT_NOT_NULL(sag_pane_split(&ed, ed.pane_root, SAG_SPLIT_H));
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT_NOT_NULL(yew_pane_split(&ed, ed.pane_root, YEW_SPLIT_H));
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
     split = ed.pane_root;
     before = split->a->rect.w;
 
-    SAG_ASSERT(sag_pane_resize(split, 2));
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    SAG_ASSERT_EQ_U64(split->a->rect.w, (u64)before + 2U);
+    YEW_ASSERT(yew_pane_resize(split, 2));
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT_EQ_U64(split->a->rect.w, (u64)before + 2U);
 
-    SAG_ASSERT(sag_pane_resize(split, -5));
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    SAG_ASSERT_EQ_U64(split->a->rect.w, (u64)before - 3U);
+    YEW_ASSERT(yew_pane_resize(split, -5));
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT_EQ_U64(split->a->rect.w, (u64)before - 3U);
 
     /* Past the minimum it refuses, and the ratio is untouched. */
     {
         float kept = split->ratio;
 
-        SAG_ASSERT(!sag_pane_resize(split, -1000));
-        SAG_ASSERT(split->ratio == kept);
+        YEW_ASSERT(!yew_pane_resize(split, -1000));
+        YEW_ASSERT(split->ratio == kept);
     }
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
 }
 
 void test_layout_ancestor_split_walks_to_the_matching_axis(void)
@@ -513,19 +513,19 @@ void test_layout_ancestor_split_walks_to_the_matching_axis(void)
     Pane *deep;
 
     ly_fixture(&ed);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 120U, 40U});
-    b = sag_pane_split(&ed, ed.pane_root, SAG_SPLIT_H);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 120U, 40U});
-    deep = sag_pane_split(&ed, b, SAG_SPLIT_V);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 120U, 40U});
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 120U, 40U});
+    b = yew_pane_split(&ed, ed.pane_root, YEW_SPLIT_H);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 120U, 40U});
+    deep = yew_pane_split(&ed, b, YEW_SPLIT_V);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 120U, 40U});
 
     /* The nearest V ancestor is the inner split; the nearest H
      * ancestor is the root, which is further up. */
-    SAG_ASSERT(sag_pane_ancestor_split(deep, SAG_SPLIT_V) == b);
-    SAG_ASSERT(sag_pane_ancestor_split(deep, SAG_SPLIT_H) == ed.pane_root);
+    YEW_ASSERT(yew_pane_ancestor_split(deep, YEW_SPLIT_V) == b);
+    YEW_ASSERT(yew_pane_ancestor_split(deep, YEW_SPLIT_H) == ed.pane_root);
     /* The root leaf of a one-pane tree has neither. */
-    SAG_ASSERT_NULL(sag_pane_ancestor_split(ed.pane_root, SAG_SPLIT_H));
-    sag_ed_free(&ed);
+    YEW_ASSERT_NULL(yew_pane_ancestor_split(ed.pane_root, YEW_SPLIT_H));
+    yew_ed_free(&ed);
 }
 
 static void count_visit(Pane *p, void *ctx)
@@ -543,15 +543,15 @@ void test_layout_tree_walk_visits_every_node(void)
     u32 n = 0U;
 
     ly_fixture(&ed);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 120U, 40U});
-    b = sag_pane_split(&ed, ed.pane_root, SAG_SPLIT_H);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 120U, 40U});
-    SAG_ASSERT_NOT_NULL(sag_pane_split(&ed, b, SAG_SPLIT_V));
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 120U, 40U});
+    b = yew_pane_split(&ed, ed.pane_root, YEW_SPLIT_H);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 120U, 40U});
+    YEW_ASSERT_NOT_NULL(yew_pane_split(&ed, b, YEW_SPLIT_V));
 
-    sag_pane_tree_walk(ed.pane_root, count_visit, &n);
+    yew_pane_tree_walk(ed.pane_root, count_visit, &n);
     /* 3 leaves + 2 split nodes. */
-    SAG_ASSERT_EQ_U64(n, 5U);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(n, 5U);
+    yew_ed_free(&ed);
 }
 
 /* ---------------------------------------------------------------- */
@@ -560,10 +560,10 @@ void test_layout_tree_walk_visits_every_node(void)
 
 static CmdStatus ly_invoke(Ed *ed, const char *name, u32 count)
 {
-    CmdId id = sag_cmd_lookup(name, (u32)strlen(name));
+    CmdId id = yew_cmd_lookup(name, (u32)strlen(name));
     CmdCtx cx;
 
-    SAG_ASSERT(id.v != 0U);
+    YEW_ASSERT(id.v != 0U);
     (void)memset(&cx, 0, sizeof(cx));
     cx.ed = ed;
     cx.win = ed->win;
@@ -571,8 +571,8 @@ static CmdStatus ly_invoke(Ed *ed, const char *name, u32 count)
      * repeat count of at least one regardless. */
     cx.count = count == 0U ? 1U : count;
     cx.count_given = count != 0U;
-    cx.source = SAG_SRC_TEST;
-    return sag_ed_invoke(ed, id, &cx);
+    cx.source = YEW_SRC_TEST;
+    return yew_ed_invoke(ed, id, &cx);
 }
 
 void test_layout_split_command_focuses_the_new_pane(void)
@@ -580,16 +580,16 @@ void test_layout_split_command_focuses_the_new_pane(void)
     Ed ed;
 
     ly_fixture(&ed);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.split_h", 0U), SAG_CMD_OK);
-    SAG_ASSERT_EQ_U64(sag_pane_leaf_count(ed.pane_root), 2U);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.split_h", 0U), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root), 2U);
     /* The NEW pane takes focus: a split means "open a view here". */
-    SAG_ASSERT(ed.focus == ed.pane_root->b);
+    YEW_ASSERT(ed.focus == ed.pane_root->b);
     /* And Ed's active window follows focus, so edits land in it. */
-    SAG_ASSERT(ed.win == ed.focus->win);
+    YEW_ASSERT(ed.win == ed.focus->win);
     /* Both views show the same buffer. */
-    SAG_ASSERT(ed.pane_root->a->win->buf == ed.pane_root->b->win->buf);
-    sag_ed_free(&ed);
+    YEW_ASSERT(ed.pane_root->a->win->buf == ed.pane_root->b->win->buf);
+    yew_ed_free(&ed);
 }
 
 void test_layout_split_command_refuses_with_a_message(void)
@@ -597,10 +597,10 @@ void test_layout_split_command_refuses_with_a_message(void)
     Ed ed;
 
     ly_fixture(&ed);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 10U, 24U});
-    SAG_ASSERT(ly_invoke(&ed, "ed.pane.split_h", 0U) != SAG_CMD_OK);
-    SAG_ASSERT_EQ_U64(sag_pane_leaf_count(ed.pane_root), 1U);
-    sag_ed_free(&ed);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 10U, 24U});
+    YEW_ASSERT(ly_invoke(&ed, "ed.pane.split_h", 0U) != YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root), 1U);
+    yew_ed_free(&ed);
 }
 
 /* Closing the focused pane must leave focus on a leaf that still
@@ -610,19 +610,19 @@ void test_layout_close_command_moves_focus_to_a_live_leaf(void)
     Ed ed;
 
     ly_fixture(&ed);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.split_h", 0U), SAG_CMD_OK);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.close", 0U), SAG_CMD_OK);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.split_h", 0U), YEW_CMD_OK);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.close", 0U), YEW_CMD_OK);
 
-    SAG_ASSERT_EQ_U64(sag_pane_leaf_count(ed.pane_root), 1U);
-    SAG_ASSERT_NOT_NULL(ed.focus);
-    SAG_ASSERT(ed.focus->is_leaf);
-    SAG_ASSERT(ed.focus == ed.pane_root);
-    SAG_ASSERT(ed.win == ed.focus->win);
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root), 1U);
+    YEW_ASSERT_NOT_NULL(ed.focus);
+    YEW_ASSERT(ed.focus->is_leaf);
+    YEW_ASSERT(ed.focus == ed.pane_root);
+    YEW_ASSERT(ed.win == ed.focus->win);
     /* The last pane refuses, naming Sprint 23. */
-    SAG_ASSERT(ly_invoke(&ed, "ed.pane.close", 0U) != SAG_CMD_OK);
-    sag_ed_free(&ed);
+    YEW_ASSERT(ly_invoke(&ed, "ed.pane.close", 0U) != YEW_CMD_OK);
+    yew_ed_free(&ed);
 }
 
 void test_layout_focus_commands_move_and_stop_at_edges(void)
@@ -630,22 +630,22 @@ void test_layout_focus_commands_move_and_stop_at_edges(void)
     Ed ed;
 
     ly_fixture(&ed);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.split_h", 0U), SAG_CMD_OK);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.split_h", 0U), YEW_CMD_OK);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
 
-    SAG_ASSERT(ed.focus == ed.pane_root->b);
-    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.focus_left", 0U),
-                      SAG_CMD_OK);
-    SAG_ASSERT(ed.focus == ed.pane_root->a);
+    YEW_ASSERT(ed.focus == ed.pane_root->b);
+    YEW_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.focus_left", 0U),
+                      YEW_CMD_OK);
+    YEW_ASSERT(ed.focus == ed.pane_root->a);
     /* Left again is a no-op, not a wrap. */
-    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.focus_left", 0U),
-                      SAG_CMD_OK);
-    SAG_ASSERT(ed.focus == ed.pane_root->a);
-    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.focus_right", 0U),
-                      SAG_CMD_OK);
-    SAG_ASSERT(ed.focus == ed.pane_root->b);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.focus_left", 0U),
+                      YEW_CMD_OK);
+    YEW_ASSERT(ed.focus == ed.pane_root->a);
+    YEW_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.focus_right", 0U),
+                      YEW_CMD_OK);
+    YEW_ASSERT(ed.focus == ed.pane_root->b);
+    yew_ed_free(&ed);
 }
 
 /* Grow means "make MY pane bigger" whichever side of the split it is
@@ -657,30 +657,30 @@ void test_layout_grow_widens_the_focused_pane_on_either_side(void)
     u16 b0;
 
     ly_fixture(&ed);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.split_h", 0U), SAG_CMD_OK);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.split_h", 0U), YEW_CMD_OK);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
     b0 = ed.pane_root->b->rect.w;
 
     /* Focus is on b, the second child. */
-    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.grow", 0U), SAG_CMD_OK);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    SAG_ASSERT_EQ_U64(ed.pane_root->b->rect.w, (u64)b0 + 2U);
+    YEW_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.grow", 0U), YEW_CMD_OK);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT_EQ_U64(ed.pane_root->b->rect.w, (u64)b0 + 2U);
 
     /* Now from the first child. */
-    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.focus_left", 0U),
-                      SAG_CMD_OK);
+    YEW_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.focus_left", 0U),
+                      YEW_CMD_OK);
     a0 = ed.pane_root->a->rect.w;
-    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.grow", 0U), SAG_CMD_OK);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    SAG_ASSERT_EQ_U64(ed.pane_root->a->rect.w, (u64)a0 + 2U);
+    YEW_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.grow", 0U), YEW_CMD_OK);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT_EQ_U64(ed.pane_root->a->rect.w, (u64)a0 + 2U);
 
     /* A count overrides the two-cell default. */
     a0 = ed.pane_root->a->rect.w;
-    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.shrink", 5U), SAG_CMD_OK);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    SAG_ASSERT_EQ_U64(ed.pane_root->a->rect.w, (u64)a0 - 5U);
-    sag_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.shrink", 5U), YEW_CMD_OK);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT_EQ_U64(ed.pane_root->a->rect.w, (u64)a0 - 5U);
+    yew_ed_free(&ed);
 }
 
 /* DoD 6: a drag moves the border by exactly the motion delta, and Esc
@@ -692,33 +692,33 @@ void test_layout_drag_moves_by_delta_and_esc_restores(void)
     float entry;
 
     ly_fixture(&ed);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    SAG_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.split_h", 0U), SAG_CMD_OK);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT_EQ_U64(ly_invoke(&ed, "ed.pane.split_h", 0U), YEW_CMD_OK);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
     before = ed.pane_root->a->rect.w;
     entry = ed.pane_root->ratio;
 
     /* Press on the border column, then move three cells right. */
-    sag_pane_drag_begin(&ed, ed.pane_root, before, 5U);
-    SAG_ASSERT(ed.drag.active);
-    sag_pane_drag_motion(&ed, (u16)(before + 3U), 5U);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    SAG_ASSERT_EQ_U64(ed.pane_root->a->rect.w, (u64)before + 3U);
-    sag_pane_drag_end(&ed);
-    SAG_ASSERT(!ed.drag.active);
+    yew_pane_drag_begin(&ed, ed.pane_root, before, 5U);
+    YEW_ASSERT(ed.drag.active);
+    yew_pane_drag_motion(&ed, (u16)(before + 3U), 5U);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT_EQ_U64(ed.pane_root->a->rect.w, (u64)before + 3U);
+    yew_pane_drag_end(&ed);
+    YEW_ASSERT(!ed.drag.active);
 
     /* A second drag, cancelled: the entry ratio comes back exactly. */
     entry = ed.pane_root->ratio;
     before = ed.pane_root->a->rect.w;
-    sag_pane_drag_begin(&ed, ed.pane_root, before, 5U);
-    sag_pane_drag_motion(&ed, (u16)(before + 6U), 5U);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    SAG_ASSERT(ed.pane_root->a->rect.w != before);
-    sag_pane_drag_cancel(&ed);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    SAG_ASSERT(ed.pane_root->ratio == entry);
-    SAG_ASSERT_EQ_U64(ed.pane_root->a->rect.w, before);
-    sag_ed_free(&ed);
+    yew_pane_drag_begin(&ed, ed.pane_root, before, 5U);
+    yew_pane_drag_motion(&ed, (u16)(before + 6U), 5U);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT(ed.pane_root->a->rect.w != before);
+    yew_pane_drag_cancel(&ed);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT(ed.pane_root->ratio == entry);
+    YEW_ASSERT_EQ_U64(ed.pane_root->a->rect.w, before);
+    yew_ed_free(&ed);
 }
 
 /*
@@ -734,20 +734,20 @@ void test_layout_close_repairs_focus_on_the_freed_sibling(void)
     Pane *left;
 
     ly_fixture(&ed);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
-    right = sag_pane_split(&ed, ed.pane_root, SAG_SPLIT_H);
-    SAG_ASSERT_NOT_NULL(right);
-    sag_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    right = yew_pane_split(&ed, ed.pane_root, YEW_SPLIT_H);
+    YEW_ASSERT_NOT_NULL(right);
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
     left = ed.pane_root->a;
 
     /* Focus the SIBLING of the pane about to close. */
     ed.focus = right;
-    SAG_ASSERT(sag_pane_close(&ed, left));
+    YEW_ASSERT(yew_pane_close(&ed, left));
     /* Focus must name a leaf that still exists — not `right`, which was
      * the sibling node and is now freed. */
-    SAG_ASSERT_NOT_NULL(ed.focus);
-    SAG_ASSERT(ed.focus == ed.pane_root);
-    SAG_ASSERT(ed.focus->is_leaf);
-    SAG_ASSERT_EQ_U64(sag_pane_leaf_count(ed.pane_root), 1U);
-    sag_ed_free(&ed);
+    YEW_ASSERT_NOT_NULL(ed.focus);
+    YEW_ASSERT(ed.focus == ed.pane_root);
+    YEW_ASSERT(ed.focus->is_leaf);
+    YEW_ASSERT_EQ_U64(yew_pane_leaf_count(ed.pane_root), 1U);
+    yew_ed_free(&ed);
 }

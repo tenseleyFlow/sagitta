@@ -16,12 +16,12 @@
 #include "unicode/utf8.h"
 #include "util/log.h"
 
-bool sag_re_pike_run(const SagRe *re, const SagReInput *in, u64 start,
-                     SagReMatch *out);
+bool yew_re_pike_run(const YewRe *re, const YewReInput *in, u64 start,
+                     YewReMatch *out);
 
 /* Reads one byte, chunk-aware.  Kept local so callers cannot accidentally
  * grow it into a "give me the whole buffer" helper (§1's law). */
-static bool byte_at(const SagReInput *in, TextIter *it, u64 off, u8 *out)
+static bool byte_at(const YewReInput *in, TextIter *it, u64 off, u8 *out)
 {
     const u8 *chunk = NULL;
     size_t n = 0U;
@@ -34,8 +34,8 @@ static bool byte_at(const SagReInput *in, TextIter *it, u64 off, u8 *out)
         *out = in->bytes[off];
         return true;
     }
-    if (!sag_textiter_begin(it, in->tb, BYTEOFF(off)) ||
-        !sag_textiter_chunk(it, in->tb, &chunk, &n) || n == 0U)
+    if (!yew_textiter_begin(it, in->tb, BYTEOFF(off)) ||
+        !yew_textiter_chunk(it, in->tb, &chunk, &n) || n == 0U)
         return false;
     *out = chunk[0];
     return true;
@@ -48,7 +48,7 @@ static bool byte_at(const SagReInput *in, TextIter *it, u64 off, u8 *out)
  * match-sized span and quite wrong for a scan, which is why the engine
  * itself uses the cursor above instead.
  */
-bool sag_re_input_byte(const SagReInput *in, u64 off, u8 *out)
+bool yew_re_input_byte(const YewReInput *in, u64 off, u8 *out)
 {
     TextIter it;
 
@@ -71,7 +71,7 @@ static u64 lead_len(u8 b)
     return 0U;
 }
 
-static bool is_cp_start(const SagReInput *in, u64 off)
+static bool is_cp_start(const YewReInput *in, u64 off)
 {
     TextIter it;
     u8 b;
@@ -93,7 +93,7 @@ static bool is_cp_start(const SagReInput *in, u64 off)
      * binary files the escape policy exists to support.  So check
      * whether a real lead actually claims this offset.
      */
-    for (back = 1U; back < SAG_UTF8_MAX && back <= off; back++) {
+    for (back = 1U; back < YEW_UTF8_MAX && back <= off; back++) {
         u8 lead;
         u64 span;
 
@@ -110,7 +110,7 @@ static bool is_cp_start(const SagReInput *in, u64 off)
 }
 
 /* Advances one codepoint from `off`. */
-static u64 next_cp_off(const SagReInput *in, u64 off)
+static u64 next_cp_off(const YewReInput *in, u64 off)
 {
     TextIter it;
     u8 b;
@@ -141,7 +141,7 @@ static u64 next_cp_off(const SagReInput *in, u64 off)
  * array.  The differential fuzzer builds its buffers by random insertion
  * precisely to hit this.
  */
-static u64 prefilter_find(const SagRe *re, const SagReInput *in, u64 from)
+static u64 prefilter_find(const YewRe *re, const YewReInput *in, u64 from)
 {
     const ReLit *l = &re->lit;
     u64 at = from;
@@ -153,7 +153,7 @@ static u64 prefilter_find(const SagRe *re, const SagReInput *in, u64 from)
 
         if (from >= in->window.hi)
             return UINT64_MAX;
-        hit = sag_lit_find(l, in->bytes + from, in->window.hi - from);
+        hit = yew_lit_find(l, in->bytes + from, in->window.hi - from);
         return hit == UINT64_MAX ? UINT64_MAX : from + hit;
     }
     while (at < in->window.hi) {
@@ -165,13 +165,13 @@ static u64 prefilter_find(const SagRe *re, const SagReInput *in, u64 from)
         u8 carry[64];
         u64 carry_n;
 
-        if (!sag_textiter_begin(&it, in->tb, BYTEOFF(at)) ||
-            !sag_textiter_chunk(&it, in->tb, &chunk, &n) || n == 0U)
+        if (!yew_textiter_begin(&it, in->tb, BYTEOFF(at)) ||
+            !yew_textiter_chunk(&it, in->tb, &chunk, &n) || n == 0U)
             return UINT64_MAX;
         span = (u64)n;
         if (at + span > in->window.hi)
             span = in->window.hi - at;
-        hit = sag_lit_find(l, chunk, span);
+        hit = yew_lit_find(l, chunk, span);
         if (hit != UINT64_MAX)
             return at + hit;
         /* Straddle window: the last n-1 bytes of this chunk plus the
@@ -194,7 +194,7 @@ static u64 prefilter_find(const SagRe *re, const SagReInput *in, u64 from)
                 carry[carry_n++] = b;
             }
             if (carry_n >= l->n) {
-                u64 chit = sag_lit_find(l, carry, carry_n);
+                u64 chit = yew_lit_find(l, carry, carry_n);
 
                 if (chit != UINT64_MAX)
                     return base + chit;
@@ -205,16 +205,16 @@ static u64 prefilter_find(const SagRe *re, const SagReInput *in, u64 from)
     return UINT64_MAX;
 }
 
-bool sag_re_match_at(const SagRe *re, const SagReInput *in, ByteOff at,
-                     SagReMatch *out)
+bool yew_re_match_at(const YewRe *re, const YewReInput *in, ByteOff at,
+                     YewReMatch *out)
 {
     if (re == NULL || in == NULL)
         return false;
-    return sag_re_pike_run(re, in, at.v, out);
+    return yew_re_pike_run(re, in, at.v, out);
 }
 
-bool sag_re_search(const SagRe *re, const SagReInput *in, ByteOff from,
-                   SagReMatch *out)
+bool yew_re_search(const YewRe *re, const YewReInput *in, ByteOff from,
+                   YewReMatch *out)
 {
     u64 at;
 
@@ -291,19 +291,19 @@ bool sag_re_search(const SagRe *re, const SagReInput *in, ByteOff from,
      */
     {
         u64 end = 0U;
-        int verdict = sag_re_dfa_find_end(re, in, at, &end);
+        int verdict = yew_re_dfa_find_end(re, in, at, &end);
 
-        if (verdict == SAG_DFA_NO)
+        if (verdict == YEW_DFA_NO)
             return false;
-        if (verdict == SAG_DFA_YES && is_cp_start(in, at) &&
+        if (verdict == YEW_DFA_YES && is_cp_start(in, at) &&
             re->max_len != UINT32_MAX &&
-            re->max_len <= SAG_RE_SPAN_WINDOW / 4U) {
+            re->max_len <= YEW_RE_SPAN_WINDOW / 4U) {
             u64 span = (u64)re->max_len * 4U;
 
             if (end > at + span) {
                 u64 to = end - span;
-                u64 floor = to > (u64)SAG_UTF8_MAX ?
-                            to - (u64)SAG_UTF8_MAX : in->window.lo;
+                u64 floor = to > (u64)YEW_UTF8_MAX ?
+                            to - (u64)YEW_UTF8_MAX : in->window.lo;
 
                 /*
                  * Start and finish on codepoint boundaries, or not at
@@ -345,10 +345,10 @@ bool sag_re_search(const SagRe *re, const SagReInput *in, ByteOff from,
      * for every pattern, which makes the narrowing reachable; /\B/ over
      * "漢字" flipped to a false match the moment it was.
      */
-    return sag_re_pike_run_ex(re, in, at, false, out);
+    return yew_re_pike_run_ex(re, in, at, false, out);
 }
 
-bool sag_re_test(const SagRe *re, const SagReInput *in, ByteOff from)
+bool yew_re_test(const YewRe *re, const YewReInput *in, ByteOff from)
 {
     int verdict;
 
@@ -357,25 +357,25 @@ bool sag_re_test(const SagRe *re, const SagReInput *in, ByteOff from)
     /* §6's dispatcher row: prefilter, then the lazy DFA.  A
      * whole-pattern literal is answered by the prefilter alone. */
     if (re->lit.kind == RE_LIT_WHOLE)
-        return sag_re_search(re, in, from, NULL);
-    verdict = sag_re_dfa_test(re, in, from.v);
-    if (verdict != SAG_DFA_GIVE_UP)
-        return verdict == SAG_DFA_YES;
+        return yew_re_search(re, in, from, NULL);
+    verdict = yew_re_dfa_test(re, in, from.v);
+    if (verdict != YEW_DFA_GIVE_UP)
+        return verdict == YEW_DFA_YES;
     /* The cache thrashed: finish on the VM rather than rebuild every
      * state per character, which is slower than never having cached. */
-    return sag_re_search(re, in, from, NULL);
+    return yew_re_search(re, in, from, NULL);
 }
 
 /*
  * Backward search: scan forward inside a bounded window that walks
- * backwards, keeping the last match.  Each window is one sag_re_search,
+ * backwards, keeping the last match.  Each window is one yew_re_search,
  * so the DFA skip-ahead above applies inside it too.
  *
  * This is the shape a reverse engine would have replaced; see the rprog
  * comment in regex_internal.h for why it does not.
  */
-bool sag_re_search_back(const SagRe *re, const SagReInput *in,
-                        ByteOff before, SagReMatch *out)
+bool yew_re_search_back(const YewRe *re, const YewReInput *in,
+                        ByteOff before, YewReMatch *out)
 {
     enum { WINDOW = 256U * 1024U };
     u64 hi = before.v > in->window.hi ? in->window.hi : before.v;
@@ -384,9 +384,9 @@ bool sag_re_search_back(const SagRe *re, const SagReInput *in,
     if (re == NULL || in == NULL || hi <= in->window.lo)
         return false;
     for (;;) {
-        SagReInput sub = *in;
-        SagReMatch best;
-        SagReMatch cur;
+        YewReInput sub = *in;
+        YewReMatch best;
+        YewReMatch cur;
         bool found = false;
         u64 at;
 
@@ -396,7 +396,7 @@ bool sag_re_search_back(const SagRe *re, const SagReInput *in,
         at = lo;
         (void)memset(&best, 0, sizeof(best));
         while (at < hi) {
-            if (!sag_re_search(re, &sub, BYTEOFF(at), &cur))
+            if (!yew_re_search(re, &sub, BYTEOFF(at), &cur))
                 break;
             if (cur.g[0].lo >= hi)
                 break;

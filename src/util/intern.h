@@ -1,5 +1,5 @@
-#ifndef SAG_UTIL_INTERN_H
-#define SAG_UTIL_INTERN_H
+#ifndef YEW_UTIL_INTERN_H
+#define YEW_UTIL_INTERN_H
 
 #include <stddef.h>
 
@@ -27,13 +27,13 @@ typedef struct {
 } Interner;
 
 void interner_init(Interner *interner, Arena *arena);
-u32 sag_intern(Interner *interner, const char *str, size_t len);
-u32 sag_intern_cstr(Interner *interner, const char *str);
-const char *sag_intern_str(const Interner *interner, u32 id);
+u32 yew_intern(Interner *interner, const char *str, size_t len);
+u32 yew_intern_cstr(Interner *interner, const char *str);
+const char *yew_intern_str(const Interner *interner, u32 id);
 /* The interned byte count for `id`, which may exceed strlen.  Zero for
- * an unknown id, matching sag_intern_str's NULL. */
-size_t sag_intern_len(const Interner *interner, u32 id);
-size_t sag_intern_count(const Interner *interner);
+ * an unknown id, matching yew_intern_str's NULL. */
+size_t yew_intern_len(const Interner *interner, u32 id);
+size_t yew_intern_count(const Interner *interner);
 void interner_free(Interner *interner);
 
 #endif

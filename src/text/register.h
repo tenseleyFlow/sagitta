@@ -1,5 +1,5 @@
-#ifndef SAG_TEXT_REGISTER_H
-#define SAG_TEXT_REGISTER_H
+#ifndef YEW_TEXT_REGISTER_H
+#define YEW_TEXT_REGISTER_H
 
 #include <stdbool.h>
 
@@ -7,24 +7,24 @@
 #include "util/buf.h"
 #include "util/vec.h"
 
-#define SAG_KILL_RING_MAX 256U
-#define SAG_KILL_RING_DEPTH_DEFAULT 32U
-#define SAG_KILL_RING_BYTES_DEFAULT (UINT64_C(8) * 1024U * 1024U)
+#define YEW_KILL_RING_MAX 256U
+#define YEW_KILL_RING_DEPTH_DEFAULT 32U
+#define YEW_KILL_RING_BYTES_DEFAULT (UINT64_C(8) * 1024U * 1024U)
 
 typedef enum {
-    SAG_REG_CHARWISE = 0,
-    SAG_REG_LINEWISE = 1,
-    SAG_REG_BLOCKWISE = 2
+    YEW_REG_CHARWISE = 0,
+    YEW_REG_LINEWISE = 1,
+    YEW_REG_BLOCKWISE = 2
 } RegType;
 
-VEC_DECL(SagRegRowVec, Span);
+VEC_DECL(YewRegRowVec, Span);
 
 typedef struct RegVal {
     u8 type;
     bool ragged;
     u32 width;
     Bytebuf bytes;
-    SagRegRowVec rows;
+    YewRegRowVec rows;
     i64 t_wall;
 } RegVal;
 
@@ -38,13 +38,13 @@ typedef struct RegInfo {
 } RegInfo;
 
 typedef enum {
-    SAG_CLIP_SYNC_OFF = 0,
-    SAG_CLIP_SYNC_YANK,
-    SAG_CLIP_SYNC_ALL,
-    SAG_CLIP_SYNC_UNNAMED
-} SagClipboardSync;
+    YEW_CLIP_SYNC_OFF = 0,
+    YEW_CLIP_SYNC_YANK,
+    YEW_CLIP_SYNC_ALL,
+    YEW_CLIP_SYNC_UNNAMED
+} YewClipboardSync;
 
-VEC_DECL(SagRegPasteSpanVec, Span);
+VEC_DECL(YewRegPasteSpanVec, Span);
 
 typedef struct Registers {
     RegVal named[26];
@@ -57,7 +57,7 @@ typedef struct Registers {
     RegVal file;
     RegVal alt_file;
     RegVal system;
-    RegVal ring[SAG_KILL_RING_MAX];
+    RegVal ring[YEW_KILL_RING_MAX];
     u32 ring_head;
     u32 ring_len;
     u32 ring_depth;
@@ -68,7 +68,7 @@ typedef struct Registers {
     const UndoTree *bound_undo;
     const FileMeta *bound_meta;
 
-    SagRegPasteSpanVec paste_spans;
+    YewRegPasteSpanVec paste_spans;
     const TextBuf *paste_owner;
     Cursor paste_origin;
     u32 paste_win_id;
@@ -78,30 +78,30 @@ typedef struct Registers {
     bool paste_live;
 } Registers;
 
-void sag_regval_init(RegVal *v);
-void sag_regval_free(RegVal *v);
-void sag_regval_copy(RegVal *dst, const RegVal *src);
-void sag_regval_from_span(RegVal *out, const TextBuf *tb, Span range,
+void yew_regval_init(RegVal *v);
+void yew_regval_free(RegVal *v);
+void yew_regval_copy(RegVal *dst, const RegVal *src);
+void yew_regval_from_span(RegVal *out, const TextBuf *tb, Span range,
                           RegType type, const FileMeta *meta);
 
-void sag_reg_init(Registers *r);
-void sag_reg_free(Registers *r);
-void sag_reg_bind_context(Registers *r, const UndoTree *undo,
+void yew_reg_init(Registers *r);
+void yew_reg_free(Registers *r);
+void yew_reg_bind_context(Registers *r, const UndoTree *undo,
                           const FileMeta *meta);
-RegVal *sag_reg_get(Registers *r, u8 name);
-void sag_reg_set(Registers *r, u8 name, const RegVal *v);
-void sag_reg_set_macro(Registers *r, u8 name, const RegVal *v, bool append);
-void sag_reg_set_cmdline(Registers *r, const u8 *bytes, size_t len);
-void sag_reg_set_search(Registers *r, const u8 *bytes, size_t len);
-void sag_reg_append(Registers *r, u8 name, const RegVal *v);
-void sag_reg_yank(Registers *r, u8 explicit_name, const RegVal *v);
-void sag_reg_delete(Registers *r, u8 explicit_name, const RegVal *v);
+RegVal *yew_reg_get(Registers *r, u8 name);
+void yew_reg_set(Registers *r, u8 name, const RegVal *v);
+void yew_reg_set_macro(Registers *r, u8 name, const RegVal *v, bool append);
+void yew_reg_set_cmdline(Registers *r, const u8 *bytes, size_t len);
+void yew_reg_set_search(Registers *r, const u8 *bytes, size_t len);
+void yew_reg_append(Registers *r, u8 name, const RegVal *v);
+void yew_reg_yank(Registers *r, u8 explicit_name, const RegVal *v);
+void yew_reg_delete(Registers *r, u8 explicit_name, const RegVal *v);
 
-bool sag_reg_paste(Registers *r, EditCtx *ec, u8 name, bool before,
+bool yew_reg_paste(Registers *r, EditCtx *ec, u8 name, bool before,
                    u32 tabw);
-void sag_reg_ring_push(Registers *r, const RegVal *v);
-void sag_reg_ring_set_depth(Registers *r, u32 depth);
-bool sag_reg_ring_cycle(Registers *r, EditCtx *ec, i32 delta);
-u32 sag_reg_ring_list(const Registers *r, RegInfo *out, u32 max);
+void yew_reg_ring_push(Registers *r, const RegVal *v);
+void yew_reg_ring_set_depth(Registers *r, u32 depth);
+bool yew_reg_ring_cycle(Registers *r, EditCtx *ec, i32 delta);
+u32 yew_reg_ring_list(const Registers *r, RegInfo *out, u32 max);
 
 #endif

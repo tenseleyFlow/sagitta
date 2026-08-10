@@ -1,10 +1,10 @@
 #define _POSIX_C_SOURCE 200809L
 
 /*
- * Public controls are SAG_FAULT_AT, SAG_FAULT_SHORT, SAG_FAULT_SEED and
- * SAG_FAULT_LOG.  The harness also uses SAG_FAULT_ENABLE=0 as its durable-
- * journal barrier, SAG_FAULT_RENAME_EXDEV=1 for decision-table row 5,
- * SAG_FAULT_FCHOWN_EPERM=1 for row 6, and SAG_FAULT_EINTR_AT=N to return
+ * Public controls are YEW_FAULT_AT, YEW_FAULT_SHORT, YEW_FAULT_SEED and
+ * YEW_FAULT_LOG.  The harness also uses YEW_FAULT_ENABLE=0 as its durable-
+ * journal barrier, YEW_FAULT_RENAME_EXDEV=1 for decision-table row 5,
+ * YEW_FAULT_FCHOWN_EPERM=1 for row 6, and YEW_FAULT_EINTR_AT=N to return
  * EINTR once at intercepted call N.
  */
 
@@ -110,22 +110,22 @@ static void initialize(void)
     load_symbol(&real_fchown_fn, sizeof(real_fchown_fn), "fchown");
     load_symbol(&real_close_fn, sizeof(real_close_fn), "close");
 
-    at = getenv("SAG_FAULT_AT");
+    at = getenv("YEW_FAULT_AT");
     parsed = parse_ull(at, UINT64_MAX);
     if (parsed <= (unsigned long long)LONG_MAX)
         fault_at = (long)parsed;
-    rng_state = (uint64_t)parse_ull(getenv("SAG_FAULT_SEED"), 1U);
+    rng_state = (uint64_t)parse_ull(getenv("YEW_FAULT_SEED"), 1U);
     if (rng_state == 0U)
         rng_state = UINT64_C(0x9e3779b97f4a7c15);
-    short_writes = env_is_one("SAG_FAULT_SHORT");
-    log_path = getenv("SAG_FAULT_LOG");
+    short_writes = env_is_one("YEW_FAULT_SHORT");
+    log_path = getenv("YEW_FAULT_LOG");
     if (log_path != NULL && *log_path != '\0') {
         log_fd = open(log_path, O_WRONLY | O_CREAT | O_APPEND | O_CLOEXEC,
                       0600);
         if (log_fd >= 0 && atexit(close_log) != 0)
             _exit(126);
     }
-    if (env_is_one("SAG_FAULT_SIGNAL_ENABLE")) {
+    if (env_is_one("YEW_FAULT_SIGNAL_ENABLE")) {
         struct sigaction action;
 
         (void)memset(&action, 0, sizeof(action));
@@ -142,9 +142,9 @@ static int faults_enabled(void)
 {
     const char *enabled;
 
-    if (env_is_one("SAG_FAULT_SIGNAL_ENABLE"))
+    if (env_is_one("YEW_FAULT_SIGNAL_ENABLE"))
         return signal_enabled != 0;
-    enabled = getenv("SAG_FAULT_ENABLE");
+    enabled = getenv("YEW_FAULT_ENABLE");
     return enabled == NULL || strcmp(enabled, "0") != 0;
 }
 
@@ -178,7 +178,7 @@ static void before_call(const char *name)
     initialize();
     if (!faults_enabled())
         return;
-    delay_us = parse_ull(getenv("SAG_FAULT_DELAY_US"), 0U);
+    delay_us = parse_ull(getenv("YEW_FAULT_DELAY_US"), 0U);
     if (delay_us != 0U) {
         struct timespec delay;
 
@@ -211,7 +211,7 @@ static int inject_eintr(const char *name)
 
     if (!faults_enabled())
         return 0;
-    at = parse_ull(getenv("SAG_FAULT_EINTR_AT"), UINT64_MAX);
+    at = parse_ull(getenv("YEW_FAULT_EINTR_AT"), UINT64_MAX);
     if (call_no == 0U || at != call_no - 1U)
         return 0;
     log_call(name, "errno=EINTR");
@@ -268,7 +268,7 @@ int fdatasync(int fd)
 int rename(const char *old_path, const char *new_path)
 {
     before_call("rename");
-    if (env_is_one("SAG_FAULT_RENAME_EXDEV") && !rename_exdev_done) {
+    if (env_is_one("YEW_FAULT_RENAME_EXDEV") && !rename_exdev_done) {
         rename_exdev_done = 1;
         log_call("rename", "errno=EXDEV");
         errno = EXDEV;
@@ -290,7 +290,7 @@ int ftruncate(int fd, off_t length)
 int fchown(int fd, uid_t owner, gid_t group)
 {
     before_call("fchown");
-    if (env_is_one("SAG_FAULT_FCHOWN_EPERM")) {
+    if (env_is_one("YEW_FAULT_FCHOWN_EPERM")) {
         log_call("fchown", "errno=EPERM");
         errno = EPERM;
         return -1;
@@ -309,8 +309,8 @@ int close(int fd)
     if (fd == log_fd)
         return real_close_fn(fd);
     before_call("close");
-    source = getenv("SAG_FAULT_LINK_SOURCE");
-    twin = getenv("SAG_FAULT_LINK_TWIN");
+    source = getenv("YEW_FAULT_LINK_SOURCE");
+    twin = getenv("YEW_FAULT_LINK_TWIN");
     if (!link_done && source != NULL && twin != NULL) {
         link_done = 1;
         if (link(source, twin) != 0)

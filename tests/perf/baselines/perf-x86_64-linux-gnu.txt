@@ -1,4 +1,4 @@
-# sagitta perf baseline v1  runner=perf-x86_64-linux-gnu
+# yew perf baseline v1  runner=perf-x86_64-linux-gnu
 # metric                         p50_ns        p99_ns        max_ns     rss_bytes
 open.100m-code                 118400000      131900000      140000000     148897792
 open.100m-utf8                 120000000      140000000      148000000     155000000

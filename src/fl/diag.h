@@ -1,5 +1,5 @@
-#ifndef SAG_FL_DIAG_H
-#define SAG_FL_DIAG_H
+#ifndef YEW_FL_DIAG_H
+#define YEW_FL_DIAG_H
 
 /*
  * Sprint 29: source spans and caret diagnostics for Fletch.
@@ -8,7 +8,7 @@
  *
  * Sprint 29's prerequisites expect a `DiagCtx` from Sprint 0, whose entry
  * says "diag/log module" without ever pinning an API.  What actually
- * landed is util/log.h -- sag_log(level, fmt, ...) -- which has no notion
+ * landed is util/log.h -- yew_log(level, fmt, ...) -- which has no notion
  * of a file, a span or a caret, and is a process-wide sink rather than a
  * per-compilation context.  The sprint anticipates the gap and says the
  * RENDERING CONTRACT is what binds, so the contract is implemented here,
@@ -119,4 +119,4 @@ void fl_diag_render(Bytebuf *out, const DiagCtx *dc, FlDiagLevel level,
 
 u32 fl_diag_errors(const DiagCtx *dc);
 
-#endif /* SAG_FL_DIAG_H */
+#endif /* YEW_FL_DIAG_H */

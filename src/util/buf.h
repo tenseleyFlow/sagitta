@@ -1,5 +1,5 @@
-#ifndef SAG_UTIL_BUF_H
-#define SAG_UTIL_BUF_H
+#ifndef YEW_UTIL_BUF_H
+#define YEW_UTIL_BUF_H
 
 #include <stddef.h>
 

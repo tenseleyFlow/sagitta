@@ -321,7 +321,7 @@ static void add_local(Compiler *c, u32 name, FlSpan sp)
             break;
         if (l->name == name) {
             cerror(c, sp, "'%s' is already declared in this scope",
-                   sag_intern_str(c->vm->in, name));
+                   yew_intern_str(c->vm->in, name));
             return;
         }
     }
@@ -349,7 +349,7 @@ static i32 resolve_local(Compiler *c, u32 name, FlSpan sp)
                  * so this reads as its own initializer rather than
                  * silently capturing an outer x. */
                 cerror(c, sp, "cannot read '%s' in its own initializer",
-                       sag_intern_str(c->vm->in, name));
+                       yew_intern_str(c->vm->in, name));
             }
             return (i32)(i - 1U);
         }
@@ -428,12 +428,12 @@ static void comp_literal(Compiler *c, const FlNode *n)
         emit_u16(c, (u16)add_const(c, FL_FLOAT_V(n->as.lit.v.f), n->sp));
         return;
     default: {
-        const char *s = sag_intern_str(c->vm->in, n->as.lit.v.str_id);
+        const char *s = yew_intern_str(c->vm->in, n->as.lit.v.str_id);
         /* The interned LENGTH, never strlen: §1.5 admits `\0`, and
          * measuring with strlen truncated "a\0b" to "a" without a word
          * to anyone. */
         FlStr *o = fl_str_new(c->vm, s == NULL ? "" : s,
-                              (u32)sag_intern_len(c->vm->in,
+                              (u32)yew_intern_len(c->vm->in,
                                                   n->as.lit.v.str_id));
 
         emit_op(c, FL_OP_CONST, n->sp);
@@ -639,8 +639,8 @@ static bool motion_validate_node(Compiler *c, const FlNode *n)
      * attached editor runtime, which is also every store/library path. */
     if (c->vm->ed != NULL &&
         (FlMotionKind)n->as.motion.mkind == FL_MK_WORD) {
-        const char *word = sag_intern_str(c->vm->in, n->as.motion.payload);
-        u32 len = (u32)sag_intern_len(c->vm->in, n->as.motion.payload);
+        const char *word = yew_intern_str(c->vm->in, n->as.motion.payload);
+        u32 len = (u32)yew_intern_len(c->vm->in, n->as.motion.payload);
         Bytebuf detail;
 
         bytebuf_init(&detail);
@@ -1067,7 +1067,7 @@ static void declare_global(Compiler *c, u32 name, FlSpan sp)
     for (i = 0U; i < c->globals.len; i++) {
         if (c->globals.data[i] == name) {
             cerror(c, sp, "'%s' is already declared in this module",
-                   sag_intern_str(c->vm->in, name));
+                   yew_intern_str(c->vm->in, name));
             return;
         }
     }
@@ -1394,9 +1394,9 @@ static FlFn *compile_program(FlVm *vm, DiagCtx *dc, const FlProgram *p,
         const char *why = NULL;
 
         /* Our own output, checked in checked builds.  A failure here is
-         * a compiler bug, not a user error, so it is a SAG_BUG. */
+         * a compiler bug, not a user error, so it is a YEW_BUG. */
         if (!fl_chunk_check(fn, &why))
-            SAG_BUG("fl compiler emitted a bad chunk: %s",
+            YEW_BUG("fl compiler emitted a bad chunk: %s",
                     why == NULL ? "?" : why);
     }
 #endif

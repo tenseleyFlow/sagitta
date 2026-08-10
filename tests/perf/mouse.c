@@ -77,9 +77,9 @@ static Key motion_at(u16 x, u16 y)
     Key k;
 
     (void)memset(&k, 0, sizeof(k));
-    k.kind = (u16)SAG_EV_MOUSE;
-    k.button = (u8)SAG_MB_LEFT;
-    k.ev = (u8)SAG_KEY_REPEAT;
+    k.kind = (u16)YEW_EV_MOUSE;
+    k.button = (u8)YEW_MB_LEFT;
+    k.ev = (u8)YEW_KEY_REPEAT;
     k.col = x;
     k.row = y;
     return k;
@@ -97,22 +97,22 @@ static i64 measure_burst(Ed *ed, u64 *renders)
     i64 elapsed;
     int i;
 
-    sag_region_frame_begin();
-    sag_tab_strip_draw(ed, ed->tab_strip_rect);
+    yew_region_frame_begin();
+    yew_tab_strip_draw(ed, ed->tab_strip_rect);
     press = motion_at(2U, 0U);
-    press.ev = (u8)SAG_KEY_PRESS;
-    sag_mouse_event(ed, &press);
+    press.ev = (u8)YEW_KEY_PRESS;
+    yew_mouse_event(ed, &press);
 
     *renders = ed->render.frames;
     start = now_ns();
     for (i = 0; i < PERF_MOUSE_EVENTS; i++) {
         Key m = motion_at((u16)(1U + (i % 70)), 0U);
 
-        sag_mouse_event(ed, &m);
+        yew_mouse_event(ed, &m);
     }
     elapsed = now_ns() - start;
     *renders = ed->render.frames - *renders;
-    sag_mouse_cancel(ed);
+    yew_mouse_cancel(ed);
     return elapsed;
 }
 
@@ -120,13 +120,13 @@ static i64 measure_burst(Ed *ed, u64 *renders)
 static bool router_allocates(const char **what)
 {
     static const char *const banned[] = {
-        "malloc(", "calloc(", "realloc(", "strdup(", "sag_xmalloc",
-        "sag_xcalloc", "sag_xrealloc", "arena_alloc"
+        "malloc(", "calloc(", "realloc(", "strdup(", "yew_xmalloc",
+        "yew_xcalloc", "yew_xrealloc", "arena_alloc"
     };
-    /* SAG_PERF_MOUSE_SRC is a test seam, and it earns its keep: a
+    /* YEW_PERF_MOUSE_SRC is a test seam, and it earns its keep: a
      * check that can only ever pass proves nothing, so pointing it at a
      * file that DOES allocate is how this gate is shown to bite. */
-    const char *src = getenv("SAG_PERF_MOUSE_SRC");
+    const char *src = getenv("YEW_PERF_MOUSE_SRC");
     FILE *f = fopen(src != NULL ? src : "src/ui/mouse.c", "r");
     char line[512];
     bool found = false;
@@ -140,7 +140,7 @@ static bool router_allocates(const char **what)
 
         /* Comments mention none of these, and a line that did would be
          * worth rewording rather than exempting. */
-        for (i = 0U; i < SAG_ARRAY_LEN(banned); i++) {
+        for (i = 0U; i < YEW_ARRAY_LEN(banned); i++) {
             if (strstr(line, banned[i]) != NULL) {
                 *what = banned[i];
                 found = true;
@@ -164,10 +164,10 @@ int main(void)
     int i;
     int status = 0;
 
-    sag_cmd_init();
-    sag_ed_init(&ed);
-    if (!sag_ed_open_scratch(&ed) ||
-        !sag_grid_init(&ed.grid, &ed.interner, 24U, 80U)) {
+    yew_cmd_init();
+    yew_ed_init(&ed);
+    if (!yew_ed_open_scratch(&ed) ||
+        !yew_grid_init(&ed.grid, &ed.interner, 24U, 80U)) {
         (void)fprintf(stderr, "perf_mouse: could not build an editor\n");
         return 1;
     }
@@ -175,11 +175,11 @@ int main(void)
     for (i = 0; i < 8; i++) {
         char path[64];
 
-        (void)snprintf(path, sizeof(path), "/tmp/sag-perfmouse-%d.txt", i);
-        (void)sag_tab_open(&ed, path);
+        (void)snprintf(path, sizeof(path), "/tmp/yew-perfmouse-%d.txt", i);
+        (void)yew_tab_open(&ed, path);
     }
-    sag_tab_switch(&ed, 0);
-    sag_ed_layout(&ed);
+    yew_tab_switch(&ed, 0);
+    yew_ed_layout(&ed);
     ed.now_ms = 1000;
 
     for (i = 0; i < PERF_MOUSE_TRIALS; i++) {
@@ -204,6 +204,6 @@ int main(void)
                  allocates ? " FAIL" : " ok");
     if (median > PERF_MOUSE_BUDGET_NS || worst_renders != 0U || allocates)
         status = 1;
-    sag_ed_free(&ed);
+    yew_ed_free(&ed);
     return status;
 }

@@ -35,7 +35,7 @@ static bool parse_one(const u8 *data, size_t len,
     bool ok;
 
     arena_init(&arena);
-    ok = sag_cmd_parse(&fuzz_editor, (const char *)data, len, &arena,
+    ok = yew_cmd_parse(&fuzz_editor, (const char *)data, len, &arena,
                        &parsed);
     if (!ok && !check_failure_token(&parsed, len, why, why_cap)) {
         arena_free_all(&arena);
@@ -78,10 +78,10 @@ int main(int argc, char **argv)
 {
     int status;
 
-    sag_ed_init(&fuzz_editor);
-    status = sag_fuzz_main(argc, argv, "fuzz_cmdparse", NULL,
+    yew_ed_init(&fuzz_editor);
+    status = yew_fuzz_main(argc, argv, "fuzz_cmdparse", NULL,
                            check_cmdparse);
-    sag_ed_free(&fuzz_editor);
-    sag_cmd_shutdown();
+    yew_ed_free(&fuzz_editor);
+    yew_cmd_shutdown();
     return status;
 }

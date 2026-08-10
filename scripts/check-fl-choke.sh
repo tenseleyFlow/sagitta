@@ -3,9 +3,9 @@
 # Sprint 34 DoD 5: the mutation choke point, enforced.
 #
 # THE LAW.  A Fletch call becomes an editor effect in exactly ONE place —
-# fl_dispatch, via sag_cmd_invoke.  Nothing under src/fl/ may reach into
+# fl_dispatch, via yew_cmd_invoke.  Nothing under src/fl/ may reach into
 # TextBuf, EditCtx, CursorSet, the undo log or the registers directly,
-# because a direct mutation would (a) skip sag_undo_record, breaking undo
+# because a direct mutation would (a) skip yew_undo_record, breaking undo
 # atomicity, and (b) skip the s13 recorder tap, making invariant 10
 # quietly false.  Two invariants, one shortcut, and no symptom until a
 # user loses work.
@@ -17,7 +17,7 @@
 # THE repl.c ALLOWANCE, stated rather than hidden.  Sprint 32's REPL
 # edits its OWN prompt line: a private TextBuf that is not a user
 # document, carries no undo tree the user can reach, and is not
-# recordable.  It genuinely uses sag_edit_insert on that line, and that
+# recordable.  It genuinely uses yew_edit_insert on that line, and that
 # is not the hazard above — no amount of prompt editing can lose a user's
 # work or desynchronise a macro.  The allowance is per-FILE and narrow on
 # purpose: a future flapi.c cannot hide behind it, and adding a second
@@ -29,7 +29,7 @@
 
 set -eu
 
-BANNED='sag_edit_insert|sag_edit_delete|sag_textbuf_|sag_undo_record|sag_reg_set|sag_reg_yank|sag_reg_delete|sag_cset_'
+BANNED='yew_edit_insert|yew_edit_delete|yew_textbuf_|yew_undo_record|yew_reg_set|yew_reg_yank|yew_reg_delete|yew_cset_'
 ALLOWED_FILE='src/fl/repl.c'
 
 # Hits in src/fl/, minus the allowance, minus comment lines.  A comment
@@ -59,7 +59,7 @@ hits=$(choke_hits src/fl || true)
 if [ -n "$hits" ]; then
     echo "fl-choke: a Fletch source mutates the editor directly." >&2
     echo "fl-choke: route it through a registered command and" >&2
-    echo "fl-choke: sag_cmd_invoke — see s34 deliverable 3." >&2
+    echo "fl-choke: yew_cmd_invoke — see s34 deliverable 3." >&2
     printf '%s\n' "$hits" >&2
     exit 1
 fi
@@ -71,14 +71,14 @@ seed_dir=$(mktemp -d)
 trap 'rm -rf "$seed_dir"' EXIT INT TERM
 mkdir -p "$seed_dir/src/fl"
 cat >"$seed_dir/src/fl/flapi.c" <<'SEED'
-/* A comment naming sag_edit_insert must NOT trip the gate. */
+/* A comment naming yew_edit_insert must NOT trip the gate. */
 void seeded(void)
 {
-    *out = sag_edit_insert(&ec, at, bytes, len);
+    *out = yew_edit_insert(&ec, at, bytes, len);
 }
 SEED
 if [ -z "$(cd "$seed_dir" && choke_hits src/fl || true)" ]; then
-    echo "fl-choke: the seeded direct sag_edit_insert was accepted" >&2
+    echo "fl-choke: the seeded direct yew_edit_insert was accepted" >&2
     exit 1
 fi
 

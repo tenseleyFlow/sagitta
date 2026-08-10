@@ -97,6 +97,6 @@ static bool check_fl_lex(const u8 *data, size_t len, char *why,
 
 int main(int argc, char **argv)
 {
-    return sag_fuzz_main(argc, argv, "fuzz_fl_lex",
+    return yew_fuzz_main(argc, argv, "fuzz_fl_lex",
                          "tests/fuzz/corpus/fl_parse", check_fl_lex);
 }

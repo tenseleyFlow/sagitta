@@ -96,16 +96,16 @@ void test_fl_hook_event_inventory(void)
     };
     u32 i;
 
-    SAG_ASSERT_EQ_U64(FL_EV__N, 12U);
-    for (i = 0U; i < (u32)SAG_ARRAY_LEN(names); i++) {
+    YEW_ASSERT_EQ_U64(FL_EV__N, 12U);
+    for (i = 0U; i < (u32)YEW_ARRAY_LEN(names); i++) {
         u32 parsed = 99U;
 
-        SAG_ASSERT_EQ_STR(fl_event_name(i), names[i]);
-        SAG_ASSERT(fl_event_parse(names[i], (u32)strlen(names[i]), &parsed));
-        SAG_ASSERT_EQ_U64(parsed, i);
+        YEW_ASSERT_EQ_STR(fl_event_name(i), names[i]);
+        YEW_ASSERT(fl_event_parse(names[i], (u32)strlen(names[i]), &parsed));
+        YEW_ASSERT_EQ_U64(parsed, i);
     }
-    SAG_ASSERT(fl_event_name(FL_EV__N) == NULL);
-    SAG_ASSERT(!fl_event_parse("ws.quit", 7U, NULL));
+    YEW_ASSERT(fl_event_name(FL_EV__N) == NULL);
+    YEW_ASSERT(!fl_event_parse("ws.quit", 7U, NULL));
 }
 
 void test_fl_hook_order_mask_and_remove(void)
@@ -120,20 +120,20 @@ void test_fl_hook_order_mask_and_remove(void)
     (void)fl_hook_add(&f.hooks, 0U, FL_EV_BUF_OPEN, fake_fn(&f, 4U));
 
     fl_hook_fire(&f.hooks, NULL, FL_EV_BUF_OPEN, NULL, 0U);
-    SAG_ASSERT_EQ_U64(f.ncalls, 4U);
-    SAG_ASSERT_EQ_U64(f.calls[0], 2U);
-    SAG_ASSERT_EQ_U64(f.calls[1], 4U);
-    SAG_ASSERT_EQ_U64(f.calls[2], 1U);
-    SAG_ASSERT_EQ_U64(f.calls[3], 3U);
+    YEW_ASSERT_EQ_U64(f.ncalls, 4U);
+    YEW_ASSERT_EQ_U64(f.calls[0], 2U);
+    YEW_ASSERT_EQ_U64(f.calls[1], 4U);
+    YEW_ASSERT_EQ_U64(f.calls[2], 1U);
+    YEW_ASSERT_EQ_U64(f.calls[3], 3U);
 
     f.ncalls = 0U;
     f.masked_origin = 2U;
-    SAG_ASSERT(fl_hook_remove(&f.hooks, removed));
-    SAG_ASSERT(!fl_hook_remove(&f.hooks, removed));
+    YEW_ASSERT(fl_hook_remove(&f.hooks, removed));
+    YEW_ASSERT(!fl_hook_remove(&f.hooks, removed));
     fl_hook_fire(&f.hooks, NULL, FL_EV_BUF_OPEN, NULL, 0U);
-    SAG_ASSERT_EQ_U64(f.ncalls, 2U);
-    SAG_ASSERT_EQ_U64(f.calls[0], 2U);
-    SAG_ASSERT_EQ_U64(f.calls[1], 4U);
+    YEW_ASSERT_EQ_U64(f.ncalls, 2U);
+    YEW_ASSERT_EQ_U64(f.calls[0], 2U);
+    YEW_ASSERT_EQ_U64(f.calls[1], 4U);
     hf_close(&f);
 }
 
@@ -153,10 +153,10 @@ void test_fl_hook_contains_and_disables_failures(void)
         for (i = 0U; i < 6U; i++)
             fl_hook_fire(&f.hooks, NULL, event, NULL, 0U);
 
-        SAG_ASSERT_EQ_U64(f.ncalls, 11U); /* bad five times; good six */
-        SAG_ASSERT_EQ_U64(f.notices[FL_HOOK_NOTICE_ERROR], 5U);
-        SAG_ASSERT_EQ_U64(f.notices[FL_HOOK_NOTICE_DISABLED], 1U);
-        SAG_ASSERT(f.hooks.v[
+        YEW_ASSERT_EQ_U64(f.ncalls, 11U); /* bad five times; good six */
+        YEW_ASSERT_EQ_U64(f.notices[FL_HOOK_NOTICE_ERROR], 5U);
+        YEW_ASSERT_EQ_U64(f.notices[FL_HOOK_NOTICE_DISABLED], 1U);
+        YEW_ASSERT(f.hooks.v[
             f.hooks.ledger.v[bad - 1U].handle - 1U].disabled);
         hf_close(&f);
     }
@@ -171,8 +171,8 @@ void test_fl_hook_drops_self_reentrancy_once(void)
     (void)fl_hook_add(&f.hooks, 0U, FL_EV_BUF_CHANGE, fake_fn(&f, 1U));
     fl_hook_fire(&f.hooks, NULL, FL_EV_BUF_CHANGE, NULL, 0U);
     fl_hook_fire(&f.hooks, NULL, FL_EV_BUF_CHANGE, NULL, 0U);
-    SAG_ASSERT_EQ_U64(f.ncalls, 2U);
-    SAG_ASSERT_EQ_U64(f.notices[FL_HOOK_NOTICE_REENTRANT], 1U);
+    YEW_ASSERT_EQ_U64(f.ncalls, 2U);
+    YEW_ASSERT_EQ_U64(f.notices[FL_HOOK_NOTICE_REENTRANT], 1U);
     hf_close(&f);
 }
 
@@ -186,10 +186,10 @@ void test_fl_hook_bounds_cross_event_depth(void)
     for (i = 0U; i < 9U; i++)
         (void)fl_hook_add(&f.hooks, 0U, i, fake_fn(&f, i));
     fl_hook_fire(&f.hooks, NULL, 0U, NULL, 0U);
-    SAG_ASSERT_EQ_U64(f.ncalls, SAG_HOOK_DEPTH_MAX);
-    SAG_ASSERT_EQ_U64(f.notices[FL_HOOK_NOTICE_DEPTH], 1U);
-    SAG_ASSERT_EQ_U64(f.hooks.v[7].errs, 1U);
-    SAG_ASSERT_EQ_U64(f.hooks.depth, 0U);
+    YEW_ASSERT_EQ_U64(f.ncalls, YEW_HOOK_DEPTH_MAX);
+    YEW_ASSERT_EQ_U64(f.notices[FL_HOOK_NOTICE_DEPTH], 1U);
+    YEW_ASSERT_EQ_U64(f.hooks.v[7].errs, 1U);
+    YEW_ASSERT_EQ_U64(f.hooks.depth, 0U);
     hf_close(&f);
 }
 
@@ -233,7 +233,7 @@ void test_fl_hook_gc_mark_provider(void)
     interner_init(&f.in, &f.arena);
     fl_diag_init(&f.dc, &f.arena);
     fl_diag_set_sink(&f.dc, gc_sink, NULL);
-    SAG_ASSERT(fl_vm_init(&f.vm, &f.arena, &f.in, &f.dc));
+    YEW_ASSERT(fl_vm_init(&f.vm, &f.arena, &f.in, &f.dc));
     fl_hook_table_init(&f.hooks, NULL, NULL);
 
     fn = fl_gc_alloc(&f.vm, sizeof(*fn), FL_NATIVE);
@@ -245,11 +245,11 @@ void test_fl_hook_gc_mark_provider(void)
                      FL_OBJ_V(FL_NATIVE, fn));
     fl_gc_root_provider(&f.vm, fl_hook_mark, &f.hooks);
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(object_live(&f.vm, &fn->h));
+    YEW_ASSERT(object_live(&f.vm, &fn->h));
 
-    SAG_ASSERT(fl_hook_remove(&f.hooks, id));
+    YEW_ASSERT(fl_hook_remove(&f.hooks, id));
     fl_gc_collect(&f.vm);
-    SAG_ASSERT(!object_live(&f.vm, &fn->h));
+    YEW_ASSERT(!object_live(&f.vm, &fn->h));
 
     fl_hook_table_free(&f.hooks);
     fl_vm_free(&f.vm);
