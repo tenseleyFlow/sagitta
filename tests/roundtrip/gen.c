@@ -10,7 +10,9 @@ typedef enum {
     RT_GEN_MOTION,
     RT_GEN_INSERT,
     RT_GEN_DELETE,
-    RT_GEN_MODE
+    RT_GEN_MODE,
+    RT_GEN_SELECTION,
+    RT_GEN_YANK
 } RtGenKind;
 
 typedef struct {
@@ -36,7 +38,10 @@ static const RtGenCmd gen_cmds[] = {
     {"ed.move.line.end", RT_GEN_MOTION},
     {"ed.edit.insert.text", RT_GEN_INSERT},
     {"ed.edit.delete.unit", RT_GEN_DELETE},
-    {"ed.mode.enter", RT_GEN_MODE}
+    {"ed.mode.enter", RT_GEN_MODE},
+    {"ed.mode.escape", RT_GEN_SELECTION},
+    {"ed.sel.expand", RT_GEN_SELECTION},
+    {"ed.sel.yank", RT_GEN_YANK}
 };
 
 static u64 xorshift64(u64 *state)
@@ -97,8 +102,10 @@ static const RtGenCmd *choose_cmd(u64 *state)
 {
     u32 roll = rnd(state, 100U);
     RtGenKind want = roll < 45U ? RT_GEN_MOTION
-                     : roll < 70U ? RT_GEN_INSERT
-                     : roll < 92U ? RT_GEN_DELETE
+                     : roll < 65U ? RT_GEN_INSERT
+                     : roll < 77U ? RT_GEN_DELETE
+                     : roll < 87U ? RT_GEN_SELECTION
+                     : roll < 95U ? RT_GEN_YANK
                                    : RT_GEN_MODE;
     u32 start = rnd(state, (u32)SAG_ARRAY_LEN(gen_cmds));
     u32 i;
@@ -110,6 +117,36 @@ static const RtGenCmd *choose_cmd(u64 *state)
             return cmd;
     }
     return &gen_cmds[0];
+}
+
+static bool append_named(RtSession *session, const char *name,
+                         const u8 *sarg, u32 sarg_len)
+{
+    RtEvent ev = {0};
+
+    ev.cmd = sag_cmd_lookup(name, (u32)strlen(name));
+    ev.count = 1U;
+    ev.sarg_len = sarg_len;
+    if (sarg_len != 0U) {
+        ev.sarg = store_bytes(session, sarg, sarg_len);
+        if (ev.sarg == NULL)
+            return false;
+    }
+    if (ev.cmd.v == 0U)
+        return false;
+    RtEventVec_push(&session->events, ev);
+    return true;
+}
+
+static bool append_highlight_scenario(RtSession *session, bool yank)
+{
+    static const u8 highlight[] = {'H'};
+
+    return append_named(session, "ed.mode.enter", highlight, 1U) &&
+           append_named(session, "ed.move.unit.next", NULL, 0U) &&
+           append_named(session, yank ? "ed.sel.yank" : "ed.sel.expand",
+                        NULL, 0U) &&
+           append_named(session, "ed.mode.escape", NULL, 0U);
 }
 
 static bool append_generated(RtSession *session, u64 *state,
@@ -174,13 +211,21 @@ bool rt_session_generate(RtSession *session, u64 seed, u32 fixture,
 
     session->seed = seed;
     session->fixture = fixture % 6U;
+    session->generated_len = target;
     session->start_mode = (u8)(SAG_MODE_L + rnd(&state, 3U));
     /* Largest generated payload is 11 bytes and sessions cap at 200. */
     session->storage_cap = 4096U;
     session->storage = sag_xmalloc(session->storage_cap);
     for (i = 0U; i < target; i++) {
-        if (!append_generated(session, &state, choose_cmd(&state)))
+        const RtGenCmd *chosen = choose_cmd(&state);
+
+        if (chosen->kind == RT_GEN_SELECTION || chosen->kind == RT_GEN_YANK) {
+            if (!append_highlight_scenario(session,
+                                           chosen->kind == RT_GEN_YANK))
+                return false;
+        } else if (!append_generated(session, &state, chosen)) {
             return false;
+        }
     }
     /* P2 needs an actual edit even when the random session chose motions. */
     if (target != 0U) {
@@ -224,51 +269,109 @@ bool rt_session_generate(RtSession *session, u64 seed, u32 fixture,
     return true;
 }
 
+typedef struct RtDenied {
+    const char *name;
+    const char *reason;
+} RtDenied;
+
+#define D(name_, reason_) {name_, reason_}
+static const RtDenied denied[] = {
+    D("ed.edit.insert.at", "RecEvent has no explicit offset field"),
+    D("ed.edit.delete.span", "RecEvent has no range field"),
+    D("ed.edit.replace.span", "RecEvent has no range field"),
+    D("ed.move.unit.up_alt", "redundant motion alias"),
+    D("ed.move.unit.down_alt", "redundant motion alias"),
+    D("ed.move.buf.home", "redundant motion alias"),
+    D("ed.move.buf.end", "TAKES_COUNT has fixture-sensitive semantics"),
+    D("ed.move.line.up", "redundant motion alias"),
+    D("ed.move.line.down", "redundant motion alias"),
+    D("ed.move.line.first_nonblank", "redundant motion alias"),
+    D("ed.move.line.last_nonblank", "redundant motion alias"),
+    D("ed.move.line.half_page_up", "viewport geometry is outside E0"),
+    D("ed.move.line.half_page_down", "viewport geometry is outside E0"),
+    D("ed.move.unit.home", "redundant motion alias"),
+    D("ed.move.unit.end", "redundant motion alias"),
+    D("ed.move.unit.home_alt", "redundant motion alias"),
+    D("ed.move.unit.end_alt", "redundant motion alias"),
+    D("ed.move.block.match_prev", "delimiter precondition is fixture-specific"),
+    D("ed.move.block.match_next", "delimiter precondition is fixture-specific"),
+    D("ed.move.word.sub_prev", "redundant motion alias"),
+    D("ed.move.word.sub_next", "redundant motion alias"),
+    D("ed.move.char.prev", "redundant motion alias"),
+    D("ed.move.char.next", "redundant motion alias"),
+    D("ed.move.char.left", "redundant motion alias"),
+    D("ed.move.char.right", "redundant motion alias"),
+    D("ed.edit.insert.newline", "native EOL metadata needs a dedicated pool"),
+    D("ed.edit.insert.tab", "tab-width state is outside generated E0"),
+    D("ed.edit.insert.after", "insert-mode transaction is not mode-closed"),
+    D("ed.edit.line.open_below", "insert-mode transaction is not mode-closed"),
+    D("ed.edit.line.open_above", "insert-mode transaction is not mode-closed"),
+    D("ed.edit.delete.grapheme_left", "redundant delete alias"),
+    D("ed.edit.delete.grapheme", "redundant delete alias"),
+    D("ed.edit.line.delete", "line register semantics need a seeded paste command"),
+    D("ed.edit.delete.prev", "redundant delete alias"),
+    D("ed.edit.delete.next", "redundant delete alias"),
+    D("ed.edit.undo", "history-dependent command"),
+    D("ed.edit.redo", "history-dependent command"),
+    D("ed.sel.contract", "selection stack history is outside E0"),
+    D("ed.sel.unit.expand", "alias of generated ed.sel.expand"),
+    D("ed.sel.unit.contract", "selection stack history is outside E0"),
+    D("ed.sel.kind", "argument-specific geometry needs a dedicated pool"),
+    D("ed.sel.swap_ends", "redundant selection permutation"),
+    D("ed.sel.delete", "covered indirectly; register deletion needs seeded paste"),
+    D("ed.sel.change", "enters insert mode and is not mode-closed"),
+    D("ed.sel.case_upper", "locale/case fixture needs a dedicated pool"),
+    D("ed.sel.case_lower", "locale/case fixture needs a dedicated pool"),
+    D("ed.sel.case_toggle", "locale/case fixture needs a dedicated pool"),
+    D("ed.sel.indent", "indent option is outside generated E0"),
+    D("ed.sel.dedent", "indent option is outside generated E0"),
+    D("ed.sel.shift_left", "indent option is outside generated E0"),
+    D("ed.sel.shift_right", "indent option is outside generated E0"),
+    D("ed.sel.join", "linewise selection precondition is fixture-specific"),
+    D("ed.sel.replace_char", "argument-specific selection edit"),
+    D("ed.edit.rect.insert", "rectangular geometry needs a dedicated fixture"),
+    D("ed.edit.rect.append", "rectangular geometry needs a dedicated fixture"),
+    D("ed.cursor.lift.lines", "multi-cursor topology is separately tested"),
+    D("ed.cursor.lift.matches", "search and multi-cursor state are outside E0"),
+    D("ed.cursor.lift.ends", "multi-cursor topology is separately tested"),
+    D("ed.cursor.add.above", "multi-cursor topology is separately tested"),
+    D("ed.cursor.add.below", "multi-cursor topology is separately tested"),
+    D("ed.cursor.drop", "multi-cursor topology is separately tested"),
+    D("ed.cursor.collapse", "multi-cursor topology is separately tested"),
+    D("ed.view.center", "viewport geometry is outside compared E0"),
+    D("ed.view.top", "viewport geometry is outside compared E0"),
+    D("ed.view.bottom", "viewport geometry is outside compared E0"),
+    D("ed.view.scroll.up", "viewport geometry is outside compared E0"),
+    D("ed.view.scroll.down", "viewport geometry is outside compared E0"),
+    D("ed.view.up", "viewport geometry is outside compared E0"),
+    D("ed.view.down", "viewport geometry is outside compared E0"),
+    D("ed.view.page_up", "viewport geometry is outside compared E0"),
+    D("ed.view.page_down", "viewport geometry is outside compared E0"),
+    D("ed.view.half_page_up", "viewport geometry is outside compared E0"),
+    D("ed.view.half_page_down", "viewport geometry is outside compared E0"),
+    D("ed.view.goto_line", "TAKES_COUNT is covered by emitter unit tests"),
+    D("ed.view.toggle_wrap", "viewport option is outside compared E0"),
+    D("ed.view.number_style", "viewport option is outside compared E0"),
+    D("ed.search.next", "search query state is outside E0"),
+    D("ed.search.prev", "search query state is outside E0"),
+    D("ed.search.word_next", "search query state is outside E0"),
+    D("ed.search.word_prev", "search query state is outside E0"),
+    D("ed.macro.replay", "macro recursion/cache is separately tested"),
+    D("ed.macro.replay_last", "macro recursion/cache is separately tested"),
+    D("ed.shell.run", "external process side effect"),
+    D("ed.shell.run_bg", "external process side effect"),
+    D("ed.shell.read", "external process side effect"),
+    D("ed.shell.filter", "external process side effect")
+};
+#undef D
+
 static const char *deny_reason(const CmdDesc *d)
 {
-    if ((d->flags & SAG_CMD_PROMPTS) != 0U)
-        return "prompt/modal input is outside generated committed commands";
-    if ((d->flags & SAG_CMD_DEFERRED) != 0U)
-        return "deferred command cannot execute successfully";
-    if (strncmp(d->name, "ed.file.", 8U) == 0 ||
-        strncmp(d->name, "ed.shell.", 9U) == 0 ||
-        strncmp(d->name, "ed.job.", 7U) == 0 ||
-        strncmp(d->name, "ed.quit", 7U) == 0)
-        return "external filesystem/process/lifecycle side effect";
-    if (strstr(d->name, ".undo") != NULL ||
-        strstr(d->name, ".redo") != NULL ||
-        strcmp(d->name, "ed.repeat") == 0)
-        return "history-dependent command is not representable in E0";
-    if (strcmp(d->name, "ed.edit.insert.at") == 0 ||
-        strcmp(d->name, "ed.edit.delete.span") == 0 ||
-        strcmp(d->name, "ed.edit.replace.span") == 0)
-        return "range/cursor envelope is absent from RecEvent";
-    if (strncmp(d->name, "ed.macro.", 9U) == 0)
-        return "macro recursion/cache state is tested separately";
-    if (strncmp(d->name, "ed.search.", 10U) == 0 ||
-        strncmp(d->name, "ed.find.", 8U) == 0)
-        return "search query and match state is outside generated E0";
-    if (strncmp(d->name, "ed.tab.", 7U) == 0 ||
-        strncmp(d->name, "ed.pane.", 8U) == 0 ||
-        strncmp(d->name, "ed.win.", 7U) == 0 ||
-        strncmp(d->name, "ed.view.", 8U) == 0 ||
-        strncmp(d->name, "ed.group.", 9U) == 0)
-        return "workspace/window topology is not generated in this sprint";
-    if (strncmp(d->name, "ed.select.", 10U) == 0 ||
-        strstr(d->name, ".yank") != NULL || strstr(d->name, ".paste") != NULL)
-        return "selection/register preconditions need a richer generator";
-    if (d->arity != (u8)SAG_ARITY_NONE)
-        return "non-motion argument envelope needs a command-specific generator";
-    if (strncmp(d->name, "ed.move.", 8U) == 0)
-        return "redundant motion alias excluded from the weighted core pool";
-    if (strncmp(d->name, "ed.edit.", 8U) == 0)
-        return "insert/selection precondition is not total over all fixtures";
-    if (strncmp(d->name, "ed.mode.", 8U) == 0)
-        return "non-unit mode would make repeated-session composition partial";
-    if (strncmp(d->name, "ed.sel.", 7U) == 0)
-        return "selection shape is not generated in this bounded campaign";
-    if (strncmp(d->name, "ed.cursor.", 10U) == 0)
-        return "multi-cursor topology is covered by focused recorder tests";
+    size_t i;
+
+    for (i = 0U; i < SAG_ARRAY_LEN(denied); i++)
+        if (strcmp(d->name, denied[i].name) == 0)
+            return denied[i].reason;
     return NULL;
 }
 
@@ -319,5 +422,11 @@ bool rt_generator_coverage(bool verbose)
             (void)printf("deny %s: %s\n", d->name, reason);
         }
     }
+    /* Sprint text names paste, but this registry currently exposes no
+     * recordable paste command.  Once one lands it is not auto-denied: the
+     * exact-table audit above fails until the generator handles it or a
+     * specific reviewed exclusion is added. */
+    if (verbose && sag_cmd_by_word("paste", 5U).v == 0U)
+        (void)printf("unavailable paste: no recordable registry command\n");
     return ok;
 }

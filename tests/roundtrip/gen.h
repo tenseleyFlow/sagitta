@@ -24,6 +24,7 @@ typedef struct RtSession {
     u32 storage_cap;
     u64 seed;
     u32 fixture;
+    u32 generated_len;
     u8 start_mode;
 } RtSession;
 

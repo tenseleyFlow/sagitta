@@ -7,10 +7,14 @@
  * recorded session has one node per edit while its Fletch replay is one
  * implicit macro transaction; asserting identical trees would encode the
  * opposite of the transaction contract.  P2 instead checks the user-visible
- * corollary: one undo after replay restores E0 byte for byte.
+ * corollary: one undo after replay restores E0 byte for byte.  P5 is a
+ * compositional check over the generator's deliberately mode-closed sessions:
+ * each S restores its starting L/W/B unit before returning.  It does not claim
+ * that arbitrary mode-leaking command sequences compose as S;S.
  */
 
 #include <errno.h>
+#include <dirent.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -39,13 +43,16 @@ static const u8 fixture_binary[] = {
     0x00U, 0x80U, 'a', '\n', 0xffU, 'z', '\r', '\n'
 };
 
+static char last_property[16];
+static char last_detail[192];
+
 static bool fail_session(u64 seed, u32 fixture, const char *property,
                          const char *detail)
 {
-    (void)fprintf(stderr,
-                  "roundtrip: FAIL seed=%llu fixture=%u property=%s: %s\n",
-                  (unsigned long long)seed, (unsigned)fixture, property,
-                  detail);
+    (void)seed;
+    (void)fixture;
+    (void)snprintf(last_property, sizeof(last_property), "%s", property);
+    (void)snprintf(last_detail, sizeof(last_detail), "%s", detail);
     return false;
 }
 
@@ -82,6 +89,17 @@ static bool bytes_equal(const Bytebuf *a, const Bytebuf *b)
 {
     return a->len == b->len &&
            (a->len == 0U || memcmp(a->data, b->data, a->len) == 0);
+}
+
+static size_t first_byte_difference(const Bytebuf *a, const Bytebuf *b)
+{
+    size_t i;
+    size_t n = a->len < b->len ? a->len : b->len;
+
+    for (i = 0U; i < n; i++)
+        if (a->data[i] != b->data[i])
+            return i;
+    return a->len == b->len ? SIZE_MAX : n;
 }
 
 static bool fixture_make(u32 fixture, Bytebuf *out)
@@ -419,7 +437,7 @@ static bool property_session(const RtSession *session)
         goto done;
     }
 
-    /* P5: no hidden recorder/cache state across a second invocation. */
+    /* P5: no hidden state across a second mode-closed invocation. */
     if (!editor_open(&direct_twice, &fixture, session->start_mode))
         goto done;
     opened_direct_twice = true;
@@ -458,6 +476,168 @@ done:
     return ok;
 }
 
+static bool corrupt_first_insert(const Bytebuf *source, Bytebuf *out)
+{
+    size_t i;
+
+    bytebuf_init(out);
+    for (i = 0U; i + 2U < source->len; i++) {
+        if (source->data[i] == (u8)'i' &&
+            source->data[i + 1U] == (u8)'"' &&
+            source->data[i + 2U] != (u8)'"' &&
+            source->data[i + 2U] != (u8)'\\') {
+            bytebuf_append(out, source->data, i + 2U);
+            bytebuf_append(out, source->data + i + 3U,
+                           source->len - i - 3U);
+            return true;
+        }
+    }
+    bytebuf_free(out);
+    return false;
+}
+
+static bool p1_diverges(const RtSession *session, u32 prefix, bool corrupt,
+                        size_t *byte_at, Bytebuf *emitted_out)
+{
+    Bytebuf fixture;
+    Bytebuf source;
+    Bytebuf bad_source;
+    RtBytes direct_bytes;
+    RtBytes replay_bytes;
+    Ed direct;
+    Ed replay;
+    const RegVal *stored;
+    const char *why = NULL;
+    bool direct_open = false;
+    bool replay_open = false;
+    bool differs = false;
+    RtSession view = *session;
+
+    *byte_at = SIZE_MAX;
+    bytebuf_init(emitted_out);
+    bytebuf_init(&source);
+    bytebuf_init(&bad_source);
+    bytes_init(&direct_bytes);
+    bytes_init(&replay_bytes);
+    if (prefix > session->events.len || !fixture_make(session->fixture, &fixture))
+        goto done;
+    view.events.len = prefix;
+    if (!editor_open(&direct, &fixture, session->start_mode))
+        goto fixture_done;
+    direct_open = true;
+    if (!sag_record_start(&direct, (u8)'a') || !run_events(&direct, &view) ||
+        sag_record_stop(&direct) != SAG_CMD_OK)
+        goto fixture_done;
+    stored = sag_reg_get(&direct.regs, (u8)'a');
+    if (stored == NULL)
+        goto fixture_done;
+    bytebuf_append(&source, stored->bytes.data, stored->bytes.len);
+    if (corrupt) {
+        if (!corrupt_first_insert(&source, &bad_source))
+            goto fixture_done;
+    } else {
+        bytebuf_append(&bad_source, source.data, source.len);
+    }
+    bytebuf_append(emitted_out, bad_source.data, bad_source.len);
+    if (!editor_open(&replay, &fixture, session->start_mode))
+        goto fixture_done;
+    replay_open = true;
+    if (!install_macro(&replay, &bad_source) ||
+        sag_macro_replay(&replay, (u8)'a', 1U) != SAG_CMD_OK)
+        goto fixture_done;
+    if (corrupt && !install_macro(&direct, &bad_source))
+        goto fixture_done;
+    differs = !editors_equal(&direct, &replay, &why);
+    if (differs && buffer_bytes(direct.buffer.tb, &direct_bytes) &&
+        buffer_bytes(replay.buffer.tb, &replay_bytes))
+        *byte_at = first_byte_difference(&direct_bytes.b, &replay_bytes.b);
+
+fixture_done:
+    if (replay_open)
+        sag_ed_free(&replay);
+    if (direct_open)
+        sag_ed_free(&direct);
+    bytebuf_free(&fixture);
+done:
+    bytes_free(&replay_bytes);
+    bytes_free(&direct_bytes);
+    bytebuf_free(&bad_source);
+    bytebuf_free(&source);
+    return differs;
+}
+
+static bool write_failure_artifact(const RtSession *session, u32 prefix,
+                                   const char *fault, char *path,
+                                   size_t path_cap)
+{
+    const char *dir = getenv("SAG_RT_TMP");
+    FILE *fp;
+
+    if (dir == NULL || dir[0] == '\0')
+        dir = "build/tmp";
+    if (mkdir(dir, 0777) != 0 && errno != EEXIST)
+        return false;
+    (void)snprintf(path, path_cap, "%s/fail-%llu.rec", dir,
+                   (unsigned long long)session->seed);
+    fp = fopen(path, "wb");
+    if (fp == NULL)
+        return false;
+    (void)fprintf(fp,
+                  "seed=%llu fixture=%u length=%u prefix=%u fault=%s\n",
+                  (unsigned long long)session->seed,
+                  (unsigned)session->fixture,
+                  (unsigned)session->generated_len, (unsigned)prefix,
+                  fault == NULL ? "none" : fault);
+    return fclose(fp) == 0;
+}
+
+static void report_failure(const RtSession *session, bool corrupt)
+{
+    Bytebuf source;
+    size_t byte_at = SIZE_MAX;
+    u32 prefix;
+    char path[512] = "<artifact write failed>";
+    const CmdDesc *desc;
+
+    for (prefix = 1U; prefix <= session->events.len; prefix++) {
+        bytebuf_init(&source);
+        if (p1_diverges(session, prefix, corrupt, &byte_at, &source))
+            break;
+        bytebuf_free(&source);
+    }
+    if (prefix > session->events.len) {
+        prefix = (u32)session->events.len;
+        bytebuf_init(&source);
+        (void)p1_diverges(session, prefix, corrupt, &byte_at, &source);
+    }
+    (void)write_failure_artifact(session, prefix,
+                                 corrupt ? "drop-first-insert-byte" : "none",
+                                 path, sizeof(path));
+    desc = prefix == 0U ? NULL :
+           sag_cmd_desc(session->events.data[prefix - 1U].cmd);
+    (void)fprintf(stderr,
+                  "roundtrip: FAIL seed=%llu fixture=%u property=%s\n"
+                  "  diverged at event %u of %u; shrunk from %u\n"
+                  "  op: %s\n"
+                  "  first differing byte: %s%zu\n"
+                  "  detail: %s\n"
+                  "  minimized session: %s\n"
+                  "  emitted source:\n",
+                  (unsigned long long)session->seed,
+                  (unsigned)session->fixture,
+                  corrupt ? "SELFTEST/P1" : last_property,
+                  prefix == 0U ? 0U : (unsigned)(prefix - 1U),
+                  (unsigned)prefix, (unsigned)session->events.len,
+                  desc == NULL ? "<unknown>" : desc->name,
+                  byte_at == SIZE_MAX ? "unavailable " : "",
+                  byte_at == SIZE_MAX ? 0U : byte_at,
+                  corrupt ? "emitted insert payload lost one byte" : last_detail,
+                  path);
+    (void)fwrite(source.data, 1U, source.len, stderr);
+    (void)fputc('\n', stderr);
+    bytebuf_free(&source);
+}
+
 static bool run_one(u64 seed, u32 fixture, u32 len)
 {
     RtSession session;
@@ -466,38 +646,124 @@ static bool run_one(u64 seed, u32 fixture, u32 len)
     rt_session_init(&session);
     ok = rt_session_generate(&session, seed, fixture, len) &&
          property_session(&session);
+    if (!ok && session.events.len != 0U)
+        report_failure(&session, false);
     rt_session_free(&session);
     return ok;
 }
 
-static bool run_corpus(void)
+static bool rec_name(const char *name)
+{
+    size_t n = strlen(name);
+
+    return n > 4U && strcmp(name + n - 4U, ".rec") == 0;
+}
+
+static void sort_names(char **names, u32 n)
 {
     u32 i;
 
-    for (i = 0U; i < 20U; i++) {
-        char path[128];
+    for (i = 1U; i < n; i++) {
+        char *value = names[i];
+        u32 j = i;
+
+        while (j != 0U && strcmp(names[j - 1U], value) > 0) {
+            names[j] = names[j - 1U];
+            j--;
+        }
+        names[j] = value;
+    }
+}
+
+static bool run_corpus(u32 *count_out)
+{
+    static const char dir_name[] = "tests/corpus/recorder";
+    DIR *dir;
+    struct dirent *entry;
+    char **names = NULL;
+    u32 names_len = 0U;
+    u32 names_cap = 0U;
+    u32 i;
+    bool ok = false;
+
+    *count_out = 0U;
+    dir = opendir(dir_name);
+    if (dir == NULL) {
+        (void)fprintf(stderr, "roundtrip: open corpus %s: %s\n", dir_name,
+                      strerror(errno));
+        return false;
+    }
+    while ((entry = readdir(dir)) != NULL) {
+        size_t n;
+
+        if (!rec_name(entry->d_name))
+            continue;
+        if (names_len == names_cap) {
+            names_cap = names_cap == 0U ? 32U : names_cap * 2U;
+            names = sag_xreallocarray(names, names_cap, sizeof(*names));
+        }
+        n = strlen(entry->d_name);
+        names[names_len] = sag_xmalloc(n + 1U);
+        (void)memcpy(names[names_len], entry->d_name, n + 1U);
+        names_len++;
+    }
+    if (closedir(dir) != 0)
+        goto done;
+    sort_names(names, names_len);
+
+    for (i = 0U; i < names_len; i++) {
+        char path[512];
         FILE *fp;
         unsigned long long seed;
         unsigned fixture;
         unsigned len;
+        unsigned prefix = 0U;
+        int parsed;
 
-        (void)snprintf(path, sizeof(path),
-                       "tests/corpus/recorder/%02u.rec", (unsigned)i);
+        (void)snprintf(path, sizeof(path), "%s/%s", dir_name, names[i]);
         fp = fopen(path, "rb");
         if (fp == NULL) {
             (void)fprintf(stderr, "roundtrip: missing corpus %s: %s\n",
                           path, strerror(errno));
-            return false;
+            goto done;
         }
-        if (fscanf(fp, "seed=%llu fixture=%u length=%u", &seed, &fixture,
-                   &len) != 3 || fclose(fp) != 0) {
+        parsed = fscanf(fp, "seed=%llu fixture=%u length=%u prefix=%u",
+                        &seed, &fixture, &len, &prefix);
+        if (parsed < 3 || fclose(fp) != 0) {
             (void)fprintf(stderr, "roundtrip: invalid corpus %s\n", path);
-            return false;
+            goto done;
         }
-        if (!run_one((u64)seed, (u32)fixture, (u32)len))
-            return false;
+        if (prefix == 0U) {
+            if (!run_one((u64)seed, (u32)fixture, (u32)len))
+                goto done;
+        } else {
+            RtSession session;
+
+            rt_session_init(&session);
+            if (!rt_session_generate(&session, (u64)seed, (u32)fixture,
+                                     (u32)len) ||
+                prefix > session.events.len) {
+                rt_session_free(&session);
+                goto done;
+            }
+            session.events.len = prefix;
+            if (!property_session(&session)) {
+                rt_session_free(&session);
+                goto done;
+            }
+            rt_session_free(&session);
+        }
     }
-    return true;
+    *count_out = names_len;
+    ok = names_len >= 20U;
+    if (!ok)
+        (void)fprintf(stderr, "roundtrip: corpus has %u files; need >=20\n",
+                      (unsigned)names_len);
+done:
+    for (i = 0U; i < names_len; i++)
+        free(names[i]);
+    free(names);
+    return ok;
 }
 
 static u32 env_seeds(void)
@@ -517,118 +783,38 @@ static u32 env_seeds(void)
     return (u32)n;
 }
 
-/*
- * Deliberately broken event transform used only by SAG_RT_SELFTEST.
- * The third event is changed after encoding, which models exactly the class
- * of emitter error the shrinker must make actionable without coupling the
- * production emitter to a test-only switch.
- */
-static void selftest_transform(const RtSession *session, u32 prefix,
-                               bool broken, Bytebuf *out)
-{
-    u32 i;
-
-    bytebuf_init(out);
-    for (i = 0U; i < prefix; i++) {
-        const RtEvent *ev = &session->events.data[i];
-        u8 encoded[8];
-
-        encoded[0] = (u8)(ev->cmd.v & 0xffU);
-        encoded[1] = (u8)((ev->cmd.v >> 8U) & 0xffU);
-        encoded[2] = (u8)(ev->count & 0xffU);
-        encoded[3] = (u8)((ev->count >> 8U) & 0xffU);
-        encoded[4] = ev->count_given ? 1U : 0U;
-        encoded[5] = (u8)(ev->sarg_len & 0xffU);
-        encoded[6] = ev->sarg_len == 0U ? 0U : ev->sarg[0];
-        encoded[7] = ev->sarg_len < 2U ? 0U : ev->sarg[1];
-        if (broken && i == 2U)
-            encoded[0] ^= 0x80U;
-        bytebuf_append(out, encoded, sizeof(encoded));
-    }
-}
-
-static bool selftest_diverges(const RtSession *session, u32 prefix,
-                              size_t *first_diff)
-{
-    Bytebuf correct;
-    Bytebuf broken;
-    size_t i;
-    bool differs;
-
-    selftest_transform(session, prefix, false, &correct);
-    selftest_transform(session, prefix, true, &broken);
-    differs = !bytes_equal(&correct, &broken);
-    *first_diff = 0U;
-    if (differs) {
-        size_t n = correct.len < broken.len ? correct.len : broken.len;
-
-        for (i = 0U; i < n; i++) {
-            if (correct.data[i] != broken.data[i]) {
-                *first_diff = i;
-                break;
-            }
-        }
-    }
-    bytebuf_free(&broken);
-    bytebuf_free(&correct);
-    return differs;
-}
-
 static int run_selftest(void)
 {
-    const char *dir = getenv("SAG_RT_TMP");
-    char path[512];
     RtSession session;
-    size_t first_diff = 0U;
-    u32 prefix;
-    FILE *fp;
-    const CmdDesc *desc;
+    u64 seed;
+    bool found = false;
 
-    if (dir == NULL || dir[0] == '\0')
-        dir = "build/tmp";
-    if (mkdir(dir, 0777) != 0 && errno != EEXIST) {
-        (void)fprintf(stderr, "roundtrip: selftest mkdir %s: %s\n", dir,
-                      strerror(errno));
-        return 2;
-    }
-    rt_session_init(&session);
-    if (!rt_session_generate(&session, UINT64_C(41207), 3U, 96U)) {
-        rt_session_free(&session);
-        return 2;
-    }
-    /* Linear earliest-prefix search: divergence is not assumed monotonic. */
-    for (prefix = 1U; prefix <= session.events.len; prefix++) {
-        if (selftest_diverges(&session, prefix, &first_diff))
+    /* Find a reproducible 96-event generated session beginning with i"x". */
+    for (seed = 0U; seed < 10000U; seed++) {
+        const CmdDesc *desc;
+
+        rt_session_init(&session);
+        if (!rt_session_generate(&session, seed, 3U, 96U))
+            return 2;
+        if (session.events.len < 96U) {
+            rt_session_free(&session);
+            return 2;
+        }
+        session.events.len = 96U;
+        desc = session.events.len == 0U ? NULL :
+               sag_cmd_desc(session.events.data[0].cmd);
+        found = desc != NULL &&
+                strcmp(desc->name, "ed.edit.insert.text") == 0 &&
+                session.events.data[0].sarg_len == 1U &&
+                session.events.data[0].sarg[0] == (u8)'x';
+        if (found)
             break;
-    }
-    if (prefix > 3U || prefix > session.events.len) {
-        (void)fprintf(stderr,
-                      "roundtrip: SELFTEST did not shrink 96 events to <=3\n");
         rt_session_free(&session);
-        return 2;
     }
-    (void)snprintf(path, sizeof(path), "%s/fail-41207.rec", dir);
-    fp = fopen(path, "wb");
-    if (fp == NULL) {
-        (void)fprintf(stderr, "roundtrip: selftest write %s: %s\n", path,
-                      strerror(errno));
-        rt_session_free(&session);
+    if (!found)
         return 2;
-    }
-    (void)fprintf(fp, "seed=41207 fixture=3 length=%u\n", (unsigned)prefix);
-    if (fclose(fp) != 0) {
-        rt_session_free(&session);
-        return 2;
-    }
-    desc = sag_cmd_desc(session.events.data[prefix - 1U].cmd);
-    (void)fprintf(stderr,
-                  "roundtrip: SELFTEST FAIL seed=41207 fixture=3\n"
-                  "  diverged at event %u of 96; shrunk to %u events\n"
-                  "  op: %s\n"
-                  "  first differing byte: %zu\n"
-                  "  minimized session: %s\n",
-                  (unsigned)(prefix - 1U), (unsigned)prefix,
-                  desc == NULL ? "<unknown>" : desc->name, first_diff, path);
+    /* This mutates real emitted Fletch, then runs it through the real VM. */
+    report_failure(&session, true);
     rt_session_free(&session);
     return 1;
 }
@@ -636,6 +822,7 @@ static int run_selftest(void)
 int main(int argc, char **argv)
 {
     u32 seeds;
+    u32 corpus_count;
     u32 i;
     bool coverage = getenv("SAG_RT_COVERAGE") != NULL;
 
@@ -663,12 +850,12 @@ int main(int argc, char **argv)
             return 1;
         }
     }
-    if (!run_corpus()) {
+    if (!run_corpus(&corpus_count)) {
         sag_cmd_shutdown();
         return 1;
     }
     sag_cmd_shutdown();
-    (void)printf("roundtrip: ok seeds=%u fixtures=6 corpus=20 P1-P5\n",
-                 (unsigned)seeds);
+    (void)printf("roundtrip: ok seeds=%u fixtures=6 corpus=%u P1-P5\n",
+                 (unsigned)seeds, (unsigned)corpus_count);
     return 0;
 }
