@@ -13,6 +13,7 @@
 #include "fl/diag.h"
 #include "syn/defs.h"
 #include "syn/engine.h"
+#include "text/journal.h"
 #include "util/arena.h"
 #include "util/buf.h"
 
@@ -25,6 +26,22 @@ static const char cache_source_y[] =
     "{ syntax: 1, language: { name: \"cache-fixture\", "
     "extensions: [\"cache\"], }, contexts: { main: { default: \"text\", "
     "rules: [ { match: \"y\", attr: \"number\" }, ], }, }, }\n";
+
+static const char cache_source_complex[] =
+    "{ syntax: 1, language: { name: \"cache-complex\", "
+    "extensions: [\"cx\"], filenames: [\"Complexfile\"], priority: 9, }, "
+    "root: \"main\", contexts: { main: { default: \"text\", rules: [ "
+    "{ match: \"^([A-Z][a-z]+|[0-9][0-9])=(yes|no)$\", "
+    "attr: \"operator\", captures: { 1: \"variable\", 2: \"boolean\" } "
+    "}, ], }, tail: { default: \"comment\", rules: [], }, }, }\n";
+
+static const char cache_source_aux[] =
+    "{ syntax: 1, language: { name: \"cache-aux\" }, contexts: { "
+    "main: { default: \"text\", rules: [ { match: \"^r(#+)\\\"\", "
+    "attr: \"string\", set_aux: 1, push: \"raw\" }, ], }, "
+    "raw: { default: \"string\", rules: [ { aux: \"literal\", "
+    "aux_pre: \"\\\"\", aux_post: \"!\", attr: \"string.escape\", "
+    "pop: 1 }, ], }, }, }\n";
 
 typedef struct CacheFixture {
     char root[64];
@@ -215,6 +232,14 @@ static void corrupt_cache(CacheFixture *f, size_t off)
     bytebuf_free(&bytes);
 }
 
+static void put_u32_le(u8 *dst, u32 value)
+{
+    dst[0] = (u8)value;
+    dst[1] = (u8)(value >> 8U);
+    dst[2] = (u8)(value >> 16U);
+    dst[3] = (u8)(value >> 24U);
+}
+
 static void assert_corruption_recompiles(CacheFixture *f)
 {
     LoadedDef loaded;
@@ -266,6 +291,111 @@ void test_syn_cache_cold_write_then_warm_load_avoids_recompile(void)
     YEW_ASSERT_EQ_U64(yew_syn_compile_count(), 0U);
     YEW_ASSERT_EQ_STR(yew_syn_rule_pattern(loaded.def, 0U), "x");
     assert_loaded_regex_executes(&loaded, 'x');
+    loaded_free(&loaded);
+    fixture_free(&f);
+}
+
+void test_syn_cache_warm_load_preserves_complex_regex_and_metadata(void)
+{
+    CacheFixture f;
+    LoadedDef loaded;
+    SynSpan spans[8];
+    SynLineOut out = {spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
+    SynEngine *engine;
+    const SynLangDesc *lang;
+    static const u8 line[] = "Abc=yes";
+
+    fixture_init(&f);
+    write_exact(f.source, (const u8 *)cache_source_complex,
+                strlen(cache_source_complex));
+    build_cold_cache(&f);
+    yew_syn_compile_count_reset();
+    loaded = load_def(&f);
+    YEW_ASSERT_EQ_U64(yew_syn_compile_count(), 0U);
+    YEW_ASSERT_EQ_STR(loaded.def->name, "cache-complex");
+    YEW_ASSERT_EQ_U64(loaded.def->root, 0U);
+    YEW_ASSERT_EQ_U64(loaded.def->nctxs, 2U);
+    YEW_ASSERT_EQ_U64(loaded.def->nrules, 1U);
+    YEW_ASSERT_EQ_STR(yew_syn_ctx_name(loaded.def, 0U), "main");
+    YEW_ASSERT_EQ_STR(yew_syn_ctx_name(loaded.def, 1U), "tail");
+    YEW_ASSERT_EQ_STR(yew_syn_rule_pattern(loaded.def, 0U),
+                      "^([A-Z][a-z]+|[0-9][0-9])=(yes|no)$");
+    lang = yew_syn_lang_desc(yew_syn_lang_named("cache-complex"));
+    YEW_ASSERT_NOT_NULL(lang);
+    YEW_ASSERT_EQ_U64(lang->nextensions, 1U);
+    YEW_ASSERT_EQ_STR(lang->extensions[0], "cx");
+    YEW_ASSERT_EQ_U64(lang->nfilenames, 1U);
+    YEW_ASSERT_EQ_STR(lang->filenames[0], "Complexfile");
+    YEW_ASSERT_EQ_I64(lang->priority, 9);
+
+    engine = yew_syn_engine_new(loaded.def);
+    YEW_ASSERT_NOT_NULL(engine);
+    yew_syn_line(engine, YEW_SYN_STATE_ROOT, line, sizeof(line) - 1U, &out);
+    YEW_ASSERT_EQ_U64(out.stop, YEW_SYN_STOP_OK);
+    YEW_ASSERT_EQ_U64(out.n, 3U);
+    YEW_ASSERT_EQ_U64(out.spans[0].start, 0U);
+    YEW_ASSERT_EQ_U64(out.spans[0].len, 3U);
+    YEW_ASSERT_EQ_U64(out.spans[0].attr, YEW_ATTR_VARIABLE);
+    YEW_ASSERT_EQ_U64(out.spans[1].start, 3U);
+    YEW_ASSERT_EQ_U64(out.spans[1].len, 1U);
+    YEW_ASSERT_EQ_U64(out.spans[1].attr, YEW_ATTR_OPERATOR);
+    YEW_ASSERT_EQ_U64(out.spans[2].start, 4U);
+    YEW_ASSERT_EQ_U64(out.spans[2].len, 3U);
+    YEW_ASSERT_EQ_U64(out.spans[2].attr, YEW_ATTR_BOOLEAN);
+    yew_syn_engine_free(engine);
+    loaded_free(&loaded);
+    fixture_free(&f);
+}
+
+void test_syn_cache_warm_load_preserves_aux_literals_and_mutable_aux(void)
+{
+    CacheFixture f;
+    LoadedDef loaded;
+    SynSpan spans[8];
+    SynLineOut out = {spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
+    SynEngine *engine;
+    const SynState *state;
+    static const u8 opener[] = "r##\"";
+    static const u8 closer[] = "body\"##!tail";
+
+    fixture_init(&f);
+    write_exact(f.source, (const u8 *)cache_source_aux,
+                strlen(cache_source_aux));
+    build_cold_cache(&f);
+    yew_syn_compile_count_reset();
+    loaded = load_def(&f);
+    YEW_ASSERT_EQ_U64(yew_syn_compile_count(), 0U);
+    YEW_ASSERT_EQ_STR(yew_syn_ctx_name(loaded.def, 1U), "raw");
+    YEW_ASSERT_EQ_STR(yew_syn_rule_pattern(loaded.def, 0U), "^r(#+)\"");
+    YEW_ASSERT_EQ_U64(loaded.def->rules[1].aux_match, SYN_AUXM_LITERAL);
+    YEW_ASSERT_EQ_STR(yew_intern_str(loaded.def->aux,
+                                     loaded.def->rules[1].aux_pre), "\"");
+    YEW_ASSERT_EQ_STR(yew_intern_str(loaded.def->aux,
+                                     loaded.def->rules[1].aux_post), "!");
+
+    engine = yew_syn_engine_new(loaded.def);
+    YEW_ASSERT_NOT_NULL(engine);
+    yew_syn_line(engine, YEW_SYN_STATE_ROOT, opener, sizeof(opener) - 1U,
+                 &out);
+    state = yew_syn_state_get(yew_syn_engine_states(engine), out.exit_state);
+    YEW_ASSERT_NOT_NULL(state);
+    YEW_ASSERT_EQ_U64(state->depth, 2U);
+    YEW_ASSERT_EQ_U64(state->ctx[1], 1U);
+    YEW_ASSERT_EQ_STR(yew_intern_str(loaded.def->aux, state->aux), "##");
+
+    yew_syn_line(engine, out.exit_state, closer, sizeof(closer) - 1U, &out);
+    YEW_ASSERT_EQ_U64(out.stop, YEW_SYN_STOP_OK);
+    YEW_ASSERT_EQ_U64(out.n, 3U);
+    YEW_ASSERT_EQ_U64(out.spans[0].attr, YEW_ATTR_STRING);
+    YEW_ASSERT_EQ_U64(out.spans[0].len, 4U);
+    YEW_ASSERT_EQ_U64(out.spans[1].attr, YEW_ATTR_STRING_ESCAPE);
+    YEW_ASSERT_EQ_U64(out.spans[1].len, 4U);
+    YEW_ASSERT_EQ_U64(out.spans[2].attr, YEW_ATTR_TEXT);
+    YEW_ASSERT_EQ_U64(out.spans[2].len, 4U);
+    state = yew_syn_state_get(yew_syn_engine_states(engine), out.exit_state);
+    YEW_ASSERT_NOT_NULL(state);
+    YEW_ASSERT_EQ_U64(state->depth, 1U);
+    yew_syn_engine_free(engine);
     loaded_free(&loaded);
     fixture_free(&f);
 }
@@ -357,6 +487,36 @@ void test_syn_cache_bad_crc_recompiles_safely(void)
     build_cold_cache(&f);
     corrupt_cache(&f, 60U);
     assert_corruption_recompiles(&f);
+    fixture_free(&f);
+}
+
+void test_syn_cache_crc_valid_structural_corruption_recompiles_safely(void)
+{
+    CacheFixture f;
+    Bytebuf bytes;
+    LoadedDef loaded;
+    size_t blob_len;
+    u32 crc;
+
+    fixture_init(&f);
+    build_cold_cache(&f);
+    bytes = read_exact(f.cache);
+    YEW_ASSERT(bytes.len > YEW_SYN_CACHE_HEADER_SIZE + 12U);
+    blob_len = bytes.len - YEW_SYN_CACHE_HEADER_SIZE;
+    put_u32_le(bytes.data + YEW_SYN_CACHE_HEADER_SIZE + 8U, UINT32_MAX);
+    crc = yew_crc32(bytes.data + YEW_SYN_CACHE_HEADER_SIZE, blob_len);
+    put_u32_le(bytes.data + 60U, crc);
+    write_exact(f.cache, bytes.data, bytes.len);
+    bytebuf_free(&bytes);
+
+    yew_test_capture_log();
+    yew_syn_compile_count_reset();
+    loaded = load_def(&f);
+    YEW_ASSERT_EQ_U64(yew_syn_compile_count(), 1U);
+    YEW_ASSERT(yew_test_log_contains(
+        YEW_LOG_WARN, "syntax cache tables invalid; recompiling"));
+    assert_loaded_regex_executes(&loaded, 'x');
+    loaded_free(&loaded);
     fixture_free(&f);
 }
 
