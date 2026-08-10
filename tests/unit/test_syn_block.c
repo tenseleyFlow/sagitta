@@ -155,6 +155,9 @@ void test_syn_stack_at_reports_prefix_without_eol_transition(void)
                                 (const u8 *)line, strlen(line),
                                 strlen(line), &state));
     YEW_ASSERT_EQ_U64(state.depth, 1U);
+    YEW_ASSERT(!yew_syn_stack_at(toy.engine, YEW_SYN_STATE_ROOT,
+                                 (const u8 *)line,
+                                 YEW_SYN_LINE_BYTE_CAP + 1U, 0U, &state));
     syn_toy_free(&toy);
 }
 

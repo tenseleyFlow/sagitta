@@ -781,7 +781,7 @@ bool yew_syn_stack_trace(SynEngine *engine, u32 entry_state, const u8 *line,
     SynLineOut line_out = {NULL, 0U, 0U, YEW_SYN_STATE_UNKNOWN,
                            YEW_SYN_STOP_OK};
 
-    if (engine == NULL || trace == NULL ||
+    if (engine == NULL || trace == NULL || len > YEW_SYN_LINE_BYTE_CAP ||
         (line == NULL && len != 0U) || trace_cap < (size_t)len + 1U)
         return false;
     syn_line_run(engine, entry_state, line, len, &line_out, false, trace);
@@ -794,7 +794,8 @@ bool yew_syn_stack_at(SynEngine *engine, u32 entry_state, const u8 *line,
     SynState *trace;
     bool ok;
 
-    if (engine == NULL || out == NULL || (line == NULL && len != 0U))
+    if (engine == NULL || out == NULL || len > YEW_SYN_LINE_BYTE_CAP ||
+        (line == NULL && len != 0U))
         return false;
     if (p > len)
         p = len;
