@@ -1,27 +1,32 @@
 # SPEC: §16
-# COVERS: kind:limit list.len
+# COVERS: kind:limit kind:handle list.len
 #
 # §16 is a registry, not a language feature, so what a conformance
 # file can assert about it is exactly this: THE AMENDMENTS THAT ARE
 # FILED ARE IN EFFECT, and their arithmetic still holds.
 #
 # A1 (Sprint 30) took the error-kind set from 11 to 12 by adding
-# "limit".  A4 (Sprint 30) corrected §7's closure sentence to "9 then
-# 10".  A2 and A3 are RESERVED, not filed -- a reserved row is a
-# promise and must not be observable here.
+# "limit".  A2 (Sprint 34) took it from 12 to 13 by adding "handle".
+# A4 (Sprint 30) corrected §7's closure sentence to "9 then 10".  A3
+# remains RESERVED, not filed -- a reserved row is a promise and must
+# not be observable here.
 import io
+import buf
 import list
 
-# -- A1: the count is 12, and it is ASSERTED (s28 DoD 8) --------------
+# -- A1 + A2: the count is 13, and it is ASSERTED (s34 DoD 11) --------
 # The list is written out so this file fails if a kind is added or
 # removed without the count moving, and check 4 of the coverage gate
 # separately requires an `# ERROR_KIND:` case for every one of them.
 let kinds = ["type", "arity", "name", "index", "key", "div",
-             "capability", "io", "import", "motion", "user", "limit"]
-# OUT: 12
+             "capability", "io", "import", "motion", "user", "limit",
+             "handle"]
+# OUT: 13
 io.print(list.len(kinds))
 # OUT: true
 io.print(list.contains(kinds, "limit"))
+# OUT: true
+io.print(list.contains(kinds, "handle"))
 
 # -- A1 in effect: "limit" is REACHABLE and CATCHABLE ------------------
 # A row in a table proves nothing.  The kind exists because the VM
@@ -38,11 +43,17 @@ try {
     io.print(e.kind)
 }
 
-# -- A2 is RESERVED, not filed: "handle" must not exist yet -----------
-# Sprint 34 files it and updates this file in the same commit.  Until
-# then the count above is 12 and nothing raises "handle".
-# OUT: false
-io.print(list.contains(kinds, "handle"))
+# -- A2 in effect: "handle" is REACHABLE and CATCHABLE ----------------
+# A headless run cannot resolve an editor handle, but that absence is a
+# runtime condition a script can catch rather than an undefined name or
+# an abort.
+try {
+    buf.current()
+    io.print("headless buffer lookup returned")
+} catch e {
+    # OUT: handle
+    io.print(e.kind)
+}
 
 # -- A4 in effect: §7's closure sentence, which §14.1 is normative for -
 # clamp(9, 0, 8) is 8 because 9 > hi, so the counter yields 9 then 10.

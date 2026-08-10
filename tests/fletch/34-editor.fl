@@ -1,7 +1,7 @@
 # SPEC: §4, §16
-# COVERS: buf.current buf.len buf.path buf.text
-# ERROR_KIND: name
-# ERROR: Sprint 34
+# COVERS: buf.current buf.len buf.path buf.text kind:handle
+# ERROR_KIND: handle
+# ERROR: no editor
 # EXIT: 1
 #
 # THE EDITOR API, AS A HEADLESS SCRIPT SEES IT.
@@ -51,10 +51,19 @@ try {
     io.print(e.kind)
 }
 
-# -- THE DEFERRAL, still tested rather than promised -------------------
-#
+# -- THE DEFERRAL, still tested rather than promised ------------------
 # `bind` has not landed (Sprint 36 owns the config surface), so it must
-# still hard-error NAMING ITS SPRINT.  Uncaught on purpose: the `# EXIT`
-# and `# ERROR` directives above assert the process outcome, which is
-# what a user actually meets.
-bind("H", "s", fn() { return 1 })
+# still hard-error naming its sprint. Catch it here so the final error
+# can independently prove A2's `handle` kind.
+try {
+    bind("H", "s", fn() { return 1 })
+} catch e {
+    # OUT: name bind lands in Sprint 34
+    io.print(e.kind, e.msg)
+}
+
+# -- the headless condition is an honest ERROR_KIND case --------------
+# Uncaught on purpose: the directives above prove that the observable
+# process error is `handle`, in addition to the caught case proving that
+# scripts can recover from it.
+buf.current()

@@ -389,16 +389,21 @@ caught by no frame.
 Runtime error kinds, **closed for 1.0**:
 
 `"type"` `"arity"` `"name"` `"index"` `"key"` `"div"` `"capability"`
-`"io"` `"import"` `"motion"` `"user"` `"limit"`
+`"io"` `"import"` `"motion"` `"user"` `"limit"` `"handle"`
 
-**Count: 12.** Sprint 33 asserts this number. `"limit"` was added by
-amendment **A1** (Sprint 30) — see §16. Later sprints amend it again,
-and anything written after Sprint 34 says 13.
+**Count: 13.** Sprint 34 asserts this number. `"limit"` was added by
+amendment **A1** (Sprint 30), and `"handle"` by amendment **A2**
+(Sprint 34) — see §16.
 
 `"limit"` covers VM resource exhaustion: call depth, value-stack depth,
 the step limit, and Sprint 31's io result caps. It is **catchable**, and
 that is the point of it — infinite recursion is user-triggerable, so it
-may not become an abort, and it is none of the other eleven.
+may not become an abort, and it is none of the other twelve.
+
+`"handle"` covers stale, closed, or otherwise unresolvable editor
+handles. It is **catchable**, so a script can distinguish an invalid
+argument (`"type"`) from an editor object that closed after the script
+obtained its handle.
 
 ### 9.2 Catching
 
@@ -649,7 +654,7 @@ it. A reserved row is a promise, not a change to the spec.
 | Id | Sprint | § | Change | Reason | Filed | Reviewer |
 |---|---|---|---|---|---|---|
 | A1 | 30 | 9 / 16 | error kinds 11 → 12, adding `"limit"` | stack/step-limit exhaustion is user-triggerable and fits none of the 11 closed kinds | 2026-08-08 | Sprint 30 implementation review |
-| A2 | 34 | 9 / 16 | error kinds 12 → 13, adding `"handle"` | a stale or closed editor handle is neither a type nor an index error; `catch` must distinguish "wrong argument" from "the buffer closed under you" | reserved | — |
+| A2 | 34 | 9 / 16 | error kinds 12 → 13, adding `"handle"` | a stale or closed editor handle is neither a type nor an index error; `catch` must distinguish "wrong argument" from "the buffer closed under you" | 2026-08-10 | Sprint 34 implementation review |
 | A3 | 55 | 11 | import resolution gains a fourth row, `$SAG_RUNTIME_DIR/`, searched **last** | shipped presets must be importable, and searching last lets a user's copy shadow the shipped one | reserved | — |
 | A4 | 30 | 7 | §7's closure sentence reads "9 then 10", was "10 then 11" | §7 cited §14.1 as normative and then disagreed with it; `clamp(9, 0, 8)` is 8, so the first call yields 9 | 2026-08-08 | Sprint 30 implementation review |
 
@@ -660,12 +665,11 @@ A4 collides with nothing; taking the next free id is the only option
 that leaves the reserved rows alone. A later sprint filing after 34 and
 55 takes A5 — sprint order resumes there.
 
-**Pitfall — §9's kind count is 13, not 12,** once A2 lands. A1 is filed
-as of Sprint 30, so §9 reads **12** today. Sprints 31, 32 and 33 were
-written between A1 and A2 and correctly say 12 for their point in time;
-anything written after Sprint 34 says 13. Sprint 33's count assertion is
-updated in A2's own commit, and Sprint 58's audit front `FLETCH`
-re-checks the arithmetic.
+**Pitfall — §9's kind count is 13, not 12.** A1 and A2 are filed.
+Sprints 31, 32 and 33 were written between them and correctly say 12
+for their point in time; anything written after Sprint 34 says 13.
+Sprint 34's conformance assertion and Sprint 58's audit front `FLETCH`
+re-check the arithmetic.
 
 ### Deferred to later sprints — named here, not invented here
 
