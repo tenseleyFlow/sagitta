@@ -1192,7 +1192,8 @@ test-script: $(BUILD)/script_runner $(BUILD)/sagitta
 		$(if $(filter 1,$(VALGRIND)),$(VALGRIND_RUN) \
 		--trace-children=yes \
 		$(VALGRIND_TRACE_SKIP),) \
-		$(BUILD)/script_runner --selftest
+		$(BUILD)/script_runner --selftest \
+		--sagitta $(abspath $(BUILD)/sagitta)
 	LC_ALL=C SAG_SCRIPT_BUDGET_MS=$(SAG_SCRIPT_BUDGET_MS) \
 		$(if $(filter 1,$(VALGRIND)),$(VALGRIND_RUN) \
 		--trace-children=yes \
@@ -1203,10 +1204,12 @@ test-script: $(BUILD)/script_runner $(BUILD)/sagitta
 test-script-determinism: $(BUILD)/script_runner $(BUILD)/sagitta
 	@tmp=$$(mktemp -d); \
 	trap 'rm -rf "$$tmp"' EXIT HUP INT TERM; \
-	LC_ALL=C $(BUILD)/script_runner --selftest >"$$tmp/run-1" 2>&1; \
+	LC_ALL=C $(BUILD)/script_runner --selftest \
+		--sagitta $(abspath $(BUILD)/sagitta) >"$$tmp/run-1" 2>&1; \
 	LC_ALL=C $(BUILD)/script_runner \
 		--sagitta $(abspath $(BUILD)/sagitta) >>"$$tmp/run-1" 2>&1; \
-	LC_ALL=C $(BUILD)/script_runner --selftest >"$$tmp/run-2" 2>&1; \
+	LC_ALL=C $(BUILD)/script_runner --selftest \
+		--sagitta $(abspath $(BUILD)/sagitta) >"$$tmp/run-2" 2>&1; \
 	LC_ALL=C $(BUILD)/script_runner \
 		--sagitta $(abspath $(BUILD)/sagitta) >>"$$tmp/run-2" 2>&1; \
 	diff -u "$$tmp/run-1" "$$tmp/run-2"; \
