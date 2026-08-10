@@ -11,7 +11,8 @@
  * A test whose first line is exactly "# CONFIG" runs without --clean; every
  * other test gets --clean.  Keeping the opt-in in byte zero makes discovery
  * deterministic and prevents an incidental comment later in a test from
- * changing its environment.
+ * changing its environment.  An optional sibling <test>.stdout file pins the
+ * child's stdout byte-for-byte; tests without one retain the original rules.
  */
 
 #include <dirent.h>
@@ -46,6 +47,7 @@ typedef struct Bytes {
 typedef struct TestFile {
     char *name;
     char *path;
+    char *stdout_path;
     bool config;
 } TestFile;
 
@@ -114,6 +116,40 @@ static bool bytes_append(Bytes *bytes, const char *data, size_t len)
     return true;
 }
 
+static bool bytes_read_path(const char *path, Bytes *bytes)
+{
+    char buf[16384];
+    int fd = open(path, O_RDONLY);
+    bool ok = fd >= 0;
+
+    while (ok) {
+        ssize_t got = read(fd, buf, sizeof(buf));
+
+        if (got == 0)
+            break;
+        if (got < 0) {
+            if (errno == EINTR)
+                continue;
+            ok = false;
+            break;
+        }
+        if (!bytes_append(bytes, buf, (size_t)got)) {
+            ok = false;
+            break;
+        }
+    }
+    if (fd >= 0 && close(fd) != 0)
+        ok = false;
+    return ok;
+}
+
+static bool bytes_equal(const Bytes *left, const Bytes *right)
+{
+    return !left->overflow && !right->overflow && left->len == right->len &&
+           (left->len == 0U ||
+            memcmp(left->data, right->data, left->len) == 0);
+}
+
 static char *path_join(const char *left, const char *right)
 {
     size_t nl = strlen(left);
@@ -138,6 +174,46 @@ static bool has_fl_suffix(const char *name)
     size_t len = strlen(name);
 
     return len > 3U && strcmp(name + len - 3U, ".fl") == 0;
+}
+
+static char *stdout_sibling_path(const char *path)
+{
+    size_t len = strlen(path);
+    char *sibling;
+
+    if (len < 3U || strcmp(path + len - 3U, ".fl") != 0 ||
+        len > SIZE_MAX - 5U)
+        return NULL;
+    sibling = malloc(len + 5U);
+    if (sibling == NULL)
+        return NULL;
+    memcpy(sibling, path, len - 3U);
+    memcpy(sibling + len - 3U, ".stdout", sizeof(".stdout"));
+    return sibling;
+}
+
+static bool optional_stdout_sibling(const char *path, char **sibling)
+{
+    struct stat st;
+    char *candidate = stdout_sibling_path(path);
+
+    *sibling = NULL;
+    if (candidate == NULL)
+        return false;
+    if (lstat(candidate, &st) == 0) {
+        if (!S_ISREG(st.st_mode)) {
+            free(candidate);
+            return false;
+        }
+        *sibling = candidate;
+        return true;
+    }
+    if (errno != ENOENT) {
+        free(candidate);
+        return false;
+    }
+    free(candidate);
+    return true;
 }
 
 static bool config_header_bytes(const char *data, size_t len)
@@ -177,7 +253,8 @@ static char *test_name(const char *file)
     return name;
 }
 
-static bool list_push(TestList *list, char *name, char *path, bool config)
+static bool list_push(TestList *list, char *name, char *path,
+                      char *stdout_path, bool config)
 {
     TestFile *grown;
     size_t cap;
@@ -194,6 +271,7 @@ static bool list_push(TestList *list, char *name, char *path, bool config)
     }
     list->data[list->len].name = name;
     list->data[list->len].path = path;
+    list->data[list->len].stdout_path = stdout_path;
     list->data[list->len].config = config;
     list->len++;
     return true;
@@ -206,6 +284,7 @@ static void list_free(TestList *list)
     for (i = 0U; i < list->len; i++) {
         free(list->data[i].name);
         free(list->data[i].path);
+        free(list->data[i].stdout_path);
     }
     free(list->data);
     memset(list, 0, sizeof(*list));
@@ -241,6 +320,7 @@ static bool discover(const char *dir_path, TestList *list)
         struct stat st;
         char *path;
         char *name;
+        char *stdout_path;
 
         errno = 0;
         entry = readdir(dir);
@@ -261,10 +341,13 @@ static bool discover(const char *dir_path, TestList *list)
             continue;
         }
         name = test_name(entry->d_name);
-        if (name == NULL ||
-            !list_push(list, name, path, header_requests_config(path))) {
+        if (name == NULL || !optional_stdout_sibling(path, &stdout_path) ||
+            !list_push(list, name, path, stdout_path,
+                       header_requests_config(path))) {
             free(name);
             free(path);
+            if (name != NULL)
+                free(stdout_path);
             ok = false;
             break;
         }
@@ -944,6 +1027,19 @@ static const char *failure_reason(const RunResult *result,
     return NULL;
 }
 
+static const char *expected_stdout_failure(const TestFile *test,
+                                           const RunResult *result,
+                                           Bytes *expected)
+{
+    if (test->stdout_path == NULL)
+        return NULL;
+    if (!bytes_read_path(test->stdout_path, expected))
+        return "cannot read expected stdout";
+    if (!bytes_equal(&result->out, expected))
+        return "stdout differs";
+    return NULL;
+}
+
 static char *absolute_existing(const char *path)
 {
     return realpath(path, NULL);
@@ -1111,8 +1207,8 @@ static bool selftest_result_fd_env(void)
 static bool selftest_zero_filter(void)
 {
     TestFile data[] = {
-        {(char *)"alpha", (char *)"alpha.fl", false},
-        {(char *)"beta", (char *)"beta.fl", false}
+        {(char *)"alpha", (char *)"alpha.fl", NULL, false},
+        {(char *)"beta", (char *)"beta.fl", NULL, false}
     };
     TestList tests = {data, sizeof(data) / sizeof(data[0]),
                       sizeof(data) / sizeof(data[0])};
@@ -1121,6 +1217,27 @@ static bool selftest_zero_filter(void)
            selection_status(selected_count(&tests, "no-match")) == 1 &&
            selected_count(&tests, "a") == 2U &&
            selection_status(selected_count(&tests, "a")) == 0;
+}
+
+static bool selftest_stdout_expectation_is_byte_exact(void)
+{
+    static char expected_data[] = "a\t1\n";
+    static char exact_data[] = "a\t1\n";
+    static char missing_newline_data[] = "a\t1";
+    static char extra_data[] = "a\t1\n\n";
+    Bytes expected = {expected_data, sizeof(expected_data) - 1U,
+                      sizeof(expected_data), false};
+    Bytes exact = {exact_data, sizeof(exact_data) - 1U,
+                   sizeof(exact_data), false};
+    Bytes missing_newline = {missing_newline_data,
+                             sizeof(missing_newline_data) - 1U,
+                             sizeof(missing_newline_data), false};
+    Bytes extra = {extra_data, sizeof(extra_data) - 1U,
+                   sizeof(extra_data), false};
+
+    return bytes_equal(&expected, &exact) &&
+           !bytes_equal(&expected, &missing_newline) &&
+           !bytes_equal(&expected, &extra);
 }
 
 static bool selftest_config_directive(void)
@@ -1203,7 +1320,7 @@ static bool selftest_negative_assertion_host(const char *sagitta,
     char *meta_dir = path_join(script_dir, "meta");
     char *script = meta_dir == NULL ? NULL :
                    path_join(meta_dir, "assertion_failures.fl");
-    TestFile test = {(char *)"assertion_failures", script, false};
+    TestFile test = {(char *)"assertion_failures", script, NULL, false};
     RunResult result;
     Protocol protocol = {0};
     char *sandbox = NULL;
@@ -1265,11 +1382,13 @@ static int run_selftests(const char *sagitta, const char *fixtures,
                                 selftest_zero_filter());
     failures += report_selftest("config_header_controls_clean",
                                 selftest_config_directive());
+    failures += report_selftest("stdout_expectation_is_byte_exact",
+                                selftest_stdout_expectation_is_byte_exact());
     failures += report_selftest("negative_assertion_host_continues",
                                 selftest_negative_assertion_host(
                                     sagitta, fixtures, script_dir));
     (void)printf("script-runner-selftest: %zu tests, %zu failure%s\n",
-                 (size_t)8U, failures,
+                 (size_t)9U, failures,
                  failures == 1U ? "" : "s");
     (void)fflush(stdout);
     return failures == 0U ? 0 : 1;
@@ -1378,10 +1497,12 @@ int main(int argc, char **argv)
     for (i = 0U; i < tests.len; i++) {
         RunResult result;
         Protocol protocol;
+        Bytes expected_stdout = {0};
         char *sandbox = NULL;
         char reason_buf[64];
         char count_line[512];
         const char *reason;
+        bool stdout_mismatch = false;
 
         if (filter != NULL && strstr(tests.data[i].name, filter) == NULL)
             continue;
@@ -1391,6 +1512,12 @@ int main(int argc, char **argv)
             suite_assertions += protocol.assertions;
         reason = failure_reason(&result, &protocol,
                                 reason_buf, sizeof(reason_buf));
+        if (reason == NULL) {
+            reason = expected_stdout_failure(&tests.data[i], &result,
+                                             &expected_stdout);
+            stdout_mismatch = reason != NULL &&
+                              strcmp(reason, "stdout differs") == 0;
+        }
         if (reason == NULL && protocol.skipped != 0U) {
             if (format_count_line(count_line, sizeof(count_line), "SKIP",
                                   tests.data[i].name,
@@ -1427,6 +1554,8 @@ int main(int argc, char **argv)
                              tests.data[i].name, reason);
             }
             print_capture("stdout", &result.out);
+            if (stdout_mismatch)
+                print_capture("expected stdout", &expected_stdout);
             print_capture("stderr", &result.err);
             if (!protocol.valid)
                 print_capture("protocol", &result.protocol);
@@ -1438,6 +1567,7 @@ int main(int argc, char **argv)
         bytes_free(&result.out);
         bytes_free(&result.err);
         bytes_free(&result.protocol);
+        bytes_free(&expected_stdout);
         (void)fflush(stdout);
     }
     if (filter == NULL && (selected < 40U || suite_assertions < 400U)) {
