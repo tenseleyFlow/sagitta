@@ -8,11 +8,34 @@ if [ "$#" -ne 1 ]; then
 fi
 
 yew=$1
-tmp=${TMPDIR:-/tmp}/yew-syn-assets.$$
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/yew-syn-assets.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
-mkdir -p "$tmp"
+export XDG_CACHE_HOME=$tmp/cache
 
 "$yew" syn check --strict runtime/syntax/ini.fl
+
+"$yew" syn list > "$tmp/list.1"
+"$yew" syn list > "$tmp/list.2"
+cmp -s "$tmp/list.1" "$tmp/list.2" || {
+    echo "syntax assets: nondeterministic definition list" >&2
+    exit 1
+}
+
+"$yew" syn compile --all
+"$yew" syn dump runtime/syntax/ini.fl --tables > "$tmp/tables.cold"
+"$yew" syn compile --all
+"$yew" syn dump runtime/syntax/ini.fl --tables > "$tmp/tables.warm"
+cmp -s "$tmp/tables.cold" "$tmp/tables.warm" || {
+    echo "syntax assets: cold/warm table dumps differ" >&2
+    diff -u "$tmp/tables.cold" "$tmp/tables.warm" || true
+    exit 1
+}
+
+cache_path=$("$yew" syn cache path)
+if [ "$cache_path" != "$XDG_CACHE_HOME/yew/syn" ]; then
+    echo "syntax assets: unexpected cache path: $cache_path" >&2
+    exit 1
+fi
 
 scripts/gen-langtab > "$tmp/langs_gen.c"
 cmp -s "$tmp/langs_gen.c" src/syn/langs_gen.c || {
