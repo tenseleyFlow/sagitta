@@ -1,0 +1,95 @@
+# runtime/syntax/ini.fl — INI / .conf highlighter.
+# Demonstrates: contexts, first-match-wins ordering, captures, consume,
+# push/pop, at_eol, include, and unit marks for B mode.
+{
+    syntax: 1,
+
+    language: {
+        name:       "ini",
+        extensions: ["ini", "cfg", "conf", "properties"],
+        filenames:  [".editorconfig", "*.desktop", "*.service"],
+        first_line: "^\\s*\\[[A-Za-z0-9_.-]+\\]\\s*$",
+        priority:   0,
+        comment:    { line: ";" },
+    },
+
+    contexts: {
+        main: {
+            default: "text",
+            rules: [
+                # 1. Whole-line comments.  `;` is canonical INI, `#` is the
+                #    universal habit; both only count at line start.
+                { match: "^\\s*[;#].*$", attr: "comment" },
+
+                # 2. A section header.  The brackets are punctuation and the
+                #    name is a namespace, so `captures` splits one match
+                #    into three attr runs.
+                { match: "^\\s*(\\[)([^\\]\\n]*)(\\])",
+                  attr: "error",                 # unmatched bytes = a broken header
+                  captures: { 1: "punct.bracket",
+                              2: "namespace",
+                              3: "punct.bracket" } },
+
+                # 3. A key.  `consume: 1` stops the scan right after the key
+                #    name, leaving `=` and the value to rules 4 and 5 — this
+                #    is how you express "an identifier FOLLOWED BY `=`"
+                #    without lookahead, which yew's regex engine does
+                #    not have and never will (s20 §4).
+                { match: "^\\s*([A-Za-z_][A-Za-z0-9_.-]*)\\s*[:=]",
+                  captures: { 1: "variable.member" },
+                  consume: 1 },
+
+                # 4. The separator, now at the scan position.
+                { match: "[:=]", attr: "operator", push: "value" },
+
+                # 5. Anything else at line level is junk in a well-formed
+                #    INI file.  Saying so is more useful than saying
+                #    nothing, and `error` means "provably impossible", not
+                #    "highlighter confused" (s39 §1).
+                { match: "\\S+", attr: "error" },
+            ],
+        },
+
+        # The right-hand side.  `at_eol: "pop"` is what makes values
+        # line-scoped: no value can leak into the next line, ever.
+        value: {
+            default: "text",
+            at_eol:  "pop",
+            unit:    "span",
+            rules: [
+                "include:strings",
+                { match: "[;#].*$", attr: "comment" },
+                { match: "\\b(true|false|yes|no|on|off)\\b",
+                  attr: "boolean", icase: true },
+                { match: "[+-]?(0[xX][0-9a-fA-F]+|[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?)",
+                  attr: "number" },
+                { match: "\\$\\{[A-Za-z_][A-Za-z0-9_]*\\}", attr: "variable" },
+            ],
+        },
+
+        # Include-only: spliced into `value`'s rule list in place.
+        strings: {
+            rules: [
+                { match: "\"", attr: "string", push: "dq" },
+                { match: "'",  attr: "string", push: "sq" },
+            ],
+        },
+
+        dq: {
+            default: "string",
+            at_eol:  "pop",          # an unterminated quote dies at EOL
+            unit:    "atom",         # B mode selects the whole string
+            rules: [
+                { match: "\\\\.", attr: "string.escape" },
+                { match: "\"",    attr: "string", pop: 1 },
+            ],
+        },
+
+        sq: {
+            default: "string",
+            at_eol:  "pop",
+            unit:    "atom",
+            rules: [ { match: "'", attr: "string", pop: 1 } ],
+        },
+    },
+}

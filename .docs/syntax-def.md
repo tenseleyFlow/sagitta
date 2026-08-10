@@ -1,0 +1,453 @@
+# Syntax Definition Author's Manual
+
+Syntax definitions are pure Fletch data. They declare how yew detects a
+language, moves between contexts, and assigns semantic attributes. They do
+not execute code, import modules, request capabilities, or name colors.
+
+Run the strict checker before committing a definition:
+
+```sh
+yew syn check --strict runtime/syntax/example.fl
+```
+
+The file must contain one map literal. Comments and trailing commas are
+allowed. Unknown keys, unknown context names, and unknown attributes are
+errors.
+
+## Top-level map
+
+| Key | Type | Required | Default | Example |
+|---|---|---:|---|---|
+| `syntax` | int | yes | none | `syntax: 1` |
+| `language` | map | yes | none | `language: { name: "ini" }` |
+| `contexts` | map of context maps | yes | none | `contexts: { main: { rules: [] } }` |
+| `root` | string | no | `"main"` | `root: "prototype"` |
+| `attrs` | map of string aliases | no | `{}` | `attrs: { kw: "keyword.control" }` |
+
+`syntax` must be `1`. A different value is not interpreted as a nearby
+version. The keys of `contexts` name contexts. Their insertion order affects
+diagnostic order, but not matching semantics. The compiler expands local
+`attrs` aliases before checking the closed attribute vocabulary.
+
+## Language detection
+
+The `language` map describes the language and its detection hints.
+
+| Key | Type | Required | Default | Example |
+|---|---|---:|---|---|
+| `name` | string | yes | none | `name: "ini"` |
+| `extensions` | list of strings | no | `[]` | `extensions: ["ini", "conf"]` |
+| `filenames` | list of strings | no | `[]` | `filenames: [".editorconfig", "*.service"]` |
+| `shebangs` | list of strings | no | `[]` | `shebangs: ["sh", "bash"]` |
+| `first_line` | regex string | no | absent | `first_line: "^\\s*\\[.+\\]$"` |
+| `priority` | int | no | `0` | `priority: 20` |
+| `comment` | map | no | `{}` | `comment: { line: ";" }` |
+
+Extension strings omit the leading dot and are compared case-insensitively.
+A filename is either exact or a one-star glob. `name` is the unique id used
+by the statusline and `yew syn list`; it also resolves deterministic ties.
+`first_line` uses yew's non-backtracking regex syntax.
+
+The optional `comment` map exposes comment delimiters to structural motion
+and editor options. It does not create highlight rules.
+
+| Key | Type | Required | Default | Example |
+|---|---|---:|---|---|
+| `line` | string | no | absent | `line: "//"` |
+| `block` | two-string list | no | absent | `block: ["/*", "*/"]` |
+
+Detection follows this order. The first matching class wins; ties within a
+class use higher `priority`, then lexicographically smaller `name`.
+
+1. A language explicitly assigned with `ed.syn.set` or `set { lang: ... }`.
+2. An exact `filenames` match on the basename.
+3. A glob `filenames` match on the basename.
+4. An `extensions` match, longest compound extension first.
+5. A `shebangs` match on line 1.
+6. A `first_line` regex match.
+7. No language (`YEW_LANG_NONE`), which disables highlighting quietly.
+
+For a shebang, yew compares the interpreter basename. In
+`#!/usr/bin/env python3`, it skips `env` and compares `python3`; in
+`#!/bin/sh -e`, it compares `sh`.
+
+## Rules
+
+A context tries its rules in order at each scan position. The first matching
+rule wins. Each rule is a map containing either `match` or `aux`, never both.
+All other keys are optional.
+
+| Key | Type | Default | Example |
+|---|---|---|---|
+| `match` | regex string | none; `match` or `aux` is required | `match: "\\bif\\b"` |
+| `attr` | attribute string | context `default` | `attr: "keyword.control"` |
+| `captures` | map int to attribute string | `{}` | `captures: { 1: "type" }` |
+| `consume` | int capture index | `0` (whole match) | `consume: 1` |
+| `push` | string or list of strings | absent (`stay`) | `push: ["outer", "inner"]` |
+| `pop` | int 1–4 or bool | absent (`stay`) | `pop: 1` |
+| `set` | context string | absent (`stay`) | `set: "main"` |
+| `icase` | bool | context `icase` | `icase: true` |
+| `set_aux` | int capture index | absent (keep current aux) | `set_aux: 1` |
+| `strip` | bool | `false` | `strip: true` |
+| `aux` | aux matcher string | none; `match` or `aux` is required | `aux: "line_eq"` |
+| `aux_pre` | string | `""` | `aux_pre: "r"` |
+| `aux_post` | string | `""` | `aux_post: "#"` |
+| `value` | bool | absent (keep current flag) | `value: true` |
+
+Regex matches are anchored at the current scan position. A leading `^` can
+therefore match only when the scan is at byte 0. Capture 0 means the whole
+match; captures 1–7 are available. `consume: N` advances to the end of
+capture N and leaves the rest of the match for later rules. This is the
+supported substitute for positive lookahead.
+
+`push`, `pop`, and `set` are mutually exclusive. A list in `push` is pushed
+left to right and may contain at most four contexts. `pop: true` means
+`pop: 1`; an integer pop may not exceed four. If no state operation appears,
+the rule stays in its current context.
+
+`set_aux` interns the selected capture's text into the syntax state. With
+`strip: true`, it also sets the strip flag used by indented heredocs.
+`value` sets or clears the state's single value bit. Definitions use these
+state fields only through the four closed aux matchers.
+
+### Aux matchers
+
+Aux matchers compare against the state's interned aux value. They keep
+runtime-derived delimiters out of the regex compiler and render path.
+
+| `aux` value | Match | Consumption | Example use |
+|---|---|---|---|
+| `line_eq` | whole line equals aux, ignoring leading tabs when `strip` is set | whole line | shell heredoc terminator |
+| `literal` | `aux_pre + aux + aux_post` starts at the scan position | whole constructed literal | Rust raw-string closer |
+| `fence_close` | column ≤ 3; line has at least `len(aux)` copies of `aux[0]`, then nothing else | whole line | Markdown fence closer |
+| `indent_lt` | byte 0; expanded indent is less than integer aux | zero bytes, then pop once | YAML block scalar end |
+
+`indent_lt` must be the first rule in its context. It is the only sanctioned
+zero-width rule. The engine bounds its per-line pops.
+
+## Contexts
+
+Each key in `contexts` names a context. A context controls rule order,
+unmatched-byte styling, line-end state, case sensitivity, and B-mode units.
+
+| Key | Type | Default | Example |
+|---|---|---|---|
+| `rules` | list of rule maps or include strings | `[]` | `rules: ["include:escapes", { match: "x" }]` |
+| `default` | attribute string | `"text"` | `default: "string"` |
+| `at_eol` | string | `"stay"` | `at_eol: "pop:2"` |
+| `icase` | bool | `false` | `icase: true` |
+| `unit` | `"span"` or `"atom"` | absent | `unit: "atom"` |
+| `include` | string or list of strings | `[]` | `include: ["escapes", "interp"]` |
+
+`at_eol` accepts `"stay"`, `"pop"`, `"pop:N"`, or `"set:ctx"`. Give
+single-line strings and values an explicit pop policy so malformed input
+cannot restyle later lines. Multiline constructs such as block comments and
+heredocs normally keep `"stay"`.
+
+`unit: "span"` exposes the whole context region to B mode while preserving
+nested units. `unit: "atom"` exposes the region but hides units inside it;
+strings, comments, and heredocs should normally be atoms. An absent `unit`
+makes the context invisible to B mode.
+
+A context-level `include` splices the named contexts' rules before its own
+rules. An in-list `"include:NAME"` splices them at that exact position.
+Inclusion is recursive, preserves order, and rejects cycles. It copies only
+rules; an included context's `default`, `at_eol`, and `unit` have no effect
+at the inclusion site. Keep include-only contexts to a `rules` key so the
+strict checker does not warn.
+
+```fletch
+common_escapes: {
+    rules: [ { match: "\\\\[ntr\"\\\\]", attr: "string.escape" } ],
+},
+dq_string: {
+    default: "string",
+    rules: [
+        "include:common_escapes",
+        { match: "\"", attr: "string", pop: 1 },
+    ],
+},
+```
+
+## Semantic attributes
+
+Definitions emit meanings, not colors. The following 54 names are the
+complete 1.0 vocabulary. Themes resolve fallbacks once when loaded.
+
+| id | Name | Fallback | Meaning |
+|---:|---|---|---|
+| 0 | `text` | — | ordinary text |
+| 1 | `keyword` | `text` | language keyword |
+| 2 | `keyword.control` | `keyword` | control-flow keyword |
+| 3 | `keyword.op` | `keyword` | word-shaped operator |
+| 4 | `keyword.storage` | `keyword` | storage or visibility keyword |
+| 5 | `type` | `text` | type name |
+| 6 | `type.builtin` | `type` | built-in type |
+| 7 | `constant` | `text` | named constant or enum member |
+| 8 | `constant.builtin` | `constant` | built-in non-boolean constant |
+| 9 | `number` | `constant` | numeric literal |
+| 10 | `boolean` | `constant` | boolean literal |
+| 11 | `character` | `string` | character or rune literal |
+| 12 | `string` | `text` | string body and delimiters |
+| 13 | `string.escape` | `string` | escape sequence |
+| 14 | `string.interp` | `string` | interpolation delimiters |
+| 15 | `string.special` | `string` | regex, raw string, or heredoc body |
+| 16 | `comment` | `text` | comment |
+| 17 | `comment.doc` | `comment` | documentation comment |
+| 18 | `comment.todo` | `comment` | task or fix marker in a comment |
+| 19 | `function` | `text` | function definition or call name |
+| 20 | `function.builtin` | `function` | built-in function |
+| 21 | `function.macro` | `function` | macro invocation |
+| 22 | `method` | `function` | method name |
+| 23 | `variable` | `text` | ordinary identifier |
+| 24 | `variable.builtin` | `variable` | built-in or magic variable |
+| 25 | `variable.param` | `variable` | parameter or lifetime |
+| 26 | `variable.member` | `variable` | field or mapping key |
+| 27 | `namespace` | `text` | module, package, or section name |
+| 28 | `label` | `text` | label, target, or statement label |
+| 29 | `attribute` | `text` | decorator, annotation, or attribute |
+| 30 | `preproc` | `text` | preprocessor directive |
+| 31 | `operator` | `text` | symbolic operator |
+| 32 | `punct` | `text` | punctuation not otherwise classed |
+| 33 | `punct.bracket` | `punct` | paired bracket |
+| 34 | `punct.delim` | `punct` | comma, semicolon, or colon delimiter |
+| 35 | `tag` | `text` | markup tag name |
+| 36 | `tag.attr` | `tag` | markup attribute name |
+| 37 | `heading` | `text` | document heading |
+| 38 | `link` | `text` | URL or link target |
+| 39 | `emphasis` | `text` | emphasized run |
+| 40 | `strong` | `text` | strongly emphasized run |
+| 41 | `code` | `text` | inline code or fenced body |
+| 42 | `list` | `text` | list marker |
+| 43 | `quote` | `text` | block quote |
+| 44 | `diff.add` | `text` | added line |
+| 45 | `diff.del` | `text` | removed line |
+| 46 | `error` | `text` | text proven syntactically impossible |
+| 47 | `warning` | `text` | legal but suspicious text |
+| 48 | `whitespace.special` | `text` | semantically significant whitespace |
+| 49 | `motion.unit` | `keyword` | Fletch terse-layer unit |
+| 50 | `motion.arrow` | `operator` | Fletch terse-layer arrow |
+| 51 | `motion.count` | `number` | Fletch terse-layer count |
+| 52 | `motion.cmd` | `function` | Fletch terse-layer command word |
+| 53 | `ui.invisible` | `text` | rendered whitespace glyph |
+
+Use `error` only when the definition proves that input is impossible in the
+language. A parser disagreement is not enough. Use `warning` for legal but
+suspicious input.
+
+## Complete INI definition
+
+This is the shipped `runtime/syntax/ini.fl` byte for byte.
+
+```fletch
+# runtime/syntax/ini.fl — INI / .conf highlighter.
+# Demonstrates: contexts, first-match-wins ordering, captures, consume,
+# push/pop, at_eol, include, and unit marks for B mode.
+{
+    syntax: 1,
+
+    language: {
+        name:       "ini",
+        extensions: ["ini", "cfg", "conf", "properties"],
+        filenames:  [".editorconfig", "*.desktop", "*.service"],
+        first_line: "^\\s*\\[[A-Za-z0-9_.-]+\\]\\s*$",
+        priority:   0,
+        comment:    { line: ";" },
+    },
+
+    contexts: {
+        main: {
+            default: "text",
+            rules: [
+                # 1. Whole-line comments.  `;` is canonical INI, `#` is the
+                #    universal habit; both only count at line start.
+                { match: "^\\s*[;#].*$", attr: "comment" },
+
+                # 2. A section header.  The brackets are punctuation and the
+                #    name is a namespace, so `captures` splits one match
+                #    into three attr runs.
+                { match: "^\\s*(\\[)([^\\]\\n]*)(\\])",
+                  attr: "error",                 # unmatched bytes = a broken header
+                  captures: { 1: "punct.bracket",
+                              2: "namespace",
+                              3: "punct.bracket" } },
+
+                # 3. A key.  `consume: 1` stops the scan right after the key
+                #    name, leaving `=` and the value to rules 4 and 5 — this
+                #    is how you express "an identifier FOLLOWED BY `=`"
+                #    without lookahead, which yew's regex engine does
+                #    not have and never will (s20 §4).
+                { match: "^\\s*([A-Za-z_][A-Za-z0-9_.-]*)\\s*[:=]",
+                  captures: { 1: "variable.member" },
+                  consume: 1 },
+
+                # 4. The separator, now at the scan position.
+                { match: "[:=]", attr: "operator", push: "value" },
+
+                # 5. Anything else at line level is junk in a well-formed
+                #    INI file.  Saying so is more useful than saying
+                #    nothing, and `error` means "provably impossible", not
+                #    "highlighter confused" (s39 §1).
+                { match: "\\S+", attr: "error" },
+            ],
+        },
+
+        # The right-hand side.  `at_eol: "pop"` is what makes values
+        # line-scoped: no value can leak into the next line, ever.
+        value: {
+            default: "text",
+            at_eol:  "pop",
+            unit:    "span",
+            rules: [
+                "include:strings",
+                { match: "[;#].*$", attr: "comment" },
+                { match: "\\b(true|false|yes|no|on|off)\\b",
+                  attr: "boolean", icase: true },
+                { match: "[+-]?(0[xX][0-9a-fA-F]+|[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?)",
+                  attr: "number" },
+                { match: "\\$\\{[A-Za-z_][A-Za-z0-9_]*\\}", attr: "variable" },
+            ],
+        },
+
+        # Include-only: spliced into `value`'s rule list in place.
+        strings: {
+            rules: [
+                { match: "\"", attr: "string", push: "dq" },
+                { match: "'",  attr: "string", push: "sq" },
+            ],
+        },
+
+        dq: {
+            default: "string",
+            at_eol:  "pop",          # an unterminated quote dies at EOL
+            unit:    "atom",         # B mode selects the whole string
+            rules: [
+                { match: "\\\\.", attr: "string.escape" },
+                { match: "\"",    attr: "string", pop: 1 },
+            ],
+        },
+
+        sq: {
+            default: "string",
+            at_eol:  "pop",
+            unit:    "atom",
+            rules: [ { match: "'", attr: "string", pop: 1 } ],
+        },
+    },
+}
+```
+
+### Rule-by-rule explanation
+
+| Rule or field | Why it is there |
+|---|---|
+| `main` rule 1 | Whole-line comments come first so comment text cannot be mistaken for headers, keys, or junk. |
+| `main` rule 2 | One regex recognizes a header; captures style the two brackets and section name separately. The `error` base attr exposes unmatched bytes. |
+| `main` rule 3 | The key rule must precede the separator. `consume: 1` stops after the captured key so the separator remains available to rule 4. |
+| `main` rule 4 | The separator is an operator and pushes `value`, giving the right-hand side its own rules, line-end policy, and B-mode span. |
+| `main` rule 5 | Non-whitespace text that is neither a header nor a key is invalid at top level, so it receives `error`. |
+| `value` include | `strings` is spliced first, so a quote opens a string before comment, boolean, number, or variable rules can claim its bytes. |
+| `value` comment | A semicolon or hash after the separator styles the rest of the line as a comment. |
+| `value` boolean | Case-insensitive matching accepts the conventional upper-, lower-, and mixed-case spellings. |
+| `value` number | Decimal, hexadecimal, fractional, and exponent forms share one rule. |
+| `value` variable | `${NAME}` is styled outside quotes; inside `dq` it is ordinary string text because that context owns the scan. |
+| `value.at_eol` | `"pop"` guarantees that every value ends on its line. Without it, one value would style the rest of the file. |
+| `value.unit` | `"span"` makes the right-hand side a structural unit while still allowing nested string atoms. |
+| `strings` | This include-only context holds the two quote-opening rules without adding runtime stack states of its own. |
+| `dq` escape | Escape matching comes before the closing quote and gives escaped bytes `string.escape`. |
+| `dq` close | A double quote closes only the double-quoted context. `at_eol: "pop"` also bounds an unterminated string. |
+| `sq` close | A single quote closes the single-quoted context; no escape rule is assumed for this INI dialect. |
+| `dq` / `sq` unit | `"atom"` makes B-mode expansion select a complete string instead of an escape inside it. |
+
+### Six-line trace
+
+Offsets are zero-based, half-open byte ranges. `>` separates stack frames.
+The stack column shows transitions while scanning and the line-end action.
+
+| Input line | Context-stack trace | Emitted spans |
+|---|---|---|
+| `; demo` | `main` | `[0,6) comment` |
+| `[server]` | `main` | `[0,1) punct.bracket`; `[1,7) namespace`; `[7,8) punct.bracket` |
+| `enabled = YES ; on` | `main` through byte 8; `main>value` after `=`; EOL → `main` | `[0,7) variable.member`; `[7,8) text`; `[8,9) operator`; `[9,10) text`; `[10,13) boolean`; `[13,14) text`; `[14,18) comment` |
+| `port=8080` | `main` through byte 4; `main>value` after `=`; EOL → `main` | `[0,4) variable.member`; `[4,5) operator`; `[5,9) number` |
+| `home="${HOME}/yew"` | `main>value` after byte 4; `main>value>dq` after byte 5; quote pop at byte 18; EOL → `main` | `[0,4) variable.member`; `[4,5) operator`; `[5,6) string`; `[6,17) string`; `[17,18) string` |
+| `bad stuff` | `main` | `[0,3) error`; `[3,4) text`; `[4,9) error` |
+
+The trace demonstrates first-match ordering, capture styling, partial
+consumption, push/pop transitions, include placement, case folding, default
+attrs, and line-end cleanup.
+
+## Porting TextMate and Sublime grammars
+
+Port structure, not syntax. TextMate regular expressions may use features
+that yew intentionally excludes, and scope names are not yew attributes.
+
+| TextMate / Sublime concept | yew definition |
+|---|---|
+| `fileTypes` or `file_extensions` | `language.extensions` and `language.filenames` |
+| `firstLineMatch` | `language.first_line` |
+| repository entry or named context | a key in `contexts` |
+| ordered `patterns` | ordered `rules` |
+| `match` | `match` |
+| `captures` | `captures` with group numbers 0–7 |
+| `begin` | a rule that styles the opener and `push`es a context |
+| `end` | a rule in the pushed context that styles the closer and `pop`s |
+| `beginCaptures` / `endCaptures` | `captures` on the push / pop rules |
+| `include` | context `include` or an in-list `"include:NAME"` |
+| `name` on a match | `attr` |
+| `contentName` or `meta_scope` | context `default` |
+| `push`, `set`, `pop` in Sublime | the same state operations |
+| `applyEndPatternLast` | place the pop rule after the rules that must win |
+
+Map source scopes onto the 54 semantic attrs by meaning. Do not copy scope
+names such as `meta.function.c`; use `function`, `type`, `punct.bracket`,
+and the other closed names above.
+
+Three common constructs require a deliberate rewrite:
+
+- Lookahead and lookbehind do not port. Capture the bytes that prove the
+  condition, then use `consume` to leave later bytes for the next rule.
+- A backreferenced `end` pattern does not port as a regex. Capture the
+  delimiter with `set_aux`, enter a context, and close it with `aux:
+  "literal"` plus `aux_pre` and `aux_post` when needed.
+- A TextMate `while` pattern does not port directly. Use `at_eol` for
+  line-scoped constructs or a first-position `aux: "indent_lt"` rule for
+  indentation-bounded constructs.
+
+Yew's regex engine also excludes backreferences and all lookaround. Keep
+rule order explicit: textual inclusion preserves the only precedence model,
+whereas repository ordering in a source grammar may be implicit.
+
+## New-definition checklist
+
+- Start with `syntax: 1`, a unique lowercase `language.name`, and a `main`
+  context or an explicit `root`.
+- Add exact filenames, one-star filename globs, extensions without dots,
+  shebang interpreter basenames, and a first-line regex only where each is
+  reliable. Choose a priority only to resolve a known tie.
+- Declare line and block comment delimiters in `language.comment`, then add
+  matching highlight rules in the appropriate contexts.
+- Put specific rules before general rules. Review every catch-all for rules
+  it could make unreachable.
+- Give strings escape rules, explicit close rules, and an honest `at_eol`
+  policy. Use `unit: "atom"` for strings and comments.
+- Cover decimal and language-specific numeric forms without letting a broad
+  number rule swallow identifiers.
+- Separate control, storage, operator-like, and ordinary keywords when the
+  language makes those distinctions.
+- Add a deliberate `error` rule only for text the grammar proves invalid.
+- Mark structural bodies `unit: "span"`; leave helper contexts unmarked.
+- Keep include-only contexts to `rules` and verify recursive includes are
+  acyclic.
+- Exercise every context in a kitchen-sink fixture and account for all
+  context transitions, captures, line-end actions, and aux matcher paths.
+- Run `yew syn check --strict PATH` and resolve every warning.
+- Run `yew syn dump PATH --tables` twice and compare the outputs.
+- Add span goldens for valid, malformed, empty, and unterminated input.
+- Confirm B mode still falls back cleanly when the language is unavailable
+  or syntax state has not settled.
+
+The unreachable-rule check is intentionally incomplete. It detects exact
+duplicate patterns and earlier catch-all rules whose first-byte set covers a
+later rule. It never claims full regex subsumption; authors must still
+review ordering.
