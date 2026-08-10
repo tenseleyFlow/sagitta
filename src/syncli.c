@@ -17,6 +17,10 @@
 #include "util/buf.h"
 #include "util/intern.h"
 
+#ifndef YEW_RUNTIME_DIR_DEFAULT
+#define YEW_RUNTIME_DIR_DEFAULT "/usr/local/share/yew/runtime"
+#endif
+
 static const char syn_usage[] =
     "Usage:\n"
     "  yew syn list\n"
@@ -161,9 +165,13 @@ static SynDef *load_def(const char *path, Arena *arena, DiagCtx *dc,
     struct stat st;
     SynDef *def;
 
-    if (stat(path, &st) != 0) {
+    errno = 0;
+    if (stat(path, &st) != 0 || !S_ISREG(st.st_mode) ||
+        access(path, R_OK) != 0) {
+        int saved = errno == 0 ? EIO : errno;
+
         (void)fprintf(stderr, "yew syn: cannot read %s: %s\n", path,
-                      strerror(errno));
+                      strerror(saved));
         *status = YEW_EXIT_IO;
         return NULL;
     }
@@ -172,6 +180,35 @@ static SynDef *load_def(const char *path, Arena *arena, DiagCtx *dc,
     def = yew_syn_def_load(arena, dc, path);
     *status = def == NULL ? YEW_EXIT_ERR : YEW_EXIT_OK;
     return def;
+}
+
+static char *runtime_source(const SynLangDesc *desc)
+{
+    const char *root = getenv("YEW_RUNTIME_DIR");
+    const char *relative = desc->source;
+    char *path;
+    size_t n;
+
+    if (strncmp(relative, "runtime/", 8U) == 0)
+        relative += 8U;
+    if (root != NULL && root[0] != '\0') {
+        n = strlen(root) + 1U + strlen(relative);
+        path = yew_xmalloc(n + 1U);
+        (void)snprintf(path, n + 1U, "%s/%s", root, relative);
+        if (access(path, R_OK) == 0)
+            return path;
+        free(path);
+    }
+    n = strlen(YEW_RUNTIME_DIR_DEFAULT) + 1U + strlen(relative);
+    path = yew_xmalloc(n + 1U);
+    (void)snprintf(path, n + 1U, "%s/%s", YEW_RUNTIME_DIR_DEFAULT,
+                   relative);
+    if (access(path, R_OK) == 0)
+        return path;
+    free(path);
+    path = yew_xmalloc(strlen(desc->source) + 1U);
+    (void)memcpy(path, desc->source, strlen(desc->source) + 1U);
+    return path;
 }
 
 static int compile_one(const char *path)
@@ -196,11 +233,14 @@ static int compile_all(void)
 
     for (i = 0U; i < count; i++) {
         const SynLangDesc *desc = lang_at(i);
+        char *path;
         int status;
 
         if (desc == NULL)
             return YEW_EXIT_BUG;
-        status = compile_one(desc->source);
+        path = runtime_source(desc);
+        status = compile_one(path);
+        free(path);
         if (status != YEW_EXIT_OK)
             return status;
     }
@@ -540,13 +580,22 @@ int yew_syn_main(int argc, char **argv, bool clean)
     if (strcmp(argv[at], "cache") == 0) {
         if (at + 2 != argc)
             return usage_error("cache requires clear or path");
-        if (strcmp(argv[at + 1], "clear") == 0)
-            return yew_syn_cache_clear() ? YEW_EXIT_OK : YEW_EXIT_IO;
+        if (strcmp(argv[at + 1], "clear") == 0) {
+            if (yew_syn_cache_clear())
+                return YEW_EXIT_OK;
+            else {
+                (void)fputs("yew syn: cannot clear syntax cache\n", stderr);
+                return YEW_EXIT_IO;
+            }
+        }
         if (strcmp(argv[at + 1], "path") == 0) {
             char *path = yew_syn_cache_dir();
 
-            if (path == NULL)
+            if (path == NULL) {
+                (void)fputs("yew syn: cannot resolve syntax cache path\n",
+                            stderr);
                 return YEW_EXIT_IO;
+            }
             (void)printf("%s\n", path);
             free(path);
             return ferror(stdout) == 0 ? YEW_EXIT_OK : YEW_EXIT_IO;
