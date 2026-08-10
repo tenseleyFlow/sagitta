@@ -95,6 +95,7 @@ static void live_remove(Pty *p)
 bool sag_pty_spawn(Pty *p, const PtySpec *sp)
 {
     char sname[128];
+    struct termios initial_termios;
     int m;
     pid_t pid;
 
@@ -109,6 +110,9 @@ bool sag_pty_spawn(Pty *p, const PtySpec *sp)
     if (fcntl(m, F_SETFD, FD_CLOEXEC) < 0)
         goto fail;
     if (grantpt(m) < 0 || unlockpt(m) < 0)
+        goto fail;
+    (void)memset(&initial_termios, 0, sizeof(initial_termios));
+    if (tcgetattr(m, &initial_termios) < 0)
         goto fail;
     {
         const char *s = ptsname(m);
@@ -171,6 +175,8 @@ bool sag_pty_spawn(Pty *p, const PtySpec *sp)
     p->reaped = false;
     p->status = -1;
     p->started_ms = ptc_now_ms();
+    p->initial_termios = initial_termios;
+    p->initial_termios_valid = true;
     live_add(p);
     return true;
 
@@ -977,6 +983,26 @@ void ptc_expect_exit(PtyCtx *c, int code)
         ptc_fail(c, "child exit %d, expected %d",
                  WEXITSTATUS(c->pty.status), code);
     }
+}
+
+void ptc_check_termios_unchanged(PtyCtx *c)
+{
+    struct termios current;
+
+    if (c == NULL || c->failed)
+        return;
+    if (!c->spawned || !c->pty.initial_termios_valid) {
+        ptc_fail(c, "terminal state was not captured at spawn");
+        return;
+    }
+    (void)memset(&current, 0, sizeof(current));
+    if (tcgetattr(c->pty.master, &current) < 0) {
+        ptc_fail(c, "reading terminal state after child exit: %s",
+                 strerror(errno));
+        return;
+    }
+    if (memcmp(&c->pty.initial_termios, &current, sizeof(current)) != 0)
+        ptc_fail(c, "child changed terminal state bytes");
 }
 
 void ptc_expect_signal(PtyCtx *c, int sig)

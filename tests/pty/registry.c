@@ -4120,6 +4120,7 @@ static void case_s37_batch_never_touches_the_terminal(PtyCtx *c)
      */
     ptc_spawn(c, ptc_sagitta_bin(c), "--clean", "--batch", path, NULL);
     ptc_expect_exit(c, 0);
+    ptc_check_termios_unchanged(c);
     ptc_check(c, memchr(c->raw.data, '\x1b', c->raw.len) == NULL,
               "sag --batch emitted terminal setup or restore bytes");
     ptc_snapshot(c, "s37_batch_no_tty");

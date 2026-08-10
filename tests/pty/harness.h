@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <stddef.h>
 #include <sys/types.h>
+#include <termios.h>
 
 #include "util/base.h"
 #include "util/buf.h"
@@ -37,6 +38,8 @@ typedef struct Pty {
     bool reaped;
     int status;
     i64 started_ms;
+    struct termios initial_termios;
+    bool initial_termios_valid;
 } Pty;
 
 typedef struct PtyCtx PtyCtx;
@@ -117,6 +120,7 @@ void ptc_bytes(PtyCtx *c, const char *lit);
 void ptc_resize(PtyCtx *c, u16 rows, u16 cols);
 void ptc_snapshot(PtyCtx *c, const char *golden_name);
 void ptc_expect_exit(PtyCtx *c, int code);
+void ptc_check_termios_unchanged(PtyCtx *c);
 
 /*
  * Sprint 25 DoD 2.  Reaps the current child, records the grid it left
