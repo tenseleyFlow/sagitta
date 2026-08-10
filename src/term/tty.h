@@ -8,6 +8,7 @@
 
 #include "util/base.h"
 #include "util/buf.h"
+#include "util/log.h"
 
 typedef struct TtyCaps {
     bool probed;
@@ -26,6 +27,7 @@ typedef struct TtyProbeConfig {
 typedef struct Tty {
     int rfd;
     int wfd;
+    bool poisoned;
     struct termios saved;
     bool raw;
     bool alt;
@@ -48,6 +50,12 @@ typedef struct TtyGuard {
     bool active;
 } TtyGuard;
 
+#define SAG_TTY_GUARD(t)                                                     \
+    do {                                                                     \
+        if ((t)->poisoned)                                                   \
+            SAG_BUG("terminal access in --batch: %s", __func__);           \
+    } while (0)
+
 /*
  * The editor process cannot handle SIGKILL.  A tiny sibling process keeps
  * the pre-raw termios state and restores it if the editor disappears while
@@ -64,6 +72,7 @@ bool sag_tty_guard_finish(TtyGuard *guard);
  * path that this process can handle leaves its terminal raw.
  */
 bool sag_tty_open(Tty *t);
+void sag_tty_poison(Tty *t);
 bool sag_tty_raw(Tty *t);
 void sag_tty_rawios(struct termios *io);
 

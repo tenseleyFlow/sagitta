@@ -350,6 +350,8 @@ const SagTest sag_tests[] = {
     T(tty_raw_local_flags),
     T(tty_raw_control_flags),
     T(tty_restore_blob),
+    T(tty_poison_marks_terminal_unusable),
+    T(tty_poisoned_access_is_bug),
     T(tty_probe_modern),
     T(tty_probe_kitty_only),
     T(tty_probe_sync_only),

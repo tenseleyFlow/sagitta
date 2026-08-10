@@ -1,7 +1,9 @@
 #include "harness.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <string.h>
+#include <sys/wait.h>
 #include <termios.h>
 #include <unistd.h>
 
@@ -160,6 +162,59 @@ void test_tty_restore_blob(void)
     SAG_ASSERT_NOT_NULL(actual);
     SAG_ASSERT_EQ_U64(len, sizeof(expected) - 1U);
     SAG_ASSERT_EQ_MEM(actual, expected, sizeof(expected) - 1U);
+}
+
+void test_tty_poison_marks_terminal_unusable(void)
+{
+    Tty t;
+
+    memset(&t, 0, sizeof(t));
+    t.rfd = STDIN_FILENO;
+    sag_tty_poison(&t);
+    SAG_ASSERT(t.poisoned);
+    SAG_ASSERT_EQ_I64(t.rfd, -1);
+}
+
+void test_tty_poisoned_access_is_bug(void)
+{
+    int fds[2];
+    pid_t child;
+    pid_t waited;
+    int status;
+    char output[1024];
+    ssize_t got;
+
+    SAG_ASSERT_EQ_I64(pipe(fds), 0);
+    SAG_ASSERT_EQ_I64(fflush(NULL), 0);
+    child = fork();
+    SAG_ASSERT(child >= 0);
+    if (child == 0) {
+        Tty t;
+
+        (void)close(fds[0]);
+        if (dup2(fds[1], STDERR_FILENO) < 0)
+            _exit(126);
+        (void)close(fds[1]);
+        memset(&t, 0, sizeof(t));
+        sag_tty_poison(&t);
+        (void)sag_tty_signal_fd(&t);
+        _exit(0);
+    }
+    SAG_ASSERT_EQ_I64(close(fds[1]), 0);
+    do {
+        got = read(fds[0], output, sizeof(output) - 1U);
+    } while (got < 0 && errno == EINTR);
+    SAG_ASSERT(got >= 0);
+    output[got < 0 ? 0U : (size_t)got] = '\0';
+    SAG_ASSERT_EQ_I64(close(fds[0]), 0);
+    do {
+        waited = waitpid(child, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+    SAG_ASSERT_EQ_I64(waited, child);
+    SAG_ASSERT(WIFEXITED(status));
+    SAG_ASSERT_EQ_I64(WEXITSTATUS(status), SAG_EXIT_BUG);
+    SAG_ASSERT(strstr(output, "terminal access in --batch: "
+                              "sag_tty_signal_fd") != NULL);
 }
 
 void test_tty_probe_modern(void)

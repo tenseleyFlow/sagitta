@@ -416,8 +416,13 @@ static const char *sag_tty_getenv(const char *name)
 
 bool sag_tty_open(Tty *t)
 {
-    if (t == NULL || g_owner != NULL) {
-        errno = t == NULL ? EINVAL : EBUSY;
+    if (t == NULL) {
+        errno = EINVAL;
+        return false;
+    }
+    SAG_TTY_GUARD(t);
+    if (g_owner != NULL) {
+        errno = EBUSY;
         return false;
     }
     (void)memset(t, 0, sizeof(*t));
@@ -437,6 +442,14 @@ bool sag_tty_open(Tty *t)
     (void)sag_tty_winsize(t);
     g_owner = t;
     return true;
+}
+
+void sag_tty_poison(Tty *t)
+{
+    if (t == NULL)
+        SAG_BUG("sag_tty_poison: NULL tty");
+    t->poisoned = true;
+    t->rfd = -1;
 }
 
 static int g_keep_opost;
@@ -501,7 +514,12 @@ bool sag_tty_raw(Tty *t)
     struct termios actual;
     int saved_errno;
 
-    if (t == NULL || t != g_owner) {
+    if (t == NULL) {
+        errno = EINVAL;
+        return false;
+    }
+    SAG_TTY_GUARD(t);
+    if (t != g_owner) {
         errno = EINVAL;
         return false;
     }
@@ -552,6 +570,7 @@ void sag_tty_close(Tty *t)
 {
     if (t == NULL)
         return;
+    SAG_TTY_GUARD(t);
     if (g_owner == t) {
         g_keep_opost = 0;
         g_resume_raw = 0;
@@ -581,7 +600,10 @@ bool sag_tty_winsize(Tty *t)
 {
     struct winsize size;
 
-    if (t == NULL || ioctl(t->wfd, TIOCGWINSZ, &size) != 0 ||
+    if (t == NULL)
+        return false;
+    SAG_TTY_GUARD(t);
+    if (ioctl(t->wfd, TIOCGWINSZ, &size) != 0 ||
         size.ws_row == 0U || size.ws_col == 0U)
         return false;
     t->rows = (int)size.ws_row;
@@ -591,7 +613,10 @@ bool sag_tty_winsize(Tty *t)
 
 void sag_tty_altscreen(Tty *t, bool on)
 {
-    if (t == NULL || t != g_owner || !t->raw || t->alt == on)
+    if (t == NULL)
+        return;
+    SAG_TTY_GUARD(t);
+    if (t != g_owner || !t->raw || t->alt == on)
         return;
     if (on) {
         if (!sag_tty_write_all(t->wfd, SAG_TTY_ALT_ON,
@@ -606,7 +631,10 @@ void sag_tty_altscreen(Tty *t, bool on)
 
 int sag_tty_signal_fd(const Tty *t)
 {
-    return t == NULL ? -1 : t->sigpipe[0];
+    if (t == NULL)
+        return -1;
+    SAG_TTY_GUARD(t);
+    return t->sigpipe[0];
 }
 
 void sag_tty_drain_signals(Tty *t, bool *winch, bool *cont, bool *chld)
@@ -617,6 +645,8 @@ void sag_tty_drain_signals(Tty *t, bool *winch, bool *cont, bool *chld)
     bool masked;
     bool saw_cont = false;
 
+    if (t != NULL)
+        SAG_TTY_GUARD(t);
     if (winch != NULL)
         *winch = false;
     if (cont != NULL)
@@ -673,7 +703,9 @@ void sag_tty_drain_signals(Tty *t, bool *winch, bool *cont, bool *chld)
 
 void sag_tty_suspend(Tty *t)
 {
-    (void)t;
+    if (t == NULL)
+        return;
+    SAG_TTY_GUARD(t);
     sag_tty_restore();
     (void)kill(0, SIGTSTP);
 }
@@ -972,6 +1004,7 @@ void sag_tty_probe_config(Tty *t, i64 now_ms,
 
     if (t == NULL)
         return;
+    SAG_TTY_GUARD(t);
     config = sag_tty_probe_read_config(getv);
     t->caps.probed = false;
     t->caps.truecolor = sag_tty_detect_truecolor(getv);
@@ -997,6 +1030,9 @@ void sag_tty_probe_config(Tty *t, i64 now_ms,
 
 void sag_tty_probe_start(Tty *t, i64 now_ms)
 {
+    if (t == NULL)
+        return;
+    SAG_TTY_GUARD(t);
     sag_tty_probe_config(t, now_ms, sag_tty_getenv);
 }
 
@@ -1004,7 +1040,10 @@ size_t sag_tty_probe_feed(Tty *t, const u8 *b, size_t n)
 {
     size_t i;
 
-    if (t == NULL || (b == NULL && n != 0U))
+    if (t == NULL)
+        return 0U;
+    SAG_TTY_GUARD(t);
+    if (b == NULL && n != 0U)
         return 0U;
     if (t->pstate != SAG_TTY_PROBE_AWAIT) {
         bytebuf_append(&t->pending, b, n);
@@ -1021,7 +1060,10 @@ size_t sag_tty_probe_feed(Tty *t, const u8 *b, size_t n)
 
 void sag_tty_probe_tick(Tty *t, i64 now_ms)
 {
-    if (t == NULL || t->pstate != SAG_TTY_PROBE_AWAIT ||
+    if (t == NULL)
+        return;
+    SAG_TTY_GUARD(t);
+    if (t->pstate != SAG_TTY_PROBE_AWAIT ||
         now_ms < t->pdeadline)
         return;
     sag_tty_probe_flush(t);
@@ -1032,12 +1074,18 @@ void sag_tty_probe_tick(Tty *t, i64 now_ms)
 
 bool sag_tty_probe_done(const Tty *t)
 {
-    return t != NULL && t->pstate == SAG_TTY_PROBE_DONE;
+    if (t == NULL)
+        return false;
+    SAG_TTY_GUARD(t);
+    return t->pstate == SAG_TTY_PROBE_DONE;
 }
 
 i64 sag_tty_probe_deadline(const Tty *t, i64 now_ms)
 {
-    if (t == NULL || t->pstate != SAG_TTY_PROBE_AWAIT)
+    if (t == NULL)
+        return -1;
+    SAG_TTY_GUARD(t);
+    if (t->pstate != SAG_TTY_PROBE_AWAIT)
         return -1;
     if (now_ms >= t->pdeadline)
         return 0;
