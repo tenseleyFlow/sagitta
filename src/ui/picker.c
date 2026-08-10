@@ -441,7 +441,6 @@ bool sag_picker_key(Ed *ed, const Key *k)
 
     if (!pk.active || ed == NULL || k == NULL)
         return false;
-    ensure_filter(ed);
     page = list_rows();
     if (page == 0U)
         page = 1U;
@@ -478,6 +477,19 @@ bool sag_picker_key(Ed *ed, const Key *k)
     default:
         break;
     }
+    if (!pk.filter_open && pk.spec.action != NULL &&
+        pk.spec.action(ed, pk.spec.ctx, sag_picker_selected(ed), k))
+        return true;
+    if (!pk.filter_open && pk.spec.filter_requires_slash) {
+        if (k->ntext == 1U && k->text[0] == (u8)'/' &&
+            (k->mods & (SAG_MOD_CTRL | SAG_MOD_ALT | SAG_MOD_SUPER)) == 0U) {
+            ensure_filter(ed);
+            ed->full_damage = true;
+        }
+        return true;
+    }
+    if (!pk.spec.filter_requires_slash || pk.filter_open)
+        ensure_filter(ed);
     /* Ctrl chords, for terminals that eat arrows and for hands that
      * would rather not leave the home row (invariant 9). */
     if ((k->mods & SAG_MOD_CTRL) != 0U && k->ntext == 0U) {
@@ -626,7 +638,8 @@ void sag_picker_draw(Ed *ed, Rect area)
 
     if (!pk.active || ed == NULL || area.w == 0U || area.h == 0U)
         return;
-    ensure_filter(ed);
+    if (!pk.spec.filter_requires_slash || pk.filter_open)
+        ensure_filter(ed);
     w = area.w < (u16)SAG_PICKER_MAX_W ? area.w : (u16)SAG_PICKER_MAX_W;
     if (w > area.w - 2U)
         w = (u16)(area.w > 2U ? area.w - 2U : area.w);
@@ -656,8 +669,12 @@ void sag_picker_draw(Ed *ed, Rect area)
                         fg, bg, SAG_ATTR_BOLD);
 
     /* The filter line draws itself — it is the s18 widget. */
-    if (ed->cmdline.active)
+    if (pk.filter_open && ed->cmdline.active)
         sag_cmdline_draw(ed, (Rect){x0, (u16)(y0 + 1U), w, 1U});
+    else
+        (void)sag_grid_puts(&ed->grid, (u16)(y0 + 1U), x0,
+                            (const u8 *)" / filter", 9U, dim, bg,
+                            SAG_ATTR_DIM);
 
     items = pk.spec.items(pk.spec.ctx, &n);
     cur = sel_row();
@@ -703,11 +720,19 @@ void sag_picker_draw(Ed *ed, Rect area)
      * flight (§7.2) — the count is meaningful mid-scan, so the footer
      * stays honest rather than showing a number that will change.
      */
-    (void)snprintf(line, sizeof(line),
-                   " %u/%u%s   up/down move . enter open . ^v split . esc",
-                   (unsigned)sag_filter_matched(&pk.filter_state),
-                   (unsigned)pk.total,
-                   pk.scanning ? " scanning..." : "");
+    if (pk.spec.footer != NULL) {
+        (void)snprintf(line, sizeof(line), " %u/%u%s   %s",
+                       (unsigned)sag_filter_matched(&pk.filter_state),
+                       (unsigned)pk.total,
+                       pk.scanning ? " scanning..." : "",
+                       pk.spec.footer);
+    } else {
+        (void)snprintf(line, sizeof(line),
+                       " %u/%u%s   up/down move . enter open . ^v split . esc",
+                       (unsigned)sag_filter_matched(&pk.filter_state),
+                       (unsigned)pk.total,
+                       pk.scanning ? " scanning..." : "");
+    }
     (void)sag_grid_puts(&ed->grid, (u16)(y0 + h - 1U), x0,
                         (const u8 *)line, strlen(line), dim, bg,
                         SAG_ATTR_DIM);

@@ -105,7 +105,16 @@ typedef struct PickerSpec {
      * counts reads and allocations. */
     void (*preview)(Ed *ed, void *ctx, i32 payload, Rect r);
     bool (*accept)(Ed *ed, void *ctx, i32 payload, u8 how);
+    /* Optional picker-specific keys.  Called before printable text is
+     * offered to the shared filter line.  Returning true consumes the key. */
+    bool (*action)(Ed *ed, void *ctx, i32 payload, const Key *key);
+    /* NULL keeps the standard picker footer. */
+    const char *footer;
     bool path_mode; /* §2's two-pass basename rule */
+    /* False preserves the normal type-to-filter picker behavior.  True
+     * leaves printable keys available to `action` until `/` opens the
+     * shared filter line. */
+    bool filter_requires_slash;
     void *ctx;
 } PickerSpec;
 
