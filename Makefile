@@ -301,8 +301,10 @@ UNIT_RUN := SAG_TORTURE_CLEAN_ONLY=1 SAG_TEST_INSTRUMENTED=1 \
 endif
 
 # Keep source and link order deterministic across filesystems.
-CORE_SRC := $(shell find src -path 'src/mod/*' -prune -o -name '*.c' \
-              -print | sort)
+CORE_SRC := $(filter-out src/ws/fl_emit.c src/ws/fl_parse.c \
+                         src/ws/state_legacy.c, \
+              $(shell find src -path 'src/mod/*' -prune -o -name '*.c' \
+                -print | sort))
 MOD_SRC  := src/mod/mods.c \
   $(foreach m,$(filter $(KNOWN_MODS),$(MODULES)), \
     $(filter-out %/shim.c,$(sort $(wildcard src/mod/$(MODDIR_$(m))/*.c)))) \
@@ -314,6 +316,12 @@ OBJ      := $(SRC:%.c=$(BUILD)/%.o)
 UNIT_SRC := $(filter-out tests/unit/fakeclip.c, \
               $(sort $(wildcard tests/unit/*.c)))
 UNIT_OBJ := $(UNIT_SRC:%.c=$(BUILD)/%.o)
+STATE_LEGACY_OBJ := $(BUILD)/tests/unit/state_legacy.o
+
+# Sprint 36: activate the independent Fletch arm in the frozen-corpus
+# differential.  The hand-written parser remains visible only to tests.
+$(BUILD)/tests/unit/test_state_differential.o: CFLAGS += \
+  -DSAG_HAVE_FLETCH_STATE=1
 FAKECLIP := $(BUILD)/fakeclip
 PTY_VT_OBJ := $(BUILD)/tests/pty/vt.o
 PTY_SNAPSHOT_OBJ := $(BUILD)/tests/pty/snapshot.o
@@ -330,7 +338,7 @@ TEXT_FUZZ_SUPPORT_OBJ := $(BUILD)/tests/fuzz/oracle.o \
                          $(BUILD)/tests/fuzz/shrink.o
 UNIT_LINK_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ)) $(UNIT_OBJ) \
                  $(PTY_ORACLE_OBJ) $(PTY_HARNESS_OBJ) \
-                 $(TEXT_FUZZ_SUPPORT_OBJ)
+                 $(TEXT_FUZZ_SUPPORT_OBJ) $(STATE_LEGACY_OBJ)
 
 FUZZ_LIB_OBJ := $(BUILD)/tests/fuzz/fuzzlib.o
 FUZZ_UTF8_OBJ := $(BUILD)/tests/fuzz/fuzz_utf8.o
@@ -565,9 +573,9 @@ $(BUILD)/fuzz_fuzzy: $(FUZZ_LINK_OBJ) $(FUZZ_FUZZY_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_FUZZY_OBJ) $(LDLIBS)
 
-$(BUILD)/fuzz_state: $(FUZZ_LINK_OBJ) $(FUZZ_STATE_OBJ)
+$(BUILD)/fuzz_state: $(FUZZ_LINK_OBJ) $(FUZZ_STATE_OBJ) $(STATE_LEGACY_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
-		$(FUZZ_STATE_OBJ) $(LDLIBS)
+		$(FUZZ_STATE_OBJ) $(STATE_LEGACY_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_gitignore: $(FUZZ_LINK_OBJ) $(FUZZ_GITIGNORE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
@@ -651,9 +659,9 @@ $(BUILD)/perf_cmdcomp: $(PERF_CORE_OBJ) $(PERF_CMDCOMP_OBJ)
 $(BUILD)/fl_smoke: $(PERF_CORE_OBJ) $(FL_SMOKE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(FL_SMOKE_OBJ) $(LDLIBS)
 
-$(BUILD)/perf_state: $(PERF_CORE_OBJ) $(PERF_STATE_OBJ)
+$(BUILD)/perf_state: $(PERF_CORE_OBJ) $(PERF_STATE_OBJ) $(STATE_LEGACY_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
-		$(PERF_STATE_OBJ) $(LDLIBS)
+		$(PERF_STATE_OBJ) $(STATE_LEGACY_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_mouse: $(PERF_CORE_OBJ) $(PERF_MOUSE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
@@ -1106,6 +1114,10 @@ endif
 $(BUILD)/%.o: %.c $(BUILD)/mods.stamp $(MODULE_FORCE) | dirs
 	$(CC) $(CFLAGS) -c -o $@ $<
 
+$(STATE_LEGACY_OBJ): src/ws/state_legacy.c src/ws/fl_parse.c \
+                     src/ws/fl_emit.c $(BUILD)/mods.stamp | dirs
+	$(CC) $(CFLAGS) -DSAG_STATE_LEGACY=1 -c -o $@ $<
+
 dirs:
 	mkdir -p $(BUILD_DIRS)
 
@@ -1200,7 +1212,8 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/sagitta
 	$(PTY_PREP) $(PTY_RUN) --demo $(abspath $(BUILD)/demo_paint) \
 		--sagitta $(abspath $(BUILD)/sagitta) $(PTY_LOG_REDIRECT)
 
--include $(OBJ:.o=.d) $(UNIT_OBJ:.o=.d) $(FUZZ_LIB_OBJ:.o=.d) \
+-include $(OBJ:.o=.d) $(UNIT_OBJ:.o=.d) $(STATE_LEGACY_OBJ:.o=.d) \
+         $(FUZZ_LIB_OBJ:.o=.d) \
          $(FUZZ_UTF8_OBJ:.o=.d) $(FUZZ_GRAPHEME_OBJ:.o=.d) \
          $(FUZZ_INPUT_OBJ:.o=.d) $(FUZZ_GRID_OBJ:.o=.d) \
          $(FUZZ_VT_OBJ:.o=.d) $(FUZZ_UNDO_OBJ:.o=.d) \

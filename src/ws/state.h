@@ -62,6 +62,11 @@ enum {
 /* Emits the whole v1 document for `ed`. */
 void sag_state_emit(const Ed *ed, Bytebuf *out);
 
+/* Sprint 36's production parser: real Fletch pure-literal syntax, adapted
+ * to the frozen v1 schema mapper.  The hand-written twin is test-only. */
+FlLit *sag_fl_parse_fletch(Arena *a, const u8 *src, u64 len,
+                           FlParseErr *err);
+
 /*
  * Sprint 25 §5: saving.
  *

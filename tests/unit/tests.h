@@ -1303,6 +1303,11 @@ void test_state_differential_comparison_detects_differences(void);
 void test_state_differential_byte_comparison_is_not_redundant(void);
 void test_state_differential_names_sprint_36(void);
 
+/* Sprint 36 §7: real Fletch data path and generated differential. */
+void test_state_diff_generated_500_matrix(void);
+void test_state_diff_data_writer_quotes_non_identifier_keys(void);
+void test_state_diff_pure_literal_runs_nothing(void);
+
 /* Sprint 26 §3: the workspace walk. */
 void test_walk_lists_files_relative_to_the_root(void);
 void test_walk_lists_only_regular_files(void);

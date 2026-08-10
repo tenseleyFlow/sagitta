@@ -529,6 +529,8 @@ FlLit *sag_fl_parse(Arena *a, const u8 *src, u64 len, FlParseErr *err)
 /* Accessors                                                        */
 /* ---------------------------------------------------------------- */
 
+#ifndef SAG_STATE_ACCESSORS_EXTERNAL
+
 const FlLit *sag_fl_get(const FlLit *map, const char *key)
 {
     u32 i;
@@ -587,3 +589,4 @@ const char *sag_fl_str_or(const FlLit *v, const char *dflt, u64 *n)
         *n = dflt == NULL ? 0U : (u64)strlen(dflt);
     return dflt;
 }
+#endif /* SAG_STATE_ACCESSORS_EXTERNAL */

@@ -827,7 +827,7 @@ SagWsResult sag_state_apply(Ed *ed, const u8 *bytes, u64 len)
         ed->state.doc_ready = true;
     }
     (void)memset(&err, 0, sizeof(err));
-    doc = sag_fl_parse(&ed->state.doc, bytes, len, &err);
+    doc = sag_fl_parse_fletch(&ed->state.doc, bytes, len, &err);
     if (doc == NULL) {
         char why[192];
 
