@@ -524,6 +524,39 @@ u32 yew_re_min_len(const YewRe *re)
     return re == NULL ? 0U : re->min_len;
 }
 
+static bool is_class_or_any(const ReInst *ins)
+{
+    return ins->op == RE_CLASS || ins->op == RE_ANY;
+}
+
+bool yew_re_is_simple_catch_all(const YewRe *re)
+{
+    const ReInst *p;
+
+    if (re == NULL || re->prog == NULL || re->min_len > 1U)
+        return false;
+    p = re->prog;
+    /* SAVE, atom, SAVE, MATCH: `.` or one character class. */
+    if (re->nprog == 4U && p[0].op == RE_SAVE &&
+        is_class_or_any(&p[1]) && p[2].op == RE_SAVE &&
+        p[3].op == RE_MATCH)
+        return true;
+    /* SAVE, atom, SPLIT(atom, exit), SAVE, MATCH: `.+` / `class+`. */
+    if (re->nprog == 5U && p[0].op == RE_SAVE &&
+        is_class_or_any(&p[1]) && p[2].op == RE_SPLIT &&
+        ((p[2].x == 1U && p[2].y == 3U) ||
+         (p[2].x == 3U && p[2].y == 1U)) &&
+        p[3].op == RE_SAVE && p[4].op == RE_MATCH)
+        return true;
+    /* SAVE, SPLIT(atom, exit), atom, JMP(split), SAVE, MATCH: `.*`. */
+    return re->nprog == 6U && p[0].op == RE_SAVE &&
+           p[1].op == RE_SPLIT &&
+           ((p[1].x == 2U && p[1].y == 4U) ||
+            (p[1].x == 4U && p[1].y == 2U)) &&
+           is_class_or_any(&p[2]) && p[3].op == RE_JMP &&
+           p[3].x == 1U && p[4].op == RE_SAVE && p[5].op == RE_MATCH;
+}
+
 static void first_add(u8 first[32], u8 byte)
 {
     first[byte >> 3U] |= (u8)(1U << (byte & 7U));

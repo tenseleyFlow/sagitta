@@ -489,7 +489,8 @@ void test_syn_defs_validation_warnings_are_nonfatal_and_exact(void)
         "{ syntax: 1, language: { name: \"warnings\" }, contexts: {\n"
         "  main: { default: \"error\", rules: [\n"
         "    { match: \"x\" }, { match: \"x\" },\n"
-        "    { match: \"y\", push: \"user\" }] },\n"
+        "    { match: \"y\", push: \"user\" },\n"
+        "    { match: \"\\\\S+\" }, { match: \"word\" }] },\n"
         "  legacy: { rules: [] },\n"
         "  shared: { default: \"text\", rules: [{ match: \"z\" }] },\n"
         "  user: { include: \"shared\", at_eol: \"pop\", rules: [] },\n"
@@ -503,11 +504,13 @@ void test_syn_defs_validation_warnings_are_nonfatal_and_exact(void)
     def = def_compile(&f, src, &nerr, &nwarn);
     YEW_ASSERT_NOT_NULL(def);
     YEW_ASSERT_EQ_U64(nerr, 0U);
-    YEW_ASSERT_EQ_U64(nwarn, 4U);
+    YEW_ASSERT_EQ_U64(nwarn, 5U);
     YEW_ASSERT(diag_has(&f, FL_DIAG_WARNING,
                         "default: 'error' paints every unmatched byte red; did you mean 'text'?"));
     YEW_ASSERT(diag_has(&f, FL_DIAG_WARNING,
                         "rule 2 is unreachable: rule 1 has the same pattern"));
+    YEW_ASSERT(diag_has(&f, FL_DIAG_WARNING,
+                        "rule 5 is unreachable: rule 4 (line 5) matches everything it could match"));
     YEW_ASSERT(diag_has(&f, FL_DIAG_WARNING,
                         "context 'legacy' is unreachable"));
     YEW_ASSERT(diag_has(&f, FL_DIAG_WARNING,

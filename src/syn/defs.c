@@ -1176,8 +1176,20 @@ static u32 context_depth(const SynDef *def, u16 id, u8 *visiting)
     return max;
 }
 
+static bool first_is_superset(const u8 a[32], const u8 b[32])
+{
+    u32 i;
+
+    for (i = 0U; i < 32U; i++) {
+        if ((a[i] | b[i]) != a[i])
+            return false;
+    }
+    return true;
+}
+
 static void validate_compiled(Compile *c, SynDef *def,
-                              const char *const *patterns)
+                              const char *const *patterns,
+                              const FlSpan *rule_spans)
 {
     u8 *visiting = arena_alloc(c->arena, c->nctxs, 1U);
     u32 i;
@@ -1220,9 +1232,18 @@ static void validate_compiled(Compile *c, SynDef *def,
 
                 if (patterns[earlier] != NULL &&
                     strcmp(patterns[earlier], patterns[index]) == 0) {
-                    diag(c, FL_DIAG_WARNING, c->ctxs[i].rules->sp,
+                    diag(c, FL_DIAG_WARNING, rule_spans[index],
                          "rule %u is unreachable: rule %u has the same pattern",
                          j + 1U, k + 1U);
+                    break;
+                }
+                if (def->rules[earlier].re != NULL &&
+                    yew_re_is_simple_catch_all(def->rules[earlier].re) &&
+                    first_is_superset(def->rules[earlier].first,
+                                      def->rules[index].first)) {
+                    diag(c, FL_DIAG_WARNING, rule_spans[index],
+                         "rule %u is unreachable: rule %u (line %u) matches everything it could match",
+                         j + 1U, k + 1U, rule_spans[earlier].line);
                     break;
                 }
             }
@@ -1303,6 +1324,7 @@ SynDef *yew_syn_def_compile(Arena *a, DiagCtx *dc, const u8 *src, size_t n,
     RuleVec *expanded = NULL;
     const char **ctx_names = NULL;
     const char **patterns = NULL;
+    FlSpan *rule_spans = NULL;
     u32 total = 0U;
     u32 i;
     i64 version;
@@ -1411,6 +1433,8 @@ SynDef *yew_syn_def_compile(Arena *a, DiagCtx *dc, const u8 *src, size_t n,
                             _Alignof(const char *));
     patterns = arena_alloc(a, (size_t)total * sizeof(*patterns),
                            _Alignof(const char *));
+    rule_spans = arena_alloc(a, (size_t)total * sizeof(*rule_spans),
+                             _Alignof(FlSpan));
     if (total != 0U)
         (void)memset(patterns, 0, (size_t)total * sizeof(*patterns));
     total = 0U;
@@ -1428,13 +1452,14 @@ SynDef *yew_syn_def_compile(Arena *a, DiagCtx *dc, const u8 *src, size_t n,
         compile_eol(&c, (u16)i, ctx);
         compile_unit(&c, (u16)i, ctx);
         for (j = 0U; j < expanded[i].len; j++) {
+            rule_spans[total] = expanded[i].data[j].node->sp;
             compile_rule(&c, expanded[i].data[j].node, (u16)i,
                          &def->rules[total], &patterns[total], total);
             first_union(ctx->first, def->rules[total].first);
             total++;
         }
     }
-    validate_compiled(&c, def, patterns);
+    validate_compiled(&c, def, patterns, rule_spans);
     if (c.errors == 0U) {
         register_meta(&c, def, &lang, ctx_names, patterns);
         if (c.errors != 0U) {

@@ -96,6 +96,10 @@ bool yew_re_test(const YewRe *re, const YewReInput *in, ByteOff from);
 u32 yew_re_group_count(const YewRe *re);
 /* Minimum codepoints any match consumes; 0 when a match may be empty. */
 u32 yew_re_min_len(const YewRe *re);
+/* True only for one class-or-any atom, optionally repeated without an
+ * upper bound.  Syntax-definition validation uses this narrow shape to
+ * diagnose first-match rules that make later rules unreachable. */
+bool yew_re_is_simple_catch_all(const YewRe *re);
 
 /* Convenience for callers holding a plain buffer. */
 YewReInput yew_re_input_bytes(const u8 *bytes, u64 len);
