@@ -266,6 +266,7 @@ static bool io_stdin(FlVm *vm, FlValue *a, u32 n, FlValue *out)
             bytebuf_append(&bytes, chunk, (size_t)got);
         } else if (got == 0) {
             *out = FL_OBJ_V(FL_STR, fl_str_take(vm, &bytes));
+            bytebuf_free(&bytes);
             return true;
         } else if (errno != EINTR) {
             int saved = errno;
