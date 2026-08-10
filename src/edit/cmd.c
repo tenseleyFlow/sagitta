@@ -207,6 +207,8 @@ static const CmdDesc builtins[] = {
      "Report incremental syntax highlighting progress", NULL},
     {"ed.syn.set", cmd_syn_set, YEW_ARITY_STR, YEW_CMD_NEEDS_WIN,
      "Set the current buffer's syntax language", NULL},
+    DEFER("ed.theme.set", YEW_ARITY_STR, 0U, 41,
+          "load and select a syntax theme"),
     {"ed.quit", yew_file_cmd_quit, YEW_ARITY_NONE, 0U,
      "Quit, prompting when the buffer is dirty", NULL},
     {"ed.quit_force", yew_file_cmd_quit_force, YEW_ARITY_NONE, 0U,
@@ -885,6 +887,7 @@ static bool command_name_valid(const char *name)
         "file", "buf", "tab", "group", "pane", "win", "reg",
         "search", "macro", "job", "git", "lsp", "ai", "plug",
         "cmdline", "del", "shell", "opt", "fl", "config", "syn",
+        "theme",
         /* Sprint 21 */
         "jump", "change", "mark",
         /* Sprint 18.5: the palette itself is Sprint 38's, but the name has

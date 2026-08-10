@@ -168,6 +168,14 @@ void test_cmd_registry_invocation_and_deferred(void)
         YEW_ASSERT((desc->flags & YEW_CMD_DEFERRED) != 0U);
         YEW_ASSERT_NOT_NULL(strstr(desc->help, "Sprint 38"));
     }
+    {
+        CmdId theme = yew_cmd_lookup("ed.theme.set", 12U);
+        const CmdDesc *desc = yew_cmd_desc(theme);
+
+        YEW_ASSERT_NOT_NULL(desc);
+        YEW_ASSERT((desc->flags & YEW_CMD_DEFERRED) != 0U);
+        YEW_ASSERT_NOT_NULL(strstr(desc->help, "Sprint 41"));
+    }
     for (i = 0U; i < YEW_ARRAY_LEN(mode_rows); i++) {
         CmdCtx mode = {0};
         CmdId enter = yew_cmd_lookup("ed.mode.enter", 13U);
