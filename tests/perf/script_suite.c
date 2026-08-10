@@ -2,6 +2,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include <errno.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -113,7 +114,12 @@ static int wait_for_suite(pid_t pid, int64_t deadline, int *status)
         if (waited < 0 && errno != EINTR)
             return -1;
         if (now_ns() >= deadline) {
-            if (kill(pid, SIGKILL) != 0 && errno != ESRCH)
+            /*
+             * The runner owns a process group containing its current
+             * sagitta child.  Killing only the runner here would leave that
+             * child running after the gate returned.
+             */
+            if (kill(-pid, SIGKILL) != 0 && errno != ESRCH)
                 return -1;
             do {
                 waited = waitpid(pid, status, 0);
@@ -122,6 +128,86 @@ static int wait_for_suite(pid_t pid, int64_t deadline, int *status)
         }
         (void)nanosleep(&poll_delay, NULL);
     }
+}
+
+static bool establish_child_group(pid_t pid)
+{
+    if (setpgid(pid, pid) == 0)
+        return true;
+    /* The child also calls setpgid before exec.  EACCES means it won that
+     * race; ESRCH means it has already exited and waitpid will report it. */
+    return errno == EACCES || errno == ESRCH;
+}
+
+static void kill_and_reap_group(pid_t pid)
+{
+    int status;
+    pid_t waited;
+
+    (void)kill(-pid, SIGKILL);
+    do {
+        waited = waitpid(pid, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+}
+
+/*
+ * A fast liveness proof for the timeout path.  The synthetic runner and its
+ * child both retain the pipe's write end.  POLLHUP therefore proves the
+ * whole process group died; killing only the direct child would leave the
+ * pipe open and fail this check.
+ */
+static int selftest_group_timeout(void)
+{
+    int pipefd[2];
+    pid_t pid;
+    int status;
+    int waited;
+    struct pollfd observed;
+    int polled;
+
+    if (pipe(pipefd) != 0)
+        return 2;
+    pid = fork();
+    if (pid < 0) {
+        (void)close(pipefd[0]);
+        (void)close(pipefd[1]);
+        return 2;
+    }
+    if (pid == 0) {
+        pid_t descendant;
+
+        (void)close(pipefd[0]);
+        if (setpgid(0, 0) != 0)
+            _exit(126);
+        descendant = fork();
+        if (descendant < 0)
+            _exit(126);
+        for (;;)
+            pause();
+    }
+    (void)close(pipefd[1]);
+    if (!establish_child_group(pid)) {
+        (void)kill(pid, SIGKILL);
+        (void)waitpid(pid, &status, 0);
+        (void)close(pipefd[0]);
+        return 2;
+    }
+    waited = wait_for_suite(pid, now_ns() + INT64_C(20000000), &status);
+    observed.fd = pipefd[0];
+    observed.events = POLLIN | POLLHUP;
+    observed.revents = 0;
+    do {
+        polled = poll(&observed, 1U, 500);
+    } while (polled < 0 && errno == EINTR);
+    (void)close(pipefd[0]);
+    if (waited != 1 || polled != 1 ||
+        (observed.revents & POLLHUP) == 0) {
+        (void)fprintf(stderr,
+                      "perf-script-suite: process-group selftest failed\n");
+        return 1;
+    }
+    (void)printf("perf-script-suite: process-group timeout selftest ok\n");
+    return 0;
 }
 
 int main(int argc, char **argv)
@@ -135,10 +221,12 @@ int main(int argc, char **argv)
     int status;
     int waited;
 
+    if (argc == 2 && strcmp(argv[1], "--selftest") == 0)
+        return selftest_group_timeout();
     if (!parse_options(argc, argv, &options)) {
         (void)fprintf(stderr,
                       "usage: %s --runner PATH --sagitta PATH "
-                      "--baseline PATH\n", argv[0]);
+                      "--baseline PATH | --selftest\n", argv[0]);
         return 2;
     }
     if (!load_limit(options.baseline, &limit)) {
@@ -163,14 +251,25 @@ int main(int argc, char **argv)
         return 2;
     }
     if (pid == 0) {
+        if (setpgid(0, 0) != 0)
+            _exit(126);
         execl(options.runner, options.runner, "--sagitta", options.sagitta,
               (char *)NULL);
         _exit(127);
+    }
+    if (!establish_child_group(pid)) {
+        (void)fprintf(stderr,
+                      "perf-script-suite: cannot create process group: %s\n",
+                      strerror(errno));
+        (void)kill(pid, SIGKILL);
+        (void)waitpid(pid, &status, 0);
+        return 2;
     }
     waited = wait_for_suite(pid, start + limit, &status);
     if (waited < 0) {
         (void)fprintf(stderr, "perf-script-suite: wait failed: %s\n",
                       strerror(errno));
+        kill_and_reap_group(pid);
         return 2;
     }
     if (waited > 0) {
