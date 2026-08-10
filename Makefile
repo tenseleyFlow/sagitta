@@ -426,7 +426,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(FUZZ_LIB_OBJ) \
                 $(PERF_STATE_OBJ) \
                 $(PERF_FINDER_OBJ) $(PERF_MOUSE_OBJ) \
                 $(GEN_BIGFILE_OBJ) $(FLETCH_RUN_OBJ) $(ROUNDTRIP_OBJ) \
-                $(PERF_FLETCH_OBJ) \
+                $(PERF_FLETCH_OBJ) $(PERF_RECORD_OBJ) $(FUZZ_RECORD_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) $(FAULTSHIM)))
 
@@ -442,12 +442,12 @@ endif
 .DEFAULT_GOAL := all
 .PHONY: all check test clean install dirs FORCE test-script test-pty fuzz \
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
-        fuzz-mouse fuzz-groups \
+        fuzz-mouse fuzz-groups fuzz-record \
         fixtures fixtures-quick fixtures-verify \
         fixtures-verify-quick \
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
         perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
-        perf-mouse \
+        perf-mouse perf-record \
         perf-undo perf-textbuf perf-huge perf-update perf-baseline-guard \
         perf-gate-selftest perf-latency perf-latency-selftest \
         torture torture-build torture-live-check \
