@@ -221,3 +221,46 @@ CmdStatus sag_flapi_cmd_span_yank(CmdCtx *cx)
     sag_regval_free(&value);
     return SAG_CMD_OK;
 }
+
+CmdStatus sag_flapi_cmd_reg_set(CmdCtx *cx)
+{
+    RegVal value;
+    u8 name;
+
+    if (cx == NULL || cx->ed == NULL || cx->iarg < (i64)'a' ||
+        cx->iarg > (i64)'z' || (cx->sarg == NULL && cx->sarg_len != 0U))
+        return SAG_CMD_ERR_ARG;
+    name = (u8)cx->iarg;
+    sag_regval_init(&value);
+    value.type = SAG_REG_CHARWISE;
+    bytebuf_append(&value.bytes, cx->sarg, cx->sarg_len);
+    if (cx->bang)
+        sag_reg_append(&cx->ed->regs, (u8)(name - 'a' + 'A'), &value);
+    else
+        sag_reg_set(&cx->ed->regs, name, &value);
+    fl_macro_cache_invalidate(cx->ed->fl, name);
+    sag_regval_free(&value);
+    return SAG_CMD_OK;
+}
+
+CmdStatus sag_flapi_reg_write(Ed *ed, u8 name, const u8 *bytes,
+                              u32 len, bool append)
+{
+    static const char command[] = "ed.reg.set";
+    CmdCtx cx = {0};
+    CmdId id;
+
+    if (ed == NULL || name < (u8)'a' || name > (u8)'z' ||
+        (bytes == NULL && len != 0U))
+        return SAG_CMD_ERR_ARG;
+    id = sag_cmd_lookup(command, (u32)(sizeof(command) - 1U));
+    cx.ed = ed;
+    cx.win = ed->win;
+    cx.count = 1U;
+    cx.iarg = name;
+    cx.sarg = (const char *)bytes;
+    cx.sarg_len = len;
+    cx.bang = append;
+    cx.source = SAG_SRC_FLETCH;
+    return sag_cmd_invoke(id, &cx);
+}

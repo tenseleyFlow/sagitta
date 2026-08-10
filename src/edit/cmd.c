@@ -15,6 +15,7 @@
 #include "edit/shell_cmds.h"
 #include "edit/sel_actions.h"
 #include "edit/ws_cmds.h"
+#include "fl/record.h"
 #include "ui/pickers.h"
 #include "ui/cmdline.h"
 #include "ui/groupnav.h"
@@ -82,7 +83,8 @@ static const CmdDesc builtins[] = {
      SAG_CMD_CHANGES_BUFFER | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
      "Replace the supplied span", "replace_span"},
     {"ed.edit.delete.unit", sag_edit_cmd_delete_unit, SAG_ARITY_NONE,
-     SAG_CMD_CHANGES_BUFFER | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
+     SAG_CMD_REPEATABLE | SAG_CMD_CHANGES_BUFFER | SAG_CMD_RECORDABLE |
+         SAG_CMD_NEEDS_WIN,
      "Delete the current unit", "delete_unit"},
     {"ed.move.unit.up", sag_edit_cmd_move_unit_up, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, "Move unit up", "unit_up"},
@@ -112,6 +114,8 @@ static const CmdDesc builtins[] = {
      SAG_CMD_NEEDS_WIN, "Focus a specific window", NULL},
     {"ed.edit.yank", sag_flapi_cmd_span_yank, SAG_ARITY_OPT_STR,
      SAG_CMD_NEEDS_WIN, "Yank a supplied span into a register", NULL},
+    {"ed.reg.set", sag_flapi_cmd_reg_set, SAG_ARITY_STR,
+     SAG_CMD_INTERNAL, "Set macro source in a named register", NULL},
     {"ed.opt.get", sag_opt_cmd_get, SAG_ARITY_STR, 0U,
      "Read an editor option", NULL},
     {"ed.opt.set", sag_opt_cmd_set, SAG_ARITY_STR, 0U,
@@ -127,8 +131,8 @@ static const CmdDesc builtins[] = {
      "Suspend the editor and restore the terminal", NULL},
     {"ed.redraw", sag_file_cmd_redraw, SAG_ARITY_NONE, 0U,
      "Redraw the complete display", NULL},
-    DEFER_W("ed.repeat", SAG_ARITY_NONE, SAG_CMD_RECORDABLE, 35,
-          "repeat the last command", "repeat"),
+    {"ed.repeat", sag_record_cmd_repeat, SAG_ARITY_NONE, 0U,
+     "Unavailable until resolved command arguments are retained", NULL},
 
     {"ed.move.buf.home", sag_edit_cmd_move_buf_home, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
@@ -660,11 +664,18 @@ static const CmdDesc builtins[] = {
      "Substitute matches of a pattern in a line range", NULL},
     {"ed.search.global", sag_search_cmd_global, SAG_ARITY_STR, 0U,
      "Rejected: :g is Fletch's query API in Sprint 34", NULL},
-    DEFER("ed.macro.record", SAG_ARITY_OPT_STR, SAG_CMD_PROMPTS, 35,
-          "record a command macro"),
-    DEFER_W("ed.macro.replay", SAG_ARITY_OPT_STR,
-          SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE, 35,
-          "replay a command macro", "replay"),
+    {"ed.macro.record", sag_record_cmd_record, SAG_ARITY_OPT_STR,
+     SAG_CMD_PROMPTS, "Record a command macro", NULL},
+    {"ed.macro.stop", sag_record_cmd_stop, SAG_ARITY_NONE, 0U,
+     "Stop recording a command macro", NULL},
+    {"ed.macro.replay", sag_record_cmd_replay, SAG_ARITY_STR,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE, "Replay a command macro",
+     "replay"},
+    {"ed.macro.replay_last", sag_record_cmd_replay_last, SAG_ARITY_NONE,
+     SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE,
+     "Replay the last command macro", "replay_last"},
+    {"ed.macro.list", sag_record_cmd_list, SAG_ARITY_NONE, 0U,
+     "List registers containing macros", NULL},
     {"ed.shell.run", sag_shell_cmd_run, SAG_ARITY_STR,
      SAG_CMD_RECORDABLE, "Run a shell command, streaming its output", "shell_run"},
     {"ed.shell.run_bg", sag_shell_cmd_run_bg, SAG_ARITY_STR,
@@ -794,7 +805,8 @@ static bool command_name_valid(const char *name)
         "open", "close", "save", "new", "enter", "leave", "grow",
         "shrink", "expand", "contract", "list", "reload", "cancel",
         "text", "undo", "redo", "escape", "add", "above", "below", "center",
-        "message_expand", "split_h", "split_v", "record", "replay", "stage",
+        "message_expand", "split_h", "split_v", "record", "stop",
+        "replay", "replay_last", "stage",
         "first_nonblank", "last_nonblank", "half_page_up", "half_page_down",
         "page_up", "page_down", "after", "newline", "tab",
         "grapheme_left", "grapheme", "undo_barrier", "open_above",

@@ -8,6 +8,7 @@
 #include "fl/handle.h"
 #include "fl/flhook.h"
 #include "fl/origin.h"
+#include "fl/record.h"
 #include "edit/jumplist.h"
 #include "edit/pane_cmds.h"
 #include "edit/ws_cmds.h"
@@ -222,6 +223,8 @@ struct Ed {
      * includes ed.h. */
     FlRuntime *fl;
     FlHookTable hooks;
+    /* Sprint 35: resolved-command macro recorder. */
+    Rec rec;
     FlPendingChange *fl_changes;
     u32 fl_changes_len;
     u32 fl_changes_cap;

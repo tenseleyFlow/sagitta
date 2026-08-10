@@ -19,6 +19,7 @@
 #include "edit/opt.h"
 #include "unicode/width.h"
 #include "fl/fltxn.h"
+#include "fl/record.h"
 #include "util/log.h"
 
 /* Tears down everything a buffer owns without touching the list slot. */
@@ -486,6 +487,8 @@ void sag_ed_init(Ed *ed)
     free(root);
     fl_origin_reg_init(&ed->origins);
     fl_h_table_init(&ed->handles);
+    sag_record_init(&ed->rec);
+    sag_cmd_set_record_tap(sag_record_tap);
     sag_opt_provider_set(ed, NULL);
     ed->undo_break_on_newline = true;
     ed->errorbells = false;
@@ -526,6 +529,7 @@ void sag_ed_free(Ed *ed)
     /* Close hooks are the last script-visible point for every buffer. */
     ed_buffer_free(ed);
     sag_fl_runtime_free(ed);
+    sag_record_free(&ed->rec);
     sag_reg_free(&ed->regs);
     sag_msg_clear(ed);
     if (ed->grid_ready)
@@ -1402,6 +1406,7 @@ void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms)
 
     if (ed == NULL || key.kind != SAG_EV_KEY)
         return;
+    sag_record_key(ed, key);
     ed->now_ms = now_ms;
     /*
      * Esc mid-gesture cancels it and restores the state the gesture
