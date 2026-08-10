@@ -1668,6 +1668,226 @@ static void case_s38_macro_indicator(PtyCtx *c)
     (void)unlink(path);
 }
 
+static bool s38_write_config(PtyCtx *c, const char *source,
+                             char *path, size_t path_cap)
+{
+    int n = snprintf(path, path_cap, "build/pty-s38-%s.fl", c->test->name);
+
+    if (n <= 0 || (size_t)n >= path_cap) {
+        ptc_check(c, false, "Sprint 38 config path overflow");
+        return false;
+    }
+    if (!write_bytes(path, (const u8 *)source, strlen(source))) {
+        ptc_check(c, false, "could not create Sprint 38 config");
+        return false;
+    }
+    return true;
+}
+
+static void s38_spawn_configured(PtyCtx *c, const char *config,
+                                 const char *path)
+{
+    ptc_spawn(c, ptc_sagitta_bin(c), "--config", config,
+              "--no-workspace-config", path, NULL);
+    ptc_settle(c, 0);
+    ptc_wait_kitty_push(c, 21U);
+}
+
+static void case_s38_macro_edit_flow(PtyCtx *c)
+{
+    static const u8 initial[] = "base\n";
+    static const u8 expected[] = "Ybase\n";
+    static const char config_source[] =
+        "import ed\n"
+        "ed.run(\"ed.reg.set\", {iarg: 97, sarg: \"@[ i\\\"\\\" ]\\n\"})\n";
+    char config[256];
+    char path[256];
+    char command[320];
+    int n;
+
+    if (!make_fixture(c, initial, sizeof(initial) - 1U, path, sizeof(path)) ||
+        !s38_write_config(c, config_source, config, sizeof(config)))
+        return;
+    s38_spawn_configured(c, config, path);
+
+    /* Q/e opens the register as ordinary Fletch source.  In insert mode,
+     * move between the empty quotes and add the one changed character. */
+    s18_settle_after_keys(c, "Q");
+    s18_settle_after_keys(c, "e");
+    s18_settle_after_keys(c,
+                          "i right right right right right Y esc");
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "w");
+    s18_settle_after_keys(c, "enter");
+
+    n = snprintf(command, sizeof(command), "tabedit %s", path);
+    if (n <= 0 || (size_t)n >= sizeof(command)) {
+        ptc_check(c, false, "Sprint 38 tabedit command overflow");
+    } else {
+        s18_settle_after_keys(c, ":");
+        s18_settle_after_bytes(c, command);
+        s18_settle_after_keys(c, "enter");
+        s18_settle_after_keys(c, ":");
+        s18_settle_after_bytes(c, "ed.macro.replay a");
+        s18_settle_after_keys(c, "enter");
+        ptc_snapshot(c, "s38_macro_edit_flow");
+        s18_settle_after_keys(c, "s");
+        ptc_check(c, file_equals(path, expected, sizeof(expected) - 1U),
+                  "edited macro replay differed from typing the edit");
+    }
+    force_quit(c);
+    (void)unlink(config);
+    (void)unlink(path);
+}
+
+static void case_s38_macro_browser(PtyCtx *c)
+{
+    static const u8 initial[] = "base\n";
+    static const u8 alpha[] =
+        "# sagitta-macro: 1\n"
+        "macro first = @[ i\"D\" ]\n";
+    static const u8 beta[] =
+        "# sagitta-macro: 1\n"
+        "macro second = @[ i\"E\" ]\n";
+    static const char macro_dir[] = "build/pty-s38-macro-browser-lib";
+    static const char alpha_path[] =
+        "build/pty-s38-macro-browser-lib/alpha.fl";
+    static const char beta_path[] =
+        "build/pty-s38-macro-browser-lib/beta.fl";
+    char config_source[1024];
+    char config[256];
+    char path[256];
+    int n;
+
+    (void)unlink(alpha_path);
+    (void)unlink(beta_path);
+    (void)rmdir(macro_dir);
+    if (mkdir(macro_dir, 0700) != 0 ||
+        !write_bytes(alpha_path, alpha, sizeof(alpha) - 1U) ||
+        !write_bytes(beta_path, beta, sizeof(beta) - 1U)) {
+        ptc_check(c, false, "could not create Sprint 38 macro library");
+        goto cleanup;
+    }
+    n = snprintf(config_source, sizeof(config_source),
+                 "import ed\n"
+                 "ed.run(\"ed.reg.set\", {iarg: 97, sarg: \"@[ i\\\"A\\\" ]\\n\"})\n"
+                 "ed.run(\"ed.reg.set\", {iarg: 98, sarg: \"@[ i\\\"B\\\" ]\\n\"})\n"
+                 "ed.run(\"ed.reg.set\", {iarg: 99, sarg: \"@[ i\\\"C\\\" ]\\n\"})\n"
+                 "set({\"macro.dir\": \"%s\"})\n", macro_dir);
+    if (n <= 0 || (size_t)n >= sizeof(config_source) ||
+        !make_fixture(c, initial, sizeof(initial) - 1U,
+                      path, sizeof(path)) ||
+        !s38_write_config(c, config_source, config, sizeof(config)))
+        goto cleanup;
+
+    s38_spawn_configured(c, config, path);
+    s18_settle_after_keys(c, "Q");
+    /* Every row contains insert source, so this typed source-text filter
+     * retains all three registers and both library functions. */
+    s18_settle_after_keys(c, "/ i");
+    ptc_snapshot(c, "s38_macro_browser");
+    force_quit(c);
+    (void)unlink(config);
+    (void)unlink(path);
+
+cleanup:
+    (void)unlink(alpha_path);
+    (void)unlink(beta_path);
+    (void)rmdir(macro_dir);
+}
+
+static void case_s38_macro_browser_actions(PtyCtx *c)
+{
+    static const u8 initial[] = "base\n";
+    static const u8 expected[] = "Bbase\n";
+    static const char macro_dir[] = "build/pty-s38-macro-actions-lib";
+    static const char user_path[] =
+        "build/pty-s38-macro-actions-lib/user.fl";
+    char config_source[1024];
+    char config[256];
+    char path[256];
+    int n;
+
+    (void)unlink(user_path);
+    (void)rmdir(macro_dir);
+    if (mkdir(macro_dir, 0700) != 0) {
+        ptc_check(c, false, "could not create Sprint 38 action library");
+        return;
+    }
+    n = snprintf(config_source, sizeof(config_source),
+                 "import ed\n"
+                 "ed.run(\"ed.reg.set\", {iarg: 97, sarg: \"@[ i\\\"A\\\" ]\\n\"})\n"
+                 "ed.run(\"ed.reg.set\", {iarg: 98, sarg: \"@[ i\\\"B\\\" ]\\n\"})\n"
+                 "ed.run(\"ed.reg.set\", {iarg: 99, sarg: \"@[ i\\\"C\\\" ]\\n\"})\n"
+                 "set({\"macro.dir\": \"%s\"})\n", macro_dir);
+    if (n <= 0 || (size_t)n >= sizeof(config_source) ||
+        !make_fixture(c, initial, sizeof(initial) - 1U,
+                      path, sizeof(path)) ||
+        !s38_write_config(c, config_source, config, sizeof(config)))
+        goto cleanup;
+
+    s38_spawn_configured(c, config, path);
+    s18_settle_after_keys(c, "Q");
+    s18_settle_after_keys(c, "y");
+    s18_settle_after_keys(c, "d");
+    s18_settle_after_keys(c, "d");
+
+    /* Clearing @a leaves @b selected when the browser reopens.  Name it,
+     * then replay it with Enter; naming is additive, so replay must work. */
+    s18_settle_after_keys(c, "Q");
+    s18_settle_after_keys(c, "n");
+    s18_settle_after_bytes(c, "named_b");
+    s18_settle_after_keys(c, "enter");
+    ptc_check(c, file_contains(user_path, "named_b"),
+              "browser n action did not create the named macro");
+    s18_settle_after_keys(c, "Q");
+    s18_settle_after_keys(c, "enter");
+    ptc_snapshot(c, "s38_macro_browser_actions");
+    s18_settle_after_keys(c, "s");
+    ptc_check(c, file_equals(path, expected, sizeof(expected) - 1U),
+              "browser Enter did not replay the surviving macro");
+    force_quit(c);
+    (void)unlink(config);
+    (void)unlink(path);
+
+cleanup:
+    (void)unlink(user_path);
+    (void)rmdir(macro_dir);
+}
+
+static void case_s38_macro_indicator_burst(PtyCtx *c)
+{
+    static const u8 initial[] = "tail\n";
+    char path[256];
+    char *burst;
+    u32 before;
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.macro.record a");
+    s18_settle_after_keys(c, "enter i");
+    burst = malloc(4001U);
+    if (burst == NULL) {
+        ptc_check(c, false, "allocating Sprint 38 indicator burst");
+        force_quit(c);
+        (void)unlink(path);
+        return;
+    }
+    (void)memset(burst, 'K', 4000U);
+    burst[4000U] = '\0';
+    before = c->vt.nsync_pairs;
+    ptc_bytes(c, burst);
+    ptc_wait_sync_pairs(c, before + 1U);
+    ptc_settle(c, 0);
+    ptc_check(c, c->vt.nsync_pairs == before + 1U,
+              "recording indicator added a frame to the 4000-key burst");
+    ptc_snapshot(c, "s38_macro_indicator_burst");
+    free(burst);
+    force_quit(c);
+    (void)unlink(path);
+}
+
 static void case_s18_cmdline_open(PtyCtx *c)
 {
     static const u8 initial[] = "alpha\nbeta\n";
@@ -4174,6 +4394,14 @@ const PtyCase sag_pty_cases[] = {
       case_s38_macro_indicator),
     C(s38_macro_indicator_40, modern, 24U, 40U,
       case_s38_macro_indicator),
+    C(s38_macro_edit_flow, modern, 24U, 80U,
+      case_s38_macro_edit_flow),
+    C(s38_macro_browser, modern, 24U, 120U,
+      case_s38_macro_browser),
+    C(s38_macro_browser_actions, modern, 24U, 80U,
+      case_s38_macro_browser_actions),
+    C(s38_macro_indicator_burst, modern, 24U, 80U,
+      case_s38_macro_indicator_burst),
     C(s35_macro_record_start_message, modern, 24U, 80U,
       case_s35_macro_record_start_message),
     C(s35_macro_record_stop_message, modern, 24U, 80U,

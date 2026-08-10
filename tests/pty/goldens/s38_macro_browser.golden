@@ -1,0 +1,61 @@
+# sagitta pty golden v1
+size 120x24 alt=1 cursor=3,3 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=2
+--- text
+    1 base
+    2
+  Macros 
+ :i                                                                                                                    
+
+    a   —   10 B                                             @[ i"A" ]
+    b   —   10 B
+    c   —   10 B
+    alpha.first   —   43 B              build/pty-s38-macro
+    beta.second   —   44 B              build/pty-s38-macro
+
+
+
+
+
+
+
+
+
+
+
+  5/5   enter replay . e edit . y yank . d clear . n name . / filter . esc
+
+:i                                                                                                                      
+--- style
+AAAAAAAAAA
+AAAAA
+ABBBBBBBB
+ACDEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+
+AAFFFFFFFFFFFFFFAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGGGGGGGGGGGGGGGGGGG
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAGGGGGGGGGGGGGGGGGGG
+
+
+
+
+
+
+
+
+
+
+
+AGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+
+CDEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+--- legend
+A fg=default bg=default attrs=----------
+B fg=default bg=default attrs=b---------
+C fg=#2f1806 bg=#e77d24 attrs=b---------
+D fg=#f7e0cc bg=#4e2a0f attrs=----------
+E fg=#f7e0cc bg=#4e2a0f attrs=b---------
+F fg=default bg=default attrs=------r---
+G fg=#787878 bg=default attrs=-d--------

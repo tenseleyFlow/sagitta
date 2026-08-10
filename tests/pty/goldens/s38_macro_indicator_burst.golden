@@ -1,0 +1,58 @@
+# sagitta pty golden v1
+size 80x24 alt=1 cursor=0,74 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=4
+--- text
+    1 KKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKKtail
+    2
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ I ●REC a 4001recording @a                                                      
+--- style
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+BBBCCCCCCCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+--- legend
+A fg=default bg=default attrs=----------
+B fg=#e1f7e6 bg=#2a9148 attrs=b---------
+C fg=#2b1f08 bg=#e1a82c attrs=b---------
+D fg=#d8eede bg=#12401f attrs=----------
