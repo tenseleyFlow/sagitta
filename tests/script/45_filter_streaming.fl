@@ -1,0 +1,56 @@
+# Sprint 19 -> 37: pipe-pressure, EPIPE, and byte-exact filter outcomes.
+import buf
+import ed
+import io
+import str
+
+fn whole(command) {
+    return ed.run("ed.shell.filter", {
+        sarg: command,
+        range_kind: "buffer",
+        range_given: true,
+    })
+}
+
+# The child writes 1 MiB before reading this 1 MiB+ input. A filter loop
+# that does not interleave POLLIN and POLLOUT deadlocks here.
+let row = "0123456789abcdefghijklmnopqrstuvwxyz\n"
+let input = str.repeat(row, 40000)
+io.write("deadlock.txt", input)
+let b = buf.open("deadlock.txt")
+edit {
+    whole("yes 0123456789abcdefghijklmnopqrstuvwxyz | head -c 1048576; cat >/dev/null")
+}
+t.eq(buf.len(b), 1048576)
+t.line(b, 1, "0123456789abcdefghijklmnopqrstuvwxyz")
+t.undo(b, 2)
+
+# head exits while most of the 10 MiB input remains unwritten. EPIPE is a
+# successful early consumer exit, not a reason to discard its output.
+let line = "line of text goes here\n"
+let huge = str.repeat(line, 456000)
+io.write("epipe.txt", huge)
+b = buf.open("epipe.txt")
+edit { whole("head -1") }
+t.text(b, line)
+t.undo(b, 2)
+
+# Four MiB is roughly 64 pipe capacities and must be drained completely.
+io.write("large-output.txt", "seed\n")
+b = buf.open("large-output.txt")
+edit {
+    whole("yes 0123456789abcdefghijklmnopqrstuvwxyz | head -c 4194304; cat >/dev/null")
+}
+t.eq(buf.len(b), 4194304)
+t.eq(buf.lines(b), 113360)
+t.line(b, 1, "0123456789abcdefghijklmnopqrstuvwxyz")
+t.line(b, 113360, "0123456789abcdefghijk")
+t.undo(b, 2)
+
+# The shell and editor both speak bytes. Invalid UTF-8 must round-trip.
+let invalid = "a\xffb\xc3\n"
+io.write("filter-invalid.bin", invalid)
+b = buf.open("filter-invalid.bin")
+edit { whole("cat") }
+t.text(b, invalid)
+t.undo(b, 2)

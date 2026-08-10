@@ -745,7 +745,8 @@ static void job_write_stdin(SagJob *j)
                 return;
             /* EPIPE: `head -1` exited early.  Not an error — stop writing,
              * close stdin, keep draining output. */
-            break;
+            job_close(&j->in_fd);
+            return;
         }
         j->in_off += (u64)wrote;
     }

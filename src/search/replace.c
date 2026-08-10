@@ -427,10 +427,13 @@ u32 sag_repl_plan_apply(SagReplPlan *p, EditCtx *ec)
 {
     u32 applied = 0U;
     u32 i;
+    bool own_transaction;
 
     if (p == NULL || ec == NULL || p->len == 0U)
         return 0U;
-    sag_undo_begin(ec, SAG_TXN_REPLACE);
+    own_transaction = ec->undo->depth == 0U;
+    if (own_transaction)
+        sag_undo_begin(ec, SAG_TXN_REPLACE);
     /*
      * Back to front: every remaining edit is at a lower offset than the
      * one just applied, so no offset needs adjusting.  Marks and
@@ -461,7 +464,8 @@ u32 sag_repl_plan_apply(SagReplPlan *p, EditCtx *ec)
             break;
         applied++;
     }
-    sag_undo_end(ec);
+    if (own_transaction)
+        sag_undo_end(ec);
     return applied;
 }
 

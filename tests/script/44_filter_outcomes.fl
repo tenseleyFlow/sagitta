@@ -1,0 +1,49 @@
+# Sprint 19 -> 37: filter outcome table on an editor-backed buffer.
+import buf
+import ed
+import io
+
+fn whole(command) {
+    return ed.run("ed.shell.filter", {
+        sarg: command,
+        range_kind: "buffer",
+        range_given: true,
+    })
+}
+
+io.write("sorted.txt", "beta\nalpha\ngamma\n")
+let b = buf.open("sorted.txt")
+edit { whole("sort") }
+t.text(b, "alpha\nbeta\ngamma\n")
+t.undo(b, 2)
+ed.run("ed.edit.undo", {})
+t.text(b, "beta\nalpha\ngamma\n")
+
+io.write("failure.txt", "keep me\n")
+b = buf.open("failure.txt")
+t.raises("user", fn() { whole("echo boom >&2; exit 2") })
+t.text(b, "keep me\n")
+t.undo(b, 1)
+t.raises("user", fn() { whole("definitely-not-a-real-command-xyz") })
+t.text(b, "keep me\n")
+t.undo(b, 1)
+
+io.write("empty.txt", "alpha\nbeta\n")
+b = buf.open("empty.txt")
+edit { whole("cat >/dev/null") }
+t.text(b, "")
+t.undo(b, 2)
+
+io.write("partial.txt", "head\nbeta\nalpha\ntail\n")
+b = buf.open("partial.txt")
+edit {
+    ed.run("ed.shell.filter", {
+        sarg: "sort",
+        range_kind: "span",
+        range_lo: 5,
+        range_hi: 16,
+        range_given: true,
+    })
+}
+t.text(b, "head\nalpha\nbeta\ntail\n")
+t.undo(b, 2)

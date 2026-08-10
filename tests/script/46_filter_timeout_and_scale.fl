@@ -1,0 +1,31 @@
+# Sprint 19 -> 37: failures preserve bytes; 10,000 lines remain one undo.
+import buf
+import ed
+import io
+import str
+
+fn whole(command) {
+    return ed.run("ed.shell.filter", {
+        sarg: command,
+        range_kind: "buffer",
+        range_given: true,
+    })
+}
+
+io.write("timeout.txt", "keep me byte-exact\n")
+let b = buf.open("timeout.txt")
+t.raises("user", fn() {
+    whole("cat >/dev/null; trap '' TERM; sleep 30")
+})
+t.text(b, "keep me byte-exact\n")
+t.undo(b, 1)
+
+let ten_thousand = str.repeat("z\n", 10000)
+io.write("ten-thousand.txt", ten_thousand)
+b = buf.open("ten-thousand.txt")
+edit { whole("sort") }
+t.text(b, ten_thousand)
+t.eq(buf.lines(b), 10001)
+t.undo(b, 2)
+ed.run("ed.edit.undo", {})
+t.text(b, ten_thousand)

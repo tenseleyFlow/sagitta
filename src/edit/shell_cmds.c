@@ -59,6 +59,15 @@ static bool range_span(CmdCtx *cx, Span *out)
         return out->hi > out->lo;
     }
     case SAG_RANGE_NONE:
+        /* Generic ed.run represents an explicit byte span in `tok` while
+         * leaving the E-mode range kind unset.  `given` distinguishes that
+         * form from a command with no range at all. */
+        if (cx->range.given && cx->range.tok.lo <= cx->range.tok.hi &&
+            cx->range.tok.hi <= sag_textbuf_len(tb)) {
+            *out = cx->range.tok;
+            return true;
+        }
+        break;
     default:
         break;
     }

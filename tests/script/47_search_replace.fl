@@ -1,0 +1,39 @@
+# Sprint 21 -> 37: editor-backed :s semantics and a 10,000-match undo.
+import buf
+import ed
+import io
+import str
+
+fn replace_all(body) {
+    return ed.run("ed.search.replace", {
+        sarg: body,
+        range_kind: "buffer",
+        range_given: true,
+    })
+}
+
+let original = "one one\nONE one\n"
+io.write("replace.txt", original)
+let b = buf.open("replace.txt")
+edit { replace_all("/one/X/g") }
+t.text(b, "X X\nONE X\n")
+t.undo(b, 2)
+ed.run("ed.edit.undo", {})
+t.text(b, original)
+
+io.write("replace-case.txt", original)
+b = buf.open("replace-case.txt")
+edit { replace_all("/one/word/gi") }
+t.text(b, "word word\nword word\n")
+t.undo(b, 2)
+
+let source = str.repeat("a", 10000) + "\n"
+let expected = str.repeat("LONG", 10000) + "\n"
+io.write("replace-10000.txt", source)
+b = buf.open("replace-10000.txt")
+edit { replace_all("/a/LONG/g") }
+t.text(b, expected)
+t.eq(buf.len(b), 40001)
+t.undo(b, 2)
+ed.run("ed.edit.undo", {})
+t.text(b, source)

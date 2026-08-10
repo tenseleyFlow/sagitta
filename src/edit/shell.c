@@ -455,6 +455,7 @@ SagFilterResult sag_shell_filter(Ed *ed, Win *w, Span region,
     u64 before_lines;
     u64 after_lines;
     char err[256];
+    bool own_transaction;
 
     if (ed == NULL || w == NULL || w->buf == NULL || cmdline == NULL)
         return SAG_FILT_SPAWN;
@@ -486,12 +487,15 @@ SagFilterResult sag_shell_filter(Ed *ed, Win *w, Span region,
          * restores the original text exactly and the journal sees one
          * commit: a crash mid-filter recovers to pre- or post-, never
          * half. */
-        sag_undo_begin(&ec, SAG_TXN_FILTER);
+        own_transaction = ec.undo->depth == 0U;
+        if (own_transaction)
+            sag_undo_begin(&ec, SAG_TXN_FILTER);
         (void)sag_edit_delete(&ec, region);
         if (j->collect.len != 0U)
             (void)sag_edit_insert(&ec, BYTEOFF(region.lo), j->collect.data,
                                   (u64)j->collect.len);
-        sag_undo_end(&ec);
+        if (own_transaction)
+            sag_undo_end(&ec);
         sag_ed_finish_edit(ed, &ec);
         after_lines = sag_textbuf_line_count(w->buf->tb);
         if (j->collect.len == 0U)
