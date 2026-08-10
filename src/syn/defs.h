@@ -67,6 +67,13 @@ SynEngine *yew_syn_engine_for(u32 lang);
 const SynLangDesc *yew_syn_lang_desc(u32 lang);
 u32 yew_syn_lang_named(const char *name);
 u32 yew_syn_lang_count(void);
+/* Forget definitions discovered under $XDG_CONFIG_HOME/yew/syntax and make
+ * the next registry lookup rescan that directory.  Primarily useful to
+ * process-lifetime owners and environment-isolated tests. */
+void yew_syn_discovery_reset(void);
+/* Set before the first registry lookup; --clean uses this to suppress user
+ * definition discovery without changing the built-in table. */
+void yew_syn_discovery_set_bypass(bool bypass);
 const char *yew_syn_ctx_name(const SynDef *def, u16 ctx);
 const char *yew_syn_rule_pattern(const SynDef *def, u32 rule);
 const char *yew_syn_attr_name(u8 attr);

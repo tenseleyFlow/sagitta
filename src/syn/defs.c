@@ -21,6 +21,7 @@
 #include "util/buf.h"
 #include "util/intern.h"
 #include "util/log.h"
+#include "util/sort.h"
 #include "util/xdg.h"
 
 enum {
@@ -108,9 +109,21 @@ typedef struct DefMeta {
     struct DefMeta *next;
 } DefMeta;
 
+typedef struct DiscoveredDef {
+    Arena arena;
+    DiagCtx dc;
+    SynDef *def;
+    struct DiscoveredDef *next;
+} DiscoveredDef;
+
 static DefMeta *metas;
+static DiscoveredDef *discovered_defs;
 static u64 compile_count;
 static bool cache_bypass;
+static bool discovery_done;
+static bool discovery_bypass;
+
+static void discover_user_definitions(void);
 
 static DefMeta *meta_for(const SynDef *def)
 {
@@ -1489,6 +1502,150 @@ void yew_syn_compile_count_reset(void)
     compile_count = 0U;
 }
 
+static void discovery_diag_discard(void *ctx, FlDiagLevel level, FlSpan sp,
+                                   const char *msg, const char *rendered)
+{
+    (void)ctx;
+    (void)level;
+    (void)sp;
+    (void)msg;
+    (void)rendered;
+}
+
+static int discovery_name_cmp(const void *left, const void *right, void *ctx)
+{
+    const char *const *a = left;
+    const char *const *b = right;
+
+    (void)ctx;
+    return strcmp(*a, *b);
+}
+
+static bool discovery_filename(const char *name)
+{
+    size_t len = strlen(name);
+
+    return len > 3U && strcmp(name + len - 3U, ".fl") == 0;
+}
+
+static char *discovery_path(const char *dir, const char *name)
+{
+    size_t len = strlen(dir) + 1U + strlen(name);
+    char *path = yew_xmalloc(len + 1U);
+
+    (void)snprintf(path, len + 1U, "%s/%s", dir, name);
+    return path;
+}
+
+static bool discovered_name_exists(const char *name)
+{
+    DiscoveredDef *owned;
+
+    for (owned = discovered_defs; owned != NULL; owned = owned->next) {
+        if (strcmp(owned->def->name, name) == 0)
+            return true;
+    }
+    return false;
+}
+
+static void discover_user_definitions(void)
+{
+    char *config;
+    char *dir;
+    DIR *stream;
+    struct dirent *entry;
+    char **names = NULL;
+    size_t nnames = 0U;
+    size_t i;
+    int read_error;
+
+    if (discovery_done)
+        return;
+    /* Set this before loading: registration and cache unpacking consult the
+     * same public registry and must not recursively rescan the directory. */
+    discovery_done = true;
+    if (discovery_bypass)
+        return;
+    config = yew_xdg_config_dir();
+    if (config == NULL)
+        return;
+    dir = discovery_path(config, "syntax");
+    free(config);
+    stream = opendir(dir);
+    if (stream == NULL) {
+        if (errno != ENOENT)
+            yew_log(YEW_LOG_WARN, "cannot scan syntax definitions: %s",
+                    dir);
+        free(dir);
+        return;
+    }
+    errno = 0;
+    while ((entry = readdir(stream)) != NULL) {
+        char *copy;
+
+        if (!discovery_filename(entry->d_name))
+            continue;
+        copy = yew_xmalloc(strlen(entry->d_name) + 1U);
+        (void)memcpy(copy, entry->d_name, strlen(entry->d_name) + 1U);
+        names = yew_xreallocarray(names, nnames + 1U, sizeof(*names));
+        names[nnames++] = copy;
+    }
+    read_error = errno;
+    if (closedir(stream) != 0 && read_error == 0)
+        read_error = errno;
+    if (read_error != 0)
+        yew_log(YEW_LOG_WARN, "cannot finish scanning syntax definitions: %s",
+                dir);
+    yew_sort_stable(names, nnames, sizeof(*names), discovery_name_cmp, NULL);
+    for (i = 0U; i < nnames; i++) {
+        DiscoveredDef *owned = yew_xcalloc(1U, sizeof(*owned));
+        char *path = discovery_path(dir, names[i]);
+
+        arena_init(&owned->arena);
+        fl_diag_init(&owned->dc, &owned->arena);
+        fl_diag_set_sink(&owned->dc, discovery_diag_discard, NULL);
+        owned->def = yew_syn_def_load(&owned->arena, &owned->dc, path);
+        if (owned->def != NULL && discovered_name_exists(owned->def->name)) {
+            yew_log(YEW_LOG_WARN,
+                    "ignoring duplicate syntax language '%s': %s",
+                    owned->def->name, path);
+            yew_syn_def_dispose(owned->def);
+            arena_free_all(&owned->arena);
+            free(owned);
+        } else if (owned->def == NULL) {
+            yew_log(YEW_LOG_WARN, "ignoring invalid syntax definition: %s",
+                    path);
+            arena_free_all(&owned->arena);
+            free(owned);
+        } else {
+            owned->next = discovered_defs;
+            discovered_defs = owned;
+        }
+        free(path);
+        free(names[i]);
+    }
+    free(names);
+    free(dir);
+}
+
+void yew_syn_discovery_reset(void)
+{
+    while (discovered_defs != NULL) {
+        DiscoveredDef *owned = discovered_defs;
+
+        discovered_defs = owned->next;
+        yew_syn_def_dispose(owned->def);
+        arena_free_all(&owned->arena);
+        free(owned);
+    }
+    discovery_done = false;
+}
+
+void yew_syn_discovery_set_bypass(bool bypass)
+{
+    discovery_bypass = bypass;
+}
+
 static const SynLangDesc *builtin_desc_at(size_t i)
 {
     static SynLangDesc desc[32];
@@ -1516,6 +1673,7 @@ const SynLangDesc *yew_syn_lang_desc(u32 lang)
     DefMeta *m;
     size_t i;
 
+    discover_user_definitions();
     for (m = metas; m != NULL; m = m->next) {
         if (m->lang.id == lang)
             return &m->lang;
@@ -1534,6 +1692,7 @@ u32 yew_syn_lang_named(const char *name)
 
     if (name == NULL)
         return YEW_LANG_NONE;
+    discover_user_definitions();
     for (m = metas; m != NULL; m = m->next) {
         if (strcmp(m->lang.name, name) == 0)
             return m->lang.id;
@@ -1550,6 +1709,7 @@ u32 yew_syn_lang_count(void)
     DefMeta *m;
     u32 count = (u32)yew_syn_builtin_langs_len;
 
+    discover_user_definitions();
     for (m = metas; m != NULL; m = m->next) {
         size_t i;
 
@@ -2708,6 +2868,7 @@ u32 yew_syn_lang_for(const char *path, const u8 *line1, u32 l1_len)
     ShebangMatch shebang;
     FirstLineMatch first = {line1, l1_len};
 
+    discover_user_definitions();
     found = best_language(filename_pred, &names);
     if (found != NULL)
         return found->id;
@@ -2774,6 +2935,7 @@ const SynDef *yew_syn_def_for(u32 lang)
 
     if (lang == YEW_LANG_NONE)
         return NULL;
+    discover_user_definitions();
     for (m = metas; m != NULL; m = m->next) {
         if (m->lang.id == lang)
             return m->def;
