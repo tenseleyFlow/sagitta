@@ -8,6 +8,8 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "edit/block.h"
+#include "edit/buf.h"
 #include "search/regex.h"
 #include "syn/defs.h"
 #include "syn/engine.h"
@@ -22,12 +24,15 @@ enum {
     PERF_SYN_EDIT_LINES = 100000,
     PERF_SYN_RULES = 6,
     PERF_SYN_CTXS = 3,
-    PERF_SYN_DETECT_PATHS = 10000
+    PERF_SYN_DETECT_PATHS = 10000,
+    PERF_SYN_BLOCK_BYTES = 64 * 1024,
+    PERF_SYN_BLOCK_MAX_LINE_CALLS = 3
 };
 
 #define PERF_SYN_DETECT_LIMIT_NS UINT64_C(5000000)
 #define PERF_SYN_COMPILE_LIMIT_NS UINT64_C(3000000)
 #define PERF_SYN_CACHE_LIMIT_NS UINT64_C(200000)
+#define PERF_SYN_BLOCK_LIMIT_NS UINT64_C(5000000)
 
 typedef struct SynFixture {
     Arena arena;
@@ -509,6 +514,81 @@ static bool measure_cap(SynFixture *fx, u8 *line, u64 *samples,
     return true;
 }
 
+static bool measure_block_provider(SynFixture *fx, u64 *samples,
+                                   size_t count, u64 *max_line_calls)
+{
+    Buffer buf = {0};
+    UnitCtx unit;
+    SynSettleReport report;
+    u8 *bytes = malloc(PERF_SYN_BLOCK_BYTES);
+    Span span;
+    bool ok = false;
+
+    *max_line_calls = 0U;
+    if (bytes == NULL)
+        return false;
+    bytes[0] = (u8)'"';
+    (void)memset(bytes + 1U, 'a', PERF_SYN_BLOCK_BYTES - 2U);
+    bytes[PERF_SYN_BLOCK_BYTES - 1U] = (u8)'"';
+    buf.tb = yew_textbuf_from_owned_bytes(bytes, PERF_SYN_BLOCK_BYTES);
+    if (buf.tb == NULL) {
+        free(bytes);
+        return false;
+    }
+    buf.lang = "perf-toy";
+    buf.tabwidth = 4U;
+    fx->ctx[0].flags = YEW_SYN_CTX_UNIT_SPAN;
+    fx->ctx[1].flags = YEW_SYN_CTX_UNIT_ATOM;
+    yew_syn_engine_set_def(fx->engine, &fx->def);
+    yew_syn_buf_init(&buf.syn);
+    yew_syn_buf_bind(&buf.syn, fx->engine);
+    yew_syn_attach(&buf.syn, 1U, buf.tb);
+    yew_syn_settle(&buf.syn, buf.tb, LINENO(0U), LINENO(1U),
+                   INT64_C(1000000000), &report);
+    if (!report.fixpoint)
+        goto done;
+    unit = (UnitCtx){buf.tb, &buf, NULL};
+    yew_block_provider_syntax_install(true);
+
+    /* Warm provider registration and allocator paths before sampling. */
+    yew_syn_engine_reset_counters(fx->engine);
+    if (!yew_block_level(&unit, BYTEOFF(PERF_SYN_BLOCK_BYTES / 2U),
+                         0U, &span) || span.lo != 1U ||
+        span.hi != PERF_SYN_BLOCK_BYTES ||
+        yew_syn_engine_line_calls(fx->engine) >
+            PERF_SYN_BLOCK_MAX_LINE_CALLS)
+        goto provider_done;
+
+    for (size_t i = 0U; i < count; i++) {
+        u64 start;
+        u64 end;
+        u64 line_calls;
+
+        yew_syn_engine_reset_counters(fx->engine);
+        if (!now_ns(&start) ||
+            !yew_block_level(&unit, BYTEOFF(PERF_SYN_BLOCK_BYTES / 2U),
+                             0U, &span) ||
+            !now_ns(&end) || end < start || span.lo != 1U ||
+            span.hi != PERF_SYN_BLOCK_BYTES)
+            goto provider_done;
+        line_calls = yew_syn_engine_line_calls(fx->engine);
+        if (line_calls > PERF_SYN_BLOCK_MAX_LINE_CALLS)
+            goto provider_done;
+        if (line_calls > *max_line_calls)
+            *max_line_calls = line_calls;
+        samples[i] = end - start;
+        perf_syn_sink += span.lo + span.hi + line_calls;
+    }
+    ok = true;
+
+provider_done:
+    yew_block_provider_syntax_install(false);
+done:
+    yew_syn_detach(&buf.syn);
+    yew_textbuf_free(buf.tb);
+    return ok;
+}
+
 static bool load_baselines(PerfCase *cases, size_t count)
 {
     FILE *file = fopen("tests/perf/baselines/syn.txt", "r");
@@ -564,6 +644,8 @@ int main(void)
     Timing detect = {0U, 0U};
     Timing compile = {0U, 0U};
     Timing cache = {0U, 0U};
+    Timing block = {0U, 0U};
+    u64 block_line_calls = 0U;
     int status = 0;
 
     if (samples == NULL || cap_line == NULL || viewport == NULL ||
@@ -613,6 +695,12 @@ int main(void)
         status = 2;
     } else if (status == 0)
         cache = timing_of(samples, count);
+    if (status == 0 &&
+        !measure_block_provider(&fx, samples, count, &block_line_calls)) {
+        (void)fprintf(stderr, "perf_syn: block-provider measurement failed\n");
+        status = 2;
+    } else if (status == 0)
+        block = timing_of(samples, count);
 
     if (status == 0 && !load_baselines(cases, YEW_ARRAY_LEN(cases)))
         status = 2;
@@ -635,6 +723,7 @@ int main(void)
         bool detect_regression = detect.median > PERF_SYN_DETECT_LIMIT_NS;
         bool compile_regression = compile.median > PERF_SYN_COMPILE_LIMIT_NS;
         bool cache_regression = cache.median > PERF_SYN_CACHE_LIMIT_NS;
+        bool block_regression = block.p99 > PERF_SYN_BLOCK_LIMIT_NS;
 
         (void)printf("syn.%-20s median_ns=%llu p99_ns=%llu%s\n",
                      "detect_10000",
@@ -651,7 +740,15 @@ int main(void)
                      (unsigned long long)cache.median,
                      (unsigned long long)cache.p99,
                      cache_regression ? " REGRESSION" : " ok");
-        if (detect_regression || compile_regression || cache_regression)
+        (void)printf("syn.%-20s median_ns=%llu p99_ns=%llu "
+                     "line_calls_max=%llu%s\n",
+                     "block_provider_64k",
+                     (unsigned long long)block.median,
+                     (unsigned long long)block.p99,
+                     (unsigned long long)block_line_calls,
+                     block_regression ? " REGRESSION" : " ok");
+        if (detect_regression || compile_regression || cache_regression ||
+            block_regression)
             status = 1;
     }
     if (status == 2)
