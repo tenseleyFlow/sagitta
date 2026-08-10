@@ -1,0 +1,334 @@
+#!/bin/sh
+# Generate src/syn/langs_gen.c from the detection-only language blocks.
+# The full definition compiler remains lazy; this tool deliberately reads
+# only the metadata needed before a definition body is loaded.
+set -eu
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+repo_dir=$(CDPATH= cd -- "$script_dir/.." && pwd)
+cd "$repo_dir"
+
+if [ "$#" -eq 0 ]; then
+    set -- runtime/syntax/*.fl
+fi
+
+LC_ALL=C awk '
+function die(msg) {
+    printf "%s:%d:%d: gen-langtab: %s\n", FILE, TLINE, TCOL, msg > "/dev/stderr"
+    exit 1
+}
+
+function take(    c) {
+    c = substr(SRC, POS, 1)
+    POS++
+    if (c == "\n") {
+        LINE++
+        COL = 1
+    } else {
+        COL++
+    }
+    return c
+}
+
+function hexval(c) {
+    if (c >= "0" && c <= "9") return c + 0
+    c = tolower(c)
+    if (c == "a") return 10
+    if (c == "b") return 11
+    if (c == "c") return 12
+    if (c == "d") return 13
+    if (c == "e") return 14
+    if (c == "f") return 15
+    return -1
+}
+
+function utf8(cp,    a,b,c,d) {
+    if (cp <= 127) return sprintf("%c", cp)
+    if (cp <= 2047) {
+        a = 192 + int(cp / 64)
+        b = 128 + cp % 64
+        return sprintf("%c%c", a, b)
+    }
+    if (cp <= 65535) {
+        a = 224 + int(cp / 4096)
+        b = 128 + int(cp / 64) % 64
+        c = 128 + cp % 64
+        return sprintf("%c%c%c", a, b, c)
+    }
+    a = 240 + int(cp / 262144)
+    b = 128 + int(cp / 4096) % 64
+    c = 128 + int(cp / 64) % 64
+    d = 128 + cp % 64
+    return sprintf("%c%c%c%c", a, b, c, d)
+}
+
+function string_token(    c,e,h1,h2,v,nd) {
+    TV = ""
+    take()
+    while (POS <= length(SRC)) {
+        c = take()
+        if (c == "\"") return "STR"
+        if (c == "\n") die("newline in string literal")
+        if (c != "\\") {
+            TV = TV c
+            continue
+        }
+        if (POS > length(SRC)) die("unterminated string escape")
+        e = take()
+        if (e == "n") TV = TV "\n"
+        else if (e == "t") TV = TV "\t"
+        else if (e == "r") TV = TV "\r"
+        else if (e == "\\") TV = TV "\\"
+        else if (e == "\"") TV = TV "\""
+        else if (e == "0") TV = TV sprintf("%c", 0)
+        else if (e == "x") {
+            h1 = take(); h2 = take()
+            if (hexval(h1) < 0 || hexval(h2) < 0)
+                die("\\x needs two hexadecimal digits")
+            TV = TV sprintf("%c", hexval(h1) * 16 + hexval(h2))
+        } else if (e == "u") {
+            if (take() != "{") die("\\u needs a braced codepoint")
+            v = 0; nd = 0
+            while (POS <= length(SRC) && substr(SRC, POS, 1) != "}") {
+                c = take()
+                if (hexval(c) < 0 || nd == 6)
+                    die("invalid braced Unicode codepoint")
+                v = v * 16 + hexval(c); nd++
+            }
+            if (nd == 0 || take() != "}" || v > 1114111 ||
+                (v >= 55296 && v <= 57343))
+                die("invalid Unicode scalar value")
+            TV = TV utf8(v)
+        } else {
+            die("unknown escape in string literal")
+        }
+    }
+    die("unterminated string literal")
+}
+
+function nexttok(    c,start) {
+    while (POS <= length(SRC)) {
+        c = substr(SRC, POS, 1)
+        if (c == " " || c == "\t" || c == "\r" || c == "\n") {
+            take(); continue
+        }
+        if (c == "#") {
+            while (POS <= length(SRC) && take() != "\n") { }
+            continue
+        }
+        break
+    }
+    TLINE = LINE; TCOL = COL
+    if (POS > length(SRC)) { TK = "EOF"; TV = ""; return }
+    c = substr(SRC, POS, 1)
+    if (c == "\"") { TK = string_token(); return }
+    if (c ~ /[A-Za-z_]/) {
+        start = POS
+        while (substr(SRC, POS, 1) ~ /[A-Za-z0-9_]/) take()
+        TV = substr(SRC, start, POS - start); TK = "ID"; return
+    }
+    if (c == "-" || c ~ /[0-9]/) {
+        start = POS
+        if (c == "-") take()
+        while (substr(SRC, POS, 1) ~ /[0-9]/) take()
+        TV = substr(SRC, start, POS - start)
+        if (TV == "-") die("expected digits after minus")
+        TK = "INT"; return
+    }
+    if (c ~ /[{}\[\]:,]/) { TK = take(); TV = TK; return }
+    die("unexpected byte in pure-literal input")
+}
+
+function need(k) {
+    if (TK != k) die("expected \047" k "\047, found \047" TK "\047")
+}
+
+function skip_value(    closing) {
+    if (TK == "STR" || TK == "INT" || TK == "ID") { nexttok(); return }
+    if (TK == "[") {
+        closing = "]"; nexttok()
+        while (TK != closing) {
+            if (TK == "EOF") die("unterminated list")
+            skip_value()
+            if (TK == ",") nexttok()
+            else if (TK != closing) die("expected comma in list")
+        }
+        nexttok(); return
+    }
+    if (TK == "{") {
+        closing = "}"; nexttok()
+        while (TK != closing) {
+            if (TK != "STR" && TK != "INT" && TK != "ID")
+                die("expected map key")
+            nexttok(); need(":"); nexttok(); skip_value()
+            if (TK == ",") nexttok()
+            else if (TK != closing) die("expected comma in map")
+        }
+        nexttok(); return
+    }
+    die("expected pure-literal value")
+}
+
+function take_string(label,    s) {
+    if (TK != "STR") die(label " must be a string")
+    s = TV; nexttok(); return s
+}
+
+function parse_strings(kind,    n,s) {
+    need("["); nexttok(); n = 0
+    while (TK != "]") {
+        s = take_string(kind); n++
+        META[IDX, kind, n] = s
+        if (TK == ",") nexttok()
+        else if (TK != "]") die("expected comma in " kind " list")
+    }
+    nexttok(); META[IDX, "n" kind] = n
+}
+
+function parse_block_comment(    n) {
+    need("["); nexttok(); n = 0
+    while (TK != "]") {
+        n++
+        if (n > 2) die("language.comment.block must have two strings")
+        META[IDX, "block" n] = take_string("language.comment.block")
+        if (TK == ",") nexttok()
+        else if (TK != "]") die("expected comma in comment block")
+    }
+    nexttok()
+    if (n != 2) die("language.comment.block must have two strings")
+}
+
+function parse_comment(    key) {
+    need("{"); nexttok()
+    while (TK != "}") {
+        if (TK != "ID" && TK != "STR") die("expected comment key")
+        key = TV; nexttok(); need(":"); nexttok()
+        if (key == "line") META[IDX, "comment_line"] = take_string("comment.line")
+        else if (key == "block") parse_block_comment()
+        else skip_value()
+        if (TK == ",") nexttok()
+        else if (TK != "}") die("expected comma in comment map")
+    }
+    nexttok()
+}
+
+function parse_language(    key) {
+    need("{"); nexttok()
+    while (TK != "}") {
+        if (TK != "ID" && TK != "STR") die("expected language key")
+        key = TV; nexttok(); need(":"); nexttok()
+        if (key == "name") META[IDX, "name"] = take_string("language.name")
+        else if (key == "extensions") parse_strings("extensions")
+        else if (key == "filenames") parse_strings("filenames")
+        else if (key == "shebangs") parse_strings("shebangs")
+        else if (key == "first_line") META[IDX, "first_line"] = take_string("language.first_line")
+        else if (key == "priority") {
+            if (TK != "INT") die("language.priority must be an integer")
+            META[IDX, "priority"] = TV + 0; nexttok()
+        } else if (key == "comment") parse_comment()
+        else skip_value()
+        if (TK == ",") nexttok()
+        else if (TK != "}") die("expected comma in language map")
+    }
+    nexttok(); META[IDX, "has_language"] = 1
+}
+
+function parse_file(    key) {
+    POS = 1; LINE = 1; COL = 1
+    nexttok(); need("{"); nexttok()
+    while (TK != "}") {
+        if (TK != "ID" && TK != "STR") die("expected top-level key")
+        key = TV; nexttok(); need(":"); nexttok()
+        if (key == "syntax") {
+            if (TK != "INT") die("syntax must be an integer")
+            META[IDX, "syntax"] = TV + 0; nexttok()
+        } else if (key == "language") parse_language()
+        else skip_value()
+        if (TK == ",") nexttok()
+        else if (TK != "}") die("expected comma in top-level map")
+    }
+    nexttok()
+    if (TK != "EOF") die("trailing input after definition")
+    if (META[IDX, "syntax"] != 1) die("generator supports only syntax version 1")
+    if (!META[IDX, "has_language"] || META[IDX, "name"] == "")
+        die("definition has no language.name")
+}
+
+function cstr(s,    out,i,c,n) {
+    out = "\""
+    for (i = 1; i <= length(s); i++) {
+        c = substr(s, i, 1); n = ORD[c]
+        if (c == "\"") out = out "\\\""
+        else if (c == "\\") out = out "\\\\"
+        else if (n >= 32 && n <= 126) out = out c
+        else out = out sprintf("\\%03o", n)
+    }
+    return out "\""
+}
+
+function emit_array(i, kind,    n,j) {
+    n = META[i, "n" kind]
+    if (n == 0) return
+    printf "static const char *const lang_%d_%s[] = {\n", i, kind
+    for (j = 1; j <= n; j++)
+        printf "    %s%s\n", cstr(META[i, kind, j]), j == n ? "" : ","
+    print "};"
+}
+
+function nullable(s) { return s == "" ? "NULL" : cstr(s) }
+
+BEGIN {
+    for (i = 0; i < 256; i++) ORD[sprintf("%c", i)] = i
+    nfile = ARGC - 1
+    for (i = 1; i <= nfile; i++) PATH[i] = ARGV[i]
+    for (i = 2; i <= nfile; i++) {
+        p = PATH[i]; j = i - 1
+        while (j >= 1 && PATH[j] > p) { PATH[j + 1] = PATH[j]; j-- }
+        PATH[j + 1] = p
+    }
+    ARGC = 1
+    for (IDX = 1; IDX <= nfile; IDX++) {
+        FILE = PATH[IDX]; SRC = ""
+        while ((getline line < FILE) > 0) SRC = SRC line "\n"
+        if (close(FILE) != 0) die("cannot close input")
+        if (SRC == "") die("cannot read empty or missing input")
+        META[IDX, "source"] = FILE
+        META[IDX, "priority"] = 0
+        parse_file()
+    }
+
+    print "/* GENERATED by scripts/gen-langtab from the runtime syntax definitions — do not edit;"
+    print " * regenerate with \047scripts/gen-langtab > src/syn/langs_gen.c\047. */"
+    print "#include \"syn/langs_gen.h\""
+    print ""
+    for (i = 1; i <= nfile; i++) {
+        emit_array(i, "extensions")
+        emit_array(i, "filenames")
+        emit_array(i, "shebangs")
+        if (META[i, "nextensions"] || META[i, "nfilenames"] || META[i, "nshebangs"])
+            print ""
+    }
+    print "const SynLangSeed yew_syn_builtin_langs[] = {"
+    for (i = 1; i <= nfile; i++) {
+        print "    {"
+        printf "        %dU,\n", i
+        printf "        %s,\n", cstr(META[i, "name"])
+        printf "        %s,\n", cstr(META[i, "source"])
+        printf "        %s,\n", META[i, "nextensions"] ? "lang_" i "_extensions" : "NULL"
+        printf "        %dU,\n", META[i, "nextensions"]
+        printf "        %s,\n", META[i, "nfilenames"] ? "lang_" i "_filenames" : "NULL"
+        printf "        %dU,\n", META[i, "nfilenames"]
+        printf "        %s,\n", META[i, "nshebangs"] ? "lang_" i "_shebangs" : "NULL"
+        printf "        %dU,\n", META[i, "nshebangs"]
+        printf "        %s,\n", nullable(META[i, "first_line"])
+        printf "        %.0f,\n", META[i, "priority"]
+        printf "        {%s, %s, %s}\n", nullable(META[i, "comment_line"]), \
+               nullable(META[i, "block1"]), nullable(META[i, "block2"])
+        printf "    }%s\n", i == nfile ? "" : ","
+    }
+    print "};"
+    print ""
+    print "const size_t yew_syn_builtin_langs_len ="
+    print "    sizeof(yew_syn_builtin_langs) / sizeof(yew_syn_builtin_langs[0]);"
+}
+' "$@"
