@@ -144,8 +144,8 @@ static bool fl_error(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     }
 }
 
-static bool macro_register_arg(FlVm *vm, FlValue value,
-                               const char *native, const FlStr **out)
+static bool parse_named_register(FlVm *vm, FlValue value,
+                                 const char *native, const FlStr **out)
 {
     const FlStr *name = NULL;
 
@@ -195,7 +195,7 @@ static bool fl_record(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     const FlStr *name = NULL;
     (void)n;
 
-    if (!macro_register_arg(vm, a[0], "record", &name))
+    if (!parse_named_register(vm, a[0], "record", &name))
         return false;
     return invoke_macro_command(vm, "ed.macro.record", name, 1U, false,
                                 out);
@@ -206,7 +206,7 @@ static bool fl_replay(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     const FlStr *name = NULL;
     i64 count = 1;
 
-    if (!macro_register_arg(vm, a[0], "replay", &name))
+    if (!parse_named_register(vm, a[0], "replay", &name))
         return false;
     if (n == 2U) {
         if (a[1].t != (u8)FL_INT)
