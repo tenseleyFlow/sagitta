@@ -8,7 +8,7 @@
 # COVERS: cur.line_span cur.insert cur.is_primary cur.valid span.lo span.hi
 # COVERS: span.len span.text span.lines span.replace span.replace_lines
 # COVERS: span.prepend span.append span.delete span.yank span.valid opt.get opt.set
-# COVERS: ed.run ed.commands record replay
+# COVERS: ed.run ed.commands bind unbind set record replay
 # COVERS: kind:handle
 # ERROR_KIND: handle
 # ERROR: no editor
@@ -42,16 +42,6 @@ fn refuses(kind, thunk) {
         error("editor native unexpectedly succeeded")
     } catch e {
         if e.kind != kind { error("editor native raised the wrong kind") }
-    }
-}
-
-fn defers(msg, thunk) {
-    try {
-        thunk()
-        error("deferred surface unexpectedly succeeded")
-    } catch e {
-        if e.kind != "name" { error("deferred surface raised the wrong kind") }
-        if e.msg != msg { error("deferred surface named the wrong sprint") }
     }
 }
 
@@ -151,18 +141,10 @@ refuses("handle", fn() { opt.set("tabwidth", 4) })
 refuses("handle", fn() { ed.run("ed.mode.normal", {}) })
 if list.len(ed.commands()) == 0 { error("editor command registry is empty") }
 
-# -- THE DEFERRAL, still tested rather than promised ------------------
-# `bind` has not landed (Sprint 36 owns the config surface), so it must
-# still hard-error naming its sprint. Catch it here so the final error
-# can independently prove A2's `handle` kind.
-try {
-    bind("H", "s", fn() { return 1 })
-} catch e {
-    # OUT: name bind lands in Sprint 36
-    io.print(e.kind, e.msg)
-}
-defers("unbind lands in Sprint 36", fn() { unbind("H", "s") })
-defers("set lands in Sprint 36", fn() { set("tabwidth", 4) })
+# -- config primitives are live and refuse cleanly without an editor --
+refuses("handle", fn() { bind("H", "s", fn() { return 1 }) })
+refuses("handle", fn() { unbind("H", "s") })
+refuses("handle", fn() { set({tabwidth: 4}) })
 refuses("handle", fn() { record("q") })
 refuses("handle", fn() { replay("q") })
 refuses("handle", fn() { replay("q", 2) })
