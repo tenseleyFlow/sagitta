@@ -870,12 +870,44 @@ static u64 env_base_seed(void)
     return (u64)n;
 }
 
+static bool has_count_folding_prefix(const RtSession *session)
+{
+    const CmdDesc *first;
+    const CmdDesc *second;
+    const CmdDesc *third;
+
+    if (session->events.len < 3U)
+        return false;
+    first = sag_cmd_desc(session->events.data[0].cmd);
+    second = sag_cmd_desc(session->events.data[1].cmd);
+    third = sag_cmd_desc(session->events.data[2].cmd);
+    return first != NULL && second != NULL && third != NULL &&
+           strcmp(first->name, "ed.move.buf.end") == 0 &&
+           strcmp(second->name, "ed.move.buf.end") == 0 &&
+           !session->events.data[0].count_given &&
+           !session->events.data[1].count_given &&
+           strcmp(third->name, "ed.edit.insert.text") == 0 &&
+           !session->events.data[2].count_given &&
+           session->events.data[2].sarg_len == 1U &&
+           session->events.data[2].sarg[0] == (u8)'x';
+}
+
 static int run_selftest(void)
 {
+    const u64 seed = UINT64_C(20764);
     RtSession session;
 
-    if (!init_count_folding_session(&session, 96U))
+    /* Use an ordinary generator seed so the minimized .rec can be copied
+     * directly into the corpus and reconstructed by run_corpus().  Keep the
+     * seed pinned: a generator change that invalidates the fixture must fail
+     * this self-test visibly rather than silently selecting another case. */
+    rt_session_init(&session);
+    if (!rt_session_generate(&session, seed, 2U, 96U) ||
+        !has_count_folding_prefix(&session) || session.events.len < 96U) {
+        rt_session_free(&session);
         return 2;
+    }
+    session.events.len = 96U;
     /* Fold a TAKES_COUNT run in real emitted Fletch, then execute it through
      * the real VM.  The shortest divergent prefix is exactly three events. */
     report_failure(&session, true);
