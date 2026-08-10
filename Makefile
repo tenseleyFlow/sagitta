@@ -359,6 +359,7 @@ FUZZ_FLPARSE_OBJ := $(BUILD)/tests/fuzz/fuzz_fl_parse.o
 FUZZ_FLSTD_OBJ := $(BUILD)/tests/fuzz/fuzz_fl_std.o
 FUZZ_FLVM_OBJ := $(BUILD)/tests/fuzz/fuzz_fl_vm.o
 FUZZ_FLAPI_OBJ := $(BUILD)/tests/fuzz/fuzz_flapi.o
+FUZZ_RECORD_OBJ := $(BUILD)/tests/fuzz/fuzz_record.o
 RE_REF_OBJ := $(BUILD)/tests/fuzz/re_ref.o
 FUZZ_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 FUZZ_LINK_OBJ := $(FUZZ_CORE_OBJ) $(FUZZ_LIB_OBJ)
@@ -385,6 +386,7 @@ PERF_MOUSE_OBJ := $(BUILD)/tests/perf/mouse.o
 LIVE_PTY_OBJ := $(BUILD)/tests/support/live_pty.o
 PERF_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 PERF_FLETCH_OBJ := $(BUILD)/tests/perf/perf_fletch.o
+PERF_RECORD_OBJ := $(BUILD)/tests/perf/perf_record.o
 FLETCH_RUN_OBJ := $(BUILD)/tests/fletch/run.o
 FLETCH_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 GEN_BIGFILE_OBJ := $(BUILD)/scripts/gen-bigfile.o
@@ -513,6 +515,10 @@ $(BUILD)/fuzz_flapi: $(FUZZ_LINK_OBJ) $(FUZZ_FLAPI_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_FLAPI_OBJ) $(LDLIBS)
 
+$(BUILD)/fuzz_record: $(FUZZ_LINK_OBJ) $(FUZZ_RECORD_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
+		$(FUZZ_RECORD_OBJ) $(LDLIBS)
+
 $(BUILD)/fuzz_fl_std: $(FUZZ_LINK_OBJ) $(FUZZ_FLSTD_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_FLSTD_OBJ) $(LDLIBS)
@@ -571,6 +577,10 @@ $(BUILD)/gen-bigfile: $(GEN_BIGFILE_OBJ)
 $(BUILD)/perf_fletch: $(PERF_CORE_OBJ) $(PERF_FLETCH_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(PERF_FLETCH_OBJ) $(LDLIBS)
+
+$(BUILD)/perf_record: $(PERF_CORE_OBJ) $(PERF_RECORD_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
+		$(PERF_RECORD_OBJ) $(LDLIBS)
 
 $(BUILD)/fletch_run: $(FLETCH_CORE_OBJ) $(FLETCH_RUN_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FLETCH_CORE_OBJ) \
@@ -714,7 +724,7 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
       $(BUILD)/fuzz_fl_std $(BUILD)/fuzz_fl_vm \
       $(BUILD)/fuzz_flapi \
       fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse \
-      fuzz-mouse fuzz-groups
+      fuzz-mouse fuzz-groups fuzz-record
 	$(BUILD)/fuzz_utf8 --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_grapheme --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_input --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
@@ -788,6 +798,9 @@ fuzz-cmdparse: $(BUILD)/fuzz_cmdparse
 	$(BUILD)/fuzz_cmdparse --iters=$(CMDPARSE_FUZZ_ITERS) \
 		--seed=$(FUZZ_SEED)
 
+fuzz-record: $(BUILD)/fuzz_record
+	$(BUILD)/fuzz_record --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+
 fuzz-textbuf: $(BUILD)/fuzz_textbuf
 	$(BUILD)/fuzz_textbuf --replay tests/fuzz/replay-smoke.trace
 	@set -eu; \
@@ -822,7 +835,7 @@ perf: perf-unicode perf-render perf-scroll perf-piece perf-cursor perf-undo perf
       perf-latency perf-jobstream perf-re-pathological \
       perf-re-throughput perf-search-latency \
       perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
-      perf-mouse
+      perf-mouse perf-record
 
 perf-cursor: $(BUILD)/perf_cursor
 	$(BUILD)/perf_cursor
@@ -838,6 +851,9 @@ perf-multicursor: $(BUILD)/perf_multicursor
 
 perf-cmdcomp: $(BUILD)/perf_cmdcomp
 	$(BUILD)/perf_cmdcomp
+
+perf-record: $(BUILD)/perf_record
+	$(BUILD)/perf_record $(if $(PERF_GATE),--gate,)
 
 #
 # Sprint 30 DoD 12: the Fletch perf smoke.  NUMBERS ONLY -- there is no
