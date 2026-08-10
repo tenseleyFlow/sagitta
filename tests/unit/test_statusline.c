@@ -261,6 +261,40 @@ void test_statusline_priority_drop_order_is_tiered(void)
     status_fixture_free(&f);
 }
 
+void test_statusline_recording_indicator_is_pinned_and_counted(void)
+{
+    static const u8 text[] = "x\n";
+    StatusFixture f;
+    StatuslineText out;
+
+    status_fixture_init(&f, text, sizeof(text) - 1U,
+                        "/a/very/long/path/that/must/lose/to/recording.c");
+    f.ed.rec.active = true;
+    f.ed.rec.reg = (u8)'a';
+    f.ed.rec.ev.len = 9U;
+    sag_statusline_build(&f.ed, &f.win, 80U, &out);
+    SAG_ASSERT_EQ_STR(out.recording, "\xE2\x97\x8FREC a");
+    SAG_ASSERT_EQ_U64(out.recording_cells, 6U);
+    SAG_ASSERT_EQ_U64(out.chip_cells + out.recording_cells + out.body_cells,
+                      80U);
+    sag_statusline_text_free(&out);
+
+    f.ed.rec.ev.len = 12U;
+    sag_statusline_build(&f.ed, &f.win, 40U, &out);
+    SAG_ASSERT_EQ_STR(out.recording, "\xE2\x97\x8FREC a 12");
+    SAG_ASSERT(strstr(out.recording, "a") != NULL);
+    SAG_ASSERT_EQ_U64(
+        (u64)(out.chip_cells + out.recording_cells + out.body_cells <= 40),
+        1U);
+    sag_statusline_text_free(&out);
+
+    sag_statusline_build(&f.ed, &f.win, 5U, &out);
+    SAG_ASSERT_EQ_STR(out.recording, "\xE2\x97\x8F" "a");
+    SAG_ASSERT_EQ_U64(out.recording_cells, 2U);
+    sag_statusline_text_free(&out);
+    status_fixture_free(&f);
+}
+
 void test_statusline_unicode_path_elision_uses_cells(void)
 {
     static const u8 text[] = "x\n";

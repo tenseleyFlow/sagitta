@@ -500,6 +500,7 @@ void test_gutter_number_styles_width_and_continuations(void);
 void test_statusline_metadata_position_percent_and_mode_chip(void);
 void test_statusline_mixed_eol_uses_warning_attributes(void);
 void test_statusline_priority_drop_order_is_tiered(void);
+void test_statusline_recording_indicator_is_pinned_and_counted(void);
 void test_statusline_unicode_path_elision_uses_cells(void);
 void test_statusline_mode_roles_are_fixed_and_distinct(void);
 void test_draw_selection_then_secondary_cursor_preserves_glyphs(void);

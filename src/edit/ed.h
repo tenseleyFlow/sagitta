@@ -3,6 +3,7 @@
 
 #include <stdbool.h>
 
+#include "edit/buf.h"
 #include "edit/dispatch.h"
 #include "edit/job.h"
 #include "fl/handle.h"
@@ -66,66 +67,6 @@ typedef struct FlPendingChange {
     u64 lo;
     u64 hi;
 } FlPendingChange;
-
-enum {
-    /* No file behind it: save refuses, the journal never opens.  Sprint 19
-     * §4 — job output must never be mistaken for a document. */
-    SAG_BUF_SCRATCH = 1U << 0,
-    /* Appends bypass the undo tree.  Recording a million streamed appends
-     * as undo ops would also journal them (s08); undo in such a buffer is
-     * a no-op with a message rather than a lie. */
-    SAG_BUF_NOUNDO = 1U << 1,
-    /* UI inspection buffers may be navigated and closed, never edited. */
-    SAG_BUF_READONLY = 1U << 2
-};
-
-typedef struct Buffer {
-    /* Owning editor, used only by the text-change callback to enqueue the
-     * coalesced Sprint 34 buf.change event. */
-    struct Ed *owner;
-    /*
-     * Stable for the buffer's lifetime and never reused.  Workspace
-     * indices shift when a buffer is dropped, so anything that outlives
-     * a close — Sprint 21's jumplist entries, Sprint 25's persisted
-     * state — names buffers by this instead.
-     */
-    u32 id;
-    TextBuf *tb;
-    FileMeta meta;
-    char *path;
-    /* Display name for buffers with no path ("*job:3 make*").  NULL for
-     * ordinary file buffers, which display their path. */
-    char *name;
-    u32 flags;
-    u32 tabwidth;
-    UndoTree *undo;
-    Journal *jrn;
-    MarkSet *marks;
-    /* Where this TEXT was edited; reachable from any view of it. */
-    ChangeList changes;
-    /*
-     * Sprint 21 §7: the 26 named marks, 'a'..'z'.  Marks rather than
-     * offsets for the same reason the jumplist uses them — a name set
-     * before an edit above it must still point at the same text after.
-     * `named_set[i]` says whether slot i has ever been set, since a
-     * zeroed MarkId is indistinguishable from a real one.
-     */
-    MarkId named[26];
-    bool named_set[26];
-    /*
-     * Sprint 25 §6: marks read from workspace state, still as OFFSETS.
-     *
-     * A MarkId needs a MarkSet, which needs a loaded buffer — so a
-     * restore that materialized marks eagerly would read every file
-     * that has ever had one, which is exactly the cost deferral exists
-     * to avoid.  They are held here and converted by sag_buf_hydrate,
-     * at the first moment there is anything to anchor them to.
-     */
-    u64 pending_marks[26];
-    bool pending_mark_set[26];
-    /* Sprint 36: sparse values explicitly set at buffer scope. */
-    Strmap opt_overrides;
-} Buffer;
 
 /* Buffers are referenced by pointer from every Win, so the list holds
  * pointers, never values: a growing value array would relocate under the

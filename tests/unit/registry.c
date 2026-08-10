@@ -524,6 +524,7 @@ const SagTest sag_tests[] = {
     T(statusline_metadata_position_percent_and_mode_chip),
     T(statusline_mixed_eol_uses_warning_attributes),
     T(statusline_priority_drop_order_is_tiered),
+    T(statusline_recording_indicator_is_pinned_and_counted),
     T(statusline_unicode_path_elision_uses_cells),
     T(statusline_mode_roles_are_fixed_and_distinct),
     T(draw_selection_then_secondary_cursor_preserves_glyphs),

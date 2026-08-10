@@ -318,6 +318,8 @@ void sag_statusline_build(const Ed *ed, Win *w, u16 cols,
     size_t path_len;
     char search_badge[40];
     char wrap_badge[8];
+    char recording[32];
+    RecStatus rec_status;
     Segment segments[11];
     int available;
     int path_cells;
@@ -346,9 +348,27 @@ void sag_statusline_build(const Ed *ed, Win *w, u16 cols,
     chip_text(ed, w, out->chip, sizeof(out->chip));
     out->chip_len = strlen(out->chip);
     out->chip_cells = (u16)cells(out->chip);
-    if (cols <= out->chip_cells)
+    (void)memset(&rec_status, 0, sizeof(rec_status));
+    (void)sag_record_status(ed, &rec_status);
+    if (rec_status.active) {
+        if (rec_status.nevents >= 10U)
+            (void)snprintf(recording, sizeof(recording),
+                           "\xE2\x97\x8FREC %c %u", (int)rec_status.reg,
+                           (unsigned)rec_status.nevents);
+        else
+            (void)snprintf(recording, sizeof(recording),
+                           "\xE2\x97\x8FREC %c", (int)rec_status.reg);
+        if ((int)cols - (int)out->chip_cells < cells(recording))
+            (void)snprintf(recording, sizeof(recording),
+                           "\xE2\x97\x8F%c", (int)rec_status.reg);
+        (void)snprintf(out->recording, sizeof(out->recording), "%s",
+                       recording);
+        out->recording_len = strlen(out->recording);
+        out->recording_cells = (u16)cells(out->recording);
+    }
+    if (cols <= (u16)(out->chip_cells + out->recording_cells))
         return;
-    available = (int)cols - out->chip_cells;
+    available = (int)cols - out->chip_cells - out->recording_cells;
     cursor = &w->cs.curs.data[w->cs.primary];
     line = sag_textbuf_line_of(w->buf->tb, cursor->pos);
     line_span = sag_textbuf_line_span(w->buf->tb, line);
@@ -517,6 +537,7 @@ void sag_statusline_draw(Ed *ed, Win *w)
 {
     StatuslineText text;
     SagUiStyle style;
+    SagUiStyle recording_style;
     Grid *grid;
     Cell blank;
     u16 row;
@@ -530,6 +551,8 @@ void sag_statusline_draw(Ed *ed, Win *w)
         return;
     row = ed->footer_rect.y;
     style = sag_statusline_mode_style(ed->mode);
+    /* H is the current select/highlight role until named theme roles land. */
+    recording_style = sag_statusline_mode_style(SAG_MODE_H);
     sag_statusline_build(ed, w, ed->footer_rect.w, &text);
     blank = grid->blank;
     blank.fg = style.row_fg;
@@ -540,6 +563,13 @@ void sag_statusline_draw(Ed *ed, Win *w)
     col = sag_grid_puts(grid, row, ed->footer_rect.x,
                         (const u8 *)text.chip, text.chip_len,
                         style.chip_fg, style.chip_bg, style.attrs);
+    if (col < grid->cols && text.recording_len != 0U)
+        col = sag_grid_puts(grid, row, col,
+                            (const u8 *)text.recording,
+                            text.recording_len,
+                            recording_style.chip_fg,
+                            recording_style.chip_bg,
+                            SAG_ATTR_BOLD);
     if (col < grid->cols && text.body_len != 0U) {
         if (text.warn_len == 0U) {
             (void)sag_grid_puts(grid, row, col, (const u8 *)text.body,

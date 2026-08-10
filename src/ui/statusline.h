@@ -21,10 +21,13 @@ typedef struct SagUiStyle {
 typedef struct StatuslineText {
     char chip[16];
     size_t chip_len;
+    char recording[32];
+    size_t recording_len;
     char *body;
     size_t body_cap;
     size_t body_len;
     u16 chip_cells;
+    u16 recording_cells;
     u16 body_cells;
     size_t warn_at;
     size_t warn_len;

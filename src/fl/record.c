@@ -238,6 +238,11 @@ void sag_record_tap(CmdId id, const CmdCtx *cx)
     if (sarg_len != 0U)
         bytebuf_append(&rec->blob, sarg, sarg_len);
     RecEventVec_push(&rec->ev, event);
+    /* Below ten events the visible indicator is unchanged.  Once the
+     * counter is shown, one dirty bit per drained input burst is enough;
+     * the event loop coalesces repeated writes before rendering. */
+    if (rec->ev.len >= 10U)
+        cx->ed->footer_dirty = true;
 }
 
 void sag_record_key(Ed *ed, Key key)
