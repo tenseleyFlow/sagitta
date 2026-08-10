@@ -2,6 +2,7 @@
 #include "search/searchui.h"
 #include "ui/cmdline.h"
 
+#include <errno.h>
 #include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -10,6 +11,7 @@
 #include "edit/ed.h"
 #include "edit/mode.h"
 #include "edit/motion.h"
+#include "edit/option.h"
 #include "fl/flruntime.h"
 #include "term/grid.h"
 #include "text/edit.h"
@@ -41,6 +43,57 @@ enum {
      */
     SAG_CMDLINE_LIVE_BUDGET_US = 1500
 };
+
+static bool parse_option_value(const OptDesc *desc, const char *text,
+                               OptVal *out)
+{
+    char *end = NULL;
+    long long integer;
+
+    if (desc->type == (u8)SAG_OPT_BOOL) {
+        if (strcmp(text, "true") == 0) {
+            *out = (OptVal){SAG_OPT_BOOL, {.b = true}};
+            return true;
+        }
+        if (strcmp(text, "false") == 0) {
+            *out = (OptVal){SAG_OPT_BOOL, {.b = false}};
+            return true;
+        }
+        return false;
+    }
+    if (desc->type == (u8)SAG_OPT_INT) {
+        errno = 0;
+        integer = strtoll(text, &end, 10);
+        if (errno != 0 || end == text || *end != '\0')
+            return false;
+        *out = (OptVal){SAG_OPT_INT, {.i = (i64)integer}};
+        return true;
+    }
+    *out = (OptVal){desc->type,
+                    {.str = {text, (u32)strlen(text)}}};
+    return true;
+}
+
+CmdStatus sag_opt_cmdline_set(CmdCtx *cx)
+{
+    const OptDesc *desc;
+    const char *err = NULL;
+    OptVal value;
+
+    if (cx == NULL || cx->ed == NULL || cx->argv.n != 3U)
+        return SAG_CMD_ERR_ARG;
+    desc = sag_opt_desc(cx->argv.v[1], (u32)strlen(cx->argv.v[1]));
+    if (desc == NULL || !parse_option_value(desc, cx->argv.v[2], &value))
+        return SAG_CMD_ERR_ARG;
+    if (!sag_opt_set(cx->ed, SAG_OPT_SCOPE_DECLARED,
+                     cx->argv.v[1], (u32)strlen(cx->argv.v[1]),
+                     &value, &err)) {
+        if (err != NULL)
+            sag_log(SAG_LOG_ERROR, ":set: %s", err);
+        return SAG_CMD_ERR_ARG;
+    }
+    return SAG_CMD_OK;
+}
 
 typedef struct CmdLineTarget {
     Buffer buffer;

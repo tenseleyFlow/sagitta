@@ -32,6 +32,7 @@
 #include "util/arena.h"
 #include "util/buf.h"
 #include "util/intern.h"
+#include "util/strmap.h"
 #include "ws/state.h"
 
 typedef enum {
@@ -47,6 +48,7 @@ typedef enum {
 
 typedef struct FlRuntime FlRuntime;
 typedef struct OptProvider OptProvider;
+struct OptStored;
 
 typedef struct FlPendingChange {
     u32 buffer_id;
@@ -108,6 +110,8 @@ typedef struct Buffer {
      */
     u64 pending_marks[26];
     bool pending_mark_set[26];
+    /* Sprint 36: sparse values explicitly set at buffer scope. */
+    Strmap opt_overrides;
 } Buffer;
 
 /* Buffers are referenced by pointer from every Win, so the list holds
@@ -233,6 +237,8 @@ struct Ed {
     bool fl_idle_fired;
     bool fl_model_teardown;
     const OptProvider *opt_provider;
+    struct OptStored *opt_globals;
+    bool *opt_inflight;
     bool undo_break_on_newline;
     bool errorbells;
     bool ambiguous_wide;

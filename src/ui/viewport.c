@@ -304,7 +304,7 @@ void sag_vp_init(Win *w)
     w->vp.scrolloff = 3U;
     w->vp.sidescrolloff = 5U;
     w->vp.wrap = false;
-    w->number_style = SAG_NUM_HYBRID;
+    w->number_style = SAG_NUM_ABS;
     w->gutter_width = 0U;
     memset(&w->wrap_cache, 0, sizeof(w->wrap_cache));
     w->wrap_goal = (CCol){0U};

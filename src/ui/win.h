@@ -13,6 +13,7 @@
 #include "ui/viewport.h"
 #include "unicode/coords.h"
 #include "util/base.h"
+#include "util/strmap.h"
 
 typedef struct Buffer Buffer;
 
@@ -42,6 +43,8 @@ typedef struct Win {
     u16 gutter_width;
     CCol wrap_goal;
     bool wrap_goal_valid;
+    /* Sprint 36: sparse values explicitly set at window scope. */
+    Strmap opt_overrides;
 } Win;
 
 /* Sprint 14 compatibility names; new code uses the sag_vp_* API. */

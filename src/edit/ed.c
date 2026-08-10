@@ -16,7 +16,7 @@
 #include "ui/pickers.h"
 #include "ui/viewport.h"
 #include "fl/flruntime.h"
-#include "edit/opt.h"
+#include "edit/option.h"
 #include "unicode/width.h"
 #include "fl/fltxn.h"
 #include "fl/record.h"
@@ -25,6 +25,7 @@
 /* Tears down everything a buffer owns without touching the list slot. */
 static void ed_buffer_dispose(Buffer *b)
 {
+    sag_opt_scope_free(&b->opt_overrides);
     if (b->jrn != NULL) {
         sag_journal_close(b->jrn);
         b->jrn = NULL;
@@ -80,6 +81,7 @@ static void ed_buffer_free(Ed *ed)
     sag_overlay_free(&ed->single_win.overlay);
     sag_vp_free(&ed->single_win);
     sag_cset_free(&ed->single_win.cs);
+    sag_opt_scope_free(&ed->single_win.opt_overrides);
     ed_ws_free(ed);
     ed_buffer_dispose(b);
     (void)memset(&ed->single_win, 0, sizeof(ed->single_win));
@@ -489,15 +491,6 @@ void sag_ed_init(Ed *ed)
     fl_h_table_init(&ed->handles);
     sag_record_init(&ed->rec);
     sag_cmd_set_record_tap(sag_record_tap);
-    sag_opt_provider_set(ed, NULL);
-    ed->undo_break_on_newline = true;
-    ed->errorbells = false;
-    ed->ambiguous_wide = false;
-    {
-        SagWidthOpts width_opts = {false};
-
-        sag_width_set_opts(&width_opts);
-    }
     /* Window ids start at 1; 0 is never handed out, so a zeroed Win is
      * distinguishable from window one. */
     ed->next_win_id = 1U;
@@ -505,6 +498,8 @@ void sag_ed_init(Ed *ed)
     ed->dispatch_ready = true;
     if (!sag_fl_runtime_init(ed))
         SAG_BUG("editor init: Fletch runtime initialization failed");
+    sag_opt_init(ed);
+    sag_opt_provider_set(ed, NULL);
     ed->exit_code = SAG_EXIT_OK;
 }
 
@@ -529,6 +524,7 @@ void sag_ed_free(Ed *ed)
     /* Close hooks are the last script-visible point for every buffer. */
     ed_buffer_free(ed);
     sag_fl_runtime_free(ed);
+    sag_opt_free(ed);
     sag_record_free(&ed->rec);
     sag_reg_free(&ed->regs);
     sag_msg_clear(ed);
@@ -737,6 +733,7 @@ Win *sag_ed_win_clone(Ed *ed, const Win *src)
         sag_cset_init(&w->cs, seed);
     }
     sag_vp_init(w);
+    sag_opt_scope_clone(&w->opt_overrides, &src->opt_overrides);
     w->vp.top = src->vp.top;
     w->vp.top_sub = src->vp.top_sub;
     sag_overlay_init(&w->overlay);
@@ -775,6 +772,7 @@ void sag_ed_win_release(Ed *ed, Win *w)
     sag_overlay_free(&w->overlay);
     sag_vp_free(w);
     sag_cset_free(&w->cs);
+    sag_opt_scope_free(&w->opt_overrides);
     free(w);
 }
 

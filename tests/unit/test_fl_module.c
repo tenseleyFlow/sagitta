@@ -211,7 +211,8 @@ void test_fl_modules_deferred_surfaces_name_their_sprint(void)
      */
     FL_EQ(&f, "return bind\n", "!name: bind lands in Sprint 36");
     FL_EQ(&f, "return unbind\n", "!name: unbind lands in Sprint 36");
-    FL_EQ(&f, "return set\n", "!name: set lands in Sprint 36");
+    /* Sprint 36 promotes set() from the deferral list to the prelude. */
+    FL_EQ(&f, "return set\n", "<fn>");
     /* Sprint 35 promoted these two names from deferrals to prelude
      * functions; keeping them in this boundary test prevents stale
      * deferral diagnostics from returning. */

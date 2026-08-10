@@ -15,6 +15,7 @@
 #include <unistd.h>
 
 #include "edit/ed.h"
+#include "edit/option.h"
 #include "ui/cmdparse.h"
 #include "unicode/utf8.h"
 #include "util/buf.h"
@@ -955,11 +956,30 @@ static u32 enumerate_paths(const CompReq *req, Vec_CompItem *out)
  * answers "no candidates" honestly, and the options model replaces the
  * function without touching the plumbing around it.
  */
-static u32 enumerate_empty(const CompReq *req, Vec_CompItem *out)
+static u32 enumerate_options(const CompReq *req, Vec_CompItem *out)
 {
-    (void)req;
-    out->len = 0U;
-    return 0U;
+    CandidateVec matches = {0};
+    u32 i;
+
+    for (i = 0U; i < sag_opts_len; i++)
+        (void)candidate_add(&matches, req->stem, sag_opts[i].name,
+                            sag_opts[i].name, sag_opts[i].help, false, false);
+    return candidate_finish(req, SAG_COMP_OPTION, &matches, out);
+}
+
+static u32 enumerate_option_values(const CompReq *req, Vec_CompItem *out)
+{
+    static const char *const values[] = {
+        "false", "true", "off", "abs", "rel", "both", "gcol",
+        "gcol_ccol", "yank", "all", "unnamed"
+    };
+    CandidateVec matches = {0};
+    u32 i;
+
+    for (i = 0U; i < (u32)SAG_ARRAY_LEN(values); i++)
+        (void)candidate_add(&matches, req->stem, values[i], values[i],
+                            "option value", false, false);
+    return candidate_finish(req, SAG_COMP_VALUE, &matches, out);
 }
 
 static struct {
@@ -977,9 +997,10 @@ static void comp_init(void)
          SAG_COMP_SRC_CACHEABLE | SAG_COMP_SRC_SLOW},
         {SAG_COMP_BUFFER, "buffer", enumerate_buffers,
          SAG_COMP_SRC_CACHEABLE},
-        {SAG_COMP_OPTION, "option", enumerate_empty,
+        {SAG_COMP_OPTION, "option", enumerate_options,
          SAG_COMP_SRC_CACHEABLE},
-        {SAG_COMP_VALUE, "value", enumerate_empty, SAG_COMP_SRC_CACHEABLE},
+        {SAG_COMP_VALUE, "value", enumerate_option_values,
+         SAG_COMP_SRC_CACHEABLE},
     };
     size_t i;
 

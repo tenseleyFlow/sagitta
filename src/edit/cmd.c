@@ -120,6 +120,8 @@ static const CmdDesc builtins[] = {
      "Read an editor option", NULL},
     {"ed.opt.set", sag_opt_cmd_set, SAG_ARITY_STR, 0U,
      "Set an editor option", NULL},
+    {"ed.opt.set_many", sag_opt_cmdline_set, SAG_ARITY_NONE, 0U,
+     "Set an editor option from E mode", NULL},
     {"ed.fl.eval", sag_fl_cmd_eval, SAG_ARITY_STR, 0U,
      "Evaluate Fletch in the persistent editor runtime", NULL},
     {"ed.nop", cmd_nop, SAG_ARITY_NONE, 0U, "Do nothing", NULL},
@@ -755,6 +757,7 @@ static const BuiltinMeta builtin_meta[] = {
     {"ed.search.replace", "s", SAG_RP_OPT, "s"},
     {"ed.search.global", "s", SAG_RP_OPT, "g"},
     {"ed.fl.eval", "s", SAG_RP_FORBID, "fl"},
+    {"ed.opt.set_many", "ov", SAG_RP_FORBID, "set"},
     {"ed.mark.set", "s", SAG_RP_FORBID, "mark"},
     /* :! carries an arbitrary command line, so its argspec is one string
      * and the range decides run-vs-filter (§5). */

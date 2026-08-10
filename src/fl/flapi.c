@@ -8,7 +8,7 @@
 
 #include "edit/dispatch.h"
 #include "edit/ed.h"
-#include "edit/opt.h"
+#include "edit/option.h"
 #include "fl/gc.h"
 #include "fl/flruntime.h"
 #include "fl/fltxn.h"
@@ -1193,6 +1193,121 @@ static bool option_command_error(FlVm *vm, const CmdCtx *cx)
     }
     return fl_raise(vm, "type", "%s", cx->opt_error_msg == NULL ?
                     "invalid option value" : cx->opt_error_msg);
+}
+
+static bool option_map_error(FlVm *vm, const FlStr *name, const char *err)
+{
+    if (err != NULL && strcmp(err, "unknown option") == 0) {
+        const char *names[64];
+        u32 nname = sag_opt_list(names, (u32)SAG_ARRAY_LEN(names));
+        FlSuggest suggest;
+        Bytebuf msg;
+        u32 i;
+
+        fl_suggest_reset(&suggest);
+        for (i = 0U; i < nname; i++)
+            fl_suggest_add(&suggest, names[i], (u32)strlen(names[i]),
+                           FL_SCOPE_GLOBAL);
+        bytebuf_init(&msg);
+        (void)fl_suggest_render(&suggest, name->b, name->len, &msg);
+        if (msg.len == 0U) {
+            bytebuf_free(&msg);
+            return fl_raise(vm, "name", "unknown option '%.*s'",
+                            (int)name->len, name->b);
+        }
+        (void)fl_raise(vm, "name", "unknown option '%.*s'; %.*s",
+                       (int)name->len, name->b, (int)msg.len,
+                       (const char *)msg.data);
+        bytebuf_free(&msg);
+        return false;
+    }
+    return fl_raise(vm,
+                    err != NULL && strstr(err, "already being changed") != NULL
+                        ? "user" : "type",
+                    "%s", err == NULL ? "invalid option value" : err);
+}
+
+typedef struct FlOptStage {
+    const FlStr *name;
+    OptVal value;
+} FlOptStage;
+
+static bool option_from_fl(FlVm *vm, FlValue value, OptVal *out)
+{
+    if (value.t == (u8)FL_BOOL) {
+        *out = (OptVal){SAG_OPT_BOOL, {.b = value.as.b}};
+        return true;
+    }
+    if (value.t == (u8)FL_INT) {
+        *out = (OptVal){SAG_OPT_INT, {.i = value.as.i}};
+        return true;
+    }
+    if (value.t == (u8)FL_STR) {
+        const FlStr *s = (const FlStr *)value.as.o;
+
+        *out = (OptVal){SAG_OPT_STR, {.str = {s->b, s->len}}};
+        return true;
+    }
+    return fl_raise(vm, "type",
+                    "set: option values must be bool, int, or string");
+}
+
+bool fl_api_set_options(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
+{
+    FlMap *map;
+    FlOptStage *staged;
+    FlValue key;
+    FlValue value;
+    u32 cursor = 0U;
+    u32 n = 0U;
+    u32 i;
+
+    if (vm == NULL || out == NULL || nargs != 1U ||
+        args[0].t != (u8)FL_MAP)
+        return vm == NULL ? false :
+               fl_raise(vm, "type", "set expects one map argument");
+    if (api_ed(vm) == NULL)
+        return false;
+    map = (FlMap *)args[0].as.o;
+    staged = sag_xcalloc(fl_map_count(map) == 0U ? 1U : fl_map_count(map),
+                         sizeof(*staged));
+    while (fl_map_iter(map, &cursor, &key, &value)) {
+        const char *err = NULL;
+
+        if (key.t != (u8)FL_STR) {
+            free(staged);
+            return fl_raise(vm, "type", "set: option names must be strings");
+        }
+        staged[n].name = (const FlStr *)key.as.o;
+        if (!option_from_fl(vm, value, &staged[n].value)) {
+            free(staged);
+            return false;
+        }
+        if (!sag_opt_validate(vm->ed, SAG_OPT_SCOPE_DECLARED,
+                              staged[n].name->b, staged[n].name->len,
+                              &staged[n].value, &err)) {
+            const FlStr *bad = staged[n].name;
+
+            free(staged);
+            return option_map_error(vm, bad, err);
+        }
+        n++;
+    }
+    for (i = 0U; i < n; i++) {
+        const char *err = NULL;
+
+        if (!sag_opt_set(vm->ed, SAG_OPT_SCOPE_DECLARED,
+                         staged[i].name->b, staged[i].name->len,
+                         &staged[i].value, &err)) {
+            const FlStr *bad = staged[i].name;
+
+            free(staged);
+            return option_map_error(vm, bad, err);
+        }
+    }
+    free(staged);
+    *out = FL_NIL_V;
+    return true;
 }
 
 bool fl_api_invoke(FlVm *vm, const FlBindDesc *d,

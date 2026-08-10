@@ -1533,5 +1533,10 @@ void test_mouse_pick_row_selects_then_accepts_the_same_row(void);
 void test_mouse_wheel_over_a_pick_row_scrolls_the_list(void);
 void test_mouse_gp_rows_reach_the_group_picker(void);
 void test_mouse_ctx_row_highlights_then_invokes(void);
+void test_option_table_has_frozen_order_types_scopes_and_defaults(void);
+void test_option_validators_reject_wrong_types_ranges_and_enums(void);
+void test_option_scope_and_side_effects_share_one_setter(void);
+void test_option_fletch_set_map_is_atomic_and_cmdline_is_identical(void);
+void test_option_completion_uses_declaration_order_inventory(void);
 
 #endif

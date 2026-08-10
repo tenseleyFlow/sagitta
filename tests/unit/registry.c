@@ -4,6 +4,11 @@
 #define T(n) { #n, test_##n }
 
 const SagTest sag_tests[] = {
+    T(option_table_has_frozen_order_types_scopes_and_defaults),
+    T(option_validators_reject_wrong_types_ranges_and_enums),
+    T(option_scope_and_side_effects_share_one_setter),
+    T(option_fletch_set_map_is_atomic_and_cmdline_is_identical),
+    T(option_completion_uses_declaration_order_inventory),
     T(arena_align),
     T(arena_strdup),
     T(vec_growth),

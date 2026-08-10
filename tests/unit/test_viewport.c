@@ -29,7 +29,7 @@ static void vp_fixture_init(VpFixture *f, const char *text, u16 rows,
     f->win.buf = &f->buffer;
     sag_cset_init(&f->win.cs, vp_test_cursor(0U));
     sag_vp_init(&f->win);
-    SAG_ASSERT_EQ_U64(f->win.number_style, SAG_NUM_HYBRID);
+    SAG_ASSERT_EQ_U64(f->win.number_style, SAG_NUM_ABS);
     f->win.vp.rows = rows;
     f->win.vp.cols = cols;
 }

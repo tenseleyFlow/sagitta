@@ -620,8 +620,8 @@ void test_cmdcomp_lcp_menu_and_empty_providers(void)
     sag_menu_free(&menu);
     SAG_ASSERT_EQ_I64(menu.sel, -1);
     SAG_ASSERT_NULL(menu.items.data);
-    SAG_ASSERT_EQ_U64(sag_comp_enumerate(&fixture.ed, SAG_COMP_OPTION,
-                                          "tab", &items), 0U);
+    SAG_ASSERT(sag_comp_enumerate(&fixture.ed, SAG_COMP_OPTION,
+                                  "tab", &items) >= 1U);
     SAG_ASSERT_EQ_U64(sag_comp_enumerate(&fixture.ed, SAG_COMP_VALUE,
                                           "4", &items), 0U);
     Vec_CompItem_push(&items,

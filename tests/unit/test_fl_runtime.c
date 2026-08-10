@@ -381,15 +381,18 @@ void test_fl_runtime_cmdline_mode_hooks_fire_once_per_transition(void)
 void test_fl_options_cover_builtins_and_raise_name_suggestions(void)
 {
     static const char *const names[] = {
-        "tabwidth", "wrap", "chord_timeout_ms", "clipboard.sync",
-        "undo.bytes_max", "undo.break_on_newline",
-        "registers.ring_depth", "errorbells", "ambiguous_wide",
-        "scrolloff", "hooks.error_limit"
+        "tabwidth", "expandtab", "wrap", "scrolloff", "number",
+        "statusline.column", "errorbells", "ambiguous_wide", "subword",
+        "chord_timeout_ms", "undo.break_on_newline", "undo.bytes_max",
+        "undo.min_nodes", "undo.persist_bytes_max", "registers.ring_depth",
+        "registers.ring_bytes_max", "registers.clip_read_max",
+        "clipboard.sync", "search.ignorecase", "search.smartcase",
+        "hooks.error_limit", "theme", "macro.dir"
     };
     Ed ed;
     FlVm *vm;
     const OptProvider *provider;
-    const char *listed[16];
+    const char *listed[32];
     FlValue args[2];
     FlValue out = FL_NIL_V;
     OptVal value;

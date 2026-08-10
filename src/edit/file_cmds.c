@@ -5,6 +5,7 @@
 
 #include "edit/ed.h"
 #include "edit/multicursor.h"
+#include "edit/option.h"
 #include "fl/flruntime.h"
 #include "fl/fltxn.h"
 #include "text/journal.h"
@@ -196,6 +197,7 @@ static void close_primary(Ed *ed)
     size_t i;
 
     fl_h_drop_buffer(ed, old_id);
+    sag_opt_scope_free(&b->opt_overrides);
     if (b->jrn != NULL)
         sag_journal_close(b->jrn);
     sag_marks_free(b->marks);
