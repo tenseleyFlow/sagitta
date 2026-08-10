@@ -1346,6 +1346,13 @@ int main(int argc, char **argv)
         bytes_free(&result.protocol);
         (void)fflush(stdout);
     }
+    if (filter == NULL && (selected < 40U || suite_assertions < 400U)) {
+        (void)printf("FAIL script_corpus_floor                  "
+                     "(need >= 40 tests and >= 400 assertions; "
+                     "got %zu and %zu)\n",
+                     selected, suite_assertions);
+        suite_failures++;
+    }
     (void)printf("script: %zu tests, %zu assertions, %zu failure%s, "
                  "%zu skipped\n",
                  selected, suite_assertions, suite_failures,

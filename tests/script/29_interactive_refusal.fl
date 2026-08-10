@@ -1,12 +1,52 @@
-# Sprint 37: prompt-driven commands refuse with capability errors.
+# Sprint 37 DoD 7: every registry-marked interactive command refuses.
 import ed
-t.raises("capability", fn() { return ed.run("ed.file.open", {}) })
-t.raises("capability", fn() { return ed.run("ed.find.file", {}) })
-t.raises("capability", fn() { return ed.run("ed.find.buffer", {}) })
-t.raises("capability", fn() { return ed.run("ed.undo.branches", {}) })
-t.raises("capability", fn() { return ed.run("ed.search.open", {}) })
-t.raises("capability", fn() { return ed.run("ed.search.open_back", {}) })
-t.raises("capability", fn() { return ed.run("ed.macro.record", {}) })
-t.raises("capability", fn() { return ed.run("ed.ai.open", {}) })
-t.raises("capability", fn() { return ed.run("ed.group.edit", {}) })
+import str
+let alternatives = {
+    "ed.ui.message_expand": "no batch alternative",
+    "ed.cmdline.accept": "use ed.run(name, args)",
+    "ed.cmdline.cancel": "use ed.run(name, args)",
+    "ed.file.open": "use buf.open(path)",
+    "ed.group.rename": "pass a name to a non-interactive group command",
+    "ed.group.new": "construct the group with explicit arguments",
+    "ed.group.edit": "no batch alternative",
+    "ed.find.file": "use io.glob(pattern)",
+    "ed.find.buffer": "use buf.list()",
+    "ed.undo.branches": "use ed.run(\"ed.edit.undo\") or redo",
+    "ed.search.open": "use b.find(re)",
+    "ed.search.open_back": "use b.find(re)",
+    "ed.macro.record": "recording needs keys; none exist",
+    "ed.ai.open": "no batch alternative",
+}
+let seen = 0
+for command in ed.commands() {
+    # SAG_CMD_INTERACTIVE is bit 10. Integer division avoids adding a
+    # bitwise language primitive solely for this registry assertion.
+    if (command.flags / 1024) % 2 == 1 {
+        let caught = false
+        try {
+            ed.run(command.name, {})
+        } catch e {
+            caught = true
+            t.eq(e.kind, "capability", command.name)
+            t.eq(str.contains(e.msg, command.name), true, command.name)
+            t.eq(str.contains(e.msg, alternatives[command.name]), true,
+                 command.name)
+        }
+        t.eq(caught, true, command.name)
+        seen = seen + 1
+    }
+}
+t.eq(seen, 14)
+
+# ed.mode.enter is conditional: only E mode is terminal-backed.
+let mode_caught = false
+try {
+    ed.run("ed.mode.enter", {sarg: "E"})
+} catch e {
+    mode_caught = true
+    t.eq(e.kind, "capability")
+    t.eq(str.contains(e.msg, "ed.mode.enter"), true)
+    t.eq(str.contains(e.msg, "use ed.run(name, args)"), true)
+}
+t.eq(mode_caught, true)
 t.eq(batch, true)

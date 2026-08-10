@@ -1,0 +1,21 @@
+# Sprint 37 DoD 9: CRLF and invalid UTF-8 remain byte-exact.
+import buf
+import io
+let crlf_path = "crlf.bin"
+let invalid_path = "invalid-utf8.bin"
+let crlf = "first\r\nsecond\r\n"
+let invalid = "left\x80\xffright\n"
+io.write(crlf_path, crlf)
+io.write(invalid_path, invalid)
+let cb = buf.open(crlf_path)
+let ib = buf.open(invalid_path)
+t.text(cb, crlf)
+t.file(crlf_path, crlf)
+t.text(ib, invalid)
+t.file(invalid_path, invalid)
+t.ne(buf.len(cb), buf.len(ib))
+t.eq(buf.lines(cb), 3)
+t.eq(buf.lines(ib), 2)
+t.line(cb, 1, "first")
+t.line(cb, 2, "second")
+t.eq(batch, true)

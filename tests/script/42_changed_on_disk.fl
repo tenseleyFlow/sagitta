@@ -1,0 +1,18 @@
+# Sprint 37 DoD 6: a save conflict is catchable and force is explicit.
+import buf
+import io
+let path = t.fixture("save.txt")
+let b = buf.open(path)
+edit { buf.insert(b, buf.len(b), "editor\n") }
+io.write(path, "outside\n")
+t.raises("io", fn() { buf.save(b) })
+t.file(path, "outside\n")
+t.eq(buf.dirty(b), true)
+buf.save(b, {force: true})
+t.file(path, "before\neditor\n")
+t.eq(buf.dirty(b), false)
+t.text(b, "before\neditor\n")
+t.eq(batch, true)
+t.ne(path, "")
+t.eq(buf.path(b), path)
+t.eq(buf.lines(b), 3)
