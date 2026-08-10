@@ -199,9 +199,7 @@ static bool q_buf_lang(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     (void)n;
     if (b == NULL)
         return false;
-    /* No language metadata exists before the syntax engine (Sprint 39).
-     * nil is the API's specified representation for that model fact. */
-    *out = FL_NIL_V;
+    *out = b->lang == NULL ? FL_NIL_V : api_cstr(vm, b->lang);
     return true;
 }
 

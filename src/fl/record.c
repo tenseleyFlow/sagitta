@@ -7,6 +7,7 @@
 #include "edit/ed.h"
 #include "edit/flapi_cmds.h"
 #include "fl/flruntime.h"
+#include "fl/macrolib.h"
 #include "fl/vm.h"
 #include "ui/cmdline.h"
 #include "ui/message.h"
@@ -571,6 +572,10 @@ void sag_record_emit(const Rec *rec, const Ed *ed, Bytebuf *out)
     bytebuf_append(out, "# sagitta-macro: 1\n", 19U);
     bytebuf_printf(out, "# recorded-with: sagitta %s\n", SAG_VERSION);
     bytebuf_append(out, "# keymap: default\n", 18U);
+    /* Folding makes the emitted motion count intentionally differ from the
+     * number of resolved commands the user recorded.  Preserve that raw
+     * count explicitly for the browser and :macros porcelain. */
+    bytebuf_printf(out, "# events: %u\n", (unsigned)rec->ev.len);
     if (rec->import_ed)
         bytebuf_append(out, "import ed\n", sizeof("import ed\n") - 1U);
     bytebuf_append(out, "(fn() {\n", 8U);
@@ -709,6 +714,40 @@ u32 sag_macro_list(const Ed *ed, RegInfo *out, u32 max)
     return found;
 }
 
+u32 sag_macro_event_count(const u8 *source, size_t len)
+{
+    static const char prefix[] = "# events: ";
+    size_t at = 0U;
+
+    if (source == NULL)
+        return 0U;
+    while (at < len) {
+        size_t line = at;
+        u64 value = 0U;
+        bool any = false;
+
+        while (at < len && source[at] != (u8)'\n')
+            at++;
+        if (at - line >= sizeof(prefix) - 1U &&
+            memcmp(source + line, prefix, sizeof(prefix) - 1U) == 0) {
+            size_t p = line + sizeof(prefix) - 1U;
+
+            while (p < at && source[p] >= (u8)'0' &&
+                   source[p] <= (u8)'9') {
+                any = true;
+                value = value * 10U + (u64)(source[p] - (u8)'0');
+                if (value > UINT32_MAX)
+                    return 0U;
+                p++;
+            }
+            return any && p == at ? (u32)value : 0U;
+        }
+        if (at < len)
+            at++;
+    }
+    return 0U;
+}
+
 static bool command_register(const CmdCtx *cx, u8 *reg)
 {
     if (cx->sarg == NULL || cx->sarg_len != 1U ||
@@ -755,7 +794,23 @@ CmdStatus sag_record_cmd_replay(CmdCtx *cx)
 {
     u8 reg;
 
-    if (cx == NULL || cx->ed == NULL || !command_register(cx, &reg))
+    if (cx == NULL || cx->ed == NULL || cx->sarg == NULL ||
+        cx->sarg_len == 0U)
+        return SAG_CMD_ERR_ARG;
+    if (cx->sarg_len != 1U) {
+        char *name;
+        CmdStatus status;
+
+        if (memchr(cx->sarg, '\0', cx->sarg_len) != NULL)
+            return SAG_CMD_ERR_ARG;
+        name = sag_xmalloc((size_t)cx->sarg_len + 1U);
+        (void)memcpy(name, cx->sarg, cx->sarg_len);
+        name[cx->sarg_len] = '\0';
+        status = sag_macrolib_call(cx->ed, name);
+        free(name);
+        return status;
+    }
+    if (!command_register(cx, &reg))
         return SAG_CMD_ERR_ARG;
     /* The registry's repeat loop owns count expansion. */
     return sag_macro_replay(cx->ed, reg, 1U);

@@ -10,6 +10,7 @@
 #include "fl/fltxn.h"
 #include "text/journal.h"
 #include "ui/layout.h"
+#include "ui/macrobrowse.h"
 #include "ui/viewport.h"
 #include "ws/trust_prompt.h"
 
@@ -17,6 +18,9 @@ CmdStatus sag_file_cmd_save(Ed *ed, bool force)
 {
     if (ed == NULL)
         return SAG_CMD_ERR_ARG;
+    if (ed->win != NULL && ed->win->buf != NULL &&
+        ed->win->buf->macro_reg != 0U)
+        return sag_macro_store(ed, ed->win->buf);
     return sag_ed_file_save(ed, force);
 }
 
@@ -24,6 +28,9 @@ CmdStatus sag_file_cmd_save_current(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL)
         return SAG_CMD_ERR_ARG;
+    if (cx->win != NULL && cx->win->buf != NULL &&
+        cx->win->buf->macro_reg != 0U)
+        return sag_macro_store(cx->ed, cx->win->buf);
     return sag_ed_file_save_win(cx->ed, cx->win, false);
 }
 
@@ -37,6 +44,9 @@ CmdStatus sag_file_cmd_write(CmdCtx *cx)
     if (cx->sarg != NULL && cx->sarg_len != 0U)
         return sag_ed_file_write_to_win(cx->ed, cx->win, cx->sarg,
                                         cx->bang);
+    if (cx->win != NULL && cx->win->buf != NULL &&
+        cx->win->buf->macro_reg != 0U)
+        return sag_macro_store(cx->ed, cx->win->buf);
     return sag_ed_file_save_win(cx->ed, cx->win, cx->bang);
 }
 

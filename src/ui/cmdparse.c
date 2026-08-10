@@ -981,6 +981,31 @@ bool sag_cmd_parse(Ed *ed, const char *line, size_t len, Arena *a,
     }
     if (strcmp(name, "fl") == 0)
         return finish_rest(&p, out, "ed.fl.eval", out->name_tok);
+    if (strcmp(name, "macro") == 0) {
+        char *verb;
+        Span verb_tok;
+        Bytebuf qualified;
+
+        skip_ws(&p);
+        if (p.at == len || !parse_token(&p, false, len, &verb, &verb_tok)) {
+            set_error(&p, name_start, p.at,
+                      "macro requires edit, name, or reload");
+            return false;
+        }
+        if (strcmp(verb, "edit") != 0 && strcmp(verb, "name") != 0 &&
+            strcmp(verb, "reload") != 0) {
+            set_error(&p, (size_t)verb_tok.lo, (size_t)verb_tok.hi,
+                      "unknown macro action '%s'", verb);
+            return false;
+        }
+        bytebuf_init(&qualified);
+        bytebuf_append(&qualified, "ed.macro.", 9U);
+        bytebuf_append(&qualified, verb, strlen(verb));
+        bytebuf_push_u8(&qualified, 0U);
+        name = arena_strdup(a, (const char *)qualified.data);
+        bytebuf_free(&qualified);
+        out->name_tok.hi = verb_tok.hi;
+    }
     if (strcmp(name, "r") == 0) {
         size_t bang = p.at;
 

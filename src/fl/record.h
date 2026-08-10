@@ -71,6 +71,8 @@ u32 sag_record_status(const Ed *ed, RecStatus *out);
 
 CmdStatus sag_macro_replay(Ed *ed, u8 reg, u32 count);
 u32 sag_macro_list(const Ed *ed, RegInfo *out, u32 max);
+/* Reads the deterministic recorder metadata; zero when absent/malformed. */
+u32 sag_macro_event_count(const u8 *source, size_t len);
 
 CmdStatus sag_record_cmd_record(CmdCtx *cx);
 CmdStatus sag_record_cmd_stop(CmdCtx *cx);

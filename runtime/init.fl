@@ -201,6 +201,7 @@ bind("F", "C-g", "ed.ui.message_expand")
 bind("*", "q", "ed.macro.record")
 bind("*", "@", "ed.macro.replay")
 bind("*", "@ @", "ed.macro.replay_last")
+bind("*", "Q", "ed.macro.list")
 
 # -- 7. hooks -----------------------------------------------------------
 # Hooks are intentionally absent by default: examples must not produce

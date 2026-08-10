@@ -22,6 +22,7 @@
 #include "ui/cmdline.h"
 #include "ui/groupnav.h"
 #include "ui/mouse.h"
+#include "ui/macrobrowse.h"
 #include "ui/grouppicker.h"
 #include "ui/tabs.h"
 #include "util/arena.h"
@@ -688,8 +689,14 @@ static const CmdDesc builtins[] = {
     {"ed.macro.replay_last", sag_record_cmd_replay_last, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE,
      "Replay the last command macro", "replay_last"},
-    {"ed.macro.list", sag_record_cmd_list, SAG_ARITY_NONE, 0U,
+    {"ed.macro.list", sag_macro_cmd_list, SAG_ARITY_NONE, 0U,
      "List registers containing macros", NULL},
+    {"ed.macro.edit", sag_macro_cmd_edit, SAG_ARITY_STR, 0U,
+     "Edit a macro register as Fletch source", NULL},
+    {"ed.macro.name", sag_macro_cmd_name, SAG_ARITY_STR, 0U,
+     "Promote a macro register into the library", NULL},
+    {"ed.macro.reload", sag_macro_cmd_reload, SAG_ARITY_NONE, 0U,
+     "Reload the macro library", NULL},
     {"ed.shell.run", sag_shell_cmd_run, SAG_ARITY_STR,
      SAG_CMD_RECORDABLE, "Run a shell command, streaming its output", "shell_run"},
     {"ed.shell.run_bg", sag_shell_cmd_run_bg, SAG_ARITY_STR,
@@ -776,6 +783,10 @@ static const BuiltinMeta builtin_meta[] = {
     {"ed.shell.run", "s", SAG_RP_OPT, NULL},
     {"ed.shell.read", "s", SAG_RP_FORBID, NULL},
     {"ed.shell.filter", "s", SAG_RP_REQUIRED, NULL},
+    {"ed.macro.list", "", SAG_RP_FORBID, "macros"},
+    {"ed.macro.edit", "s", SAG_RP_FORBID, NULL},
+    {"ed.macro.name", "ss", SAG_RP_FORBID, NULL},
+    {"ed.macro.reload", "", SAG_RP_FORBID, NULL},
     {"ed.job.list", "", SAG_RP_FORBID, "jobs"},
     {"ed.job.kill", "", SAG_RP_FORBID, NULL},
     {"ed.shell.term", "", SAG_RP_FORBID, "term"},
@@ -821,7 +832,7 @@ static bool command_name_valid(const char *name)
         "open", "close", "save", "new", "enter", "leave", "grow",
         "shrink", "expand", "contract", "list", "reload", "cancel",
         "text", "undo", "redo", "escape", "add", "above", "below", "center",
-        "message_expand", "split_h", "split_v", "record", "stop",
+        "message_expand", "split_h", "split_v", "record", "stop", "name",
         "replay", "replay_last", "stage", "map",
         "first_nonblank", "last_nonblank", "half_page_up", "half_page_down",
         "page_up", "page_down", "after", "newline", "tab",
