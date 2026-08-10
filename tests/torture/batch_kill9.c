@@ -279,6 +279,22 @@ static pid_t spawn_batch(const char *sagitta, const char *script,
     _exit(127);
 }
 
+static pid_t spawn_checker(const char *checker, const char *target,
+                           const char *old_path, const char *new_path,
+                           const char *trial)
+{
+    pid_t pid = fork();
+
+    if (pid < 0)
+        die("fork checker");
+    if (pid != 0)
+        return pid;
+    set_child_environment(trial);
+    execl(checker, checker, "--check", target, old_path, new_path,
+          (char *)NULL);
+    _exit(127);
+}
+
 static int wait_status(pid_t pid, int *status)
 {
     pid_t waited;
@@ -341,7 +357,8 @@ static bool exact(const unsigned char *got, size_t got_len,
 static void usage(const char *argv0)
 {
     (void)fprintf(stderr,
-                  "usage: %s --sagitta PATH [--iterations N] [--seed N] "
+                  "usage: %s --sagitta PATH --checker PATH "
+                  "[--iterations N] [--seed N] "
                   "[--max-delay-us N]\n",
                   argv0);
 }
@@ -351,7 +368,10 @@ int main(int argc, char **argv)
     char root_template[] = "/tmp/sagitta-batch-kill9-XXXXXX";
     char save_script[1024];
     char open_script[1024];
+    char old_path[1024];
+    char new_path[1024];
     char *sagitta = NULL;
+    char *checker = NULL;
     char *root;
     unsigned char *new_bytes;
     size_t new_len;
@@ -391,6 +411,11 @@ int main(int argc, char **argv)
             sagitta = realpath(value, NULL);
             if (sagitta == NULL)
                 die(value);
+        } else if (strcmp(argv[i - 1], "--checker") == 0) {
+            free(checker);
+            checker = realpath(value, NULL);
+            if (checker == NULL)
+                die(value);
         } else if (strcmp(argv[i - 1], "--iterations") == 0) {
             iterations = parse_count("--iterations", value, 200U);
         } else if (strcmp(argv[i - 1], "--seed") == 0) {
@@ -400,11 +425,14 @@ int main(int argc, char **argv)
         } else {
             usage(argv[0]);
             free(sagitta);
+            free(checker);
             return 2;
         }
     }
-    if (sagitta == NULL) {
+    if (sagitta == NULL || checker == NULL) {
         usage(argv[0]);
+        free(sagitta);
+        free(checker);
         return 2;
     }
     initial_seed = rng;
@@ -413,10 +441,14 @@ int main(int argc, char **argv)
         die("mkdtemp");
     if (snprintf(save_script, sizeof(save_script), "%s/save-heavy.fl", root) <
             0 ||
-        snprintf(open_script, sizeof(open_script), "%s/reopen.fl", root) < 0)
+        snprintf(open_script, sizeof(open_script), "%s/reopen.fl", root) < 0 ||
+        snprintf(old_path, sizeof(old_path), "%s/old.txt", root) < 0 ||
+        snprintf(new_path, sizeof(new_path), "%s/new.txt", root) < 0)
         die("script path");
     write_scripts(save_script, open_script);
     new_bytes = make_payload(&new_len);
+    make_file(old_path, old_bytes, sizeof(old_bytes) - 1U);
+    make_file(new_path, new_bytes, new_len);
     (void)printf("batch-kill9 seed=%llu iterations=%llu max-delay-us=%llu\n",
                  (unsigned long long)initial_seed, iterations, max_delay_us);
     (void)fflush(stdout);
@@ -432,6 +464,7 @@ int main(int argc, char **argv)
         int status;
         bool is_old;
         bool is_new;
+        bool has_journal;
 
         attempts++;
         if (snprintf(trial, sizeof(trial), "%s/trial-%08llu", root,
@@ -469,7 +502,16 @@ int main(int argc, char **argv)
                       killed, got_len);
         old_seen += is_old ? 1U : 0U;
         new_seen += is_new ? 1U : 0U;
-        journal_seen += tree_has_journal(trial) ? 1U : 0U;
+        has_journal = tree_has_journal(trial);
+        journal_seen += has_journal ? 1U : 0U;
+        if (has_journal) {
+            pid = spawn_checker(checker, target, old_path, new_path, trial);
+            if (wait_status(pid, &status) != 0)
+                fail_root(root,
+                          "batch-kill9: journal replay failed after "
+                          "trial=%llu size=%zu\n",
+                          killed, got_len);
+        }
 
         pid = spawn_batch(sagitta, open_script, target, trial);
         if (wait_status(pid, &status) != 0)
@@ -498,6 +540,7 @@ int main(int argc, char **argv)
                  (unsigned long long)initial_seed);
     free(new_bytes);
     free(sagitta);
+    free(checker);
     if (getenv("SAG_TORTURE_KEEP") != NULL) {
         (void)printf("batch-kill9 root retained: %s\n", root);
     } else if (!remove_tree(root)) {

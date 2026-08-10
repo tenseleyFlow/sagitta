@@ -409,10 +409,12 @@ GEN_BIGFILE_OBJ := $(BUILD)/scripts/gen-bigfile.o
 TORTURE_CHILD_OBJ := $(BUILD)/tests/torture/sag-torture.o
 TORTURE_DRIVER_OBJ := $(BUILD)/tests/torture/kill9.o
 TORTURE_LIVE_OBJ := $(BUILD)/tests/torture/sag-live-torture.o
+TORTURE_BATCH_OBJ := $(BUILD)/tests/torture/batch_kill9.o
 TORTURE_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 TORTURE_CHILD := $(BUILD)/sag-torture
 TORTURE_DRIVER := $(BUILD)/kill9
 TORTURE_LIVE := $(BUILD)/sag-live-torture
+TORTURE_BATCH := $(BUILD)/batch-kill9
 FAULTSHIM := $(BUILD)/tests/torture/faultshim.so
 
 BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(FUZZ_LIB_OBJ) \
@@ -441,7 +443,8 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(FUZZ_LIB_OBJ) \
                 $(PERF_FLETCH_OBJ) $(PERF_RECORD_OBJ) $(PERF_BATCH_OBJ) \
                 $(FUZZ_RECORD_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
-                $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) $(FAULTSHIM)))
+                $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) \
+                $(TORTURE_BATCH_OBJ) $(FAULTSHIM)))
 
 # A content mismatch makes FORCE a normal prerequisite of every object built
 # by this invocation.  The stamp recipe also removes objects not reachable
@@ -453,7 +456,8 @@ MODULE_FORCE := FORCE
 endif
 
 .DEFAULT_GOAL := all
-.PHONY: all check test clean install dirs FORCE test-script test-pty fuzz \
+.PHONY: all check test clean install dirs FORCE test-script \
+        test-script-determinism test-script-budget test-pty fuzz \
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
         fuzz-mouse fuzz-groups fuzz-record test-record-corpus \
         fixtures fixtures-quick fixtures-verify \
@@ -464,7 +468,7 @@ endif
         perf-batch perf-batch-selftest \
         perf-undo perf-textbuf perf-huge perf-update perf-baseline-guard \
         perf-gate-selftest perf-latency perf-latency-selftest \
-        torture torture-build torture-live-check \
+        torture torture-build torture-live-check torture-batch \
         fl-perf-smoke fl-dispatch-parity fl-gc-stress \
         test-fletch test-roundtrip test-roundtrip-coverage \
         test-fletch-roundtrip fletch-ledger \
@@ -693,6 +697,9 @@ $(TORTURE_DRIVER): $(TORTURE_DRIVER_OBJ)
 $(TORTURE_LIVE): $(TORTURE_LIVE_OBJ) $(LIVE_PTY_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TORTURE_LIVE_OBJ) \
 		$(LIVE_PTY_OBJ) $(LDLIBS)
+
+$(TORTURE_BATCH): $(TORTURE_BATCH_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(TORTURE_BATCH_OBJ) $(LDLIBS)
 
 $(FAULTSHIM): tests/torture/faultshim.c | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -fPIC $(SHARED_FLAG) -o $@ $< \
@@ -1093,7 +1100,7 @@ perf-gate-selftest: $(BUILD)/perf_textbuf fixtures-quick
 	fi
 
 torture-build: $(BUILD)/sagitta $(TORTURE_CHILD) $(TORTURE_LIVE) \
-               $(TORTURE_DRIVER) $(FAULTSHIM)
+               $(TORTURE_DRIVER) $(TORTURE_BATCH) $(FAULTSHIM)
 
 torture-live-check: torture-build
 	SAG_TORTURE_CLEAN_ONLY=1 \
@@ -1102,6 +1109,10 @@ torture-live-check: torture-build
 		$(if $(filter 1,$(VALGRIND)),$(VALGRIND_RUN) --trace-children=yes,) \
 		$(TORTURE_DRIVER) $(abspath $(TORTURE_LIVE)) \
 		$(abspath $(FAULTSHIM))
+
+torture-batch: torture-build
+	$(TORTURE_BATCH) --sagitta $(abspath $(BUILD)/sagitta) \
+		--checker $(abspath $(TORTURE_CHILD))
 
 torture: torture-build
 	SAG_TORTURE_SIGKILL_ITERS=$(TORTURE_SIGKILL_ITERS) \
@@ -1113,6 +1124,8 @@ torture: torture-build
 	SAG_TORTURE_SIGKILL_ITERS=$(TORTURE_SIGKILL_ITERS) \
 		$(TORTURE_DRIVER) $(abspath $(TORTURE_LIVE)) \
 		$(abspath $(FAULTSHIM))
+	$(TORTURE_BATCH) --sagitta $(abspath $(BUILD)/sagitta) \
+		--checker $(abspath $(TORTURE_CHILD))
 
 unicode-tables: $(BUILD)/gen-unicode-tables
 	$< ucd/16.0.0 > src/unicode/tables.c
@@ -1159,7 +1172,32 @@ clean:
 	rm -rf $(BUILD)
 
 test-script: $(BUILD)/script_runner $(BUILD)/sagitta
-	LC_ALL=C $(BUILD)/script_runner --sagitta $(abspath $(BUILD)/sagitta)
+	LC_ALL=C $(if $(filter 1,$(VALGRIND)),$(VALGRIND_RUN) \
+		--trace-children=yes \
+		--trace-children-skip='/bin/*',) \
+		$(BUILD)/script_runner --selftest
+	LC_ALL=C $(if $(filter 1,$(VALGRIND)),$(VALGRIND_RUN) \
+		--trace-children=yes \
+		--trace-children-skip='/bin/*',) \
+		$(BUILD)/script_runner \
+		--sagitta $(abspath $(BUILD)/sagitta)
+
+test-script-determinism: $(BUILD)/script_runner $(BUILD)/sagitta
+	@tmp=$$(mktemp -d); \
+	trap 'rm -rf "$$tmp"' EXIT HUP INT TERM; \
+	LC_ALL=C $(BUILD)/script_runner --selftest >"$$tmp/run-1" 2>&1; \
+	LC_ALL=C $(BUILD)/script_runner \
+		--sagitta $(abspath $(BUILD)/sagitta) >>"$$tmp/run-1" 2>&1; \
+	LC_ALL=C $(BUILD)/script_runner --selftest >"$$tmp/run-2" 2>&1; \
+	LC_ALL=C $(BUILD)/script_runner \
+		--sagitta $(abspath $(BUILD)/sagitta) >>"$$tmp/run-2" 2>&1; \
+	diff -u "$$tmp/run-1" "$$tmp/run-2"; \
+	echo 'test-script-determinism: ok'
+
+test-script-budget: $(BUILD)/script_runner $(BUILD)/sagitta
+	@timeout 20s env LC_ALL=C $(BUILD)/script_runner \
+		--sagitta $(abspath $(BUILD)/sagitta)
+	@echo 'test-script-budget: <= 20 s'
 
 # The conformance suite (Sprint 33).  LC_ALL=C is set rather than
 # assumed: run.c sorts with strcmp and the ledger is byte-compared.
@@ -1269,6 +1307,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/sagitta
          $(PERF_FLETCH_OBJ:.o=.d) $(PERF_BATCH_OBJ:.o=.d) \
          $(GEN_BIGFILE_OBJ:.o=.d) \
          $(TORTURE_CHILD_OBJ:.o=.d) \
-	 $(TORTURE_DRIVER_OBJ:.o=.d) $(TORTURE_LIVE_OBJ:.o=.d)
+	 $(TORTURE_DRIVER_OBJ:.o=.d) $(TORTURE_LIVE_OBJ:.o=.d) \
+	 $(TORTURE_BATCH_OBJ:.o=.d)
 
 FORCE:

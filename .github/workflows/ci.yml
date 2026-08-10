@@ -152,10 +152,27 @@ jobs:
       # lane runs it with PERF_GATE=1; Sprint 56 recalibrates.
       - name: Benches, absolute budgets enforced
         run: make bench-fletch
-      - name: Round-trip law and remaining batch deferral
+      - name: Round-trip law
+        run: make test-fletch-roundtrip
+
+  # Sprint 37: editor-backed Fletch tests are a product lane, not part of
+  # the language-only conformance runner above.  Keep the explicit job even
+  # though `make test` also depends on it, so protocol or determinism failures
+  # name the surface that regressed.
+  script:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Script runner and editor corpus, GCC
+        run: make test-script CC=gcc
+      - name: Byte-identical repeated runs
+        run: make test-script-determinism CC=gcc
+      - name: Enforce the whole-suite budget
+        run: make test-script-budget CC=gcc
+      - name: Script runner and editor corpus, Clang
         run: |
-          make test-fletch-roundtrip
-          ! ./build/sagitta --batch x.fl
+          make clean
+          make test-script CC=clang
 
   pty:
     runs-on: ubuntu-latest
@@ -290,6 +307,10 @@ jobs:
         run: make perf-cmdcomp CC=gcc
       - name: Enforce Sprint 35 recorder latency budgets
         run: make perf-record CC=gcc PERF_GATE=1
+      - name: Enforce Sprint 37 batch startup budget
+        run: |
+          make perf-batch CC=gcc
+          make perf-batch-selftest CC=gcc
 
   torture:
     runs-on: ubuntu-latest
