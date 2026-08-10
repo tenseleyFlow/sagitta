@@ -266,6 +266,8 @@ const SagTest sag_tests[] = {
     T(cmd_registry_builtins_are_deterministic),
     T(cmd_registry_invocation_and_deferred),
     T(cmd_registry_rejects_invalid_descriptors),
+    T(cmd_registry_enforces_cmdwords),
+    T(cmd_registry_word_roundtrip),
     T(keymap_build_validations),
     T(keymap_binary_lookup_matches_oracle_and_budget),
     T(keymap_layer_ownership_and_listing_determinism),

@@ -21,7 +21,7 @@ static CmdStatus range_nop(CmdCtx *cx)
 static void range_register(const char *name, const char *abbrev, u8 policy)
 {
     CmdEntry entry = {
-        {name, range_nop, SAG_ARITY_NONE, 0U, "Range test command"},
+        {name, range_nop, SAG_ARITY_NONE, 0U, "Range test command", NULL},
         "", policy, abbrev};
 
     (void)sag_cmd_register_entry(&entry);

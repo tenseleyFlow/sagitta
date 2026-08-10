@@ -50,11 +50,11 @@ static CmdStatus chord_tail(CmdCtx *cx)
 static void chord_register_commands(void)
 {
     static const CmdDesc commands[] = {
-        {"ed.ui.toggle", chord_short, SAG_ARITY_NONE, 0U, "short probe"},
-        {"ed.ui.open", chord_force, SAG_ARITY_NONE, 0U, "force probe"},
-        {"ed.ui.close", chord_refeed, SAG_ARITY_NONE, 0U, "refeed probe"},
-        {"ed.ui.next", chord_long, SAG_ARITY_NONE, 0U, "long probe"},
-        {"ed.ui.prev", chord_tail, SAG_ARITY_NONE, 0U, "tail probe"},
+        {"ed.ui.toggle", chord_short, SAG_ARITY_NONE, 0U, "short probe", NULL},
+        {"ed.ui.open", chord_force, SAG_ARITY_NONE, 0U, "force probe", NULL},
+        {"ed.ui.close", chord_refeed, SAG_ARITY_NONE, 0U, "refeed probe", NULL},
+        {"ed.ui.next", chord_long, SAG_ARITY_NONE, 0U, "long probe", NULL},
+        {"ed.ui.prev", chord_tail, SAG_ARITY_NONE, 0U, "tail probe", NULL},
     };
     size_t i;
 

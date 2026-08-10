@@ -21,11 +21,16 @@
 #include "ui/tabs.h"
 #include "util/arena.h"
 #include "util/intern.h"
+#include "util/strmap.h"
 #include "util/log.h"
 
 typedef struct {
     Arena arena;
     Interner names;
+    /* Sprint 34 §8: CMDWORD -> CmdId, built as commands register.  A
+     * map rather than a scan because motion-block execution looks a
+     * word up per WORD, inside the 1 us dispatch budget. */
+    Strmap words;
     CmdEntry *entries;
     size_t len;
     size_t cap;
@@ -50,380 +55,391 @@ static CmdStatus deferred_unreachable(CmdCtx *cx)
 #define DEFER(name_, arity_, flags_, sprint_, help_)                           \
     {                                                                          \
         name_, deferred_unreachable, arity_, (flags_) | SAG_CMD_DEFERRED,      \
-            "Sprint " #sprint_ ": " help_                                    \
+            "Sprint " #sprint_ ": " help_, NULL                              \
+    }
+
+/*
+ * A deferred command that is nonetheless RECORDABLE, and so must carry
+ * its CMDWORD now: the word is what a macro records, and s35 cannot
+ * add it later without changing what earlier recordings mean.
+ */
+#define DEFER_W(name_, arity_, flags_, sprint_, help_, word_)                  \
+    {                                                                          \
+        name_, deferred_unreachable, arity_, (flags_) | SAG_CMD_DEFERRED,      \
+            "Sprint " #sprint_ ": " help_, word_                             \
     }
 
 static const CmdDesc builtins[] = {
-    {"ed.nop", cmd_nop, SAG_ARITY_NONE, 0U, "Do nothing"},
+    {"ed.nop", cmd_nop, SAG_ARITY_NONE, 0U, "Do nothing", NULL},
     {"ed.quit", sag_file_cmd_quit, SAG_ARITY_NONE, 0U,
-     "Quit, prompting when the buffer is dirty"},
+     "Quit, prompting when the buffer is dirty", NULL},
     {"ed.quit_force", sag_file_cmd_quit_force, SAG_ARITY_NONE, 0U,
-     "Quit without discarding the recovery journal"},
+     "Quit without discarding the recovery journal", NULL},
     {"ed.suspend", sag_file_cmd_suspend, SAG_ARITY_NONE, 0U,
-     "Suspend the editor and restore the terminal"},
+     "Suspend the editor and restore the terminal", NULL},
     {"ed.redraw", sag_file_cmd_redraw, SAG_ARITY_NONE, 0U,
-     "Redraw the complete display"},
-    DEFER("ed.repeat", SAG_ARITY_NONE, SAG_CMD_RECORDABLE, 35,
-          "repeat the last command"),
+     "Redraw the complete display", NULL},
+    DEFER_W("ed.repeat", SAG_ARITY_NONE, SAG_CMD_RECORDABLE, 35,
+          "repeat the last command", "repeat"),
 
     {"ed.move.buf.home", sag_edit_cmd_move_buf_home, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move to the start of the buffer"},
+     "Move to the start of the buffer", "buf_home"},
     {"ed.move.buf.end", sag_edit_cmd_move_buf_end, SAG_ARITY_NONE,
      SAG_CMD_TAKES_COUNT | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move to the end of the buffer or a counted line"},
+     "Move to the end of the buffer or a counted line", "buf_end"},
     {"ed.move.line.home", sag_edit_cmd_move_line_home, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move to the start of the line"},
+     "Move to the start of the line", "line_home"},
     {"ed.move.line.end", sag_edit_cmd_move_line_end, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move to the end of the line"},
+     "Move to the end of the line", "line_end"},
     {"ed.move.line.up", sag_edit_cmd_move_line_up, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move one line up"},
+     "Move one line up", "up"},
     {"ed.move.line.down", sag_edit_cmd_move_line_down, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move one line down"},
+     "Move one line down", "down"},
     {"ed.move.line.first_nonblank", sag_edit_cmd_move_line_first_nonblank,
      SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move to the first nonblank grapheme"},
+     "Move to the first nonblank grapheme", "home_text"},
     {"ed.move.line.last_nonblank", sag_edit_cmd_move_line_last_nonblank,
      SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move to the last nonblank grapheme"},
+     "Move to the last nonblank grapheme", "end_text"},
     {"ed.move.line.half_page_up", sag_edit_cmd_move_line_half_page_up,
      SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move half a viewport up"},
+     "Move half a viewport up", "half_up"},
     {"ed.move.line.half_page_down", sag_edit_cmd_move_line_half_page_down,
      SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move half a viewport down"},
+     "Move half a viewport down", "half_down"},
     {"ed.move.unit.next", sag_edit_cmd_move_unit_next, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move to the next unit"},
+     "Move to the next unit", "unit_next"},
     {"ed.move.unit.prev", sag_edit_cmd_move_unit_prev, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move to the previous unit"},
+     "Move to the previous unit", "unit_prev"},
     {"ed.move.unit.home", sag_edit_cmd_move_unit_home, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move to the start of the current unit"},
+     "Move to the start of the current unit", "unit_home"},
     {"ed.move.unit.end", sag_edit_cmd_move_unit_end, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move to the end of the current unit"},
+     "Move to the end of the current unit", "unit_end"},
     {"ed.move.unit.next_alt", sag_edit_cmd_move_unit_next_alt,
      SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move to the next alternate unit"},
+     "Move to the next alternate unit", "unit_next_alt"},
     {"ed.move.unit.prev_alt", sag_edit_cmd_move_unit_prev_alt,
      SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move to the previous alternate unit"},
+     "Move to the previous alternate unit", "unit_prev_alt"},
     {"ed.move.unit.home_alt", sag_edit_cmd_move_unit_home_alt,
      SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move to the alternate unit start"},
+     "Move to the alternate unit start", "unit_home_alt"},
     {"ed.move.unit.end_alt", sag_edit_cmd_move_unit_end_alt,
      SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move to the alternate unit end"},
+     "Move to the alternate unit end", "unit_end_alt"},
     {"ed.move.block.match_prev", sag_edit_cmd_move_block_match_prev,
      SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move to the enclosing opening delimiter"},
+     "Move to the enclosing opening delimiter", "match_prev"},
     {"ed.move.block.match_next", sag_edit_cmd_move_block_match_next,
      SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move to the enclosing closing delimiter"},
+     "Move to the enclosing closing delimiter", "match_next"},
     {"ed.move.word.sub_prev", sag_edit_cmd_move_word_sub_prev,
      SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move to the previous subword"},
+     "Move to the previous subword", "subword_prev"},
     {"ed.move.word.sub_next", sag_edit_cmd_move_word_sub_next,
      SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move to the next subword"},
+     "Move to the next subword", "subword_next"},
     {"ed.move.char.prev", sag_edit_cmd_move_char_prev, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move one grapheme left"},
+     "Move one grapheme left", "char_prev"},
     {"ed.move.char.next", sag_edit_cmd_move_char_next, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move one grapheme right"},
+     "Move one grapheme right", "char_next"},
     {"ed.move.char.left", sag_edit_cmd_move_char_prev, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Alias for moving one grapheme left"},
+     "Alias for moving one grapheme left", "char_left"},
     {"ed.move.char.right", sag_edit_cmd_move_char_next, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Alias for moving one grapheme right"},
+     "Alias for moving one grapheme right", "char_right"},
 
     {"ed.edit.insert.text", sag_edit_cmd_insert_text, SAG_ARITY_STR,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
-     "Insert UTF-8 text at the cursor"},
+     "Insert UTF-8 text at the cursor", "insert"},
     {"ed.edit.insert.newline", sag_edit_cmd_insert_newline, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
-     "Insert the buffer's native line ending"},
+     "Insert the buffer's native line ending", "newline"},
     {"ed.edit.insert.tab", sag_edit_cmd_insert_tab, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
-     "Insert a literal tab"},
+     "Insert a literal tab", "tab"},
     {"ed.edit.insert.after", sag_edit_cmd_insert_after, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Enter insert mode after the current grapheme"},
+     "Enter insert mode after the current grapheme", "append"},
     {"ed.edit.line.open_below", sag_edit_cmd_open_below, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
-     "Open a new line below and enter insert mode"},
+     "Open a new line below and enter insert mode", "open_below"},
     {"ed.edit.line.open_above", sag_edit_cmd_open_above, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
-     "Open a new line above and enter insert mode"},
+     "Open a new line above and enter insert mode", "open_above"},
     {"ed.edit.delete.grapheme_left", sag_edit_cmd_delete_grapheme_left,
      SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN |
          SAG_CMD_CHANGES_BUFFER,
-     "Delete the grapheme left of the cursor"},
+     "Delete the grapheme left of the cursor", "backspace"},
     {"ed.edit.delete.grapheme", sag_edit_cmd_delete_grapheme,
      SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN |
          SAG_CMD_CHANGES_BUFFER,
-     "Delete the grapheme at the cursor"},
+     "Delete the grapheme at the cursor", "del_char"},
     {"ed.edit.line.delete", sag_edit_cmd_delete_line, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN |
          SAG_CMD_CHANGES_BUFFER,
-     "Delete the current logical line"},
+     "Delete the current logical line", "del_line"},
     {"ed.edit.delete.prev", sag_edit_cmd_delete_grapheme_left,
      SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN |
          SAG_CMD_CHANGES_BUFFER,
-     "Alias for deleting the previous grapheme"},
+     "Alias for deleting the previous grapheme", "del_prev"},
     {"ed.edit.delete.next", sag_edit_cmd_delete_grapheme, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN |
          SAG_CMD_CHANGES_BUFFER,
-     "Alias for deleting the next grapheme"},
+     "Alias for deleting the next grapheme", "del_next"},
     {"ed.edit.undo", sag_edit_cmd_undo, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Undo the last edit transaction"},
+     "Undo the last edit transaction", "undo"},
     {"ed.edit.redo", sag_edit_cmd_redo, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Redo the last undone transaction"},
+     "Redo the last undone transaction", "redo"},
     {"ed.edit.undo_barrier", sag_edit_cmd_undo_barrier, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Close the active insert transaction"},
+     SAG_CMD_NEEDS_WIN, "Close the active insert transaction", NULL},
     {"ed.mode.enter", sag_edit_cmd_mode_enter, SAG_ARITY_STR,
      SAG_CMD_RECORDABLE | SAG_CMD_INTERNAL,
-     "Enter L/W/B/I/H/E; F Sprint 52"},
+     "Enter L/W/B/I/H/E; F Sprint 52", "mode"},
     {"ed.mode.escape", sag_edit_cmd_mode_escape, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_INTERNAL, "Return to line mode"},
+     SAG_CMD_RECORDABLE | SAG_CMD_INTERNAL, "Return to line mode", "escape"},
     {"ed.sel.expand", sag_edit_cmd_sel_unit_expand, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Expand the selection to the next structural unit"},
+     "Expand the selection to the next structural unit", "sel_expand"},
     {"ed.sel.contract", sag_edit_cmd_sel_unit_contract, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Contract the selection to the previous structural unit"},
+     "Contract the selection to the previous structural unit", "sel_contract"},
     {"ed.sel.unit.expand", sag_edit_cmd_sel_unit_expand, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Expand to the next structural unit"},
+     "Expand to the next structural unit", "unit_expand"},
     {"ed.sel.unit.contract", sag_edit_cmd_sel_unit_contract,
      SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Contract to the previous structural unit"},
+     "Contract to the previous structural unit", "unit_contract"},
     {"ed.sel.kind", sag_edit_cmd_sel_kind, SAG_ARITY_STR,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Choose character, line, or rectangular selection geometry"},
+     "Choose character, line, or rectangular selection geometry", "sel_kind"},
     {"ed.sel.swap_ends", sag_edit_cmd_sel_swap_ends, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Exchange the active and anchored ends of each selection"},
+     "Exchange the active and anchored ends of each selection", "swap_ends"},
     {"ed.sel.yank", sag_sel_cmd_yank, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_MULTI_AGGREGATE,
-     "Yank the active selections"},
+     "Yank the active selections", "yank"},
     {"ed.sel.delete", sag_sel_cmd_delete, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
          SAG_CMD_MULTI_AGGREGATE,
-     "Delete the active selections"},
+     "Delete the active selections", "sel_delete"},
     {"ed.sel.change", sag_sel_cmd_change, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
          SAG_CMD_MULTI_AGGREGATE,
-     "Change the active selections"},
+     "Change the active selections", "change"},
     {"ed.sel.case_upper", sag_sel_cmd_case_upper, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
          SAG_CMD_MULTI_AGGREGATE,
-     "Uppercase the active selections"},
+     "Uppercase the active selections", "upper"},
     {"ed.sel.case_lower", sag_sel_cmd_case_lower, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
          SAG_CMD_MULTI_AGGREGATE,
-     "Lowercase the active selections"},
+     "Lowercase the active selections", "lower"},
     {"ed.sel.case_toggle", sag_sel_cmd_case_toggle, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
          SAG_CMD_MULTI_AGGREGATE,
-     "Toggle case in the active selections"},
+     "Toggle case in the active selections", "case_toggle"},
     {"ed.sel.indent", sag_sel_cmd_indent, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
          SAG_CMD_MULTI_AGGREGATE,
-     "Indent lines covered by the selection"},
+     "Indent lines covered by the selection", "indent"},
     {"ed.sel.dedent", sag_sel_cmd_dedent, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
          SAG_CMD_MULTI_AGGREGATE,
-     "Dedent lines covered by the selection"},
+     "Dedent lines covered by the selection", "dedent"},
     {"ed.sel.shift_left", sag_sel_cmd_shift_left, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
          SAG_CMD_MULTI_AGGREGATE,
-     "Shift selected text left"},
+     "Shift selected text left", "shift_left"},
     {"ed.sel.shift_right", sag_sel_cmd_shift_right, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
          SAG_CMD_MULTI_AGGREGATE,
-     "Shift selected text right"},
+     "Shift selected text right", "shift_right"},
     {"ed.sel.join", sag_sel_cmd_join, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
          SAG_CMD_MULTI_AGGREGATE,
-     "Join lines covered by the selection"},
+     "Join lines covered by the selection", "join"},
     {"ed.sel.replace_char", sag_sel_cmd_replace_char, SAG_ARITY_STR,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
          SAG_CMD_MULTI_AGGREGATE | SAG_CMD_CAPTURES_TEXT,
-     "Replace selected graphemes with one grapheme"},
+     "Replace selected graphemes with one grapheme", "replace_char"},
     {"ed.edit.rect.insert", sag_sel_cmd_rect_insert, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
          SAG_CMD_MULTI_AGGREGATE,
-     "Insert at the left edge of a rectangular selection"},
+     "Insert at the left edge of a rectangular selection", "rect_insert"},
     {"ed.edit.rect.append", sag_sel_cmd_rect_append, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER |
          SAG_CMD_MULTI_AGGREGATE,
-     "Insert at the right edge of a rectangular selection"},
+     "Insert at the right edge of a rectangular selection", "rect_append"},
     {"ed.cursor.lift.lines", sag_edit_cmd_cursor_lift_lines, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Lift a selection to one cursor per line"},
+     "Lift a selection to one cursor per line", "lift_lines"},
     {"ed.cursor.lift.matches", sag_edit_cmd_cursor_lift_matches,
      SAG_ARITY_OPT_STR, SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Lift literal matches in the selection to cursors"},
+     "Lift literal matches in the selection to cursors", "lift_matches"},
     {"ed.cursor.lift.ends", sag_edit_cmd_cursor_lift_ends, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Lift both ends of each selection to cursors"},
+     "Lift both ends of each selection to cursors", "lift_ends"},
     {"ed.cursor.add.above", sag_edit_cmd_cursor_add_above, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Add a cursor on the preceding line"},
+     "Add a cursor on the preceding line", "cursor_above"},
     {"ed.cursor.add.below", sag_edit_cmd_cursor_add_below, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Add a cursor on the following line"},
+     "Add a cursor on the following line", "cursor_below"},
     {"ed.cursor.drop", sag_edit_cmd_cursor_drop, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Drop the most recently added cursor"},
+     "Drop the most recently added cursor", "cursor_drop"},
     {"ed.cursor.collapse", sag_edit_cmd_cursor_collapse, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Keep only the primary cursor"},
+     "Keep only the primary cursor", "collapse"},
     {"ed.view.center", sag_edit_cmd_view_center, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, "Center the cursor line"},
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, "Center the cursor line", "center"},
     {"ed.view.top", sag_edit_cmd_view_top, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Place the cursor line at the top"},
+     "Place the cursor line at the top", "view_top"},
     {"ed.view.bottom", sag_edit_cmd_view_bottom, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Place the cursor line at the bottom"},
+     "Place the cursor line at the bottom", "view_bottom"},
     {"ed.view.scroll.up", sag_edit_cmd_view_scroll_up, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Scroll the active view up one display row"},
+     "Scroll the active view up one display row", "scroll_up"},
     {"ed.view.scroll.down", sag_edit_cmd_view_scroll_down, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Scroll the active view down one display row"},
+     "Scroll the active view down one display row", "scroll_down"},
     {"ed.view.up", sag_edit_cmd_view_scroll_up, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Alias for scrolling the active view up"},
+     "Alias for scrolling the active view up", "view_up"},
     {"ed.view.down", sag_edit_cmd_view_scroll_down, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Alias for scrolling the active view down"},
+     "Alias for scrolling the active view down", "view_down"},
     {"ed.view.page_up", sag_edit_cmd_view_page_up, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move one viewport up"},
+     "Move one viewport up", "page_up"},
     {"ed.view.page_down", sag_edit_cmd_view_page_down, SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move one viewport down"},
+     "Move one viewport down", "page_down"},
     {"ed.view.half_page_up", sag_edit_cmd_view_half_page_up,
      SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Scroll half a viewport up"},
+     "Scroll half a viewport up", "view_half_up"},
     {"ed.view.half_page_down", sag_edit_cmd_view_half_page_down,
      SAG_ARITY_NONE,
      SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Scroll half a viewport down"},
+     "Scroll half a viewport down", "view_half_down"},
     {"ed.view.goto_line", sag_edit_cmd_view_goto_line, SAG_ARITY_NONE,
      SAG_CMD_TAKES_COUNT | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Go to a counted line and center it"},
+     "Go to a counted line and center it", "goto_line"},
     {"ed.view.toggle_wrap", sag_edit_cmd_view_toggle_wrap, SAG_ARITY_NONE,
-     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, "Toggle line wrapping"},
+     SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN, "Toggle line wrapping", "toggle_wrap"},
     {"ed.view.number_style", sag_edit_cmd_view_number_style, SAG_ARITY_STR,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Set line numbers to none, abs, rel, or hybrid"},
+     "Set line numbers to none, abs, rel, or hybrid", "number_style"},
     {"ed.ui.message_expand", sag_edit_cmd_message_expand, SAG_ARITY_NONE,
-     SAG_CMD_PROMPTS, "Expand the current message"},
+     SAG_CMD_PROMPTS, "Expand the current message", NULL},
     {"ed.ui.cancel", sag_edit_cmd_ui_cancel, SAG_ARITY_NONE, 0U,
-     "Cancel the active prompt or message overlay"},
+     "Cancel the active prompt or message overlay", NULL},
 
     {"ed.cmdline.hist_prev", sag_cmdline_cmd_hist_prev, SAG_ARITY_NONE,
      SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
-     "Find the previous matching command-line history entry"},
+     "Find the previous matching command-line history entry", NULL},
     {"ed.cmdline.hist_next", sag_cmdline_cmd_hist_next, SAG_ARITY_NONE,
      SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
-     "Find the next matching command-line history entry"},
+     "Find the next matching command-line history entry", NULL},
     {"ed.cmdline.complete_next", sag_cmdline_cmd_complete_next,
      SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
-     "Open or advance command-line completion"},
+     "Open or advance command-line completion", NULL},
     {"ed.cmdline.complete_prev", sag_cmdline_cmd_complete_prev,
      SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
-     "Open or reverse command-line completion"},
+     "Open or reverse command-line completion", NULL},
     {"ed.cmdline.insert_register", sag_cmdline_cmd_insert_register,
      SAG_ARITY_STR,
      SAG_CMD_NEEDS_WIN | SAG_CMD_CAPTURES_TEXT | SAG_CMD_INTERNAL,
-     "Insert one named register into the command line"},
+     "Insert one named register into the command line", NULL},
     {"ed.cmdline.literal_next", sag_cmdline_cmd_literal_next,
      SAG_ARITY_STR,
      SAG_CMD_NEEDS_WIN | SAG_CMD_CAPTURES_TEXT | SAG_CMD_INTERNAL,
-     "Insert the next text-producing key literally"},
+     "Insert the next text-producing key literally", NULL},
     {"ed.cmdline.ghost.accept", sag_cmdline_cmd_ghost_accept,
      SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
-     "Accept the inline suggestion, or move one grapheme right"},
+     "Accept the inline suggestion, or move one grapheme right", NULL},
     /* Sprint 18.5 §10.  complete_next/prev stay as the names the keymap
      * and the goldens already use; these are the same behaviours under
      * the menu's own namespace, plus the two the old menu could not do. */
     {"ed.cmdline.menu.next", sag_cmdline_cmd_complete_next, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL, "Select the next menu row"},
+     SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL, "Select the next menu row", NULL},
     {"ed.cmdline.menu.prev", sag_cmdline_cmd_complete_prev, SAG_ARITY_NONE,
      SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
-     "Select the previous menu row"},
+     "Select the previous menu row", NULL},
     {"ed.cmdline.menu.page_next", sag_cmdline_cmd_menu_page_next,
      SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
-     "Move one visible page down the menu"},
+     "Move one visible page down the menu", NULL},
     {"ed.cmdline.menu.page_prev", sag_cmdline_cmd_menu_page_prev,
      SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
-     "Move one visible page up the menu"},
+     "Move one visible page up the menu", NULL},
     {"ed.cmdline.menu.accept", sag_cmdline_cmd_menu_accept, SAG_ARITY_NONE,
      SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
-     "Accept the selected menu row"},
+     "Accept the selected menu row", NULL},
     {"ed.cmdline.menu.dismiss", sag_cmdline_cmd_menu_dismiss,
      SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN | SAG_CMD_INTERNAL,
-     "Close the menu without accepting"},
+     "Close the menu without accepting", NULL},
     {"ed.cmdline.accept", sag_cmdline_cmd_accept, SAG_ARITY_NONE,
      SAG_CMD_NEEDS_WIN | SAG_CMD_PROMPTS | SAG_CMD_INTERNAL,
-     "Accept the command line"},
+     "Accept the command line", NULL},
     {"ed.cmdline.cancel", sag_cmdline_cmd_cancel, SAG_ARITY_NONE,
      SAG_CMD_NEEDS_WIN | SAG_CMD_PROMPTS | SAG_CMD_INTERNAL,
-     "Cancel the command line or menu"},
+     "Cancel the command line or menu", NULL},
     {"ed.del.word_prev", sag_cmdline_cmd_delete_word_prev, SAG_ARITY_NONE,
      SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER | SAG_CMD_INTERNAL,
-     "Delete to the previous word boundary"},
+     "Delete to the previous word boundary", NULL},
     {"ed.del.to_home", sag_cmdline_cmd_delete_to_home, SAG_ARITY_NONE,
      SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER | SAG_CMD_INTERNAL,
-     "Delete from the cursor to line start"},
+     "Delete from the cursor to line start", NULL},
     {"ed.del.to_end", sag_cmdline_cmd_delete_to_end, SAG_ARITY_NONE,
      SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER | SAG_CMD_INTERNAL,
-     "Delete from the cursor to line end"},
+     "Delete from the cursor to line end", NULL},
 
     DEFER("ed.file.open", SAG_ARITY_STR, SAG_CMD_PROMPTS, 23,
           "open a file"),
     {"ed.file.write", sag_file_cmd_write, SAG_ARITY_OPT_STR,
-     SAG_CMD_NEEDS_WIN, "Write the active buffer, optionally to a path"},
+     SAG_CMD_NEEDS_WIN, "Write the active buffer, optionally to a path", NULL},
     {"ed.file.write_quit", sag_file_cmd_write_quit, SAG_ARITY_OPT_STR,
-     SAG_CMD_NEEDS_WIN, "Write the active buffer and quit"},
+     SAG_CMD_NEEDS_WIN, "Write the active buffer and quit", NULL},
     {"ed.file.save", sag_file_cmd_save_current, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Atomically save the active file"},
+     SAG_CMD_NEEDS_WIN, "Atomically save the active file", NULL},
     {"ed.file.new", sag_file_cmd_new, SAG_ARITY_OPT_STR, 0U,
-     "Create an empty buffer, optionally naming its file"},
+     "Create an empty buffer, optionally naming its file", NULL},
     {"ed.file.reload", sag_file_cmd_reload, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Reload the active file from disk"},
+     SAG_CMD_NEEDS_WIN, "Reload the active file from disk", NULL},
     DEFER("ed.file.close", SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN, 23,
           "close the active file"),
     DEFER("ed.buf.next", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 23,
@@ -431,56 +447,56 @@ static const CmdDesc builtins[] = {
     DEFER("ed.buf.prev", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 23,
           "activate the previous buffer"),
     {"ed.tab.goto", sag_tab_cmd_goto, SAG_ARITY_OPT_INT,
-     SAG_CMD_TAKES_COUNT, "Activate a numbered tab (0 = tab 10)"},
+     SAG_CMD_TAKES_COUNT, "Activate a numbered tab (0 = tab 10)", NULL},
     {"ed.tab.new", sag_tab_cmd_new, SAG_ARITY_NONE, 0U,
-     "Open an untitled tab"},
+     "Open an untitled tab", NULL},
     {"ed.tab.open", sag_tab_cmd_open, SAG_ARITY_STR, 0U,
-     "Open a path in a new tab"},
+     "Open a path in a new tab", NULL},
     {"ed.tab.close", sag_tab_cmd_close, SAG_ARITY_NONE, 0U,
-     "Close the active tab"},
+     "Close the active tab", NULL},
     {"ed.tab.next", sag_tab_cmd_next, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE, "Activate the next tab"},
+     SAG_CMD_REPEATABLE, "Activate the next tab", NULL},
     {"ed.tab.prev", sag_tab_cmd_prev, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE, "Activate the previous tab"},
+     SAG_CMD_REPEATABLE, "Activate the previous tab", NULL},
     {"ed.tab.move", sag_tab_cmd_move, SAG_ARITY_OPT_INT,
-     SAG_CMD_TAKES_COUNT, "Move the active tab to position N"},
+     SAG_CMD_TAKES_COUNT, "Move the active tab to position N", NULL},
     /* Sprint 27 §5: the tab context menu's rows.  Commands, because
      * invariant 9 requires a keyboard path for every menu row. */
     {"ed.tab.close_others", sag_tab_cmd_close_others, SAG_ARITY_NONE, 0U,
-     "Close every tab but the active one"},
+     "Close every tab but the active one", NULL},
     {"ed.tab.copy_path", sag_tab_cmd_copy_path, SAG_ARITY_NONE, 0U,
-     "Copy the active tab's canonical path to the clipboard"},
+     "Copy the active tab's canonical path to the clipboard", NULL},
     /* Sprint 24 §6: the continuous line.  next/prev walk EVERY open
      * file — members of the active group first, then the row-1 entry
      * beside it — so left/right never dead-ends inside a group. */
     {"ed.file.next", sag_file_cmd_next, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE, "Walk to the next open file"},
+     SAG_CMD_REPEATABLE, "Walk to the next open file", NULL},
     {"ed.file.prev", sag_file_cmd_prev, SAG_ARITY_NONE,
-     SAG_CMD_REPEATABLE, "Walk to the previous open file"},
+     SAG_CMD_REPEATABLE, "Walk to the previous open file", NULL},
     {"ed.group.enter", sag_group_cmd_enter, SAG_ARITY_NONE, 0U,
-     "Enter a tab group, resuming where you left it"},
+     "Enter a tab group, resuming where you left it", NULL},
     {"ed.group.leave", sag_group_cmd_leave, SAG_ARITY_NONE, 0U,
-     "Leave the active tab group"},
+     "Leave the active tab group", NULL},
     {"ed.group.dissolve", sag_group_cmd_dissolve, SAG_ARITY_NONE, 0U,
-     "Dissolve the active group; its tabs stay open"},
+     "Dissolve the active group; its tabs stay open", NULL},
     {"ed.group.remove_tab", sag_group_cmd_remove_tab, SAG_ARITY_NONE, 0U,
-     "Remove the active tab from its group"},
+     "Remove the active tab from its group", NULL},
     /* Sprint 27 §5/§9. */
     {"ed.ui.context_menu", sag_ui_cmd_context_menu, SAG_ARITY_NONE, 0U,
-     "Open the context menu for the focused tab or group"},
+     "Open the context menu for the focused tab or group", NULL},
     {"ed.mouse.enable", sag_mouse_cmd_enable, SAG_ARITY_NONE, 0U,
-     "Turn mouse reporting on for this session"},
+     "Turn mouse reporting on for this session", NULL},
     {"ed.mouse.disable", sag_mouse_cmd_disable, SAG_ARITY_NONE, 0U,
-     "Turn mouse reporting off for this session"},
+     "Turn mouse reporting off for this session", NULL},
     /* Sprint 27 §8: the keyboard twin of dropping a tab into a group. */
     {"ed.group.add_tab", sag_group_cmd_add_tab, SAG_ARITY_STR, 0U,
-     "Add the active tab to the named group"},
+     "Add the active tab to the named group", NULL},
     {"ed.group.rename", sag_group_cmd_rename, SAG_ARITY_OPT_STR,
-     SAG_CMD_PROMPTS, "Rename the active tab group"},
+     SAG_CMD_PROMPTS, "Rename the active tab group", NULL},
     {"ed.group.new", sag_gp_cmd_new, SAG_ARITY_OPT_STR, SAG_CMD_PROMPTS,
-     "Assemble a new tab group"},
+     "Assemble a new tab group", NULL},
     {"ed.group.edit", sag_gp_cmd_edit, SAG_ARITY_NONE, SAG_CMD_PROMPTS,
-     "Edit the active group's membership"},
+     "Edit the active group's membership", NULL},
     DEFER("ed.group.from_dir", SAG_ARITY_STR, 0U, 53,
           "open a directory as a tab group (F-mode)"),
     DEFER("ed.group.next", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 24,
@@ -489,13 +505,13 @@ static const CmdDesc builtins[] = {
           "activate the previous tab group"),
     /* Sprint 25 §9: workspace state. */
     {"ed.ws.save_state", sag_ws_cmd_save_state, SAG_ARITY_NONE, 0U,
-     "Write this workspace's state now, without waiting for the debounce"},
+     "Write this workspace's state now, without waiting for the debounce", NULL},
     {"ed.ws.restore_state", sag_ws_cmd_restore_state, SAG_ARITY_NONE, 0U,
-     "Open what this workspace's saved state names, alongside what is open"},
+     "Open what this workspace's saved state names, alongside what is open", NULL},
     {"ed.ws.info", sag_ws_cmd_info, SAG_ARITY_NONE, 0U,
-     "Report the workspace key, state directory, path record and lock owner"},
+     "Report the workspace key, state directory, path record and lock owner", NULL},
     {"ed.ws.forget", sag_ws_cmd_forget, SAG_ARITY_NONE, 0U,
-     "Delete this workspace's state directory, after confirming"},
+     "Delete this workspace's state directory, after confirming", NULL},
     /*
      * v1 is FROZEN and there is no v2, so there is nothing to migrate
      * TO.  The name exists and hard-errors rather than being absent and
@@ -512,11 +528,11 @@ static const CmdDesc builtins[] = {
      */
     /* Sprint 26 §6: the three instances. */
     {"ed.find.file", sag_find_cmd_file, SAG_ARITY_NONE, 0U,
-     "Find a file in the workspace by fuzzy name"},
+     "Find a file in the workspace by fuzzy name", NULL},
     {"ed.find.buffer", sag_find_cmd_buffer, SAG_ARITY_NONE, 0U,
-     "Switch to an open tab by fuzzy name"},
+     "Switch to an open tab by fuzzy name", NULL},
     {"ed.undo.branches", sag_undo_cmd_branches, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Pick an undo state from the branch tree"},
+     SAG_CMD_NEEDS_WIN, "Pick an undo state from the branch tree", NULL},
     /*
      * Sprint 26 §9 defers these two, and they must EXIST to say so:
      * absent, they read to the user as "no such command" rather than
@@ -528,103 +544,103 @@ static const CmdDesc builtins[] = {
     DEFER("ed.find.command", SAG_ARITY_NONE, 0U, 38,
           "open the command palette"),
     {"ed.pane.split_h", sag_pane_cmd_split_h, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Split the focused pane side by side"},
+     SAG_CMD_NEEDS_WIN, "Split the focused pane side by side", NULL},
     {"ed.pane.split_v", sag_pane_cmd_split_v, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Split the focused pane top and bottom"},
+     SAG_CMD_NEEDS_WIN, "Split the focused pane top and bottom", NULL},
     {"ed.pane.close", sag_pane_cmd_close, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Close the focused pane"},
+     SAG_CMD_NEEDS_WIN, "Close the focused pane", NULL},
     {"ed.pane.focus_left", sag_pane_cmd_focus_left, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Focus the pane to the left"},
+     SAG_CMD_NEEDS_WIN, "Focus the pane to the left", NULL},
     {"ed.pane.focus_right", sag_pane_cmd_focus_right, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Focus the pane to the right"},
+     SAG_CMD_NEEDS_WIN, "Focus the pane to the right", NULL},
     {"ed.pane.focus_up", sag_pane_cmd_focus_up, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Focus the pane above"},
+     SAG_CMD_NEEDS_WIN, "Focus the pane above", NULL},
     {"ed.pane.focus_down", sag_pane_cmd_focus_down, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Focus the pane below"},
+     SAG_CMD_NEEDS_WIN, "Focus the pane below", NULL},
     {"ed.pane.focus_next", sag_pane_cmd_focus_next, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Focus the next pane in tree order"},
+     SAG_CMD_NEEDS_WIN, "Focus the next pane in tree order", NULL},
     {"ed.pane.grow", sag_pane_cmd_grow, SAG_ARITY_OPT_INT,
-     SAG_CMD_TAKES_COUNT | SAG_CMD_NEEDS_WIN, "Grow the focused pane"},
+     SAG_CMD_TAKES_COUNT | SAG_CMD_NEEDS_WIN, "Grow the focused pane", NULL},
     {"ed.pane.shrink", sag_pane_cmd_shrink, SAG_ARITY_OPT_INT,
-     SAG_CMD_TAKES_COUNT | SAG_CMD_NEEDS_WIN, "Shrink the focused pane"},
+     SAG_CMD_TAKES_COUNT | SAG_CMD_NEEDS_WIN, "Shrink the focused pane", NULL},
     DEFER("ed.win.next", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 22,
           "focus the next window"),
     DEFER("ed.win.prev", SAG_ARITY_NONE, SAG_CMD_REPEATABLE, 22,
           "focus the previous window"),
 
     {"ed.search.open", sag_search_cmd_open, SAG_ARITY_OPT_STR,
-     SAG_CMD_PROMPTS | SAG_CMD_NEEDS_WIN, "Open incremental search"},
+     SAG_CMD_PROMPTS | SAG_CMD_NEEDS_WIN, "Open incremental search", NULL},
     {"ed.search.open_back", sag_search_cmd_open_back, SAG_ARITY_OPT_STR,
      SAG_CMD_PROMPTS | SAG_CMD_NEEDS_WIN,
-     "Open incremental search, backwards"},
+     "Open incremental search, backwards", NULL},
     {"ed.search.next", sag_search_cmd_next, SAG_ARITY_OPT_INT,
      SAG_CMD_TAKES_COUNT | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move to the next search match"},
+     "Move to the next search match", "search_next"},
     {"ed.search.prev", sag_search_cmd_prev, SAG_ARITY_OPT_INT,
      SAG_CMD_TAKES_COUNT | SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Move to the previous search match"},
+     "Move to the previous search match", "search_prev"},
     {"ed.search.word_next", sag_search_cmd_word_next, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Search forward for the word under the cursor"},
+     "Search forward for the word under the cursor", "word_next"},
     {"ed.search.word_prev", sag_search_cmd_word_prev, SAG_ARITY_NONE,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN,
-     "Search backward for the word under the cursor"},
+     "Search backward for the word under the cursor", "word_prev"},
     {"ed.mark.set", sag_mark_cmd_set, SAG_ARITY_STR,
      SAG_CMD_CAPTURES_TEXT | SAG_CMD_NEEDS_WIN,
-     "Set a named mark at the cursor"},
+     "Set a named mark at the cursor", NULL},
     {"ed.mark.jump", sag_mark_cmd_jump, SAG_ARITY_STR,
      SAG_CMD_CAPTURES_TEXT | SAG_CMD_NEEDS_WIN,
-     "Jump to a named mark"},
+     "Jump to a named mark", NULL},
     {"ed.search.clear_highlight", sag_search_cmd_clear_highlight,
-     SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN, "Clear match highlighting"},
+     SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN, "Clear match highlighting", NULL},
     {"ed.jump.back", sag_jump_cmd_back, SAG_ARITY_OPT_INT,
      SAG_CMD_TAKES_COUNT | SAG_CMD_NEEDS_WIN,
-     "Jump to an older position in this window's history"},
+     "Jump to an older position in this window's history", NULL},
     {"ed.jump.fwd", sag_jump_cmd_fwd, SAG_ARITY_OPT_INT,
      SAG_CMD_TAKES_COUNT | SAG_CMD_NEEDS_WIN,
-     "Jump to a newer position in this window's history"},
+     "Jump to a newer position in this window's history", NULL},
     {"ed.jump.list", sag_jump_cmd_list, SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN,
-     "Show this window's jumplist"},
+     "Show this window's jumplist", NULL},
     {"ed.change.older", sag_change_cmd_older, SAG_ARITY_OPT_INT,
      SAG_CMD_TAKES_COUNT | SAG_CMD_NEEDS_WIN,
-     "Jump to an older change position in this buffer"},
+     "Jump to an older change position in this buffer", NULL},
     {"ed.change.newer", sag_change_cmd_newer, SAG_ARITY_OPT_INT,
      SAG_CMD_TAKES_COUNT | SAG_CMD_NEEDS_WIN,
-     "Jump to a newer change position in this buffer"},
+     "Jump to a newer change position in this buffer", NULL},
     {"ed.search.replace", sag_search_cmd_replace, SAG_ARITY_STR,
      SAG_CMD_CHANGES_BUFFER | SAG_CMD_NEEDS_WIN,
-     "Substitute matches of a pattern in a line range"},
+     "Substitute matches of a pattern in a line range", NULL},
     {"ed.search.global", sag_search_cmd_global, SAG_ARITY_STR, 0U,
-     "Rejected: :g is Fletch's query API in Sprint 34"},
+     "Rejected: :g is Fletch's query API in Sprint 34", NULL},
     DEFER("ed.macro.record", SAG_ARITY_OPT_STR, SAG_CMD_PROMPTS, 35,
           "record a command macro"),
-    DEFER("ed.macro.replay", SAG_ARITY_OPT_STR,
+    DEFER_W("ed.macro.replay", SAG_ARITY_OPT_STR,
           SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE, 35,
-          "replay a command macro"),
+          "replay a command macro", "replay"),
     {"ed.shell.run", sag_shell_cmd_run, SAG_ARITY_STR,
-     SAG_CMD_RECORDABLE, "Run a shell command, streaming its output"},
+     SAG_CMD_RECORDABLE, "Run a shell command, streaming its output", "shell_run"},
     {"ed.shell.run_bg", sag_shell_cmd_run_bg, SAG_ARITY_STR,
-     SAG_CMD_RECORDABLE, "Run a shell command without stealing focus"},
+     SAG_CMD_RECORDABLE, "Run a shell command without stealing focus", "shell_bg"},
     {"ed.shell.read", sag_shell_cmd_read, SAG_ARITY_STR,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
-     "Insert a shell command's output at the cursor"},
+     "Insert a shell command's output at the cursor", "shell_read"},
     {"ed.shell.filter", sag_shell_cmd_filter, SAG_ARITY_STR,
      SAG_CMD_RECORDABLE | SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
-     "Pipe a region through a shell command and replace it"},
+     "Pipe a region through a shell command and replace it", "filter"},
     {"ed.shell.term", sag_shell_cmd_term, SAG_ARITY_NONE, 0U,
-     "Interactive terminals are not a 1.0 feature"},
+     "Interactive terminals are not a 1.0 feature", NULL},
     {"ed.job.list", sag_job_cmd_list, SAG_ARITY_NONE, 0U,
-     "Open the job table"},
+     "Open the job table", NULL},
     {"ed.job.kill", sag_job_cmd_kill, SAG_ARITY_OPT_INT,
-     SAG_CMD_TAKES_COUNT, "Terminate a job's process group"},
+     SAG_CMD_TAKES_COUNT, "Terminate a job's process group", NULL},
     {"ed.job.kill_force", sag_job_cmd_kill_force, SAG_ARITY_OPT_INT,
-     SAG_CMD_TAKES_COUNT, "Kill a job's process group"},
+     SAG_CMD_TAKES_COUNT, "Kill a job's process group", NULL},
     {"ed.job.jump", sag_job_cmd_jump, SAG_ARITY_OPT_INT,
-     SAG_CMD_TAKES_COUNT, "Focus a job's output buffer"},
+     SAG_CMD_TAKES_COUNT, "Focus a job's output buffer", NULL},
     {"ed.job.clear_finished", sag_job_cmd_clear_finished, SAG_ARITY_NONE,
-     0U, "Drop every finished job and its output buffer"},
+     0U, "Drop every finished job and its output buffer", NULL},
     {"ed.job.rerun", sag_job_cmd_rerun, SAG_ARITY_OPT_INT,
-     SAG_CMD_TAKES_COUNT, "Run a job's command line again"},
+     SAG_CMD_TAKES_COUNT, "Run a job's command line again", NULL},
     DEFER("ed.git.stage", SAG_ARITY_NONE, SAG_CMD_NEEDS_WIN, 52,
           "stage the selected path"),
     DEFER("ed.lsp.goto", SAG_ARITY_STR, SAG_CMD_NEEDS_WIN, 47,
@@ -823,6 +839,44 @@ static bool help_names_sprint(const char *help)
     return isdigit((unsigned char)*p) != 0;
 }
 
+/*
+ * Sprint 34 §3: the CMDWORD rules, enforced where a command is BORN.
+ *
+ * Sprint 35's round-trip law says a recorded macro and a hand-typed
+ * motion block are indistinguishable, which requires word -> command
+ * to be a bijection over the recordable set.  A law checked in the
+ * recorder is a law that a new command silently breaks; checked here,
+ * adding a recordable command without a word does not build.
+ */
+static void word_validate(const CmdDesc *d)
+{
+    const char *w = d->word;
+    size_t n;
+
+    if ((d->flags & SAG_CMD_RECORDABLE) != 0U && w == NULL)
+        SAG_BUG("recordable command %s has no CMDWORD", d->name);
+    if (w == NULL)
+        return;
+    if ((d->flags & SAG_CMD_RECORDABLE) == 0U)
+        SAG_BUG("command %s has a CMDWORD but is not recordable", d->name);
+    n = strlen(w);
+    if (n == 0U || n > 16U)
+        SAG_BUG("command %s has a CMDWORD of bad length", d->name);
+    if (w[0] < 'a' || w[0] > 'z')
+        SAG_BUG("command %s CMDWORD must start with a letter", d->name);
+    {
+        size_t i;
+
+        for (i = 1U; i < n; i++) {
+            char c = w[i];
+
+            if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+                  c == '_'))
+                SAG_BUG("command %s has an invalid CMDWORD", d->name);
+        }
+    }
+}
+
 static void desc_validate(const CmdDesc *d)
 {
     const u32 known_flags = SAG_CMD_REPEATABLE | SAG_CMD_TAKES_COUNT |
@@ -853,6 +907,7 @@ static void desc_validate(const CmdDesc *d)
     if ((d->flags & SAG_CMD_DEFERRED) != 0U &&
         !help_names_sprint(d->help))
         SAG_BUG("deferred command %s help does not name its sprint", d->name);
+    word_validate(d);
 }
 
 static const char *default_argspec(const CmdDesc *d)
@@ -922,6 +977,17 @@ static CmdId register_entry(const CmdEntry *entry)
     copy.abbrev = entry->abbrev == NULL ? NULL :
                   arena_strdup(&registry.arena, entry->abbrev);
     registry.entries[registry.len++] = copy;
+    if (copy.cmd.word != NULL) {
+        size_t wlen = strlen(copy.cmd.word);
+
+        if (strmap_has(&registry.words, copy.cmd.word, wlen))
+            SAG_BUG("duplicate CMDWORD '%s' on %s", copy.cmd.word,
+                    d->name);
+        copy.cmd.word = arena_strdup(&registry.arena, copy.cmd.word);
+        registry.entries[registry.len - 1U].cmd.word = copy.cmd.word;
+        (void)strmap_put(&registry.words, copy.cmd.word, wlen,
+                         (void *)(uintptr_t)id);
+    }
     return (CmdId){id};
 }
 
@@ -965,6 +1031,7 @@ void sag_cmd_init(void)
         return;
     arena_init(&registry.arena);
     interner_init(&registry.names, &registry.arena);
+    strmap_init(&registry.words);
     registry.initialized = true;
     for (i = 0; i < SAG_ARRAY_LEN(builtins); i++)
         (void)register_desc(&builtins[i]);
@@ -976,6 +1043,7 @@ void sag_cmd_shutdown(void)
     if (!registry.initialized)
         return;
     interner_free(&registry.names);
+    strmap_free(&registry.words);
     arena_free_all(&registry.arena);
     free(registry.entries);
     registry = (CmdRegistry){0};
@@ -1001,6 +1069,17 @@ CmdId sag_cmd_lookup(const char *name, u32 len)
     if (name == NULL)
         return SAG_CMD_NONE;
     found = strmap_get(&registry.names.map, name, len);
+    return (CmdId){(u32)(uintptr_t)found};
+}
+
+CmdId sag_cmd_by_word(const char *word, u32 len)
+{
+    void *found;
+
+    sag_cmd_init();
+    if (word == NULL || len == 0U)
+        return SAG_CMD_NONE;
+    found = strmap_get(&registry.words, word, len);
     return (CmdId){(u32)(uintptr_t)found};
 }
 

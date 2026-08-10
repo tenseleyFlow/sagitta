@@ -263,6 +263,8 @@ void test_keyseq_default_tables_roundtrip(void);
 void test_cmd_registry_builtins_are_deterministic(void);
 void test_cmd_registry_invocation_and_deferred(void);
 void test_cmd_registry_rejects_invalid_descriptors(void);
+void test_cmd_registry_enforces_cmdwords(void);
+void test_cmd_registry_word_roundtrip(void);
 void test_keymap_build_validations(void);
 void test_keymap_binary_lookup_matches_oracle_and_budget(void);
 void test_keymap_layer_ownership_and_listing_determinism(void);

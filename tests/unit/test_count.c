@@ -38,11 +38,11 @@ static void count_register_commands(void)
 {
     static const CmdDesc commands[] = {
         {"ed.ui.grow", count_repeat, SAG_ARITY_NONE,
-         SAG_CMD_REPEATABLE, "repeat count probe"},
+         SAG_CMD_REPEATABLE, "repeat count probe", NULL},
         {"ed.ui.shrink", count_take, SAG_ARITY_NONE,
-         SAG_CMD_TAKES_COUNT, "consuming count probe"},
+         SAG_CMD_TAKES_COUNT, "consuming count probe", NULL},
         {"ed.ui.expand", count_plain, SAG_ARITY_NONE,
-         0U, "plain count probe"},
+         0U, "plain count probe", NULL},
     };
     size_t i;
 

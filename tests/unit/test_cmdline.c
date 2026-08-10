@@ -399,7 +399,7 @@ void test_cmdline_catalogue_errors_preserve_live_prompt(void)
     CmdlineFixture fixture;
     CmdEntry required = {
         {"ed.ui.grow", cmdline_noop, SAG_ARITY_NONE, 0U,
-         "Command-line error test command"},
+         "Command-line error test command", NULL},
         "", SAG_RP_REQUIRED, NULL};
     char document[412];
     size_t i;

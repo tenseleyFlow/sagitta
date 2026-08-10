@@ -23,7 +23,7 @@ static void register_parse_command(const char *name, u8 arity,
                                    const char *abbrev)
 {
     CmdEntry entry = {
-        {name, parse_nop, arity, 0U, "Parser test command"},
+        {name, parse_nop, arity, 0U, "Parser test command", NULL},
         argspec, policy, abbrev};
 
     (void)sag_cmd_register_entry(&entry);

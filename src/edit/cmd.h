@@ -115,6 +115,22 @@ typedef struct CmdDesc {
     u8 arity;
     u32 flags;
     const char *help;
+    /*
+     * Sprint 34 §3: the motion-space CMDWORD -- "yank", "del_line" --
+     * or NULL when this command is not one.
+     *
+     * `[a-z][a-z0-9_]{0,15}`, globally unique, and REQUIRED whenever
+     * SAG_CMD_RECORDABLE is set.  That bijection is what Sprint 35's
+     * round-trip law stands on: a recorded macro is a motion block, and
+     * a motion block is what the recorder emits, so word -> command and
+     * command -> word must be inverse.  Enforcing it at REGISTRATION
+     * means the law cannot be broken by adding a command -- which is
+     * the only way anyone would ever break it.
+     *
+     * Last field so the 200-odd descriptors that are not recordable
+     * keep their five-element initializers and read as they did.
+     */
+    const char *word;
 } CmdDesc;
 
 /* CmdDesc remains the key/Fletch execution descriptor.  CmdEntry is the
@@ -134,6 +150,11 @@ void sag_cmd_shutdown(void);
 CmdId sag_cmd_register(const CmdDesc *d);
 CmdId sag_cmd_register_entry(const CmdEntry *entry);
 CmdId sag_cmd_lookup(const char *name, u32 len);
+/*
+ * Sprint 34 §8: the motion-space word -> command map, built at
+ * registration.  SAG_CMD_NONE when no command carries that word.
+ */
+CmdId sag_cmd_by_word(const char *word, u32 len);
 const CmdDesc *sag_cmd_desc(CmdId id);
 const CmdEntry *sag_cmd_entry(CmdId id);
 CmdStatus sag_cmd_prepare(CmdId id, CmdCtx *cx, const CmdDesc **out);

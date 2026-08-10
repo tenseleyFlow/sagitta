@@ -145,7 +145,7 @@ static CmdId mc_probe_id(void)
         static const CmdDesc desc = {
             "ed.edit.mc.insert", mc_probe_insert, SAG_ARITY_NONE,
             SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
-            "Insert one multicursor test byte",
+            "Insert one multicursor test byte", NULL
         };
 
         id = sag_cmd_register(&desc);
@@ -161,7 +161,7 @@ static CmdId mc_probe_fail_id(void)
         static const CmdDesc desc = {
             "ed.edit.mc.cancel", mc_probe_fail_second, SAG_ARITY_NONE,
             SAG_CMD_NEEDS_WIN | SAG_CMD_CHANGES_BUFFER,
-            "Fail the second multicursor test edit",
+            "Fail the second multicursor test edit", NULL
         };
 
         id = sag_cmd_register(&desc);

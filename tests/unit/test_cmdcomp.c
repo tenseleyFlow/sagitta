@@ -81,15 +81,15 @@ static const CompItem *find_item(const Vec_CompItem *items,
 void test_cmdcomp_source_selection_and_score(void)
 {
     static const CmdEntry entry = {
-        {"ed.ui.probe", NULL, SAG_ARITY_OPT_STR, 0U, "probe"},
+        {"ed.ui.probe", NULL, SAG_ARITY_OPT_STR, 0U, "probe", NULL},
         "fbov", SAG_RP_FORBID, NULL,
     };
     static const CmdEntry repeat = {
-        {"ed.ui.probe", NULL, SAG_ARITY_OPT_STR, 0U, "probe"},
+        {"ed.ui.probe", NULL, SAG_ARITY_OPT_STR, 0U, "probe", NULL},
         "f*", SAG_RP_FORBID, NULL,
     };
     static const CmdEntry free_string = {
-        {"ed.ui.probe", NULL, SAG_ARITY_OPT_STR, 0U, "probe"},
+        {"ed.ui.probe", NULL, SAG_ARITY_OPT_STR, 0U, "probe", NULL},
         "s", SAG_RP_FORBID, NULL,
     };
     SagCompKind kind = SAG_COMP_VALUE;

@@ -85,10 +85,11 @@ void test_cmd_registry_invocation_and_deferred(void)
     static const CmdDesc repeat_desc = {
         "ed.ui.toggle", probe_repeat, SAG_ARITY_NONE,
         SAG_CMD_REPEATABLE | SAG_CMD_RECORDABLE, "Toggle the test probe",
+        "toggle_probe"
     };
     static const CmdDesc count_desc = {
         "ed.ui.goto", probe_takes_count, SAG_ARITY_INT,
-        SAG_CMD_TAKES_COUNT, "Send a count to the test probe",
+        SAG_CMD_TAKES_COUNT, "Send a count to the test probe", NULL
     };
     static const struct {
         const char *mode;
@@ -228,7 +229,7 @@ void test_cmd_registry_rejects_invalid_descriptors(void)
         "ed.move.abcdefghijklmnopq", "ed.rogue.open", "ed.ui.unknown",
     };
     CmdDesc desc = {
-        "ed.ui.toggle", probe_repeat, SAG_ARITY_NONE, 0U, "test command",
+        "ed.ui.toggle", probe_repeat, SAG_ARITY_NONE, 0U, "test command", NULL
     };
     size_t i;
 
@@ -249,4 +250,97 @@ void test_cmd_registry_rejects_invalid_descriptors(void)
     SAG_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), SAG_EXIT_BUG);
     desc.fn = probe_repeat;
     SAG_ASSERT_EQ_I64(descriptor_child_exit(&desc, true), SAG_EXIT_BUG);
+}
+
+/*
+ * Sprint 34 §3 / DoD 6: the CMDWORD bijection.
+ *
+ * Sprint 35's round-trip law says a recorded macro and a hand-typed
+ * motion block are the same thing to the editor.  That needs word ->
+ * command to be one-to-one over the recordable set, and the only
+ * durable way to keep it so is to refuse the registration -- a law
+ * checked in the recorder is one that the next command silently
+ * breaks.
+ */
+void test_cmd_registry_enforces_cmdwords(void)
+{
+    CmdDesc desc = {
+        "ed.ui.toggle", probe_repeat, SAG_ARITY_NONE, SAG_CMD_RECORDABLE,
+        "test command", NULL
+    };
+
+    sag_cmd_shutdown();
+    sag_cmd_init();
+    /* Recordable without a word. */
+    SAG_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), SAG_EXIT_BUG);
+    /* A word on a command that is not recordable: the reverse map
+     * would then hold a word no recording can ever produce. */
+    desc.flags = 0U;
+    desc.word = "toggle_it";
+    SAG_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), SAG_EXIT_BUG);
+    /* Bad shapes. */
+    desc.flags = SAG_CMD_RECORDABLE;
+    desc.word = "Toggle";
+    SAG_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), SAG_EXIT_BUG);
+    desc.word = "9lives";
+    SAG_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), SAG_EXIT_BUG);
+    desc.word = "has.dot";
+    SAG_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), SAG_EXIT_BUG);
+    desc.word = "";
+    SAG_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), SAG_EXIT_BUG);
+    desc.word = "abcdefghijklmnopq";      /* 17 */
+    SAG_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), SAG_EXIT_BUG);
+    /* Colliding with a word a builtin already owns. */
+    desc.word = "yank";
+    SAG_ASSERT_EQ_I64(descriptor_child_exit(&desc, false), SAG_EXIT_BUG);
+    /* A good one registers, and round-trips. */
+    desc.word = "toggle_it";
+    {
+        CmdId id = sag_cmd_register(&desc);
+
+        SAG_ASSERT(id.v != 0U);
+        SAG_ASSERT_EQ_U64(sag_cmd_by_word("toggle_it", 9U).v, id.v);
+    }
+    sag_cmd_shutdown();
+    sag_cmd_init();
+}
+
+/*
+ * Every registered command round-trips through its own word, and every
+ * recordable one has a word.  This is the assertion DoD 6 asks for, and
+ * it covers the whole table rather than a sample.
+ */
+void test_cmd_registry_word_roundtrip(void)
+{
+    u32 i;
+    u32 n;
+    u32 recordable = 0U;
+    u32 worded = 0U;
+
+    sag_cmd_shutdown();
+    sag_cmd_init();
+    n = sag_cmd_count();
+    SAG_ASSERT(n > 100U);
+    for (i = 0U; i < n; i++) {
+        const CmdDesc *d = sag_cmd_at(i);
+        CmdId back;
+
+        if ((d->flags & SAG_CMD_RECORDABLE) != 0U) {
+            recordable++;
+            SAG_ASSERT_NOT_NULL(d->word);
+        }
+        if (d->word == NULL)
+            continue;
+        worded++;
+        back = sag_cmd_by_word(d->word, (u32)strlen(d->word));
+        /* Same DESCRIPTOR, not merely a command with that word: an
+         * alias pair sharing a word would pass an id comparison
+         * against either one. */
+        SAG_ASSERT(sag_cmd_desc(back) == d);
+    }
+    /* No unrecordable command carries one, so the two counts agree and
+     * the map has no entries a recording could not produce. */
+    SAG_ASSERT_EQ_U64(worded, recordable);
+    SAG_ASSERT_EQ_U64(sag_cmd_by_word("no_such_word", 12U).v, 0U);
+    SAG_ASSERT_EQ_U64(sag_cmd_by_word(NULL, 0U).v, 0U);
 }
