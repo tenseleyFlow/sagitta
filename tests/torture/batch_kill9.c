@@ -290,7 +290,7 @@ static pid_t spawn_checker(const char *checker, const char *target,
     if (pid != 0)
         return pid;
     set_child_environment(trial);
-    execl(checker, checker, "--check", target, old_path, new_path,
+    execl(checker, checker, "--check-batch", target, old_path, new_path,
           (char *)NULL);
     _exit(127);
 }

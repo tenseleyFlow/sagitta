@@ -10,8 +10,10 @@
 #include <unistd.h>
 
 #include "text/file.h"
+#include "text/edit.h"
 #include "text/journal.h"
 #include "text/piece.h"
+#include "text/undo.h"
 
 static bool read_all(int fd, u8 *bytes, size_t len)
 {
@@ -196,14 +198,70 @@ done:
     return ok ? 0 : 1;
 }
 
+/* A batch process can die between the two records of a replacement.  The
+ * complete journal prefix is still valid recovery data, but it need not be
+ * the final replacement: interactive recovery groups that prefix as one
+ * external undo transaction.  Prove the recovered buffer is either the
+ * intended post-save image or can be undone byte-exactly to the durable
+ * pre-run image.  The ordinary --check path remains strict for the atomic
+ * file-save torture, whose journal is complete before its kill window. */
+static int check_batch_case(const char *path, const char *old_path,
+                            const char *post_path)
+{
+    FileMeta meta;
+    TextBuf *tb = NULL;
+    UndoTree *undo = NULL;
+    EditCtx edit;
+    u8 *old_bytes = NULL;
+    u8 *post_bytes = NULL;
+    size_t old_len = 0U;
+    size_t post_len = 0U;
+    bool ok = false;
+
+    if (!slurp(old_path, &old_bytes, &old_len) ||
+        !slurp(post_path, &post_bytes, &post_len))
+        goto done;
+    if (file_equals(path, post_bytes, post_len)) {
+        ok = true;
+        goto done;
+    }
+    if (!file_equals(path, old_bytes, old_len) ||
+        sag_file_load(path, &tb, &meta) != SAG_LOAD_OK)
+        goto done;
+    undo = sag_undo_new(tb);
+    edit = (EditCtx){tb, NULL, NULL, 0U, NULL, undo, &meta,
+                     NULL, NULL, 0};
+    if (!sag_journal_replay_edit(path, &edit, &meta))
+        goto done_loaded;
+    if (buffer_equals(tb, post_bytes, post_len) ||
+        buffer_equals(tb, old_bytes, old_len)) {
+        ok = true;
+    } else if (sag_undo(&edit) && buffer_equals(tb, old_bytes, old_len)) {
+        ok = true;
+    }
+
+done_loaded:
+    sag_journal_close(edit.jrnl);
+    sag_undo_free(undo);
+    sag_filemeta_dispose(&meta);
+    sag_textbuf_free(tb);
+done:
+    free(old_bytes);
+    free(post_bytes);
+    return ok ? 0 : 1;
+}
+
 int main(int argc, char **argv)
 {
     if (argc == 4 && strcmp(argv[1], "--save") == 0)
         return save_case(argv[2], argv[3]);
     if (argc == 5 && strcmp(argv[1], "--check") == 0)
         return check_case(argv[2], argv[3], argv[4]);
+    if (argc == 5 && strcmp(argv[1], "--check-batch") == 0)
+        return check_batch_case(argv[2], argv[3], argv[4]);
     (void)fprintf(stderr,
-                  "usage: %s --save PATH POST | --check PATH OLD POST\n",
+                  "usage: %s --save PATH POST | --check PATH OLD POST | "
+                  "--check-batch PATH OLD POST\n",
                   argv[0]);
     return 2;
 }
