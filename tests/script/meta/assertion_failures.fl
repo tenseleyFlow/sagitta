@@ -1,0 +1,19 @@
+# Sprint 37 runner meta-fixture: every failure-capable assertion records and
+# returns, so reaching t.log proves earlier failures did not stop execution.
+import buf
+import win
+let b = buf.current()
+let w = win.current()
+let path = t.fixture("plain.txt")
+t.eq(1, 2)
+t.ne(1, 1)
+t.text(b, "not empty")
+t.line(b, 1, "not empty")
+t.cursor(w, 2, 9)
+t.cursors(w, [[2, 9]])
+t.sel(w, "not selected")
+t.reg("z", "not registered")
+t.undo(b, 99)
+t.file(path, "not the fixture")
+t.raises("user", fn() { return 42 })
+t.log("error", "runner-meta-log-that-was-never-emitted")

@@ -1146,13 +1146,108 @@ static bool selftest_config_directive(void)
            config_argv[4] == NULL;
 }
 
+static bool protocol_has_all_negative_assertions(const Bytes *protocol)
+{
+    static const char *const expected[] = {
+        "t.eq", "t.ne", "t.text", "t.line", "t.cursor", "t.cursors",
+        "t.sel", "t.reg", "t.undo", "t.file", "t.raises", "t.log"
+    };
+    bool seen[sizeof(expected) / sizeof(expected[0])] = {false};
+    size_t failures = 0U;
+    size_t at = 0U;
+
+    while (at < protocol->len) {
+        size_t end = at;
+
+        while (end < protocol->len && protocol->data[end] != '\n')
+            end++;
+        if (end - at >= 6U &&
+            memcmp(protocol->data + at, "FAIL\t", 5U) == 0) {
+            const char *name = protocol->data + at + 5U;
+            const char *tab = memchr(name, '\t', end - at - 5U);
+            size_t i;
+            bool found = false;
+
+            if (tab == NULL)
+                return false;
+            for (i = 0U; i < sizeof(expected) / sizeof(expected[0]); i++) {
+                size_t n = strlen(expected[i]);
+
+                if ((size_t)(tab - name) == n &&
+                    memcmp(name, expected[i], n) == 0) {
+                    if (seen[i])
+                        return false;
+                    seen[i] = true;
+                    found = true;
+                    break;
+                }
+            }
+            if (!found)
+                return false;
+            failures++;
+        }
+        at = end < protocol->len ? end + 1U : end;
+    }
+    if (failures != sizeof(expected) / sizeof(expected[0]))
+        return false;
+    for (at = 0U; at < sizeof(expected) / sizeof(expected[0]); at++)
+        if (!seen[at])
+            return false;
+    return true;
+}
+
+static bool selftest_negative_assertion_host(const char *sagitta,
+                                             const char *fixtures,
+                                             const char *script_dir)
+{
+    char *meta_dir = path_join(script_dir, "meta");
+    char *script = meta_dir == NULL ? NULL :
+                   path_join(meta_dir, "assertion_failures.fl");
+    TestFile test = {(char *)"assertion_failures", script, false};
+    RunResult result;
+    Protocol protocol = {0};
+    char *sandbox = NULL;
+    bool attempted = false;
+    bool ran = false;
+    bool ok = false;
+
+    if (script != NULL) {
+        attempted = true;
+        ran = run_test(sagitta, fixtures, &test, &sandbox, &result);
+    }
+    if (ran) {
+        protocol = parse_protocol(&result.protocol);
+        ok = !result.setup_failed && !result.timed_out && result.waited &&
+             WIFEXITED(result.status) && WEXITSTATUS(result.status) == 2 &&
+             result.out.len == 0U && result.err.len == 0U &&
+             sandbox != NULL && protocol.valid &&
+             protocol.assertions == 12U && protocol.failures == 12U &&
+             protocol.skipped == 0U &&
+             protocol_has_all_negative_assertions(&result.protocol);
+        if (ok && sandbox != NULL)
+            ok = finish_sandbox(sandbox, true);
+    }
+    if (!ok && sandbox != NULL)
+        (void)printf("  negative-host sandbox preserved: %s\n", sandbox);
+    if (attempted) {
+        bytes_free(&result.out);
+        bytes_free(&result.err);
+        bytes_free(&result.protocol);
+    }
+    free(sandbox);
+    free(script);
+    free(meta_dir);
+    return ok;
+}
+
 static size_t report_selftest(const char *name, bool ok)
 {
     (void)printf("%s %s\n", ok ? "PASS" : "FAIL", name);
     return ok ? 0U : 1U;
 }
 
-static int run_selftests(const char *fixtures)
+static int run_selftests(const char *sagitta, const char *fixtures,
+                         const char *script_dir)
 {
     size_t failures = 0U;
 
@@ -1170,8 +1265,11 @@ static int run_selftests(const char *fixtures)
                                 selftest_zero_filter());
     failures += report_selftest("config_header_controls_clean",
                                 selftest_config_directive());
+    failures += report_selftest("negative_assertion_host_continues",
+                                selftest_negative_assertion_host(
+                                    sagitta, fixtures, script_dir));
     (void)printf("script-runner-selftest: %zu tests, %zu failure%s\n",
-                 (size_t)7U, failures,
+                 (size_t)8U, failures,
                  failures == 1U ? "" : "s");
     (void)fflush(stdout);
     return failures == 0U ? 0 : 1;
@@ -1209,8 +1307,21 @@ int main(int argc, char **argv)
         return 1;
     }
     if (selftest) {
-        int rc = run_selftests(fixtures);
+        int rc;
 
+        sagitta = absolute_existing(sagitta_arg);
+        if (sagitta == NULL) {
+            (void)fprintf(stderr,
+                          "script: cannot resolve sagitta '%s': %s\n",
+                          sagitta_arg, strerror(errno));
+            free(root);
+            free(script_dir);
+            free(fixtures);
+            return 1;
+        }
+        rc = run_selftests(sagitta, fixtures, script_dir);
+
+        free(sagitta);
         free(root);
         free(script_dir);
         free(fixtures);
