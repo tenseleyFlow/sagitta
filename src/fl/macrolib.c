@@ -510,6 +510,12 @@ static bool bind_exports(MacroLib *candidate, u32 file_index, FlMap *exports)
     FlValue key;
     FlValue value;
     u32 matched = 0U;
+    u32 expected = 0U;
+
+    for (cursor = 0U; cursor < candidate->nentries; cursor++)
+        if (candidate->entries[cursor].file == file_index)
+            expected++;
+    cursor = 0U;
 
     while (fl_map_iter(exports, &cursor, &key, &value)) {
         const FlStr *binding;
@@ -533,7 +539,7 @@ static bool bind_exports(MacroLib *candidate, u32 file_index, FlMap *exports)
             }
         }
     }
-    return matched != 0U || candidate->nentries == 0U;
+    return matched == expected;
 }
 
 static bool recorded_major_mismatch(const SagMacroHeader *header)
