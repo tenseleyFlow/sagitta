@@ -224,7 +224,7 @@ bool rt_session_generate(RtSession *session, u64 seed, u32 fixture,
 {
     u64 state = seed ^ (UINT64_C(0xd1b54a32d192ed03) * (fixture + 1U));
     u32 target = forced_len == 0U ? 1U + rnd(&state, 200U) : forced_len;
-    u32 i;
+    bool has_text_insert = false;
 
     session->seed = seed;
     session->fixture = fixture % 6U;
@@ -233,42 +233,41 @@ bool rt_session_generate(RtSession *session, u64 seed, u32 fixture,
     /* Largest generated payload is 11 bytes and sessions cap at 200. */
     session->storage_cap = 4096U;
     session->storage = sag_xmalloc(session->storage_cap);
-    for (i = 0U; i < target; i++) {
+    while (session->events.len + (has_text_insert ? 1U : 2U) < target) {
         const RtGenCmd *chosen = choose_cmd(&state);
+        u32 reserve = has_text_insert ? 1U : 2U;
+        u32 available = target - (u32)session->events.len - reserve;
 
-        if (chosen->kind == RT_GEN_SELECTION || chosen->kind == RT_GEN_YANK) {
+        if ((chosen->kind == RT_GEN_SELECTION ||
+             chosen->kind == RT_GEN_YANK) && available >= 4U) {
             if (!append_highlight_scenario(session,
                                            chosen->kind == RT_GEN_YANK))
                 return false;
-        } else if (!append_generated(session, &state, chosen)) {
-            return false;
+        } else {
+            const RtGenCmd *one = chosen;
+
+            if (chosen->kind == RT_GEN_SELECTION ||
+                chosen->kind == RT_GEN_YANK)
+                one = &gen_cmds[0];
+            if (!append_generated(session, &state, one))
+                return false;
+            if (strcmp(one->name, "ed.edit.insert.text") == 0)
+                has_text_insert = true;
         }
     }
     /* P2 needs an actual edit even when the random session chose motions. */
-    if (target != 0U) {
-        u32 j;
-        bool inserts = false;
+    if (!has_text_insert) {
+        const RtGenCmd insert = {"ed.edit.insert.text", RT_GEN_INSERT};
 
-        for (j = 0U; j < session->events.len; j++) {
-            const CmdDesc *d = sag_cmd_desc(session->events.data[j].cmd);
-
-            inserts = inserts ||
-                      (d != NULL && strcmp(d->name,
-                                           "ed.edit.insert.text") == 0);
-        }
-        if (!inserts) {
-            const RtGenCmd insert = {"ed.edit.insert.text", RT_GEN_INSERT};
-
-            if (!append_generated(session, &state, &insert))
-                return false;
-        }
+        if (!append_generated(session, &state, &insert))
+            return false;
     }
     /*
      * P5 composes S with itself.  Restore the starting unit explicitly so
      * the second direct S begins under the same unit that the emitted
      * macro's mode annotation establishes for its second invocation.
      */
-    {
+    if (session->events.len < target) {
         RtEvent restore = {0};
         static const u8 modes[] = {'L', 'W', 'B'};
 
@@ -283,7 +282,7 @@ bool rt_session_generate(RtSession *session, u64 seed, u32 fixture,
             return false;
         RtEventVec_push(&session->events, restore);
     }
-    return true;
+    return session->events.len == target;
 }
 
 typedef struct RtDenied {

@@ -45,6 +45,7 @@ static const u8 fixture_binary[] = {
 
 static char last_property[16];
 static char last_detail[192];
+static bool quiet_probe;
 
 static bool fail_session(u64 seed, u32 fixture, const char *property,
                          const char *detail)
@@ -184,9 +185,10 @@ static bool run_events(Ed *ed, const RtSession *session)
         if (!invoke_event(ed, &session->events.data[i])) {
             const CmdDesc *d = sag_cmd_desc(session->events.data[i].cmd);
 
-            (void)fprintf(stderr, "roundtrip: event %u failed: %s\n",
-                          (unsigned)i,
-                          d == NULL ? "<unknown>" : d->name);
+            if (!quiet_probe)
+                (void)fprintf(stderr, "roundtrip: event %u failed: %s\n",
+                              (unsigned)i,
+                              d == NULL ? "<unknown>" : d->name);
             return false;
         }
     }
@@ -339,7 +341,7 @@ static bool parse_dump(const Bytebuf *source, Bytebuf *dump)
         fl_ast_dump(dump, &program, &interner);
     interner_free(&interner);
     arena_free_all(&arena);
-    if (program.had_error || count.n != 0U)
+    if (!quiet_probe && (program.had_error || count.n != 0U))
         (void)fprintf(stderr, "roundtrip: parse diagnostic: %s\n",
                       count.first);
     return !program.had_error && count.n == 0U;
@@ -396,8 +398,10 @@ static bool property_session(const RtSession *session)
     if (!parse_dump(&emitted_a, &dump_a)) {
         (void)fail_session(session->seed, session->fixture, "P4",
                            "emitted Fletch does not parse");
-        (void)fwrite(emitted_a.data, 1U, emitted_a.len, stderr);
-        (void)fputc('\n', stderr);
+        if (!quiet_probe) {
+            (void)fwrite(emitted_a.data, 1U, emitted_a.len, stderr);
+            (void)fputc('\n', stderr);
+        }
         goto done;
     }
     if (!parse_dump(&emitted_a, &dump_b)) {
@@ -434,8 +438,10 @@ static bool property_session(const RtSession *session)
         !bytes_equal(&after_undo.b, &fixture)) {
         (void)fail_session(session->seed, session->fixture, "P2",
                            "one undo did not restore E0 bytes");
-        (void)fwrite(emitted_a.data, 1U, emitted_a.len, stderr);
-        (void)fputc('\n', stderr);
+        if (!quiet_probe) {
+            (void)fwrite(emitted_a.data, 1U, emitted_a.len, stderr);
+            (void)fputc('\n', stderr);
+        }
         goto done;
     }
 
@@ -461,7 +467,7 @@ static bool property_session(const RtSession *session)
     ok = true;
 
 done:
-    if (!ok && why[0] != '\0')
+    if (!quiet_probe && !ok && why[0] != '\0')
         (void)fprintf(stderr, "roundtrip: context: %s\n", why);
     if (opened_replayed_twice)
         sag_ed_free(&replayed_twice);
@@ -569,6 +575,34 @@ done:
     return differs;
 }
 
+static bool property_prefix_fails(const RtSession *session, u32 prefix,
+                                  const char *property, bool corrupt,
+                                  size_t *byte_at, Bytebuf *emitted_out)
+{
+    RtSession view = *session;
+    bool failed;
+
+    if (corrupt || strcmp(property, "P1") == 0)
+        return p1_diverges(session, prefix, corrupt, byte_at, emitted_out);
+    if (prefix > session->events.len)
+        return false;
+    view.events.len = prefix;
+    last_property[0] = '\0';
+    last_detail[0] = '\0';
+    quiet_probe = true;
+    failed = !property_session(&view) &&
+             strcmp(last_property, property) == 0;
+    quiet_probe = false;
+    if (!failed)
+        return false;
+
+    /* p1_diverges also renders the exact prefix source.  A later-property
+     * failure has already established that P1 itself succeeds, so its return
+     * value is intentionally ignored here. */
+    (void)p1_diverges(session, prefix, false, byte_at, emitted_out);
+    return true;
+}
+
 static bool write_failure_artifact(const RtSession *session, u32 prefix,
                                    const char *fault, char *path,
                                    size_t path_cap)
@@ -600,19 +634,30 @@ static void report_failure(const RtSession *session, bool corrupt)
     size_t byte_at = SIZE_MAX;
     u32 prefix;
     u32 op_at;
+    char property[sizeof(last_property)];
+    char detail[sizeof(last_detail)];
     char path[512] = "<artifact write failed>";
     const CmdDesc *desc;
 
+    (void)snprintf(property, sizeof(property), "%s",
+                   corrupt ? "SELFTEST/P1" : last_property);
+    (void)snprintf(detail, sizeof(detail), "%s",
+                   corrupt ? "TAKES_COUNT run was illegally folded" :
+                             last_detail);
     for (prefix = 1U; prefix <= session->events.len; prefix++) {
         bytebuf_init(&source);
-        if (p1_diverges(session, prefix, corrupt, &byte_at, &source))
+        if (property_prefix_fails(session, prefix,
+                                  corrupt ? "P1" : property, corrupt,
+                                  &byte_at, &source))
             break;
         bytebuf_free(&source);
     }
     if (prefix > session->events.len) {
         prefix = (u32)session->events.len;
         bytebuf_init(&source);
-        (void)p1_diverges(session, prefix, corrupt, &byte_at, &source);
+        (void)property_prefix_fails(session, prefix,
+                                    corrupt ? "P1" : property, corrupt,
+                                    &byte_at, &source);
     }
     (void)write_failure_artifact(session, prefix,
                                  corrupt ? "fold-takes-count" : "none",
@@ -629,14 +674,13 @@ static void report_failure(const RtSession *session, bool corrupt)
                   "  emitted source:\n",
                   (unsigned long long)session->seed,
                   (unsigned)session->fixture,
-                  corrupt ? "SELFTEST/P1" : last_property,
+                  property,
                   (unsigned)op_at,
                   (unsigned)prefix, (unsigned)session->events.len,
                   desc == NULL ? "<unknown>" : desc->name,
                   byte_at == SIZE_MAX ? "unavailable " : "",
                   byte_at == SIZE_MAX ? 0U : byte_at,
-                  corrupt ? "TAKES_COUNT run was illegally folded" :
-                            last_detail,
+                  detail,
                   path);
     (void)fwrite(source.data, 1U, source.len, stderr);
     (void)fputc('\n', stderr);
