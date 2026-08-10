@@ -204,10 +204,14 @@ void test_fl_marshal_ed_run_status_mapping(void)
     mf_open(&f);
     map = fl_map_new(&f.fl.vm);
     fl_gc_protect(&f.fl.vm, FL_OBJ_V(FL_MAP, map));
-    args[0] = strv(&f.fl.vm, "ed.repeat", 9U);
+    args[0] = strv(&f.fl.vm, "ed.definitely.missing", 21U);
     args[1] = FL_OBJ_V(FL_MAP, map);
     SAG_ASSERT(!fl_api_ed_run(&f.fl.vm, args, 2U, &out));
     SAG_ASSERT(error_is(&f.fl.vm, "name"));
+    f.fl.vm.err = FL_NIL_V;
+    args[0] = strv(&f.fl.vm, "ed.repeat", 9U);
+    SAG_ASSERT(!fl_api_ed_run(&f.fl.vm, args, 2U, &out));
+    SAG_ASSERT(error_is(&f.fl.vm, "user"));
     f.fl.vm.err = FL_NIL_V;
     args[0] = strv(&f.fl.vm, "ed.edit.insert.text", 19U);
     SAG_ASSERT(!fl_api_ed_run(&f.fl.vm, args, 2U, &out));

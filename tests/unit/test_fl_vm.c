@@ -796,8 +796,6 @@ void test_fl_vm_deferred_surfaces_name_their_sprint(void)
 
     SAG_ASSERT_EQ_I64(strcmp(fl_deferred_msg("set"),
                              "set lands in Sprint 36"), 0);
-    SAG_ASSERT_EQ_I64(strcmp(fl_deferred_msg("record"),
-                             "record lands in Sprint 35"), 0);
     SAG_ASSERT_EQ_I64(strcmp(fl_deferred_msg("nope"),
                              "undefined name 'nope'"), 0);
 }
