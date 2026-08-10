@@ -5,6 +5,7 @@
 
 #include "edit/dispatch.h"
 #include "edit/job.h"
+#include "fl/handle.h"
 #include "fl/origin.h"
 #include "edit/jumplist.h"
 #include "edit/pane_cmds.h"
@@ -201,6 +202,9 @@ struct Ed {
      * registry has not been allocated yet" is not one.
      */
     FlOriginReg origins;
+    /* Sprint 34 §1: every editor handle a script holds. */
+    FlHandleTable handles;
+    u32 next_win_id;
 
     bool dispatch_ready;
     bool model_ready;
@@ -231,6 +235,14 @@ Buffer *sag_ws_scratch_new(Ed *ed, const char *name, u32 flags);
 Buffer *sag_ws_scratch_find(Ed *ed, const char *name);
 /* NULL when the buffer has been closed since the id was recorded. */
 Buffer *sag_ws_buf_by_id(Ed *ed, u32 id);
+/*
+ * The same contract for windows (Sprint 34 §1).  Searches every tab's
+ * pane tree, not just the active one: a Fletch handle taken in one tab
+ * stays valid when the user switches to another, and a script that
+ * walks buf.list() across tabs would otherwise see its own windows
+ * vanish.
+ */
+Win *sag_ed_win_by_id(Ed *ed, u32 id);
 void sag_ws_scratch_drop(Ed *ed, Buffer *b);
 /* Points the focused window at `b` with a fresh cursor set and viewport.
  * Returns false when `b` is not in the workspace. */

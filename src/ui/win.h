@@ -17,6 +17,16 @@
 typedef struct Buffer Buffer;
 
 typedef struct Win {
+    /*
+     * Sprint 34: stable for this window's lifetime and never reused.
+     *
+     * Buffers have carried one since Sprint 14 for the same reason a
+     * window needs one now: a Fletch handle outlives the pane tree
+     * mutation that freed the Win, and an id that is absent from the
+     * tree fails cleanly where a dangling pointer does not.  Assigned
+     * by ed.c, which owns the counter; 0 is never handed out.
+     */
+    u32 id;
     Buffer *buf;
     CursorSet cs;
     HState h;

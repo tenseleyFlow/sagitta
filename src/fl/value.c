@@ -73,6 +73,16 @@ bool fl_equal(FlValue a, FlValue b)
     case FL_FLOAT: return a.as.f == b.as.f;
     case FL_STR:   return fl_str_eq((const FlStr *)a.as.o,
                                     (const FlStr *)b.as.o);
+    /*
+     * Sprint 34's handles are scalars, not objects: the payload is a
+     * {slot, gen} pair, so two handles are equal when they name the
+     * same slot in the same life.  The default branch below would read
+     * the same eight bytes through `as.o` and get the right answer by
+     * accident; saying it in the tag the value actually carries means
+     * the next person to add a scalar tag does not have to notice.
+     */
+    case FL_BUF: case FL_CURSOR: case FL_SPAN: case FL_WIN: case FL_REGEX:
+        return a.as.i == b.as.i;
     default:
         /* Reference identity for the rest: two distinct lists with
          * equal contents are not the same list. */

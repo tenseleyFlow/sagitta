@@ -269,6 +269,43 @@ Buffer *sag_ws_buf_by_id(Ed *ed, u32 id)
     return NULL;
 }
 
+static Win *win_by_id_in(Pane *p, u32 id)
+{
+    Win *w;
+
+    if (p == NULL)
+        return NULL;
+    if (p->is_leaf)
+        return p->win != NULL && p->win->id == id ? p->win : NULL;
+    w = win_by_id_in(p->a, id);
+    return w != NULL ? w : win_by_id_in(p->b, id);
+}
+
+Win *sag_ed_win_by_id(Ed *ed, u32 id)
+{
+    size_t i;
+    Win *w;
+
+    if (ed == NULL || id == 0U)
+        return NULL;
+    /*
+     * Every tab's tree, not just the active one.  A handle taken in
+     * one tab must survive a switch to another -- a script that walks
+     * buffers across tabs would otherwise watch its own windows
+     * disappear as the user navigated.  ed->pane_root is the active
+     * tab's root and is already one of these.
+     */
+    for (i = 0U; i < ed->tabs.v.len; i++) {
+        w = win_by_id_in(ed->tabs.v.data[i].root, id);
+        if (w != NULL)
+            return w;
+    }
+    w = win_by_id_in(ed->pane_root, id);
+    if (w != NULL)
+        return w;
+    return ed->single_win.id == id ? &ed->single_win : NULL;
+}
+
 Buffer *sag_ws_scratch_find(Ed *ed, const char *name)
 {
     u32 i;
@@ -392,6 +429,7 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
         ed->tabs.active = 0;
     }
     sag_reg_bind_context(&ed->regs, ed->buffer.undo, &ed->buffer.meta);
+    ed->single_win.id = ed->next_win_id++;
     sag_cset_init(&ed->single_win.cs, cursor);
     ed->single_win.buf = &ed->buffer;
     sag_vp_init(&ed->single_win);
@@ -433,6 +471,10 @@ void sag_ed_init(Ed *ed)
     ed->ws.dir = arena_strdup(&ed->arena, root == NULL ? "." : root);
     free(root);
     fl_origin_reg_init(&ed->origins);
+    fl_h_table_init(&ed->handles);
+    /* Window ids start at 1; 0 is never handed out, so a zeroed Win is
+     * distinguishable from window one. */
+    ed->next_win_id = 1U;
     sag_dispatch_init(ed);
     ed->dispatch_ready = true;
     ed->exit_code = SAG_EXIT_OK;
@@ -469,6 +511,7 @@ void sag_ed_free(Ed *ed)
     sag_term_oob_clear();
     if (ed->dispatch_ready)
         sag_dispatch_free(ed);
+    fl_h_table_free(&ed->handles);
     fl_origin_reg_free(&ed->origins);
     sag_timers_free(&ed->timers);
     bytebuf_free(&ed->paste);
@@ -617,6 +660,7 @@ Win *sag_ed_win_clone(Ed *ed, const Win *src)
     if (ed == NULL || src == NULL)
         return NULL;
     w = sag_xcalloc(1U, sizeof(*w));
+    w->id = ed->next_win_id++;
     w->buf = src->buf;
     w->rect = src->rect;
     w->number_style = src->number_style;
