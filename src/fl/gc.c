@@ -220,9 +220,10 @@ static void mark_roots(FlVm *vm)
     mark_obj(vm, (FlObj *)vm->builtins);
     /* 5c. the prelude (root 10), added by s33 with §9's `error`. */
     mark_obj(vm, (FlObj *)vm->prelude);
-    /* 6. handles -- Sprint 34 fills this; rooted now */
-    for (i = 0U; i < vm->handles.n; i++)
-        mark_value(vm, vm->handles.v[i]);
+    /* 6. host-retained values (s34).  See FlHostRoots in vm.h for why
+     *    this is pointers to slots and not a copy of each value. */
+    for (i = 0U; i < vm->host_roots.n; i++)
+        mark_value(vm, *vm->host_roots.v[i]);
     /* 7. the temp-root protection stack */
     for (i = 0U; i < vm->ntemp; i++)
         mark_value(vm, vm->temp[i]);
@@ -230,10 +231,75 @@ static void mark_roots(FlVm *vm)
      *    so a collection can land in the middle of building one. */
     for (i = 0U; i < vm->ncompiling; i++)
         mark_obj(vm, (FlObj *)vm->compiling[i]);
+    /* 11. mark providers (s34), for collections that move under the
+     *     registration -- the hook table is the first. */
+    for (i = 0U; i < vm->nproviders; i++)
+        vm->providers[i].mark(vm, vm->providers[i].ctx);
     /* The in-flight raised value is not a numbered root because it is
      * not a container the program can reach -- but dropping it would
      * lose the error a handler is about to catch. */
     mark_value(vm, vm->err);
+}
+
+void fl_gc_mark_value(FlVm *vm, FlValue v)
+{
+    mark_value(vm, v);
+}
+
+void fl_gc_host_root_add(FlVm *vm, FlValue *slot)
+{
+    u32 i;
+
+    if (vm == NULL || slot == NULL)
+        SAG_BUG("fletch gc: NULL host root");
+    for (i = 0U; i < vm->host_roots.n; i++) {
+        if (vm->host_roots.v[i] == slot)
+            SAG_BUG("fletch gc: host root registered twice");
+    }
+    if (vm->host_roots.n == vm->host_roots.cap) {
+        u32 want = vm->host_roots.cap == 0U ? 8U : vm->host_roots.cap * 2U;
+
+        vm->host_roots.v = (FlValue **)sag_xreallocarray(
+            vm->host_roots.v, want, sizeof(*vm->host_roots.v));
+        vm->host_roots.cap = want;
+    }
+    vm->host_roots.v[vm->host_roots.n++] = slot;
+}
+
+void fl_gc_host_root_remove(FlVm *vm, FlValue *slot)
+{
+    u32 i;
+
+    if (vm == NULL || slot == NULL)
+        return;
+    for (i = 0U; i < vm->host_roots.n; i++) {
+        if (vm->host_roots.v[i] != slot)
+            continue;
+        /*
+         * Order is not meaningful here -- marking is a set operation --
+         * so the last entry fills the hole and teardown stays O(1).
+         */
+        vm->host_roots.v[i] = vm->host_roots.v[vm->host_roots.n - 1U];
+        vm->host_roots.n--;
+        return;
+    }
+}
+
+void fl_gc_root_provider(FlVm *vm, FlGcMarkFn mark, void *ctx)
+{
+    u32 i;
+
+    if (vm == NULL || mark == NULL)
+        SAG_BUG("fletch gc: NULL mark provider");
+    for (i = 0U; i < vm->nproviders; i++) {
+        if (vm->providers[i].mark == mark && vm->providers[i].ctx == ctx)
+            return;                 /* idempotent: re-attach is a no-op */
+    }
+    if (vm->nproviders == (u32)FL_GC_PROVIDERS_MAX)
+        SAG_BUG("fletch gc: too many mark providers");
+    vm->providers[vm->nproviders].mark = mark;
+    vm->providers[vm->nproviders].ctx = ctx;
+    vm->nproviders++;
 }
 
 /* ---------------------------------------------------------------- */

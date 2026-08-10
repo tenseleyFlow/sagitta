@@ -55,16 +55,52 @@ struct FlErr {
 };
 
 /*
- * Sprint 34's handle table.  Rooted NOW and empty now, deliberately:
- * a subsystem that adds a root later is the failure mode where it
- * works in every test that never collects and drops objects in
- * production.
+ * Root 6.  Sprint 30 reserved it for "Sprint 34's handle table" and
+ * Sprint 34 found it needed for the opposite thing.
+ *
+ * Handles turned out to be SCALARS -- a {slot, gen} pair naming an
+ * editor object, with no heap children -- so the collector needs no
+ * knowledge of them at all.  What it does need is the mirror problem:
+ * FlValues the HOST retains and the program cannot reach.  A hook
+ * closure lives in Ed, not in any Fletch variable, and a collector
+ * that cannot see it frees a function that is about to be called.
+ * That is the classic embedding crash, and it is what root 6 now
+ * covers.
+ *
+ * POINTERS TO SLOTS, not copies of values: the host owns the storage
+ * and writes through it, so a copy would go stale the first time a
+ * hook was replaced.  Every registered address must outlive its
+ * registration -- fl_gc_host_root_add is for stable addresses only,
+ * and anything in a vector that reallocates uses the provider form
+ * below instead.
  */
-typedef struct FlHandleTab {
-    FlValue *v;
+typedef struct FlHostRoots {
+    FlValue **v;
     u32 n;
     u32 cap;
-} FlHandleTab;
+} FlHostRoots;
+
+/*
+ * Root 11: mark providers, for collections that MOVE.
+ *
+ * The hook table is a growing vector of FlValues; registering each
+ * entry's address would hand the collector pointers that the next
+ * push invalidates.  A provider is called during marking and walks
+ * the live collection itself.
+ *
+ * The callback takes the VM rather than the FlGc the sprint sketched,
+ * because a provider's whole job is to call fl_gc_mark_value and that
+ * needs the VM -- an FlGc-only signature would force every provider
+ * to recover the VM by pointer arithmetic on its own container.
+ */
+typedef void (*FlGcMarkFn)(FlVm *vm, void *ctx);
+
+typedef struct FlGcProvider {
+    FlGcMarkFn mark;
+    void *ctx;
+} FlGcProvider;
+
+enum { FL_GC_PROVIDERS_MAX = 8 };
 
 typedef struct FlMotionProg FlMotionProg;
 
@@ -101,7 +137,9 @@ struct FlVm {
      */
     FlMap *modules;
     FlModTab mods;
-    FlHandleTab handles;         /* Sprint 34 fills; rooted now           */
+    FlHostRoots host_roots;      /* root 6 -- see FlHostRoots above       */
+    FlGcProvider providers[FL_GC_PROVIDERS_MAX];
+    u32 nproviders;
     FlValue temp[FL_TEMP_MAX];
     u32 ntemp;
     /*
@@ -201,6 +239,22 @@ struct FlVm {
 };
 
 bool fl_vm_init(FlVm *vm, Arena *a, Interner *in, DiagCtx *dc);
+
+/*
+ * Root 6: a host-owned FlValue the collector must see.  `slot` must
+ * have a STABLE ADDRESS for as long as it is registered -- a field of
+ * a heap struct that outlives the registration, never an element of a
+ * vector that grows.  Registering the same address twice is a bug and
+ * a SAG_BUG; removing one that was never added is a no-op, so a
+ * teardown path that runs twice is safe.
+ */
+void fl_gc_host_root_add(FlVm *vm, FlValue *slot);
+void fl_gc_host_root_remove(FlVm *vm, FlValue *slot);
+
+/* Root 11: for collections that move.  See FlGcProvider. */
+void fl_gc_root_provider(FlVm *vm, FlGcMarkFn mark, void *ctx);
+/* What a provider calls.  Safe on any value, including scalars. */
+void fl_gc_mark_value(FlVm *vm, FlValue v);
 
 /*
  * Builds the {kind, msg} error map into vm->err and RETURNS FALSE, so a

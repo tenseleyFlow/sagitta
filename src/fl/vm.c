@@ -115,8 +115,16 @@ void fl_vm_set_step_limit(FlVm *vm, u64 steps)
 
 void fl_vm_free(FlVm *vm)
 {
-    /* The handle table is Sprint 34's; it is rooted and empty here, so
-     * there is nothing of ours to release beyond the heap itself. */
+    /*
+     * Root 6's registration array.  The SLOTS belong to whoever
+     * registered them -- the editor's hook table outlives this VM in a
+     * reload -- so only the array of pointers is ours to free.
+     */
+    free(vm->host_roots.v);
+    vm->host_roots.v = NULL;
+    vm->host_roots.n = 0U;
+    vm->host_roots.cap = 0U;
+    vm->nproviders = 0U;
 #if FL_VM_TRACE
     bytebuf_free(&vm->trace);
 #endif

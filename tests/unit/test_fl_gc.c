@@ -262,39 +262,116 @@ void test_fl_gc_root_builtins(void)
 }
 
 /* ---------------------------------------------------------------- */
-/* Root 6: the handle table (Sprint 34 fills it; rooted now)        */
+/* Root 6: host-retained values (Sprint 34)                         */
 /* ---------------------------------------------------------------- */
 
+/*
+ * Sprint 30 reserved root 6 for "Sprint 34's handle table" and left a
+ * placeholder here.  Sprint 34's handles turned out to be scalars the
+ * collector never needs to see; what root 6 actually carries is the
+ * mirror problem -- an FlValue the HOST holds and no Fletch variable
+ * reaches, like a hook closure sitting in Ed.  That is the classic
+ * embedding crash, so this is the test that matters.
+ */
 void test_fl_gc_root_handle_table(void)
 {
     GcFix f;
     FlStr *h;
+    FlValue slot;
 
-    /*
-     * Empty until s34, and rooted anyway.  Tested now because a root
-     * that is never exercised is a root that quietly stops working, and
-     * s34 would then debug a collector bug while writing a buffer API.
-     */
     gf_open(&f);
     h = witness(&f, "handle");
-    SAG_ASSERT(f.vm.handles.n < f.vm.handles.cap ||
-               f.vm.handles.cap == 0U);
-    if (f.vm.handles.cap == 0U) {
-        /* No slots allocated yet, so this root cannot be exercised
-         * without s34's table growth.  Assert the empty case marks
-         * nothing and leave the rest to s34. */
-        fl_gc_collect(&f.vm);
-        SAG_ASSERT(!still_live(&f.vm, h));
-        gf_close(&f);
-        return;
-    }
-    f.vm.handles.v[f.vm.handles.n++] = FL_OBJ_V(FL_STR, h);
+    slot = FL_OBJ_V(FL_STR, h);
+
+    /* Unrooted, a host-only value is collected -- the bug root 6 is
+     * for.  Assert that first, so a root that silently stopped working
+     * could not make the rest of this test pass. */
+    fl_gc_collect(&f.vm);
+    SAG_ASSERT(!still_live(&f.vm, h));
+
+    h = witness(&f, "handle two");
+    slot = FL_OBJ_V(FL_STR, h);
+    fl_gc_host_root_add(&f.vm, &slot);
     fl_gc_collect(&f.vm);
     SAG_ASSERT(still_live(&f.vm, h));
 
-    f.vm.handles.n--;                 /* drop it */
+    /* The root is the SLOT, not the value: writing through it must
+     * change what survives, which is what makes replacing a hook safe. */
+    slot = FL_NIL_V;
     fl_gc_collect(&f.vm);
     SAG_ASSERT(!still_live(&f.vm, h));
+
+    h = witness(&f, "handle three");
+    slot = FL_OBJ_V(FL_STR, h);
+    fl_gc_collect(&f.vm);
+    SAG_ASSERT(still_live(&f.vm, h));
+
+    fl_gc_host_root_remove(&f.vm, &slot);
+    fl_gc_collect(&f.vm);
+    SAG_ASSERT(!still_live(&f.vm, h));
+    /* Removing twice is a no-op, so a teardown that runs twice is
+     * safe -- s36's reload path does exactly that. */
+    fl_gc_host_root_remove(&f.vm, &slot);
+    gf_close(&f);
+}
+
+/* ---------------------------------------------------------------- */
+/* Root 11: mark providers (Sprint 34)                              */
+/* ---------------------------------------------------------------- */
+
+typedef struct ProviderCtx {
+    FlValue *v;
+    u32 n;
+    u32 calls;
+} ProviderCtx;
+
+static void provider_mark(FlVm *vm, void *ctx)
+{
+    ProviderCtx *p = (ProviderCtx *)ctx;
+    u32 i;
+
+    p->calls++;
+    for (i = 0U; i < p->n; i++)
+        fl_gc_mark_value(vm, p->v[i]);
+}
+
+void test_fl_gc_root_provider(void)
+{
+    GcFix f;
+    ProviderCtx ctx;
+    FlValue held[2];
+    FlStr *a, *b;
+
+    gf_open(&f);
+    a = witness(&f, "provider a");
+    b = witness(&f, "provider b");
+    held[0] = FL_OBJ_V(FL_STR, a);
+    held[1] = FL_OBJ_V(FL_STR, b);
+    ctx.v = held;
+    ctx.n = 2U;
+    ctx.calls = 0U;
+
+    fl_gc_root_provider(&f.vm, provider_mark, &ctx);
+    fl_gc_collect(&f.vm);
+    SAG_ASSERT_EQ_U64(ctx.calls, 1U);
+    SAG_ASSERT(still_live(&f.vm, a));
+    SAG_ASSERT(still_live(&f.vm, b));
+
+    /* A provider walks a LIVE collection, so shrinking it drops what
+     * it no longer reports -- that is the whole point of the form: the
+     * hook table's storage moves and its addresses cannot be
+     * registered. */
+    ctx.n = 1U;
+    fl_gc_collect(&f.vm);
+    SAG_ASSERT_EQ_U64(ctx.calls, 2U);
+    SAG_ASSERT(still_live(&f.vm, a));
+    SAG_ASSERT(!still_live(&f.vm, b));
+
+    /* Re-attaching the same (fn, ctx) pair is idempotent: boot paths
+     * that run twice must not double-mark or exhaust the table. */
+    fl_gc_root_provider(&f.vm, provider_mark, &ctx);
+    fl_gc_collect(&f.vm);
+    SAG_ASSERT_EQ_U64(ctx.calls, 3U);
     gf_close(&f);
 }
 
