@@ -258,6 +258,9 @@ struct Ed {
     SagOptHistory *opt_history;
     SagConfigState *config;
     bool clean;
+    /* Sprint 37: model/runtime without terminal, input, grid, or loop. */
+    bool headless;
+    bool batch_stdin_claimed;
     bool undo_break_on_newline;
     bool errorbells;
     bool ambiguous_wide;
@@ -276,6 +279,9 @@ void sag_ed_init(Ed *ed);
 void sag_ed_free(Ed *ed);
 SagLoadErr sag_ed_open(Ed *ed, const char *path);
 bool sag_ed_open_scratch(Ed *ed);
+/* A byte-exact, initially-clean scratch buffer for `--batch ... -`. */
+bool sag_ed_open_memory(Ed *ed, const u8 *bytes, size_t len,
+                        const char *name);
 int sag_ed_driver(const char *path);
 int sag_ed_driver_opts(const char *path, const SagEdStartup *startup);
 const char *sag_ws_root(const Ed *ed);

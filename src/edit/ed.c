@@ -576,7 +576,7 @@ SagLoadErr sag_ed_open(Ed *ed, const char *path)
     if (tb == NULL)
         tb = sag_textbuf_new();
     (void)ed_model_finish(ed, tb, path);
-    if (ed->buffer.meta.realpath != NULL &&
+    if (!ed->headless && ed->buffer.meta.realpath != NULL &&
         sag_journal_probe(ed->buffer.meta.realpath, &ed->buffer.meta))
         sag_ed_prompt(ed, SAG_PROMPT_RECOVER);
     sag_fl_hook_buffer(ed, FL_EV_BUF_OPEN, &ed->buffer);
@@ -593,6 +593,26 @@ bool sag_ed_open_scratch(Ed *ed)
     sag_filemeta_init(&ed->buffer.meta);
     tb = sag_textbuf_new();
     return ed_model_finish(ed, tb, NULL);
+}
+
+bool sag_ed_open_memory(Ed *ed, const u8 *bytes, size_t len,
+                        const char *name)
+{
+    TextBuf *tb;
+
+    if (ed == NULL || name == NULL || (bytes == NULL && len != 0U) ||
+        ed->fl_model_teardown)
+        return false;
+    ed_buffer_free(ed);
+    sag_filemeta_init(&ed->buffer.meta);
+    tb = sag_textbuf_from_bytes(bytes, (u64)len);
+    if (!ed_model_finish(ed, tb, NULL)) {
+        sag_textbuf_free(tb);
+        return false;
+    }
+    ed->buffer.name = arena_strdup(&ed->arena, name);
+    ed->buffer.flags |= SAG_BUF_SCRATCH;
+    return true;
 }
 
 bool sag_buf_dirty(const Buffer *b)
@@ -1214,7 +1234,12 @@ CmdStatus sag_ed_file_save_win(Ed *ed, Win *win, bool force)
     }
     sag_ed_finish_edit(ed, &ec);
     if (result == SAG_SAVE_CHANGED_ON_DISK) {
-        sag_ed_prompt(ed, SAG_PROMPT_OVERWRITE);
+        if (!ed->headless)
+            sag_ed_prompt(ed, SAG_PROMPT_OVERWRITE);
+        else
+            sag_msg(ed, SAG_MSG_ERROR,
+                    "%s changed on disk; pass {force: true} to save",
+                    doc->path);
         return SAG_CMD_ERR_IO;
     }
     if (result != SAG_SAVE_OK) {

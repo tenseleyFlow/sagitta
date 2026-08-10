@@ -38,6 +38,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 
+#include "edit/ed.h"
 #include "fl/gc.h"
 #include "text/file.h"
 #include "util/intern.h"
@@ -238,6 +239,41 @@ static bool io_read_lines(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     *out = fl_split_lines(vm, (const char *)bb.data, (u32)bb.len);
     bytebuf_free(&bb);
     return true;
+}
+
+static bool io_stdin(FlVm *vm, FlValue *a, u32 n, FlValue *out)
+{
+    Bytebuf bytes;
+
+    (void)a;
+    (void)n;
+    if (vm->ed != NULL && vm->ed->batch_stdin_claimed)
+        return fl_raise(vm, "io",
+                        "stdin is already the '-' batch file buffer");
+    if (vm->ed != NULL)
+        vm->ed->batch_stdin_claimed = true;
+    bytebuf_init(&bytes);
+    for (;;) {
+        u8 chunk[65536];
+        ssize_t got = read(STDIN_FILENO, chunk, sizeof(chunk));
+
+        if (got > 0) {
+            if (bytes.len > (size_t)IO_MAX - (size_t)got) {
+                bytebuf_free(&bytes);
+                return fl_raise(vm, "limit", "io.stdin input exceeds %u bytes",
+                                (unsigned)IO_MAX);
+            }
+            bytebuf_append(&bytes, chunk, (size_t)got);
+        } else if (got == 0) {
+            *out = FL_OBJ_V(FL_STR, fl_str_take(vm, &bytes));
+            return true;
+        } else if (errno != EINTR) {
+            int saved = errno;
+
+            bytebuf_free(&bytes);
+            return io_err(vm, saved, "stdin");
+        }
+    }
 }
 
 static bool io_write(FlVm *vm, FlValue *a, u32 n, FlValue *out)
@@ -951,6 +987,7 @@ static bool io_glob(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 /* ---------------------------------------------------------------- */
 
 static const FlNativeDef IO_DEFS[] = {
+    {"stdin",      io_stdin,      0U, 0U, 0U,                "() -> str"},
     {"read",       io_read,       1U, 1U, FL_CAP_FS_READ,  "(path) -> str"},
     {"read_lines", io_read_lines, 1U, 1U, FL_CAP_FS_READ,  "(path) -> list"},
     {"write",      io_write,      2U, 2U, FL_CAP_FS_WRITE, "(path, s) -> nil"},

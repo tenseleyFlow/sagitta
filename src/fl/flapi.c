@@ -2,6 +2,8 @@
 
 #include "fl/flapi.h"
 
+#include "edit/batch.h"
+
 #include <limits.h>
 #include <stdlib.h>
 #include <string.h>
@@ -674,7 +676,7 @@ FlBindDesc fl_api[] = {
     COMMAND_ARGS("buf.close", "ed.buf.close", FL_H_BUF, 1U, 2U, 0U,
                  FL_ARG_BOOL, FL_ARG_NONE, FL_ARG_NONE),
     COMMAND_ARGS("buf.save", "ed.file.write", FL_H_BUF, 1U, 2U,
-                 FL_CAP_FS_WRITE, FL_ARG_STR, FL_ARG_NONE, FL_ARG_NONE),
+                 FL_CAP_FS_WRITE, FL_ARG_VALUE, FL_ARG_NONE, FL_ARG_NONE),
     QUERY("buf.path", FL_H_BUF, 1U, 1U, q_buf_path),
     QUERY("buf.name", FL_H_BUF, 1U, 1U, q_buf_name),
     QUERY("buf.lang", FL_H_BUF, 1U, 1U, q_buf_lang),
@@ -1103,8 +1105,26 @@ static bool marshal_command(FlVm *vm, const FlBindDesc *d,
             if (!need_type(vm, a[i], FL_MAP, i)) return false;
             break;
         case FL_ARG_VALUE:
-            SAG_BUG("Fletch value arg reached generic marshaller: %s",
-                    d->fl_name);
+            if (strcmp(d->fl_name, "buf.save") == 0 &&
+                a[i].t == (u8)FL_STR) {
+                s = (const FlStr *)a[i].as.o;
+                cx->sarg = s->b;
+                cx->sarg_len = s->len;
+            } else if (strcmp(d->fl_name, "buf.save") == 0 &&
+                       a[i].t == (u8)FL_MAP) {
+                FlValue force = FL_NIL_V;
+                FlStr *key = fl_str_new(vm, "force", 5U);
+
+                if (!fl_map_get((FlMap *)a[i].as.o,
+                                FL_OBJ_V(FL_STR, key), &force) ||
+                    force.t != (u8)FL_BOOL)
+                    return fl_raise(vm, "type",
+                                    "buf.save options require boolean force");
+                cx->bang = force.as.b;
+            } else {
+                return fl_raise(vm, "type",
+                                "buf.save argument 2 must be path string or options map");
+            }
             break;
         case FL_ARG_NONE:
         default:
@@ -1134,9 +1154,22 @@ static bool invoke_command(FlVm *vm, CmdId id, CmdCtx *cx,
                            CmdStatus *out)
 {
     const CmdDesc *desc = sag_cmd_desc(id);
+    const char *alternative = desc == NULL ? NULL :
+        sag_batch_command_alternative(desc->name, cx);
     bool changes = desc != NULL &&
                    (desc->flags & SAG_CMD_CHANGES_BUFFER) != 0U;
     EditCtx ec;
+
+    if (cx->ed != NULL && cx->ed->headless && desc != NULL &&
+        (((desc->flags & SAG_CMD_INTERACTIVE) != 0U) ||
+         alternative != NULL)) {
+        if (alternative == NULL)
+            SAG_BUG("interactive command lacks a batch refusal: %s",
+                    desc->name);
+        return fl_raise(vm, "capability",
+                        "\"%s\" requires a terminal and is not available "
+                        "under --batch; %s", desc->name, alternative);
+    }
 
     if (changes && cx->ed != NULL && cx->ed->fl_model_teardown)
         return fl_raise(vm, "user",

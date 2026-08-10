@@ -28,6 +28,9 @@ CmdStatus sag_fl_eval(Ed *ed, const char *source, u32 len);
  * is used only in diagnostics/traces. */
 FlFn *fl_compile_str(FlRuntime *rt, const u8 *source, size_t len,
                      const char *label);
+/* Compile a top-level CLI script with its real path and full user authority. */
+FlFn *fl_compile_script(FlRuntime *rt, const u8 *source, size_t len,
+                        const char *realpath_label);
 
 /* Execute a compiled script in the persistent editor VM.  A call made from
  * inside Fletch nests without resetting the caller's frames; a host call is

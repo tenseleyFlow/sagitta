@@ -397,6 +397,7 @@ PERF_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 PERF_FLETCH_OBJ := $(BUILD)/tests/perf/perf_fletch.o
 PERF_RECORD_OBJ := $(BUILD)/tests/perf/perf_record.o
 FLETCH_RUN_OBJ := $(BUILD)/tests/fletch/run.o
+SCRIPT_RUNNER_OBJ := $(BUILD)/tests/script/runner.o
 FLETCH_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 ROUNDTRIP_OBJ := $(BUILD)/tests/roundtrip/gen.o \
                  $(BUILD)/tests/roundtrip/runner.o
@@ -434,7 +435,8 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(FUZZ_LIB_OBJ) \
                 $(PERF_CMDCOMP_OBJ) \
                 $(PERF_STATE_OBJ) \
                 $(PERF_FINDER_OBJ) $(PERF_MOUSE_OBJ) \
-                $(GEN_BIGFILE_OBJ) $(FLETCH_RUN_OBJ) $(ROUNDTRIP_OBJ) \
+                $(GEN_BIGFILE_OBJ) $(FLETCH_RUN_OBJ) $(SCRIPT_RUNNER_OBJ) \
+                $(ROUNDTRIP_OBJ) \
                 $(PERF_FLETCH_OBJ) $(PERF_RECORD_OBJ) $(FUZZ_RECORD_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) $(FAULTSHIM)))
@@ -601,6 +603,9 @@ $(BUILD)/fletch_run: $(FLETCH_CORE_OBJ) $(FLETCH_RUN_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FLETCH_CORE_OBJ) \
 		$(FLETCH_RUN_OBJ) $(LDLIBS)
 
+$(BUILD)/script_runner: $(SCRIPT_RUNNER_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(SCRIPT_RUNNER_OBJ) $(LDLIBS)
+
 $(BUILD)/roundtrip_runner: $(ROUNDTRIP_LINK_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(ROUNDTRIP_LINK_OBJ) $(LDLIBS)
 
@@ -710,7 +715,7 @@ $(FAKECLIP): tests/unit/fakeclip.c | dirs
 # see the valgrind job in .github/workflows/ci.yml for when that lane
 # has to be asked for by hand.
 #
-check: $(BUILD)/unit_tests $(BUILD)/sagitta test-fletch
+check: $(BUILD)/unit_tests $(BUILD)/sagitta test-fletch test-script
 	$(UNIT_RUN)
 	scripts/bans.sh
 	scripts/check-cmd-dispatch.sh
@@ -721,7 +726,7 @@ check: $(BUILD)/unit_tests $(BUILD)/sagitta test-fletch
 	scripts/smoke.sh $(BUILD)/sagitta
 	@echo "check: ok (fast tier -- pty, torture, sanitizers and valgrind NOT run)"
 
-test: $(BUILD)/unit_tests $(BUILD)/sagitta test-pty test-fletch \
+test: $(BUILD)/unit_tests $(BUILD)/sagitta test-pty test-fletch test-script \
       test-roundtrip test-record-corpus torture-build
 	$(UNIT_RUN)
 	scripts/bans.sh
@@ -1135,8 +1140,8 @@ install: all
 clean:
 	rm -rf $(BUILD)
 
-test-script:
-	@echo 'error: script-test runner lands in Sprint 37 (sag --batch)'; exit 1
+test-script: $(BUILD)/script_runner $(BUILD)/sagitta
+	LC_ALL=C $(BUILD)/script_runner --sagitta $(abspath $(BUILD)/sagitta)
 
 # The conformance suite (Sprint 33).  LC_ALL=C is set rather than
 # assumed: run.c sorts with strcmp and the ledger is byte-compared.
@@ -1231,7 +1236,8 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/sagitta
          $(PTY_ORACLE_OBJ:.o=.d) \
          $(PTY_HARNESS_OBJ:.o=.d) $(PTY_REGISTRY_OBJ:.o=.d) \
          $(PTY_RUNNER_OBJ:.o=.d) $(PTY_DEMO_OBJ:.o=.d) \
-         $(FLETCH_RUN_OBJ:.o=.d) $(ROUNDTRIP_OBJ:.o=.d) \
+         $(FLETCH_RUN_OBJ:.o=.d) $(SCRIPT_RUNNER_OBJ:.o=.d) \
+         $(ROUNDTRIP_OBJ:.o=.d) \
          $(PERF_UNICODE_OBJ:.o=.d) $(PERF_RENDER_OBJ:.o=.d) \
          $(PERF_PIECE_OBJ:.o=.d) $(PERF_CURSOR_OBJ:.o=.d) \
          $(PERF_UNDO_OBJ:.o=.d) $(PERF_TEXTBUF_OBJ:.o=.d) \

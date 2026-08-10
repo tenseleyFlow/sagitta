@@ -4,6 +4,11 @@
 #define T(n) { #n, test_##n }
 
 const SagTest sag_tests[] = {
+    T(batch_selfcheck_pins_every_uninitialized_subsystem),
+    T(batch_selfcheck_rejects_seeded_grid_input_tty_and_timer),
+    T(batch_selfcheck_rejects_interactive_installed_binding),
+    T(batch_refusal_table_covers_every_interactive_command),
+    T(batch_memory_buffer_is_byte_exact_named_and_initially_clean),
     T(runtime_defaults_rebuild_frozen_keymap),
     T(runtime_defaults_parse_run_style_and_options),
     T(trust_prompt_routes_all_terminal_answers_through_event_loop),

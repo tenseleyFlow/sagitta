@@ -1,6 +1,12 @@
 #ifndef SAG_TEST_TESTS_H
 #define SAG_TEST_TESTS_H
 
+void test_batch_selfcheck_pins_every_uninitialized_subsystem(void);
+void test_batch_selfcheck_rejects_seeded_grid_input_tty_and_timer(void);
+void test_batch_selfcheck_rejects_interactive_installed_binding(void);
+void test_batch_refusal_table_covers_every_interactive_command(void);
+void test_batch_memory_buffer_is_byte_exact_named_and_initially_clean(void);
+
 void test_arena_align(void);
 void test_arena_strdup(void);
 void test_vec_growth(void);

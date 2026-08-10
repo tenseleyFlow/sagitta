@@ -19,6 +19,9 @@ typedef struct SagLogSink {
 
 void sag_log(SagLogLevel level, const char *fmt, ...);
 void sag_log_set_sink(const SagLogSink *sink);
+/* An observer in addition to the file/custom sink.  Batch uses this to
+ * mirror WARN+ without changing the durable logging contract. */
+void sag_log_set_mirror(const SagLogSink *sink);
 
 /* Runs before an internal-error report so terminal owners can restore it. */
 void sag_bug_set_prehook(void (*fn)(void));

@@ -1,5 +1,6 @@
 #include "args.h"
 #include "flcli.h"
+#include "edit/batch.h"
 #include "edit/cmd.h"
 #include "edit/ed.h"
 #include "mod/mods.h"
@@ -22,7 +23,11 @@ static const char help_text[] =
     "  --config PATH    Use PATH instead of the user init.fl.\n"
     "  --no-workspace-config  Do not load .sagitta.fl.\n"
     "  --trust-workspace      Pre-grant this workspace configuration.\n"
-    "  --batch <file>   Run a Fletch batch script (Sprint 37).\n"
+    "  --batch SCRIPT   Run SCRIPT headlessly; no tty or grid.\n"
+    "  --test           Add the t.* script-test assertions (batch only).\n"
+    "  --quiet          Suppress batch warnings; errors still print.\n"
+    "  --grant NAME:CAP Reserve a plugin capability grant (Sprint 54).\n"
+    "  --               Pass every remaining argument to the batch script.\n"
     "\n"
     "Subcommands:\n"
     "  sag fl FILE      Run a Fletch script headlessly.\n"
@@ -110,9 +115,19 @@ static int run_driver(const SagArgs *args)
         return SAG_EXIT_OK;
     }
     if (args->batch_script != NULL) {
-        (void)fprintf(stderr,
-            "sagitta: error: batch mode is not yet implemented: Sprint 37\n");
-        return SAG_EXIT_ERR;
+        BatchOpts batch;
+
+        if (args->ngrants != 0U) {
+            (void)fprintf(stderr,
+                "sagitta: error: --grant enforcement lands in Sprint 54\n");
+            return SAG_EXIT_ERR;
+        }
+        batch = (BatchOpts){args->batch_script, args->files, args->nfiles,
+                            args->batch_args, args->nbatch_args,
+                            args->config_path, args->clean,
+                            args->no_workspace_config,
+                            args->trust_workspace, args->test, args->quiet};
+        return sag_batch_run(&batch);
     }
     if (args->nfiles != 0U && strcmp(args->files[0], "pkg") == 0) {
         (void)fprintf(stderr, "sagitta: error: unknown argument '%s'\n",
@@ -134,6 +149,7 @@ static int run_driver(const SagArgs *args)
 int main(int argc, char **argv)
 {
     Bytebuf err = {0};
+    int exit_code;
 
     /*
      * `sag fl` is handled BEFORE the editor's parser: its options are
@@ -154,8 +170,12 @@ int main(int argc, char **argv)
         if (result != SAG_EXIT_OK) {
             return result;
         }
-        return run_driver(&args);
+        exit_code = run_driver(&args);
+        sag_args_free(&args);
+        return exit_code;
     }
     bytebuf_free(&err);
-    return run_driver(&args);
+    exit_code = run_driver(&args);
+    sag_args_free(&args);
+    return exit_code;
 }

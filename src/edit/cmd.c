@@ -591,12 +591,13 @@ static const CmdDesc builtins[] = {
      * absent and reading as "no such command" (invariant 3).
      */
     /* Sprint 26 §6: the three instances. */
-    {"ed.find.file", sag_find_cmd_file, SAG_ARITY_NONE, 0U,
+    {"ed.find.file", sag_find_cmd_file, SAG_ARITY_NONE, SAG_CMD_PROMPTS,
      "Find a file in the workspace by fuzzy name", NULL},
-    {"ed.find.buffer", sag_find_cmd_buffer, SAG_ARITY_NONE, 0U,
+    {"ed.find.buffer", sag_find_cmd_buffer, SAG_ARITY_NONE, SAG_CMD_PROMPTS,
      "Switch to an open tab by fuzzy name", NULL},
     {"ed.undo.branches", sag_undo_cmd_branches, SAG_ARITY_NONE,
-     SAG_CMD_NEEDS_WIN, "Pick an undo state from the branch tree", NULL},
+     SAG_CMD_NEEDS_WIN | SAG_CMD_PROMPTS,
+     "Pick an undo state from the branch tree", NULL},
     /*
      * Sprint 26 §9 defers these two, and they must EXIST to say so:
      * absent, they read to the user as "no such command" rather than

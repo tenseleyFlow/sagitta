@@ -14,6 +14,8 @@
 
 static SagLogSink active_sink;
 static bool has_custom_sink;
+static SagLogSink mirror_sink;
+static bool has_mirror_sink;
 static void (*bug_prehook)(void);
 
 static const char *level_name(SagLogLevel level)
@@ -184,6 +186,17 @@ void sag_log_set_sink(const SagLogSink *sink)
     }
 }
 
+void sag_log_set_mirror(const SagLogSink *sink)
+{
+    if (sink == NULL) {
+        mirror_sink = (SagLogSink){0};
+        has_mirror_sink = false;
+    } else {
+        mirror_sink = *sink;
+        has_mirror_sink = true;
+    }
+}
+
 void sag_bug_set_prehook(void (*fn)(void))
 {
     bug_prehook = fn;
@@ -210,6 +223,8 @@ void sag_log(SagLogLevel level, const char *fmt, ...)
     } else {
         default_write(level, message);
     }
+    if (has_mirror_sink && mirror_sink.write != NULL)
+        mirror_sink.write(mirror_sink.user, level, message);
     free(message);
 }
 
