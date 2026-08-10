@@ -28,6 +28,7 @@
 #include "ui/win.h"
 #include "ui/grouppicker.h"
 #include "ui/tabs.h"
+#include "syn/defs.h"
 #include "util/arena.h"
 #include "util/intern.h"
 #include "util/strmap.h"
@@ -67,6 +68,54 @@ static CmdStatus cmd_syn_status(CmdCtx *cx)
     yew_syn_status(&b->syn, yew_textbuf_line_count(b->tb), status,
                    sizeof(status));
     yew_msg(cx->ed, YEW_MSG_INFO, "%s", status);
+    return YEW_CMD_OK;
+}
+
+static CmdStatus cmd_syn_set(CmdCtx *cx)
+{
+    Buffer *b;
+    SynEngine *engine;
+    const SynLangDesc *desc;
+    u32 lang;
+
+    if (cx == NULL || cx->win == NULL || cx->win->buf == NULL ||
+        cx->win->buf->tb == NULL || cx->sarg == NULL)
+        return YEW_CMD_ERR_STATE;
+    b = cx->win->buf;
+    if ((cx->sarg_len == 4U && memcmp(cx->sarg, "none", 4U) == 0) ||
+        (cx->sarg_len == 4U && memcmp(cx->sarg, "text", 4U) == 0)) {
+        yew_syn_attach(&b->syn, YEW_LANG_NONE, b->tb);
+        b->lang = NULL;
+        return YEW_CMD_OK;
+    }
+    {
+        char name[96];
+
+        if (cx->sarg_len == 0U || cx->sarg_len >= sizeof(name))
+            return YEW_CMD_ERR_ARG;
+        (void)memcpy(name, cx->sarg, cx->sarg_len);
+        name[cx->sarg_len] = '\0';
+        lang = yew_syn_lang_named(name);
+        if (lang == YEW_LANG_NONE) {
+            u32 sprint = strcmp(name, "c") == 0 || strcmp(name, "fletch") == 0 ||
+                                 strcmp(name, "sh") == 0 ||
+                                 strcmp(name, "make") == 0 ||
+                                 strcmp(name, "markdown") == 0
+                             ? 41U
+                             : 42U;
+
+            yew_msg(cx->ed, YEW_MSG_ERROR,
+                    "no definition for '%s' — Sprint %u", name, sprint);
+            return YEW_CMD_ERR_ARG;
+        }
+    }
+    engine = yew_syn_engine_for(lang);
+    if (engine == NULL)
+        return YEW_CMD_ERR_IO;
+    yew_syn_attach(&b->syn, lang, b->tb);
+    yew_syn_buf_bind(&b->syn, engine);
+    desc = yew_syn_lang_desc(lang);
+    b->lang = desc == NULL ? NULL : desc->name;
     return YEW_CMD_OK;
 }
 
@@ -156,6 +205,8 @@ static const CmdDesc builtins[] = {
     {"ed.nop", cmd_nop, YEW_ARITY_NONE, 0U, "Do nothing", NULL},
     {"ed.syn.status", cmd_syn_status, YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN,
      "Report incremental syntax highlighting progress", NULL},
+    {"ed.syn.set", cmd_syn_set, YEW_ARITY_STR, YEW_CMD_NEEDS_WIN,
+     "Set the current buffer's syntax language", NULL},
     {"ed.quit", yew_file_cmd_quit, YEW_ARITY_NONE, 0U,
      "Quit, prompting when the buffer is dirty", NULL},
     {"ed.quit_force", yew_file_cmd_quit_force, YEW_ARITY_NONE, 0U,

@@ -127,4 +127,9 @@ bool yew_re_has_upper_literal(const YewRe *re);
 bool yew_re_forces_icase(const YewRe *re);
 bool yew_re_forces_case(const YewRe *re);
 
+/* Conservative byte set for an anchored match at offset zero.  A set bit
+ * means "may begin with this byte"; false positives only cost a VM probe,
+ * while a false negative would make syntax highlighting incorrect. */
+void yew_re_first_bytes(const YewRe *re, u8 first[32]);
+
 #endif

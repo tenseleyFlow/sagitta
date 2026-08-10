@@ -23,11 +23,70 @@
 #include "fl/fltxn.h"
 #include "fl/record.h"
 #include "fl/macrolib.h"
+#include "syn/defs.h"
 #include "util/log.h"
 
 static void ed_syn_init(Buffer *b)
 {
     yew_syn_buf_init(&b->syn);
+}
+
+static u8 *ed_first_line(const TextBuf *tb, u32 *len_out)
+{
+    Span span = yew_textbuf_line_span(tb, LINENO(0U));
+    u64 want = span.hi - span.lo;
+    TextIter it;
+    u8 *line;
+    u64 copied = 0U;
+
+    if (want > YEW_SYN_LINE_BYTE_CAP)
+        want = YEW_SYN_LINE_BYTE_CAP;
+    line = yew_xmalloc((size_t)(want == 0U ? 1U : want));
+    if (want != 0U && yew_textiter_begin(&it, tb, BYTEOFF(span.lo))) {
+        while (copied < want) {
+            const u8 *chunk;
+            u64 n;
+
+            if (!yew_textiter_chunk(&it, tb, &chunk, &n))
+                break;
+            if (n > want - copied)
+                n = want - copied;
+            (void)memcpy(line + copied, chunk, (size_t)n);
+            copied += n;
+            if (copied != want && !yew_textiter_advance(&it, tb))
+                break;
+        }
+    }
+    while (copied != 0U &&
+           (line[copied - 1U] == '\n' || line[copied - 1U] == '\r'))
+        copied--;
+    *len_out = (u32)copied;
+    return line;
+}
+
+static void ed_syn_bind(Buffer *b)
+{
+    const SynLangDesc *desc;
+    SynEngine *engine;
+    u8 *line;
+    u32 len;
+    u32 lang;
+
+    if (b == NULL || b->tb == NULL)
+        return;
+    line = ed_first_line(b->tb, &len);
+    lang = yew_syn_lang_for(b->path, line, len);
+    free(line);
+    yew_syn_attach(&b->syn, lang, b->tb);
+    b->lang = NULL;
+    if (lang == YEW_LANG_NONE)
+        return;
+    engine = yew_syn_engine_for(lang);
+    if (engine == NULL)
+        return;
+    yew_syn_buf_bind(&b->syn, engine);
+    desc = yew_syn_lang_desc(lang);
+    b->lang = desc == NULL ? NULL : desc->name;
 }
 
 /* Tears down everything a buffer owns without touching the list slot. */
@@ -238,7 +297,7 @@ int yew_buf_hydrate(Ed *ed, Buffer *b)
     if (tb == NULL)
         tb = yew_textbuf_new();
     b->tb = tb;
-    yew_syn_attach(&b->syn, YEW_LANG_NONE, b->tb);
+    ed_syn_bind(b);
     b->undo = yew_undo_new(tb);
     yew_undo_mark_saved(b->undo);
     if (b->marks == NULL)
@@ -418,9 +477,9 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
     ed->buffer.tb = tb;
     ed->buffer.owner = ed;
     ed_syn_init(&ed->buffer);
-    yew_syn_attach(&ed->buffer.syn, YEW_LANG_NONE, tb);
     ed->buffer.id = ed->ws.next_buf_id++;
     ed->buffer.path = path == NULL ? NULL : arena_strdup(&ed->arena, path);
+    ed_syn_bind(&ed->buffer);
     ed->buffer.tabwidth = YEW_VP_TABWIDTH;
     ed->buffer.undo = yew_undo_new(tb);
     yew_undo_mark_saved(ed->buffer.undo);

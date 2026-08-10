@@ -10,6 +10,8 @@ char *yew_xdg_state_dir(void);
  * resolver looks for `fl/` beneath it, which is the second and last
  * place a quoted import is searched. */
 char *yew_xdg_config_dir(void);
+/* $XDG_CACHE_HOME/yew, or ~/.cache/yew. */
+char *yew_xdg_cache_dir(void);
 bool yew_mkdirs(const char *path, unsigned int mode);
 
 #endif

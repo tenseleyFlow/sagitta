@@ -49,6 +49,26 @@ char *yew_xdg_config_dir(void)
     return path;
 }
 
+char *yew_xdg_cache_dir(void)
+{
+    const char *root = getenv("XDG_CACHE_HOME");
+    const char *suffix = "/yew";
+    size_t len;
+    char *path;
+
+    if (root == NULL || root[0] == '\0') {
+        root = getenv("HOME");
+        suffix = "/.cache/yew";
+    }
+    if (root == NULL || root[0] == '\0')
+        return NULL;
+    len = strlen(root) + strlen(suffix);
+    path = yew_xmalloc(len + 1U);
+    (void)memcpy(path, root, strlen(root));
+    (void)memcpy(path + strlen(root), suffix, strlen(suffix) + 1U);
+    return path;
+}
+
 static bool yew_mkdir_one(const char *path, mode_t mode)
 {
     struct stat st;

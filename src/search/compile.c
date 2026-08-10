@@ -524,6 +524,126 @@ u32 yew_re_min_len(const YewRe *re)
     return re == NULL ? 0U : re->min_len;
 }
 
+static void first_add(u8 first[32], u8 byte)
+{
+    first[byte >> 3U] |= (u8)(1U << (byte & 7U));
+}
+
+static void first_char(u8 first[32], u32 cp)
+{
+    u8 encoded[YEW_UTF8_MAX];
+    size_t n = yew_utf8_encode(cp, encoded);
+
+    if (n == 0U)
+        (void)memset(first, 0xff, 32U);
+    else
+        first_add(first, encoded[0]);
+}
+
+static void first_class(u8 first[32], const ReClass *cls)
+{
+    u32 byte;
+
+    /* Syntax scans bytes, while regex classes describe codepoints.  Testing
+     * all single-byte codepoints gives the exact ASCII portion; any class
+     * containing a non-ASCII codepoint conservatively admits every UTF-8
+     * lead byte. */
+    for (byte = 0U; byte < 128U; byte++) {
+        if (yew_re_class_has(cls, byte))
+            first_add(first, (u8)byte);
+    }
+    /* Invalid UTF-8 is decoded losslessly into the surrogate escape band.
+     * A negated class such as \S therefore matches those raw bytes too. */
+    for (byte = 128U; byte < 256U; byte++) {
+        if (yew_re_class_has(cls, yew_utf8_escape_of((u8)byte)))
+            first_add(first, (u8)byte);
+    }
+    for (byte = 0U; byte < cls->n; byte++) {
+        u32 lead;
+
+        if (cls->r[byte].hi < 128U)
+            continue;
+        for (lead = 0xc2U; lead <= 0xf4U; lead++)
+            first_add(first, (u8)lead);
+        break;
+    }
+}
+
+void yew_re_first_bytes(const YewRe *re, u8 first[32])
+{
+    u32 stack[YEW_RE_MAX_PROG];
+    u8 seen[YEW_RE_MAX_PROG];
+    u32 nstack = 0U;
+
+    if (first == NULL)
+        return;
+    (void)memset(first, 0, 32U);
+    if (re == NULL || re->prog == NULL || re->nprog == 0U ||
+        re->nprog > YEW_RE_MAX_PROG) {
+        (void)memset(first, 0xff, 32U);
+        return;
+    }
+    (void)memset(seen, 0, sizeof(seen));
+    stack[nstack++] = 0U;
+    while (nstack != 0U) {
+        u32 pc = stack[--nstack];
+        const ReInst *ins;
+
+        if (pc >= re->nprog || seen[pc] != 0U)
+            continue;
+        seen[pc] = 1U;
+        ins = &re->prog[pc];
+        switch ((ReOp)ins->op) {
+        case RE_CHAR:
+            first_char(first, ins->arg);
+            break;
+        case RE_CLASS:
+            if (ins->arg >= re->nclasses) {
+                (void)memset(first, 0xff, 32U);
+                return;
+            }
+            first_class(first, &re->classes[ins->arg]);
+            break;
+        case RE_ANY:
+            (void)memset(first, 0xff, 32U);
+            return;
+        case RE_SPLIT:
+            if (nstack + 2U > YEW_RE_MAX_PROG) {
+                (void)memset(first, 0xff, 32U);
+                return;
+            }
+            stack[nstack++] = ins->x;
+            stack[nstack++] = ins->y;
+            break;
+        case RE_JMP:
+            if (nstack == YEW_RE_MAX_PROG) {
+                (void)memset(first, 0xff, 32U);
+                return;
+            }
+            stack[nstack++] = ins->x;
+            break;
+        case RE_SAVE:
+            if (nstack == YEW_RE_MAX_PROG) {
+                (void)memset(first, 0xff, 32U);
+                return;
+            }
+            stack[nstack++] = pc + 1U;
+            break;
+        case RE_BOL:
+        case RE_BOT:
+        case RE_WORDB:
+        case RE_NWORDB:
+        case RE_EOL:
+        case RE_EOT:
+        case RE_MATCH:
+            /* Empty matches are tried only by the engine's guarded BOL path.
+             * All bits keeps the set conservative for other callers. */
+            (void)memset(first, 0xff, 32U);
+            return;
+        }
+    }
+}
+
 YewReInput yew_re_input_bytes(const u8 *bytes, u64 len)
 {
     YewReInput in;

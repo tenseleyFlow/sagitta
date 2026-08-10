@@ -1,0 +1,2348 @@
+#define _POSIX_C_SOURCE 200809L
+
+#include "syn/defs.h"
+
+#include <ctype.h>
+#include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include "fl/ast.h"
+#include "fl/parse.h"
+#include "syn/langs_gen.h"
+#include "text/file.h"
+#include "util/buf.h"
+#include "util/intern.h"
+#include "util/log.h"
+#include "util/xdg.h"
+
+enum {
+    SYN_DEF_MAX_CONTEXTS = 4096,
+    SYN_DEF_MAX_RULES = 65536,
+    SYN_DEF_MAX_DIAGS = 64,
+    SYN_DEF_STATIC_DEPTH = 12
+};
+
+static const char *const attr_names[YEW_ATTR__COUNT] = {
+    "text", "keyword", "keyword.control", "keyword.op",
+    "keyword.storage", "type", "type.builtin", "constant",
+    "constant.builtin", "number", "boolean", "character", "string",
+    "string.escape", "string.interp", "string.special", "comment",
+    "comment.doc", "comment.todo", "function",
+    "function.builtin", "function.macro", "method", "variable",
+    "variable.builtin", "variable.param", "variable.member",
+    "namespace", "label", "attribute", "preproc", "operator",
+    "punct", "punct.bracket", "punct.delim", "tag",
+    "tag.attr", "heading", "link", "emphasis", "strong", "code",
+    "list", "quote", "diff.add", "diff.del", "error", "warning",
+    "whitespace.special", "motion.unit", "motion.arrow", "motion.count",
+    "motion.cmd", "ui.invisible"
+};
+
+typedef struct AliasSpec {
+    const char *name;
+    size_t name_len;
+    const char *value;
+    size_t value_len;
+    FlSpan sp;
+} AliasSpec;
+
+typedef struct CtxSpec {
+    const char *name;
+    size_t name_len;
+    FlNode *node;
+    FlNode *rules;
+    FlNode *include;
+    FlNode *default_node;
+    FlNode *at_eol_node;
+    FlNode *unit_node;
+    bool icase;
+    bool include_used;
+    bool reachable;
+    bool pushed;
+} CtxSpec;
+
+typedef struct RuleRef {
+    FlNode *node;
+    u16 owner;
+} RuleRef;
+
+typedef struct RuleVec {
+    RuleRef *data;
+    u32 len;
+    u32 cap;
+} RuleVec;
+
+typedef struct Compile {
+    Arena *arena;
+    DiagCtx *dc;
+    Interner in;
+    Interner *aux;
+    const u8 *src;
+    size_t src_len;
+    u32 file_id;
+    u32 errors;
+    u32 warnings;
+    AliasSpec *aliases;
+    u32 naliases;
+    CtxSpec *ctxs;
+    u32 nctxs;
+    u16 root;
+} Compile;
+
+typedef struct DefMeta {
+    SynDef *def;
+    SynLangDesc lang;
+    const char **ctx_names;
+    const char **patterns;
+    YewRe *first_line_re;
+    Interner *aux;
+    SynEngine *engine;
+    struct DefMeta *next;
+} DefMeta;
+
+static DefMeta *metas;
+static u64 compile_count;
+static bool cache_bypass;
+
+static DefMeta *meta_for(const SynDef *def)
+{
+    DefMeta *m;
+
+    for (m = metas; m != NULL; m = m->next) {
+        if (m->def == def)
+            return m;
+    }
+    return NULL;
+}
+
+const char *yew_syn_attr_name(u8 attr)
+{
+    return attr < YEW_ATTR__COUNT ? attr_names[attr] : NULL;
+}
+
+bool yew_syn_attr_id(const char *name, size_t n, u8 *out)
+{
+    u32 i;
+
+    if (name == NULL)
+        return false;
+    for (i = 0U; i < YEW_ATTR__COUNT; i++) {
+        if (strlen(attr_names[i]) == n && memcmp(attr_names[i], name, n) == 0) {
+            if (out != NULL)
+                *out = (u8)i;
+            return true;
+        }
+    }
+    return false;
+}
+
+static void diag(Compile *c, FlDiagLevel level, FlSpan sp,
+                 const char *fmt, ...)
+{
+    va_list ap;
+
+    if (c->errors + c->warnings >= SYN_DEF_MAX_DIAGS)
+        return;
+    if (level == FL_DIAG_ERROR)
+        c->errors++;
+    else if (level == FL_DIAG_WARNING)
+        c->warnings++;
+    va_start(ap, fmt);
+    fl_diag_vemit(c->dc, level, sp, fmt, ap);
+    va_end(ap);
+}
+
+static bool node_is(const FlNode *n, FlAstKind kind)
+{
+    return n != NULL && n->kind == (u8)kind;
+}
+
+static bool lit_is(const FlNode *n, FlLitKind kind)
+{
+    return node_is(n, FL_A_LIT) && n->as.lit.lit == (u8)kind;
+}
+
+static const char *node_str(const Compile *c, const FlNode *n, size_t *len)
+{
+    if (!lit_is(n, FL_L_STR))
+        return NULL;
+    if (len != NULL)
+        *len = yew_intern_len(&c->in, n->as.lit.v.str_id);
+    return yew_intern_str(&c->in, n->as.lit.v.str_id);
+}
+
+static bool text_eq(const char *a, size_t an, const char *b)
+{
+    return strlen(b) == an && (an == 0U || memcmp(a, b, an) == 0);
+}
+
+static const char *key_str(const Compile *c, const FlNode *key, size_t *len)
+{
+    return node_str(c, key, len);
+}
+
+static FlNode *map_find(const Compile *c, const FlNode *map,
+                        const char *want)
+{
+    u32 i;
+
+    if (!node_is(map, FL_A_MAP))
+        return NULL;
+    for (i = 0U; i < map->as.map.n; i++) {
+        size_t n = 0U;
+        const char *key = key_str(c, map->as.map.keys[i], &n);
+
+        if (key != NULL && text_eq(key, n, want))
+            return map->as.map.vals[i];
+    }
+    return NULL;
+}
+
+static u32 edit_distance(const char *a, size_t an, const char *b, size_t bn)
+{
+    u32 row[96];
+    u32 next[96];
+    size_t i;
+    size_t j;
+
+    if (an >= YEW_ARRAY_LEN(row) || bn >= YEW_ARRAY_LEN(row))
+        return UINT32_MAX;
+    for (j = 0U; j <= bn; j++)
+        row[j] = (u32)j;
+    for (i = 0U; i < an; i++) {
+        next[0] = (u32)(i + 1U);
+        for (j = 0U; j < bn; j++) {
+            u32 sub = row[j] + (a[i] == b[j] ? 0U : 1U);
+            u32 del = row[j + 1U] + 1U;
+            u32 ins = next[j] + 1U;
+
+            next[j + 1U] = sub < del ? sub : del;
+            if (ins < next[j + 1U])
+                next[j + 1U] = ins;
+        }
+        (void)memcpy(row, next, (bn + 1U) * sizeof(*row));
+    }
+    return row[bn];
+}
+
+static const char *suggest(const char *key, size_t n,
+                           const char *const *known, u32 nknown)
+{
+    const char *best = NULL;
+    u32 best_dist = 3U;
+    u32 i;
+
+    for (i = 0U; i < nknown; i++) {
+        u32 d = edit_distance(key, n, known[i], strlen(known[i]));
+        if (d < best_dist) {
+            best = known[i];
+            best_dist = d;
+        }
+    }
+    return best;
+}
+
+static bool key_known(const char *key, size_t n,
+                      const char *const *known, u32 nknown)
+{
+    u32 i;
+
+    for (i = 0U; i < nknown; i++) {
+        if (text_eq(key, n, known[i]))
+            return true;
+    }
+    return false;
+}
+
+static void validate_keys(Compile *c, const FlNode *map,
+                          const char *const *known, u32 nknown)
+{
+    u32 i;
+
+    if (!node_is(map, FL_A_MAP))
+        return;
+    for (i = 0U; i < map->as.map.n; i++) {
+        size_t n = 0U;
+        FlNode *kn = map->as.map.keys[i];
+        const char *key = key_str(c, kn, &n);
+        const char *maybe;
+
+        if (key == NULL) {
+            diag(c, FL_DIAG_ERROR, kn->sp, "map key must be a string or name");
+            continue;
+        }
+        if (key_known(key, n, known, nknown))
+            continue;
+        if (text_eq(key, n, "embed")) {
+            diag(c, FL_DIAG_ERROR, kn->sp,
+                 "'embed' is deferred to Sprint 41.5");
+            continue;
+        }
+        maybe = suggest(key, n, known, nknown);
+        if (maybe != NULL)
+            diag(c, FL_DIAG_ERROR, kn->sp,
+                 "unknown key '%.*s' (did you mean '%s'?)", (int)n, key,
+                 maybe);
+        else
+            diag(c, FL_DIAG_ERROR, kn->sp, "unknown key '%.*s'", (int)n,
+                 key);
+    }
+}
+
+static bool require_map(Compile *c, FlNode *n, const char *what)
+{
+    if (node_is(n, FL_A_MAP))
+        return true;
+    diag(c, FL_DIAG_ERROR, n == NULL ? (FlSpan){c->file_id, 1U, 1U, 1U}
+                                     : n->sp,
+         "%s must be a map", what);
+    return false;
+}
+
+static bool require_string(Compile *c, FlNode *n, const char *what,
+                           const char **out, size_t *out_len)
+{
+    const char *s = node_str(c, n, out_len);
+
+    if (s != NULL) {
+        if (out != NULL)
+            *out = s;
+        return true;
+    }
+    diag(c, FL_DIAG_ERROR, n == NULL ? (FlSpan){c->file_id, 1U, 1U, 1U}
+                                     : n->sp,
+         "%s must be a string", what);
+    return false;
+}
+
+static bool require_bool(Compile *c, FlNode *n, const char *what, bool *out)
+{
+    if (lit_is(n, FL_L_BOOL)) {
+        *out = n->as.lit.v.b;
+        return true;
+    }
+    diag(c, FL_DIAG_ERROR, n == NULL ? (FlSpan){c->file_id, 1U, 1U, 1U}
+                                     : n->sp,
+         "%s must be a boolean", what);
+    return false;
+}
+
+static bool require_int(Compile *c, FlNode *n, const char *what, i64 *out)
+{
+    if (lit_is(n, FL_L_INT)) {
+        *out = n->as.lit.v.i;
+        return true;
+    }
+    diag(c, FL_DIAG_ERROR, n == NULL ? (FlSpan){c->file_id, 1U, 1U, 1U}
+                                     : n->sp,
+         "%s must be an integer", what);
+    return false;
+}
+
+static i32 ctx_index(const Compile *c, const char *name, size_t n)
+{
+    u32 i;
+
+    for (i = 0U; i < c->nctxs; i++) {
+        if (c->ctxs[i].name_len == n &&
+            (n == 0U || memcmp(c->ctxs[i].name, name, n) == 0))
+            return (i32)i;
+    }
+    return -1;
+}
+
+static bool attr_resolve(Compile *c, FlNode *node, u8 *out)
+{
+    const char *name;
+    size_t n;
+    u32 i;
+    const char *maybe = NULL;
+    u32 best = 3U;
+
+    if (!require_string(c, node, "attr", &name, &n))
+        return false;
+    for (i = 0U; i < c->naliases; i++) {
+        if (c->aliases[i].name_len == n &&
+            memcmp(c->aliases[i].name, name, n) == 0) {
+            name = c->aliases[i].value;
+            n = c->aliases[i].value_len;
+            break;
+        }
+    }
+    if (yew_syn_attr_id(name, n, out))
+        return true;
+    for (i = 0U; i < YEW_ATTR__COUNT; i++) {
+        u32 d = edit_distance(name, n, attr_names[i], strlen(attr_names[i]));
+        if (d < best) {
+            best = d;
+            maybe = attr_names[i];
+        }
+    }
+    if (maybe != NULL)
+        diag(c, FL_DIAG_ERROR, node->sp,
+             "unknown attr '%.*s' (did you mean '%s'?)", (int)n, name,
+             maybe);
+    else
+        diag(c, FL_DIAG_ERROR, node->sp, "unknown attr '%.*s'", (int)n,
+             name);
+    return false;
+}
+
+static void parse_aliases(Compile *c, FlNode *node)
+{
+    u32 i;
+
+    if (node == NULL)
+        return;
+    if (!require_map(c, node, "attrs"))
+        return;
+    c->aliases = arena_alloc(c->arena,
+                             (size_t)node->as.map.n * sizeof(*c->aliases),
+                             _Alignof(AliasSpec));
+    for (i = 0U; i < node->as.map.n; i++) {
+        FlNode *kn = node->as.map.keys[i];
+        FlNode *vn = node->as.map.vals[i];
+        const char *key;
+        const char *value;
+        size_t key_len;
+        size_t value_len;
+        u32 j;
+
+        key = key_str(c, kn, &key_len);
+        if (key == NULL || !require_string(c, vn, "attr alias value", &value,
+                                           &value_len))
+            continue;
+        for (j = 0U; j < c->naliases; j++) {
+            if (c->aliases[j].name_len == key_len &&
+                memcmp(c->aliases[j].name, key, key_len) == 0) {
+                diag(c, FL_DIAG_ERROR, kn->sp,
+                     "duplicate attr alias '%.*s'", (int)key_len, key);
+                break;
+            }
+        }
+        if (j != c->naliases)
+            continue;
+        c->aliases[c->naliases++] =
+            (AliasSpec){key, key_len, value, value_len, vn->sp};
+    }
+    for (i = 0U; i < c->naliases; i++) {
+        u8 ignored;
+
+        if (!yew_syn_attr_id(c->aliases[i].value,
+                             c->aliases[i].value_len, &ignored)) {
+            diag(c, FL_DIAG_ERROR, c->aliases[i].sp,
+                 "unknown attr '%.*s'", (int)c->aliases[i].value_len,
+                 c->aliases[i].value);
+        }
+    }
+}
+
+static void parse_contexts(Compile *c, FlNode *node)
+{
+    static const char *const keys[] = {
+        "rules", "default", "at_eol", "icase", "unit", "include"
+    };
+    u32 i;
+
+    if (!require_map(c, node, "contexts"))
+        return;
+    if (node->as.map.n == 0U) {
+        diag(c, FL_DIAG_ERROR, node->sp, "contexts must not be empty");
+        return;
+    }
+    if (node->as.map.n > SYN_DEF_MAX_CONTEXTS) {
+        diag(c, FL_DIAG_ERROR, node->sp, "too many contexts (max %u)",
+             SYN_DEF_MAX_CONTEXTS);
+        return;
+    }
+    c->ctxs = arena_alloc(c->arena,
+                          (size_t)node->as.map.n * sizeof(*c->ctxs),
+                          _Alignof(CtxSpec));
+    (void)memset(c->ctxs, 0, (size_t)node->as.map.n * sizeof(*c->ctxs));
+    for (i = 0U; i < node->as.map.n; i++) {
+        FlNode *kn = node->as.map.keys[i];
+        FlNode *vn = node->as.map.vals[i];
+        const char *name;
+        size_t name_len;
+        u32 j;
+        bool b;
+
+        name = key_str(c, kn, &name_len);
+        if (name == NULL || !require_map(c, vn, "context"))
+            continue;
+        for (j = 0U; j < c->nctxs; j++) {
+            if (c->ctxs[j].name_len == name_len &&
+                memcmp(c->ctxs[j].name, name, name_len) == 0) {
+                diag(c, FL_DIAG_ERROR, kn->sp,
+                     "duplicate context '%.*s'", (int)name_len, name);
+                break;
+            }
+        }
+        if (j != c->nctxs)
+            continue;
+        validate_keys(c, vn, keys, (u32)YEW_ARRAY_LEN(keys));
+        c->ctxs[c->nctxs].name = name;
+        c->ctxs[c->nctxs].name_len = name_len;
+        c->ctxs[c->nctxs].node = vn;
+        c->ctxs[c->nctxs].rules = map_find(c, vn, "rules");
+        c->ctxs[c->nctxs].include = map_find(c, vn, "include");
+        c->ctxs[c->nctxs].default_node = map_find(c, vn, "default");
+        c->ctxs[c->nctxs].at_eol_node = map_find(c, vn, "at_eol");
+        c->ctxs[c->nctxs].unit_node = map_find(c, vn, "unit");
+        if (map_find(c, vn, "icase") != NULL &&
+            require_bool(c, map_find(c, vn, "icase"), "context icase", &b))
+            c->ctxs[c->nctxs].icase = b;
+        if (c->ctxs[c->nctxs].rules != NULL &&
+            !node_is(c->ctxs[c->nctxs].rules, FL_A_LIST))
+            diag(c, FL_DIAG_ERROR, c->ctxs[c->nctxs].rules->sp,
+                 "rules must be a list");
+        c->nctxs++;
+    }
+}
+
+static bool parse_string_list(Compile *c, FlNode *node, const char *what,
+                              const char ***out, u32 *nout)
+{
+    const char **list;
+    u32 i;
+
+    *out = NULL;
+    *nout = 0U;
+    if (node == NULL)
+        return true;
+    if (!node_is(node, FL_A_LIST)) {
+        diag(c, FL_DIAG_ERROR, node->sp, "%s must be a list", what);
+        return false;
+    }
+    list = arena_alloc(c->arena,
+                       (size_t)node->as.list.n * sizeof(*list),
+                       _Alignof(const char *));
+    for (i = 0U; i < node->as.list.n; i++) {
+        const char *s;
+        size_t n;
+
+        if (!require_string(c, node->as.list.items[i], what, &s, &n))
+            continue;
+        if (memchr(s, '\0', n) != NULL) {
+            diag(c, FL_DIAG_ERROR, node->as.list.items[i]->sp,
+                 "%s entries may not contain NUL", what);
+            continue;
+        }
+        list[(*nout)++] = s;
+    }
+    *out = list;
+    return true;
+}
+
+static void parse_comment(Compile *c, FlNode *node, SynComment *out)
+{
+    static const char *const keys[] = {"line", "block"};
+    FlNode *line;
+    FlNode *block;
+    size_t ignored;
+
+    if (node == NULL)
+        return;
+    if (!require_map(c, node, "language.comment"))
+        return;
+    validate_keys(c, node, keys, (u32)YEW_ARRAY_LEN(keys));
+    line = map_find(c, node, "line");
+    block = map_find(c, node, "block");
+    if (line != NULL)
+        (void)require_string(c, line, "comment.line", &out->line, &ignored);
+    if (block != NULL) {
+        if (!node_is(block, FL_A_LIST) || block->as.list.n != 2U) {
+            diag(c, FL_DIAG_ERROR, block->sp,
+                 "comment.block must be a two-string list");
+        } else {
+            (void)require_string(c, block->as.list.items[0],
+                                 "comment block opener", &out->block_open,
+                                 &ignored);
+            (void)require_string(c, block->as.list.items[1],
+                                 "comment block closer", &out->block_close,
+                                 &ignored);
+        }
+    }
+}
+
+static void parse_language(Compile *c, FlNode *node, SynLangDesc *lang)
+{
+    static const char *const keys[] = {
+        "name", "extensions", "filenames", "shebangs", "first_line",
+        "priority", "comment"
+    };
+    FlNode *name;
+    FlNode *first;
+    FlNode *priority;
+    size_t ignored;
+    i64 value;
+
+    if (!require_map(c, node, "language"))
+        return;
+    validate_keys(c, node, keys, (u32)YEW_ARRAY_LEN(keys));
+    name = map_find(c, node, "name");
+    if (name == NULL) {
+        diag(c, FL_DIAG_ERROR, node->sp, "language.name is required");
+    } else {
+        (void)require_string(c, name, "language.name", &lang->name, &ignored);
+    }
+    (void)parse_string_list(c, map_find(c, node, "extensions"),
+                            "language.extensions", &lang->extensions,
+                            &lang->nextensions);
+    (void)parse_string_list(c, map_find(c, node, "filenames"),
+                            "language.filenames", &lang->filenames,
+                            &lang->nfilenames);
+    (void)parse_string_list(c, map_find(c, node, "shebangs"),
+                            "language.shebangs", &lang->shebangs,
+                            &lang->nshebangs);
+    first = map_find(c, node, "first_line");
+    if (first != NULL)
+        (void)require_string(c, first, "language.first_line",
+                             &lang->first_line, &ignored);
+    priority = map_find(c, node, "priority");
+    if (priority != NULL && require_int(c, priority, "language.priority",
+                                        &value)) {
+        if (value < INT32_MIN || value > INT32_MAX)
+            diag(c, FL_DIAG_ERROR, priority->sp,
+                 "language.priority is out of range");
+        else
+            lang->priority = (i32)value;
+    }
+    parse_comment(c, map_find(c, node, "comment"), &lang->comment);
+}
+
+static bool rulevec_push(Compile *c, RuleVec *v, FlNode *node, u16 owner)
+{
+    RuleRef *grown;
+    u32 cap;
+
+    if (v->len == SYN_DEF_MAX_RULES) {
+        diag(c, FL_DIAG_ERROR, node->sp, "too many expanded rules (max %u)",
+             SYN_DEF_MAX_RULES);
+        return false;
+    }
+    if (v->len == v->cap) {
+        cap = v->cap == 0U ? 16U : v->cap * 2U;
+        if (cap > SYN_DEF_MAX_RULES)
+            cap = SYN_DEF_MAX_RULES;
+        grown = arena_alloc(c->arena, (size_t)cap * sizeof(*grown),
+                            _Alignof(RuleRef));
+        if (v->len != 0U)
+            (void)memcpy(grown, v->data,
+                         (size_t)v->len * sizeof(*grown));
+        v->data = grown;
+        v->cap = cap;
+    }
+    v->data[v->len++] = (RuleRef){node, owner};
+    return true;
+}
+
+static bool include_name(Compile *c, RuleVec *out, const char *name, size_t n,
+                         FlSpan sp, u8 *visiting);
+
+static bool expand_context(Compile *c, RuleVec *out, u16 id, FlSpan via,
+                           u8 *visiting)
+{
+    CtxSpec *ctx;
+    u32 i;
+
+    if (id >= c->nctxs)
+        return false;
+    if (visiting[id] != 0U) {
+        diag(c, FL_DIAG_ERROR, via, "include cycle reaches '%.*s'",
+             (int)c->ctxs[id].name_len, c->ctxs[id].name);
+        return false;
+    }
+    visiting[id] = 1U;
+    ctx = &c->ctxs[id];
+    if (ctx->include != NULL) {
+        if (lit_is(ctx->include, FL_L_STR)) {
+            size_t n;
+            const char *name = node_str(c, ctx->include, &n);
+
+            (void)include_name(c, out, name, n, ctx->include->sp, visiting);
+        } else if (node_is(ctx->include, FL_A_LIST)) {
+            for (i = 0U; i < ctx->include->as.list.n; i++) {
+                FlNode *item = ctx->include->as.list.items[i];
+                size_t n;
+                const char *name = node_str(c, item, &n);
+
+                if (name == NULL)
+                    diag(c, FL_DIAG_ERROR, item->sp,
+                         "context include entries must be strings");
+                else
+                    (void)include_name(c, out, name, n, item->sp, visiting);
+            }
+        } else {
+            diag(c, FL_DIAG_ERROR, ctx->include->sp,
+                 "context include must be a string or list");
+        }
+    }
+    if (node_is(ctx->rules, FL_A_LIST)) {
+        for (i = 0U; i < ctx->rules->as.list.n; i++) {
+            FlNode *item = ctx->rules->as.list.items[i];
+
+            if (node_is(item, FL_A_MAP)) {
+                (void)rulevec_push(c, out, item, id);
+            } else if (lit_is(item, FL_L_STR)) {
+                size_t n;
+                const char *text = node_str(c, item, &n);
+
+                if (n > 8U && memcmp(text, "include:", 8U) == 0)
+                    (void)include_name(c, out, text + 8U, n - 8U,
+                                       item->sp, visiting);
+                else
+                    diag(c, FL_DIAG_ERROR, item->sp,
+                         "rule-list string must be 'include:NAME'");
+            } else {
+                diag(c, FL_DIAG_ERROR, item->sp,
+                     "rule must be a map or 'include:NAME'");
+            }
+        }
+    }
+    visiting[id] = 0U;
+    return true;
+}
+
+static bool include_name(Compile *c, RuleVec *out, const char *name, size_t n,
+                         FlSpan sp, u8 *visiting)
+{
+    i32 id = ctx_index(c, name, n);
+
+    if (id < 0) {
+        diag(c, FL_DIAG_ERROR, sp, "no context named '%.*s'", (int)n, name);
+        return false;
+    }
+    c->ctxs[id].include_used = true;
+    return expand_context(c, out, (u16)id, sp, visiting);
+}
+
+static bool context_target(Compile *c, FlNode *node, const char *what,
+                           u16 *out)
+{
+    const char *name;
+    size_t n;
+    i32 id;
+
+    if (!require_string(c, node, what, &name, &n))
+        return false;
+    id = ctx_index(c, name, n);
+    if (id < 0) {
+        diag(c, FL_DIAG_ERROR, node->sp, "no context named '%.*s'",
+             (int)n, name);
+        return false;
+    }
+    *out = (u16)id;
+    return true;
+}
+
+static void first_union(u8 dst[32], const u8 src[32])
+{
+    u32 i;
+
+    for (i = 0U; i < 32U; i++)
+        dst[i] |= src[i];
+}
+
+static bool parse_pop(Compile *c, FlNode *node, u8 *out)
+{
+    i64 value;
+
+    if (lit_is(node, FL_L_BOOL)) {
+        if (!node->as.lit.v.b) {
+            diag(c, FL_DIAG_ERROR, node->sp,
+                 "pop: false is not an operation; omit pop instead");
+            return false;
+        }
+        *out = 1U;
+        return true;
+    }
+    if (!require_int(c, node, "pop", &value))
+        return false;
+    if (value < 1 || value > 4) {
+        diag(c, FL_DIAG_ERROR, node->sp, "pop count %lld is out of range (1-4)",
+             (long long)value);
+        return false;
+    }
+    *out = (u8)value;
+    return true;
+}
+
+static void compile_captures(Compile *c, FlNode *node, SynRule *rule,
+                             u32 groups)
+{
+    u32 i;
+
+    if (node == NULL)
+        return;
+    if (!node_is(node, FL_A_MAP)) {
+        diag(c, FL_DIAG_ERROR, node->sp, "captures must be a map");
+        return;
+    }
+    for (i = 0U; i < node->as.map.n; i++) {
+        FlNode *key = node->as.map.keys[i];
+        i64 group;
+        u8 attr;
+
+        if (!require_int(c, key, "capture group", &group))
+            continue;
+        if (group < 0 || group > 7) {
+            diag(c, FL_DIAG_ERROR, key->sp,
+                 "capture group %lld is out of range (0-7)",
+                 (long long)group);
+            continue;
+        }
+        if ((u64)group >= groups) {
+            diag(c, FL_DIAG_ERROR, key->sp,
+                 "capture group %lld but the pattern has %u capture groups",
+                 (long long)group, groups == 0U ? 0U : groups - 1U);
+            continue;
+        }
+        if (attr_resolve(c, node->as.map.vals[i], &attr))
+            rule->caps[group] = attr;
+    }
+}
+
+static u8 aux_kind(Compile *c, FlNode *node)
+{
+    const char *name;
+    size_t n;
+
+    if (!require_string(c, node, "aux", &name, &n))
+        return SYN_AUXM_NONE;
+    if (text_eq(name, n, "line_eq"))
+        return SYN_AUXM_LINE_EQ;
+    if (text_eq(name, n, "literal"))
+        return SYN_AUXM_LITERAL;
+    if (text_eq(name, n, "fence_close"))
+        return SYN_AUXM_FENCE_CLOSE;
+    if (text_eq(name, n, "indent_lt"))
+        return SYN_AUXM_INDENT_LT;
+    diag(c, FL_DIAG_ERROR, node->sp, "unknown aux matcher '%.*s'", (int)n,
+         name);
+    return SYN_AUXM_NONE;
+}
+
+static void compile_rule(Compile *c, FlNode *node, u16 ctx_id, SynRule *rule,
+                         const char **pattern_out, u32 rule_index)
+{
+    static const char *const keys[] = {
+        "match", "attr", "captures", "consume", "push", "pop", "set",
+        "icase", "set_aux", "strip", "aux", "aux_pre", "aux_post",
+        "value"
+    };
+    FlNode *match = map_find(c, node, "match");
+    FlNode *aux = map_find(c, node, "aux");
+    FlNode *push = map_find(c, node, "push");
+    FlNode *pop = map_find(c, node, "pop");
+    FlNode *set = map_find(c, node, "set");
+    FlNode *consume = map_find(c, node, "consume");
+    FlNode *set_aux = map_find(c, node, "set_aux");
+    FlNode *strip = map_find(c, node, "strip");
+    FlNode *value_node = map_find(c, node, "value");
+    FlNode *icase_node = map_find(c, node, "icase");
+    bool icase = c->ctxs[ctx_id].icase;
+    u32 errors_before_keys = c->errors;
+    u32 groups = 0U;
+    u32 nops = (push != NULL ? 1U : 0U) + (pop != NULL ? 1U : 0U) +
+               (set != NULL ? 1U : 0U);
+    i64 integer;
+
+    (void)rule_index;
+    (void)memset(rule, 0, sizeof(*rule));
+    (void)memset(rule->caps, 0xff, sizeof(rule->caps));
+    rule->attr = YEW_ATTR_TEXT;
+    validate_keys(c, node, keys, (u32)YEW_ARRAY_LEN(keys));
+    if (match == NULL && aux == NULL && c->errors == errors_before_keys)
+        diag(c, FL_DIAG_ERROR, node->sp,
+             "rule requires 'match' or one aux matcher");
+    if (match != NULL && aux != NULL)
+        diag(c, FL_DIAG_ERROR, aux->sp,
+             "rule has both 'match' and 'aux'; choose one matcher");
+    if (nops > 1U) {
+        const char *a = push != NULL ? "push" : "pop";
+        const char *b = set != NULL ? "set" : "pop";
+
+        diag(c, FL_DIAG_ERROR, node->sp,
+             "rule has both '%s' and '%s'; a rule performs exactly one state op",
+             a, b);
+    }
+    if (icase_node != NULL)
+        (void)require_bool(c, icase_node, "rule icase", &icase);
+    if (match != NULL) {
+        const char *pattern;
+        size_t pattern_len;
+        YewReErr err = {0U, NULL};
+
+        if (require_string(c, match, "match", &pattern, &pattern_len)) {
+            rule->re = yew_re_compile(c->arena, pattern, pattern_len,
+                                      icase ? YEW_RE_ICASE : 0U, &err);
+            *pattern_out = pattern;
+            if (rule->re == NULL) {
+                diag(c, FL_DIAG_ERROR, match->sp,
+                     "invalid pattern at offset %u: %s", err.off,
+                     err.msg == NULL ? "compile failed" : err.msg);
+            } else {
+                groups = yew_re_group_count(rule->re);
+                if (yew_re_min_len(rule->re) == 0U)
+                    diag(c, FL_DIAG_ERROR, match->sp,
+                         "pattern may match empty; only indent_lt may be zero-width");
+                yew_re_first_bytes(rule->re, rule->first);
+            }
+        }
+    } else if (aux != NULL) {
+        rule->aux_match = aux_kind(c, aux);
+        (void)memset(rule->first, 0xff, sizeof(rule->first));
+        if (rule->aux_match == SYN_AUXM_INDENT_LT)
+            rule->flags |= YEW_SYN_RULE_ZERO_POP;
+    }
+    if (map_find(c, node, "attr") != NULL)
+        (void)attr_resolve(c, map_find(c, node, "attr"), &rule->attr);
+    else if (ctx_id < c->nctxs && c->ctxs[ctx_id].default_node != NULL)
+        (void)attr_resolve(c, c->ctxs[ctx_id].default_node, &rule->attr);
+    compile_captures(c, map_find(c, node, "captures"), rule, groups);
+    if (consume != NULL && require_int(c, consume, "consume", &integer)) {
+        if (integer < 0 || integer > 7) {
+            diag(c, FL_DIAG_ERROR, consume->sp,
+                 "consume group %lld is out of range (0-7)",
+                 (long long)integer);
+        } else if ((u64)integer >= groups) {
+            diag(c, FL_DIAG_ERROR, consume->sp,
+                 "consume: %lld but the pattern has %u capture groups",
+                 (long long)integer, groups == 0U ? 0U : groups - 1U);
+        } else {
+            rule->consume = (u8)integer;
+        }
+    }
+    if (push != NULL) {
+        rule->op = SYN_OP_PUSH;
+        if (lit_is(push, FL_L_STR)) {
+            if (context_target(c, push, "push", &rule->target))
+                c->ctxs[rule->target].pushed = true;
+        } else if (node_is(push, FL_A_LIST)) {
+            u32 i;
+
+            if (push->as.list.n == 0U || push->as.list.n > 4U) {
+                diag(c, FL_DIAG_ERROR, push->sp,
+                     "push list has %u entries (limit 1-4)", push->as.list.n);
+            } else {
+                rule->npush = (u8)push->as.list.n;
+                for (i = 0U; i < push->as.list.n; i++) {
+                    if (context_target(c, push->as.list.items[i], "push",
+                                       &rule->push[i]))
+                        c->ctxs[rule->push[i]].pushed = true;
+                }
+            }
+        } else {
+            diag(c, FL_DIAG_ERROR, push->sp,
+                 "push must be a context name or list");
+        }
+    } else if (pop != NULL) {
+        rule->op = SYN_OP_POP;
+        (void)parse_pop(c, pop, &rule->nop);
+    } else if (set != NULL) {
+        rule->op = SYN_OP_SET;
+        (void)context_target(c, set, "set", &rule->target);
+        if (rule->target < c->nctxs)
+            c->ctxs[rule->target].pushed = true;
+    }
+    if (set_aux != NULL && require_int(c, set_aux, "set_aux", &integer)) {
+        if (integer < 0 || integer > 7 || (u64)integer >= groups) {
+            diag(c, FL_DIAG_ERROR, set_aux->sp,
+                 "set_aux: %lld but the pattern has %u capture groups",
+                 (long long)integer, groups == 0U ? 0U : groups - 1U);
+        } else {
+            rule->flags |= YEW_SYN_RULE_SET_AUX;
+            rule->aux_group = (u8)integer;
+        }
+    }
+    if (strip != NULL) {
+        bool enabled = false;
+
+        if (require_bool(c, strip, "strip", &enabled) && enabled) {
+            if (set_aux == NULL)
+                diag(c, FL_DIAG_ERROR, strip->sp,
+                     "strip requires set_aux on the same rule");
+            rule->flags |= YEW_SYN_RULE_STRIP;
+        }
+    }
+    if (value_node != NULL) {
+        bool enabled = false;
+
+        if (require_bool(c, value_node, "value", &enabled))
+            rule->flags |= enabled ? YEW_SYN_RULE_SET_VALUE
+                                   : YEW_SYN_RULE_CLR_VALUE;
+    }
+    if (map_find(c, node, "aux_pre") != NULL) {
+        const char *s;
+        size_t n;
+
+        if (require_string(c, map_find(c, node, "aux_pre"), "aux_pre", &s,
+                           &n))
+            rule->aux_pre = yew_intern(c->aux, s, n);
+    }
+    if (map_find(c, node, "aux_post") != NULL) {
+        const char *s;
+        size_t n;
+
+        if (require_string(c, map_find(c, node, "aux_post"), "aux_post", &s,
+                           &n))
+            rule->aux_post = yew_intern(c->aux, s, n);
+    }
+    if ((map_find(c, node, "aux_pre") != NULL ||
+         map_find(c, node, "aux_post") != NULL) &&
+        rule->aux_match != SYN_AUXM_LITERAL)
+        diag(c, FL_DIAG_ERROR, node->sp,
+             "aux_pre and aux_post require aux: 'literal'");
+    if (rule->aux_match == SYN_AUXM_INDENT_LT && rule->op != SYN_OP_POP)
+        diag(c, FL_DIAG_ERROR, node->sp,
+             "indent_lt is zero-width and must pop");
+}
+
+static void compile_eol(Compile *c, u16 id, SynCtx *out)
+{
+    FlNode *node = c->ctxs[id].at_eol_node;
+    const char *text;
+    size_t n;
+
+    out->at_eol = SYN_OP_STAY;
+    if (node == NULL)
+        return;
+    if (!require_string(c, node, "at_eol", &text, &n))
+        return;
+    if (text_eq(text, n, "stay"))
+        return;
+    if (text_eq(text, n, "pop")) {
+        out->at_eol = SYN_OP_POP;
+        out->eol_nop = 1U;
+        return;
+    }
+    if (n > 4U && memcmp(text, "pop:", 4U) == 0) {
+        unsigned long value;
+        char tail[16];
+        char *end;
+
+        if (n - 4U >= sizeof(tail)) {
+            diag(c, FL_DIAG_ERROR, node->sp, "invalid at_eol '%.*s'",
+                 (int)n, text);
+            return;
+        }
+        (void)memcpy(tail, text + 4U, n - 4U);
+        tail[n - 4U] = '\0';
+        errno = 0;
+        value = strtoul(tail, &end, 10);
+        if (errno != 0 || *tail == '\0' || *end != '\0' || value < 1U ||
+            value > 4U) {
+            diag(c, FL_DIAG_ERROR, node->sp,
+                 "at_eol pop count is out of range (1-4)");
+            return;
+        }
+        out->at_eol = SYN_OP_POP;
+        out->eol_nop = (u8)value;
+        return;
+    }
+    if (n > 4U && memcmp(text, "set:", 4U) == 0) {
+        i32 target = ctx_index(c, text + 4U, n - 4U);
+
+        if (target < 0)
+            diag(c, FL_DIAG_ERROR, node->sp, "no context named '%.*s'",
+                 (int)(n - 4U), text + 4U);
+        else {
+            out->at_eol = SYN_OP_SET;
+            out->eol_target = (u16)target;
+            c->ctxs[target].pushed = true;
+        }
+        return;
+    }
+    diag(c, FL_DIAG_ERROR, node->sp, "invalid at_eol '%.*s'", (int)n, text);
+}
+
+static void compile_unit(Compile *c, u16 id, SynCtx *out)
+{
+    FlNode *node = c->ctxs[id].unit_node;
+    const char *text;
+    size_t n;
+
+    if (node == NULL)
+        return;
+    if (!require_string(c, node, "unit", &text, &n))
+        return;
+    if (text_eq(text, n, "span"))
+        out->flags |= YEW_SYN_CTX_UNIT_SPAN;
+    else if (text_eq(text, n, "atom"))
+        out->flags |= YEW_SYN_CTX_UNIT_ATOM;
+    else
+        diag(c, FL_DIAG_ERROR, node->sp,
+             "unit must be 'span' or 'atom'");
+}
+
+static void mark_reachable(const SynDef *def, CtxSpec *ctxs, u16 id)
+{
+    const SynCtx *ctx;
+    u32 i;
+
+    if (id >= def->nctxs || ctxs[id].reachable)
+        return;
+    ctxs[id].reachable = true;
+    ctx = &def->ctxs[id];
+    for (i = 0U; i < ctx->nrules; i++) {
+        const SynRule *rule = &def->rules[ctx->first_rule + i];
+        u32 j;
+
+        if (rule->op == SYN_OP_PUSH) {
+            if (rule->npush == 0U)
+                mark_reachable(def, ctxs, rule->target);
+            else {
+                for (j = 0U; j < rule->npush; j++)
+                    mark_reachable(def, ctxs, rule->push[j]);
+            }
+        } else if (rule->op == SYN_OP_SET) {
+            mark_reachable(def, ctxs, rule->target);
+        }
+    }
+    if (ctx->at_eol == SYN_OP_SET)
+        mark_reachable(def, ctxs, ctx->eol_target);
+}
+
+static bool context_reduces(const SynDef *def, u16 id)
+{
+    const SynCtx *ctx = &def->ctxs[id];
+    u32 i;
+
+    if (ctx->at_eol == SYN_OP_POP || ctx->at_eol == SYN_OP_SET)
+        return true;
+    for (i = 0U; i < ctx->nrules; i++) {
+        u8 op = def->rules[ctx->first_rule + i].op;
+
+        if (op == SYN_OP_POP || op == SYN_OP_SET)
+            return true;
+    }
+    return false;
+}
+
+static u32 context_depth(const SynDef *def, u16 id, u8 *visiting)
+{
+    const SynCtx *ctx;
+    u32 max = 1U;
+    u32 i;
+
+    if (id >= def->nctxs || visiting[id] != 0U)
+        return 1U;
+    visiting[id] = 1U;
+    ctx = &def->ctxs[id];
+    for (i = 0U; i < ctx->nrules; i++) {
+        const SynRule *rule = &def->rules[ctx->first_rule + i];
+        u32 d = 1U;
+        u32 j;
+
+        if (rule->op != SYN_OP_PUSH)
+            continue;
+        if (rule->npush == 0U) {
+            d += context_depth(def, rule->target, visiting);
+        } else {
+            d += rule->npush;
+            for (j = 0U; j < rule->npush; j++) {
+                u32 child = context_depth(def, rule->push[j], visiting);
+
+                if (child > 1U)
+                    d += child - 1U;
+            }
+        }
+        if (d > max)
+            max = d;
+    }
+    visiting[id] = 0U;
+    return max;
+}
+
+static void validate_compiled(Compile *c, SynDef *def,
+                              const char *const *patterns)
+{
+    u8 *visiting = arena_alloc(c->arena, c->nctxs, 1U);
+    u32 i;
+
+    (void)memset(visiting, 0, c->nctxs);
+    mark_reachable(def, c->ctxs, def->root);
+    for (i = 0U; i < c->nctxs; i++) {
+        const SynCtx *ctx = &def->ctxs[i];
+        u32 j;
+
+        if (!c->ctxs[i].reachable && !c->ctxs[i].include_used)
+            diag(c, FL_DIAG_WARNING, c->ctxs[i].node->sp,
+                 "context '%.*s' is unreachable", (int)c->ctxs[i].name_len,
+                 c->ctxs[i].name);
+        if (i != def->root && c->ctxs[i].reachable && c->ctxs[i].pushed &&
+            !context_reduces(def, (u16)i))
+            diag(c, FL_DIAG_ERROR, c->ctxs[i].node->sp,
+                 "context '%.*s' can never be popped",
+                 (int)c->ctxs[i].name_len, c->ctxs[i].name);
+        if (c->ctxs[i].include_used && !c->ctxs[i].pushed && i != def->root &&
+            (c->ctxs[i].default_node != NULL ||
+             c->ctxs[i].at_eol_node != NULL ||
+             c->ctxs[i].unit_node != NULL))
+            diag(c, FL_DIAG_WARNING, c->ctxs[i].node->sp,
+                 "only 'rules' is used at an include site");
+        if (ctx->dflt_attr == YEW_ATTR_ERROR)
+            diag(c, FL_DIAG_WARNING, c->ctxs[i].default_node->sp,
+                 "default: 'error' paints every unmatched byte red; did you mean 'text'?");
+        for (j = 0U; j < ctx->nrules; j++) {
+            u32 index = ctx->first_rule + j;
+            u32 k;
+
+            if (def->rules[index].aux_match == SYN_AUXM_INDENT_LT && j != 0U)
+                diag(c, FL_DIAG_ERROR, c->ctxs[i].rules->sp,
+                     "indent_lt must be the first rule in its context");
+            if (patterns[index] == NULL)
+                continue;
+            for (k = 0U; k < j; k++) {
+                u32 earlier = ctx->first_rule + k;
+
+                if (patterns[earlier] != NULL &&
+                    strcmp(patterns[earlier], patterns[index]) == 0) {
+                    diag(c, FL_DIAG_WARNING, c->ctxs[i].rules->sp,
+                         "rule %u is unreachable: rule %u has the same pattern",
+                         j + 1U, k + 1U);
+                    break;
+                }
+            }
+        }
+    }
+    (void)memset(visiting, 0, c->nctxs);
+    {
+        u32 depth = context_depth(def, def->root, visiting);
+
+        if (depth > SYN_DEF_STATIC_DEPTH)
+            diag(c, FL_DIAG_ERROR, c->ctxs[def->root].node->sp,
+                 "context nesting can reach depth %u; the cap is 16 with 4 levels reserved for runtime recursion (see YEW_SYN_DEPTH_MAX)",
+                 depth);
+    }
+}
+
+static u32 language_id(const char *name)
+{
+    DefMeta *m;
+    size_t i;
+    u32 max = 0U;
+
+    for (i = 0U; i < yew_syn_builtin_langs_len; i++) {
+        if (strcmp(yew_syn_builtin_langs[i].name, name) == 0)
+            return yew_syn_builtin_langs[i].id;
+        if (yew_syn_builtin_langs[i].id > max)
+            max = yew_syn_builtin_langs[i].id;
+    }
+    for (m = metas; m != NULL; m = m->next) {
+        if (strcmp(m->lang.name, name) == 0)
+            return m->lang.id;
+        if (m->lang.id > max)
+            max = m->lang.id;
+    }
+    return max + 1U;
+}
+
+static void register_meta(Compile *c, SynDef *def, SynLangDesc *lang,
+                          const char **ctx_names, const char **patterns)
+{
+    DefMeta *m = yew_xcalloc(1U, sizeof(*m));
+
+    lang->id = language_id(lang->name);
+    m->def = def;
+    m->lang = *lang;
+    m->ctx_names = ctx_names;
+    m->patterns = patterns;
+    m->aux = c->aux;
+    if (lang->first_line != NULL) {
+        YewReErr err = {0U, NULL};
+
+        m->first_line_re = yew_re_compile(c->arena, lang->first_line,
+                                          strlen(lang->first_line), 0U,
+                                          &err);
+        if (m->first_line_re == NULL)
+            diag(c, FL_DIAG_ERROR, (FlSpan){c->file_id, 1U, 1U, 1U},
+                 "invalid first_line pattern at offset %u: %s", err.off,
+                 err.msg == NULL ? "compile failed" : err.msg);
+    }
+    m->next = metas;
+    metas = m;
+}
+
+SynDef *yew_syn_def_compile(Arena *a, DiagCtx *dc, const u8 *src, size_t n,
+                            u32 file_id, u32 *n_err, u32 *n_warn)
+{
+    static const char *const top_keys[] = {
+        "syntax", "language", "contexts", "root", "attrs"
+    };
+    Compile c;
+    FlNode *top;
+    FlNode *syntax;
+    FlNode *language;
+    FlNode *contexts;
+    FlNode *root;
+    SynLangDesc lang;
+    SynDef *def = NULL;
+    RuleVec *expanded = NULL;
+    const char **ctx_names = NULL;
+    const char **patterns = NULL;
+    u32 total = 0U;
+    u32 i;
+    i64 version;
+
+    if (n_err != NULL)
+        *n_err = 0U;
+    if (n_warn != NULL)
+        *n_warn = 0U;
+    if (a == NULL || dc == NULL || (src == NULL && n != 0U))
+        return NULL;
+    (void)memset(&c, 0, sizeof(c));
+    (void)memset(&lang, 0, sizeof(lang));
+    c.arena = a;
+    c.dc = dc;
+    c.src = src;
+    c.src_len = n;
+    c.file_id = file_id;
+    interner_init(&c.in, a);
+    c.aux = arena_alloc(a, sizeof(*c.aux), _Alignof(Interner));
+    interner_init(c.aux, a);
+    compile_count++;
+    top = fl_parse_literal(a, dc, &c.in, (const char *)src, n, file_id);
+    if (top == NULL) {
+        c.errors = 1U;
+        goto done;
+    }
+    if (!require_map(&c, top, "syntax definition"))
+        goto done;
+    validate_keys(&c, top, top_keys, (u32)YEW_ARRAY_LEN(top_keys));
+    syntax = map_find(&c, top, "syntax");
+    language = map_find(&c, top, "language");
+    contexts = map_find(&c, top, "contexts");
+    root = map_find(&c, top, "root");
+    if (syntax == NULL) {
+        diag(&c, FL_DIAG_ERROR, top->sp,
+             "missing schema version (this build understands 1)");
+    } else if (require_int(&c, syntax, "syntax", &version) && version != 1) {
+        diag(&c, FL_DIAG_ERROR, syntax->sp,
+             "unknown schema version %lld (this build understands 1)",
+             (long long)version);
+    }
+    if (language == NULL)
+        diag(&c, FL_DIAG_ERROR, top->sp, "language is required");
+    else
+        parse_language(&c, language, &lang);
+    parse_aliases(&c, map_find(&c, top, "attrs"));
+    if (contexts == NULL)
+        diag(&c, FL_DIAG_ERROR, top->sp, "contexts is required");
+    else
+        parse_contexts(&c, contexts);
+    if (c.nctxs == 0U || lang.name == NULL)
+        goto done;
+    c.root = 0U;
+    if (root != NULL) {
+        const char *name;
+        size_t name_len;
+        i32 id;
+
+        if (require_string(&c, root, "root", &name, &name_len)) {
+            id = ctx_index(&c, name, name_len);
+            if (id < 0)
+                diag(&c, FL_DIAG_ERROR, root->sp,
+                     "no context named '%.*s'", (int)name_len, name);
+            else
+                c.root = (u16)id;
+        }
+    } else {
+        i32 id = ctx_index(&c, "main", 4U);
+
+        if (id < 0)
+            diag(&c, FL_DIAG_ERROR, contexts->sp,
+                 "no context named 'main'");
+        else
+            c.root = (u16)id;
+    }
+    expanded = arena_alloc(a, (size_t)c.nctxs * sizeof(*expanded),
+                           _Alignof(RuleVec));
+    (void)memset(expanded, 0, (size_t)c.nctxs * sizeof(*expanded));
+    for (i = 0U; i < c.nctxs; i++) {
+        u8 *visiting = arena_alloc(a, c.nctxs, 1U);
+
+        (void)memset(visiting, 0, c.nctxs);
+        (void)expand_context(&c, &expanded[i], (u16)i,
+                             c.ctxs[i].node->sp, visiting);
+        if (UINT32_MAX - total < expanded[i].len) {
+            diag(&c, FL_DIAG_ERROR, c.ctxs[i].node->sp,
+                 "expanded rule count overflow");
+            goto done;
+        }
+        total += expanded[i].len;
+    }
+    def = arena_alloc(a, sizeof(*def), _Alignof(SynDef));
+    def->name = lang.name;
+    def->root = c.root;
+    def->nctxs = (u16)c.nctxs;
+    def->nrules = total;
+    def->ctxs = arena_alloc(a, (size_t)c.nctxs * sizeof(*def->ctxs),
+                            _Alignof(SynCtx));
+    def->rules = arena_alloc(a, (size_t)total * sizeof(*def->rules),
+                             _Alignof(SynRule));
+    def->aux = c.aux;
+    (void)memset(def->ctxs, 0, (size_t)c.nctxs * sizeof(*def->ctxs));
+    if (total != 0U)
+        (void)memset(def->rules, 0, (size_t)total * sizeof(*def->rules));
+    ctx_names = arena_alloc(a, (size_t)c.nctxs * sizeof(*ctx_names),
+                            _Alignof(const char *));
+    patterns = arena_alloc(a, (size_t)total * sizeof(*patterns),
+                           _Alignof(const char *));
+    if (total != 0U)
+        (void)memset(patterns, 0, (size_t)total * sizeof(*patterns));
+    total = 0U;
+    for (i = 0U; i < c.nctxs; i++) {
+        SynCtx *ctx = &def->ctxs[i];
+        u32 j;
+
+        ctx_names[i] = c.ctxs[i].name;
+        ctx->first_rule = total;
+        ctx->nrules = expanded[i].len;
+        ctx->dflt_attr = YEW_ATTR_TEXT;
+        if (c.ctxs[i].default_node != NULL)
+            (void)attr_resolve(&c, c.ctxs[i].default_node,
+                               &ctx->dflt_attr);
+        compile_eol(&c, (u16)i, ctx);
+        compile_unit(&c, (u16)i, ctx);
+        for (j = 0U; j < expanded[i].len; j++) {
+            compile_rule(&c, expanded[i].data[j].node, (u16)i,
+                         &def->rules[total], &patterns[total], total);
+            first_union(ctx->first, def->rules[total].first);
+            total++;
+        }
+    }
+    validate_compiled(&c, def, patterns);
+    if (c.errors == 0U) {
+        register_meta(&c, def, &lang, ctx_names, patterns);
+        if (c.errors != 0U) {
+            DefMeta *m = metas;
+
+            metas = m->next;
+            free(m);
+        }
+    }
+
+done:
+    if (n_err != NULL)
+        *n_err = c.errors;
+    if (n_warn != NULL)
+        *n_warn = c.warnings;
+    interner_free(&c.in);
+    if (c.errors != 0U) {
+        interner_free(c.aux);
+        def = NULL;
+    }
+    return def;
+}
+
+void yew_syn_def_dispose(SynDef *def)
+{
+    DefMeta **link = &metas;
+
+    while (*link != NULL) {
+        DefMeta *m = *link;
+
+        if (m->def != def) {
+            link = &m->next;
+            continue;
+        }
+        *link = m->next;
+        if (m->aux != NULL)
+            interner_free(m->aux);
+        yew_syn_engine_free(m->engine);
+        free(m);
+        return;
+    }
+}
+
+const char *yew_syn_ctx_name(const SynDef *def, u16 ctx)
+{
+    DefMeta *m = meta_for(def);
+
+    return m != NULL && ctx < def->nctxs ? m->ctx_names[ctx] : NULL;
+}
+
+const char *yew_syn_rule_pattern(const SynDef *def, u32 rule)
+{
+    DefMeta *m = meta_for(def);
+
+    return m != NULL && rule < def->nrules ? m->patterns[rule] : NULL;
+}
+
+u64 yew_syn_compile_count(void)
+{
+    return compile_count;
+}
+
+void yew_syn_compile_count_reset(void)
+{
+    compile_count = 0U;
+}
+
+static const SynLangDesc *builtin_desc_at(size_t i)
+{
+    static SynLangDesc desc[32];
+    static bool ready[32];
+    const SynLangSeed *seed;
+
+    if (i >= yew_syn_builtin_langs_len || i >= YEW_ARRAY_LEN(desc))
+        return NULL;
+    if (ready[i])
+        return &desc[i];
+    seed = &yew_syn_builtin_langs[i];
+    desc[i] = (SynLangDesc){
+        seed->id, seed->name, seed->source,
+        (const char **)seed->extensions, seed->nextensions,
+        (const char **)seed->filenames, seed->nfilenames,
+        (const char **)seed->shebangs, seed->nshebangs,
+        seed->first_line, seed->priority, seed->comment
+    };
+    ready[i] = true;
+    return &desc[i];
+}
+
+const SynLangDesc *yew_syn_lang_desc(u32 lang)
+{
+    DefMeta *m;
+    size_t i;
+
+    for (m = metas; m != NULL; m = m->next) {
+        if (m->lang.id == lang)
+            return &m->lang;
+    }
+    for (i = 0U; i < yew_syn_builtin_langs_len; i++) {
+        if (yew_syn_builtin_langs[i].id == lang)
+            return builtin_desc_at(i);
+    }
+    return NULL;
+}
+
+u32 yew_syn_lang_named(const char *name)
+{
+    DefMeta *m;
+    size_t i;
+
+    if (name == NULL)
+        return YEW_LANG_NONE;
+    for (m = metas; m != NULL; m = m->next) {
+        if (strcmp(m->lang.name, name) == 0)
+            return m->lang.id;
+    }
+    for (i = 0U; i < yew_syn_builtin_langs_len; i++) {
+        if (strcmp(yew_syn_builtin_langs[i].name, name) == 0)
+            return yew_syn_builtin_langs[i].id;
+    }
+    return YEW_LANG_NONE;
+}
+
+u32 yew_syn_lang_count(void)
+{
+    DefMeta *m;
+    u32 count = (u32)yew_syn_builtin_langs_len;
+
+    for (m = metas; m != NULL; m = m->next) {
+        size_t i;
+
+        for (i = 0U; i < yew_syn_builtin_langs_len; i++) {
+            if (m->lang.id == yew_syn_builtin_langs[i].id)
+                break;
+        }
+        if (i == yew_syn_builtin_langs_len)
+            count++;
+    }
+    return count;
+}
+
+static void put32(u8 *p, u32 v)
+{
+    p[0] = (u8)v;
+    p[1] = (u8)(v >> 8U);
+    p[2] = (u8)(v >> 16U);
+    p[3] = (u8)(v >> 24U);
+}
+
+static void put64(u8 *p, u64 v)
+{
+    u32 i;
+
+    for (i = 0U; i < 8U; i++)
+        p[i] = (u8)(v >> (i * 8U));
+}
+
+static u32 get32(const u8 *p)
+{
+    return (u32)p[0] | (u32)p[1] << 8U | (u32)p[2] << 16U |
+           (u32)p[3] << 24U;
+}
+
+static u64 get64(const u8 *p)
+{
+    u64 value = 0U;
+    u32 i;
+
+    for (i = 0U; i < 8U; i++)
+        value |= (u64)p[i] << (i * 8U);
+    return value;
+}
+
+static u64 fnv64(const u8 *p, size_t n)
+{
+    u64 hash = UINT64_C(14695981039346656037);
+    size_t i;
+
+    for (i = 0U; i < n; i++) {
+        hash ^= p[i];
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash;
+}
+
+static u32 crc32_bytes(const u8 *p, size_t n)
+{
+    u32 crc = UINT32_MAX;
+    size_t i;
+
+    for (i = 0U; i < n; i++) {
+        u32 bit;
+
+        crc ^= p[i];
+        for (bit = 0U; bit < 8U; bit++)
+            crc = (crc >> 1U) ^
+                  (UINT32_C(0xedb88320) & (u32)-(i32)(crc & 1U));
+    }
+    return ~crc;
+}
+
+static u32 abi_tag(void)
+{
+    const u16 one = 1U;
+    const u8 little = *(const u8 *)&one;
+
+    return ((u32)sizeof(void *) << 8U) | ((u32)little << 1U) |
+           (u32)(sizeof(SynRule) & 1U);
+}
+
+static bool read_whole(const char *path, Bytebuf *out, struct stat *st)
+{
+    int fd;
+    u8 buf[16384];
+
+    bytebuf_init(out);
+    if (stat(path, st) != 0 || st->st_size < 0 ||
+        (u64)st->st_size > 64U * 1024U * 1024U)
+        return false;
+    fd = open(path, O_RDONLY);
+    if (fd < 0)
+        return false;
+    for (;;) {
+        ssize_t got = read(fd, buf, sizeof(buf));
+
+        if (got > 0) {
+            bytebuf_append(out, buf, (size_t)got);
+            continue;
+        }
+        if (got < 0 && errno == EINTR)
+            continue;
+        if (got < 0) {
+            (void)close(fd);
+            bytebuf_free(out);
+            return false;
+        }
+        break;
+    }
+    if (close(fd) != 0) {
+        bytebuf_free(out);
+        return false;
+    }
+    return true;
+}
+
+char *yew_syn_cache_dir(void)
+{
+    char *root = yew_xdg_cache_dir();
+    char *path;
+    size_t n;
+
+    if (root == NULL)
+        return NULL;
+    n = strlen(root) + strlen("/syn");
+    path = yew_xmalloc(n + 1U);
+    (void)snprintf(path, n + 1U, "%s/syn", root);
+    free(root);
+    return path;
+}
+
+char *yew_syn_cache_path(const char *name)
+{
+    char *dir;
+    char *path;
+    size_t n;
+
+    if (name == NULL || name[0] == '\0' || strchr(name, '/') != NULL)
+        return NULL;
+    dir = yew_syn_cache_dir();
+    if (dir == NULL)
+        return NULL;
+    n = strlen(dir) + 1U + strlen(name) + strlen(".stab");
+    path = yew_xmalloc(n + 1U);
+    (void)snprintf(path, n + 1U, "%s/%s.stab", dir, name);
+    free(dir);
+    return path;
+}
+
+void yew_syn_cache_set_bypass(bool bypass)
+{
+    cache_bypass = bypass;
+}
+
+bool yew_syn_cache_clear(void)
+{
+    char *dir = yew_syn_cache_dir();
+    DIR *stream;
+    struct dirent *entry;
+    bool ok = true;
+
+    if (dir == NULL)
+        return false;
+    stream = opendir(dir);
+    if (stream == NULL) {
+        ok = errno == ENOENT;
+        free(dir);
+        return ok;
+    }
+    errno = 0;
+    while ((entry = readdir(stream)) != NULL) {
+        size_t len = strlen(entry->d_name);
+
+        if (len <= 5U || strcmp(entry->d_name + len - 5U, ".stab") != 0)
+            continue;
+        {
+            size_t n = strlen(dir) + 1U + len;
+            char *path = yew_xmalloc(n + 1U);
+
+            (void)snprintf(path, n + 1U, "%s/%s", dir, entry->d_name);
+            if (unlink(path) != 0 && errno != ENOENT)
+                ok = false;
+            free(path);
+        }
+    }
+    if (errno != 0)
+        ok = false;
+    if (closedir(stream) != 0)
+        ok = false;
+    free(dir);
+    return ok;
+}
+
+static char *heap_stem(const char *path)
+{
+    const char *base = strrchr(path, '/');
+    const char *dot;
+    size_t n;
+    char *name;
+
+    base = base == NULL ? path : base + 1;
+    dot = strrchr(base, '.');
+    n = dot != NULL && dot != base ? (size_t)(dot - base) : strlen(base);
+    if (n == 0U)
+        return NULL;
+    name = yew_xmalloc(n + 1U);
+    (void)memcpy(name, base, n);
+    name[n] = '\0';
+    return name;
+}
+
+static bool cache_header_ok(const u8 *p, size_t n, size_t *blob_len)
+{
+    u64 version_hash = fnv64((const u8 *)YEW_VERSION, strlen(YEW_VERSION));
+    u32 len;
+
+    if (n < YEW_SYN_CACHE_HEADER_SIZE ||
+        memcmp(p, YEW_SYN_CACHE_MAGIC, 8U) != 0 ||
+        get32(p + 8U) != YEW_SYN_TABLE_VERSION ||
+        get32(p + 12U) != abi_tag() || get64(p + 16U) != version_hash)
+        return false;
+    len = get32(p + 56U);
+    if ((size_t)len != n - YEW_SYN_CACHE_HEADER_SIZE ||
+        crc32_bytes(p + YEW_SYN_CACHE_HEADER_SIZE, len) != get32(p + 60U))
+        return false;
+    *blob_len = len;
+    return true;
+}
+
+static bool cache_write(const char *path, const struct stat *st,
+                        const u8 *src, size_t n)
+{
+    Bytebuf bytes;
+    char *dir = yew_syn_cache_dir();
+    u8 header[YEW_SYN_CACHE_HEADER_SIZE];
+    bool ok;
+
+    if (path == NULL || dir == NULL || n > UINT32_MAX) {
+        free(dir);
+        return false;
+    }
+    if (!yew_mkdirs(dir, 0700U)) {
+        free(dir);
+        return false;
+    }
+    free(dir);
+    (void)memset(header, 0, sizeof(header));
+    (void)memcpy(header, YEW_SYN_CACHE_MAGIC, 8U);
+    put32(header + 8U, YEW_SYN_TABLE_VERSION);
+    put32(header + 12U, abi_tag());
+    put64(header + 16U, fnv64((const u8 *)YEW_VERSION, strlen(YEW_VERSION)));
+    put64(header + 24U, (u64)st->st_mtim.tv_sec);
+    put64(header + 32U, (u64)st->st_mtim.tv_nsec);
+    put64(header + 40U, (u64)st->st_size);
+    put64(header + 48U, fnv64(src, n));
+    put32(header + 56U, (u32)n);
+    put32(header + 60U, crc32_bytes(src, n));
+    bytebuf_init(&bytes);
+    bytebuf_append(&bytes, header, sizeof(header));
+    bytebuf_append(&bytes, src, n);
+    ok = yew_file_write_atomic(path, bytes.data, bytes.len, 0600U) ==
+         YEW_SAVE_OK;
+    bytebuf_free(&bytes);
+    return ok;
+}
+
+SynDef *yew_syn_def_load(Arena *a, DiagCtx *dc, const char *path)
+{
+    Bytebuf source;
+    Bytebuf cached;
+    struct stat src_st;
+    struct stat cache_st;
+    char *name;
+    char *cache_path;
+    const u8 *chosen = NULL;
+    size_t chosen_len = 0U;
+    size_t blob_len = 0U;
+    bool valid_cache = false;
+    bool from_cache = false;
+    bool bypass;
+    u32 file_id;
+    u32 errors = 0U;
+    u32 warnings = 0U;
+    SynDef *def;
+    char *owned;
+
+    if (a == NULL || dc == NULL || path == NULL)
+        return NULL;
+    bytebuf_init(&source);
+    bytebuf_init(&cached);
+    if (stat(path, &src_st) != 0) {
+        file_id = fl_diag_add_file(dc, path, "", 0U);
+        fl_diag_emit(dc, FL_DIAG_ERROR, (FlSpan){file_id, 1U, 1U, 1U},
+                     "cannot read syntax definition: %s", strerror(errno));
+        return NULL;
+    }
+    name = heap_stem(path);
+    cache_path = yew_syn_cache_path(name);
+    bypass = cache_bypass || getenv("YEW_NO_SYN_CACHE") != NULL;
+    if (!bypass && cache_path != NULL &&
+        read_whole(cache_path, &cached, &cache_st)) {
+        valid_cache = cache_header_ok(cached.data, cached.len, &blob_len);
+        if (!valid_cache) {
+            yew_log(YEW_LOG_WARN, "syntax cache corrupt; recompiling %s",
+                    path);
+        } else if (get64(cached.data + 24U) == (u64)src_st.st_mtim.tv_sec &&
+                   get64(cached.data + 32U) == (u64)src_st.st_mtim.tv_nsec &&
+                   get64(cached.data + 40U) == (u64)src_st.st_size) {
+            chosen = cached.data + YEW_SYN_CACHE_HEADER_SIZE;
+            chosen_len = blob_len;
+            from_cache = true;
+        }
+    }
+    if (chosen == NULL) {
+        if (!read_whole(path, &source, &src_st)) {
+            file_id = fl_diag_add_file(dc, path, "", 0U);
+            fl_diag_emit(dc, FL_DIAG_ERROR, (FlSpan){file_id, 1U, 1U, 1U},
+                         "cannot read syntax definition: %s", strerror(errno));
+            free(name);
+            free(cache_path);
+            bytebuf_free(&cached);
+            return NULL;
+        }
+        if (valid_cache &&
+            get64(cached.data + 48U) == fnv64(source.data, source.len)) {
+            chosen = cached.data + YEW_SYN_CACHE_HEADER_SIZE;
+            chosen_len = blob_len;
+            from_cache = true;
+            if (!cache_write(cache_path, &src_st, chosen, chosen_len))
+                yew_log(YEW_LOG_WARN, "syntax cache metadata update failed: %s",
+                        cache_path);
+        } else {
+            chosen = source.data;
+            chosen_len = source.len;
+        }
+    }
+    owned = arena_strndup(a, (const char *)chosen, chosen_len);
+    file_id = fl_diag_add_file(dc, path, owned, chosen_len);
+    def = yew_syn_def_compile(a, dc, (const u8 *)owned, chosen_len, file_id,
+                              &errors, &warnings);
+    if (from_cache && compile_count != 0U)
+        compile_count--;
+    if (def != NULL) {
+        DefMeta *m = meta_for(def);
+
+        if (m != NULL)
+            m->lang.source = arena_strdup(a, path);
+        if (!bypass && !from_cache && cache_path != NULL &&
+            !cache_write(cache_path, &src_st, (const u8 *)owned, chosen_len))
+            yew_log(YEW_LOG_WARN, "syntax cache write failed: %s", cache_path);
+    }
+    (void)errors;
+    (void)warnings;
+    free(name);
+    free(cache_path);
+    bytebuf_free(&source);
+    bytebuf_free(&cached);
+    return def;
+}
+
+static bool first_has(const u8 first[32], u8 byte)
+{
+    return (first[byte >> 3U] & (u8)(1U << (byte & 7U))) != 0U;
+}
+
+bool yew_syn_def_firstbyte_check(const SynDef *def, u32 *bad_rule,
+                                 u8 *bad_byte)
+{
+    static const u8 tails[][12] = {
+        "", "a", "0", " ", "true", "=value", "]", "\"text\""
+    };
+    u32 i;
+
+    if (def == NULL)
+        return false;
+    for (i = 0U; i < def->nrules; i++) {
+        const SynRule *rule = &def->rules[i];
+        u32 byte;
+
+        if (rule->re == NULL)
+            continue;
+        for (byte = 0U; byte < 256U; byte++) {
+            u32 t;
+
+            for (t = 0U; t < YEW_ARRAY_LEN(tails); t++) {
+                u8 sample[16];
+                size_t tail_len = strlen((const char *)tails[t]);
+                YewReInput in;
+                YewReMatch match;
+
+                sample[0] = (u8)byte;
+                (void)memcpy(sample + 1U, tails[t], tail_len);
+                in = yew_re_input_bytes(sample, 1U + tail_len);
+                if (yew_re_match_at(rule->re, &in, BYTEOFF(0U), &match) &&
+                    !first_has(rule->first, (u8)byte)) {
+                    if (bad_rule != NULL)
+                        *bad_rule = i;
+                    if (bad_byte != NULL)
+                        *bad_byte = (u8)byte;
+                    return false;
+                }
+            }
+        }
+    }
+    return true;
+}
+
+static bool ascii_equal_fold(const char *a, size_t an, const char *b,
+                             size_t bn)
+{
+    size_t i;
+
+    if (an != bn)
+        return false;
+    for (i = 0U; i < an; i++) {
+        u8 ac = (u8)a[i];
+        u8 bc = (u8)b[i];
+
+        if (ac >= (u8)'A' && ac <= (u8)'Z')
+            ac = (u8)(ac + ((u8)'a' - (u8)'A'));
+        if (bc >= (u8)'A' && bc <= (u8)'Z')
+            bc = (u8)(bc + ((u8)'a' - (u8)'A'));
+        if (ac != bc)
+            return false;
+    }
+    return true;
+}
+
+static const char *path_base(const char *path)
+{
+    const char *slash;
+
+    if (path == NULL)
+        return "";
+    slash = strrchr(path, '/');
+    return slash == NULL ? path : slash + 1;
+}
+
+static bool one_star_glob(const char *pat, const char *text)
+{
+    const char *star = strchr(pat, '*');
+    size_t pn;
+    size_t tn;
+    size_t prefix;
+    size_t suffix;
+
+    if (star == NULL || strchr(star + 1, '*') != NULL)
+        return false;
+    pn = strlen(pat);
+    tn = strlen(text);
+    prefix = (size_t)(star - pat);
+    suffix = pn - prefix - 1U;
+    return tn >= prefix + suffix && memcmp(pat, text, prefix) == 0 &&
+           memcmp(star + 1, text + tn - suffix, suffix) == 0;
+}
+
+static bool better(const SynLangDesc *a, const SynLangDesc *b)
+{
+    return b == NULL || a->priority > b->priority ||
+           (a->priority == b->priority && strcmp(a->name, b->name) < 0);
+}
+
+typedef bool (*LangPred)(const SynLangDesc *, void *);
+
+static const SynLangDesc *best_language(LangPred pred, void *ctx)
+{
+    const SynLangDesc *best = NULL;
+    DefMeta *m;
+    size_t i;
+
+    for (i = 0U; i < yew_syn_builtin_langs_len; i++) {
+        const SynLangDesc *d = yew_syn_lang_desc(yew_syn_builtin_langs[i].id);
+
+        if (d != NULL && pred(d, ctx) && better(d, best))
+            best = d;
+    }
+    for (m = metas; m != NULL; m = m->next) {
+        bool builtin = false;
+
+        for (i = 0U; i < yew_syn_builtin_langs_len; i++) {
+            if (m->lang.id == yew_syn_builtin_langs[i].id) {
+                builtin = true;
+                break;
+            }
+        }
+        if (!builtin && pred(&m->lang, ctx) && better(&m->lang, best))
+            best = &m->lang;
+    }
+    return best;
+}
+
+typedef struct NameMatch {
+    const char *base;
+    bool glob;
+} NameMatch;
+
+static bool filename_pred(const SynLangDesc *lang, void *opaque)
+{
+    NameMatch *m = opaque;
+    u32 i;
+
+    for (i = 0U; i < lang->nfilenames; i++) {
+        const char *pat = lang->filenames[i];
+        bool has_star = strchr(pat, '*') != NULL;
+
+        if (m->glob != has_star)
+            continue;
+        if ((!has_star && strcmp(pat, m->base) == 0) ||
+            (has_star && one_star_glob(pat, m->base)))
+            return true;
+    }
+    return false;
+}
+
+typedef struct ExtMatch {
+    const char *base;
+    size_t longest;
+} ExtMatch;
+
+static size_t language_extension_len(const SynLangDesc *lang,
+                                     const char *base)
+{
+    size_t base_len = strlen(base);
+    size_t longest = 0U;
+    u32 i;
+
+    for (i = 0U; i < lang->nextensions; i++) {
+        const char *ext = lang->extensions[i];
+        size_t n = strlen(ext);
+
+        if (n <= longest || base_len <= n || base[base_len - n - 1U] != '.')
+            continue;
+        if (ascii_equal_fold(base + base_len - n, n, ext, n))
+            longest = n;
+    }
+    return longest;
+}
+
+static size_t longest_extension(const char *base)
+{
+    size_t longest = 0U;
+    DefMeta *m;
+    size_t i;
+
+    for (i = 0U; i < yew_syn_builtin_langs_len; i++) {
+        const SynLangDesc *d = yew_syn_lang_desc(yew_syn_builtin_langs[i].id);
+        size_t n = d == NULL ? 0U : language_extension_len(d, base);
+
+        if (n > longest)
+            longest = n;
+    }
+    for (m = metas; m != NULL; m = m->next) {
+        size_t n = language_extension_len(&m->lang, base);
+
+        if (n > longest)
+            longest = n;
+    }
+    return longest;
+}
+
+static bool extension_pred(const SynLangDesc *lang, void *opaque)
+{
+    const ExtMatch *m = opaque;
+
+    return m->longest != 0U &&
+           language_extension_len(lang, m->base) == m->longest;
+}
+
+typedef struct ShebangMatch {
+    const char *name;
+    size_t len;
+} ShebangMatch;
+
+static bool shebang_pred(const SynLangDesc *lang, void *opaque)
+{
+    ShebangMatch *m = opaque;
+    u32 i;
+
+    for (i = 0U; i < lang->nshebangs; i++) {
+        if (ascii_equal_fold(lang->shebangs[i], strlen(lang->shebangs[i]),
+                             m->name, m->len))
+            return true;
+    }
+    return false;
+}
+
+static bool parse_shebang(const u8 *line, u32 len, ShebangMatch *out)
+{
+    u32 at = 2U;
+    u32 start;
+    u32 end;
+    u32 slash;
+
+    if (line == NULL || len < 3U || line[0] != '#' || line[1] != '!')
+        return false;
+    while (at < len && (line[at] == ' ' || line[at] == '\t'))
+        at++;
+    start = at;
+    while (at < len && line[at] != ' ' && line[at] != '\t' &&
+           line[at] != '\r' && line[at] != '\n')
+        at++;
+    end = at;
+    slash = end;
+    while (slash > start && line[slash - 1U] != '/')
+        slash--;
+    start = slash;
+    if (ascii_equal_fold((const char *)line + start, end - start, "env", 3U)) {
+        do {
+            while (at < len && (line[at] == ' ' || line[at] == '\t'))
+                at++;
+            start = at;
+            while (at < len && line[at] != ' ' && line[at] != '\t' &&
+                   line[at] != '\r' && line[at] != '\n')
+                at++;
+            end = at;
+        } while (start < end && line[start] == '-');
+        slash = end;
+        while (slash > start && line[slash - 1U] != '/')
+            slash--;
+        start = slash;
+    }
+    if (start == end)
+        return false;
+    out->name = (const char *)line + start;
+    out->len = end - start;
+    return true;
+}
+
+static YewRe *detection_re(const SynLangDesc *lang)
+{
+    static Arena arena;
+    static bool initialized;
+    static struct {
+        u32 id;
+        YewRe *re;
+    } slots[32];
+    DefMeta *m;
+    u32 i;
+
+    for (m = metas; m != NULL; m = m->next) {
+        if (m->lang.id == lang->id && m->first_line_re != NULL)
+            return m->first_line_re;
+    }
+    if (!initialized) {
+        arena_init(&arena);
+        initialized = true;
+    }
+    for (i = 0U; i < YEW_ARRAY_LEN(slots); i++) {
+        YewReErr err = {0U, NULL};
+
+        if (slots[i].id == lang->id)
+            return slots[i].re;
+        if (slots[i].id != 0U)
+            continue;
+        slots[i].id = lang->id;
+        slots[i].re = yew_re_compile(&arena, lang->first_line,
+                                     strlen(lang->first_line), 0U, &err);
+        return slots[i].re;
+    }
+    return NULL;
+}
+
+typedef struct FirstLineMatch {
+    const u8 *line;
+    u32 len;
+} FirstLineMatch;
+
+static bool first_line_pred(const SynLangDesc *lang, void *opaque)
+{
+    FirstLineMatch *m = opaque;
+    YewRe *re;
+    YewReInput in;
+    YewReMatch match;
+
+    if (lang->first_line == NULL)
+        return false;
+    re = detection_re(lang);
+    if (re == NULL)
+        return false;
+    in = yew_re_input_bytes(m->line, m->len);
+    return yew_re_match_at(re, &in, BYTEOFF(0U), &match);
+}
+
+u32 yew_syn_lang_for(const char *path, const u8 *line1, u32 l1_len)
+{
+    const char *base = path_base(path);
+    const SynLangDesc *found;
+    NameMatch names = {base, false};
+    ExtMatch ext = {base, longest_extension(base)};
+    ShebangMatch shebang;
+    FirstLineMatch first = {line1, l1_len};
+
+    found = best_language(filename_pred, &names);
+    if (found != NULL)
+        return found->id;
+    names.glob = true;
+    found = best_language(filename_pred, &names);
+    if (found != NULL)
+        return found->id;
+    found = best_language(extension_pred, &ext);
+    if (found != NULL)
+        return found->id;
+    if (parse_shebang(line1, l1_len, &shebang)) {
+        found = best_language(shebang_pred, &shebang);
+        if (found != NULL)
+            return found->id;
+    }
+    if (line1 != NULL) {
+        found = best_language(first_line_pred, &first);
+        if (found != NULL)
+            return found->id;
+    }
+    return YEW_LANG_NONE;
+}
+
+static char *runtime_definition_path(const SynLangSeed *seed)
+{
+    const char *root = getenv("YEW_RUNTIME_DIR");
+    const char *relative = seed->source;
+    char *path;
+    size_t n;
+
+    if (strncmp(relative, "runtime/", 8U) == 0)
+        relative += 8U;
+    if (root != NULL && root[0] != '\0') {
+        n = strlen(root) + 1U + strlen(relative);
+        path = yew_xmalloc(n + 1U);
+        (void)snprintf(path, n + 1U, "%s/%s", root, relative);
+        if (access(path, R_OK) == 0)
+            return path;
+        free(path);
+    }
+    root = YEW_RUNTIME_DIR_DEFAULT;
+    n = strlen(root) + 1U + strlen(relative);
+    path = yew_xmalloc(n + 1U);
+    (void)snprintf(path, n + 1U, "%s/%s", root, relative);
+    if (access(path, R_OK) == 0)
+        return path;
+    free(path);
+    path = yew_xmalloc(strlen(seed->source) + 1U);
+    (void)memcpy(path, seed->source, strlen(seed->source) + 1U);
+    return path;
+}
+
+const SynDef *yew_syn_def_for(u32 lang)
+{
+    typedef struct BuiltinDef {
+        Arena arena;
+        DiagCtx dc;
+        SynDef *def;
+        bool tried;
+    } BuiltinDef;
+    static BuiltinDef builtins[32];
+    DefMeta *m;
+    size_t i;
+
+    if (lang == YEW_LANG_NONE)
+        return NULL;
+    for (m = metas; m != NULL; m = m->next) {
+        if (m->lang.id == lang)
+            return m->def;
+    }
+    for (i = 0U; i < yew_syn_builtin_langs_len; i++) {
+        char *path;
+
+        if (yew_syn_builtin_langs[i].id != lang || i >= YEW_ARRAY_LEN(builtins))
+            continue;
+        if (builtins[i].tried)
+            return builtins[i].def;
+        builtins[i].tried = true;
+        arena_init(&builtins[i].arena);
+        fl_diag_init(&builtins[i].dc, &builtins[i].arena);
+        path = runtime_definition_path(&yew_syn_builtin_langs[i]);
+        builtins[i].def = yew_syn_def_load(&builtins[i].arena,
+                                           &builtins[i].dc, path);
+        free(path);
+        return builtins[i].def;
+    }
+    return NULL;
+}
+
+SynEngine *yew_syn_engine_for(u32 lang)
+{
+    const SynDef *def = yew_syn_def_for(lang);
+    DefMeta *m;
+
+    if (def == NULL)
+        return NULL;
+    m = meta_for(def);
+    if (m == NULL)
+        return NULL;
+    if (m->engine == NULL)
+        m->engine = yew_syn_engine_new(m->def);
+    return m->engine;
+}

@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include "syn/engine.h"
+#include "syn/defs.h"
 #include "syn/theme.h"
 #include "util/buf.h"
 
@@ -60,11 +61,6 @@ static void syn_expect_bug(SynBugCase run, const char *needle)
     bytebuf_append(&output, "", 1U);
     YEW_ASSERT(strstr((const char *)output.data, needle) != NULL);
     bytebuf_free(&output);
-}
-
-static void syn_load_fl_bug(void)
-{
-    yew_syn_def_load_fl("test.fl");
 }
 
 static void syn_load_theme_bug(void)
@@ -209,8 +205,14 @@ void test_syn_state_table_exhaustion_degrades_to_root(void)
 
 void test_syn_deferred_surfaces_fail_loudly(void)
 {
-    YEW_ASSERT_EQ_U64(yew_syn_lang_for("example.c"), YEW_LANG_NONE);
-    syn_expect_bug(syn_load_fl_bug, "Sprint 40");
+    const SynDef *ini;
+
+    YEW_ASSERT_EQ_U64(yew_syn_lang_for("example.xyz", NULL, 0U),
+                      YEW_LANG_NONE);
+    YEW_ASSERT_EQ_U64(yew_syn_lang_for("example.ini", NULL, 0U), 1U);
+    ini = yew_syn_def_for(1U);
+    YEW_ASSERT_NOT_NULL(ini);
+    YEW_ASSERT_EQ_STR(ini->name, "ini");
     syn_expect_bug(syn_load_theme_bug, "Sprint 41");
     syn_expect_bug(syn_embedded_def_bug, "embedded definitions");
 }
