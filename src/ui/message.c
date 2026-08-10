@@ -281,11 +281,13 @@ void sag_message_draw(Ed *ed, Win *w)
     StatuslineText status;
     SagUiStyle style;
     SagUiStyle mode_style;
+    SagUiStyle recording_style;
     Grid *grid;
     size_t text_len;
     size_t pos = 0U;
     u16 footer;
     u16 chip_cells;
+    u16 prefix_cells;
     u16 available;
     u16 rows = 1U;
     u16 first;
@@ -302,12 +304,18 @@ void sag_message_draw(Ed *ed, Win *w)
                  : (u16)(grid->rows - 1U);
     sag_statusline_build(ed, w, grid->cols, &status);
     mode_style = sag_statusline_mode_style(ed->mode);
+    recording_style = sag_statusline_mode_style(SAG_MODE_H);
     style = sag_message_style(ed);
     chip_cells = (u16)sag_str_width((const u8 *)status.chip,
                                     status.chip_len, 1U);
     if (chip_cells > grid->cols)
         chip_cells = grid->cols;
-    available = (u16)(grid->cols - chip_cells);
+    prefix_cells = chip_cells;
+    if (status.recording_cells > (u16)(grid->cols - prefix_cells))
+        prefix_cells = grid->cols;
+    else
+        prefix_cells = (u16)(prefix_cells + status.recording_cells);
+    available = (u16)(grid->cols - prefix_cells);
     text = message_text(&ed->msg);
     text_len = ed->msg.len;
     ed->msg.truncated = row_take(text, text_len, available) < text_len;
@@ -333,7 +341,7 @@ void sag_message_draw(Ed *ed, Win *w)
     first = (u16)(footer + 1U - rows);
     for (i = 0U; i < rows; i++) {
         u16 row = (u16)(first + i);
-        u16 col = chip_cells;
+        u16 col = prefix_cells;
         size_t take;
         bool last = i + 1U == rows;
         bool remainder;
@@ -361,8 +369,19 @@ void sag_message_draw(Ed *ed, Win *w)
 
     /* The modal anchor remains on the footer even while continuation rows
      * occupy the document area above it. */
-    (void)sag_grid_puts(grid, footer, 0U, (const u8 *)status.chip,
-                        status.chip_len, mode_style.chip_fg,
-                        mode_style.chip_bg, mode_style.attrs);
+    {
+        u16 col = sag_grid_puts(grid, footer, 0U,
+                                (const u8 *)status.chip,
+                                status.chip_len, mode_style.chip_fg,
+                                mode_style.chip_bg, mode_style.attrs);
+
+        if (col < grid->cols && status.recording_len != 0U)
+            (void)sag_grid_puts(grid, footer, col,
+                                (const u8 *)status.recording,
+                                status.recording_len,
+                                recording_style.chip_fg,
+                                recording_style.chip_bg,
+                                SAG_ATTR_BOLD);
+    }
     sag_statusline_text_free(&status);
 }
