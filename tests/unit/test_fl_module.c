@@ -273,7 +273,7 @@ void test_fl_modules_list_natives_is_deterministic(void)
     }
     SAG_ASSERT_EQ_U64((u64)lines, (u64)na);
     /*
-     * 176 = the stdlib's 117 (30 str + 19 list + 12 map + 29 math +
+     * 177 = the stdlib's 118 (30 str + 19 list + 12 map + 29 math +
      * 7 fmt + 13 io + 7 re) plus Sprint 34's 59 editor natives.  Pinned so a
      * function added or lost shows up here and in s33's coverage ledger;
      * the ledger names every new native missing a COVERS token.
@@ -281,7 +281,7 @@ void test_fl_modules_list_natives_is_deterministic(void)
      * s31's DoD 2 asks for 150 and its own tables define 117; see the
      * DoD-walk note.  The number below is the tables, not the target.
      */
-    SAG_ASSERT_EQ_U64((u64)na, 176U);
+    SAG_ASSERT_EQ_U64((u64)na, 177U);
     bytebuf_free(&a);
     bytebuf_free(&b);
     flfix_close(&f);

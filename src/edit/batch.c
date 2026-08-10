@@ -319,7 +319,7 @@ static bool open_batch_files(Ed *ed, const BatchOpts *opts)
         } else if (i == 0U) {
             SagLoadErr load = sag_ed_open(ed, path);
 
-            if (load != SAG_LOAD_OK && load != SAG_LOAD_ENOENT) {
+            if (load != SAG_LOAD_OK) {
                 (void)fprintf(stderr, "sagitta: error: cannot open %s: %s\n",
                               path, load_error_text(load));
                 return false;

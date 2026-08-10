@@ -128,10 +128,45 @@ expect_stderr_contains \
     "stdin is not a terminal (--batch lands in Sprint 37)" "non-tty stdin"
 echo "smoke: non-tty stdin ok"
 
-run_capture "$bin" --batch x.fl
-expect_rc 1 batch
-expect_stderr_contains "Sprint 37" batch
-echo "smoke: batch ok"
+batch_dir=$tmp/batch
+mkdir "$batch_dir"
+printf 'import io\nio.print("batch-ok")\n' >"$batch_dir/ok.fl"
+printf 'import io\nio.print("before-error")\nerror("boom")\n' \
+    >"$batch_dir/fail.fl"
+printf 'import io\nimport buf\nbuf.insert(buf.current(), 0, "dirty")\nio.print("script-only")\n' \
+    >"$batch_dir/dirty.fl"
+
+run_capture "$bin" --batch --clean "$batch_dir/ok.fl"
+expect_rc 0 "batch success"
+[ "$(cat "$out")" = "batch-ok" ] || fail "batch success stdout"
+[ ! -s "$err" ] || fail "batch success stderr"
+
+run_capture "$bin" --batch --clean "$batch_dir/fail.fl"
+expect_rc 2 "batch failure"
+[ "$(cat "$out")" = "before-error" ] || fail "batch failure stdout flush"
+expect_stderr_contains "sagitta: script failed: user: boom" \
+    "batch failure trace"
+expect_stderr_contains "$batch_dir/fail.fl:3" "batch failure caret"
+
+run_capture "$bin" --batch --clean "$batch_dir/dirty.fl"
+expect_rc 0 "batch dirty warning"
+[ "$(cat "$out")" = "script-only" ] || fail "batch stdout purity"
+expect_stderr_contains "buffer modified and not saved" "batch dirty warning"
+
+run_capture "$bin" --batch --clean --quiet "$batch_dir/dirty.fl"
+expect_rc 0 "batch quiet"
+[ "$(cat "$out")" = "script-only" ] || fail "batch quiet stdout"
+[ ! -s "$err" ] || fail "batch quiet stderr"
+
+run_capture "$bin" --batch "$batch_dir/missing.fl"
+expect_rc 1 "batch unreadable script"
+expect_stderr_contains "$batch_dir/missing.fl" "batch unreadable script"
+
+run_capture "$bin" --batch --clean "$batch_dir/ok.fl" \
+    "$batch_dir/missing.txt"
+expect_rc 3 "batch unreadable file"
+expect_stderr_contains "$batch_dir/missing.txt" "batch unreadable file"
+echo "smoke: batch stdio and exit codes ok"
 
 rc=0
 XDG_STATE_HOME=$tmp/state SAG_LOG=$tmp/state/sagitta.log \
@@ -171,8 +206,6 @@ check_deferred_target()
     fi
     echo "smoke: deferred target $target ok"
 }
-
-check_deferred_target test-script 37
 
 #
 # Sprint 32 §1: every row of the `sag fl` exit-code contract, driven
@@ -235,12 +268,12 @@ echo "smoke: fl stdin ok"
 
 run_capture "$bin" fl --list-natives
 expect_rc 0 "fl --list-natives"
-# 121 = the stdlib's 117 plus Sprint 34's four on `buf`.  A literal
+# 177 = the stdlib/editor surface after Sprint 37 added `io.stdin`. A literal
 # rather than a range on purpose: a native appearing or vanishing without
 # anyone noticing is the thing this line exists to prevent, and it is
 # checked in three places (here, test_fl_module.c, and s33's ledger) so
 # that adding one to the tables without covering it cannot pass.
-[ "$(wc -l < "$out" | tr -d ' ')" -eq 176 ] || fail "fl --list-natives count"
+[ "$(wc -l < "$out" | tr -d ' ')" -eq 177 ] || fail "fl --list-natives count"
 echo "smoke: fl --list-natives ok"
 
 run_capture "$bin" fl --help

@@ -396,6 +396,7 @@ LIVE_PTY_OBJ := $(BUILD)/tests/support/live_pty.o
 PERF_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 PERF_FLETCH_OBJ := $(BUILD)/tests/perf/perf_fletch.o
 PERF_RECORD_OBJ := $(BUILD)/tests/perf/perf_record.o
+PERF_BATCH_OBJ := $(BUILD)/tests/perf/batch.o
 FLETCH_RUN_OBJ := $(BUILD)/tests/fletch/run.o
 SCRIPT_RUNNER_OBJ := $(BUILD)/tests/script/runner.o
 FLETCH_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
@@ -437,7 +438,8 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(FUZZ_LIB_OBJ) \
                 $(PERF_FINDER_OBJ) $(PERF_MOUSE_OBJ) \
                 $(GEN_BIGFILE_OBJ) $(FLETCH_RUN_OBJ) $(SCRIPT_RUNNER_OBJ) \
                 $(ROUNDTRIP_OBJ) \
-                $(PERF_FLETCH_OBJ) $(PERF_RECORD_OBJ) $(FUZZ_RECORD_OBJ) \
+                $(PERF_FLETCH_OBJ) $(PERF_RECORD_OBJ) $(PERF_BATCH_OBJ) \
+                $(FUZZ_RECORD_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) $(FAULTSHIM)))
 
@@ -459,6 +461,7 @@ endif
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
         perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
         perf-mouse perf-record \
+        perf-batch perf-batch-selftest \
         perf-undo perf-textbuf perf-huge perf-update perf-baseline-guard \
         perf-gate-selftest perf-latency perf-latency-selftest \
         torture torture-build torture-live-check \
@@ -598,6 +601,9 @@ $(BUILD)/perf_fletch: $(PERF_CORE_OBJ) $(PERF_FLETCH_OBJ)
 $(BUILD)/perf_record: $(PERF_CORE_OBJ) $(PERF_RECORD_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(PERF_RECORD_OBJ) $(LDLIBS)
+
+$(BUILD)/perf_batch: $(PERF_BATCH_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_BATCH_OBJ) $(LDLIBS)
 
 $(BUILD)/fletch_run: $(FLETCH_CORE_OBJ) $(FLETCH_RUN_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FLETCH_CORE_OBJ) \
@@ -864,7 +870,7 @@ perf: perf-unicode perf-render perf-scroll perf-piece perf-cursor perf-undo perf
       perf-latency perf-jobstream perf-re-pathological \
       perf-re-throughput perf-search-latency \
       perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
-      perf-mouse perf-record
+      perf-mouse perf-record perf-batch
 
 perf-cursor: $(BUILD)/perf_cursor
 	$(BUILD)/perf_cursor
@@ -883,6 +889,18 @@ perf-cmdcomp: $(BUILD)/perf_cmdcomp
 
 perf-record: $(BUILD)/perf_record
 	$(BUILD)/perf_record $(if $(PERF_GATE),--gate,)
+
+perf-batch: $(BUILD)/perf_batch $(BUILD)/sagitta
+	$(BUILD)/perf_batch --sagitta $(abspath $(BUILD)/sagitta) --gate
+
+perf-batch-selftest: $(BUILD)/perf_batch $(BUILD)/sagitta
+	@if SAG_BATCH_INJECT_NS=12000000 $(BUILD)/perf_batch \
+		--sagitta $(abspath $(BUILD)/sagitta) --gate; then \
+		echo 'error: batch startup gate accepted injected delay' >&2; \
+		exit 1; \
+	else \
+		echo 'perf-batch-selftest: injected delay rejected'; \
+	fi
 
 #
 # Sprint 30 DoD 12: the Fletch perf smoke.  NUMBERS ONLY -- there is no
@@ -1248,7 +1266,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/sagitta
          $(PERF_CMDCOMP_OBJ:.o=.d) \
          $(PERF_STATE_OBJ:.o=.d) \
          $(PERF_FINDER_OBJ:.o=.d) $(PERF_MOUSE_OBJ:.o=.d) \
-         $(PERF_FLETCH_OBJ:.o=.d) \
+         $(PERF_FLETCH_OBJ:.o=.d) $(PERF_BATCH_OBJ:.o=.d) \
          $(GEN_BIGFILE_OBJ:.o=.d) \
          $(TORTURE_CHILD_OBJ:.o=.d) \
 	 $(TORTURE_DRIVER_OBJ:.o=.d) $(TORTURE_LIVE_OBJ:.o=.d)

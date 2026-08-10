@@ -37,13 +37,16 @@ static FlOrigin runtime_origin(void)
 static FlFn *compile_owned(FlRuntime *rt, const u8 *source, size_t len,
                            const char *label, FlOrigin origin)
 {
+    static const u8 empty_source[] = "";
     const char *owned;
     const char *owned_label;
     u32 file_id;
     FlProgram program;
 
-    if (rt == NULL || source == NULL || len > UINT32_MAX)
+    if (rt == NULL || (source == NULL && len != 0U) || len > UINT32_MAX)
         return NULL;
+    if (source == NULL)
+        source = empty_source;
     if (rt->diag.nfiles >= FL_DIAG_MAX_FILES) {
         if (rt->ed != NULL)
             sag_msg(rt->ed, SAG_MSG_ERROR,

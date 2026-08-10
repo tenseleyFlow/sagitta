@@ -1,7 +1,7 @@
 # SPEC: §13, §11
 # ORIGIN: config
 # CAPS: fs.read,fs.write
-# COVERS: io.read io.read_lines io.write io.append io.exists io.is_dir
+# COVERS: io.stdin io.read io.read_lines io.write io.append io.exists io.is_dir
 # COVERS: io.size io.remove io.mkdir io.glob io.env io.print io.eprint
 # COVERS: kind:io
 #
