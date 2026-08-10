@@ -388,6 +388,7 @@ FUZZ_FLVM_OBJ := $(BUILD)/tests/fuzz/fuzz_fl_vm.o
 FUZZ_FLAPI_OBJ := $(BUILD)/tests/fuzz/fuzz_flapi.o
 FUZZ_RECORD_OBJ := $(BUILD)/tests/fuzz/fuzz_record.o
 FUZZ_SYN_OBJ := $(BUILD)/tests/fuzz/fuzz_syn.o
+FUZZ_SYN_DEF_OBJ := $(BUILD)/tests/fuzz/fuzz_syn_def.o
 RE_REF_OBJ := $(BUILD)/tests/fuzz/re_ref.o
 FUZZ_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 FUZZ_LINK_OBJ := $(FUZZ_CORE_OBJ) $(FUZZ_LIB_OBJ)
@@ -463,7 +464,8 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(FUZZ_LIB_OBJ) \
                 $(ROUNDTRIP_OBJ) \
                 $(PERF_FLETCH_OBJ) $(PERF_RECORD_OBJ) $(PERF_BATCH_OBJ) \
                 $(PERF_SCRIPT_SUITE_OBJ) \
-                $(FUZZ_RECORD_OBJ) $(FUZZ_SYN_OBJ) $(PERF_SYN_OBJ) \
+                $(FUZZ_RECORD_OBJ) $(FUZZ_SYN_OBJ) $(FUZZ_SYN_DEF_OBJ) \
+                $(PERF_SYN_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) \
                 $(TORTURE_BATCH_OBJ) $(FAULTSHIM)))
@@ -481,10 +483,11 @@ endif
 .PHONY: all check test clean install dirs FORCE test-script \
         test-script-determinism test-script-budget test-pty fuzz \
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
-        fuzz-mouse fuzz-groups fuzz-record fuzz-syn fuzz-syn-long \
+        fuzz-mouse fuzz-groups fuzz-record fuzz-syn fuzz-syn-def \
+        fuzz-syn-long \
         fuzz-syn-line-long fuzz-syn-edit-long \
         test-record-corpus \
-        test-syn-corpus \
+        test-syn-corpus test-syn-def-corpus test-syn-assets \
         fixtures fixtures-quick fixtures-verify \
         fixtures-verify-quick \
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
@@ -569,6 +572,10 @@ $(BUILD)/fuzz_record: $(FUZZ_LINK_OBJ) $(FUZZ_RECORD_OBJ)
 $(BUILD)/fuzz_syn: $(FUZZ_LINK_OBJ) $(FUZZ_SYN_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_SYN_OBJ) $(LDLIBS)
+
+$(BUILD)/fuzz_syn_def: $(FUZZ_LINK_OBJ) $(FUZZ_SYN_DEF_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
+		$(FUZZ_SYN_DEF_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_fl_std: $(FUZZ_LINK_OBJ) $(FUZZ_FLSTD_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
@@ -762,7 +769,8 @@ $(FAKECLIP): tests/unit/fakeclip.c | dirs
 # see the valgrind job in .github/workflows/ci.yml for when that lane
 # has to be asked for by hand.
 #
-check: $(BUILD)/unit_tests $(BUILD)/yew test-fletch test-script
+check: $(BUILD)/unit_tests $(BUILD)/yew test-fletch test-script \
+       test-syn-assets
 	$(UNIT_RUN)
 	scripts/bans.sh
 	scripts/check-cmd-dispatch.sh
@@ -774,7 +782,8 @@ check: $(BUILD)/unit_tests $(BUILD)/yew test-fletch test-script
 	@echo "check: ok (fast tier -- pty, torture, sanitizers and valgrind NOT run)"
 
 test: $(BUILD)/unit_tests $(BUILD)/yew test-pty test-fletch test-script \
-      test-roundtrip test-record-corpus test-syn-corpus torture-build
+      test-roundtrip test-record-corpus test-syn-corpus \
+      test-syn-def-corpus test-syn-assets torture-build
 	$(UNIT_RUN)
 	scripts/bans.sh
 	scripts/check-cmd-dispatch.sh
@@ -797,7 +806,7 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
       $(BUILD)/fuzz_fl_std $(BUILD)/fuzz_fl_vm \
       $(BUILD)/fuzz_flapi \
       fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse \
-      fuzz-mouse fuzz-groups fuzz-record fuzz-syn
+      fuzz-mouse fuzz-groups fuzz-record fuzz-syn fuzz-syn-def
 	$(BUILD)/fuzz_utf8 --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_grapheme --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_input --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
@@ -896,6 +905,15 @@ fuzz-syn-edit-long: $(BUILD)/fuzz_syn
 
 test-syn-corpus: $(BUILD)/fuzz_syn
 	$(BUILD)/fuzz_syn --corpus-only
+
+fuzz-syn-def: $(BUILD)/fuzz_syn_def
+	$(BUILD)/fuzz_syn_def --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+
+test-syn-def-corpus: $(BUILD)/fuzz_syn_def
+	$(BUILD)/fuzz_syn_def --corpus-only
+
+test-syn-assets: $(BUILD)/yew
+	scripts/check-syn-assets.sh $(BUILD)/yew
 
 fuzz-textbuf: $(BUILD)/fuzz_textbuf
 	$(BUILD)/fuzz_textbuf --replay tests/fuzz/replay-smoke.trace
@@ -1355,6 +1373,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew
          $(FUZZ_TEXTBUF_OBJ:.o=.d) $(TEXT_FUZZ_SUPPORT_OBJ:.o=.d) \
          $(FUZZ_MULTICURSOR_OBJ:.o=.d) \
          $(FUZZ_FLAPI_OBJ:.o=.d) $(FUZZ_SYN_OBJ:.o=.d) \
+         $(FUZZ_SYN_DEF_OBJ:.o=.d) \
          $(FUZZ_CMDPARSE_OBJ:.o=.d) $(FUZZ_RECOMPILE_OBJ:.o=.d) \
          $(FUZZ_REDIFF_OBJ:.o=.d) $(RE_REF_OBJ:.o=.d) \
          $(PTY_ORACLE_OBJ:.o=.d) \

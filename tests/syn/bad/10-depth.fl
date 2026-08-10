@@ -1,0 +1,8 @@
+{ syntax: 1, language: { name: "deep" }, contexts: {
+main:{rules:[{match:"a",push:"c1"}]}, c1:{rules:[{match:"a",push:"c2"},{match:"z",pop:1}]},
+c2:{rules:[{match:"a",push:"c3"},{match:"z",pop:1}]}, c3:{rules:[{match:"a",push:"c4"},{match:"z",pop:1}]},
+c4:{rules:[{match:"a",push:"c5"},{match:"z",pop:1}]}, c5:{rules:[{match:"a",push:"c6"},{match:"z",pop:1}]},
+c6:{rules:[{match:"a",push:"c7"},{match:"z",pop:1}]}, c7:{rules:[{match:"a",push:"c8"},{match:"z",pop:1}]},
+c8:{rules:[{match:"a",push:"c9"},{match:"z",pop:1}]}, c9:{rules:[{match:"a",push:"c10"},{match:"z",pop:1}]},
+c10:{rules:[{match:"a",push:"c11"},{match:"z",pop:1}]}, c11:{rules:[{match:"a",push:"c12"},{match:"z",pop:1}]},
+c12:{rules:[{match:"z",pop:1}]} } }

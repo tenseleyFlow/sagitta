@@ -1,0 +1,1 @@
+{ syntax: 1, language: { name: "bad" }, contexts: { main: { rules: [{ match: "(a)(b)", consume: 3 }] } } }

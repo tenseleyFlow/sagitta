@@ -1,0 +1,1 @@
+{ syntax: 1, language: { name: "bad" }, contexts: { main: { rules: [{ match: "x", push: "child", pop: 1 }] }, child: { rules: [{ match: "x", pop: 1 }] } } }

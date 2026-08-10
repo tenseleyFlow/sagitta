@@ -1,0 +1,18 @@
+# fixture|level|line|column|message
+01-schema|error|1|11|unknown schema version 2 (this build understands 1)
+02-key|error|1|71|unknown key 'matchh' (did you mean 'match'?)
+03-attr|error|1|89|unknown attr 'strng' (did you mean 'string'?)
+04-context|error|1|89|no context named 'missing'
+05-state-ops|error|1|69|rule has both 'push' and 'pop'; a rule performs exactly one state op
+06-consume|error|1|97|consume: 3 but the pattern has 2 capture groups
+07-capture|error|1|97|capture group 9 is out of range (0-7)
+08-pattern|error|1|78|invalid pattern at offset 0: unterminated character class
+09-pop|error|1|88|pop count 5 is out of range (1-4)
+10-depth|error|2|6|context nesting can reach depth 13; the cap is 16 with 4 levels reserved for runtime recursion (see YEW_SYN_DEPTH_MAX)
+11-include-cycle|error|1|70|include cycle reaches 'main'
+12-no-pop|error|1|110|context 'stuck' can never be popped
+13-unreachable-rule|warning|1|68|rule 2 is unreachable: rule 1 has the same pattern
+14-unreachable-context|warning|1|82|context 'legacy' is unreachable
+15-error-default|warning|1|70|default: 'error' paints every unmatched byte red; did you mean 'text'?
+16-include-fields|warning|1|101|only 'rules' is used at an include site
+17-indent-order|error|1|68|indent_lt must be the first rule in its context
