@@ -197,7 +197,11 @@ endif
 endif
 
 UNIT_RUN := $(BUILD)/unit_tests
-PTY_RUN  := $(BUILD)/pty_runner
+# Deferred (=, not :=) so $(SAG_PTY_BUDGET_MS) resolves at USE time,
+# after the VALGRIND/else branches below have chosen a value.  Without
+# the prefix the plain lanes passed nothing and silently inherited
+# runner.c's 180 s fallback.
+PTY_RUN   = SAG_PTY_BUDGET_MS=$(SAG_PTY_BUDGET_MS) $(BUILD)/pty_runner
 PTY_PREP :=
 PTY_LOG_REDIRECT :=
 # Plain compiler lanes cover intentional abort contracts. Instrumented lanes
@@ -272,6 +276,23 @@ PTY_RUN  := SAG_PTY_BUDGET_MS=$(SAG_PTY_BUDGET_MS) \
             --log-fd=9 $(BUILD)/pty_runner
 PTY_PREP := ulimit -c 0 &&
 PTY_LOG_REDIRECT := 9>&2
+else
+# MEASURED, like the valgrind ceiling above, and for the same reason: the
+# suite has grown into the runner's built-in default.
+#
+# tests/pty/runner.c falls back to RUNNER_BUDGET_MS = 180000 when nothing
+# sets this, and only the valgrind branch above ever did — so every plain
+# lane has quietly been running against 180 s.  The 206-case suite takes
+# 132 s on a quiet developer machine, which is 73% of that before a CI
+# runner's slower cores are considered, and fletch-dispatch duly ran out
+# on the last case with "global budget exhausted after 180000 ms" while
+# the pty lane on the same commit finished.  That is a ceiling being
+# brushed, not a hang.
+#
+# 600 s is ~4.5x the measured time.  It is a wall-clock ceiling on a
+# HANG, not a latency budget — nothing measures against it, and the
+# per-case budget is what bounds a single stuck case.
+SAG_PTY_BUDGET_MS ?= 600000
 endif
 
 ifeq ($(SAN),1)
