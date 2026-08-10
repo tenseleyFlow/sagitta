@@ -1,0 +1,15 @@
+# Sprint 37: insertion-ordered map helpers in batch mode.
+import map
+import list
+let m = {alpha: 1, beta: 2}
+t.eq(map.len(m), 2)
+t.eq(map.get(m, "alpha"), 1)
+t.eq(map.has(m, "beta"), true)
+t.eq(map.has(m, "gamma"), false)
+map.set(m, "gamma", 3)
+t.eq(map.len(m), 3)
+t.eq(map.get(m, "gamma"), 3)
+t.eq(list.len(map.keys(m)), 3)
+t.eq(map.remove(m, "beta"), 2)
+t.eq(map.len(m), 2)
+t.ne(map.copy(m), m)

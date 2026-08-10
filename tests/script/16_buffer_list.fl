@@ -1,0 +1,15 @@
+# Sprint 34 -> 37: list/current identity and stable buffer metadata.
+import buf
+import list
+let b = buf.current()
+let bs = buf.list()
+t.eq(list.len(bs), 1)
+t.eq(bs[0], b)
+t.eq(buf.name(bs[0]), "[No Name]")
+t.eq(buf.path(bs[0]), nil)
+t.eq(buf.lang(bs[0]), nil)
+t.eq(buf.len(bs[0]), 0)
+t.eq(buf.lines(bs[0]), 1)
+t.eq(buf.dirty(bs[0]), false)
+t.eq(buf.readonly(bs[0]), false)
+t.text(bs[0], "")

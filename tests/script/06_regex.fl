@@ -1,0 +1,14 @@
+# Sprint 37: real regex work in the batch VM.
+import re
+import map
+import list
+t.eq(re.test("alpha42", "[0-9]+"), true)
+t.eq(re.test("alpha", "[0-9]+"), false)
+t.eq(map.get(re.find("abc123", "[0-9]+"), "text"), "123")
+t.eq(map.get(re.find("abc123", "[0-9]+"), "lo"), 3)
+t.eq(map.get(re.find("abc123", "[0-9]+"), "hi"), 6)
+t.eq(list.len(re.find_all("a1b2c3", "[0-9]")), 3)
+t.eq(re.replace("a1b2", "[0-9]", "#"), "a#b#")
+t.eq(list.len(re.split("a,b;c", "[,;]")), 3)
+t.eq(re.test("a.b", re.escape("a.b")), true)
+t.eq(re.find("abc", "z"), nil)

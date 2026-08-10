@@ -1,0 +1,19 @@
+# Sprint 17 -> 37: explicit cursor placement uses byte offsets.
+import buf
+import win
+import cur
+let b = buf.current()
+let w = win.current()
+edit { buf.insert(b, 0, "abc\ndef") }
+let c = win.cursors(w)[0]
+edit { cur.goto(c, 5) }
+t.eq(cur.pos(c), 5)
+t.eq(cur.anchor(c), 5)
+t.eq(cur.line(c), 2)
+t.eq(cur.col(c), 1)
+t.eq(cur.is_primary(c), true)
+t.eq(cur.valid(c), true)
+t.eq(cur.span(c), nil)
+t.cursor(w, 2, 1)
+t.cursors(w, [[2, 1]])
+t.text(b, "abc\ndef")

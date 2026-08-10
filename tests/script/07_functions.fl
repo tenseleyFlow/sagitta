@@ -1,0 +1,20 @@
+# Sprint 37: closures and recursion survive process-isolated execution.
+fn fact(n) { if n < 2 { return 1 } return n * fact(n - 1) }
+fn counter(start) {
+    let n = start
+    return fn() {
+        n = n + 1
+        return n
+    }
+}
+let c = counter(4)
+t.eq(fact(0), 1)
+t.eq(fact(1), 1)
+t.eq(fact(3), 6)
+t.eq(fact(5), 120)
+t.eq(c(), 5)
+t.eq(c(), 6)
+t.eq(c(), 7)
+t.ne(c(), 7)
+t.eq(fn(x) { return x + 1 }(9), 10)
+t.eq(batch, true)

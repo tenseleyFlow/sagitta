@@ -1,0 +1,19 @@
+# Sprint 37: files opened by the script retain insertion order.
+import buf
+import list
+let p1 = t.fixture("plain.txt")
+let p2 = t.fixture("three-lines.txt")
+let scratch = buf.current()
+let b1 = buf.open(p1)
+let b2 = buf.open(p2)
+let bs = buf.list()
+t.eq(list.len(bs), 3)
+t.eq(bs[0], scratch)
+t.eq(bs[1], b1)
+t.eq(bs[2], b2)
+t.eq(buf.current(), b2)
+t.eq(buf.name(bs[0]), "[No Name]")
+t.eq(buf.name(bs[1]), p1)
+t.eq(buf.name(bs[2]), p2)
+t.text(b1, "alpha beta\ngamma delta\n")
+t.text(b2, "first\nsecond\nthird\n")

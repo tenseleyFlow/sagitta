@@ -1,0 +1,21 @@
+# Sprint 37: combined host/editor/file coverage in one isolated process.
+import buf
+import win
+import span
+let path = t.fixture("plain.txt")
+let b = buf.open(path)
+let w = win.current()
+let s = buf.span(b, 0, 5)
+t.eq(span.text(s), "alpha")
+t.ne(buf.name(b), "[No Name]")
+t.text(b, "alpha beta\ngamma delta\n")
+t.line(b, 2, "gamma delta")
+t.cursor(w, 1, 0)
+t.cursors(w, [[1, 0]])
+t.sel(w, "")
+edit { span.yank(s, "z") }
+t.reg("z", "alpha", "char")
+t.undo(b, 1)
+t.file(path, "alpha beta\ngamma delta\n")
+t.raises("range", fn() { return buf.line(b, 99) })
+t.eq(batch, true)

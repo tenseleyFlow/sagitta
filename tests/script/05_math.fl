@@ -1,0 +1,12 @@
+# Sprint 37: math module calls are deterministic headlessly.
+import math
+t.eq(math.abs(-7), 7)
+t.eq(math.min(4, 9), 4)
+t.eq(math.max(4, 9), 9)
+t.eq(math.floor(2.9), 2)
+t.eq(math.ceil(2.1), 3)
+t.eq(math.round(2.4), 2)
+t.eq(math.clamp(12, 0, 10), 10)
+t.eq(math.clamp(-2, 0, 10), 0)
+t.eq(math.clamp(5, 0, 10), 5)
+t.ne(math.sqrt(9), 4.0)

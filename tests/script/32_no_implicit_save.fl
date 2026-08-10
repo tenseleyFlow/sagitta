@@ -1,0 +1,15 @@
+# Sprint 37: dirty buffers never write without an explicit save.
+import buf
+let path = t.fixture("save.txt")
+let b = buf.open(path)
+t.file(path, "before\n")
+edit { buf.insert(b, 0, "local ") }
+t.eq(buf.dirty(b), true)
+t.text(b, "local before\n")
+t.file(path, "before\n")
+t.eq(buf.path(b), path)
+t.eq(buf.name(b), path)
+t.eq(buf.len(b), 13)
+t.eq(buf.lines(b), 2)
+t.line(b, 1, "local before")
+t.eq(buf.readonly(b), false)

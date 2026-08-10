@@ -1,0 +1,19 @@
+# Sprint 17 -> 37: empty selection state is observable without rendering.
+import buf
+import win
+import cur
+let b = buf.current()
+let w = win.current()
+let c = win.cursors(w)[0]
+edit { buf.insert(b, 0, "selection") }
+edit { cur.goto(c, 4) }
+t.sel(w, "")
+t.eq(win.selection(w), nil)
+t.eq(cur.span(c), nil)
+t.eq(cur.pos(c), 4)
+t.eq(cur.anchor(c), 4)
+t.eq(cur.line(c), 1)
+t.eq(cur.col(c), 4)
+t.cursor(w, 1, 4)
+t.cursors(w, [[1, 4]])
+t.text(b, "selection")

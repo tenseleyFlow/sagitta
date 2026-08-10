@@ -1,0 +1,13 @@
+# Sprint 37: globals have their pinned types and default contents.
+import list
+import str
+t.eq(batch, true)
+t.eq(list.len(args), 0)
+t.eq(list.len(files), 0)
+t.eq(str.starts_with(script_path, "/"), true)
+t.eq(str.ends_with(script_path, "37_batch_globals.fl"), true)
+t.ne(script_path, "37_batch_globals.fl")
+t.ne(list.copy(args), args)
+t.ne(list.copy(files), files)
+t.ne(args, files)
+t.eq(str.contains(script_path, "tests/script"), true)

@@ -1,0 +1,14 @@
+# Sprint 34 -> 37: scratch-buffer queries and edits.
+import buf
+let b = buf.current()
+t.eq(buf.name(b), "[No Name]")
+t.eq(buf.path(b), nil)
+t.eq(buf.len(b), 0)
+t.eq(buf.lines(b), 1)
+t.eq(buf.text(b), "")
+t.eq(buf.dirty(b), false)
+t.eq(buf.readonly(b), false)
+edit { buf.insert(b, 0, "alpha\nbeta\n") }
+t.eq(buf.len(b), 11)
+t.text(b, "alpha\nbeta\n")
+t.line(b, 2, "beta")

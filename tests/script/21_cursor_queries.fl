@@ -1,0 +1,17 @@
+# Sprint 17 -> 37: cursor handles expose deterministic positions.
+import win
+import cur
+import list
+let w = win.current()
+let cs = win.cursors(w)
+let c = cs[0]
+t.eq(list.len(cs), 1)
+t.eq(cur.pos(c), 0)
+t.eq(cur.anchor(c), 0)
+t.eq(cur.line(c), 1)
+t.eq(cur.col(c), 0)
+t.eq(cur.span(c), nil)
+t.eq(cur.is_primary(c), true)
+t.eq(cur.valid(c), true)
+t.cursor(w, 1, 0)
+t.cursors(w, [[1, 0]])

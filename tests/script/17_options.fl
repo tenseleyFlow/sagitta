@@ -1,0 +1,15 @@
+# Sprint 16 -> 37: option access does not require a terminal.
+import opt
+let old = opt.get("tabwidth")
+t.eq(old, 4)
+edit { opt.set("tabwidth", 8) }
+t.eq(opt.get("tabwidth"), 8)
+edit { opt.set("tabwidth", 2) }
+t.eq(opt.get("tabwidth"), 2)
+t.raises("name", fn() { return opt.get("not_an_option") })
+t.raises("name", fn() { edit { opt.set("not_an_option", 1) } })
+t.raises("type", fn() { return opt.get(42) })
+t.raises("type", fn() { edit { opt.set("tabwidth", "wide") } })
+t.eq(batch, true)
+t.ne(old, 8)
+t.eq(nil, nil)

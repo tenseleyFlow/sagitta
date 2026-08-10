@@ -1,0 +1,12 @@
+# Sprint 37: batch scripts have the complete string stdlib.
+import str
+t.eq(str.len("hello"), 5)
+t.eq(str.len_bytes("hello"), 5)
+t.eq(str.upper("Sagitta"), "SAGITTA")
+t.eq(str.lower("FLETCH"), "fletch")
+t.eq(str.trim("  x  "), "x")
+t.eq(str.starts_with("batch", "bat"), true)
+t.eq(str.ends_with("batch", "tch"), true)
+t.eq(str.contains("terminal", "mina"), true)
+t.eq(str.replace("a-b-c", "-", "/"), "a/b/c")
+t.eq(str.repeat("ab", 3), "ababab")

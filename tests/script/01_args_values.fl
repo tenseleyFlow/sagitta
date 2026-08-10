@@ -1,0 +1,11 @@
+# Sprint 37: scalar semantics remain intact in batch mode.
+t.eq(batch, true)
+t.eq(6 * 7, 42)
+t.eq(9 / 3, 3)
+t.eq(9 % 4, 1)
+t.eq(-4 + 9, 5)
+t.eq(true and true, true)
+t.eq(false or true, true)
+t.ne(nil, false)
+t.ne(0, false)
+t.eq("head" + "less", "headless")

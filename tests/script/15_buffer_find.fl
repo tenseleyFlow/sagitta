@@ -1,0 +1,14 @@
+# Sprint 21 -> 37: buffer search over editor-owned text.
+import buf
+let b = buf.current()
+edit { buf.insert(b, 0, "one two one three one") }
+t.raises("type", fn() { return buf.find(b, "one") })
+t.raises("type", fn() { return buf.find_all(b, "one") })
+t.raises("type", fn() { return buf.find(b, nil) })
+t.raises("type", fn() { return buf.find_all(b, nil) })
+t.eq(buf.line(b, 1), "one two one three one")
+t.eq(buf.lines(b), 1)
+t.eq(buf.dirty(b), true)
+t.eq(buf.readonly(b), false)
+t.text(b, "one two one three one")
+t.eq(buf.len(b), 21)

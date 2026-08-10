@@ -1,0 +1,15 @@
+# Sprint 34 -> 37: invalid editor ranges are typed and catchable.
+import buf
+import span
+let b = buf.current()
+edit { buf.insert(b, 0, "abc") }
+t.raises("range", fn() { return buf.span(b, -1, 1) })
+t.raises("range", fn() { return buf.span(b, 2, 1) })
+t.raises("range", fn() { return buf.span(b, 0, 4) })
+t.raises("range", fn() { return buf.line(b, 2) })
+t.raises("range", fn() { return buf.line_span(b, 0) })
+t.raises("type", fn() { return buf.len(42) })
+t.raises("type", fn() { return span.text(42) })
+t.eq(buf.text(b), "abc")
+t.eq(buf.dirty(b), true)
+t.text(b, "abc")

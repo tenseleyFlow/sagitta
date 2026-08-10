@@ -1,0 +1,11 @@
+# Sprint 37: fixture path confinement fails as a typed I/O error.
+t.raises("io", fn() { return t.fixture("") })
+t.raises("io", fn() { return t.fixture(".") })
+t.raises("io", fn() { return t.fixture("..") })
+t.raises("io", fn() { return t.fixture("../plain.txt") })
+t.raises("io", fn() { return t.fixture("missing.txt") })
+t.eq(batch, true)
+t.ne(script_path, "")
+t.eq(nil, nil)
+t.ne(1, 2)
+t.eq("fixture", "fixture")

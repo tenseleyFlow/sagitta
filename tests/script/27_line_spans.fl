@@ -1,0 +1,18 @@
+# Sprint 34 -> 37: line spans expose exact EOL-inclusive bytes.
+import buf
+import span
+import list
+let b = buf.current()
+edit { buf.insert(b, 0, "aa\nbbb\nc") }
+let first = buf.line_span(b, 1)
+let second = buf.line_span(b, 2)
+t.eq(span.text(first), "aa\n")
+t.eq(span.len(first), 3)
+t.eq(span.lo(first), 0)
+t.eq(span.hi(first), 3)
+t.eq(span.text(second), "bbb\n")
+t.eq(span.len(second), 4)
+t.eq(list.len(span.lines(second)), 2)
+t.line(b, 1, "aa")
+t.line(b, 2, "bbb")
+t.text(b, "aa\nbbb\nc")

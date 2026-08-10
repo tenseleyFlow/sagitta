@@ -1,0 +1,12 @@
+# Sprint 37: skip is explicit and still reports prior assertion work.
+t.eq(batch, true)
+t.eq(1, 1)
+t.ne(1, 2)
+t.eq("skip", "skip")
+t.ne("skip", "fail")
+t.eq(nil, nil)
+t.eq(true, true)
+t.eq(false, false)
+t.eq(3 * 3, 9)
+t.eq(10 - 4, 6)
+t.skip("assertion host skip protocol covered")

@@ -1,0 +1,16 @@
+# Sprint 37: catchable errors and the t.raises assertion.
+import str
+fn try_value() { try { error("x") } catch e { return "caught" } }
+fn nested_value() { try { error("x") } catch e { return 7 } }
+fn error_kind() { try { error("x") } catch e { return e.kind } }
+
+t.raises("user", fn() { error("expected") })
+t.raises("type", fn() { return str.len(42) })
+t.raises("arity", fn() { return str.len() })
+t.raises("index", fn() { return [1][9] })
+t.raises("key", fn() { return {x: 1}.missing })
+t.eq(try_value(), "caught")
+t.eq(nested_value(), 7)
+t.ne(error_kind(), "type")
+t.eq(batch, true)
+t.eq(nil, nil)

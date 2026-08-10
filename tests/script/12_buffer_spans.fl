@@ -1,0 +1,16 @@
+# Sprint 34 -> 37: span queries preserve byte offsets.
+import buf
+import span
+let b = buf.current()
+edit { buf.insert(b, 0, "alpha beta gamma") }
+let s = buf.span(b, 6, 10)
+t.eq(span.lo(s), 6)
+t.eq(span.hi(s), 10)
+t.eq(span.len(s), 4)
+t.eq(span.text(s), "beta")
+t.eq(span.valid(s), true)
+t.eq(buf.text(b, s), "beta")
+t.eq(buf.len(b), 16)
+t.eq(buf.line(b, 1), "alpha beta gamma")
+t.text(b, "alpha beta gamma")
+t.line(b, 1, "alpha beta gamma")

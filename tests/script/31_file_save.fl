@@ -1,0 +1,16 @@
+# Sprint 14 -> 37: explicit save changes disk and clears dirty state.
+import buf
+let path = t.fixture("save.txt")
+let b = buf.open(path)
+t.file(path, "before\n")
+t.eq(buf.dirty(b), false)
+edit { buf.insert(b, buf.len(b), "after\n") }
+t.eq(buf.dirty(b), true)
+t.text(b, "before\nafter\n")
+t.file(path, "before\n")
+buf.save(b)
+t.eq(buf.dirty(b), false)
+t.file(path, "before\nafter\n")
+t.eq(buf.path(b), path)
+t.eq(buf.name(b), path)
+t.eq(buf.lines(b), 3)

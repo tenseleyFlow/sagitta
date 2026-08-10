@@ -1,0 +1,13 @@
+# Sprint 37: t.file compares exact on-disk bytes.
+let plain = t.fixture("plain.txt")
+let lines = t.fixture("three-lines.txt")
+t.file(plain, "alpha beta\ngamma delta\n")
+t.file(lines, "first\nsecond\nthird\n")
+t.ne(plain, lines)
+t.eq(batch, true)
+t.eq(23, 23)
+t.eq(19, 19)
+t.ne("alpha", "gamma")
+t.eq("first\n" + "second\n" + "third\n", "first\nsecond\nthird\n")
+t.eq(nil, nil)
+t.ne(true, false)

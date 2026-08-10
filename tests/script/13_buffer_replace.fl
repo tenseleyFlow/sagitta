@@ -1,0 +1,21 @@
+# Sprint 14 -> 37: insert, replace, prepend, append, and delete.
+import buf
+import span
+let b = buf.current()
+edit { buf.insert(b, 0, "abc def") }
+let word = buf.span(b, 4, 7)
+edit { span.replace(word, "XYZ") }
+t.text(b, "abc XYZ")
+t.eq(buf.len(b), 7)
+let head = buf.span(b, 0, 3)
+edit { span.prepend(head, "[") }
+t.text(b, "[abc XYZ")
+edit { span.append(head, "]") }
+t.text(b, "[abc] XYZ")
+t.eq(span.text(head), "[abc]")
+t.eq(span.valid(head), true)
+edit { span.delete(head) }
+t.text(b, " XYZ")
+t.eq(buf.dirty(b), true)
+t.eq(buf.lines(b), 1)
+t.line(b, 1, " XYZ")

@@ -1,0 +1,12 @@
+# Sprint 37: prompt-driven commands refuse with capability errors.
+import ed
+t.raises("capability", fn() { return ed.run("ed.file.open", {}) })
+t.raises("capability", fn() { return ed.run("ed.find.file", {}) })
+t.raises("capability", fn() { return ed.run("ed.find.buffer", {}) })
+t.raises("capability", fn() { return ed.run("ed.undo.branches", {}) })
+t.raises("capability", fn() { return ed.run("ed.search.open", {}) })
+t.raises("capability", fn() { return ed.run("ed.search.open_back", {}) })
+t.raises("capability", fn() { return ed.run("ed.macro.record", {}) })
+t.raises("capability", fn() { return ed.run("ed.ai.open", {}) })
+t.raises("capability", fn() { return ed.run("ed.group.edit", {}) })
+t.eq(batch, true)

@@ -1,0 +1,13 @@
+# Sprint 37: list values and helpers in an isolated process.
+import list
+let xs = [3, 1, 2]
+t.eq(list.len(xs), 3)
+t.eq(list.get(xs, 0), 3)
+t.eq(list.contains(xs, 1), true)
+t.eq(list.index_of(xs, 2), 2)
+t.eq(list.reduce(xs, fn(a, v) { return a + v }, 0), 6)
+t.eq(list.any(xs, fn(v) { return v == 1 }), true)
+t.eq(list.all(xs, fn(v) { return v > 0 }), true)
+t.eq(list.len(list.map(xs, fn(v) { return v * 2 })), 3)
+t.eq(list.len(list.filter(xs, fn(v) { return v > 1 })), 2)
+t.ne(list.copy(xs), xs)

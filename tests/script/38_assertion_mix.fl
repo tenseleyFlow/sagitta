@@ -1,0 +1,15 @@
+# Sprint 37: assertion failures record independently; passing calls continue.
+import buf
+import win
+let b = buf.current()
+let w = win.current()
+t.eq(4, 4, "optional diagnostic note")
+t.ne(4, 5)
+t.text(b, "")
+t.line(b, 1, "")
+t.cursor(w, 1, 0)
+t.cursors(w, [[1, 0]])
+t.sel(w, "")
+t.undo(b, 1)
+t.raises("user", fn() { error("expected") })
+t.eq(batch, true)

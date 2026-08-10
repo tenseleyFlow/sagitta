@@ -1,0 +1,13 @@
+# Sprint 37: sandbox helpers expose stable, nonempty locations.
+import str
+let root = t.tmpdir()
+t.ne(root, "")
+t.eq(str.starts_with(root, "/"), true)
+t.eq(str.len(root) >= 4, true)
+t.eq(batch, true)
+t.eq(str.contains(root, "/"), true)
+t.ne(script_path, root)
+t.eq(str.starts_with(script_path, "/"), true)
+t.eq(2 + 3, 5)
+t.ne("tmp", "work")
+t.eq(nil, nil)

@@ -1,0 +1,14 @@
+# Sprint 14 -> 37: line-oriented queries over real editor state.
+import buf
+let b = buf.current()
+edit { buf.insert(b, 0, "one\ntwo\nthree") }
+t.eq(buf.lines(b), 3)
+t.eq(buf.line(b, 1), "one")
+t.eq(buf.line(b, 2), "two")
+t.eq(buf.line(b, 3), "three")
+t.line(b, 1, "one")
+t.line(b, 2, "two")
+t.line(b, 3, "three")
+t.eq(buf.len(b), 13)
+t.eq(buf.text(b), "one\ntwo\nthree")
+t.text(b, "one\ntwo\nthree")

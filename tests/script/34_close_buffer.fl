@@ -1,0 +1,17 @@
+# Sprint 34 -> 37: a clean opened buffer can close headlessly.
+import buf
+import list
+let path = t.fixture("plain.txt")
+let scratch = buf.current()
+let opened = buf.open(path)
+t.eq(list.len(buf.list()), 2)
+t.eq(buf.current(), opened)
+t.eq(buf.dirty(opened), false)
+buf.close(opened)
+t.eq(list.len(buf.list()), 1)
+t.eq(buf.current(), scratch)
+t.eq(buf.name(scratch), "[No Name]")
+t.eq(buf.path(scratch), nil)
+t.eq(buf.len(scratch), 0)
+t.eq(buf.dirty(scratch), false)
+t.text(scratch, "")

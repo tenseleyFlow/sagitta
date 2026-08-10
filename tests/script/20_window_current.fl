@@ -1,0 +1,16 @@
+# Sprint 14 -> 37: the headless editor still has a logical window.
+import win
+import buf
+import list
+let w = win.current()
+let b = buf.current()
+t.eq(win.buf(w), b)
+t.eq(list.len(win.list()), 1)
+t.eq(win.list()[0], w)
+t.eq(win.selection(w), nil)
+t.eq(list.len(win.cursors(w)), 1)
+t.eq(win.viewport(w).top, 1)
+t.eq(win.viewport(w).rows, 0)
+t.eq(win.viewport(w).cols, 0)
+t.cursor(w, 1, 0)
+t.cursors(w, [[1, 0]])

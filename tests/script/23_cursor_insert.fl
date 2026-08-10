@@ -1,0 +1,18 @@
+# Sprint 14 -> 37: cursor-targeted insertion updates text and cursor.
+import buf
+import win
+import cur
+let b = buf.current()
+let w = win.current()
+let c = win.cursors(w)[0]
+edit { cur.insert(c, "hello") }
+t.text(b, "hello")
+t.eq(buf.len(b), 5)
+t.eq(cur.pos(c), 5)
+t.eq(cur.anchor(c), 5)
+t.eq(cur.line(c), 1)
+t.eq(cur.col(c), 5)
+t.eq(cur.is_primary(c), true)
+t.eq(cur.valid(c), true)
+t.cursor(w, 1, 5)
+t.cursors(w, [[1, 5]])

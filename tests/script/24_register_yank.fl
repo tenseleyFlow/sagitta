@@ -1,0 +1,17 @@
+# Sprint 12 -> 37: yanking real buffer text populates a named register.
+import buf
+import span
+let b = buf.current()
+edit { buf.insert(b, 0, "alpha beta") }
+let s = buf.span(b, 0, 5)
+edit { span.yank(s, "a") }
+t.reg("a", "alpha")
+t.reg("a", "alpha", "char")
+t.eq(span.text(s), "alpha")
+t.eq(span.len(s), 5)
+t.eq(span.lo(s), 0)
+t.eq(span.hi(s), 5)
+t.eq(span.valid(s), true)
+t.text(b, "alpha beta")
+t.line(b, 1, "alpha beta")
+t.eq(buf.dirty(b), true)

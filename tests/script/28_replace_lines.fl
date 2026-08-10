@@ -1,0 +1,17 @@
+# Sprint 34 -> 37: structured line replacement is byte-exact.
+import buf
+import span
+let b = buf.current()
+edit { buf.insert(b, 0, "old\ntail") }
+let s = buf.span(b, 0, 3)
+edit { span.replace_lines(s, ["one", "two"]) }
+t.text(b, "one\ntwo\ntail")
+t.eq(buf.lines(b), 3)
+t.eq(buf.len(b), 12)
+t.line(b, 1, "one")
+t.line(b, 2, "two")
+t.line(b, 3, "tail")
+t.eq(buf.dirty(b), true)
+t.eq(buf.readonly(b), false)
+t.eq(span.valid(s), true)
+t.eq(span.text(s), "one\ntwo")

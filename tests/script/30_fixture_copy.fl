@@ -1,0 +1,15 @@
+# Sprint 37: fixture copies are isolated inside each sandbox.
+import buf
+import str
+let path = t.fixture("plain.txt")
+t.eq(str.ends_with(path, "/plain.txt"), true)
+t.file(path, "alpha beta\ngamma delta\n")
+let b = buf.open(path)
+t.eq(buf.path(b), path)
+t.eq(buf.name(b), path)
+t.eq(buf.len(b), 23)
+t.eq(buf.lines(b), 3)
+t.line(b, 1, "alpha beta")
+t.line(b, 2, "gamma delta")
+t.line(b, 3, "")
+t.text(b, "alpha beta\ngamma delta\n")

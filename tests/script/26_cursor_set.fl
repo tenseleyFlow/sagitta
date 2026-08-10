@@ -1,0 +1,22 @@
+# Sprint 17 -> 37: replacing the cursor set keeps canonical order.
+import buf
+import win
+import cur
+import list
+let b = buf.current()
+let w = win.current()
+edit { buf.insert(b, 0, "abcdef") }
+let c = win.cursors(w)[0]
+edit { cur.goto(c, 3) }
+edit { win.set_cursors(w, [c]) }
+let cs = win.cursors(w)
+t.eq(list.len(cs), 1)
+t.eq(cur.pos(cs[0]), 3)
+t.eq(cur.anchor(cs[0]), 3)
+t.eq(cur.line(cs[0]), 1)
+t.eq(cur.col(cs[0]), 3)
+t.eq(cur.is_primary(cs[0]), true)
+t.eq(cur.valid(cs[0]), true)
+t.cursor(w, 1, 3)
+t.cursors(w, [[1, 3]])
+t.text(b, "abcdef")

@@ -1,0 +1,21 @@
+# Sprint 34 -> 37: an escaped edit error rolls back atomically.
+import buf
+let b = buf.current()
+edit { buf.insert(b, 0, "stable") }
+try {
+    edit {
+        buf.insert(b, 6, " broken")
+        error("rollback")
+    }
+} catch e {
+    t.eq(e.kind, "user")
+}
+t.text(b, "stable")
+t.eq(buf.len(b), 6)
+t.eq(buf.line(b, 1), "stable")
+t.eq(buf.lines(b), 1)
+t.eq(buf.dirty(b), true)
+t.eq(buf.readonly(b), false)
+t.eq(batch, true)
+t.ne(buf.name(b), "")
+t.line(b, 1, "stable")

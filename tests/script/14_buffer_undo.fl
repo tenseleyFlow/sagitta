@@ -1,0 +1,15 @@
+# Sprint 9 -> 37: editor mutations produce coherent undo nodes.
+import buf
+let b = buf.current()
+t.undo(b, 1)
+edit { buf.insert(b, 0, "a") }
+t.undo(b, 2)
+t.text(b, "a")
+edit { buf.insert(b, 1, "b") }
+t.undo(b, 3)
+t.text(b, "ab")
+t.eq(buf.dirty(b), true)
+t.eq(buf.len(b), 2)
+t.eq(buf.lines(b), 1)
+t.line(b, 1, "ab")
+t.eq(buf.readonly(b), false)
