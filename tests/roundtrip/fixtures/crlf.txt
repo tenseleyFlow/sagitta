@@ -1,0 +1,1 @@
+# CRLF byte fixture is embedded in runner.c to preserve line endings.

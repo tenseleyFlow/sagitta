@@ -152,9 +152,9 @@ jobs:
       # lane runs it with PERF_GATE=1; Sprint 56 recalibrates.
       - name: Benches, absolute budgets enforced
         run: make bench-fletch
-      - name: The deferrals still hard-error naming their sprint
+      - name: Round-trip law and remaining batch deferral
         run: |
-          ! make test-fletch-roundtrip
+          make test-fletch-roundtrip
           ! ./build/sagitta --batch x.fl
 
   pty:

@@ -389,6 +389,10 @@ PERF_FLETCH_OBJ := $(BUILD)/tests/perf/perf_fletch.o
 PERF_RECORD_OBJ := $(BUILD)/tests/perf/perf_record.o
 FLETCH_RUN_OBJ := $(BUILD)/tests/fletch/run.o
 FLETCH_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
+ROUNDTRIP_OBJ := $(BUILD)/tests/roundtrip/gen.o \
+                 $(BUILD)/tests/roundtrip/runner.o
+ROUNDTRIP_LINK_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ)) \
+                      $(ROUNDTRIP_OBJ)
 GEN_BIGFILE_OBJ := $(BUILD)/scripts/gen-bigfile.o
 
 TORTURE_CHILD_OBJ := $(BUILD)/tests/torture/sag-torture.o
@@ -421,7 +425,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(FUZZ_LIB_OBJ) \
                 $(PERF_CMDCOMP_OBJ) \
                 $(PERF_STATE_OBJ) \
                 $(PERF_FINDER_OBJ) $(PERF_MOUSE_OBJ) \
-                $(GEN_BIGFILE_OBJ) $(FLETCH_RUN_OBJ) \
+                $(GEN_BIGFILE_OBJ) $(FLETCH_RUN_OBJ) $(ROUNDTRIP_OBJ) \
                 $(PERF_FLETCH_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) $(FAULTSHIM)))
@@ -448,7 +452,9 @@ endif
         perf-gate-selftest perf-latency perf-latency-selftest \
         torture torture-build torture-live-check \
         fl-perf-smoke fl-dispatch-parity fl-gc-stress \
-        test-fletch test-fletch-roundtrip fletch-ledger bench-fletch \
+        test-fletch test-roundtrip test-roundtrip-coverage \
+        test-fletch-roundtrip fletch-ledger \
+        bench-fletch \
         test-fletch-dispatch test-fletch-gc-stress test-fletch-determinism
 
 all: $(BUILD)/sagitta $(BUILD)/sag
@@ -586,6 +592,9 @@ $(BUILD)/fletch_run: $(FLETCH_CORE_OBJ) $(FLETCH_RUN_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FLETCH_CORE_OBJ) \
 		$(FLETCH_RUN_OBJ) $(LDLIBS)
 
+$(BUILD)/roundtrip_runner: $(ROUNDTRIP_LINK_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(ROUNDTRIP_LINK_OBJ) $(LDLIBS)
+
 $(BUILD)/perf_textbuf: $(PERF_CORE_OBJ) $(PERF_TEXTBUF_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(PERF_TEXTBUF_OBJ) $(LDLIBS)
@@ -702,7 +711,8 @@ check: $(BUILD)/unit_tests $(BUILD)/sagitta test-fletch
 	scripts/smoke.sh $(BUILD)/sagitta
 	@echo "check: ok (fast tier -- pty, torture, sanitizers and valgrind NOT run)"
 
-test: $(BUILD)/unit_tests $(BUILD)/sagitta test-pty test-fletch torture-build
+test: $(BUILD)/unit_tests $(BUILD)/sagitta test-pty test-fletch \
+      test-roundtrip torture-build
 	$(UNIT_RUN)
 	scripts/check-cmd-dispatch.sh
 	scripts/check-fl-choke.sh
@@ -1175,9 +1185,13 @@ test-fletch-determinism: $(BUILD)/fletch_run $(BUILD)/sagitta
 	cmp $(BUILD)/fletch-led-1.txt $(BUILD)/fletch-led-2.txt
 	@echo 'test-fletch-determinism: two runs identical, ledger stable'
 
-test-fletch-roundtrip:
-	@echo 'error: round-trip law harness lands in Sprint 35 (invariant 10)'; \
-		exit 1
+test-roundtrip: $(BUILD)/roundtrip_runner
+	SAG_RT_TMP=$(BUILD)/tmp LC_ALL=C $(BUILD)/roundtrip_runner
+
+test-roundtrip-coverage: $(BUILD)/roundtrip_runner
+	SAG_RT_TMP=$(BUILD)/tmp LC_ALL=C $(BUILD)/roundtrip_runner --coverage
+
+test-fletch-roundtrip: test-roundtrip
 
 test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/sagitta
 	$(PTY_PREP) $(PTY_RUN) --demo $(abspath $(BUILD)/demo_paint) \
@@ -1195,7 +1209,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/sagitta
          $(PTY_ORACLE_OBJ:.o=.d) \
          $(PTY_HARNESS_OBJ:.o=.d) $(PTY_REGISTRY_OBJ:.o=.d) \
          $(PTY_RUNNER_OBJ:.o=.d) $(PTY_DEMO_OBJ:.o=.d) \
-         $(FLETCH_RUN_OBJ:.o=.d) \
+         $(FLETCH_RUN_OBJ:.o=.d) $(ROUNDTRIP_OBJ:.o=.d) \
          $(PERF_UNICODE_OBJ:.o=.d) $(PERF_RENDER_OBJ:.o=.d) \
          $(PERF_PIECE_OBJ:.o=.d) $(PERF_CURSOR_OBJ:.o=.d) \
          $(PERF_UNDO_OBJ:.o=.d) $(PERF_TEXTBUF_OBJ:.o=.d) \

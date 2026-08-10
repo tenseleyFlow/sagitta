@@ -1,0 +1,1 @@
+# NUL, lone 0x80, 0xff, LF, and CRLF bytes are embedded in runner.c.
