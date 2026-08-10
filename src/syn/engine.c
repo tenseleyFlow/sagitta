@@ -273,6 +273,11 @@ SynStateTab *yew_syn_engine_states(SynEngine *engine)
     return engine == NULL ? NULL : engine->states;
 }
 
+const SynDef *yew_syn_engine_def(const SynEngine *engine)
+{
+    return engine == NULL ? NULL : engine->def;
+}
+
 u64 yew_syn_engine_line_calls(const SynEngine *engine)
 {
     return engine == NULL ? 0U : engine->line_calls;
@@ -292,6 +297,8 @@ static bool bitset_has(const u8 bits[32], u8 byte)
 static void emit_span(SynLineOut *out, u32 start, u32 len, u8 attr,
                       u8 flags)
 {
+    if (out->spans == NULL)
+        return;
     while (len != 0U) {
         u16 take = len > UINT16_MAX ? UINT16_MAX : (u16)len;
         if (out->n != 0U) {
@@ -600,8 +607,9 @@ static void apply_empty_bol(SynEngine *engine, SynState *state,
     }
 }
 
-void yew_syn_line(SynEngine *engine, u32 entry_state, const u8 *line,
-                  u32 len, SynLineOut *out)
+static void syn_line_run(SynEngine *engine, u32 entry_state,
+                         const u8 *line, u32 len, SynLineOut *out,
+                         bool apply_eol)
 {
     SynState state;
     const SynState *entry;
@@ -719,11 +727,38 @@ void yew_syn_line(SynEngine *engine, u32 entry_state, const u8 *line,
             }
         }
     }
-    {
+    if (apply_eol) {
         const SynCtx *ctx = &engine->def->ctxs[state.ctx[state.depth - 1U]];
         apply_op(&state, ctx->at_eol, ctx->eol_nop, ctx->eol_target);
     }
     out->exit_state = yew_syn_state_intern(engine->states, &state);
+}
+
+void yew_syn_line(SynEngine *engine, u32 entry_state, const u8 *line,
+                  u32 len, SynLineOut *out)
+{
+    syn_line_run(engine, entry_state, line, len, out, true);
+}
+
+bool yew_syn_stack_at(SynEngine *engine, u32 entry_state, const u8 *line,
+                      u32 len, u32 p, SynState *out)
+{
+    SynLineOut line_out = {NULL, 0U, 0U, YEW_SYN_STATE_UNKNOWN,
+                           YEW_SYN_STOP_OK};
+    const SynState *state;
+
+    if (engine == NULL || out == NULL || (line == NULL && len != 0U))
+        return false;
+    if (p > len)
+        p = len;
+    syn_line_run(engine, entry_state, line, p, &line_out, false);
+    if (line_out.stop != YEW_SYN_STOP_OK)
+        return false;
+    state = yew_syn_state_get(engine->states, line_out.exit_state);
+    if (state == NULL)
+        return false;
+    *out = *state;
+    return true;
 }
 
 static i64 real_now_us(void *ctx)
@@ -1299,18 +1334,6 @@ void yew_syn_status(const SynBuf *syn, u64 line_count, char *dst, size_t cap)
                    (unsigned long long)line_count,
                    (unsigned long long)syn->wave.v,
                    syn->degraded ? "yes" : "no");
-}
-
-u32 yew_syn_lang_for(const char *path)
-{
-    (void)path;
-    return YEW_LANG_NONE;
-}
-
-void yew_syn_def_load_fl(const char *path)
-{
-    (void)path;
-    YEW_BUG("syntax definitions land in Sprint 40");
 }
 
 void yew_theme_load(const char *path)

@@ -2,6 +2,7 @@
 
 #include <limits.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "edit/ed.h"
 #include "unicode/coords.h"
@@ -78,13 +79,15 @@ static void ensure_providers(void)
 void yew_block_register(BlockProvider provider)
 {
     ensure_providers();
+    if (provider.name == NULL)
+        YEW_BUG("block provider has no name");
+    for (u8 i = 0U; i < provider_count; i++) {
+        if (strcmp(providers[i].name, provider.name) == 0) {
+            providers[i] = provider;
+            return;
+        }
+    }
     provider_append(provider);
-}
-
-void yew_block_provider_syntax_install(BlockProvider provider)
-{
-    (void)provider;
-    YEW_BUG("syntax block provider installation lands in Sprint 40");
 }
 
 static bool read_span(const TextBuf *tb, Span span, u8 *dst)
@@ -617,11 +620,17 @@ static bool scope_pair(UnitCtx *u, ByteOff p, Span inner, Span *out,
     u64 window_len;
     u8 *bytes;
     u64 cursor = 0U;
+    bool syntax_exact;
 
     if (last >= count || last < center)
         last = count - 1U;
     window.lo = yew_textbuf_line_span(u->tb, LINENO(first)).lo;
     window.hi = yew_textbuf_line_span(u->tb, LINENO(last)).hi;
+    syntax_exact =
+        u->buf != NULL && u->buf->syn.lang != YEW_LANG_NONE &&
+        u->buf->syn.engine != NULL && !u->buf->syn.degraded &&
+        u->buf->syn.entry.len == count &&
+        u->buf->syn.settled_to.v > last;
     window_len = window.hi - window.lo;
     bytes = yew_xmalloc((size_t)(window_len == 0U ? 1U : window_len));
     if (!read_span(u->tb, window, bytes))
@@ -652,41 +661,51 @@ static bool scope_pair(UnitCtx *u, ByteOff p, Span inner, Span *out,
         for (u64 i = 0U; i < len; i++) {
             u8 byte = line[i];
 
-            if (block_comment) {
-                if (byte == (u8)'*' && i + 1U < len &&
-                    line[i + 1U] == (u8)'/') {
-                    block_comment = false;
-                    i++;
+            if (syntax_exact) {
+                u8 ignored;
+
+                if (!is_open(byte) && !opener_for(byte, &ignored))
+                    continue;
+                if (yew_syn_in_string_or_comment(
+                        u->buf, BYTEOFF(line_span.lo + i)))
+                    continue;
+            } else {
+                if (block_comment) {
+                    if (byte == (u8)'*' && i + 1U < len &&
+                        line[i + 1U] == (u8)'/') {
+                        block_comment = false;
+                        i++;
+                    }
+                    continue;
                 }
-                continue;
-            }
-            if (quote != 0U) {
-                if (byte == (u8)'\\' && i + 1U < len) {
+                if (quote != 0U) {
+                    if (byte == (u8)'\\' && i + 1U < len) {
+                        i++;
+                        continue;
+                    }
+                    if (byte == quote)
+                        quote = 0U;
+                    continue;
+                }
+                if (byte == (u8)'/' && i + 1U < len &&
+                    line[i + 1U] == (u8)'*') {
+                    block_comment = true;
                     i++;
                     continue;
                 }
-                if (byte == quote)
-                    quote = 0U;
-                continue;
-            }
-            if (byte == (u8)'/' && i + 1U < len &&
-                line[i + 1U] == (u8)'*') {
-                block_comment = true;
-                i++;
-                continue;
-            }
-            if ((byte == (u8)'/' && i + 1U < len &&
-                 line[i + 1U] == (u8)'/') ||
-                (byte == (u8)'-' && i + 1U < len &&
-                 line[i + 1U] == (u8)'-') ||
-                byte == (u8)'#' || byte == (u8)';')
-                break;
-            if ((byte == (u8)'\'' && singles != 0U &&
-                 (singles & 1U) == 0U) ||
-                (byte == (u8)'"' && doubles != 0U &&
-                 (doubles & 1U) == 0U)) {
-                quote = byte;
-                continue;
+                if ((byte == (u8)'/' && i + 1U < len &&
+                     line[i + 1U] == (u8)'/') ||
+                    (byte == (u8)'-' && i + 1U < len &&
+                     line[i + 1U] == (u8)'-') ||
+                    byte == (u8)'#' || byte == (u8)';')
+                    break;
+                if ((byte == (u8)'\'' && singles != 0U &&
+                     (singles & 1U) == 0U) ||
+                    (byte == (u8)'"' && doubles != 0U &&
+                     (doubles & 1U) == 0U)) {
+                    quote = byte;
+                    continue;
+                }
             }
             if (is_open(byte)) {
                 scope_push(&stack,

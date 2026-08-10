@@ -2,14 +2,10 @@
 
 #include "harness.h"
 
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/types.h>
-#include <sys/wait.h>
 #include <time.h>
-#include <unistd.h>
 
 #include "edit/block.h"
 #include "edit/ed.h"
@@ -329,50 +325,18 @@ void test_block_selection_chain_saturates_at_buffer_for_stack_replay(void)
     block_fixture_free(&fixture);
 }
 
-void test_block_syntax_install_names_sprint40(void)
+void test_block_syntax_install_accepts_disabled_provider(void)
 {
-    BlockProvider provider = {"syntax", 40, NULL, NULL};
-    Bytebuf output;
-    int pipefd[2];
-    pid_t child;
-    pid_t waited;
-    int status;
-    ssize_t count;
-    u8 chunk[256];
+    static const char text[] = "one\n\n  two\n    three\n";
+    BlockFixture fixture;
+    Span before;
+    Span after;
 
-    bytebuf_init(&output);
-    YEW_ASSERT_EQ_I64(fflush(NULL), 0);
-    YEW_ASSERT_EQ_I64(pipe(pipefd), 0);
-    child = fork();
-    YEW_ASSERT(child >= 0);
-    if (child == 0) {
-        (void)close(pipefd[0]);
-        if (dup2(pipefd[1], STDERR_FILENO) < 0)
-            _exit(126);
-        (void)close(pipefd[1]);
-        (void)setenv("YEW_LOG", "/dev/null", 1);
-        yew_block_provider_syntax_install(provider);
-        _exit(99);
-    }
-    (void)close(pipefd[1]);
-    for (;;) {
-        count = read(pipefd[0], chunk, sizeof(chunk));
-        if (count > 0) {
-            bytebuf_append(&output, chunk, (size_t)count);
-            continue;
-        }
-        if (count < 0 && errno == EINTR)
-            continue;
-        break;
-    }
-    (void)close(pipefd[0]);
-    do {
-        waited = waitpid(child, &status, 0);
-    } while (waited < 0 && errno == EINTR);
-    YEW_ASSERT_EQ_I64(waited, child);
-    YEW_ASSERT(WIFEXITED(status));
-    YEW_ASSERT_EQ_I64(WEXITSTATUS(status), YEW_EXIT_BUG);
-    bytebuf_append(&output, "", 1U);
-    YEW_ASSERT(strstr((const char *)output.data, "Sprint 40") != NULL);
-    bytebuf_free(&output);
+    block_fixture_text(&fixture, text);
+    before = block_level(&fixture, text_off(text, "three"), 0U);
+    yew_block_provider_syntax_install(NULL);
+    after = block_level(&fixture, text_off(text, "three"), 0U);
+    YEW_ASSERT_EQ_U64(after.lo, before.lo);
+    YEW_ASSERT_EQ_U64(after.hi, before.hi);
+    block_fixture_free(&fixture);
 }

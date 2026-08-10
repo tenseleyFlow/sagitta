@@ -1,0 +1,165 @@
+#include "harness.h"
+
+#include <stdlib.h>
+#include <string.h>
+
+#include "edit/block.h"
+#include "edit/buf.h"
+#include "unit/syn_toy.h"
+
+typedef struct SynBlockFixture {
+    SynToy toy;
+    Buffer buf;
+    UnitCtx unit;
+} SynBlockFixture;
+
+static u64 find_off(const char *text, const char *needle)
+{
+    const char *at = strstr(text, needle);
+
+    YEW_ASSERT_NOT_NULL(at);
+    return (u64)(at - text);
+}
+
+static void fixture_init(SynBlockFixture *f, const char *text)
+{
+    SynSettleReport report;
+    u64 lines;
+
+    (void)memset(f, 0, sizeof(*f));
+    syn_toy_init(&f->toy);
+    f->toy.ctxs[SYN_TOY_MAIN].flags = YEW_SYN_CTX_UNIT_SPAN;
+    f->toy.ctxs[SYN_TOY_STRING].flags = YEW_SYN_CTX_UNIT_ATOM;
+    f->toy.ctxs[SYN_TOY_COMMENT_BLOCK].flags = YEW_SYN_CTX_UNIT_ATOM;
+    f->toy.ctxs[SYN_TOY_COMMENT_LINE].flags = YEW_SYN_CTX_UNIT_ATOM;
+    f->buf.tb = yew_textbuf_from_bytes((const u8 *)text, strlen(text));
+    f->buf.lang = "toy";
+    f->buf.tabwidth = 4U;
+    yew_syn_buf_init(&f->buf.syn);
+    yew_syn_buf_bind(&f->buf.syn, f->toy.engine);
+    yew_syn_attach(&f->buf.syn, 1U, f->buf.tb);
+    lines = yew_textbuf_line_count(f->buf.tb);
+    yew_syn_settle(&f->buf.syn, f->buf.tb, LINENO(0U), LINENO(lines),
+                   INT64_C(1000000), &report);
+    YEW_ASSERT(report.fixpoint);
+    f->unit.tb = f->buf.tb;
+    f->unit.buf = &f->buf;
+    yew_block_provider_syntax_install(f->toy.engine);
+}
+
+static void fixture_free(SynBlockFixture *f)
+{
+    yew_block_provider_syntax_install(NULL);
+    yew_syn_detach(&f->buf.syn);
+    yew_textbuf_free(f->buf.tb);
+    syn_toy_free(&f->toy);
+}
+
+void test_syn_block_atom_beats_delimiters_inside_string(void)
+{
+    static const char text[] = "head\nx = \"first\" + \"a[b\"\ntail\n";
+    SynBlockFixture f;
+    u64 at = find_off(text, "[b") + 1U;
+    Span atom;
+    ByteOff match;
+
+    fixture_init(&f, text);
+    YEW_ASSERT(yew_block_level(&f.unit, BYTEOFF(at), 0U, &atom));
+    YEW_ASSERT_EQ_U64(atom.lo, find_off(text, "a[b"));
+    YEW_ASSERT_EQ_U64(atom.hi, find_off(text, "\"\ntail") + 1U);
+    YEW_ASSERT(!yew_block_match(&f.unit, BYTEOFF(at), false, &match));
+    YEW_ASSERT(yew_syn_in_string_or_comment(&f.buf, BYTEOFF(at)));
+    YEW_ASSERT(!yew_syn_in_string_or_comment(
+        &f.buf, BYTEOFF(find_off(text, "tail"))));
+    fixture_free(&f);
+}
+
+void test_syn_block_comment_predicate_makes_scope_exact(void)
+{
+    static const char text[] =
+        "before\n"
+        "/* ) [ hidden */ [live]\n"
+        "after\n";
+    SynBlockFixture f;
+    u64 hidden = find_off(text, "hidden");
+    u64 live = find_off(text, "live");
+    Span span;
+    ByteOff match;
+
+    fixture_init(&f, text);
+    YEW_ASSERT(yew_syn_in_string_or_comment(&f.buf, BYTEOFF(hidden)));
+    YEW_ASSERT(!yew_block_match(&f.unit, BYTEOFF(hidden), false, &match));
+    YEW_ASSERT(yew_block_match(&f.unit, BYTEOFF(live), false, &match));
+    YEW_ASSERT_EQ_U64(match.v, live - 1U);
+    YEW_ASSERT(yew_block_level(&f.unit, BYTEOFF(hidden), 0U, &span));
+    YEW_ASSERT_EQ_U64(span.lo, find_off(text, " ) [ hidden"));
+    YEW_ASSERT(span.hi >= find_off(text, "*/") + 2U);
+    fixture_free(&f);
+}
+
+void test_syn_block_unsettled_and_unbound_use_plain_fallback(void)
+{
+    static const char text[] = "one\n\n  two\n    three\n";
+    SynBlockFixture f;
+    Span exact;
+    Span fallback;
+    u64 at = find_off(text, "three");
+
+    fixture_init(&f, text);
+    YEW_ASSERT(yew_block_level(&f.unit, BYTEOFF(at), 0U, &exact));
+    f.buf.syn.settled_to = LINENO(1U);
+    YEW_ASSERT(yew_block_level(&f.unit, BYTEOFF(at), 0U, &fallback));
+    YEW_ASSERT(fallback.lo <= at && fallback.hi >= at);
+    f.buf.syn.settled_to = LINENO(f.buf.syn.entry.len);
+    f.buf.syn.lang = YEW_LANG_NONE;
+    YEW_ASSERT(yew_block_level(&f.unit, BYTEOFF(at), 0U, &fallback));
+    YEW_ASSERT(fallback.lo <= at && fallback.hi >= at);
+    f.buf.syn.lang = 1U;
+    yew_block_provider_syntax_install(NULL);
+    YEW_ASSERT(yew_block_level(&f.unit, BYTEOFF(at), 0U, &fallback));
+    YEW_ASSERT(fallback.lo <= at && fallback.hi >= at);
+    YEW_ASSERT(exact.lo <= at && exact.hi >= at);
+    fixture_free(&f);
+}
+
+void test_syn_stack_at_reports_prefix_without_eol_transition(void)
+{
+    SynToy toy;
+    SynState state;
+    static const char line[] = "x = \"abc\"";
+
+    syn_toy_init(&toy);
+    YEW_ASSERT(yew_syn_stack_at(toy.engine, YEW_SYN_STATE_ROOT,
+                                (const u8 *)line, strlen(line), 6U,
+                                &state));
+    YEW_ASSERT_EQ_U64(state.depth, 2U);
+    YEW_ASSERT_EQ_U64(state.ctx[1], SYN_TOY_STRING);
+    YEW_ASSERT(yew_syn_stack_at(toy.engine, YEW_SYN_STATE_ROOT,
+                                (const u8 *)line, strlen(line),
+                                strlen(line), &state));
+    YEW_ASSERT_EQ_U64(state.depth, 1U);
+    syn_toy_free(&toy);
+}
+
+void test_syn_block_scan_cap_falls_through_to_paragraph(void)
+{
+    enum { LINES = 100002 };
+    char *text = malloc((size_t)LINES * 2U + 1U);
+    SynBlockFixture f;
+    Span span;
+
+    YEW_ASSERT_NOT_NULL(text);
+    for (u32 i = 0U; i < LINES; i++) {
+        text[i * 2U] = 'x';
+        text[i * 2U + 1U] = '\n';
+    }
+    text[(size_t)LINES * 2U] = '\0';
+    fixture_init(&f, text);
+    YEW_ASSERT(yew_block_level(&f.unit,
+                               BYTEOFF((u64)(LINES - 1U) * 2U),
+                               0U, &span));
+    YEW_ASSERT_EQ_U64(span.lo, 0U);
+    YEW_ASSERT_EQ_U64(span.hi, (u64)LINES * 2U);
+    fixture_free(&f);
+    free(text);
+}

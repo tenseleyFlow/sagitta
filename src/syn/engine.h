@@ -161,11 +161,14 @@ SynEngine *yew_syn_engine_new(SynDef *def);
 void yew_syn_engine_free(SynEngine *engine);
 void yew_syn_engine_set_def(SynEngine *engine, SynDef *def);
 SynStateTab *yew_syn_engine_states(SynEngine *engine);
+const SynDef *yew_syn_engine_def(const SynEngine *engine);
 u64 yew_syn_engine_line_calls(const SynEngine *engine);
 void yew_syn_engine_reset_counters(SynEngine *engine);
 
 void yew_syn_line(SynEngine *engine, u32 entry_state, const u8 *line,
                   u32 len, SynLineOut *out);
+bool yew_syn_stack_at(SynEngine *engine, u32 entry_state, const u8 *line,
+                      u32 len, u32 p, SynState *out);
 
 typedef i64 (*SynClockFn)(void *ctx);
 
@@ -220,8 +223,5 @@ void yew_syn_spans(SynBuf *syn, const TextBuf *tb, LineNo line,
 bool yew_syn_status_visible(const SynBuf *syn);
 void yew_syn_status(const SynBuf *syn, u64 line_count, char *dst,
                     size_t cap);
-
-u32 yew_syn_lang_for(const char *path);
-void yew_syn_def_load_fl(const char *path);
 
 #endif
