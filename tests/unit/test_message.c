@@ -286,6 +286,18 @@ void test_message_draw_retains_chip_and_caps_overlay(void)
     SAG_ASSERT_EQ_U64(ed.grid.back[5U * ed.grid.cols].bg.tag,
                       SAG_COLOR_RGB);
 
+    ed.rec.active = true;
+    ed.rec.reg = (u8)'a';
+    sag_message_draw(&ed, &win);
+    cell = &ed.grid.back[5U * ed.grid.cols];
+    SAG_ASSERT_EQ_U64(cell[3].utf8[0], 0xe2U);
+    SAG_ASSERT_EQ_U64(cell[4].utf8[0], (u8)'R');
+    SAG_ASSERT_EQ_U64(cell[5].utf8[0], (u8)'E');
+    SAG_ASSERT_EQ_U64(cell[6].utf8[0], (u8)'C');
+    SAG_ASSERT_EQ_U64(cell[7].utf8[0], (u8)' ');
+    SAG_ASSERT_EQ_U64(cell[8].utf8[0], (u8)'a');
+    SAG_ASSERT((cell[3].attrs & SAG_ATTR_BLINK) == 0U);
+
     sag_msg_clear(&ed);
     sag_vp_free(&win);
     sag_cset_free(&win.cs);
