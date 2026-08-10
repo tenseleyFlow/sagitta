@@ -514,6 +514,7 @@ void sag_ed_free(Ed *ed)
 {
     if (ed == NULL)
         return;
+    sag_trust_prompt_cancel(ed);
     /* Belt and braces: a path that never reached sag_state_close still
      * must not leave its lock behind.  Dispose saves nothing. */
     sag_state_dispose(ed);
@@ -601,8 +602,9 @@ bool sag_buf_readonly(const Buffer *b)
 {
     mode_t write_bits = S_IWUSR | S_IWGRP | S_IWOTH;
 
-    return b != NULL && b->meta.exists &&
-           (b->meta.mode & write_bits) == 0;
+    return b != NULL &&
+           (((b->flags & SAG_BUF_READONLY) != 0U) ||
+            (b->meta.exists && (b->meta.mode & write_bits) == 0));
 }
 
 u64 sag_buf_len(const Buffer *b)
@@ -1143,6 +1145,9 @@ void sag_ed_prompt(Ed *ed, PromptKind prompt)
          * directory it is about to remove and this function does not
          * have it. */
         break;
+    case SAG_PROMPT_WORKSPACE_TRUST:
+        /* trust_prompt.c owns the path, fingerprint reason, and choices. */
+        break;
     }
     if (prompt != SAG_PROMPT_NONE)
         ed->msg.prompt = true;
@@ -1362,6 +1367,12 @@ static bool prompt_key(Ed *ed, Key key)
 
     if (key.ev == SAG_KEY_RELEASE)
         return true;
+    if (ed->prompt == SAG_PROMPT_WORKSPACE_TRUST) {
+        u8 answer = code == SAG_KEY_ESCAPE ? 0x1BU :
+                    (key.mods == 0U && code <= 0x7fU ? (u8)code : 0U);
+
+        return sag_trust_prompt_key(ed, answer);
+    }
     if (code == SAG_KEY_ESCAPE) {
         ed->quit_after_save = false;
         sag_ed_prompt(ed, SAG_PROMPT_NONE);

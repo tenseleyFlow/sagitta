@@ -11,6 +11,7 @@
 #include "text/journal.h"
 #include "ui/layout.h"
 #include "ui/viewport.h"
+#include "ws/trust_prompt.h"
 
 CmdStatus sag_file_cmd_save(Ed *ed, bool force)
 {
@@ -270,7 +271,12 @@ CmdStatus sag_file_cmd_buf_close(CmdCtx *cx)
     }
     retarget_buffer(cx->ed, b, &cx->ed->buffer);
     fl_h_drop_buffer(cx->ed, b->id);
-    sag_ws_scratch_drop(cx->ed, b);
+    {
+        u32 closed_id = b->id;
+
+        sag_ws_scratch_drop(cx->ed, b);
+        sag_trust_prompt_buffer_closed(cx->ed, closed_id);
+    }
     sag_state_mark_dirty(cx->ed);
     cx->ed->fl_model_teardown = false;
     return SAG_CMD_OK;

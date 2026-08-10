@@ -34,6 +34,7 @@
 #include "util/intern.h"
 #include "util/strmap.h"
 #include "ws/state.h"
+#include "ws/trust_prompt.h"
 
 typedef enum {
     SAG_PROMPT_NONE,
@@ -43,7 +44,8 @@ typedef enum {
     /* Sprint 25 §9: ed.ws.forget.  Its own kind because every other
      * prompt here asks about unsaved BYTES, and answering "delete a
      * cache" must never share a keystroke with those. */
-    SAG_PROMPT_WS_FORGET
+    SAG_PROMPT_WS_FORGET,
+    SAG_PROMPT_WORKSPACE_TRUST
 } PromptKind;
 
 typedef struct FlRuntime FlRuntime;
@@ -64,7 +66,9 @@ enum {
     /* Appends bypass the undo tree.  Recording a million streamed appends
      * as undo ops would also journal them (s08); undo in such a buffer is
      * a no-op with a message rather than a lie. */
-    SAG_BUF_NOUNDO = 1U << 1
+    SAG_BUF_NOUNDO = 1U << 1,
+    /* UI inspection buffers may be navigated and closed, never edited. */
+    SAG_BUF_READONLY = 1U << 2
 };
 
 typedef struct Buffer {
@@ -165,6 +169,7 @@ struct Ed {
     Groups groups;
     TabPrompt tab_prompt;
     WsPrompt ws_prompt;
+    SagTrustPrompt trust_prompt;
     Rect footer_rect;
     Rect tab_strip_rect;
 
