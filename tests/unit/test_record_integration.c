@@ -7,6 +7,7 @@
 #include "fl/flruntime.h"
 #include "fl/record.h"
 #include "text/undo.h"
+#include "ui/cmdline.h"
 
 typedef struct RecordFix {
     Ed ed;
@@ -258,6 +259,38 @@ void test_record_rejects_nonportable_targets_before_execution(void)
         SAG_CMD_ERR_STATE);
     SAG_ASSERT_EQ_U64(f.ed.rec.ev.len, 0U);
     assert_buffer(&f.ed, "", 0U);
+    rf_close(&f);
+}
+
+void test_record_cmdline_accepts_prompt_edits_and_keeps_status_messages(void)
+{
+    static const char start[] = "ed.macro.record a";
+    static const char stop[] = "ed.macro.stop";
+    CmdCtx cx = {0};
+    RecordFix f;
+    Key key = {0};
+
+    rf_open(&f);
+    cx.ed = &f.ed;
+    cx.win = f.ed.win;
+    cx.count = 1U;
+    cx.source = SAG_SRC_TEST;
+
+    sag_cmdline_open(&f.ed, SAG_PROMPT_CMD, "");
+    sag_cmdline_paste(&f.ed, (const u8 *)start, sizeof(start) - 1U);
+    SAG_ASSERT_EQ_I64(sag_cmdline_cmd_accept(&cx), SAG_CMD_OK);
+    SAG_ASSERT(sag_record_active(&f.ed));
+    SAG_ASSERT(f.ed.msg.active);
+    SAG_ASSERT_EQ_STR(f.ed.msg.text, "recording @a");
+
+    sag_cmdline_open(&f.ed, SAG_PROMPT_CMD, "");
+    sag_record_key(&f.ed, key);
+    SAG_ASSERT(f.ed.rec.in_prompt);
+    sag_cmdline_paste(&f.ed, (const u8 *)stop, sizeof(stop) - 1U);
+    SAG_ASSERT_EQ_I64(sag_cmdline_cmd_accept(&cx), SAG_CMD_OK);
+    SAG_ASSERT(!sag_record_active(&f.ed));
+    SAG_ASSERT(f.ed.msg.active);
+    SAG_ASSERT(strncmp(f.ed.msg.text, "recorded @a (0 events, ", 23U) == 0);
     rf_close(&f);
 }
 

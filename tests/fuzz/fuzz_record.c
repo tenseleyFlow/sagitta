@@ -39,7 +39,7 @@ static u32 read_u32(const u8 *data, size_t len, size_t at)
 static bool check_record(const u8 *data, size_t len, char *why,
                          size_t why_cap)
 {
-    enum { EVENT_BYTES = 16U, EVENT_MAX = 256U };
+    enum { EVENT_BYTES = 24U, EVENT_MAX = 256U };
     Arena arena;
     Interner in;
     DiagCtx dc;
@@ -71,11 +71,21 @@ static bool check_record(const u8 *data, size_t len, char *why,
         u32 raw_slice = read_u32(data, len, at + 8U);
         RecEvent event = {0};
 
-        event.cmd.v = sag_cmd_count() == 0U ? raw_cmd :
-            raw_cmd % (sag_cmd_count() + 4U);
+        event.cmd.v = sag_cmd_count() == 0U ? 0U :
+            1U + raw_cmd % sag_cmd_count();
         event.count = 1U + read_u32(data, len, at + 4U) % 100U;
         event.count_given = at + 1U < len && (data[at + 1U] & 1U) != 0U;
         event.iarg = (i64)(i32)read_u32(data, len, at + 12U);
+        event.bang = at + 4U < len && (data[at + 4U] & 1U) != 0U;
+        event.range_kind = at + 5U < len
+                               ? data[at + 5U] %
+                                     ((u8)SAG_REC_RANGE_SPAN + 1U)
+                               : (u8)SAG_REC_RANGE_NONE;
+        event.range_given = at + 6U < len &&
+                            (data[at + 6U] & 1U) != 0U;
+        event.range_lo = read_u32(data, len, at + 16U);
+        event.range_hi = event.range_lo +
+                         read_u32(data, len, at + 20U);
         event.mode = at + 2U < len ? data[at + 2U] % (u8)SAG_MODE__N : 0U;
         event.src = at + 3U < len ? data[at + 3U] %
             ((u8)SAG_SRC_TEST + 1U) : (u8)SAG_SRC_KEY;

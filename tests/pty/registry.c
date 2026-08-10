@@ -1564,6 +1564,42 @@ static void s18_finish(PtyCtx *c, const char *path)
  * Drive the same registry commands through E mode, then compare the saved
  * bytes: the replayed edit must be indistinguishable from typing it once.
  */
+static void case_s35_macro_record_start_message(PtyCtx *c)
+{
+    static const u8 initial[] = "base\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.macro.record a");
+    s18_settle_after_keys(c, "enter");
+    ptc_snapshot(c, "s35_macro_record_start_message");
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.macro.stop");
+    s18_settle_after_keys(c, "enter");
+    quit_cleanly(c);
+    (void)unlink(path);
+}
+
+static void case_s35_macro_record_stop_message(PtyCtx *c)
+{
+    static const u8 initial[] = "base\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.macro.record a");
+    s18_settle_after_keys(c, "enter");
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.macro.stop");
+    s18_settle_after_keys(c, "enter");
+    ptc_snapshot(c, "s35_macro_record_stop_message");
+    quit_cleanly(c);
+    (void)unlink(path);
+}
+
 static void case_s35_macro_record_replay_from_e_mode(PtyCtx *c)
 {
     static const u8 initial[] = "base\n";
@@ -4057,6 +4093,10 @@ static void case_s32_bug_restores_the_terminal(PtyCtx *c)
 }
 
 const PtyCase sag_pty_cases[] = {
+    C(s35_macro_record_start_message, modern, 24U, 80U,
+      case_s35_macro_record_start_message),
+    C(s35_macro_record_stop_message, modern, 24U, 80U,
+      case_s35_macro_record_stop_message),
     C(s35_macro_record_replay_from_e_mode, modern, 24U, 80U,
       case_s35_macro_record_replay_from_e_mode),
     C(s22_click_in_the_right_pane, modern, 24U, 80U,

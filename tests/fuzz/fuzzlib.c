@@ -46,6 +46,7 @@ typedef struct {
     size_t iterations;
     u64 seconds;
     u64 deadline_ms;
+    bool corpus_only;
     const char *target;
     SagFuzzCheck check;
     Corpus corpus;
@@ -902,8 +903,13 @@ int sag_fuzz_main(int argc, char **argv, const char *target,
         if (parse_u64_option(argv[i], "--seconds=", &run.seconds) &&
             run.seconds != 0U)
             continue;
+        if (strcmp(argv[i], "--corpus-only") == 0) {
+            run.corpus_only = true;
+            continue;
+        }
         (void)fprintf(stderr,
-                      "usage: %s [--seed=N] [--iters=N] [--seconds=N]\n",
+                      "usage: %s [--seed=N] [--iters=N] [--seconds=N] "
+                      "[--corpus-only]\n",
                       argv[0]);
         return 2;
     }
@@ -942,6 +948,24 @@ int sag_fuzz_main(int argc, char **argv, const char *target,
                       strerror(errno));
         corpus_free(&run.corpus);
         return 2;
+    }
+    if (run.corpus_only) {
+        for (run.iteration = 0U; run.iteration < run.corpus.len;
+             run.iteration++) {
+            const CorpusEntry *entry = &run.corpus.entries[run.iteration];
+            char why[SAG_FUZZ_WHY_CAP] = {0};
+
+            if (!checked(&run, &entry->bytes, why)) {
+                (void)fprintf(stderr, "%s: FAIL corpus=%s: %s\n",
+                              target, entry->name, why);
+                corpus_free(&run.corpus);
+                return 1;
+            }
+        }
+        (void)printf("%s: corpus=%zu exact replay ok\n", target,
+                     run.corpus.len);
+        corpus_free(&run.corpus);
+        return 0;
     }
     for (run.iteration = 0U; run.iteration < run.iterations;
          run.iteration++) {

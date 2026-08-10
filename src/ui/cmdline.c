@@ -387,10 +387,16 @@ void sag_cmdline_close(Ed *ed, bool accepted)
 {
     CmdLine *line;
     Mode restore;
+    bool keep_message;
 
     if (ed == NULL || !ed->cmdline.active)
         return;
     line = &ed->cmdline;
+    /* A successful command may have produced the message the user needs to
+     * see.  Opening the prompt already cleared older messages, so an active
+     * message here belongs to the command that was just accepted. */
+    keep_message = accepted && line->kind == SAG_PROMPT_CMD &&
+                   ed->msg.active;
     if (line->kind == SAG_PROMPT_SEARCH_F ||
         line->kind == SAG_PROMPT_SEARCH_B) {
         /* Accept commits the pattern and the jump; cancel restores the
@@ -418,7 +424,8 @@ void sag_cmdline_close(Ed *ed, bool accepted)
     line->active = false;
     line->err = (CmdErr){0};
     line->scroll = 0U;
-    sag_msg_clear(ed);
+    if (!keep_message)
+        sag_msg_clear(ed);
     if (ed->mode != restore) {
         Mode old = ed->mode;
 

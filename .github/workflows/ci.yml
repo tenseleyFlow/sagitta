@@ -288,6 +288,8 @@ jobs:
         run: make bench-fletch CC=gcc
       - name: Enforce Sprint 18 completion latency budget
         run: make perf-cmdcomp CC=gcc
+      - name: Enforce Sprint 35 recorder latency budgets
+        run: make perf-record CC=gcc PERF_GATE=1
 
   torture:
     runs-on: ubuntu-latest
@@ -437,6 +439,8 @@ jobs:
         run: |
           make fuzz CC=clang SAN=1 BUILD=build-deep-san \
             FUZZ_SEED=1 FUZZ_SECONDS=60
+      - name: Run the recorder emitter for ten minutes under ASan and UBSan
+        run: build-deep-san/fuzz_record --seconds=600 --seed=1
       # No `make clean` between the two: they use different BUILD dirs,
       # so their objects never meet. Mixing sanitized and plain objects
       # in one tree is the trap that produces a binary whose behaviour
@@ -460,6 +464,11 @@ jobs:
       - uses: actions/checkout@v6
       - name: Run randomized text campaigns for 30 minutes
         run: make fuzz-long CC=clang SAN=1 BUILD=build-nightly-san
+      - name: Run the Sprint 35 round-trip law at nightly depth
+        run: |
+          seed=$(date -u +%Y%m%d)
+          SAG_RT_SEEDS=100000 SAG_RT_BASE_SEED="$seed" \
+            make test-roundtrip CC=gcc BUILD=build-nightly
       - name: Attach minimized open findings
         if: failure()
         uses: actions/upload-artifact@v4

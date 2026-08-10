@@ -785,6 +785,23 @@ static u32 env_seeds(void)
     return (u32)n;
 }
 
+static u64 env_base_seed(void)
+{
+    const char *s = getenv("SAG_RT_BASE_SEED");
+    char *end;
+    unsigned long long n;
+
+    if (s == NULL || s[0] == '\0')
+        return 0U;
+    errno = 0;
+    n = strtoull(s, &end, 0);
+    if (errno != 0 || *end != '\0') {
+        (void)fprintf(stderr, "roundtrip: invalid SAG_RT_BASE_SEED=%s\n", s);
+        exit(2);
+    }
+    return (u64)n;
+}
+
 static int run_selftest(void)
 {
     RtSession session;
@@ -826,6 +843,7 @@ int main(int argc, char **argv)
     u32 seeds;
     u32 corpus_count;
     u32 i;
+    u64 base_seed;
     bool coverage = getenv("SAG_RT_COVERAGE") != NULL;
 
     if (argc == 2 && strcmp(argv[1], "--coverage") == 0)
@@ -846,8 +864,9 @@ int main(int argc, char **argv)
         return result;
     }
     seeds = env_seeds();
+    base_seed = env_base_seed();
     for (i = 0U; i < seeds; i++) {
-        if (!run_one((u64)i, i % 6U, 0U)) {
+        if (!run_one(base_seed + i, i % 6U, 0U)) {
             sag_cmd_shutdown();
             return 1;
         }
@@ -857,7 +876,8 @@ int main(int argc, char **argv)
         return 1;
     }
     sag_cmd_shutdown();
-    (void)printf("roundtrip: ok seeds=%u fixtures=6 corpus=%u P1-P5\n",
-                 (unsigned)seeds, (unsigned)corpus_count);
+    (void)printf("roundtrip: ok seeds=%u base=%llu fixtures=6 corpus=%u "
+                 "P1-P5\n", (unsigned)seeds,
+                 (unsigned long long)base_seed, (unsigned)corpus_count);
     return 0;
 }

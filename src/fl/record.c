@@ -8,6 +8,7 @@
 #include "edit/flapi_cmds.h"
 #include "fl/flruntime.h"
 #include "fl/vm.h"
+#include "ui/cmdline.h"
 #include "ui/message.h"
 
 static bool named_register(u8 name)
@@ -105,6 +106,13 @@ CmdStatus sag_record_preflight(CmdId id, const CmdCtx *cx)
 
     if (cx == NULL || cx->ed == NULL || !cx->ed->rec.active ||
         cx->source == SAG_SRC_REPLAY)
+        return SAG_CMD_OK;
+    /* Editing an open prompt uses the ordinary edit commands against the
+     * prompt's private window.  Those keystrokes are intentionally dropped
+     * by sag_record_tap(); let them execute so the committed CMDLINE command
+     * can be recorded once when the prompt is accepted. */
+    if (cx->ed->rec.in_prompt && cx->source != SAG_SRC_CMDLINE &&
+        cx->ed->cmdline.active && cx->win == sag_cmdline_target(cx->ed))
         return SAG_CMD_OK;
     desc = sag_cmd_desc(id);
     if (cx->win != NULL && cx->win != cx->ed->win) {
@@ -489,10 +497,10 @@ static void emit_run(const Rec *rec, const RecEvent *event, Bytebuf *out)
     const CmdDesc *desc = sag_cmd_desc(event->cmd);
     bool need_comma = false;
 
-    /* Fuzzed/corrupt event ids still emit a parseable no-op program. */
+    if (desc == NULL)
+        SAG_BUG("macro recorder contains an unknown command id");
     bytebuf_append(out, "  ed.run(", 9U);
-    emit_escaped(out, (const u8 *)(desc == NULL ? "ed.nop" : desc->name),
-                 (u32)strlen(desc == NULL ? "ed.nop" : desc->name));
+    emit_escaped(out, (const u8 *)desc->name, (u32)strlen(desc->name));
     bytebuf_append(out, ", {", 3U);
     if (event->count_given) {
         bytebuf_printf(out, " count: %u",

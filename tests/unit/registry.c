@@ -1003,6 +1003,7 @@ const SagTest sag_tests[] = {
     T(record_dispatch_ignores_nonrecordable_commands),
     T(record_multicursor_dispatch_captures_one_event),
     T(record_rejects_nonportable_targets_before_execution),
+    T(record_cmdline_accepts_prompt_edits_and_keeps_status_messages),
     T(record_range_envelope_replays_the_same_span_edit),
     T(record_stop_stores_parseable_source_and_uppercase_appends),
     T(macro_replay_uses_one_undo_node_per_run),

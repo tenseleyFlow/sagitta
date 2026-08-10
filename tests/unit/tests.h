@@ -1009,6 +1009,7 @@ void test_record_tap_drops_replay_source(void);
 void test_record_dispatch_ignores_nonrecordable_commands(void);
 void test_record_multicursor_dispatch_captures_one_event(void);
 void test_record_rejects_nonportable_targets_before_execution(void);
+void test_record_cmdline_accepts_prompt_edits_and_keeps_status_messages(void);
 void test_record_range_envelope_replays_the_same_span_edit(void);
 void test_record_stop_stores_parseable_source_and_uppercase_appends(void);
 void test_macro_replay_uses_one_undo_node_per_run(void);

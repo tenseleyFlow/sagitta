@@ -442,7 +442,7 @@ endif
 .DEFAULT_GOAL := all
 .PHONY: all check test clean install dirs FORCE test-script test-pty fuzz \
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
-        fuzz-mouse fuzz-groups fuzz-record \
+        fuzz-mouse fuzz-groups fuzz-record test-record-corpus \
         fixtures fixtures-quick fixtures-verify \
         fixtures-verify-quick \
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
@@ -712,7 +712,7 @@ check: $(BUILD)/unit_tests $(BUILD)/sagitta test-fletch
 	@echo "check: ok (fast tier -- pty, torture, sanitizers and valgrind NOT run)"
 
 test: $(BUILD)/unit_tests $(BUILD)/sagitta test-pty test-fletch \
-      test-roundtrip torture-build
+      test-roundtrip test-record-corpus torture-build
 	$(UNIT_RUN)
 	scripts/check-cmd-dispatch.sh
 	scripts/check-fl-choke.sh
@@ -810,6 +810,9 @@ fuzz-cmdparse: $(BUILD)/fuzz_cmdparse
 
 fuzz-record: $(BUILD)/fuzz_record
 	$(BUILD)/fuzz_record --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+
+test-record-corpus: $(BUILD)/fuzz_record
+	$(BUILD)/fuzz_record --corpus-only
 
 fuzz-textbuf: $(BUILD)/fuzz_textbuf
 	$(BUILD)/fuzz_textbuf --replay tests/fuzz/replay-smoke.trace
