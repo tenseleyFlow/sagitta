@@ -1,0 +1,18 @@
+{
+    syntax: 1,
+    language: {
+        name: "asset-user",
+        extensions: ["asset"],
+        filenames: [],
+        shebangs: [],
+        priority: 0,
+    },
+    contexts: {
+        main: {
+            default: "text",
+            rules: [
+                { match: "asset", attr: "keyword" },
+            ],
+        },
+    },
+}
