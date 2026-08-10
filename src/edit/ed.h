@@ -48,6 +48,7 @@ typedef enum {
 
 typedef struct FlRuntime FlRuntime;
 typedef struct OptProvider OptProvider;
+typedef struct SagOptHistory SagOptHistory;
 struct OptStored;
 
 typedef struct FlPendingChange {
@@ -241,6 +242,7 @@ struct Ed {
     const OptProvider *opt_provider;
     struct OptStored *opt_globals;
     bool *opt_inflight;
+    SagOptHistory *opt_history;
     bool undo_break_on_newline;
     bool errorbells;
     bool ambiguous_wide;

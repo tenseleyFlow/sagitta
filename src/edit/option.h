@@ -79,6 +79,13 @@ bool sag_opt_get(Ed *ed, Buffer *buffer, Win *win,
                  const char *name, u32 len, OptVal *out);
 bool sag_opt_set(Ed *ed, u8 scope_hint, const char *name, u32 len,
                  const OptVal *value, const char **err);
+/* Snapshot/commit is the transactional registration seam used by set(map).
+ * A committed checkpoint is removed by its shared registration-ledger id. */
+u32 sag_opt_checkpoint(Ed *ed, const char *name, u32 len,
+                       const char **err);
+u32 sag_opt_commit(Ed *ed, u32 origin_id, u32 checkpoint);
+void sag_opt_discard(Ed *ed, u32 checkpoint);
+bool sag_opt_remove(Ed *ed, u32 ledger_id);
 u32 sag_opt_list(const char **out, u32 max);
 
 void sag_opt_provider_set(Ed *ed, const OptProvider *provider);

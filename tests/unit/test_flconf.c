@@ -265,6 +265,7 @@ void test_flconf_reloaded_hook_fires_once(void)
     ConfigFix f;
     OptVal off = {SAG_OPT_BOOL, {.b = false}};
     const char *err = NULL;
+    u32 active_before;
     u32 i;
 
     startup.no_workspace_config = true;
@@ -276,9 +277,10 @@ void test_flconf_reloaded_hook_fires_once(void)
         SAG_ASSERT_EQ_I64(sag_config_reload(&f.ed, NULL), SAG_CFG_OK);
     SAG_ASSERT(sag_opt_set(&f.ed, SAG_OPT_GLOBAL, "errorbells", 10U, &off,
                            &err));
+    active_before = cf_active_ledger(&f);
     sag_fl_hook_workspace(&f.ed, FL_EV_WS_OPEN);
     SAG_ASSERT(cf_opt(&f, "errorbells").as.b);
-    SAG_ASSERT_EQ_U64(cf_active_ledger(&f), 1U);
+    SAG_ASSERT_EQ_U64(cf_active_ledger(&f), active_before + 1U);
     cf_free(&f);
 }
 

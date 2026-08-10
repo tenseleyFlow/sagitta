@@ -1230,6 +1230,8 @@ static bool option_map_error(FlVm *vm, const FlStr *name, const char *err)
 typedef struct FlOptStage {
     const FlStr *name;
     OptVal value;
+    u32 checkpoint;
+    u32 ledger_id;
 } FlOptStage;
 
 static bool option_from_fl(FlVm *vm, FlValue value, OptVal *out)
@@ -1261,6 +1263,7 @@ bool fl_api_set_options(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
     u32 cursor = 0U;
     u32 n = 0U;
     u32 i;
+    u32 origin;
 
     if (vm == NULL || out == NULL || nargs != 1U ||
         args[0].t != (u8)FL_MAP)
@@ -1269,6 +1272,9 @@ bool fl_api_set_options(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
     if (api_ed(vm) == NULL)
         return false;
     map = (FlMap *)args[0].as.o;
+    origin = fl_origin_of_frame(vm);
+    if (origin == FL_ORIGIN_ID_NONE)
+        return fl_raise(vm, "handle", "set: callback has no editor origin");
     staged = sag_xcalloc(fl_map_count(map) == 0U ? 1U : fl_map_count(map),
                          sizeof(*staged));
     while (fl_map_iter(map, &cursor, &key, &value)) {
@@ -1296,14 +1302,37 @@ bool fl_api_set_options(FlVm *vm, FlValue *args, u32 nargs, FlValue *out)
     for (i = 0U; i < n; i++) {
         const char *err = NULL;
 
+        staged[i].checkpoint = sag_opt_checkpoint(
+            vm->ed, staged[i].name->b, staged[i].name->len, &err);
+        if (staged[i].checkpoint == 0U) {
+            const FlStr *bad = staged[i].name;
+            u32 rollback = i;
+
+            while (rollback != 0U) {
+                rollback--;
+                (void)sag_opt_remove(vm->ed, staged[rollback].ledger_id);
+            }
+            free(staged);
+            return option_map_error(vm, bad, err);
+        }
         if (!sag_opt_set(vm->ed, SAG_OPT_SCOPE_DECLARED,
                          staged[i].name->b, staged[i].name->len,
                          &staged[i].value, &err)) {
             const FlStr *bad = staged[i].name;
+            u32 rollback = i;
 
+            sag_opt_discard(vm->ed, staged[i].checkpoint);
+            while (rollback != 0U) {
+                rollback--;
+                (void)sag_opt_remove(vm->ed, staged[rollback].ledger_id);
+            }
             free(staged);
             return option_map_error(vm, bad, err);
         }
+        staged[i].ledger_id = sag_opt_commit(vm->ed, origin,
+                                             staged[i].checkpoint);
+        if (staged[i].ledger_id == 0U)
+            SAG_BUG("validated option registration could not commit");
     }
     free(staged);
     *out = FL_NIL_V;

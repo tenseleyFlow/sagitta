@@ -160,19 +160,38 @@ void test_option_fletch_set_map_is_atomic_and_cmdline_is_identical(void)
 {
     static const char bad[] = "set({tabwidth: 8, tabwith: 2})";
     static const char good[] = "set({tabwidth: 8, wrap: true})";
+    static const char later[] = "set({tabwidth: 10})";
     Ed ed;
     CmdCtx cx = {0};
     char *argv[] = {"ed.opt.set_many", "tabwidth", "6"};
+    u32 before;
 
     sag_ed_init(&ed);
     SAG_ASSERT(sag_ed_open_scratch(&ed));
+    before = ed.hooks.ledger.n;
     SAG_ASSERT(sag_fl_eval(&ed, bad, (u32)(sizeof(bad) - 1U)) !=
                SAG_CMD_OK);
     SAG_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 4);
+    SAG_ASSERT_EQ_U64(ed.hooks.ledger.n, before);
     SAG_ASSERT_EQ_I64(sag_fl_eval(&ed, good, (u32)(sizeof(good) - 1U)),
                       SAG_CMD_OK);
     SAG_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 8);
     SAG_ASSERT(opt_get(&ed, "wrap").as.b);
+    SAG_ASSERT_EQ_U64(ed.hooks.ledger.n, before + 2U);
+    SAG_ASSERT_EQ_U64(ed.hooks.ledger.v[before].kind, REG_OPTION);
+    SAG_ASSERT_EQ_U64(ed.hooks.ledger.v[before].origin_id,
+                      FL_ORIGIN_ID_CONFIG);
+    SAG_ASSERT_EQ_I64(sag_fl_eval(&ed, later,
+                                  (u32)(sizeof(later) - 1U)), SAG_CMD_OK);
+    SAG_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 10);
+    SAG_ASSERT_EQ_U64(ed.hooks.ledger.n, before + 3U);
+    SAG_ASSERT(sag_opt_remove(&ed, before + 3U));
+    SAG_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 8);
+    SAG_ASSERT(sag_opt_remove(&ed, before + 2U));
+    SAG_ASSERT(!opt_get(&ed, "wrap").as.b);
+    SAG_ASSERT(sag_opt_remove(&ed, before + 1U));
+    SAG_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 4);
+    SAG_ASSERT(!sag_opt_remove(&ed, before + 1U));
     cx.ed = &ed;
     cx.argv = (CmdArgv){argv, 3U};
     SAG_ASSERT_EQ_I64(sag_opt_cmdline_set(&cx), SAG_CMD_OK);

@@ -23,6 +23,22 @@ struct OptStored {
     char *owned;
 };
 
+typedef struct SagOptUndo {
+    struct OptStored previous;
+    u32 target_id;
+    u32 ledger_id;
+    u16 desc_index;
+    u8 scope;
+    bool pending;
+    bool active;
+} SagOptUndo;
+
+struct SagOptHistory {
+    SagOptUndo *v;
+    u32 n;
+    u32 cap;
+};
+
 static const char *const number_values[] = {
     "off", "abs", "rel", "both", NULL
 };
@@ -40,6 +56,9 @@ static const char *const clipboard_values[] = {
 
 static void option_changed(Ed *ed, const OptDesc *desc,
                            const OptVal *old, const OptVal *nu);
+static void option_changed_target(Ed *ed, const OptDesc *desc,
+                                  const OptVal *old, const OptVal *nu,
+                                  Buffer *buffer, Win *win);
 
 const OptDesc sag_opts[] = {
     {"tabwidth", SAG_OPT_INT, SAG_OPT_BUFFER, OPT_INT(4), NULL, 1, 16,
@@ -302,12 +321,10 @@ static void each_undo_set_persist(Ed *ed, u64 bytes)
     }
 }
 
-static void option_changed(Ed *ed, const OptDesc *desc,
-                           const OptVal *old, const OptVal *nu)
+static void option_changed_target(Ed *ed, const OptDesc *desc,
+                                  const OptVal *old, const OptVal *nu,
+                                  Buffer *buffer, Win *win)
 {
-    Buffer *buffer = current_buffer(ed);
-    Win *win = ed == NULL ? NULL : ed->win;
-
     (void)old;
     if (ed == NULL || desc == NULL || nu == NULL)
         return;
@@ -377,6 +394,13 @@ static void option_changed(Ed *ed, const OptDesc *desc,
     ed->footer_dirty = true;
 }
 
+static void option_changed(Ed *ed, const OptDesc *desc,
+                           const OptVal *old, const OptVal *nu)
+{
+    option_changed_target(ed, desc, old, nu, current_buffer(ed),
+                          ed == NULL ? NULL : ed->win);
+}
+
 void sag_opt_init(Ed *ed)
 {
     u32 i;
@@ -404,8 +428,15 @@ void sag_opt_free(Ed *ed)
         stored_clear(&ed->opt_globals[i]);
     free(ed->opt_globals);
     free(ed->opt_inflight);
+    if (ed->opt_history != NULL) {
+        for (i = 0U; i < ed->opt_history->n; i++)
+            stored_clear(&ed->opt_history->v[i].previous);
+        free(ed->opt_history->v);
+        free(ed->opt_history);
+    }
     ed->opt_globals = NULL;
     ed->opt_inflight = NULL;
+    ed->opt_history = NULL;
 }
 
 static void reset_map(Strmap *map)
@@ -588,6 +619,176 @@ bool sag_opt_set(Ed *ed, u8 scope_hint, const char *name, u32 len,
 fail_old:
     stored_clear(&old);
     return false;
+}
+
+static SagOptHistory *history_get(Ed *ed)
+{
+    if (ed->opt_history == NULL)
+        ed->opt_history = sag_xcalloc(1U, sizeof(*ed->opt_history));
+    return ed->opt_history;
+}
+
+static SagOptUndo *undo_by_checkpoint(Ed *ed, u32 checkpoint)
+{
+    SagOptHistory *history;
+
+    if (ed == NULL || checkpoint == 0U ||
+        (history = ed->opt_history) == NULL || checkpoint > history->n)
+        return NULL;
+    return &history->v[checkpoint - 1U];
+}
+
+u32 sag_opt_checkpoint(Ed *ed, const char *name, u32 len,
+                       const char **err)
+{
+    SagOptHistory *history;
+    SagOptUndo *undo;
+    const OptDesc *desc;
+    OptVal previous;
+    Buffer *buffer;
+    Win *win;
+    u32 want;
+
+    if (err != NULL)
+        *err = NULL;
+    if (ed == NULL || name == NULL || err == NULL) {
+        return 0U;
+    }
+    desc = sag_opt_desc(name, len);
+    if (desc == NULL) {
+        *err = "unknown option";
+        return 0U;
+    }
+    buffer = current_buffer(ed);
+    win = ed->win;
+    if (desc->scope == (u8)SAG_OPT_BUFFER && buffer == NULL) {
+        *err = "no current buffer";
+        return 0U;
+    }
+    if (desc->scope == (u8)SAG_OPT_WINDOW && win == NULL) {
+        *err = "no current window";
+        return 0U;
+    }
+    if (!sag_opt_get(ed, buffer, win, name, len, &previous)) {
+        *err = "could not retain the old option value";
+        return 0U;
+    }
+    history = history_get(ed);
+    if (history->n == history->cap) {
+        want = history->cap == 0U ? 8U : history->cap * 2U;
+        history->v = sag_xreallocarray(history->v, want,
+                                       sizeof(*history->v));
+        (void)memset(&history->v[history->cap], 0,
+                     (size_t)(want - history->cap) * sizeof(*history->v));
+        history->cap = want;
+    }
+    undo = &history->v[history->n++];
+    (void)memset(undo, 0, sizeof(*undo));
+    if (!stored_assign(&undo->previous, &previous)) {
+        history->n--;
+        *err = "could not retain the old option value";
+        return 0U;
+    }
+    undo->desc_index = (u16)desc_index(desc);
+    undo->scope = desc->scope;
+    undo->target_id = desc->scope == (u8)SAG_OPT_BUFFER ? buffer->id :
+                      desc->scope == (u8)SAG_OPT_WINDOW ? win->id : 0U;
+    undo->pending = true;
+    return history->n;
+}
+
+u32 sag_opt_commit(Ed *ed, u32 origin_id, u32 checkpoint)
+{
+    SagOptUndo *undo = undo_by_checkpoint(ed, checkpoint);
+
+    if (undo == NULL || !undo->pending || undo->active ||
+        origin_id == FL_ORIGIN_ID_NONE)
+        return 0U;
+    undo->ledger_id = fl_reg_add(&ed->hooks.ledger, origin_id, REG_OPTION,
+                                 checkpoint);
+    undo->pending = false;
+    undo->active = true;
+    return undo->ledger_id;
+}
+
+void sag_opt_discard(Ed *ed, u32 checkpoint)
+{
+    SagOptUndo *undo = undo_by_checkpoint(ed, checkpoint);
+
+    if (undo == NULL || !undo->pending || undo->active)
+        return;
+    stored_clear(&undo->previous);
+    undo->pending = false;
+}
+
+static struct OptStored *undo_target(Ed *ed, const SagOptUndo *undo,
+                                     const OptDesc *desc,
+                                     Buffer **buffer_out, Win **win_out)
+{
+    Buffer *buffer = NULL;
+    Win *win = NULL;
+    Strmap *map;
+    struct OptStored *stored;
+    u32 len = (u32)strlen(desc->name);
+
+    if (undo->scope == (u8)SAG_OPT_GLOBAL)
+        return &ed->opt_globals[undo->desc_index];
+    if (undo->scope == (u8)SAG_OPT_BUFFER) {
+        buffer = sag_ws_buf_by_id(ed, undo->target_id);
+        if (buffer == NULL)
+            return NULL;
+        map = &buffer->opt_overrides;
+    } else {
+        win = sag_ed_win_by_id(ed, undo->target_id);
+        if (win == NULL)
+            return NULL;
+        buffer = win->buf;
+        map = &win->opt_overrides;
+    }
+    stored = scope_stored(map, desc->name, len);
+    if (stored == NULL) {
+        stored = sag_xcalloc(1U, sizeof(*stored));
+        (void)strmap_put(map, desc->name, len, stored);
+    }
+    *buffer_out = buffer;
+    *win_out = win;
+    return stored;
+}
+
+bool sag_opt_remove(Ed *ed, u32 ledger_id)
+{
+    FlRegistration *registration;
+    SagOptUndo *undo;
+    const OptDesc *desc;
+    struct OptStored current = {0};
+    struct OptStored *target;
+    Buffer *buffer = NULL;
+    Win *win = NULL;
+
+    if (ed == NULL || ledger_id == 0U || ledger_id > ed->hooks.ledger.n)
+        return false;
+    registration = &ed->hooks.ledger.v[ledger_id - 1U];
+    if (!registration->active || registration->kind != (u8)REG_OPTION)
+        return false;
+    undo = undo_by_checkpoint(ed, registration->handle);
+    if (undo == NULL || !undo->active || undo->ledger_id != ledger_id ||
+        undo->desc_index >= sag_opts_len)
+        return false;
+    desc = &sag_opts[undo->desc_index];
+    target = undo_target(ed, undo, desc, &buffer, &win);
+    if (target != NULL) {
+        if (!stored_assign(&current, &target->value))
+            SAG_BUG("option teardown could not retain current value");
+        if (!stored_assign(target, &undo->previous.value))
+            SAG_BUG("option teardown could not restore previous value");
+        option_changed_target(ed, desc, &current.value, &target->value,
+                              buffer, win);
+        stored_clear(&current);
+    }
+    stored_clear(&undo->previous);
+    undo->active = false;
+    (void)fl_reg_remove(&ed->hooks.ledger, ledger_id);
+    return true;
 }
 
 u32 sag_opt_list(const char **out, u32 max)
