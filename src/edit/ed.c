@@ -1488,9 +1488,6 @@ void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms)
      */
     if (sag_mouse_menu_key(ed, &key))
         return;
-    if (key.ev != SAG_KEY_RELEASE && sag_msg_dismiss_overlay(ed)) {
-        return;
-    }
     if (key.code == SAG_KEY_ESCAPE &&
         (ed->chord.n != 0U || ed->chord.count_given)) {
         sag_dispatch_key(ed, key, now_ms);
@@ -1516,6 +1513,8 @@ void sag_ed_handle_key(Ed *ed, Key key, i64 now_ms)
      * reaches the document behind it.
      */
     if (sag_picker_active(ed) && sag_picker_key(ed, &key))
+        return;
+    if (key.ev != SAG_KEY_RELEASE && sag_msg_dismiss_overlay(ed))
         return;
     if (ed->cmdline.active && sag_cmdline_key(ed, &key))
         return;
