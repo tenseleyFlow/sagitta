@@ -483,6 +483,56 @@ void test_syn_defs_static_push_depth_reserves_four_runtime_frames(void)
         2U, 6U);
 }
 
+void test_syn_defs_multi_push_depth_uses_maximum_live_branch(void)
+{
+    static const char src[] =
+        "{syntax:1,language:{name:\"multi-depth\"},contexts:{\n"
+        "main:{rules:[{match:\"m\",push:[\"a\",\"b\",\"c\",\"d\"]}]},\n"
+        "a:{rules:[{match:\"x\",push:\"a1\"},{match:\"p\",pop:1}]},"
+        "a1:{rules:[{match:\"x\",push:\"a2\"},{match:\"p\",pop:1}]},"
+        "a2:{rules:[{match:\"p\",pop:1}]},\n"
+        "b:{rules:[{match:\"x\",push:\"b1\"},{match:\"p\",pop:1}]},"
+        "b1:{rules:[{match:\"x\",push:\"b2\"},{match:\"p\",pop:1}]},"
+        "b2:{rules:[{match:\"p\",pop:1}]},\n"
+        "c:{rules:[{match:\"x\",push:\"c1\"},{match:\"p\",pop:1}]},"
+        "c1:{rules:[{match:\"x\",push:\"c2\"},{match:\"p\",pop:1}]},"
+        "c2:{rules:[{match:\"p\",pop:1}]},\n"
+        "d:{rules:[{match:\"x\",push:\"d1\"},{match:\"p\",pop:1}]},"
+        "d1:{rules:[{match:\"x\",push:\"d2\"},{match:\"p\",pop:1}]},"
+        "d2:{rules:[{match:\"p\",pop:1}]} } }";
+    DefFix f;
+    SynDef *def;
+    u32 nerr;
+    u32 nwarn;
+
+    def_fix_open(&f);
+    def = def_compile(&f, src, &nerr, &nwarn);
+    YEW_ASSERT_NOT_NULL(def);
+    YEW_ASSERT_EQ_U64(nerr, 0U);
+    def_fix_close(&f, def);
+}
+
+void test_syn_defs_invalid_first_line_uses_literal_span(void)
+{
+    static const char src[] =
+        "{ syntax: 1,\n"
+        "  language: { name: \"first\", first_line: \"[\" },\n"
+        "  contexts: { main: { rules: [] } } }";
+    DefFix f;
+    u32 nerr;
+    u32 nwarn;
+
+    def_fix_open(&f);
+    YEW_ASSERT_NULL(def_compile(&f, src, &nerr, &nwarn));
+    YEW_ASSERT_EQ_U64(nerr, 1U);
+    YEW_ASSERT_EQ_U64(f.diag.n, 1U);
+    YEW_ASSERT_EQ_U64(f.diag.sp[0].line, 2U);
+    YEW_ASSERT_EQ_U64(f.diag.sp[0].col, 42U);
+    YEW_ASSERT_EQ_U64(f.diag.sp[0].len, 3U);
+    YEW_ASSERT(strstr(f.diag.msg[0], "invalid first_line pattern") != NULL);
+    def_fix_close(&f, NULL);
+}
+
 void test_syn_defs_validation_warnings_are_nonfatal_and_exact(void)
 {
     static const char src[] =

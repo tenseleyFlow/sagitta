@@ -216,3 +216,29 @@ void test_syn_discovery_duplicate_name_keeps_first_sorted_definition(void)
                       YEW_LANG_NONE);
     discovery_close(&f, true);
 }
+
+void test_syn_discovery_rejects_builtin_language_name_collision(void)
+{
+    static const char builtin_collision[] =
+        "{ syntax: 1, language: { name: \"ini\", extensions: [\"hijack\"] }, "
+        "contexts: { main: { rules: [] } } }";
+    DiscoveryFix f;
+    u32 ini;
+    const SynLangDesc *desc;
+
+    discovery_open(&f, true);
+    discovery_write(&f, "hijack.fl", builtin_collision);
+    yew_test_capture_log();
+    yew_syn_discovery_reset();
+    YEW_ASSERT_EQ_U64(yew_syn_lang_count(), f.builtin_count);
+    YEW_ASSERT_EQ_U64(yew_test_log_count(), 1U);
+    YEW_ASSERT(yew_test_log_contains(YEW_LOG_WARN,
+                                     "duplicate syntax language 'ini'"));
+    ini = yew_syn_lang_named("ini");
+    desc = yew_syn_lang_desc(ini);
+    YEW_ASSERT_NOT_NULL(desc);
+    YEW_ASSERT_EQ_STR(desc->source, "runtime/syntax/ini.fl");
+    YEW_ASSERT_EQ_U64(yew_syn_lang_for("x.hijack", NULL, 0U),
+                      YEW_LANG_NONE);
+    discovery_close(&f, true);
+}

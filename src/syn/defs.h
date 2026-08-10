@@ -9,7 +9,7 @@
 #include "util/arena.h"
 #include "util/base.h"
 
-#define YEW_SYN_TABLE_VERSION 2U
+#define YEW_SYN_TABLE_VERSION 3U
 #define YEW_SYN_CACHE_MAGIC "SAGSYN\0\0"
 #define YEW_SYN_CACHE_HEADER_SIZE 64U
 
@@ -86,7 +86,10 @@ u64 yew_syn_compile_count(void);
 void yew_syn_compile_count_reset(void);
 
 char *yew_syn_cache_dir(void);
-char *yew_syn_cache_path(const char *name);
+/* Return the cache entry for a definition source path.  The basename keeps
+ * entries recognizable; the full path hash prevents equal stems in distinct
+ * directories from sharing an entry. */
+char *yew_syn_cache_path(const char *source);
 bool yew_syn_cache_clear(void);
 void yew_syn_cache_set_bypass(bool bypass);
 

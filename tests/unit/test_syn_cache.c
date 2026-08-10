@@ -129,7 +129,7 @@ static void fixture_init(CacheFixture *f)
     YEW_ASSERT(n > 0 && (size_t)n < sizeof(f->source));
     write_exact(f->source, (const u8 *)cache_source_x,
                 strlen(cache_source_x));
-    path = yew_syn_cache_path("fixture");
+    path = yew_syn_cache_path(f->source);
     YEW_ASSERT_NOT_NULL(path);
     n = snprintf(f->cache, sizeof(f->cache), "%s", path);
     YEW_ASSERT(n > 0 && (size_t)n < sizeof(f->cache));
@@ -265,14 +265,85 @@ void test_syn_cache_path_uses_temp_xdg_root(void)
     (void)snprintf(expected, sizeof(expected), "%s/yew/syn", f.root);
     dir = yew_syn_cache_dir();
     YEW_ASSERT_EQ_STR(dir, expected);
-    (void)snprintf(expected, sizeof(expected), "%s/yew/syn/alpha.stab",
+    (void)snprintf(expected, sizeof(expected), "%s/yew/syn/alpha-",
                    f.root);
     path = yew_syn_cache_path("alpha");
-    YEW_ASSERT_EQ_STR(path, expected);
-    YEW_ASSERT_NULL(yew_syn_cache_path("bad/name"));
+    YEW_ASSERT(strncmp(path, expected, strlen(expected)) == 0);
+    YEW_ASSERT_EQ_STR(path + strlen(path) - 5U, ".stab");
+    {
+        char *other = yew_syn_cache_path("elsewhere/alpha.fl");
+
+        YEW_ASSERT_NOT_NULL(other);
+        YEW_ASSERT(strcmp(path, other) != 0);
+        free(other);
+    }
     YEW_ASSERT_NULL(yew_syn_cache_path(""));
     free(dir);
     free(path);
+    fixture_free(&f);
+}
+
+void test_syn_cache_same_stems_have_distinct_source_namespaces(void)
+{
+    CacheFixture f;
+    char other[128];
+    char *first;
+    char *second;
+
+    fixture_init(&f);
+    (void)snprintf(other, sizeof(other), "%s/nested/fixture.fl", f.root);
+    first = yew_syn_cache_path(f.source);
+    second = yew_syn_cache_path(other);
+    YEW_ASSERT_NOT_NULL(first);
+    YEW_ASSERT_NOT_NULL(second);
+    YEW_ASSERT(strcmp(first, second) != 0);
+    YEW_ASSERT(strstr(first, "/fixture-") != NULL);
+    YEW_ASSERT(strstr(second, "/fixture-") != NULL);
+    free(first);
+    free(second);
+    fixture_free(&f);
+}
+
+void test_syn_cache_rejects_blob_copied_from_another_source(void)
+{
+    CacheFixture f;
+    char second_source[128];
+    char *second_cache;
+    Bytebuf bytes;
+    LoadedDef loaded;
+    struct stat st;
+    struct timespec times[2];
+
+    fixture_init(&f);
+    build_cold_cache(&f);
+    (void)snprintf(second_source, sizeof(second_source), "%s/other.fl",
+                   f.root);
+    write_exact(second_source, (const u8 *)cache_source_y,
+                strlen(cache_source_y));
+    YEW_ASSERT_EQ_I64(stat(f.source, &st), 0);
+    times[0] = st.st_atim;
+    times[1] = st.st_mtim;
+    YEW_ASSERT_EQ_I64(utimensat(AT_FDCWD, second_source, times, 0), 0);
+    second_cache = yew_syn_cache_path(second_source);
+    YEW_ASSERT_NOT_NULL(second_cache);
+    bytes = read_exact(f.cache);
+    write_exact(second_cache, bytes.data, bytes.len);
+    bytebuf_free(&bytes);
+
+    yew_test_capture_log();
+    yew_syn_compile_count_reset();
+    arena_init(&loaded.arena);
+    fl_diag_init(&loaded.dc, &loaded.arena);
+    loaded.def = yew_syn_def_load(&loaded.arena, &loaded.dc, second_source);
+    YEW_ASSERT_NOT_NULL(loaded.def);
+    YEW_ASSERT_EQ_U64(yew_syn_compile_count(), 1U);
+    YEW_ASSERT_EQ_STR(yew_syn_rule_pattern(loaded.def, 0U), "y");
+    YEW_ASSERT(yew_test_log_contains(YEW_LOG_WARN,
+                                     "syntax cache tables invalid"));
+    loaded_free(&loaded);
+    YEW_ASSERT_EQ_I64(unlink(second_cache), 0);
+    YEW_ASSERT_EQ_I64(unlink(second_source), 0);
+    free(second_cache);
     fixture_free(&f);
 }
 
@@ -517,6 +588,67 @@ void test_syn_cache_crc_valid_structural_corruption_recompiles_safely(void)
         YEW_LOG_WARN, "syntax cache tables invalid; recompiling"));
     assert_loaded_regex_executes(&loaded, 'x');
     loaded_free(&loaded);
+    fixture_free(&f);
+}
+
+void test_syn_cache_restores_first_byte_filters_from_regex_programs(void)
+{
+    CacheFixture f;
+    Bytebuf bytes;
+    LoadedDef loaded;
+    u8 first[32] = {0};
+    size_t i;
+    u32 changed = 0U;
+    size_t blob_len;
+
+    fixture_init(&f);
+    build_cold_cache(&f);
+    bytes = read_exact(f.cache);
+    first[(u8)'x' >> 3U] = (u8)(1U << ((u8)'x' & 7U));
+    for (i = YEW_SYN_CACHE_HEADER_SIZE;
+         i + sizeof(first) <= bytes.len; i++) {
+        if (memcmp(bytes.data + i, first, sizeof(first)) == 0) {
+            (void)memset(bytes.data + i, 0, sizeof(first));
+            changed++;
+            i += sizeof(first) - 1U;
+        }
+    }
+    YEW_ASSERT(changed >= 2U);
+    blob_len = bytes.len - YEW_SYN_CACHE_HEADER_SIZE;
+    put_u32_le(bytes.data + 60U,
+               yew_crc32(bytes.data + YEW_SYN_CACHE_HEADER_SIZE, blob_len));
+    write_exact(f.cache, bytes.data, bytes.len);
+    bytebuf_free(&bytes);
+
+    yew_syn_compile_count_reset();
+    loaded = load_def(&f);
+    YEW_ASSERT_EQ_U64(yew_syn_compile_count(), 0U);
+    YEW_ASSERT(yew_syn_def_firstbyte_check(loaded.def, NULL, NULL));
+    assert_loaded_regex_executes(&loaded, 'x');
+    loaded_free(&loaded);
+    fixture_free(&f);
+}
+
+void test_syn_definition_load_rejects_nonregular_and_oversized_files(void)
+{
+    CacheFixture f;
+    Arena arena;
+    DiagCtx dc;
+    char large[128];
+    int fd;
+
+    fixture_init(&f);
+    arena_init(&arena);
+    fl_diag_init(&dc, &arena);
+    YEW_ASSERT_NULL(yew_syn_def_load(&arena, &dc, f.root));
+    (void)snprintf(large, sizeof(large), "%s/large.fl", f.root);
+    fd = open(large, O_WRONLY | O_CREAT | O_TRUNC, 0600);
+    YEW_ASSERT(fd >= 0);
+    YEW_ASSERT_EQ_I64(ftruncate(fd, (off_t)(64U * 1024U * 1024U + 1U)), 0);
+    YEW_ASSERT_EQ_I64(close(fd), 0);
+    YEW_ASSERT_NULL(yew_syn_def_load(&arena, &dc, large));
+    YEW_ASSERT_EQ_I64(unlink(large), 0);
+    arena_free_all(&arena);
     fixture_free(&f);
 }
 
