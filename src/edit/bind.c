@@ -34,6 +34,8 @@ typedef struct SagBindings {
     SagBindRow *v;
     u32 n;
     u32 cap;
+    u32 free_hint;
+    u32 active_hi;
     u32 batch_depth;
     u32 rebuilds;
     bool pending;
@@ -136,7 +138,7 @@ static SagBindRow *find_sequence(Ed *ed, Mode mode, const char *seq)
     SagBindings *binds = ed->bindings;
     u32 i;
 
-    for (i = binds->n; i != 0U; i--) {
+    for (i = binds->active_hi; i != 0U; i--) {
         SagBindRow *row = &binds->v[i - 1U];
 
         if (row->active && row->mode == mode && strcmp(row->seq, seq) == 0)
@@ -145,70 +147,85 @@ static SagBindRow *find_sequence(Ed *ed, Mode mode, const char *seq)
     return NULL;
 }
 
-static bool row_is_shadowed(const SagBindings *binds, u32 index,
-                            Mode mode, const char *seq,
-                            const SagBindRow *extra)
+static u64 sequence_hash(const char *seq)
 {
-    u32 i;
+    const unsigned char *p = (const unsigned char *)seq;
+    u64 hash = UINT64_C(14695981039346656037);
 
-    if (extra != NULL && extra->mode == mode &&
-        strcmp(extra->seq, seq) == 0)
-        return true;
-    for (i = index + 1U; i < binds->n; i++) {
-        const SagBindRow *later = &binds->v[i];
-
-        if (later->active && later->mode == mode &&
-            strcmp(later->seq, seq) == 0)
-            return true;
+    while (*p != '\0') {
+        hash ^= (u64)*p++;
+        hash *= UINT64_C(1099511628211);
     }
-    return false;
+    return hash;
 }
 
-static bool rows_for_mode(Ed *ed, Mode mode, const SagBindRow *extra,
-                          BindRow **out, u32 *out_n)
+static bool sequence_set_add(const char **set, size_t cap, const char *seq)
 {
-    SagBindings *binds = ed->bindings;
-    BindRow *rows;
-    u32 n = extra == NULL ? 0U : 1U;
-    u32 i;
-    u32 at = 0U;
+    size_t at = (size_t)sequence_hash(seq) & (cap - 1U);
 
-    for (i = 0U; i < binds->n; i++)
-        if (binds->v[i].active && binds->v[i].mode == mode &&
-            !row_is_shadowed(binds, i, mode, binds->v[i].seq, extra))
-            n++;
-    rows = n == 0U ? NULL : sag_xcalloc(n, sizeof(*rows));
-    for (i = 0U; i < binds->n; i++) {
-        SagBindRow *row = &binds->v[i];
-
-        if (!row->active || row->mode != mode ||
-            row_is_shadowed(binds, i, mode, row->seq, extra))
-            continue;
-        rows[at++] = (BindRow){row->seq, row->cmd, row->iarg, row->sarg};
+    while (set[at] != NULL) {
+        if (strcmp(set[at], seq) == 0)
+            return false;
+        at = (at + 1U) & (cap - 1U);
     }
-    if (extra != NULL)
-        rows[at++] = (BindRow){extra->seq, extra->cmd, extra->iarg,
-                              extra->sarg};
-    *out = rows;
-    *out_n = at;
+    set[at] = seq;
     return true;
 }
 
-static bool validate_candidate(Ed *ed, Mode mode, const SagBindRow *extra)
+static bool rows_for_mode(Ed *ed, Mode mode, BindRow **out, u32 *out_n)
 {
-    Keymap scratch = {0};
-    BindRow *rows = NULL;
-    SagKeymapDiag diag;
+    SagBindings *binds = ed->bindings;
+    const char **seen;
+    bool *keep;
+    BindRow *rows;
     u32 n = 0U;
-    bool ok;
+    size_t cap = 16U;
+    u64 want = (u64)binds->active_hi * 2U + 2U;
+    u32 i;
+    u32 at = 0U;
 
-    (void)rows_for_mode(ed, mode, extra, &rows, &n);
-    ok = sag_keymap_build_diag(&scratch, "config", rows, n, &diag);
-    if (!ok)
-        bind_error(ed, "%s", sag_keymap_error_string(diag.error));
-    sag_keymap_free(&scratch);
-    free(rows);
-    return ok;
+    while ((u64)cap < want) {
+        if (cap > SIZE_MAX / 2U)
+            SAG_BUG("binding shadow set exceeds address space");
+        cap *= 2U;
+    }
+    seen = sag_xcalloc(cap, sizeof(*seen));
+    keep = binds->active_hi == 0U ? NULL :
+           sag_xcalloc(binds->active_hi, sizeof(*keep));
+    for (i = binds->active_hi; i != 0U; i--) {
+        SagBindRow *row = &binds->v[i - 1U];
+
+        if (row->active && row->mode == mode &&
+            sequence_set_add(seen, cap, row->seq)) {
+            keep[i - 1U] = true;
+            n++;
+        }
+    }
+    rows = n == 0U ? NULL : sag_xcalloc(n, sizeof(*rows));
+    for (i = 0U; i < binds->active_hi; i++) {
+        SagBindRow *row = &binds->v[i];
+
+        if (!keep[i])
+            continue;
+        rows[at++] = (BindRow){row->seq, row->cmd, row->iarg, row->sarg};
+    }
+    *out = rows;
+    *out_n = at;
+    free(keep);
+    free(seen);
+    return true;
+}
+
+static bool validate_candidate(Ed *ed, const SagBindRow *extra)
+{
+    BindRow row;
+    SagKeymapError error;
+
+    row = (BindRow){extra->seq, extra->cmd, extra->iarg, extra->sarg};
+    error = sag_keymap_validate_row(&row);
+    if (error != SAG_KEYMAP_ERR_NONE)
+        bind_error(ed, "%s", sag_keymap_error_string(error));
+    return error == SAG_KEYMAP_ERR_NONE;
 }
 
 void sag_bind_init(Ed *ed)
@@ -266,8 +283,8 @@ u32 sag_bind_add(Ed *ed, u32 origin, Mode mode, const char *seq,
         return 0U;
     }
     binds->error[0] = '\0';
-    if (find_sequence(ed, mode, seq) != NULL &&
-        find_sequence(ed, mode, seq)->origin == origin) {
+    row = find_sequence(ed, mode, seq);
+    if (row != NULL && row->origin == origin) {
         bind_error(ed, "duplicate key sequence");
         return 0U;
     }
@@ -289,10 +306,10 @@ u32 sag_bind_add(Ed *ed, u32 origin, Mode mode, const char *seq,
     candidate.iarg = iarg;
     candidate.fn = fn;
     candidate.mode = mode;
-    if (!validate_candidate(ed, mode, &candidate))
+    if (!validate_candidate(ed, &candidate))
         return 0U;
 
-    for (slot = 0U; slot < binds->n; slot++)
+    for (slot = binds->free_hint; slot < binds->n; slot++)
         if (!binds->v[slot].active)
             break;
     if (slot == binds->n && binds->n == binds->cap) {
@@ -318,6 +335,12 @@ u32 sag_bind_add(Ed *ed, u32 origin, Mode mode, const char *seq,
         row->iarg = (i64)row->ledger_id;
     if (slot == binds->n)
         binds->n++;
+    if (slot + 1U > binds->active_hi)
+        binds->active_hi = slot + 1U;
+    binds->free_hint = slot + 1U;
+    while (binds->free_hint < binds->n &&
+           binds->v[binds->free_hint].active)
+        binds->free_hint++;
     binds->pending = true;
     if (binds->batch_depth == 0U)
         sag_bind_rebuild(ed);
@@ -327,14 +350,23 @@ u32 sag_bind_add(Ed *ed, u32 origin, Mode mode, const char *seq,
 bool sag_bind_remove(Ed *ed, u32 ledger_id)
 {
     SagBindRow *row = row_by_ledger(ed, ledger_id);
+    SagBindings *binds;
+    u32 slot;
 
     if (row == NULL)
         return false;
+    binds = ed->bindings;
+    slot = (u32)(row - binds->v);
     row->active = false;
     row->fn = FL_NIL_V;
     (void)fl_reg_remove(&ed->hooks.ledger, ledger_id);
-    ed->bindings->pending = true;
-    if (ed->bindings->batch_depth == 0U)
+    if (slot < binds->free_hint)
+        binds->free_hint = slot;
+    while (binds->active_hi != 0U &&
+           !binds->v[binds->active_hi - 1U].active)
+        binds->active_hi--;
+    binds->pending = true;
+    if (binds->batch_depth == 0U)
         sag_bind_rebuild(ed);
     return true;
 }
@@ -350,7 +382,7 @@ void sag_bind_rebuild(Ed *ed)
         BindRow *rows = NULL;
         u32 n = 0U;
 
-        (void)rows_for_mode(ed, (Mode)mode, NULL, &rows, &n);
+        (void)rows_for_mode(ed, (Mode)mode, &rows, &n);
         if (!sag_keymap_build(&ed->bind_keys[mode], "config", rows, n))
             SAG_BUG("validated config keymap no longer builds");
         free(rows);

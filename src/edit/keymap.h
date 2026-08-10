@@ -90,6 +90,7 @@ bool sag_keymap_build_diag(Keymap *km, const char *name,
                            const BindRow *rows, u32 n,
                            SagKeymapDiag *diag);
 const char *sag_keymap_error_string(SagKeymapError error);
+SagKeymapError sag_keymap_validate_row(const BindRow *row);
 void sag_keymap_free(Keymap *km);
 
 bool sag_keymap_step(const Keymap *km, u32 node, KeyId key, u32 *child);

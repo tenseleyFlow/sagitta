@@ -34,10 +34,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
+#include "edit/bind.h"
 #include "edit/ed.h"
 #include "fl/compile.h"
 #include "fl/flapi.h"
+#include "fl/flconf.h"
 #include "fl/gc.h"
 #include "fl/handle.h"
 #include "fl/fltxn.h"
@@ -62,6 +65,8 @@ enum {
      * 20 ms cold-start share in 00-decisions.md. */
     GATE_STARTUP_NS = 2000000,        /* 2 ms   */
     GATE_CONFIG_NS = 1000000,         /* 1 ms   */
+    GATE_CONFIG_RELOAD_NS = 5000000,  /* 5 ms   */
+    CONFIG_RELOAD_BINDS = 500,
     MOTION_ITERS = 1000000,
     GATE_MOTION_NS_PER_OP = 1000,     /* 1 us   */
     QUERY_ITERS = 1000000,
@@ -406,6 +411,86 @@ static u64 sample_startup(void *ud)
     return time_startup();
 }
 
+typedef struct ConfigArg {
+    const char *user_path;
+} ConfigArg;
+
+static u64 sample_config_reload(void *ud)
+{
+    ConfigArg *arg = ud;
+    SagEdStartup startup = {0};
+    Ed ed;
+    CfgStatus status;
+    u64 t0;
+    u64 dt;
+
+    startup.config_path = arg->user_path;
+    startup.no_workspace_config = true;
+    sag_ed_init(&ed);
+    if (!sag_ed_open_scratch(&ed)) {
+        (void)fprintf(stderr, "perf_fletch: cannot open config scratch\n");
+        exit(1);
+    }
+    sag_config_init(&ed, &startup);
+    status = sag_config_load_all(&ed, NULL);
+    if (status != SAG_CFG_OK ||
+        sag_bind_active_count(&ed) < CONFIG_RELOAD_BINDS) {
+        (void)fprintf(stderr,
+                      "perf_fletch: 500-bind config did not load\n");
+        exit(1);
+    }
+    t0 = now_ns();
+    status = sag_config_reload(&ed, NULL);
+    dt = now_ns() - t0;
+    if (status != SAG_CFG_OK) {
+        (void)fprintf(stderr, "perf_fletch: config reload failed\n");
+        exit(1);
+    }
+    sag_ed_free(&ed);
+    return dt;
+}
+
+static void make_reload_fixture(char *path)
+{
+    static const char source[] =
+        "let first = [\"a\", \"b\", \"c\", \"d\", \"e\", \"f\", \"g\", "
+        "\"h\", \"i\", \"j\", \"k\", \"l\", \"m\", \"n\", \"o\", \"p\", "
+        "\"q\", \"r\", \"s\", \"t\"]\n"
+        "let second = [\"a\", \"b\", \"c\", \"d\", \"e\", \"f\", \"g\", "
+        "\"h\", \"i\", \"j\", \"k\", \"l\", \"m\", \"n\", \"o\", \"p\", "
+        "\"q\", \"r\", \"s\", \"t\", \"u\", \"v\", \"w\", \"x\", \"y\"]\n"
+        "for a in first {\n"
+        "  for b in second {\n"
+        "    bind(\"L\", \"z \" + a + \" \" + b, \"ed.nop\")\n"
+        "  }\n"
+        "}\n";
+    int fd = mkstemp(path);
+    FILE *fp;
+
+    if (fd < 0) {
+        (void)fprintf(stderr, "perf_fletch: cannot create reload fixture\n");
+        exit(1);
+    }
+    fp = fdopen(fd, "wb");
+    if (fp == NULL) {
+        (void)close(fd);
+        (void)unlink(path);
+        (void)fprintf(stderr, "perf_fletch: cannot open reload fixture\n");
+        exit(1);
+    }
+    if (fwrite(source, 1U, sizeof(source) - 1U, fp) != sizeof(source) - 1U) {
+        (void)fclose(fp);
+        (void)unlink(path);
+        (void)fprintf(stderr, "perf_fletch: cannot write reload fixture\n");
+        exit(1);
+    }
+    if (fclose(fp) != 0) {
+        (void)unlink(path);
+        (void)fprintf(stderr, "perf_fletch: cannot close reload fixture\n");
+        exit(1);
+    }
+}
+
 /* ---------------------------------------------------------------- */
 /* Live editor API                                                  */
 /* ---------------------------------------------------------------- */
@@ -450,6 +535,37 @@ static void editor_fail(EditorEnv *e, const char *msg, u32 iteration)
         (void)fwrite(rendered.data, 1U, rendered.len, stderr);
     bytebuf_free(&rendered);
     exit(1);
+}
+
+static u64 sample_config_program(void *ud)
+{
+    ProgArg *arg = ud;
+    EditorEnv e;
+    FlProgram program;
+    FlOrigin origin;
+    FlFn *fn;
+    FlValue out = FL_NIL_V;
+    u64 t0;
+    u64 dt;
+
+    editor_env_open(&e);
+    origin = (FlOrigin){(u8)FL_ORIGIN_BUILTIN,
+                        sag_intern(&e.fl.in, arg->name, strlen(arg->name)),
+                        (u32)FL_CAP_FS_READ | (u32)FL_CAP_FS_WRITE |
+                            (u32)FL_CAP_SHELL | (u32)FL_CAP_NET};
+    sag_bind_batch_begin(&e.ed);
+    t0 = now_ns();
+    (void)fl_diag_add_file(&e.fl.dc, arg->name, arg->src, strlen(arg->src));
+    program = fl_parse(&e.fl.arena, &e.fl.dc, &e.fl.in, arg->src,
+                       strlen(arg->src), 0U);
+    fn = program.had_error ? NULL :
+         fl_compile(&e.fl.vm, &e.fl.dc, &program, 0U, origin);
+    if (fn == NULL || !fl_vm_run(&e.fl.vm, fn, &out))
+        editor_fail(&e, "runtime/init.fl failed", 0U);
+    sag_bind_batch_end(&e.ed);
+    dt = now_ns() - t0;
+    editor_env_close(&e);
+    return dt;
 }
 
 static u64 sample_query_cur_pos(void *ud)
@@ -748,8 +864,8 @@ int main(int argc, char **argv)
             /*
              * The ABSOLUTE budgets only, with no baseline comparison.
              *
-             * Every lane can run this: the three hard gates have 3x to
-             * 40x headroom on the dev machine, so a slower CI runner
+             * Every lane can run this: the hard gates have enough
+             * headroom on the dev machine that a slower CI runner
              * still clears them, whereas comparing a runner's timings
              * against dev-machine baselines fails on hardware rather
              * than on a regression.  The full two-condition gate runs
@@ -783,7 +899,9 @@ int main(int argc, char **argv)
 
     {
         ProgArg a;
+        ConfigArg config;
         Bench *b;
+        char reload_path[] = "/tmp/sagitta-perf-config.XXXXXX";
 
         b = add("startup", true, (u64)GATE_STARTUP_NS,
                 "fl_vm_init + fl_std_register");
@@ -792,12 +910,12 @@ int main(int argc, char **argv)
         {
             char *src;
             size_t len = 0U;
-            FILE *f = fopen("tests/perf/fixtures/init_bench.fl", "rb");
+            FILE *f = fopen("runtime/init.fl", "rb");
             Bytebuf bb;
 
             if (f == NULL) {
                 (void)fprintf(stderr, "perf_fletch: cannot read "
-                                      "tests/perf/fixtures/init_bench.fl\n");
+                                      "runtime/init.fl\n");
                 return 2;
             }
             bytebuf_init(&bb);
@@ -819,17 +937,30 @@ int main(int argc, char **argv)
             src[len] = '\0';
             bytebuf_free(&bb);
 
-            a.name = "init_bench.fl";
+            if (setenv("SAG_RUNTIME_DIR", "runtime", 1) != 0) {
+                free(src);
+                (void)fprintf(stderr,
+                              "perf_fletch: cannot select runtime directory\n");
+                return 2;
+            }
+            a.name = "runtime/init.fl";
             a.src = src;
             a.gc_pause = 0U;
             b = add("config_load", true, (u64)GATE_CONFIG_NS,
-                    "parse + compile + run of the s36 stand-in fixture");
-            measure(b, sample_prog, &a);
+                    "parse + compile + run of shipped runtime/init.fl");
+            measure(b, sample_config_program, &a);
 
             b = add("parse_only", false, 0U, "parse + AST build, same file");
             measure(b, sample_parse, &a);
             free(src);
         }
+
+        make_reload_fixture(reload_path);
+        config.user_path = reload_path;
+        b = add("config_reload_500", true, (u64)GATE_CONFIG_RELOAD_NS,
+                "real reload with 500 user binds plus shipped defaults");
+        measure(b, sample_config_reload, &config);
+        (void)unlink(reload_path);
 
         a.name = "motion";
         a.src = SRC_MOTION;

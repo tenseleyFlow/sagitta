@@ -59,6 +59,18 @@ void test_bind_keymap_diagnostics_classify_all_six_failures(void)
     u32 i;
 
     sag_cmd_init();
+    SAG_ASSERT_EQ_U64(sag_keymap_validate_row(&bad_seq[0]),
+                      SAG_KEYMAP_ERR_SEQUENCE);
+    SAG_ASSERT_EQ_U64(sag_keymap_validate_row(&unknown[0]),
+                      SAG_KEYMAP_ERR_COMMAND);
+    SAG_ASSERT_EQ_U64(sag_keymap_validate_row(&duplicate[0]),
+                      SAG_KEYMAP_ERR_NONE);
+    SAG_ASSERT_EQ_U64(sag_keymap_validate_row(&arity[0]),
+                      SAG_KEYMAP_ERR_ARITY);
+    SAG_ASSERT_EQ_U64(sag_keymap_validate_row(&escape[0]),
+                      SAG_KEYMAP_ERR_ESCAPE_PREFIX);
+    SAG_ASSERT_EQ_U64(sag_keymap_validate_row(&long_seq[0]),
+                      SAG_KEYMAP_ERR_TOO_LONG);
     for (i = 0U; i < SAG_ARRAY_LEN(cases); i++) {
         Keymap map = {0};
         SagKeymapDiag diag = {99U, SAG_KEYMAP_ERR_NONE};

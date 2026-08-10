@@ -283,42 +283,57 @@ static bool binding_arity_ok(const CmdDesc *desc, const BindRow *row)
     return false;
 }
 
+static SagKeymapError validate_row(const BindRow *row, KeyId *seq, u32 *out_n)
+{
+    const CmdDesc *desc;
+    CmdId cmd;
+    u32 n;
+    u32 i;
+
+    if (row == NULL || row->seq == NULL || row->cmd == NULL)
+        return SAG_KEYMAP_ERR_SEQUENCE;
+    n = sag_key_parse_seq(row->seq, seq, SAG_CHORD_MAX + 1U);
+    if (n == 0U)
+        return SAG_KEYMAP_ERR_SEQUENCE;
+    if (n > SAG_CHORD_MAX)
+        return SAG_KEYMAP_ERR_TOO_LONG;
+    cmd = sag_cmd_lookup(row->cmd, (u32)strlen(row->cmd));
+    desc = sag_cmd_desc(cmd);
+    if (cmd.v == 0U || desc == NULL)
+        return SAG_KEYMAP_ERR_COMMAND;
+    if (!binding_arity_ok(desc, row))
+        return SAG_KEYMAP_ERR_ARITY;
+    for (i = 0U; i < n; i++)
+        if ((u32)(seq[i].v >> 16U) == SAG_KEY_ESCAPE && i + 1U < n)
+            return SAG_KEYMAP_ERR_ESCAPE_PREFIX;
+    *out_n = n;
+    return SAG_KEYMAP_ERR_NONE;
+}
+
+SagKeymapError sag_keymap_validate_row(const BindRow *row)
+{
+    KeyId seq[SAG_CHORD_MAX + 1U];
+    u32 n = 0U;
+
+    return validate_row(row, seq, &n);
+}
+
 static bool add_row(Keymap *out, ScratchNodeVec *scratch,
                     const BindRow *row, SagKeymapError *error)
 {
     KeyId seq[SAG_CHORD_MAX + 1U];
-    u32 n = sag_key_parse_seq(row->seq, seq, SAG_CHORD_MAX + 1U);
+    u32 n = 0U;
     CmdId cmd;
-    const CmdDesc *desc;
     u32 node = 0U;
     u32 i;
     Binding binding;
 
-    if (n == 0U) {
-        *error = SAG_KEYMAP_ERR_SEQUENCE;
+    *error = validate_row(row, seq, &n);
+    if (*error != SAG_KEYMAP_ERR_NONE)
         return false;
-    }
-    if (n > SAG_CHORD_MAX) {
-        *error = SAG_KEYMAP_ERR_TOO_LONG;
-        return false;
-    }
     cmd = sag_cmd_lookup(row->cmd, (u32)strlen(row->cmd));
-    desc = sag_cmd_desc(cmd);
-    if (cmd.v == 0U || !desc) {
-        *error = SAG_KEYMAP_ERR_COMMAND;
-        return false;
-    }
-    if (!binding_arity_ok(desc, row)) {
-        *error = SAG_KEYMAP_ERR_ARITY;
-        return false;
-    }
-    for (i = 0U; i < n; i++) {
-        if ((u32)(seq[i].v >> 16) == SAG_KEY_ESCAPE && i + 1U < n) {
-            *error = SAG_KEYMAP_ERR_ESCAPE_PREFIX;
-            return false;
-        }
+    for (i = 0U; i < n; i++)
         node = scratch_child(scratch, node, seq[i].v);
-    }
     if (scratch->data[node].bind != 0U) {
         *error = SAG_KEYMAP_ERR_DUPLICATE;
         return false;
