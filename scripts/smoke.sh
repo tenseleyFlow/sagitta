@@ -240,7 +240,7 @@ expect_rc 0 "fl --list-natives"
 # anyone noticing is the thing this line exists to prevent, and it is
 # checked in three places (here, test_fl_module.c, and s33's ledger) so
 # that adding one to the tables without covering it cannot pass.
-[ "$(wc -l < "$out" | tr -d ' ')" -eq 121 ] || fail "fl --list-natives count"
+[ "$(wc -l < "$out" | tr -d ' ')" -eq 176 ] || fail "fl --list-natives count"
 echo "smoke: fl --list-natives ok"
 
 run_capture "$bin" fl --help
