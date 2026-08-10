@@ -8,6 +8,10 @@
  * root: editor state, configuration, logs, and crashes cannot leak into the
  * next test.  fd 3 is deliberately separate from stdout/stderr because those
  * streams are part of the --batch product contract being tested.
+ * A test whose first line is exactly "# CONFIG" runs without --clean; every
+ * other test gets --clean.  Keeping the opt-in in byte zero makes discovery
+ * deterministic and prevents an incidental comment later in a test from
+ * changing its environment.
  */
 
 #include <dirent.h>
@@ -42,6 +46,7 @@ typedef struct Bytes {
 typedef struct TestFile {
     char *name;
     char *path;
+    bool config;
 } TestFile;
 
 typedef struct TestList {
@@ -135,6 +140,31 @@ static bool has_fl_suffix(const char *name)
     return len > 3U && strcmp(name + len - 3U, ".fl") == 0;
 }
 
+static bool config_header_bytes(const char *data, size_t len)
+{
+    static const char directive[] = "# CONFIG";
+    size_t n = sizeof(directive) - 1U;
+
+    return len >= n && memcmp(data, directive, n) == 0 &&
+           (len == n || data[n] == '\n' ||
+            (data[n] == '\r' && len > n + 1U && data[n + 1U] == '\n'));
+}
+
+static bool header_requests_config(const char *path)
+{
+    char first[10];
+    int fd = open(path, O_RDONLY);
+    ssize_t got;
+
+    if (fd < 0)
+        return false;
+    do {
+        got = read(fd, first, sizeof(first));
+    } while (got < 0 && errno == EINTR);
+    (void)close(fd);
+    return got >= 0 && config_header_bytes(first, (size_t)got);
+}
+
 static char *test_name(const char *file)
 {
     size_t len = strlen(file);
@@ -147,7 +177,7 @@ static char *test_name(const char *file)
     return name;
 }
 
-static bool list_push(TestList *list, char *name, char *path)
+static bool list_push(TestList *list, char *name, char *path, bool config)
 {
     TestFile *grown;
     size_t cap;
@@ -164,6 +194,7 @@ static bool list_push(TestList *list, char *name, char *path)
     }
     list->data[list->len].name = name;
     list->data[list->len].path = path;
+    list->data[list->len].config = config;
     list->len++;
     return true;
 }
@@ -230,7 +261,8 @@ static bool discover(const char *dir_path, TestList *list)
             continue;
         }
         name = test_name(entry->d_name);
-        if (name == NULL || !list_push(list, name, path)) {
+        if (name == NULL ||
+            !list_push(list, name, path, header_requests_config(path))) {
             free(name);
             free(path);
             ok = false;
@@ -459,6 +491,7 @@ static bool child_environment(const char *root, const char *work)
              setenv("XDG_CACHE_HOME", cache, 1) == 0 &&
              setenv("TMPDIR", root, 1) == 0 &&
              setenv("SAG_SCRIPT_TMPDIR", root, 1) == 0 &&
+             setenv("SAG_SCRIPT_RESULT_FD", "3", 1) == 0 &&
              chdir(work) == 0;
     free(cfg);
     free(state);
@@ -467,20 +500,31 @@ static bool child_environment(const char *root, const char *work)
     return ok;
 }
 
+static size_t build_child_argv(char **argv, const char *sagitta,
+                               const char *script, bool config)
+{
+    size_t argc = 0U;
+
+    argv[argc++] = (char *)sagitta;
+    argv[argc++] = (char *)"--batch";
+    argv[argc++] = (char *)"--test";
+    if (!config)
+        argv[argc++] = (char *)"--clean";
+    argv[argc++] = (char *)script;
+    argv[argc] = NULL;
+    return argc;
+}
+
 static void child_exec(const char *sagitta, const char *script,
                        const char *root, const char *work,
-                       int out_pipe[2], int err_pipe[2], int result_pipe[2])
+                       bool config, int out_pipe[2], int err_pipe[2],
+                       int result_pipe[2])
 {
     int fds[6];
     size_t i;
-    char *const child_argv[] = {
-        (char *)sagitta,
-        (char *)"--batch",
-        (char *)"--test",
-        (char *)"--clean",
-        (char *)script,
-        NULL
-    };
+    char *child_argv[6];
+
+    (void)build_child_argv(child_argv, sagitta, script, config);
 
     if (setpgid(0, 0) != 0)
         _exit(126);
@@ -677,7 +721,7 @@ static bool run_test(const char *sagitta, const char *fixtures,
     }
     if (child == 0)
         child_exec(sagitta, test->path, *sandbox, work,
-                   out_pipe, err_pipe, result_pipe);
+                   test->config, out_pipe, err_pipe, result_pipe);
     if (setpgid(child, child) != 0 && errno != EACCES && errno != ESRCH) {
         (void)kill(child, SIGKILL);
         while (waitpid(child, &result->status, 0) < 0 && errno == EINTR) {
@@ -785,6 +829,44 @@ static Protocol parse_protocol(const Bytes *bytes)
     return parsed;
 }
 
+static size_t selected_count(const TestList *tests, const char *filter)
+{
+    size_t selected = 0U;
+    size_t i;
+
+    for (i = 0U; i < tests->len; i++)
+        if (filter == NULL || strstr(tests->data[i].name, filter) != NULL)
+            selected++;
+    return selected;
+}
+
+static int selection_status(size_t selected)
+{
+    return selected == 0U ? 1 : 0;
+}
+
+static bool format_count_line(char *line, size_t cap, const char *verdict,
+                              const char *name, size_t assertions,
+                              size_t failures)
+{
+    int n;
+
+    if (failures == 0U)
+        n = snprintf(line, cap, "%s %-36s (%zu assertions)\n",
+                     verdict, name, assertions);
+    else
+        n = snprintf(line, cap,
+                     "%s %-36s (%zu assertions, %zu failure%s)\n",
+                     verdict, name, assertions, failures,
+                     failures == 1U ? "" : "s");
+    return n >= 0 && (size_t)n < cap;
+}
+
+static bool finish_sandbox(const char *sandbox, bool passed)
+{
+    return !passed || remove_tree(sandbox);
+}
+
 static void print_capture(const char *label, const Bytes *bytes)
 {
     size_t at = 0U;
@@ -863,16 +945,19 @@ static char *absolute_existing(const char *path)
 }
 
 static bool parse_cli(int argc, char **argv, const char **filter,
-                      const char **sagitta, bool *list)
+                      const char **sagitta, bool *list, bool *selftest)
 {
     int i;
 
     *filter = NULL;
     *sagitta = "build/sagitta";
     *list = false;
+    *selftest = false;
     for (i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--list") == 0) {
             *list = true;
+        } else if (strcmp(argv[i], "--selftest") == 0) {
+            *selftest = true;
         } else if (strcmp(argv[i], "--filter") == 0) {
             if (++i >= argc) {
                 (void)fprintf(stderr,
@@ -894,11 +979,227 @@ static bool parse_cli(int argc, char **argv, const char **filter,
     return true;
 }
 
+static bool protocol_from_text(const char *text, Protocol *protocol,
+                               RunResult *result)
+{
+    memset(result, 0, sizeof(*result));
+    result->waited = true;
+    result->status = 0;
+    if (!bytes_append(&result->protocol, text, strlen(text)))
+        return false;
+    *protocol = parse_protocol(&result->protocol);
+    return true;
+}
+
+static bool selftest_zero_assertions(void)
+{
+    RunResult result;
+    Protocol protocol;
+    char reason_buf[64];
+    const char *reason;
+    bool ok;
+
+    if (!protocol_from_text("SAGTEST\t0\t0\t0\n", &protocol, &result))
+        return false;
+    reason = failure_reason(&result, &protocol,
+                            reason_buf, sizeof(reason_buf));
+    ok = protocol.valid && reason != NULL &&
+         strcmp(reason, "no assertions") == 0;
+    bytes_free(&result.protocol);
+    return ok;
+}
+
+static bool selftest_skip_report(void)
+{
+    static const char name[] = "012345678901234567890123456789012345";
+    static const char expected[] =
+        "SKIP 012345678901234567890123456789012345 (4 assertions)\n";
+    RunResult result;
+    Protocol protocol;
+    char reason_buf[64];
+    char line[128];
+    const char *reason;
+    bool ok;
+
+    if (!protocol_from_text("SAGTEST\t4\t0\t1\n", &protocol, &result))
+        return false;
+    reason = failure_reason(&result, &protocol,
+                            reason_buf, sizeof(reason_buf));
+    ok = protocol.valid && protocol.skipped == 1U && reason == NULL &&
+         format_count_line(line, sizeof(line), "SKIP", name,
+                           protocol.assertions, 0U) &&
+         strcmp(line, expected) == 0;
+    bytes_free(&result.protocol);
+    return ok;
+}
+
+static bool selftest_failure_report(void)
+{
+    static const char text[] =
+        "FAIL\tt.text\twant | a\\ngot | b\nSAGTEST\t9\t1\t0\n";
+    static const char name[] = "012345678901234567890123456789012345";
+    static const char expected[] =
+        "FAIL 012345678901234567890123456789012345 "
+        "(9 assertions, 1 failure)\n";
+    RunResult result;
+    Protocol protocol;
+    char reason_buf[64];
+    char line[160];
+    const char *reason;
+    bool ok;
+
+    if (!protocol_from_text(text, &protocol, &result))
+        return false;
+    reason = failure_reason(&result, &protocol,
+                            reason_buf, sizeof(reason_buf));
+    ok = protocol.valid && protocol.failures == 1U && reason != NULL &&
+         strcmp(reason, "assertion failure") == 0 &&
+         format_count_line(line, sizeof(line), "FAIL", name,
+                           protocol.assertions, protocol.failures) &&
+         strcmp(line, expected) == 0;
+    bytes_free(&result.protocol);
+    return ok;
+}
+
+static bool selftest_sandbox_lifecycle(const char *fixtures)
+{
+    char *root = NULL;
+    char *work = NULL;
+    struct stat st;
+    bool ok;
+
+    if (!make_sandbox(fixtures, &root, &work))
+        return false;
+    ok = finish_sandbox(root, false) && lstat(root, &st) == 0 &&
+         S_ISDIR(st.st_mode) && finish_sandbox(root, true);
+    errno = 0;
+    ok = ok && lstat(root, &st) != 0 && errno == ENOENT;
+    if (!ok)
+        (void)remove_tree(root);
+    free(work);
+    free(root);
+    return ok;
+}
+
+static bool selftest_result_fd_env(const char *fixtures)
+{
+    char *root = NULL;
+    char *work = NULL;
+    pid_t child;
+    pid_t waited;
+    int status = 0;
+    bool ok;
+
+    if (!make_sandbox(fixtures, &root, &work))
+        return false;
+    child = fork();
+    if (child == 0) {
+        const char *fd;
+        char *cwd;
+
+        if (!child_environment(root, work))
+            _exit(1);
+        fd = getenv("SAG_SCRIPT_RESULT_FD");
+        cwd = getcwd(NULL, 0U);
+        if (fd == NULL || strcmp(fd, "3") != 0 || cwd == NULL ||
+            strcmp(cwd, work) != 0) {
+            free(cwd);
+            _exit(1);
+        }
+        free(cwd);
+        _exit(0);
+    }
+    if (child < 0) {
+        (void)remove_tree(root);
+        free(work);
+        free(root);
+        return false;
+    }
+    do {
+        waited = waitpid(child, &status, 0);
+    } while (waited < 0 && errno == EINTR);
+    ok = waited == child && WIFEXITED(status) && WEXITSTATUS(status) == 0 &&
+         finish_sandbox(root, true);
+    free(work);
+    free(root);
+    return ok;
+}
+
+static bool selftest_zero_filter(void)
+{
+    TestFile data[] = {
+        {(char *)"alpha", (char *)"alpha.fl", false},
+        {(char *)"beta", (char *)"beta.fl", false}
+    };
+    TestList tests = {data, sizeof(data) / sizeof(data[0]),
+                      sizeof(data) / sizeof(data[0])};
+
+    return selected_count(&tests, "no-match") == 0U &&
+           selection_status(selected_count(&tests, "no-match")) == 1 &&
+           selected_count(&tests, "a") == 2U &&
+           selection_status(selected_count(&tests, "a")) == 0;
+}
+
+static bool selftest_config_directive(void)
+{
+    static const char yes_lf[] = "# CONFIG\nprint(1)\n";
+    static const char yes_crlf[] = "# CONFIG\r\nprint(1)\r\n";
+    static const char no_later[] = "# comment\n# CONFIG\n";
+    static const char no_suffix[] = "# CONFIGURE\n";
+    char *clean_argv[6];
+    char *config_argv[6];
+    size_t clean_argc = build_child_argv(clean_argv, "sag", "test.fl",
+                                         false);
+    size_t config_argc = build_child_argv(config_argv, "sag", "test.fl",
+                                          true);
+
+    return config_header_bytes(yes_lf, sizeof(yes_lf) - 1U) &&
+           config_header_bytes(yes_crlf, sizeof(yes_crlf) - 1U) &&
+           !config_header_bytes(no_later, sizeof(no_later) - 1U) &&
+           !config_header_bytes(no_suffix, sizeof(no_suffix) - 1U) &&
+           clean_argc == 5U && strcmp(clean_argv[3], "--clean") == 0 &&
+           strcmp(clean_argv[4], "test.fl") == 0 &&
+           config_argc == 4U && strcmp(config_argv[3], "test.fl") == 0 &&
+           config_argv[4] == NULL;
+}
+
+static size_t report_selftest(const char *name, bool ok)
+{
+    (void)printf("%s %s\n", ok ? "PASS" : "FAIL", name);
+    return ok ? 0U : 1U;
+}
+
+static int run_selftests(const char *fixtures)
+{
+    size_t failures = 0U;
+
+    failures += report_selftest("zero_assertions_fail",
+                                selftest_zero_assertions());
+    failures += report_selftest("skip_reports_skipped",
+                                selftest_skip_report());
+    failures += report_selftest("failure_report_is_pinned",
+                                selftest_failure_report());
+    failures += report_selftest("sandbox_preserve_and_remove",
+                                selftest_sandbox_lifecycle(fixtures));
+    failures += report_selftest("result_protocol_uses_fd3",
+                                selftest_result_fd_env(fixtures));
+    failures += report_selftest("zero_filter_selects_none",
+                                selftest_zero_filter());
+    failures += report_selftest("config_header_controls_clean",
+                                selftest_config_directive());
+    (void)printf("script-runner-selftest: %zu tests, %zu failure%s\n",
+                 (size_t)7U, failures,
+                 failures == 1U ? "" : "s");
+    (void)fflush(stdout);
+    return failures == 0U ? 0 : 1;
+}
+
 int main(int argc, char **argv)
 {
     const char *filter;
     const char *sagitta_arg;
     bool list_only;
+    bool selftest;
     char *root;
     char *script_dir;
     char *fixtures;
@@ -910,13 +1211,29 @@ int main(int argc, char **argv)
     size_t suite_skipped = 0U;
     size_t i;
 
-    if (!parse_cli(argc, argv, &filter, &sagitta_arg, &list_only))
+    if (!parse_cli(argc, argv, &filter, &sagitta_arg, &list_only,
+                   &selftest))
         return 1;
     root = getcwd(NULL, 0U);
     script_dir = root == NULL ? NULL : path_join(root, "tests/script");
     fixtures = script_dir == NULL ? NULL : path_join(script_dir, "fixtures");
-    if (root == NULL || script_dir == NULL || fixtures == NULL ||
-        !discover(script_dir, &tests)) {
+    if (root == NULL || script_dir == NULL || fixtures == NULL) {
+        (void)fprintf(stderr, "script: cannot locate tests/script: %s\n",
+                      strerror(errno));
+        free(root);
+        free(script_dir);
+        free(fixtures);
+        return 1;
+    }
+    if (selftest) {
+        int rc = run_selftests(fixtures);
+
+        free(root);
+        free(script_dir);
+        free(fixtures);
+        return rc;
+    }
+    if (!discover(script_dir, &tests)) {
         (void)fprintf(stderr, "script: cannot discover tests/script: %s\n",
                       strerror(errno));
         free(root);
@@ -925,16 +1242,14 @@ int main(int argc, char **argv)
         list_free(&tests);
         return 1;
     }
-    for (i = 0U; i < tests.len; i++)
-        if (filter == NULL || strstr(tests.data[i].name, filter) != NULL)
-            selected++;
-    if (selected == 0U) {
+    selected = selected_count(&tests, filter);
+    if (selection_status(selected) != 0) {
         (void)fprintf(stderr, "script: filter matched zero tests\n");
         free(root);
         free(script_dir);
         free(fixtures);
         list_free(&tests);
-        return 1;
+        return selection_status(selected);
     }
     if (list_only) {
         for (i = 0U; i < tests.len; i++)
@@ -971,6 +1286,7 @@ int main(int argc, char **argv)
         Protocol protocol;
         char *sandbox = NULL;
         char reason_buf[64];
+        char count_line[512];
         const char *reason;
 
         if (filter != NULL && strstr(tests.data[i].name, filter) == NULL)
@@ -982,19 +1298,23 @@ int main(int argc, char **argv)
         reason = failure_reason(&result, &protocol,
                                 reason_buf, sizeof(reason_buf));
         if (reason == NULL && protocol.skipped != 0U) {
-            (void)printf("SKIP %-36s (%zu assertions)\n",
-                         tests.data[i].name, protocol.assertions);
+            if (format_count_line(count_line, sizeof(count_line), "SKIP",
+                                  tests.data[i].name,
+                                  protocol.assertions, 0U))
+                (void)fputs(count_line, stdout);
             suite_skipped++;
-            if (sandbox != NULL && !remove_tree(sandbox)) {
+            if (sandbox != NULL && !finish_sandbox(sandbox, true)) {
                 (void)printf("FAIL %-36s (cannot remove sandbox)\n",
                              tests.data[i].name);
                 (void)printf("  sandbox preserved: %s\n", sandbox);
                 suite_failures++;
             }
         } else if (reason == NULL) {
-            (void)printf("PASS %-36s (%zu assertions)\n",
-                         tests.data[i].name, protocol.assertions);
-            if (sandbox != NULL && !remove_tree(sandbox)) {
+            if (format_count_line(count_line, sizeof(count_line), "PASS",
+                                  tests.data[i].name,
+                                  protocol.assertions, 0U))
+                (void)fputs(count_line, stdout);
+            if (sandbox != NULL && !finish_sandbox(sandbox, true)) {
                 (void)printf("FAIL %-36s (cannot remove sandbox)\n",
                              tests.data[i].name);
                 (void)printf("  sandbox preserved: %s\n", sandbox);
@@ -1002,10 +1322,11 @@ int main(int argc, char **argv)
             }
         } else {
             if (protocol.valid && protocol.failures != 0U) {
-                (void)printf("FAIL %-36s (%zu assertions, %zu failure%s)\n",
-                             tests.data[i].name, protocol.assertions,
-                             protocol.failures,
-                             protocol.failures == 1U ? "" : "s");
+                if (format_count_line(count_line, sizeof(count_line), "FAIL",
+                                      tests.data[i].name,
+                                      protocol.assertions,
+                                      protocol.failures))
+                    (void)fputs(count_line, stdout);
                 print_protocol_failures(&result.protocol);
             } else {
                 (void)printf("FAIL %-36s (%s)\n",
