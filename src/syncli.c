@@ -123,6 +123,7 @@ static const SynLangDesc *lang_at(u32 ordinal)
 static int list_defs(bool bypass)
 {
     Bytebuf out;
+    const char *no_cache = getenv("YEW_NO_SYN_CACHE");
     u32 count = yew_syn_lang_count();
     u32 i;
 
@@ -139,7 +140,8 @@ static int list_defs(bool bypass)
             return YEW_EXIT_BUG;
         }
         cache = yew_syn_cache_path(desc->name);
-        state = bypass || getenv("YEW_NO_SYN_CACHE") != NULL ? "bypassed" :
+        state = bypass || (no_cache != NULL && strcmp(no_cache, "1") == 0) ?
+                "bypassed" :
                 cache != NULL && access(cache, F_OK) == 0 ? "warm" : "cold";
         bytebuf_printf(&out, "%s\t", desc->name);
         for (j = 0U; j < desc->nextensions; j++) {

@@ -55,7 +55,7 @@ static const char help_text[] =
     "Environment:\n"
     "  YEW_LOG          Override the log file path.\n"
     "  YEW_LOG_LEVEL    Set debug, info, warn, or error logging.\n"
-    "  YEW_NO_SYN_CACHE Set any value to bypass the syntax table cache.\n"
+    "  YEW_NO_SYN_CACHE Set to 1 to bypass the syntax table cache.\n"
     "  YEW_TTY_PROBE    Set 0 to disable terminal capability probes.\n"
     "  YEW_PROBE_TIMEOUT_MS  Override the 50 ms probe deadline.\n"
     "  YEW_TRUECOLOR    Set 0 or 1 to override truecolor detection.\n"
