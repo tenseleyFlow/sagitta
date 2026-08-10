@@ -1502,6 +1502,14 @@ const SagTest sag_tests[] = {
     T(mouse_wheel_over_a_pick_row_scrolls_the_list),
     T(mouse_gp_rows_reach_the_group_picker),
     T(mouse_ctx_row_highlights_then_invokes),
+    T(trust_content_hash_invalidation_ignores_mtime),
+    T(trust_realpath_move_and_symlink_do_not_carry_grant),
+    T(trust_same_path_new_inode_reprompts),
+    T(trust_deleted_config_retains_entry),
+    T(trust_write_prunes_only_old_missing_dirs),
+    T(trust_bare_string_upgrades_and_output_sorts),
+    T(trust_truncated_load_does_not_clobber_live_db),
+    T(trust_no_tty_never_requests_prompt),
 };
 
 const size_t sag_tests_len = SAG_ARRAY_LEN(sag_tests);
