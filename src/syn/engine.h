@@ -169,6 +169,8 @@ void yew_syn_line(SynEngine *engine, u32 entry_state, const u8 *line,
                   u32 len, SynLineOut *out);
 bool yew_syn_stack_at(SynEngine *engine, u32 entry_state, const u8 *line,
                       u32 len, u32 p, SynState *out);
+bool yew_syn_stack_trace(SynEngine *engine, u32 entry_state, const u8 *line,
+                         u32 len, SynState *trace, size_t trace_cap);
 
 typedef i64 (*SynClockFn)(void *ctx);
 

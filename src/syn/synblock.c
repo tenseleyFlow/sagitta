@@ -103,6 +103,7 @@ static bool line_first_frame(const Buffer *buf, u64 line, u8 depth,
                              u16 ctx, u32 from, bool want, u32 *at)
 {
     SynBlockLine text = {0};
+    SynState *trace;
     u32 entry;
     u32 p;
 
@@ -111,22 +112,25 @@ static bool line_first_frame(const Buffer *buf, u64 line, u8 depth,
     entry = buf->syn.entry.data[line];
     if (entry == YEW_SYN_STATE_UNKNOWN || !line_read(buf->tb, line, &text))
         return false;
+    trace = malloc(((size_t)text.len + 1U) * sizeof(*trace));
+    if (trace == NULL ||
+        !yew_syn_stack_trace(buf->syn.engine, entry, text.bytes, text.len,
+                             trace, (size_t)text.len + 1U)) {
+        free(trace);
+        free(text.bytes);
+        return false;
+    }
     if (from > text.len)
         from = text.len;
     for (p = from; p <= text.len; p++) {
-        SynState state;
-
-        if (!yew_syn_stack_at(buf->syn.engine, entry, text.bytes, text.len,
-                              p, &state)) {
-            free(text.bytes);
-            return false;
-        }
-        if (frame_is(&state, depth, ctx) == want) {
+        if (frame_is(&trace[p], depth, ctx) == want) {
             *at = p;
+            free(trace);
             free(text.bytes);
             return true;
         }
     }
+    free(trace);
     free(text.bytes);
     return false;
 }
@@ -135,6 +139,7 @@ static bool line_last_frame_start(const Buffer *buf, u64 line, u8 depth,
                                   u16 ctx, u32 through, u32 *at)
 {
     SynBlockLine text = {0};
+    SynState *trace;
     u32 entry;
     bool previous = false;
     bool found = false;
@@ -144,24 +149,26 @@ static bool line_last_frame_start(const Buffer *buf, u64 line, u8 depth,
     entry = buf->syn.entry.data[line];
     if (entry == YEW_SYN_STATE_UNKNOWN || !line_read(buf->tb, line, &text))
         return false;
+    trace = malloc(((size_t)text.len + 1U) * sizeof(*trace));
+    if (trace == NULL ||
+        !yew_syn_stack_trace(buf->syn.engine, entry, text.bytes, text.len,
+                             trace, (size_t)text.len + 1U)) {
+        free(trace);
+        free(text.bytes);
+        return false;
+    }
     if (through > text.len)
         through = text.len;
     for (u32 p = 0U; p <= through; p++) {
-        SynState state;
         bool present;
-
-        if (!yew_syn_stack_at(buf->syn.engine, entry, text.bytes, text.len,
-                              p, &state)) {
-            free(text.bytes);
-            return false;
-        }
-        present = frame_is(&state, depth, ctx);
+        present = frame_is(&trace[p], depth, ctx);
         if (present && !previous) {
             *at = p;
             found = true;
         }
         previous = present;
     }
+    free(trace);
     free(text.bytes);
     return found;
 }
@@ -178,7 +185,7 @@ static bool entry_has(const Buffer *buf, u64 line, u8 depth, u16 ctx)
     return frame_is(state, depth, ctx);
 }
 
-static bool syntax_ready(const Buffer *buf)
+static bool syntax_ready_at(const Buffer *buf, u64 line)
 {
     u64 lines;
 
@@ -186,7 +193,9 @@ static bool syntax_ready(const Buffer *buf)
         buf->syn.engine == NULL || buf->syn.degraded)
         return false;
     lines = yew_textbuf_line_count(buf->tb);
-    return buf->syn.entry.len == lines && buf->syn.settled_to.v >= lines;
+    return buf->syn.entry.len == lines && line < lines &&
+           line < buf->syn.settled_to.v &&
+           buf->syn.entry.data[line] != YEW_SYN_STATE_UNKNOWN;
 }
 
 static bool frame_bounds(const Buffer *buf, u64 center, u32 local,
@@ -218,6 +227,10 @@ static bool frame_bounds(const Buffer *buf, u64 center, u32 local,
                   local_at;
         return true;
     }
+    if (hi_line + 1U < buf->syn.entry.len &&
+        (hi_line + 1U >= buf->syn.settled_to.v ||
+         buf->syn.entry.data[hi_line + 1U] == YEW_SYN_STATE_UNKNOWN))
+        return false;
     while (hi_line + 1U < buf->syn.entry.len &&
            entry_has(buf, hi_line + 1U, depth, ctx)) {
         if (++scanned > YEW_SYN_UNIT_SCAN_LINES)
@@ -229,6 +242,11 @@ static bool frame_bounds(const Buffer *buf, u64 center, u32 local,
                       local_at;
             return true;
         }
+        if (hi_line + 1U < buf->syn.entry.len &&
+            (hi_line + 1U >= buf->syn.settled_to.v ||
+             buf->syn.entry.data[hi_line + 1U] ==
+                 YEW_SYN_STATE_UNKNOWN))
+            return false;
     }
     {
         SynBlockLine text = {0};
@@ -259,13 +277,15 @@ static bool syn_enclosing(void *ctx, UnitCtx *u, ByteOff p, Span inner,
     int depth;
 
     (void)ctx;
-    if (u == NULL || out == NULL || !syntax_ready(u->buf))
+    if (u == NULL || out == NULL || u->buf == NULL || u->buf->tb == NULL)
         return false;
     buf = u->buf;
+    line = yew_textbuf_line_of(buf->tb, p).v;
+    if (!syntax_ready_at(buf, line))
+        return false;
     def = yew_syn_engine_def(buf->syn.engine);
     if (def == NULL || def->ctxs == NULL)
         return false;
-    line = yew_textbuf_line_of(buf->tb, p).v;
     line_span = yew_textbuf_line_span(buf->tb, LINENO(line));
     local = p.v <= line_span.lo ? 0U :
             p.v - line_span.lo > UINT32_MAX ? UINT32_MAX :

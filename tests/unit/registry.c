@@ -1602,6 +1602,7 @@ const YewTest yew_tests[] = {
     T(syn_discovery_is_sorted_and_integrates_every_registry_surface),
     T(syn_discovery_invalid_file_warns_once_and_reset_drops_user_state),
     T(syn_discovery_duplicate_name_keeps_first_sorted_definition),
+    T(syn_discovery_rejects_builtin_language_name_collision),
     T(syn_defs_ini_compiles_to_expected_context_table),
     T(syn_defs_alias_include_and_rule_features_pack),
     T(syn_defs_unknown_schema_diagnostic_is_exact_and_spanned),

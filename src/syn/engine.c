@@ -609,7 +609,7 @@ static void apply_empty_bol(SynEngine *engine, SynState *state,
 
 static void syn_line_run(SynEngine *engine, u32 entry_state,
                          const u8 *line, u32 len, SynLineOut *out,
-                         bool apply_eol)
+                         bool apply_eol, SynState *trace)
 {
     SynState state;
     const SynState *entry;
@@ -629,6 +629,8 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
         entry = yew_syn_state_get(engine->states, entry_state);
     }
     state = *entry;
+    if (trace != NULL)
+        trace[0] = state;
     if (len > YEW_SYN_LINE_BYTE_CAP) {
         emit_span(out, 0U, len, YEW_ATTR_TEXT, YEW_SPAN_TRUNCATED);
         out->exit_state = entry_state;
@@ -637,16 +639,25 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
     }
     if (engine->def == NULL || engine->def->ctxs == NULL ||
         state.ctx[state.depth - 1U] >= engine->def->nctxs) {
+        if (trace != NULL) {
+            u32 t;
+            for (t = 1U; t <= len; t++)
+                trace[t] = state;
+        }
         emit_span(out, 0U, len, YEW_ATTR_TEXT, 0U);
         out->exit_state = entry_state;
         return;
     }
     step_cap = YEW_SYN_LINE_STEPS(len);
-    if (len == 0U)
+    if (len == 0U) {
         apply_empty_bol(engine, &state, line);
+        if (trace != NULL)
+            trace[0] = state;
+    }
     while (p < len) {
         const SynCtx *ctx = &engine->def->ctxs[state.ctx[state.depth - 1U]];
         const SynRule *matched = NULL;
+        SynState before;
         YewReMatch match;
         u32 ri;
 
@@ -657,6 +668,11 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
             while (q < len && !bitset_has(ctx->first, line[q]))
                 q++;
             emit_span(out, p, q - p, ctx->dflt_attr, 0U);
+            if (trace != NULL) {
+                u32 t;
+                for (t = p + 1U; t <= q; t++)
+                    trace[t] = state;
+            }
             p = q;
             continue;
         }
@@ -682,9 +698,15 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
         if (matched == NULL) {
             u32 q = next_boundary(line, len, p);
             emit_span(out, p, q - p, ctx->dflt_attr, 0U);
+            if (trace != NULL) {
+                u32 t;
+                for (t = p + 1U; t <= q; t++)
+                    trace[t] = state;
+            }
             p = q;
             continue;
         }
+        before = state;
         {
             u32 end = (u32)match.g[0].hi;
             if (matched->consume != 0U &&
@@ -713,16 +735,29 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
                 match.g[matched->consume].hi != UINT64_MAX)
                 end = (u32)match.g[matched->consume].hi;
             if (end > p) {
+                if (trace != NULL) {
+                    u32 t;
+                    for (t = p + 1U; t < end; t++)
+                        trace[t] = before;
+                    trace[end] = state;
+                }
                 p = end;
             } else if ((matched->flags & YEW_SYN_RULE_ZERO_POP) != 0U &&
                        matched->op == SYN_OP_POP && p == 0U &&
                        zero_pops++ < YEW_SYN_DEPTH_MAX) {
+                if (trace != NULL)
+                    trace[p] = state;
                 continue;
             } else {
                 const SynCtx *after =
                     &engine->def->ctxs[state.ctx[state.depth - 1U]];
                 u32 q = next_boundary(line, len, p);
                 emit_span(out, p, q - p, after->dflt_attr, 0U);
+                if (trace != NULL) {
+                    u32 t;
+                    for (t = p + 1U; t <= q; t++)
+                        trace[t] = state;
+                }
                 p = q;
             }
         }
@@ -737,28 +772,41 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
 void yew_syn_line(SynEngine *engine, u32 entry_state, const u8 *line,
                   u32 len, SynLineOut *out)
 {
-    syn_line_run(engine, entry_state, line, len, out, true);
+    syn_line_run(engine, entry_state, line, len, out, true, NULL);
+}
+
+bool yew_syn_stack_trace(SynEngine *engine, u32 entry_state, const u8 *line,
+                         u32 len, SynState *trace, size_t trace_cap)
+{
+    SynLineOut line_out = {NULL, 0U, 0U, YEW_SYN_STATE_UNKNOWN,
+                           YEW_SYN_STOP_OK};
+
+    if (engine == NULL || trace == NULL ||
+        (line == NULL && len != 0U) || trace_cap < (size_t)len + 1U)
+        return false;
+    syn_line_run(engine, entry_state, line, len, &line_out, false, trace);
+    return line_out.stop == YEW_SYN_STOP_OK;
 }
 
 bool yew_syn_stack_at(SynEngine *engine, u32 entry_state, const u8 *line,
                       u32 len, u32 p, SynState *out)
 {
-    SynLineOut line_out = {NULL, 0U, 0U, YEW_SYN_STATE_UNKNOWN,
-                           YEW_SYN_STOP_OK};
-    const SynState *state;
+    SynState *trace;
+    bool ok;
 
     if (engine == NULL || out == NULL || (line == NULL && len != 0U))
         return false;
     if (p > len)
         p = len;
-    syn_line_run(engine, entry_state, line, p, &line_out, false);
-    if (line_out.stop != YEW_SYN_STOP_OK)
+    trace = malloc(((size_t)len + 1U) * sizeof(*trace));
+    if (trace == NULL)
         return false;
-    state = yew_syn_state_get(engine->states, line_out.exit_state);
-    if (state == NULL)
-        return false;
-    *out = *state;
-    return true;
+    ok = yew_syn_stack_trace(engine, entry_state, line, len, trace,
+                             (size_t)len + 1U);
+    if (ok)
+        *out = trace[p];
+    free(trace);
+    return ok;
 }
 
 static i64 real_now_us(void *ctx)
