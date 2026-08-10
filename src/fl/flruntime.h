@@ -6,6 +6,7 @@
 #include <stdbool.h>
 
 #include "edit/cmd.h"
+#include "fl/diag.h"
 #include "fl/flhook.h"
 #include "util/base.h"
 
@@ -23,6 +24,10 @@ FlVm *sag_fl_vm(Ed *ed);
  * registered hooks survive subsequent entries; the source is arena-owned
  * so retained closures keep valid trace spans. */
 CmdStatus sag_fl_eval(Ed *ed, const char *source, u32 len);
+
+/* The most recently rendered compiler diagnostic, retained by the runtime
+ * until the next compile attempt.  The returned string belongs to `rt`. */
+const char *fl_runtime_last_diag(const FlRuntime *rt, FlSpan *span);
 
 /* Compile an arena-owned script for later execution.  `label` is copied and
  * is used only in diagnostics/traces. */

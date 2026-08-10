@@ -61,7 +61,7 @@ typedef enum FlDiagLevel {
 typedef void (*FlDiagSink)(void *ctx, FlDiagLevel level, FlSpan sp,
                            const char *msg, const char *rendered);
 
-enum { FL_DIAG_MAX_FILES = 64 };
+enum { FL_DIAG_INITIAL_FILES = 16 };
 
 typedef struct FlDiagFile {
     const char *path;
@@ -71,8 +71,11 @@ typedef struct FlDiagFile {
 
 typedef struct DiagCtx {
     Arena *arena;
-    FlDiagFile files[FL_DIAG_MAX_FILES];
+    /* Arena-grown.  File ids are indices and therefore remain stable when
+     * the backing array moves; old arrays die with the same arena. */
+    FlDiagFile *files;
     u32 nfiles;
+    u32 capfiles;
     u32 nerrors;
     u32 nwarnings;
     FlDiagSink sink;
@@ -93,7 +96,7 @@ typedef struct DiagCtx {
 void fl_diag_init(DiagCtx *dc, Arena *arena);
 
 /*
- * Registers a source and returns its id.  The text is BORROWED: the
+ * Registers a source and returns its stable id.  The text is BORROWED: the
  * caller keeps it alive for as long as diagnostics may be rendered
  * against it, because the caret block quotes the offending line out of
  * it rather than copying every line up front.

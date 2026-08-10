@@ -309,8 +309,6 @@ static bool compile_unit(Ed *ed, CfgUnit *unit, const Bytebuf *source)
     owned = arena_strndup(&rt->arena, (const char *)source->data, source->len);
     path = arena_strdup(&rt->arena, unit->path);
     if (unit->file_id == UINT32_MAX) {
-        if (rt->diag.nfiles >= FL_DIAG_MAX_FILES)
-            return false;
         unit->file_id = fl_diag_add_file(&rt->diag, path, owned,
                                          source->len);
     } else {

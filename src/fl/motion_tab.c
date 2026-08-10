@@ -1,12 +1,43 @@
 #include "fl/motion_tab.h"
 
+#include <string.h>
+
 #include "edit/cmd.h"
 #include "edit/ed.h"
 #include "fl/flruntime.h"
 #include "fl/fltxn.h"
+#include "fl/suggest.h"
 #include "util/intern.h"
 
 enum { FL_MOTION_NEST_MAX = 256 };
+
+bool fl_motion_word_validate(const char *word, u32 len, Bytebuf *detail)
+{
+    FlSuggest suggest;
+    Bytebuf suffix;
+    u32 i;
+
+    if (word == NULL || len == 0U || detail == NULL)
+        return false;
+    if (sag_cmd_by_word(word, len).v != 0U)
+        return true;
+    bytebuf_printf(detail, "no command has word '%.*s'", (int)len, word);
+    fl_suggest_reset(&suggest);
+    for (i = 0U; i < sag_cmd_count(); i++) {
+        const CmdDesc *desc = sag_cmd_at(i);
+
+        if (desc != NULL && desc->word != NULL)
+            fl_suggest_add(&suggest, desc->word, (u32)strlen(desc->word),
+                           FL_SCOPE_GLOBAL);
+    }
+    bytebuf_init(&suffix);
+    if (fl_suggest_render(&suggest, word, len, &suffix) != 0U) {
+        bytebuf_append(detail, "; ", 2U);
+        bytebuf_append(detail, suffix.data, suffix.len);
+    }
+    bytebuf_free(&suffix);
+    return false;
+}
 
 static bool motion_fail_status(FlVm *vm, CmdStatus status,
                                const char *word, u32 word_len)

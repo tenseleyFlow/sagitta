@@ -27,7 +27,10 @@ struct FlRuntime {
     Ed *ed;
     FlMacroCache macro_cache[26];
     CmdSource command_source;
+    Bytebuf last_diag_rendered;
+    FlSpan last_diag_span;
     char diag_message[256];
+    bool has_last_diag;
     bool diag_error;
     bool ready;
 };

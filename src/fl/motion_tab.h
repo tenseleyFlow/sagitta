@@ -5,6 +5,7 @@
 
 #include "fl/value.h"
 #include "fl/vm.h"
+#include "util/buf.h"
 
 typedef struct Ed Ed;
 typedef struct Win Win;
@@ -23,6 +24,11 @@ typedef enum FlMotionExecKind {
 /* Execute one preassembled motion program through the command registry. */
 bool fl_motion_exec(FlVm *vm, Ed *ed, Win *win,
                     const FlMotionProg *prog);
+
+/* Compile/store-time command-word validation.  On failure `detail` receives
+ * the complete deterministic diagnostic sentence, including a suggestion
+ * when one is close enough. */
+bool fl_motion_word_validate(const char *word, u32 len, Bytebuf *detail);
 
 /* FlHost.motion-compatible adapter; uses vm->ed and its focused window. */
 bool fl_motion_host_dispatch(FlVm *vm, const FlMotionProg *prog);

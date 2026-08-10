@@ -5,6 +5,7 @@
 
 #include "fl/gc.h"
 #include "fl/lex.h"
+#include "fl/motion_tab.h"
 #include "fl/opcodes.h"
 #include "util/log.h"
 #include "util/vec.h"
@@ -629,6 +630,44 @@ static u32 motion_count(const FlNode *n)
     return total;
 }
 
+static bool motion_validate_node(Compiler *c, const FlNode *n)
+{
+    u32 i;
+
+    /* Headless conformance scripts deliberately use arbitrary words to
+     * exercise the null motion host.  Registry validation belongs to an
+     * attached editor runtime, which is also every store/library path. */
+    if (c->vm->ed != NULL &&
+        (FlMotionKind)n->as.motion.mkind == FL_MK_WORD) {
+        const char *word = sag_intern_str(c->vm->in, n->as.motion.payload);
+        u32 len = (u32)sag_intern_len(c->vm->in, n->as.motion.payload);
+        Bytebuf detail;
+
+        bytebuf_init(&detail);
+        if (!fl_motion_word_validate(word, len, &detail)) {
+            bytebuf_push_u8(&detail, (u8)'\0');
+            cerror(c, n->sp, "%s", (const char *)detail.data);
+            bytebuf_free(&detail);
+            return false;
+        }
+        bytebuf_free(&detail);
+    }
+    for (i = 0U; i < n->as.motion.ninner; i++)
+        if (!motion_validate_node(c, n->as.motion.inner[i]))
+            return false;
+    return true;
+}
+
+static bool motion_validate(Compiler *c, const FlNode *n)
+{
+    u32 i;
+
+    for (i = 0U; i < n->as.list.n; i++)
+        if (!motion_validate_node(c, n->as.list.items[i]))
+            return false;
+    return true;
+}
+
 static void motion_flatten_node(const FlNode *n, FlMotionOp *out, u32 *at)
 {
     u32 start = *at;
@@ -665,9 +704,16 @@ static void comp_motion_block(Compiler *c, const FlNode *n)
      * recorded macro must not pay 20 dispatches and 20 constant loads
      * to get there.
      */
-    u32 total = motion_count(n);
-    FlMotionProg *p = fl_gc_alloc(c->vm, sizeof(*p), FL_MOTION_PROG);
+    u32 total;
+    FlMotionProg *p;
     u32 at = 0U;
+
+    if (!motion_validate(c, n)) {
+        emit_op(c, FL_OP_NIL, n->sp);
+        return;
+    }
+    p = fl_gc_alloc(c->vm, sizeof(*p), FL_MOTION_PROG);
+    total = motion_count(n);
 
     if (total != 0U) {
         p->op = arena_alloc(c->vm->arena, (size_t)total * sizeof(*p->op),

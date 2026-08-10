@@ -22,11 +22,21 @@ static void runtime_diag(void *ctx, FlDiagLevel level, FlSpan span,
                          const char *msg, const char *rendered)
 {
     FlRuntime *rt = (FlRuntime *)ctx;
-    (void)span;
     sag_log(level == FL_DIAG_ERROR ? SAG_LOG_ERROR :
             level == FL_DIAG_WARNING ? SAG_LOG_WARN : SAG_LOG_INFO,
             "Fletch: %s", rendered == NULL ?
                 (msg == NULL ? "diagnostic" : msg) : rendered);
+    if (rt != NULL) {
+        rt->last_diag_span = span;
+        rt->has_last_diag = true;
+        rt->last_diag_rendered.len = 0U;
+        if (rendered != NULL)
+            bytebuf_append(&rt->last_diag_rendered, rendered,
+                           strlen(rendered));
+        else if (msg != NULL)
+            bytebuf_append(&rt->last_diag_rendered, msg, strlen(msg));
+        bytebuf_push_u8(&rt->last_diag_rendered, (u8)'\0');
+    }
     if (rt != NULL && level == FL_DIAG_ERROR) {
         rt->diag_error = true;
         (void)snprintf(rt->diag_message, sizeof(rt->diag_message), "%s",
@@ -139,8 +149,10 @@ bool sag_fl_runtime_init(Ed *ed)
     arena_init(&rt->arena);
     interner_init(&rt->interner, &rt->arena);
     fl_diag_init(&rt->diag, &rt->arena);
+    bytebuf_init(&rt->last_diag_rendered);
     fl_diag_set_sink(&rt->diag, runtime_diag, rt);
     if (!fl_vm_init(&rt->vm, &rt->arena, &rt->interner, &rt->diag)) {
+        bytebuf_free(&rt->last_diag_rendered);
         interner_free(&rt->interner);
         arena_free_all(&rt->arena);
         free(rt);
@@ -177,6 +189,7 @@ void sag_fl_runtime_free(Ed *ed)
     fl_hook_table_free(&ed->hooks);
     fl_ed_detach(&rt->vm);
     fl_vm_free(&rt->vm);
+    bytebuf_free(&rt->last_diag_rendered);
     interner_free(&rt->interner);
     arena_free_all(&rt->arena);
     free(rt);
@@ -186,6 +199,16 @@ FlVm *sag_fl_vm(Ed *ed)
 {
     return ed == NULL || ed->fl == NULL || !ed->fl->ready
                ? NULL : &ed->fl->vm;
+}
+
+const char *fl_runtime_last_diag(const FlRuntime *rt, FlSpan *span)
+{
+    if (rt == NULL || !rt->has_last_diag)
+        return NULL;
+    if (span != NULL)
+        *span = rt->last_diag_span;
+    return rt->last_diag_rendered.data == NULL ? "" :
+           (const char *)rt->last_diag_rendered.data;
 }
 
 CmdSource fl_runtime_cmd_source(const FlVm *vm)

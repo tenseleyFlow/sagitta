@@ -18,10 +18,27 @@ void fl_diag_init(DiagCtx *dc, Arena *arena)
 u32 fl_diag_add_file(DiagCtx *dc, const char *path, const char *src,
                      size_t len)
 {
+    FlDiagFile *grown;
     u32 id;
 
-    if (dc == NULL || dc->nfiles >= FL_DIAG_MAX_FILES)
-        SAG_BUG("fletch diag: too many source files");
+    if (dc == NULL || dc->arena == NULL)
+        SAG_BUG("fletch diag: no context arena");
+    if (dc->nfiles == UINT32_MAX)
+        SAG_BUG("fletch diag: file id overflow");
+    if (dc->nfiles == dc->capfiles) {
+        u32 want = dc->capfiles == 0U ? (u32)FL_DIAG_INITIAL_FILES :
+                   dc->capfiles * 2U;
+
+        if (want < dc->capfiles)
+            SAG_BUG("fletch diag: file table size overflow");
+        grown = arena_alloc(dc->arena, (size_t)want * sizeof(*grown),
+                            _Alignof(FlDiagFile));
+        if (dc->nfiles != 0U)
+            (void)memcpy(grown, dc->files,
+                         (size_t)dc->nfiles * sizeof(*grown));
+        dc->files = grown;
+        dc->capfiles = want;
+    }
     id = dc->nfiles++;
     dc->files[id].path = path == NULL ? "<input>" : path;
     dc->files[id].src = src;

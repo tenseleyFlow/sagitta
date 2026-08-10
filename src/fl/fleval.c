@@ -47,17 +47,13 @@ static FlFn *compile_owned(FlRuntime *rt, const u8 *source, size_t len,
         return NULL;
     if (source == NULL)
         source = empty_source;
-    if (rt->diag.nfiles >= FL_DIAG_MAX_FILES) {
-        if (rt->ed != NULL)
-            sag_msg(rt->ed, SAG_MSG_ERROR,
-                    "Fletch evaluation source limit reached for this session");
-        return NULL;
-    }
     owned = arena_strndup(&rt->arena, (const char *)source, len);
     owned_label = arena_strdup(&rt->arena,
                                label == NULL ? "<macro>" : label);
     rt->diag_error = false;
     rt->diag_message[0] = '\0';
+    rt->has_last_diag = false;
+    rt->last_diag_rendered.len = 0U;
     file_id = fl_diag_add_file(&rt->diag, owned_label, owned, len);
     program = fl_parse(&rt->arena, &rt->diag, &rt->interner, owned, len,
                        file_id);
@@ -198,14 +194,11 @@ CmdStatus fl_runtime_eval(FlRuntime *rt, const char *source, u32 len)
     if (rt == NULL || source == NULL || rt->ed == NULL)
         return SAG_CMD_ERR_ARG;
     ed = rt->ed;
-    if (rt->diag.nfiles >= FL_DIAG_MAX_FILES) {
-        sag_msg(ed, SAG_MSG_ERROR,
-                "Fletch evaluation source limit reached for this session");
-        return SAG_CMD_ERR_STATE;
-    }
     owned = arena_strndup(&rt->arena, source, len);
     rt->diag_error = false;
     rt->diag_message[0] = '\0';
+    rt->has_last_diag = false;
+    rt->last_diag_rendered.len = 0U;
     file_id = fl_diag_add_file(&rt->diag, "<E>", owned, len);
     program = fl_parse(&rt->arena, &rt->diag, &rt->interner, owned, len,
                        file_id);
