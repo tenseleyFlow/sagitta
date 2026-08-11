@@ -1,0 +1,102 @@
+# PowerShell syntax.
+# Deliberate limits: command/argument roles and type-vs-attribute brackets need
+# parser state, so bracketed names share `type`; expandable here-strings model
+# variables and escapes but not the full subexpression grammar.  Single-line
+# quotes pop at EOL; only here-strings and block comments persist.
+{
+    syntax: 1,
+    language: {
+        name: "powershell",
+        extensions: ["ps1", "psm1", "psd1"],
+        shebangs: ["pwsh", "powershell"],
+        priority: 0,
+        comment: { line: "#", block: ["<#", "#>"] },
+    },
+    contexts: {
+        main: {
+            default: "text",
+            rules: [
+                { match: "^#!.*$", attr: "preproc", first_line: true },
+                { match: "<#", attr: "comment", push: "block_comment" },
+                { match: "#.*$", attr: "comment" },
+                { match: "@\"[ \\t]*$", attr: "string", push: "here_expand" },
+                { match: "@'[ \\t]*$", attr: "string", push: "here_verbatim" },
+                { match: "\"", attr: "string", push: "dq" },
+                { match: "'", attr: "string", push: "sq" },
+                { match: "\\[([A-Za-z_][A-Za-z0-9_.]*)\\]",
+                  attr: "punct.bracket", captures: { 1: "type" } },
+                { match: "\\b(function|filter|class|enum)\\s+([A-Za-z_][A-Za-z0-9_-]*)",
+                  attr: "keyword.storage", captures: { 2: "function" }, consume: 2 },
+                { match: "\\b(if|elseif|else|switch|for|foreach|while|do|until|try|catch|finally|trap|throw|return|break|continue|exit)\\b",
+                  attr: "keyword.control", icase: true },
+                { match: "\\b(function|filter|class|enum|param|begin|process|end|dynamicparam|data|in)\\b",
+                  attr: "keyword.storage", icase: true },
+                { match: "-(and|or|xor|not|band|bor|bxor|bnot|eq|ne|gt|ge|lt|le|like|notlike|match|notmatch|contains|notcontains|in|notin|is|isnot|as|replace|split|join)\\b",
+                  attr: "keyword.op", icase: true },
+                { match: "\\$(true|false|null)\\b", attr: "constant.builtin", icase: true },
+                { match: "\\$(global:|script:|local:|private:|env:)?[A-Za-z_?^][A-Za-z0-9_:?^]*|\\$[0-9$]",
+                  attr: "variable", icase: true },
+                { match: "-[A-Za-z][A-Za-z0-9-]*", attr: "constant" },
+                { match: "0[xX][0-9A-Fa-f]+|[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?[dDlLfF]?",
+                  attr: "number" },
+                { match: "::|\\.\\.|&&|\\|\\||[+*/%=!<>&|?-]+", attr: "operator" },
+                { match: "[(){}\\[\\]]", attr: "punct.bracket" },
+                { match: "[,;:.]", attr: "punct.delim" },
+            ],
+        },
+        block_comment: {
+            default: "comment", at_eol: "stay", unit: "atom",
+            rules: [
+                { match: "\\b(TODO|FIXME|XXX)\\b", attr: "comment.todo" },
+                { match: "#>", attr: "comment", pop: 1 },
+            ],
+        },
+        dq: {
+            default: "string", at_eol: "pop", unit: "atom",
+            rules: [
+                { match: "`.", attr: "string.escape" },
+                { match: "\\$\\(", attr: "string.interp", push: "subexpr" },
+                { match: "\\$[A-Za-z_?^][A-Za-z0-9_:?^]*|\\$[0-9$]", attr: "variable" },
+                { match: "\"", attr: "string", pop: 1 },
+            ],
+        },
+        sq: {
+            default: "string", at_eol: "pop", unit: "atom",
+            rules: [
+                { match: "''", attr: "string.escape" },
+                { match: "'", attr: "string", pop: 1 },
+            ],
+        },
+        subexpr: {
+            default: "text", at_eol: "pop", unit: "span",
+            rules: [
+                { match: "\\)", attr: "string.interp", pop: 1 },
+                { match: "\\$[A-Za-z_?^][A-Za-z0-9_:?^]*", attr: "variable" },
+                { match: "[+*/%=!-]+", attr: "operator" },
+                { match: "[0-9]+", attr: "number" },
+            ],
+        },
+        here_expand: {
+            default: "string.special", at_eol: "stay", unit: "atom",
+            rules: [
+                { match: "^\"@[ \\t]*$", attr: "string", pop: 1 },
+                { match: "`.", attr: "string.escape" },
+                { match: "\\$\\(", attr: "string.interp", push: "here_subexpr" },
+                { match: "\\$[A-Za-z_?^][A-Za-z0-9_:?^]*|\\$[0-9$]", attr: "variable" },
+            ],
+        },
+        here_subexpr: {
+            default: "text", at_eol: "stay", unit: "span",
+            rules: [
+                { match: "\\)", attr: "string.interp", pop: 1 },
+                { match: "\\$[A-Za-z_?^][A-Za-z0-9_:?^]*", attr: "variable" },
+                { match: "[+*/%=!-]+", attr: "operator" },
+                { match: "[0-9]+", attr: "number" },
+            ],
+        },
+        here_verbatim: {
+            default: "string.special", at_eol: "stay", unit: "atom",
+            rules: [ { match: "^'@[ \\t]*$", attr: "string", pop: 1 } ],
+        },
+    },
+}
