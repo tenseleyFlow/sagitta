@@ -164,7 +164,7 @@ static void feeder(YewLivePty *pty, pid_t editor, int ready_fd,
     i64 deadline = yew_live_pty_now_ns() + INT64_C(3000000000);
     struct timespec escape_settle = {0, 50000000};
     static const char save = 's';
-    static const char quit[] = "q!";
+    static const char quit[] = ":ed.quit_force\r";
 
     if (!yew_live_pty_wait_frame(pty, 0U, deadline, NULL) ||
         !feed_replace(pty, old, old_len, post, post_len, deadline))
