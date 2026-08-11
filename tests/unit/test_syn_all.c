@@ -254,11 +254,11 @@ void test_syn_all_new_pack_long_sanitizer_lane(void)
     static const PackCase heavy[] = {
         {"cpp", "tests/syn/cpp/01-kitchen.cpp"},
         {"kotlin", "tests/syn/kotlin/01-kitchen.kt"},
-        {"csharp", "tests/syn/csharp/01-kitchen.cs"},
-        {"swift", "tests/syn/swift/01-kitchen.swift"},
-        {"lua", "tests/syn/lua/01-kitchen.lua"},
         {"ruby", "tests/syn/ruby/01-kitchen.rb"},
+        {"perl", "tests/syn/perl/01-kitchen.pl"},
+        {"powershell", "tests/syn/powershell/01-kitchen.ps1"},
         {"haskell", "tests/syn/haskell/01-kitchen.hs"},
+        {"xml", "tests/syn/xml/01-kitchen.xml"},
         {"hcl", "tests/syn/hcl/01-kitchen.tf"},
     };
     const char *enabled = getenv("YEW_SYN_PACK_LONG");
