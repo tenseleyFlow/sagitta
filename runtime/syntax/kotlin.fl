@@ -1,0 +1,69 @@
+# Kotlin syntax.
+#
+# Block comments nest exactly. Ordinary and triple strings enter balanced
+# `${...}` expression contexts; braces inside nested strings/comments cannot
+# close the expression. Full template-expression parsing is approximated by
+# lexical brace balance and is bounded by the context stack.
+{
+    syntax: 1,
+    language: { name: "kotlin", extensions: ["kt", "kts"], priority: 20,
+                comment: { line: "//", block: ["/*", "*/"] } },
+    contexts: {
+        main: { default: "text", rules: ["include:kotlin"] },
+        kotlin: { rules: [
+            { match: "///.*$", attr: "comment.doc" }, { match: "//.*$", attr: "comment" },
+            { match: "/\\*", attr: "comment", push: "comment" },
+            { match: "\"\"\"", attr: "string.special", push: "raw" },
+            { match: "\"", attr: "string", push: "string" },
+            { match: "'", attr: "character", push: "character" },
+            { match: "@[A-Za-z_][A-Za-z0-9_.]*", attr: "attribute" },
+            { match: "\\b(class|interface|object|enum|typealias)\\s+([A-Za-z_][A-Za-z0-9_]*)", attr: "keyword.storage", captures: { 2: "type" } },
+            { match: "\\b(if|else|when|for|while|do|break|continue|return|throw|try|catch|finally)\\b", attr: "keyword.control" },
+            { match: "\\b(as|by|constructor|delegate|dynamic|field|file|get|import|in|init|is|out|package|param|property|receiver|set|setparam|this|where|actual|abstract|annotation|companion|const|crossinline|data|expect|external|final|infix|inline|inner|internal|lateinit|noinline|open|operator|override|private|protected|public|reified|sealed|suspend|tailrec|vararg|fun|val|var)\\b", attr: "keyword.storage" },
+            { match: "\\b(Boolean|Byte|Char|Double|Float|Int|Long|Short|String|Unit|Any|Nothing)\\b", attr: "type.builtin" },
+            { match: "\\b(true|false)\\b", attr: "boolean" }, { match: "\\bnull\\b", attr: "constant.builtin" },
+            { match: "\\b(0[xX][0-9A-Fa-f_]+|0[bB][01_]+|[0-9][0-9_]*(\\.[0-9_]*)?([eE][+-]?[0-9_]+)?)[uU]?[lLfF]?\\b", attr: "number" },
+            { match: "([A-Za-z_][A-Za-z0-9_]*)\\s*\\(", captures: { 1: "function" }, consume: 1 },
+            { match: "\\*/", attr: "error" },
+            { match: "(\\?\\.|\\?:|!!|::|->|===|!==|==|!=|<=|>=|&&|\\|\\||[+*/%&|^~!=<>?-])", attr: "operator" },
+            { match: "[(){}\\[\\]]", attr: "punct.bracket" }, { match: "[,;:.]", attr: "punct.delim" },
+        ] },
+        string: { default: "string", at_eol: "pop", unit: "atom", rules: [
+            { match: "\\\\(u[0-9A-Fa-f]{4}|.)", attr: "string.escape" },
+            { match: "\\$[A-Za-z_][A-Za-z0-9_]*", attr: "string.interp" },
+            { match: "\\$\\{", attr: "string.interp", push: "expr" },
+            { match: "\"", attr: "string", pop: 1 },
+        ] },
+        raw: { default: "string.special", at_eol: "stay", unit: "atom", rules: [
+            { match: "\\$[A-Za-z_][A-Za-z0-9_]*", attr: "string.interp" },
+            { match: "\\$\\{", attr: "string.interp", push: "expr" },
+            { match: "\"\"\"", attr: "string.special", pop: 1 },
+        ] },
+        expr: { default: "text", at_eol: "stay", unit: "span", rules: [
+            { match: "\\}", attr: "string.interp", pop: 1 },
+            { match: "\\{", attr: "punct.bracket", push: "expr_brace" },
+            { match: "\"", attr: "string", push: "expr_string" },
+            { match: "/\\*", attr: "comment", push: "comment" },
+            { match: "//.*$", attr: "comment" },
+            { match: "\\b[0-9]+\\b", attr: "number" },
+            { match: "(\\?\\.|\\?:|==|!=|[+*/%<>=-])", attr: "operator" },
+            { match: "[()\\[\\]]", attr: "punct.bracket" },
+        ] },
+        expr_brace: { default: "text", at_eol: "stay", unit: "span", rules: [
+            { match: "\\}", attr: "punct.bracket", pop: 1 }, { match: "\\{", attr: "punct.bracket", push: "expr_brace" },
+            { match: "\"", attr: "string", push: "expr_string" },
+            { match: "\\b[0-9]+\\b", attr: "number" },
+            { match: "[+*/%<>=-]", attr: "operator" },
+        ] },
+        expr_string: { default: "string", at_eol: "pop", unit: "atom", rules: [
+            { match: "\\\\.", attr: "string.escape" }, { match: "\"", attr: "string", pop: 1 },
+        ] },
+        character: { default: "character", at_eol: "pop", unit: "atom", rules: [
+            { match: "\\\\(u[0-9A-Fa-f]{4}|.)", attr: "string.escape" }, { match: "'", attr: "character", pop: 1 },
+        ] },
+        comment: { default: "comment", at_eol: "stay", unit: "atom", rules: [
+            { match: "/\\*", attr: "comment", push: "comment" }, { match: "\\*/", attr: "comment", pop: 1 },
+            { match: "\\b(TODO|FIXME)\\b", attr: "comment.todo" },
+        ] },
+    },
+}

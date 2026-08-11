@@ -1,0 +1,71 @@
+# C++ syntax.
+#
+# Template angle brackets are styled lexically as operators; deciding whether
+# `<` opens a template argument list requires parsing. Raw-string delimiters
+# are exact (0-16 bytes) through the definition aux slot. Preprocessor branch
+# activity is not evaluated, so the approximation is confined to styling.
+{
+    syntax: 1,
+    language: {
+        name: "cpp",
+        extensions: ["cc", "cp", "cpp", "cxx", "c++", "hh", "hpp", "hxx", "h++", "inl", "ipp", "tpp"],
+        priority: 20,
+        comment: { line: "//", block: ["/*", "*/"] },
+    },
+    contexts: {
+        main: { default: "text", rules: [
+            { match: "^\\s*#\\s*(include|include_next|import)\\b", attr: "preproc", push: "include" },
+            { match: "^\\s*#\\s*[A-Za-z_][A-Za-z0-9_]*", attr: "preproc", push: "preproc" },
+            { match: "///.*$|//!.*$", attr: "comment.doc" },
+            { match: "//.*$", attr: "comment" },
+            { match: "/\\*", attr: "comment", push: "comment" },
+            { match: "(u8|u|U|L)?R\"([A-Za-z0-9_{}#<>%:;.?*+\\-/]{0,16})\\(", attr: "string.special", set_aux: 2, push: "raw" },
+            { match: "(u8|u|U|L)?\"", attr: "string", push: "string" },
+            { match: "(u8|u|U|L)?'", attr: "character", push: "character" },
+            { match: "\\[\\[", attr: "attribute", push: "attribute" },
+            { match: "\\b(class|struct|union|enum|concept|typename)\\s+([A-Za-z_][A-Za-z0-9_]*)", attr: "keyword.storage", captures: { 2: "type" } },
+            { match: "\\b(alignas|alignof|asm|auto|const|consteval|constexpr|constinit|decltype|explicit|export|extern|friend|inline|mutable|namespace|noexcept|register|requires|static|template|thread_local|typedef|using|virtual|volatile)\\b", attr: "keyword.storage" },
+            { match: "\\b(if|else|switch|case|default|for|while|do|break|continue|return|goto|try|catch|throw|co_await|co_return|co_yield)\\b", attr: "keyword.control" },
+            { match: "\\b(bool|char|char8_t|char16_t|char32_t|wchar_t|short|int|long|float|double|signed|unsigned|void)\\b", attr: "type.builtin" },
+            { match: "\\b(true|false)\\b", attr: "boolean" },
+            { match: "\\b(nullptr|this)\\b", attr: "constant.builtin" },
+            { match: "\\b(0[xX][0-9A-Fa-f']+|0[bB][01']+|[0-9][0-9']*(\\.[0-9']*)?([eEpP][+-]?[0-9']+)?)([uUlLfF]|ll|LL|uz|UZ)*\\b", attr: "number" },
+            { match: "([A-Za-z_][A-Za-z0-9_]*)\\s*\\(", captures: { 1: "function" }, consume: 1 },
+            { match: "\\*/", attr: "error" },
+            { match: "(::|->\\*|->|<=>|<<=|>>=|<<|>>|<=|>=|==|!=|&&|\\|\\||\\+\\+|--|[+*/%&|^~!=<>?-])", attr: "operator" },
+            { match: "[(){}\\[\\]]", attr: "punct.bracket" },
+            { match: "[,;:.]", attr: "punct.delim" },
+        ] },
+        include: { default: "preproc", at_eol: "pop", unit: "span", rules: [
+            { match: "<[^>]+>", attr: "string" },
+            { match: "\"", attr: "string", push: "string" },
+            { match: "//.*$", attr: "comment" },
+        ] },
+        preproc: { default: "preproc", at_eol: "pop", unit: "span", rules: [
+            { match: "//.*$", attr: "comment" },
+            { match: "/\\*", attr: "comment", push: "comment" },
+            { match: "\"", attr: "string", push: "string" },
+            { match: "\\bdefined\\b", attr: "function.builtin" },
+            { match: "\\b[0-9]+\\b", attr: "number" },
+        ] },
+        string: { default: "string", at_eol: "pop", unit: "atom", rules: [
+            { match: "\\\\(x[0-9A-Fa-f]+|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|.)", attr: "string.escape" },
+            { match: "\"", attr: "string", pop: 1 },
+        ] },
+        character: { default: "character", at_eol: "pop", unit: "atom", rules: [
+            { match: "\\\\(x[0-9A-Fa-f]+|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|.)", attr: "string.escape" },
+            { match: "'", attr: "character", pop: 1 },
+        ] },
+        raw: { default: "string.special", at_eol: "stay", unit: "atom", rules: [
+            { aux: "literal", aux_pre: ")", aux_post: "\"", attr: "string.special", pop: 1 },
+        ] },
+        comment: { default: "comment", at_eol: "stay", unit: "atom", rules: [
+            { match: "\\b(TODO|FIXME|XXX|HACK)\\b", attr: "comment.todo" },
+            { match: "\\*/", attr: "comment", pop: 1 },
+        ] },
+        attribute: { default: "attribute", at_eol: "stay", unit: "span", rules: [
+            { match: "\\[\\[", attr: "attribute", push: "attribute" },
+            { match: "\\]\\]", attr: "attribute", pop: 1 },
+        ] },
+    },
+}

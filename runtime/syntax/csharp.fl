@@ -1,0 +1,84 @@
+# C# syntax.
+#
+# Raw delimiters of 3-16 quotes are matched exactly through aux. Per the
+# sprint contract, only a single-dollar interpolated raw opener enters brace
+# expressions; multi-dollar raw bodies remain string.special throughout.
+# Ordinary interpolation balances braces lexically, not semantically.
+{
+    syntax: 1,
+    language: { name: "csharp", extensions: ["cs", "csx"], priority: 20,
+                comment: { line: "//", block: ["/*", "*/"] } },
+    contexts: {
+        main: { default: "text", rules: ["include:csharp"] },
+        csharp: { rules: [
+            { match: "///.*$", attr: "comment.doc" }, { match: "//.*$", attr: "comment" },
+            { match: "/\\*", attr: "comment", push: "comment" },
+            { match: "\\$(\"{3,16})", attr: "string.special", set_aux: 1, push: "raw_interp" },
+            { match: "\\$\\$+(\"{3,16})", attr: "string.special", set_aux: 1, push: "raw" },
+            { match: "(\"{3,16})", attr: "string.special", set_aux: 1, push: "raw" },
+            { match: "\\$@\"|@\\$\"", attr: "string.special", push: "verbatim_interp" },
+            { match: "@\"", attr: "string.special", push: "verbatim" },
+            { match: "\\$\"", attr: "string", push: "interp" },
+            { match: "\"", attr: "string", push: "string" },
+            { match: "'", attr: "character", push: "character" },
+            { match: "\\[[A-Za-z_][A-Za-z0-9_.]*", attr: "attribute" },
+            { match: "\\b(class|struct|interface|enum|record|delegate)\\s+([A-Za-z_][A-Za-z0-9_]*)", attr: "keyword.storage", captures: { 2: "type" } },
+            { match: "\\b(if|else|switch|case|default|for|foreach|while|do|break|continue|return|goto|try|catch|finally|throw|yield|await)\\b", attr: "keyword.control" },
+            { match: "\\b(abstract|as|async|base|const|event|explicit|extern|fixed|implicit|in|internal|is|lock|namespace|new|out|override|params|partial|private|protected|public|readonly|ref|required|sealed|sizeof|stackalloc|static|this|unsafe|using|virtual|volatile|with|var)\\b", attr: "keyword.storage" },
+            { match: "\\b(bool|byte|char|decimal|double|float|int|long|nint|nuint|object|sbyte|short|string|uint|ulong|ushort|void)\\b", attr: "type.builtin" },
+            { match: "\\b(true|false)\\b", attr: "boolean" }, { match: "\\b(null|default)\\b", attr: "constant.builtin" },
+            { match: "\\b(0[xX][0-9A-Fa-f_]+|0[bB][01_]+|[0-9][0-9_]*(\\.[0-9_]*)?([eE][+-]?[0-9_]+)?)[uUlLfFdDmM]*\\b", attr: "number" },
+            { match: "([A-Za-z_][A-Za-z0-9_]*)\\s*\\(", captures: { 1: "function" }, consume: 1 },
+            { match: "\\*/", attr: "error" },
+            { match: "(\\?\\?|\\?\\.|=>|::|==|!=|<=|>=|&&|\\|\\||\\+\\+|--|[+*/%&|^~!=<>?-])", attr: "operator" },
+            { match: "[(){}\\[\\]]", attr: "punct.bracket" }, { match: "[,;:.]", attr: "punct.delim" },
+        ] },
+        string: { default: "string", at_eol: "pop", unit: "atom", rules: [
+            { match: "\\\\(u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|x[0-9A-Fa-f]{1,4}|.)", attr: "string.escape" },
+            { match: "\"", attr: "string", pop: 1 },
+        ] },
+        character: { default: "character", at_eol: "pop", unit: "atom", rules: [
+            { match: "\\\\(u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|x[0-9A-Fa-f]{1,4}|.)", attr: "string.escape" },
+            { match: "'", attr: "character", pop: 1 },
+        ] },
+        verbatim: { default: "string.special", at_eol: "stay", unit: "atom", rules: [
+            { match: "\"\"", attr: "string.escape" }, { match: "\"", attr: "string.special", pop: 1 },
+        ] },
+        interp: { default: "string", at_eol: "pop", unit: "atom", rules: [
+            { match: "\\{\\{|\\}\\}", attr: "string.escape" }, { match: "\\{", attr: "string.interp", push: "expr" },
+            { match: "\\\\.", attr: "string.escape" }, { match: "\"", attr: "string", pop: 1 },
+        ] },
+        verbatim_interp: { default: "string.special", at_eol: "stay", unit: "atom", rules: [
+            { match: "\\{\\{|\\}\\}", attr: "string.escape" }, { match: "\\{", attr: "string.interp", push: "expr" },
+            { match: "\"\"", attr: "string.escape" }, { match: "\"", attr: "string.special", pop: 1 },
+        ] },
+        raw: { default: "string.special", at_eol: "stay", unit: "atom", rules: [
+            { aux: "literal", attr: "string.special", pop: 1 },
+        ] },
+        raw_interp: { default: "string.special", at_eol: "stay", unit: "atom", rules: [
+            { match: "\\{\\{|\\}\\}", attr: "string.escape" }, { match: "\\{", attr: "string.interp", push: "expr" },
+            { aux: "literal", attr: "string.special", pop: 1 },
+        ] },
+        expr: { default: "text", at_eol: "stay", unit: "span", rules: [
+            { match: "\\}", attr: "string.interp", pop: 1 }, { match: "\\{", attr: "punct.bracket", push: "expr_brace" },
+            { match: "\"", attr: "string", push: "expr_string" },
+            { match: "/\\*", attr: "comment", push: "comment" },
+            { match: "//.*$", attr: "comment" },
+            { match: "\\b[0-9]+\\b", attr: "number" },
+            { match: "(\\?\\?|\\?\\.|==|!=|[+*/%<>=-])", attr: "operator" },
+            { match: "[()\\[\\]]", attr: "punct.bracket" },
+        ] },
+        expr_brace: { default: "text", at_eol: "stay", unit: "span", rules: [
+            { match: "\\}", attr: "punct.bracket", pop: 1 }, { match: "\\{", attr: "punct.bracket", push: "expr_brace" },
+            { match: "\"", attr: "string", push: "expr_string" },
+            { match: "\\b[0-9]+\\b", attr: "number" },
+            { match: "[+*/%<>=-]", attr: "operator" },
+        ] },
+        expr_string: { default: "string", at_eol: "pop", unit: "atom", rules: [
+            { match: "\\\\.", attr: "string.escape" }, { match: "\"", attr: "string", pop: 1 },
+        ] },
+        comment: { default: "comment", at_eol: "stay", unit: "atom", rules: [
+            { match: "\\b(TODO|FIXME)\\b", attr: "comment.todo" }, { match: "\\*/", attr: "comment", pop: 1 },
+        ] },
+    },
+}

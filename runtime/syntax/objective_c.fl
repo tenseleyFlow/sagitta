@@ -1,0 +1,47 @@
+# Objective-C syntax.
+#
+# Message sends are highlighted lexically by brackets, selectors, and names;
+# resolving receiver/type roles requires semantic analysis. Objective-C++ in
+# `.mm` receives the shared Objective-C/C-family lexical surface, not a full
+# second C++ grammar. Unterminated quotes remain bounded to one line.
+{
+    syntax: 1,
+    language: { name: "objective-c", extensions: ["m", "mm"], priority: 20,
+                comment: { line: "//", block: ["/*", "*/"] } },
+    contexts: {
+        main: { default: "text", rules: [
+            { match: "^\\s*#\\s*[A-Za-z_][A-Za-z0-9_]*", attr: "preproc" },
+            { match: "///.*$", attr: "comment.doc" },
+            { match: "//.*$", attr: "comment" },
+            { match: "/\\*", attr: "comment", push: "comment" },
+            { match: "@\"", attr: "string.special", push: "objc_string" },
+            { match: "\"", attr: "string", push: "string" },
+            { match: "'", attr: "character", push: "character" },
+            { match: "@(interface|implementation|protocol|end|class|selector|encode|synchronized|autoreleasepool|property|synthesize|dynamic|required|optional|public|private|protected|package|try|catch|finally|throw)\\b", attr: "keyword.storage" },
+            { match: "@(YES|NO)\\b", attr: "boolean" },
+            { match: "@([0-9]+(\\.[0-9]+)?)", attr: "number" },
+            { match: "\\b(if|else|switch|case|default|for|while|do|break|continue|return|goto)\\b", attr: "keyword.control" },
+            { match: "\\b(void|char|short|int|long|float|double|signed|unsigned|BOOL|NSInteger|NSUInteger|id|Class|SEL|instancetype)\\b", attr: "type.builtin" },
+            { match: "\\b(nil|Nil|NULL|self|super)\\b", attr: "constant.builtin" },
+            { match: "\\b[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?[uUlLfF]*\\b", attr: "number" },
+            { match: "([A-Za-z_][A-Za-z0-9_]*)\\s*:", captures: { 1: "function" }, consume: 1 },
+            { match: "([A-Za-z_][A-Za-z0-9_]*)\\s*\\(", captures: { 1: "function" }, consume: 1 },
+            { match: "\\*/", attr: "error" },
+            { match: "(->|==|!=|<=|>=|&&|\\|\\||\\+\\+|--|[+*/%&|^~!=<>?-])", attr: "operator" },
+            { match: "[(){}\\[\\]]", attr: "punct.bracket" },
+            { match: "[,;:.]", attr: "punct.delim" },
+        ] },
+        string: { default: "string", at_eol: "pop", unit: "atom", rules: [
+            { match: "\\\\.", attr: "string.escape" }, { match: "\"", attr: "string", pop: 1 },
+        ] },
+        objc_string: { default: "string.special", at_eol: "pop", unit: "atom", rules: [
+            { match: "\\\\.", attr: "string.escape" }, { match: "\"", attr: "string.special", pop: 1 },
+        ] },
+        character: { default: "character", at_eol: "pop", unit: "atom", rules: [
+            { match: "\\\\.", attr: "string.escape" }, { match: "'", attr: "character", pop: 1 },
+        ] },
+        comment: { default: "comment", at_eol: "stay", unit: "atom", rules: [
+            { match: "\\b(TODO|FIXME)\\b", attr: "comment.todo" }, { match: "\\*/", attr: "comment", pop: 1 },
+        ] },
+    },
+}
