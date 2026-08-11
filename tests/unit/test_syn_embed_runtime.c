@@ -1,7 +1,14 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "harness.h"
 
+#include <errno.h>
+#include <fcntl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include "syn/defs.h"
 #include "syn/engine.h"
@@ -253,6 +260,8 @@ void test_syn_embed_runtime_merged_first_mask_covers_all_bytes(void)
     u32 compiled_sites = 0U;
     u32 source_sites = 0U;
     u32 checked_sites = 0U;
+    bool mutate = getenv("YEW_SYN_TEST_NARROW_EMBED_MASK") != NULL;
+    bool mutated = false;
 
     /* The explicit source inventory is the grep gate: adding an embed site
      * to any shipped definition changes the source count and fails here
@@ -322,9 +331,18 @@ void test_syn_embed_runtime_merged_first_mask_covers_all_bytes(void)
                 const SynDef *active = guest[guest_index];
                 const SynDef *active_def = active == NULL ? host : active;
                 const SynCtx *active_ctx = bridge;
-                u8 expected[32] = {0};
-                u8 merged[32] = {0};
+                SynEngine *master = yew_syn_engine_new((SynDef *)host);
+                SynEngine *runtime = master;
+                SynState state = {0};
+                u8 expected_active[32] = {0};
+                u8 expected_bridge[32] = {0};
+                u8 merged_bol[32];
+                u8 bridge_bol[32];
+                u8 merged_nonbol[32];
+                u8 bridge_nonbol[32];
+                u8 active_slot = 0U;
 
+                YEW_ASSERT_NOT_NULL(master);
                 if (active != NULL) {
                     u16 ctx_id = active->root;
 
@@ -345,52 +363,125 @@ void test_syn_embed_runtime_merged_first_mask_covers_all_bytes(void)
                         }
                     }
                     active_ctx = &active->ctxs[ctx_id];
+                    if (active != host) {
+                        u32 lang = yew_syn_lang_named(active->name);
+
+                        runtime = yew_syn_engine_new((SynDef *)active);
+                        YEW_ASSERT_NOT_NULL(runtime);
+                        YEW_ASSERT(yew_syn_engine_test_install_resident(
+                            master, lang, runtime));
+                        active_slot = 1U;
+                    }
                 }
-                (void)memcpy(merged, active_ctx->first, sizeof(merged));
                 for (u32 i = 0U; i < active_ctx->nrules; i++) {
                     u8 first[32];
                     const SynRule *rule = &active_def->rules[
                         active_ctx->first_rule + i];
 
                     yew_re_first_bytes(rule->re, first);
-                    for (u32 octet = 0U; octet < sizeof(expected); octet++)
-                        expected[octet] |= first[octet];
+                    for (u32 octet = 0U;
+                         octet < sizeof(expected_active); octet++)
+                        expected_active[octet] |= first[octet];
                 }
-                if (bridge->embed.end == SYN_EMBED_END_INLINE ||
-                    bridge->embed.end == SYN_EMBED_END_INLINE_ROOT) {
-                    for (u32 i = 0U; i < bridge->nrules; i++) {
-                        const SynRule *rule = &host->rules[
-                            bridge->first_rule + i];
-                        u8 first[32];
+                for (u32 i = 0U; i < bridge->nrules; i++) {
+                    const SynRule *rule = &host->rules[
+                        bridge->first_rule + i];
+                    u8 first[32];
 
-                        if (rule->end == 0U)
+                    if (rule->end == 0U)
+                        continue;
+                    if (rule->aux_match != SYN_AUXM_NONE)
+                        (void)memset(first, 0xff, sizeof(first));
+                    else
+                        yew_re_first_bytes(rule->re, first);
+                    for (u32 octet = 0U;
+                         octet < sizeof(expected_bridge); octet++)
+                        expected_bridge[octet] |= first[octet];
+                }
+                state.depth = active == NULL ? 1U : 2U;
+                state.ndef = active == NULL ? 1U : 2U;
+                state.f[0] = (SynFrame){opener->target, 0U,
+                                        YEW_SYN_FR_BRIDGE};
+                if (active != NULL) {
+                    state.f[1] = (SynFrame){
+                        (u16)(active_ctx - active_def->ctxs), active_slot, 0U
+                    };
+                }
+                YEW_ASSERT(yew_syn_engine_test_masks(
+                    master, &state, true, merged_bol, bridge_bol));
+                YEW_ASSERT(yew_syn_engine_test_masks(
+                    master, &state, false, merged_nonbol,
+                    bridge_nonbol));
+                if (mutate && !mutated) {
+                    for (u32 byte = 0U; byte <= UINT8_MAX; byte++) {
+                        u8 bit = (u8)(1U << (byte & 7U));
+
+                        if ((expected_bridge[byte >> 3U] & bit) == 0U)
                             continue;
-                        if (rule->aux_match != SYN_AUXM_NONE)
-                            (void)memset(first, 0xff, sizeof(first));
-                        else
-                            yew_re_first_bytes(rule->re, first);
-                        for (u32 octet = 0U; octet < sizeof(merged);
-                             octet++) {
-                            merged[octet] |= first[octet];
-                            expected[octet] |= first[octet];
-                        }
+                        YEW_ASSERT(yew_syn_engine_test_narrow_mask(
+                            master, &state, true, (u8)byte));
+                        YEW_ASSERT(yew_syn_engine_test_masks(
+                            master, &state, true, merged_bol,
+                            bridge_bol));
+                        mutated = true;
+                        break;
                     }
                 }
                 for (u32 byte = 0U; byte <= UINT8_MAX; byte++) {
                     u8 bit = (u8)(1U << (byte & 7U));
-                    bool actual = (merged[byte >> 3U] & bit) != 0U;
-                    bool want = (expected[byte >> 3U] & bit) != 0U;
+                    bool want_active =
+                        (expected_active[byte >> 3U] & bit) != 0U;
+                    bool want_bridge =
+                        (expected_bridge[byte >> 3U] & bit) != 0U;
+                    bool inline_end =
+                        bridge->embed.end == SYN_EMBED_END_INLINE ||
+                        bridge->embed.end == SYN_EMBED_END_INLINE_ROOT;
 
-                    YEW_ASSERT_EQ_U64(actual, want);
-                    if (want) {
-                        u8 narrowed[32];
-
-                        (void)memcpy(narrowed, merged, sizeof(narrowed));
-                        narrowed[byte >> 3U] &= (u8)~bit;
-                        YEW_ASSERT((narrowed[byte >> 3U] & bit) == 0U);
-                        YEW_ASSERT((expected[byte >> 3U] & bit) != 0U);
+                    if (want_active)
+                        YEW_ASSERT((merged_bol[byte >> 3U] & bit) != 0U);
+                    if (want_bridge) {
+                        YEW_ASSERT((bridge_bol[byte >> 3U] & bit) != 0U);
+                        if (inline_end) {
+                            YEW_ASSERT((merged_bol[byte >> 3U] & bit) !=
+                                       0U);
+                            YEW_ASSERT((merged_nonbol[byte >> 3U] & bit) !=
+                                       0U);
+                            YEW_ASSERT((bridge_nonbol[byte >> 3U] & bit) !=
+                                       0U);
+                        } else {
+                            YEW_ASSERT((bridge_nonbol[byte >> 3U] & bit) ==
+                                       0U);
+                        }
                     }
                 }
+                if (active != NULL && state.depth < YEW_SYN_DEPTH_MAX) {
+                    SynState nested = state;
+                    u8 nested_merged[32];
+                    u8 nested_bridge[32];
+
+                    nested.f[nested.depth] = nested.f[nested.depth - 1U];
+                    nested.depth++;
+                    YEW_ASSERT(yew_syn_engine_test_masks(
+                        master, &nested, true, nested_merged,
+                        nested_bridge));
+                    for (u32 byte = 0U; byte <= UINT8_MAX; byte++) {
+                        u8 bit = (u8)(1U << (byte & 7U));
+                        bool want_bridge =
+                            (expected_bridge[byte >> 3U] & bit) != 0U;
+
+                        if (!want_bridge)
+                            continue;
+                        if (bridge->embed.end == SYN_EMBED_END_INLINE_ROOT)
+                            YEW_ASSERT((nested_bridge[byte >> 3U] & bit) ==
+                                       0U);
+                        else
+                            YEW_ASSERT((nested_bridge[byte >> 3U] & bit) !=
+                                       0U);
+                    }
+                }
+                yew_syn_engine_free(master);
+                if (runtime != master)
+                    yew_syn_engine_free(runtime);
             }
             checked_sites++;
         }
@@ -401,6 +492,36 @@ void test_syn_embed_runtime_merged_first_mask_covers_all_bytes(void)
     YEW_ASSERT_EQ_U64(source_sites, 29U);
     YEW_ASSERT_EQ_U64(compiled_sites, 62U);
     YEW_ASSERT_EQ_U64(checked_sites, compiled_sites);
+    YEW_ASSERT(!mutate || mutated);
+}
+
+void test_syn_embed_runtime_merged_mask_mutation_fails(void)
+{
+    pid_t pid = fork();
+    int status;
+
+    YEW_ASSERT(pid >= 0);
+    if (pid == 0) {
+        int null_fd = open("/dev/null", O_WRONLY);
+        const char *program = yew_test_program_path();
+
+        if (null_fd < 0 || dup2(null_fd, STDOUT_FILENO) < 0 ||
+            dup2(null_fd, STDERR_FILENO) < 0)
+            _exit(126);
+        (void)close(null_fd);
+        if (setenv("YEW_SYN_TEST_NARROW_EMBED_MASK", "1", 1) != 0)
+            _exit(126);
+        execl(program, program, "--filter",
+              "syn_embed_runtime_merged_first_mask_covers_all_bytes",
+              (char *)NULL);
+        _exit(127);
+    }
+    while (waitpid(pid, &status, 0) < 0) {
+        if (errno != EINTR)
+            YEW_ASSERT(false);
+    }
+    YEW_ASSERT(WIFEXITED(status));
+    YEW_ASSERT_EQ_I64(WEXITSTATUS(status), 1);
 }
 
 void test_syn_embed_runtime_coverage_uses_resident_definition_and_site(void)

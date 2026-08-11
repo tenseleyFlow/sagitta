@@ -1663,6 +1663,7 @@ const YewTest yew_tests[] = {
     T(syn_embed_runtime_line_host_eol_returns_after_guest),
     T(syn_embed_runtime_zero_headroom_records_protected_lost_debt),
     T(syn_embed_runtime_merged_first_mask_covers_all_bytes),
+    T(syn_embed_runtime_merged_mask_mutation_fails),
     T(syn_embed_runtime_coverage_uses_resident_definition_and_site),
     T(syn_embed_runtime_inline_root_defers_outer_exit_until_guest_root),
     T(syn_embed_runtime_line_continuation_keeps_unprefixed_guest),

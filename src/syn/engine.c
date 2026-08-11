@@ -3849,6 +3849,70 @@ ready:
     return cached->bits;
 }
 
+bool yew_syn_engine_test_masks(SynEngine *master, const SynState *state,
+                               bool bol, u8 merged[32], u8 bridge[32])
+{
+    SynEngine *active;
+    const SynCtx *ctx;
+    const u8 *first;
+    u32 byte;
+
+    if (master == NULL || state == NULL || state->depth == 0U ||
+        merged == NULL || bridge == NULL)
+        return false;
+    ctx = checked_ctx(master, &state->f[state->depth - 1U], &active);
+    first = merged_first_bytes(master, state, active, ctx, bol, NULL);
+    (void)memcpy(merged, first, 32U);
+    (void)memset(bridge, 0, 32U);
+    for (byte = 0U; byte <= UINT8_MAX; byte++) {
+        bool aggregate = bitset_has(master->embed_end_first, (u8)byte) ||
+            (bol && bitset_has(master->embed_bol_end_first, (u8)byte));
+
+        if (aggregate && bridge_end_byte_possible(
+                             master, state, bol ? 0U : 1U, (u8)byte))
+            bridge[byte >> 3U] |= (u8)(1U << (byte & 7U));
+    }
+    return true;
+}
+
+bool yew_syn_engine_test_narrow_mask(SynEngine *master,
+                                     const SynState *state, bool bol,
+                                     u8 byte)
+{
+    SynEngine *active;
+    const SynCtx *ctx;
+    const u8 *first;
+    u8 merged[32];
+    u8 bridge[32];
+    u8 bit = (u8)(1U << (byte & 7U));
+    bool present;
+    u16 resident;
+    size_t i;
+
+    if (!yew_syn_engine_test_masks(master, state, bol, merged, bridge))
+        return false;
+    present = ((merged[byte >> 3U] | bridge[byte >> 3U]) & bit) != 0U;
+    ctx = checked_ctx(master, &state->f[state->depth - 1U], &active);
+    first = merged_first_bytes(master, state, active, ctx, bol, NULL);
+    for (i = 0U; i < YEW_ARRAY_LEN(master->merged_first); i++) {
+        if (first == master->merged_first[i].bits) {
+            master->merged_first[i].bits[byte >> 3U] &= (u8)~bit;
+            break;
+        }
+    }
+    master->embed_end_first[byte >> 3U] &= (u8)~bit;
+    master->embed_bol_end_first[byte >> 3U] &= (u8)~bit;
+    for (resident = 0U; resident < master->ndefs; resident++) {
+        SynEngine *runtime = master->defs[resident].runtime;
+
+        if (runtime == NULL)
+            continue;
+        runtime->embed_local_end_first[byte >> 3U] &= (u8)~bit;
+        runtime->embed_local_bol_end_first[byte >> 3U] &= (u8)~bit;
+    }
+    return present;
+}
+
 static void syn_line_run(SynEngine *engine, u32 entry_state,
                          const u8 *line, u32 len, SynLineOut *out,
                          bool apply_eol, bool instrument, SynState *trace,
@@ -4808,6 +4872,12 @@ static bool resident_install(SynEngine *master, u32 lang,
             runtime->embed_local_bol_end_first[byte];
     }
     return true;
+}
+
+bool yew_syn_engine_test_install_resident(SynEngine *master, u32 lang,
+                                          SynEngine *runtime)
+{
+    return resident_install(master, lang, runtime);
 }
 
 static void syn_pending_request(SynBuf *syn, u32 lang, size_t line)
