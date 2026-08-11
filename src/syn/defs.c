@@ -933,6 +933,8 @@ static u8 aux_kind(Compile *c, FlNode *node)
         return SYN_AUXM_NONE;
     if (text_eq(name, n, "line_eq"))
         return SYN_AUXM_LINE_EQ;
+    if (text_eq(name, n, "line_eq_ws"))
+        return SYN_AUXM_LINE_EQ_WS;
     if (text_eq(name, n, "literal"))
         return SYN_AUXM_LITERAL;
     if (text_eq(name, n, "fence_close"))
@@ -2453,7 +2455,7 @@ static bool syn_rule_valid(const SynRule *rule, const SynDef *def,
     u32 i;
 
     if (rule->attr >= YEW_ATTR__COUNT || rule->op > SYN_OP_EMBED ||
-        rule->nop > 4U || rule->aux_match > SYN_AUXM_LINE_START ||
+        rule->nop > 4U || rule->aux_match > SYN_AUXM_LINE_EQ_WS ||
         rule->consume > 7U || rule->npush > 4U ||
         rule->value_pred > SYN_VALUE_SET ||
         rule->aux_group > 7U || rule->end > 1U ||

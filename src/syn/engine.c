@@ -2444,9 +2444,13 @@ static bool aux_match(const SynEngine *engine, const SynState *state,
         return false;
     match->ngroups = 1U;
     switch ((SynAuxMatch)rule->aux_match) {
-    case SYN_AUXM_LINE_EQ: {
+    case SYN_AUXM_LINE_EQ:
+    case SYN_AUXM_LINE_EQ_WS: {
         const u8 *text;
-        if ((state->flags & YEW_SYN_F_STRIP) != 0U) {
+        if (rule->aux_match == SYN_AUXM_LINE_EQ_WS) {
+            while (lo < len && (line[lo] == ' ' || line[lo] == '\t'))
+                lo++;
+        } else if ((state->flags & YEW_SYN_F_STRIP) != 0U) {
             while (lo < len && line[lo] == '\t')
                 lo++;
         }

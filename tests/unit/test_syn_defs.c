@@ -573,3 +573,25 @@ void test_syn_defs_validation_warnings_are_nonfatal_and_exact(void)
                         "only 'rules' is used at an include site"));
     def_fix_close(&f, def);
 }
+
+void test_syn_defs_line_eq_ws_is_in_the_closed_aux_set(void)
+{
+    static const char src[] =
+        "{ syntax: 1, language: { name: \"line-eq-ws\" }, contexts: {\n"
+        "  main: { rules: [{ match: \"(END)\", set_aux: 1, push: \"body\" }] },\n"
+        "  body: { rules: [{ aux: \"line_eq_ws\", pop: 1 }] },\n"
+        "} }";
+    DefFix f;
+    SynDef *def;
+    u32 nerr;
+    u32 nwarn;
+
+    def_fix_open(&f);
+    def = def_compile(&f, src, &nerr, &nwarn);
+    YEW_ASSERT_NOT_NULL(def);
+    YEW_ASSERT_EQ_U64(nerr, 0U);
+    YEW_ASSERT_EQ_U64(nwarn, 0U);
+    YEW_ASSERT_EQ_U64(def->nrules, 2U);
+    YEW_ASSERT_EQ_U64(def->rules[1].aux_match, SYN_AUXM_LINE_EQ_WS);
+    def_fix_close(&f, def);
+}

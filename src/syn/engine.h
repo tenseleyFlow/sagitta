@@ -133,7 +133,8 @@ typedef enum SynAuxMatch {
     SYN_AUXM_FENCE_CLOSE,
     SYN_AUXM_INDENT_LT,
     SYN_AUXM_LINE_EMPTY,
-    SYN_AUXM_LINE_START
+    SYN_AUXM_LINE_START,
+    SYN_AUXM_LINE_EQ_WS
 } SynAuxMatch;
 
 typedef enum SynValuePredicate {

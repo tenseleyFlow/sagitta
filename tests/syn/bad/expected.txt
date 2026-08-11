@@ -24,3 +24,4 @@
 23-embed-depth|error|1|613|bad-embed-depth→html→javascript→css can reach depth 19; the cap is 16
 23-self-embed-depth|error|10|31|bad-self-embed-depth→bad-self-embed-depth→bad-self-embed-depth→bad-self-embed-depth can reach depth 19; the cap is 16
 24-embed-dynamic-depth|warning|1|629|dynamic embed has worst installed chain bad-embed-dynamic→typescript→html→javascript; cap exceeded by 6 frame(s)
+25-aux|error|1|76|unknown aux matcher 'line_eq_wss'

@@ -1095,3 +1095,67 @@ void test_syn_line_coverage_is_optional_and_excludes_stack_probes(void)
     yew_syn_coverage_free(&coverage);
     syn_toy_free(&toy);
 }
+
+void test_syn_line_line_eq_ws_ignores_only_leading_ascii_space_and_tab(void)
+{
+    static const struct {
+        const char *line;
+        bool matches;
+    } cases[] = {
+        {"END", true},
+        {" END", true},
+        {"\t \tEND", true},
+        {"\vEND", false},
+        {"END ", false},
+        {"end", false},
+    };
+    Arena aux_arena;
+    Interner aux;
+    SynCtx ctxs[2] = {{0}};
+    SynRule rule = {0};
+    SynDef def = {"line-eq-ws", 0U, 2U, 1U, ctxs, &rule, &aux};
+    SynEngine *engine;
+    SynState state = {0};
+    u32 entry;
+    size_t i;
+
+    arena_init(&aux_arena);
+    interner_init(&aux, &aux_arena);
+    ctxs[0].dflt_attr = YEW_ATTR_TEXT;
+    ctxs[1].nrules = 1U;
+    ctxs[1].dflt_attr = YEW_ATTR_STRING_SPECIAL;
+    (void)memset(ctxs[1].first, 0xff, sizeof(ctxs[1].first));
+    rule.attr = YEW_ATTR_STRING;
+    rule.op = SYN_OP_POP;
+    rule.nop = 1U;
+    rule.aux_match = SYN_AUXM_LINE_EQ_WS;
+    (void)memset(rule.caps, 0xff, sizeof(rule.caps));
+    (void)memset(rule.first, 0xff, sizeof(rule.first));
+    state.f[0].ctx = 0U;
+    state.f[1].ctx = 1U;
+    state.depth = 2U;
+    state.ndef = 1U;
+    state.aux[0] = yew_intern(&aux, "END", 3U);
+    engine = yew_syn_engine_new(&def);
+    entry = yew_syn_state_intern(yew_syn_engine_states(engine), &state);
+
+    for (i = 0U; i < YEW_ARRAY_LEN(cases); i++) {
+        SynSpan spans[8];
+        SynLineOut out = {spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
+        const SynState *exit;
+
+        yew_syn_line(engine, entry, (const u8 *)cases[i].line,
+                     (u32)strlen(cases[i].line), &out);
+        exit = yew_syn_state_get(yew_syn_engine_states(engine),
+                                 out.exit_state);
+        YEW_ASSERT_EQ_U64(out.stop, YEW_SYN_STOP_OK);
+        YEW_ASSERT_NOT_NULL(exit);
+        YEW_ASSERT_EQ_U64(exit->depth, cases[i].matches ? 1U : 2U);
+        YEW_ASSERT_EQ_U64(attr_at(&out, 0U),
+                          cases[i].matches ? YEW_ATTR_STRING :
+                                            YEW_ATTR_STRING_SPECIAL);
+    }
+    yew_syn_engine_free(engine);
+    interner_free(&aux);
+    arena_free_all(&aux_arena);
+}

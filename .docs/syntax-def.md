@@ -155,6 +155,7 @@ runtime-derived delimiters out of the regex compiler and render path.
 | `aux` value | Match | Consumption | Example use |
 |---|---|---|---|
 | `line_eq` | whole line equals aux, ignoring leading tabs when `strip` is set | whole line | sh heredoc terminator |
+| `line_eq_ws` | whole line equals aux after leading ASCII spaces and tabs | whole line | Ruby and HCL indented heredoc terminator |
 | `literal` | `aux_pre + aux + aux_post` starts at the scan position | whole constructed literal | Rust raw strings; Python and TOML dynamic triple delimiters |
 | `fence_close` | column ≤ 3; line has at least `len(aux)` copies of `aux[0]`, then nothing else | whole line | Markdown fence closer |
 | `indent_lt` | byte 0; expanded indent is less than integer aux | zero bytes, then pop once | YAML block scalar end |
@@ -195,7 +196,8 @@ heredoc: {
 Use separate pending/body pairs when the opener selects different body
 semantics, such as quoted shell delimiters suppressing expansion. With
 `strip: true`, `line_eq` ignores leading tabs only; spaces remain significant
-for `<<-`.
+for shell `<<-`. Use `line_eq_ws` only for languages whose indented heredoc
+syntax permits both leading spaces and tabs; it does not depend on `strip`.
 
 ## Embedded languages
 

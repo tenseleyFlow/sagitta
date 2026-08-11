@@ -1,0 +1,1 @@
+{ syntax: 1, language: { name: "bad" }, contexts: { main: { rules: [{ aux: "line_eq_wss", pop: 1 }] } } }
