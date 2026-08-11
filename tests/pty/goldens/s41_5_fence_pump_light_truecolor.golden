@@ -1,0 +1,179 @@
+# yew pty golden v1
+size 240x24 alt=1 cursor=3,7 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+     3 ```javascript                                                                                                                                                                                                                            
+     2 const answer = 42;                                                                                                                                                                                                                       
+     1 ```                                                                                                                                                                                                                                      
+     4 plain markdown line 0001                                                                                                                                                                                                                 
+     1 plain markdown line 0002                                                                                                                                                                                                                 
+     2 plain markdown line 0003                                                                                                                                                                                                                 
+     3 plain markdown line 0004                                                                                                                                                                                                                 
+     4 plain markdown line 0005                                                                                                                                                                                                                 
+     5 plain markdown line 0006                                                                                                                                                                                                                 
+     6 plain markdown line 0007                                                                                                                                                                                                                 
+     7 plain markdown line 0008                                                                                                                                                                                                                 
+     8 plain markdown line 0009                                                                                                                                                                                                                 
+     9 plain markdown line 0010                                                                                                                                                                                                                 
+    10 plain markdown line 0011                                                                                                                                                                                                                 
+    11 plain markdown line 0012                                                                                                                                                                                                                 
+    12 plain markdown line 0013                                                                                                                                                                                                                 
+    13 plain markdown line 0014                                                                                                                                                                                                                 
+    14 plain markdown line 0015                                                                                                                                                                                                                 
+    15 plain markdown line 0016                                                                                                                                                                                                                 
+    16 plain markdown line 0017                                                                                                                                                                                                                 
+    17 plain markdown line 0018                                                                                                                                                                                                                 
+    18 plain markdown line 0019                                                                                                                                                                                                                 
+    19 plain markdown line 0020                                                                                                                                                                                                                 
+ L settled 5004/5004, wave 5004, root=markdown active=markdown defs=1/4 depth=1/16 states=6 degraded=no embed_pending=0 embed_refused=none                                                                                                      
+--- style
+AAAAAAABBBCCCCCCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAAEEEEEDDDDDDDDFDFFBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAABBBDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAGADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+HHHIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
+--- legend
+A fg=#8c959f bg=#ffffff attrs=----------
+B fg=#57606a bg=#ffffff attrs=----------
+C fg=#9a6700 bg=#ffffff attrs=----------
+D fg=#24292f bg=#ffffff attrs=----------
+E fg=#cf222e bg=#ffffff attrs=--i-------
+F fg=#0550ae bg=#ffffff attrs=----------
+G fg=#24292f bg=#ffffff attrs=b---------
+H fg=#ebf4ff bg=#266eba attrs=b---------
+I fg=#dae5f0 bg=#14304c attrs=----------
+--- sgr
+\x1b[0;38;2;140;149;159;48;2;255;255;255m
+\x1b[1;38;2;36;41;47m
+\x1b[22;38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;255;255;255;48;2;5;80;174m
+\x1b[38;2;36;41;47;48;2;255;255;255m
+\x1b[0;38;2;255;255;255;48;2;17;99;41m
+\x1b[0;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;87;96;106m
+\x1b[38;2;154;103;0m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;17;99;41m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;87;96;106m
+\x1b[38;2;36;41;47m
+\x1b[1m
+\x1b[22m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[38;2;140;149;159m
+\x1b[38;2;36;41;47m
+\x1b[0;3;38;2;207;34;46;48;2;255;255;255m
+\x1b[23;38;2;36;41;47m
+\x1b[38;2;5;80;174m
+\x1b[38;2;36;41;47m
+\x1b[38;2;5;80;174m
+\x1b[38;2;87;96;106m
+\x1b[0;1;38;2;47;24;6;48;2;231;125;36m
+\x1b[38;2;247;224;204;48;2;78;42;15m
+\x1b[0;1;2;38;2;247;224;204;48;2;78;42;15m
+\x1b[22m
+\x1b[0;38;2;140;149;159;48;2;255;255;255m
+\x1b[38;2;36;41;47m
+\x1b[1;38;2;235;244;255;48;2;38;110;186m
+\x1b[22;38;2;218;229;240;48;2;20;48;76m

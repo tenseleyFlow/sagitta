@@ -4701,6 +4701,171 @@ static void case_s42_fortran_fixed_col73(PtyCtx *c)
     (void)unlink(path);
 }
 
+/* ---------------------------------------------------------------- */
+/* Sprint 41.5: embedded-language PTY contracts                     */
+/* ---------------------------------------------------------------- */
+
+static void case_s41_5_markdown_embed(PtyCtx *c)
+{
+    const char *path = "tests/syn/embed/markdown/09-fence-javascript.md";
+    const char *theme = strstr(c->test->name, "_light_") != NULL
+                            ? "quiver-light" : "quiver-dark";
+    char cache[1024];
+    Bytebuf screen;
+    int n;
+
+    ptc_spawn(c, ptc_yew_bin(c), "--theme", theme, path, NULL);
+    ptc_wait_kitty_push(c, 21U);
+    s41_wait_syn_settled(c);
+
+    /* The first idle settle paints the fallback while JavaScript is not
+     * resident; the pump then installs exactly one guest and schedules the
+     * corrective wave.  The fresh cache proves that the guest loaded, the
+     * status proves the closing fence returned to the root, and the SGR
+     * snapshot pins the resulting host/guest boundary. */
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.syn.status");
+    s18_settle_after_keys(c, "enter");
+    bytebuf_init(&screen);
+    snapshot_write(&c->vt, &screen);
+    bytebuf_push_u8(&screen, 0U);
+    ptc_check(c, strstr((const char *)screen.data, "defs=1/4") != NULL,
+              "markdown embed did not return to its root definition");
+    bytebuf_free(&screen);
+    n = snprintf(cache, sizeof(cache), "%s/yew/syn/javascript.stab",
+                 c->state_dir);
+    ptc_check(c, n > 0 && (size_t)n < sizeof(cache) &&
+                     access(cache, F_OK) == 0,
+              "markdown embed did not load its JavaScript guest");
+
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot_sgr(c, c->test->name);
+    force_quit(c);
+}
+
+static size_t s41_5_sync_end(const Bytebuf *raw, u32 pair)
+{
+    static const u8 end[] = "\x1b[?2026l";
+    u32 seen = 0U;
+    size_t i;
+
+    for (i = 0U; i + sizeof(end) - 1U <= raw->len; i++) {
+        if (memcmp(raw->data + i, end, sizeof(end) - 1U) != 0)
+            continue;
+        seen++;
+        if (seen == pair)
+            return i + sizeof(end) - 1U;
+    }
+    return 0U;
+}
+
+static bool s41_5_find_ascii(const VtScreen *vt, const char *needle,
+                             VtCell *first)
+{
+    size_t want = strlen(needle);
+    int row;
+
+    for (row = 0; row < vt->rows; row++) {
+        int col;
+
+        for (col = 0; col + (int)want <= vt->cols; col++) {
+            size_t at;
+
+            for (at = 0U; at < want; at++) {
+                const VtCell *cell = &vt->cells[(size_t)row *
+                                               (size_t)vt->cols +
+                                               (size_t)col + at];
+                const u8 *glyph;
+                size_t n;
+
+                glyph = vt_cell_bytes(vt, cell, &n);
+                if (n != 1U || glyph[0] != (u8)needle[at])
+                    break;
+            }
+            if (at == want) {
+                *first = vt->cells[(size_t)row * (size_t)vt->cols +
+                                   (size_t)col];
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+static void case_s41_5_interactive_fence_pump(PtyCtx *c)
+{
+    static const char burst[] =
+        "```javascript\rconst answer = 42;\r```\r"
+        "\x1b";
+    const char *theme = strstr(c->test->name, "_light_") != NULL
+                            ? "quiver-light" : "quiver-dark";
+    Bytebuf fixture;
+    Bytebuf screen;
+    VtScreen pending;
+    VtCell fallback;
+    VtCell guest;
+    char path[256];
+    size_t pending_end;
+    u32 before;
+    u32 line;
+
+    bytebuf_init(&fixture);
+    for (line = 0U; line < 5000U; line++)
+        bytebuf_printf(&fixture, "plain markdown line %04u\n", line + 1U);
+    if (!s41_fixture(c, ".md", fixture.data, fixture.len,
+                     path, sizeof(path))) {
+        bytebuf_free(&fixture);
+        return;
+    }
+    bytebuf_free(&fixture);
+
+    s41_open_fixture(c, theme, path);
+    s18_settle_after_keys(c, "i");
+    before = c->vt.nsync_pairs;
+
+    /* One input drain inserts a complete local fence and asks for status.
+     * Its budget may paint the safe host fallback, but may not synchronously
+     * load the guest.  The following input-free iteration pumps JavaScript
+     * and must schedule exactly one corrective repaint. */
+    ptc_bytes(c, burst);
+    ptc_wait_sync_pairs(c, before + 2U);
+    ptc_settle(c, 250);
+    ptc_check(c, c->vt.nsync_pairs == before + 2U,
+              "idle embed pump did not produce exactly one repaint");
+
+    pending_end = s41_5_sync_end(&c->raw, before + 1U);
+    ptc_check(c, pending_end != 0U,
+              "could not isolate the pending fallback frame");
+    vt_init(&pending, c->vt.rows, c->vt.cols);
+    vt_set_profile(&pending, VT_PROFILE_MODERN);
+    if (pending_end != 0U)
+        vt_feed(&pending, c->raw.data, pending_end);
+    ptc_check(c, s41_5_find_ascii(&pending, "const", &fallback),
+              "pending fallback frame omitted inserted JavaScript");
+    ptc_check(c, s41_5_find_ascii(&c->vt, "const", &guest),
+              "idle repaint omitted inserted JavaScript");
+    ptc_check(c, memcmp(&fallback.fg, &guest.fg,
+                        sizeof(fallback.fg)) != 0 ||
+                     fallback.attrs != guest.attrs,
+              "idle repaint retained the host fallback style");
+    vt_free(&pending);
+
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.syn.status");
+    s18_settle_after_keys(c, "enter");
+    bytebuf_init(&screen);
+    snapshot_write(&c->vt, &screen);
+    bytebuf_push_u8(&screen, 0U);
+    ptc_check(c, strstr((const char *)screen.data, "embed_pending=0") != NULL,
+              "embed pending status did not clear after idle pump");
+    bytebuf_free(&screen);
+
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot_sgr(c, c->test->name);
+    force_quit(c);
+    (void)unlink(path);
+}
+
 static bool s41_fixture(PtyCtx *c, const char *suffix, const u8 *bytes,
                         size_t len, char *path, size_t cap)
 {
@@ -4986,6 +5151,14 @@ static void case_s37_batch_never_touches_the_terminal(PtyCtx *c)
 }
 
 const PtyCase yew_pty_cases[] = {
+    C(s41_5_fence_pump_dark_truecolor, modern, 24U, 240U,
+      case_s41_5_interactive_fence_pump),
+    C(s41_5_fence_pump_light_truecolor, modern, 24U, 240U,
+      case_s41_5_interactive_fence_pump),
+    C(s41_5_markdown_embed_dark_truecolor, modern, 24U, 80U,
+      case_s41_5_markdown_embed),
+    C(s41_5_markdown_embed_light_truecolor, modern, 24U, 80U,
+      case_s41_5_markdown_embed),
     C(s42_python_dark_truecolor, modern, 24U, 80U, case_s42_kitchen),
     C(s42_python_light_truecolor, modern, 24U, 80U, case_s42_kitchen),
     C(s42_rust_dark_truecolor, modern, 24U, 80U, case_s42_kitchen),

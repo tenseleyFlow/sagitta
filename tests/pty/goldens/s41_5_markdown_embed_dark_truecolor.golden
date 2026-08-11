@@ -1,0 +1,133 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=0,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+    1 ```javascript                                                             
+    1 const answer = 42;                                                        
+    2 ```                                                                       
+    3                                                                           
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ L settled 4/4, wave 4, root=markdown active=markdown defs=1/4 depth=1/16 state…
+--- style
+AAAABACCCDDDDDDDDDDEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+AAAAAAFFFFFEEEEEEEEGEHHCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+AAAAAACCCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+AAAAAAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+AAAAAAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+AAAAAAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+AAAAAAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+AAAAAAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+AAAAAAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+AAAAAAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+AAAAAAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+AAAAAAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+AAAAAAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+AAAAAAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+AAAAAAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+AAAAAAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+AAAAAAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+AAAAAAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+AAAAAAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+AAAAAAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+AAAAAAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+AAAAAAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+AAAAAAEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+IIIJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJJ
+--- legend
+A fg=#4b5263 bg=#12141a attrs=----------
+B fg=#c8ccd4 bg=#12141a attrs=b---------
+C fg=#9aa0aa bg=#12141a attrs=----------
+D fg=#e5c07b bg=#12141a attrs=----------
+E fg=#c8ccd4 bg=#12141a attrs=----------
+F fg=#c678dd bg=#12141a attrs=--i-------
+G fg=#56b6c2 bg=#12141a attrs=----------
+H fg=#d19a66 bg=#12141a attrs=----------
+I fg=#ebf4ff bg=#266eba attrs=b---------
+J fg=#dae5f0 bg=#14304c attrs=----------
+--- sgr
+\x1b[0;38;2;75;82;99;48;2;18;20;26m
+\x1b[1;38;2;200;204;212m
+\x1b[22;38;2;75;82;99m
+\x1b[38;2;154;160;170m
+\x1b[38;2;229;192;123m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;154;160;170m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;18;20;26;48;2;97;175;239m
+\x1b[38;2;200;204;212;48;2;18;20;26m
+\x1b[0;38;2;152;195;121;48;2;18;20;26m
+\x1b[0;3;38;2;198;120;221;48;2;18;20;26m
+\x1b[23;38;2;200;204;212m
+\x1b[38;2;86;182;194m
+\x1b[38;2;200;204;212m
+\x1b[38;2;209;154;102m
+\x1b[38;2;154;160;170m
+\x1b[0;1;38;2;47;24;6;48;2;231;125;36m
+\x1b[38;2;247;224;204;48;2;78;42;15m
+\x1b[0;1;2;38;2;247;224;204;48;2;78;42;15m
+\x1b[22m
+\x1b[0;38;2;75;82;99;48;2;18;20;26m
+\x1b[38;2;200;204;212m
+\x1b[1;38;2;235;244;255;48;2;38;110;186m
+\x1b[22;38;2;218;229;240;48;2;20;48;76m
