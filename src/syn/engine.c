@@ -1610,12 +1610,33 @@ static u64 state_hash(const SynState *state)
 
 static void state_validate(const SynState *state)
 {
+    u8 i;
+
     if (state == NULL)
         YEW_BUG("syntax: NULL state");
-    if (state->def != 0U)
-        YEW_BUG("syntax: embedded definitions are outside the 1.0 core");
     if (state->depth == 0U || state->depth > YEW_SYN_DEPTH_MAX)
         YEW_BUG("syntax: invalid state depth %u", (unsigned)state->depth);
+    if (state->ndef == 0U || state->ndef > YEW_SYN_DEF_MAX)
+        YEW_BUG("syntax: invalid definition depth %u",
+                (unsigned)state->ndef);
+    for (i = 0U; i < state->depth; i++) {
+        if (state->f[i].def >= YEW_SYN_DEF_MAX)
+            YEW_BUG("syntax: invalid definition index %u",
+                    (unsigned)state->f[i].def);
+    }
+}
+
+static SynState syn_state_canon(const SynState *state)
+{
+    SynState canon;
+
+    state_validate(state);
+    canon = *state;
+    (void)memset(&canon.f[canon.depth], 0,
+                 (YEW_SYN_DEPTH_MAX - canon.depth) * sizeof(canon.f[0]));
+    (void)memset(&canon.aux[canon.ndef], 0,
+                 (YEW_SYN_DEF_MAX - canon.ndef) * sizeof(canon.aux[0]));
+    return canon;
 }
 
 static void state_rehash(SynStateTab *tab, u32 cap)
@@ -1643,8 +1664,9 @@ SynStateTab *yew_syn_state_tab_new(u16 root_ctx)
     tab->states = yew_xcalloc(tab->cap, sizeof(*tab->states));
     tab->len = 2U;
     (void)memset(&root, 0, sizeof(root));
-    root.ctx[0] = root_ctx;
+    root.f[0].ctx = root_ctx;
     root.depth = 1U;
+    root.ndef = 1U;
     tab->states[YEW_SYN_STATE_ROOT] = root;
     state_rehash(tab, 32U);
     return tab;
@@ -1661,15 +1683,16 @@ void yew_syn_state_tab_free(SynStateTab *tab)
 
 u32 yew_syn_state_intern(SynStateTab *tab, const SynState *state)
 {
+    SynState canon;
     u32 at;
 
     if (tab == NULL)
         YEW_BUG("syntax: NULL state table");
-    state_validate(state);
-    at = (u32)state_hash(state) & (tab->slots_cap - 1U);
+    canon = syn_state_canon(state);
+    at = (u32)state_hash(&canon) & (tab->slots_cap - 1U);
     while (tab->slots[at] != 0U) {
         u32 id = tab->slots[at];
-        if (memcmp(&tab->states[id], state, sizeof(*state)) == 0)
+        if (memcmp(&tab->states[id], &canon, sizeof(canon)) == 0)
             return id;
         at = (at + 1U) & (tab->slots_cap - 1U);
     }
@@ -1693,11 +1716,11 @@ u32 yew_syn_state_intern(SynStateTab *tab, const SynState *state)
         if (cap < tab->slots_cap)
             YEW_BUG("syntax: state hash capacity overflow");
         state_rehash(tab, cap);
-        at = (u32)state_hash(state) & (tab->slots_cap - 1U);
+        at = (u32)state_hash(&canon) & (tab->slots_cap - 1U);
         while (tab->slots[at] != 0U)
             at = (at + 1U) & (tab->slots_cap - 1U);
     }
-    tab->states[tab->len] = *state;
+    tab->states[tab->len] = canon;
     tab->slots[at] = tab->len;
     return tab->len++;
 }
@@ -1724,7 +1747,12 @@ void yew_syn_state_push(SynState *state, u16 ctx)
 {
     state_validate(state);
     if (state->depth < YEW_SYN_DEPTH_MAX) {
-        state->ctx[state->depth++] = ctx;
+        SynFrame *frame = &state->f[state->depth];
+
+        frame->ctx = ctx;
+        frame->def = YEW_SYN_DEF_OF(state);
+        frame->fl = 0U;
+        state->depth++;
         return;
     }
     if (state->lost < YEW_SYN_LOST_MAX)
@@ -1740,7 +1768,9 @@ void yew_syn_state_pop(SynState *state, u8 count)
         if (state->lost != 0U) {
             state->lost--;
         } else if (state->depth > 1U) {
-            state->ctx[--state->depth] = 0U;
+            state->depth--;
+            (void)memset(&state->f[state->depth], 0,
+                         sizeof(state->f[state->depth]));
         }
     }
 }
@@ -1748,7 +1778,7 @@ void yew_syn_state_pop(SynState *state, u8 count)
 void yew_syn_state_set(SynState *state, u16 ctx)
 {
     state_validate(state);
-    state->ctx[state->depth - 1U] = ctx;
+    state->f[state->depth - 1U].ctx = ctx;
 }
 
 SynEngine *yew_syn_engine_new(SynDef *def)
@@ -2054,11 +2084,11 @@ static void coverage_transition(SynEngine *engine, const SynState *before,
         return;
     if (after->depth > before->depth) {
         for (i = before->depth; i < after->depth; i++)
-            coverage_context(engine, after->ctx[i]);
+            coverage_context(engine, after->f[i].ctx);
     } else if (after->depth != before->depth ||
-               after->ctx[after->depth - 1U] !=
-                   before->ctx[before->depth - 1U]) {
-        coverage_context(engine, after->ctx[after->depth - 1U]);
+               after->f[after->depth - 1U].ctx !=
+                   before->f[before->depth - 1U].ctx) {
+        coverage_context(engine, after->f[after->depth - 1U].ctx);
     }
 }
 
@@ -2141,7 +2171,7 @@ static bool aux_match(const SynEngine *engine, const SynState *state,
             return false;
         match->ngroups = 1U;
         match->g[0] = (Span){0U, 0U};
-        return indent < state->aux;
+        return indent < YEW_SYN_AUX_OF(state);
     }
     if (rule->aux_match == SYN_AUXM_LINE_EMPTY) {
         if (at != 0U || len != 0U)
@@ -2157,10 +2187,10 @@ static bool aux_match(const SynEngine *engine, const SynState *state,
         match->g[0] = (Span){0U, 0U};
         return true;
     }
-    if (engine->def->aux == NULL || state->aux == 0U)
+    if (engine->def->aux == NULL || YEW_SYN_AUX_OF(state) == 0U)
         return false;
-    aux = yew_intern_str(engine->def->aux, state->aux);
-    aux_len = yew_intern_len(engine->def->aux, state->aux);
+    aux = yew_intern_str(engine->def->aux, YEW_SYN_AUX_OF(state));
+    aux_len = yew_intern_len(engine->def->aux, YEW_SYN_AUX_OF(state));
     if (aux == NULL)
         return false;
     match->ngroups = 1U;
@@ -2815,13 +2845,14 @@ static bool set_aux(SynEngine *engine, SynState *state, const SynRule *rule,
             value = UINT32_MAX;
         else
             value += add;
-        state->aux = value;
+        YEW_SYN_AUX_OF(state) = value;
     } else {
         static const char empty[] = "";
         const char *bytes = hi == lo && line == NULL
                                 ? empty
                                 : (const char *)line + lo;
-        state->aux = yew_intern(engine->def->aux, bytes, (size_t)(hi - lo));
+        YEW_SYN_AUX_OF(state) =
+            yew_intern(engine->def->aux, bytes, (size_t)(hi - lo));
     }
     return true;
 }
@@ -2862,7 +2893,7 @@ static void apply_rule_op(SynState *state, const SynRule *rule)
      * so clearing aux during that repayment would corrupt the matcher. */
     if ((rule->flags & YEW_SYN_RULE_CLR_AUX) != 0U &&
         state->depth < depth) {
-        state->aux = 0U;
+        YEW_SYN_AUX_OF(state) = 0U;
         state->flags &= (u8)~YEW_SYN_F_STRIP;
     }
 }
@@ -2872,7 +2903,7 @@ static void apply_empty_bol(SynEngine *engine, SynState *state,
 {
     u32 guard = 0U;
     while (guard++ <= YEW_SYN_DEPTH_MAX) {
-        u16 ctx_id = state->ctx[state->depth - 1U];
+        u16 ctx_id = state->f[state->depth - 1U].ctx;
         const SynCtx *ctx = &engine->def->ctxs[ctx_id];
         const SynRule *matched = NULL;
         u32 matched_index = UINT32_MAX;
@@ -3097,7 +3128,7 @@ static SynFortranBolResult fortran_bol_match(const SynEngine *engine,
 {
     if (!engine->fortran_fast_enabled ||
         engine->fortran_form == SYN_FORTRAN_NONE || len == 0U ||
-        state->ctx[state->depth - 1U] != engine->def->root)
+        state->f[state->depth - 1U].ctx != engine->def->root)
         return SYN_FORTRAN_BOL_FALLBACK;
     if (engine->fortran_form == SYN_FORTRAN_FIXED)
         return fortran_fixed_bol(engine, line, len, rule_index, match);
@@ -3127,7 +3158,7 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
     }
     state = *entry;
     if (instrument && state.depth != 0U)
-        coverage_context(engine, state.ctx[state.depth - 1U]);
+        coverage_context(engine, state.f[state.depth - 1U].ctx);
     if (trace != NULL)
         trace[0] = state;
     if (len > YEW_SYN_LINE_BYTE_CAP) {
@@ -3138,7 +3169,7 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
         return;
     }
     if (engine->def == NULL || engine->def->ctxs == NULL ||
-        state.ctx[state.depth - 1U] >= engine->def->nctxs) {
+        state.f[state.depth - 1U].ctx >= engine->def->nctxs) {
         if (trace != NULL) {
             u32 t;
             for (t = 1U; t <= len; t++)
@@ -3155,10 +3186,11 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
             trace[0] = state;
     }
     while (p < len) {
-        const SynCtx *ctx = &engine->def->ctxs[state.ctx[state.depth - 1U]];
+        const SynCtx *ctx =
+            &engine->def->ctxs[state.f[state.depth - 1U].ctx];
         const u32 *candidate_offsets = engine->candidate_offsets;
         size_t candidate_slot =
-            (size_t)state.ctx[state.depth - 1U] * SYN_CANDIDATE_STRIDE +
+            (size_t)state.f[state.depth - 1U].ctx * SYN_CANDIDATE_STRIDE +
             line[p];
         u32 candidate_off = candidate_offsets == NULL ? 0U :
             candidate_offsets[candidate_slot];
@@ -3209,7 +3241,7 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
         }
         if (engine->fortran_fast_enabled &&
             engine->fortran_words_cap != 0U &&
-            state.ctx[state.depth - 1U] == engine->def->root) {
+            state.f[state.depth - 1U].ctx == engine->def->root) {
             word_probe_init_folded(&word_probe, line, len, p);
             if (word_probe.status == SYN_WORD_PROBE_READY)
                 fortran_word_rule = fortran_word_winner(
@@ -3229,13 +3261,13 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
             !bitset_has(p == 0U || engine->ctx_first_nonbol == NULL ?
                         ctx->first :
                         engine->ctx_first_nonbol[
-                            state.ctx[state.depth - 1U]], line[p]) &&
+                            state.f[state.depth - 1U].ctx], line[p]) &&
             (engine->ctx_aux == NULL ||
-             engine->ctx_aux[state.ctx[state.depth - 1U]] == 0U)) {
+             engine->ctx_aux[state.f[state.depth - 1U].ctx] == 0U)) {
             u32 q = p + 1U;
             const u8 *next_first = engine->ctx_first_nonbol == NULL ?
                 ctx->first :
-                engine->ctx_first_nonbol[state.ctx[state.depth - 1U]];
+                engine->ctx_first_nonbol[state.f[state.depth - 1U].ctx];
 
             while (q < len && !bitset_has(next_first, line[q]))
                 q++;
@@ -3381,7 +3413,7 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
                 continue;
             } else {
                 const SynCtx *after =
-                    &engine->def->ctxs[state.ctx[state.depth - 1U]];
+                    &engine->def->ctxs[state.f[state.depth - 1U].ctx];
                 u32 q = next_boundary(line, len, p);
                 emit_span(out, p, q - p, after->dflt_attr, 0U);
                 if (trace != NULL) {
@@ -3394,7 +3426,8 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
         }
     }
     if (apply_eol) {
-        const SynCtx *ctx = &engine->def->ctxs[state.ctx[state.depth - 1U]];
+        const SynCtx *ctx =
+            &engine->def->ctxs[state.f[state.depth - 1U].ctx];
         SynState before;
 
         if (instrument)

@@ -150,7 +150,7 @@ void test_syn_stack_at_reports_prefix_without_eol_transition(void)
                                 (const u8 *)line, strlen(line), 6U,
                                 &state));
     YEW_ASSERT_EQ_U64(state.depth, 2U);
-    YEW_ASSERT_EQ_U64(state.ctx[1], SYN_TOY_STRING);
+    YEW_ASSERT_EQ_U64(state.f[1].ctx, SYN_TOY_STRING);
     YEW_ASSERT(yew_syn_stack_at(toy.engine, YEW_SYN_STATE_ROOT,
                                 (const u8 *)line, strlen(line),
                                 strlen(line), &state));
@@ -173,7 +173,7 @@ void test_syn_stack_at_preserves_full_line_end_anchor_semantics(void)
                                 (const u8 *)line, strlen(line), 3U,
                                 &state));
     YEW_ASSERT_EQ_U64(state.depth, 1U);
-    YEW_ASSERT_EQ_U64(state.ctx[0], SYN_TOY_MAIN);
+    YEW_ASSERT_EQ_U64(state.f[0].ctx, SYN_TOY_MAIN);
     syn_toy_free(&toy);
 }
 
@@ -189,7 +189,7 @@ void test_syn_stack_at_consume_capture_can_use_lookahead_bytes(void)
                                 (const u8 *)line, strlen(line), 3U,
                                 &state));
     YEW_ASSERT_EQ_U64(state.depth, 2U);
-    YEW_ASSERT_EQ_U64(state.ctx[1], SYN_TOY_STRING);
+    YEW_ASSERT_EQ_U64(state.f[1].ctx, SYN_TOY_STRING);
     syn_toy_free(&toy);
 }
 

@@ -1623,6 +1623,9 @@ void test_macrobrowse_edit_is_an_ordinary_multicursor_undo_buffer(void);
 
 void test_syn_state_root_is_reserved_and_canonical(void);
 void test_syn_state_equal_tuples_share_identity(void);
+void test_syn_state2_layout(void);
+void test_syn_state_unused_tails_are_canonicalized(void);
+void test_syn_state_cross_definition_identity(void);
 void test_syn_state_different_tuples_have_different_identities(void);
 void test_syn_state_depth_cap_balances_refused_pushes(void);
 void test_syn_state_lost_saturates_and_marks_degraded(void);

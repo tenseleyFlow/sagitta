@@ -85,8 +85,12 @@ static void pack_compare(SynBuf *incremental, SynBuf *fresh,
                                  a.exit_state);
         YEW_ASSERT_NOT_NULL(entry);
         YEW_ASSERT_NOT_NULL(exit);
-        YEW_ASSERT_EQ_U64(entry->def, 0U);
-        YEW_ASSERT_EQ_U64(exit->def, 0U);
+        YEW_ASSERT_EQ_U64(entry->ndef, 1U);
+        YEW_ASSERT_EQ_U64(exit->ndef, 1U);
+        for (u8 depth = 0U; depth < entry->depth; depth++)
+            YEW_ASSERT_EQ_U64(entry->f[depth].def, 0U);
+        for (u8 depth = 0U; depth < exit->depth; depth++)
+            YEW_ASSERT_EQ_U64(exit->f[depth].def, 0U);
     }
 }
 

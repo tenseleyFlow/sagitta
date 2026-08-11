@@ -210,7 +210,9 @@ void test_syn_fletch_spec14_tokens_match_runtime_definition(void)
             const SynState *produced =
                 yew_syn_state_get(yew_syn_engine_states(engine), state);
             YEW_ASSERT_NOT_NULL(produced);
-            YEW_ASSERT_EQ_U64(produced->def, 0U);
+            YEW_ASSERT_EQ_U64(produced->ndef, 1U);
+            for (u8 depth = 0U; depth < produced->depth; depth++)
+                YEW_ASSERT_EQ_U64(produced->f[depth].def, 0U);
         }
         base = end < len ? end + 1U : end;
     }
@@ -261,7 +263,9 @@ void test_syn_fletch_spec14_tokens_match_runtime_definition(void)
         const SynState *produced = yew_syn_state_get(states, (u32)i);
 
         YEW_ASSERT_NOT_NULL(produced);
-        YEW_ASSERT_EQ_U64(produced->def, 0U);
+        YEW_ASSERT_EQ_U64(produced->ndef, 1U);
+        for (u8 depth = 0U; depth < produced->depth; depth++)
+            YEW_ASSERT_EQ_U64(produced->f[depth].def, 0U);
     }
 
     interner_free(&interner);

@@ -43,7 +43,9 @@ void test_syn_depth_rust_twenty_nested_comments_balance_exactly(void)
     YEW_ASSERT_NOT_NULL(deep);
     YEW_ASSERT_EQ_U64(deep->depth, YEW_SYN_DEPTH_MAX);
     YEW_ASSERT_EQ_U64(deep->lost, 20U - (YEW_SYN_DEPTH_MAX - 1U));
-    YEW_ASSERT_EQ_U64(deep->def, 0U);
+    YEW_ASSERT_EQ_U64(deep->ndef, 1U);
+    for (u8 depth = 0U; depth < deep->depth; depth++)
+        YEW_ASSERT_EQ_U64(deep->f[depth].def, 0U);
     exit_id = rust_line(engine, deep_id,
         "*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/*/");
     exit = yew_syn_state_get(yew_syn_engine_states(engine), exit_id);
@@ -51,7 +53,8 @@ void test_syn_depth_rust_twenty_nested_comments_balance_exactly(void)
     YEW_ASSERT_EQ_MEM(exit, entry, sizeof(*entry));
     YEW_ASSERT_EQ_U64(exit->depth, 1U);
     YEW_ASSERT_EQ_U64(exit->lost, 0U);
-    YEW_ASSERT_EQ_U64(exit->def, 0U);
+    YEW_ASSERT_EQ_U64(exit->ndef, 1U);
+    YEW_ASSERT_EQ_U64(exit->f[0].def, 0U);
     yew_syn_engine_free(engine);
 }
 
@@ -77,12 +80,15 @@ void test_syn_depth_rust_recovers_after_shallow_edit(void)
     YEW_ASSERT_NOT_NULL(open);
     YEW_ASSERT_EQ_U64(open->depth, 4U);
     YEW_ASSERT_EQ_U64(open->lost, 0U);
-    YEW_ASSERT_EQ_U64(open->def, 0U);
+    YEW_ASSERT_EQ_U64(open->ndef, 1U);
+    for (u8 depth = 0U; depth < open->depth; depth++)
+        YEW_ASSERT_EQ_U64(open->f[depth].def, 0U);
     exit_id = rust_line(engine, open_id, "*/*/*/");
     exit = yew_syn_state_get(yew_syn_engine_states(engine), exit_id);
     YEW_ASSERT_NOT_NULL(exit);
     YEW_ASSERT_EQ_MEM(exit, entry, sizeof(*entry));
     YEW_ASSERT_EQ_U64(exit->lost, 0U);
-    YEW_ASSERT_EQ_U64(exit->def, 0U);
+    YEW_ASSERT_EQ_U64(exit->ndef, 1U);
+    YEW_ASSERT_EQ_U64(exit->f[0].def, 0U);
     yew_syn_engine_free(engine);
 }

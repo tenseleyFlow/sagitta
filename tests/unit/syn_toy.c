@@ -100,11 +100,14 @@ void syn_toy_free(SynToy *toy)
 
 u32 syn_toy_state(SynToy *toy, u16 ctx)
 {
-    SynState state = {{0}, 0U, 1U, 0U, 0U, 0U};
+    SynState state;
 
-    state.ctx[0] = SYN_TOY_MAIN;
+    (void)memset(&state, 0, sizeof(state));
+    state.f[0].ctx = SYN_TOY_MAIN;
+    state.depth = 1U;
+    state.ndef = 1U;
     if (ctx != SYN_TOY_MAIN) {
-        state.ctx[1] = ctx;
+        state.f[1].ctx = ctx;
         state.depth = 2U;
     }
     return yew_syn_state_intern(yew_syn_engine_states(toy->engine), &state);

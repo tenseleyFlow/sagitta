@@ -454,12 +454,12 @@ static int check_coverage(const SynDef *def, const char *const *inputs,
         for (i = YEW_SYN_STATE_ROOT; i < nstates; i++) {
             const SynState *state = yew_syn_state_get(states, i);
 
-            if (state == NULL || state->def != 0U) {
+            if (state == NULL || state->ndef != 1U) {
                 (void)fprintf(stderr,
-                              "yew syn: state %u uses embedded definition %u; "
-                              "embedding is deferred to s41_5\n",
+                              "yew syn: state %u has definition depth %u; "
+                              "unexpected embed in non-embedding coverage\n",
                               (unsigned)i,
-                              state == NULL ? 0U : (unsigned)state->def);
+                              state == NULL ? 0U : (unsigned)state->ndef);
                 status = YEW_EXIT_ERR;
                 break;
             }
@@ -632,7 +632,7 @@ static const char *state_context(SynEngine *engine, u32 state)
 
     if (value == NULL || value->depth == 0U)
         return "<unknown>";
-    return ctx_name(def, value->ctx[value->depth - 1U]);
+    return ctx_name(def, value->f[value->depth - 1U].ctx);
 }
 
 static int dump_spans(const SynDef *def, const char *path)
@@ -685,7 +685,7 @@ static int dump_spans(const SynDef *def, const char *path)
             if (yew_syn_stack_at(engine, entry, (const u8 *)input + lo,
                                  (u32)line_len, spans[i].start, &at) &&
                 at.depth != 0U)
-                context = ctx_name(def, at.ctx[at.depth - 1U]);
+                context = ctx_name(def, at.f[at.depth - 1U].ctx);
             bytebuf_printf(&text, "  %u:%u-%u attr=%s context=%s",
                            (unsigned)line_no, (unsigned)spans[i].start,
                            (unsigned)(spans[i].start + spans[i].len),

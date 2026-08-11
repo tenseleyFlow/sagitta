@@ -13,6 +13,7 @@
 typedef struct TextBuf TextBuf;
 
 #define YEW_SYN_DEPTH_MAX 16U
+#define YEW_SYN_DEF_MAX 4U
 #define YEW_SYN_LOST_MAX 255U
 #define YEW_SYN_MAX_STATES 65536U
 #define YEW_SYN_MAX_SPANS 4096U
@@ -34,7 +35,13 @@ enum {
     YEW_SYN_F_VALUE = 1U << 0,
     YEW_SYN_F_STRIP = 1U << 1,
     YEW_SYN_F_DEGRADED = 1U << 2,
-    YEW_SYN_F_PAST_FIRST = 1U << 3
+    YEW_SYN_F_PAST_FIRST = 1U << 3,
+    YEW_SYN_F_EMBED_LOST = 1U << 4,
+    YEW_SYN_F_EMBED_PEND = 1U << 5
+};
+
+enum {
+    YEW_SYN_FR_BRIDGE = 1U << 0
 };
 
 enum {
@@ -48,16 +55,27 @@ typedef enum SynStop {
     YEW_SYN_STOP_STEPS
 } SynStop;
 
+typedef struct SynFrame {
+    u16 ctx;
+    u8 def;
+    u8 fl;
+} SynFrame;
+
+_Static_assert(sizeof(SynFrame) == 4, "frame packs to 4 bytes");
+
 typedef struct SynState {
-    u16 ctx[YEW_SYN_DEPTH_MAX];
-    u32 aux;
+    SynFrame f[YEW_SYN_DEPTH_MAX];
+    u32 aux[YEW_SYN_DEF_MAX];
     u8 depth;
     u8 lost;
-    u8 def;
+    u8 ndef;
     u8 flags;
 } SynState;
 
-_Static_assert(sizeof(SynState) == 40, "state tuple size");
+_Static_assert(sizeof(SynState) == 84, "state tuple size");
+
+#define YEW_SYN_DEF_OF(s) ((s)->f[(s)->depth - 1U].def)
+#define YEW_SYN_AUX_OF(s) ((s)->aux[(s)->ndef - 1U])
 
 typedef struct SynSpan {
     u32 start;

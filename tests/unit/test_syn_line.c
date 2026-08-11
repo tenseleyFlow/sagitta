@@ -105,14 +105,16 @@ void test_syn_line_toy_golden_table(void)
                            YEW_ARRAY_LEN(spans), &out);
         exit = yew_syn_state_get(yew_syn_engine_states(toy.engine),
                                  out.exit_state);
-        if (exit != NULL && exit->ctx[exit->depth - 1U] != rows[i].exit_ctx)
+        if (exit != NULL &&
+            exit->f[exit->depth - 1U].ctx != rows[i].exit_ctx)
             (void)fprintf(stderr, "toy row %u (%s): exit ctx %u, want %u\n",
                           i, rows[i].line,
-                          (unsigned)exit->ctx[exit->depth - 1U],
+                          (unsigned)exit->f[exit->depth - 1U].ctx,
                           (unsigned)rows[i].exit_ctx);
         YEW_ASSERT_EQ_U64(out.stop, YEW_SYN_STOP_OK);
         YEW_ASSERT_NOT_NULL(exit);
-        YEW_ASSERT_EQ_U64(exit->ctx[exit->depth - 1U], rows[i].exit_ctx);
+        YEW_ASSERT_EQ_U64(exit->f[exit->depth - 1U].ctx,
+                          rows[i].exit_ctx);
         YEW_ASSERT_EQ_U64(attr_at(&out, rows[i].probe), rows[i].attr);
         assert_spans_well_formed(&out, (u32)strlen(rows[i].line));
     }
@@ -141,7 +143,7 @@ void test_syn_line_byte_cap_preserves_entry_state(void)
             yew_syn_engine_states(toy.engine), out.exit_state);
 
         YEW_ASSERT_NOT_NULL(exit);
-        YEW_ASSERT_EQ_U64(exit->ctx[exit->depth - 1U],
+        YEW_ASSERT_EQ_U64(exit->f[exit->depth - 1U].ctx,
                           SYN_TOY_COMMENT_BLOCK);
         YEW_ASSERT((exit->flags & YEW_SYN_F_PAST_FIRST) != 0U);
     }
@@ -227,7 +229,7 @@ void test_syn_line_step_cap_degrades_instead_of_stalling(void)
             yew_syn_engine_states(engine), out.exit_state);
 
         YEW_ASSERT_NOT_NULL(exit);
-        YEW_ASSERT_EQ_U64(exit->ctx[0], 0U);
+        YEW_ASSERT_EQ_U64(exit->f[0].ctx, 0U);
         YEW_ASSERT((exit->flags & YEW_SYN_F_PAST_FIRST) != 0U);
     }
     yew_syn_engine_free(engine);
@@ -316,13 +318,15 @@ void test_syn_line_consume_stops_emission_and_optional_aux_is_safe(void)
     SynEngine *engine;
     SynSpan spans[8];
     SynLineOut out = {spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
-    SynState state = {{0}, 0U, 1U, 0U, 0U, 0U};
+    SynState state = {0};
     u32 entry;
     const SynState *exit;
 
     arena_init(&arena);
     arena_init(&aux_arena);
     interner_init(&aux, &aux_arena);
+    state.depth = 1U;
+    state.ndef = 1U;
     ctx.nrules = 2U;
     ctx.dflt_attr = YEW_ATTR_TEXT;
     ctx.first['a' >> 3U] |= (u8)(1U << ('a' & 7U));
@@ -356,13 +360,13 @@ void test_syn_line_consume_stops_emission_and_optional_aux_is_safe(void)
     (void)memset(rules[0].caps, 0xff, sizeof(rules[0].caps));
     rules[0].first['b' >> 3U] |= (u8)(1U << ('b' & 7U));
     engine = yew_syn_engine_new(&def);
-    state.aux = yew_intern(&aux, "old", 3U);
+    state.aux[0] = yew_intern(&aux, "old", 3U);
     entry = yew_syn_state_intern(yew_syn_engine_states(engine), &state);
     out.n = 0U;
     yew_syn_line(engine, entry, (const u8 *)"b", 1U, &out);
     exit = yew_syn_state_get(yew_syn_engine_states(engine), out.exit_state);
     YEW_ASSERT_NOT_NULL(exit);
-    YEW_ASSERT_EQ_U64(exit->aux, state.aux);
+    YEW_ASSERT_EQ_U64(YEW_SYN_AUX_OF(exit), YEW_SYN_AUX_OF(&state));
     YEW_ASSERT_EQ_U64(exit->flags & YEW_SYN_F_STRIP, 0U);
     yew_syn_engine_free(engine);
 
@@ -386,12 +390,12 @@ void test_syn_line_consume_stops_emission_and_optional_aux_is_safe(void)
     yew_syn_line(engine, YEW_SYN_STATE_ROOT, (const u8 *)"  I", 3U, &out);
     exit = yew_syn_state_get(yew_syn_engine_states(engine), out.exit_state);
     YEW_ASSERT_NOT_NULL(exit);
-    YEW_ASSERT_EQ_U64(exit->aux, 3U);
+    YEW_ASSERT_EQ_U64(YEW_SYN_AUX_OF(exit), 3U);
     out.n = 0U;
     yew_syn_line(engine, YEW_SYN_STATE_ROOT, (const u8 *)"  7I", 4U, &out);
     exit = yew_syn_state_get(yew_syn_engine_states(engine), out.exit_state);
     YEW_ASSERT_NOT_NULL(exit);
-    YEW_ASSERT_EQ_U64(exit->aux, 9U);
+    YEW_ASSERT_EQ_U64(YEW_SYN_AUX_OF(exit), 9U);
     yew_syn_engine_free(engine);
 
     rules[0].re = NULL;
@@ -399,7 +403,7 @@ void test_syn_line_consume_stops_emission_and_optional_aux_is_safe(void)
     rules[0].aux_match = SYN_AUXM_LINE_EQ;
     ctx.first[0] = 0U;
     engine = yew_syn_engine_new(&def);
-    state.aux = yew_intern(&aux, "", 0U);
+    state.aux[0] = yew_intern(&aux, "", 0U);
     entry = yew_syn_state_intern(yew_syn_engine_states(engine), &state);
     out.n = 0U;
     yew_syn_line(engine, entry, NULL, 0U, &out);
@@ -419,11 +423,15 @@ void test_syn_line_push_list_eol_target_and_clear_aux_pop_laws(void)
     SynEngine *engine;
     SynSpan spans[8];
     SynLineOut out = {spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
-    SynState state = {{0}, 77U, 2U, 0U, 0U, YEW_SYN_F_STRIP};
+    SynState state = {0};
     const SynState *exit;
     u32 entry;
 
     arena_init(&arena);
+    state.aux[0] = 77U;
+    state.depth = 2U;
+    state.ndef = 1U;
+    state.flags = YEW_SYN_F_STRIP;
     ctxs[0].nrules = 1U;
     ctxs[0].dflt_attr = YEW_ATTR_TEXT;
     ctxs[0].first['x' >> 3U] |= (u8)(1U << ('x' & 7U));
@@ -439,8 +447,8 @@ void test_syn_line_push_list_eol_target_and_clear_aux_pop_laws(void)
     yew_syn_line(engine, YEW_SYN_STATE_ROOT, (const u8 *)"x", 1U, &out);
     exit = yew_syn_state_get(yew_syn_engine_states(engine), out.exit_state);
     YEW_ASSERT_EQ_U64(exit->depth, 3U);
-    YEW_ASSERT_EQ_U64(exit->ctx[1], 1U);
-    YEW_ASSERT_EQ_U64(exit->ctx[2], 2U);
+    YEW_ASSERT_EQ_U64(exit->f[1].ctx, 1U);
+    YEW_ASSERT_EQ_U64(exit->f[2].ctx, 2U);
     yew_syn_engine_free(engine);
 
     rule.op = SYN_OP_POP;
@@ -448,14 +456,14 @@ void test_syn_line_push_list_eol_target_and_clear_aux_pop_laws(void)
     rule.nop = 1U;
     rule.flags = YEW_SYN_RULE_CLR_AUX;
     engine = yew_syn_engine_new(&def);
-    state.ctx[0] = 0U;
-    state.ctx[1] = 0U;
+    state.f[0].ctx = 0U;
+    state.f[1].ctx = 0U;
     entry = yew_syn_state_intern(yew_syn_engine_states(engine), &state);
     out.n = 0U;
     yew_syn_line(engine, entry, (const u8 *)"x", 1U, &out);
     exit = yew_syn_state_get(yew_syn_engine_states(engine), out.exit_state);
     YEW_ASSERT_EQ_U64(exit->depth, 1U);
-    YEW_ASSERT_EQ_U64(exit->aux, 0U);
+    YEW_ASSERT_EQ_U64(YEW_SYN_AUX_OF(exit), 0U);
     YEW_ASSERT_EQ_U64(exit->flags & YEW_SYN_F_STRIP, 0U);
 
     state.lost = 1U;
@@ -465,7 +473,7 @@ void test_syn_line_push_list_eol_target_and_clear_aux_pop_laws(void)
     exit = yew_syn_state_get(yew_syn_engine_states(engine), out.exit_state);
     YEW_ASSERT_EQ_U64(exit->depth, 2U);
     YEW_ASSERT_EQ_U64(exit->lost, 0U);
-    YEW_ASSERT_EQ_U64(exit->aux, 77U);
+    YEW_ASSERT_EQ_U64(YEW_SYN_AUX_OF(exit), 77U);
     YEW_ASSERT(exit->flags & YEW_SYN_F_STRIP);
     yew_syn_engine_free(engine);
 
@@ -476,7 +484,7 @@ void test_syn_line_push_list_eol_target_and_clear_aux_pop_laws(void)
     out.n = 0U;
     yew_syn_line(engine, YEW_SYN_STATE_ROOT, NULL, 0U, &out);
     exit = yew_syn_state_get(yew_syn_engine_states(engine), out.exit_state);
-    YEW_ASSERT_EQ_U64(exit->ctx[0], 2U);
+    YEW_ASSERT_EQ_U64(exit->f[0].ctx, 2U);
     yew_syn_engine_free(engine);
     arena_free_all(&arena);
 }

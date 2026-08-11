@@ -78,7 +78,8 @@ static bool line_read(const TextBuf *tb, u64 line, SynBlockLine *out)
 
 static bool frame_is(const SynState *state, u8 depth, u16 ctx)
 {
-    return state != NULL && depth < state->depth && state->ctx[depth] == ctx;
+    return state != NULL && depth < state->depth &&
+           state->f[depth].ctx == ctx;
 }
 
 static bool state_at_line(const Buffer *buf, u64 line, u32 at,
@@ -306,7 +307,7 @@ static bool syn_enclosing(void *ctx, UnitCtx *u, ByteOff p, Span inner,
     if (!state_at_line(buf, line, local, &state) || state.lost != 0U)
         return false;
     for (depth = 0; depth < state.depth; depth++) {
-        u16 id = state.ctx[depth];
+        u16 id = state.f[depth].ctx;
         if (id >= def->nctxs)
             return false;
         if ((def->ctxs[id].flags & YEW_SYN_CTX_UNIT_ATOM) != 0U) {
@@ -316,7 +317,7 @@ static bool syn_enclosing(void *ctx, UnitCtx *u, ByteOff p, Span inner,
     }
     for (depth = atom >= 0 ? atom : (int)state.depth - 1;
          depth >= 0; depth--) {
-        u16 id = state.ctx[depth];
+        u16 id = state.f[depth].ctx;
         u8 flags = def->ctxs[id].flags;
         Span candidate;
 

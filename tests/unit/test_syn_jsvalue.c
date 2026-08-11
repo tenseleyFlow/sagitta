@@ -47,7 +47,9 @@ static void js_assert_cases(const JsValueCase *cases, size_t n)
         YEW_ASSERT_EQ_U64(out.stop, YEW_SYN_STOP_OK);
         YEW_ASSERT_NOT_NULL(exit);
         YEW_ASSERT_EQ_U64(js_attr_at(&out, cases[i].slash), cases[i].attr);
-        YEW_ASSERT_EQ_U64(exit->def, 0U);
+        YEW_ASSERT_EQ_U64(exit->ndef, 1U);
+        for (u8 depth = 0U; depth < exit->depth; depth++)
+            YEW_ASSERT_EQ_U64(exit->f[depth].def, 0U);
         YEW_ASSERT((exit->flags & YEW_SYN_F_VALUE) == 0U);
     }
     yew_syn_engine_free(engine);
@@ -136,7 +138,8 @@ void test_syn_jsvalue_known_failures_are_line_bounded(void)
     YEW_ASSERT_NOT_NULL(exit);
     YEW_ASSERT_EQ_U64(exit->depth, 1U);
     YEW_ASSERT_EQ_U64(exit->lost, 0U);
-    YEW_ASSERT_EQ_U64(exit->def, 0U);
+    YEW_ASSERT_EQ_U64(exit->ndef, 1U);
+    YEW_ASSERT_EQ_U64(exit->f[0].def, 0U);
     YEW_ASSERT((exit->flags & YEW_SYN_F_VALUE) == 0U);
     yew_syn_engine_free(engine);
 }

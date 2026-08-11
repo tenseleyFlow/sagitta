@@ -487,8 +487,9 @@ void test_syn_cache_warm_load_preserves_aux_literals_and_mutable_aux(void)
     state = yew_syn_state_get(yew_syn_engine_states(engine), out.exit_state);
     YEW_ASSERT_NOT_NULL(state);
     YEW_ASSERT_EQ_U64(state->depth, 2U);
-    YEW_ASSERT_EQ_U64(state->ctx[1], 1U);
-    YEW_ASSERT_EQ_STR(yew_intern_str(loaded.def->aux, state->aux), "##");
+    YEW_ASSERT_EQ_U64(state->f[1].ctx, 1U);
+    YEW_ASSERT_EQ_STR(yew_intern_str(loaded.def->aux,
+                                     YEW_SYN_AUX_OF(state)), "##");
 
     yew_syn_line(engine, out.exit_state, closer, sizeof(closer) - 1U, &out);
     YEW_ASSERT_EQ_U64(out.stop, YEW_SYN_STOP_OK);
