@@ -15,8 +15,9 @@ not earn a field milestone.
   keystrokes with the required live latency histogram, abnormal-exit and
   resume trials, self-hosting attribution for at least 60% of eligible changed
   lines from one complete post-Sprint-42 implementation sprint under the
-  dogfood log's path/artifact rules (Sprint 42.5 is designated), and the other
-  Sprint 42 field checks
+  dogfood log's path/artifact rules. Sprint 42.5 recorded no qualifying yew
+  sessions and contributes zero; a later full sprint must be designated before
+  implementation begins. The other Sprint 42 field checks also remain open
 - Revocation policy: B1–B10 in the dogfood log; once earned, any listed
   incident changes this state to `REVOKED` with a reason and issue id
 
