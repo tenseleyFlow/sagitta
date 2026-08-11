@@ -377,6 +377,7 @@ const YewTest yew_tests[] = {
     T(tty_probe_config),
     T(tty_probe_background_query_and_common_replies),
     T(tty_probe_background_preserves_unrelated_input),
+    T(tty_probe_background_waits_for_delayed_capability_reply),
     T(tty_probe_background_timeout_and_malformed),
     T(tty_truecolor),
     T(input_legacy_bytes),

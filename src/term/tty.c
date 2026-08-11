@@ -1063,9 +1063,10 @@ static bool yew_tty_probe_candidate(Tty *t)
         t->background = background_light ? YEW_TTY_BACKGROUND_LIGHT :
                                            YEW_TTY_BACKGROUND_DARK;
         t->background_await = false;
-        t->caps.probed = true;
-        t->pstate = YEW_TTY_PROBE_DONE;
-        t->pdeadline = 0;
+        if (!t->capability_await) {
+            t->pstate = YEW_TTY_PROBE_DONE;
+            t->pdeadline = 0;
+        }
         t->probe_prefix_len = 0U;
         return true;
     }
@@ -1084,6 +1085,7 @@ static bool yew_tty_probe_candidate(Tty *t)
     if (da1_complete) {
         t->caps.da1_seen = true;
         t->caps.probed = true;
+        t->capability_await = false;
         if (!t->background_await) {
             t->pstate = YEW_TTY_PROBE_DONE;
             t->pdeadline = 0;
@@ -1139,6 +1141,7 @@ void yew_tty_probe_config(Tty *t, i64 now_ms,
     t->caps.da1_seen = false;
     t->background = YEW_TTY_BACKGROUND_UNKNOWN;
     t->background_await = false;
+    t->capability_await = false;
     t->probe_prefix_len = 0U;
     if (!config.enabled) {
         t->pstate = YEW_TTY_PROBE_DONE;
@@ -1147,6 +1150,7 @@ void yew_tty_probe_config(Tty *t, i64 now_ms,
         return;
     }
     t->pstate = YEW_TTY_PROBE_AWAIT;
+    t->capability_await = true;
     if (now_ms > INT64_MAX - config.timeout_ms)
         t->pdeadline = INT64_MAX;
     else
@@ -1223,6 +1227,7 @@ void yew_tty_probe_tick(Tty *t, i64 now_ms)
         return;
     yew_tty_probe_flush(t);
     t->background_await = false;
+    t->capability_await = false;
     t->pstate = YEW_TTY_PROBE_DONE;
     t->pdeadline = 0;
     t->caps.probed = true;

@@ -46,6 +46,7 @@ typedef struct Tty {
     i64 pdeadline;
     u8 background;                 /* TtyBackground */
     bool background_await;
+    bool capability_await;
 
     /* An incomplete probe reply is ambiguous input until it matches. */
     u8 probe_prefix[64];

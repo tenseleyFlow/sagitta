@@ -504,6 +504,37 @@ void test_tty_probe_background_preserves_unrelated_input(void)
     tty_fixture_free(&t, pipefd);
 }
 
+void test_tty_probe_background_waits_for_delayed_capability_reply(void)
+{
+    static const u8 background[] =
+        "\x1b]11;rgb:ffff/ffff/ffff\x07";
+    static const u8 da1[] = "\x1b[?1;2c";
+    Tty t;
+    int pipefd[2];
+
+    memset(&t, 0, sizeof(t));
+    t.rfd = -1;
+    YEW_ASSERT_EQ_I64(pipe(pipefd), 0);
+    t.wfd = pipefd[1];
+    bytebuf_init(&t.pending);
+    set_test_env(NULL, 0U);
+    yew_tty_probe_config(&t, 1000, test_getenv);
+    YEW_ASSERT(t.capability_await);
+    YEW_ASSERT(yew_tty_probe_background_config(&t, 1000, test_getenv));
+    (void)yew_tty_probe_feed(&t, background, sizeof(background) - 1U);
+    YEW_ASSERT(!yew_tty_probe_done(&t));
+    YEW_ASSERT(t.capability_await);
+    YEW_ASSERT(yew_tty_probe_background(&t) ==
+               YEW_TTY_BACKGROUND_LIGHT);
+    YEW_ASSERT_EQ_U64(t.pending.len, 0U);
+    (void)yew_tty_probe_feed(&t, da1, sizeof(da1) - 1U);
+    YEW_ASSERT(yew_tty_probe_done(&t));
+    YEW_ASSERT(!t.capability_await);
+    YEW_ASSERT(t.caps.da1_seen);
+    YEW_ASSERT_EQ_U64(t.pending.len, 0U);
+    tty_fixture_free(&t, pipefd);
+}
+
 void test_tty_probe_background_timeout_and_malformed(void)
 {
     static const u8 malformed[] = "\x1b]11;rgb:ffff/nope/0000\x07";

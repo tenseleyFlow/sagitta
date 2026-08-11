@@ -353,6 +353,7 @@ void test_tty_resume_failure_visible(void);
 void test_tty_probe_config(void);
 void test_tty_probe_background_query_and_common_replies(void);
 void test_tty_probe_background_preserves_unrelated_input(void);
+void test_tty_probe_background_waits_for_delayed_capability_reply(void);
 void test_tty_probe_background_timeout_and_malformed(void);
 void test_tty_truecolor(void);
 void test_input_legacy_bytes(void);
