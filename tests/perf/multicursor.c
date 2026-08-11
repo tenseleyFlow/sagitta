@@ -123,6 +123,7 @@ static void model_free(Ed *ed, Win *win)
 {
     yew_vp_free(win);
     yew_cset_free(&win->cs);
+    yew_syn_detach(&ed->buffer.syn);
     yew_marks_free(ed->buffer.marks);
     yew_undo_free(ed->buffer.undo);
     yew_textbuf_free(ed->buffer.tb);
