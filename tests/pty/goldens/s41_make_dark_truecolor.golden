@@ -1,0 +1,185 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=0,7 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
+--- text
+     1 ifeq ($(MODE_0),debug)                                                   
+     2 CFLAGS_1 += -g                                                           
+     3 endif                                                                    
+     4 define emit_3                                                            
+     5     @printf "%s\n" "$@ $< $^"                                            
+     6 endef                                                                    
+     7 target_6: dep_6                                                          
+     8     $(CC) $(CFLAGS) -o target_7 dep_7                                    
+     9 ifeq ($(MODE_8),debug)                                                   
+    10 CFLAGS_9 += -g                                                           
+    11 endif                                                                    
+    12 define emit_11                                                           
+    13     @printf "%s\n" "$@ $< $^"                                            
+    14 endef                                                                    
+    15 target_14: dep_14                                                        
+    16     $(CC) $(CFLAGS) -o target_15 dep_15                                  
+    17 ifeq ($(MODE_16),debug)                                                  
+    18 CFLAGS_17 += -g                                                          
+    19 endif                                                                    
+    20 define emit_19                                                           
+    21     @printf "%s\n" "$@ $< $^"                                            
+    22 endef                                                                    
+    23 target_22: dep_22                                                        
+ L  mk_kitchen.mk                                            utf-8  lf  1:1  top
+--- style
+AAAAABACCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAADDDDDDDDDEEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAACCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAAFFFFFFDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAAGGGGGGGGGGGGGGGGGGGGHHGHHGHHGGGGGGGGGGGGGDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAAFFFFFDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAAIIIIIIIIEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAAJJJJDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAACCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAADDDDDDDDDEEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAACCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAAFFFFFFDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAAGGGGGGGGGGGGGGGGGGGGHHGHHGHHGGGGGGGGGGGGGDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAAFFFFFDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAAIIIIIIIIIEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAAJJJJDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAACCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAADDDDDDDDDDEEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAACCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAAFFFFFFDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAAGGGGGGGGGGGGGGGGGGGGHHGHHGHHGGGGGGGGGGGGGDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAAFFFFFDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAAIIIIIIIIIEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+KKKDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+--- legend
+A fg=#4b5263 bg=#12141a attrs=----------
+B fg=#c8ccd4 bg=#12141a attrs=b---------
+C fg=#c678dd bg=#12141a attrs=b---------
+D fg=#c8ccd4 bg=#12141a attrs=----------
+E fg=#56b6c2 bg=#12141a attrs=----------
+F fg=#c678dd bg=#12141a attrs=----------
+G fg=#98c379 bg=#12141a attrs=--i-------
+H fg=#e06c75 bg=#12141a attrs=--i-------
+I fg=#ff79c6 bg=#12141a attrs=----------
+J fg=#3a3f4b bg=#12141a attrs=----------
+K fg=#12141a bg=#61afef attrs=----------
+--- sgr
+\x1b[0;38;2;75;82;99;48;2;18;20;26m
+\x1b[1;38;2;200;204;212m
+\x1b[22;38;2;75;82;99m
+\x1b[1;38;2;198;120;221m
+\x1b[22;38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;86;182;194m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[1;38;2;198;120;221m
+\x1b[22;38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;198;120;221m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;58;63;75m
+\x1b[38;2;86;182;194m
+\x1b[38;2;200;204;212m
+\x1b[38;2;152;195;121m
+\x1b[38;2;86;182;194m
+\x1b[38;2;152;195;121m
+\x1b[38;2;200;204;212m
+\x1b[38;2;152;195;121m
+\x1b[3;38;2;224;108;117m
+\x1b[23;38;2;152;195;121m
+\x1b[3;38;2;224;108;117m
+\x1b[23;38;2;152;195;121m
+\x1b[3;38;2;224;108;117m
+\x1b[23;38;2;152;195;121m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;198;120;221m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;255;121;198m
+\x1b[38;2;86;182;194m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;58;63;75m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[1;38;2;198;120;221m
+\x1b[22;38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;86;182;194m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[1;38;2;198;120;221m
+\x1b[22;38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;198;120;221m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;58;63;75m
+\x1b[38;2;86;182;194m
+\x1b[38;2;200;204;212m
+\x1b[38;2;152;195;121m
+\x1b[38;2;86;182;194m
+\x1b[38;2;152;195;121m
+\x1b[38;2;200;204;212m
+\x1b[38;2;152;195;121m
+\x1b[3;38;2;224;108;117m
+\x1b[23;38;2;152;195;121m
+\x1b[3;38;2;224;108;117m
+\x1b[23;38;2;152;195;121m
+\x1b[3;38;2;224;108;117m
+\x1b[23;38;2;152;195;121m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;198;120;221m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;255;121;198m
+\x1b[38;2;86;182;194m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;58;63;75m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[1;38;2;198;120;221m
+\x1b[22;38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;86;182;194m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[1;38;2;198;120;221m
+\x1b[22;38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;198;120;221m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;58;63;75m
+\x1b[38;2;86;182;194m
+\x1b[38;2;200;204;212m
+\x1b[38;2;152;195;121m
+\x1b[38;2;86;182;194m
+\x1b[38;2;152;195;121m
+\x1b[38;2;200;204;212m
+\x1b[38;2;152;195;121m
+\x1b[3;38;2;224;108;117m
+\x1b[23;38;2;152;195;121m
+\x1b[3;38;2;224;108;117m
+\x1b[23;38;2;152;195;121m
+\x1b[3;38;2;224;108;117m
+\x1b[23;38;2;152;195;121m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;198;120;221m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;255;121;198m
+\x1b[38;2;86;182;194m
+\x1b[38;2;200;204;212m
+\x1b[38;2;18;20;26;48;2;97;175;239m
+\x1b[38;2;200;204;212;48;2;18;20;26m
+\x1b[0;3;38;2;152;195;121;48;2;18;20;26m

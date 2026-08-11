@@ -4445,6 +4445,358 @@ static void case_s39_deferred_5000_line_wave(PtyCtx *c)
 }
 
 /* ---------------------------------------------------------------- */
+/* Sprint 41: shipped language and theme PTY contracts               */
+/* ---------------------------------------------------------------- */
+
+typedef struct S41Kitchen {
+    const char *tag;
+    const char *path;
+} S41Kitchen;
+
+static const S41Kitchen s41_kitchens[] = {
+    {"_c_", "tests/perf/fixtures/syn/c_kitchen.c"},
+    {"_fletch_", "tests/perf/fixtures/syn/fl_kitchen.fl"},
+    {"_sh_", "tests/perf/fixtures/syn/sh_kitchen.sh"},
+    {"_make_", "tests/perf/fixtures/syn/mk_kitchen.mk"},
+    {"_markdown_", "tests/perf/fixtures/syn/md_kitchen.md"}
+};
+
+static bool raw_contains_since(const PtyCtx *c, size_t at,
+                               const char *needle)
+{
+    size_t n;
+    size_t i;
+
+    if (c == NULL || needle == NULL || at > c->raw.len)
+        return false;
+    n = strlen(needle);
+    if (n == 0U)
+        return true;
+    for (i = at; i + n <= c->raw.len; i++) {
+        if (memcmp(c->raw.data + i, needle, n) == 0)
+            return true;
+    }
+    return false;
+}
+
+static bool raw_sgr_has_param_since(const PtyCtx *c, size_t at,
+                                    unsigned wanted)
+{
+    size_t i;
+
+    if (c == NULL || at > c->raw.len)
+        return false;
+    for (i = at; i + 2U < c->raw.len; i++) {
+        size_t p;
+
+        if (c->raw.data[i] != 0x1bU || c->raw.data[i + 1U] != '[')
+            continue;
+        p = i + 2U;
+        while (p < c->raw.len && c->raw.data[p] != 'm') {
+            unsigned value = 0U;
+            bool digits = false;
+
+            while (p < c->raw.len && c->raw.data[p] >= '0' &&
+                   c->raw.data[p] <= '9') {
+                digits = true;
+                value = value * 10U + (unsigned)(c->raw.data[p] - '0');
+                p++;
+            }
+            if (digits && value == wanted)
+                return true;
+            if (p >= c->raw.len || c->raw.data[p] == 'm')
+                break;
+            if (c->raw.data[p] != ';' && c->raw.data[p] != ':')
+                break;
+            p++;
+        }
+    }
+    return false;
+}
+
+static bool raw_has_any_sgr_since(const PtyCtx *c, size_t at)
+{
+    size_t i;
+
+    if (c == NULL || at > c->raw.len)
+        return false;
+    for (i = at; i + 2U < c->raw.len; i++) {
+        size_t p;
+
+        if (c->raw.data[i] != 0x1bU || c->raw.data[i + 1U] != '[')
+            continue;
+        for (p = i + 2U; p < c->raw.len; p++) {
+            if (c->raw.data[p] == 'm')
+                return true;
+            if (!(c->raw.data[p] == ';' || c->raw.data[p] == ':' ||
+                  (c->raw.data[p] >= '0' && c->raw.data[p] <= '9')))
+                break;
+        }
+    }
+    return false;
+}
+
+static const char *s41_kitchen_path(PtyCtx *c)
+{
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(s41_kitchens); i++) {
+        if (strstr(c->test->name, s41_kitchens[i].tag) != NULL)
+            return s41_kitchens[i].path;
+    }
+    ptc_check(c, false, "Sprint 41 kitchen case has no fixture mapping");
+    return NULL;
+}
+
+static void case_s41_kitchen(PtyCtx *c)
+{
+    const char *path = s41_kitchen_path(c);
+    const char *theme = strstr(c->test->name, "_light_") != NULL
+                            ? "quiver-light" : "quiver-dark";
+
+    if (path == NULL)
+        return;
+    ptc_spawn(c, ptc_yew_bin(c), "--theme", theme, path, NULL);
+    ptc_settle(c, 0);
+    ptc_wait_kitty_push(c, 21U);
+    if (strstr(c->test->name, "colors_256") != NULL ||
+        strstr(c->test->name, "colors_16") != NULL) {
+        ptc_check(c, !raw_sgr_has_param_since(c, 0U, 58U),
+                  "lower colour tier emitted SGR 58 underline colour");
+        ptc_check(c, !raw_sgr_has_param_since(c, 0U, 59U),
+                  "lower colour tier emitted SGR 59 underline reset");
+    }
+    ptc_snapshot_sgr(c, c->test->name);
+    force_quit(c);
+}
+
+static bool s41_fixture(PtyCtx *c, const char *suffix, const u8 *bytes,
+                        size_t len, char *path, size_t cap)
+{
+    int n = snprintf(path, cap, "build/pty-%s%s", c->test->name, suffix);
+
+    if (n <= 0 || (size_t)n >= cap) {
+        ptc_check(c, false, "Sprint 41 fixture path overflow");
+        return false;
+    }
+    if (!write_bytes(path, bytes, len)) {
+        ptc_check(c, false, "could not create Sprint 41 PTY fixture");
+        return false;
+    }
+    return true;
+}
+
+static void s41_open_fixture(PtyCtx *c, const char *theme, const char *path)
+{
+    ptc_spawn(c, ptc_yew_bin(c), "--theme", theme, path, NULL);
+    ptc_settle(c, 0);
+    ptc_wait_kitty_push(c, 21U);
+}
+
+static void case_s41_underline_error(PtyCtx *c)
+{
+    static const u8 text[] = "const char *bad = \"\\q\";\n";
+    const bool lower = strstr(c->test->name, "colors_256") != NULL;
+    const char *theme = strstr(c->test->name, "_light_") != NULL
+                            ? "quiver-light" : "quiver-dark";
+    const char *rgb = strstr(c->test->name, "_light_") != NULL
+                          ? "58;2;164;14;38" : "58;2;255;95;95";
+    char path[256];
+
+    if (!s41_fixture(c, ".c", text, sizeof(text) - 1U, path, sizeof(path)))
+        return;
+    s41_open_fixture(c, theme, path);
+    ptc_check(c, raw_contains_since(c, 0U, rgb) != lower,
+              lower ? "256-colour error emitted SGR 58"
+                    : "truecolour error omitted its SGR 58 RGB");
+    ptc_check(c, raw_sgr_has_param_since(c, 0U, 59U) != lower,
+              lower ? "256-colour error emitted SGR 59"
+                    : "truecolour error omitted SGR 59 reset");
+    ptc_snapshot(c, c->test->name);
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s41_underline_warning(PtyCtx *c)
+{
+    static const u8 text[] = "target:\n  echo missing-tab\n";
+    const bool lower = strstr(c->test->name, "colors_256") != NULL;
+    const char *theme = strstr(c->test->name, "_light_") != NULL
+                            ? "quiver-light" : "quiver-dark";
+    const char *rgb = strstr(c->test->name, "_light_") != NULL
+                          ? "58;2;154;103;0" : "58;2;229;192;123";
+    char path[256];
+
+    if (!s41_fixture(c, ".mk", text, sizeof(text) - 1U, path, sizeof(path)))
+        return;
+    s41_open_fixture(c, theme, path);
+    ptc_check(c, raw_contains_since(c, 0U, rgb) != lower,
+              lower ? "256-colour warning emitted SGR 58"
+                    : "truecolour warning omitted its SGR 58 RGB");
+    ptc_check(c, raw_sgr_has_param_since(c, 0U, 59U) != lower,
+              lower ? "256-colour warning emitted SGR 59"
+                    : "truecolour warning omitted SGR 59 reset");
+    ptc_snapshot(c, c->test->name);
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s41_theme_switch_one_repaint(PtyCtx *c)
+{
+    static const u8 text[] = "int main(void) { return 0; }\n";
+    char path[256];
+    u32 before;
+
+    if (!s41_fixture(c, ".c", text, sizeof(text) - 1U, path, sizeof(path)))
+        return;
+    s41_open_fixture(c, "quiver-dark", path);
+    ptc_keys(c, ":");
+    ptc_settle(c, 0);
+    ptc_bytes(c, "ed.theme.set quiver-light");
+    ptc_settle(c, 0);
+    before = c->vt.nsync_pairs;
+    ptc_keys(c, "enter");
+    ptc_wait_sync_pairs(c, before + 1U);
+    ptc_settle(c, 0);
+    ptc_check(c, c->vt.nsync_pairs == before + 1U,
+              "live theme switch did not produce exactly one frame");
+    ptc_snapshot(c, "s41_theme_switch_one_repaint");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s41_cjk_emoji_string(PtyCtx *c)
+{
+    static const u8 text[] =
+        "const char *wide = \"CJK \xE6\xBC\xA2\xE5\xAD\x97 emoji "
+        "\xF0\x9F\x98\x80\";\n";
+    char path[256];
+
+    if (!s41_fixture(c, ".c", text, sizeof(text) - 1U, path, sizeof(path)))
+        return;
+    s41_open_fixture(c, "quiver-dark", path);
+    {
+        const VtCell *row = c->vt.cells;
+        const u8 han[] = {0xe6U, 0xbcU, 0xa2U};
+        const u8 emoji[] = {0xf0U, 0x9fU, 0x98U, 0x80U};
+        int col;
+        bool saw_han = false;
+        bool saw_emoji = false;
+
+        for (col = 0; col + 1 < c->vt.cols; col++) {
+            const u8 *glyph;
+            size_t n;
+
+            glyph = vt_cell_bytes(&c->vt, &row[col], &n);
+            if ((n == sizeof(han) && memcmp(glyph, han, n) == 0) ||
+                (n == sizeof(emoji) && memcmp(glyph, emoji, n) == 0)) {
+                const VtCell *tail = &row[col + 1];
+
+                ptc_check(c, row[col].w == 2U && tail->w == 0U,
+                          "wide syntax glyph does not occupy head+tail cells");
+                ptc_check(c, row[col].attrs == tail->attrs &&
+                                 memcmp(&row[col].fg, &tail->fg,
+                                        sizeof(row[col].fg)) == 0 &&
+                                 memcmp(&row[col].bg, &tail->bg,
+                                        sizeof(row[col].bg)) == 0,
+                          "wide syntax glyph head and tail styles differ");
+                if (n == sizeof(han))
+                    saw_han = true;
+                else
+                    saw_emoji = true;
+            }
+        }
+        ptc_check(c, saw_han && saw_emoji,
+                  "CJK/emoji syntax fixture did not render both wide glyphs");
+    }
+    {
+        u32 before = c->vt.nsync_pairs;
+
+        ptc_keys(c, "end");
+        ptc_wait_sync_pairs(c, before + 1U);
+        ptc_settle(c, 0);
+        /* `end` lands on the line-end cursor cell after the 38-column
+         * source row; the six-cell gutter and cursor placement make the
+         * terminal's post-draw caret column 45. */
+        ptc_check(c, c->vt.cur_r == 0 && c->vt.cur_c == 45,
+                  "cursor geometry disagrees with CJK/emoji display width");
+    }
+    ptc_snapshot(c, "s41_cjk_emoji_string");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s41_cold_warm_identical(PtyCtx *c)
+{
+    const char *path = "tests/perf/fixtures/syn/c_kitchen.c";
+    char cache[1024];
+    int n;
+
+    s41_open_fixture(c, "quiver-dark", path);
+    n = snprintf(cache, sizeof(cache), "%s/yew/syn/c.stab", c->state_dir);
+    ptc_check(c, n > 0 && (size_t)n < sizeof(cache) &&
+                     access(cache, F_OK) == 0,
+              "cold launch did not populate the C syntax disk cache");
+    ptc_mark_resume(c);
+    force_quit(c);
+    ptc_resume(c, ptc_yew_bin(c), "--theme", "quiver-dark", path, NULL);
+    ptc_settle(c, 0);
+    ptc_wait_kitty_push(c, 21U);
+    ptc_check_resume_exact(c);
+    ptc_snapshot(c, "s41_cold_warm_identical");
+    force_quit(c);
+}
+
+static void case_s41_degrade_full_frame(PtyCtx *c)
+{
+    static const u8 text[] = "const char *bad = \"\\q\";\n";
+    char path[256];
+    size_t frame_at;
+    u32 before;
+
+    if (!s41_fixture(c, ".c", text, sizeof(text) - 1U, path, sizeof(path)))
+        return;
+    if (strcmp(c->test->profile, "dumb") == 0) {
+        /* A real TERM=dumb editor paints in the primary screen and cannot
+         * signal readiness with smcup.  The raw log is the oracle here. */
+        ptc_allow_primary(c);
+        ptc_no_altscreen(c);
+    }
+    ptc_spawn(c, ptc_yew_bin(c), "--theme", "quiver-dark", path, NULL);
+    ptc_settle(c, 0);
+    if (strcmp(c->test->profile, "dumb") != 0)
+        ptc_wait_kitty_push(c, 21U);
+    before = c->vt.nsync_pairs;
+    ptc_resize(c, 25U, 80U);
+    if (strcmp(c->test->profile, "dumb") != 0)
+        ptc_wait_sync_pairs(c, before + 1U);
+    ptc_settle(c, 0);
+    frame_at = c->raw.len;
+    before = c->vt.nsync_pairs;
+    ptc_resize(c, 24U, 80U);
+    if (strcmp(c->test->profile, "dumb") != 0)
+        ptc_wait_sync_pairs(c, before + 1U);
+    ptc_settle(c, 0);
+    ptc_check(c, !raw_sgr_has_param_since(c, frame_at, 38U) &&
+                     !raw_sgr_has_param_since(c, frame_at, 48U),
+              "colour-disabled full frame emitted SGR 38/48");
+    if (strcmp(c->test->profile, "dumb") == 0)
+        ptc_check(c, !raw_has_any_sgr_since(c, frame_at),
+                  "TERM=dumb full frame emitted SGR");
+    ptc_snapshot(c, c->test->name);
+    if (strcmp(c->test->profile, "dumb") == 0) {
+        ptc_allow_restore(c);
+        if (kill(c->pty.pid, SIGTERM) != 0)
+            ptc_check(c, false, "could not terminate TERM=dumb editor");
+        else
+            ptc_expect_signal(c, SIGTERM);
+    } else {
+        force_quit(c);
+    }
+    (void)unlink(path);
+}
+
+/* ---------------------------------------------------------------- */
 /* Sprint 37: batch mode never owns the terminal                    */
 /* ---------------------------------------------------------------- */
 
@@ -4479,6 +4831,60 @@ static void case_s37_batch_never_touches_the_terminal(PtyCtx *c)
 }
 
 const PtyCase yew_pty_cases[] = {
+    C(s41_c_dark_truecolor, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_c_dark_colors_256, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_c_dark_colors_16, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_c_light_truecolor, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_c_light_colors_256, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_c_light_colors_16, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_fletch_dark_truecolor, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_fletch_dark_colors_256, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_fletch_dark_colors_16, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_fletch_light_truecolor, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_fletch_light_colors_256, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_fletch_light_colors_16, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_sh_dark_truecolor, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_sh_dark_colors_256, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_sh_dark_colors_16, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_sh_light_truecolor, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_sh_light_colors_256, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_sh_light_colors_16, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_make_dark_truecolor, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_make_dark_colors_256, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_make_dark_colors_16, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_make_light_truecolor, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_make_light_colors_256, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_make_light_colors_16, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_markdown_dark_truecolor, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_markdown_dark_colors_256, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_markdown_dark_colors_16, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_markdown_light_truecolor, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_markdown_light_colors_256, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_markdown_light_colors_16, modern, 24U, 80U, case_s41_kitchen),
+    C(s41_underline_error_dark_truecolor, modern, 24U, 80U,
+      case_s41_underline_error),
+    C(s41_underline_error_light_truecolor, modern, 24U, 80U,
+      case_s41_underline_error),
+    C(s41_underline_error_dark_colors_256, modern, 24U, 80U,
+      case_s41_underline_error),
+    C(s41_underline_warning_dark_truecolor, modern, 24U, 80U,
+      case_s41_underline_warning),
+    C(s41_underline_warning_light_truecolor, modern, 24U, 80U,
+      case_s41_underline_warning),
+    C(s41_underline_warning_dark_colors_256, modern, 24U, 80U,
+      case_s41_underline_warning),
+    C(s41_theme_switch_one_repaint, modern, 24U, 80U,
+      case_s41_theme_switch_one_repaint),
+    C(s41_cjk_emoji_string, modern, 24U, 80U,
+      case_s41_cjk_emoji_string),
+    C(s41_cold_warm_identical, modern, 24U, 80U,
+      case_s41_cold_warm_identical),
+    C(s41_theme_nocolor_empty, modern, 24U, 80U,
+      case_s41_degrade_full_frame),
+    C(s41_theme_nocolor_set, modern, 24U, 80U,
+      case_s41_degrade_full_frame),
+    C(s41_theme_term_dumb, dumb, 24U, 80U,
+      case_s41_degrade_full_frame),
     C(s39_toy_syntax_80x24, modern, 24U, 80U,
       case_s39_toy_syntax_80x24),
     C(s39_deferred_5000_line_wave, modern, 24U, 80U,

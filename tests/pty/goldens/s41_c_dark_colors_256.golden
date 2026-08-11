@@ -1,0 +1,315 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=0,7 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=0
+--- text
+     1 static int fn_00000(int x) { re                                          
+     2 #define VALUE_00001(x) ((x) + 1                                          
+     3 const char *s_00002 = "escape\n                                          
+     4 if (value_00003) return 0; // n                                          
+     5 struct item_00004 { int value;                                           
+     6 static int fn_00005(int x) { re                                          
+     7 #define VALUE_00006(x) ((x) + 1                                          
+     8 const char *s_00007 = "escape\n                                          
+     9 if (value_00008) return 0; // n                                          
+    10 struct item_00009 { int value;                                           
+    11 static int fn_00010(int x) { re                                          
+    12 #define VALUE_00011(x) ((x) + 1                                          
+    13 const char *s_00012 = "escape\n                                          
+    14 if (value_00013) return 0; // n                                          
+    15 struct item_00014 { int value;                                           
+    16 static int fn_00015(int x) { re                                          
+    17 #define VALUE_00016(x) ((x) + 1                                          
+    18 const char *s_00017 = "escape\n                                          
+    19 if (value_00018) return 0; // n                                          
+    20 struct item_00019 { int value;                                           
+    21 static int fn_00020(int x) { re                                          
+    22 #define VALUE_00021(x) ((x) + 1                                          
+    23 const char *s_00022 = "escape\n                                          
+ L  c_kitchen.c                                              utf-8  lf  1:1  top
+--- style
+AAAAABACCCCCCDEEEDFFFFFFFFGEEEDDGDGDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAAHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAACCCCCDEEEEDJDDDDDDDDJDKKKKKKKJJDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAALLDGDDDDDDDDDDDGDLLLLLLDIGDMMMMDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAACCCCCCCNNNNNNNNNNDGDEEEDDDDDDGDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAACCCCCCDEEEDFFFFFFFFGEEEDDGDGDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAAHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAACCCCCDEEEEDJDDDDDDDDJDKKKKKKKJJDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAALLDGDDDDDDDDDDDGDLLLLLLDIGDMMMMDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAACCCCCCCNNNNNNNNNNDGDEEEDDDDDDGDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAACCCCCCDEEEDFFFFFFFFGEEEDDGDGDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAAHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAACCCCCDEEEEDJDDDDDDDDJDKKKKKKKJJDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAALLDGDDDDDDDDDDDGDLLLLLLDIGDMMMMDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAACCCCCCCNNNNNNNNNNDGDEEEDDDDDDGDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAACCCCCCDEEEDFFFFFFFFGEEEDDGDGDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAAHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAACCCCCDEEEEDJDDDDDDDDJDKKKKKKKJJDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAALLDGDDDDDDDDDDDGDLLLLLLDIGDMMMMDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAACCCCCCCNNNNNNNNNNDGDEEEDDDDDDGDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAACCCCCCDEEEDFFFFFFFFGEEEDDGDGDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAAHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAACCCCCDEEEEDJDDDDDDDDJDKKKKKKKJJDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+OOODDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+--- legend
+A fg=idx:240 bg=idx:233 attrs=----------
+B fg=idx:252 bg=idx:233 attrs=b---------
+C fg=idx:176 bg=idx:233 attrs=--i-------
+D fg=idx:252 bg=idx:233 attrs=----------
+E fg=idx:180 bg=idx:233 attrs=--i-------
+F fg=idx:75 bg=idx:233 attrs=----------
+G fg=idx:247 bg=idx:233 attrs=----------
+H fg=idx:176 bg=idx:233 attrs=----------
+I fg=idx:173 bg=idx:233 attrs=----------
+J fg=idx:73 bg=idx:233 attrs=----------
+K fg=idx:114 bg=idx:233 attrs=----------
+L fg=idx:176 bg=idx:233 attrs=b---------
+M fg=idx:241 bg=idx:233 attrs=--i-------
+N fg=idx:180 bg=idx:233 attrs=----------
+O fg=idx:233 bg=idx:75 attrs=----------
+--- sgr
+\x1b[0;38;5;240;48;5;233m
+\x1b[1;38;5;252m
+\x1b[22;38;5;240m
+\x1b[3;38;5;176m
+\x1b[23;38;5;252m
+\x1b[3;38;5;180m
+\x1b[23;38;5;252m
+\x1b[38;5;75m
+\x1b[38;5;247m
+\x1b[3;38;5;180m
+\x1b[23;38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;176m
+\x1b[38;5;173m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[3;38;5;176m
+\x1b[23;38;5;252m
+\x1b[3;38;5;180m
+\x1b[23;38;5;252m
+\x1b[38;5;73m
+\x1b[38;5;252m
+\x1b[38;5;73m
+\x1b[38;5;252m
+\x1b[38;5;114m
+\x1b[38;5;73m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[1;38;5;176m
+\x1b[22;38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[1;38;5;176m
+\x1b[22;38;5;252m
+\x1b[38;5;173m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[3;38;5;241m
+\x1b[23;38;5;252m
+\x1b[38;5;240m
+\x1b[3;38;5;176m
+\x1b[23;38;5;180m
+\x1b[38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[3;38;5;180m
+\x1b[23;38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[3;38;5;176m
+\x1b[23;38;5;252m
+\x1b[3;38;5;180m
+\x1b[23;38;5;252m
+\x1b[38;5;75m
+\x1b[38;5;247m
+\x1b[3;38;5;180m
+\x1b[23;38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;176m
+\x1b[38;5;173m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[3;38;5;176m
+\x1b[23;38;5;252m
+\x1b[3;38;5;180m
+\x1b[23;38;5;252m
+\x1b[38;5;73m
+\x1b[38;5;252m
+\x1b[38;5;73m
+\x1b[38;5;252m
+\x1b[38;5;114m
+\x1b[38;5;73m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[1;38;5;176m
+\x1b[22;38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[1;38;5;176m
+\x1b[22;38;5;252m
+\x1b[38;5;173m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[3;38;5;241m
+\x1b[23;38;5;252m
+\x1b[38;5;240m
+\x1b[3;38;5;176m
+\x1b[23;38;5;180m
+\x1b[38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[3;38;5;180m
+\x1b[23;38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[3;38;5;176m
+\x1b[23;38;5;252m
+\x1b[3;38;5;180m
+\x1b[23;38;5;252m
+\x1b[38;5;75m
+\x1b[38;5;247m
+\x1b[3;38;5;180m
+\x1b[23;38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;176m
+\x1b[38;5;173m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[3;38;5;176m
+\x1b[23;38;5;252m
+\x1b[3;38;5;180m
+\x1b[23;38;5;252m
+\x1b[38;5;73m
+\x1b[38;5;252m
+\x1b[38;5;73m
+\x1b[38;5;252m
+\x1b[38;5;114m
+\x1b[38;5;73m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[1;38;5;176m
+\x1b[22;38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[1;38;5;176m
+\x1b[22;38;5;252m
+\x1b[38;5;173m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[3;38;5;241m
+\x1b[23;38;5;252m
+\x1b[38;5;240m
+\x1b[3;38;5;176m
+\x1b[23;38;5;180m
+\x1b[38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[3;38;5;180m
+\x1b[23;38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[3;38;5;176m
+\x1b[23;38;5;252m
+\x1b[3;38;5;180m
+\x1b[23;38;5;252m
+\x1b[38;5;75m
+\x1b[38;5;247m
+\x1b[3;38;5;180m
+\x1b[23;38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;176m
+\x1b[38;5;173m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[3;38;5;176m
+\x1b[23;38;5;252m
+\x1b[3;38;5;180m
+\x1b[23;38;5;252m
+\x1b[38;5;73m
+\x1b[38;5;252m
+\x1b[38;5;73m
+\x1b[38;5;252m
+\x1b[38;5;114m
+\x1b[38;5;73m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[1;38;5;176m
+\x1b[22;38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[1;38;5;176m
+\x1b[22;38;5;252m
+\x1b[38;5;173m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[3;38;5;241m
+\x1b[23;38;5;252m
+\x1b[38;5;240m
+\x1b[3;38;5;176m
+\x1b[23;38;5;180m
+\x1b[38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[3;38;5;180m
+\x1b[23;38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[3;38;5;176m
+\x1b[23;38;5;252m
+\x1b[3;38;5;180m
+\x1b[23;38;5;252m
+\x1b[38;5;75m
+\x1b[38;5;247m
+\x1b[3;38;5;180m
+\x1b[23;38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[38;5;247m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;176m
+\x1b[38;5;173m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[3;38;5;176m
+\x1b[23;38;5;252m
+\x1b[3;38;5;180m
+\x1b[23;38;5;252m
+\x1b[38;5;73m
+\x1b[38;5;252m
+\x1b[38;5;73m
+\x1b[38;5;252m
+\x1b[38;5;114m
+\x1b[38;5;73m
+\x1b[38;5;252m
+\x1b[38;5;233;48;5;75m
+\x1b[38;5;252;48;5;233m

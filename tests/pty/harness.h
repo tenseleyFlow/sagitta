@@ -10,7 +10,7 @@
 #include "util/buf.h"
 #include "vt.h"
 
-#define YEW_PTY_ENV_COUNT 15U
+#define YEW_PTY_ENV_COUNT 16U
 
 typedef struct PtySpec {
     /*
@@ -92,8 +92,8 @@ extern const PtyCase yew_pty_cases[];
 bool yew_pty_spawn(Pty *p, const PtySpec *sp);
 /* no_color == NULL omits NO_COLOR; non-NULL values, including empty, are
  * exported verbatim so presence semantics can be tested explicitly. */
-bool ptc_env_build(char **envp, const char *colors, const char *state_dir,
-                   const char *no_color, const char *ascii,
+bool ptc_env_build(char **envp, const char *term, const char *colors,
+                   const char *state_dir, const char *no_color, const char *ascii,
                    const char *runtime_dir);
 void ptc_env_free(char **envp);
 
@@ -122,6 +122,7 @@ void ptc_keys(PtyCtx *c, const char *spec);
 void ptc_bytes(PtyCtx *c, const char *lit);
 void ptc_resize(PtyCtx *c, u16 rows, u16 cols);
 void ptc_snapshot(PtyCtx *c, const char *golden_name);
+void ptc_snapshot_sgr(PtyCtx *c, const char *golden_name);
 void ptc_expect_exit(PtyCtx *c, int code);
 void ptc_check_termios_unchanged(PtyCtx *c);
 

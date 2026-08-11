@@ -1,0 +1,109 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=0,7 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=0
+--- text
+     1 --- --- --- --- --- --- --- ---                                          
+     2 title: Kitchen title: Kitchen ti                                         
+     3 --- --- --- --- --- --- --- ---                                          
+     4 ```c ```c ```c ```c ```c ```c ``                                         
+     5 int fenced_0(void) { return 0; }                                         
+     6 ``` ``` ``` ``` ``` ``` ``` ```                                          
+     7 | key | value | | key | value |                                          
+     8 |---|---:| |---|---:| |---|---:|                                         
+     9 | row | 0 | | row | 0 | | row |                                          
+    10 - outer - outer - outer - outer                                          
+    11   - nested   - nested   - nested                                         
+    12 ```c ```c ```c ```c ```c ```c ``                                         
+    13 int fenced_1(void) { return 1; }                                         
+    14 ``` ``` ``` ``` ``` ``` ``` ```                                          
+    15 | key | value | | key | value |                                          
+    16 |---|---:| |---|---:| |---|---:|                                         
+    17 | row | 1 | | row | 1 | | row |                                          
+    18 - outer - outer - outer - outer                                          
+    19   - nested   - nested   - nested                                         
+    20 ```c ```c ```c ```c ```c ```c ``                                         
+    21 int fenced_2(void) { return 2; }                                         
+    22 ``` ``` ``` ``` ``` ``` ``` ```                                          
+    23 | key | value | | key | value |                                          
+ L  md_kitchen.md                                            utf-8  lf  1:1  top
+--- style
+AAAAABACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+DDDCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+--- legend
+A fg=idx:246 bg=idx:231 attrs=----------
+B fg=idx:235 bg=idx:231 attrs=b---------
+C fg=idx:235 bg=idx:231 attrs=----------
+D fg=idx:231 bg=idx:25 attrs=----------
+--- sgr
+\x1b[0;38;5;246;48;5;231m
+\x1b[1;38;5;235m
+\x1b[22;38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;231;48;5;25m
+\x1b[38;5;235;48;5;231m

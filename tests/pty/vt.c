@@ -427,7 +427,16 @@ static bool parse_sgr(VtScreen *v, const u8 *s, size_t n)
             bg = (YewColor){YEW_COLOR_INDEXED, (u8)(x - 92u), 0u, 0u};
         else if (x == 39u) fg = default_color();
         else if (x == 49u) bg = default_color();
-        else if ((x == 38u || x == 48u) && i + 2u < np && p[i + 1u] == 5u &&
+        else if (x == 59u) {
+            /* Sprint 41: reset the underline colour.  The snapshot model
+             * does not render underline colours independently, but the
+             * closed parser must accept the renderer's pinned sequence. */
+        } else if (x == 58u && i + 4u < np && p[i + 1u] == 2u &&
+                   p[i + 2u] <= 255u && p[i + 3u] <= 255u &&
+                   p[i + 4u] <= 255u) {
+            /* Sprint 41 emits underline colour only as truecolour. */
+            i += 4u;
+        } else if ((x == 38u || x == 48u) && i + 2u < np && p[i + 1u] == 5u &&
                  p[i + 2u] <= 255u) {
             YewColor color = {YEW_COLOR_INDEXED, (u8)p[i + 2u], 0u, 0u};
             if (x == 38u) fg = color; else bg = color;

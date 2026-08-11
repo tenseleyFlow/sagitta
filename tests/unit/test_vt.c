@@ -158,6 +158,9 @@ void test_vt_sgr_closed_rows(void)
     feed_lit(&v, "\033[31;104m");
     assert_color(v.fg, YEW_COLOR_INDEXED, 1u, 0u, 0u);
     assert_color(v.bg, YEW_COLOR_INDEXED, 12u, 0u, 0u);
+    feed_lit(&v, "\033[4:3;58;2;255;95;95mU\033[59m");
+    YEW_ASSERT((v.cells[1].attrs & YEW_ATTR_UNDERCURL) != 0u);
+    YEW_ASSERT_EQ_U64(v.nerrors, 0u);
     for (i = 0u; i < 8u; i++) {
         char seq[24];
 
@@ -174,6 +177,8 @@ void test_vt_sgr_closed_rows(void)
     YEW_ASSERT_EQ_U64(v.nerrors, 0u);
     feed_lit(&v, "\033[38;5;256m");
     YEW_ASSERT_EQ_U64(v.nerrors, 1u);
+    feed_lit(&v, "\033[58;5;196m");
+    YEW_ASSERT_EQ_U64(v.nerrors, 2u);
     vt_free(&v);
 }
 

@@ -398,6 +398,12 @@ static const char *color_tier(const PtyCtx *c)
     return "truecolor";
 }
 
+static const char *term_for(const PtyCtx *c)
+{
+    return strstr(c->test->name, "_term_dumb") != NULL
+               ? "dumb" : "xterm-256color";
+}
+
 /*
  * Sprint 27 §7: the degradation variants are selected by the case NAME.
  *
@@ -409,6 +415,8 @@ static const char *color_tier(const PtyCtx *c)
  */
 static const char *no_color_for(const PtyCtx *c)
 {
+    if (strstr(c->test->name, "_nocolor_empty") != NULL)
+        return "";
     return strstr(c->test->name, "_nocolor") != NULL ? "1" : NULL;
 }
 
@@ -417,8 +425,8 @@ static const char *ascii_for(const PtyCtx *c)
     return strstr(c->test->name, "_ascii") != NULL ? "1" : "0";
 }
 
-bool ptc_env_build(char **envp, const char *colors, const char *state_dir,
-                   const char *no_color, const char *ascii,
+bool ptc_env_build(char **envp, const char *term, const char *colors,
+                   const char *state_dir, const char *no_color, const char *ascii,
                    const char *runtime_dir)
 {
     static const char *const keys[] = {
@@ -427,10 +435,10 @@ bool ptc_env_build(char **envp, const char *colors, const char *state_dir,
         "YEW_LOG_LEVEL", "YEW_JOB_ELAPSED_MS", "SHELL",
         "YEW_PICKERS_NOW",
         /* Sprint 27 §7's degradation variants. */
-        "NO_COLOR", "YEW_ASCII", "YEW_RUNTIME_DIR"
+        "NO_COLOR", "YEW_ASCII", "YEW_RUNTIME_DIR", "XDG_CACHE_HOME"
     };
     const char *values[] = {
-        "xterm-256color", colors, "1", "500", "25", state_dir,
+        term, colors, "1", "500", "25", state_dir,
         "C.UTF-8", "C.UTF-8", "debug",
         /* Pin job elapsed time: it is the only nondeterministic thing a
          * job prints, and goldens are byte-compared (invariant 5). */
@@ -442,14 +450,14 @@ bool ptc_env_build(char **envp, const char *colors, const char *state_dir,
         "/bin/sh",
         /* Sprint 26: pins the undo picker's relative timestamps. */
         "1700000000",
-        no_color, ascii, runtime_dir
+        no_color, ascii, runtime_dir, state_dir
     };
     size_t i;
     size_t out_i = 0U;
 
     _Static_assert(YEW_ARRAY_LEN(keys) == YEW_PTY_ENV_COUNT,
                    "YEW_PTY_ENV_COUNT must match the key table");
-    if (envp == NULL || colors == NULL || state_dir == NULL ||
+    if (envp == NULL || term == NULL || colors == NULL || state_dir == NULL ||
         ascii == NULL || runtime_dir == NULL)
         return false;
     for (i = 0U; i <= YEW_PTY_ENV_COUNT; i++)
@@ -538,7 +546,8 @@ void ptc_spawn(PtyCtx *c, const char *bin, ...)
     /* A child may chdir into an isolated workspace.  Pin the checked-in
      * runtime by absolute path so config-bearing cases remain hermetic. */
     runtime_dir = realpath("runtime", NULL);
-    if (!ptc_env_build(envp, color_tier(c), c->state_dir,
+    if (!ptc_env_build(envp, term_for(c),
+                       color_tier(c), c->state_dir,
                        no_color_for(c), ascii_for(c),
                        runtime_dir == NULL ? "" : runtime_dir)) {
         free(runtime_dir);
@@ -961,6 +970,35 @@ void ptc_snapshot(PtyCtx *c, const char *golden_name)
     }
     snapshot_write(&c->vt, &c->snapshot);
     c->snapshot_taken = true;
+}
+
+void ptc_snapshot_sgr(PtyCtx *c, const char *golden_name)
+{
+    size_t i;
+
+    ptc_snapshot(c, golden_name);
+    if (c == NULL || c->failed)
+        return;
+    bytebuf_append(&c->snapshot, "--- sgr\n", 8U);
+    for (i = 0U; i + 2U < c->raw.len; i++) {
+        size_t end;
+
+        if (c->raw.data[i] != 0x1bU || c->raw.data[i + 1U] != '[')
+            continue;
+        end = i + 2U;
+        while (end < c->raw.len &&
+               !(c->raw.data[end] >= 0x40U && c->raw.data[end] <= 0x7eU))
+            end++;
+        if (end == c->raw.len)
+            break;
+        if (c->raw.data[end] == 'm') {
+            bytebuf_append(&c->snapshot, "\\x1b[", 5U);
+            bytebuf_append(&c->snapshot, c->raw.data + i + 2U,
+                           end - (i + 2U) + 1U);
+            bytebuf_append(&c->snapshot, "\n", 1U);
+        }
+        i = end;
+    }
 }
 
 static void wait_for_exit(PtyCtx *c)

@@ -1,0 +1,374 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=0,7 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=0
+--- text
+     1 bind "n" { motion "word" } bi                                            
+     2 macro m_00001() { edit { inse                                            
+     3 let value_00002 = { key: [1,                                             
+     4 H(1) -> repeat(2) -> motion("                                            
+     5 bind "n" { motion "word" } bi                                            
+     6 macro m_00005() { edit { inse                                            
+     7 let value_00006 = { key: [1,                                             
+     8 H(1) -> repeat(2) -> motion("                                            
+     9 bind "n" { motion "word" } bi                                            
+    10 macro m_00009() { edit { inse                                            
+    11 let value_00010 = { key: [1,                                             
+    12 H(1) -> repeat(2) -> motion("                                            
+    13 bind "n" { motion "word" } bi                                            
+    14 macro m_00013() { edit { inse                                            
+    15 let value_00014 = { key: [1,                                             
+    16 H(1) -> repeat(2) -> motion("                                            
+    17 bind "n" { motion "word" } bi                                            
+    18 macro m_00017() { edit { inse                                            
+    19 let value_00018 = { key: [1,                                             
+    20 H(1) -> repeat(2) -> motion("                                            
+    21 bind "n" { motion "word" } bi                                            
+    22 macro m_00021() { edit { inse                                            
+    23 let value_00022 = { key: [1,                                             
+ L  fl_kitchen.fl                                            utf-8  lf  1:1  top
+--- style
+AAAAABACCCCCDDDCECCCCCCCCDDDDDDCECCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAAFFFFFFGGGGGGGEECECFFFFCECCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAAFFFCCCCCCCCCCCCCHCECIIIECEHECCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAAGEHECHHCGGGGGGEHECHHCGGGGGGEDCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCDDDCECCCCCCCCDDDDDDCECCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAAFFFFFFGGGGGGGEECECFFFFCECCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAAFFFCCCCCCCCCCCCCHCECIIIECEHECCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAAGEHECHHCGGGGGGEHECHHCGGGGGGEDCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCDDDCECCCCCCCCDDDDDDCECCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAAFFFFFFGGGGGGGEECECFFFFCECCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAAFFFCCCCCCCCCCCCCHCECIIIECEHECCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAAGEHECHHCGGGGGGEHECHHCGGGGGGEDCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCDDDCECCCCCCCCDDDDDDCECCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAAFFFFFFGGGGGGGEECECFFFFCECCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAAFFFCCCCCCCCCCCCCHCECIIIECEHECCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAAGEHECHHCGGGGGGEHECHHCGGGGGGEDCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCDDDCECCCCCCCCDDDDDDCECCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAAFFFFFFGGGGGGGEECECFFFFCECCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAAFFFCCCCCCCCCCCCCHCECIIIECEHECCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAAGEHECHHCGGGGGGEHECHHCGGGGGGEDCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCDDDCECCCCCCCCDDDDDDCECCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAAFFFFFFGGGGGGGEECECFFFFCECCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAAFFFCCCCCCCCCCCCCHCECIIIECEHECCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+JJJCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+--- legend
+A fg=idx:246 bg=idx:231 attrs=----------
+B fg=idx:235 bg=idx:231 attrs=b---------
+C fg=idx:235 bg=idx:231 attrs=----------
+D fg=idx:23 bg=idx:231 attrs=----------
+E fg=idx:241 bg=idx:231 attrs=----------
+F fg=idx:160 bg=idx:231 attrs=--i-------
+G fg=idx:98 bg=idx:231 attrs=----------
+H fg=idx:25 bg=idx:231 attrs=----------
+I fg=idx:22 bg=idx:231 attrs=----------
+J fg=idx:231 bg=idx:25 attrs=----------
+--- sgr
+\x1b[0;38;5;246;48;5;231m
+\x1b[1;38;5;235m
+\x1b[22;38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;23m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;23m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[3;38;5;160m
+\x1b[23;38;5;98m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[3;38;5;160m
+\x1b[23;38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[3;38;5;160m
+\x1b[23;38;5;235m
+\x1b[38;5;25m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;22m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;25m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;98m
+\x1b[38;5;241m
+\x1b[38;5;25m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;25m
+\x1b[38;5;235m
+\x1b[38;5;98m
+\x1b[38;5;241m
+\x1b[38;5;25m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;25m
+\x1b[38;5;235m
+\x1b[38;5;98m
+\x1b[38;5;241m
+\x1b[38;5;23m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;23m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;23m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[3;38;5;160m
+\x1b[23;38;5;98m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[3;38;5;160m
+\x1b[23;38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[3;38;5;160m
+\x1b[23;38;5;235m
+\x1b[38;5;25m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;22m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;25m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;98m
+\x1b[38;5;241m
+\x1b[38;5;25m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;25m
+\x1b[38;5;235m
+\x1b[38;5;98m
+\x1b[38;5;241m
+\x1b[38;5;25m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;25m
+\x1b[38;5;235m
+\x1b[38;5;98m
+\x1b[38;5;241m
+\x1b[38;5;23m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;23m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;23m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[3;38;5;160m
+\x1b[23;38;5;98m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[3;38;5;160m
+\x1b[23;38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[3;38;5;160m
+\x1b[23;38;5;235m
+\x1b[38;5;25m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;22m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;25m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;98m
+\x1b[38;5;241m
+\x1b[38;5;25m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;25m
+\x1b[38;5;235m
+\x1b[38;5;98m
+\x1b[38;5;241m
+\x1b[38;5;25m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;25m
+\x1b[38;5;235m
+\x1b[38;5;98m
+\x1b[38;5;241m
+\x1b[38;5;23m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;23m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;23m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[3;38;5;160m
+\x1b[23;38;5;98m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[3;38;5;160m
+\x1b[23;38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[3;38;5;160m
+\x1b[23;38;5;235m
+\x1b[38;5;25m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;22m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;25m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;98m
+\x1b[38;5;241m
+\x1b[38;5;25m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;25m
+\x1b[38;5;235m
+\x1b[38;5;98m
+\x1b[38;5;241m
+\x1b[38;5;25m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;25m
+\x1b[38;5;235m
+\x1b[38;5;98m
+\x1b[38;5;241m
+\x1b[38;5;23m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;23m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;23m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[3;38;5;160m
+\x1b[23;38;5;98m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[3;38;5;160m
+\x1b[23;38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[3;38;5;160m
+\x1b[23;38;5;235m
+\x1b[38;5;25m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;22m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;25m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;98m
+\x1b[38;5;241m
+\x1b[38;5;25m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;25m
+\x1b[38;5;235m
+\x1b[38;5;98m
+\x1b[38;5;241m
+\x1b[38;5;25m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;25m
+\x1b[38;5;235m
+\x1b[38;5;98m
+\x1b[38;5;241m
+\x1b[38;5;23m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[38;5;235m
+\x1b[38;5;23m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;23m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[3;38;5;160m
+\x1b[23;38;5;98m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[3;38;5;160m
+\x1b[23;38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;246m
+\x1b[3;38;5;160m
+\x1b[23;38;5;235m
+\x1b[38;5;25m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;22m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;241m
+\x1b[38;5;25m
+\x1b[38;5;241m
+\x1b[38;5;235m
+\x1b[38;5;231;48;5;25m
+\x1b[38;5;235;48;5;231m

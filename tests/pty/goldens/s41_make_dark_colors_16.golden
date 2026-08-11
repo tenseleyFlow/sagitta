@@ -1,0 +1,142 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=0,7 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
+--- text
+     1 ifeq ($(MODE_0),debug)                                                   
+     2 CFLAGS_1 += -g                                                           
+     3 endif                                                                    
+     4 define emit_3                                                            
+     5     @printf "%s\n" "$@ $< $^"                                            
+     6 endef                                                                    
+     7 target_6: dep_6                                                          
+     8     $(CC) $(CFLAGS) -o target_7 dep_7                                    
+     9 ifeq ($(MODE_8),debug)                                                   
+    10 CFLAGS_9 += -g                                                           
+    11 endif                                                                    
+    12 define emit_11                                                           
+    13     @printf "%s\n" "$@ $< $^"                                            
+    14 endef                                                                    
+    15 target_14: dep_14                                                        
+    16     $(CC) $(CFLAGS) -o target_15 dep_15                                  
+    17 ifeq ($(MODE_16),debug)                                                  
+    18 CFLAGS_17 += -g                                                          
+    19 endif                                                                    
+    20 define emit_19                                                           
+    21     @printf "%s\n" "$@ $< $^"                                            
+    22 endef                                                                    
+    23 target_22: dep_22                                                        
+ L  mk_kitchen.mk                                            utf-8  lf  1:1  top
+--- style
+AAAAABABBBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAABBBBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAADDDDDDDDDDDDDDDDDDDDEEDEEDEEDDDDDDDDDDDDDCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAAFFFFCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAABBBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAABBBBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAADDDDDDDDDDDDDDDDDDDDEEDEEDEEDDDDDDDDDDDDDCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAAFFFFCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAABBBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAABBBBBCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAADDDDDDDDDDDDDDDDDDDDEEDEEDEEDDDDDDDDDDDDDCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+GGGCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+--- legend
+A fg=idx:8 bg=idx:0 attrs=----------
+B fg=idx:7 bg=idx:0 attrs=b---------
+C fg=idx:7 bg=idx:0 attrs=----------
+D fg=idx:7 bg=idx:0 attrs=--i-------
+E fg=idx:8 bg=idx:0 attrs=--i-------
+F fg=idx:4 bg=idx:0 attrs=----------
+G fg=idx:0 bg=idx:7 attrs=----------
+--- sgr
+\x1b[0;90;40m
+\x1b[1;37m
+\x1b[22;90m
+\x1b[1;37m
+\x1b[22m
+\x1b[90m
+\x1b[37m
+\x1b[90m
+\x1b[1;37m
+\x1b[22m
+\x1b[90m
+\x1b[37m
+\x1b[90m
+\x1b[34m
+\x1b[37m
+\x1b[3;90m
+\x1b[23;37m
+\x1b[3;90m
+\x1b[23;37m
+\x1b[3;90m
+\x1b[23;37m
+\x1b[90m
+\x1b[37m
+\x1b[90m
+\x1b[37m
+\x1b[90m
+\x1b[34m
+\x1b[37m
+\x1b[90m
+\x1b[1;37m
+\x1b[22m
+\x1b[90m
+\x1b[37m
+\x1b[90m
+\x1b[1;37m
+\x1b[22m
+\x1b[90m
+\x1b[37m
+\x1b[90m
+\x1b[34m
+\x1b[37m
+\x1b[3;90m
+\x1b[23;37m
+\x1b[3;90m
+\x1b[23;37m
+\x1b[3;90m
+\x1b[23;37m
+\x1b[90m
+\x1b[37m
+\x1b[90m
+\x1b[37m
+\x1b[90m
+\x1b[34m
+\x1b[37m
+\x1b[90m
+\x1b[1;37m
+\x1b[22m
+\x1b[90m
+\x1b[37m
+\x1b[90m
+\x1b[1;37m
+\x1b[22m
+\x1b[90m
+\x1b[37m
+\x1b[90m
+\x1b[34m
+\x1b[37m
+\x1b[3;90m
+\x1b[23;37m
+\x1b[3;90m
+\x1b[23;37m
+\x1b[3;90m
+\x1b[23;37m
+\x1b[90m
+\x1b[37m
+\x1b[90m
+\x1b[37m
+\x1b[30;47m
+\x1b[37;40m
+\x1b[0;3;37;40m
