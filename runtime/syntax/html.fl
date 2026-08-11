@@ -1,0 +1,150 @@
+# HTML syntax with JavaScript and CSS raw-text dispatch.
+#
+# HTML terminates a script at the first literal </script>, including inside a
+# JavaScript string; write <\/script> there, matching browser tokenization.
+# Unknown script type values stay text.  JSX borrows the `tag` context from
+# JavaScript and TypeScript definitions; full host/guest interleaving is not
+# attempted here.
+{
+    syntax: 1,
+    language: {
+        name: "html",
+        extensions: ["html", "htm", "xhtml"],
+        filenames: ["*.html", "*.htm"],
+        priority: 0,
+        comment: { block: ["<!--", "-->"] },
+    },
+    contexts: {
+        main: {
+            default: "text", at_eol: "stay",
+            rules: [
+                # Tagged-template escapes must consume their delimiter before
+                # the host bridge can test it.  In standalone HTML this is a
+                # harmless, explicit escape highlight.
+                { match: "\\\\.", attr: "string.escape" },
+                { match: "<!--", attr: "comment", push: "comment" },
+                { match: "<!DOCTYPE\\b", attr: "preproc", icase: true,
+                  push: "declaration" },
+                { match: "(<)(script)\\b", attr: "tag", icase: true,
+                  captures: { 1: "punct.bracket", 2: "tag" },
+                  push: "script_open" },
+                { match: "(<)(style)\\b", attr: "tag", icase: true,
+                  captures: { 1: "punct.bracket", 2: "tag" },
+                  push: "style_open" },
+                { match: "(<\\/?)([A-Za-z][A-Za-z0-9:.-]*)", attr: "tag",
+                  captures: { 1: "punct.bracket", 2: "tag" }, push: "tag" },
+                { match: "&(#x[0-9A-Fa-f]+|#[0-9]+|[A-Za-z][A-Za-z0-9]+);",
+                  attr: "constant" },
+            ],
+        },
+
+        comment: {
+            default: "comment", at_eol: "stay", unit: "atom",
+            rules: [
+                { match: "\\b(TODO|FIXME|XXX)\\b", attr: "comment.todo" },
+                { match: "-->", attr: "comment", pop: 1 },
+            ],
+        },
+        declaration: {
+            default: "preproc", at_eol: "pop", unit: "span",
+            rules: [ { match: ">", attr: "punct.bracket", pop: 1 } ],
+        },
+
+        tag_attrs: {
+            rules: [
+                { match: "[A-Za-z_:][A-Za-z0-9_.:-]*", attr: "tag.attr" },
+                { match: "=", attr: "operator" },
+                { match: "\"", attr: "string", push: "tag_dq" },
+                { match: "'", attr: "string", push: "tag_sq" },
+            ],
+        },
+        tag: {
+            default: "tag", at_eol: "stay", unit: "span",
+            rules: [
+                { match: "/?>", attr: "punct.bracket", pop: 1 },
+                "include:tag_attrs",
+            ],
+        },
+        tag_dq: {
+            default: "string", at_eol: "stay", unit: "atom",
+            rules: [
+                { match: "&(#x[0-9A-Fa-f]+|#[0-9]+|[A-Za-z][A-Za-z0-9]+);",
+                  attr: "constant" },
+                { match: "\"", attr: "string", pop: 1 },
+            ],
+        },
+        tag_sq: {
+            default: "string", at_eol: "stay", unit: "atom",
+            rules: [
+                { match: "&(#x[0-9A-Fa-f]+|#[0-9]+|[A-Za-z][A-Za-z0-9]+);",
+                  attr: "constant" },
+                { match: "'", attr: "string", pop: 1 },
+            ],
+        },
+
+        script_open: {
+            default: "tag", at_eol: "stay", unit: "span",
+            rules: [
+                { match: "type\\s*=\\s*[\"']?(module|text/javascript|application/javascript|text/ecmascript|application/ecmascript)[\"']?",
+                  attr: "tag.attr", icase: true, set: "script_open_js" },
+                { match: "type\\s*=\\s*[^ \\t>]+", attr: "tag.attr",
+                  icase: true, set: "script_open_text" },
+                { match: "/\\s*>", attr: "punct.bracket", pop: 1 },
+                { match: ">", attr: "punct.bracket", push: "script_body",
+                  embed: { lang: "javascript", ctx: "main", end: "inline",
+                           fallback: "text" } },
+                "include:tag_attrs",
+            ],
+        },
+        script_open_js: {
+            default: "tag", at_eol: "stay", unit: "span",
+            rules: [
+                { match: "/\\s*>", attr: "punct.bracket", pop: 1 },
+                { match: ">", attr: "punct.bracket", push: "script_body",
+                  embed: { lang: "javascript", ctx: "main", end: "inline",
+                           fallback: "text" } },
+                "include:tag_attrs",
+            ],
+        },
+        script_open_text: {
+            default: "tag", at_eol: "stay", unit: "span",
+            rules: [
+                { match: "/\\s*>", attr: "punct.bracket", pop: 1 },
+                { match: ">", attr: "punct.bracket", push: "script_text" },
+                "include:tag_attrs",
+            ],
+        },
+        script_body: {
+            default: "text", at_eol: "stay", unit: "span",
+            rules: [
+                { match: "</script\\s*>", attr: "tag", icase: true,
+                  pop: 2, end: true },
+            ],
+        },
+        script_text: {
+            default: "text", at_eol: "stay", unit: "atom",
+            rules: [
+                { match: "</script\\s*>", attr: "tag", icase: true,
+                  pop: 2 },
+            ],
+        },
+
+        style_open: {
+            default: "tag", at_eol: "stay", unit: "span",
+            rules: [
+                { match: "/\\s*>", attr: "punct.bracket", pop: 1 },
+                { match: ">", attr: "punct.bracket", push: "style_body",
+                  embed: { lang: "css", ctx: "main", end: "inline",
+                           fallback: "text" } },
+                "include:tag_attrs",
+            ],
+        },
+        style_body: {
+            default: "text", at_eol: "stay", unit: "span",
+            rules: [
+                { match: "</style\\s*>", attr: "tag", icase: true,
+                  pop: 2, end: true },
+            ],
+        },
+    },
+}

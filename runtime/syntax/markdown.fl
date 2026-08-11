@@ -1,6 +1,6 @@
-# CommonMark-oriented Markdown highlighting without embedded languages.
-# Fenced bodies are code and info strings are attributes; s41_5 adds guest
-# dispatch.  Setext text cannot be styled by a forward-only line machine, so
+# CommonMark-oriented Markdown highlighting.  Fenced bodies dispatch through
+# their info strings; unknown languages retain the ordinary code styling.
+# Setext text cannot be styled by a forward-only line machine, so
 # only its underline is heading.  Emphasis is single-line.  HTML handling is
 # deliberately generic rather than an HTML parser.  Front matter is recognized
 # only when its opening delimiter is the first physical line.
@@ -21,7 +21,9 @@
                   push: "front_pending" },
                 { match: "^ {0,3}(`{3,}|~{3,})[ \\t]*([A-Za-z0-9_+.-]*)",
                   attr: "punct", captures: { 1: "punct", 2: "attribute" },
-                  set_aux: 1, push: "fenced" },
+                  set_aux: 1, push: "fenced",
+                  embed: { lang: "@2", defer: true, end: "line",
+                           fallback: "code" } },
                 { match: "^ {4}.*$", attr: "code", push: "indented_code" },
                 { match: "^ {0,3}(#{1,6})\\s+.*$", attr: "heading",
                   captures: { 1: "punct" } },
@@ -65,7 +67,9 @@
         },
         fenced: {
             default: "code", at_eol: "stay", unit: "atom",
-            rules: [ { aux: "fence_close", attr: "punct", pop: 1 } ],
+            rules: [
+                { aux: "fence_close", attr: "punct", pop: 1, end: true },
+            ],
         },
         indented_code: { default: "code", at_eol: "pop", unit: "atom" },
         inline_code: {

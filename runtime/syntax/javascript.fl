@@ -1,4 +1,4 @@
-# ECMAScript syntax (including .jsx as expressions, not markup).
+# ECMAScript syntax, including HTML-tag JSX and tagged templates.
 #
 # Regex literals use the pinned one-bit previous-token heuristic: a slash is
 # a regex opener only while `value` is clear.  `}` and `)` deliberately set
@@ -6,7 +6,6 @@
 # those two known failures are bounded because `regex.at_eol` pops.
 # Template interpolation contains the complete main rule body.  Its `braces`
 # context balances object literals before `}` can return to the template.
-# JSX tags are intentionally styled as ordinary JavaScript expressions.
 {
     syntax: 1,
     language: {
@@ -26,7 +25,33 @@
                 { match: "/\\*", attr: "comment", push: "block_comment" },
                 { match: "\"", attr: "string", push: "dq", value: true },
                 { match: "'", attr: "string", push: "sq", value: true },
+
+                # The closed tag table keeps dispatch deterministic.  gql is
+                # allowed to fall back until a gql definition is installed.
+                { match: "(html)(`)", attr: "string",
+                  captures: { 1: "function", 2: "string" },
+                  push: "tagged_html",
+                  embed: { lang: "html", end: "inline",
+                           fallback: "string" }, value: true },
+                { match: "(css)(`)", attr: "string",
+                  captures: { 1: "function", 2: "string" },
+                  push: "tagged_css",
+                  embed: { lang: "css", end: "inline",
+                           fallback: "string" }, value: true },
+                { match: "(gql)(`)", attr: "string",
+                  captures: { 1: "function", 2: "string" },
+                  push: "tagged_gql",
+                  embed: { lang: "gql", end: "inline",
+                           fallback: "string" }, value: true },
                 { match: "`", attr: "string", push: "template", value: true },
+
+                # Each JSX tag borrows HTML's tag context.  Child text remains
+                # JavaScript; a full JSX tree needs bidirectional interleave.
+                { match: "(<\\/?)([A-Za-z][A-Za-z0-9:.-]*)", attr: "tag",
+                  captures: { 1: "punct.bracket", 2: "tag" },
+                  push: "jsx_tag",
+                  embed: { lang: "html", ctx: "tag", end: "inline",
+                           fallback: "text" }, value: true },
 
                 # These two rules differ only in the previous-token predicate.
                 { match: "/", attr: "string.special", if_value: false,
@@ -120,6 +145,37 @@
                 { match: "\\$\\{", attr: "string.interp", push: "template_expr",
                   value: false },
                 { match: "`", attr: "string", pop: 1, value: true },
+            ],
+        },
+        tagged_html: {
+            default: "string", at_eol: "stay", unit: "atom",
+            rules: [
+                { match: "\\\\.", attr: "string.escape" },
+                { match: "`", attr: "string", pop: 1, end: true,
+                  value: true },
+            ],
+        },
+        tagged_css: {
+            default: "string", at_eol: "stay", unit: "atom",
+            rules: [
+                { match: "\\\\.", attr: "string.escape" },
+                { match: "`", attr: "string", pop: 1, end: true,
+                  value: true },
+            ],
+        },
+        tagged_gql: {
+            default: "string", at_eol: "stay", unit: "atom",
+            rules: [
+                { match: "\\\\.", attr: "string.escape" },
+                { match: "`", attr: "string", pop: 1, end: true,
+                  value: true },
+            ],
+        },
+        jsx_tag: {
+            default: "text", at_eol: "stay", unit: "span",
+            rules: [
+                { match: "/?>", attr: "punct.bracket", pop: 1, end: true,
+                  value: true },
             ],
         },
         template_expr: {

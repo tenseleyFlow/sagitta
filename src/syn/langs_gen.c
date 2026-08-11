@@ -8,10 +8,14 @@ static const char *const lang_1_extensions[] = {
 };
 
 static const char *const lang_2_extensions[] = {
-    "fl"
+    "css"
 };
 
 static const char *const lang_3_extensions[] = {
+    "fl"
+};
+
+static const char *const lang_4_extensions[] = {
     "f90",
     "f95",
     "f03",
@@ -19,48 +23,58 @@ static const char *const lang_3_extensions[] = {
     "f18"
 };
 
-static const char *const lang_4_extensions[] = {
+static const char *const lang_5_extensions[] = {
     "f",
     "for",
     "ftn",
     "fpp"
 };
 
-static const char *const lang_5_extensions[] = {
+static const char *const lang_6_extensions[] = {
     "go"
 };
 
-static const char *const lang_6_extensions[] = {
+static const char *const lang_7_extensions[] = {
+    "html",
+    "htm",
+    "xhtml"
+};
+static const char *const lang_7_filenames[] = {
+    "*.html",
+    "*.htm"
+};
+
+static const char *const lang_8_extensions[] = {
     "ini",
     "cfg",
     "conf",
     "properties"
 };
-static const char *const lang_6_filenames[] = {
+static const char *const lang_8_filenames[] = {
     ".editorconfig",
     "*.desktop",
     "*.service"
 };
 
-static const char *const lang_7_extensions[] = {
+static const char *const lang_9_extensions[] = {
     "js",
     "mjs",
     "cjs",
     "jsx"
 };
-static const char *const lang_7_shebangs[] = {
+static const char *const lang_9_shebangs[] = {
     "node",
     "nodejs"
 };
 
-static const char *const lang_8_extensions[] = {
+static const char *const lang_10_extensions[] = {
     "json"
 };
 
-static const char *const lang_9_extensions[] = {
+static const char *const lang_11_extensions[] = {
     "jsonc"
 };
-static const char *const lang_9_filenames[] = {
+static const char *const lang_11_filenames[] = {
     "tsconfig.json",
     "jsconfig.json",
     ".eslintrc.json",
@@ -68,41 +82,41 @@ static const char *const lang_9_filenames[] = {
     "*.jsonc"
 };
 
-static const char *const lang_10_extensions[] = {
+static const char *const lang_12_extensions[] = {
     "mk",
     "mak"
 };
-static const char *const lang_10_filenames[] = {
+static const char *const lang_12_filenames[] = {
     "Makefile",
     "makefile",
     "GNUmakefile",
     "*.mk"
 };
 
-static const char *const lang_11_extensions[] = {
+static const char *const lang_13_extensions[] = {
     "md",
     "markdown",
     "mdown",
     "mkd"
 };
-static const char *const lang_11_filenames[] = {
+static const char *const lang_13_filenames[] = {
     "README",
     "README.*",
     "CHANGELOG",
     "CONTRIBUTING.md"
 };
 
-static const char *const lang_12_extensions[] = {
+static const char *const lang_14_extensions[] = {
     "py",
     "pyw",
     "pyi"
 };
-static const char *const lang_12_filenames[] = {
+static const char *const lang_14_filenames[] = {
     "SConstruct",
     "SConscript",
     "wscript"
 };
-static const char *const lang_12_shebangs[] = {
+static const char *const lang_14_shebangs[] = {
     "python",
     "python2",
     "python3",
@@ -110,44 +124,44 @@ static const char *const lang_12_shebangs[] = {
     "pypy3"
 };
 
-static const char *const lang_13_extensions[] = {
+static const char *const lang_15_extensions[] = {
     "rs"
 };
 
-static const char *const lang_14_extensions[] = {
+static const char *const lang_16_extensions[] = {
     "sh",
     "bash"
 };
-static const char *const lang_14_filenames[] = {
+static const char *const lang_16_filenames[] = {
     ".bashrc",
     ".bash_profile",
     ".profile",
     "PKGBUILD"
 };
-static const char *const lang_14_shebangs[] = {
+static const char *const lang_16_shebangs[] = {
     "sh",
     "bash",
     "dash",
     "ksh"
 };
 
-static const char *const lang_15_extensions[] = {
+static const char *const lang_17_extensions[] = {
     "toml"
 };
-static const char *const lang_15_filenames[] = {
+static const char *const lang_17_filenames[] = {
     "Cargo.lock",
     "Pipfile",
     "poetry.lock"
 };
 
-static const char *const lang_16_extensions[] = {
+static const char *const lang_18_extensions[] = {
     "ts",
     "mts",
     "cts",
     "tsx"
 };
 
-static const char *const lang_17_extensions[] = {
+static const char *const lang_19_extensions[] = {
     "yaml",
     "yml"
 };
@@ -169,9 +183,23 @@ const SynLangSeed yew_syn_builtin_langs[] = {
     },
     {
         2U,
+        "css",
+        "runtime/syntax/css.fl",
+        lang_2_extensions,
+        1U,
+        NULL,
+        0U,
+        NULL,
+        0U,
+        NULL,
+        0,
+        {NULL, "/*", "*/"}
+    },
+    {
+        3U,
         "fletch",
         "runtime/syntax/fletch.fl",
-        lang_2_extensions,
+        lang_3_extensions,
         1U,
         NULL,
         0U,
@@ -182,10 +210,10 @@ const SynLangSeed yew_syn_builtin_langs[] = {
         {"#", NULL, NULL}
     },
     {
-        3U,
+        4U,
         "fortran",
         "runtime/syntax/fortran.fl",
-        lang_3_extensions,
+        lang_4_extensions,
         5U,
         NULL,
         0U,
@@ -196,10 +224,10 @@ const SynLangSeed yew_syn_builtin_langs[] = {
         {"!", NULL, NULL}
     },
     {
-        4U,
+        5U,
         "fortran-fixed",
         "runtime/syntax/fortran_fixed.fl",
-        lang_4_extensions,
+        lang_5_extensions,
         4U,
         NULL,
         0U,
@@ -210,10 +238,10 @@ const SynLangSeed yew_syn_builtin_langs[] = {
         {"!", NULL, NULL}
     },
     {
-        5U,
+        6U,
         "go",
         "runtime/syntax/go.fl",
-        lang_5_extensions,
+        lang_6_extensions,
         1U,
         NULL,
         0U,
@@ -224,12 +252,26 @@ const SynLangSeed yew_syn_builtin_langs[] = {
         {"//", "/*", "*/"}
     },
     {
-        6U,
+        7U,
+        "html",
+        "runtime/syntax/html.fl",
+        lang_7_extensions,
+        3U,
+        lang_7_filenames,
+        2U,
+        NULL,
+        0U,
+        NULL,
+        0,
+        {NULL, "<!--", "-->"}
+    },
+    {
+        8U,
         "ini",
         "runtime/syntax/ini.fl",
-        lang_6_extensions,
+        lang_8_extensions,
         4U,
-        lang_6_filenames,
+        lang_8_filenames,
         3U,
         NULL,
         0U,
@@ -238,24 +280,24 @@ const SynLangSeed yew_syn_builtin_langs[] = {
         {";", NULL, NULL}
     },
     {
-        7U,
+        9U,
         "javascript",
         "runtime/syntax/javascript.fl",
-        lang_7_extensions,
+        lang_9_extensions,
         4U,
         NULL,
         0U,
-        lang_7_shebangs,
+        lang_9_shebangs,
         2U,
         NULL,
         0,
         {"//", "/*", "*/"}
     },
     {
-        8U,
+        10U,
         "json",
         "runtime/syntax/json.fl",
-        lang_8_extensions,
+        lang_10_extensions,
         1U,
         NULL,
         0U,
@@ -266,12 +308,12 @@ const SynLangSeed yew_syn_builtin_langs[] = {
         {NULL, NULL, NULL}
     },
     {
-        9U,
+        11U,
         "jsonc",
         "runtime/syntax/jsonc.fl",
-        lang_9_extensions,
+        lang_11_extensions,
         1U,
-        lang_9_filenames,
+        lang_11_filenames,
         5U,
         NULL,
         0U,
@@ -280,12 +322,12 @@ const SynLangSeed yew_syn_builtin_langs[] = {
         {"//", "/*", "*/"}
     },
     {
-        10U,
+        12U,
         "make",
         "runtime/syntax/make.fl",
-        lang_10_extensions,
+        lang_12_extensions,
         2U,
-        lang_10_filenames,
+        lang_12_filenames,
         4U,
         NULL,
         0U,
@@ -294,12 +336,12 @@ const SynLangSeed yew_syn_builtin_langs[] = {
         {"#", NULL, NULL}
     },
     {
-        11U,
+        13U,
         "markdown",
         "runtime/syntax/markdown.fl",
-        lang_11_extensions,
+        lang_13_extensions,
         4U,
-        lang_11_filenames,
+        lang_13_filenames,
         4U,
         NULL,
         0U,
@@ -308,24 +350,24 @@ const SynLangSeed yew_syn_builtin_langs[] = {
         {NULL, "<!--", "-->"}
     },
     {
-        12U,
+        14U,
         "python",
         "runtime/syntax/python.fl",
-        lang_12_extensions,
+        lang_14_extensions,
         3U,
-        lang_12_filenames,
+        lang_14_filenames,
         3U,
-        lang_12_shebangs,
+        lang_14_shebangs,
         5U,
         NULL,
         20,
         {"#", NULL, NULL}
     },
     {
-        13U,
+        15U,
         "rust",
         "runtime/syntax/rust.fl",
-        lang_13_extensions,
+        lang_15_extensions,
         1U,
         NULL,
         0U,
@@ -336,26 +378,26 @@ const SynLangSeed yew_syn_builtin_langs[] = {
         {"//", "/*", "*/"}
     },
     {
-        14U,
+        16U,
         "sh",
         "runtime/syntax/sh.fl",
-        lang_14_extensions,
+        lang_16_extensions,
         2U,
-        lang_14_filenames,
+        lang_16_filenames,
         4U,
-        lang_14_shebangs,
+        lang_16_shebangs,
         4U,
         NULL,
         0,
         {"#", NULL, NULL}
     },
     {
-        15U,
+        17U,
         "toml",
         "runtime/syntax/toml.fl",
-        lang_15_extensions,
+        lang_17_extensions,
         1U,
-        lang_15_filenames,
+        lang_17_filenames,
         3U,
         NULL,
         0U,
@@ -364,10 +406,10 @@ const SynLangSeed yew_syn_builtin_langs[] = {
         {"#", NULL, NULL}
     },
     {
-        16U,
+        18U,
         "typescript",
         "runtime/syntax/typescript.fl",
-        lang_16_extensions,
+        lang_18_extensions,
         4U,
         NULL,
         0U,
@@ -378,10 +420,10 @@ const SynLangSeed yew_syn_builtin_langs[] = {
         {"//", "/*", "*/"}
     },
     {
-        17U,
+        19U,
         "yaml",
         "runtime/syntax/yaml.fl",
-        lang_17_extensions,
+        lang_19_extensions,
         2U,
         NULL,
         0U,

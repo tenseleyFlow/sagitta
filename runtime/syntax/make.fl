@@ -1,8 +1,8 @@
 # GNU/POSIX Make syntax.  A leading recipe tab is semantic and rendered as
 # whitespace.special.  Leading spaces after a target are only a warning:
-# they are legal inside define bodies.  Recipe bodies are styled generically;
-# shell embedding is deferred to s41_5.  Recipe # text is shown as a comment
-# because it is passed to the shell even though it is not a Make comment.
+# they are legal inside define bodies.  Recipe bodies dispatch to shell after
+# Make consumes the significant tab and command prefixes.  Recipe # text is
+# therefore styled by the shell rather than as a Make comment.
 {
     syntax: 1,
     language: {
@@ -24,7 +24,8 @@
                   attr: "preproc" },
                 { match: "^(\\t)([@+-]*)", attr: "text",
                   captures: { 1: "whitespace.special", 2: "operator" },
-                  consume: 2, push: "recipe" },
+                  consume: 2, push: "recipe",
+                  embed: { lang: "sh", end: "line", fallback: "text" } },
                 { match: "^\\s*([A-Za-z_][A-Za-z0-9_.-]*)\\s*([:?+!]?=)",
                   captures: { 1: "variable", 2: "operator" }, consume: 2 },
                 { match: "\\.(PHONY|SUFFIXES|DEFAULT|PRECIOUS|SECONDARY|NOTPARALLEL|ONESHELL|DELETE_ON_ERROR)\\b",
@@ -50,7 +51,8 @@
             rules: [
                 { match: "^(\\t)([@+-]*)", attr: "text",
                   captures: { 1: "whitespace.special", 2: "operator" },
-                  consume: 2, push: "recipe" },
+                  consume: 2, push: "recipe",
+                  embed: { lang: "sh", end: "line", fallback: "text" } },
                 { match: "^ {2,}[^ \\t#].*$", attr: "warning" },
                 { match: "\\.(PHONY|SUFFIXES|DEFAULT|PRECIOUS|SECONDARY|NOTPARALLEL|ONESHELL|DELETE_ON_ERROR)\\b",
                   attr: "attribute" },

@@ -1,6 +1,6 @@
 # TypeScript syntax.  The TS-only rules are spliced before the shared
-# JavaScript rule body.  .tsx is supported with the same explicit limitation
-# as .jsx: tags are expressions, not markup, rather than a partial JSX mode.
+# JavaScript rule body.  .tsx borrows HTML's tag context; child text remains
+# in TypeScript because full JSX trees require bidirectional interleave.
 # Regex/value and template-literal limitations are identical to javascript.fl.
 {
     syntax: 1,
@@ -40,7 +40,27 @@
                 { match: "/\\*", attr: "comment", push: "block_comment" },
                 { match: "\"", attr: "string", push: "dq", value: true },
                 { match: "'", attr: "string", push: "sq", value: true },
+                { match: "(html)(`)", attr: "string",
+                  captures: { 1: "function", 2: "string" },
+                  push: "tagged_html",
+                  embed: { lang: "html", end: "inline",
+                           fallback: "string" }, value: true },
+                { match: "(css)(`)", attr: "string",
+                  captures: { 1: "function", 2: "string" },
+                  push: "tagged_css",
+                  embed: { lang: "css", end: "inline",
+                           fallback: "string" }, value: true },
+                { match: "(gql)(`)", attr: "string",
+                  captures: { 1: "function", 2: "string" },
+                  push: "tagged_gql",
+                  embed: { lang: "gql", end: "inline",
+                           fallback: "string" }, value: true },
                 { match: "`", attr: "string", push: "template", value: true },
+                { match: "(<\\/?)([A-Za-z][A-Za-z0-9:.-]*)", attr: "tag",
+                  captures: { 1: "punct.bracket", 2: "tag" },
+                  push: "jsx_tag",
+                  embed: { lang: "html", ctx: "tag", end: "inline",
+                           fallback: "text" }, value: true },
                 { match: "/", attr: "string.special", if_value: false,
                   push: "regex", value: true },
                 { match: "/=?", attr: "operator", if_value: true,
@@ -124,6 +144,37 @@
                 { match: "\\\\.", attr: "string.escape" },
                 { match: "\\$\\{", attr: "string.interp", push: "template_expr", value: false },
                 { match: "`", attr: "string", pop: 1, value: true },
+            ],
+        },
+        tagged_html: {
+            default: "string", at_eol: "stay", unit: "atom",
+            rules: [
+                { match: "\\\\.", attr: "string.escape" },
+                { match: "`", attr: "string", pop: 1, end: true,
+                  value: true },
+            ],
+        },
+        tagged_css: {
+            default: "string", at_eol: "stay", unit: "atom",
+            rules: [
+                { match: "\\\\.", attr: "string.escape" },
+                { match: "`", attr: "string", pop: 1, end: true,
+                  value: true },
+            ],
+        },
+        tagged_gql: {
+            default: "string", at_eol: "stay", unit: "atom",
+            rules: [
+                { match: "\\\\.", attr: "string.escape" },
+                { match: "`", attr: "string", pop: 1, end: true,
+                  value: true },
+            ],
+        },
+        jsx_tag: {
+            default: "text", at_eol: "stay", unit: "span",
+            rules: [
+                { match: "/?>", attr: "punct.bracket", pop: 1, end: true,
+                  value: true },
             ],
         },
         template_expr: {
