@@ -1,0 +1,9 @@
+// line comment
+/* TODO block
+ * FIXME and XXX
+ */
+message Escapes {
+  string double_quote = 1 [default = "line\nhex\x41"];
+  string single_quote = 2 [default = 'tab\t'];
+  double ratio = 3 [default = -1.25e+2];
+}

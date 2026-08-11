@@ -1,0 +1,6 @@
+<?xml version="1.0"?>
+<!DOCTYPE catalog>
+<catalog xmlns:x="urn:demo" enabled='yes'>
+  <x:item id="a&amp;b" count='&#x32;'>text &lt; more</x:item>
+  <empty />
+</catalog>

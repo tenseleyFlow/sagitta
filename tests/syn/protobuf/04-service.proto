@@ -1,0 +1,8 @@
+edition = "2023";
+package example.api;
+service Greeter {
+  rpc SayHello (HelloRequest) returns (HelloReply);
+  rpc Watch (HelloRequest) returns (stream HelloReply);
+}
+message HelloRequest { string name = 1; }
+message HelloReply { string message = 1; }

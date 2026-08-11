@@ -1,0 +1,67 @@
+# Nix syntax. Attribute-set semantics and URI/path validity are parser-level;
+# this bounded lexer recognizes their common lexical shapes only. Ordinary
+# strings end at EOL when malformed; indented strings and block comments keep
+# their real multiline lifetime.
+{
+    syntax: 1,
+    language: {
+        name: "nix", extensions: ["nix"], priority: 0,
+        comment: { line: "#", block: ["/*", "*/"] },
+    },
+    contexts: {
+        main: {
+            default: "text",
+            rules: [
+                { match: "#.*$", attr: "comment" },
+                { match: "/\\*", attr: "comment", push: "block_comment" },
+                { match: "''", attr: "string.special", push: "indented" },
+                { match: "\"", attr: "string", push: "dq" },
+                { match: "\\b(if|then|else|assert|with|let|in|rec|inherit|or)\\b", attr: "keyword.control" },
+                { match: "\\b(builtins|import|abort|baseNameOf|dirOf|fetchTarball|map|removeAttrs|throw|toString)\\b", attr: "function.builtin" },
+                { match: "\\b(true|false)\\b", attr: "boolean" },
+                { match: "\\bnull\\b", attr: "constant.builtin" },
+                { match: "(https?|ftp)://[^ \\t(){}\\[\\]\"']+", attr: "link" },
+                { match: "(\\./|\\.\\./|/)[A-Za-z0-9._+/-]+", attr: "string.special" },
+                { match: "<[^> \\t]+>", attr: "string.special" },
+                { match: "[+-]?[0-9]+(\\.[0-9]+)?", attr: "number" },
+                { match: "(==|!=|<=|>=|&&|\\|\\||//|\\+\\+|->|[+*/?<>=!@:-])", attr: "operator" },
+                { match: "[{}()\\[\\]]", attr: "punct.bracket" },
+                { match: "[,;.]", attr: "punct.delim" },
+                { match: "[A-Za-z_][A-Za-z0-9_'-]*", attr: "variable" },
+            ],
+        },
+        block_comment: {
+            default: "comment", at_eol: "stay", unit: "atom",
+            rules: [ { match: "\\*/", attr: "comment", pop: 1 } ],
+        },
+        dq: {
+            default: "string", at_eol: "pop", unit: "atom",
+            rules: [
+                { match: "\\\\.", attr: "string.escape" },
+                { match: "\\$\\{", attr: "string.interp", push: "interp" },
+                { match: "\"", attr: "string", pop: 1 },
+            ],
+        },
+        indented: {
+            default: "string.special", at_eol: "stay", unit: "atom",
+            rules: [
+                { match: "''''|''\\$", attr: "string.escape" },
+                { match: "\\$\\{", attr: "string.interp", push: "interp" },
+                { match: "''", attr: "string.special", pop: 1 },
+            ],
+        },
+        interp: {
+            default: "text", at_eol: "stay", unit: "span",
+            rules: [
+                { match: "#.*$", attr: "comment" },
+                { match: "\"", attr: "string", push: "dq" },
+                { match: "\\{", attr: "punct.bracket", push: "interp" },
+                { match: "\\}", attr: "string.interp", pop: 1 },
+                { match: "\\b(if|then|else|let|in)\\b", attr: "keyword.control" },
+                { match: "[0-9]+", attr: "number" },
+                { match: "[A-Za-z_][A-Za-z0-9_'-]*", attr: "variable" },
+                { match: "[+*/?:=-]", attr: "operator" },
+            ],
+        },
+    },
+}

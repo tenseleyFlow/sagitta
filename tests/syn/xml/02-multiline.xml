@@ -1,0 +1,7 @@
+<!-- TODO outer comment
+     second line -->
+<payload><![CDATA[
+literal <tag attr="x"> &entity;
+]]></payload>
+<?work
+  multiline instruction?>

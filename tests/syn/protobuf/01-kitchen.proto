@@ -1,0 +1,12 @@
+syntax = "proto3";
+package demo.v1;
+import "google/protobuf/timestamp.proto";
+
+option (demo.file_option) = true;
+message Record {
+  optional string name = 1;
+  repeated int64 values = 2;
+  map<string, bytes> labels = 0x10;
+  oneof choice { bool enabled = 4; Nested value = 5; }
+}
+enum State { STATE_UNKNOWN = 0; STATE_READY = 1; }

@@ -1,0 +1,10 @@
+"A user record"
+type User implements Node @key(fields: "id") {
+  id: ID!
+  name(format: String = "short\n"): String
+  score: Float
+}
+fragment UserFields on User { id name }
+query Fetch($id: ID!, $limit: Int = 10) @cached {
+  user(id: $id) { ...UserFields score }
+}

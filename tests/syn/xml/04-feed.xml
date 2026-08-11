@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="urn:example">
+  <title>Example &amp; Updates</title>
+  <entry id="one"><link href='https://example.test/one'/></entry>
+</feed>

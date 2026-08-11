@@ -1,0 +1,57 @@
+# OCaml syntax. Constructor/module classification is lexical (capitalized
+# identifiers) and cannot resolve local modules or polymorphic variants.
+# Nested comments and quoted strings retain their real multiline lifetime;
+# ordinary strings and characters are bounded at EOL when malformed.
+{
+    syntax: 1,
+    language: {
+        name: "ocaml", extensions: ["ml", "mli", "mll", "mly"], priority: 0,
+        comment: { block: ["(*", "*)"] },
+    },
+    contexts: {
+        main: {
+            default: "text",
+            rules: [
+                { match: "\\(\\*", attr: "comment", push: "comment" },
+                { match: "\\{([a-z]*)\\|", attr: "string.special", set_aux: 1, push: "quoted" },
+                { match: "\"", attr: "string", push: "dq" },
+                { match: "'", attr: "character", push: "char" },
+                { match: "~[a-z_][A-Za-z0-9_']*|\\?[a-z_][A-Za-z0-9_']*", attr: "variable.param" },
+                { match: "`[A-Z][A-Za-z0-9_']*", attr: "constant" },
+                { match: "\\b(and|as|assert|begin|class|constraint|do|done|downto|else|end|exception|external|for|fun|function|functor|if|in|include|inherit|initializer|lazy|let|match|method|module|mutable|new|object|of|open|or|private|rec|sig|struct|then|to|try|type|val|virtual|when|while|with)\\b", attr: "keyword.control" },
+                { match: "\\b(true|false)\\b", attr: "boolean" },
+                { match: "\\b[A-Z][A-Za-z0-9_']*", attr: "type" },
+                { match: "\\b(0[xX][0-9A-Fa-f_]+|0[oO][0-7_]+|0[bB][01_]+|[0-9][0-9_]*(\\.[0-9_]+)?([eE][+-]?[0-9_]+)?)\\b", attr: "number" },
+                { match: "(::|:=|->|<-|=>|[!$%&*+./:<=>?@^|~-]+)", attr: "operator" },
+                { match: "[(){}\\[\\]]", attr: "punct.bracket" },
+                { match: "[,;]", attr: "punct.delim" },
+                { match: "[a-z_][A-Za-z0-9_']*", attr: "variable" },
+            ],
+        },
+        comment: {
+            default: "comment", at_eol: "stay", unit: "atom",
+            rules: [
+                { match: "\\(\\*", attr: "comment", push: "comment" },
+                { match: "\\*\\)", attr: "comment", pop: 1 },
+            ],
+        },
+        quoted: {
+            default: "string.special", at_eol: "stay", unit: "atom",
+            rules: [ { aux: "literal", aux_pre: "|", aux_post: "}", attr: "string.special", pop: 1 } ],
+        },
+        dq: {
+            default: "string", at_eol: "pop", unit: "atom",
+            rules: [
+                { match: "\\\\.", attr: "string.escape" },
+                { match: "\"", attr: "string", pop: 1 },
+            ],
+        },
+        char: {
+            default: "character", at_eol: "pop", unit: "atom",
+            rules: [
+                { match: "\\\\.", attr: "string.escape" },
+                { match: "'", attr: "character", pop: 1 },
+            ],
+        },
+    },
+}

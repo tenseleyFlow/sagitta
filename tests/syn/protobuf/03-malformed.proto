@@ -1,0 +1,7 @@
+message Broken {
+  string value = 1 [default = "unterminated
+  int32 recovered = 2;
+  string other = 3 [default = 'unterminated
+  fixed32 recovered_again = 4;
+  /* unterminated block comment
+}

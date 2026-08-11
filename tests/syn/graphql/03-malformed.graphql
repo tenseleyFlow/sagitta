@@ -1,0 +1,6 @@
+query Broken {
+  field(arg: "unterminated
+  next(arg: null, ratio: -1.5e+2)
+  # comment after recovery
+  description: """unterminated block
+  still block text

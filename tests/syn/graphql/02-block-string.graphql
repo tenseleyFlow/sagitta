@@ -1,0 +1,5 @@
+"""A multiline description with an escaped delimiter: \"""
+and another line
+"""
+scalar Date
+directive @audit(enabled: Boolean = true) repeatable on FIELD
