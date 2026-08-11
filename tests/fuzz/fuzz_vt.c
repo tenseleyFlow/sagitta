@@ -50,17 +50,24 @@ static const u8 *grid_cell_bytes(const Grid *grid, const Cell *cell,
     return cell->utf8;
 }
 
-static u16 expected_attrs(u16 attrs)
+static u16 expected_attrs(u16 attrs, bool undercurl)
 {
     if ((attrs & YEW_ATTR_INVALID_BYTE) != 0U)
         attrs |= YEW_ATTR_REVERSE;
     attrs &= (u16)((1u << YEW_CELL_UL_SHIFT) - 1u);
-    if ((attrs & YEW_ATTR_UNDERCURL) != 0U)
-        attrs &= (u16)~YEW_ATTR_UNDERLINE;
+    if ((attrs & YEW_ATTR_UNDERCURL) != 0U) {
+        if (undercurl)
+            attrs &= (u16)~YEW_ATTR_UNDERLINE;
+        else {
+            attrs &= (u16)~YEW_ATTR_UNDERCURL;
+            attrs |= YEW_ATTR_UNDERLINE;
+        }
+    }
     return attrs;
 }
 
-static bool screens_equal(const Grid *grid, const VtScreen *vt,
+static bool screens_equal(const Grid *grid, const Render *render,
+                          const VtScreen *vt,
                           char *why, size_t why_cap, size_t at)
 {
     size_t count = (size_t)grid->rows * grid->cols;
@@ -81,7 +88,8 @@ static bool screens_equal(const Grid *grid, const VtScreen *vt,
         if ((want_len != 0U && want_bytes == NULL) ||
             want_len != got_len ||
             (want_len != 0U && memcmp(want_bytes, got_bytes, want_len) != 0) ||
-            want->w != got->w || expected_attrs(want->attrs) != got->attrs ||
+            want->w != got->w ||
+            expected_attrs(want->attrs, render->undercurl) != got->attrs ||
             memcmp(&want->fg, &got->fg, sizeof(want->fg)) != 0 ||
             memcmp(&want->bg, &got->bg, sizeof(want->bg)) != 0) {
             (void)snprintf(why, why_cap,
@@ -89,7 +97,8 @@ static bool screens_equal(const Grid *grid, const VtScreen *vt,
                            "(len %zu/%zu w %u/%u attrs %u/%u)",
                            i, at, want_len, got_len, (unsigned)want->w,
                            (unsigned)got->w,
-                           (unsigned)expected_attrs(want->attrs),
+                           (unsigned)expected_attrs(want->attrs,
+                                                    render->undercurl),
                            (unsigned)got->attrs);
             return false;
         }
@@ -235,7 +244,7 @@ static bool check_render_roundtrip(const u8 *data, size_t len,
         }
         vt_feed(&vt, output.data, output.len);
         if (vt.nerrors != 0U ||
-            !screens_equal(&grid, &vt, why, why_cap, pos)) {
+            !screens_equal(&grid, &render, &vt, why, why_cap, pos)) {
             if (vt.nerrors != 0U)
                 ok = fuzz_fail(why, why_cap, "renderer left closed VT set", pos);
             else
