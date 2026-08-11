@@ -45,6 +45,9 @@ static void discovery_env_restore(const char *name, char *value)
 
 static void discovery_open(DiscoveryFix *f, bool make_syntax)
 {
+    YEW_ASSERT_NOT_NULL(f);
+    if (f == NULL)
+        return;
     (void)memset(f, 0, sizeof(*f));
     (void)snprintf(f->root, sizeof(f->root), "/tmp/yew-syn-discovery-XXXXXX");
     YEW_ASSERT_NOT_NULL(mkdtemp(f->root));
@@ -69,6 +72,9 @@ static void discovery_write(DiscoveryFix *f, const char *name,
     FILE *fp;
     size_t len = strlen(source);
 
+    YEW_ASSERT_NOT_NULL(f);
+    if (f == NULL)
+        return;
     YEW_ASSERT(f->nfiles < YEW_ARRAY_LEN(f->files));
     (void)snprintf(f->files[f->nfiles], sizeof(f->files[f->nfiles]),
                    "%s/%s", f->syntax, name);

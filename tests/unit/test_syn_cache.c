@@ -122,6 +122,9 @@ static void fixture_init(CacheFixture *f)
     char *path;
     int n;
 
+    YEW_ASSERT_NOT_NULL(f);
+    if (f == NULL)
+        return;
     (void)memset(f, 0, sizeof(*f));
     f->saved_xdg = heap_copy(xdg);
     f->saved_no_cache = heap_copy(no_cache);
@@ -136,6 +139,8 @@ static void fixture_init(CacheFixture *f)
                 strlen(cache_source_x));
     path = yew_syn_cache_path("cache-fixture");
     YEW_ASSERT_NOT_NULL(path);
+    if (path == NULL)
+        return;
     n = snprintf(f->cache, sizeof(f->cache), "%s", path);
     YEW_ASSERT(n > 0 && (size_t)n < sizeof(f->cache));
     free(path);
