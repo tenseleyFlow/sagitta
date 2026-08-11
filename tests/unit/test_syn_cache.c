@@ -37,7 +37,8 @@ static const char cache_source_complex[] =
     "extensions: [\"cx\"], filenames: [\"Complexfile\"], priority: 9, }, "
     "root: \"main\", contexts: { main: { default: \"text\", rules: [ "
     "{ match: \"^([A-Z][a-z]+|[0-9][0-9])=(yes|no)$\", "
-    "attr: \"operator\", captures: { 1: \"variable\", 2: \"boolean\" } "
+    "attr: \"operator\", captures: { 1: \"variable\", 2: \"boolean\" }, "
+    "first_line: true "
     "}, ], }, tail: { default: \"comment\", rules: [], }, }, }\n";
 
 static const char cache_source_aux[] =
@@ -411,6 +412,7 @@ void test_syn_cache_warm_load_preserves_complex_regex_and_metadata(void)
     YEW_ASSERT_EQ_STR(yew_syn_ctx_name(loaded.def, 1U), "tail");
     YEW_ASSERT_EQ_STR(yew_syn_rule_pattern(loaded.def, 0U),
                       "^([A-Z][a-z]+|[0-9][0-9])=(yes|no)$");
+    YEW_ASSERT(loaded.def->rules[0].flags & YEW_SYN_RULE_FIRST_LINE);
     lang = yew_syn_lang_desc(yew_syn_lang_named("cache-complex"));
     YEW_ASSERT_NOT_NULL(lang);
     YEW_ASSERT_EQ_U64(lang->nextensions, 1U);
@@ -433,6 +435,20 @@ void test_syn_cache_warm_load_preserves_complex_regex_and_metadata(void)
     YEW_ASSERT_EQ_U64(out.spans[2].start, 4U);
     YEW_ASSERT_EQ_U64(out.spans[2].len, 3U);
     YEW_ASSERT_EQ_U64(out.spans[2].attr, YEW_ATTR_BOOLEAN);
+
+    yew_syn_line(engine, out.exit_state, line, sizeof(line) - 1U, &out);
+    YEW_ASSERT_EQ_U64(out.stop, YEW_SYN_STOP_OK);
+    YEW_ASSERT_EQ_U64(out.n, 1U);
+    YEW_ASSERT_EQ_U64(out.spans[0].attr, YEW_ATTR_TEXT);
+
+    yew_syn_engine_free(engine);
+    engine = yew_syn_engine_new(loaded.def);
+    YEW_ASSERT_NOT_NULL(engine);
+    yew_syn_line(engine, YEW_SYN_STATE_ROOT, NULL, 0U, &out);
+    yew_syn_line(engine, out.exit_state, line, sizeof(line) - 1U, &out);
+    YEW_ASSERT_EQ_U64(out.stop, YEW_SYN_STOP_OK);
+    YEW_ASSERT_EQ_U64(out.n, 1U);
+    YEW_ASSERT_EQ_U64(out.spans[0].attr, YEW_ATTR_TEXT);
     yew_syn_engine_free(engine);
     loaded_free(&loaded);
     fixture_free(&f);

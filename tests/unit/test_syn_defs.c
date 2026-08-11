@@ -168,7 +168,7 @@ void test_syn_defs_alias_include_and_rule_features_pack(void)
         "      { match: \"D\", set: \"left\", value: false },\n"
         "      { aux: \"line_eq\", pop: true },\n"
         "      { match: \"I\", push: \"indent\" } ] },\n"
-        "    common: { icase: true, rules: [{ match: \"A\", attr: \"kw\" }] },\n"
+        "    common: { icase: true, rules: [{ match: \"A\", attr: \"kw\", first_line: true }] },\n"
         "    left: { at_eol: \"set:main\", rules: [\n"
         "      { aux: \"literal\", aux_pre: \"r\", aux_post: \"#\", pop: 1 } ] },\n"
         "    right: { at_eol: \"pop:2\", rules: [\n"
@@ -193,6 +193,7 @@ void test_syn_defs_alias_include_and_rule_features_pack(void)
     YEW_ASSERT_EQ_STR(yew_syn_ctx_name(def, 1U), "common");
     YEW_ASSERT_EQ_STR(yew_syn_rule_pattern(def, 0U), "A");
     YEW_ASSERT_EQ_U64(def->rules[0].attr, YEW_ATTR_KEYWORD_CONTROL);
+    YEW_ASSERT(def->rules[0].flags & YEW_SYN_RULE_FIRST_LINE);
     YEW_ASSERT_EQ_STR(yew_syn_rule_pattern(def, 1U), "(B)(C)");
     YEW_ASSERT_EQ_U64(def->rules[1].caps[1], YEW_ATTR_NUMBER);
     YEW_ASSERT_EQ_U64(def->rules[1].caps[2], YEW_ATTR_STRING);
@@ -218,7 +219,7 @@ void test_syn_defs_alias_include_and_rule_features_pack(void)
     YEW_ASSERT(def->rules[6].aux_post != 0U);
     YEW_ASSERT_EQ_U64(def->rules[7].aux_match, SYN_AUXM_FENCE_CLOSE);
     YEW_ASSERT_EQ_U64(def->rules[8].aux_match, SYN_AUXM_INDENT_LT);
-    YEW_ASSERT(def->rules[8].flags & YEW_SYN_RULE_ZERO_POP);
+    YEW_ASSERT(def->rules[8].flags & YEW_SYN_RULE_ZERO_TRANSITION);
     YEW_ASSERT_EQ_U64(def->rules[8].op, SYN_OP_POP);
     YEW_ASSERT_EQ_U64(def->ctxs[2].at_eol, SYN_OP_SET);
     YEW_ASSERT_EQ_U64(def->ctxs[2].eol_target, 0U);

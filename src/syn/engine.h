@@ -20,7 +20,9 @@ typedef struct TextBuf TextBuf;
 #define YEW_SYN_LINE_STEPS(len) (4096ULL + 8ULL * (u64)(len))
 #define YEW_SYN_FRAME_BUDGET_US 1000
 #define YEW_SYN_IDLE_BUDGET_US 4000
-#define YEW_SYN_CLOCK_EVERY 256U
+#define YEW_SYN_CLOCK_EVERY 4U
+#define YEW_SYN_CLOCK_HEADROOM_US 64
+#define YEW_SYN_INJECTED_CLOCK_EVERY 256U
 #define YEW_SYN_SETTLING_MS 250U
 #define YEW_SYN_SPAN_CACHE 256U
 
@@ -31,7 +33,8 @@ typedef struct TextBuf TextBuf;
 enum {
     YEW_SYN_F_VALUE = 1U << 0,
     YEW_SYN_F_STRIP = 1U << 1,
-    YEW_SYN_F_DEGRADED = 1U << 2
+    YEW_SYN_F_DEGRADED = 1U << 2,
+    YEW_SYN_F_PAST_FIRST = 1U << 3
 };
 
 enum {
@@ -85,7 +88,9 @@ typedef enum SynAuxMatch {
     SYN_AUXM_LINE_EQ,
     SYN_AUXM_LITERAL,
     SYN_AUXM_FENCE_CLOSE,
-    SYN_AUXM_INDENT_LT
+    SYN_AUXM_INDENT_LT,
+    SYN_AUXM_LINE_EMPTY,
+    SYN_AUXM_LINE_START
 } SynAuxMatch;
 
 enum {
@@ -93,9 +98,10 @@ enum {
     YEW_SYN_RULE_SET_VALUE = 1U << 1,
     YEW_SYN_RULE_CLR_VALUE = 1U << 2,
     YEW_SYN_RULE_STRIP = 1U << 3,
-    YEW_SYN_RULE_ZERO_POP = 1U << 4,
+    YEW_SYN_RULE_ZERO_TRANSITION = 1U << 4,
     YEW_SYN_RULE_AUX_INT = 1U << 5,
-    YEW_SYN_RULE_CLR_AUX = 1U << 6
+    YEW_SYN_RULE_CLR_AUX = 1U << 6,
+    YEW_SYN_RULE_FIRST_LINE = 1U << 7
 };
 
 enum {
@@ -171,6 +177,10 @@ SynStateTab *yew_syn_engine_states(SynEngine *engine);
 const SynDef *yew_syn_engine_def(const SynEngine *engine);
 u64 yew_syn_engine_line_calls(const SynEngine *engine);
 void yew_syn_engine_reset_counters(SynEngine *engine);
+/* Narrow test seam for differential checks against the regex VM. */
+void yew_syn_engine_set_identifier_fast_path(SynEngine *engine,
+                                             bool enabled);
+u32 yew_syn_engine_identifier_fast_rules(const SynEngine *engine);
 bool yew_syn_coverage_init(SynCoverage *coverage, const SynDef *def);
 void yew_syn_coverage_clear(SynCoverage *coverage);
 void yew_syn_coverage_free(SynCoverage *coverage);

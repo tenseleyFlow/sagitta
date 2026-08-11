@@ -130,11 +130,21 @@ void test_syn_line_byte_cap_preserves_entry_state(void)
     YEW_ASSERT_NOT_NULL(line);
     (void)memset(line, 'x', YEW_SYN_LINE_BYTE_CAP + 1U);
     syn_toy_init(&toy);
+    toy.rules[0].flags |= YEW_SYN_RULE_FIRST_LINE;
+    yew_syn_engine_set_def(toy.engine, &toy.def);
     entry = syn_toy_state(&toy, SYN_TOY_COMMENT_BLOCK);
     out = (SynLineOut){spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
     yew_syn_line(toy.engine, entry, line, YEW_SYN_LINE_BYTE_CAP + 1U, &out);
     YEW_ASSERT_EQ_U64(out.stop, YEW_SYN_STOP_BYTES);
-    YEW_ASSERT_EQ_U64(out.exit_state, entry);
+    {
+        const SynState *exit = yew_syn_state_get(
+            yew_syn_engine_states(toy.engine), out.exit_state);
+
+        YEW_ASSERT_NOT_NULL(exit);
+        YEW_ASSERT_EQ_U64(exit->ctx[exit->depth - 1U],
+                          SYN_TOY_COMMENT_BLOCK);
+        YEW_ASSERT((exit->flags & YEW_SYN_F_PAST_FIRST) != 0U);
+    }
     assert_spans_well_formed(&out, YEW_SYN_LINE_BYTE_CAP + 1U);
     syn_toy_free(&toy);
     free(line);
@@ -207,11 +217,19 @@ void test_syn_line_step_cap_degrades_instead_of_stalling(void)
         (void)memset(rules[i].caps, 0xff, sizeof(rules[i].caps));
         rules[i].first['x' >> 3U] |= (u8)(1U << ('x' & 7U));
     }
+    rules[0].flags |= YEW_SYN_RULE_FIRST_LINE;
     engine = yew_syn_engine_new(&def);
     YEW_ASSERT_NOT_NULL(engine);
     yew_syn_line(engine, YEW_SYN_STATE_ROOT, (const u8 *)"x", 1U, &out);
     YEW_ASSERT_EQ_U64(out.stop, YEW_SYN_STOP_STEPS);
-    YEW_ASSERT_EQ_U64(out.exit_state, YEW_SYN_STATE_ROOT);
+    {
+        const SynState *exit = yew_syn_state_get(
+            yew_syn_engine_states(engine), out.exit_state);
+
+        YEW_ASSERT_NOT_NULL(exit);
+        YEW_ASSERT_EQ_U64(exit->ctx[0], 0U);
+        YEW_ASSERT((exit->flags & YEW_SYN_F_PAST_FIRST) != 0U);
+    }
     yew_syn_engine_free(engine);
     arena_free_all(&arena);
     free(rules);
@@ -363,6 +381,94 @@ void test_syn_line_push_list_eol_target_and_clear_aux_pop_laws(void)
     YEW_ASSERT_EQ_U64(exit->ctx[0], 2U);
     yew_syn_engine_free(engine);
     arena_free_all(&arena);
+}
+
+static void assert_identifier_fast_path_equal(const char *pattern,
+                                              const u8 *line, u32 len)
+{
+    Arena arena;
+    SynCtx ctxs[2] = {{0}};
+    SynRule rule = {0};
+    SynDef def = {"identifier-fast", 0U, 2U, 1U, ctxs, &rule, NULL};
+    SynEngine *fast;
+    SynEngine *reference;
+    SynSpan fast_spans[32];
+    SynSpan reference_spans[32];
+    SynLineOut fast_out = {fast_spans, 0U, YEW_ARRAY_LEN(fast_spans),
+                           0U, 0U};
+    SynLineOut reference_out = {
+        reference_spans, 0U, YEW_ARRAY_LEN(reference_spans), 0U, 0U};
+    const SynState *fast_state;
+    const SynState *reference_state;
+
+    arena_init(&arena);
+    rule.re = yew_re_compile(&arena, pattern, strlen(pattern), 0U, NULL);
+    YEW_ASSERT_NOT_NULL(rule.re);
+    rule.attr = YEW_ATTR_TEXT;
+    rule.op = SYN_OP_SET;
+    rule.target = 1U;
+    rule.consume = 1U;
+    (void)memset(rule.caps, 0xff, sizeof(rule.caps));
+    rule.caps[1] = YEW_ATTR_FUNCTION;
+    ctxs[0].nrules = 1U;
+    ctxs[0].dflt_attr = YEW_ATTR_TEXT;
+    (void)memset(ctxs[0].first, 0xff, sizeof(ctxs[0].first));
+    ctxs[1].dflt_attr = YEW_ATTR_COMMENT;
+    fast = yew_syn_engine_new(&def);
+    reference = yew_syn_engine_new(&def);
+    YEW_ASSERT_EQ_U64(yew_syn_engine_identifier_fast_rules(fast), 1U);
+    YEW_ASSERT_EQ_U64(yew_syn_engine_identifier_fast_rules(reference), 1U);
+    yew_syn_engine_set_identifier_fast_path(reference, false);
+
+    yew_syn_line(fast, YEW_SYN_STATE_ROOT, line, len, &fast_out);
+    yew_syn_line(reference, YEW_SYN_STATE_ROOT, line, len, &reference_out);
+    YEW_ASSERT_EQ_U64(fast_out.stop, reference_out.stop);
+    YEW_ASSERT_EQ_U64(fast_out.n, reference_out.n);
+    YEW_ASSERT_EQ_MEM(fast_out.spans, reference_out.spans,
+                      fast_out.n * sizeof(*fast_out.spans));
+    fast_state = yew_syn_state_get(yew_syn_engine_states(fast),
+                                   fast_out.exit_state);
+    reference_state = yew_syn_state_get(yew_syn_engine_states(reference),
+                                        reference_out.exit_state);
+    YEW_ASSERT_NOT_NULL(fast_state);
+    YEW_ASSERT_NOT_NULL(reference_state);
+    YEW_ASSERT_EQ_MEM(fast_state, reference_state, sizeof(*fast_state));
+
+    yew_syn_engine_free(reference);
+    yew_syn_engine_free(fast);
+    arena_free_all(&arena);
+}
+
+void test_syn_line_identifier_suffix_fast_path_matches_regex(void)
+{
+    static const char *const patterns[] = {
+        "([A-Za-z_][A-Za-z0-9_]*)\\s*\\(",
+        "([A-Za-z_][A-Za-z0-9_]*)\\s*:"
+    };
+    static const struct {
+        const u8 *bytes;
+        u32 len;
+    } rows[] = {
+        {(const u8 *)"function(", 9U},
+        {(const u8 *)"_member42   :", 13U},
+        {(const u8 *)"prefix\t(", 8U},
+        {(const u8 *)"9prefix(", 8U},
+        {(const u8 *)"plain", 5U},
+        {(const u8 *)"prefix x(", 9U},
+        {(const u8 *)"na\xc3\xafve(", 7U},
+        {(const u8 *)"name\xc2\xa0(", 7U},
+        {(const u8 *)"bad\xff(", 5U}
+    };
+    u32 pattern;
+    u32 row;
+
+    for (pattern = 0U; pattern < YEW_ARRAY_LEN(patterns); pattern++) {
+        for (row = 0U; row < YEW_ARRAY_LEN(rows); row++) {
+            assert_identifier_fast_path_equal(patterns[pattern],
+                                              rows[row].bytes,
+                                              rows[row].len);
+        }
+    }
 }
 
 void test_syn_line_coverage_is_optional_and_excludes_stack_probes(void)

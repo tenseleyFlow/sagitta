@@ -1637,6 +1637,7 @@ void test_syn_line_zero_width_rule_forces_utf8_progress(void);
 void test_syn_line_step_cap_degrades_instead_of_stalling(void);
 void test_syn_line_consume_stops_emission_and_optional_aux_is_safe(void);
 void test_syn_line_push_list_eol_target_and_clear_aux_pop_laws(void);
+void test_syn_line_identifier_suffix_fast_path_matches_regex(void);
 void test_syn_line_coverage_is_optional_and_excludes_stack_probes(void);
 void test_syn_splice_table_preserves_root_and_length(void);
 void test_syn_splice_inserts_unknown_slots_and_retains_tail(void);

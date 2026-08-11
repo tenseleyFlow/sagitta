@@ -1599,6 +1599,7 @@ const YewTest yew_tests[] = {
     T(syn_line_step_cap_degrades_instead_of_stalling),
     T(syn_line_consume_stops_emission_and_optional_aux_is_safe),
     T(syn_line_push_list_eol_target_and_clear_aux_pop_laws),
+    T(syn_line_identifier_suffix_fast_path_matches_regex),
     T(syn_line_coverage_is_optional_and_excludes_stack_probes),
     T(syn_splice_table_preserves_root_and_length),
     T(syn_splice_inserts_unknown_slots_and_retains_tail),

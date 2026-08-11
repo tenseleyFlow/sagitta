@@ -99,6 +99,7 @@ All other keys are optional.
 | `pop` | int 1–4 or bool | absent (`stay`) | `pop: 1` |
 | `set` | context string | absent (`stay`) | `set: "main"` |
 | `icase` | bool | context `icase` | `icase: true` |
+| `first_line` | bool | `false` | `first_line: true` |
 | `set_aux` | int capture index | absent (keep current aux) | `set_aux: 1` |
 | `strip` | bool | `false` | `strip: true` |
 | `aux` | aux matcher string | none; `match` or `aux` is required | `aux: "line_eq"` |
@@ -112,6 +113,11 @@ match; captures 1–7 are available. `consume: N` advances to the end of
 capture N and leaves the rest of the match for later rules. This is the
 supported substitute for positive lookahead.
 
+`first_line: true` restricts the rule to the document's first physical line.
+It is independent of the active context: multiline contexts opened on line 1
+retain the fact that later lines are not first. Empty first lines count, and
+incremental rescans preserve the same document-position state.
+
 `push`, `pop`, and `set` are mutually exclusive. A list in `push` is pushed
 left to right and may contain at most four contexts. `pop: true` means
 `pop: 1`; an integer pop may not exceed four. If no state operation appears,
@@ -120,7 +126,7 @@ the rule stays in its current context.
 `set_aux` interns the selected capture's text into the syntax state. With
 `strip: true`, it also sets the strip flag used by indented heredocs.
 `value` sets or clears the state's single value bit. Definitions use these
-state fields only through the four closed aux matchers.
+state fields only through the closed aux matchers below.
 
 ### Aux matchers
 
@@ -133,9 +139,13 @@ runtime-derived delimiters out of the regex compiler and render path.
 | `literal` | `aux_pre + aux + aux_post` starts at the scan position | whole constructed literal | Rust raw-string closer |
 | `fence_close` | column ≤ 3; line has at least `len(aux)` copies of `aux[0]`, then nothing else | whole line | Markdown fence closer |
 | `indent_lt` | byte 0; expanded indent is less than integer aux | zero bytes, then pop once | YAML block scalar end |
+| `line_empty` | the physical line has zero bytes | zero bytes, then one state operation | end a backslash continuation across a blank line |
+| `line_start` | byte 0 of any physical line | zero bytes, then one state operation | resume normal string or preprocessor rules after a continuation |
 
-`indent_lt` must be the first rule in its context. It is the only sanctioned
-zero-width rule. The engine bounds its per-line pops.
+`indent_lt` must be the first rule in its context. `indent_lt`, `line_empty`,
+and `line_start` are the only sanctioned zero-width matchers. Zero-width state
+transitions are bounded by the engine's per-line transition limit;
+`line_empty` runs only in the dedicated empty-line transition pass.
 
 ### Deferred entry for heredocs and similar blocks
 

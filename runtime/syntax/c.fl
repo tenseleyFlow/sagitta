@@ -75,17 +75,16 @@
         },
 
         # A continuation line first returns to the ordinary preprocessor
-        # context after consuming one byte; a final backslash can set this
-        # state again.  Empty continued lines remain preprocessor-colored,
-        # which is harmless and avoids an illegal zero-width transition.
+        # context without consuming byte zero; a final backslash can set this
+        # state again.  The explicit empty-line matcher keeps that transition
+        # covered for a physical line with no bytes.
         preproc_cont: {
             default: "preproc",
             at_eol:  "stay",
             unit:    "span",
             rules: [
-                { match: "\\\\\\s*$", attr: "operator", set: "preproc_cont" },
-                { match: "^(.)(.*[^\\\\\\s])?\\s*$", attr: "preproc",
-                  consume: 1, set: "preproc" },
+                { aux: "line_empty", set: "preproc" },
+                { aux: "line_start", set: "preproc" },
             ],
         },
 
@@ -120,8 +119,8 @@
             at_eol:  "stay",
             unit:    "atom",
             rules: [
-                { match: "^(.)(.*[^\\\\])?$", attr: "string",
-                  consume: 1, set: "dq" },
+                { aux: "line_empty", set: "dq" },
+                { aux: "line_start", set: "dq" },
             ],
         },
 

@@ -846,6 +846,10 @@ static u8 aux_kind(Compile *c, FlNode *node)
         return SYN_AUXM_FENCE_CLOSE;
     if (text_eq(name, n, "indent_lt"))
         return SYN_AUXM_INDENT_LT;
+    if (text_eq(name, n, "line_empty"))
+        return SYN_AUXM_LINE_EMPTY;
+    if (text_eq(name, n, "line_start"))
+        return SYN_AUXM_LINE_START;
     diag(c, FL_DIAG_ERROR, node->sp, "unknown aux matcher '%.*s'", (int)n,
          name);
     return SYN_AUXM_NONE;
@@ -857,7 +861,7 @@ static void compile_rule(Compile *c, FlNode *node, u16 ctx_id, SynRule *rule,
     static const char *const keys[] = {
         "match", "attr", "captures", "consume", "push", "pop", "set",
         "icase", "set_aux", "strip", "aux", "aux_pre", "aux_post",
-        "value"
+        "value", "first_line"
     };
     FlNode *match = map_find(c, node, "match");
     FlNode *aux = map_find(c, node, "aux");
@@ -869,6 +873,7 @@ static void compile_rule(Compile *c, FlNode *node, u16 ctx_id, SynRule *rule,
     FlNode *strip = map_find(c, node, "strip");
     FlNode *value_node = map_find(c, node, "value");
     FlNode *icase_node = map_find(c, node, "icase");
+    FlNode *first_line_node = map_find(c, node, "first_line");
     bool icase = c->ctxs[ctx_id].icase;
     u32 errors_before_keys = c->errors;
     u32 groups = 0U;
@@ -897,6 +902,13 @@ static void compile_rule(Compile *c, FlNode *node, u16 ctx_id, SynRule *rule,
     }
     if (icase_node != NULL)
         (void)require_bool(c, icase_node, "rule icase", &icase);
+    if (first_line_node != NULL) {
+        bool enabled = false;
+
+        if (require_bool(c, first_line_node, "rule first_line", &enabled) &&
+            enabled)
+            rule->flags |= YEW_SYN_RULE_FIRST_LINE;
+    }
     if (match != NULL) {
         const char *pattern;
         size_t pattern_len;
@@ -914,15 +926,16 @@ static void compile_rule(Compile *c, FlNode *node, u16 ctx_id, SynRule *rule,
                 groups = yew_re_group_count(rule->re);
                 if (yew_re_min_len(rule->re) == 0U)
                     diag(c, FL_DIAG_ERROR, match->sp,
-                         "pattern may match empty; only indent_lt may be zero-width");
+                         "pattern may match empty; use a sanctioned zero-width aux matcher");
                 yew_re_first_bytes(rule->re, rule->first);
             }
         }
     } else if (aux != NULL) {
         rule->aux_match = aux_kind(c, aux);
         (void)memset(rule->first, 0xff, sizeof(rule->first));
-        if (rule->aux_match == SYN_AUXM_INDENT_LT)
-            rule->flags |= YEW_SYN_RULE_ZERO_POP;
+        if (rule->aux_match == SYN_AUXM_INDENT_LT ||
+            rule->aux_match == SYN_AUXM_LINE_START)
+            rule->flags |= YEW_SYN_RULE_ZERO_TRANSITION;
     }
     if (map_find(c, node, "attr") != NULL)
         (void)attr_resolve(c, map_find(c, node, "attr"), &rule->attr);
@@ -1025,6 +1038,9 @@ static void compile_rule(Compile *c, FlNode *node, u16 ctx_id, SynRule *rule,
     if (rule->aux_match == SYN_AUXM_INDENT_LT && rule->op != SYN_OP_POP)
         diag(c, FL_DIAG_ERROR, node->sp,
              "indent_lt is zero-width and must pop");
+    if (rule->aux_match == SYN_AUXM_LINE_START && rule->op == SYN_OP_STAY)
+        diag(c, FL_DIAG_ERROR, node->sp,
+             "line_start is zero-width and requires a state operation");
 }
 
 static void compile_eol(Compile *c, u16 id, SynCtx *out)
@@ -2061,7 +2077,7 @@ static bool syn_rule_valid(const SynRule *rule, const SynDef *def,
     u32 i;
 
     if (rule->attr >= YEW_ATTR__COUNT || rule->op > SYN_OP_SET ||
-        rule->nop > 4U || rule->aux_match > SYN_AUXM_INDENT_LT ||
+        rule->nop > 4U || rule->aux_match > SYN_AUXM_LINE_START ||
         rule->consume > 7U || rule->npush > 4U ||
         rule->aux_group > 7U || rule->aux_pre >= naux ||
         rule->aux_post >= naux)

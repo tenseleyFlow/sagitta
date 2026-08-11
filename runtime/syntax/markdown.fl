@@ -2,9 +2,8 @@
 # Fenced bodies are code and info strings are attributes; s41_5 adds guest
 # dispatch.  Setext text cannot be styled by a forward-only line machine, so
 # only its underline is heading.  Emphasis is single-line.  HTML handling is
-# deliberately generic rather than an HTML parser.  The definition format has
-# no absolute-line predicate, so an exact --- line can open front matter away
-# from line one; this is an admitted highlighting-only false positive.
+# deliberately generic rather than an HTML parser.  Front matter is recognized
+# only when its opening delimiter is the first physical line.
 {
     syntax: 1,
     language: {
@@ -18,7 +17,8 @@
         main: { default: "text", rules: [ "include:main_rules" ] },
         main_rules: {
             rules: [
-                { match: "^---\\s*$", attr: "preproc", push: "front_pending" },
+                { match: "^---\\s*$", attr: "preproc", first_line: true,
+                  push: "front_pending" },
                 { match: "^ {0,3}(`{3,}|~{3,})[ \\t]*([A-Za-z0-9_+.-]*)",
                   attr: "punct", captures: { 1: "punct", 2: "attribute" },
                   set_aux: 1, push: "fenced" },

@@ -1,0 +1,2 @@
+printf "%s" "joined\
+value"

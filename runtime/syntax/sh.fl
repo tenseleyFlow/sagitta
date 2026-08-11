@@ -18,7 +18,7 @@
         main: {
             default: "text",
             rules: [
-                { match: "^#!.*$", attr: "preproc" },
+                { match: "^#!.*$", attr: "preproc", first_line: true },
                 # Quoted delimiters precede bare delimiters.  Strip and
                 # non-strip forms are separate because strip is a rule flag.
                 { match: "<<-\\s*'([A-Za-z_][A-Za-z0-9_]*)'",
@@ -98,6 +98,7 @@
         dq: {
             default: "string", at_eol: "stay", unit: "atom",
             rules: [
+                { match: "\\\\$", attr: "string.escape" },
                 { match: "\\\\[$`\"\\\\]", attr: "string.escape" },
                 { match: "\\$\\(\\(", attr: "string.interp", push: "arith" },
                 { match: "\\$\\(", attr: "string.interp", push: "cmd_sub" },
