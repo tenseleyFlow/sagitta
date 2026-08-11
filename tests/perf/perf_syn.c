@@ -1475,8 +1475,10 @@ static bool measure_frozen_edit(FrozenFixture *fixture, u64 *samples,
         yew_syn_edit(&syn, LINENO(edit_line), 0U, 0U);
         if (!now_ns(&start))
             goto done;
-        yew_syn_settle(&syn, tb, LINENO(edit_line), LINENO(200U), INT64_MAX,
-                       &report);
+        /* A keystroke receives the frame budget.  The idle embedded-language
+         * pump is measured separately and must not contaminate edit latency. */
+        yew_syn_settle(&syn, tb, LINENO(edit_line), LINENO(200U),
+                       YEW_SYN_FRAME_BUDGET_US, &report);
         if (!now_ns(&end) || end < start || !report.fixpoint ||
             report.lines > 2U)
             goto done;
@@ -1484,8 +1486,8 @@ static bool measure_frozen_edit(FrozenFixture *fixture, u64 *samples,
         perf_syn_sink += report.lines;
         yew_textbuf_delete(tb, (Span){edit_at, edit_at + 1U});
         yew_syn_edit(&syn, LINENO(edit_line), 0U, 0U);
-        yew_syn_settle(&syn, tb, LINENO(edit_line), LINENO(200U), INT64_MAX,
-                       &restore);
+        yew_syn_settle(&syn, tb, LINENO(edit_line), LINENO(200U),
+                       YEW_SYN_FRAME_BUDGET_US, &restore);
         if (!restore.fixpoint || restore.lines > 2U)
             goto done;
     }
@@ -1930,7 +1932,7 @@ static bool measure_edit(SynFixture *fx, TextBuf *tb, u64 *samples,
             return false;
         }
         yew_syn_settle(&syn, tb, LINENO(0U), LINENO(200U),
-                       INT64_C(1000000000), &report);
+                       YEW_SYN_FRAME_BUDGET_US, &report);
         if (!now_ns(&end) || end < start || !report.fixpoint ||
             report.lines > 2U) {
             yew_syn_detach(&syn);
@@ -1941,7 +1943,7 @@ static bool measure_edit(SynFixture *fx, TextBuf *tb, u64 *samples,
         yew_textbuf_delete(tb, (Span){2U, 3U});
         yew_syn_edit(&syn, LINENO(0U), 0U, 0U);
         yew_syn_settle(&syn, tb, LINENO(0U), LINENO(200U),
-                       INT64_C(1000000000), &restore);
+                       YEW_SYN_FRAME_BUDGET_US, &restore);
         if (!restore.fixpoint || restore.lines > 2U) {
             yew_syn_detach(&syn);
             return false;
