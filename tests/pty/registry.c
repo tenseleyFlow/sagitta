@@ -4609,7 +4609,13 @@ static void case_s41_kitchen(PtyCtx *c)
         ptc_check(c, !raw_sgr_has_param_since(c, 0U, 59U),
                   "lower colour tier emitted SGR 59 underline reset");
     }
-    ptc_snapshot_sgr(c, c->test->name);
+    /* Definition compilation and the background wave may finish before
+     * or after synchronized output becomes available.  Their repaint
+     * count and duplicate wire-level SGR resets are timing, not terminal
+     * state.  The decoded grid below still pins every cell's exact style
+     * and colour at all three tiers. */
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, c->test->name);
     force_quit(c);
 }
 
