@@ -3432,6 +3432,12 @@ static const SynLangDesc *path_language(const char *base)
                               yew_syn_builtin_detect_index.nexact,
                               base, base_len, false);
     match.exact = best_detect_run(run);
+    /* Exact filenames outrank every remaining path detector.  When no user
+     * definitions exist there is no same-class candidate left to compare,
+     * so avoid walking glob and extension indexes on this common clean-pack
+     * path. */
+    if (match.exact != NULL && user_metas == NULL)
+        return match.exact;
     for (i = 0U; i < yew_syn_builtin_detect_index.nglobs; i++) {
         const SynDetectEntry *entry =
             &yew_syn_builtin_detect_index.globs[i];
@@ -3441,6 +3447,9 @@ static const SynLangDesc *path_language(const char *base)
         size_t suffix = entry->key_len - prefix - 1U;
 
         if (base_len < prefix + suffix ||
+            (prefix != 0U && entry->key[0] != base[0]) ||
+            (suffix != 0U &&
+             entry->key[entry->key_len - 1U] != base[base_len - 1U]) ||
             memcmp(entry->key, base, prefix) != 0 ||
             memcmp(entry->key + prefix + 1U,
                    base + base_len - suffix, suffix) != 0)
@@ -3449,6 +3458,11 @@ static const SynLangDesc *path_language(const char *base)
         if (lang != NULL && better(lang, match.glob))
             match.glob = lang;
     }
+    /* A built-in glob likewise settles the result before extension lookup
+     * unless a user definition can contribute a competing exact or glob
+     * candidate. */
+    if (match.glob != NULL && user_metas == NULL)
+        return match.glob;
     dot = strchr(base, '.');
     while (dot != NULL) {
         const char *extension = dot + 1;
