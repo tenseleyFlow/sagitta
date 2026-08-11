@@ -1,0 +1,6 @@
+single = 'one\'two'
+double = "three\n"
+long_one = '''alpha
+beta'''
+long_two = """gamma\n
+delta"""

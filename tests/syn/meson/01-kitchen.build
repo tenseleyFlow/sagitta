@@ -1,0 +1,13 @@
+# Meson kitchen sink
+project('yew', 'c', version: '1.0')
+enabled = true and not false
+if enabled or false
+  executable('yew', ['main.c'], install: true)
+elif 2.5 >= 1
+  continue
+else
+  break
+endif
+foreach item : [1, 2]
+  message(item)
+endforeach

@@ -1,0 +1,58 @@
+# Meson build-language syntax.
+# Calls and keyword arguments are identified lexically on one line; this does
+# not attempt Meson's expression grammar, so ambiguity cannot leak state.
+{
+    syntax: 1,
+    language: {
+        name: "meson",
+        filenames: ["meson.build", "meson_options.txt"],
+        priority: 0,
+        comment: { line: "#" },
+    },
+    contexts: {
+        main: {
+            default: "text",
+            rules: [
+                { match: "#.*$", attr: "comment" },
+                { match: "([A-Za-z_][A-Za-z0-9_]*)\\s*\\(", captures: { 1: "function" }, consume: 1 },
+                { match: "([A-Za-z_][A-Za-z0-9_]*)\\s*:", captures: { 1: "variable.param" }, consume: 1 },
+                { match: "\\b(if|elif|else|endif|foreach|endforeach|break|continue)\\b", attr: "keyword.control" },
+                { match: "\\b(and|or|not|in)\\b", attr: "keyword.op" },
+                { match: "\\b(true|false)\\b", attr: "boolean" },
+                { match: "\"\"\"", attr: "string", push: "triple_dq" },
+                { match: "'''", attr: "string", push: "triple_sq" },
+                { match: "\"", attr: "string", push: "dq" },
+                { match: "'", attr: "string", push: "sq" },
+                { match: "[0-9]+(\\.[0-9]+)?", attr: "number" },
+                { match: "[\\[\\]{}()]", attr: "punct.bracket" },
+                { match: "[,:.]", attr: "punct.delim" },
+                { match: "==|!=|<=|>=|//|[+*/%<>=-]", attr: "operator" },
+            ],
+        },
+        dq: {
+            default: "string", at_eol: "pop", unit: "atom",
+            rules: [
+                { match: "\\\\.", attr: "string.escape" },
+                { match: "\"", attr: "string", pop: 1 },
+            ],
+        },
+        sq: {
+            default: "string", at_eol: "pop", unit: "atom",
+            rules: [
+                { match: "\\\\.", attr: "string.escape" },
+                { match: "'", attr: "string", pop: 1 },
+            ],
+        },
+        triple_dq: {
+            default: "string.special", at_eol: "stay", unit: "atom",
+            rules: [
+                { match: "\\\\.", attr: "string.escape" },
+                { match: "\"\"\"", attr: "string", pop: 1 },
+            ],
+        },
+        triple_sq: {
+            default: "string.special", at_eol: "stay", unit: "atom",
+            rules: [ { match: "'''", attr: "string", pop: 1 } ],
+        },
+    },
+}

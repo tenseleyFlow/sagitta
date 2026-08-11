@@ -1,0 +1,9 @@
+*** old/file.c 2026-01-01
+--- new/file.c 2026-01-02
+***************
+*** 1,3 ****
+-removed in approximation
+!changed old
+--- 1,3 ----
++added in approximation
+!changed new

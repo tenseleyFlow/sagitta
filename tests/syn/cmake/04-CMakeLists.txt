@@ -1,0 +1,6 @@
+cmake_minimum_required(VERSION 3.20)
+project(yew C)
+function(add_yew_test name)
+  add_executable(${name} ${ARGN})
+endfunction()
+add_yew_test(unit_tests tests/unit/main.c)

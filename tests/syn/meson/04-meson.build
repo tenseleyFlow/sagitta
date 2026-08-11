@@ -1,0 +1,4 @@
+project('yew', 'c')
+cc = meson.get_compiler('c')
+src = files('main.c', 'editor.c')
+executable('yew', src, dependencies: [], install: true)

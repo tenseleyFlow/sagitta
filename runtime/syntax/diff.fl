@@ -1,0 +1,28 @@
+# Unified/context diff and patch syntax.
+# Classification is deliberately whole-line and ordered: file markers win
+# over additions/deletions, and unrecognized metadata remains plain text.
+{
+    syntax: 1,
+    language: {
+        name: "diff",
+        extensions: ["diff", "patch"],
+        priority: 0,
+    },
+    contexts: {
+        main: {
+            default: "text",
+            rules: [
+                { match: "^diff --git .*$|^Index: .*$|^index [0-9A-Fa-f.]+ .*$|^new file mode .*$|^deleted file mode .*$|^similarity index .*$|^rename (from|to) .*$",
+                  attr: "preproc" },
+                { match: "^@@ .* @@.*$|^\\*\\*\\* [0-9,]+ \\*\\*\\*\\*$|^--- [0-9,]+ ----$",
+                  attr: "heading" },
+                { match: "^(---|\\*\\*\\*) .*$", attr: "diff.del" },
+                { match: "^\\+\\+\\+ .*$", attr: "diff.add" },
+                { match: "^\\+.*$", attr: "diff.add" },
+                { match: "^-.*$", attr: "diff.del" },
+                { match: "^!.*$", attr: "warning" },
+                { match: "^\\\\ No newline at end of file$", attr: "comment" },
+            ],
+        },
+    },
+}
