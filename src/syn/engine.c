@@ -192,6 +192,9 @@ struct SynEngine {
     const char **ctx_names;
     SynMergedFirst merged_first[64];
     u8 embed_end_first[32];
+    u8 embed_bol_end_first[32];
+    u8 embed_local_end_first[32];
+    u8 embed_local_bol_end_first[32];
     SynLangName *lang_names;
     u32 nlang_names;
 };
@@ -1565,34 +1568,49 @@ static void engine_index_embed_end_first(SynEngine *engine)
 {
     u16 ctx_id;
 
-    (void)memset(engine->embed_end_first, 0,
-                 sizeof(engine->embed_end_first));
-    if (engine->def == NULL)
-        return;
-    for (ctx_id = 0U; ctx_id < engine->def->nctxs; ctx_id++) {
-        const SynCtx *ctx = &engine->def->ctxs[ctx_id];
-        u32 i;
+    (void)memset(engine->embed_local_end_first, 0,
+                 sizeof(engine->embed_local_end_first));
+    (void)memset(engine->embed_local_bol_end_first, 0,
+                 sizeof(engine->embed_local_bol_end_first));
+    if (engine->def != NULL) {
+        for (ctx_id = 0U; ctx_id < engine->def->nctxs; ctx_id++) {
+            const SynCtx *ctx = &engine->def->ctxs[ctx_id];
+            u8 *first;
+            u32 i;
 
-        if (ctx->embed.end != SYN_EMBED_END_INLINE &&
-            ctx->embed.end != SYN_EMBED_END_INLINE_ROOT)
-            continue;
-        for (i = 0U; i < ctx->nrules; i++) {
-            u32 index = ctx->first_rule + i;
-            const SynRule *rule = &engine->def->rules[index];
-            u32 byte;
-
-            if (rule->end == 0U)
+            if (ctx->embed.end == SYN_EMBED_END_INLINE ||
+                ctx->embed.end == SYN_EMBED_END_INLINE_ROOT)
+                first = engine->embed_local_end_first;
+            else if (ctx->embed.end == SYN_EMBED_END_LINE ||
+                     ctx->embed.end == SYN_EMBED_END_LINE_CONTINUATION)
+                first = engine->embed_local_bol_end_first;
+            else
                 continue;
-            if (rule->aux_match != SYN_AUXM_NONE) {
-                (void)memset(engine->embed_end_first, 0xff,
-                             sizeof(engine->embed_end_first));
-                return;
+            for (i = 0U; i < ctx->nrules; i++) {
+                u32 index = ctx->first_rule + i;
+                const SynRule *rule = &engine->def->rules[index];
+                u32 byte;
+
+                if (rule->end == 0U)
+                    continue;
+                if (rule->aux_match != SYN_AUXM_NONE) {
+                    (void)memset(first, 0xff,
+                                 sizeof(engine->embed_local_end_first));
+                    break;
+                }
+                for (byte = 0U;
+                     byte < sizeof(engine->embed_local_end_first); byte++)
+                    first[byte] |= engine->rule_first == NULL ?
+                        rule->first[byte] : engine->rule_first[index][byte];
             }
-            for (byte = 0U; byte < sizeof(engine->embed_end_first); byte++)
-                engine->embed_end_first[byte] |= engine->rule_first == NULL ?
-                    rule->first[byte] : engine->rule_first[index][byte];
         }
     }
+    (void)memcpy(engine->embed_end_first,
+                 engine->embed_local_end_first,
+                 sizeof(engine->embed_end_first));
+    (void)memcpy(engine->embed_bol_end_first,
+                 engine->embed_local_bol_end_first,
+                 sizeof(engine->embed_bol_end_first));
 }
 
 static void engine_index_candidates(SynEngine *engine)
@@ -3607,6 +3625,42 @@ static SynFortranBolResult fortran_bol_match(const SynEngine *engine,
     return fortran_free_bol(engine, line, len, rule_index, match);
 }
 
+static bool bridge_end_byte_possible(SynEngine *master,
+                                     const SynState *state, u32 at, u8 byte)
+{
+    i32 depth;
+
+    for (depth = (i32)state->depth - 1; depth >= 0; depth--) {
+        const SynFrame *frame = &state->f[depth];
+        SynEngine *host;
+        const SynCtx *ctx;
+        const u8 *first;
+
+        if ((frame->fl & YEW_SYN_FR_BRIDGE) == 0U)
+            continue;
+        ctx = checked_ctx(master, frame, &host);
+        if ((ctx->embed.end == SYN_EMBED_END_LINE ||
+             ctx->embed.end == SYN_EMBED_END_LINE_CONTINUATION) &&
+            at != 0U)
+            return false;
+        if (ctx->embed.end != SYN_EMBED_END_LINE &&
+            ctx->embed.end != SYN_EMBED_END_INLINE &&
+            ctx->embed.end != SYN_EMBED_END_INLINE_ROOT &&
+            ctx->embed.end != SYN_EMBED_END_LINE_CONTINUATION)
+            return false;
+        if (ctx->embed.end == SYN_EMBED_END_INLINE_ROOT &&
+            depth + 1 < (i32)state->depth &&
+            state->depth != (u8)(depth + 2))
+            return false;
+        first = ctx->embed.end == SYN_EMBED_END_LINE ||
+                        ctx->embed.end == SYN_EMBED_END_LINE_CONTINUATION ?
+                    host->embed_local_bol_end_first :
+                    host->embed_local_end_first;
+        return bitset_has(first, byte);
+    }
+    return false;
+}
+
 static bool bridge_end_match(SynEngine *master, const SynState *state,
                              const u8 *line, u32 len, u32 at,
                              SynEngine **host_out, const SynRule **rule_out,
@@ -3916,8 +3970,10 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
             u8 bridge_depth;
             u8 host_aux;
 
-            if ((p == 0U ||
-                 bitset_has(engine->embed_end_first, line[p])) &&
+            if ((bitset_has(engine->embed_end_first, line[p]) ||
+                 (p == 0U && bitset_has(engine->embed_bol_end_first,
+                                        line[p]))) &&
+                bridge_end_byte_possible(engine, &state, p, line[p]) &&
                 bridge_end_match(engine, &state, line, len, p, &host,
                                  &end_rule, &end_index, &bridge_depth,
                                  &host_aux, &match)) {
@@ -4011,8 +4067,8 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
             const u8 *merged_first = merged_first_bytes(
                 engine, &state, active, ctx, p == 0U, NULL);
             u32 q = p + 1U;
-            const u8 *next_first = merged_first_bytes(
-                engine, &state, active, ctx, false, NULL);
+            const u8 *next_first = p == 0U ? merged_first_bytes(
+                engine, &state, active, ctx, false, NULL) : merged_first;
 
             if (bitset_has(merged_first, line[p]))
                 goto scan_rules;
@@ -4745,8 +4801,12 @@ static bool resident_install(SynEngine *master, u32 lang,
         return false;
     yew_syn_def_pin(runtime->def);
     master->defs[master->ndefs++] = (SynResident){lang, runtime};
-    for (byte = 0U; byte < sizeof(master->embed_end_first); byte++)
-        master->embed_end_first[byte] |= runtime->embed_end_first[byte];
+    for (byte = 0U; byte < sizeof(master->embed_end_first); byte++) {
+        master->embed_end_first[byte] |=
+            runtime->embed_local_end_first[byte];
+        master->embed_bol_end_first[byte] |=
+            runtime->embed_local_bol_end_first[byte];
+    }
     return true;
 }
 

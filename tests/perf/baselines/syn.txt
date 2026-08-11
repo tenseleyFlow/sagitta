@@ -36,6 +36,14 @@ yaml_line 850 3300
 yaml_edit 2700 4200
 json_line 2400 2900
 json_edit 1800 3000
+md_embed_line 150 3000
+md_embed_edit 7000 8000
+html_embed_line 600 4000
+html_embed_edit 7000 9000
+sh_subst_line 1800 4000
+sh_subst_edit 6000 8000
+tsx_embed_line 2200 4500
+tsx_embed_edit 8500 16000
 viewport_200x100_c 575000 780000
 viewport_200x100_comment 45000 110000
 viewport_200x100_minified 12000 45000
@@ -51,6 +59,10 @@ viewport_200x100_fortran 560000 825000
 viewport_200x100_fortran_fixed 775000 1000000
 viewport_200x100_yaml 400000 600000
 viewport_200x100_json 400000 600000
+viewport_200x100_md_embed 130000 300000
+viewport_200x100_html_embed 250000 450000
+viewport_200x100_sh_subst 350000 600000
+viewport_200x100_tsx_embed 550000 750000
 viewport_80x24_c 70000 150000
 viewport_80x24_comment 5500 25000
 viewport_80x24_minified 12000 48000
@@ -66,5 +78,9 @@ viewport_80x24_fortran 65000 135000
 viewport_80x24_fortran_fixed 90000 180000
 viewport_80x24_yaml 65000 130000
 viewport_80x24_json 58000 120000
+viewport_80x24_md_embed 15000 40000
+viewport_80x24_html_embed 40000 75000
+viewport_80x24_sh_subst 60000 90000
+viewport_80x24_tsx_embed 100000 180000
 theme_switch_200x50 1050000 1300000
 minified_first_paint 16000000 17500000

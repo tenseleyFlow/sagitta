@@ -40,9 +40,11 @@ enum {
     PERF_SYN_BLOCK_BYTES = 64 * 1024,
     PERF_SYN_BLOCK_LINES = 100000,
     PERF_SYN_BLOCK_MAX_LINE_CALLS = 3,
-    PERF_SYN_FIXTURE_COUNT = 15,
+    PERF_SYN_FIXTURE_COUNT = 19,
     PERF_SYN_S42_FIRST = 7,
     PERF_SYN_JSON_INDEX = 14,
+    PERF_SYN_MD_EMBED_INDEX = 15,
+    PERF_SYN_HTML_EMBED_INDEX = 16,
     PERF_SYN_CASE_NAME_CAP = 64,
     PERF_SYN_THEME_ROWS = 50,
     PERF_SYN_THEME_COLS = 200,
@@ -172,7 +174,15 @@ static const FrozenSpec frozen_specs[PERF_SYN_FIXTURE_COUNT] = {
     {"yaml", "tests/perf/fixtures/syn/yaml_kitchen.yml",
      "runtime/syntax/yaml.fl", 4000U, 96U * 1024U},
     {"json", "tests/perf/fixtures/syn/json_kitchen.json",
-     "runtime/syntax/json.fl", 5001U, 2252U * 1024U}
+     "runtime/syntax/json.fl", 5001U, 2252U * 1024U},
+    {"md_embed", "tests/perf/fixtures/syn/md_embed.md",
+     "runtime/syntax/markdown.fl", 6000U, 190U * 1024U},
+    {"html_embed", "tests/perf/fixtures/syn/html_embed.html",
+     "runtime/syntax/html.fl", 4000U, 130U * 1024U},
+    {"sh_subst", "tests/perf/fixtures/syn/sh_subst.sh",
+     "runtime/syntax/sh.fl", 2000U, 62U * 1024U},
+    {"tsx_embed", "tests/perf/fixtures/syn/tsx_embed.tsx",
+     "runtime/syntax/typescript.fl", 3000U, 110U * 1024U}
 };
 
 static bool now_ns(u64 *out)
@@ -389,6 +399,75 @@ static bool settle_all(SynBuf *syn, const TextBuf *tb, LineNo lo,
     } while (!report.fixpoint);
     if (frames != NULL)
         *frames += calls;
+    return true;
+}
+
+static u64 resident_count(const SynEngine *engine)
+{
+    u64 count = 0U;
+
+    while (count < YEW_SYN_RESIDENT_MAX &&
+           yew_syn_engine_def_at(engine, (u8)count) != NULL)
+        count++;
+    return count;
+}
+
+static bool prime_frozen_embeds(FrozenFixture *fixture, u64 *idle_ticks,
+                                u64 *loads, u64 *max_pump_ns)
+{
+    SynBuf syn;
+    u64 before;
+
+    *idle_ticks = 0U;
+    *loads = 0U;
+    *max_pump_ns = 0U;
+    yew_syn_buf_init(&syn);
+    yew_syn_buf_bind(&syn, fixture->engine);
+    yew_syn_attach(&syn, 1U, fixture->tb);
+    /* Keystroke-budget settle discovers every pending site without allowing
+     * the idle-only loader to run.  Each explicit pump below is one idle
+     * tick and loads at most one definition. */
+    if (!settle_all(&syn, fixture->tb, LINENO(0U),
+                    LINENO(fixture->spec->lines),
+                    YEW_SYN_FRAME_BUDGET_US,
+                    NULL, NULL, NULL)) {
+        yew_syn_detach(&syn);
+        return false;
+    }
+    before = resident_count(fixture->engine);
+    while (*idle_ticks < 8U) {
+        u64 start;
+        u64 end;
+
+        if (!now_ns(&start)) {
+            yew_syn_detach(&syn);
+            return false;
+        }
+        if (!yew_syn_embed_pump(&syn, fixture->engine,
+                                YEW_SYN_EMBED_LOAD_BUDGET_US)) {
+            if (!now_ns(&end) || end < start) {
+                yew_syn_detach(&syn);
+                return false;
+            }
+            break;
+        }
+        if (!now_ns(&end) || end < start) {
+            yew_syn_detach(&syn);
+            return false;
+        }
+        if (end - start > *max_pump_ns)
+            *max_pump_ns = end - start;
+        (*idle_ticks)++;
+        if (!settle_all(&syn, fixture->tb, LINENO(0U),
+                        LINENO(fixture->spec->lines),
+                        YEW_SYN_FRAME_BUDGET_US,
+                        NULL, NULL, NULL)) {
+            yew_syn_detach(&syn);
+            return false;
+        }
+    }
+    *loads = resident_count(fixture->engine) - before;
+    yew_syn_detach(&syn);
     return true;
 }
 
@@ -953,22 +1032,244 @@ static bool measure_frozen_line(FrozenFixture *fixture, u64 *samples,
     return true;
 }
 
+static bool measure_html_scan_pair(FrozenFixture *fixture,
+                                   u64 *embedded_ns, u64 *plain_ns)
+{
+    u64 embedded[PERF_SYN_TRIALS];
+    u64 guest_only[PERF_SYN_TRIALS];
+    u32 javascript = yew_syn_lang_named("javascript");
+    u32 css = yew_syn_lang_named("css");
+    SynEngine *guest[2] = {yew_syn_engine_for(javascript),
+                           yew_syn_engine_for(css)};
+
+    if (guest[0] == NULL || guest[1] == NULL)
+        return false;
+    for (size_t trial = 0U; trial < PERF_SYN_TRIALS; trial++) {
+        u64 *results[2] = {&embedded[trial], &guest_only[trial]};
+
+        for (size_t step = 0U; step < 2U; step++) {
+            size_t which = (trial + step) & 1U;
+            u32 state = YEW_SYN_STATE_ROOT;
+            u32 guest_state = YEW_SYN_STATE_ROOT;
+            size_t lo = 0U;
+            u64 line_no = 0U;
+
+            *results[which] = 0U;
+            while (lo < fixture->source.len) {
+                SynSpan spans[YEW_SYN_MAX_SPANS];
+                SynLineOut out = {spans, 0U, YEW_ARRAY_LEN(spans),
+                                  0U, 0U};
+                size_t hi = lo;
+                u64 row = line_no % 20U;
+                bool body = row == 2U || row == 3U ||
+                            row == 6U || row == 7U;
+                size_t guest_index = row >= 6U ? 1U : 0U;
+                u64 start = 0U;
+                u64 end = 0U;
+
+                while (hi < fixture->source.len &&
+                       fixture->source.data[hi] != (u8)'\n')
+                    hi++;
+                if (hi - lo > UINT32_MAX)
+                    return false;
+                if (!body && which != 0U) {
+                    lo = hi < fixture->source.len ? hi + 1U : hi;
+                    line_no++;
+                    continue;
+                }
+                if (which != 0U && (row == 2U || row == 6U))
+                    guest_state = YEW_SYN_STATE_ROOT;
+                if (body && !now_ns(&start))
+                    return false;
+                yew_syn_line(which == 0U ? fixture->engine :
+                                               guest[guest_index],
+                             which == 0U ? state : guest_state,
+                             fixture->source.data + lo, (u32)(hi - lo),
+                             &out);
+                if (body && (!now_ns(&end) || end < start))
+                    return false;
+                if (out.stop != YEW_SYN_STOP_OK &&
+                    out.stop != YEW_SYN_STOP_BYTES)
+                    return false;
+                if (body)
+                    *results[which] += end - start;
+                if (which == 0U)
+                    state = out.exit_state;
+                else
+                    guest_state = out.exit_state;
+                perf_syn_sink += out.n + out.exit_state;
+                lo = hi < fixture->source.len ? hi + 1U : hi;
+                line_no++;
+            }
+        }
+    }
+    stable_sort(embedded, YEW_ARRAY_LEN(embedded));
+    stable_sort(guest_only, YEW_ARRAY_LEN(guest_only));
+    *embedded_ns = embedded[PERF_SYN_TRIALS / 2U];
+    *plain_ns = guest_only[PERF_SYN_TRIALS / 2U];
+    return true;
+}
+
+static bool measure_definition_switch(FrozenFixture *fixture,
+                                      u64 *per_line_ns)
+{
+    static const char *const names[] = {
+        "c", "javascript", "typescript", "python",
+        "rust", "go", "sh", "html"
+    };
+    enum { BODY_LINES = 600U * 3U };
+    SynEngine *guest[YEW_ARRAY_LEN(names)];
+    u64 embedded[PERF_SYN_TRIALS];
+    u64 plain[PERF_SYN_TRIALS];
+
+    for (size_t i = 0U; i < YEW_ARRAY_LEN(names); i++) {
+        guest[i] = yew_syn_engine_for(yew_syn_lang_named(names[i]));
+        if (guest[i] == NULL)
+            return false;
+    }
+    for (size_t trial = 0U; trial < PERF_SYN_TRIALS; trial++) {
+        u64 *results[2] = {&embedded[trial], &plain[trial]};
+
+        for (size_t step = 0U; step < 2U; step++) {
+            size_t which = (trial + step) & 1U;
+            u32 master_state = YEW_SYN_STATE_ROOT;
+            u32 guest_state = YEW_SYN_STATE_ROOT;
+            size_t lo = 0U;
+            u64 line = 0U;
+            u64 body_lines = 0U;
+
+            *results[which] = 0U;
+            while (lo < fixture->source.len) {
+                SynSpan spans[YEW_SYN_MAX_SPANS];
+                SynLineOut out = {.spans = spans,
+                                  .cap = YEW_ARRAY_LEN(spans)};
+                size_t hi = lo;
+                u64 row = line % 10U;
+                bool body = row >= 6U && row <= 8U;
+                size_t guest_index = (size_t)((line / 10U) %
+                                              YEW_ARRAY_LEN(guest));
+                u64 start = 0U;
+                u64 end = 0U;
+
+                while (hi < fixture->source.len &&
+                       fixture->source.data[hi] != (u8)'\n')
+                    hi++;
+                if (hi - lo > UINT32_MAX)
+                    return false;
+                if (which != 0U && !body) {
+                    lo = hi < fixture->source.len ? hi + 1U : hi;
+                    line++;
+                    continue;
+                }
+                if (which != 0U && row == 6U)
+                    guest_state = YEW_SYN_STATE_ROOT;
+                if (body && !now_ns(&start))
+                    return false;
+                yew_syn_line(which == 0U ? fixture->engine :
+                                               guest[guest_index],
+                             which == 0U ? master_state : guest_state,
+                             fixture->source.data + lo, (u32)(hi - lo),
+                             &out);
+                if (body && (!now_ns(&end) || end < start))
+                    return false;
+                if (out.stop != YEW_SYN_STOP_OK &&
+                    out.stop != YEW_SYN_STOP_BYTES)
+                    return false;
+                if (body) {
+                    *results[which] += end - start;
+                    body_lines++;
+                }
+                if (which == 0U)
+                    master_state = out.exit_state;
+                else
+                    guest_state = out.exit_state;
+                perf_syn_sink += out.n + out.exit_state;
+                lo = hi < fixture->source.len ? hi + 1U : hi;
+                line++;
+            }
+            if (body_lines != BODY_LINES)
+                return false;
+        }
+    }
+    stable_sort(embedded, YEW_ARRAY_LEN(embedded));
+    stable_sort(plain, YEW_ARRAY_LEN(plain));
+    *per_line_ns = embedded[PERF_SYN_TRIALS / 2U] >
+                           plain[PERF_SYN_TRIALS / 2U]
+                       ? (embedded[PERF_SYN_TRIALS / 2U] -
+                          plain[PERF_SYN_TRIALS / 2U]) / BODY_LINES
+                       : 0U;
+    return true;
+}
+
 static bool measure_frozen_edit(FrozenFixture *fixture, u64 *samples,
                                 size_t count)
 {
     TextBuf *tb = yew_textbuf_from_bytes(fixture->source.data,
                                          fixture->source.len);
     SynBuf syn;
+    size_t edit_at = 4U;
+    size_t line_start = 0U;
+    u64 edit_line = 0U;
+    bool embedded_fixture = false;
     bool ok = false;
 
     if (tb == NULL)
         return false;
+    if (strcmp(fixture->spec->stem, "md_embed") == 0) {
+        edit_line = 6U;
+        embedded_fixture = true;
+    } else if (strcmp(fixture->spec->stem, "html_embed") == 0) {
+        edit_line = 2U;
+        embedded_fixture = true;
+    } else if (strcmp(fixture->spec->stem, "sh_subst") == 0) {
+        edit_at = 8U;
+        embedded_fixture = true;
+    } else if (strcmp(fixture->spec->stem, "tsx_embed") == 0) {
+        const u8 *tick = memchr(fixture->source.data, '`',
+                               fixture->source.len);
+
+        if (tick == NULL) {
+            yew_textbuf_free(tb);
+            return false;
+        }
+        edit_at = (size_t)(tick - fixture->source.data) + 1U;
+        embedded_fixture = true;
+    }
+    if (edit_line != 0U) {
+        u64 line = 0U;
+
+        line_start = 0U;
+        while (line_start < fixture->source.len && line < edit_line) {
+            if (fixture->source.data[line_start++] == (u8)'\n')
+                line++;
+        }
+        if (line != edit_line || line_start + 4U >= fixture->source.len) {
+            yew_textbuf_free(tb);
+            return false;
+        }
+        edit_at = line_start + 4U;
+    }
     yew_syn_buf_init(&syn);
     yew_syn_buf_bind(&syn, fixture->engine);
     yew_syn_attach(&syn, 1U, tb);
     if (!settle_all(&syn, tb, LINENO(0U), LINENO(200U), INT64_MAX,
                     NULL, NULL, NULL))
         goto done;
+    if (embedded_fixture) {
+        SynState stack;
+        size_t line_end = line_start;
+
+        while (line_end < fixture->source.len &&
+               fixture->source.data[line_end] != (u8)'\n')
+            line_end++;
+        if (edit_line >= syn.entry.len || line_end - line_start > UINT32_MAX ||
+            !yew_syn_stack_at(fixture->engine, syn.entry.data[edit_line],
+                              fixture->source.data + line_start,
+                              (u32)(line_end - line_start),
+                              (u32)(edit_at - line_start), &stack) ||
+            stack.ndef <= 1U)
+            goto done;
+    }
     for (size_t i = 0U; i < count; i++) {
         static const u8 byte = (u8)'x';
         SynSettleReport report;
@@ -976,20 +1277,20 @@ static bool measure_frozen_edit(FrozenFixture *fixture, u64 *samples,
         u64 start;
         u64 end;
 
-        yew_textbuf_insert(tb, BYTEOFF(4U), &byte, 1U);
-        yew_syn_edit(&syn, LINENO(0U), 0U, 0U);
+        yew_textbuf_insert(tb, BYTEOFF(edit_at), &byte, 1U);
+        yew_syn_edit(&syn, LINENO(edit_line), 0U, 0U);
         if (!now_ns(&start))
             goto done;
-        yew_syn_settle(&syn, tb, LINENO(0U), LINENO(200U), INT64_MAX,
+        yew_syn_settle(&syn, tb, LINENO(edit_line), LINENO(200U), INT64_MAX,
                        &report);
         if (!now_ns(&end) || end < start || !report.fixpoint ||
             report.lines > 2U)
             goto done;
         samples[i] = end - start;
         perf_syn_sink += report.lines;
-        yew_textbuf_delete(tb, (Span){4U, 5U});
-        yew_syn_edit(&syn, LINENO(0U), 0U, 0U);
-        yew_syn_settle(&syn, tb, LINENO(0U), LINENO(200U), INT64_MAX,
+        yew_textbuf_delete(tb, (Span){edit_at, edit_at + 1U});
+        yew_syn_edit(&syn, LINENO(edit_line), 0U, 0U);
+        yew_syn_settle(&syn, tb, LINENO(edit_line), LINENO(200U), INT64_MAX,
                        &restore);
         if (!restore.fixpoint || restore.lines > 2U)
             goto done;
@@ -1766,6 +2067,13 @@ int main(int argc, char **argv)
     u64 all_state_capacity_bytes = 0U;
     u64 all_state_limit_bytes = 0U;
     u64 warm_start_compiled_max = 0U;
+    u64 md_embed_idle_ticks = 0U;
+    u64 md_embed_loads = 0U;
+    u64 md_embed_pump_max_ns = 0U;
+    u64 md_embed_states = 0U;
+    u64 html_embed_scan_ns = 0U;
+    u64 html_plain_scan_ns = 0U;
+    u64 definition_switch_ns = 0U;
     bool regression_seen = false;
     int status = 0;
 
@@ -1813,6 +2121,40 @@ int main(int argc, char **argv)
         for (size_t i = 0U; i < frozen_initialized; i++)
             frozen_free(&frozen[i]);
         return 2;
+    }
+    for (size_t i = 0U; i < PERF_SYN_FIXTURE_COUNT; i++) {
+        u64 idle_ticks;
+        u64 loads;
+        u64 max_pump_ns;
+
+        if (!prime_frozen_embeds(&frozen[i], &idle_ticks, &loads,
+                                 &max_pump_ns)) {
+            (void)fprintf(stderr, "perf_syn: embed prime '%s' failed\n",
+                          frozen[i].spec->stem);
+            status = 2;
+            break;
+        }
+        if (i == PERF_SYN_MD_EMBED_INDEX) {
+            md_embed_idle_ticks = idle_ticks;
+            md_embed_loads = loads;
+            md_embed_pump_max_ns = max_pump_ns;
+            md_embed_states = yew_syn_state_count(
+                yew_syn_engine_states(frozen[i].engine));
+        }
+    }
+    if (status == 0 &&
+        !measure_html_scan_pair(&frozen[PERF_SYN_HTML_EMBED_INDEX],
+                                &html_embed_scan_ns,
+                                &html_plain_scan_ns)) {
+        (void)fprintf(stderr, "perf_syn: html inline scan pair failed\n");
+        status = 2;
+    }
+    if (status == 0 &&
+        !measure_definition_switch(&frozen[PERF_SYN_MD_EMBED_INDEX],
+                                   &definition_switch_ns)) {
+        (void)fprintf(stderr,
+                      "perf_syn: definition-switch measurement failed\n");
+        status = 2;
     }
     (void)memset(cap_line, 'x', 512U * 1024U);
     for (size_t trial = 0U; trial < PERF_SYN_TRIALS && status == 0;
@@ -2021,9 +2363,16 @@ int main(int argc, char **argv)
         if (i >= CASE_VIEW_24_FIRST && i <= CASE_VIEW_24_LAST)
             regression = regression ||
                          cases[i].measured.p99 > PERF_SYN_VIEW_24_LIMIT_NS;
-        if (i >= CASE_FROZEN_LINE_FIRST && i <= CASE_FROZEN_LINE_LAST)
-            regression = regression || cases[i].measured.median > 3000U ||
-                         cases[i].measured.p99 > 12000U;
+        if (i >= CASE_FROZEN_LINE_FIRST && i <= CASE_FROZEN_LINE_LAST) {
+            bool markdown_embed =
+                i == CASE_FROZEN_LINE_FIRST + PERF_SYN_MD_EMBED_INDEX;
+
+            regression = regression ||
+                         cases[i].measured.median >
+                             (markdown_embed ? 3500U : 3000U) ||
+                         cases[i].measured.p99 >
+                             (markdown_embed ? 14000U : 12000U);
+        }
         if (i >= CASE_FROZEN_EDIT_FIRST && i <= CASE_FROZEN_EDIT_LAST)
             regression = regression || cases[i].measured.p99 > 60000U;
         if (i == CASE_THEME_SWITCH)
@@ -2106,6 +2455,17 @@ int main(int argc, char **argv)
                 comment_state_rss_growth > PERF_SYN_STATE_LIMIT_BYTES;
             bool all_state_regression =
                 all_state_capacity_bytes > all_state_limit_bytes;
+            bool embed_pump_regression =
+                md_embed_idle_ticks > 8U || md_embed_loads != 8U ||
+                md_embed_pump_max_ns > UINT64_C(2000000) ||
+                md_embed_states > 2500U;
+            bool inline_scan_regression =
+                html_plain_scan_ns == 0U ||
+                (html_embed_scan_ns > html_plain_scan_ns &&
+                 (html_embed_scan_ns - html_plain_scan_ns) * 100U >
+                     html_plain_scan_ns * 8U);
+            bool definition_switch_regression =
+                definition_switch_ns > 250U;
 
             for (size_t i = 0U; i < PERF_SYN_FIXTURE_COUNT; i++) {
                 bool fixture_scroll_regression =
@@ -2156,9 +2516,28 @@ int main(int argc, char **argv)
                          (unsigned long long)all_state_capacity_bytes,
                          (unsigned long long)all_state_limit_bytes,
                          all_state_regression ? " REGRESSION" : " ok");
+            (void)printf("syn.%-20s idle_ticks=%llu loads=%llu "
+                         "states=%llu max_pump_ns=%llu%s\n",
+                         "md_embed_pump",
+                         (unsigned long long)md_embed_idle_ticks,
+                         (unsigned long long)md_embed_loads,
+                         (unsigned long long)md_embed_states,
+                         (unsigned long long)md_embed_pump_max_ns,
+                         embed_pump_regression ? " REGRESSION" : " ok");
+            (void)printf("syn.%-20s embedded_ns=%llu plain_ns=%llu%s\n",
+                         "html_inline_scan",
+                         (unsigned long long)html_embed_scan_ns,
+                         (unsigned long long)html_plain_scan_ns,
+                         inline_scan_regression ? " REGRESSION" : " ok");
+            (void)printf("syn.%-20s amortized_ns=%llu%s\n",
+                         "definition_switch",
+                         (unsigned long long)definition_switch_ns,
+                         definition_switch_regression ? " REGRESSION" :
+                                                        " ok");
             if (comment_view_regression || comment_idle_regression ||
                 scroll_regression || whole_regression || state_regression ||
-                all_state_regression)
+                all_state_regression || embed_pump_regression ||
+                inline_scan_regression || definition_switch_regression)
                 regression_seen = true;
         }
         if (detect_regression || compile_regression || cache_regression ||
