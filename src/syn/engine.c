@@ -9,6 +9,7 @@
 #include <time.h>
 
 #include "search/regex_internal.h"
+#include "syn/defs.h"
 #include "syn/theme.h"
 #include "text/piece.h"
 #include "unicode/utf8.h"
@@ -49,14 +50,75 @@ typedef struct SynWordSet {
     u32 count;
     u32 bytes_len;
     u32 bytes_cap;
+    u32 collect_steps;
     bool fold_ascii;
+    bool overflow;
 } SynWordSet;
+
+typedef enum SynWordProbeStatus {
+    SYN_WORD_PROBE_UNSET,
+    SYN_WORD_PROBE_NO_MATCH,
+    SYN_WORD_PROBE_FALLBACK,
+    SYN_WORD_PROBE_READY
+} SynWordProbeStatus;
+
+typedef struct SynWordProbe {
+    u64 exact_hash;
+    u64 folded_hash;
+    u32 hi;
+    u8 status;
+} SynWordProbe;
+
+typedef struct SynFortranWordSlot {
+    u64 hash;
+    u32 off;
+    u32 len;
+    u32 rule;
+} SynFortranWordSlot;
+
+typedef struct SynFiniteLit {
+    u32 off;
+    u16 len;
+    u16 cap_lo;
+    u16 cap_hi;
+} SynFiniteLit;
+
+typedef struct SynFiniteSet {
+    SynFiniteLit *lits;
+    u8 *bytes;
+    u32 count;
+    u32 cap;
+    u32 bytes_len;
+    u32 bytes_cap;
+    u8 ngroups;
+} SynFiniteSet;
+
+typedef struct SynIdentifierSpec {
+    u8 prefix[2];
+    u8 nprefix;
+    u8 start_kind;
+    u8 continue_kind;
+    bool boundary_before;
+    bool boundary_after;
+} SynIdentifierSpec;
 
 enum {
     SYN_CANDIDATE_BYTES = 256,
     SYN_CANDIDATE_STRIDE = SYN_CANDIDATE_BYTES + 1,
     SYN_CANDIDATE_RULE_BYTES_MAX = 8 * 1024 * 1024,
-    SYN_WORD_LITERAL_PROG_MAX = 4096
+    SYN_WORD_LITERAL_PROG_MAX = 4096,
+    SYN_WORD_LITERAL_COUNT_MAX = 4096,
+    SYN_WORD_LITERAL_BYTES_MAX = 256 * 1024,
+    SYN_WORD_LITERAL_STEPS_MAX = 64 * 1024,
+    SYN_FINITE_LITERAL_MAX = 512,
+    SYN_FINITE_BYTES_MAX = 32 * 1024,
+    SYN_FINITE_LENGTH_MAX = 256
+};
+
+enum {
+    SYN_FORTRAN_NONE,
+    SYN_FORTRAN_FREE,
+    SYN_FORTRAN_FIXED
 };
 
 struct SynStateTab {
@@ -76,8 +138,13 @@ struct SynEngine {
     u8 *rule_wordb;
     u8 *rule_word_literal;
     u8 *rule_identifier_suffix;
+    u8 *rule_json_key;
+    u8 *rule_yaml_block_key;
+    SynIdentifierSpec *rule_identifiers;
     SynWordSet *word_sets;
     u32 word_sets_len;
+    SynFiniteSet *finite_sets;
+    u32 finite_sets_len;
     u8 (*rule_first)[32];
     u8 (*ctx_first_nonbol)[32];
     u32 *candidate_offsets;
@@ -86,10 +153,81 @@ struct SynEngine {
     bool has_first_line;
     bool identifier_fast_enabled;
     bool word_literal_fast_enabled;
+    bool finite_literal_fast_enabled;
+    bool fortran_fast_enabled;
+    bool json_key_fast_enabled;
+    bool yaml_block_key_fast_enabled;
+    u8 fortran_form;
+    u8 fortran_bol_rules;
+    u8 *rule_fortran_word;
+    SynFortranWordSlot *fortran_words;
+    u32 fortran_words_cap;
+    u32 fortran_words_count;
     SynCoverage *coverage;
     u64 line_calls;
     u64 generation;
 };
+
+static void engine_index_fortran_bol(SynEngine *engine)
+{
+    static const char *const fixed_patterns[] = {
+        "^[Cc*!].*$",
+        "^#.*$",
+        "^(.{72})(.+)$",
+        "^(\\t)([1-9])",
+        "^\\t",
+        "^((?:[0-9][ 0-9]{4}| [0-9][ 0-9]{3}|  [0-9][ 0-9]{2}|   [0-9][ 0-9]|    [0-9]))([^ 0])",
+        "^((?:[0-9][ 0-9]{4}| [0-9][ 0-9]{3}|  [0-9][ 0-9]{2}|   [0-9][ 0-9]|    [0-9]))[ 0]",
+        "^( {5})([^ 0])",
+        "^ {5}[ 0]"
+    };
+    static const char *const free_patterns[] = {
+        "^\\s*#.*$",
+        "^(\\s*)(&)",
+        "^(\\s*)([0-9]{1,5})(\\s+)"
+    };
+    const char *const *patterns;
+    const SynCtx *root;
+    u8 count;
+    u32 i;
+
+    engine->fortran_form = SYN_FORTRAN_NONE;
+    engine->fortran_bol_rules = 0U;
+    if (engine->def == NULL || engine->def->name == NULL ||
+        engine->def->ctxs == NULL || engine->def->root >= engine->def->nctxs ||
+        engine->rule_bol == NULL)
+        return;
+    if (strcmp(engine->def->name, "fortran-fixed") == 0) {
+        engine->fortran_form = SYN_FORTRAN_FIXED;
+        count = (u8)YEW_ARRAY_LEN(fixed_patterns);
+        patterns = fixed_patterns;
+    } else if (strcmp(engine->def->name, "fortran") == 0) {
+        engine->fortran_form = SYN_FORTRAN_FREE;
+        count = (u8)YEW_ARRAY_LEN(free_patterns);
+        patterns = free_patterns;
+    } else {
+        return;
+    }
+    root = &engine->def->ctxs[engine->def->root];
+    if (root->nrules < count || root->first_rule > engine->def->nrules - count)
+        goto reject;
+    for (i = 0U; i < count; i++) {
+        u32 index = root->first_rule + i;
+        const char *pattern = yew_syn_rule_pattern(engine->def, index);
+
+        if (engine->rule_bol[index] == 0U || pattern == NULL ||
+            strcmp(pattern, patterns[i]) != 0 ||
+            engine->def->rules[index].aux_match != SYN_AUXM_NONE ||
+            engine->def->rules[index].value_pred != SYN_VALUE_ANY ||
+            (engine->def->rules[index].flags &
+             YEW_SYN_RULE_FIRST_LINE) != 0U)
+            goto reject;
+    }
+    engine->fortran_bol_rules = count;
+    return;
+reject:
+    engine->fortran_form = SYN_FORTRAN_NONE;
+}
 
 static bool ascii_identifier_start(u8 byte)
 {
@@ -109,6 +247,62 @@ static bool ascii_space(u8 byte)
            byte == (u8)'\v' || byte == (u8)'\f' || byte == (u8)'\r';
 }
 
+static bool ascii_yaml_key_start(u8 byte)
+{
+    return !ascii_space(byte) && byte != (u8)'#';
+}
+
+static bool ascii_yaml_key_continue(u8 byte)
+{
+    return byte != (u8)':' && byte != (u8)'#';
+}
+
+static bool ascii_hex(u8 byte)
+{
+    return (byte >= (u8)'0' && byte <= (u8)'9') ||
+           (byte >= (u8)'A' && byte <= (u8)'F') ||
+           (byte >= (u8)'a' && byte <= (u8)'f');
+}
+
+static bool ascii_json_escape(u8 byte)
+{
+    return byte == (u8)'"' || byte == (u8)'\\' || byte == (u8)'/' ||
+           byte == (u8)'b' || byte == (u8)'f' || byte == (u8)'n' ||
+           byte == (u8)'r' || byte == (u8)'t';
+}
+
+static bool ascii_json_key_byte(u8 byte)
+{
+    return byte >= 0x20U && byte != (u8)'"' && byte != (u8)'\\';
+}
+
+enum {
+    SYN_IDENT_CLASS_NONE,
+    SYN_IDENT_CLASS_START,
+    SYN_IDENT_CLASS_CONTINUE,
+    SYN_IDENT_CLASS_UPPER,
+    SYN_IDENT_CLASS_UPPER_CONTINUE,
+    SYN_IDENT_CLASS_CAMEL_CONTINUE
+};
+
+static bool ascii_upper(u8 byte)
+{
+    return byte >= (u8)'A' && byte <= (u8)'Z';
+}
+
+static bool ascii_upper_continue(u8 byte)
+{
+    return ascii_upper(byte) || byte == (u8)'_' ||
+           (byte >= (u8)'0' && byte <= (u8)'9');
+}
+
+static bool ascii_camel_continue(u8 byte)
+{
+    return (byte >= (u8)'A' && byte <= (u8)'Z') ||
+           (byte >= (u8)'a' && byte <= (u8)'z') ||
+           (byte >= (u8)'0' && byte <= (u8)'9');
+}
+
 typedef bool (*AsciiPred)(u8 byte);
 
 static bool bitset_has(const u8 bits[32], u8 byte);
@@ -123,6 +317,96 @@ static bool class_ascii_equals(const YewRe *re, u32 index, AsciiPred pred)
         if (yew_re_class_has(&re->classes[index], byte) != pred((u8)byte))
             return false;
     }
+    return true;
+}
+
+static u8 identifier_class_kind(const YewRe *re, u32 index)
+{
+    u32 range;
+
+    if (index >= re->nclasses)
+        return SYN_IDENT_CLASS_NONE;
+    for (range = 0U; range < re->classes[index].n; range++) {
+        if (re->classes[index].r[range].hi >= 0x80U)
+            return SYN_IDENT_CLASS_NONE;
+    }
+    if (class_ascii_equals(re, index, ascii_identifier_start))
+        return SYN_IDENT_CLASS_START;
+    if (class_ascii_equals(re, index, ascii_identifier_continue))
+        return SYN_IDENT_CLASS_CONTINUE;
+    if (class_ascii_equals(re, index, ascii_upper))
+        return SYN_IDENT_CLASS_UPPER;
+    if (class_ascii_equals(re, index, ascii_upper_continue))
+        return SYN_IDENT_CLASS_UPPER_CONTINUE;
+    if (class_ascii_equals(re, index, ascii_camel_continue))
+        return SYN_IDENT_CLASS_CAMEL_CONTINUE;
+    return SYN_IDENT_CLASS_NONE;
+}
+
+static bool identifier_kind_has(u8 kind, u8 byte)
+{
+    switch (kind) {
+    case SYN_IDENT_CLASS_START: return ascii_identifier_start(byte);
+    case SYN_IDENT_CLASS_CONTINUE: return ascii_identifier_continue(byte);
+    case SYN_IDENT_CLASS_UPPER: return ascii_upper(byte);
+    case SYN_IDENT_CLASS_UPPER_CONTINUE: return ascii_upper_continue(byte);
+    case SYN_IDENT_CLASS_CAMEL_CONTINUE: return ascii_camel_continue(byte);
+    default: break;
+    }
+    return false;
+}
+
+static bool regex_ascii_identifier(const YewRe *re, SynIdentifierSpec *out)
+{
+    SynIdentifierSpec spec = {{0U, 0U}, 0U, 0U, 0U, false, false};
+    u32 pc = 0U;
+    u32 split;
+
+    if (re == NULL || out == NULL || re->ngroups != 1U ||
+        re->nprog < 7U || (re->flags & YEW_RE_ICASE) != 0U ||
+        (ReOp)re->prog[pc].op != RE_SAVE || re->prog[pc].arg != 0U)
+        return false;
+    pc++;
+    if ((ReOp)re->prog[pc].op == RE_WORDB) {
+        spec.boundary_before = true;
+        pc++;
+    }
+    while (pc < re->nprog && (ReOp)re->prog[pc].op == RE_CHAR &&
+           spec.nprefix < YEW_ARRAY_LEN(spec.prefix)) {
+        if (re->prog[pc].arg >= 0x80U)
+            return false;
+        spec.prefix[spec.nprefix++] = (u8)re->prog[pc].arg;
+        pc++;
+    }
+    if (pc >= re->nprog || (ReOp)re->prog[pc].op != RE_CLASS)
+        return false;
+    spec.start_kind = identifier_class_kind(re, re->prog[pc].arg);
+    if (spec.start_kind == SYN_IDENT_CLASS_NONE)
+        return false;
+    pc++;
+    split = pc;
+    if (pc + 2U >= re->nprog ||
+        (ReOp)re->prog[pc].op != RE_SPLIT ||
+        re->prog[pc].x != pc + 1U || re->prog[pc].y != pc + 3U ||
+        (ReOp)re->prog[pc + 1U].op != RE_CLASS ||
+        (ReOp)re->prog[pc + 2U].op != RE_JMP ||
+        re->prog[pc + 2U].x != split)
+        return false;
+    spec.continue_kind =
+        identifier_class_kind(re, re->prog[pc + 1U].arg);
+    if (spec.continue_kind == SYN_IDENT_CLASS_NONE)
+        return false;
+    pc += 3U;
+    if ((ReOp)re->prog[pc].op == RE_WORDB) {
+        spec.boundary_after = true;
+        pc++;
+    }
+    if (pc + 1U >= re->nprog || (ReOp)re->prog[pc].op != RE_SAVE ||
+        re->prog[pc].arg != 1U ||
+        (ReOp)re->prog[pc + 1U].op != RE_MATCH ||
+        pc + 2U != re->nprog)
+        return false;
+    *out = spec;
     return true;
 }
 
@@ -153,6 +437,91 @@ static u8 regex_identifier_suffix(const YewRe *re)
         !class_ascii_equals(re, p[8].arg, ascii_space))
         return 0U;
     return (u8)p[10].arg;
+}
+
+static bool regex_json_key(const YewRe *re)
+{
+    const ReInst *p;
+
+    if (re == NULL || re->nprog != 28U || re->ngroups != 3U ||
+        re->flags != 0U)
+        return false;
+    p = re->prog;
+    if ((ReOp)p[0].op != RE_SAVE || p[0].arg != 0U ||
+        (ReOp)p[1].op != RE_SAVE || p[1].arg != 2U ||
+        (ReOp)p[2].op != RE_CHAR || p[2].arg != (u32)'"' ||
+        (ReOp)p[3].op != RE_SPLIT || p[3].x != 4U || p[3].y != 20U ||
+        (ReOp)p[4].op != RE_SAVE || p[4].arg != 4U ||
+        (ReOp)p[5].op != RE_SPLIT || p[5].x != 6U || p[5].y != 17U ||
+        (ReOp)p[6].op != RE_SPLIT || p[6].x != 7U || p[6].y != 10U ||
+        (ReOp)p[7].op != RE_CHAR || p[7].arg != (u32)'\\' ||
+        (ReOp)p[8].op != RE_CLASS ||
+        (ReOp)p[9].op != RE_JMP || p[9].x != 16U ||
+        (ReOp)p[10].op != RE_CHAR || p[10].arg != (u32)'\\' ||
+        (ReOp)p[11].op != RE_CHAR || p[11].arg != (u32)'u' ||
+        (ReOp)p[12].op != RE_CLASS ||
+        (ReOp)p[13].op != RE_CLASS ||
+        (ReOp)p[14].op != RE_CLASS ||
+        (ReOp)p[15].op != RE_CLASS ||
+        (ReOp)p[16].op != RE_JMP || p[16].x != 18U ||
+        (ReOp)p[17].op != RE_CLASS ||
+        (ReOp)p[18].op != RE_SAVE || p[18].arg != 5U ||
+        (ReOp)p[19].op != RE_JMP || p[19].x != 3U ||
+        (ReOp)p[20].op != RE_CHAR || p[20].arg != (u32)'"' ||
+        (ReOp)p[21].op != RE_SAVE || p[21].arg != 3U ||
+        (ReOp)p[22].op != RE_SPLIT || p[22].x != 23U || p[22].y != 25U ||
+        (ReOp)p[23].op != RE_CLASS ||
+        (ReOp)p[24].op != RE_JMP || p[24].x != 22U ||
+        (ReOp)p[25].op != RE_CHAR || p[25].arg != (u32)':' ||
+        (ReOp)p[26].op != RE_SAVE || p[26].arg != 1U ||
+        (ReOp)p[27].op != RE_MATCH ||
+        !class_ascii_equals(re, p[8].arg, ascii_json_escape) ||
+        !class_ascii_equals(re, p[12].arg, ascii_hex) ||
+        p[13].arg != p[12].arg || p[14].arg != p[12].arg ||
+        p[15].arg != p[12].arg ||
+        !class_ascii_equals(re, p[17].arg, ascii_json_key_byte) ||
+        !class_ascii_equals(re, p[23].arg, ascii_space))
+        return false;
+    return true;
+}
+
+static bool regex_yaml_block_key(const YewRe *re)
+{
+    const ReInst *p;
+
+    if (re == NULL || re->nprog != 24U || re->ngroups != 5U ||
+        re->flags != 0U)
+        return false;
+    p = re->prog;
+    return (ReOp)p[0].op == RE_SAVE && p[0].arg == 0U &&
+           (ReOp)p[1].op == RE_BOL &&
+           (ReOp)p[2].op == RE_SAVE && p[2].arg == 2U &&
+           (ReOp)p[3].op == RE_SPLIT && p[3].x == 4U && p[3].y == 6U &&
+           (ReOp)p[4].op == RE_CLASS &&
+           (ReOp)p[5].op == RE_JMP && p[5].x == 3U &&
+           (ReOp)p[6].op == RE_SAVE && p[6].arg == 3U &&
+           (ReOp)p[7].op == RE_SAVE && p[7].arg == 4U &&
+           (ReOp)p[8].op == RE_CLASS &&
+           (ReOp)p[9].op == RE_SPLIT && p[9].x == 10U && p[9].y == 12U &&
+           (ReOp)p[10].op == RE_CLASS &&
+           (ReOp)p[11].op == RE_JMP && p[11].x == 9U &&
+           (ReOp)p[12].op == RE_SAVE && p[12].arg == 5U &&
+           (ReOp)p[13].op == RE_SAVE && p[13].arg == 6U &&
+           (ReOp)p[14].op == RE_CHAR && p[14].arg == (u32)':' &&
+           (ReOp)p[15].op == RE_SAVE && p[15].arg == 7U &&
+           (ReOp)p[16].op == RE_SAVE && p[16].arg == 8U &&
+           (ReOp)p[17].op == RE_SPLIT && p[17].x == 18U &&
+           p[17].y == 20U &&
+           (ReOp)p[18].op == RE_CLASS &&
+           (ReOp)p[19].op == RE_JMP && p[19].x == 21U &&
+           (ReOp)p[20].op == RE_EOL &&
+           (ReOp)p[21].op == RE_SAVE && p[21].arg == 9U &&
+           (ReOp)p[22].op == RE_SAVE && p[22].arg == 1U &&
+           (ReOp)p[23].op == RE_MATCH &&
+           class_ascii_equals(re, p[4].arg, ascii_space) &&
+           class_ascii_equals(re, p[8].arg, ascii_yaml_key_start) &&
+           class_ascii_equals(re, p[10].arg, ascii_yaml_key_continue) &&
+           class_ascii_equals(re, p[18].arg, ascii_space);
 }
 
 static void engine_index_aux(SynEngine *engine)
@@ -405,9 +774,15 @@ static void word_set_rehash(SynWordSet *set, u32 cap)
 
 static void word_set_insert(SynWordSet *set, const u8 *word, u32 len)
 {
-    u64 hash = word_hash(word, len, set->fold_ascii);
+    u64 hash;
     u32 at;
 
+    if (set->count >= SYN_WORD_LITERAL_COUNT_MAX ||
+        len > SYN_WORD_LITERAL_BYTES_MAX - set->bytes_len) {
+        set->overflow = true;
+        return;
+    }
+    hash = word_hash(word, len, set->fold_ascii);
     if (set->cap == 0U || (set->count + 1U) * 4U >= set->cap * 3U)
         word_set_rehash(set, set->cap == 0U ? 16U : set->cap * 2U);
     at = (u32)hash & (set->cap - 1U);
@@ -447,9 +822,14 @@ static bool word_set_collect(SynWordSet *set, const YewRe *re, u32 pc,
     const ReInst *ins;
     u8 byte;
 
+    if (set->overflow || set->collect_steps >= SYN_WORD_LITERAL_STEPS_MAX) {
+        set->overflow = true;
+        return false;
+    }
+    set->collect_steps++;
     if (pc == suffix) {
         word_set_insert(set, word, len);
-        return true;
+        return !set->overflow;
     }
     if (pc >= suffix || depth >= re->nprog ||
         len >= SYN_WORD_LITERAL_PROG_MAX)
@@ -498,6 +878,79 @@ static bool word_set_build(SynWordSet *set, const YewRe *re)
     return true;
 }
 
+static void word_set_collect_partial(
+    SynWordSet *set, const YewRe *re, u32 pc, u32 suffix,
+    u8 word[SYN_WORD_LITERAL_PROG_MAX], u32 len, u32 depth)
+{
+    const ReInst *ins;
+    u8 byte;
+
+    if (set->overflow || set->collect_steps >= SYN_WORD_LITERAL_STEPS_MAX) {
+        set->overflow = true;
+        return;
+    }
+    set->collect_steps++;
+    if (pc == suffix) {
+        if (len != 0U)
+            word_set_insert(set, word, len);
+        return;
+    }
+    if (pc >= suffix || depth >= re->nprog ||
+        len >= SYN_WORD_LITERAL_PROG_MAX)
+        return;
+    ins = &re->prog[pc];
+    switch ((ReOp)ins->op) {
+    case RE_CHAR:
+        if (ins->arg >= 0x80U ||
+            !ascii_identifier_continue((u8)ins->arg))
+            return;
+        word[len] = set->fold_ascii ? ascii_fold((u8)ins->arg) :
+                                     (u8)ins->arg;
+        word_set_collect_partial(set, re, pc + 1U, suffix, word, len + 1U,
+                                 depth + 1U);
+        return;
+    case RE_CLASS:
+        if (!class_word_byte(re, ins->arg, &byte))
+            return;
+        word[len] = set->fold_ascii ? ascii_fold(byte) : byte;
+        word_set_collect_partial(set, re, pc + 1U, suffix, word, len + 1U,
+                                 depth + 1U);
+        return;
+    case RE_JMP:
+        word_set_collect_partial(set, re, ins->x, suffix, word, len,
+                                 depth + 1U);
+        return;
+    case RE_SPLIT:
+        word_set_collect_partial(set, re, ins->x, suffix, word, len,
+                                 depth + 1U);
+        word_set_collect_partial(set, re, ins->y, suffix, word, len,
+                                 depth + 1U);
+        return;
+    default:
+        return;
+    }
+}
+
+static bool word_set_build_partial(SynWordSet *set, const YewRe *re)
+{
+    u8 word[SYN_WORD_LITERAL_PROG_MAX];
+    u32 start;
+    u32 suffix;
+
+    if (re == NULL || re->nprog < 6U || re->ngroups < 1U ||
+        re->ngroups > 2U)
+        return false;
+    start = re->ngroups == 2U ? 3U : 2U;
+    suffix = re->nprog - (re->ngroups == 2U ? 4U : 3U);
+    set->fold_ascii = (re->flags & YEW_RE_ICASE) != 0U;
+    word_set_collect_partial(set, re, start, suffix, word, 0U, 0U);
+    if (set->overflow || set->count == 0U) {
+        word_set_free(set);
+        return false;
+    }
+    return true;
+}
+
 static void engine_free_word_sets(SynEngine *engine)
 {
     u32 i;
@@ -507,6 +960,158 @@ static void engine_free_word_sets(SynEngine *engine)
     free(engine->word_sets);
     engine->word_sets = NULL;
     engine->word_sets_len = 0U;
+}
+
+static void finite_set_free(SynFiniteSet *set)
+{
+    free(set->lits);
+    free(set->bytes);
+    (void)memset(set, 0, sizeof(*set));
+}
+
+static bool finite_set_add(SynFiniteSet *set, const u8 *bytes, u32 len,
+                           u16 cap_lo, u16 cap_hi)
+{
+    if (len == 0U || len > SYN_FINITE_LENGTH_MAX ||
+        set->count == SYN_FINITE_LITERAL_MAX ||
+        len > SYN_FINITE_BYTES_MAX - set->bytes_len)
+        return false;
+    if (set->count == set->cap) {
+        u32 cap = set->cap == 0U ? 16U : set->cap * 2U;
+
+        if (cap > SYN_FINITE_LITERAL_MAX)
+            cap = SYN_FINITE_LITERAL_MAX;
+        set->lits = yew_xreallocarray(set->lits, cap,
+                                      sizeof(*set->lits));
+        set->cap = cap;
+    }
+    if (set->bytes_len + len > set->bytes_cap) {
+        u32 cap = set->bytes_cap == 0U ? 256U : set->bytes_cap;
+
+        while (cap < set->bytes_len + len)
+            cap *= 2U;
+        set->bytes = yew_xrealloc(set->bytes, cap);
+        set->bytes_cap = cap;
+    }
+    set->lits[set->count++] =
+        (SynFiniteLit){set->bytes_len, (u16)len, cap_lo, cap_hi};
+    (void)memcpy(set->bytes + set->bytes_len, bytes, len);
+    set->bytes_len += len;
+    return true;
+}
+
+static bool finite_class_ascii(const ReClass *cls)
+{
+    u32 i;
+
+    if (cls == NULL || cls->n == 0U)
+        return false;
+    for (i = 0U; i < cls->n; i++) {
+        if (cls->r[i].lo > cls->r[i].hi || cls->r[i].hi >= 0x80U)
+            return false;
+    }
+    return true;
+}
+
+static bool finite_set_collect(SynFiniteSet *set, const YewRe *re, u32 pc,
+                               u8 bytes[SYN_FINITE_LENGTH_MAX], u32 len,
+                               u16 cap_lo, u16 cap_hi,
+                               u8 active[SYN_WORD_LITERAL_PROG_MAX])
+{
+    const ReInst *ins;
+    bool ok = false;
+
+    if (pc >= re->nprog || active[pc] != 0U)
+        return false;
+    active[pc] = 1U;
+    ins = &re->prog[pc];
+    switch ((ReOp)ins->op) {
+    case RE_CHAR:
+        if (ins->arg < 0x80U && len < SYN_FINITE_LENGTH_MAX) {
+            bytes[len] = (u8)ins->arg;
+            ok = finite_set_collect(set, re, pc + 1U, bytes, len + 1U,
+                                    cap_lo, cap_hi, active);
+        }
+        break;
+    case RE_CLASS:
+        if (ins->arg < re->nclasses &&
+            finite_class_ascii(&re->classes[ins->arg]) &&
+            len < SYN_FINITE_LENGTH_MAX) {
+            const ReClass *cls = &re->classes[ins->arg];
+            u32 range;
+
+            ok = true;
+            for (range = 0U; range < cls->n && ok; range++) {
+                u32 byte;
+
+                for (byte = cls->r[range].lo;
+                     byte <= cls->r[range].hi && ok; byte++) {
+                    bytes[len] = (u8)byte;
+                    ok = finite_set_collect(set, re, pc + 1U, bytes,
+                                            len + 1U, cap_lo, cap_hi,
+                                            active);
+                }
+            }
+        }
+        break;
+    case RE_JMP:
+        ok = finite_set_collect(set, re, ins->x, bytes, len, cap_lo,
+                                cap_hi, active);
+        break;
+    case RE_SPLIT:
+        ok = finite_set_collect(set, re, ins->x, bytes, len, cap_lo,
+                                cap_hi, active) &&
+             finite_set_collect(set, re, ins->y, bytes, len, cap_lo,
+                                cap_hi, active);
+        break;
+    case RE_SAVE:
+        if (ins->arg <= 3U) {
+            if (ins->arg == 2U)
+                cap_lo = (u16)len;
+            else if (ins->arg == 3U)
+                cap_hi = (u16)len;
+            ok = finite_set_collect(set, re, pc + 1U, bytes, len, cap_lo,
+                                    cap_hi, active);
+        }
+        break;
+    case RE_MATCH:
+        ok = (cap_lo == UINT16_MAX) == (cap_hi == UINT16_MAX) &&
+             (cap_lo == UINT16_MAX || cap_lo <= cap_hi) &&
+             finite_set_add(set, bytes, len, cap_lo, cap_hi);
+        break;
+    default:
+        break;
+    }
+    active[pc] = 0U;
+    return ok;
+}
+
+static bool finite_set_build(SynFiniteSet *set, const YewRe *re)
+{
+    u8 bytes[SYN_FINITE_LENGTH_MAX];
+    u8 active[SYN_WORD_LITERAL_PROG_MAX] = {0};
+
+    if (re == NULL || re->nprog > SYN_WORD_LITERAL_PROG_MAX ||
+        re->ngroups == 0U || re->ngroups > 2U ||
+        !finite_set_collect(set, re, 0U, bytes, 0U, UINT16_MAX,
+                            UINT16_MAX, active) ||
+        set->count == 0U) {
+        finite_set_free(set);
+        return false;
+    }
+    set->ngroups = (u8)re->ngroups;
+    return true;
+}
+
+static void engine_free_finite_sets(SynEngine *engine)
+{
+    u32 i;
+
+    for (i = 0U; i < engine->finite_sets_len; i++)
+        finite_set_free(&engine->finite_sets[i]);
+    free(engine->finite_sets);
+    engine->finite_sets = NULL;
+    engine->finite_sets_len = 0U;
 }
 
 static void first_add(u8 first[32], u8 byte)
@@ -675,19 +1280,209 @@ static void engine_index_word_literals(SynEngine *engine)
     }
 }
 
+static void engine_free_fortran_words(SynEngine *engine)
+{
+    free(engine->rule_fortran_word);
+    free(engine->fortran_words);
+    engine->rule_fortran_word = NULL;
+    engine->fortran_words = NULL;
+    engine->fortran_words_cap = 0U;
+    engine->fortran_words_count = 0U;
+}
+
+static void fortran_words_rehash(SynEngine *engine, u32 cap)
+{
+    SynFortranWordSlot *slots = yew_xcalloc(cap, sizeof(*slots));
+    u32 i;
+
+    for (i = 0U; i < engine->fortran_words_cap; i++) {
+        SynFortranWordSlot slot = engine->fortran_words[i];
+        u32 at;
+
+        if (slot.hash == 0U)
+            continue;
+        at = (u32)slot.hash & (cap - 1U);
+        while (slots[at].hash != 0U)
+            at = (at + 1U) & (cap - 1U);
+        slots[at] = slot;
+    }
+    free(engine->fortran_words);
+    engine->fortran_words = slots;
+    engine->fortran_words_cap = cap;
+}
+
+static void fortran_words_insert(SynEngine *engine, u32 rule,
+                                 const SynWordSlot *word)
+{
+    const SynWordSet *set = &engine->word_sets[rule];
+    u32 at;
+
+    if (engine->fortran_words_cap == 0U ||
+        (engine->fortran_words_count + 1U) * 4U >=
+            engine->fortran_words_cap * 3U)
+        fortran_words_rehash(engine, engine->fortran_words_cap == 0U ?
+                            64U : engine->fortran_words_cap * 2U);
+    at = (u32)word->hash & (engine->fortran_words_cap - 1U);
+    while (engine->fortran_words[at].hash != 0U) {
+        const SynFortranWordSlot *slot = &engine->fortran_words[at];
+        const SynWordSet *prior = &engine->word_sets[slot->rule];
+
+        if (slot->hash == word->hash && slot->len == word->len &&
+            memcmp(prior->bytes + slot->off, set->bytes + word->off,
+                   word->len) == 0)
+            return;
+        at = (at + 1U) & (engine->fortran_words_cap - 1U);
+    }
+    engine->fortran_words[at] = (SynFortranWordSlot){
+        word->hash, word->off, word->len, rule};
+    engine->fortran_words_count++;
+}
+
+static void engine_index_fortran_words(SynEngine *engine)
+{
+    const SynCtx *root;
+    u32 i;
+
+    engine_free_fortran_words(engine);
+    if (engine->fortran_form == SYN_FORTRAN_NONE || engine->def == NULL ||
+        engine->word_sets == NULL || engine->rule_word_literal == NULL)
+        return;
+    root = &engine->def->ctxs[engine->def->root];
+    engine->rule_fortran_word = yew_xcalloc(
+        engine->def->nrules, sizeof(*engine->rule_fortran_word));
+    for (i = 0U; i < root->nrules; i++) {
+        u32 rule = root->first_rule + i;
+        const SynWordSet *set;
+        u32 slot;
+
+        if (rule >= engine->def->nrules)
+            continue;
+        if (engine->rule_word_literal[rule] == 0U) {
+            if (engine->rule_wordb == NULL ||
+                engine->rule_wordb[rule] == 0U ||
+                !word_set_build_partial(&engine->word_sets[rule],
+                                        engine->def->rules[rule].re))
+                continue;
+            engine->rule_fortran_word[rule] = 2U;
+        } else {
+            engine->rule_fortran_word[rule] = 1U;
+        }
+        set = &engine->word_sets[rule];
+        if (!set->fold_ascii)
+            continue;
+        for (slot = 0U; slot < set->cap; slot++) {
+            if (set->slots[slot].hash != 0U)
+                fortran_words_insert(engine, rule, &set->slots[slot]);
+        }
+    }
+}
+
+static void engine_index_finite_literals(SynEngine *engine)
+{
+    u32 i;
+
+    engine_free_finite_sets(engine);
+    if (engine->def == NULL || engine->def->nrules == 0U)
+        return;
+    engine->finite_sets = yew_xcalloc(engine->def->nrules,
+                                      sizeof(*engine->finite_sets));
+    engine->finite_sets_len = engine->def->nrules;
+    for (i = 0U; i < engine->def->nrules; i++) {
+        if ((engine->rule_word_literal == NULL ||
+             engine->rule_word_literal[i] == 0U) &&
+            engine->def->rules[i].aux_match == SYN_AUXM_NONE)
+            (void)finite_set_build(&engine->finite_sets[i],
+                                   engine->def->rules[i].re);
+    }
+}
+
 static void engine_index_identifier_suffixes(SynEngine *engine)
 {
     u32 i;
 
     free(engine->rule_identifier_suffix);
+    free(engine->rule_identifiers);
     engine->rule_identifier_suffix = NULL;
+    engine->rule_identifiers = NULL;
     if (engine->def == NULL || engine->def->nrules == 0U)
         return;
     engine->rule_identifier_suffix = yew_xcalloc(
         engine->def->nrules, sizeof(*engine->rule_identifier_suffix));
-    for (i = 0U; i < engine->def->nrules; i++)
+    engine->rule_identifiers = yew_xcalloc(
+        engine->def->nrules, sizeof(*engine->rule_identifiers));
+    for (i = 0U; i < engine->def->nrules; i++) {
         engine->rule_identifier_suffix[i] =
             regex_identifier_suffix(engine->def->rules[i].re);
+        (void)regex_ascii_identifier(engine->def->rules[i].re,
+                                     &engine->rule_identifiers[i]);
+    }
+}
+
+static void engine_index_json_keys(SynEngine *engine)
+{
+    u32 i;
+
+    free(engine->rule_json_key);
+    engine->rule_json_key = NULL;
+    if (engine->def == NULL || engine->def->nrules == 0U)
+        return;
+    engine->rule_json_key = yew_xcalloc(engine->def->nrules,
+                                        sizeof(*engine->rule_json_key));
+    for (i = 0U; i < engine->def->nrules; i++) {
+        if (engine->def->rules[i].aux_match == SYN_AUXM_NONE &&
+            regex_json_key(engine->def->rules[i].re))
+            engine->rule_json_key[i] = 1U;
+    }
+}
+
+static void engine_index_yaml_block_keys(SynEngine *engine)
+{
+    static const char *const yaml_root_prefix[] = {
+        "^\\s*(---|\\.\\.\\.)\\s*(#.*)?$",
+        "^\\s*%(YAML|TAG)\\b.*$",
+        "^(\\s*)([^\\s#][^:#]*)(:)(\\s*)([|>][+-]?([1-9]?)[+-]?)(\\s*#.*)?$",
+        "^(\\s*)(-)\\s+([|>][+-]?([1-9]?)[+-]?)(\\s*#.*)?$"
+    };
+    u32 i;
+
+    free(engine->rule_yaml_block_key);
+    engine->rule_yaml_block_key = NULL;
+    if (engine->def == NULL || engine->def->nrules == 0U)
+        return;
+    engine->rule_yaml_block_key = yew_xcalloc(
+        engine->def->nrules, sizeof(*engine->rule_yaml_block_key));
+    for (i = 0U; i < engine->def->nrules; i++) {
+        if (engine->def->rules[i].aux_match == SYN_AUXM_NONE &&
+            regex_yaml_block_key(engine->def->rules[i].re)) {
+            engine->rule_yaml_block_key[i] = 1U;
+            if (strcmp(engine->def->name, "yaml") == 0 &&
+                engine->def->root < engine->def->nctxs) {
+                const SynCtx *root =
+                    &engine->def->ctxs[engine->def->root];
+                u32 prefix;
+
+                if (i >= root->first_rule &&
+                    i - root->first_rule ==
+                        YEW_ARRAY_LEN(yaml_root_prefix) &&
+                    engine->def->rules[i].value_pred == SYN_VALUE_ANY &&
+                    (engine->def->rules[i].flags &
+                     YEW_SYN_RULE_FIRST_LINE) == 0U) {
+                    for (prefix = 0U;
+                         prefix < YEW_ARRAY_LEN(yaml_root_prefix);
+                         prefix++) {
+                        const char *pattern = yew_syn_rule_pattern(
+                            engine->def, root->first_rule + prefix);
+
+                        if (pattern == NULL ||
+                            strcmp(pattern, yaml_root_prefix[prefix]) != 0)
+                            break;
+                    }
+                    if (prefix == YEW_ARRAY_LEN(yaml_root_prefix))
+                        engine->rule_yaml_block_key[i] = 2U;
+                }
+            }
+        }
+    }
 }
 
 static void engine_index_first(SynEngine *engine)
@@ -966,13 +1761,22 @@ SynEngine *yew_syn_engine_new(SynDef *def)
     engine->generation = 1U;
     engine->identifier_fast_enabled = true;
     engine->word_literal_fast_enabled = true;
+    engine->finite_literal_fast_enabled = true;
+    engine->fortran_fast_enabled = true;
+    engine->json_key_fast_enabled = true;
+    engine->yaml_block_key_fast_enabled = true;
     yew_re_workspace_init(&engine->re_workspace);
     engine_index_aux(engine);
     engine_index_bol(engine);
+    engine_index_fortran_bol(engine);
     engine_index_first_line(engine);
     engine_index_wordb(engine);
     engine_index_word_literals(engine);
+    engine_index_fortran_words(engine);
+    engine_index_finite_literals(engine);
     engine_index_identifier_suffixes(engine);
+    engine_index_json_keys(engine);
+    engine_index_yaml_block_keys(engine);
     engine_index_first(engine);
     engine_index_ctx_first_nonbol(engine);
     engine_index_candidates(engine);
@@ -989,7 +1793,12 @@ void yew_syn_engine_free(SynEngine *engine)
     free(engine->rule_wordb);
     free(engine->rule_word_literal);
     free(engine->rule_identifier_suffix);
+    free(engine->rule_json_key);
+    free(engine->rule_yaml_block_key);
+    free(engine->rule_identifiers);
+    engine_free_fortran_words(engine);
     engine_free_word_sets(engine);
+    engine_free_finite_sets(engine);
     free(engine->rule_first);
     free(engine->ctx_first_nonbol);
     free(engine->candidate_offsets);
@@ -1008,10 +1817,15 @@ void yew_syn_engine_set_def(SynEngine *engine, SynDef *def)
     engine->states = yew_syn_state_tab_new(def == NULL ? 0U : def->root);
     engine_index_aux(engine);
     engine_index_bol(engine);
+    engine_index_fortran_bol(engine);
     engine_index_first_line(engine);
     engine_index_wordb(engine);
     engine_index_word_literals(engine);
+    engine_index_fortran_words(engine);
+    engine_index_finite_literals(engine);
     engine_index_identifier_suffixes(engine);
+    engine_index_json_keys(engine);
+    engine_index_yaml_block_keys(engine);
     engine_index_first(engine);
     engine_index_ctx_first_nonbol(engine);
     engine_index_candidates(engine);
@@ -1055,11 +1869,14 @@ u32 yew_syn_engine_identifier_fast_rules(const SynEngine *engine)
     u32 count = 0U;
     u32 i;
 
-    if (engine == NULL || engine->def == NULL ||
-        engine->rule_identifier_suffix == NULL)
+    if (engine == NULL || engine->def == NULL)
         return 0U;
     for (i = 0U; i < engine->def->nrules; i++) {
-        if (engine->rule_identifier_suffix[i] != 0U)
+        if ((engine->rule_identifier_suffix != NULL &&
+             engine->rule_identifier_suffix[i] != 0U) ||
+            (engine->rule_identifiers != NULL &&
+             engine->rule_identifiers[i].start_kind !=
+                 SYN_IDENT_CLASS_NONE))
             count++;
     }
     return count;
@@ -1083,6 +1900,85 @@ u32 yew_syn_engine_word_literal_fast_rules(const SynEngine *engine)
         return 0U;
     for (i = 0U; i < engine->def->nrules; i++) {
         if (engine->rule_word_literal[i] != 0U)
+            count++;
+    }
+    return count;
+}
+
+void yew_syn_engine_set_finite_literal_fast_path(SynEngine *engine,
+                                                 bool enabled)
+{
+    if (engine == NULL)
+        YEW_BUG("syntax: NULL engine");
+    engine->finite_literal_fast_enabled = enabled;
+}
+
+u32 yew_syn_engine_finite_literal_fast_rules(const SynEngine *engine)
+{
+    u32 count = 0U;
+    u32 i;
+
+    if (engine == NULL || engine->finite_sets == NULL)
+        return 0U;
+    for (i = 0U; i < engine->finite_sets_len; i++) {
+        if (engine->finite_sets[i].count != 0U)
+            count++;
+    }
+    return count;
+}
+
+void yew_syn_engine_set_fortran_fast_path(SynEngine *engine, bool enabled)
+{
+    if (engine == NULL)
+        YEW_BUG("syntax: NULL engine");
+    engine->fortran_fast_enabled = enabled;
+}
+
+u32 yew_syn_engine_fortran_fast_rules(const SynEngine *engine)
+{
+    return engine == NULL ? 0U : engine->fortran_bol_rules;
+}
+
+void yew_syn_engine_set_json_key_fast_path(SynEngine *engine, bool enabled)
+{
+    if (engine == NULL)
+        YEW_BUG("syntax: NULL engine");
+    engine->json_key_fast_enabled = enabled;
+}
+
+u32 yew_syn_engine_json_key_fast_rules(const SynEngine *engine)
+{
+    u32 count = 0U;
+    u32 i;
+
+    if (engine == NULL || engine->def == NULL ||
+        engine->rule_json_key == NULL)
+        return 0U;
+    for (i = 0U; i < engine->def->nrules; i++) {
+        if (engine->rule_json_key[i] != 0U)
+            count++;
+    }
+    return count;
+}
+
+void yew_syn_engine_set_yaml_block_key_fast_path(SynEngine *engine,
+                                                 bool enabled)
+{
+    if (engine == NULL)
+        YEW_BUG("syntax: NULL engine");
+    engine->yaml_block_key_fast_enabled = enabled;
+}
+
+u32 yew_syn_engine_yaml_block_key_fast_rules(const SynEngine *engine)
+{
+    u32 count = 0U;
+    u32 i;
+
+    if (engine == NULL || engine->def == NULL ||
+        engine->rule_yaml_block_key == NULL)
+        return 0U;
+    for (i = 0U; i < engine->def->nrules; i++) {
+        if (engine->rule_yaml_block_key[i] != 0U)
             count++;
     }
     return count;
@@ -1333,34 +2229,102 @@ static bool ascii_word(u8 byte)
            (byte >= (u8)'a' && byte <= (u8)'z');
 }
 
+static void word_probe_init(SynWordProbe *probe, const u8 *line, u32 len,
+                            u32 at)
+{
+    u32 p;
+
+    if (at >= len) {
+        probe->status = SYN_WORD_PROBE_NO_MATCH;
+        return;
+    }
+    if ((at != 0U && line[at - 1U] >= 0x80U) || line[at] >= 0x80U) {
+        probe->status = SYN_WORD_PROBE_FALLBACK;
+        return;
+    }
+    if ((at != 0U && ascii_word(line[at - 1U])) ||
+        !ascii_word(line[at])) {
+        probe->status = SYN_WORD_PROBE_NO_MATCH;
+        return;
+    }
+    probe->exact_hash = UINT64_C(14695981039346656037);
+    probe->folded_hash = UINT64_C(14695981039346656037);
+    p = at;
+    while (p < len && line[p] < 0x80U && ascii_word(line[p])) {
+        probe->exact_hash ^= line[p];
+        probe->exact_hash *= UINT64_C(1099511628211);
+        probe->folded_hash ^= ascii_fold(line[p]);
+        probe->folded_hash *= UINT64_C(1099511628211);
+        p++;
+    }
+    if (p < len && line[p] >= 0x80U) {
+        probe->status = SYN_WORD_PROBE_FALLBACK;
+        return;
+    }
+    if (probe->exact_hash == 0U)
+        probe->exact_hash = 1U;
+    if (probe->folded_hash == 0U)
+        probe->folded_hash = 1U;
+    probe->hi = p;
+    probe->status = SYN_WORD_PROBE_READY;
+}
+
+static void word_probe_init_folded(SynWordProbe *probe, const u8 *line,
+                                   u32 len, u32 at)
+{
+    u32 p;
+
+    if (at >= len) {
+        probe->status = SYN_WORD_PROBE_NO_MATCH;
+        return;
+    }
+    if ((at != 0U && line[at - 1U] >= 0x80U) || line[at] >= 0x80U) {
+        probe->status = SYN_WORD_PROBE_FALLBACK;
+        return;
+    }
+    if ((at != 0U && ascii_word(line[at - 1U])) ||
+        !ascii_word(line[at])) {
+        probe->status = SYN_WORD_PROBE_NO_MATCH;
+        return;
+    }
+    probe->folded_hash = UINT64_C(14695981039346656037);
+    p = at;
+    while (p < len && line[p] < 0x80U && ascii_word(line[p])) {
+        probe->folded_hash ^= ascii_fold(line[p]);
+        probe->folded_hash *= UINT64_C(1099511628211);
+        p++;
+    }
+    if (p < len && line[p] >= 0x80U) {
+        probe->status = SYN_WORD_PROBE_FALLBACK;
+        return;
+    }
+    if (probe->folded_hash == 0U)
+        probe->folded_hash = 1U;
+    probe->hi = p;
+    probe->status = SYN_WORD_PROBE_READY;
+}
+
 static int word_literal_match(const SynWordSet *set, const YewRe *re,
                               const u8 *line, u32 len, u32 at,
-                              YewReMatch *match)
+                              SynWordProbe *probe, YewReMatch *match)
 {
     u64 hash;
-    u32 p;
     u32 slot;
 
     if (set == NULL || set->cap == 0U)
         return -1;
-    if (at >= len)
+    if (probe->status == SYN_WORD_PROBE_UNSET)
+        word_probe_init(probe, line, len, at);
+    if (probe->status == SYN_WORD_PROBE_NO_MATCH)
         return 0;
-    if ((at != 0U && line[at - 1U] >= 0x80U) || line[at] >= 0x80U)
+    if (probe->status == SYN_WORD_PROBE_FALLBACK)
         return -1;
-    if ((at != 0U && ascii_word(line[at - 1U])) ||
-        !ascii_word(line[at]))
-        return 0;
-    p = at + 1U;
-    while (p < len && line[p] < 0x80U && ascii_word(line[p]))
-        p++;
-    if (p < len && line[p] >= 0x80U)
-        return -1;
-    hash = word_hash(line + at, p - at, set->fold_ascii);
+    hash = set->fold_ascii ? probe->folded_hash : probe->exact_hash;
     slot = (u32)hash & (set->cap - 1U);
     while (set->slots[slot].hash != 0U) {
         const SynWordSlot *entry = &set->slots[slot];
 
-        if (entry->hash == hash && entry->len == p - at) {
+        if (entry->hash == hash && entry->len == probe->hi - at) {
             u32 i;
 
             for (i = 0U; i < entry->len; i++) {
@@ -1375,13 +2339,44 @@ static int word_literal_match(const SynWordSet *set, const YewRe *re,
 
                 match->ngroups = re->ngroups;
                 for (group = 0U; group < re->ngroups; group++)
-                    match->g[group] = (Span){at, p};
+                    match->g[group] = (Span){at, probe->hi};
                 return 1;
             }
         }
         slot = (slot + 1U) & (set->cap - 1U);
     }
     return 0;
+}
+
+static u32 fortran_word_winner(const SynEngine *engine, const u8 *line,
+                               u32 at, const SynWordProbe *probe)
+{
+    u32 slot;
+
+    if (!engine->fortran_fast_enabled ||
+        engine->fortran_words_cap == 0U ||
+        probe->status != SYN_WORD_PROBE_READY)
+        return UINT32_MAX;
+    slot = (u32)probe->folded_hash & (engine->fortran_words_cap - 1U);
+    while (engine->fortran_words[slot].hash != 0U) {
+        const SynFortranWordSlot *entry = &engine->fortran_words[slot];
+
+        if (entry->hash == probe->folded_hash &&
+            entry->len == probe->hi - at) {
+            const SynWordSet *set = &engine->word_sets[entry->rule];
+            u32 i;
+
+            for (i = 0U; i < entry->len; i++) {
+                if (set->bytes[entry->off + i] !=
+                    ascii_fold(line[at + i]))
+                    break;
+            }
+            if (i == entry->len)
+                return entry->rule;
+        }
+        slot = (slot + 1U) & (engine->fortran_words_cap - 1U);
+    }
+    return UINT32_MAX;
 }
 
 static int identifier_suffix_match(const YewRe *re, u8 suffix,
@@ -1416,14 +2411,237 @@ static int identifier_suffix_match(const YewRe *re, u8 suffix,
     return 1;
 }
 
+static int ascii_identifier_match(const SynIdentifierSpec *spec,
+                                  const u8 *line, u32 len, u32 at,
+                                  YewReMatch *match)
+{
+    u32 p = at;
+    u32 i;
+
+    if (spec == NULL || spec->start_kind == SYN_IDENT_CLASS_NONE)
+        return -1;
+    if (spec->boundary_before) {
+        bool before_word;
+        bool after_word;
+
+        if ((at != 0U && line[at - 1U] >= 0x80U) ||
+            (at < len && line[at] >= 0x80U))
+            return -1;
+        before_word = at != 0U && ascii_word(line[at - 1U]);
+        after_word = at < len && ascii_word(line[at]);
+        if (before_word == after_word)
+            return 0;
+    }
+    if (spec->nprefix > len - p)
+        return 0;
+    for (i = 0U; i < spec->nprefix; i++) {
+        if (line[p + i] != spec->prefix[i])
+            return 0;
+    }
+    p += spec->nprefix;
+    if (p >= len || line[p] >= 0x80U ||
+        !identifier_kind_has(spec->start_kind, line[p]))
+        return 0;
+    p++;
+    while (p < len && line[p] < 0x80U &&
+           identifier_kind_has(spec->continue_kind, line[p]))
+        p++;
+    if (spec->boundary_after) {
+        if (p < len && line[p] >= 0x80U)
+            return -1;
+        if (p < len && ascii_word(line[p]))
+            return 0;
+    }
+    match->ngroups = 1U;
+    match->g[0] = (Span){at, p};
+    return 1;
+}
+
+static bool finite_literal_match(const SynFiniteSet *set, const u8 *line,
+                                 u32 len, u32 at, YewReMatch *match)
+{
+    u32 i;
+
+    for (i = 0U; i < set->count; i++) {
+        const SynFiniteLit *lit = &set->lits[i];
+
+        if (lit->len > len - at ||
+            line[at] != set->bytes[lit->off] ||
+            (lit->len > 1U &&
+             memcmp(line + at + 1U, set->bytes + lit->off + 1U,
+                    lit->len - 1U) != 0U))
+            continue;
+        match->ngroups = set->ngroups;
+        match->g[0] = (Span){at, at + lit->len};
+        if (set->ngroups == 2U) {
+            if (lit->cap_lo == UINT16_MAX) {
+                match->g[1] = (Span){UINT64_MAX, UINT64_MAX};
+            } else {
+                match->g[1] =
+                    (Span){at + lit->cap_lo, at + lit->cap_hi};
+            }
+        }
+        return true;
+    }
+    return false;
+}
+
+static int yaml_block_key_match(const YewRe *re, const u8 *line, u32 len,
+                                u32 at, YewReMatch *match)
+{
+    u32 key_lo;
+    u32 colon;
+    u32 hi;
+
+    if (at != 0U)
+        return 0;
+    key_lo = 0U;
+    while (key_lo < len && line[key_lo] < 0x80U &&
+           ascii_space(line[key_lo]))
+        key_lo++;
+    if (key_lo < len && line[key_lo] >= 0x80U)
+        return -1;
+    if (key_lo == len || !ascii_yaml_key_start(line[key_lo]))
+        return 0;
+    colon = key_lo + 1U;
+    while (colon < len && line[colon] < 0x80U &&
+           ascii_yaml_key_continue(line[colon]))
+        colon++;
+    if (colon < len && line[colon] >= 0x80U)
+        return -1;
+    if (colon == len || line[colon] != (u8)':')
+        return 0;
+    hi = colon + 1U;
+    if (hi < len) {
+        if (line[hi] >= 0x80U)
+            return -1;
+        if (!ascii_space(line[hi]))
+            return 0;
+        hi++;
+    }
+    match->ngroups = re->ngroups;
+    match->g[0] = (Span){0U, hi};
+    match->g[1] = (Span){0U, key_lo};
+    match->g[2] = (Span){key_lo, colon};
+    match->g[3] = (Span){colon, colon + 1U};
+    match->g[4] = (Span){colon + 1U, hi};
+    return 1;
+}
+
+static bool yaml_block_key_predecessors_cannot_match(const u8 *line,
+                                                     u32 len,
+                                                     const YewReMatch *match)
+{
+    u32 key = (u32)match->g[2].lo;
+    u32 value = (u32)match->g[3].hi;
+
+    if (key >= len || line[key] == (u8)'%' || line[key] == (u8)'-' ||
+        line[key] == (u8)'.')
+        return false;
+    while (value < len &&
+           (line[value] == (u8)' ' || line[value] == (u8)'\t'))
+        value++;
+    return value == len ||
+           (line[value] != (u8)'|' && line[value] != (u8)'>');
+}
+
+static int json_key_match(const u8 *line, u32 len, u32 at,
+                          YewReMatch *match)
+{
+    u32 close;
+    u32 last_hi = UINT32_MAX;
+    u32 last_lo = UINT32_MAX;
+    u32 p;
+
+    if (at >= len || line[at] != (u8)'"')
+        return 0;
+    p = at + 1U;
+    for (;;) {
+        u8 byte;
+
+        if (p >= len)
+            return 0;
+        byte = line[p];
+        if (byte >= 0x80U)
+            return -1;
+        if (byte < 0x20U)
+            return 0;
+        if (byte == (u8)'"') {
+            close = p + 1U;
+            break;
+        }
+        if (byte != (u8)'\\') {
+            last_lo = p;
+            p++;
+            last_hi = p;
+            continue;
+        }
+        if (p + 1U >= len)
+            return 0;
+        byte = line[p + 1U];
+        if (byte >= 0x80U)
+            return -1;
+        if (ascii_json_escape(byte)) {
+            last_lo = p;
+            p += 2U;
+            last_hi = p;
+            continue;
+        }
+        if (byte != (u8)'u' || p + 6U > len)
+            return 0;
+        if (line[p + 2U] >= 0x80U || line[p + 3U] >= 0x80U ||
+            line[p + 4U] >= 0x80U || line[p + 5U] >= 0x80U)
+            return -1;
+        if (!ascii_hex(line[p + 2U]) || !ascii_hex(line[p + 3U]) ||
+            !ascii_hex(line[p + 4U]) || !ascii_hex(line[p + 5U]))
+            return 0;
+        last_lo = p;
+        p += 6U;
+        last_hi = p;
+    }
+    p = close;
+    while (p < len && line[p] < 0x80U && ascii_space(line[p]))
+        p++;
+    if (p < len && line[p] >= 0x80U)
+        return -1;
+    if (p >= len || line[p] != (u8)':')
+        return 0;
+    match->ngroups = 3U;
+    match->g[0] = (Span){at, p + 1U};
+    match->g[1] = (Span){at, close};
+    match->g[2] = last_lo == UINT32_MAX ?
+        (Span){UINT64_MAX, UINT64_MAX} : (Span){last_lo, last_hi};
+    return 1;
+}
+
 static bool rule_match(SynEngine *engine, const SynState *state,
                        const SynRule *rule, u32 rule_index, const u8 *line,
-                       u32 len, u32 at, YewReMatch *match)
+                       u32 len, u32 at, SynWordProbe *word_probe,
+                       YewReMatch *match)
 {
     if (rule->aux_match != SYN_AUXM_NONE)
         return aux_match(engine, state, rule, line, len, at, match);
     if (rule->re == NULL)
         return false;
+    /* min_len is in codepoints.  A remaining byte count smaller than that
+     * can never satisfy the rule, even for malformed or multibyte input. */
+    if (rule->re->min_len > len - at)
+        return false;
+    if (engine->yaml_block_key_fast_enabled &&
+        engine->rule_yaml_block_key != NULL &&
+        engine->rule_yaml_block_key[rule_index] != 0U) {
+        int fast = yaml_block_key_match(rule->re, line, len, at, match);
+
+        if (fast >= 0)
+            return fast != 0;
+    }
+    if (engine->json_key_fast_enabled && engine->rule_json_key != NULL &&
+        engine->rule_json_key[rule_index] != 0U) {
+        int fast = json_key_match(line, len, at, match);
+
+        if (fast >= 0)
+            return fast != 0;
+    }
     if (engine->identifier_fast_enabled &&
         engine->rule_identifier_suffix != NULL &&
         engine->rule_identifier_suffix[rule_index] != 0U) {
@@ -1434,15 +2652,41 @@ static bool rule_match(SynEngine *engine, const SynState *state,
         if (fast >= 0)
             return fast != 0;
     }
-    if (engine->word_literal_fast_enabled &&
-        engine->rule_word_literal != NULL &&
-        engine->rule_word_literal[rule_index] != 0U) {
-        int fast = word_literal_match(&engine->word_sets[rule_index],
-                                      rule->re, line, len, at, match);
+    if (engine->identifier_fast_enabled &&
+        engine->rule_identifiers != NULL &&
+        engine->rule_identifiers[rule_index].start_kind !=
+            SYN_IDENT_CLASS_NONE) {
+        int fast = ascii_identifier_match(
+            &engine->rule_identifiers[rule_index], line, len, at, match);
 
         if (fast >= 0)
             return fast != 0;
     }
+    if (engine->fortran_fast_enabled &&
+        engine->rule_fortran_word != NULL &&
+        engine->rule_fortran_word[rule_index] == 2U) {
+        int fast = word_literal_match(&engine->word_sets[rule_index],
+                                      rule->re, line, len, at, word_probe,
+                                      match);
+
+        if (fast > 0)
+            return true;
+    }
+    if (engine->word_literal_fast_enabled &&
+        engine->rule_word_literal != NULL &&
+        engine->rule_word_literal[rule_index] != 0U) {
+        int fast = word_literal_match(&engine->word_sets[rule_index],
+                                      rule->re, line, len, at, word_probe,
+                                      match);
+
+        if (fast >= 0)
+            return fast != 0;
+    }
+    if (engine->finite_literal_fast_enabled &&
+        engine->finite_sets != NULL &&
+        engine->finite_sets[rule_index].count != 0U)
+        return finite_literal_match(&engine->finite_sets[rule_index], line,
+                                    len, at, match);
     if (rule->re->lit.kind == RE_LIT_WHOLE &&
         rule->re->ngroups == 1U &&
         (rule->re->flags & YEW_RE_ICASE) == 0U) {
@@ -1493,6 +2737,22 @@ static void emit_match(SynLineOut *out, const SynRule *rule,
         emit_span(out, p, end - p, attr, 0U);
         p = end;
     }
+}
+
+static void emit_yaml_block_key(SynLineOut *out, const SynRule *rule,
+                                const YewReMatch *match)
+{
+    u8 base = rule->caps[0] == UINT8_MAX ? rule->attr : rule->caps[0];
+    u8 indent = rule->caps[1] == UINT8_MAX ? base : rule->caps[1];
+    u8 key = rule->caps[2] == UINT8_MAX ? base : rule->caps[2];
+    u8 colon = rule->caps[3] == UINT8_MAX ? base : rule->caps[3];
+
+    emit_span(out, (u32)match->g[1].lo,
+              (u32)(match->g[1].hi - match->g[1].lo), indent, 0U);
+    emit_span(out, (u32)match->g[2].lo,
+              (u32)(match->g[2].hi - match->g[2].lo), key, 0U);
+    emit_span(out, (u32)match->g[3].lo,
+              (u32)(match->g[3].hi - match->g[3].lo), colon, 0U);
 }
 
 static bool set_aux(SynEngine *engine, SynState *state, const SynRule *rule,
@@ -1617,6 +2877,7 @@ static void apply_empty_bol(SynEngine *engine, SynState *state,
         const SynRule *matched = NULL;
         u32 matched_index = UINT32_MAX;
         YewReMatch match;
+        SynWordProbe word_probe = {0};
         u32 i;
         if (engine->ctx_aux == NULL || engine->ctx_aux[ctx_id] == 0U)
             return;
@@ -1635,7 +2896,7 @@ static void apply_empty_bol(SynEngine *engine, SynState *state,
                  (state->flags & YEW_SYN_F_VALUE) != 0U))
                 continue;
             if (rule_match(engine, state, rule, index, line, 0U, 0U,
-                           &match) &&
+                           &word_probe, &match) &&
                 match.g[0].hi == 0U) {
                 matched = rule;
                 matched_index = index;
@@ -1676,6 +2937,171 @@ static u32 truncated_exit_state(SynEngine *engine, u32 entry_state,
         return yew_syn_state_intern(engine->states, &exit);
     }
     return entry_state;
+}
+
+typedef enum SynFortranBolResult {
+    SYN_FORTRAN_BOL_FALLBACK,
+    SYN_FORTRAN_BOL_NONE,
+    SYN_FORTRAN_BOL_MATCH
+} SynFortranBolResult;
+
+static void fortran_match_init(YewReMatch *match, u32 ngroups, u32 hi)
+{
+    u32 i;
+
+    (void)memset(match, 0, sizeof(*match));
+    match->ngroups = ngroups;
+    for (i = 0U; i < ngroups && i < YEW_RE_MAX_GROUPS; i++)
+        match->g[i] = (Span){UINT64_MAX, UINT64_MAX};
+    match->g[0] = (Span){0U, hi};
+}
+
+static bool fortran_fixed_label(const u8 *line)
+{
+    bool digit = false;
+    u32 i;
+
+    for (i = 0U; i < 5U; i++) {
+        if (line[i] >= (u8)'0' && line[i] <= (u8)'9')
+            digit = true;
+        else if (line[i] != (u8)' ')
+            return false;
+    }
+    return digit;
+}
+
+static SynFortranBolResult fortran_fixed_bol(const SynEngine *engine,
+                                             const u8 *line, u32 len,
+                                             u32 *rule_index,
+                                             YewReMatch *match)
+{
+    const SynCtx *root = &engine->def->ctxs[engine->def->root];
+    u32 base = root->first_rule;
+    u32 i;
+
+    if (line[0] == (u8)'C' || line[0] == (u8)'c' ||
+        line[0] == (u8)'*' || line[0] == (u8)'!') {
+        *rule_index = base;
+        fortran_match_init(match, 1U, len);
+        return SYN_FORTRAN_BOL_MATCH;
+    }
+    if (line[0] == (u8)'#') {
+        *rule_index = base + 1U;
+        fortran_match_init(match, 1U, len);
+        return SYN_FORTRAN_BOL_MATCH;
+    }
+    if (len >= 73U) {
+        for (i = 0U; i < len; i++) {
+            if (line[i] >= 0x80U)
+                return SYN_FORTRAN_BOL_FALLBACK;
+        }
+        *rule_index = base + 2U;
+        fortran_match_init(match, 3U, len);
+        match->g[1] = (Span){0U, 72U};
+        match->g[2] = (Span){72U, len};
+        return SYN_FORTRAN_BOL_MATCH;
+    }
+    if (line[0] == (u8)'\t') {
+        if (len >= 2U && line[1] >= (u8)'1' && line[1] <= (u8)'9') {
+            *rule_index = base + 3U;
+            fortran_match_init(match, 3U, 2U);
+            match->g[1] = (Span){0U, 1U};
+            match->g[2] = (Span){1U, 2U};
+        } else {
+            *rule_index = base + 4U;
+            fortran_match_init(match, 1U, 1U);
+        }
+        return SYN_FORTRAN_BOL_MATCH;
+    }
+    if (len < 6U)
+        return SYN_FORTRAN_BOL_NONE;
+    for (i = 0U; i < 6U; i++) {
+        if (line[i] >= 0x80U)
+            return SYN_FORTRAN_BOL_FALLBACK;
+    }
+    if (fortran_fixed_label(line)) {
+        *rule_index = base +
+            (line[5] != (u8)' ' && line[5] != (u8)'0' ? 5U : 6U);
+        fortran_match_init(match, *rule_index == base + 5U ? 3U : 2U, 6U);
+        match->g[1] = (Span){0U, 5U};
+        if (*rule_index == base + 5U)
+            match->g[2] = (Span){5U, 6U};
+        return SYN_FORTRAN_BOL_MATCH;
+    }
+    if (memcmp(line, "     ", 5U) == 0) {
+        *rule_index = base +
+            (line[5] != (u8)' ' && line[5] != (u8)'0' ? 7U : 8U);
+        fortran_match_init(match, *rule_index == base + 7U ? 3U : 1U, 6U);
+        if (*rule_index == base + 7U) {
+            match->g[1] = (Span){0U, 5U};
+            match->g[2] = (Span){5U, 6U};
+        }
+        return SYN_FORTRAN_BOL_MATCH;
+    }
+    return SYN_FORTRAN_BOL_NONE;
+}
+
+static SynFortranBolResult fortran_free_bol(const SynEngine *engine,
+                                            const u8 *line, u32 len,
+                                            u32 *rule_index,
+                                            YewReMatch *match)
+{
+    const SynCtx *root = &engine->def->ctxs[engine->def->root];
+    u32 base = root->first_rule;
+    u32 p = 0U;
+    u32 digits;
+
+    while (p < len && line[p] < 0x80U && ascii_space(line[p]))
+        p++;
+    if (p < len && line[p] >= 0x80U)
+        return SYN_FORTRAN_BOL_FALLBACK;
+    if (p < len && line[p] == (u8)'#') {
+        *rule_index = base;
+        fortran_match_init(match, 1U, len);
+        return SYN_FORTRAN_BOL_MATCH;
+    }
+    if (p < len && line[p] == (u8)'&') {
+        *rule_index = base + 1U;
+        fortran_match_init(match, 3U, p + 1U);
+        match->g[1] = (Span){0U, p};
+        match->g[2] = (Span){p, p + 1U};
+        return SYN_FORTRAN_BOL_MATCH;
+    }
+    digits = p;
+    while (p < len && p - digits < 5U &&
+           line[p] >= (u8)'0' && line[p] <= (u8)'9')
+        p++;
+    if (p != digits && p < len && line[p] < 0x80U &&
+        ascii_space(line[p])) {
+        u32 whitespace = p;
+
+        while (p < len && line[p] < 0x80U && ascii_space(line[p]))
+            p++;
+        if (p < len && line[p] >= 0x80U)
+            return SYN_FORTRAN_BOL_FALLBACK;
+        *rule_index = base + 2U;
+        fortran_match_init(match, 4U, p);
+        match->g[1] = (Span){0U, digits};
+        match->g[2] = (Span){digits, whitespace};
+        match->g[3] = (Span){whitespace, p};
+        return SYN_FORTRAN_BOL_MATCH;
+    }
+    return SYN_FORTRAN_BOL_NONE;
+}
+
+static SynFortranBolResult fortran_bol_match(const SynEngine *engine,
+                                             const SynState *state,
+                                             const u8 *line, u32 len,
+                                             u32 *rule_index,
+                                             YewReMatch *match)
+{
+    if (!engine->fortran_fast_enabled ||
+        engine->fortran_form == SYN_FORTRAN_NONE || len == 0U ||
+        state->ctx[state->depth - 1U] != engine->def->root)
+        return SYN_FORTRAN_BOL_FALLBACK;
+    if (engine->fortran_form == SYN_FORTRAN_FIXED)
+        return fortran_fixed_bol(engine, line, len, rule_index, match);
+    return fortran_free_bol(engine, line, len, rule_index, match);
 }
 
 static void syn_line_run(SynEngine *engine, u32 entry_state,
@@ -1742,9 +3168,65 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
         u32 matched_index = UINT32_MAX;
         SynState before;
         YewReMatch match;
+        SynWordProbe word_probe = {0};
+        u32 fortran_word_rule = UINT32_MAX;
+        SynFortranBolResult fortran_bol = SYN_FORTRAN_BOL_FALLBACK;
+        u32 matched_end;
         u32 ri;
 
-        if (!bitset_has(p == 0U || engine->ctx_first_nonbol == NULL ?
+        if (p == 0U) {
+            fortran_bol = fortran_bol_match(engine, &state, line, len,
+                                            &matched_index, &match);
+            if (fortran_bol == SYN_FORTRAN_BOL_MATCH)
+                matched = &engine->def->rules[matched_index];
+        }
+        if (matched == NULL && p == 0U &&
+            engine->yaml_block_key_fast_enabled &&
+            engine->rule_yaml_block_key != NULL) {
+            u32 yi;
+
+            for (yi = 0U;
+                 yi < (candidate_offsets == NULL ? ctx->nrules :
+                                                    candidate_len);
+                 yi++) {
+                u32 index = candidate_offsets == NULL ?
+                    ctx->first_rule + yi :
+                    engine->candidate_rules[candidate_off + yi];
+                int fast;
+
+                if (engine->rule_yaml_block_key[index] != 2U)
+                    continue;
+                fast = yaml_block_key_match(
+                    engine->def->rules[index].re, line, len, 0U, &match);
+                if (fast > 0 &&
+                    yaml_block_key_predecessors_cannot_match(line, len,
+                                                             &match)) {
+                    matched_index = index;
+                    matched = &engine->def->rules[index];
+                }
+                break;
+            }
+        }
+        if (engine->fortran_fast_enabled &&
+            engine->fortran_words_cap != 0U &&
+            state.ctx[state.depth - 1U] == engine->def->root) {
+            word_probe_init_folded(&word_probe, line, len, p);
+            if (word_probe.status == SYN_WORD_PROBE_READY)
+                fortran_word_rule = fortran_word_winner(
+                    engine, line, p, &word_probe);
+        }
+        if (matched == NULL && fortran_word_rule != UINT32_MAX) {
+            const SynRule *rule = &engine->def->rules[fortran_word_rule];
+            u32 group;
+
+            match.ngroups = rule->re->ngroups;
+            for (group = 0U; group < match.ngroups; group++)
+                match.g[group] = (Span){p, word_probe.hi};
+            matched_index = fortran_word_rule;
+            matched = rule;
+        }
+        if (matched == NULL &&
+            !bitset_has(p == 0U || engine->ctx_first_nonbol == NULL ?
                         ctx->first :
                         engine->ctx_first_nonbol[
                             state.ctx[state.depth - 1U]], line[p]) &&
@@ -1766,8 +3248,9 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
             p = q;
             continue;
         }
-        for (ri = 0U; ri < (candidate_offsets == NULL ? ctx->nrules :
-                            candidate_len); ri++) {
+        for (ri = 0U; matched == NULL &&
+             ri < (candidate_offsets == NULL ? ctx->nrules : candidate_len);
+             ri++) {
             u32 index = candidate_offsets == NULL ? ctx->first_rule + ri :
                 engine->candidate_rules[candidate_off + ri];
             const SynRule *rule;
@@ -1780,6 +3263,18 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
                 return;
             }
             rule = &engine->def->rules[index];
+            if (engine->fortran_fast_enabled &&
+                word_probe.status == SYN_WORD_PROBE_READY &&
+                engine->rule_fortran_word != NULL &&
+                engine->rule_fortran_word[index] != 0U &&
+                (fortran_word_rule != UINT32_MAX ||
+                 engine->rule_fortran_word[index] == 1U) &&
+                index != fortran_word_rule)
+                continue;
+            if (fortran_bol == SYN_FORTRAN_BOL_NONE &&
+                index >= ctx->first_rule &&
+                index < ctx->first_rule + engine->fortran_bol_rules)
+                continue;
             if ((state.flags & YEW_SYN_F_PAST_FIRST) != 0U &&
                 (rule->flags & YEW_SYN_RULE_FIRST_LINE) != 0U)
                 continue;
@@ -1821,7 +3316,7 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
                 rule->aux_match == SYN_AUXM_NONE)
                 continue;
             if (rule_match(engine, &state, rule, index, line, len, p,
-                           &match)) {
+                           &word_probe, &match)) {
                 matched = rule;
                 matched_index = index;
                 break;
@@ -1842,16 +3337,20 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
             before = state;
         if (instrument)
             coverage_rule(engine, matched_index);
-        {
-            u32 end = (u32)match.g[0].hi;
-            if (matched->consume != 0U &&
-                matched->consume < match.ngroups &&
-                match.g[matched->consume].hi != UINT64_MAX)
-                end = (u32)match.g[matched->consume].hi;
-            if (end < p || end > match.g[0].hi)
-                YEW_BUG("syntax: consume group ends outside whole match");
-            emit_match(out, matched, &match, end);
-        }
+        matched_end = (u32)match.g[0].hi;
+        if (matched->consume != 0U &&
+            matched->consume < match.ngroups &&
+            match.g[matched->consume].hi != UINT64_MAX)
+            matched_end = (u32)match.g[matched->consume].hi;
+        if (matched_end < p || matched_end > match.g[0].hi)
+            YEW_BUG("syntax: consume group ends outside whole match");
+        if (matched->consume == 3U && match.ngroups == 5U &&
+            engine->yaml_block_key_fast_enabled &&
+            engine->rule_yaml_block_key != NULL &&
+            engine->rule_yaml_block_key[matched_index] != 0U)
+            emit_yaml_block_key(out, matched, &match);
+        else
+            emit_match(out, matched, &match, matched_end);
         {
             bool aux_set = set_aux(engine, &state, matched, line, len,
                                    &match);
@@ -1866,19 +3365,14 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
         if (instrument)
             coverage_transition(engine, &before, &state);
         {
-            u32 end = (u32)match.g[0].hi;
-            if (matched->consume != 0U &&
-                matched->consume < match.ngroups &&
-                match.g[matched->consume].hi != UINT64_MAX)
-                end = (u32)match.g[matched->consume].hi;
-            if (end > p) {
+            if (matched_end > p) {
                 if (trace != NULL) {
                     u32 t;
-                    for (t = p + 1U; t < end; t++)
+                    for (t = p + 1U; t < matched_end; t++)
                         trace[t] = before;
-                    trace[end] = state;
+                    trace[matched_end] = state;
                 }
-                p = end;
+                p = matched_end;
             } else if ((matched->flags & YEW_SYN_RULE_ZERO_TRANSITION) != 0U &&
                        matched->op != SYN_OP_STAY && p == 0U &&
                        zero_transitions++ < YEW_SYN_DEPTH_MAX) {
@@ -1912,7 +3406,8 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
         if (instrument)
             coverage_transition(engine, &before, &state);
     }
-    out->exit_state = yew_syn_state_intern(engine->states, &state);
+    out->exit_state = memcmp(entry, &state, sizeof(state)) == 0 ?
+        entry_state : yew_syn_state_intern(engine->states, &state);
 }
 
 void yew_syn_line(SynEngine *engine, u32 entry_state, const u8 *line,

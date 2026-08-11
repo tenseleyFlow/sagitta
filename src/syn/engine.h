@@ -193,6 +193,16 @@ u32 yew_syn_engine_identifier_fast_rules(const SynEngine *engine);
 void yew_syn_engine_set_word_literal_fast_path(SynEngine *engine,
                                                bool enabled);
 u32 yew_syn_engine_word_literal_fast_rules(const SynEngine *engine);
+void yew_syn_engine_set_finite_literal_fast_path(SynEngine *engine,
+                                                 bool enabled);
+u32 yew_syn_engine_finite_literal_fast_rules(const SynEngine *engine);
+void yew_syn_engine_set_fortran_fast_path(SynEngine *engine, bool enabled);
+u32 yew_syn_engine_fortran_fast_rules(const SynEngine *engine);
+void yew_syn_engine_set_json_key_fast_path(SynEngine *engine, bool enabled);
+u32 yew_syn_engine_json_key_fast_rules(const SynEngine *engine);
+void yew_syn_engine_set_yaml_block_key_fast_path(SynEngine *engine,
+                                                 bool enabled);
+u32 yew_syn_engine_yaml_block_key_fast_rules(const SynEngine *engine);
 bool yew_syn_coverage_init(SynCoverage *coverage, const SynDef *def);
 void yew_syn_coverage_clear(SynCoverage *coverage);
 void yew_syn_coverage_free(SynCoverage *coverage);

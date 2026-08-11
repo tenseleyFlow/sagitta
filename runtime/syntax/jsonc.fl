@@ -49,8 +49,8 @@
         string: {
             default: "string", at_eol: "pop", unit: "atom",
             rules: [
-                { match: "\\\\(\"|\\\\|/|b|f|n|r|t|u[0-9A-Fa-f]{4})",
-                  attr: "string.escape" },
+                { match: "\\\\u[0-9A-Fa-f]{4}", attr: "string.escape" },
+                { match: "\\\\[\"\\\\/bfnrt]", attr: "string.escape" },
                 { match: "\\\\.", attr: "error" },
                 { match: "[\\x00-\\x1F]", attr: "error" },
                 { match: "\"", attr: "string", pop: 1 },

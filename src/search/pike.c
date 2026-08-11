@@ -553,6 +553,8 @@ bool yew_re_pike_run_ws(YewReWorkspace *workspace, const YewRe *re,
     u32 prev_cp = 0U;
     bool matched = false;
     bool captureless;
+    u32 cp = 0U;
+    u32 cp_len = 0U;
     u32 i;
 
     if (workspace == NULL || re == NULL || in == NULL || re->nprog == 0U)
@@ -585,36 +587,40 @@ bool yew_re_pike_run_ws(YewReWorkspace *workspace, const YewRe *re,
               impl->generation[1]);
     cursor_init(&cur);
 
-    /* The codepoint preceding `start`, needed by \b and ^ without a
+    /* The codepoint preceding the VM seed, needed by \b and ^ without a
      * second pass.  Scanning back a few bytes is bounded by YEW_UTF8_MAX. */
-    if (start > in->window.lo) {
-        u64 back = start - in->window.lo > YEW_UTF8_MAX ?
-                   (u64)YEW_UTF8_MAX : start - in->window.lo;
-        u64 probe = start - back;
+    if (pos > in->window.lo) {
+        if (in->tb == NULL && pos <= in->len &&
+            in->bytes[pos - 1U] < 0x80U) {
+            prev_cp = in->bytes[pos - 1U];
+        } else {
+            u64 back = pos - in->window.lo > YEW_UTF8_MAX ?
+                       (u64)YEW_UTF8_MAX : pos - in->window.lo;
+            u64 probe = pos - back;
 
-        while (probe < start) {
-            u32 len = 0U;
-            u32 cp = cursor_decode(&cur, in, probe, &len);
+            while (probe < pos) {
+                u32 len = 0U;
+                u32 cp = cursor_decode(&cur, in, probe, &len);
 
-            if (len == 0U)
-                break;
-            if (probe + len >= start) {
-                prev_cp = cp;
-                break;
+                if (len == 0U)
+                    break;
+                if (probe + len >= pos) {
+                    prev_cp = cp;
+                    break;
+                }
+                probe += len;
             }
-            probe += len;
         }
     }
 
     list_clear(&clist);
     list_clear(&nlist);
+    cp = cursor_decode(&cur, in, pos, &cp_len);
     for (;;) {
-        u32 cp = 0U;
-        u32 cp_len = 0U;
-        bool have_cp;
-
-        cp = cursor_decode(&cur, in, pos, &cp_len);
-        have_cp = cp_len != 0U && pos < in->window.hi;
+        bool have_cp = cp_len != 0U && pos < in->window.hi;
+        u32 next_cp = 0U;
+        u32 next_len = 0U;
+        bool have_next = false;
 
         x.re = re;
         x.in = in;
@@ -642,6 +648,7 @@ bool yew_re_pike_run_ws(YewReWorkspace *workspace, const YewRe *re,
             prev_cp = cp;
             pos += cp_len;
             list_clear(&clist);
+            cp = cursor_decode(&cur, in, pos, &cp_len);
             continue;
         }
 
@@ -656,9 +663,6 @@ bool yew_re_pike_run_ws(YewReWorkspace *workspace, const YewRe *re,
          */
         {
             ReCtx xn;
-            u32 next_cp = 0U;
-            u32 next_len = 0U;
-            bool have_next = false;
             u64 next_pos = pos + (have_cp ? cp_len : 0U);
 
             if (have_cp) {
@@ -708,6 +712,8 @@ bool yew_re_pike_run_ws(YewReWorkspace *workspace, const YewRe *re,
         }
         prev_cp = cp;
         pos += cp_len;
+        cp = next_cp;
+        cp_len = next_len;
         if (clist.n == 0U && (anchored || matched))
             break;
     }
