@@ -246,6 +246,7 @@ bool yew_theme_apply(Ed *ed, const char *name, char *error, size_t cap)
 
 bool yew_theme_set(Ed *ed, const char *name, char *error, size_t cap)
 {
+    const OptProvider *provider;
     OptVal value;
     const char *why = NULL;
     size_t len;
@@ -261,8 +262,8 @@ bool yew_theme_set(Ed *ed, const char *name, char *error, size_t cap)
         return false;
     }
     value = (OptVal){YEW_OPT_STR, {.str = {name, (u32)len}}};
-    if (!yew_opt_set(ed, YEW_OPT_SCOPE_DECLARED, "theme", 5U, &value,
-                     &why)) {
+    provider = yew_opt_provider(ed);
+    if (!provider->set(ed, "theme", 5U, &value, &why)) {
         if (error != NULL && cap != 0U)
             (void)snprintf(error, cap, "%s",
                            why == NULL ? "theme could not be set" : why);

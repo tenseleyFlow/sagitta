@@ -32,6 +32,9 @@ find "$repo_dir/tests/fuzz" "$repo_dir/scripts" -type f -print |
 : >"$syn_files"
 while IFS= read -r file; do
     case ${file#"$repo_dir"/} in
+        # Theme loading is the one syntax subsystem that owns colors;
+        # definitions and matching continue to traffic only in attrs.
+        src/syn/theme.c|src/syn/theme.h) ;;
         src/syn/*) printf '%s\n' "$file" >>"$syn_files" ;;
     esac
     case ${file#"$repo_dir"/} in
