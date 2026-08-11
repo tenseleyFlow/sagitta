@@ -1,0 +1,73 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=0,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+    1 //go:build linux                                                          
+    1 // +build amd64                                                           
+    2 // ordinary comment                                                       
+    3 package main                                                              
+    4                                                                           
+    5 /* block comment */                                                       
+    6 const answer = 42                                                         
+    7 const tag = `json:"name"\nraw`                                            
+    8 var text = "line\n\u00e9\q"                                               
+    9 var runeValue = '\U0001F642'                                              
+   10 var badRune = '\q'                                                        
+   11 var flags = true || false                                                 
+   12 var absent = nil                                                          
+   13 var nums = []any{0xff_ff, 0b1010, 0o755, 1_000.5e-2i, .5i}                
+   14                                                                           
+   15 func main() {                                                             
+   16 start:                                                                    
+   17     println(append(nums, iota), text, tag, runeValue)                     
+   18     if answer >= len(nums) { goto start }                                 
+   19 }                                                                         
+   20                                                                           
+                                                                                
+                                                                                
+ L  01-kitchen.go                                            utf-8  lf  1:1  all
+--- style
+AAAABACCCCCCCCCCCCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAACCCCCCCCCCCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAEEEEEEEEEEEEEEEEEEEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAFFFFFFFDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAEEEEEEEEEEEEEEEEEEEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAFFFFFDDDDDDDDGDGGDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAFFFFFDDDDDGDHHHHHHHHHHHHHHHHHHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAFFFDDDDDDGDIIIIIJJJJJJJJKKIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAFFFDDDDDDDDDDDGDIJJJJJJJJJJIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAFFFDDDDDDDDDGDIKKIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAFFFDDDDDDDGDLLLLDGGDLLLLLDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAFFFDDDDDDDDGDLLLDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAFFFDDDDDDGDMMNNNMGGGGGGGMDGGGGGGMDGGGGGMDGGGGGGGGGGGMDGGGMDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAFFFFFOOOOMMDMDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAPPPPPMDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDQQQQQQQMQQQQQQMDDDDMDLLLLMMDDDDDMDDDDMDDDDDDDDDDMDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDRRDDDDDDDDGGDQQQMDDDDMDMDRRRRDDDDDDDMDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAMDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+SSSDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+--- legend
+A fg=#8c959f bg=#ffffff attrs=----------
+B fg=#24292f bg=#ffffff attrs=b---------
+C fg=#cf222e bg=#ffffff attrs=----------
+D fg=#24292f bg=#ffffff attrs=----------
+E fg=#6a737d bg=#ffffff attrs=--i-------
+F fg=#cf222e bg=#ffffff attrs=--i-------
+G fg=#0550ae bg=#ffffff attrs=----------
+H fg=#0a3069 bg=#ffffff attrs=--i-------
+I fg=#0a3069 bg=#ffffff attrs=----------
+J fg=#1b7c83 bg=#ffffff attrs=----------
+K fg=#a40e26 bg=#ffffff attrs=b---c-----
+L fg=#0550ae bg=#ffffff attrs=b---------
+M fg=#57606a bg=#ffffff attrs=----------
+N fg=#953800 bg=#ffffff attrs=--i-------
+O fg=#8250df bg=#ffffff attrs=----------
+P fg=#bf3989 bg=#ffffff attrs=----------
+Q fg=#8250df bg=#ffffff attrs=--i-------
+R fg=#cf222e bg=#ffffff attrs=b---------
+S fg=#ffffff bg=#0550ae attrs=----------

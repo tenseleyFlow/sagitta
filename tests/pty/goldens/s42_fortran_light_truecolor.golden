@@ -1,0 +1,71 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=0,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+    1 #define ENABLED 1                                                         
+    1 MoDuLe kitchen                                                            
+    2   implicit none                                                           
+    3   integer, parameter :: n = 2_int64                                       
+    4   integer :: boz = z'FF'                                                  
+    5   real(kind=8) :: x = 1.0d-3                                              
+    6   logical :: ok = .TRUE. .AND. .NOT. .FALSE.                              
+    7 contains                                                                  
+    8   pure recursive function work(value) result(out)                         
+    9     real, intent(in) :: value                                             
+   10     real :: out                                                           
+   11     character(len=*), parameter :: path = 'C:\path\n'                     
+   12     character(len=*), parameter :: quote = 'it''s'                        
+   13     character(len=*), parameter :: dquote = "a ""quote"""                 
+   14     common /shared/ boz                                                   
+   15     data boz /1/                                                          
+   16     out = atomic_add + c_loc + epsilon + iachar + matmul + new_line       
+   17     out = out + selected_int_kind(4) + sign(1.0, out)                     
+   18     out = out .custom. 1.0                                                
+   19     out = sqrt(value) + &                                                 
+   20         & abs(1.0_dp)                                                     
+   21     if (ok) call print_value(out) ! note                                  
+   22 100 continue                                                              
+ L  01-kitchen.f90                                  utf-8  lf  1:1  top  fortran
+--- style
+AAAABACCCCCCCCCCCCCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAACCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDCCCCCCCCDCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDEEEEEEEFDGGGGGGGGGDHHDDDHDHHHHHHHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDEEEEEEEDHHDDDDDHDHHHHHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDEEEEFCCCCHHFDHHDDDHDHHHHHHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDEEEEEEEDHHDDDDHDIIIIIIDHHHHHDHHHHHDIIIIIIIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAACCCCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDGGGGDGGGGGGGGGDCCCCCCCCDJJJJFGGGGGFDCCCCCCFDDDFDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDEEEEFDGGGGGGFDDFDHHDGGGGGDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDEEEEDHHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDEEEEEEEEEFCCCHHFFDGGGGGGGGGDHHDDDDDDHDKKKKKKKKKKKDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDEEEEEEEEEFCCCHHFFDGGGGGGGGGDHHDDDDDDDHDKKKLLKKDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDEEEEEEEEEFCCCHHFFDGGGGGGGGGDHHDDDDDDDDHDKKKLLKKKKKLLKDDDDDDDDDDDDDDDDD
+AAAAAADDDDCCCCCCDHDDDDDDHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDCCCCDDDDDHHHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDHDMMMMMMMMMMDHDMMMMMDHDMMMMMMMDHDMMMMMMDHDMMMMMMDHDMMMMMMMMDDDDDDD
+AAAAAADDDDDDDDHDDDDDHDMMMMMMMMMMMMMMMMMFHFDHDMMMMFHHHFDDDDFDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDHDDDDDHHHHHHHHDHHHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDHDMMMMFGGGGGFDHDHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDHDMMMFHHHHHHFDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDNNDFDDFDCCCCDJJJJJJJJJJJFDDDFDOOOOOODDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAPPPDNNNNNNNNDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+QQQDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+--- legend
+A fg=#8c959f bg=#ffffff attrs=----------
+B fg=#24292f bg=#ffffff attrs=b---------
+C fg=#cf222e bg=#ffffff attrs=----------
+D fg=#24292f bg=#ffffff attrs=----------
+E fg=#953800 bg=#ffffff attrs=--i-------
+F fg=#57606a bg=#ffffff attrs=----------
+G fg=#cf222e bg=#ffffff attrs=--i-------
+H fg=#0550ae bg=#ffffff attrs=----------
+I fg=#0550ae bg=#ffffff attrs=b---------
+J fg=#8250df bg=#ffffff attrs=----------
+K fg=#0a3069 bg=#ffffff attrs=----------
+L fg=#1b7c83 bg=#ffffff attrs=----------
+M fg=#8250df bg=#ffffff attrs=--i-------
+N fg=#cf222e bg=#ffffff attrs=b---------
+O fg=#6a737d bg=#ffffff attrs=--i-------
+P fg=#bf3989 bg=#ffffff attrs=----------
+Q fg=#ffffff bg=#0550ae attrs=----------

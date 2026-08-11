@@ -1,0 +1,65 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=0,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+    1 {                                                                         
+    1   "valid": "quote \" slash \/ backslash \\ controls \b\f\n\r\t unicode \u2
+    2   "numbers": [0, -1, 12.5, 6.02e23],                                      
+    3   "values": [true, false, null],                                          
+    4   "badEscape": "\q",                                                      
+    5   "control": "a b",                                                       
+    6   "badNumbers": [+1, 01, 0x10, .5, 1., 1e],                               
+    7   "badWord": nope,                                                        
+    8   "single": 'bad',                                                        
+    9   "trailing": [1,],                                                       
+   10   // invalid line comment                                                 
+   11   "block": /* invalid *                                                   
+   12   still invalid */ 2                                                      
+   13 }                                                                         
+   14                                                                           
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ L  01-kitchen.json                                          utf-8  lf  1:1  all
+--- style
+AAAABACDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDEEEEEEECDFFFFFFFGGFFFFFFFGGFFFFFFFFFFFGGFFFFFFFFFFGGGGGGGGGGFFFFFFFFFGGG
+AAAAAADDEEEEEEEEECDCHCDHHCDHHHHCDHHHHHHHCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDEEEEEEEECDCIIIICDIIIIICDIIIICCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDEEEEEEEEEEECDFJJFCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDEEEEEEEEECDFFJFFCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDEEEEEEEEEEEECDCJJCDJJCDJJJJCDJJCDJJCDJJCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDEEEEEEEEECDJJJJCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDEEEEEEEECDJJJJJCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDEEEEEEEEEECDCHJCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDJJJJJJJJJJJJJJJJJJJJJJJDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDEEEEEEECDJJJJJJJJJJJJDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAJJJJJJJJJJJJJJJJJJDHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAACDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+KKKDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+--- legend
+A fg=#8c959f bg=#ffffff attrs=----------
+B fg=#24292f bg=#ffffff attrs=b---------
+C fg=#57606a bg=#ffffff attrs=----------
+D fg=#24292f bg=#ffffff attrs=----------
+E fg=#116329 bg=#ffffff attrs=----------
+F fg=#0a3069 bg=#ffffff attrs=----------
+G fg=#1b7c83 bg=#ffffff attrs=----------
+H fg=#0550ae bg=#ffffff attrs=----------
+I fg=#0550ae bg=#ffffff attrs=b---------
+J fg=#a40e26 bg=#ffffff attrs=b---c-----
+K fg=#ffffff bg=#0550ae attrs=----------

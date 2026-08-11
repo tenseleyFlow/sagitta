@@ -1,0 +1,74 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=0,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+    1 #!/usr/bin/env python3                                                    
+    1 # type: list[int]                                                         
+    2 # TODO ordinary comment                                                   
+    3      mixed_indent = True                                                  
+    4 @pkg.decorate                                                             
+    5 class Widget(Base):                                                       
+    6     async def method(self, cls: list[int]) -> str:                        
+    7         raw = r"raw"                                                      
+    8         byte = b'bytes'                                                   
+    9         escaped = "\n\x41\N{SNOWMAN}\q"                                   
+   10         triple = """first                                                 
+   11 second \t                                                                 
+   12 third"""                                                                  
+   13         prefixed = rb'''raw bytes                                         
+   14 body'''                                                                   
+   15         fmt = f"{{literal}} { {'same': "quote", 'nested': {'x': 1}}!r:>{2}
+   16         fmt3 = fr'''outer {"same"}                                        
+   17 {value:{width}}'''                                                        
+   18         nums = (0b1010_0011, 0o755, 0xCA_FE, 1.2e-3j, 42j)                
+   19         if self is not None and cls:                                      
+   20             return str(nums) := value                                     
+   21         else:                                                             
+   22             yield Ellipsis                                                
+ L  01-kitchen.py                                            utf-8  lf  1:1  top
+--- style
+AAAABACCCCCCCCCCCCCCCCCCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAEEEEEEEEEEEEEEEEEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAFFFFFDDDDDDDDDDDDDGDHHHHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAIIIIIIIIIIIIIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAJJJJJJKKKKKKLDDDDLLDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDJJJJJDJJJJMMMMMMLJJJJLDJJJLLKKKKLNNNLLDLLLKKKLDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDGDOOOOOODDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDGDOOOOOOOODDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDGDOPPPPPPPPPPPPPPPPPPPODDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDGDOOOOOOOODDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAOOOOOOOPPDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAOOOOOOOODDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDGDOOOOOOOOOOOOOODDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAOOOOOOODDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDGDOOPPOOOOOOOPPOQDLOOOOOOLDOOOOOOOLDOOOOOOOOLDLOOOLDGLLRRRRQGQ
+AAAAAADDDDDDDDDDDDDGDOOOOOOOOOOOQOOOOOOQDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAQDDDDDRQDDDDDQQOOODDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDGDLGGGGGGGGGGGLDGGGGGLDGGGGGGGLDGGGGGGGLDGGGLDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDSSDJJJJDGGDGGGDHHHHDGGGDJJJLDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDSSSSSSDNNNLDDDDLDGGDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDSSSSLDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDSSSSSDHHHHHHHHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+TTTDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+--- legend
+A fg=#8c959f bg=#ffffff attrs=----------
+B fg=#24292f bg=#ffffff attrs=b---------
+C fg=#6a737d bg=#ffffff attrs=--i-------
+D fg=#24292f bg=#ffffff attrs=----------
+E fg=#57606a bg=#ffffff attrs=--i-------
+F fg=#9a6700 bg=#ffffff attrs=----c-----
+G fg=#0550ae bg=#ffffff attrs=----------
+H fg=#0550ae bg=#ffffff attrs=b---------
+I fg=#9a6700 bg=#ffffff attrs=----------
+J fg=#cf222e bg=#ffffff attrs=--i-------
+K fg=#953800 bg=#ffffff attrs=----------
+L fg=#57606a bg=#ffffff attrs=----------
+M fg=#8250df bg=#ffffff attrs=----------
+N fg=#8250df bg=#ffffff attrs=--i-------
+O fg=#0a3069 bg=#ffffff attrs=----------
+P fg=#1b7c83 bg=#ffffff attrs=----------
+Q fg=#bf3989 bg=#ffffff attrs=----------
+R fg=#0a3069 bg=#ffffff attrs=--i-------
+S fg=#cf222e bg=#ffffff attrs=b---------
+T fg=#ffffff bg=#0550ae attrs=----------

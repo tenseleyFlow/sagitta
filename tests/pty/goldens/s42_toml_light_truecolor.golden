@@ -1,0 +1,67 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=0,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+    1 # TOML kitchen                                                            
+    1 [owner.profile."quoted name"]                                             
+    2 name = "Tom \"D\"\n"                                                      
+    3 literal = 'C:\path\n'                                                     
+    4 multiline = """first                                                      
+    5 second \n \q \                                                            
+    6   joined                                                                  
+    7 third"""                                                                  
+    8 multiliteral = '''first                                                   
+    9 C:\path\n                                                                 
+   10 third'''                                                                  
+   11 when_offset = 1979-05-27T07:32:00.999999-07:00                            
+   12 when_z = 1979-05-27t07:32:00Z                                             
+   13 when_local = 1979-05-27 07:32:00                                          
+   14 date = 1979-05-27                                                         
+   15 time = 07:32:00.5                                                         
+   16 nums = [1_000, 0xff, 0o755, 0b1010, 1.2e-3, inf, -nan]                    
+   17 enabled = true                                                            
+   18 inline = { dotted.key = false }                                           
+   19 bad = "\q"                                                                
+   20                                                                           
+   21 [[products.tools]]                                                        
+   22 name = "hammer"                                                           
+ L  01-kitchen.toml                                          utf-8  lf  1:1  top
+--- style
+AAAABACCCCCCCCCCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAEFFFFFEFFFFFFFEFFFFFFFFFFFFFEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAGGGGDHDIIIIIJJIJJJJIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAGGGGGGGDHDIIIIIIIIIIIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAGGGGGGGGGDHDIIIIIIIIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAIIIIIIIJJIKKIJDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAIIIIIIIIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAIIIIIIIIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAGGGGGGGGGGGGDHDIIIIIIIIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAIIIIIIIIIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAIIIIIIIIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAGGGGGGGGGGGDHDHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHHDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAGGGGGGDHDHHHHHHHHHHHHHHHHHHHHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAGGGGGGGGGGDHDHHHHHHHHHHHHHHHHHHHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAGGGGDHDHHHHHHHHHHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAGGGGDHDHHHHHHHHHHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAGGGGDHDEHHHHHEDHHHHEDHHHHHEDHHHHHHEDHHHHHHEDHHHEDHHHHEDDDDDDDDDDDDDDDDDDDD
+AAAAAAGGGGGGGDHDLLLLDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAGGGGGGDHDEDDDDDDDEDDDDHDLLLLLDEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAGGGDHDIKKIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAEEFFFFFFFFEFFFFFEEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAGGGGDHDIIIIIIIIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+MMMDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+--- legend
+A fg=#8c959f bg=#ffffff attrs=----------
+B fg=#24292f bg=#ffffff attrs=b---------
+C fg=#6a737d bg=#ffffff attrs=--i-------
+D fg=#24292f bg=#ffffff attrs=----------
+E fg=#57606a bg=#ffffff attrs=----------
+F fg=#953800 bg=#ffffff attrs=----------
+G fg=#116329 bg=#ffffff attrs=----------
+H fg=#0550ae bg=#ffffff attrs=----------
+I fg=#0a3069 bg=#ffffff attrs=----------
+J fg=#1b7c83 bg=#ffffff attrs=----------
+K fg=#a40e26 bg=#ffffff attrs=b---c-----
+L fg=#0550ae bg=#ffffff attrs=b---------
+M fg=#ffffff bg=#0550ae attrs=----------

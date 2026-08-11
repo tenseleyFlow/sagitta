@@ -1,0 +1,70 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=0,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+    1 // TODO line                                                              
+    1 /* block FIXME */                                                         
+    2 const values = [0xff_ffn, 0b101n, 0o77, 1_000.5e-2, .25];                 
+    3 let a = "x\u{1f642}\q", b = 'y\x41';                                      
+    4 let div = identifier / 2;                                                 
+    5 let re = /a[\\/]b+/g;                                                     
+    6 return /afterReturn/i;                                                    
+    7 const nested = `a${`b${{c: /x/.test(a)}}`} tail`;                         
+    8 function call(x) { return x?.method(); }                                  
+    9 if (x) /knownWrong/.test(x);                                              
+   10 if (x) {} /knownWrongBlock/.test(x);                                      
+   11 this / 2; super / 2; true / 2; false / 2; null / 2; undefined / 2;        
+   12 .;                                                                        
+   13                                                                           
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ L  01-kitchen.js                                            utf-8  lf  1:1  all
+--- style
+AAAABACCCCCCCCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAACCCCCCCCCEEEEECCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAFFFFFDDDDDDDDGDHGGGGGGGGHDGGGGGGHDGGGGHDGGGGGGGGGGHDGGGHHDDDDDDDDDDDDDDDDD
+AAAAAAFFFDDDGDIIJJJJJJJJJJJIHDDDGDIIJJJJIHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAFFFDDDDDGDDDDDDDDDDDDGDGHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAFFFDDDDGDKKKJJKKKKKKHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAALLLLLLDKKKKKKKKKKKKKKHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAFFFFFDDDDDDDDGDIIMMIIMMHDHDKKKNNNNNHDHHMIMIIIIIIHDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAFFFFFFFFDNNNNHDHDHDLLLLLLDDGGNNNNNNHHHDHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAALLDHDHDGDDDDDDDDDDGNNNNNHDHHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAALLDHDHDHHDGDDDDDDDDDDDDDDDGNNNNNHDHHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAOOOODGDGHDOOOOODGDGHDOOOODGDGHDOOOOODGDGHDOOOODGDGHDOOOOOOOOODGDGHDDDDDDDD
+AAAAAAHHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+PPPDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+--- legend
+A fg=#8c959f bg=#ffffff attrs=----------
+B fg=#24292f bg=#ffffff attrs=b---------
+C fg=#6a737d bg=#ffffff attrs=--i-------
+D fg=#24292f bg=#ffffff attrs=----------
+E fg=#9a6700 bg=#ffffff attrs=b---------
+F fg=#cf222e bg=#ffffff attrs=--i-------
+G fg=#0550ae bg=#ffffff attrs=----------
+H fg=#57606a bg=#ffffff attrs=----------
+I fg=#0a3069 bg=#ffffff attrs=----------
+J fg=#1b7c83 bg=#ffffff attrs=----------
+K fg=#0a3069 bg=#ffffff attrs=--i-------
+L fg=#cf222e bg=#ffffff attrs=b---------
+M fg=#bf3989 bg=#ffffff attrs=----------
+N fg=#8250df bg=#ffffff attrs=----------
+O fg=#0550ae bg=#ffffff attrs=b---------
+P fg=#ffffff bg=#0550ae attrs=----------

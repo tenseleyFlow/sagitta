@@ -4619,6 +4619,80 @@ static void case_s41_kitchen(PtyCtx *c)
     force_quit(c);
 }
 
+/* ---------------------------------------------------------------- */
+/* Sprint 42: langpack-two PTY contracts                            */
+/* ---------------------------------------------------------------- */
+
+static bool s41_fixture(PtyCtx *c, const char *suffix, const u8 *bytes,
+                        size_t len, char *path, size_t cap);
+static void s41_open_fixture(PtyCtx *c, const char *theme, const char *path);
+
+typedef struct S42Kitchen {
+    const char *tag;
+    const char *path;
+} S42Kitchen;
+
+static const S42Kitchen s42_kitchens[] = {
+    {"_python_", "tests/syn/python/01-kitchen.py"},
+    {"_rust_", "tests/syn/rust/01-kitchen.rs"},
+    {"_go_", "tests/syn/go/01-kitchen.go"},
+    {"_javascript_", "tests/syn/javascript/01-kitchen.js"},
+    {"_typescript_", "tests/syn/javascript/10-kitchen.ts"},
+    {"_fortran_", "tests/syn/fortran/01-kitchen.f90"},
+    {"_json_", "tests/syn/json/01-kitchen.json"},
+    {"_yaml_", "tests/syn/yaml/01-kitchen.yml"},
+    {"_toml_", "tests/syn/toml/01-kitchen.toml"}
+};
+
+static const char *s42_kitchen_path(PtyCtx *c)
+{
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(s42_kitchens); i++) {
+        if (strstr(c->test->name, s42_kitchens[i].tag) != NULL)
+            return s42_kitchens[i].path;
+    }
+    ptc_check(c, false, "Sprint 42 kitchen case has no fixture mapping");
+    return NULL;
+}
+
+static void case_s42_kitchen(PtyCtx *c)
+{
+    const char *path = s42_kitchen_path(c);
+    const char *theme = strstr(c->test->name, "_light_") != NULL
+                            ? "quiver-light" : "quiver-dark";
+
+    if (path == NULL)
+        return;
+    ptc_spawn(c, ptc_yew_bin(c), "--theme", theme, path, NULL);
+    ptc_wait_kitty_push(c, 21U);
+    s41_wait_syn_settled(c);
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, c->test->name);
+    force_quit(c);
+}
+
+static void case_s42_fortran_fixed_col73(PtyCtx *c)
+{
+    static const u8 text[] =
+        "      INTEGER VALUE"
+        "                    "
+        "                    "
+        "             "
+        "CARD0073\n";
+    char path[256];
+
+    if (!s41_fixture(c, ".f", text, sizeof(text) - 1U, path, sizeof(path)))
+        return;
+    s41_open_fixture(c, "quiver-dark", path);
+    ptc_keys(c, "end");
+    ptc_settle(c, 0);
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, "s42_fortran_fixed_col73_dark_truecolor");
+    force_quit(c);
+    (void)unlink(path);
+}
+
 static bool s41_fixture(PtyCtx *c, const char *suffix, const u8 *bytes,
                         size_t len, char *path, size_t cap)
 {
@@ -4881,6 +4955,26 @@ static void case_s37_batch_never_touches_the_terminal(PtyCtx *c)
 }
 
 const PtyCase yew_pty_cases[] = {
+    C(s42_python_dark_truecolor, modern, 24U, 80U, case_s42_kitchen),
+    C(s42_python_light_truecolor, modern, 24U, 80U, case_s42_kitchen),
+    C(s42_rust_dark_truecolor, modern, 24U, 80U, case_s42_kitchen),
+    C(s42_rust_light_truecolor, modern, 24U, 80U, case_s42_kitchen),
+    C(s42_go_dark_truecolor, modern, 24U, 80U, case_s42_kitchen),
+    C(s42_go_light_truecolor, modern, 24U, 80U, case_s42_kitchen),
+    C(s42_javascript_dark_truecolor, modern, 24U, 80U, case_s42_kitchen),
+    C(s42_javascript_light_truecolor, modern, 24U, 80U, case_s42_kitchen),
+    C(s42_typescript_dark_truecolor, modern, 24U, 80U, case_s42_kitchen),
+    C(s42_typescript_light_truecolor, modern, 24U, 80U, case_s42_kitchen),
+    C(s42_fortran_dark_truecolor, modern, 24U, 80U, case_s42_kitchen),
+    C(s42_fortran_light_truecolor, modern, 24U, 80U, case_s42_kitchen),
+    C(s42_json_dark_truecolor, modern, 24U, 80U, case_s42_kitchen),
+    C(s42_json_light_truecolor, modern, 24U, 80U, case_s42_kitchen),
+    C(s42_yaml_dark_truecolor, modern, 24U, 80U, case_s42_kitchen),
+    C(s42_yaml_light_truecolor, modern, 24U, 80U, case_s42_kitchen),
+    C(s42_toml_dark_truecolor, modern, 24U, 80U, case_s42_kitchen),
+    C(s42_toml_light_truecolor, modern, 24U, 80U, case_s42_kitchen),
+    C(s42_fortran_fixed_col73_dark_truecolor, modern, 24U, 80U,
+      case_s42_fortran_fixed_col73),
     C(s41_c_dark_truecolor, modern, 24U, 80U, case_s41_kitchen),
     C(s41_c_dark_colors_256, modern, 24U, 80U, case_s41_kitchen),
     C(s41_c_dark_colors_16, modern, 24U, 80U, case_s41_kitchen),
