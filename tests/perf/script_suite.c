@@ -213,7 +213,7 @@ static int selftest_group_timeout(void)
 int main(int argc, char **argv)
 {
     Options options;
-    int64_t limit;
+    int64_t limit = 0;
     int64_t inject = injected_delay();
     int64_t start;
     int64_t elapsed;
