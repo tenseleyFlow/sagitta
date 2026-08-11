@@ -611,6 +611,7 @@ const YewTest yew_tests[] = {
     T(syn_stack_at_preserves_full_line_end_anchor_semantics),
     T(syn_stack_at_consume_capture_can_use_lookahead_bytes),
     T(syn_block_long_line_replay_is_bounded_to_constant_passes),
+    T(syn_block_multiline_scan_replays_only_boundaries),
     T(syn_block_local_settlement_ignores_unrelated_distant_tail),
     T(syn_block_scan_cap_falls_through_to_paragraph),
     T(fuzzy_parity_corpus),

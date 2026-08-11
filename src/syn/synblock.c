@@ -100,13 +100,15 @@ static bool state_at_line(const Buffer *buf, u64 line, u32 at,
 }
 
 static bool line_first_frame(const Buffer *buf, u64 line, u8 depth,
-                             u16 ctx, u32 from, bool want, u32 *at)
+                             u16 ctx, u32 from, bool want, u32 *at,
+                             bool *found)
 {
     SynBlockLine text = {0};
     SynState *trace;
     u32 entry;
     u32 p;
 
+    *found = false;
     if (line >= buf->syn.entry.len)
         return false;
     entry = buf->syn.entry.data[line];
@@ -125,6 +127,7 @@ static bool line_first_frame(const Buffer *buf, u64 line, u8 depth,
     for (p = from; p <= text.len; p++) {
         if (frame_is(&trace[p], depth, ctx) == want) {
             *at = p;
+            *found = true;
             free(trace);
             free(text.bytes);
             return true;
@@ -132,7 +135,7 @@ static bool line_first_frame(const Buffer *buf, u64 line, u8 depth,
     }
     free(trace);
     free(text.bytes);
-    return false;
+    return true;
 }
 
 static bool line_last_frame_start(const Buffer *buf, u64 line, u8 depth,
@@ -205,6 +208,8 @@ static bool frame_bounds(const Buffer *buf, u64 center, u32 local,
     u64 hi_line = center;
     u64 scanned = 0U;
     u32 local_at;
+    bool found;
+    bool tail_unsettled = false;
 
     while (lo_line != 0U && entry_has(buf, lo_line, depth, ctx)) {
         if (++scanned > YEW_SYN_UNIT_SCAN_LINES)
@@ -222,32 +227,32 @@ static bool frame_bounds(const Buffer *buf, u64 center, u32 local,
     out->lo = yew_textbuf_line_span(buf->tb, LINENO(lo_line)).lo + local_at;
 
     scanned = 0U;
-    if (line_first_frame(buf, hi_line, depth, ctx, local, false, &local_at)) {
+    while (hi_line + 1U < buf->syn.entry.len) {
+        if (hi_line + 1U >= buf->syn.settled_to.v ||
+            buf->syn.entry.data[hi_line + 1U] == YEW_SYN_STATE_UNKNOWN) {
+            tail_unsettled = true;
+            break;
+        }
+        if (!entry_has(buf, hi_line + 1U, depth, ctx))
+            break;
+        if (++scanned > YEW_SYN_UNIT_SCAN_LINES)
+            return false;
+        hi_line++;
+    }
+    /* entry[] identifies the last line whose entry stack still contains
+     * this frame.  Interior lines need only sequential cached-state reads;
+     * replay the last such line once to locate its exact closing byte. */
+    if (!line_first_frame(buf, hi_line, depth, ctx,
+                          hi_line == center ? local : 0U, false,
+                          &local_at, &found))
+        return false;
+    if (found) {
         out->hi = yew_textbuf_line_span(buf->tb, LINENO(hi_line)).lo +
                   local_at;
         return true;
     }
-    if (hi_line + 1U < buf->syn.entry.len &&
-        (hi_line + 1U >= buf->syn.settled_to.v ||
-         buf->syn.entry.data[hi_line + 1U] == YEW_SYN_STATE_UNKNOWN))
+    if (tail_unsettled)
         return false;
-    while (hi_line + 1U < buf->syn.entry.len &&
-           entry_has(buf, hi_line + 1U, depth, ctx)) {
-        if (++scanned > YEW_SYN_UNIT_SCAN_LINES)
-            return false;
-        hi_line++;
-        if (line_first_frame(buf, hi_line, depth, ctx, 0U, false,
-                             &local_at)) {
-            out->hi = yew_textbuf_line_span(buf->tb, LINENO(hi_line)).lo +
-                      local_at;
-            return true;
-        }
-        if (hi_line + 1U < buf->syn.entry.len &&
-            (hi_line + 1U >= buf->syn.settled_to.v ||
-             buf->syn.entry.data[hi_line + 1U] ==
-                 YEW_SYN_STATE_UNKNOWN))
-            return false;
-    }
     {
         SynBlockLine text = {0};
         if (!line_read(buf->tb, hi_line, &text))

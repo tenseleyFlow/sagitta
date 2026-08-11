@@ -215,6 +215,35 @@ void test_syn_block_long_line_replay_is_bounded_to_constant_passes(void)
     free(text);
 }
 
+void test_syn_block_multiline_scan_replays_only_boundaries(void)
+{
+    enum { LINES = 100000 };
+    size_t len = 3U + ((size_t)LINES - 2U) * 2U + 2U;
+    char *text = malloc(len + 1U);
+    SynBlockFixture f;
+    Span span;
+    u64 at;
+
+    YEW_ASSERT_NOT_NULL(text);
+    (void)memcpy(text, "/*\n", 3U);
+    for (u32 line = 1U; line + 1U < LINES; line++) {
+        text[3U + ((size_t)line - 1U) * 2U] = 'x';
+        text[4U + ((size_t)line - 1U) * 2U] = '\n';
+    }
+    (void)memcpy(text + len - 2U, "*/", 2U);
+    text[len] = '\0';
+    at = 3U + ((u64)LINES / 2U - 1U) * 2U;
+
+    fixture_init(&f, text);
+    yew_syn_engine_reset_counters(f.toy.engine);
+    YEW_ASSERT(yew_block_level(&f.unit, BYTEOFF(at), 0U, &span));
+    YEW_ASSERT_EQ_U64(span.lo, 2U);
+    YEW_ASSERT_EQ_U64(span.hi, len);
+    YEW_ASSERT(yew_syn_engine_line_calls(f.toy.engine) <= 3U);
+    fixture_free(&f);
+    free(text);
+}
+
 void test_syn_block_local_settlement_ignores_unrelated_distant_tail(void)
 {
     static const char text[] = "\"abc\"\nplain\n/* distant tail\n";

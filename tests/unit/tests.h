@@ -587,6 +587,7 @@ void test_syn_stack_at_reports_prefix_without_eol_transition(void);
 void test_syn_stack_at_preserves_full_line_end_anchor_semantics(void);
 void test_syn_stack_at_consume_capture_can_use_lookahead_bytes(void);
 void test_syn_block_long_line_replay_is_bounded_to_constant_passes(void);
+void test_syn_block_multiline_scan_replays_only_boundaries(void);
 void test_syn_block_local_settlement_ignores_unrelated_distant_tail(void);
 void test_syn_block_scan_cap_falls_through_to_paragraph(void);
 void test_fuzzy_parity_corpus(void);
