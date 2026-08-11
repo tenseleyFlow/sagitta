@@ -164,16 +164,13 @@ static void fixture_free(CacheFixture *f)
     free(f->saved_no_cache);
 }
 
-static LoadedDef load_def(const CacheFixture *f)
+static void load_def(LoadedDef *loaded, const CacheFixture *f)
 {
-    LoadedDef loaded;
-
-    arena_init(&loaded.arena);
-    fl_diag_init(&loaded.dc, &loaded.arena);
-    loaded.def = yew_syn_def_load(&loaded.arena, &loaded.dc, f->source);
-    YEW_ASSERT_NOT_NULL(loaded.def);
-    YEW_ASSERT_EQ_U64(fl_diag_errors(&loaded.dc), 0U);
-    return loaded;
+    arena_init(&loaded->arena);
+    fl_diag_init(&loaded->dc, &loaded->arena);
+    loaded->def = yew_syn_def_load(&loaded->arena, &loaded->dc, f->source);
+    YEW_ASSERT_NOT_NULL(loaded->def);
+    YEW_ASSERT_EQ_U64(fl_diag_errors(&loaded->dc), 0U);
 }
 
 static void loaded_free(LoadedDef *loaded)
@@ -203,7 +200,7 @@ static void build_cold_cache(CacheFixture *f)
     LoadedDef loaded;
 
     yew_syn_compile_count_reset();
-    loaded = load_def(f);
+    load_def(&loaded, f);
     YEW_ASSERT_EQ_U64(yew_syn_compile_count(), 1U);
     YEW_ASSERT_EQ_I64(access(f->cache, F_OK), 0);
     loaded_free(&loaded);
@@ -246,7 +243,7 @@ static void assert_corruption_recompiles(CacheFixture *f)
 
     yew_test_capture_log();
     yew_syn_compile_count_reset();
-    loaded = load_def(f);
+    load_def(&loaded, f);
     YEW_ASSERT_EQ_U64(yew_syn_compile_count(), 1U);
     YEW_ASSERT(yew_test_log_contains(YEW_LOG_WARN,
                                      "syntax cache corrupt; recompiling"));
@@ -358,7 +355,7 @@ void test_syn_cache_cold_write_then_warm_load_avoids_recompile(void)
     YEW_ASSERT_EQ_I64(stat(f.cache, &st), 0);
     YEW_ASSERT((u64)st.st_size > YEW_SYN_CACHE_HEADER_SIZE);
     yew_syn_compile_count_reset();
-    loaded = load_def(&f);
+    load_def(&loaded, &f);
     YEW_ASSERT_EQ_U64(yew_syn_compile_count(), 0U);
     YEW_ASSERT_EQ_STR(yew_syn_rule_pattern(loaded.def, 0U), "x");
     assert_loaded_regex_executes(&loaded, 'x');
@@ -381,7 +378,7 @@ void test_syn_cache_warm_load_preserves_complex_regex_and_metadata(void)
                 strlen(cache_source_complex));
     build_cold_cache(&f);
     yew_syn_compile_count_reset();
-    loaded = load_def(&f);
+    load_def(&loaded, &f);
     YEW_ASSERT_EQ_U64(yew_syn_compile_count(), 0U);
     YEW_ASSERT_EQ_STR(loaded.def->name, "cache-complex");
     YEW_ASSERT_EQ_U64(loaded.def->root, 0U);
@@ -434,7 +431,7 @@ void test_syn_cache_warm_load_preserves_aux_literals_and_mutable_aux(void)
                 strlen(cache_source_aux));
     build_cold_cache(&f);
     yew_syn_compile_count_reset();
-    loaded = load_def(&f);
+    load_def(&loaded, &f);
     YEW_ASSERT_EQ_U64(yew_syn_compile_count(), 0U);
     YEW_ASSERT_EQ_STR(yew_syn_ctx_name(loaded.def, 1U), "raw");
     YEW_ASSERT_EQ_STR(yew_syn_rule_pattern(loaded.def, 0U), "^r(#+)\"");
@@ -483,7 +480,7 @@ void test_syn_cache_touch_without_content_change_avoids_recompile(void)
     YEW_ASSERT_EQ_I64(stat(f.cache, &before), 0);
     touch_source(&f);
     yew_syn_compile_count_reset();
-    loaded = load_def(&f);
+    load_def(&loaded, &f);
     YEW_ASSERT_EQ_U64(yew_syn_compile_count(), 0U);
     YEW_ASSERT_EQ_STR(yew_syn_rule_pattern(loaded.def, 0U), "x");
     YEW_ASSERT_EQ_I64(stat(f.cache, &after), 0);
@@ -506,7 +503,7 @@ void test_syn_cache_content_change_recompiles(void)
                 strlen(cache_source_y));
     touch_source(&f);
     yew_syn_compile_count_reset();
-    loaded = load_def(&f);
+    load_def(&loaded, &f);
     YEW_ASSERT_EQ_U64(yew_syn_compile_count(), 1U);
     YEW_ASSERT_EQ_STR(yew_syn_rule_pattern(loaded.def, 0U), "y");
     loaded_free(&loaded);
@@ -582,7 +579,7 @@ void test_syn_cache_crc_valid_structural_corruption_recompiles_safely(void)
 
     yew_test_capture_log();
     yew_syn_compile_count_reset();
-    loaded = load_def(&f);
+    load_def(&loaded, &f);
     YEW_ASSERT_EQ_U64(yew_syn_compile_count(), 1U);
     YEW_ASSERT(yew_test_log_contains(
         YEW_LOG_WARN, "syntax cache tables invalid; recompiling"));
@@ -621,7 +618,7 @@ void test_syn_cache_restores_first_byte_filters_from_regex_programs(void)
     bytebuf_free(&bytes);
 
     yew_syn_compile_count_reset();
-    loaded = load_def(&f);
+    load_def(&loaded, &f);
     YEW_ASSERT_EQ_U64(yew_syn_compile_count(), 0U);
     YEW_ASSERT(yew_syn_def_firstbyte_check(loaded.def, NULL, NULL));
     assert_loaded_regex_executes(&loaded, 'x');
@@ -662,7 +659,7 @@ void test_syn_cache_environment_bypass_never_reads_or_writes(void)
     YEW_ASSERT_EQ_I64(setenv("YEW_NO_SYN_CACHE", "1", 1), 0);
     YEW_ASSERT_EQ_I64(unlink(f.cache), 0);
     yew_syn_compile_count_reset();
-    loaded = load_def(&f);
+    load_def(&loaded, &f);
     YEW_ASSERT_EQ_U64(yew_syn_compile_count(), 1U);
     YEW_ASSERT(access(f.cache, F_OK) != 0);
     loaded_free(&loaded);
@@ -679,7 +676,7 @@ void test_syn_cache_explicit_bypass_never_reads_or_writes(void)
     YEW_ASSERT_EQ_I64(unlink(f.cache), 0);
     yew_syn_cache_set_bypass(true);
     yew_syn_compile_count_reset();
-    loaded = load_def(&f);
+    load_def(&loaded, &f);
     YEW_ASSERT_EQ_U64(yew_syn_compile_count(), 1U);
     YEW_ASSERT(access(f.cache, F_OK) != 0);
     loaded_free(&loaded);
@@ -715,7 +712,7 @@ void test_syn_cache_write_failure_is_best_effort(void)
     write_exact(blocker, marker, sizeof(marker) - 1U);
     yew_test_capture_log();
     yew_syn_compile_count_reset();
-    loaded = load_def(&f);
+    load_def(&loaded, &f);
     YEW_ASSERT_EQ_U64(yew_syn_compile_count(), 1U);
     YEW_ASSERT(yew_test_log_contains(YEW_LOG_WARN,
                                      "syntax cache write failed"));
