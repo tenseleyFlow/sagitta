@@ -1,0 +1,121 @@
+# Rust syntax.
+#
+# Rust block comments nest.  `block_comment` recursively pushes itself;
+# the engine's depth/lost accounting therefore degrades excessive nesting
+# without losing balance after the matching closers.
+#
+# Raw strings store only the opening hash run in aux.  Their context has no
+# escape rule because backslashes have no special meaning in Rust raw strings.
+#
+# Lifetime/character ambiguity is resolved in this exact order: complete char
+# literal, `'static`/`'_`, named lifetime, lone quote.  A complete character
+# grammar cannot be confused with a valid lifetime, while malformed input is
+# bounded to its physical line.
+{
+    syntax: 1,
+
+    language: {
+        name:       "rust",
+        extensions: ["rs"],
+        priority:   20,
+        comment:    { line: "//", block: ["/*", "*/"] },
+    },
+
+    contexts: {
+        main: {
+            default: "text",
+            rules: [ "include:rust" ],
+        },
+
+        rust: {
+            rules: [
+                { match: "///.*$|//!.*$", attr: "comment.doc" },
+                { match: "//.*$", attr: "comment" },
+                { match: "/\\*", attr: "comment", push: "block_comment" },
+                { match: "#!?\\[", attr: "attribute", push: "attribute" },
+
+                { match: "b?r(#*)\"", attr: "string.special",
+                  set_aux: 1, push: "rawstr" },
+                { match: "b\"", attr: "string.special", push: "byte_string" },
+                { match: "\"", attr: "string", push: "string" },
+
+                # The pinned lifetime-vs-character ordering.
+                { match: "b?'([^'\\\\\\n]|\\\\(x[0-9a-fA-F]{2}|u\\{[0-9a-fA-F]{1,6}\\}|[nrt0'\"\\\\]))'",
+                  attr: "character" },
+                { match: "'(static|_)\\b", attr: "variable.param" },
+                { match: "'[A-Za-z_][A-Za-z0-9_]*", attr: "variable.param" },
+                { match: "'", attr: "error" },
+
+                { match: "r#[A-Za-z_][A-Za-z0-9_]*", attr: "variable" },
+                { match: "([A-Za-z_][A-Za-z0-9_]*)!",
+                  captures: { 1: "function.macro" }, consume: 1 },
+                { match: "\\b(pub|let|mut|static|const|unsafe|async)\\b",
+                  attr: "keyword.storage" },
+                { match: "\\b(if|else|match|loop|while|for|break|continue|return|yield|await)\\b",
+                  attr: "keyword.control" },
+                { match: "\\b(as|crate|dyn|enum|extern|fn|impl|in|macro_rules|mod|move|ref|self|Self|struct|super|trait|type|union|use|where|abstract|become|box|do|final|macro|override|priv|typeof|unsized|virtual|try)\\b",
+                  attr: "keyword" },
+                { match: "\\b(bool|char|str|i8|i16|i32|i64|i128|isize|u8|u16|u32|u64|u128|usize|f32|f64)\\b",
+                  attr: "type.builtin" },
+                { match: "\\b(true|false)\\b", attr: "boolean" },
+                { match: "\\b[A-Z][A-Z0-9_]*\\b", attr: "constant" },
+                { match: "\\b[A-Z][A-Za-z0-9]*\\b", attr: "type" },
+
+                { match: "\\b0[xX][0-9A-Fa-f]([0-9A-Fa-f_]*[0-9A-Fa-f])?([iu](8|16|32|64|128|size))?\\b",
+                  attr: "number" },
+                { match: "\\b0[oO][0-7]([0-7_]*[0-7])?([iu](8|16|32|64|128|size))?\\b",
+                  attr: "number" },
+                { match: "\\b0[bB][01]([01_]*[01])?([iu](8|16|32|64|128|size))?\\b",
+                  attr: "number" },
+                { match: "\\b[0-9]([0-9_]*[0-9])?(\\.[0-9]([0-9_]*[0-9])?)?([eE][+-]?[0-9]([0-9_]*[0-9])?)?(f32|f64|[iu](8|16|32|64|128|size))?\\b",
+                  attr: "number" },
+
+                { match: "(=>|->|::|\\.\\.=|\\.\\.|<<=|>>=|<<|>>|&&|\\|\\||==|!=|<=|>=|\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|[?+*/%&|^!~=<>-])",
+                  attr: "operator" },
+                { match: "[(){}\\[\\]]", attr: "punct.bracket" },
+                { match: "[,;:.]", attr: "punct.delim" },
+            ],
+        },
+
+        string: {
+            default: "string", at_eol: "pop", unit: "atom",
+            rules: [
+                { match: "\\\\(x[0-9A-Fa-f]{2}|u\\{[0-9A-Fa-f]{1,6}\\}|[nrt0'\"\\\\])",
+                  attr: "string.escape" },
+                { match: "\\\\.", attr: "error" },
+                { match: "\"", attr: "string", pop: 1 },
+            ],
+        },
+        byte_string: {
+            default: "string.special", at_eol: "pop", unit: "atom",
+            rules: [
+                { match: "\\\\(x[0-9A-Fa-f]{2}|[nrt0'\"\\\\])",
+                  attr: "string.escape" },
+                { match: "\\\\.", attr: "error" },
+                { match: "\"", attr: "string.special", pop: 1 },
+            ],
+        },
+        rawstr: {
+            default: "string.special", at_eol: "stay", unit: "atom",
+            rules: [
+                { aux: "literal", aux_pre: "\"", attr: "string.special",
+                  pop: 1 },
+            ],
+        },
+        block_comment: {
+            default: "comment", at_eol: "stay", unit: "atom",
+            rules: [
+                { match: "/\\*", attr: "comment", push: "block_comment" },
+                { match: "\\*/", attr: "comment", pop: 1 },
+                { match: "\\b(TODO|FIXME|XXX|HACK)\\b", attr: "comment.todo" },
+            ],
+        },
+        attribute: {
+            default: "attribute", at_eol: "stay", unit: "span",
+            rules: [
+                { match: "\\[", attr: "attribute", push: "attribute" },
+                { match: "\\]", attr: "attribute", pop: 1 },
+            ],
+        },
+    },
+}
