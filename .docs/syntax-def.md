@@ -1,8 +1,10 @@
 # Syntax Definition Author's Manual
 
 Syntax definitions are pure Fletch data. They declare how yew detects a
-language, moves between contexts, and assigns semantic attributes. They do
-not execute code, import modules, request capabilities, or name colors.
+language, moves between contexts, and assigns lexical style attributes from
+yew's closed vocabulary. They do not parse programs, analyze symbols, produce
+LSP semantic tokens, execute code, import modules, request capabilities, or
+name colors.
 
 Run the strict checker before committing a definition:
 
@@ -82,6 +84,68 @@ class use higher `priority`, then lexicographically smaller `name`.
 For a shebang, yew compares the interpreter basename. In
 `#!/usr/bin/env python3`, it skips `env` and compares `python3`; in
 `#!/bin/sh -e`, it compares `sh`.
+
+## Built-in pack
+
+`yew --clean syn list` reports exactly these 48 built-ins. The table is
+ordered by the base rows in `tests/syn/manifest.tsv`; the cohort records the
+sprint that supplied each definition.
+
+| Language | Runtime definition | Cohort |
+|---|---|---|
+| `c` | `c.fl` | `s41` |
+| `cmake` | `cmake.fl` | `s42_5` |
+| `cpp` | `cpp.fl` | `s42_5` |
+| `csharp` | `csharp.fl` | `s42_5` |
+| `css` | `css.fl` | `s42_5` |
+| `dart` | `dart.fl` | `s42_5` |
+| `diff` | `diff.fl` | `s42_5` |
+| `dockerfile` | `dockerfile.fl` | `s42_5` |
+| `fish` | `fish.fl` | `s42_5` |
+| `fletch` | `fletch.fl` | `s41` |
+| `fortran` | `fortran.fl` | `s42` |
+| `fortran-fixed` | `fortran_fixed.fl` | `s42` |
+| `go` | `go.fl` | `s42` |
+| `graphql` | `graphql.fl` | `s42_5` |
+| `haskell` | `haskell.fl` | `s42_5` |
+| `hcl` | `hcl.fl` | `s42_5` |
+| `html` | `html.fl` | `s42_5` |
+| `ini` | `ini.fl` | `s41` |
+| `java` | `java.fl` | `s42_5` |
+| `javascript` | `javascript.fl` | `s42` |
+| `json` | `json.fl` | `s42` |
+| `jsonc` | `jsonc.fl` | `s42` |
+| `julia` | `julia.fl` | `s42_5` |
+| `kotlin` | `kotlin.fl` | `s42_5` |
+| `lua` | `lua.fl` | `s42_5` |
+| `make` | `make.fl` | `s41` |
+| `markdown` | `markdown.fl` | `s41` |
+| `meson` | `meson.fl` | `s42_5` |
+| `nix` | `nix.fl` | `s42_5` |
+| `objective-c` | `objective_c.fl` | `s42_5` |
+| `ocaml` | `ocaml.fl` | `s42_5` |
+| `perl` | `perl.fl` | `s42_5` |
+| `powershell` | `powershell.fl` | `s42_5` |
+| `protobuf` | `protobuf.fl` | `s42_5` |
+| `python` | `python.fl` | `s42` |
+| `r` | `r.fl` | `s42_5` |
+| `ruby` | `ruby.fl` | `s42_5` |
+| `rust` | `rust.fl` | `s42` |
+| `sh` | `sh.fl` | `s41` |
+| `sql` | `sql.fl` | `s42_5` |
+| `swift` | `swift.fl` | `s42_5` |
+| `toml` | `toml.fl` | `s42` |
+| `typescript` | `typescript.fl` | `s42` |
+| `wolf` | `wolf.fl` | `s42_5` |
+| `xml` | `xml.fl` | `s42_5` |
+| `yaml` | `yaml.fl` | `s42` |
+| `zig` | `zig.fl` | `s42_5` |
+| `zsh` | `zsh.fl` | `s42_5` |
+
+Built-ins are installed runtime data and compile lazily. User definitions in
+`$XDG_CONFIG_HOME/yew/syntax/*.fl` use the same format and are discovered in
+bytewise filename order. They may add languages but may not shadow a built-in
+canonical name.
 
 ## Rules
 
@@ -276,6 +340,15 @@ that exceeds the frame budget is a warning. Runtime refusal remains the guard
 for capture-selected and user-installed definitions that were not statically
 available to the checker.
 
+The global registry and the per-buffer state have different jobs. All 48
+built-ins live in an exact-sized process-lifetime registry; there is no fixed
+32-definition ceiling. A buffer still encodes at most
+`YEW_SYN_DEF_MAX == 4` simultaneous definition levels and
+`YEW_SYN_DEPTH_MAX == 16` context frames at one source position, while up to
+`YEW_SYN_RESIDENT_MAX == 255` definitions may remain loaded for regions the
+buffer has visited. Growing the installed pack therefore does not enlarge
+the 84-byte `SynState` or the 4-byte-per-line entry array.
+
 > **Pitfall — the guest's fast-scan will skip straight over the exit
 > delimiter.** While a guest with `embed.end: "inline"` or `"inline-root"`
 > is eligible to exit, the scan mask must be the union of the guest context's
@@ -315,6 +388,17 @@ folding, comment strings, or LSP routing; and raising either stack cap without
 state-count measurements. Semantic LSP highlighting remains a post-1.0 buffer
 overlay rather than a per-region bridge feature; the binding Sprint 46/47
 contracts explicitly exclude semantic tokens from 1.0.
+
+These three surfaces are deliberately distinct:
+
+| Surface | What it knows | Runtime dependency |
+|---|---|---|
+| Lexical highlighting | bytes, regex rules, contexts, and lexical attributes for one definition | one built-in or user `.fl` definition |
+| Embedded highlighting | where a host delegates a bounded region to a guest lexical definition | the host/guest bridge and installed definitions |
+| Semantic language intelligence | symbols, types, diagnostics, completion, navigation, and hover | Sprint 44's symbol index and Sprints 45–47's LSP client |
+
+Semantic-token overlays remain explicitly post-1.0. They are not a hidden
+requirement for either ordinary or embedded lexical highlighting.
 
 ## Contexts
 
@@ -432,7 +516,7 @@ suspicious input.
 ## Starting point and bounded definitions
 
 For a new language, start with
-[`runtime/syntax/go.fl`](../../runtime/syntax/go.fl). Go is the intentionally
+[`runtime/syntax/go.fl`](../runtime/syntax/go.fl). Go is the intentionally
 ordinary template: a small root rule set, bounded string/comment contexts,
 captures plus `consume` for function names, explicit EOL policies, and no aux
 or token-history state. Use the larger definitions only when the language has
@@ -586,6 +670,32 @@ The stack column shows transitions while scanning and the line-end action.
 The trace demonstrates first-match ordering, capture styling, partial
 consumption, push/pop transitions, include placement, case folding, default
 attrs, and line-end cleanup.
+
+## Wolf worked example
+
+The shipped [`runtime/syntax/wolf.fl`](../runtime/syntax/wolf.fl) is the
+acceptance example for a state-heavy definition. Files ending in `.lu` select
+it directly; `yew --clean syn list` exposes the canonical name `wolf`.
+
+Wolf's ordinary double-quoted and triple-quoted strings are interpolated.
+`{{` and `}}` are consumed before a single brace can open or close an
+interpolation, and nested expression delimiters balance until the matching
+`}`. Raw strings use a captured hash run (`r"..."`, `r#"..."#`, and so on)
+with an aux matcher for the exact closer. Generalized `IDENT"..."` literals
+reuse raw-body semantics without interpolation. These are lexical states;
+the highlighter does not evaluate format specifications or literal contents.
+
+The `unsafe c { ... }` surface demonstrates an honest boundary. Wolf enters
+its own brace-balanced `inline_c_neutral` context, with C-shaped string,
+character, line-comment, and block-comment subcontexts so braces inside those
+lexemes do not affect depth. It deliberately does not delegate to `c.fl` or
+copy C keyword rules: the current bridge cannot use the matching arbitrary
+nested brace as a safe cross-definition exit, and ending the guest at the
+first `}` would be incorrect.
+
+Use Wolf when a language needs captured delimiters, nested interpolation,
+contextual words, or bounded neutral sublanguages. Use the smaller Go or INI
+definitions when it does not.
 
 ## Porting TextMate and Sublime grammars
 

@@ -7,9 +7,10 @@ editor. The implementation is C11 using only the C standard library and POSIX.
 
 yew is currently **pre-1.0**. Its terminal stack, deterministic renderer,
 PTY acceptance harness, piece-tree text engine, byte-exact file loading,
-durable save paths, and crash journal are in place. Interactive editing and
-Fletch execution land in later sprints; unimplemented surfaces fail with a
-message naming the sprint that provides them.
+durable save paths, crash journal, modal editing, Fletch configuration and
+macros, batch interface, and lexical syntax runtime are in place. Remaining
+future surfaces fail explicitly with a message naming the sprint that owns
+them.
 
 ## Your first Fletch program
 
@@ -25,6 +26,23 @@ ambient (spec §11), so a program says what it reaches for. `yew fl --help`
 lists the rest of the surface — `-c` to compile only, `--dump-ast`,
 `--dump-bytecode`, `--list-natives`, and `--caps`/`--origin` to run a script
 with fewer grants than the shell has.
+
+## Native syntax highlighting
+
+Yew ships exactly 48 lexical syntax modes. List the built-in pack without
+loading user configuration or definitions:
+
+```sh
+yew --clean syn list
+```
+
+Built-ins are pure Fletch data under `runtime/syntax/*.fl`; installed builds
+place them under `share/yew/runtime/syntax`. Add personal definitions as
+`$XDG_CONFIG_HOME/yew/syntax/*.fl`. Lexical highlighting, including the
+supported Markdown, HTML, Make, shell, and template embedding, needs no
+plugin, language server, external process, or rebuild. Symbol intelligence
+and LSP features are a separate campaign and are not required for native
+coloring.
 
 ## Build
 
