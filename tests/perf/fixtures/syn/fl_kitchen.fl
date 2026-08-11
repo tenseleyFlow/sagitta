@@ -1,0 +1,2000 @@
+bind "n" { motion "word" } bi
+macro m_00001() { edit { inse
+let value_00002 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00005() { edit { inse
+let value_00006 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00009() { edit { inse
+let value_00010 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00013() { edit { inse
+let value_00014 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00017() { edit { inse
+let value_00018 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00021() { edit { inse
+let value_00022 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00025() { edit { inse
+let value_00026 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00029() { edit { inse
+let value_00030 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00033() { edit { inse
+let value_00034 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00037() { edit { inse
+let value_00038 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00041() { edit { inse
+let value_00042 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00045() { edit { inse
+let value_00046 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00049() { edit { inse
+let value_00050 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00053() { edit { inse
+let value_00054 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00057() { edit { inse
+let value_00058 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00061() { edit { inse
+let value_00062 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00065() { edit { inse
+let value_00066 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00069() { edit { inse
+let value_00070 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00073() { edit { inse
+let value_00074 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00077() { edit { inse
+let value_00078 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00081() { edit { inse
+let value_00082 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00085() { edit { inse
+let value_00086 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00089() { edit { inse
+let value_00090 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00093() { edit { inse
+let value_00094 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00097() { edit { inse
+let value_00098 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00101() { edit { inse
+let value_00102 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00105() { edit { inse
+let value_00106 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00109() { edit { inse
+let value_00110 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00113() { edit { inse
+let value_00114 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00117() { edit { inse
+let value_00118 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00121() { edit { inse
+let value_00122 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00125() { edit { inse
+let value_00126 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00129() { edit { inse
+let value_00130 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00133() { edit { inse
+let value_00134 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00137() { edit { inse
+let value_00138 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00141() { edit { inse
+let value_00142 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00145() { edit { inse
+let value_00146 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00149() { edit { inse
+let value_00150 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00153() { edit { inse
+let value_00154 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00157() { edit { inse
+let value_00158 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00161() { edit { inse
+let value_00162 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00165() { edit { inse
+let value_00166 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00169() { edit { inse
+let value_00170 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00173() { edit { inse
+let value_00174 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00177() { edit { inse
+let value_00178 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00181() { edit { inse
+let value_00182 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00185() { edit { inse
+let value_00186 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00189() { edit { inse
+let value_00190 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00193() { edit { inse
+let value_00194 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00197() { edit { inse
+let value_00198 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00201() { edit { inse
+let value_00202 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00205() { edit { inse
+let value_00206 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00209() { edit { inse
+let value_00210 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00213() { edit { inse
+let value_00214 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00217() { edit { inse
+let value_00218 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00221() { edit { inse
+let value_00222 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00225() { edit { inse
+let value_00226 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00229() { edit { inse
+let value_00230 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00233() { edit { inse
+let value_00234 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00237() { edit { inse
+let value_00238 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00241() { edit { inse
+let value_00242 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00245() { edit { inse
+let value_00246 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00249() { edit { inse
+let value_00250 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00253() { edit { inse
+let value_00254 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00257() { edit { inse
+let value_00258 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00261() { edit { inse
+let value_00262 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00265() { edit { inse
+let value_00266 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00269() { edit { inse
+let value_00270 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00273() { edit { inse
+let value_00274 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00277() { edit { inse
+let value_00278 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00281() { edit { inse
+let value_00282 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00285() { edit { inse
+let value_00286 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00289() { edit { inse
+let value_00290 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00293() { edit { inse
+let value_00294 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00297() { edit { inse
+let value_00298 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00301() { edit { inse
+let value_00302 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00305() { edit { inse
+let value_00306 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00309() { edit { inse
+let value_00310 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00313() { edit { inse
+let value_00314 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00317() { edit { inse
+let value_00318 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00321() { edit { inse
+let value_00322 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00325() { edit { inse
+let value_00326 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00329() { edit { inse
+let value_00330 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00333() { edit { inse
+let value_00334 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00337() { edit { inse
+let value_00338 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00341() { edit { inse
+let value_00342 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00345() { edit { inse
+let value_00346 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00349() { edit { inse
+let value_00350 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00353() { edit { inse
+let value_00354 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00357() { edit { inse
+let value_00358 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00361() { edit { inse
+let value_00362 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00365() { edit { inse
+let value_00366 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00369() { edit { inse
+let value_00370 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00373() { edit { inse
+let value_00374 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00377() { edit { inse
+let value_00378 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00381() { edit { inse
+let value_00382 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00385() { edit { inse
+let value_00386 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00389() { edit { inse
+let value_00390 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00393() { edit { inse
+let value_00394 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00397() { edit { inse
+let value_00398 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00401() { edit { inse
+let value_00402 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00405() { edit { inse
+let value_00406 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00409() { edit { inse
+let value_00410 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00413() { edit { inse
+let value_00414 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00417() { edit { inse
+let value_00418 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00421() { edit { inse
+let value_00422 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00425() { edit { inse
+let value_00426 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00429() { edit { inse
+let value_00430 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00433() { edit { inse
+let value_00434 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00437() { edit { inse
+let value_00438 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00441() { edit { inse
+let value_00442 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00445() { edit { inse
+let value_00446 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00449() { edit { inse
+let value_00450 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00453() { edit { inse
+let value_00454 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00457() { edit { inse
+let value_00458 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00461() { edit { inse
+let value_00462 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00465() { edit { inse
+let value_00466 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00469() { edit { inse
+let value_00470 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00473() { edit { inse
+let value_00474 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00477() { edit { inse
+let value_00478 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00481() { edit { inse
+let value_00482 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00485() { edit { inse
+let value_00486 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00489() { edit { inse
+let value_00490 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00493() { edit { inse
+let value_00494 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00497() { edit { inse
+let value_00498 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00501() { edit { inse
+let value_00502 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00505() { edit { inse
+let value_00506 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00509() { edit { inse
+let value_00510 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00513() { edit { inse
+let value_00514 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00517() { edit { inse
+let value_00518 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00521() { edit { inse
+let value_00522 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00525() { edit { inse
+let value_00526 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00529() { edit { inse
+let value_00530 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00533() { edit { inse
+let value_00534 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00537() { edit { inse
+let value_00538 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00541() { edit { inse
+let value_00542 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00545() { edit { inse
+let value_00546 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00549() { edit { inse
+let value_00550 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00553() { edit { inse
+let value_00554 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00557() { edit { inse
+let value_00558 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00561() { edit { inse
+let value_00562 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00565() { edit { inse
+let value_00566 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00569() { edit { inse
+let value_00570 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00573() { edit { inse
+let value_00574 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00577() { edit { inse
+let value_00578 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00581() { edit { inse
+let value_00582 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00585() { edit { inse
+let value_00586 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00589() { edit { inse
+let value_00590 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00593() { edit { inse
+let value_00594 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00597() { edit { inse
+let value_00598 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00601() { edit { inse
+let value_00602 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00605() { edit { inse
+let value_00606 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00609() { edit { inse
+let value_00610 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00613() { edit { inse
+let value_00614 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00617() { edit { inse
+let value_00618 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00621() { edit { inse
+let value_00622 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00625() { edit { inse
+let value_00626 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00629() { edit { inse
+let value_00630 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00633() { edit { inse
+let value_00634 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00637() { edit { inse
+let value_00638 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00641() { edit { inse
+let value_00642 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00645() { edit { inse
+let value_00646 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00649() { edit { inse
+let value_00650 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00653() { edit { inse
+let value_00654 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00657() { edit { inse
+let value_00658 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00661() { edit { inse
+let value_00662 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00665() { edit { inse
+let value_00666 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00669() { edit { inse
+let value_00670 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00673() { edit { inse
+let value_00674 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00677() { edit { inse
+let value_00678 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00681() { edit { inse
+let value_00682 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00685() { edit { inse
+let value_00686 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00689() { edit { inse
+let value_00690 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00693() { edit { inse
+let value_00694 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00697() { edit { inse
+let value_00698 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00701() { edit { inse
+let value_00702 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00705() { edit { inse
+let value_00706 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00709() { edit { inse
+let value_00710 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00713() { edit { inse
+let value_00714 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00717() { edit { inse
+let value_00718 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00721() { edit { inse
+let value_00722 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00725() { edit { inse
+let value_00726 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00729() { edit { inse
+let value_00730 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00733() { edit { inse
+let value_00734 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00737() { edit { inse
+let value_00738 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00741() { edit { inse
+let value_00742 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00745() { edit { inse
+let value_00746 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00749() { edit { inse
+let value_00750 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00753() { edit { inse
+let value_00754 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00757() { edit { inse
+let value_00758 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00761() { edit { inse
+let value_00762 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00765() { edit { inse
+let value_00766 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00769() { edit { inse
+let value_00770 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00773() { edit { inse
+let value_00774 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00777() { edit { inse
+let value_00778 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00781() { edit { inse
+let value_00782 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00785() { edit { inse
+let value_00786 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00789() { edit { inse
+let value_00790 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00793() { edit { inse
+let value_00794 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00797() { edit { inse
+let value_00798 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00801() { edit { inse
+let value_00802 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00805() { edit { inse
+let value_00806 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00809() { edit { inse
+let value_00810 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00813() { edit { inse
+let value_00814 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00817() { edit { inse
+let value_00818 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00821() { edit { inse
+let value_00822 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00825() { edit { inse
+let value_00826 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00829() { edit { inse
+let value_00830 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00833() { edit { inse
+let value_00834 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00837() { edit { inse
+let value_00838 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00841() { edit { inse
+let value_00842 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00845() { edit { inse
+let value_00846 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00849() { edit { inse
+let value_00850 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00853() { edit { inse
+let value_00854 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00857() { edit { inse
+let value_00858 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00861() { edit { inse
+let value_00862 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00865() { edit { inse
+let value_00866 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00869() { edit { inse
+let value_00870 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00873() { edit { inse
+let value_00874 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00877() { edit { inse
+let value_00878 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00881() { edit { inse
+let value_00882 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00885() { edit { inse
+let value_00886 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00889() { edit { inse
+let value_00890 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00893() { edit { inse
+let value_00894 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00897() { edit { inse
+let value_00898 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00901() { edit { inse
+let value_00902 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00905() { edit { inse
+let value_00906 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00909() { edit { inse
+let value_00910 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00913() { edit { inse
+let value_00914 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00917() { edit { inse
+let value_00918 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00921() { edit { inse
+let value_00922 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00925() { edit { inse
+let value_00926 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00929() { edit { inse
+let value_00930 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00933() { edit { inse
+let value_00934 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00937() { edit { inse
+let value_00938 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00941() { edit { inse
+let value_00942 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00945() { edit { inse
+let value_00946 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00949() { edit { inse
+let value_00950 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00953() { edit { inse
+let value_00954 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00957() { edit { inse
+let value_00958 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00961() { edit { inse
+let value_00962 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00965() { edit { inse
+let value_00966 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00969() { edit { inse
+let value_00970 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00973() { edit { inse
+let value_00974 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00977() { edit { inse
+let value_00978 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00981() { edit { inse
+let value_00982 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00985() { edit { inse
+let value_00986 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00989() { edit { inse
+let value_00990 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00993() { edit { inse
+let value_00994 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_00997() { edit { inse
+let value_00998 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01001() { edit { inse
+let value_01002 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01005() { edit { inse
+let value_01006 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01009() { edit { inse
+let value_01010 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01013() { edit { inse
+let value_01014 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01017() { edit { inse
+let value_01018 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01021() { edit { inse
+let value_01022 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01025() { edit { inse
+let value_01026 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01029() { edit { inse
+let value_01030 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01033() { edit { inse
+let value_01034 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01037() { edit { inse
+let value_01038 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01041() { edit { inse
+let value_01042 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01045() { edit { inse
+let value_01046 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01049() { edit { inse
+let value_01050 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01053() { edit { inse
+let value_01054 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01057() { edit { inse
+let value_01058 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01061() { edit { inse
+let value_01062 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01065() { edit { inse
+let value_01066 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01069() { edit { inse
+let value_01070 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01073() { edit { inse
+let value_01074 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01077() { edit { inse
+let value_01078 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01081() { edit { inse
+let value_01082 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01085() { edit { inse
+let value_01086 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01089() { edit { inse
+let value_01090 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01093() { edit { inse
+let value_01094 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01097() { edit { inse
+let value_01098 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01101() { edit { inse
+let value_01102 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01105() { edit { inse
+let value_01106 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01109() { edit { inse
+let value_01110 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01113() { edit { inse
+let value_01114 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01117() { edit { inse
+let value_01118 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01121() { edit { inse
+let value_01122 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01125() { edit { inse
+let value_01126 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01129() { edit { inse
+let value_01130 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01133() { edit { inse
+let value_01134 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01137() { edit { inse
+let value_01138 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01141() { edit { inse
+let value_01142 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01145() { edit { inse
+let value_01146 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01149() { edit { inse
+let value_01150 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01153() { edit { inse
+let value_01154 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01157() { edit { inse
+let value_01158 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01161() { edit { inse
+let value_01162 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01165() { edit { inse
+let value_01166 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01169() { edit { inse
+let value_01170 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01173() { edit { inse
+let value_01174 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01177() { edit { inse
+let value_01178 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01181() { edit { inse
+let value_01182 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01185() { edit { inse
+let value_01186 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01189() { edit { inse
+let value_01190 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01193() { edit { inse
+let value_01194 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01197() { edit { inse
+let value_01198 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01201() { edit { inse
+let value_01202 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01205() { edit { inse
+let value_01206 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01209() { edit { inse
+let value_01210 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01213() { edit { inse
+let value_01214 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01217() { edit { inse
+let value_01218 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01221() { edit { inse
+let value_01222 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01225() { edit { inse
+let value_01226 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01229() { edit { inse
+let value_01230 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01233() { edit { inse
+let value_01234 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01237() { edit { inse
+let value_01238 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01241() { edit { inse
+let value_01242 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01245() { edit { inse
+let value_01246 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01249() { edit { inse
+let value_01250 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01253() { edit { inse
+let value_01254 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01257() { edit { inse
+let value_01258 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01261() { edit { inse
+let value_01262 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01265() { edit { inse
+let value_01266 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01269() { edit { inse
+let value_01270 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01273() { edit { inse
+let value_01274 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01277() { edit { inse
+let value_01278 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01281() { edit { inse
+let value_01282 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01285() { edit { inse
+let value_01286 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01289() { edit { inse
+let value_01290 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01293() { edit { inse
+let value_01294 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01297() { edit { inse
+let value_01298 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01301() { edit { inse
+let value_01302 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01305() { edit { inse
+let value_01306 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01309() { edit { inse
+let value_01310 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01313() { edit { inse
+let value_01314 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01317() { edit { inse
+let value_01318 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01321() { edit { inse
+let value_01322 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01325() { edit { inse
+let value_01326 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01329() { edit { inse
+let value_01330 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01333() { edit { inse
+let value_01334 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01337() { edit { inse
+let value_01338 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01341() { edit { inse
+let value_01342 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01345() { edit { inse
+let value_01346 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01349() { edit { inse
+let value_01350 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01353() { edit { inse
+let value_01354 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01357() { edit { inse
+let value_01358 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01361() { edit { inse
+let value_01362 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01365() { edit { inse
+let value_01366 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01369() { edit { inse
+let value_01370 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01373() { edit { inse
+let value_01374 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01377() { edit { inse
+let value_01378 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01381() { edit { inse
+let value_01382 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01385() { edit { inse
+let value_01386 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } bi
+macro m_01389() { edit { inse
+let value_01390 = { key: [1, 
+H(1) -> repeat(2) -> motion("
+bind "n" { motion "word" } b
+macro m_01393() { edit { ins
+let value_01394 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01397() { edit { ins
+let value_01398 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01401() { edit { ins
+let value_01402 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01405() { edit { ins
+let value_01406 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01409() { edit { ins
+let value_01410 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01413() { edit { ins
+let value_01414 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01417() { edit { ins
+let value_01418 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01421() { edit { ins
+let value_01422 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01425() { edit { ins
+let value_01426 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01429() { edit { ins
+let value_01430 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01433() { edit { ins
+let value_01434 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01437() { edit { ins
+let value_01438 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01441() { edit { ins
+let value_01442 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01445() { edit { ins
+let value_01446 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01449() { edit { ins
+let value_01450 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01453() { edit { ins
+let value_01454 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01457() { edit { ins
+let value_01458 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01461() { edit { ins
+let value_01462 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01465() { edit { ins
+let value_01466 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01469() { edit { ins
+let value_01470 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01473() { edit { ins
+let value_01474 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01477() { edit { ins
+let value_01478 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01481() { edit { ins
+let value_01482 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01485() { edit { ins
+let value_01486 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01489() { edit { ins
+let value_01490 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01493() { edit { ins
+let value_01494 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01497() { edit { ins
+let value_01498 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01501() { edit { ins
+let value_01502 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01505() { edit { ins
+let value_01506 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01509() { edit { ins
+let value_01510 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01513() { edit { ins
+let value_01514 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01517() { edit { ins
+let value_01518 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01521() { edit { ins
+let value_01522 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01525() { edit { ins
+let value_01526 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01529() { edit { ins
+let value_01530 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01533() { edit { ins
+let value_01534 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01537() { edit { ins
+let value_01538 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01541() { edit { ins
+let value_01542 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01545() { edit { ins
+let value_01546 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01549() { edit { ins
+let value_01550 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01553() { edit { ins
+let value_01554 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01557() { edit { ins
+let value_01558 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01561() { edit { ins
+let value_01562 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01565() { edit { ins
+let value_01566 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01569() { edit { ins
+let value_01570 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01573() { edit { ins
+let value_01574 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01577() { edit { ins
+let value_01578 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01581() { edit { ins
+let value_01582 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01585() { edit { ins
+let value_01586 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01589() { edit { ins
+let value_01590 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01593() { edit { ins
+let value_01594 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01597() { edit { ins
+let value_01598 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01601() { edit { ins
+let value_01602 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01605() { edit { ins
+let value_01606 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01609() { edit { ins
+let value_01610 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01613() { edit { ins
+let value_01614 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01617() { edit { ins
+let value_01618 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01621() { edit { ins
+let value_01622 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01625() { edit { ins
+let value_01626 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01629() { edit { ins
+let value_01630 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01633() { edit { ins
+let value_01634 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01637() { edit { ins
+let value_01638 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01641() { edit { ins
+let value_01642 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01645() { edit { ins
+let value_01646 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01649() { edit { ins
+let value_01650 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01653() { edit { ins
+let value_01654 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01657() { edit { ins
+let value_01658 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01661() { edit { ins
+let value_01662 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01665() { edit { ins
+let value_01666 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01669() { edit { ins
+let value_01670 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01673() { edit { ins
+let value_01674 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01677() { edit { ins
+let value_01678 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01681() { edit { ins
+let value_01682 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01685() { edit { ins
+let value_01686 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01689() { edit { ins
+let value_01690 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01693() { edit { ins
+let value_01694 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01697() { edit { ins
+let value_01698 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01701() { edit { ins
+let value_01702 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01705() { edit { ins
+let value_01706 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01709() { edit { ins
+let value_01710 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01713() { edit { ins
+let value_01714 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01717() { edit { ins
+let value_01718 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01721() { edit { ins
+let value_01722 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01725() { edit { ins
+let value_01726 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01729() { edit { ins
+let value_01730 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01733() { edit { ins
+let value_01734 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01737() { edit { ins
+let value_01738 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01741() { edit { ins
+let value_01742 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01745() { edit { ins
+let value_01746 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01749() { edit { ins
+let value_01750 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01753() { edit { ins
+let value_01754 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01757() { edit { ins
+let value_01758 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01761() { edit { ins
+let value_01762 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01765() { edit { ins
+let value_01766 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01769() { edit { ins
+let value_01770 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01773() { edit { ins
+let value_01774 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01777() { edit { ins
+let value_01778 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01781() { edit { ins
+let value_01782 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01785() { edit { ins
+let value_01786 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01789() { edit { ins
+let value_01790 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01793() { edit { ins
+let value_01794 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01797() { edit { ins
+let value_01798 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01801() { edit { ins
+let value_01802 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01805() { edit { ins
+let value_01806 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01809() { edit { ins
+let value_01810 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01813() { edit { ins
+let value_01814 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01817() { edit { ins
+let value_01818 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01821() { edit { ins
+let value_01822 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01825() { edit { ins
+let value_01826 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01829() { edit { ins
+let value_01830 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01833() { edit { ins
+let value_01834 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01837() { edit { ins
+let value_01838 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01841() { edit { ins
+let value_01842 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01845() { edit { ins
+let value_01846 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01849() { edit { ins
+let value_01850 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01853() { edit { ins
+let value_01854 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01857() { edit { ins
+let value_01858 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01861() { edit { ins
+let value_01862 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01865() { edit { ins
+let value_01866 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01869() { edit { ins
+let value_01870 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01873() { edit { ins
+let value_01874 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01877() { edit { ins
+let value_01878 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01881() { edit { ins
+let value_01882 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01885() { edit { ins
+let value_01886 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01889() { edit { ins
+let value_01890 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01893() { edit { ins
+let value_01894 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01897() { edit { ins
+let value_01898 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01901() { edit { ins
+let value_01902 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01905() { edit { ins
+let value_01906 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01909() { edit { ins
+let value_01910 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01913() { edit { ins
+let value_01914 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01917() { edit { ins
+let value_01918 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01921() { edit { ins
+let value_01922 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01925() { edit { ins
+let value_01926 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01929() { edit { ins
+let value_01930 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01933() { edit { ins
+let value_01934 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01937() { edit { ins
+let value_01938 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01941() { edit { ins
+let value_01942 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01945() { edit { ins
+let value_01946 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01949() { edit { ins
+let value_01950 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01953() { edit { ins
+let value_01954 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01957() { edit { ins
+let value_01958 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01961() { edit { ins
+let value_01962 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01965() { edit { ins
+let value_01966 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01969() { edit { ins
+let value_01970 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01973() { edit { ins
+let value_01974 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01977() { edit { ins
+let value_01978 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01981() { edit { ins
+let value_01982 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01985() { edit { ins
+let value_01986 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01989() { edit { ins
+let value_01990 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01993() { edit { ins
+let value_01994 = { key: [1,
+H(1) -> repeat(2) -> motion(
+bind "n" { motion "word" } b
+macro m_01997() { edit { ins
+let value_01998 = { key: [1,
+H(1) -> repeat(2) -> motion(
