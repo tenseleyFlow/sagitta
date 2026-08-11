@@ -4554,6 +4554,43 @@ static const char *s41_kitchen_path(PtyCtx *c)
     return NULL;
 }
 
+static void s41_wait_syn_settled(PtyCtx *c)
+{
+    bool clear_once = false;
+
+    /* The full-file wave is intentionally incremental.  Instrumented
+     * builds can leave gaps longer than the generic quiet window between
+     * slices, so silence alone is not proof that the footer reached its
+     * final state.  Require the visible pending badge to disappear and
+     * remain absent for a second conservative settle window. */
+    while (!c->failed) {
+        Bytebuf screen;
+        bool pending;
+        bool degraded;
+
+        ptc_settle(c, 250);
+        if (c->failed)
+            return;
+        bytebuf_init(&screen);
+        snapshot_write(&c->vt, &screen);
+        bytebuf_push_u8(&screen, 0U);
+        pending = strstr((const char *)screen.data, "syn\xE2\x80\xA6") != NULL;
+        degraded = strstr((const char *)screen.data, "syn!") != NULL;
+        bytebuf_free(&screen);
+        ptc_check(c, !degraded,
+                  "syntax degraded while waiting for the completed viewport");
+        if (c->failed)
+            return;
+        if (pending) {
+            clear_once = false;
+            continue;
+        }
+        if (clear_once)
+            return;
+        clear_once = true;
+    }
+}
+
 static void case_s41_kitchen(PtyCtx *c)
 {
     const char *path = s41_kitchen_path(c);
@@ -4563,8 +4600,8 @@ static void case_s41_kitchen(PtyCtx *c)
     if (path == NULL)
         return;
     ptc_spawn(c, ptc_yew_bin(c), "--theme", theme, path, NULL);
-    ptc_settle(c, 0);
     ptc_wait_kitty_push(c, 21U);
+    s41_wait_syn_settled(c);
     if (strstr(c->test->name, "colors_256") != NULL ||
         strstr(c->test->name, "colors_16") != NULL) {
         ptc_check(c, !raw_sgr_has_param_since(c, 0U, 58U),
@@ -4595,8 +4632,8 @@ static bool s41_fixture(PtyCtx *c, const char *suffix, const u8 *bytes,
 static void s41_open_fixture(PtyCtx *c, const char *theme, const char *path)
 {
     ptc_spawn(c, ptc_yew_bin(c), "--theme", theme, path, NULL);
-    ptc_settle(c, 0);
     ptc_wait_kitty_push(c, 21U);
+    s41_wait_syn_settled(c);
 }
 
 static void case_s41_underline_error(PtyCtx *c)
@@ -4746,8 +4783,8 @@ static void case_s41_cold_warm_identical(PtyCtx *c)
     ptc_mark_resume(c);
     force_quit(c);
     ptc_resume(c, ptc_yew_bin(c), "--theme", "quiver-dark", path, NULL);
-    ptc_settle(c, 0);
     ptc_wait_kitty_push(c, 21U);
+    s41_wait_syn_settled(c);
     ptc_check_resume_exact(c);
     ptc_snapshot(c, "s41_cold_warm_identical");
     force_quit(c);
@@ -4831,7 +4868,8 @@ static void case_s37_batch_never_touches_the_terminal(PtyCtx *c)
     ptc_spawn(c, ptc_yew_bin(c), "--clean", "--batch", path, NULL);
     ptc_expect_exit(c, 0);
     ptc_check_termios_unchanged(c);
-    ptc_check(c, memchr(c->raw.data, '\x1b', c->raw.len) == NULL,
+    ptc_check(c, c->raw.len == 0U ||
+                     memchr(c->raw.data, '\x1b', c->raw.len) == NULL,
               "yew --batch emitted terminal setup or restore bytes");
     ptc_snapshot(c, "s37_batch_no_tty");
 }
