@@ -1698,6 +1698,7 @@ void test_syn_jsvalue_nonvalue_tokens_choose_regex(void);
 void test_syn_jsvalue_known_failures_are_line_bounded(void);
 void test_syn_depth_rust_twenty_nested_comments_balance_exactly(void);
 void test_syn_depth_rust_recovers_after_shallow_edit(void);
+void test_syn_all_eight_languages_four_seeds_100k_edits(void);
 void test_syn_fletch_spec14_tokens_match_runtime_definition(void);
 void test_theme_defaults_compile_with_full_attr_coverage(void);
 void test_theme_partial_fallback_and_colour_forms(void);

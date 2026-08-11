@@ -1660,6 +1660,7 @@ const YewTest yew_tests[] = {
     T(syn_jsvalue_known_failures_are_line_bounded),
     T(syn_depth_rust_twenty_nested_comments_balance_exactly),
     T(syn_depth_rust_recovers_after_shallow_edit),
+    T(syn_all_eight_languages_four_seeds_100k_edits),
     T(syn_fletch_spec14_tokens_match_runtime_definition),
     T(theme_defaults_compile_with_full_attr_coverage),
     T(theme_partial_fallback_and_colour_forms),
