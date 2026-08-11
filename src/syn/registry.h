@@ -25,6 +25,8 @@ typedef struct BuiltinRegistry {
 typedef struct SynDetectEntry {
     const char *key;
     u32 lang;
+    u32 key_len;
+    u32 split;
 } SynDetectEntry;
 
 typedef struct SynDetectIndex {
@@ -40,6 +42,11 @@ typedef struct SynDetectIndex {
     size_t nfirst_lines;
 } SynDetectIndex;
 
+typedef struct SynDetectRun {
+    const SynDetectEntry *entry;
+    size_t len;
+} SynDetectRun;
+
 typedef SynDef *(*BuiltinRegistryLoadFn)(Arena *arena, DiagCtx *dc,
                                         const SynLangSeed *seed, void *ctx);
 
@@ -54,5 +61,7 @@ SynDef *yew_syn_builtin_registry_load(BuiltinRegistry *registry,
                                       void *ctx);
 YewRe *yew_syn_builtin_registry_first_line(BuiltinRegistry *registry,
                                            size_t ordinal);
+SynDetectRun yew_syn_detect_find(const SynDetectEntry *entries, size_t len,
+                                 const char *key, size_t key_len, bool fold);
 
 #endif

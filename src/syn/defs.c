@@ -113,6 +113,7 @@ typedef struct DefMeta {
     bool builtin;
     bool retired;
     struct DefMeta *next;
+    struct DefMeta *user_next;
 } DefMeta;
 
 typedef struct DiscoveredDef {
@@ -125,6 +126,7 @@ typedef struct DiscoveredDef {
 } DiscoveredDef;
 
 static DefMeta *metas;
+static DefMeta *user_metas;
 static DiscoveredDef *discovered_defs;
 static DiscoveredDef *retired_defs;
 static u64 compile_count;
@@ -135,6 +137,32 @@ static BuiltinRegistry builtin_registry;
 
 static void discover_user_definitions(void);
 static bool builtin_name_exists(const char *name);
+
+static void meta_link(DefMeta *meta)
+{
+    meta->next = metas;
+    metas = meta;
+    if (!meta->builtin) {
+        meta->user_next = user_metas;
+        user_metas = meta;
+    }
+}
+
+static void meta_unlink_user(DefMeta *meta)
+{
+    DefMeta **link;
+
+    if (meta->builtin)
+        return;
+    link = &user_metas;
+    while (*link != NULL) {
+        if (*link == meta) {
+            *link = meta->user_next;
+            return;
+        }
+        link = &(*link)->user_next;
+    }
+}
 
 static DefMeta *meta_for(const SynDef *def)
 {
@@ -1607,8 +1635,7 @@ static void register_meta(Compile *c, SynDef *def, SynLangDesc *lang,
                  "invalid first_line pattern at offset %u: %s", err.off,
                  err.msg == NULL ? "compile failed" : err.msg);
     }
-    m->next = metas;
-    metas = m;
+    meta_link(m);
 }
 
 SynDef *yew_syn_def_compile(Arena *a, DiagCtx *dc, const u8 *src, size_t n,
@@ -1812,6 +1839,7 @@ void yew_syn_def_dispose(SynDef *def)
             continue;
         }
         *link = m->next;
+        meta_unlink_user(m);
         if (m->aux != NULL)
             interner_free(m->aux);
         yew_syn_engine_free(m->engine);
@@ -2713,8 +2741,7 @@ static SynDef *syn_blob_unpack(Arena *arena, const u8 *data, size_t len,
     m->def = def;
     m->lang.id = language_id(def->name);
     (void)cached_id;
-    m->next = metas;
-    metas = m;
+    meta_link(m);
     return def;
 
 fail:
@@ -3299,21 +3326,40 @@ static bool better(const SynLangDesc *a, const SynLangDesc *b)
 
 typedef bool (*LangPred)(const SynLangDesc *, void *);
 
-static const SynLangDesc *best_language(LangPred pred, void *ctx)
+static const SynLangDesc *builtin_desc_for_id(u32 lang)
+{
+    size_t ordinal;
+
+    if (lang == YEW_LANG_NONE)
+        return NULL;
+    ordinal = (size_t)lang - 1U;
+    if (ordinal >= yew_syn_builtin_langs_len ||
+        yew_syn_builtin_langs[ordinal].id != lang)
+        return NULL;
+    return builtin_desc_at(ordinal);
+}
+
+static const SynLangDesc *best_detect_run(SynDetectRun run)
 {
     const SynLangDesc *best = NULL;
-    DefMeta *m;
     size_t i;
 
-    for (i = 0U; i < yew_syn_builtin_langs_len; i++) {
-        const SynLangDesc *d = builtin_desc_at(i);
+    for (i = 0U; i < run.len; i++) {
+        const SynLangDesc *lang = builtin_desc_for_id(run.entry[i].lang);
 
-        if (d != NULL && pred(d, ctx) && better(d, best))
-            best = d;
+        if (lang != NULL && better(lang, best))
+            best = lang;
     }
-    for (m = metas; m != NULL; m = m->next) {
-        if (!m->builtin && !m->retired && pred(&m->lang, ctx) &&
-            better(&m->lang, best))
+    return best;
+}
+
+static const SynLangDesc *best_user_language(LangPred pred, void *ctx,
+                                              const SynLangDesc *best)
+{
+    DefMeta *m;
+
+    for (m = user_metas; m != NULL; m = m->user_next) {
+        if (!m->retired && pred(&m->lang, ctx) && better(&m->lang, best))
             best = &m->lang;
     }
     return best;
@@ -3374,17 +3420,54 @@ static void path_match_consider(PathMatch *match, const SynLangDesc *lang)
 static const SynLangDesc *path_language(const char *base)
 {
     PathMatch match = {base, NULL, NULL, NULL, 0U};
+    SynDetectRun run;
     DefMeta *m;
     size_t i;
+    size_t base_len = strlen(base);
+    const char *dot;
 
-    for (i = 0U; i < yew_syn_builtin_langs_len; i++) {
-        const SynLangDesc *lang = builtin_desc_at(i);
+    run = yew_syn_detect_find(yew_syn_builtin_detect_index.exact,
+                              yew_syn_builtin_detect_index.nexact,
+                              base, base_len, false);
+    match.exact = best_detect_run(run);
+    for (i = 0U; i < yew_syn_builtin_detect_index.nglobs; i++) {
+        const SynDetectEntry *entry =
+            &yew_syn_builtin_detect_index.globs[i];
+        const SynLangDesc *lang;
 
-        if (lang != NULL)
-            path_match_consider(&match, lang);
+        size_t prefix = entry->split;
+        size_t suffix = entry->key_len - prefix - 1U;
+
+        if (base_len < prefix + suffix ||
+            memcmp(entry->key, base, prefix) != 0 ||
+            memcmp(entry->key + prefix + 1U,
+                   base + base_len - suffix, suffix) != 0)
+            continue;
+        lang = builtin_desc_for_id(entry->lang);
+        if (lang != NULL && better(lang, match.glob))
+            match.glob = lang;
     }
-    for (m = metas; m != NULL; m = m->next) {
-        if (!m->builtin && !m->retired)
+    dot = strchr(base, '.');
+    while (dot != NULL) {
+        const char *extension = dot + 1;
+        size_t extension_len = (size_t)(base + base_len - extension);
+        const SynLangDesc *lang;
+
+        run = yew_syn_detect_find(yew_syn_builtin_detect_index.extensions,
+                                  yew_syn_builtin_detect_index.nextensions,
+                                  extension, extension_len, true);
+        lang = best_detect_run(run);
+        if (lang != NULL &&
+            (extension_len > match.extension_len ||
+             (extension_len == match.extension_len &&
+              better(lang, match.extension)))) {
+            match.extension_len = extension_len;
+            match.extension = lang;
+        }
+        dot = strchr(dot + 1, '.');
+    }
+    for (m = user_metas; m != NULL; m = m->user_next) {
+        if (!m->retired)
             path_match_consider(&match, &m->lang);
     }
     if (match.exact != NULL)
@@ -3459,7 +3542,7 @@ static YewRe *detection_re(const SynLangDesc *lang)
     DefMeta *m;
     size_t i;
 
-    for (m = metas; m != NULL; m = m->next) {
+    for (m = user_metas; m != NULL; m = m->user_next) {
         if (!m->retired && m->lang.id == lang->id &&
             m->first_line_re != NULL)
             return m->first_line_re;
@@ -3506,12 +3589,29 @@ u32 yew_syn_lang_for(const char *path, const u8 *line1, u32 l1_len)
     if (found != NULL)
         return found->id;
     if (parse_shebang(line1, l1_len, &shebang)) {
-        found = best_language(shebang_pred, &shebang);
+        SynDetectRun run = yew_syn_detect_find(
+            yew_syn_builtin_detect_index.shebangs,
+            yew_syn_builtin_detect_index.nshebangs,
+            shebang.name, shebang.len, true);
+
+        found = best_detect_run(run);
+        found = best_user_language(shebang_pred, &shebang, found);
         if (found != NULL)
             return found->id;
     }
     if (line1 != NULL) {
-        found = best_language(first_line_pred, &first);
+        size_t i;
+
+        found = NULL;
+        for (i = 0U; i < yew_syn_builtin_detect_index.nfirst_lines; i++) {
+            const SynLangDesc *lang = builtin_desc_for_id(
+                yew_syn_builtin_detect_index.first_lines[i].lang);
+
+            if (lang != NULL && first_line_pred(lang, &first) &&
+                better(lang, found))
+                found = lang;
+        }
+        found = best_user_language(first_line_pred, &first, found);
         if (found != NULL)
             return found->id;
     }

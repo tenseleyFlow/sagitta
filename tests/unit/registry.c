@@ -1689,6 +1689,8 @@ const YewTest yew_tests[] = {
     T(syn_detect_shebang_precedes_first_line_regex),
     T(syn_detect_first_line_regex_is_last_positive_stage),
     T(syn_detect_unknown_path_and_empty_input_return_none),
+    T(syn_detect_indexes_scale_without_definition_scans),
+    T(syn_detect_index_returns_the_complete_duplicate_key_run),
     T(syn_fortran_twenty_hand_scored_inputs),
     T(syn_fortran_tie_limit_and_column_signal_are_pinned),
     T(syn_jsvalue_value_tokens_choose_division),

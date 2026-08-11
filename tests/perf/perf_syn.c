@@ -73,7 +73,8 @@ enum {
     PERF_SYN_CASE_COUNT
 };
 
-#define PERF_SYN_DETECT_LIMIT_NS UINT64_C(5000000)
+#define PERF_SYN_DETECT_HARD_LIMIT_NS UINT64_C(5000000)
+#define PERF_SYN_DETECT_P99_LIMIT_NS UINT64_C(1200000)
 #define PERF_SYN_COMPILE_LIMIT_NS UINT64_C(3000000)
 #define PERF_SYN_CACHE_LIMIT_NS UINT64_C(200000)
 #define PERF_SYN_BLOCK_LIMIT_NS UINT64_C(5000000)
@@ -2085,6 +2086,7 @@ int main(int argc, char **argv)
         (void)fprintf(stderr, "perf_syn: unknown argument\n");
         return 2;
     }
+    yew_syn_discovery_set_bypass(true);
     if (!init_cases(cases, case_names)) {
         (void)fprintf(stderr, "perf_syn: case name initialization failed\n");
         return 2;
@@ -2392,7 +2394,9 @@ int main(int argc, char **argv)
             regression_seen = true;
     }
     if (status != 2) {
-        bool detect_regression = detect.median > PERF_SYN_DETECT_LIMIT_NS;
+        bool detect_regression =
+            detect.median > PERF_SYN_DETECT_HARD_LIMIT_NS ||
+            detect.p99 > PERF_SYN_DETECT_P99_LIMIT_NS;
         bool compile_regression = compile.median > PERF_SYN_COMPILE_LIMIT_NS;
         bool cache_regression = cache.median > PERF_SYN_CACHE_LIMIT_NS;
         bool warm_start_regression =

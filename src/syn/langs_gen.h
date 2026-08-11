@@ -3,9 +3,10 @@
 
 #include <stddef.h>
 
-#include "syn/defs.h"
+#include "syn/registry.h"
 
 extern const SynLangSeed yew_syn_builtin_langs[];
 extern const size_t yew_syn_builtin_langs_len;
+extern const SynDetectIndex yew_syn_builtin_detect_index;
 
 #endif

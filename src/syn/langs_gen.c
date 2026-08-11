@@ -437,3 +437,112 @@ const SynLangSeed yew_syn_builtin_langs[] = {
 
 const size_t yew_syn_builtin_langs_len =
     sizeof(yew_syn_builtin_langs) / sizeof(yew_syn_builtin_langs[0]);
+
+static const SynDetectEntry builtin_exact[] = {
+    {".bash_profile", 16U, 13U, 0U},
+    {".bashrc", 16U, 7U, 0U},
+    {".editorconfig", 8U, 13U, 0U},
+    {".eslintrc.json", 11U, 14U, 0U},
+    {".profile", 16U, 8U, 0U},
+    {"CHANGELOG", 13U, 9U, 0U},
+    {"CONTRIBUTING.md", 13U, 15U, 0U},
+    {"Cargo.lock", 17U, 10U, 0U},
+    {"GNUmakefile", 12U, 11U, 0U},
+    {"Makefile", 12U, 8U, 0U},
+    {"PKGBUILD", 16U, 8U, 0U},
+    {"Pipfile", 17U, 7U, 0U},
+    {"README", 13U, 6U, 0U},
+    {"SConscript", 14U, 10U, 0U},
+    {"SConstruct", 14U, 10U, 0U},
+    {"devcontainer.json", 11U, 17U, 0U},
+    {"jsconfig.json", 11U, 13U, 0U},
+    {"makefile", 12U, 8U, 0U},
+    {"poetry.lock", 17U, 11U, 0U},
+    {"tsconfig.json", 11U, 13U, 0U},
+    {"wscript", 14U, 7U, 0U}
+};
+
+static const SynDetectEntry builtin_extensions[] = {
+    {"bash", 16U, 4U, 0U},
+    {"c", 1U, 1U, 0U},
+    {"cfg", 8U, 3U, 0U},
+    {"cjs", 9U, 3U, 0U},
+    {"conf", 8U, 4U, 0U},
+    {"css", 2U, 3U, 0U},
+    {"cts", 18U, 3U, 0U},
+    {"f", 5U, 1U, 0U},
+    {"f03", 4U, 3U, 0U},
+    {"f08", 4U, 3U, 0U},
+    {"f18", 4U, 3U, 0U},
+    {"f90", 4U, 3U, 0U},
+    {"f95", 4U, 3U, 0U},
+    {"fl", 3U, 2U, 0U},
+    {"for", 5U, 3U, 0U},
+    {"fpp", 5U, 3U, 0U},
+    {"ftn", 5U, 3U, 0U},
+    {"go", 6U, 2U, 0U},
+    {"h", 1U, 1U, 0U},
+    {"htm", 7U, 3U, 0U},
+    {"html", 7U, 4U, 0U},
+    {"ini", 8U, 3U, 0U},
+    {"js", 9U, 2U, 0U},
+    {"json", 10U, 4U, 0U},
+    {"jsonc", 11U, 5U, 0U},
+    {"jsx", 9U, 3U, 0U},
+    {"mak", 12U, 3U, 0U},
+    {"markdown", 13U, 8U, 0U},
+    {"md", 13U, 2U, 0U},
+    {"mdown", 13U, 5U, 0U},
+    {"mjs", 9U, 3U, 0U},
+    {"mk", 12U, 2U, 0U},
+    {"mkd", 13U, 3U, 0U},
+    {"mts", 18U, 3U, 0U},
+    {"properties", 8U, 10U, 0U},
+    {"py", 14U, 2U, 0U},
+    {"pyi", 14U, 3U, 0U},
+    {"pyw", 14U, 3U, 0U},
+    {"rs", 15U, 2U, 0U},
+    {"sh", 16U, 2U, 0U},
+    {"toml", 17U, 4U, 0U},
+    {"ts", 18U, 2U, 0U},
+    {"tsx", 18U, 3U, 0U},
+    {"xhtml", 7U, 5U, 0U},
+    {"yaml", 19U, 4U, 0U},
+    {"yml", 19U, 3U, 0U}
+};
+
+static const SynDetectEntry builtin_globs[] = {
+    {"*.desktop", 8U, 9U, 0U},
+    {"*.htm", 7U, 5U, 0U},
+    {"*.html", 7U, 6U, 0U},
+    {"*.jsonc", 11U, 7U, 0U},
+    {"*.mk", 12U, 4U, 0U},
+    {"*.service", 8U, 9U, 0U},
+    {"README.*", 13U, 8U, 7U}
+};
+
+static const SynDetectEntry builtin_shebangs[] = {
+    {"bash", 16U, 4U, 0U},
+    {"dash", 16U, 4U, 0U},
+    {"ksh", 16U, 3U, 0U},
+    {"node", 9U, 4U, 0U},
+    {"nodejs", 9U, 6U, 0U},
+    {"pypy", 14U, 4U, 0U},
+    {"pypy3", 14U, 5U, 0U},
+    {"python", 14U, 6U, 0U},
+    {"python2", 14U, 7U, 0U},
+    {"python3", 14U, 7U, 0U},
+    {"sh", 16U, 2U, 0U}
+};
+
+static const SynDetectEntry builtin_first_lines[] = {
+    {"^\\s*\\[[A-Za-z0-9_.-]+\\]\\s*$", 8U, 27U, 3U}
+};
+
+const SynDetectIndex yew_syn_builtin_detect_index = {
+    builtin_exact, 21U,
+    builtin_extensions, 46U,
+    builtin_globs, 7U,
+    builtin_shebangs, 11U,
+    builtin_first_lines, 1U
+};

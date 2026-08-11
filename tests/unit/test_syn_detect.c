@@ -1,9 +1,11 @@
 #include "harness.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "syn/defs.h"
+#include "syn/registry.h"
 
 typedef struct DetectFix {
     Arena arena;
@@ -230,4 +232,71 @@ void test_syn_detect_unknown_path_and_empty_input_return_none(void)
                       YEW_LANG_NONE);
     YEW_ASSERT_EQ_U64(yew_syn_lang_for(NULL, NULL, 0U), YEW_LANG_NONE);
     YEW_ASSERT_NULL(yew_syn_lang_desc(YEW_LANG_NONE));
+}
+
+void test_syn_detect_indexes_scale_without_definition_scans(void)
+{
+    static const size_t sizes[] = {0U, 1U, 19U, 48U, 257U};
+    size_t s;
+
+    for (s = 0U; s < YEW_ARRAY_LEN(sizes); s++) {
+        SynDetectEntry *entries =
+            yew_xcalloc(sizes[s], sizeof(*entries));
+        char (*keys)[16] = yew_xcalloc(sizes[s], sizeof(*keys));
+        SynDetectIndex index = {0};
+        SynDetectRun run;
+        size_t i;
+
+        for (i = 0U; i < sizes[s]; i++) {
+            (void)snprintf(keys[i], sizeof(keys[i]), "key-%03zu", i);
+            entries[i].key = keys[i];
+            entries[i].lang = (u32)(i + 1U);
+            entries[i].key_len = (u32)strlen(keys[i]);
+        }
+        index.extensions = entries;
+        index.nextensions = sizes[s];
+        if (sizes[s] == 0U) {
+            run = yew_syn_detect_find(index.extensions, index.nextensions,
+                                      "key-000", 7U, true);
+            YEW_ASSERT_NULL(run.entry);
+            YEW_ASSERT_EQ_U64(run.len, 0U);
+        } else {
+            const char *last = keys[sizes[s] - 1U];
+
+            run = yew_syn_detect_find(index.extensions, index.nextensions,
+                                      last, strlen(last), true);
+            YEW_ASSERT_NOT_NULL(run.entry);
+            YEW_ASSERT_EQ_U64(run.len, 1U);
+            YEW_ASSERT_EQ_U64(run.entry->lang, sizes[s]);
+            run = yew_syn_detect_find(index.extensions, index.nextensions,
+                                      "KEY-000", 7U, true);
+            YEW_ASSERT_NOT_NULL(run.entry);
+            YEW_ASSERT_EQ_U64(run.entry->lang, 1U);
+        }
+        run = yew_syn_detect_find(index.extensions, index.nextensions,
+                                  "missing", 7U, true);
+        YEW_ASSERT_NULL(run.entry);
+        YEW_ASSERT_EQ_U64(run.len, 0U);
+        free(keys);
+        free(entries);
+    }
+}
+
+void test_syn_detect_index_returns_the_complete_duplicate_key_run(void)
+{
+    static const SynDetectEntry entries[] = {
+        {"alpha", 1U, 5U, 0U},
+        {"duplicate", 9U, 9U, 0U},
+        {"duplicate", 4U, 9U, 0U},
+        {"omega", 2U, 5U, 0U}
+    };
+    SynDetectRun run = yew_syn_detect_find(
+        entries, YEW_ARRAY_LEN(entries), "duplicate", 9U, false);
+
+    YEW_ASSERT_NOT_NULL(run.entry);
+    YEW_ASSERT_EQ_U64(run.len, 2U);
+    YEW_ASSERT_EQ_U64(run.entry[0].lang, 9U);
+    YEW_ASSERT_EQ_U64(run.entry[1].lang, 4U);
+    YEW_ASSERT_NULL(yew_syn_detect_find(
+        entries, YEW_ARRAY_LEN(entries), "DUPLICATE", 9U, false).entry);
 }

@@ -102,3 +102,67 @@ YewRe *yew_syn_builtin_registry_first_line(BuiltinRegistry *registry,
     }
     return registry->first_line_re[ordinal];
 }
+
+static u8 detect_fold(u8 byte)
+{
+    if (byte >= (u8)'A' && byte <= (u8)'Z')
+        return (u8)(byte + ((u8)'a' - (u8)'A'));
+    return byte;
+}
+
+static int detect_key_compare(const char *key, size_t key_len,
+                              const SynDetectEntry *candidate, bool fold)
+{
+    size_t candidate_len = candidate->key_len;
+    size_t common = key_len < candidate_len ? key_len : candidate_len;
+    size_t i;
+
+    for (i = 0U; i < common; i++) {
+        u8 left = (u8)key[i];
+        u8 right = (u8)candidate->key[i];
+
+        if (fold) {
+            left = detect_fold(left);
+            right = detect_fold(right);
+        }
+        if (left < right)
+            return -1;
+        if (left > right)
+            return 1;
+    }
+    if (key_len < candidate_len)
+        return -1;
+    if (key_len > candidate_len)
+        return 1;
+    return 0;
+}
+
+SynDetectRun yew_syn_detect_find(const SynDetectEntry *entries, size_t len,
+                                 const char *key, size_t key_len, bool fold)
+{
+    SynDetectRun found = {NULL, 0U};
+    size_t low = 0U;
+    size_t high = len;
+    size_t at;
+
+    if (entries == NULL || key == NULL)
+        return found;
+    while (low < high) {
+        size_t mid = low + (high - low) / 2U;
+
+        if (detect_key_compare(key, key_len, &entries[mid], fold) > 0)
+            low = mid + 1U;
+        else
+            high = mid;
+    }
+    if (low == len ||
+        detect_key_compare(key, key_len, &entries[low], fold) != 0)
+        return found;
+    found.entry = &entries[low];
+    at = low;
+    while (at < len &&
+           detect_key_compare(key, key_len, &entries[at], fold) == 0)
+        at++;
+    found.len = at - low;
+    return found;
+}

@@ -12,7 +12,13 @@ if [ "$#" -eq 0 ]; then
     set -- runtime/syntax/*.fl
 fi
 
-LC_ALL=C awk '
+ledger=tests/syn/builtin-ids.txt
+if [ ! -f "$ledger" ]; then
+    echo "gen-langtab: missing stable id ledger: $ledger" >&2
+    exit 1
+fi
+
+LC_ALL=C awk -v LEDGER="$ledger" '
 function die(msg) {
     printf "%s:%d:%d: gen-langtab: %s\n", FILE, TLINE, TCOL, msg > "/dev/stderr"
     exit 1
@@ -266,10 +272,10 @@ function cstr(s,    out,i,c,n) {
     return out "\""
 }
 
-function emit_array(i, kind,    n,j) {
+function emit_array(i, id, kind,    n,j) {
     n = META[i, "n" kind]
     if (n == 0) return
-    printf "static const char *const lang_%d_%s[] = {\n", i, kind
+    printf "static const char *const lang_%d_%s[] = {\n", id, kind
     for (j = 1; j <= n; j++)
         printf "    %s%s\n", cstr(META[i, kind, j]), j == n ? "" : ","
     print "};"
@@ -277,7 +283,102 @@ function emit_array(i, kind,    n,j) {
 
 function nullable(s) { return s == "" ? "NULL" : cstr(s) }
 
+function path_stem(path,    base) {
+    base = path
+    sub(/^.*\//, "", base)
+    sub(/\.fl$/, "", base)
+    return base
+}
+
+function ledger_die(line, msg) {
+    FILE = LEDGER; TLINE = line; TCOL = 1
+    die(msg)
+}
+
+function add_detect(kind, key, lang,    n) {
+    n = ++DET[kind, "n"]
+    DET[kind, n, "key"] = key
+    DET[kind, n, "lang"] = lang
+}
+
+function detect_before(kind, left_key, left_lang, right_key, right_lang,
+                       left_i,right_i,left_priority,right_priority) {
+    if (left_key != right_key) return left_key < right_key
+    left_i = BY_ID[left_lang]
+    right_i = BY_ID[right_lang]
+    left_priority = META[left_i, "priority"]
+    right_priority = META[right_i, "priority"]
+    if (left_priority != right_priority)
+        return left_priority > right_priority
+    if (META[left_i, "name"] != META[right_i, "name"])
+        return META[left_i, "name"] < META[right_i, "name"]
+    return left_lang < right_lang
+}
+
+function sort_detect(kind,    n,i,j,key,lang) {
+    n = DET[kind, "n"]
+    for (i = 2; i <= n; i++) {
+        key = DET[kind, i, "key"]
+        lang = DET[kind, i, "lang"]
+        j = i - 1
+        while (j >= 1 && detect_before(kind, key, lang,
+               DET[kind, j, "key"], DET[kind, j, "lang"])) {
+            DET[kind, j + 1, "key"] = DET[kind, j, "key"]
+            DET[kind, j + 1, "lang"] = DET[kind, j, "lang"]
+            j--
+        }
+        DET[kind, j + 1, "key"] = key
+        DET[kind, j + 1, "lang"] = lang
+    }
+}
+
+function emit_detect(kind, symbol,    n,i) {
+    n = DET[kind, "n"]
+    if (n == 0) return
+    printf "static const SynDetectEntry %s[] = {\n", symbol
+    for (i = 1; i <= n; i++) {
+        printf "    {%s, %dU, %dU, %dU}%s\n", \
+               cstr(DET[kind, i, "key"]), DET[kind, i, "lang"], \
+               length(DET[kind, i, "key"]), \
+               index(DET[kind, i, "key"], "*") == 0 ? 0 : \
+                   index(DET[kind, i, "key"], "*") - 1, \
+               i == n ? "" : ","
+    }
+    print "};"
+    print ""
+}
+
 BEGIN {
+    ledger_line = 0
+    while ((getline ledger_text < LEDGER) > 0) {
+        ledger_line++
+        if (ledger_text == "" || substr(ledger_text, 1, 1) == "#")
+            continue
+        fields = split(ledger_text, ledger_field, "|")
+        if (fields != 3 || ledger_field[1] !~ /^[1-9][0-9]*$/ ||
+            ledger_field[2] == "" || ledger_field[3] == "")
+            ledger_die(ledger_line, "expected id|canonical-language|definition-stem")
+        id = ledger_field[1] + 0
+        if (id in LEDGER_STEM)
+            ledger_die(ledger_line, "duplicate id " id)
+        if (ledger_field[2] in LEDGER_NAME_ID)
+            ledger_die(ledger_line, "duplicate canonical language " ledger_field[2])
+        if (ledger_field[3] in LEDGER_ID)
+            ledger_die(ledger_line, "duplicate definition stem " ledger_field[3])
+        LEDGER_STEM[id] = ledger_field[3]
+        LEDGER_NAME[id] = ledger_field[2]
+        LEDGER_ID[ledger_field[3]] = id
+        LEDGER_NAME_ID[ledger_field[2]] = id
+        ledger_count++
+        if (id > ledger_max) ledger_max = id
+    }
+    if (close(LEDGER) != 0)
+        ledger_die(ledger_line, "cannot close id ledger")
+    if (ledger_count == 0)
+        ledger_die(1, "id ledger is empty")
+    if (ledger_max != ledger_count)
+        ledger_die(1, "ids must be contiguous from 1")
+
     for (i = 0; i < 256; i++) ORD[sprintf("%c", i)] = i
     nfile = ARGC - 1
     for (i = 1; i <= nfile; i++) PATH[i] = ARGV[i]
@@ -295,40 +396,89 @@ BEGIN {
         META[IDX, "source"] = FILE
         META[IDX, "priority"] = 0
         parse_file()
+        stem = path_stem(FILE)
+        if (!(stem in LEDGER_ID))
+            die("definition stem \047" stem "\047 is missing from " LEDGER)
+        id = LEDGER_ID[stem]
+        if (META[IDX, "name"] != LEDGER_NAME[id])
+            die("language.name \047" META[IDX, "name"] \
+                "\047 does not match ledger name \047" LEDGER_NAME[id] "\047")
+        if (id in BY_ID)
+            die("multiple definitions use ledger id " id)
+        META[IDX, "id"] = id
+        BY_ID[id] = IDX
     }
+    if (nfile != ledger_count)
+        ledger_die(1, "ledger has " ledger_count " rows but " nfile \
+                   " definitions were provided")
+    for (id = 1; id <= ledger_max; id++) {
+        if (!(id in BY_ID))
+            ledger_die(1, "orphan ledger row for definition \047" \
+                       LEDGER_STEM[id] "\047")
+        i = BY_ID[id]
+        for (j = 1; j <= META[i, "nextensions"]; j++)
+            add_detect("extension", tolower(META[i, "extensions", j]), id)
+        for (j = 1; j <= META[i, "nfilenames"]; j++) {
+            key = META[i, "filenames", j]
+            add_detect(index(key, "*") == 0 ? "exact" : "glob", key, id)
+        }
+        for (j = 1; j <= META[i, "nshebangs"]; j++)
+            add_detect("shebang", tolower(META[i, "shebangs", j]), id)
+        if (META[i, "first_line"] != "")
+            add_detect("first_line", META[i, "first_line"], id)
+    }
+    sort_detect("exact")
+    sort_detect("extension")
+    sort_detect("glob")
+    sort_detect("shebang")
 
     print "/* GENERATED by scripts/gen-langtab from the runtime syntax definitions — do not edit;"
     print " * regenerate with \047scripts/gen-langtab > src/syn/langs_gen.c\047. */"
     print "#include \"syn/langs_gen.h\""
     print ""
-    for (i = 1; i <= nfile; i++) {
-        emit_array(i, "extensions")
-        emit_array(i, "filenames")
-        emit_array(i, "shebangs")
+    for (id = 1; id <= ledger_max; id++) {
+        i = BY_ID[id]
+        emit_array(i, id, "extensions")
+        emit_array(i, id, "filenames")
+        emit_array(i, id, "shebangs")
         if (META[i, "nextensions"] || META[i, "nfilenames"] || META[i, "nshebangs"])
             print ""
     }
     print "const SynLangSeed yew_syn_builtin_langs[] = {"
-    for (i = 1; i <= nfile; i++) {
+    for (id = 1; id <= ledger_max; id++) {
+        i = BY_ID[id]
         print "    {"
-        printf "        %dU,\n", i
+        printf "        %dU,\n", id
         printf "        %s,\n", cstr(META[i, "name"])
         printf "        %s,\n", cstr(META[i, "source"])
-        printf "        %s,\n", META[i, "nextensions"] ? "lang_" i "_extensions" : "NULL"
+        printf "        %s,\n", META[i, "nextensions"] ? "lang_" id "_extensions" : "NULL"
         printf "        %dU,\n", META[i, "nextensions"]
-        printf "        %s,\n", META[i, "nfilenames"] ? "lang_" i "_filenames" : "NULL"
+        printf "        %s,\n", META[i, "nfilenames"] ? "lang_" id "_filenames" : "NULL"
         printf "        %dU,\n", META[i, "nfilenames"]
-        printf "        %s,\n", META[i, "nshebangs"] ? "lang_" i "_shebangs" : "NULL"
+        printf "        %s,\n", META[i, "nshebangs"] ? "lang_" id "_shebangs" : "NULL"
         printf "        %dU,\n", META[i, "nshebangs"]
         printf "        %s,\n", nullable(META[i, "first_line"])
         printf "        %.0f,\n", META[i, "priority"]
         printf "        {%s, %s, %s}\n", nullable(META[i, "comment_line"]), \
                nullable(META[i, "block1"]), nullable(META[i, "block2"])
-        printf "    }%s\n", i == nfile ? "" : ","
+        printf "    }%s\n", id == ledger_max ? "" : ","
     }
     print "};"
     print ""
     print "const size_t yew_syn_builtin_langs_len ="
     print "    sizeof(yew_syn_builtin_langs) / sizeof(yew_syn_builtin_langs[0]);"
+    print ""
+    emit_detect("exact", "builtin_exact")
+    emit_detect("extension", "builtin_extensions")
+    emit_detect("glob", "builtin_globs")
+    emit_detect("shebang", "builtin_shebangs")
+    emit_detect("first_line", "builtin_first_lines")
+    print "const SynDetectIndex yew_syn_builtin_detect_index = {"
+    printf "    %s, %dU,\n", DET["exact", "n"] ? "builtin_exact" : "NULL", DET["exact", "n"]
+    printf "    %s, %dU,\n", DET["extension", "n"] ? "builtin_extensions" : "NULL", DET["extension", "n"]
+    printf "    %s, %dU,\n", DET["glob", "n"] ? "builtin_globs" : "NULL", DET["glob", "n"]
+    printf "    %s, %dU,\n", DET["shebang", "n"] ? "builtin_shebangs" : "NULL", DET["shebang", "n"]
+    printf "    %s, %dU\n", DET["first_line", "n"] ? "builtin_first_lines" : "NULL", DET["first_line", "n"]
+    print "};"
 }
 ' "$@"
