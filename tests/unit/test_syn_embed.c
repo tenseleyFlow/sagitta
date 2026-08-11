@@ -164,7 +164,7 @@ void test_syn_embed_rejects_incompatible_state_operations(void)
 {
     expect_embed_error(
         "{syntax:1,language:{name:\"x\"},contexts:{main:{rules:[{match:\"x\",push:\"b\",pop:1,embed:{lang:\"js\",end:\"line\"}}]},b:{at_eol:\"pop\",rules:[]}}}",
-        "embed cannot be combined with 'pop' or 'set'; it may only accompany its string 'push' bridge target");
+        "embed is a state op; a rule performs exactly one");
 }
 
 void test_syn_embed_validates_capture_end_and_field_types(void)
@@ -184,6 +184,9 @@ void test_syn_embed_validates_capture_end_and_field_types(void)
     expect_embed_error(
         "{syntax:1,language:{name:\"x\"},contexts:{main:{rules:[{match:\"x\",push:\"b\",embed:{lang:\"js\",end:\"line\",fallback:\"wat\"}}]},b:{at_eol:\"pop\",rules:[]}}}",
         "unknown attr 'wat' (did you mean 'tag'?)");
+    expect_embed_error(
+        "{syntax:1,language:{name:\"x\"},contexts:{main:{rules:[{match:\"x\",push:\"b\",embed:{lang:\"js\",end:\"line\",interleave:true}}]},b:{at_eol:\"pop\",rules:[]}}}",
+        "embed.interleave is deferred until after 1.0");
 }
 
 void test_syn_embed_end_is_scoped_to_bridge_context(void)

@@ -93,6 +93,11 @@ typedef struct SynFiniteSet {
     u8 ngroups;
 } SynFiniteSet;
 
+typedef struct SynResident {
+    u32 lang;
+    struct SynEngine *runtime;
+} SynResident;
+
 typedef struct SynIdentifierSpec {
     u8 prefix[2];
     u8 nprefix;
@@ -130,6 +135,22 @@ struct SynStateTab {
     bool exhausted;
 };
 
+typedef struct SynMergedFirst {
+    u16 active_ctx;
+    u16 bridge_ctx;
+    u8 active_def;
+    u8 bridge_def;
+    u8 bol;
+    bool valid;
+    u8 bits[32];
+    u8 end_bits[32];
+} SynMergedFirst;
+
+typedef struct SynLangName {
+    char *name;
+    u32 lang;
+} SynLangName;
+
 struct SynEngine {
     SynDef *def;
     SynStateTab *states;
@@ -166,7 +187,17 @@ struct SynEngine {
     SynCoverage *coverage;
     u64 line_calls;
     u64 generation;
+    SynResident defs[YEW_SYN_RESIDENT_MAX];
+    u16 ndefs;
+    const char **ctx_names;
+    SynMergedFirst merged_first[64];
+    u8 embed_end_first[32];
+    SynLangName *lang_names;
+    u32 nlang_names;
 };
+
+static const SynCtx *checked_ctx(SynEngine *master, const SynFrame *frame,
+                                 SynEngine **runtime_out);
 
 static void engine_index_fortran_bol(SynEngine *engine)
 {
@@ -1530,6 +1561,40 @@ static void engine_index_ctx_first_nonbol(SynEngine *engine)
     }
 }
 
+static void engine_index_embed_end_first(SynEngine *engine)
+{
+    u16 ctx_id;
+
+    (void)memset(engine->embed_end_first, 0,
+                 sizeof(engine->embed_end_first));
+    if (engine->def == NULL)
+        return;
+    for (ctx_id = 0U; ctx_id < engine->def->nctxs; ctx_id++) {
+        const SynCtx *ctx = &engine->def->ctxs[ctx_id];
+        u32 i;
+
+        if (ctx->embed.end != SYN_EMBED_END_INLINE &&
+            ctx->embed.end != SYN_EMBED_END_INLINE_ROOT)
+            continue;
+        for (i = 0U; i < ctx->nrules; i++) {
+            u32 index = ctx->first_rule + i;
+            const SynRule *rule = &engine->def->rules[index];
+            u32 byte;
+
+            if (rule->end == 0U)
+                continue;
+            if (rule->aux_match != SYN_AUXM_NONE) {
+                (void)memset(engine->embed_end_first, 0xff,
+                             sizeof(engine->embed_end_first));
+                return;
+            }
+            for (byte = 0U; byte < sizeof(engine->embed_end_first); byte++)
+                engine->embed_end_first[byte] |= engine->rule_first == NULL ?
+                    rule->first[byte] : engine->rule_first[index][byte];
+        }
+    }
+}
+
 static void engine_index_candidates(SynEngine *engine)
 {
     u32 *offsets;
@@ -1610,8 +1675,6 @@ static u64 state_hash(const SynState *state)
 
 static void state_validate(const SynState *state)
 {
-    u8 i;
-
     if (state == NULL)
         YEW_BUG("syntax: NULL state");
     if (state->depth == 0U || state->depth > YEW_SYN_DEPTH_MAX)
@@ -1619,11 +1682,6 @@ static void state_validate(const SynState *state)
     if (state->ndef == 0U || state->ndef > YEW_SYN_DEF_MAX)
         YEW_BUG("syntax: invalid definition depth %u",
                 (unsigned)state->ndef);
-    for (i = 0U; i < state->depth; i++) {
-        if (state->f[i].def >= YEW_SYN_DEF_MAX)
-            YEW_BUG("syntax: invalid definition index %u",
-                    (unsigned)state->f[i].def);
-    }
 }
 
 static SynState syn_state_canon(const SynState *state)
@@ -1634,8 +1692,18 @@ static SynState syn_state_canon(const SynState *state)
     canon = *state;
     (void)memset(&canon.f[canon.depth], 0,
                  (YEW_SYN_DEPTH_MAX - canon.depth) * sizeof(canon.f[0]));
-    (void)memset(&canon.aux[canon.ndef], 0,
-                 (YEW_SYN_DEF_MAX - canon.ndef) * sizeof(canon.aux[0]));
+    {
+        u8 keep = canon.ndef;
+
+        /* A pending guest occupies its future aux slot until the idle
+         * loader has made that definition resident. */
+        if (((canon.flags & YEW_SYN_F_EMBED_PEND) != 0U ||
+             (canon.f[canon.depth - 1U].fl & YEW_SYN_FR_DEFER) != 0U) &&
+            keep < YEW_SYN_DEF_MAX)
+            keep++;
+        (void)memset(&canon.aux[keep], 0,
+                     (YEW_SYN_DEF_MAX - keep) * sizeof(canon.aux[0]));
+    }
     return canon;
 }
 
@@ -1765,7 +1833,10 @@ void yew_syn_state_pop(SynState *state, u8 count)
 {
     state_validate(state);
     while (count-- != 0U) {
-        if (state->lost != 0U) {
+        u8 protected_embed_debt =
+            (state->flags & YEW_SYN_F_EMBED_LOST) != 0U ? 2U : 0U;
+
+        if (state->lost > protected_embed_debt) {
             state->lost--;
         } else if (state->depth > 1U) {
             state->depth--;
@@ -1781,12 +1852,85 @@ void yew_syn_state_set(SynState *state, u16 ctx)
     state->f[state->depth - 1U].ctx = ctx;
 }
 
+static void engine_snapshot_lang_names(SynEngine *engine)
+{
+    const char **names;
+    u32 *langs;
+    u32 count;
+    u32 i;
+
+    for (i = 0U; i < engine->nlang_names; i++)
+        free(engine->lang_names[i].name);
+    free(engine->lang_names);
+    engine->lang_names = NULL;
+    engine->nlang_names = 0U;
+    count = yew_syn_lang_snapshot(NULL, NULL, 0U);
+    if (count == 0U)
+        return;
+    names = yew_xcalloc(count, sizeof(*names));
+    langs = yew_xcalloc(count, sizeof(*langs));
+    count = yew_syn_lang_snapshot(names, langs, count);
+    engine->lang_names = yew_xcalloc(count, sizeof(*engine->lang_names));
+    for (i = 0U; i < count; i++) {
+        size_t len = strlen(names[i]);
+
+        engine->lang_names[i].name = yew_xmalloc(len + 1U);
+        (void)memcpy(engine->lang_names[i].name, names[i], len + 1U);
+        engine->lang_names[i].lang = langs[i];
+    }
+    engine->nlang_names = count;
+    free(langs);
+    free(names);
+}
+
+static u32 engine_lang_by_name(const SynEngine *engine, const char *name,
+                               size_t len)
+{
+    u32 i;
+
+    for (i = 0U; i < engine->nlang_names; i++) {
+        const char *candidate = engine->lang_names[i].name;
+
+        if (strlen(candidate) == len &&
+            (len == 0U || memcmp(candidate, name, len) == 0))
+            return engine->lang_names[i].lang;
+    }
+    return YEW_LANG_NONE;
+}
+
+static const char *engine_name_by_lang(const SynEngine *engine, u32 lang)
+{
+    u32 i;
+
+    for (i = 0U; i < engine->nlang_names; i++) {
+        if (engine->lang_names[i].lang == lang)
+            return engine->lang_names[i].name;
+    }
+    return "none";
+}
+
 SynEngine *yew_syn_engine_new(SynDef *def)
 {
     SynEngine *engine = yew_xcalloc(1U, sizeof(*engine));
     u16 root = def == NULL ? 0U : def->root;
 
     engine->def = def;
+    engine_snapshot_lang_names(engine);
+    (void)memset(engine->merged_first, 0, sizeof(engine->merged_first));
+    engine->defs[0] = (SynResident){
+        def == NULL || def->name == NULL ? YEW_LANG_NONE :
+            engine_lang_by_name(engine, def->name, strlen(def->name)),
+        engine
+    };
+    engine->ndefs = 1U;
+    if (def != NULL && def->nctxs != 0U) {
+        u16 i;
+
+        engine->ctx_names = yew_xcalloc(def->nctxs,
+                                        sizeof(*engine->ctx_names));
+        for (i = 0U; i < def->nctxs; i++)
+            engine->ctx_names[i] = yew_syn_ctx_name(def, i);
+    }
     engine->states = yew_syn_state_tab_new(root);
     engine->generation = 1U;
     engine->identifier_fast_enabled = true;
@@ -1809,14 +1953,23 @@ SynEngine *yew_syn_engine_new(SynDef *def)
     engine_index_yaml_block_keys(engine);
     engine_index_first(engine);
     engine_index_ctx_first_nonbol(engine);
+    engine_index_embed_end_first(engine);
     engine_index_candidates(engine);
     return engine;
 }
 
 void yew_syn_engine_free(SynEngine *engine)
 {
+    u16 resident;
+
     if (engine == NULL)
         return;
+    for (resident = 1U; resident < engine->ndefs; resident++) {
+        SynEngine *runtime = engine->defs[resident].runtime;
+
+        if (runtime != NULL)
+            yew_syn_def_unpin(runtime->def);
+    }
     yew_syn_state_tab_free(engine->states);
     free(engine->ctx_aux);
     free(engine->rule_bol);
@@ -1833,16 +1986,48 @@ void yew_syn_engine_free(SynEngine *engine)
     free(engine->ctx_first_nonbol);
     free(engine->candidate_offsets);
     free(engine->candidate_rules);
+    free(engine->ctx_names);
+    for (u32 i = 0U; i < engine->nlang_names; i++)
+        free(engine->lang_names[i].name);
+    free(engine->lang_names);
     yew_re_workspace_free(&engine->re_workspace);
     free(engine);
 }
 
 void yew_syn_engine_set_def(SynEngine *engine, SynDef *def)
 {
+    u16 resident;
+
     if (engine == NULL)
         YEW_BUG("syntax: NULL engine");
+    for (resident = 1U; resident < engine->ndefs; resident++) {
+        SynEngine *runtime = engine->defs[resident].runtime;
+
+        if (runtime != NULL)
+            yew_syn_def_unpin(runtime->def);
+    }
     yew_syn_state_tab_free(engine->states);
     engine->def = def;
+    engine_snapshot_lang_names(engine);
+    (void)memset(engine->merged_first, 0, sizeof(engine->merged_first));
+    free(engine->ctx_names);
+    engine->ctx_names = NULL;
+    engine->defs[0] = (SynResident){
+        def == NULL || def->name == NULL ? YEW_LANG_NONE :
+            engine_lang_by_name(engine, def->name, strlen(def->name)),
+        engine
+    };
+    (void)memset(&engine->defs[1], 0,
+                 (YEW_SYN_RESIDENT_MAX - 1U) * sizeof(engine->defs[0]));
+    engine->ndefs = 1U;
+    if (def != NULL && def->nctxs != 0U) {
+        u16 i;
+
+        engine->ctx_names = yew_xcalloc(def->nctxs,
+                                        sizeof(*engine->ctx_names));
+        for (i = 0U; i < def->nctxs; i++)
+            engine->ctx_names[i] = yew_syn_ctx_name(def, i);
+    }
     engine->coverage = NULL;
     engine->states = yew_syn_state_tab_new(def == NULL ? 0U : def->root);
     engine_index_aux(engine);
@@ -1858,6 +2043,7 @@ void yew_syn_engine_set_def(SynEngine *engine, SynDef *def)
     engine_index_yaml_block_keys(engine);
     engine_index_first(engine);
     engine_index_ctx_first_nonbol(engine);
+    engine_index_embed_end_first(engine);
     engine_index_candidates(engine);
     engine->line_calls = 0U;
     engine->generation++;
@@ -1873,6 +2059,28 @@ SynStateTab *yew_syn_engine_states(SynEngine *engine)
 const SynDef *yew_syn_engine_def(const SynEngine *engine)
 {
     return engine == NULL ? NULL : engine->def;
+}
+
+const SynDef *yew_syn_engine_def_at(const SynEngine *engine, u8 def_index)
+{
+    if (engine == NULL || def_index >= engine->ndefs ||
+        engine->defs[def_index].runtime == NULL)
+        return NULL;
+    return engine->defs[def_index].runtime->def;
+}
+
+const SynDef *yew_syn_def_resident(SynEngine *engine, u32 lang)
+{
+    u16 i;
+
+    if (engine == NULL || lang == YEW_LANG_NONE)
+        return NULL;
+    for (i = 0U; i < engine->ndefs; i++) {
+        if (engine->defs[i].lang == lang &&
+            engine->defs[i].runtime != NULL)
+            return engine->defs[i].runtime->def;
+    }
+    return NULL;
 }
 
 u64 yew_syn_engine_line_calls(const SynEngine *engine)
@@ -2027,6 +2235,9 @@ bool yew_syn_coverage_init(SynCoverage *coverage, const SynDef *def)
     if (coverage->nrules != 0U)
         coverage->rules = yew_xcalloc(coverage->nrules,
                                       sizeof(*coverage->rules));
+    if (coverage->nctxs != 0U)
+        coverage->embeds = yew_xcalloc(coverage->nctxs,
+                                       sizeof(*coverage->embeds));
     return true;
 }
 
@@ -2040,6 +2251,9 @@ void yew_syn_coverage_clear(SynCoverage *coverage)
     if (coverage->rules != NULL)
         (void)memset(coverage->rules, 0,
                      coverage->nrules * sizeof(*coverage->rules));
+    if (coverage->embeds != NULL)
+        (void)memset(coverage->embeds, 0,
+                     coverage->nctxs * sizeof(*coverage->embeds));
 }
 
 void yew_syn_coverage_free(SynCoverage *coverage)
@@ -2048,6 +2262,7 @@ void yew_syn_coverage_free(SynCoverage *coverage)
         return;
     free(coverage->contexts);
     free(coverage->rules);
+    free(coverage->embeds);
     (void)memset(coverage, 0, sizeof(*coverage));
 }
 
@@ -2074,21 +2289,36 @@ static void coverage_rule(SynEngine *engine, u32 rule)
         engine->coverage->rules[rule]++;
 }
 
-static void coverage_transition(SynEngine *engine, const SynState *before,
+static void coverage_embed(SynEngine *engine, u16 ctx)
+{
+    if (engine->coverage != NULL && ctx < engine->coverage->nctxs)
+        engine->coverage->embeds[ctx]++;
+}
+
+static void coverage_frame(SynEngine *master, const SynFrame *frame)
+{
+    SynEngine *owner;
+
+    (void)checked_ctx(master, frame, &owner);
+    coverage_context(owner, frame->ctx);
+}
+
+static void coverage_transition(SynEngine *master, const SynState *before,
                                 const SynState *after)
 {
     u8 i;
 
-    if (engine->coverage == NULL || before == NULL || after == NULL ||
-        after->depth == 0U)
+    if (before == NULL || after == NULL || after->depth == 0U)
         return;
     if (after->depth > before->depth) {
         for (i = before->depth; i < after->depth; i++)
-            coverage_context(engine, after->f[i].ctx);
+            coverage_frame(master, &after->f[i]);
     } else if (after->depth != before->depth ||
                after->f[after->depth - 1U].ctx !=
-                   before->f[before->depth - 1U].ctx) {
-        coverage_context(engine, after->f[after->depth - 1U].ctx);
+                   before->f[before->depth - 1U].ctx ||
+               after->f[after->depth - 1U].def !=
+                   before->f[before->depth - 1U].def) {
+        coverage_frame(master, &after->f[after->depth - 1U]);
     }
 }
 
@@ -2142,6 +2372,7 @@ static bool bytes_equal(const u8 *a, size_t an, const char *b, size_t bn)
 }
 
 static bool aux_match(const SynEngine *engine, const SynState *state,
+                      u8 aux_level,
                       const SynRule *rule, const u8 *line, u32 len, u32 at,
                       YewReMatch *match)
 {
@@ -2171,7 +2402,7 @@ static bool aux_match(const SynEngine *engine, const SynState *state,
             return false;
         match->ngroups = 1U;
         match->g[0] = (Span){0U, 0U};
-        return indent < YEW_SYN_AUX_OF(state);
+        return indent < state->aux[aux_level];
     }
     if (rule->aux_match == SYN_AUXM_LINE_EMPTY) {
         if (at != 0U || len != 0U)
@@ -2187,10 +2418,10 @@ static bool aux_match(const SynEngine *engine, const SynState *state,
         match->g[0] = (Span){0U, 0U};
         return true;
     }
-    if (engine->def->aux == NULL || YEW_SYN_AUX_OF(state) == 0U)
+    if (engine->def->aux == NULL || state->aux[aux_level] == 0U)
         return false;
-    aux = yew_intern_str(engine->def->aux, YEW_SYN_AUX_OF(state));
-    aux_len = yew_intern_len(engine->def->aux, YEW_SYN_AUX_OF(state));
+    aux = yew_intern_str(engine->def->aux, state->aux[aux_level]);
+    aux_len = yew_intern_len(engine->def->aux, state->aux[aux_level]);
     if (aux == NULL)
         return false;
     match->ngroups = 1U;
@@ -2645,12 +2876,14 @@ static int json_key_match(const u8 *line, u32 len, u32 at,
 }
 
 static bool rule_match(SynEngine *engine, const SynState *state,
+                       u8 aux_level,
                        const SynRule *rule, u32 rule_index, const u8 *line,
                        u32 len, u32 at, SynWordProbe *word_probe,
                        YewReMatch *match)
 {
     if (rule->aux_match != SYN_AUXM_NONE)
-        return aux_match(engine, state, rule, line, len, at, match);
+        return aux_match(engine, state, aux_level, rule, line, len, at,
+                         match);
     if (rule->re == NULL)
         return false;
     /* min_len is in codepoints.  A remaining byte count smaller than that
@@ -2785,7 +3018,8 @@ static void emit_yaml_block_key(SynLineOut *out, const SynRule *rule,
               (u32)(match->g[3].hi - match->g[3].lo), colon, 0U);
 }
 
-static bool set_aux(SynEngine *engine, SynState *state, const SynRule *rule,
+static bool set_aux(SynEngine *engine, SynState *state, u8 aux_level,
+                    const SynRule *rule,
                     const u8 *line, u32 len, const YewReMatch *match)
 {
     Span cap;
@@ -2845,16 +3079,232 @@ static bool set_aux(SynEngine *engine, SynState *state, const SynRule *rule,
             value = UINT32_MAX;
         else
             value += add;
-        YEW_SYN_AUX_OF(state) = value;
+        state->aux[aux_level] = value;
     } else {
         static const char empty[] = "";
         const char *bytes = hi == lo && line == NULL
                                 ? empty
                                 : (const char *)line + lo;
-        YEW_SYN_AUX_OF(state) =
+        state->aux[aux_level] =
             yew_intern(engine->def->aux, bytes, (size_t)(hi - lo));
     }
     return true;
+}
+
+static SynEngine *runtime_at(SynEngine *master, u8 def_index)
+{
+    SynEngine *runtime;
+
+    if (master == NULL || def_index >= master->ndefs ||
+        master->defs[def_index].runtime == NULL)
+        YEW_BUG("syntax: nonresident definition index %u",
+                (unsigned)def_index);
+    runtime = master->defs[def_index].runtime;
+    if (runtime->def == NULL || runtime->def->ctxs == NULL)
+        YEW_BUG("syntax: resident definition has no context table");
+    return runtime;
+}
+
+static const SynCtx *checked_ctx(SynEngine *master, const SynFrame *frame,
+                                 SynEngine **runtime)
+{
+    SynEngine *active = runtime_at(master, frame->def);
+
+    if (frame->ctx >= active->def->nctxs)
+        YEW_BUG("syntax: context %u outside definition %u",
+                (unsigned)frame->ctx, (unsigned)frame->def);
+    if (runtime != NULL)
+        *runtime = active;
+    return &active->def->ctxs[frame->ctx];
+}
+
+static u16 runtime_ctx_named(const SynEngine *runtime, const char *name,
+                             size_t len)
+{
+    u16 i;
+
+    if (runtime == NULL || runtime->def == NULL)
+        return UINT16_MAX;
+    for (i = 0U; i < runtime->def->nctxs; i++) {
+        const char *candidate = runtime->ctx_names == NULL ? NULL :
+                                runtime->ctx_names[i];
+
+        if (candidate != NULL && strlen(candidate) == len &&
+            (len == 0U || memcmp(candidate, name, len) == 0))
+            return i;
+    }
+    return UINT16_MAX;
+}
+
+static u8 resident_slot(const SynEngine *master, u32 lang)
+{
+    u16 i;
+
+    for (i = 0U; i < master->ndefs; i++) {
+        if (master->defs[i].lang == lang &&
+            master->defs[i].runtime != NULL)
+            return (u8)i;
+    }
+    return UINT8_MAX;
+}
+
+static void lost_add(SynState *state, u8 count)
+{
+    while (count-- != 0U && state->lost < YEW_SYN_LOST_MAX)
+        state->lost++;
+    if (state->lost == YEW_SYN_LOST_MAX)
+        state->flags |= YEW_SYN_F_DEGRADED;
+}
+
+static bool embed_language(const SynEngine *master, const SynEngine *host,
+                           u8 host_slot,
+                           const SynEmbed *embed, const u8 *line, u32 len,
+                           const YewReMatch *match, u32 *lang)
+{
+    const char *name = NULL;
+    size_t name_len = 0U;
+
+    if (embed->lang_kind == SYN_EMBED_LANG_SELF) {
+        *lang = host_slot < master->ndefs ? master->defs[host_slot].lang :
+                                            YEW_LANG_NONE;
+        return true;
+    }
+    if (embed->lang_kind == SYN_EMBED_LANG_LITERAL && host->def->aux != NULL) {
+        name = yew_intern_str(host->def->aux, embed->lang);
+        name_len = yew_intern_len(host->def->aux, embed->lang);
+    } else if (embed->lang_kind == SYN_EMBED_LANG_CAPTURE &&
+               embed->lang_group < match->ngroups) {
+        Span cap = match->g[embed->lang_group];
+
+        if (cap.lo != UINT64_MAX && cap.hi >= cap.lo && cap.hi <= len) {
+            name = (const char *)line + cap.lo;
+            name_len = (size_t)(cap.hi - cap.lo);
+        }
+    }
+    if (name == NULL || name_len > UINT32_MAX) {
+        *lang = YEW_LANG_NONE;
+        return false;
+    }
+    *lang = engine_lang_by_name(master, name, name_len);
+    return *lang != YEW_LANG_NONE;
+}
+
+static u16 embed_guest_ctx(const SynEngine *host, const SynEngine *guest,
+                           const SynEmbed *embed)
+{
+    const char *name;
+    size_t len;
+
+    if (embed->ctx == 0U)
+        return guest->def->root;
+    if (host->def->aux == NULL)
+        return UINT16_MAX;
+    name = yew_intern_str(host->def->aux, embed->ctx);
+    len = yew_intern_len(host->def->aux, embed->ctx);
+    return name == NULL ? UINT16_MAX : runtime_ctx_named(guest, name, len);
+}
+
+static bool push_guest(SynEngine *master, SynState *state, u8 slot,
+                       const SynEmbed *embed, SynEngine *host)
+{
+    SynEngine *guest = runtime_at(master, slot);
+    u16 ctx = embed_guest_ctx(host, guest, embed);
+
+    if (ctx == UINT16_MAX || state->depth >= YEW_SYN_DEPTH_MAX ||
+        state->ndef >= YEW_SYN_DEF_MAX)
+        return false;
+    state->f[state->depth++] = (SynFrame){ctx, slot, 0U};
+    state->aux[state->ndef] = 0U;
+    state->ndef++;
+    state->flags &= (u8)~YEW_SYN_F_EMBED_PEND;
+    return true;
+}
+
+static void apply_embed(SynEngine *master, SynEngine *host, SynState *state,
+                        const SynRule *rule, const u8 *line, u32 len,
+                        const YewReMatch *match, u32 *pending_lang,
+                        u32 *refused_lang, const char **unknown_name,
+                        size_t *unknown_len)
+{
+    u8 host_slot = YEW_SYN_DEF_OF(state);
+    u32 selected;
+    u8 slot = UINT8_MAX;
+    bool selected_known;
+
+    selected_known = embed_language(master, host, host_slot, &rule->embed,
+                                    line, len, match, &selected);
+    if (!selected_known && unknown_name != NULL && unknown_len != NULL) {
+        if (rule->embed.lang_kind == SYN_EMBED_LANG_LITERAL &&
+            host->def->aux != NULL) {
+            *unknown_name = yew_intern_str(host->def->aux,
+                                           rule->embed.lang);
+            *unknown_len = yew_intern_len(host->def->aux,
+                                          rule->embed.lang);
+        } else if (rule->embed.lang_kind == SYN_EMBED_LANG_CAPTURE &&
+                   rule->embed.lang_group < match->ngroups) {
+            Span cap = match->g[rule->embed.lang_group];
+
+            if (cap.lo != UINT64_MAX && cap.hi >= cap.lo && cap.hi <= len) {
+                *unknown_name = (const char *)line + cap.lo;
+                *unknown_len = (size_t)(cap.hi - cap.lo);
+            }
+        }
+    }
+    if (state->depth >= YEW_SYN_DEPTH_MAX) {
+        /* There is no slot in which to retain the bridge boundary.  A
+         * synthetic lost debt would later consume an unrelated host pop,
+         * so leave the stack untouched and expose the refusal flag only. */
+        if ((state->flags & YEW_SYN_F_EMBED_LOST) == 0U)
+            lost_add(state, 2U);
+        state->flags |= YEW_SYN_F_EMBED_LOST | YEW_SYN_F_EMBED_ORPHAN;
+        if (selected_known && refused_lang != NULL)
+            *refused_lang = selected;
+        return;
+    }
+    state->f[state->depth++] = (SynFrame){
+        rule->target, host_slot,
+        (u8)(YEW_SYN_FR_BRIDGE |
+             ((rule->embed.flags & YEW_SYN_EMBED_DEFER) != 0U ?
+              YEW_SYN_FR_DEFER : 0U))
+    };
+    if (!selected_known)
+        return;
+    if (rule->embed.lang_kind == SYN_EMBED_LANG_SELF)
+        slot = host_slot;
+    else
+        slot = resident_slot(master, selected);
+    if (state->ndef >= YEW_SYN_DEF_MAX ||
+        state->depth >= YEW_SYN_DEPTH_MAX) {
+        lost_add(state, 2U);
+        state->flags |= YEW_SYN_F_EMBED_LOST;
+        if (refused_lang != NULL)
+            *refused_lang = selected;
+        return;
+    }
+    if (slot == UINT8_MAX) {
+        if (master->ndefs >= YEW_SYN_RESIDENT_MAX) {
+            lost_add(state, 2U);
+            state->flags |= YEW_SYN_F_EMBED_LOST;
+            if (refused_lang != NULL)
+                *refused_lang = selected;
+            return;
+        }
+        state->aux[state->ndef] = selected;
+        state->flags |= YEW_SYN_F_EMBED_PEND;
+        if (pending_lang != NULL && *pending_lang == YEW_LANG_NONE)
+            *pending_lang = selected;
+        return;
+    }
+    if ((rule->embed.flags & YEW_SYN_EMBED_DEFER) != 0U) {
+        state->aux[state->ndef] = (u32)slot + 1U;
+        return;
+    }
+    if (!push_guest(master, state, slot, &rule->embed, host)) {
+        lost_add(state, 2U);
+        state->flags |= YEW_SYN_F_EMBED_LOST;
+        if (refused_lang != NULL)
+            *refused_lang = selected;
+    }
 }
 
 static void apply_op(SynState *state, u8 op, u8 nop, u16 target)
@@ -2871,15 +3321,26 @@ static void apply_op(SynState *state, u8 op, u8 nop, u16 target)
     case SYN_OP_SET:
         yew_syn_state_set(state, target);
         break;
+    case SYN_OP_EMBED:
+        YEW_BUG("syntax: embed operation requires opener metadata");
+        break;
     default:
         YEW_BUG("syntax: invalid rule operation %u", (unsigned)op);
     }
 }
 
-static void apply_rule_op(SynState *state, const SynRule *rule)
+static void apply_rule_op(SynEngine *master, SynEngine *active,
+                          SynState *state, const SynRule *rule,
+                          const u8 *line, u32 len,
+                          const YewReMatch *match, u32 *pending_lang,
+                          u32 *refused_lang, const char **unknown_name,
+                          size_t *unknown_len)
 {
     u8 depth = state->depth;
-    if (rule->op == SYN_OP_PUSH && rule->npush != 0U) {
+    if (rule->op == SYN_OP_EMBED) {
+        apply_embed(master, active, state, rule, line, len, match,
+                    pending_lang, refused_lang, unknown_name, unknown_len);
+    } else if (rule->op == SYN_OP_PUSH && rule->npush != 0U) {
         u8 i;
         if (rule->npush > 4U)
             YEW_BUG("syntax: rule push list exceeds four contexts");
@@ -2898,13 +3359,18 @@ static void apply_rule_op(SynState *state, const SynRule *rule)
     }
 }
 
-static void apply_empty_bol(SynEngine *engine, SynState *state,
-                            const u8 *line, bool instrument)
+static void apply_empty_bol(SynEngine *master, SynState *state,
+                            const u8 *line, bool instrument,
+                            u32 *pending_lang, u32 *refused_lang,
+                            const char **unknown_name, size_t *unknown_len)
 {
     u32 guard = 0U;
     while (guard++ <= YEW_SYN_DEPTH_MAX) {
+        SynEngine *engine;
         u16 ctx_id = state->f[state->depth - 1U].ctx;
-        const SynCtx *ctx = &engine->def->ctxs[ctx_id];
+        const SynCtx *ctx = checked_ctx(master,
+                                        &state->f[state->depth - 1U],
+                                        &engine);
         const SynRule *matched = NULL;
         u32 matched_index = UINT32_MAX;
         YewReMatch match;
@@ -2926,7 +3392,8 @@ static void apply_empty_bol(SynEngine *engine, SynState *state,
                 (rule->value_pred == SYN_VALUE_CLEAR &&
                  (state->flags & YEW_SYN_F_VALUE) != 0U))
                 continue;
-            if (rule_match(engine, state, rule, index, line, 0U, 0U,
+            if (rule_match(engine, state, state->ndef - 1U, rule, index,
+                           line, 0U, 0U,
                            &word_probe, &match) &&
                 match.g[0].hi == 0U) {
                 matched = rule;
@@ -2941,10 +3408,15 @@ static void apply_empty_bol(SynEngine *engine, SynState *state,
 
             if (instrument)
                 coverage_rule(engine, matched_index);
-            (void)set_aux(engine, state, matched, line, 0U, &match);
-            apply_rule_op(state, matched);
+            if (instrument && matched->op == SYN_OP_EMBED)
+                coverage_embed(engine, matched->target);
+            (void)set_aux(engine, state, state->ndef - 1U, matched, line,
+                          0U, &match);
+            apply_rule_op(master, engine, state, matched, line, 0U, &match,
+                          pending_lang, refused_lang, unknown_name,
+                          unknown_len);
             if (instrument)
-                coverage_transition(engine, &before, state);
+                coverage_transition(master, &before, state);
         }
         if ((matched->flags & YEW_SYN_RULE_ZERO_TRANSITION) == 0U ||
             matched->op == SYN_OP_STAY)
@@ -3135,9 +3607,199 @@ static SynFortranBolResult fortran_bol_match(const SynEngine *engine,
     return fortran_free_bol(engine, line, len, rule_index, match);
 }
 
+static bool bridge_end_match(SynEngine *master, const SynState *state,
+                             const u8 *line, u32 len, u32 at,
+                             SynEngine **host_out, const SynRule **rule_out,
+                             u32 *rule_index_out, u8 *bridge_depth_out,
+                             u8 *aux_level_out, YewReMatch *match)
+{
+    i32 depth;
+
+    for (depth = (i32)state->depth - 1; depth >= 0; depth--) {
+        const SynFrame *frame = &state->f[depth];
+        SynEngine *host;
+        const SynCtx *ctx;
+        u8 aux_level;
+        u32 i;
+
+        if ((frame->fl & YEW_SYN_FR_BRIDGE) == 0U)
+            continue;
+        ctx = checked_ctx(master, frame, &host);
+        if ((ctx->embed.end == SYN_EMBED_END_LINE ||
+             ctx->embed.end == SYN_EMBED_END_LINE_CONTINUATION) &&
+            at != 0U)
+            return false;
+        if (ctx->embed.end != SYN_EMBED_END_LINE &&
+            ctx->embed.end != SYN_EMBED_END_INLINE &&
+            ctx->embed.end != SYN_EMBED_END_INLINE_ROOT &&
+            ctx->embed.end != SYN_EMBED_END_LINE_CONTINUATION)
+            return false;
+        if (ctx->embed.end == SYN_EMBED_END_INLINE_ROOT &&
+            depth + 1 < (i32)state->depth &&
+            state->depth != (u8)(depth + 2))
+            return false;
+        aux_level = (u8)(depth + 1 < state->depth ? state->ndef - 2U :
+                                                     state->ndef - 1U);
+        for (i = 0U; i < ctx->nrules; i++) {
+            u32 index = ctx->first_rule + i;
+            const SynRule *rule;
+            SynWordProbe word_probe = {0};
+
+            if (index >= host->def->nrules)
+                YEW_BUG("syntax: bridge rule outside host definition");
+            rule = &host->def->rules[index];
+            if (rule->end == 0U)
+                continue;
+            if (at < len && rule->aux_match == SYN_AUXM_NONE &&
+                !bitset_has(host->rule_first == NULL ? rule->first :
+                            host->rule_first[index], line[at]))
+                continue;
+            if (rule_match(host, state, aux_level, rule, index, line, len,
+                           at, &word_probe, match)) {
+                *host_out = host;
+                *rule_out = rule;
+                *rule_index_out = index;
+                *bridge_depth_out = (u8)depth;
+                *aux_level_out = aux_level;
+                return true;
+            }
+        }
+        return false;
+    }
+    return false;
+}
+
+static bool line_has_continuation(const u8 *line, u32 len)
+{
+    u32 trailing = 0U;
+
+    while (len > trailing && line[len - trailing - 1U] == (u8)'\\')
+        trailing++;
+    return (trailing & 1U) != 0U;
+}
+
+static void leave_embed(SynState *state, u8 bridge_depth)
+{
+    bool guest = bridge_depth + 1U < state->depth;
+
+    if (guest) {
+        while (state->depth > bridge_depth + 1U) {
+            state->depth--;
+            (void)memset(&state->f[state->depth], 0,
+                         sizeof(state->f[state->depth]));
+        }
+        state->aux[state->ndef - 1U] = 0U;
+        state->ndef--;
+    } else if ((state->flags & YEW_SYN_F_EMBED_PEND) != 0U ||
+               (state->f[bridge_depth].fl & YEW_SYN_FR_DEFER) != 0U) {
+        if (state->ndef < YEW_SYN_DEF_MAX)
+            state->aux[state->ndef] = 0U;
+    }
+    if ((state->flags & YEW_SYN_F_EMBED_LOST) != 0U) {
+        state->lost = state->lost > 2U ? (u8)(state->lost - 2U) : 0U;
+        state->flags &= (u8)~YEW_SYN_F_EMBED_LOST;
+    }
+    state->flags &= (u8)~YEW_SYN_F_EMBED_PEND;
+}
+
+static const u8 *merged_first_bytes(SynEngine *master,
+                                    const SynState *state,
+                                    SynEngine *active, const SynCtx *ctx,
+                                    bool bol, const u8 **end_first)
+{
+    i32 depth;
+    const SynFrame *bridge_frame = NULL;
+    SynEngine *host = NULL;
+    const SynCtx *bridge = NULL;
+    SynMergedFirst *cached;
+    u32 hash;
+    u32 byte;
+    u32 i;
+
+    if (state->ndef == 1U &&
+        (state->f[state->depth - 1U].fl & YEW_SYN_FR_BRIDGE) == 0U) {
+        if (end_first != NULL)
+            *end_first = NULL;
+        return bol || active->ctx_first_nonbol == NULL ? ctx->first :
+            active->ctx_first_nonbol[state->f[state->depth - 1U].ctx];
+    }
+
+    for (depth = (i32)state->depth - 1; depth >= 0; depth--) {
+        const SynFrame *frame = &state->f[depth];
+
+        if ((frame->fl & YEW_SYN_FR_BRIDGE) == 0U)
+            continue;
+        bridge = checked_ctx(master, frame, &host);
+        if (bridge->embed.end == SYN_EMBED_END_INLINE ||
+            (bridge->embed.end == SYN_EMBED_END_INLINE_ROOT &&
+             (depth + 1 == (i32)state->depth ||
+              depth + 2 == (i32)state->depth)))
+            bridge_frame = frame;
+        else if (bridge->embed.end == SYN_EMBED_END_LINE &&
+                 end_first != NULL)
+            *end_first = bridge->first;
+        break;
+    }
+    if (bridge_frame == NULL) {
+        if (end_first != NULL && (bridge == NULL ||
+            bridge->embed.end != SYN_EMBED_END_LINE))
+            *end_first = NULL;
+        return bol || active->ctx_first_nonbol == NULL ? ctx->first :
+            active->ctx_first_nonbol[state->f[state->depth - 1U].ctx];
+    }
+    hash = (u32)state->f[state->depth - 1U].def * 131U +
+           state->f[state->depth - 1U].ctx * 17U +
+           (u32)bridge_frame->def * 7U + bridge_frame->ctx * 3U +
+           (bol ? 1U : 0U);
+    cached = &master->merged_first[hash % YEW_ARRAY_LEN(master->merged_first)];
+    if (cached->valid && cached->active_def ==
+            state->f[state->depth - 1U].def &&
+        cached->active_ctx == state->f[state->depth - 1U].ctx &&
+        cached->bridge_def == bridge_frame->def &&
+        cached->bridge_ctx == bridge_frame->ctx &&
+        cached->bol == (u8)bol)
+        goto ready;
+    cached->active_def = state->f[state->depth - 1U].def;
+    cached->active_ctx = state->f[state->depth - 1U].ctx;
+    cached->bridge_def = bridge_frame->def;
+    cached->bridge_ctx = bridge_frame->ctx;
+    cached->bol = (u8)bol;
+    (void)memcpy(cached->bits,
+                 bol || active->ctx_first_nonbol == NULL ? ctx->first :
+                 active->ctx_first_nonbol[cached->active_ctx],
+                 sizeof(cached->bits));
+    (void)memset(cached->end_bits, 0, sizeof(cached->end_bits));
+    for (i = 0U; i < bridge->nrules; i++) {
+        u32 index = bridge->first_rule + i;
+        const SynRule *rule = &host->def->rules[index];
+
+        if (rule->end == 0U)
+            continue;
+        if (rule->aux_match != SYN_AUXM_NONE) {
+            (void)memset(cached->bits, 0xff, sizeof(cached->bits));
+            (void)memset(cached->end_bits, 0xff,
+                         sizeof(cached->end_bits));
+            break;
+        }
+        for (byte = 0U; byte < sizeof(cached->bits); byte++) {
+            u8 first = host->rule_first == NULL ? rule->first[byte] :
+                                                  host->rule_first[index][byte];
+            cached->bits[byte] |= first;
+            cached->end_bits[byte] |= first;
+        }
+    }
+    cached->valid = true;
+ready:
+    if (end_first != NULL)
+        *end_first = cached->end_bits;
+    return cached->bits;
+}
+
 static void syn_line_run(SynEngine *engine, u32 entry_state,
                          const u8 *line, u32 len, SynLineOut *out,
-                         bool apply_eol, bool instrument, SynState *trace)
+                         bool apply_eol, bool instrument, SynState *trace,
+                         u32 *pending_lang, u32 *refused_lang,
+                         const char **unknown_name, size_t *unknown_len)
 {
     SynState state;
     const SynState *entry;
@@ -3151,14 +3813,26 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
     engine->line_calls++;
     out->n = 0U;
     out->stop = YEW_SYN_STOP_OK;
+    if (pending_lang != NULL)
+        *pending_lang = YEW_LANG_NONE;
+    if (refused_lang != NULL)
+        *refused_lang = YEW_LANG_NONE;
+    if (unknown_name != NULL)
+        *unknown_name = NULL;
+    if (unknown_len != NULL)
+        *unknown_len = 0U;
     entry = yew_syn_state_get(engine->states, entry_state);
     if (entry == NULL) {
         entry_state = YEW_SYN_STATE_ROOT;
         entry = yew_syn_state_get(engine->states, entry_state);
     }
     state = *entry;
-    if (instrument && state.depth != 0U)
-        coverage_context(engine, state.f[state.depth - 1U].ctx);
+    if (instrument && state.depth != 0U) {
+        SynEngine *active;
+
+        (void)checked_ctx(engine, &state.f[state.depth - 1U], &active);
+        coverage_context(active, state.f[state.depth - 1U].ctx);
+    }
     if (trace != NULL)
         trace[0] = state;
     if (len > YEW_SYN_LINE_BYTE_CAP) {
@@ -3168,8 +3842,7 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
         out->stop = YEW_SYN_STOP_BYTES;
         return;
     }
-    if (engine->def == NULL || engine->def->ctxs == NULL ||
-        state.f[state.depth - 1U].ctx >= engine->def->nctxs) {
+    if (engine->def == NULL || engine->def->ctxs == NULL) {
         if (trace != NULL) {
             u32 t;
             for (t = 1U; t <= len; t++)
@@ -3181,14 +3854,44 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
     }
     step_cap = YEW_SYN_LINE_STEPS(len);
     if (len == 0U) {
-        apply_empty_bol(engine, &state, line, instrument);
+        SynEngine *host;
+        const SynRule *end_rule;
+        u32 end_index;
+        u8 bridge_depth;
+        u8 host_aux;
+        YewReMatch empty_match;
+
+        if (bridge_end_match(engine, &state, line, len, 0U, &host,
+                             &end_rule, &end_index, &bridge_depth,
+                             &host_aux, &empty_match)) {
+            SynState before = state;
+
+            (void)set_aux(host, &state, host_aux, end_rule, line, len,
+                          &empty_match);
+            leave_embed(&state, bridge_depth);
+            apply_rule_op(engine, host, &state, end_rule, line, len,
+                          &empty_match, pending_lang, refused_lang,
+                          unknown_name, unknown_len);
+            if (instrument) {
+                coverage_rule(host, end_index);
+                coverage_transition(engine, &before, &state);
+            }
+        } else {
+            apply_empty_bol(engine, &state, line, instrument, pending_lang,
+                            refused_lang, unknown_name, unknown_len);
+        }
         if (trace != NULL)
             trace[0] = state;
     }
     while (p < len) {
-        const SynCtx *ctx =
-            &engine->def->ctxs[state.f[state.depth - 1U].ctx];
-        const u32 *candidate_offsets = engine->candidate_offsets;
+        SynEngine *active;
+        const SynCtx *ctx = checked_ctx(engine,
+                                        &state.f[state.depth - 1U],
+                                        &active);
+        u8 dflt_attr =
+            (state.f[state.depth - 1U].fl & YEW_SYN_FR_BRIDGE) != 0U ?
+                ctx->embed.fallback : ctx->dflt_attr;
+        const u32 *candidate_offsets = active->candidate_offsets;
         size_t candidate_slot =
             (size_t)state.f[state.depth - 1U].ctx * SYN_CANDIDATE_STRIDE +
             line[p];
@@ -3206,15 +3909,61 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
         u32 matched_end;
         u32 ri;
 
+        {
+            SynEngine *host;
+            const SynRule *end_rule;
+            u32 end_index;
+            u8 bridge_depth;
+            u8 host_aux;
+
+            if ((p == 0U ||
+                 bitset_has(engine->embed_end_first, line[p])) &&
+                bridge_end_match(engine, &state, line, len, p, &host,
+                                 &end_rule, &end_index, &bridge_depth,
+                                 &host_aux, &match)) {
+                SynState exit_before = state;
+
+                matched_end = (u32)match.g[0].hi;
+                emit_match(out, end_rule, &match, matched_end);
+                (void)set_aux(host, &state, host_aux, end_rule, line, len,
+                              &match);
+                leave_embed(&state, bridge_depth);
+                apply_rule_op(engine, host, &state, end_rule, line, len,
+                              &match, pending_lang, refused_lang,
+                              unknown_name, unknown_len);
+                if (instrument) {
+                    coverage_rule(host, end_index);
+                    coverage_transition(engine, &exit_before, &state);
+                }
+                if (matched_end > p) {
+                    if (trace != NULL) {
+                        u32 t;
+
+                        for (t = p + 1U; t < matched_end; t++)
+                            trace[t] = exit_before;
+                        trace[matched_end] = state;
+                    }
+                    p = matched_end;
+                } else {
+                    if (trace != NULL)
+                        trace[p] = state;
+                    if (zero_transitions++ < YEW_SYN_DEPTH_MAX)
+                        continue;
+                    p = next_boundary(line, len, p);
+                }
+                continue;
+            }
+        }
+
         if (p == 0U) {
-            fortran_bol = fortran_bol_match(engine, &state, line, len,
+            fortran_bol = fortran_bol_match(active, &state, line, len,
                                             &matched_index, &match);
             if (fortran_bol == SYN_FORTRAN_BOL_MATCH)
-                matched = &engine->def->rules[matched_index];
+                matched = &active->def->rules[matched_index];
         }
         if (matched == NULL && p == 0U &&
-            engine->yaml_block_key_fast_enabled &&
-            engine->rule_yaml_block_key != NULL) {
+            active->yaml_block_key_fast_enabled &&
+            active->rule_yaml_block_key != NULL) {
             u32 yi;
 
             for (yi = 0U;
@@ -3223,32 +3972,32 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
                  yi++) {
                 u32 index = candidate_offsets == NULL ?
                     ctx->first_rule + yi :
-                    engine->candidate_rules[candidate_off + yi];
+                    active->candidate_rules[candidate_off + yi];
                 int fast;
 
-                if (engine->rule_yaml_block_key[index] != 2U)
+                if (active->rule_yaml_block_key[index] != 2U)
                     continue;
                 fast = yaml_block_key_match(
-                    engine->def->rules[index].re, line, len, 0U, &match);
+                    active->def->rules[index].re, line, len, 0U, &match);
                 if (fast > 0 &&
                     yaml_block_key_predecessors_cannot_match(line, len,
                                                              &match)) {
                     matched_index = index;
-                    matched = &engine->def->rules[index];
+                    matched = &active->def->rules[index];
                 }
                 break;
             }
         }
-        if (engine->fortran_fast_enabled &&
-            engine->fortran_words_cap != 0U &&
-            state.f[state.depth - 1U].ctx == engine->def->root) {
+        if (active->fortran_fast_enabled &&
+            active->fortran_words_cap != 0U &&
+            state.f[state.depth - 1U].ctx == active->def->root) {
             word_probe_init_folded(&word_probe, line, len, p);
             if (word_probe.status == SYN_WORD_PROBE_READY)
                 fortran_word_rule = fortran_word_winner(
-                    engine, line, p, &word_probe);
+                    active, line, p, &word_probe);
         }
         if (matched == NULL && fortran_word_rule != UINT32_MAX) {
-            const SynRule *rule = &engine->def->rules[fortran_word_rule];
+            const SynRule *rule = &active->def->rules[fortran_word_rule];
             u32 group;
 
             match.ngroups = rule->re->ngroups;
@@ -3257,21 +4006,20 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
             matched_index = fortran_word_rule;
             matched = rule;
         }
-        if (matched == NULL &&
-            !bitset_has(p == 0U || engine->ctx_first_nonbol == NULL ?
-                        ctx->first :
-                        engine->ctx_first_nonbol[
-                            state.f[state.depth - 1U].ctx], line[p]) &&
-            (engine->ctx_aux == NULL ||
-             engine->ctx_aux[state.f[state.depth - 1U].ctx] == 0U)) {
+        if (matched == NULL && (active->ctx_aux == NULL ||
+            active->ctx_aux[state.f[state.depth - 1U].ctx] == 0U)) {
+            const u8 *merged_first = merged_first_bytes(
+                engine, &state, active, ctx, p == 0U, NULL);
             u32 q = p + 1U;
-            const u8 *next_first = engine->ctx_first_nonbol == NULL ?
-                ctx->first :
-                engine->ctx_first_nonbol[state.f[state.depth - 1U].ctx];
+            const u8 *next_first = merged_first_bytes(
+                engine, &state, active, ctx, false, NULL);
+
+            if (bitset_has(merged_first, line[p]))
+                goto scan_rules;
 
             while (q < len && !bitset_has(next_first, line[q]))
                 q++;
-            emit_span(out, p, q - p, ctx->dflt_attr, 0U);
+            emit_span(out, p, q - p, dflt_attr, 0U);
             if (trace != NULL) {
                 u32 t;
                 for (t = p + 1U; t <= q; t++)
@@ -3280,13 +4028,14 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
             p = q;
             continue;
         }
+scan_rules:
         for (ri = 0U; matched == NULL &&
              ri < (candidate_offsets == NULL ? ctx->nrules : candidate_len);
              ri++) {
             u32 index = candidate_offsets == NULL ? ctx->first_rule + ri :
-                engine->candidate_rules[candidate_off + ri];
+                active->candidate_rules[candidate_off + ri];
             const SynRule *rule;
-            if (++steps > step_cap || index >= engine->def->nrules) {
+            if (++steps > step_cap || index >= active->def->nrules) {
                 emit_span(out, p, len - p, YEW_ATTR_TEXT,
                           YEW_SPAN_TRUNCATED);
                 out->exit_state = truncated_exit_state(
@@ -3294,18 +4043,18 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
                 out->stop = YEW_SYN_STOP_STEPS;
                 return;
             }
-            rule = &engine->def->rules[index];
-            if (engine->fortran_fast_enabled &&
+            rule = &active->def->rules[index];
+            if (active->fortran_fast_enabled &&
                 word_probe.status == SYN_WORD_PROBE_READY &&
-                engine->rule_fortran_word != NULL &&
-                engine->rule_fortran_word[index] != 0U &&
+                active->rule_fortran_word != NULL &&
+                active->rule_fortran_word[index] != 0U &&
                 (fortran_word_rule != UINT32_MAX ||
-                 engine->rule_fortran_word[index] == 1U) &&
+                 active->rule_fortran_word[index] == 1U) &&
                 index != fortran_word_rule)
                 continue;
             if (fortran_bol == SYN_FORTRAN_BOL_NONE &&
                 index >= ctx->first_rule &&
-                index < ctx->first_rule + engine->fortran_bol_rules)
+                index < ctx->first_rule + active->fortran_bol_rules)
                 continue;
             if ((state.flags & YEW_SYN_F_PAST_FIRST) != 0U &&
                 (rule->flags & YEW_SYN_RULE_FIRST_LINE) != 0U)
@@ -3315,11 +4064,11 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
                 (rule->value_pred == SYN_VALUE_CLEAR &&
                  (state.flags & YEW_SYN_F_VALUE) != 0U))
                 continue;
-            if (p != 0U && engine->rule_bol != NULL &&
-                engine->rule_bol[index] != 0U)
+            if (p != 0U && active->rule_bol != NULL &&
+                active->rule_bol[index] != 0U)
                 continue;
-            if (engine->rule_wordb != NULL &&
-                engine->rule_wordb[index] != 0U && line[p] < 0x80U) {
+            if (active->rule_wordb != NULL &&
+                active->rule_wordb[index] != 0U && line[p] < 0x80U) {
                 bool after_word = line[p] == (u8)'_' ||
                                   (line[p] >= (u8)'0' &&
                                    line[p] <= (u8)'9') ||
@@ -3343,11 +4092,12 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
                     continue;
             }
             if (candidate_offsets == NULL &&
-                !bitset_has(engine->rule_first == NULL ? rule->first :
-                            engine->rule_first[index], line[p]) &&
+                !bitset_has(active->rule_first == NULL ? rule->first :
+                            active->rule_first[index], line[p]) &&
                 rule->aux_match == SYN_AUXM_NONE)
                 continue;
-            if (rule_match(engine, &state, rule, index, line, len, p,
+            if (rule_match(active, &state, state.ndef - 1U, rule, index,
+                           line, len, p,
                            &word_probe, &match)) {
                 matched = rule;
                 matched_index = index;
@@ -3356,7 +4106,7 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
         }
         if (matched == NULL) {
             u32 q = next_boundary(line, len, p);
-            emit_span(out, p, q - p, ctx->dflt_attr, 0U);
+            emit_span(out, p, q - p, dflt_attr, 0U);
             if (trace != NULL) {
                 u32 t;
                 for (t = p + 1U; t <= q; t++)
@@ -3368,7 +4118,9 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
         if (instrument || trace != NULL)
             before = state;
         if (instrument)
-            coverage_rule(engine, matched_index);
+            coverage_rule(active, matched_index);
+        if (instrument && matched->op == SYN_OP_EMBED)
+            coverage_embed(active, matched->target);
         matched_end = (u32)match.g[0].hi;
         if (matched->consume != 0U &&
             matched->consume < match.ngroups &&
@@ -3377,14 +4129,15 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
         if (matched_end < p || matched_end > match.g[0].hi)
             YEW_BUG("syntax: consume group ends outside whole match");
         if (matched->consume == 3U && match.ngroups == 5U &&
-            engine->yaml_block_key_fast_enabled &&
-            engine->rule_yaml_block_key != NULL &&
-            engine->rule_yaml_block_key[matched_index] != 0U)
+            active->yaml_block_key_fast_enabled &&
+            active->rule_yaml_block_key != NULL &&
+            active->rule_yaml_block_key[matched_index] != 0U)
             emit_yaml_block_key(out, matched, &match);
         else
             emit_match(out, matched, &match, matched_end);
         {
-            bool aux_set = set_aux(engine, &state, matched, line, len,
+            bool aux_set = set_aux(active, &state, state.ndef - 1U,
+                                   matched, line, len,
                                    &match);
             if ((matched->flags & YEW_SYN_RULE_STRIP) != 0U && aux_set)
                 state.flags |= YEW_SYN_F_STRIP;
@@ -3393,7 +4146,8 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
             state.flags |= YEW_SYN_F_VALUE;
         if ((matched->flags & YEW_SYN_RULE_CLR_VALUE) != 0U)
             state.flags &= (u8)~YEW_SYN_F_VALUE;
-        apply_rule_op(&state, matched);
+        apply_rule_op(engine, active, &state, matched, line, len, &match,
+                      pending_lang, refused_lang, unknown_name, unknown_len);
         if (instrument)
             coverage_transition(engine, &before, &state);
         {
@@ -3412,8 +4166,8 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
                     trace[p] = state;
                 continue;
             } else {
-                const SynCtx *after =
-                    &engine->def->ctxs[state.f[state.depth - 1U].ctx];
+                const SynCtx *after = checked_ctx(
+                    engine, &state.f[state.depth - 1U], NULL);
                 u32 q = next_boundary(line, len, p);
                 emit_span(out, p, q - p, after->dflt_attr, 0U);
                 if (trace != NULL) {
@@ -3426,18 +4180,74 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
         }
     }
     if (apply_eol) {
-        const SynCtx *ctx =
-            &engine->def->ctxs[state.f[state.depth - 1U].ctx];
-        SynState before;
+        SynFrame *top = &state.f[state.depth - 1U];
 
-        if (instrument)
-            before = state;
-        apply_op(&state, ctx->at_eol, ctx->eol_nop, ctx->eol_target);
+        if ((top->fl & (YEW_SYN_FR_BRIDGE | YEW_SYN_FR_DEFER)) ==
+                (YEW_SYN_FR_BRIDGE | YEW_SYN_FR_DEFER) &&
+            (state.flags & YEW_SYN_F_EMBED_PEND) == 0U) {
+            SynEngine *host;
+            const SynCtx *bridge = checked_ctx(engine, top, &host);
+            u32 encoded = state.aux[state.ndef];
+
+            top->fl &= (u8)~YEW_SYN_FR_DEFER;
+            state.aux[state.ndef] = 0U;
+            if (encoded != 0U &&
+                !push_guest(engine, &state, (u8)(encoded - 1U),
+                            &bridge->embed, host)) {
+                lost_add(&state, 2U);
+                state.flags |= YEW_SYN_F_EMBED_LOST;
+            }
+        } else {
+            SynEngine *active;
+            const SynCtx *ctx = checked_ctx(engine, top, &active);
+            SynState before;
+            bool guest_was_active =
+                (top->fl & YEW_SYN_FR_BRIDGE) == 0U && state.ndef > 1U;
+
+            if (instrument)
+                before = state;
+            if ((top->fl & YEW_SYN_FR_BRIDGE) != 0U &&
+                ctx->at_eol == SYN_OP_POP)
+                leave_embed(&state, state.depth - 1U);
+            apply_op(&state, ctx->at_eol, ctx->eol_nop, ctx->eol_target);
+            if (instrument)
+                coverage_transition(engine, &before, &state);
+            if (guest_was_active) {
+                i32 depth;
+
+                for (depth = (i32)state.depth - 1; depth >= 0; depth--) {
+                    SynFrame *bridge_frame = &state.f[depth];
+                    SynEngine *host;
+                    const SynCtx *bridge;
+
+                    if ((bridge_frame->fl & YEW_SYN_FR_BRIDGE) == 0U)
+                        continue;
+                    bridge = checked_ctx(engine, bridge_frame, &host);
+                    if ((bridge->embed.end == SYN_EMBED_END_LINE ||
+                         (bridge->embed.end ==
+                              SYN_EMBED_END_LINE_CONTINUATION &&
+                          !line_has_continuation(line, len))) &&
+                        bridge->at_eol != SYN_OP_STAY) {
+                        SynState host_before = state;
+
+                        leave_embed(&state, (u8)depth);
+                        apply_op(&state, bridge->at_eol, bridge->eol_nop,
+                                 bridge->eol_target);
+                        if (instrument)
+                            coverage_transition(engine, &host_before, &state);
+                    }
+                    break;
+                }
+            }
+        }
         state.flags &= (u8)~YEW_SYN_F_VALUE;
+        if ((state.flags & YEW_SYN_F_EMBED_ORPHAN) != 0U) {
+            state.lost = state.lost > 2U ? (u8)(state.lost - 2U) : 0U;
+            state.flags &= (u8)~(YEW_SYN_F_EMBED_LOST |
+                                YEW_SYN_F_EMBED_ORPHAN);
+        }
         if (engine->has_first_line)
             state.flags |= YEW_SYN_F_PAST_FIRST;
-        if (instrument)
-            coverage_transition(engine, &before, &state);
     }
     out->exit_state = memcmp(entry, &state, sizeof(state)) == 0 ?
         entry_state : yew_syn_state_intern(engine->states, &state);
@@ -3447,7 +4257,8 @@ void yew_syn_line(SynEngine *engine, u32 entry_state, const u8 *line,
                   u32 len, SynLineOut *out)
 {
     syn_line_run(engine, entry_state, line, len, out, true,
-                 engine != NULL && engine->coverage != NULL, NULL);
+                 engine != NULL && engine->coverage != NULL, NULL, NULL,
+                 NULL, NULL, NULL);
 }
 
 bool yew_syn_stack_trace(SynEngine *engine, u32 entry_state, const u8 *line,
@@ -3460,7 +4271,7 @@ bool yew_syn_stack_trace(SynEngine *engine, u32 entry_state, const u8 *line,
         (line == NULL && len != 0U) || trace_cap < (size_t)len + 1U)
         return false;
     syn_line_run(engine, entry_state, line, len, &line_out, false, false,
-                 trace);
+                 trace, NULL, NULL, NULL, NULL);
     return line_out.stop == YEW_SYN_STOP_OK;
 }
 
@@ -3536,6 +4347,93 @@ static void vec_splice(SynU32Vec *vec, size_t at, size_t removed,
     if (inserted != 0U)
         (void)memset(vec->data + at, 0, inserted * sizeof(*vec->data));
     vec->len = new_len;
+}
+
+static void pending_sync_head(SynBuf *syn)
+{
+    if (syn->embed_pending_count == 0U) {
+        syn->embed_pending = YEW_LANG_NONE;
+        syn->embed_pending_line = LINENO(0U);
+        return;
+    }
+    syn->embed_pending = syn->embed_pending_langs[0];
+    syn->embed_pending_line = syn->embed_pending_lines[0];
+}
+
+static void pending_reset(SynBuf *syn)
+{
+    syn->embed_pending_count = 0U;
+    pending_sync_head(syn);
+}
+
+static bool pending_contains(const SynBuf *syn, u32 lang)
+{
+    u16 i;
+
+    for (i = 0U; i < syn->embed_pending_count; i++) {
+        if (syn->embed_pending_langs[i] == lang)
+            return true;
+    }
+    return false;
+}
+
+static void pending_add(SynBuf *syn, u32 lang, size_t line)
+{
+    u16 i;
+
+    for (i = 0U; i < syn->embed_pending_count; i++) {
+        if (syn->embed_pending_langs[i] != lang)
+            continue;
+        if (line < syn->embed_pending_lines[i].v)
+            syn->embed_pending_lines[i] = LINENO(line);
+        pending_sync_head(syn);
+        return;
+    }
+    if (syn->embed_pending_count >= YEW_SYN_RESIDENT_MAX)
+        YEW_BUG("syntax: pending embed queue exceeds resident capacity");
+    i = syn->embed_pending_count++;
+    syn->embed_pending_langs[i] = lang;
+    syn->embed_pending_lines[i] = LINENO(line);
+    pending_sync_head(syn);
+}
+
+static void pending_remove_head(SynBuf *syn)
+{
+    if (syn->embed_pending_count != 0U) {
+        syn->embed_pending_count--;
+        if (syn->embed_pending_count != 0U) {
+            (void)memmove(syn->embed_pending_langs,
+                          syn->embed_pending_langs + 1U,
+                          syn->embed_pending_count *
+                              sizeof(*syn->embed_pending_langs));
+            (void)memmove(syn->embed_pending_lines,
+                          syn->embed_pending_lines + 1U,
+                          syn->embed_pending_count *
+                              sizeof(*syn->embed_pending_lines));
+        }
+    }
+    pending_sync_head(syn);
+}
+
+static void pending_shift_edit(SynBuf *syn, size_t at, size_t removed,
+                               size_t inserted, size_t edited_line)
+{
+    u16 i;
+
+    for (i = 0U; i < syn->embed_pending_count; i++) {
+        size_t line = (size_t)syn->embed_pending_lines[i].v;
+
+        if (line < at)
+            continue;
+        if (line < at + removed)
+            line = edited_line;
+        else
+            line = line - removed + inserted;
+        if (syn->entry.len != 0U && line >= syn->entry.len)
+            line = syn->entry.len - 1U;
+        syn->embed_pending_lines[i] = LINENO(line);
+    }
+    pending_sync_head(syn);
 }
 
 void yew_syn_buf_init(SynBuf *syn)
@@ -3616,6 +4514,9 @@ void yew_syn_attach(SynBuf *syn, u32 lang, const TextBuf *tb)
         syn->wave = LINENO(n);
     }
     syn->degraded = false;
+    pending_reset(syn);
+    syn->embed_refused = YEW_LANG_NONE;
+    syn->embed_unknown_logged = false;
     syn->spec_valid = false;
     syn->spec_from = LINENO(0U);
     syn->must_reach = LINENO(syn->settling ? n : 0U);
@@ -3704,6 +4605,8 @@ void yew_syn_edit(SynBuf *syn, LineNo lo, u64 removed, u64 inserted)
         syn->wave = lo;
     syn->settling = true;
     syn->spec_valid = false;
+    pending_shift_edit(syn, at, (size_t)removed, (size_t)inserted,
+                       (size_t)lo.v);
     if (frontier < at + inserted)
         frontier = at + inserted;
     if (frontier > syn->entry.len)
@@ -3828,6 +4731,96 @@ static void reconcile_engine(SynBuf *syn)
     cache_invalidate(syn);
 }
 
+static bool resident_install(SynEngine *master, u32 lang,
+                             SynEngine *runtime)
+{
+    u32 byte;
+
+    if (master == NULL || runtime == NULL || runtime->def == NULL ||
+        lang == YEW_LANG_NONE)
+        return false;
+    if (resident_slot(master, lang) != UINT8_MAX)
+        return true;
+    if (master->ndefs >= YEW_SYN_RESIDENT_MAX)
+        return false;
+    yew_syn_def_pin(runtime->def);
+    master->defs[master->ndefs++] = (SynResident){lang, runtime};
+    for (byte = 0U; byte < sizeof(master->embed_end_first); byte++)
+        master->embed_end_first[byte] |= runtime->embed_end_first[byte];
+    return true;
+}
+
+static void syn_pending_request(SynBuf *syn, u32 lang, size_t line)
+{
+    if (lang == YEW_LANG_NONE ||
+        yew_syn_def_resident(syn->engine, lang) != NULL)
+        return;
+    pending_add(syn, lang, line);
+}
+
+bool yew_syn_embed_pump(SynBuf *syn, SynEngine *engine, i64 budget_us)
+{
+    size_t i;
+    u32 lang = YEW_LANG_NONE;
+    SynEngine *runtime;
+    bool queued = false;
+
+    if (syn == NULL || engine == NULL ||
+        budget_us < YEW_SYN_EMBED_LOAD_BUDGET_US)
+        return false;
+    if (syn->embed_pending_count != 0U) {
+        lang = syn->embed_pending_langs[0];
+        i = syn->embed_pending_lines[0].v;
+        queued = true;
+    }
+    if (!queued) {
+        for (i = 0U; lang == YEW_LANG_NONE && i < syn->entry.len; i++) {
+            const SynState *state = yew_syn_state_get(
+                engine->states, syn->entry.data[i]);
+
+            if (state != NULL &&
+                (state->flags & YEW_SYN_F_EMBED_PEND) != 0U &&
+                state->ndef < YEW_SYN_DEF_MAX) {
+                lang = state->aux[state->ndef];
+                if (lang != YEW_LANG_NONE &&
+                    resident_slot(engine, lang) == UINT8_MAX)
+                    break;
+                lang = YEW_LANG_NONE;
+            }
+        }
+    }
+    if (lang == YEW_LANG_NONE || engine->ndefs >= YEW_SYN_RESIDENT_MAX)
+        return false;
+    runtime = yew_syn_engine_for(lang);
+    if (!resident_install(engine, lang, runtime))
+        return false;
+
+    if (queued) {
+        pending_remove_head(syn);
+    }
+
+    /* The pending state is an entry state, so its opener is on the prior
+     * line for deferred embeds and may be there for an immediate embed.
+     * Replaying one line of headroom is cheap and covers both cases. */
+    if (!queued && i != 0U)
+        i--;
+    if (i < syn->entry.len) {
+        size_t clear_from = i + 1U;
+        size_t tail = syn->entry.len - clear_from;
+
+        if (tail != 0U)
+            (void)memset(syn->entry.data + clear_from, 0,
+                         tail * sizeof(*syn->entry.data));
+        syn->wave = LINENO(i);
+        syn->settled_to = LINENO(i + 1U);
+        syn->must_reach = LINENO(syn->entry.len);
+        syn->settling = true;
+        syn->spec_valid = false;
+        cache_invalidate(syn);
+    }
+    return true;
+}
+
 void yew_syn_settle(SynBuf *syn, const TextBuf *tb, LineNo view_lo,
                     LineNo view_hi, i64 budget_us, SynSettleReport *report)
 {
@@ -3858,6 +4851,9 @@ void yew_syn_settle(SynBuf *syn, const TextBuf *tb, LineNo view_lo,
         deadline_us -= YEW_SYN_CLOCK_HEADROOM_US;
     reconcile_engine(syn);
     reconcile_generation(syn, tb);
+    if (budget_us >= YEW_SYN_IDLE_BUDGET_US)
+        (void)yew_syn_embed_pump(syn, syn->engine,
+                                 YEW_SYN_EMBED_LOAD_BUDGET_US);
     nlines = syn->entry.len;
     if (syn->engine == NULL || syn->lang == YEW_LANG_NONE || nlines == 0U) {
         syn->settling = false;
@@ -3874,6 +4870,10 @@ void yew_syn_settle(SynBuf *syn, const TextBuf *tb, LineNo view_lo,
     for (; i < nlines; i++) {
         SynLineOut out = {spans, 0U, YEW_SYN_MAX_SPANS, 0U,
                           YEW_SYN_STOP_OK};
+        u32 pending_lang;
+        u32 refused_lang;
+        const char *unknown_name;
+        size_t unknown_len;
         u32 len;
         const u8 *bytes;
         u32 held;
@@ -3882,7 +4882,22 @@ void yew_syn_settle(SynBuf *syn, const TextBuf *tb, LineNo view_lo,
         if (entry == YEW_SYN_STATE_UNKNOWN)
             entry = YEW_SYN_STATE_ROOT;
         bytes = line_copy(syn, tb, LINENO(i), &len);
-        yew_syn_line(syn->engine, entry, bytes, len, &out);
+        syn_line_run(syn->engine, entry, bytes, len, &out, true,
+                     syn->engine->coverage != NULL, NULL, &pending_lang,
+                     &refused_lang, &unknown_name, &unknown_len);
+        syn_pending_request(syn, pending_lang, i);
+        if (refused_lang != YEW_LANG_NONE) {
+            syn->embed_refused = refused_lang;
+            syn->degraded = true;
+        }
+        if (unknown_name != NULL && !syn->embed_unknown_logged) {
+            int shown = unknown_len > 120U ? 120 : (int)unknown_len;
+
+            yew_log(YEW_LOG_WARN,
+                    "syntax embed language '%.*s' is unavailable; using fallback",
+                    shown, unknown_name);
+            syn->embed_unknown_logged = true;
+        }
         report->lines++;
         {
             const SynState *exit =
@@ -4058,16 +5073,81 @@ bool yew_syn_status_visible(const SynBuf *syn)
 
 void yew_syn_status(const SynBuf *syn, u64 line_count, char *dst, size_t cap)
 {
+    const char *root_name = "none";
+    const char *active_name = "none";
+    const char *refused_name = "none";
+    u32 states = 0U;
+    u32 pending = 0U;
+    u8 ndefs = 0U;
+    u8 depth = 0U;
+    size_t i;
+
     if (dst == NULL || cap == 0U)
         return;
     if (syn == NULL) {
         (void)snprintf(dst, cap, "syntax unavailable");
         return;
     }
+    if (syn->engine != NULL) {
+        const SynDef *root = yew_syn_engine_def_at(syn->engine, 0U);
+        const SynState *active = NULL;
+        size_t at = syn->wave.v < syn->entry.len ? (size_t)syn->wave.v :
+                    syn->entry.len == 0U ? 0U : syn->entry.len - 1U;
+
+        if (root != NULL && root->name != NULL)
+            root_name = root->name;
+        states = yew_syn_state_count(syn->engine->states);
+        pending = syn->embed_pending_count;
+        if (syn->embed_refused != YEW_LANG_NONE)
+            refused_name = engine_name_by_lang(syn->engine,
+                                               syn->embed_refused);
+        if (syn->entry.len != 0U)
+            active = yew_syn_state_get(syn->engine->states,
+                                       syn->entry.data[at]);
+        if (active != NULL) {
+            const SynDef *def = yew_syn_engine_def_at(
+                syn->engine, YEW_SYN_DEF_OF(active));
+
+            depth = active->depth;
+            ndefs = active->ndef;
+            if (def != NULL && def->name != NULL)
+                active_name = def->name;
+        }
+        for (i = 0U; i < syn->entry.len; i++) {
+            const SynState *state = yew_syn_state_get(
+                syn->engine->states, syn->entry.data[i]);
+
+            if (state != NULL &&
+                (state->flags & YEW_SYN_F_EMBED_PEND) != 0U &&
+                state->ndef < YEW_SYN_DEF_MAX) {
+                u32 lang = state->aux[state->ndef];
+                size_t prior;
+                bool seen = pending_contains(syn, lang);
+
+                for (prior = 0U; !seen && prior < i; prior++) {
+                    const SynState *earlier = yew_syn_state_get(
+                        syn->engine->states, syn->entry.data[prior]);
+
+                    seen = earlier != NULL &&
+                        (earlier->flags & YEW_SYN_F_EMBED_PEND) != 0U &&
+                        earlier->ndef < YEW_SYN_DEF_MAX &&
+                        earlier->aux[earlier->ndef] == lang;
+                }
+                if (!seen)
+                    pending++;
+            }
+        }
+    }
     (void)snprintf(dst, cap,
-                   "settled %llu/%llu lines, wave at %llu, degraded=%s",
+                   "settled %llu/%llu, wave %llu, root=%s active=%s "
+                   "defs=%u/%u depth=%u/%u states=%u degraded=%s "
+                   "embed_pending=%u embed_refused=%s",
                    (unsigned long long)syn->settled_to.v,
                    (unsigned long long)line_count,
                    (unsigned long long)syn->wave.v,
-                   syn->degraded ? "yes" : "no");
+                   root_name, active_name, (unsigned)ndefs,
+                   (unsigned)YEW_SYN_DEF_MAX, (unsigned)depth,
+                   (unsigned)YEW_SYN_DEPTH_MAX, (unsigned)states,
+                   syn->degraded ? "yes" : "no", (unsigned)pending,
+                   refused_name);
 }

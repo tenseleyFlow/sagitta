@@ -9,6 +9,8 @@
 #include <unistd.h>
 
 #include "syn/defs.h"
+#include "syn/engine.h"
+#include "text/piece.h"
 
 typedef struct DiscoveryFix {
     char root[160];
@@ -246,5 +248,116 @@ void test_syn_discovery_rejects_builtin_language_name_collision(void)
     YEW_ASSERT_EQ_STR(desc->source, "runtime/syntax/ini.fl");
     YEW_ASSERT_EQ_U64(yew_syn_lang_for("x.hijack", NULL, 0U),
                       YEW_LANG_NONE);
+    discovery_close(&f, true);
+}
+
+void test_syn_discovery_engine_snapshots_user_name_for_pure_embed_lookup(void)
+{
+    static const char host_src[] =
+        "{syntax:1,language:{name:\"snapshot-host\"},contexts:{"
+        "main:{rules:[{match:\"OPEN\",push:\"bridge\",embed:{lang:\"user-alpha\",end:\"inline\"}}]},"
+        "bridge:{rules:[{match:\"END\",pop:1,end:true}]}}}";
+    DiscoveryFix f;
+    Arena arena;
+    DiagCtx dc;
+    SynDef *host;
+    SynEngine *engine;
+    SynSpan spans[8];
+    SynLineOut out = {spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
+    const SynState *pending;
+    u32 alpha;
+    u32 errors = 0U;
+    u32 warnings = 0U;
+    u32 file;
+    u64 compiled;
+
+    discovery_open(&f, true);
+    discovery_write(&f, "user.fl", alpha_def);
+    yew_syn_discovery_reset();
+    alpha = yew_syn_lang_named("user-alpha");
+    YEW_ASSERT(alpha != YEW_LANG_NONE);
+    arena_init(&arena);
+    fl_diag_init(&dc, &arena);
+    file = fl_diag_add_file(&dc, "snapshot-host.fl", host_src,
+                            strlen(host_src));
+    host = yew_syn_def_compile(&arena, &dc, (const u8 *)host_src,
+                               strlen(host_src), file, &errors, &warnings);
+    YEW_ASSERT_NOT_NULL(host);
+    YEW_ASSERT_EQ_U64(errors, 0U);
+    YEW_ASSERT_EQ_U64(warnings, 0U);
+    engine = yew_syn_engine_new(host);
+    compiled = yew_syn_compile_count();
+    yew_syn_line(engine, YEW_SYN_STATE_ROOT, (const u8 *)"OPENx", 5U,
+                 &out);
+    YEW_ASSERT_EQ_U64(yew_syn_compile_count(), compiled);
+    pending = yew_syn_state_get(yew_syn_engine_states(engine),
+                                out.exit_state);
+    YEW_ASSERT_NOT_NULL(pending);
+    YEW_ASSERT((pending->flags & YEW_SYN_F_EMBED_PEND) != 0U);
+    YEW_ASSERT_EQ_U64(pending->aux[pending->ndef], alpha);
+    yew_syn_engine_free(engine);
+    yew_syn_def_dispose(host);
+    arena_free_all(&arena);
+    discovery_close(&f, true);
+}
+
+void test_syn_discovery_reset_keeps_pumped_guest_runtime_alive(void)
+{
+    static const char host_src[] =
+        "{syntax:1,language:{name:\"reset-host\"},contexts:{"
+        "main:{rules:[{match:\"OPEN\",push:\"bridge\",embed:{lang:\"user-alpha\",end:\"inline\"}}]},"
+        "bridge:{rules:[{match:\"END\",pop:1,end:true}]}}}";
+    DiscoveryFix f;
+    Arena arena;
+    DiagCtx dc;
+    SynDef *host;
+    SynEngine *engine;
+    SynBuf syn;
+    TextBuf *tb;
+    SynSettleReport report;
+    u32 errors = 0U;
+    u32 warnings = 0U;
+    u32 file;
+    u32 alpha;
+
+    discovery_open(&f, true);
+    discovery_write(&f, "user.fl", alpha_def);
+    yew_syn_discovery_reset();
+    alpha = yew_syn_lang_named("user-alpha");
+    YEW_ASSERT(alpha != YEW_LANG_NONE);
+    arena_init(&arena);
+    fl_diag_init(&dc, &arena);
+    file = fl_diag_add_file(&dc, "reset-host.fl", host_src,
+                            strlen(host_src));
+    host = yew_syn_def_compile(&arena, &dc, (const u8 *)host_src,
+                               strlen(host_src), file, &errors, &warnings);
+    YEW_ASSERT_NOT_NULL(host);
+    YEW_ASSERT_EQ_U64(errors, 0U);
+    YEW_ASSERT_EQ_U64(warnings, 0U);
+    engine = yew_syn_engine_new(host);
+    yew_syn_buf_init(&syn);
+    yew_syn_buf_bind(&syn, engine);
+    tb = yew_textbuf_from_bytes((const u8 *)"OPENxEND\n", 9U);
+    YEW_ASSERT_NOT_NULL(tb);
+    yew_syn_attach(&syn, 1U, tb);
+    yew_syn_settle(&syn, tb, LINENO(0U), LINENO(1U), INT64_MAX, &report);
+    YEW_ASSERT_EQ_U64(syn.embed_pending, alpha);
+    YEW_ASSERT(yew_syn_embed_pump(&syn, engine,
+                                  YEW_SYN_EMBED_LOAD_BUDGET_US));
+    YEW_ASSERT_NOT_NULL(yew_syn_def_resident(engine, alpha));
+
+    yew_syn_discovery_reset();
+    yew_syn_edit(&syn, LINENO(0U), 0U, 0U);
+    yew_syn_settle(&syn, tb, LINENO(0U), LINENO(1U), INT64_MAX, &report);
+    YEW_ASSERT(report.fixpoint);
+    YEW_ASSERT_NOT_NULL(yew_syn_def_resident(engine, alpha));
+    YEW_ASSERT_EQ_STR(yew_syn_def_resident(engine, alpha)->name,
+                      "user-alpha");
+
+    yew_syn_detach(&syn);
+    yew_textbuf_free(tb);
+    yew_syn_engine_free(engine);
+    yew_syn_def_dispose(host);
+    arena_free_all(&arena);
     discovery_close(&f, true);
 }

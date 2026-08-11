@@ -1041,7 +1041,8 @@ bool yew_ed_syn_pending(const Ed *ed)
         const Win *win = leaves[i]->win;
 
         if (win != NULL && win->buf != NULL && win->buf->tb != NULL &&
-            win->buf->syn.settling)
+            (win->buf->syn.settling ||
+             win->buf->syn.embed_pending != YEW_LANG_NONE))
             return true;
     }
     return false;
@@ -1073,7 +1074,9 @@ void yew_ed_syn_tick(Ed *ed, i64 budget_us, bool prioritize_focus)
         u32 j;
 
         if (candidate == NULL || candidate->buf == NULL ||
-            candidate->buf->tb == NULL || !candidate->buf->syn.settling)
+            candidate->buf->tb == NULL ||
+            (!candidate->buf->syn.settling &&
+             candidate->buf->syn.embed_pending == YEW_LANG_NONE))
             continue;
         for (j = 0U; j < ncandidates; j++) {
             if (candidates[j] == candidate->buf)

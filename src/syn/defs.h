@@ -68,8 +68,16 @@ u32 yew_syn_lang_for_scored(const char *path, const u8 *line1, u32 l1_len,
                             SynFortranForm override, bool sniff_legacy);
 const SynDef *yew_syn_def_for(u32 lang);
 SynEngine *yew_syn_engine_for(u32 lang);
+/* Resident engines pin discovered definition storage across registry resets. */
+void yew_syn_def_pin(const SynDef *def);
+void yew_syn_def_unpin(const SynDef *def);
 const SynLangDesc *yew_syn_lang_desc(u32 lang);
 u32 yew_syn_lang_named(const char *name);
+/* Generated-table-only lookup.  This function performs no discovery or I/O. */
+u32 yew_syn_lang_by_name(const u8 *name, u32 len);
+/* Impure registry snapshot seam for engine construction.  Returned names
+ * remain registry-owned; callers that outlive discovery resets copy them. */
+u32 yew_syn_lang_snapshot(const char **names, u32 *langs, u32 cap);
 u32 yew_syn_lang_count(void);
 /* Forget definitions discovered under $XDG_CONFIG_HOME/yew/syntax and make
  * the next registry lookup rescan that directory.  Primarily useful to

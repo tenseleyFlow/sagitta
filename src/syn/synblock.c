@@ -76,10 +76,10 @@ static bool line_read(const TextBuf *tb, u64 line, SynBlockLine *out)
     return true;
 }
 
-static bool frame_is(const SynState *state, u8 depth, u16 ctx)
+static bool frame_is(const SynState *state, u8 depth, u8 def, u16 ctx)
 {
     return state != NULL && depth < state->depth &&
-           state->f[depth].ctx == ctx;
+           state->f[depth].def == def && state->f[depth].ctx == ctx;
 }
 
 static bool state_at_line(const Buffer *buf, u64 line, u32 at,
@@ -101,7 +101,7 @@ static bool state_at_line(const Buffer *buf, u64 line, u32 at,
 }
 
 static bool line_first_frame(const Buffer *buf, u64 line, u8 depth,
-                             u16 ctx, u32 from, bool want, u32 *at,
+                             u8 def, u16 ctx, u32 from, bool want, u32 *at,
                              bool *found)
 {
     SynBlockLine text = {0};
@@ -126,7 +126,7 @@ static bool line_first_frame(const Buffer *buf, u64 line, u8 depth,
     if (from > text.len)
         from = text.len;
     for (p = from; p <= text.len; p++) {
-        if (frame_is(&trace[p], depth, ctx) == want) {
+        if (frame_is(&trace[p], depth, def, ctx) == want) {
             *at = p;
             *found = true;
             free(trace);
@@ -140,7 +140,7 @@ static bool line_first_frame(const Buffer *buf, u64 line, u8 depth,
 }
 
 static bool line_last_frame_start(const Buffer *buf, u64 line, u8 depth,
-                                  u16 ctx, u32 through, u32 *at)
+                                  u8 def, u16 ctx, u32 through, u32 *at)
 {
     SynBlockLine text = {0};
     SynState *trace;
@@ -165,7 +165,7 @@ static bool line_last_frame_start(const Buffer *buf, u64 line, u8 depth,
         through = text.len;
     for (u32 p = 0U; p <= through; p++) {
         bool present;
-        present = frame_is(&trace[p], depth, ctx);
+        present = frame_is(&trace[p], depth, def, ctx);
         if (present && !previous) {
             *at = p;
             found = true;
@@ -177,7 +177,7 @@ static bool line_last_frame_start(const Buffer *buf, u64 line, u8 depth,
     return found;
 }
 
-static bool entry_has(const Buffer *buf, u64 line, u8 depth, u16 ctx,
+static bool entry_has(const Buffer *buf, u64 line, u8 depth, u8 def, u16 ctx,
                       u32 *matching_entry)
 {
     const SynState *state;
@@ -189,7 +189,7 @@ static bool entry_has(const Buffer *buf, u64 line, u8 depth, u16 ctx,
     if (id != YEW_SYN_STATE_UNKNOWN && id == *matching_entry)
         return true;
     state = yew_syn_state_get(yew_syn_engine_states(buf->syn.engine), id);
-    if (!frame_is(state, depth, ctx))
+    if (!frame_is(state, depth, def, ctx))
         return false;
     *matching_entry = id;
     return true;
@@ -209,7 +209,7 @@ static bool syntax_ready_at(const Buffer *buf, u64 line)
 }
 
 static bool frame_bounds(const Buffer *buf, u64 center, u32 local,
-                         u8 depth, u16 ctx, Span *out)
+                         u8 depth, u8 def, u16 ctx, Span *out)
 {
     u64 lo_line = center;
     u64 hi_line = center;
@@ -220,12 +220,12 @@ static bool frame_bounds(const Buffer *buf, u64 center, u32 local,
     bool tail_unsettled = false;
 
     while (lo_line != 0U &&
-           entry_has(buf, lo_line, depth, ctx, &matching_entry)) {
+           entry_has(buf, lo_line, depth, def, ctx, &matching_entry)) {
         if (++scanned > YEW_SYN_UNIT_SCAN_LINES)
             return false;
         lo_line--;
     }
-    if (!line_last_frame_start(buf, lo_line, depth, ctx,
+    if (!line_last_frame_start(buf, lo_line, depth, def, ctx,
                                lo_line == center ? local : UINT32_MAX,
                                &local_at)) {
         if (lo_line == center)
@@ -242,7 +242,7 @@ static bool frame_bounds(const Buffer *buf, u64 center, u32 local,
             tail_unsettled = true;
             break;
         }
-        if (!entry_has(buf, hi_line + 1U, depth, ctx, &matching_entry))
+        if (!entry_has(buf, hi_line + 1U, depth, def, ctx, &matching_entry))
             break;
         if (++scanned > YEW_SYN_UNIT_SCAN_LINES)
             return false;
@@ -251,7 +251,7 @@ static bool frame_bounds(const Buffer *buf, u64 center, u32 local,
     /* entry[] identifies the last line whose entry stack still contains
      * this frame.  Interior lines need only sequential cached-state reads;
      * replay the last such line once to locate its exact closing byte. */
-    if (!line_first_frame(buf, hi_line, depth, ctx,
+    if (!line_first_frame(buf, hi_line, depth, def, ctx,
                           hi_line == center ? local : 0U, false,
                           &local_at, &found))
         return false;
@@ -282,7 +282,6 @@ static bool syn_enclosing(void *ctx, UnitCtx *u, ByteOff p, Span inner,
                           Span *out)
 {
     const Buffer *buf;
-    const SynDef *def;
     SynState state;
     Span line_span;
     u64 line;
@@ -297,9 +296,6 @@ static bool syn_enclosing(void *ctx, UnitCtx *u, ByteOff p, Span inner,
     line = yew_textbuf_line_of(buf->tb, p).v;
     if (!syntax_ready_at(buf, line))
         return false;
-    def = yew_syn_engine_def(buf->syn.engine);
-    if (def == NULL || def->ctxs == NULL)
-        return false;
     line_span = yew_textbuf_line_span(buf->tb, LINENO(line));
     local = p.v <= line_span.lo ? 0U :
             p.v - line_span.lo > UINT32_MAX ? UINT32_MAX :
@@ -307,8 +303,10 @@ static bool syn_enclosing(void *ctx, UnitCtx *u, ByteOff p, Span inner,
     if (!state_at_line(buf, line, local, &state) || state.lost != 0U)
         return false;
     for (depth = 0; depth < state.depth; depth++) {
+        const SynDef *def = yew_syn_engine_def_at(buf->syn.engine,
+                                                  state.f[depth].def);
         u16 id = state.f[depth].ctx;
-        if (id >= def->nctxs)
+        if (def == NULL || def->ctxs == NULL || id >= def->nctxs)
             return false;
         if ((def->ctxs[id].flags & YEW_SYN_CTX_UNIT_ATOM) != 0U) {
             atom = depth;
@@ -317,13 +315,20 @@ static bool syn_enclosing(void *ctx, UnitCtx *u, ByteOff p, Span inner,
     }
     for (depth = atom >= 0 ? atom : (int)state.depth - 1;
          depth >= 0; depth--) {
+        const SynDef *def = yew_syn_engine_def_at(buf->syn.engine,
+                                                  state.f[depth].def);
         u16 id = state.f[depth].ctx;
-        u8 flags = def->ctxs[id].flags;
+        u8 flags;
         Span candidate;
+
+        if (def == NULL || def->ctxs == NULL || id >= def->nctxs)
+            return false;
+        flags = def->ctxs[id].flags;
 
         if ((flags & (YEW_SYN_CTX_UNIT_SPAN | YEW_SYN_CTX_UNIT_ATOM)) == 0U)
             continue;
-        if (!frame_bounds(buf, line, local, (u8)depth, id, &candidate))
+        if (!frame_bounds(buf, line, local, (u8)depth,
+                          state.f[depth].def, id, &candidate))
             return false;
         if (span_strictly_contains(candidate, inner)) {
             *out = candidate;

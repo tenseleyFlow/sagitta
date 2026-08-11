@@ -110,6 +110,7 @@ typedef struct DefMeta {
     Interner *aux;
     SynEngine *engine;
     bool builtin;
+    bool retired;
     struct DefMeta *next;
 } DefMeta;
 
@@ -117,11 +118,14 @@ typedef struct DiscoveredDef {
     Arena arena;
     DiagCtx dc;
     SynDef *def;
+    u32 pins;
+    bool retired;
     struct DiscoveredDef *next;
 } DiscoveredDef;
 
 static DefMeta *metas;
 static DiscoveredDef *discovered_defs;
+static DiscoveredDef *retired_defs;
 static u64 compile_count;
 static bool cache_bypass;
 static bool discovery_done;
@@ -139,6 +143,61 @@ static DefMeta *meta_for(const SynDef *def)
             return m;
     }
     return NULL;
+}
+
+static DiscoveredDef *discovered_owned(const SynDef *def,
+                                       DiscoveredDef ***link_out)
+{
+    DiscoveredDef **lists[] = {&discovered_defs, &retired_defs};
+    u32 list;
+
+    for (list = 0U; list < YEW_ARRAY_LEN(lists); list++) {
+        DiscoveredDef **link = lists[list];
+
+        while (*link != NULL) {
+            if ((*link)->def == def) {
+                if (link_out != NULL)
+                    *link_out = link;
+                return *link;
+            }
+            link = &(*link)->next;
+        }
+    }
+    return NULL;
+}
+
+static void discovered_owned_free(DiscoveredDef *owned)
+{
+    yew_syn_def_dispose(owned->def);
+    arena_free_all(&owned->arena);
+    free(owned);
+}
+
+void yew_syn_def_pin(const SynDef *def)
+{
+    DiscoveredDef *owned = discovered_owned(def, NULL);
+
+    if (owned != NULL) {
+        if (owned->pins == UINT32_MAX)
+            YEW_BUG("syntax: discovered definition pin overflow");
+        owned->pins++;
+    }
+}
+
+void yew_syn_def_unpin(const SynDef *def)
+{
+    DiscoveredDef **link = NULL;
+    DiscoveredDef *owned = discovered_owned(def, &link);
+
+    if (owned == NULL)
+        return;
+    if (owned->pins == 0U)
+        YEW_BUG("syntax: discovered definition pin underflow");
+    owned->pins--;
+    if (owned->pins == 0U && owned->retired && link != NULL) {
+        *link = owned->next;
+        discovered_owned_free(owned);
+    }
 }
 
 const char *yew_syn_attr_name(u8 attr)
@@ -869,7 +928,7 @@ static void compile_embed(Compile *c, FlNode *node, FlNode *push,
                           u16 target, u32 groups, SynEmbed *out)
 {
     static const char *const keys[] = {
-        "lang", "ctx", "end", "defer", "fallback"
+        "lang", "ctx", "end", "defer", "fallback", "interleave"
     };
     SynEmbed desc;
     FlNode *lang;
@@ -877,6 +936,7 @@ static void compile_embed(Compile *c, FlNode *node, FlNode *push,
     FlNode *end;
     FlNode *defer;
     FlNode *fallback;
+    FlNode *interleave;
     const char *text;
     size_t n;
     u32 errors_before = c->errors;
@@ -891,6 +951,10 @@ static void compile_embed(Compile *c, FlNode *node, FlNode *push,
     end = map_find(c, node, "end");
     defer = map_find(c, node, "defer");
     fallback = map_find(c, node, "fallback");
+    interleave = map_find(c, node, "interleave");
+    if (interleave != NULL)
+        diag(c, FL_DIAG_ERROR, interleave->sp,
+             "embed.interleave is deferred until after 1.0");
 
     if (push == NULL) {
         diag(c, FL_DIAG_ERROR, node->sp,
@@ -950,9 +1014,13 @@ static void compile_embed(Compile *c, FlNode *node, FlNode *push,
             desc.end = SYN_EMBED_END_LINE;
         else if (text_eq(text, n, "inline"))
             desc.end = SYN_EMBED_END_INLINE;
+        else if (text_eq(text, n, "inline-root"))
+            desc.end = SYN_EMBED_END_INLINE_ROOT;
+        else if (text_eq(text, n, "line-continuation"))
+            desc.end = SYN_EMBED_END_LINE_CONTINUATION;
         else
             diag(c, FL_DIAG_ERROR, end->sp,
-                 "embed.end must be 'line' or 'inline'");
+                 "embed.end must be 'line', 'inline', 'inline-root', or 'line-continuation'");
     }
     if (defer != NULL) {
         bool enabled = false;
@@ -1033,7 +1101,7 @@ static void compile_rule(Compile *c, FlNode *node, u16 ctx_id, SynRule *rule,
     if (match != NULL && aux != NULL)
         diag(c, FL_DIAG_ERROR, aux->sp,
              "rule has both 'match' and 'aux'; choose one matcher");
-    if (nops > 1U) {
+    if (embed == NULL && nops > 1U) {
         const char *a = push != NULL ? "push" : "pop";
         const char *b = set != NULL ? "set" : "pop";
 
@@ -1043,7 +1111,7 @@ static void compile_rule(Compile *c, FlNode *node, u16 ctx_id, SynRule *rule,
     }
     if (embed != NULL && (pop != NULL || set != NULL))
         diag(c, FL_DIAG_ERROR, node->sp,
-             "embed cannot be combined with 'pop' or 'set'; it may only accompany its string 'push' bridge target");
+             "embed is a state op; a rule performs exactly one");
     if (icase_node != NULL)
         (void)require_bool(c, icase_node, "rule icase", &icase);
     if (first_line_node != NULL) {
@@ -1917,11 +1985,18 @@ void yew_syn_discovery_reset(void)
 {
     while (discovered_defs != NULL) {
         DiscoveredDef *owned = discovered_defs;
+        DefMeta *meta = meta_for(owned->def);
 
         discovered_defs = owned->next;
-        yew_syn_def_dispose(owned->def);
-        arena_free_all(&owned->arena);
-        free(owned);
+        if (owned->pins != 0U) {
+            owned->retired = true;
+            owned->next = retired_defs;
+            retired_defs = owned;
+            if (meta != NULL)
+                meta->retired = true;
+        } else {
+            discovered_owned_free(owned);
+        }
     }
     discovery_done = false;
 }
@@ -1960,7 +2035,7 @@ const SynLangDesc *yew_syn_lang_desc(u32 lang)
 
     discover_user_definitions();
     for (m = metas; m != NULL; m = m->next) {
-        if (m->lang.id == lang)
+        if (!m->retired && m->lang.id == lang)
             return &m->lang;
     }
     for (i = 0U; i < yew_syn_builtin_langs_len; i++) {
@@ -1979,7 +2054,7 @@ u32 yew_syn_lang_named(const char *name)
         return YEW_LANG_NONE;
     discover_user_definitions();
     for (m = metas; m != NULL; m = m->next) {
-        if (strcmp(m->lang.name, name) == 0)
+        if (!m->retired && strcmp(m->lang.name, name) == 0)
             return m->lang.id;
     }
     for (i = 0U; i < yew_syn_builtin_langs_len; i++) {
@@ -1987,6 +2062,49 @@ u32 yew_syn_lang_named(const char *name)
             return yew_syn_builtin_langs[i].id;
     }
     return YEW_LANG_NONE;
+}
+
+u32 yew_syn_lang_by_name(const u8 *name, u32 len)
+{
+    size_t i;
+
+    if (name == NULL)
+        return YEW_LANG_NONE;
+    for (i = 0U; i < yew_syn_builtin_langs_len; i++) {
+        const char *candidate = yew_syn_builtin_langs[i].name;
+        size_t candidate_len = strlen(candidate);
+
+        if (candidate_len == len &&
+            (len == 0U || memcmp(candidate, name, len) == 0))
+            return yew_syn_builtin_langs[i].id;
+    }
+    return YEW_LANG_NONE;
+}
+
+u32 yew_syn_lang_snapshot(const char **names, u32 *langs, u32 cap)
+{
+    DefMeta *m;
+    u32 n = 0U;
+    size_t i;
+
+    discover_user_definitions();
+    for (m = metas; m != NULL; m = m->next) {
+        if (m->retired)
+            continue;
+        if (n < cap && names != NULL && langs != NULL) {
+            names[n] = m->lang.name;
+            langs[n] = m->lang.id;
+        }
+        n++;
+    }
+    for (i = 0U; i < yew_syn_builtin_langs_len; i++) {
+        if (n < cap && names != NULL && langs != NULL) {
+            names[n] = yew_syn_builtin_langs[i].name;
+            langs[n] = yew_syn_builtin_langs[i].id;
+        }
+        n++;
+    }
+    return n;
 }
 
 u32 yew_syn_lang_count(void)
@@ -1997,6 +2115,9 @@ u32 yew_syn_lang_count(void)
     discover_user_definitions();
     for (m = metas; m != NULL; m = m->next) {
         size_t i;
+
+        if (m->retired)
+            continue;
 
         for (i = 0U; i < yew_syn_builtin_langs_len; i++) {
             if (m->lang.id == yew_syn_builtin_langs[i].id)
@@ -2339,7 +2460,7 @@ static bool syn_rule_valid(const SynRule *rule, const SynDef *def,
         if (rule->embed.lang_kind == SYN_EMBED_LANG_NONE ||
             rule->embed.lang_kind > SYN_EMBED_LANG_SELF ||
             rule->embed.end == SYN_EMBED_END_NONE ||
-            rule->embed.end > SYN_EMBED_END_INLINE ||
+            rule->embed.end > SYN_EMBED_END_LINE_CONTINUATION ||
             rule->embed.fallback >= YEW_ATTR__COUNT ||
             (rule->embed.flags & (u8)~YEW_SYN_EMBED_DEFER) != 0U ||
             rule->embed.lang >= naux || rule->embed.ctx >= naux)
@@ -2376,7 +2497,7 @@ static bool syn_embed_boundary_valid(const SynEmbed *embed, bool active,
     return embed->lang == 0U && embed->ctx < naux &&
            embed->lang_kind == SYN_EMBED_LANG_NONE &&
            embed->lang_group == 0U && embed->end != SYN_EMBED_END_NONE &&
-           embed->end <= SYN_EMBED_END_INLINE &&
+           embed->end <= SYN_EMBED_END_LINE_CONTINUATION &&
            embed->fallback < YEW_ATTR__COUNT && embed->flags == 0U;
 }
 
@@ -3196,7 +3317,8 @@ static const SynLangDesc *best_language(LangPred pred, void *ctx)
             best = d;
     }
     for (m = metas; m != NULL; m = m->next) {
-        if (!m->builtin && pred(&m->lang, ctx) && better(&m->lang, best))
+        if (!m->builtin && !m->retired && pred(&m->lang, ctx) &&
+            better(&m->lang, best))
             best = &m->lang;
     }
     return best;
@@ -3267,7 +3389,7 @@ static const SynLangDesc *path_language(const char *base)
             path_match_consider(&match, lang);
     }
     for (m = metas; m != NULL; m = m->next) {
-        if (!m->builtin)
+        if (!m->builtin && !m->retired)
             path_match_consider(&match, &m->lang);
     }
     if (match.exact != NULL)
@@ -3349,7 +3471,8 @@ static YewRe *detection_re(const SynLangDesc *lang)
     u32 i;
 
     for (m = metas; m != NULL; m = m->next) {
-        if (m->lang.id == lang->id && m->first_line_re != NULL)
+        if (!m->retired && m->lang.id == lang->id &&
+            m->first_line_re != NULL)
             return m->first_line_re;
     }
     if (!initialized) {
@@ -3494,7 +3617,7 @@ const SynDef *yew_syn_def_for(u32 lang)
         return NULL;
     discover_user_definitions();
     for (m = metas; m != NULL; m = m->next) {
-        if (m->lang.id == lang)
+        if (!m->retired && m->lang.id == lang)
             return m->def;
     }
     for (i = 0U; i < yew_syn_builtin_langs_len; i++) {

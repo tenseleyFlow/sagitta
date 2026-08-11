@@ -14,6 +14,7 @@ typedef struct TextBuf TextBuf;
 
 #define YEW_SYN_DEPTH_MAX 16U
 #define YEW_SYN_DEF_MAX 4U
+#define YEW_SYN_RESIDENT_MAX 255U
 #define YEW_SYN_LOST_MAX 255U
 #define YEW_SYN_MAX_STATES 65536U
 #define YEW_SYN_MAX_SPANS 4096U
@@ -26,6 +27,8 @@ typedef struct TextBuf TextBuf;
 #define YEW_SYN_INJECTED_CLOCK_EVERY 256U
 #define YEW_SYN_SETTLING_MS 250U
 #define YEW_SYN_SPAN_CACHE 256U
+#define YEW_SYN_EMBED_LOADS_PER_SETTLE 1U
+#define YEW_SYN_EMBED_LOAD_BUDGET_US 2000
 
 #define YEW_SYN_STATE_UNKNOWN 0U
 #define YEW_SYN_STATE_ROOT 1U
@@ -37,11 +40,13 @@ enum {
     YEW_SYN_F_DEGRADED = 1U << 2,
     YEW_SYN_F_PAST_FIRST = 1U << 3,
     YEW_SYN_F_EMBED_LOST = 1U << 4,
-    YEW_SYN_F_EMBED_PEND = 1U << 5
+    YEW_SYN_F_EMBED_PEND = 1U << 5,
+    YEW_SYN_F_EMBED_ORPHAN = 1U << 6
 };
 
 enum {
-    YEW_SYN_FR_BRIDGE = 1U << 0
+    YEW_SYN_FR_BRIDGE = 1U << 0,
+    YEW_SYN_FR_DEFER = 1U << 1
 };
 
 enum {
@@ -112,7 +117,9 @@ typedef enum SynEmbedLang {
 typedef enum SynEmbedEnd {
     SYN_EMBED_END_NONE = 0,
     SYN_EMBED_END_LINE,
-    SYN_EMBED_END_INLINE
+    SYN_EMBED_END_INLINE,
+    SYN_EMBED_END_INLINE_ROOT,
+    SYN_EMBED_END_LINE_CONTINUATION
 } SynEmbedEnd;
 
 enum {
@@ -214,6 +221,7 @@ typedef struct SynEngine SynEngine;
 typedef struct SynCoverage {
     u64 *contexts;
     u64 *rules;
+    u64 *embeds;
     u32 nctxs;
     u32 nrules;
 } SynCoverage;
@@ -235,6 +243,8 @@ void yew_syn_engine_free(SynEngine *engine);
 void yew_syn_engine_set_def(SynEngine *engine, SynDef *def);
 SynStateTab *yew_syn_engine_states(SynEngine *engine);
 const SynDef *yew_syn_engine_def(const SynEngine *engine);
+const SynDef *yew_syn_engine_def_at(const SynEngine *engine, u8 def_index);
+const SynDef *yew_syn_def_resident(SynEngine *engine, u32 lang);
 u64 yew_syn_engine_line_calls(const SynEngine *engine);
 void yew_syn_engine_reset_counters(SynEngine *engine);
 /* Narrow test seam for differential checks against the regex VM. */
@@ -294,6 +304,13 @@ typedef struct SynBuf {
     void *private_cache;
     u64 splice_count;
     u64 provisional_corrections;
+    u32 embed_pending;
+    LineNo embed_pending_line;
+    u32 embed_pending_langs[YEW_SYN_RESIDENT_MAX];
+    LineNo embed_pending_lines[YEW_SYN_RESIDENT_MAX];
+    u16 embed_pending_count;
+    u32 embed_refused;
+    bool embed_unknown_logged;
 } SynBuf;
 
 typedef struct SynSettleReport {
@@ -314,6 +331,7 @@ void yew_syn_buf_set_clock(SynBuf *syn, SynClockFn clock, void *ctx);
 void yew_syn_edit(SynBuf *syn, LineNo lo, u64 removed, u64 inserted);
 void yew_syn_settle(SynBuf *syn, const TextBuf *tb, LineNo view_lo,
                     LineNo view_hi, i64 budget_us, SynSettleReport *report);
+bool yew_syn_embed_pump(SynBuf *syn, SynEngine *engine, i64 budget_us);
 void yew_syn_spans(SynBuf *syn, const TextBuf *tb, LineNo line,
                    SynLineOut *out);
 bool yew_syn_status_visible(const SynBuf *syn);
