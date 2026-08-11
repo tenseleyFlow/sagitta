@@ -26,6 +26,7 @@ static const char syn_usage[] =
     "  yew syn list\n"
     "  yew syn compile [--all | FILE]\n"
     "  yew syn check FILE [--strict]\n"
+    "  yew syn check --coverage FILE INPUT... [--strict]\n"
     "  yew syn dump FILE --tables\n"
     "  yew syn dump FILE --spans INPUT\n"
     "  yew syn cache clear|path\n"
@@ -184,6 +185,9 @@ static SynDef *load_def(const char *path, Arena *arena, DiagCtx *dc,
     return def;
 }
 
+static int check_coverage(const SynDef *def, const char *const *inputs,
+                          u32 ninputs);
+
 static char *runtime_source(const SynLangDesc *desc)
 {
     const char *root = getenv("YEW_RUNTIME_DIR");
@@ -249,7 +253,8 @@ static int compile_all(void)
     return YEW_EXIT_OK;
 }
 
-static int check_one(const char *path, bool strict)
+static int check_one(const char *path, bool strict, bool coverage,
+                     const char *const *inputs, u32 ninputs)
 {
     Arena arena;
     DiagCtx dc;
@@ -274,6 +279,8 @@ static int check_one(const char *path, bool strict)
                               &errors, &warnings);
     status = errors != 0U || (strict && warnings != 0U) ? YEW_EXIT_ERR :
              YEW_EXIT_OK;
+    if (def != NULL && status == YEW_EXIT_OK && coverage)
+        status = check_coverage(def, inputs, ninputs);
     if (def != NULL)
         yew_syn_def_dispose(def);
     arena_free_all(&arena);
@@ -315,6 +322,192 @@ static const char *ctx_name(const SynDef *def, u16 id)
     const char *name = yew_syn_ctx_name(def, id);
 
     return name == NULL ? "<unknown>" : name;
+}
+
+static void coverage_reachable(const SynDef *def, bool *reachable)
+{
+    bool changed = true;
+
+    reachable[def->root] = true;
+    while (changed) {
+        u16 i;
+
+        changed = false;
+        for (i = 0U; i < def->nctxs; i++) {
+            const SynCtx *ctx;
+            u32 j;
+
+            if (!reachable[i])
+                continue;
+            ctx = &def->ctxs[i];
+            if (ctx->at_eol == SYN_OP_SET && !reachable[ctx->eol_target]) {
+                reachable[ctx->eol_target] = true;
+                changed = true;
+            }
+            for (j = 0U; j < ctx->nrules; j++) {
+                const SynRule *rule = &def->rules[ctx->first_rule + j];
+                u8 k;
+
+                if (rule->op == SYN_OP_SET ||
+                    (rule->op == SYN_OP_PUSH && rule->npush == 0U)) {
+                    if (!reachable[rule->target]) {
+                        reachable[rule->target] = true;
+                        changed = true;
+                    }
+                }
+                if (rule->op != SYN_OP_PUSH)
+                    continue;
+                for (k = 0U; k < rule->npush; k++) {
+                    if (!reachable[rule->push[k]]) {
+                        reachable[rule->push[k]] = true;
+                        changed = true;
+                    }
+                }
+            }
+        }
+    }
+}
+
+static u16 coverage_rule_context(const SynDef *def, u32 rule)
+{
+    u16 i;
+
+    for (i = 0U; i < def->nctxs; i++) {
+        const SynCtx *ctx = &def->ctxs[i];
+
+        if (rule >= ctx->first_rule &&
+            rule - ctx->first_rule < ctx->nrules)
+            return i;
+    }
+    return UINT16_MAX;
+}
+
+static int coverage_scan_input(SynEngine *engine, const char *path)
+{
+    Arena arena;
+    char *input;
+    size_t input_len = 0U;
+    size_t lo = 0U;
+    u32 entry = YEW_SYN_STATE_ROOT;
+
+    arena_init(&arena);
+    input = slurp(path, &input_len, &arena);
+    if (input == NULL) {
+        arena_free_all(&arena);
+        return YEW_EXIT_IO;
+    }
+    while (lo <= input_len) {
+        size_t hi = lo;
+        size_t line_len;
+        SynLineOut out = {NULL, 0U, 0U, 0U, 0U};
+
+        while (hi < input_len && input[hi] != '\n')
+            hi++;
+        line_len = hi - lo;
+        if (line_len != 0U && input[lo + line_len - 1U] == '\r')
+            line_len--;
+        if (line_len > UINT32_MAX) {
+            (void)fprintf(stderr, "yew syn: input line is too long: %s\n",
+                          path);
+            arena_free_all(&arena);
+            return YEW_EXIT_IO;
+        }
+        yew_syn_line(engine, entry, (const u8 *)input + lo, (u32)line_len,
+                     &out);
+        entry = out.exit_state;
+        if (hi == input_len)
+            break;
+        lo = hi + 1U;
+    }
+    arena_free_all(&arena);
+    return YEW_EXIT_OK;
+}
+
+static int check_coverage(const SynDef *def, const char *const *inputs,
+                          u32 ninputs)
+{
+    SynCoverage coverage;
+    SynEngine *engine;
+    bool *reachable;
+    u32 covered_ctx = 0U;
+    u32 total_ctx = 0U;
+    u32 covered_rules = 0U;
+    u32 total_rules = 0U;
+    u32 i;
+    int status = YEW_EXIT_OK;
+
+    if (ninputs == 0U)
+        return usage_error("--coverage requires at least one INPUT");
+    if (!yew_syn_coverage_init(&coverage, def))
+        return YEW_EXIT_BUG;
+    engine = yew_syn_engine_new((SynDef *)def);
+    yew_syn_engine_set_coverage(engine, &coverage);
+    for (i = 0U; i < ninputs; i++) {
+        status = coverage_scan_input(engine, inputs[i]);
+        if (status != YEW_EXIT_OK)
+            break;
+    }
+    if (status == YEW_EXIT_OK) {
+        SynStateTab *states = yew_syn_engine_states(engine);
+        u32 nstates = yew_syn_state_count(states);
+
+        for (i = YEW_SYN_STATE_ROOT; i < nstates; i++) {
+            const SynState *state = yew_syn_state_get(states, i);
+
+            if (state == NULL || state->def != 0U) {
+                (void)fprintf(stderr,
+                              "yew syn: state %u uses embedded definition %u; "
+                              "embedding is deferred to s41_5\n",
+                              (unsigned)i,
+                              state == NULL ? 0U : (unsigned)state->def);
+                status = YEW_EXIT_ERR;
+                break;
+            }
+        }
+    }
+    reachable = yew_xcalloc(def->nctxs, sizeof(*reachable));
+    coverage_reachable(def, reachable);
+    if (status == YEW_EXIT_OK) {
+        for (i = 0U; i < def->nctxs; i++) {
+            if (!reachable[i])
+                continue;
+            total_ctx++;
+            if (coverage.contexts[i] != 0U) {
+                covered_ctx++;
+            } else {
+                (void)fprintf(stderr, "yew syn: uncovered context %s\n",
+                              ctx_name(def, (u16)i));
+            }
+        }
+        for (i = 0U; i < def->nrules; i++) {
+            u16 ctx = coverage_rule_context(def, i);
+            const char *pattern;
+
+            if (ctx == UINT16_MAX || !reachable[ctx])
+                continue;
+            total_rules++;
+            if (coverage.rules[i] != 0U) {
+                covered_rules++;
+                continue;
+            }
+            pattern = yew_syn_rule_pattern(def, i);
+            (void)fprintf(stderr,
+                          "yew syn: uncovered rule %u context=%s %s=%s\n",
+                          (unsigned)i, ctx_name(def, ctx),
+                          pattern == NULL ? "aux" : "match",
+                          pattern == NULL ? "<dynamic>" : pattern);
+        }
+        (void)printf("coverage: contexts %u/%u, rules %u/%u\n",
+                     (unsigned)covered_ctx, (unsigned)total_ctx,
+                     (unsigned)covered_rules, (unsigned)total_rules);
+        if (covered_ctx != total_ctx || covered_rules != total_rules)
+            status = YEW_EXIT_ERR;
+    }
+    free(reachable);
+    yew_syn_engine_set_coverage(engine, NULL);
+    yew_syn_engine_free(engine);
+    yew_syn_coverage_free(&coverage);
+    return status;
 }
 
 static void quote(Bytebuf *out, const char *s)
@@ -559,19 +752,39 @@ int yew_syn_main(int argc, char **argv, bool clean)
     }
     if (strcmp(argv[at], "check") == 0) {
         bool strict = false;
+        bool coverage = false;
         const char *path = NULL;
+        const char **inputs = yew_xcalloc((size_t)(argc - at),
+                                          sizeof(*inputs));
+        u32 ninputs = 0U;
+        int result;
         int i;
 
         for (i = at + 1; i < argc; i++) {
             if (strcmp(argv[i], "--strict") == 0 && !strict)
                 strict = true;
+            else if (strcmp(argv[i], "--coverage") == 0 && !coverage)
+                coverage = true;
             else if (path == NULL)
                 path = argv[i];
-            else
+            else if (coverage) {
+                inputs[ninputs++] = argv[i];
+            } else {
+                free(inputs);
                 return usage_error("check requires one FILE");
+            }
         }
-        return path == NULL ? usage_error("check requires FILE") :
-               check_one(path, strict);
+        if (path == NULL) {
+            free(inputs);
+            return usage_error("check requires FILE");
+        }
+        if (coverage && ninputs == 0U) {
+            free(inputs);
+            return usage_error("--coverage requires at least one INPUT");
+        }
+        result = check_one(path, strict, coverage, inputs, ninputs);
+        free(inputs);
+        return result;
     }
     if (strcmp(argv[at], "dump") == 0) {
         if (at + 3 == argc && strcmp(argv[at + 2], "--tables") == 0)

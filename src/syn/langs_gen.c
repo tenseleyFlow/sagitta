@@ -3,31 +3,151 @@
 #include "syn/langs_gen.h"
 
 static const char *const lang_1_extensions[] = {
+    "c",
+    "h"
+};
+
+static const char *const lang_2_extensions[] = {
+    "fl"
+};
+
+static const char *const lang_3_extensions[] = {
     "ini",
     "cfg",
     "conf",
     "properties"
 };
-static const char *const lang_1_filenames[] = {
+static const char *const lang_3_filenames[] = {
     ".editorconfig",
     "*.desktop",
     "*.service"
 };
 
+static const char *const lang_4_extensions[] = {
+    "mk",
+    "mak"
+};
+static const char *const lang_4_filenames[] = {
+    "Makefile",
+    "makefile",
+    "GNUmakefile",
+    "*.mk"
+};
+
+static const char *const lang_5_extensions[] = {
+    "md",
+    "markdown",
+    "mdown",
+    "mkd"
+};
+static const char *const lang_5_filenames[] = {
+    "README",
+    "README.*",
+    "CHANGELOG",
+    "CONTRIBUTING.md"
+};
+
+static const char *const lang_6_extensions[] = {
+    "sh",
+    "bash"
+};
+static const char *const lang_6_filenames[] = {
+    ".bashrc",
+    ".bash_profile",
+    ".profile",
+    "PKGBUILD"
+};
+static const char *const lang_6_shebangs[] = {
+    "sh",
+    "bash",
+    "dash",
+    "ksh"
+};
+
 const SynLangSeed yew_syn_builtin_langs[] = {
     {
         1U,
+        "c",
+        "runtime/syntax/c.fl",
+        lang_1_extensions,
+        2U,
+        NULL,
+        0U,
+        NULL,
+        0U,
+        NULL,
+        20,
+        {"//", "/*", "*/"}
+    },
+    {
+        2U,
+        "fletch",
+        "runtime/syntax/fletch.fl",
+        lang_2_extensions,
+        1U,
+        NULL,
+        0U,
+        NULL,
+        0U,
+        NULL,
+        20,
+        {"#", NULL, NULL}
+    },
+    {
+        3U,
         "ini",
         "runtime/syntax/ini.fl",
-        lang_1_extensions,
+        lang_3_extensions,
         4U,
-        lang_1_filenames,
+        lang_3_filenames,
         3U,
         NULL,
         0U,
         "^\\s*\\[[A-Za-z0-9_.-]+\\]\\s*$",
         0,
         {";", NULL, NULL}
+    },
+    {
+        4U,
+        "make",
+        "runtime/syntax/make.fl",
+        lang_4_extensions,
+        2U,
+        lang_4_filenames,
+        4U,
+        NULL,
+        0U,
+        NULL,
+        10,
+        {"#", NULL, NULL}
+    },
+    {
+        5U,
+        "markdown",
+        "runtime/syntax/markdown.fl",
+        lang_5_extensions,
+        4U,
+        lang_5_filenames,
+        4U,
+        NULL,
+        0U,
+        NULL,
+        0,
+        {NULL, "<!--", "-->"}
+    },
+    {
+        6U,
+        "sh",
+        "runtime/syntax/sh.fl",
+        lang_6_extensions,
+        2U,
+        lang_6_filenames,
+        4U,
+        lang_6_shebangs,
+        4U,
+        NULL,
+        0,
+        {"#", NULL, NULL}
     }
 };
 

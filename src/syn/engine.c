@@ -47,6 +47,7 @@ struct SynEngine {
     SynDef *def;
     SynStateTab *states;
     u8 *ctx_aux;
+    SynCoverage *coverage;
     u64 line_calls;
     u64 generation;
 };
@@ -260,6 +261,7 @@ void yew_syn_engine_set_def(SynEngine *engine, SynDef *def)
         YEW_BUG("syntax: NULL engine");
     yew_syn_state_tab_free(engine->states);
     engine->def = def;
+    engine->coverage = NULL;
     engine->states = yew_syn_state_tab_new(def == NULL ? 0U : def->root);
     engine_index_aux(engine);
     engine->line_calls = 0U;
@@ -287,6 +289,84 @@ void yew_syn_engine_reset_counters(SynEngine *engine)
 {
     if (engine != NULL)
         engine->line_calls = 0U;
+}
+
+bool yew_syn_coverage_init(SynCoverage *coverage, const SynDef *def)
+{
+    if (coverage == NULL || def == NULL)
+        return false;
+    (void)memset(coverage, 0, sizeof(*coverage));
+    coverage->nctxs = def->nctxs;
+    coverage->nrules = def->nrules;
+    if (coverage->nctxs != 0U)
+        coverage->contexts = yew_xcalloc(coverage->nctxs,
+                                         sizeof(*coverage->contexts));
+    if (coverage->nrules != 0U)
+        coverage->rules = yew_xcalloc(coverage->nrules,
+                                      sizeof(*coverage->rules));
+    return true;
+}
+
+void yew_syn_coverage_clear(SynCoverage *coverage)
+{
+    if (coverage == NULL)
+        return;
+    if (coverage->contexts != NULL)
+        (void)memset(coverage->contexts, 0,
+                     coverage->nctxs * sizeof(*coverage->contexts));
+    if (coverage->rules != NULL)
+        (void)memset(coverage->rules, 0,
+                     coverage->nrules * sizeof(*coverage->rules));
+}
+
+void yew_syn_coverage_free(SynCoverage *coverage)
+{
+    if (coverage == NULL)
+        return;
+    free(coverage->contexts);
+    free(coverage->rules);
+    (void)memset(coverage, 0, sizeof(*coverage));
+}
+
+void yew_syn_engine_set_coverage(SynEngine *engine, SynCoverage *coverage)
+{
+    if (engine == NULL)
+        YEW_BUG("syntax: NULL engine");
+    if (coverage != NULL &&
+        (engine->def == NULL || coverage->nctxs != engine->def->nctxs ||
+         coverage->nrules != engine->def->nrules))
+        YEW_BUG("syntax: coverage table does not match definition");
+    engine->coverage = coverage;
+}
+
+static void coverage_context(SynEngine *engine, u16 ctx)
+{
+    if (engine->coverage != NULL && ctx < engine->coverage->nctxs)
+        engine->coverage->contexts[ctx]++;
+}
+
+static void coverage_rule(SynEngine *engine, u32 rule)
+{
+    if (engine->coverage != NULL && rule < engine->coverage->nrules)
+        engine->coverage->rules[rule]++;
+}
+
+static void coverage_transition(SynEngine *engine, const SynState *before,
+                                const SynState *after)
+{
+    u8 i;
+
+    if (engine->coverage == NULL || before == NULL || after == NULL ||
+        after->depth == 0U)
+        return;
+    if (after->depth > before->depth) {
+        for (i = before->depth; i < after->depth; i++)
+            coverage_context(engine, after->ctx[i]);
+    } else if (after->depth != before->depth ||
+               after->ctx[after->depth - 1U] !=
+                   before->ctx[before->depth - 1U]) {
+        coverage_context(engine, after->ctx[after->depth - 1U]);
+    }
 }
 
 static bool bitset_has(const u8 bits[32], u8 byte)
@@ -574,13 +654,14 @@ static void apply_rule_op(SynState *state, const SynRule *rule)
 }
 
 static void apply_empty_bol(SynEngine *engine, SynState *state,
-                            const u8 *line)
+                            const u8 *line, bool instrument)
 {
     u32 guard = 0U;
     while (guard++ <= YEW_SYN_DEPTH_MAX) {
         u16 ctx_id = state->ctx[state->depth - 1U];
         const SynCtx *ctx = &engine->def->ctxs[ctx_id];
         const SynRule *matched = NULL;
+        u32 matched_index = UINT32_MAX;
         YewReMatch match;
         u32 i;
         if (engine->ctx_aux == NULL || engine->ctx_aux[ctx_id] == 0U)
@@ -594,13 +675,22 @@ static void apply_empty_bol(SynEngine *engine, SynState *state,
             if (rule_match(engine, state, rule, line, 0U, 0U, &match) &&
                 match.g[0].hi == 0U) {
                 matched = rule;
+                matched_index = index;
                 break;
             }
         }
         if (matched == NULL)
             return;
-        (void)set_aux(engine, state, matched, line, 0U, &match);
-        apply_rule_op(state, matched);
+        {
+            SynState before = *state;
+
+            if (instrument)
+                coverage_rule(engine, matched_index);
+            (void)set_aux(engine, state, matched, line, 0U, &match);
+            apply_rule_op(state, matched);
+            if (instrument)
+                coverage_transition(engine, &before, state);
+        }
         if ((matched->flags & YEW_SYN_RULE_ZERO_POP) == 0U ||
             matched->op != SYN_OP_POP)
             return;
@@ -609,7 +699,7 @@ static void apply_empty_bol(SynEngine *engine, SynState *state,
 
 static void syn_line_run(SynEngine *engine, u32 entry_state,
                          const u8 *line, u32 len, SynLineOut *out,
-                         bool apply_eol, SynState *trace)
+                         bool apply_eol, bool instrument, SynState *trace)
 {
     SynState state;
     const SynState *entry;
@@ -629,6 +719,8 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
         entry = yew_syn_state_get(engine->states, entry_state);
     }
     state = *entry;
+    if (instrument && state.depth != 0U)
+        coverage_context(engine, state.ctx[state.depth - 1U]);
     if (trace != NULL)
         trace[0] = state;
     if (len > YEW_SYN_LINE_BYTE_CAP) {
@@ -650,13 +742,14 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
     }
     step_cap = YEW_SYN_LINE_STEPS(len);
     if (len == 0U) {
-        apply_empty_bol(engine, &state, line);
+        apply_empty_bol(engine, &state, line, instrument);
         if (trace != NULL)
             trace[0] = state;
     }
     while (p < len) {
         const SynCtx *ctx = &engine->def->ctxs[state.ctx[state.depth - 1U]];
         const SynRule *matched = NULL;
+        u32 matched_index = UINT32_MAX;
         SynState before;
         YewReMatch match;
         u32 ri;
@@ -692,6 +785,7 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
                 continue;
             if (rule_match(engine, &state, rule, line, len, p, &match)) {
                 matched = rule;
+                matched_index = index;
                 break;
             }
         }
@@ -707,6 +801,8 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
             continue;
         }
         before = state;
+        if (instrument)
+            coverage_rule(engine, matched_index);
         {
             u32 end = (u32)match.g[0].hi;
             if (matched->consume != 0U &&
@@ -728,6 +824,8 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
         if ((matched->flags & YEW_SYN_RULE_CLR_VALUE) != 0U)
             state.flags &= (u8)~YEW_SYN_F_VALUE;
         apply_rule_op(&state, matched);
+        if (instrument)
+            coverage_transition(engine, &before, &state);
         {
             u32 end = (u32)match.g[0].hi;
             if (matched->consume != 0U &&
@@ -764,7 +862,10 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
     }
     if (apply_eol) {
         const SynCtx *ctx = &engine->def->ctxs[state.ctx[state.depth - 1U]];
+        SynState before = state;
         apply_op(&state, ctx->at_eol, ctx->eol_nop, ctx->eol_target);
+        if (instrument)
+            coverage_transition(engine, &before, &state);
     }
     out->exit_state = yew_syn_state_intern(engine->states, &state);
 }
@@ -772,7 +873,7 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
 void yew_syn_line(SynEngine *engine, u32 entry_state, const u8 *line,
                   u32 len, SynLineOut *out)
 {
-    syn_line_run(engine, entry_state, line, len, out, true, NULL);
+    syn_line_run(engine, entry_state, line, len, out, true, true, NULL);
 }
 
 bool yew_syn_stack_trace(SynEngine *engine, u32 entry_state, const u8 *line,
@@ -784,7 +885,8 @@ bool yew_syn_stack_trace(SynEngine *engine, u32 entry_state, const u8 *line,
     if (engine == NULL || trace == NULL || len > YEW_SYN_LINE_BYTE_CAP ||
         (line == NULL && len != 0U) || trace_cap < (size_t)len + 1U)
         return false;
-    syn_line_run(engine, entry_state, line, len, &line_out, false, trace);
+    syn_line_run(engine, entry_state, line, len, &line_out, false, false,
+                 trace);
     return line_out.stop == YEW_SYN_STOP_OK;
 }
 
@@ -1383,21 +1485,4 @@ void yew_syn_status(const SynBuf *syn, u64 line_count, char *dst, size_t cap)
                    (unsigned long long)line_count,
                    (unsigned long long)syn->wave.v,
                    syn->degraded ? "yes" : "no");
-}
-
-void yew_theme_load(const char *path)
-{
-    (void)path;
-    YEW_BUG("theme loading lands in Sprint 41");
-}
-
-const ThemeEnt *yew_theme_table(void)
-{
-    static ThemeEnt table[64];
-    static bool initialized;
-    if (!initialized) {
-        table[YEW_ATTR_COMMENT].attrs = YEW_ATTR_DIM;
-        initialized = true;
-    }
-    return table;
 }

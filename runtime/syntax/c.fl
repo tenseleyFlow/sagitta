@@ -66,7 +66,7 @@
                 { match: "\\\\\\s*$", attr: "operator", set: "preproc_cont" },
                 { match: "\\b(include|include_next|import)\\b", attr: "preproc",
                   set: "preproc_include" },
-                { match: "//", attr: "comment", push: "line_comment" },
+                { match: "//.*$", attr: "comment" },
                 { match: "/\\*", attr: "comment", push: "block_comment" },
                 { match: "\"", attr: "string", push: "dq" },
                 { match: "\\bdefined\\b", attr: "function.builtin" },
@@ -83,21 +83,9 @@
             at_eol:  "stay",
             unit:    "span",
             rules: [
+                { match: "\\\\\\s*$", attr: "operator", set: "preproc_cont" },
                 { match: "^(.)(.*[^\\\\\\s])?\\s*$", attr: "preproc",
                   consume: 1, set: "preproc" },
-                { match: "^\\s+$", attr: "preproc", set: "preproc" },
-                "include:preproc_rules",
-            ],
-        },
-
-        preproc_rules: {
-            rules: [
-                { match: "\\\\\\s*$", attr: "operator", set: "preproc_cont" },
-                { match: "//", attr: "comment", push: "line_comment" },
-                { match: "/\\*", attr: "comment", push: "block_comment" },
-                { match: "\"", attr: "string", push: "dq" },
-                { match: "\\bdefined\\b", attr: "function.builtin" },
-                { match: "\\b[0-9]+\\b", attr: "number" },
             ],
         },
 
@@ -109,7 +97,7 @@
                 { match: "\\\\\\s*$", attr: "operator", set: "preproc_cont" },
                 { match: "<[^>\\n]+>", attr: "string" },
                 { match: "\"", attr: "string", push: "dq" },
-                { match: "//", attr: "comment", push: "line_comment" },
+                { match: "//.*$", attr: "comment" },
                 { match: "/\\*", attr: "comment", push: "block_comment" },
             ],
         },
@@ -134,11 +122,6 @@
             rules: [
                 { match: "^(.)(.*[^\\\\])?$", attr: "string",
                   consume: 1, set: "dq" },
-                { match: "\\\\(x[0-9A-Fa-f]{1,2}|[0-7]{1,3}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|['\"?\\\\abfnrtv])",
-                  attr: "string.escape" },
-                { match: "\\\\$", attr: "string.escape", set: "dq_cont" },
-                { match: "\\\\.", attr: "error" },
-                { match: "\"", attr: "string", pop: 1 },
             ],
         },
 

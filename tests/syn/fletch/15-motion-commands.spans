@@ -1,4 +1,4 @@
-line 1 entry=main exit=main
+line 1 entry=main exit=motion
   1:0-1 attr=keyword context=main
   1:1-2 attr=punct.bracket context=main
   1:2-3 attr=text context=motion
@@ -8,5 +8,7 @@ line 1 entry=main exit=main
   1:13-14 attr=text context=motion
   1:14-28 attr=motion.cmd context=motion
   1:28-29 attr=text context=motion
-  1:29-30 attr=punct.bracket context=motion
-line 2 entry=main exit=main
+  1:29-45 attr=comment context=motion
+line 2 entry=motion exit=main
+  2:0-1 attr=punct.bracket context=motion
+line 3 entry=main exit=main

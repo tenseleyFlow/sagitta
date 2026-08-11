@@ -364,3 +364,50 @@ void test_syn_line_push_list_eol_target_and_clear_aux_pop_laws(void)
     yew_syn_engine_free(engine);
     arena_free_all(&arena);
 }
+
+void test_syn_line_coverage_is_optional_and_excludes_stack_probes(void)
+{
+    SynToy toy;
+    SynCoverage coverage;
+    SynSpan spans[16];
+    SynLineOut out;
+    SynState at;
+    u64 context_hits;
+    u64 rule_hits;
+    u32 i;
+
+    syn_toy_init(&toy);
+    YEW_ASSERT(yew_syn_coverage_init(&coverage, &toy.def));
+    yew_syn_engine_set_coverage(toy.engine, &coverage);
+    (void)syn_toy_line(&toy, YEW_SYN_STATE_ROOT, "\"a\\nb\"", spans,
+                       YEW_ARRAY_LEN(spans), &out);
+    YEW_ASSERT_EQ_U64(coverage.contexts[SYN_TOY_MAIN], 2U);
+    YEW_ASSERT_EQ_U64(coverage.contexts[SYN_TOY_STRING], 1U);
+    YEW_ASSERT_EQ_U64(coverage.rules[2], 1U);
+    YEW_ASSERT_EQ_U64(coverage.rules[7], 1U);
+    YEW_ASSERT_EQ_U64(coverage.rules[8], 1U);
+
+    context_hits = 0U;
+    for (i = 0U; i < coverage.nctxs; i++)
+        context_hits += coverage.contexts[i];
+    rule_hits = 0U;
+    for (i = 0U; i < coverage.nrules; i++)
+        rule_hits += coverage.rules[i];
+    YEW_ASSERT(yew_syn_stack_at(toy.engine, YEW_SYN_STATE_ROOT,
+                                (const u8 *)"\"a\\nb\"", 6U, 3U, &at));
+    for (i = 0U; i < coverage.nctxs; i++)
+        context_hits -= coverage.contexts[i];
+    for (i = 0U; i < coverage.nrules; i++)
+        rule_hits -= coverage.rules[i];
+    YEW_ASSERT_EQ_U64(context_hits, 0U);
+    YEW_ASSERT_EQ_U64(rule_hits, 0U);
+
+    yew_syn_coverage_clear(&coverage);
+    for (i = 0U; i < coverage.nctxs; i++)
+        YEW_ASSERT_EQ_U64(coverage.contexts[i], 0U);
+    for (i = 0U; i < coverage.nrules; i++)
+        YEW_ASSERT_EQ_U64(coverage.rules[i], 0U);
+    yew_syn_engine_set_coverage(toy.engine, NULL);
+    yew_syn_coverage_free(&coverage);
+    syn_toy_free(&toy);
+}

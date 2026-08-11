@@ -1,1 +1,2 @@
-@[ yank paste custom_command ]
+@[ yank paste custom_command # motion comment
+]

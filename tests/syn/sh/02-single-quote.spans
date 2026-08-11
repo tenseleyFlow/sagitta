@@ -1,0 +1,7 @@
+line 1 entry=main exit=main
+  1:0-6 attr=function.builtin context=main
+  1:6-7 attr=text context=main
+  1:7-13 attr=string context=main
+  1:13-14 attr=text context=main
+  1:14-22 attr=string context=main
+line 2 entry=main exit=main

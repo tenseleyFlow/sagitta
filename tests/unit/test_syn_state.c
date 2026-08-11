@@ -11,7 +11,6 @@
 
 #include "syn/engine.h"
 #include "syn/defs.h"
-#include "syn/theme.h"
 #include "util/buf.h"
 
 typedef void (*SynBugCase)(void);
@@ -61,11 +60,6 @@ static void syn_expect_bug(SynBugCase run, const char *needle)
     bytebuf_append(&output, "", 1U);
     YEW_ASSERT(strstr((const char *)output.data, needle) != NULL);
     bytebuf_free(&output);
-}
-
-static void syn_load_theme_bug(void)
-{
-    yew_theme_load("test.theme");
 }
 
 static void syn_embedded_def_bug(void)
@@ -206,13 +200,14 @@ void test_syn_state_table_exhaustion_degrades_to_root(void)
 void test_syn_deferred_surfaces_fail_loudly(void)
 {
     const SynDef *ini;
+    u32 ini_lang;
 
     YEW_ASSERT_EQ_U64(yew_syn_lang_for("example.xyz", NULL, 0U),
                       YEW_LANG_NONE);
-    YEW_ASSERT_EQ_U64(yew_syn_lang_for("example.ini", NULL, 0U), 1U);
-    ini = yew_syn_def_for(1U);
+    ini_lang = yew_syn_lang_for("example.ini", NULL, 0U);
+    YEW_ASSERT(ini_lang != YEW_LANG_NONE);
+    ini = yew_syn_def_for(ini_lang);
     YEW_ASSERT_NOT_NULL(ini);
     YEW_ASSERT_EQ_STR(ini->name, "ini");
-    syn_expect_bug(syn_load_theme_bug, "Sprint 41");
     syn_expect_bug(syn_embedded_def_bug, "embedded definitions");
 }

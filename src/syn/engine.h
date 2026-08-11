@@ -145,6 +145,13 @@ typedef struct SynDef {
 typedef struct SynStateTab SynStateTab;
 typedef struct SynEngine SynEngine;
 
+typedef struct SynCoverage {
+    u64 *contexts;
+    u64 *rules;
+    u32 nctxs;
+    u32 nrules;
+} SynCoverage;
+
 SynStateTab *yew_syn_state_tab_new(u16 root_ctx);
 void yew_syn_state_tab_free(SynStateTab *tab);
 u32 yew_syn_state_intern(SynStateTab *tab, const SynState *state);
@@ -164,6 +171,10 @@ SynStateTab *yew_syn_engine_states(SynEngine *engine);
 const SynDef *yew_syn_engine_def(const SynEngine *engine);
 u64 yew_syn_engine_line_calls(const SynEngine *engine);
 void yew_syn_engine_reset_counters(SynEngine *engine);
+bool yew_syn_coverage_init(SynCoverage *coverage, const SynDef *def);
+void yew_syn_coverage_clear(SynCoverage *coverage);
+void yew_syn_coverage_free(SynCoverage *coverage);
+void yew_syn_engine_set_coverage(SynEngine *engine, SynCoverage *coverage);
 
 void yew_syn_line(SynEngine *engine, u32 entry_state, const u8 *line,
                   u32 len, SynLineOut *out);

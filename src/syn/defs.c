@@ -297,7 +297,7 @@ static void validate_keys(Compile *c, const FlNode *map,
             continue;
         if (text_eq(key, n, "embed")) {
             diag(c, FL_DIAG_ERROR, kn->sp,
-                 "'embed' is deferred to Sprint 41.5");
+                 "'embed' is deferred to s41_5");
             continue;
         }
         maybe = suggest(key, n, known, nknown);

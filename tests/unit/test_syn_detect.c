@@ -170,7 +170,7 @@ void test_syn_detect_env_and_direct_shebang_interpreters(void)
 {
     static const u8 env_line[] = "#!/usr/bin/env python3";
     static const u8 env_flags[] = "#!/usr/bin/env -S python3 -u";
-    static const u8 direct[] = "#!/bin/sh -e";
+    static const u8 direct[] = "#!/bin/probe-sh -e";
     DetectFix f;
     u32 py;
     u32 sh;
@@ -178,7 +178,7 @@ void test_syn_detect_env_and_direct_shebang_interpreters(void)
     detect_open(&f);
     py = detect_add(&f, "python-probe", "[]", "[]", "[\"python3\"]",
                     "", 0);
-    sh = detect_add(&f, "shell-probe", "[]", "[]", "[\"sh\"]", "", 0);
+    sh = detect_add(&f, "shell-probe", "[]", "[]", "[\"probe-sh\"]", "", 0);
     YEW_ASSERT_EQ_U64(yew_syn_lang_for("script", env_line,
                                        (u32)strlen((const char *)env_line)), py);
     YEW_ASSERT_EQ_U64(yew_syn_lang_for("script", env_flags,
@@ -215,7 +215,7 @@ void test_syn_detect_first_line_regex_is_last_positive_stage(void)
     detect_open(&f);
     regex = detect_add(&f, "line-probe", "[]", "[]", "[]", "\"^MODE:\\\\s\"",
                        0);
-    YEW_ASSERT_EQ_U64(yew_syn_lang_for("README", line,
+    YEW_ASSERT_EQ_U64(yew_syn_lang_for("untitled", line,
                                        (u32)strlen((const char *)line)), regex);
     detect_close(&f);
 }

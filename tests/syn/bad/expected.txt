@@ -16,3 +16,4 @@
 15-error-default|warning|1|70|default: 'error' paints every unmatched byte red; did you mean 'text'?
 16-include-fields|warning|1|101|only 'rules' is used at an include site
 17-indent-order|error|1|68|indent_lt must be the first rule in its context
+18-embed-deferred|error|5|34|'embed' is deferred to s41_5

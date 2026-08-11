@@ -1,5 +1,5 @@
 #!/bin/sh
-# Sprint 40 syntax-definition integration gates.
+# Sprint 40/41 syntax-definition integration gates.
 set -eu
 
 if [ "$#" -ne 1 ]; then
@@ -18,6 +18,41 @@ cp tests/syn/discovery/user-asset.fl \
    "$XDG_CONFIG_HOME/yew/syntax/asset-user.fl"
 
 "$yew" syn check --strict runtime/syntax/ini.fl
+
+golden_count=0
+for spec in c:c fletch:fl sh:sh make:mk markdown:md; do
+    lang=${spec%%:*}
+    ext=${spec#*:}
+    def=runtime/syntax/$lang.fl
+
+    "$yew" syn check --strict "$def"
+    "$yew" syn check --coverage "$def" tests/syn/"$lang"/*."$ext"
+    for input in tests/syn/"$lang"/*."$ext"; do
+        golden=${input%."$ext"}.spans
+        actual=$tmp/$lang-$(basename "$input").spans
+
+        test -f "$golden" || {
+            echo "syntax assets: missing span golden: $golden" >&2
+            exit 1
+        }
+        "$yew" syn dump "$def" --spans "$input" > "$actual"
+        cmp -s "$golden" "$actual" || {
+            echo "syntax assets: stale span golden: $golden" >&2
+            diff -u "$golden" "$actual" || true
+            exit 1
+        }
+        "$yew" syn dump "$def" --spans "$input" > "$actual.2"
+        cmp -s "$actual" "$actual.2" || {
+            echo "syntax assets: nondeterministic span dump: $input" >&2
+            exit 1
+        }
+        golden_count=$((golden_count + 1))
+    done
+done
+if [ "$golden_count" -lt 90 ]; then
+    echo "syntax assets: only $golden_count Sprint 41 goldens (need 90)" >&2
+    exit 1
+fi
 
 "$yew" syn list > "$tmp/list.1"
 "$yew" syn list > "$tmp/list.2"
