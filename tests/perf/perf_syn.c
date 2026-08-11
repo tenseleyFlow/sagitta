@@ -18,14 +18,16 @@
 #include "util/intern.h"
 
 enum {
-    PERF_SYN_DEFAULT_SAMPLES = 101,
+    PERF_SYN_DEFAULT_SAMPLES = 1001,
     PERF_SYN_MAX_SAMPLES = 1001,
+    PERF_SYN_TRIALS = 3,
     PERF_SYN_VIEW_LINES = 200,
     PERF_SYN_EDIT_LINES = 100000,
     PERF_SYN_RULES = 6,
     PERF_SYN_CTXS = 3,
     PERF_SYN_DETECT_PATHS = 10000,
     PERF_SYN_BLOCK_BYTES = 64 * 1024,
+    PERF_SYN_BLOCK_LINES = 100000,
     PERF_SYN_BLOCK_MAX_LINE_CALLS = 3
 };
 
@@ -96,6 +98,21 @@ static Timing timing_of(u64 *samples, size_t len)
     result.median = samples[len / 2U];
     result.p99 = samples[p99];
     return result;
+}
+
+static Timing timing_of_trials(const Timing trials[PERF_SYN_TRIALS])
+{
+    u64 medians[PERF_SYN_TRIALS];
+    u64 p99s[PERF_SYN_TRIALS];
+
+    for (size_t i = 0U; i < PERF_SYN_TRIALS; i++) {
+        medians[i] = trials[i].median;
+        p99s[i] = trials[i].p99;
+    }
+    stable_sort(medians, PERF_SYN_TRIALS);
+    stable_sort(p99s, PERF_SYN_TRIALS);
+    return (Timing){medians[PERF_SYN_TRIALS / 2U],
+                    p99s[PERF_SYN_TRIALS / 2U]};
 }
 
 static size_t sample_count(void)
@@ -467,6 +484,7 @@ static bool measure_edit(SynFixture *fx, TextBuf *tb, u64 *samples,
     for (size_t i = 0U; i < count; i++) {
         static const u8 byte = (u8)'x';
         SynSettleReport report;
+        SynSettleReport restore;
         u64 start;
         u64 end;
 
@@ -485,6 +503,14 @@ static bool measure_edit(SynFixture *fx, TextBuf *tb, u64 *samples,
         }
         samples[i] = end - start;
         perf_syn_sink += report.lines;
+        yew_textbuf_delete(tb, (Span){2U, 3U});
+        yew_syn_edit(&syn, LINENO(0U), 0U, 0U);
+        yew_syn_settle(&syn, tb, LINENO(0U), LINENO(200U),
+                       INT64_C(1000000000), &restore);
+        if (!restore.fixpoint || restore.lines > 2U) {
+            yew_syn_detach(&syn);
+            return false;
+        }
     }
     yew_syn_detach(&syn);
     return true;
@@ -589,6 +615,84 @@ done:
     return ok;
 }
 
+static bool measure_block_multiline(SynFixture *fx, u64 *samples,
+                                    size_t count, u64 *max_line_calls)
+{
+    size_t len = 3U + ((size_t)PERF_SYN_BLOCK_LINES - 2U) * 2U + 2U;
+    u8 *bytes = malloc(len);
+    Buffer buf = {0};
+    UnitCtx unit;
+    SynSettleReport report;
+    Span span;
+    u64 at;
+    bool ok = false;
+
+    *max_line_calls = 0U;
+    if (bytes == NULL)
+        return false;
+    (void)memcpy(bytes, "/*\n", 3U);
+    for (u32 line = 1U; line + 1U < PERF_SYN_BLOCK_LINES; line++) {
+        bytes[3U + ((size_t)line - 1U) * 2U] = (u8)'x';
+        bytes[4U + ((size_t)line - 1U) * 2U] = (u8)'\n';
+    }
+    (void)memcpy(bytes + len - 2U, "*/", 2U);
+    buf.tb = yew_textbuf_from_owned_bytes(bytes, len);
+    if (buf.tb == NULL) {
+        free(bytes);
+        return false;
+    }
+    buf.lang = "perf-toy";
+    buf.tabwidth = 4U;
+    fx->ctx[2].flags = YEW_SYN_CTX_UNIT_ATOM;
+    yew_syn_engine_set_def(fx->engine, &fx->def);
+    yew_syn_buf_init(&buf.syn);
+    yew_syn_buf_bind(&buf.syn, fx->engine);
+    yew_syn_attach(&buf.syn, 1U, buf.tb);
+    yew_syn_settle(&buf.syn, buf.tb, LINENO(0U),
+                   LINENO(PERF_SYN_BLOCK_LINES), INT64_C(1000000000),
+                   &report);
+    if (!report.fixpoint)
+        goto done;
+    unit = (UnitCtx){buf.tb, &buf, NULL};
+    at = 3U + ((u64)PERF_SYN_BLOCK_LINES / 2U - 1U) * 2U;
+    yew_block_provider_syntax_install(true);
+
+    yew_syn_engine_reset_counters(fx->engine);
+    if (!yew_block_level(&unit, BYTEOFF(at), 0U, &span) ||
+        span.lo != 2U || span.hi != len ||
+        yew_syn_engine_line_calls(fx->engine) >
+            PERF_SYN_BLOCK_MAX_LINE_CALLS)
+        goto provider_done;
+
+    for (size_t i = 0U; i < count; i++) {
+        u64 start;
+        u64 end;
+        u64 line_calls;
+
+        yew_syn_engine_reset_counters(fx->engine);
+        if (!now_ns(&start) ||
+            !yew_block_level(&unit, BYTEOFF(at), 0U, &span) ||
+            !now_ns(&end) || end < start || span.lo != 2U ||
+            span.hi != len)
+            goto provider_done;
+        line_calls = yew_syn_engine_line_calls(fx->engine);
+        if (line_calls > PERF_SYN_BLOCK_MAX_LINE_CALLS)
+            goto provider_done;
+        if (line_calls > *max_line_calls)
+            *max_line_calls = line_calls;
+        samples[i] = end - start;
+        perf_syn_sink += span.lo + span.hi + line_calls;
+    }
+    ok = true;
+
+provider_done:
+    yew_block_provider_syntax_install(false);
+done:
+    yew_syn_detach(&buf.syn);
+    yew_textbuf_free(buf.tb);
+    return ok;
+}
+
 static bool load_baselines(PerfCase *cases, size_t count)
 {
     FILE *file = fopen("tests/perf/baselines/syn.txt", "r");
@@ -634,6 +738,12 @@ int main(void)
         {"edit_settle_100k", {0U, 0U}, {0U, 0U}},
         {"line_cap_512k", {0U, 0U}, {0U, 0U}}
     };
+    Timing case_trials[YEW_ARRAY_LEN(cases)][PERF_SYN_TRIALS];
+    Timing detect_trials[PERF_SYN_TRIALS];
+    Timing compile_trials[PERF_SYN_TRIALS];
+    Timing cache_trials[PERF_SYN_TRIALS];
+    Timing block_trials[PERF_SYN_TRIALS];
+    Timing block_multiline_trials[PERF_SYN_TRIALS];
     size_t count = sample_count();
     u64 *samples = calloc(count, sizeof(*samples));
     u8 *cap_line = malloc(512U * 1024U);
@@ -645,9 +755,19 @@ int main(void)
     Timing compile = {0U, 0U};
     Timing cache = {0U, 0U};
     Timing block = {0U, 0U};
+    Timing block_multiline = {0U, 0U};
     u64 block_line_calls = 0U;
+    u64 block_multiline_calls = 0U;
+    bool regression_seen = false;
     int status = 0;
 
+    (void)memset(case_trials, 0, sizeof(case_trials));
+    (void)memset(detect_trials, 0, sizeof(detect_trials));
+    (void)memset(compile_trials, 0, sizeof(compile_trials));
+    (void)memset(cache_trials, 0, sizeof(cache_trials));
+    (void)memset(block_trials, 0, sizeof(block_trials));
+    (void)memset(block_multiline_trials, 0,
+                 sizeof(block_multiline_trials));
     if (samples == NULL || cap_line == NULL || viewport == NULL ||
         edit == NULL || !read_source("runtime/syntax/ini.fl", &ini) ||
         !fixture_init(&fx)) {
@@ -660,47 +780,85 @@ int main(void)
         return 2;
     }
     (void)memset(cap_line, 'x', 512U * 1024U);
-    if (!measure_line(&fx, samples, count)) {
-        (void)fprintf(stderr, "perf_syn: line measurement failed\n");
-        status = 2;
-    } else
-        cases[0].measured = timing_of(samples, count);
-    if (status == 0 && !measure_viewport(&fx, viewport, samples, count)) {
-        (void)fprintf(stderr, "perf_syn: viewport measurement failed\n");
-        status = 2;
-    } else if (status == 0)
-        cases[1].measured = timing_of(samples, count);
-    if (status == 0 && !measure_edit(&fx, edit, samples, count)) {
-        (void)fprintf(stderr, "perf_syn: edit measurement failed\n");
-        status = 2;
-    } else if (status == 0)
-        cases[2].measured = timing_of(samples, count);
-    if (status == 0 && !measure_cap(&fx, cap_line, samples, count)) {
-        (void)fprintf(stderr, "perf_syn: line-cap measurement failed\n");
-        status = 2;
-    } else if (status == 0)
-        cases[3].measured = timing_of(samples, count);
-    if (status == 0 && !measure_detect(samples, count)) {
-        (void)fprintf(stderr, "perf_syn: detection measurement failed\n");
-        status = 2;
-    } else if (status == 0)
-        detect = timing_of(samples, count);
-    if (status == 0 && !measure_compile(&ini, samples, count)) {
-        (void)fprintf(stderr, "perf_syn: definition compile failed\n");
-        status = 2;
-    } else if (status == 0)
-        compile = timing_of(samples, count);
-    if (status == 0 && !measure_cache(samples, count)) {
-        (void)fprintf(stderr, "perf_syn: cache-load measurement failed\n");
-        status = 2;
-    } else if (status == 0)
-        cache = timing_of(samples, count);
-    if (status == 0 &&
-        !measure_block_provider(&fx, samples, count, &block_line_calls)) {
-        (void)fprintf(stderr, "perf_syn: block-provider measurement failed\n");
-        status = 2;
-    } else if (status == 0)
-        block = timing_of(samples, count);
+    for (size_t trial = 0U; trial < PERF_SYN_TRIALS && status == 0;
+         trial++) {
+        u64 trial_line_calls = 0U;
+        u64 trial_multiline_calls = 0U;
+
+        if (!measure_line(&fx, samples, count)) {
+            (void)fprintf(stderr, "perf_syn: line measurement failed\n");
+            status = 2;
+        } else
+            case_trials[0][trial] = timing_of(samples, count);
+        if (status == 0 &&
+            !measure_viewport(&fx, viewport, samples, count)) {
+            (void)fprintf(stderr,
+                          "perf_syn: viewport measurement failed\n");
+            status = 2;
+        } else if (status == 0)
+            case_trials[1][trial] = timing_of(samples, count);
+        if (status == 0 && !measure_edit(&fx, edit, samples, count)) {
+            (void)fprintf(stderr, "perf_syn: edit measurement failed\n");
+            status = 2;
+        } else if (status == 0)
+            case_trials[2][trial] = timing_of(samples, count);
+        if (status == 0 && !measure_cap(&fx, cap_line, samples, count)) {
+            (void)fprintf(stderr,
+                          "perf_syn: line-cap measurement failed\n");
+            status = 2;
+        } else if (status == 0)
+            case_trials[3][trial] = timing_of(samples, count);
+        if (status == 0 && !measure_detect(samples, count)) {
+            (void)fprintf(stderr,
+                          "perf_syn: detection measurement failed\n");
+            status = 2;
+        } else if (status == 0)
+            detect_trials[trial] = timing_of(samples, count);
+        if (status == 0 && !measure_compile(&ini, samples, count)) {
+            (void)fprintf(stderr,
+                          "perf_syn: definition compile failed\n");
+            status = 2;
+        } else if (status == 0)
+            compile_trials[trial] = timing_of(samples, count);
+        if (status == 0 && !measure_cache(samples, count)) {
+            (void)fprintf(stderr,
+                          "perf_syn: cache-load measurement failed\n");
+            status = 2;
+        } else if (status == 0)
+            cache_trials[trial] = timing_of(samples, count);
+        if (status == 0 &&
+            !measure_block_provider(&fx, samples, count,
+                                    &trial_line_calls)) {
+            (void)fprintf(stderr,
+                          "perf_syn: block-provider measurement failed\n");
+            status = 2;
+        } else if (status == 0) {
+            block_trials[trial] = timing_of(samples, count);
+            if (trial_line_calls > block_line_calls)
+                block_line_calls = trial_line_calls;
+        }
+        if (status == 0 &&
+            !measure_block_multiline(&fx, samples, count,
+                                     &trial_multiline_calls)) {
+            (void)fprintf(
+                stderr,
+                "perf_syn: multiline block-provider measurement failed\n");
+            status = 2;
+        } else if (status == 0) {
+            block_multiline_trials[trial] = timing_of(samples, count);
+            if (trial_multiline_calls > block_multiline_calls)
+                block_multiline_calls = trial_multiline_calls;
+        }
+    }
+    if (status == 0) {
+        for (size_t i = 0U; i < YEW_ARRAY_LEN(cases); i++)
+            cases[i].measured = timing_of_trials(case_trials[i]);
+        detect = timing_of_trials(detect_trials);
+        compile = timing_of_trials(compile_trials);
+        cache = timing_of_trials(cache_trials);
+        block = timing_of_trials(block_trials);
+        block_multiline = timing_of_trials(block_multiline_trials);
+    }
 
     if (status == 0 && !load_baselines(cases, YEW_ARRAY_LEN(cases)))
         status = 2;
@@ -717,13 +875,15 @@ int main(void)
                      (unsigned long long)cases[i].measured.p99,
                      regression ? " REGRESSION" : " ok");
         if (regression)
-            status = 1;
+            regression_seen = true;
     }
     if (status != 2) {
         bool detect_regression = detect.median > PERF_SYN_DETECT_LIMIT_NS;
         bool compile_regression = compile.median > PERF_SYN_COMPILE_LIMIT_NS;
         bool cache_regression = cache.median > PERF_SYN_CACHE_LIMIT_NS;
         bool block_regression = block.p99 > PERF_SYN_BLOCK_LIMIT_NS;
+        bool multiline_regression =
+            block_multiline.p99 > PERF_SYN_BLOCK_LIMIT_NS;
 
         (void)printf("syn.%-20s median_ns=%llu p99_ns=%llu%s\n",
                      "detect_10000",
@@ -747,8 +907,17 @@ int main(void)
                      (unsigned long long)block.p99,
                      (unsigned long long)block_line_calls,
                      block_regression ? " REGRESSION" : " ok");
+        (void)printf("syn.%-20s median_ns=%llu p99_ns=%llu "
+                     "line_calls_max=%llu%s\n",
+                     "block_multiline_100k",
+                     (unsigned long long)block_multiline.median,
+                     (unsigned long long)block_multiline.p99,
+                     (unsigned long long)block_multiline_calls,
+                     multiline_regression ? " REGRESSION" : " ok");
         if (detect_regression || compile_regression || cache_regression ||
-            block_regression)
+            block_regression || multiline_regression)
+            regression_seen = true;
+        if (regression_seen)
             status = 1;
     }
     if (status == 2)
