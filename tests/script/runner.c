@@ -18,6 +18,7 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <poll.h>
 #include <signal.h>
 #include <stdbool.h>
@@ -73,6 +74,67 @@ typedef struct RunResult {
     bool timed_out;
     bool setup_failed;
 } RunResult;
+
+static bool mark_fd_cloexec(int fd)
+{
+    int flags = fcntl(fd, F_GETFD);
+
+    if (flags < 0)
+        return errno == EBADF;
+    return (flags & FD_CLOEXEC) != 0 ||
+           fcntl(fd, F_SETFD, flags | FD_CLOEXEC) == 0;
+}
+
+/*
+ * The runner may inherit descriptors from its launcher (GitHub Actions keeps
+ * several high-numbered pipes open).  They belong to the runner, never to the
+ * isolated editor children: letting them cross exec both breaks isolation and
+ * makes Valgrind's fd report contaminate captured child stderr.
+ */
+static bool mark_inherited_fds_cloexec(void)
+{
+    long limit = sysconf(_SC_OPEN_MAX);
+
+    if (limit < 0 || limit > INT_MAX) {
+        errno = EOVERFLOW;
+        return false;
+    }
+#if defined(__linux__)
+    DIR *dir = opendir("/proc/self/fd");
+
+    if (dir != NULL) {
+        struct dirent *entry;
+        bool ok = true;
+
+        errno = 0;
+        while ((entry = readdir(dir)) != NULL) {
+            char *end;
+            long fd;
+
+            errno = 0;
+            fd = strtol(entry->d_name, &end, 10);
+            if (errno != 0 || *entry->d_name == '\0' || *end != '\0' ||
+                fd <= STDERR_FILENO || fd >= limit)
+                continue;
+            if (!mark_fd_cloexec((int)fd))
+                ok = false;
+        }
+        if (errno != 0)
+            ok = false;
+        if (closedir(dir) != 0)
+            ok = false;
+        return ok;
+    }
+#endif
+    {
+        int fd;
+
+        for (fd = STDERR_FILENO + 1; fd < (int)limit; fd++)
+            if (!mark_fd_cloexec(fd))
+                return false;
+    }
+    return true;
+}
 
 static void bytes_free(Bytes *bytes)
 {
@@ -1411,6 +1473,12 @@ int main(int argc, char **argv)
     size_t suite_skipped = 0U;
     size_t i;
 
+    if (!mark_inherited_fds_cloexec()) {
+        (void)fprintf(stderr,
+                      "script: cannot isolate inherited descriptors: %s\n",
+                      strerror(errno));
+        return 1;
+    }
     if (!parse_cli(argc, argv, &filter, &yew_arg, &list_only,
                    &selftest))
         return 1;

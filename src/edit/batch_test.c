@@ -603,6 +603,7 @@ static int result_fd(int fd)
 bool yew_batch_test_finish(YewBatchTestState *s, int fd)
 {
     Bytebuf summary; u64 failures; bool io_ok = true;
+    bool close_result = fd < 0;
     if (s == NULL || !s->installed) return false;
     if (!s->finished && !s->skipped && s->assertions == 0U) {
         static const char none[] = "FAIL\tt.?\tno assertions\n";
@@ -617,7 +618,10 @@ bool yew_batch_test_finish(YewBatchTestState *s, int fd)
                    (unsigned long long)s->assertions,
                    (unsigned long long)failures, s->skipped ? 1U : 0U);
     if (!write_all(fd, summary.data, summary.len)) io_ok = false;
-    bytebuf_free(&summary); return io_ok && (s->skipped || failures == 0U);
+    bytebuf_free(&summary);
+    if (close_result && fd > STDERR_FILENO && close(fd) != 0)
+        io_ok = false;
+    return io_ok && (s->skipped || failures == 0U);
 }
 
 void yew_batch_test_free(YewBatchTestState *s)
