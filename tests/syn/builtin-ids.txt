@@ -1,0 +1,20 @@
+# Stable built-in syntax ids. Append-only: id|canonical-language|definition-stem
+1|c|c
+2|css|css
+3|fletch|fletch
+4|fortran|fortran
+5|fortran-fixed|fortran_fixed
+6|go|go
+7|html|html
+8|ini|ini
+9|javascript|javascript
+10|json|json
+11|jsonc|jsonc
+12|make|make
+13|markdown|markdown
+14|python|python
+15|rust|rust
+16|sh|sh
+17|toml|toml
+18|typescript|typescript
+19|yaml|yaml

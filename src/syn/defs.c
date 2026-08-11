@@ -17,6 +17,7 @@
 #include "fl/ast.h"
 #include "fl/parse.h"
 #include "syn/langs_gen.h"
+#include "syn/registry.h"
 #include "text/file.h"
 #include "util/buf.h"
 #include "util/intern.h"
@@ -130,6 +131,7 @@ static u64 compile_count;
 static bool cache_bypass;
 static bool discovery_done;
 static bool discovery_bypass;
+static BuiltinRegistry builtin_registry;
 
 static void discover_user_definitions(void);
 static bool builtin_name_exists(const char *name);
@@ -2006,26 +2008,19 @@ void yew_syn_discovery_set_bypass(bool bypass)
     discovery_bypass = bypass;
 }
 
+static void builtin_registry_init(void)
+{
+    if (!builtin_registry.ready) {
+        yew_syn_builtin_registry_build(&builtin_registry,
+                                       yew_syn_builtin_langs,
+                                       yew_syn_builtin_langs_len);
+    }
+}
+
 static const SynLangDesc *builtin_desc_at(size_t i)
 {
-    static SynLangDesc desc[32];
-    static bool ready[32];
-    const SynLangSeed *seed;
-
-    if (i >= yew_syn_builtin_langs_len || i >= YEW_ARRAY_LEN(desc))
-        return NULL;
-    if (ready[i])
-        return &desc[i];
-    seed = &yew_syn_builtin_langs[i];
-    desc[i] = (SynLangDesc){
-        seed->id, seed->name, seed->source,
-        (const char **)seed->extensions, seed->nextensions,
-        (const char **)seed->filenames, seed->nfilenames,
-        (const char **)seed->shebangs, seed->nshebangs,
-        seed->first_line, seed->priority, seed->comment
-    };
-    ready[i] = true;
-    return &desc[i];
+    builtin_registry_init();
+    return yew_syn_builtin_registry_desc_at(&builtin_registry, i);
 }
 
 const SynLangDesc *yew_syn_lang_desc(u32 lang)
@@ -3461,35 +3456,19 @@ static bool parse_shebang(const u8 *line, u32 len, ShebangMatch *out)
 
 static YewRe *detection_re(const SynLangDesc *lang)
 {
-    static Arena arena;
-    static bool initialized;
-    static struct {
-        u32 id;
-        YewRe *re;
-    } slots[32];
     DefMeta *m;
-    u32 i;
+    size_t i;
 
     for (m = metas; m != NULL; m = m->next) {
         if (!m->retired && m->lang.id == lang->id &&
             m->first_line_re != NULL)
             return m->first_line_re;
     }
-    if (!initialized) {
-        arena_init(&arena);
-        initialized = true;
-    }
-    for (i = 0U; i < YEW_ARRAY_LEN(slots); i++) {
-        YewReErr err = {0U, NULL};
-
-        if (slots[i].id == lang->id)
-            return slots[i].re;
-        if (slots[i].id != 0U)
+    builtin_registry_init();
+    for (i = 0U; i < builtin_registry.len; i++) {
+        if (builtin_registry.desc[i].id != lang->id)
             continue;
-        slots[i].id = lang->id;
-        slots[i].re = yew_re_compile(&arena, lang->first_line,
-                                     strlen(lang->first_line), 0U, &err);
-        return slots[i].re;
+        return yew_syn_builtin_registry_first_line(&builtin_registry, i);
     }
     return NULL;
 }
@@ -3601,17 +3580,22 @@ static char *runtime_definition_path(const SynLangSeed *seed)
     return path;
 }
 
+static SynDef *load_builtin_definition(Arena *arena, DiagCtx *dc,
+                                       const SynLangSeed *seed, void *ctx)
+{
+    char *path;
+    SynDef *def;
+
+    (void)ctx;
+    path = runtime_definition_path(seed);
+    def = yew_syn_def_load(arena, dc, path);
+    free(path);
+    return def;
+}
+
 const SynDef *yew_syn_def_for(u32 lang)
 {
-    typedef struct BuiltinDef {
-        Arena arena;
-        DiagCtx dc;
-        SynDef *def;
-        bool tried;
-    } BuiltinDef;
-    static BuiltinDef builtins[32];
     DefMeta *m;
-    size_t i;
 
     if (lang == YEW_LANG_NONE)
         return NULL;
@@ -3620,23 +3604,10 @@ const SynDef *yew_syn_def_for(u32 lang)
         if (!m->retired && m->lang.id == lang)
             return m->def;
     }
-    for (i = 0U; i < yew_syn_builtin_langs_len; i++) {
-        char *path;
-
-        if (yew_syn_builtin_langs[i].id != lang || i >= YEW_ARRAY_LEN(builtins))
-            continue;
-        if (builtins[i].tried)
-            return builtins[i].def;
-        builtins[i].tried = true;
-        arena_init(&builtins[i].arena);
-        fl_diag_init(&builtins[i].dc, &builtins[i].arena);
-        path = runtime_definition_path(&yew_syn_builtin_langs[i]);
-        builtins[i].def = yew_syn_def_load(&builtins[i].arena,
-                                           &builtins[i].dc, path);
-        free(path);
-        return builtins[i].def;
-    }
-    return NULL;
+    builtin_registry_init();
+    return yew_syn_builtin_registry_load(
+        &builtin_registry, yew_syn_builtin_langs,
+        yew_syn_builtin_langs_len, lang, load_builtin_definition, NULL);
 }
 
 SynEngine *yew_syn_engine_for(u32 lang)
