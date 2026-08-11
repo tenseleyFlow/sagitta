@@ -116,7 +116,7 @@ CmdStatus yew_macro_store(Ed *ed, Buffer *scratch)
 {
     Bytebuf source;
     FlFn *compiled;
-    FlSpan span;
+    FlSpan span = {0};
     const char *diag;
     CmdStatus status;
     u32 lines;
