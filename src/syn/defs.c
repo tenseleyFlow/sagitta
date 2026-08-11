@@ -3025,9 +3025,11 @@ static char *builtin_language_for_source(const char *source)
 {
     size_t i;
 
+    /* Repository-relative builtin paths are the overwhelmingly common case
+     * for development and `syn compile --all`.  Resolve installation paths
+     * only after this allocation-free exact pass; interleaving both checks
+     * made a full pack load perform O(n^2) path allocations and probes. */
     for (i = 0U; i < yew_syn_builtin_langs_len; i++) {
-        char *resolved;
-        bool matches;
         const char *builtin_name = yew_syn_builtin_langs[i].name;
 
         if (strcmp(source, yew_syn_builtin_langs[i].source) == 0) {
@@ -3036,6 +3038,12 @@ static char *builtin_language_for_source(const char *source)
             (void)memcpy(name, builtin_name, strlen(builtin_name) + 1U);
             return name;
         }
+    }
+    for (i = 0U; i < yew_syn_builtin_langs_len; i++) {
+        char *resolved;
+        bool matches;
+        const char *builtin_name = yew_syn_builtin_langs[i].name;
+
         resolved = runtime_definition_path(&yew_syn_builtin_langs[i]);
         matches = strcmp(source, resolved) == 0;
         free(resolved);
