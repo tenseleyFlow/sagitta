@@ -1,0 +1,148 @@
+# TypeScript syntax.  The TS-only rules are spliced before the shared
+# JavaScript rule body.  .tsx is supported with the same explicit limitation
+# as .jsx: tags are expressions, not markup, rather than a partial JSX mode.
+# Regex/value and template-literal limitations are identical to javascript.fl.
+{
+    syntax: 1,
+    language: {
+        name: "typescript",
+        extensions: ["ts", "mts", "cts", "tsx"],
+        priority: 10,
+        comment: { line: "//", block: ["/*", "*/"] },
+    },
+    contexts: {
+        main: {
+            default: "text", at_eol: "stay",
+            rules: [ "include:ts_rules", "include:js_rules" ],
+        },
+        ts_rules: {
+            rules: [
+                { match: "@[A-Za-z_$][A-Za-z0-9_$]*(\\.[A-Za-z_$][A-Za-z0-9_$]*)*",
+                  attr: "attribute", value: false },
+                { match: "\\b(interface|type|enum|namespace|module|declare|abstract|implements|keyof|infer|is|asserts|readonly|override|unique|accessor)\\b",
+                  attr: "keyword.storage", value: false },
+                { match: "\\b(public|private|protected)\\b",
+                  attr: "keyword.storage", value: false },
+                { match: "\\b(satisfies|as)\\b", attr: "keyword.op",
+                  value: false },
+                { match: "\\b(any|unknown|never|void|string|number|boolean|bigint|symbol|object|undefined|null)\\b",
+                  attr: "type.builtin", value: true },
+                { match: "\\b[A-Z][A-Za-z0-9_$]*\\b", attr: "type",
+                  value: true },
+                { match: "<([A-Z][A-Za-z0-9_$]*(\\s+extends\\s+[^,>]+)?)(\\s*,\\s*[A-Z][A-Za-z0-9_$]*(\\s+extends\\s+[^,>]+)?)*>",
+                  attr: "type", captures: { 1: "type" }, value: true },
+            ],
+        },
+
+        js_rules: {
+            rules: [
+                { match: "//.*$", attr: "comment" },
+                { match: "/\\*", attr: "comment", push: "block_comment" },
+                { match: "\"", attr: "string", push: "dq", value: true },
+                { match: "'", attr: "string", push: "sq", value: true },
+                { match: "`", attr: "string", push: "template", value: true },
+                { match: "/", attr: "string.special", if_value: false,
+                  push: "regex", value: true },
+                { match: "/=?", attr: "operator", if_value: true,
+                  value: false },
+                { match: "\\b(this|super|true|false|null|undefined)\\b",
+                  attr: "constant.builtin", value: true },
+                { match: "\\b(return|typeof|instanceof|in|of|new|delete|void|case|do|else|yield|await)\\b",
+                  attr: "keyword.control", value: false },
+                { match: "\\b(if|switch|while|for|with|catch|throw|try|finally|break|continue|debugger)\\b",
+                  attr: "keyword.control", value: false },
+                { match: "\\b(const|let|var|function|class|extends|import|export|from|default|async|get|set|static)\\b",
+                  attr: "keyword.storage", value: false },
+                { match: "\\b0[xX][0-9A-Fa-f]([0-9A-Fa-f_]*[0-9A-Fa-f])?n?\\b",
+                  attr: "number", value: true },
+                { match: "\\b0[bB][01]([01_]*[01])?n?\\b",
+                  attr: "number", value: true },
+                { match: "\\b0[oO][0-7]([0-7_]*[0-7])?n?\\b",
+                  attr: "number", value: true },
+                { match: "\\b[0-9]([0-9_]*[0-9])?(\\.[0-9]([0-9_]*[0-9])?)?([eE][+-]?[0-9]([0-9_]*[0-9])?)?n?\\b",
+                  attr: "number", value: true },
+                { match: "\\.[0-9]([0-9_]*[0-9])?([eE][+-]?[0-9]([0-9_]*[0-9])?)?\\b",
+                  attr: "number", value: true },
+                { match: "([A-Za-z_$][A-Za-z0-9_$]*)\\s*\\(",
+                  captures: { 1: "function" }, consume: 1, value: true },
+                { match: "\\.[A-Za-z_$][A-Za-z0-9_$]*", attr: "method",
+                  value: true },
+                { match: "[A-Za-z_$][A-Za-z0-9_$]*", attr: "variable",
+                  value: true },
+                { match: "(\\+\\+|--)", attr: "operator", value: true },
+                { match: "(=>|===|!==|==|!=|<=|>=|\\*\\*|&&|\\|\\||\\?\\?|\\?\\.|<<|>>>|>>|\\+=|-=|\\*=|%=|&=|\\|=|\\^=|&&=|\\|\\|=|\\?\\?=|\\*\\*=|<<=|>>=|>>>=|[+*%&|^<>=!~?-])",
+                  attr: "operator", value: false },
+                { match: "[({\\[]", attr: "punct.bracket", value: false },
+                { match: "[)}\\]]", attr: "punct.bracket", value: true },
+                { match: "[,;:]", attr: "punct.delim", value: false },
+                { match: "\\.", attr: "punct.delim", value: false },
+            ],
+        },
+
+        block_comment: {
+            default: "comment", at_eol: "stay", unit: "atom",
+            rules: [
+                { match: "\\b(TODO|FIXME|XXX)\\b", attr: "comment.todo" },
+                { match: "\\*/", attr: "comment", pop: 1 },
+            ],
+        },
+        dq: {
+            default: "string", at_eol: "pop", unit: "atom",
+            rules: [
+                { match: "\\\\(x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}|u\\{[0-9A-Fa-f]{1,6}\\}|[0-7]{1,3}|[bfnrtv0'\"\\\\]|\\r?\\n)", attr: "string.escape" },
+                { match: "\\\\.", attr: "string.escape" },
+                { match: "\"", attr: "string", pop: 1, value: true },
+            ],
+        },
+        sq: {
+            default: "string", at_eol: "pop", unit: "atom",
+            rules: [
+                { match: "\\\\(x[0-9A-Fa-f]{2}|u[0-9A-Fa-f]{4}|u\\{[0-9A-Fa-f]{1,6}\\}|[0-7]{1,3}|[bfnrtv0'\"\\\\]|\\r?\\n)", attr: "string.escape" },
+                { match: "\\\\.", attr: "string.escape" },
+                { match: "'", attr: "string", pop: 1, value: true },
+            ],
+        },
+        regex: {
+            default: "string.special", at_eol: "pop", unit: "atom",
+            rules: [
+                { match: "\\\\.", attr: "string.escape" },
+                { match: "\\[", attr: "string.special", push: "regex_class" },
+                { match: "/[dgimsuvy]*", attr: "string.special", pop: 1,
+                  value: true },
+            ],
+        },
+        regex_class: {
+            default: "string.special", at_eol: "pop:2",
+            rules: [
+                { match: "\\\\.", attr: "string.escape" },
+                { match: "\\]", attr: "string.special", pop: 1 },
+            ],
+        },
+        template: {
+            default: "string", at_eol: "stay", unit: "atom",
+            rules: [
+                { match: "\\\\.", attr: "string.escape" },
+                { match: "\\$\\{", attr: "string.interp", push: "template_expr", value: false },
+                { match: "`", attr: "string", pop: 1, value: true },
+            ],
+        },
+        template_expr: {
+            default: "text", at_eol: "stay", unit: "span",
+            rules: [
+                { match: "}", attr: "string.interp", pop: 1, value: true },
+                { match: "{", attr: "punct.bracket", push: "braces", value: false },
+                "include:ts_rules",
+                "include:js_rules",
+            ],
+        },
+        braces: {
+            default: "text", at_eol: "stay", unit: "span",
+            rules: [
+                { match: "{", attr: "punct.bracket", push: "braces", value: false },
+                { match: "}", attr: "punct.bracket", pop: 1, value: true },
+                "include:ts_rules",
+                "include:js_rules",
+            ],
+        },
+    },
+}
