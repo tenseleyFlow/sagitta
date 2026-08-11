@@ -805,8 +805,11 @@ done:
     return ok;
 }
 
-static bool check_comment_bomb(FrozenFixture *fixture, u64 *total_us,
-                               u64 *max_us, u64 *frames,
+static bool check_comment_bomb(FrozenFixture *fixture,
+                               u64 *first_frame_max_us,
+                               u64 *first_frame_frames,
+                               u64 *idle_total_us, u64 *idle_max_us,
+                               u64 *idle_frames,
                                u64 *state_logical_bytes,
                                u64 *state_capacity_bytes, u64 *rss_growth,
                                u64 *wall_ns)
@@ -815,7 +818,7 @@ static bool check_comment_bomb(FrozenFixture *fixture, u64 *total_us,
     static const u8 paste[] = "/*";
     enum { VIEW_LO = 100, VIEW_HI = 124 };
     SynBuf syn;
-    FakeClock clock = {0, 1};
+    FakeClock clock = {0, YEW_SYN_FRAME_BUDGET_US / 2};
     SynSettleReport report;
     TextBuf *tb;
     u64 started;
@@ -825,9 +828,13 @@ static bool check_comment_bomb(FrozenFixture *fixture, u64 *total_us,
     u64 base_lines;
     bool ok = false;
 
-    *total_us = 0U;
-    *max_us = 0U;
-    *frames = 0U;
+    *first_frame_max_us = 0U;
+    *first_frame_frames = 0U;
+    *idle_total_us = 0U;
+    *idle_max_us = 0U;
+    *idle_frames = 0U;
+    _Static_assert(VIEW_HI < YEW_SYN_INJECTED_CLOCK_EVERY,
+                   "comment-bomb view must precede the second clock sample");
     if (fixture->source.len < sizeof(frozen_prefix) - 1U ||
         memcmp(fixture->source.data, frozen_prefix,
                sizeof(frozen_prefix) - 1U) != 0)
@@ -862,14 +869,15 @@ static bool check_comment_bomb(FrozenFixture *fixture, u64 *total_us,
         goto done_syn;
     yew_syn_settle(&syn, tb, LINENO(VIEW_LO), LINENO(VIEW_HI),
                    YEW_SYN_FRAME_BUDGET_US, &report);
-    *total_us += report.us;
-    *max_us = report.us;
-    *frames = 1U;
-    /* Reaching the viewport is sufficient here: the exact span loop below
-     * proves first-frame correctness.  A non-provisional report means the
-     * real propagation wave reached the view, not that the whole 40k-line
-     * buffer must already be at fixpoint. */
-    if (!report.hit_view)
+    *first_frame_max_us = report.us;
+    *first_frame_frames = 1U;
+    /* The first observation stays below budget.  The second, after line 256,
+     * reaches exactly 1 ms: past the complete viewport, but far short of the
+     * 40k-line fixpoint.  This makes the frame boundary a deterministic gate
+     * rather than depending on host speed. */
+    if (!report.hit_view || report.fixpoint ||
+        report.us != YEW_SYN_FRAME_BUDGET_US ||
+        syn.wave.v < VIEW_HI || syn.wave.v >= syn.entry.len)
         goto done_syn;
     for (u64 line = VIEW_LO; line < VIEW_HI; line++) {
         SynSpan spans[YEW_SYN_MAX_SPANS];
@@ -885,9 +893,9 @@ static bool check_comment_bomb(FrozenFixture *fixture, u64 *total_us,
                 goto done_syn;
         }
     }
-    if (!report.fixpoint &&
-        !settle_all(&syn, tb, LINENO(VIEW_LO), LINENO(VIEW_HI),
-                    YEW_SYN_IDLE_BUDGET_US, total_us, max_us, NULL)) {
+    if (!settle_all(&syn, tb, LINENO(VIEW_LO), LINENO(VIEW_HI),
+                    YEW_SYN_IDLE_BUDGET_US, idle_total_us, idle_max_us,
+                    idle_frames)) {
         goto done_syn;
     }
     if (!now_ns(&ended) || ended < started ||
@@ -1458,9 +1466,11 @@ int main(void)
     u64 block_line_calls = 0U;
     u64 block_multiline_calls = 0U;
     u64 theme_line_calls = 0U;
-    u64 comment_total_us = 0U;
-    u64 comment_max_us = 0U;
-    u64 comment_frames = 0U;
+    u64 comment_first_max_us = 0U;
+    u64 comment_first_frames = 0U;
+    u64 comment_idle_total_us = 0U;
+    u64 comment_idle_max_us = 0U;
+    u64 comment_idle_frames = 0U;
     u64 comment_state_logical_bytes = 0U;
     u64 comment_state_capacity_bytes = 0U;
     u64 comment_state_rss_growth = 0U;
@@ -1640,8 +1650,10 @@ int main(void)
     }
 
     if (status == 0 &&
-        !check_comment_bomb(&frozen[1], &comment_total_us,
-                            &comment_max_us, &comment_frames,
+        !check_comment_bomb(&frozen[1], &comment_first_max_us,
+                            &comment_first_frames,
+                            &comment_idle_total_us,
+                            &comment_idle_max_us, &comment_idle_frames,
                             &comment_state_logical_bytes,
                             &comment_state_capacity_bytes,
                             &comment_state_rss_growth,
@@ -1738,10 +1750,13 @@ int main(void)
                      (unsigned long long)block_multiline_calls,
                      multiline_regression ? " REGRESSION" : " ok");
         {
-            bool comment_regression =
-                comment_frames != 1U ||
-                comment_max_us > YEW_SYN_FRAME_BUDGET_US ||
-                comment_total_us > PERF_SYN_COMMENT_TOTAL_US ||
+            bool comment_view_regression =
+                comment_first_frames != 1U ||
+                comment_first_max_us > YEW_SYN_FRAME_BUDGET_US;
+            bool comment_idle_regression =
+                comment_idle_frames == 0U ||
+                comment_idle_max_us > YEW_SYN_IDLE_BUDGET_US ||
+                comment_idle_total_us > PERF_SYN_COMMENT_TOTAL_US ||
                 comment_wall_ns > UINT64_C(400000000);
             bool scroll_regression =
                 markdown_nowrap_fps < PERF_SYN_SCROLL_MIN_FPS ||
@@ -1752,14 +1767,19 @@ int main(void)
                 comment_state_capacity_bytes > PERF_SYN_STATE_LIMIT_BYTES ||
                 comment_state_rss_growth > PERF_SYN_STATE_LIMIT_BYTES;
 
+            (void)printf("syn.%-20s frames=%llu fake_max_frame_us=%llu%s\n",
+                         "comment_view",
+                         (unsigned long long)comment_first_frames,
+                         (unsigned long long)comment_first_max_us,
+                         comment_view_regression ? " REGRESSION" : " ok");
             (void)printf("syn.%-20s frames=%llu fake_total_us=%llu "
                          "fake_max_frame_us=%llu wall_ns=%llu%s\n",
-                         "comment_bomb",
-                         (unsigned long long)comment_frames,
-                         (unsigned long long)comment_total_us,
-                         (unsigned long long)comment_max_us,
+                         "comment_idle",
+                         (unsigned long long)comment_idle_frames,
+                         (unsigned long long)comment_idle_total_us,
+                         (unsigned long long)comment_idle_max_us,
                          (unsigned long long)comment_wall_ns,
-                         comment_regression ? " REGRESSION" : " ok");
+                         comment_idle_regression ? " REGRESSION" : " ok");
             (void)printf("syn.%-20s line_calls_max=%llu%s\n",
                          "theme_switch_calls",
                          (unsigned long long)theme_line_calls,
@@ -1780,8 +1800,8 @@ int main(void)
                          (unsigned long long)comment_state_capacity_bytes,
                          (unsigned long long)comment_state_rss_growth,
                          state_regression ? " REGRESSION" : " ok");
-            if (comment_regression || scroll_regression || whole_regression ||
-                state_regression)
+            if (comment_view_regression || comment_idle_regression ||
+                scroll_regression || whole_regression || state_regression)
                 regression_seen = true;
         }
         if (detect_regression || compile_regression || cache_regression ||
