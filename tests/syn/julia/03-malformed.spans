@@ -1,0 +1,7 @@
+line 1 entry=julia:main exit=julia:block_comment
+  1:0-28 attr=comment context=julia:main
+line 2 entry=julia:block_comment exit=julia:block_comment
+  2:0-21 attr=comment context=julia:block_comment
+line 3 entry=julia:block_comment exit=julia:block_comment
+  3:0-19 attr=comment context=julia:block_comment
+line 4 entry=julia:block_comment exit=julia:block_comment

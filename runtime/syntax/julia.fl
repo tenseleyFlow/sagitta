@@ -1,0 +1,39 @@
+# Julia syntax.
+#
+# Block comments nest exactly.  Triple strings and command literals keep
+# lexical state across lines.  Macro names are lexical; macro expansion and
+# parser-level adjoint-versus-character distinctions are not attempted.
+{
+    syntax: 1,
+    language: { name: "julia", extensions: ["jl"], priority: 20, comment: { line: "#", block: ["#=", "=#"] } },
+    contexts: {
+        main: { default: "text", rules: ["include:julia"] },
+        julia: { rules: [
+            { match: "#=", attr: "comment", push: "block_comment" },
+            { match: "#.*$", attr: "comment" },
+            { match: "\"\"\"", attr: "string", push: "triple" },
+            { match: "\"", attr: "string", push: "dq" },
+            { match: "`", attr: "string.special", push: "command" },
+            { match: "'([^'\\\\\\n]|\\\\.)'", attr: "character" },
+            { match: "@[A-Za-z_][A-Za-z0-9_!.]*", attr: "function.macro" },
+            { match: "\\b(function|macro|struct|mutable|primitive|abstract|type|const|global|local)\\b", attr: "keyword.storage" },
+            { match: "\\b(if|elseif|else|for|while|begin|let|try|catch|finally|return|break|continue|do|end|where)\\b", attr: "keyword.control" },
+            { match: "\\b(import|using|export|baremodule|module)\\b", attr: "keyword" },
+            { match: "\\b(true|false)\\b", attr: "boolean" },
+            { match: "\\b(nothing|missing|Inf|NaN)\\b", attr: "constant.builtin" },
+            { match: "\\b(Int8|Int16|Int32|Int64|Int128|UInt8|UInt16|UInt32|UInt64|UInt128|Float16|Float32|Float64|Bool|Char|String|Symbol|Any|Nothing)\\b", attr: "type.builtin" },
+            { match: "\\b0[xX][0-9A-Fa-f_]+\\b|\\b0[bB][01_]+\\b|\\b0[oO][0-7_]+\\b|\\b[0-9][0-9_]*(\\.[0-9_]+)?([eEfF][+-]?[0-9_]+)?\\b", attr: "number" },
+            { match: "(::|<:|>:|=>|==|!=|<=|>=|===|!==|&&|\\|\\||\\.\\^|\\.[+*/-]|[+*/%^&|~<>=!?$\\\\-])", attr: "operator" },
+            { match: "[(){}\\[\\]]", attr: "punct.bracket" },
+            { match: "[,;:.]", attr: "punct.delim" },
+            { match: "[A-Z][A-Za-z0-9_]*", attr: "type" },
+            { match: "[A-Za-z_][A-Za-z0-9_!]*", attr: "variable" },
+        ] },
+        block_comment: { default: "comment", at_eol: "stay", unit: "atom", rules: [{ match: "#=", attr: "comment", push: "block_comment" }, { match: "=#", attr: "comment", pop: 1 }] },
+        dq: { default: "string", at_eol: "pop", unit: "atom", rules: ["include:interp", { match: "\\\\.", attr: "string.escape" }, { match: "\"", attr: "string", pop: 1 }] },
+        triple: { default: "string", at_eol: "stay", unit: "atom", rules: ["include:interp", { match: "\\\\.", attr: "string.escape" }, { match: "\"\"\"", attr: "string", pop: 1 }] },
+        command: { default: "string.special", at_eol: "stay", unit: "atom", rules: ["include:interp", { match: "\\\\.", attr: "string.escape" }, { match: "`", attr: "string.special", pop: 1 }] },
+        interp: { rules: [{ match: "\\$[A-Za-z_][A-Za-z0-9_!]*", attr: "variable" }, { match: "\\$\\(", attr: "string.interp", push: "interp_expr" }] },
+        interp_expr: { default: "code", at_eol: "stay", unit: "span", rules: [{ match: "\\)", attr: "string.interp", pop: 1 }, { match: "\\(", attr: "punct.bracket", push: "interp_expr" }] },
+    },
+}

@@ -1,0 +1,43 @@
+# Dart syntax.
+#
+# Raw strings suppress escapes and interpolation.  Ordinary interpolation
+# balances braces through a dedicated expression context.  Nested block
+# comments are accepted; parser-only generic and cascade distinctions are
+# represented lexically and never leak beyond their real delimiter.
+{
+    syntax: 1,
+    language: { name: "dart", extensions: ["dart"], priority: 20, comment: { line: "//", block: ["/*", "*/"] } },
+    contexts: {
+        main: { default: "text", rules: ["include:dart"] },
+        dart: { rules: [
+            { match: "///.*$", attr: "comment.doc" },
+            { match: "//.*$", attr: "comment" },
+            { match: "/\\*", attr: "comment", push: "block_comment" },
+            { match: "@[A-Za-z_][A-Za-z0-9_.]*", attr: "attribute" },
+            { match: "r\"", attr: "string.special", push: "raw_dq" },
+            { match: "r'", attr: "string.special", push: "raw_sq" },
+            { match: "\"", attr: "string", push: "dq" },
+            { match: "'", attr: "string", push: "sq" },
+            { match: "\\b(class|mixin|extension|enum|typedef|abstract|base|interface|final|sealed|covariant|late|external|factory|static|const|var)\\b", attr: "keyword.storage" },
+            { match: "\\b(if|else|switch|case|default|for|while|do|break|continue|return|throw|try|catch|on|finally|rethrow|yield|await|async|sync)\\b", attr: "keyword.control" },
+            { match: "\\b(import|export|library|part|show|hide|as|is|in|with|implements|get|set|operator|required)\\b", attr: "keyword" },
+            { match: "\\b(true|false)\\b", attr: "boolean" },
+            { match: "\\b(null|this|super)\\b", attr: "constant.builtin" },
+            { match: "\\b(void|dynamic|Never|Object|String|bool|int|double|num|List|Map|Set|Future|Stream)\\b", attr: "type.builtin" },
+            { match: "\\b0[xX][0-9A-Fa-f]+\\b|\\b[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?\\b", attr: "number" },
+            { match: "(\\?\\.\\.|\\.\\.|\\?\\.|\\?\\?|\\?=|=>|==|!=|<=|>=|&&|\\|\\||<<|>>|>>>|[+*/%&|^~<>=!?-])", attr: "operator" },
+            { match: "[(){}\\[\\]]", attr: "punct.bracket" },
+            { match: "[,;:.]", attr: "punct.delim" },
+            { match: "[A-Z][A-Za-z0-9_]*", attr: "type" },
+            { match: "[A-Za-z_$][A-Za-z0-9_$]*", attr: "variable" },
+        ] },
+        block_comment: { default: "comment", at_eol: "stay", unit: "atom", rules: [{ match: "/\\*", attr: "comment", push: "block_comment" }, { match: "\\*/", attr: "comment", pop: 1 }] },
+        dq: { default: "string", at_eol: "pop", unit: "atom", rules: ["include:interp", { match: "\\\\.", attr: "string.escape" }, { match: "\"", attr: "string", pop: 1 }] },
+        sq: { default: "string", at_eol: "pop", unit: "atom", rules: ["include:interp", { match: "\\\\.", attr: "string.escape" }, { match: "'", attr: "string", pop: 1 }] },
+        raw_dq: { default: "string.special", at_eol: "pop", unit: "atom", rules: [{ match: "\"", attr: "string.special", pop: 1 }] },
+        raw_sq: { default: "string.special", at_eol: "pop", unit: "atom", rules: [{ match: "'", attr: "string.special", pop: 1 }] },
+        interp: { rules: [{ match: "\\$[A-Za-z_][A-Za-z0-9_]*", attr: "variable" }, { match: "\\$\\{", attr: "string.interp", push: "interp_expr" }] },
+        interp_expr: { default: "code", at_eol: "stay", unit: "span", rules: [{ match: "}", attr: "string.interp", pop: 1 }, { match: "\\{", attr: "punct.bracket", push: "interp_brace" }] },
+        interp_brace: { default: "code", at_eol: "stay", unit: "span", rules: [{ match: "}", attr: "punct.bracket", pop: 1 }, { match: "\\{", attr: "punct.bracket", push: "interp_brace" }] },
+    },
+}
