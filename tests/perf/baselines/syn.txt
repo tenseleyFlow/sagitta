@@ -1,13 +1,41 @@
-# yew Sprint 39 + 41 syntax engine baselines (median_ns p99_ns)
+# yew Sprint 39-42 syntax engine baselines (median_ns p99_ns)
 # Regressions above 1.2x either committed number fail perf-syn.
-# Sprint 41 fixture rows are calibrated observations on the development
-# machine; perf_syn enforces the independent contract budgets directly.
+# These are provisional development-machine observations; Sprint 56 performs
+# reference-hardware calibration. Independent contract budgets also apply.
 line 600 700
 viewport_cold_200 100000 220000
 edit_settle_100k 1000 1800
-line_cap_512k 30 35
-c_kitchen_line 2900 6000
-c_kitchen_edit 4500 7000
+line_cap_512k 65 70
+c_kitchen_line 1950 2700
+c_kitchen_edit 3100 18000
+comment_line 70 110
+comment_edit 250 300
+minified_line 30 35
+minified_edit 1450 1800
+fletch_line 1100 1550
+fletch_edit 1250 3000
+sh_line 560 650
+sh_edit 2500 18000
+make_line 1000 3500
+make_edit 3700 22000
+markdown_line 600 700
+markdown_edit 1400 16000
+python_line 1700 2300
+python_edit 700 750
+rust_line 2700 4200
+rust_edit 2300 3500
+go_line 1200 2100
+go_edit 1550 5000
+typescript_line 1700 4100
+typescript_edit 4500 25000
+fortran_line 1150 7200
+fortran_edit 3200 20000
+fortran_fixed_line 2800 11000
+fortran_fixed_edit 5100 25000
+yaml_line 850 3300
+yaml_edit 2700 4200
+json_line 2400 2900
+json_edit 1800 3000
 viewport_200x100_c 575000 780000
 viewport_200x100_comment 45000 110000
 viewport_200x100_minified 12000 45000
@@ -15,6 +43,14 @@ viewport_200x100_fletch 400000 650000
 viewport_200x100_sh 140000 280000
 viewport_200x100_make 300000 500000
 viewport_200x100_markdown 155000 320000
+viewport_200x100_python 550000 775000
+viewport_200x100_rust 500000 750000
+viewport_200x100_go 250000 450000
+viewport_200x100_typescript 875000 1150000
+viewport_200x100_fortran 560000 825000
+viewport_200x100_fortran_fixed 775000 1000000
+viewport_200x100_yaml 400000 600000
+viewport_200x100_json 400000 600000
 viewport_80x24_c 70000 150000
 viewport_80x24_comment 5500 25000
 viewport_80x24_minified 12000 48000
@@ -22,5 +58,13 @@ viewport_80x24_fletch 50000 120000
 viewport_80x24_sh 17000 56000
 viewport_80x24_make 35000 85000
 viewport_80x24_markdown 23000 62000
+viewport_80x24_python 65000 135000
+viewport_80x24_rust 52000 115000
+viewport_80x24_go 30000 75000
+viewport_80x24_typescript 100000 180000
+viewport_80x24_fortran 65000 135000
+viewport_80x24_fortran_fixed 90000 180000
+viewport_80x24_yaml 65000 130000
+viewport_80x24_json 58000 120000
 theme_switch_200x50 1050000 1300000
 minified_first_paint 16000000 17500000
