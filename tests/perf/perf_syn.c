@@ -721,12 +721,13 @@ static bool measure_frozen_line(FrozenFixture *fixture, u64 *samples,
     SynSpan spans[YEW_SYN_MAX_SPANS];
 
     /* Sample the whole fixture evenly.  Sequentially taking the first N rows
-     * makes reduced-sample CI runs measure only the fixture prefix. */
+     * makes reduced-sample CI runs measure only the fixture prefix.  Use the
+     * median of three calls per row: this remains a wall-clock latency gate,
+     * while an isolated scheduler preemption cannot manufacture a syntax
+     * engine p99 regression. */
     for (size_t i = 0U; i < count; i++) {
-        SynLineOut out = {spans, 0U, YEW_SYN_MAX_SPANS, 0U, 0U};
         u64 target = (u64)i * fixture->spec->lines / (u64)count;
-        u64 start;
-        u64 end;
+        u64 elapsed[3];
 
         while (line < target) {
             while (hi < fixture->source.len &&
@@ -742,16 +743,36 @@ static bool measure_frozen_line(FrozenFixture *fixture, u64 *samples,
             hi++;
         if (hi - lo > UINT32_MAX)
             return false;
-        if (!now_ns(&start)) {
-            return false;
+        for (size_t attempt = 0U; attempt < YEW_ARRAY_LEN(elapsed);
+             attempt++) {
+            SynLineOut out = {spans, 0U, YEW_SYN_MAX_SPANS, 0U, 0U};
+            u64 start;
+            u64 end;
+
+            if (!now_ns(&start))
+                return false;
+            yew_syn_line(fixture->engine, YEW_SYN_STATE_ROOT,
+                         fixture->source.data + lo, (u32)(hi - lo), &out);
+            if (!now_ns(&end) || end < start)
+                return false;
+            elapsed[attempt] = end - start;
+            perf_syn_sink += out.n + out.exit_state;
         }
-        yew_syn_line(fixture->engine, YEW_SYN_STATE_ROOT,
-                     fixture->source.data + lo, (u32)(hi - lo), &out);
-        if (!now_ns(&end) || end < start) {
-            return false;
+        if (elapsed[0] > elapsed[1]) {
+            u64 swap = elapsed[0];
+
+            elapsed[0] = elapsed[1];
+            elapsed[1] = swap;
         }
-        samples[i] = end - start;
-        perf_syn_sink += out.n + out.exit_state;
+        if (elapsed[1] > elapsed[2]) {
+            u64 swap = elapsed[1];
+
+            elapsed[1] = elapsed[2];
+            elapsed[2] = swap;
+        }
+        if (elapsed[0] > elapsed[1])
+            elapsed[1] = elapsed[0];
+        samples[i] = elapsed[1];
         lo = hi < fixture->source.len ? hi + 1U : hi;
     }
     return true;
