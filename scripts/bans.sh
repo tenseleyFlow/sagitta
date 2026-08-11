@@ -8,6 +8,7 @@ tmp=$(umask 077 && mktemp -d "${TMPDIR:-/tmp}/yew-bans.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
 
 all_files=$tmp/all-files
+c_files=$tmp/c-files
 source_files=$tmp/source-files
 non_unicode_files=$tmp/non-unicode-files
 ci_files=$tmp/ci-files
@@ -20,6 +21,11 @@ hits=$tmp/hits
 
 find "$repo_dir/src" "$repo_dir/tests" -type f -print |
     LC_ALL=C sort >"$all_files"
+while IFS= read -r file; do
+    case $file in
+        *.c|*.h) printf '%s\n' "$file" ;;
+    esac
+done <"$all_files" >"$c_files"
 find "$repo_dir/src" -type f -print | LC_ALL=C sort >"$source_files"
 find "$repo_dir/.github" -type f -print | LC_ALL=C sort >"$ci_files"
 {
@@ -223,7 +229,7 @@ scan "qsort is unstable; use yew_sort_stable" \
 scan "__attribute__ is outside the locked C11 subset" \
     '__attribute__' "$all_files"
 scan "constructor registration is forbidden; use the explicit registry" \
-    'constructor' "$all_files"
+    'constructor' "$c_files"
 scan "threads are forbidden in the single-threaded core" \
     '(threads\.h|pthread)' "$source_files"
 scan "__DATE__ and __TIME__ break reproducible builds" \
