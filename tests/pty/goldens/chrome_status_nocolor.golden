@@ -2,11 +2,11 @@
 size 80x24 alt=1 cursor=2,25 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- text
-    1 alpha beta gamma
-    2 delta epsilon
+    2 alpha beta gamma
+    1 delta epsilon
     3 zeta eta theta iota
-    4 kappa
-    5
+    1 kappa
+    2
 
 
 
@@ -29,7 +29,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- style
 AAAAAAAAAAAAAAAAAAAAAA
 AAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAAAAAAAA
+AAAABAAAAAAAAAAAAAAAAAAAA
 AAAAAAAAAAA
 AAAAA
 

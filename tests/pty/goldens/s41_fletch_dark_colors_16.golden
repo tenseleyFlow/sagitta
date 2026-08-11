@@ -3,28 +3,28 @@ size 80x24 alt=1 cursor=0,7 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=0
 --- text
      1 bind "n" { motion "word" } bi                                            
-     2 macro m_00001() { edit { inse                                            
-     3 let value_00002 = { key: [1,                                             
-     4 H(1) -> repeat(2) -> motion("                                            
-     5 bind "n" { motion "word" } bi                                            
-     6 macro m_00005() { edit { inse                                            
-     7 let value_00006 = { key: [1,                                             
-     8 H(1) -> repeat(2) -> motion("                                            
-     9 bind "n" { motion "word" } bi                                            
-    10 macro m_00009() { edit { inse                                            
-    11 let value_00010 = { key: [1,                                             
-    12 H(1) -> repeat(2) -> motion("                                            
-    13 bind "n" { motion "word" } bi                                            
-    14 macro m_00013() { edit { inse                                            
-    15 let value_00014 = { key: [1,                                             
-    16 H(1) -> repeat(2) -> motion("                                            
-    17 bind "n" { motion "word" } bi                                            
-    18 macro m_00017() { edit { inse                                            
-    19 let value_00018 = { key: [1,                                             
-    20 H(1) -> repeat(2) -> motion("                                            
-    21 bind "n" { motion "word" } bi                                            
-    22 macro m_00021() { edit { inse                                            
-    23 let value_00022 = { key: [1,                                             
+     1 macro m_00001() { edit { inse                                            
+     2 let value_00002 = { key: [1,                                             
+     3 H(1) -> repeat(2) -> motion("                                            
+     4 bind "n" { motion "word" } bi                                            
+     5 macro m_00005() { edit { inse                                            
+     6 let value_00006 = { key: [1,                                             
+     7 H(1) -> repeat(2) -> motion("                                            
+     8 bind "n" { motion "word" } bi                                            
+     9 macro m_00009() { edit { inse                                            
+    10 let value_00010 = { key: [1,                                             
+    11 H(1) -> repeat(2) -> motion("                                            
+    12 bind "n" { motion "word" } bi                                            
+    13 macro m_00013() { edit { inse                                            
+    14 let value_00014 = { key: [1,                                             
+    15 H(1) -> repeat(2) -> motion("                                            
+    16 bind "n" { motion "word" } bi                                            
+    17 macro m_00017() { edit { inse                                            
+    18 let value_00018 = { key: [1,                                             
+    19 H(1) -> repeat(2) -> motion("                                            
+    20 bind "n" { motion "word" } bi                                            
+    21 macro m_00021() { edit { inse                                            
+    22 let value_00022 = { key: [1,                                             
  L  fl_kitchen.fl                                            utf-8  lf  1:1  top
 --- style
 AAAAABACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC

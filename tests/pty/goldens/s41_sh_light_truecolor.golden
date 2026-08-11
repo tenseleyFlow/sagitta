@@ -3,28 +3,28 @@ size 80x24 alt=1 cursor=0,7 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- text
      1 cat <<'EOF' cat <<'EOF' cat <<'                                          
-     2 $HOME `nested $(echo x)` $HOME                                           
-     3 EOF EOF EOF EOF EOF EOF EOF EOF                                          
-     4 cat <<"EOF" cat <<"EOF" cat <<"                                          
-     5 $HOME `nested $(echo x)` $HOME                                           
-     6 EOF EOF EOF EOF EOF EOF EOF EOF                                          
-     7 cat <<-EOF cat <<-EOF cat <<-EO                                          
-     8 $HOME `nested $(echo x)` $HOME                                           
-     9     EOF     EOF     EOF     EOF     EOF     EOF                          
-    10 cat <<EOF cat <<EOF cat <<EOF c                                          
-    11 $HOME `nested $(echo x)` $HOME                                           
-    12 EOF EOF EOF EOF EOF EOF EOF EOF                                          
-    13 cat <<'EOF' cat <<'EOF' cat <<'                                          
-    14 $HOME `nested $(echo x)` $HOME                                           
-    15 EOF EOF EOF EOF EOF EOF EOF EOF                                          
-    16 cat <<"EOF" cat <<"EOF" cat <<"                                          
-    17 $HOME `nested $(echo x)` $HOME                                           
-    18 EOF EOF EOF EOF EOF EOF EOF EOF                                          
-    19 cat <<-EOF cat <<-EOF cat <<-EO                                          
-    20 $HOME `nested $(echo x)` $HOME                                           
-    21     EOF     EOF     EOF     EOF     EOF     EOF                          
-    22 cat <<EOF cat <<EOF cat <<EOF c                                          
-    23 $HOME `nested $(echo x)` $HOME                                           
+     1 $HOME `nested $(echo x)` $HOME                                           
+     2 EOF EOF EOF EOF EOF EOF EOF EOF                                          
+     3 cat <<"EOF" cat <<"EOF" cat <<"                                          
+     4 $HOME `nested $(echo x)` $HOME                                           
+     5 EOF EOF EOF EOF EOF EOF EOF EOF                                          
+     6 cat <<-EOF cat <<-EOF cat <<-EO                                          
+     7 $HOME `nested $(echo x)` $HOME                                           
+     8     EOF     EOF     EOF     EOF     EOF     EOF                          
+     9 cat <<EOF cat <<EOF cat <<EOF c                                          
+    10 $HOME `nested $(echo x)` $HOME                                           
+    11 EOF EOF EOF EOF EOF EOF EOF EOF                                          
+    12 cat <<'EOF' cat <<'EOF' cat <<'                                          
+    13 $HOME `nested $(echo x)` $HOME                                           
+    14 EOF EOF EOF EOF EOF EOF EOF EOF                                          
+    15 cat <<"EOF" cat <<"EOF" cat <<"                                          
+    16 $HOME `nested $(echo x)` $HOME                                           
+    17 EOF EOF EOF EOF EOF EOF EOF EOF                                          
+    18 cat <<-EOF cat <<-EOF cat <<-EO                                          
+    19 $HOME `nested $(echo x)` $HOME                                           
+    20     EOF     EOF     EOF     EOF     EOF     EOF                          
+    21 cat <<EOF cat <<EOF cat <<EOF c                                          
+    22 $HOME `nested $(echo x)` $HOME                                           
  L  sh_kitchen.sh                                            utf-8  lf  1:1  top
 --- style
 AAAAABACCCDEEEFFFEDCCCDEEFFFFFDCCCDEEFDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD

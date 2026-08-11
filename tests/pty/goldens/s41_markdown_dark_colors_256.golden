@@ -3,28 +3,28 @@ size 80x24 alt=1 cursor=0,7 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- text
      1 --- --- --- --- --- --- --- ---                                          
-     2 title: Kitchen title: Kitchen ti                                         
-     3 --- --- --- --- --- --- --- ---                                          
-     4 ```c ```c ```c ```c ```c ```c ``                                         
-     5 int fenced_0(void) { return 0; }                                         
-     6 ``` ``` ``` ``` ``` ``` ``` ```                                          
-     7 | key | value | | key | value |                                          
-     8 |---|---:| |---|---:| |---|---:|                                         
-     9 | row | 0 | | row | 0 | | row |                                          
-    10 - outer - outer - outer - outer                                          
-    11   - nested   - nested   - nested                                         
-    12 ```c ```c ```c ```c ```c ```c ``                                         
-    13 int fenced_1(void) { return 1; }                                         
-    14 ``` ``` ``` ``` ``` ``` ``` ```                                          
-    15 | key | value | | key | value |                                          
-    16 |---|---:| |---|---:| |---|---:|                                         
-    17 | row | 1 | | row | 1 | | row |                                          
-    18 - outer - outer - outer - outer                                          
-    19   - nested   - nested   - nested                                         
-    20 ```c ```c ```c ```c ```c ```c ``                                         
-    21 int fenced_2(void) { return 2; }                                         
-    22 ``` ``` ``` ``` ``` ``` ``` ```                                          
-    23 | key | value | | key | value |                                          
+     1 title: Kitchen title: Kitchen ti                                         
+     2 --- --- --- --- --- --- --- ---                                          
+     3 ```c ```c ```c ```c ```c ```c ``                                         
+     4 int fenced_0(void) { return 0; }                                         
+     5 ``` ``` ``` ``` ``` ``` ``` ```                                          
+     6 | key | value | | key | value |                                          
+     7 |---|---:| |---|---:| |---|---:|                                         
+     8 | row | 0 | | row | 0 | | row |                                          
+     9 - outer - outer - outer - outer                                          
+    10   - nested   - nested   - nested                                         
+    11 ```c ```c ```c ```c ```c ```c ``                                         
+    12 int fenced_1(void) { return 1; }                                         
+    13 ``` ``` ``` ``` ``` ``` ``` ```                                          
+    14 | key | value | | key | value |                                          
+    15 |---|---:| |---|---:| |---|---:|                                         
+    16 | row | 1 | | row | 1 | | row |                                          
+    17 - outer - outer - outer - outer                                          
+    18   - nested   - nested   - nested                                         
+    19 ```c ```c ```c ```c ```c ```c ``                                         
+    20 int fenced_2(void) { return 2; }                                         
+    21 ``` ``` ``` ``` ``` ``` ``` ```                                          
+    22 | key | value | | key | value |                                          
  L  md_kitchen.md                                            utf-8  lf  1:1  top
 --- style
 AAAAABACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD

@@ -3,7 +3,7 @@ size 80x24 alt=1 cursor=23,3 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- text
     1 completion fixture
-    2
+    1
 
 
 
@@ -27,7 +27,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
   file.next                    Walk to the next open file                   1/54
 :fl                                                                             
 --- style
-AAAAAAAAAAAAAAAAAAAAAAAA
+AAAABAAAAAAAAAAAAAAAAAAA
 AAAAA
 
 

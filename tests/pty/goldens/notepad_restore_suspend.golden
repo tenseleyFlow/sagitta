@@ -25,9 +25,9 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 
 
 
-   wrote build/pty-s14-notepad_restore_suspend.txt, 2 lines                     
+ L wrote build/pty-s14-notepad_restore_suspend.txt, 2 lines                     
 --- style
-AAAAAAAAAAAAA
+AAAAAABBBBBBB
 
 
 
@@ -50,7 +50,9 @@ AAAAAAAAAAAAA
 
 
 
-AAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+CCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
 --- legend
 A fg=default bg=default attrs=----------
-B fg=#dae5f0 bg=#14304c attrs=----------
+B fg=#c8ccd4 bg=#12141a attrs=----------
+C fg=#ebf4ff bg=#266eba attrs=b---------
+D fg=#dae5f0 bg=#14304c attrs=----------

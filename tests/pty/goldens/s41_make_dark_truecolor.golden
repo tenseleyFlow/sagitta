@@ -3,28 +3,28 @@ size 80x24 alt=1 cursor=0,7 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- text
      1 ifeq ($(MODE_0),debug)                                                   
-     2 CFLAGS_1 += -g                                                           
-     3 endif                                                                    
-     4 define emit_3                                                            
-     5     @printf "%s\n" "$@ $< $^"                                            
-     6 endef                                                                    
-     7 target_6: dep_6                                                          
-     8     $(CC) $(CFLAGS) -o target_7 dep_7                                    
-     9 ifeq ($(MODE_8),debug)                                                   
-    10 CFLAGS_9 += -g                                                           
-    11 endif                                                                    
-    12 define emit_11                                                           
-    13     @printf "%s\n" "$@ $< $^"                                            
-    14 endef                                                                    
-    15 target_14: dep_14                                                        
-    16     $(CC) $(CFLAGS) -o target_15 dep_15                                  
-    17 ifeq ($(MODE_16),debug)                                                  
-    18 CFLAGS_17 += -g                                                          
-    19 endif                                                                    
-    20 define emit_19                                                           
-    21     @printf "%s\n" "$@ $< $^"                                            
-    22 endef                                                                    
-    23 target_22: dep_22                                                        
+     1 CFLAGS_1 += -g                                                           
+     2 endif                                                                    
+     3 define emit_3                                                            
+     4     @printf "%s\n" "$@ $< $^"                                            
+     5 endef                                                                    
+     6 target_6: dep_6                                                          
+     7     $(CC) $(CFLAGS) -o target_7 dep_7                                    
+     8 ifeq ($(MODE_8),debug)                                                   
+     9 CFLAGS_9 += -g                                                           
+    10 endif                                                                    
+    11 define emit_11                                                           
+    12     @printf "%s\n" "$@ $< $^"                                            
+    13 endef                                                                    
+    14 target_14: dep_14                                                        
+    15     $(CC) $(CFLAGS) -o target_15 dep_15                                  
+    16 ifeq ($(MODE_16),debug)                                                  
+    17 CFLAGS_17 += -g                                                          
+    18 endif                                                                    
+    19 define emit_19                                                           
+    20     @printf "%s\n" "$@ $< $^"                                            
+    21 endef                                                                    
+    22 target_22: dep_22                                                        
  L  mk_kitchen.mk                                            utf-8  lf  1:1  top
 --- style
 AAAAABACCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD

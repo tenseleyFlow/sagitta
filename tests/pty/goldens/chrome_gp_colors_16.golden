@@ -2,60 +2,62 @@
 size 80x24 alt=1 cursor=0,6 vis=1
 modes 2004,1002,1006,1004 kitty=21 sync_pairs=5
 --- text
-    1 alpha beta gamma
-    2 delta epsilon
-    3 zet New Tab Group 
-    4 kap name: yew-s24-grp/
-    5     /tmp/yew-s24-grp
-
-              ../
-          [✓] one.txt
-          [ ] three.txt
-          [ ] two.txt
-
-
-
-
-
-
-
-
-
-          1 selected
-          tab focus · space tick · enter create · esc cancel
-
-
+    1 alpha beta gamma                                                          
+    1 delta epsilon                                                             
+    2 zet New Tab Group                                                         
+    3 kap name: yew-s24-grp/                                                    
+    4     /tmp/yew-s24-grp                                                      
+                                                                                
+              ../                                                               
+          [✓] one.txt                                                           
+          [ ] three.txt                                                         
+          [ ] two.txt                                                           
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+          1 selected                                                            
+          tab focus · space tick · enter create · esc cancel                    
+                                                                                
+                                                                                
  L  pty-s14-chrome_gp_colors_16.txt                          utf-8  lf  1:1  all
 --- style
-AAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAAAAAAAAAAA
-AAAAAAAAABBBBBBBBBBBBBBB
-AAAAAAAAAAAAAAAAAAAAAAAAAAAA
-AAAAAAAAAACCCCCCCCCCCCCCCC
-
-AAAAAAAAAAAAAAAAA
-AAAAAAAAADDDDDDDDDDDD
-AAAAAAAAAEEEEEEEEEEEEEE
-AAAAAAAAAAAAAAAAAAAAA
-
-
-
-
-
-
-
-
-
-AAAAAAAAABBBBBBBBBBB
-AAAAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
-
-
-FFFGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+AAAABACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAACCCDDDDDDDDDDDDDDDEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEECCCCCCCCC
+AAAAAACCCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEECCCCCCCCC
+AAAAAACCCEFFFFFFFFFFFFFFFFEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEECCCCCCCCC
+AAAAAACCCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEECCCCCCCCC
+AAAAAACCCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEECCCCCCCCC
+AAAAAACCCGGGGGGGGGGGGEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEECCCCCCCCC
+AAAAAACCCHHHHHHHHHHHHHHEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEECCCCCCCCC
+AAAAAACCCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEECCCCCCCCC
+AAAAAACCCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEECCCCCCCCC
+AAAAAACCCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEECCCCCCCCC
+AAAAAACCCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEECCCCCCCCC
+AAAAAACCCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEECCCCCCCCC
+AAAAAACCCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEECCCCCCCCC
+AAAAAACCCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEECCCCCCCCC
+AAAAAACCCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEECCCCCCCCC
+AAAAAACCCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEECCCCCCCCC
+AAAAAACCCEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEECCCCCCCCC
+AAAAAACCCDDDDDDDDDDDEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEECCCCCCCCC
+AAAAAACCCFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEEEEEEEEEEECCCCCCCCC
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
+IIICCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 --- legend
-A fg=default bg=default attrs=----------
-B fg=default bg=default attrs=b---------
-C fg=idx:8 bg=default attrs=-d--------
-D fg=idx:7 bg=default attrs=----------
-E fg=default bg=default attrs=------r---
-F fg=idx:15 bg=idx:6 attrs=b---------
-G fg=idx:15 bg=idx:4 attrs=----------
+A fg=idx:8 bg=idx:0 attrs=----------
+B fg=idx:7 bg=idx:0 attrs=b---------
+C fg=idx:7 bg=idx:0 attrs=----------
+D fg=default bg=default attrs=b---------
+E fg=default bg=default attrs=----------
+F fg=idx:8 bg=default attrs=-d--------
+G fg=idx:7 bg=default attrs=----------
+H fg=default bg=default attrs=------r---
+I fg=idx:0 bg=idx:7 attrs=----------
