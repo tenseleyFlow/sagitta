@@ -1,0 +1,8 @@
+f"{value:{width}}"
+r###"raw \n"### 'a' 'life
+//go:build linux `raw \n`
+return /a[\\/]b+/g; value / 2
+      X = 1.0D0
+{"key":"\u263a","bad":"\q"}
+block: |2-
+time = 1979-05-27T07:32:00Z

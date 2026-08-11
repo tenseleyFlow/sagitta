@@ -63,7 +63,8 @@ static bool check_tables(const SynDef *def, char *why, size_t why_cap)
 
         if (rule->attr >= YEW_ATTR__COUNT || rule->op > SYN_OP_SET ||
             rule->nop > 4U || rule->npush > 4U ||
-            rule->aux_match > SYN_AUXM_INDENT_LT ||
+            rule->aux_match > SYN_AUXM_LINE_START ||
+            rule->value_pred > SYN_VALUE_SET ||
             ((rule->op == SYN_OP_PUSH || rule->op == SYN_OP_SET) &&
              rule->target >= def->nctxs)) {
             (void)snprintf(why, why_cap, "invalid rule %u",

@@ -101,11 +101,14 @@ All other keys are optional.
 | `icase` | bool | context `icase` | `icase: true` |
 | `first_line` | bool | `false` | `first_line: true` |
 | `set_aux` | int capture index | absent (keep current aux) | `set_aux: 1` |
+| `aux_int` | bool | `false` | `aux_int: true` |
+| `aux_add` | int 0–255 | `0` | `aux_add: 2` |
 | `strip` | bool | `false` | `strip: true` |
 | `aux` | aux matcher string | none; `match` or `aux` is required | `aux: "line_eq"` |
 | `aux_pre` | string | `""` | `aux_pre: "r"` |
 | `aux_post` | string | `""` | `aux_post: "#"` |
 | `value` | bool | absent (keep current flag) | `value: true` |
+| `if_value` | bool | absent (match either state) | `if_value: false` |
 
 Regex matches are anchored at the current scan position. A leading `^` can
 therefore match only when the scan is at byte 0. Capture 0 means the whole
@@ -123,10 +126,22 @@ left to right and may contain at most four contexts. `pop: true` means
 `pop: 1`; an integer pop may not exceed four. If no state operation appears,
 the rule stays in its current context.
 
-`set_aux` interns the selected capture's text into the syntax state. With
-`strip: true`, it also sets the strip flag used by indented heredocs.
-`value` sets or clears the state's single value bit. Definitions use these
-state fields only through the closed aux matchers below.
+`set_aux` normally interns the selected capture's text into the syntax state.
+With `aux_int: true`, it instead stores the capture's expanded indentation
+width as an integer; `aux_add` is added with saturation. YAML block scalars
+use this pair for explicit and implicit body indentation. With `strip: true`,
+`set_aux` also sets the strip flag used by indented heredocs.
+
+`value` sets or clears the state's single value bit. `if_value` makes a rule
+eligible only while that bit is set or clear. The bit is cleared at every
+physical EOL, so a definition never inherits token history from another line.
+JavaScript uses the pair for its pinned regex-literal-versus-division
+heuristic: identifiers, literals, and closing brackets set `value: true`;
+operators, opening brackets, separators, and expression-leading keywords
+clear it; `/` with `if_value: false` opens a regex, while `/` with
+`if_value: true` is division. The two documented ambiguous cases are `)`
+after a control-flow head and `}` after a block. Both failures are bounded to
+one line because the regex context pops at EOL.
 
 ### Aux matchers
 
@@ -135,8 +150,8 @@ runtime-derived delimiters out of the regex compiler and render path.
 
 | `aux` value | Match | Consumption | Example use |
 |---|---|---|---|
-| `line_eq` | whole line equals aux, ignoring leading tabs when `strip` is set | whole line | shell heredoc terminator |
-| `literal` | `aux_pre + aux + aux_post` starts at the scan position | whole constructed literal | Rust raw-string closer |
+| `line_eq` | whole line equals aux, ignoring leading tabs when `strip` is set | whole line | sh heredoc terminator |
+| `literal` | `aux_pre + aux + aux_post` starts at the scan position | whole constructed literal | Rust raw strings; Python and TOML dynamic triple delimiters |
 | `fence_close` | column ≤ 3; line has at least `len(aux)` copies of `aux[0]`, then nothing else | whole line | Markdown fence closer |
 | `indent_lt` | byte 0; expanded indent is less than integer aux | zero bytes, then pop once | YAML block scalar end |
 | `line_empty` | the physical line has zero bytes | zero bytes, then one state operation | end a backslash continuation across a blank line |
@@ -290,6 +305,22 @@ complete 1.0 vocabulary. Themes resolve fallbacks once when loaded.
 Use `error` only when the definition proves that input is impossible in the
 language. A parser disagreement is not enough. Use `warning` for legal but
 suspicious input.
+
+## Starting point and bounded definitions
+
+For a new language, start with
+[`runtime/syntax/go.fl`](../../runtime/syntax/go.fl). Go is the intentionally
+ordinary template: a small root rule set, bounded string/comment contexts,
+captures plus `consume` for function names, explicit EOL policies, and no aux
+or token-history state. Use the larger definitions only when the language has
+a construct that actually requires their machinery.
+
+YAML is deliberately an honest subset rather than a partial parser. It does
+not carry plain multi-line scalars, complex keys, tag resolution, flow nesting
+past four levels, cross-line flow collections, perfect `: ` disambiguation in
+plain values, or YAML 1.1 boolean/sexagesimal quirks. Quoted and flow contexts
+pop at EOL; block scalars terminate through `indent_lt`, so none of those
+known inaccuracies can leak indefinitely.
 
 ## Complete INI definition
 
