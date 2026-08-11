@@ -27,6 +27,11 @@ static const char cache_source_y[] =
     "extensions: [\"cache\"], }, contexts: { main: { default: \"text\", "
     "rules: [ { match: \"y\", attr: \"number\" }, ], }, }, }\n";
 
+static const char cache_source_other[] =
+    "{ syntax: 1, language: { name: \"other-language\", "
+    "extensions: [\"other\"], }, contexts: { main: { default: \"text\", "
+    "rules: [ { match: \"z\", attr: \"number\" }, ], }, }, }\n";
+
 static const char cache_source_complex[] =
     "{ syntax: 1, language: { name: \"cache-complex\", "
     "extensions: [\"cx\"], filenames: [\"Complexfile\"], priority: 9, }, "
@@ -129,7 +134,7 @@ static void fixture_init(CacheFixture *f)
     YEW_ASSERT(n > 0 && (size_t)n < sizeof(f->source));
     write_exact(f->source, (const u8 *)cache_source_x,
                 strlen(cache_source_x));
-    path = yew_syn_cache_path(f->source);
+    path = yew_syn_cache_path("cache-fixture");
     YEW_ASSERT_NOT_NULL(path);
     n = snprintf(f->cache, sizeof(f->cache), "%s", path);
     YEW_ASSERT(n > 0 && (size_t)n < sizeof(f->cache));
@@ -198,10 +203,17 @@ static void assert_loaded_regex_executes(LoadedDef *loaded, char byte)
 static void build_cold_cache(CacheFixture *f)
 {
     LoadedDef loaded;
+    char *path;
+    int n;
 
     yew_syn_compile_count_reset();
     load_def(&loaded, f);
     YEW_ASSERT_EQ_U64(yew_syn_compile_count(), 1U);
+    path = yew_syn_cache_path(loaded.def->name);
+    YEW_ASSERT_NOT_NULL(path);
+    n = snprintf(f->cache, sizeof(f->cache), "%s", path);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(f->cache));
+    free(path);
     YEW_ASSERT_EQ_I64(access(f->cache, F_OK), 0);
     loaded_free(&loaded);
 }
@@ -257,47 +269,60 @@ void test_syn_cache_path_uses_temp_xdg_root(void)
     char expected[160];
     char *dir;
     char *path;
+    char *ini;
 
     fixture_init(&f);
     (void)snprintf(expected, sizeof(expected), "%s/yew/syn", f.root);
     dir = yew_syn_cache_dir();
     YEW_ASSERT_EQ_STR(dir, expected);
-    (void)snprintf(expected, sizeof(expected), "%s/yew/syn/alpha-",
+    (void)snprintf(expected, sizeof(expected), "%s/yew/syn/alpha.stab",
                    f.root);
     path = yew_syn_cache_path("alpha");
-    YEW_ASSERT(strncmp(path, expected, strlen(expected)) == 0);
-    YEW_ASSERT_EQ_STR(path + strlen(path) - 5U, ".stab");
-    {
-        char *other = yew_syn_cache_path("elsewhere/alpha.fl");
-
-        YEW_ASSERT_NOT_NULL(other);
-        YEW_ASSERT(strcmp(path, other) != 0);
-        free(other);
-    }
+    YEW_ASSERT_EQ_STR(path, expected);
+    (void)snprintf(expected, sizeof(expected), "%s/yew/syn/ini.stab",
+                   f.root);
+    ini = yew_syn_cache_path("ini");
+    YEW_ASSERT_EQ_STR(ini, expected);
+    YEW_ASSERT_NULL(yew_syn_cache_path("bad/name"));
     YEW_ASSERT_NULL(yew_syn_cache_path(""));
     free(dir);
     free(path);
+    free(ini);
     fixture_free(&f);
 }
 
 void test_syn_cache_same_stems_have_distinct_source_namespaces(void)
 {
     CacheFixture f;
-    char other[128];
-    char *first;
-    char *second;
+    char nested[128];
+    char other_source[160];
+    char *other_cache;
+    LoadedDef loaded;
 
     fixture_init(&f);
-    (void)snprintf(other, sizeof(other), "%s/nested/fixture.fl", f.root);
-    first = yew_syn_cache_path(f.source);
-    second = yew_syn_cache_path(other);
-    YEW_ASSERT_NOT_NULL(first);
-    YEW_ASSERT_NOT_NULL(second);
-    YEW_ASSERT(strcmp(first, second) != 0);
-    YEW_ASSERT(strstr(first, "/fixture-") != NULL);
-    YEW_ASSERT(strstr(second, "/fixture-") != NULL);
-    free(first);
-    free(second);
+    (void)snprintf(nested, sizeof(nested), "%s/nested", f.root);
+    YEW_ASSERT_EQ_I64(mkdir(nested, 0700), 0);
+    (void)snprintf(other_source, sizeof(other_source), "%s/fixture.fl",
+                   nested);
+    write_exact(other_source, (const u8 *)cache_source_other,
+                strlen(cache_source_other));
+    load_def(&loaded, &f);
+    loaded_free(&loaded);
+    arena_init(&loaded.arena);
+    fl_diag_init(&loaded.dc, &loaded.arena);
+    loaded.def = yew_syn_def_load(&loaded.arena, &loaded.dc, other_source);
+    YEW_ASSERT_NOT_NULL(loaded.def);
+    YEW_ASSERT_EQ_STR(loaded.def->name, "other-language");
+    loaded_free(&loaded);
+    other_cache = yew_syn_cache_path("other-language");
+    YEW_ASSERT_NOT_NULL(other_cache);
+    YEW_ASSERT_EQ_I64(access(f.cache, F_OK), 0);
+    YEW_ASSERT_EQ_I64(access(other_cache, F_OK), 0);
+    YEW_ASSERT(strcmp(f.cache, other_cache) != 0);
+    YEW_ASSERT_EQ_I64(unlink(other_cache), 0);
+    YEW_ASSERT_EQ_I64(unlink(other_source), 0);
+    YEW_ASSERT_EQ_I64(rmdir(nested), 0);
+    free(other_cache);
     fixture_free(&f);
 }
 
@@ -306,7 +331,6 @@ void test_syn_cache_rejects_blob_copied_from_another_source(void)
     CacheFixture f;
     char second_source[128];
     char *second_cache;
-    Bytebuf bytes;
     LoadedDef loaded;
     struct stat st;
     struct timespec times[2];
@@ -321,13 +345,10 @@ void test_syn_cache_rejects_blob_copied_from_another_source(void)
     times[0] = st.st_atim;
     times[1] = st.st_mtim;
     YEW_ASSERT_EQ_I64(utimensat(AT_FDCWD, second_source, times, 0), 0);
-    second_cache = yew_syn_cache_path(second_source);
+    second_cache = yew_syn_cache_path("cache-fixture");
     YEW_ASSERT_NOT_NULL(second_cache);
-    bytes = read_exact(f.cache);
-    write_exact(second_cache, bytes.data, bytes.len);
-    bytebuf_free(&bytes);
+    YEW_ASSERT_EQ_STR(second_cache, f.cache);
 
-    yew_test_capture_log();
     yew_syn_compile_count_reset();
     arena_init(&loaded.arena);
     fl_diag_init(&loaded.dc, &loaded.arena);
@@ -335,10 +356,7 @@ void test_syn_cache_rejects_blob_copied_from_another_source(void)
     YEW_ASSERT_NOT_NULL(loaded.def);
     YEW_ASSERT_EQ_U64(yew_syn_compile_count(), 1U);
     YEW_ASSERT_EQ_STR(yew_syn_rule_pattern(loaded.def, 0U), "y");
-    YEW_ASSERT(yew_test_log_contains(YEW_LOG_WARN,
-                                     "syntax cache tables invalid"));
     loaded_free(&loaded);
-    YEW_ASSERT_EQ_I64(unlink(second_cache), 0);
     YEW_ASSERT_EQ_I64(unlink(second_source), 0);
     free(second_cache);
     fixture_free(&f);

@@ -86,10 +86,8 @@ u64 yew_syn_compile_count(void);
 void yew_syn_compile_count_reset(void);
 
 char *yew_syn_cache_dir(void);
-/* Return the cache entry for a definition source path.  The basename keeps
- * entries recognizable; the full path hash prevents equal stems in distinct
- * directories from sharing an entry. */
-char *yew_syn_cache_path(const char *source);
+/* Return the canonical cache entry for a validated language name. */
+char *yew_syn_cache_path(const char *name);
 bool yew_syn_cache_clear(void);
 void yew_syn_cache_set_bypass(bool bypass);
 

@@ -139,7 +139,7 @@ static int list_defs(bool bypass)
             (void)fputs("yew syn: internal language table gap\n", stderr);
             return YEW_EXIT_BUG;
         }
-        cache = yew_syn_cache_path(desc->source);
+        cache = yew_syn_cache_path(desc->name);
         state = bypass || (no_cache != NULL && strcmp(no_cache, "1") == 0) ?
                 "bypassed" :
                 cache != NULL && access(cache, F_OK) == 0 ? "warm" : "cold";

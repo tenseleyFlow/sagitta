@@ -53,15 +53,13 @@ fi
 "$yew" syn cache clear
 YEW_NO_SYN_CACHE=1 "$yew" syn dump runtime/syntax/ini.fl --tables \
     > "$tmp/tables.cold"
-set -- "$XDG_CACHE_HOME"/yew/syn/ini-*.stab
-if [ -e "$1" ]; then
+if [ -e "$XDG_CACHE_HOME/yew/syn/ini.stab" ]; then
     echo "syntax assets: bypassed cold dump wrote a cache entry" >&2
     exit 1
 fi
 "$yew" syn compile runtime/syntax/ini.fl
-set -- "$XDG_CACHE_HOME"/yew/syn/ini-*.stab
-if [ "$#" -ne 1 ] || [ ! -f "$1" ]; then
-    echo "syntax assets: syntax compile did not create exactly one hashed INI cache entry" >&2
+if [ ! -f "$XDG_CACHE_HOME/yew/syn/ini.stab" ]; then
+    echo "syntax assets: syntax compile did not create canonical ini.stab" >&2
     exit 1
 fi
 "$yew" syn dump runtime/syntax/ini.fl --tables > "$tmp/tables.warm"

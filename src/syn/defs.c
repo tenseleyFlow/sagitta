@@ -606,7 +606,13 @@ static void parse_language(Compile *c, FlNode *node, SynLangDesc *lang)
     if (name == NULL) {
         diag(c, FL_DIAG_ERROR, node->sp, "language.name is required");
     } else {
-        (void)require_string(c, name, "language.name", &lang->name, &ignored);
+        if (require_string(c, name, "language.name", &lang->name, &ignored) &&
+            (ignored == 0U || strchr(lang->name, '/') != NULL ||
+             strcmp(lang->name, ".") == 0 || strcmp(lang->name, "..") == 0)) {
+            diag(c, FL_DIAG_ERROR, name->sp,
+                 "language.name must be a non-empty cache-safe name");
+            lang->name = NULL;
+        }
     }
     (void)parse_string_list(c, map_find(c, node, "extensions"),
                             "language.extensions", &lang->extensions,
@@ -2077,7 +2083,7 @@ static bool syn_rule_valid(const SynRule *rule, const SynDef *def,
 }
 
 static SynDef *syn_blob_unpack(Arena *arena, const u8 *data, size_t len,
-                               const char *source)
+                               const char *source, const char *expected_name)
 {
     BlobReader r = {data, len, 0U, true};
     SynDef *def = NULL;
@@ -2227,7 +2233,8 @@ static SynDef *syn_blob_unpack(Arena *arena, const u8 *data, size_t len,
             (rule->aux_match == SYN_AUXM_NONE) != (rule->re != NULL))
             goto fail;
     }
-    if (!r.ok || r.at != r.len || def->name == NULL)
+    if (!r.ok || r.at != r.len || def->name == NULL ||
+        expected_name == NULL || strcmp(def->name, expected_name) != 0)
         goto fail;
     for (i = 0U; i < def->nctxs; i++) {
         SynCtx *ctx = &def->ctxs[i];
@@ -2384,28 +2391,7 @@ static bool source_stat(const char *path, struct stat *st)
     return false;
 }
 
-static u64 fnv64(const u8 *p, size_t n);
-static char *heap_stem(const char *path);
 static char *runtime_definition_path(const SynLangSeed *seed);
-
-static const char *cache_source_identity(const char *source)
-{
-    size_t i;
-
-    for (i = 0U; i < yew_syn_builtin_langs_len; i++) {
-        char *resolved;
-        bool matches;
-
-        if (strcmp(source, yew_syn_builtin_langs[i].source) == 0)
-            return yew_syn_builtin_langs[i].source;
-        resolved = runtime_definition_path(&yew_syn_builtin_langs[i]);
-        matches = strcmp(source, resolved) == 0;
-        free(resolved);
-        if (matches)
-            return yew_syn_builtin_langs[i].source;
-    }
-    return source;
-}
 
 char *yew_syn_cache_dir(void)
 {
@@ -2422,32 +2408,20 @@ char *yew_syn_cache_dir(void)
     return path;
 }
 
-char *yew_syn_cache_path(const char *source)
+char *yew_syn_cache_path(const char *name)
 {
-    const char *identity;
     char *dir;
     char *path;
-    char *stem;
     size_t n;
-    u64 hash;
 
-    if (source == NULL || source[0] == '\0')
-        return NULL;
-    identity = cache_source_identity(source);
-    stem = heap_stem(identity);
-    if (stem == NULL)
+    if (name == NULL || name[0] == '\0' || strchr(name, '/') != NULL)
         return NULL;
     dir = yew_syn_cache_dir();
-    if (dir == NULL) {
-        free(stem);
+    if (dir == NULL)
         return NULL;
-    }
-    hash = fnv64((const u8 *)identity, strlen(identity));
-    n = strlen(dir) + 1U + strlen(stem) + 1U + 16U + strlen(".stab");
+    n = strlen(dir) + 1U + strlen(name) + strlen(".stab");
     path = yew_xmalloc(n + 1U);
-    (void)snprintf(path, n + 1U, "%s/%s-%016llx.stab", dir, stem,
-                   (unsigned long long)hash);
-    free(stem);
+    (void)snprintf(path, n + 1U, "%s/%s.stab", dir, name);
     free(dir);
     return path;
 }
@@ -2494,24 +2468,6 @@ bool yew_syn_cache_clear(void)
         ok = false;
     free(dir);
     return ok;
-}
-
-static char *heap_stem(const char *path)
-{
-    const char *base = strrchr(path, '/');
-    const char *dot;
-    size_t n;
-    char *name;
-
-    base = base == NULL ? path : base + 1;
-    dot = strrchr(base, '.');
-    n = dot != NULL && dot != base ? (size_t)(dot - base) : strlen(base);
-    if (n == 0U)
-        return NULL;
-    name = yew_xmalloc(n + 1U);
-    (void)memcpy(name, base, n);
-    name[n] = '\0';
-    return name;
 }
 
 static bool cache_header_ok(const u8 *p, size_t n, size_t *blob_len)
@@ -2570,6 +2526,69 @@ static bool cache_write(const char *path, const struct stat *st,
     return ok;
 }
 
+static char *builtin_language_for_source(const char *source)
+{
+    size_t i;
+
+    for (i = 0U; i < yew_syn_builtin_langs_len; i++) {
+        char *resolved;
+        bool matches;
+        const char *builtin_name = yew_syn_builtin_langs[i].name;
+
+        if (strcmp(source, yew_syn_builtin_langs[i].source) == 0) {
+            char *name = yew_xmalloc(strlen(builtin_name) + 1U);
+
+            (void)memcpy(name, builtin_name, strlen(builtin_name) + 1U);
+            return name;
+        }
+        resolved = runtime_definition_path(&yew_syn_builtin_langs[i]);
+        matches = strcmp(source, resolved) == 0;
+        free(resolved);
+        if (matches) {
+            char *name = yew_xmalloc(strlen(builtin_name) + 1U);
+
+            (void)memcpy(name, builtin_name, strlen(builtin_name) + 1U);
+            return name;
+        }
+    }
+    return NULL;
+}
+
+static char *definition_language_name(const u8 *src, size_t len)
+{
+    Arena arena;
+    DiagCtx dc;
+    Compile c;
+    FlNode *top;
+    FlNode *language;
+    FlNode *name;
+    const char *value;
+    size_t value_len;
+    char *copy = NULL;
+
+    arena_init(&arena);
+    fl_diag_init(&dc, &arena);
+    fl_diag_set_sink(&dc, discovery_diag_discard, NULL);
+    (void)memset(&c, 0, sizeof(c));
+    c.arena = &arena;
+    c.dc = &dc;
+    interner_init(&c.in, &arena);
+    top = fl_parse_literal(&arena, &dc, &c.in, (const char *)src, len, 0U);
+    language = map_find(&c, top, "language");
+    name = map_find(&c, language, "name");
+    value = node_str(&c, name, &value_len);
+    if (value != NULL && value_len != 0U && strchr(value, '/') == NULL &&
+        !(value_len == 1U && value[0] == '.') &&
+        !(value_len == 2U && value[0] == '.' && value[1] == '.')) {
+        copy = yew_xmalloc(value_len + 1U);
+        (void)memcpy(copy, value, value_len);
+        copy[value_len] = '\0';
+    }
+    interner_free(&c.in);
+    arena_free_all(&arena);
+    return copy;
+}
+
 SynDef *yew_syn_def_load(Arena *a, DiagCtx *dc, const char *path)
 {
     Bytebuf source;
@@ -2577,11 +2596,13 @@ SynDef *yew_syn_def_load(Arena *a, DiagCtx *dc, const char *path)
     Bytebuf packed;
     struct stat src_st;
     struct stat cache_st;
+    char *expected_name = NULL;
     char *cache_path;
     size_t blob_len = 0U;
     bool valid_cache = false;
     bool bypass;
     bool cache_warned = false;
+    bool source_loaded = false;
     const char *no_cache;
     u32 file_id;
     u32 errors = 0U;
@@ -2600,7 +2621,20 @@ SynDef *yew_syn_def_load(Arena *a, DiagCtx *dc, const char *path)
                      "cannot read syntax definition: %s", strerror(errno));
         return NULL;
     }
-    cache_path = yew_syn_cache_path(path);
+    expected_name = builtin_language_for_source(path);
+    if (expected_name == NULL) {
+        if (!read_whole(path, &source, &src_st)) {
+            file_id = fl_diag_add_file(dc, path, "", 0U);
+            fl_diag_emit(dc, FL_DIAG_ERROR,
+                         (FlSpan){file_id, 1U, 1U, 1U},
+                         "cannot read syntax definition: %s",
+                         strerror(errno));
+            return NULL;
+        }
+        source_loaded = true;
+        expected_name = definition_language_name(source.data, source.len);
+    }
+    cache_path = yew_syn_cache_path(expected_name);
     no_cache = getenv("YEW_NO_SYN_CACHE");
     bypass = cache_bypass || (no_cache != NULL && strcmp(no_cache, "1") == 0);
     if (!bypass && cache_path != NULL) {
@@ -2617,7 +2651,7 @@ SynDef *yew_syn_def_load(Arena *a, DiagCtx *dc, const char *path)
             yew_log(YEW_LOG_WARN, "syntax cache corrupt; recompiling %s",
                     path);
             cache_warned = true;
-        } else if (valid_cache &&
+        } else if (valid_cache && !source_loaded &&
                    get64(cached.data + 24U) == (u64)src_st.st_mtim.tv_sec &&
                    get64(cached.data + 32U) == (u64)src_st.st_mtim.tv_nsec &&
                    get64(cached.data + 40U) == (u64)src_st.st_size) {
@@ -2625,7 +2659,7 @@ SynDef *yew_syn_def_load(Arena *a, DiagCtx *dc, const char *path)
             (void)file_id;
             def = syn_blob_unpack(a,
                                   cached.data + YEW_SYN_CACHE_HEADER_SIZE,
-                                  blob_len, path);
+                                  blob_len, path, expected_name);
             if (def != NULL)
                 goto done;
             yew_log(YEW_LOG_WARN,
@@ -2634,16 +2668,17 @@ SynDef *yew_syn_def_load(Arena *a, DiagCtx *dc, const char *path)
             valid_cache = false;
         }
     }
-    if (!read_whole(path, &source, &src_st)) {
+    if (!source_loaded && !read_whole(path, &source, &src_st)) {
         file_id = fl_diag_add_file(dc, path, "", 0U);
         fl_diag_emit(dc, FL_DIAG_ERROR, (FlSpan){file_id, 1U, 1U, 1U},
                      "cannot read syntax definition: %s", strerror(errno));
         goto done;
     }
+    source_loaded = true;
     if (valid_cache &&
         get64(cached.data + 48U) == fnv64(source.data, source.len)) {
         def = syn_blob_unpack(a, cached.data + YEW_SYN_CACHE_HEADER_SIZE,
-                              blob_len, path);
+                              blob_len, path, expected_name);
         if (def != NULL) {
             if (!cache_write(cache_path, &src_st, source.data, source.len,
                              cached.data + YEW_SYN_CACHE_HEADER_SIZE,
@@ -2660,6 +2695,15 @@ SynDef *yew_syn_def_load(Arena *a, DiagCtx *dc, const char *path)
     file_id = fl_diag_add_file(dc, path, owned, source.len);
     def = yew_syn_def_compile(a, dc, (const u8 *)owned, source.len, file_id,
                               &errors, &warnings);
+    if (def != NULL && expected_name != NULL &&
+        strcmp(def->name, expected_name) != 0) {
+        fl_diag_emit(dc, FL_DIAG_ERROR,
+                     (FlSpan){file_id, 1U, 1U, 1U},
+                     "syntax language name '%s' does not match expected '%s'",
+                     def->name, expected_name);
+        yew_syn_def_dispose(def);
+        def = NULL;
+    }
     if (def != NULL) {
         DefMeta *m = meta_for(def);
 
@@ -2677,6 +2721,7 @@ SynDef *yew_syn_def_load(Arena *a, DiagCtx *dc, const char *path)
     (void)warnings;
 
 done:
+    free(expected_name);
     free(cache_path);
     bytebuf_free(&source);
     bytebuf_free(&cached);
