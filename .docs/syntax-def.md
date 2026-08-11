@@ -10,6 +10,18 @@ Run the strict checker before committing a definition:
 yew syn check --strict runtime/syntax/example.fl
 ```
 
+Then prove that the committed fixture corpus enters every reachable context
+and fires every reachable rule:
+
+```sh
+yew syn check --coverage runtime/syntax/example.fl tests/syn/example/*
+```
+
+Coverage excludes include-only helper contexts, whose copied rules are
+accounted for at each reachable inclusion site. An uncovered context or rule
+is an error; the diagnostic names it so the author can add a fixture or delete
+dead definition code.
+
 The file must contain one map literal. Comments and trailing commas are
 allowed. Unknown keys, unknown context names, and unknown attributes are
 errors.
@@ -125,6 +137,37 @@ runtime-derived delimiters out of the regex compiler and render path.
 `indent_lt` must be the first rule in its context. It is the only sanctioned
 zero-width rule. The engine bounds its per-line pops.
 
+### Deferred entry for heredocs and similar blocks
+
+Some constructs announce a multiline body on one line but do not enter that
+body until the next line. A shell heredoc is the canonical example:
+`cat <<EOF | tee out` keeps the pipe in ordinary shell syntax, while the next
+line begins the string-like body. Do not push the body context directly.
+Capture the delimiter into `aux`, push a pending context that includes the
+ordinary rules, then use its `at_eol` action to replace it with the body:
+
+```fletch
+{ match: "<<(-?)\\s*([A-Za-z_][A-Za-z0-9_]*)",
+  attr: "operator", captures: { 2: "string" },
+  set_aux: 2, strip: true, push: "heredoc_pending" },
+
+heredoc_pending: {
+    include: "main",
+    at_eol: "set:heredoc",
+},
+heredoc: {
+    default: "string.special",
+    at_eol: "stay",
+    unit: "atom",
+    rules: [ { aux: "line_eq", attr: "string", pop: 1 } ],
+},
+```
+
+Use separate pending/body pairs when the opener selects different body
+semantics, such as quoted shell delimiters suppressing expansion. With
+`strip: true`, `line_eq` ignores leading tabs only; spaces remain significant
+for `<<-`.
+
 ## Contexts
 
 Each key in `contexts` names a context. A context controls rule order,
@@ -145,9 +188,12 @@ cannot restyle later lines. Multiline constructs such as block comments and
 heredocs normally keep `"stay"`.
 
 `unit: "span"` exposes the whole context region to B mode while preserving
-nested units. `unit: "atom"` exposes the region but hides units inside it;
-strings, comments, and heredocs should normally be atoms. An absent `unit`
-makes the context invisible to B mode.
+nested units. Use it for structural containers whose children remain useful
+motion targets. `unit: "atom"` exposes the region but hides units inside it;
+strings, comments, heredocs, and fenced code bodies should normally be atoms.
+An absent `unit` makes the context invisible to B mode and is appropriate for
+transient helpers such as a deferred-entry context. Inclusion copies rules
+only, so a helper's `unit` never leaks into the including context.
 
 A context-level `include` splices the named contexts' rules before its own
 rules. An in-list `"include:NAME"` splices them at that exact position.
@@ -417,6 +463,12 @@ Three common constructs require a deliberate rewrite:
 Yew's regex engine also excludes backreferences and all lookaround. Keep
 rule order explicit: textual inclusion preserves the only precedence model,
 whereas repository ordering in a source grammar may be implicit.
+
+Definitions are intentionally lexical rather than partial compilers. For
+example, C block comments do not nest and therefore need exactly one closer;
+`#if 0` regions are not dimmed because determining whether preprocessor input
+is live requires macro evaluation. A highlighter that guesses there can hide
+live code, so leaving it lexically styled is the safer, documented limit.
 
 ## New-definition checklist
 
