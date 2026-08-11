@@ -265,7 +265,36 @@ void test_syn_embed_runtime_merged_first_mask_covers_all_bytes(void)
         {4U, 10U},  /* sh */
         {0U, 0U},   /* toml */
         {4U, 16U},  /* typescript */
-        {0U, 0U}    /* yaml */
+        {0U, 0U},   /* yaml */
+        {0U, 0U},   /* wolf */
+        {0U, 0U},   /* cpp */
+        {0U, 0U},   /* objective-c */
+        {0U, 0U},   /* java */
+        {0U, 0U},   /* kotlin */
+        {0U, 0U},   /* csharp */
+        {0U, 0U},   /* swift */
+        {0U, 0U},   /* zig */
+        {0U, 0U},   /* lua */
+        {0U, 0U},   /* ruby */
+        {0U, 0U},   /* perl */
+        {0U, 0U},   /* r */
+        {0U, 0U},   /* julia */
+        {0U, 0U},   /* dart */
+        {0U, 0U},   /* powershell */
+        {0U, 0U},   /* zsh */
+        {0U, 0U},   /* fish */
+        {0U, 0U},   /* sql */
+        {0U, 0U},   /* nix */
+        {0U, 0U},   /* haskell */
+        {0U, 0U},   /* ocaml */
+        {0U, 0U},   /* xml */
+        {0U, 0U},   /* graphql */
+        {0U, 0U},   /* protobuf */
+        {0U, 0U},   /* hcl */
+        {0U, 0U},   /* dockerfile */
+        {0U, 0U},   /* cmake */
+        {0U, 0U},   /* meson */
+        {0U, 0U}    /* diff */
     };
     u32 compiled_sites = 0U;
     u32 source_sites = 0U;
@@ -308,11 +337,13 @@ void test_syn_embed_runtime_merged_first_mask_covers_all_bytes(void)
              rule_index++) {
             const SynRule *opener = &host->rules[rule_index];
             const SynCtx *bridge;
-            const SynDef *guest[20];
+            const SynDef **guest;
             u32 nguests = 0U;
 
             if (opener->op != SYN_OP_EMBED)
                 continue;
+            guest = yew_xcalloc(yew_syn_builtin_langs_len + 1U,
+                                sizeof(*guest));
             compiled_sites++;
             YEW_ASSERT(opener->target < host->nctxs);
             bridge = &host->ctxs[opener->target];
@@ -495,6 +526,7 @@ void test_syn_embed_runtime_merged_first_mask_covers_all_bytes(void)
                 if (runtime != master)
                     yew_syn_engine_free(runtime);
             }
+            free(guest);
             checked_sites++;
         }
         YEW_ASSERT_EQ_U64(compiled_sites - before,
