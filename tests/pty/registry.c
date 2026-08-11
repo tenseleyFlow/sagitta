@@ -4890,6 +4890,7 @@ static void case_s41_cold_warm_identical(PtyCtx *c)
 static void case_s41_degrade_full_frame(PtyCtx *c)
 {
     static const u8 text[] = "const char *bad = \"\\q\";\n";
+    static const u8 frame_end[] = "\x1b[1;7H\x1b[?25h";
     char path[256];
     size_t frame_at;
     u32 before;
@@ -4903,18 +4904,29 @@ static void case_s41_degrade_full_frame(PtyCtx *c)
         ptc_no_altscreen(c);
     }
     ptc_spawn(c, ptc_yew_bin(c), "--theme", "quiver-dark", path, NULL);
-    ptc_settle(c, 0);
-    if (strcmp(c->test->profile, "dumb") != 0)
+    if (strcmp(c->test->profile, "dumb") == 0) {
+        ptc_wait_output(c, frame_end, sizeof(frame_end) - 1U);
+        ptc_settle(c, 0);
+    } else {
+        ptc_settle(c, 0);
         ptc_wait_kitty_push(c, 21U);
+    }
+    frame_at = c->raw.len;
     before = c->vt.nsync_pairs;
     ptc_resize(c, 25U, 80U);
-    if (strcmp(c->test->profile, "dumb") != 0)
+    if (strcmp(c->test->profile, "dumb") == 0)
+        ptc_wait_output_since(c, frame_at, frame_end,
+                              sizeof(frame_end) - 1U);
+    else
         ptc_wait_sync_pairs(c, before + 1U);
     ptc_settle(c, 0);
     frame_at = c->raw.len;
     before = c->vt.nsync_pairs;
     ptc_resize(c, 24U, 80U);
-    if (strcmp(c->test->profile, "dumb") != 0)
+    if (strcmp(c->test->profile, "dumb") == 0)
+        ptc_wait_output_since(c, frame_at, frame_end,
+                              sizeof(frame_end) - 1U);
+    else
         ptc_wait_sync_pairs(c, before + 1U);
     ptc_settle(c, 0);
     ptc_check(c, !raw_sgr_has_param_since(c, frame_at, 38U) &&

@@ -114,8 +114,12 @@ void ptc_no_altscreen(PtyCtx *c);
  * a blind settle races the child's startup, and under valgrind it loses
  * -- input typed before the child reaches raw mode is processed by the
  * TTY instead, which turns CR into LF behind your back.
+ * The `_since` form requires the bytes to occur after a raw-log checkpoint,
+ * which provides a frame barrier when the same bytes occur in every repaint.
  */
 void ptc_wait_output(PtyCtx *c, const void *bytes, size_t len);
+void ptc_wait_output_since(PtyCtx *c, size_t at,
+                           const void *bytes, size_t len);
 void ptc_wait_kitty_push(PtyCtx *c, u32 flags);
 void ptc_wait_sync_pairs(PtyCtx *c, u32 count);
 void ptc_keys(PtyCtx *c, const char *spec);

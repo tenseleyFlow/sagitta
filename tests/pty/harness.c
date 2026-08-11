@@ -611,14 +611,21 @@ void ptc_no_altscreen(PtyCtx *c)
 static const u8 *find_bytes(const u8 *hay, size_t nhay,
                             const u8 *needle, size_t nneedle);
 
-void ptc_wait_output(PtyCtx *c, const void *bytes, size_t len)
+void ptc_wait_output_since(PtyCtx *c, size_t at,
+                           const void *bytes, size_t len)
 {
     i64 deadline;
 
     if (c == NULL || bytes == NULL || !c->spawned || c->failed)
         return;
+    if (at > c->raw.len) {
+        ptc_fail(c, "output checkpoint is past the raw log");
+        return;
+    }
     deadline = case_deadline(c);
-    while (find_bytes(c->raw.data, c->raw.len, bytes, len) == NULL) {
+    while (find_bytes(at == 0U ? c->raw.data : c->raw.data + at,
+                      c->raw.len - at,
+                      bytes, len) == NULL) {
         if (c->failed)
             return;
         if (ptc_now_ms() >= deadline) {
@@ -632,6 +639,11 @@ void ptc_wait_output(PtyCtx *c, const void *bytes, size_t len)
         }
         pump_quiet(c, 20, false);
     }
+}
+
+void ptc_wait_output(PtyCtx *c, const void *bytes, size_t len)
+{
+    ptc_wait_output_since(c, 0U, bytes, len);
 }
 
 void ptc_settle(PtyCtx *c, i64 quiet_ms)
