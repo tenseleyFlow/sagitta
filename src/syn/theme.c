@@ -807,30 +807,41 @@ static bool valid_name(const char *name)
     return true;
 }
 
-static bool read_file(const char *path, Bytebuf *out)
+typedef enum ThemeReadStatus {
+    THEME_READ_OK = 0,
+    THEME_READ_IO,
+    THEME_READ_TOO_LARGE
+} ThemeReadStatus;
+
+static ThemeReadStatus read_file(const char *path, Bytebuf *out)
 {
     FILE *file = fopen(path, "rb");
     u8 chunk[4096];
 
     if (file == NULL)
-        return false;
+        return THEME_READ_IO;
     bytebuf_init(out);
     while (!feof(file)) {
         size_t n = fread(chunk, 1U, sizeof(chunk), file);
 
         if (n != 0U)
             bytebuf_append(out, chunk, n);
-        if (ferror(file) || out->len > THEME_MAX_BYTES) {
+        if (out->len > THEME_MAX_BYTES) {
             (void)fclose(file);
             bytebuf_free(out);
-            return false;
+            return THEME_READ_TOO_LARGE;
+        }
+        if (ferror(file)) {
+            (void)fclose(file);
+            bytebuf_free(out);
+            return THEME_READ_IO;
         }
     }
     if (fclose(file) != 0) {
         bytebuf_free(out);
-        return false;
+        return THEME_READ_IO;
     }
-    return true;
+    return THEME_READ_OK;
 }
 
 static char *theme_filename(const char *name)
@@ -890,6 +901,7 @@ bool yew_theme_select(Theme *theme, const char *name,
     Theme candidate;
     char *path;
     Bytebuf src;
+    ThemeReadStatus read_status;
     bool ok;
 
     if (theme == NULL || dc == NULL)
@@ -905,7 +917,14 @@ bool yew_theme_select(Theme *theme, const char *name,
                      "theme '%s' was not found", name);
         return false;
     }
-    if (!read_file(path, &src)) {
+    read_status = read_file(path, &src);
+    if (read_status != THEME_READ_OK) {
+        if (read_status == THEME_READ_TOO_LARGE) {
+            fl_diag_emit(dc, FL_DIAG_ERROR, (FlSpan){0U, 1U, 1U, 1U},
+                         "theme '%s' exceeds the 1 MiB limit", path);
+            free(path);
+            return false;
+        }
         fl_diag_emit(dc, FL_DIAG_ERROR, (FlSpan){0U, 1U, 1U, 1U},
                      "cannot read theme '%s': %s", path, strerror(errno));
         free(path);

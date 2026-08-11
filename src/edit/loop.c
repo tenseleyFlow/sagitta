@@ -14,6 +14,7 @@
 #include "edit/dispatch.h"
 #include "edit/ed.h"
 #include "edit/job.h"
+#include "edit/theme_cmds.h"
 #include "ui/mouse.h"
 #include "edit/shell.h"
 #include "fl/flruntime.h"
@@ -276,8 +277,10 @@ static void loop_seed_probe(Ed *ed)
     ed->in.caps = ed->tty.caps;
     if (ed->input_ready)
         yew_input_enable(ed->tty.wfd, &ed->tty.caps);
-    if (ed->render_ready)
+    if (ed->render_ready) {
         yew_render_init(&ed->render, &ed->tty.caps, loop_getenv);
+        yew_theme_sync_surfaces(ed);
+    }
     yew_input_seed(&ed->in, &ed->tty.pending);
     ed->tty.pending.len = 0U;
     ed->probe_seeded = true;

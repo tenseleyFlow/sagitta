@@ -1653,6 +1653,7 @@ const YewTest yew_tests[] = {
     T(theme_defaults_compile_with_full_attr_coverage),
     T(theme_partial_fallback_and_colour_forms),
     T(theme_invalid_input_is_diagnostic_and_transactional),
+    T(theme_oversize_file_reports_the_size_limit),
     T(theme_all_108_documented_256_conversions),
     T(theme_degradation_ladder),
     T(theme_switch_repaints_without_rehighlighting),

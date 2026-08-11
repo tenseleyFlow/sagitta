@@ -502,6 +502,24 @@ void test_render_underline_undercurl_shared_reset(void)
 
     {
         RenderFixture f;
+        YewColor warning = {YEW_COLOR_RGB, 229u, 192u, 123u};
+
+        render_fixture_init(&f, 1u, 1u, false);
+        yew_render_set_underline_colors(
+            &f.render, (YewColor){YEW_COLOR_RGB, 255u, 95u, 95u},
+            warning, (YewColor){YEW_COLOR_RGB, 97u, 175u, 239u});
+        yew_grid_put(&f.grid, 0u, 0u, (const u8 *)"w", 1u,
+                     color, color,
+                     (u16)(YEW_ATTR_UNDERCURL | YEW_CELL_UL_WARN));
+        yew_render_frame(&f.render, &f.grid, &f.out);
+        YEW_ASSERT(render_contains(&f.out, "58;2;229;192;123"));
+        YEW_ASSERT(render_contains(&f.out, "\033[59m"));
+        YEW_ASSERT_EQ_U64(f.render.attrs & YEW_CELL_UL_MASK, 0u);
+        render_fixture_free(&f);
+    }
+
+    {
+        RenderFixture f;
 
         render_fixture_init(&f, 1u, 1u, false);
         f.render.tier = YEW_RENDER_TIER_256;

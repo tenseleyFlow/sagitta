@@ -1691,6 +1691,7 @@ void test_syn_fletch_spec14_tokens_match_runtime_definition(void);
 void test_theme_defaults_compile_with_full_attr_coverage(void);
 void test_theme_partial_fallback_and_colour_forms(void);
 void test_theme_invalid_input_is_diagnostic_and_transactional(void);
+void test_theme_oversize_file_reports_the_size_limit(void);
 void test_theme_all_108_documented_256_conversions(void);
 void test_theme_degradation_ladder(void);
 void test_theme_switch_repaints_without_rehighlighting(void);

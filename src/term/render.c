@@ -806,6 +806,15 @@ size_t yew_render_frame(Render *r, Grid *g, Bytebuf *out)
         }
     }
 
+    /* A damaged run may end on an underlined cell even though the unchanged
+     * cell after it is not emitted.  Restore the terminal's underline colour
+     * at the frame boundary so out-of-band output and later cursor-only
+     * frames never inherit the semantic error/warning palette. */
+    if (underline_selector(r, r->attrs) != 0U) {
+        bytes(out, "\033[59m");
+        r->attrs &= (u16)~YEW_CELL_UL_MASK;
+    }
+
     /* The frame envelope always ends with an absolute position. Besides
      * making frames deterministic in isolation, CUP clears any terminal's
      * pending-wrap state after output in the last column. */

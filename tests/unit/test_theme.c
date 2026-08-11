@@ -1,8 +1,13 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "harness.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include "syn/theme.h"
 #include "util/arena.h"
@@ -91,6 +96,14 @@ void test_theme_defaults_compile_with_full_attr_coverage(void)
                               [YEW_ATTR_TEXT].fg.tag, YEW_COLOR_RGB);
         YEW_ASSERT_EQ_U64(yew_theme_table(&theme, YEW_THEME_MONO)
                               [YEW_ATTR_ERROR].attrs, YEW_ATTR_REVERSE);
+        YEW_ASSERT((yew_theme_table(&theme, YEW_THEME_TRUECOLOR)
+                        [YEW_ATTR_ERROR].attrs &
+                    (YEW_ATTR_UNDERCURL | YEW_CELL_UL_MASK)) ==
+                   (YEW_ATTR_UNDERCURL | YEW_CELL_UL_ERROR));
+        YEW_ASSERT((yew_theme_table(&theme, YEW_THEME_TRUECOLOR)
+                        [YEW_ATTR_WARNING].attrs &
+                    (YEW_ATTR_UNDERCURL | YEW_CELL_UL_MASK)) ==
+                   (YEW_ATTR_UNDERCURL | YEW_CELL_UL_WARN));
         yew_theme_free(&theme);
         free(src);
     }
@@ -177,4 +190,46 @@ void test_theme_invalid_input_is_diagnostic_and_transactional(void)
     YEW_ASSERT(strstr(f.message, "unknown theme key") != NULL);
     yew_theme_free(&theme);
     theme_fix_close(&f);
+}
+
+void test_theme_oversize_file_reports_the_size_limit(void)
+{
+    char root[] = "build/theme-oversize.XXXXXX";
+    char dir[256];
+    char path[256];
+    u8 block[4096];
+    ThemeFix f;
+    Theme theme;
+    FILE *file;
+    u32 i;
+    int n;
+
+    YEW_ASSERT_NOT_NULL(mkdtemp(root));
+    n = snprintf(dir, sizeof(dir), "%s/themes", root);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(dir));
+    YEW_ASSERT_EQ_I64(mkdir(dir, 0700), 0);
+    n = snprintf(path, sizeof(path), "%s/oversize.fl", dir);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(path));
+    file = fopen(path, "wb");
+    YEW_ASSERT_NOT_NULL(file);
+    (void)memset(block, 'x', sizeof(block));
+    for (i = 0U; i < 257U; i++)
+        YEW_ASSERT_EQ_U64(fwrite(block, 1U, sizeof(block), file),
+                          sizeof(block));
+    YEW_ASSERT_EQ_I64(fclose(file), 0);
+
+    theme_fix_open(&f);
+    yew_theme_init(&theme);
+    errno = 0;
+    YEW_ASSERT(!yew_theme_select(&theme, "oversize", root, &f.dc));
+    YEW_ASSERT_EQ_U64(f.ndiag, 1U);
+    YEW_ASSERT(strstr(f.message, "exceeds the 1 MiB limit") != NULL);
+    YEW_ASSERT(strstr(f.message, "Success") == NULL);
+    YEW_ASSERT_NULL(yew_theme_name(&theme));
+    yew_theme_free(&theme);
+    theme_fix_close(&f);
+
+    YEW_ASSERT_EQ_I64(unlink(path), 0);
+    YEW_ASSERT_EQ_I64(rmdir(dir), 0);
+    YEW_ASSERT_EQ_I64(rmdir(root), 0);
 }
