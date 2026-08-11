@@ -310,8 +310,9 @@ interleaving such as PHP, ERB, Jinja, Handlebars, and Vue SFC; open-ended
 `lang=` or `type=` dispatch; guessing a fence language from its contents;
 multiple line-ended guests on one physical line; per-region indentation,
 folding, comment strings, or LSP routing; and raising either stack cap without
-state-count measurements. Semantic LSP highlighting remains a Sprint 47
-buffer overlay rather than a per-region bridge feature.
+state-count measurements. Semantic LSP highlighting remains a post-1.0 buffer
+overlay rather than a per-region bridge feature; the binding Sprint 46/47
+contracts explicitly exclude semantic tokens from 1.0.
 
 ## Contexts
 

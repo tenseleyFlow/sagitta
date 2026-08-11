@@ -6,6 +6,24 @@ hours, real keystrokes, abnormal-exit trials, or workspace-resume cycles.
 Only observations made while using yew as the primary editor belong in the
 session table.
 
+Sprint 42's implementation landed before this evidence window opened.
+Sprint 42.5 is therefore the designated self-hosting sprint: real sessions
+used to author its implementation may satisfy the "one full sprint" and
+≥60% eligible-changed-lines criterion. The denominator is the sum of all
+eligible added and deleted human-authored lines in the qualifying sprint
+under `src/`,
+`runtime/syntax/*.fl`, `scripts/`, `tests/`, `.docs/`, `README.md`, and
+`Makefile`; the numerator is the added-plus-deleted subset tied by commit to a
+logged yew session. Both numerator and denominator exclude
+`src/syn/langs_gen.c`,
+`tests/**/*.spans`, fuzz corpora, generated or mechanically expanded perf
+fixtures, build/cache artifacts, and vendored files. Record the base commit,
+tip commit, path-filtered `git diff --numstat` totals, and attributed commits
+with the final evidence. Automated edits, CI runs, benchmarks, and work
+performed in another editor never enter the numerator. This changes where
+evidence is collected, not the milestone's safety, duration, latency, or
+revocation thresholds.
+
 ## Reference machine
 
 Recorded 2026-08-11.
@@ -40,8 +58,10 @@ link committed evidence where the gate requires it.
 
 - [ ] At least 10 working days and 40 logged hours, with every fallback
       recorded.
-- [ ] At least 60% of Sprint 42's changed lines authored inside yew, linked
-      by commit.
+- [ ] At least 60% of one complete post-Sprint-42 implementation sprint's
+      eligible changed lines, using the path and artifact rules above,
+      authored inside yew and linked by commit. Sprint 42.5 is the designated
+      qualifying sprint.
 - [ ] Zero data-loss incidents.
 - [ ] Zero crashes or `BUG` log entries across recorded sessions.
 - [ ] Three abnormal-exit terminal-restore trials: `SIGKILL`, `SIGSEGV`,
