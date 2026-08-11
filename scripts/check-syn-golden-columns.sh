@@ -25,8 +25,8 @@ if [ "$all_count" -ne "$expected_total" ]; then
     echo "syntax golden columns: found $all_count pre-Sprint paths (ledger accounts for $expected_total)" >&2
     exit 1
 fi
-if [ "$embed_count" -ne 14 ]; then
-    echo "syntax golden columns: ledger has $embed_count embed exceptions (need 14)" >&2
+if [ "$embed_count" -ne 15 ]; then
+    echo "syntax golden columns: ledger has $embed_count embed exceptions (need 15)" >&2
     exit 1
 fi
 if [ "$(sort -u "$tmp/embed.paths" | wc -l | tr -d ' ')" -ne "$embed_count" ]; then

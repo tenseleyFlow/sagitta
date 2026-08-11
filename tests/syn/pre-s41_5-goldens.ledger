@@ -4,10 +4,10 @@
 # qualifier.  This makes name qualification invisible while retaining every
 # semantic state, span, attribute, flag, and byte boundary.
 #
-# The 229 files not named below have this normalized aggregate:
-column|229|9723c16c27a9dd60c94efeef70af7ca45878c0759b84e3abaf54e8fce4e767bf
+# The 228 files not named below have this normalized aggregate:
+column|228|c311aac61e0c2b482cf318358150e75994ae55995cb251d67f248a9b3634592b
 #
-# These 14 pre-existing host fixtures intentionally changed semantics when
+# These 15 pre-existing host fixtures intentionally changed semantics when
 # embedded guests became active.  Each row records old hash, approved current
 # hash, and path; the checker rejects additions, omissions, and hash drift.
 embed|16f56a9ba6f1f1f1d754f56322b20f7c0f2b48d4023b856917989a04b3b5d925|762b219411536ecd35ace5a3c9323d5f70aa5295735a29aab472484e7607a92e|tests/syn/make/04-recipe-tab.spans
@@ -23,4 +23,5 @@ embed|98ad9d043ae0252d3e4da947e07ea541a04ee0a66070c40677997bd08892be43|80734f5e6
 embed|8c64c612c4272777485199a5919185a072b3e04aa2e09db28f9be41db8df354d|8c42d0dfce4648b176d7f98d599970c4442b8caa0ce85e972809cb76f191d027|tests/syn/sh/05-heredoc-plain.spans
 embed|1d00bf9cceda753d54208b12de9364bee8133420a23e658d75f19ac091a2f6ee|7878b878dc6f079d86229a8ac75929e53245e6e7422164f773b2451db5998d05|tests/syn/sh/08-heredoc-single-quoted.spans
 embed|90c6b85a525300d9f57e1169f71df1e9ba4a8fae97c124b9c8bbf0693f98ceba|94596530fc25e6f5770e23f2b543f3534278a8897ae75d96744be8172b95e3ad|tests/syn/sh/12-nested-command.spans
+embed|700f9f125fffa5300718fc501b545e0ae844e15cc8b4be630e79d3db19457f90|5ecb8cf3cfca00d5df8bfd4aa95882e1c67f41e9111de31b44cfe00da4190907|tests/syn/sh/13-arithmetic.spans
 embed|f63afd2c92feb5541983d540bb4b236efe9fd422d3767fea7d0c29e64ea7003c|99158146bd9ac5a9a8e7a93766c5a7e289671ba4ad8fff001adb2b3c5106d519|tests/syn/sh/14-backticks.spans

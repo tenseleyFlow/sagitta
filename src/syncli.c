@@ -308,7 +308,6 @@ typedef struct EmbedDepth {
     u32 frames;
     u32 defs;
     bool dynamic;
-    bool self_chain;
     char chain[512];
 } EmbedDepth;
 
@@ -502,8 +501,6 @@ static EmbedDepth embed_combined_depth_limit(
                 continue;
             candidate.frames += 2U;
             candidate.defs++;
-            if (rule->embed.lang_kind == SYN_EMBED_LANG_SELF)
-                candidate.self_chain = true;
             embed_chain_prefix(&candidate,
                                def->name == NULL ? "<unnamed>" : def->name);
             if (candidate.defs <= def_cap &&
@@ -557,7 +554,6 @@ static int check_embed(bool strict)
         EmbedDepth dynamic_depth;
         const EmbedDepth *display;
         bool static_bad;
-        bool static_refused;
         bool dynamic_bad;
         const char *result = "ok";
         u32 ctx;
@@ -606,10 +602,7 @@ static int check_embed(bool strict)
         dynamic_depth = embed_combined_depth_limit(
             defs, ndefs, i, defs[i]->root, path, 0U, YEW_SYN_DEF_MAX, 0U,
             true, true);
-        static_refused = static_depth.self_chain &&
-                         static_depth.frames > YEW_SYN_DEPTH_MAX;
-        static_bad = !static_refused &&
-                     static_depth.frames > YEW_SYN_DEPTH_MAX;
+        static_bad = static_depth.frames > YEW_SYN_DEPTH_MAX;
         dynamic_bad = dynamic_depth.frames > YEW_SYN_DEPTH_MAX;
         if (static_bad) {
             result = "error";
@@ -617,10 +610,8 @@ static int check_embed(bool strict)
         } else if (dynamic_bad) {
             result = "warning";
             warnings++;
-        } else if (static_refused) {
-            result = "runtime-refused";
         }
-        if (static_bad || static_refused)
+        if (static_bad)
             display = &static_depth;
         else if (dynamic_bad)
             display = &dynamic_depth;
@@ -817,8 +808,7 @@ static void check_embed_source(Arena *arena, DiagCtx *dc, const char *source,
     depth = embed_combined_depth_limit(
         defs, ndefs, subject, def->root, path, 0U, YEW_SYN_DEF_MAX, 0U,
         false, false);
-    if (static_site != NULL && !depth.self_chain &&
-        depth.frames > YEW_SYN_DEPTH_MAX) {
+    if (static_site != NULL && depth.frames > YEW_SYN_DEPTH_MAX) {
         char rendered[sizeof(depth.chain)];
         size_t at = 0U;
         const unsigned char *p = (const unsigned char *)depth.chain;

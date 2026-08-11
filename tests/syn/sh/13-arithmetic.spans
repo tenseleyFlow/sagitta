@@ -22,10 +22,11 @@ line 2 entry=sh:main exit=sh:main
   2:6-7 attr=operator context=sh:main
   2:7-10 attr=string.interp context=sh:main
   2:10-12 attr=punct.bracket context=sh:arith
-  2:12-13 attr=number context=sh:arith
-  2:13-14 attr=text context=sh:arith
-  2:14-15 attr=operator context=sh:arith
-  2:15-16 attr=text context=sh:arith
-  2:16-17 attr=number context=sh:arith
-  2:17-21 attr=string.interp context=sh:arith
+  2:12-13 attr=number context=sh:arith_nested
+  2:13-14 attr=text context=sh:arith_nested
+  2:14-15 attr=operator context=sh:arith_nested
+  2:15-16 attr=text context=sh:arith_nested
+  2:16-17 attr=number context=sh:arith_nested
+  2:17-19 attr=punct.bracket context=sh:arith_nested
+  2:19-21 attr=string.interp context=sh:arith
 line 3 entry=sh:main exit=sh:main

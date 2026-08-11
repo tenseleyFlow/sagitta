@@ -1,0 +1,15 @@
+{
+    syntax: 1,
+    language: { name: "bad-self-embed-depth", extensions: ["bad"] },
+    contexts: {
+        main: { rules: [{ match: "a", push: "a" }] },
+        a: { rules: [{ match: "b", push: "b" }, { match: "z", pop: 1 }] },
+        b: { rules: [{ match: "c", push: "c" }, { match: "z", pop: 1 }] },
+        c: { rules: [
+            { match: "\\(", push: "bridge",
+              embed: { lang: "@self", ctx: "main", end: "inline" } },
+            { match: "z", pop: 1 },
+        ] },
+        bridge: { rules: [{ match: "\\)", pop: 1, end: true }] },
+    },
+}

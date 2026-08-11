@@ -2,6 +2,7 @@
 # Deliberate limits: no shopt-dependent parsing, arithmetic-for is generic,
 # process substitution bodies are ordinary shell, two heredocs on one line
 # share only the first delimiter, and zsh/fish syntax belongs to later defs.
+# Arithmetic highlighting tracks one nested double-parenthesis pair.
 # Single quotes never honor backslashes.  Heredoc entry is deferred to the
 # next line; quoted delimiters suppress expansion; <<- strips tabs, not spaces.
 {
@@ -144,8 +145,24 @@
         arith: {
             default: "text", at_eol: "stay", unit: "span",
             rules: [
-                { match: "\\(\\(", attr: "punct.bracket", push: "arith" },
+                # The first nested pair replaces this state instead of
+                # stacking it.  That preserves balanced highlighting while
+                # four @self levels remain inside the global frame cap.
+                { match: "\\(\\(", attr: "punct.bracket",
+                  set: "arith_nested" },
                 { match: "\\)\\)", attr: "string.interp", pop: 1 },
+                "include:arith_rules",
+            ],
+        },
+        arith_nested: {
+            default: "text", at_eol: "stay", unit: "span",
+            rules: [
+                { match: "\\)\\)", attr: "punct.bracket", set: "arith" },
+                "include:arith_rules",
+            ],
+        },
+        arith_rules: {
+            rules: [
                 { match: "[A-Za-z_][A-Za-z0-9_]*", attr: "variable" },
                 { match: "0[xX][0-9A-Fa-f]+|[0-9]+", attr: "number" },
                 { match: "[+*/%<>=!&|?:~-]+", attr: "operator" },

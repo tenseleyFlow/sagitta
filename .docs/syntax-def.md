@@ -268,11 +268,11 @@ table. Literal chains that exceed 16 are errors. Capture-selected guests are
 open-ended, so the checker reports their worst installed guest and remaining
 headroom. Static and capture-selected maxima are computed separately and both
 are truncated to the four definition levels the runtime can enter. Repeated
-`@self` entry is modeled through that fourth level; a self-entry candidate
-whose transition would exceed either runtime cap is marked
-`runtime-refused`. An enterable dynamic chain that exceeds the frame budget
-is a warning. The runtime caps remain authoritative for user definitions
-installed later.
+`@self` entry is modeled through that fourth level and is subject to the same
+static frame cap as every other literal target. An enterable dynamic chain
+that exceeds the frame budget is a warning. Runtime refusal remains the guard
+for capture-selected and user-installed definitions that were not statically
+available to the checker.
 
 > **Pitfall — the guest's fast-scan will skip straight over the exit
 > delimiter.** While a guest with `embed.end: "inline"` or `"inline-root"`

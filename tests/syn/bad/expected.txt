@@ -22,4 +22,5 @@
 21-embed-state-op|error|1|117|embed is a state op; a rule performs exactly one
 22-embed-capture|error|1|171|embed.lang: @2 but the pattern has 1 capture groups
 23-embed-depth|error|1|613|bad-embed-depth→html→javascript→css can reach depth 19; the cap is 16
+23-self-embed-depth|error|10|31|bad-self-embed-depth→bad-self-embed-depth→bad-self-embed-depth→bad-self-embed-depth can reach depth 19; the cap is 16
 24-embed-dynamic-depth|warning|1|629|dynamic embed has worst installed chain bad-embed-dynamic→typescript→html→javascript; cap exceeded by 6 frame(s)
