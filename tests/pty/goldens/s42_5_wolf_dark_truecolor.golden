@@ -1,0 +1,71 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=0,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+    1 //! Wolf kitchen sink: pinned lexical surface.                            
+    1 // ordinary line comment                                                  
+    2 #[trusted]                                                                
+    3 const MAX_COUNT = 42                                                      
+    4 pub fn render(self: View, value: i64) -> str {                            
+    5     let total = 0x2a + 0o52 + 0b101010 + 42_000                           
+    6     let ceiling = LIMIT_VALUE                                             
+    7     let ratio = 3.14e+2                                                   
+    8     let label = "value={value:>{width}} {{stable}}"                       
+    9     if total >= ratio { return label }                                    
+   10     else { return path"/tmp/wolf" }                                       
+   11 }                                                                         
+   12                                                                           
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ L  01-kitchen.lu                                            utf-8  lf  1:1  all
+--- style
+AAAABACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAEEEEEEEEEEEEEEEEEEEEEEEEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAFFFFFFFFFFDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAGGGGGGDDDDDDDDDDHDIIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAGGGDGGGJJJJJJKLLLLKDFFFFKDDDDDDKDDDDKDHHDDDDDKDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDGGGGDDDDDDHDIIIIDHDIIIIDHDIIIIIIIIDHDIIIIIIDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDGGGGDDDDDDDDHDIIIIIIIIIIIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDGGGGDDDDDDHDIIIIIIIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDGGGGDDDDDDHDMMMMMMMNDDDDDOONDDDDDNNMHHMMMMMMHHMDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDPPDDDDDDDHHDDDDDDDKDPPPPPPDDDDDDDKDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDPPPPDKDPPPPPPDFFFFOOOOOOOOOOODKDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAKDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+QQQDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+--- legend
+A fg=#4b5263 bg=#12141a attrs=----------
+B fg=#c8ccd4 bg=#12141a attrs=b---------
+C fg=#7f8c98 bg=#12141a attrs=--i-------
+D fg=#c8ccd4 bg=#12141a attrs=----------
+E fg=#5c6370 bg=#12141a attrs=--i-------
+F fg=#e5c07b bg=#12141a attrs=----------
+G fg=#c678dd bg=#12141a attrs=--i-------
+H fg=#56b6c2 bg=#12141a attrs=----------
+I fg=#d19a66 bg=#12141a attrs=----------
+J fg=#61afef bg=#12141a attrs=----------
+K fg=#9aa0aa bg=#12141a attrs=----------
+L fg=#c8ccd4 bg=#12141a attrs=--i-------
+M fg=#98c379 bg=#12141a attrs=----------
+N fg=#ff79c6 bg=#12141a attrs=----------
+O fg=#98c379 bg=#12141a attrs=--i-------
+P fg=#c678dd bg=#12141a attrs=b---------
+Q fg=#12141a bg=#61afef attrs=----------

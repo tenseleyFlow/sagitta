@@ -1,0 +1,71 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=0,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+    1 #!/usr/bin/env ruby                                                       
+    1 # kitchen                                                                 
+    2 require "json"                                                            
+    3 class Widget                                                              
+    4   CONST = 0xff                                                            
+    5   def run(arg)                                                            
+    6     @value = @@count + $global                                            
+    7     if arg && true                                                        
+    8       puts "value #{arg} #@value #{ {inner: {value: arg}} }" %Q{nested {#{
+    9       puts %q{raw {nested} \\}}, 'it\'s raw'                              
+   10       puts :plain, :'quoted', :"dynamic #{arg} #@value \q"                
+   11       /a\\/b/im =~ arg                                                    
+   12     elsif nil                                                             
+   13       return 1.5e2ri                                                      
+   14     else                                                                  
+   15       yield self                                                          
+   16     end                                                                   
+   17   rescue Error                                                            
+   18     retry                                                                 
+   19   ensure                                                                  
+   20     break                                                                 
+   21   end                                                                     
+   22 end                                                                       
+ L  01-kitchen.rb                                            utf-8  lf  1:1  top
+--- style
+AAAABACCCCCCCCCCCCCCCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAACCCCCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAEEEEEEEDFFFFFFDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAGGGGGDHHHHHHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDHHHHHDIDJJJJDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDGGGDDDDKDDDKDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDLLLLLLDIDLLLLLLLDIDLLLLLLLDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDMMDDDDDIIDNNNNDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDFFFFFFFOOFFFOFDDDDDDDFOOFKFFFFFFFKFFFFFFFFFFKKFOFDFFFFFFFFFFKOO
+AAAAAADDDDDDDDDDDPPPPPPPKPPPPPPPPIIPKKDPPPIIPPPPPPDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDJJJJJJKDDPPPPPPPPKDJJJJJJJJJJOOFFFOJDDDDDDDJIIJDDDDDDDDDDDDDDDD
+AAAAAAPPPPPPPPPPPDIDDDIIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDMMMMMDNNNDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDMMMMMMDJKDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDMMMMDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDMMMMMDNNNNDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDMMMDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDMMMMMMDHHHHHDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDMMMMMDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDMMMMMMDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDMMMMMDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDMMMDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAMMMDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+QQQDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+--- legend
+A fg=idx:240 bg=idx:233 attrs=----------
+B fg=idx:252 bg=idx:233 attrs=b---------
+C fg=idx:241 bg=idx:233 attrs=--i-------
+D fg=idx:252 bg=idx:233 attrs=----------
+E fg=idx:176 bg=idx:233 attrs=----------
+F fg=idx:114 bg=idx:233 attrs=----------
+G fg=idx:176 bg=idx:233 attrs=--i-------
+H fg=idx:180 bg=idx:233 attrs=----------
+I fg=idx:73 bg=idx:233 attrs=----------
+J fg=idx:173 bg=idx:233 attrs=----------
+K fg=idx:247 bg=idx:233 attrs=----------
+L fg=idx:168 bg=idx:233 attrs=--i-------
+M fg=idx:176 bg=idx:233 attrs=b---------
+N fg=idx:173 bg=idx:233 attrs=b---------
+O fg=idx:212 bg=idx:233 attrs=----------
+P fg=idx:114 bg=idx:233 attrs=--i-------
+Q fg=idx:233 bg=idx:75 attrs=----------

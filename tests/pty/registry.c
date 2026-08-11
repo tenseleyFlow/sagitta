@@ -4866,6 +4866,174 @@ static void case_s41_5_interactive_fence_pump(PtyCtx *c)
     (void)unlink(path);
 }
 
+/* ---------------------------------------------------------------- */
+/* Sprint 42.5: native language pack PTY contracts                  */
+/* ---------------------------------------------------------------- */
+
+typedef struct S42_5Kitchen {
+    const char *tag;
+    const char *path;
+} S42_5Kitchen;
+
+/* One representative for every Sprint 42.5 performance family. */
+static const S42_5Kitchen s42_5_kitchens[] = {
+    {"_wolf_", "tests/syn/wolf/01-kitchen.lu"},
+    {"_systems_", "tests/syn/cpp/01-kitchen.cpp"},
+    {"_vm_", "tests/syn/kotlin/01-kitchen.kt"},
+    {"_script_", "tests/syn/ruby/01-kitchen.rb"},
+    {"_functional_", "tests/syn/haskell/01-kitchen.hs"},
+    {"_data_", "tests/syn/xml/01-kitchen.xml"},
+    {"_build_", "tests/syn/hcl/01-kitchen.tf"}
+};
+
+static const char *s42_5_kitchen_path(PtyCtx *c)
+{
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(s42_5_kitchens); i++) {
+        if (strstr(c->test->name, s42_5_kitchens[i].tag) != NULL)
+            return s42_5_kitchens[i].path;
+    }
+    ptc_check(c, false, "Sprint 42.5 kitchen case has no fixture mapping");
+    return NULL;
+}
+
+static void case_s42_5_kitchen(PtyCtx *c)
+{
+    const char *path = s42_5_kitchen_path(c);
+    const char *theme = strstr(c->test->name, "_light_") != NULL
+                            ? "quiver-light" : "quiver-dark";
+
+    if (path == NULL)
+        return;
+    ptc_spawn(c, ptc_yew_bin(c), "--theme", theme, path, NULL);
+    ptc_wait_kitty_push(c, 21U);
+    s41_wait_syn_settled(c);
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, c->test->name);
+    force_quit(c);
+}
+
+static void s42_5_set_language(PtyCtx *c, const char *name)
+{
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.syn.set ");
+    s18_settle_after_bytes(c, name);
+    s18_settle_after_keys(c, "enter");
+    s41_wait_syn_settled(c);
+}
+
+static void case_s42_5_switch_three_definitions(PtyCtx *c)
+{
+    static const u8 text[] =
+        "fn answer(value) { return value + 42; }\n"
+        "let message = \"value=${answer}\";\n"
+        "# comment-like text\n";
+    Bytebuf first;
+    Bytebuf again;
+    char path[256];
+
+    if (!s41_fixture(c, ".txt", text, sizeof(text) - 1U,
+                     path, sizeof(path)))
+        return;
+    s41_open_fixture(c, "quiver-dark", path);
+    s42_5_set_language(c, "wolf");
+    bytebuf_init(&first);
+    snapshot_write(&c->vt, &first);
+
+    s42_5_set_language(c, "cpp");
+    s42_5_set_language(c, "ruby");
+    s42_5_set_language(c, "wolf");
+    bytebuf_init(&again);
+    snapshot_write(&c->vt, &again);
+    ptc_check(c, s21_grids_equal(&first, &again),
+              "returning to Wolf after two definition switches changed "
+              "the rendered grid");
+    bytebuf_free(&again);
+    bytebuf_free(&first);
+
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, "s42_5_switch_three_definitions");
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static const char *const s42_5_fence_langs[] = {
+    "wolf", "cpp", "objective-c", "java", "kotlin", "csharp", "swift",
+    "zig", "lua", "ruby", "perl", "r", "julia", "dart", "powershell",
+    "zsh", "fish", "sql", "nix", "haskell", "ocaml", "xml", "graphql",
+    "protobuf", "hcl", "dockerfile", "cmake", "meson", "diff"
+};
+
+static size_t s42_5_cached_fences(PtyCtx *c)
+{
+    size_t loaded = 0U;
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(s42_5_fence_langs); i++) {
+        char cache[1024];
+        int n = snprintf(cache, sizeof(cache), "%s/yew/syn/%s.stab",
+                         c->state_dir, s42_5_fence_langs[i]);
+
+        if (n > 0 && (size_t)n < sizeof(cache) && access(cache, F_OK) == 0)
+            loaded++;
+    }
+    return loaded;
+}
+
+static void case_s42_5_all_fences_lazy(PtyCtx *c)
+{
+    const char *path = "tests/syn/embed/markdown/25-native-pack.md";
+    Bytebuf screen;
+    size_t initially_loaded;
+    size_t loaded;
+    unsigned attempts;
+
+    ptc_spawn(c, ptc_yew_bin(c), "--theme", "quiver-dark", path, NULL);
+    ptc_wait_kitty_push(c, 21U);
+    initially_loaded = s42_5_cached_fences(c);
+    ptc_check(c, initially_loaded < YEW_ARRAY_LEN(s42_5_fence_langs),
+              "Markdown startup eagerly compiled the entire native pack");
+
+    /* A keystroke must be processed while guest definitions are still
+     * pending.  Seeing it in the first settled grid is the PTY half of the
+     * no-input-blockage contract. */
+    s18_settle_after_keys(c, "i");
+    s18_settle_after_bytes(c, "X");
+    s18_settle_after_keys(c, "esc");
+    bytebuf_init(&screen);
+    snapshot_write(&c->vt, &screen);
+    bytebuf_push_u8(&screen, 0U);
+    ptc_check(c, strstr((const char *)screen.data,
+                        "X# Native language pack") != NULL,
+              "input was not painted while Markdown guests loaded lazily");
+    bytebuf_free(&screen);
+
+    loaded = s42_5_cached_fences(c);
+    for (attempts = 0U;
+         attempts < 96U && loaded < YEW_ARRAY_LEN(s42_5_fence_langs);
+         attempts++) {
+        ptc_settle(c, 0);
+        loaded = s42_5_cached_fences(c);
+    }
+    ptc_check(c, loaded == YEW_ARRAY_LEN(s42_5_fence_langs),
+              "Markdown did not lazily resolve all 29 canonical fences");
+
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.syn.status");
+    s18_settle_after_keys(c, "enter");
+    bytebuf_init(&screen);
+    snapshot_write(&c->vt, &screen);
+    bytebuf_push_u8(&screen, 0U);
+    ptc_check(c, strstr((const char *)screen.data, "embed_pending=0") != NULL,
+              "native-pack Markdown retained a pending guest");
+    bytebuf_free(&screen);
+
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, "s42_5_all_fences_lazy");
+    force_quit(c);
+}
+
 static bool s41_fixture(PtyCtx *c, const char *suffix, const u8 *bytes,
                         size_t len, char *path, size_t cap)
 {
@@ -5151,6 +5319,66 @@ static void case_s37_batch_never_touches_the_terminal(PtyCtx *c)
 }
 
 const PtyCase yew_pty_cases[] = {
+    C(s42_5_wolf_dark_truecolor, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_wolf_dark_colors_256, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_wolf_light_truecolor, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_wolf_light_colors_256, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_systems_dark_truecolor, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_systems_dark_colors_256, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_systems_light_truecolor, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_systems_light_colors_256, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_vm_dark_truecolor, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_vm_dark_colors_256, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_vm_light_truecolor, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_vm_light_colors_256, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_script_dark_truecolor, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_script_dark_colors_256, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_script_light_truecolor, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_script_light_colors_256, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_functional_dark_truecolor, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_functional_dark_colors_256, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_functional_light_truecolor, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_functional_light_colors_256, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_data_dark_truecolor, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_data_dark_colors_256, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_data_light_truecolor, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_data_light_colors_256, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_build_dark_truecolor, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_build_dark_colors_256, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_build_light_truecolor, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_build_light_colors_256, modern, 24U, 80U,
+      case_s42_5_kitchen),
+    C(s42_5_switch_three_definitions, modern, 24U, 80U,
+      case_s42_5_switch_three_definitions),
+    C(s42_5_all_fences_lazy, modern, 24U, 120U,
+      case_s42_5_all_fences_lazy),
     C(s41_5_fence_pump_dark_truecolor, modern, 24U, 240U,
       case_s41_5_interactive_fence_pump),
     C(s41_5_fence_pump_light_truecolor, modern, 24U, 240U,

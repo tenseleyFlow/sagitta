@@ -1,0 +1,74 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=0,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+    1 #include <vector> // header                                               
+    1 #include "local.hpp"                                                      
+    2 #if defined(FLAG) && 12                                                   
+    3 "macro" /* TODO */                                                        
+    4 #endif                                                                    
+    5 #define VALUE defined(OTHER) + 1 + "x" /* macro */ // tail                
+    6 /// API docs                                                              
+    7 /* FIXME block */                                                         
+    8 [[outer::tag([[nested]])]] class Box {};                                  
+    9 template<typename T> concept Sized = requires(T x) { x.size(); };         
+   10 constexpr unsigned long value = 0xCA'FEuLL + 0b1010;                      
+   11 bool f(char c, const char *s) { return c == '\n' && s != nullptr && true; 
+   12 auto nested = std::vector<std::vector<int>>{};                            
+   13 int ops = value++ + --value; // comment                                   
+   14 */                                                                        
+   15                                                                           
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ L  01-kitchen.cpp                                           utf-8  lf  1:1  all
+--- style
+AAAABACCCCCCCCCDDDDDDDDCEEEEEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+AAAAAACCCCCCCCCDDDDDDDDDDDFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+AAAAAACCCCGGGGGGGCCCCCCCCCCHHFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+AAAAAADDDDDDDFEEEIIIIEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+AAAAAACCCCCCFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+AAAAAACCCCCCCCCCCCCCGGGGGGGCCCCCCCCCCHCCCDDDCEEEEEEEEEEECEEEEEEEFFFFFFFFFFFFFFFF
+AAAAAAJJJJJJJJJJJJFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+AAAAAAEEEIIIIIEEEEEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+AAAAAAKKKKKKKKKKKKKKKKKKKKKKKKKKFLLLLLLKKKFMMMFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+AAAAAALLLLLLLLHLLLLLLLLLKHFLLLLLLLLKKKKKFHFLLLLLLLLMFFFMFMFFMNNNNMMMFMMFFFFFFFFF
+AAAAAALLLLLLLLLFOOOOOOOOFOOOOFFFFFFFHFHHHHHHHHHHFHFHHHHHHMFFFFFFFFFFFFFFFFFFFFFF
+AAAAAAOOOOFNMOOOOFFMFLLLLLFOOOOFHFMFMFPPPPPPFFFHHFDQQDFHHFFFHHFRRRRRRRFHHFRRRRMF
+AAAAAALLLLFFFFFFFFHFFFFHHFFFFFFHFFFHHFFFFFFHOOOHHMMMFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+AAAAAAOOOFFFFFHFFFFFFHHFHFHHFFFFFMFEEEEEEEEEEFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+AAAAAASSFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+AAAAAAFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+AAAAAAFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+AAAAAAFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+AAAAAAFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+AAAAAAFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+AAAAAAFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+AAAAAAFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+AAAAAAFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+TTTFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+--- legend
+A fg=idx:246 bg=idx:231 attrs=----------
+B fg=idx:235 bg=idx:231 attrs=b---------
+C fg=idx:160 bg=idx:231 attrs=----------
+D fg=idx:23 bg=idx:231 attrs=----------
+E fg=idx:243 bg=idx:231 attrs=--i-------
+F fg=idx:235 bg=idx:231 attrs=----------
+G fg=idx:98 bg=idx:231 attrs=--i-------
+H fg=idx:25 bg=idx:231 attrs=----------
+I fg=idx:94 bg=idx:231 attrs=b---------
+J fg=idx:241 bg=idx:231 attrs=--i-------
+K fg=idx:94 bg=idx:231 attrs=----------
+L fg=idx:160 bg=idx:231 attrs=--i-------
+M fg=idx:241 bg=idx:231 attrs=----------
+N fg=idx:98 bg=idx:231 attrs=----------
+O fg=idx:94 bg=idx:231 attrs=--i-------
+P fg=idx:160 bg=idx:231 attrs=b---------
+Q fg=idx:30 bg=idx:231 attrs=----------
+R fg=idx:25 bg=idx:231 attrs=b---------
+S fg=idx:124 bg=idx:231 attrs=b--u------
+T fg=idx:231 bg=idx:25 attrs=----------

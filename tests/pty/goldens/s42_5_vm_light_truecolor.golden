@@ -1,0 +1,74 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=0,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+    1 package demo                                                              
+    1 /// docs                                                                  
+    2 // ordinary line comment                                                  
+    3 /* outer /* nested TODO */ done */                                        
+    4 @JvmInline value class UserId(val raw: Long)                              
+    5 sealed interface Result                                                   
+    6 data class User(val name: String, val age: Int)                           
+    7 fun greet(user: User?): String {                                          
+    8     val n = 0xCA_FEuL + 1.5e2F                                            
+    9     return if (user?.name != null) "hello $user ${user.name ?: "none"}" el
+   10 }                                                                         
+   11 val char = '\n'                                                           
+   12 val truth = true                                                          
+   13 val absent = null                                                         
+   14 */                                                                        
+   15                                                                           
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ L  01-kitchen.kt                                            utf-8  lf  1:1  all
+--- style
+AAAABACCCCCCCDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAEEEEEEEEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAFFFFFFFFFFFFFFFFFFFFFFFFDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAFFFFFFFFFFFFFFFFFFFGGGGFFFFFFFFFFFDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAAHHHHHHHHHHDDDDDDDCCCCCCIIIIIIJCCCDDDDJDKKKKJDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAACCCCCCDCCCCCCCCCCIIIIIIDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAACCCCDCCCCCCIIIIJCCCDDDDDJDKKKKKKJDCCCDDDDJDKKKJDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAACCCDLLLLLJDDDDJDDDDDMJJDKKKKKKDJDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDCCCDDDMDMMMMMMMMMDMDMMMMMMDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDNNNNNNDNNDJDDDDMMDDDDDMMDOOOOJDPPPPPPPQQQQQPQQDDDDDDDDDDMMDPPPPPPQPDNN
+AAAAAAJDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAACCCDDDDDDMDPRRPDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAACCCDDDDDDDMDOOOODDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAACCCDDDDDDDDMDOOOODDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAASSDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+TTTDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+--- legend
+A fg=#8c959f bg=#ffffff attrs=----------
+B fg=#24292f bg=#ffffff attrs=b---------
+C fg=#cf222e bg=#ffffff attrs=--i-------
+D fg=#24292f bg=#ffffff attrs=----------
+E fg=#57606a bg=#ffffff attrs=--i-------
+F fg=#6a737d bg=#ffffff attrs=--i-------
+G fg=#9a6700 bg=#ffffff attrs=b---------
+H fg=#9a6700 bg=#ffffff attrs=----------
+I fg=#953800 bg=#ffffff attrs=----------
+J fg=#57606a bg=#ffffff attrs=----------
+K fg=#953800 bg=#ffffff attrs=--i-------
+L fg=#8250df bg=#ffffff attrs=----------
+M fg=#0550ae bg=#ffffff attrs=----------
+N fg=#cf222e bg=#ffffff attrs=b---------
+O fg=#0550ae bg=#ffffff attrs=b---------
+P fg=#0a3069 bg=#ffffff attrs=----------
+Q fg=#bf3989 bg=#ffffff attrs=----------
+R fg=#1b7c83 bg=#ffffff attrs=----------
+S fg=#a40e26 bg=#ffffff attrs=b---c-----
+T fg=#ffffff bg=#0550ae attrs=----------
