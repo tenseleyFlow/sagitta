@@ -107,6 +107,7 @@ typedef struct DefMeta {
     YewRe *first_line_re;
     Interner *aux;
     SynEngine *engine;
+    bool builtin;
     struct DefMeta *next;
 } DefMeta;
 
@@ -125,6 +126,7 @@ static bool discovery_done;
 static bool discovery_bypass;
 
 static void discover_user_definitions(void);
+static bool builtin_name_exists(const char *name);
 
 static DefMeta *meta_for(const SynDef *def)
 {
@@ -861,7 +863,8 @@ static void compile_rule(Compile *c, FlNode *node, u16 ctx_id, SynRule *rule,
     static const char *const keys[] = {
         "match", "attr", "captures", "consume", "push", "pop", "set",
         "icase", "set_aux", "strip", "aux", "aux_pre", "aux_post",
-        "aux_int", "aux_add", "value", "if_value", "first_line"
+        "aux_int", "aux_add", "aux_add_capture", "value", "if_value",
+        "first_line"
     };
     FlNode *match = map_find(c, node, "match");
     FlNode *aux = map_find(c, node, "aux");
@@ -873,6 +876,7 @@ static void compile_rule(Compile *c, FlNode *node, u16 ctx_id, SynRule *rule,
     FlNode *strip = map_find(c, node, "strip");
     FlNode *aux_int = map_find(c, node, "aux_int");
     FlNode *aux_add = map_find(c, node, "aux_add");
+    FlNode *aux_add_capture = map_find(c, node, "aux_add_capture");
     FlNode *value_node = map_find(c, node, "value");
     FlNode *if_value_node = map_find(c, node, "if_value");
     FlNode *icase_node = map_find(c, node, "icase");
@@ -1020,6 +1024,19 @@ static void compile_rule(Compile *c, FlNode *node, u16 ctx_id, SynRule *rule,
                 diag(c, FL_DIAG_ERROR, aux_add->sp,
                      "aux_add requires aux_int on the same rule");
             rule->aux_add = (u8)integer;
+        }
+    }
+    if (aux_add_capture != NULL &&
+        require_int(c, aux_add_capture, "aux_add_capture", &integer)) {
+        if (integer < 1 || integer > 7 || (u64)integer >= groups) {
+            diag(c, FL_DIAG_ERROR, aux_add_capture->sp,
+                 "aux_add_capture: %lld but the pattern has %u capture groups",
+                 (long long)integer, groups == 0U ? 0U : groups - 1U);
+        } else {
+            if (aux_int == NULL)
+                diag(c, FL_DIAG_ERROR, aux_add_capture->sp,
+                     "aux_add_capture requires aux_int on the same rule");
+            rule->aux_add_group = (u8)integer;
         }
     }
     if (strip != NULL) {
@@ -1345,6 +1362,7 @@ static void register_meta(Compile *c, SynDef *def, SynLangDesc *lang,
     lang->id = language_id(lang->name);
     m->def = def;
     m->lang = *lang;
+    m->builtin = builtin_name_exists(lang->name);
     m->ctx_names = ctx_names;
     m->patterns = patterns;
     m->aux = c->aux;
@@ -2079,6 +2097,7 @@ static bool syn_blob_pack(const SynDef *def, const char *source, Bytebuf *out)
         bytebuf_push_u8(out, rule->flags);
         bytebuf_push_u8(out, rule->value_pred);
         bytebuf_push_u8(out, rule->aux_add);
+        bytebuf_push_u8(out, rule->aux_add_group);
         bytebuf_append(out, rule->caps, sizeof(rule->caps));
         bytebuf_push_u8(out, rule->aux_group);
         bytebuf_push_u8(out, rule->npush);
@@ -2113,7 +2132,8 @@ static bool syn_rule_valid(const SynRule *rule, const SynDef *def,
         rule->nop > 4U || rule->aux_match > SYN_AUXM_LINE_START ||
         rule->consume > 7U || rule->npush > 4U ||
         rule->value_pred > SYN_VALUE_SET ||
-        rule->aux_group > 7U || rule->aux_pre >= naux ||
+        rule->aux_group > 7U || rule->aux_add_group > 7U ||
+        rule->aux_pre >= naux ||
         rule->aux_post >= naux)
         return false;
     if ((rule->op == SYN_OP_PUSH && rule->npush == 0U) ||
@@ -2129,6 +2149,10 @@ static bool syn_rule_valid(const SynRule *rule, const SynDef *def,
         if (rule->caps[i] != UINT8_MAX && rule->caps[i] >= YEW_ATTR__COUNT)
             return false;
     }
+    if (rule->aux_add_group != 0U &&
+        (((rule->flags & YEW_SYN_RULE_AUX_INT) == 0U) || rule->re == NULL ||
+         rule->aux_add_group >= yew_re_group_count(rule->re)))
+        return false;
     return true;
 }
 
@@ -2169,6 +2193,7 @@ static SynDef *syn_blob_unpack(Arena *arena, const u8 *data, size_t len,
     m = yew_xcalloc(1U, sizeof(*m));
     def->name = blob_read_string(&r, arena, NULL);
     m->lang.name = def->name;
+    m->builtin = builtin_name_exists(def->name);
     m->lang.extensions = blob_read_string_array(&r, arena,
                                                 &m->lang.nextensions);
     m->lang.filenames = blob_read_string_array(&r, arena,
@@ -2259,6 +2284,7 @@ static SynDef *syn_blob_unpack(Arena *arena, const u8 *data, size_t len,
         rule->flags = blob_read_u8(&r);
         rule->value_pred = blob_read_u8(&r);
         rule->aux_add = blob_read_u8(&r);
+        rule->aux_add_group = blob_read_u8(&r);
         bytes = blob_read_bytes(&r, sizeof(rule->caps));
         if (bytes != NULL)
             (void)memcpy(rule->caps, bytes, sizeof(rule->caps));
@@ -2892,53 +2918,17 @@ static const SynLangDesc *best_language(LangPred pred, void *ctx)
     size_t i;
 
     for (i = 0U; i < yew_syn_builtin_langs_len; i++) {
-        const SynLangDesc *d = yew_syn_lang_desc(yew_syn_builtin_langs[i].id);
+        const SynLangDesc *d = builtin_desc_at(i);
 
         if (d != NULL && pred(d, ctx) && better(d, best))
             best = d;
     }
     for (m = metas; m != NULL; m = m->next) {
-        bool builtin = false;
-
-        for (i = 0U; i < yew_syn_builtin_langs_len; i++) {
-            if (m->lang.id == yew_syn_builtin_langs[i].id) {
-                builtin = true;
-                break;
-            }
-        }
-        if (!builtin && pred(&m->lang, ctx) && better(&m->lang, best))
+        if (!m->builtin && pred(&m->lang, ctx) && better(&m->lang, best))
             best = &m->lang;
     }
     return best;
 }
-
-typedef struct NameMatch {
-    const char *base;
-    bool glob;
-} NameMatch;
-
-static bool filename_pred(const SynLangDesc *lang, void *opaque)
-{
-    NameMatch *m = opaque;
-    u32 i;
-
-    for (i = 0U; i < lang->nfilenames; i++) {
-        const char *pat = lang->filenames[i];
-        bool has_star = strchr(pat, '*') != NULL;
-
-        if (m->glob != has_star)
-            continue;
-        if ((!has_star && strcmp(pat, m->base) == 0) ||
-            (has_star && one_star_glob(pat, m->base)))
-            return true;
-    }
-    return false;
-}
-
-typedef struct ExtMatch {
-    const char *base;
-    size_t longest;
-} ExtMatch;
 
 static size_t language_extension_len(const SynLangDesc *lang,
                                      const char *base)
@@ -2959,34 +2949,60 @@ static size_t language_extension_len(const SynLangDesc *lang,
     return longest;
 }
 
-static size_t longest_extension(const char *base)
+typedef struct PathMatch {
+    const char *base;
+    const SynLangDesc *exact;
+    const SynLangDesc *glob;
+    const SynLangDesc *extension;
+    size_t extension_len;
+} PathMatch;
+
+static void path_match_consider(PathMatch *match, const SynLangDesc *lang)
 {
-    size_t longest = 0U;
+    size_t extension_len;
+    u32 i;
+
+    for (i = 0U; i < lang->nfilenames; i++) {
+        const char *pattern = lang->filenames[i];
+        bool glob = strchr(pattern, '*') != NULL;
+
+        if (!glob && strcmp(pattern, match->base) == 0 &&
+            better(lang, match->exact))
+            match->exact = lang;
+        if (glob && one_star_glob(pattern, match->base) &&
+            better(lang, match->glob))
+            match->glob = lang;
+    }
+    extension_len = language_extension_len(lang, match->base);
+    if (extension_len > match->extension_len ||
+        (extension_len != 0U && extension_len == match->extension_len &&
+         better(lang, match->extension))) {
+        match->extension_len = extension_len;
+        match->extension = lang;
+    }
+}
+
+static const SynLangDesc *path_language(const char *base)
+{
+    PathMatch match = {base, NULL, NULL, NULL, 0U};
     DefMeta *m;
     size_t i;
 
     for (i = 0U; i < yew_syn_builtin_langs_len; i++) {
-        const SynLangDesc *d = yew_syn_lang_desc(yew_syn_builtin_langs[i].id);
-        size_t n = d == NULL ? 0U : language_extension_len(d, base);
+        const SynLangDesc *lang = builtin_desc_at(i);
 
-        if (n > longest)
-            longest = n;
+        if (lang != NULL)
+            path_match_consider(&match, lang);
     }
     for (m = metas; m != NULL; m = m->next) {
-        size_t n = language_extension_len(&m->lang, base);
-
-        if (n > longest)
-            longest = n;
+        if (!m->builtin)
+            path_match_consider(&match, &m->lang);
     }
-    return longest;
-}
-
-static bool extension_pred(const SynLangDesc *lang, void *opaque)
-{
-    const ExtMatch *m = opaque;
-
-    return m->longest != 0U &&
-           language_extension_len(lang, m->base) == m->longest;
+    if (match.exact != NULL)
+        return match.exact;
+    if (match.glob != NULL)
+        return match.glob;
+    return match.extension;
 }
 
 typedef struct ShebangMatch {
@@ -3108,20 +3124,11 @@ u32 yew_syn_lang_for(const char *path, const u8 *line1, u32 l1_len)
 {
     const char *base = path_base(path);
     const SynLangDesc *found;
-    NameMatch names = {base, false};
-    ExtMatch ext = {base, longest_extension(base)};
     ShebangMatch shebang;
     FirstLineMatch first = {line1, l1_len};
 
     discover_user_definitions();
-    found = best_language(filename_pred, &names);
-    if (found != NULL)
-        return found->id;
-    names.glob = true;
-    found = best_language(filename_pred, &names);
-    if (found != NULL)
-        return found->id;
-    found = best_language(extension_pred, &ext);
+    found = path_language(base);
     if (found != NULL)
         return found->id;
     if (parse_shebang(line1, l1_len, &shebang)) {

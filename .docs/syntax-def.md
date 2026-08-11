@@ -103,6 +103,7 @@ All other keys are optional.
 | `set_aux` | int capture index | absent (keep current aux) | `set_aux: 1` |
 | `aux_int` | bool | `false` | `aux_int: true` |
 | `aux_add` | int 0–255 | `0` | `aux_add: 2` |
+| `aux_add_capture` | int capture index 1–7 | absent | `aux_add_capture: 2` |
 | `strip` | bool | `false` | `strip: true` |
 | `aux` | aux matcher string | none; `match` or `aux` is required | `aux: "line_eq"` |
 | `aux_pre` | string | `""` | `aux_pre: "r"` |
@@ -128,9 +129,12 @@ the rule stays in its current context.
 
 `set_aux` normally interns the selected capture's text into the syntax state.
 With `aux_int: true`, it instead stores the capture's expanded indentation
-width as an integer; `aux_add` is added with saturation. YAML block scalars
-use this pair for explicit and implicit body indentation. With `strip: true`,
-`set_aux` also sets the strip flag used by indented heredocs.
+width as an integer; `aux_add` is added with saturation. When
+`aux_add_capture` names a matched, single-digit capture, that digit replaces
+the constant addition. An absent or empty capture keeps the `aux_add`
+fallback. YAML block scalars use these fields for explicit and implicit body
+indentation. With `strip: true`, `set_aux` also sets the strip flag used by
+indented heredocs.
 
 `value` sets or clears the state's single value bit. `if_value` makes a rule
 eligible only while that bit is set or clear. The bit is cleared at every

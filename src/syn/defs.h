@@ -10,7 +10,7 @@
 #include "util/arena.h"
 #include "util/base.h"
 
-#define YEW_SYN_TABLE_VERSION 4U
+#define YEW_SYN_TABLE_VERSION 5U
 #define YEW_SYN_CACHE_MAGIC "SAGSYN\0\0"
 #define YEW_SYN_CACHE_HEADER_SIZE 64U
 

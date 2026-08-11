@@ -366,6 +366,34 @@ void test_syn_line_consume_stops_emission_and_optional_aux_is_safe(void)
     YEW_ASSERT_EQ_U64(exit->flags & YEW_SYN_F_STRIP, 0U);
     yew_syn_engine_free(engine);
 
+    (void)memset(&ctx, 0, sizeof(ctx));
+    (void)memset(rules, 0, sizeof(rules));
+    ctx.nrules = 1U;
+    ctx.dflt_attr = YEW_ATTR_TEXT;
+    ctx.first[' ' >> 3U] |= (u8)(1U << (' ' & 7U));
+    rules[0].re = yew_re_compile(&arena, "( +)([1-9]?)I",
+                                 strlen("( +)([1-9]?)I"), 0U, NULL);
+    YEW_ASSERT_NOT_NULL(rules[0].re);
+    rules[0].attr = YEW_ATTR_TEXT;
+    rules[0].flags = YEW_SYN_RULE_SET_AUX | YEW_SYN_RULE_AUX_INT;
+    rules[0].aux_group = 1U;
+    rules[0].aux_add = 1U;
+    rules[0].aux_add_group = 2U;
+    (void)memset(rules[0].caps, 0xff, sizeof(rules[0].caps));
+    rules[0].first[' ' >> 3U] |= (u8)(1U << (' ' & 7U));
+    engine = yew_syn_engine_new(&def);
+    out.n = 0U;
+    yew_syn_line(engine, YEW_SYN_STATE_ROOT, (const u8 *)"  I", 3U, &out);
+    exit = yew_syn_state_get(yew_syn_engine_states(engine), out.exit_state);
+    YEW_ASSERT_NOT_NULL(exit);
+    YEW_ASSERT_EQ_U64(exit->aux, 3U);
+    out.n = 0U;
+    yew_syn_line(engine, YEW_SYN_STATE_ROOT, (const u8 *)"  7I", 4U, &out);
+    exit = yew_syn_state_get(yew_syn_engine_states(engine), out.exit_state);
+    YEW_ASSERT_NOT_NULL(exit);
+    YEW_ASSERT_EQ_U64(exit->aux, 9U);
+    yew_syn_engine_free(engine);
+
     rules[0].re = NULL;
     rules[0].flags = 0U;
     rules[0].aux_match = SYN_AUXM_LINE_EQ;
@@ -539,6 +567,97 @@ void test_syn_line_identifier_suffix_fast_path_matches_regex(void)
                                               rows[row].len);
         }
     }
+}
+
+static void assert_word_literal_fast_path_equal(const char *pattern,
+                                                u32 flags,
+                                                const u8 *line, u32 len)
+{
+    Arena arena;
+    SynCtx ctx = {0};
+    SynRule rule = {0};
+    SynDef def = {"word-fast", 0U, 1U, 1U, &ctx, &rule, NULL};
+    SynEngine *fast;
+    SynEngine *reference;
+    SynSpan fast_spans[16];
+    SynSpan reference_spans[16];
+    SynLineOut fast_out = {fast_spans, 0U, YEW_ARRAY_LEN(fast_spans),
+                           0U, 0U};
+    SynLineOut reference_out = {
+        reference_spans, 0U, YEW_ARRAY_LEN(reference_spans), 0U, 0U};
+    const SynState *fast_state;
+    const SynState *reference_state;
+
+    arena_init(&arena);
+    rule.re = yew_re_compile(&arena, pattern, strlen(pattern), flags, NULL);
+    YEW_ASSERT_NOT_NULL(rule.re);
+    rule.attr = YEW_ATTR_KEYWORD;
+    (void)memset(rule.caps, 0xff, sizeof(rule.caps));
+    ctx.nrules = 1U;
+    ctx.dflt_attr = YEW_ATTR_TEXT;
+    (void)memset(ctx.first, 0xff, sizeof(ctx.first));
+    fast = yew_syn_engine_new(&def);
+    reference = yew_syn_engine_new(&def);
+    YEW_ASSERT_EQ_U64(yew_syn_engine_word_literal_fast_rules(fast), 1U);
+    YEW_ASSERT_EQ_U64(yew_syn_engine_word_literal_fast_rules(reference), 1U);
+    yew_syn_engine_set_word_literal_fast_path(reference, false);
+
+    yew_syn_line(fast, YEW_SYN_STATE_ROOT, line, len, &fast_out);
+    yew_syn_line(reference, YEW_SYN_STATE_ROOT, line, len, &reference_out);
+    YEW_ASSERT_EQ_U64(fast_out.stop, reference_out.stop);
+    YEW_ASSERT_EQ_U64(fast_out.n, reference_out.n);
+    YEW_ASSERT_EQ_MEM(fast_out.spans, reference_out.spans,
+                      fast_out.n * sizeof(*fast_out.spans));
+    fast_state = yew_syn_state_get(yew_syn_engine_states(fast),
+                                   fast_out.exit_state);
+    reference_state = yew_syn_state_get(yew_syn_engine_states(reference),
+                                        reference_out.exit_state);
+    YEW_ASSERT_NOT_NULL(fast_state);
+    YEW_ASSERT_NOT_NULL(reference_state);
+    YEW_ASSERT_EQ_MEM(fast_state, reference_state, sizeof(*fast_state));
+
+    yew_syn_engine_free(reference);
+    yew_syn_engine_free(fast);
+    arena_free_all(&arena);
+}
+
+void test_syn_line_word_literal_fast_path_matches_regex(void)
+{
+    static const char long_pattern[] =
+        "\\b(aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa)\\b";
+    static const char long_word[] =
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+        "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    static const struct {
+        const u8 *bytes;
+        u32 len;
+    } rows[] = {
+        {(const u8 *)"alpha", 5U},
+        {(const u8 *)"BeTa", 4U},
+        {(const u8 *)"gamma!", 6U},
+        {(const u8 *)"alphabet", 8U},
+        {(const u8 *)"x beta", 6U},
+        {(const u8 *)"b\xc3\xa9ta", 5U}
+    };
+    u32 row;
+
+    for (row = 0U; row < YEW_ARRAY_LEN(rows); row++) {
+        assert_word_literal_fast_path_equal("\\b(alpha|beta|gamma)\\b",
+                                            YEW_RE_ICASE, rows[row].bytes,
+                                            rows[row].len);
+    }
+    assert_word_literal_fast_path_equal(long_pattern, 0U,
+                                        (const u8 *)long_word,
+                                        (u32)strlen(long_word));
 }
 
 void test_syn_line_coverage_is_optional_and_excludes_stack_probes(void)

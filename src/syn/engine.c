@@ -36,10 +36,27 @@ typedef struct SynCache {
     size_t line_cap;
 } SynCache;
 
+typedef struct SynWordSlot {
+    u64 hash;
+    u32 off;
+    u32 len;
+} SynWordSlot;
+
+typedef struct SynWordSet {
+    SynWordSlot *slots;
+    u8 *bytes;
+    u32 cap;
+    u32 count;
+    u32 bytes_len;
+    u32 bytes_cap;
+    bool fold_ascii;
+} SynWordSet;
+
 enum {
     SYN_CANDIDATE_BYTES = 256,
     SYN_CANDIDATE_STRIDE = SYN_CANDIDATE_BYTES + 1,
-    SYN_CANDIDATE_RULE_BYTES_MAX = 8 * 1024 * 1024
+    SYN_CANDIDATE_RULE_BYTES_MAX = 8 * 1024 * 1024,
+    SYN_WORD_LITERAL_PROG_MAX = 4096
 };
 
 struct SynStateTab {
@@ -59,6 +76,8 @@ struct SynEngine {
     u8 *rule_wordb;
     u8 *rule_word_literal;
     u8 *rule_identifier_suffix;
+    SynWordSet *word_sets;
+    u32 word_sets_len;
     u8 (*rule_first)[32];
     u8 (*ctx_first_nonbol)[32];
     u32 *candidate_offsets;
@@ -66,6 +85,7 @@ struct SynEngine {
     YewReWorkspace re_workspace;
     bool has_first_line;
     bool identifier_fast_enabled;
+    bool word_literal_fast_enabled;
     SynCoverage *coverage;
     u64 line_calls;
     u64 generation;
@@ -234,11 +254,12 @@ static bool regex_requires_wordb(const YewRe *re)
 static bool regex_is_word_literal(const YewRe *re)
 {
     u32 suffix;
-    u32 stack[256];
-    u8 seen[256];
+    u32 stack[SYN_WORD_LITERAL_PROG_MAX];
+    u8 seen[SYN_WORD_LITERAL_PROG_MAX];
     u32 nstack = 0U;
 
-    if (re == NULL || re->nprog < 5U || re->nprog > 256U ||
+    if (re == NULL || re->nprog < 5U ||
+        re->nprog > SYN_WORD_LITERAL_PROG_MAX ||
         re->ngroups > 2U || (ReOp)re->prog[0].op != RE_SAVE ||
         re->prog[0].arg != 0U || (ReOp)re->prog[1].op != RE_WORDB)
         return false;
@@ -278,6 +299,12 @@ static bool regex_is_word_literal(const YewRe *re)
                 return false;
             stack[nstack++] = pc + 1U;
             break;
+        case RE_CLASS:
+            if (ins->arg >= re->nclasses ||
+                nstack == YEW_ARRAY_LEN(stack))
+                return false;
+            stack[nstack++] = pc + 1U;
+            break;
         case RE_JMP:
             if (ins->x <= pc)
                 return false;
@@ -298,6 +325,188 @@ static bool regex_is_word_literal(const YewRe *re)
         }
     }
     return true;
+}
+
+static u8 ascii_fold(u8 byte)
+{
+    return byte >= (u8)'A' && byte <= (u8)'Z' ?
+        (u8)(byte + ((u8)'a' - (u8)'A')) : byte;
+}
+
+static u64 word_hash(const u8 *word, u32 len, bool fold_ascii)
+{
+    u64 hash = UINT64_C(14695981039346656037);
+    u32 i;
+
+    for (i = 0U; i < len; i++) {
+        u8 byte = fold_ascii ? ascii_fold(word[i]) : word[i];
+
+        hash ^= byte;
+        hash *= UINT64_C(1099511628211);
+    }
+    return hash == 0U ? 1U : hash;
+}
+
+static bool class_word_byte(const YewRe *re, u32 index, u8 *out)
+{
+    u8 bytes[2];
+    u32 count = 0U;
+    u32 byte;
+
+    if (index >= re->nclasses)
+        return false;
+    for (byte = 0U; byte < 0x80U; byte++) {
+        if (yew_re_class_has(&re->classes[index], byte)) {
+            if (count == YEW_ARRAY_LEN(bytes))
+                return false;
+            bytes[count++] = (u8)byte;
+        }
+    }
+    if (count == 1U && ascii_identifier_continue(bytes[0])) {
+        *out = bytes[0];
+        return true;
+    }
+    if (count == 2U && ascii_identifier_continue(bytes[0]) &&
+        ascii_identifier_continue(bytes[1]) &&
+        ascii_fold(bytes[0]) == ascii_fold(bytes[1])) {
+        *out = ascii_fold(bytes[0]);
+        return true;
+    }
+    return false;
+}
+
+static void word_set_free(SynWordSet *set)
+{
+    free(set->slots);
+    free(set->bytes);
+    (void)memset(set, 0, sizeof(*set));
+}
+
+static void word_set_rehash(SynWordSet *set, u32 cap)
+{
+    SynWordSlot *slots = yew_xcalloc(cap, sizeof(*slots));
+    u32 i;
+
+    for (i = 0U; i < set->cap; i++) {
+        SynWordSlot slot = set->slots[i];
+        u32 at;
+
+        if (slot.hash == 0U)
+            continue;
+        at = (u32)slot.hash & (cap - 1U);
+        while (slots[at].hash != 0U)
+            at = (at + 1U) & (cap - 1U);
+        slots[at] = slot;
+    }
+    free(set->slots);
+    set->slots = slots;
+    set->cap = cap;
+}
+
+static void word_set_insert(SynWordSet *set, const u8 *word, u32 len)
+{
+    u64 hash = word_hash(word, len, set->fold_ascii);
+    u32 at;
+
+    if (set->cap == 0U || (set->count + 1U) * 4U >= set->cap * 3U)
+        word_set_rehash(set, set->cap == 0U ? 16U : set->cap * 2U);
+    at = (u32)hash & (set->cap - 1U);
+    while (set->slots[at].hash != 0U) {
+        const SynWordSlot *slot = &set->slots[at];
+
+        if (slot->hash == hash && slot->len == len &&
+            memcmp(set->bytes + slot->off, word, len) == 0)
+            return;
+        at = (at + 1U) & (set->cap - 1U);
+    }
+    if (len > UINT32_MAX - set->bytes_len)
+        YEW_BUG("syntax: word literal table exceeds 4 GiB");
+    if (set->bytes_len + len > set->bytes_cap) {
+        u32 cap = set->bytes_cap == 0U ? 256U : set->bytes_cap;
+
+        while (cap < set->bytes_len + len) {
+            if (cap > UINT32_MAX / 2U)
+                cap = UINT32_MAX;
+            else
+                cap *= 2U;
+        }
+        set->bytes = yew_xrealloc(set->bytes, cap);
+        set->bytes_cap = cap;
+    }
+    set->slots[at] = (SynWordSlot){hash, set->bytes_len, len};
+    if (len != 0U)
+        (void)memcpy(set->bytes + set->bytes_len, word, len);
+    set->bytes_len += len;
+    set->count++;
+}
+
+static bool word_set_collect(SynWordSet *set, const YewRe *re, u32 pc,
+                             u32 suffix, u8 word[SYN_WORD_LITERAL_PROG_MAX],
+                             u32 len, u32 depth)
+{
+    const ReInst *ins;
+    u8 byte;
+
+    if (pc == suffix) {
+        word_set_insert(set, word, len);
+        return true;
+    }
+    if (pc >= suffix || depth >= re->nprog ||
+        len >= SYN_WORD_LITERAL_PROG_MAX)
+        return false;
+    ins = &re->prog[pc];
+    switch ((ReOp)ins->op) {
+    case RE_CHAR:
+        if (ins->arg >= 0x80U ||
+            !ascii_identifier_continue((u8)ins->arg))
+            return false;
+        word[len] = set->fold_ascii ? ascii_fold((u8)ins->arg) :
+                                     (u8)ins->arg;
+        return word_set_collect(set, re, pc + 1U, suffix, word, len + 1U,
+                                depth + 1U);
+    case RE_CLASS:
+        if (!class_word_byte(re, ins->arg, &byte))
+            return false;
+        word[len] = set->fold_ascii ? ascii_fold(byte) : byte;
+        return word_set_collect(set, re, pc + 1U, suffix, word, len + 1U,
+                                depth + 1U);
+    case RE_JMP:
+        return word_set_collect(set, re, ins->x, suffix, word, len,
+                                depth + 1U);
+    case RE_SPLIT:
+        return word_set_collect(set, re, ins->x, suffix, word, len,
+                                depth + 1U) &&
+               word_set_collect(set, re, ins->y, suffix, word, len,
+                                depth + 1U);
+    default:
+        return false;
+    }
+}
+
+static bool word_set_build(SynWordSet *set, const YewRe *re)
+{
+    u8 word[SYN_WORD_LITERAL_PROG_MAX];
+    u32 start = re->ngroups == 2U ? 3U : 2U;
+    u32 suffix = re->nprog - (re->ngroups == 2U ? 4U : 3U);
+
+    set->fold_ascii = (re->flags & YEW_RE_ICASE) != 0U;
+    if (!word_set_collect(set, re, start, suffix, word, 0U, 0U) ||
+        set->count == 0U) {
+        word_set_free(set);
+        return false;
+    }
+    return true;
+}
+
+static void engine_free_word_sets(SynEngine *engine)
+{
+    u32 i;
+
+    for (i = 0U; i < engine->word_sets_len; i++)
+        word_set_free(&engine->word_sets[i]);
+    free(engine->word_sets);
+    engine->word_sets = NULL;
+    engine->word_sets_len = 0U;
 }
 
 static void first_add(u8 first[32], u8 byte)
@@ -448,14 +657,20 @@ static void engine_index_word_literals(SynEngine *engine)
 {
     u32 i;
 
+    engine_free_word_sets(engine);
     free(engine->rule_word_literal);
     engine->rule_word_literal = NULL;
     if (engine->def == NULL || engine->def->nrules == 0U)
         return;
     engine->rule_word_literal = yew_xcalloc(
         engine->def->nrules, sizeof(*engine->rule_word_literal));
+    engine->word_sets = yew_xcalloc(engine->def->nrules,
+                                    sizeof(*engine->word_sets));
+    engine->word_sets_len = engine->def->nrules;
     for (i = 0U; i < engine->def->nrules; i++) {
-        if (regex_is_word_literal(engine->def->rules[i].re))
+        if (regex_is_word_literal(engine->def->rules[i].re) &&
+            word_set_build(&engine->word_sets[i],
+                           engine->def->rules[i].re))
             engine->rule_word_literal[i] = 1U;
     }
 }
@@ -750,6 +965,7 @@ SynEngine *yew_syn_engine_new(SynDef *def)
     engine->states = yew_syn_state_tab_new(root);
     engine->generation = 1U;
     engine->identifier_fast_enabled = true;
+    engine->word_literal_fast_enabled = true;
     yew_re_workspace_init(&engine->re_workspace);
     engine_index_aux(engine);
     engine_index_bol(engine);
@@ -773,6 +989,7 @@ void yew_syn_engine_free(SynEngine *engine)
     free(engine->rule_wordb);
     free(engine->rule_word_literal);
     free(engine->rule_identifier_suffix);
+    engine_free_word_sets(engine);
     free(engine->rule_first);
     free(engine->ctx_first_nonbol);
     free(engine->candidate_offsets);
@@ -843,6 +1060,29 @@ u32 yew_syn_engine_identifier_fast_rules(const SynEngine *engine)
         return 0U;
     for (i = 0U; i < engine->def->nrules; i++) {
         if (engine->rule_identifier_suffix[i] != 0U)
+            count++;
+    }
+    return count;
+}
+
+void yew_syn_engine_set_word_literal_fast_path(SynEngine *engine,
+                                               bool enabled)
+{
+    if (engine == NULL)
+        YEW_BUG("syntax: NULL engine");
+    engine->word_literal_fast_enabled = enabled;
+}
+
+u32 yew_syn_engine_word_literal_fast_rules(const SynEngine *engine)
+{
+    u32 count = 0U;
+    u32 i;
+
+    if (engine == NULL || engine->def == NULL ||
+        engine->rule_word_literal == NULL)
+        return 0U;
+    for (i = 0U; i < engine->def->nrules; i++) {
+        if (engine->rule_word_literal[i] != 0U)
             count++;
     }
     return count;
@@ -1093,67 +1333,53 @@ static bool ascii_word(u8 byte)
            (byte >= (u8)'a' && byte <= (u8)'z');
 }
 
-static int word_literal_match(const YewRe *re, const u8 *line, u32 len,
-                              u32 at, YewReMatch *match)
+static int word_literal_match(const SynWordSet *set, const YewRe *re,
+                              const u8 *line, u32 len, u32 at,
+                              YewReMatch *match)
 {
-    typedef struct WordFrame {
-        u32 pc;
-        u32 pos;
-    } WordFrame;
-    WordFrame stack[256];
-    u32 nstack = 0U;
-    u32 suffix = re->nprog - (re->ngroups == 2U ? 4U : 3U);
+    u64 hash;
+    u32 p;
+    u32 slot;
 
+    if (set == NULL || set->cap == 0U)
+        return -1;
     if (at >= len)
         return 0;
     if ((at != 0U && line[at - 1U] >= 0x80U) || line[at] >= 0x80U)
         return -1;
-    stack[nstack++] = (WordFrame){re->ngroups == 2U ? 3U : 2U, at};
-    while (nstack != 0U) {
-        WordFrame frame = stack[--nstack];
-        const ReInst *ins;
+    if ((at != 0U && ascii_word(line[at - 1U])) ||
+        !ascii_word(line[at]))
+        return 0;
+    p = at + 1U;
+    while (p < len && line[p] < 0x80U && ascii_word(line[p]))
+        p++;
+    if (p < len && line[p] >= 0x80U)
+        return -1;
+    hash = word_hash(line + at, p - at, set->fold_ascii);
+    slot = (u32)hash & (set->cap - 1U);
+    while (set->slots[slot].hash != 0U) {
+        const SynWordSlot *entry = &set->slots[slot];
 
-        if (frame.pc == suffix) {
-            bool before_word;
-            bool after_word;
-            u32 group;
+        if (entry->hash == hash && entry->len == p - at) {
+            u32 i;
 
-            if (frame.pos != len && line[frame.pos] >= 0x80U)
-                return -1;
-            before_word = frame.pos != 0U &&
-                          ascii_word(line[frame.pos - 1U]);
-            after_word = frame.pos != len && ascii_word(line[frame.pos]);
-            if (before_word == after_word)
-                continue;
-            match->ngroups = re->ngroups;
-            for (group = 0U; group < re->ngroups; group++)
-                match->g[group] = (Span){at, frame.pos};
-            return 1;
-        }
-        ins = &re->prog[frame.pc];
-        switch ((ReOp)ins->op) {
-        case RE_CHAR:
-            if (frame.pos < len && line[frame.pos] == (u8)ins->arg) {
-                if (nstack == YEW_ARRAY_LEN(stack))
-                    return -1;
-                stack[nstack++] =
-                    (WordFrame){frame.pc + 1U, frame.pos + 1U};
+            for (i = 0U; i < entry->len; i++) {
+                u8 byte = set->fold_ascii ? ascii_fold(line[at + i]) :
+                                            line[at + i];
+
+                if (set->bytes[entry->off + i] != byte)
+                    break;
             }
-            break;
-        case RE_JMP:
-            if (nstack == YEW_ARRAY_LEN(stack))
-                return -1;
-            stack[nstack++] = (WordFrame){ins->x, frame.pos};
-            break;
-        case RE_SPLIT:
-            if (nstack + 2U > YEW_ARRAY_LEN(stack))
-                return -1;
-            stack[nstack++] = (WordFrame){ins->y, frame.pos};
-            stack[nstack++] = (WordFrame){ins->x, frame.pos};
-            break;
-        default:
-            YEW_BUG("syntax: invalid word-literal fast path");
+            if (i == entry->len) {
+                u32 group;
+
+                match->ngroups = re->ngroups;
+                for (group = 0U; group < re->ngroups; group++)
+                    match->g[group] = (Span){at, p};
+                return 1;
+            }
         }
+        slot = (slot + 1U) & (set->cap - 1U);
     }
     return 0;
 }
@@ -1208,9 +1434,11 @@ static bool rule_match(SynEngine *engine, const SynState *state,
         if (fast >= 0)
             return fast != 0;
     }
-    if (engine->rule_word_literal != NULL &&
+    if (engine->word_literal_fast_enabled &&
+        engine->rule_word_literal != NULL &&
         engine->rule_word_literal[rule_index] != 0U) {
-        int fast = word_literal_match(rule->re, line, len, at, match);
+        int fast = word_literal_match(&engine->word_sets[rule_index],
+                                      rule->re, line, len, at, match);
 
         if (fast >= 0)
             return fast != 0;
@@ -1294,6 +1522,7 @@ static bool set_aux(SynEngine *engine, SynState *state, const SynRule *rule,
     }
     if ((rule->flags & YEW_SYN_RULE_AUX_INT) != 0U) {
         u32 value = 0U;
+        u32 add = rule->aux_add;
         u64 p;
         bool decimal = lo < hi;
         for (p = lo; p < hi; p++) {
@@ -1313,10 +1542,19 @@ static bool set_aux(SynEngine *engine, SynState *state, const SynRule *rule,
                     value = (value + 8U) & ~7U;
             }
         }
-        if (value > UINT32_MAX - rule->aux_add)
+        if (rule->aux_add_group != 0U &&
+            rule->aux_add_group < match->ngroups) {
+            Span add_cap = match->g[rule->aux_add_group];
+
+            if (add_cap.lo != UINT64_MAX && add_cap.hi == add_cap.lo + 1U &&
+                add_cap.hi <= len && line[add_cap.lo] >= '0' &&
+                line[add_cap.lo] <= '9')
+                add = (u32)(line[add_cap.lo] - '0');
+        }
+        if (value > UINT32_MAX - add)
             value = UINT32_MAX;
         else
-            value += rule->aux_add;
+            value += add;
         state->aux = value;
     } else {
         static const char empty[] = "";

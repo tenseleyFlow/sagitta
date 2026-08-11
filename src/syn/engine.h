@@ -126,6 +126,7 @@ typedef struct SynRule {
     u8 flags;
     u8 value_pred;
     u8 aux_add;
+    u8 aux_add_group;
     u8 caps[8];
     u8 aux_group;
     u32 aux_pre;             /* interned literal affix, 0 = empty */
@@ -189,6 +190,9 @@ void yew_syn_engine_reset_counters(SynEngine *engine);
 void yew_syn_engine_set_identifier_fast_path(SynEngine *engine,
                                              bool enabled);
 u32 yew_syn_engine_identifier_fast_rules(const SynEngine *engine);
+void yew_syn_engine_set_word_literal_fast_path(SynEngine *engine,
+                                               bool enabled);
+u32 yew_syn_engine_word_literal_fast_rules(const SynEngine *engine);
 bool yew_syn_coverage_init(SynCoverage *coverage, const SynDef *def);
 void yew_syn_coverage_clear(SynCoverage *coverage);
 void yew_syn_coverage_free(SynCoverage *coverage);

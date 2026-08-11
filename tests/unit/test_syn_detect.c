@@ -177,8 +177,9 @@ void test_syn_detect_env_and_direct_shebang_interpreters(void)
 
     detect_open(&f);
     py = detect_add(&f, "python-probe", "[]", "[]", "[\"python3\"]",
-                    "", 0);
-    sh = detect_add(&f, "shell-probe", "[]", "[]", "[\"probe-sh\"]", "", 0);
+                    "", 100);
+    sh = detect_add(&f, "shell-probe", "[]", "[]", "[\"probe-sh\"]", "",
+                    100);
     YEW_ASSERT_EQ_U64(yew_syn_lang_for("script", env_line,
                                        (u32)strlen((const char *)env_line)), py);
     YEW_ASSERT_EQ_U64(yew_syn_lang_for("script", env_flags,
