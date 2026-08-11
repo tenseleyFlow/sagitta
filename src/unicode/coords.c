@@ -414,17 +414,21 @@ static bool bytes_are_simple_ascii(const u8 *bytes, size_t len)
     while (len - pos >= sizeof(size_t)) {
         size_t word;
         size_t del;
+        size_t low;
 
         memcpy(&word, bytes + pos, sizeof(word));
         del = word ^ del_bytes;
+        low = (word - low_limit) & ~word & highs;
         if ((word & highs) != 0U ||
-            ((word - low_limit) & ~word & highs) != 0U ||
             ((del - ones) & ~del & highs) != 0U)
             return false;
+        if (low != 0U)
+            break;
         pos += sizeof(word);
     }
     while (pos < len) {
-        if (bytes[pos] < 0x20U || bytes[pos] >= 0x7fU)
+        if (bytes[pos] != (u8)'\n' &&
+            (bytes[pos] < 0x20U || bytes[pos] >= 0x7fU))
             return false;
         pos++;
     }
@@ -497,18 +501,30 @@ static void coords_index_rebuild(TextBuf *tb)
 void yew_coords_index_seed(TextBuf *tb)
 {
     YewGraphemeIndex *index;
+    u64 len;
 
     if (tb == NULL)
         YEW_BUG("yew_coords_index_seed: NULL buffer");
     index = &tb->graphemes;
-    if (yew_textbuf_len(tb) >= (u64)YEW_DEFER_INDEX_BYTES) {
+    len = yew_textbuf_len(tb);
+    if (len >= (u64)YEW_SIMPLE_ASCII_BYPASS_BYTES &&
+        range_is_simple_ascii(tb, 0U, len)) {
         index->len = 0U;
         index->motion_len = 0U;
         index->gen = tb->gen;
-        index->simple_ascii = range_is_simple_ascii(
-            tb, 0U, yew_textbuf_len(tb));
-        index->simple_ascii_direct = index->simple_ascii;
-        index->initialized = index->simple_ascii;
+        index->simple_ascii = true;
+        index->simple_ascii_direct = true;
+        index->initialized = true;
+        pending_clear(tb);
+        return;
+    }
+    if (len >= (u64)YEW_DEFER_INDEX_BYTES) {
+        index->len = 0U;
+        index->motion_len = 0U;
+        index->gen = tb->gen;
+        index->simple_ascii = false;
+        index->simple_ascii_direct = false;
+        index->initialized = false;
         pending_clear(tb);
         return;
     }
@@ -1018,15 +1034,23 @@ static bool coords_simple_ascii(const TextBuf *tb)
            tb->graphemes.gen == tb->gen;
 }
 
-static ByteOff simple_col_to_off(Span line, u64 col)
+static u64 simple_line_end(const TextBuf *tb, Span line)
 {
-    u64 len = line.hi - line.lo;
+    return line_content_end(tb, line);
+}
+
+static ByteOff simple_col_to_off(const TextBuf *tb, Span line, u64 col)
+{
+    u64 end = simple_line_end(tb, line);
+    u64 len = end - line.lo;
 
     if (col <= len)
         return BYTEOFF(line.lo + col);
+    if (end < line.hi)
+        return BYTEOFF(end);
     if (len == 0U)
-        return BYTEOFF(line.hi);
-    return BYTEOFF(line.hi - 1U);
+        return BYTEOFF(end);
+    return BYTEOFF(end - 1U);
 }
 
 GCol yew_off_to_gcol(const TextBuf *tb, Span line, ByteOff pos)
@@ -1045,8 +1069,11 @@ GCol yew_off_to_gcol(const TextBuf *tb, Span line, ByteOff pos)
 
     require_span(tb, line);
     require_pos(line, pos);
-    if (coords_simple_ascii(tb))
-        return (GCol){pos.v - line.lo};
+    if (coords_simple_ascii(tb)) {
+        u64 end = simple_line_end(tb, line);
+
+        return (GCol){(pos.v > end ? end : pos.v) - line.lo};
+    }
     end = line_content_end(tb, line);
     if (pos.v > end)
         pos.v = end;
@@ -1114,7 +1141,7 @@ ByteOff yew_gcol_to_off(const TextBuf *tb, Span line, GCol g)
 
     require_span(tb, line);
     if (coords_simple_ascii(tb))
-        return simple_col_to_off(line, g.v);
+        return simple_col_to_off(tb, line, g.v);
     end = line_content_end(tb, line);
     index = coords_index(tb);
     checkpoint = index_before_gcol(index, line, end, g.v);
@@ -1144,8 +1171,11 @@ CharCol yew_off_to_charcol(const TextBuf *tb, Span line, ByteOff pos)
 
     require_span(tb, line);
     require_pos(line, pos);
-    if (coords_simple_ascii(tb))
-        return (CharCol){pos.v - line.lo};
+    if (coords_simple_ascii(tb)) {
+        u64 end = simple_line_end(tb, line);
+
+        return (CharCol){(pos.v > end ? end : pos.v) - line.lo};
+    }
     end = line_content_end(tb, line);
     if (pos.v > end)
         pos.v = end;
@@ -1168,8 +1198,11 @@ CCol yew_off_to_ccol(const TextBuf *tb, Span line, ByteOff pos, u32 tabw)
 
     require_span(tb, line);
     require_pos(line, pos);
-    if (coords_simple_ascii(tb))
-        return (CCol){pos.v - line.lo};
+    if (coords_simple_ascii(tb)) {
+        u64 end = simple_line_end(tb, line);
+
+        return (CCol){(pos.v > end ? end : pos.v) - line.lo};
+    }
     end = line_content_end(tb, line);
     if (pos.v > end)
         pos.v = end;
@@ -1202,7 +1235,7 @@ ByteOff yew_ccol_to_off(const TextBuf *tb, Span line, CCol c, u32 tabw)
 
     require_span(tb, line);
     if (coords_simple_ascii(tb))
-        return simple_col_to_off(line, c.v);
+        return simple_col_to_off(tb, line, c.v);
     end = line_content_end(tb, line);
     if (c.v <= end - line.lo) {
         u64 candidate = line.lo + c.v;
