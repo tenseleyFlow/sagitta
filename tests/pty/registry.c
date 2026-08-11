@@ -4025,6 +4025,14 @@ static void case_chrome_search(PtyCtx *c)
     s18_settle_after_keys(c, "/");
     s18_settle_after_bytes(c, "a");
     s18_settle_after_keys(c, "enter");
+    /*
+     * Opening the document starts background syntax work.  Under a slow
+     * tracer that work can publish its repaint before or after the search
+     * overlay settles, so the cumulative synchronized-frame count is not
+     * a property of the overlay.  The snapshot still pins the complete
+     * grid and terminal modes.
+     */
+    c->vt.sync_pairs_unstable = true;
     chrome_snapshot(c);
     force_quit(c);
     (void)unlink(path);
