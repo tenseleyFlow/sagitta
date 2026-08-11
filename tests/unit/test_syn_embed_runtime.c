@@ -244,18 +244,28 @@ void test_syn_embed_runtime_zero_headroom_records_protected_lost_debt(void)
 void test_syn_embed_runtime_merged_first_mask_covers_all_bytes(void)
 {
     static const struct {
-        const char *name;
-        const char *path;
         u32 sites;
         u32 compiled;
-    } inventory[] = {
-        {"css", "runtime/syntax/css.fl", 3U, 5U},
-        {"html", "runtime/syntax/html.fl", 11U, 11U},
-        {"javascript", "runtime/syntax/javascript.fl", 4U, 16U},
-        {"make", "runtime/syntax/make.fl", 2U, 2U},
-        {"markdown", "runtime/syntax/markdown.fl", 1U, 2U},
-        {"sh", "runtime/syntax/sh.fl", 4U, 10U},
-        {"typescript", "runtime/syntax/typescript.fl", 4U, 16U}
+    } expected[] = {
+        {0U, 0U},   /* c */
+        {3U, 5U},   /* css */
+        {0U, 0U},   /* fletch */
+        {0U, 0U},   /* fortran */
+        {0U, 0U},   /* fortran-fixed */
+        {0U, 0U},   /* go */
+        {11U, 11U}, /* html */
+        {0U, 0U},   /* ini */
+        {4U, 16U},  /* javascript */
+        {0U, 0U},   /* json */
+        {0U, 0U},   /* jsonc */
+        {2U, 2U},   /* make */
+        {1U, 2U},   /* markdown */
+        {0U, 0U},   /* python */
+        {0U, 0U},   /* rust */
+        {4U, 10U},  /* sh */
+        {0U, 0U},   /* toml */
+        {4U, 16U},  /* typescript */
+        {0U, 0U}    /* yaml */
     };
     u32 compiled_sites = 0U;
     u32 source_sites = 0U;
@@ -263,15 +273,16 @@ void test_syn_embed_runtime_merged_first_mask_covers_all_bytes(void)
     bool mutate = getenv("YEW_SYN_TEST_NARROW_EMBED_MASK") != NULL;
     bool mutated = false;
 
-    /* The explicit source inventory is the grep gate: adding an embed site
-     * to any shipped definition changes the source count and fails here
-     * until that site joins the 256-byte matrix below. */
-    YEW_ASSERT_EQ_U64(yew_syn_builtin_langs_len, 19U);
-    for (u32 file_index = 0U; file_index < YEW_ARRAY_LEN(inventory);
+    /* The generated catalog supplies every shipped source path.  The exact
+     * zeroes matter: the first embed site added to any non-host definition
+     * must fail here until it joins the 256-byte production-mask matrix. */
+    YEW_ASSERT_EQ_U64(yew_syn_builtin_langs_len, YEW_ARRAY_LEN(expected));
+    for (u32 file_index = 0U; file_index < YEW_ARRAY_LEN(expected);
          file_index++) {
+        const SynLangSeed *seed = &yew_syn_builtin_langs[file_index];
         const SynDef *host = yew_syn_def_for(
-            yew_syn_lang_named(inventory[file_index].name));
-        FILE *file = fopen(inventory[file_index].path, "rb");
+            yew_syn_lang_named(seed->name));
+        FILE *file = fopen(seed->source, "rb");
         char source[32768];
         size_t nread;
         u32 in_source = 0U;
@@ -280,6 +291,7 @@ void test_syn_embed_runtime_merged_first_mask_covers_all_bytes(void)
 
         YEW_ASSERT_NOT_NULL(host);
         YEW_ASSERT_NOT_NULL(file);
+        YEW_ASSERT(strcmp(host->name, seed->name) == 0);
         nread = fread(source, 1U, sizeof(source) - 1U, file);
         YEW_ASSERT(!ferror(file));
         YEW_ASSERT_EQ_I64(fclose(file), 0);
@@ -289,7 +301,7 @@ void test_syn_embed_runtime_merged_first_mask_covers_all_bytes(void)
             in_source++;
             at += sizeof("embed:") - 1U;
         }
-        YEW_ASSERT_EQ_U64(in_source, inventory[file_index].sites);
+        YEW_ASSERT_EQ_U64(in_source, expected[file_index].sites);
         source_sites += in_source;
 
         for (u32 rule_index = 0U; rule_index < host->nrules;
@@ -486,7 +498,7 @@ void test_syn_embed_runtime_merged_first_mask_covers_all_bytes(void)
             checked_sites++;
         }
         YEW_ASSERT_EQ_U64(compiled_sites - before,
-                          inventory[file_index].compiled);
+                          expected[file_index].compiled);
         YEW_ASSERT_EQ_U64(checked_sites, compiled_sites);
     }
     YEW_ASSERT_EQ_U64(source_sites, 29U);

@@ -264,6 +264,7 @@ u32 yew_syn_engine_json_key_fast_rules(const SynEngine *engine);
 void yew_syn_engine_set_yaml_block_key_fast_path(SynEngine *engine,
                                                  bool enabled);
 u32 yew_syn_engine_yaml_block_key_fast_rules(const SynEngine *engine);
+#if defined(YEW_SYN_TEST)
 /* Narrow seams for the embedded-mask exhaustive and mutation checks. */
 bool yew_syn_engine_test_install_resident(SynEngine *master, u32 lang,
                                           SynEngine *runtime);
@@ -272,6 +273,7 @@ bool yew_syn_engine_test_masks(SynEngine *master, const SynState *state,
 bool yew_syn_engine_test_narrow_mask(SynEngine *master,
                                      const SynState *state, bool bol,
                                      u8 byte);
+#endif
 bool yew_syn_coverage_init(SynCoverage *coverage, const SynDef *def);
 void yew_syn_coverage_clear(SynCoverage *coverage);
 void yew_syn_coverage_free(SynCoverage *coverage);

@@ -3849,6 +3849,7 @@ ready:
     return cached->bits;
 }
 
+#if defined(YEW_SYN_TEST)
 bool yew_syn_engine_test_masks(SynEngine *master, const SynState *state,
                                bool bol, u8 merged[32], u8 bridge[32])
 {
@@ -3912,6 +3913,7 @@ bool yew_syn_engine_test_narrow_mask(SynEngine *master,
     }
     return present;
 }
+#endif
 
 static void syn_line_run(SynEngine *engine, u32 entry_state,
                          const u8 *line, u32 len, SynLineOut *out,
@@ -4874,11 +4876,13 @@ static bool resident_install(SynEngine *master, u32 lang,
     return true;
 }
 
+#if defined(YEW_SYN_TEST)
 bool yew_syn_engine_test_install_resident(SynEngine *master, u32 lang,
                                           SynEngine *runtime)
 {
     return resident_install(master, lang, runtime);
 }
+#endif
 
 static void syn_pending_request(SynBuf *syn, u32 lang, size_t line)
 {

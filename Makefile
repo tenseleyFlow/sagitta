@@ -334,12 +334,14 @@ OBJ      := $(SRC:%.c=$(BUILD)/%.o)
 UNIT_SRC := $(filter-out tests/unit/fakeclip.c, \
               $(sort $(wildcard tests/unit/*.c)))
 UNIT_OBJ := $(UNIT_SRC:%.c=$(BUILD)/%.o)
+SYN_ENGINE_UNIT_OBJ := $(BUILD)/tests/unit/syn_engine.o
 STATE_LEGACY_OBJ := $(BUILD)/tests/unit/state_legacy.o
 
 # Sprint 36: activate the independent Fletch arm in the frozen-corpus
 # differential.  The hand-written parser remains visible only to tests.
 $(BUILD)/tests/unit/test_state_differential.o: CFLAGS += \
   -DYEW_HAVE_FLETCH_STATE=1
+$(BUILD)/tests/unit/test_syn_embed_runtime.o: CFLAGS += -DYEW_SYN_TEST=1
 FAKECLIP := $(BUILD)/fakeclip
 PTY_VT_OBJ := $(BUILD)/tests/pty/vt.o
 PTY_SNAPSHOT_OBJ := $(BUILD)/tests/pty/snapshot.o
@@ -354,7 +356,9 @@ PTY_LINK_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ)) \
 PTY_DEMO_LINK_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ)) $(PTY_DEMO_OBJ)
 TEXT_FUZZ_SUPPORT_OBJ := $(BUILD)/tests/fuzz/oracle.o \
                          $(BUILD)/tests/fuzz/shrink.o
-UNIT_LINK_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ)) $(UNIT_OBJ) \
+UNIT_LINK_OBJ := $(filter-out $(BUILD)/src/main.o \
+                 $(BUILD)/src/syn/engine.o,$(OBJ)) \
+                 $(SYN_ENGINE_UNIT_OBJ) $(UNIT_OBJ) \
                  $(PTY_ORACLE_OBJ) $(PTY_HARNESS_OBJ) \
                  $(TEXT_FUZZ_SUPPORT_OBJ) $(STATE_LEGACY_OBJ)
 
@@ -438,7 +442,8 @@ TORTURE_LIVE := $(BUILD)/yew-live-torture
 TORTURE_BATCH := $(BUILD)/batch-kill9
 FAULTSHIM := $(BUILD)/tests/torture/faultshim.so
 
-BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(FUZZ_LIB_OBJ) \
+BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
+                $(FUZZ_LIB_OBJ) \
                 $(FUZZ_UTF8_OBJ) $(FUZZ_GRAPHEME_OBJ) $(FUZZ_INPUT_OBJ) \
                 $(FUZZ_GRID_OBJ) $(FUZZ_VT_OBJ) $(FUZZ_UNDO_OBJ) \
                 $(FUZZ_TEXTBUF_OBJ) $(TEXT_FUZZ_SUPPORT_OBJ) \
@@ -1219,7 +1224,8 @@ unicode-tables: $(BUILD)/gen-unicode-tables
 # mtime when it is unchanged so objects are not rebuilt spuriously.
 $(BUILD)/mods.stamp: FORCE | dirs
 	@if ! printf '%s\n' '$(MODULES)' | cmp -s - $@; then \
-		rm -f $(OBJ) $(OBJ:.o=.d) $(UNIT_OBJ) $(UNIT_OBJ:.o=.d); \
+		rm -f $(OBJ) $(OBJ:.o=.d) $(UNIT_OBJ) $(UNIT_OBJ:.o=.d) \
+		      $(SYN_ENGINE_UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ:.o=.d); \
 		printf '%s\n' '$(MODULES)' > $@; \
 	fi
 
@@ -1234,6 +1240,10 @@ endif
 
 $(BUILD)/%.o: %.c $(BUILD)/mods.stamp $(MODULE_FORCE) | dirs
 	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(SYN_ENGINE_UNIT_OBJ): src/syn/engine.c $(BUILD)/mods.stamp \
+                        $(MODULE_FORCE) | dirs
+	$(CC) $(CFLAGS) -DYEW_SYN_TEST=1 -c -o $@ $<
 
 $(STATE_LEGACY_OBJ): src/ws/state_legacy.c src/ws/fl_parse.c \
                      src/ws/fl_emit.c $(BUILD)/mods.stamp | dirs
@@ -1375,7 +1385,8 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew
 	$(PTY_PREP) $(PTY_RUN) --demo $(abspath $(BUILD)/demo_paint) \
 		--yew $(abspath $(BUILD)/yew) $(PTY_LOG_REDIRECT)
 
--include $(OBJ:.o=.d) $(UNIT_OBJ:.o=.d) $(STATE_LEGACY_OBJ:.o=.d) \
+-include $(OBJ:.o=.d) $(UNIT_OBJ:.o=.d) $(SYN_ENGINE_UNIT_OBJ:.o=.d) \
+         $(STATE_LEGACY_OBJ:.o=.d) \
          $(FUZZ_LIB_OBJ:.o=.d) \
          $(FUZZ_UTF8_OBJ:.o=.d) $(FUZZ_GRAPHEME_OBJ:.o=.d) \
          $(FUZZ_INPUT_OBJ:.o=.d) $(FUZZ_GRID_OBJ:.o=.d) \
