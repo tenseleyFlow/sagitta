@@ -1,0 +1,5 @@
+line 1 entry=main exit=main
+  1:0-4 attr=text context=main
+  1:4-11 attr=code context=main
+  1:11-19 attr=text context=main
+line 2 entry=main exit=main

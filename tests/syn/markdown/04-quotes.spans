@@ -1,0 +1,7 @@
+line 1 entry=main exit=main
+  1:0-2 attr=quote context=main
+  1:2-7 attr=text context=main
+line 2 entry=main exit=main
+  2:0-3 attr=quote context=main
+  2:3-15 attr=text context=main
+line 3 entry=main exit=main

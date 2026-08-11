@@ -1,0 +1,7 @@
+line 1 entry=main exit=main
+  1:0-3 attr=punct context=main
+line 2 entry=main exit=main
+  2:0-5 attr=punct context=main
+line 3 entry=main exit=main
+  3:0-5 attr=punct context=main
+line 4 entry=main exit=main

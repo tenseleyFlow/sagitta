@@ -1,0 +1,1 @@
+Use `x * y` inline.

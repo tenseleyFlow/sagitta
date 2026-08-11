@@ -1,0 +1,102 @@
+# CommonMark-oriented Markdown highlighting without embedded languages.
+# Fenced bodies are code and info strings are attributes; s41_5 adds guest
+# dispatch.  Setext text cannot be styled by a forward-only line machine, so
+# only its underline is heading.  Emphasis is single-line.  HTML handling is
+# deliberately generic rather than an HTML parser.  The definition format has
+# no absolute-line predicate, so an exact --- line can open front matter away
+# from line one; this is an admitted highlighting-only false positive.
+{
+    syntax: 1,
+    language: {
+        name: "markdown",
+        extensions: ["md", "markdown", "mdown", "mkd"],
+        filenames: ["README", "README.*", "CHANGELOG", "CONTRIBUTING.md"],
+        priority: 0,
+        comment: { block: ["<!--", "-->"] },
+    },
+    contexts: {
+        main: { default: "text", rules: [ "include:main_rules" ] },
+        main_rules: {
+            rules: [
+                { match: "^---\\s*$", attr: "preproc", push: "front_pending" },
+                { match: "^ {0,3}(`{3,}|~{3,})[ \\t]*([A-Za-z0-9_+.-]*)",
+                  attr: "punct", captures: { 1: "punct", 2: "attribute" },
+                  set_aux: 1, push: "fenced" },
+                { match: "^ {4}.*$", attr: "code", push: "indented_code" },
+                { match: "^ {0,3}(#{1,6})\\s+.*$", attr: "heading",
+                  captures: { 1: "punct" } },
+                { match: "^ {0,3}(=+|-+)\\s*$", attr: "heading" },
+                { match: "^ {0,3}(\\*[ \\t]*){3,}$", attr: "punct" },
+                { match: "^ {0,3}(-[ \\t]*){3,}$", attr: "punct" },
+                { match: "^ {0,3}(_[ \\t]*){3,}$", attr: "punct" },
+                { match: "^\\s*([-+*]|[0-9]+[.)])\\s+",
+                  captures: { 1: "list" } },
+                { match: "^ {0,3}>+\\s?", attr: "quote" },
+                { match: "^\\s*\\|?\\s*:?-{3,}:?\\s*(\\|\\s*:?-{3,}:?\\s*)+\\|?\\s*$",
+                  attr: "operator" },
+                { match: "^\\[\\^[^]\\n]+\\]:", attr: "label" },
+                { match: "<!--", attr: "comment", push: "html_comment" },
+                { match: "^ {0,3}<(script|style|pre|table|div|section|article|header|footer)(\\s|>)",
+                  attr: "tag", push: "html_block" },
+                { match: "(`{1,2})", attr: "code", set_aux: 1,
+                  push: "inline_code" },
+                { match: "(!?\\[[^]\\n]*\\])\\(([^) \\t]+)(\\s+\"[^\"]*\")?\\)",
+                  attr: "text", captures: { 1: "link", 2: "link", 3: "string" } },
+                { match: "!?\\[[^]\\n]*\\]\\[[^]\\n]*\\]", attr: "link" },
+                { match: "<([A-Za-z][A-Za-z0-9+.-]*:[^> \\t]+|[^> \\t]+@[^> \\t]+)>",
+                  attr: "link" },
+                { match: "(\\*\\*|__)", attr: "strong", set_aux: 1,
+                  push: "strong" },
+                { match: "(\\*|_)", attr: "emphasis", set_aux: 1,
+                  push: "emph" },
+                { match: "\\|", attr: "punct.delim" },
+                { match: "\\\\[\\\\`*{}\\[\\]()#+.!_>-]", attr: "string.escape" },
+            ],
+        },
+        front_pending: { default: "text", at_eol: "set:front_matter" },
+        front_matter: {
+            default: "string.special", at_eol: "stay", unit: "atom",
+            rules: [
+                { match: "^---\\s*$", attr: "preproc", pop: 1 },
+                { match: "^([A-Za-z_][A-Za-z0-9_.-]*)(:)",
+                  captures: { 1: "variable.member", 2: "operator" } },
+                { match: "#.*$", attr: "comment" },
+            ],
+        },
+        fenced: {
+            default: "code", at_eol: "stay", unit: "atom",
+            rules: [ { aux: "fence_close", attr: "punct", pop: 1 } ],
+        },
+        indented_code: { default: "code", at_eol: "pop", unit: "atom" },
+        inline_code: {
+            default: "code", at_eol: "pop", unit: "atom",
+            rules: [ { aux: "literal", attr: "code", pop: 1 } ],
+        },
+        strong: {
+            default: "strong", at_eol: "pop", unit: "span",
+            rules: [ { aux: "literal", attr: "strong", pop: 1 } ],
+        },
+        emph: {
+            default: "emphasis", at_eol: "pop", unit: "span",
+            rules: [ { aux: "literal", attr: "emphasis", pop: 1 } ],
+        },
+        html_comment: {
+            default: "comment", at_eol: "stay", unit: "atom",
+            rules: [ { match: "-->", attr: "comment", pop: 1 } ],
+        },
+        html_block: {
+            default: "text", at_eol: "stay", unit: "span",
+            rules: [
+                { match: "</(script|style|pre|table|div|section|article|header|footer)\\s*>",
+                  attr: "tag", pop: 1 },
+                { match: "</?[A-Za-z][A-Za-z0-9-]*", attr: "tag" },
+                { match: "[A-Za-z_:][A-Za-z0-9_.:-]*=", attr: "tag.attr" },
+                { match: "\"", attr: "string", push: "html_dq" },
+            ],
+        },
+        html_dq: {
+            default: "string", at_eol: "stay", unit: "atom",
+            rules: [ { match: "\"", attr: "string", pop: 1 } ],
+        },
+    },
+}
