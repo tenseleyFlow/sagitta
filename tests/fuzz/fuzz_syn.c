@@ -200,6 +200,10 @@ static bool check_line(SynFixture *fx, Rng *rng, const u8 *data, size_t len,
     u64 end = 0U;
 
     mutate_definition(fx, rng);
+    /* Rule indexes and fast-path recognizers are built from the current
+     * definition.  Rebind after mutating it so the fuzzer exercises a
+     * valid live engine rather than stale setup-time metadata. */
+    yew_syn_engine_set_def(fx->engine, &fx->def);
     entry = random_entry(fx, rng);
     (void)memset(&out, 0, sizeof(out));
     out.spans = spans;
