@@ -4735,6 +4735,10 @@ static void case_s41_underline_error(PtyCtx *c)
     ptc_check(c, raw_sgr_has_param_since(c, 0U, 59U) != lower,
               lower ? "256-colour error emitted SGR 59"
                     : "truecolour error omitted SGR 59 reset");
+    /* Definition compilation may finish before or after synchronized
+     * output becomes available.  This case pins the final grid and exact
+     * underline SGRs, not the scheduler-dependent startup frame count. */
+    c->vt.sync_pairs_unstable = true;
     ptc_snapshot(c, c->test->name);
     force_quit(c);
     (void)unlink(path);
@@ -4759,6 +4763,7 @@ static void case_s41_underline_warning(PtyCtx *c)
     ptc_check(c, raw_sgr_has_param_since(c, 0U, 59U) != lower,
               lower ? "256-colour warning emitted SGR 59"
                     : "truecolour warning omitted SGR 59 reset");
+    c->vt.sync_pairs_unstable = true;
     ptc_snapshot(c, c->test->name);
     force_quit(c);
     (void)unlink(path);
