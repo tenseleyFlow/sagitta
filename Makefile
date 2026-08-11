@@ -498,7 +498,7 @@ endif
         fixtures-verify-quick \
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
         perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
-        perf-mouse perf-record perf-syn \
+        perf-mouse perf-record perf-syn perf-syn-size \
         perf-batch perf-batch-selftest \
         perf-undo perf-textbuf perf-huge perf-update perf-baseline-guard \
         perf-gate-selftest perf-latency perf-latency-selftest \
@@ -985,8 +985,12 @@ perf-cmdcomp: $(BUILD)/perf_cmdcomp
 perf-record: $(BUILD)/perf_record
 	$(BUILD)/perf_record $(if $(PERF_GATE),--gate,)
 
-perf-syn: $(BUILD)/perf_syn
+perf-syn: $(BUILD)/perf_syn $(BUILD)/yew
 	$(BUILD)/perf_syn
+
+perf-syn-size: $(BUILD)/yew
+	CC=$(CC) MODULES='$(MODULES)' \
+		scripts/check-s42_5-binary-growth.sh $(abspath $(BUILD)/yew)
 
 perf-batch: $(BUILD)/perf_batch $(BUILD)/yew
 	$(BUILD)/perf_batch --yew $(abspath $(BUILD)/yew) --gate

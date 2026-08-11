@@ -112,7 +112,7 @@ awk 'BEGIN {
         else if (i % 9 == 3) print "  a(1:n) = a(1:n) * 2.0d0 &"
         else if (i % 9 == 4) print "             + 1.0d0"
         else if (i % 9 == 5) print "  write(*,*) '\''C:\\path\\n'\''"
-        else if (i % 9 == 6) print "  print *, '\''it'\''\''\''s free form'\''"
+        else if (i % 9 == 6) printf "  print *, %cit%c%cs free form%c\n", 39, 39, 39, 39
         else if (i % 9 == 7) print "end subroutine"
         else printf "! free-form workload %d\n", i
     }
@@ -177,4 +177,147 @@ test "$(wc -c < "$out/json_kitchen.json")" -eq $((2252 * 1024))
 first_bytes=$(awk 'NR == 1 { print length($0); exit }' "$out/json_kitchen.json")
 test "$first_bytes" -eq 2097152
 
-printf 'generated Sprint 42 syntax perf fixtures\n'
+awk 'BEGIN {
+    for (i = 1; i <= 5000; i++) {
+        phase = (i - 1) % 16
+        if (phase == 0) printf "let cooked_%d = \"value={{raw}} {%d + {inner: 2}.inner:>8}\";\n", i, i
+        else if (phase == 1) printf "let triple_%d = \"\"\"row {%d:>{width}}\n", i, i
+        else if (phase == 2) print "nested {{ braces }} and {call({depth: 2})}"
+        else if (phase == 3) print "\"\"\";"
+        else if (phase == 4) printf "let raw_%d = r###\"raw { braces } \\\\ path\"###;\n", i
+        else if (phase == 5) printf "let generalized_%d = SQL\"select * from rows where id = ?\";\n", i
+        else if (phase == 6) printf "fn arrow_%d(value: i64) -> i64 {\n", i
+        else if (phase == 7) print "    if value > 0 { return value; } else { return 0; }"
+        else if (phase == 8) print "}"
+        else if (phase == 9) printf "#[bench(case = \"row-%d\")]\n", i
+        else if (phase == 10) printf "unsafe c { int row_%d = %d; /* neutral C body */ }\n", i, i
+        else if (phase == 11) printf "proc worker_%d(in value: i64, out result: i64) {\n", i
+        else if (phase == 12) print "    spawn task(value); await result;"
+        else if (phase == 13) print "}"
+        else if (phase == 14) printf "//! Wolf performance row %d\n", i
+        else printf "const mask_%d = 0xff_u64 | 0b1010_0101;\n", i
+    }
+}' > "$scratch/wolf"
+finish_fixture "$scratch/wolf" "$out/wolf_kitchen.lu" 5000 $((256 * 1024))
+
+awk 'BEGIN {
+    for (i = 1; i <= 6000; i++) {
+        phase = (i - 1) % 12
+        if (phase == 0) printf "#define YEWTAG_%d(x) ((x) + %d)\n", i, i
+        else if (phase == 1) printf "template <class T, class U = std::vector<std::pair<T, int>>>\n"
+        else if (phase == 2) printf "[[nodiscard]] auto map_%d(T value) -> U {\n", i
+        else if (phase == 3) printf "    auto raw = R\"tag(row %d \\\\ \\\" text)tag\";\n", i
+        else if (phase == 4) print "    if constexpr (requires { value.begin(); }) {"
+        else if (phase == 5) print "        return U{value, 42}; // template branch"
+        else if (phase == 6) print "    } else {"
+        else if (phase == 7) print "        return U{};"
+        else if (phase == 8) print "    }"
+        else if (phase == 9) print "}"
+        else if (phase == 10) printf "static_assert(sizeof(long long) >= %d);\n", i % 8
+        else print "/* C++ block comment with <nested<vector<int>>> punctuation */"
+    }
+}' > "$scratch/native-systems"
+finish_fixture "$scratch/native-systems" "$out/native_systems.cpp" 6000 $((320 * 1024))
+
+awk 'BEGIN {
+    for (i = 1; i <= 5000; i++) {
+        phase = (i - 1) % 14
+        if (phase == 0) printf "data class Row%d<T>(val value: T, val label: String?)\n", i
+        else if (phase == 1) printf "val raw%d = \"\"\"row ${items[%d]?.name ?: \"missing\"}\n", i, i
+        else if (phase == 2) print "literal dollars and braces ${buildString { append(\"ok\") }}"
+        else if (phase == 3) print "\"\"\".trimIndent()"
+        else if (phase == 4) print "/* outer comment"
+        else if (phase == 5) print "   /* nested comment */"
+        else if (phase == 6) print "*/"
+        else if (phase == 7) printf "fun <T : Comparable<T>> choose%d(a: T?, b: T): T =\n", i
+        else if (phase == 8) print "    a?.takeIf { it > b } ?: b"
+        else if (phase == 9) printf "@Deprecated(\"row-%d\")\n", i
+        else if (phase == 10) printf "val range%d = 1 until %d\n", i, i
+        else if (phase == 11) printf "when (val x%d = range%d.first) {\n", i, i - 1
+        else if (phase == 12) print "    in 0..10 -> println(x)"
+        else print "}"
+    }
+}' > "$scratch/native-vm"
+finish_fixture "$scratch/native-vm" "$out/native_vm.kt" 5000 $((240 * 1024))
+
+awk 'BEGIN {
+    for (i = 1; i <= 5000; i++) {
+        phase = (i - 1) % 16
+        if (phase == 0) printf "class Row%d\n", i
+        else if (phase == 1) printf "  VALUE = %%Q{row #{%d + 1}}\n", i
+        else if (phase == 2) printf "  REGEX = /row\\/#{%d}\\s+/ix\n", i
+        else if (phase == 3) print "  TEXT = <<~YEW_DOC"
+        else if (phase == 4) printf "    interpolated #{VALUE} row %d\n", i
+        else if (phase == 5) print "    nested-looking #{items.map { |x| x.to_s }.join(\",\")}"
+        else if (phase == 6) print "  YEW_DOC"
+        else if (phase == 7) print "  RAW = <<-'YEW_RAW'"
+        else if (phase == 8) print "    literal #{not_interpolated}"
+        else if (phase == 9) print "  YEW_RAW"
+        else if (phase == 10) printf "  def call_%d(value)\n", i
+        else if (phase == 11) print "    value&.then { _1.to_s } || :missing"
+        else if (phase == 12) print "  end"
+        else if (phase == 13) print "end"
+        else if (phase == 14) printf "symbol_%d = :row_%d\n", i, i
+        else print "# Ruby performance row"
+    }
+}' > "$scratch/native-script"
+finish_fixture "$scratch/native-script" "$out/native_script.rb" 5000 $((240 * 1024))
+
+awk 'BEGIN {
+    for (i = 1; i <= 5000; i++) {
+        phase = (i - 1) % 12
+        if (phase == 0) print "{-# LANGUAGE DataKinds, TypeFamilies #-}"
+        else if (phase == 1) print "{- outer block"
+        else if (phase == 2) print "   {- nested block -}"
+        else if (phase == 3) print "-}"
+        else if (phase == 4) printf "data Row%d a = Row%d { value%d :: a } deriving (Eq, Show)\n", i, i, i
+        else if (phase == 5) printf "mapRow%d :: (a -> b) -> Row%d a -> Row%d b\n", i, i - 1, i - 1
+        else if (phase == 6) printf "mapRow%d f (Row%d x) = Row%d (f x)\n", i - 1, i - 2, i - 2
+        else if (phase == 7) printf "qualified%d = Data.List.map (+ %d) [1..10]\n", i, i
+        else if (phase == 8) printf "infixl 6 <+%d+>\n", i
+        else if (phase == 9) printf "a <+%d+> b = a + b\n", i - 1
+        else if (phase == 10) printf "type family Result%d a where\n", i
+        else print "  Result1 Int = Integer"
+    }
+}' > "$scratch/native-functional"
+finish_fixture "$scratch/native-functional" "$out/native_functional.hs" 5000 $((240 * 1024))
+
+awk 'BEGIN {
+    for (i = 1; i <= 5000; i++) {
+        phase = (i - 1) % 10
+        if (phase == 0) printf "<row id=\"%d\" title=\"a large &amp; deterministic attribute %d\" data-owner=\"tenseley-flow\" data-profile=\"native-pack-performance\">\n", i, i
+        else if (phase == 1) print "  <![CDATA[raw <xml> & bytes ]]>"
+        else if (phase == 2) print "  <!-- comment with entities &lt; &gt; -->"
+        else if (phase == 3) printf "  <value enabled=\"true\">&#x%x;</value>\n", i
+        else if (phase == 4) print "  <?yew highlight=\"native-data\"?>"
+        else if (phase == 5) print "  <nested xmlns:y=\"urn:yew:perf\">"
+        else if (phase == 6) printf "    <y:item key=\"row-%d\">text &quot; value</y:item>\n", i
+        else if (phase == 7) print "  </nested>"
+        else if (phase == 8) print "</row>"
+        else print "<!-- XML performance separator -->"
+    }
+}' > "$scratch/native-data"
+finish_fixture "$scratch/native-data" "$out/native_data.xml" 5000 $((300 * 1024))
+
+awk 'BEGIN {
+    for (i = 1; i <= 5000; i++) {
+        phase = (i - 1) % 14
+        if (phase == 0) printf "resource \"yew_row\" \"r%d\" {\n", i
+        else if (phase == 1) printf "  name = \"row-${var.prefix}-%d\"\n", i
+        else if (phase == 2) print "  body = <<-YEW_DOC"
+        else if (phase == 3) print "    %{ if var.enabled }"
+        else if (phase == 4) print "    value = ${local.rows[0].name}"
+        else if (phase == 5) print "    %{ else }"
+        else if (phase == 6) print "    disabled"
+        else if (phase == 7) print "    %{ endif }"
+        else if (phase == 8) print "  YEW_DOC"
+        else if (phase == 9) print "  raw = <<YEW_RAW"
+        else if (phase == 10) print "literal ${not_a_template_here}"
+        else if (phase == 11) print "YEW_RAW"
+        else if (phase == 12) print "}"
+        else print "# HCL performance row"
+    }
+}' > "$scratch/native-build"
+finish_fixture "$scratch/native-build" "$out/native_build.hcl" 5000 $((240 * 1024))
+
+printf 'generated Sprint 42/42.5 syntax perf fixtures\n'
