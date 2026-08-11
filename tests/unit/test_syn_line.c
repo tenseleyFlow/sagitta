@@ -208,7 +208,7 @@ void test_syn_line_step_cap_degrades_instead_of_stalling(void)
 
     YEW_ASSERT_NOT_NULL(rules);
     arena_init(&arena);
-    never = yew_re_compile(&arena, "z", 1U, 0U, NULL);
+    never = yew_re_compile(&arena, "^xy", 3U, 0U, NULL);
     YEW_ASSERT_NOT_NULL(never);
     ctx.first['x' >> 3U] |= (u8)(1U << ('x' & 7U));
     for (i = 0U; i < NRULES; i++) {
@@ -230,6 +230,76 @@ void test_syn_line_step_cap_degrades_instead_of_stalling(void)
         YEW_ASSERT_EQ_U64(exit->ctx[0], 0U);
         YEW_ASSERT((exit->flags & YEW_SYN_F_PAST_FIRST) != 0U);
     }
+    yew_syn_engine_free(engine);
+    arena_free_all(&arena);
+    free(rules);
+}
+
+void test_syn_line_empty_candidate_set_does_not_scan_declared_first(void)
+{
+    enum { NRULES = 4200 };
+    Arena arena;
+    SynRule *rules = calloc(NRULES, sizeof(*rules));
+    SynCtx ctx = {0U, NRULES, YEW_ATTR_TEXT, SYN_OP_STAY, 0U, 0U, {0}, 0U};
+    SynDef def = {"empty-candidates", 0U, 1U, NRULES, &ctx, rules, NULL};
+    SynEngine *engine;
+    SynSpan spans[8];
+    SynLineOut out = {spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
+    YewRe *never;
+    u32 i;
+
+    YEW_ASSERT_NOT_NULL(rules);
+    arena_init(&arena);
+    never = yew_re_compile(&arena, "z", 1U, 0U, NULL);
+    YEW_ASSERT_NOT_NULL(never);
+    ctx.first['x' >> 3U] |= (u8)(1U << ('x' & 7U));
+    for (i = 0U; i < NRULES; i++) {
+        rules[i].re = never;
+        rules[i].attr = YEW_ATTR_TEXT;
+        (void)memset(rules[i].caps, 0xff, sizeof(rules[i].caps));
+        rules[i].first['x' >> 3U] |= (u8)(1U << ('x' & 7U));
+    }
+    engine = yew_syn_engine_new(&def);
+    YEW_ASSERT_NOT_NULL(engine);
+    yew_syn_line(engine, YEW_SYN_STATE_ROOT, (const u8 *)"x", 1U, &out);
+    YEW_ASSERT_EQ_U64(out.stop, YEW_SYN_STOP_OK);
+    YEW_ASSERT_EQ_U64(out.n, 1U);
+    YEW_ASSERT_EQ_U64(out.spans[0].attr, YEW_ATTR_TEXT);
+    yew_syn_engine_free(engine);
+    arena_free_all(&arena);
+    free(rules);
+}
+
+void test_syn_line_large_candidate_index_falls_back_without_semantic_change(void)
+{
+    enum { NRULES = 9000 };
+    Arena arena;
+    SynRule *rules = calloc(NRULES, sizeof(*rules));
+    SynCtx ctx = {0U, NRULES, YEW_ATTR_TEXT, SYN_OP_STAY, 0U, 0U, {0}, 0U};
+    SynDef def = {"candidate-cap", 0U, 1U, NRULES, &ctx, rules, NULL};
+    SynEngine *engine;
+    SynSpan spans[8];
+    SynLineOut out = {spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
+    YewRe *match;
+    u32 i;
+
+    YEW_ASSERT_NOT_NULL(rules);
+    arena_init(&arena);
+    match = yew_re_compile(&arena, ".", 1U, 0U, NULL);
+    YEW_ASSERT_NOT_NULL(match);
+    (void)memset(ctx.first, 0xff, sizeof(ctx.first));
+    for (i = 0U; i < NRULES; i++) {
+        rules[i].re = match;
+        rules[i].attr = YEW_ATTR_KEYWORD;
+        (void)memset(rules[i].caps, 0xff, sizeof(rules[i].caps));
+        (void)memset(rules[i].first, 0xff, sizeof(rules[i].first));
+    }
+    engine = yew_syn_engine_new(&def);
+    YEW_ASSERT_NOT_NULL(engine);
+    yew_syn_line(engine, YEW_SYN_STATE_ROOT, (const u8 *)"x", 1U, &out);
+    YEW_ASSERT_EQ_U64(out.stop, YEW_SYN_STOP_OK);
+    YEW_ASSERT_EQ_U64(out.n, 1U);
+    YEW_ASSERT_EQ_U64(out.spans[0].attr, YEW_ATTR_KEYWORD);
     yew_syn_engine_free(engine);
     arena_free_all(&arena);
     free(rules);

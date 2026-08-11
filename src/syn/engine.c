@@ -36,10 +36,11 @@ typedef struct SynCache {
     size_t line_cap;
 } SynCache;
 
-typedef struct SynRuleCandidates {
-    u32 off;
-    u32 len;
-} SynRuleCandidates;
+enum {
+    SYN_CANDIDATE_BYTES = 256,
+    SYN_CANDIDATE_STRIDE = SYN_CANDIDATE_BYTES + 1,
+    SYN_CANDIDATE_RULE_BYTES_MAX = 8 * 1024 * 1024
+};
 
 struct SynStateTab {
     SynState *states;
@@ -60,7 +61,7 @@ struct SynEngine {
     u8 *rule_identifier_suffix;
     u8 (*rule_first)[32];
     u8 (*ctx_first_nonbol)[32];
-    SynRuleCandidates *ctx_candidates;
+    u32 *candidate_offsets;
     u32 *candidate_rules;
     YewReWorkspace re_workspace;
     bool has_first_line;
@@ -521,20 +522,19 @@ static void engine_index_ctx_first_nonbol(SynEngine *engine)
 
 static void engine_index_candidates(SynEngine *engine)
 {
-    SynRuleCandidates *ranges;
-    u32 *cursor;
+    u32 *offsets;
     u64 total = 0U;
-    size_t nranges;
+    size_t noffsets;
+    u32 out = 0U;
     u32 i;
 
-    free(engine->ctx_candidates);
+    free(engine->candidate_offsets);
     free(engine->candidate_rules);
-    engine->ctx_candidates = NULL;
+    engine->candidate_offsets = NULL;
     engine->candidate_rules = NULL;
     if (engine->def == NULL || engine->def->nctxs == 0U)
         return;
-    nranges = (size_t)engine->def->nctxs * 256U;
-    ranges = yew_xcalloc(nranges, sizeof(*ranges));
+    noffsets = (size_t)engine->def->nctxs * SYN_CANDIDATE_STRIDE;
     for (i = 0U; i < engine->def->nctxs; i++) {
         const SynCtx *ctx = &engine->def->ctxs[i];
         u32 j;
@@ -545,49 +545,44 @@ static void engine_index_candidates(SynEngine *engine)
 
             if (index >= engine->def->nrules)
                 YEW_BUG("syntax: context rule range exceeds definition");
-            for (byte = 0U; byte < 256U; byte++) {
+            for (byte = 0U; byte < SYN_CANDIDATE_BYTES; byte++) {
                 if (engine->def->rules[index].aux_match != SYN_AUXM_NONE ||
                     bitset_has(engine->rule_first[index], (u8)byte)) {
-                    ranges[(size_t)i * 256U + byte].len++;
                     total++;
+                    /* The index is an optional accelerator.  A broad valid
+                     * definition must fall back to the filtered rule scan,
+                     * not turn its rule/byte cross-product into a fatal
+                     * allocation. */
+                    if (total >
+                        SYN_CANDIDATE_RULE_BYTES_MAX / sizeof(u32))
+                        return;
                 }
             }
         }
     }
-    if (total > UINT32_MAX || total > SIZE_MAX / sizeof(u32))
-        YEW_BUG("syntax: candidate rule table overflow");
-    {
-        u32 off = 0U;
-
-        for (size_t range = 0U; range < nranges; range++) {
-            ranges[range].off = off;
-            off += ranges[range].len;
-        }
-    }
+    offsets = yew_xcalloc(noffsets, sizeof(*offsets));
     engine->candidate_rules = yew_xcalloc((size_t)total,
                                            sizeof(*engine->candidate_rules));
-    cursor = yew_xcalloc(nranges, sizeof(*cursor));
     for (i = 0U; i < engine->def->nctxs; i++) {
         const SynCtx *ctx = &engine->def->ctxs[i];
-        u32 j;
+        u32 byte;
 
-        for (j = 0U; j < ctx->nrules; j++) {
-            u32 index = ctx->first_rule + j;
-            u32 byte;
+        for (byte = 0U; byte < SYN_CANDIDATE_BYTES; byte++) {
+            u32 j;
 
-            for (byte = 0U; byte < 256U; byte++) {
-                size_t range = (size_t)i * 256U + byte;
+            offsets[(size_t)i * SYN_CANDIDATE_STRIDE + byte] = out;
+            for (j = 0U; j < ctx->nrules; j++) {
+                u32 index = ctx->first_rule + j;
 
                 if (engine->def->rules[index].aux_match != SYN_AUXM_NONE ||
-                    bitset_has(engine->rule_first[index], (u8)byte)) {
-                    engine->candidate_rules[ranges[range].off +
-                                            cursor[range]++] = index;
-                }
+                    bitset_has(engine->rule_first[index], (u8)byte))
+                    engine->candidate_rules[out++] = index;
             }
         }
+        offsets[(size_t)i * SYN_CANDIDATE_STRIDE +
+                SYN_CANDIDATE_BYTES] = out;
     }
-    free(cursor);
-    engine->ctx_candidates = ranges;
+    engine->candidate_offsets = offsets;
 }
 
 static u64 state_hash(const SynState *state)
@@ -780,7 +775,7 @@ void yew_syn_engine_free(SynEngine *engine)
     free(engine->rule_identifier_suffix);
     free(engine->rule_first);
     free(engine->ctx_first_nonbol);
-    free(engine->ctx_candidates);
+    free(engine->candidate_offsets);
     free(engine->candidate_rules);
     yew_re_workspace_free(&engine->re_workspace);
     free(engine);
@@ -1482,18 +1477,19 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
     }
     while (p < len) {
         const SynCtx *ctx = &engine->def->ctxs[state.ctx[state.depth - 1U]];
-        const SynRuleCandidates *candidates = engine->ctx_candidates == NULL ?
-            NULL : &engine->ctx_candidates[
-                (size_t)state.ctx[state.depth - 1U] * 256U + line[p]];
+        const u32 *candidate_offsets = engine->candidate_offsets;
+        size_t candidate_slot =
+            (size_t)state.ctx[state.depth - 1U] * SYN_CANDIDATE_STRIDE +
+            line[p];
+        u32 candidate_off = candidate_offsets == NULL ? 0U :
+            candidate_offsets[candidate_slot];
+        u32 candidate_len = candidate_offsets == NULL ? 0U :
+            candidate_offsets[candidate_slot + 1U] - candidate_off;
         const SynRule *matched = NULL;
         u32 matched_index = UINT32_MAX;
         SynState before;
         YewReMatch match;
         u32 ri;
-
-        if (candidates != NULL && candidates->len == 0U &&
-            bitset_has(ctx->first, line[p]))
-            candidates = NULL;
 
         if (!bitset_has(p == 0U || engine->ctx_first_nonbol == NULL ?
                         ctx->first :
@@ -1517,10 +1513,10 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
             p = q;
             continue;
         }
-        for (ri = 0U; ri < (candidates == NULL ? ctx->nrules :
-                            candidates->len); ri++) {
-            u32 index = candidates == NULL ? ctx->first_rule + ri :
-                engine->candidate_rules[candidates->off + ri];
+        for (ri = 0U; ri < (candidate_offsets == NULL ? ctx->nrules :
+                            candidate_len); ri++) {
+            u32 index = candidate_offsets == NULL ? ctx->first_rule + ri :
+                engine->candidate_rules[candidate_off + ri];
             const SynRule *rule;
             if (++steps > step_cap || index >= engine->def->nrules) {
                 emit_span(out, p, len - p, YEW_ATTR_TEXT,
@@ -1561,7 +1557,7 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
                 if (before_word == after_word)
                     continue;
             }
-            if (candidates == NULL &&
+            if (candidate_offsets == NULL &&
                 !bitset_has(engine->rule_first == NULL ? rule->first :
                             engine->rule_first[index], line[p]) &&
                 rule->aux_match == SYN_AUXM_NONE)

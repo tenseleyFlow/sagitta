@@ -1597,6 +1597,8 @@ const YewTest yew_tests[] = {
     T(syn_line_span_cap_stops_without_overwriting_caller_storage),
     T(syn_line_zero_width_rule_forces_utf8_progress),
     T(syn_line_step_cap_degrades_instead_of_stalling),
+    T(syn_line_empty_candidate_set_does_not_scan_declared_first),
+    T(syn_line_large_candidate_index_falls_back_without_semantic_change),
     T(syn_line_consume_stops_emission_and_optional_aux_is_safe),
     T(syn_line_push_list_eol_target_and_clear_aux_pop_laws),
     T(syn_line_identifier_suffix_fast_path_matches_regex),
