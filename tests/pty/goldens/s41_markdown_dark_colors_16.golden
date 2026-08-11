@@ -1,6 +1,6 @@
 # yew pty golden v1
 size 80x24 alt=1 cursor=0,7 vis=1
-modes 2004,1002,1006,1004 kitty=21 sync_pairs=0
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- text
      1 --- --- --- --- --- --- --- ---                                          
      2 title: Kitchen title: Kitchen ti                                         
@@ -69,6 +69,8 @@ D fg=idx:0 bg=idx:7 attrs=----------
 \x1b[37m
 \x1b[90m
 \x1b[37m
+\x1b[3m
+\x1b[23m
 \x1b[90m
 \x1b[37m
 \x1b[90m
@@ -85,6 +87,8 @@ D fg=idx:0 bg=idx:7 attrs=----------
 \x1b[37m
 \x1b[90m
 \x1b[37m
+\x1b[3m
+\x1b[23m
 \x1b[90m
 \x1b[37m
 \x1b[90m
@@ -101,9 +105,12 @@ D fg=idx:0 bg=idx:7 attrs=----------
 \x1b[37m
 \x1b[90m
 \x1b[37m
+\x1b[3m
+\x1b[23m
 \x1b[90m
 \x1b[37m
 \x1b[90m
 \x1b[37m
 \x1b[30;47m
 \x1b[37;40m
+\x1b[0;37;40m
