@@ -84,7 +84,7 @@ static Cell cell_make(const u8 *bytes, size_t n, YewColor fg, YewColor bg,
     memset(&c, 0, sizeof(c));
     c.fg = color_normalize(fg);
     c.bg = color_normalize(bg);
-    c.attrs = (u16)(attrs & ((YEW_ATTR_INVALID_BYTE << 1) - 1u));
+    c.attrs = (u16)(attrs & YEW_CELL_ATTR_MASK);
     c.w = width;
     if (n <= sizeof(c.utf8)) {
         if (n != 0u)
@@ -395,14 +395,14 @@ void yew_grid_fill(Grid *g, u16 row, u16 c0, u16 c1, Cell c)
         c = g->blank;
         c.fg = color_normalize(fg);
         c.bg = color_normalize(bg);
-        c.attrs = (u16)(attrs & ((YEW_ATTR_INVALID_BYTE << 1) - 1u));
+        c.attrs = (u16)(attrs & YEW_CELL_ATTR_MASK);
     } else {
         const u8 *data;
         size_t n;
 
         c.fg = color_normalize(c.fg);
         c.bg = color_normalize(c.bg);
-        c.attrs = (u16)(c.attrs & ((YEW_ATTR_INVALID_BYTE << 1) - 1u));
+        c.attrs = (u16)(c.attrs & YEW_CELL_ATTR_MASK);
         c.flags &= CELL_INTERNED;
         if ((c.flags & CELL_INTERNED) != 0u) {
             const char *interned = yew_intern_str(g->gi, c.id);
@@ -449,9 +449,13 @@ void yew_grid_overlay(Grid *g, u16 row, u16 c0, u16 c1,
             cells[col].fg = color_normalize(style->fg);
         if ((fields & YEW_OVERLAY_BG) != 0u)
             cells[col].bg = color_normalize(style->bg);
-        if ((fields & YEW_OVERLAY_ATTRS) != 0u)
-            cells[col].attrs |= (u16)(style->attrs &
-                                      ((YEW_ATTR_INVALID_BYTE << 1) - 1u));
+        if ((fields & YEW_OVERLAY_ATTRS) != 0u) {
+            u16 attrs = (u16)(style->attrs & YEW_CELL_ATTR_MASK);
+
+            if ((attrs & YEW_CELL_UL_MASK) != 0u)
+                cells[col].attrs &= (u16)~YEW_CELL_UL_MASK;
+            cells[col].attrs |= attrs;
+        }
     }
     damage_add(g, row, c0, c1);
 }

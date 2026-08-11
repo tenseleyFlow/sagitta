@@ -54,7 +54,7 @@ static u16 expected_attrs(u16 attrs)
 {
     if ((attrs & YEW_ATTR_INVALID_BYTE) != 0U)
         attrs |= YEW_ATTR_REVERSE;
-    attrs &= 0x03ffU;
+    attrs &= (u16)((1u << YEW_CELL_UL_SHIFT) - 1u);
     if ((attrs & YEW_ATTR_UNDERCURL) != 0U)
         attrs &= (u16)~YEW_ATTR_UNDERLINE;
     return attrs;
@@ -125,7 +125,7 @@ static void mutate_grid(Grid *grid, const u8 *data, size_t len, size_t *pos)
     u16 col = (u16)(b % grid->cols);
     YewColor fg = fuzz_indexed(b);
     YewColor bg = fuzz_indexed(c);
-    u16 attrs = (u16)(((u16)a << 8U | b) & 0x03ffU);
+    u16 attrs = (u16)(((u16)a << 8U | b) & YEW_CELL_ATTR_MASK);
     const u8 *text = ascii;
     size_t text_len = sizeof(ascii) - 1U;
 

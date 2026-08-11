@@ -225,6 +225,10 @@ static bool check_grid(const u8 *data, size_t len,
     caps.truecolor = true;
     caps.sync_output = true;
     yew_render_init(&render, &caps, NULL);
+    yew_render_set_underline_colors(
+        &render, (YewColor){YEW_COLOR_RGB, 255u, 95u, 95u},
+        (YewColor){YEW_COLOR_RGB, 229u, 192u, 123u},
+        (YewColor){YEW_COLOR_RGB, 97u, 175u, 239u});
     bytebuf_init(&output);
 
     while (pos < len && ops < MAX_OPS) {
@@ -236,7 +240,7 @@ static bool check_grid(const u8 *data, size_t len,
         u16 col = (u16)(b % grid.cols);
         YewColor fg = fuzz_color(a, b, c);
         YewColor bg = fuzz_color(c, a, b);
-        u16 attrs = (u16)(((u16)a << 8u | b) & 0x03ffu);
+        u16 attrs = (u16)(((u16)a << 8u | b) & YEW_CELL_ATTR_MASK);
         VtCounts counts;
         size_t emitted;
 

@@ -24,19 +24,13 @@ typedef struct Render {
     u16 col;
     bool pos_known;
     u8 tier;
-    /*
-     * Sprint 27 §8: NO_COLOR is set and non-empty.
-     *
-     * Read ONCE, at init (Sprint 0's single-decision rule).  When it is
-     * on, ZERO colour SGR parameters are emitted and identity is
-     * carried by attributes alone — reverse for active/selected, dim
-     * for inactive, bold for headers, underline for the current match.
-     * A half-honoured NO_COLOR is worse than none: the user who set it
-     * did so because the colours are unreadable on their terminal.
-     */
+    /* NO_COLOR is active whenever the variable exists, including empty. */
     bool no_color;
+    /* TERM=dumb drops colours and attributes, leaving plain glyph output. */
+    bool plain;
     bool sync;
     bool undercurl;
+    YewColor underline_colors[3];
     bool cursor_known;
     bool cursor_visible;
     YewCursorShape cursor_shape;
@@ -52,6 +46,8 @@ u8 yew_rgb_to_16(u8 r, u8 g, u8 b);
 
 void yew_render_init(Render *r, const TtyCaps *caps,
                      const char *(*getv)(const char *));
+void yew_render_set_underline_colors(Render *r, YewColor error,
+                                     YewColor warn, YewColor info);
 size_t yew_render_frame(Render *r, Grid *g, Bytebuf *out);
 
 /*

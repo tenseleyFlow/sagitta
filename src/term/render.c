@@ -227,17 +227,25 @@ u8 yew_render_tier(const TtyCaps *caps,
 void yew_render_init(Render *r, const TtyCaps *caps,
                      const char *(*getv)(const char *))
 {
+    const char *term;
+
     memset(r, 0, sizeof(*r));
     r->tier = yew_render_tier(caps, getv);
-    {
-        const char *nc = getv != NULL ? getv("NO_COLOR") : NULL;
+    r->no_color = getv != NULL && getv("NO_COLOR") != NULL;
+    term = getv != NULL ? getv("TERM") : NULL;
+    r->plain = term != NULL && strcmp(term, "dumb") == 0;
+    r->sync = !r->plain && caps != NULL && caps->sync_output;
+    r->undercurl = !r->plain && r->tier == YEW_RENDER_TIER_TRUECOLOR;
+}
 
-        /* Set and NON-EMPTY, per the no-color.org convention: an empty
-         * value is how a shell profile un-sets it. */
-        r->no_color = nc != NULL && nc[0] != '\0';
-    }
-    r->sync = caps != NULL && caps->sync_output;
-    r->undercurl = caps != NULL && caps->truecolor;
+void yew_render_set_underline_colors(Render *r, YewColor error,
+                                     YewColor warn, YewColor info)
+{
+    if (r == NULL)
+        return;
+    r->underline_colors[0] = error;
+    r->underline_colors[1] = warn;
+    r->underline_colors[2] = info;
 }
 
 static bool color_equal(YewColor a, YewColor b)
@@ -288,16 +296,8 @@ static u8 color_ansi(const YewColor *color)
 static void color_param(Bytebuf *out, bool *first, const YewColor *color,
                         bool foreground, u8 tier, bool no_color)
 {
-    /*
-     * Sprint 27 §8.  Everything becomes the terminal's default, which
-     * is the only honest answer: the palette the user chose is the one
-     * they can read.  Attributes still carry every distinction the
-     * chrome makes.
-     */
-    if (no_color) {
-        param_num(out, first, foreground ? 39u : 49u);
+    if (no_color)
         return;
-    }
     if (color->tag == 0u) {
         param_num(out, first, foreground ? 39u : 49u);
         return;
@@ -342,6 +342,35 @@ static void color_param(Bytebuf *out, bool *first, const YewColor *color,
             code = (foreground ? 90u : 100u) + (u32)(index - 8u);
         param_num(out, first, code);
     }
+}
+
+static u8 underline_selector(const Render *r, u16 attrs)
+{
+    u16 line_attrs;
+    u8 selector;
+
+    if (r->plain || r->no_color || r->tier != YEW_RENDER_TIER_TRUECOLOR)
+        return 0u;
+    line_attrs = terminal_attrs(attrs, r->undercurl);
+    if ((line_attrs & (ATTR_UNDERLINE | ATTR_UNDERCURL)) == 0u)
+        return 0u;
+    selector = (u8)((attrs & YEW_CELL_UL_MASK) >> YEW_CELL_UL_SHIFT);
+    if (selector == 0u ||
+        r->underline_colors[selector - 1u].tag != YEW_COLOR_RGB)
+        return 0u;
+    return selector;
+}
+
+static void underline_color_param(const Render *r, Bytebuf *out,
+                                  bool *first, u8 selector)
+{
+    const YewColor *color = &r->underline_colors[selector - 1u];
+
+    param_num(out, first, 58u);
+    param_num(out, first, 2u);
+    param_num(out, first, color->r);
+    param_num(out, first, color->g);
+    param_num(out, first, color->b);
 }
 
 static void attrs_full(Bytebuf *out, bool *first, u16 attrs,
@@ -455,20 +484,33 @@ static void set_style(Render *r, Bytebuf *out, const Cell *cell)
 {
     u16 attrs = terminal_attrs(cell->attrs, r->undercurl);
     u16 old_attrs = terminal_attrs(r->attrs, r->undercurl);
+    u8 ul = underline_selector(r, cell->attrs);
+    u8 old_ul = underline_selector(r, r->attrs);
     bool fg_changed;
     bool bg_changed;
     bool full;
     bool first = true;
     unsigned resets;
 
-    if (r->pen_known && old_attrs == attrs &&
-        color_equal(r->fg, cell->fg) && color_equal(r->bg, cell->bg)) {
+    if (r->plain) {
+        r->fg = cell->fg;
+        r->bg = cell->bg;
+        r->attrs = cell->attrs;
+        r->pen_known = true;
+        return;
+    }
+
+    if (r->pen_known && old_attrs == attrs && old_ul == ul &&
+        (r->no_color || color_equal(r->fg, cell->fg)) &&
+        (r->no_color || color_equal(r->bg, cell->bg))) {
         r->attrs = cell->attrs;
         return;
     }
 
-    fg_changed = !r->pen_known || !color_equal(r->fg, cell->fg);
-    bg_changed = !r->pen_known || !color_equal(r->bg, cell->bg);
+    fg_changed = !r->no_color &&
+                 (!r->pen_known || !color_equal(r->fg, cell->fg));
+    bg_changed = !r->no_color &&
+                 (!r->pen_known || !color_equal(r->bg, cell->bg));
     resets = r->pen_known ? attr_reset_count(old_attrs, attrs) : 3u;
     if (r->pen_known && fg_changed && cell->fg.tag == 0u)
         resets++;
@@ -486,6 +528,8 @@ static void set_style(Render *r, Bytebuf *out, const Cell *cell)
         if (cell->bg.tag != 0u)
             color_param(out, &first, &cell->bg, false, r->tier,
                         r->no_color);
+        if (ul != 0u)
+            underline_color_param(r, out, &first, ul);
     } else {
         attrs_delta(out, &first, old_attrs, attrs, r->undercurl);
         if (fg_changed)
@@ -494,6 +538,12 @@ static void set_style(Render *r, Bytebuf *out, const Cell *cell)
         if (bg_changed)
             color_param(out, &first, &cell->bg, false, r->tier,
                         r->no_color);
+        if (old_ul != ul) {
+            if (ul == 0u)
+                param_num(out, &first, 59u);
+            else
+                underline_color_param(r, out, &first, ul);
+        }
     }
     bytebuf_push_u8(out, (u8)'m');
     r->fg = cell->fg;
@@ -593,7 +643,11 @@ static bool can_reemit_gap(const Render *r, const Grid *g, u16 row,
         u16 pen_attrs = terminal_attrs(r->attrs, r->undercurl);
 
         if (cell->w != 1u || cell_attrs != pen_attrs ||
-            !color_equal(cell->fg, r->fg) || !color_equal(cell->bg, r->bg))
+            underline_selector(r, cell->attrs) !=
+                underline_selector(r, r->attrs) ||
+            (!r->no_color && !r->plain &&
+             (!color_equal(cell->fg, r->fg) ||
+              !color_equal(cell->bg, r->bg))))
             return false;
         cell_bytes(g, cell, row, col, &data, &len);
         (void)data;

@@ -70,6 +70,26 @@ static void dg_frame(Ed *ed, Render *r, Bytebuf *out)
     bytebuf_append(out, (const u8 *)"", 1U);
 }
 
+static bool dg_has_sgr(const Bytebuf *out)
+{
+    size_t i;
+
+    for (i = 0U; i + 2U < out->len; i++) {
+        size_t end;
+
+        if (out->data[i] != 0x1bU || out->data[i + 1U] != (u8)'[')
+            continue;
+        for (end = i + 2U; end < out->len; end++) {
+            if (out->data[end] >= (u8)'@' && out->data[end] <= (u8)'~') {
+                if (out->data[end] == (u8)'m')
+                    return true;
+                break;
+            }
+        }
+    }
+    return false;
+}
+
 /* ---------------------------------------------------------------- */
 /* NO_COLOR                                                          */
 /* ---------------------------------------------------------------- */
@@ -131,20 +151,38 @@ void test_degrade_no_color_emits_no_colour_and_stays_legible(void)
     yew_ed_free(&ed);
 }
 
-/* An EMPTY NO_COLOR is how a shell profile un-sets it, and must not
- * count — the convention is "set and non-empty". */
+/* The NO_COLOR contract is presence-based: even an empty value counts. */
 void test_degrade_empty_no_color_is_not_set(void)
 {
+    Ed ed;
     Render r;
+    Bytebuf frame;
+    const char *s;
 
+    bytebuf_init(&frame);
     (void)setenv("NO_COLOR", "", 1);
     (void)memset(&r, 0, sizeof(r));
     yew_render_init(&r, NULL, dg_env);
-    YEW_ASSERT(!r.no_color);
+    YEW_ASSERT(r.no_color);
+    dg_fixture(&ed, 24U, 80U, 1);
+    dg_frame(&ed, &r, &frame);
+    s = (const char *)frame.data;
+    YEW_ASSERT(strstr(s, "38;") == NULL);
+    YEW_ASSERT(strstr(s, "48;") == NULL);
+    yew_ed_free(&ed);
     (void)unsetenv("NO_COLOR");
+
+    (void)setenv("TERM", "dumb", 1);
     (void)memset(&r, 0, sizeof(r));
     yew_render_init(&r, NULL, dg_env);
     YEW_ASSERT(!r.no_color);
+    YEW_ASSERT(r.plain);
+    dg_fixture(&ed, 24U, 80U, 1);
+    dg_frame(&ed, &r, &frame);
+    YEW_ASSERT(!dg_has_sgr(&frame));
+    yew_ed_free(&ed);
+    (void)unsetenv("TERM");
+    bytebuf_free(&frame);
 }
 
 /* ---------------------------------------------------------------- */

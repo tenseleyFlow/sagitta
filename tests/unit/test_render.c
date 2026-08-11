@@ -477,6 +477,48 @@ void test_render_underline_undercurl_shared_reset(void)
             render_fixture_free(&f);
         }
     }
+
+    {
+        RenderFixture f;
+        YewColor error = {YEW_COLOR_RGB, 255u, 95u, 95u};
+
+        render_fixture_init(&f, 1u, 2u, false);
+        yew_render_set_underline_colors(
+            &f.render, error,
+            (YewColor){YEW_COLOR_RGB, 229u, 192u, 123u},
+            (YewColor){YEW_COLOR_RGB, 97u, 175u, 239u});
+        yew_grid_put(&f.grid, 0u, 0u, (const u8 *)"a", 1u,
+                     color, color,
+                     (u16)(YEW_ATTR_UNDERLINE | YEW_CELL_UL_ERROR));
+        yew_grid_put(&f.grid, 0u, 1u, (const u8 *)"b", 1u,
+                     color, color, YEW_ATTR_UNDERLINE);
+        yew_render_frame(&f.render, &f.grid, &f.out);
+        YEW_ASSERT(render_contains(&f.out, "58;2;255;95;95"));
+        YEW_ASSERT(render_contains(&f.out, "a\033[59mb"));
+        YEW_ASSERT_EQ_U64(sizeof(Cell), 20u);
+        YEW_ASSERT((YEW_CELL_UL_MASK & YEW_ATTR_INVALID_BYTE) == 0u);
+        render_fixture_free(&f);
+    }
+
+    {
+        RenderFixture f;
+
+        render_fixture_init(&f, 1u, 1u, false);
+        f.render.tier = YEW_RENDER_TIER_256;
+        f.render.undercurl = false;
+        yew_render_set_underline_colors(
+            &f.render, (YewColor){YEW_COLOR_RGB, 255u, 95u, 95u},
+            (YewColor){YEW_COLOR_RGB, 229u, 192u, 123u},
+            (YewColor){YEW_COLOR_RGB, 97u, 175u, 239u});
+        yew_grid_put(&f.grid, 0u, 0u, (const u8 *)"x", 1u,
+                     color, color,
+                     (u16)(YEW_ATTR_UNDERCURL | YEW_CELL_UL_WARN));
+        yew_render_frame(&f.render, &f.grid, &f.out);
+        YEW_ASSERT(!render_contains(&f.out, "58;"));
+        YEW_ASSERT(!render_contains(&f.out, "59m"));
+        YEW_ASSERT(render_contains(&f.out, "\033[0;4m"));
+        render_fixture_free(&f);
+    }
 }
 
 static int invalid_cell_child_exit(int scenario)

@@ -33,8 +33,19 @@ enum {
     YEW_ATTR_CONCEAL = 1u << 7,
     YEW_ATTR_STRIKE = 1u << 8,
     YEW_ATTR_OVERLINE = 1u << 9,
-    YEW_ATTR_INVALID_BYTE = 1u << 10
+    YEW_CELL_UL_SHIFT = 10,
+    YEW_CELL_UL_MASK = 3u << YEW_CELL_UL_SHIFT,
+    YEW_CELL_UL_ERROR = 1u << YEW_CELL_UL_SHIFT,
+    YEW_CELL_UL_WARN = 2u << YEW_CELL_UL_SHIFT,
+    YEW_CELL_UL_INFO = 3u << YEW_CELL_UL_SHIFT,
+    YEW_ATTR_INVALID_BYTE = 1u << 12,
+    YEW_CELL_ATTR_MASK = (YEW_ATTR_INVALID_BYTE << 1) - 1u
 };
+
+_Static_assert((YEW_CELL_UL_MASK & ((1u << YEW_CELL_UL_SHIFT) - 1u)) == 0u,
+               "underline selector must not overlap terminal attrs");
+_Static_assert((YEW_CELL_UL_MASK & YEW_ATTR_INVALID_BYTE) == 0u,
+               "invalid-byte marker must not overlap underline selector");
 
 enum {
     CELL_INTERNED = 1u << 0
