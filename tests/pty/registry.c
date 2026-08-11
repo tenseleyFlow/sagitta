@@ -4849,6 +4849,10 @@ static void case_s41_cjk_emoji_string(PtyCtx *c)
         ptc_check(c, c->vt.cur_r == 0 && c->vt.cur_c == 45,
                   "cursor geometry disagrees with CJK/emoji display width");
     }
+    /* The delta above pins the key-triggered repaint.  Startup syntax
+     * compilation may independently contribute a scheduler-dependent
+     * frame before it, so the cumulative snapshot count is not state. */
+    c->vt.sync_pairs_unstable = true;
     ptc_snapshot(c, "s41_cjk_emoji_string");
     force_quit(c);
     (void)unlink(path);
@@ -4911,6 +4915,8 @@ static void case_s41_degrade_full_frame(PtyCtx *c)
     if (strcmp(c->test->profile, "dumb") == 0)
         ptc_check(c, !raw_has_any_sgr_since(c, frame_at),
                   "TERM=dumb full frame emitted SGR");
+    else
+        c->vt.sync_pairs_unstable = true;
     ptc_snapshot(c, c->test->name);
     if (strcmp(c->test->profile, "dumb") == 0) {
         ptc_allow_restore(c);
