@@ -111,6 +111,46 @@ static bool remove_tree(const char *path)
     return unlink(path) == 0;
 }
 
+static int selftest_exit_drain(void)
+{
+    YewLivePty pty = {.master = -1, .pid = -1};
+    char slave[128];
+    pid_t pid;
+    int code = -1;
+
+    if (!yew_live_pty_open(&pty, slave, sizeof(slave),
+                           SCREEN_ROWS, SCREEN_COLS))
+        return 1;
+    pid = fork();
+    if (pid < 0) {
+        yew_live_pty_close(&pty);
+        return 1;
+    }
+    if (pid == 0) {
+        u8 bytes[4096];
+        size_t i;
+
+        if (!yew_live_pty_attach(&pty, slave, SCREEN_ROWS, SCREEN_COLS))
+            _exit(126);
+        (void)memset(bytes, 'x', sizeof(bytes));
+        for (i = 0U; i < 256U; i++) {
+            if (!write_all(STDOUT_FILENO, bytes, sizeof(bytes)))
+                _exit(125);
+        }
+        _exit(0);
+    }
+    pty.pid = pid;
+    if (!yew_live_pty_wait_exit(
+            &pty, yew_live_pty_now_ns() + INT64_C(5000000000), &code) ||
+        code != 0) {
+        yew_live_pty_close(&pty);
+        return 1;
+    }
+    yew_live_pty_close(&pty);
+    (void)printf("perf-latency-selftest: exit drain ok\n");
+    return 0;
+}
+
 static bool load_limits(const char *path, LatencyLimits *limits)
 {
     FILE *file = fopen(path, "r");
@@ -171,59 +211,36 @@ static const char *g_stop_why = "?";
 
 static bool stop_editor(YewLivePty *pty)
 {
-    static const char escape = '\033';
-    static const char quit[] = "q!";
-    struct timespec settle = {0, 50000000};
+    static const char quit[] = "\033[27u:q!\r";
     /*
      * A LIVENESS bound, not a measured quantity.
      *
      * The sample is taken before this function runs, so how long the
      * editor takes to shut down cannot move any number this gate
      * reports — which means a tight deadline here buys nothing and
-     * costs a flake.  Two seconds, minus the 50 ms settle and two
-     * writes, is not much for a cold-started process on a loaded CI
-     * runner: the lane failed with "cold run 1 did not quit" while the
-     * same measurement passed locally with thirty times the budget to
-     * spare.
+     * costs a flake.
      */
     i64 deadline = yew_live_pty_now_ns() + INT64_C(20000000000);
     int code;
 
     /*
-     * THE QUIT IS RETRIED, because one attempt is not reliable and the
-     * reason is in the input decoder rather than in the editor.
+     * THE QUIT IS ENCODED, not timed.
      *
-     * The 50 ms gap below buys separation only if the editor performs a
-     * READ between the two writes.  When a loaded runner deschedules it
-     * for longer than that, both writes are already in the pty buffer
-     * and one read drains them together — and input.c then treats
-     * "\033q" as ALT-Q: arm_deadline() only starts the 25 ms
-     * disambiguation window when ESC is the last byte available, so with
-     * `q` already buffered there is no window at all.  Alt-q is bound to
-     * nothing, the following `!` is bound to nothing, and the editor
-     * sits there until this deadline expires.
-     *
-     * That is what "cold run N did not quit" has been, four times.  It
-     * is a property of writing raw bytes at a terminal we are not
-     * synchronised with, so the fix is to try again rather than to widen
-     * the gap a third time: by the next attempt the buffer is drained
-     * and the editor is idle, so its read gets the ESC alone.
+     * A raw ESC followed later by command text is still one buffered read
+     * when a loaded runner deschedules the editor between writes.  The
+     * decoder then correctly treats ESC plus the next byte as an Alt
+     * chord, so a wall-clock sleep cannot make this protocol reliable.
+     * CSI-u Escape is unambiguous however the read is split, and `:q!`
+     * remains valid after the default `q` key became macro recording.
      *
      * Retrying cannot hide a real hang.  An editor that is genuinely
-     * stuck ignores every attempt and still fails at the same 20 s
-     * bound, with the same message.
+     * stuck ignores every encoded command and still fails at the same
+     * 20 s bound, with the same message.
      */
     while (yew_live_pty_now_ns() < deadline) {
         i64 give_up;
 
-        g_stop_why = "escape write timed out";
-        if (!yew_live_pty_write(pty, &escape, 1U, deadline))
-            return false;
-        settle.tv_sec = 0;
-        settle.tv_nsec = 50000000L;
-        while (nanosleep(&settle, &settle) != 0 && errno == EINTR)
-            ;
-        g_stop_why = "q! write timed out";
+        g_stop_why = "quit write timed out";
         if (!yew_live_pty_write(pty, quit, sizeof(quit) - 1U, deadline))
             return false;
 
@@ -404,6 +421,8 @@ int main(int argc, char **argv)
     i64 cold;
     int status = 0;
 
+    if (argc == 2 && strcmp(argv[1], "--selftest-exit-drain") == 0)
+        return selftest_exit_drain();
     if (argc != 5 || strcmp(argv[1], "--yew") != 0 ||
         strcmp(argv[3], "--baseline") != 0) {
         (void)fprintf(stderr,

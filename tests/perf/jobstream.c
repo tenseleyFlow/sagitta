@@ -174,7 +174,9 @@ static bool read_limit(const char *path, i64 *limit_out)
 
 static bool stop_editor(YewLivePty *pty)
 {
-    static const char quit[] = "\x1b:q!\r";
+    /* CSI-u Escape cannot merge with `:` into an Alt chord when a loaded
+     * runner drains the whole quit sequence in one read. */
+    static const char quit[] = "\x1b[27u:q!\r";
     i64 deadline = yew_live_pty_now_ns() + INT64_C(5000000000);
     int code = 0;
 

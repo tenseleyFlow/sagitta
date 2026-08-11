@@ -310,6 +310,7 @@ bool yew_live_pty_wait_frame(YewLivePty *pty, u64 after, i64 deadline_ns,
 bool yew_live_pty_wait_exit(YewLivePty *pty, i64 deadline_ns, int *code)
 {
     for (;;) {
+        struct pollfd fd = {pty->master, POLLIN | POLLHUP, 0};
         int status;
         pid_t got = waitpid(pty->pid, &status, WNOHANG);
 
@@ -324,10 +325,24 @@ bool yew_live_pty_wait_exit(YewLivePty *pty, i64 deadline_ns, int *code)
             return false;
         if (yew_live_pty_now_ns() >= deadline_ns)
             return false;
-        {
-            struct timespec delay = {0, 1000000};
+        /* A child can keep painting while it processes the quit.  Drain
+         * the master so a full PTY cannot block it in terminal output
+         * before it gets back to input and exits. */
+        if (poll(&fd, 1U, 1) < 0) {
+            if (errno == EINTR)
+                continue;
+            return false;
+        }
+        if ((fd.revents & POLLIN) != 0) {
+            u8 bytes[8192];
+            ssize_t n;
 
-            (void)nanosleep(&delay, NULL);
+            do {
+                n = read(pty->master, bytes, sizeof(bytes));
+            } while (n < 0 && errno == EINTR);
+            if (n < 0 && errno != EAGAIN && errno != EWOULDBLOCK &&
+                errno != EIO)
+                return false;
         }
     }
 }

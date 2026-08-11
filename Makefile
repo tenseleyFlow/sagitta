@@ -1096,6 +1096,7 @@ perf-jobstream-selftest: $(BUILD)/perf_jobstream $(BUILD)/yew
 	fi
 
 perf-latency-selftest: $(BUILD)/perf_latency $(BUILD)/yew
+	$(BUILD)/perf_latency --selftest-exit-drain
 	@if YEW_LATENCY_KEYS=100 YEW_LATENCY_INJECT_NS=6000000 \
 		$(BUILD)/perf_latency --yew $(abspath $(BUILD)/yew) \
 		--baseline $(LATENCY_BASELINE); then \
