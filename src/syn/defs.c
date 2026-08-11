@@ -69,6 +69,8 @@ typedef struct CtxSpec {
     bool include_used;
     bool reachable;
     bool pushed;
+    bool embed_set;
+    SynEmbed embed;
 } CtxSpec;
 
 typedef struct RuleRef {
@@ -299,7 +301,7 @@ static void validate_keys(Compile *c, const FlNode *map,
             continue;
         if (text_eq(key, n, "embed")) {
             diag(c, FL_DIAG_ERROR, kn->sp,
-                 "'embed' is deferred to s41_5");
+                 "'embed' is only valid on a rule");
             continue;
         }
         maybe = suggest(key, n, known, nknown);
@@ -857,6 +859,136 @@ static u8 aux_kind(Compile *c, FlNode *node)
     return SYN_AUXM_NONE;
 }
 
+static bool embed_boundary_same(const SynEmbed *a, const SynEmbed *b)
+{
+    return a->ctx == b->ctx && a->end == b->end &&
+           a->fallback == b->fallback;
+}
+
+static void compile_embed(Compile *c, FlNode *node, FlNode *push,
+                          u16 target, u32 groups, SynEmbed *out)
+{
+    static const char *const keys[] = {
+        "lang", "ctx", "end", "defer", "fallback"
+    };
+    SynEmbed desc;
+    FlNode *lang;
+    FlNode *ctx;
+    FlNode *end;
+    FlNode *defer;
+    FlNode *fallback;
+    const char *text;
+    size_t n;
+    u32 errors_before = c->errors;
+
+    (void)memset(&desc, 0, sizeof(desc));
+    (void)memset(out, 0, sizeof(*out));
+    if (!require_map(c, node, "embed"))
+        return;
+    validate_keys(c, node, keys, (u32)YEW_ARRAY_LEN(keys));
+    lang = map_find(c, node, "lang");
+    ctx = map_find(c, node, "ctx");
+    end = map_find(c, node, "end");
+    defer = map_find(c, node, "defer");
+    fallback = map_find(c, node, "fallback");
+
+    if (push == NULL) {
+        diag(c, FL_DIAG_ERROR, node->sp,
+             "embed requires exactly one string 'push' bridge target");
+    } else if (!lit_is(push, FL_L_STR)) {
+        diag(c, FL_DIAG_ERROR, push->sp,
+             "embed bridge 'push' must be one context name, not a list");
+    }
+
+    if (require_string(c, lang, "embed.lang", &text, &n)) {
+        if (n == 0U || memchr(text, '\0', n) != NULL) {
+            diag(c, FL_DIAG_ERROR, lang->sp,
+                 "embed.lang must be a non-empty string without NUL");
+        } else if (text_eq(text, n, "@self")) {
+            desc.lang_kind = SYN_EMBED_LANG_SELF;
+        } else if (text[0] == '@') {
+            u32 group = 0U;
+            size_t i;
+
+            if (n == 1U) {
+                group = UINT32_MAX;
+            } else {
+                for (i = 1U; i < n; i++) {
+                    if (text[i] < '0' || text[i] > '9' ||
+                        group > (UINT32_MAX - 9U) / 10U) {
+                        group = UINT32_MAX;
+                        break;
+                    }
+                    group = group * 10U + (u32)(text[i] - '0');
+                }
+            }
+            if (group == 0U || group == UINT32_MAX) {
+                diag(c, FL_DIAG_ERROR, lang->sp,
+                     "embed.lang reference must be '@self' or '@N'");
+            } else if (group > 7U || group >= groups) {
+                diag(c, FL_DIAG_ERROR, lang->sp,
+                     "embed.lang: @%u but the pattern has %u capture groups",
+                     group, groups == 0U ? 0U : groups - 1U);
+            } else {
+                desc.lang_kind = SYN_EMBED_LANG_CAPTURE;
+                desc.lang_group = (u8)group;
+            }
+        } else {
+            desc.lang_kind = SYN_EMBED_LANG_LITERAL;
+            desc.lang = yew_intern(c->aux, text, n);
+        }
+    }
+    if (ctx != NULL && require_string(c, ctx, "embed.ctx", &text, &n)) {
+        if (n == 0U || memchr(text, '\0', n) != NULL)
+            diag(c, FL_DIAG_ERROR, ctx->sp,
+                 "embed.ctx must be a non-empty string without NUL");
+        else
+            desc.ctx = yew_intern(c->aux, text, n);
+    }
+    if (require_string(c, end, "embed.end", &text, &n)) {
+        if (text_eq(text, n, "line"))
+            desc.end = SYN_EMBED_END_LINE;
+        else if (text_eq(text, n, "inline"))
+            desc.end = SYN_EMBED_END_INLINE;
+        else
+            diag(c, FL_DIAG_ERROR, end->sp,
+                 "embed.end must be 'line' or 'inline'");
+    }
+    if (defer != NULL) {
+        bool enabled = false;
+
+        if (require_bool(c, defer, "embed.defer", &enabled) && enabled)
+            desc.flags |= YEW_SYN_EMBED_DEFER;
+    }
+    if (fallback != NULL)
+        (void)attr_resolve(c, fallback, &desc.fallback);
+    else if (target < c->nctxs && c->ctxs[target].default_node != NULL)
+        (void)attr_resolve(c, c->ctxs[target].default_node, &desc.fallback);
+    else
+        desc.fallback = YEW_ATTR_TEXT;
+
+    if (c->errors != errors_before || push == NULL ||
+        !lit_is(push, FL_L_STR) || target >= c->nctxs)
+        return;
+    if (node_str(c, push, &n) == NULL ||
+        ctx_index(c, node_str(c, push, NULL), n) < 0)
+        return;
+    *out = desc;
+    /* The bridge owns one normalized exit policy.  Language selection and
+     * defer remain on the opener rule, so compatible openers may share it. */
+    if (c->ctxs[target].embed_set) {
+        if (!embed_boundary_same(&c->ctxs[target].embed, &desc))
+            diag(c, FL_DIAG_ERROR, node->sp,
+                 "context '%.*s' has incompatible embed bridge descriptors",
+                 (int)c->ctxs[target].name_len, c->ctxs[target].name);
+        return;
+    }
+    c->ctxs[target].embed.ctx = desc.ctx;
+    c->ctxs[target].embed.end = desc.end;
+    c->ctxs[target].embed.fallback = desc.fallback;
+    c->ctxs[target].embed_set = true;
+}
+
 static void compile_rule(Compile *c, FlNode *node, u16 ctx_id, SynRule *rule,
                          const char **pattern_out, u32 rule_index)
 {
@@ -864,13 +996,15 @@ static void compile_rule(Compile *c, FlNode *node, u16 ctx_id, SynRule *rule,
         "match", "attr", "captures", "consume", "push", "pop", "set",
         "icase", "set_aux", "strip", "aux", "aux_pre", "aux_post",
         "aux_int", "aux_add", "aux_add_capture", "value", "if_value",
-        "first_line"
+        "first_line", "embed", "end"
     };
     FlNode *match = map_find(c, node, "match");
     FlNode *aux = map_find(c, node, "aux");
     FlNode *push = map_find(c, node, "push");
     FlNode *pop = map_find(c, node, "pop");
     FlNode *set = map_find(c, node, "set");
+    FlNode *embed = map_find(c, node, "embed");
+    FlNode *end_node = map_find(c, node, "end");
     FlNode *consume = map_find(c, node, "consume");
     FlNode *set_aux = map_find(c, node, "set_aux");
     FlNode *strip = map_find(c, node, "strip");
@@ -907,6 +1041,9 @@ static void compile_rule(Compile *c, FlNode *node, u16 ctx_id, SynRule *rule,
              "rule has both '%s' and '%s'; a rule performs exactly one state op",
              a, b);
     }
+    if (embed != NULL && (pop != NULL || set != NULL))
+        diag(c, FL_DIAG_ERROR, node->sp,
+             "embed cannot be combined with 'pop' or 'set'; it may only accompany its string 'push' bridge target");
     if (icase_node != NULL)
         (void)require_bool(c, icase_node, "rule icase", &icase);
     if (first_line_node != NULL) {
@@ -993,6 +1130,16 @@ static void compile_rule(Compile *c, FlNode *node, u16 ctx_id, SynRule *rule,
         (void)context_target(c, set, "set", &rule->target);
         if (rule->target < c->nctxs)
             c->ctxs[rule->target].pushed = true;
+    }
+    if (embed != NULL) {
+        compile_embed(c, embed, push, rule->target, groups, &rule->embed);
+        rule->op = SYN_OP_EMBED;
+    }
+    if (end_node != NULL) {
+        bool enabled = false;
+
+        if (require_bool(c, end_node, "rule end", &enabled))
+            rule->end = enabled ? 1U : 0U;
     }
     if (set_aux != NULL && require_int(c, set_aux, "set_aux", &integer)) {
         if (integer < 0 || integer > 7 || (u64)integer >= groups) {
@@ -1181,7 +1328,7 @@ static void mark_reachable(const SynDef *def, CtxSpec *ctxs, u16 id)
         const SynRule *rule = &def->rules[ctx->first_rule + i];
         u32 j;
 
-        if (rule->op == SYN_OP_PUSH) {
+        if (rule->op == SYN_OP_PUSH || rule->op == SYN_OP_EMBED) {
             if (rule->npush == 0U)
                 mark_reachable(def, ctxs, rule->target);
             else {
@@ -1227,7 +1374,7 @@ static u32 context_depth(const SynDef *def, u16 id, u8 *visiting)
         u32 d = 1U;
         u32 j;
 
-        if (rule->op != SYN_OP_PUSH)
+        if (rule->op != SYN_OP_PUSH && rule->op != SYN_OP_EMBED)
             continue;
         if (rule->npush == 0U) {
             d += context_depth(def, rule->target, visiting);
@@ -1270,6 +1417,7 @@ static void validate_compiled(Compile *c, SynDef *def,
     mark_reachable(def, c->ctxs, def->root);
     for (i = 0U; i < c->nctxs; i++) {
         const SynCtx *ctx = &def->ctxs[i];
+        bool has_end = false;
         u32 j;
 
         if (!c->ctxs[i].reachable && !c->ctxs[i].include_used)
@@ -1293,6 +1441,13 @@ static void validate_compiled(Compile *c, SynDef *def,
         for (j = 0U; j < ctx->nrules; j++) {
             u32 index = ctx->first_rule + j;
             u32 k;
+
+            if (def->rules[index].end != 0U) {
+                has_end = true;
+                if ((ctx->flags & YEW_SYN_CTX_EMBED_BRIDGE) == 0U)
+                    diag(c, FL_DIAG_ERROR, rule_spans[index],
+                         "'end' marks a rule that returns from an embedded language");
+            }
 
             if (def->rules[index].aux_match == SYN_AUXM_INDENT_LT && j != 0U)
                 diag(c, FL_DIAG_ERROR, c->ctxs[i].rules->sp,
@@ -1320,6 +1475,11 @@ static void validate_compiled(Compile *c, SynDef *def,
                 }
             }
         }
+        if ((ctx->flags & YEW_SYN_CTX_EMBED_BRIDGE) != 0U && !has_end &&
+            ctx->at_eol != SYN_OP_POP && ctx->at_eol != SYN_OP_SET)
+            diag(c, FL_DIAG_ERROR, c->ctxs[i].node->sp,
+                 "context '%.*s' embeds a language it can never leave",
+                 (int)c->ctxs[i].name_len, c->ctxs[i].name);
     }
     (void)memset(visiting, 0, c->nctxs);
     {
@@ -1540,6 +1700,11 @@ SynDef *yew_syn_def_compile(Arena *a, DiagCtx *dc, const u8 *src, size_t n,
             first_union(ctx->first, def->rules[total].first);
             total++;
         }
+    }
+    for (i = 0U; i < c.nctxs; i++) {
+        def->ctxs[i].embed = c.ctxs[i].embed;
+        if (c.ctxs[i].embed_set)
+            def->ctxs[i].flags |= YEW_SYN_CTX_EMBED_BRIDGE;
     }
     validate_compiled(&c, def, patterns, rule_spans);
     if (c.errors == 0U) {
@@ -2019,7 +2184,7 @@ static const char **blob_read_string_array(BlobReader *r, Arena *arena,
     return values;
 }
 
-static const u8 syn_blob_magic[8] = {'Y', 'E', 'W', 'S', 'Y', 'N', '1', 0};
+static const u8 syn_blob_magic[8] = {'Y', 'E', 'W', 'S', 'Y', 'N', '2', 0};
 
 static bool syn_blob_pack(const SynDef *def, const char *source, Bytebuf *out)
 {
@@ -2078,6 +2243,13 @@ static bool syn_blob_pack(const SynDef *def, const char *source, Bytebuf *out)
         bytebuf_push_u8(out, ctx->eol_nop);
         bytebuf_push_u8(out, ctx->flags);
         blob_u16(out, ctx->eol_target);
+        blob_u32(out, ctx->embed.lang);
+        blob_u32(out, ctx->embed.ctx);
+        bytebuf_push_u8(out, ctx->embed.lang_kind);
+        bytebuf_push_u8(out, ctx->embed.lang_group);
+        bytebuf_push_u8(out, ctx->embed.end);
+        bytebuf_push_u8(out, ctx->embed.fallback);
+        bytebuf_push_u8(out, ctx->embed.flags);
         bytebuf_append(out, ctx->first, sizeof(ctx->first));
         if (!blob_string(out, m->ctx_names[i]))
             goto fail;
@@ -2100,7 +2272,15 @@ static bool syn_blob_pack(const SynDef *def, const char *source, Bytebuf *out)
         bytebuf_push_u8(out, rule->aux_add_group);
         bytebuf_append(out, rule->caps, sizeof(rule->caps));
         bytebuf_push_u8(out, rule->aux_group);
+        bytebuf_push_u8(out, rule->end);
         bytebuf_push_u8(out, rule->npush);
+        blob_u32(out, rule->embed.lang);
+        blob_u32(out, rule->embed.ctx);
+        bytebuf_push_u8(out, rule->embed.lang_kind);
+        bytebuf_push_u8(out, rule->embed.lang_group);
+        bytebuf_push_u8(out, rule->embed.end);
+        bytebuf_push_u8(out, rule->embed.fallback);
+        bytebuf_push_u8(out, rule->embed.flags);
         blob_u32(out, rule->aux_pre);
         blob_u32(out, rule->aux_post);
         for (j = 0U; j < YEW_ARRAY_LEN(rule->push); j++)
@@ -2128,15 +2308,17 @@ static bool syn_rule_valid(const SynRule *rule, const SynDef *def,
 {
     u32 i;
 
-    if (rule->attr >= YEW_ATTR__COUNT || rule->op > SYN_OP_SET ||
+    if (rule->attr >= YEW_ATTR__COUNT || rule->op > SYN_OP_EMBED ||
         rule->nop > 4U || rule->aux_match > SYN_AUXM_LINE_START ||
         rule->consume > 7U || rule->npush > 4U ||
         rule->value_pred > SYN_VALUE_SET ||
-        rule->aux_group > 7U || rule->aux_add_group > 7U ||
+        rule->aux_group > 7U || rule->end > 1U ||
+        rule->aux_add_group > 7U ||
         rule->aux_pre >= naux ||
         rule->aux_post >= naux)
         return false;
-    if ((rule->op == SYN_OP_PUSH && rule->npush == 0U) ||
+    if (((rule->op == SYN_OP_PUSH || rule->op == SYN_OP_EMBED) &&
+         rule->npush == 0U) ||
         rule->op == SYN_OP_SET) {
         if (rule->target >= def->nctxs)
             return false;
@@ -2153,7 +2335,49 @@ static bool syn_rule_valid(const SynRule *rule, const SynDef *def,
         (((rule->flags & YEW_SYN_RULE_AUX_INT) == 0U) || rule->re == NULL ||
          rule->aux_add_group >= yew_re_group_count(rule->re)))
         return false;
+    if (rule->op == SYN_OP_EMBED) {
+        if (rule->embed.lang_kind == SYN_EMBED_LANG_NONE ||
+            rule->embed.lang_kind > SYN_EMBED_LANG_SELF ||
+            rule->embed.end == SYN_EMBED_END_NONE ||
+            rule->embed.end > SYN_EMBED_END_INLINE ||
+            rule->embed.fallback >= YEW_ATTR__COUNT ||
+            (rule->embed.flags & (u8)~YEW_SYN_EMBED_DEFER) != 0U ||
+            rule->embed.lang >= naux || rule->embed.ctx >= naux)
+            return false;
+        if (rule->embed.lang_kind == SYN_EMBED_LANG_LITERAL) {
+            if (rule->embed.lang == 0U || rule->embed.lang_group != 0U)
+                return false;
+        } else if (rule->embed.lang_kind == SYN_EMBED_LANG_CAPTURE) {
+            if (rule->embed.lang != 0U || rule->embed.lang_group < 1U ||
+                rule->embed.lang_group > 7U || rule->re == NULL ||
+                rule->embed.lang_group >= yew_re_group_count(rule->re))
+                return false;
+        } else if (rule->embed.lang != 0U ||
+                   rule->embed.lang_group != 0U) {
+            return false;
+        }
+    } else if (rule->embed.lang != 0U || rule->embed.ctx != 0U ||
+               rule->embed.lang_kind != SYN_EMBED_LANG_NONE ||
+               rule->embed.lang_group != 0U ||
+               rule->embed.end != SYN_EMBED_END_NONE ||
+               rule->embed.fallback != 0U || rule->embed.flags != 0U) {
+        return false;
+    }
     return true;
+}
+
+static bool syn_embed_boundary_valid(const SynEmbed *embed, bool active,
+                                     size_t naux)
+{
+    if (!active)
+        return embed->lang == 0U && embed->ctx == 0U &&
+               embed->lang_group == 0U && embed->end == SYN_EMBED_END_NONE &&
+               embed->fallback == 0U && embed->flags == 0U;
+    return embed->lang == 0U && embed->ctx < naux &&
+           embed->lang_kind == SYN_EMBED_LANG_NONE &&
+           embed->lang_group == 0U && embed->end != SYN_EMBED_END_NONE &&
+           embed->end <= SYN_EMBED_END_INLINE &&
+           embed->fallback < YEW_ATTR__COUNT && embed->flags == 0U;
 }
 
 static SynDef *syn_blob_unpack(Arena *arena, const u8 *data, size_t len,
@@ -2250,6 +2474,13 @@ static SynDef *syn_blob_unpack(Arena *arena, const u8 *data, size_t len,
         ctx->eol_nop = blob_read_u8(&r);
         ctx->flags = blob_read_u8(&r);
         ctx->eol_target = blob_read_u16(&r);
+        ctx->embed.lang = blob_read_u32(&r);
+        ctx->embed.ctx = blob_read_u32(&r);
+        ctx->embed.lang_kind = blob_read_u8(&r);
+        ctx->embed.lang_group = blob_read_u8(&r);
+        ctx->embed.end = blob_read_u8(&r);
+        ctx->embed.fallback = blob_read_u8(&r);
+        ctx->embed.flags = blob_read_u8(&r);
         first = blob_read_bytes(&r, sizeof(ctx->first));
         (void)first;
         m->ctx_names[i] = blob_read_string(&r, arena, NULL);
@@ -2258,6 +2489,13 @@ static SynDef *syn_blob_unpack(Arena *arena, const u8 *data, size_t len,
             ctx->nrules > def->nrules - ctx->first_rule ||
             ctx->dflt_attr >= YEW_ATTR__COUNT || ctx->at_eol > SYN_OP_SET ||
             ctx->eol_nop > 4U ||
+            (ctx->flags & (u8)~(YEW_SYN_CTX_UNIT_SPAN |
+                                YEW_SYN_CTX_UNIT_ATOM |
+                                YEW_SYN_CTX_EMBED_BRIDGE)) != 0U ||
+            !syn_embed_boundary_valid(
+                &ctx->embed,
+                (ctx->flags & YEW_SYN_CTX_EMBED_BRIDGE) != 0U,
+                (size_t)naux + 1U) ||
             (ctx->at_eol == SYN_OP_SET && ctx->eol_target >= def->nctxs))
             goto fail;
     }
@@ -2289,7 +2527,15 @@ static SynDef *syn_blob_unpack(Arena *arena, const u8 *data, size_t len,
         if (bytes != NULL)
             (void)memcpy(rule->caps, bytes, sizeof(rule->caps));
         rule->aux_group = blob_read_u8(&r);
+        rule->end = blob_read_u8(&r);
         rule->npush = blob_read_u8(&r);
+        rule->embed.lang = blob_read_u32(&r);
+        rule->embed.ctx = blob_read_u32(&r);
+        rule->embed.lang_kind = blob_read_u8(&r);
+        rule->embed.lang_group = blob_read_u8(&r);
+        rule->embed.end = blob_read_u8(&r);
+        rule->embed.fallback = blob_read_u8(&r);
+        rule->embed.flags = blob_read_u8(&r);
         rule->aux_pre = blob_read_u32(&r);
         rule->aux_post = blob_read_u32(&r);
         for (j = 0U; j < YEW_ARRAY_LEN(rule->push); j++)
@@ -2309,6 +2555,32 @@ static SynDef *syn_blob_unpack(Arena *arena, const u8 *data, size_t len,
             (void)memset(rule->first, 0xff, sizeof(rule->first));
         if (!r.ok || !syn_rule_valid(rule, def, (size_t)naux + 1U) ||
             (rule->aux_match == SYN_AUXM_NONE) != (rule->re != NULL))
+            goto fail;
+    }
+    for (i = 0U; i < def->nctxs; i++) {
+        const SynCtx *ctx = &def->ctxs[i];
+        bool bridge = (ctx->flags & YEW_SYN_CTX_EMBED_BRIDGE) != 0U;
+        bool has_end = false;
+        u32 j;
+
+        for (j = 0U; j < ctx->nrules; j++) {
+            const SynRule *rule = &def->rules[ctx->first_rule + j];
+
+            if (rule->end != 0U) {
+                if (!bridge)
+                    goto fail;
+                has_end = true;
+            }
+            if (rule->op == SYN_OP_EMBED) {
+                const SynCtx *target = &def->ctxs[rule->target];
+
+                if ((target->flags & YEW_SYN_CTX_EMBED_BRIDGE) == 0U ||
+                    !embed_boundary_same(&target->embed, &rule->embed))
+                    goto fail;
+            }
+        }
+        if (bridge && !has_end && ctx->at_eol != SYN_OP_POP &&
+            ctx->at_eol != SYN_OP_SET)
             goto fail;
     }
     if (!r.ok || r.at != r.len || def->name == NULL ||

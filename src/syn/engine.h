@@ -98,8 +98,26 @@ typedef enum SynOp {
     SYN_OP_STAY = 0,
     SYN_OP_PUSH,
     SYN_OP_POP,
-    SYN_OP_SET
+    SYN_OP_SET,
+    SYN_OP_EMBED
 } SynOp;
+
+typedef enum SynEmbedLang {
+    SYN_EMBED_LANG_NONE = 0,
+    SYN_EMBED_LANG_LITERAL,
+    SYN_EMBED_LANG_CAPTURE,
+    SYN_EMBED_LANG_SELF
+} SynEmbedLang;
+
+typedef enum SynEmbedEnd {
+    SYN_EMBED_END_NONE = 0,
+    SYN_EMBED_END_LINE,
+    SYN_EMBED_END_INLINE
+} SynEmbedEnd;
+
+enum {
+    YEW_SYN_EMBED_DEFER = 1U << 0
+};
 
 typedef enum SynAuxMatch {
     SYN_AUXM_NONE = 0,
@@ -130,8 +148,20 @@ enum {
 
 enum {
     YEW_SYN_CTX_UNIT_SPAN = 1U << 0,
-    YEW_SYN_CTX_UNIT_ATOM = 1U << 1
+    YEW_SYN_CTX_UNIT_ATOM = 1U << 1,
+    YEW_SYN_CTX_EMBED_BRIDGE = 1U << 2
 };
+
+typedef struct SynEmbed {
+    u32 lang;                /* aux interner id for a literal language */
+    u32 ctx;                 /* aux interner id for guest context, 0 = root */
+    u8 lang_kind;
+    u8 lang_group;
+    u8 end;
+    u8 fallback;
+    u8 flags;
+    u8 reserved[3];
+} SynEmbed;
 
 typedef struct SynRule {
     const YewRe *re;
@@ -147,11 +177,13 @@ typedef struct SynRule {
     u8 aux_add_group;
     u8 caps[8];
     u8 aux_group;
+    u8 end;
     u32 aux_pre;             /* interned literal affix, 0 = empty */
     u32 aux_post;            /* interned literal affix, 0 = empty */
     u16 push[4];             /* multi-push outermost to innermost */
     u8 npush;                /* 0 uses target as the single push */
     u8 first[32];
+    SynEmbed embed;          /* opener selector plus boundary policy */
 } SynRule;
 
 typedef struct SynCtx {
@@ -163,6 +195,7 @@ typedef struct SynCtx {
     u8 flags;
     u8 first[32];
     u16 eol_target;          /* SYN_OP_SET target; zero otherwise */
+    SynEmbed embed;          /* non-zero lang_kind marks an embed bridge */
 } SynCtx;
 
 typedef struct SynDef {

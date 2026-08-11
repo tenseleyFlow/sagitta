@@ -44,13 +44,15 @@ void syn_toy_init(SynToy *toy)
     interner_init(&toy->aux, &toy->aux_arena);
 
     toy->ctxs[SYN_TOY_MAIN] = (SynCtx){0U, 7U, YEW_ATTR_TEXT,
-                                       SYN_OP_STAY, 0U, 0U, {0}, 0U};
+                                       SYN_OP_STAY, 0U, 0U, {0}, 0U, {0}};
     toy->ctxs[SYN_TOY_STRING] = (SynCtx){7U, 2U, YEW_ATTR_STRING,
-                                         SYN_OP_POP, 1U, 0U, {0}, 0U};
+                                         SYN_OP_POP, 1U, 0U, {0}, 0U, {0}};
     toy->ctxs[SYN_TOY_COMMENT_BLOCK] =
-        (SynCtx){9U, 1U, YEW_ATTR_COMMENT, SYN_OP_STAY, 0U, 0U, {0}, 0U};
+        (SynCtx){9U, 1U, YEW_ATTR_COMMENT, SYN_OP_STAY, 0U, 0U, {0}, 0U,
+                 {0}};
     toy->ctxs[SYN_TOY_COMMENT_LINE] =
-        (SynCtx){10U, 0U, YEW_ATTR_COMMENT, SYN_OP_POP, 1U, 0U, {0}, 0U};
+        (SynCtx){10U, 0U, YEW_ATTR_COMMENT, SYN_OP_POP, 1U, 0U, {0}, 0U,
+                 {0}};
 
     rule_init(toy, 0U, "//", YEW_ATTR_COMMENT, SYN_OP_PUSH,
               SYN_TOY_COMMENT_LINE);

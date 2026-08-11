@@ -200,7 +200,8 @@ void test_syn_line_step_cap_degrades_instead_of_stalling(void)
     enum { NRULES = 4200 };
     Arena arena;
     SynRule *rules = calloc(NRULES, sizeof(*rules));
-    SynCtx ctx = {0U, NRULES, YEW_ATTR_TEXT, SYN_OP_STAY, 0U, 0U, {0}, 0U};
+    SynCtx ctx = {0U, NRULES, YEW_ATTR_TEXT, SYN_OP_STAY, 0U, 0U, {0}, 0U,
+                  {0}};
     SynDef def = {"steps", 0U, 1U, NRULES, &ctx, rules, NULL};
     SynEngine *engine;
     SynSpan spans[8];
@@ -242,7 +243,8 @@ void test_syn_line_empty_candidate_set_does_not_scan_declared_first(void)
     enum { NRULES = 4200 };
     Arena arena;
     SynRule *rules = calloc(NRULES, sizeof(*rules));
-    SynCtx ctx = {0U, NRULES, YEW_ATTR_TEXT, SYN_OP_STAY, 0U, 0U, {0}, 0U};
+    SynCtx ctx = {0U, NRULES, YEW_ATTR_TEXT, SYN_OP_STAY, 0U, 0U, {0}, 0U,
+                  {0}};
     SynDef def = {"empty-candidates", 0U, 1U, NRULES, &ctx, rules, NULL};
     SynEngine *engine;
     SynSpan spans[8];
@@ -277,7 +279,8 @@ void test_syn_line_large_candidate_index_falls_back_without_semantic_change(void
     enum { NRULES = 9000 };
     Arena arena;
     SynRule *rules = calloc(NRULES, sizeof(*rules));
-    SynCtx ctx = {0U, NRULES, YEW_ATTR_TEXT, SYN_OP_STAY, 0U, 0U, {0}, 0U};
+    SynCtx ctx = {0U, NRULES, YEW_ATTR_TEXT, SYN_OP_STAY, 0U, 0U, {0}, 0U,
+                  {0}};
     SynDef def = {"candidate-cap", 0U, 1U, NRULES, &ctx, rules, NULL};
     SynEngine *engine;
     SynSpan spans[8];
