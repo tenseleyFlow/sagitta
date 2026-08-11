@@ -139,10 +139,8 @@ void test_draw_rect_selected_cells_equal_deleted_span_cells(void)
         "a\xFF" "b\n"
         "x\n"
         "   z\n";
-    static const YewColor selected_bg = {
-        YEW_COLOR_RGB, 52U, 72U, 108U
-    };
     Ed ed;
+    const ThemeEnt *selection;
     Cursor *cursor;
     YewSelSpanVec spans = {0};
     Bytebuf before;
@@ -153,6 +151,8 @@ void test_draw_rect_selected_cells_equal_deleted_span_cells(void)
     size_t row;
 
     yew_ed_init(&ed);
+    selection = yew_theme_ui_tab(&ed, "sel");
+    YEW_ASSERT_NOT_NULL(selection);
     YEW_ASSERT(yew_ed_open_scratch(&ed));
     yew_undo_free(ed.buffer.undo);
     yew_textbuf_free(ed.buffer.tb);
@@ -191,8 +191,8 @@ void test_draw_rect_selected_cells_equal_deleted_span_cells(void)
             const Cell *cell = &ed.grid.back[row * ed.grid.cols + col];
             bool selected = col >= painted_lo.v && col < painted_hi.v;
 
-            YEW_ASSERT((memcmp(&cell->bg, &selected_bg,
-                               sizeof(selected_bg)) == 0) == selected);
+            YEW_ASSERT((memcmp(&cell->bg, &selection->bg,
+                               sizeof(selection->bg)) == 0) == selected);
         }
     }
 
