@@ -1,0 +1,30 @@
+%YAML 1.2
+---
+# root comment
+defaults: &defaults
+  enabled: true # note
+  missing: null
+  infinity: .inf
+  timestamp: 2025-01-02T03:04:05Z
+  values: [1, {nested: [false, !!str value, *defaults]}]
+  merge: <<
+  single: 'it''s'
+  double: "line\n"
+- item
+literal: |2-
+    body
+
+    still body
+next: value
+folded: >+
+ body
+after: done
+? complex
+: key
+plain continued
+  msg: a: b
+deep: [[[[[value]]]]]
+yes_word: yes
+...
+
+# Sprint 42 deterministic variant: yaml-10

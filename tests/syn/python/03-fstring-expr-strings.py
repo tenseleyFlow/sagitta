@@ -1,0 +1,8 @@
+f"{f'''nested'''}"
+f"{f'nested'}"
+f"{'''triple'''}"
+f"{rb'''bytes'''}"
+f"{r"raw"}"
+f"{b'bytes'}"
+f"{\"double\"}"
+f"{'single'}"

@@ -1,0 +1,13 @@
+{
+  // legal line comment
+  "valid": "quote \" slash \/ backslash \\ controls \b\f\n\r\t unicode \u263A",
+  /* legal block
+     comment */
+  "numbers": [0, -1, 12.5, 6.02e23, +1, 01, 0x10, .5, 1., 1e],
+  "values": [true, false, null, nope],
+  "badEscape": "\q",
+  "control": "a	b",
+  "trailing": [1,],
+}
+
+// Sprint 42 deterministic variant: jsonc-17

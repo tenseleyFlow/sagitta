@@ -1,0 +1,6 @@
+main_alias: *alias
+main_tag: !custom
+main_time: 07:32:00.5
+main_number: 12.5
+main_map: {"quoted": 'value', bare: "double", refs: &anchor, tag: !!str, date: 2025-01-02T03:04:05Z, time: 07:32:00, bool: true, nil: null, float: .nan, num: 12.5, nested: ["q": 'v', bare: "d", ref: *anchor, tag: !x, date: 2025-01-02, time: 07:32:00, bool: false, nil: ~, float: .inf, num: 2, nested: {"q": 'v', bare: "d", ref: &anchor, tag: !x, date: 2025-01-02, time: 07:32:00, bool: true, nil: null, float: .nan, num: 3, nested: ["q": 'v', bare: "d", ref: *anchor, tag: !x, date: 2025-01-02, time: 07:32:00, bool: false, nil: ~, float: .inf, num: 4, deeper: [x], comma: y]}]}]}
+bad_escape: "\q"

@@ -1,0 +1,25 @@
+# TOML kitchen
+[owner.profile."quoted name"]
+name = "Tom \"D\"\n"
+literal = 'C:\path\n'
+multiline = """first
+second \n \q \
+  joined
+third"""
+multiliteral = '''first
+C:\path\n
+third'''
+when_offset = 1979-05-27T07:32:00.999999-07:00
+when_z = 1979-05-27t07:32:00Z
+when_local = 1979-05-27 07:32:00
+date = 1979-05-27
+time = 07:32:00.5
+nums = [1_000, 0xff, 0o755, 0b1010, 1.2e-3, inf, -nan]
+enabled = true
+inline = { dotted.key = false }
+bad = "\q"
+
+[[products.tools]]
+name = "hammer"
+
+# Sprint 42 deterministic variant: toml-16

@@ -1,0 +1,16 @@
+{
+  "valid": "quote \" slash \/ backslash \\ controls \b\f\n\r\t unicode \u263A",
+  "numbers": [0, -1, 12.5, 6.02e23],
+  "values": [true, false, null],
+  "badEscape": "\q",
+  "control": "a	b",
+  "badNumbers": [+1, 01, 0x10, .5, 1., 1e],
+  "badWord": nope,
+  "single": 'bad',
+  "trailing": [1,],
+  // invalid line comment
+  "block": /* invalid *
+  still invalid */ 2
+}
+
+// Sprint 42 deterministic variant: json-04
