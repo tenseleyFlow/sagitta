@@ -486,7 +486,7 @@ endif
         fuzz-syn-long \
         fuzz-syn-line-long fuzz-syn-edit-long \
         test-record-corpus \
-        test-syn-corpus test-syn-def-corpus test-syn-assets \
+        test-syn-corpus test-syn-def-corpus test-syn-assets syn-goldens \
         fixtures fixtures-quick fixtures-verify \
         fixtures-verify-quick \
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
@@ -913,6 +913,9 @@ test-syn-def-corpus: $(BUILD)/fuzz_syn_def
 
 test-syn-assets: $(BUILD)/yew
 	scripts/check-syn-assets.sh $(BUILD)/yew
+
+syn-goldens: $(BUILD)/yew
+	scripts/gen-syn-goldens.sh $(BUILD)/yew
 
 fuzz-textbuf: $(BUILD)/fuzz_textbuf
 	$(BUILD)/fuzz_textbuf --replay tests/fuzz/replay-smoke.trace

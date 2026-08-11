@@ -1,5 +1,5 @@
 #!/bin/sh
-# Sprint 40/41 syntax-definition integration gates.
+# Sprint 40-42 syntax-definition integration gates.
 set -eu
 
 if [ "$#" -ne 1 ]; then
@@ -17,17 +17,39 @@ mkdir -p "$XDG_CONFIG_HOME/yew/syntax"
 cp tests/syn/discovery/user-asset.fl \
    "$XDG_CONFIG_HOME/yew/syntax/asset-user.fl"
 
-"$yew" syn check --strict runtime/syntax/ini.fl
+for def in runtime/syntax/*.fl; do
+    "$yew" syn check --strict "$def"
+done
 
 golden_count=0
-for spec in c:c fletch:fl sh:sh make:mk markdown:md; do
+new_golden_count=0
+for spec in \
+    c:tests/syn/c:c \
+    fletch:tests/syn/fletch:fl \
+    ini:tests/syn/ini:ini \
+    make:tests/syn/make:mk \
+    markdown:tests/syn/markdown:md \
+    sh:tests/syn/sh:sh \
+    python:tests/syn/python:py \
+    rust:tests/syn/rust:rs \
+    go:tests/syn/go:go \
+    javascript:tests/syn/javascript:js \
+    typescript:tests/syn/javascript:ts \
+    fortran:tests/syn/fortran:f90 \
+    fortran_fixed:tests/syn/fortran:f \
+    json:tests/syn/json:json \
+    jsonc:tests/syn/json:jsonc \
+    yaml:tests/syn/yaml:yml \
+    toml:tests/syn/toml:toml
+do
     lang=${spec%%:*}
-    ext=${spec#*:}
+    rest=${spec#*:}
+    dir=${rest%%:*}
+    ext=${rest#*:}
     def=runtime/syntax/$lang.fl
 
-    "$yew" syn check --strict "$def"
-    "$yew" syn check --coverage "$def" tests/syn/"$lang"/*."$ext"
-    for input in tests/syn/"$lang"/*."$ext"; do
+    "$yew" syn check --coverage "$def" "$dir"/*."$ext"
+    for input in "$dir"/*."$ext"; do
         golden=${input%."$ext"}.spans
         actual=$tmp/$lang-$(basename "$input").spans
 
@@ -47,10 +69,15 @@ for spec in c:c fletch:fl sh:sh make:mk markdown:md; do
             exit 1
         }
         golden_count=$((golden_count + 1))
+        case "$dir" in
+            tests/syn/c|tests/syn/fletch|tests/syn/ini|tests/syn/make|\
+            tests/syn/markdown|tests/syn/sh) ;;
+            *) new_golden_count=$((new_golden_count + 1)) ;;
+        esac
     done
 done
-if [ "$golden_count" -lt 90 ]; then
-    echo "syntax assets: only $golden_count Sprint 41 goldens (need 90)" >&2
+if [ "$new_golden_count" -lt 140 ]; then
+    echo "syntax assets: only $new_golden_count Sprint 42 goldens (need 140)" >&2
     exit 1
 fi
 
@@ -144,20 +171,4 @@ while IFS='|' read -r fixture level line col message; do
     fi
 done < tests/syn/bad/expected.txt
 
-for input in tests/syn/ini/*.ini; do
-    golden=${input%.ini}.spans
-    actual=$tmp/$(basename "${input%.ini}").spans
-    "$yew" syn dump runtime/syntax/ini.fl --spans "$input" > "$actual"
-    cmp -s "$golden" "$actual" || {
-        echo "syntax assets: stale span golden: $golden" >&2
-        diff -u "$golden" "$actual" || true
-        exit 1
-    }
-    "$yew" syn dump runtime/syntax/ini.fl --spans "$input" > "$actual.2"
-    cmp -s "$actual" "$actual.2" || {
-        echo "syntax assets: nondeterministic span dump: $input" >&2
-        exit 1
-    }
-done
-
-echo "syntax assets: ok"
+echo "syntax assets: ok ($golden_count total, $new_golden_count Sprint 42)"
