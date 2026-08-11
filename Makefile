@@ -18,6 +18,7 @@ SYN_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
                   0x9e3779b97f4a7c15 0xd1b54a32d192ed03
 SYN_FUZZ_OPS ?= 100000
 SYN_FUZZ_SECONDS ?= 600
+SYN_PACK_ROTATE ?= 0
 # Sprint 27: 100 000 mouse events per seed, four seeds.  Sessions rather
 # than a raw iteration count, because each session drives a whole editor
 # and the events are what the gate is counted in.
@@ -916,6 +917,10 @@ fuzz-syn-def: $(BUILD)/fuzz_syn_def
 
 test-syn-def-corpus: $(BUILD)/fuzz_syn_def
 	$(BUILD)/fuzz_syn_def --corpus-only
+
+test-syn-pack-long: $(BUILD)/unit_tests
+	YEW_SYN_PACK_LONG=1 YEW_SYN_PACK_ROTATE=$(SYN_PACK_ROTATE) \
+		$(BUILD)/unit_tests --filter syn_all_new_pack_long_sanitizer_lane
 
 test-syn-assets: $(BUILD)/yew
 	scripts/check-syn-assets.sh $(BUILD)/yew

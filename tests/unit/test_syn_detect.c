@@ -234,6 +234,153 @@ void test_syn_detect_unknown_path_and_empty_input_return_none(void)
     YEW_ASSERT_NULL(yew_syn_lang_desc(YEW_LANG_NONE));
 }
 
+typedef struct PackDetector {
+    const char *name;
+    const char *extensions;
+    const char *filenames;
+    const char *shebangs;
+} PackDetector;
+
+static void detector_csv(char *out, size_t cap, const char *const *items,
+                         size_t len)
+{
+    size_t used = 0U;
+    size_t i;
+
+    YEW_ASSERT(cap != 0U);
+    out[0] = '\0';
+    for (i = 0U; i < len; i++) {
+        int n = snprintf(out + used, cap - used, "%s%s",
+                         i == 0U ? "" : ",", items[i]);
+
+        YEW_ASSERT(n >= 0);
+        YEW_ASSERT((size_t)n < cap - used);
+        used += (size_t)n;
+    }
+}
+
+static void detector_upper(char *out, size_t cap, const char *text)
+{
+    size_t i;
+    size_t len = strlen(text);
+
+    YEW_ASSERT(len < cap);
+    for (i = 0U; i < len; i++) {
+        char ch = text[i];
+
+        out[i] = ch >= 'a' && ch <= 'z' ?
+                 (char)(ch - ('a' - 'A')) : ch;
+    }
+    out[len] = '\0';
+}
+
+static void detector_expand_glob(char *out, size_t cap, const char *glob)
+{
+    const char *star = strchr(glob, '*');
+    size_t prefix;
+    int n;
+
+    YEW_ASSERT_NOT_NULL(star);
+    YEW_ASSERT_NULL(strchr(star + 1, '*'));
+    prefix = (size_t)(star - glob);
+    n = snprintf(out, cap, "%.*sprobe%s", (int)prefix, glob, star + 1);
+    YEW_ASSERT(n >= 0);
+    YEW_ASSERT((size_t)n < cap);
+}
+
+void test_syn_detect_new_pack_exact_metadata_and_near_misses(void)
+{
+    static const PackDetector expected[] = {
+        {"cpp", "cc,cp,cpp,cxx,c++,hh,hpp,hxx,h++,inl,ipp,tpp", "", ""},
+        {"objective-c", "m,mm", "", ""},
+        {"java", "java", "", ""},
+        {"kotlin", "kt,kts", "", ""},
+        {"csharp", "cs,csx", "", ""},
+        {"swift", "swift", "", ""},
+        {"zig", "zig", "", ""},
+        {"lua", "lua", "", "lua,lua5.1,lua5.2,lua5.3,lua5.4,luajit"},
+        {"ruby", "rb,rake,gemspec", "Rakefile,Gemfile,Guardfile,Vagrantfile,Berksfile,Capfile,Podfile", "ruby,jruby"},
+        {"perl", "pl,pm,t", "", "perl"},
+        {"r", "r", ".Rprofile", ""},
+        {"julia", "jl", "", ""},
+        {"dart", "dart", "", ""},
+        {"powershell", "ps1,psm1,psd1", "", "pwsh,powershell"},
+        {"zsh", "zsh", ".zshenv,.zprofile,.zshrc,.zlogin,.zlogout", "zsh"},
+        {"fish", "fish", "", "fish"},
+        {"sql", "sql", "", ""},
+        {"nix", "nix", "", ""},
+        {"haskell", "hs,lhs", "", ""},
+        {"ocaml", "ml,mli,mll,mly", "", ""},
+        {"xml", "xml,xsd,xsl,xslt,svg", "", ""},
+        {"graphql", "graphql,gql", "", ""},
+        {"protobuf", "proto", "", ""},
+        {"hcl", "hcl,tf,tfvars", "", ""},
+        {"dockerfile", "", "Dockerfile,Containerfile,Dockerfile.*,*.Dockerfile,Containerfile.*,*.Containerfile", ""},
+        {"cmake", "cmake", "CMakeLists.txt", ""},
+        {"meson", "", "meson.build,meson_options.txt", ""},
+        {"diff", "diff,patch", "", ""},
+    };
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(expected); i++) {
+        const PackDetector *want = &expected[i];
+        u32 id = detect_id(want->name);
+        const SynLangDesc *lang = yew_syn_lang_desc(id);
+        char actual[512];
+        char path[256];
+        char folded[128];
+        size_t j;
+
+        YEW_ASSERT(id != YEW_LANG_NONE);
+        YEW_ASSERT_NOT_NULL(lang);
+        detector_csv(actual, sizeof(actual), lang->extensions,
+                     lang->nextensions);
+        YEW_ASSERT_EQ_STR(actual, want->extensions);
+        detector_csv(actual, sizeof(actual), lang->filenames,
+                     lang->nfilenames);
+        YEW_ASSERT_EQ_STR(actual, want->filenames);
+        detector_csv(actual, sizeof(actual), lang->shebangs,
+                     lang->nshebangs);
+        YEW_ASSERT_EQ_STR(actual, want->shebangs);
+
+        for (j = 0U; j < lang->nextensions; j++) {
+            (void)snprintf(path, sizeof(path), "probe.%s",
+                           lang->extensions[j]);
+            YEW_ASSERT_EQ_U64(yew_syn_lang_for(path, NULL, 0U), id);
+            detector_upper(folded, sizeof(folded), lang->extensions[j]);
+            (void)snprintf(path, sizeof(path), "probe.%s", folded);
+            YEW_ASSERT_EQ_U64(yew_syn_lang_for(path, NULL, 0U), id);
+        }
+        for (j = 0U; j < lang->nfilenames; j++) {
+            if (strchr(lang->filenames[j], '*') == NULL) {
+                (void)snprintf(path, sizeof(path), "/tmp/%s",
+                               lang->filenames[j]);
+            } else {
+                detector_expand_glob(folded, sizeof(folded),
+                                     lang->filenames[j]);
+                (void)snprintf(path, sizeof(path), "/tmp/%s", folded);
+            }
+            YEW_ASSERT_EQ_U64(yew_syn_lang_for(path, NULL, 0U), id);
+        }
+        for (j = 0U; j < lang->nshebangs; j++) {
+            u8 line[256];
+            int n = snprintf((char *)line, sizeof(line),
+                             "#!/usr/bin/env %s", lang->shebangs[j]);
+
+            YEW_ASSERT(n > 0);
+            YEW_ASSERT((size_t)n < sizeof(line));
+            YEW_ASSERT_EQ_U64(yew_syn_lang_for("script", line, (u32)n), id);
+            n = snprintf((char *)line, sizeof(line), "#!/usr/bin/%s -x",
+                         lang->shebangs[j]);
+            YEW_ASSERT(n > 0);
+            YEW_ASSERT((size_t)n < sizeof(line));
+            YEW_ASSERT_EQ_U64(yew_syn_lang_for("script", line, (u32)n), id);
+        }
+        (void)snprintf(path, sizeof(path), "probe.yew-no-syntax-%zu", i);
+        YEW_ASSERT_EQ_U64(yew_syn_lang_for(path, NULL, 0U), YEW_LANG_NONE);
+    }
+}
+
 void test_syn_detect_indexes_scale_without_definition_scans(void)
 {
     static const size_t sizes[] = {0U, 1U, 19U, 48U, 257U};

@@ -68,7 +68,7 @@ static bool check_tables(const SynDef *def, char *why, size_t why_cap)
         if (rule->attr >= YEW_ATTR__COUNT || rule->op > SYN_OP_EMBED ||
             rule->nop > 4U || rule->npush > 4U ||
             rule->end > 1U ||
-            rule->aux_match > SYN_AUXM_LINE_START ||
+            rule->aux_match > SYN_AUXM_LINE_EQ_WS ||
             rule->value_pred > SYN_VALUE_SET ||
             rule->embed.lang_kind > SYN_EMBED_LANG_SELF ||
             rule->embed.end > SYN_EMBED_END_LINE_CONTINUATION ||

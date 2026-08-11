@@ -1374,7 +1374,6 @@ static int dump_spans(const SynDef *def, const char *path)
     {
         u32 lang = yew_syn_lang_named(def->name);
         u32 passes = 0U;
-        bool loaded;
         SynSettleReport report;
 
         yew_syn_attach(&syn, lang == YEW_LANG_NONE ? 1U : lang, tb);
@@ -1382,10 +1381,9 @@ static int dump_spans(const SynDef *def, const char *path)
             yew_syn_settle(&syn, tb, LINENO(0U),
                            LINENO(yew_textbuf_line_count(tb)), INT64_MAX,
                            &report);
-            loaded = yew_syn_embed_pump(&syn, engine,
-                                        YEW_SYN_EMBED_LOAD_BUDGET_US);
             passes++;
-        } while ((loaded || !report.fixpoint) && passes < 64U);
+        } while ((!report.fixpoint || syn.embed_pending_count != 0U) &&
+                 passes < 64U);
         if (passes == 64U) {
             (void)fputs("yew syn: embed settling did not converge\n", stderr);
             status = YEW_EXIT_BUG;

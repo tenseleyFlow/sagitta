@@ -94,7 +94,7 @@ static void pack_compare(SynBuf *incremental, SynBuf *fresh,
     }
 }
 
-static void pack_run(const PackCase *pack, u64 seed)
+static void pack_run(const PackCase *pack, u64 seed, u32 edits)
 {
     static const u8 replacements[] =
         "abcdefghijklmnopqrstuvwxyz0123456789/*'\"`{}[]:=+-_# ";
@@ -118,7 +118,7 @@ static void pack_run(const PackCase *pack, u64 seed)
     yew_syn_attach(&incremental, 1U, tb);
     pack_settle(&incremental, tb);
 
-    for (edit = 0U; edit < 100000U; edit++) {
+    for (edit = 0U; edit < edits; edit++) {
         size_t at;
         u8 byte;
         LineNo line;
@@ -174,5 +174,119 @@ void test_syn_all_eight_languages_four_seeds_100k_edits(void)
 
     for (language = 0U; language < YEW_ARRAY_LEN(packs); language++)
         for (seed = 0U; seed < YEW_ARRAY_LEN(seeds); seed++)
-            pack_run(&packs[language], seeds[seed]);
+            pack_run(&packs[language], seeds[seed], 100000U);
+}
+
+void test_syn_all_new_pack_two_seeds_2000_edits(void)
+{
+    static const PackCase packs[] = {
+        {"wolf", "tests/syn/wolf/01-kitchen.lu"},
+        {"cpp", "tests/syn/cpp/01-kitchen.cpp"},
+        {"objective-c", "tests/syn/objective_c/01-kitchen.m"},
+        {"java", "tests/syn/java/01-kitchen.java"},
+        {"kotlin", "tests/syn/kotlin/01-kitchen.kt"},
+        {"csharp", "tests/syn/csharp/01-kitchen.cs"},
+        {"swift", "tests/syn/swift/01-kitchen.swift"},
+        {"zig", "tests/syn/zig/01-kitchen.zig"},
+        {"lua", "tests/syn/lua/01-kitchen.lua"},
+        {"ruby", "tests/syn/ruby/01-kitchen.rb"},
+        {"perl", "tests/syn/perl/01-kitchen.pl"},
+        {"r", "tests/syn/r/01-kitchen.r"},
+        {"julia", "tests/syn/julia/01-kitchen.jl"},
+        {"dart", "tests/syn/dart/01-kitchen.dart"},
+        {"powershell", "tests/syn/powershell/01-kitchen.ps1"},
+        {"zsh", "tests/syn/zsh/01-kitchen.zsh"},
+        {"fish", "tests/syn/fish/01-kitchen.fish"},
+        {"sql", "tests/syn/sql/01-kitchen.sql"},
+        {"nix", "tests/syn/nix/01-kitchen.nix"},
+        {"haskell", "tests/syn/haskell/01-kitchen.hs"},
+        {"ocaml", "tests/syn/ocaml/01-kitchen.ml"},
+        {"xml", "tests/syn/xml/01-kitchen.xml"},
+        {"graphql", "tests/syn/graphql/01-kitchen.graphql"},
+        {"protobuf", "tests/syn/protobuf/01-kitchen.proto"},
+        {"hcl", "tests/syn/hcl/01-kitchen.tf"},
+        {"dockerfile", "tests/syn/dockerfile/01-kitchen.Dockerfile"},
+        {"cmake", "tests/syn/cmake/01-kitchen.cmake"},
+        {"meson", "tests/syn/meson/01-kitchen.build"},
+        {"diff", "tests/syn/diff/01-unified.diff"},
+    };
+    static const u64 seeds[] = {
+        UINT64_C(0x4250000000000001),
+        UINT64_C(0x4250000000000002),
+    };
+    size_t language;
+    size_t seed;
+
+    for (language = 0U; language < YEW_ARRAY_LEN(packs); language++)
+        for (seed = 0U; seed < YEW_ARRAY_LEN(seeds); seed++)
+            pack_run(&packs[language], seeds[seed], 2000U);
+}
+
+void test_syn_all_state_heavy_four_seeds_25000_edits(void)
+{
+    static const PackCase packs[] = {
+        {"wolf", "tests/syn/wolf/01-kitchen.lu"},
+        {"cpp", "tests/syn/cpp/01-kitchen.cpp"},
+        {"kotlin", "tests/syn/kotlin/01-kitchen.kt"},
+        {"csharp", "tests/syn/csharp/01-kitchen.cs"},
+        {"swift", "tests/syn/swift/01-kitchen.swift"},
+        {"lua", "tests/syn/lua/01-kitchen.lua"},
+        {"ruby", "tests/syn/ruby/01-kitchen.rb"},
+        {"haskell", "tests/syn/haskell/01-kitchen.hs"},
+        {"hcl", "tests/syn/hcl/01-kitchen.tf"},
+    };
+    static const u64 seeds[] = {
+        UINT64_C(0x4250a11ce0000001),
+        UINT64_C(0x4250a11ce0000002),
+        UINT64_C(0x4250a11ce0000003),
+        UINT64_C(0x4250a11ce0000004),
+    };
+    size_t language;
+    size_t seed;
+
+    for (language = 0U; language < YEW_ARRAY_LEN(packs); language++)
+        for (seed = 0U; seed < YEW_ARRAY_LEN(seeds); seed++)
+            pack_run(&packs[language], seeds[seed], 25000U);
+}
+
+void test_syn_all_new_pack_long_sanitizer_lane(void)
+{
+    static const PackCase heavy[] = {
+        {"cpp", "tests/syn/cpp/01-kitchen.cpp"},
+        {"kotlin", "tests/syn/kotlin/01-kitchen.kt"},
+        {"csharp", "tests/syn/csharp/01-kitchen.cs"},
+        {"swift", "tests/syn/swift/01-kitchen.swift"},
+        {"lua", "tests/syn/lua/01-kitchen.lua"},
+        {"ruby", "tests/syn/ruby/01-kitchen.rb"},
+        {"haskell", "tests/syn/haskell/01-kitchen.hs"},
+        {"hcl", "tests/syn/hcl/01-kitchen.tf"},
+    };
+    const char *enabled = getenv("YEW_SYN_PACK_LONG");
+    const char *rotation = getenv("YEW_SYN_PACK_ROTATE");
+    unsigned long selected = 0UL;
+    char *end = NULL;
+    size_t seed;
+    static const PackCase wolf = {
+        "wolf", "tests/syn/wolf/01-kitchen.lu"
+    };
+    static const u64 seeds[] = {
+        UINT64_C(0x4250100000000001),
+        UINT64_C(0x4250100000000002),
+        UINT64_C(0x4250100000000003),
+        UINT64_C(0x4250100000000004),
+    };
+
+    if (enabled == NULL || strcmp(enabled, "1") != 0) {
+        YEW_ASSERT(true);
+        return;
+    }
+    if (rotation != NULL) {
+        selected = strtoul(rotation, &end, 10);
+        YEW_ASSERT(end != rotation && *end == '\0');
+    }
+    selected %= YEW_ARRAY_LEN(heavy);
+    for (seed = 0U; seed < YEW_ARRAY_LEN(seeds); seed++) {
+        pack_run(&wolf, seeds[seed], 100000U);
+        pack_run(&heavy[selected], seeds[seed], 100000U);
+    }
 }

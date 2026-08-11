@@ -216,9 +216,15 @@ void test_syn_registry_builtin_id_ledger_matches_generated_table(void)
         YEW_ASSERT_EQ_STR(yew_syn_builtin_langs[row].name, name);
         (void)snprintf(source, sizeof(source), "runtime/syntax/%s.fl", stem);
         YEW_ASSERT_EQ_STR(yew_syn_builtin_langs[row].source, source);
+        YEW_ASSERT_EQ_U64(yew_syn_lang_named(name), id);
+        YEW_ASSERT_EQ_U64(yew_syn_lang_by_name((const u8 *)name,
+                                               (u32)strlen(name)), id);
+        YEW_ASSERT_NOT_NULL(yew_syn_lang_desc(id));
+        YEW_ASSERT_EQ_STR(yew_syn_lang_desc(id)->name, name);
         row++;
     }
     YEW_ASSERT(!ferror(fp));
     YEW_ASSERT_EQ_I64(fclose(fp), 0);
     YEW_ASSERT_EQ_U64(row, yew_syn_builtin_langs_len);
+    YEW_ASSERT_EQ_U64(yew_syn_builtin_langs_len, 48U);
 }

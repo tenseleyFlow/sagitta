@@ -170,6 +170,203 @@ static const char *const lang_20_extensions[] = {
     "lu"
 };
 
+static const char *const lang_21_extensions[] = {
+    "cc",
+    "cp",
+    "cpp",
+    "cxx",
+    "c++",
+    "hh",
+    "hpp",
+    "hxx",
+    "h++",
+    "inl",
+    "ipp",
+    "tpp"
+};
+
+static const char *const lang_22_extensions[] = {
+    "m",
+    "mm"
+};
+
+static const char *const lang_23_extensions[] = {
+    "java"
+};
+
+static const char *const lang_24_extensions[] = {
+    "kt",
+    "kts"
+};
+
+static const char *const lang_25_extensions[] = {
+    "cs",
+    "csx"
+};
+
+static const char *const lang_26_extensions[] = {
+    "swift"
+};
+
+static const char *const lang_27_extensions[] = {
+    "zig"
+};
+
+static const char *const lang_28_extensions[] = {
+    "lua"
+};
+static const char *const lang_28_shebangs[] = {
+    "lua",
+    "lua5.1",
+    "lua5.2",
+    "lua5.3",
+    "lua5.4",
+    "luajit"
+};
+
+static const char *const lang_29_extensions[] = {
+    "rb",
+    "rake",
+    "gemspec"
+};
+static const char *const lang_29_filenames[] = {
+    "Rakefile",
+    "Gemfile",
+    "Guardfile",
+    "Vagrantfile",
+    "Berksfile",
+    "Capfile",
+    "Podfile"
+};
+static const char *const lang_29_shebangs[] = {
+    "ruby",
+    "jruby"
+};
+
+static const char *const lang_30_extensions[] = {
+    "pl",
+    "pm",
+    "t"
+};
+static const char *const lang_30_shebangs[] = {
+    "perl"
+};
+
+static const char *const lang_31_extensions[] = {
+    "r"
+};
+static const char *const lang_31_filenames[] = {
+    ".Rprofile"
+};
+
+static const char *const lang_32_extensions[] = {
+    "jl"
+};
+
+static const char *const lang_33_extensions[] = {
+    "dart"
+};
+
+static const char *const lang_34_extensions[] = {
+    "ps1",
+    "psm1",
+    "psd1"
+};
+static const char *const lang_34_shebangs[] = {
+    "pwsh",
+    "powershell"
+};
+
+static const char *const lang_35_extensions[] = {
+    "zsh"
+};
+static const char *const lang_35_filenames[] = {
+    ".zshenv",
+    ".zprofile",
+    ".zshrc",
+    ".zlogin",
+    ".zlogout"
+};
+static const char *const lang_35_shebangs[] = {
+    "zsh"
+};
+
+static const char *const lang_36_extensions[] = {
+    "fish"
+};
+static const char *const lang_36_shebangs[] = {
+    "fish"
+};
+
+static const char *const lang_37_extensions[] = {
+    "sql"
+};
+
+static const char *const lang_38_extensions[] = {
+    "nix"
+};
+
+static const char *const lang_39_extensions[] = {
+    "hs",
+    "lhs"
+};
+
+static const char *const lang_40_extensions[] = {
+    "ml",
+    "mli",
+    "mll",
+    "mly"
+};
+
+static const char *const lang_41_extensions[] = {
+    "xml",
+    "xsd",
+    "xsl",
+    "xslt",
+    "svg"
+};
+
+static const char *const lang_42_extensions[] = {
+    "graphql",
+    "gql"
+};
+
+static const char *const lang_43_extensions[] = {
+    "proto"
+};
+
+static const char *const lang_44_extensions[] = {
+    "hcl",
+    "tf",
+    "tfvars"
+};
+
+static const char *const lang_45_filenames[] = {
+    "Dockerfile",
+    "Containerfile",
+    "Dockerfile.*",
+    "*.Dockerfile",
+    "Containerfile.*",
+    "*.Containerfile"
+};
+
+static const char *const lang_46_extensions[] = {
+    "cmake"
+};
+static const char *const lang_46_filenames[] = {
+    "CMakeLists.txt"
+};
+
+static const char *const lang_47_filenames[] = {
+    "meson.build",
+    "meson_options.txt"
+};
+
+static const char *const lang_48_extensions[] = {
+    "diff",
+    "patch"
+};
+
 const SynLangSeed yew_syn_builtin_langs[] = {
     {
         1U,
@@ -450,6 +647,398 @@ const SynLangSeed yew_syn_builtin_langs[] = {
         NULL,
         0,
         {"//", NULL, NULL}
+    },
+    {
+        21U,
+        "cpp",
+        "runtime/syntax/cpp.fl",
+        lang_21_extensions,
+        12U,
+        NULL,
+        0U,
+        NULL,
+        0U,
+        NULL,
+        20,
+        {"//", "/*", "*/"}
+    },
+    {
+        22U,
+        "objective-c",
+        "runtime/syntax/objective_c.fl",
+        lang_22_extensions,
+        2U,
+        NULL,
+        0U,
+        NULL,
+        0U,
+        NULL,
+        20,
+        {"//", "/*", "*/"}
+    },
+    {
+        23U,
+        "java",
+        "runtime/syntax/java.fl",
+        lang_23_extensions,
+        1U,
+        NULL,
+        0U,
+        NULL,
+        0U,
+        NULL,
+        20,
+        {"//", "/*", "*/"}
+    },
+    {
+        24U,
+        "kotlin",
+        "runtime/syntax/kotlin.fl",
+        lang_24_extensions,
+        2U,
+        NULL,
+        0U,
+        NULL,
+        0U,
+        NULL,
+        20,
+        {"//", "/*", "*/"}
+    },
+    {
+        25U,
+        "csharp",
+        "runtime/syntax/csharp.fl",
+        lang_25_extensions,
+        2U,
+        NULL,
+        0U,
+        NULL,
+        0U,
+        NULL,
+        20,
+        {"//", "/*", "*/"}
+    },
+    {
+        26U,
+        "swift",
+        "runtime/syntax/swift.fl",
+        lang_26_extensions,
+        1U,
+        NULL,
+        0U,
+        NULL,
+        0U,
+        NULL,
+        20,
+        {"//", "/*", "*/"}
+    },
+    {
+        27U,
+        "zig",
+        "runtime/syntax/zig.fl",
+        lang_27_extensions,
+        1U,
+        NULL,
+        0U,
+        NULL,
+        0U,
+        NULL,
+        20,
+        {"//", NULL, NULL}
+    },
+    {
+        28U,
+        "lua",
+        "runtime/syntax/lua.fl",
+        lang_28_extensions,
+        1U,
+        NULL,
+        0U,
+        lang_28_shebangs,
+        6U,
+        NULL,
+        20,
+        {"--", "--[[", "]]"}
+    },
+    {
+        29U,
+        "ruby",
+        "runtime/syntax/ruby.fl",
+        lang_29_extensions,
+        3U,
+        lang_29_filenames,
+        7U,
+        lang_29_shebangs,
+        2U,
+        NULL,
+        20,
+        {"#", "=begin", "=end"}
+    },
+    {
+        30U,
+        "perl",
+        "runtime/syntax/perl.fl",
+        lang_30_extensions,
+        3U,
+        NULL,
+        0U,
+        lang_30_shebangs,
+        1U,
+        NULL,
+        20,
+        {"#", NULL, NULL}
+    },
+    {
+        31U,
+        "r",
+        "runtime/syntax/r.fl",
+        lang_31_extensions,
+        1U,
+        lang_31_filenames,
+        1U,
+        NULL,
+        0U,
+        NULL,
+        20,
+        {"#", NULL, NULL}
+    },
+    {
+        32U,
+        "julia",
+        "runtime/syntax/julia.fl",
+        lang_32_extensions,
+        1U,
+        NULL,
+        0U,
+        NULL,
+        0U,
+        NULL,
+        20,
+        {"#", "#=", "=#"}
+    },
+    {
+        33U,
+        "dart",
+        "runtime/syntax/dart.fl",
+        lang_33_extensions,
+        1U,
+        NULL,
+        0U,
+        NULL,
+        0U,
+        NULL,
+        20,
+        {"//", "/*", "*/"}
+    },
+    {
+        34U,
+        "powershell",
+        "runtime/syntax/powershell.fl",
+        lang_34_extensions,
+        3U,
+        NULL,
+        0U,
+        lang_34_shebangs,
+        2U,
+        NULL,
+        0,
+        {"#", "<#", "#>"}
+    },
+    {
+        35U,
+        "zsh",
+        "runtime/syntax/zsh.fl",
+        lang_35_extensions,
+        1U,
+        lang_35_filenames,
+        5U,
+        lang_35_shebangs,
+        1U,
+        NULL,
+        0,
+        {"#", NULL, NULL}
+    },
+    {
+        36U,
+        "fish",
+        "runtime/syntax/fish.fl",
+        lang_36_extensions,
+        1U,
+        NULL,
+        0U,
+        lang_36_shebangs,
+        1U,
+        NULL,
+        0,
+        {"#", NULL, NULL}
+    },
+    {
+        37U,
+        "sql",
+        "runtime/syntax/sql.fl",
+        lang_37_extensions,
+        1U,
+        NULL,
+        0U,
+        NULL,
+        0U,
+        NULL,
+        0,
+        {"--", "/*", "*/"}
+    },
+    {
+        38U,
+        "nix",
+        "runtime/syntax/nix.fl",
+        lang_38_extensions,
+        1U,
+        NULL,
+        0U,
+        NULL,
+        0U,
+        NULL,
+        0,
+        {"#", "/*", "*/"}
+    },
+    {
+        39U,
+        "haskell",
+        "runtime/syntax/haskell.fl",
+        lang_39_extensions,
+        2U,
+        NULL,
+        0U,
+        NULL,
+        0U,
+        NULL,
+        0,
+        {"--", "{-", "-}"}
+    },
+    {
+        40U,
+        "ocaml",
+        "runtime/syntax/ocaml.fl",
+        lang_40_extensions,
+        4U,
+        NULL,
+        0U,
+        NULL,
+        0U,
+        NULL,
+        0,
+        {NULL, "(*", "*)"}
+    },
+    {
+        41U,
+        "xml",
+        "runtime/syntax/xml.fl",
+        lang_41_extensions,
+        5U,
+        NULL,
+        0U,
+        NULL,
+        0U,
+        NULL,
+        0,
+        {NULL, "<!--", "-->"}
+    },
+    {
+        42U,
+        "graphql",
+        "runtime/syntax/graphql.fl",
+        lang_42_extensions,
+        2U,
+        NULL,
+        0U,
+        NULL,
+        0U,
+        NULL,
+        0,
+        {"#", NULL, NULL}
+    },
+    {
+        43U,
+        "protobuf",
+        "runtime/syntax/protobuf.fl",
+        lang_43_extensions,
+        1U,
+        NULL,
+        0U,
+        NULL,
+        0U,
+        NULL,
+        0,
+        {"//", "/*", "*/"}
+    },
+    {
+        44U,
+        "hcl",
+        "runtime/syntax/hcl.fl",
+        lang_44_extensions,
+        3U,
+        NULL,
+        0U,
+        NULL,
+        0U,
+        NULL,
+        0,
+        {"#", "/*", "*/"}
+    },
+    {
+        45U,
+        "dockerfile",
+        "runtime/syntax/dockerfile.fl",
+        NULL,
+        0U,
+        lang_45_filenames,
+        6U,
+        NULL,
+        0U,
+        NULL,
+        0,
+        {"#", NULL, NULL}
+    },
+    {
+        46U,
+        "cmake",
+        "runtime/syntax/cmake.fl",
+        lang_46_extensions,
+        1U,
+        lang_46_filenames,
+        1U,
+        NULL,
+        0U,
+        NULL,
+        0,
+        {"#", NULL, NULL}
+    },
+    {
+        47U,
+        "meson",
+        "runtime/syntax/meson.fl",
+        NULL,
+        0U,
+        lang_47_filenames,
+        2U,
+        NULL,
+        0U,
+        NULL,
+        0,
+        {"#", NULL, NULL}
+    },
+    {
+        48U,
+        "diff",
+        "runtime/syntax/diff.fl",
+        lang_48_extensions,
+        2U,
+        NULL,
+        0U,
+        NULL,
+        0U,
+        NULL,
+        0,
+        {NULL, NULL, NULL}
     }
 };
 
@@ -457,24 +1046,42 @@ const size_t yew_syn_builtin_langs_len =
     sizeof(yew_syn_builtin_langs) / sizeof(yew_syn_builtin_langs[0]);
 
 static const SynDetectEntry builtin_exact[] = {
+    {".Rprofile", 31U, 9U, 0U},
     {".bash_profile", 16U, 13U, 0U},
     {".bashrc", 16U, 7U, 0U},
     {".editorconfig", 8U, 13U, 0U},
     {".eslintrc.json", 11U, 14U, 0U},
     {".profile", 16U, 8U, 0U},
+    {".zlogin", 35U, 7U, 0U},
+    {".zlogout", 35U, 8U, 0U},
+    {".zprofile", 35U, 9U, 0U},
+    {".zshenv", 35U, 7U, 0U},
+    {".zshrc", 35U, 6U, 0U},
+    {"Berksfile", 29U, 9U, 0U},
     {"CHANGELOG", 13U, 9U, 0U},
+    {"CMakeLists.txt", 46U, 14U, 0U},
     {"CONTRIBUTING.md", 13U, 15U, 0U},
+    {"Capfile", 29U, 7U, 0U},
     {"Cargo.lock", 17U, 10U, 0U},
+    {"Containerfile", 45U, 13U, 0U},
+    {"Dockerfile", 45U, 10U, 0U},
     {"GNUmakefile", 12U, 11U, 0U},
+    {"Gemfile", 29U, 7U, 0U},
+    {"Guardfile", 29U, 9U, 0U},
     {"Makefile", 12U, 8U, 0U},
     {"PKGBUILD", 16U, 8U, 0U},
     {"Pipfile", 17U, 7U, 0U},
+    {"Podfile", 29U, 7U, 0U},
     {"README", 13U, 6U, 0U},
+    {"Rakefile", 29U, 8U, 0U},
     {"SConscript", 14U, 10U, 0U},
     {"SConstruct", 14U, 10U, 0U},
+    {"Vagrantfile", 29U, 11U, 0U},
     {"devcontainer.json", 11U, 17U, 0U},
     {"jsconfig.json", 11U, 13U, 0U},
     {"makefile", 12U, 8U, 0U},
+    {"meson.build", 47U, 11U, 0U},
+    {"meson_options.txt", 47U, 17U, 0U},
     {"poetry.lock", 17U, 11U, 0U},
     {"tsconfig.json", 11U, 13U, 0U},
     {"wscript", 14U, 7U, 0U}
@@ -483,31 +1090,60 @@ static const SynDetectEntry builtin_exact[] = {
 static const SynDetectEntry builtin_extensions[] = {
     {"bash", 16U, 4U, 0U},
     {"c", 1U, 1U, 0U},
+    {"c++", 21U, 3U, 0U},
+    {"cc", 21U, 2U, 0U},
     {"cfg", 8U, 3U, 0U},
     {"cjs", 9U, 3U, 0U},
+    {"cmake", 46U, 5U, 0U},
     {"conf", 8U, 4U, 0U},
+    {"cp", 21U, 2U, 0U},
+    {"cpp", 21U, 3U, 0U},
+    {"cs", 25U, 2U, 0U},
     {"css", 2U, 3U, 0U},
+    {"csx", 25U, 3U, 0U},
     {"cts", 18U, 3U, 0U},
+    {"cxx", 21U, 3U, 0U},
+    {"dart", 33U, 4U, 0U},
+    {"diff", 48U, 4U, 0U},
     {"f", 5U, 1U, 0U},
     {"f03", 4U, 3U, 0U},
     {"f08", 4U, 3U, 0U},
     {"f18", 4U, 3U, 0U},
     {"f90", 4U, 3U, 0U},
     {"f95", 4U, 3U, 0U},
+    {"fish", 36U, 4U, 0U},
     {"fl", 3U, 2U, 0U},
     {"for", 5U, 3U, 0U},
     {"fpp", 5U, 3U, 0U},
     {"ftn", 5U, 3U, 0U},
+    {"gemspec", 29U, 7U, 0U},
     {"go", 6U, 2U, 0U},
+    {"gql", 42U, 3U, 0U},
+    {"graphql", 42U, 7U, 0U},
     {"h", 1U, 1U, 0U},
+    {"h++", 21U, 3U, 0U},
+    {"hcl", 44U, 3U, 0U},
+    {"hh", 21U, 2U, 0U},
+    {"hpp", 21U, 3U, 0U},
+    {"hs", 39U, 2U, 0U},
     {"htm", 7U, 3U, 0U},
     {"html", 7U, 4U, 0U},
+    {"hxx", 21U, 3U, 0U},
     {"ini", 8U, 3U, 0U},
+    {"inl", 21U, 3U, 0U},
+    {"ipp", 21U, 3U, 0U},
+    {"java", 23U, 4U, 0U},
+    {"jl", 32U, 2U, 0U},
     {"js", 9U, 2U, 0U},
     {"json", 10U, 4U, 0U},
     {"jsonc", 11U, 5U, 0U},
     {"jsx", 9U, 3U, 0U},
+    {"kt", 24U, 2U, 0U},
+    {"kts", 24U, 3U, 0U},
+    {"lhs", 39U, 3U, 0U},
     {"lu", 20U, 2U, 0U},
+    {"lua", 28U, 3U, 0U},
+    {"m", 22U, 1U, 0U},
     {"mak", 12U, 3U, 0U},
     {"markdown", 13U, 8U, 0U},
     {"md", 13U, 2U, 0U},
@@ -515,43 +1151,89 @@ static const SynDetectEntry builtin_extensions[] = {
     {"mjs", 9U, 3U, 0U},
     {"mk", 12U, 2U, 0U},
     {"mkd", 13U, 3U, 0U},
+    {"ml", 40U, 2U, 0U},
+    {"mli", 40U, 3U, 0U},
+    {"mll", 40U, 3U, 0U},
+    {"mly", 40U, 3U, 0U},
+    {"mm", 22U, 2U, 0U},
     {"mts", 18U, 3U, 0U},
+    {"nix", 38U, 3U, 0U},
+    {"patch", 48U, 5U, 0U},
+    {"pl", 30U, 2U, 0U},
+    {"pm", 30U, 2U, 0U},
     {"properties", 8U, 10U, 0U},
+    {"proto", 43U, 5U, 0U},
+    {"ps1", 34U, 3U, 0U},
+    {"psd1", 34U, 4U, 0U},
+    {"psm1", 34U, 4U, 0U},
     {"py", 14U, 2U, 0U},
     {"pyi", 14U, 3U, 0U},
     {"pyw", 14U, 3U, 0U},
+    {"r", 31U, 1U, 0U},
+    {"rake", 29U, 4U, 0U},
+    {"rb", 29U, 2U, 0U},
     {"rs", 15U, 2U, 0U},
     {"sh", 16U, 2U, 0U},
+    {"sql", 37U, 3U, 0U},
+    {"svg", 41U, 3U, 0U},
+    {"swift", 26U, 5U, 0U},
+    {"t", 30U, 1U, 0U},
+    {"tf", 44U, 2U, 0U},
+    {"tfvars", 44U, 6U, 0U},
     {"toml", 17U, 4U, 0U},
+    {"tpp", 21U, 3U, 0U},
     {"ts", 18U, 2U, 0U},
     {"tsx", 18U, 3U, 0U},
     {"xhtml", 7U, 5U, 0U},
+    {"xml", 41U, 3U, 0U},
+    {"xsd", 41U, 3U, 0U},
+    {"xsl", 41U, 3U, 0U},
+    {"xslt", 41U, 4U, 0U},
     {"yaml", 19U, 4U, 0U},
-    {"yml", 19U, 3U, 0U}
+    {"yml", 19U, 3U, 0U},
+    {"zig", 27U, 3U, 0U},
+    {"zsh", 35U, 3U, 0U}
 };
 
 static const SynDetectEntry builtin_globs[] = {
+    {"*.Containerfile", 45U, 15U, 0U},
+    {"*.Dockerfile", 45U, 12U, 0U},
     {"*.desktop", 8U, 9U, 0U},
     {"*.htm", 7U, 5U, 0U},
     {"*.html", 7U, 6U, 0U},
     {"*.jsonc", 11U, 7U, 0U},
     {"*.mk", 12U, 4U, 0U},
     {"*.service", 8U, 9U, 0U},
+    {"Containerfile.*", 45U, 15U, 14U},
+    {"Dockerfile.*", 45U, 12U, 11U},
     {"README.*", 13U, 8U, 7U}
 };
 
 static const SynDetectEntry builtin_shebangs[] = {
     {"bash", 16U, 4U, 0U},
     {"dash", 16U, 4U, 0U},
+    {"fish", 36U, 4U, 0U},
+    {"jruby", 29U, 5U, 0U},
     {"ksh", 16U, 3U, 0U},
+    {"lua", 28U, 3U, 0U},
+    {"lua5.1", 28U, 6U, 0U},
+    {"lua5.2", 28U, 6U, 0U},
+    {"lua5.3", 28U, 6U, 0U},
+    {"lua5.4", 28U, 6U, 0U},
+    {"luajit", 28U, 6U, 0U},
     {"node", 9U, 4U, 0U},
     {"nodejs", 9U, 6U, 0U},
+    {"perl", 30U, 4U, 0U},
+    {"powershell", 34U, 10U, 0U},
+    {"pwsh", 34U, 4U, 0U},
     {"pypy", 14U, 4U, 0U},
     {"pypy3", 14U, 5U, 0U},
     {"python", 14U, 6U, 0U},
     {"python2", 14U, 7U, 0U},
     {"python3", 14U, 7U, 0U},
-    {"sh", 16U, 2U, 0U}
+    {"ruby", 29U, 4U, 0U},
+    {"sh", 16U, 2U, 0U},
+    {"zsh", 35U, 3U, 0U}
 };
 
 static const SynDetectEntry builtin_first_lines[] = {
@@ -559,9 +1241,9 @@ static const SynDetectEntry builtin_first_lines[] = {
 };
 
 const SynDetectIndex yew_syn_builtin_detect_index = {
-    builtin_exact, 21U,
-    builtin_extensions, 47U,
-    builtin_globs, 7U,
-    builtin_shebangs, 11U,
+    builtin_exact, 39U,
+    builtin_extensions, 105U,
+    builtin_globs, 11U,
+    builtin_shebangs, 24U,
     builtin_first_lines, 1U
 };
