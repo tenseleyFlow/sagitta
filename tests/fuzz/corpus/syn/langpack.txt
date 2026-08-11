@@ -6,3 +6,14 @@ return /a[\\/]b+/g; value / 2
 {"key":"\u263a","bad":"\q"}
 block: |2-
 time = 1979-05-27T07:32:00Z
+
+# Sprint 42.5 state-heavy malformed/unterminated edges.
+f"{value:{width"
+R"tag(open
+/* outer /* inner */
+value = <<~'DOC'
+my $s = <<"END";
+@" $($items[0])
+{- outer {- inner -}
+<root><![CDATA[unterminated
+value = <<-EOT
