@@ -1,0 +1,1 @@
+{ syntax: 1, language: { name: "bad-embed-no-exit", extensions: ["bad"] }, contexts: { main: { default: "text", rules: [ { match: "<", push: "main", embed: { lang: "c", end: "inline" } } ] } } }

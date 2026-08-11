@@ -1,0 +1,7 @@
+/* TODO embedded stylesheet */
+:root {
+  /* FIXME inside a block */
+  --label: "ready";
+  color: var(--label);
+  outline: none;
+}

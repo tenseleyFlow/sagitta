@@ -1,0 +1,4 @@
+```ini
+[editor]
+theme = "dark"
+```

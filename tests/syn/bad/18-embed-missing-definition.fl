@@ -1,0 +1,1 @@
+{ syntax: 1, language: { name: "bad-embed-missing", extensions: ["bad"] }, contexts: { main: { default: "text", rules: [ { match: "<", push: "body", embed: { lang: "scss", end: "inline" } } ] }, body: { default: "text", rules: [ { match: ">", pop: 1, end: true } ] } } }

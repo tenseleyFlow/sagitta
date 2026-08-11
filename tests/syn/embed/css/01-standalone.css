@@ -1,0 +1,18 @@
+"root\20 string" 'root\27 string'
+--root-accent: #c0ffee;
+color: var(--root-accent) !important;
+width: calc(100% - 1.5rem);
+transform: custom-fn(2px);
+display: none;
+@media screen {
+  \escaped @supports;
+  .card#hero:hover > a[href^="x"] + input {
+    --accent: #c0ffee;
+    color: var(--accent) !important;
+    width: calc(100% - 1.5rem);
+    transform: custom-fn(2px);
+    content: 'it\27 s';
+    background: url("x\20 y");
+  }
+}
+\escaped .outside, #label ~ button[disabled] { color: transparent; }

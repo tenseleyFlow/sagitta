@@ -1,0 +1,1 @@
+{ syntax: 1, language: { name: "bad-end", extensions: ["bad"] }, contexts: { main: { default: "text", rules: [ { match: ">", end: true } ] } } }

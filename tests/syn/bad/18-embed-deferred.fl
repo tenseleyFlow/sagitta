@@ -1,7 +1,0 @@
-{
-    syntax: 1,
-    language: { name: "bad-embed", extensions: ["badembed"] },
-    contexts: {
-        main: { default: "text", embed: "c", rules: [] },
-    },
-}

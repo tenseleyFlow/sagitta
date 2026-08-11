@@ -1,0 +1,3 @@
+```markdown
+## Embedded heading
+```

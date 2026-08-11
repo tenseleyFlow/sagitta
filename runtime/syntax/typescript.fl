@@ -1,6 +1,7 @@
 # TypeScript syntax.  The TS-only rules are spliced before the shared
-# JavaScript rule body.  .tsx borrows HTML's tag context; child text remains
-# in TypeScript because full JSX trees require bidirectional interleave.
+# JavaScript rule body.  .tsx borrows HTML's tag context; HTML delegates JSX
+# attribute expressions back to JavaScript while child expressions resume in
+# the surrounding TypeScript context.
 # Regex/value and template-literal limitations are identical to javascript.fl.
 {
     syntax: 1,
@@ -56,10 +57,11 @@
                   embed: { lang: "gql", end: "inline",
                            fallback: "string" }, value: true },
                 { match: "`", attr: "string", push: "template", value: true },
-                { match: "(<\\/?)([A-Za-z][A-Za-z0-9:.-]*)", attr: "tag",
+                { match: "(<)([A-Za-z][A-Za-z0-9:.-]*)", attr: "tag",
                   captures: { 1: "punct.bracket", 2: "tag" },
-                  push: "jsx_tag",
-                  embed: { lang: "html", ctx: "tag", end: "inline",
+                  push: "jsx_tree",
+                  embed: { lang: "html", ctx: "jsx_tag",
+                           end: "inline-root",
                            fallback: "text" }, value: true },
                 { match: "/", attr: "string.special", if_value: false,
                   push: "regex", value: true },
@@ -149,7 +151,8 @@
         tagged_html: {
             default: "string", at_eol: "stay", unit: "atom",
             rules: [
-                { match: "\\\\.", attr: "string.escape" },
+                { match: "\\$\\{", attr: "string.interp",
+                  push: "template_expr", value: false },
                 { match: "`", attr: "string", pop: 1, end: true,
                   value: true },
             ],
@@ -157,7 +160,8 @@
         tagged_css: {
             default: "string", at_eol: "stay", unit: "atom",
             rules: [
-                { match: "\\\\.", attr: "string.escape" },
+                { match: "\\$\\{", attr: "string.interp",
+                  push: "template_expr", value: false },
                 { match: "`", attr: "string", pop: 1, end: true,
                   value: true },
             ],
@@ -166,14 +170,21 @@
             default: "string", at_eol: "stay", unit: "atom",
             rules: [
                 { match: "\\\\.", attr: "string.escape" },
+                { match: "\\$\\{", attr: "string.interp",
+                  push: "template_expr", value: false },
                 { match: "`", attr: "string", pop: 1, end: true,
                   value: true },
             ],
         },
-        jsx_tag: {
+        jsx_tree: {
             default: "text", at_eol: "stay", unit: "span",
             rules: [
-                { match: "/?>", attr: "punct.bracket", pop: 1, end: true,
+                { match: "/>", attr: "punct.bracket", pop: 1, end: true,
+                  value: true },
+                { match: "(</)([A-Za-z][A-Za-z0-9:.-]*)(\\s*>)",
+                  attr: "tag",
+                  captures: { 1: "punct.bracket", 2: "tag",
+                              3: "punct.bracket" }, pop: 1, end: true,
                   value: true },
             ],
         },

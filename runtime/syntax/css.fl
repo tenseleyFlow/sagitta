@@ -16,6 +16,9 @@
         },
         css_rules: {
             rules: [
+                { match: "\\$\\{", attr: "string.interp", push: "js_expr",
+                  embed: { lang: "javascript", ctx: "template_expr",
+                           end: "inline-root", fallback: "text" } },
                 { match: "/\\*", attr: "comment", push: "comment" },
                 { match: "\\\\.", attr: "string.escape" },
                 { match: "\"", attr: "string", push: "dq" },
@@ -62,6 +65,9 @@
         dq: {
             default: "string", at_eol: "stay", unit: "atom",
             rules: [
+                { match: "\\$\\{", attr: "string.interp", push: "js_expr",
+                  embed: { lang: "javascript", ctx: "template_expr",
+                           end: "inline-root", fallback: "text" } },
                 { match: "\\\\([0-9A-Fa-f]{1,6}[ \\t]?|.)",
                   attr: "string.escape" },
                 { match: "\"", attr: "string", pop: 1 },
@@ -70,9 +76,18 @@
         sq: {
             default: "string", at_eol: "stay", unit: "atom",
             rules: [
+                { match: "\\$\\{", attr: "string.interp", push: "js_expr",
+                  embed: { lang: "javascript", ctx: "template_expr",
+                           end: "inline-root", fallback: "text" } },
                 { match: "\\\\([0-9A-Fa-f]{1,6}[ \\t]?|.)",
                   attr: "string.escape" },
                 { match: "'", attr: "string", pop: 1 },
+            ],
+        },
+        js_expr: {
+            default: "text", at_eol: "stay", unit: "span",
+            rules: [
+                { match: "}", attr: "punct.bracket", pop: 1, end: true },
             ],
         },
     },

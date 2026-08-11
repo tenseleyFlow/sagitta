@@ -16,4 +16,10 @@
 15-error-default|warning|1|70|default: 'error' paints every unmatched byte red; did you mean 'text'?
 16-include-fields|warning|1|101|only 'rules' is used at an include site
 17-indent-order|error|1|68|indent_lt must be the first rule in its context
-18-embed-deferred|error|5|34|'embed' is deferred to s41_5
+18-embed-missing-definition|error|1|166|embed: no definition named 'scss'
+19-embed-no-exit|error|1|94|context 'main' embeds a language it can never leave
+20-end-without-embed|error|1|121|'end' marks a rule that returns from an embedded language
+21-embed-state-op|error|1|117|embed is a state op; a rule performs exactly one
+22-embed-capture|error|1|171|embed.lang: @2 but the pattern has 1 capture groups
+23-embed-depth|error|1|613|bad-embed-depth→html→javascript→css can reach depth 19; the cap is 16
+24-embed-dynamic-depth|warning|1|629|dynamic embed has worst installed chain bad-embed-dynamic→typescript→html→javascript; cap exceeded by 6 frame(s)

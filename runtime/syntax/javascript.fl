@@ -45,12 +45,14 @@
                            fallback: "string" }, value: true },
                 { match: "`", attr: "string", push: "template", value: true },
 
-                # Each JSX tag borrows HTML's tag context.  Child text remains
-                # JavaScript; a full JSX tree needs bidirectional interleave.
-                { match: "(<\\/?)([A-Za-z][A-Za-z0-9:.-]*)", attr: "tag",
+                # Each JSX tag borrows HTML's tag context.  HTML delegates
+                # attribute expressions back here; child expressions resume
+                # in the surrounding JavaScript context.
+                { match: "(<)([A-Za-z][A-Za-z0-9:.-]*)", attr: "tag",
                   captures: { 1: "punct.bracket", 2: "tag" },
-                  push: "jsx_tag",
-                  embed: { lang: "html", ctx: "tag", end: "inline",
+                  push: "jsx_tree",
+                  embed: { lang: "html", ctx: "jsx_tag",
+                           end: "inline-root",
                            fallback: "text" }, value: true },
 
                 # These two rules differ only in the previous-token predicate.
@@ -150,7 +152,8 @@
         tagged_html: {
             default: "string", at_eol: "stay", unit: "atom",
             rules: [
-                { match: "\\\\.", attr: "string.escape" },
+                { match: "\\$\\{", attr: "string.interp",
+                  push: "template_expr", value: false },
                 { match: "`", attr: "string", pop: 1, end: true,
                   value: true },
             ],
@@ -158,7 +161,8 @@
         tagged_css: {
             default: "string", at_eol: "stay", unit: "atom",
             rules: [
-                { match: "\\\\.", attr: "string.escape" },
+                { match: "\\$\\{", attr: "string.interp",
+                  push: "template_expr", value: false },
                 { match: "`", attr: "string", pop: 1, end: true,
                   value: true },
             ],
@@ -167,14 +171,21 @@
             default: "string", at_eol: "stay", unit: "atom",
             rules: [
                 { match: "\\\\.", attr: "string.escape" },
+                { match: "\\$\\{", attr: "string.interp",
+                  push: "template_expr", value: false },
                 { match: "`", attr: "string", pop: 1, end: true,
                   value: true },
             ],
         },
-        jsx_tag: {
+        jsx_tree: {
             default: "text", at_eol: "stay", unit: "span",
             rules: [
-                { match: "/?>", attr: "punct.bracket", pop: 1, end: true,
+                { match: "/>", attr: "punct.bracket", pop: 1, end: true,
+                  value: true },
+                { match: "(</)([A-Za-z][A-Za-z0-9:.-]*)(\\s*>)",
+                  attr: "tag",
+                  captures: { 1: "punct.bracket", 2: "tag",
+                              3: "punct.bracket" }, pop: 1, end: true,
                   value: true },
             ],
         },

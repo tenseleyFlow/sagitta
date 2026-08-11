@@ -197,6 +197,122 @@ semantics, such as quoted shell delimiters suppressing expansion. With
 `strip: true`, `line_eq` ignores leading tabs only; spaces remain significant
 for `<<-`.
 
+## Embedded languages
+
+An opener rule can delegate a region to another installed syntax definition.
+The opener must also name exactly one string `push` target: that target is the
+host bridge context whose `end: true` rules decide when control returns from
+the guest. `embed` is a state operation, so it may not be combined with
+`pop`, `set`, or a multi-context `push`.
+
+| Key | Type | Required | Default | Example |
+|---|---|---:|---|---|
+| `embed.lang` | string | yes | none | `lang: "javascript"`, `lang: "@2"`, or `lang: "@self"` |
+| `embed.ctx` | string | no | guest `root` | `ctx: "jsx_tag"` |
+| `embed.end` | `"line"`, `"inline"`, `"inline-root"`, or `"line-continuation"` | yes | none | `end: "line"` |
+| `embed.defer` | bool | no | `false` | `defer: true` |
+| `embed.fallback` | attribute string | no | bridge context `default` | `fallback: "code"` |
+| `end` on a rule | bool | no | `false` | `end: true` |
+
+`embed.lang` names a definition. `"@N"` selects the text of capture group
+N from the opener, while `"@self"` re-enters the current definition at its
+root with a fresh definition-level aux slot. `embed.ctx` enters a named guest
+context instead of its root. `embed.end: "line"` tests the bridge's exit
+rules once at byte 0; `"inline"` tests them before guest rules at every scan
+position. `"inline-root"` also tests at every position, but only while the
+guest is at its entry context: nested guest contexts must balance and return
+to that root before the host delimiter can close the bridge. This lets a
+tagged HTML or CSS template suspend guest text at `${`, parse a balanced
+JavaScript expression, and resume the same guest afterward.
+
+`"line-continuation"` has line-end lifetime. An odd run of trailing
+backslashes retains the guest and all of its contexts for the next physical
+line; an even run (including zero) ends the guest and applies the bridge's
+line-end operation. Make recipes use this mode so a backslash-continued shell
+command preserves shell strings, substitutions, and heredoc state across
+recipe lines. With `defer: true`, the bridge is entered on the opener but the
+guest begins at the next physical line. An unavailable, unknown, or
+depth-refused guest uses `embed.fallback` until the bridge exits.
+
+Markdown fences show the complete shape:
+
+```fletch
+{ match: "^ {0,3}(`{3,}|~{3,})[ \\t]*([A-Za-z0-9_+.-]*)",
+  attr: "punct", captures: { 1: "punct", 2: "attribute" },
+  set_aux: 1, push: "fenced",
+  embed: { lang: "@2", defer: true, end: "line", fallback: "code" } },
+
+fenced: {
+    default: "code", at_eol: "stay", unit: "atom",
+    rules: [ { aux: "fence_close", attr: "punct", pop: 1, end: true } ],
+},
+```
+
+### How the bridge carries its end delimiter
+
+The guest does not own or compile the host delimiter. The host bridge frame
+remains directly below the guest and retains the host definition, bridge
+context, and host aux value. Before a guest rule runs, yew tests the bridge
+context's `end: true` rules using the host definition and host aux slot. A
+markdown `fence_close` therefore reads the captured fence run exactly as a
+shell `line_eq` reads a captured heredoc terminator: both are host text tested
+while a guest is active. On a match, all guest frames are discarded and the
+exit rule's host operation is applied; an unterminated guest string cannot
+leak past the host boundary.
+
+The combined stack limit is 16 frames across host and guests, and the limit
+is four simultaneous definition levels including the root. A refused embed
+uses its fallback styling and remains bounded by the host exit rules. Run
+`yew syn check --embed` to print the installed definitions' combined-depth
+table. Literal chains that exceed 16 are errors. Capture-selected guests are
+open-ended, so the checker reports their worst installed guest and remaining
+headroom. Static and capture-selected maxima are computed separately and both
+are truncated to the four definition levels the runtime can enter. Repeated
+`@self` entry is modeled through that fourth level; a self-entry candidate
+whose transition would exceed either runtime cap is marked
+`runtime-refused`. An enterable dynamic chain that exceeds the frame budget
+is a warning. The runtime caps remain authoritative for user definitions
+installed later.
+
+> **Pitfall — the guest's fast-scan will skip straight over the exit
+> delimiter.** While a guest with `embed.end: "inline"` or `"inline-root"`
+> is eligible to exit, the scan mask must be the union of the guest context's
+> first-byte set and the bridge exit rules' first-byte set. Otherwise
+> JavaScript, for example, can skip `<` in `</script>` and color the rest of
+> the document as JavaScript.
+
+> **Pitfall — line-ended modes must be tested before `at_eol`, and before the
+> guest's own line-start rules.** The fixed order is bridge exit rules, guest
+> context rules, guest `at_eol`, continuation decision, then host `at_eol`;
+> bridge frames do not run `at_eol` while a guest remains above them.
+
+### Embedded-language scope in 1.0
+
+The 1.0 bridge supports markdown fences, HTML script/style bodies, make
+recipes delegated to shell, shell command substitutions, JavaScript and
+TypeScript tagged templates, and JSX through HTML's tag context. HTML closes
+`<script>` at `</script>` even inside a JavaScript string, matching the HTML
+tokenizer; spell the literal as `<\/script>` when it must remain guest text.
+Markdown indented code and fences with unknown info strings stay `code`.
+
+Make recipe shell state follows odd trailing-backslash continuation across
+physical lines. Tagged HTML/CSS templates suspend guest parsing for balanced
+`${...}` JavaScript expressions and resume the guest after the matching `}`;
+guest escape rules consume escaped delimiters before the host bridge tests
+them. JSX delegates tag and attribute lexing to HTML, whose expression
+children and attribute expressions bridge into JavaScript's shared balanced
+expression context, then return to HTML. Balanced expressions and nested JSX
+trees therefore retain the correct host/guest alternation for both JavaScript
+and TypeScript hosts.
+
+The following are explicit post-1.0 work: bidirectional host/guest
+interleaving such as PHP, ERB, Jinja, Handlebars, and Vue SFC; open-ended
+`lang=` or `type=` dispatch; guessing a fence language from its contents;
+multiple line-ended guests on one physical line; per-region indentation,
+folding, comment strings, or LSP routing; and raising either stack cap without
+state-count measurements. Semantic LSP highlighting remains a Sprint 47
+buffer overlay rather than a per-region bridge feature.
+
 ## Contexts
 
 Each key in `contexts` names a context. A context controls rule order,

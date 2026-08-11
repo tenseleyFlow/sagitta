@@ -1,0 +1,6 @@
+${root}
+.card {
+  color: ${palette({ tone: "red" })};
+  content: "${label}";
+  marker: '${alternate}';
+}

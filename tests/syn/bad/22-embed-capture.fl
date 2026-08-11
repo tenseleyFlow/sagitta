@@ -1,0 +1,1 @@
+{ syntax: 1, language: { name: "bad-embed-capture", extensions: ["bad"] }, contexts: { main: { default: "text", rules: [ { match: "<(tag)>", push: "body", embed: { lang: "@2", end: "line" } } ] }, body: { default: "text", at_eol: "pop" } } }
