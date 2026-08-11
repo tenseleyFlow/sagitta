@@ -51,6 +51,9 @@ static const char *const status_column_values[] = {
 static const char *const clipboard_values[] = {
     "off", "yank", "all", "unnamed", NULL
 };
+static const char *const fortran_form_values[] = {
+    "auto", "free", "fixed", NULL
+};
 
 /* The core is deliberately single-threaded.  Keep a stable diagnostic for
  * the option API's borrowed error pointer without growing every Ed. */
@@ -88,6 +91,9 @@ const OptDesc yew_opts[] = {
      "Render East Asian ambiguous characters as two cells"},
     {"subword", YEW_OPT_BOOL, YEW_OPT_BUFFER, OPT_BOOL(false), NULL, 0, 0,
      NULL, option_changed, "Use subword boundaries for word navigation"},
+    {"fortran_form", YEW_OPT_ENUM, YEW_OPT_BUFFER, OPT_ENUM("auto"),
+     fortran_form_values, 0, 0, NULL, option_changed,
+     "Fortran source form: auto, free, or fixed"},
     {"chord_timeout_ms", YEW_OPT_INT, YEW_OPT_GLOBAL,
      OPT_INT(YEW_CHORD_TIMEOUT_DEFAULT_MS), NULL, 0, 5000, NULL,
      option_changed, "Milliseconds to wait for a key chord"},
@@ -396,6 +402,9 @@ static void option_changed_target(Ed *ed, const OptDesc *desc,
         ed->search_opts.ignorecase = nu->as.b;
     } else if (strcmp(desc->name, "search.smartcase") == 0) {
         ed->search_opts.smartcase = nu->as.b;
+    } else if (strcmp(desc->name, "fortran_form") == 0 && buffer != NULL &&
+               buffer->tb != NULL) {
+        yew_ed_syn_bind(buffer);
     } else if (strcmp(desc->name, "hooks.error_limit") == 0) {
         fl_hook_error_limit(&ed->hooks, (u32)nu->as.i);
     } else if (strcmp(desc->name, "theme") == 0 &&

@@ -363,7 +363,7 @@ void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
     char syn_badge[8];
     char recording[32];
     RecStatus rec_status;
-    Segment segments[12];
+    Segment segments[13];
     int available;
     int path_cells;
     int dirty_cells;
@@ -517,6 +517,9 @@ void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
             syn_badge[0] = '\0';
         segments[11] = (Segment){syn_badge, 4U, show};
     }
+    segments[12] = (Segment){w->buf->lang, 3U,
+                             w->buf->lang != NULL &&
+                             strncmp(w->buf->lang, "fortran", 7U) == 0};
     path_cells = cells(path);
     dirty_cells = yew_buf_dirty(w->buf) ? 2 : 0;
     right_cells = right_width(segments, YEW_ARRAY_LEN(segments));

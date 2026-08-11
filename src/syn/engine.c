@@ -999,6 +999,10 @@ static bool aux_match(const SynEngine *engine, const SynState *state,
             }
             p++;
         }
+        /* Blank lines are content in indentation-delimited constructs such
+         * as YAML block scalars; only a nonblank dedent closes the context. */
+        if (p == len)
+            return false;
         match->ngroups = 1U;
         match->g[0] = (Span){0U, 0U};
         return indent < state->aux;
@@ -1309,6 +1313,10 @@ static bool set_aux(SynEngine *engine, SynState *state, const SynRule *rule,
                     value = (value + 8U) & ~7U;
             }
         }
+        if (value > UINT32_MAX - rule->aux_add)
+            value = UINT32_MAX;
+        else
+            value += rule->aux_add;
         state->aux = value;
     } else {
         static const char empty[] = "";
@@ -1383,6 +1391,11 @@ static void apply_empty_bol(SynEngine *engine, SynState *state,
             if ((state->flags & YEW_SYN_F_PAST_FIRST) != 0U &&
                 (rule->flags & YEW_SYN_RULE_FIRST_LINE) != 0U)
                 continue;
+            if ((rule->value_pred == SYN_VALUE_SET &&
+                 (state->flags & YEW_SYN_F_VALUE) == 0U) ||
+                (rule->value_pred == SYN_VALUE_CLEAR &&
+                 (state->flags & YEW_SYN_F_VALUE) != 0U))
+                continue;
             if (rule_match(engine, state, rule, index, line, 0U, 0U,
                            &match) &&
                 match.g[0].hi == 0U) {
@@ -1418,8 +1431,10 @@ static u32 truncated_exit_state(SynEngine *engine, u32 entry_state,
      * it is still a physical line.  Losing this bit lets line-two-only
      * content satisfy `first_line` rules after an oversized or hostile
      * first line. */
-    if (apply_eol && engine->has_first_line) {
-        exit.flags |= YEW_SYN_F_PAST_FIRST;
+    if (apply_eol) {
+        exit.flags &= (u8)~YEW_SYN_F_VALUE;
+        if (engine->has_first_line)
+            exit.flags |= YEW_SYN_F_PAST_FIRST;
         return yew_syn_state_intern(engine->states, &exit);
     }
     return entry_state;
@@ -1529,6 +1544,11 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
             rule = &engine->def->rules[index];
             if ((state.flags & YEW_SYN_F_PAST_FIRST) != 0U &&
                 (rule->flags & YEW_SYN_RULE_FIRST_LINE) != 0U)
+                continue;
+            if ((rule->value_pred == SYN_VALUE_SET &&
+                 (state.flags & YEW_SYN_F_VALUE) == 0U) ||
+                (rule->value_pred == SYN_VALUE_CLEAR &&
+                 (state.flags & YEW_SYN_F_VALUE) != 0U))
                 continue;
             if (p != 0U && engine->rule_bol != NULL &&
                 engine->rule_bol[index] != 0U)
@@ -1648,6 +1668,7 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
         if (instrument)
             before = state;
         apply_op(&state, ctx->at_eol, ctx->eol_nop, ctx->eol_target);
+        state.flags &= (u8)~YEW_SYN_F_VALUE;
         if (engine->has_first_line)
             state.flags |= YEW_SYN_F_PAST_FIRST;
         if (instrument)

@@ -861,7 +861,7 @@ static void compile_rule(Compile *c, FlNode *node, u16 ctx_id, SynRule *rule,
     static const char *const keys[] = {
         "match", "attr", "captures", "consume", "push", "pop", "set",
         "icase", "set_aux", "strip", "aux", "aux_pre", "aux_post",
-        "value", "first_line"
+        "aux_int", "aux_add", "value", "if_value", "first_line"
     };
     FlNode *match = map_find(c, node, "match");
     FlNode *aux = map_find(c, node, "aux");
@@ -871,7 +871,10 @@ static void compile_rule(Compile *c, FlNode *node, u16 ctx_id, SynRule *rule,
     FlNode *consume = map_find(c, node, "consume");
     FlNode *set_aux = map_find(c, node, "set_aux");
     FlNode *strip = map_find(c, node, "strip");
+    FlNode *aux_int = map_find(c, node, "aux_int");
+    FlNode *aux_add = map_find(c, node, "aux_add");
     FlNode *value_node = map_find(c, node, "value");
+    FlNode *if_value_node = map_find(c, node, "if_value");
     FlNode *icase_node = map_find(c, node, "icase");
     FlNode *first_line_node = map_find(c, node, "first_line");
     bool icase = c->ctxs[ctx_id].icase;
@@ -997,6 +1000,28 @@ static void compile_rule(Compile *c, FlNode *node, u16 ctx_id, SynRule *rule,
             rule->aux_group = (u8)integer;
         }
     }
+    if (aux_int != NULL) {
+        bool enabled = false;
+
+        if (require_bool(c, aux_int, "rule aux_int", &enabled) && enabled) {
+            if (set_aux == NULL)
+                diag(c, FL_DIAG_ERROR, aux_int->sp,
+                     "aux_int requires set_aux on the same rule");
+            rule->flags |= YEW_SYN_RULE_AUX_INT;
+        }
+    }
+    if (aux_add != NULL && require_int(c, aux_add, "aux_add", &integer)) {
+        if (integer < 0 || integer > UINT8_MAX) {
+            diag(c, FL_DIAG_ERROR, aux_add->sp,
+                 "aux_add %lld is out of range (0-255)",
+                 (long long)integer);
+        } else {
+            if (aux_int == NULL)
+                diag(c, FL_DIAG_ERROR, aux_add->sp,
+                     "aux_add requires aux_int on the same rule");
+            rule->aux_add = (u8)integer;
+        }
+    }
     if (strip != NULL) {
         bool enabled = false;
 
@@ -1013,6 +1038,12 @@ static void compile_rule(Compile *c, FlNode *node, u16 ctx_id, SynRule *rule,
         if (require_bool(c, value_node, "value", &enabled))
             rule->flags |= enabled ? YEW_SYN_RULE_SET_VALUE
                                    : YEW_SYN_RULE_CLR_VALUE;
+    }
+    if (if_value_node != NULL) {
+        bool enabled = false;
+
+        if (require_bool(c, if_value_node, "rule if_value", &enabled))
+            rule->value_pred = enabled ? SYN_VALUE_SET : SYN_VALUE_CLEAR;
     }
     if (map_find(c, node, "aux_pre") != NULL) {
         const char *s;
@@ -2046,6 +2077,8 @@ static bool syn_blob_pack(const SynDef *def, const char *source, Bytebuf *out)
         blob_u16(out, rule->target);
         bytebuf_push_u8(out, rule->consume);
         bytebuf_push_u8(out, rule->flags);
+        bytebuf_push_u8(out, rule->value_pred);
+        bytebuf_push_u8(out, rule->aux_add);
         bytebuf_append(out, rule->caps, sizeof(rule->caps));
         bytebuf_push_u8(out, rule->aux_group);
         bytebuf_push_u8(out, rule->npush);
@@ -2079,6 +2112,7 @@ static bool syn_rule_valid(const SynRule *rule, const SynDef *def,
     if (rule->attr >= YEW_ATTR__COUNT || rule->op > SYN_OP_SET ||
         rule->nop > 4U || rule->aux_match > SYN_AUXM_LINE_START ||
         rule->consume > 7U || rule->npush > 4U ||
+        rule->value_pred > SYN_VALUE_SET ||
         rule->aux_group > 7U || rule->aux_pre >= naux ||
         rule->aux_post >= naux)
         return false;
@@ -2223,6 +2257,8 @@ static SynDef *syn_blob_unpack(Arena *arena, const u8 *data, size_t len,
         rule->target = blob_read_u16(&r);
         rule->consume = blob_read_u8(&r);
         rule->flags = blob_read_u8(&r);
+        rule->value_pred = blob_read_u8(&r);
+        rule->aux_add = blob_read_u8(&r);
         bytes = blob_read_bytes(&r, sizeof(rule->caps));
         if (bytes != NULL)
             (void)memcpy(rule->caps, bytes, sizeof(rule->caps));
@@ -3099,6 +3135,39 @@ u32 yew_syn_lang_for(const char *path, const u8 *line1, u32 l1_len)
             return found->id;
     }
     return YEW_LANG_NONE;
+}
+
+static u32 fortran_lang(SynFortranForm form)
+{
+    return yew_syn_lang_named(form == YEW_FORTRAN_FIXED ?
+                              "fortran-fixed" : "fortran");
+}
+
+u32 yew_syn_lang_for_scored(const char *path, const u8 *line1, u32 l1_len,
+                            const SynFortranScore *fortran,
+                            SynFortranForm override, bool sniff_legacy)
+{
+    SynFortranForm scored;
+    u32 detected;
+
+    if (override == YEW_FORTRAN_FREE || override == YEW_FORTRAN_FIXED)
+        return fortran_lang(override);
+    scored = yew_syn_fortran_score_result(fortran);
+    if (sniff_legacy && yew_syn_fortran_legacy_path(path) &&
+        fortran != NULL)
+        return fortran_lang(fortran->fixed_form > fortran->free_form ?
+                            YEW_FORTRAN_FIXED : YEW_FORTRAN_FREE);
+    detected = yew_syn_lang_for(path, line1, l1_len);
+    if (detected != YEW_LANG_NONE)
+        return detected;
+    if (!yew_syn_fortran_ambiguous_path(path) || fortran == NULL)
+        return YEW_LANG_NONE;
+    if (fortran->signals == 0U &&
+        (path == NULL || strchr(path_base(path), '.') == NULL))
+        return YEW_LANG_NONE;
+    if (scored == YEW_FORTRAN_AUTO)
+        scored = YEW_FORTRAN_FREE;
+    return fortran_lang(scored);
 }
 
 static char *runtime_definition_path(const SynLangSeed *seed)

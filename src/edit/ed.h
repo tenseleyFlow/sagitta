@@ -270,6 +270,8 @@ void yew_ws_scratch_drop(Ed *ed, Buffer *b);
 /* Points the focused window at `b` with a fresh cursor set and viewport.
  * Returns false when `b` is not in the workspace. */
 bool yew_ed_show_buffer(Ed *ed, Buffer *b);
+/* Re-run language detection and bind the matching syntax engine. */
+void yew_ed_syn_bind(Buffer *b);
 
 /*
  * Sprint 24 §3: deferred file buffers.

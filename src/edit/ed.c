@@ -66,10 +66,51 @@ static u8 *ed_first_line(const TextBuf *tb, u32 *len_out)
     return line;
 }
 
-static void ed_syn_bind(Buffer *b)
+static void ed_fortran_score(const TextBuf *tb, SynFortranScore *score)
+{
+    u64 line_count = yew_textbuf_line_count(tb);
+    u64 line_no;
+
+    yew_syn_fortran_score_init(score);
+    for (line_no = 0U; line_no < line_count && score->nonblank < 100U;
+         line_no++) {
+        Span span = yew_textbuf_line_span(tb, LINENO(line_no));
+        u64 want = span.hi - span.lo;
+        TextIter it;
+        u8 *line;
+        u64 copied = 0U;
+
+        if (want > YEW_SYN_LINE_BYTE_CAP)
+            want = YEW_SYN_LINE_BYTE_CAP;
+        line = yew_xmalloc((size_t)(want == 0U ? 1U : want));
+        if (want != 0U && yew_textiter_begin(&it, tb, BYTEOFF(span.lo))) {
+            while (copied < want) {
+                const u8 *chunk;
+                u64 n;
+
+                if (!yew_textiter_chunk(&it, tb, &chunk, &n))
+                    break;
+                if (n > want - copied)
+                    n = want - copied;
+                (void)memcpy(line + copied, chunk, (size_t)n);
+                copied += n;
+                if (copied != want && !yew_textiter_advance(&it, tb))
+                    break;
+            }
+        }
+        yew_syn_fortran_score_line(score, line, (size_t)copied);
+        free(line);
+    }
+}
+
+void yew_ed_syn_bind(Buffer *b)
 {
     const SynLangDesc *desc;
     SynEngine *engine;
+    SynFortranScore score;
+    const SynFortranScore *score_ptr = NULL;
+    SynFortranForm form = YEW_FORTRAN_AUTO;
+    OptVal option;
     u8 *line;
     u32 len;
     u32 lang;
@@ -77,7 +118,23 @@ static void ed_syn_bind(Buffer *b)
     if (b == NULL || b->tb == NULL)
         return;
     line = ed_first_line(b->tb, &len);
-    lang = yew_syn_lang_for(b->path, line, len);
+    if (b->owner != NULL &&
+        yew_opt_get(b->owner, b, NULL, "fortran_form", 12U, &option) &&
+        option.type == (u8)YEW_OPT_ENUM) {
+        if (option.as.str.len == 4U &&
+            memcmp(option.as.str.s, "free", 4U) == 0)
+            form = YEW_FORTRAN_FREE;
+        else if (option.as.str.len == 5U &&
+                 memcmp(option.as.str.s, "fixed", 5U) == 0)
+            form = YEW_FORTRAN_FIXED;
+    }
+    if (form == YEW_FORTRAN_AUTO &&
+        yew_syn_fortran_ambiguous_path(b->path)) {
+        ed_fortran_score(b->tb, &score);
+        score_ptr = &score;
+    }
+    lang = yew_syn_lang_for_scored(b->path, line, len, score_ptr, form,
+                                   false);
     free(line);
     yew_syn_attach(&b->syn, lang, b->tb);
     b->lang = NULL;
@@ -88,7 +145,9 @@ static void ed_syn_bind(Buffer *b)
         return;
     yew_syn_buf_bind(&b->syn, engine);
     desc = yew_syn_lang_desc(lang);
-    b->lang = desc == NULL ? NULL : desc->name;
+    b->lang = desc == NULL ? NULL :
+              strcmp(desc->name, "fortran-fixed") == 0 ?
+              "fortran(fixed)" : desc->name;
 }
 
 /* Tears down everything a buffer owns without touching the list slot. */
@@ -299,7 +358,7 @@ int yew_buf_hydrate(Ed *ed, Buffer *b)
     if (tb == NULL)
         tb = yew_textbuf_new();
     b->tb = tb;
-    ed_syn_bind(b);
+    yew_ed_syn_bind(b);
     b->undo = yew_undo_new(tb);
     yew_undo_mark_saved(b->undo);
     if (b->marks == NULL)
@@ -481,7 +540,7 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
     ed_syn_init(&ed->buffer);
     ed->buffer.id = ed->ws.next_buf_id++;
     ed->buffer.path = path == NULL ? NULL : arena_strdup(&ed->arena, path);
-    ed_syn_bind(&ed->buffer);
+    yew_ed_syn_bind(&ed->buffer);
     ed->buffer.tabwidth = YEW_VP_TABWIDTH;
     ed->buffer.undo = yew_undo_new(tb);
     yew_undo_mark_saved(ed->buffer.undo);

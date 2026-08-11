@@ -93,6 +93,12 @@ typedef enum SynAuxMatch {
     SYN_AUXM_LINE_START
 } SynAuxMatch;
 
+typedef enum SynValuePredicate {
+    SYN_VALUE_ANY = 0,
+    SYN_VALUE_CLEAR,
+    SYN_VALUE_SET
+} SynValuePredicate;
+
 enum {
     YEW_SYN_RULE_SET_AUX = 1U << 0,
     YEW_SYN_RULE_SET_VALUE = 1U << 1,
@@ -118,6 +124,8 @@ typedef struct SynRule {
     u16 target;
     u8 consume;
     u8 flags;
+    u8 value_pred;
+    u8 aux_add;
     u8 caps[8];
     u8 aux_group;
     u32 aux_pre;             /* interned literal affix, 0 = empty */

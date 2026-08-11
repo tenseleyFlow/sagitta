@@ -1691,6 +1691,8 @@ void test_syn_detect_env_and_direct_shebang_interpreters(void);
 void test_syn_detect_shebang_precedes_first_line_regex(void);
 void test_syn_detect_first_line_regex_is_last_positive_stage(void);
 void test_syn_detect_unknown_path_and_empty_input_return_none(void);
+void test_syn_fortran_twenty_hand_scored_inputs(void);
+void test_syn_fortran_tie_limit_and_column_signal_are_pinned(void);
 void test_syn_fletch_spec14_tokens_match_runtime_definition(void);
 void test_theme_defaults_compile_with_full_attr_coverage(void);
 void test_theme_partial_fallback_and_colour_forms(void);

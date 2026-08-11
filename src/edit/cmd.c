@@ -116,7 +116,9 @@ static CmdStatus cmd_syn_set(CmdCtx *cx)
     yew_syn_attach(&b->syn, lang, b->tb);
     yew_syn_buf_bind(&b->syn, engine);
     desc = yew_syn_lang_desc(lang);
-    b->lang = desc == NULL ? NULL : desc->name;
+    b->lang = desc == NULL ? NULL :
+              strcmp(desc->name, "fortran-fixed") == 0 ?
+              "fortran(fixed)" : desc->name;
     return YEW_CMD_OK;
 }
 

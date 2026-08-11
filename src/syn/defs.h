@@ -6,10 +6,11 @@
 
 #include "fl/diag.h"
 #include "syn/engine.h"
+#include "syn/fortran.h"
 #include "util/arena.h"
 #include "util/base.h"
 
-#define YEW_SYN_TABLE_VERSION 3U
+#define YEW_SYN_TABLE_VERSION 4U
 #define YEW_SYN_CACHE_MAGIC "SAGSYN\0\0"
 #define YEW_SYN_CACHE_HEADER_SIZE 64U
 
@@ -62,6 +63,9 @@ SynDef *yew_syn_def_load(Arena *a, DiagCtx *dc, const char *path);
 void yew_syn_def_dispose(SynDef *def);
 
 u32 yew_syn_lang_for(const char *path, const u8 *line1, u32 l1_len);
+u32 yew_syn_lang_for_scored(const char *path, const u8 *line1, u32 l1_len,
+                            const SynFortranScore *fortran,
+                            SynFortranForm override, bool sniff_legacy);
 const SynDef *yew_syn_def_for(u32 lang);
 SynEngine *yew_syn_engine_for(u32 lang);
 const SynLangDesc *yew_syn_lang_desc(u32 lang);
