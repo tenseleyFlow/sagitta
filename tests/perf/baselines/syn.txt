@@ -1,6 +1,26 @@
-# yew Sprint 39 syntax engine baselines (median_ns p99_ns)
+# yew Sprint 39 + 41 syntax engine baselines (median_ns p99_ns)
 # Regressions above 1.2x either committed number fail perf-syn.
-line 7500 12000
-viewport_cold_200 525000 950000
-edit_settle_100k 8000 16000
-line_cap_512k 100 500
+# Sprint 41 fixture rows are calibrated observations on the development
+# machine; perf_syn enforces the independent contract budgets directly.
+line 600 700
+viewport_cold_200 100000 220000
+edit_settle_100k 1000 1800
+line_cap_512k 30 35
+c_kitchen_line 2900 6000
+c_kitchen_edit 4500 7000
+viewport_200x100_c 575000 780000
+viewport_200x100_comment 45000 110000
+viewport_200x100_minified 12000 45000
+viewport_200x100_fletch 400000 650000
+viewport_200x100_sh 140000 280000
+viewport_200x100_make 300000 500000
+viewport_200x100_markdown 155000 320000
+viewport_80x24_c 70000 150000
+viewport_80x24_comment 5500 25000
+viewport_80x24_minified 12000 48000
+viewport_80x24_fletch 50000 120000
+viewport_80x24_sh 17000 56000
+viewport_80x24_make 35000 85000
+viewport_80x24_markdown 23000 62000
+theme_switch_200x50 1050000 1300000
+minified_first_paint 16000000 17500000

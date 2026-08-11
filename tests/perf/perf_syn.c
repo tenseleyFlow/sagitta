@@ -4,17 +4,26 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/resource.h>
 #include <sys/stat.h>
 #include <time.h>
 #include <unistd.h>
 
 #include "edit/block.h"
 #include "edit/buf.h"
+#include "edit/ed.h"
+#include "edit/theme_cmds.h"
 #include "search/regex.h"
 #include "syn/defs.h"
 #include "syn/engine.h"
+#include "text/file.h"
 #include "text/piece.h"
+#include "text/undo.h"
+#include "ui/draw.h"
+#include "ui/layout.h"
+#include "ui/viewport.h"
 #include "util/arena.h"
+#include "util/buf.h"
 #include "util/intern.h"
 
 enum {
@@ -28,13 +37,40 @@ enum {
     PERF_SYN_DETECT_PATHS = 10000,
     PERF_SYN_BLOCK_BYTES = 64 * 1024,
     PERF_SYN_BLOCK_LINES = 100000,
-    PERF_SYN_BLOCK_MAX_LINE_CALLS = 3
+    PERF_SYN_BLOCK_MAX_LINE_CALLS = 3,
+    PERF_SYN_FIXTURE_COUNT = 7,
+    PERF_SYN_THEME_ROWS = 50,
+    PERF_SYN_THEME_COLS = 200,
+    PERF_SYN_SCROLL_FRAMES = 240
+};
+
+enum {
+    CASE_TOY_LINE = 0,
+    CASE_TOY_VIEW,
+    CASE_TOY_EDIT,
+    CASE_LINE_CAP,
+    CASE_C_LINE,
+    CASE_C_EDIT,
+    CASE_VIEW_200_FIRST,
+    CASE_VIEW_200_LAST = CASE_VIEW_200_FIRST + PERF_SYN_FIXTURE_COUNT - 1,
+    CASE_VIEW_24_FIRST,
+    CASE_VIEW_24_LAST = CASE_VIEW_24_FIRST + PERF_SYN_FIXTURE_COUNT - 1,
+    CASE_THEME_SWITCH,
+    CASE_MINIFIED_FIRST_PAINT,
+    PERF_SYN_CASE_COUNT
 };
 
 #define PERF_SYN_DETECT_LIMIT_NS UINT64_C(5000000)
 #define PERF_SYN_COMPILE_LIMIT_NS UINT64_C(3000000)
 #define PERF_SYN_CACHE_LIMIT_NS UINT64_C(200000)
 #define PERF_SYN_BLOCK_LIMIT_NS UINT64_C(5000000)
+#define PERF_SYN_VIEW_200_LIMIT_NS UINT64_C(1500000)
+#define PERF_SYN_VIEW_24_LIMIT_NS UINT64_C(300000)
+#define PERF_SYN_THEME_LIMIT_NS UINT64_C(2000000)
+#define PERF_SYN_MINIFIED_LIMIT_NS UINT64_C(20000000)
+#define PERF_SYN_COMMENT_TOTAL_US UINT64_C(400000)
+#define PERF_SYN_STATE_LIMIT_BYTES UINT64_C(204800)
+#define PERF_SYN_SCROLL_MIN_FPS 120.0
 
 typedef struct SynFixture {
     Arena arena;
@@ -63,6 +99,54 @@ typedef struct Source {
     size_t len;
 } Source;
 
+typedef struct FrozenSpec {
+    const char *stem;
+    const char *source_path;
+    const char *definition_path;
+    u64 lines;
+    size_t bytes;
+} FrozenSpec;
+
+typedef struct FrozenFixture {
+    const FrozenSpec *spec;
+    Source source;
+    Arena arena;
+    DiagCtx dc;
+    SynDef *def;
+    SynEngine *engine;
+    TextBuf *tb;
+} FrozenFixture;
+
+typedef struct FakeClock {
+    i64 now;
+    i64 step;
+} FakeClock;
+
+typedef struct PaintFixture {
+    Ed ed;
+    Buffer buffer;
+    Buffer *bufptrs[1];
+    Win win;
+    TtyCaps caps;
+} PaintFixture;
+
+static const FrozenSpec frozen_specs[PERF_SYN_FIXTURE_COUNT] = {
+    {"c", "tests/perf/fixtures/syn/c_kitchen.c", "runtime/syntax/c.fl",
+     8000U, 244U * 1024U},
+    {"comment_bomb", "tests/perf/fixtures/syn/c_comment_bomb.c",
+     "runtime/syntax/c.fl", 40001U, 3U + 5U * 244U * 1024U},
+    {"minified", "tests/perf/fixtures/syn/c_minified.c",
+     "runtime/syntax/c.fl", 1U, 512U * 1024U},
+    {"fletch", "tests/perf/fixtures/syn/fl_kitchen.fl",
+     "runtime/syntax/fletch.fl", 2000U, 58U * 1024U},
+    {"sh", "tests/perf/fixtures/syn/sh_kitchen.sh", "runtime/syntax/sh.fl",
+     3000U, 92U * 1024U},
+    {"make", "tests/perf/fixtures/syn/mk_kitchen.mk",
+     "runtime/syntax/make.fl", 1200U, 36U * 1024U},
+    {"markdown", "tests/perf/fixtures/syn/md_kitchen.md",
+     "runtime/syntax/markdown.fl", 5000U, 160U * 1024U}
+};
+
 static bool now_ns(u64 *out)
 {
     struct timespec ts;
@@ -70,6 +154,44 @@ static bool now_ns(u64 *out)
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
         return false;
     *out = (u64)ts.tv_sec * UINT64_C(1000000000) + (u64)ts.tv_nsec;
+    return true;
+}
+
+static bool current_rss_bytes(u64 *out)
+{
+#if defined(__linux__)
+    FILE *file = fopen("/proc/self/statm", "r");
+    unsigned long long total_pages;
+    unsigned long long resident_pages;
+    long page_size;
+
+    if (file != NULL) {
+        int count = fscanf(file, "%llu %llu", &total_pages,
+                           &resident_pages);
+
+        (void)total_pages;
+        (void)fclose(file);
+        page_size = sysconf(_SC_PAGESIZE);
+        if (count == 2 && page_size > 0 &&
+            resident_pages <= UINT64_MAX / (u64)page_size) {
+            *out = (u64)resident_pages * (u64)page_size;
+            return true;
+        }
+    }
+#endif
+    {
+        struct rusage usage;
+
+        if (getrusage(RUSAGE_SELF, &usage) != 0 || usage.ru_maxrss < 0)
+            return false;
+#if defined(__APPLE__)
+        *out = (u64)usage.ru_maxrss;
+#else
+        if ((u64)usage.ru_maxrss > UINT64_MAX / 1024U)
+            return false;
+        *out = (u64)usage.ru_maxrss * 1024U;
+#endif
+    }
     return true;
 }
 
@@ -158,6 +280,87 @@ static bool read_source(const char *path, Source *source)
         return false;
     }
     source->len = (size_t)size;
+    return true;
+}
+
+static u64 source_lines(const Source *source)
+{
+    u64 lines = 0U;
+
+    for (size_t i = 0U; i < source->len; i++) {
+        if (source->data[i] == (u8)'\n')
+            lines++;
+    }
+    if (source->len != 0U && source->data[source->len - 1U] != (u8)'\n')
+        lines++;
+    return lines;
+}
+
+static void frozen_free(FrozenFixture *fixture);
+
+static bool frozen_init(FrozenFixture *fixture, const FrozenSpec *spec)
+{
+    (void)memset(fixture, 0, sizeof(*fixture));
+    fixture->spec = spec;
+    arena_init(&fixture->arena);
+    fl_diag_init(&fixture->dc, &fixture->arena);
+    if (!read_source(spec->source_path, &fixture->source) ||
+        fixture->source.len != spec->bytes ||
+        source_lines(&fixture->source) != spec->lines)
+        goto fail;
+    fixture->def = yew_syn_def_load(&fixture->arena, &fixture->dc,
+                                    spec->definition_path);
+    if (fixture->def == NULL)
+        goto fail;
+    fixture->engine = yew_syn_engine_new(fixture->def);
+    fixture->tb = yew_textbuf_from_bytes(fixture->source.data,
+                                         fixture->source.len);
+    if (fixture->engine == NULL || fixture->tb == NULL)
+        goto fail;
+    return true;
+fail:
+    frozen_free(fixture);
+    return false;
+}
+
+static void frozen_free(FrozenFixture *fixture)
+{
+    yew_textbuf_free(fixture->tb);
+    yew_syn_engine_free(fixture->engine);
+    if (fixture->def != NULL)
+        yew_syn_def_dispose(fixture->def);
+    arena_free_all(&fixture->arena);
+    free(fixture->source.data);
+    (void)memset(fixture, 0, sizeof(*fixture));
+}
+
+static i64 fake_clock(void *ctx)
+{
+    FakeClock *clock = ctx;
+
+    clock->now += clock->step;
+    return clock->now;
+}
+
+static bool settle_all(SynBuf *syn, const TextBuf *tb, LineNo lo,
+                       LineNo hi, i64 budget_us, u64 *total_us,
+                       u64 *max_us, u64 *frames)
+{
+    SynSettleReport report;
+    u64 calls = 0U;
+
+    do {
+        yew_syn_settle(syn, tb, lo, hi, budget_us, &report);
+        if (total_us != NULL)
+            *total_us += report.us;
+        if (max_us != NULL && report.us > *max_us)
+            *max_us = report.us;
+        calls++;
+        if (calls > 100000U)
+            return false;
+    } while (!report.fixpoint);
+    if (frames != NULL)
+        *frames += calls;
     return true;
 }
 
@@ -463,6 +666,482 @@ static bool measure_viewport(SynFixture *fx, TextBuf *tb, u64 *samples,
     return true;
 }
 
+static bool measure_frozen_viewport(FrozenFixture *fixture, u64 rows,
+                                    u64 *samples, size_t count)
+{
+    size_t prefix = 0U;
+    u64 lines = 0U;
+    TextBuf *tb;
+
+    while (prefix < fixture->source.len && lines < rows) {
+        if (fixture->source.data[prefix++] == (u8)'\n')
+            lines++;
+    }
+    if (lines < rows)
+        prefix = fixture->source.len;
+    tb = yew_textbuf_from_bytes(fixture->source.data, prefix);
+    if (tb == NULL)
+        return false;
+    for (size_t i = 0U; i < count; i++) {
+        SynBuf syn;
+        SynSettleReport report;
+        u64 start;
+        u64 end;
+
+        yew_syn_buf_init(&syn);
+        yew_syn_buf_bind(&syn, fixture->engine);
+        yew_syn_attach(&syn, 1U, tb);
+        if (!now_ns(&start)) {
+            yew_syn_detach(&syn);
+            yew_textbuf_free(tb);
+            return false;
+        }
+        yew_syn_settle(&syn, tb, LINENO(0U), LINENO(rows),
+                       INT64_C(1000000000), &report);
+        if (!now_ns(&end) || end < start ||
+            (!report.fixpoint && report.lines < rows)) {
+            yew_syn_detach(&syn);
+            yew_textbuf_free(tb);
+            return false;
+        }
+        samples[i] = end - start;
+        perf_syn_sink += report.lines;
+        yew_syn_detach(&syn);
+    }
+    yew_textbuf_free(tb);
+    return true;
+}
+
+static bool measure_frozen_line(FrozenFixture *fixture, u64 *samples,
+                                size_t count)
+{
+    size_t lo = 0U;
+    size_t hi = 0U;
+    u64 line = 0U;
+    SynSpan spans[YEW_SYN_MAX_SPANS];
+
+    /* Sample the whole fixture evenly.  Sequentially taking the first N rows
+     * makes reduced-sample CI runs measure only the fixture prefix. */
+    for (size_t i = 0U; i < count; i++) {
+        SynLineOut out = {spans, 0U, YEW_SYN_MAX_SPANS, 0U, 0U};
+        u64 target = (u64)i * fixture->spec->lines / (u64)count;
+        u64 start;
+        u64 end;
+
+        while (line < target) {
+            while (hi < fixture->source.len &&
+                   fixture->source.data[hi] != (u8)'\n')
+                hi++;
+            lo = hi < fixture->source.len ? hi + 1U : hi;
+            hi = lo;
+            line++;
+        }
+        hi = lo;
+        while (hi < fixture->source.len &&
+               fixture->source.data[hi] != (u8)'\n')
+            hi++;
+        if (hi - lo > UINT32_MAX)
+            return false;
+        if (!now_ns(&start)) {
+            return false;
+        }
+        yew_syn_line(fixture->engine, YEW_SYN_STATE_ROOT,
+                     fixture->source.data + lo, (u32)(hi - lo), &out);
+        if (!now_ns(&end) || end < start) {
+            return false;
+        }
+        samples[i] = end - start;
+        perf_syn_sink += out.n + out.exit_state;
+        lo = hi < fixture->source.len ? hi + 1U : hi;
+    }
+    return true;
+}
+
+static bool measure_frozen_edit(FrozenFixture *fixture, u64 *samples,
+                                size_t count)
+{
+    TextBuf *tb = yew_textbuf_from_bytes(fixture->source.data,
+                                         fixture->source.len);
+    SynBuf syn;
+    bool ok = false;
+
+    if (tb == NULL)
+        return false;
+    yew_syn_buf_init(&syn);
+    yew_syn_buf_bind(&syn, fixture->engine);
+    yew_syn_attach(&syn, 1U, tb);
+    if (!settle_all(&syn, tb, LINENO(0U), LINENO(200U), INT64_MAX,
+                    NULL, NULL, NULL))
+        goto done;
+    for (size_t i = 0U; i < count; i++) {
+        static const u8 byte = (u8)'x';
+        SynSettleReport report;
+        SynSettleReport restore;
+        u64 start;
+        u64 end;
+
+        yew_textbuf_insert(tb, BYTEOFF(4U), &byte, 1U);
+        yew_syn_edit(&syn, LINENO(0U), 0U, 0U);
+        if (!now_ns(&start))
+            goto done;
+        yew_syn_settle(&syn, tb, LINENO(0U), LINENO(200U), INT64_MAX,
+                       &report);
+        if (!now_ns(&end) || end < start || !report.fixpoint ||
+            report.lines > 2U)
+            goto done;
+        samples[i] = end - start;
+        perf_syn_sink += report.lines;
+        yew_textbuf_delete(tb, (Span){4U, 5U});
+        yew_syn_edit(&syn, LINENO(0U), 0U, 0U);
+        yew_syn_settle(&syn, tb, LINENO(0U), LINENO(200U), INT64_MAX,
+                       &restore);
+        if (!restore.fixpoint || restore.lines > 2U)
+            goto done;
+    }
+    ok = true;
+done:
+    yew_syn_detach(&syn);
+    yew_textbuf_free(tb);
+    return ok;
+}
+
+static bool check_comment_bomb(FrozenFixture *fixture, u64 *total_us,
+                               u64 *max_us, u64 *frames,
+                               u64 *state_logical_bytes,
+                               u64 *state_capacity_bytes, u64 *rss_growth,
+                               u64 *wall_ns)
+{
+    static const u8 frozen_prefix[] = "/*";
+    static const u8 paste[] = "/*";
+    enum { VIEW_LO = 100, VIEW_HI = 124 };
+    SynBuf syn;
+    FakeClock clock = {0, 1};
+    SynSettleReport report;
+    TextBuf *tb;
+    u64 started;
+    u64 ended;
+    u64 rss_before;
+    u64 rss_after;
+    u64 base_lines;
+    bool ok = false;
+
+    *total_us = 0U;
+    *max_us = 0U;
+    *frames = 0U;
+    if (fixture->source.len < sizeof(frozen_prefix) - 1U ||
+        memcmp(fixture->source.data, frozen_prefix,
+               sizeof(frozen_prefix) - 1U) != 0)
+        return false;
+    tb = yew_textbuf_from_bytes(
+        fixture->source.data + sizeof(frozen_prefix) - 1U,
+        fixture->source.len - (sizeof(frozen_prefix) - 1U));
+    if (tb == NULL)
+        return false;
+    base_lines = yew_textbuf_line_count(tb);
+    if (!current_rss_bytes(&rss_before))
+        goto done_tb;
+    yew_syn_buf_init(&syn);
+    yew_syn_buf_bind(&syn, fixture->engine);
+    yew_syn_attach(&syn, 1U, tb);
+    if (!settle_all(&syn, tb, LINENO(0U), LINENO(VIEW_HI), INT64_MAX,
+                    NULL, NULL, NULL))
+        goto done_syn;
+
+    /* Exercise the actual pathological edit, rather than timing a cold
+     * attach to an already-bombed fixture.  The frozen file supplies the
+     * settled body; the benchmark pastes the unterminated opener itself. */
+    yew_syn_buf_set_clock(&syn, fake_clock, &clock);
+    yew_textbuf_insert(tb, BYTEOFF(0U), paste, sizeof(paste) - 1U);
+    yew_syn_edit(&syn, LINENO(0U), 0U, 0U);
+    if (yew_textbuf_len(tb) != fixture->source.len ||
+        yew_textbuf_line_count(tb) != base_lines)
+        goto done_syn;
+    *state_logical_bytes = syn.entry.len * sizeof(*syn.entry.data);
+    *state_capacity_bytes = syn.entry.cap * sizeof(*syn.entry.data);
+    if (!now_ns(&started))
+        goto done_syn;
+    yew_syn_settle(&syn, tb, LINENO(VIEW_LO), LINENO(VIEW_HI),
+                   YEW_SYN_FRAME_BUDGET_US, &report);
+    *total_us += report.us;
+    *max_us = report.us;
+    *frames = 1U;
+    /* Reaching the viewport is sufficient here: the exact span loop below
+     * proves first-frame correctness.  A non-provisional report means the
+     * real propagation wave reached the view, not that the whole 40k-line
+     * buffer must already be at fixpoint. */
+    if (!report.hit_view)
+        goto done_syn;
+    for (u64 line = VIEW_LO; line < VIEW_HI; line++) {
+        SynSpan spans[YEW_SYN_MAX_SPANS];
+        SynLineOut out = {spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
+
+        yew_syn_spans(&syn, tb, LINENO(line), &out);
+        if (out.n == 0U || out.stop != YEW_SYN_STOP_OK)
+            goto done_syn;
+        for (u32 i = 0U; i < out.n; i++) {
+            if (out.spans[i].attr != YEW_ATTR_COMMENT &&
+                out.spans[i].attr != YEW_ATTR_COMMENT_DOC &&
+                out.spans[i].attr != YEW_ATTR_COMMENT_TODO)
+                goto done_syn;
+        }
+    }
+    if (!report.fixpoint &&
+        !settle_all(&syn, tb, LINENO(VIEW_LO), LINENO(VIEW_HI),
+                    YEW_SYN_IDLE_BUDGET_US, total_us, max_us, NULL)) {
+        goto done_syn;
+    }
+    if (!now_ns(&ended) || ended < started ||
+        !current_rss_bytes(&rss_after))
+        goto done_syn;
+    *rss_growth = rss_after > rss_before ? rss_after - rss_before : 0U;
+    *wall_ns = ended - started;
+    ok = true;
+done_syn:
+    yew_syn_detach(&syn);
+done_tb:
+    yew_textbuf_free(tb);
+    return ok;
+}
+
+static bool measure_whole_settle(FrozenFixture *fixture, u64 *total_ns,
+                                 u64 *max_frame_ns, u64 *frames)
+{
+    SynBuf syn;
+    SynSettleReport report;
+
+    *total_ns = 0U;
+    *max_frame_ns = 0U;
+    *frames = 0U;
+    yew_syn_buf_init(&syn);
+    yew_syn_buf_bind(&syn, fixture->engine);
+    yew_syn_attach(&syn, 1U, fixture->tb);
+    do {
+        u64 start;
+        u64 end;
+        u64 elapsed;
+
+        if (!now_ns(&start)) {
+            yew_syn_detach(&syn);
+            return false;
+        }
+        yew_syn_settle(&syn, fixture->tb, LINENO(0U), LINENO(200U),
+                       YEW_SYN_FRAME_BUDGET_US, &report);
+        if (!now_ns(&end) || end < start) {
+            yew_syn_detach(&syn);
+            return false;
+        }
+        elapsed = end - start;
+        *total_ns += elapsed;
+        if (elapsed > *max_frame_ns)
+            *max_frame_ns = elapsed;
+        (*frames)++;
+        if (*frames > 100000U) {
+            yew_syn_detach(&syn);
+            return false;
+        }
+    } while (!report.fixpoint);
+    yew_syn_detach(&syn);
+    return true;
+}
+
+static void paint_free(PaintFixture *paint);
+
+static bool paint_switch_theme(PaintFixture *paint, const char *name)
+{
+    char error[192];
+
+    return yew_theme_set(&paint->ed, name, error, sizeof(error));
+}
+
+static bool paint_init(PaintFixture *paint, FrozenFixture *fixture,
+                       u16 rows, u16 cols, bool wrap, bool load_file)
+{
+    Cursor cursor;
+    SynSettleReport report;
+
+    (void)memset(paint, 0, sizeof(*paint));
+    arena_init(&paint->ed.arena);
+    interner_init(&paint->ed.interner, &paint->ed.arena);
+    bytebuf_init(&paint->ed.frame);
+    yew_theme_init(&paint->ed.theme);
+    if (!yew_grid_init(&paint->ed.grid, &paint->ed.interner, rows, cols))
+        goto fail;
+    yew_filemeta_init(&paint->buffer.meta);
+    if (load_file) {
+        if (yew_file_load(fixture->spec->source_path, &paint->buffer.tb,
+                          &paint->buffer.meta) != YEW_LOAD_OK)
+            goto fail;
+    } else {
+        paint->buffer.tb = yew_textbuf_from_bytes(fixture->source.data,
+                                                  fixture->source.len);
+    }
+    if (paint->buffer.tb == NULL)
+        goto fail;
+    paint->buffer.undo = yew_undo_new(paint->buffer.tb);
+    yew_undo_mark_saved(paint->buffer.undo);
+    paint->buffer.path = (char *)fixture->spec->source_path;
+    paint->buffer.lang = (char *)fixture->spec->stem;
+    paint->buffer.tabwidth = 4U;
+    yew_syn_buf_init(&paint->buffer.syn);
+    yew_syn_buf_bind(&paint->buffer.syn, fixture->engine);
+    yew_syn_attach(&paint->buffer.syn, 1U, paint->buffer.tb);
+    yew_syn_settle(&paint->buffer.syn, paint->buffer.tb, LINENO(0U),
+                   LINENO(rows), INT64_MAX, &report);
+    if (!report.fixpoint)
+        goto fail;
+    cursor.pos = yew_textbuf_line_start(
+        paint->buffer.tb,
+        LINENO(yew_textbuf_line_count(paint->buffer.tb) / 2U));
+    cursor.anchor = cursor.pos;
+    cursor.goal_col = (GCol){0U};
+    paint->win.buf = &paint->buffer;
+    yew_cset_init(&paint->win.cs, cursor);
+    yew_vp_init(&paint->win);
+    paint->win.vp.wrap = wrap;
+    paint->win.number_style = YEW_NUM_HYBRID;
+    paint->win.syn_spans = calloc(YEW_SYN_MAX_SPANS,
+                                  sizeof(*paint->win.syn_spans));
+    paint->win.syn_spans_cap = YEW_SYN_MAX_SPANS;
+    if (paint->win.syn_spans == NULL)
+        goto fail;
+    paint->ed.mode = YEW_MODE_L;
+    paint->ed.prev_unit = YEW_MODE_L;
+    paint->ed.win = &paint->win;
+    paint->bufptrs[0] = &paint->buffer;
+    paint->ed.ws.bufs = paint->bufptrs;
+    paint->ed.ws.nbufs = 1U;
+    paint->caps.truecolor = true;
+    yew_render_init(&paint->ed.render, &paint->caps, NULL);
+    paint->ed.render_ready = true;
+    paint->ed.grid_ready = true;
+    if (!paint_switch_theme(paint, "quiver-dark"))
+        goto fail;
+    yew_layout(&paint->ed);
+    yew_draw_win(&paint->ed, &paint->win);
+    yew_grid_mark_all(&paint->ed.grid);
+    (void)yew_render_frame(&paint->ed.render, &paint->ed.grid,
+                           &paint->ed.frame);
+    yew_grid_flip(&paint->ed.grid);
+    return true;
+fail:
+    paint_free(paint);
+    return false;
+}
+
+static void paint_free(PaintFixture *paint)
+{
+    free(paint->win.syn_spans);
+    yew_vp_free(&paint->win);
+    yew_cset_free(&paint->win.cs);
+    yew_syn_detach(&paint->buffer.syn);
+    yew_undo_free(paint->buffer.undo);
+    yew_textbuf_free(paint->buffer.tb);
+    yew_filemeta_dispose(&paint->buffer.meta);
+    yew_grid_free(&paint->ed.grid);
+    yew_theme_free(&paint->ed.theme);
+    free(paint->ed.theme_last_dark);
+    free(paint->ed.theme_last_light);
+    bytebuf_free(&paint->ed.frame);
+    interner_free(&paint->ed.interner);
+    arena_free_all(&paint->ed.arena);
+}
+
+static bool measure_theme_switch(FrozenFixture *fixture, u64 *samples,
+                                 size_t count, u64 *max_line_calls)
+{
+    PaintFixture paint;
+    bool ok = false;
+
+    *max_line_calls = 0U;
+    if (!paint_init(&paint, fixture, PERF_SYN_THEME_ROWS,
+                    PERF_SYN_THEME_COLS, false, false))
+        return false;
+    for (size_t i = 0U; i < count; i++) {
+        const char *name = (i & 1U) == 0U ? "quiver-light" : "quiver-dark";
+        u64 start;
+        u64 end;
+        u64 calls;
+
+        yew_syn_engine_reset_counters(fixture->engine);
+        if (!now_ns(&start) || !paint_switch_theme(&paint, name))
+            goto done;
+        yew_draw_win(&paint.ed, &paint.win);
+        paint.ed.frame.len = 0U;
+        (void)yew_render_frame(&paint.ed.render, &paint.ed.grid,
+                               &paint.ed.frame);
+        yew_grid_flip(&paint.ed.grid);
+        if (!now_ns(&end) || end < start)
+            goto done;
+        calls = yew_syn_engine_line_calls(fixture->engine);
+        if (calls > *max_line_calls)
+            *max_line_calls = calls;
+        if (calls != 0U)
+            goto done;
+        samples[i] = end - start;
+        perf_syn_sink += paint.ed.frame.len;
+    }
+    ok = true;
+done:
+    paint_free(&paint);
+    return ok;
+}
+
+static bool measure_minified_first_paint(FrozenFixture *fixture,
+                                         u64 *samples, size_t count)
+{
+    for (size_t i = 0U; i < count; i++) {
+        PaintFixture paint;
+        u64 start;
+        u64 end;
+
+        if (!now_ns(&start) ||
+            !paint_init(&paint, fixture, 24U, 80U, false, true))
+            return false;
+        if (!now_ns(&end) || end < start) {
+            paint_free(&paint);
+            return false;
+        }
+        samples[i] = end - start;
+        perf_syn_sink += paint.ed.frame.len;
+        paint_free(&paint);
+    }
+    return true;
+}
+
+static bool measure_markdown_scroll(FrozenFixture *fixture, bool wrap,
+                                    double *fps)
+{
+    PaintFixture paint;
+    u64 start;
+    u64 end;
+
+    if (!paint_init(&paint, fixture, PERF_SYN_THEME_ROWS,
+                    PERF_SYN_THEME_COLS, wrap, false))
+        return false;
+    if (!now_ns(&start)) {
+        paint_free(&paint);
+        return false;
+    }
+    for (u32 frame = 0U; frame < PERF_SYN_SCROLL_FRAMES; frame++) {
+        yew_vp_scroll(&paint.win, 1);
+        yew_vp_push_cursor(&paint.win);
+        yew_draw_win(&paint.ed, &paint.win);
+        yew_grid_mark_all(&paint.ed.grid);
+        paint.ed.frame.len = 0U;
+        perf_syn_sink += yew_render_frame(&paint.ed.render, &paint.ed.grid,
+                                          &paint.ed.frame);
+        yew_grid_flip(&paint.ed.grid);
+    }
+    if (!now_ns(&end) || end <= start) {
+        paint_free(&paint);
+        return false;
+    }
+    *fps = (double)PERF_SYN_SCROLL_FRAMES * 1000000000.0 /
+           (double)(end - start);
+    paint_free(&paint);
+    return true;
+}
+
 static bool measure_edit(SynFixture *fx, TextBuf *tb, u64 *samples,
                          size_t count)
 {
@@ -732,11 +1411,29 @@ static bool load_baselines(PerfCase *cases, size_t count)
 
 int main(void)
 {
-    PerfCase cases[] = {
+    PerfCase cases[PERF_SYN_CASE_COUNT] = {
         {"line", {0U, 0U}, {0U, 0U}},
         {"viewport_cold_200", {0U, 0U}, {0U, 0U}},
         {"edit_settle_100k", {0U, 0U}, {0U, 0U}},
-        {"line_cap_512k", {0U, 0U}, {0U, 0U}}
+        {"line_cap_512k", {0U, 0U}, {0U, 0U}},
+        {"c_kitchen_line", {0U, 0U}, {0U, 0U}},
+        {"c_kitchen_edit", {0U, 0U}, {0U, 0U}},
+        {"viewport_200x100_c", {0U, 0U}, {0U, 0U}},
+        {"viewport_200x100_comment", {0U, 0U}, {0U, 0U}},
+        {"viewport_200x100_minified", {0U, 0U}, {0U, 0U}},
+        {"viewport_200x100_fletch", {0U, 0U}, {0U, 0U}},
+        {"viewport_200x100_sh", {0U, 0U}, {0U, 0U}},
+        {"viewport_200x100_make", {0U, 0U}, {0U, 0U}},
+        {"viewport_200x100_markdown", {0U, 0U}, {0U, 0U}},
+        {"viewport_80x24_c", {0U, 0U}, {0U, 0U}},
+        {"viewport_80x24_comment", {0U, 0U}, {0U, 0U}},
+        {"viewport_80x24_minified", {0U, 0U}, {0U, 0U}},
+        {"viewport_80x24_fletch", {0U, 0U}, {0U, 0U}},
+        {"viewport_80x24_sh", {0U, 0U}, {0U, 0U}},
+        {"viewport_80x24_make", {0U, 0U}, {0U, 0U}},
+        {"viewport_80x24_markdown", {0U, 0U}, {0U, 0U}},
+        {"theme_switch_200x50", {0U, 0U}, {0U, 0U}},
+        {"minified_first_paint", {0U, 0U}, {0U, 0U}}
     };
     Timing case_trials[YEW_ARRAY_LEN(cases)][PERF_SYN_TRIALS];
     Timing detect_trials[PERF_SYN_TRIALS];
@@ -750,6 +1447,8 @@ int main(void)
     TextBuf *viewport = line_fixture(PERF_SYN_VIEW_LINES - 1U);
     TextBuf *edit = line_fixture(PERF_SYN_EDIT_LINES - 1U);
     SynFixture fx;
+    FrozenFixture frozen[PERF_SYN_FIXTURE_COUNT];
+    size_t frozen_initialized = 0U;
     Source ini = {NULL, 0U};
     Timing detect = {0U, 0U};
     Timing compile = {0U, 0U};
@@ -758,6 +1457,19 @@ int main(void)
     Timing block_multiline = {0U, 0U};
     u64 block_line_calls = 0U;
     u64 block_multiline_calls = 0U;
+    u64 theme_line_calls = 0U;
+    u64 comment_total_us = 0U;
+    u64 comment_max_us = 0U;
+    u64 comment_frames = 0U;
+    u64 comment_state_logical_bytes = 0U;
+    u64 comment_state_capacity_bytes = 0U;
+    u64 comment_state_rss_growth = 0U;
+    u64 comment_wall_ns = 0U;
+    u64 whole_total_ns = 0U;
+    u64 whole_max_frame_ns = 0U;
+    u64 whole_frames = 0U;
+    double markdown_nowrap_fps = 0.0;
+    double markdown_wrap_fps = 0.0;
     bool regression_seen = false;
     int status = 0;
 
@@ -768,8 +1480,18 @@ int main(void)
     (void)memset(block_trials, 0, sizeof(block_trials));
     (void)memset(block_multiline_trials, 0,
                  sizeof(block_multiline_trials));
+    (void)memset(frozen, 0, sizeof(frozen));
+    for (size_t i = 0U; i < PERF_SYN_FIXTURE_COUNT; i++) {
+        if (!frozen_init(&frozen[i], &frozen_specs[i])) {
+            (void)fprintf(stderr, "perf_syn: fixture '%s' failed\n",
+                          frozen_specs[i].stem);
+            break;
+        }
+        frozen_initialized++;
+    }
     if (samples == NULL || cap_line == NULL || viewport == NULL ||
-        edit == NULL || !read_source("runtime/syntax/ini.fl", &ini) ||
+        edit == NULL || frozen_initialized != PERF_SYN_FIXTURE_COUNT ||
+        !read_source("runtime/syntax/ini.fl", &ini) ||
         !fixture_init(&fx)) {
         (void)fprintf(stderr, "perf_syn: fixture allocation failed\n");
         free(samples);
@@ -777,6 +1499,8 @@ int main(void)
         free(ini.data);
         yew_textbuf_free(viewport);
         yew_textbuf_free(edit);
+        for (size_t i = 0U; i < frozen_initialized; i++)
+            frozen_free(&frozen[i]);
         return 2;
     }
     (void)memset(cap_line, 'x', 512U * 1024U);
@@ -807,7 +1531,62 @@ int main(void)
                           "perf_syn: line-cap measurement failed\n");
             status = 2;
         } else if (status == 0)
-            case_trials[3][trial] = timing_of(samples, count);
+            case_trials[CASE_LINE_CAP][trial] = timing_of(samples, count);
+        if (status == 0 &&
+            !measure_frozen_line(&frozen[0], samples, count)) {
+            (void)fprintf(stderr, "perf_syn: C line measurement failed\n");
+            status = 2;
+        } else if (status == 0)
+            case_trials[CASE_C_LINE][trial] = timing_of(samples, count);
+        if (status == 0 &&
+            !measure_frozen_edit(&frozen[0], samples, count)) {
+            (void)fprintf(stderr, "perf_syn: C edit measurement failed\n");
+            status = 2;
+        } else if (status == 0)
+            case_trials[CASE_C_EDIT][trial] = timing_of(samples, count);
+        for (size_t i = 0U; i < PERF_SYN_FIXTURE_COUNT && status == 0; i++) {
+            if (!measure_frozen_viewport(&frozen[i], 200U, samples,
+                                         count)) {
+                (void)fprintf(stderr,
+                              "perf_syn: 200-row %s measurement failed\n",
+                              frozen[i].spec->stem);
+                status = 2;
+            } else {
+                case_trials[CASE_VIEW_200_FIRST + i][trial] =
+                    timing_of(samples, count);
+            }
+        }
+        for (size_t i = 0U; i < PERF_SYN_FIXTURE_COUNT && status == 0; i++) {
+            if (!measure_frozen_viewport(&frozen[i], 24U, samples,
+                                         count)) {
+                (void)fprintf(stderr,
+                              "perf_syn: 24-row %s measurement failed\n",
+                              frozen[i].spec->stem);
+                status = 2;
+            } else {
+                case_trials[CASE_VIEW_24_FIRST + i][trial] =
+                    timing_of(samples, count);
+            }
+        }
+        if (status == 0 &&
+            !measure_theme_switch(&frozen[0], samples, count,
+                                  &trial_line_calls)) {
+            (void)fprintf(stderr, "perf_syn: theme-switch measurement failed\n");
+            status = 2;
+        } else if (status == 0) {
+            case_trials[CASE_THEME_SWITCH][trial] = timing_of(samples, count);
+            if (trial_line_calls > theme_line_calls)
+                theme_line_calls = trial_line_calls;
+        }
+        if (status == 0 &&
+            !measure_minified_first_paint(&frozen[2], samples, count)) {
+            (void)fprintf(stderr,
+                          "perf_syn: minified first-paint measurement failed\n");
+            status = 2;
+        } else if (status == 0) {
+            case_trials[CASE_MINIFIED_FIRST_PAINT][trial] =
+                timing_of(samples, count);
+        }
         if (status == 0 && !measure_detect(samples, count)) {
             (void)fprintf(stderr,
                           "perf_syn: detection measurement failed\n");
@@ -860,6 +1639,31 @@ int main(void)
         block_multiline = timing_of_trials(block_multiline_trials);
     }
 
+    if (status == 0 &&
+        !check_comment_bomb(&frozen[1], &comment_total_us,
+                            &comment_max_us, &comment_frames,
+                            &comment_state_logical_bytes,
+                            &comment_state_capacity_bytes,
+                            &comment_state_rss_growth,
+                            &comment_wall_ns)) {
+        (void)fprintf(stderr, "perf_syn: comment-bomb frame check failed\n");
+        status = 2;
+    }
+    if (status == 0 &&
+        !measure_whole_settle(&frozen[0], &whole_total_ns,
+                              &whole_max_frame_ns, &whole_frames)) {
+        (void)fprintf(stderr, "perf_syn: whole-file settle failed\n");
+        status = 2;
+    }
+    if (status == 0 &&
+        (!measure_markdown_scroll(&frozen[6], false,
+                                  &markdown_nowrap_fps) ||
+         !measure_markdown_scroll(&frozen[6], true,
+                                  &markdown_wrap_fps))) {
+        (void)fprintf(stderr, "perf_syn: markdown scroll measurement failed\n");
+        status = 2;
+    }
+
     if (status == 0 && !load_baselines(cases, YEW_ARRAY_LEN(cases)))
         status = 2;
     for (size_t i = 0U; status == 0 && i < YEW_ARRAY_LEN(cases); i++) {
@@ -868,6 +1672,25 @@ int main(void)
         u64 p99_limit = cases[i].baseline.p99 + cases[i].baseline.p99 / 5U;
         bool regression = cases[i].measured.median > median_limit ||
                           cases[i].measured.p99 > p99_limit;
+
+        if (i >= CASE_VIEW_200_FIRST && i <= CASE_VIEW_200_LAST)
+            regression = regression ||
+                         cases[i].measured.p99 > PERF_SYN_VIEW_200_LIMIT_NS;
+        if (i >= CASE_VIEW_24_FIRST && i <= CASE_VIEW_24_LAST)
+            regression = regression ||
+                         cases[i].measured.p99 > PERF_SYN_VIEW_24_LIMIT_NS;
+        if (i == CASE_C_LINE)
+            regression = regression || cases[i].measured.median > 3000U ||
+                         cases[i].measured.p99 > 12000U;
+        if (i == CASE_C_EDIT)
+            regression = regression || cases[i].measured.p99 > 60000U;
+        if (i == CASE_THEME_SWITCH)
+            regression = regression ||
+                         cases[i].measured.p99 > PERF_SYN_THEME_LIMIT_NS ||
+                         theme_line_calls != 0U;
+        if (i == CASE_MINIFIED_FIRST_PAINT)
+            regression = regression ||
+                         cases[i].measured.p99 > PERF_SYN_MINIFIED_LIMIT_NS;
 
         (void)printf("syn.%-20s median_ns=%llu p99_ns=%llu%s\n",
                      cases[i].name,
@@ -914,6 +1737,53 @@ int main(void)
                      (unsigned long long)block_multiline.p99,
                      (unsigned long long)block_multiline_calls,
                      multiline_regression ? " REGRESSION" : " ok");
+        {
+            bool comment_regression =
+                comment_frames != 1U ||
+                comment_max_us > YEW_SYN_FRAME_BUDGET_US ||
+                comment_total_us > PERF_SYN_COMMENT_TOTAL_US ||
+                comment_wall_ns > UINT64_C(400000000);
+            bool scroll_regression =
+                markdown_nowrap_fps < PERF_SYN_SCROLL_MIN_FPS ||
+                markdown_wrap_fps < PERF_SYN_SCROLL_MIN_FPS;
+            bool whole_regression = whole_total_ns > UINT64_C(45000000) ||
+                                    whole_max_frame_ns > UINT64_C(1000000);
+            bool state_regression =
+                comment_state_capacity_bytes > PERF_SYN_STATE_LIMIT_BYTES ||
+                comment_state_rss_growth > PERF_SYN_STATE_LIMIT_BYTES;
+
+            (void)printf("syn.%-20s frames=%llu fake_total_us=%llu "
+                         "fake_max_frame_us=%llu wall_ns=%llu%s\n",
+                         "comment_bomb",
+                         (unsigned long long)comment_frames,
+                         (unsigned long long)comment_total_us,
+                         (unsigned long long)comment_max_us,
+                         (unsigned long long)comment_wall_ns,
+                         comment_regression ? " REGRESSION" : " ok");
+            (void)printf("syn.%-20s line_calls_max=%llu%s\n",
+                         "theme_switch_calls",
+                         (unsigned long long)theme_line_calls,
+                         theme_line_calls == 0U ? " ok" : " REGRESSION");
+            (void)printf("syn.%-20s nowrap_fps=%.2f wrap_fps=%.2f%s\n",
+                         "markdown_scroll", markdown_nowrap_fps,
+                         markdown_wrap_fps,
+                         scroll_regression ? " REGRESSION" : " ok");
+            (void)printf("syn.%-20s frames=%llu total_ns=%llu "
+                         "max_frame_ns=%llu%s\n", "whole_c_settle",
+                         (unsigned long long)whole_frames,
+                         (unsigned long long)whole_total_ns,
+                         (unsigned long long)whole_max_frame_ns,
+                         whole_regression ? " REGRESSION" : " ok");
+            (void)printf("syn.%-20s logical_bytes=%llu capacity_bytes=%llu "
+                         "rss_growth_bytes=%llu%s\n", "comment_state",
+                         (unsigned long long)comment_state_logical_bytes,
+                         (unsigned long long)comment_state_capacity_bytes,
+                         (unsigned long long)comment_state_rss_growth,
+                         state_regression ? " REGRESSION" : " ok");
+            if (comment_regression || scroll_regression || whole_regression ||
+                state_regression)
+                regression_seen = true;
+        }
         if (detect_regression || compile_regression || cache_regression ||
             block_regression || multiline_regression)
             regression_seen = true;
@@ -925,6 +1795,8 @@ int main(void)
     fixture_free(&fx);
     yew_textbuf_free(viewport);
     yew_textbuf_free(edit);
+    for (size_t i = 0U; i < frozen_initialized; i++)
+        frozen_free(&frozen[i]);
     free(ini.data);
     free(cap_line);
     free(samples);
