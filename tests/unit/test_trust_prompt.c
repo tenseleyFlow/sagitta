@@ -52,16 +52,18 @@ static void tp_done(Ed *ed, YewTrustAnswer answer, void *ctx)
 
 static void tp_make(TrustPromptFix *f)
 {
+    static const char state_template[] = "/tmp/yew-trust-prompt-XXXXXX";
     const char *old = getenv("XDG_STATE_HOME");
     FILE *fp;
 
+    _Static_assert(sizeof(state_template) <= sizeof(f->state_home),
+                   "trust prompt state template exceeds fixture storage");
     (void)memset(f, 0, sizeof(*f));
     f->had_state_home = old != NULL;
     if (old != NULL)
         (void)snprintf(f->saved_state_home, sizeof(f->saved_state_home),
                        "%s", old);
-    (void)snprintf(f->state_home, sizeof(f->state_home),
-                   "/tmp/yew-trust-prompt-XXXXXX");
+    (void)memcpy(f->state_home, state_template, sizeof(state_template));
     YEW_ASSERT_NOT_NULL(mkdtemp(f->state_home));
     YEW_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", f->state_home, 1), 0);
     (void)snprintf(f->config, sizeof(f->config), "%s/.yew.fl",
