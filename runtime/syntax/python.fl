@@ -24,17 +24,21 @@
     contexts: {
         main: {
             default: "text",
-            rules: [ "include:python" ],
+            rules: [ "include:line_prefix", "include:python" ],
+        },
+
+        # These rules can only match at physical column zero.  Keeping them
+        # out of expression includes avoids dead copies in nested contexts.
+        line_prefix: {
+            rules: [
+                { match: "^([ ]+\\t|\\t+[ ])[ \\t]*", attr: "warning" },
+                { match: "^\\s*#\\s*type\\s*:.*$", attr: "comment.doc" },
+            ],
         },
 
         # Shared by the root, f-string expressions, and nested brace bodies.
         python: {
             rules: [
-                # Mixing tabs and spaces in leading indentation is almost
-                # always accidental.  Either ordering catches the first
-                # transition between the two byte kinds.
-                { match: "^([ ]+\\t|\\t+[ ])[ \\t]*", attr: "warning" },
-                { match: "^\\s*#\\s*type\\s*:.*$", attr: "comment.doc" },
                 { match: "#.*$", attr: "comment" },
 
                 # F-prefixed forms must precede ordinary prefixed strings.

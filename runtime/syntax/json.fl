@@ -70,7 +70,8 @@
             default: "text", at_eol: "stay", unit: "atom",
             rules: [
                 { match: "\\*/", attr: "error", pop: 1 },
-                { match: ".+", attr: "error" },
+                { match: "[^*]+|\\*[^/]", attr: "error" },
+                { match: "\\*$", attr: "error" },
             ],
         },
     },
