@@ -1,0 +1,5 @@
+line 1 entry=main exit=main
+  1:0-20 attr=comment context=main
+  1:20-21 attr=text context=main
+  1:21-23 attr=error context=main
+line 2 entry=main exit=main

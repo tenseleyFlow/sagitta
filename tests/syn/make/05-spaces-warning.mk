@@ -1,0 +1,2 @@
+all:
+  printf missing-separator

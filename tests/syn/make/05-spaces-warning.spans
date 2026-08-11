@@ -1,0 +1,6 @@
+line 1 entry=main exit=after_target
+  1:0-3 attr=label context=main
+  1:3-4 attr=operator context=main
+line 2 entry=after_target exit=main
+  2:0-26 attr=warning context=after_target
+line 3 entry=main exit=main

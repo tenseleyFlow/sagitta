@@ -1,0 +1,3 @@
+.PHONY: all clean
+.DELETE_ON_ERROR:
+.NOTPARALLEL: deploy

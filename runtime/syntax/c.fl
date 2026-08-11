@@ -1,0 +1,176 @@
+# runtime/syntax/c.fl — ISO C highlighter (C11 plus common C23 literals).
+#
+# C comments do not nest: `/* /* */ */` closes at the first `*/`; the final
+# `*/` is invalid C.  This definition therefore has one close rule and no
+# recursive comment push.  Line comments cannot open block comments, and
+# comment-looking bytes inside quotes remain strings/characters by context.
+#
+# Deliberate limit: `#if 0` bodies are not dimmed.  Correctly deciding whether
+# preprocessor branches are live requires macro evaluation; guessing would
+# incorrectly hide live code such as `#if defined(X)`.
+{
+    syntax: 1,
+
+    language: {
+        name:       "c",
+        extensions: ["c", "h"],
+        priority:   20,
+        comment:    { line: "//", block: ["/*", "*/"] },
+    },
+
+    contexts: {
+        main: {
+            default: "text",
+            rules: [
+                { match: "^\\s*(#)\\s*(include|include_next|import)\\b",
+                  attr: "preproc",
+                  captures: { 1: "preproc", 2: "preproc" },
+                  push: "preproc_include" },
+                { match: "^\\s*(#)\\s*([A-Za-z]+)", attr: "preproc",
+                  captures: { 1: "preproc", 2: "preproc" },
+                  push: "preproc" },
+                { match: "//", attr: "comment", push: "line_comment" },
+                { match: "/\\*", attr: "comment", push: "block_comment" },
+                { match: "\"", attr: "string", push: "dq" },
+                { match: "'", attr: "character", push: "sq" },
+                { match: "\\b(struct|union|enum|typedef)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+                  attr: "keyword.storage", captures: { 2: "type" } },
+                { match: "\\b(u?int(8|16|32|64)_t|intptr_t|uintptr_t|size_t|ptrdiff_t|wchar_t)\\b",
+                  attr: "type.builtin" },
+                { match: "\\b[A-Za-z_][A-Za-z0-9_]*_t\\b", attr: "type" },
+                { match: "\\b(void|char|short|int|long|float|double|signed|unsigned|_Bool|_Complex|_Atomic)\\b",
+                  attr: "type.builtin" },
+                { match: "\\b(if|else|switch|case|default|for|while|do|break|continue|return|goto)\\b",
+                  attr: "keyword.control" },
+                { match: "\\b(auto|const|extern|inline|register|restrict|static|volatile|_Alignas|alignas|_Noreturn|_Static_assert|static_assert|_Thread_local)\\b",
+                  attr: "keyword.storage" },
+                { match: "\\b(true|false)\\b", attr: "boolean" },
+                { match: "\\b(NULL|EOF)\\b", attr: "constant.builtin" },
+                { match: "\\b(0[xX][0-9A-Fa-f]([0-9A-Fa-f']*[0-9A-Fa-f])?(\\.[0-9A-Fa-f]([0-9A-Fa-f']*[0-9A-Fa-f])?)?([pP][+-]?[0-9]([0-9']*[0-9])?)?|0[bB][01]([01']*[01])?|0[0-7]([0-7']*[0-7])?|[0-9]([0-9']*[0-9])?(\\.[0-9]([0-9']*[0-9])?)?([eE][+-]?[0-9]([0-9']*[0-9])?)?)([uU]([lL]{1,2})?|[lL]{1,2}[uU]?|[fF])?\\b",
+                  attr: "number" },
+                { match: "([A-Za-z_][A-Za-z0-9_]*)\\s*\\(",
+                  captures: { 1: "function" }, consume: 1 },
+                { match: "\\*/", attr: "error" },
+                { match: "(==|!=|<=|>=|<<|>>|->|\\+\\+|--|&&|\\|\\||[+*/%&|^~!=<>?-])",
+                  attr: "operator" },
+                { match: "[(){}\\[\\]]", attr: "punct.bracket" },
+                { match: "[,;:]", attr: "punct.delim" },
+            ],
+        },
+
+        preproc: {
+            default: "preproc",
+            at_eol:  "pop",
+            unit:    "span",
+            rules: [
+                { match: "\\\\\\s*$", attr: "operator", set: "preproc_cont" },
+                { match: "\\b(include|include_next|import)\\b", attr: "preproc",
+                  set: "preproc_include" },
+                { match: "//", attr: "comment", push: "line_comment" },
+                { match: "/\\*", attr: "comment", push: "block_comment" },
+                { match: "\"", attr: "string", push: "dq" },
+                { match: "\\bdefined\\b", attr: "function.builtin" },
+                { match: "\\b[0-9]+\\b", attr: "number" },
+            ],
+        },
+
+        # A continuation line first returns to the ordinary preprocessor
+        # context after consuming one byte; a final backslash can set this
+        # state again.  Empty continued lines remain preprocessor-colored,
+        # which is harmless and avoids an illegal zero-width transition.
+        preproc_cont: {
+            default: "preproc",
+            at_eol:  "stay",
+            unit:    "span",
+            rules: [
+                { match: "^(.)(.*[^\\\\\\s])?\\s*$", attr: "preproc",
+                  consume: 1, set: "preproc" },
+                { match: "^\\s+$", attr: "preproc", set: "preproc" },
+                "include:preproc_rules",
+            ],
+        },
+
+        preproc_rules: {
+            rules: [
+                { match: "\\\\\\s*$", attr: "operator", set: "preproc_cont" },
+                { match: "//", attr: "comment", push: "line_comment" },
+                { match: "/\\*", attr: "comment", push: "block_comment" },
+                { match: "\"", attr: "string", push: "dq" },
+                { match: "\\bdefined\\b", attr: "function.builtin" },
+                { match: "\\b[0-9]+\\b", attr: "number" },
+            ],
+        },
+
+        preproc_include: {
+            default: "preproc",
+            at_eol:  "pop",
+            unit:    "span",
+            rules: [
+                { match: "\\\\\\s*$", attr: "operator", set: "preproc_cont" },
+                { match: "<[^>\\n]+>", attr: "string" },
+                { match: "\"", attr: "string", push: "dq" },
+                { match: "//", attr: "comment", push: "line_comment" },
+                { match: "/\\*", attr: "comment", push: "block_comment" },
+            ],
+        },
+
+        dq: {
+            default: "string",
+            at_eol:  "pop",
+            unit:    "atom",
+            rules: [
+                { match: "\\\\(x[0-9A-Fa-f]{1,2}|[0-7]{1,3}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|['\"?\\\\abfnrtv])",
+                  attr: "string.escape" },
+                { match: "\\\\$", attr: "string.escape", set: "dq_cont" },
+                { match: "\\\\.", attr: "error" },
+                { match: "\"", attr: "string", pop: 1 },
+            ],
+        },
+
+        dq_cont: {
+            default: "string",
+            at_eol:  "stay",
+            unit:    "atom",
+            rules: [
+                { match: "^(.)(.*[^\\\\])?$", attr: "string",
+                  consume: 1, set: "dq" },
+                { match: "\\\\(x[0-9A-Fa-f]{1,2}|[0-7]{1,3}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|['\"?\\\\abfnrtv])",
+                  attr: "string.escape" },
+                { match: "\\\\$", attr: "string.escape", set: "dq_cont" },
+                { match: "\\\\.", attr: "error" },
+                { match: "\"", attr: "string", pop: 1 },
+            ],
+        },
+
+        sq: {
+            default: "character",
+            at_eol:  "pop",
+            unit:    "atom",
+            rules: [
+                { match: "\\\\(x[0-9A-Fa-f]{1,2}|[0-7]{1,3}|u[0-9A-Fa-f]{4}|U[0-9A-Fa-f]{8}|['\"?\\\\abfnrtv])",
+                  attr: "string.escape" },
+                { match: "\\\\.", attr: "error" },
+                { match: "'", attr: "character", pop: 1 },
+            ],
+        },
+
+        block_comment: {
+            default: "comment",
+            at_eol:  "stay",
+            unit:    "atom",
+            rules: [
+                { match: "\\b(TODO|FIXME|XXX|HACK)\\b", attr: "comment.todo" },
+                { match: "\\*/", attr: "comment", pop: 1 },
+            ],
+        },
+
+        line_comment: {
+            default: "comment",
+            at_eol:  "pop",
+            unit:    "atom",
+            rules: [
+                { match: "\\b(TODO|FIXME|XXX|HACK)\\b", attr: "comment.todo" },
+            ],
+        },
+    },
+}

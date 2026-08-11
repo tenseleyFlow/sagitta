@@ -1,0 +1,7 @@
+line 1 entry=main exit=after_target
+  1:0-7 attr=label context=main
+  1:7-9 attr=operator context=main
+  1:9-18 attr=text context=target_tail
+  1:18-19 attr=operator context=target_tail
+  1:19-33 attr=text context=target_tail
+line 2 entry=after_target exit=main

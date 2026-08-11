@@ -1,0 +1,7 @@
+line 1 entry=main exit=main
+  1:0-36 attr=comment context=main
+line 2 entry=main exit=main
+  2:0-3 attr=type.builtin context=main
+  2:3-8 attr=text context=main
+  2:8-9 attr=punct.delim context=main
+line 3 entry=main exit=main

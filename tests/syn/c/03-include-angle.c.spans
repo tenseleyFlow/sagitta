@@ -1,0 +1,4 @@
+line 1 entry=main exit=main
+  1:0-9 attr=preproc context=main
+  1:9-18 attr=string context=preproc_include
+line 2 entry=main exit=main
