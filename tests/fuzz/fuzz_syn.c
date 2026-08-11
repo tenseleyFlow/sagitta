@@ -14,8 +14,9 @@ enum {
     SYN_FUZZ_CTX_ROOT = 0,
     SYN_FUZZ_CTX_STRING,
     SYN_FUZZ_CTX_COMMENT,
+    SYN_FUZZ_CTX_BRIDGE,
     SYN_FUZZ_CTX_COUNT,
-    SYN_FUZZ_RULE_COUNT = 9,
+    SYN_FUZZ_RULE_COUNT = 11,
     SYN_FUZZ_EDIT_BYTES = 4096,
     SYN_FUZZ_DEFAULT_EDITS = 4
 };
@@ -27,6 +28,7 @@ typedef struct SynFixture {
     SynRule rule[SYN_FUZZ_RULE_COUNT];
     SynDef def;
     SynEngine *engine;
+    u32 embed_lang[3];
 } SynFixture;
 
 typedef struct Rng {
@@ -88,14 +90,18 @@ static bool fixture_init(SynFixture *fx)
                    YEW_ATTR_NUMBER, SYN_OP_STAY, 0U) ||
         !rule_init(fx, 4U, "(z)?q", 0U, (u8)'q',
                    YEW_ATTR_TEXT, SYN_OP_STAY, 0U) ||
-        !rule_init(fx, 5U, "\\\\.", 0U, (u8)'\\',
+        !rule_init(fx, 5U, "$(", YEW_RE_LITERAL, (u8)'$',
+                   YEW_ATTR_OPERATOR, SYN_OP_EMBED, SYN_FUZZ_CTX_BRIDGE) ||
+        !rule_init(fx, 6U, "\\\\.", 0U, (u8)'\\',
                    YEW_ATTR_STRING_ESCAPE, SYN_OP_STAY, 0U) ||
-        !rule_init(fx, 6U, "\"", YEW_RE_LITERAL, (u8)'\"',
+        !rule_init(fx, 7U, "\"", YEW_RE_LITERAL, (u8)'\"',
                    YEW_ATTR_STRING, SYN_OP_POP, 0U) ||
-        !rule_init(fx, 7U, "a*", 0U, (u8)'a',
+        !rule_init(fx, 8U, "a*", 0U, (u8)'a',
                    YEW_ATTR_STRING_SPECIAL, SYN_OP_STAY, 0U) ||
-        !rule_init(fx, 8U, "*/", YEW_RE_LITERAL, (u8)'*',
-                   YEW_ATTR_COMMENT, SYN_OP_POP, 0U)) {
+        !rule_init(fx, 9U, "*/", YEW_RE_LITERAL, (u8)'*',
+                   YEW_ATTR_COMMENT, SYN_OP_POP, 0U) ||
+        !rule_init(fx, 10U, ")", YEW_RE_LITERAL, (u8)')',
+                   YEW_ATTR_OPERATOR, SYN_OP_POP, 0U)) {
         interner_free(&fx->aux);
         arena_free_all(&fx->arena);
         return false;
@@ -104,17 +110,18 @@ static bool fixture_init(SynFixture *fx)
     fx->ctx[SYN_FUZZ_CTX_ROOT].first_rule = 0U;
     fx->rule[4U].flags = YEW_SYN_RULE_SET_AUX | YEW_SYN_RULE_STRIP;
     fx->rule[4U].aux_group = 1U;
-    fx->ctx[SYN_FUZZ_CTX_ROOT].nrules = 5U;
+    fx->ctx[SYN_FUZZ_CTX_ROOT].nrules = 6U;
     fx->ctx[SYN_FUZZ_CTX_ROOT].dflt_attr = YEW_ATTR_TEXT;
     first_add(fx->ctx[SYN_FUZZ_CTX_ROOT].first, (u8)'\"');
     first_add(fx->ctx[SYN_FUZZ_CTX_ROOT].first, (u8)'/');
     first_add(fx->ctx[SYN_FUZZ_CTX_ROOT].first, (u8)'i');
     first_add(fx->ctx[SYN_FUZZ_CTX_ROOT].first, (u8)'q');
+    first_add(fx->ctx[SYN_FUZZ_CTX_ROOT].first, (u8)'$');
     for (u8 digit = (u8)'0'; digit <= (u8)'9'; digit++) {
         first_add(fx->rule[3].first, digit);
         first_add(fx->ctx[SYN_FUZZ_CTX_ROOT].first, digit);
     }
-    fx->ctx[SYN_FUZZ_CTX_STRING].first_rule = 5U;
+    fx->ctx[SYN_FUZZ_CTX_STRING].first_rule = 6U;
     fx->ctx[SYN_FUZZ_CTX_STRING].nrules = 3U;
     fx->ctx[SYN_FUZZ_CTX_STRING].dflt_attr = YEW_ATTR_STRING;
     fx->ctx[SYN_FUZZ_CTX_STRING].at_eol = SYN_OP_POP;
@@ -122,10 +129,24 @@ static bool fixture_init(SynFixture *fx)
     first_add(fx->ctx[SYN_FUZZ_CTX_STRING].first, (u8)'\\');
     first_add(fx->ctx[SYN_FUZZ_CTX_STRING].first, (u8)'\"');
     first_add(fx->ctx[SYN_FUZZ_CTX_STRING].first, (u8)'a');
-    fx->ctx[SYN_FUZZ_CTX_COMMENT].first_rule = 8U;
+    fx->ctx[SYN_FUZZ_CTX_COMMENT].first_rule = 9U;
     fx->ctx[SYN_FUZZ_CTX_COMMENT].nrules = 1U;
     fx->ctx[SYN_FUZZ_CTX_COMMENT].dflt_attr = YEW_ATTR_COMMENT;
     first_add(fx->ctx[SYN_FUZZ_CTX_COMMENT].first, (u8)'*');
+    fx->ctx[SYN_FUZZ_CTX_BRIDGE].first_rule = 10U;
+    fx->ctx[SYN_FUZZ_CTX_BRIDGE].nrules = 1U;
+    fx->ctx[SYN_FUZZ_CTX_BRIDGE].dflt_attr = YEW_ATTR_CODE;
+    fx->ctx[SYN_FUZZ_CTX_BRIDGE].flags = YEW_SYN_CTX_EMBED_BRIDGE;
+    first_add(fx->ctx[SYN_FUZZ_CTX_BRIDGE].first, (u8)')');
+
+    fx->embed_lang[0] = yew_intern(&fx->aux, "fuzz-toy", 8U);
+    fx->embed_lang[1] = yew_intern(&fx->aux, "css", 3U);
+    fx->embed_lang[2] = yew_intern(&fx->aux, "not-installed", 13U);
+    fx->rule[5U].embed.lang_kind = SYN_EMBED_LANG_SELF;
+    fx->rule[5U].embed.end = SYN_EMBED_END_INLINE;
+    fx->rule[5U].embed.fallback = YEW_ATTR_CODE;
+    fx->ctx[SYN_FUZZ_CTX_BRIDGE].embed = fx->rule[5U].embed;
+    fx->rule[10U].end = 1U;
 
     fx->def.name = "fuzz-toy";
     fx->def.root = SYN_FUZZ_CTX_ROOT;
@@ -167,13 +188,35 @@ static void mutate_definition(SynFixture *fx, Rng *rng)
     size_t b = choose(rng, 5U);
     SynRule tmp = fx->rule[a];
     SynRule *rule;
+    size_t mutable;
+    u8 selector;
 
     fx->rule[a] = fx->rule[b];
     fx->rule[b] = tmp;
-    rule = &fx->rule[choose(rng, SYN_FUZZ_RULE_COUNT)];
+    mutable = choose(rng, SYN_FUZZ_RULE_COUNT - 2U);
+    if (mutable >= 5U)
+        mutable++;
+    rule = &fx->rule[mutable];
     rule->op = (u8)choose(rng, 4U);
     rule->target = (u16)choose(rng, SYN_FUZZ_CTX_COUNT);
     rule->nop = (u8)(1U + choose(rng, 4U));
+
+    selector = (u8)choose(rng, 4U);
+    (void)memset(&fx->rule[5U].embed, 0,
+                 sizeof(fx->rule[5U].embed));
+    if (selector == 0U) {
+        fx->rule[5U].embed.lang_kind = SYN_EMBED_LANG_SELF;
+    } else {
+        fx->rule[5U].embed.lang_kind = SYN_EMBED_LANG_LITERAL;
+        fx->rule[5U].embed.lang = fx->embed_lang[selector - 1U];
+    }
+    fx->rule[5U].embed.end = choose(rng, 2U) == 0U
+                                 ? SYN_EMBED_END_INLINE
+                                 : SYN_EMBED_END_LINE;
+    fx->rule[5U].embed.fallback = (u8)choose(rng, YEW_ATTR__COUNT);
+    if (choose(rng, 2U) != 0U)
+        fx->rule[5U].embed.flags = YEW_SYN_EMBED_DEFER;
+    fx->ctx[SYN_FUZZ_CTX_BRIDGE].embed = fx->rule[5U].embed;
 }
 
 static u32 random_entry(SynFixture *fx, Rng *rng)
@@ -184,9 +227,10 @@ static u32 random_entry(SynFixture *fx, Rng *rng)
     (void)memset(&state, 0, sizeof(state));
     state.depth = depth;
     state.lost = (u8)choose(rng, 8U);
-    state.ctx[0] = SYN_FUZZ_CTX_ROOT;
+    state.ndef = 1U;
+    state.f[0].ctx = SYN_FUZZ_CTX_ROOT;
     for (u8 i = 1U; i < depth; i++)
-        state.ctx[i] = (u16)choose(rng, SYN_FUZZ_CTX_COUNT);
+        state.f[i].ctx = (u16)choose(rng, SYN_FUZZ_CTX_BRIDGE);
     return yew_syn_state_intern(yew_syn_engine_states(fx->engine), &state);
 }
 
@@ -209,6 +253,11 @@ static bool check_line(SynFixture *fx, Rng *rng, const u8 *data, size_t len,
     out.spans = spans;
     out.cap = YEW_SYN_MAX_SPANS;
     yew_syn_line(fx->engine, entry, data, (u32)len, &out);
+    if (out.stop > YEW_SYN_STOP_STEPS) {
+        (void)snprintf(why, why_cap, "invalid stop reason %u",
+                       (unsigned)out.stop);
+        return false;
+    }
     if (out.n > out.cap) {
         (void)snprintf(why, why_cap, "span count %u exceeds cap %u",
                        (unsigned)out.n, (unsigned)out.cap);
@@ -235,17 +284,49 @@ static bool check_line(SynFixture *fx, Rng *rng, const u8 *data, size_t len,
     exit = yew_syn_state_get(yew_syn_engine_states(fx->engine),
                              out.exit_state);
     if (exit == NULL || exit->depth < 1U ||
-        exit->depth > YEW_SYN_DEPTH_MAX || exit->def != 0U) {
+        exit->depth > YEW_SYN_DEPTH_MAX || exit->ndef < 1U ||
+        exit->ndef > YEW_SYN_DEF_MAX) {
         (void)snprintf(why, why_cap, "invalid exit state id %u",
                        (unsigned)out.exit_state);
         return false;
     }
     for (u8 i = 0U; i < exit->depth; i++) {
-        if (exit->ctx[i] >= SYN_FUZZ_CTX_COUNT) {
-            (void)snprintf(why, why_cap, "exit context %u out of range",
-                           (unsigned)exit->ctx[i]);
+        if (exit->f[i].def >= YEW_SYN_RESIDENT_MAX ||
+            exit->f[i].ctx >= SYN_FUZZ_CTX_COUNT) {
+            (void)snprintf(why, why_cap,
+                           "exit frame %u has def/context %u/%u",
+                           (unsigned)i, (unsigned)exit->f[i].def,
+                           (unsigned)exit->f[i].ctx);
             return false;
         }
+    }
+    return true;
+}
+
+static bool check_balanced_self_embed(SynFixture *fx, char *why,
+                                      size_t why_cap)
+{
+    static const u8 nested[] = "$($())";
+    SynSpan spans[32];
+    SynLineOut out = {.spans = spans, .cap = YEW_ARRAY_LEN(spans)};
+    const SynState *exit;
+
+    (void)memset(&fx->rule[5U].embed, 0,
+                 sizeof(fx->rule[5U].embed));
+    fx->rule[5U].embed.lang_kind = SYN_EMBED_LANG_SELF;
+    fx->rule[5U].embed.end = SYN_EMBED_END_INLINE;
+    fx->rule[5U].embed.fallback = YEW_ATTR_CODE;
+    fx->ctx[SYN_FUZZ_CTX_BRIDGE].embed = fx->rule[5U].embed;
+    yew_syn_engine_set_def(fx->engine, &fx->def);
+    yew_syn_line(fx->engine, YEW_SYN_STATE_ROOT, nested,
+                 (u32)(sizeof(nested) - 1U), &out);
+    exit = yew_syn_state_get(yew_syn_engine_states(fx->engine),
+                             out.exit_state);
+    if (exit == NULL || exit->depth != 1U || exit->ndef != 1U ||
+        exit->lost != 0U) {
+        (void)snprintf(why, why_cap,
+                       "balanced recursive embed did not restore root");
+        return false;
     }
     return true;
 }
@@ -276,8 +357,8 @@ static bool compare_spans(SynBuf *a, SynBuf *b, const TextBuf *tb,
     u64 lines = yew_textbuf_line_count(tb);
 
     for (u64 line = 0U; line < lines; line++) {
-        SynLineOut ao = {as, 0U, YEW_SYN_MAX_SPANS, 0U, 0U};
-        SynLineOut bo = {bs, 0U, YEW_SYN_MAX_SPANS, 0U, 0U};
+        SynLineOut ao = {.spans = as, .cap = YEW_SYN_MAX_SPANS};
+        SynLineOut bo = {.spans = bs, .cap = YEW_SYN_MAX_SPANS};
 
         yew_syn_spans(a, tb, LINENO(line), &ao);
         yew_syn_spans(b, tb, LINENO(line), &bo);
@@ -445,7 +526,8 @@ static bool check_syn(const u8 *data, size_t len, char *why, size_t why_cap)
         (void)snprintf(why, why_cap, "cannot initialize toy definition");
         return false;
     }
-    ok = check_line(&fx, &rng, data, len, why, why_cap);
+    ok = check_balanced_self_embed(&fx, why, why_cap) &&
+         check_line(&fx, &rng, data, len, why, why_cap);
     /* One input in 32 also drives the expensive incremental oracle.  A
      * normal replay stays quick; long campaigns still accumulate far more
      * than the Sprint 39 requirement's 100k random edit operations. */

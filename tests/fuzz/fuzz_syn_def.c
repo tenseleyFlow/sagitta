@@ -52,6 +52,10 @@ static bool check_tables(const SynDef *def, char *why, size_t why_cap)
             ctx->nrules > def->nrules - ctx->first_rule ||
             ctx->dflt_attr >= YEW_ATTR__COUNT || ctx->at_eol > SYN_OP_SET ||
             ctx->eol_nop > 4U ||
+            ctx->embed.lang_kind > SYN_EMBED_LANG_SELF ||
+            ctx->embed.end > SYN_EMBED_END_LINE_CONTINUATION ||
+            ctx->embed.fallback >= YEW_ATTR__COUNT ||
+            (ctx->embed.flags & (u8)~YEW_SYN_EMBED_DEFER) != 0U ||
             (ctx->at_eol == SYN_OP_SET && ctx->eol_target >= def->nctxs)) {
             (void)snprintf(why, why_cap, "invalid context %u",
                            (unsigned)i);
@@ -61,12 +65,21 @@ static bool check_tables(const SynDef *def, char *why, size_t why_cap)
     for (u32 i = 0U; i < def->nrules; i++) {
         const SynRule *rule = &def->rules[i];
 
-        if (rule->attr >= YEW_ATTR__COUNT || rule->op > SYN_OP_SET ||
+        if (rule->attr >= YEW_ATTR__COUNT || rule->op > SYN_OP_EMBED ||
             rule->nop > 4U || rule->npush > 4U ||
+            rule->end > 1U ||
             rule->aux_match > SYN_AUXM_LINE_START ||
             rule->value_pred > SYN_VALUE_SET ||
+            rule->embed.lang_kind > SYN_EMBED_LANG_SELF ||
+            rule->embed.end > SYN_EMBED_END_LINE_CONTINUATION ||
+            rule->embed.fallback >= YEW_ATTR__COUNT ||
+            (rule->embed.flags & (u8)~YEW_SYN_EMBED_DEFER) != 0U ||
             ((rule->op == SYN_OP_PUSH || rule->op == SYN_OP_SET) &&
-             rule->target >= def->nctxs)) {
+             rule->target >= def->nctxs) ||
+            (rule->op == SYN_OP_EMBED &&
+             (rule->target >= def->nctxs ||
+              (def->ctxs[rule->target].flags &
+               YEW_SYN_CTX_EMBED_BRIDGE) == 0U))) {
             (void)snprintf(why, why_cap, "invalid rule %u",
                            (unsigned)i);
             return false;
@@ -93,7 +106,7 @@ static bool check_engine(SynDef *def, const u8 *data, size_t len,
                          char *why, size_t why_cap)
 {
     SynSpan spans[YEW_SYN_MAX_SPANS];
-    SynLineOut out = {spans, 0U, YEW_SYN_MAX_SPANS, 0U, 0U};
+    SynLineOut out = {.spans = spans, .cap = YEW_SYN_MAX_SPANS};
     SynEngine *engine;
     const SynState *exit;
     u64 prior_end = 0U;
@@ -124,8 +137,9 @@ static bool check_engine(SynDef *def, const u8 *data, size_t len,
         prior_end = end;
     }
     exit = yew_syn_state_get(yew_syn_engine_states(engine), out.exit_state);
-    if (exit == NULL || exit->depth == 0U ||
-        exit->depth > YEW_SYN_DEPTH_MAX) {
+    if (out.stop > YEW_SYN_STOP_STEPS || exit == NULL ||
+        exit->depth == 0U || exit->depth > YEW_SYN_DEPTH_MAX ||
+        exit->ndef == 0U || exit->ndef > YEW_SYN_DEF_MAX) {
         (void)snprintf(why, why_cap, "invalid emitted exit state");
         yew_syn_engine_free(engine);
         return false;
@@ -186,23 +200,45 @@ static bool check_syn_def(const u8 *data, size_t len, char *why,
     static const char *const attrs[] = {
         "text", "keyword", "number", "string.escape", "comment", "error"
     };
-    char plausible[1024];
+    char plausible[2048];
     unsigned selector = len == 0U ? 0U : data[0];
     int wrote;
 
     if (!compile_one(data, len, why, why_cap))
         return false;
-    wrote = snprintf(plausible, sizeof(plausible),
-        "{ syntax: 1, language: { name: \"fuzz-%u\", extensions: "
-        "[\"fz\"], priority: %u }, contexts: { main: { default: \"text\", "
-        "rules: [ { match: \"%s\", attr: \"%s\" }, "
-        "{ match: \"\\\"\", attr: \"string\", push: \"quoted\" } ] }, "
-        "quoted: { default: \"string\", at_eol: \"pop\", unit: \"atom\", "
-        "rules: [ { match: \"\\\\.\", attr: \"string.escape\" }, "
-        "{ match: \"\\\"\", attr: \"string\", pop: 1 } ] } } }",
-        selector, selector & 7U,
-        patterns[selector % YEW_ARRAY_LEN(patterns)],
-        attrs[(selector / 7U) % YEW_ARRAY_LEN(attrs)]);
+    if ((selector & 1U) == 0U) {
+        wrote = snprintf(plausible, sizeof(plausible),
+            "{ syntax: 1, language: { name: \"fuzz-%u\", extensions: "
+            "[\"fz\"], priority: %u }, contexts: { main: { default: \"text\", "
+            "rules: [ { match: \"%s\", attr: \"%s\" }, "
+            "{ match: \"\\\"\", attr: \"string\", push: \"quoted\" } ] }, "
+            "quoted: { default: \"string\", at_eol: \"pop\", unit: \"atom\", "
+            "rules: [ { match: \"\\\\.\", attr: \"string.escape\" }, "
+            "{ match: \"\\\"\", attr: \"string\", pop: 1 } ] } } }",
+            selector, selector & 7U,
+            patterns[selector % YEW_ARRAY_LEN(patterns)],
+            attrs[(selector / 7U) % YEW_ARRAY_LEN(attrs)]);
+    } else {
+        wrote = snprintf(plausible, sizeof(plausible),
+            "{ syntax: 1, language: { name: \"fuzz-%u\", extensions: "
+            "[\"fz\"], priority: %u }, contexts: { main: { default: \"text\", "
+            "rules: [ "
+            "{ match: \"(js)\", push: \"capture_bridge\", embed: { "
+            "lang: \"@1\", ctx: \"tag\", end: \"inline\", defer: true, "
+            "fallback: \"code\" } }, "
+            "{ match: \"script\", push: \"literal_bridge\", embed: { "
+            "lang: \"javascript\", ctx: \"tag\", end: \"inline\", "
+            "defer: false, fallback: \"error\" } }, "
+            "{ match: \"self\", push: \"self_bridge\", embed: { "
+            "lang: \"@self\", end: \"line\", defer: false, "
+            "fallback: \"string\" } } ] }, "
+            "capture_bridge: { default: \"code\", rules: [ "
+            "{ match: \"close\", pop: 1, end: true } ] }, "
+            "literal_bridge: { default: \"error\", rules: [ "
+            "{ match: \"close\", pop: 1, end: true } ] }, "
+            "self_bridge: { default: \"string\", at_eol: \"pop\", "
+            "rules: [] } } }", selector, selector & 7U);
+    }
     if (wrote < 0 || (size_t)wrote >= sizeof(plausible)) {
         (void)snprintf(why, why_cap, "plausible fixture overflow");
         return false;
