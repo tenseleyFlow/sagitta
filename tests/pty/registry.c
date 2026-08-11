@@ -2550,7 +2550,7 @@ static void case_s21_search_cancel_restores_grid(PtyCtx *c)
     char path[256];
     Bytebuf before;
     Bytebuf after;
-    Bytebuf msg;
+    bool restored;
 
     if (!s18_open(c, s21_doc, sizeof(s21_doc) - 1U, path, sizeof(path)))
         return;
@@ -2570,11 +2570,17 @@ static void case_s21_search_cancel_restores_grid(PtyCtx *c)
     s18_settle_after_keys(c, "esc");
 
     bytebuf_init(&after);
-    bytebuf_init(&msg);
     snapshot_write(&c->vt, &after);
-    ptc_check(c, s21_grids_equal(&after, &before),
+    restored = s21_grids_equal(&after, &before);
+    if (!restored) {
+        (void)fprintf(stderr,
+                      "--- search cancel: before ---\n%.*s\n"
+                      "--- search cancel: after ---\n%.*s\n",
+                      (int)before.len, (const char *)before.data,
+                      (int)after.len, (const char *)after.data);
+    }
+    ptc_check(c, restored,
               "cancelling a search must restore the grid cell for cell");
-    bytebuf_free(&msg);
     bytebuf_free(&after);
     bytebuf_free(&before);
 

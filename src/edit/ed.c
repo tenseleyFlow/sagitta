@@ -1911,6 +1911,8 @@ void yew_ed_render(Ed *ed)
 {
     Win *win;
     LineNo cursor_line;
+    bool cursor_line_changed;
+    bool view_changed;
 
     if (ed == NULL || !ed->grid_ready || !ed->render_ready ||
         !ed->model_ready)
@@ -1922,16 +1924,31 @@ void yew_ed_render(Ed *ed)
     }
     cursor_line = yew_textbuf_line_of(win->buf->tb,
                                       yew_ed_cursor(ed)->pos);
-    if (!ed->drawn_top_valid ||
-        ed->drawn_top.v != yew_win_view_top(win).v ||
-        ed->drawn_top_sub != win->vp.top_sub ||
-        ed->drawn_left.v != win->vp.left.v ||
-        ed->drawn_wrap != win->vp.wrap ||
-        !ed->drawn_cursor_line_valid ||
+    cursor_line_changed = ed->drawn_cursor_line_valid &&
+                          ed->drawn_cursor_line.v != cursor_line.v;
+    view_changed = !ed->drawn_top_valid ||
+                   ed->drawn_top.v != yew_win_view_top(win).v ||
+                   ed->drawn_top_sub != win->vp.top_sub ||
+                   ed->drawn_left.v != win->vp.left.v ||
+                   ed->drawn_wrap != win->vp.wrap ||
+                   !ed->drawn_cursor_line_valid;
+    if (view_changed ||
         ((win->number_style == YEW_NUM_REL ||
-          win->number_style == YEW_NUM_HYBRID) &&
-         ed->drawn_cursor_line.v != cursor_line.v))
+          win->number_style == YEW_NUM_HYBRID) && cursor_line_changed)) {
         yew_ed_damage_document(ed);
+    } else if (win->number_style == YEW_NUM_ABS && cursor_line_changed) {
+        u16 row;
+
+        /* Absolute numbering changes only the old and new cursor-line
+         * accents.  Cursor motion otherwise moves the terminal cursor
+         * without repainting document cells, so explicitly damage both
+         * gutter rows instead of leaving the old number bold until the
+         * next full redraw. */
+        if (yew_win_view_row(win, ed->drawn_cursor_line, &row))
+            yew_ed_damage_rows(ed, row, (u16)(row + 1U));
+        if (yew_win_view_row(win, cursor_line, &row))
+            yew_ed_damage_rows(ed, row, (u16)(row + 1U));
+    }
     if (ed->full_damage) {
         /*
          * Every leaf plus the borders their splits own.  With a single

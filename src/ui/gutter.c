@@ -85,6 +85,7 @@ void yew_gutter_draw(Ed *ed, Win *w, u16 lo, u16 hi)
     const Cursor *cursor;
     LineNo cursor_line;
     u16 width;
+    u16 grid_col;
     u16 number_width;
     u16 row;
     const ThemeEnt *gutter;
@@ -95,8 +96,11 @@ void yew_gutter_draw(Ed *ed, Win *w, u16 lo, u16 hi)
         YEW_BUG("gutter draw: missing editor window");
     grid = &ed->grid;
     width = w->gutter_width;
-    if (width > grid->cols)
-        width = grid->cols;
+    grid_col = w->rect.x >= width ? (u16)(w->rect.x - width) : 0U;
+    if (grid_col >= grid->cols)
+        return;
+    if (width > (u16)(grid->cols - grid_col))
+        width = (u16)(grid->cols - grid_col);
     if (width == 0U || lo >= hi)
         return;
     if (w->cs.curs.len == 0U || (size_t)w->cs.primary >= w->cs.curs.len)
@@ -124,7 +128,8 @@ void yew_gutter_draw(Ed *ed, Win *w, u16 lo, u16 hi)
 
         if (grid_row32 >= grid->rows)
             break;
-        yew_grid_fill(grid, (u16)grid_row32, 0U, width, gutter_blank);
+        yew_grid_fill(grid, (u16)grid_row32, grid_col,
+                      (u16)(grid_col + width), gutter_blank);
         if (number_width != 0U &&
             yew_vp_line_of_row(w, row, &line, &sub)) {
             char number[32];
@@ -141,7 +146,7 @@ void yew_gutter_draw(Ed *ed, Win *w, u16 lo, u16 hi)
                 YewColor fg = gutter_blank.fg;
                 YewColor bg = gutter_blank.bg;
                 u16 attrs = gutter_blank.attrs;
-                u16 col = (u16)(YEW_GUTTER_SIGN_COLS +
+                u16 col = (u16)(grid_col + YEW_GUTTER_SIGN_COLS +
                                 number_width - (u16)len);
 
                 if (number_style != NULL) {
