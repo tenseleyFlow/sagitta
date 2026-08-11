@@ -715,9 +715,26 @@ void ptc_wait_sync_pairs(PtyCtx *c, u32 count)
 
 void ptc_bytes(PtyCtx *c, const char *lit)
 {
+    size_t len;
+
     if (c == NULL || lit == NULL || !c->spawned || c->failed)
         return;
-    (void)write_master(c, (const u8 *)lit, strlen(lit));
+    len = strlen(lit);
+    /*
+     * A PTY preserves byte order, not the read boundary of this write.
+     * Once a raw write contains more than one byte the harness cannot
+     * prove that it denotes one input event without duplicating the
+     * editor's incremental UTF-8 / escape-sequence decoder.  The child may
+     * therefore drain it in one loop iteration or several and paint an
+     * identical final grid with a different cumulative frame count.
+     *
+     * Keep counting pairs: explicit ptc_wait_sync_pairs / ptc_check gates
+     * still observe nsync_pairs.  Only the snapshot header stops treating
+     * the scheduler-dependent total as terminal state.
+     */
+    if (len > 1U)
+        c->vt.sync_pairs_unstable = true;
+    (void)write_master(c, (const u8 *)lit, len);
 }
 
 typedef struct KeyName {
@@ -911,6 +928,7 @@ void ptc_keys(PtyCtx *c, const char *spec)
 {
     Bytebuf burst;
     const char *p;
+    size_t nevents = 0U;
 
     if (c == NULL || spec == NULL || !c->spawned || c->failed)
         return;
@@ -927,9 +945,16 @@ void ptc_keys(PtyCtx *c, const char *spec)
         while (*p != '\0' && *p != ' ' && *p != '\t' && *p != ',')
             p++;
         emit_key(c, &burst, start, (size_t)(p - start));
+        nevents++;
     }
-    if (!c->failed && burst.len != 0U)
+    if (!c->failed && burst.len != 0U) {
+        /* One token is one decoded key even when its wire encoding is a
+         * multi-byte CSI sequence.  Two tokens are a burst whose split
+         * across child reads is scheduler-dependent, just like ptc_bytes. */
+        if (nevents > 1U)
+            c->vt.sync_pairs_unstable = true;
         (void)write_master(c, burst.data, burst.len);
+    }
     bytebuf_free(&burst);
 }
 
