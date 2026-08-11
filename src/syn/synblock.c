@@ -176,7 +176,8 @@ static bool line_last_frame_start(const Buffer *buf, u64 line, u8 depth,
     return found;
 }
 
-static bool entry_has(const Buffer *buf, u64 line, u8 depth, u16 ctx)
+static bool entry_has(const Buffer *buf, u64 line, u8 depth, u16 ctx,
+                      u32 *matching_entry)
 {
     const SynState *state;
     u32 id;
@@ -184,8 +185,13 @@ static bool entry_has(const Buffer *buf, u64 line, u8 depth, u16 ctx)
     if (line >= buf->syn.entry.len)
         return false;
     id = buf->syn.entry.data[line];
+    if (id != YEW_SYN_STATE_UNKNOWN && id == *matching_entry)
+        return true;
     state = yew_syn_state_get(yew_syn_engine_states(buf->syn.engine), id);
-    return frame_is(state, depth, ctx);
+    if (!frame_is(state, depth, ctx))
+        return false;
+    *matching_entry = id;
+    return true;
 }
 
 static bool syntax_ready_at(const Buffer *buf, u64 line)
@@ -207,11 +213,13 @@ static bool frame_bounds(const Buffer *buf, u64 center, u32 local,
     u64 lo_line = center;
     u64 hi_line = center;
     u64 scanned = 0U;
+    u32 matching_entry = YEW_SYN_STATE_UNKNOWN;
     u32 local_at;
     bool found;
     bool tail_unsettled = false;
 
-    while (lo_line != 0U && entry_has(buf, lo_line, depth, ctx)) {
+    while (lo_line != 0U &&
+           entry_has(buf, lo_line, depth, ctx, &matching_entry)) {
         if (++scanned > YEW_SYN_UNIT_SCAN_LINES)
             return false;
         lo_line--;
@@ -233,7 +241,7 @@ static bool frame_bounds(const Buffer *buf, u64 center, u32 local,
             tail_unsettled = true;
             break;
         }
-        if (!entry_has(buf, hi_line + 1U, depth, ctx))
+        if (!entry_has(buf, hi_line + 1U, depth, ctx, &matching_entry))
             break;
         if (++scanned > YEW_SYN_UNIT_SCAN_LINES)
             return false;
