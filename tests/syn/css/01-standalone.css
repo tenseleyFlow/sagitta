@@ -1,0 +1,10 @@
+:root {
+    --accent: #7f5af0;
+    color-scheme: dark light;
+}
+
+main > article:first-child {
+    display: grid;
+    grid-template-columns: minmax(12rem, 1fr) 2fr;
+    color: rgb(220 220 230 / 90%);
+}

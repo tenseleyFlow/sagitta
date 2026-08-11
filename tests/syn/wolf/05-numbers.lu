@@ -1,0 +1,4 @@
+let integers = 0 + 1_000 + 0xff_ff + 0o755 + 0b1010_0011
+let floats = 1.0 + 6.022e23 + 9e-3 + 10_000.25_00
+let splits = 1. + 1..10 + 1.e5
+let malformed_prefixes = 0x + 0o + 0b

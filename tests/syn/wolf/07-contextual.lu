@@ -1,0 +1,11 @@
+import c "stdio.h"
+region rc Arena
+region pool WorkerPool
+assume noalias left, right
+pub(pkg) fn visible(self: Thing) {}
+select {
+    item from queue => item
+    timeout after => false
+    message from "queue" => 1
+}
+let c = rc + pool + from + timeout + noalias + pkg + self + out + inout + lateout + reg

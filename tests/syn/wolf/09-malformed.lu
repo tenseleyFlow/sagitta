@@ -1,0 +1,7 @@
+fn malformed() {
+    let bad_escape = "wolf\q"
+    let lone_brace = "bad } brace"
+    let unterminated_plain = "ends here
+    let unterminated_generalized = re"ends here
+    let unterminated_raw = r###"runs to eof
+}

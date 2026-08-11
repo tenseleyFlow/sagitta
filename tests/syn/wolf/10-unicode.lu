@@ -1,0 +1,5 @@
+fn привет(λύκος: str) -> str {
+    let 狼 = "wolf {λύκος}"
+    let café = привет(狼)
+    return café
+}

@@ -924,7 +924,7 @@ syn-goldens: $(BUILD)/yew
 	scripts/gen-syn-goldens.sh $(BUILD)/yew
 
 syn-fuzz-seeds:
-	scripts/gen-s42-fuzz-corpus.sh
+	scripts/gen-syn-fuzz-corpus.sh
 
 fuzz-textbuf: $(BUILD)/fuzz_textbuf
 	$(BUILD)/fuzz_textbuf --replay tests/fuzz/replay-smoke.trace

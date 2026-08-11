@@ -1,0 +1,12 @@
+fn formats(value: i64, width: i64) {
+    let simple = "{value:>8}"
+    let dynamic = "{value:>{width}}"
+    let nested_colon = "{map[{key: 1}].value:0>8}"
+    let nested_string = "{lookup("a:b"):>4}"
+    let escaped = "{value:{{>{width}}}}"
+    let escapes = "{value:>\n\q{width}}"
+    let raw_in_plain = "{r"raw"}"
+    let raw_in_plain_nested = "{(r"raw")}"
+    let raw_in_multi = """{r"raw"}"""
+    let raw_in_multi_nested = """{(r"raw")}"""
+}

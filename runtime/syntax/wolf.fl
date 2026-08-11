@@ -1,0 +1,293 @@
+# Wolf lexical highlighting, frozen to wolf-lang commit
+# ab23a23f2b190d6f9b45271149b5ac7032b8133e.
+#
+# Every ordinary string is interpolated.  Plain-string interpolation uses
+# EOL pops so malformed input cannot color the rest of the file; multiline
+# interpolation deliberately persists.  The engine's existing literal aux
+# matcher balances arbitrary raw-string hash fences without another schema
+# feature.
+#
+# `unsafe c { ... }` is recognized but intentionally not embedded into c.fl:
+# this definition owns a brace-balanced neutral-code context with C lexical
+# strings and comments.  Delegating at the first `}` would be structurally
+# wrong.  Exact cross-definition C highlighting remains deferred.
+{
+    syntax: 1,
+    language: {
+        name: "wolf",
+        extensions: ["lu"],
+        priority: 0,
+        comment: { line: "//" },
+    },
+    contexts: {
+        main: { default: "text", rules: [ "include:wolf_rules" ] },
+
+        wolf_rules: {
+            rules: [
+                { match: "//(!.*|/([^/].*)?)$", attr: "comment.doc" },
+                { match: "//.*$", attr: "comment" },
+                { match: "#\\[", attr: "attribute", push: "attribute" },
+
+                # The inline-C opener precedes ordinary keyword rules.  Its
+                # body is neutral code, not a partial copy of C semantics.
+                { match: "\\b(unsafe)([ \\t]+)(c)([ \\t]*)(\\{)",
+                  attr: "keyword.storage",
+                  captures: { 1: "keyword.storage", 3: "keyword",
+                              5: "punct.bracket" },
+                  push: "inline_c_neutral" },
+                { match: "\\b(asm)([ \\t]*)(\\{)", attr: "keyword.storage",
+                  captures: { 1: "keyword.storage", 3: "punct.bracket" },
+                  push: "asm_body" },
+                { match: "\\b(select)([ \\t]*)(\\{)",
+                  attr: "keyword.control",
+                  captures: { 1: "keyword.control", 3: "punct.bracket" },
+                  push: "select_body" },
+
+                { match: "r\"", attr: "string.special",
+                  push: "generalized" },
+                { match: "r(#+)\"", attr: "string.special",
+                  set_aux: 1, push: "raw_string" },
+                { match: "\"\"\"", attr: "string", push: "multiline" },
+
+                { match: "\\b(fn|proc)[ \\t]+(\\w+)",
+                  attr: "keyword.storage", captures: { 2: "function" } },
+                { match: "\\b(type|struct|enum|trait|impl)[ \\t]+(\\w+)",
+                  attr: "keyword.storage", captures: { 2: "type" } },
+                { match: "\\b(let|var|const)[ \\t]+(\\w+)",
+                  attr: "keyword.storage", captures: { 2: "variable" } },
+
+                # Contextual words are styled only in bounded, recognizable
+                # positions; the generic identifier rule owns them elsewhere.
+                { match: "\\b(import)([ \\t]+)(c)\\b",
+                  attr: "keyword.storage",
+                  captures: { 1: "keyword.storage", 3: "keyword" } },
+                { match: "\\b(region)([ \\t]+)(rc|pool)\\b",
+                  attr: "keyword.storage",
+                  captures: { 1: "keyword.storage", 3: "type" } },
+                { match: "\\b(assume)([ \\t]+)(noalias)\\b",
+                  attr: "keyword.op",
+                  captures: { 1: "keyword.op", 3: "keyword" } },
+                { match: "\\b(pub)([ \\t]*)(\\()([ \\t]*)(pkg)([ \\t]*)(\\))",
+                  attr: "keyword.storage",
+                  captures: { 1: "keyword.storage", 3: "punct.bracket",
+                              5: "keyword", 7: "punct.bracket" } },
+                { match: "(\\()([ \\t]*)(self)\\b",
+                  captures: { 1: "punct.bracket", 3: "variable.param" } },
+
+                { match: "\\b(true|false)\\b", attr: "boolean" },
+                { match: "\\b(break|continue|defer|else|errdefer|for|if|loop|match|return|scope|select|when|while)\\b",
+                  attr: "keyword.control" },
+                { match: "\\b(comptime|const|distinct|dyn|enum|export|extern|fn|impl|import|let|mut|proc|pub|region|shared|spawn|struct|trait|type|unsafe|use|var|weak)\\b",
+                  attr: "keyword.storage" },
+                { match: "\\b(as|asm|assume|borrow|copy|freeze|handle|in|move|take)\\b",
+                  attr: "keyword.op" },
+
+                # Keyword rules precede this opener, so `fn\"...\"` is an
+                # ordinary interpolated string while `path\"...\"` is raw.
+                { match: "([A-Za-z_][A-Za-z0-9_]*)(\")",
+                  attr: "string.special",
+                  captures: { 1: "type", 2: "string.special" },
+                  push: "generalized" },
+                { match: "\"", attr: "string", push: "plain_string" },
+
+                { match: "\\b0[xX][0-9A-Fa-f]([0-9A-Fa-f_]*[0-9A-Fa-f])?\\b",
+                  attr: "number" },
+                { match: "\\b0[oO][0-7]([0-7_]*[0-7])?\\b",
+                  attr: "number" },
+                { match: "\\b0[bB][01]([01_]*[01])?\\b",
+                  attr: "number" },
+                { match: "\\b[0-9]([0-9_]*[0-9])?\\.[0-9]([0-9_]*[0-9])?([eE][+-]?[0-9]([0-9_]*[0-9])?)?\\b",
+                  attr: "number" },
+                { match: "\\b[0-9]([0-9_]*[0-9])?[eE][+-]?[0-9]([0-9_]*[0-9])?\\b",
+                  attr: "number" },
+                { match: "\\b[0-9]([0-9_]*[0-9])?\\b", attr: "number" },
+
+                { match: "(\\w+)[ \\t]*\\(",
+                  captures: { 1: "function" }, consume: 1 },
+                { match: "\\.\\w+", attr: "method" },
+                { match: "\\b[A-Z][A-Z0-9_]*\\b", attr: "constant" },
+                { match: "\\b[A-Z][A-Za-z0-9_]*\\b", attr: "type" },
+                { match: "\\w+", attr: "variable" },
+
+                { match: "(<=>|\\.\\.=|\\.\\.|<<=|>>=|=>|->|==|!=|<=|>=|&&|\\|\\||<<|>>|\\+=|-=|\\*=|/=|%=|&=|\\|=|\\^=|[+*/%&|^!~<>=?-])",
+                  attr: "operator" },
+                { match: "[(){}\\[\\]]", attr: "punct.bracket" },
+                { match: "[,;:.@]", attr: "punct.delim" },
+            ],
+        },
+
+        attribute: {
+            default: "attribute", at_eol: "stay", unit: "span",
+            rules: [ { match: "\\]", attr: "attribute", pop: 1 } ],
+        },
+
+        plain_string: {
+            default: "string", at_eol: "pop", unit: "atom",
+            rules: [
+                { match: "\\{\\{|\\}\\}", attr: "string.escape" },
+                { match: "\\{", attr: "string.interp",
+                  push: "plain_interp" },
+                { match: "\\\\(n|t|r|\\\\|\"|0|x[0-9A-Fa-f]{2}|u\\{[0-9A-Fa-f]{1,6}\\})",
+                  attr: "string.escape" },
+                { match: "\\\\.", attr: "error" },
+                { match: "\"", attr: "string", pop: 1 },
+                { match: "\\}", attr: "error" },
+            ],
+        },
+        multiline: {
+            default: "string", at_eol: "stay", unit: "atom",
+            rules: [
+                { match: "\"\"\"", attr: "string", pop: 1 },
+                { match: "\\{\\{|\\}\\}", attr: "string.escape" },
+                { match: "\\{", attr: "string.interp",
+                  push: "multi_interp" },
+                { match: "\\\\(n|t|r|\\\\|\"|0|x[0-9A-Fa-f]{2}|u\\{[0-9A-Fa-f]{1,6}\\})",
+                  attr: "string.escape" },
+                { match: "\\\\.", attr: "error" },
+                { match: "\\}", attr: "error" },
+            ],
+        },
+        raw_string: {
+            default: "string.special", at_eol: "stay", unit: "atom",
+            rules: [
+                { aux: "literal", aux_pre: "\"", attr: "string.special",
+                  pop: 1 },
+            ],
+        },
+        generalized: {
+            default: "string.special", at_eol: "pop", unit: "atom",
+            rules: [ { match: "\"", attr: "string.special", pop: 1 } ],
+        },
+
+        plain_interp: {
+            default: "text", at_eol: "pop:4", unit: "span",
+            rules: [
+                { match: "\\}", attr: "string.interp", pop: 1 },
+                { match: "[({\\[]", attr: "punct.bracket",
+                  push: "plain_nested" },
+                { match: ":", attr: "string.special", push: "plain_format" },
+                "include:interp_tokens",
+            ],
+        },
+        plain_nested: {
+            default: "text", at_eol: "pop:4", unit: "span",
+            rules: [
+                { match: "[({\\[]", attr: "punct.bracket",
+                  push: "plain_nested" },
+                { match: "[)}\\]]", attr: "punct.bracket", pop: 1 },
+                "include:interp_tokens",
+            ],
+        },
+        plain_format: {
+            default: "string.special", at_eol: "pop:4", unit: "span",
+            rules: [
+                { match: "\\{\\{|\\}\\}", attr: "string.escape" },
+                { match: "\\{", attr: "string.interp", push: "plain_interp" },
+                { match: "\\}", attr: "string.interp", pop: 2 },
+                { match: "\\\\(n|t|r|\\\\|\"|0|x[0-9A-Fa-f]{2}|u\\{[0-9A-Fa-f]{1,6}\\})",
+                  attr: "string.escape" },
+                { match: "\\\\.", attr: "error" },
+            ],
+        },
+
+        multi_interp: {
+            default: "text", at_eol: "stay", unit: "span",
+            rules: [
+                { match: "\\}", attr: "string.interp", pop: 1 },
+                { match: "[({\\[]", attr: "punct.bracket",
+                  push: "multi_nested" },
+                { match: ":", attr: "string.special", push: "multi_format" },
+                "include:interp_tokens",
+            ],
+        },
+        multi_nested: {
+            default: "text", at_eol: "stay", unit: "span",
+            rules: [
+                { match: "[({\\[]", attr: "punct.bracket",
+                  push: "multi_nested" },
+                { match: "[)}\\]]", attr: "punct.bracket", pop: 1 },
+                "include:interp_tokens",
+            ],
+        },
+        multi_format: {
+            default: "string.special", at_eol: "stay", unit: "span",
+            rules: [
+                { match: "\\{\\{|\\}\\}", attr: "string.escape" },
+                { match: "\\{", attr: "string.interp", push: "multi_interp" },
+                { match: "\\}", attr: "string.interp", pop: 2 },
+                { match: "\\\\(n|t|r|\\\\|\"|0|x[0-9A-Fa-f]{2}|u\\{[0-9A-Fa-f]{1,6}\\})",
+                  attr: "string.escape" },
+                { match: "\\\\.", attr: "error" },
+            ],
+        },
+
+        interp_tokens: {
+            rules: [
+                { match: "r\"", attr: "string.special",
+                  push: "generalized" },
+                { match: "r(#+)\"", attr: "string.special",
+                  set_aux: 1, push: "raw_string" },
+                { match: "\"", attr: "string", push: "plain_string" },
+                { match: "\\b(0[xX][0-9A-Fa-f_]+|0[oO][0-7_]+|0[bB][01_]+|[0-9][0-9_]*(\\.[0-9][0-9_]*)?([eE][+-]?[0-9][0-9_]*)?)\\b",
+                  attr: "number" },
+                { match: "\\w+", attr: "variable" },
+                { match: "(<=>|\\.\\.=|\\.\\.|=>|->|==|!=|<=|>=|&&|\\|\\||[+*/%&|^!~<>=?,;.@:-])",
+                  attr: "operator" },
+            ],
+        },
+
+        select_body: {
+            default: "text", at_eol: "stay", unit: "span",
+            rules: [
+                { match: "\\}", attr: "punct.bracket", pop: 1 },
+                { match: "\\b(from|timeout)\\b", attr: "keyword" },
+                { match: "\"", attr: "string", push: "plain_string" },
+                { match: "\\b[0-9][0-9_]*\\b", attr: "number" },
+                { match: "\\w+", attr: "variable" },
+                { match: "(=>|[,.:+*/?-])", attr: "operator" },
+            ],
+        },
+        asm_body: {
+            default: "text", at_eol: "stay", unit: "span",
+            rules: [
+                { match: "\\}", attr: "punct.bracket", pop: 1 },
+                { match: "\\b(in|out|inout|lateout)\\b", attr: "keyword.op" },
+                { match: "\\breg\\b", attr: "type" },
+                { match: "\"", attr: "string", push: "plain_string" },
+                { match: "\\w+", attr: "variable" },
+                { match: "[,()]", attr: "punct.delim" },
+            ],
+        },
+
+        inline_c_neutral: {
+            default: "code", at_eol: "stay", unit: "span",
+            rules: [
+                { match: "//.*$", attr: "comment" },
+                { match: "/\\*", attr: "comment", push: "inline_c_comment" },
+                { match: "\"", attr: "string", push: "inline_c_dq" },
+                { match: "'", attr: "character", push: "inline_c_sq" },
+                { match: "\\{", attr: "punct.bracket",
+                  push: "inline_c_neutral" },
+                { match: "\\}", attr: "punct.bracket", pop: 1 },
+            ],
+        },
+        inline_c_comment: {
+            default: "comment", at_eol: "stay", unit: "atom",
+            rules: [ { match: "\\*/", attr: "comment", pop: 1 } ],
+        },
+        inline_c_dq: {
+            default: "string", at_eol: "pop", unit: "atom",
+            rules: [
+                { match: "\\\\.", attr: "string.escape" },
+                { match: "\"", attr: "string", pop: 1 },
+            ],
+        },
+        inline_c_sq: {
+            default: "character", at_eol: "pop", unit: "atom",
+            rules: [
+                { match: "\\\\.", attr: "string.escape" },
+                { match: "'", attr: "character", pop: 1 },
+            ],
+        },
+    },
+}

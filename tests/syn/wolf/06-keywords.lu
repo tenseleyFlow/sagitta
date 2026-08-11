@@ -1,0 +1,6 @@
+as asm assume borrow break comptime const continue copy defer
+distinct dyn else enum errdefer export extern false fn for
+freeze handle if impl import in let loop match move mut proc pub
+region return scope select shared spawn struct take trait true type
+unsafe use var weak when while
+/// exactly fifty reserved words above

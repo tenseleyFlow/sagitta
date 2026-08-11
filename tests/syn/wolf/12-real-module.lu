@@ -1,0 +1,21 @@
+//! Real-shaped module derived from Wolf's public corpus conventions.
+use std.io
+
+pub struct Counter {
+    value: i64,
+}
+
+impl Counter {
+    pub fn increment(self: Counter, amount: i64) -> Counter {
+        let next = self.value + amount
+        return Counter { value: next }
+    }
+}
+
+pub proc main() {
+    var counter = Counter { value: 0 }
+    for item in 0..10 {
+        counter = counter.increment(item)
+    }
+    io.println("count={counter.value}")
+}

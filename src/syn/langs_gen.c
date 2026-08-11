@@ -166,6 +166,10 @@ static const char *const lang_19_extensions[] = {
     "yml"
 };
 
+static const char *const lang_20_extensions[] = {
+    "lu"
+};
+
 const SynLangSeed yew_syn_builtin_langs[] = {
     {
         1U,
@@ -432,6 +436,20 @@ const SynLangSeed yew_syn_builtin_langs[] = {
         NULL,
         10,
         {"#", NULL, NULL}
+    },
+    {
+        20U,
+        "wolf",
+        "runtime/syntax/wolf.fl",
+        lang_20_extensions,
+        1U,
+        NULL,
+        0U,
+        NULL,
+        0U,
+        NULL,
+        0,
+        {"//", NULL, NULL}
     }
 };
 
@@ -489,6 +507,7 @@ static const SynDetectEntry builtin_extensions[] = {
     {"json", 10U, 4U, 0U},
     {"jsonc", 11U, 5U, 0U},
     {"jsx", 9U, 3U, 0U},
+    {"lu", 20U, 2U, 0U},
     {"mak", 12U, 3U, 0U},
     {"markdown", 13U, 8U, 0U},
     {"md", 13U, 2U, 0U},
@@ -541,7 +560,7 @@ static const SynDetectEntry builtin_first_lines[] = {
 
 const SynDetectIndex yew_syn_builtin_detect_index = {
     builtin_exact, 21U,
-    builtin_extensions, 46U,
+    builtin_extensions, 47U,
     builtin_globs, 7U,
     builtin_shebangs, 11U,
     builtin_first_lines, 1U

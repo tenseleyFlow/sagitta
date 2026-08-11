@@ -1,0 +1,14 @@
+fn strings(name: str) {
+    let escaped = "line\\n tab\\t quote\\\" wolf \\u{1F43A}"
+    let nested = "outer {format("inner {name}")} done"
+    let nested_modes = "raw {r#"body"#} string {"inner"}"
+    let nested_delims = "{call([r#"raw"#, 2 + item])}"
+    let braces = "{{literal}} and {name}"
+    let multiline = """
+        hello {{wolf}} {name}
+        direct {r#"raw"# + "inner" + 12}
+        nested {[("inner"), r#"raw"#, 2 + item]}
+        formatted {name:{{>\n\q{width}}
+        escapes \n \q and lone }
+        """
+}

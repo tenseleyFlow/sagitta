@@ -1,0 +1,12 @@
+//! Wolf kitchen sink: pinned lexical surface.
+// ordinary line comment
+#[trusted]
+const MAX_COUNT = 42
+pub fn render(self: View, value: i64) -> str {
+    let total = 0x2a + 0o52 + 0b101010 + 42_000
+    let ceiling = LIMIT_VALUE
+    let ratio = 3.14e+2
+    let label = "value={value:>{width}} {{stable}}"
+    if total >= ratio { return label }
+    else { return path"/tmp/wolf" }
+}

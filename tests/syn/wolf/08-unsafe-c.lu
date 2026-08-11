@@ -1,0 +1,15 @@
+fn foreign(ptr: *u8) {
+    unsafe c {
+        // ordinary C comment
+        if (ptr) { call("brace } in string"); }
+        call("escaped \" brace");
+        /* { brace in comment } */
+        char ch = '}';
+        char escaped = '\}';
+    }
+    unsafe {
+        asm { "mov {0}, {1}", out(reg) dst, in(reg) src, inout(reg) both, lateout(reg) scratch }
+        assume noalias ptr, other
+        borrow ptr from owner
+    }
+}

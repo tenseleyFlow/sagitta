@@ -1,0 +1,8 @@
+fn literals() {
+    let raw0 = r"{not interpolation} \\n"
+    let raw1 = r#"quote " and # are body"#
+    let raw4 = r####"ends only at matching fence"####
+    let regex = re"[a-z]+{2}"
+    let path_value = path"/etc/{literal}/hosts"
+    let keyword_prefix = fn"ordinary {interpolation}"
+}

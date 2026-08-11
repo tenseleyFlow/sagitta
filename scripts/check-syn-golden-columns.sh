@@ -3,9 +3,13 @@
 # This consumes a committed ledger and deliberately does not inspect git.
 set -eu
 
+LC_ALL=C
+export LC_ALL
 ledger=tests/syn/pre-s41_5-goldens.ledger
+manifest=tests/syn/manifest.tsv
 tmp=$(mktemp -d "${TMPDIR:-/tmp}/yew-syn-columns.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT HUP INT TERM
+tab=$(printf '\t')
 
 normalize_hash()
 {
@@ -14,8 +18,77 @@ normalize_hash()
 }
 
 awk -F '|' '$1 == "embed" { print $4 }' "$ledger" > "$tmp/embed.paths"
+awk -F '\t' '
+    NR == 1 {
+        if ($0 != "# definition\tlanguage\tsource-patterns\tgolden-rule\tscope\tcohort\tmin-goldens") bad = 1
+        next
+    }
+    /^[[:space:]]*$/ || /^#/ { next }
+    {
+        if (NF != 7) bad = 1
+        count = split($3, paths, ",")
+        for (i = 1; i <= count; i++) {
+            stars = paths[i]
+            star_count = gsub(/\*/, "", stars)
+            if (paths[i] !~ /^tests\/syn\/[A-Za-z0-9_.\/*-]+$/ ||
+                paths[i] ~ /(^|\/)\.\.($|\/)/ || star_count > 1) bad = 1
+        }
+    }
+    END {
+        if (bad) {
+            print "syntax golden columns: invalid manifest" > "/dev/stderr"
+            exit 1
+        }
+    }
+' "$manifest"
+: > "$tmp/new.paths"
+while IFS="$tab" read -r definition language patterns golden_rule scope cohort minimum; do
+    case "$definition" in ''|'#'*) continue ;; esac
+    [ "$cohort" = s42_5 ] || continue
+    saved_ifs=$IFS
+    IFS=,
+    set -- $patterns
+    IFS=$saved_ifs
+    for pattern do
+        matched=0
+        for source in $pattern; do
+            [ -f "$source" ] || continue
+            case "$source" in
+                *.spans)
+                    echo "syntax golden columns: source pattern selected a golden: $pattern" >&2
+                    exit 1
+                    ;;
+            esac
+            matched=$((matched + 1))
+            case "$golden_rule" in
+                replace-extension)
+                    basename=${source##*/}
+                    case "$basename" in
+                        ?*.*) golden=${source%.*}.spans ;;
+                        *)
+                            echo "syntax golden columns: replace-extension requires a suffix: $source" >&2
+                            exit 1
+                            ;;
+                    esac
+                    ;;
+                append-spans) golden=$source.spans ;;
+                *)
+                    echo "syntax golden columns: invalid golden rule: $golden_rule" >&2
+                    exit 1
+                    ;;
+            esac
+            printf '%s\n' "$golden" >> "$tmp/new.paths"
+        done
+        if [ "$matched" -eq 0 ]; then
+            echo "syntax golden columns: source pattern matched no files: $pattern" >&2
+            exit 1
+        fi
+    done
+done < "$manifest"
+sort -u "$tmp/new.paths" > "$tmp/new.paths.sorted"
 find tests/syn -type f -name '*.spans' \
-    ! -path 'tests/syn/embed/*' -print | sort > "$tmp/all.paths"
+    ! -path 'tests/syn/embed/*' -print | sort > "$tmp/current.paths"
+comm -23 "$tmp/current.paths" "$tmp/new.paths.sorted" > "$tmp/all.paths"
 
 all_count=$(wc -l < "$tmp/all.paths" | tr -d ' ')
 embed_count=$(wc -l < "$tmp/embed.paths" | tr -d ' ')

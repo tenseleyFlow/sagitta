@@ -1,0 +1,9 @@
+type Count = i64
+struct Pair { left: Count, right: Count }
+enum Choice { First, Second }
+trait Render { fn render(self: Render) -> str }
+impl Pair { fn sum(self: Pair) -> Count { return self.left + self.right } }
+proc serve(port: i64) {}
+let local = 1
+var changing = 2
+const LIMIT = 3
