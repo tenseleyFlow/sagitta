@@ -213,6 +213,14 @@ bool yew_re_match_at(const YewRe *re, const YewReInput *in, ByteOff at,
     return yew_re_pike_run(re, in, at.v, out);
 }
 
+bool yew_re_match_at_ws(YewReWorkspace *workspace, const YewRe *re,
+                        const YewReInput *in, ByteOff at, YewReMatch *out)
+{
+    if (workspace == NULL || re == NULL || in == NULL)
+        return false;
+    return yew_re_pike_run_ws(workspace, re, in, at.v, true, out);
+}
+
 bool yew_re_search(const YewRe *re, const YewReInput *in, ByteOff from,
                    YewReMatch *out)
 {

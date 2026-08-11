@@ -706,6 +706,7 @@ void test_re_golden_table_textbuf(void);
 void test_re_leftmost_first_is_pinned(void);
 void test_re_empty_width_loop_terminates(void);
 void test_re_match_at_is_anchored(void);
+void test_re_workspace_reuses_mixed_programs_and_captures(void);
 void test_re_search_from_offset_and_back(void);
 void test_re_group_count_and_min_len(void);
 

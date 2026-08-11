@@ -39,6 +39,16 @@
 typedef struct TextBuf TextBuf;
 typedef struct YewRe YewRe; /* arena-owned, immutable once compiled */
 
+/*
+ * Reusable execution storage for callers that perform many anchored
+ * probes.  The object itself is caller-owned; its implementation remains
+ * private so Pike's thread representation is not part of the public ABI.
+ * Initialize once, reuse serially, then free.  It owns no regex or input.
+ */
+typedef struct YewReWorkspace {
+    void *impl;
+} YewReWorkspace;
+
 enum {
     YEW_RE_ICASE = 1U << 0,     /* simple case folding, s02 tables      */
     YEW_RE_DOTALL = 1U << 1,    /* '.' also matches '\n'                */
@@ -92,6 +102,10 @@ bool yew_re_search_back(const YewRe *re, const YewReInput *in,
 /* Anchored at `at`: the match must start exactly there. */
 bool yew_re_match_at(const YewRe *re, const YewReInput *in, ByteOff at,
                      YewReMatch *out);
+void yew_re_workspace_init(YewReWorkspace *workspace);
+void yew_re_workspace_free(YewReWorkspace *workspace);
+bool yew_re_match_at_ws(YewReWorkspace *workspace, const YewRe *re,
+                        const YewReInput *in, ByteOff at, YewReMatch *out);
 bool yew_re_test(const YewRe *re, const YewReInput *in, ByteOff from);
 u32 yew_re_group_count(const YewRe *re);
 /* Minimum codepoints any match consumes; 0 when a match may be empty. */

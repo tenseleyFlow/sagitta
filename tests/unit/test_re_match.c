@@ -174,6 +174,66 @@ void test_re_match_at_is_anchored(void)
     arena_free_all(&arena);
 }
 
+void test_re_workspace_reuses_mixed_programs_and_captures(void)
+{
+    static const char wide_pat[] = "(a)(b)?(a)(c)?(a)(d)?(a)(b)(r)(a)";
+    Arena arena;
+    YewReWorkspace workspace;
+    YewRe *short_re;
+    YewRe *wide_re;
+    YewRe *boundary_re;
+    YewReMatch m;
+    YewReMatch standard;
+    YewReInput in = yew_re_input_bytes((const u8 *)"abacadabra", 10U);
+    YewReInput boundary_in =
+        yew_re_input_bytes((const u8 *)"ab outside", 10U);
+    u32 i;
+
+    arena_init(&arena);
+    yew_re_workspace_init(&workspace);
+    short_re = yew_re_compile(&arena, "a|ab", 4U, 0U, NULL);
+    wide_re = yew_re_compile(&arena, wide_pat, sizeof(wide_pat) - 1U,
+                             0U, NULL);
+    boundary_re = yew_re_compile(&arena, "\\b(a|ab)\\b", 10U, 0U, NULL);
+    YEW_ASSERT_NOT_NULL(short_re);
+    YEW_ASSERT_NOT_NULL(wide_re);
+    YEW_ASSERT_NOT_NULL(boundary_re);
+
+    /* Alternate smaller and larger programs so capacity growth, capture
+     * slot growth, and stale sparse-set generations are all exercised.
+     * The short pattern also pins leftmost-first priority under reuse. */
+    for (i = 0U; i < 1000U; i++) {
+        YEW_ASSERT(yew_re_match_at_ws(&workspace, short_re, &in,
+                                      BYTEOFF(0U), &m));
+        YEW_ASSERT_EQ_U64(m.g[0].lo, 0U);
+        YEW_ASSERT_EQ_U64(m.g[0].hi, 1U);
+        YEW_ASSERT(yew_re_match_at_ws(&workspace, wide_re, &in,
+                                      BYTEOFF(0U), &m));
+        YEW_ASSERT_EQ_U64(m.ngroups, 11U);
+        YEW_ASSERT_EQ_U64(m.g[0].hi, 10U);
+        YEW_ASSERT_EQ_U64(m.g[2].lo, 1U);
+        YEW_ASSERT_EQ_U64(m.g[2].hi, 2U);
+        YEW_ASSERT_EQ_U64(m.g[4].lo, 3U);
+        YEW_ASSERT_EQ_U64(m.g[4].hi, 4U);
+        YEW_ASSERT(!yew_re_match_at_ws(&workspace, wide_re, &in,
+                                       BYTEOFF(1U), &m));
+        YEW_ASSERT(yew_re_match_at(boundary_re, &boundary_in, BYTEOFF(0U),
+                                   &standard));
+        YEW_ASSERT(yew_re_match_at_ws(&workspace, boundary_re, &boundary_in,
+                                      BYTEOFF(0U), &m));
+        YEW_ASSERT_EQ_U64(m.ngroups, standard.ngroups);
+        YEW_ASSERT_EQ_U64(m.g[0].lo, standard.g[0].lo);
+        YEW_ASSERT_EQ_U64(m.g[0].hi, standard.g[0].hi);
+        YEW_ASSERT_EQ_U64(m.g[1].lo, standard.g[1].lo);
+        YEW_ASSERT_EQ_U64(m.g[1].hi, standard.g[1].hi);
+    }
+    yew_re_workspace_free(&workspace);
+    YEW_ASSERT(workspace.impl == NULL);
+    /* Empty and repeated teardown are valid lifecycle edges. */
+    yew_re_workspace_free(&workspace);
+    arena_free_all(&arena);
+}
+
 void test_re_search_from_offset_and_back(void)
 {
     Arena arena;

@@ -725,6 +725,7 @@ const YewTest yew_tests[] = {
     T(re_leftmost_first_is_pinned),
     T(re_empty_width_loop_terminates),
     T(re_match_at_is_anchored),
+    T(re_workspace_reuses_mixed_programs_and_captures),
     T(re_search_from_offset_and_back),
     T(re_group_count_and_min_len),
     T(re_error_table),

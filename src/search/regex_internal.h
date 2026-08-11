@@ -192,6 +192,9 @@ bool yew_re_pike_run(const YewRe *re, const YewReInput *in, u64 start,
  * which is what keeps an unanchored search O(n*m) instead of O(n^2). */
 bool yew_re_pike_run_ex(const YewRe *re, const YewReInput *in, u64 start,
                         bool anchored, YewReMatch *out);
+bool yew_re_pike_run_ws(YewReWorkspace *workspace, const YewRe *re,
+                        const YewReInput *in, u64 start, bool anchored,
+                        YewReMatch *out);
 
 /* Lazy DFA (§6b).  It answers only "is there a match": a state is a set
  * of pcs and knows nothing about which path reached it, so it cannot

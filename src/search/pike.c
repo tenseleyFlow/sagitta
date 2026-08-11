@@ -9,6 +9,7 @@
  */
 #include "search/regex_internal.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 #include "unicode/utf8.h"
@@ -70,6 +71,15 @@ static u32 cursor_decode(ReCursor *c, const YewReInput *in, u64 off,
     u32 cp = 0U;
     size_t used;
 
+    /* Syntax lines are flat and overwhelmingly ASCII.  Avoid four
+     * cursor probes plus the general UTF-8 decoder for the common byte;
+     * non-ASCII and piece-tree input retain the exact decoder path. */
+    if (in->tb == NULL && off < in->window.hi && off < in->len &&
+        in->bytes[off] < 0x80U) {
+        *len_out = 1U;
+        return in->bytes[off];
+    }
+
     while (have < YEW_UTF8_MAX) {
         u8 b;
 
@@ -101,85 +111,8 @@ typedef struct Caps {
     u32 refs;
     u64 *slot;
     struct Caps *next_free;
+    struct Caps *next_all;
 } Caps;
-
-/*
- * Dead arrays go on a free list instead of being abandoned.  An
- * unanchored scan seeds a thread at every input position, so without
- * reuse the live set would grow with the INPUT (O(n*k)) rather than with
- * the thread count (O(m*k) as specified) — and a working set that leaves
- * cache at 100 KB shows up as super-linear scaling even though the
- * algorithm is linear.
- */
-typedef struct CapPool {
-    Arena *arena;
-    Caps *free_list;
-    u32 nslots;
-    u64 live;
-} CapPool;
-
-static Caps *caps_new(CapPool *pool)
-{
-    Caps *c = pool->free_list;
-
-    if (c != NULL) {
-        pool->free_list = c->next_free;
-    } else {
-        c = arena_alloc(pool->arena, sizeof(*c), sizeof(void *));
-        c->slot = arena_alloc(pool->arena,
-                              (size_t)pool->nslots * sizeof(*c->slot),
-                              sizeof(u64));
-        pool->live++;
-    }
-    c->refs = 1U;
-    c->next_free = NULL;
-    (void)memset(c->slot, 0xFF, (size_t)pool->nslots * sizeof(*c->slot));
-    return c;
-}
-
-static void caps_free(CapPool *pool, Caps *c)
-{
-    c->next_free = pool->free_list;
-    pool->free_list = c;
-}
-
-static Caps *caps_share(Caps *c)
-{
-    if (c != NULL)
-        c->refs++;
-    return c;
-}
-
-static void caps_release(CapPool *pool, Caps *c)
-{
-    if (c == NULL || c->refs == 0U)
-        return;
-    c->refs--;
-    if (c->refs == 0U)
-        caps_free(pool, c);
-}
-
-/* Copy-on-write: a SAVE on a shared array copies once instead of every
- * thread copying at every step. */
-static Caps *caps_set(CapPool *pool, Caps *c, u32 slot, u64 value)
-{
-    Caps *target = c;
-
-    if (slot >= pool->nslots)
-        return c;
-    if (c == NULL)
-        return NULL;
-    if (c->refs > 1U) {
-        Caps *copy = caps_new(pool);
-
-        (void)memcpy(copy->slot, c->slot,
-                     (size_t)pool->nslots * sizeof(*copy->slot));
-        c->refs--;
-        target = copy;
-    }
-    target->slot[slot] = value;
-    return target;
-}
 
 /* ---------------------------------------------------------------- */
 /* Thread lists — sparse set                                         */
@@ -192,25 +125,20 @@ typedef struct ReThread {
 
 typedef struct ReList {
     ReThread *dense;
-    u32 *sparse;
     u32 n;
     u32 cap;
     u32 gen;
     u32 *stamp; /* per-pc generation; equal means present              */
 } ReList;
 
-static void list_init(ReList *l, Arena *a, u32 nprog)
+static void list_init(ReList *l, ReThread *dense, u32 *stamp, u32 nprog,
+                      u32 generation)
 {
-    l->dense = arena_alloc(a, (size_t)nprog * sizeof(*l->dense),
-                           sizeof(void *));
-    l->sparse = arena_alloc(a, (size_t)nprog * sizeof(*l->sparse),
-                            sizeof(u32));
-    l->stamp = arena_alloc(a, (size_t)nprog * sizeof(*l->stamp),
-                           sizeof(u32));
-    (void)memset(l->stamp, 0, (size_t)nprog * sizeof(*l->stamp));
+    l->dense = dense;
+    l->stamp = stamp;
     l->cap = nprog;
     l->n = 0U;
-    l->gen = 0U;
+    l->gen = generation;
 }
 
 /* No clearing between steps: bumping the generation invalidates every
@@ -218,6 +146,10 @@ static void list_init(ReList *l, Arena *a, u32 nprog)
 static void list_clear(ReList *l)
 {
     l->n = 0U;
+    if (l->gen >= UINT32_MAX - 1U) {
+        (void)memset(l->stamp, 0, (size_t)l->cap * sizeof(*l->stamp));
+        l->gen = 0U;
+    }
     l->gen++;
 }
 
@@ -301,6 +233,129 @@ typedef struct AddFrame {
     u32 pc;
     Caps *caps;
 } AddFrame;
+
+typedef struct PikeWorkspace {
+    ReThread *dense[2];
+    u32 *stamp[2];
+    AddFrame *stack;
+    Caps *caps_all;
+    Caps *caps_free;
+    u32 prog_cap;
+    u32 slot_cap;
+    u32 generation[2];
+} PikeWorkspace;
+
+/*
+ * Dead arrays go on a free list instead of being abandoned.  An
+ * unanchored scan seeds a thread at every input position, so without
+ * reuse the live set would grow with the INPUT (O(n*k)) rather than with
+ * the thread count (O(m*k) as specified).
+ */
+typedef struct CapPool {
+    PikeWorkspace *workspace;
+    Caps *free_list;
+    u32 nslots;
+} CapPool;
+
+static Caps *caps_new(CapPool *pool)
+{
+    PikeWorkspace *workspace = pool->workspace;
+    Caps *c = pool->free_list;
+
+    if (c != NULL) {
+        pool->free_list = c->next_free;
+    } else {
+        c = yew_xmalloc(sizeof(*c));
+        c->slot = yew_xmalloc((size_t)workspace->slot_cap *
+                              sizeof(*c->slot));
+        c->next_all = workspace->caps_all;
+        workspace->caps_all = c;
+    }
+    c->refs = 1U;
+    c->next_free = NULL;
+    (void)memset(c->slot, 0xFF, (size_t)pool->nslots * sizeof(*c->slot));
+    return c;
+}
+
+static void caps_free(CapPool *pool, Caps *c)
+{
+    c->next_free = pool->free_list;
+    pool->free_list = c;
+}
+
+static Caps *caps_share(Caps *c)
+{
+    if (c != NULL)
+        c->refs++;
+    return c;
+}
+
+static void caps_release(CapPool *pool, Caps *c)
+{
+    if (c == NULL || c->refs == 0U)
+        return;
+    c->refs--;
+    if (c->refs == 0U)
+        caps_free(pool, c);
+}
+
+/* Copy-on-write: a SAVE on a shared array copies once instead of every
+ * thread copying at every step. */
+static Caps *caps_set(CapPool *pool, Caps *c, u32 slot, u64 value)
+{
+    Caps *target = c;
+
+    if (slot >= pool->nslots)
+        return c;
+    if (c == NULL)
+        return NULL;
+    if (c->refs > 1U) {
+        Caps *copy = caps_new(pool);
+
+        (void)memcpy(copy->slot, c->slot,
+                     (size_t)pool->nslots * sizeof(*copy->slot));
+        c->refs--;
+        target = copy;
+    }
+    target->slot[slot] = value;
+    return target;
+}
+
+static void workspace_prepare(PikeWorkspace *workspace, u32 nprog,
+                              u32 nslots)
+{
+    u32 i;
+
+    if (workspace->prog_cap < nprog) {
+        u32 old_cap = workspace->prog_cap;
+
+        for (i = 0U; i < 2U; i++) {
+            workspace->dense[i] = yew_xreallocarray(
+                workspace->dense[i], nprog, sizeof(*workspace->dense[i]));
+            workspace->stamp[i] = yew_xreallocarray(
+                workspace->stamp[i], nprog, sizeof(*workspace->stamp[i]));
+            (void)memset(workspace->stamp[i] + old_cap, 0,
+                         (size_t)(nprog - old_cap) *
+                         sizeof(*workspace->stamp[i]));
+        }
+        workspace->stack = yew_xreallocarray(
+            workspace->stack, (size_t)nprog * 2U + 8U,
+            sizeof(*workspace->stack));
+        workspace->prog_cap = nprog;
+    }
+    if (workspace->slot_cap < nslots) {
+        Caps *c;
+
+        workspace->slot_cap = nslots;
+        for (c = workspace->caps_all; c != NULL; c = c->next_all)
+            c->slot = yew_xreallocarray(c->slot, nslots, sizeof(*c->slot));
+    }
+    workspace->caps_free = workspace->caps_all;
+    for (Caps *c = workspace->caps_all; c != NULL; c = c->next_all) {
+        c->refs = 0U;
+        c->next_free = c->next_all;
+    }
+}
 
 typedef struct VmState {
     const YewRe *re;
@@ -440,7 +495,53 @@ bool yew_re_pike_run(const YewRe *re, const YewReInput *in, u64 start,
 bool yew_re_pike_run_ex(const YewRe *re, const YewReInput *in, u64 start,
                         bool anchored, YewReMatch *out)
 {
-    Arena arena;
+    YewReWorkspace workspace;
+    bool matched;
+
+    yew_re_workspace_init(&workspace);
+    matched = yew_re_pike_run_ws(&workspace, re, in, start, anchored, out);
+    yew_re_workspace_free(&workspace);
+    return matched;
+}
+
+void yew_re_workspace_init(YewReWorkspace *workspace)
+{
+    if (workspace != NULL)
+        workspace->impl = NULL;
+}
+
+void yew_re_workspace_free(YewReWorkspace *workspace)
+{
+    PikeWorkspace *impl;
+    Caps *caps;
+
+    if (workspace == NULL)
+        return;
+    impl = workspace->impl;
+    if (impl == NULL)
+        return;
+    caps = impl->caps_all;
+    while (caps != NULL) {
+        Caps *next = caps->next_all;
+
+        free(caps->slot);
+        free(caps);
+        caps = next;
+    }
+    free(impl->dense[0]);
+    free(impl->dense[1]);
+    free(impl->stamp[0]);
+    free(impl->stamp[1]);
+    free(impl->stack);
+    free(impl);
+    workspace->impl = NULL;
+}
+
+bool yew_re_pike_run_ws(YewReWorkspace *workspace, const YewRe *re,
+                        const YewReInput *in, u64 start, bool anchored,
+                        YewReMatch *out)
+{
+    PikeWorkspace *impl;
     VmState vm;
     ReList clist;
     ReList nlist;
@@ -448,29 +549,40 @@ bool yew_re_pike_run_ex(const YewRe *re, const YewReInput *in, u64 start,
     ReCtx x;
     Caps *best = NULL;
     u64 pos = start;
+    u64 match_end = start;
     u32 prev_cp = 0U;
     bool matched = false;
+    bool captureless;
     u32 i;
 
-    if (re == NULL || in == NULL || re->nprog == 0U)
+    if (workspace == NULL || re == NULL || in == NULL || re->nprog == 0U)
         return false;
-    arena_init(&arena);
+    /* In an anchored run with no explicit groups, group zero is exactly
+     * [start, MATCH-position].  SAVE threads carry no additional
+     * information, so skip the capture pool entirely for this dominant
+     * syntax-highlighting shape. */
+    captureless = anchored && re->ngroups == 1U;
+    if (workspace->impl == NULL)
+        workspace->impl = yew_xcalloc(1U, sizeof(PikeWorkspace));
+    impl = workspace->impl;
+    workspace_prepare(impl, re->nprog, re->ngroups * 2U);
     (void)memset(&vm, 0, sizeof(vm));
     vm.re = re;
     vm.prog = re->prog;
     vm.nprog = re->nprog;
-    vm.pool.arena = &arena;
+    vm.pool.workspace = impl;
+    vm.pool.free_list = impl->caps_free;
     /* Only the slots this pattern can actually write. */
     vm.pool.nslots = re->ngroups * 2U;
     if (vm.pool.nslots > YEW_RE_MAX_GROUPS * 2U)
         vm.pool.nslots = YEW_RE_MAX_GROUPS * 2U;
     /* Each instruction can push at most two frames. */
     vm.stack_cap = re->nprog * 2U + 8U;
-    vm.stack = arena_alloc(&arena,
-                           (size_t)vm.stack_cap * sizeof(*vm.stack),
-                           sizeof(void *));
-    list_init(&clist, &arena, re->nprog);
-    list_init(&nlist, &arena, re->nprog);
+    vm.stack = impl->stack;
+    list_init(&clist, impl->dense[0], impl->stamp[0], re->nprog,
+              impl->generation[0]);
+    list_init(&nlist, impl->dense[1], impl->stamp[1], re->nprog,
+              impl->generation[1]);
     cursor_init(&cur);
 
     /* The codepoint preceding `start`, needed by \b and ^ without a
@@ -519,7 +631,7 @@ bool yew_re_pike_run_ex(const YewRe *re, const YewReInput *in, u64 start,
          * never beat one already found.
          */
         if (!matched && (pos == start || !anchored)) {
-            Caps *seed = caps_new(&vm.pool);
+            Caps *seed = captureless ? NULL : caps_new(&vm.pool);
 
             addthread(&vm, &clist, 0U, seed, &x, cp, have_cp);
         }
@@ -566,6 +678,7 @@ bool yew_re_pike_run_ex(const YewRe *re, const YewReInput *in, u64 start,
                 if ((ReOp)ins->op == RE_MATCH) {
                     caps_release(&vm.pool, best);
                     best = caps;
+                    match_end = pos;
                     matched = true;
                     /*
                      * Priority cut: threads after this one in clist are
@@ -604,19 +717,34 @@ bool yew_re_pike_run_ex(const YewRe *re, const YewReInput *in, u64 start,
 
         (void)memset(out, 0, sizeof(*out));
         out->ngroups = re->ngroups;
-        for (g = 0U; g < re->ngroups && g < YEW_RE_MAX_GROUPS; g++) {
-            u64 lo = best->slot[g * 2U];
-            u64 hi = best->slot[g * 2U + 1U];
+        if (captureless) {
+            out->g[0] = (Span){start, match_end};
+        } else {
+            for (g = 0U; g < re->ngroups && g < YEW_RE_MAX_GROUPS; g++) {
+                u64 lo = best->slot[g * 2U];
+                u64 hi = best->slot[g * 2U + 1U];
 
-            if (lo == UINT64_MAX || hi == UINT64_MAX) {
-                out->g[g].lo = UINT64_MAX;
-                out->g[g].hi = UINT64_MAX;
-                continue;
+                if (lo == UINT64_MAX || hi == UINT64_MAX) {
+                    out->g[g].lo = UINT64_MAX;
+                    out->g[g].hi = UINT64_MAX;
+                    continue;
+                }
+                out->g[g].lo = lo;
+                out->g[g].hi = hi;
             }
-            out->g[g].lo = lo;
-            out->g[g].hi = hi;
         }
     }
-    arena_free_all(&arena);
+    if (clist.stamp == impl->stamp[0]) {
+        impl->generation[0] = clist.gen;
+        impl->generation[1] = nlist.gen;
+    } else {
+        impl->generation[0] = nlist.gen;
+        impl->generation[1] = clist.gen;
+    }
+    impl->caps_free = impl->caps_all;
+    for (Caps *c = impl->caps_all; c != NULL; c = c->next_all) {
+        c->refs = 0U;
+        c->next_free = c->next_all;
+    }
     return matched;
 }
