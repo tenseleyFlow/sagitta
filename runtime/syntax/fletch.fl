@@ -64,8 +64,7 @@
             unit:    "span",
             rules: [
                 { match: "#.*$", attr: "comment" },
-                { match: "H(\\()", attr: "keyword",
-                  captures: { 1: "punct.bracket" }, push: "motion" },
+                { match: "H\\(", attr: "punct.bracket", push: "motion" },
                 { match: "\\)", attr: "punct.bracket", pop: 1 },
                 { match: "\\]", attr: "punct.bracket", pop: 1 },
                 { match: "[lwbc]\\b", attr: "motion.unit" },
