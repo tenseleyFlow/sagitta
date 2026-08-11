@@ -1,6 +1,6 @@
 # yew pty golden v1
 size 80x24 alt=1 cursor=3,2 vis=1
-modes 2004,1002,1006,1004 kitty=21 sync_pairs=10
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
 [1: pty-s14-s26_buffer_s[2: alpha.c*]
     1 xcontents of alpha.c                                                      

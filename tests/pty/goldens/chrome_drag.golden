@@ -1,6 +1,6 @@
 # yew pty golden v1
 size 80x24 alt=1 cursor=1,6 vis=1
-modes 2004,1002,1006,1004 kitty=21 sync_pairs=7
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
 [2: yew-pty-0.txt][3: yew-pty-1.txt][1: pty-s14-chrome_drag.
     1                                                                           

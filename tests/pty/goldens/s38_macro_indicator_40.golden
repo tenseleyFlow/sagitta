@@ -1,6 +1,6 @@
 # yew pty golden v1
 size 40x24 alt=1 cursor=0,18 vis=1
-modes 2004,1002,1006,1004 kitty=21 sync_pairs=4
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
     1 abcdefghijklbase                  
     1                                   

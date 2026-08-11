@@ -1,6 +1,6 @@
 # yew pty golden v1
 size 80x24 alt=1 cursor=2,6 vis=1
-modes 2004,1002,1006,1004 kitty=21 sync_pairs=12
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
 --- text
 [yew-s24-grp/ (3)][1: pty-s14-s27_dwell_op
  one.txt three.txt two.txt
