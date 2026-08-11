@@ -25,7 +25,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
     20 plain fixture line 0021                                                  
     21 plain fixture line 0022                                                  
     22 plain fixture line 0023                                                  
- L settled 5001/5001 lines, wave at 5001, degraded=no                           
+ L settled 5001/5001, wave 5001, root=none active=none defs=0/4 depth=0/16 stat…
 --- style
 AAAAABACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 AAAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
