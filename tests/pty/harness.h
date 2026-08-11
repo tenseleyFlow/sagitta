@@ -90,6 +90,8 @@ struct PtyCtx {
 extern const PtyCase yew_pty_cases[];
 
 bool yew_pty_spawn(Pty *p, const PtySpec *sp);
+/* no_color == NULL omits NO_COLOR; non-NULL values, including empty, are
+ * exported verbatim so presence semantics can be tested explicitly. */
 bool ptc_env_build(char **envp, const char *colors, const char *state_dir,
                    const char *no_color, const char *ascii,
                    const char *runtime_dir);

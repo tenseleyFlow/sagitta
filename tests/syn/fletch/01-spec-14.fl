@@ -1,0 +1,33 @@
+# fletch-spec §14 — one of everything
+import str
+
+let greet = "hi\tthere\n"
+let nums  = [1, 2.5, 0x10]
+let cfg   = { tabwidth: 4, wrap: false, name: nil }
+
+fn clamp(x, lo, hi) {
+    if x < lo { return lo }
+    else if x > hi { return hi }
+    return x
+}
+
+fn counter(start) {
+    let n = start
+    return fn() { n = n + 1; return n }
+}
+
+let next = counter(clamp(9, 0, 8))
+while next() < 10 { }
+
+let total = 0
+for x in nums {
+    if x == 2.5 { continue }
+    total = total + x
+}
+
+macro dup = @[ l< H(lv) yank v paste esc ]
+
+fn shout(s) {
+    try { edit { @[ 2v i"!" del ] } }
+    catch e { return str.upper(e.kind) or "?" }
+}

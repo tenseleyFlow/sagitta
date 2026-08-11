@@ -1,0 +1,93 @@
+# runtime/syntax/fletch.fl — Fletch 1.0 language and motion literals.
+# The syntax follows .docs/fletch-spec.md.  Motion blocks are a distinct
+# lexer context: `@[` enters it, `]` leaves it, and `H(` nests it.  The
+# engine caps nesting at 16 states, with four levels reserved internally.
+{
+    syntax: 1,
+
+    language: {
+        name:       "fletch",
+        extensions: ["fl"],
+        priority:   20,
+        comment:    { line: "#" },
+    },
+
+    contexts: {
+        main: {
+            default: "text",
+            rules: [
+                { match: "#.*$", attr: "comment" },
+                { match: "(@)(\\[)", attr: "keyword",
+                  captures: { 1: "keyword", 2: "punct.bracket" },
+                  push: "motion" },
+                { match: "\\b(fn|macro)\\s+([A-Za-z_][A-Za-z0-9_]*)",
+                  attr: "keyword.storage", captures: { 2: "function" },
+                  consume: 2 },
+                { match: "\\b(if|else|for|while|break|continue|return|try|catch)\\b",
+                  attr: "keyword.control" },
+                { match: "\\b(and|or|not|in|as)\\b", attr: "keyword.op" },
+                { match: "\\b(let|fn|macro|import|edit)\\b", attr: "keyword.storage" },
+                { match: "\\bnil\\b", attr: "constant.builtin" },
+                { match: "\\b(true|false)\\b", attr: "boolean" },
+                { match: "\"", attr: "string", push: "dq" },
+                { match: "\\b0[xX][0-9A-Fa-f]([0-9A-Fa-f_]*[0-9A-Fa-f])?\\b",
+                  attr: "number" },
+                { match: "\\b[0-9]([0-9_]*[0-9])?\\.[0-9]([0-9_]*[0-9])?([eE][+-]?[0-9]([0-9_]*[0-9])?)?\\b",
+                  attr: "number" },
+                { match: "\\b[0-9]([0-9_]*[0-9])?\\b", attr: "number" },
+                { match: "([A-Za-z_][A-Za-z0-9_]*)\\s*:",
+                  captures: { 1: "variable.member" }, consume: 1 },
+                { match: "([A-Za-z_][A-Za-z0-9_]*)\\s*\\(",
+                  captures: { 1: "function" }, consume: 1 },
+                { match: "\\.[A-Za-z_][A-Za-z0-9_]*", attr: "method" },
+                { match: "(==|!=|<=|>=|[+*/%<>=-])", attr: "operator" },
+                { match: "[(){}\\[\\]]", attr: "punct.bracket" },
+                { match: "[,;:.]", attr: "punct.delim" },
+            ],
+        },
+
+        dq: {
+            default: "string",
+            at_eol:  "pop",
+            unit:    "atom",
+            rules: [
+                { match: "\\\\(n|t|r|\\\\|\"|0|x[0-9A-Fa-f]{2}|u\\{[0-9A-Fa-f]{1,6}\\})",
+                  attr: "string.escape" },
+                { match: "\\\\.", attr: "error" },
+                { match: "\"", attr: "string", pop: 1 },
+            ],
+        },
+
+        motion: {
+            default: "text",
+            at_eol:  "stay",
+            unit:    "span",
+            rules: [
+                { match: "#.*$", attr: "comment" },
+                { match: "H(\\()", attr: "keyword",
+                  captures: { 1: "punct.bracket" }, push: "motion" },
+                { match: "\\)", attr: "punct.bracket", pop: 1 },
+                { match: "\\]", attr: "punct.bracket", pop: 1 },
+                { match: "[lwbc]\\b", attr: "motion.unit" },
+                { match: "(a[<>^v]|[<>^v]|→|←|↑|↓)", attr: "motion.arrow" },
+                { match: "[0-9]+", attr: "motion.count" },
+                { match: "(i)(\")", attr: "keyword",
+                  captures: { 2: "string" }, push: "motion_dq" },
+                { match: "(del|esc)\\b", attr: "keyword.control" },
+                { match: "[A-Za-z_][A-Za-z0-9_]*\\b", attr: "motion.cmd" },
+            ],
+        },
+
+        motion_dq: {
+            default: "string",
+            at_eol:  "pop",
+            unit:    "atom",
+            rules: [
+                { match: "\\\\(n|t|r|\\\\|\"|0|x[0-9A-Fa-f]{2}|u\\{[0-9A-Fa-f]{1,6}\\})",
+                  attr: "string.escape" },
+                { match: "\\\\.", attr: "error" },
+                { match: "\"", attr: "string", pop: 1 },
+            ],
+        },
+    },
+}

@@ -403,12 +403,13 @@ static const char *color_tier(const PtyCtx *c)
  *
  * A suffix rather than a per-case field because the golden is named
  * after the case too — so `chrome_tabs_nocolor` names one env, one
- * scene and one golden, and the three cannot drift apart.  An empty
- * NO_COLOR is the un-set convention, so the default value is "".
+ * scene and one golden, and the three cannot drift apart.  NO_COLOR is
+ * presence-based, so baseline cases omit it rather than exporting an empty
+ * value.
  */
 static const char *no_color_for(const PtyCtx *c)
 {
-    return strstr(c->test->name, "_nocolor") != NULL ? "1" : "";
+    return strstr(c->test->name, "_nocolor") != NULL ? "1" : NULL;
 }
 
 static const char *ascii_for(const PtyCtx *c)
@@ -444,21 +445,30 @@ bool ptc_env_build(char **envp, const char *colors, const char *state_dir,
         no_color, ascii, runtime_dir
     };
     size_t i;
+    size_t out_i = 0U;
 
     _Static_assert(YEW_ARRAY_LEN(keys) == YEW_PTY_ENV_COUNT,
                    "YEW_PTY_ENV_COUNT must match the key table");
     if (envp == NULL || colors == NULL || state_dir == NULL ||
-        no_color == NULL || ascii == NULL || runtime_dir == NULL)
+        ascii == NULL || runtime_dir == NULL)
         return false;
+    for (i = 0U; i <= YEW_PTY_ENV_COUNT; i++)
+        envp[i] = NULL;
     for (i = 0U; i < YEW_ARRAY_LEN(keys); i++) {
-        envp[i] = env_pair(keys[i], values[i]);
-        if (envp[i] == NULL) {
-            while (i != 0U)
-                free(envp[--i]);
+        if (values[i] == NULL)
+            continue;
+        envp[out_i] = env_pair(keys[i], values[i]);
+        if (envp[out_i] == NULL) {
+            while (out_i != 0U) {
+                out_i--;
+                free(envp[out_i]);
+                envp[out_i] = NULL;
+            }
             return false;
         }
+        out_i++;
     }
-    envp[YEW_ARRAY_LEN(keys)] = NULL;
+    envp[out_i] = NULL;
     return true;
 }
 

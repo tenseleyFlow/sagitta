@@ -1,0 +1,2 @@
+# comment with fn @[ l> ] "string"
+let live = 1 # trailing comment

@@ -1,0 +1,3 @@
+let dec = 1_000_000
+let hex = 0xFF_FF
+let float = 12.50e-2

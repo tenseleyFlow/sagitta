@@ -26,10 +26,8 @@ void test_pty_environment_exact(void)
         /* Sprint 26 pins the undo picker's relative timestamps, so
          * "3 minutes ago" is the same string on every run. */
         "YEW_PICKERS_NOW=1700000000",
-        /* Sprint 27 §7's degradation variants, pinned to OFF for the
-         * baseline so a case that does not ask for them cannot inherit
-         * whatever the developer's shell happens to export. */
-        "NO_COLOR=",
+        /* Sprint 27 §7's remaining degradation variant. NO_COLOR is
+         * absent from baseline cases because even an empty value is set. */
         "YEW_ASCII=0",
         "YEW_RUNTIME_DIR=/tmp/yew-runtime"
     };
@@ -38,17 +36,30 @@ void test_pty_environment_exact(void)
 
     /* Keeps the two in lockstep: adding a key without an expectation
      * would otherwise read past `expected` (it did, once). */
-    YEW_ASSERT_EQ_U64((u64)YEW_ARRAY_LEN(expected),
+    YEW_ASSERT_EQ_U64((u64)YEW_ARRAY_LEN(expected) + 1U,
                       (u64)YEW_PTY_ENV_COUNT);
 
     YEW_ASSERT(ptc_env_build(envp, "truecolor", "/tmp/yew-pty-state",
-                             "", "0", "/tmp/yew-runtime"));
-    for (i = 0U; i < YEW_PTY_ENV_COUNT; i++)
+                             NULL, "0", "/tmp/yew-runtime"));
+    for (i = 0U; i < YEW_ARRAY_LEN(expected); i++)
         YEW_ASSERT_EQ_STR(envp[i], expected[i]);
-    YEW_ASSERT_NULL(envp[YEW_PTY_ENV_COUNT]);
+    for (; i <= YEW_PTY_ENV_COUNT; i++)
+        YEW_ASSERT_NULL(envp[i]);
     ptc_env_free(envp);
     for (i = 0U; i <= YEW_PTY_ENV_COUNT; i++)
         YEW_ASSERT_NULL(envp[i]);
+
+    YEW_ASSERT(ptc_env_build(envp, "truecolor", "/tmp/yew-pty-state",
+                             "", "0", "/tmp/yew-runtime"));
+    YEW_ASSERT_EQ_STR(envp[12], "NO_COLOR=");
+    YEW_ASSERT_NULL(envp[YEW_PTY_ENV_COUNT]);
+    ptc_env_free(envp);
+
+    YEW_ASSERT(ptc_env_build(envp, "truecolor", "/tmp/yew-pty-state",
+                             "0", "0", "/tmp/yew-runtime"));
+    YEW_ASSERT_EQ_STR(envp[12], "NO_COLOR=0");
+    YEW_ASSERT_NULL(envp[YEW_PTY_ENV_COUNT]);
+    ptc_env_free(envp);
 }
 
 void test_pty_spawn_clears_signal_mask(void)
