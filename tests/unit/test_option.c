@@ -80,7 +80,7 @@ void test_option_table_has_frozen_order_types_scopes_and_defaults(void)
     }
     YEW_ASSERT_EQ_U64(ed.buffer.tabwidth, 4U);
     YEW_ASSERT_EQ_U64(ed.win->vp.scrolloff, 3U);
-    YEW_ASSERT_EQ_U64(ed.win->number_style, YEW_NUM_ABS);
+    YEW_ASSERT_EQ_U64(ed.win->number_style, YEW_NUM_HYBRID);
     YEW_ASSERT_EQ_U64(ed.chord_timeout_ms, 500U);
     YEW_ASSERT_EQ_U64(ed.regs.ring_depth, YEW_KILL_RING_DEPTH_DEFAULT);
     YEW_ASSERT_EQ_U64(ed.regs.ring_bytes_max, YEW_KILL_RING_BYTES_DEFAULT);
@@ -168,7 +168,7 @@ void test_option_scope_and_side_effects_share_one_setter(void)
     YEW_ASSERT_EQ_I64(opt_get(&ed, "tabwidth").as.i, 4);
     YEW_ASSERT_EQ_U64(ed.buffer.tabwidth, 4U);
     YEW_ASSERT(!ed.win->vp.wrap);
-    YEW_ASSERT_EQ_U64(ed.win->number_style, YEW_NUM_ABS);
+    YEW_ASSERT_EQ_U64(ed.win->number_style, YEW_NUM_HYBRID);
     YEW_ASSERT(!ed.errorbells);
     yew_ed_free(&ed);
 }

@@ -13,7 +13,7 @@ set({
     expandtab: false,
     wrap: false,
     scrolloff: 3,
-    number: "abs",
+    number: "both",
     "statusline.column": "gcol",
     errorbells: false,
     ambiguous_wide: false,

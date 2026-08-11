@@ -304,7 +304,7 @@ void yew_vp_init(Win *w)
     w->vp.scrolloff = 3U;
     w->vp.sidescrolloff = 5U;
     w->vp.wrap = false;
-    w->number_style = YEW_NUM_ABS;
+    w->number_style = YEW_NUM_HYBRID;
     w->gutter_width = 0U;
     memset(&w->wrap_cache, 0, sizeof(w->wrap_cache));
     w->wrap_goal = (CCol){0U};

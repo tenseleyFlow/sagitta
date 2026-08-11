@@ -76,7 +76,7 @@ const OptDesc yew_opts[] = {
      NULL, option_changed, "Wrap long lines in this window"},
     {"scrolloff", YEW_OPT_INT, YEW_OPT_WINDOW, OPT_INT(3), NULL, 0, 99,
      NULL, option_changed, "Minimum screen rows around the cursor"},
-    {"number", YEW_OPT_ENUM, YEW_OPT_WINDOW, OPT_ENUM("abs"), number_values,
+    {"number", YEW_OPT_ENUM, YEW_OPT_WINDOW, OPT_ENUM("both"), number_values,
      0, 0, NULL, option_changed, "Line numbers: off, abs, rel, or both"},
     {"statusline.column", YEW_OPT_ENUM, YEW_OPT_GLOBAL, OPT_ENUM("gcol"),
      status_column_values, 0, 0, NULL, option_changed,

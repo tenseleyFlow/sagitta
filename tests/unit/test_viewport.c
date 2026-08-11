@@ -29,7 +29,7 @@ static void vp_fixture_init(VpFixture *f, const char *text, u16 rows,
     f->win.buf = &f->buffer;
     yew_cset_init(&f->win.cs, vp_test_cursor(0U));
     yew_vp_init(&f->win);
-    YEW_ASSERT_EQ_U64(f->win.number_style, YEW_NUM_ABS);
+    YEW_ASSERT_EQ_U64(f->win.number_style, YEW_NUM_HYBRID);
     f->win.vp.rows = rows;
     f->win.vp.cols = cols;
 }
