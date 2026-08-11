@@ -1393,7 +1393,8 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew
          $(FUZZ_VT_OBJ:.o=.d) $(FUZZ_UNDO_OBJ:.o=.d) \
          $(FUZZ_TEXTBUF_OBJ:.o=.d) $(TEXT_FUZZ_SUPPORT_OBJ:.o=.d) \
          $(FUZZ_MULTICURSOR_OBJ:.o=.d) \
-         $(FUZZ_FLAPI_OBJ:.o=.d) $(FUZZ_SYN_OBJ:.o=.d) \
+         $(FUZZ_FLAPI_OBJ:.o=.d) $(FUZZ_RECORD_OBJ:.o=.d) \
+         $(FUZZ_SYN_OBJ:.o=.d) \
          $(FUZZ_SYN_DEF_OBJ:.o=.d) \
          $(FUZZ_CMDPARSE_OBJ:.o=.d) $(FUZZ_RECOMPILE_OBJ:.o=.d) \
          $(FUZZ_REDIFF_OBJ:.o=.d) $(RE_REF_OBJ:.o=.d) \
@@ -1412,7 +1413,8 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew
          $(PERF_CMDCOMP_OBJ:.o=.d) \
          $(PERF_STATE_OBJ:.o=.d) \
          $(PERF_FINDER_OBJ:.o=.d) $(PERF_MOUSE_OBJ:.o=.d) \
-         $(PERF_FLETCH_OBJ:.o=.d) $(PERF_BATCH_OBJ:.o=.d) \
+         $(PERF_FLETCH_OBJ:.o=.d) $(PERF_RECORD_OBJ:.o=.d) \
+         $(PERF_BATCH_OBJ:.o=.d) \
          $(PERF_SYN_OBJ:.o=.d) \
          $(PERF_SCRIPT_SUITE_OBJ:.o=.d) \
          $(GEN_BIGFILE_OBJ:.o=.d) \
