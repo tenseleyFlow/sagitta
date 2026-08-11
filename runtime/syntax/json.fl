@@ -1,0 +1,77 @@
+# Strict RFC 8259 JSON syntax.
+#
+# Only the RFC escape set is accepted in strings.  Comments, trailing commas,
+# leading plus signs, leading zeroes, hexadecimal numbers, incomplete
+# fractions/exponents, and single-quoted strings are proven-invalid JSON and
+# are therefore errors.  Use the separate jsonc definition for ecosystem files
+# that intentionally allow comments and trailing commas.
+{
+    syntax: 1,
+
+    language: {
+        name:       "json",
+        extensions: ["json"],
+        priority:   0,
+    },
+
+    contexts: {
+        main: {
+            default: "text",
+            rules: [ "include:json_strict" ],
+        },
+
+        json_strict: {
+            rules: [
+                # A key is a complete valid JSON string followed by a colon.
+                # consume leaves whitespace and the colon for ordinary rules.
+                { match: "(\"(\\\\[\"\\\\/bfnrt]|\\\\u[0-9A-Fa-f]{4}|[^\"\\\\\\x00-\\x1F])*\")\\s*:",
+                  captures: { 1: "variable.member" }, consume: 1 },
+
+                { match: "//.*$", attr: "error" },
+                { match: "/\\*", attr: "error", push: "invalid_comment" },
+                { match: "(,)\\s*([}\\]])", attr: "error", consume: 1 },
+
+                { match: "\"", attr: "string", push: "string" },
+                { match: "'[^'\\n]*'", attr: "error" },
+
+                # Invalid number shapes precede the valid grammar so a valid
+                # prefix cannot hide the offending suffix.
+                { match: "\\+[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?", attr: "error" },
+                { match: "-?0[0-9]+(\\.[0-9]+)?([eE][+-]?[0-9]+)?", attr: "error" },
+                { match: "-?0[xX][0-9A-Fa-f]+", attr: "error" },
+                { match: "-?\\.[0-9]+([eE][+-]?[0-9]+)?", attr: "error" },
+                { match: "(-?[0-9]+\\.)(\\s|[,}\\]]|$)", attr: "error",
+                  consume: 1 },
+                { match: "(-?[0-9]+(\\.[0-9]+)?[eE][+-]?)(\\s|[,}\\]]|$)",
+                  attr: "error", consume: 1 },
+                { match: "-?(0|[1-9][0-9]*)(\\.[0-9]+)?([eE][+-]?[0-9]+)?",
+                  attr: "number" },
+
+                { match: "\\b(true|false)\\b", attr: "boolean" },
+                { match: "\\bnull\\b", attr: "constant.builtin" },
+                { match: "\\b[A-Za-z_][A-Za-z0-9_]*\\b", attr: "error" },
+                { match: "[{}\\[\\]]", attr: "punct.bracket" },
+                { match: "[:,]", attr: "punct.delim" },
+            ],
+        },
+
+        string: {
+            default: "string", at_eol: "pop", unit: "atom",
+            rules: [
+                { match: "\\\\(\"|\\\\|/|b|f|n|r|t|u[0-9A-Fa-f]{4})",
+                  attr: "string.escape" },
+                { match: "\\\\.", attr: "error" },
+                { match: "[\\x00-\\x1F]", attr: "error" },
+                { match: "\"", attr: "string", pop: 1 },
+            ],
+        },
+
+        invalid_comment: {
+            default: "text", at_eol: "stay", unit: "atom",
+            rules: [
+                { match: "\\*/", attr: "error", pop: 1 },
+                { match: ".+", attr: "error" },
+            ],
+        },
+    },
+}
