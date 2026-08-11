@@ -536,6 +536,7 @@ void test_syn_defs_invalid_first_line_uses_literal_span(void)
     YEW_ASSERT_EQ_U64(f.diag.sp[0].col, 42U);
     YEW_ASSERT_EQ_U64(f.diag.sp[0].len, 3U);
     YEW_ASSERT(strstr(f.diag.msg[0], "invalid first_line pattern") != NULL);
+    YEW_ASSERT_EQ_U64(yew_syn_lang_named("first"), YEW_LANG_NONE);
     def_fix_close(&f, NULL);
 }
 

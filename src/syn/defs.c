@@ -1638,6 +1638,10 @@ static void register_meta(Compile *c, SynDef *def, SynLangDesc *lang,
                  "invalid first_line pattern at offset %u: %s", err.off,
                  err.msg == NULL ? "compile failed" : err.msg);
     }
+    if (c->errors != 0U) {
+        free(m);
+        return;
+    }
     meta_link(m);
 }
 
@@ -1809,12 +1813,6 @@ SynDef *yew_syn_def_compile(Arena *a, DiagCtx *dc, const u8 *src, size_t n,
     validate_compiled(&c, def, patterns, rule_spans);
     if (c.errors == 0U) {
         register_meta(&c, def, &lang, first_line_sp, ctx_names, patterns);
-        if (c.errors != 0U) {
-            DefMeta *m = metas;
-
-            metas = m->next;
-            free(m);
-        }
     }
 
 done:
