@@ -26,6 +26,7 @@ static const char YEW_TTY_PROBE_QUERY[] =
     "\x1b[?u"
     "\x1b[?2026$p"
     "\x1b[c";
+static const char YEW_TTY_BACKGROUND_QUERY[] = "\x1b]11;?\x07";
 static const char YEW_TTY_ALT_ON[] = "\x1b" "7\x1b[?1049h";
 static const char YEW_TTY_ALT_OFF[] = "\x1b[?1049l\x1b" "8";
 
@@ -939,12 +940,112 @@ static bool yew_tty_probe_sync(const u8 *bytes, size_t len, bool *complete,
     return true;
 }
 
+static bool yew_tty_hex(u8 byte, unsigned *value)
+{
+    if (byte >= (u8)'0' && byte <= (u8)'9') {
+        *value = (unsigned)(byte - (u8)'0');
+        return true;
+    }
+    if (byte >= (u8)'a' && byte <= (u8)'f') {
+        *value = 10U + (unsigned)(byte - (u8)'a');
+        return true;
+    }
+    if (byte >= (u8)'A' && byte <= (u8)'F') {
+        *value = 10U + (unsigned)(byte - (u8)'A');
+        return true;
+    }
+    return false;
+}
+
+static bool yew_tty_probe_rgb_component(const u8 *bytes, size_t len,
+                                        u8 *component)
+{
+    size_t i;
+    unsigned value = 0U;
+    unsigned maximum = 0U;
+
+    if (len == 0U || len > 4U)
+        return false;
+    for (i = 0U; i < len; ++i) {
+        unsigned digit;
+
+        if (!yew_tty_hex(bytes[i], &digit))
+            return false;
+        value = value * 16U + digit;
+        maximum = maximum * 16U + 15U;
+    }
+    *component = (u8)((value * 255U + maximum / 2U) / maximum);
+    return true;
+}
+
+static bool yew_tty_probe_background_reply(const u8 *bytes, size_t len,
+                                           bool *complete, bool *light)
+{
+    static const char prefix[] = "\x1b]11;rgb:";
+    size_t prefix_len = sizeof(prefix) - 1U;
+    size_t slash_a = 0U;
+    size_t slash_b = 0U;
+    size_t end;
+    size_t i;
+    bool terminated = false;
+    u8 red;
+    u8 green;
+    u8 blue;
+
+    *complete = false;
+    if (len <= prefix_len)
+        return yew_tty_prefix_fixed(bytes, len, prefix);
+    if (memcmp(bytes, prefix, prefix_len) != 0)
+        return false;
+    end = len;
+    if (bytes[end - 1U] == 0x07U) {
+        end--;
+        terminated = true;
+    } else if (end >= 2U && bytes[end - 2U] == 0x1bU &&
+               bytes[end - 1U] == (u8)'\\') {
+        end -= 2U;
+        terminated = true;
+    } else if (bytes[end - 1U] == 0x1bU) {
+        return true;
+    }
+    for (i = prefix_len; i < end; ++i) {
+        if (bytes[i] == (u8)'/') {
+            if (slash_a == 0U)
+                slash_a = i;
+            else if (slash_b == 0U)
+                slash_b = i;
+            else
+                return false;
+        } else {
+            unsigned unused;
+
+            if (!yew_tty_hex(bytes[i], &unused))
+                return false;
+        }
+    }
+    if (!terminated)
+        return end - prefix_len <= 14U;
+    if (slash_a == 0U || slash_b == 0U ||
+        !yew_tty_probe_rgb_component(bytes + prefix_len,
+                                     slash_a - prefix_len, &red) ||
+        !yew_tty_probe_rgb_component(bytes + slash_a + 1U,
+                                     slash_b - slash_a - 1U, &green) ||
+        !yew_tty_probe_rgb_component(bytes + slash_b + 1U,
+                                     end - slash_b - 1U, &blue))
+        return false;
+    *complete = true;
+    *light = 299U * red + 587U * green + 114U * blue >= 128000U;
+    return true;
+}
+
 static bool yew_tty_probe_candidate(Tty *t)
 {
     bool kitty_complete;
     bool da1_complete;
     bool sync_complete;
     bool sync_supported = false;
+    bool background_complete = false;
+    bool background_light = false;
     u32 kitty_flags = 0;
     bool kitty = yew_tty_probe_kitty(t->probe_prefix, t->probe_prefix_len,
                                     &kitty_complete, &kitty_flags);
@@ -952,6 +1053,22 @@ static bool yew_tty_probe_candidate(Tty *t)
                                 &da1_complete);
     bool sync = yew_tty_probe_sync(t->probe_prefix, t->probe_prefix_len,
                                   &sync_complete, &sync_supported);
+    bool background = t->background_await &&
+        yew_tty_probe_background_reply(t->probe_prefix,
+                                       t->probe_prefix_len,
+                                       &background_complete,
+                                       &background_light);
+
+    if (background_complete) {
+        t->background = background_light ? YEW_TTY_BACKGROUND_LIGHT :
+                                           YEW_TTY_BACKGROUND_DARK;
+        t->background_await = false;
+        t->caps.probed = true;
+        t->pstate = YEW_TTY_PROBE_DONE;
+        t->pdeadline = 0;
+        t->probe_prefix_len = 0U;
+        return true;
+    }
 
     if (kitty_complete) {
         t->caps.kitty_kbd = true;
@@ -967,12 +1084,14 @@ static bool yew_tty_probe_candidate(Tty *t)
     if (da1_complete) {
         t->caps.da1_seen = true;
         t->caps.probed = true;
-        t->pstate = YEW_TTY_PROBE_DONE;
-        t->pdeadline = 0;
+        if (!t->background_await) {
+            t->pstate = YEW_TTY_PROBE_DONE;
+            t->pdeadline = 0;
+        }
         t->probe_prefix_len = 0U;
         return true;
     }
-    return kitty || da1 || sync;
+    return kitty || da1 || sync || background;
 }
 
 static void yew_tty_probe_byte(Tty *t, u8 byte)
@@ -1018,6 +1137,8 @@ void yew_tty_probe_config(Tty *t, i64 now_ms,
     t->caps.kitty_flags = 0;
     t->caps.sync_output = false;
     t->caps.da1_seen = false;
+    t->background = YEW_TTY_BACKGROUND_UNKNOWN;
+    t->background_await = false;
     t->probe_prefix_len = 0U;
     if (!config.enabled) {
         t->pstate = YEW_TTY_PROBE_DONE;
@@ -1040,6 +1161,34 @@ void yew_tty_probe_start(Tty *t, i64 now_ms)
         return;
     YEW_TTY_GUARD(t);
     yew_tty_probe_config(t, now_ms, yew_tty_getenv);
+}
+
+bool yew_tty_probe_background_config(Tty *t, i64 now_ms,
+                                     const char *(*getv)(const char *))
+{
+    TtyProbeConfig config;
+
+    if (t == NULL)
+        return false;
+    YEW_TTY_GUARD(t);
+    config = yew_tty_probe_read_config(getv);
+    if (!config.enabled ||
+        !yew_tty_write_all(t->wfd, YEW_TTY_BACKGROUND_QUERY,
+                           sizeof(YEW_TTY_BACKGROUND_QUERY) - 1U))
+        return false;
+    t->background = YEW_TTY_BACKGROUND_UNKNOWN;
+    t->background_await = true;
+    t->pstate = YEW_TTY_PROBE_AWAIT;
+    if (now_ms > INT64_MAX - config.timeout_ms)
+        t->pdeadline = INT64_MAX;
+    else
+        t->pdeadline = now_ms + config.timeout_ms;
+    return true;
+}
+
+bool yew_tty_probe_background_start(Tty *t, i64 now_ms)
+{
+    return yew_tty_probe_background_config(t, now_ms, yew_tty_getenv);
 }
 
 size_t yew_tty_probe_feed(Tty *t, const u8 *b, size_t n)
@@ -1073,6 +1222,7 @@ void yew_tty_probe_tick(Tty *t, i64 now_ms)
         now_ms < t->pdeadline)
         return;
     yew_tty_probe_flush(t);
+    t->background_await = false;
     t->pstate = YEW_TTY_PROBE_DONE;
     t->pdeadline = 0;
     t->caps.probed = true;
@@ -1096,6 +1246,14 @@ i64 yew_tty_probe_deadline(const Tty *t, i64 now_ms)
     if (now_ms >= t->pdeadline)
         return 0;
     return t->pdeadline - now_ms;
+}
+
+TtyBackground yew_tty_probe_background(const Tty *t)
+{
+    if (t == NULL)
+        return YEW_TTY_BACKGROUND_UNKNOWN;
+    YEW_TTY_GUARD(t);
+    return (TtyBackground)t->background;
 }
 
 const u8 *yew_tty_restore_blob(size_t *len)

@@ -13,6 +13,7 @@
 
 #include "edit/ed.h"
 #include "edit/select.h"
+#include "edit/theme_cmds.h"
 #include "syn/theme.h"
 #include "term/grid.h"
 #include "ui/gutter.h"
@@ -24,11 +25,25 @@
 #include "unicode/width.h"
 #include "util/log.h"
 
-static YewColor default_color(void)
+static u8 themed_overlay(Cell *style, const ThemeEnt *theme)
 {
-    YewColor color = {0U, 0U, 0U, 0U};
+    u8 fields = 0U;
 
-    return color;
+    if (style == NULL || theme == NULL)
+        return 0U;
+    if (theme->fg.tag != YEW_COLOR_DEFAULT) {
+        style->fg = theme->fg;
+        fields |= YEW_OVERLAY_FG;
+    }
+    if (theme->bg.tag != YEW_COLOR_DEFAULT) {
+        style->bg = theme->bg;
+        fields |= YEW_OVERLAY_BG;
+    }
+    if (theme->attrs != 0U) {
+        style->attrs = theme->attrs;
+        fields |= YEW_OVERLAY_ATTRS;
+    }
+    return fields;
 }
 
 static u8 text_byte_at(const TextBuf *tb, u64 off)
@@ -250,11 +265,16 @@ static void draw_selection_rows(Ed *ed, Win *w, u16 lo, u16 hi)
         YEW_COLOR_RGB, 52U, 72U, 108U
     };
     Cell style = ed->grid.blank;
+    u8 fields;
     size_t i;
 
     if (ed->mode != YEW_MODE_H)
         return;
-    style.bg = selected_bg;
+    fields = themed_overlay(&style, yew_theme_ui_tab(ed, "sel"));
+    if (fields == 0U) {
+        style.bg = selected_bg;
+        fields = YEW_OVERLAY_BG;
+    }
     for (i = 0U; i < w->cs.curs.len; i++) {
         const Cursor *cursor = &w->cs.curs.data[i];
         YewSelSpanVec rect_spans = {0};
@@ -295,7 +315,7 @@ static void draw_selection_rows(Ed *ed, Win *w, u16 lo, u16 hi)
                 selected = rect_spans.data[index];
             }
             overlay_span(&ed->grid, w, (u16)(w->rect.y + screen_row),
-                         displayed, selected, &style, YEW_OVERLAY_BG);
+                         displayed, selected, &style, fields);
         }
         YewSelSpanVec_free(&rect_spans);
     }
@@ -304,13 +324,18 @@ static void draw_selection_rows(Ed *ed, Win *w, u16 lo, u16 hi)
 static void draw_secondary_rows(Ed *ed, Win *w, u16 lo, u16 hi)
 {
     Cell style = ed->grid.blank;
+    u8 theme_fields;
     size_t i;
 
-    if (ed->render.tier == YEW_RENDER_TIER_16) {
+    theme_fields = themed_overlay(&style,
+                                  yew_theme_ui_tab(ed, "cursor.secondary"));
+    if (theme_fields == 0U && ed->render.tier == YEW_RENDER_TIER_16) {
         style.attrs = YEW_ATTR_REVERSE;
-    } else {
+        theme_fields = YEW_OVERLAY_ATTRS;
+    } else if (theme_fields == 0U) {
         style.fg = (YewColor){YEW_COLOR_RGB, 250U, 252U, 255U};
         style.bg = (YewColor){YEW_COLOR_RGB, 104U, 139U, 214U};
+        theme_fields = (u8)(YEW_OVERLAY_FG | YEW_OVERLAY_BG);
     }
     for (i = 0U; i < w->cs.curs.len; i++) {
         const Cursor *cursor;
@@ -348,8 +373,7 @@ static void draw_secondary_rows(Ed *ed, Win *w, u16 lo, u16 hi)
         if ((u32)w->rect.y + screen_row >= ed->grid.rows ||
             x < w->rect.x || x >= row_right(&ed->grid, w))
             continue;
-        fields = ed->render.tier == YEW_RENDER_TIER_16 ? YEW_OVERLAY_ATTRS :
-                 (u8)(YEW_OVERLAY_FG | YEW_OVERLAY_BG);
+        fields = theme_fields;
         yew_grid_overlay(&ed->grid, (u16)(w->rect.y + screen_row), x,
                          (u16)(x + 1U), &style, fields);
     }
@@ -372,7 +396,13 @@ static void draw_search_rows(Ed *ed, Win *w, u16 lo, u16 hi)
         u8 fields;
         u16 screen_row;
 
-        if (ed->render.no_color) {
+        fields = themed_overlay(
+            &style, yew_theme_ui_tab(
+                        ed, (i32)i == overlay->cur_index ?
+                                "search.current" : "search.match"));
+        if (fields != 0U) {
+            /* The compiled theme already chose the active degradation tier. */
+        } else if (ed->render.no_color) {
             style.attrs = (i32)i == overlay->cur_index ?
                               (u16)(YEW_ATTR_BOLD | YEW_ATTR_UNDERLINE) :
                               YEW_ATTR_BOLD;
@@ -427,10 +457,9 @@ static u8 syn_attr_at(const SynLineOut *syn, u32 relative, u32 *at)
 
 static void draw_span(Grid *grid, const TextBuf *tb, Span span,
                       u64 line_start, const SynLineOut *syn, u16 row,
-                      const Win *w, CCol left)
+                      const Win *w, CCol left, const ThemeEnt *theme)
 {
-    YewColor bg = default_color();
-    const ThemeEnt *theme = yew_theme_table();
+    YewColor bg = grid->blank.bg;
     u32 tabwidth = draw_tabwidth(w);
     ByteOff start = yew_ccol_to_off(tb, span, left, tabwidth);
     CCol logical = yew_off_to_ccol(tb, span, start, tabwidth);
@@ -450,6 +479,11 @@ static void draw_span(Grid *grid, const TextBuf *tb, Span span,
                        (u32)(pos - line_start);
         u8 attr = syn_attr_at(syn, relative, &syn_at);
         ThemeEnt style = theme[attr];
+
+        if (style.fg.tag == YEW_COLOR_DEFAULT)
+            style.fg = grid->blank.fg;
+        if (style.bg.tag == YEW_COLOR_DEFAULT)
+            style.bg = bg;
 
         if (next <= pos || next > span.hi)
             YEW_BUG("draw: invalid grapheme boundary");
@@ -473,17 +507,19 @@ static void draw_span(Grid *grid, const TextBuf *tb, Span span,
             u64 target64 = (u64)w->rect.x + relative;
             u16 target = target64 > right ? right : (u16)target64;
 
-            col = put_styled_spaces(grid, row, col, target, style.fg, bg,
+            col = put_styled_spaces(grid, row, col, target, style.fg,
+                                    style.bg,
                                     style.attrs);
             if (n == 1U && cluster[0] == '\t') {
                 u64 stop64 = (u64)col + cells;
                 u16 stop = stop64 > right ? right : (u16)stop64;
 
-                col = put_styled_spaces(grid, row, col, stop, style.fg, bg,
+                col = put_styled_spaces(grid, row, col, stop, style.fg,
+                                        style.bg,
                                         style.attrs);
             } else {
                 col = yew_grid_put(grid, row, col, cluster, (size_t)n,
-                                   style.fg, bg, style.attrs);
+                                   style.fg, style.bg, style.attrs);
             }
         }
         logical.v = cells > UINT64_MAX - logical.v ? UINT64_MAX :
@@ -534,7 +570,8 @@ void yew_draw_document_rows(Ed *ed, Win *w, u16 lo, u16 hi)
                                    YEW_SYN_STOP_OK};
             }
             draw_span(grid, tb, span, line_span.lo, &syn, (u16)row32, w,
-                      w->vp.wrap ? (CCol){0U} : w->vp.left);
+                      w->vp.wrap ? (CCol){0U} : w->vp.left,
+                      yew_theme_tab(ed));
         } else {
             (void)put_spaces(grid, (u16)row32, w->rect.x,
                              row_right(grid, w));

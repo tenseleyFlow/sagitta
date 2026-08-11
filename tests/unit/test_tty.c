@@ -429,6 +429,111 @@ void test_tty_probe_config(void)
     YEW_ASSERT_EQ_I64(config.timeout_ms, 173);
 }
 
+static void tty_background_fixture_init(Tty *t, int pipefd[2], i64 now_ms)
+{
+    memset(t, 0, sizeof(*t));
+    t->rfd = -1;
+    YEW_ASSERT_EQ_I64(pipe(pipefd), 0);
+    t->wfd = pipefd[1];
+    bytebuf_init(&t->pending);
+    set_test_env(NULL, 0U);
+    YEW_ASSERT(yew_tty_probe_background_config(t, now_ms, test_getenv));
+}
+
+void test_tty_probe_background_query_and_common_replies(void)
+{
+    static const u8 query[] = "\x1b]11;?\x07";
+    static const u8 light_16[] = "\x1b]11;rgb:ffff/ffff/ffff\x07";
+    static const u8 dark_8[] = "\x1b]11;rgb:00/00/00\x1b\\";
+    static const u8 light_4[] = "\x1b]11;rgb:F/8/0\x07";
+    static const struct {
+        const u8 *reply;
+        size_t len;
+        TtyBackground expected;
+    } cases[] = {
+        {light_16, sizeof(light_16) - 1U,
+         YEW_TTY_BACKGROUND_LIGHT},
+        {dark_8, sizeof(dark_8) - 1U,
+         YEW_TTY_BACKGROUND_DARK},
+        {light_4, sizeof(light_4) - 1U,
+         YEW_TTY_BACKGROUND_LIGHT}
+    };
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(cases); ++i) {
+        Tty t;
+        int pipefd[2];
+        u8 actual_query[sizeof(query) - 1U];
+        ssize_t n;
+        size_t split;
+
+        tty_background_fixture_init(&t, pipefd, 1000);
+        n = read(pipefd[0], actual_query, sizeof(actual_query));
+        YEW_ASSERT_EQ_I64(n, (ssize_t)sizeof(actual_query));
+        YEW_ASSERT_EQ_MEM(actual_query, query, sizeof(actual_query));
+        split = cases[i].len / 2U;
+        (void)yew_tty_probe_feed(&t, cases[i].reply, split);
+        YEW_ASSERT(!yew_tty_probe_done(&t));
+        (void)yew_tty_probe_feed(&t, cases[i].reply + split,
+                                 cases[i].len - split);
+        YEW_ASSERT(yew_tty_probe_done(&t));
+        YEW_ASSERT(yew_tty_probe_background(&t) == cases[i].expected);
+        YEW_ASSERT_EQ_U64(t.pending.len, 0U);
+        tty_fixture_free(&t, pipefd);
+    }
+}
+
+void test_tty_probe_background_preserves_unrelated_input(void)
+{
+    static const u8 stream[] =
+        "hello\x1b[?7u\x1b[A\x1b[?1;2c!"
+        "\x1b]11;rgb:1010/2020/3030\x07" "z";
+    static const u8 expected[] = "hello\x1b[A!z";
+    Tty t;
+    int pipefd[2];
+
+    tty_background_fixture_init(&t, pipefd, 50);
+    (void)yew_tty_probe_feed(&t, stream, sizeof(stream) - 1U);
+    YEW_ASSERT(yew_tty_probe_done(&t));
+    YEW_ASSERT(t.caps.kitty_kbd);
+    YEW_ASSERT_EQ_U64(t.caps.kitty_flags, 7U);
+    YEW_ASSERT(t.caps.da1_seen);
+    YEW_ASSERT(yew_tty_probe_background(&t) == YEW_TTY_BACKGROUND_DARK);
+    YEW_ASSERT_EQ_U64(t.pending.len, sizeof(expected) - 1U);
+    YEW_ASSERT_EQ_MEM(t.pending.data, expected, sizeof(expected) - 1U);
+    tty_fixture_free(&t, pipefd);
+}
+
+void test_tty_probe_background_timeout_and_malformed(void)
+{
+    static const u8 malformed[] = "\x1b]11;rgb:ffff/nope/0000\x07";
+    static const TestEnvEntry disabled[] = {{"YEW_TTY_PROBE", "0"}};
+    Tty t;
+    int pipefd[2];
+
+    tty_background_fixture_init(&t, pipefd, 700);
+    (void)yew_tty_probe_feed(&t, malformed, sizeof(malformed) - 1U);
+    YEW_ASSERT(!yew_tty_probe_done(&t));
+    yew_tty_probe_tick(&t, 750);
+    YEW_ASSERT(yew_tty_probe_done(&t));
+    YEW_ASSERT(yew_tty_probe_background(&t) ==
+               YEW_TTY_BACKGROUND_UNKNOWN);
+    YEW_ASSERT_EQ_U64(t.pending.len, sizeof(malformed) - 1U);
+    YEW_ASSERT_EQ_MEM(t.pending.data, malformed, sizeof(malformed) - 1U);
+    tty_fixture_free(&t, pipefd);
+
+    memset(&t, 0, sizeof(t));
+    t.rfd = -1;
+    YEW_ASSERT_EQ_I64(pipe(pipefd), 0);
+    t.wfd = pipefd[1];
+    bytebuf_init(&t.pending);
+    set_test_env(disabled, YEW_ARRAY_LEN(disabled));
+    YEW_ASSERT(!yew_tty_probe_background_config(&t, 0, test_getenv));
+    YEW_ASSERT(yew_tty_probe_background(&t) ==
+               YEW_TTY_BACKGROUND_UNKNOWN);
+    tty_fixture_free(&t, pipefd);
+}
+
 void test_tty_truecolor(void)
 {
     static const TestEnvEntry forced_off[] = {

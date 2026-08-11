@@ -173,8 +173,10 @@ void test_cmd_registry_invocation_and_deferred(void)
         const CmdDesc *desc = yew_cmd_desc(theme);
 
         YEW_ASSERT_NOT_NULL(desc);
-        YEW_ASSERT((desc->flags & YEW_CMD_DEFERRED) != 0U);
-        YEW_ASSERT_NOT_NULL(strstr(desc->help, "Sprint 41"));
+        YEW_ASSERT((desc->flags & YEW_CMD_DEFERRED) == 0U);
+        YEW_ASSERT_EQ_U64(desc->arity, YEW_ARITY_STR);
+        YEW_ASSERT_NOT_NULL(yew_cmd_desc(
+            yew_cmd_lookup("ed.theme.toggle", 15U)));
     }
     for (i = 0U; i < YEW_ARRAY_LEN(mode_rows); i++) {
         CmdCtx mode = {0};

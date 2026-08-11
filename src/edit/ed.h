@@ -26,6 +26,7 @@
 #include "text/edit.h"
 #include "text/register.h"
 #include "search/searchui.h"
+#include "syn/theme.h"
 #include "ui/cmdline.h"
 #include "ui/message.h"
 #include "ui/mouse.h"
@@ -58,6 +59,7 @@ struct OptStored;
 
 typedef struct YewEdStartup {
     const char *config_path;
+    const char *theme;
     bool clean;
     bool no_workspace_config;
     bool trust_workspace;
@@ -206,6 +208,10 @@ struct Ed {
     YewOptHistory *opt_history;
     YewConfigState *config;
     bool clean;
+    Theme theme;
+    char *theme_last_dark;
+    char *theme_last_light;
+    bool theme_option_inflight;
     /* Sprint 37: model/runtime without terminal, input, grid, or loop. */
     bool headless;
     bool batch_stdin_claimed;

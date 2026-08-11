@@ -9,6 +9,8 @@
 #include <sys/stat.h>
 
 #include "edit/ed.h"
+#include "edit/theme_cmds.h"
+#include "syn/theme.h"
 #include "text/file.h"
 #include "ui/viewport.h"
 #include "ui/win.h"
@@ -69,6 +71,46 @@ static int cells(const char *text)
                               STATUS_TABWIDTH);
 
     return width < 0 ? 0 : width;
+}
+
+static const char *mode_theme_role(Mode mode)
+{
+    static const char *const roles[YEW_MODE__N] = {
+        [YEW_MODE_L] = "mode.line",
+        [YEW_MODE_W] = "mode.word",
+        [YEW_MODE_B] = "mode.block",
+        [YEW_MODE_H] = "mode.highlight",
+        [YEW_MODE_I] = "mode.insert",
+        [YEW_MODE_E] = "mode.explore",
+        [YEW_MODE_F] = "mode.fuss",
+    };
+
+    return mode >= YEW_MODE_L && mode < YEW_MODE__N ? roles[mode] : NULL;
+}
+
+static void statusline_apply_theme(const Ed *ed, Mode mode,
+                                   YewUiStyle *style)
+{
+    const ThemeEnt *chip;
+    const ThemeEnt *fg;
+    const ThemeEnt *bg;
+
+    if (style == NULL)
+        return;
+    chip = yew_theme_ui_tab(ed, mode_theme_role(mode));
+    fg = yew_theme_ui_tab(ed, "fg");
+    bg = yew_theme_ui_tab(ed, "bg");
+    if (chip != NULL) {
+        if (chip->fg.tag != YEW_COLOR_DEFAULT)
+            style->chip_fg = chip->fg;
+        if (chip->bg.tag != YEW_COLOR_DEFAULT)
+            style->chip_bg = chip->bg;
+        style->attrs = chip->attrs;
+    }
+    if (fg != NULL && fg->fg.tag != YEW_COLOR_DEFAULT)
+        style->row_fg = fg->fg;
+    if (bg != NULL && bg->bg.tag != YEW_COLOR_DEFAULT)
+        style->row_bg = bg->bg;
 }
 
 static YewColor indexed_color(u8 index)
@@ -563,8 +605,9 @@ void yew_statusline_draw(Ed *ed, Win *w)
         return;
     row = ed->footer_rect.y;
     style = yew_statusline_mode_style(ed->mode);
-    /* H is the current select/highlight role until named theme roles land. */
+    statusline_apply_theme(ed, ed->mode, &style);
     recording_style = yew_statusline_mode_style(YEW_MODE_H);
+    statusline_apply_theme(ed, YEW_MODE_H, &recording_style);
     yew_statusline_build(ed, w, ed->footer_rect.w, &text);
     blank = grid->blank;
     blank.fg = style.row_fg;

@@ -439,7 +439,7 @@ int yew_batch_run(const BatchOpts *opts)
     yew_batch_selfcheck(&ed);
     ed.fl->diag.sink = batch_diag;
     ed.fl->diag.sink_ctx = &log_ctx;
-    startup = (YewEdStartup){opts->config_path, opts->clean,
+    startup = (YewEdStartup){opts->config_path, NULL, opts->clean,
                              opts->no_workspace_config,
                              opts->trust_workspace};
     yew_config_init(&ed, &startup);

@@ -4,6 +4,8 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#include "edit/theme_cmds.h"
+#include "syn/theme.h"
 #include "term/grid.h"
 #include "ui/viewport.h"
 #include "ui/win.h"
@@ -77,13 +79,6 @@ size_t yew_gutter_number(char *dst, size_t cap, NumStyle style,
     return (size_t)written;
 }
 
-static YewColor default_color(void)
-{
-    YewColor color = {YEW_COLOR_DEFAULT, 0U, 0U, 0U};
-
-    return color;
-}
-
 void yew_gutter_draw(Ed *ed, Win *w, u16 lo, u16 hi)
 {
     Grid *grid;
@@ -92,7 +87,9 @@ void yew_gutter_draw(Ed *ed, Win *w, u16 lo, u16 hi)
     u16 width;
     u16 number_width;
     u16 row;
-    YewColor color = default_color();
+    const ThemeEnt *gutter;
+    const ThemeEnt *gutter_cursor;
+    Cell gutter_blank;
 
     if (ed == NULL || w == NULL || w->buf == NULL || w->buf->tb == NULL)
         YEW_BUG("gutter draw: missing editor window");
@@ -106,6 +103,16 @@ void yew_gutter_draw(Ed *ed, Win *w, u16 lo, u16 hi)
         YEW_BUG("gutter draw: missing primary cursor");
     cursor = &w->cs.curs.data[w->cs.primary];
     cursor_line = yew_textbuf_line_of(w->buf->tb, cursor->pos);
+    gutter = yew_theme_ui_tab(ed, "gutter");
+    gutter_cursor = yew_theme_ui_tab(ed, "gutter.cursor");
+    gutter_blank = grid->blank;
+    if (gutter != NULL) {
+        if (gutter->fg.tag != YEW_COLOR_DEFAULT)
+            gutter_blank.fg = gutter->fg;
+        if (gutter->bg.tag != YEW_COLOR_DEFAULT)
+            gutter_blank.bg = gutter->bg;
+        gutter_blank.attrs = gutter->attrs;
+    }
     number_width = width > YEW_GUTTER_SIGN_COLS + 1U ?
                    (u16)(width - YEW_GUTTER_SIGN_COLS - 1U) : 0U;
     if (hi > w->rect.h)
@@ -117,7 +124,7 @@ void yew_gutter_draw(Ed *ed, Win *w, u16 lo, u16 hi)
 
         if (grid_row32 >= grid->rows)
             break;
-        yew_grid_fill(grid, (u16)grid_row32, 0U, width, grid->blank);
+        yew_grid_fill(grid, (u16)grid_row32, 0U, width, gutter_blank);
         if (number_width != 0U &&
             yew_vp_line_of_row(w, row, &line, &sub)) {
             char number[32];
@@ -128,12 +135,24 @@ void yew_gutter_draw(Ed *ed, Win *w, u16 lo, u16 hi)
             if (len > number_width)
                 len = number_width;
             if (len != 0U) {
+                const ThemeEnt *number_style =
+                    line.v == cursor_line.v && sub == 0U &&
+                            gutter_cursor != NULL ? gutter_cursor : gutter;
+                YewColor fg = gutter_blank.fg;
+                YewColor bg = gutter_blank.bg;
+                u16 attrs = gutter_blank.attrs;
                 u16 col = (u16)(YEW_GUTTER_SIGN_COLS +
                                 number_width - (u16)len);
 
+                if (number_style != NULL) {
+                    if (number_style->fg.tag != YEW_COLOR_DEFAULT)
+                        fg = number_style->fg;
+                    if (number_style->bg.tag != YEW_COLOR_DEFAULT)
+                        bg = number_style->bg;
+                    attrs = number_style->attrs;
+                }
                 (void)yew_grid_puts(grid, (u16)grid_row32, col,
-                                    (const u8 *)number, len,
-                                    color, color, 0U);
+                                    (const u8 *)number, len, fg, bg, attrs);
             }
         }
     }

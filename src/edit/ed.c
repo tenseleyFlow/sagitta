@@ -18,6 +18,7 @@
 #include "fl/flruntime.h"
 #include "fl/flconf.h"
 #include "edit/option.h"
+#include "edit/theme_cmds.h"
 #include "edit/bind.h"
 #include "edit/block.h"
 #include "unicode/width.h"
@@ -574,6 +575,12 @@ void yew_ed_init(Ed *ed)
     fl_origin_reg_init(&ed->origins);
     fl_h_table_init(&ed->handles);
     yew_record_init(&ed->rec);
+    yew_theme_init(&ed->theme);
+    ed->theme_last_dark = yew_xmalloc(sizeof("quiver-dark"));
+    (void)memcpy(ed->theme_last_dark, "quiver-dark", sizeof("quiver-dark"));
+    ed->theme_last_light = yew_xmalloc(sizeof("quiver-light"));
+    (void)memcpy(ed->theme_last_light, "quiver-light",
+                 sizeof("quiver-light"));
     yew_cmd_set_record_tap(yew_record_tap);
     /* Window ids start at 1; 0 is never handed out, so a zeroed Win is
      * distinguishable from window one. */
@@ -618,6 +625,11 @@ void yew_ed_free(Ed *ed)
     yew_config_free(ed);
     yew_fl_runtime_free(ed);
     yew_opt_free(ed);
+    yew_theme_free(&ed->theme);
+    free(ed->theme_last_dark);
+    free(ed->theme_last_light);
+    ed->theme_last_dark = NULL;
+    ed->theme_last_light = NULL;
     yew_record_free(&ed->rec);
     yew_reg_free(&ed->regs);
     yew_msg_clear(ed);
@@ -2062,12 +2074,25 @@ static int ed_driver_inner(const char *path, const YewEdStartup *startup)
     ed.grid_ready = true;
     yew_render_init(&ed.render, &ed.tty.caps, ed_getenv);
     ed.render_ready = true;
+    yew_theme_sync_surfaces(&ed);
     /*
      * State comes up AFTER the buffers so a restore has somewhere to
      * land, and the lock is claimed before the first change can mark
      * anything dirty.
      */
     (void)yew_config_load_all(&ed, NULL);
+    (void)yew_theme_auto_startup(&ed);
+    {
+        const char *override = startup != NULL && startup->theme != NULL
+                                   ? startup->theme : getenv("YEW_THEME");
+
+        if (override != NULL) {
+            char error[192];
+
+            if (!yew_theme_set(&ed, override, error, sizeof(error)))
+                yew_msg(&ed, YEW_MSG_ERROR, "%s", error);
+        }
+    }
     if (!ed.clean)
         yew_state_open(&ed);
     /*

@@ -23,6 +23,7 @@ static const char help_text[] =
     "  --version        Show version and compiled modules.\n"
     "  --clean          Load only the panic keymap; keep no state/history.\n"
     "  --config PATH    Use PATH instead of the user init.fl.\n"
+    "  --theme NAME     Override the configured theme for this run.\n"
     "  --no-workspace-config  Do not load .yew.fl.\n"
     "  --trust-workspace      Pre-grant this workspace configuration.\n"
     "  --batch SCRIPT   Run SCRIPT headlessly; no tty or grid.\n"
@@ -56,6 +57,7 @@ static const char help_text[] =
     "  YEW_LOG          Override the log file path.\n"
     "  YEW_LOG_LEVEL    Set debug, info, warn, or error logging.\n"
     "  YEW_NO_SYN_CACHE Set to 1 to bypass the syntax table cache.\n"
+    "  YEW_THEME        Override the configured theme (loses to --theme).\n"
     "  YEW_TTY_PROBE    Set 0 to disable terminal capability probes.\n"
     "  YEW_PROBE_TIMEOUT_MS  Override the 50 ms probe deadline.\n"
     "  YEW_TRUECOLOR    Set 0 or 1 to override truecolor detection.\n"
@@ -145,7 +147,7 @@ static int run_driver(const YewArgs *args)
             "yew: error: multiple files are not yet implemented: Sprint 23 (tabs)\n");
         return YEW_EXIT_ERR;
     }
-    startup = (YewEdStartup){args->config_path, args->clean,
+    startup = (YewEdStartup){args->config_path, args->theme, args->clean,
                              args->no_workspace_config,
                              args->trust_workspace};
     return yew_ed_driver_opts(args->nfiles == 0U ? NULL : args->files[0],

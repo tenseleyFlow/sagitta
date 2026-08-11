@@ -15,6 +15,7 @@
 #include "edit/file_cmds.h"
 #include "edit/flapi_cmds.h"
 #include "edit/shell_cmds.h"
+#include "edit/theme_cmds.h"
 #include "edit/sel_actions.h"
 #include "edit/ws_cmds.h"
 #include "fl/flconf.h"
@@ -207,8 +208,10 @@ static const CmdDesc builtins[] = {
      "Report incremental syntax highlighting progress", NULL},
     {"ed.syn.set", cmd_syn_set, YEW_ARITY_STR, YEW_CMD_NEEDS_WIN,
      "Set the current buffer's syntax language", NULL},
-    DEFER("ed.theme.set", YEW_ARITY_STR, 0U, 41,
-          "load and select a syntax theme"),
+    {"ed.theme.set", yew_theme_cmd_set, YEW_ARITY_STR, 0U,
+     "Load and select a syntax theme", NULL},
+    {"ed.theme.toggle", yew_theme_cmd_toggle, YEW_ARITY_NONE, 0U,
+     "Toggle between the last dark and light themes", NULL},
     {"ed.quit", yew_file_cmd_quit, YEW_ARITY_NONE, 0U,
      "Quit, prompting when the buffer is dirty", NULL},
     {"ed.quit_force", yew_file_cmd_quit_force, YEW_ARITY_NONE, 0U,
@@ -850,6 +853,8 @@ static const BuiltinMeta builtin_meta[] = {
     {"ed.search.global", "s", YEW_RP_OPT, "g"},
     {"ed.fl.eval", "s", YEW_RP_FORBID, "fl"},
     {"ed.opt.set_many", "ov", YEW_RP_FORBID, "set"},
+    {"ed.theme.set", "s", YEW_RP_FORBID, "theme"},
+    {"ed.theme.toggle", "", YEW_RP_FORBID, NULL},
     {"ed.mark.set", "s", YEW_RP_FORBID, "mark"},
     /* :! carries an arbitrary command line, so its argspec is one string
      * and the range decides run-vs-filter (§5). */

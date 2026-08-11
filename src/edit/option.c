@@ -6,6 +6,7 @@
 
 #include "edit/dispatch.h"
 #include "edit/ed.h"
+#include "edit/theme_cmds.h"
 #include "fl/flruntime.h"
 #include "fl/flhook.h"
 #include "fl/macrolib.h"
@@ -50,6 +51,10 @@ static const char *const status_column_values[] = {
 static const char *const clipboard_values[] = {
     "off", "yank", "all", "unnamed", NULL
 };
+
+/* The core is deliberately single-threaded.  Keep a stable diagnostic for
+ * the option API's borrowed error pointer without growing every Ed. */
+static char theme_option_error[192];
 
 #define OPT_BOOL(v_) {YEW_OPT_BOOL, {.b = (v_)}}
 #define OPT_INT(v_) {YEW_OPT_INT, {.i = (v_)}}
@@ -120,6 +125,9 @@ const OptDesc yew_opts[] = {
      option_changed, "Disable a failing hook after this many errors"},
     {"theme", YEW_OPT_STR, YEW_OPT_GLOBAL, OPT_STR("quiver-dark"), NULL,
      0, 0, NULL, option_changed, "Active theme name"},
+    {"theme_auto", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(false), NULL,
+     0, 0, NULL, option_changed,
+     "Select a dark or light theme from the terminal background"},
     {"macro.dir", YEW_OPT_STR, YEW_OPT_GLOBAL, OPT_STR(""), NULL,
      0, 0, NULL, option_changed, "Macro library directory (Sprint 38)"}
 };
@@ -390,6 +398,13 @@ static void option_changed_target(Ed *ed, const OptDesc *desc,
         ed->search_opts.smartcase = nu->as.b;
     } else if (strcmp(desc->name, "hooks.error_limit") == 0) {
         fl_hook_error_limit(&ed->hooks, (u32)nu->as.i);
+    } else if (strcmp(desc->name, "theme") == 0 &&
+               !ed->theme_option_inflight) {
+        char error[192];
+
+        if (!yew_theme_apply(ed, nu->as.str.s, error, sizeof(error)) &&
+            ed->model_ready)
+            yew_msg(ed, YEW_MSG_ERROR, "%s", error);
     } else if (strcmp(desc->name, "macro.dir") == 0) {
         yew_macrolib_option_changed(ed);
     }
@@ -645,9 +660,24 @@ bool yew_opt_set(Ed *ed, u8 scope_hint, const char *name, u32 len,
         *err = "option string is missing its bytes";
         goto fail_old;
     }
+    if (strcmp(desc->name, "theme") == 0 &&
+        !ed->theme_option_inflight &&
+        !yew_theme_apply(ed, target->value.as.str.s, theme_option_error,
+                         sizeof(theme_option_error))) {
+        stored_clear(target);
+        if (!stored_assign(target, &old.value))
+            YEW_BUG("could not restore theme option after rejected change");
+        if (err != NULL)
+            *err = theme_option_error;
+        goto fail_old;
+    }
     ed->opt_inflight[index] = true;
+    if (strcmp(desc->name, "theme") == 0)
+        ed->theme_option_inflight = true;
     if (desc->on_change != NULL)
         desc->on_change(ed, desc, &old.value, &target->value);
+    if (strcmp(desc->name, "theme") == 0)
+        ed->theme_option_inflight = false;
     ed->opt_inflight[index] = false;
     stored_clear(&old);
     return true;

@@ -165,13 +165,15 @@ void test_args_parse_end_options(void)
 void test_args_parse_config_controls(void)
 {
     char *argv[] = {"yew", "--config", "mine.fl",
+                    "--theme", "quiver-light",
                     "--no-workspace-config", "--trust-workspace"};
     YewArgs args;
     Bytebuf err;
 
     bytebuf_init(&err);
-    YEW_ASSERT_EQ_I64(yew_args_parse(&args, 5, argv, &err), -1);
+    YEW_ASSERT_EQ_I64(yew_args_parse(&args, 7, argv, &err), -1);
     YEW_ASSERT_EQ_STR(args.config_path, "mine.fl");
+    YEW_ASSERT_EQ_STR(args.theme, "quiver-light");
     YEW_ASSERT(args.no_workspace_config);
     YEW_ASSERT(args.trust_workspace);
     YEW_ASSERT_EQ_U64(err.len, 0U);

@@ -108,6 +108,12 @@ int yew_args_parse(YewArgs *out, int argc, char **argv, Bytebuf *err)
             if (rc >= 0)
                 return rc;
             out->config_path = value;
+        } else if (strcmp(arg, "--theme") == 0) {
+            int rc = require_value(out, &i, argc, argv, err, &value);
+
+            if (rc >= 0)
+                return rc;
+            out->theme = value;
         } else if (strcmp(arg, "--no-workspace-config") == 0) {
             out->no_workspace_config = true;
         } else if (strcmp(arg, "--trust-workspace") == 0) {

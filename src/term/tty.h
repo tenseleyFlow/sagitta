@@ -24,6 +24,12 @@ typedef struct TtyProbeConfig {
     i64 timeout_ms;
 } TtyProbeConfig;
 
+typedef enum TtyBackground {
+    YEW_TTY_BACKGROUND_UNKNOWN = 0,
+    YEW_TTY_BACKGROUND_DARK,
+    YEW_TTY_BACKGROUND_LIGHT
+} TtyBackground;
+
 typedef struct Tty {
     int rfd;
     int wfd;
@@ -38,6 +44,8 @@ typedef struct Tty {
     Bytebuf pending;
     u8 pstate;
     i64 pdeadline;
+    u8 background;                 /* TtyBackground */
+    bool background_await;
 
     /* An incomplete probe reply is ambiguous input until it matches. */
     u8 probe_prefix[64];
@@ -107,12 +115,16 @@ void yew_tty_suspend(Tty *t);
 void yew_tty_probe_start(Tty *t, i64 now_ms);
 void yew_tty_probe_config(Tty *t, i64 now_ms,
                           const char *(*getv)(const char *));
+bool yew_tty_probe_background_start(Tty *t, i64 now_ms);
+bool yew_tty_probe_background_config(Tty *t, i64 now_ms,
+                                     const char *(*getv)(const char *));
 TtyProbeConfig yew_tty_probe_read_config(
     const char *(*getv)(const char *));
 size_t yew_tty_probe_feed(Tty *t, const u8 *b, size_t n);
 void yew_tty_probe_tick(Tty *t, i64 now_ms);
 bool yew_tty_probe_done(const Tty *t);
 i64 yew_tty_probe_deadline(const Tty *t, i64 now_ms);
+TtyBackground yew_tty_probe_background(const Tty *t);
 
 bool yew_tty_detect_truecolor(const char *(*getv)(const char *));
 

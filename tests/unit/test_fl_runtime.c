@@ -387,7 +387,7 @@ void test_fl_options_cover_builtins_and_raise_name_suggestions(void)
         "undo.min_nodes", "undo.persist_bytes_max", "registers.ring_depth",
         "registers.ring_bytes_max", "registers.clip_read_max",
         "clipboard.sync", "search.ignorecase", "search.smartcase",
-        "hooks.error_limit", "theme", "macro.dir"
+        "hooks.error_limit", "theme", "theme_auto", "macro.dir"
     };
     Ed ed;
     FlVm *vm;
