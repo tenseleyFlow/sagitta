@@ -172,34 +172,53 @@ bool yew_re_class_has(const ReClass *c, u32 cp)
     return false;
 }
 
-/* Materializes a Perl shorthand as explicit ranges.  Enumerating the
- * whole scalar space would be 1.1M probes per class, so the sets are
- * built by scanning for property runs once at compile time. */
-static u32 build_prop_ranges(ReParse *p, bool (*pred)(u32), ReRange **out)
-{
-    /* Property runs are sparse; 4096 is far above what \w/\d/\s need and
-     * the count is asserted rather than assumed. */
-    enum { MAX_RUNS = 4096 };
-    ReRange *r = arena_alloc(p->arena, MAX_RUNS * sizeof(*r), sizeof(u32));
-    u32 n = 0U;
-    u32 cp = 0U;
+enum { RE_PROP_MAX_RUNS = 4096 };
 
-    while (cp <= 0x10FFFFU) {
-        if (!pred(cp)) {
+typedef struct RePropCache {
+    ReRange *ranges;
+    u32 len;
+    bool ready;
+} RePropCache;
+
+/* Materializes a Unicode property as explicit ranges.  The first request
+ * scans the scalar space and retains an exact-sized process-lifetime copy;
+ * subsequent regex compiles copy those ranges into their own arena.  A
+ * full syntax-pack compile contains hundreds of repeated \w/\d shorthands,
+ * so rescanning 1.1M codepoints for each occurrence dominated cold start. */
+static u32 build_prop_ranges(ReParse *p, bool (*pred)(u32),
+                             RePropCache *cache, ReRange **out)
+{
+    ReRange *r;
+
+    if (!cache->ready) {
+        u32 n = 0U;
+        u32 cp = 0U;
+
+        cache->ranges = yew_xmalloc(RE_PROP_MAX_RUNS * sizeof(*r));
+        while (cp <= 0x10FFFFU) {
+            if (!pred(cp)) {
+                cp++;
+                continue;
+            }
+            if (n == RE_PROP_MAX_RUNS)
+                YEW_BUG("regex: property run table overflow");
+            cache->ranges[n].lo = cp;
+            while (cp + 1U <= 0x10FFFFU && pred(cp + 1U))
+                cp++;
+            cache->ranges[n].hi = cp;
+            n++;
             cp++;
-            continue;
         }
-        if (n == MAX_RUNS)
-            YEW_BUG("regex: property run table overflow");
-        r[n].lo = cp;
-        while (cp + 1U <= 0x10FFFFU && pred(cp + 1U))
-            cp++;
-        r[n].hi = cp;
-        n++;
-        cp++;
+        cache->ranges = yew_xreallocarray(cache->ranges, n, sizeof(*r));
+        cache->len = n;
+        cache->ready = true;
     }
+    r = arena_alloc(p->arena, (size_t)cache->len * sizeof(*r), sizeof(u32));
+    if (cache->len != 0U)
+        (void)memcpy(r, cache->ranges,
+                     (size_t)cache->len * sizeof(*r));
     *out = r;
-    return n;
+    return cache->len;
 }
 
 static u32 build_space_ranges(ReParse *p, ReRange **out)
@@ -219,6 +238,8 @@ static u32 build_space_ranges(ReParse *p, ReRange **out)
 
 u32 yew_re_class_perl(ReParse *p, char which)
 {
+    static RePropCache word_cache;
+    static RePropCache digit_cache;
     ReRange *r = NULL;
     u32 n;
     bool negate = which == 'W' || which == 'D' || which == 'S';
@@ -226,10 +247,10 @@ u32 yew_re_class_perl(ReParse *p, char which)
 
     switch (base) {
     case 'w':
-        n = build_prop_ranges(p, yew_re_is_word, &r);
+        n = build_prop_ranges(p, yew_re_is_word, &word_cache, &r);
         break;
     case 'd':
-        n = build_prop_ranges(p, yew_re_is_digit, &r);
+        n = build_prop_ranges(p, yew_re_is_digit, &digit_cache, &r);
         break;
     default:
         n = build_space_ranges(p, &r);
@@ -654,6 +675,7 @@ static bool parse_posix_class(ReParse *p, ClassBuf *b)
         {"print", posix_print}, {"xdigit", posix_xdigit},
         {"word", posix_word}
     };
+    static RePropCache caches[YEW_ARRAY_LEN(classes)];
     size_t start = p->at;
     size_t end;
     bool negate = false;
@@ -684,7 +706,7 @@ static bool parse_posix_class(ReParse *p, ClassBuf *b)
         if (strlen(classes[i].name) != name_len ||
             memcmp(p->pat + name_at, classes[i].name, name_len) != 0)
             continue;
-        n = build_prop_ranges(p, classes[i].pred, &r);
+        n = build_prop_ranges(p, classes[i].pred, &caches[i], &r);
         idx = yew_re_class_intern(p, r, n, negate);
         cbuf_add_class(p, b, idx);
         p->at = end;

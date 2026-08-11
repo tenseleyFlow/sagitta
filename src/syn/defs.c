@@ -19,6 +19,7 @@
 #include "syn/langs_gen.h"
 #include "syn/registry.h"
 #include "text/file.h"
+#include "text/journal.h"
 #include "util/buf.h"
 #include "util/intern.h"
 #include "util/log.h"
@@ -2765,22 +2766,6 @@ static u64 fnv64(const u8 *p, size_t n)
     return hash;
 }
 
-static u32 crc32_bytes(const u8 *p, size_t n)
-{
-    u32 crc = UINT32_MAX;
-    size_t i;
-
-    for (i = 0U; i < n; i++) {
-        u32 bit;
-
-        crc ^= p[i];
-        for (bit = 0U; bit < 8U; bit++)
-            crc = (crc >> 1U) ^
-                  (UINT32_C(0xedb88320) & (u32)-(i32)(crc & 1U));
-    }
-    return ~crc;
-}
-
 static u32 abi_tag(void)
 {
     const u16 one = 1U;
@@ -2977,7 +2962,7 @@ static bool cache_header_ok(const u8 *p, size_t n, size_t *blob_len)
         return false;
     len = get32(p + 56U);
     if ((size_t)len != n - YEW_SYN_CACHE_HEADER_SIZE ||
-        crc32_bytes(p + YEW_SYN_CACHE_HEADER_SIZE, len) != get32(p + 60U))
+        yew_crc32(p + YEW_SYN_CACHE_HEADER_SIZE, len) != get32(p + 60U))
         return false;
     *blob_len = len;
     return true;
@@ -3011,7 +2996,7 @@ static bool cache_write(const char *path, const struct stat *st,
     put64(header + 40U, (u64)st->st_size);
     put64(header + 48U, fnv64(src, src_len));
     put32(header + 56U, (u32)blob_len);
-    put32(header + 60U, crc32_bytes(blob, blob_len));
+    put32(header + 60U, yew_crc32(blob, blob_len));
     bytebuf_init(&bytes);
     bytebuf_append(&bytes, header, sizeof(header));
     bytebuf_append(&bytes, blob, blob_len);
