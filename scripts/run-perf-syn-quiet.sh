@@ -12,11 +12,12 @@ lock_timeout=${YEW_PERF_LOCK_TIMEOUT:-1800}
 quiet_timeout=${YEW_PERF_QUIET_TIMEOUT:-1800}
 quiet_window=${YEW_PERF_QUIET_WINDOW:-30}
 poll_seconds=${YEW_PERF_POLL_SECONDS:-1}
+status_interval=${YEW_PERF_STATUS_INTERVAL:-30}
 idle_min=${YEW_PERF_MIN_IDLE_PERCENT:-95}
 temp_max=${YEW_PERF_MAX_TEMP_C:-75}
 run_temp_max=${YEW_PERF_MAX_RUN_TEMP_C:-100}
 run_timeout=${YEW_PERF_RUN_TIMEOUT:-1800}
-busy_pattern=${YEW_PERF_BUSY_PATTERN:-'(^|[[:space:]/])(cgfried|cc1|cc1plus|gcc|g\+\+|clang|clang\+\+|torture-run|s35_loop_driver|ctfe_diagnostic)([[:space:]/]|$)'}
+busy_pattern=${YEW_PERF_BUSY_PATTERN:-'(^|[[:space:]/])(cgfried|cc1|cc1plus|gcc|g\+\+|clang|clang\+\+|cargo|rustc|torture-run|import-c-testsuite(\.sh)?|s35_loop_driver|ctfe_diagnostic|release_native)([[:space:]/]|$)'}
 stat_file=${YEW_PERF_STAT_FILE:-/proc/stat}
 
 die()
@@ -38,6 +39,7 @@ check_uint YEW_PERF_LOCK_TIMEOUT "$lock_timeout"
 check_uint YEW_PERF_QUIET_TIMEOUT "$quiet_timeout"
 check_uint YEW_PERF_QUIET_WINDOW "$quiet_window"
 check_uint YEW_PERF_POLL_SECONDS "$poll_seconds"
+check_uint YEW_PERF_STATUS_INTERVAL "$status_interval"
 check_uint YEW_PERF_MIN_IDLE_PERCENT "$idle_min"
 check_uint YEW_PERF_MAX_TEMP_C "$temp_max"
 check_uint YEW_PERF_MAX_RUN_TEMP_C "$run_temp_max"
@@ -45,6 +47,7 @@ check_uint YEW_PERF_RUN_TIMEOUT "$run_timeout"
 [ "$lock_timeout" -gt 0 ] || die 'YEW_PERF_LOCK_TIMEOUT must be greater than zero'
 [ "$quiet_timeout" -gt 0 ] || die 'YEW_PERF_QUIET_TIMEOUT must be greater than zero'
 [ "$poll_seconds" -gt 0 ] || die 'YEW_PERF_POLL_SECONDS must be greater than zero'
+[ "$status_interval" -gt 0 ] || die 'YEW_PERF_STATUS_INTERVAL must be greater than zero'
 [ "$idle_min" -le 100 ] || die 'YEW_PERF_MIN_IDLE_PERCENT must not exceed 100'
 [ "$run_temp_max" -ge "$temp_max" ] ||
     die 'YEW_PERF_MAX_RUN_TEMP_C must be at least YEW_PERF_MAX_TEMP_C'
@@ -154,6 +157,16 @@ has_competitor()
     printf '%s\n' "$ps_output" | grep -E "$busy_pattern" >/dev/null 2>&1
 }
 
+cpu=${YEW_PERF_CPU:-}
+if [ -z "$cpu" ]; then
+    cpu=$(awk '/^Cpus_allowed_list:/ {
+        split($2, groups, ","); split(groups[1], span, "-"); print span[1]
+    }' /proc/self/status 2>/dev/null || :)
+    cpu=${cpu:-0}
+fi
+check_uint YEW_PERF_CPU "$cpu"
+cpu_stat_name=cpu$cpu
+
 previous_total=
 previous_idle=
 read_idle_percent()
@@ -167,13 +180,14 @@ read_idle_percent()
         esac
         return
     fi
-    cpu_line=$(sed -n '1p' "$stat_file" 2>/dev/null || :)
+    cpu_line=$(awk -v wanted="$cpu_stat_name" '$1 == wanted { print; exit }' \
+        "$stat_file" 2>/dev/null || :)
     set -f
     # Splitting the /proc/stat fields is intentional; globbing is disabled.
     # shellcheck disable=SC2086
     set -- $cpu_line
     set +f
-    if [ "${1:-}" != cpu ] || [ "$#" -lt 5 ]; then
+    if [ "${1:-}" != "$cpu_stat_name" ] || [ "$#" -lt 5 ]; then
         return
     fi
     shift
@@ -259,6 +273,11 @@ while [ "$quiet_streak" -lt "$quiet_window" ]; do
     if [ "$quiet_streak" -ge "$quiet_window" ]; then
         break
     fi
+    if [ $((quiet_elapsed % status_interval)) -eq 0 ]; then
+        printf 'perf-syn-quiet: waiting; cpu=%s idle=%s%% temp=%sC competitor=%s streak=%ss\n' \
+            "$cpu" "${cpu_idle:-unknown}" "${package_temp:-unknown}" \
+            "$competing" "$quiet_streak" >&2
+    fi
     if [ "$quiet_elapsed" -ge "$quiet_timeout" ]; then
         printf 'perf-syn-quiet: quiet-window timeout after %ss\n' "$quiet_elapsed" >&2
         exit 75
@@ -266,15 +285,6 @@ while [ "$quiet_streak" -lt "$quiet_window" ]; do
     sleep_for_poll
     quiet_elapsed=$((quiet_elapsed + poll_seconds))
 done
-
-cpu=${YEW_PERF_CPU:-}
-if [ -z "$cpu" ]; then
-    cpu=$(awk '/^Cpus_allowed_list:/ {
-        split($2, groups, ","); split(groups[1], span, "-"); print span[1]
-    }' /proc/self/status 2>/dev/null || :)
-    cpu=${cpu:-0}
-fi
-check_uint YEW_PERF_CPU "$cpu"
 
 taskset_tool=
 if [ "${YEW_PERF_TASKSET+x}" = x ]; then
