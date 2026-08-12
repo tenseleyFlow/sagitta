@@ -50,6 +50,9 @@ typedef struct ShadowProvider {
 typedef struct Shadow {
     bool live;
     bool suppressed;
+    /* Keep provider-owned bytes alive until the edit choke point has
+     * finished journaling an acceptance that consumes the whole ghost. */
+    bool accepting;
     ShadowSug sug;
     u8 *owned_text;
     u32 seq_next[YEW_SHADOW_NPROV];
@@ -75,6 +78,9 @@ void yew_shadow_dismiss(Ed *ed, Win *win);
 
 void yew_shadow_register(const ShadowProvider *provider);
 void yew_shadow_deliver(Ed *ed, const ShadowSug *suggestion);
+bool yew_shadow_accept_word(Ed *ed, Win *win, bool alt);
+bool yew_shadow_accept_line(Ed *ed, Win *win);
+bool yew_shadow_accept_all(Ed *ed, Win *win);
 
 /* Internal guard exposed so the staleness suite can exercise byte-exact
  * piece-boundary cases without accepting text. */

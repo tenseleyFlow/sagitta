@@ -4,6 +4,7 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#include "edit/motion.h"
 #include "text/edit.h"
 #include "ui/message.h"
 #include "util/log.h"
@@ -165,6 +166,169 @@ i64 yew_shadow_revalidate(const TextBuf *tb, const ShadowSug *suggestion,
     return (i64)compared;
 }
 
+static bool shadow_accept_n(Ed *ed, Win *win, u64 nbytes)
+{
+    Shadow *shadow;
+    Cursor *cursor;
+    EditCtx edit;
+    i64 validated;
+    u64 lo;
+    u64 hi;
+    bool own_txn;
+    bool ok;
+
+    if (ed == NULL || win == NULL || win->buf == NULL ||
+        win->buf->tb == NULL || !win->shadow.live ||
+        win->cs.curs.len != 1U || win->cs.primary >= win->cs.curs.len)
+        return false;
+    shadow = &win->shadow;
+    cursor = &win->cs.curs.data[win->cs.primary];
+    validated = yew_shadow_revalidate(win->buf->tb, &shadow->sug,
+                                      cursor->pos);
+    if (validated < 0) {
+        ed->shadow_stats.revalidate_fail++;
+        yew_shadow_dismiss(ed, win);
+        yew_msg(ed, YEW_MSG_INFO, "suggestion is stale");
+        return false;
+    }
+    lo = (u64)validated;
+    hi = lo + nbytes;
+    if (hi < lo || hi > shadow->sug.len)
+        hi = shadow->sug.len;
+    if (hi <= lo)
+        return false;
+
+    edit = yew_ed_edit_ctx_for(ed, win);
+    own_txn = edit.undo != NULL && edit.undo->depth == 0U;
+    if (own_txn)
+        yew_undo_begin(&edit, YEW_TXN_PASTE);
+    else if (edit.undo != NULL &&
+             edit.undo->pending_reason != YEW_TXN_PASTE)
+        YEW_BUG("shadow accept: transaction must be paste");
+
+    /* Cursor motion can leave an otherwise valid ghost with a stale
+     * consumed counter.  Revalidation is authoritative for acceptance. */
+    shadow->sug.consumed = (u32)lo;
+    shadow->accepting = true;
+    ok = yew_edit_insert(&edit, cursor->pos, shadow->sug.text + lo,
+                         hi - lo);
+    shadow->accepting = false;
+    if (own_txn) {
+        if (ok)
+            yew_undo_end(&edit);
+        else
+            yew_undo_abort(&edit);
+        yew_ed_finish_edit(ed, &edit);
+    }
+    if (!ok) {
+        yew_shadow_dismiss(ed, win);
+        return false;
+    }
+    if (hi == shadow->sug.len)
+        yew_shadow_dismiss(ed, win);
+    return true;
+}
+
+static u64 shadow_word_len(Ed *ed, ShadowSug *suggestion, u64 from,
+                           bool alt)
+{
+    const UnitOps *unit;
+    UnitCtx ctx;
+    ByteOff next;
+
+    if (suggestion->scratch == NULL)
+        suggestion->scratch = yew_textbuf_from_bytes(suggestion->text,
+                                                     suggestion->len);
+    unit = (ed->mode == YEW_MODE_I || ed->mode == YEW_MODE_E)
+               ? &yew_unit_word
+               : yew_unit_of_mode(ed->mode);
+    if (unit == NULL)
+        unit = &yew_unit_word;
+    ctx = (UnitCtx){suggestion->scratch, NULL, NULL};
+    next = unit->next(&ctx, BYTEOFF(from), alt);
+    if (next.v <= from)
+        return 0U;
+    if (next.v > suggestion->len)
+        next.v = suggestion->len;
+    return next.v - from;
+}
+
+bool yew_shadow_accept_word(Ed *ed, Win *win, bool alt)
+{
+    Shadow *shadow;
+    Cursor *cursor;
+    i64 done;
+    u64 nbytes;
+
+    if (ed == NULL || win == NULL || !win->shadow.live ||
+        win->buf == NULL || win->buf->tb == NULL ||
+        win->cs.curs.len != 1U || win->cs.primary >= win->cs.curs.len)
+        return false;
+    shadow = &win->shadow;
+    cursor = &win->cs.curs.data[win->cs.primary];
+    done = yew_shadow_revalidate(win->buf->tb, &shadow->sug, cursor->pos);
+    if (done < 0)
+        nbytes = shadow->sug.len;
+    else
+        nbytes = shadow_word_len(ed, &shadow->sug, (u64)done, alt);
+    if (!shadow_accept_n(ed, win, nbytes))
+        return false;
+    ed->shadow_stats.accepted_word++;
+    return true;
+}
+
+bool yew_shadow_accept_line(Ed *ed, Win *win)
+{
+    Shadow *shadow;
+    Cursor *cursor;
+    i64 done;
+    u64 nbytes;
+    const u8 *newline;
+
+    if (ed == NULL || win == NULL || !win->shadow.live ||
+        win->buf == NULL || win->buf->tb == NULL ||
+        win->cs.curs.len != 1U || win->cs.primary >= win->cs.curs.len)
+        return false;
+    shadow = &win->shadow;
+    cursor = &win->cs.curs.data[win->cs.primary];
+    done = yew_shadow_revalidate(win->buf->tb, &shadow->sug, cursor->pos);
+    if (done < 0)
+        nbytes = shadow->sug.len;
+    else {
+        nbytes = shadow->sug.len - (u64)done;
+        newline = memchr(shadow->sug.text + (u64)done, '\n',
+                         (size_t)nbytes);
+        if (newline != NULL)
+            nbytes = (u64)(newline -
+                           (shadow->sug.text + (u64)done)) + 1U;
+    }
+    if (!shadow_accept_n(ed, win, nbytes))
+        return false;
+    ed->shadow_stats.accepted_line++;
+    return true;
+}
+
+bool yew_shadow_accept_all(Ed *ed, Win *win)
+{
+    Shadow *shadow;
+    Cursor *cursor;
+    i64 done;
+    u64 nbytes;
+
+    if (ed == NULL || win == NULL || !win->shadow.live ||
+        win->buf == NULL || win->buf->tb == NULL ||
+        win->cs.curs.len != 1U || win->cs.primary >= win->cs.curs.len)
+        return false;
+    shadow = &win->shadow;
+    cursor = &win->cs.curs.data[win->cs.primary];
+    done = yew_shadow_revalidate(win->buf->tb, &shadow->sug, cursor->pos);
+    nbytes = done < 0 ? shadow->sug.len : shadow->sug.len - (u64)done;
+    if (!shadow_accept_n(ed, win, nbytes))
+        return false;
+    ed->shadow_stats.accepted_all++;
+    return true;
+}
+
 static bool shadow_insert_matches(const TextBuf *tb,
                                   const ShadowSug *suggestion,
                                   ByteOff at, u64 len)
@@ -213,7 +377,7 @@ static void shadow_note_window_edit(EditCtx *ec, Win *win, u8 kind,
         shadow_insert_matches(ec->tb, &shadow->sug, at, len)) {
         shadow->sug.consumed += (u32)len;
         shadow->sug.buf_gen = ec->tb->gen;
-        if (shadow->sug.consumed == shadow->sug.len)
+        if (shadow->sug.consumed == shadow->sug.len && !shadow->accepting)
             yew_shadow_dismiss(ec->ed, win);
         return;
     }

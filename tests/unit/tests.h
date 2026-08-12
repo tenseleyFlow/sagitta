@@ -1767,5 +1767,10 @@ void test_shadow_delivery_owns_bytes_and_rejects_stale_results(void);
 void test_shadow_generation_drop_preserves_buffer_bytes(void);
 void test_shadow_edit_keeps_only_a_matching_typed_prefix(void);
 void test_shadow_delete_always_dismisses(void);
+void test_shadow_accept_all_is_one_owned_undo_transaction(void);
+void test_shadow_accept_line_shortens_then_consumes(void);
+void test_shadow_accept_after_typed_prefix_keeps_owned_bytes_alive(void);
+void test_shadow_accept_revalidation_failure_never_inserts(void);
+void test_shadow_accept_word_matches_mode_units(void);
 
 #endif
