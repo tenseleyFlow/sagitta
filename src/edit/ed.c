@@ -1323,6 +1323,7 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     bool document_target;
     bool durability_command;
     bool newline;
+    bool shadow_accept;
     bool opened = false;
     bool started_in_insert;
 
@@ -1343,6 +1344,7 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     durability_command = document_target && edits_text;
     newline = ed->undo_break_on_newline &&
               strcmp(desc->name, "ed.edit.insert.newline") == 0;
+    shadow_accept = strncmp(desc->name, "ed.shadow.accept_", 17U) == 0;
     started_in_insert = ed->mode == YEW_MODE_I;
 
     if (durability_command && ed->durability_failed) {
@@ -1351,11 +1353,11 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
         return YEW_CMD_ERR_IO;
     }
 
-    if (started_in_insert && (!changes || newline))
+    if (started_in_insert && (!changes || newline || shadow_accept))
         yew_ed_insert_barrier(ed);
     if (changes && ed->model_ready) {
         ec = yew_ed_edit_ctx_for(ed, cx->win);
-        if (started_in_insert && !newline) {
+        if (started_in_insert && !newline && !shadow_accept) {
             if (!ed->insert_txn) {
                 yew_undo_begin(&ec,
                                multiple ? YEW_TXN_MULTI : YEW_TXN_TYPE);
@@ -1375,13 +1377,14 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
             yew_undo_begin(
                 &ec,
                 multiple ? YEW_TXN_MULTI
+                      : (shadow_accept ? YEW_TXN_PASTE
                       : (strcmp(desc->name, "ed.search.replace") == 0
                              ? YEW_TXN_REPLACE
                       : (strstr(desc->name, ".delete.") != NULL ||
                                  strcmp(desc->name,
                                         "ed.edit.line.delete") == 0
                              ? YEW_TXN_ERASE
-                             : YEW_TXN_TYPE)));
+                             : YEW_TXN_TYPE))));
             opened = true;
         }
     }
@@ -1405,7 +1408,8 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
             if (ed->win != NULL && ed->win->cs.curs.len > 1U)
                 yew_undo_promote_multi(&ec);
             ed->insert_txn = true;
-        } else if ((!started_in_insert || newline) && opened) {
+        } else if ((!started_in_insert || newline || shadow_accept) &&
+                   opened) {
             yew_undo_end(&ec);
         }
         yew_ed_finish_edit(ed, &ec);

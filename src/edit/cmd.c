@@ -12,6 +12,7 @@
 #include "edit/opt.h"
 #include "edit/pane_cmds.h"
 #include "edit/search_cmds.h"
+#include "edit/shadow_cmds.h"
 #include "edit/file_cmds.h"
 #include "edit/flapi_cmds.h"
 #include "edit/shell_cmds.h"
@@ -214,6 +215,21 @@ static const CmdDesc builtins[] = {
      "Load and select a syntax theme", NULL},
     {"ed.theme.toggle", yew_theme_cmd_toggle, YEW_ARITY_NONE, 0U,
      "Toggle between the last dark and light themes", NULL},
+    {"ed.shadow.accept_word", yew_shadow_cmd_accept_word, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER,
+     "Accept the next suggested unit", "shadow_word"},
+    {"ed.shadow.accept_word_alt", yew_shadow_cmd_accept_word_alt,
+     YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER,
+     "Accept the next alternate suggested unit", "shadow_word_alt"},
+    {"ed.shadow.accept_line", yew_shadow_cmd_accept_line, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER,
+     "Accept the next suggested line", "shadow_line"},
+    {"ed.shadow.accept_all", yew_shadow_cmd_accept_all, YEW_ARITY_NONE,
+     YEW_CMD_RECORDABLE | YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER,
+     "Accept the complete suggestion", "shadow_all"},
+    {"ed.shadow.dismiss", yew_shadow_cmd_dismiss, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Dismiss the current suggestion", NULL},
     {"ed.quit", yew_file_cmd_quit, YEW_ARITY_NONE, 0U,
      "Quit, prompting when the buffer is dirty", NULL},
     {"ed.quit_force", yew_file_cmd_quit_force, YEW_ARITY_NONE, 0U,
@@ -894,7 +910,7 @@ static bool command_name_valid(const char *name)
         "file", "buf", "tab", "group", "pane", "win", "reg",
         "search", "macro", "job", "git", "lsp", "ai", "plug",
         "cmdline", "del", "shell", "opt", "fl", "config", "syn",
-        "theme",
+        "theme", "shadow",
         /* Sprint 21 */
         "jump", "change", "mark",
         /* Sprint 18.5: the palette itself is Sprint 38's, but the name has
@@ -950,7 +966,8 @@ static bool command_name_valid(const char *name)
         "close_others", "copy_path", "rename", "context_menu", "add_tab",
         "enable", "disable", "at", "span", "unit", "up_alt", "down_alt",
         "get", "eval", "set_many", "split", "focus", "closure",
-        "reload", "status"};
+        "reload", "status", "accept_word", "accept_word_alt",
+        "accept_line", "accept_all"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

@@ -1772,5 +1772,7 @@ void test_shadow_accept_line_shortens_then_consumes(void);
 void test_shadow_accept_after_typed_prefix_keeps_owned_bytes_alive(void);
 void test_shadow_accept_revalidation_failure_never_inserts(void);
 void test_shadow_accept_word_matches_mode_units(void);
+void test_shadow_accept_command_breaks_typing_into_paste_undo(void);
+void test_shadow_escape_is_two_stage_in_insert_mode(void);
 
 #endif

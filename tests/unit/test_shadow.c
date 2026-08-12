@@ -194,3 +194,52 @@ void test_shadow_accept_word_matches_mode_units(void)
         }
     }
 }
+
+void test_shadow_accept_command_breaks_typing_into_paste_undo(void)
+{
+    Ed ed;
+    EditCtx edit;
+    CmdCtx command = {0};
+    CmdId accept;
+    UndoNodeInfo nodes[4];
+    u32 count;
+
+    shadow_accept_fixture(&ed, NULL, 0U);
+    ed.mode = YEW_MODE_I;
+    edit = yew_ed_edit_ctx(&ed);
+    yew_undo_begin(&edit, YEW_TXN_TYPE);
+    ed.insert_txn = true;
+    deliver_at_cursor(&ed, (const u8 *)"hello", 5U);
+    accept = yew_cmd_lookup("ed.shadow.accept_all", 20U);
+    YEW_ASSERT(accept.v != 0U);
+    command.source = YEW_SRC_TEST;
+    command.count = 1U;
+    YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, accept, &command), YEW_CMD_OK);
+    YEW_ASSERT(!ed.insert_txn);
+    YEW_ASSERT(accept_text_eq(ed.win->buf->tb, (const u8 *)"hello", 5U));
+    count = yew_undo_list(ed.win->buf->undo, nodes, YEW_ARRAY_LEN(nodes));
+    YEW_ASSERT_EQ_U64(count, 2U);
+    YEW_ASSERT_EQ_U64(nodes[1].reason, YEW_TXN_PASTE);
+    yew_ed_free(&ed);
+}
+
+void test_shadow_escape_is_two_stage_in_insert_mode(void)
+{
+    Ed ed;
+    CmdCtx command = {0};
+    CmdId dismiss;
+
+    shadow_accept_fixture(&ed, NULL, 0U);
+    ed.mode = YEW_MODE_I;
+    deliver_at_cursor(&ed, (const u8 *)"hello", 5U);
+    dismiss = yew_cmd_lookup("ed.shadow.dismiss", 17U);
+    YEW_ASSERT(dismiss.v != 0U);
+    command.source = YEW_SRC_TEST;
+    command.count = 1U;
+    YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, dismiss, &command), YEW_CMD_OK);
+    YEW_ASSERT(!ed.win->shadow.live);
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_I);
+    YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, dismiss, &command), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(ed.mode, YEW_MODE_L);
+    yew_ed_free(&ed);
+}

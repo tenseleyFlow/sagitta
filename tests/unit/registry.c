@@ -1734,6 +1734,8 @@ const YewTest yew_tests[] = {
     T(shadow_accept_after_typed_prefix_keeps_owned_bytes_alive),
     T(shadow_accept_revalidation_failure_never_inserts),
     T(shadow_accept_word_matches_mode_units),
+    T(shadow_accept_command_breaks_typing_into_paste_undo),
+    T(shadow_escape_is_two_stage_in_insert_mode),
 };
 
 const size_t yew_tests_len = YEW_ARRAY_LEN(yew_tests);

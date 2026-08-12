@@ -13,16 +13,18 @@
 #include "fl/record.h"
 #include "util/buf.h"
 
-/* Frozen immediately before the Sprint 36 migration from keys_default.c. */
+/* Frozen default keymap, extended by Sprint 43's shadow surface. */
 static const BindRow frozen_L[] = {
     {"<left>", "ed.move.unit.home", 0, NULL},
     {"<right>", "ed.move.unit.end", 0, NULL},
     {"<up>", "ed.move.unit.prev", 0, NULL},
     {"<down>", "ed.move.unit.next", 0, NULL},
     {"A-<left>", "ed.move.unit.home_alt", 0, NULL},
-    {"A-<right>", "ed.move.unit.end_alt", 0, NULL},
+    {"A-<right>", "ed.shadow.accept_word", 0, NULL},
+    {"A-S-<right>", "ed.shadow.accept_word_alt", 0, NULL},
     {"A-<up>", "ed.move.unit.prev_alt", 0, NULL},
-    {"A-<down>", "ed.move.unit.next_alt", 0, NULL},
+    {"A-<down>", "ed.shadow.accept_line", 0, NULL},
+    {"A-<cr>", "ed.shadow.accept_all", 0, NULL},
     {"<home>", "ed.move.unit.home", 0, NULL},
     {"<end>", "ed.move.unit.end", 0, NULL},
     {"<pgup>", "ed.view.page_up", 0, NULL},
@@ -135,7 +137,10 @@ static const BindRow frozen_W[] = {
     {"<up>", "ed.move.line.up", 0, NULL},
     {"<down>", "ed.move.line.down", 0, NULL},
     {"A-<left>", "ed.move.unit.prev_alt", 0, NULL},
-    {"A-<right>", "ed.move.unit.next_alt", 0, NULL},
+    {"A-<right>", "ed.shadow.accept_word", 0, NULL},
+    {"A-S-<right>", "ed.shadow.accept_word_alt", 0, NULL},
+    {"A-<down>", "ed.shadow.accept_line", 0, NULL},
+    {"A-<cr>", "ed.shadow.accept_all", 0, NULL},
     {"C-<left>", "ed.move.word.sub_prev", 0, NULL},
     {"C-<right>", "ed.move.word.sub_next", 0, NULL},
     {"<home>", "ed.move.unit.home", 0, NULL},
@@ -156,9 +161,11 @@ static const BindRow frozen_B[] = {
     {"<up>", "ed.move.unit.prev", 0, NULL},
     {"<down>", "ed.move.unit.next", 0, NULL},
     {"A-<left>", "ed.move.block.match_prev", 0, NULL},
-    {"A-<right>", "ed.move.block.match_next", 0, NULL},
+    {"A-<right>", "ed.shadow.accept_word", 0, NULL},
+    {"A-S-<right>", "ed.shadow.accept_word_alt", 0, NULL},
     {"A-<up>", "ed.sel.unit.expand", 0, NULL},
-    {"A-<down>", "ed.sel.unit.contract", 0, NULL},
+    {"A-<down>", "ed.shadow.accept_line", 0, NULL},
+    {"A-<cr>", "ed.shadow.accept_all", 0, NULL},
     {"h", "ed.mode.enter", 0, "H"},
     {":", "ed.mode.enter", 0, "E"},
     {"<esc>", "ed.mode.escape", 0, NULL},
@@ -171,8 +178,12 @@ static const BindRow frozen_B[] = {
 
 static const BindRow frozen_I[] = {
     {"A-h", "ed.mode.enter", 0, "H"},
-    {"<esc>", "ed.mode.escape", 0, NULL},
+    {"<esc>", "ed.shadow.dismiss", 0, NULL},
     {"C-g", "ed.ui.message_expand", 0, NULL},
+    {"A-<right>", "ed.shadow.accept_word", 0, NULL},
+    {"A-S-<right>", "ed.shadow.accept_word_alt", 0, NULL},
+    {"A-<down>", "ed.shadow.accept_line", 0, NULL},
+    {"A-<cr>", "ed.shadow.accept_all", 0, NULL},
     {"<cr>", "ed.edit.insert.newline", 0, NULL},
     {"<tab>", "ed.edit.insert.tab", 0, NULL},
     {"<bs>", "ed.edit.delete.grapheme_left", 0, NULL},
@@ -324,7 +335,7 @@ void test_runtime_defaults_rebuild_frozen_keymap(void)
                                   (u32)(source.len - 1U)), YEW_CMD_OK);
     yew_bind_batch_end(&ed);
     YEW_ASSERT_EQ_U64(yew_bind_rebuild_count(&ed), rebuilds + 1U);
-    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 160U);
+    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 171U);
     for (mode = 0U; mode < (u32)YEW_MODE__N; mode++) {
         if (mode != (u32)YEW_MODE_H)
             panic_rows += yew_keymap_binding_count(&ed.mode_keys[mode]);
