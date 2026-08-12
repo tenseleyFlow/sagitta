@@ -424,6 +424,7 @@ const YewTest yew_tests[] = {
     T(render_oob_flushes_after_frame),
     T(render_frame_envelope_goldens),
     T(render_gap_motion_goldens),
+    T(render_ascii_run_preserves_gap_and_style_boundaries),
     T(render_erase_to_eol_heuristic),
     T(render_bold_dim_shared_reset_transitions),
     T(render_three_resets_use_full_reset),

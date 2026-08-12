@@ -400,6 +400,7 @@ void test_render_empty_frame_emits_zero_bytes(void);
 void test_render_oob_flushes_after_frame(void);
 void test_render_frame_envelope_goldens(void);
 void test_render_gap_motion_goldens(void);
+void test_render_ascii_run_preserves_gap_and_style_boundaries(void);
 void test_render_erase_to_eol_heuristic(void);
 void test_render_bold_dim_shared_reset_transitions(void);
 void test_render_three_resets_use_full_reset(void);

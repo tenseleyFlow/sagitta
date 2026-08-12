@@ -216,6 +216,24 @@ void test_render_gap_motion_goldens(void)
     }
 }
 
+void test_render_ascii_run_preserves_gap_and_style_boundaries(void)
+{
+    RenderFixture f;
+    YewColor color = render_default_color();
+
+    render_fixture_init(&f, 1u, 8u, false);
+    yew_grid_puts(&f.grid, 0u, 0u, (const u8 *)"abcdefgh", 8u,
+                  color, color, 0u);
+    yew_grid_flip(&f.grid);
+    yew_grid_puts(&f.grid, 0u, 0u, (const u8 *)"AB", 2u,
+                  color, color, 0u);
+    yew_grid_puts(&f.grid, 0u, 3u, (const u8 *)"DE", 2u,
+                  color, color, YEW_ATTR_BOLD);
+    yew_render_frame(&f.render, &f.grid, &f.out);
+    YEW_ASSERT(render_contains(&f.out, "ABc\033[1mDE"));
+    render_fixture_free(&f);
+}
+
 void test_render_erase_to_eol_heuristic(void)
 {
     RenderFixture f;

@@ -609,6 +609,52 @@ static void emit_cell(Render *r, const Grid *g, Bytebuf *out,
     }
 }
 
+static bool printable_ascii_cell(const Cell *cell)
+{
+    if ((cell->flags & CELL_INTERNED) != 0u || cell->w != 1u ||
+        cell->utf8[0] < 0x20u || cell->utf8[0] > 0x7eu ||
+        cell->utf8[1] != 0u)
+        return false;
+    return true;
+}
+
+static bool same_style(const Cell *a, const Cell *b)
+{
+    return a->attrs == b->attrs && color_equal(a->fg, b->fg) &&
+           color_equal(a->bg, b->bg);
+}
+
+static u16 emit_printable_ascii_run(Render *r, const Grid *g, Bytebuf *out,
+                                    u16 row, u16 col, u16 end)
+{
+    const Cell *first = &g->back[(size_t)row * g->cols + col];
+    u8 bytes_buf[256];
+    u16 next = col;
+
+    set_style(r, out, first);
+    while (next < end) {
+        size_t count = 0u;
+
+        while (next < end && count < sizeof(bytes_buf)) {
+            size_t at = (size_t)row * g->cols + next;
+            const Cell *cell = &g->back[at];
+
+            if (yew_cell_eq(&g->front[at], cell) ||
+                !same_style(first, cell) ||
+                !printable_ascii_cell(cell))
+                break;
+            bytes_buf[count++] = cell->utf8[0];
+            next++;
+        }
+        if (count == 0u)
+            break;
+        bytebuf_append(out, bytes_buf, count);
+    }
+    if (r->pos_known)
+        r->col = (u16)(r->col + (u16)(next - col));
+    return next;
+}
+
 static void cup(Render *r, Bytebuf *out, u16 row, u16 col)
 {
     if (row == 0u && col == 0u) {
@@ -800,6 +846,10 @@ size_t yew_render_frame(Render *r, Grid *g, Bytebuf *out)
                 set_style(r, out, cell);
                 bytes(out, "\033[K");
                 break;
+            }
+            if (printable_ascii_cell(cell)) {
+                col = emit_printable_ascii_run(r, g, out, row, col, end);
+                continue;
             }
             emit_cell(r, g, out, cell);
             col = (u16)(col + (cell->w == 2u ? 2u : 1u));
