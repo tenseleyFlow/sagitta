@@ -311,6 +311,94 @@ static int wait_status(pid_t pid, int *status)
     return 255;
 }
 
+static uint32_t header_u32_le(const unsigned char *bytes)
+{
+    return (uint32_t)bytes[0] | ((uint32_t)bytes[1] << 8U) |
+           ((uint32_t)bytes[2] << 16U) | ((uint32_t)bytes[3] << 24U);
+}
+
+static uint64_t header_u64_le(const unsigned char *bytes)
+{
+    uint64_t value = 0U;
+    unsigned int i;
+
+    for (i = 0U; i < 8U; i++)
+        value |= (uint64_t)bytes[i] << (i * 8U);
+    return value;
+}
+
+static bool journal_header_complete(const unsigned char fixed[16],
+                                    uintmax_t file_size)
+{
+    uint64_t path_len;
+
+    if (memcmp(fixed, "YEWJ", 4U) != 0 ||
+        header_u32_le(fixed + 4U) != 1U)
+        return false;
+    path_len = header_u64_le(fixed + 8U);
+    return path_len <= UINTMAX_MAX - 36U &&
+           file_size >= 36U + (uintmax_t)path_len;
+}
+
+static bool file_has_complete_journal_header(const char *path,
+                                             const struct stat *st)
+{
+    unsigned char fixed[16];
+    size_t at = 0U;
+    int fd;
+
+    if (st->st_size < 0)
+        return false;
+    fd = open(path, O_RDONLY);
+    if (fd < 0)
+        return false;
+    while (at < sizeof(fixed)) {
+        ssize_t n = read(fd, fixed + at, sizeof(fixed) - at);
+
+        if (n < 0 && errno == EINTR)
+            continue;
+        if (n <= 0)
+            break;
+        at += (size_t)n;
+    }
+    if (close(fd) != 0 || at != sizeof(fixed))
+        return false;
+    return journal_header_complete(fixed, (uintmax_t)st->st_size);
+}
+
+static void journal_header_classifier_selfcheck(void)
+{
+    static const unsigned char killed_after_first_write[16] = {
+        'Y', 'E', 'W', 'J', 1U, 0U, 0U, 0U,
+        53U, 0U, 0U, 0U, 0U, 0U, 0U, 0U
+    };
+    unsigned char bad[16];
+    uintmax_t cut;
+
+    for (cut = 0U; cut <= 90U; cut++) {
+        if (journal_header_complete(killed_after_first_write, cut) !=
+            (cut >= 89U)) {
+            (void)fprintf(stderr,
+                          "batch-kill9: journal header self-check failed\n");
+            exit(2);
+        }
+    }
+    (void)memcpy(bad, killed_after_first_write, sizeof(bad));
+    bad[0] = 'X';
+    if (journal_header_complete(bad, 89U)) {
+        (void)fprintf(stderr,
+                      "batch-kill9: journal magic self-check failed\n");
+        exit(2);
+    }
+    (void)memcpy(bad, killed_after_first_write, sizeof(bad));
+    bad[4] = 2U;
+    if (journal_header_complete(bad, 89U)) {
+        (void)fprintf(stderr,
+                      "batch-kill9: journal version self-check failed\n");
+        exit(2);
+    }
+}
+
 static bool tree_has_journal(const char *path)
 {
     struct stat st;
@@ -321,7 +409,7 @@ static bool tree_has_journal(const char *path)
         size_t n = strlen(path);
 
         return n >= 5U && strcmp(path + n - 5U, ".yewj") == 0 &&
-               st.st_size > 0;
+               file_has_complete_journal_header(path, &st);
     }
     if (S_ISDIR(st.st_mode)) {
         DIR *dir = opendir(path);
@@ -386,6 +474,7 @@ int main(int argc, char **argv)
     uint64_t initial_seed;
     int i;
 
+    journal_header_classifier_selfcheck();
     {
         const char *v = getenv("YEW_BATCH_KILL9_ITERS");
         if (v != NULL)
