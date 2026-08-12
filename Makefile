@@ -500,7 +500,8 @@ endif
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
         perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
         perf-mouse perf-record perf-syn perf-syn-budgets perf-syn-quiet \
-        perf-syn-gate-selftest perf-syn-line-probe perf-syn-size \
+        perf-syn-gate-selftest perf-syn-line-probe \
+        perf-syn-resident-line-probe perf-syn-size \
         perf-batch perf-batch-selftest \
         perf-undo perf-textbuf perf-huge perf-update perf-baseline-guard \
         perf-gate-selftest perf-latency perf-latency-selftest \
@@ -998,6 +999,9 @@ perf-syn-gate-selftest: $(BUILD)/perf_syn
 
 perf-syn-line-probe: $(BUILD)/perf_syn
 	$(BUILD)/perf_syn --probe-legacy-line='$(PERF_SYN_PROBE_STEM)'
+
+perf-syn-resident-line-probe: $(BUILD)/perf_syn
+	$(BUILD)/perf_syn --probe-resident-line='$(PERF_SYN_PROBE_STEM)'
 
 perf-syn-quiet: $(BUILD)/perf_syn $(BUILD)/yew
 	YEW_PERF_SYN_COMMAND='$(abspath $(BUILD)/perf_syn) --gate' \

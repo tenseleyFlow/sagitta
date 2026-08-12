@@ -577,7 +577,7 @@ typedef struct LegacyLineProbeRow {
     u64 cpu_ns;
 } LegacyLineProbeRow;
 
-static int probe_legacy_line(const char *stem)
+static int probe_legacy_line(const char *stem, bool resident)
 {
     enum {
         PROBE_ROWS = 200,
@@ -590,6 +590,9 @@ static int probe_legacy_line(const char *stem)
     FrozenFixture fixture;
     SynSpan spans[YEW_SYN_MAX_SPANS];
     const FrozenSpec *spec = NULL;
+    u64 idle_ticks = 0U;
+    u64 loads = 0U;
+    u64 max_pump_ns = 0U;
     size_t nrows = 0U;
     size_t lo = 0U;
     u32 state = YEW_SYN_STATE_ROOT;
@@ -606,7 +609,10 @@ static int probe_legacy_line(const char *stem)
         return 2;
     }
     yew_syn_discovery_set_bypass(true);
-    if (!frozen_init(&fixture, spec)) {
+    if (!frozen_init(&fixture, spec) ||
+        (resident &&
+         !prime_frozen_embeds(&fixture, &idle_ticks, &loads,
+                              &max_pump_ns))) {
         (void)fprintf(stderr, "perf_syn: legacy probe setup failed\n");
         if (fixture.spec != NULL)
             frozen_free(&fixture);
@@ -699,8 +705,14 @@ static int probe_legacy_line(const char *stem)
         rows[row].cpu_ns = (end - start) / PROBE_ROW_REPLAYS;
     }
     stable_sort(batches, YEW_ARRAY_LEN(batches));
-    (void)printf("probe.legacy_line stem=%s rows=%lu cpu_ns_per_line=%llu\n",
-                 stem, (unsigned long)nrows,
+    (void)printf("probe.legacy_line stem=%s resident=%u ticks=%llu "
+                 "loads=%llu max_pump_ns=%llu rows=%lu "
+                 "cpu_ns_per_line=%llu\n",
+                 stem, resident ? 1U : 0U,
+                 (unsigned long long)idle_ticks,
+                 (unsigned long long)loads,
+                 (unsigned long long)max_pump_ns,
+                 (unsigned long)nrows,
                  (unsigned long long)batches[PROBE_BATCHES / 2U]);
     for (size_t rank = 0U; rank < 8U && rank < nrows; rank++) {
         size_t hottest = rank;
@@ -2537,7 +2549,9 @@ int main(int argc, char **argv)
     if (argc == 2 && strcmp(argv[1], "--selftest-gate") == 0)
         return selftest_gate();
     if (argc == 2 && strncmp(argv[1], "--probe-legacy-line=", 20U) == 0)
-        return probe_legacy_line(argv[1] + 20U);
+        return probe_legacy_line(argv[1] + 20U, false);
+    if (argc == 2 && strncmp(argv[1], "--probe-resident-line=", 22U) == 0)
+        return probe_legacy_line(argv[1] + 22U, true);
     if (argc == 2 && strcmp(argv[1], "--gate-budgets") == 0)
         gate_mode = PERF_SYN_GATE_BUDGETS;
     else if (argc == 2 && strcmp(argv[1], "--gate") == 0)
@@ -2545,7 +2559,8 @@ int main(int argc, char **argv)
     else if (argc != 1) {
         (void)fprintf(stderr,
                       "usage: perf_syn [--gate|--gate-budgets|"
-                      "--selftest-gate|--probe-legacy-line=STEM]\n");
+                      "--selftest-gate|--probe-legacy-line=STEM|"
+                      "--probe-resident-line=STEM]\n");
         return 2;
     }
     yew_syn_discovery_set_bypass(true);
