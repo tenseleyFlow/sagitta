@@ -27,6 +27,8 @@ make_fake()
 }
 
 make_fake "$scratch/idle" 'printf "100\n"'
+make_fake "$scratch/idle-busy-after" \
+    'if [ -e "$TEST_STARTED" ]; then printf "0\n"; else printf "100\n"; fi'
 make_fake "$scratch/temp" 'printf "50\n"'
 make_fake "$scratch/temp-warm" \
     'if [ -e "$TEST_STARTED" ]; then printf "80\n"; else printf "50\n"; fi'
@@ -43,6 +45,8 @@ make_fake "$scratch/benchmark" \
     '[ "$(pwd)" = "$TEST_REPO" ] || exit 94' \
     'touch "$TEST_STARTED"' \
     'printf "authoritative result\n"'
+mkdir -p "$scratch/topology/cpu3/topology"
+printf '3,11\n' >"$scratch/topology/cpu3/topology/thread_siblings_list"
 
 common_env()
 {
@@ -57,6 +61,7 @@ common_env()
     YEW_PERF_LOCK_TIMEOUT=3 \
     YEW_PERF_RUN_TIMEOUT=3 \
     YEW_PERF_TASKSET="$scratch/taskset" \
+    YEW_PERF_TOPOLOGY_ROOT="$scratch/topology" \
     YEW_PERF_CPU=3 \
     TEST_TASKSET_LOG="$scratch/taskset.log" \
     "$@"
@@ -128,6 +133,26 @@ fi
 [ ! -s "$scratch/contaminated.out" ] || fail 'contaminated output was not discarded'
 grep 'run contaminated' "$scratch/contaminated.err" >/dev/null ||
     fail 'contamination diagnostic missing'
+
+rm -f "$scratch/release" "$scratch/started"
+if common_env env \
+    TEST_STARTED="$scratch/started" TEST_RELEASE="$scratch/release" \
+    YEW_PERF_IDLE_COMMAND="$scratch/idle-busy-after" \
+    YEW_PERF_SLEEP_COMMAND="$scratch/sleep-release" \
+    YEW_PERF_LOCK_PATH="$scratch/sibling-busy.lock" \
+    YEW_PERF_PS_COMMAND="$scratch/ps-clear" \
+    "$runner" "$scratch/benchmark-wait" \
+    >"$scratch/sibling-busy.out" 2>"$scratch/sibling-busy.err"; then
+    fail 'busy SMT sibling unexpectedly preserved benchmark results'
+else
+    status=$?
+fi
+[ "$status" -eq 75 ] ||
+    fail "busy SMT sibling returned $status instead of 75"
+[ ! -s "$scratch/sibling-busy.out" ] ||
+    fail 'busy SMT sibling output was not discarded'
+grep 'run contaminated' "$scratch/sibling-busy.err" >/dev/null ||
+    fail 'busy SMT sibling contamination diagnostic missing'
 
 make_fake "$scratch/temp-hot" \
     'if [ -e "$TEST_STARTED" ]; then printf "95\n"; else printf "50\n"; fi'

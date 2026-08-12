@@ -14,11 +14,13 @@ quiet_window=${YEW_PERF_QUIET_WINDOW:-30}
 poll_seconds=${YEW_PERF_POLL_SECONDS:-1}
 status_interval=${YEW_PERF_STATUS_INTERVAL:-30}
 idle_min=${YEW_PERF_MIN_IDLE_PERCENT:-95}
+run_sibling_idle_min=${YEW_PERF_MIN_RUN_SIBLING_IDLE_PERCENT:-$idle_min}
 temp_max=${YEW_PERF_MAX_TEMP_C:-75}
 run_temp_max=${YEW_PERF_MAX_RUN_TEMP_C:-100}
 run_timeout=${YEW_PERF_RUN_TIMEOUT:-1800}
 busy_pattern=${YEW_PERF_BUSY_PATTERN:-'(^|[[:space:]/])(cgfried|cc1|cc1plus|gcc|g\+\+|clang|clang\+\+|cargo|rustc|torture-run|import-c-testsuite(\.sh)?|s35_loop_driver|ctfe_diagnostic|release_native)([[:space:]/]|$)'}
 stat_file=${YEW_PERF_STAT_FILE:-/proc/stat}
+topology_root=${YEW_PERF_TOPOLOGY_ROOT:-/sys/devices/system/cpu}
 
 die()
 {
@@ -41,6 +43,7 @@ check_uint YEW_PERF_QUIET_WINDOW "$quiet_window"
 check_uint YEW_PERF_POLL_SECONDS "$poll_seconds"
 check_uint YEW_PERF_STATUS_INTERVAL "$status_interval"
 check_uint YEW_PERF_MIN_IDLE_PERCENT "$idle_min"
+check_uint YEW_PERF_MIN_RUN_SIBLING_IDLE_PERCENT "$run_sibling_idle_min"
 check_uint YEW_PERF_MAX_TEMP_C "$temp_max"
 check_uint YEW_PERF_MAX_RUN_TEMP_C "$run_temp_max"
 check_uint YEW_PERF_RUN_TIMEOUT "$run_timeout"
@@ -49,6 +52,8 @@ check_uint YEW_PERF_RUN_TIMEOUT "$run_timeout"
 [ "$poll_seconds" -gt 0 ] || die 'YEW_PERF_POLL_SECONDS must be greater than zero'
 [ "$status_interval" -gt 0 ] || die 'YEW_PERF_STATUS_INTERVAL must be greater than zero'
 [ "$idle_min" -le 100 ] || die 'YEW_PERF_MIN_IDLE_PERCENT must not exceed 100'
+[ "$run_sibling_idle_min" -le 100 ] ||
+    die 'YEW_PERF_MIN_RUN_SIBLING_IDLE_PERCENT must not exceed 100'
 [ "$run_temp_max" -ge "$temp_max" ] ||
     die 'YEW_PERF_MAX_RUN_TEMP_C must be at least YEW_PERF_MAX_TEMP_C'
 
@@ -86,6 +91,7 @@ cleanup()
         rmdir "$lock_path.d" 2>/dev/null || :
     fi
     rm -f "$scratch/output"
+    rm -f "$scratch"/idle-*
     rmdir "$scratch" 2>/dev/null || :
 }
 trap cleanup EXIT
@@ -165,52 +171,102 @@ if [ -z "$cpu" ]; then
     cpu=${cpu:-0}
 fi
 check_uint YEW_PERF_CPU "$cpu"
-cpu_stat_name=cpu$cpu
+cpu_threads=$cpu
+topology_file=$topology_root/cpu$cpu/topology/thread_siblings_list
+if [ -r "$topology_file" ]; then
+    sibling_spec=$(awk 'NR == 1 { print; exit }' "$topology_file" 2>/dev/null || :)
+    expanded=$(printf '%s\n' "$sibling_spec" | awk -F, '
+        {
+            for (i = 1; i <= NF; i++) {
+                n = split($i, span, "-")
+                if (n == 1 && span[1] ~ /^[0-9]+$/) {
+                    print span[1]
+                } else if (n == 2 && span[1] ~ /^[0-9]+$/ &&
+                           span[2] ~ /^[0-9]+$/ && span[1] <= span[2]) {
+                    for (cpu = span[1]; cpu <= span[2]; cpu++)
+                        print cpu
+                } else {
+                    exit 2
+                }
+            }
+        }
+    ') || die "invalid thread sibling list: $sibling_spec"
+    [ -z "$expanded" ] || cpu_threads=$(printf '%s\n' "$expanded" |
+        awk '!seen[$1]++ { if (out != "") out = out " "; out = out $1 }
+             END { print out }')
+fi
+sibling_threads=
+for thread_cpu in $cpu_threads; do
+    check_uint thread_sibling "$thread_cpu"
+    if [ "$thread_cpu" != "$cpu" ]; then
+        sibling_threads=${sibling_threads:+$sibling_threads }$thread_cpu
+    fi
+done
 
-previous_total=
-previous_idle=
-read_idle_percent()
+read_idle_set()
 {
-    cpu_idle=
+    idle_set=$1
+    idle_result=
+    [ -n "$idle_set" ] || return
     if [ -n "${YEW_PERF_IDLE_COMMAND:-}" ]; then
-        cpu_idle=$("$YEW_PERF_IDLE_COMMAND" 2>/dev/null || :)
-        case $cpu_idle in
-            ''|*[!0-9]*) cpu_idle= ;;
-            *) [ "$cpu_idle" -le 100 ] || cpu_idle= ;;
+        idle_result=$("$YEW_PERF_IDLE_COMMAND" 2>/dev/null || :)
+        case $idle_result in
+            ''|*[!0-9]*) idle_result= ;;
+            *) [ "$idle_result" -le 100 ] || idle_result= ;;
         esac
         return
     fi
-    cpu_line=$(awk -v wanted="$cpu_stat_name" '$1 == wanted { print; exit }' \
-        "$stat_file" 2>/dev/null || :)
-    set -f
-    # Splitting the /proc/stat fields is intentional; globbing is disabled.
-    # shellcheck disable=SC2086
-    set -- $cpu_line
-    set +f
-    if [ "${1:-}" != "$cpu_stat_name" ] || [ "$#" -lt 5 ]; then
-        return
-    fi
-    shift
-    cpu_total=0
-    cpu_field_count=0
-    cpu_idle_now=0
-    for cpu_field in "$@"; do
-        case $cpu_field in
-            ''|*[!0-9]*) return ;;
-        esac
-        cpu_field_count=$((cpu_field_count + 1))
-        cpu_total=$((cpu_total + cpu_field))
-        if [ "$cpu_field_count" -eq 4 ] || [ "$cpu_field_count" -eq 5 ]; then
-            cpu_idle_now=$((cpu_idle_now + cpu_field))
+    idle_known=1
+    idle_minimum=100
+    for idle_cpu in $idle_set; do
+        cpu_stat_name=cpu$idle_cpu
+        cpu_line=$(awk -v wanted="$cpu_stat_name" \
+            '$1 == wanted { print; exit }' "$stat_file" 2>/dev/null || :)
+        set -f
+        # Splitting the /proc/stat fields is intentional; globbing is disabled.
+        # shellcheck disable=SC2086
+        set -- $cpu_line
+        set +f
+        if [ "${1:-}" != "$cpu_stat_name" ] || [ "$#" -lt 5 ]; then
+            idle_known=0
+            continue
         fi
-    done
-    if [ -n "$previous_total" ] && [ "$cpu_total" -gt "$previous_total" ]; then
+        shift
+        cpu_total=0
+        cpu_field_count=0
+        cpu_idle_now=0
+        for cpu_field in "$@"; do
+            case $cpu_field in
+                ''|*[!0-9]*) idle_known=0; break ;;
+            esac
+            cpu_field_count=$((cpu_field_count + 1))
+            cpu_total=$((cpu_total + cpu_field))
+            if [ "$cpu_field_count" -eq 4 ] ||
+               [ "$cpu_field_count" -eq 5 ]; then
+                cpu_idle_now=$((cpu_idle_now + cpu_field))
+            fi
+        done
+        idle_state=$scratch/idle-$idle_cpu
+        previous_total=
+        previous_idle=
+        if [ -r "$idle_state" ]; then
+            IFS=' ' read -r previous_total previous_idle <"$idle_state" || :
+        fi
+        printf '%s %s\n' "$cpu_total" "$cpu_idle_now" >"$idle_state"
+        if [ -z "$previous_total" ] || [ "$cpu_total" -le "$previous_total" ]; then
+            idle_known=0
+            continue
+        fi
         cpu_delta=$((cpu_total - previous_total))
         idle_delta=$((cpu_idle_now - previous_idle))
-        cpu_idle=$((idle_delta * 100 / cpu_delta))
+        current_idle=$((idle_delta * 100 / cpu_delta))
+        if [ "$current_idle" -lt "$idle_minimum" ]; then
+            idle_minimum=$current_idle
+        fi
+    done
+    if [ "$idle_known" -eq 1 ]; then
+        idle_result=$idle_minimum
     fi
-    previous_total=$cpu_total
-    previous_idle=$cpu_idle_now
 }
 
 read_package_temp()
@@ -257,7 +313,8 @@ temp_notice=0
 while [ "$quiet_streak" -lt "$quiet_window" ]; do
     competing=0
     has_competitor && competing=1
-    read_idle_percent
+    read_idle_set "$cpu_threads"
+    cpu_idle=$idle_result
     read_package_temp
     if [ -z "$package_temp" ] && [ "$temp_notice" -eq 0 ]; then
         printf 'perf-syn-quiet: package temperature unavailable; continuing\n' >&2
@@ -274,9 +331,9 @@ while [ "$quiet_streak" -lt "$quiet_window" ]; do
         break
     fi
     if [ $((quiet_elapsed % status_interval)) -eq 0 ]; then
-        printf 'perf-syn-quiet: waiting; cpu=%s idle=%s%% temp=%sC competitor=%s streak=%ss\n' \
-            "$cpu" "${cpu_idle:-unknown}" "${package_temp:-unknown}" \
-            "$competing" "$quiet_streak" >&2
+        printf 'perf-syn-quiet: waiting; cpu=%s threads=%s idle=%s%% temp=%sC competitor=%s streak=%ss\n' \
+            "$cpu" "$cpu_threads" "${cpu_idle:-unknown}" \
+            "${package_temp:-unknown}" "$competing" "$quiet_streak" >&2
     fi
     if [ "$quiet_elapsed" -ge "$quiet_timeout" ]; then
         printf 'perf-syn-quiet: quiet-window timeout after %ss\n' "$quiet_elapsed" >&2
@@ -304,9 +361,23 @@ fi
 benchmark_pid=$!
 run_elapsed=0
 contaminated=0
+sibling_contaminated=0
+sibling_idle_low=unknown
 timed_out=0
 while kill -0 "$benchmark_pid" 2>/dev/null; do
     has_competitor && contaminated=1
+    if [ -n "$sibling_threads" ]; then
+        read_idle_set "$sibling_threads"
+        sibling_idle=$idle_result
+        if [ -z "$sibling_idle" ] ||
+           [ "$sibling_idle" -lt "$run_sibling_idle_min" ]; then
+            contaminated=1
+            sibling_contaminated=1
+            if [ -n "$sibling_idle" ]; then
+                sibling_idle_low=$sibling_idle
+            fi
+        fi
+    fi
     read_package_temp
     if [ -n "$package_temp" ] && [ "$package_temp" -ge "$run_temp_max" ]; then
         contaminated=1
@@ -327,6 +398,18 @@ fi
 
 # Catch a competitor that appeared between the final monitor poll and wait.
 has_competitor && contaminated=1
+if [ -n "$sibling_threads" ]; then
+    read_idle_set "$sibling_threads"
+    sibling_idle=$idle_result
+    if [ -z "$sibling_idle" ] ||
+       [ "$sibling_idle" -lt "$run_sibling_idle_min" ]; then
+        contaminated=1
+        sibling_contaminated=1
+        if [ -n "$sibling_idle" ]; then
+            sibling_idle_low=$sibling_idle
+        fi
+    fi
+fi
 read_package_temp
 if [ -n "$package_temp" ] && [ "$package_temp" -ge "$run_temp_max" ]; then
     contaminated=1
@@ -338,7 +421,12 @@ if [ "$timed_out" -eq 1 ]; then
     exit 75
 fi
 if [ "$contaminated" -eq 1 ]; then
-    printf 'perf-syn-quiet: run contaminated; results discarded\n' >&2
+    if [ "$sibling_contaminated" -eq 1 ]; then
+        printf 'perf-syn-quiet: run contaminated; sibling idle %s%% below %s%%; results discarded\n' \
+            "$sibling_idle_low" "$run_sibling_idle_min" >&2
+    else
+        printf 'perf-syn-quiet: run contaminated; results discarded\n' >&2
+    fi
     exit 75
 fi
 
