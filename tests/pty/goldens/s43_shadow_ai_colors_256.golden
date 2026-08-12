@@ -1,0 +1,116 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=0,13 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+ a  1 anchorXassistant_model answer                                             
+ a  1 ai overlay two                                                            
+ a  2 ai overlay three                                                          
+ a  3 ai overlay four                                                           
+    4 real row five                                                             
+    5 real row six                                                              
+    6 real row seven                                                            
+    7 real row eight                                                            
+    8 real row nine                                                             
+    9                                                                           
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+                                                                                
+ I  pty-s14-s43_shadow_ai_colors_256.txt *                   utf-8  lf  1:8  all
+--- style
+ABAACADDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+ABAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+ABAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+ABAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+EEEDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDD
+--- legend
+A fg=idx:240 bg=idx:233 attrs=----------
+B fg=idx:173 bg=idx:233 attrs=-diu------
+C fg=idx:252 bg=idx:233 attrs=b---------
+D fg=idx:252 bg=idx:233 attrs=----------
+E fg=idx:233 bg=idx:114 attrs=----------
+--- sgr
+\x1b[0;38;5;240;48;5;233m
+\x1b[1;38;5;252m
+\x1b[22;38;5;240m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;252m
+\x1b[38;5;240m
+\x1b[38;5;252m
+\x1b[38;5;233;48;5;75m
+\x1b[38;5;252;48;5;233m
+\x1b[0;2;38;5;75;48;5;233m
+\x1b[22;38;5;252m
+\x1b[2;38;5;75m
+\x1b[22;38;5;233;48;5;114m
+\x1b[38;5;252;48;5;233m
+\x1b[0;2;3;4;38;5;173;48;5;233m

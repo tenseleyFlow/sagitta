@@ -5284,6 +5284,228 @@ static void case_s41_degrade_full_frame(PtyCtx *c)
 }
 
 /* ---------------------------------------------------------------- */
+/* Sprint 43: passive shadow-text integration contracts             */
+/* ---------------------------------------------------------------- */
+
+static bool s43_screen_contains(const VtScreen *vt, const char *needle)
+{
+    Bytebuf screen;
+    bool found;
+
+    bytebuf_init(&screen);
+    snapshot_write(vt, &screen);
+    bytebuf_push_u8(&screen, 0U);
+    found = strstr((const char *)screen.data, needle) != NULL;
+    bytebuf_free(&screen);
+    return found;
+}
+
+static bool s43_cell_is(const VtScreen *vt, int row, int col, u8 want)
+{
+    const VtCell *cell;
+    const u8 *glyph;
+    size_t n;
+
+    if (row < 0 || row >= vt->rows || col < 0 || col >= vt->cols)
+        return false;
+    cell = &vt->cells[(size_t)row * (size_t)vt->cols + (size_t)col];
+    glyph = vt_cell_bytes(vt, cell, &n);
+    return n == 1U && glyph[0] == want;
+}
+
+static bool s43_open_shadow(PtyCtx *c, char *path, size_t path_cap)
+{
+    static const u8 initial[] =
+        "anchor\n"
+        "real row two\n"
+        "real row three\n"
+        "real row four\n"
+        "real row five\n"
+        "real row six\n"
+        "real row seven\n"
+        "real row eight\n"
+        "real row nine\n";
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, path_cap))
+        return false;
+    s18_settle_after_keys(c, "end a X");
+    ptc_settle(c, 400);
+    return !c->failed;
+}
+
+static void s43_select_provider(PtyCtx *c)
+{
+    if (strstr(c->test->name, "_lsp_") != NULL)
+        s18_settle_after_keys(c, "alt+]");
+    else if (strstr(c->test->name, "_ai_") != NULL)
+        s18_settle_after_keys(c, "alt+] alt+]");
+}
+
+static void s43_force_quit(PtyCtx *c)
+{
+    ptc_keys(c, "esc esc");
+    ptc_settle(c, 0);
+    force_quit(c);
+}
+
+static void case_s43_shadow_provenance(PtyCtx *c)
+{
+    const char *text = "symbol_index field";
+    u16 attrs = YEW_ATTR_DIM;
+    u8 glyph = 's';
+    const VtCell *first;
+    char path[256];
+
+    if (!s43_open_shadow(c, path, sizeof(path)))
+        return;
+    s43_select_provider(c);
+    if (strstr(c->test->name, "_lsp_") != NULL) {
+        text = "language_server item";
+        attrs = (u16)(attrs | YEW_ATTR_ITALIC);
+        glyph = 'l';
+    } else if (strstr(c->test->name, "_ai_") != NULL) {
+        text = "assistant_model answer";
+        attrs = (u16)(attrs | YEW_ATTR_ITALIC | YEW_ATTR_UNDERLINE);
+        glyph = 'a';
+    }
+    ptc_check(c, s43_screen_contains(&c->vt, text),
+              "selected shadow provider text is not visible");
+    if (!c->failed) {
+        first = &c->vt.cells[13U];
+        ptc_check(c, (first->attrs & attrs) == attrs,
+                  "shadow provider attributes are incomplete");
+        ptc_check(c, s43_cell_is(&c->vt, 0, 1, glyph),
+                  "shadow provenance gutter cell is missing");
+    }
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot_sgr(c, c->test->name);
+    s43_force_quit(c);
+    (void)unlink(path);
+}
+
+static void s43_command(PtyCtx *c, const char *command)
+{
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, command);
+    s18_settle_after_keys(c, "enter");
+}
+
+static void case_s43_shadow_overlay_no_jump(PtyCtx *c)
+{
+    static const u8 initial[] =
+        "anchor\n"
+        "real row two\n"
+        "real row three\n"
+        "real row four\n"
+        "real row five\n"
+        "real row six\n"
+        "real row seven\n"
+        "real row eight\n"
+        "real row nine\n";
+    VtCell *baseline;
+    char path[256];
+    size_t cells;
+    u16 row;
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    s43_command(c, "ed.shadow.toggle");
+    s18_settle_after_keys(c, "end a X esc");
+    cells = (size_t)c->vt.rows * (size_t)c->vt.cols;
+    baseline = malloc(cells * sizeof(*baseline));
+    if (baseline == NULL) {
+        ptc_check(c, false, "allocating Sprint 43 baseline grid");
+        s43_force_quit(c);
+        (void)unlink(path);
+        return;
+    }
+    (void)memcpy(baseline, c->vt.cells, cells * sizeof(*baseline));
+    s43_command(c, "ed.shadow.toggle");
+    ptc_settle(c, 400);
+    ptc_check(c, s43_screen_contains(&c->vt, "symbol_index field"),
+              "four-line shadow did not appear");
+    for (row = 4U; row <= 8U; row++)
+        ptc_check(c,
+                  memcmp(baseline + (size_t)row * (size_t)c->vt.cols,
+                         c->vt.cells + (size_t)row * (size_t)c->vt.cols,
+                         (size_t)c->vt.cols * sizeof(*baseline)) == 0,
+                  "shadow changed or moved a non-ghost document row");
+    free(baseline);
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, c->test->name);
+    s43_force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s43_shadow_accept_word(PtyCtx *c)
+{
+    static const u8 expected[] =
+        "anchorXsymbol_index \n"
+        "real row two\n"
+        "real row three\n"
+        "real row four\n"
+        "real row five\n"
+        "real row six\n"
+        "real row seven\n"
+        "real row eight\n"
+        "real row nine\n";
+    const VtCell *accepted;
+    const VtCell *remaining;
+    char path[256];
+
+    if (!s43_open_shadow(c, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "alt+right");
+    ptc_check(c, s43_screen_contains(&c->vt, "symbol_index"),
+              "accept-word did not insert its first word");
+    ptc_check(c, s43_screen_contains(&c->vt, " field"),
+              "accept-word did not redraw the shortened ghost");
+    if (!c->failed) {
+        accepted = &c->vt.cells[13U];
+        remaining = &c->vt.cells[26U];
+        ptc_check(c, (accepted->attrs & YEW_ATTR_DIM) == 0U,
+                  "accepted word is still styled as ghost text");
+        ptc_check(c, (remaining->attrs & YEW_ATTR_DIM) != 0U,
+                  "shortened remainder lost its ghost styling");
+    }
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot_sgr(c, c->test->name);
+    s18_settle_after_keys(c, "esc esc s");
+    ptc_check(c, file_equals(path, expected, sizeof(expected) - 1U),
+              "accept-word persisted bytes beyond the accepted prefix");
+    s43_force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s43_shadow_escape_stages(PtyCtx *c)
+{
+    static const u8 expected[] =
+        "anchorXZ\n"
+        "real row two\n"
+        "real row three\n"
+        "real row four\n"
+        "real row five\n"
+        "real row six\n"
+        "real row seven\n"
+        "real row eight\n"
+        "real row nine\n";
+    char path[256];
+
+    if (!s43_open_shadow(c, path, sizeof(path)))
+        return;
+    s18_settle_after_keys(c, "esc");
+    ptc_check(c, !s43_screen_contains(&c->vt, "symbol_index field"),
+              "first Esc did not dismiss shadow text");
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, c->test->name);
+    s18_settle_after_keys(c, "Z esc s");
+    ptc_check(c, file_equals(path, expected, sizeof(expected) - 1U),
+              "Esc stages did not retain I then return to L");
+    s43_force_quit(c);
+    (void)unlink(path);
+}
+
+/* ---------------------------------------------------------------- */
 /* Sprint 37: batch mode never owns the terminal                    */
 /* ---------------------------------------------------------------- */
 
@@ -5319,6 +5541,30 @@ static void case_s37_batch_never_touches_the_terminal(PtyCtx *c)
 }
 
 const PtyCase yew_pty_cases[] = {
+    C(s43_shadow_index_truecolor, modern, 24U, 80U,
+      case_s43_shadow_provenance),
+    C(s43_shadow_index_colors_256, modern, 24U, 80U,
+      case_s43_shadow_provenance),
+    C(s43_shadow_index_colors_16, modern, 24U, 80U,
+      case_s43_shadow_provenance),
+    C(s43_shadow_lsp_truecolor, modern, 24U, 80U,
+      case_s43_shadow_provenance),
+    C(s43_shadow_lsp_colors_256, modern, 24U, 80U,
+      case_s43_shadow_provenance),
+    C(s43_shadow_lsp_colors_16, modern, 24U, 80U,
+      case_s43_shadow_provenance),
+    C(s43_shadow_ai_truecolor, modern, 24U, 80U,
+      case_s43_shadow_provenance),
+    C(s43_shadow_ai_colors_256, modern, 24U, 80U,
+      case_s43_shadow_provenance),
+    C(s43_shadow_ai_colors_16, modern, 24U, 80U,
+      case_s43_shadow_provenance),
+    C(s43_shadow_overlay_no_jump, modern, 24U, 80U,
+      case_s43_shadow_overlay_no_jump),
+    C(s43_shadow_accept_word, modern, 24U, 80U,
+      case_s43_shadow_accept_word),
+    C(s43_shadow_escape_stages, modern, 24U, 80U,
+      case_s43_shadow_escape_stages),
     C(s42_5_wolf_dark_truecolor, modern, 24U, 80U,
       case_s42_5_kitchen),
     C(s42_5_wolf_dark_colors_256, modern, 24U, 80U,
