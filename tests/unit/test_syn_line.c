@@ -134,6 +134,18 @@ void test_syn_line_byte_cap_preserves_entry_state(void)
     syn_toy_init(&toy);
     toy.rules[0].flags |= YEW_SYN_RULE_FIRST_LINE;
     yew_syn_engine_set_def(toy.engine, &toy.def);
+    out = (SynLineOut){spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
+    yew_syn_line(toy.engine, YEW_SYN_STATE_ROOT, line,
+                 YEW_SYN_LINE_BYTE_CAP + 1U, &out);
+    YEW_ASSERT(out.exit_state != YEW_SYN_STATE_ROOT);
+    {
+        u32 cached = out.exit_state;
+
+        out = (SynLineOut){spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
+        yew_syn_line(toy.engine, YEW_SYN_STATE_ROOT, line,
+                     YEW_SYN_LINE_BYTE_CAP + 1U, &out);
+        YEW_ASSERT_EQ_U64(out.exit_state, cached);
+    }
     entry = syn_toy_state(&toy, SYN_TOY_COMMENT_BLOCK);
     out = (SynLineOut){spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
     yew_syn_line(toy.engine, entry, line, YEW_SYN_LINE_BYTE_CAP + 1U, &out);
