@@ -215,6 +215,31 @@ void test_record_dispatch_ignores_nonrecordable_commands(void)
     rf_close(&f);
 }
 
+void test_record_shadow_escape_records_only_the_mode_change(void)
+{
+    RecordFix f;
+    CmdId escape;
+
+    rf_open(&f);
+    f.ed.mode = YEW_MODE_I;
+    f.ed.prev_unit = YEW_MODE_I;
+    YEW_ASSERT(yew_record_start(&f.ed, (u8)'e'));
+    f.ed.win->shadow.live = true;
+    YEW_ASSERT_EQ_I64(rf_run(&f, "ed.shadow.dismiss", NULL, 0U, 1U,
+                             YEW_SRC_KEY), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_I);
+    YEW_ASSERT_EQ_U64(f.ed.rec.ev.len, 0U);
+
+    YEW_ASSERT_EQ_I64(rf_run(&f, "ed.shadow.dismiss", NULL, 0U, 1U,
+                             YEW_SRC_KEY), YEW_CMD_OK);
+    escape = yew_cmd_lookup("ed.mode.escape", 14U);
+    YEW_ASSERT_EQ_U64(f.ed.mode, YEW_MODE_L);
+    YEW_ASSERT_EQ_U64(f.ed.rec.ev.len, 1U);
+    YEW_ASSERT_EQ_U64(f.ed.rec.ev.data[0].cmd.v, escape.v);
+    YEW_ASSERT_EQ_I64(yew_record_stop(&f.ed), YEW_CMD_OK);
+    rf_close(&f);
+}
+
 void test_record_multicursor_dispatch_captures_one_event(void)
 {
     Cursor second = {{0U}, {0U}, {0U}};

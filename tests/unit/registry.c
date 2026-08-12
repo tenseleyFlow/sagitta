@@ -1063,6 +1063,7 @@ const YewTest yew_tests[] = {
     T(record_tap_deep_copies_binary_arguments_and_resolved_context),
     T(record_tap_drops_replay_source),
     T(record_dispatch_ignores_nonrecordable_commands),
+    T(record_shadow_escape_records_only_the_mode_change),
     T(record_multicursor_dispatch_captures_one_event),
     T(record_rejects_nonportable_targets_before_execution),
     T(record_cmdline_accepts_prompt_edits_and_keeps_status_messages),

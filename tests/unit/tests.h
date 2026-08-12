@@ -1047,6 +1047,7 @@ void test_record_state_machine_reports_start_stop_and_last_register(void);
 void test_record_tap_deep_copies_binary_arguments_and_resolved_context(void);
 void test_record_tap_drops_replay_source(void);
 void test_record_dispatch_ignores_nonrecordable_commands(void);
+void test_record_shadow_escape_records_only_the_mode_change(void);
 void test_record_multicursor_dispatch_captures_one_event(void);
 void test_record_rejects_nonportable_targets_before_execution(void);
 void test_record_cmdline_accepts_prompt_edits_and_keeps_status_messages(void);

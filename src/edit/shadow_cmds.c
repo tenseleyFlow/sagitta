@@ -3,7 +3,6 @@
 #include <string.h>
 
 #include "edit/ed.h"
-#include "edit/mode.h"
 #include "edit/option.h"
 #include "edit/shadow.h"
 #include "ui/message.h"
@@ -39,13 +38,18 @@ CmdStatus yew_shadow_cmd_accept_all(CmdCtx *cx)
 
 CmdStatus yew_shadow_cmd_dismiss(CmdCtx *cx)
 {
+    CmdId escape;
+
     if (cx == NULL || cx->ed == NULL || cx->win == NULL)
         return YEW_CMD_ERR_STATE;
     if (cx->win->shadow.live) {
         yew_shadow_dismiss(cx->ed, cx->win);
         return YEW_CMD_OK;
     }
-    return yew_mode_escape(cx->ed);
+    escape = yew_cmd_lookup("ed.mode.escape", 14U);
+    if (escape.v == 0U)
+        YEW_BUG("shadow dismiss: mode escape command is missing");
+    return yew_ed_invoke(cx->ed, escape, cx);
 }
 
 CmdStatus yew_shadow_cmd_next(CmdCtx *cx)
