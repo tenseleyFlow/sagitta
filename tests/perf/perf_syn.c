@@ -43,6 +43,7 @@ enum {
     PERF_SYN_BLOCK_MAX_LINE_CALLS = 3,
     PERF_SYN_FIXTURE_COUNT = 26,
     PERF_SYN_S42_5_FIRST = 19,
+    PERF_SYN_MAKE_INDEX = 5,
     PERF_SYN_JSON_INDEX = 14,
     PERF_SYN_MD_EMBED_INDEX = 15,
     PERF_SYN_HTML_EMBED_INDEX = 16,
@@ -275,6 +276,16 @@ static bool now_ns(u64 *out)
     struct timespec ts;
 
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
+        return false;
+    *out = (u64)ts.tv_sec * UINT64_C(1000000000) + (u64)ts.tv_nsec;
+    return true;
+}
+
+static bool now_cpu_ns(u64 *out)
+{
+    struct timespec ts;
+
+    if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts) != 0)
         return false;
     *out = (u64)ts.tv_sec * UINT64_C(1000000000) + (u64)ts.tv_nsec;
     return true;
@@ -554,6 +565,172 @@ static bool prime_frozen_embeds(FrozenFixture *fixture, u64 *idle_ticks,
     *loads = resident_count(fixture->engine) - before;
     yew_syn_detach(&syn);
     return true;
+}
+
+typedef struct LegacyLineProbeRow {
+    size_t lo;
+    u32 len;
+    u32 line;
+    u32 entry_state;
+    u32 exit_state;
+    u32 spans;
+    u64 cpu_ns;
+} LegacyLineProbeRow;
+
+static int probe_legacy_line(const char *stem)
+{
+    enum {
+        PROBE_ROWS = 200,
+        PROBE_BATCHES = 31,
+        PROBE_REPLAYS = 64,
+        PROBE_ROW_REPLAYS = 257
+    };
+    LegacyLineProbeRow rows[PROBE_ROWS];
+    u64 batches[PROBE_BATCHES];
+    FrozenFixture fixture;
+    SynSpan spans[YEW_SYN_MAX_SPANS];
+    const FrozenSpec *spec = NULL;
+    size_t nrows = 0U;
+    size_t lo = 0U;
+    u32 state = YEW_SYN_STATE_ROOT;
+    int status = 2;
+
+    for (size_t i = 0U; i < PERF_SYN_MD_EMBED_INDEX; i++) {
+        if (strcmp(frozen_specs[i].stem, stem) == 0) {
+            spec = &frozen_specs[i];
+            break;
+        }
+    }
+    if (spec == NULL) {
+        (void)fprintf(stderr, "perf_syn: unknown legacy stem '%s'\n", stem);
+        return 2;
+    }
+    yew_syn_discovery_set_bypass(true);
+    if (!frozen_init(&fixture, spec)) {
+        (void)fprintf(stderr, "perf_syn: legacy probe setup failed\n");
+        if (fixture.spec != NULL)
+            frozen_free(&fixture);
+        return 2;
+    }
+    while (nrows < PROBE_ROWS && lo < fixture.source.len) {
+        LegacyLineProbeRow *row = &rows[nrows];
+        SynLineOut out = {spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
+        size_t hi = lo;
+
+        while (hi < fixture.source.len &&
+               fixture.source.data[hi] != (u8)'\n')
+            hi++;
+        if (hi - lo > UINT32_MAX)
+            goto done;
+        row->lo = lo;
+        row->len = (u32)(hi - lo);
+        row->line = (u32)nrows + 1U;
+        row->entry_state = state;
+        yew_syn_line(fixture.engine, state, fixture.source.data + lo,
+                     row->len, &out);
+        if (out.stop != YEW_SYN_STOP_OK && out.stop != YEW_SYN_STOP_BYTES)
+            goto done;
+        row->exit_state = out.exit_state;
+        row->spans = out.n;
+        row->cpu_ns = 0U;
+        state = out.exit_state;
+        perf_syn_sink += out.n + out.exit_state;
+        lo = hi < fixture.source.len ? hi + 1U : hi;
+        nrows++;
+    }
+    if (nrows == 0U)
+        goto done;
+    for (size_t warmup = 0U; warmup < 3U; warmup++) {
+        for (size_t row = 0U; row < nrows; row++) {
+            SynLineOut out = {spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
+
+            yew_syn_line(fixture.engine, rows[row].entry_state,
+                         fixture.source.data + rows[row].lo, rows[row].len,
+                         &out);
+            if (out.exit_state != rows[row].exit_state ||
+                out.n != rows[row].spans)
+                goto done;
+            perf_syn_sink += out.n + out.exit_state;
+        }
+    }
+    for (size_t batch = 0U; batch < PROBE_BATCHES; batch++) {
+        u64 start;
+        u64 end;
+
+        if (!now_cpu_ns(&start))
+            goto done;
+        for (size_t replay = 0U; replay < PROBE_REPLAYS; replay++) {
+            for (size_t row = 0U; row < nrows; row++) {
+                SynLineOut out = {spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
+
+                yew_syn_line(fixture.engine, rows[row].entry_state,
+                             fixture.source.data + rows[row].lo,
+                             rows[row].len, &out);
+                if (out.exit_state != rows[row].exit_state ||
+                    out.n != rows[row].spans)
+                    goto done;
+                perf_syn_sink += out.n + out.exit_state;
+            }
+        }
+        if (!now_cpu_ns(&end) || end < start)
+            goto done;
+        batches[batch] = (end - start) /
+            ((u64)PROBE_REPLAYS * (u64)nrows);
+    }
+    for (size_t row = 0U; row < nrows; row++) {
+        u64 start;
+        u64 end;
+
+        if (!now_cpu_ns(&start))
+            goto done;
+        for (size_t replay = 0U; replay < PROBE_ROW_REPLAYS; replay++) {
+            SynLineOut out = {spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
+
+            yew_syn_line(fixture.engine, rows[row].entry_state,
+                         fixture.source.data + rows[row].lo, rows[row].len,
+                         &out);
+            if (out.exit_state != rows[row].exit_state ||
+                out.n != rows[row].spans)
+                goto done;
+            perf_syn_sink += out.n + out.exit_state;
+        }
+        if (!now_cpu_ns(&end) || end < start)
+            goto done;
+        rows[row].cpu_ns = (end - start) / PROBE_ROW_REPLAYS;
+    }
+    stable_sort(batches, YEW_ARRAY_LEN(batches));
+    (void)printf("probe.legacy_line stem=%s rows=%lu cpu_ns_per_line=%llu\n",
+                 stem, (unsigned long)nrows,
+                 (unsigned long long)batches[PROBE_BATCHES / 2U]);
+    for (size_t rank = 0U; rank < 8U && rank < nrows; rank++) {
+        size_t hottest = rank;
+
+        for (size_t row = rank + 1U; row < nrows; row++) {
+            if (rows[row].cpu_ns > rows[hottest].cpu_ns)
+                hottest = row;
+        }
+        if (hottest != rank) {
+            LegacyLineProbeRow swap = rows[rank];
+
+            rows[rank] = rows[hottest];
+            rows[hottest] = swap;
+        }
+        (void)printf("probe.legacy_hot rank=%lu line=%lu bytes=%u "
+                     "entry=%u exit=%u spans=%u cpu_ns=%llu\n",
+                     (unsigned long)(rank + 1U),
+                     (unsigned long)rows[rank].line,
+                     (unsigned)rows[rank].len,
+                     (unsigned)rows[rank].entry_state,
+                     (unsigned)rows[rank].exit_state,
+                     (unsigned)rows[rank].spans,
+                     (unsigned long long)rows[rank].cpu_ns);
+    }
+    status = 0;
+done:
+    if (status != 0)
+        (void)fprintf(stderr, "perf_syn: legacy probe replay failed\n");
+    frozen_free(&fixture);
+    return status;
 }
 
 static bool measure_detect(u64 *samples, size_t count)
@@ -2290,6 +2467,8 @@ int main(int argc, char **argv)
     Timing cache_trials[PERF_SYN_TRIALS];
     Timing block_trials[PERF_SYN_TRIALS];
     Timing block_multiline_trials[PERF_SYN_TRIALS];
+    Timing make_embed_line_trials[PERF_SYN_TRIALS];
+    Timing make_embed_view_trials[PERF_SYN_TRIALS];
     size_t count = sample_count();
     size_t start_count = count < PERF_SYN_START_SAMPLES ?
                          count : PERF_SYN_START_SAMPLES;
@@ -2309,6 +2488,8 @@ int main(int argc, char **argv)
     Timing clean_list = {0U, 0U};
     Timing block = {0U, 0U};
     Timing block_multiline = {0U, 0U};
+    Timing make_embed_line = {0U, 0U};
+    Timing make_embed_view = {0U, 0U};
     u64 block_line_calls = 0U;
     u64 block_multiline_calls = 0U;
     u64 theme_line_calls = 0U;
@@ -2337,6 +2518,9 @@ int main(int argc, char **argv)
     u64 md_embed_loads = 0U;
     u64 md_embed_pump_max_ns = 0U;
     u64 md_embed_states = 0U;
+    u64 make_embed_idle_ticks = 0U;
+    u64 make_embed_loads = 0U;
+    u64 make_embed_pump_max_ns = 0U;
     u64 html_embed_scan_ns = 0U;
     u64 html_plain_scan_ns = 0U;
     u64 definition_switch_ns = 0U;
@@ -2352,6 +2536,8 @@ int main(int argc, char **argv)
         return detect_probe();
     if (argc == 2 && strcmp(argv[1], "--selftest-gate") == 0)
         return selftest_gate();
+    if (argc == 2 && strncmp(argv[1], "--probe-legacy-line=", 20U) == 0)
+        return probe_legacy_line(argv[1] + 20U);
     if (argc == 2 && strcmp(argv[1], "--gate-budgets") == 0)
         gate_mode = PERF_SYN_GATE_BUDGETS;
     else if (argc == 2 && strcmp(argv[1], "--gate") == 0)
@@ -2359,7 +2545,7 @@ int main(int argc, char **argv)
     else if (argc != 1) {
         (void)fprintf(stderr,
                       "usage: perf_syn [--gate|--gate-budgets|"
-                      "--selftest-gate]\n");
+                      "--selftest-gate|--probe-legacy-line=STEM]\n");
         return 2;
     }
     yew_syn_discovery_set_bypass(true);
@@ -2374,6 +2560,10 @@ int main(int argc, char **argv)
     (void)memset(block_trials, 0, sizeof(block_trials));
     (void)memset(block_multiline_trials, 0,
                  sizeof(block_multiline_trials));
+    (void)memset(make_embed_line_trials, 0,
+                 sizeof(make_embed_line_trials));
+    (void)memset(make_embed_view_trials, 0,
+                 sizeof(make_embed_view_trials));
     (void)memset(frozen, 0, sizeof(frozen));
     (void)memset(scroll_fps, 0, sizeof(scroll_fps));
     for (size_t i = 0U; i < PERF_SYN_FIXTURE_COUNT; i++) {
@@ -2400,7 +2590,12 @@ int main(int argc, char **argv)
             frozen_free(&frozen[i]);
         return 2;
     }
-    for (size_t i = 0U; i < PERF_SYN_FIXTURE_COUNT; i++) {
+    /* The original s41/s42 fixtures are the frozen non-resident path: their
+     * unchanged baselines prove that adding embed-capable state does not tax
+     * an unloaded guest.  The four s41.5 fixtures and all later fixtures are
+     * the resident-guest lane and carry the embed workload and budgets. */
+    for (size_t i = PERF_SYN_MD_EMBED_INDEX;
+         i < PERF_SYN_FIXTURE_COUNT; i++) {
         u64 idle_ticks;
         u64 loads;
         u64 max_pump_ns;
@@ -2579,6 +2774,40 @@ int main(int argc, char **argv)
         cache = timing_of_trials(cache_trials);
         block = timing_of_trials(block_trials);
         block_multiline = timing_of_trials(block_multiline_trials);
+    }
+    /* The legacy Make rows above retain their unchanged, guest-unloaded
+     * baseline.  Prime that same engine only after those timings, then gate
+     * the real Make -> shell resident path independently. */
+    if (status == 0 &&
+        !prime_frozen_embeds(&frozen[PERF_SYN_MAKE_INDEX],
+                             &make_embed_idle_ticks, &make_embed_loads,
+                             &make_embed_pump_max_ns)) {
+        (void)fprintf(stderr, "perf_syn: Make resident prime failed\n");
+        status = 2;
+    }
+    for (size_t trial = 0U; trial < PERF_SYN_TRIALS && status == 0;
+         trial++) {
+        if (!measure_frozen_line(&frozen[PERF_SYN_MAKE_INDEX], samples,
+                                 count)) {
+            (void)fprintf(stderr,
+                          "perf_syn: Make resident line measurement failed\n");
+            status = 2;
+        } else {
+            make_embed_line_trials[trial] = timing_of(samples, count);
+        }
+        if (status == 0 &&
+            !measure_frozen_viewport(&frozen[PERF_SYN_MAKE_INDEX], 200U,
+                                     samples, count)) {
+            (void)fprintf(stderr,
+                          "perf_syn: Make resident view measurement failed\n");
+            status = 2;
+        } else if (status == 0) {
+            make_embed_view_trials[trial] = timing_of(samples, count);
+        }
+    }
+    if (status == 0) {
+        make_embed_line = timing_of_trials(make_embed_line_trials);
+        make_embed_view = timing_of_trials(make_embed_view_trials);
     }
     if (status == 0 &&
         !measure_warm_start(argv[0], start_samples, start_count,
@@ -2803,6 +3032,12 @@ int main(int argc, char **argv)
                      html_plain_scan_ns * 8U);
             bool definition_switch_regression =
                 definition_switch_ns > 250U;
+            bool make_embed_regression =
+                make_embed_idle_ticks > 1U || make_embed_loads != 1U ||
+                make_embed_pump_max_ns > UINT64_C(2000000) ||
+                make_embed_line.median > 3000U ||
+                make_embed_line.p99 > 12000U ||
+                make_embed_view.p99 > PERF_SYN_VIEW_200_LIMIT_NS;
 
             for (size_t i = 0U; i < PERF_SYN_FIXTURE_COUNT; i++) {
                 bool fixture_scroll_regression =
@@ -2892,6 +3127,17 @@ int main(int argc, char **argv)
                          (unsigned long long)md_embed_states,
                          (unsigned long long)md_embed_pump_max_ns,
                          embed_pump_regression ? " REGRESSION" : " ok");
+            (void)printf("syn.%-20s line_median_ns=%llu line_p99_ns=%llu "
+                         "view_p99_ns=%llu idle_ticks=%llu loads=%llu "
+                         "max_pump_ns=%llu%s\n",
+                         "make_embed_resident",
+                         (unsigned long long)make_embed_line.median,
+                         (unsigned long long)make_embed_line.p99,
+                         (unsigned long long)make_embed_view.p99,
+                         (unsigned long long)make_embed_idle_ticks,
+                         (unsigned long long)make_embed_loads,
+                         (unsigned long long)make_embed_pump_max_ns,
+                         make_embed_regression ? " REGRESSION" : " ok");
             (void)printf("syn.%-20s embedded_ns=%llu plain_ns=%llu%s\n",
                          "html_inline_scan",
                          (unsigned long long)html_embed_scan_ns,
@@ -2905,7 +3151,8 @@ int main(int argc, char **argv)
             if (comment_view_regression || comment_idle_regression ||
                 scroll_regression || whole_regression || state_regression ||
                 all_state_regression || embed_pump_regression ||
-                inline_scan_regression || definition_switch_regression)
+                make_embed_regression || inline_scan_regression ||
+                definition_switch_regression)
                 regression_seen = true;
         }
         if (detect_regression || compile_regression || cache_regression ||

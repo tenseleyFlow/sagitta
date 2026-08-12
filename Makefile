@@ -52,6 +52,7 @@ PERF_BASELINE ?= tests/perf/baselines/perf-x86_64-linux-gnu.txt
 LATENCY_BASELINE ?= tests/perf/baselines/latency-x86_64-linux-gnu.txt
 SCRIPT_SUITE_BASELINE ?= tests/perf/baselines/script-x86_64-linux-gnu.txt
 PERF_ADVISORY ?= 0
+PERF_SYN_PROBE_STEM ?= markdown
 
 ifneq ($(filter 1,$(SAN)),)
 ifneq ($(filter 1,$(VALGRIND)),)
@@ -499,7 +500,7 @@ endif
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
         perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
         perf-mouse perf-record perf-syn perf-syn-budgets perf-syn-quiet \
-        perf-syn-gate-selftest perf-syn-size \
+        perf-syn-gate-selftest perf-syn-line-probe perf-syn-size \
         perf-batch perf-batch-selftest \
         perf-undo perf-textbuf perf-huge perf-update perf-baseline-guard \
         perf-gate-selftest perf-latency perf-latency-selftest \
@@ -994,6 +995,9 @@ perf-syn-budgets: $(BUILD)/perf_syn $(BUILD)/yew
 
 perf-syn-gate-selftest: $(BUILD)/perf_syn
 	$(BUILD)/perf_syn --selftest-gate
+
+perf-syn-line-probe: $(BUILD)/perf_syn
+	$(BUILD)/perf_syn --probe-legacy-line='$(PERF_SYN_PROBE_STEM)'
 
 perf-syn-quiet: $(BUILD)/perf_syn $(BUILD)/yew
 	YEW_PERF_SYN_COMMAND='$(abspath $(BUILD)/perf_syn) --gate' \
