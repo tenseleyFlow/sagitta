@@ -154,6 +154,8 @@ static bool accepted_prefix(const Bytebuf *before, const Bytebuf *after,
                             size_t why_cap)
 {
     size_t inserted;
+    size_t prefix_len;
+    size_t suffix_len;
 
     if (after->len <= before->len)
         return fail(why, why_cap, "successful accept inserted no bytes");
@@ -161,12 +163,17 @@ static bool accepted_prefix(const Bytebuf *before, const Bytebuf *after,
     if (consumed > suggestion_len ||
         inserted > suggestion_len - (size_t)consumed)
         return fail(why, why_cap, "accept exceeded suggestion remainder");
-    if (cursor > before->len ||
-        memcmp(after->data, before->data, (size_t)cursor) != 0 ||
-        memcmp(after->data + cursor + inserted, before->data + cursor,
-               before->len - (size_t)cursor) != 0)
+    if (cursor > before->len)
+        return fail(why, why_cap, "accept cursor exceeded original buffer");
+    prefix_len = (size_t)cursor;
+    suffix_len = before->len - prefix_len;
+    if ((prefix_len != 0U &&
+         memcmp(after->data, before->data, prefix_len) != 0) ||
+        (suffix_len != 0U &&
+         memcmp(after->data + prefix_len + inserted,
+                before->data + prefix_len, suffix_len) != 0))
         return fail(why, why_cap, "accept changed bytes outside insertion");
-    if (memcmp(after->data + cursor, suggestion + consumed, inserted) != 0)
+    if (memcmp(after->data + prefix_len, suggestion + consumed, inserted) != 0)
         return fail(why, why_cap, "accept did not insert suggestion prefix");
     return true;
 }
