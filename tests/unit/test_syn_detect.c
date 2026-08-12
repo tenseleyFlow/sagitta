@@ -395,7 +395,8 @@ void test_syn_detect_indexes_scale_without_definition_scans(void)
         size_t i;
 
         for (i = 0U; i < sizes[s]; i++) {
-            (void)snprintf(keys[i], sizeof(keys[i]), "key-%03zu", i);
+            (void)snprintf(keys[i], sizeof(keys[i]), "key-%03u",
+                           (unsigned)i);
             entries[i].key = keys[i];
             entries[i].lang = (u32)(i + 1U);
             entries[i].key_len = (u32)strlen(keys[i]);
