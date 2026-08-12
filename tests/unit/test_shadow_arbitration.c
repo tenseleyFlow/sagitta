@@ -6,6 +6,10 @@
 #include "edit/ed.h"
 #include "edit/option.h"
 #include "edit/shadow.h"
+#include "term/grid.h"
+#include "term/render.h"
+#include "ui/draw.h"
+#include "ui/shadowdraw.h"
 
 static void arbitration_fixture(Ed *ed)
 {
@@ -37,6 +41,25 @@ static void arbitration_deliver_order(Ed *ed, const u8 order[3])
 
     for (i = 0U; i < 3U; i++)
         arbitration_deliver(ed, order[i], text[order[i]]);
+}
+
+static void arbitration_render(Ed *ed)
+{
+    TtyCaps caps;
+
+    (void)memset(&caps, 0, sizeof(caps));
+    YEW_ASSERT(yew_grid_init(&ed->grid, &ed->interner, 12U, 60U));
+    ed->grid_ready = true;
+    yew_render_init(&ed->render, &caps, NULL);
+    ed->render_ready = true;
+    yew_ed_layout(ed);
+    yew_draw_panes(ed);
+    yew_grid_mark_all(&ed->grid);
+    yew_draw_footer(ed, ed->win);
+    yew_draw_cursor(ed, ed->win);
+    yew_shadow_draw_panes(ed);
+    ed->frame.len = 0U;
+    YEW_ASSERT(yew_render_frame(&ed->render, &ed->grid, &ed->frame) != 0U);
 }
 
 void test_shadow_stats_names_every_unregistered_provider_sprint(void)
@@ -92,6 +115,10 @@ void test_shadow_arbitration_is_independent_of_delivery_order(void)
     }
     YEW_ASSERT_EQ_U64(first.shadow_stats.delivered, 3U);
     YEW_ASSERT_EQ_U64(second.shadow_stats.delivered, 3U);
+    arbitration_render(&first);
+    arbitration_render(&second);
+    YEW_ASSERT_EQ_U64(first.frame.len, second.frame.len);
+    YEW_ASSERT_EQ_MEM(first.frame.data, second.frame.data, first.frame.len);
     yew_ed_free(&second);
     yew_ed_free(&first);
 }

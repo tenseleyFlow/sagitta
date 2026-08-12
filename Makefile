@@ -405,6 +405,7 @@ FUZZ_LINK_OBJ := $(FUZZ_CORE_OBJ) $(FUZZ_LIB_OBJ)
 
 PERF_UNICODE_OBJ := $(BUILD)/tests/perf/perf_unicode.o
 PERF_RENDER_OBJ := $(BUILD)/tests/perf/perf_render.o
+PERF_SHADOW_OBJ := $(BUILD)/tests/perf/perf_shadow.o
 PERF_SCROLL_OBJ := $(BUILD)/tests/perf/scroll.o
 PERF_PIECE_OBJ := $(BUILD)/tests/perf/perf_piece.o
 PERF_CURSOR_OBJ := $(BUILD)/tests/perf/perf_cursor.o
@@ -462,6 +463,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
                 $(PTY_ORACLE_OBJ) \
                 $(PTY_HARNESS_OBJ) $(PTY_REGISTRY_OBJ) $(PTY_RUNNER_OBJ) \
                 $(PTY_DEMO_OBJ) $(PERF_UNICODE_OBJ) $(PERF_RENDER_OBJ) \
+                $(PERF_SHADOW_OBJ) \
                 $(PERF_PIECE_OBJ) $(PERF_CURSOR_OBJ) $(PERF_UNDO_OBJ) \
                 $(PERF_TEXTBUF_OBJ) $(PERF_LATENCY_OBJ) \
                 $(PERF_JOBSTREAM_OBJ) $(PERF_REPATH_OBJ) \
@@ -504,6 +506,7 @@ endif
         fixtures fixtures-quick fixtures-verify \
         fixtures-verify-quick \
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
+        perf-shadow \
         perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
         perf-mouse perf-record perf-syn perf-syn-budgets perf-syn-quiet \
         perf-syn-gate-selftest perf-syn-line-probe \
@@ -688,6 +691,10 @@ $(BUILD)/perf_unicode: $(PERF_CORE_OBJ) $(PERF_UNICODE_OBJ)
 
 $(BUILD)/perf_render: $(PERF_CORE_OBJ) $(PERF_RENDER_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_RENDER_OBJ) $(LDLIBS)
+
+$(BUILD)/perf_shadow: $(PERF_CORE_OBJ) $(PERF_SHADOW_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
+		$(PERF_SHADOW_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_scroll: $(PERF_CORE_OBJ) $(PERF_SCROLL_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) $(PERF_SCROLL_OBJ) $(LDLIBS)
@@ -975,13 +982,16 @@ perf-unicode: $(BUILD)/perf_unicode
 perf-render: $(BUILD)/perf_render
 	$(BUILD)/perf_render
 
+perf-shadow: $(BUILD)/perf_shadow
+	YEW_SHADOW_TEST=0 $(BUILD)/perf_shadow
+
 perf-scroll: $(BUILD)/perf_scroll
 	$(BUILD)/perf_scroll
 
 perf-piece: $(BUILD)/perf_piece
 	$(BUILD)/perf_piece
 
-perf: perf-unicode perf-render perf-scroll perf-piece perf-cursor perf-undo perf-textbuf \
+perf: perf-unicode perf-render perf-shadow perf-scroll perf-piece perf-cursor perf-undo perf-textbuf \
       perf-latency perf-jobstream perf-re-pathological \
       perf-re-throughput perf-search-latency \
       perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
@@ -1453,6 +1463,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew
          $(FLETCH_RUN_OBJ:.o=.d) $(SCRIPT_RUNNER_OBJ:.o=.d) \
          $(ROUNDTRIP_OBJ:.o=.d) \
          $(PERF_UNICODE_OBJ:.o=.d) $(PERF_RENDER_OBJ:.o=.d) \
+         $(PERF_SHADOW_OBJ:.o=.d) \
          $(PERF_PIECE_OBJ:.o=.d) $(PERF_CURSOR_OBJ:.o=.d) \
          $(PERF_UNDO_OBJ:.o=.d) $(PERF_TEXTBUF_OBJ:.o=.d) \
          $(PERF_LATENCY_OBJ:.o=.d) $(PERF_JOBSTREAM_OBJ:.o=.d) \
