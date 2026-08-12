@@ -498,7 +498,8 @@ endif
         fixtures-verify-quick \
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
         perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
-        perf-mouse perf-record perf-syn perf-syn-size \
+        perf-mouse perf-record perf-syn perf-syn-budgets perf-syn-quiet \
+        perf-syn-gate-selftest perf-syn-size \
         perf-batch perf-batch-selftest \
         perf-undo perf-textbuf perf-huge perf-update perf-baseline-guard \
         perf-gate-selftest perf-latency perf-latency-selftest \
@@ -986,7 +987,17 @@ perf-record: $(BUILD)/perf_record
 	$(BUILD)/perf_record $(if $(PERF_GATE),--gate,)
 
 perf-syn: $(BUILD)/perf_syn $(BUILD)/yew
-	$(BUILD)/perf_syn
+	$(BUILD)/perf_syn --gate
+
+perf-syn-budgets: $(BUILD)/perf_syn $(BUILD)/yew
+	$(BUILD)/perf_syn --gate-budgets
+
+perf-syn-gate-selftest: $(BUILD)/perf_syn
+	$(BUILD)/perf_syn --selftest-gate
+
+perf-syn-quiet: $(BUILD)/perf_syn $(BUILD)/yew
+	YEW_PERF_SYN_COMMAND='$(abspath $(BUILD)/perf_syn) --gate' \
+		scripts/run-perf-syn-quiet.sh
 
 perf-syn-size: $(BUILD)/yew
 	CC=$(CC) MODULES='$(MODULES)' \

@@ -114,7 +114,70 @@ typedef struct PerfCase {
     Timing baseline;
 } PerfCase;
 
+typedef enum PerfSynGateMode {
+    PERF_SYN_GATE_BUDGETS,
+    PERF_SYN_GATE_FULL
+} PerfSynGateMode;
+
 static volatile u64 perf_syn_sink;
+
+static bool gate_fails(PerfSynGateMode mode, bool absolute_violation,
+                       bool relative_violation)
+{
+    return absolute_violation ||
+           (mode == PERF_SYN_GATE_FULL && relative_violation);
+}
+
+static bool gate_uses_baseline(PerfSynGateMode mode)
+{
+    return mode == PERF_SYN_GATE_FULL;
+}
+
+static int selftest_gate(void)
+{
+    static const struct {
+        PerfSynGateMode mode;
+        bool absolute_violation;
+        bool relative_violation;
+        bool want;
+        const char *what;
+    } cases[] = {
+        {PERF_SYN_GATE_BUDGETS, false, false, false, "budgets clean"},
+        {PERF_SYN_GATE_BUDGETS, true, false, true, "budget exceeded"},
+        {PERF_SYN_GATE_BUDGETS, false, true, false, "relative ignored"},
+        {PERF_SYN_GATE_BUDGETS, true, true, true, "both in budgets mode"},
+        {PERF_SYN_GATE_FULL, false, false, false, "full clean"},
+        {PERF_SYN_GATE_FULL, true, false, true, "full budget exceeded"},
+        {PERF_SYN_GATE_FULL, false, true, true, "full relative exceeded"},
+        {PERF_SYN_GATE_FULL, true, true, true, "both in full mode"}
+    };
+    size_t failures = 0U;
+
+    for (size_t i = 0U; i < YEW_ARRAY_LEN(cases); i++) {
+        bool got = gate_fails(cases[i].mode, cases[i].absolute_violation,
+                              cases[i].relative_violation);
+
+        if (got != cases[i].want) {
+            (void)printf("FAIL gate rule: %s -> %s, wanted %s\n",
+                         cases[i].what, got ? "failure" : "pass",
+                         cases[i].want ? "failure" : "pass");
+            failures++;
+        }
+    }
+    if (gate_uses_baseline(PERF_SYN_GATE_BUDGETS) ||
+        !gate_uses_baseline(PERF_SYN_GATE_FULL)) {
+        (void)printf("FAIL gate rule: baseline selection\n");
+        failures++;
+    }
+    if (failures != 0U) {
+        (void)printf("perf_syn: %lu gate-rule cases wrong\n",
+                     (unsigned long)failures);
+        return 1;
+    }
+    (void)printf("perf_syn: gate modes behave (%lu cases)\n",
+                 (unsigned long)YEW_ARRAY_LEN(cases));
+    return 0;
+}
 
 typedef struct Source {
     u8 *data;
@@ -2278,6 +2341,7 @@ int main(int argc, char **argv)
     u64 html_plain_scan_ns = 0U;
     u64 definition_switch_ns = 0U;
     bool regression_seen = false;
+    PerfSynGateMode gate_mode = PERF_SYN_GATE_FULL;
     int status = 0;
 
     if (argc == 2 && strcmp(argv[1], "--prime-all-syntax") == 0)
@@ -2286,8 +2350,16 @@ int main(int argc, char **argv)
         return warm_start_probe();
     if (argc == 2 && strcmp(argv[1], "--detect-probe") == 0)
         return detect_probe();
-    if (argc != 1) {
-        (void)fprintf(stderr, "perf_syn: unknown argument\n");
+    if (argc == 2 && strcmp(argv[1], "--selftest-gate") == 0)
+        return selftest_gate();
+    if (argc == 2 && strcmp(argv[1], "--gate-budgets") == 0)
+        gate_mode = PERF_SYN_GATE_BUDGETS;
+    else if (argc == 2 && strcmp(argv[1], "--gate") == 0)
+        gate_mode = PERF_SYN_GATE_FULL;
+    else if (argc != 1) {
+        (void)fprintf(stderr,
+                      "usage: perf_syn [--gate|--gate-budgets|"
+                      "--selftest-gate]\n");
         return 2;
     }
     yew_syn_discovery_set_bypass(true);
@@ -2572,40 +2644,52 @@ int main(int argc, char **argv)
         status = 2;
     }
 
-    if (status == 0 && !load_baselines(cases, YEW_ARRAY_LEN(cases)))
+    if (status == 0 && gate_uses_baseline(gate_mode) &&
+        !load_baselines(cases, YEW_ARRAY_LEN(cases)))
         status = 2;
     for (size_t i = 0U; status == 0 && i < YEW_ARRAY_LEN(cases); i++) {
-        u64 median_limit = cases[i].baseline.median +
-                           cases[i].baseline.median / 5U;
-        u64 p99_limit = cases[i].baseline.p99 + cases[i].baseline.p99 / 5U;
-        bool regression = cases[i].measured.median > median_limit ||
-                          cases[i].measured.p99 > p99_limit;
+        bool relative_regression = false;
+        bool absolute_regression = false;
+        bool regression;
+
+        if (gate_mode == PERF_SYN_GATE_FULL) {
+            u64 median_limit = cases[i].baseline.median +
+                               cases[i].baseline.median / 5U;
+            u64 p99_limit = cases[i].baseline.p99 +
+                            cases[i].baseline.p99 / 5U;
+
+            relative_regression = cases[i].measured.median > median_limit ||
+                                  cases[i].measured.p99 > p99_limit;
+        }
 
         if (i >= CASE_VIEW_200_FIRST && i <= CASE_VIEW_200_LAST)
-            regression = regression ||
-                         cases[i].measured.p99 > PERF_SYN_VIEW_200_LIMIT_NS;
+            absolute_regression =
+                cases[i].measured.p99 > PERF_SYN_VIEW_200_LIMIT_NS;
         if (i >= CASE_VIEW_24_FIRST && i <= CASE_VIEW_24_LAST)
-            regression = regression ||
-                         cases[i].measured.p99 > PERF_SYN_VIEW_24_LIMIT_NS;
+            absolute_regression = absolute_regression ||
+                cases[i].measured.p99 > PERF_SYN_VIEW_24_LIMIT_NS;
         if (i >= CASE_FROZEN_LINE_FIRST && i <= CASE_FROZEN_LINE_LAST) {
             bool markdown_embed =
                 i == CASE_FROZEN_LINE_FIRST + PERF_SYN_MD_EMBED_INDEX;
 
-            regression = regression ||
-                         cases[i].measured.median >
-                             (markdown_embed ? 3500U : 3000U) ||
-                         cases[i].measured.p99 >
-                             (markdown_embed ? 14000U : 12000U);
+            absolute_regression = absolute_regression ||
+                cases[i].measured.median >
+                    (markdown_embed ? 3500U : 3000U) ||
+                cases[i].measured.p99 >
+                    (markdown_embed ? 14000U : 12000U);
         }
         if (i >= CASE_FROZEN_EDIT_FIRST && i <= CASE_FROZEN_EDIT_LAST)
-            regression = regression || cases[i].measured.p99 > 60000U;
+            absolute_regression = absolute_regression ||
+                                  cases[i].measured.p99 > 60000U;
         if (i == CASE_THEME_SWITCH)
-            regression = regression ||
-                         cases[i].measured.p99 > PERF_SYN_THEME_LIMIT_NS ||
-                         theme_line_calls != 0U;
+            absolute_regression = absolute_regression ||
+                cases[i].measured.p99 > PERF_SYN_THEME_LIMIT_NS ||
+                theme_line_calls != 0U;
         if (i == CASE_MINIFIED_FIRST_PAINT)
-            regression = regression ||
-                         cases[i].measured.p99 > PERF_SYN_MINIFIED_LIMIT_NS;
+            absolute_regression = absolute_regression ||
+                cases[i].measured.p99 > PERF_SYN_MINIFIED_LIMIT_NS;
+        regression = gate_fails(gate_mode, absolute_regression,
+                                relative_regression);
 
         (void)printf("syn.%-20s median_ns=%llu p99_ns=%llu%s\n",
                      cases[i].name,
