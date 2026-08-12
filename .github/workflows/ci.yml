@@ -269,8 +269,8 @@ jobs:
         run: make perf-gate-selftest CC=gcc
       - name: Run subsystem budgets despite runner noise
         run: |
-          for target in perf-unicode perf-render perf-cursor perf-undo \
-            perf-units perf-multicursor perf-piece; do
+          for target in perf-unicode perf-render perf-shadow perf-cursor \
+            perf-undo perf-units perf-multicursor perf-piece; do
             passed=0
             for attempt in 1 2 3; do
               if make "$target" CC=gcc; then
