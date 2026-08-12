@@ -184,6 +184,36 @@ static u16 put_ascii_expansion(Grid *g, u16 row, u16 col,
     return col;
 }
 
+static u16 put_printable_ascii_run(Grid *g, u16 row, u16 col,
+                                   const u8 *bytes, size_t n, YewColor fg,
+                                   YewColor bg, u16 attrs)
+{
+    Cell *cells = &g->back[(size_t)row * g->cols];
+    Cell cell;
+    size_t available = (size_t)(g->cols - col);
+    size_t count = n < available ? n : available;
+    u16 lo = col;
+    u16 hi = (u16)(col + count);
+    size_t i;
+
+    if (count == 0u)
+        return col;
+    break_pair(g, row, col, &lo, &hi);
+    if (count > 1u)
+        break_pair(g, row, (u16)(col + count - 1u), &lo, &hi);
+    memset(&cell, 0, sizeof(cell));
+    cell.fg = color_normalize(fg);
+    cell.bg = color_normalize(bg);
+    cell.attrs = (u16)(attrs & YEW_CELL_ATTR_MASK);
+    cell.w = 1u;
+    for (i = 0u; i < count; i++) {
+        cell.utf8[0] = bytes[i];
+        cells[col + i] = cell;
+    }
+    damage_add(g, row, lo, hi);
+    return (u16)(col + count);
+}
+
 static bool control_expansion(const u8 *cluster, size_t n, u8 out[4],
                               size_t *out_n, bool *invalid)
 {
@@ -360,6 +390,16 @@ u16 yew_grid_puts(Grid *g, u16 row, u16 col, const u8 *s, size_t n,
     if (g == NULL || s == NULL || row >= g->rows)
         return col;
     while (pos < n && col < g->cols) {
+        if (s[pos] >= 0x20u && s[pos] <= 0x7eu) {
+            size_t end = pos + 1u;
+
+            while (end < n && s[end] >= 0x20u && s[end] <= 0x7eu)
+                end++;
+            col = put_printable_ascii_run(g, row, col, s + pos, end - pos,
+                                          fg, bg, attrs);
+            pos = end;
+            continue;
+        }
         size_t next = yew_gb_next_bytes(s, n, pos);
 
         if (next <= pos || next > n)

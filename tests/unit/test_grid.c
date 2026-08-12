@@ -159,6 +159,51 @@ void test_grid_controls_are_lowered_to_printable_cells(void)
     grid_fixture_free(&grid, &arena, &interner);
 }
 
+void test_grid_printable_ascii_runs_match_scalar_writes(void)
+{
+    Grid run;
+    Grid scalar;
+    Arena run_arena;
+    Arena scalar_arena;
+    Interner run_interner;
+    Interner scalar_interner;
+    YewColor fg = {YEW_COLOR_INDEXED, 42u, 91u, 37u};
+    YewColor bg = {9u, 8u, 7u, 6u};
+    static const u8 cjk[] = {0xe6u, 0xbcu, 0xa2u};
+    static const u8 ascii[] = "abcdef";
+    static const u8 combined[] = {'e', 0xccu, 0x81u};
+    size_t i;
+
+    grid_fixture_init(&run, &run_arena, &run_interner, 2u, 8u);
+    grid_fixture_init(&scalar, &scalar_arena, &scalar_interner, 2u, 8u);
+    (void)yew_grid_put(&run, 0u, 0u, cjk, sizeof(cjk), fg, bg, 0u);
+    (void)yew_grid_put(&run, 0u, 6u, cjk, sizeof(cjk), fg, bg, 0u);
+    (void)yew_grid_put(&scalar, 0u, 0u, cjk, sizeof(cjk), fg, bg, 0u);
+    (void)yew_grid_put(&scalar, 0u, 6u, cjk, sizeof(cjk), fg, bg, 0u);
+    yew_grid_flip(&run);
+    yew_grid_flip(&scalar);
+
+    YEW_ASSERT_EQ_U64(yew_grid_puts(&run, 0u, 1u, ascii,
+                                   sizeof(ascii) - 1u, fg, bg, UINT16_MAX),
+                      7u);
+    for (i = 0u; i < sizeof(ascii) - 1u; i++)
+        (void)yew_grid_put(&scalar, 0u, (u16)(i + 1u), &ascii[i], 1u,
+                           fg, bg, UINT16_MAX);
+    YEW_ASSERT_EQ_U64(yew_grid_puts(&run, 1u, 0u, combined,
+                                   sizeof(combined), fg, bg, UINT16_MAX),
+                      1u);
+    YEW_ASSERT_EQ_U64(yew_grid_put(&scalar, 1u, 0u, combined,
+                                  sizeof(combined), fg, bg, UINT16_MAX),
+                      1u);
+    YEW_ASSERT_EQ_MEM(run.back, scalar.back, 16u * sizeof(*run.back));
+    YEW_ASSERT_EQ_MEM(run.dmg, scalar.dmg, 2u * sizeof(*run.dmg));
+    YEW_ASSERT_EQ_U64(run.dmg_lo, scalar.dmg_lo);
+    YEW_ASSERT_EQ_U64(run.dmg_hi, scalar.dmg_hi);
+
+    grid_fixture_free(&scalar, &scalar_arena, &scalar_interner);
+    grid_fixture_free(&run, &run_arena, &run_interner);
+}
+
 void test_grid_invalid_and_c1_bytes_are_lowered(void)
 {
     Grid grid;

@@ -404,6 +404,7 @@ const YewTest yew_tests[] = {
     T(grid_resize_discards_cells_and_marks_all),
     T(grid_cursor_snaps_left_from_continuation),
     T(grid_controls_are_lowered_to_printable_cells),
+    T(grid_printable_ascii_runs_match_scalar_writes),
     T(grid_invalid_and_c1_bytes_are_lowered),
     T(grid_wide_tail_copies_style),
     T(grid_overwrite_wide_head_blanks_tail),

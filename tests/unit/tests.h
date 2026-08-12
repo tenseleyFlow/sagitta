@@ -380,6 +380,7 @@ void test_grid_damage_unions_writes(void);
 void test_grid_resize_discards_cells_and_marks_all(void);
 void test_grid_cursor_snaps_left_from_continuation(void);
 void test_grid_controls_are_lowered_to_printable_cells(void);
+void test_grid_printable_ascii_runs_match_scalar_writes(void);
 void test_grid_invalid_and_c1_bytes_are_lowered(void);
 void test_grid_wide_tail_copies_style(void);
 void test_grid_overwrite_wide_head_blanks_tail(void);

@@ -12,7 +12,6 @@
 #include "ui/viewport.h"
 #include "ui/win.h"
 #include "unicode/coords.h"
-#include "unicode/grapheme.h"
 #include "unicode/width.h"
 #include "util/log.h"
 
@@ -146,23 +145,23 @@ static void shadow_style(const Ed *ed, const ShadowSug *suggestion,
 static u16 shadow_puts(Grid *grid, u16 row, u16 col, const u8 *text,
                        size_t len, Cell style)
 {
+    static const u8 space = ' ';
     size_t at = 0U;
 
     while (at < len && col < grid->cols) {
-        size_t next = yew_gb_next_bytes(text, len, at);
+        size_t run = at;
 
-        if (next <= at || next > len)
-            YEW_BUG("shadow draw: invalid grapheme boundary");
-        if (next == at + 1U && text[at] == '\t') {
-            static const u8 space = ' ';
-
-            col = yew_grid_put(grid, row, col, &space, 1U, style.fg,
-                               style.bg, style.attrs);
-        } else {
-            col = yew_grid_put(grid, row, col, text + at, next - at,
-                               style.fg, style.bg, style.attrs);
+        while (run < len && text[run] != '\t')
+            run++;
+        if (run != at) {
+            col = yew_grid_puts(grid, row, col, text + at, run - at,
+                                style.fg, style.bg, style.attrs);
+            at = run;
+            continue;
         }
-        at = next;
+        col = yew_grid_put(grid, row, col, &space, 1U, style.fg,
+                           style.bg, style.attrs);
+        at++;
     }
     return col;
 }
