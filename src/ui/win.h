@@ -2,6 +2,7 @@
 #define YEW_UI_WIN_H
 
 #include "edit/motion.h"
+#include "edit/completion.h"
 #include "edit/jumplist.h"
 #include "edit/shadow.h"
 /* Sprint 22 moved Rect here, as this file said it would. */
@@ -53,6 +54,7 @@ typedef struct Win {
     Strmap opt_overrides;
     /* Sprint 43: display-only completion state belongs to the view. */
     Shadow shadow;
+    Completion compl;
 } Win;
 
 /* Sprint 14 compatibility names; new code uses the yew_vp_* API. */

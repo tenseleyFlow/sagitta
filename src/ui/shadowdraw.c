@@ -204,6 +204,8 @@ void yew_shadow_draw(Ed *ed, Win *win, const ShadowLayout *layout,
         layout->nlines == 0U)
         return;
     shadow = &win->shadow;
+    if (win->compl.open && shadow->live)
+        YEW_BUG("shadow draw: completion menu and ghost are both open");
     if (!shadow->live || shadow->suppressed)
         return;
     text = shadow->sug.text + shadow->sug.consumed;

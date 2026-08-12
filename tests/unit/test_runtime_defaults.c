@@ -25,6 +25,8 @@ static const BindRow frozen_L[] = {
     {"A-<up>", "ed.move.unit.prev_alt", 0, NULL},
     {"A-<down>", "ed.shadow.accept_line", 0, NULL},
     {"A-<cr>", "ed.shadow.accept_all", 0, NULL},
+    {"A-]", "ed.shadow.next", 0, NULL},
+    {"A-[", "ed.shadow.prev", 0, NULL},
     {"<home>", "ed.move.unit.home", 0, NULL},
     {"<end>", "ed.move.unit.end", 0, NULL},
     {"<pgup>", "ed.view.page_up", 0, NULL},
@@ -141,6 +143,8 @@ static const BindRow frozen_W[] = {
     {"A-S-<right>", "ed.shadow.accept_word_alt", 0, NULL},
     {"A-<down>", "ed.shadow.accept_line", 0, NULL},
     {"A-<cr>", "ed.shadow.accept_all", 0, NULL},
+    {"A-]", "ed.shadow.next", 0, NULL},
+    {"A-[", "ed.shadow.prev", 0, NULL},
     {"C-<left>", "ed.move.word.sub_prev", 0, NULL},
     {"C-<right>", "ed.move.word.sub_next", 0, NULL},
     {"<home>", "ed.move.unit.home", 0, NULL},
@@ -166,6 +170,8 @@ static const BindRow frozen_B[] = {
     {"A-<up>", "ed.sel.unit.expand", 0, NULL},
     {"A-<down>", "ed.shadow.accept_line", 0, NULL},
     {"A-<cr>", "ed.shadow.accept_all", 0, NULL},
+    {"A-]", "ed.shadow.next", 0, NULL},
+    {"A-[", "ed.shadow.prev", 0, NULL},
     {"h", "ed.mode.enter", 0, "H"},
     {":", "ed.mode.enter", 0, "E"},
     {"<esc>", "ed.mode.escape", 0, NULL},
@@ -184,6 +190,8 @@ static const BindRow frozen_I[] = {
     {"A-S-<right>", "ed.shadow.accept_word_alt", 0, NULL},
     {"A-<down>", "ed.shadow.accept_line", 0, NULL},
     {"A-<cr>", "ed.shadow.accept_all", 0, NULL},
+    {"A-]", "ed.shadow.next", 0, NULL},
+    {"A-[", "ed.shadow.prev", 0, NULL},
     {"<cr>", "ed.edit.insert.newline", 0, NULL},
     {"<tab>", "ed.edit.insert.tab", 0, NULL},
     {"<bs>", "ed.edit.delete.grapheme_left", 0, NULL},
@@ -335,7 +343,7 @@ void test_runtime_defaults_rebuild_frozen_keymap(void)
                                   (u32)(source.len - 1U)), YEW_CMD_OK);
     yew_bind_batch_end(&ed);
     YEW_ASSERT_EQ_U64(yew_bind_rebuild_count(&ed), rebuilds + 1U);
-    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 171U);
+    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 179U);
     for (mode = 0U; mode < (u32)YEW_MODE__N; mode++) {
         if (mode != (u32)YEW_MODE_H)
             panic_rows += yew_keymap_binding_count(&ed.mode_keys[mode]);

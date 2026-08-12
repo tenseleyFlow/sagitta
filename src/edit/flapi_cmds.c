@@ -5,6 +5,7 @@
 
 #include "edit/ed.h"
 #include "edit/motion.h"
+#include "edit/shadow.h"
 #include "fl/flruntime.h"
 #include "text/register.h"
 #include "ui/tabs.h"
@@ -86,6 +87,8 @@ CmdStatus yew_flapi_cmd_win_focus(CmdCtx *cx)
     if (tab_index >= 0 && tab_index != ed->tabs.active) {
         yew_tab_switch(ed, tab_index);
     } else {
+        if (before != NULL && leaf->win != before)
+            yew_shadow_dismiss(ed, before);
         ed->focus = leaf;
         ed->win = leaf->win;
         ed->layout_dirty = true;

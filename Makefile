@@ -224,6 +224,7 @@ UNIT_DEATH_EXCLUDES := \
   --exclude multicursor_deferred_guards_name_their_sprints \
   --exclude syn_deferred_surfaces_fail_loudly \
   --exclude ctxmenu_a_row_handler_reading_a_payload_is_a_bug \
+  --exclude shadow_menu_ghost_conflict_is_a_bug \
   --exclude undo_filter_reason_names_sprint19 \
   --exclude undo_replace_reason_names_sprint21 \
   --exclude undo_macro_reason_names_sprint34 \

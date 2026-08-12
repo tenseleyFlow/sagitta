@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#include "edit/shadow.h"
 #include "fl/flruntime.h"
 #include "ui/message.h"
 #include "ui/win.h"
@@ -21,18 +22,27 @@
  */
 static void pane_refocus(Ed *ed, Pane *want)
 {
+    Pane *leaves[YEW_PANE_MAX_LEAVES];
+    Pane *target;
     Win *before;
+    bool before_live = false;
+    u32 n = 0U;
+    u32 i;
 
     if (ed == NULL || ed->pane_root == NULL)
         return;
     before = ed->win;
-    if (want != NULL && want->is_leaf) {
-        ed->focus = want;
-    } else if (ed->focus == NULL || !ed->focus->is_leaf) {
-        /* Whatever we were looking at is gone: take the first leaf in
-         * tree order rather than leaving a dangling pointer. */
-        ed->focus = yew_pane_first_leaf(ed->pane_root);
-    }
+    target = want != NULL && want->is_leaf ? want : ed->focus;
+    if (target == NULL || !target->is_leaf)
+        target = yew_pane_first_leaf(ed->pane_root);
+    yew_pane_collect_leaves(ed->pane_root, leaves,
+                            YEW_ARRAY_LEN(leaves), &n);
+    for (i = 0U; i < n; i++)
+        if (leaves[i]->win == before)
+            before_live = true;
+    if (before_live && target != NULL && target->win != before)
+        yew_shadow_dismiss(ed, before);
+    ed->focus = target;
     if (ed->focus != NULL && ed->focus->win != NULL)
         ed->win = ed->focus->win;
     /*

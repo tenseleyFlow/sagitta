@@ -1,8 +1,12 @@
 #include "edit/shadow_cmds.h"
 
+#include <string.h>
+
 #include "edit/ed.h"
 #include "edit/mode.h"
+#include "edit/option.h"
 #include "edit/shadow.h"
+#include "ui/message.h"
 
 static CmdStatus accept_status(bool accepted)
 {
@@ -42,4 +46,51 @@ CmdStatus yew_shadow_cmd_dismiss(CmdCtx *cx)
         return YEW_CMD_OK;
     }
     return yew_mode_escape(cx->ed);
+}
+
+CmdStatus yew_shadow_cmd_next(CmdCtx *cx)
+{
+    return accept_status(cx != NULL &&
+                         yew_shadow_next(cx->ed, cx->win));
+}
+
+CmdStatus yew_shadow_cmd_prev(CmdCtx *cx)
+{
+    return accept_status(cx != NULL &&
+                         yew_shadow_prev(cx->ed, cx->win));
+}
+
+CmdStatus yew_shadow_cmd_toggle(CmdCtx *cx)
+{
+    OptVal current;
+    OptVal next;
+    const char *error = NULL;
+
+    if (cx == NULL || cx->ed == NULL ||
+        !yew_opt_get(cx->ed, NULL, NULL, "shadow.enable", 13U, &current) ||
+        current.type != (u8)YEW_OPT_BOOL)
+        return YEW_CMD_ERR_STATE;
+    next = (OptVal){YEW_OPT_BOOL, {.b = !current.as.b}};
+    if (!yew_opt_set(cx->ed, YEW_OPT_SCOPE_DECLARED, "shadow.enable", 13U,
+                     &next, &error)) {
+        yew_msg(cx->ed, YEW_MSG_ERROR, "%s",
+                error == NULL ? "could not toggle shadow text" : error);
+        return YEW_CMD_ERR_STATE;
+    }
+    if (next.as.b && cx->ed->win != NULL)
+        yew_shadow_arm(cx->ed, cx->ed->win);
+    yew_msg(cx->ed, YEW_MSG_INFO, "shadow text %s",
+            next.as.b ? "enabled" : "disabled");
+    return YEW_CMD_OK;
+}
+
+CmdStatus yew_shadow_cmd_stats(CmdCtx *cx)
+{
+    char status[512];
+
+    if (cx == NULL || cx->ed == NULL)
+        return YEW_CMD_ERR_STATE;
+    yew_shadow_stats_format(cx->ed, status, sizeof(status));
+    yew_msg(cx->ed, YEW_MSG_INFO, "%s", status);
+    return YEW_CMD_OK;
 }

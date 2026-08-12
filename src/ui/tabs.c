@@ -10,6 +10,7 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#include "edit/shadow.h"
 #include "fl/flruntime.h"
 #include "ui/groupnav.h"
 #include "ui/glyphs.h"
@@ -51,6 +52,26 @@ static void tab_destroy(Ed *ed, Tab *t)
     }
     free(t->path);
     (void)memset(t, 0, sizeof(*t));
+}
+
+static bool tabs_has_window(const Ed *ed, const Win *want)
+{
+    size_t tab;
+
+    if (ed == NULL || want == NULL)
+        return false;
+    for (tab = 0U; tab < ed->tabs.v.len; tab++) {
+        Pane *leaves[YEW_PANE_MAX_LEAVES];
+        u32 n = 0U;
+        u32 i;
+
+        yew_pane_collect_leaves(ed->tabs.v.data[tab].root, leaves,
+                                YEW_ARRAY_LEN(leaves), &n);
+        for (i = 0U; i < n; i++)
+            if (leaves[i]->win == want)
+                return true;
+    }
+    return false;
 }
 
 void yew_tabs_free(Ed *ed)
@@ -265,6 +286,9 @@ void yew_tab_switch(Ed *ed, int idx)
         ed->tabs.active = ed->tabs.v.len == 0U ? -1 : ed->tabs.active;
         return;
     }
+    if (tabs_has_window(ed, before) &&
+        (t->focus == NULL || t->focus->win != before))
+        yew_shadow_dismiss(ed, before);
     ed->tabs.active = idx;
     /*
      * Hydrate FIRST.  Every route to a different tab comes through

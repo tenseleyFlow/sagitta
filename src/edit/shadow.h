@@ -47,6 +47,12 @@ typedef struct ShadowProvider {
     void (*cancel)(Ed *ed, u32 buf_id, u32 up_to);
 } ShadowProvider;
 
+typedef struct ShadowAnswer {
+    bool live;
+    ShadowSug sug;
+    u8 *owned_text;
+} ShadowAnswer;
+
 typedef struct Shadow {
     bool live;
     bool suppressed;
@@ -55,6 +61,9 @@ typedef struct Shadow {
     bool accepting;
     ShadowSug sug;
     u8 *owned_text;
+    ShadowAnswer answers[YEW_SHADOW_NPROV];
+    u8 selected;
+    bool selected_by_user;
     u32 seq_next[YEW_SHADOW_NPROV];
     u32 seq_min[YEW_SHADOW_NPROV];
     TimerId timer;
@@ -89,6 +98,9 @@ void yew_shadow_fire(Ed *ed, Win *win);
 bool yew_shadow_accept_word(Ed *ed, Win *win, bool alt);
 bool yew_shadow_accept_line(Ed *ed, Win *win);
 bool yew_shadow_accept_all(Ed *ed, Win *win);
+bool yew_shadow_next(Ed *ed, Win *win);
+bool yew_shadow_prev(Ed *ed, Win *win);
+void yew_shadow_stats_format(const Ed *ed, char *out, size_t cap);
 
 /* Internal guard exposed so the staleness suite can exercise byte-exact
  * piece-boundary cases without accepting text. */

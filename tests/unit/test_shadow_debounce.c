@@ -41,7 +41,7 @@ static void fake_cancel_ai(Ed *ed, u32 buf_id, u32 up_to)
     cancel_calls[YEW_SHADOW_AI]++;
 }
 
-static void fake_providers_register(void)
+void yew_test_shadow_providers_register(void)
 {
     static const ShadowProvider providers[YEW_SHADOW_NPROV] = {
         {"index", YEW_SHADOW_INDEX, 0U, fake_request, NULL},
@@ -68,7 +68,7 @@ static void fake_counts_reset(void)
 static void debounce_fixture(Ed *ed, const u8 *bytes, size_t len,
                              u64 cursor)
 {
-    fake_providers_register();
+    yew_test_shadow_providers_register();
     yew_ed_init(ed);
     YEW_ASSERT(yew_ed_open_memory(ed, bytes, len, "shadow-debounce"));
     ed->win->cs.curs.data[ed->win->cs.primary].pos = BYTEOFF(cursor);

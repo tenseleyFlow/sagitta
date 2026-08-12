@@ -1329,6 +1329,9 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     bool durability_command;
     bool newline;
     bool shadow_accept;
+    bool shadow_motion;
+    bool shadow_quiet;
+    bool shadow_holdoff_before;
     bool opened = false;
     bool started_in_insert;
 
@@ -1350,7 +1353,19 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     newline = ed->undo_break_on_newline &&
               strcmp(desc->name, "ed.edit.insert.newline") == 0;
     shadow_accept = strncmp(desc->name, "ed.shadow.accept_", 17U) == 0;
+    shadow_motion = document_target &&
+                    strncmp(desc->name, "ed.move.", 8U) == 0;
+    shadow_quiet = document_target &&
+                   (cx->source == YEW_SRC_REPLAY ||
+                    strcmp(desc->name, "ed.edit.undo") == 0 ||
+                    strcmp(desc->name, "ed.edit.redo") == 0 ||
+                    strncmp(desc->name, "ed.macro.replay", 15U) == 0 ||
+                    strncmp(desc->name, "ed.file.save", 12U) == 0 ||
+                    strncmp(desc->name, "ed.file.write", 13U) == 0);
     started_in_insert = ed->mode == YEW_MODE_I;
+
+    if ((shadow_motion || shadow_quiet) && cx->win != NULL)
+        yew_shadow_dismiss(ed, cx->win);
 
     if (durability_command && ed->durability_failed) {
         yew_msg(ed, YEW_MSG_ERROR,
@@ -1394,7 +1409,13 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
         }
     }
 
+    shadow_holdoff_before = ed->shadow_holdoff;
+    if (shadow_quiet)
+        ed->shadow_holdoff = true;
     status = yew_ed_dispatch_resolved(ed, id, cx);
+    ed->shadow_holdoff = shadow_holdoff_before;
+    if (status == YEW_CMD_OK && shadow_motion && cx->win != NULL)
+        yew_shadow_arm(ed, cx->win);
     if (status == YEW_CMD_OK && document_target && ed->win != NULL &&
         (changes || durability_command ||
          strncmp(desc->name, "ed.move.", 8U) == 0 ||
@@ -1536,6 +1557,7 @@ CmdStatus yew_ed_file_save_win(Ed *ed, Win *win, bool force)
 
     if (ed == NULL || !ed->model_ready || win == NULL || win->buf == NULL)
         return YEW_CMD_ERR_STATE;
+    yew_shadow_dismiss(ed, win);
     yew_ed_insert_barrier(ed);
     doc = win->buf;
     if (doc == NULL || doc->path == NULL) {
@@ -1904,8 +1926,11 @@ void yew_ed_handle_paste(Ed *ed, const u8 *bytes, size_t len, bool end)
     if (ed == NULL)
         return;
     if (!end && bytes == NULL && len == 0U) {
+        if (ed->win != NULL)
+            yew_shadow_dismiss(ed, ed->win);
         ed->paste.len = 0U;
         ed->paste_active = true;
+        ed->shadow_holdoff = true;
         return;
     }
     if (!ed->paste_active)
@@ -1935,6 +1960,7 @@ void yew_ed_handle_paste(Ed *ed, const u8 *bytes, size_t len, bool end)
     }
     ed->paste.len = 0U;
     ed->paste_active = false;
+    ed->shadow_holdoff = false;
 }
 
 void yew_ed_resize(Ed *ed, bool resumed)

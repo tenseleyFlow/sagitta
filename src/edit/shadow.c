@@ -1,5 +1,6 @@
 #include "edit/shadow.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -17,9 +18,29 @@
 
 static const ShadowProvider *shadow_providers[YEW_SHADOW_NPROV];
 
+static bool shadow_opt(Ed *ed, Win *win, const char *name, OptVal *out);
+
 static bool shadow_provider_valid(u8 prov)
 {
     return prov < (u8)YEW_SHADOW_NPROV;
+}
+
+static void shadow_suggestion_clear(ShadowSug *suggestion, u8 **owned_text)
+{
+    if (suggestion == NULL || owned_text == NULL)
+        return;
+    yew_textbuf_free(suggestion->scratch);
+    free(*owned_text);
+    (void)memset(suggestion, 0, sizeof(*suggestion));
+    *owned_text = NULL;
+}
+
+static void shadow_answer_clear(ShadowAnswer *answer)
+{
+    if (answer == NULL)
+        return;
+    shadow_suggestion_clear(&answer->sug, &answer->owned_text);
+    answer->live = false;
 }
 
 void yew_shadow_init(Shadow *shadow)
@@ -30,16 +51,20 @@ void yew_shadow_init(Shadow *shadow)
         YEW_BUG("shadow init: NULL state");
     (void)memset(shadow, 0, sizeof(*shadow));
     shadow->max_lines = YEW_SHADOW_MAX_LINES;
+    shadow->selected = (u8)YEW_SHADOW_NPROV;
     for (i = 0U; i < (u32)YEW_SHADOW_NPROV; i++)
         shadow->seq_next[i] = 1U;
 }
 
 void yew_shadow_free(Shadow *shadow)
 {
+    u32 i;
+
     if (shadow == NULL)
         return;
-    yew_textbuf_free(shadow->sug.scratch);
-    free(shadow->owned_text);
+    shadow_suggestion_clear(&shadow->sug, &shadow->owned_text);
+    for (i = 0U; i < (u32)YEW_SHADOW_NPROV; i++)
+        shadow_answer_clear(&shadow->answers[i]);
     (void)memset(shadow, 0, sizeof(*shadow));
 }
 
@@ -72,12 +97,16 @@ void yew_shadow_dismiss(Ed *ed, Win *win)
     }
     for (i = 0U; i < (u32)YEW_SHADOW_NPROV; i++) {
         seq_next[i] = shadow->seq_next[i];
-        seq_min[i] = shadow->seq_min[i];
+        /* Cancellation is best effort.  A reply already queued in the
+         * poll loop must not resurrect a ghost after Esc, a mode/focus
+         * change, save, or completion-menu open. */
+        seq_min[i] = shadow->seq_next[i];
     }
     suppressed = shadow->suppressed;
     max_lines = shadow->max_lines;
-    yew_textbuf_free(shadow->sug.scratch);
-    free(shadow->owned_text);
+    shadow_suggestion_clear(&shadow->sug, &shadow->owned_text);
+    for (i = 0U; i < (u32)YEW_SHADOW_NPROV; i++)
+        shadow_answer_clear(&shadow->answers[i]);
     (void)memset(shadow, 0, sizeof(*shadow));
     for (i = 0U; i < (u32)YEW_SHADOW_NPROV; i++) {
         shadow->seq_next[i] = seq_next[i];
@@ -85,6 +114,7 @@ void yew_shadow_dismiss(Ed *ed, Win *win)
     }
     shadow->suppressed = suppressed;
     shadow->max_lines = max_lines == 0U ? YEW_SHADOW_MAX_LINES : max_lines;
+    shadow->selected = (u8)YEW_SHADOW_NPROV;
 }
 
 void yew_shadow_register(const ShadowProvider *provider)
@@ -100,8 +130,8 @@ void yew_shadow_register(const ShadowProvider *provider)
     shadow_providers[prov] = provider;
 }
 
-static bool shadow_copy_suggestion(Shadow *shadow,
-                                   const ShadowSug *suggestion)
+static bool shadow_copy_into(ShadowSug *dst, u8 **owned_text,
+                             const ShadowSug *suggestion)
 {
     u8 *copy;
 
@@ -110,16 +140,97 @@ static bool shadow_copy_suggestion(Shadow *shadow,
     copy = yew_xmalloc(suggestion->len == 0U ? 1U : suggestion->len);
     if (suggestion->len != 0U)
         (void)memcpy(copy, suggestion->text, suggestion->len);
-    yew_textbuf_free(shadow->sug.scratch);
-    free(shadow->owned_text);
-    shadow->sug = *suggestion;
-    shadow->owned_text = copy;
-    shadow->sug.text = copy;
-    shadow->sug.scratch = NULL;
-    shadow->live = suggestion->len != 0U &&
+    shadow_suggestion_clear(dst, owned_text);
+    *dst = *suggestion;
+    *owned_text = copy;
+    dst->text = copy;
+    dst->scratch = NULL;
+    return true;
+}
+
+static bool shadow_answer_copy(ShadowAnswer *answer,
+                               const ShadowSug *suggestion)
+{
+    if (!shadow_copy_into(&answer->sug, &answer->owned_text, suggestion))
+        return false;
+    answer->live = suggestion->len != 0U &&
                    suggestion->consumed < suggestion->len;
+    return true;
+}
+
+static u8 shadow_provider_from_name(const char *name, u32 len)
+{
+    if (len == 5U && memcmp(name, "index", 5U) == 0)
+        return (u8)YEW_SHADOW_INDEX;
+    if (len == 3U && memcmp(name, "lsp", 3U) == 0)
+        return (u8)YEW_SHADOW_LSP;
+    if (len == 2U && memcmp(name, "ai", 2U) == 0)
+        return (u8)YEW_SHADOW_AI;
+    return (u8)YEW_SHADOW_NPROV;
+}
+
+static u32 shadow_provider_order(Ed *ed, Win *win,
+                                 u8 order[YEW_SHADOW_NPROV])
+{
+    OptVal value;
+    u32 at = 0U;
+    u32 n = 0U;
+
+    if (!shadow_opt(ed, win, "shadow.providers", &value) ||
+        value.type != (u8)YEW_OPT_STR)
+        return 0U;
+    while (at < value.as.str.len && n < (u32)YEW_SHADOW_NPROV) {
+        u32 lo;
+        u8 prov;
+
+        while (at < value.as.str.len &&
+               (value.as.str.s[at] == ' ' || value.as.str.s[at] == '\t'))
+            at++;
+        lo = at;
+        while (at < value.as.str.len && value.as.str.s[at] != ' ' &&
+               value.as.str.s[at] != '\t')
+            at++;
+        if (at == lo)
+            break;
+        prov = shadow_provider_from_name(value.as.str.s + lo, at - lo);
+        if (shadow_provider_valid(prov))
+            order[n++] = prov;
+    }
+    return n;
+}
+
+static bool shadow_select_answer(Shadow *shadow, u8 prov)
+{
+    const ShadowAnswer *answer;
+
+    if (shadow == NULL || !shadow_provider_valid(prov))
+        return false;
+    answer = &shadow->answers[prov];
+    if (!answer->live ||
+        !shadow_copy_into(&shadow->sug, &shadow->owned_text, &answer->sug))
+        return false;
+    shadow->live = true;
+    shadow->selected = prov;
     shadow->vrows = 0U;
     return true;
+}
+
+static bool shadow_select_preferred(Ed *ed, Win *win)
+{
+    Shadow *shadow = &win->shadow;
+    u8 order[YEW_SHADOW_NPROV];
+    u32 n;
+    u32 i;
+
+    n = shadow_provider_order(ed, win, order);
+    for (i = 0U; i < n; i++)
+        if (shadow->answers[order[i]].live)
+            return shadow_select_answer(shadow, order[i]);
+    shadow_suggestion_clear(&shadow->sug, &shadow->owned_text);
+    shadow->live = false;
+    shadow->selected = (u8)YEW_SHADOW_NPROV;
+    shadow->vrows = 0U;
+    return false;
 }
 
 void yew_shadow_deliver(Ed *ed, const ShadowSug *suggestion)
@@ -136,7 +247,7 @@ void yew_shadow_deliver(Ed *ed, const ShadowSug *suggestion)
         return;
     shadow = &win->shadow;
     prov = suggestion->prov;
-    if (suggestion->buf_id != win->buf->id ||
+    if (shadow->suppressed || suggestion->buf_id != win->buf->id ||
         suggestion->seq < shadow->seq_min[prov] ||
         suggestion->seq >= shadow->seq_next[prov]) {
         ed->shadow_stats.dropped_stale++;
@@ -149,10 +260,20 @@ void yew_shadow_deliver(Ed *ed, const ShadowSug *suggestion)
     if (shadow->vrows != 0U)
         yew_ed_damage_rows(ed, shadow->draw_row,
                            (u16)(shadow->draw_row + shadow->vrows));
-    if (!shadow_copy_suggestion(shadow, suggestion)) {
+    if (!shadow_answer_copy(&shadow->answers[prov], suggestion)) {
         ed->shadow_stats.dropped_stale++;
         return;
     }
+    if (shadow->selected_by_user && shadow->selected == prov) {
+        if (!shadow_select_answer(shadow, prov)) {
+            shadow->selected_by_user = false;
+            (void)shadow_select_preferred(ed, win);
+        }
+    }
+    else if (!shadow->selected_by_user)
+        (void)shadow_select_preferred(ed, win);
+    else if (!shadow->live)
+        (void)shadow_select_preferred(ed, win);
     ed->full_damage = true;
     ed->shadow_stats.delivered++;
 }
@@ -258,6 +379,7 @@ static bool shadow_arm_eligible(Ed *ed, Win *win)
     u32 i;
 
     if (ed == NULL || win == NULL || win != ed->win || ed->headless ||
+        ed->shadow_holdoff ||
         win->shadow.suppressed || win->buf == NULL || win->buf->tb == NULL ||
         win->cs.curs.len != 1U || win->cs.primary >= win->cs.curs.len ||
         fl_runtime_cmd_source(yew_fl_vm(ed)) == YEW_SRC_REPLAY)
@@ -574,6 +696,87 @@ bool yew_shadow_accept_all(Ed *ed, Win *win)
     return true;
 }
 
+static bool shadow_cycle(Ed *ed, Win *win, bool forward)
+{
+    Shadow *shadow;
+    u8 order[YEW_SHADOW_NPROV];
+    u8 answered[YEW_SHADOW_NPROV];
+    u32 order_len;
+    u32 answered_len = 0U;
+    u32 current = 0U;
+    u32 i;
+
+    if (ed == NULL || win == NULL)
+        return false;
+    shadow = &win->shadow;
+    order_len = shadow_provider_order(ed, win, order);
+    for (i = 0U; i < order_len; i++) {
+        if (!shadow->answers[order[i]].live)
+            continue;
+        if (order[i] == shadow->selected)
+            current = answered_len;
+        answered[answered_len++] = order[i];
+    }
+    if (answered_len == 0U)
+        return false;
+    if (!shadow_provider_valid(shadow->selected))
+        current = forward ? answered_len - 1U : 0U;
+    current = forward ? (current + 1U) % answered_len :
+                        (current + answered_len - 1U) % answered_len;
+    if (!shadow_select_answer(shadow, answered[current]))
+        return false;
+    shadow->selected_by_user = true;
+    ed->full_damage = true;
+    return true;
+}
+
+bool yew_shadow_next(Ed *ed, Win *win)
+{
+    return shadow_cycle(ed, win, true);
+}
+
+bool yew_shadow_prev(Ed *ed, Win *win)
+{
+    return shadow_cycle(ed, win, false);
+}
+
+void yew_shadow_stats_format(const Ed *ed, char *out, size_t cap)
+{
+    static const char *const deferred[YEW_SHADOW_NPROV] = {
+        "index — (Sprint 44)",
+        "lsp — (Sprint 47)",
+        "ai — (Sprint 49)",
+    };
+    static const char *const ready[YEW_SHADOW_NPROV] = {
+        "index ready", "lsp ready", "ai ready",
+    };
+
+    if (out == NULL || cap == 0U)
+        return;
+    if (ed == NULL) {
+        (void)snprintf(out, cap, "shadow unavailable");
+        return;
+    }
+    (void)snprintf(
+        out, cap,
+        "shadow requests=%llu delivered=%llu stale=%llu gen=%llu "
+        "accepted=%llu/%llu/%llu revalidate=%llu; %s; %s; %s",
+        (unsigned long long)ed->shadow_stats.requests,
+        (unsigned long long)ed->shadow_stats.delivered,
+        (unsigned long long)ed->shadow_stats.dropped_stale,
+        (unsigned long long)ed->shadow_stats.dropped_gen,
+        (unsigned long long)ed->shadow_stats.accepted_word,
+        (unsigned long long)ed->shadow_stats.accepted_line,
+        (unsigned long long)ed->shadow_stats.accepted_all,
+        (unsigned long long)ed->shadow_stats.revalidate_fail,
+        shadow_providers[YEW_SHADOW_INDEX] == NULL
+            ? deferred[YEW_SHADOW_INDEX] : ready[YEW_SHADOW_INDEX],
+        shadow_providers[YEW_SHADOW_LSP] == NULL
+            ? deferred[YEW_SHADOW_LSP] : ready[YEW_SHADOW_LSP],
+        shadow_providers[YEW_SHADOW_AI] == NULL
+            ? deferred[YEW_SHADOW_AI] : ready[YEW_SHADOW_AI]);
+}
+
 static bool shadow_insert_matches(const TextBuf *tb,
                                   const ShadowSug *suggestion,
                                   ByteOff at, u64 len)
@@ -622,6 +825,20 @@ static bool shadow_note_window_edit(EditCtx *ec, Win *win, u8 kind,
         shadow_insert_matches(ec->tb, &shadow->sug, at, len)) {
         shadow->sug.consumed += (u32)len;
         shadow->sug.buf_gen = ec->tb->gen;
+        for (i = 0U; i < (u32)YEW_SHADOW_NPROV; i++) {
+            ShadowAnswer *answer = &shadow->answers[i];
+
+            if (!answer->live)
+                continue;
+            if (!shadow_insert_matches(ec->tb, &answer->sug, at, len)) {
+                shadow_answer_clear(answer);
+                continue;
+            }
+            answer->sug.consumed += (u32)len;
+            answer->sug.buf_gen = ec->tb->gen;
+            if (answer->sug.consumed == answer->sug.len)
+                shadow_answer_clear(answer);
+        }
         ec->ed->full_damage = true;
         if (shadow->sug.consumed == shadow->sug.len && !shadow->accepting)
             yew_shadow_dismiss(ec->ed, win);
@@ -651,6 +868,7 @@ void yew_shadow_on_edit(EditCtx *ec, u8 kind, ByteOff at, u64 len)
             if (shadow_note_window_edit(ec, leaves[i]->win, kind, at, len))
                 kept = true;
     }
-    if (!kept && ed->win != NULL && ed->win->id == ec->win_id)
+    if (!kept && !ed->shadow_holdoff && ed->win != NULL &&
+        ed->win->id == ec->win_id)
         yew_shadow_arm(ed, ed->win);
 }

@@ -230,6 +230,14 @@ static const CmdDesc builtins[] = {
      "Accept the complete suggestion", "shadow_all"},
     {"ed.shadow.dismiss", yew_shadow_cmd_dismiss, YEW_ARITY_NONE,
      YEW_CMD_NEEDS_WIN, "Dismiss the current suggestion", NULL},
+    {"ed.shadow.next", yew_shadow_cmd_next, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Show the next provider suggestion", NULL},
+    {"ed.shadow.prev", yew_shadow_cmd_prev, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Show the previous provider suggestion", NULL},
+    {"ed.shadow.toggle", yew_shadow_cmd_toggle, YEW_ARITY_NONE, 0U,
+     "Toggle passive shadow suggestions", NULL},
+    {"ed.shadow.stats", yew_shadow_cmd_stats, YEW_ARITY_NONE, 0U,
+     "Report shadow provider and delivery statistics", NULL},
     {"ed.quit", yew_file_cmd_quit, YEW_ARITY_NONE, 0U,
      "Quit, prompting when the buffer is dirty", NULL},
     {"ed.quit_force", yew_file_cmd_quit_force, YEW_ARITY_NONE, 0U,
@@ -966,7 +974,7 @@ static bool command_name_valid(const char *name)
         "close_others", "copy_path", "rename", "context_menu", "add_tab",
         "enable", "disable", "at", "span", "unit", "up_alt", "down_alt",
         "get", "eval", "set_many", "split", "focus", "closure",
-        "reload", "status", "accept_word", "accept_word_alt",
+        "reload", "status", "stats", "accept_word", "accept_word_alt",
         "accept_line", "accept_all"};
     const char *segments[4];
     size_t lengths[4];

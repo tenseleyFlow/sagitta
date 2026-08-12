@@ -6,6 +6,7 @@
 #include "edit/ed.h"
 #include "edit/keys_highlight.h"
 #include "edit/motion.h"
+#include "edit/shadow.h"
 #include "fl/flruntime.h"
 #include "util/log.h"
 
@@ -59,6 +60,8 @@ CmdStatus yew_mode_enter(Ed *ed, Mode mode)
 
         return yew_mode_enter_highlight(ed, unit, false);
     }
+    if (ed->mode != mode && ed->win != NULL)
+        yew_shadow_dismiss(ed, ed->win);
     if (mode == YEW_MODE_E) {
         const char *seed = NULL;
         if (ed->mode == YEW_MODE_I)
@@ -103,6 +106,8 @@ CmdStatus yew_mode_enter_highlight(Ed *ed, Mode unit, bool sticky)
 
     if (ed == NULL || ed->win == NULL)
         return YEW_CMD_ERR_STATE;
+    if (ed->mode != YEW_MODE_H)
+        yew_shadow_dismiss(ed, ed->win);
     if (unit == YEW_MODE_I)
         ops = &yew_unit_char;
     else
