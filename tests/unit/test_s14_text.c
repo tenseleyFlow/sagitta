@@ -193,7 +193,8 @@ void test_s14_journal_replay_edit_is_one_external_undo_transaction(void)
     mark = yew_mark_add(marks, BYTEOFF(3U), YEW_BIAS_RIGHT);
     yew_cset_init(&cursors, cursor);
     undo = yew_undo_new(tb);
-    edit = (EditCtx){tb, marks, &cursors, 9U, NULL, undo, &meta, NULL, NULL, 0};
+    edit = (EditCtx){tb, marks, &cursors, 9U, NULL, undo, &meta, NULL, NULL,
+                     0, NULL, NULL, {0}, 0U};
     YEW_ASSERT(yew_journal_replay_edit(f.source, &edit, &meta));
     YEW_ASSERT_NULL(edit.jrnl);
     YEW_ASSERT_EQ_U64(yew_textbuf_len(tb), 7U);
@@ -272,7 +273,7 @@ static void s14_edit_fixture_init(S14EditFixture *f, FileMeta *meta,
     yew_cset_init(&f->cursors, cursor);
     f->undo = yew_undo_new(f->tb);
     f->edit = (EditCtx){f->tb, f->marks, &f->cursors, 7U, journal,
-                        f->undo, meta, NULL, NULL, 0};
+                        f->undo, meta, NULL, NULL, 0, NULL, NULL, {0}, 0U};
 }
 
 static void s14_edit_fixture_assert_unchanged(const S14EditFixture *f)

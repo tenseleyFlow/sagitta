@@ -112,7 +112,7 @@ static void ring_fixture_init(RingFixture *f)
     f->undo = yew_undo_new(f->tb);
     yew_filemeta_init(&f->meta);
     f->edit = (EditCtx){f->tb, NULL, &f->cursors, 3U, NULL, f->undo,
-                       NULL, NULL, NULL, 0};
+                       NULL, NULL, NULL, 0, NULL, NULL, {0}, 0U};
 }
 
 static void ring_fixture_free(RingFixture *f)

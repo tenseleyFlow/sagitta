@@ -219,6 +219,7 @@ struct Ed {
     bool errorbells;
     bool ambiguous_wide;
     u32 next_win_id;
+    ShadowStats shadow_stats;
 
     bool dispatch_ready;
     bool model_ready;

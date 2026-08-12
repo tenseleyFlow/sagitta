@@ -3,6 +3,7 @@
 
 #include "edit/motion.h"
 #include "edit/jumplist.h"
+#include "edit/shadow.h"
 /* Sprint 22 moved Rect here, as this file said it would. */
 #include "ui/layout.h"
 #include "search/overlay.h"
@@ -49,6 +50,8 @@ typedef struct Win {
     bool wrap_goal_valid;
     /* Sprint 36: sparse values explicitly set at window scope. */
     Strmap opt_overrides;
+    /* Sprint 43: display-only completion state belongs to the view. */
+    Shadow shadow;
 } Win;
 
 /* Sprint 14 compatibility names; new code uses the yew_vp_* API. */

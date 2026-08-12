@@ -54,7 +54,7 @@ static void undo_fixture_init(UndoFixture *f, const u8 *bytes, u64 len)
     f->clock.wall = 100;
     yew_undo_set_clock(f->undo, undo_mono, undo_wall, &f->clock);
     f->edit = (EditCtx){f->tb, f->marks, &f->cursors, 7U, NULL, f->undo,
-                       NULL, NULL, NULL, 0};
+                       NULL, NULL, NULL, 0, NULL, NULL, {0}, 0U};
 }
 
 static void undo_fixture_free(UndoFixture *f)
@@ -607,7 +607,8 @@ void test_undo_save_reopens_journal_on_navigation(void)
     YEW_ASSERT_EQ_U64(yew_file_load(source, &tb, &meta), YEW_LOAD_OK);
     yew_cset_init(&cursors, cursor);
     undo = yew_undo_new(tb);
-    edit = (EditCtx){tb, NULL, &cursors, 0U, NULL, undo, &meta, NULL, NULL, 0};
+    edit = (EditCtx){tb, NULL, &cursors, 0U, NULL, undo, &meta, NULL, NULL,
+                     0, NULL, NULL, {0}, 0U};
 
     yew_edit_insert(&edit, BYTEOFF(4U), (const u8 *)"X", 1U);
     YEW_ASSERT_NOT_NULL(edit.jrnl);

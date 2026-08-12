@@ -43,7 +43,7 @@ static void marks_fixture_init(MarkFixture *f, const u8 *bytes, u64 len)
     f->wall = 100;
     yew_undo_set_clock(f->undo, marks_mono, marks_wall, f);
     f->edit = (EditCtx){f->tb, f->marks, &f->cursors, 0U, NULL, f->undo,
-                       NULL, NULL, NULL, 0};
+                       NULL, NULL, NULL, 0, NULL, NULL, {0}, 0U};
 }
 
 static void marks_fixture_free(MarkFixture *f)

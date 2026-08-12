@@ -98,7 +98,8 @@ void test_piece_regress_undo_branch_survives(void)
 
     yew_cset_init(&cursors, cursor);
     undo = yew_undo_new(tb);
-    edit = (EditCtx){tb, marks, &cursors, 3U, NULL, undo, NULL, NULL, NULL, 0};
+    edit = (EditCtx){tb, marks, &cursors, 3U, NULL, undo, NULL, NULL, NULL,
+                     0, NULL, NULL, {0}, 0U};
 
     yew_undo_boundary(undo);
     yew_edit_insert(&edit, BYTEOFF(4U), (const u8 *)"A", 1U);
@@ -156,7 +157,8 @@ void test_piece_regress_undo_compact_zero_repair_run(void)
     const UndoRepairRun *insert_run;
 
     yew_cset_init(&cursors, cursor);
-    edit = (EditCtx){tb, marks, &cursors, 1U, NULL, undo, NULL, NULL, NULL, 0};
+    edit = (EditCtx){tb, marks, &cursors, 1U, NULL, undo, NULL, NULL, NULL,
+                     0, NULL, NULL, {0}, 0U};
 
     /* A deletion first records the collapsed mark. The following insert has
      * an empty repair run, but its offset still belongs at the current end

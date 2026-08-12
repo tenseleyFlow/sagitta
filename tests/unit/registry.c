@@ -1723,6 +1723,12 @@ const YewTest yew_tests[] = {
     T(theme_auto_uses_fake_osc11_io_and_is_default_off),
     T(theme_option_rejects_invalid_name_transactionally),
     T(theme_default_syncs_underline_palette_after_render_init),
+    T(shadow_revalidate_exact_and_divergent_prefixes),
+    T(shadow_revalidate_boundaries_pieces_and_binary),
+    T(shadow_delivery_owns_bytes_and_rejects_stale_results),
+    T(shadow_generation_drop_preserves_buffer_bytes),
+    T(shadow_edit_keeps_only_a_matching_typed_prefix),
+    T(shadow_delete_always_dismisses),
 };
 
 const size_t yew_tests_len = YEW_ARRAY_LEN(yew_tests);

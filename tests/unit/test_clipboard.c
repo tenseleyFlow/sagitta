@@ -941,7 +941,7 @@ void test_clipboard_unnamed_paste_reads_subprocess(void)
     yew_cset_init(&cursors, cursor);
     undo = yew_undo_new(tb);
     edit = (EditCtx){tb, NULL, &cursors, 7U, NULL, undo, NULL,
-                     NULL, NULL, 0};
+                     NULL, NULL, 0, NULL, NULL, {0}, 0U};
     bytebuf_init(&materialized);
 
     yew_test_capture_log();

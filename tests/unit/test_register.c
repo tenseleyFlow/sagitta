@@ -64,7 +64,8 @@ void test_register_computes_last_insert_and_current_path_on_read(void)
     yew_filemeta_init(&meta);
     meta.realpath = yew_xmalloc(sizeof(path));
     (void)memcpy(meta.realpath, path, sizeof(path));
-    edit = (EditCtx){tb, NULL, &cursors, 1U, NULL, undo, NULL, NULL, NULL, 0};
+    edit = (EditCtx){tb, NULL, &cursors, 1U, NULL, undo, NULL, NULL, NULL,
+                     0, NULL, NULL, {0}, 0U};
     yew_edit_insert(&edit, BYTEOFF(0U), inserted, sizeof(inserted));
     yew_edit_delete(&edit, (Span){2U, 3U});
     yew_reg_bind_context(&r, undo, &meta);
@@ -91,7 +92,8 @@ void test_register_last_insert_reflects_backspace_in_type_run(void)
     yew_reg_init(&r);
     tb = yew_textbuf_from_bytes((const u8 *)"--", 2U);
     undo = yew_undo_new(tb);
-    edit = (EditCtx){tb, NULL, NULL, 1U, NULL, undo, NULL, NULL, NULL, 0};
+    edit = (EditCtx){tb, NULL, NULL, 1U, NULL, undo, NULL, NULL, NULL, 0,
+                     NULL, NULL, {0}, 0U};
     yew_undo_begin(&edit, YEW_TXN_TYPE);
     yew_edit_insert(&edit, BYTEOFF(1U), (const u8 *)"abc", 3U);
     yew_edit_delete(&edit, (Span){2U, 3U});

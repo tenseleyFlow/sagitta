@@ -39,7 +39,7 @@ static void txn_buf_open(TxnBuf *b, const char *text)
     yew_cset_init(&b->cursors, txn_cursor());
     b->undo = yew_undo_new(b->tb);
     b->ec = (EditCtx){b->tb, b->marks, &b->cursors, 1U, NULL, b->undo,
-                      NULL, NULL, NULL, 0};
+                      NULL, NULL, NULL, 0, NULL, NULL, {0}, 0U};
 }
 
 static void txn_buf_close(TxnBuf *b)

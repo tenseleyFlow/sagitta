@@ -1761,5 +1761,11 @@ void test_theme_commands_set_and_toggle_live_theme(void);
 void test_theme_auto_uses_fake_osc11_io_and_is_default_off(void);
 void test_theme_option_rejects_invalid_name_transactionally(void);
 void test_theme_default_syncs_underline_palette_after_render_init(void);
+void test_shadow_revalidate_exact_and_divergent_prefixes(void);
+void test_shadow_revalidate_boundaries_pieces_and_binary(void);
+void test_shadow_delivery_owns_bytes_and_rejects_stale_results(void);
+void test_shadow_generation_drop_preserves_buffer_bytes(void);
+void test_shadow_edit_keeps_only_a_matching_typed_prefix(void);
+void test_shadow_delete_always_dismisses(void);
 
 #endif

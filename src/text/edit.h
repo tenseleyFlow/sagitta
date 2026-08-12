@@ -29,6 +29,11 @@ typedef struct EditCtx {
                       i64 now_ms, bool new_change);
     void *on_change_ctx;
     i64 now_ms;
+    /* Sprint 43: direct consumers of the fixed edit notification list. */
+    struct Ed *ed;
+    struct Buffer *buffer;
+    LineNo notify_line;
+    u64 notify_old_lines;
 } EditCtx;
 
 bool yew_edit_insert(EditCtx *ec, ByteOff at, const u8 *bytes, u64 len);

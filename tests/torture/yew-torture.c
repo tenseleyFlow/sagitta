@@ -230,7 +230,7 @@ static int check_batch_case(const char *path, const char *old_path,
         goto done;
     undo = yew_undo_new(tb);
     edit = (EditCtx){tb, NULL, NULL, 0U, NULL, undo, &meta,
-                     NULL, NULL, 0};
+                     NULL, NULL, 0, NULL, NULL, {0}, 0U};
     if (!yew_journal_replay_edit(path, &edit, &meta))
         goto done_loaded;
     if (buffer_equals(tb, post_bytes, post_len) ||

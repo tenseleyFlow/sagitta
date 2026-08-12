@@ -41,7 +41,8 @@ static void serial_fixture_init(SerialFixture *f, const u8 *bytes, u64 len)
     f->mono = 1000U;
     f->wall = 100;
     yew_undo_set_clock(f->undo, serial_mono, serial_wall, f);
-    f->edit = (EditCtx){f->tb, NULL, &f->cursors, 0U, NULL, f->undo, NULL, NULL, NULL, 0};
+    f->edit = (EditCtx){f->tb, NULL, &f->cursors, 0U, NULL, f->undo, NULL,
+                       NULL, NULL, 0, NULL, NULL, {0}, 0U};
 }
 
 static void serial_fixture_free(SerialFixture *f)

@@ -208,6 +208,7 @@ static void ed_buffer_free(Ed *ed)
     ed->pane_root = NULL;
     ed->focus = NULL;
     yew_overlay_free(&ed->single_win.overlay);
+    yew_shadow_free(&ed->single_win.shadow);
     free(ed->single_win.syn_spans);
     ed->single_win.syn_spans = NULL;
     ed->single_win.syn_spans_cap = 0U;
@@ -517,6 +518,7 @@ bool yew_ed_show_buffer(Ed *ed, Buffer *b)
     if (ed->win->buf == b)
         return true;
     yew_ed_insert_barrier(ed);
+    yew_shadow_dismiss(ed, ed->win);
     yew_vp_free(ed->win);
     yew_cset_free(&ed->win->cs);
     yew_cset_init(&ed->win->cs, cursor);
@@ -549,6 +551,7 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
     yew_search_opts_init(&ed->search_opts);
     yew_search_state_init(&ed->search);
     yew_overlay_init(&ed->single_win.overlay);
+    yew_shadow_init(&ed->single_win.shadow);
     /* One leaf holding the document window: the pane tree always
      * exists, so no code path has to ask whether panes are "on". */
     ed->pane_root = yew_pane_new_leaf(&ed->single_win);
@@ -849,16 +852,19 @@ static void ed_on_change(void *ctx, ByteOff at, LineNo line,
         yew_change_record(b, at, now_ms);
         yew_fl_hook_note_change(b->owner, b, at.v);
     }
-    current_lines = yew_textbuf_line_count(b->tb);
-    prior_lines = current_lines >= inserted_lines &&
-                          removed_lines <=
-                              UINT64_MAX - (current_lines - inserted_lines)
-                      ? current_lines - inserted_lines + removed_lines
-                      : UINT64_MAX;
-    if (prior_lines == b->syn.entry.len)
-        yew_syn_edit(&b->syn, line, removed_lines, inserted_lines);
-    else
-        yew_syn_attach(&b->syn, b->syn.lang, b->tb);
+    if (!new_change) {
+        current_lines = yew_textbuf_line_count(b->tb);
+        prior_lines = current_lines >= inserted_lines &&
+                              removed_lines <=
+                                  UINT64_MAX -
+                                      (current_lines - inserted_lines)
+                          ? current_lines - inserted_lines + removed_lines
+                          : UINT64_MAX;
+        if (prior_lines == b->syn.entry.len)
+            yew_syn_edit(&b->syn, line, removed_lines, inserted_lines);
+        else
+            yew_syn_attach(&b->syn, b->syn.lang, b->tb);
+    }
     if (b->owner != NULL)
         b->owner->footer_dirty = true;
 }
@@ -942,6 +948,7 @@ Win *yew_ed_win_clone(Ed *ed, const Win *src)
     w->vp.top = src->vp.top;
     w->vp.top_sub = src->vp.top_sub;
     yew_overlay_init(&w->overlay);
+    yew_shadow_init(&w->shadow);
     yew_jumplist_init(&w->jumps);
     return w;
 }
@@ -960,6 +967,7 @@ void yew_ed_win_set_buffer(Ed *ed, Win *w, Buffer *b)
     (void)ed;
     if (w == NULL || b == NULL || w->buf == b)
         return;
+    yew_shadow_dismiss(ed, w);
     yew_vp_free(w);
     yew_cset_free(&w->cs);
     yew_cset_init(&w->cs, origin);
@@ -975,6 +983,7 @@ void yew_ed_win_release(Ed *ed, Win *w)
     if (w == &ed->single_win)
         return;
     yew_overlay_free(&w->overlay);
+    yew_shadow_free(&w->shadow);
     free(w->syn_spans);
     yew_vp_free(w);
     yew_cset_free(&w->cs);
@@ -994,13 +1003,15 @@ EditCtx yew_ed_edit_ctx_for(Ed *ed, Win *win)
     ec.tb = buffer->tb;
     ec.marks = buffer->marks;
     ec.cset = &win->cs;
-    ec.win_id = 0U;
+    ec.win_id = win->id;
     ec.jrnl = buffer->jrn;
     ec.undo = buffer->undo;
     ec.meta = buffer->path == NULL ? NULL : &buffer->meta;
     ec.on_change = ed_on_change;
     ec.on_change_ctx = buffer;
     ec.now_ms = ed->now_ms;
+    ec.ed = ed;
+    ec.buffer = buffer;
     return ec;
 }
 
