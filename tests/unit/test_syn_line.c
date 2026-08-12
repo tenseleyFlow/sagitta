@@ -152,6 +152,27 @@ void test_syn_line_byte_cap_preserves_entry_state(void)
     free(line);
 }
 
+void test_syn_line_byte_cap_reuses_unchanged_state_id(void)
+{
+    SynToy toy;
+    SynSpan spans[8];
+    SynLineOut out;
+    u8 *line = malloc(YEW_SYN_LINE_BYTE_CAP + 1U);
+    u32 entry;
+
+    YEW_ASSERT_NOT_NULL(line);
+    (void)memset(line, 'x', YEW_SYN_LINE_BYTE_CAP + 1U);
+    syn_toy_init(&toy);
+    entry = syn_toy_state(&toy, SYN_TOY_COMMENT_BLOCK);
+    out = (SynLineOut){spans, 0U, YEW_ARRAY_LEN(spans), 0U, 0U};
+    yew_syn_line(toy.engine, entry, line, YEW_SYN_LINE_BYTE_CAP + 1U, &out);
+    YEW_ASSERT_EQ_U64(out.stop, YEW_SYN_STOP_BYTES);
+    YEW_ASSERT_EQ_U64(out.exit_state, entry);
+    assert_spans_well_formed(&out, YEW_SYN_LINE_BYTE_CAP + 1U);
+    syn_toy_free(&toy);
+    free(line);
+}
+
 void test_syn_line_span_cap_stops_without_overwriting_caller_storage(void)
 {
     SynToy toy;

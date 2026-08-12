@@ -3449,19 +3449,23 @@ static void apply_empty_bol(SynEngine *master, SynState *state,
 static u32 truncated_exit_state(SynEngine *engine, u32 entry_state,
                                 const SynState *entry, bool apply_eol)
 {
-    SynState exit = *entry;
+    u8 exit_flags;
+    SynState exit;
 
     /* A truncated line deliberately suppresses grammar transitions, but
      * it is still a physical line.  Losing this bit lets line-two-only
      * content satisfy `first_line` rules after an oversized or hostile
      * first line. */
-    if (apply_eol) {
-        exit.flags &= (u8)~YEW_SYN_F_VALUE;
-        if (engine->has_first_line)
-            exit.flags |= YEW_SYN_F_PAST_FIRST;
-        return yew_syn_state_intern(engine->states, &exit);
-    }
-    return entry_state;
+    if (!apply_eol)
+        return entry_state;
+    exit_flags = entry->flags & (u8)~YEW_SYN_F_VALUE;
+    if (engine->has_first_line)
+        exit_flags |= YEW_SYN_F_PAST_FIRST;
+    if (exit_flags == entry->flags)
+        return entry_state;
+    exit = *entry;
+    exit.flags = exit_flags;
+    return yew_syn_state_intern(engine->states, &exit);
 }
 
 typedef enum SynFortranBolResult {
@@ -3629,6 +3633,7 @@ static SynFortranBolResult fortran_bol_match(const SynEngine *engine,
     return fortran_free_bol(engine, line, len, rule_index, match);
 }
 
+#if defined(YEW_SYN_TEST)
 static bool bridge_end_byte_possible(SynEngine *master,
                                      const SynState *state, u32 at, u8 byte)
 {
@@ -3664,6 +3669,7 @@ static bool bridge_end_byte_possible(SynEngine *master,
     }
     return false;
 }
+#endif
 
 static bool bridge_end_match(SynEngine *master, const SynState *state,
                              const u8 *line, u32 len, u32 at,
@@ -3677,6 +3683,7 @@ static bool bridge_end_match(SynEngine *master, const SynState *state,
         const SynFrame *frame = &state->f[depth];
         SynEngine *host;
         const SynCtx *ctx;
+        const u8 *first;
         u8 aux_level;
         u32 i;
 
@@ -3695,6 +3702,12 @@ static bool bridge_end_match(SynEngine *master, const SynState *state,
         if (ctx->embed.end == SYN_EMBED_END_INLINE_ROOT &&
             depth + 1 < (i32)state->depth &&
             state->depth != (u8)(depth + 2))
+            return false;
+        first = ctx->embed.end == SYN_EMBED_END_LINE ||
+                        ctx->embed.end == SYN_EMBED_END_LINE_CONTINUATION ?
+                    host->embed_local_bol_end_first :
+                    host->embed_local_end_first;
+        if (at < len && !bitset_has(first, line[at]))
             return false;
         aux_level = (u8)(depth + 1 < state->depth ? state->ndef - 2U :
                                                      state->ndef - 1U);
@@ -3931,6 +3944,12 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
     u64 step_cap;
     u32 p = 0U;
     u32 zero_transitions = 0U;
+    u32 dispatch_gen = 1U;
+    u32 cached_dispatch_gen = 0U;
+    SynEngine *cached_active = NULL;
+    const SynCtx *cached_ctx = NULL;
+    const u8 *cached_first_bol = NULL;
+    const u8 *cached_first_nonbol = NULL;
 
     if (engine == NULL || out == NULL || (line == NULL && len != 0U))
         YEW_BUG("syntax: invalid line arguments");
@@ -4008,21 +4027,16 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
             trace[0] = state;
     }
     while (p < len) {
+        SynFrame *top = &state.f[state.depth - 1U];
+        bool plain = state.ndef == 1U && top->def == 0U &&
+                     (top->fl & YEW_SYN_FR_BRIDGE) == 0U;
         SynEngine *active;
-        const SynCtx *ctx = checked_ctx(engine,
-                                        &state.f[state.depth - 1U],
-                                        &active);
-        u8 dflt_attr =
-            (state.f[state.depth - 1U].fl & YEW_SYN_FR_BRIDGE) != 0U ?
-                ctx->embed.fallback : ctx->dflt_attr;
-        const u32 *candidate_offsets = active->candidate_offsets;
-        size_t candidate_slot =
-            (size_t)state.f[state.depth - 1U].ctx * SYN_CANDIDATE_STRIDE +
-            line[p];
-        u32 candidate_off = candidate_offsets == NULL ? 0U :
-            candidate_offsets[candidate_slot];
-        u32 candidate_len = candidate_offsets == NULL ? 0U :
-            candidate_offsets[candidate_slot + 1U] - candidate_off;
+        const SynCtx *ctx;
+        u8 dflt_attr;
+        const u32 *candidate_offsets;
+        size_t candidate_slot;
+        u32 candidate_off;
+        u32 candidate_len;
         const SynRule *matched = NULL;
         u32 matched_index = UINT32_MAX;
         SynState before;
@@ -4033,7 +4047,35 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
         u32 matched_end;
         u32 ri;
 
-        {
+        if (cached_dispatch_gen == dispatch_gen) {
+            active = cached_active;
+            ctx = cached_ctx;
+        } else {
+            active = plain ? engine : NULL;
+            if (plain) {
+                if (top->ctx >= engine->def->nctxs)
+                    YEW_BUG("syntax: context %u outside root definition",
+                            (unsigned)top->ctx);
+                ctx = &engine->def->ctxs[top->ctx];
+            } else {
+                ctx = checked_ctx(engine, top, &active);
+            }
+            cached_active = active;
+            cached_ctx = ctx;
+            cached_first_bol = NULL;
+            cached_first_nonbol = NULL;
+            cached_dispatch_gen = dispatch_gen;
+        }
+        dflt_attr = (top->fl & YEW_SYN_FR_BRIDGE) != 0U ?
+            ctx->embed.fallback : ctx->dflt_attr;
+        candidate_offsets = active->candidate_offsets;
+        candidate_slot = (size_t)top->ctx * SYN_CANDIDATE_STRIDE + line[p];
+        candidate_off = candidate_offsets == NULL ? 0U :
+            candidate_offsets[candidate_slot];
+        candidate_len = candidate_offsets == NULL ? 0U :
+            candidate_offsets[candidate_slot + 1U] - candidate_off;
+
+        if (!plain) {
             SynEngine *host;
             const SynRule *end_rule;
             u32 end_index;
@@ -4043,7 +4085,6 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
             if ((bitset_has(engine->embed_end_first, line[p]) ||
                  (p == 0U && bitset_has(engine->embed_bol_end_first,
                                         line[p]))) &&
-                bridge_end_byte_possible(engine, &state, p, line[p]) &&
                 bridge_end_match(engine, &state, line, len, p, &host,
                                  &end_rule, &end_index, &bridge_depth,
                                  &host_aux, &match)) {
@@ -4057,6 +4098,7 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
                 apply_rule_op(engine, host, &state, end_rule, line, len,
                               &match, pending_lang, refused_lang,
                               unknown_name, unknown_len);
+                dispatch_gen++;
                 if (instrument) {
                     coverage_rule(host, end_index);
                     coverage_transition(engine, &exit_before, &state);
@@ -4116,7 +4158,7 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
         }
         if (active->fortran_fast_enabled &&
             active->fortran_words_cap != 0U &&
-            state.f[state.depth - 1U].ctx == active->def->root) {
+            top->ctx == active->def->root) {
             word_probe_init_folded(&word_probe, line, len, p);
             if (word_probe.status == SYN_WORD_PROBE_READY)
                 fortran_word_rule = fortran_word_winner(
@@ -4133,12 +4175,37 @@ static void syn_line_run(SynEngine *engine, u32 entry_state,
             matched = rule;
         }
         if (matched == NULL && (active->ctx_aux == NULL ||
-            active->ctx_aux[state.f[state.depth - 1U].ctx] == 0U)) {
-            const u8 *merged_first = merged_first_bytes(
-                engine, &state, active, ctx, p == 0U, NULL);
+            active->ctx_aux[top->ctx] == 0U)) {
+            const u8 *merged_first;
             u32 q = p + 1U;
-            const u8 *next_first = p == 0U ? merged_first_bytes(
-                engine, &state, active, ctx, false, NULL) : merged_first;
+            const u8 *next_first;
+
+            if (plain) {
+                merged_first = p == 0U ||
+                        active->ctx_first_nonbol == NULL ?
+                    ctx->first : active->ctx_first_nonbol[top->ctx];
+            } else if (p == 0U) {
+                if (cached_first_bol == NULL)
+                    cached_first_bol = merged_first_bytes(
+                        engine, &state, active, ctx, true, NULL);
+                merged_first = cached_first_bol;
+            } else {
+                if (cached_first_nonbol == NULL)
+                    cached_first_nonbol = merged_first_bytes(
+                        engine, &state, active, ctx, false, NULL);
+                merged_first = cached_first_nonbol;
+            }
+            if (p != 0U) {
+                next_first = merged_first;
+            } else if (plain) {
+                next_first = active->ctx_first_nonbol == NULL ? ctx->first :
+                    active->ctx_first_nonbol[top->ctx];
+            } else {
+                if (cached_first_nonbol == NULL)
+                    cached_first_nonbol = merged_first_bytes(
+                        engine, &state, active, ctx, false, NULL);
+                next_first = cached_first_nonbol;
+            }
 
             if (bitset_has(merged_first, line[p]))
                 goto scan_rules;
@@ -4274,6 +4341,8 @@ scan_rules:
             state.flags &= (u8)~YEW_SYN_F_VALUE;
         apply_rule_op(engine, active, &state, matched, line, len, &match,
                       pending_lang, refused_lang, unknown_name, unknown_len);
+        if (matched->op != SYN_OP_STAY)
+            dispatch_gen++;
         if (instrument)
             coverage_transition(engine, &before, &state);
         {
@@ -4292,9 +4361,21 @@ scan_rules:
                     trace[p] = state;
                 continue;
             } else {
-                const SynCtx *after = checked_ctx(
-                    engine, &state.f[state.depth - 1U], NULL);
+                const SynFrame *after_top = &state.f[state.depth - 1U];
+                bool after_plain = state.ndef == 1U &&
+                    after_top->def == 0U &&
+                    (after_top->fl & YEW_SYN_FR_BRIDGE) == 0U;
+                const SynCtx *after;
                 u32 q = next_boundary(line, len, p);
+
+                if (after_plain) {
+                    if (after_top->ctx >= engine->def->nctxs)
+                        YEW_BUG("syntax: context %u outside root definition",
+                                (unsigned)after_top->ctx);
+                    after = &engine->def->ctxs[after_top->ctx];
+                } else {
+                    after = checked_ctx(engine, after_top, NULL);
+                }
                 emit_span(out, p, q - p, after->dflt_attr, 0U);
                 if (trace != NULL) {
                     u32 t;
@@ -4324,12 +4405,22 @@ scan_rules:
                 state.flags |= YEW_SYN_F_EMBED_LOST;
             }
         } else {
-            SynEngine *active;
-            const SynCtx *ctx = checked_ctx(engine, top, &active);
+            bool plain = state.ndef == 1U && top->def == 0U &&
+                         (top->fl & YEW_SYN_FR_BRIDGE) == 0U;
+            SynEngine *active = plain ? engine : NULL;
+            const SynCtx *ctx;
             SynState before;
             bool guest_was_active =
                 (top->fl & YEW_SYN_FR_BRIDGE) == 0U && state.ndef > 1U;
 
+            if (plain) {
+                if (top->ctx >= engine->def->nctxs)
+                    YEW_BUG("syntax: context %u outside root definition",
+                            (unsigned)top->ctx);
+                ctx = &engine->def->ctxs[top->ctx];
+            } else {
+                ctx = checked_ctx(engine, top, &active);
+            }
             if (instrument)
                 before = state;
             if ((top->fl & YEW_SYN_FR_BRIDGE) != 0U &&

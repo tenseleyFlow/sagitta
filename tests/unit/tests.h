@@ -1636,6 +1636,7 @@ void test_syn_state_table_exhaustion_degrades_to_root(void);
 void test_syn_deferred_surfaces_fail_loudly(void);
 void test_syn_line_toy_golden_table(void);
 void test_syn_line_byte_cap_preserves_entry_state(void);
+void test_syn_line_byte_cap_reuses_unchanged_state_id(void);
 void test_syn_line_span_cap_stops_without_overwriting_caller_storage(void);
 void test_syn_line_zero_width_rule_forces_utf8_progress(void);
 void test_syn_line_step_cap_degrades_instead_of_stalling(void);
