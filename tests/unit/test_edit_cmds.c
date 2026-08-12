@@ -662,12 +662,12 @@ void test_edit_word_and_block_key_layers_dispatch(void)
     key.mods = YEW_MOD_ALT;
     yew_ed_handle_key(&ed, key, 1);
     YEW_ASSERT_EQ_U64(ed.last_cmd.v,
-                      yew_cmd_lookup("ed.move.unit.next_alt", 21U).v);
-    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 8U);
+                      yew_cmd_lookup("ed.shadow.accept_line", 21U).v);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 4U);
     yew_ed_handle_key(&ed, edit_key(YEW_KEY_LEFT), 2);
     YEW_ASSERT_EQ_U64(ed.last_cmd.v,
                       yew_cmd_lookup("ed.move.unit.home", 17U).v);
-    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 7U);
+    YEW_ASSERT_EQ_U64(yew_ed_cursor(&ed)->pos.v, 0U);
     yew_ed_free(&ed);
 
     edit_fixture(&ed, word_text, sizeof(word_text) - 1U, YEW_EOL_LF);
