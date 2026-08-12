@@ -6,8 +6,8 @@ not earn a field milestone.
 ## Daily driver — Sprint 42
 
 - State: `PENDING`
-- Implementation frontier: Sprint 42.5 (native language pack); Campaign 09
-  is paused until its Definition of Done is green
+- Implementation frontier: Sprint 43 (provider-neutral shadow text); Sprint
+  42.5 is complete and Campaign 09 is active
 - Reference machine: Intel Core i7-10870H, 32 GiB RAM, Linux
   7.1.5-arch1-2, `TERM=xterm-256color`; terminal emulator not yet recorded
 - Evidence: [daily-driver dogfood log](dogfood-log.md)

@@ -10,9 +10,12 @@ Sprint 42's implementation landed before this evidence window opened.
 Sprint 42.5 was designated as the first self-hosting evidence window, but no
 qualifying yew session was recorded while its implementation was authored.
 It therefore contributes zero working days, hours, keystrokes, or eligible
-changed lines. A later complete implementation sprint must be explicitly
-designated before its work begins to satisfy the "one full sprint" and ≥60%
-eligible-changed-lines criterion. For that qualifying sprint, the denominator
+changed lines. Sprint 43 is not designated automatically by implementation
+start; it contributes only if a qualifying yew session is explicitly opened
+and logged before eligible edits. A later complete implementation sprint must
+be explicitly designated before its work begins to satisfy the "one full
+sprint" and ≥60% eligible-changed-lines criterion. For that qualifying sprint,
+the denominator
 is the sum of all eligible added and deleted human-authored lines under `src/`,
 `runtime/syntax/*.fl`, `scripts/`, `tests/`, `.docs/`, `README.md`, and
 `Makefile`; the numerator is the added-plus-deleted subset tied by commit to a
