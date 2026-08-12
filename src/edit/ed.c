@@ -631,6 +631,7 @@ void yew_ed_init(Ed *ed)
     yew_timers_init(&ed->timers);
     yew_jobs_init(&ed->jobs);
     yew_mouse_init(&ed->mouse);
+    yew_shadow_test_install();
     yew_block_provider_syntax_install(true);
     root = realpath(".", NULL);
     if (root == NULL)

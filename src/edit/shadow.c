@@ -130,6 +130,61 @@ void yew_shadow_register(const ShadowProvider *provider)
     shadow_providers[prov] = provider;
 }
 
+static bool shadow_test_request(Ed *ed, const ShadowReq *request)
+{
+    static const char *const replies[YEW_SHADOW_NPROV] = {
+        "symbol_index field\nindex overlay two\nindex overlay three\n"
+        "index overlay four",
+        "language_server item\nlsp overlay two\nlsp overlay three\n"
+        "lsp overlay four",
+        "assistant_model answer\nai overlay two\nai overlay three\n"
+        "ai overlay four",
+    };
+    ShadowSug suggestion = {0};
+    const char *reply;
+
+    if (ed == NULL || request == NULL ||
+        !shadow_provider_valid(request->prov))
+        return false;
+    reply = replies[request->prov];
+    suggestion.seq = request->seq;
+    suggestion.prov = request->prov;
+    suggestion.buf_id = request->buf_id;
+    suggestion.buf_gen = request->buf_gen;
+    suggestion.pos = request->pos;
+    suggestion.text = (const u8 *)reply;
+    suggestion.len = (u32)strlen(reply);
+    yew_shadow_deliver(ed, &suggestion);
+    return true;
+}
+
+static void shadow_test_cancel(Ed *ed, u32 buf_id, u32 up_to)
+{
+    (void)ed;
+    (void)buf_id;
+    (void)up_to;
+}
+
+void yew_shadow_test_install(void)
+{
+    static const ShadowProvider providers[YEW_SHADOW_NPROV] = {
+        {"index", YEW_SHADOW_INDEX, 0U, shadow_test_request, NULL},
+        {"lsp", YEW_SHADOW_LSP, 120U, shadow_test_request,
+         shadow_test_cancel},
+        {"ai", YEW_SHADOW_AI, 350U, shadow_test_request,
+         shadow_test_cancel},
+    };
+    static bool installed;
+    const char *enabled = getenv("YEW_SHADOW_TEST");
+    u32 i;
+
+    if (installed || enabled == NULL || strcmp(enabled, "1") != 0)
+        return;
+    for (i = 0U; i < (u32)YEW_SHADOW_NPROV; i++)
+        yew_shadow_register(&providers[i]);
+    installed = true;
+}
+
 static bool shadow_copy_into(ShadowSug *dst, u8 **owned_text,
                              const ShadowSug *suggestion)
 {

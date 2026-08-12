@@ -32,7 +32,9 @@ void test_pty_environment_exact(void)
         "YEW_RUNTIME_DIR=/tmp/yew-runtime",
         /* Sprint 41 cold/warm syntax-cache PTYs share one isolated cache
          * root across their two independent editor launches. */
-        "XDG_CACHE_HOME=/tmp/yew-pty-state"
+        "XDG_CACHE_HOME=/tmp/yew-pty-state",
+        /* Sprint 43's deterministic provider is opt-in per PTY case. */
+        "YEW_SHADOW_TEST=0"
     };
     char *envp[YEW_PTY_ENV_COUNT + 1U] = {0};
     size_t i;
@@ -44,7 +46,7 @@ void test_pty_environment_exact(void)
 
     YEW_ASSERT(ptc_env_build(envp, "xterm-256color", "truecolor",
                              "/tmp/yew-pty-state",
-                             NULL, "0", "/tmp/yew-runtime"));
+                             NULL, "0", "/tmp/yew-runtime", "0"));
     for (i = 0U; i < YEW_ARRAY_LEN(expected); i++)
         YEW_ASSERT_EQ_STR(envp[i], expected[i]);
     for (; i <= YEW_PTY_ENV_COUNT; i++)
@@ -55,20 +57,20 @@ void test_pty_environment_exact(void)
 
     YEW_ASSERT(ptc_env_build(envp, "xterm-256color", "truecolor",
                              "/tmp/yew-pty-state",
-                             "", "0", "/tmp/yew-runtime"));
+                             "", "0", "/tmp/yew-runtime", "0"));
     YEW_ASSERT_EQ_STR(envp[12], "NO_COLOR=");
     YEW_ASSERT_NULL(envp[YEW_PTY_ENV_COUNT]);
     ptc_env_free(envp);
 
     YEW_ASSERT(ptc_env_build(envp, "xterm-256color", "truecolor",
                              "/tmp/yew-pty-state",
-                             "0", "0", "/tmp/yew-runtime"));
+                             "0", "0", "/tmp/yew-runtime", "0"));
     YEW_ASSERT_EQ_STR(envp[12], "NO_COLOR=0");
     YEW_ASSERT_NULL(envp[YEW_PTY_ENV_COUNT]);
     ptc_env_free(envp);
 
     YEW_ASSERT(ptc_env_build(envp, "dumb", "16", "/tmp/yew-pty-state",
-                             NULL, "0", "/tmp/yew-runtime"));
+                             NULL, "0", "/tmp/yew-runtime", "0"));
     YEW_ASSERT_EQ_STR(envp[0], "TERM=dumb");
     ptc_env_free(envp);
 }

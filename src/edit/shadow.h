@@ -90,6 +90,10 @@ void yew_shadow_free(Shadow *shadow);
 void yew_shadow_dismiss(Ed *ed, Win *win);
 
 void yew_shadow_register(const ShadowProvider *provider);
+/* Installs deterministic closed-slot providers only when the process
+ * environment contains YEW_SHADOW_TEST=1.  Production startup leaves all
+ * three slots for their owning sprints. */
+void yew_shadow_test_install(void);
 void yew_shadow_deliver(Ed *ed, const ShadowSug *suggestion);
 /* Passive suggestions are single-cursor only; ineligible windows are
  * dismissed and carry no timer. */

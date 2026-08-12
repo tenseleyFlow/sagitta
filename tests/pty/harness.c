@@ -425,9 +425,14 @@ static const char *ascii_for(const PtyCtx *c)
     return strstr(c->test->name, "_ascii") != NULL ? "1" : "0";
 }
 
+static const char *shadow_test_for(const PtyCtx *c)
+{
+    return strncmp(c->test->name, "s43_shadow_", 11U) == 0 ? "1" : "0";
+}
+
 bool ptc_env_build(char **envp, const char *term, const char *colors,
                    const char *state_dir, const char *no_color, const char *ascii,
-                   const char *runtime_dir)
+                   const char *runtime_dir, const char *shadow_test)
 {
     static const char *const keys[] = {
         "TERM", "YEW_COLORS", "YEW_TTY_PROBE", "YEW_PROBE_TIMEOUT_MS",
@@ -435,7 +440,8 @@ bool ptc_env_build(char **envp, const char *term, const char *colors,
         "YEW_LOG_LEVEL", "YEW_JOB_ELAPSED_MS", "SHELL",
         "YEW_PICKERS_NOW",
         /* Sprint 27 §7's degradation variants. */
-        "NO_COLOR", "YEW_ASCII", "YEW_RUNTIME_DIR", "XDG_CACHE_HOME"
+        "NO_COLOR", "YEW_ASCII", "YEW_RUNTIME_DIR", "XDG_CACHE_HOME",
+        "YEW_SHADOW_TEST"
     };
     const char *values[] = {
         term, colors, "1", "500", "25", state_dir,
@@ -450,7 +456,7 @@ bool ptc_env_build(char **envp, const char *term, const char *colors,
         "/bin/sh",
         /* Sprint 26: pins the undo picker's relative timestamps. */
         "1700000000",
-        no_color, ascii, runtime_dir, state_dir
+        no_color, ascii, runtime_dir, state_dir, shadow_test
     };
     size_t i;
     size_t out_i = 0U;
@@ -458,7 +464,7 @@ bool ptc_env_build(char **envp, const char *term, const char *colors,
     _Static_assert(YEW_ARRAY_LEN(keys) == YEW_PTY_ENV_COUNT,
                    "YEW_PTY_ENV_COUNT must match the key table");
     if (envp == NULL || term == NULL || colors == NULL || state_dir == NULL ||
-        ascii == NULL || runtime_dir == NULL)
+        ascii == NULL || runtime_dir == NULL || shadow_test == NULL)
         return false;
     for (i = 0U; i <= YEW_PTY_ENV_COUNT; i++)
         envp[i] = NULL;
@@ -549,7 +555,8 @@ void ptc_spawn(PtyCtx *c, const char *bin, ...)
     if (!ptc_env_build(envp, term_for(c),
                        color_tier(c), c->state_dir,
                        no_color_for(c), ascii_for(c),
-                       runtime_dir == NULL ? "" : runtime_dir)) {
+                       runtime_dir == NULL ? "" : runtime_dir,
+                       shadow_test_for(c))) {
         free(runtime_dir);
         strv_free(argv);
         ptc_fail(c, "allocating pinned environment");
