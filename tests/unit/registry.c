@@ -1741,6 +1741,14 @@ const YewTest yew_tests[] = {
     T(shadow_debounce_policy_gates_and_provider_filter),
     T(shadow_provider_option_rejects_unknown_and_duplicate_names),
     T(shadow_pending_timer_is_cancelled_before_window_teardown),
+    T(gutter_sign_kind_cells_and_priority_cover_all_combinations),
+    T(gutter_sign_rejects_wide_glyph_once_and_uses_ascii),
+    T(gutter_sign_clear_is_scrolled_range_exact),
+    T(shadow_layout_geometry_is_exact_and_viewport_is_unchanged),
+    T(shadow_layout_clamps_forty_lines_to_eight),
+    T(shadow_layout_last_visible_row_and_inline_only_clip),
+    T(shadow_draw_overlays_exact_damage_blocks_hits_and_clips),
+    T(shadow_draw_provenance_attrs_and_glyphs_are_distinct),
 };
 
 const size_t yew_tests_len = YEW_ARRAY_LEN(yew_tests);

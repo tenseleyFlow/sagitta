@@ -60,6 +60,8 @@ typedef struct Shadow {
     TimerId timer;
     i64 armed_at_ms;
     u8 pending_mask;
+    u8 max_lines;
+    u16 draw_row;
     u16 vrows;
 } Shadow;
 

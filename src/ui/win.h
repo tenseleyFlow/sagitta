@@ -46,6 +46,7 @@ typedef struct Win {
     Rect rect;
     NumStyle number_style;
     u16 gutter_width;
+    GutterSigns gutter_signs;
     CCol wrap_goal;
     bool wrap_goal_valid;
     /* Sprint 36: sparse values explicitly set at window scope. */

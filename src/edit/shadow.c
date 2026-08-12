@@ -9,6 +9,7 @@
 #include "fl/flruntime.h"
 #include "text/edit.h"
 #include "ui/message.h"
+#include "ui/shadowdraw.h"
 #include "unicode/coords.h"
 #include "unicode/utf8.h"
 #include "unicode/wordbreak.h"
@@ -28,6 +29,7 @@ void yew_shadow_init(Shadow *shadow)
     if (shadow == NULL)
         YEW_BUG("shadow init: NULL state");
     (void)memset(shadow, 0, sizeof(*shadow));
+    shadow->max_lines = YEW_SHADOW_MAX_LINES;
     for (i = 0U; i < (u32)YEW_SHADOW_NPROV; i++)
         shadow->seq_next[i] = 1U;
 }
@@ -47,11 +49,17 @@ void yew_shadow_dismiss(Ed *ed, Win *win)
     u32 seq_next[YEW_SHADOW_NPROV];
     u32 seq_min[YEW_SHADOW_NPROV];
     bool suppressed;
+    u8 max_lines;
     u32 i;
 
     if (win == NULL)
         return;
     shadow = &win->shadow;
+    if (ed != NULL && shadow->vrows != 0U) {
+        yew_ed_damage_rows(ed, shadow->draw_row,
+                           (u16)(shadow->draw_row + shadow->vrows));
+        ed->full_damage = true;
+    }
     if (ed != NULL && shadow->timer != YEW_TIMER_NONE)
         (void)yew_timer_cancel(&ed->timers, shadow->timer);
     if (ed != NULL && win->buf != NULL) {
@@ -67,6 +75,7 @@ void yew_shadow_dismiss(Ed *ed, Win *win)
         seq_min[i] = shadow->seq_min[i];
     }
     suppressed = shadow->suppressed;
+    max_lines = shadow->max_lines;
     yew_textbuf_free(shadow->sug.scratch);
     free(shadow->owned_text);
     (void)memset(shadow, 0, sizeof(*shadow));
@@ -75,6 +84,7 @@ void yew_shadow_dismiss(Ed *ed, Win *win)
         shadow->seq_min[i] = seq_min[i];
     }
     shadow->suppressed = suppressed;
+    shadow->max_lines = max_lines == 0U ? YEW_SHADOW_MAX_LINES : max_lines;
 }
 
 void yew_shadow_register(const ShadowProvider *provider)
@@ -136,10 +146,14 @@ void yew_shadow_deliver(Ed *ed, const ShadowSug *suggestion)
         ed->shadow_stats.dropped_gen++;
         return;
     }
+    if (shadow->vrows != 0U)
+        yew_ed_damage_rows(ed, shadow->draw_row,
+                           (u16)(shadow->draw_row + shadow->vrows));
     if (!shadow_copy_suggestion(shadow, suggestion)) {
         ed->shadow_stats.dropped_stale++;
         return;
     }
+    ed->full_damage = true;
     ed->shadow_stats.delivered++;
 }
 
@@ -608,6 +622,7 @@ static bool shadow_note_window_edit(EditCtx *ec, Win *win, u8 kind,
         shadow_insert_matches(ec->tb, &shadow->sug, at, len)) {
         shadow->sug.consumed += (u32)len;
         shadow->sug.buf_gen = ec->tb->gen;
+        ec->ed->full_damage = true;
         if (shadow->sug.consumed == shadow->sug.len && !shadow->accepting)
             yew_shadow_dismiss(ec->ed, win);
         return true;

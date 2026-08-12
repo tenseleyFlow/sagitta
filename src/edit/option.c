@@ -470,6 +470,20 @@ static void option_changed_target(Ed *ed, const OptDesc *desc,
             yew_msg(ed, YEW_MSG_ERROR, "%s", error);
     } else if (strcmp(desc->name, "macro.dir") == 0) {
         yew_macrolib_option_changed(ed);
+    } else if (strcmp(desc->name, "shadow.max_lines") == 0 &&
+               ed->model_ready) {
+        u32 tab;
+
+        for (tab = 0U; tab < ed->tabs.v.len; tab++) {
+            Pane *leaves[YEW_PANE_MAX_LEAVES];
+            u32 n = 0U;
+            u32 i;
+
+            yew_pane_collect_leaves(ed->tabs.v.data[tab].root, leaves,
+                                    YEW_ARRAY_LEN(leaves), &n);
+            for (i = 0U; i < n; i++)
+                leaves[i]->win->shadow.max_lines = (u8)nu->as.i;
+        }
     } else if (strncmp(desc->name, "shadow.", 7U) == 0 &&
                strcmp(desc->name, "shadow.max_lines") != 0 &&
                ed->model_ready) {

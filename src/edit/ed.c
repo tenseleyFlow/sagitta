@@ -14,6 +14,7 @@
 #include "ui/grouppicker.h"
 #include "ui/picker.h"
 #include "ui/pickers.h"
+#include "ui/shadowdraw.h"
 #include "ui/viewport.h"
 #include "fl/flruntime.h"
 #include "fl/flconf.h"
@@ -210,6 +211,7 @@ static void ed_buffer_free(Ed *ed)
     yew_overlay_free(&ed->single_win.overlay);
     yew_shadow_dismiss(ed, &ed->single_win);
     yew_shadow_free(&ed->single_win.shadow);
+    yew_gutter_signs_free(&ed->single_win);
     free(ed->single_win.syn_spans);
     ed->single_win.syn_spans = NULL;
     ed->single_win.syn_spans_cap = 0U;
@@ -986,6 +988,7 @@ void yew_ed_win_release(Ed *ed, Win *w)
     yew_overlay_free(&w->overlay);
     yew_shadow_dismiss(ed, w);
     yew_shadow_free(&w->shadow);
+    yew_gutter_signs_free(w);
     free(w->syn_spans);
     yew_vp_free(w);
     yew_cset_free(&w->cs);
@@ -2028,6 +2031,8 @@ void yew_ed_render(Ed *ed)
         if (yew_win_view_row(win, cursor_line, &row))
             yew_ed_damage_rows(ed, row, (u16)(row + 1U));
     }
+    if (win->shadow.live)
+        ed->full_damage = true;
     if (ed->full_damage) {
         /*
          * Every leaf plus the borders their splits own.  With a single
@@ -2049,8 +2054,12 @@ void yew_ed_render(Ed *ed)
     }
     if (ed->full_damage || ed->footer_dirty)
         yew_draw_footer(ed, win);
+    if (!ed->cmdline.active)
+        yew_draw_cursor(ed, win);
+    yew_shadow_draw_panes(ed);
     /*
-     * The picker draws LAST, after the footer.
+     * The picker draws LAST, after the footer, cursor preparation, and
+     * passive shadow text.
      *
      * It is modal and owns its rectangle, and its filter line IS the
      * command line — so drawing it inside yew_draw_panes meant the
@@ -2068,8 +2077,6 @@ void yew_ed_render(Ed *ed)
      */
     if (yew_ctx_active())
         yew_mouse_menu_draw(ed);
-    if (!ed->cmdline.active)
-        yew_draw_cursor(ed, win);
     ed->frame.len = 0U;
     (void)yew_render_frame(&ed->render, &ed->grid, &ed->frame);
     if (!write_all(ed->tty.wfd, ed->frame.data, ed->frame.len)) {

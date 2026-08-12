@@ -18,6 +18,7 @@
 #include "term/grid.h"
 #include "ui/gutter.h"
 #include "ui/message.h"
+#include "ui/shadowdraw.h"
 #include "ui/statusline.h"
 #include "ui/viewport.h"
 #include "ui/win.h"
@@ -663,6 +664,12 @@ void yew_draw_win(Ed *ed, Win *w)
     yew_draw_footer(ed, w);
     if (!ed->cmdline.active)
         yew_draw_cursor(ed, w);
+    {
+        ShadowLayout layout;
+
+        yew_shadow_layout(w, &w->shadow, &layout);
+        yew_shadow_draw(ed, w, &layout, &ed->grid);
+    }
 }
 
 /* ---------------------------------------------------------------- */

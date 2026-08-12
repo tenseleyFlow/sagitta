@@ -1,6 +1,7 @@
 #include "ui/gutter.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "edit/ed.h"
@@ -9,7 +10,152 @@
 #include "term/grid.h"
 #include "ui/viewport.h"
 #include "ui/win.h"
+#include "unicode/width.h"
 #include "util/log.h"
+
+static u8 invalid_sign_warned;
+
+static const u8 *sign_fallback(SignKind kind)
+{
+    static const u8 glyphs[YEW_SIGN_NKIND] = {'!', '+', 's'};
+
+    if (kind >= YEW_SIGN_NKIND)
+        YEW_BUG("gutter sign: invalid kind");
+    return &glyphs[kind];
+}
+
+static u32 sign_lower_bound(const GutterSigns *signs, LineNo line)
+{
+    u32 lo = 0U;
+    u32 hi = signs->len;
+
+    while (lo < hi) {
+        u32 mid = lo + (hi - lo) / 2U;
+
+        if (signs->v[mid].line.v < line.v)
+            lo = mid + 1U;
+        else
+            hi = mid;
+    }
+    return lo;
+}
+
+static GutterSignLine *sign_line(Win *w, LineNo line, bool create)
+{
+    GutterSigns *signs = &w->gutter_signs;
+    u32 at = sign_lower_bound(signs, line);
+
+    if (at < signs->len && signs->v[at].line.v == line.v)
+        return &signs->v[at];
+    if (!create)
+        return NULL;
+    if (signs->len == signs->cap) {
+        u32 cap = signs->cap == 0U ? 8U : signs->cap * 2U;
+
+        if (cap < signs->cap)
+            YEW_BUG("gutter sign table overflow");
+        signs->v = yew_xreallocarray(signs->v, cap, sizeof(*signs->v));
+        signs->cap = cap;
+    }
+    if (at < signs->len)
+        (void)memmove(signs->v + at + 1U, signs->v + at,
+                      (signs->len - at) * sizeof(*signs->v));
+    (void)memset(&signs->v[at], 0, sizeof(signs->v[at]));
+    signs->v[at].line = line;
+    signs->len++;
+    return &signs->v[at];
+}
+
+void yew_gutter_sign_set(Win *w, LineNo line, SignKind kind,
+                         const GutterSign *sign)
+{
+    GutterSignLine *entry;
+    u8 bit;
+
+    if (w == NULL || kind >= YEW_SIGN_NKIND)
+        YEW_BUG("gutter sign set: invalid argument");
+    bit = (u8)(1U << kind);
+    entry = sign_line(w, line, sign != NULL);
+    if (entry == NULL)
+        return;
+    if (sign == NULL) {
+        entry->mask &= (u8)~bit;
+        return;
+    }
+    entry->sign[kind] = *sign;
+    if (sign->glyph == NULL || sign->nbytes == 0U ||
+        yew_cluster_width(sign->glyph, sign->nbytes) != 1) {
+        entry->sign[kind].glyph = sign_fallback(kind);
+        entry->sign[kind].nbytes = 1U;
+        if ((invalid_sign_warned & bit) == 0U) {
+            yew_log(YEW_LOG_WARN,
+                    "gutter sign kind %u is not one cell; using ASCII fallback",
+                    (unsigned int)kind);
+            invalid_sign_warned |= bit;
+        }
+    }
+    entry->mask |= bit;
+}
+
+void yew_gutter_signs_clear(Win *w, LineNo lo, LineNo hi)
+{
+    GutterSigns *signs;
+    u32 first;
+    u32 last;
+
+    if (w == NULL || lo.v >= hi.v)
+        return;
+    signs = &w->gutter_signs;
+    first = sign_lower_bound(signs, lo);
+    last = sign_lower_bound(signs, hi);
+    if (first >= last)
+        return;
+    if (last < signs->len)
+        (void)memmove(signs->v + first, signs->v + last,
+                      (signs->len - last) * sizeof(*signs->v));
+    signs->len -= last - first;
+}
+
+void yew_gutter_signs_free(Win *w)
+{
+    if (w == NULL)
+        return;
+    free(w->gutter_signs.v);
+    (void)memset(&w->gutter_signs, 0, sizeof(w->gutter_signs));
+}
+
+static const GutterSign *sign_pick(const Win *w, LineNo line,
+                                   SignKind kind)
+{
+    const GutterSigns *signs = &w->gutter_signs;
+    u32 at = sign_lower_bound(signs, line);
+    u8 bit = (u8)(1U << kind);
+
+    if (at >= signs->len || signs->v[at].line.v != line.v ||
+        (signs->v[at].mask & bit) == 0U)
+        return NULL;
+    return &signs->v[at].sign[kind];
+}
+
+static void draw_sign(Ed *ed, Grid *grid, u16 row, u16 col,
+                      const GutterSign *sign, Cell base)
+{
+    const ThemeEnt *role;
+
+    if (sign == NULL || col >= grid->cols)
+        return;
+    role = sign->role == NULL ? NULL : yew_theme_ui_tab(ed, sign->role);
+    if (role != NULL) {
+        if (role->fg.tag != YEW_COLOR_DEFAULT)
+            base.fg = role->fg;
+        if (role->bg.tag != YEW_COLOR_DEFAULT)
+            base.bg = role->bg;
+        base.attrs |= role->attrs;
+    }
+    base.attrs |= sign->attrs;
+    (void)yew_grid_put(grid, row, col, sign->glyph, sign->nbytes,
+                       base.fg, base.bg, base.attrs);
+}
 
 static u16 decimal_digits(u64 value)
 {
@@ -130,6 +276,18 @@ void yew_gutter_draw(Ed *ed, Win *w, u16 lo, u16 hi)
             break;
         yew_grid_fill(grid, (u16)grid_row32, grid_col,
                       (u16)(grid_col + width), gutter_blank);
+        if (yew_vp_line_of_row(w, row, &line, &sub)) {
+            const GutterSign *diag = sign_pick(w, line, YEW_SIGN_DIAG);
+            const GutterSign *git = sign_pick(w, line, YEW_SIGN_GIT);
+            const GutterSign *shadow = sign_pick(w, line,
+                                                 YEW_SIGN_SHADOW);
+
+            draw_sign(ed, grid, (u16)grid_row32, grid_col,
+                      diag == NULL ? git : diag, gutter_blank);
+            if (width > 1U)
+                draw_sign(ed, grid, (u16)grid_row32,
+                          (u16)(grid_col + 1U), shadow, gutter_blank);
+        }
         if (number_width != 0U &&
             yew_vp_line_of_row(w, row, &line, &sub)) {
             char number[32];

@@ -24,6 +24,9 @@
         "mode.fuss": { bg: "@red", fg: "@bg", mono: "bold" },
         "search.match": { bg: "#fff8c5", mono: "bold" },
         "search.current": { bg: "#f2cc60", fg: "@fg", mono: "underline" },
+        "shadow.index": { fg: "@blue", mono: "dim" },
+        "shadow.lsp": { fg: "@violet", mono: "italic" },
+        "shadow.ai": { fg: "@brown", mono: "underline" },
         ul: { error: "#a40e26", warn: "#9a6700", info: "#0550ae" },
     },
     attrs: {
