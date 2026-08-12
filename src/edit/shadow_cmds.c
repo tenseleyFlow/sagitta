@@ -62,17 +62,19 @@ CmdStatus yew_shadow_cmd_prev(CmdCtx *cx)
 
 CmdStatus yew_shadow_cmd_toggle(CmdCtx *cx)
 {
+    const OptProvider *provider;
     OptVal current;
     OptVal next;
     const char *error = NULL;
 
-    if (cx == NULL || cx->ed == NULL ||
-        !yew_opt_get(cx->ed, NULL, NULL, "shadow.enable", 13U, &current) ||
+    if (cx == NULL || cx->ed == NULL)
+        return YEW_CMD_ERR_STATE;
+    provider = yew_opt_provider(cx->ed);
+    if (!provider->get(cx->ed, "shadow.enable", 13U, &current) ||
         current.type != (u8)YEW_OPT_BOOL)
         return YEW_CMD_ERR_STATE;
     next = (OptVal){YEW_OPT_BOOL, {.b = !current.as.b}};
-    if (!yew_opt_set(cx->ed, YEW_OPT_SCOPE_DECLARED, "shadow.enable", 13U,
-                     &next, &error)) {
+    if (!provider->set(cx->ed, "shadow.enable", 13U, &next, &error)) {
         yew_msg(cx->ed, YEW_MSG_ERROR, "%s",
                 error == NULL ? "could not toggle shadow text" : error);
         return YEW_CMD_ERR_STATE;
