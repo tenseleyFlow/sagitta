@@ -14,6 +14,9 @@ UNITS_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
 MULTICURSOR_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
                           0x9e3779b97f4a7c15 0xd1b54a32d192ed03
 MULTICURSOR_FUZZ_OPS ?= 100000
+SHADOW_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
+                    0x9e3779b97f4a7c15 0xd1b54a32d192ed03
+SHADOW_FUZZ_ITERS ?= 50000
 SYN_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
                   0x9e3779b97f4a7c15 0xd1b54a32d192ed03
 SYN_FUZZ_OPS ?= 100000
@@ -381,6 +384,7 @@ FUZZ_REQUOTE_OBJ := $(BUILD)/tests/fuzz/fuzz_re_quote.o
 FUZZ_SEARCH_OBJ := $(BUILD)/tests/fuzz/fuzz_search.o
 FUZZ_PANES_OBJ := $(BUILD)/tests/fuzz/fuzz_panes.o
 FUZZ_TABS_OBJ := $(BUILD)/tests/fuzz/fuzz_tabs.o
+FUZZ_SHADOW_OBJ := $(BUILD)/tests/fuzz/fuzz_shadow.o
 FUZZ_GROUPS_OBJ := $(BUILD)/tests/fuzz/fuzz_groups.o
 FUZZ_REDIFF_OBJ := $(BUILD)/tests/fuzz/fuzz_re_diff.o
 FUZZ_FUZZY_OBJ := $(BUILD)/tests/fuzz/fuzz_fuzzy.o
@@ -452,6 +456,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
                 $(FUZZ_TEXTBUF_OBJ) $(TEXT_FUZZ_SUPPORT_OBJ) \
                 $(FUZZ_UNITS_OBJ) \
                 $(FUZZ_MULTICURSOR_OBJ) \
+                $(FUZZ_SHADOW_OBJ) \
                 $(FUZZ_CMDPARSE_OBJ) $(FUZZ_RECOMPILE_OBJ) \
                 $(FUZZ_REDIFF_OBJ) $(RE_REF_OBJ) \
                 $(PTY_ORACLE_OBJ) \
@@ -490,7 +495,7 @@ endif
 .PHONY: all check test clean install dirs FORCE test-script \
         test-script-determinism test-script-budget test-pty fuzz \
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
-        fuzz-mouse fuzz-groups fuzz-record fuzz-syn fuzz-syn-def \
+        fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
         fuzz-syn-long \
         fuzz-syn-line-long fuzz-syn-edit-long \
         test-record-corpus \
@@ -594,6 +599,10 @@ $(BUILD)/fuzz_fl_std: $(FUZZ_LINK_OBJ) $(FUZZ_FLSTD_OBJ)
 $(BUILD)/fuzz_tabs: $(FUZZ_LINK_OBJ) $(FUZZ_TABS_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_TABS_OBJ) $(LDLIBS)
+
+$(BUILD)/fuzz_shadow: $(FUZZ_LINK_OBJ) $(FUZZ_SHADOW_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
+		$(FUZZ_SHADOW_OBJ) $(LDLIBS)
 
 $(BUILD)/fuzz_groups: $(FUZZ_LINK_OBJ) $(FUZZ_GROUPS_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
@@ -816,7 +825,7 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
       $(BUILD)/fuzz_fl_std $(BUILD)/fuzz_fl_vm \
       $(BUILD)/fuzz_flapi \
       fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse \
-      fuzz-mouse fuzz-groups fuzz-record fuzz-syn fuzz-syn-def
+      fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def
 	$(BUILD)/fuzz_utf8 --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_grapheme --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_input --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
@@ -846,6 +855,13 @@ fuzz-groups: $(BUILD)/fuzz_groups
 	for seed in $(GROUPS_FUZZ_SEEDS); do \
 		$(BUILD)/fuzz_groups --iters=$(GROUPS_FUZZ_SESSIONS) \
 			--seed=$$seed; \
+	done
+
+fuzz-shadow: $(BUILD)/fuzz_shadow
+	@set -eu; \
+	for seed in $(SHADOW_FUZZ_SEEDS); do \
+		YEW_SHADOW_TEST=0 $(BUILD)/fuzz_shadow \
+			--iters=$(SHADOW_FUZZ_ITERS) --seed=$$seed; \
 	done
 
 fuzz-mouse: $(BUILD)/fuzz_mouse
@@ -1425,6 +1441,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew
          $(FUZZ_VT_OBJ:.o=.d) $(FUZZ_UNDO_OBJ:.o=.d) \
          $(FUZZ_TEXTBUF_OBJ:.o=.d) $(TEXT_FUZZ_SUPPORT_OBJ:.o=.d) \
          $(FUZZ_MULTICURSOR_OBJ:.o=.d) \
+         $(FUZZ_SHADOW_OBJ:.o=.d) \
          $(FUZZ_FLAPI_OBJ:.o=.d) $(FUZZ_RECORD_OBJ:.o=.d) \
          $(FUZZ_SYN_OBJ:.o=.d) \
          $(FUZZ_SYN_DEF_OBJ:.o=.d) \
