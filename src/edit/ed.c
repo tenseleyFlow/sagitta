@@ -208,6 +208,7 @@ static void ed_buffer_free(Ed *ed)
     ed->pane_root = NULL;
     ed->focus = NULL;
     yew_overlay_free(&ed->single_win.overlay);
+    yew_shadow_dismiss(ed, &ed->single_win);
     yew_shadow_free(&ed->single_win.shadow);
     free(ed->single_win.syn_spans);
     ed->single_win.syn_spans = NULL;
@@ -983,6 +984,7 @@ void yew_ed_win_release(Ed *ed, Win *w)
     if (w == &ed->single_win)
         return;
     yew_overlay_free(&w->overlay);
+    yew_shadow_dismiss(ed, w);
     yew_shadow_free(&w->shadow);
     free(w->syn_spans);
     yew_vp_free(w);

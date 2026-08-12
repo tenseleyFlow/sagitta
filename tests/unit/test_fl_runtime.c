@@ -388,7 +388,9 @@ void test_fl_options_cover_builtins_and_raise_name_suggestions(void)
         "registers.ring_depth", "registers.ring_bytes_max",
         "registers.clip_read_max", "clipboard.sync", "search.ignorecase",
         "search.smartcase", "hooks.error_limit", "theme", "theme_auto",
-        "macro.dir"
+        "macro.dir", "shadow.enable", "shadow.providers",
+        "shadow.max_lines", "shadow.midline", "shadow.lsp_debounce_ms",
+        "shadow.ai_debounce_ms"
     };
     Ed ed;
     FlVm *vm;

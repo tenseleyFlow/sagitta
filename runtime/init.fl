@@ -32,6 +32,12 @@ set({
     "hooks.error_limit": 5,
     theme: "quiver-dark",
     "macro.dir": "",
+    "shadow.enable": true,
+    "shadow.providers": "index lsp ai",
+    "shadow.max_lines": 8,
+    "shadow.midline": false,
+    "shadow.lsp_debounce_ms": 120,
+    "shadow.ai_debounce_ms": 350,
 })
 
 # -- 2. unit modes (L line, W word, B block) ----------------------------

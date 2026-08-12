@@ -6,6 +6,7 @@
 
 #include "edit/dispatch.h"
 #include "edit/ed.h"
+#include "edit/shadow.h"
 #include "edit/theme_cmds.h"
 #include "fl/flruntime.h"
 #include "fl/flhook.h"
@@ -58,6 +59,46 @@ static const char *const fortran_form_values[] = {
 /* The core is deliberately single-threaded.  Keep a stable diagnostic for
  * the option API's borrowed error pointer without growing every Ed. */
 static char theme_option_error[192];
+
+static bool shadow_providers_validate(const OptVal *value, const char **err)
+{
+    u32 at = 0U;
+    u8 seen = 0U;
+
+    while (at < value->as.str.len) {
+        u32 lo;
+        u8 bit;
+
+        while (at < value->as.str.len &&
+               (value->as.str.s[at] == ' ' || value->as.str.s[at] == '\t'))
+            at++;
+        if (at == value->as.str.len)
+            break;
+        lo = at;
+        while (at < value->as.str.len && value->as.str.s[at] != ' ' &&
+               value->as.str.s[at] != '\t')
+            at++;
+        bit = at - lo == 5U && memcmp(value->as.str.s + lo, "index", 5U) == 0
+                  ? (u8)(1U << YEW_SHADOW_INDEX)
+              : at - lo == 3U &&
+                        memcmp(value->as.str.s + lo, "lsp", 3U) == 0
+                  ? (u8)(1U << YEW_SHADOW_LSP)
+              : at - lo == 2U &&
+                        memcmp(value->as.str.s + lo, "ai", 2U) == 0
+                  ? (u8)(1U << YEW_SHADOW_AI)
+                  : 0U;
+        if (bit == 0U) {
+            *err = "shadow.providers accepts only index, lsp, and ai";
+            return false;
+        }
+        if ((seen & bit) != 0U) {
+            *err = "shadow.providers contains a duplicate provider";
+            return false;
+        }
+        seen |= bit;
+    }
+    return true;
+}
 
 #define OPT_BOOL(v_) {YEW_OPT_BOOL, {.b = (v_)}}
 #define OPT_INT(v_) {YEW_OPT_INT, {.i = (v_)}}
@@ -135,7 +176,20 @@ const OptDesc yew_opts[] = {
      0, 0, NULL, option_changed,
      "Select a dark or light theme from the terminal background"},
     {"macro.dir", YEW_OPT_STR, YEW_OPT_GLOBAL, OPT_STR(""), NULL,
-     0, 0, NULL, option_changed, "Macro library directory (Sprint 38)"}
+     0, 0, NULL, option_changed, "Macro library directory (Sprint 38)"},
+    {"shadow.enable", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(true), NULL,
+     0, 0, NULL, option_changed, "Enable passive shadow suggestions"},
+    {"shadow.providers", YEW_OPT_STR, YEW_OPT_GLOBAL,
+     OPT_STR("index lsp ai"), NULL, 0, 0, shadow_providers_validate,
+     option_changed, "Ordered passive suggestion providers"},
+    {"shadow.max_lines", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(8), NULL,
+     1, 8, NULL, option_changed, "Maximum overlaid suggestion lines"},
+    {"shadow.midline", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(false), NULL,
+     0, 0, NULL, option_changed, "Allow suggestions inside non-space text"},
+    {"shadow.lsp_debounce_ms", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(120),
+     NULL, 0, 5000, NULL, option_changed, "LSP suggestion idle delay"},
+    {"shadow.ai_debounce_ms", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(350),
+     NULL, 0, 5000, NULL, option_changed, "AI suggestion idle delay"}
 };
 
 const u32 yew_opts_len = (u32)YEW_ARRAY_LEN(yew_opts);
@@ -416,6 +470,21 @@ static void option_changed_target(Ed *ed, const OptDesc *desc,
             yew_msg(ed, YEW_MSG_ERROR, "%s", error);
     } else if (strcmp(desc->name, "macro.dir") == 0) {
         yew_macrolib_option_changed(ed);
+    } else if (strncmp(desc->name, "shadow.", 7U) == 0 &&
+               strcmp(desc->name, "shadow.max_lines") != 0 &&
+               ed->model_ready) {
+        u32 tab;
+
+        for (tab = 0U; tab < ed->tabs.v.len; tab++) {
+            Pane *leaves[YEW_PANE_MAX_LEAVES];
+            u32 n = 0U;
+            u32 i;
+
+            yew_pane_collect_leaves(ed->tabs.v.data[tab].root, leaves,
+                                    YEW_ARRAY_LEN(leaves), &n);
+            for (i = 0U; i < n; i++)
+                yew_shadow_dismiss(ed, leaves[i]->win);
+        }
     }
     ed->layout_dirty = true;
     ed->full_damage = true;

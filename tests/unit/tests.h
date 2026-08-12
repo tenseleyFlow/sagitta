@@ -1774,5 +1774,10 @@ void test_shadow_accept_revalidation_failure_never_inserts(void);
 void test_shadow_accept_word_matches_mode_units(void);
 void test_shadow_accept_command_breaks_typing_into_paste_undo(void);
 void test_shadow_escape_is_two_stage_in_insert_mode(void);
+void test_shadow_debounce_fans_one_timer_out_at_provider_deadlines(void);
+void test_shadow_debounce_burst_keeps_one_timer_and_one_request_each(void);
+void test_shadow_debounce_policy_gates_and_provider_filter(void);
+void test_shadow_provider_option_rejects_unknown_and_duplicate_names(void);
+void test_shadow_pending_timer_is_cancelled_before_window_teardown(void);
 
 #endif

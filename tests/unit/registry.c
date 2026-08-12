@@ -1736,6 +1736,11 @@ const YewTest yew_tests[] = {
     T(shadow_accept_word_matches_mode_units),
     T(shadow_accept_command_breaks_typing_into_paste_undo),
     T(shadow_escape_is_two_stage_in_insert_mode),
+    T(shadow_debounce_fans_one_timer_out_at_provider_deadlines),
+    T(shadow_debounce_burst_keeps_one_timer_and_one_request_each),
+    T(shadow_debounce_policy_gates_and_provider_filter),
+    T(shadow_provider_option_rejects_unknown_and_duplicate_names),
+    T(shadow_pending_timer_is_cancelled_before_window_teardown),
 };
 
 const size_t yew_tests_len = YEW_ARRAY_LEN(yew_tests);

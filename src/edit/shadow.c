@@ -5,8 +5,13 @@
 
 #include "edit/ed.h"
 #include "edit/motion.h"
+#include "edit/option.h"
+#include "fl/flruntime.h"
 #include "text/edit.h"
 #include "ui/message.h"
+#include "unicode/coords.h"
+#include "unicode/utf8.h"
+#include "unicode/wordbreak.h"
 #include "util/log.h"
 
 static const ShadowProvider *shadow_providers[YEW_SHADOW_NPROV];
@@ -44,10 +49,19 @@ void yew_shadow_dismiss(Ed *ed, Win *win)
     bool suppressed;
     u32 i;
 
-    (void)ed;
     if (win == NULL)
         return;
     shadow = &win->shadow;
+    if (ed != NULL && shadow->timer != YEW_TIMER_NONE)
+        (void)yew_timer_cancel(&ed->timers, shadow->timer);
+    if (ed != NULL && win->buf != NULL) {
+        for (i = 0U; i < (u32)YEW_SHADOW_NPROV; i++) {
+            const ShadowProvider *provider = shadow_providers[i];
+
+            if (provider != NULL && provider->cancel != NULL)
+                provider->cancel(ed, win->buf->id, shadow->seq_next[i]);
+        }
+    }
     for (i = 0U; i < (u32)YEW_SHADOW_NPROV; i++) {
         seq_next[i] = shadow->seq_next[i];
         seq_min[i] = shadow->seq_min[i];
@@ -127,6 +141,223 @@ void yew_shadow_deliver(Ed *ed, const ShadowSug *suggestion)
         return;
     }
     ed->shadow_stats.delivered++;
+}
+
+static bool shadow_opt(Ed *ed, Win *win, const char *name, OptVal *out)
+{
+    return ed != NULL && win != NULL && win->buf != NULL &&
+           yew_opt_get(ed, win->buf, win, name, (u32)strlen(name), out);
+}
+
+static bool shadow_provider_enabled(Ed *ed, Win *win, u8 prov)
+{
+    static const char *const names[YEW_SHADOW_NPROV] = {
+        "index", "lsp", "ai",
+    };
+    OptVal value;
+    u32 at = 0U;
+
+    if (!shadow_provider_valid(prov) ||
+        !shadow_opt(ed, win, "shadow.providers", &value) ||
+        value.type != (u8)YEW_OPT_STR)
+        return false;
+    while (at < value.as.str.len) {
+        u32 lo;
+
+        while (at < value.as.str.len &&
+               (value.as.str.s[at] == ' ' || value.as.str.s[at] == '\t'))
+            at++;
+        lo = at;
+        while (at < value.as.str.len && value.as.str.s[at] != ' ' &&
+               value.as.str.s[at] != '\t')
+            at++;
+        if (at - lo == strlen(names[prov]) &&
+            memcmp(value.as.str.s + lo, names[prov], at - lo) == 0)
+            return true;
+    }
+    return false;
+}
+
+static u32 shadow_provider_delay(Ed *ed, Win *win,
+                                 const ShadowProvider *provider)
+{
+    OptVal value;
+    const char *name = provider->prov == (u8)YEW_SHADOW_LSP
+                           ? "shadow.lsp_debounce_ms"
+                       : provider->prov == (u8)YEW_SHADOW_AI
+                           ? "shadow.ai_debounce_ms"
+                           : NULL;
+
+    if (name != NULL && shadow_opt(ed, win, name, &value) &&
+        value.type == (u8)YEW_OPT_INT)
+        return (u32)value.as.i;
+    return provider->debounce_ms;
+}
+
+static ByteOff shadow_line_end(const TextBuf *tb, LineNo line)
+{
+    Span span = yew_textbuf_line_span(tb, line);
+    ByteOff end = BYTEOFF(span.hi);
+
+    if (line.v + 1U < yew_textbuf_line_count(tb))
+        end = yew_grapheme_prev_boundary(tb, end);
+    return end;
+}
+
+static bool shadow_cursor_on_whitespace(const TextBuf *tb, ByteOff cursor)
+{
+    TextIter iter;
+    u8 bytes[YEW_UTF8_MAX];
+    size_t copied = 0U;
+    u32 cp;
+
+    if (cursor.v >= yew_textbuf_len(tb) ||
+        !yew_textiter_begin(&iter, tb, cursor))
+        return false;
+    while (copied < sizeof(bytes)) {
+        const u8 *chunk;
+        u64 available;
+        size_t take;
+
+        if (!yew_textiter_chunk(&iter, tb, &chunk, &available))
+            break;
+        take = (size_t)(available < sizeof(bytes) - copied
+                            ? available
+                            : sizeof(bytes) - copied);
+        if (take == 0U)
+            break;
+        (void)memcpy(bytes + copied, chunk, take);
+        copied += take;
+        if (copied == sizeof(bytes) ||
+            !yew_textiter_advance(&iter, tb))
+            break;
+    }
+    return copied != 0U && yew_utf8_decode(bytes, copied, &cp) != 0U &&
+           yew_unicode_is_white_space(cp);
+}
+
+static bool shadow_arm_eligible(Ed *ed, Win *win)
+{
+    Cursor *cursor;
+    TextBuf *tb;
+    OptVal value;
+    u32 i;
+
+    if (ed == NULL || win == NULL || win != ed->win || ed->headless ||
+        win->shadow.suppressed || win->buf == NULL || win->buf->tb == NULL ||
+        win->cs.curs.len != 1U || win->cs.primary >= win->cs.curs.len ||
+        fl_runtime_cmd_source(yew_fl_vm(ed)) == YEW_SRC_REPLAY)
+        return false;
+    if (!shadow_opt(ed, win, "shadow.enable", &value) || !value.as.b)
+        return false;
+    for (i = 0U; i < win->cs.curs.len; i++)
+        if (win->cs.curs.data[i].pos.v != win->cs.curs.data[i].anchor.v)
+            return false;
+    cursor = &win->cs.curs.data[win->cs.primary];
+    tb = win->buf->tb;
+    if (shadow_opt(ed, win, "shadow.midline", &value) && value.as.b)
+        return true;
+    if (cursor->pos.v ==
+        shadow_line_end(tb, yew_textbuf_line_of(tb, cursor->pos)).v)
+        return true;
+    return shadow_cursor_on_whitespace(tb, cursor->pos);
+}
+
+static void shadow_timer_fire(Ed *ed, void *ctx)
+{
+    Win *win = ctx;
+
+    if (win == NULL)
+        return;
+    win->shadow.timer = YEW_TIMER_NONE;
+    yew_shadow_fire(ed, win);
+}
+
+void yew_shadow_arm(Ed *ed, Win *win)
+{
+    Shadow *shadow;
+    i64 delay = INT64_MAX;
+    u32 i;
+
+    if (ed == NULL || win == NULL)
+        return;
+    shadow = &win->shadow;
+    if (shadow->timer != YEW_TIMER_NONE) {
+        (void)yew_timer_cancel(&ed->timers, shadow->timer);
+        shadow->timer = YEW_TIMER_NONE;
+    }
+    shadow->pending_mask = 0U;
+    for (i = 0U; i < (u32)YEW_SHADOW_NPROV; i++) {
+        const ShadowProvider *provider = shadow_providers[i];
+
+        shadow->seq_min[i] = shadow->seq_next[i];
+        if (provider != NULL && provider->cancel != NULL && win->buf != NULL)
+            provider->cancel(ed, win->buf->id, shadow->seq_next[i]);
+    }
+    if (!shadow_arm_eligible(ed, win))
+        return;
+    for (i = 0U; i < (u32)YEW_SHADOW_NPROV; i++) {
+        const ShadowProvider *provider = shadow_providers[i];
+        u32 provider_delay;
+
+        if (provider == NULL ||
+            !shadow_provider_enabled(ed, win, (u8)i))
+            continue;
+        shadow->pending_mask |= (u8)(1U << i);
+        provider_delay = shadow_provider_delay(ed, win, provider);
+        if ((i64)provider_delay < delay)
+            delay = (i64)provider_delay;
+    }
+    if (shadow->pending_mask == 0U)
+        return;
+    shadow->armed_at_ms = ed->now_ms;
+    shadow->timer = yew_timer_add(&ed->timers, ed->now_ms + delay,
+                                  shadow_timer_fire, win);
+}
+
+void yew_shadow_fire(Ed *ed, Win *win)
+{
+    Shadow *shadow;
+    Cursor *cursor;
+    i64 next_at = INT64_MAX;
+    u32 i;
+
+    if (!shadow_arm_eligible(ed, win)) {
+        yew_shadow_dismiss(ed, win);
+        return;
+    }
+    shadow = &win->shadow;
+    cursor = &win->cs.curs.data[win->cs.primary];
+    for (i = 0U; i < (u32)YEW_SHADOW_NPROV; i++) {
+        const ShadowProvider *provider = shadow_providers[i];
+        i64 due;
+
+        if ((shadow->pending_mask & (u8)(1U << i)) == 0U ||
+            provider == NULL)
+            continue;
+        due = shadow->armed_at_ms +
+              (i64)shadow_provider_delay(ed, win, provider);
+        if (due <= ed->now_ms) {
+            ShadowReq request;
+
+            request.buf_id = win->buf->id;
+            request.buf_gen = win->buf->tb->gen;
+            request.pos = cursor->pos;
+            request.line = yew_textbuf_line_span(
+                win->buf->tb,
+                yew_textbuf_line_of(win->buf->tb, cursor->pos));
+            request.seq = shadow->seq_next[i]++;
+            request.prov = (u8)i;
+            shadow->pending_mask &= (u8)~(1U << i);
+            if (provider->request(ed, &request))
+                ed->shadow_stats.requests++;
+        } else if (due < next_at) {
+            next_at = due;
+        }
+    }
+    if (shadow->pending_mask != 0U)
+        shadow->timer = yew_timer_add(&ed->timers, next_at,
+                                      shadow_timer_fire, win);
 }
 
 i64 yew_shadow_revalidate(const TextBuf *tb, const ShadowSug *suggestion,
@@ -360,34 +591,36 @@ static bool shadow_insert_matches(const TextBuf *tb,
     return true;
 }
 
-static void shadow_note_window_edit(EditCtx *ec, Win *win, u8 kind,
+static bool shadow_note_window_edit(EditCtx *ec, Win *win, u8 kind,
                                     ByteOff at, u64 len)
 {
     Shadow *shadow;
     u32 i;
 
     if (win == NULL || win->buf != ec->buffer)
-        return;
+        return false;
     shadow = &win->shadow;
     for (i = 0U; i < (u32)YEW_SHADOW_NPROV; i++)
         shadow->seq_min[i] = shadow->seq_next[i];
     if (!shadow->live)
-        return;
+        return false;
     if (kind == YEW_JOURNAL_INS && win->id == ec->win_id &&
         shadow_insert_matches(ec->tb, &shadow->sug, at, len)) {
         shadow->sug.consumed += (u32)len;
         shadow->sug.buf_gen = ec->tb->gen;
         if (shadow->sug.consumed == shadow->sug.len && !shadow->accepting)
             yew_shadow_dismiss(ec->ed, win);
-        return;
+        return true;
     }
     yew_shadow_dismiss(ec->ed, win);
+    return false;
 }
 
 void yew_shadow_on_edit(EditCtx *ec, u8 kind, ByteOff at, u64 len)
 {
     Ed *ed;
     u32 tab;
+    bool kept = false;
 
     if (ec == NULL || ec->ed == NULL || ec->buffer == NULL)
         return;
@@ -400,6 +633,9 @@ void yew_shadow_on_edit(EditCtx *ec, u8 kind, ByteOff at, u64 len)
         yew_pane_collect_leaves(ed->tabs.v.data[tab].root, leaves,
                                 YEW_ARRAY_LEN(leaves), &n);
         for (i = 0U; i < n; i++)
-            shadow_note_window_edit(ec, leaves[i]->win, kind, at, len);
+            if (shadow_note_window_edit(ec, leaves[i]->win, kind, at, len))
+                kept = true;
     }
+    if (!kept && ed->win != NULL && ed->win->id == ec->win_id)
+        yew_shadow_arm(ed, ed->win);
 }

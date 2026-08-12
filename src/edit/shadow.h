@@ -58,6 +58,8 @@ typedef struct Shadow {
     u32 seq_next[YEW_SHADOW_NPROV];
     u32 seq_min[YEW_SHADOW_NPROV];
     TimerId timer;
+    i64 armed_at_ms;
+    u8 pending_mask;
     u16 vrows;
 } Shadow;
 
@@ -78,6 +80,10 @@ void yew_shadow_dismiss(Ed *ed, Win *win);
 
 void yew_shadow_register(const ShadowProvider *provider);
 void yew_shadow_deliver(Ed *ed, const ShadowSug *suggestion);
+/* Passive suggestions are single-cursor only; ineligible windows are
+ * dismissed and carry no timer. */
+void yew_shadow_arm(Ed *ed, Win *win);
+void yew_shadow_fire(Ed *ed, Win *win);
 bool yew_shadow_accept_word(Ed *ed, Win *win, bool alt);
 bool yew_shadow_accept_line(Ed *ed, Win *win);
 bool yew_shadow_accept_all(Ed *ed, Win *win);
