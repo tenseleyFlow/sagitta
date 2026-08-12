@@ -1,8 +1,8 @@
 #!/bin/sh
 
-# Run the authoritative syntax benchmark only after the host has remained
-# quiet and cool for a sustained window.  Cooperating jobs should use the
-# same lock path (shared for background work, exclusive for this runner).
+# Run the authoritative syntax benchmark only after its physical CPU core has
+# remained quiet for a sustained window.  Cooperating jobs should use the same
+# lock path (shared for background work, exclusive for this runner).
 set -eu
 
 repo=$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd)
@@ -15,6 +15,7 @@ poll_seconds=${YEW_PERF_POLL_SECONDS:-1}
 status_interval=${YEW_PERF_STATUS_INTERVAL:-30}
 idle_min=${YEW_PERF_MIN_IDLE_PERCENT:-95}
 run_sibling_idle_min=${YEW_PERF_MIN_RUN_SIBLING_IDLE_PERCENT:-$idle_min}
+check_temp=${YEW_PERF_CHECK_TEMP:-0}
 temp_max=${YEW_PERF_MAX_TEMP_C:-75}
 run_temp_max=${YEW_PERF_MAX_RUN_TEMP_C:-100}
 run_timeout=${YEW_PERF_RUN_TIMEOUT:-1800}
@@ -44,6 +45,7 @@ check_uint YEW_PERF_POLL_SECONDS "$poll_seconds"
 check_uint YEW_PERF_STATUS_INTERVAL "$status_interval"
 check_uint YEW_PERF_MIN_IDLE_PERCENT "$idle_min"
 check_uint YEW_PERF_MIN_RUN_SIBLING_IDLE_PERCENT "$run_sibling_idle_min"
+check_uint YEW_PERF_CHECK_TEMP "$check_temp"
 check_uint YEW_PERF_MAX_TEMP_C "$temp_max"
 check_uint YEW_PERF_MAX_RUN_TEMP_C "$run_temp_max"
 check_uint YEW_PERF_RUN_TIMEOUT "$run_timeout"
@@ -54,6 +56,7 @@ check_uint YEW_PERF_RUN_TIMEOUT "$run_timeout"
 [ "$idle_min" -le 100 ] || die 'YEW_PERF_MIN_IDLE_PERCENT must not exceed 100'
 [ "$run_sibling_idle_min" -le 100 ] ||
     die 'YEW_PERF_MIN_RUN_SIBLING_IDLE_PERCENT must not exceed 100'
+[ "$check_temp" -le 1 ] || die 'YEW_PERF_CHECK_TEMP must be zero or one'
 [ "$run_temp_max" -ge "$temp_max" ] ||
     die 'YEW_PERF_MAX_RUN_TEMP_C must be at least YEW_PERF_MAX_TEMP_C'
 
@@ -315,14 +318,19 @@ while [ "$quiet_streak" -lt "$quiet_window" ]; do
     has_competitor && competing=1
     read_idle_set "$cpu_threads"
     cpu_idle=$idle_result
-    read_package_temp
-    if [ -z "$package_temp" ] && [ "$temp_notice" -eq 0 ]; then
+    package_temp=
+    if [ "$check_temp" -eq 1 ]; then
+        read_package_temp
+    fi
+    if [ "$check_temp" -eq 1 ] && [ -z "$package_temp" ] &&
+       [ "$temp_notice" -eq 0 ]; then
         printf 'perf-syn-quiet: package temperature unavailable; continuing\n' >&2
         temp_notice=1
     fi
     if [ "$competing" -eq 0 ] && [ -n "$cpu_idle" ] &&
        [ "$cpu_idle" -ge "$idle_min" ] &&
-       { [ -z "$package_temp" ] || [ "$package_temp" -le "$temp_max" ]; }; then
+       { [ "$check_temp" -eq 0 ] || [ -z "$package_temp" ] ||
+         [ "$package_temp" -le "$temp_max" ]; }; then
         quiet_streak=$((quiet_streak + poll_seconds))
     else
         quiet_streak=0
@@ -331,9 +339,9 @@ while [ "$quiet_streak" -lt "$quiet_window" ]; do
         break
     fi
     if [ $((quiet_elapsed % status_interval)) -eq 0 ]; then
-        printf 'perf-syn-quiet: waiting; cpu=%s threads=%s idle=%s%% temp=%sC competitor=%s streak=%ss\n' \
+        printf 'perf-syn-quiet: waiting; cpu=%s threads=%s idle=%s%% temp=%s competitor=%s streak=%ss\n' \
             "$cpu" "$cpu_threads" "${cpu_idle:-unknown}" \
-            "${package_temp:-unknown}" "$competing" "$quiet_streak" >&2
+            "${package_temp:-ignored}" "$competing" "$quiet_streak" >&2
     fi
     if [ "$quiet_elapsed" -ge "$quiet_timeout" ]; then
         printf 'perf-syn-quiet: quiet-window timeout after %ss\n' "$quiet_elapsed" >&2
@@ -378,9 +386,12 @@ while kill -0 "$benchmark_pid" 2>/dev/null; do
             fi
         fi
     fi
-    read_package_temp
-    if [ -n "$package_temp" ] && [ "$package_temp" -ge "$run_temp_max" ]; then
-        contaminated=1
+    if [ "$check_temp" -eq 1 ]; then
+        read_package_temp
+        if [ -n "$package_temp" ] &&
+           [ "$package_temp" -ge "$run_temp_max" ]; then
+            contaminated=1
+        fi
     fi
     if [ "$run_timeout" -gt 0 ] && [ "$run_elapsed" -ge "$run_timeout" ]; then
         timed_out=1
@@ -410,9 +421,11 @@ if [ -n "$sibling_threads" ]; then
         fi
     fi
 fi
-read_package_temp
-if [ -n "$package_temp" ] && [ "$package_temp" -ge "$run_temp_max" ]; then
-    contaminated=1
+if [ "$check_temp" -eq 1 ]; then
+    read_package_temp
+    if [ -n "$package_temp" ] && [ "$package_temp" -ge "$run_temp_max" ]; then
+        contaminated=1
+    fi
 fi
 
 if [ "$timed_out" -eq 1 ]; then

@@ -71,7 +71,8 @@ output=$(common_env env \
     YEW_PERF_LOCK_PATH="$scratch/happy.lock" \
     YEW_PERF_PS_COMMAND="$scratch/ps-clear" \
     YEW_PERF_TEMP_COMMAND="$scratch/temp-warm" \
-    YEW_PERF_MAX_RUN_TEMP_C=90 \
+    YEW_PERF_MAX_TEMP_C=50 \
+    YEW_PERF_MAX_RUN_TEMP_C=70 \
     YEW_PERF_SYN_COMMAND="$scratch/benchmark --gate" \
     TEST_STARTED="$scratch/happy-started" \
     TEST_REPO="$repo" \
@@ -80,6 +81,7 @@ output=$(common_env env \
 [ "$output" = 'authoritative result' ] || fail 'clean output was not preserved'
 [ "$(cat "$scratch/taskset.log")" = "-c 3 $scratch/benchmark --gate" ] ||
     fail 'benchmark was not pinned to the requested CPU'
+
 grep 'clean run completed' "$scratch/happy.err" >/dev/null ||
     fail 'clean completion diagnostic missing'
 
@@ -161,6 +163,7 @@ make_fake "$scratch/benchmark-hot" \
     'printf "discard hot result\n"'
 if common_env env \
     TEST_STARTED="$scratch/hot-started" \
+    YEW_PERF_CHECK_TEMP=1 \
     YEW_PERF_LOCK_PATH="$scratch/hot.lock" \
     YEW_PERF_PS_COMMAND="$scratch/ps-clear" \
     YEW_PERF_TEMP_COMMAND="$scratch/temp-hot" \
