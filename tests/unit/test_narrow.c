@@ -311,9 +311,10 @@ void test_narrow_sliced_rescan_equals_unsliced(void)
     /* A 1 us budget forces many slices. */
     (void)yew_filter_apply(&sliced, f.items, f.n, true, "sc", 2U, 1);
     while (yew_filter_step(&sliced, f.items, true, 1)) {
-        steps++;
-        YEW_ASSERT(steps < 100000U);
+        if (++steps >= 100000U)
+            break;
     }
+    YEW_ASSERT(steps < 100000U);
     n_got = yew_filter_top(&sliced, f.items, true, got, YEW_FILTER_TOPK);
     n_want = nw_full(&f, true, "sc", 2U, want, YEW_FILTER_TOPK);
     YEW_ASSERT_EQ_U64(n_got, n_want);
@@ -346,12 +347,16 @@ void test_narrow_partial_scan_has_a_usable_count(void)
     u32 n_partial;
     u32 n_whole;
     u32 k;
+    bool monotone = true;
+    bool pending;
 
     nw_make(&f, 50000U, 5U);
     yew_filter_init(&fs);
     yew_filter_reset(&fs, f.items, f.n, 0U);
     /* A 1 us budget stops almost immediately. */
-    if (!yew_filter_apply(&fs, f.items, f.n, true, "s", 1U, 1)) {
+    pending = !yew_filter_apply(&fs, f.items, f.n, true, "s", 1U, 1);
+    YEW_ASSERT(pending);
+    if (pending) {
         seen_partial = yew_filter_matched(&fs);
         /* Partway through: a usable count, and never more matches than
          * the corpus holds. */
@@ -367,12 +372,14 @@ void test_narrow_partial_scan_has_a_usable_count(void)
 
             /* Monotone: a count that went backwards would make the
              * footer flicker downward as the scan progressed. */
-            YEW_ASSERT(now_matched >= last);
+            monotone = monotone && now_matched >= last;
             last = now_matched;
-            steps++;
-            YEW_ASSERT(steps < 200000U);
+            if (++steps >= 200000U)
+                break;
         }
     }
+    YEW_ASSERT(monotone);
+    YEW_ASSERT(steps < 200000U);
     /* And the finished answer equals an unsliced one. */
     n_whole = nw_full(&f, true, "s", 1U, whole, YEW_FILTER_TOPK);
     n_partial = yew_filter_top(&fs, f.items, true, partial,

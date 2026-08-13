@@ -771,9 +771,10 @@ void test_cmdcomp_listing_slices_and_resumes_without_rescanning(void)
      * many slices it takes -- a resume that reopened would both re-read
      * from the top and never terminate. */
     while (yew_comp_listing_advance(1)) {
-        slices++;
-        YEW_ASSERT(slices < 100U);
+        if (++slices >= 100U)
+            break;
     }
+    YEW_ASSERT(slices < 100U);
     YEW_ASSERT(slices != 0U);
     YEW_ASSERT(!yew_comp_listing_pending());
     YEW_ASSERT_EQ_U64(yew_comp_listing_opendirs() - before, 1U);

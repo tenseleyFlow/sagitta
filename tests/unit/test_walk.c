@@ -290,9 +290,10 @@ void test_walk_sliced_equals_unsliced(void)
     w = yew_walk_begin(f.root, NULL, &sliced);
     YEW_ASSERT_NOT_NULL(w);
     while (yew_walk_step(w, 1)) {
-        steps++;
-        YEW_ASSERT(steps < 10000U); /* never loops */
+        if (++steps >= 10000U)
+            break;
     }
+    YEW_ASSERT(steps < 10000U); /* never loops */
     yew_walk_end(w);
     /* It really was sliced, or this proves nothing. */
     YEW_ASSERT(steps > 1U);
