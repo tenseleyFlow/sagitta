@@ -9,6 +9,7 @@
 #include "edit/buf.h"
 #include "edit/edit_cmds.h"
 #include "edit/jumplist.h"
+#include "edit/lsp_cmds.h"
 #include "edit/opt.h"
 #include "edit/pane_cmds.h"
 #include "edit/search_cmds.h"
@@ -146,6 +147,21 @@ static CmdStatus deferred_unreachable(CmdCtx *cx)
         name_, deferred_unreachable, arity_, (flags_) | YEW_CMD_DEFERRED,      \
             "Sprint " #sprint_ ": " help_, word_                             \
     }
+
+#ifndef YEW_WITH_LSP
+#define YEW_WITH_LSP 0
+#endif
+
+#if YEW_WITH_LSP
+#define LSP_DEFER(name_, arity_, flags_, sprint_, help_)                       \
+    DEFER(name_, arity_, flags_, sprint_, help_)
+#else
+#define LSP_DEFER(name_, arity_, flags_, sprint_, help_)                       \
+    {                                                                          \
+        name_, yew_lsp_cmd_require, arity_, flags_,                            \
+            "LSP module unavailable: " help_, NULL                            \
+    }
+#endif
 
 static const CmdDesc builtins[] = {
     {"ed.edit.insert.at", yew_edit_cmd_insert_at, YEW_ARITY_STR,
@@ -846,10 +862,42 @@ static const CmdDesc builtins[] = {
      0U, "Drop every finished job and its output buffer", NULL},
     {"ed.job.rerun", yew_job_cmd_rerun, YEW_ARITY_OPT_INT,
      YEW_CMD_TAKES_COUNT, "Run a job's command line again", NULL},
+    {"ed.lsp.info", yew_lsp_cmd_info, YEW_ARITY_NONE, 0U,
+     "Show LSP module and server status", NULL},
+    {"ed.lsp.log", yew_lsp_cmd_log, YEW_ARITY_NONE, 0U,
+     "Open the LSP server log", NULL},
+    {"ed.lsp.restart", yew_lsp_cmd_start, YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN,
+     "Restart the server for the current buffer", NULL},
+    LSP_DEFER("ed.lsp.stop", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 46,
+              "stop the server for the current buffer"),
+    LSP_DEFER("ed.lsp.diagnostics", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 46,
+              "open the diagnostic list"),
+    LSP_DEFER("ed.lsp.diag_next", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 46,
+              "jump to the next diagnostic"),
+    LSP_DEFER("ed.lsp.diag_prev", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 46,
+              "jump to the previous diagnostic"),
+    LSP_DEFER("ed.lsp.goto_def", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 47,
+              "go to the definition under the cursor"),
+    LSP_DEFER("ed.lsp.goto_decl", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 47,
+              "go to the declaration under the cursor"),
+    LSP_DEFER("ed.lsp.goto_type", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 47,
+              "go to the type definition under the cursor"),
+    LSP_DEFER("ed.lsp.goto_impl", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 47,
+              "go to the implementation under the cursor"),
+    LSP_DEFER("ed.lsp.references", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 47,
+              "list references to the symbol under the cursor"),
+    LSP_DEFER("ed.lsp.hover", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 47,
+              "show hover information"),
+    LSP_DEFER("ed.lsp.rename", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 47,
+              "rename the symbol under the cursor"),
+    LSP_DEFER("ed.lsp.symbols", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 47,
+              "list document symbols"),
+    LSP_DEFER("ed.lsp.signature", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 47,
+              "show signature help"),
+    LSP_DEFER("ed.lsp.complete", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 47,
+              "request completion"),
     DEFER("ed.git.stage", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 52,
           "stage the selected path"),
-    DEFER("ed.lsp.goto", YEW_ARITY_STR, YEW_CMD_NEEDS_WIN, 47,
-          "go to an LSP location"),
     DEFER("ed.ai.open", YEW_ARITY_NONE, YEW_CMD_PROMPTS, 49,
           "open the AI prompt"),
     DEFER("ed.plug.reload", YEW_ARITY_OPT_STR, 0U, 54,
@@ -857,6 +905,7 @@ static const CmdDesc builtins[] = {
 };
 
 #undef DEFER
+#undef LSP_DEFER
 
 typedef struct {
     const char *name;
@@ -998,7 +1047,12 @@ static bool command_name_valid(const char *name)
         "enable", "disable", "at", "span", "unit", "up_alt", "down_alt",
         "get", "eval", "set_many", "split", "focus", "closure",
         "reload", "status", "stats", "accept_word", "accept_word_alt",
-        "accept_line", "accept_all", "doc_toggle", "reindex"};
+        "accept_line", "accept_all", "doc_toggle", "reindex",
+        /* Sprint 45: the LSP module surface is registered before its
+         * lifecycle and feature implementations land. */
+        "log", "restart", "diagnostics", "diag_next", "diag_prev",
+        "goto_def", "goto_decl", "goto_type", "goto_impl", "references",
+        "hover", "symbols", "signature", "complete"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

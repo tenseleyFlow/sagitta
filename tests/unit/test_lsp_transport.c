@@ -86,9 +86,24 @@ static void transport_destroy(void *opaque)
     free(owner);
 }
 
+static i64 transport_deadline(const void *opaque)
+{
+    const TransportOwner *owner = opaque;
+
+    return yew_rpc_deadline(&owner->conn);
+}
+
+static void transport_tick(void *opaque, Ed *ed, i64 now_ms)
+{
+    TransportOwner *owner = opaque;
+
+    (void)yew_rpc_sweep(&owner->conn, ed, now_ms);
+}
+
 static const YewJobFramedOps transport_ops = {
     transport_feed, transport_finish, transport_tx_view,
-    transport_tx_consume, transport_destroy
+    transport_tx_consume, transport_deadline, transport_tick,
+    transport_destroy
 };
 
 static bool run_framed(Ed *ed, u32 id)
@@ -235,5 +250,41 @@ void test_lsp_transport_bypasses_text_safe_prefix(void)
     YEW_ASSERT(yew_job_signal(&ed, id, SIGTERM));
     YEW_ASSERT(run_framed(&ed, id));
     yew_ed_free(&ed);
+    bytebuf_free(&capture.bodies);
+}
+
+void test_lsp_transport_rpc_deadline_wakes_job_clock(void)
+{
+    TransportCapture capture = {0};
+    TransportOwner *owner = yew_xcalloc(1U, sizeof(*owner));
+    RpcPending pending = {0};
+    Ed ed;
+    YewJob *job;
+
+    bytebuf_init(&capture.bodies);
+    yew_rpc_conn_init(&owner->conn);
+    owner->capture = &capture;
+    pending.sent_ms = 10;
+    pending.deadline_ms = 75;
+    YEW_ASSERT_EQ_U64(yew_rpc_call(&owner->conn, "deadline", NULL, 0U,
+                                   &pending), 1U);
+    yew_ed_init(&ed);
+    job = &ed.jobs.v[ed.jobs.len++];
+    (void)memset(job, 0, sizeof(*job));
+    job->in_fd = -1;
+    job->out_fd = -1;
+    job->err_fd = -1;
+    job->exec_fd = -1;
+    job->state = YEW_JOB_RUNNING;
+    job->sink = YEW_SINK_FRAMED;
+    job->framed_owner = owner;
+    job->framed_ops = &transport_ops;
+    YEW_ASSERT_EQ_I64(yew_job_deadline(&ed, 74), 1);
+    YEW_ASSERT_EQ_I64(yew_job_deadline(&ed, 75), 0);
+    yew_job_tick(&ed, 75);
+    YEW_ASSERT_EQ_U64(owner->conn.npending, 0U);
+    YEW_ASSERT_EQ_I64(yew_job_deadline(&ed, 75), -1);
+    yew_ed_free(&ed);
+    YEW_ASSERT(capture.destroyed);
     bytebuf_free(&capture.bodies);
 }

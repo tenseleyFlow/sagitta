@@ -968,6 +968,15 @@ i64 yew_job_deadline(const Ed *ed, i64 now_ms)
 
         if (j->state != YEW_JOB_RUNNING)
             continue;
+        if (j->sink == YEW_SINK_FRAMED && j->framed_ops != NULL &&
+            j->framed_ops->deadline != NULL) {
+            i64 framed_at = j->framed_ops->deadline(j->framed_owner);
+
+            if (framed_at >= 0 && framed_at <= now_ms)
+                return 0;
+            if (framed_at >= 0 && (best < 0 || framed_at - now_ms < best))
+                best = framed_at - now_ms;
+        }
         if (j->kill_at_ms != 0)
             at = j->kill_at_ms;
         else if (j->timeout_ms > 0)
@@ -1002,6 +1011,9 @@ void yew_job_tick(Ed *ed, i64 now_ms)
         }
         if (j->state != YEW_JOB_RUNNING)
             continue;
+        if (j->sink == YEW_SINK_FRAMED && j->framed_ops != NULL &&
+            j->framed_ops->tick != NULL)
+            j->framed_ops->tick(j->framed_owner, ed, now_ms);
         if (j->timeout_ms > 0 && now_ms - j->start_ms >= j->timeout_ms) {
             j->state = YEW_JOB_TIMEOUT;
             ed->jobs.dirty = true;

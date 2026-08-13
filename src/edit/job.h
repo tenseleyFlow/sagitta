@@ -35,6 +35,8 @@ typedef struct YewJobFramedOps {
     bool (*finish_stdout)(void *owner);
     u64 (*tx_view)(void *owner, const u8 **bytes);
     void (*tx_consume)(void *owner, u64 len);
+    i64 (*deadline)(const void *owner);
+    void (*tick)(void *owner, Ed *ed, i64 now_ms);
     void (*destroy)(void *owner);
 } YewJobFramedOps;
 

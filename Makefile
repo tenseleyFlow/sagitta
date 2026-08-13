@@ -339,6 +339,12 @@ OBJ      := $(SRC:%.c=$(BUILD)/%.o)
 
 UNIT_SRC := $(filter-out tests/unit/fakeclip.c, \
               $(sort $(wildcard tests/unit/*.c)))
+UNIT_LSP_SRC := tests/unit/test_json.c tests/unit/test_json_num.c \
+                tests/unit/test_jsonw.c tests/unit/test_jsonrpc_frame.c \
+                tests/unit/test_jsonrpc.c tests/unit/test_lsp_transport.c
+ifeq ($(filter lsp,$(MODULES)),)
+UNIT_SRC := $(filter-out $(UNIT_LSP_SRC),$(UNIT_SRC))
+endif
 UNIT_OBJ := $(UNIT_SRC:%.c=$(BUILD)/%.o)
 SYN_ENGINE_UNIT_OBJ := $(BUILD)/tests/unit/syn_engine.o
 STATE_LEGACY_OBJ := $(BUILD)/tests/unit/state_legacy.o
@@ -349,6 +355,7 @@ $(BUILD)/tests/unit/test_state_differential.o: CFLAGS += \
   -DYEW_HAVE_FLETCH_STATE=1
 $(BUILD)/tests/unit/test_syn_embed_runtime.o: CFLAGS += -DYEW_SYN_TEST=1
 FAKECLIP := $(BUILD)/fakeclip
+FAKELSP := $(BUILD)/tests/helpers/fakelsp
 PTY_VT_OBJ := $(BUILD)/tests/pty/vt.o
 PTY_SNAPSHOT_OBJ := $(BUILD)/tests/pty/snapshot.o
 PTY_ORACLE_OBJ := $(PTY_VT_OBJ) $(PTY_SNAPSHOT_OBJ)
@@ -484,7 +491,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
                 $(FUZZ_SYMIDX_OBJ) $(PERF_SYN_OBJ) $(PERF_SYMIDX_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) \
-                $(TORTURE_BATCH_OBJ) $(FAULTSHIM)))
+                $(TORTURE_BATCH_OBJ) $(FAULTSHIM) $(FAKELSP)))
 
 # A content mismatch makes FORCE a normal prerequisite of every object built
 # by this invocation.  The stamp recipe also removes objects not reachable
@@ -529,7 +536,7 @@ all: $(BUILD)/yew
 $(BUILD)/yew: $(OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJ) $(LDLIBS)
 
-$(BUILD)/unit_tests: $(UNIT_LINK_OBJ) $(FAKECLIP) $(TORTURE_CHILD) \
+$(BUILD)/unit_tests: $(UNIT_LINK_OBJ) $(FAKECLIP) $(FAKELSP) $(TORTURE_CHILD) \
                      $(TORTURE_DRIVER) $(FAULTSHIM)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(UNIT_LINK_OBJ) $(LDLIBS)
 
@@ -787,6 +794,9 @@ $(BUILD)/gen-unicode-tables: scripts/gen-unicode-tables.c | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
 $(FAKECLIP): tests/unit/fakeclip.c | dirs
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
+
+$(FAKELSP): tests/helpers/fakelsp.c | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
 #

@@ -1,6 +1,9 @@
 #include "harness.h"
 
+#include "edit/cmd.h"
+#include "edit/ed.h"
 #include "mod/mods.h"
+#include "ui/message.h"
 
 #include <stdio.h>
 
@@ -31,4 +34,31 @@ void test_mod_require_message(void)
             YEW_ASSERT_EQ_STR(err, expected);
         }
     }
+}
+
+void test_lsp_restart_crosses_module_boundary(void)
+{
+    Ed ed;
+    CmdCtx cx = {0};
+    CmdId restart;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_scratch(&ed));
+    restart = yew_cmd_lookup("ed.lsp.restart", 14U);
+    YEW_ASSERT(restart.v != 0U);
+    cx.ed = &ed;
+    cx.win = ed.win;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, restart, &cx), YEW_CMD_ERR_STATE);
+    YEW_ASSERT(ed.msg.active);
+    YEW_ASSERT_EQ_U64(ed.msg.sev, YEW_MSG_ERROR);
+#if YEW_WITH_LSP
+    YEW_ASSERT_EQ_STR(ed.msg.text, "LSP servers start in Sprint 46");
+#else
+    YEW_ASSERT_EQ_STR(
+        ed.msg.text,
+        "this build has no lsp module; rebuild with 'make MODULES=\"… lsp\"'");
+#endif
+    yew_ed_free(&ed);
 }
