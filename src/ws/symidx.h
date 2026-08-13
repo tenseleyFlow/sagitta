@@ -56,20 +56,44 @@ _Static_assert(sizeof(SymEntry) <= 32, "sym entry bloat");
 
 VEC_DECL(Vec_SymEntry, SymEntry);
 VEC_DECL(Vec_SymTick, u32);
+VEC_DECL(Vec_SymSig, u64);
+
+typedef struct SymOcc {
+    u32 name;
+    u32 file;
+    u64 off;
+    u32 line;
+    u32 updated;
+    u8 kind;
+    u8 flags;
+    u16 reserved;
+} SymOcc;
+
+VEC_DECL(Vec_SymOcc, SymOcc);
 
 typedef struct SymIndex {
     Vec_SymEntry e;
     Strmap by_name;
     Arena arena;
     u32 tick;
+    u32 scan_limit;
     u64 bytes;
 
     /* Parallel to e. Recency is deliberately an index-update clock, not
      * wall time, so ranking is reproducible across hosts and replays. */
     Vec_SymTick updated;
+    Vec_SymSig sig;
+    /* Open-buffer indices retain compact occurrences so a dirty-line
+     * replacement can reproduce a full scan byte-for-byte. Workspace
+     * indices are rebuild-only and leave this vector disabled. */
+    Vec_SymOcc occ;
     Interner *intern;
+    Workspace *owner;
+    u32 buf_id;
     bool capped;
     bool map_dirty;
+    bool track_occ;
+    bool occ_only;
 } SymIndex;
 
 typedef enum SymProx {
@@ -112,6 +136,8 @@ typedef struct SymDirty {
     bool pending;
     bool have_pre;
     bool prepared;
+    size_t occ_base;
+    Vec_SymTick affected;
 } SymDirty;
 
 typedef struct SymBufIndex {
@@ -130,6 +156,11 @@ void yew_symidx_workspace_free(Workspace *ws);
 /* Scan a byte range using the editor's word unit and syntax spans. The
  * caller removes obsolete records first when replacing an indexed range. */
 u32 yew_symidx_scan(SymIndex *idx, Buffer *buf, Span range);
+/* Workspace scans use buf_id 0 even when their bytes come from an open
+ * buffer.  This is the save-time and background-walk tier boundary. */
+u32 yew_symidx_scan_workspace(SymIndex *idx, Buffer *buf, Span range);
+void yew_symidx_workspace_replace(Workspace *ws, Buffer *buf);
+u64 yew_symidx_workspace_bytes(const Workspace *ws);
 
 i32 yew_sym_rank(i32 fuzzy, u32 age, SymProx prox, u8 kind, u16 hits);
 u32 yew_symidx_query(Workspace *ws, const SymQuery *q, SymHit *out, u32 max);

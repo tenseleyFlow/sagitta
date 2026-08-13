@@ -14,6 +14,7 @@ let alternatives = {
     "ed.undo.branches": "use ed.run(\"ed.edit.undo\") or redo",
     "ed.search.open": "use b.find(re)",
     "ed.search.open_back": "use b.find(re)",
+    "ed.compl.open": "no batch alternative",
     "ed.macro.record": "recording needs keys; none exist",
     "ed.ai.open": "no batch alternative",
 }
@@ -36,7 +37,7 @@ for command in ed.commands() {
         seen = seen + 1
     }
 }
-t.eq(seen, 14)
+t.eq(seen, 15)
 
 # ed.mode.enter is conditional: only E mode is terminal-backed.
 let mode_caught = false

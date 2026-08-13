@@ -430,17 +430,16 @@ bool yew_walk_step(WalkState *w, i64 budget_us)
         struct stat st;
         u32 saved;
 
+        /* read_sorted has already closed DIR* and retained an immutable
+         * name vector in the frame, so an entry boundary is a safe yield
+         * point.  Checking only when a whole directory finished let a
+         * flat source tree monopolize the editor for several milliseconds. */
+        if (budget_us > 0 && now_us() - started >= budget_us)
+            return true;
+
         if (f->at >= f->n) {
             path_truncate(w, f->rel_len);
             frame_pop(w);
-            /*
-             * Checked when a DIRECTORY finishes, not per entry: a
-             * single directory is one indivisible unit of work, and
-             * slicing inside one would mean holding a half-read DIR*
-             * across frames while the filesystem changes underneath.
-             */
-            if (budget_us > 0 && now_us() - started >= budget_us)
-                return w->depth > 0U;
             continue;
         }
         name = f->names[f->at++];

@@ -1,0 +1,127 @@
+# yew pty golden v1
+size 100x24 alt=1 cursor=17,9 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
+--- text
+   17 alphaOne alphaTwo alphaThree alphaFour alphaFive                                              
+   16 filler row                                                                                    
+   15 filler row                                                                                    
+   14 filler row                                                                                    
+   13 filler row                                                                                    
+   12 filler row                                                                                    
+   11 filler row                                                                                    
+   10 filler row                                                                                    
+    9 filler row                                                                                    
+    8 filler row                                                                                    
+    7 filler row                                                                                    
+    6 filler row                                                                                    
+    5 filler row                                                                                    
+    4 filler row                                                                                    
+    3 filler row                                                                                    
+    2 filler row                                                                                    
+    1 filler row                                                                                    
+   18 alp                                                                                           
+    1 +--------------------------------------------------------++--------------------------+        
+      |w alphaOne                                              ||(no documentation)        |        
+      |w alphaTwo                                              ||                          |        
+      +--------------------------------------------------------++--------------------------+        
+      1 of 10   index                                                                               
+ I git discovery unavailable; using workspace walk                                                  
+--- style
+AAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+AAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+AAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+AAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+AAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+AAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+AAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+AAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+AAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+AAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+AAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+AAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+AAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+AAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+AAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+AAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+AAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+AAACCABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDBBBBBBBB
+AAAAAADEEFFFEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEDDDDDDDDDDDDDDDDDDDDBBBBBBBBDBBBBBBBB
+AAAAAADDDGGGDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBDBBBBBBBB
+AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDBBBBBBBB
+AAAAAADDDDDDDDDDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+HHHIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
+--- legend
+A fg=#4b5263 bg=#12141a attrs=----------
+B fg=#c8ccd4 bg=#12141a attrs=----------
+C fg=#c8ccd4 bg=#12141a attrs=b---------
+D fg=#c8ccd4 bg=default attrs=----------
+E fg=default bg=#2c313a attrs=----------
+F fg=default bg=#2c313a attrs=b---------
+G fg=#c8ccd4 bg=default attrs=b---------
+H fg=#e1f7e6 bg=#2a9148 attrs=b---------
+I fg=#d8eede bg=#12401f attrs=----------
+--- sgr
+\x1b[0;38;2;75;82;99;48;2;18;20;26m
+\x1b[1;38;2;200;204;212m
+\x1b[22;38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[38;2;75;82;99m
+\x1b[38;2;200;204;212m
+\x1b[1;38;2;235;244;255;48;2;38;110;186m
+\x1b[22;38;2;218;229;240;48;2;20;48;76m
+\x1b[0;38;2;75;82;99;48;2;18;20;26m
+\x1b[1;38;2;200;204;212m
+\x1b[22;38;2;75;82;99m
+\x1b[38;2;200;204;212;49m
+\x1b[39;48;2;44;49;58m
+\x1b[1m
+\x1b[22m
+\x1b[38;2;200;204;212;49m
+\x1b[1m
+\x1b[22m
+\x1b[1;38;2;225;247;230;48;2;42;145;72m
+\x1b[22;38;2;216;238;222;48;2;18;64;31m
+\x1b[0;38;2;200;204;212m

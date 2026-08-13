@@ -21,6 +21,8 @@
 #include "term/input.h"
 #include "term/tty.h"
 #include "util/log.h"
+#include "ws/symidx.h"
+#include "ws/symwalk.h"
 
 static const char *loop_getenv(const char *name)
 {
@@ -235,6 +237,10 @@ int yew_loop_deadline(const Ed *ed, i64 now_ms)
      * predicate is shared with the tick deliberately — see its comment
      * for what a mismatched pair does. */
     if (yew_cmdline_comp_scanning(ed))
+        return 0;
+    if (yew_symidx_pending(ed))
+        return 0;
+    if (ed->ws.sym_walk.running && ed->ws.sym_walk.job == 0U)
         return 0;
     /* Syntax propagation is sliced on a 16 ms idle cadence.  It is work,
      * but unlike picker scans it must not turn an idle editor into a busy
@@ -455,6 +461,10 @@ int yew_loop_run(Ed *ed)
         /* The completion scan is sliced for the same reason and drains
          * in the same place. */
         (void)yew_cmdline_comp_tick(ed);
+        yew_symidx_pump(ed, had_input ? YEW_SYMIDX_BURST_US :
+                                         YEW_SYMIDX_FULL_US);
+        yew_symwalk_pump(ed, had_input ? YEW_SYMWALK_BUDGET_US / 2 :
+                                        YEW_SYMWALK_BUDGET_US);
         yew_mouse_tick(ed, now);
         /* Coalesced events run after input and deadline work, never inside
          * the keypress path.  A paste therefore produces one callback. */

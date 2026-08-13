@@ -18,7 +18,8 @@ typedef struct Ed Ed;
 
 enum {
     YEW_SYMWALK_MAX_FILES = 20000,
-    YEW_SYMWALK_MAX_SYMS_PER_FILE = 4000
+    YEW_SYMWALK_MAX_SYMS_PER_FILE = 4000,
+    YEW_SYMWALK_SCAN_LINES = 4
 };
 
 #define YEW_SYMWALK_MAX_FILE_BYTES (4U * 1024U * 1024U)
@@ -43,6 +44,10 @@ typedef struct SymWalk {
     bool discovery_done;
     bool fallback_reported;
     Vec_SymPath retired_jobs;
+    void *scratch_syn;
+    void *scan_buf;
+    u64 scan_line;
+    u32 scan_symbols;
 } SymWalk;
 
 void yew_symwalk_start(Ed *ed);

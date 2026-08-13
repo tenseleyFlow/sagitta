@@ -171,6 +171,8 @@ static void ed_ws_free(Ed *ed)
 {
     u32 i;
 
+    for (i = 0U; i < ed->ws.nbufs; i++)
+        yew_symidx_drop_buffer(&ed->ws, ed->ws.bufs[i]->id);
     /* Slot 0 aliases &ed->buffer and is disposed by the caller; every
      * other slot is heap-owned here. */
     for (i = 1U; i < ed->ws.nbufs; i++) {
@@ -493,6 +495,7 @@ void yew_ws_scratch_drop(Ed *ed, Buffer *b)
          * this buffer falls back to the document buffer first. */
         if (ed->win != NULL && ed->win->buf == b)
             (void)yew_ed_show_buffer(ed, &ed->buffer);
+        yew_symidx_drop_buffer(&ed->ws, b->id);
         ed_buffer_dispose(b);
         free(b);
         (void)memmove(&ed->ws.bufs[i], &ed->ws.bufs[i + 1U],
@@ -628,6 +631,7 @@ void yew_ed_init(Ed *ed)
     interner_init(&ed->interner, &ed->arena);
     ed->ws.owner = ed;
     yew_symidx_init(&ed->ws.sym_ws, &ed->interner);
+    ed->ws.sym_ws.owner = &ed->ws;
     bytebuf_init(&ed->frame);
     bytebuf_init(&ed->paste);
     yew_reg_init(&ed->regs);
@@ -654,6 +658,8 @@ void yew_ed_init(Ed *ed)
     /* Window ids start at 1; 0 is never handed out, so a zeroed Win is
      * distinguishable from window one. */
     ed->next_win_id = 1U;
+    /* Symbol records reserve buffer id 0 for workspace-only files. */
+    ed->ws.next_buf_id = 1U;
     yew_dispatch_init(ed);
     ed->dispatch_ready = true;
     if (!yew_fl_runtime_init(ed))
@@ -1638,6 +1644,7 @@ CmdStatus yew_ed_file_save_win(Ed *ed, Win *win, bool force)
     lines = yew_textbuf_line_count(doc->tb);
     yew_msg(ed, YEW_MSG_INFO, "wrote %s, %llu lines", doc->path,
             (unsigned long long)lines);
+    yew_symidx_workspace_replace(&ed->ws, doc);
     yew_fl_hook_buffer(ed, FL_EV_BUF_SAVED, doc);
     if (ed->quit_after_save) {
         ed->quit_after_save = false;
@@ -1745,6 +1752,7 @@ CmdStatus yew_ed_file_write_to_win(Ed *ed, Win *win, const char *path,
     ed->durability_failed = false;
     yew_msg(ed, YEW_MSG_INFO, "wrote %s, %llu lines", path,
             (unsigned long long)yew_textbuf_line_count(doc->tb));
+    yew_symidx_workspace_replace(&ed->ws, doc);
     yew_fl_hook_buffer(ed, FL_EV_BUF_SAVED, doc);
     return YEW_CMD_OK;
 }
@@ -2263,6 +2271,7 @@ static int ed_driver_inner(const char *path, const YewEdStartup *startup)
      */
     if (path == NULL && !ed.clean)
         (void)yew_ws_restore(&ed);
+    yew_symwalk_start(&ed);
     /* The workspace hook sees restored tabs and buffers, and runs before
      * the first paint.  Startup used to paint once before restore, which
      * made this ordering impossible and also caused a redundant frame. */

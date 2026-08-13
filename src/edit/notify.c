@@ -3,23 +3,7 @@
 #include "edit/buf.h"
 #include "edit/shadow.h"
 #include "util/log.h"
-
-/* Sprint 44 replaces these two fixed no-op consumers in place. */
-static void yew_symidx_note_pre(EditCtx *ec, u8 kind, ByteOff at, u64 len)
-{
-    (void)ec;
-    (void)kind;
-    (void)at;
-    (void)len;
-}
-
-static void yew_symidx_note_post(EditCtx *ec, u8 kind, ByteOff at, u64 len)
-{
-    (void)ec;
-    (void)kind;
-    (void)at;
-    (void)len;
-}
+#include "ws/symidx.h"
 
 /* Sprint 46 replaces this fixed core shim with the module consumer. */
 static void yew_lsp_note_edit(EditCtx *ec, u8 kind, ByteOff at, u64 len)

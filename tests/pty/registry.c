@@ -5506,6 +5506,91 @@ static void case_s43_shadow_escape_stages(PtyCtx *c)
 }
 
 /* ---------------------------------------------------------------- */
+/* Sprint 44: no-LSP completion menu goldens                        */
+/* ---------------------------------------------------------------- */
+
+static void s44_finish(PtyCtx *c, const char *path)
+{
+    ptc_keys(c, "esc esc");
+    ptc_settle(c, 0);
+    force_quit(c);
+    (void)unlink(path);
+}
+
+static void case_s44_completion_below(PtyCtx *c)
+{
+    static const u8 initial[] =
+        "alp\n"
+        "alphaOne alphaTwo alphaThree alphaFour alphaFive\n"
+        "alphaSix alphaSeven alphaEight alphaNine alphaTen\n"
+        "alphaEleven alphaTwelve alphaThirteen alphaFourteen\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    ptc_settle(c, 400);
+    s18_settle_after_keys(c, "end a ctrl+space");
+    ptc_check(c, s43_screen_contains(&c->vt, "alphaOne"),
+              "Sprint 44 completion menu did not open below the cursor");
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot_sgr(c, c->test->name);
+    s44_finish(c, path);
+}
+
+static void case_s44_completion_flipped_doc(PtyCtx *c)
+{
+    static const u8 initial[] =
+        "alphaOne alphaTwo alphaThree alphaFour alphaFive\n"
+        "filler row\n"
+        "filler row\n"
+        "filler row\n"
+        "filler row\n"
+        "filler row\n"
+        "filler row\n"
+        "filler row\n"
+        "filler row\n"
+        "filler row\n"
+        "filler row\n"
+        "filler row\n"
+        "filler row\n"
+        "filler row\n"
+        "filler row\n"
+        "filler row\n"
+        "filler row\n"
+        "alp\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    ptc_settle(c, 400);
+    s18_settle_after_keys(c, "1 8 G end a ctrl+space");
+    s18_settle_after_keys(c, "ctrl+space");
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot_sgr(c, c->test->name);
+    ptc_check(c, s43_screen_contains(&c->vt, "(no documentation)"),
+              "Sprint 44 index documentation placeholder is absent");
+    s44_finish(c, path);
+}
+
+static void case_s44_completion_right_edge(PtyCtx *c)
+{
+    static const u8 initial[] =
+        "                         alp\n"
+        "alpha_candidate_with_a_long_tail alpha_compact alpha_other\n";
+    char path[256];
+
+    if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    ptc_settle(c, 400);
+    s18_settle_after_keys(c, "end a ctrl+space");
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot_sgr(c, c->test->name);
+    ptc_check(c, s43_screen_contains(&c->vt, "alpha_"),
+              "Sprint 44 right-edge menu lost its completion row");
+    s44_finish(c, path);
+}
+
+/* ---------------------------------------------------------------- */
 /* Sprint 37: batch mode never owns the terminal                    */
 /* ---------------------------------------------------------------- */
 
@@ -5541,6 +5626,12 @@ static void case_s37_batch_never_touches_the_terminal(PtyCtx *c)
 }
 
 const PtyCase yew_pty_cases[] = {
+    C(s44_completion_below, modern, 24U, 80U,
+      case_s44_completion_below),
+    C(s44_completion_flipped_doc, modern, 24U, 100U,
+      case_s44_completion_flipped_doc),
+    C(s44_completion_right_edge, modern, 16U, 32U,
+      case_s44_completion_right_edge),
     C(s43_shadow_index_truecolor, modern, 24U, 80U,
       case_s43_shadow_provenance),
     C(s43_shadow_index_colors_256, modern, 24U, 80U,

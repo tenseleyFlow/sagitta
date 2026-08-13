@@ -15,13 +15,12 @@
 #include <unistd.h>
 
 #include "edit/ed.h"
-#include "edit/motion.h"
 #include "syn/defs.h"
 #include "ui/message.h"
-#include "unicode/utf8.h"
-#include "unicode/wordbreak.h"
 #include "util/log.h"
 #include "ws/symidx.h"
+
+#define YEW_SYMWALK_HEADROOM_US 750
 
 static i64 symwalk_now_us(void)
 {
@@ -299,137 +298,99 @@ static bool read_whole(const char *path, size_t len, u8 **out)
     return true;
 }
 
-static bool text_copy(const TextBuf *tb, Span span, u8 *out)
+static void scan_file_end(Ed *ed)
 {
-    TextIter it;
-    u64 copied = 0U;
-    u64 want = span.hi - span.lo;
+    SymWalk *sw = &ed->ws.sym_walk;
+    Buffer *buf = sw->scan_buf;
+    SynBuf *scratch;
 
-    if (want == 0U)
-        return true;
-    if (!yew_textiter_begin(&it, tb, BYTEOFF(span.lo)))
-        return false;
-    while (copied < want) {
-        const u8 *chunk;
-        u64 n;
-
-        if (!yew_textiter_chunk(&it, tb, &chunk, &n) || n == 0U)
-            return false;
-        if (n > want - copied)
-            n = want - copied;
-        (void)memcpy(out + copied, chunk, (size_t)n);
-        copied += n;
-        if (copied < want && !yew_textiter_advance(&it, tb))
-            return false;
-    }
-    return true;
+    if (buf == NULL)
+        return;
+    scratch = sw->scratch_syn;
+    if (scratch == NULL)
+        YEW_BUG("symbol walk: active scan has no syntax scratch");
+    *scratch = buf->syn;
+    yew_syn_buf_init(&buf->syn);
+    yew_textbuf_free(buf->tb);
+    free(buf);
+    sw->scan_buf = NULL;
+    sw->scan_line = 0U;
+    sw->scan_symbols = 0U;
 }
 
-static bool identifier_shape(const TextBuf *tb, Span word)
-{
-    u64 len = word.hi - word.lo;
-    u8 bytes[YEW_SYM_MAX_LEN];
-    u32 at = 0U;
-    bool first = true;
-
-    if (len < YEW_SYM_MIN_LEN || len > YEW_SYM_MAX_LEN ||
-        !text_copy(tb, word, bytes))
-        return false;
-    while (at < (u32)len) {
-        u32 cp;
-        size_t used = yew_utf8_decode(bytes + at, (size_t)len - at, &cp);
-        YewWb prop;
-
-        if (used == 0U || yew_utf8_is_escape(cp))
-            return false;
-        prop = yew_wb_prop(cp);
-        if (first) {
-            if (cp != (u32)'_' && prop != YEW_WB_ALETTER)
-                return false;
-            first = false;
-        } else if (prop != YEW_WB_ALETTER && prop != YEW_WB_NUMERIC &&
-                   prop != YEW_WB_EXTENDNUMLET && prop != YEW_WB_EXTEND) {
-            return false;
-        }
-        at += (u32)used;
-    }
-    return !first;
-}
-
-/* Returns the largest prefix containing at most the per-file symbol cap.
- * Counting identifier-shaped word units before the syntax filter is
- * conservative: comments may reduce the actual count but can never let an
- * untrusted file intern more than the cap. */
-static Span capped_scan_span(Buffer *buf)
-{
-    UnitCtx unit = {buf->tb, buf, NULL};
-    u64 nlines = yew_textbuf_line_count(buf->tb);
-    u64 line_no;
-    u32 count = 0U;
-    u64 hi = yew_textbuf_len(buf->tb);
-
-    for (line_no = 0U; line_no < nlines; line_no++) {
-        Span line = yew_textbuf_line_span(buf->tb, LINENO(line_no));
-        u64 at = line.lo;
-
-        while (at < line.hi) {
-            Span word = yew_unit_word.span(&unit, BYTEOFF(at), false);
-
-            if (word.hi <= at) {
-                at++;
-                continue;
-            }
-            at = word.hi;
-            if (word.lo < line.lo || word.hi > line.hi ||
-                !identifier_shape(buf->tb, word))
-                continue;
-            count++;
-            if (count == YEW_SYMWALK_MAX_SYMS_PER_FILE) {
-                hi = word.hi;
-                return (Span){0U, hi};
-            }
-        }
-    }
-    return (Span){0U, hi};
-}
-
-static void scan_file(Ed *ed, const char *path)
+static bool scan_file_begin(Ed *ed, const char *path)
 {
     SymWalk *sw = &ed->ws.sym_walk;
     struct stat st;
     u8 *bytes;
-    Buffer buf;
-    Span range;
+    Buffer *buf;
+    SynBuf *scratch;
 
     if (open_buffer_owns(ed, path) || stat(path, &st) != 0 ||
         !S_ISREG(st.st_mode) || st.st_size < 0 ||
         (u64)st.st_size > YEW_SYMWALK_MAX_FILE_BYTES)
-        return;
+        return false;
     if (!read_whole(path, (size_t)st.st_size, &bytes))
-        return;
+        return false;
     if (memchr(bytes, 0, (size_t)st.st_size < 8192U ?
                        (size_t)st.st_size : 8192U) != NULL) {
         free(bytes);
-        return;
+        return false;
     }
-    (void)memset(&buf, 0, sizeof(buf));
-    buf.owner = ed;
-    buf.path = (char *)path;
-    buf.tb = yew_textbuf_from_bytes(bytes, (size_t)st.st_size);
+    buf = yew_xcalloc(1U, sizeof(*buf));
+    buf->owner = ed;
+    buf->path = (char *)path;
+    buf->tb = yew_textbuf_from_bytes(bytes, (size_t)st.st_size);
     free(bytes);
-    yew_syn_buf_init(&buf.syn);
-    yew_ed_syn_bind(&buf);
-    range = capped_scan_span(&buf);
-    (void)yew_symidx_scan(&ed->ws.sym_ws, &buf, range);
-    yew_syn_detach(&buf.syn);
-    yew_textbuf_free(buf.tb);
+    if (sw->scratch_syn == NULL) {
+        sw->scratch_syn = yew_xcalloc(1U, sizeof(SynBuf));
+        yew_syn_buf_init(sw->scratch_syn);
+    }
+    scratch = sw->scratch_syn;
+    buf->syn = *scratch;
+    (void)memset(scratch, 0, sizeof(*scratch));
+    yew_ed_syn_bind(buf);
+    sw->scan_buf = buf;
+    sw->scan_line = 0U;
+    sw->scan_symbols = 0U;
     sw->bytes_read += (u64)st.st_size;
+    return true;
+}
+
+static void scan_file_chunk(Ed *ed)
+{
+    SymWalk *sw = &ed->ws.sym_walk;
+    Buffer *buf = sw->scan_buf;
+    u64 lines;
+    u64 last;
+    Span first_span;
+    Span last_span;
+    u32 remaining;
+
+    if (buf == NULL)
+        return;
+    lines = yew_textbuf_line_count(buf->tb);
+    last = sw->scan_line + YEW_SYMWALK_SCAN_LINES;
+    if (last > lines)
+        last = lines;
+    first_span = yew_textbuf_line_span(buf->tb, LINENO(sw->scan_line));
+    last_span = yew_textbuf_line_span(buf->tb, LINENO(last - 1U));
+    remaining = YEW_SYMWALK_MAX_SYMS_PER_FILE - sw->scan_symbols;
+    ed->ws.sym_ws.scan_limit = remaining;
+    sw->scan_symbols += yew_symidx_scan_workspace(
+        &ed->ws.sym_ws, buf, (Span){first_span.lo, last_span.hi});
+    ed->ws.sym_ws.scan_limit = 0U;
+    sw->scan_line = last;
+    if (last == lines ||
+        sw->scan_symbols >= YEW_SYMWALK_MAX_SYMS_PER_FILE)
+        scan_file_end(ed);
 }
 
 void yew_symwalk_start(Ed *ed)
 {
     SymWalk *sw;
     Vec_SymPath retired;
+    void *scratch_syn;
     char git[PATH_MAX];
     char err[160];
     char *argv[7];
@@ -440,8 +401,10 @@ void yew_symwalk_start(Ed *ed)
     yew_symwalk_stop(ed);
     sw = &ed->ws.sym_walk;
     retired = sw->retired_jobs;
+    scratch_syn = sw->scratch_syn;
     (void)memset(sw, 0, sizeof(*sw));
     sw->retired_jobs = retired;
+    sw->scratch_syn = scratch_syn;
     sw->running = true;
     yew_symidx_clear(&ed->ws.sym_ws);
 
@@ -473,7 +436,6 @@ void yew_symwalk_pump(Ed *ed, i64 budget_us)
 {
     SymWalk *sw;
     i64 started;
-    bool did_scan = false;
 
     if (ed == NULL)
         return;
@@ -492,6 +454,11 @@ void yew_symwalk_pump(Ed *ed, i64 budget_us)
 
         if (budget_us > 0)
             remaining -= symwalk_now_us() - started;
+        /* Both the directory walker and a line chunk check their clocks
+         * cooperatively.  Leave one worst-case chunk of headroom so their
+         * final unit of work cannot consume the event-loop deadline. */
+        if (remaining > YEW_SYMWALK_HEADROOM_US)
+            remaining -= YEW_SYMWALK_HEADROOM_US;
         if (remaining < 1 && budget_us > 0)
             return;
         if (yew_walk_step(sw->walk, budget_us == 0 ? 0 : remaining))
@@ -499,24 +466,38 @@ void yew_symwalk_pump(Ed *ed, i64 budget_us)
         yew_walk_end(sw->walk);
         sw->walk = NULL;
         queue_filelist(ed);
+        if (budget_us > 0 &&
+            symwalk_now_us() - started >=
+                (budget_us > YEW_SYMWALK_HEADROOM_US ?
+                    budget_us - YEW_SYMWALK_HEADROOM_US : 0))
+            return;
     }
-    while (sw->discovery_done && sw->next < sw->queue.len &&
+    while (sw->discovery_done &&
+           (sw->scan_buf != NULL || sw->next < sw->queue.len) &&
            !ed->ws.sym_ws.capped) {
-        const char *path = yew_intern_str(&ed->interner,
-                                          sw->queue.data[sw->next++]);
+        if (sw->scan_buf == NULL) {
+            const char *path = yew_intern_str(
+                &ed->interner, sw->queue.data[sw->next++]);
 
-        if (path != NULL)
-            scan_file(ed, path);
-        sw->files_done++;
-        if (did_scan && budget_us > 0 &&
-            symwalk_now_us() - started >= budget_us)
+            if (path == NULL || !scan_file_begin(ed, path)) {
+                sw->files_done++;
+                continue;
+            }
+        }
+        scan_file_chunk(ed);
+        if (sw->scan_buf == NULL)
+            sw->files_done++;
+        if (budget_us > 0 &&
+            symwalk_now_us() - started >=
+                (budget_us > YEW_SYMWALK_HEADROOM_US ?
+                    budget_us - YEW_SYMWALK_HEADROOM_US : 0))
             break;
-        did_scan = true;
     }
     if (ed->ws.sym_ws.capped) {
+        scan_file_end(ed);
         sw->capped = true;
         sw->running = false;
-    } else if (sw->next >= sw->queue.len) {
+    } else if (sw->scan_buf == NULL && sw->next >= sw->queue.len) {
         sw->running = false;
     }
 }
@@ -540,6 +521,7 @@ void yew_symwalk_stop(Ed *ed)
     }
     if (sw->walk != NULL)
         yew_walk_end(sw->walk);
+    scan_file_end(ed);
     if (sw->files_init)
         yew_filelist_free(&sw->files);
     Vec_SymPath_free(&sw->queue);
@@ -562,4 +544,9 @@ void yew_symwalk_dispose(Ed *ed)
         return;
     yew_symwalk_stop(ed);
     Vec_SymPath_free(&ed->ws.sym_walk.retired_jobs);
+    if (ed->ws.sym_walk.scratch_syn != NULL) {
+        yew_syn_detach(ed->ws.sym_walk.scratch_syn);
+        free(ed->ws.sym_walk.scratch_syn);
+        ed->ws.sym_walk.scratch_syn = NULL;
+    }
 }

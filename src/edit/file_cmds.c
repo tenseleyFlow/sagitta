@@ -12,6 +12,7 @@
 #include "ui/layout.h"
 #include "ui/macrobrowse.h"
 #include "ui/viewport.h"
+#include "ws/symidx.h"
 #include "ws/trust_prompt.h"
 
 CmdStatus yew_file_cmd_save(Ed *ed, bool force)
@@ -208,6 +209,7 @@ static void close_primary(Ed *ed)
     size_t i;
 
     fl_h_drop_buffer(ed, old_id);
+    yew_symidx_drop_buffer(&ed->ws, old_id);
     yew_opt_scope_free(&b->opt_overrides);
     if (b->jrn != NULL)
         yew_journal_close(b->jrn);

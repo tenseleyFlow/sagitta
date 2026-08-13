@@ -765,7 +765,8 @@ typedef struct KeyName {
 
 static const KeyName key_names[] = {
     {"esc", 27U, "\x1b", 0U}, {"enter", 13U, "\r", 0U},
-    {"tab", 9U, "\t", 0U}, {"backspace", 127U, "\x7f", 0U},
+    {"tab", 9U, "\t", 0U}, {"space", 32U, " ", 0U},
+    {"backspace", 127U, "\x7f", 0U},
     {"insert", 57348U, NULL, 2U}, {"delete", 57349U, NULL, 3U},
     {"left", 57350U, "\x1b[D", 0U},
     {"right", 57351U, "\x1b[C", 0U},
@@ -894,7 +895,8 @@ static void emit_key(PtyCtx *c, Bytebuf *burst,
      * in the legacy parameter.  This mirrors the terminal contract and the
      * real sequences a flag-21 terminal sends. */
     if (modern &&
-        (scalar != 0U || kitty == 27U || kitty == 13U || kitty == 9U ||
+        (scalar != 0U || kitty == 32U || kitty == 27U || kitty == 13U ||
+         kitty == 9U ||
          kitty == 127U || (legacy == NULL && tilde == 0U))) {
         n = snprintf(sequence, sizeof(sequence), "\x1b[%u;%uu",
                      (unsigned)kitty, (unsigned)mods + 1U);

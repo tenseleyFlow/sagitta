@@ -318,3 +318,60 @@ void test_complmenu_layout_flips_above_near_pane_bottom(void)
     YEW_ASSERT_EQ_U64(ed.win->compl.sel, 0U);
     yew_ed_free(&ed);
 }
+
+void test_complmenu_ten_rows_share_draw_and_hit_geometry_three_widths(void)
+{
+    static const u16 widths[] = {100U, 44U, 24U};
+    static const u8 glyphs[] = {'w', 'f', 't', 'm', 'k'};
+    size_t widx;
+
+    for (widx = 0U; widx < YEW_ARRAY_LEN(widths); widx++) {
+        Ed ed;
+        Grid grid;
+        u32 row;
+
+        compl_fixture(&ed, (const u8 *)"alp", 3U, 3U,
+                      (Rect){2U, 0U, (u16)(widths[widx] - 2U), 20U});
+        YEW_ASSERT(yew_compl_open_source(&ed, ed.win, &fixture_source));
+        YEW_ASSERT(yew_grid_init(&grid, &ed.interner, 24U, widths[widx]));
+        yew_region_frame_begin();
+        yew_compl_draw(&ed, ed.win, &grid);
+        YEW_ASSERT(ed.win->compl.box.x >= ed.win->rect.x);
+        YEW_ASSERT(ed.win->compl.box.x + ed.win->compl.box.w <=
+                   ed.win->rect.x + ed.win->rect.w);
+        for (row = 0U; row < 10U; row++) {
+            u16 screen_row = (u16)(ed.win->compl.box.y + 1U + row);
+            Region hit = yew_region_hit(
+                (u16)(ed.win->compl.box.x + 2U), screen_row);
+
+            YEW_ASSERT_EQ_U64(cell_byte(&grid, screen_row,
+                                        (u16)(ed.win->compl.box.x + 1U)),
+                              glyphs[row % YEW_ARRAY_LEN(glyphs)]);
+            YEW_ASSERT_EQ_I64(hit.kind, YEW_REGION_COMPL_ROW);
+            YEW_ASSERT_EQ_I64(hit.payload, (i32)row);
+        }
+        yew_grid_free(&grid);
+        yew_ed_free(&ed);
+    }
+}
+
+void test_complmenu_stats_reports_every_symbol_cap(void)
+{
+    Ed ed;
+    CmdCtx cx = {0};
+
+    compl_fixture(&ed, (const u8 *)"alpha_symbol beta_symbol\n", 25U, 0U,
+                  (Rect){0U, 0U, 80U, 20U});
+    while (yew_symidx_pending(&ed))
+        yew_symidx_pump(&ed, INT64_MAX);
+    cx.ed = &ed;
+    cx.win = ed.win;
+    YEW_ASSERT_EQ_I64(yew_compl_cmd_stats(&cx), YEW_CMD_OK);
+    YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "buffers="));
+    YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "workspace files="));
+    YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "caps files=20000"));
+    YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "symbols/file=4000"));
+    YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "memory="));
+    YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "/33554432"));
+    yew_ed_free(&ed);
+}

@@ -787,11 +787,33 @@ CmdStatus yew_compl_cmd_doc_toggle(CmdCtx *cx)
 
 CmdStatus yew_compl_cmd_stats(CmdCtx *cx)
 {
+    u64 buffer_symbols = 0U;
+    u64 buffer_bytes = 0U;
+    u64 total_bytes;
+    size_t i;
+
     if (cx == NULL || cx->ed == NULL)
         return YEW_CMD_ERR_STATE;
+    for (i = 0U; i < cx->ed->ws.sym_buf.len; i++) {
+        buffer_symbols += cx->ed->ws.sym_buf.data[i].idx.e.len;
+        buffer_bytes += cx->ed->ws.sym_buf.data[i].idx.bytes;
+    }
+    total_bytes = yew_symidx_workspace_bytes(&cx->ed->ws);
     yew_msg(cx->ed, YEW_MSG_INFO,
-            "completion: %zu open-buffer indices, %zu workspace symbols",
-            cx->ed->ws.sym_buf.len, cx->ed->ws.sym_ws.e.len);
+            "completion: buffers=%zu symbols=%llu bytes=%llu; "
+            "workspace files=%llu/%llu symbols=%zu bytes=%llu; "
+            "caps files=%u symbols/file=%u memory=%llu/%u%s",
+            cx->ed->ws.sym_buf.len,
+            (unsigned long long)buffer_symbols,
+            (unsigned long long)buffer_bytes,
+            (unsigned long long)cx->ed->ws.sym_walk.files_done,
+            (unsigned long long)cx->ed->ws.sym_walk.files_total,
+            cx->ed->ws.sym_ws.e.len,
+            (unsigned long long)cx->ed->ws.sym_ws.bytes,
+            YEW_SYMWALK_MAX_FILES, YEW_SYMWALK_MAX_SYMS_PER_FILE,
+            (unsigned long long)total_bytes, YEW_SYMIDX_BYTES_MAX,
+            cx->ed->ws.sym_walk.capped || cx->ed->ws.sym_ws.capped ?
+                " capped" : "");
     return YEW_CMD_OK;
 }
 

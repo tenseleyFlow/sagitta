@@ -399,6 +399,7 @@ FUZZ_FLAPI_OBJ := $(BUILD)/tests/fuzz/fuzz_flapi.o
 FUZZ_RECORD_OBJ := $(BUILD)/tests/fuzz/fuzz_record.o
 FUZZ_SYN_OBJ := $(BUILD)/tests/fuzz/fuzz_syn.o
 FUZZ_SYN_DEF_OBJ := $(BUILD)/tests/fuzz/fuzz_syn_def.o
+FUZZ_SYMIDX_OBJ := $(BUILD)/tests/fuzz/fuzz_symidx.o
 RE_REF_OBJ := $(BUILD)/tests/fuzz/re_ref.o
 FUZZ_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 FUZZ_LINK_OBJ := $(FUZZ_CORE_OBJ) $(FUZZ_LIB_OBJ)
@@ -430,6 +431,7 @@ PERF_RECORD_OBJ := $(BUILD)/tests/perf/perf_record.o
 PERF_SYN_OBJ := $(BUILD)/tests/perf/perf_syn.o
 PERF_BATCH_OBJ := $(BUILD)/tests/perf/batch.o
 PERF_SCRIPT_SUITE_OBJ := $(BUILD)/tests/perf/script_suite.o
+PERF_SYMIDX_OBJ := $(BUILD)/tests/perf/perf_symidx.o
 FLETCH_RUN_OBJ := $(BUILD)/tests/fletch/run.o
 SCRIPT_RUNNER_OBJ := $(BUILD)/tests/script/runner.o
 FLETCH_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
@@ -479,7 +481,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
                 $(PERF_FLETCH_OBJ) $(PERF_RECORD_OBJ) $(PERF_BATCH_OBJ) \
                 $(PERF_SCRIPT_SUITE_OBJ) \
                 $(FUZZ_RECORD_OBJ) $(FUZZ_SYN_OBJ) $(FUZZ_SYN_DEF_OBJ) \
-                $(PERF_SYN_OBJ) \
+                $(FUZZ_SYMIDX_OBJ) $(PERF_SYN_OBJ) $(PERF_SYMIDX_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) \
                 $(TORTURE_BATCH_OBJ) $(FAULTSHIM)))
@@ -498,6 +500,7 @@ endif
         test-script-determinism test-script-budget test-pty fuzz \
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
         fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
+        fuzz-symidx \
         fuzz-syn-long \
         fuzz-syn-line-long fuzz-syn-edit-long \
         test-record-corpus \
@@ -506,7 +509,7 @@ endif
         fixtures fixtures-quick fixtures-verify \
         fixtures-verify-quick \
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
-        perf-shadow \
+        perf-shadow perf-symidx \
         perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
         perf-mouse perf-record perf-syn perf-syn-budgets perf-syn-quiet \
         perf-syn-gate-selftest perf-syn-line-probe \
@@ -651,6 +654,10 @@ $(BUILD)/fuzz_mouse: $(FUZZ_LINK_OBJ) $(FUZZ_MOUSE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_MOUSE_OBJ) $(LDLIBS)
 
+$(BUILD)/fuzz_symidx: $(FUZZ_LINK_OBJ) $(FUZZ_SYMIDX_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
+		$(FUZZ_SYMIDX_OBJ) $(LDLIBS)
+
 $(BUILD)/gen-bigfile: $(GEN_BIGFILE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(GEN_BIGFILE_OBJ) $(LDLIBS)
 
@@ -665,6 +672,10 @@ $(BUILD)/perf_record: $(PERF_CORE_OBJ) $(PERF_RECORD_OBJ)
 $(BUILD)/perf_syn: $(PERF_CORE_OBJ) $(PERF_SYN_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(PERF_SYN_OBJ) $(LDLIBS)
+
+$(BUILD)/perf_symidx: $(PERF_CORE_OBJ) $(PERF_SYMIDX_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
+		$(PERF_SYMIDX_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_batch: $(PERF_BATCH_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_BATCH_OBJ) $(LDLIBS)
@@ -832,7 +843,8 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
       $(BUILD)/fuzz_fl_std $(BUILD)/fuzz_fl_vm \
       $(BUILD)/fuzz_flapi \
       fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse \
-      fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def
+      fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
+      fuzz-symidx
 	$(BUILD)/fuzz_utf8 --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_grapheme --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_input --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
@@ -942,6 +954,12 @@ test-syn-corpus: $(BUILD)/fuzz_syn
 fuzz-syn-def: $(BUILD)/fuzz_syn_def
 	$(BUILD)/fuzz_syn_def --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 
+fuzz-symidx: $(BUILD)/fuzz_symidx
+	@set -eu; \
+	for seed in 0x44 0x4401 0x4402 0x4403; do \
+		$(BUILD)/fuzz_symidx --iters=$(FUZZ_ITERS) --seed=$$seed; \
+	done
+
 test-syn-def-corpus: $(BUILD)/fuzz_syn_def
 	$(BUILD)/fuzz_syn_def --corpus-only
 
@@ -995,7 +1013,7 @@ perf: perf-unicode perf-render perf-shadow perf-scroll perf-piece perf-cursor pe
       perf-latency perf-jobstream perf-re-pathological \
       perf-re-throughput perf-search-latency \
       perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
-      perf-mouse perf-record perf-syn perf-batch
+      perf-mouse perf-record perf-syn perf-symidx perf-batch
 
 perf-cursor: $(BUILD)/perf_cursor
 	$(BUILD)/perf_cursor
@@ -1017,6 +1035,9 @@ perf-record: $(BUILD)/perf_record
 
 perf-syn: $(BUILD)/perf_syn $(BUILD)/yew
 	$(BUILD)/perf_syn --gate
+
+perf-symidx: $(BUILD)/perf_symidx
+	$(BUILD)/perf_symidx
 
 perf-syn-budgets: $(BUILD)/perf_syn $(BUILD)/yew
 	$(BUILD)/perf_syn --gate-budgets
@@ -1455,6 +1476,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew
          $(FUZZ_FLAPI_OBJ:.o=.d) $(FUZZ_RECORD_OBJ:.o=.d) \
          $(FUZZ_SYN_OBJ:.o=.d) \
          $(FUZZ_SYN_DEF_OBJ:.o=.d) \
+         $(FUZZ_SYMIDX_OBJ:.o=.d) \
          $(FUZZ_CMDPARSE_OBJ:.o=.d) $(FUZZ_RECOMPILE_OBJ:.o=.d) \
          $(FUZZ_REDIFF_OBJ:.o=.d) $(RE_REF_OBJ:.o=.d) \
          $(PTY_ORACLE_OBJ:.o=.d) \
@@ -1476,6 +1498,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew
          $(PERF_FLETCH_OBJ:.o=.d) $(PERF_RECORD_OBJ:.o=.d) \
          $(PERF_BATCH_OBJ:.o=.d) \
          $(PERF_SYN_OBJ:.o=.d) \
+         $(PERF_SYMIDX_OBJ:.o=.d) \
          $(PERF_SCRIPT_SUITE_OBJ:.o=.d) \
          $(GEN_BIGFILE_OBJ:.o=.d) \
          $(TORTURE_CHILD_OBJ:.o=.d) \
