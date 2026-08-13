@@ -9,6 +9,7 @@
 #include "util/base.h"
 #include "util/buf.h"
 #include "util/log.h"
+#include "ws/symshadow.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -105,6 +106,7 @@ static int run_driver(const YewArgs *args)
 {
     YewEdStartup startup;
 
+    yew_symshadow_install();
     yew_syn_cache_set_bypass(args->clean);
     yew_syn_discovery_set_bypass(args->clean);
     if (args->selftest_bug) {
