@@ -209,6 +209,7 @@ static void ed_buffer_free(Ed *ed)
     ed->pane_root = NULL;
     ed->focus = NULL;
     yew_overlay_free(&ed->single_win.overlay);
+    yew_compl_free(&ed->single_win.compl);
     yew_shadow_dismiss(ed, &ed->single_win);
     yew_shadow_free(&ed->single_win.shadow);
     yew_gutter_signs_free(&ed->single_win);
@@ -977,6 +978,8 @@ void yew_ed_win_set_buffer(Ed *ed, Win *w, Buffer *b)
     (void)ed;
     if (w == NULL || b == NULL || w->buf == b)
         return;
+    if (w->compl.open)
+        yew_compl_close_result(ed, w, false);
     yew_shadow_dismiss(ed, w);
     yew_vp_free(w);
     yew_cset_free(&w->cs);
@@ -993,6 +996,9 @@ void yew_ed_win_release(Ed *ed, Win *w)
     if (w == &ed->single_win)
         return;
     yew_overlay_free(&w->overlay);
+    if (w->compl.open)
+        yew_compl_close_result(ed, w, false);
+    yew_compl_free(&w->compl);
     yew_shadow_dismiss(ed, w);
     yew_shadow_free(&w->shadow);
     yew_gutter_signs_free(w);
@@ -1359,7 +1365,8 @@ CmdStatus yew_ed_invoke(Ed *ed, CmdId id, CmdCtx *cx)
     durability_command = document_target && edits_text;
     newline = ed->undo_break_on_newline &&
               strcmp(desc->name, "ed.edit.insert.newline") == 0;
-    shadow_accept = strncmp(desc->name, "ed.shadow.accept_", 17U) == 0;
+    shadow_accept = strncmp(desc->name, "ed.shadow.accept_", 17U) == 0 ||
+                    strcmp(desc->name, "ed.compl.accept") == 0;
     shadow_motion = document_target &&
                     strncmp(desc->name, "ed.move.", 8U) == 0;
     shadow_quiet = document_target &&
@@ -1838,6 +1845,7 @@ void yew_ed_handle_key(Ed *ed, Key key, i64 now_ms)
 {
     const u16 command_mods = YEW_MOD_ALT | YEW_MOD_CTRL | YEW_MOD_SUPER |
                              YEW_MOD_HYPER | YEW_MOD_META;
+    bool compl_fallthrough = false;
 
     if (ed == NULL || key.kind != YEW_EV_KEY)
         return;
@@ -1891,6 +1899,11 @@ void yew_ed_handle_key(Ed *ed, Key key, i64 now_ms)
         return;
     if (ed->cmdline.active && yew_cmdline_key(ed, &key))
         return;
+    if (ed->win != NULL && ed->win->compl.open) {
+        if (yew_compl_key(ed, ed->win, &key))
+            return;
+        compl_fallthrough = ed->win->compl.open;
+    }
     /*
      * Sprint 24 §7.  BEFORE the insert-mode text path: a digit arriving
      * inside the jump window is the second half of a chord, and letting
@@ -1915,9 +1928,13 @@ void yew_ed_handle_key(Ed *ed, Key key, i64 now_ms)
         ed->last_cmd = id;
         ed->last_status = yew_ed_invoke(ed, id, &cx);
         ed->dispatch_count++;
+        if (compl_fallthrough)
+            yew_compl_after_key(ed, ed->win);
         return;
     }
     yew_dispatch_key(ed, key, now_ms);
+    if (compl_fallthrough)
+        yew_compl_after_key(ed, ed->win);
 }
 
 /*
@@ -1996,6 +2013,8 @@ void yew_ed_resize(Ed *ed, bool resumed)
         }
         if (ed->win != NULL)
             yew_vp_invalidate(ed->win);
+        if (ed->win != NULL && ed->win->compl.open)
+            yew_compl_resize(ed, ed->win);
         resized = true;
     }
     if (!resumed && !resized)
@@ -2110,6 +2129,10 @@ void yew_ed_render(Ed *ed)
      */
     if (yew_ctx_active())
         yew_mouse_menu_draw(ed);
+    /* Sprint 44: the non-modal completion popup is the final overlay and
+     * therefore owns the last-added hit regions for its exact boxes. */
+    if (win->compl.open)
+        yew_compl_draw(ed, win, &ed->grid);
     ed->frame.len = 0U;
     (void)yew_render_frame(&ed->render, &ed->grid, &ed->frame);
     if (!write_all(ed->tty.wfd, ed->frame.data, ed->frame.len)) {

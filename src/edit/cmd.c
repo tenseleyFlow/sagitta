@@ -23,6 +23,7 @@
 #include "fl/record.h"
 #include "ui/pickers.h"
 #include "ui/cmdline.h"
+#include "ui/complmenu.h"
 #include "ui/groupnav.h"
 #include "ui/mouse.h"
 #include "ui/macrobrowse.h"
@@ -238,6 +239,28 @@ static const CmdDesc builtins[] = {
      "Toggle passive shadow suggestions", NULL},
     {"ed.shadow.stats", yew_shadow_cmd_stats, YEW_ARITY_NONE, 0U,
      "Report shadow provider and delivery statistics", NULL},
+    {"ed.compl.open", yew_compl_cmd_open, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_PROMPTS,
+     "Open symbol completion for the current stem", NULL},
+    {"ed.compl.next", yew_compl_cmd_next, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Select the next completion", NULL},
+    {"ed.compl.prev", yew_compl_cmd_prev, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Select the previous completion", NULL},
+    {"ed.compl.page_next", yew_compl_cmd_page_next, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Page forward through completions", NULL},
+    {"ed.compl.page_prev", yew_compl_cmd_page_prev, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Page backward through completions", NULL},
+    {"ed.compl.accept", yew_compl_cmd_accept, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_CHANGES_BUFFER,
+     "Accept the selected completion", NULL},
+    {"ed.compl.cancel", yew_compl_cmd_cancel, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Close completion without editing", NULL},
+    {"ed.compl.doc_toggle", yew_compl_cmd_doc_toggle, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Toggle completion documentation", NULL},
+    {"ed.compl.stats", yew_compl_cmd_stats, YEW_ARITY_NONE, 0U,
+     "Report symbol completion index statistics", NULL},
+    {"ed.compl.reindex", yew_compl_cmd_reindex, YEW_ARITY_NONE, 0U,
+     "Rebuild the workspace symbol index", NULL},
     {"ed.quit", yew_file_cmd_quit, YEW_ARITY_NONE, 0U,
      "Quit, prompting when the buffer is dirty", NULL},
     {"ed.quit_force", yew_file_cmd_quit_force, YEW_ARITY_NONE, 0U,
@@ -918,7 +941,7 @@ static bool command_name_valid(const char *name)
         "file", "buf", "tab", "group", "pane", "win", "reg",
         "search", "macro", "job", "git", "lsp", "ai", "plug",
         "cmdline", "del", "shell", "opt", "fl", "config", "syn",
-        "theme", "shadow",
+        "theme", "shadow", "compl",
         /* Sprint 21 */
         "jump", "change", "mark",
         /* Sprint 18.5: the palette itself is Sprint 38's, but the name has
@@ -975,7 +998,7 @@ static bool command_name_valid(const char *name)
         "enable", "disable", "at", "span", "unit", "up_alt", "down_alt",
         "get", "eval", "set_many", "split", "focus", "closure",
         "reload", "status", "stats", "accept_word", "accept_word_alt",
-        "accept_line", "accept_all"};
+        "accept_line", "accept_all", "doc_toggle", "reindex"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

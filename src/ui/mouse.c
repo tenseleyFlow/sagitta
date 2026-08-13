@@ -93,9 +93,35 @@ bool yew_mouse_claimed_by_menu(Ed *ed, Key key)
 {
     Region hit;
 
-    if (ed == NULL || key.kind != (u16)YEW_EV_MOUSE || !ed->cmdline.active)
+    if (ed == NULL || key.kind != (u16)YEW_EV_MOUSE)
         return false;
     hit = yew_region_hit(key.col, key.row);
+    if (ed->win != NULL && ed->win->compl.open) {
+        if (hit.kind != YEW_REGION_COMPL_ROW &&
+            hit.kind != YEW_REGION_BLOCK)
+            return false;
+        if (key.button == (u8)YEW_MB_WHEEL_UP ||
+            key.button == (u8)YEW_MB_WHEEL_DOWN) {
+            i32 next = ed->win->compl.sel +
+                       (key.button == (u8)YEW_MB_WHEEL_UP ?
+                            -YEW_WHEEL_ROWS : YEW_WHEEL_ROWS);
+
+            if (next < 0)
+                next = 0;
+            if ((size_t)next >= ed->win->compl.items.len)
+                next = ed->win->compl.items.len == 0U ? -1 :
+                       (i32)ed->win->compl.items.len - 1;
+            yew_compl_select(ed, ed->win, next);
+            return true;
+        }
+        if (key.button != (u8)YEW_MB_LEFT)
+            return false;
+        if (key.ev == YEW_KEY_PRESS && hit.kind == YEW_REGION_COMPL_ROW)
+            yew_compl_select(ed, ed->win, hit.payload);
+        return true;
+    }
+    if (!ed->cmdline.active)
+        return false;
     if (hit.kind != YEW_REGION_MENU_ROW && hit.kind != YEW_REGION_BLOCK)
         return false;
     if (key.button == (u8)YEW_MB_WHEEL_UP ||
@@ -280,6 +306,7 @@ static void mouse_wheel(Ed *ed, const Key *k)
     case YEW_REGION_CTX_ROW:
     case YEW_REGION_BLOCK:
     case YEW_REGION_MENU_ROW:
+    case YEW_REGION_COMPL_ROW:
     case YEW_REGION_NONE:
     default:
         break;

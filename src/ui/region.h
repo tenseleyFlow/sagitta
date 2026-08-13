@@ -52,6 +52,8 @@ typedef enum {
      * registered in; see region.c on clearing at frame BEGIN.
      */
     YEW_REGION_MENU_ROW,
+    /* Sprint 44: item index within the focused window's open completion. */
+    YEW_REGION_COMPL_ROW,
     /*
      * Sprint 26 §5.  Payload is the item's PAYLOAD, never the row
      * index — the same law the picker's selection follows, so a click

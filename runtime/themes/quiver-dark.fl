@@ -27,6 +27,11 @@
         "shadow.index": { fg: "@blue", mono: "dim" },
         "shadow.lsp": { fg: "@violet", mono: "italic" },
         "shadow.ai": { fg: "@orange", mono: "underline" },
+        "compl.word": { fg: "@fg", mono: "plain" },
+        "compl.func": { fg: "@blue", mono: "bold" },
+        "compl.type": { fg: "@yellow", mono: "bold" },
+        "compl.macro": { fg: "@orange", mono: "plain" },
+        "compl.keyword": { fg: "@violet", mono: "dim" },
         ul: { error: "#ff5f5f", warn: "#e5c07b", info: "#61afef" },
     },
     attrs: {

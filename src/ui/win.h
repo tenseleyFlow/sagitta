@@ -54,7 +54,7 @@ typedef struct Win {
     Strmap opt_overrides;
     /* Sprint 43: display-only completion state belongs to the view. */
     Shadow shadow;
-    Completion compl;
+    ComplMenu compl;
 } Win;
 
 /* Sprint 14 compatibility names; new code uses the yew_vp_* API. */
