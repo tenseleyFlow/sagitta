@@ -625,6 +625,8 @@ void yew_ed_init(Ed *ed)
     arena_init(&ed->arena);
     arena_init(&ed->cmdline.comp_arena);
     interner_init(&ed->interner, &ed->arena);
+    ed->ws.owner = ed;
+    yew_symidx_init(&ed->ws.sym_ws, &ed->interner);
     bytebuf_init(&ed->frame);
     bytebuf_init(&ed->paste);
     yew_reg_init(&ed->regs);
@@ -714,6 +716,7 @@ void yew_ed_free(Ed *ed)
     yew_timers_free(&ed->timers);
     bytebuf_free(&ed->paste);
     bytebuf_free(&ed->frame);
+    yew_symidx_workspace_free(&ed->ws);
     interner_free(&ed->interner);
     arena_free_all(&ed->cmdline.comp_arena);
     arena_free_all(&ed->arena);

@@ -36,6 +36,7 @@
 #include "util/intern.h"
 #include "util/strmap.h"
 #include "ws/state.h"
+#include "ws/symidx.h"
 #include "ws/trust_prompt.h"
 
 typedef enum {
@@ -76,11 +77,20 @@ typedef struct FlPendingChange {
  * windows pointing into it.  Slot 0 is always the document buffer
  * (&ed->buffer, not owned); every other slot is heap-owned by the list. */
 typedef struct Workspace {
+    struct Ed *owner;
     Buffer **bufs;
     u32 nbufs;
     u32 cap;
     u32 next_buf_id;
     char *dir;
+    SymIndex sym_ws;
+    Vec_SymBufIndex sym_buf;
+    Vec_SymHit sym_query;
+    u32 *sym_seen;
+    u32 *sym_slot;
+    size_t sym_seen_cap;
+    u32 sym_seen_tick;
+    u32 sym_rr;
 } Workspace;
 
 struct Ed {
