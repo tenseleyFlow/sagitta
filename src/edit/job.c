@@ -152,6 +152,18 @@ static void job_close(int *fd)
     }
 }
 
+static void job_framed_destroy(YewJob *j)
+{
+    if (j->framed_destroyed)
+        return;
+    if (j->framed_owner != NULL && j->framed_ops != NULL &&
+        j->framed_ops->destroy != NULL)
+        j->framed_ops->destroy(j->framed_owner);
+    j->framed_owner = NULL;
+    j->framed_ops = NULL;
+    j->framed_destroyed = true;
+}
+
 static void job_dispose(YewJob *j)
 {
     job_close(&j->in_fd);
@@ -160,6 +172,8 @@ static void job_dispose(YewJob *j)
     job_close(&j->exec_fd);
     bytebuf_free(&j->hold);
     bytebuf_free(&j->collect);
+    bytebuf_free(&j->framed_err);
+    job_framed_destroy(j);
     free(j->label);
     (void)memset(j, 0, sizeof(*j));
     j->in_fd = j->out_fd = j->err_fd = j->exec_fd = -1;
@@ -451,6 +465,16 @@ u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
         (void)snprintf(err, errsz, "no command");
         return 0U;
     }
+    if (spec->sink == YEW_SINK_FRAMED &&
+        (spec->framed_owner == NULL || spec->framed_ops == NULL ||
+         spec->framed_ops->feed_stdout == NULL ||
+         spec->framed_ops->finish_stdout == NULL ||
+         spec->framed_ops->tx_view == NULL ||
+         spec->framed_ops->tx_consume == NULL ||
+         spec->framed_ops->destroy == NULL)) {
+        (void)snprintf(err, errsz, "framed job has no transport");
+        return 0U;
+    }
 
     /* Everything that allocates happens BEFORE fork. */
     arena_init(&scratch);
@@ -506,6 +530,8 @@ u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
     j->exec_fd = exec_p[0];
     j->state = YEW_JOB_RUNNING;
     j->sink = spec->sink;
+    j->framed_owner = spec->framed_owner;
+    j->framed_ops = spec->framed_ops;
     j->in_buf = spec->in_buf;
     j->in_span = spec->in_span;
     j->timeout_ms = spec->timeout_ms;
@@ -513,6 +539,7 @@ u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
     j->follow_tail = true;
     bytebuf_init(&j->hold);
     bytebuf_init(&j->collect);
+    bytebuf_init(&j->framed_err);
     display = spec->display != NULL ? spec->display :
               (spec->cmdline != NULL ? spec->cmdline : argv[0]);
     {
@@ -524,7 +551,7 @@ u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
     /* No stdin to write means closing immediately: a child whose read()
      * never sees EOF is this subsystem's signature hang, and it presents
      * as "that command is slow", not as a deadlock. */
-    if (!want_stdin)
+    if (!want_stdin && j->sink != YEW_SINK_FRAMED)
         job_close(&j->in_fd);
     ed->jobs.dirty = true;
     arena_free_all(&scratch);
@@ -568,6 +595,11 @@ u32 yew_job_pollfd_count(const Ed *ed)
 
 static bool job_wants_stdin(const YewJob *j)
 {
+    const u8 *bytes = NULL;
+
+    if (j->in_fd >= 0 && j->sink == YEW_SINK_FRAMED &&
+        j->framed_owner != NULL && j->framed_ops != NULL)
+        return j->framed_ops->tx_view(j->framed_owner, &bytes) != 0U;
     return j->in_fd >= 0 && j->in_buf != NULL &&
            j->in_off < j->in_span.hi - j->in_span.lo;
 }
@@ -637,6 +669,25 @@ static void job_deliver(Ed *ed, YewJob *j, const u8 *bytes, u64 len,
     case YEW_SINK_BUFFER:
         yew_job_buffer_append(ed, j, bytes, len, is_err);
         break;
+    case YEW_SINK_FRAMED:
+        if (is_err) {
+            if (len > YEW_JOB_COLLECT_MAX - (u64)j->framed_err.len) {
+                if (!j->collect_capped) {
+                    j->collect_capped = true;
+                    (void)yew_job_signal(ed, j->id, SIGTERM);
+                }
+                return;
+            }
+            bytebuf_append(&j->framed_err, bytes, (size_t)len);
+            yew_log(YEW_LOG_DEBUG, "framed job %u stderr: %.*s", j->id,
+                    (int)len, (const char *)bytes);
+        } else if (!j->framed_ops->feed_stdout(j->framed_owner, bytes,
+                                                len)) {
+            j->framed_failed = true;
+            if (j->state == YEW_JOB_RUNNING)
+                (void)yew_job_signal(ed, j->id, SIGTERM);
+        }
+        break;
     case YEW_SINK_DISCARD:
     default:
         break;
@@ -669,6 +720,21 @@ static bool job_drain(Ed *ed, YewJob *j, int *fd, bool is_err)
             j->bytes_err += (u64)got;
         else
             j->bytes_out += (u64)got;
+        /* Protocol bytes are already framed and counted.  Passing them
+         * through the text-safe prefix would retain a split UTF-8 tail and
+         * prevent Content-Length from ever completing. */
+        if (j->sink == YEW_SINK_FRAMED) {
+            if (got != 0)
+                job_deliver(ed, j, chunk, (u64)got, is_err);
+            if (got == 0) {
+                if (!is_err &&
+                    !j->framed_ops->finish_stdout(j->framed_owner))
+                    j->framed_failed = true;
+                job_close(fd);
+                return true;
+            }
+            continue;
+        }
         /* Held bytes from the previous read lead the window. */
         if (j->hold.len != 0U) {
             bytebuf_append(&j->hold, chunk, (size_t)got);
@@ -757,6 +823,38 @@ static void job_write_stdin(YewJob *j)
         job_close(&j->in_fd);
 }
 
+static void job_write_framed(YewJob *j)
+{
+    u64 sent = 0U;
+
+    while (sent < YEW_JOB_READ_BUDGET) {
+        const u8 *bytes = NULL;
+        u64 len = j->framed_ops->tx_view(j->framed_owner, &bytes);
+        ssize_t wrote;
+
+        if (len == 0U || bytes == NULL)
+            return;
+        if (len > YEW_JOB_READ_BUDGET - sent)
+            len = YEW_JOB_READ_BUDGET - sent;
+        if (len > (u64)SSIZE_MAX)
+            len = (u64)SSIZE_MAX;
+        wrote = write(j->in_fd, bytes, (size_t)len);
+        if (wrote < 0) {
+            if (errno == EINTR)
+                continue;
+            if (errno == EAGAIN || errno == EWOULDBLOCK)
+                return;
+            j->framed_failed = true;
+            job_close(&j->in_fd);
+            return;
+        }
+        if (wrote == 0)
+            return;
+        j->framed_ops->tx_consume(j->framed_owner, (u64)wrote);
+        sent += (u64)wrote;
+    }
+}
+
 void yew_job_pump(Ed *ed, const struct pollfd *pfd, u32 n)
 {
     u32 i;
@@ -777,8 +875,12 @@ void yew_job_pump(Ed *ed, const struct pollfd *pfd, u32 n)
         if (re != 0 && j->err_fd >= 0)
             (void)job_drain(ed, j, &j->err_fd, true);
         re = revents_for(pfd, n, j->in_fd);
-        if ((re & (POLLOUT | POLLERR | POLLHUP)) != 0 && j->in_fd >= 0)
-            job_write_stdin(j);
+        if ((re & (POLLOUT | POLLERR | POLLHUP)) != 0 && j->in_fd >= 0) {
+            if (j->sink == YEW_SINK_FRAMED)
+                job_write_framed(j);
+            else
+                job_write_stdin(j);
+        }
     }
 }
 
@@ -847,6 +949,8 @@ void yew_job_settle(Ed *ed)
         if (j->drained || yew_job_pending(j))
             continue;
         j->drained = true;
+        job_close(&j->in_fd);
+        job_framed_destroy(j);
         yew_job_finish(ed, j);
     }
 }

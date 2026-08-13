@@ -22,6 +22,22 @@
 typedef struct Ed Ed;
 typedef struct TextBuf TextBuf;
 
+/*
+ * Module-neutral seam for protocol transports.  Core cannot name RpcConn:
+ * job.c also links in MODULES="" builds, where no LSP object exists.  A
+ * module supplies one static callback table and an opaque owner instead.
+ * `tx_view` returns the unsent prefix; `tx_consume` advances it only after
+ * write(2) succeeds.  `finish_stdout` makes a truncated final frame an
+ * explicit protocol failure rather than a connection that waits forever.
+ */
+typedef struct YewJobFramedOps {
+    bool (*feed_stdout)(void *owner, const u8 *bytes, u64 len);
+    bool (*finish_stdout)(void *owner);
+    u64 (*tx_view)(void *owner, const u8 **bytes);
+    void (*tx_consume)(void *owner, u64 len);
+    void (*destroy)(void *owner);
+} YewJobFramedOps;
+
 enum {
     /* Concurrent jobs.  Spawning past this errors — never queues silently,
      * because a queued job that runs minutes later surprises the user. */
@@ -68,6 +84,7 @@ typedef enum {
 typedef enum {
     YEW_SINK_BUFFER,  /* append to a job buffer (mode a)                  */
     YEW_SINK_COLLECT, /* accumulate, deliver when the job ends (b and c) */
+    YEW_SINK_FRAMED,  /* raw stdout -> owner; stderr -> framed_err        */
     YEW_SINK_DISCARD
 } YewJobSink;
 
@@ -81,6 +98,10 @@ typedef struct YewJobSpec {
     i64 timeout_ms;       /* 0 = none (async jobs)                        */
     u32 target_win;
     const char *display;  /* job-table text; defaults to cmdline/argv[0]  */
+    /* Required for YEW_SINK_FRAMED.  Ownership transfers only after a
+     * successful spawn and is released exactly once by the job. */
+    void *framed_owner;
+    const YewJobFramedOps *framed_ops;
 } YewJobSpec;
 
 typedef struct YewJob {
@@ -99,6 +120,9 @@ typedef struct YewJob {
     YewJobSink sink;
     Bytebuf hold;    /* incomplete UTF-8 / cluster tail (§3)              */
     Bytebuf collect; /* YEW_SINK_COLLECT                                  */
+    Bytebuf framed_err; /* YEW_SINK_FRAMED stderr, never protocol input    */
+    void *framed_owner;
+    const YewJobFramedOps *framed_ops;
     const TextBuf *in_buf;
     Span in_span;
     u64 in_off; /* bytes of in_span already written                       */
@@ -112,6 +136,8 @@ typedef struct YewJob {
     struct Buffer *buf;
     bool follow_tail;
     bool collect_capped;
+    bool framed_failed;
+    bool framed_destroyed;
     bool reaped;
     /* Set once the child is reaped AND its output pipes have reached
      * EOF.  Child exit alone is not the end of the output: up to a
