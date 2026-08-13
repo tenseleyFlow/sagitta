@@ -124,7 +124,7 @@ static bool run_framed(Ed *ed, u32 id)
         yew_job_pump(ed, pfd, n);
         yew_job_reap(ed);
         yew_job_settle(ed);
-        if (yew_now_ms() - start > 1000)
+        if (yew_now_ms() - start > 10000)
             return false;
     }
 }
@@ -143,7 +143,7 @@ static bool wait_for_message(Ed *ed, u32 id, TransportCapture *capture)
         (void)poll(pfd, (nfds_t)n, 20);
         yew_job_pump(ed, pfd, n);
         yew_job_reap(ed);
-        if (yew_now_ms() - start > 10000)
+        if (yew_now_ms() - start > 1000)
             return false;
     }
     return true;
