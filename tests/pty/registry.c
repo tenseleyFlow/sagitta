@@ -2468,10 +2468,12 @@ static void case_s19_read_at_cursor(PtyCtx *c)
     s19_run(c, "r !printf 'inserted\\n'");
     /* The historical frame count also includes command-line repaint and
      * can be satisfied before a delayed child completes.  Wait for this
-     * command's semantic completion before comparing its cursor state. */
+     * command's semantic completion before comparing its cursor state.
+     * s19_run already settled the completed frame; another scaled quiet
+     * window can cross the four-second info-message expiry under Valgrind
+     * and replace the very footer this case asserts with the status line. */
     ptc_wait_output_since(c, output_at, completion,
                           sizeof(completion) - 1U);
-    ptc_settle(c, 250);
     ptc_snapshot(c, "s19_read_at_cursor");
     s18_finish(c, path);
 }
@@ -4870,6 +4872,17 @@ static void case_s41_5_interactive_fence_pump(PtyCtx *c)
     bytebuf_push_u8(&screen, 0U);
     ptc_check(c, strstr((const char *)screen.data, "embed_pending=0") != NULL,
               "embed pending status did not clear after idle pump");
+    ptc_check(c,
+              strstr((const char *)screen.data, "settled 5004/5004") != NULL &&
+                  strstr((const char *)screen.data, "wave 5004") != NULL &&
+                  strstr((const char *)screen.data, "root=markdown") != NULL &&
+                  strstr((const char *)screen.data, "active=markdown") != NULL &&
+                  strstr((const char *)screen.data, "defs=1/4") != NULL &&
+                  strstr((const char *)screen.data, "depth=1/16") != NULL &&
+                  strstr((const char *)screen.data, "degraded=no") != NULL &&
+                  strstr((const char *)screen.data,
+                         "embed_refused=none") != NULL,
+              "interactive fence status omitted its settled root contract");
     bytebuf_free(&screen);
     ptc_check(c, raw_contains_since(c, render_at, "\x1b[38;2;"),
               "interactive guest repaint did not emit truecolour SGR");
@@ -4877,7 +4890,19 @@ static void case_s41_5_interactive_fence_pump(PtyCtx *c)
     /* The decoded grid pins every final cell and the explicit check above
      * pins truecolour transport.  The chronological SGR list is not stable:
      * the asynchronous corrective frame can legitimately reuse one more or
-     * one fewer prior terminal attribute while reaching the same grid. */
+     * one fewer prior terminal attribute while reaching the same grid.  The
+     * state-interner count in ed.syn.status is likewise diagnostic history:
+     * the same final grid can intern one extra transient fallback state on a
+     * slow run.  Clear the checked status before comparing the stable grid. */
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.nop");
+    s18_settle_after_keys(c, "enter");
+    bytebuf_init(&screen);
+    snapshot_write(&c->vt, &screen);
+    bytebuf_push_u8(&screen, 0U);
+    ptc_check(c, strstr((const char *)screen.data, "states=") == NULL,
+              "interactive fence snapshot retained diagnostic history");
+    bytebuf_free(&screen);
     c->vt.sync_pairs_unstable = true;
     ptc_snapshot(c, c->test->name);
     force_quit(c);
@@ -5005,7 +5030,8 @@ static void case_s42_5_all_fences_lazy(PtyCtx *c)
     Bytebuf screen;
     size_t initially_loaded;
     size_t loaded;
-    unsigned attempts;
+    bool input_painted = false;
+    u32 before;
 
     ptc_spawn(c, ptc_yew_bin(c), "--theme", "quiver-dark", path, NULL);
     ptc_wait_kitty_push(c, 21U);
@@ -5016,21 +5042,26 @@ static void case_s42_5_all_fences_lazy(PtyCtx *c)
     /* A keystroke must be processed while guest definitions are still
      * pending.  Seeing it in the first settled grid is the PTY half of the
      * no-input-blockage contract. */
-    s18_settle_after_keys(c, "i");
-    s18_settle_after_bytes(c, "X");
-    s18_settle_after_keys(c, "esc");
-    bytebuf_init(&screen);
-    snapshot_write(&c->vt, &screen);
-    bytebuf_push_u8(&screen, 0U);
-    ptc_check(c, strstr((const char *)screen.data,
-                        "X# Native language pack") != NULL,
+    before = c->vt.nsync_pairs;
+    ptc_keys(c, "i X esc");
+    while (!c->failed && !input_painted) {
+        ptc_wait_sync_pairs(c, before + 1U);
+        before = c->vt.nsync_pairs;
+        bytebuf_init(&screen);
+        snapshot_write(&c->vt, &screen);
+        bytebuf_push_u8(&screen, 0U);
+        input_painted = strstr((const char *)screen.data,
+                               "X# Native language pack") != NULL;
+        bytebuf_free(&screen);
+    }
+    ptc_check(c, input_painted,
               "input was not painted while Markdown guests loaded lazily");
-    bytebuf_free(&screen);
+    ptc_check(c,
+              s42_5_cached_fences(c) < YEW_ARRAY_LEN(s42_5_fence_langs),
+              "input paint waited for every Markdown guest to load");
 
     loaded = s42_5_cached_fences(c);
-    for (attempts = 0U;
-         attempts < 96U && loaded < YEW_ARRAY_LEN(s42_5_fence_langs);
-         attempts++) {
+    while (!c->failed && loaded < YEW_ARRAY_LEN(s42_5_fence_langs)) {
         ptc_settle(c, 0);
         loaded = s42_5_cached_fences(c);
     }
@@ -5452,7 +5483,8 @@ static void case_s43_shadow_overlay_no_jump(PtyCtx *c)
     }
     (void)memcpy(baseline, c->vt.cells, cells * sizeof(*baseline));
     s43_command(c, "ed.shadow.toggle");
-    ptc_settle(c, 400);
+    ptc_check(c, s43_screen_contains(&c->vt, "shadow text enabled"),
+              "enabling shadow text did not report its new state");
     ptc_check(c, s43_screen_contains(&c->vt, "symbol_index field"),
               "four-line shadow did not appear");
     for (row = 4U; row <= 8U; row++)
@@ -5462,6 +5494,9 @@ static void case_s43_shadow_overlay_no_jump(PtyCtx *c)
                          (size_t)c->vt.cols * sizeof(*baseline)) == 0,
                   "shadow changed or moved a non-ghost document row");
     free(baseline);
+    /* s43_command already waited for the completed command frame.  Do not
+     * add a scaled quiet window here: under Valgrind it spans the four-second
+     * info-message expiry and snapshots a different, later UI state. */
     c->vt.sync_pairs_unstable = true;
     ptc_snapshot(c, c->test->name);
     s43_force_quit(c);
