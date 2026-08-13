@@ -124,7 +124,7 @@ static bool run_framed(Ed *ed, u32 id)
         yew_job_pump(ed, pfd, n);
         yew_job_reap(ed);
         yew_job_settle(ed);
-        if (yew_now_ms() - start > 10000)
+        if (yew_now_ms() - start > 1000)
             return false;
     }
 }
@@ -143,7 +143,7 @@ static bool wait_for_message(Ed *ed, u32 id, TransportCapture *capture)
         (void)poll(pfd, (nfds_t)n, 20);
         yew_job_pump(ed, pfd, n);
         yew_job_reap(ed);
-        if (yew_now_ms() - start > 1000)
+        if (yew_now_ms() - start > 10000)
             return false;
     }
     return true;
@@ -154,15 +154,29 @@ static u32 spawn_fakelsp(Ed *ed, const char *mode, TransportCapture *capture,
 {
     static const u8 request[] =
         "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"é\"}";
+    const char *program = yew_test_program_path();
+    const char *slash = strrchr(program, '/');
     TransportOwner *owner = yew_xcalloc(1U, sizeof(*owner));
+    char helper[4096];
     char *argv[3];
     YewJobSpec spec = {0};
     u32 id;
+    int n;
 
     yew_rpc_conn_init(&owner->conn);
     owner->capture = capture;
     yew_rpctx_send(&owner->conn.tx, request, sizeof(request) - 1U);
-    argv[0] = (char *)"build/tests/helpers/fakelsp";
+    if (slash != NULL)
+        n = snprintf(helper, sizeof(helper), "%.*s/tests/helpers/fakelsp",
+                     (int)(slash - program), program);
+    else
+        n = snprintf(helper, sizeof(helper), "./tests/helpers/fakelsp");
+    if (n < 0 || (size_t)n >= sizeof(helper)) {
+        (void)snprintf(err, errsz, "fake LSP helper path is too long");
+        transport_destroy(owner);
+        return 0U;
+    }
+    argv[0] = helper;
     argv[1] = (char *)mode;
     argv[2] = NULL;
     spec.argv = argv;
