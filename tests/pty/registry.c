@@ -2395,18 +2395,15 @@ static void case_s19_badge_while_running(PtyCtx *c)
     ptc_keys(c, ":");
     ptc_settle(c, 0);
     ptc_bytes(c, "!sleep 30");
+    ptc_settle(c, 0);
     /*
      * The count is taken HERE, immediately before Enter, so the wait
      * below is for a frame ENTER causes.
      *
-     * Sampling it before the `:` instead — which is what this did, and
-     * what s19_run_frames still does — makes `before + 1` satisfied by
-     * the frame that merely opened the command line, long before the
-     * command has run.  The 120 ms settle then has to carry the whole
-     * synchronisation on its own, and on a loaded runner it can find
-     * 120 ms of quiet while the editor has not yet processed Enter: the
-     * two runs snapshot different screens, one with the command line
-     * still up (cursor on the last row) and one back in the document.
+     * Sampling it before `:` or before the command-line repaint is drained
+     * makes `before + 1` satisfiable by input echo, long before the command
+     * has run.  The 120 ms settle would then carry the whole synchronisation
+     * on its own and could snapshot the command line on a loaded runner.
      */
     before = c->vt.nsync_pairs;
     ptc_keys(c, "enter");
@@ -2461,11 +2458,20 @@ static void case_s19_filter_nonzero_keeps_buffer(PtyCtx *c)
 static void case_s19_read_at_cursor(PtyCtx *c)
 {
     static const u8 initial[] = "before\nafter\n";
+    static const char completion[] = "bytes read";
     char path[256];
+    size_t output_at;
 
     if (!s18_open(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
         return;
+    output_at = c->raw.len;
     s19_run(c, "r !printf 'inserted\\n'");
+    /* The historical frame count also includes command-line repaint and
+     * can be satisfied before a delayed child completes.  Wait for this
+     * command's semantic completion before comparing its cursor state. */
+    ptc_wait_output_since(c, output_at, completion,
+                          sizeof(completion) - 1U);
+    ptc_settle(c, 250);
     ptc_snapshot(c, "s19_read_at_cursor");
     s18_finish(c, path);
 }
