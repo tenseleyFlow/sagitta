@@ -81,6 +81,7 @@ expect_rc 0 version
 echo "smoke: version ok"
 
 smoke_modules=${SMOKE_MODULES-lsp ai fuss plugins}
+[ -n "$smoke_modules" ] || smoke_modules=none
 [ "$(sed -n '2p' "$out")" = "modules: $smoke_modules" ] || fail modules
 echo "smoke: modules ok"
 

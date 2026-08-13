@@ -226,6 +226,7 @@ UNIT_DEATH_EXCLUDES := \
   --exclude multicursor_edit_guard_requires_multi_transaction \
   --exclude multicursor_deferred_guards_name_their_sprints \
   --exclude syn_deferred_surfaces_fail_loudly \
+  --exclude json_writer_structure_bugs \
   --exclude ctxmenu_a_row_handler_reading_a_payload_is_a_bug \
   --exclude shadow_menu_ghost_conflict_is_a_bug \
   --exclude undo_filter_reason_names_sprint19 \
@@ -836,7 +837,7 @@ check: $(BUILD)/unit_tests $(BUILD)/yew test-fletch test-script \
 	scripts/check-input.sh
 	scripts/check-render.sh
 	scripts/check-sigsafe.sh
-	scripts/smoke.sh $(BUILD)/yew
+	SMOKE_MODULES="$(MODULES)" scripts/smoke.sh $(BUILD)/yew
 	@echo "check: ok (fast tier -- pty, torture, sanitizers and valgrind NOT run)"
 
 test: $(BUILD)/unit_tests $(BUILD)/yew test-pty test-fletch test-script \
@@ -849,7 +850,7 @@ test: $(BUILD)/unit_tests $(BUILD)/yew test-pty test-fletch test-script \
 	scripts/check-input.sh
 	scripts/check-render.sh
 	scripts/check-sigsafe.sh
-	scripts/smoke.sh $(BUILD)/yew
+	SMOKE_MODULES="$(MODULES)" scripts/smoke.sh $(BUILD)/yew
 	$(MAKE) --no-print-directory torture-live-check BUILD=$(BUILD) \
 		CC=$(CC) SAN=$(SAN) VALGRIND=$(VALGRIND)
 
