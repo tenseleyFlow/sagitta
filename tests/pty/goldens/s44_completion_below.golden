@@ -15,7 +15,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
       |w alphaFive                                             |                
       |w alphaFour                                             |                
       +--------------------------------------------------------+                
-      1 of 19   index                                                           
+      1 of 14   index                                                           
                                                                                 
                                                                                 
                                                                                 
@@ -25,7 +25,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
                                                                                 
                                                                                 
                                                                                 
- I git discovery unavailable; using workspace walk                              
+ I  pty-s14-s44_completion_below.txt                         utf-8  lf  1:4  all
 --- style
 AAAABACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDCCCCCCCCCCCCCCCC
@@ -50,7 +50,7 @@ AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 AAAAAACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
-HHHIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
+HHHCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
 --- legend
 A fg=#4b5263 bg=#12141a attrs=----------
 B fg=#c8ccd4 bg=#12141a attrs=b---------
@@ -59,8 +59,7 @@ D fg=#c8ccd4 bg=default attrs=----------
 E fg=default bg=#2c313a attrs=----------
 F fg=default bg=#2c313a attrs=b---------
 G fg=#c8ccd4 bg=default attrs=b---------
-H fg=#e1f7e6 bg=#2a9148 attrs=b---------
-I fg=#d8eede bg=#12401f attrs=----------
+H fg=#12141a bg=#98c379 attrs=----------
 --- sgr
 \x1b[0;38;2;75;82;99;48;2;18;20;26m
 \x1b[1;38;2;200;204;212m
@@ -110,8 +109,8 @@ I fg=#d8eede bg=#12401f attrs=----------
 \x1b[38;2;200;204;212m
 \x1b[38;2;75;82;99m
 \x1b[38;2;200;204;212m
-\x1b[1;38;2;235;244;255;48;2;38;110;186m
-\x1b[22;38;2;218;229;240;48;2;20;48;76m
+\x1b[38;2;18;20;26;48;2;97;175;239m
+\x1b[38;2;200;204;212;48;2;18;20;26m
 \x1b[0;38;2;200;204;212m
 \x1b[39;48;2;44;49;58m
 \x1b[1m
@@ -135,5 +134,5 @@ I fg=#d8eede bg=#12401f attrs=----------
 \x1b[22m
 \x1b[1m
 \x1b[22m
-\x1b[1;38;2;225;247;230;48;2;42;145;72m
-\x1b[22;38;2;216;238;222;48;2;18;64;31m
+\x1b[38;2;18;20;26;48;2;152;195;121m
+\x1b[38;2;200;204;212;48;2;18;20;26m

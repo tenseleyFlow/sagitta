@@ -59,6 +59,7 @@ struct PtyCtx {
     Bytebuf raw;
     Bytebuf snapshot;
     char *state_dir;
+    char *workspace_dir;
     char *golden_name;
     const char *demo_bin;
     const char *yew_bin;
@@ -80,7 +81,7 @@ struct PtyCtx {
     Bytebuf pre_resume;
     bool resumed;
     bool marked_resume;
-    /* Set by a case before spawning; NULL inherits the runner's. */
+    /* Defaults to workspace_dir; a case may replace it before spawning. */
     const char *cwd;
     /* The binary, made absolute when cwd is set. */
     char *resolved_bin;

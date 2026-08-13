@@ -1414,6 +1414,41 @@ void ptc_init(PtyCtx *c, const PtyCase *test, const char *state_dir,
     } else {
         c->state_dir = copy_string(state_dir);
     }
+    if (c->state_dir != NULL) {
+        size_t len = strlen(c->state_dir);
+        static const char *const links[] = {"build", "tests"};
+        size_t i;
+
+        c->workspace_dir = malloc(len + sizeof("/workspace"));
+        if (c->workspace_dir != NULL) {
+            (void)memcpy(c->workspace_dir, c->state_dir, len);
+            (void)memcpy(c->workspace_dir + len, "/workspace",
+                         sizeof("/workspace"));
+            if (mkdir(c->workspace_dir, 0700) != 0)
+                ptc_fail(c, "creating isolated workspace: %s",
+                         strerror(errno));
+        }
+        for (i = 0U; c->workspace_dir != NULL &&
+                     i < YEW_ARRAY_LEN(links); i++) {
+            size_t name_len = strlen(links[i]);
+            size_t path_len = strlen(c->workspace_dir) + name_len + 2U;
+            char *path = malloc(path_len);
+            char *target = realpath(links[i], NULL);
+
+            if (path == NULL || target == NULL) {
+                ptc_fail(c, "preparing isolated workspace");
+            } else {
+                (void)snprintf(path, path_len, "%s/%s", c->workspace_dir,
+                               links[i]);
+                if (symlink(target, path) != 0)
+                    ptc_fail(c, "linking isolated workspace: %s",
+                             strerror(errno));
+            }
+            free(target);
+            free(path);
+        }
+        c->cwd = c->workspace_dir;
+    }
     c->demo_bin = demo_bin;
     c->yew_bin = yew_bin;
     c->budget_ms = budget_ms > 0 ? budget_ms : PTC_DEFAULT_BUDGET_MS;
@@ -1622,10 +1657,12 @@ void ptc_dispose(PtyCtx *c)
     bytebuf_free(&c->snapshot);
     bytebuf_free(&c->pre_resume);
     free(c->state_dir);
+    free(c->workspace_dir);
     free(c->resolved_bin);
     c->resolved_bin = NULL;
     free(c->golden_name);
     c->state_dir = NULL;
+    c->workspace_dir = NULL;
     c->golden_name = NULL;
 }
 
