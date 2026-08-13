@@ -4,10 +4,12 @@
 
 #include "edit/ed.h"
 #include "edit/cmd.h"
+#include "edit/option.h"
 #include "term/grid.h"
 #include "text/edit.h"
 #include "ui/complmenu.h"
 #include "ui/region.h"
+#include "ws/symidx.h"
 
 static const char *const labels[] = {
     "alphaOne", "alphaTwo", "alphaThree", "alphaFour",
@@ -133,6 +135,33 @@ static u8 cell_byte(const Grid *g, u16 row, u16 col)
     const Cell *cell = &g->back[(size_t)row * g->cols + col];
 
     return (cell->flags & CELL_INTERNED) == 0U ? cell->utf8[0] : 0U;
+}
+
+void test_complmenu_auto_trigger_reads_typed_options(void)
+{
+    static const u8 text[] = "object_symbol\nobj";
+    const char *err = NULL;
+    OptVal enabled = {YEW_OPT_BOOL, {.b = true}};
+    OptVal triggers = {YEW_OPT_STR, {.str = {"zz obj", 6U}}};
+    Ed ed;
+
+    compl_fixture(&ed, text, sizeof(text) - 1U, sizeof(text) - 1U,
+                  (Rect){0U, 0U, 80U, 20U});
+    while (yew_symidx_pending(&ed))
+        yew_symidx_pump(&ed, INT64_MAX);
+    YEW_ASSERT_EQ_I64(yew_mode_enter(&ed, YEW_MODE_I), YEW_CMD_OK);
+    YEW_ASSERT(!yew_compl_maybe_auto_trigger(&ed, ed.win));
+    YEW_ASSERT(!ed.win->compl.open);
+    YEW_ASSERT(yew_opt_set(&ed, YEW_OPT_SCOPE_DECLARED,
+                           "compl.auto_trigger", 18U, &enabled, &err));
+    YEW_ASSERT(yew_opt_set(&ed, YEW_OPT_SCOPE_DECLARED,
+                           "compl.trigger_chars", 19U, &triggers, &err));
+    YEW_ASSERT(yew_compl_maybe_auto_trigger(&ed, ed.win));
+    YEW_ASSERT(ed.win->compl.open);
+    YEW_ASSERT(ed.win->compl.items.len != 0U);
+    YEW_ASSERT_EQ_MEM(ed.win->compl.items.data[0].label,
+                      "object_symbol", 13U);
+    yew_ed_free(&ed);
 }
 
 void test_complmenu_key_table_wraps_pages_and_toggles_panel(void)
@@ -385,9 +414,12 @@ void test_complmenu_stats_reports_every_symbol_cap(void)
     YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "buffers="));
     YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "workspace files="));
     YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "caps files=20000"));
+    YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "file-bytes=4194304"));
+    YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "line-bytes=65536"));
     YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "symbols/file=4000"));
     YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "memory="));
     YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "/33554432"));
+    YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "long-line-files=0"));
     YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "buffer-indexes=ok"));
 
     ed.ws.sym_buf.data[0].idx.capped = true;

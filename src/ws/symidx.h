@@ -161,6 +161,7 @@ u32 yew_symidx_scan(SymIndex *idx, Buffer *buf, Span range);
 u32 yew_symidx_scan_workspace(SymIndex *idx, Buffer *buf, Span range);
 void yew_symidx_workspace_replace(Workspace *ws, Buffer *buf);
 u64 yew_symidx_workspace_bytes(const Workspace *ws);
+void yew_symidx_reindex_buffers(Workspace *ws);
 
 i32 yew_sym_rank(i32 fuzzy, u32 age, SymProx prox, u8 kind, u16 hits);
 u32 yew_symidx_query(Workspace *ws, const SymQuery *q, SymHit *out, u32 max);

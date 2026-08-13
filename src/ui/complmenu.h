@@ -72,6 +72,7 @@ void yew_compl_close_result(Ed *ed, Win *w, bool accepted);
 void yew_compl_push(Ed *ed, Win *w, const ComplItem *it, u32 n);
 bool yew_compl_key(Ed *ed, Win *w, const Key *k);
 void yew_compl_after_key(Ed *ed, Win *w);
+bool yew_compl_maybe_auto_trigger(Ed *ed, Win *w);
 void yew_compl_resize(Ed *ed, Win *w);
 void yew_compl_draw(Ed *ed, Win *w, Grid *g);
 void yew_compl_free(ComplMenu *menu);

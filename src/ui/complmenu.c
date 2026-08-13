@@ -7,6 +7,7 @@
 
 #include "edit/ed.h"
 #include "edit/motion.h"
+#include "edit/option.h"
 #include "edit/shadow.h"
 #include "edit/theme_cmds.h"
 #include "term/grid.h"
@@ -306,6 +307,58 @@ bool yew_compl_open_source(Ed *ed, Win *w, const ComplSource *src)
     yew_compl_resize(ed, w);
     ed->full_damage = true;
     return true;
+}
+
+static bool compl_has_suffix(Win *w, const char *want, u32 len)
+{
+    Cursor *cursor;
+    u8 *got;
+    bool equal;
+
+    if (w == NULL || w->buf == NULL || w->buf->tb == NULL || want == NULL ||
+        len == 0U || w->cs.curs.len != 1U ||
+        w->cs.primary >= w->cs.curs.len)
+        return false;
+    cursor = &w->cs.curs.data[w->cs.primary];
+    if (cursor->pos.v < len)
+        return false;
+    got = yew_xmalloc(len);
+    equal = text_copy(w->buf->tb,
+                      (Span){cursor->pos.v - len, cursor->pos.v}, got) &&
+            memcmp(got, want, len) == 0;
+    free(got);
+    return equal;
+}
+
+bool yew_compl_maybe_auto_trigger(Ed *ed, Win *w)
+{
+    OptVal enabled;
+    OptVal triggers;
+    u32 at = 0U;
+
+    if (ed == NULL || w == NULL || w->compl.open || ed->mode != YEW_MODE_I ||
+        !yew_opt_get(ed, w->buf, w, "compl.auto_trigger", 18U, &enabled) ||
+        enabled.type != (u8)YEW_OPT_BOOL || !enabled.as.b ||
+        !yew_opt_get(ed, w->buf, w, "compl.trigger_chars", 19U, &triggers) ||
+        triggers.type != (u8)YEW_OPT_STR)
+        return false;
+    while (at < triggers.as.str.len) {
+        u32 lo;
+
+        while (at < triggers.as.str.len &&
+               (triggers.as.str.s[at] == ' ' ||
+                triggers.as.str.s[at] == '\t'))
+            at++;
+        lo = at;
+        while (at < triggers.as.str.len &&
+               triggers.as.str.s[at] != ' ' &&
+               triggers.as.str.s[at] != '\t')
+            at++;
+        if (at != lo && compl_has_suffix(w, triggers.as.str.s + lo,
+                                         at - lo))
+            return yew_compl_open_source(ed, w, &yew_compl_source_index);
+    }
+    return false;
 }
 
 void yew_compl_close_result(Ed *ed, Win *w, bool accepted)
@@ -839,7 +892,8 @@ CmdStatus yew_compl_cmd_stats(CmdCtx *cx)
     yew_msg(cx->ed, YEW_MSG_INFO,
             "completion: buffers=%zu symbols=%llu bytes=%llu; "
             "workspace files=%llu/%llu symbols=%zu bytes=%llu; "
-            "caps files=%u symbols/file=%u memory=%llu/%u "
+            "caps files=%u file-bytes=%u line-bytes=%u symbols/file=%u "
+            "memory=%llu/%u long-line-files=%llu "
             "buffer-indexes=%s workspace=%s walk=%s",
             cx->ed->ws.sym_buf.len,
             (unsigned long long)buffer_symbols,
@@ -848,8 +902,10 @@ CmdStatus yew_compl_cmd_stats(CmdCtx *cx)
             (unsigned long long)cx->ed->ws.sym_walk.files_total,
             cx->ed->ws.sym_ws.e.len,
             (unsigned long long)cx->ed->ws.sym_ws.bytes,
-            YEW_SYMWALK_MAX_FILES, YEW_SYMWALK_MAX_SYMS_PER_FILE,
+            YEW_SYMWALK_MAX_FILES, YEW_SYMWALK_MAX_FILE_BYTES,
+            YEW_SYMWALK_MAX_LINE_BYTES, YEW_SYMWALK_MAX_SYMS_PER_FILE,
             (unsigned long long)total_bytes, YEW_SYMIDX_BYTES_MAX,
+            (unsigned long long)cx->ed->ws.sym_walk.long_files_skipped,
             buffer_capped ? "capped" : "ok",
             cx->ed->ws.sym_ws.capped ? "capped" : "ok",
             cx->ed->ws.sym_walk.capped ? "capped" : "ok");

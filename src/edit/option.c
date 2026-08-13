@@ -189,7 +189,13 @@ const OptDesc yew_opts[] = {
     {"shadow.lsp_debounce_ms", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(120),
      NULL, 0, 5000, NULL, option_changed, "LSP suggestion idle delay"},
     {"shadow.ai_debounce_ms", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(350),
-     NULL, 0, 5000, NULL, option_changed, "AI suggestion idle delay"}
+     NULL, 0, 5000, NULL, option_changed, "AI suggestion idle delay"},
+    {"compl.auto_trigger", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(false),
+     NULL, 0, 0, NULL, option_changed,
+     "Open completion after configured trigger text"},
+    {"compl.trigger_chars", YEW_OPT_STR, YEW_OPT_GLOBAL,
+     OPT_STR(". -> ::"), NULL, 0, 0, NULL, option_changed,
+     "Whitespace-separated completion trigger text"}
 };
 
 const u32 yew_opts_len = (u32)YEW_ARRAY_LEN(yew_opts);

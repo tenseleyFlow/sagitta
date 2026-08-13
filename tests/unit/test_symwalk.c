@@ -91,6 +91,24 @@ static void sw_big_file(const SymWalkFix *f)
     YEW_ASSERT_EQ_I64(fclose(fp), 0);
 }
 
+static void sw_long_line_file(const SymWalkFix *f)
+{
+    char path[512];
+    static const char symbol[] = "pathological_symbol";
+    FILE *fp;
+    size_t i;
+
+    sw_join(path, sizeof(path), f, "long.txt");
+    fp = fopen(path, "wb");
+    YEW_ASSERT_NOT_NULL(fp);
+    YEW_ASSERT_EQ_U64(fwrite(symbol, 1U, sizeof(symbol) - 1U, fp),
+                      sizeof(symbol) - 1U);
+    for (i = sizeof(symbol) - 1U;
+         i <= (size_t)YEW_SYMWALK_MAX_LINE_BYTES; i++)
+        YEW_ASSERT_EQ_I64(fputc('x', fp), 'x');
+    YEW_ASSERT_EQ_I64(fclose(fp), 0);
+}
+
 static void sw_symbol_file(const SymWalkFix *f)
 {
     char path[512];
@@ -199,6 +217,7 @@ void test_symwalk_fallback_caps_skips_and_repeat_interning(void)
         sw_file(&f, name, "shared_symbol\n");
     }
     sw_big_file(&f);
+    sw_long_line_file(&f);
     sw_binary_file(&f);
     sw_symbol_file(&f);
     sw_ed(&ed, &f);
@@ -214,10 +233,12 @@ void test_symwalk_fallback_caps_skips_and_repeat_interning(void)
     YEW_ASSERT_NOT_NULL(sw_find(&ed, "shared_symbol"));
     YEW_ASSERT_NOT_NULL(sw_find(&ed, "fallback_kept"));
     YEW_ASSERT_NULL(sw_find(&ed, "dependency_noise"));
+    YEW_ASSERT_NULL(sw_find(&ed, "pathological_symbol"));
     YEW_ASSERT_EQ_U64(sw_file_entries(&ed, "/many.txt"), 4000U);
     YEW_ASSERT_NULL(sw_find(&ed, "symbol_04000"));
-    YEW_ASSERT_EQ_U64(ed.ws.sym_walk.files_total, 205U);
-    YEW_ASSERT_EQ_U64(ed.ws.sym_walk.files_done, 205U);
+    YEW_ASSERT_EQ_U64(ed.ws.sym_walk.files_total, 206U);
+    YEW_ASSERT_EQ_U64(ed.ws.sym_walk.files_done, 206U);
+    YEW_ASSERT_EQ_U64(ed.ws.sym_walk.long_files_skipped, 1U);
     YEW_ASSERT(ed.ws.sym_walk.bytes_read < 5U * 1024U * 1024U);
 
     first_interns = yew_intern_count(&ed.interner);
@@ -228,6 +249,57 @@ void test_symwalk_fallback_caps_skips_and_repeat_interning(void)
     }
     sw_join(path, sizeof(path), &f, "many.txt");
     YEW_ASSERT(access(path, F_OK) == 0);
+    yew_ed_free(&ed);
+    sw_free(&f);
+}
+
+void test_symwalk_stop_retires_exited_undrained_job(void)
+{
+    SymWalkFix f;
+    Ed ed;
+    YewJob *job;
+    u32 job_id;
+    i64 deadline;
+
+    sw_init(&f);
+    if (f.old_path == NULL) {
+        sw_free(&f);
+        return;
+    }
+    sw_dir(&f, ".git");
+    sw_file(&f, "tracked.txt", "retired_job_symbol\n");
+    sw_ed(&ed, &f);
+    yew_symwalk_start(&ed);
+    job_id = ed.ws.sym_walk.job;
+    job = yew_job_find(&ed, job_id);
+    YEW_ASSERT_NOT_NULL(job);
+    YEW_ASSERT(yew_job_pending(job));
+
+    /* Reproduce the narrow state in which waitpid observed exit before
+     * stdout/stderr reached EOF.  Stop must retain ownership until both
+     * pipes drain instead of forgetting the job. */
+    job->state = YEW_JOB_EXITED;
+    job->exit_code = 0;
+    yew_symwalk_stop(&ed);
+    YEW_ASSERT_EQ_U64(ed.ws.sym_walk.retired_jobs.len, 1U);
+    YEW_ASSERT_NOT_NULL(yew_job_find(&ed, job_id));
+
+    deadline = yew_now_ms() + 30000;
+    while (ed.ws.sym_walk.retired_jobs.len != 0U &&
+           yew_now_ms() < deadline) {
+        struct pollfd pfd[YEW_JOB_MAX * 4U];
+        u32 n = 0U;
+
+        yew_job_collect_fds(&ed, pfd, &n);
+        if (n != 0U)
+            (void)poll(pfd, n, 20);
+        yew_job_pump(&ed, pfd, n);
+        yew_job_reap(&ed);
+        yew_job_settle(&ed);
+        yew_symwalk_pump(&ed, 0);
+    }
+    YEW_ASSERT_EQ_U64(ed.ws.sym_walk.retired_jobs.len, 0U);
+    YEW_ASSERT_NULL(yew_job_find(&ed, job_id));
     yew_ed_free(&ed);
     sw_free(&f);
 }

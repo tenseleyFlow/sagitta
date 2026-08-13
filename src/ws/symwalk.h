@@ -23,6 +23,7 @@ enum {
 };
 
 #define YEW_SYMWALK_MAX_FILE_BYTES (4U * 1024U * 1024U)
+#define YEW_SYMWALK_MAX_LINE_BYTES (64U * 1024U)
 #define YEW_SYMWALK_BUDGET_US 2000
 
 VEC_DECL(Vec_SymPath, u32);
@@ -34,6 +35,7 @@ typedef struct SymWalk {
     u64 files_done;
     u64 files_total;
     u64 bytes_read;
+    u64 long_files_skipped;
     bool running;
     bool capped;
 
@@ -46,8 +48,16 @@ typedef struct SymWalk {
     Vec_SymPath retired_jobs;
     void *scratch_syn;
     void *scan_buf;
+    int scan_fd;
+    u64 scan_size;
+    u64 scan_at;
+    u64 scan_line_bytes;
     u64 scan_line;
     u32 scan_symbols;
+    size_t queue_at;
+    size_t git_at;
+    bool scan_bound;
+    bool queueing_files;
 } SymWalk;
 
 void yew_symwalk_start(Ed *ed);

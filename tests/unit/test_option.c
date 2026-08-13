@@ -39,9 +39,10 @@ void test_option_table_has_frozen_order_types_scopes_and_defaults(void)
         "hooks.error_limit", "theme", "theme_auto", "macro.dir",
         "shadow.enable", "shadow.providers", "shadow.max_lines",
         "shadow.midline", "shadow.lsp_debounce_ms",
-        "shadow.ai_debounce_ms"
+        "shadow.ai_debounce_ms", "compl.auto_trigger",
+        "compl.trigger_chars"
     };
-    const char *listed[32];
+    const char *listed[34];
     Ed ed;
     u32 i;
 

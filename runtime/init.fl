@@ -38,6 +38,8 @@ set({
     "shadow.midline": false,
     "shadow.lsp_debounce_ms": 120,
     "shadow.ai_debounce_ms": 350,
+    "compl.auto_trigger": false,
+    "compl.trigger_chars": ". -> ::",
 })
 
 # -- 2. unit modes (L line, W word, B block) ----------------------------

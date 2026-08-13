@@ -219,6 +219,33 @@ static bool write_walk_fixture(const char *root)
         if (fclose(fp) != 0)
             return false;
     }
+    {
+        char path[256];
+        u8 chunk[32U * 1024U];
+        static const char symbol[] = "pathological_symbol";
+        FILE *fp;
+        u32 part;
+        int n = snprintf(path, sizeof(path), "%s/pathological.c", root);
+
+        if (n <= 0 || (size_t)n >= sizeof(path))
+            return false;
+        (void)memset(chunk, 'x', sizeof(chunk));
+        (void)memcpy(chunk, symbol, sizeof(symbol) - 1U);
+        fp = fopen(path, "wb");
+        if (fp == NULL)
+            return false;
+        for (part = 0U;
+             part < YEW_SYMWALK_MAX_FILE_BYTES / sizeof(chunk); part++) {
+            if (fwrite(chunk, 1U, sizeof(chunk), fp) != sizeof(chunk)) {
+                (void)fclose(fp);
+                return false;
+            }
+            if (part == 0U)
+                (void)memset(chunk, 'x', sizeof(symbol) - 1U);
+        }
+        if (fclose(fp) != 0)
+            return false;
+    }
     return true;
 }
 
@@ -229,6 +256,13 @@ static void remove_walk_fixture(const char *root)
     for (file = 0U; file < SYMIDX_WALK_FILES; file++) {
         char path[256];
         int n = snprintf(path, sizeof(path), "%s/file_%04u.c", root, file);
+
+        if (n > 0 && (size_t)n < sizeof(path))
+            (void)unlink(path);
+    }
+    {
+        char path[256];
+        int n = snprintf(path, sizeof(path), "%s/pathological.c", root);
 
         if (n > 0 && (size_t)n < sizeof(path))
             (void)unlink(path);
@@ -245,6 +279,7 @@ static bool measure_walk_typing(Timing *typing_out, Timing *pump_out)
     u64 *pump_samples = malloc(SYMIDX_WALK_FILES * sizeof(*pump_samples));
     Ed ed;
     u32 count = 0U;
+    u64 tail_max = 0U;
     bool opened = false;
     bool ok = false;
 
@@ -279,16 +314,36 @@ static bool measure_walk_typing(Timing *typing_out, Timing *pump_out)
     }
     while (ed.ws.sym_walk.running) {
         u64 started = now_ns();
+        u64 scan_at = ed.ws.sym_walk.scan_at;
+        u64 scan_line = ed.ws.sym_walk.scan_line;
+        u64 files_done = ed.ws.sym_walk.files_done;
+        u64 elapsed;
 
         yew_symwalk_pump(&ed, YEW_SYMWALK_BUDGET_US);
-        if (now_ns() - started > (u64)YEW_SYMWALK_BUDGET_US * 1000U)
-            goto done_ed;
+        elapsed = now_ns() - started;
+        if (elapsed > (u64)YEW_SYMWALK_BUDGET_US * 1000U)
+            (void)fprintf(stderr,
+                          "perf_symidx: slow workspace pump ns=%llu "
+                          "scan=%llu->%llu line=%llu->%llu "
+                          "done=%llu->%llu\n",
+                          (unsigned long long)elapsed,
+                          (unsigned long long)scan_at,
+                          (unsigned long long)ed.ws.sym_walk.scan_at,
+                          (unsigned long long)scan_line,
+                          (unsigned long long)ed.ws.sym_walk.scan_line,
+                          (unsigned long long)files_done,
+                          (unsigned long long)ed.ws.sym_walk.files_done);
+        if (elapsed > tail_max)
+            tail_max = elapsed;
     }
-    if (count == 0U || ed.ws.sym_walk.files_done != SYMIDX_WALK_FILES ||
+    if (count == 0U ||
+        ed.ws.sym_walk.files_done != SYMIDX_WALK_FILES + 1U ||
         ed.ws.sym_walk.bytes_read == 0U || !drain_index(&ed))
         goto done_ed;
     summarize(samples, count, typing_out);
     summarize(pump_samples, count, pump_out);
+    if (tail_max > pump_out->maximum_ns)
+        pump_out->maximum_ns = tail_max;
     ok = true;
 done_ed:
     if (opened)

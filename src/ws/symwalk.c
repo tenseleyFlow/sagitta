@@ -21,6 +21,7 @@
 #include "ws/symidx.h"
 
 #define YEW_SYMWALK_HEADROOM_US 750
+#define YEW_SYMWALK_READ_BYTES (32U * 1024U)
 
 static i64 symwalk_now_us(void)
 {
@@ -162,50 +163,58 @@ static void queue_path(Ed *ed, const char *rel, bool apply_fallback_skip)
     Vec_SymPath_push(&sw->queue, id);
 }
 
-static void queue_filelist(Ed *ed)
+static bool queue_filelist_step(Ed *ed, i64 stop_us)
 {
     SymWalk *sw = &ed->ws.sym_walk;
-    size_t i;
 
-    for (i = 0U; i < sw->files.paths.len && !sw->capped; i++)
-        queue_path(ed, sw->files.paths.data[i], true);
+    while (sw->queue_at < sw->files.paths.len && !sw->capped) {
+        queue_path(ed, sw->files.paths.data[sw->queue_at++], true);
+        if (stop_us != 0 && symwalk_now_us() >= stop_us)
+            return false;
+    }
     if (sw->files.truncated)
         sw->capped = true;
     sw->files_total = sw->queue.len;
     sw->discovery_done = true;
+    sw->queueing_files = false;
+    return true;
 }
 
-static bool parse_git_paths(Ed *ed, const Bytebuf *bytes)
+/* -1 = malformed, 0 = yielded, 1 = complete. */
+static int parse_git_paths_step(Ed *ed, const Bytebuf *bytes, i64 stop_us)
 {
-    size_t at = 0U;
+    SymWalk *sw = &ed->ws.sym_walk;
 
-    while (at < bytes->len) {
-        const u8 *nul = memchr(bytes->data + at, 0, bytes->len - at);
+    while (sw->git_at < bytes->len) {
+        const u8 *nul = memchr(bytes->data + sw->git_at, 0,
+                               bytes->len - sw->git_at);
         size_t len;
         char rel[PATH_MAX];
 
         if (nul == NULL)
-            return false;
-        len = (size_t)(nul - (bytes->data + at));
+            return -1;
+        len = (size_t)(nul - (bytes->data + sw->git_at));
         if (len != 0U && len < sizeof(rel)) {
-            (void)memcpy(rel, bytes->data + at, len);
+            (void)memcpy(rel, bytes->data + sw->git_at, len);
             rel[len] = '\0';
             queue_path(ed, rel, false);
         }
-        at += len + 1U;
+        sw->git_at += len + 1U;
         if (ed->ws.sym_walk.capped)
             break;
+        if (stop_us != 0 && symwalk_now_us() >= stop_us)
+            return 0;
     }
     ed->ws.sym_walk.files_total = ed->ws.sym_walk.queue.len;
     ed->ws.sym_walk.discovery_done = true;
-    return true;
+    return 1;
 }
 
-static void git_settle(Ed *ed)
+static void git_settle(Ed *ed, i64 stop_us)
 {
     SymWalk *sw = &ed->ws.sym_walk;
     YewJob *job = yew_job_find(ed, sw->job);
-    bool ok;
+    int parsed;
 
     if (job == NULL) {
         sw->job = 0U;
@@ -214,15 +223,28 @@ static void git_settle(Ed *ed)
     }
     if (yew_job_pending(job))
         return;
-    ok = job->state == YEW_JOB_EXITED && job->exit_code == 0 &&
-         !job->collect_capped && parse_git_paths(ed, &job->collect);
-    yew_job_release(ed, job);
-    sw->job = 0U;
-    if (!ok) {
+    if (job->state != YEW_JOB_EXITED || job->exit_code != 0 ||
+        job->collect_capped) {
+        yew_job_release(ed, job);
+        sw->job = 0U;
         Vec_SymPath_free(&sw->queue);
         sw->next = 0U;
         sw->files_total = 0U;
         sw->discovery_done = false;
+        fallback_begin(ed, true);
+        return;
+    }
+    parsed = parse_git_paths_step(ed, &job->collect, stop_us);
+    if (parsed == 0)
+        return;
+    yew_job_release(ed, job);
+    sw->job = 0U;
+    if (parsed < 0) {
+        Vec_SymPath_free(&sw->queue);
+        sw->next = 0U;
+        sw->files_total = 0U;
+        sw->discovery_done = false;
+        sw->git_at = 0U;
         fallback_begin(ed, true);
     }
 }
@@ -264,40 +286,6 @@ static bool open_buffer_owns(const Ed *ed, const char *path)
     return false;
 }
 
-static bool read_whole(const char *path, size_t len, u8 **out)
-{
-    int fd;
-    size_t at = 0U;
-    u8 *bytes = yew_xmalloc(len == 0U ? 1U : len);
-
-    fd = open(path, O_RDONLY);
-    if (fd < 0) {
-        free(bytes);
-        return false;
-    }
-    while (at < len) {
-        ssize_t got = read(fd, bytes + at, len - at);
-
-        if (got < 0) {
-            if (errno == EINTR)
-                continue;
-            (void)close(fd);
-            free(bytes);
-            return false;
-        }
-        if (got == 0)
-            break;
-        at += (size_t)got;
-    }
-    (void)close(fd);
-    if (at != len) {
-        free(bytes);
-        return false;
-    }
-    *out = bytes;
-    return true;
-}
-
 static void scan_file_end(Ed *ed)
 {
     SymWalk *sw = &ed->ws.sym_walk;
@@ -306,6 +294,8 @@ static void scan_file_end(Ed *ed)
 
     if (buf == NULL)
         return;
+    if (sw->scan_fd >= 0)
+        (void)close(sw->scan_fd);
     scratch = sw->scratch_syn;
     if (scratch == NULL)
         YEW_BUG("symbol walk: active scan has no syntax scratch");
@@ -314,34 +304,34 @@ static void scan_file_end(Ed *ed)
     yew_textbuf_free(buf->tb);
     free(buf);
     sw->scan_buf = NULL;
+    sw->scan_fd = -1;
+    sw->scan_size = 0U;
+    sw->scan_at = 0U;
+    sw->scan_line_bytes = 0U;
     sw->scan_line = 0U;
     sw->scan_symbols = 0U;
+    sw->scan_bound = false;
 }
 
 static bool scan_file_begin(Ed *ed, const char *path)
 {
     SymWalk *sw = &ed->ws.sym_walk;
     struct stat st;
-    u8 *bytes;
     Buffer *buf;
     SynBuf *scratch;
+    int fd;
 
     if (open_buffer_owns(ed, path) || stat(path, &st) != 0 ||
         !S_ISREG(st.st_mode) || st.st_size < 0 ||
         (u64)st.st_size > YEW_SYMWALK_MAX_FILE_BYTES)
         return false;
-    if (!read_whole(path, (size_t)st.st_size, &bytes))
+    fd = open(path, O_RDONLY | O_CLOEXEC);
+    if (fd < 0)
         return false;
-    if (memchr(bytes, 0, (size_t)st.st_size < 8192U ?
-                       (size_t)st.st_size : 8192U) != NULL) {
-        free(bytes);
-        return false;
-    }
     buf = yew_xcalloc(1U, sizeof(*buf));
     buf->owner = ed;
     buf->path = (char *)path;
-    buf->tb = yew_textbuf_from_bytes(bytes, (size_t)st.st_size);
-    free(bytes);
+    buf->tb = yew_textbuf_new();
     if (sw->scratch_syn == NULL) {
         sw->scratch_syn = yew_xcalloc(1U, sizeof(SynBuf));
         yew_syn_buf_init(sw->scratch_syn);
@@ -349,11 +339,86 @@ static bool scan_file_begin(Ed *ed, const char *path)
     scratch = sw->scratch_syn;
     buf->syn = *scratch;
     (void)memset(scratch, 0, sizeof(*scratch));
-    yew_ed_syn_bind(buf);
     sw->scan_buf = buf;
+    sw->scan_fd = fd;
+    sw->scan_size = (u64)st.st_size;
+    sw->scan_at = 0U;
+    sw->scan_line_bytes = 0U;
     sw->scan_line = 0U;
     sw->scan_symbols = 0U;
-    sw->bytes_read += (u64)st.st_size;
+    sw->scan_bound = false;
+    return true;
+}
+
+static bool scan_file_lines_bounded(SymWalk *sw, const u8 *bytes,
+                                    size_t len)
+{
+    size_t i;
+
+    for (i = 0U; i < len; i++) {
+        sw->scan_line_bytes++;
+        if (sw->scan_line_bytes > YEW_SYMWALK_MAX_LINE_BYTES)
+            return false;
+        if (bytes[i] == (u8)'\n')
+            sw->scan_line_bytes = 0U;
+    }
+    return true;
+}
+
+static bool scan_file_prepare_chunk(Ed *ed)
+{
+    SymWalk *sw = &ed->ws.sym_walk;
+    Buffer *buf = sw->scan_buf;
+
+    if (buf == NULL)
+        return false;
+    if (sw->scan_fd >= 0) {
+        u8 bytes[YEW_SYMWALK_READ_BYTES];
+        u64 left = sw->scan_size - sw->scan_at;
+        size_t want = left < sizeof(bytes) ? (size_t)left : sizeof(bytes);
+        ssize_t got;
+
+        if (want == 0U) {
+            (void)close(sw->scan_fd);
+            sw->scan_fd = -1;
+            return false;
+        }
+        got = read(sw->scan_fd, bytes, want);
+        if (got < 0 && errno == EINTR)
+            return false;
+        if (got <= 0) {
+            scan_file_end(ed);
+            return false;
+        }
+        if (sw->scan_at < 8192U) {
+            size_t check = (size_t)got;
+            u64 until = 8192U - sw->scan_at;
+
+            if ((u64)check > until)
+                check = (size_t)until;
+            if (memchr(bytes, 0, check) != NULL) {
+                scan_file_end(ed);
+                return false;
+            }
+        }
+        if (!scan_file_lines_bounded(sw, bytes, (size_t)got)) {
+            sw->long_files_skipped++;
+            scan_file_end(ed);
+            return false;
+        }
+        yew_textbuf_insert(buf->tb, BYTEOFF(sw->scan_at), bytes, (u64)got);
+        sw->scan_at += (u64)got;
+        sw->bytes_read += (u64)got;
+        if (sw->scan_at == sw->scan_size) {
+            (void)close(sw->scan_fd);
+            sw->scan_fd = -1;
+        }
+        return false;
+    }
+    if (!sw->scan_bound) {
+        yew_ed_syn_bind(buf);
+        sw->scan_bound = true;
+    }
     return true;
 }
 
@@ -405,8 +470,10 @@ void yew_symwalk_start(Ed *ed)
     (void)memset(sw, 0, sizeof(*sw));
     sw->retired_jobs = retired;
     sw->scratch_syn = scratch_syn;
+    sw->scan_fd = -1;
     sw->running = true;
     yew_symidx_clear(&ed->ws.sym_ws);
+    yew_symidx_reindex_buffers(&ed->ws);
 
     if (!repo_marker(yew_ws_root(ed))) {
         fallback_begin(ed, false);
@@ -436,6 +503,7 @@ void yew_symwalk_pump(Ed *ed, i64 budget_us)
 {
     SymWalk *sw;
     i64 started;
+    i64 stop_us;
 
     if (ed == NULL)
         return;
@@ -444,8 +512,11 @@ void yew_symwalk_pump(Ed *ed, i64 budget_us)
     if (!sw->running)
         return;
     started = symwalk_now_us();
+    stop_us = budget_us > YEW_SYMWALK_HEADROOM_US
+                  ? started + budget_us - YEW_SYMWALK_HEADROOM_US
+                  : (budget_us > 0 ? started + budget_us : 0);
     if (sw->job != 0U) {
-        git_settle(ed);
+        git_settle(ed, stop_us);
         if (sw->job != 0U || !sw->running)
             return;
     }
@@ -460,18 +531,17 @@ void yew_symwalk_pump(Ed *ed, i64 budget_us)
         if (remaining > YEW_SYMWALK_HEADROOM_US)
             remaining -= YEW_SYMWALK_HEADROOM_US;
         if (remaining < 1 && budget_us > 0)
-            return;
+            remaining = 1;
         if (yew_walk_step(sw->walk, budget_us == 0 ? 0 : remaining))
             return;
         yew_walk_end(sw->walk);
         sw->walk = NULL;
-        queue_filelist(ed);
-        if (budget_us > 0 &&
-            symwalk_now_us() - started >=
-                (budget_us > YEW_SYMWALK_HEADROOM_US ?
-                    budget_us - YEW_SYMWALK_HEADROOM_US : 0))
-            return;
+        sw->queueing_files = true;
     }
+    if (sw->queueing_files && !queue_filelist_step(ed, stop_us))
+        return;
+    if (stop_us != 0 && symwalk_now_us() >= stop_us)
+        return;
     while (sw->discovery_done &&
            (sw->scan_buf != NULL || sw->next < sw->queue.len) &&
            !ed->ws.sym_ws.capped) {
@@ -481,17 +551,29 @@ void yew_symwalk_pump(Ed *ed, i64 budget_us)
 
             if (path == NULL || !scan_file_begin(ed, path)) {
                 sw->files_done++;
+                if (stop_us != 0 && symwalk_now_us() >= stop_us)
+                    break;
                 continue;
             }
+        }
+        if (!scan_file_prepare_chunk(ed)) {
+            if (sw->scan_buf == NULL)
+                sw->files_done++;
+            /* One filesystem read plus one TextBuf append is the
+             * cooperative unit.  Even when the first chunk finishes well
+             * before the deadline, do not compound realloc/copy work by
+             * starting another chunk in the same budgeted turn. */
+            if (budget_us > 0)
+                return;
+            if (stop_us != 0 && symwalk_now_us() >= stop_us)
+                break;
+            continue;
         }
         scan_file_chunk(ed);
         if (sw->scan_buf == NULL)
             sw->files_done++;
-        if (budget_us > 0 &&
-            symwalk_now_us() - started >=
-                (budget_us > YEW_SYMWALK_HEADROOM_US ?
-                    budget_us - YEW_SYMWALK_HEADROOM_US : 0))
-            break;
+        if (stop_us != 0 && symwalk_now_us() >= stop_us)
+            return;
     }
     if (ed->ws.sym_ws.capped) {
         scan_file_end(ed);
@@ -513,8 +595,9 @@ void yew_symwalk_stop(Ed *ed)
     job = yew_job_find(ed, sw->job);
     if (job != NULL) {
         if (yew_job_pending(job)) {
-            if (yew_job_signal(ed, job->id, SIGTERM))
-                Vec_SymPath_push(&sw->retired_jobs, job->id);
+            if (job->state == YEW_JOB_RUNNING)
+                (void)yew_job_signal(ed, job->id, SIGTERM);
+            Vec_SymPath_push(&sw->retired_jobs, job->id);
         } else {
             yew_job_release(ed, job);
         }
@@ -531,6 +614,7 @@ void yew_symwalk_stop(Ed *ed)
     sw->files_done = 0U;
     sw->files_total = 0U;
     sw->bytes_read = 0U;
+    sw->long_files_skipped = 0U;
     sw->running = false;
     sw->capped = false;
     sw->files_init = false;

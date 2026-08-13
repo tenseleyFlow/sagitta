@@ -120,6 +120,30 @@ u64 yew_symidx_workspace_bytes(const Workspace *ws)
     return total;
 }
 
+void yew_symidx_reindex_buffers(Workspace *ws)
+{
+    size_t i;
+
+    if (ws == NULL || ws->owner == NULL)
+        return;
+    for (i = 0U; i < ws->sym_buf.len; i++) {
+        SymBufIndex *sb = &ws->sym_buf.data[i];
+        Buffer *buf = yew_ws_buf_by_id(ws->owner, sb->buf_id);
+        Vec_SymTick affected = sb->dirty.affected;
+
+        yew_symidx_clear(&sb->idx);
+        affected.len = 0U;
+        (void)memset(&sb->dirty, 0, sizeof(sb->dirty));
+        sb->dirty.affected = affected;
+        if (buf != NULL && buf->tb != NULL) {
+            sb->dirty.post_lo = LINENO(0U);
+            sb->dirty.post_hi = LINENO(
+                yew_textbuf_line_count(buf->tb) - 1U);
+            sb->dirty.pending = true;
+        }
+    }
+}
+
 void yew_symidx_free(SymIndex *idx)
 {
     if (idx == NULL)
@@ -1300,6 +1324,10 @@ void yew_symidx_pump(Ed *ed, i64 budget_us)
                 symidx_occ_remove_lines(&sb->idx, dirty, dirty->post_lo,
                                         dirty->post_hi);
             }
+            /* A cap describes the previous allocation state.  Removal,
+             * close, or workspace replacement may have freed enough of
+             * the shared budget for this rescan to make progress. */
+            sb->idx.capped = false;
             dirty->occ_base = sb->idx.occ.len;
             dirty->prepared = true;
         }
@@ -1443,8 +1471,11 @@ static bool fuzzy_possible(const char *pattern, u32 pattern_len,
     return true;
 }
 
+static bool workspace_file_has_dirty_buffer(const Workspace *ws, u32 file);
+
 static void query_index(Workspace *ws, SymIndex *idx, const SymQuery *q,
-                        u32 cursor_line, bool buffer_tier, u64 query_sig)
+                        u32 cursor_line, bool buffer_tier,
+                        bool dirty_open_buffer, u64 query_sig)
 {
     size_t i;
 
@@ -1459,7 +1490,9 @@ static void query_index(Workspace *ws, SymIndex *idx, const SymQuery *q,
         u32 seen_slot;
         bool seen;
 
-        if (entry->name >= ws->sym_seen_cap ||
+        if ((!buffer_tier && dirty_open_buffer &&
+             workspace_file_has_dirty_buffer(ws, entry->file)) ||
+            entry->name >= ws->sym_seen_cap ||
             (!q->keywords && entry->kind == YEW_SYMK_KEYWORD))
             continue;
         if (idx->sig.len == idx->e.len &&
@@ -1507,12 +1540,40 @@ static void query_index(Workspace *ws, SymIndex *idx, const SymQuery *q,
     }
 }
 
+static bool workspace_file_has_dirty_buffer(const Workspace *ws, u32 file)
+{
+    const char *entry_path;
+    size_t i;
+
+    if (file == 0U || ws == NULL || ws->owner == NULL)
+        return false;
+    entry_path = yew_intern_str(&ws->owner->interner, file);
+    if (entry_path == NULL)
+        return false;
+    for (i = 0U; i < ws->sym_buf.len; i++) {
+        const SymBufIndex *sb = &ws->sym_buf.data[i];
+        const Buffer *buf;
+        const char *path;
+
+        if (!sb->dirty.pending)
+            continue;
+        buf = yew_ws_buf_by_id(ws->owner, sb->buf_id);
+        if (buf == NULL)
+            continue;
+        path = buf->meta.realpath != NULL ? buf->meta.realpath : buf->path;
+        if (path != NULL && strcmp(path, entry_path) == 0)
+            return true;
+    }
+    return false;
+}
+
 u32 yew_symidx_query(Workspace *ws, const SymQuery *q, SymHit *out, u32 max)
 {
     Buffer *current;
     u32 cursor_line = 0U;
     u32 limit;
     u64 query_sig;
+    bool dirty_open_buffer = false;
     size_t i;
 
     if (ws == NULL || ws->owner == NULL || q == NULL || out == NULL ||
@@ -1524,10 +1585,19 @@ u32 yew_symidx_query(Workspace *ws, const SymQuery *q, SymHit *out, u32 max)
     ws->sym_query.len = 0U;
     query_sig = sym_signature((const u8 *)q->stem, q->slen);
     sym_seen_prepare(ws);
-    for (i = 0U; i < ws->sym_buf.len; i++)
+    for (i = 0U; i < ws->sym_buf.len; i++) {
+        if (ws->sym_buf.data[i].dirty.pending) {
+            dirty_open_buffer = true;
+            continue;
+        }
         query_index(ws, &ws->sym_buf.data[i].idx, q, cursor_line, true,
-                    query_sig);
-    query_index(ws, &ws->sym_ws, q, cursor_line, false, query_sig);
+                    false, query_sig);
+    }
+    /* A dirty open buffer is authoritative over its on-disk workspace
+     * record.  query_index suppresses that file until replacement is
+     * complete rather than offering bytes the user has already deleted. */
+    query_index(ws, &ws->sym_ws, q, cursor_line, false,
+                dirty_open_buffer, query_sig);
     yew_sort_stable(ws->sym_query.data, ws->sym_query.len,
                     sizeof(*ws->sym_query.data), symhit_cmp,
                     &ws->owner->interner);

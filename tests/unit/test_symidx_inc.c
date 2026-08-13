@@ -72,6 +72,20 @@ static void inc_delete(Ed *ed, u64 lo, u64 hi)
     yew_ed_finish_edit(ed, &ec);
 }
 
+static bool inc_has(const SymIndex *idx, const Interner *intern,
+                    const char *name)
+{
+    size_t i;
+
+    for (i = 0U; i < idx->e.len; i++) {
+        const char *got = yew_intern_str(intern, idx->e.data[i].name);
+
+        if (got != NULL && strcmp(got, name) == 0)
+            return true;
+    }
+    return false;
+}
+
 static void inc_run_seed(u32 seed)
 {
     static const u8 initial[] =
@@ -145,5 +159,66 @@ void test_symidx_incremental_offset_zero_ten_thousand_lines(void)
     inc_drain(&ed);
     inc_insert(&ed, 0U, "prefix_symbol\n");
     inc_assert_full_rescan(&ed);
+    yew_ed_free(&ed);
+}
+
+void test_symidx_partial_rescan_never_exposes_deleted_symbol(void)
+{
+    static const char first[] = "deleted_symbol\n";
+    static const char filler[] = "ordinary_filler\n";
+    const size_t lines = 600U;
+    const size_t first_len = sizeof(first) - 1U;
+    const size_t filler_len = sizeof(filler) - 1U;
+    const size_t len = first_len + (lines - 1U) * filler_len;
+    u8 *bytes = yew_xmalloc(len);
+    SymQuery query = {"deleted_symbol", 14U, 0U, BYTEOFF(first_len),
+                      YEW_SYM_QUERY_MAX, true};
+    SymHit hits[8];
+    Ed ed;
+    size_t i;
+
+    (void)memcpy(bytes, first, first_len);
+    for (i = 1U; i < lines; i++)
+        (void)memcpy(bytes + first_len + (i - 1U) * filler_len,
+                     filler, filler_len);
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_memory(&ed, bytes, len, "symidx-partial.txt"));
+    free(bytes);
+    inc_drain(&ed);
+    query.buf_id = ed.buffer.id;
+    YEW_ASSERT_EQ_U64(yew_symidx_query(&ed.ws, &query, hits,
+                                      YEW_ARRAY_LEN(hits)), 1U);
+
+    inc_delete(&ed, 0U, first_len);
+    YEW_ASSERT(ed.ws.sym_buf.len != 0U);
+    ed.ws.sym_buf.data[0].dirty.post_hi = LINENO(400U);
+    yew_symidx_pump(&ed, 1);
+    YEW_ASSERT(yew_symidx_pending(&ed));
+    YEW_ASSERT_EQ_U64(yew_symidx_query(&ed.ws, &query, hits,
+                                      YEW_ARRAY_LEN(hits)), 0U);
+    inc_drain(&ed);
+    YEW_ASSERT_EQ_U64(yew_symidx_query(&ed.ws, &query, hits,
+                                      YEW_ARRAY_LEN(hits)), 0U);
+    yew_ed_free(&ed);
+}
+
+void test_symidx_dirty_rescan_retries_after_a_memory_cap(void)
+{
+    static const u8 initial[] = "alpha_symbol\n";
+    SymIndex *idx;
+    Ed ed;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_memory(&ed, initial, sizeof(initial) - 1U,
+                                  "symidx-retry.txt"));
+    inc_drain(&ed);
+    idx = yew_symidx_buffer(&ed.ws, ed.buffer.id, false);
+    YEW_ASSERT_NOT_NULL(idx);
+    idx->capped = true;
+    inc_insert(&ed, yew_textbuf_len(ed.buffer.tb), "beta_symbol\n");
+    inc_drain(&ed);
+    YEW_ASSERT(!idx->capped);
+    YEW_ASSERT(inc_has(idx, &ed.interner, "alpha_symbol"));
+    YEW_ASSERT(inc_has(idx, &ed.interner, "beta_symbol"));
     yew_ed_free(&ed);
 }
