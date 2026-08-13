@@ -4743,9 +4743,13 @@ static void case_s41_5_markdown_embed(PtyCtx *c)
     ptc_check(c, n > 0 && (size_t)n < sizeof(cache) &&
                      access(cache, F_OK) == 0,
               "markdown embed did not load its JavaScript guest");
+    ptc_check(c, raw_contains_since(c, 0U, "\x1b[38;2;"),
+              "Markdown guest render did not emit truecolour SGR");
 
+    /* The grid pins the final host/guest boundary.  Raw SGR chronology is
+     * scheduler history because the guest definition loads asynchronously. */
     c->vt.sync_pairs_unstable = true;
-    ptc_snapshot_sgr(c, c->test->name);
+    ptc_snapshot(c, c->test->name);
     force_quit(c);
 }
 
@@ -4812,6 +4816,7 @@ static void case_s41_5_interactive_fence_pump(PtyCtx *c)
     VtCell guest;
     char path[256];
     size_t pending_end;
+    size_t render_at;
     u32 before;
     u32 line;
 
@@ -4828,6 +4833,7 @@ static void case_s41_5_interactive_fence_pump(PtyCtx *c)
     s41_open_fixture(c, theme, path);
     s18_settle_after_keys(c, "i");
     before = c->vt.nsync_pairs;
+    render_at = c->raw.len;
 
     /* One input drain inserts a complete local fence and asks for status.
      * Its budget may paint the safe host fallback, but may not synchronously
@@ -4865,9 +4871,15 @@ static void case_s41_5_interactive_fence_pump(PtyCtx *c)
     ptc_check(c, strstr((const char *)screen.data, "embed_pending=0") != NULL,
               "embed pending status did not clear after idle pump");
     bytebuf_free(&screen);
+    ptc_check(c, raw_contains_since(c, render_at, "\x1b[38;2;"),
+              "interactive guest repaint did not emit truecolour SGR");
 
+    /* The decoded grid pins every final cell and the explicit check above
+     * pins truecolour transport.  The chronological SGR list is not stable:
+     * the asynchronous corrective frame can legitimately reuse one more or
+     * one fewer prior terminal attribute while reaching the same grid. */
     c->vt.sync_pairs_unstable = true;
-    ptc_snapshot_sgr(c, c->test->name);
+    ptc_snapshot(c, c->test->name);
     force_quit(c);
     (void)unlink(path);
 }
