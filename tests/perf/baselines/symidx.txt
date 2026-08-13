@@ -1,5 +1,5 @@
 # case median_ns p99_ns
-pump_insert_10kloc 2177969 3484316
-walk_pump_100kloc 8893857 17097272
-walk_typing_100kloc 9278389 17612098
-query_15k 784978 1246268
+pump_insert_10kloc 230305 291749
+walk_pump_100kloc 1290336 1346213
+walk_typing_100kloc 1378871 1443821
+query_15k 116520 147497
