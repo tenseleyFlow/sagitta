@@ -43,6 +43,7 @@ typedef struct {
     u64 p99;
     u64 max;
     u64 rss;
+    bool scalar;
 } Baseline;
 
 typedef struct {
@@ -292,14 +293,20 @@ static bool baselines_read(const char *path, Baselines *set)
         (void)memset(&value, 0, sizeof(value));
         count = sscanf(line, "%79s %llu %llu %llu %llu", value.name,
                        &p50, &p99, &max, &rss);
-        value.p50 = (u64)p50;
-        value.p99 = (u64)p99;
-        value.max = (u64)max;
-        value.rss = (u64)rss;
-        if (count == 4) {
-            value.rss = value.max;
-            value.max = value.p99;
-        } else if (count != 5) {
+        if (count == 2) {
+            value.p50 = (u64)p50;
+            value.scalar = true;
+        } else if (count == 4) {
+            value.p50 = (u64)p50;
+            value.p99 = (u64)p99;
+            value.max = (u64)p99;
+            value.rss = (u64)max;
+        } else if (count == 5) {
+            value.p50 = (u64)p50;
+            value.p99 = (u64)p99;
+            value.max = (u64)max;
+            value.rss = (u64)rss;
+        } else {
             (void)fprintf(stderr, "perf_textbuf: malformed baseline: %s",
                           line);
             (void)fclose(file);
@@ -360,6 +367,7 @@ static bool baselines_update(const char *path, const char *runner_id,
         baseline->p99 = result->p99;
         baseline->max = result->max;
         baseline->rss = result->rss;
+        baseline->scalar = false;
     }
     file = fopen(path, "wb");
     if (file == NULL)
@@ -378,12 +386,19 @@ static bool baselines_update(const char *path, const char *runner_id,
                     "# Informational: all-newline input is exempt from the "
                     "1.6x RSS gate (s07).\n") < 0)
             goto fail;
-        if (fprintf(file, "%-28s %14llu %14llu %14llu %14llu\n",
-                    baseline->name, (unsigned long long)baseline->p50,
-                    (unsigned long long)baseline->p99,
-                    (unsigned long long)baseline->max,
-                    (unsigned long long)baseline->rss) < 0)
+        if (baseline->scalar) {
+            if (fprintf(file, "%-36s %14llu\n", baseline->name,
+                        (unsigned long long)baseline->p50) < 0)
+                goto fail;
+        } else if (fprintf(file,
+                           "%-28s %14llu %14llu %14llu %14llu\n",
+                           baseline->name,
+                           (unsigned long long)baseline->p50,
+                           (unsigned long long)baseline->p99,
+                           (unsigned long long)baseline->max,
+                           (unsigned long long)baseline->rss) < 0) {
             goto fail;
+        }
     }
     return fclose(file) == 0;
 
