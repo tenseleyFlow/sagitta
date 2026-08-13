@@ -4,6 +4,7 @@
 #include "harness.h"
 
 #include <poll.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -113,6 +114,26 @@ static bool run_framed(Ed *ed, u32 id)
     }
 }
 
+static bool wait_for_message(Ed *ed, u32 id, TransportCapture *capture)
+{
+    i64 start = yew_now_ms();
+
+    while (capture->messages == 0U) {
+        struct pollfd pfd[YEW_JOB_MAX * 4U];
+        u32 n = 0U;
+
+        if (yew_job_find(ed, id) == NULL)
+            return false;
+        yew_job_collect_fds(ed, pfd, &n);
+        (void)poll(pfd, (nfds_t)n, 20);
+        yew_job_pump(ed, pfd, n);
+        yew_job_reap(ed);
+        if (yew_now_ms() - start > 1000)
+            return false;
+    }
+    return true;
+}
+
 static u32 spawn_fakelsp(Ed *ed, const char *mode, TransportCapture *capture,
                          char *err, size_t errsz)
 {
@@ -204,10 +225,15 @@ void test_lsp_transport_bypasses_text_safe_prefix(void)
     bytebuf_init(&capture.bodies);
     yew_ed_init(&ed);
     YEW_ASSERT(yew_ed_open_scratch(&ed));
-    id = spawn_fakelsp(&ed, "onebyte", &capture, err, sizeof(err));
+    id = spawn_fakelsp(&ed, "live", &capture, err, sizeof(err));
     YEW_ASSERT(id != 0U);
-    YEW_ASSERT(run_framed(&ed, id));
+    YEW_ASSERT(wait_for_message(&ed, id, &capture));
+    /* The helper keeps stdout open after the complete frame.  A text-safe
+     * path retains the last grapheme until EOF, so the assertion above
+     * times out when somebody accidentally reintroduces safe-prefixing. */
     YEW_ASSERT_EQ_U64(capture.messages, 1U);
+    YEW_ASSERT(yew_job_signal(&ed, id, SIGTERM));
+    YEW_ASSERT(run_framed(&ed, id));
     yew_ed_free(&ed);
     bytebuf_free(&capture.bodies);
 }

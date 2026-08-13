@@ -3,6 +3,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include <errno.h>
+#include <poll.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -131,6 +132,8 @@ int main(int argc, char **argv)
         goto fail;
     }
     free(request);
+    if (strcmp(mode, "live") == 0)
+        (void)poll(NULL, 0U, 3000);
     return 0;
 fail:
     free(request);
