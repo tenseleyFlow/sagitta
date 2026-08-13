@@ -24,7 +24,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
   find                         find.file                                        
   fl.eval                      Evaluate Fletch in the persistent editor runtime 
   file.new                     Create an empty buffer, optionally naming its fil
-  file.next                    Walk to the next open file                   1/54
+  file.next                    Walk to the next open file                   1/57
 :fl                                                                             
 --- style
 AAAABACCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCCC
