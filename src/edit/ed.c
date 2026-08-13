@@ -682,6 +682,9 @@ void yew_ed_free(Ed *ed)
     yew_picker_close(ed, false);
     yew_pickers_dispose();
     yew_cmdline_dispose(ed);
+    /* The symbol walk borrows a job slot and must release its filesystem
+     * traversal before the generic job table is dismantled. */
+    yew_symwalk_dispose(ed);
     /* Jobs die with the process (never persisted, s25); kill and reap
      * before the buffers they append into go away. */
     yew_jobs_free(ed);

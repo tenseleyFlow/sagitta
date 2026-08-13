@@ -37,6 +37,7 @@
 #include "util/strmap.h"
 #include "ws/state.h"
 #include "ws/symidx.h"
+#include "ws/symwalk.h"
 #include "ws/trust_prompt.h"
 
 typedef enum {
@@ -91,6 +92,7 @@ typedef struct Workspace {
     size_t sym_seen_cap;
     u32 sym_seen_tick;
     u32 sym_rr;
+    SymWalk sym_walk;
 } Workspace;
 
 struct Ed {
