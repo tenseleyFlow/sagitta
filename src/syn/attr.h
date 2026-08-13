@@ -64,4 +64,6 @@ typedef enum SynAttr {
 _Static_assert(YEW_ATTR__COUNT <= 64, "attr id must fit 6 bits");
 _Static_assert(YEW_ATTR__COUNT == 54, "semantic attr table is closed for 1.0");
 
+u8 yew_syn_attr_parent(u8 attr);
+
 #endif
