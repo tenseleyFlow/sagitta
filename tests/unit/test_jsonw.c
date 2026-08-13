@@ -139,6 +139,48 @@ void test_json_writer_tree_roundtrip(void)
     }
 }
 
+void test_json_writer_fixture_determinism(void)
+{
+    static const char path[] =
+        "tests/unit/fixtures/lsp/writer-corpus.json";
+    Bytebuf fixture;
+    Bytebuf first;
+    Bytebuf second;
+    Arena arena;
+    JsonErr err;
+    JsonValue *root;
+    JsonW writer;
+    FILE *fp;
+    int ch;
+
+    bytebuf_init(&fixture);
+    bytebuf_init(&first);
+    bytebuf_init(&second);
+    fp = fopen(path, "rb");
+    YEW_ASSERT_NOT_NULL(fp);
+    while ((ch = fgetc(fp)) != EOF)
+        bytebuf_push_u8(&fixture, (u8)ch);
+    YEW_ASSERT_EQ_I64(fclose(fp), 0);
+    if (fixture.len != 0U && fixture.data[fixture.len - 1U] == (u8)'\n')
+        fixture.len--;
+
+    arena_init(&arena);
+    root = yew_json_parse(&arena, fixture.data, fixture.len, &err);
+    YEW_ASSERT_NOT_NULL(root);
+    yew_jsonw_init(&writer, &first);
+    yew_jsonw_value(&writer, root);
+    yew_jsonw_init(&writer, &second);
+    yew_jsonw_value(&writer, root);
+    YEW_ASSERT_EQ_U64(first.len, fixture.len);
+    YEW_ASSERT_EQ_MEM(first.data, fixture.data, fixture.len);
+    YEW_ASSERT_EQ_U64(second.len, first.len);
+    YEW_ASSERT_EQ_MEM(second.data, first.data, first.len);
+    arena_free_all(&arena);
+    bytebuf_free(&fixture);
+    bytebuf_free(&first);
+    bytebuf_free(&second);
+}
+
 static int writer_bug_exit(u32 action)
 {
     pid_t child;

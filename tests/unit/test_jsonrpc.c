@@ -301,3 +301,16 @@ void test_jsonrpc_reply_shapes(void)
     arena_free_all(&arena);
     yew_rpc_conn_free(&c);
 }
+
+void test_jsonrpc_ids_stop_at_signed_wire_limit(void)
+{
+    RpcConn c;
+
+    yew_rpc_conn_init(&c);
+    c.next_id = (u64)INT64_MAX;
+    YEW_ASSERT_EQ_U64(yew_rpc_call(&c, "last", NULL, 0U, NULL),
+                      (u64)INT64_MAX);
+    YEW_ASSERT_EQ_U64(yew_rpc_call(&c, "overflow", NULL, 0U, NULL), 0U);
+    YEW_ASSERT_EQ_U64(c.npending, 1U);
+    yew_rpc_conn_free(&c);
+}

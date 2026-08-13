@@ -193,3 +193,38 @@ void test_json_parse_duplicate_keys_and_depth(void)
     arena_free_all(&a);
     bytebuf_free(&doc);
 }
+
+void test_json_parse_size_and_node_limits(void)
+{
+    static const u8 unused = 0u;
+    Arena a;
+    JsonErr err;
+    Bytebuf doc;
+    size_t i;
+
+    arena_init(&a);
+    YEW_ASSERT_NULL(yew_json_parse(&a, &unused,
+                                   (u64)YEW_JSON_MAX_BYTES + 1u, &err));
+    YEW_ASSERT_EQ_STR(err.msg, "document exceeds 64 MiB");
+    YEW_ASSERT_NULL(a.head);
+    arena_free_all(&a);
+
+    bytebuf_init(&doc);
+    bytebuf_reserve(&doc, (size_t)YEW_JSON_MAX_NODES * 2u + 1u);
+    doc.data[0] = (u8)'[';
+    for (i = 0u; i < (size_t)YEW_JSON_MAX_NODES; i++) {
+        doc.data[i * 2u + 1u] = (u8)'0';
+        if (i + 1u < (size_t)YEW_JSON_MAX_NODES)
+            doc.data[i * 2u + 2u] = (u8)',';
+    }
+    doc.data[(size_t)YEW_JSON_MAX_NODES * 2u] = (u8)']';
+    doc.len = (size_t)YEW_JSON_MAX_NODES * 2u + 1u;
+
+    arena_init(&a);
+    YEW_ASSERT_NULL(yew_json_parse(&a, doc.data, doc.len, &err));
+    YEW_ASSERT_EQ_STR(err.msg, "too many JSON nodes");
+    YEW_ASSERT_EQ_U64(err.line, 1u);
+    YEW_ASSERT(err.col > 1u);
+    arena_free_all(&a);
+    bytebuf_free(&doc);
+}

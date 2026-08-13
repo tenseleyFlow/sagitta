@@ -407,6 +407,8 @@ FUZZ_RECORD_OBJ := $(BUILD)/tests/fuzz/fuzz_record.o
 FUZZ_SYN_OBJ := $(BUILD)/tests/fuzz/fuzz_syn.o
 FUZZ_SYN_DEF_OBJ := $(BUILD)/tests/fuzz/fuzz_syn_def.o
 FUZZ_SYMIDX_OBJ := $(BUILD)/tests/fuzz/fuzz_symidx.o
+FUZZ_JSON_OBJ := $(BUILD)/tests/fuzz/fuzz_json.o
+FUZZ_JSONRPC_OBJ := $(BUILD)/tests/fuzz/fuzz_jsonrpc.o
 RE_REF_OBJ := $(BUILD)/tests/fuzz/re_ref.o
 FUZZ_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 FUZZ_LINK_OBJ := $(FUZZ_CORE_OBJ) $(FUZZ_LIB_OBJ)
@@ -488,7 +490,8 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
                 $(PERF_FLETCH_OBJ) $(PERF_RECORD_OBJ) $(PERF_BATCH_OBJ) \
                 $(PERF_SCRIPT_SUITE_OBJ) \
                 $(FUZZ_RECORD_OBJ) $(FUZZ_SYN_OBJ) $(FUZZ_SYN_DEF_OBJ) \
-                $(FUZZ_SYMIDX_OBJ) $(PERF_SYN_OBJ) $(PERF_SYMIDX_OBJ) \
+                $(FUZZ_SYMIDX_OBJ) $(FUZZ_JSON_OBJ) $(FUZZ_JSONRPC_OBJ) \
+                $(PERF_SYN_OBJ) $(PERF_SYMIDX_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) \
                 $(TORTURE_BATCH_OBJ) $(FAULTSHIM) $(FAKELSP)))
@@ -507,7 +510,7 @@ endif
         test-script-determinism test-script-budget test-pty fuzz \
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
         fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
-        fuzz-symidx \
+        fuzz-symidx fuzz-json fuzz-jsonrpc \
         fuzz-syn-long \
         fuzz-syn-line-long fuzz-syn-edit-long \
         test-record-corpus \
@@ -664,6 +667,14 @@ $(BUILD)/fuzz_mouse: $(FUZZ_LINK_OBJ) $(FUZZ_MOUSE_OBJ)
 $(BUILD)/fuzz_symidx: $(FUZZ_LINK_OBJ) $(FUZZ_SYMIDX_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_SYMIDX_OBJ) $(LDLIBS)
+
+$(BUILD)/fuzz_json: $(FUZZ_LINK_OBJ) $(FUZZ_JSON_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
+		$(FUZZ_JSON_OBJ) $(LDLIBS)
+
+$(BUILD)/fuzz_jsonrpc: $(FUZZ_LINK_OBJ) $(FUZZ_JSONRPC_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
+		$(FUZZ_JSONRPC_OBJ) $(LDLIBS)
 
 $(BUILD)/gen-bigfile: $(GEN_BIGFILE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(GEN_BIGFILE_OBJ) $(LDLIBS)
@@ -854,7 +865,7 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
       $(BUILD)/fuzz_flapi \
       fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse \
       fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
-      fuzz-symidx
+      fuzz-symidx fuzz-json fuzz-jsonrpc
 	$(BUILD)/fuzz_utf8 --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_grapheme --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_input --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
@@ -937,6 +948,12 @@ fuzz-cmdparse: $(BUILD)/fuzz_cmdparse
 
 fuzz-record: $(BUILD)/fuzz_record
 	$(BUILD)/fuzz_record --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+
+fuzz-json: $(BUILD)/fuzz_json
+	$(BUILD)/fuzz_json --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+
+fuzz-jsonrpc: $(BUILD)/fuzz_jsonrpc
+	$(BUILD)/fuzz_jsonrpc --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 
 test-record-corpus: $(BUILD)/fuzz_record
 	$(BUILD)/fuzz_record --corpus-only
@@ -1489,6 +1506,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew
          $(FUZZ_SYN_OBJ:.o=.d) \
          $(FUZZ_SYN_DEF_OBJ:.o=.d) \
          $(FUZZ_SYMIDX_OBJ:.o=.d) \
+         $(FUZZ_JSON_OBJ:.o=.d) $(FUZZ_JSONRPC_OBJ:.o=.d) \
          $(FUZZ_CMDPARSE_OBJ:.o=.d) $(FUZZ_RECOMPILE_OBJ:.o=.d) \
          $(FUZZ_REDIFF_OBJ:.o=.d) $(RE_REF_OBJ:.o=.d) \
          $(PTY_ORACLE_OBJ:.o=.d) \

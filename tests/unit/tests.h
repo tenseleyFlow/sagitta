@@ -739,12 +739,14 @@ void test_json_parse_values_and_accessors(void);
 void test_json_parse_escapes_and_surrogates(void);
 void test_json_parse_strict_rejections(void);
 void test_json_parse_duplicate_keys_and_depth(void);
+void test_json_parse_size_and_node_limits(void);
 void test_json_number_policy(void);
 void test_json_number_rejections(void);
 void test_json_writer_scalars_and_escapes(void);
 void test_json_writer_order_and_nested_shape(void);
 void test_json_writer_raw_byte_roundtrip(void);
 void test_json_writer_tree_roundtrip(void);
+void test_json_writer_fixture_determinism(void);
 void test_json_writer_structure_bugs(void);
 void test_jsonrpc_frame_every_split(void);
 void test_jsonrpc_frame_one_byte_chunks(void);
@@ -758,6 +760,7 @@ void test_jsonrpc_call_dispatch_and_string_echo(void);
 void test_jsonrpc_pending_cap_timeout_and_cancel(void);
 void test_jsonrpc_reply_shapes(void);
 void test_jsonrpc_connection_kills_eight_malformed_messages(void);
+void test_jsonrpc_ids_stop_at_signed_wire_limit(void);
 
 void test_job_torture_spawn_kill_cycles(void);
 

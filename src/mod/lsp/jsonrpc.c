@@ -498,7 +498,7 @@ u64 yew_rpc_call(RpcConn *c, const char *method, const u8 *params,
     u64 id;
 
     if (c == NULL || method == NULL || c->npending >= YEW_RPC_MAX_PENDING ||
-        c->next_id == 0U)
+        c->next_id == 0U || c->next_id > (u64)INT64_MAX)
         return 0U;
     id = c->next_id++;
     slot = find_slot(c, id, true);
