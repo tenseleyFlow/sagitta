@@ -513,10 +513,12 @@ void yew_symwalk_pump(Ed *ed, i64 budget_us)
             break;
         did_scan = true;
     }
-    if (ed->ws.sym_ws.capped)
+    if (ed->ws.sym_ws.capped) {
         sw->capped = true;
-    if (sw->next >= sw->queue.len || sw->capped)
         sw->running = false;
+    } else if (sw->next >= sw->queue.len) {
+        sw->running = false;
+    }
 }
 
 void yew_symwalk_stop(Ed *ed)
