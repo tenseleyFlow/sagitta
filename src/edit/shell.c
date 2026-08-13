@@ -91,13 +91,11 @@ static void fmt_elapsed(char *out, size_t n, i64 ms)
 
 /* Appends straight through the edit chokepoint so marks and cursors track,
  * but outside any undo transaction: a job buffer is YEW_BUF_NOUNDO. */
-static void buf_append_raw(Ed *ed, Buffer *b, const u8 *bytes, u64 len)
+static EditCtx buf_raw_edit_ctx(Ed *ed, Buffer *b)
 {
     EditCtx ec = {0};
     Win *w = ed->win != NULL && ed->win->buf == b ? ed->win : NULL;
 
-    if (b == NULL || b->tb == NULL || len == 0U)
-        return;
     ec.tb = b->tb;
     ec.marks = b->marks;
     ec.cset = w != NULL ? &w->cs : NULL;
@@ -107,6 +105,19 @@ static void buf_append_raw(Ed *ed, Buffer *b, const u8 *bytes, u64 len)
      * file-backed and demands a journal path, which a scratch buffer has
      * no business owning — there is no file here to protect. */
     ec.meta = NULL;
+    ec.now_ms = ed->now_ms;
+    ec.ed = ed;
+    ec.buffer = b;
+    return ec;
+}
+
+static void buf_append_raw(Ed *ed, Buffer *b, const u8 *bytes, u64 len)
+{
+    EditCtx ec;
+
+    if (b == NULL || b->tb == NULL || len == 0U)
+        return;
+    ec = buf_raw_edit_ctx(ed, b);
     (void)yew_edit_insert(&ec, BYTEOFF(yew_textbuf_len(b->tb)), bytes, len);
 }
 
@@ -533,6 +544,8 @@ YewFilterResult yew_shell_filter(Ed *ed, Win *w, Span region,
 static void jobs_table_render(Ed *ed, Buffer *b)
 {
     Bytebuf out;
+    EditCtx ec;
+    u64 old_len;
     u32 i;
 
     bytebuf_init(&out);
@@ -559,10 +572,15 @@ static void jobs_table_render(Ed *ed, Buffer *b)
                        (unsigned long long)(j->bytes_out + j->bytes_err),
                        j->label);
     }
-    /* Replace wholesale: the table is derived state, so diffing it would
-     * buy nothing but a chance to disagree with the job list. */
-    yew_textbuf_free(b->tb);
-    b->tb = yew_textbuf_from_bytes(out.data, out.len);
+    /* Replace wholesale through the edit chokepoint.  The table is derived
+     * state, but its syntax cache, symbol index, marks, and visible cursor
+     * still have to observe the replacement. */
+    ec = buf_raw_edit_ctx(ed, b);
+    old_len = yew_textbuf_len(b->tb);
+    if (old_len != 0U)
+        (void)yew_edit_delete(&ec, (Span){0U, old_len});
+    if (out.len != 0U)
+        (void)yew_edit_insert(&ec, BYTEOFF(0U), out.data, (u64)out.len);
     bytebuf_free(&out);
 }
 

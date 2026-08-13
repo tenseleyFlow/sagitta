@@ -16,6 +16,7 @@
 #include "edit/ed.h"
 #include "edit/job.h"
 #include "edit/loop.h"
+#include "ws/symidx.h"
 
 static void job_fixture(Ed *ed)
 {
@@ -90,6 +91,28 @@ static u32 spawn_argv(Ed *ed, char **argv, char *err, size_t errsz)
     spec.argv = argv;
     spec.sink = YEW_SINK_COLLECT;
     return yew_job_spawn(ed, &spec, err, errsz);
+}
+
+void test_job_buffer_append_updates_syntax(void)
+{
+    Ed ed;
+    YewJob job = {0};
+    Buffer *buffer;
+
+    job_fixture(&ed);
+    buffer = ed.win->buf;
+    job.buf = buffer;
+    YEW_ASSERT_EQ_U64(buffer->syn.entry.len,
+                      yew_textbuf_line_count(buffer->tb));
+
+    yew_job_buffer_append(&ed, &job, (const u8 *)"one\ntwo\n", 8U,
+                          false);
+
+    YEW_ASSERT_EQ_U64(yew_textbuf_line_count(buffer->tb), 3U);
+    YEW_ASSERT_EQ_U64(buffer->syn.entry.len,
+                      yew_textbuf_line_count(buffer->tb));
+    YEW_ASSERT(yew_symidx_pending(&ed));
+    yew_ed_free(&ed);
 }
 
 /* Counts our open descriptors; /proc when available, else an fcntl sweep. */

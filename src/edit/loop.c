@@ -24,6 +24,13 @@
 #include "ws/symidx.h"
 #include "ws/symwalk.h"
 
+enum {
+    /* Background indexing must not race the next key after a paint.  The
+     * grace period is short enough to be invisible at rest and long enough
+     * for a continuing input burst to reach poll first. */
+    YEW_BACKGROUND_IDLE_MS = 12
+};
+
 static const char *loop_getenv(const char *name)
 {
     return getenv(name);
@@ -215,6 +222,23 @@ static i64 absolute_deadline(i64 at_ms, i64 now_ms)
     return at_ms - now_ms;
 }
 
+static i64 background_deadline(const Ed *ed, i64 now_ms)
+{
+    i64 ready_ms;
+
+    if (!yew_symidx_pending(ed) &&
+        !(ed->ws.sym_walk.running && ed->ws.sym_walk.job == 0U))
+        return -1;
+    if (ed->fl_idle_since_ms < 0)
+        return 0;
+    ready_ms = ed->fl_idle_since_ms;
+    if (ready_ms <= INT64_MAX - YEW_BACKGROUND_IDLE_MS)
+        ready_ms += YEW_BACKGROUND_IDLE_MS;
+    else
+        ready_ms = INT64_MAX;
+    return absolute_deadline(ready_ms, now_ms);
+}
+
 int yew_loop_deadline(const Ed *ed, i64 now_ms)
 {
     i64 deadline;
@@ -238,10 +262,6 @@ int yew_loop_deadline(const Ed *ed, i64 now_ms)
      * for what a mismatched pair does. */
     if (yew_cmdline_comp_scanning(ed))
         return 0;
-    if (yew_symidx_pending(ed))
-        return 0;
-    if (ed->ws.sym_walk.running && ed->ws.sym_walk.job == 0U)
-        return 0;
     /* Syntax propagation is sliced on a 16 ms idle cadence.  It is work,
      * but unlike picker scans it must not turn an idle editor into a busy
      * loop while a million-line wave is settling. */
@@ -249,6 +269,7 @@ int yew_loop_deadline(const Ed *ed, i64 now_ms)
         deadline = 16;
     else
         deadline = -1;
+    deadline = deadline_min(deadline, background_deadline(ed, now_ms));
     deadline = deadline_min(
         deadline, absolute_deadline(yew_dispatch_deadline(ed), now_ms));
     deadline = deadline_min(deadline,
@@ -461,10 +482,15 @@ int yew_loop_run(Ed *ed)
         /* The completion scan is sliced for the same reason and drains
          * in the same place. */
         (void)yew_cmdline_comp_tick(ed);
-        yew_symidx_pump(ed, had_input ? YEW_SYMIDX_BURST_US :
-                                         YEW_SYMIDX_FULL_US);
-        yew_symwalk_pump(ed, had_input ? YEW_SYMWALK_BUDGET_US / 2 :
-                                        YEW_SYMWALK_BUDGET_US);
+        /* Symbol indexing is stale-safe, so preserve input-to-paint latency
+         * by waiting for a short idle window.  The deadline above wakes the
+         * loop even when no further event arrives. */
+        if (!had_input &&
+            (ed->fl_idle_since_ms < 0 ||
+             now - ed->fl_idle_since_ms >= YEW_BACKGROUND_IDLE_MS)) {
+            yew_symidx_pump(ed, YEW_SYMIDX_FULL_US);
+            yew_symwalk_pump(ed, YEW_SYMWALK_BUDGET_US);
+        }
         yew_mouse_tick(ed, now);
         /* Coalesced events run after input and deadline work, never inside
          * the keypress path.  A paste therefore produces one callback. */

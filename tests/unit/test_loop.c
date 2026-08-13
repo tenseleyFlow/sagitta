@@ -141,6 +141,24 @@ void test_loop_deadline_clamps_poll_range(void)
     loop_ed_free(&ed);
 }
 
+void test_loop_background_work_yields_after_input(void)
+{
+    Ed ed;
+
+    loop_ed_init(&ed);
+    ed.ws.sym_walk.running = true;
+    ed.ws.sym_walk.job = 0U;
+    ed.fl_idle_since_ms = 1000;
+
+    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1000), 12);
+    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1011), 1);
+    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1012), 0);
+
+    ed.fl_idle_since_ms = -1;
+    YEW_ASSERT_EQ_I64(yew_loop_deadline(&ed, 1012), 0);
+    loop_ed_free(&ed);
+}
+
 void test_timer_heap_stable_equal_deadlines(void)
 {
     TimerHeap timers;
