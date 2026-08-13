@@ -448,6 +448,39 @@ static bool is_printable(const Key *k)
            (k->mods & command) == 0U;
 }
 
+static void compl_expect_stem_edit(Win *w, const Key *k)
+{
+    ComplMenu *menu;
+    Cursor *cursor;
+    u64 next_hi;
+
+    if (w == NULL || k == NULL || w->buf == NULL || w->buf->tb == NULL ||
+        w->cs.curs.len != 1U || w->cs.primary >= w->cs.curs.len)
+        return;
+    menu = &w->compl;
+    cursor = &w->cs.curs.data[w->cs.primary];
+    if (w->buf->tb->gen != menu->buf_gen ||
+        cursor->pos.v != menu->replace.hi || menu->buf_gen == UINT64_MAX)
+        return;
+    next_hi = menu->replace.hi;
+    if (is_printable(k)) {
+        if ((u64)k->ntext > UINT64_MAX - next_hi)
+            return;
+        next_hi += (u64)k->ntext;
+    } else if (k->code == YEW_KEY_BACKSPACE) {
+        if (next_hi <= menu->replace.lo)
+            return;
+        next_hi = yew_grapheme_prev_boundary(w->buf->tb,
+                                              BYTEOFF(next_hi)).v;
+        if (next_hi < menu->replace.lo)
+            return;
+    } else {
+        return;
+    }
+    menu->replace.hi = next_hi;
+    menu->buf_gen++;
+}
+
 bool yew_compl_key(Ed *ed, Win *w, const Key *k)
 {
     bool ctrl;
@@ -492,8 +525,10 @@ bool yew_compl_key(Ed *ed, Win *w, const Key *k)
         ed->full_damage = true;
         return true;
     }
-    if (is_printable(k) || k->code == YEW_KEY_BACKSPACE)
+    if (is_printable(k) || k->code == YEW_KEY_BACKSPACE) {
+        compl_expect_stem_edit(w, k);
         return false;
+    }
     yew_compl_close_result(ed, w, false);
     return false;
 }
@@ -509,14 +544,13 @@ void yew_compl_after_key(Ed *ed, Win *w)
         w->buf == NULL || w->buf->tb == NULL)
         return;
     menu = &w->compl;
-    if (!compl_stem(w, &replace, &stem, &slen) || slen == 0U ||
-        replace.lo != menu->replace.lo) {
+    if (w->buf->tb->gen != menu->buf_gen ||
+        !compl_stem(w, &replace, &stem, &slen) || slen == 0U ||
+        replace.lo != menu->replace.lo || replace.hi != menu->replace.hi) {
         free(stem);
         yew_compl_close_result(ed, w, false);
         return;
     }
-    menu->replace = replace;
-    menu->buf_gen = w->buf->tb->gen;
     compl_fill(ed, w, menu->src, stem, slen);
     free(stem);
     if (menu->items.len == 0U) {
@@ -790,6 +824,7 @@ CmdStatus yew_compl_cmd_stats(CmdCtx *cx)
     u64 buffer_symbols = 0U;
     u64 buffer_bytes = 0U;
     u64 total_bytes;
+    bool buffer_capped = false;
     size_t i;
 
     if (cx == NULL || cx->ed == NULL)
@@ -797,12 +832,15 @@ CmdStatus yew_compl_cmd_stats(CmdCtx *cx)
     for (i = 0U; i < cx->ed->ws.sym_buf.len; i++) {
         buffer_symbols += cx->ed->ws.sym_buf.data[i].idx.e.len;
         buffer_bytes += cx->ed->ws.sym_buf.data[i].idx.bytes;
+        if (cx->ed->ws.sym_buf.data[i].idx.capped)
+            buffer_capped = true;
     }
     total_bytes = yew_symidx_workspace_bytes(&cx->ed->ws);
     yew_msg(cx->ed, YEW_MSG_INFO,
             "completion: buffers=%zu symbols=%llu bytes=%llu; "
             "workspace files=%llu/%llu symbols=%zu bytes=%llu; "
-            "caps files=%u symbols/file=%u memory=%llu/%u%s",
+            "caps files=%u symbols/file=%u memory=%llu/%u "
+            "buffer-indexes=%s workspace=%s walk=%s",
             cx->ed->ws.sym_buf.len,
             (unsigned long long)buffer_symbols,
             (unsigned long long)buffer_bytes,
@@ -812,8 +850,9 @@ CmdStatus yew_compl_cmd_stats(CmdCtx *cx)
             (unsigned long long)cx->ed->ws.sym_ws.bytes,
             YEW_SYMWALK_MAX_FILES, YEW_SYMWALK_MAX_SYMS_PER_FILE,
             (unsigned long long)total_bytes, YEW_SYMIDX_BYTES_MAX,
-            cx->ed->ws.sym_walk.capped || cx->ed->ws.sym_ws.capped ?
-                " capped" : "");
+            buffer_capped ? "capped" : "ok",
+            cx->ed->ws.sym_ws.capped ? "capped" : "ok",
+            cx->ed->ws.sym_walk.capped ? "capped" : "ok");
     return YEW_CMD_OK;
 }
 

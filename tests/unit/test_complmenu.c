@@ -88,6 +88,17 @@ static Key named_key(u32 code, u16 mods)
     return key;
 }
 
+static Key text_key(const char *text)
+{
+    Key key = named_key((u8)text[0], 0U);
+    size_t len = strlen(text);
+
+    YEW_ASSERT(len <= sizeof(key.text));
+    (void)memcpy(key.text, text, len);
+    key.ntext = (u8)len;
+    return key;
+}
+
 static bool text_eq(const TextBuf *tb, const char *want)
 {
     TextIter it;
@@ -222,31 +233,35 @@ void test_complmenu_refilters_expected_typing_and_closes_on_stale_edit(void)
     Key key;
     u64 old_gen;
 
-    compl_fixture(&ed, (const u8 *)"alp", 3U, 3U,
+    compl_fixture(&ed, (const u8 *)"alp tail", 8U, 3U,
                   (Rect){0U, 0U, 80U, 20U});
+    yew_test_load_runtime(&ed);
+    YEW_ASSERT_EQ_I64(yew_mode_enter(&ed, YEW_MODE_I), YEW_CMD_OK);
     YEW_ASSERT(yew_compl_open_source(&ed, ed.win, &fixture_source));
     old_gen = ed.win->compl.buf_gen;
-    edit = yew_ed_edit_ctx(&ed);
-    yew_undo_begin(&edit, YEW_TXN_TYPE);
-    YEW_ASSERT(yew_edit_insert(&edit, BYTEOFF(3U), (const u8 *)"h", 1U));
-    yew_undo_end(&edit);
-    yew_ed_finish_edit(&ed, &edit);
-    yew_compl_after_key(&ed, ed.win);
+    key = text_key("h");
+    yew_ed_handle_key(&ed, key, 0);
     YEW_ASSERT(ed.win->compl.open);
-    YEW_ASSERT(ed.win->compl.buf_gen != old_gen);
+    YEW_ASSERT_EQ_U64(ed.win->compl.buf_gen, old_gen + 1U);
     YEW_ASSERT_EQ_U64(ed.win->compl.replace.lo, 0U);
     YEW_ASSERT_EQ_U64(ed.win->compl.replace.hi, 4U);
     YEW_ASSERT_EQ_U64(ed.win->compl.items.len, 12U);
 
+    key = named_key(YEW_KEY_BACKSPACE, 0U);
+    yew_ed_handle_key(&ed, key, 1);
+    YEW_ASSERT(ed.win->compl.open);
+    YEW_ASSERT_EQ_U64(ed.win->compl.buf_gen, old_gen + 2U);
+    YEW_ASSERT_EQ_U64(ed.win->compl.replace.hi, 3U);
+    YEW_ASSERT(text_eq(ed.win->buf->tb, "alp tail"));
+
     edit = yew_ed_edit_ctx(&ed);
     yew_undo_begin(&edit, YEW_TXN_TYPE);
-    YEW_ASSERT(yew_edit_insert(&edit, BYTEOFF(0U), (const u8 *)"z", 1U));
+    YEW_ASSERT(yew_edit_insert(&edit, BYTEOFF(8U), (const u8 *)"!", 1U));
     yew_undo_end(&edit);
     yew_ed_finish_edit(&ed, &edit);
-    key = named_key(YEW_KEY_TAB, 0U);
-    YEW_ASSERT(yew_compl_key(&ed, ed.win, &key));
+    yew_compl_after_key(&ed, ed.win);
     YEW_ASSERT(!ed.win->compl.open);
-    YEW_ASSERT(text_eq(ed.win->buf->tb, "zalph"));
+    YEW_ASSERT(text_eq(ed.win->buf->tb, "alp tail!"));
     yew_ed_free(&ed);
 }
 
@@ -373,5 +388,10 @@ void test_complmenu_stats_reports_every_symbol_cap(void)
     YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "symbols/file=4000"));
     YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "memory="));
     YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "/33554432"));
+    YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "buffer-indexes=ok"));
+
+    ed.ws.sym_buf.data[0].idx.capped = true;
+    YEW_ASSERT_EQ_I64(yew_compl_cmd_stats(&cx), YEW_CMD_OK);
+    YEW_ASSERT_NOT_NULL(strstr(ed.msg.text, "buffer-indexes=capped"));
     yew_ed_free(&ed);
 }
