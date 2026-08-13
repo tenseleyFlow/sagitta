@@ -1272,6 +1272,7 @@ torture-live-check: torture-build
 	YEW_TORTURE_CLEAN_ONLY=1 \
 	YEW_TORTURE_CHECKER=$(abspath $(TORTURE_CHILD)) \
 	YEW_TORTURE_YEW=$(abspath $(BUILD)/yew) \
+	YEW_RUNTIME_DIR=$(abspath runtime) \
 		$(if $(filter 1,$(VALGRIND)),$(VALGRIND_RUN) --trace-children=yes,) \
 		$(TORTURE_DRIVER) $(abspath $(TORTURE_LIVE)) \
 		$(abspath $(FAULTSHIM))
@@ -1286,6 +1287,7 @@ torture: torture-build
 		$(abspath $(FAULTSHIM))
 	YEW_TORTURE_CHECKER=$(abspath $(TORTURE_CHILD)) \
 	YEW_TORTURE_YEW=$(abspath $(BUILD)/yew) \
+	YEW_RUNTIME_DIR=$(abspath runtime) \
 	YEW_TORTURE_LANE=live-editor \
 	YEW_TORTURE_SIGKILL_ITERS=$(TORTURE_SIGKILL_ITERS) \
 		$(TORTURE_DRIVER) $(abspath $(TORTURE_LIVE)) \

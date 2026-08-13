@@ -129,6 +129,22 @@ static u64 line_count(const u8 *bytes, size_t len)
     return lines;
 }
 
+static bool isolate_workspace(const char *path)
+{
+    static const char suffix[] = ".workspace";
+    size_t len = strlen(path);
+    char *workspace = malloc(len + sizeof(suffix));
+    bool ok;
+
+    if (workspace == NULL)
+        return false;
+    (void)memcpy(workspace, path, len);
+    (void)memcpy(workspace + len, suffix, sizeof(suffix));
+    ok = mkdir(workspace, 0700) == 0 && chdir(workspace) == 0;
+    free(workspace);
+    return ok;
+}
+
 static bool feed_replace(YewLivePty *pty, const u8 *old, size_t old_len,
                          const u8 *post, size_t post_len, i64 deadline)
 {
@@ -210,6 +226,7 @@ static int live_save(const char *path, const char *post_path)
     if (binary == NULL || *binary == '\0' ||
         !slurp(path, &old, &old_len) ||
         !slurp(post_path, &post, &post_len) ||
+        !isolate_workspace(path) ||
         !yew_live_pty_open(&pty, slave, sizeof(slave),
                            LIVE_ROWS, LIVE_COLS))
         goto fail;
