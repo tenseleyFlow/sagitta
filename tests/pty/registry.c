@@ -5035,6 +5035,19 @@ static void case_s42_5_all_fences_lazy(PtyCtx *c)
               "native-pack Markdown retained a pending guest");
     bytebuf_free(&screen);
 
+    /* The global state interner includes transient states created while
+     * input races the deliberately asynchronous guest loader.  Its count
+     * is diagnostic history, not rendered document state, so clear the
+     * status message after checking the semantic completion fields. */
+    s18_settle_after_keys(c, ":");
+    s18_settle_after_bytes(c, "ed.nop");
+    s18_settle_after_keys(c, "enter");
+    bytebuf_init(&screen);
+    snapshot_write(&c->vt, &screen);
+    bytebuf_push_u8(&screen, 0U);
+    ptc_check(c, strstr((const char *)screen.data, "states=") == NULL,
+              "stable native-pack snapshot retained diagnostic history");
+    bytebuf_free(&screen);
     c->vt.sync_pairs_unstable = true;
     ptc_snapshot(c, "s42_5_all_fences_lazy");
     force_quit(c);
