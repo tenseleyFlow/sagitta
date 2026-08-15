@@ -136,6 +136,8 @@ void yew_rpc_cancel(RpcConn *c, u64 id);
 /* Dispatches a response/error to its pending callback.  The parsed tree is
  * owned by the caller and is valid only for the duration of the callback. */
 bool yew_rpc_dispatch(RpcConn *c, Ed *ed, const JsonValue *msg);
+/* Removes a pending request without invoking its callback. */
+bool yew_rpc_drop(RpcConn *c, u64 id);
 u32 yew_rpc_sweep(RpcConn *c, Ed *ed, i64 now_ms);
 i64 yew_rpc_deadline(const RpcConn *c);
 i64 yew_rpc_job_deadline(const void *owner);

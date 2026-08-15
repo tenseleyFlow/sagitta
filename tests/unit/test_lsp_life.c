@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include "mod/lsp/client.h"
+#include "edit/ed.h"
 #include "util/arena.h"
 
 static JsonValue *parse(Arena *arena, const char *json)
@@ -165,4 +166,64 @@ void test_lsp_default_server_table_is_complete(void)
     }
     YEW_ASSERT_NULL(yew_lsp_default_cfg("fletch"));
     YEW_ASSERT_NULL(yew_lsp_default_cfg("unknown"));
+}
+
+typedef struct StaleSeen { u32 calls; } StaleSeen;
+
+static void stale_callback(Ed *ed, void *ctx, const JsonValue *result,
+                           const JsonValue *error)
+{
+    StaleSeen *seen = ctx;
+    (void)ed;
+    (void)result;
+    (void)error;
+    seen->calls++;
+}
+
+void test_lsp_lifecycle_drops_stale_response_before_callback(void)
+{
+    Ed ed;
+    Buffer buffer;
+    Buffer *bufs[1];
+    LspServer server;
+    RpcPending pending;
+    StaleSeen seen;
+    Arena arena;
+    JsonValue *response;
+    u64 id;
+    char json[80];
+
+    (void)memset(&ed, 0, sizeof(ed));
+    (void)memset(&buffer, 0, sizeof(buffer));
+    (void)memset(&server, 0, sizeof(server));
+    (void)memset(&pending, 0, sizeof(pending));
+    (void)memset(&seen, 0, sizeof(seen));
+    buffer.id = 9U;
+    buffer.tb = yew_textbuf_from_bytes((const u8 *)"old", 3U);
+    bufs[0] = &buffer;
+    ed.model_ready = true;
+    ed.ws.bufs = bufs;
+    ed.ws.nbufs = 1U;
+    server.owner = &ed;
+    yew_rpc_conn_init(&server.rpc);
+    server.rpc_live = true;
+    pending.buf_id = buffer.id;
+    pending.gen = buffer.tb->gen + 1U;
+    pending.cb = stale_callback;
+    pending.ctx = &seen;
+    id = yew_rpc_call(&server.rpc, "textDocument/hover",
+                      (const u8 *)"{}", 2U, &pending);
+    (void)snprintf(json, sizeof(json),
+                   "{\"jsonrpc\":\"2.0\",\"id\":%llu,\"result\":{}}",
+                   (unsigned long long)id);
+    arena_init(&arena);
+    response = parse(&arena, json);
+    YEW_ASSERT(!yew_lsp_dispatch_response(&server, response));
+    YEW_ASSERT_EQ_U64(seen.calls, 0U);
+    YEW_ASSERT_EQ_U64(server.dropped_stale, 1U);
+    YEW_ASSERT_NULL(yew_rpc_pending(&server.rpc, id));
+    arena_free_all(&arena);
+    yew_rpc_conn_free(&server.rpc);
+    server.rpc_live = false;
+    yew_textbuf_free(buffer.tb);
 }

@@ -79,6 +79,7 @@ struct LspServer {
     bool rpc_live;
     bool gave_up;
     Ed *owner;
+    u64 dropped_stale;
 };
 
 /* The defaults are immutable and may be replaced by compiled init.fl data. */
@@ -111,6 +112,11 @@ void yew_lsp_client_free(Ed *ed);
 bool yew_lsp_client_start(Ed *ed, Buffer *b);
 void yew_lsp_client_stop(Ed *ed, LspServer *s, bool graceful);
 void yew_lsp_client_pump(Ed *ed);
+void yew_lsp_client_close_buffer(Ed *ed, Buffer *b);
+bool yew_lsp_client_restart(Ed *ed, Buffer *b);
+
+/* Central response gate used by the transport and focused race tests. */
+bool yew_lsp_dispatch_response(LspServer *s, const JsonValue *msg);
 
 LspDoc *yew_lsp_doc_for_buffer(Ed *ed, const Buffer *b);
 LspServer *yew_lsp_server_for_doc(Ed *ed, const LspDoc *doc);

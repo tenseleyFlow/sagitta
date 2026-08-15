@@ -582,6 +582,31 @@ static void initialize_done(Ed *ed, void *ctx, const JsonValue *result,
     }
 }
 
+bool yew_lsp_dispatch_response(LspServer *s, const JsonValue *msg)
+{
+    const JsonValue *id;
+    const RpcPending *pending;
+    u64 number;
+
+    if (s == NULL || msg == NULL)
+        return false;
+    id = yew_json_get(msg, "id");
+    if (!yew_rpc_id_u64(id, &number))
+        return false;
+    pending = yew_rpc_pending(&s->rpc, number);
+    if (pending != NULL && pending->buf_id != 0U) {
+        Buffer *buffer = yew_ws_buf_by_id(s->owner, pending->buf_id);
+
+        if (buffer == NULL || buffer->tb == NULL ||
+            buffer->tb->gen != pending->gen) {
+            if (yew_rpc_drop(&s->rpc, number))
+                s->dropped_stale++;
+            return false;
+        }
+    }
+    return yew_rpc_dispatch(&s->rpc, s->owner, msg);
+}
+
 static void on_rpc_value(void *ctx, const JsonValue *msg)
 {
     LspServer *s = ctx;
@@ -592,7 +617,7 @@ static void on_rpc_value(void *ctx, const JsonValue *msg)
     if (kind == YEW_RPC_MALFORMED)
         return;
     if (kind == YEW_RPC_RESPONSE || kind == YEW_RPC_ERROR) {
-        (void)yew_rpc_dispatch(&s->rpc, s->owner, msg);
+        (void)yew_lsp_dispatch_response(s, msg);
         return;
     }
     method = yew_json_get(msg, "method");
@@ -694,6 +719,9 @@ static bool spawn_server(Ed *ed, LspServer *s)
     if (s->job == 0U) {
         framed_destroy(s);
         s->state = YEW_LSP_DEAD;
+        /* A missing optional tool is disabled for this session; retry only
+         * after an explicit :lsp.restart. */
+        s->gave_up = true;
         yew_msg(ed, YEW_MSG_ERROR, "%s", err);
         return false;
     }
@@ -798,6 +826,67 @@ void yew_lsp_client_stop(Ed *ed, LspServer *s, bool graceful)
     } else {
         (void)yew_job_signal(ed, s->job, SIGTERM);
     }
+}
+
+void yew_lsp_client_close_buffer(Ed *ed, Buffer *b)
+{
+    u32 i;
+
+    if (ed == NULL || ed->lsp == NULL || b == NULL)
+        return;
+    yew_diag_store_free(b);
+    for (i = 0U; i < ed->lsp->len; i++) {
+        LspServer *s = ed->lsp->server[i];
+        size_t d;
+
+        for (d = 0U; d < s->docv.len; d++) {
+            if (s->docv.data[d].buf_id == b->id) {
+                size_t k;
+
+                if (s->state == YEW_LSP_READY)
+                    yew_lsp_doc_close(&s->rpc, &s->docv.data[d]);
+                yew_lsp_doc_free(&s->docv.data[d]);
+                if (d + 1U < s->docv.len)
+                    (void)memmove(&s->docv.data[d], &s->docv.data[d + 1U],
+                        (s->docv.len - d - 1U) * sizeof(s->docv.data[0]));
+                s->docv.len--;
+                for (k = 0U; k < s->docs.len; k++) {
+                    if (s->docs.data[k] != b->id)
+                        continue;
+                    if (k + 1U < s->docs.len)
+                        (void)memmove(&s->docs.data[k], &s->docs.data[k + 1U],
+                            (s->docs.len - k - 1U) * sizeof(s->docs.data[0]));
+                    s->docs.len--;
+                    break;
+                }
+                return;
+            }
+        }
+    }
+}
+
+bool yew_lsp_client_restart(Ed *ed, Buffer *b)
+{
+    LspDoc *doc;
+    LspServer *s;
+    size_t i;
+
+    if (ed == NULL || b == NULL)
+        return false;
+    doc = yew_lsp_doc_for_buffer(ed, b);
+    s = yew_lsp_server_for_doc(ed, doc);
+    if (s == NULL)
+        return yew_lsp_client_start(ed, b);
+    for (i = 0U; i < s->docv.len; i++) {
+        if (s->state == YEW_LSP_READY)
+            yew_lsp_doc_close(&s->rpc, &s->docv.data[i]);
+        s->docv.data[i].open = false;
+    }
+    yew_lsp_server_restart_reset(s);
+    (void)yew_job_signal(ed, s->job, SIGTERM);
+    s->state = YEW_LSP_DEAD;
+    s->next_try_ms = ed->now_ms;
+    return true;
 }
 
 void yew_lsp_client_pump(Ed *ed)

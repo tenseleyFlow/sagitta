@@ -649,6 +649,20 @@ bool yew_rpc_dispatch(RpcConn *c, Ed *ed, const JsonValue *msg)
     return true;
 }
 
+bool yew_rpc_drop(RpcConn *c, u64 id)
+{
+    RpcPendingSlot *slot;
+
+    if (c == NULL)
+        return false;
+    slot = find_slot(c, id, false);
+    if (slot == NULL || slot->state != RPC_SLOT_USED)
+        return false;
+    slot->state = RPC_SLOT_TOMB;
+    c->npending--;
+    return true;
+}
+
 u32 yew_rpc_sweep(RpcConn *c, Ed *ed, i64 now_ms)
 {
     JsonValue code;
