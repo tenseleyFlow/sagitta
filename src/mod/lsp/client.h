@@ -78,6 +78,7 @@ struct LspServer {
     Bytebuf stderr_tail;
     bool rpc_live;
     bool gave_up;
+    bool exit_sent;
     Ed *owner;
     u64 dropped_stale;
 };

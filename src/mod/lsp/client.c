@@ -806,9 +806,9 @@ static void shutdown_done(Ed *ed, void *ctx, const JsonValue *result,
     (void)result;
     (void)error;
     yew_rpc_notify(&s->rpc, "exit", (const u8 *)"null", 4U);
-    /* The transport must flush exit before termination.  The pump applies
-     * the bounded process-group escalation after this queued frame. */
-    s->next_try_ms = ed->now_ms + YEW_JOB_TERM_GRACE_MS;
+    s->exit_sent = true;
+    s->next_try_ms = 0;
+    (void)ed;
 }
 
 void yew_lsp_client_stop(Ed *ed, LspServer *s, bool graceful)
@@ -832,9 +832,11 @@ void yew_lsp_client_close_buffer(Ed *ed, Buffer *b)
 {
     u32 i;
 
-    if (ed == NULL || ed->lsp == NULL || b == NULL)
+    if (b == NULL)
         return;
     yew_diag_store_free(b);
+    if (ed == NULL || ed->lsp == NULL)
+        return;
     for (i = 0U; i < ed->lsp->len; i++) {
         LspServer *s = ed->lsp->server[i];
         size_t d;
@@ -899,6 +901,15 @@ void yew_lsp_client_pump(Ed *ed)
         LspServer *s = ed->lsp->server[i];
         YewJob *j = yew_job_find(ed, s->job);
 
+        if (j != NULL && j->state == YEW_JOB_EXECFAIL) {
+            s->state = YEW_LSP_DEAD;
+            s->gave_up = true;
+            yew_msg(ed, YEW_MSG_ERROR,
+                    "%s: %s — install %s or set lsp.servers.%s.cmd",
+                    s->cfg->id, strerror(j->exec_errno), s->cfg->cmd,
+                    s->cfg->lang);
+            continue;
+        }
         if (j != NULL && j->state == YEW_JOB_RUNNING)
         {
             if (s->state == YEW_LSP_READY) {
@@ -912,10 +923,19 @@ void yew_lsp_client_pump(Ed *ed)
                         (void)yew_lsp_doc_flush(&s->rpc, &s->docv.data[d],
                             s->caps.sync_kind, buffer->tb);
                 }
-            } else if (s->state == YEW_LSP_SHUTTING_DOWN &&
-                       s->next_try_ms != 0 && ed->now_ms >= s->next_try_ms) {
-                (void)yew_job_signal(ed, s->job, SIGTERM);
-                s->next_try_ms = 0;
+            } else if (s->state == YEW_LSP_SHUTTING_DOWN && s->exit_sent) {
+                if (s->next_try_ms == 0 && s->rpc.tx.pending.len == 0U) {
+                    if (j->in_fd >= 0) {
+                        (void)close(j->in_fd);
+                        j->in_fd = -1;
+                    }
+                    s->next_try_ms = ed->now_ms + YEW_JOB_TERM_GRACE_MS;
+                } else if (s->next_try_ms != 0 &&
+                           ed->now_ms >= s->next_try_ms) {
+                    (void)yew_job_signal(ed, s->job, SIGTERM);
+                    s->next_try_ms = 0;
+                    s->exit_sent = false;
+                }
             }
             continue;
         }
