@@ -125,8 +125,29 @@ bool yew_lsp_doc_open(RpcConn *rpc, LspDoc *doc, const Buffer *buffer,
     return true;
 }
 
-static void pos_of_off(u8 pos_enc, const TextBuf *tb, ByteOff off,
-                       i64 *line, i64 *ch)
+static Span lsp_content_span(const TextBuf *tb, LineNo line)
+{
+    Span span = yew_textbuf_line_span(tb, line);
+    TextIter it;
+    const u8 *bytes;
+    u64 len;
+
+    if (span.hi > span.lo &&
+        yew_textiter_begin(&it, tb, BYTEOFF(span.hi - 1U)) &&
+        yew_textiter_chunk(&it, tb, &bytes, &len) && len != 0U &&
+        bytes[0] == (u8)'\n') {
+        --span.hi;
+        if (span.hi > span.lo &&
+            yew_textiter_begin(&it, tb, BYTEOFF(span.hi - 1U)) &&
+            yew_textiter_chunk(&it, tb, &bytes, &len) && len != 0U &&
+            bytes[0] == (u8)'\r')
+            --span.hi;
+    }
+    return span;
+}
+
+static void lsp_pos_of_off(u8 pos_enc, const TextBuf *tb, ByteOff off,
+                           i64 *line, i64 *ch)
 {
     LineNo l = yew_textbuf_line_of(tb, off);
     Span span = yew_textbuf_line_span(tb, l);
@@ -134,6 +155,37 @@ static void pos_of_off(u8 pos_enc, const TextBuf *tb, ByteOff off,
     *line = (i64)l.v;
     *ch = pos_enc == YEW_POSENC_UTF8 ? (i64)(off.v - span.lo) :
           (i64)yew_off_to_u16col(tb, span, off).v;
+}
+
+static ByteOff lsp_off_of_pos(u8 pos_enc, const TextBuf *tb, LineNo line,
+                              u64 character)
+{
+    Span span;
+
+    if (line.v >= yew_textbuf_line_count(tb))
+        line = LINENO(yew_textbuf_line_count(tb) - 1U);
+    span = lsp_content_span(tb, line);
+    if (pos_enc == YEW_POSENC_UTF8)
+        return BYTEOFF(character > span.hi - span.lo ?
+                       span.hi : span.lo + character);
+    return yew_u16col_to_off(tb, span, U16COL(character));
+}
+
+void yew_lsp_pos_of_off(u8 pos_enc, const TextBuf *tb, ByteOff off,
+                        i64 *line, i64 *character)
+{
+    if (tb == NULL || line == NULL || character == NULL ||
+        off.v > yew_textbuf_len(tb))
+        YEW_BUG("lsp position: invalid offset conversion");
+    lsp_pos_of_off(pos_enc, tb, off, line, character);
+}
+
+ByteOff yew_lsp_off_of_pos(u8 pos_enc, const TextBuf *tb, LineNo line,
+                           u64 character)
+{
+    if (tb == NULL || yew_textbuf_line_count(tb) == 0U)
+        YEW_BUG("lsp position: invalid protocol conversion");
+    return lsp_off_of_pos(pos_enc, tb, line, character);
 }
 
 static void force_full(LspDoc *doc)
@@ -162,12 +214,12 @@ void yew_lsp_doc_note_edit(LspDoc *doc, u8 pos_enc, u8 sync_kind,
     if (sync_kind != 2U)
         return;
     (void)memset(&change, 0, sizeof(change));
-    pos_of_off(pos_enc, tb, at, &change.sl, &change.sc);
+    lsp_pos_of_off(pos_enc, tb, at, &change.sl, &change.sc);
     if (kind == YEW_JOURNAL_DEL) {
         if (at.v > UINT64_MAX - len || at.v + len > yew_textbuf_len(tb))
             YEW_BUG("lsp note delete: range out of bounds");
-        pos_of_off(pos_enc, tb, BYTEOFF(at.v + len),
-                   &change.el, &change.ec);
+        lsp_pos_of_off(pos_enc, tb, BYTEOFF(at.v + len),
+                       &change.el, &change.ec);
     } else {
         change.el = change.sl;
         change.ec = change.sc;

@@ -119,6 +119,8 @@ void test_lsp_sync_open_save_close_and_generation(void)
     Arena arena;
     JsonValue *root;
     const JsonValue *params;
+    const JsonValue *changes;
+    const JsonValue *change;
     LspGen gen;
 
     fix_init(&f, "int main(void) {}\n");
@@ -155,9 +157,43 @@ void test_lsp_sync_open_save_close_and_generation(void)
     (void)params_of(root, "textDocument/didClose");
     YEW_ASSERT(!f.doc.open);
     YEW_ASSERT(!yew_lsp_gen_matches(&gen, &f.doc, f.buffer.tb));
-    tx_clear(&f.rpc);
     YEW_ASSERT(yew_lsp_doc_open(&f.rpc, &f.doc, &f.buffer, "c"));
+    root = frame_json(&f.rpc, 1U, &arena);
+    params = params_of(root, "textDocument/didOpen");
+    YEW_ASSERT_EQ_I64(yew_json_int(
+        yew_json_path(params, "textDocument.version"), -1), 1);
     YEW_ASSERT_EQ_I64(f.doc.version, 1);
+    arena_free_all(&arena);
+    fix_free(&f);
+
+    fix_init(&f, "ab\ncd");
+    YEW_ASSERT(yew_lsp_doc_open(&f.rpc, &f.doc, &f.buffer, "c"));
+    tx_clear(&f.rpc);
+    apply_insert(&f, YEW_POSENC_UTF8, 2U, 3U, "S");
+    apply_insert(&f, YEW_POSENC_UTF8, 2U,
+                 yew_textbuf_len(f.buffer.tb), "E");
+    YEW_ASSERT(yew_lsp_doc_flush(&f.rpc, &f.doc, 2U, f.buffer.tb));
+    arena_init(&arena);
+    root = frame_json(&f.rpc, 0U, &arena);
+    changes = yew_json_path(params_of(root, "textDocument/didChange"),
+                            "contentChanges");
+    YEW_ASSERT_EQ_U64(yew_json_len(changes), 2U);
+    change = yew_json_at(changes, 0U);
+    YEW_ASSERT_EQ_I64(yew_json_int(yew_json_path(change,
+        "range.start.line"), -1), 1);
+    YEW_ASSERT_EQ_I64(yew_json_int(yew_json_path(change,
+        "range.start.character"), -1), 0);
+    change = yew_json_at(changes, 1U);
+    YEW_ASSERT_EQ_I64(yew_json_int(yew_json_path(change,
+        "range.start.line"), -1), 1);
+    YEW_ASSERT_EQ_I64(yew_json_int(yew_json_path(change,
+        "range.start.character"), -1), 3);
+    YEW_ASSERT_EQ_I64(f.doc.version, 2);
+    tx_clear(&f.rpc);
+    apply_insert(&f, YEW_POSENC_UTF8, 2U,
+                 yew_textbuf_len(f.buffer.tb), "!");
+    YEW_ASSERT(yew_lsp_doc_flush(&f.rpc, &f.doc, 2U, f.buffer.tb));
+    YEW_ASSERT_EQ_I64(f.doc.version, 3);
     arena_free_all(&arena);
     fix_free(&f);
 }
@@ -233,8 +269,11 @@ void test_lsp_sync_burst_batches_once_and_overflow_falls_back_full(void)
     fix_init(&f, "");
     YEW_ASSERT(yew_lsp_doc_open(&f.rpc, &f.doc, &f.buffer, "c"));
     tx_clear(&f.rpc);
-    for (i = 0U; i < 40U; ++i)
-        apply_insert(&f, YEW_POSENC_UTF8, 2U, i, "x");
+    for (i = 0U; i < 40U; ++i) {
+        char text[2] = {(char)('A' + i % 26U), '\0'};
+
+        apply_insert(&f, YEW_POSENC_UTF8, 2U, i, text);
+    }
     YEW_ASSERT_EQ_U64(f.rpc.tx.pending.len, 0U);
     YEW_ASSERT(yew_lsp_doc_flush(&f.rpc, &f.doc, 2U, f.buffer.tb));
     arena_init(&arena);
@@ -242,10 +281,17 @@ void test_lsp_sync_burst_batches_once_and_overflow_falls_back_full(void)
     changes = yew_json_path(params_of(root, "textDocument/didChange"),
                             "contentChanges");
     YEW_ASSERT_EQ_U64(yew_json_len(changes), 40U);
-    YEW_ASSERT(yew_json_streq(yew_json_get(yew_json_at(changes, 0U),
-                                           "text"), "x"));
-    YEW_ASSERT(yew_json_streq(yew_json_get(yew_json_at(changes, 39U),
-                                           "text"), "x"));
+    for (i = 0U; i < 40U; ++i) {
+        const JsonValue *change = yew_json_at(changes, i);
+        u32 text_len = 0U;
+        const u8 *text = yew_json_str(yew_json_get(change, "text"),
+                                      &text_len);
+
+        YEW_ASSERT_EQ_U64(text_len, 1U);
+        YEW_ASSERT_EQ_U64(text[0], (u8)('A' + i % 26U));
+        YEW_ASSERT_EQ_I64(yew_json_int(yew_json_path(change,
+            "range.start.character"), -1), i);
+    }
     arena_free_all(&arena);
     tx_clear(&f.rpc);
     for (i = 0U; i <= YEW_LSP_PENDING_MAX; ++i)
@@ -274,8 +320,20 @@ void test_lsp_sync_full_mode_and_binary_open_policy(void)
     Arena arena;
     JsonValue *root;
     const JsonValue *changes;
+    i64 line;
+    i64 character;
 
-    fix_init(&f, "abc");
+    fix_init(&f, "a\xF0\x9F\x98\x80\r\nz");
+    yew_lsp_pos_of_off(YEW_POSENC_UTF16, f.buffer.tb, BYTEOFF(5U),
+                       &line, &character);
+    YEW_ASSERT_EQ_I64(line, 0);
+    YEW_ASSERT_EQ_I64(character, 3);
+    YEW_ASSERT_EQ_U64(yew_lsp_off_of_pos(
+        YEW_POSENC_UTF16, f.buffer.tb, LINENO(0U), 3U).v, 5U);
+    YEW_ASSERT_EQ_U64(yew_lsp_off_of_pos(
+        YEW_POSENC_UTF16, f.buffer.tb, LINENO(0U), 2U).v, 1U);
+    YEW_ASSERT_EQ_U64(yew_lsp_off_of_pos(
+        YEW_POSENC_UTF8, f.buffer.tb, LINENO(0U), 99U).v, 5U);
     f.buffer.meta.binary = true;
     YEW_ASSERT(!yew_lsp_doc_open(&f.rpc, &f.doc, &f.buffer, "c"));
     YEW_ASSERT_EQ_U64(f.rpc.tx.pending.len, 0U);
@@ -291,7 +349,8 @@ void test_lsp_sync_full_mode_and_binary_open_policy(void)
                             "contentChanges");
     YEW_ASSERT_EQ_U64(yew_json_len(changes), 1U);
     YEW_ASSERT(yew_json_streq(yew_json_get(yew_json_at(changes, 0U),
-                                           "text"), "aQbc"));
+                                           "text"),
+                             "aQ\xF0\x9F\x98\x80\r\nz"));
     YEW_ASSERT_EQ_I64(f.doc.version, 2);
     arena_free_all(&arena);
     fix_free(&f);

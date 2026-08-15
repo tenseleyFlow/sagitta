@@ -63,6 +63,12 @@ void yew_lsp_doc_save(RpcConn *rpc, const LspDoc *doc, const TextBuf *tb,
                       bool include_text);
 void yew_lsp_doc_close(RpcConn *rpc, LspDoc *doc);
 
+/* The only LSP protocol-position conversion boundary. */
+void yew_lsp_pos_of_off(u8 pos_enc, const TextBuf *tb, ByteOff off,
+                        i64 *line, i64 *character);
+ByteOff yew_lsp_off_of_pos(u8 pos_enc, const TextBuf *tb, LineNo line,
+                           u64 character);
+
 LspGen yew_lsp_gen(const LspDoc *doc, const TextBuf *tb);
 bool yew_lsp_gen_matches(const LspGen *gen, const LspDoc *doc,
                          const TextBuf *tb);
