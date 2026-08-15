@@ -1,0 +1,930 @@
+#define _XOPEN_SOURCE 700
+
+#include "mod/lsp/client.h"
+
+#include <errno.h>
+#include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
+
+#include "edit/buf.h"
+#include "edit/ed.h"
+#include "edit/job.h"
+#include "edit/loop.h"
+#include "mod/lsp/diag.h"
+#include "ui/message.h"
+
+enum { YEW_LSP_MAX_SERVERS = 16, YEW_LSP_RESTART_WINDOW_MS = 300000 };
+
+struct LspClient {
+    LspServer *server[YEW_LSP_MAX_SERVERS];
+    u32 len;
+    u32 next_id;
+};
+
+static const char *const clangd_args[] = {
+    "--background-index", "--clang-tidy", "--offset-encoding=utf-8", NULL
+};
+static const char *const clangd_roots[] = {
+    "compile_commands.json", ".clangd", "compile_flags.txt", ".git", NULL
+};
+static const char *const rust_roots[] = {"Cargo.toml", ".git", NULL};
+static const char *const py_args[] = {"--stdio", NULL};
+static const char *const py_roots[] = {
+    "pyproject.toml", "setup.py", "setup.cfg", ".git", NULL
+};
+static const char *const go_roots[] = {"go.mod", ".git", NULL};
+static const char *const ts_args[] = {"--stdio", NULL};
+static const char *const ts_roots[] = {
+    "tsconfig.json", "package.json", ".git", NULL
+};
+static const char *const fort_roots[] = {".fortls", ".git", NULL};
+static const char *const sh_args[] = {"start", NULL};
+static const char *const git_roots[] = {".git", NULL};
+
+#define CFG(lang_, id_, cmd_, args_, roots_)                                  \
+    {id_, lang_, cmd_, args_, roots_, NULL, YEW_RPC_INIT_TIMEOUT_MS}
+
+static const LspServerCfg default_cfgs[] = {
+    CFG("c", "clangd", "clangd", clangd_args, clangd_roots),
+    CFG("cpp", "clangd", "clangd", clangd_args, clangd_roots),
+    CFG("objc", "clangd", "clangd", clangd_args, clangd_roots),
+    CFG("rust", "rust-analyzer", "rust-analyzer", NULL, rust_roots),
+    CFG("python", "pyright", "pyright-langserver", py_args, py_roots),
+    CFG("go", "gopls", "gopls", NULL, go_roots),
+    CFG("js", "tsserver", "typescript-language-server", ts_args, ts_roots),
+    CFG("ts", "tsserver", "typescript-language-server", ts_args, ts_roots),
+    CFG("jsx", "tsserver", "typescript-language-server", ts_args, ts_roots),
+    CFG("tsx", "tsserver", "typescript-language-server", ts_args, ts_roots),
+    CFG("fortran", "fortls", "fortls", NULL, fort_roots),
+    CFG("sh", "bashls", "bash-language-server", sh_args, git_roots)
+};
+
+const LspServerCfg *yew_lsp_default_cfg(const char *lang)
+{
+    size_t i;
+
+    if (lang == NULL)
+        return NULL;
+    for (i = 0U; i < YEW_ARRAY_LEN(default_cfgs); i++)
+        if (strcmp(default_cfgs[i].lang, lang) == 0)
+            return &default_cfgs[i];
+    return NULL;
+}
+
+static char *copy_string(const char *s)
+{
+    size_t n = strlen(s) + 1U;
+    char *copy = yew_xmalloc(n);
+
+    (void)memcpy(copy, s, n);
+    return copy;
+}
+
+static char *canonical_dir(const char *path)
+{
+    char *real = realpath(path, NULL);
+
+    return real != NULL ? real : NULL;
+}
+
+static char *path_dir(const char *path)
+{
+    char *copy;
+    char *slash;
+
+    if (path == NULL || path[0] == '\0')
+        return NULL;
+    copy = copy_string(path);
+    slash = strrchr(copy, '/');
+    if (slash == NULL) {
+        free(copy);
+        return copy_string(".");
+    }
+    if (slash == copy)
+        slash[1] = '\0';
+    else
+        *slash = '\0';
+    return copy;
+}
+
+static bool under_root(const char *dir, const char *root)
+{
+    size_t n = strlen(root);
+
+    if (strncmp(dir, root, n) != 0)
+        return false;
+    return dir[n] == '\0' || (n == 1U && root[0] == '/') || dir[n] == '/';
+}
+
+static bool has_marker(const char *dir, const char *name)
+{
+    Bytebuf path;
+    struct stat st;
+    bool found;
+
+    bytebuf_init(&path);
+    bytebuf_append(&path, dir, strlen(dir));
+    if (path.len == 0U || path.data[path.len - 1U] != '/')
+        bytebuf_push_u8(&path, '/');
+    bytebuf_append(&path, name, strlen(name));
+    bytebuf_push_u8(&path, 0U);
+    found = stat((const char *)path.data, &st) == 0;
+    bytebuf_free(&path);
+    return found;
+}
+
+char *yew_lsp_resolve_root(const LspServerCfg *cfg, const char *buffer_path,
+                           const char *workspace_root)
+{
+    char *raw_dir;
+    char *dir;
+    char *root;
+
+    if (cfg == NULL || buffer_path == NULL || workspace_root == NULL)
+        return NULL;
+    root = canonical_dir(workspace_root);
+    raw_dir = path_dir(buffer_path);
+    dir = raw_dir == NULL ? NULL : canonical_dir(raw_dir);
+    free(raw_dir);
+    if (root == NULL || dir == NULL || !under_root(dir, root)) {
+        free(dir);
+        return root;
+    }
+    for (;;) {
+        const char *const *marker;
+
+        for (marker = cfg->roots; marker != NULL && *marker != NULL; marker++) {
+            if (has_marker(dir, *marker)) {
+                free(root);
+                return dir;
+            }
+        }
+        if (strcmp(dir, root) == 0)
+            break;
+        {
+            char *parent = path_dir(dir);
+
+            if (parent == NULL || strcmp(parent, dir) == 0) {
+                free(parent);
+                break;
+            }
+            free(dir);
+            dir = parent;
+        }
+    }
+    free(dir);
+    return root;
+}
+
+static bool uri_safe(u8 c)
+{
+    return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') ||
+           (c >= '0' && c <= '9') || c == '-' || c == '.' || c == '_' ||
+           c == '~' || c == '/';
+}
+
+void yew_lsp_uri_of_path(Bytebuf *out, const u8 *path, u32 n)
+{
+    static const char hex[] = "0123456789ABCDEF";
+    u32 i;
+
+    if (out == NULL || (path == NULL && n != 0U))
+        return;
+    bytebuf_append(out, "file://", 7U);
+    for (i = 0U; i < n; i++) {
+        if (uri_safe(path[i]))
+            bytebuf_push_u8(out, path[i]);
+        else {
+            bytebuf_push_u8(out, '%');
+            bytebuf_push_u8(out, (u8)hex[path[i] >> 4]);
+            bytebuf_push_u8(out, (u8)hex[path[i] & 15U]);
+        }
+    }
+}
+
+static int hexval(u8 c)
+{
+    if (c >= '0' && c <= '9') return (int)(c - '0');
+    if (c >= 'A' && c <= 'F') return (int)(c - 'A') + 10;
+    if (c >= 'a' && c <= 'f') return (int)(c - 'a') + 10;
+    return -1;
+}
+
+bool yew_lsp_path_of_uri(Bytebuf *out, const u8 *uri, u32 n)
+{
+    u32 i;
+
+    if (out == NULL || uri == NULL || n < 8U ||
+        memcmp(uri, "file://", 7U) != 0 || uri[7] != '/')
+        return false;
+    for (i = 7U; i < n; i++) {
+        if (uri[i] == '%') {
+            int hi;
+            int lo;
+
+            if (i + 2U >= n || (hi = hexval(uri[i + 1U])) < 0 ||
+                (lo = hexval(uri[i + 2U])) < 0)
+                return false;
+            bytebuf_push_u8(out, (u8)((hi << 4) | lo));
+            i += 2U;
+        } else {
+            bytebuf_push_u8(out, uri[i]);
+        }
+    }
+    return true;
+}
+
+static bool capability(const JsonValue *caps, const char *name)
+{
+    const JsonValue *v = yew_json_get(caps, name);
+
+    return v != NULL && v->kind != YEW_JS_NULL &&
+           !(v->kind == YEW_JS_BOOL && !v->b);
+}
+
+static void append_string_array(char *out, size_t cap, const JsonValue *arr)
+{
+    u32 i;
+    size_t used = 0U;
+
+    if (cap == 0U || arr == NULL || arr->kind != YEW_JS_ARR)
+        return;
+    for (i = 0U; i < arr->arr.n; i++) {
+        u32 n = 0U;
+        const u8 *s = yew_json_str(arr->arr.v[i], &n);
+
+        if (s == NULL || n == 0U || n > cap - 1U - used)
+            continue;
+        (void)memcpy(out + used, s, n);
+        used += n;
+    }
+    out[used] = '\0';
+}
+
+void yew_lsp_caps_parse(LspCaps *out, const JsonValue *initialize_result,
+                        u8 *pos_enc, bool *unknown_encoding)
+{
+    static const struct { const char *key; u32 bit; } fields[] = {
+        {"completionProvider", YEW_LSPC_COMPLETION},
+        {"hoverProvider", YEW_LSPC_HOVER},
+        {"signatureHelpProvider", YEW_LSPC_SIGNATURE},
+        {"definitionProvider", YEW_LSPC_DEFINITION},
+        {"declarationProvider", YEW_LSPC_DECLARATION},
+        {"typeDefinitionProvider", YEW_LSPC_TYPE_DEFINITION},
+        {"implementationProvider", YEW_LSPC_IMPLEMENTATION},
+        {"referencesProvider", YEW_LSPC_REFERENCES},
+        {"documentHighlightProvider", YEW_LSPC_DOCUMENT_HIGHLIGHT},
+        {"documentSymbolProvider", YEW_LSPC_DOCUMENT_SYMBOL},
+        {"renameProvider", YEW_LSPC_RENAME},
+        {"workspaceSymbolProvider", YEW_LSPC_WORKSPACE_SYMBOL}
+    };
+    const JsonValue *caps = yew_json_get(initialize_result, "capabilities");
+    const JsonValue *sync;
+    const JsonValue *completion;
+    const JsonValue *sig;
+    const JsonValue *enc;
+    size_t i;
+
+    (void)memset(out, 0, sizeof(*out));
+    *pos_enc = YEW_POSENC_UTF16;
+    *unknown_encoding = false;
+    if (caps == NULL || caps->kind != YEW_JS_OBJ)
+        return;
+    for (i = 0U; i < YEW_ARRAY_LEN(fields); i++)
+        if (capability(caps, fields[i].key)) out->bits |= fields[i].bit;
+    sync = yew_json_get(caps, "textDocumentSync");
+    if (sync != NULL && sync->kind == YEW_JS_INT)
+        out->sync_kind = sync->i >= 0 && sync->i <= 2 ? (u8)sync->i : 0U;
+    else if (sync != NULL && sync->kind == YEW_JS_OBJ) {
+        i64 change = yew_json_int(yew_json_get(sync, "change"), 0);
+        const JsonValue *save = yew_json_get(sync, "save");
+
+        out->sync_kind = change >= 0 && change <= 2 ? (u8)change : 0U;
+        out->save_supported = save != NULL && save->kind != YEW_JS_NULL &&
+            !(save->kind == YEW_JS_BOOL && !save->b);
+        if (save != NULL && save->kind == YEW_JS_OBJ)
+            out->save_include_text = yew_json_bool(
+                yew_json_get(save, "includeText"), false);
+    }
+    completion = yew_json_get(caps, "completionProvider");
+    if (completion != NULL && completion->kind == YEW_JS_OBJ) {
+        out->resolve_completion = yew_json_bool(
+            yew_json_get(completion, "resolveProvider"), false);
+        append_string_array(out->trigger_chars, sizeof(out->trigger_chars),
+                            yew_json_get(completion, "triggerCharacters"));
+    }
+    sig = yew_json_get(caps, "signatureHelpProvider");
+    if (sig != NULL && sig->kind == YEW_JS_OBJ)
+        append_string_array(out->sig_trigger, sizeof(out->sig_trigger),
+                            yew_json_get(sig, "triggerCharacters"));
+    enc = yew_json_get(caps, "positionEncoding");
+    if (enc == NULL)
+        return;
+    if (yew_json_streq(enc, "utf-8"))
+        *pos_enc = YEW_POSENC_UTF8;
+    else if (!yew_json_streq(enc, "utf-16"))
+        *unknown_encoding = true;
+}
+
+bool yew_lsp_has(const LspServer *s, u32 cap)
+{
+    return s != NULL && (s->caps.bits & cap) != 0U;
+}
+
+void yew_lsp_initialize_params(Bytebuf *out, const LspServerCfg *cfg,
+                               const char *root, i64 process_id)
+{
+    Bytebuf uri;
+    JsonW w;
+    const char *name;
+
+    bytebuf_init(&uri);
+    yew_lsp_uri_of_path(&uri, (const u8 *)root, (u32)strlen(root));
+    name = strrchr(root, '/');
+    name = name == NULL ? root : name + 1;
+    yew_jsonw_init(&w, out);
+    yew_jsonw_obj(&w);
+    yew_jsonw_key(&w, "processId"); yew_jsonw_int(&w, process_id);
+    yew_jsonw_key(&w, "clientInfo"); yew_jsonw_obj(&w);
+    yew_jsonw_key(&w, "name"); yew_jsonw_cstr(&w, "yew");
+    yew_jsonw_key(&w, "version"); yew_jsonw_cstr(&w, YEW_VERSION);
+    yew_jsonw_obj_end(&w);
+    yew_jsonw_key(&w, "rootUri"); yew_jsonw_str(&w, uri.data, (u32)uri.len);
+    yew_jsonw_key(&w, "workspaceFolders"); yew_jsonw_arr(&w);
+    yew_jsonw_obj(&w);
+    yew_jsonw_key(&w, "uri"); yew_jsonw_str(&w, uri.data, (u32)uri.len);
+    yew_jsonw_key(&w, "name"); yew_jsonw_cstr(&w, name);
+    yew_jsonw_obj_end(&w); yew_jsonw_arr_end(&w);
+    yew_jsonw_key(&w, "initializationOptions");
+    if (cfg->init_options != NULL)
+        yew_jsonw_raw(&w, (const u8 *)cfg->init_options,
+                      (u32)strlen(cfg->init_options));
+    else { yew_jsonw_obj(&w); yew_jsonw_obj_end(&w); }
+    yew_jsonw_key(&w, "capabilities"); yew_jsonw_obj(&w);
+    yew_jsonw_key(&w, "general"); yew_jsonw_obj(&w);
+    yew_jsonw_key(&w, "positionEncodings"); yew_jsonw_arr(&w);
+    yew_jsonw_cstr(&w, "utf-8"); yew_jsonw_cstr(&w, "utf-16");
+    yew_jsonw_arr_end(&w); yew_jsonw_obj_end(&w);
+    yew_jsonw_key(&w, "textDocument"); yew_jsonw_obj(&w);
+    yew_jsonw_key(&w, "synchronization"); yew_jsonw_obj(&w);
+    yew_jsonw_key(&w, "dynamicRegistration"); yew_jsonw_bool(&w, false);
+    yew_jsonw_key(&w, "willSave"); yew_jsonw_bool(&w, false);
+    yew_jsonw_key(&w, "willSaveWaitUntil"); yew_jsonw_bool(&w, false);
+    yew_jsonw_key(&w, "didSave"); yew_jsonw_bool(&w, true);
+    yew_jsonw_obj_end(&w);
+    yew_jsonw_key(&w, "completion"); yew_jsonw_obj(&w);
+    yew_jsonw_key(&w, "contextSupport"); yew_jsonw_bool(&w, true);
+    yew_jsonw_key(&w, "completionItem"); yew_jsonw_obj(&w);
+    yew_jsonw_key(&w, "snippetSupport"); yew_jsonw_bool(&w, false);
+    yew_jsonw_key(&w, "documentationFormat"); yew_jsonw_arr(&w);
+    yew_jsonw_cstr(&w, "plaintext"); yew_jsonw_arr_end(&w);
+    yew_jsonw_key(&w, "insertReplaceSupport"); yew_jsonw_bool(&w, false);
+    yew_jsonw_key(&w, "resolveSupport"); yew_jsonw_obj(&w);
+    yew_jsonw_key(&w, "properties"); yew_jsonw_arr(&w);
+    yew_jsonw_cstr(&w, "documentation"); yew_jsonw_cstr(&w, "detail");
+    yew_jsonw_arr_end(&w); yew_jsonw_obj_end(&w); yew_jsonw_obj_end(&w);
+    yew_jsonw_key(&w, "completionItemKind"); yew_jsonw_obj(&w);
+    yew_jsonw_key(&w, "valueSet"); yew_jsonw_arr(&w);
+    { i64 k; for (k = 1; k <= 25; k++) yew_jsonw_int(&w, k); }
+    yew_jsonw_arr_end(&w); yew_jsonw_obj_end(&w); yew_jsonw_obj_end(&w);
+#define SIMPLE_CAP(name_)                                                     \
+    do { yew_jsonw_key(&w, name_); yew_jsonw_obj(&w);                         \
+         yew_jsonw_obj_end(&w); } while (0)
+    yew_jsonw_key(&w, "hover"); yew_jsonw_obj(&w);
+    yew_jsonw_key(&w, "contentFormat"); yew_jsonw_arr(&w);
+    yew_jsonw_cstr(&w, "plaintext"); yew_jsonw_arr_end(&w);
+    yew_jsonw_obj_end(&w);
+    yew_jsonw_key(&w, "signatureHelp"); yew_jsonw_obj(&w);
+    yew_jsonw_key(&w, "signatureInformation"); yew_jsonw_obj(&w);
+    yew_jsonw_key(&w, "documentationFormat"); yew_jsonw_arr(&w);
+    yew_jsonw_cstr(&w, "plaintext"); yew_jsonw_arr_end(&w);
+    yew_jsonw_key(&w, "parameterInformation"); yew_jsonw_obj(&w);
+    yew_jsonw_key(&w, "labelOffsetSupport"); yew_jsonw_bool(&w, true);
+    yew_jsonw_obj_end(&w); yew_jsonw_obj_end(&w); yew_jsonw_obj_end(&w);
+    yew_jsonw_key(&w, "definition"); yew_jsonw_obj(&w);
+    yew_jsonw_key(&w, "linkSupport"); yew_jsonw_bool(&w, false);
+    yew_jsonw_obj_end(&w);
+    yew_jsonw_key(&w, "declaration"); yew_jsonw_obj(&w);
+    yew_jsonw_key(&w, "linkSupport"); yew_jsonw_bool(&w, false);
+    yew_jsonw_obj_end(&w);
+    yew_jsonw_key(&w, "typeDefinition"); yew_jsonw_obj(&w);
+    yew_jsonw_key(&w, "linkSupport"); yew_jsonw_bool(&w, false);
+    yew_jsonw_obj_end(&w);
+    yew_jsonw_key(&w, "implementation"); yew_jsonw_obj(&w);
+    yew_jsonw_key(&w, "linkSupport"); yew_jsonw_bool(&w, false);
+    yew_jsonw_obj_end(&w);
+    SIMPLE_CAP("references"); SIMPLE_CAP("documentHighlight");
+    yew_jsonw_key(&w, "documentSymbol"); yew_jsonw_obj(&w);
+    yew_jsonw_key(&w, "hierarchicalDocumentSymbolSupport");
+    yew_jsonw_bool(&w, true); yew_jsonw_obj_end(&w);
+    yew_jsonw_key(&w, "rename"); yew_jsonw_obj(&w);
+    yew_jsonw_key(&w, "prepareSupport"); yew_jsonw_bool(&w, false);
+    yew_jsonw_obj_end(&w);
+    yew_jsonw_key(&w, "publishDiagnostics"); yew_jsonw_obj(&w);
+    yew_jsonw_key(&w, "relatedInformation"); yew_jsonw_bool(&w, true);
+    yew_jsonw_key(&w, "versionSupport"); yew_jsonw_bool(&w, true);
+    yew_jsonw_key(&w, "tagSupport"); yew_jsonw_obj(&w);
+    yew_jsonw_key(&w, "valueSet"); yew_jsonw_arr(&w);
+    yew_jsonw_int(&w, 1); yew_jsonw_int(&w, 2); yew_jsonw_arr_end(&w);
+    yew_jsonw_obj_end(&w); yew_jsonw_obj_end(&w); yew_jsonw_obj_end(&w);
+    yew_jsonw_key(&w, "workspace"); yew_jsonw_obj(&w);
+    yew_jsonw_key(&w, "applyEdit"); yew_jsonw_bool(&w, false);
+    yew_jsonw_key(&w, "configuration"); yew_jsonw_bool(&w, true);
+    yew_jsonw_key(&w, "workspaceFolders"); yew_jsonw_bool(&w, true);
+    yew_jsonw_key(&w, "workspaceEdit"); yew_jsonw_obj(&w);
+    yew_jsonw_key(&w, "documentChanges"); yew_jsonw_bool(&w, true);
+    yew_jsonw_key(&w, "failureHandling"); yew_jsonw_cstr(&w, "abort");
+    yew_jsonw_key(&w, "resourceOperations"); yew_jsonw_arr(&w);
+    yew_jsonw_arr_end(&w); yew_jsonw_obj_end(&w); yew_jsonw_obj_end(&w);
+    yew_jsonw_key(&w, "window"); yew_jsonw_obj(&w);
+    SIMPLE_CAP("showMessage");
+    yew_jsonw_key(&w, "workDoneProgress"); yew_jsonw_bool(&w, false);
+    yew_jsonw_obj_end(&w); yew_jsonw_obj_end(&w); yew_jsonw_obj_end(&w);
+#undef SIMPLE_CAP
+    bytebuf_free(&uri);
+}
+
+void yew_lsp_server_init(LspServer *s, u32 id,
+                         const LspServerCfg *cfg, char *root)
+{
+    (void)memset(s, 0, sizeof(*s));
+    s->id = id;
+    s->cfg = cfg;
+    s->root = root;
+    s->state = YEW_LSP_SPAWNING;
+    s->pos_enc = YEW_POSENC_UTF16;
+    bytebuf_init(&s->stderr_tail);
+}
+
+void yew_lsp_server_dispose(LspServer *s)
+{
+    size_t i;
+
+    if (s->rpc_live)
+        yew_rpc_conn_free(&s->rpc);
+    for (i = 0U; i < s->docv.len; i++) {
+        yew_lsp_doc_free(&s->docv.data[i]);
+    }
+    VecLspDoc_free(&s->docv);
+    VecU32Lsp_free(&s->docs);
+    bytebuf_free(&s->stderr_tail);
+    free(s->root);
+    (void)memset(s, 0, sizeof(*s));
+}
+
+bool yew_lsp_server_initialized(LspServer *s, const JsonValue *result)
+{
+    bool unknown;
+
+    if (s == NULL || s->state != YEW_LSP_INITIALIZING || result == NULL)
+        return false;
+    yew_lsp_caps_parse(&s->caps, result, &s->pos_enc, &unknown);
+    if (unknown && s->owner != NULL)
+        yew_msg(s->owner, YEW_MSG_WARN,
+                "%s returned unknown positionEncoding; using utf-16",
+                s->cfg->id);
+    if (s->caps.sync_kind == 0U) {
+        s->state = YEW_LSP_DEAD;
+        return false;
+    }
+    s->state = YEW_LSP_READY;
+    return true;
+}
+
+bool yew_lsp_server_crashed(LspServer *s, i64 now_ms,
+                            const char *last_stderr, Bytebuf *message)
+{
+    static const i64 delay[] = {250, 1000, 4000, 16000};
+
+    if (s->restarts == 0U ||
+        now_ms - s->first_restart_ms >= YEW_LSP_RESTART_WINDOW_MS) {
+        s->first_restart_ms = now_ms;
+        s->restarts = 0U;
+    }
+    s->restarts++;
+    s->state = YEW_LSP_DEAD;
+    if (s->restarts >= 5U) {
+        s->gave_up = true;
+        bytebuf_printf(message,
+            "%s crashed 5 times in 5 minutes; LSP is off for this workspace.\n"
+            "last error: %s\nrun :lsp.restart to try again, or :lsp.log "
+            "to read the server's output.", s->cfg->id,
+            last_stderr != NULL && last_stderr[0] != '\0' ? last_stderr :
+            "(no stderr output)");
+        return false;
+    }
+    s->next_try_ms = now_ms + delay[s->restarts - 1U];
+    if (s->restarts == 2U)
+        bytebuf_printf(message, "%s restarted", s->cfg->id);
+    else if (s->restarts > 2U)
+        bytebuf_printf(message, "%s restarted (%u)", s->cfg->id,
+                       s->restarts);
+    return true;
+}
+
+void yew_lsp_server_restart_reset(LspServer *s)
+{
+    s->restarts = 0U;
+    s->first_restart_ms = 0;
+    s->next_try_ms = 0;
+    s->gave_up = false;
+}
+
+static void framed_destroy(void *owner)
+{
+    LspServer *s = owner;
+
+    if (s->rpc_live) {
+        yew_rpc_conn_free(&s->rpc);
+        s->rpc_live = false;
+    }
+}
+
+static bool framed_feed(void *owner, const u8 *bytes, u64 n)
+{ return yew_rpc_feed_stdout(&((LspServer *)owner)->rpc, bytes, n); }
+static bool framed_finish(void *owner)
+{ return yew_rpc_finish_stdout(&((LspServer *)owner)->rpc); }
+static u64 framed_view(void *owner, const u8 **bytes)
+{ return yew_rpc_tx_view(&((LspServer *)owner)->rpc, bytes); }
+static void framed_consume(void *owner, u64 n)
+{ yew_rpc_tx_consume(&((LspServer *)owner)->rpc, n); }
+static i64 framed_deadline(const void *owner)
+{ return yew_rpc_job_deadline(&((const LspServer *)owner)->rpc); }
+static void framed_tick(void *owner, Ed *ed, i64 now_ms)
+{ yew_rpc_job_tick(&((LspServer *)owner)->rpc, ed, now_ms); }
+
+static const YewJobFramedOps framed_ops = {
+    framed_feed, framed_finish, framed_view, framed_consume,
+    framed_deadline, framed_tick, framed_destroy
+};
+
+static void initialize_done(Ed *ed, void *ctx, const JsonValue *result,
+                            const JsonValue *error)
+{
+    LspServer *s = ctx;
+    size_t i;
+
+    if (error != NULL || !yew_lsp_server_initialized(s, result)) {
+        s->state = YEW_LSP_DEAD;
+        return;
+    }
+    yew_rpc_notify(&s->rpc, "initialized", (const u8 *)"{}", 2U);
+    for (i = 0U; i < s->docv.len; i++) {
+        LspDoc *doc = &s->docv.data[i];
+        Buffer *buffer = yew_ws_buf_by_id(ed, doc->buf_id);
+
+        if (buffer != NULL && buffer->tb != NULL)
+            (void)yew_lsp_doc_open(&s->rpc, doc, buffer, buffer->lang);
+    }
+}
+
+static void on_rpc_value(void *ctx, const JsonValue *msg)
+{
+    LspServer *s = ctx;
+    RpcMsgKind kind = yew_rpc_classify(msg);
+    const JsonValue *method;
+    const JsonValue *params;
+
+    if (kind == YEW_RPC_MALFORMED)
+        return;
+    if (kind == YEW_RPC_RESPONSE || kind == YEW_RPC_ERROR) {
+        (void)yew_rpc_dispatch(&s->rpc, s->owner, msg);
+        return;
+    }
+    method = yew_json_get(msg, "method");
+    params = yew_json_get(msg, "params");
+    if (yew_json_streq(method, "textDocument/publishDiagnostics")) {
+        const JsonValue *uri = yew_json_get(params, "uri");
+        const JsonValue *items = yew_json_get(params, "diagnostics");
+        i64 version = yew_json_int(yew_json_get(params, "version"), -1);
+        u32 nuri = 0U;
+        const u8 *puri = yew_json_str(uri, &nuri);
+        size_t i;
+
+        for (i = 0U; puri != NULL && i < s->docv.len; i++) {
+            LspDoc *doc = &s->docv.data[i];
+
+            if (strlen(doc->uri) == nuri && memcmp(doc->uri, puri, nuri) == 0) {
+                Buffer *buffer = yew_ws_buf_by_id(s->owner, doc->buf_id);
+
+                if (buffer != NULL && items != NULL &&
+                    items->kind == YEW_JS_ARR)
+                    yew_diag_replace(s->owner, buffer, s->id, items, version);
+                break;
+            }
+        }
+        return;
+    }
+    if (kind == YEW_RPC_SRV_REQUEST) {
+        const JsonValue *id = yew_json_get(msg, "id");
+
+        if (yew_json_streq(method, "workspace/configuration"))
+            yew_rpc_reply(&s->rpc, id, (const u8 *)"[]", 2U);
+        else
+            yew_rpc_reply_error(&s->rpc, id, -32601,
+                                "method not supported by yew");
+        return;
+    }
+    if (yew_json_streq(method, "$/progress") ||
+        yew_json_streq(method, "window/logMessage"))
+        return;
+    if (yew_json_streq(method, "window/showMessage")) {
+        u32 n = 0U;
+        const u8 *text = yew_json_str(yew_json_get(params, "message"), &n);
+
+        if (text != NULL)
+            yew_msg(s->owner, YEW_MSG_INFO, "%.*s", (int)n,
+                    (const char *)text);
+    }
+}
+
+LspClient *yew_lsp_client_new(void)
+{
+    LspClient *client = yew_xcalloc(1U, sizeof(*client));
+
+    client->next_id = 1U;
+    return client;
+}
+
+static LspServer *find_server(const LspClient *c, const char *id,
+                              const char *root)
+{
+    u32 i;
+
+    for (i = 0U; c != NULL && i < c->len; i++)
+        if (strcmp(c->server[i]->cfg->id, id) == 0 &&
+            strcmp(c->server[i]->root, root) == 0)
+            return c->server[i];
+    return NULL;
+}
+
+static bool spawn_server(Ed *ed, LspServer *s)
+{
+    char *argv[16];
+    u32 argc = 0U;
+    const char *const *arg;
+    YewJobSpec spec;
+    RpcPending pending;
+    Bytebuf params;
+    char err[160];
+
+    argv[argc++] = (char *)s->cfg->cmd;
+    for (arg = s->cfg->args; arg != NULL && *arg != NULL; arg++) {
+        if (argc + 1U >= YEW_ARRAY_LEN(argv))
+            return false;
+        argv[argc++] = (char *)*arg;
+    }
+    argv[argc] = NULL;
+    yew_rpc_conn_init(&s->rpc);
+    s->rpc_live = true;
+    s->owner = ed;
+    yew_rpc_set_handler(&s->rpc, on_rpc_value, s);
+    (void)memset(&spec, 0, sizeof(spec));
+    spec.argv = argv;
+    spec.cwd = s->root;
+    spec.sink = YEW_SINK_FRAMED;
+    spec.display = s->cfg->id;
+    spec.framed_owner = s;
+    spec.framed_ops = &framed_ops;
+    s->job = yew_job_spawn(ed, &spec, err, sizeof(err));
+    if (s->job == 0U) {
+        framed_destroy(s);
+        s->state = YEW_LSP_DEAD;
+        yew_msg(ed, YEW_MSG_ERROR, "%s", err);
+        return false;
+    }
+    bytebuf_init(&params);
+    yew_lsp_initialize_params(&params, s->cfg, s->root, (i64)getpid());
+    (void)memset(&pending, 0, sizeof(pending));
+    pending.cb = initialize_done;
+    pending.ctx = s;
+    pending.sent_ms = ed->now_ms;
+    pending.deadline_ms = ed->now_ms + s->cfg->init_timeout_ms;
+    (void)yew_rpc_call(&s->rpc, "initialize", params.data, (u32)params.len,
+                       &pending);
+    bytebuf_free(&params);
+    s->state = YEW_LSP_INITIALIZING;
+    return true;
+}
+
+static LspDoc *attach_doc(LspServer *s, const Buffer *b)
+{
+    Bytebuf uri;
+    LspDoc doc;
+    const char *path;
+
+    for (size_t i = 0U; i < s->docv.len; i++)
+        if (s->docv.data[i].buf_id == b->id)
+            return &s->docv.data[i];
+    path = b->meta.realpath != NULL ? b->meta.realpath : b->path;
+    bytebuf_init(&uri);
+    yew_lsp_uri_of_path(&uri, (const u8 *)path, (u32)strlen(path));
+    bytebuf_push_u8(&uri, 0U);
+    yew_lsp_doc_init(&doc, b->id, (const char *)uri.data);
+    doc.server = s;
+    VecLspDoc_push(&s->docv, doc);
+    VecU32Lsp_push(&s->docs, b->id);
+    bytebuf_free(&uri);
+    return &s->docv.data[s->docv.len - 1U];
+}
+
+bool yew_lsp_client_start(Ed *ed, Buffer *b)
+{
+    const LspServerCfg *cfg;
+    char *root;
+    LspServer *s;
+
+    if (ed == NULL || b == NULL || b->lang == NULL || b->path == NULL)
+        return false;
+    cfg = yew_lsp_default_cfg(b->lang);
+    if (cfg == NULL)
+        return false;
+    if (ed->lsp == NULL)
+        ed->lsp = yew_lsp_client_new();
+    root = yew_lsp_resolve_root(cfg, b->path, yew_ws_root(ed));
+    if (root == NULL)
+        return false;
+    s = find_server(ed->lsp, cfg->id, root);
+    if (s != NULL) {
+        LspDoc *doc;
+
+        free(root);
+        doc = attach_doc(s, b);
+        if (s->state == YEW_LSP_READY && !doc->open)
+            (void)yew_lsp_doc_open(&s->rpc, doc, b, b->lang);
+        return !s->gave_up;
+    }
+    if (ed->lsp->len >= YEW_LSP_MAX_SERVERS) {
+        free(root);
+        yew_msg(ed, YEW_MSG_ERROR, "LSP server limit reached");
+        return false;
+    }
+    s = yew_xcalloc(1U, sizeof(*s));
+    yew_lsp_server_init(s, ed->lsp->next_id++, cfg, root);
+    ed->lsp->server[ed->lsp->len++] = s;
+    (void)attach_doc(s, b);
+    return spawn_server(ed, s);
+}
+
+static void shutdown_done(Ed *ed, void *ctx, const JsonValue *result,
+                          const JsonValue *error)
+{
+    LspServer *s = ctx;
+
+    (void)result;
+    (void)error;
+    yew_rpc_notify(&s->rpc, "exit", (const u8 *)"null", 4U);
+    /* The transport must flush exit before termination.  The pump applies
+     * the bounded process-group escalation after this queued frame. */
+    s->next_try_ms = ed->now_ms + YEW_JOB_TERM_GRACE_MS;
+}
+
+void yew_lsp_client_stop(Ed *ed, LspServer *s, bool graceful)
+{
+    if (ed == NULL || s == NULL || s->state == YEW_LSP_DEAD)
+        return;
+    s->state = YEW_LSP_SHUTTING_DOWN;
+    if (graceful && s->rpc_live) {
+        RpcPending p;
+
+        (void)memset(&p, 0, sizeof(p));
+        p.cb = shutdown_done;
+        p.ctx = s;
+        (void)yew_rpc_call(&s->rpc, "shutdown", NULL, 0U, &p);
+    } else {
+        (void)yew_job_signal(ed, s->job, SIGTERM);
+    }
+}
+
+void yew_lsp_client_pump(Ed *ed)
+{
+    u32 i;
+
+    if (ed == NULL || ed->lsp == NULL)
+        return;
+    for (i = 0U; i < ed->lsp->len; i++) {
+        LspServer *s = ed->lsp->server[i];
+        YewJob *j = yew_job_find(ed, s->job);
+
+        if (j != NULL && j->state == YEW_JOB_RUNNING)
+        {
+            if (s->state == YEW_LSP_READY) {
+                size_t d;
+
+                for (d = 0U; d < s->docv.len; d++) {
+                    Buffer *buffer = yew_ws_buf_by_id(ed,
+                        s->docv.data[d].buf_id);
+
+                    if (buffer != NULL && buffer->tb != NULL)
+                        (void)yew_lsp_doc_flush(&s->rpc, &s->docv.data[d],
+                            s->caps.sync_kind, buffer->tb);
+                }
+            } else if (s->state == YEW_LSP_SHUTTING_DOWN &&
+                       s->next_try_ms != 0 && ed->now_ms >= s->next_try_ms) {
+                (void)yew_job_signal(ed, s->job, SIGTERM);
+                s->next_try_ms = 0;
+            }
+            continue;
+        }
+        if (s->state != YEW_LSP_DEAD && s->state != YEW_LSP_SHUTTING_DOWN) {
+            Bytebuf msg;
+            Bytebuf tail;
+
+            bytebuf_init(&msg);
+            bytebuf_init(&tail);
+            if (j != NULL && j->framed_err.len != 0U)
+                bytebuf_append(&tail, j->framed_err.data, j->framed_err.len);
+            bytebuf_push_u8(&tail, 0U);
+            if (!yew_lsp_server_crashed(s, ed->now_ms,
+                                        (const char *)tail.data, &msg) ||
+                msg.len != 0U) {
+                bytebuf_push_u8(&msg, 0U);
+                yew_msg(ed, s->gave_up ? YEW_MSG_ERROR : YEW_MSG_WARN,
+                        "%s", msg.data);
+            }
+            bytebuf_free(&tail);
+            bytebuf_free(&msg);
+        }
+        if (!s->gave_up && s->state == YEW_LSP_DEAD &&
+            ed->now_ms >= s->next_try_ms) {
+            if (j != NULL && !yew_job_pending(j))
+                yew_job_release(ed, j);
+            (void)spawn_server(ed, s);
+        }
+    }
+}
+
+void yew_lsp_client_free(Ed *ed)
+{
+    u32 i;
+
+    if (ed == NULL || ed->lsp == NULL)
+        return;
+    for (i = 0U; i < ed->lsp->len; i++) {
+        LspServer *s = ed->lsp->server[i];
+        YewJob *j = yew_job_find(ed, s->job);
+
+        if (s->state != YEW_LSP_DEAD)
+            (void)yew_job_signal(ed, s->job, SIGTERM);
+        /* Detach the framed owner before releasing it.  yew_ed_free may
+         * dispose the optional client before the generic job table. */
+        if (j != NULL && j->framed_owner == s) {
+            framed_destroy(s);
+            j->framed_owner = NULL;
+            j->framed_ops = NULL;
+            j->framed_destroyed = true;
+        }
+        yew_lsp_server_dispose(s);
+        free(s);
+    }
+    free(ed->lsp);
+    ed->lsp = NULL;
+}
+
+LspDoc *yew_lsp_doc_find(const Ed *ed, u32 buf_id,
+                         const LspServer **server)
+{
+    u32 i;
+
+    if (server != NULL) *server = NULL;
+    for (i = 0U; ed != NULL && ed->lsp != NULL && i < ed->lsp->len; i++) {
+        LspServer *s = ed->lsp->server[i];
+        size_t j;
+
+        for (j = 0U; j < s->docv.len; j++) {
+            if (s->docv.data[j].buf_id == buf_id) {
+                if (server != NULL) *server = s;
+                return &s->docv.data[j];
+            }
+        }
+    }
+    return NULL;
+}
+
+LspDoc *yew_lsp_doc_for_buffer(Ed *ed, const Buffer *b)
+{
+    return b == NULL ? NULL : yew_lsp_doc_find(ed, b->id, NULL);
+}
+
+LspServer *yew_lsp_server_for_doc(Ed *ed, const LspDoc *doc)
+{
+    (void)ed;
+    return doc == NULL ? NULL : doc->server;
+}
+
+bool yew_lsp_server_pos_enc(const Ed *ed, u32 server, u8 *out)
+{
+    u32 i;
+
+    for (i = 0U; ed != NULL && ed->lsp != NULL && i < ed->lsp->len; i++) {
+        if (ed->lsp->server[i]->id == server) {
+            if (out != NULL) *out = ed->lsp->server[i]->pos_enc;
+            return true;
+        }
+    }
+    return false;
+}
