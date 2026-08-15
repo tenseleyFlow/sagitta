@@ -57,6 +57,7 @@ typedef struct MacroLib MacroLib;
 typedef struct OptProvider OptProvider;
 typedef struct YewConfigState YewConfigState;
 typedef struct YewOptHistory YewOptHistory;
+typedef struct LspClient LspClient;
 struct OptStored;
 
 typedef struct YewEdStartup {
@@ -163,6 +164,10 @@ struct Ed {
     bool syn_rr_last_valid;
     TimerHeap timers;
     JobTable jobs;
+    /* Optional-module state stays opaque to the editor core.  The enabled
+     * LSP implementation owns this allocation; the stripped shim preserves
+     * the same lifecycle surface without pulling module internals into Ed. */
+    LspClient *lsp;
     Msg msg;
     /* Cursor-local diagnostic echo; real messages always take precedence. */
     Msg msg_hint;

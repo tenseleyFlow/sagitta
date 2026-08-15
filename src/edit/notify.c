@@ -2,17 +2,9 @@
 
 #include "edit/buf.h"
 #include "edit/shadow.h"
+#include "mod/lsp/lsp.h"
 #include "util/log.h"
 #include "ws/symidx.h"
-
-/* Sprint 46 replaces this fixed core shim with the module consumer. */
-static void yew_lsp_note_edit(EditCtx *ec, u8 kind, ByteOff at, u64 len)
-{
-    (void)ec;
-    (void)kind;
-    (void)at;
-    (void)len;
-}
 
 void yew_edit_notify_pre(EditCtx *ec, u8 kind, ByteOff at, u64 len)
 {
@@ -34,6 +26,7 @@ void yew_edit_notify_post(EditCtx *ec, u8 kind, ByteOff at, u64 len)
     if (ec == NULL || ec->tb == NULL ||
         (kind != YEW_JOURNAL_INS && kind != YEW_JOURNAL_DEL))
         YEW_BUG("edit notify post: invalid edit");
+    yew_lsp_note_edit_post(ec, kind, at, len);
     new_lines = yew_textbuf_line_count(ec->tb);
     removed = ec->notify_old_lines > new_lines ?
                   ec->notify_old_lines - new_lines : 0U;

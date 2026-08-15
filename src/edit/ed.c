@@ -26,6 +26,7 @@
 #include "fl/fltxn.h"
 #include "fl/record.h"
 #include "fl/macrolib.h"
+#include "mod/lsp/lsp.h"
 #include "syn/defs.h"
 #include "util/log.h"
 
@@ -193,8 +194,10 @@ static void ed_buffer_free(Ed *ed)
     if (!ed->model_ready)
         return;
     ed->fl_model_teardown = true;
-    for (i = 0U; i < ed->ws.nbufs; i++)
+    for (i = 0U; i < ed->ws.nbufs; i++) {
+        yew_lsp_buffer_close(ed, ed->ws.bufs[i]);
         yew_fl_hook_buffer(ed, FL_EV_BUF_CLOSE, ed->ws.bufs[i]);
+    }
     yew_ed_insert_barrier(ed);
     yew_reg_bind_context(&ed->regs, NULL, NULL);
     yew_search_state_free(&ed->search);
@@ -390,14 +393,15 @@ int yew_buf_hydrate(Ed *ed, Buffer *b)
                                               : b->pending_marks[i]));
         }
     }
+    yew_lsp_buffer_open(ed, b);
     return 0;
 }
 
 void yew_buf_defer(Ed *ed, Buffer *b)
 {
-    (void)ed;
     if (b == NULL || b->tb == NULL || b->path == NULL)
         return;
+    yew_lsp_buffer_close(ed, b);
     if (b->jrn != NULL) {
         yew_journal_close(b->jrn);
         b->jrn = NULL;
@@ -692,6 +696,8 @@ void yew_ed_free(Ed *ed)
     /* The symbol walk borrows a job slot and must release its filesystem
      * traversal before the generic job table is dismantled. */
     yew_symwalk_dispose(ed);
+    /* LSP framed owners and diagnostics borrow jobs, buffers and marks. */
+    yew_lsp_free(ed);
     /* Jobs die with the process (never persisted, s25); kill and reap
      * before the buffers they append into go away. */
     yew_jobs_free(ed);
@@ -1645,6 +1651,7 @@ CmdStatus yew_ed_file_save_win(Ed *ed, Win *win, bool force)
     lines = yew_textbuf_line_count(doc->tb);
     yew_msg(ed, YEW_MSG_INFO, "wrote %s, %llu lines", doc->path,
             (unsigned long long)lines);
+    yew_lsp_buffer_save(ed, doc);
     yew_symidx_workspace_replace(&ed->ws, doc);
     yew_fl_hook_buffer(ed, FL_EV_BUF_SAVED, doc);
     if (ed->quit_after_save) {
@@ -1721,9 +1728,13 @@ CmdStatus yew_ed_file_write_to_win(Ed *ed, Win *win, const char *path,
         yew_msg(ed, YEW_MSG_ERROR, "could not write %s", path);
         return YEW_CMD_ERR_IO;
     }
+    yew_lsp_buffer_close(ed, doc);
     yew_filemeta_dispose(&doc->meta);
     doc->meta = next;
     doc->path = arena_strdup(&ed->arena, path);
+    yew_ed_syn_bind(doc);
+    yew_lsp_buffer_open(ed, doc);
+    yew_lsp_buffer_save(ed, doc);
     if (ed->win == win) {
         yew_search_opts_init(&ed->search_opts);
         yew_search_state_init(&ed->search);

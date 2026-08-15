@@ -18,6 +18,7 @@
 #include "ui/mouse.h"
 #include "edit/shell.h"
 #include "fl/flruntime.h"
+#include "mod/lsp/lsp.h"
 #include "term/input.h"
 #include "term/tty.h"
 #include "util/log.h"
@@ -450,6 +451,7 @@ int yew_loop_run(Ed *ed)
         /* Completion is delivered here, not from reap: a job is done
          * when the child is gone AND its pipes have drained. */
         yew_job_settle(ed);
+        yew_lsp_pump(ed);
         if (ed->jobs.dirty) {
             /* One refresh per iteration, not one per state change: a
              * burst of exits redraws the table and badge exactly once. */

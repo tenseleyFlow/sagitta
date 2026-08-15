@@ -30,6 +30,35 @@ CmdStatus yew_lsp_cmd_start(CmdCtx *cx)
     return status_of(yew_lsp_start(cx->ed, cx->win->buf));
 }
 
+CmdStatus yew_lsp_cmd_stop(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL || cx->win == NULL ||
+        cx->win->buf == NULL)
+        return YEW_CMD_ERR_STATE;
+    return status_of(yew_lsp_stop(cx->ed, cx->win->buf));
+}
+
+CmdStatus yew_lsp_cmd_diagnostics(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL)
+        return YEW_CMD_ERR_STATE;
+    return status_of(yew_lsp_diagnostics(cx->ed));
+}
+
+CmdStatus yew_lsp_cmd_diag_next(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL || cx->win == NULL)
+        return YEW_CMD_ERR_STATE;
+    return status_of(yew_lsp_diag_step(cx->ed, cx->win, true));
+}
+
+CmdStatus yew_lsp_cmd_diag_prev(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL || cx->win == NULL)
+        return YEW_CMD_ERR_STATE;
+    return status_of(yew_lsp_diag_step(cx->ed, cx->win, false));
+}
+
 CmdStatus yew_lsp_cmd_require(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL)

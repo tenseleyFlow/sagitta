@@ -50,12 +50,18 @@ void test_lsp_restart_crosses_module_boundary(void)
     cx.win = ed.win;
     cx.count = 1U;
     cx.source = YEW_SRC_TEST;
-    YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, restart, &cx), YEW_CMD_ERR_STATE);
-    YEW_ASSERT(ed.msg.active);
-    YEW_ASSERT_EQ_U64(ed.msg.sev, YEW_MSG_ERROR);
 #if YEW_WITH_LSP
-    YEW_ASSERT_EQ_STR(ed.msg.text, "LSP servers start in Sprint 46");
+    YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, restart, &cx), YEW_CMD_OK);
 #else
+    YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, restart, &cx), YEW_CMD_ERR_STATE);
+#endif
+    YEW_ASSERT(ed.msg.active);
+#if YEW_WITH_LSP
+    YEW_ASSERT_EQ_U64(ed.msg.sev, YEW_MSG_INFO);
+    YEW_ASSERT_EQ_STR(ed.msg.text,
+                      "no LSP server configured for this buffer");
+#else
+    YEW_ASSERT_EQ_U64(ed.msg.sev, YEW_MSG_ERROR);
     YEW_ASSERT_EQ_STR(
         ed.msg.text,
         "this build has no lsp module; rebuild with 'make MODULES=\"… lsp\"'");

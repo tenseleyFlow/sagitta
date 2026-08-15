@@ -70,6 +70,8 @@ const LspServerCfg *yew_lsp_default_cfg(const char *lang)
 
     if (lang == NULL)
         return NULL;
+    if (strncmp(lang, "fortran", 7U) == 0)
+        lang = "fortran";
     for (i = 0U; i < YEW_ARRAY_LEN(default_cfgs); i++)
         if (strcmp(default_cfgs[i].lang, lang) == 0)
             return &default_cfgs[i];

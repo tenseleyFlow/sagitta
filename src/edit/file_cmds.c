@@ -8,6 +8,7 @@
 #include "edit/option.h"
 #include "fl/flruntime.h"
 #include "fl/fltxn.h"
+#include "mod/lsp/lsp.h"
 #include "text/journal.h"
 #include "ui/layout.h"
 #include "ui/macrobrowse.h"
@@ -279,6 +280,7 @@ CmdStatus yew_file_cmd_buf_close(CmdCtx *cx)
         cx->ed->fl_model_teardown = false;
         return YEW_CMD_ERR_STATE;
     }
+    yew_lsp_buffer_close(cx->ed, b);
     if (b == &cx->ed->buffer) {
         close_primary(cx->ed);
         cx->ed->fl_model_teardown = false;
