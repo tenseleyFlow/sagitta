@@ -17,6 +17,9 @@
 #include "unicode/coords.h"
 #include "unicode/width.h"
 #include "util/log.h"
+#if YEW_WITH_LSP
+#include "mod/lsp/diag.h"
+#endif
 
 enum { STATUS_TABWIDTH = 4 };
 enum { STATUS_WARN_COLOR = 214 };
@@ -361,9 +364,10 @@ void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
     char search_badge[40];
     char wrap_badge[8];
     char syn_badge[8];
+    char diag_badge[48];
     char recording[32];
     RecStatus rec_status;
-    Segment segments[13];
+    Segment segments[14];
     int available;
     int path_cells;
     int dirty_cells;
@@ -517,7 +521,26 @@ void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
             syn_badge[0] = '\0';
         segments[11] = (Segment){syn_badge, 4U, show};
     }
-    segments[12] = (Segment){w->buf->lang, 3U,
+    diag_badge[0] = '\0';
+#if YEW_WITH_LSP
+    if (w->buf->diag != NULL &&
+        (w->buf->diag->n[YEW_DIAG_ERROR] != 0U ||
+         w->buf->diag->n[YEW_DIAG_WARN] != 0U)) {
+        if (w->buf->diag->n[YEW_DIAG_ERROR] != 0U &&
+            w->buf->diag->n[YEW_DIAG_WARN] != 0U)
+            (void)snprintf(diag_badge, sizeof(diag_badge), "E:%u W:%u",
+                           (unsigned)w->buf->diag->n[YEW_DIAG_ERROR],
+                           (unsigned)w->buf->diag->n[YEW_DIAG_WARN]);
+        else if (w->buf->diag->n[YEW_DIAG_ERROR] != 0U)
+            (void)snprintf(diag_badge, sizeof(diag_badge), "E:%u",
+                           (unsigned)w->buf->diag->n[YEW_DIAG_ERROR]);
+        else
+            (void)snprintf(diag_badge, sizeof(diag_badge), "W:%u",
+                           (unsigned)w->buf->diag->n[YEW_DIAG_WARN]);
+    }
+#endif
+    segments[12] = (Segment){diag_badge, 5U, diag_badge[0] != '\0'};
+    segments[13] = (Segment){w->buf->lang, 3U,
                              w->buf->lang != NULL &&
                              strncmp(w->buf->lang, "fortran", 7U) == 0};
     path_cells = cells(path);

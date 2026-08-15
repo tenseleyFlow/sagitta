@@ -25,6 +25,9 @@
 #include "unicode/coords.h"
 #include "unicode/width.h"
 #include "util/log.h"
+#if YEW_WITH_LSP
+#include "mod/lsp/diag.h"
+#endif
 
 static u8 themed_overlay(Cell *style, const ThemeEnt *theme)
 {
@@ -435,6 +438,48 @@ static void draw_search_rows(Ed *ed, Win *w, u16 lo, u16 hi)
     }
 }
 
+#if YEW_WITH_LSP
+static void draw_diag_rows(Ed *ed, Win *w, u16 lo, u16 hi)
+{
+    DiagStore *store = w->buf->diag;
+    u32 i;
+
+    if (store == NULL)
+        return;
+    for (i = 0U; i < store->d.len; i++) {
+        Diagnostic *d = &store->d.data[i];
+        Span diagnostic = yew_diag_span(w->buf, d);
+        Cell style = ed->grid.blank;
+        const ThemeEnt *theme = yew_theme_ui_tab(ed, yew_diag_role(d->sev));
+        u8 fields = themed_overlay(&style, theme);
+        u16 screen_row;
+
+        style.attrs |= yew_diag_attrs(
+            d->sev, d->tags,
+            ed->render.tier == YEW_RENDER_TIER_TRUECOLOR);
+        if (store->stale)
+            style.attrs |= YEW_ATTR_DIM;
+        fields |= YEW_OVERLAY_ATTRS;
+        for (screen_row = lo;
+             screen_row < hi && screen_row < w->rect.h; screen_row++) {
+            LineNo line;
+            u32 sub;
+            Span displayed;
+
+            if (!yew_vp_line_of_row(w, screen_row, &line, &sub))
+                continue;
+            displayed = w->vp.wrap ? yew_wrap_row(w, line, sub) :
+                                     line_content_span(w->buf->tb, line);
+            if (diagnostic.hi <= displayed.lo ||
+                diagnostic.lo >= displayed.hi)
+                continue;
+            overlay_span(&ed->grid, w, (u16)(w->rect.y + screen_row),
+                         displayed, diagnostic, &style, fields);
+        }
+    }
+}
+#endif
+
 static u8 syn_attr_at(const SynLineOut *syn, u32 relative, u32 *at)
 {
     while (*at < syn->n) {
@@ -581,6 +626,9 @@ void yew_draw_document_rows(Ed *ed, Win *w, u16 lo, u16 hi)
     yew_gutter_draw(ed, w, lo, hi);
     draw_selection_rows(ed, w, lo, hi);
     draw_search_rows(ed, w, lo, hi);
+#if YEW_WITH_LSP
+    draw_diag_rows(ed, w, lo, hi);
+#endif
     draw_secondary_rows(ed, w, lo, hi);
     if (lo == 0U && hi == w->rect.h) {
         grid->cursor_overlay_signature = cursor_overlay_signature(ed, w);
@@ -646,11 +694,14 @@ void yew_draw_cursor(Ed *ed, Win *w)
 
 void yew_draw_footer(Ed *ed, Win *w)
 {
+#if YEW_WITH_LSP
+    yew_diag_cursor_hint(ed, w);
+#endif
     if (ed->footer_rect.h == 0U)
         return;
     if (ed->cmdline.active)
         yew_cmdline_draw(ed, ed->footer_rect);
-    else if (ed->msg.active)
+    else if (yew_msg_visible(ed))
         yew_message_draw(ed, w);
     else
         yew_statusline_draw(ed, w);

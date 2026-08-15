@@ -57,6 +57,8 @@ void yew_gutter_draw(Ed *ed, Win *w, u16 lo, u16 hi);
 void yew_gutter_sign_set(Win *w, LineNo line, SignKind kind,
                          const GutterSign *sign);
 void yew_gutter_signs_clear(Win *w, LineNo lo, LineNo hi);
+void yew_gutter_sign_clear_kind(Win *w, LineNo lo, LineNo hi,
+                                SignKind kind);
 void yew_gutter_signs_free(Win *w);
 
 #endif

@@ -39,6 +39,8 @@ typedef struct Buffer {
     /* Nonzero only for an editable macro-register scratch buffer. */
     u8 macro_reg;
     Strmap opt_overrides;
+    /* Optional-module allocation; the LSP client owns its lifetime. */
+    struct DiagStore *diag;
 } Buffer;
 
 #endif /* YEW_EDIT_BUF_H */

@@ -23,6 +23,13 @@ enum {
 
 static const char ellipsis[] = "\xe2\x80\xa6";
 
+static const Msg *visible_message(const Ed *ed)
+{
+    if (ed->msg.active)
+        return &ed->msg;
+    return ed->msg_hint.active ? &ed->msg_hint : NULL;
+}
+
 static YewColor indexed_color(u8 index)
 {
     YewColor color = {YEW_COLOR_INDEXED, index, 0U, 0U};
@@ -67,6 +74,61 @@ void yew_msg_clear(Ed *ed)
     ed->footer_dirty = true;
     if (expanded || ed->cmdline.active)
         ed->full_damage = true;
+}
+
+void yew_msg_hint_clear(Ed *ed)
+{
+    if (ed == NULL)
+        return;
+    free(ed->msg_hint.full);
+    (void)memset(&ed->msg_hint, 0, sizeof(ed->msg_hint));
+    ed->footer_dirty = true;
+}
+
+static void hint_vset(Ed *ed, MsgSev sev, const char *fmt, va_list ap)
+{
+    va_list copy;
+    int needed;
+
+    if (ed == NULL)
+        return;
+    if (fmt == NULL) {
+        yew_msg_hint_clear(ed);
+        return;
+    }
+    yew_msg_hint_clear(ed);
+    va_copy(copy, ap);
+    needed = vsnprintf(ed->msg_hint.text, sizeof(ed->msg_hint.text), fmt,
+                       copy);
+    va_end(copy);
+    if (needed < 0) {
+        ed->msg_hint.text[0] = '\0';
+        needed = 0;
+    } else if ((size_t)needed >= sizeof(ed->msg_hint.text)) {
+        ed->msg_hint.full = yew_xmalloc((size_t)needed + 1U);
+        va_copy(copy, ap);
+        (void)vsnprintf(ed->msg_hint.full, (size_t)needed + 1U, fmt, copy);
+        va_end(copy);
+    }
+    ed->msg_hint.len = (size_t)needed;
+    ed->msg_hint.sev = sev;
+    ed->msg_hint.active = true;
+    ed->msg_hint.expiry = YEW_TIMER_NONE;
+    ed->footer_dirty = true;
+}
+
+void yew_msg_hint(Ed *ed, MsgSev sev, const char *fmt, ...)
+{
+    va_list ap;
+
+    va_start(ap, fmt);
+    hint_vset(ed, sev, fmt, ap);
+    va_end(ap);
+}
+
+bool yew_msg_visible(const Ed *ed)
+{
+    return ed != NULL && visible_message(ed) != NULL;
 }
 
 static void message_vset(Ed *ed, MsgSev sev, i64 now_ms,
@@ -232,14 +294,18 @@ static Cell styled_blank(YewColor fg, YewColor bg, u16 attrs)
 YewUiStyle yew_message_style(const Ed *ed)
 {
     YewUiStyle style = yew_statusline_mode_style(ed->mode);
+    const Msg *msg = visible_message(ed);
 
-    if (ed->msg.prompt) {
+    /* Style remains queryable for a prepared, not-yet-active message. */
+    if (msg == NULL)
+        msg = &ed->msg;
+    if (msg->prompt) {
         style.row_fg = indexed_color(YEW_MESSAGE_PROMPT_COLOR);
         style.attrs = YEW_ATTR_BOLD;
-    } else if (ed->msg.sev == YEW_MSG_WARN) {
+    } else if (msg->sev == YEW_MSG_WARN) {
         style.row_fg = indexed_color(YEW_MESSAGE_WARN_COLOR);
         style.attrs = YEW_ATTR_BOLD;
-    } else if (ed->msg.sev == YEW_MSG_ERROR) {
+    } else if (msg->sev == YEW_MSG_ERROR) {
         style.row_fg = indexed_color(YEW_MESSAGE_ERROR_COLOR);
         style.attrs = YEW_ATTR_BOLD;
     } else {
@@ -293,9 +359,11 @@ void yew_message_draw(Ed *ed, Win *w)
     u16 first;
     u16 i;
     const char *text;
+    Msg *msg;
 
-    if (ed == NULL || w == NULL || !ed->msg.active)
+    if (ed == NULL || w == NULL || !yew_msg_visible(ed))
         return;
+    msg = ed->msg.active ? &ed->msg : &ed->msg_hint;
     grid = &ed->grid;
     if (grid->rows == 0U || grid->cols == 0U)
         return;
@@ -316,11 +384,11 @@ void yew_message_draw(Ed *ed, Win *w)
     else
         prefix_cells = (u16)(prefix_cells + status.recording_cells);
     available = (u16)(grid->cols - prefix_cells);
-    text = message_text(&ed->msg);
-    text_len = ed->msg.len;
-    ed->msg.truncated = row_take(text, text_len, available) < text_len;
+    text = message_text(msg);
+    text_len = msg->len;
+    msg->truncated = row_take(text, text_len, available) < text_len;
 
-    if (ed->msg.expanded && ed->msg.truncated && available != 0U) {
+    if (msg->expanded && msg->truncated && available != 0U) {
         size_t scan = 0U;
 
         rows = 0U;

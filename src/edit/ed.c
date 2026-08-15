@@ -711,6 +711,7 @@ void yew_ed_free(Ed *ed)
     yew_record_free(&ed->rec);
     yew_reg_free(&ed->regs);
     yew_msg_clear(ed);
+    yew_msg_hint_clear(ed);
     if (ed->grid_ready)
         yew_grid_free(&ed->grid);
     if (ed->input_ready) {

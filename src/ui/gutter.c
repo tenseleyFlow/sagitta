@@ -116,6 +116,31 @@ void yew_gutter_signs_clear(Win *w, LineNo lo, LineNo hi)
     signs->len -= last - first;
 }
 
+void yew_gutter_sign_clear_kind(Win *w, LineNo lo, LineNo hi,
+                                SignKind kind)
+{
+    GutterSigns *signs;
+    u32 at;
+    u8 bit;
+
+    if (w == NULL || lo.v >= hi.v || kind >= YEW_SIGN_NKIND)
+        return;
+    signs = &w->gutter_signs;
+    at = sign_lower_bound(signs, lo);
+    bit = (u8)(1U << kind);
+    while (at < signs->len && signs->v[at].line.v < hi.v) {
+        signs->v[at].mask &= (u8)~bit;
+        if (signs->v[at].mask != 0U) {
+            at++;
+            continue;
+        }
+        if (at + 1U < signs->len)
+            (void)memmove(signs->v + at, signs->v + at + 1U,
+                          (signs->len - at - 1U) * sizeof(*signs->v));
+        signs->len--;
+    }
+}
+
 void yew_gutter_signs_free(Win *w)
 {
     if (w == NULL)

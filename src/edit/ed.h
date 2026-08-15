@@ -164,6 +164,8 @@ struct Ed {
     TimerHeap timers;
     JobTable jobs;
     Msg msg;
+    /* Cursor-local diagnostic echo; real messages always take precedence. */
+    Msg msg_hint;
     SearchOpts search_opts;
     SearchState search;
     SearchConfirm confirm;

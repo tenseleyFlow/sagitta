@@ -29,6 +29,10 @@ typedef struct Msg {
 } Msg;
 
 void yew_msg(Ed *ed, MsgSev sev, const char *fmt, ...);
+/* Low-priority persistent text.  A real message temporarily displaces it. */
+void yew_msg_hint(Ed *ed, MsgSev sev, const char *fmt, ...);
+void yew_msg_hint_clear(Ed *ed);
+bool yew_msg_visible(const Ed *ed);
 /* Event-loop/test variant: schedules expiry relative to the supplied clock. */
 void yew_msg_at(Ed *ed, MsgSev sev, i64 now_ms, const char *fmt, ...);
 void yew_msg_clear(Ed *ed);
