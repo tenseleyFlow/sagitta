@@ -1,0 +1,5 @@
+# case median_ns p99_ns
+note_edit_utf8_4k 45 47
+note_edit_utf16_4k 17793 37550
+diag_viewport_10k 925605 1136853
+framed_50m_keypress 124 574

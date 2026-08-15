@@ -342,7 +342,10 @@ UNIT_SRC := $(filter-out tests/unit/fakeclip.c, \
               $(sort $(wildcard tests/unit/*.c)))
 UNIT_LSP_SRC := tests/unit/test_json.c tests/unit/test_json_num.c \
                 tests/unit/test_jsonw.c tests/unit/test_jsonrpc_frame.c \
-                tests/unit/test_jsonrpc.c tests/unit/test_lsp_transport.c
+                tests/unit/test_jsonrpc.c tests/unit/test_lsp_transport.c \
+                tests/unit/test_lsp_caps.c tests/unit/test_lsp_diag.c \
+                tests/unit/test_lsp_life.c tests/unit/test_lsp_sync.c \
+                tests/unit/test_lsp_uri.c
 ifeq ($(filter lsp,$(MODULES)),)
 UNIT_SRC := $(filter-out $(UNIT_LSP_SRC),$(UNIT_SRC))
 endif
@@ -410,6 +413,7 @@ FUZZ_SYN_DEF_OBJ := $(BUILD)/tests/fuzz/fuzz_syn_def.o
 FUZZ_SYMIDX_OBJ := $(BUILD)/tests/fuzz/fuzz_symidx.o
 FUZZ_JSON_OBJ := $(BUILD)/tests/fuzz/fuzz_json.o
 FUZZ_JSONRPC_OBJ := $(BUILD)/tests/fuzz/fuzz_jsonrpc.o
+FUZZ_LSP_MSG_OBJ := $(BUILD)/tests/fuzz/fuzz_lsp_msg.o
 RE_REF_OBJ := $(BUILD)/tests/fuzz/re_ref.o
 FUZZ_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 FUZZ_LINK_OBJ := $(FUZZ_CORE_OBJ) $(FUZZ_LIB_OBJ)
@@ -442,6 +446,11 @@ PERF_SYN_OBJ := $(BUILD)/tests/perf/perf_syn.o
 PERF_BATCH_OBJ := $(BUILD)/tests/perf/batch.o
 PERF_SCRIPT_SUITE_OBJ := $(BUILD)/tests/perf/script_suite.o
 PERF_SYMIDX_OBJ := $(BUILD)/tests/perf/perf_symidx.o
+PERF_LSP_OBJ := $(BUILD)/tests/perf/perf_lsp.o
+ifneq ($(filter lsp,$(MODULES)),)
+LSP_FUZZ_TARGET := fuzz-lsp-msg
+LSP_PERF_TARGET := perf-lsp
+endif
 FLETCH_RUN_OBJ := $(BUILD)/tests/fletch/run.o
 SCRIPT_RUNNER_OBJ := $(BUILD)/tests/script/runner.o
 FLETCH_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
@@ -492,7 +501,8 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
                 $(PERF_SCRIPT_SUITE_OBJ) \
                 $(FUZZ_RECORD_OBJ) $(FUZZ_SYN_OBJ) $(FUZZ_SYN_DEF_OBJ) \
                 $(FUZZ_SYMIDX_OBJ) $(FUZZ_JSON_OBJ) $(FUZZ_JSONRPC_OBJ) \
-                $(PERF_SYN_OBJ) $(PERF_SYMIDX_OBJ) \
+                $(FUZZ_LSP_MSG_OBJ) \
+                $(PERF_SYN_OBJ) $(PERF_SYMIDX_OBJ) $(PERF_LSP_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) \
                 $(TORTURE_BATCH_OBJ) $(FAULTSHIM) $(FAKELSP)))
@@ -511,7 +521,7 @@ endif
         test-script-determinism test-script-budget test-pty fuzz \
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
         fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
-        fuzz-symidx fuzz-json fuzz-jsonrpc \
+        fuzz-symidx fuzz-json fuzz-jsonrpc fuzz-lsp-msg \
         fuzz-syn-long \
         fuzz-syn-line-long fuzz-syn-edit-long \
         test-record-corpus \
@@ -520,7 +530,7 @@ endif
         fixtures fixtures-quick fixtures-verify \
         fixtures-verify-quick \
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
-        perf-shadow perf-symidx \
+        perf-shadow perf-symidx perf-lsp \
         perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
         perf-mouse perf-record perf-syn perf-syn-budgets perf-syn-quiet \
         perf-syn-gate-selftest perf-syn-line-probe \
@@ -677,6 +687,10 @@ $(BUILD)/fuzz_jsonrpc: $(FUZZ_LINK_OBJ) $(FUZZ_JSONRPC_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_JSONRPC_OBJ) $(LDLIBS)
 
+$(BUILD)/fuzz_lsp_msg: $(FUZZ_LINK_OBJ) $(FUZZ_LSP_MSG_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
+		$(FUZZ_LSP_MSG_OBJ) $(LDLIBS)
+
 $(BUILD)/gen-bigfile: $(GEN_BIGFILE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(GEN_BIGFILE_OBJ) $(LDLIBS)
 
@@ -695,6 +709,10 @@ $(BUILD)/perf_syn: $(PERF_CORE_OBJ) $(PERF_SYN_OBJ)
 $(BUILD)/perf_symidx: $(PERF_CORE_OBJ) $(PERF_SYMIDX_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(PERF_SYMIDX_OBJ) $(LDLIBS)
+
+$(BUILD)/perf_lsp: $(PERF_CORE_OBJ) $(PERF_LSP_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
+		$(PERF_LSP_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_batch: $(PERF_BATCH_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_BATCH_OBJ) $(LDLIBS)
@@ -866,7 +884,7 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
       $(BUILD)/fuzz_flapi \
       fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse \
       fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
-      fuzz-symidx fuzz-json fuzz-jsonrpc
+      fuzz-symidx fuzz-json fuzz-jsonrpc $(LSP_FUZZ_TARGET)
 	$(BUILD)/fuzz_utf8 --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_grapheme --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_input --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
@@ -956,6 +974,9 @@ fuzz-json: $(BUILD)/fuzz_json
 fuzz-jsonrpc: $(BUILD)/fuzz_jsonrpc
 	$(BUILD)/fuzz_jsonrpc --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 
+fuzz-lsp-msg: $(BUILD)/fuzz_lsp_msg
+	$(BUILD)/fuzz_lsp_msg --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+
 test-record-corpus: $(BUILD)/fuzz_record
 	$(BUILD)/fuzz_record --corpus-only
 
@@ -1041,7 +1062,10 @@ perf: perf-unicode perf-render perf-shadow perf-scroll perf-piece perf-cursor pe
       perf-latency perf-jobstream perf-re-pathological \
       perf-re-throughput perf-search-latency \
       perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
-      perf-mouse perf-record perf-syn perf-symidx perf-batch
+      perf-mouse perf-record perf-syn perf-symidx perf-batch $(LSP_PERF_TARGET)
+
+perf-lsp: $(BUILD)/perf_lsp
+	$(BUILD)/perf_lsp
 
 perf-cursor: $(BUILD)/perf_cursor
 	$(BUILD)/perf_cursor
@@ -1508,6 +1532,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew
          $(FUZZ_SYN_DEF_OBJ:.o=.d) \
          $(FUZZ_SYMIDX_OBJ:.o=.d) \
          $(FUZZ_JSON_OBJ:.o=.d) $(FUZZ_JSONRPC_OBJ:.o=.d) \
+         $(FUZZ_LSP_MSG_OBJ:.o=.d) \
          $(FUZZ_CMDPARSE_OBJ:.o=.d) $(FUZZ_RECOMPILE_OBJ:.o=.d) \
          $(FUZZ_REDIFF_OBJ:.o=.d) $(RE_REF_OBJ:.o=.d) \
          $(PTY_ORACLE_OBJ:.o=.d) \
@@ -1530,6 +1555,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew
          $(PERF_BATCH_OBJ:.o=.d) \
          $(PERF_SYN_OBJ:.o=.d) \
          $(PERF_SYMIDX_OBJ:.o=.d) \
+         $(PERF_LSP_OBJ:.o=.d) \
          $(PERF_SCRIPT_SUITE_OBJ:.o=.d) \
          $(GEN_BIGFILE_OBJ:.o=.d) \
          $(TORTURE_CHILD_OBJ:.o=.d) \
