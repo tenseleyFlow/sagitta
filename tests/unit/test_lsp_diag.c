@@ -176,3 +176,117 @@ void test_lsp_diag_gutter_hint_and_picker_identity(void)
     YEW_ASSERT_EQ_I64(items[0].payload, identity);
     diag_fix_free(&f);
 }
+
+static void oracle_insert(u64 lo[50], u64 hi[50], u64 at, u64 len)
+{
+    u32 i;
+
+    for (i = 0U; i < 50U; i++) {
+        if (lo[i] > at)
+            lo[i] += len;
+        if (hi[i] >= at)
+            hi[i] += len;
+    }
+}
+
+static void oracle_delete_pos(u64 *pos, u64 at, u64 len)
+{
+    u64 end = at + len;
+
+    if (*pos < at)
+        return;
+    *pos = *pos < end ? at : *pos - len;
+}
+
+static void oracle_delete(u64 lo[50], u64 hi[50], u64 at, u64 len)
+{
+    u32 i;
+
+    for (i = 0U; i < 50U; i++) {
+        oracle_delete_pos(&lo[i], at, len);
+        oracle_delete_pos(&hi[i], at, len);
+    }
+}
+
+void test_lsp_diag_marks_survive_1000_mixed_edits(void)
+{
+    enum { NDIAG = 50, NEDIT = 1000 };
+    DiagFix f;
+    Buffer *b;
+    Bytebuf source;
+    Bytebuf json;
+    u64 lo[NDIAG];
+    u64 hi[NDIAG];
+    u32 i;
+
+    (void)memset(&f, 0, sizeof(f));
+    yew_ed_init(&f.ed);
+    bytebuf_init(&source);
+    for (i = 0U; i < 2000U; i++)
+        bytebuf_push_u8(&source, (u8)('a' + i % 26U));
+    YEW_ASSERT(yew_ed_open_memory(&f.ed, source.data, source.len,
+                                  "diag-oracle.c"));
+    bytebuf_free(&source);
+    arena_init(&f.json);
+    bytebuf_init(&json);
+    bytebuf_push_u8(&json, (u8)'[');
+    for (i = 0U; i < NDIAG; i++) {
+        lo[i] = (u64)i * 30U + 3U;
+        hi[i] = lo[i] + 9U;
+        if (i != 0U)
+            bytebuf_push_u8(&json, (u8)',');
+        bytebuf_printf(
+            &json,
+            "{\"range\":{\"start\":{\"line\":0,\"character\":%llu},"
+            "\"end\":{\"line\":0,\"character\":%llu}},"
+            "\"severity\":2,\"message\":\"range %u\"}",
+            (unsigned long long)lo[i], (unsigned long long)hi[i],
+            (unsigned)i);
+    }
+    bytebuf_push_u8(&json, (u8)']');
+    b = yew_ed_doc(&f.ed);
+    {
+        JsonErr err;
+        JsonValue *arr = yew_json_parse(&f.json, json.data, json.len, &err);
+
+        YEW_ASSERT_NOT_NULL(arr);
+        yew_diag_replace(&f.ed, b, 11U, arr, 1);
+    }
+    bytebuf_free(&json);
+    YEW_ASSERT_EQ_U64(b->diag->d.len, NDIAG);
+
+    for (i = 0U; i < NEDIT; i++) {
+        EditCtx ec = yew_ed_edit_ctx(&f.ed);
+        u64 text_len = yew_textbuf_len(b->tb);
+
+        if (i % 3U == 0U) {
+            u64 at = ((u64)i * 37U + 11U) % (text_len + 1U);
+
+            YEW_ASSERT(yew_edit_insert(&ec, BYTEOFF(at), (const u8 *)"x",
+                                       1U));
+            oracle_insert(lo, hi, at, 1U);
+        } else {
+            u64 at = ((u64)i * 53U + 7U) % text_len;
+            u64 len = 1U + i % 3U;
+
+            if (len > text_len - at)
+                len = text_len - at;
+            YEW_ASSERT(yew_edit_delete(&ec, (Span){at, at + len}));
+            oracle_delete(lo, hi, at, len);
+        }
+        yew_ed_finish_edit(&f.ed, &ec);
+        if ((i + 1U) % 20U == 0U) {
+            u32 d;
+
+            for (d = 0U; d < NDIAG; d++) {
+                Diagnostic *diag = &b->diag->d.data[d];
+
+                YEW_ASSERT_EQ_U64(yew_mark_pos(b->marks, diag->lo).v,
+                                  lo[d]);
+                YEW_ASSERT_EQ_U64(yew_mark_pos(b->marks, diag->hi).v,
+                                  hi[d]);
+            }
+        }
+    }
+    diag_fix_free(&f);
+}

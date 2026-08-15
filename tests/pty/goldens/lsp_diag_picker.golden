@@ -1,0 +1,63 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=3,2 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
+--- text
+✗   1 error alpha
+▲   2 warning beta
+● Diagnostics 
+·:                                                                             
+
+  src/diag_fixture.c:1:1  ✗ use of undeclared identifier 'alpha'
+  src/diag_fixture.c:2:1  ▲ warning diagnostic
+  src/diag_fixture.c:3:1  ● information diagnostic
+  src/diag_fixture.c:4:1  · hint diagnostic
+
+
+
+
+
+
+
+
+
+
+
+
+  4/4   up/down move . enter open . ^v split . esc
+
+ L  diag_fixture.c                                  utf-8  lf  5:1  all  E:1 W:1
+--- style
+AAAAAABBBBBAAAAAA
+AAAAAABBBBBBBAAAAA
+ACCCCCCCCCCCCC
+ADEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+
+AAFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+AGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+
+HHHIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
+--- legend
+A fg=default bg=default attrs=----------
+B fg=default bg=default attrs=----c-----
+C fg=default bg=default attrs=b---------
+D fg=#2f1806 bg=#e77d24 attrs=b---------
+E fg=#f7e0cc bg=#4e2a0f attrs=b---------
+F fg=default bg=default attrs=------r---
+G fg=#787878 bg=default attrs=-d--------
+H fg=#ebf4ff bg=#266eba attrs=b---------
+I fg=#dae5f0 bg=#14304c attrs=----------

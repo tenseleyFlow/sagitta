@@ -1,0 +1,59 @@
+# yew pty golden v1
+size 40x24 alt=1 cursor=4,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
+--- text
+✗   1 error alpha
+▲   2 warning beta
+●   3 information gamma
+·   4 hint delta
+    5 clean footer line
+    6
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ L  diag_fixture.c        utf-8  lf  5:1
+--- style
+AAAAAABBBBBAAAAAA
+AAAAAABBBBBBBAAAAA
+AAAAAACCCCCCCCCCCAAAAAA
+AAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAA
+AAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+DDDEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+--- legend
+A fg=default bg=default attrs=----------
+B fg=default bg=default attrs=----c-----
+C fg=default bg=default attrs=---u------
+D fg=#ebf4ff bg=#266eba attrs=b---------
+E fg=#dae5f0 bg=#14304c attrs=----------

@@ -1,0 +1,59 @@
+# yew pty golden v1
+size 80x24 alt=1 cursor=0,6 vis=1
+modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
+--- text
+✗   1 error alpha
+▲   2 warning beta
+●   3 information gamma
+·   4 hint delta
+    5 clean footer line
+    6
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ L E ✗ [clang] use of undeclared identifier 'alpha' (undeclared_var)            
+--- style
+AAAAAABBBBBAAAAAA
+AAAAAABBBBBBBAAAAA
+AAAAAACCCCCCCCCCCAAAAAA
+AAAAAAAAAAAAAAAA
+AAAAAAAAAAAAAAAAAAAAAAA
+AAAAA
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+DDDEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
+--- legend
+A fg=default bg=default attrs=----------
+B fg=default bg=default attrs=----c-----
+C fg=default bg=default attrs=---u------
+D fg=#ebf4ff bg=#266eba attrs=b---------
+E fg=idx:196 bg=#14304c attrs=b---------

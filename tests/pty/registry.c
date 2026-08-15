@@ -5691,7 +5691,164 @@ static void case_s37_batch_never_touches_the_terminal(PtyCtx *c)
     ptc_snapshot(c, "s37_batch_no_tty");
 }
 
+/* ---------------------------------------------------------------- */
+/* Sprint 46: deterministic diagnostic UI contracts                 */
+/* ---------------------------------------------------------------- */
+
+#if YEW_WITH_LSP
+static bool s46_row_text_has_attrs(const VtScreen *vt, int row,
+                                   const char *text, u16 attrs)
+{
+    size_t want = strlen(text);
+    int col;
+
+    if (row < 0 || row >= vt->rows)
+        return false;
+    for (col = 0; col + (int)want <= vt->cols; col++) {
+        size_t i;
+
+        for (i = 0U; i < want; i++) {
+            const VtCell *cell = &vt->cells[(size_t)row *
+                                           (size_t)vt->cols +
+                                           (size_t)col + i];
+            const u8 *glyph;
+            size_t n;
+
+            glyph = vt_cell_bytes(vt, cell, &n);
+            if (n != 1U || glyph[0] != (u8)text[i] ||
+                (cell->attrs & attrs) != attrs)
+                break;
+        }
+        if (i == want)
+            return true;
+    }
+    return false;
+}
+
+static void case_lsp_diag_visual(PtyCtx *c)
+{
+    bool lower = strstr(c->test->name, "colors_256") != NULL;
+    u16 severe = lower ? YEW_ATTR_UNDERLINE : YEW_ATTR_UNDERCURL;
+
+    spawn_scene(c, "s46_diag_visual");
+    ptc_check(c, s46_row_text_has_attrs(&c->vt, 0, "error", severe),
+              lower ? "256-colour diagnostic did not use underline"
+                    : "truecolour diagnostic did not use undercurl");
+    ptc_check(c, s46_row_text_has_attrs(&c->vt, 1, "warning", severe),
+              "warning diagnostic underline style is wrong");
+    ptc_check(c,
+              s46_row_text_has_attrs(&c->vt, 2, "information",
+                                     YEW_ATTR_UNDERLINE),
+              "information diagnostic did not use plain underline");
+    ptc_check(c, !s46_row_text_has_attrs(&c->vt, 3, "hint",
+                                         YEW_ATTR_UNDERLINE) &&
+                     !s46_row_text_has_attrs(&c->vt, 3, "hint",
+                                             YEW_ATTR_UNDERCURL),
+              "hint diagnostic unexpectedly underlined document text");
+    ptc_check(c, s43_screen_contains(&c->vt, "E:1 W:1"),
+              "diagnostic status badge omitted error/warning counts");
+    ptc_check(c, raw_contains_since(c, 0U, "4:3") != lower,
+              lower ? "256-colour diagnostic emitted undercurl SGR"
+                    : "truecolour diagnostic omitted undercurl SGR");
+    ptc_snapshot(c, c->test->name);
+    quit_cleanly(c);
+}
+
+static void case_lsp_diag_narrow(PtyCtx *c)
+{
+    spawn_scene(c, "s46_diag_visual");
+    ptc_check(c, !s43_screen_contains(&c->vt, "E:1") &&
+                     !s43_screen_contains(&c->vt, "W:1"),
+              "priority-5 diagnostic badge survived the narrow layout");
+    ptc_check(c, s43_screen_contains(&c->vt, "diag_fixture.c"),
+              "narrow layout dropped the path before diagnostic badges");
+    ptc_snapshot(c, "lsp_diag_narrow");
+    quit_cleanly(c);
+}
+
+static void case_lsp_diag_hint(PtyCtx *c)
+{
+    spawn_scene(c, "s46_diag_hint");
+    ptc_check(c, s43_screen_contains(&c->vt, "undeclared identifier"),
+              "cursor diagnostic hint is not visible");
+    ptc_snapshot(c, "lsp_diag_hint");
+    quit_cleanly(c);
+}
+
+static void case_lsp_diag_message_displaces_hint(PtyCtx *c)
+{
+    u32 before;
+
+    spawn_scene(c, "s46_diag_hint");
+    before = c->vt.nsync_pairs;
+    ptc_keys(c, "a");
+    ptc_wait_sync_pairs(c, before + 1U);
+    ptc_settle(c, 0);
+    ptc_check(c, s43_screen_contains(&c->vt, "saved file") &&
+                     !s43_screen_contains(&c->vt,
+                                          "undeclared identifier"),
+              "real message did not displace the diagnostic hint");
+    ptc_snapshot(c, "lsp_diag_message_displaces_hint");
+    quit_cleanly(c);
+}
+
+static void case_lsp_diag_hint_restore(PtyCtx *c)
+{
+    u32 before;
+
+    spawn_scene(c, "s46_diag_hint");
+    ptc_check(c, s43_screen_contains(
+                     &c->vt, "E ") &&
+                     s43_screen_contains(&c->vt, "undeclared identifier"),
+              "cursor diagnostic hint is not visible");
+
+    before = c->vt.nsync_pairs;
+    ptc_keys(c, "a");
+    ptc_wait_sync_pairs(c, before + 1U);
+    ptc_settle(c, 0);
+    ptc_check(c, s43_screen_contains(&c->vt, "saved file") &&
+                     !s43_screen_contains(&c->vt,
+                                          "undeclared identifier"),
+              "real message did not displace the diagnostic hint");
+
+    before = c->vt.nsync_pairs;
+    ptc_keys(c, "b");
+    ptc_wait_sync_pairs(c, before + 1U);
+    ptc_settle(c, 0);
+    ptc_check(c, s43_screen_contains(&c->vt, "undeclared identifier") &&
+                     !s43_screen_contains(&c->vt, "saved file"),
+              "diagnostic hint was not restored after the real message");
+    ptc_snapshot(c, "lsp_diag_hint_restored");
+    quit_cleanly(c);
+}
+
+static void case_lsp_diag_picker(PtyCtx *c)
+{
+    spawn_scene(c, "s46_diag_picker");
+    ptc_check(c, s43_screen_contains(&c->vt, "Diagnostics") &&
+                     s43_screen_contains(&c->vt, "undeclared identifier") &&
+                     s43_screen_contains(&c->vt, "warning diagnostic") &&
+                     s43_screen_contains(&c->vt, "hint diagnostic"),
+              "diagnostic picker omitted its chrome or sorted rows");
+    ptc_snapshot(c, "lsp_diag_picker");
+    quit_cleanly(c);
+}
+#endif
+
 const PtyCase yew_pty_cases[] = {
+#if YEW_WITH_LSP
+    C(lsp_diag_visual_truecolor, modern, 24U, 80U,
+      case_lsp_diag_visual),
+    C(lsp_diag_visual_colors_256, modern, 24U, 80U,
+      case_lsp_diag_visual),
+    C(lsp_diag_narrow, modern, 24U, 40U, case_lsp_diag_narrow),
+    C(lsp_diag_hint, modern, 24U, 80U, case_lsp_diag_hint),
+    C(lsp_diag_message_displaces_hint, modern, 24U, 80U,
+      case_lsp_diag_message_displaces_hint),
+    C(lsp_diag_hint_restore, modern, 24U, 80U,
+      case_lsp_diag_hint_restore),
+    C(lsp_diag_picker, modern, 24U, 80U, case_lsp_diag_picker),
+#endif
     C(s44_completion_below, modern, 24U, 80U,
       case_s44_completion_below),
     C(s44_completion_flipped_doc, modern, 24U, 100U,

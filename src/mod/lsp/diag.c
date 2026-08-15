@@ -6,12 +6,12 @@
 
 #include "edit/ed.h"
 #include "mod/lsp/client.h"
+#include "mod/lsp/sync.h"
 #include "term/grid.h"
 #include "ui/gutter.h"
 #include "ui/viewport.h"
 #include "ui/win.h"
 #include "unicode/coords.h"
-#include "unicode/u16.h"
 #include "util/sort.h"
 
 enum {
@@ -101,52 +101,17 @@ void yew_diag_store_free(Buffer *b)
     b->diag = NULL;
 }
 
-static u64 line_content_end(const TextBuf *tb, Span line)
-{
-    TextIter it;
-    const u8 *bytes;
-    u64 len;
-    u64 end = line.hi;
-
-    if (line.lo == line.hi)
-        return line.hi;
-    if (!yew_textiter_begin(&it, tb, BYTEOFF(line.hi - 1U)) ||
-        !yew_textiter_chunk(&it, tb, &bytes, &len) || len == 0U)
-        return line.hi;
-    if (bytes[0] != (u8)'\n')
-        return line.hi;
-    end--;
-    if (end == line.lo)
-        return end;
-    if (!yew_textiter_begin(&it, tb, BYTEOFF(end - 1U)) ||
-        !yew_textiter_chunk(&it, tb, &bytes, &len) || len == 0U)
-        return end;
-    return bytes[0] == (u8)'\r' ? end - 1U : end;
-}
-
 static ByteOff diag_position(const Ed *ed, const Buffer *b, u32 server,
                              const JsonValue *position)
 {
     i64 raw_line = yew_json_int(yew_json_get(position, "line"), 0);
     i64 raw_ch = yew_json_int(yew_json_get(position, "character"), 0);
-    u64 lines = yew_textbuf_line_count(b->tb);
     u64 line = raw_line < 0 ? 0U : (u64)raw_line;
     u64 ch = raw_ch < 0 ? 0U : (u64)raw_ch;
-    Span span;
-    u64 end;
     u8 enc = YEW_POSENC_UTF16;
 
-    if (lines == 0U)
-        return BYTEOFF(0U);
-    if (line >= lines)
-        line = lines - 1U;
-    span = yew_textbuf_line_span(b->tb, LINENO(line));
-    end = line_content_end(b->tb, span);
     (void)yew_lsp_server_pos_enc(ed, server, &enc);
-    if (enc == YEW_POSENC_UTF8)
-        return BYTEOFF(ch > end - span.lo ? end : span.lo + ch);
-    span.hi = end;
-    return yew_u16col_to_off(b->tb, span, U16COL(ch));
+    return yew_lsp_off_of_pos(enc, b->tb, LINENO(line), ch);
 }
 
 static u8 diag_severity(const JsonValue *v)
@@ -593,12 +558,16 @@ u32 yew_diag_list(Ed *ed, PickItem *out, u32 max)
             LineNo line = yew_textbuf_line_of(b->tb, BYTEOFF(sp.lo));
             Span line_span = yew_textbuf_line_span(b->tb, line);
             GCol col = yew_off_to_gcol(b->tb, line_span, BYTEOFF(sp.lo));
+            u64 display_line = line.v;
+            u64 display_col = col.v;
 
             (void)glyph_len;
+            display_line++;
+            display_col++;
             (void)snprintf(row, sizeof(row), "%s:%llu:%llu  %s %s",
                            yew_buf_label(b),
-                           (unsigned long long)(line.v + 1U),
-                           (unsigned long long)(col.v + 1U), glyph,
+                           (unsigned long long)display_line,
+                           (unsigned long long)display_col, glyph,
                            d->message);
             offsets[bi] = pick_text(row);
             out[bi].detail = NULL;

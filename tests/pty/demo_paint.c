@@ -14,13 +14,22 @@
 #include "term/render.h"
 #include "term/tty.h"
 #include "edit/ed.h"
+#include "edit/loop.h"
+#if YEW_WITH_LSP
+#include "mod/lsp/diag.h"
+#include "mod/lsp/json.h"
+#endif
 #include "search/regex.h"
 #include "syn/engine.h"
 #include "text/clipboard.h"
+#include "text/mark.h"
 #include "text/register.h"
 #include "text/undo.h"
 #include "ui/draw.h"
 #include "ui/layout.h"
+#include "ui/message.h"
+#include "ui/picker.h"
+#include "ui/region.h"
 #include "ui/viewport.h"
 #include "util/arena.h"
 #include "util/base.h"
@@ -41,6 +50,7 @@ typedef struct Demo {
     bool damage_flip;
     bool clipboard_after_render;
     bool echo_ready;
+    u8 diag_phase;
     Key echo_key;
 } Demo;
 
@@ -571,8 +581,116 @@ static void paint_s39_syntax(Demo *d)
     bytebuf_free(&text);
 }
 
+#if YEW_WITH_LSP
+static bool s46_scene_is(const Demo *d, const char *suffix)
+{
+    return strncmp(d->scene, "s46_diag_", 9U) == 0 &&
+           strcmp(d->scene + 9U, suffix) == 0;
+}
+
+static void paint_s46_diag(Demo *d)
+{
+    static const u8 text[] =
+        "error alpha\n"
+        "warning beta\n"
+        "information gamma\n"
+        "hint delta\n"
+        "clean footer line\n";
+    static const u8 diagnostics[] =
+        "[{\"range\":{\"start\":{\"line\":0,\"character\":0},"
+        "\"end\":{\"line\":0,\"character\":5}},\"severity\":1,"
+        "\"source\":\"clang\",\"code\":\"undeclared_var\","
+        "\"message\":\"use of undeclared identifier 'alpha'\"},"
+        "{\"range\":{\"start\":{\"line\":1,\"character\":0},"
+        "\"end\":{\"line\":1,\"character\":7}},\"severity\":2,"
+        "\"message\":\"warning diagnostic\"},"
+        "{\"range\":{\"start\":{\"line\":2,\"character\":0},"
+        "\"end\":{\"line\":2,\"character\":11}},\"severity\":3,"
+        "\"message\":\"information diagnostic\"},"
+        "{\"range\":{\"start\":{\"line\":3,\"character\":0},"
+        "\"end\":{\"line\":3,\"character\":4}},\"severity\":4,"
+        "\"message\":\"hint diagnostic\"}]";
+    Ed ed;
+    Buffer buffer;
+    Buffer *bufptrs[1];
+    Win win;
+    Cursor cursor;
+    Arena json;
+    JsonErr error;
+    JsonValue *values;
+
+    (void)memset(&ed, 0, sizeof(ed));
+    (void)memset(&buffer, 0, sizeof(buffer));
+    (void)memset(&win, 0, sizeof(win));
+    arena_init(&json);
+    buffer.id = 1U;
+    buffer.tb = yew_textbuf_from_bytes(text, sizeof(text) - 1U);
+    buffer.undo = yew_undo_new(buffer.tb);
+    buffer.marks = yew_marks_new();
+    yew_undo_mark_saved(buffer.undo);
+    yew_filemeta_init(&buffer.meta);
+    buffer.path = (char *)"src/diag_fixture.c";
+    buffer.lang = "c";
+
+    cursor.pos = s46_scene_is(d, "hint") ? BYTEOFF(0U) :
+                 yew_textbuf_line_start(buffer.tb, LINENO(4U));
+    cursor.anchor = cursor.pos;
+    cursor.goal_col = (GCol){0U};
+    win.buf = &buffer;
+    yew_cset_init(&win.cs, cursor);
+    yew_vp_init(&win);
+    win.number_style = YEW_NUM_ABS;
+
+    ed.grid = d->grid;
+    ed.render = d->render;
+    ed.mode = YEW_MODE_L;
+    ed.prev_unit = YEW_MODE_L;
+    ed.win = &win;
+    bufptrs[0] = &buffer;
+    ed.ws.bufs = bufptrs;
+    ed.ws.nbufs = 1U;
+    yew_timers_init(&ed.timers);
+    values = yew_json_parse(&json, diagnostics, sizeof(diagnostics) - 1U,
+                            &error);
+    if (values == NULL)
+        YEW_BUG("Sprint 46 PTY diagnostic JSON: %s", error.msg);
+    yew_diag_replace(&ed, &buffer, 1U, values, 1);
+    if (s46_scene_is(d, "hint") && d->diag_phase == 1U)
+        yew_msg_at(&ed, YEW_MSG_INFO, 1000, "saved file");
+
+    yew_layout(&ed);
+    yew_region_frame_begin();
+    yew_draw_win(&ed, &win);
+    if (s46_scene_is(d, "picker")) {
+        yew_diag_picker_open(&ed);
+        yew_picker_draw(&ed, (Rect){0U, 0U, ed.grid.cols, ed.grid.rows});
+    }
+    yew_grid_mark_all(&ed.grid);
+    d->grid = ed.grid;
+
+    if (yew_picker_active(&ed))
+        yew_picker_close(&ed, false);
+    yew_msg_clear(&ed);
+    yew_msg_hint_clear(&ed);
+    yew_timers_free(&ed.timers);
+    yew_diag_store_free(&buffer);
+    yew_vp_free(&win);
+    yew_cset_free(&win.cs);
+    yew_marks_free(buffer.marks);
+    yew_undo_free(buffer.undo);
+    yew_textbuf_free(buffer.tb);
+    yew_filemeta_dispose(&buffer.meta);
+    arena_free_all(&json);
+}
+#endif
+
 static void paint_scene(Demo *d)
 {
+#if YEW_WITH_LSP
+    if (strncmp(d->scene, "s46_diag_", 9U) == 0)
+        paint_s46_diag(d);
+    else
+#endif
     if (strcmp(d->scene, "s39_syntax") == 0)
         paint_s39_syntax(d);
     else if (strncmp(d->scene, "s15_", 4U) == 0)
@@ -705,6 +823,13 @@ static bool handle_key(Demo *d, const Key *key, bool *running)
         if (emitted > 32U)
             return false;
     }
+#if YEW_WITH_LSP
+    if (s46_scene_is(d, "hint")) {
+        d->diag_phase = (u8)((d->diag_phase + 1U) % 3U);
+        paint_s46_diag(d);
+        return emit_frame(d, NULL);
+    }
+#endif
     return true;
 }
 
@@ -802,7 +927,13 @@ static bool parse_args(int argc, char **argv, const char **scene, bool *crash)
             return false;
         }
     }
-    return strncmp(*scene, "s15_", 4U) == 0 ||
+    if (strncmp(*scene, "s15_", 4U) == 0)
+        return true;
+#if YEW_WITH_LSP
+    if (strncmp(*scene, "s46_diag_", 9U) == 0)
+        return true;
+#endif
+    return
            strcmp(*scene, "s39_syntax") == 0 ||
            strcmp(*scene, "basic") == 0 || strcmp(*scene, "wide") == 0 ||
            strcmp(*scene, "colors") == 0 ||
