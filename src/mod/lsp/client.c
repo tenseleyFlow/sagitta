@@ -18,6 +18,7 @@
 #include "ui/message.h"
 
 enum { YEW_LSP_MAX_SERVERS = 16, YEW_LSP_RESTART_WINDOW_MS = 300000 };
+enum { YEW_LSP_STDERR_TAIL = 8U * 1024U };
 
 struct LspClient {
     LspServer *server[YEW_LSP_MAX_SERVERS];
@@ -901,6 +902,15 @@ void yew_lsp_client_pump(Ed *ed)
         LspServer *s = ed->lsp->server[i];
         YewJob *j = yew_job_find(ed, s->job);
 
+        if (j != NULL && j->framed_err.len > YEW_LSP_STDERR_TAIL) {
+            size_t keep = YEW_LSP_STDERR_TAIL;
+
+            (void)memmove(j->framed_err.data,
+                          j->framed_err.data + j->framed_err.len - keep,
+                          keep);
+            j->framed_err.len = keep;
+        }
+
         if (j != NULL && j->state == YEW_JOB_EXECFAIL) {
             s->state = YEW_LSP_DEAD;
             s->gave_up = true;
@@ -942,11 +952,22 @@ void yew_lsp_client_pump(Ed *ed)
         if (s->state != YEW_LSP_DEAD && s->state != YEW_LSP_SHUTTING_DOWN) {
             Bytebuf msg;
             Bytebuf tail;
+            size_t line;
 
             bytebuf_init(&msg);
             bytebuf_init(&tail);
-            if (j != NULL && j->framed_err.len != 0U)
-                bytebuf_append(&tail, j->framed_err.data, j->framed_err.len);
+            line = j == NULL ? 0U : j->framed_err.len;
+            while (line != 0U && (j->framed_err.data[line - 1U] == '\n' ||
+                                  j->framed_err.data[line - 1U] == '\r'))
+                line--;
+            if (j != NULL && line != 0U) {
+                size_t start = line;
+
+                while (start != 0U && j->framed_err.data[start - 1U] != '\n')
+                    start--;
+                bytebuf_append(&tail, j->framed_err.data + start,
+                               line - start);
+            }
             bytebuf_push_u8(&tail, 0U);
             if (!yew_lsp_server_crashed(s, ed->now_ms,
                                         (const char *)tail.data, &msg) ||
