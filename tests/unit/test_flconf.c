@@ -14,6 +14,7 @@
 #include "edit/option.h"
 #include "fl/flconf.h"
 #include "fl/flruntime.h"
+#include "fl/value.h"
 
 typedef struct ConfigFix {
     Ed ed;
@@ -164,6 +165,59 @@ void test_flconf_loads_builtin_user_workspace_in_precedence_order(void)
     YEW_ASSERT_EQ_I64(yew_config_load_all(&f.ed, NULL), YEW_CFG_OK);
     YEW_ASSERT_EQ_I64(cf_opt(&f, "tabwidth").as.i, 7);
     YEW_ASSERT_EQ_U64(f.ed.buffer.tabwidth, 7U);
+    cf_free(&f);
+}
+
+void test_flconf_global_accessor_reads_private_layers_in_precedence_order(void)
+{
+    YewEdStartup startup = {0};
+    ConfigFix f;
+    FlValue value = FL_NIL_V;
+
+    startup.trust_workspace = true;
+    cf_init(&f, &startup);
+    cf_write(f.runtime_init,
+             "let shared = 1\nlet builtin_only = 2\nlet nil_value = nil\n");
+    cf_write(f.user_init, "let shared = 3\nlet user_only = 4\n");
+    cf_write(f.workspace_init, "let shared = 5\n");
+    YEW_ASSERT_EQ_I64(yew_config_load_all(&f.ed, NULL), YEW_CFG_OK);
+    YEW_ASSERT_EQ_I64(yew_fl_eval(&f.ed, "let vm_only = 99\n", 17U),
+                      YEW_CMD_OK);
+
+    YEW_ASSERT(yew_config_get_global(&f.ed, "shared", 6U, &value));
+    YEW_ASSERT_EQ_I64(value.t, FL_INT);
+    YEW_ASSERT_EQ_I64(value.as.i, 5);
+    YEW_ASSERT(yew_config_get_global(&f.ed, "user_only", 9U, &value));
+    YEW_ASSERT_EQ_I64(value.as.i, 4);
+    YEW_ASSERT(yew_config_get_global(&f.ed, "builtin_only", 12U, &value));
+    YEW_ASSERT_EQ_I64(value.as.i, 2);
+    YEW_ASSERT(yew_config_get_global(&f.ed, "nil_value", 9U, &value));
+    YEW_ASSERT_EQ_I64(value.t, FL_NIL);
+    YEW_ASSERT(!yew_config_get_global(&f.ed, "missing", 7U, &value));
+    YEW_ASSERT(!yew_config_get_global(&f.ed, "vm_only", 7U, &value));
+    cf_free(&f);
+}
+
+void test_flconf_global_accessor_follows_successful_reload(void)
+{
+    YewEdStartup startup = {0};
+    ConfigFix f;
+    FlValue value = FL_NIL_V;
+
+    startup.no_workspace_config = true;
+    cf_init(&f, &startup);
+    cf_write(f.runtime_init, "let setting = 1\n");
+    cf_write(f.user_init, "let setting = 2\n");
+    YEW_ASSERT_EQ_I64(yew_config_load_all(&f.ed, NULL), YEW_CFG_OK);
+    YEW_ASSERT(yew_config_get_global(&f.ed, "setting", 7U, &value));
+    YEW_ASSERT_EQ_I64(value.as.i, 2);
+
+    cf_write(f.user_init, "let replacement = 3\n");
+    YEW_ASSERT_EQ_I64(yew_config_reload(&f.ed, NULL), YEW_CFG_OK);
+    YEW_ASSERT(yew_config_get_global(&f.ed, "setting", 7U, &value));
+    YEW_ASSERT_EQ_I64(value.as.i, 1);
+    YEW_ASSERT(yew_config_get_global(&f.ed, "replacement", 11U, &value));
+    YEW_ASSERT_EQ_I64(value.as.i, 3);
     cf_free(&f);
 }
 

@@ -50,6 +50,7 @@ typedef struct CfgUnit {
     u32 file_id;
     u8 kind;
     bool rooted;
+    bool ran;
 } CfgUnit;
 
 struct YewConfigState {
@@ -202,6 +203,7 @@ static void unit_unroot(Ed *ed, CfgUnit *unit)
     if (unit->rooted && vm != NULL)
         fl_gc_host_root_remove(vm, &unit->closure);
     unit->rooted = false;
+    unit->ran = false;
     unit->closure = FL_NIL_V;
 }
 
@@ -452,8 +454,10 @@ static CfgStatus run_one(Ed *ed, CfgUnit *unit)
 {
     if (!unit->rooted)
         return YEW_CFG_OK;
-    if (fl_call_value(ed->fl, unit->closure, YEW_SRC_FLETCH))
+    if (fl_call_value(ed->fl, unit->closure, YEW_SRC_FLETCH)) {
+        unit->ran = true;
         return YEW_CFG_OK;
+    }
     yew_log(YEW_LOG_ERROR, "config runtime error: %s", unit->path);
     yew_msg(ed, YEW_MSG_ERROR, "config runtime error: %s", unit->path);
     yew_origin_teardown(ed, unit->origin);
@@ -631,6 +635,38 @@ CfgStatus yew_config_reload(Ed *ed, DiagCtx *dc)
     ed->full_damage = true;
     ed->footer_dirty = true;
     return overall;
+}
+
+bool yew_config_get_global(const Ed *ed, const char *name, size_t name_len,
+                           FlValue *out)
+{
+    const YewConfigState *state;
+    const FlRuntime *rt;
+    void *found;
+    FlValue key;
+    u32 i;
+
+    if (ed == NULL || name == NULL || out == NULL || ed->config == NULL ||
+        ed->fl == NULL)
+        return false;
+    state = ed->config;
+    rt = ed->fl;
+    found = strmap_get(&rt->interner.map, name, name_len);
+    if (found == NULL)
+        return false;
+    key = FL_INT_V((i64)(u32)(uintptr_t)found);
+    i = YEW_CFG_SOURCE_N;
+    while (i != 0U) {
+        const CfgUnit *unit = &state->unit[--i];
+        const FlClosure *closure;
+
+        if (!unit->rooted || !unit->ran || unit->closure.t != FL_CLOSURE)
+            continue;
+        closure = (const FlClosure *)unit->closure.as.o;
+        if (fl_map_get(closure->globals, key, out))
+            return true;
+    }
+    return false;
 }
 
 const char *yew_config_user_path(Ed *ed)
