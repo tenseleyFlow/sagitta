@@ -1,31 +1,39 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include <errno.h>
+#include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <unistd.h>
 
 #include "edit/ed.h"
+#include "edit/job.h"
 #include "edit/notify.h"
 #include "mod/lsp/diag.h"
 #include "mod/lsp/json.h"
 #include "mod/lsp/jsonrpc.h"
 #include "mod/lsp/sync.h"
+#include "term/grid.h"
+#include "term/render.h"
+#include "ui/draw.h"
 #include "util/sort.h"
 
 enum {
     LSP_NOTE_SAMPLES = 1001,
     LSP_DIAG_SAMPLES = 101,
-    LSP_STREAM_SAMPLES = 801,
     LSP_LINE_BYTES = 4096,
     LSP_DIAGNOSTICS = 10000,
     LSP_VIEWPORT_LINES = 50,
-    LSP_STREAM_CHUNK = 64 * 1024,
+    LSP_VIEWPORT_COLS = 200,
+    LSP_STREAM_SAMPLE_CAP = 16384,
     LSP_NOTE_P99_BUDGET_NS = 100000,
     LSP_VIEW_P99_BUDGET_NS = 5000000,
     LSP_KEY_P99_BUDGET_NS = 5000000
 };
+
+#define LSP_STREAM_BYTES (UINT64_C(50) * 1024U * 1024U)
 
 typedef struct Timing {
     const char *name;
@@ -38,6 +46,9 @@ typedef struct Timing {
 } Timing;
 
 static volatile u64 lsp_perf_sink;
+static const u8 lsp_stream_frame[] =
+    "Content-Length: 53\r\n\r\n"
+    "{\"jsonrpc\":\"2.0\",\"method\":\"$/progress\",\"params\":null}";
 
 static u64 now_ns(void)
 {
@@ -153,7 +164,6 @@ static bool make_diagnostics(Bytebuf *json)
 
 static bool measure_diag_viewport(Timing *out)
 {
-    const Diagnostic *found[4];
     u64 samples[LSP_DIAG_SAMPLES];
     Bytebuf text;
     Bytebuf json;
@@ -161,6 +171,7 @@ static bool measure_diag_viewport(Timing *out)
     JsonErr err;
     JsonValue *arr;
     Ed ed;
+    TtyCaps caps;
     u32 i;
     bool parsed_ready = false;
     bool ok = false;
@@ -179,24 +190,64 @@ static bool measure_diag_viewport(Timing *out)
     yew_ed_init(&ed);
     if (!yew_ed_open_memory(&ed, text.data, text.len, "perf_diag.c"))
         goto done_ed;
+    (void)memset(&caps, 0, sizeof(caps));
+    if (!yew_grid_init(&ed.grid, &ed.interner,
+                       LSP_VIEWPORT_LINES + 1U, LSP_VIEWPORT_COLS))
+        goto done_ed;
+    ed.grid_ready = true;
+    yew_render_init(&ed.render, &caps, NULL);
+    ed.render_ready = true;
+    yew_ed_layout(&ed);
+    if (ed.win == NULL || ed.win->rect.h != LSP_VIEWPORT_LINES ||
+        ed.win->cs.curs.len == 0U) {
+        (void)fprintf(stderr,
+                      "perf_lsp: viewport setup rows=%u cursors=%zu\n",
+                      ed.win == NULL ? 0U : ed.win->rect.h,
+                      ed.win == NULL ? 0U : ed.win->cs.curs.len);
+        goto done_ed;
+    }
+    ed.win->cs.curs.data[ed.win->cs.primary].pos =
+        yew_textbuf_line_start(ed.buffer.tb, LINENO(5000U));
+    ed.win->cs.curs.data[ed.win->cs.primary].anchor =
+        ed.win->cs.curs.data[ed.win->cs.primary].pos;
+    yew_vp_center(ed.win);
     yew_diag_replace(&ed, &ed.buffer, 1U, arr, 1);
     if (ed.buffer.diag == NULL ||
-        ed.buffer.diag->d.len != LSP_DIAGNOSTICS)
+        ed.buffer.diag->d.len != LSP_DIAGNOSTICS ||
+        ed.win->gutter_signs.len != LSP_DIAGNOSTICS) {
+        (void)fprintf(stderr,
+                      "perf_lsp: diagnostic setup diagnostics=%zu signs=%u\n",
+                      ed.buffer.diag == NULL ? 0U : ed.buffer.diag->d.len,
+                      ed.win->gutter_signs.len);
         goto done_ed;
+    }
     for (i = 0U; i < LSP_DIAG_SAMPLES; i++) {
-        u32 line;
+        size_t emitted;
+        size_t cell_count;
+        u32 styled = 0U;
         u64 started = now_ns();
 
-        for (line = 0U; line < LSP_VIEWPORT_LINES; line++) {
-            u32 n = yew_diag_at_line(
-                &ed.buffer, LINENO(4975U + line), found,
-                YEW_ARRAY_LEN(found));
-
-            if (n != 1U)
-                goto done_ed;
-            lsp_perf_sink ^= found[0]->identity + found[0]->cache.lo;
-        }
+        yew_draw_panes(&ed);
+        yew_grid_mark_all(&ed.grid);
+        ed.frame.len = 0U;
+        emitted = yew_render_frame(&ed.render, &ed.grid, &ed.frame);
+        yew_grid_flip(&ed.grid);
         samples[i] = now_ns() - started;
+        cell_count = (size_t)ed.grid.rows * ed.grid.cols;
+        for (size_t cell = 0U; cell < cell_count; cell++) {
+            if ((ed.grid.back[cell].attrs &
+                 (YEW_CELL_UL_ERROR | YEW_CELL_UL_WARN |
+                  YEW_CELL_UL_INFO)) != 0U)
+                styled++;
+        }
+        if (emitted == 0U || emitted != ed.frame.len || styled == 0U) {
+            (void)fprintf(stderr,
+                          "perf_lsp: diagnostic frame emitted=%zu "
+                          "frame=%zu styled=%u\n",
+                          emitted, ed.frame.len, styled);
+            goto done_ed;
+        }
+        lsp_perf_sink ^= (u64)emitted + styled;
     }
     summarize(samples, LSP_DIAG_SAMPLES, out);
     ok = true;
@@ -213,7 +264,13 @@ done_buffers:
 
 typedef struct StreamCount {
     u64 messages;
+    bool destroyed;
 } StreamCount;
+
+typedef struct StreamOwner {
+    RpcConn rpc;
+    StreamCount *count;
+} StreamOwner;
 
 static void count_message(void *ctx, const JsonValue *message)
 {
@@ -223,71 +280,197 @@ static void count_message(void *ctx, const JsonValue *message)
         count->messages++;
 }
 
-static bool make_stream_chunk(Bytebuf *chunk)
+static bool stream_feed(void *opaque, const u8 *bytes, u64 len)
 {
-    static const u8 body[] =
-        "{\"jsonrpc\":\"2.0\",\"method\":\"$/progress\",\"params\":null}";
-    RpcTx tx;
+    StreamOwner *owner = opaque;
 
-    yew_rpctx_init(&tx);
-    yew_rpctx_send(&tx, body, sizeof(body) - 1U);
-    while (chunk->len + tx.pending.len <= LSP_STREAM_CHUNK)
-        bytebuf_append(chunk, tx.pending.data, tx.pending.len);
-    yew_rpctx_free(&tx);
-    return chunk->len != 0U;
+    return yew_rpc_feed_stdout(&owner->rpc, bytes, len);
 }
 
-static bool measure_stream_keypress(Timing *out)
+static bool stream_finish(void *opaque)
 {
-    u64 samples[LSP_STREAM_SAMPLES];
-    Bytebuf chunk;
-    RpcConn rpc;
-    StreamCount count = {0U};
+    StreamOwner *owner = opaque;
+
+    return yew_rpc_finish_stdout(&owner->rpc);
+}
+
+static u64 stream_tx_view(void *opaque, const u8 **bytes)
+{
+    StreamOwner *owner = opaque;
+
+    return yew_rpc_tx_view(&owner->rpc, bytes);
+}
+
+static void stream_tx_consume(void *opaque, u64 len)
+{
+    StreamOwner *owner = opaque;
+
+    yew_rpc_tx_consume(&owner->rpc, len);
+}
+
+static i64 stream_deadline(const void *opaque)
+{
+    const StreamOwner *owner = opaque;
+
+    return yew_rpc_job_deadline(&owner->rpc);
+}
+
+static void stream_tick(void *opaque, Ed *ed, i64 now_ms)
+{
+    StreamOwner *owner = opaque;
+
+    yew_rpc_job_tick(&owner->rpc, ed, now_ms);
+}
+
+static void stream_destroy(void *opaque)
+{
+    StreamOwner *owner = opaque;
+
+    yew_rpc_conn_free(&owner->rpc);
+    owner->count->destroyed = true;
+    free(owner);
+}
+
+static const YewJobFramedOps stream_ops = {
+    stream_feed, stream_finish, stream_tx_view, stream_tx_consume,
+    stream_deadline, stream_tick, stream_destroy
+};
+
+static bool write_all(int fd, const u8 *bytes, size_t len)
+{
+    while (len != 0U) {
+        ssize_t n = write(fd, bytes, len);
+
+        if (n > 0) {
+            bytes += (size_t)n;
+            len -= (size_t)n;
+        } else if (n < 0 && errno == EINTR) {
+            continue;
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
+
+static int run_stream_server(void)
+{
+    u64 sent = 0U;
+
+    while (sent < LSP_STREAM_BYTES) {
+        if (!write_all(STDOUT_FILENO, lsp_stream_frame,
+                       sizeof(lsp_stream_frame) - 1U))
+            return 1;
+        sent += sizeof(lsp_stream_frame) - 1U;
+    }
+    return 0;
+}
+
+static bool measure_stream_keypress(const char *self, Timing *out)
+{
+    u64 samples[LSP_STREAM_SAMPLE_CAP];
+    StreamCount count = {0U, false};
+    StreamOwner *owner;
     Ed ed;
-    u64 bytes = 0U;
-    u32 i;
+    YewJobSpec spec = {0};
+    char *child_argv[3];
+    char err[160] = {0};
+    u32 id;
+    size_t nsamples = 0U;
+    i64 deadline;
     bool ok = false;
 
-    bytebuf_init(&chunk);
-    if (!make_stream_chunk(&chunk))
-        goto done_chunk;
-    yew_rpc_conn_init(&rpc);
-    yew_rpc_set_handler(&rpc, count_message, &count);
     yew_ed_init(&ed);
     if (!yew_ed_open_memory(&ed, NULL, 0U, "perf_stream.c"))
         goto done_ed;
-    for (i = 0U; i < LSP_STREAM_SAMPLES; i++) {
-        Key key;
+    owner = calloc(1U, sizeof(*owner));
+    if (owner == NULL)
+        goto done_ed;
+    yew_rpc_conn_init(&owner->rpc);
+    owner->count = &count;
+    yew_rpc_set_handler(&owner->rpc, count_message, &count);
+    child_argv[0] = (char *)self;
+    child_argv[1] = (char *)"--server";
+    child_argv[2] = NULL;
+    spec.argv = child_argv;
+    spec.cwd = ".";
+    spec.sink = YEW_SINK_FRAMED;
+    spec.display = "perf-lsp-stream";
+    spec.framed_owner = owner;
+    spec.framed_ops = &stream_ops;
+    id = yew_job_spawn(&ed, &spec, err, sizeof(err));
+    if (id == 0U) {
+        stream_destroy(owner);
+        (void)fprintf(stderr, "perf_lsp: stream spawn failed: %s\n", err);
+        goto done_ed;
+    }
+    deadline = (i64)(now_ns() / UINT64_C(1000000)) + 30000;
+    for (;;) {
+        struct pollfd pfd[YEW_JOB_MAX * 4U];
+        YewJob *job = yew_job_find(&ed, id);
+        u64 before;
         u64 started;
+        u32 n = 0U;
+        Key key;
 
-        if (!yew_rpc_feed_stdout(&rpc, chunk.data, chunk.len)) {
-            (void)fprintf(stderr,
-                          "perf_lsp: stream died at chunk %u: %s\n",
-                          i, rpc.rx.err);
+        if (job == NULL)
+            goto done_ed;
+        if (job->drained)
+            break;
+        if ((i64)(now_ns() / UINT64_C(1000000)) > deadline) {
+            (void)fprintf(stderr, "perf_lsp: stream timed out\n");
             goto done_ed;
         }
-        bytes += chunk.len;
+        yew_job_collect_fds(&ed, pfd, &n);
+        if (poll(pfd, (nfds_t)n, 100) < 0 && errno != EINTR)
+            goto done_ed;
+        job = yew_job_find(&ed, id);
+        if (job == NULL)
+            goto done_ed;
+        before = job->bytes_out;
         (void)memset(&key, 0, sizeof(key));
         key.code = YEW_KEY_RIGHT;
         started = now_ns();
-        yew_dispatch_key(&ed, key, (i64)i);
-        samples[i] = now_ns() - started;
+        yew_job_pump(&ed, pfd, n);
+        yew_dispatch_key(&ed, key, (i64)nsamples);
+        job = yew_job_find(&ed, id);
+        if (job == NULL)
+            goto done_ed;
+        if (job->bytes_out != before) {
+            if (nsamples == LSP_STREAM_SAMPLE_CAP) {
+                (void)fprintf(stderr,
+                              "perf_lsp: stream exceeded sample cap\n");
+                goto done_ed;
+            }
+            samples[nsamples++] = now_ns() - started;
+        }
+        yew_job_reap(&ed);
+        yew_job_settle(&ed);
         lsp_perf_sink ^= ed.dispatch_count + count.messages;
     }
-    if (bytes < UINT64_C(50) * 1024U * 1024U || count.messages == 0U) {
-        (void)fprintf(stderr,
-                      "perf_lsp: stream short bytes=%llu messages=%llu\n",
-                      (unsigned long long)bytes,
-                      (unsigned long long)count.messages);
-        goto done_ed;
+    {
+        YewJob *job = yew_job_find(&ed, id);
+
+        if (job == NULL || job->bytes_out < LSP_STREAM_BYTES ||
+            job->state != YEW_JOB_EXITED || job->exit_code != 0 ||
+            job->framed_failed || !count.destroyed ||
+            count.messages != job->bytes_out /
+                              (sizeof(lsp_stream_frame) - 1U) ||
+            nsamples < 100U) {
+            (void)fprintf(stderr,
+                          "perf_lsp: stream invariant bytes=%llu "
+                          "messages=%llu samples=%zu destroyed=%u\n",
+                          (unsigned long long)(job == NULL ? 0U :
+                                                       job->bytes_out),
+                          (unsigned long long)count.messages, nsamples,
+                          count.destroyed ? 1U : 0U);
+            goto done_ed;
+        }
     }
-    summarize(samples, LSP_STREAM_SAMPLES, out);
+    summarize(samples, nsamples, out);
     ok = true;
 done_ed:
     yew_ed_free(&ed);
-    yew_rpc_conn_free(&rpc);
-done_chunk:
-    bytebuf_free(&chunk);
     return ok;
 }
 
@@ -336,11 +519,14 @@ int main(int argc, char **argv)
          LSP_KEY_P99_BUDGET_NS}
     };
     bool measure = argc == 2 && strcmp(argv[1], "--measure") == 0;
+    bool server = argc == 2 && strcmp(argv[1], "--server") == 0;
     size_t i;
     int status = 0;
 
+    if (server)
+        return run_stream_server();
     if (argc > 2 || (argc == 2 && !measure)) {
-        (void)fprintf(stderr, "usage: %s [--measure]\n", argv[0]);
+        (void)fprintf(stderr, "usage: %s [--measure|--server]\n", argv[0]);
         return 2;
     }
     if (!measure_note_edit(YEW_POSENC_UTF8, &rows[0])) {
@@ -355,7 +541,7 @@ int main(int argc, char **argv)
         (void)fprintf(stderr, "perf_lsp: diagnostic viewport invariant failed\n");
         return 2;
     }
-    if (!measure_stream_keypress(&rows[3])) {
+    if (!measure_stream_keypress(argv[0], &rows[3])) {
         (void)fprintf(stderr, "perf_lsp: framed stream invariant failed\n");
         return 2;
     }
