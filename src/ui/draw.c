@@ -442,9 +442,28 @@ static void draw_search_rows(Ed *ed, Win *w, u16 lo, u16 hi)
 static void draw_diag_rows(Ed *ed, Win *w, u16 lo, u16 hi)
 {
     DiagStore *store = w->buf->diag;
+    Span viewport = {UINT64_MAX, 0U};
+    u16 screen_row;
     u32 i;
 
     if (store == NULL)
+        return;
+    for (screen_row = lo;
+         screen_row < hi && screen_row < w->rect.h; screen_row++) {
+        LineNo line;
+        u32 sub;
+        Span displayed;
+
+        if (!yew_vp_line_of_row(w, screen_row, &line, &sub))
+            continue;
+        displayed = w->vp.wrap ? yew_wrap_row(w, line, sub) :
+                                 line_content_span(w->buf->tb, line);
+        if (displayed.lo < viewport.lo)
+            viewport.lo = displayed.lo;
+        if (displayed.hi > viewport.hi)
+            viewport.hi = displayed.hi;
+    }
+    if (viewport.lo == UINT64_MAX)
         return;
     for (i = 0U; i < store->d.len; i++) {
         Diagnostic *d = &store->d.data[i];
@@ -452,7 +471,9 @@ static void draw_diag_rows(Ed *ed, Win *w, u16 lo, u16 hi)
         Cell style = ed->grid.blank;
         const ThemeEnt *theme = yew_theme_ui_tab(ed, yew_diag_role(d->sev));
         u8 fields = themed_overlay(&style, theme);
-        u16 screen_row;
+
+        if (diagnostic.hi <= viewport.lo || diagnostic.lo >= viewport.hi)
+            continue;
 
         style.attrs |= yew_diag_attrs(
             d->sev, d->tags,
