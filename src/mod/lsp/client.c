@@ -3,6 +3,7 @@
 #include "mod/lsp/client.h"
 
 #include <errno.h>
+#include <poll.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -573,6 +574,8 @@ static void initialize_done(Ed *ed, void *ctx, const JsonValue *result,
 
     if (error != NULL || !yew_lsp_server_initialized(s, result)) {
         s->state = YEW_LSP_DEAD;
+        s->gave_up = true;
+        (void)yew_job_signal(ed, s->job, SIGTERM);
         return;
     }
     yew_rpc_notify(&s->rpc, "initialized", (const u8 *)"{}", 2U);
@@ -763,16 +766,13 @@ static LspDoc *attach_doc(LspServer *s, const Buffer *b)
     return &s->docv.data[s->docv.len - 1U];
 }
 
-bool yew_lsp_client_start(Ed *ed, Buffer *b)
+bool yew_lsp_client_start_cfg(Ed *ed, Buffer *b, const LspServerCfg *cfg)
 {
-    const LspServerCfg *cfg;
     char *root;
     LspServer *s;
 
-    if (ed == NULL || b == NULL || b->lang == NULL || b->path == NULL)
-        return false;
-    cfg = yew_lsp_default_cfg(b->lang);
-    if (cfg == NULL)
+    if (ed == NULL || b == NULL || cfg == NULL || b->path == NULL ||
+        cfg->id == NULL || cfg->lang == NULL || cfg->cmd == NULL)
         return false;
     if (ed->lsp == NULL)
         ed->lsp = yew_lsp_client_new();
@@ -799,6 +799,16 @@ bool yew_lsp_client_start(Ed *ed, Buffer *b)
     ed->lsp->server[ed->lsp->len++] = s;
     (void)attach_doc(s, b);
     return spawn_server(ed, s);
+}
+
+bool yew_lsp_client_start(Ed *ed, Buffer *b)
+{
+    const LspServerCfg *cfg;
+
+    if (b == NULL || b->lang == NULL)
+        return false;
+    cfg = yew_lsp_default_cfg(b->lang);
+    return cfg != NULL && yew_lsp_client_start_cfg(ed, b, cfg);
 }
 
 static void shutdown_done(Ed *ed, void *ctx, const JsonValue *result,
@@ -954,21 +964,22 @@ void yew_lsp_client_pump(Ed *ed)
         if (s->state != YEW_LSP_DEAD && s->state != YEW_LSP_SHUTTING_DOWN) {
             Bytebuf msg;
             Bytebuf tail;
-            size_t line;
+            size_t tail_end;
 
             bytebuf_init(&msg);
             bytebuf_init(&tail);
-            line = j == NULL ? 0U : j->framed_err.len;
-            while (line != 0U && (j->framed_err.data[line - 1U] == '\n' ||
-                                  j->framed_err.data[line - 1U] == '\r'))
-                line--;
-            if (j != NULL && line != 0U) {
-                size_t start = line;
+            tail_end = j == NULL ? 0U : j->framed_err.len;
+            while (tail_end != 0U &&
+                   (j->framed_err.data[tail_end - 1U] == '\n' ||
+                    j->framed_err.data[tail_end - 1U] == '\r'))
+                tail_end--;
+            if (j != NULL && tail_end != 0U) {
+                size_t start = tail_end;
 
                 while (start != 0U && j->framed_err.data[start - 1U] != '\n')
                     start--;
                 bytebuf_append(&tail, j->framed_err.data + start,
-                               line - start);
+                               tail_end - start);
             }
             bytebuf_push_u8(&tail, 0U);
             if (!yew_lsp_server_crashed(s, ed->now_ms,
@@ -992,10 +1003,50 @@ void yew_lsp_client_pump(Ed *ed)
 
 void yew_lsp_client_free(Ed *ed)
 {
+    struct pollfd pfd[YEW_JOB_MAX * 4U];
+    i64 deadline;
     u32 i;
 
     if (ed == NULL || ed->lsp == NULL)
         return;
+    for (i = 0U; i < ed->lsp->len; i++)
+        yew_lsp_client_stop(ed, ed->lsp->server[i], true);
+    deadline = yew_now_ms() + 500;
+    for (;;) {
+        bool pending = false;
+        i64 now = yew_now_ms();
+        u32 n = 0U;
+        int timeout;
+
+        for (i = 0U; i < ed->lsp->len; i++) {
+            YewJob *j = yew_job_find(ed, ed->lsp->server[i]->job);
+
+            if (j != NULL && yew_job_pending(j)) {
+                pending = true;
+                break;
+            }
+        }
+        if (!pending || now >= deadline)
+            break;
+        yew_job_collect_fds(ed, pfd, &n);
+        timeout = (int)(deadline - now);
+        if (timeout > 10)
+            timeout = 10;
+        (void)poll(pfd, (nfds_t)n, timeout);
+        now = yew_now_ms();
+        ed->now_ms = now;
+        yew_job_pump(ed, pfd, n);
+        yew_job_reap(ed);
+        yew_job_tick(ed, now);
+        yew_job_settle(ed);
+        yew_lsp_client_pump(ed);
+    }
+    for (i = 0U; i < ed->lsp->len; i++) {
+        YewJob *j = yew_job_find(ed, ed->lsp->server[i]->job);
+
+        if (j != NULL && yew_job_pending(j))
+            (void)yew_job_signal(ed, j->id, SIGKILL);
+    }
     for (i = 0U; i < ed->lsp->len; i++) {
         LspServer *s = ed->lsp->server[i];
         YewJob *j = yew_job_find(ed, s->job);

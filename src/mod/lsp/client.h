@@ -111,6 +111,9 @@ void yew_lsp_server_restart_reset(LspServer *s);
 LspClient *yew_lsp_client_new(void);
 void yew_lsp_client_free(Ed *ed);
 bool yew_lsp_client_start(Ed *ed, Buffer *b);
+/* Compiled config entry point used by init.fl overrides and protocol tests. */
+bool yew_lsp_client_start_cfg(Ed *ed, Buffer *b,
+                              const LspServerCfg *cfg);
 void yew_lsp_client_stop(Ed *ed, LspServer *s, bool graceful);
 void yew_lsp_client_pump(Ed *ed);
 void yew_lsp_client_close_buffer(Ed *ed, Buffer *b);
