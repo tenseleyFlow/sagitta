@@ -405,9 +405,13 @@ void yew_lsp_sync_save(Ed *ed, Buffer *buffer)
         return;
     doc = yew_lsp_doc_for_buffer(ed, buffer);
     server = yew_lsp_server_for_doc(ed, doc);
-    if (server != NULL && server->state == YEW_LSP_READY)
-        yew_lsp_doc_save(&server->rpc, doc, buffer->tb,
-                         server->caps.save_include_text);
+    if (server != NULL && server->state == YEW_LSP_READY) {
+        (void)yew_lsp_doc_flush(&server->rpc, doc,
+                                server->caps.sync_kind, buffer->tb);
+        if (server->caps.save_supported)
+            yew_lsp_doc_save(&server->rpc, doc, buffer->tb,
+                             server->caps.save_include_text);
+    }
 }
 
 void yew_lsp_sync_close(Ed *ed, Buffer *buffer)
