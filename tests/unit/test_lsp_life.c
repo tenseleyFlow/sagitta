@@ -14,6 +14,7 @@
 #include <unistd.h>
 
 #include "mod/lsp/client.h"
+#include "mod/lsp/diag.h"
 #include "mod/lsp/lsp.h"
 #include "edit/ed.h"
 #include "edit/job.h"
@@ -238,9 +239,10 @@ void test_lsp_lifecycle_drops_stale_response_before_callback(void)
 typedef struct LifeFix {
     Ed ed;
     LspServerCfg cfg;
-    const char *args[2];
+    const char *args[3];
     char helper[4096];
     char path[256];
+    char marker[256];
 } LifeFix;
 
 static void helper_path(char *out, size_t cap)
@@ -260,6 +262,7 @@ static void helper_path(char *out, size_t cap)
 static void life_fix_init(LifeFix *f, const char *mode, i32 timeout_ms)
 {
     char tmp[] = "/tmp/yew-lsp-life-XXXXXX";
+    char marker[] = "/tmp/yew-lsp-restart-XXXXXX";
     int fd;
 
     (void)memset(f, 0, sizeof(*f));
@@ -269,8 +272,14 @@ static void life_fix_init(LifeFix *f, const char *mode, i32 timeout_ms)
     YEW_ASSERT_EQ_I64(write(fd, "int x;\n", 7U), 7);
     YEW_ASSERT_EQ_I64(close(fd), 0);
     (void)snprintf(f->path, sizeof(f->path), "%s", tmp);
+    fd = mkstemp(marker);
+    YEW_ASSERT(fd >= 0);
+    YEW_ASSERT_EQ_I64(close(fd), 0);
+    YEW_ASSERT_EQ_I64(unlink(marker), 0);
+    (void)snprintf(f->marker, sizeof(f->marker), "%s", marker);
     f->args[0] = mode;
-    f->args[1] = NULL;
+    f->args[1] = f->marker;
+    f->args[2] = NULL;
     f->cfg.id = "fakelsp";
     f->cfg.lang = "c";
     f->cfg.cmd = f->helper;
@@ -288,6 +297,8 @@ static void life_fix_free(LifeFix *f)
 {
     yew_ed_free(&f->ed);
     YEW_ASSERT_EQ_I64(unlink(f->path), 0);
+    if (unlink(f->marker) != 0)
+        YEW_ASSERT_EQ_I64(errno, ENOENT);
 }
 
 static void life_pump_once(Ed *ed)
@@ -571,4 +582,189 @@ void test_lsp_lifecycle_editor_free_is_graceful(void)
     YEW_ASSERT_EQ_MEM(job->framed_err.data, transcript,
                       sizeof(transcript) - 1U);
     life_fix_free(&f);
+}
+
+static bool bytes_contain(const u8 *bytes, size_t len, const char *needle)
+{
+    size_t n = strlen(needle);
+    size_t i;
+
+    if (n > len)
+        return false;
+    for (i = 0U; i + n <= len; i++)
+        if (memcmp(bytes + i, needle, n) == 0)
+            return true;
+    return false;
+}
+
+static void dispatch_diag(LifeFix *f, LspServer *server, i64 version)
+{
+    LspDoc *doc = yew_lsp_doc_for_buffer(&f->ed, &f->ed.buffer);
+    char json[1024];
+    Arena arena;
+    JsonValue *value;
+    int n;
+
+    YEW_ASSERT_NOT_NULL(doc);
+    n = snprintf(json, sizeof(json),
+        "{\"jsonrpc\":\"2.0\","
+        "\"method\":\"textDocument/publishDiagnostics\","
+        "\"params\":{\"uri\":\"%s\",\"version\":%lld,"
+        "\"diagnostics\":[{\"range\":{"
+        "\"start\":{\"line\":0,\"character\":0},"
+        "\"end\":{\"line\":0,\"character\":1}},"
+        "\"severity\":1,\"message\":\"boom\"}]}}",
+        doc->uri, (long long)version);
+    YEW_ASSERT(n > 0 && (size_t)n < sizeof(json));
+    arena_init(&arena);
+    value = parse(&arena, json);
+    yew_lsp_server_dispatch_value(server, value);
+    arena_free_all(&arena);
+}
+
+static bool wait_new_ready(LifeFix *f, u32 old_job, i64 timeout_ms)
+{
+    i64 start = yew_now_ms();
+
+    while (yew_now_ms() - start <= timeout_ms) {
+        LspServer *server = life_server(f);
+        LspDoc *doc = yew_lsp_doc_for_buffer(&f->ed, &f->ed.buffer);
+
+        if (server->job != old_job && server->state == YEW_LSP_READY &&
+            doc != NULL && doc->open)
+            return true;
+        life_pump_once(&f->ed);
+    }
+    return false;
+}
+
+void test_lsp_lifecycle_diagnostics_follow_live_document_version(void)
+{
+    LifeFix f;
+    LspServer *server;
+    LspDoc *doc;
+    u32 old_job;
+
+    life_fix_init(&f, "session-utf8", 1000);
+    YEW_ASSERT(wait_state(&f, YEW_LSP_READY, 2000));
+    server = life_server(&f);
+    doc = yew_lsp_doc_for_buffer(&f.ed, &f.ed.buffer);
+    YEW_ASSERT_NOT_NULL(doc);
+    YEW_ASSERT_EQ_I64(doc->version, 1);
+    dispatch_diag(&f, server, 0);
+    YEW_ASSERT_NULL(f.ed.buffer.diag);
+    dispatch_diag(&f, server, 1);
+    YEW_ASSERT_NOT_NULL(f.ed.buffer.diag);
+    YEW_ASSERT_EQ_U64(f.ed.buffer.diag->d.len, 1U);
+    doc->full_sync = true;
+    doc->insert_waiting = true;
+    Vec_LspChange_push(&doc->pending, ((LspChange){0}));
+    old_job = server->job;
+    YEW_ASSERT(yew_lsp_client_restart(&f.ed, &f.ed.buffer));
+    YEW_ASSERT_NULL(f.ed.buffer.diag);
+    YEW_ASSERT_EQ_I64(doc->version, 0);
+    YEW_ASSERT(!doc->open);
+    YEW_ASSERT(!doc->full_sync);
+    YEW_ASSERT(!doc->insert_waiting);
+    YEW_ASSERT_EQ_U64(doc->pending.len, 0U);
+    YEW_ASSERT(wait_new_ready(&f, old_job, 3000));
+    YEW_ASSERT_EQ_I64(doc->version, 1);
+    dispatch_diag(&f, server, 1);
+    YEW_ASSERT_NOT_NULL(f.ed.buffer.diag);
+    YEW_ASSERT_EQ_U64(f.ed.buffer.diag->d.len, 1U);
+    yew_lsp_client_stop(&f.ed, server, true);
+    YEW_ASSERT(wait_drained(&f, 2000));
+    life_fix_free(&f);
+}
+
+void test_lsp_lifecycle_automatic_restart_reopens_documents(void)
+{
+    LifeFix f;
+    LspServer *server;
+    LspDoc *doc;
+    u32 old_job;
+
+    life_fix_init(&f, "session-crash-restart", 1000);
+    YEW_ASSERT(wait_state(&f, YEW_LSP_READY, 2000));
+    server = life_server(&f);
+    doc = yew_lsp_doc_for_buffer(&f.ed, &f.ed.buffer);
+    YEW_ASSERT_NOT_NULL(doc);
+    dispatch_diag(&f, server, 1);
+    YEW_ASSERT_NOT_NULL(f.ed.buffer.diag);
+    {
+        YewJob *job = yew_job_find(&f.ed, server->job);
+
+        YEW_ASSERT_NOT_NULL(job);
+        YEW_ASSERT_EQ_I64(kill(-job->pgid, SIGKILL), 0);
+    }
+    doc->full_sync = true;
+    Vec_LspChange_push(&doc->pending, ((LspChange){0}));
+    old_job = server->job;
+    YEW_ASSERT(wait_new_ready(&f, old_job, 3000));
+    YEW_ASSERT_NULL(f.ed.buffer.diag);
+    YEW_ASSERT(doc->open);
+    YEW_ASSERT_EQ_I64(doc->version, 1);
+    YEW_ASSERT(!doc->full_sync);
+    YEW_ASSERT(!doc->insert_waiting);
+    YEW_ASSERT_EQ_U64(doc->pending.len, 0U);
+    yew_lsp_client_stop(&f.ed, server, true);
+    YEW_ASSERT(wait_drained(&f, 2000));
+    life_fix_free(&f);
+}
+
+void test_lsp_lifecycle_stop_escalates_to_sigkill(void)
+{
+    LifeFix f;
+    LspServer *server;
+    YewJob *job;
+    i64 start;
+
+    life_fix_init(&f, "session-resistant", 1000);
+    YEW_ASSERT(wait_state(&f, YEW_LSP_READY, 2000));
+    server = life_server(&f);
+    start = yew_now_ms();
+    yew_lsp_client_stop(&f.ed, server, true);
+    YEW_ASSERT(wait_drained(&f, 2000));
+    YEW_ASSERT(yew_now_ms() - start >= 350);
+    job = yew_job_find(&f.ed, server->job);
+    YEW_ASSERT_NOT_NULL(job);
+    YEW_ASSERT_EQ_U64(job->state, YEW_JOB_SIGNALED);
+    YEW_ASSERT_EQ_I64(job->termsig, SIGKILL);
+    life_fix_free(&f);
+}
+
+void test_lsp_server_requests_receive_protocol_results(void)
+{
+    LspServer server;
+    Arena arena;
+    JsonValue *request;
+
+    (void)memset(&server, 0, sizeof(server));
+    yew_rpc_conn_init(&server.rpc);
+    server.rpc_live = true;
+    arena_init(&arena);
+    request = parse(&arena,
+        "{\"jsonrpc\":\"2.0\",\"id\":7,"
+        "\"method\":\"workspace/configuration\","
+        "\"params\":{\"items\":[{},{},{}]}}"
+    );
+    yew_lsp_server_dispatch_value(&server, request);
+    YEW_ASSERT(bytes_contain(server.rpc.tx.pending.data,
+                             server.rpc.tx.pending.len,
+                             "\"id\":7,\"result\":[null,null,null]"));
+    yew_rpctx_consume(&server.rpc.tx, server.rpc.tx.pending.len);
+    arena_free_all(&arena);
+    arena_init(&arena);
+    request = parse(&arena,
+        "{\"jsonrpc\":\"2.0\",\"id\":8,"
+        "\"method\":\"window/workDoneProgress/create\","
+        "\"params\":{\"token\":1}}"
+    );
+    yew_lsp_server_dispatch_value(&server, request);
+    YEW_ASSERT(bytes_contain(server.rpc.tx.pending.data,
+                             server.rpc.tx.pending.len,
+                             "\"id\":8,\"result\":null"));
+    arena_free_all(&arena);
+    yew_rpc_conn_free(&server.rpc);
+    server.rpc_live = false;
 }

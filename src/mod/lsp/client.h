@@ -124,6 +124,8 @@ bool yew_lsp_client_restart(Ed *ed, Buffer *b);
 
 /* Central response gate used by the transport and focused race tests. */
 bool yew_lsp_dispatch_response(LspServer *s, const JsonValue *msg);
+/* Real notification/request dispatcher; also the fuzz protocol seam. */
+void yew_lsp_server_dispatch_value(LspServer *s, const JsonValue *msg);
 
 LspDoc *yew_lsp_doc_for_buffer(Ed *ed, const Buffer *b);
 LspServer *yew_lsp_server_for_doc(Ed *ed, const LspDoc *doc);

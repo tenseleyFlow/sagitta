@@ -3,7 +3,9 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include <errno.h>
+#include <fcntl.h>
 #include <poll.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -150,12 +152,29 @@ static bool read_method(const char *method, unsigned long long *id)
     return ok;
 }
 
-static int run_session(const char *mode)
+static int run_session(const char *mode, const char *marker)
 {
     unsigned long long id = 0U;
     const char *encoding = NULL;
     char response[320];
+    bool crash = false;
     int n;
+
+    if (strcmp(mode, "session-resistant") == 0)
+        (void)signal(SIGTERM, SIG_IGN);
+    if (strcmp(mode, "session-crash-restart") == 0) {
+        int fd;
+
+        if (marker == NULL)
+            return 9;
+        fd = open(marker, O_WRONLY | O_CREAT | O_EXCL, 0600);
+        if (fd >= 0) {
+            crash = true;
+            (void)close(fd);
+        } else if (errno != EEXIST) {
+            return 9;
+        }
+    }
 
     if (!read_method("\"method\":\"initialize\"", &id) || id == 0U)
         return 10;
@@ -167,7 +186,9 @@ static int run_session(const char *mode)
     }
     if (strcmp(mode, "session-utf8") == 0 ||
         strcmp(mode, "session-sync") == 0 ||
-        strcmp(mode, "session-stale") == 0)
+        strcmp(mode, "session-stale") == 0 ||
+        strcmp(mode, "session-resistant") == 0 ||
+        strcmp(mode, "session-crash-restart") == 0)
         encoding = ",\"positionEncoding\":\"utf-8\"";
     else if (strcmp(mode, "session-utf16") == 0)
         encoding = ",\"positionEncoding\":\"utf-16\"";
@@ -190,6 +211,11 @@ static int run_session(const char *mode)
     if (!read_method("\"method\":\"textDocument/didOpen\"", NULL) ||
         !write_all(STDERR_FILENO, "seq:didOpen\n", 12U))
         return 15;
+    if (crash) {
+        (void)write_all(STDERR_FILENO, "seq:crash\n", 10U);
+        (void)poll(NULL, 0U, 1000);
+        return 25;
+    }
     if (strcmp(mode, "session-sync") == 0) {
         if (!read_method("\"method\":\"textDocument/didChange\"", NULL) ||
             !write_all(STDERR_FILENO, "seq:didChange\n", 14U))
@@ -226,6 +252,9 @@ static int run_session(const char *mode)
     if (!read_method("\"method\":\"exit\"", NULL) ||
         !write_all(STDERR_FILENO, "seq:exit\n", 9U))
         return 18;
+    if (strcmp(mode, "session-resistant") == 0)
+        for (;;)
+            (void)poll(NULL, 0U, 1000);
     return 0;
 }
 
@@ -238,7 +267,7 @@ int main(int argc, char **argv)
     int hlen;
 
     if (strncmp(mode, "session-", 8U) == 0)
-        return run_session(mode);
+        return run_session(mode, argc > 2 ? argv[2] : NULL);
 
     if (!read_request(&request, &request_len))
         return 2;

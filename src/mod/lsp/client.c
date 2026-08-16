@@ -867,13 +867,34 @@ bool yew_lsp_dispatch_response(LspServer *s, const JsonValue *msg)
     return yew_rpc_dispatch(&s->rpc, s->owner, msg);
 }
 
-static void on_rpc_value(void *ctx, const JsonValue *msg)
+static void reply_configuration(LspServer *s, const JsonValue *id,
+                                const JsonValue *params)
 {
-    LspServer *s = ctx;
-    RpcMsgKind kind = yew_rpc_classify(msg);
+    const JsonValue *items = yew_json_get(params, "items");
+    Bytebuf result;
+    JsonW w;
+    u32 i;
+
+    bytebuf_init(&result);
+    yew_jsonw_init(&w, &result);
+    yew_jsonw_arr(&w);
+    for (i = 0U; items != NULL && items->kind == YEW_JS_ARR &&
+         i < items->arr.n; i++)
+        yew_jsonw_null(&w);
+    yew_jsonw_arr_end(&w);
+    yew_rpc_reply(&s->rpc, id, result.data, (u32)result.len);
+    bytebuf_free(&result);
+}
+
+void yew_lsp_server_dispatch_value(LspServer *s, const JsonValue *msg)
+{
+    RpcMsgKind kind;
     const JsonValue *method;
     const JsonValue *params;
 
+    if (s == NULL || msg == NULL)
+        return;
+    kind = yew_rpc_classify(msg);
     if (kind == YEW_RPC_MALFORMED)
         return;
     if (kind == YEW_RPC_RESPONSE || kind == YEW_RPC_ERROR) {
@@ -897,7 +918,8 @@ static void on_rpc_value(void *ctx, const JsonValue *msg)
                 Buffer *buffer = yew_ws_buf_by_id(s->owner, doc->buf_id);
 
                 if (buffer != NULL && items != NULL &&
-                    items->kind == YEW_JS_ARR)
+                    items->kind == YEW_JS_ARR &&
+                    (version < 0 || version >= doc->version))
                     yew_diag_replace(s->owner, buffer, s->id, items, version);
                 break;
             }
@@ -908,7 +930,10 @@ static void on_rpc_value(void *ctx, const JsonValue *msg)
         const JsonValue *id = yew_json_get(msg, "id");
 
         if (yew_json_streq(method, "workspace/configuration"))
-            yew_rpc_reply(&s->rpc, id, (const u8 *)"[]", 2U);
+            reply_configuration(s, id, params);
+        else if (yew_json_streq(method,
+                                "window/workDoneProgress/create"))
+            yew_rpc_reply(&s->rpc, id, (const u8 *)"null", 4U);
         else
             yew_rpc_reply_error(&s->rpc, id, -32601,
                                 "method not supported by yew");
@@ -925,6 +950,11 @@ static void on_rpc_value(void *ctx, const JsonValue *msg)
             yew_msg(s->owner, YEW_MSG_INFO, "%.*s", (int)n,
                     (const char *)text);
     }
+}
+
+static void on_rpc_value(void *ctx, const JsonValue *msg)
+{
+    yew_lsp_server_dispatch_value(ctx, msg);
 }
 
 LspClient *yew_lsp_client_new(void)
@@ -1119,6 +1149,7 @@ void yew_lsp_client_stop(Ed *ed, LspServer *s, bool graceful)
         (void)memset(&p, 0, sizeof(p));
         p.cb = shutdown_done;
         p.ctx = s;
+        p.sent_ms = ed->now_ms;
         (void)yew_rpc_call(&s->rpc, "shutdown", NULL, 0U, &p);
     } else {
         (void)yew_job_signal(ed, s->job, SIGTERM);
@@ -1164,6 +1195,30 @@ void yew_lsp_client_close_buffer(Ed *ed, Buffer *b)
     }
 }
 
+static void reset_server_session(Ed *ed, LspServer *s)
+{
+    size_t i;
+
+    (void)memset(&s->caps, 0, sizeof(s->caps));
+    s->pos_enc = YEW_POSENC_UTF16;
+    s->exit_sent = false;
+    for (i = 0U; i < s->docv.len; i++) {
+        LspDoc *doc = &s->docv.data[i];
+        Buffer *buffer = yew_ws_buf_by_id(ed, doc->buf_id);
+
+        doc->version = 0;
+        doc->sent_gen = 0U;
+        doc->open = false;
+        doc->full_sync = false;
+        doc->insert_waiting = false;
+        doc->pending.len = 0U;
+        arena_free_all(&doc->changes);
+        arena_init(&doc->changes);
+        if (buffer != NULL)
+            yew_diag_store_free(buffer);
+    }
+}
+
 bool yew_lsp_client_restart(Ed *ed, Buffer *b)
 {
     LspDoc *doc;
@@ -1179,8 +1234,8 @@ bool yew_lsp_client_restart(Ed *ed, Buffer *b)
     for (i = 0U; i < s->docv.len; i++) {
         if (s->state == YEW_LSP_READY)
             yew_lsp_doc_close(&s->rpc, &s->docv.data[i]);
-        s->docv.data[i].open = false;
     }
+    reset_server_session(ed, s);
     yew_lsp_server_restart_reset(s);
     (void)yew_job_signal(ed, s->job, SIGTERM);
     s->state = YEW_LSP_DEAD;
@@ -1252,6 +1307,7 @@ void yew_lsp_client_pump(Ed *ed)
 
             bytebuf_init(&msg);
             bytebuf_init(&tail);
+            reset_server_session(ed, s);
             tail_end = j == NULL ? 0U : j->framed_err.len;
             while (tail_end != 0U &&
                    (j->framed_err.data[tail_end - 1U] == '\n' ||
