@@ -174,3 +174,15 @@ void yew_lsp_note_edit_post(EditCtx *ec, u8 kind, ByteOff at, u64 len)
     (void)at;
     (void)len;
 }
+
+void yew_lsp_highlight_cursor(Ed *ed, Win *w)
+{
+    (void)ed;
+    (void)w;
+}
+
+void yew_lsp_highlight_clear(Ed *ed, Win *w)
+{
+    (void)ed;
+    (void)w;
+}

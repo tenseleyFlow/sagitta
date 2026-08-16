@@ -1014,6 +1014,36 @@ void test_lsp_lifecycle_document_highlight_cursor_rearm_rejects_stale_response(
     highlight_life_finish(&f, server);
 }
 
+void test_lsp_lifecycle_document_highlight_focus_return_rearms(void)
+{
+    LifeFix f;
+    LspServer *server = highlight_life_ready(&f);
+    Win *win = f.ed.win;
+    u64 stale = highlight_fire(&f, 300);
+    u64 current;
+
+    YEW_ASSERT(stale != 0U);
+    f.ed.win = NULL;
+    YEW_ASSERT(highlight_dispatch(&f, stale,
+        "\"result\":[{\"range\":{\"start\":{\"line\":0,"
+        "\"character\":0},\"end\":{\"line\":0,\"character\":3}},"
+        "\"kind\":2}]"));
+    YEW_ASSERT_EQ_U64(win->lsp_highlight.request, 0U);
+    YEW_ASSERT(!win->lsp_highlight.cursor_valid);
+    YEW_ASSERT_EQ_U64(win->lsp_highlight.read.spans.len, 0U);
+
+    f.ed.win = win;
+    yew_lsp_highlight_cursor(&f.ed, win);
+    YEW_ASSERT(win->lsp_highlight.timer != YEW_TIMER_NONE);
+    f.ed.now_ms += 300;
+    yew_timers_fire(&f.ed.timers, &f.ed, f.ed.now_ms);
+    current = win->lsp_highlight.request;
+    YEW_ASSERT(current != 0U);
+    YEW_ASSERT(current != stale);
+    YEW_ASSERT(highlight_dispatch(&f, current, "\"result\":[]"));
+    highlight_life_finish(&f, server);
+}
+
 void test_lsp_lifecycle_method_not_found_clears_highlight_capability(void)
 {
     LifeFix f;
@@ -1027,6 +1057,27 @@ void test_lsp_lifecycle_method_not_found_clears_highlight_capability(void)
     YEW_ASSERT_EQ_U64(f.ed.win->lsp_highlight.request, 0U);
     YEW_ASSERT_EQ_U64(f.ed.win->lsp_highlight.read.spans.len, 0U);
     YEW_ASSERT_EQ_U64(f.ed.win->lsp_highlight.write.spans.len, 0U);
+    highlight_life_finish(&f, server);
+}
+
+void test_lsp_lifecycle_unfocused_method_not_found_clears_highlight_capability(
+    void)
+{
+    LifeFix f;
+    LspServer *server = highlight_life_ready(&f);
+    Win *win = f.ed.win;
+    u64 request = highlight_fire(&f, 300);
+
+    YEW_ASSERT(request != 0U);
+    f.ed.win = NULL;
+    YEW_ASSERT(highlight_dispatch(&f, request,
+        "\"error\":{\"code\":-32601,\"message\":\"missing\"}"));
+    YEW_ASSERT(!yew_lsp_has(server, YEW_LSPC_DOCUMENT_HIGHLIGHT));
+    YEW_ASSERT_EQ_U64(win->lsp_highlight.request, 0U);
+    YEW_ASSERT(!win->lsp_highlight.cursor_valid);
+    YEW_ASSERT_EQ_U64(win->lsp_highlight.read.spans.len, 0U);
+    YEW_ASSERT_EQ_U64(win->lsp_highlight.write.spans.len, 0U);
+    f.ed.win = win;
     highlight_life_finish(&f, server);
 }
 

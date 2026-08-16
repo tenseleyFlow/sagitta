@@ -473,6 +473,7 @@ int yew_loop_run(Ed *ed)
 
         /* Deadline work cannot split a queued typeahead burst. */
         yew_dispatch_tick(ed, now);
+        yew_lsp_highlight_cursor(ed, ed->win);
         yew_timers_fire(&ed->timers, ed, now);
         /*
          * Sprint 26 §7.2: a sliced rescan continues here, on the idle

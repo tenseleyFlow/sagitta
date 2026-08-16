@@ -7,6 +7,7 @@
 #include "edit/buf.h"
 #include "edit/ed.h"
 #include "mod/lsp/client.h"
+#include "mod/lsp/highlight.h"
 #include "mod/lsp/json.h"
 #include "text/piece.h"
 #include "unicode/u16.h"
@@ -414,6 +415,8 @@ void yew_lsp_note_edit(EditCtx *ec, u8 kind, ByteOff at, u64 len)
     LspDoc *doc;
     LspServer *server;
 
+    if (ec != NULL && ec->ed != NULL && ec->buffer != NULL)
+        yew_lsp_highlight_buffer_clear(ec->ed, ec->buffer->id);
     if (edit_sync(ec, &doc, &server))
         yew_lsp_doc_note_edit(doc, server->pos_enc, server->caps.sync_kind,
                               ec->tb, kind, at, len);

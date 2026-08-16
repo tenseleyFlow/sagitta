@@ -46,5 +46,7 @@ void yew_lsp_buffer_save(Ed *ed, Buffer *b);
 void yew_lsp_buffer_close(Ed *ed, Buffer *b);
 void yew_lsp_note_edit(EditCtx *ec, u8 kind, ByteOff at, u64 len);
 void yew_lsp_note_edit_post(EditCtx *ec, u8 kind, ByteOff at, u64 len);
+void yew_lsp_highlight_cursor(Ed *ed, Win *w);
+void yew_lsp_highlight_clear(Ed *ed, Win *w);
 
 #endif

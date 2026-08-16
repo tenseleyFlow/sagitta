@@ -9,6 +9,7 @@
 #include "mod/lsp/client.h"
 #include "mod/lsp/diag.h"
 #include "mod/lsp/features.h"
+#include "mod/lsp/highlight.h"
 #include "mod/lsp/pickers.h"
 #include "mod/lsp/sync.h"
 #include "ui/complmenu.h"
@@ -409,6 +410,7 @@ void yew_lsp_free(Ed *ed)
 
     if (ed == NULL)
         return;
+    yew_lsp_highlight_shutdown(ed);
     for (i = 0U; i < ed->ws.nbufs; i++)
         yew_diag_store_free(ed->ws.bufs[i]);
     yew_lsp_pickers_free();
@@ -431,5 +433,7 @@ void yew_lsp_buffer_save(Ed *ed, Buffer *b)
 
 void yew_lsp_buffer_close(Ed *ed, Buffer *b)
 {
+    if (b != NULL)
+        yew_lsp_highlight_buffer_clear(ed, b->id);
     yew_lsp_client_close_buffer(ed, b);
 }

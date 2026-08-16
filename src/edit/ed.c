@@ -215,6 +215,8 @@ static void ed_buffer_free(Ed *ed)
     ed->pane_root = NULL;
     ed->focus = NULL;
     yew_overlay_free(&ed->single_win.overlay);
+    yew_overlay_free(&ed->single_win.lsp_highlight.read);
+    yew_overlay_free(&ed->single_win.lsp_highlight.write);
     yew_compl_free(&ed->single_win.compl);
     yew_panel_close(ed, &ed->single_win.panel);
     yew_shadow_dismiss(ed, &ed->single_win);
@@ -531,6 +533,7 @@ bool yew_ed_show_buffer(Ed *ed, Buffer *b)
     if (ed->win->buf == b)
         return true;
     yew_ed_insert_barrier(ed);
+    yew_lsp_highlight_clear(ed, ed->win);
     yew_panel_close(ed, &ed->win->panel);
     yew_shadow_dismiss(ed, ed->win);
     yew_vp_free(ed->win);
@@ -565,6 +568,8 @@ static bool ed_model_finish(Ed *ed, TextBuf *tb, const char *path)
     yew_search_opts_init(&ed->search_opts);
     yew_search_state_init(&ed->search);
     yew_overlay_init(&ed->single_win.overlay);
+    yew_overlay_init(&ed->single_win.lsp_highlight.read);
+    yew_overlay_init(&ed->single_win.lsp_highlight.write);
     yew_shadow_init(&ed->single_win.shadow);
     /* One leaf holding the document window: the pane tree always
      * exists, so no code path has to ask whether panes are "on". */
@@ -975,6 +980,8 @@ Win *yew_ed_win_clone(Ed *ed, const Win *src)
     w->vp.top = src->vp.top;
     w->vp.top_sub = src->vp.top_sub;
     yew_overlay_init(&w->overlay);
+    yew_overlay_init(&w->lsp_highlight.read);
+    yew_overlay_init(&w->lsp_highlight.write);
     yew_shadow_init(&w->shadow);
     yew_jumplist_init(&w->jumps);
     return w;
@@ -991,11 +998,11 @@ void yew_ed_win_set_buffer(Ed *ed, Win *w, Buffer *b)
 {
     Cursor origin = {BYTEOFF(0U), {0U}, BYTEOFF(0U)};
 
-    (void)ed;
     if (w == NULL || b == NULL || w->buf == b)
         return;
     if (w->compl.open)
         yew_compl_close_result(ed, w, false);
+    yew_lsp_highlight_clear(ed, w);
     yew_panel_close(ed, &w->panel);
     yew_shadow_dismiss(ed, w);
     yew_vp_free(w);
@@ -1010,9 +1017,12 @@ void yew_ed_win_release(Ed *ed, Win *w)
     if (ed == NULL || w == NULL)
         return;
     fl_h_drop_window(ed, w->id);
+    yew_lsp_highlight_clear(ed, w);
     if (w == &ed->single_win)
         return;
     yew_overlay_free(&w->overlay);
+    yew_overlay_free(&w->lsp_highlight.read);
+    yew_overlay_free(&w->lsp_highlight.write);
     if (w->compl.open)
         yew_compl_close_result(ed, w, false);
     yew_compl_free(&w->compl);

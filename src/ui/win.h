@@ -21,6 +21,21 @@
 
 typedef struct Buffer Buffer;
 
+typedef struct LspHighlightState {
+    /* Separate from Win.overlay: search and LSP responses have independent
+     * ownership, invalidation, and paint roles. */
+    MatchOverlay read;
+    MatchOverlay write;
+    TimerId timer;
+    u64 request;
+    u64 seq;
+    u64 buf_gen;
+    ByteOff cursor;
+    u32 server_id;
+    u32 buf_id;
+    bool cursor_valid;
+} LspHighlightState;
+
 typedef struct Win {
     /*
      * Sprint 34: stable for this window's lifetime and never reused.
@@ -72,6 +87,9 @@ typedef struct Win {
     u64 symbol_source_request;
     u64 symbol_source_seq;
     u32 symbol_source_server;
+    /* Sprint 47: passive document highlights debounce and reject stale
+     * responses independently of every command-driven LSP request. */
+    LspHighlightState lsp_highlight;
 } Win;
 
 /* Sprint 14 compatibility names; new code uses the yew_vp_* API. */

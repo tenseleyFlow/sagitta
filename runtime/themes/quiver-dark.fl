@@ -33,6 +33,8 @@
         "compl.macro": { fg: "@orange", mono: "plain" },
         "compl.keyword": { fg: "@violet", mono: "dim" },
         "lsp.hover_range": { bg: "#2c313a", underline: true, mono: "underline" },
+        "lsp.highlight_read": { bg: "#2c313a", underline: true, mono: "underline" },
+        "lsp.highlight_write": { bg: "#4a3640", bold: true, mono: "bold" },
         "diag.error": { fg: "@red", mono: "bold" },
         "diag.warn": { fg: "@yellow", mono: "bold" },
         "diag.info": { fg: "@blue", mono: "underline" },

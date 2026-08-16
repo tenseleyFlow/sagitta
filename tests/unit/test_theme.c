@@ -70,7 +70,7 @@ void test_theme_defaults_compile_with_full_attr_coverage(void)
         "runtime/themes/quiver-dark.fl", "runtime/themes/quiver-light.fl"
     };
     static const char *const ui_roles[] = {
-        "lsp.hover_range",
+        "lsp.hover_range", "lsp.highlight_read", "lsp.highlight_write",
         "diag.error", "diag.warn", "diag.info", "diag.hint",
         "diag.unnecessary", "diag.deprecated"
     };

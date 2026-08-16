@@ -4,6 +4,7 @@
 #include "util/base.h"
 #include "util/buf.h"
 #include "mod/lsp/json.h"
+#include "mod/lsp/highlight.h"
 #include "edit/shadow.h"
 #include "ui/complmenu.h"
 #include "util/vec.h"

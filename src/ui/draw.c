@@ -438,6 +438,57 @@ static void draw_search_rows(Ed *ed, Win *w, u16 lo, u16 hi)
     }
 }
 
+#if YEW_WITH_LSP
+static void draw_lsp_highlight_overlay(Ed *ed, Win *w,
+                                       const MatchOverlay *overlay,
+                                       const char *role, u16 lo, u16 hi,
+                                       bool write)
+{
+    size_t i;
+
+    for (i = 0U; i < overlay->spans.len; i++) {
+        const Span match = overlay->spans.data[i];
+        Cell style = ed->grid.blank;
+        u8 fields = themed_overlay(&style, yew_theme_ui_tab(ed, role));
+        u16 screen_row;
+
+        if (fields == 0U) {
+            style.attrs = write ? (u16)(YEW_ATTR_BOLD | YEW_ATTR_UNDERLINE) :
+                                  YEW_ATTR_UNDERLINE;
+            fields = YEW_OVERLAY_ATTRS;
+        }
+        for (screen_row = lo;
+             screen_row < hi && screen_row < w->rect.h; screen_row++) {
+            LineNo line;
+            u32 sub;
+            Span displayed;
+
+            if (!yew_vp_line_of_row(w, screen_row, &line, &sub))
+                continue;
+            displayed = w->vp.wrap ? yew_wrap_row(w, line, sub) :
+                                     line_content_span(w->buf->tb, line);
+            if (match.hi <= displayed.lo || match.lo >= displayed.hi)
+                continue;
+            overlay_span(&ed->grid, w, (u16)(w->rect.y + screen_row),
+                         displayed, match, &style, fields);
+        }
+    }
+}
+
+static void draw_lsp_highlight_rows(Ed *ed, Win *w, u16 lo, u16 hi)
+{
+    const LspHighlightState *state = &w->lsp_highlight;
+
+    if (w->buf == NULL || w->buf->tb == NULL || !state->cursor_valid ||
+        state->buf_id != w->buf->id || state->buf_gen != w->buf->tb->gen)
+        return;
+    draw_lsp_highlight_overlay(ed, w, &state->read, "lsp.highlight_read",
+                               lo, hi, false);
+    draw_lsp_highlight_overlay(ed, w, &state->write, "lsp.highlight_write",
+                               lo, hi, true);
+}
+#endif
+
 static void draw_panel_mark_rows(Ed *ed, Win *w, u16 lo, u16 hi)
 {
     const Panel *panel = &w->panel;
@@ -686,6 +737,7 @@ void yew_draw_document_rows(Ed *ed, Win *w, u16 lo, u16 hi)
     draw_selection_rows(ed, w, lo, hi);
     draw_search_rows(ed, w, lo, hi);
 #if YEW_WITH_LSP
+    draw_lsp_highlight_rows(ed, w, lo, hi);
     draw_diag_rows(ed, w, lo, hi);
 #endif
     draw_panel_mark_rows(ed, w, lo, hi);
