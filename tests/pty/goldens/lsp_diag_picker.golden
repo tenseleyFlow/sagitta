@@ -4,7 +4,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 --- text
 ✗   1 error alpha
 ▲   2 warning beta
-● Diagnostics 
+● Diagnostics (buffer) 
 ·:                                                                             
 
   src/diag_fixture.c:1:1  ✗ use of undeclared identifier 'alpha'
@@ -23,13 +23,13 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=1
 
 
 
-  4/4   up/down move . enter open . ^v split . esc
+  4/4   tab scope . enter jump . esc
 
  L  diag_fixture.c                                  utf-8  lf  5:1  all  E:1 W:1
 --- style
 AAAAAABBBBBAAAAAA
 AAAAAABBBBBBBAAAAA
-ACCCCCCCCCCCCC
+ACCCCCCCCCCCCCCCCCCCCCC
 ADEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEE
 
 AAFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF
@@ -48,7 +48,7 @@ AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA
 
 
 
-AGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
+AGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGGG
 
 HHHIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
 --- legend
