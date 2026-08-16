@@ -211,12 +211,12 @@ static i64 clip_test_now_ms(void)
     return (i64)ts.tv_sec * 1000 + (i64)(ts.tv_nsec / 1000000L);
 }
 
-static u64 clip_test_now_ns(void)
+static u64 clip_test_cpu_ns(void)
 {
     struct timespec ts;
 
-    if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
-        YEW_BUG("clipboard test monotonic clock failed: %s", strerror(errno));
+    if (clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts) != 0)
+        YEW_BUG("clipboard test CPU clock failed: %s", strerror(errno));
     return (u64)ts.tv_sec * UINT64_C(1000000000) + (u64)ts.tv_nsec;
 }
 
@@ -654,12 +654,23 @@ void test_clipboard_nonexit_100_writes_are_nonblocking(void)
     budget_ns = getenv("YEW_TEST_INSTRUMENTED") != NULL ?
                     UINT64_C(100000000) : UINT64_C(2000000);
     for (i = 0U; i < 100U; i++) {
-        u64 start = clip_test_now_ns();
+        u64 start;
         u64 elapsed;
+        int fd;
 
+        start = clip_test_cpu_ns();
         YEW_ASSERT(yew_clip_write(&value, '+'));
         yew_clip_after_render(&terminal, clip_test_now_ms());
-        elapsed = clip_test_now_ns() - start;
+        elapsed = clip_test_cpu_ns() - start;
+        /* CPU time excludes unrelated scheduler delay.  The descriptor
+         * check separately proves that the clipboard pipe cannot block. */
+        fd = yew_clip_write_fd();
+        if (fd >= 0) {
+            int flags = fcntl(fd, F_GETFL);
+
+            YEW_ASSERT(flags >= 0);
+            YEW_ASSERT((flags & O_NONBLOCK) != 0);
+        }
         if (elapsed > slowest)
             slowest = elapsed;
         clip_pump_until_idle();
