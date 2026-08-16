@@ -348,6 +348,7 @@ UNIT_LSP_SRC := tests/unit/test_json.c tests/unit/test_json_num.c \
                 tests/unit/test_lsp_config.c tests/unit/test_lsp_life.c \
                 tests/unit/test_lsp_nav.c \
                 tests/unit/test_lsp_snippet.c \
+                tests/unit/test_lsp_symbols.c \
                 tests/unit/test_lsp_sync.c \
                 tests/unit/test_lsp_uri.c
 ifeq ($(filter lsp,$(MODULES)),)
