@@ -174,8 +174,21 @@ static u32 index_enumerate(Ed *ed, Win *w, const u8 *stem, u32 slen,
 }
 
 const ComplSource yew_compl_source_index = {
-    "index", index_enumerate, NULL, NULL,
+    .name = "index",
+    .enumerate = index_enumerate,
 };
+
+static void compl_items_clear(ComplMenu *menu)
+{
+    size_t i;
+
+    if (menu == NULL)
+        return;
+    if (menu->src != NULL && menu->src->discard != NULL)
+        for (i = 0U; i < menu->items.len; i++)
+            menu->src->discard(&menu->items.data[i], menu->src->ctx);
+    menu->items.len = 0U;
+}
 
 static u16 u16_min(u16 a, u16 b)
 {
@@ -268,7 +281,7 @@ static void compl_fill(Ed *ed, Win *w, const ComplSource *src,
 {
     ComplMenu *menu = &w->compl;
 
-    menu->items.len = 0U;
+    compl_items_clear(menu);
     menu->sel = -1;
     menu->top = 0U;
     menu->src = src;
@@ -286,7 +299,9 @@ bool yew_compl_open_source(Ed *ed, Win *w, const ComplSource *src)
 
     if (ed == NULL || w == NULL || src == NULL || src->name == NULL ||
         w->buf == NULL || w->buf->tb == NULL ||
-        !compl_stem(w, &replace, &stem, &slen) || slen == 0U) {
+        !compl_stem(w, &replace, &stem, &slen) ||
+        (slen == 0U &&
+         (src->flags & YEW_COMPL_SRC_EMPTY_STEM) == 0U)) {
         free(stem);
         return false;
     }
@@ -300,7 +315,8 @@ bool yew_compl_open_source(Ed *ed, Win *w, const ComplSource *src)
     w->shadow.suppressed = true;
     compl_fill(ed, w, src, stem, slen);
     free(stem);
-    if (w->compl.items.len == 0U) {
+    if (w->compl.items.len == 0U &&
+        (src->flags & YEW_COMPL_SRC_ASYNC) == 0U) {
         yew_compl_close_result(ed, w, false);
         return false;
     }
@@ -366,8 +382,10 @@ void yew_compl_close_result(Ed *ed, Win *w, bool accepted)
     (void)accepted;
     if (w == NULL)
         return;
+    if (w->compl.src != NULL && w->compl.src->close != NULL)
+        w->compl.src->close(ed, w, w->compl.src->ctx);
+    compl_items_clear(&w->compl);
     w->compl.open = false;
-    w->compl.items.len = 0U;
     w->compl.sel = -1;
     w->compl.top = 0U;
     w->compl.panel_open = false;
@@ -400,6 +418,7 @@ void yew_compl_free(ComplMenu *menu)
 {
     if (menu == NULL)
         return;
+    compl_items_clear(menu);
     Vec_ComplItem_free(&menu->items);
     (void)memset(menu, 0, sizeof(*menu));
 }
@@ -437,6 +456,11 @@ static void compl_move(Ed *ed, Win *w, i32 delta, bool page)
         next += n;
     next %= n;
     menu->sel = (i32)next;
+    if (menu->panel_open && menu->src != NULL &&
+        menu->src->resolve != NULL &&
+        menu->items.data[menu->sel].doc == NULL)
+        menu->src->resolve(ed, w, &menu->items.data[menu->sel],
+                           menu->src->ctx);
     yew_compl_resize(ed, w);
     ed->full_damage = true;
 }
@@ -447,6 +471,11 @@ void yew_compl_select(Ed *ed, Win *w, i32 item)
         (size_t)item >= w->compl.items.len)
         return;
     w->compl.sel = item;
+    if (w->compl.panel_open && w->compl.src != NULL &&
+        w->compl.src->resolve != NULL &&
+        w->compl.items.data[item].doc == NULL)
+        w->compl.src->resolve(ed, w, &w->compl.items.data[item],
+                              w->compl.src->ctx);
     yew_compl_resize(ed, w);
     ed->full_damage = true;
 }
@@ -471,6 +500,13 @@ static bool compl_accept(Ed *ed, Win *w)
     item = menu->items.data[menu->sel];
     if (item.insert == NULL)
         return false;
+    if (menu->src != NULL && menu->src->accept != NULL) {
+        ok = menu->src->accept(ed, w, menu->replace, &item,
+                               menu->src->ctx);
+        if (ok)
+            yew_compl_close_result(ed, w, true);
+        return ok;
+    }
     edit = yew_ed_edit_ctx_for(ed, w);
     own_txn = edit.undo != NULL && edit.undo->depth == 0U;
     if (own_txn)
@@ -572,7 +608,7 @@ bool yew_compl_key(Ed *ed, Win *w, const Key *k)
         if (w->compl.panel_open && w->compl.sel >= 0 &&
             w->compl.src != NULL && w->compl.src->resolve != NULL &&
             w->compl.items.data[w->compl.sel].doc == NULL)
-            w->compl.src->resolve(ed,
+            w->compl.src->resolve(ed, w,
                 &w->compl.items.data[w->compl.sel], w->compl.src->ctx);
         yew_compl_resize(ed, w);
         ed->full_damage = true;
@@ -598,7 +634,9 @@ void yew_compl_after_key(Ed *ed, Win *w)
         return;
     menu = &w->compl;
     if (w->buf->tb->gen != menu->buf_gen ||
-        !compl_stem(w, &replace, &stem, &slen) || slen == 0U ||
+        !compl_stem(w, &replace, &stem, &slen) ||
+        (slen == 0U &&
+         (menu->src->flags & YEW_COMPL_SRC_EMPTY_STEM) == 0U) ||
         replace.lo != menu->replace.lo || replace.hi != menu->replace.hi) {
         free(stem);
         yew_compl_close_result(ed, w, false);
@@ -606,7 +644,8 @@ void yew_compl_after_key(Ed *ed, Win *w)
     }
     compl_fill(ed, w, menu->src, stem, slen);
     free(stem);
-    if (menu->items.len == 0U) {
+    if (menu->items.len == 0U &&
+        (menu->src->flags & YEW_COMPL_SRC_ASYNC) == 0U) {
         yew_compl_close_result(ed, w, false);
         return;
     }

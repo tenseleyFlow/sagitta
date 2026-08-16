@@ -1,5 +1,6 @@
 #include "harness.h"
 
+#include <stdlib.h>
 #include <string.h>
 
 #include "edit/ed.h"
@@ -49,11 +50,12 @@ static u32 fixture_enumerate(Ed *ed, Win *w, const u8 *stem, u32 slen,
     return (u32)out->len;
 }
 
-static void fixture_resolve(Ed *ed, ComplItem *item, void *ctx)
+static void fixture_resolve(Ed *ed, Win *w, ComplItem *item, void *ctx)
 {
     static const u8 doc[] = "plain documentation";
 
     (void)ed;
+    (void)w;
     (void)ctx;
     resolved++;
     item->doc = doc;
@@ -61,7 +63,9 @@ static void fixture_resolve(Ed *ed, ComplItem *item, void *ctx)
 }
 
 static const ComplSource fixture_source = {
-    "fixture", fixture_enumerate, fixture_resolve, NULL,
+    .name = "fixture",
+    .enumerate = fixture_enumerate,
+    .resolve = fixture_resolve,
 };
 
 static void compl_fixture(Ed *ed, const u8 *bytes, size_t len, u64 cursor,
@@ -130,6 +134,86 @@ static bool text_eq(const TextBuf *tb, const char *want)
     return true;
 }
 
+typedef struct AsyncSourceSeen {
+    u32 enumerated;
+    u32 resolved;
+    u32 accepted;
+    u32 discarded;
+    u32 closed;
+} AsyncSourceSeen;
+
+static u32 async_enumerate(Ed *ed, Win *w, const u8 *stem, u32 slen,
+                           Vec_ComplItem *out, void *ctx)
+{
+    AsyncSourceSeen *seen = ctx;
+
+    (void)ed;
+    (void)w;
+    (void)stem;
+    (void)slen;
+    (void)out;
+    seen->enumerated++;
+    return 0U;
+}
+
+static void async_resolve(Ed *ed, Win *w, ComplItem *item, void *ctx)
+{
+    AsyncSourceSeen *seen = ctx;
+
+    (void)ed;
+    (void)w;
+    seen->resolved++;
+    item->doc = (const u8 *)"resolved";
+    item->doc_len = 8U;
+}
+
+static bool async_accept(Ed *ed, Win *w, Span replace,
+                         const ComplItem *item, void *ctx)
+{
+    AsyncSourceSeen *seen = ctx;
+
+    (void)ed;
+    (void)w;
+    (void)replace;
+    (void)item;
+    seen->accepted++;
+    return true;
+}
+
+static void async_discard(ComplItem *item, void *ctx)
+{
+    AsyncSourceSeen *seen = ctx;
+
+    free(item->user);
+    item->user = NULL;
+    seen->discarded++;
+}
+
+static void async_close(Ed *ed, Win *w, void *ctx)
+{
+    AsyncSourceSeen *seen = ctx;
+
+    (void)ed;
+    (void)w;
+    seen->closed++;
+}
+
+static ComplSource async_source(AsyncSourceSeen *seen)
+{
+    ComplSource source = {
+        .name = "async",
+        .flags = YEW_COMPL_SRC_ASYNC | YEW_COMPL_SRC_EMPTY_STEM,
+        .enumerate = async_enumerate,
+        .resolve = async_resolve,
+        .accept = async_accept,
+        .discard = async_discard,
+        .close = async_close,
+        .ctx = seen,
+    };
+
+    return source;
+}
+
 static u8 cell_byte(const Grid *g, u16 row, u16 col)
 {
     const Cell *cell = &g->back[(size_t)row * g->cols + col];
@@ -161,6 +245,44 @@ void test_complmenu_auto_trigger_reads_typed_options(void)
     YEW_ASSERT(ed.win->compl.items.len != 0U);
     YEW_ASSERT_EQ_MEM(ed.win->compl.items.data[0].label,
                       "object_symbol", 13U);
+    yew_ed_free(&ed);
+}
+
+void test_complmenu_async_source_owns_lifecycle_and_empty_stem(void)
+{
+    static const u8 label[] = "later";
+    AsyncSourceSeen seen = {0};
+    ComplSource source = async_source(&seen);
+    ComplItem item = {0};
+    Ed ed;
+    Key key;
+
+    compl_fixture(&ed, NULL, 0U, 0U, (Rect){0U, 0U, 80U, 20U});
+    YEW_ASSERT(yew_compl_open_source(&ed, ed.win, &source));
+    YEW_ASSERT(ed.win->compl.open);
+    YEW_ASSERT_EQ_U64(seen.enumerated, 1U);
+    YEW_ASSERT_EQ_U64(ed.win->compl.items.len, 0U);
+    YEW_ASSERT_EQ_I64(ed.win->compl.sel, -1);
+
+    item.label = label;
+    item.label_len = sizeof(label) - 1U;
+    item.insert = label;
+    item.insert_len = sizeof(label) - 1U;
+    item.user = malloc(1U);
+    YEW_ASSERT_NOT_NULL(item.user);
+    yew_compl_push(&ed, ed.win, &item, 1U);
+    YEW_ASSERT_EQ_U64(ed.win->compl.items.len, 1U);
+    YEW_ASSERT_EQ_I64(ed.win->compl.sel, 0);
+
+    key = named_key(' ', YEW_MOD_CTRL);
+    YEW_ASSERT(yew_compl_key(&ed, ed.win, &key));
+    YEW_ASSERT_EQ_U64(seen.resolved, 1U);
+    YEW_ASSERT_EQ_I64(yew_compl_cmd_accept(
+        &(CmdCtx){.ed = &ed, .win = ed.win}), YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(seen.accepted, 1U);
+    YEW_ASSERT_EQ_U64(seen.closed, 1U);
+    YEW_ASSERT_EQ_U64(seen.discarded, 1U);
+    YEW_ASSERT(!ed.win->compl.open);
     yew_ed_free(&ed);
 }
 

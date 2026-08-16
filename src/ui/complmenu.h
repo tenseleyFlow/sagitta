@@ -39,11 +39,27 @@ typedef struct ComplItem {
 
 VEC_DECL(Vec_ComplItem, ComplItem);
 
+enum {
+    /* The source starts work from enumerate() and supplies rows later with
+     * yew_compl_push(). */
+    YEW_COMPL_SRC_ASYNC = 1U << 0,
+    /* Protocol-backed sources may complete at punctuation or an empty gap. */
+    YEW_COMPL_SRC_EMPTY_STEM = 1U << 1
+};
+
 typedef struct ComplSource {
     const char *name;
+    u32 flags;
     u32 (*enumerate)(Ed *ed, Win *w, const u8 *stem, u32 slen,
                      Vec_ComplItem *out, void *ctx);
-    void (*resolve)(Ed *ed, ComplItem *item, void *ctx);
+    void (*resolve)(Ed *ed, Win *w, ComplItem *item, void *ctx);
+    /* A source-specific accept owns its complete atomic edit. */
+    bool (*accept)(Ed *ed, Win *w, Span replace, const ComplItem *item,
+                   void *ctx);
+    /* Called exactly once for every item transferred into the menu. */
+    void (*discard)(ComplItem *item, void *ctx);
+    /* Cancel pending source work; item disposal follows this callback. */
+    void (*close)(Ed *ed, Win *w, void *ctx);
     void *ctx;
 } ComplSource;
 

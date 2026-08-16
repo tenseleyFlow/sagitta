@@ -653,6 +653,7 @@ const YewTest yew_tests[] = {
     T(symidx_save_replaces_workspace_file_tier),
     T(complmenu_key_table_wraps_pages_and_toggles_panel),
     T(complmenu_auto_trigger_reads_typed_options),
+    T(complmenu_async_source_owns_lifecycle_and_empty_stem),
     T(complmenu_accept_is_one_undo_transaction),
     T(complmenu_refilters_expected_typing_and_closes_on_stale_edit),
     T(complmenu_draw_rows_match_evidence_footer_and_regions),

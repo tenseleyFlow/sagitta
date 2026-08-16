@@ -629,6 +629,7 @@ void test_symidx_real_c_highlighter_filters_comments_and_strings(void);
 void test_symidx_save_replaces_workspace_file_tier(void);
 void test_complmenu_key_table_wraps_pages_and_toggles_panel(void);
 void test_complmenu_auto_trigger_reads_typed_options(void);
+void test_complmenu_async_source_owns_lifecycle_and_empty_stem(void);
 void test_complmenu_accept_is_one_undo_transaction(void);
 void test_complmenu_refilters_expected_typing_and_closes_on_stale_edit(void);
 void test_complmenu_draw_rows_match_evidence_footer_and_regions(void);
