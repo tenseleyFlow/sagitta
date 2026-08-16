@@ -2,6 +2,7 @@
 
 #include "harness.h"
 
+#include <dirent.h>
 #include <fcntl.h>
 #include <errno.h>
 #include <poll.h>
@@ -241,6 +242,7 @@ void test_lsp_lifecycle_drops_stale_response_before_callback(void)
 typedef struct LifeFix {
     Ed ed;
     LspServerCfg cfg;
+    struct sigaction saved_sigpipe;
     const char *args[3];
     char helper[4096];
     char path[256];
@@ -265,9 +267,14 @@ static void life_fix_init(LifeFix *f, const char *mode, i32 timeout_ms)
 {
     char tmp[] = "/tmp/yew-lsp-life-XXXXXX";
     char marker[] = "/tmp/yew-lsp-restart-XXXXXX";
+    struct sigaction ignored;
     int fd;
 
     (void)memset(f, 0, sizeof(*f));
+    (void)memset(&ignored, 0, sizeof(ignored));
+    ignored.sa_handler = SIG_IGN;
+    YEW_ASSERT_EQ_I64(sigemptyset(&ignored.sa_mask), 0);
+    YEW_ASSERT_EQ_I64(sigaction(SIGPIPE, &ignored, &f->saved_sigpipe), 0);
     helper_path(f->helper, sizeof(f->helper));
     fd = mkstemp(tmp);
     YEW_ASSERT(fd >= 0);
@@ -298,6 +305,7 @@ static void life_fix_init(LifeFix *f, const char *mode, i32 timeout_ms)
 static void life_fix_free(LifeFix *f)
 {
     yew_ed_free(&f->ed);
+    YEW_ASSERT_EQ_I64(sigaction(SIGPIPE, &f->saved_sigpipe, NULL), 0);
     YEW_ASSERT_EQ_I64(unlink(f->path), 0);
     if (unlink(f->marker) != 0)
         YEW_ASSERT_EQ_I64(errno, ENOENT);
@@ -485,12 +493,25 @@ void test_lsp_lifecycle_fakelsp_initialize_timeout_kills_child(void)
 
 static u32 open_fd_count(void)
 {
+    DIR *dir = opendir("/proc/self/fd");
     u32 count = 0U;
-    int fd;
 
-    for (fd = 0; fd < 256; fd++)
-        if (fcntl(fd, F_GETFD) != -1 || errno != EBADF)
-            count++;
+    if (dir != NULL) {
+        struct dirent *entry;
+
+        while ((entry = readdir(dir)) != NULL)
+            if (entry->d_name[0] != '.')
+                count++;
+        (void)closedir(dir);
+        return count;
+    }
+    {
+        int fd;
+
+        for (fd = 0; fd < 256; fd++)
+            if (fcntl(fd, F_GETFD) != -1)
+                count++;
+    }
     return count;
 }
 
