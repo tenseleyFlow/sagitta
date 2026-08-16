@@ -391,12 +391,12 @@ void test_fl_options_cover_builtins_and_raise_name_suggestions(void)
         "macro.dir", "shadow.enable", "shadow.providers",
         "shadow.max_lines", "shadow.midline", "shadow.lsp_debounce_ms",
         "shadow.ai_debounce_ms", "compl.auto_trigger",
-        "compl.trigger_chars"
+        "compl.trigger_chars", "lsp.open_in"
     };
     Ed ed;
     FlVm *vm;
     const OptProvider *provider;
-    const char *listed[34];
+    const char *listed[35];
     FlValue args[2];
     FlValue out = FL_NIL_V;
     OptVal value;

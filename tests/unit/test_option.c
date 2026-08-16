@@ -40,9 +40,9 @@ void test_option_table_has_frozen_order_types_scopes_and_defaults(void)
         "shadow.enable", "shadow.providers", "shadow.max_lines",
         "shadow.midline", "shadow.lsp_debounce_ms",
         "shadow.ai_debounce_ms", "compl.auto_trigger",
-        "compl.trigger_chars"
+        "compl.trigger_chars", "lsp.open_in"
     };
-    const char *listed[34];
+    const char *listed[35];
     Ed ed;
     u32 i;
 
@@ -100,6 +100,7 @@ void test_option_validators_reject_wrong_types_ranges_and_enums(void)
     OptVal boolean = {YEW_OPT_BOOL, {.b = true}};
     OptVal integer = {YEW_OPT_INT, {.i = 1}};
     OptVal string = {YEW_OPT_STR, {.str = {"bogus", 5U}}};
+    static const char *const open_in[] = {"here", "split", "tab"};
     u32 i;
 
     yew_ed_init(&ed);
@@ -138,6 +139,16 @@ void test_option_validators_reject_wrong_types_ranges_and_enums(void)
                                 desc->name, string, &err));
             YEW_ASSERT_NOT_NULL(err);
         }
+    }
+    for (i = 0U; i < YEW_ARRAY_LEN(open_in); i++) {
+        OptVal value = {YEW_OPT_STR,
+                        {.str = {open_in[i], (u32)strlen(open_in[i])}}};
+
+        err = NULL;
+        YEW_ASSERT(opt_set(&ed, YEW_OPT_SCOPE_DECLARED, "lsp.open_in",
+                           value, &err));
+        YEW_ASSERT_EQ_STR(opt_get(&ed, "lsp.open_in").as.str.s,
+                          open_in[i]);
     }
     yew_ed_free(&ed);
 }

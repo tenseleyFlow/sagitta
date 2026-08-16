@@ -55,6 +55,9 @@ static const char *const clipboard_values[] = {
 static const char *const fortran_form_values[] = {
     "auto", "free", "fixed", NULL
 };
+static const char *const lsp_open_in_values[] = {
+    "here", "split", "tab", NULL
+};
 
 /* The core is deliberately single-threaded.  Keep a stable diagnostic for
  * the option API's borrowed error pointer without growing every Ed. */
@@ -195,7 +198,10 @@ const OptDesc yew_opts[] = {
      "Open completion after configured trigger text"},
     {"compl.trigger_chars", YEW_OPT_STR, YEW_OPT_GLOBAL,
      OPT_STR(". -> ::"), NULL, 0, 0, NULL, option_changed,
-     "Whitespace-separated completion trigger text"}
+     "Whitespace-separated completion trigger text"},
+    {"lsp.open_in", YEW_OPT_ENUM, YEW_OPT_GLOBAL, OPT_ENUM("here"),
+     lsp_open_in_values, 0, 0, NULL, option_changed,
+     "Open LSP navigation targets here, in a split, or in a tab"}
 };
 
 const u32 yew_opts_len = (u32)YEW_ARRAY_LEN(yew_opts);
