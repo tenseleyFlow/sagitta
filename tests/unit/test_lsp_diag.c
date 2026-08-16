@@ -142,7 +142,9 @@ void test_lsp_diag_gutter_hint_and_picker_identity(void)
         "\"message\":\"error\"}]";
     DiagFix f;
     Buffer *b;
+    Buffer *other;
     PickItem items[8];
+    Key tab = {.code = YEW_KEY_TAB};
     i32 identity;
 
     diag_fix_init(&f);
@@ -174,6 +176,80 @@ void test_lsp_diag_gutter_hint_and_picker_identity(void)
     YEW_ASSERT(identity != items[1].payload);
     YEW_ASSERT(strstr(items[0].label, "diag.c:2:1") != NULL);
     YEW_ASSERT_EQ_I64(items[0].payload, identity);
+
+    other = yew_ws_scratch_new(&f.ed, "other.c", 0U);
+    YEW_ASSERT_NOT_NULL(other);
+    yew_diag_replace(&f.ed, other, 4U, diag_array(&f, many), 1);
+    YEW_ASSERT(yew_grid_init(&f.ed.grid, &f.ed.interner, 24U, 80U));
+    f.ed.grid_ready = true;
+    yew_diag_picker_open(&f.ed);
+    YEW_ASSERT(yew_picker_active(&f.ed));
+    YEW_ASSERT_EQ_U64(yew_picker_total(&f.ed), 2U);
+    YEW_ASSERT(yew_picker_key(&f.ed, &tab));
+    YEW_ASSERT_EQ_U64(yew_picker_total(&f.ed), 4U);
+    yew_picker_close(&f.ed, false);
+    diag_fix_free(&f);
+}
+
+void test_lsp_diag_store_is_bounded(void)
+{
+    static const u8 message_text[] = "bounded";
+    static JsonValue zero = {.kind = YEW_JS_INT, .i = 0};
+    static JsonValue message = {
+        .kind = YEW_JS_STR,
+        .s = {message_text, sizeof(message_text) - 1U}
+    };
+    static JsonMember position_members[] = {
+        {(const u8 *)"line", 4U, &zero},
+        {(const u8 *)"character", 9U, &zero}
+    };
+    static JsonValue position = {
+        .kind = YEW_JS_OBJ,
+        .obj = {position_members, YEW_ARRAY_LEN(position_members)}
+    };
+    static JsonMember range_members[] = {
+        {(const u8 *)"start", 5U, &position},
+        {(const u8 *)"end", 3U, &position}
+    };
+    static JsonValue range = {
+        .kind = YEW_JS_OBJ,
+        .obj = {range_members, YEW_ARRAY_LEN(range_members)}
+    };
+    static JsonMember item_members[] = {
+        {(const u8 *)"range", 5U, &range},
+        {(const u8 *)"message", 7U, &message}
+    };
+    static JsonValue item = {
+        .kind = YEW_JS_OBJ,
+        .obj = {item_members, YEW_ARRAY_LEN(item_members)}
+    };
+    DiagFix f;
+    JsonValue arr;
+    JsonValue **items;
+    Win *win;
+    u32 i;
+
+    diag_fix_init(&f);
+    items = yew_xmalloc(((size_t)YEW_DIAG_STORE_MAX + 1U) *
+                        sizeof(*items));
+    for (i = 0U; i <= YEW_DIAG_STORE_MAX; i++)
+        items[i] = &item;
+    (void)memset(&arr, 0, sizeof(arr));
+    arr.kind = YEW_JS_ARR;
+    arr.arr.v = items;
+    arr.arr.n = YEW_DIAG_STORE_MAX + 1U;
+    win = f.ed.win;
+    f.ed.win = NULL;
+    yew_test_capture_log();
+    yew_diag_replace(&f.ed, yew_ed_doc(&f.ed), 1U, &arr, 1);
+    f.ed.win = win;
+    YEW_ASSERT_NOT_NULL(f.ed.buffer.diag);
+    YEW_ASSERT_EQ_U64(f.ed.buffer.diag->d.len, YEW_DIAG_STORE_MAX);
+    YEW_ASSERT_EQ_U64(f.ed.buffer.diag->n[YEW_DIAG_ERROR],
+                      YEW_DIAG_STORE_MAX);
+    YEW_ASSERT(yew_test_log_contains(YEW_LOG_WARN,
+                                     "keeping at most 16384"));
+    free(items);
     diag_fix_free(&f);
 }
 

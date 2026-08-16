@@ -15,7 +15,6 @@
 
 enum {
     LSP_FUZZ_LINES = 16,
-    LSP_FUZZ_DIAG_MAX = 4096,
     LSP_FUZZ_STRING_MAX = 64 * 1024
 };
 
@@ -221,7 +220,7 @@ static bool fuzz_diagnostics(const u8 *data, size_t len,
         DiagStore *store = ed.buffer.diag;
         u64 text_len = yew_textbuf_len(ed.buffer.tb);
 
-        if (store->d.len > LSP_FUZZ_DIAG_MAX)
+        if (store->d.len > YEW_DIAG_STORE_MAX)
             goto done_ed;
         for (i = 0U; i < store->d.len; i++) {
             const Diagnostic *diag = &store->d.data[i];

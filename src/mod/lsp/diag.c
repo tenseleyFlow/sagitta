@@ -12,6 +12,7 @@
 #include "ui/viewport.h"
 #include "ui/win.h"
 #include "unicode/coords.h"
+#include "util/log.h"
 #include "util/sort.h"
 
 enum {
@@ -31,6 +32,8 @@ typedef struct DiagPickCtx {
     size_t text_len;
     size_t text_cap;
     u32 n;
+    bool workspace;
+    char title[40];
 } DiagPickCtx;
 
 typedef struct DiagCandidate {
@@ -166,6 +169,10 @@ static void retain_other_servers(Buffer *b, DiagStore *store, u32 server,
             diagnostic_drop_marks(b, &d);
             continue;
         }
+        if (kept->len >= YEW_DIAG_STORE_MAX) {
+            diagnostic_drop_marks(b, &d);
+            continue;
+        }
         d.code = d.code == NULL ? NULL : arena_strdup(arena, d.code);
         d.source = d.source == NULL ? NULL : arena_strdup(arena, d.source);
         d.message = arena_strdup(arena, d.message);
@@ -200,7 +207,8 @@ void yew_diag_replace(Ed *ed, Buffer *b, u32 server, const JsonValue *arr,
         return;
     arena_init(&arena);
     retain_other_servers(b, store, server, &next, &arena);
-    for (i = 0U; i < arr->arr.n; i++) {
+    for (i = 0U;
+         i < arr->arr.n && next.len < YEW_DIAG_STORE_MAX; i++) {
         const JsonValue *item = arr->arr.v[i];
         const JsonValue *range;
         const JsonValue *start;
@@ -247,6 +255,12 @@ void yew_diag_replace(Ed *ed, Buffer *b, u32 server, const JsonValue *arr,
         d.message = arena_strndup(&arena, (const char *)msg, msg_len);
         DiagnosticVec_push(&next, d);
     }
+    if (i < arr->arr.n)
+        yew_log(YEW_LOG_WARN,
+                "LSP diagnostics: server %u published %u entries; "
+                "keeping at most %u",
+                (unsigned)server, (unsigned)arr->arr.n,
+                (unsigned)YEW_DIAG_STORE_MAX);
     DiagnosticVec_free(&store->d);
     arena_free_all(&store->arena);
     store->d = next;
@@ -412,29 +426,32 @@ void yew_diag_refresh_view(Ed *ed, Win *w)
     store = w->buf->diag;
     if (store == NULL)
         return;
-    for (i = 0U; i < store->d.len; i++) {
+    i = 0U;
+    while (i < store->d.len) {
         Diagnostic *d = &store->d.data[i];
+        Diagnostic *best = d;
+        u32 line;
+        u32 j;
         size_t glyph_len;
         GutterSign sign;
-        u32 j;
-        bool beaten = false;
 
         (void)diagnostic_span(w->buf, d);
-        for (j = 0U; j < i; j++) {
-            Diagnostic *prior = &store->d.data[j];
+        line = d->line;
+        for (j = i + 1U; j < store->d.len; j++) {
+            Diagnostic *candidate = &store->d.data[j];
 
-            if (prior->line == d->line && prior->sev <= d->sev) {
-                beaten = true;
+            (void)diagnostic_span(w->buf, candidate);
+            if (candidate->line != line)
                 break;
-            }
+            if (candidate->sev < best->sev)
+                best = candidate;
         }
-        if (beaten)
-            continue;
-        sign.glyph = (const u8 *)yew_diag_glyph(d->sev, &glyph_len);
+        sign.glyph = (const u8 *)yew_diag_glyph(best->sev, &glyph_len);
         sign.nbytes = (u8)glyph_len;
-        sign.role = yew_diag_role(d->sev);
+        sign.role = yew_diag_role(best->sev);
         sign.attrs = store->stale ? YEW_ATTR_DIM : 0U;
-        yew_gutter_sign_set(w, LINENO(d->line), YEW_SIGN_DIAG, &sign);
+        yew_gutter_sign_set(w, LINENO(line), YEW_SIGN_DIAG, &sign);
+        i = j;
     }
 }
 
@@ -524,7 +541,7 @@ static int candidate_order(const void *left, const void *right, void *ctx)
            a->d->identity != b->d->identity;
 }
 
-u32 yew_diag_list(Ed *ed, PickItem *out, u32 max)
+static u32 diag_list_scope(Ed *ed, Buffer *only, PickItem *out, u32 max)
 {
     DiagCandidate candidates[YEW_DIAG_PICK_MAX];
     size_t offsets[YEW_DIAG_PICK_MAX];
@@ -539,7 +556,7 @@ u32 yew_diag_list(Ed *ed, PickItem *out, u32 max)
         Buffer *b = ed->ws.bufs[bi];
         u32 i;
 
-        if (b->diag == NULL)
+        if ((only != NULL && b != only) || b->diag == NULL)
             continue;
         for (i = 0U; i < b->diag->d.len && n < max; i++)
             candidates[n++] = (DiagCandidate){b, &b->diag->d.data[i]};
@@ -579,6 +596,11 @@ u32 yew_diag_list(Ed *ed, PickItem *out, u32 max)
         out[bi].label = picker.text + offsets[bi];
     picker.n = n;
     return n;
+}
+
+u32 yew_diag_list(Ed *ed, PickItem *out, u32 max)
+{
+    return diag_list_scope(ed, NULL, out, max);
 }
 
 static const PickItem *diag_pick_items(void *ctx, u32 *n)
@@ -628,17 +650,42 @@ static bool diag_pick_accept(Ed *ed, void *ctx, i32 payload, u8 how)
     return true;
 }
 
+static bool diag_pick_action(Ed *ed, void *ctx, i32 payload, const Key *key)
+{
+    DiagPickCtx *p = ctx;
+    Buffer *only;
+
+    (void)payload;
+    if (key == NULL || key->code != YEW_KEY_TAB)
+        return false;
+    p->workspace = !p->workspace;
+    only = p->workspace || ed->win == NULL ? NULL : ed->win->buf;
+    p->n = diag_list_scope(ed, only, p->rows, YEW_DIAG_PICK_MAX);
+    (void)snprintf(p->title, sizeof(p->title), "Diagnostics (%s)",
+                   p->workspace ? "workspace" : "buffer");
+    yew_picker_refilter(ed);
+    ed->full_damage = true;
+    return true;
+}
+
 void yew_diag_picker_open(Ed *ed)
 {
     PickerSpec spec;
+    Buffer *only;
 
     if (ed == NULL)
         return;
-    picker.n = yew_diag_list(ed, picker.rows, YEW_DIAG_PICK_MAX);
+    picker.workspace = false;
+    only = ed->win == NULL ? NULL : ed->win->buf;
+    picker.n = diag_list_scope(ed, only, picker.rows, YEW_DIAG_PICK_MAX);
+    (void)snprintf(picker.title, sizeof(picker.title),
+                   "Diagnostics (buffer)");
     (void)memset(&spec, 0, sizeof(spec));
-    spec.title = "Diagnostics";
+    spec.title = picker.title;
     spec.items = diag_pick_items;
     spec.accept = diag_pick_accept;
+    spec.action = diag_pick_action;
+    spec.footer = "tab scope . enter jump . esc";
     spec.ctx = &picker;
     yew_picker_open(ed, &spec);
 }

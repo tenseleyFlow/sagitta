@@ -23,7 +23,10 @@ typedef enum {
 
 enum {
     YEW_DIAGT_UNNECESSARY = 1U << 0,
-    YEW_DIAGT_DEPRECATED = 1U << 1
+    YEW_DIAGT_DEPRECATED = 1U << 1,
+    /* Above Sprint 46's 10k render gate, but bounded against hostile or
+     * accidentally unbounded server publications. */
+    YEW_DIAG_STORE_MAX = 16U * 1024U
 };
 
 typedef struct Diagnostic {

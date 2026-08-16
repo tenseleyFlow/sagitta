@@ -739,7 +739,8 @@ bool yew_picker_key(Ed *ed, const Key *k)
     default:
         break;
     }
-    if (!pk.filter_open && pk.spec.action != NULL &&
+    if ((!pk.filter_open || k->code == YEW_KEY_TAB) &&
+        pk.spec.action != NULL &&
         pk.spec.action(ed, pk.spec.ctx, yew_picker_selected(ed), k))
         return true;
     if (!pk.filter_open && pk.spec.filter_requires_slash) {
