@@ -26,6 +26,7 @@
 #include "text/register.h"
 #include "text/undo.h"
 #include "ui/draw.h"
+#include "ui/gutter.h"
 #include "ui/layout.h"
 #include "ui/message.h"
 #include "ui/picker.h"
@@ -674,6 +675,7 @@ static void paint_s46_diag(Demo *d)
     yew_msg_hint_clear(&ed);
     yew_timers_free(&ed.timers);
     yew_diag_store_free(&buffer);
+    yew_gutter_signs_free(&win);
     yew_vp_free(&win);
     yew_cset_free(&win.cs);
     yew_marks_free(buffer.marks);
