@@ -54,6 +54,12 @@ bool yew_lsp_diag_step(Ed *ed, Win *w, bool forward)
     return require_lsp(ed);
 }
 
+bool yew_lsp_complete(Ed *ed, Win *w)
+{
+    (void)w;
+    return require_lsp(ed);
+}
+
 bool yew_lsp_status_badge(const Ed *ed, const Buffer *b,
                           char *out, size_t cap)
 {
@@ -62,6 +68,10 @@ bool yew_lsp_status_badge(const Ed *ed, const Buffer *b,
     if (out != NULL && cap != 0U)
         out[0] = '\0';
     return false;
+}
+
+void yew_lsp_shadow_install(void)
+{
 }
 
 void yew_lsp_pump(Ed *ed)

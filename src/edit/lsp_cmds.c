@@ -59,6 +59,13 @@ CmdStatus yew_lsp_cmd_diag_prev(CmdCtx *cx)
     return status_of(yew_lsp_diag_step(cx->ed, cx->win, false));
 }
 
+CmdStatus yew_lsp_cmd_complete(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL || cx->win == NULL)
+        return YEW_CMD_ERR_STATE;
+    return status_of(yew_lsp_complete(cx->ed, cx->win));
+}
+
 CmdStatus yew_lsp_cmd_require(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL)

@@ -344,6 +344,7 @@ UNIT_LSP_SRC := tests/unit/test_json.c tests/unit/test_json_num.c \
                 tests/unit/test_jsonw.c tests/unit/test_jsonrpc_frame.c \
                 tests/unit/test_jsonrpc.c tests/unit/test_lsp_transport.c \
                 tests/unit/test_lsp_caps.c tests/unit/test_lsp_diag.c \
+                tests/unit/test_lsp_completion.c \
                 tests/unit/test_lsp_config.c tests/unit/test_lsp_life.c \
                 tests/unit/test_lsp_snippet.c \
                 tests/unit/test_lsp_sync.c \

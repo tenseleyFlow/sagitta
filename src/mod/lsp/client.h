@@ -79,8 +79,12 @@ struct LspServer {
     bool rpc_live;
     bool gave_up;
     bool exit_sent;
+    u32 missing_warned;
     Ed *owner;
     u64 dropped_stale;
+    u64 shadow_request;
+    u32 shadow_buf_id;
+    u32 shadow_seq;
 };
 
 /* The defaults are immutable and may be replaced by compiled init.fl data. */
@@ -129,6 +133,7 @@ void yew_lsp_server_dispatch_value(LspServer *s, const JsonValue *msg);
 
 LspDoc *yew_lsp_doc_for_buffer(Ed *ed, const Buffer *b);
 LspServer *yew_lsp_server_for_doc(Ed *ed, const LspDoc *doc);
+LspServer *yew_lsp_server_by_id(Ed *ed, u32 id);
 LspDoc *yew_lsp_doc_find(const Ed *ed, u32 buf_id,
                          const LspServer **server);
 bool yew_lsp_server_pos_enc(const Ed *ed, u32 server, u8 *out);

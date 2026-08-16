@@ -192,7 +192,7 @@ static const BindRow frozen_I[] = {
     {"A-<cr>", "ed.shadow.accept_all", 0, NULL},
     {"A-]", "ed.shadow.next", 0, NULL},
     {"A-[", "ed.shadow.prev", 0, NULL},
-    {"C-<space>", "ed.compl.open", 0, NULL},
+    {"C-<space>", "ed.lsp.complete", 0, NULL},
     {"<cr>", "ed.edit.insert.newline", 0, NULL},
     {"<tab>", "ed.edit.insert.tab", 0, NULL},
     {"<bs>", "ed.edit.delete.grapheme_left", 0, NULL},

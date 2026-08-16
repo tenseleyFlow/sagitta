@@ -22,6 +22,24 @@ enum {
     YEW_COMPL_W = YEW_COMPL_LABEL_W + YEW_COMPL_DETAIL_W
 };
 
+/* The first five values deliberately match SymKind so the local symbol
+ * source remains a zero-copy producer.  Protocol sources extend the visual
+ * vocabulary without widening SymKind's ranking tables. */
+typedef enum ComplKind {
+    YEW_COMPLK_WORD = 0,
+    YEW_COMPLK_FUNC,
+    YEW_COMPLK_TYPE,
+    YEW_COMPLK_MACRO,
+    YEW_COMPLK_KEYWORD,
+    YEW_COMPLK_VARIABLE,
+    YEW_COMPLK_CONSTANT,
+    YEW_COMPLK_FIELD,
+    YEW_COMPLK_ENUM,
+    YEW_COMPLK_MODULE,
+    YEW_COMPLK_SNIPPET,
+    YEW_COMPLK_NKIND
+} ComplKind;
+
 typedef struct ComplItem {
     const u8 *label;
     u32 label_len;
@@ -74,6 +92,12 @@ typedef struct ComplMenu {
     Rect panel;
     bool panel_open;
     const ComplSource *src;
+    /* Opaque request slots for asynchronous sources.  Core never interprets
+     * them; the owning source cancels them from close() or before a refill. */
+    u64 source_request;
+    u64 source_resolve;
+    u64 source_seq;
+    u32 source_server;
 } ComplMenu;
 
 extern const ComplSource yew_compl_source_index;

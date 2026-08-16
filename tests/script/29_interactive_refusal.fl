@@ -15,6 +15,7 @@ let alternatives = {
     "ed.search.open": "use b.find(re)",
     "ed.search.open_back": "use b.find(re)",
     "ed.compl.open": "no batch alternative",
+    "ed.lsp.complete": "no batch alternative",
     "ed.macro.record": "recording needs keys; none exist",
     "ed.ai.open": "no batch alternative",
 }
@@ -37,7 +38,7 @@ for command in ed.commands() {
         seen = seen + 1
     }
 }
-t.eq(seen, 15)
+t.eq(seen, 16)
 
 # ed.mode.enter is conditional: only E mode is terminal-backed.
 let mode_caught = false

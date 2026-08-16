@@ -16,12 +16,14 @@
 
 #include "mod/lsp/client.h"
 #include "mod/lsp/diag.h"
+#include "mod/lsp/features.h"
 #include "mod/lsp/lsp.h"
 #include "edit/cmd.h"
 #include "edit/ed.h"
 #include "edit/job.h"
 #include "edit/loop.h"
 #include "ui/message.h"
+#include "ui/complmenu.h"
 #include "util/arena.h"
 
 static JsonValue *parse(Arena *arena, const char *json)
@@ -353,6 +355,61 @@ static bool wait_state(LifeFix *f, u8 state, i64 timeout_ms)
     return false;
 }
 
+static bool wait_completion_rows(LifeFix *f, size_t rows, i64 timeout_ms)
+{
+    i64 start = yew_now_ms();
+
+    while (yew_now_ms() - start <= timeout_ms) {
+        if (f->ed.win->compl.items.len == rows)
+            return true;
+        life_pump_once(&f->ed);
+    }
+    return false;
+}
+
+static bool wait_capability_clear(LifeFix *f, u32 capability,
+                                  i64 timeout_ms)
+{
+    i64 start = yew_now_ms();
+
+    while (yew_now_ms() - start <= timeout_ms) {
+        if (!yew_lsp_has(life_server(f), capability))
+            return true;
+        life_pump_once(&f->ed);
+    }
+    return false;
+}
+
+static bool wait_selected_doc(LifeFix *f, const char *doc, i64 timeout_ms)
+{
+    i64 start = yew_now_ms();
+    size_t len = strlen(doc);
+
+    while (yew_now_ms() - start <= timeout_ms) {
+        ComplMenu *menu = &f->ed.win->compl;
+
+        if (menu->sel >= 0 && (size_t)menu->sel < menu->items.len &&
+            menu->items.data[menu->sel].doc_len == len &&
+            memcmp(menu->items.data[menu->sel].doc, doc, len) == 0)
+            return true;
+        life_pump_once(&f->ed);
+    }
+    return false;
+}
+
+static bool wait_lsp_shadow(LifeFix *f, i64 timeout_ms)
+{
+    i64 start = yew_now_ms();
+
+    while (yew_now_ms() - start <= timeout_ms) {
+        if (f->ed.win->shadow.live &&
+            f->ed.win->shadow.sug.prov == (u8)YEW_SHADOW_LSP)
+            return true;
+        life_pump_once(&f->ed);
+    }
+    return false;
+}
+
 static bool wait_drained(LifeFix *f, i64 timeout_ms)
 {
     LspServer *server = life_server(f);
@@ -381,6 +438,79 @@ static bool wait_server_drained(LifeFix *f, LspServer *server,
         life_pump_once(&f->ed);
     }
     return false;
+}
+
+void test_lsp_lifecycle_completion_resolve_cancel_and_shadow(void)
+{
+    const ShadowProvider *provider = yew_lsp_shadow_provider();
+    LifeFix f;
+    LspServer *server;
+    ShadowReq shadow = {0};
+    Key panel = {0};
+    Key down = {0};
+
+    life_fix_init(&f, "session-features", 1000);
+    YEW_ASSERT(wait_state(&f, YEW_LSP_READY, 2000));
+    server = life_server(&f);
+    YEW_ASSERT(yew_lsp_has(server, YEW_LSPC_COMPLETION));
+    YEW_ASSERT(server->caps.resolve_completion);
+    YEW_ASSERT(yew_lsp_complete(&f.ed, f.ed.win));
+    YEW_ASSERT(wait_completion_rows(&f, 2U, 2000));
+    YEW_ASSERT_EQ_MEM(f.ed.win->compl.items.data[0].doc,
+                      "preliminary", 11U);
+
+    panel.kind = YEW_EV_KEY;
+    panel.ev = YEW_KEY_PRESS;
+    panel.code = ' ';
+    panel.mods = YEW_MOD_CTRL;
+    down.kind = YEW_EV_KEY;
+    down.ev = YEW_KEY_PRESS;
+    down.code = YEW_KEY_DOWN;
+    YEW_ASSERT(yew_compl_key(&f.ed, f.ed.win, &panel));
+    YEW_ASSERT(f.ed.win->compl.source_resolve != 0U);
+    YEW_ASSERT(yew_compl_key(&f.ed, f.ed.win, &down));
+    YEW_ASSERT_EQ_I64(f.ed.win->compl.sel, 1);
+    YEW_ASSERT_EQ_U64(server->rpc.npending, 1U);
+    YEW_ASSERT(wait_selected_doc(&f, "resolved puts", 2000));
+    YEW_ASSERT_EQ_MEM(f.ed.win->compl.items.data[1].detail,
+                      "void puts", 9U);
+    yew_compl_close(&f.ed, f.ed.win);
+
+    YEW_ASSERT_NOT_NULL(provider);
+    YEW_ASSERT_EQ_U64(provider->prov, YEW_SHADOW_LSP);
+    f.ed.win->shadow.seq_next[YEW_SHADOW_LSP] = 2U;
+    shadow.buf_id = f.ed.buffer.id;
+    shadow.buf_gen = f.ed.buffer.tb->gen;
+    shadow.pos = BYTEOFF(0U);
+    shadow.line = yew_textbuf_line_span(f.ed.buffer.tb, LINENO(0U));
+    shadow.seq = 1U;
+    shadow.prov = (u8)YEW_SHADOW_LSP;
+    YEW_ASSERT(provider->request(&f.ed, &shadow));
+    YEW_ASSERT(wait_lsp_shadow(&f, 2000));
+    YEW_ASSERT_EQ_MEM(f.ed.win->shadow.sug.text, "printf", 6U);
+    YEW_ASSERT_EQ_U64(f.ed.win->shadow.sug.len, 6U);
+
+    yew_lsp_client_stop(&f.ed, server, true);
+    YEW_ASSERT(wait_server_drained(&f, server, 2000));
+    life_fix_free(&f);
+}
+
+void test_lsp_lifecycle_method_not_found_clears_completion(void)
+{
+    LifeFix f;
+    LspServer *server;
+
+    life_fix_init(&f, "session-completion-missing", 1000);
+    YEW_ASSERT(wait_state(&f, YEW_LSP_READY, 2000));
+    server = life_server(&f);
+    YEW_ASSERT(yew_lsp_has(server, YEW_LSPC_COMPLETION));
+    YEW_ASSERT(yew_lsp_complete(&f.ed, f.ed.win));
+    YEW_ASSERT(wait_capability_clear(&f, YEW_LSPC_COMPLETION, 2000));
+    YEW_ASSERT(!f.ed.win->compl.open);
+
+    yew_lsp_client_stop(&f.ed, server, true);
+    YEW_ASSERT(wait_server_drained(&f, server, 2000));
+    life_fix_free(&f);
 }
 
 void test_lsp_lifecycle_fakelsp_handshake_queue_and_shutdown(void)

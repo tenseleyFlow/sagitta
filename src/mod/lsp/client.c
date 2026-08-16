@@ -1180,6 +1180,13 @@ void yew_lsp_client_close_buffer(Ed *ed, Buffer *b)
             if (s->docv.data[d].buf_id == b->id) {
                 size_t k;
 
+                if (s->shadow_buf_id == b->id) {
+                    yew_rpc_cancel(&s->rpc, s->shadow_request);
+                    (void)yew_rpc_drop(&s->rpc, s->shadow_request);
+                    s->shadow_request = 0U;
+                    s->shadow_buf_id = 0U;
+                    s->shadow_seq = 0U;
+                }
                 if (s->state == YEW_LSP_READY)
                     yew_lsp_doc_close(&s->rpc, &s->docv.data[d]);
                 yew_lsp_doc_free(&s->docv.data[d]);
@@ -1209,6 +1216,10 @@ static void reset_server_session(Ed *ed, LspServer *s)
     (void)memset(&s->caps, 0, sizeof(s->caps));
     s->pos_enc = YEW_POSENC_UTF16;
     s->exit_sent = false;
+    s->missing_warned = 0U;
+    s->shadow_request = 0U;
+    s->shadow_buf_id = 0U;
+    s->shadow_seq = 0U;
     for (i = 0U; i < s->docv.len; i++) {
         LspDoc *doc = &s->docv.data[i];
         Buffer *buffer = yew_ws_buf_by_id(ed, doc->buf_id);
@@ -1446,6 +1457,16 @@ LspServer *yew_lsp_server_for_doc(Ed *ed, const LspDoc *doc)
 {
     (void)ed;
     return doc == NULL ? NULL : doc->server;
+}
+
+LspServer *yew_lsp_server_by_id(Ed *ed, u32 id)
+{
+    u32 i;
+
+    for (i = 0U; ed != NULL && ed->lsp != NULL && i < ed->lsp->len; i++)
+        if (ed->lsp->server[i]->id == id)
+            return ed->lsp->server[i];
+    return NULL;
 }
 
 bool yew_lsp_server_pos_enc(const Ed *ed, u32 server, u8 *out)

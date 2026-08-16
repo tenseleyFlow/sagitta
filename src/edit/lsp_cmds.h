@@ -10,6 +10,7 @@ CmdStatus yew_lsp_cmd_stop(CmdCtx *cx);
 CmdStatus yew_lsp_cmd_diagnostics(CmdCtx *cx);
 CmdStatus yew_lsp_cmd_diag_next(CmdCtx *cx);
 CmdStatus yew_lsp_cmd_diag_prev(CmdCtx *cx);
+CmdStatus yew_lsp_cmd_complete(CmdCtx *cx);
 CmdStatus yew_lsp_cmd_require(CmdCtx *cx);
 
 #endif

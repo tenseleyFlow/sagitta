@@ -22,8 +22,10 @@ bool yew_lsp_start(Ed *ed, Buffer *b);
 bool yew_lsp_stop(Ed *ed, Buffer *b);
 bool yew_lsp_diagnostics(Ed *ed);
 bool yew_lsp_diag_step(Ed *ed, Win *w, bool forward);
+bool yew_lsp_complete(Ed *ed, Win *w);
 bool yew_lsp_status_badge(const Ed *ed, const Buffer *b,
                           char *out, size_t cap);
+void yew_lsp_shadow_install(void);
 
 /* Module-neutral editor lifecycle.  The stripped shim implements the same
  * surface so the core never needs feature-conditionals. */

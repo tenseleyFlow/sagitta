@@ -53,19 +53,22 @@ static const u8 *kind_detail(u8 kind, u32 *len)
 
 static u8 kind_glyph(u8 kind)
 {
-    static const u8 glyphs[YEW_SYMK_NKIND] = {'w', 'f', 't', 'm', 'k'};
+    static const u8 glyphs[YEW_COMPLK_NKIND] = {
+        'w', 'f', 't', 'm', 'k', 'v', 'c', 'F', 'e', 'M', 's'
+    };
 
-    return kind < YEW_SYMK_NKIND ? glyphs[kind] : (u8)'w';
+    return kind < YEW_COMPLK_NKIND ? glyphs[kind] : (u8)'w';
 }
 
 static const char *kind_role(u8 kind)
 {
-    static const char *const roles[YEW_SYMK_NKIND] = {
+    static const char *const roles[YEW_COMPLK_NKIND] = {
         "compl.word", "compl.func", "compl.type", "compl.macro",
-        "compl.keyword",
+        "compl.keyword", "compl.word", "compl.macro", "compl.func",
+        "compl.type", "compl.type", "compl.keyword",
     };
 
-    return kind < YEW_SYMK_NKIND ? roles[kind] : roles[YEW_SYMK_WORD];
+    return kind < YEW_COMPLK_NKIND ? roles[kind] : roles[YEW_COMPLK_WORD];
 }
 
 static bool text_copy(const TextBuf *tb, Span span, u8 *dst)
@@ -309,6 +312,10 @@ bool yew_compl_open_source(Ed *ed, Win *w, const ComplSource *src)
         yew_compl_close_result(ed, w, false);
     w->compl.open = true;
     w->compl.panel_open = false;
+    w->compl.source_request = 0U;
+    w->compl.source_resolve = 0U;
+    w->compl.source_seq = 0U;
+    w->compl.source_server = 0U;
     w->compl.replace = replace;
     w->compl.buf_gen = w->buf->tb->gen;
     yew_shadow_dismiss(ed, w);
@@ -390,6 +397,10 @@ void yew_compl_close_result(Ed *ed, Win *w, bool accepted)
     w->compl.top = 0U;
     w->compl.panel_open = false;
     w->compl.src = NULL;
+    w->compl.source_request = 0U;
+    w->compl.source_resolve = 0U;
+    w->compl.source_seq = 0U;
+    w->compl.source_server = 0U;
     w->compl.box = (Rect){0U, 0U, 0U, 0U};
     w->compl.panel = (Rect){0U, 0U, 0U, 0U};
     w->shadow.suppressed = false;
@@ -457,8 +468,7 @@ static void compl_move(Ed *ed, Win *w, i32 delta, bool page)
     next %= n;
     menu->sel = (i32)next;
     if (menu->panel_open && menu->src != NULL &&
-        menu->src->resolve != NULL &&
-        menu->items.data[menu->sel].doc == NULL)
+        menu->src->resolve != NULL)
         menu->src->resolve(ed, w, &menu->items.data[menu->sel],
                            menu->src->ctx);
     yew_compl_resize(ed, w);
@@ -472,8 +482,7 @@ void yew_compl_select(Ed *ed, Win *w, i32 item)
         return;
     w->compl.sel = item;
     if (w->compl.panel_open && w->compl.src != NULL &&
-        w->compl.src->resolve != NULL &&
-        w->compl.items.data[item].doc == NULL)
+        w->compl.src->resolve != NULL)
         w->compl.src->resolve(ed, w, &w->compl.items.data[item],
                               w->compl.src->ctx);
     yew_compl_resize(ed, w);
@@ -606,8 +615,7 @@ bool yew_compl_key(Ed *ed, Win *w, const Key *k)
     if (ctrl && (k->code == ' ' || k->code == 0U)) {
         w->compl.panel_open = !w->compl.panel_open;
         if (w->compl.panel_open && w->compl.sel >= 0 &&
-            w->compl.src != NULL && w->compl.src->resolve != NULL &&
-            w->compl.items.data[w->compl.sel].doc == NULL)
+            w->compl.src != NULL && w->compl.src->resolve != NULL)
             w->compl.src->resolve(ed, w,
                 &w->compl.items.data[w->compl.sel], w->compl.src->ctx);
         yew_compl_resize(ed, w);

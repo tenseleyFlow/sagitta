@@ -8,7 +8,9 @@
 #include "edit/job.h"
 #include "mod/lsp/client.h"
 #include "mod/lsp/diag.h"
+#include "mod/lsp/features.h"
 #include "mod/lsp/sync.h"
+#include "ui/complmenu.h"
 #include "ui/message.h"
 #include "ui/win.h"
 
@@ -76,6 +78,19 @@ static LspServer *buffer_server(Ed *ed, const Buffer *b, LspDoc **out)
     return yew_lsp_server_for_doc(ed, doc);
 }
 
+static bool feat_require(Ed *ed, LspServer *server, u32 cap,
+                         const char *what)
+{
+    if (yew_lsp_has(server, cap))
+        return true;
+    if (server != NULL && (server->missing_warned & cap) == 0U) {
+        server->missing_warned |= cap;
+        yew_msg(ed, YEW_MSG_INFO, "%s does not support %s",
+                server->cfg->id, what);
+    }
+    return false;
+}
+
 bool yew_lsp_require(Ed *ed)
 {
     (void)ed;
@@ -112,6 +127,8 @@ bool yew_lsp_info(Ed *ed)
             caps, (unsigned)server->restarts,
             (long long)(doc == NULL ? 0 : doc->version),
             (unsigned long long)server->dropped_stale);
+    yew_msg_hint(ed, YEW_MSG_INFO,
+                 "LSP snippets are inserted as plain text");
     return true;
 }
 
@@ -190,6 +207,31 @@ bool yew_lsp_diag_step(Ed *ed, Win *w, bool forward)
         return true;
     }
     return true;
+}
+
+bool yew_lsp_complete(Ed *ed, Win *w)
+{
+    LspDoc *doc;
+    LspServer *server;
+    const char *lang;
+
+    if (ed == NULL || w == NULL || w->buf == NULL || w->buf->tb == NULL)
+        return false;
+    doc = yew_lsp_doc_for_buffer(ed, w->buf);
+    server = yew_lsp_server_for_doc(ed, doc);
+    if (server == NULL && yew_lsp_client_start(ed, w->buf)) {
+        doc = yew_lsp_doc_for_buffer(ed, w->buf);
+        server = yew_lsp_server_for_doc(ed, doc);
+    }
+    if (server == NULL || server->state != YEW_LSP_READY) {
+        lang = w->buf->lang == NULL ? "this buffer" : w->buf->lang;
+        yew_msg(ed, YEW_MSG_INFO,
+                "no ready LSP server for %s; using index completion", lang);
+        return yew_compl_open_source(ed, w, &yew_compl_source_index);
+    }
+    if (!feat_require(ed, server, YEW_LSPC_COMPLETION, "completion"))
+        return false;
+    return yew_compl_open_source(ed, w, &yew_compl_src_lsp);
 }
 
 bool yew_lsp_status_badge(const Ed *ed, const Buffer *b,

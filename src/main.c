@@ -4,6 +4,7 @@
 #include "edit/batch.h"
 #include "edit/cmd.h"
 #include "edit/ed.h"
+#include "mod/lsp/lsp.h"
 #include "mod/mods.h"
 #include "syn/defs.h"
 #include "util/base.h"
@@ -107,6 +108,7 @@ static int run_driver(const YewArgs *args)
     YewEdStartup startup;
 
     yew_symshadow_install();
+    yew_lsp_shadow_install();
     yew_syn_cache_set_bypass(args->clean);
     yew_syn_discovery_set_bypass(args->clean);
     if (args->selftest_bug) {

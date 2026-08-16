@@ -187,6 +187,8 @@ static int run_session(const char *mode, const char *marker)
     if (strcmp(mode, "session-utf8") == 0 ||
         strcmp(mode, "session-sync") == 0 ||
         strcmp(mode, "session-close") == 0 ||
+        strcmp(mode, "session-features") == 0 ||
+        strcmp(mode, "session-completion-missing") == 0 ||
         strcmp(mode, "session-unversioned") == 0 ||
         strcmp(mode, "session-stale") == 0 ||
         strcmp(mode, "session-resistant") == 0 ||
@@ -210,7 +212,11 @@ static int run_session(const char *mode, const char *marker)
             "{\"jsonrpc\":\"2.0\",\"id\":%llu,\"result\":{"
             "\"capabilities\":{\"textDocumentSync\":{"
             "\"openClose\":true,\"change\":2,\"save\":true}%s,"
-            "\"hoverProvider\":true}}}", id, encoding);
+            "\"hoverProvider\":true%s}}}", id, encoding,
+            (strcmp(mode, "session-features") == 0 ||
+             strcmp(mode, "session-completion-missing") == 0)
+                ? ",\"completionProvider\":{\"resolveProvider\":true}"
+                : "");
     if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
         return 13;
     if (!read_method("\"method\":\"initialized\"", NULL) ||
@@ -256,6 +262,52 @@ static int run_session(const char *mode, const char *marker)
         if (!read_method("\"method\":\"textDocument/didChange\"", NULL) ||
             !write_all(STDERR_FILENO, "seq:didChange\n", 14U))
             return 24;
+    } else if (strcmp(mode, "session-completion-missing") == 0) {
+        if (!read_method("\"method\":\"textDocument/completion\"", &id) ||
+            id == 0U)
+            return 34;
+        n = snprintf(response, sizeof(response),
+            "{\"jsonrpc\":\"2.0\",\"id\":%llu,\"error\":{"
+            "\"code\":-32601,\"message\":\"missing\"}}", id);
+        if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
+            return 35;
+    } else if (strcmp(mode, "session-features") == 0) {
+        if (!read_method("\"method\":\"textDocument/completion\"", &id) ||
+            id == 0U)
+            return 26;
+        n = snprintf(response, sizeof(response),
+            "{\"jsonrpc\":\"2.0\",\"id\":%llu,\"result\":["
+            "{\"label\":\"printf\",\"insertText\":\"printf\","
+            "\"documentation\":\"preliminary\"},"
+            "{\"label\":\"puts\",\"insertText\":\"puts\"}]}", id);
+        if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
+            return 27;
+        if (!read_method("\"method\":\"completionItem/resolve\"", &id) ||
+            id == 0U)
+            return 28;
+        n = snprintf(response, sizeof(response),
+            "{\"jsonrpc\":\"2.0\",\"id\":%llu,\"result\":{"
+            "\"label\":\"printf\",\"documentation\":\"stale\"}}", id);
+        if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
+            return 29;
+        if (!read_method("\"method\":\"$/cancelRequest\"", NULL) ||
+            !read_method("\"method\":\"completionItem/resolve\"", &id) ||
+            id == 0U)
+            return 30;
+        n = snprintf(response, sizeof(response),
+            "{\"jsonrpc\":\"2.0\",\"id\":%llu,\"result\":{"
+            "\"label\":\"puts\",\"detail\":\"void puts\","
+            "\"documentation\":\"resolved puts\"}}", id);
+        if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
+            return 31;
+        if (!read_method("\"method\":\"textDocument/completion\"", &id) ||
+            id == 0U)
+            return 32;
+        n = snprintf(response, sizeof(response),
+            "{\"jsonrpc\":\"2.0\",\"id\":%llu,\"result\":["
+            "{\"label\":\"printf\",\"insertText\":\"printf\"}]}", id);
+        if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
+            return 33;
     }
     if (!read_method("\"method\":\"shutdown\"", &id) || id == 0U ||
         !write_all(STDERR_FILENO, "seq:shutdown\n", 13U))
