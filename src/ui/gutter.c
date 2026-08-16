@@ -15,12 +15,26 @@
 
 static u8 invalid_sign_warned;
 
-static const u8 *sign_fallback(SignKind kind)
+static const u8 *sign_fallback(SignKind kind, const char *role)
 {
     static const u8 glyphs[YEW_SIGN_NKIND] = {'!', '+', 's'};
+    static const u8 diag_error = 'E';
+    static const u8 diag_warn = 'W';
+    static const u8 diag_info = 'i';
+    static const u8 diag_hint = 'h';
 
     if (kind >= YEW_SIGN_NKIND)
         YEW_BUG("gutter sign: invalid kind");
+    if (kind == YEW_SIGN_DIAG && role != NULL) {
+        if (strcmp(role, "diag.error") == 0)
+            return &diag_error;
+        if (strcmp(role, "diag.warn") == 0)
+            return &diag_warn;
+        if (strcmp(role, "diag.info") == 0)
+            return &diag_info;
+        if (strcmp(role, "diag.hint") == 0)
+            return &diag_hint;
+    }
     return &glyphs[kind];
 }
 
@@ -85,7 +99,7 @@ void yew_gutter_sign_set(Win *w, LineNo line, SignKind kind,
     entry->sign[kind] = *sign;
     if (sign->glyph == NULL || sign->nbytes == 0U ||
         yew_cluster_width(sign->glyph, sign->nbytes) != 1) {
-        entry->sign[kind].glyph = sign_fallback(kind);
+        entry->sign[kind].glyph = sign_fallback(kind, sign->role);
         entry->sign[kind].nbytes = 1U;
         if ((invalid_sign_warned & bit) == 0U) {
             yew_log(YEW_LOG_WARN,

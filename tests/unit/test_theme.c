@@ -69,6 +69,10 @@ void test_theme_defaults_compile_with_full_attr_coverage(void)
     static const char *const paths[] = {
         "runtime/themes/quiver-dark.fl", "runtime/themes/quiver-light.fl"
     };
+    static const char *const diag_roles[] = {
+        "diag.error", "diag.warn", "diag.info", "diag.hint",
+        "diag.unnecessary", "diag.deprecated"
+    };
     ThemeFix f;
     u32 file;
 
@@ -90,6 +94,9 @@ void test_theme_defaults_compile_with_full_attr_coverage(void)
                           file == 0U ? YEW_THEME_DARK : YEW_THEME_LIGHT);
         for (attr = 0U; attr < YEW_ATTR__COUNT; attr++)
             YEW_ASSERT(yew_theme_attr_explicit(&theme, (SynAttr)attr));
+        for (attr = 0U; attr < YEW_ARRAY_LEN(diag_roles); attr++)
+            YEW_ASSERT_NOT_NULL(yew_theme_ui(&theme, diag_roles[attr],
+                                              YEW_THEME_TRUECOLOR));
         YEW_ASSERT_EQ_U64(theme.explicit_attrs,
                           (UINT64_C(1) << YEW_ATTR__COUNT) - UINT64_C(1));
         YEW_ASSERT_EQ_U64(yew_theme_table(&theme, YEW_THEME_TRUECOLOR)

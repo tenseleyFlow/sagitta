@@ -19,6 +19,7 @@
 #include "util/log.h"
 #if YEW_WITH_LSP
 #include "mod/lsp/diag.h"
+#include "mod/lsp/lsp.h"
 #endif
 
 enum { STATUS_TABWIDTH = 4 };
@@ -523,19 +524,30 @@ void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
     }
     diag_badge[0] = '\0';
 #if YEW_WITH_LSP
+    (void)yew_lsp_status_badge(ed, w->buf, diag_badge,
+                               sizeof(diag_badge));
     if (w->buf->diag != NULL &&
         (w->buf->diag->n[YEW_DIAG_ERROR] != 0U ||
          w->buf->diag->n[YEW_DIAG_WARN] != 0U)) {
+        size_t used = strlen(diag_badge);
+        char *at = diag_badge + used;
+        size_t left = sizeof(diag_badge) - used;
+
+        if (used != 0U && left > 1U) {
+            *at++ = ' ';
+            *at = '\0';
+            left--;
+        }
         if (w->buf->diag->n[YEW_DIAG_ERROR] != 0U &&
             w->buf->diag->n[YEW_DIAG_WARN] != 0U)
-            (void)snprintf(diag_badge, sizeof(diag_badge), "E:%u W:%u",
+            (void)snprintf(at, left, "E:%u W:%u",
                            (unsigned)w->buf->diag->n[YEW_DIAG_ERROR],
                            (unsigned)w->buf->diag->n[YEW_DIAG_WARN]);
         else if (w->buf->diag->n[YEW_DIAG_ERROR] != 0U)
-            (void)snprintf(diag_badge, sizeof(diag_badge), "E:%u",
+            (void)snprintf(at, left, "E:%u",
                            (unsigned)w->buf->diag->n[YEW_DIAG_ERROR]);
         else
-            (void)snprintf(diag_badge, sizeof(diag_badge), "W:%u",
+            (void)snprintf(at, left, "W:%u",
                            (unsigned)w->buf->diag->n[YEW_DIAG_WARN]);
     }
 #endif

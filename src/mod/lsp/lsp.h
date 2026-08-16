@@ -2,6 +2,7 @@
 #define YEW_MOD_LSP_LSP_H
 
 #include <stdbool.h>
+#include <stddef.h>
 
 #include "text/coords.h"
 #include "util/base.h"
@@ -21,6 +22,8 @@ bool yew_lsp_start(Ed *ed, Buffer *b);
 bool yew_lsp_stop(Ed *ed, Buffer *b);
 bool yew_lsp_diagnostics(Ed *ed);
 bool yew_lsp_diag_step(Ed *ed, Win *w, bool forward);
+bool yew_lsp_status_badge(const Ed *ed, const Buffer *b,
+                          char *out, size_t cap);
 
 /* Module-neutral editor lifecycle.  The stripped shim implements the same
  * surface so the core never needs feature-conditionals. */

@@ -80,6 +80,30 @@ void test_gutter_sign_rejects_wide_glyph_once_and_uses_ascii(void)
     yew_ed_free(&ed);
 }
 
+void test_gutter_sign_uses_severity_ascii_fallbacks(void)
+{
+    static const u8 wide[] = "漢";
+    static const char *const roles[] = {
+        "diag.error", "diag.warn", "diag.info", "diag.hint"
+    };
+    static const u8 fallbacks[] = {'E', 'W', 'i', 'h'};
+    Ed ed;
+    u32 i;
+
+    gutter_sign_fixture(&ed);
+    for (i = 0U; i < 4U; i++) {
+        GutterSign bad = {
+            wide, (u8)(sizeof(wide) - 1U), roles[i], YEW_ATTR_DIM
+        };
+
+        yew_gutter_sign_set(ed.win, LINENO(i), YEW_SIGN_DIAG, &bad);
+    }
+    yew_gutter_draw(&ed, ed.win, 0U, 4U);
+    for (i = 0U; i < 4U; i++)
+        YEW_ASSERT_EQ_U64(gutter_byte(&ed, (u16)i, 0U), fallbacks[i]);
+    yew_ed_free(&ed);
+}
+
 void test_gutter_sign_clear_is_scrolled_range_exact(void)
 {
     Ed ed;

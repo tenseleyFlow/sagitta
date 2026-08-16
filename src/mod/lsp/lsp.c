@@ -23,6 +23,50 @@ static const char *state_name(u8 state)
     return state <= YEW_LSP_DEAD ? names[state] : "unknown";
 }
 
+static void cap_names(const LspServer *server, char *out, size_t cap)
+{
+    static const struct {
+        u32 bit;
+        const char *name;
+    } names[] = {
+        {YEW_LSPC_COMPLETION, "completion"},
+        {YEW_LSPC_HOVER, "hover"},
+        {YEW_LSPC_SIGNATURE, "signatureHelp"},
+        {YEW_LSPC_DEFINITION, "definition"},
+        {YEW_LSPC_DECLARATION, "declaration"},
+        {YEW_LSPC_TYPE_DEFINITION, "typeDefinition"},
+        {YEW_LSPC_IMPLEMENTATION, "implementation"},
+        {YEW_LSPC_REFERENCES, "references"},
+        {YEW_LSPC_DOCUMENT_HIGHLIGHT, "documentHighlight"},
+        {YEW_LSPC_DOCUMENT_SYMBOL, "documentSymbol"},
+        {YEW_LSPC_RENAME, "rename"},
+        {YEW_LSPC_WORKSPACE_SYMBOL, "workspaceSymbol"}
+    };
+    size_t used = 0U;
+    u32 i;
+
+    if (out == NULL || cap == 0U)
+        return;
+    out[0] = '\0';
+    for (i = 0U; i < YEW_ARRAY_LEN(names); i++) {
+        int n;
+
+        if (!yew_lsp_has(server, names[i].bit))
+            continue;
+        n = snprintf(out + used, cap - used, "%s%s",
+                     used == 0U ? "" : ",", names[i].name);
+        if (n < 0)
+            YEW_BUG("LSP capability formatting failed");
+        if ((size_t)n >= cap - used) {
+            used = cap - 1U;
+            break;
+        }
+        used += (size_t)n;
+    }
+    if (used == 0U)
+        (void)snprintf(out, cap, "none");
+}
+
 static LspServer *buffer_server(Ed *ed, const Buffer *b, LspDoc **out)
 {
     LspDoc *doc = yew_lsp_doc_for_buffer(ed, b);
@@ -43,6 +87,7 @@ bool yew_lsp_info(Ed *ed)
     Buffer *b;
     LspDoc *doc;
     LspServer *server;
+    char caps[256];
 
     if (ed == NULL || ed->win == NULL || ed->win->buf == NULL)
         return false;
@@ -58,12 +103,13 @@ bool yew_lsp_info(Ed *ed)
     }
     if (server == NULL)
         return false;
+    cap_names(server, caps, sizeof(caps));
     yew_msg(ed, YEW_MSG_INFO,
-            "%s %s; root %s; %s; caps 0x%08x; restarts %u; doc v%lld; "
+            "%s %s; root %s; %s; caps %s; restarts %u; doc v%lld; "
             "stale drops %llu",
             server->cfg->id, state_name(server->state), server->root,
             server->pos_enc == YEW_POSENC_UTF8 ? "utf-8" : "utf-16",
-            (unsigned)server->caps.bits, (unsigned)server->restarts,
+            caps, (unsigned)server->restarts,
             (long long)(doc == NULL ? 0 : doc->version),
             (unsigned long long)server->dropped_stale);
     return true;
@@ -144,6 +190,23 @@ bool yew_lsp_diag_step(Ed *ed, Win *w, bool forward)
         return true;
     }
     return true;
+}
+
+bool yew_lsp_status_badge(const Ed *ed, const Buffer *b,
+                          char *out, size_t cap)
+{
+    const LspServer *server = NULL;
+
+    if (out == NULL || cap == 0U)
+        return false;
+    out[0] = '\0';
+    if (ed == NULL || b == NULL ||
+        yew_lsp_doc_find(ed, b->id, &server) == NULL || server == NULL)
+        return false;
+    (void)snprintf(out, cap, "%s%s", server->cfg->id,
+                   server->state == YEW_LSP_INITIALIZING ? "\xE2\x80\xA6" :
+                                                           "");
+    return out[0] != '\0';
 }
 
 void yew_lsp_pump(Ed *ed)

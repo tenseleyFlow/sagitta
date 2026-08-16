@@ -32,6 +32,12 @@
         "compl.type": { fg: "@yellow", mono: "bold" },
         "compl.macro": { fg: "@orange", mono: "plain" },
         "compl.keyword": { fg: "@violet", mono: "dim" },
+        "diag.error": { fg: "@red", mono: "bold" },
+        "diag.warn": { fg: "@yellow", mono: "bold" },
+        "diag.info": { fg: "@blue", mono: "underline" },
+        "diag.hint": { fg: "@cyan", mono: "plain" },
+        "diag.unnecessary": { fg: "#5c6370", dim: true, mono: "dim" },
+        "diag.deprecated": { fg: "@orange", strike: true, mono: "dim" },
         ul: { error: "#ff5f5f", warn: "#e5c07b", info: "#61afef" },
     },
     attrs: {
