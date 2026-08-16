@@ -436,7 +436,8 @@ bool ptc_env_build(char **envp, const char *term, const char *colors,
 {
     static const char *const keys[] = {
         "TERM", "YEW_COLORS", "YEW_TTY_PROBE", "YEW_PROBE_TIMEOUT_MS",
-        "YEW_ESC_TIMEOUT_MS", "XDG_STATE_HOME", "LANG", "LC_ALL",
+        "YEW_ESC_TIMEOUT_MS", "XDG_STATE_HOME", "XDG_CONFIG_HOME",
+        "LANG", "LC_ALL",
         "YEW_LOG_LEVEL", "YEW_JOB_ELAPSED_MS", "SHELL",
         "YEW_PICKERS_NOW",
         /* Sprint 27 §7's degradation variants. */
@@ -444,7 +445,7 @@ bool ptc_env_build(char **envp, const char *term, const char *colors,
         "YEW_SHADOW_TEST"
     };
     const char *values[] = {
-        term, colors, "1", "500", "25", state_dir,
+        term, colors, "1", "500", "25", state_dir, state_dir,
         "C.UTF-8", "C.UTF-8", "debug",
         /* Pin job elapsed time: it is the only nondeterministic thing a
          * job prints, and goldens are byte-compared (invariant 5). */

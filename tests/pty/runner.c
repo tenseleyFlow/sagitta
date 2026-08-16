@@ -4,6 +4,7 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <limits.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -110,12 +111,38 @@ static bool remove_tree(const char *path)
 static bool make_state_dir(const PtyCase *test, unsigned run,
                            char *path, size_t cap)
 {
+    static const char config[] = "let lsp = {servers: {}}\n";
+    char config_dir[PATH_MAX];
+    char config_path[PATH_MAX];
+    FILE *file;
     int n;
 
     if (mkdir("build", 0777) != 0 && errno != EEXIST)
         return false;
     n = snprintf(path, cap, "build/pty-%s-%u.XXXXXX", test->name, run);
-    return n > 0 && (size_t)n < cap && mkdtemp(path) != NULL;
+    if (n <= 0 || (size_t)n >= cap || mkdtemp(path) == NULL)
+        return false;
+    /* PTY goldens exercise the editor, not whichever language servers are
+     * installed on the host.  A real user-layer config keeps automatic LSP
+     * startup enabled in production while making these sessions hermetic. */
+    n = snprintf(config_dir, sizeof(config_dir), "%s/yew", path);
+    if (n <= 0 || (size_t)n >= sizeof(config_dir) ||
+        mkdir(config_dir, 0700) != 0)
+        return false;
+    n = snprintf(config_path, sizeof(config_path), "%s/init.fl", config_dir);
+    if (n <= 0 || (size_t)n >= sizeof(config_path))
+        return false;
+    file = fopen(config_path, "wb");
+    if (file == NULL)
+        return false;
+    {
+        bool ok = fwrite(config, 1U, sizeof(config) - 1U, file) ==
+                  sizeof(config) - 1U;
+
+        if (fclose(file) != 0)
+            ok = false;
+        return ok;
+    }
 }
 
 static bool read_file(const char *path, Bytebuf *out, bool *missing)
