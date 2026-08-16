@@ -628,8 +628,44 @@ void yew_lsp_symbol_picker_open(Ed *ed, Win *w,
     spec.preview = symbol_preview;
     spec.accept = symbol_accept;
     spec.search_part = symbol_search_part;
+    spec.search_parts_independent = true;
     spec.ctx = &symbol_source;
     yew_picker_open(ed, &spec);
+}
+
+static SymBufIndex *symbol_buffer_index(Ed *ed, u32 buf_id, size_t *slot)
+{
+    size_t i;
+
+    if (ed == NULL)
+        return NULL;
+    for (i = 0U; i < ed->ws.sym_buf.len; i++) {
+        if (ed->ws.sym_buf.data[i].buf_id != buf_id)
+            continue;
+        if (slot != NULL)
+            *slot = i;
+        return &ed->ws.sym_buf.data[i];
+    }
+    return NULL;
+}
+
+/* An explicit current-buffer picker must never expose the background
+ * indexer's partial state.  Seed missing indices, then keep putting the
+ * requested buffer at the front of the round-robin until it is complete;
+ * unrelated buffers remain background work. */
+static SymIndex *symbol_buffer_index_settle(Ed *ed, u32 buf_id)
+{
+    SymBufIndex *buffer_index;
+    size_t slot = 0U;
+
+    yew_symidx_pump(ed, 1);
+    buffer_index = symbol_buffer_index(ed, buf_id, &slot);
+    while (buffer_index != NULL && buffer_index->dirty.pending) {
+        ed->ws.sym_rr = (u32)slot;
+        yew_symidx_pump(ed, YEW_SYMIDX_FULL_US);
+        buffer_index = symbol_buffer_index(ed, buf_id, &slot);
+    }
+    return buffer_index == NULL ? NULL : &buffer_index->idx;
 }
 
 bool yew_lsp_symbol_index_open(Ed *ed, Win *w)
@@ -641,8 +677,7 @@ bool yew_lsp_symbol_index_open(Ed *ed, Win *w)
 
     if (ed == NULL || w == NULL || w->buf == NULL || w->buf->tb == NULL)
         return false;
-    yew_symidx_pump(ed, YEW_SYMIDX_FULL_US);
-    index = yew_symidx_buffer(&ed->ws, w->buf->id, false);
+    index = symbol_buffer_index_settle(ed, w->buf->id);
     path = w->buf->path != NULL ? w->buf->path : w->buf->name;
     for (i = 0U; index != NULL && i < index->e.len &&
                 symbols.len < LSP_SYMBOL_PICK_MAX; i++) {

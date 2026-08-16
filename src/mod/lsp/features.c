@@ -823,7 +823,14 @@ static int symbol_cmp(const void *a, const void *b, void *ctx)
     cmp = strcmp(left->breadcrumb, right->breadcrumb);
     if (cmp != 0)
         return cmp;
-    return strcmp(left->name, right->name);
+    cmp = strcmp(left->name, right->name);
+    if (cmp != 0)
+        return cmp;
+    if (left->kind != right->kind)
+        return left->kind < right->kind ? -1 : 1;
+    if (left->buf_id != right->buf_id)
+        return left->buf_id < right->buf_id ? -1 : 1;
+    return 0;
 }
 
 u32 yew_lsp_symbols_parse(const JsonValue *result, const char *doc_path,

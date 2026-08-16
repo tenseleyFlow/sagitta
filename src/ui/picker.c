@@ -34,6 +34,7 @@ typedef struct PickerCustomSearch {
     size_t part_off;
     size_t total;
     i64 score;
+    i32 best_score;
     u32 item;
     u32 part;
     u32 pattern_at;
@@ -273,6 +274,7 @@ static void custom_candidate_reset(void)
     (void)memset(&pk.custom, 0, sizeof(pk.custom));
     pk.custom.item = item;
     pk.custom.prefix = true;
+    pk.custom.best_score = YEW_FZ_NO_MATCH;
 }
 
 static void custom_reset(void)
@@ -281,6 +283,20 @@ static void custom_reset(void)
     pk.custom_matched = 0U;
     (void)memset(&pk.custom, 0, sizeof(pk.custom));
     pk.custom.prefix = true;
+    pk.custom.best_score = YEW_FZ_NO_MATCH;
+}
+
+static void custom_part_reset(void)
+{
+    u32 item = pk.custom.item;
+    u32 part = pk.custom.part;
+    i32 best_score = pk.custom.best_score;
+
+    (void)memset(&pk.custom, 0, sizeof(pk.custom));
+    pk.custom.item = item;
+    pk.custom.part = part;
+    pk.custom.prefix = true;
+    pk.custom.best_score = best_score;
 }
 
 static void custom_rank(const PickItem *items, u32 idx, i32 score,
@@ -381,7 +397,9 @@ static bool custom_step(const PickItem *items, u32 n,
             if (!pk.spec.search_part(pk.spec.ctx,
                                      items[pk.custom.item].payload,
                                      pk.custom.part, &text, &len)) {
-                i32 score = custom_finish_score(pattern_len);
+                i32 score = pk.spec.search_parts_independent
+                                ? pk.custom.best_score
+                                : custom_finish_score(pattern_len);
                 u32 next = pk.custom.item + 1U;
 
                 if (score != YEW_FZ_NO_MATCH)
@@ -398,7 +416,8 @@ static bool custom_step(const PickItem *items, u32 n,
             pk.custom.part_len = len;
             pk.custom.part_off = 0U;
             pk.custom.part_loaded = true;
-            pk.custom.separator_done = pk.custom.part == 0U;
+            pk.custom.separator_done =
+                pk.spec.search_parts_independent || pk.custom.part == 0U;
             if (text == NULL && len != 0U) {
                 pk.custom.invalid = true;
                 pk.custom.part_len = 0U;
@@ -418,7 +437,15 @@ static bool custom_step(const PickItem *items, u32 n,
                 return false;
         }
         pk.custom.part++;
-        pk.custom.part_loaded = false;
+        if (pk.spec.search_parts_independent) {
+            i32 score = custom_finish_score(pattern_len);
+
+            if (score > pk.custom.best_score)
+                pk.custom.best_score = score;
+            custom_part_reset();
+        } else {
+            pk.custom.part_loaded = false;
+        }
         if (budget_us > 0 && picker_now_us() - started_us >= budget_us)
             return false;
     }

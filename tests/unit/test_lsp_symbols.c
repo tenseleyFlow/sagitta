@@ -8,9 +8,11 @@
 #include "edit/jumplist.h"
 #include "mod/lsp/features.h"
 #include "mod/lsp/pickers.h"
+#include "mod/lsp/sync.h"
 #include "term/grid.h"
 #include "ui/picker.h"
 #include "util/arena.h"
+#include "util/buf.h"
 #include "ws/symidx.h"
 
 static JsonValue *symbols_json(Arena *arena, const char *json)
@@ -32,6 +34,37 @@ static void symbols_parse(const char *json, const char *doc_path,
     YEW_ASSERT_EQ_U64(yew_lsp_symbols_parse(
         symbols_json(&arena, json), doc_path, symbols), want);
     arena_free_all(&arena);
+}
+
+static char *symbols_copy(const char *text)
+{
+    size_t len = strlen(text);
+    char *copy = yew_xmalloc(len + 1U);
+
+    (void)memcpy(copy, text, len + 1U);
+    return copy;
+}
+
+static SymBufIndex *symbols_buffer_index(Ed *ed, u32 buf_id, size_t *slot)
+{
+    size_t i;
+
+    for (i = 0U; i < ed->ws.sym_buf.len; i++) {
+        if (ed->ws.sym_buf.data[i].buf_id != buf_id)
+            continue;
+        if (slot != NULL)
+            *slot = i;
+        return &ed->ws.sym_buf.data[i];
+    }
+    return NULL;
+}
+
+static void symbols_type(Ed *ed, char ch)
+{
+    Key key = {0};
+
+    key.code = (u32)(u8)ch;
+    YEW_ASSERT(yew_picker_key(ed, &key));
 }
 
 void test_lsp_symbols_nested_tree_preserves_preorder_breadcrumbs_and_selection(void)
@@ -233,7 +266,15 @@ void test_lsp_symbols_sort_identically_across_server_permutations(void)
         "{\"name\":\"alpha\",\"kind\":12,\"location\":{"
         "\"uri\":\"file:///a.c\",\"range\":{"
         "\"start\":{\"line\":1,\"character\":7},"
-        "\"end\":{\"line\":1,\"character\":8}}}}]";
+        "\"end\":{\"line\":1,\"character\":8}}}},"
+        "{\"name\":\"same\",\"kind\":12,\"location\":{"
+        "\"uri\":\"file:///same.c\",\"range\":{"
+        "\"start\":{\"line\":2,\"character\":3},"
+        "\"end\":{\"line\":2,\"character\":4}}}},"
+        "{\"name\":\"same\",\"kind\":13,\"location\":{"
+        "\"uri\":\"file:///same.c\",\"range\":{"
+        "\"start\":{\"line\":2,\"character\":3},"
+        "\"end\":{\"line\":2,\"character\":4}}}}]";
     static const char second[] =
         "[{\"name\":\"alpha\",\"kind\":12,\"location\":{"
         "\"uri\":\"file:///a.c\",\"range\":{"
@@ -246,13 +287,21 @@ void test_lsp_symbols_sort_identically_across_server_permutations(void)
         "{\"name\":\"beta\",\"kind\":13,\"containerName\":\"A\","
         "\"location\":{\"uri\":\"file:///a.c\",\"range\":{"
         "\"start\":{\"line\":4,\"character\":2},"
-        "\"end\":{\"line\":4,\"character\":3}}}}]";
+        "\"end\":{\"line\":4,\"character\":3}}}},"
+        "{\"name\":\"same\",\"kind\":13,\"location\":{"
+        "\"uri\":\"file:///same.c\",\"range\":{"
+        "\"start\":{\"line\":2,\"character\":3},"
+        "\"end\":{\"line\":2,\"character\":4}}}},"
+        "{\"name\":\"same\",\"kind\":12,\"location\":{"
+        "\"uri\":\"file:///same.c\",\"range\":{"
+        "\"start\":{\"line\":2,\"character\":3},"
+        "\"end\":{\"line\":2,\"character\":4}}}}]";
     Vec_LspSymbol left = {0};
     Vec_LspSymbol right = {0};
     size_t i;
 
-    symbols_parse(first, "/ignored.c", &left, 3U);
-    symbols_parse(second, "/ignored.c", &right, 3U);
+    symbols_parse(first, "/ignored.c", &left, 5U);
+    symbols_parse(second, "/ignored.c", &right, 5U);
     YEW_ASSERT_EQ_U64(left.len, right.len);
     for (i = 0U; i < left.len; i++) {
         YEW_ASSERT_EQ_STR(left.data[i].path, right.data[i].path);
@@ -260,6 +309,8 @@ void test_lsp_symbols_sort_identically_across_server_permutations(void)
                           right.data[i].breadcrumb);
         YEW_ASSERT_EQ_U64(left.data[i].line, right.data[i].line);
         YEW_ASSERT_EQ_U64(left.data[i].chr, right.data[i].chr);
+        YEW_ASSERT_EQ_STR(left.data[i].name, right.data[i].name);
+        YEW_ASSERT_EQ_U64(left.data[i].kind, right.data[i].kind);
     }
     yew_lsp_symbols_free(&right);
     yew_lsp_symbols_free(&left);
@@ -272,6 +323,12 @@ void test_lsp_symbols_local_index_opens_and_accepts_current_buffer(void)
         "gamma_symbol\n";
     Cursor *cursor;
     SymIndex *index;
+    SymBufIndex *current_state;
+    SymBufIndex *other_state;
+    Buffer *other;
+    Bytebuf other_text;
+    size_t other_slot = 0U;
+    u32 i;
     Ed ed;
 
     yew_ed_init(&ed);
@@ -279,17 +336,40 @@ void test_lsp_symbols_local_index_opens_and_accepts_current_buffer(void)
                                   "symbols-local.txt"));
     YEW_ASSERT(yew_grid_init(&ed.grid, &ed.interner, 24U, 80U));
     ed.grid_ready = true;
-    while (yew_symidx_pending(&ed))
-        yew_symidx_pump(&ed, INT64_MAX);
+    other = yew_ws_scratch_new(&ed, "symbols-other.txt", 0U);
+    YEW_ASSERT_NOT_NULL(other);
+    bytebuf_init(&other_text);
+    for (i = 0U; i < 100000U; i++)
+        bytebuf_append(&other_text, "other_symbol\n", 13U);
+    yew_textbuf_insert(other->tb, BYTEOFF(0U), other_text.data,
+                       (u64)other_text.len);
+    bytebuf_free(&other_text);
+
+    /* Seed both indices while deliberately spending the first slice on
+     * the unrelated large buffer.  The current buffer must still settle
+     * completely when its explicit picker opens. */
+    ed.ws.sym_rr = 1U;
+    yew_symidx_pump(&ed, 1);
+    current_state = symbols_buffer_index(&ed, ed.buffer.id, NULL);
+    other_state = symbols_buffer_index(&ed, other->id, &other_slot);
+    YEW_ASSERT_NOT_NULL(current_state);
+    YEW_ASSERT_NOT_NULL(other_state);
+    YEW_ASSERT(current_state->dirty.pending);
+    YEW_ASSERT(other_state->dirty.pending);
+    ed.ws.sym_rr = (u32)other_slot;
+
+    YEW_ASSERT(yew_lsp_symbol_index_open(&ed, ed.win));
     index = yew_symidx_buffer(&ed.ws, ed.buffer.id, false);
     YEW_ASSERT_NOT_NULL(index);
     YEW_ASSERT(index->e.len >= 3U);
+    other_state = symbols_buffer_index(&ed, other->id, NULL);
+    YEW_ASSERT_NOT_NULL(other_state);
+    YEW_ASSERT(other_state->dirty.pending);
     cursor = yew_ed_cursor(&ed);
     YEW_ASSERT_NOT_NULL(cursor);
     cursor->pos = BYTEOFF(sizeof(text) - 2U);
     cursor->anchor = cursor->pos;
 
-    YEW_ASSERT(yew_lsp_symbol_index_open(&ed, ed.win));
     YEW_ASSERT(yew_picker_active(&ed));
     YEW_ASSERT_EQ_U64(yew_picker_total(&ed), index->e.len);
     YEW_ASSERT_EQ_I64(yew_picker_selected(&ed), 0);
@@ -299,5 +379,45 @@ void test_lsp_symbols_local_index_opens_and_accepts_current_buffer(void)
     YEW_ASSERT_NOT_NULL(cursor);
     YEW_ASSERT_EQ_U64(cursor->pos.v, index->e.data[0].off);
     YEW_ASSERT_EQ_U64(yew_jumplist_len(&ed.win->jumps), 1U);
+
+    /* Leaf and breadcrumb are separate fuzzy candidates.  "put" must
+     * not match by taking 'p' from the leaf and 'ut' from its container. */
+    {
+        Vec_LspSymbol symbols = {0};
+        LspSymbol symbol = {0};
+
+        symbol.name = symbols_copy("put");
+        symbol.breadcrumb = symbols_copy("put");
+        symbol.path = symbols_copy("symbols-local.txt");
+        symbol.buf_id = ed.buffer.id;
+        symbol.kind = YEW_COMPLK_FUNC;
+        Vec_LspSymbol_push(&symbols, symbol);
+
+        (void)memset(&symbol, 0, sizeof(symbol));
+        symbol.name = symbols_copy("put_something_else");
+        symbol.breadcrumb = symbols_copy("Grid \xE2\x80\xBA put_something_else");
+        symbol.path = symbols_copy("symbols-local.txt");
+        symbol.buf_id = ed.buffer.id;
+        symbol.kind = YEW_COMPLK_FIELD;
+        Vec_LspSymbol_push(&symbols, symbol);
+
+        (void)memset(&symbol, 0, sizeof(symbol));
+        symbol.name = symbols_copy("p");
+        symbol.breadcrumb = symbols_copy("ut \xE2\x80\xBA p");
+        symbol.path = symbols_copy("symbols-local.txt");
+        symbol.buf_id = ed.buffer.id;
+        symbol.kind = YEW_COMPLK_WORD;
+        Vec_LspSymbol_push(&symbols, symbol);
+
+        yew_lsp_symbol_picker_open(&ed, ed.win, &symbols,
+                                   YEW_POSENC_UTF8);
+        symbols_type(&ed, 'p');
+        symbols_type(&ed, 'u');
+        symbols_type(&ed, 't');
+        YEW_ASSERT_EQ_U64(yew_picker_shown(&ed), 2U);
+        YEW_ASSERT_EQ_I64(yew_picker_selected(&ed), 0);
+        yew_picker_close(&ed, false);
+        yew_lsp_pickers_free();
+    }
     yew_ed_free(&ed);
 }

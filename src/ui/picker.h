@@ -114,9 +114,14 @@ typedef struct PickerSpec {
     /* Optional borrowed search text for candidates whose searchable text is
      * larger or different from the visible label.  Parts are concatenated
      * with one normalized space and scored incrementally under the picker's
-     * slice budget.  Return false when `part` is past the last part. */
+     * slice budget unless `search_parts_independent` is set.  Return false
+     * when `part` is past the last part. */
     bool (*search_part)(void *ctx, i32 payload, u32 part,
                         const u8 **text, size_t *len);
+    /* Score each borrowed part independently and rank by the best score.
+     * This prevents a match from starting in one semantic field and ending
+     * in another (for example, an LSP symbol leaf and its breadcrumb). */
+    bool search_parts_independent;
     /* NULL keeps the standard picker footer. */
     const char *footer;
     bool path_mode; /* §2's two-pass basename rule */
