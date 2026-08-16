@@ -195,6 +195,9 @@ static int run_session(const char *mode, const char *marker)
         strcmp(mode, "session-definition-empty") == 0 ||
         strcmp(mode, "session-definition-missing") == 0 ||
         strcmp(mode, "session-references") == 0 ||
+        strcmp(mode, "session-symbols") == 0 ||
+        strcmp(mode, "session-symbols-empty") == 0 ||
+        strcmp(mode, "session-symbols-missing") == 0 ||
         strcmp(mode, "session-unversioned") == 0 ||
         strcmp(mode, "session-stale") == 0 ||
         strcmp(mode, "session-resistant") == 0 ||
@@ -232,6 +235,10 @@ static int run_session(const char *mode, const char *marker)
                        strcmp(mode, "session-references") == 0)
                         ? ",\"definitionProvider\":true,"
                           "\"referencesProvider\":true"
+                    : (strcmp(mode, "session-symbols") == 0 ||
+                       strcmp(mode, "session-symbols-empty") == 0 ||
+                       strcmp(mode, "session-symbols-missing") == 0)
+                        ? ",\"documentSymbolProvider\":true"
                         : "");
     if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
         return 13;
@@ -323,6 +330,43 @@ static int run_session(const char *mode, const char *marker)
             id, marker, marker);
         if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
             return 53;
+    } else if (strcmp(mode, "session-symbols") == 0) {
+        if (!read_method("\"method\":\"textDocument/documentSymbol\"",
+                         &id) || id == 0U)
+            return 54;
+        n = snprintf(response, sizeof(response),
+            "{\"jsonrpc\":\"2.0\",\"id\":%llu,\"result\":[{"
+            "\"name\":\"Root\",\"kind\":5,"
+            "\"range\":{\"start\":{\"line\":0,\"character\":0},"
+            "\"end\":{\"line\":0,\"character\":6}},"
+            "\"selectionRange\":{"
+            "\"start\":{\"line\":0,\"character\":0},"
+            "\"end\":{\"line\":0,\"character\":4}},"
+            "\"children\":[{\"name\":\"leaf\",\"kind\":12,"
+            "\"range\":{\"start\":{\"line\":0,\"character\":4},"
+            "\"end\":{\"line\":0,\"character\":6}},"
+            "\"selectionRange\":{"
+            "\"start\":{\"line\":0,\"character\":4},"
+            "\"end\":{\"line\":0,\"character\":6}}}]}]}", id);
+        if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
+            return 55;
+    } else if (strcmp(mode, "session-symbols-empty") == 0) {
+        if (!read_method("\"method\":\"textDocument/documentSymbol\"",
+                         &id) || id == 0U)
+            return 56;
+        n = snprintf(response, sizeof(response),
+            "{\"jsonrpc\":\"2.0\",\"id\":%llu,\"result\":[]}", id);
+        if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
+            return 57;
+    } else if (strcmp(mode, "session-symbols-missing") == 0) {
+        if (!read_method("\"method\":\"textDocument/documentSymbol\"",
+                         &id) || id == 0U)
+            return 58;
+        n = snprintf(response, sizeof(response),
+            "{\"jsonrpc\":\"2.0\",\"id\":%llu,\"error\":{"
+            "\"code\":-32601,\"message\":\"missing\"}}", id);
+        if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
+            return 59;
     } else if (strcmp(mode, "session-completion-missing") == 0) {
         if (!read_method("\"method\":\"textDocument/completion\"", &id) ||
             id == 0U)

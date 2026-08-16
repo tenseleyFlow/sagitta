@@ -753,6 +753,70 @@ void test_lsp_lifecycle_method_not_found_clears_definition_capability(void)
     life_fix_free(&f);
 }
 
+void test_lsp_lifecycle_document_symbols_open_nested_picker(void)
+{
+    LifeFix f;
+    LspServer *server;
+
+    life_fix_init(&f, "session-symbols", 1000);
+    YEW_ASSERT(yew_grid_init(&f.ed.grid, &f.ed.interner, 24U, 80U));
+    YEW_ASSERT(wait_state(&f, YEW_LSP_READY, 2000));
+    server = life_server(&f);
+    YEW_ASSERT(yew_lsp_has(server, YEW_LSPC_DOCUMENT_SYMBOL));
+
+    YEW_ASSERT(yew_lsp_symbols(&f.ed, f.ed.win));
+    YEW_ASSERT(wait_picker_rows(&f, 2U, 2000));
+    YEW_ASSERT_EQ_U64(f.ed.win->symbol_source_request, 0U);
+    yew_picker_close(&f.ed, false);
+
+    yew_lsp_client_stop(&f.ed, server, true);
+    YEW_ASSERT(wait_server_drained(&f, server, 2000));
+    life_fix_free(&f);
+}
+
+void test_lsp_lifecycle_empty_document_symbols_report_exact_info_message(void)
+{
+    LifeFix f;
+    LspServer *server;
+
+    life_fix_init(&f, "session-symbols-empty", 1000);
+    YEW_ASSERT(wait_state(&f, YEW_LSP_READY, 2000));
+    server = life_server(&f);
+    YEW_ASSERT(yew_lsp_has(server, YEW_LSPC_DOCUMENT_SYMBOL));
+
+    YEW_ASSERT(yew_lsp_symbols(&f.ed, f.ed.win));
+    YEW_ASSERT(wait_message(&f, "fakelsp: no document symbols found",
+                            2000));
+    YEW_ASSERT_EQ_U64(f.ed.msg.sev, YEW_MSG_INFO);
+    YEW_ASSERT(!yew_picker_active(&f.ed));
+
+    yew_lsp_client_stop(&f.ed, server, true);
+    YEW_ASSERT(wait_server_drained(&f, server, 2000));
+    life_fix_free(&f);
+}
+
+void test_lsp_lifecycle_method_not_found_clears_document_symbol_capability(
+    void)
+{
+    LifeFix f;
+    LspServer *server;
+
+    life_fix_init(&f, "session-symbols-missing", 1000);
+    YEW_ASSERT(wait_state(&f, YEW_LSP_READY, 2000));
+    server = life_server(&f);
+    YEW_ASSERT(yew_lsp_has(server, YEW_LSPC_DOCUMENT_SYMBOL));
+
+    YEW_ASSERT(yew_lsp_symbols(&f.ed, f.ed.win));
+    YEW_ASSERT(wait_capability_clear(&f, YEW_LSPC_DOCUMENT_SYMBOL, 2000));
+    YEW_ASSERT(!yew_lsp_symbols(&f.ed, f.ed.win));
+    YEW_ASSERT_EQ_STR(f.ed.msg.text,
+                      "fakelsp does not support document symbols");
+
+    yew_lsp_client_stop(&f.ed, server, true);
+    YEW_ASSERT(wait_server_drained(&f, server, 2000));
+    life_fix_free(&f);
+}
+
 void test_lsp_lifecycle_fakelsp_handshake_queue_and_shutdown(void)
 {
     LifeFix f;
