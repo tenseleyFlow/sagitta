@@ -361,6 +361,7 @@ $(BUILD)/tests/unit/test_state_differential.o: CFLAGS += \
 $(BUILD)/tests/unit/test_syn_embed_runtime.o: CFLAGS += -DYEW_SYN_TEST=1
 FAKECLIP := $(BUILD)/fakeclip
 FAKELSP := $(BUILD)/tests/helpers/fakelsp
+SCRIPT_RUNNER_ARGS := $(if $(filter lsp,$(MODULES)),,--exclude lsp_)
 PTY_VT_OBJ := $(BUILD)/tests/pty/vt.o
 PTY_SNAPSHOT_OBJ := $(BUILD)/tests/pty/snapshot.o
 PTY_ORACLE_OBJ := $(PTY_VT_OBJ) $(PTY_SNAPSHOT_OBJ)
@@ -1414,6 +1415,7 @@ test-script: $(BUILD)/script_runner $(BUILD)/yew $(FAKELSP)
 		--trace-children=yes \
 		$(VALGRIND_TRACE_SKIP),) \
 		$(BUILD)/script_runner \
+		$(SCRIPT_RUNNER_ARGS) \
 		--yew $(abspath $(BUILD)/yew) \
 		--fakelsp $(abspath $(FAKELSP))
 
@@ -1424,11 +1426,13 @@ test-script-determinism: $(BUILD)/script_runner $(BUILD)/yew $(FAKELSP)
 	LC_ALL=C $(BUILD)/script_runner --selftest \
 		--yew $(abspath $(BUILD)/yew) >"$$tmp/run-1" 2>&1; \
 	LC_ALL=C $(BUILD)/script_runner \
+		$(SCRIPT_RUNNER_ARGS) \
 		--yew $(abspath $(BUILD)/yew) \
 		--fakelsp $(abspath $(FAKELSP)) >>"$$tmp/run-1" 2>&1; \
 	LC_ALL=C $(BUILD)/script_runner --selftest \
 		--yew $(abspath $(BUILD)/yew) >"$$tmp/run-2" 2>&1; \
 	LC_ALL=C $(BUILD)/script_runner \
+		$(SCRIPT_RUNNER_ARGS) \
 		--yew $(abspath $(BUILD)/yew) \
 		--fakelsp $(abspath $(FAKELSP)) >>"$$tmp/run-2" 2>&1; \
 	diff -u "$$tmp/run-1" "$$tmp/run-2"; \

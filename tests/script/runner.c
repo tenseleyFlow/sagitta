@@ -1049,13 +1049,21 @@ static Protocol parse_protocol(const Bytes *bytes)
     return parsed;
 }
 
-static size_t selected_count(const TestList *tests, const char *filter)
+static bool selected_test(const char *name, const char *filter,
+                          const char *exclude)
+{
+    return (filter == NULL || strstr(name, filter) != NULL) &&
+           (exclude == NULL || strstr(name, exclude) == NULL);
+}
+
+static size_t selected_count(const TestList *tests, const char *filter,
+                             const char *exclude)
 {
     size_t selected = 0U;
     size_t i;
 
     for (i = 0U; i < tests->len; i++)
-        if (filter == NULL || strstr(tests->data[i].name, filter) != NULL)
+        if (selected_test(tests->data[i].name, filter, exclude))
             selected++;
     return selected;
 }
@@ -1197,12 +1205,14 @@ static char *fakelsp_beside_yew(const char *yew)
 }
 
 static bool parse_cli(int argc, char **argv, const char **filter,
+                      const char **exclude,
                       const char **yew, const char **fakelsp,
                       bool *list, bool *selftest)
 {
     int i;
 
     *filter = NULL;
+    *exclude = NULL;
     *yew = "build/yew";
     *fakelsp = NULL;
     *list = false;
@@ -1219,6 +1229,13 @@ static bool parse_cli(int argc, char **argv, const char **filter,
                 return false;
             }
             *filter = argv[i];
+        } else if (strcmp(argv[i], "--exclude") == 0) {
+            if (++i >= argc) {
+                (void)fprintf(stderr,
+                              "script: --exclude requires a substring\n");
+                return false;
+            }
+            *exclude = argv[i];
         } else if (strcmp(argv[i], "--yew") == 0) {
             if (++i >= argc) {
                 (void)fprintf(stderr, "script: --yew requires a path\n");
@@ -1373,10 +1390,12 @@ static bool selftest_zero_filter(void)
     TestList tests = {data, sizeof(data) / sizeof(data[0]),
                       sizeof(data) / sizeof(data[0])};
 
-    return selected_count(&tests, "no-match") == 0U &&
-           selection_status(selected_count(&tests, "no-match")) == 1 &&
-           selected_count(&tests, "a") == 2U &&
-           selection_status(selected_count(&tests, "a")) == 0;
+    return selected_count(&tests, "no-match", NULL) == 0U &&
+           selection_status(selected_count(&tests, "no-match", NULL)) == 1 &&
+           selected_count(&tests, "a", NULL) == 2U &&
+           selection_status(selected_count(&tests, "a", NULL)) == 0 &&
+           selected_count(&tests, NULL, "beta") == 1U &&
+           selected_count(&tests, "a", "alpha") == 1U;
 }
 
 static bool selftest_stdout_expectation_is_byte_exact(void)
@@ -1565,6 +1584,7 @@ static int run_selftests(const char *yew, const char *fixtures,
 int main(int argc, char **argv)
 {
     const char *filter;
+    const char *exclude;
     const char *yew_arg;
     const char *fakelsp_arg;
     bool list_only;
@@ -1587,8 +1607,8 @@ int main(int argc, char **argv)
                       strerror(errno));
         return 1;
     }
-    if (!parse_cli(argc, argv, &filter, &yew_arg, &fakelsp_arg, &list_only,
-                   &selftest))
+    if (!parse_cli(argc, argv, &filter, &exclude, &yew_arg, &fakelsp_arg,
+                   &list_only, &selftest))
         return 1;
     root = getcwd(NULL, 0U);
     script_dir = root == NULL ? NULL : path_join(root, "tests/script");
@@ -1631,7 +1651,7 @@ int main(int argc, char **argv)
         list_free(&tests);
         return 1;
     }
-    selected = selected_count(&tests, filter);
+    selected = selected_count(&tests, filter, exclude);
     if (selection_status(selected) != 0) {
         (void)fprintf(stderr, "script: filter matched zero tests\n");
         free(root);
@@ -1642,7 +1662,7 @@ int main(int argc, char **argv)
     }
     if (list_only) {
         for (i = 0U; i < tests.len; i++)
-            if (filter == NULL || strstr(tests.data[i].name, filter) != NULL)
+            if (selected_test(tests.data[i].name, filter, exclude))
                 (void)printf("%s\n", tests.data[i].name);
         free(root);
         free(script_dir);
@@ -1661,7 +1681,7 @@ int main(int argc, char **argv)
         return 1;
     }
     for (i = 0U; i < tests.len; i++) {
-        if ((filter == NULL || strstr(tests.data[i].name, filter) != NULL) &&
+        if (selected_test(tests.data[i].name, filter, exclude) &&
             tests.data[i].config_path != NULL) {
             char *derived = fakelsp_arg == NULL ? fakelsp_beside_yew(yew) :
                             NULL;
@@ -1708,7 +1728,7 @@ int main(int argc, char **argv)
         const char *reason;
         bool stdout_mismatch = false;
 
-        if (filter != NULL && strstr(tests.data[i].name, filter) == NULL)
+        if (!selected_test(tests.data[i].name, filter, exclude))
             continue;
         (void)run_test(yew, fixtures, fakelsp, &tests.data[i], &sandbox,
                        &result);
