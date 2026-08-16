@@ -300,15 +300,19 @@ static void life_fix_init(LifeFix *f, const char *mode, i32 timeout_ms)
     f->ed.buffer.lang = "c";
     f->ed.now_ms = yew_now_ms();
     YEW_ASSERT(yew_lsp_client_start_cfg(&f->ed, &f->ed.buffer, &f->cfg));
+    YEW_ASSERT_NOT_NULL(yew_lsp_doc_for_buffer(&f->ed, &f->ed.buffer));
 }
 
 static void life_fix_free(LifeFix *f)
 {
+    int marker_rc;
+
     yew_ed_free(&f->ed);
     YEW_ASSERT_EQ_I64(sigaction(SIGPIPE, &f->saved_sigpipe, NULL), 0);
     YEW_ASSERT_EQ_I64(unlink(f->path), 0);
-    if (unlink(f->marker) != 0)
-        YEW_ASSERT_EQ_I64(errno, ENOENT);
+    errno = 0;
+    marker_rc = unlink(f->marker);
+    YEW_ASSERT(marker_rc == 0 || errno == ENOENT);
 }
 
 static void life_pump_once(Ed *ed)
@@ -332,7 +336,8 @@ static LspServer *life_server(LifeFix *f)
 {
     LspDoc *doc = yew_lsp_doc_for_buffer(&f->ed, &f->ed.buffer);
 
-    YEW_ASSERT_NOT_NULL(doc);
+    if (doc == NULL)
+        YEW_BUG("LSP lifecycle fixture lost its document");
     return yew_lsp_server_for_doc(&f->ed, doc);
 }
 
