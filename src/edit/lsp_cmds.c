@@ -115,6 +115,13 @@ CmdStatus yew_lsp_cmd_references(CmdCtx *cx)
     return status_of(yew_lsp_references(cx->ed, cx->win));
 }
 
+CmdStatus yew_lsp_cmd_symbols(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL || cx->win == NULL)
+        return YEW_CMD_ERR_STATE;
+    return status_of(yew_lsp_symbols(cx->ed, cx->win));
+}
+
 CmdStatus yew_lsp_cmd_require(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL)

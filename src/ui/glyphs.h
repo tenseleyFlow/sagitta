@@ -66,6 +66,8 @@ typedef enum {
     YEW_GLYPH_BORDER_BL,
     YEW_GLYPH_BORDER_BR,
     YEW_GLYPH_SCROLL_UP,
+    /* Document-symbol breadcrumb separator. */
+    YEW_GLYPH_BREADCRUMB,
     /*
      * Git status — RESERVED for Sprint 52.  They live in the table now
      * so that sprint does not invent a second vocabulary, and nothing

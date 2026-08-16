@@ -56,6 +56,7 @@ static const InteractiveRow interactive_rows[] = {
     {"ed.lsp.complete", "no batch alternative"},
     {"ed.lsp.hover", "no batch alternative"},
     {"ed.lsp.references", "no batch alternative"},
+    {"ed.lsp.symbols", "no batch alternative"},
     {"ed.lsp.signature", "no batch alternative"},
     {"ed.macro.record", "recording needs keys; none exist"},
     {"ed.ai.open", "no batch alternative"},

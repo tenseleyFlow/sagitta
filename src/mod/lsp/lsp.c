@@ -320,6 +320,33 @@ bool yew_lsp_references(Ed *ed, Win *w)
                               YEW_LSPC_REFERENCES, "references", true);
 }
 
+bool yew_lsp_symbols(Ed *ed, Win *w)
+{
+    LspDoc *doc;
+    LspServer *server;
+    const char *lang;
+
+    if (ed == NULL || w == NULL || w->buf == NULL || w->buf->tb == NULL)
+        return false;
+    doc = yew_lsp_doc_for_buffer(ed, w->buf);
+    server = yew_lsp_server_for_doc(ed, doc);
+    if (server == NULL && yew_lsp_client_start(ed, w->buf)) {
+        doc = yew_lsp_doc_for_buffer(ed, w->buf);
+        server = yew_lsp_server_for_doc(ed, doc);
+    }
+    if (server == NULL || server->state != YEW_LSP_READY) {
+        lang = w->buf->lang == NULL ? "this buffer" : w->buf->lang;
+        yew_msg(ed, YEW_MSG_INFO,
+                "no ready LSP server for %s; using local symbol index",
+                lang);
+        return yew_lsp_symbol_index_open(ed, w);
+    }
+    if (!feat_require(ed, server, YEW_LSPC_DOCUMENT_SYMBOL,
+                      "document symbols"))
+        return false;
+    return yew_lsp_symbols_request(ed, w);
+}
+
 void yew_lsp_signature_maybe_auto_trigger(Ed *ed, Win *w,
                                           const u8 *text, u32 len)
 {

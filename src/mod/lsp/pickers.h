@@ -13,6 +13,10 @@ bool yew_lsp_location_jump(Ed *ed, Win *w, const LspLoc *loc, u8 pos_enc);
 /* Consumes `locs` and opens the shared location picker. */
 void yew_lsp_location_picker_open(Ed *ed, Win *w, Vec_LspLoc *locs,
                                   u8 pos_enc, const char *title);
+/* Consumes `symbols` and opens the document-symbol picker. */
+void yew_lsp_symbol_picker_open(Ed *ed, Win *w,
+                                Vec_LspSymbol *symbols, u8 pos_enc);
+bool yew_lsp_symbol_index_open(Ed *ed, Win *w);
 void yew_lsp_pickers_free(void);
 
 #endif /* YEW_MOD_LSP_PICKERS_H */

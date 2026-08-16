@@ -51,7 +51,7 @@ static const u8 *kind_detail(u8 kind, u32 *len)
     }
 }
 
-static u8 kind_glyph(u8 kind)
+u8 yew_compl_kind_glyph(u8 kind)
 {
     static const u8 glyphs[YEW_COMPLK_NKIND] = {
         'w', 'f', 't', 'm', 'k', 'v', 'c', 'F', 'e', 'M', 's'
@@ -804,7 +804,7 @@ void yew_compl_draw(Ed *ed, Win *w, Grid *g)
         style = compl_style(ed, g, kind_role(menu->items.data[index].kind),
                             (i32)index == menu->sel);
         yew_grid_fill(g, rr.y, rr.x, (u16)(rr.x + rr.w), style);
-        glyph = kind_glyph(menu->items.data[index].kind);
+        glyph = yew_compl_kind_glyph(menu->items.data[index].kind);
         put_ascii(g, rr.y, rr.x, glyph, style);
         label_w = rr.w > YEW_COMPL_DETAIL_W + 2U ?
                     (u16)(rr.w - YEW_COMPL_DETAIL_W - 2U) :

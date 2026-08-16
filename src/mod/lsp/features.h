@@ -22,6 +22,18 @@ typedef struct LspLoc {
 
 VEC_DECL(Vec_LspLoc, LspLoc);
 
+typedef struct LspSymbol {
+    char *name;       /* leaf name */
+    char *breadcrumb; /* leaf plus ancestors, separated by U+203A */
+    char *path;
+    u32 buf_id;       /* nonzero for the local-index fallback */
+    u32 line;
+    u32 chr;
+    u8 kind;          /* ComplKind */
+} LspSymbol;
+
+VEC_DECL(Vec_LspSymbol, LspSymbol);
+
 /* Downgrade LSP snippet syntax to insertion-ready plain text.  Returns the
  * byte offset where $0 occurred, or the emitted length when it was absent. */
 u32 yew_lsp_snippet_strip(const u8 *in, u32 n, Bytebuf *out);
@@ -48,11 +60,15 @@ bool yew_lsp_signature_parse(const JsonValue *result, Bytebuf *body,
  * file locations.  Malformed/non-file rows are ignored. */
 u32 yew_lsp_locations_parse(const JsonValue *result, Vec_LspLoc *out);
 void yew_lsp_locations_free(Vec_LspLoc *locs);
+u32 yew_lsp_symbols_parse(const JsonValue *result, const char *doc_path,
+                          Vec_LspSymbol *out);
+void yew_lsp_symbols_free(Vec_LspSymbol *symbols);
 bool yew_lsp_hover_request(Ed *ed, Win *w);
 bool yew_lsp_signature_request(Ed *ed, Win *w);
 bool yew_lsp_navigation_request(Ed *ed, Win *w, const char *method,
                                 u32 cap, const char *what,
                                 bool always_picker);
+bool yew_lsp_symbols_request(Ed *ed, Win *w);
 
 extern const ComplSource yew_compl_src_lsp;
 const ShadowProvider *yew_lsp_shadow_provider(void);

@@ -1,10 +1,17 @@
 #include "harness.h"
 
 #include <stdio.h>
+#include <stdint.h>
 #include <string.h>
 
+#include "edit/ed.h"
+#include "edit/jumplist.h"
 #include "mod/lsp/features.h"
+#include "mod/lsp/pickers.h"
+#include "term/grid.h"
+#include "ui/picker.h"
 #include "util/arena.h"
+#include "ws/symidx.h"
 
 static JsonValue *symbols_json(Arena *arena, const char *json)
 {
@@ -210,4 +217,87 @@ void test_lsp_symbols_cap_response_count(void)
     YEW_ASSERT_EQ_U64(symbols.len, 20000U);
     yew_lsp_symbols_free(&symbols);
     bytebuf_free(&json);
+}
+
+void test_lsp_symbols_sort_identically_across_server_permutations(void)
+{
+    static const char first[] =
+        "[{\"name\":\"zeta\",\"kind\":12,\"location\":{"
+        "\"uri\":\"file:///z.c\",\"range\":{"
+        "\"start\":{\"line\":8,\"character\":1},"
+        "\"end\":{\"line\":8,\"character\":2}}}},"
+        "{\"name\":\"beta\",\"kind\":13,\"containerName\":\"A\","
+        "\"location\":{\"uri\":\"file:///a.c\",\"range\":{"
+        "\"start\":{\"line\":4,\"character\":2},"
+        "\"end\":{\"line\":4,\"character\":3}}}},"
+        "{\"name\":\"alpha\",\"kind\":12,\"location\":{"
+        "\"uri\":\"file:///a.c\",\"range\":{"
+        "\"start\":{\"line\":1,\"character\":7},"
+        "\"end\":{\"line\":1,\"character\":8}}}}]";
+    static const char second[] =
+        "[{\"name\":\"alpha\",\"kind\":12,\"location\":{"
+        "\"uri\":\"file:///a.c\",\"range\":{"
+        "\"start\":{\"line\":1,\"character\":7},"
+        "\"end\":{\"line\":1,\"character\":8}}}},"
+        "{\"name\":\"zeta\",\"kind\":12,\"location\":{"
+        "\"uri\":\"file:///z.c\",\"range\":{"
+        "\"start\":{\"line\":8,\"character\":1},"
+        "\"end\":{\"line\":8,\"character\":2}}}},"
+        "{\"name\":\"beta\",\"kind\":13,\"containerName\":\"A\","
+        "\"location\":{\"uri\":\"file:///a.c\",\"range\":{"
+        "\"start\":{\"line\":4,\"character\":2},"
+        "\"end\":{\"line\":4,\"character\":3}}}}]";
+    Vec_LspSymbol left = {0};
+    Vec_LspSymbol right = {0};
+    size_t i;
+
+    symbols_parse(first, "/ignored.c", &left, 3U);
+    symbols_parse(second, "/ignored.c", &right, 3U);
+    YEW_ASSERT_EQ_U64(left.len, right.len);
+    for (i = 0U; i < left.len; i++) {
+        YEW_ASSERT_EQ_STR(left.data[i].path, right.data[i].path);
+        YEW_ASSERT_EQ_STR(left.data[i].breadcrumb,
+                          right.data[i].breadcrumb);
+        YEW_ASSERT_EQ_U64(left.data[i].line, right.data[i].line);
+        YEW_ASSERT_EQ_U64(left.data[i].chr, right.data[i].chr);
+    }
+    yew_lsp_symbols_free(&right);
+    yew_lsp_symbols_free(&left);
+}
+
+void test_lsp_symbols_local_index_opens_and_accepts_current_buffer(void)
+{
+    static const u8 text[] =
+        "alpha_symbol beta_symbol\n"
+        "gamma_symbol\n";
+    Cursor *cursor;
+    SymIndex *index;
+    Ed ed;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_memory(&ed, text, sizeof(text) - 1U,
+                                  "symbols-local.txt"));
+    YEW_ASSERT(yew_grid_init(&ed.grid, &ed.interner, 24U, 80U));
+    ed.grid_ready = true;
+    while (yew_symidx_pending(&ed))
+        yew_symidx_pump(&ed, INT64_MAX);
+    index = yew_symidx_buffer(&ed.ws, ed.buffer.id, false);
+    YEW_ASSERT_NOT_NULL(index);
+    YEW_ASSERT(index->e.len >= 3U);
+    cursor = yew_ed_cursor(&ed);
+    YEW_ASSERT_NOT_NULL(cursor);
+    cursor->pos = BYTEOFF(sizeof(text) - 2U);
+    cursor->anchor = cursor->pos;
+
+    YEW_ASSERT(yew_lsp_symbol_index_open(&ed, ed.win));
+    YEW_ASSERT(yew_picker_active(&ed));
+    YEW_ASSERT_EQ_U64(yew_picker_total(&ed), index->e.len);
+    YEW_ASSERT_EQ_I64(yew_picker_selected(&ed), 0);
+    YEW_ASSERT(yew_picker_accept(&ed));
+    YEW_ASSERT(!yew_picker_active(&ed));
+    cursor = yew_ed_cursor(&ed);
+    YEW_ASSERT_NOT_NULL(cursor);
+    YEW_ASSERT_EQ_U64(cursor->pos.v, index->e.data[0].off);
+    YEW_ASSERT_EQ_U64(yew_jumplist_len(&ed.win->jumps), 1U);
+    yew_ed_free(&ed);
 }

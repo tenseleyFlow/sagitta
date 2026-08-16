@@ -46,6 +46,7 @@ static const GlyphRow glyphs[] = {
     [YEW_GLYPH_BORDER_BL] = {"\xE2\x94\x94", "+"},     /* └ */
     [YEW_GLYPH_BORDER_BR] = {"\xE2\x94\x98", "+"},     /* ┘ */
     [YEW_GLYPH_SCROLL_UP] = {"\xE2\x96\xB2", "^"},     /* ▲ */
+    [YEW_GLYPH_BREADCRUMB] = {"\xE2\x80\xBA", ">"},    /* › */
     /* Reserved for Sprint 52; nothing draws these yet. */
     [YEW_GLYPH_GIT_AHEAD] = {"\xE2\x86\x91", "^"},     /* ↑ */
     [YEW_GLYPH_GIT_CONFLICT] = {"\xE2\x9C\x97", "x"},  /* ✗ */

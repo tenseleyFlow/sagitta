@@ -16,15 +16,18 @@
 #include "term/grid.h"
 #include "text/piece.h"
 #include "ui/message.h"
+#include "ui/glyphs.h"
 #include "ui/picker.h"
 #include "ui/tabs.h"
 #include "ui/win.h"
 #include "unicode/width.h"
+#include "ws/symidx.h"
 
 enum {
     LSP_LOC_DETAIL_MAX = 512,
     LSP_LOC_PREVIEW_BYTES = 64U * 1024U,
-    LSP_LOC_PREVIEW_LINES = 40
+    LSP_LOC_PREVIEW_LINES = 40,
+    LSP_SYMBOL_PICK_MAX = 20000
 };
 
 typedef struct LocSrc {
@@ -36,7 +39,28 @@ typedef struct LocSrc {
     u8 pos_enc;
 } LocSrc;
 
+typedef struct SymSrc {
+    Vec_LspSymbol symbols;
+    PickItem *rows;
+    char **labels;
+    char **details;
+    u32 nrows;
+    u8 pos_enc;
+} SymSrc;
+
 static LocSrc source;
+static SymSrc symbol_source;
+
+static char *copy_cstr(const char *text)
+{
+    size_t len = text == NULL ? 0U : strlen(text);
+    char *copy = yew_xmalloc(len + 1U);
+
+    if (len != 0U)
+        (void)memcpy(copy, text, len);
+    copy[len] = '\0';
+    return copy;
+}
 
 static void source_free(void)
 {
@@ -53,9 +77,25 @@ static void source_free(void)
     (void)memset(&source, 0, sizeof(source));
 }
 
+static void symbol_source_free(void)
+{
+    u32 i;
+
+    for (i = 0U; i < symbol_source.nrows; i++) {
+        free(symbol_source.labels[i]);
+        free(symbol_source.details[i]);
+    }
+    free(symbol_source.rows);
+    free(symbol_source.labels);
+    free(symbol_source.details);
+    yew_lsp_symbols_free(&symbol_source.symbols);
+    (void)memset(&symbol_source, 0, sizeof(symbol_source));
+}
+
 void yew_lsp_pickers_free(void)
 {
     source_free();
+    symbol_source_free();
 }
 
 static Buffer *buffer_for_path(Ed *ed, const char *path)
@@ -338,22 +378,20 @@ static bool location_accept(Ed *ed, void *ctx, i32 payload, u8 how)
     }
 }
 
-static void location_preview(Ed *ed, void *ctx, i32 payload, Rect r)
+static void preview_path(Ed *ed, const char *path, Rect r)
 {
     static u8 bytes[LSP_LOC_PREVIEW_BYTES];
     YewColor dim = {YEW_COLOR_RGB, 140U, 140U, 140U};
     YewColor bg = {YEW_COLOR_DEFAULT, 0U, 0U, 0U};
-    LocSrc *src = ctx;
     ssize_t got;
     int fd;
     u16 row = 0U;
     u64 at = 0U;
     u64 i;
 
-    if (ed == NULL || src == NULL || payload < 0 ||
-        (u32)payload >= src->nrows || r.w == 0U || r.h == 0U)
+    if (ed == NULL || path == NULL || r.w == 0U || r.h == 0U)
         return;
-    fd = open(src->locs.data[payload].path, O_RDONLY);
+    fd = open(path, O_RDONLY);
     if (fd < 0)
         return;
     got = pread(fd, bytes, sizeof(bytes), 0);
@@ -390,6 +428,15 @@ static void location_preview(Ed *ed, void *ctx, i32 payload, Rect r)
     }
 }
 
+static void location_preview(Ed *ed, void *ctx, i32 payload, Rect r)
+{
+    LocSrc *src = ctx;
+
+    if (src == NULL || payload < 0 || (u32)payload >= src->nrows)
+        return;
+    preview_path(ed, src->locs.data[payload].path, r);
+}
+
 void yew_lsp_location_picker_open(Ed *ed, Win *w, Vec_LspLoc *locs,
                                   u8 pos_enc, const char *title)
 {
@@ -400,7 +447,10 @@ void yew_lsp_location_picker_open(Ed *ed, Win *w, Vec_LspLoc *locs,
         return;
     if (locs->len > INT32_MAX)
         return;
+    if (yew_picker_active(ed))
+        yew_picker_close(ed, false);
     source_free();
+    symbol_source_free();
     source.locs = *locs;
     (void)memset(locs, 0, sizeof(*locs));
     source.nrows = (u32)source.locs.len;
@@ -422,4 +472,210 @@ void yew_lsp_location_picker_open(Ed *ed, Win *w, Vec_LspLoc *locs,
     spec.path_mode = true;
     spec.ctx = &source;
     yew_picker_open(ed, &spec);
+}
+
+static char *symbol_breadcrumb_display(const char *breadcrumb)
+{
+    static const char canonical[] = "\xE2\x80\xBA";
+    const char *separator = yew_glyph(YEW_GLYPH_BREADCRUMB);
+    const char *at = breadcrumb;
+    Bytebuf out;
+
+    bytebuf_init(&out);
+    while (at != NULL && *at != '\0') {
+        const char *next = strstr(at, canonical);
+
+        if (next == NULL) {
+            bytebuf_append(&out, at, strlen(at));
+            break;
+        }
+        bytebuf_append(&out, at, (size_t)(next - at));
+        bytebuf_append(&out, separator, strlen(separator));
+        at = next + sizeof(canonical) - 1U;
+    }
+    bytebuf_push_u8(&out, 0U);
+    return (char *)out.data;
+}
+
+static char *symbol_label(const LspSymbol *symbol)
+{
+    char *breadcrumb = symbol_breadcrumb_display(symbol->breadcrumb);
+    u8 glyph = yew_compl_kind_glyph(symbol->kind);
+    size_t len = strlen(breadcrumb);
+    char *label = yew_xmalloc(len + 4U);
+
+    label[0] = (char)glyph;
+    label[1] = ' ';
+    label[2] = ' ';
+    (void)memcpy(label + 3U, breadcrumb, len + 1U);
+    free(breadcrumb);
+    return label;
+}
+
+static char *symbol_detail(Ed *ed, const LspSymbol *symbol)
+{
+    const char *path = symbol->path == NULL ? "(buffer)" :
+                                                 display_path(ed,
+                                                              symbol->path);
+    unsigned long long line = (unsigned long long)symbol->line + 1ULL;
+    int n = snprintf(NULL, 0, "%s:%llu", path, line);
+    char *detail;
+
+    if (n < 0)
+        return copy_cstr(path);
+    detail = yew_xmalloc((size_t)n + 1U);
+    (void)snprintf(detail, (size_t)n + 1U, "%s:%llu", path, line);
+    return detail;
+}
+
+static const PickItem *symbol_items(void *ctx, u32 *n)
+{
+    SymSrc *src = ctx;
+
+    *n = src == NULL ? 0U : src->nrows;
+    return src == NULL ? NULL : src->rows;
+}
+
+static bool symbol_search_part(void *ctx, i32 payload, u32 part,
+                               const u8 **text, size_t *len)
+{
+    SymSrc *src = ctx;
+    const LspSymbol *symbol;
+    const char *value;
+
+    if (src == NULL || payload < 0 || (u32)payload >= src->nrows ||
+        text == NULL || len == NULL || part > 1U)
+        return false;
+    symbol = &src->symbols.data[payload];
+    value = part == 0U ? symbol->name : symbol->breadcrumb;
+    if (value == NULL || (part == 1U && strcmp(value, symbol->name) == 0))
+        return false;
+    *text = (const u8 *)value;
+    *len = strlen(value);
+    return true;
+}
+
+static bool symbol_accept(Ed *ed, void *ctx, i32 payload, u8 how)
+{
+    SymSrc *src = ctx;
+    LspSymbol *symbol;
+    Buffer *target;
+    ByteOff pos;
+
+    (void)how;
+    if (ed == NULL || ed->win == NULL || src == NULL || payload < 0 ||
+        (u32)payload >= src->nrows)
+        return false;
+    symbol = &src->symbols.data[payload];
+    target = symbol->buf_id == 0U ?
+                 yew_ws_file_buf(ed, symbol->path) :
+                 yew_ws_buf_by_id(ed, symbol->buf_id);
+    if (target == NULL ||
+        (target->tb == NULL && yew_buf_hydrate(ed, target) != 0) ||
+        target->tb == NULL)
+        return false;
+    pos = yew_lsp_off_of_pos(src->pos_enc, target->tb,
+                             LINENO(symbol->line), symbol->chr);
+    return jump_in_focused(ed, ed->win, target, pos);
+}
+
+static void symbol_preview(Ed *ed, void *ctx, i32 payload, Rect r)
+{
+    SymSrc *src = ctx;
+    const LspSymbol *symbol;
+
+    if (src == NULL || payload < 0 || (u32)payload >= src->nrows)
+        return;
+    symbol = &src->symbols.data[payload];
+    if (symbol->path != NULL && symbol->buf_id == 0U)
+        preview_path(ed, symbol->path, r);
+}
+
+void yew_lsp_symbol_picker_open(Ed *ed, Win *w,
+                                Vec_LspSymbol *symbols, u8 pos_enc)
+{
+    PickerSpec spec = {0};
+    u32 i;
+
+    if (ed == NULL || w == NULL || symbols == NULL || symbols->len == 0U ||
+        symbols->len > INT32_MAX)
+        return;
+    if (yew_picker_active(ed))
+        yew_picker_close(ed, false);
+    source_free();
+    symbol_source_free();
+    symbol_source.symbols = *symbols;
+    (void)memset(symbols, 0, sizeof(*symbols));
+    symbol_source.nrows = (u32)symbol_source.symbols.len;
+    symbol_source.pos_enc = pos_enc;
+    symbol_source.rows = yew_xcalloc(symbol_source.nrows,
+                                     sizeof(*symbol_source.rows));
+    symbol_source.labels = yew_xcalloc(symbol_source.nrows,
+                                       sizeof(*symbol_source.labels));
+    symbol_source.details = yew_xcalloc(symbol_source.nrows,
+                                        sizeof(*symbol_source.details));
+    for (i = 0U; i < symbol_source.nrows; i++) {
+        symbol_source.labels[i] = symbol_label(
+            &symbol_source.symbols.data[i]);
+        symbol_source.details[i] = symbol_detail(
+            ed, &symbol_source.symbols.data[i]);
+        symbol_source.rows[i].label = symbol_source.labels[i];
+        symbol_source.rows[i].detail = symbol_source.details[i];
+        symbol_source.rows[i].payload = (i32)i;
+    }
+    spec.title = "symbols";
+    spec.items = symbol_items;
+    spec.preview = symbol_preview;
+    spec.accept = symbol_accept;
+    spec.search_part = symbol_search_part;
+    spec.ctx = &symbol_source;
+    yew_picker_open(ed, &spec);
+}
+
+bool yew_lsp_symbol_index_open(Ed *ed, Win *w)
+{
+    Vec_LspSymbol symbols = {0};
+    SymIndex *index;
+    const char *path;
+    size_t i;
+
+    if (ed == NULL || w == NULL || w->buf == NULL || w->buf->tb == NULL)
+        return false;
+    yew_symidx_pump(ed, YEW_SYMIDX_FULL_US);
+    index = yew_symidx_buffer(&ed->ws, w->buf->id, false);
+    path = w->buf->path != NULL ? w->buf->path : w->buf->name;
+    for (i = 0U; index != NULL && i < index->e.len &&
+                symbols.len < LSP_SYMBOL_PICK_MAX; i++) {
+        const SymEntry *entry = &index->e.data[i];
+        const char *name = yew_intern_str(&ed->interner, entry->name);
+        size_t name_len = yew_intern_len(&ed->interner, entry->name);
+        Span line;
+        LspSymbol symbol = {0};
+
+        if (name == NULL || name_len == 0U || name_len > UINT32_MAX ||
+            entry->line >= yew_textbuf_line_count(w->buf->tb))
+            continue;
+        line = yew_textbuf_line_span(w->buf->tb, LINENO(entry->line));
+        if (entry->off < line.lo || entry->off - line.lo > UINT32_MAX)
+            continue;
+        symbol.name = yew_xmalloc(name_len + 1U);
+        (void)memcpy(symbol.name, name, name_len);
+        symbol.name[name_len] = '\0';
+        symbol.breadcrumb = copy_cstr(symbol.name);
+        symbol.path = copy_cstr(path == NULL ? "(buffer)" : path);
+        symbol.buf_id = w->buf->id;
+        symbol.line = entry->line;
+        symbol.chr = (u32)(entry->off - line.lo);
+        symbol.kind = entry->kind < (u8)YEW_COMPLK_NKIND ?
+                          entry->kind : (u8)YEW_COMPLK_WORD;
+        Vec_LspSymbol_push(&symbols, symbol);
+    }
+    if (symbols.len == 0U) {
+        yew_lsp_symbols_free(&symbols);
+        yew_msg(ed, YEW_MSG_INFO, "no symbols in this buffer");
+        return true;
+    }
+    yew_lsp_symbol_picker_open(ed, w, &symbols, YEW_POSENC_UTF8);
+    yew_lsp_symbols_free(&symbols);
+    return true;
 }

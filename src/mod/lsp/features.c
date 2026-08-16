@@ -631,6 +631,251 @@ void yew_lsp_locations_free(Vec_LspLoc *locs)
     Vec_LspLoc_free(locs);
 }
 
+enum {
+    LSP_SYMBOL_MAX = 20000U,
+    LSP_SYMBOL_DEPTH_MAX = 64U,
+    LSP_SYMBOL_TEXT_MAX = 4096U
+};
+
+static u8 symbol_kind(i64 kind)
+{
+    switch (kind) {
+    case 6:  /* Method */
+    case 9:  /* Constructor */
+    case 12: /* Function */
+    case 24: /* Event */
+    case 25: return (u8)YEW_COMPLK_FUNC; /* Operator */
+    case 5:  /* Class */
+    case 11: /* Interface */
+    case 23: /* Struct */
+    case 26: return (u8)YEW_COMPLK_TYPE; /* TypeParameter */
+    case 13: return (u8)YEW_COMPLK_VARIABLE;
+    case 14:
+    case 22: return (u8)YEW_COMPLK_CONSTANT;
+    case 7:
+    case 8:
+    case 20: return (u8)YEW_COMPLK_FIELD;
+    case 10: return (u8)YEW_COMPLK_ENUM;
+    case 1:
+    case 2:
+    case 3:
+    case 4: return (u8)YEW_COMPLK_MODULE;
+    default: return (u8)YEW_COMPLK_WORD;
+    }
+}
+
+static char *symbol_text_copy(const JsonValue *value)
+{
+    const u8 *text;
+    u32 len;
+    char *copy;
+
+    text = yew_json_str(value, &len);
+    if (text == NULL || len == 0U || len > LSP_SYMBOL_TEXT_MAX ||
+        memchr(text, 0, len) != NULL)
+        return NULL;
+    copy = yew_xmalloc((size_t)len + 1U);
+    (void)memcpy(copy, text, len);
+    copy[len] = '\0';
+    return copy;
+}
+
+static char *symbol_path_copy(const char *path)
+{
+    size_t len;
+    char *copy;
+
+    if (path == NULL)
+        return NULL;
+    len = strlen(path);
+    if (len == 0U || len > UINT32_MAX)
+        return NULL;
+    copy = yew_xmalloc(len + 1U);
+    (void)memcpy(copy, path, len + 1U);
+    return copy;
+}
+
+static char *symbol_breadcrumb(const char *parent, const char *name)
+{
+    static const char separator[] = " \xE2\x80\xBA ";
+    size_t parent_len = parent == NULL ? 0U : strlen(parent);
+    size_t name_len = name == NULL ? 0U : strlen(name);
+    size_t sep_len = parent_len == 0U ? 0U : sizeof(separator) - 1U;
+    size_t len;
+    char *out;
+
+    if (name_len == 0U || parent_len > LSP_SYMBOL_TEXT_MAX ||
+        name_len > LSP_SYMBOL_TEXT_MAX ||
+        parent_len + sep_len > LSP_SYMBOL_TEXT_MAX - name_len)
+        return NULL;
+    len = parent_len + sep_len + name_len;
+    out = yew_xmalloc(len + 1U);
+    if (parent_len != 0U)
+        (void)memcpy(out, parent, parent_len);
+    if (sep_len != 0U)
+        (void)memcpy(out + parent_len, separator, sep_len);
+    (void)memcpy(out + parent_len + sep_len, name, name_len);
+    out[len] = '\0';
+    return out;
+}
+
+static bool symbol_range(const JsonValue *value, LspSymbol *symbol)
+{
+    LspLoc loc = {0};
+
+    if (!location_range(value, &loc))
+        return false;
+    symbol->line = loc.line;
+    symbol->chr = loc.chr;
+    return true;
+}
+
+static void symbol_document(const JsonValue *value, const char *doc_path,
+                            const char *parent, Vec_LspSymbol *out,
+                            u32 depth, u32 *added)
+{
+    const JsonValue *children;
+    const JsonValue *range;
+    LspSymbol symbol = {0};
+    u32 i;
+
+    if (value == NULL || value->kind != YEW_JS_OBJ || doc_path == NULL ||
+        doc_path[0] == '\0' || depth >= LSP_SYMBOL_DEPTH_MAX ||
+        *added >= LSP_SYMBOL_MAX)
+        return;
+    symbol.name = symbol_text_copy(yew_json_get(value, "name"));
+    symbol.breadcrumb = symbol_breadcrumb(parent, symbol.name);
+    range = yew_json_get(value, "selectionRange");
+    if (range == NULL)
+        range = yew_json_get(value, "range");
+    if (symbol.name == NULL || symbol.breadcrumb == NULL ||
+        !symbol_range(range, &symbol)) {
+        free(symbol.name);
+        free(symbol.breadcrumb);
+        return;
+    }
+    symbol.path = symbol_path_copy(doc_path);
+    if (symbol.path == NULL) {
+        free(symbol.name);
+        free(symbol.breadcrumb);
+        return;
+    }
+    symbol.kind = symbol_kind(yew_json_int(yew_json_get(value, "kind"),
+                                           0));
+    Vec_LspSymbol_push(out, symbol);
+    (*added)++;
+    children = yew_json_get(value, "children");
+    if (children == NULL || children->kind != YEW_JS_ARR)
+        return;
+    for (i = 0U; i < children->arr.n && *added < LSP_SYMBOL_MAX; i++)
+        symbol_document(children->arr.v[i], doc_path, symbol.breadcrumb,
+                        out, depth + 1U, added);
+}
+
+static void symbol_information(const JsonValue *value,
+                               Vec_LspSymbol *out, u32 *added)
+{
+    const JsonValue *location;
+    char *container;
+    LspSymbol symbol = {0};
+    LspLoc loc = {0};
+
+    if (value == NULL || value->kind != YEW_JS_OBJ ||
+        *added >= LSP_SYMBOL_MAX)
+        return;
+    location = yew_json_get(value, "location");
+    if (location == NULL || location->kind != YEW_JS_OBJ ||
+        !location_one(location, &loc))
+        return;
+    symbol.name = symbol_text_copy(yew_json_get(value, "name"));
+    container = symbol_text_copy(yew_json_get(value, "containerName"));
+    symbol.breadcrumb = symbol_breadcrumb(container, symbol.name);
+    free(container);
+    if (symbol.name == NULL || symbol.breadcrumb == NULL) {
+        free(symbol.name);
+        free(symbol.breadcrumb);
+        free(loc.path);
+        return;
+    }
+    symbol.path = loc.path;
+    symbol.line = loc.line;
+    symbol.chr = loc.chr;
+    symbol.kind = symbol_kind(yew_json_int(yew_json_get(value, "kind"),
+                                           0));
+    Vec_LspSymbol_push(out, symbol);
+    (*added)++;
+}
+
+static int symbol_cmp(const void *a, const void *b, void *ctx)
+{
+    const LspSymbol *left = a;
+    const LspSymbol *right = b;
+    int cmp;
+
+    (void)ctx;
+    cmp = strcmp(left->path, right->path);
+    if (cmp != 0)
+        return cmp;
+    if (left->line != right->line)
+        return left->line < right->line ? -1 : 1;
+    if (left->chr != right->chr)
+        return left->chr < right->chr ? -1 : 1;
+    cmp = strcmp(left->breadcrumb, right->breadcrumb);
+    if (cmp != 0)
+        return cmp;
+    return strcmp(left->name, right->name);
+}
+
+u32 yew_lsp_symbols_parse(const JsonValue *result, const char *doc_path,
+                          Vec_LspSymbol *out)
+{
+    enum { SYMBOL_SHAPE_UNKNOWN, SYMBOL_SHAPE_TREE, SYMBOL_SHAPE_FLAT };
+    size_t base;
+    u32 added = 0U;
+    u32 i;
+    u8 shape = SYMBOL_SHAPE_UNKNOWN;
+
+    if (out == NULL || result == NULL || result->kind == YEW_JS_NULL ||
+        result->kind != YEW_JS_ARR)
+        return 0U;
+    base = out->len;
+    for (i = 0U; i < result->arr.n && added < LSP_SYMBOL_MAX; i++) {
+        const JsonValue *value = result->arr.v[i];
+        bool flat;
+
+        if (value == NULL || value->kind != YEW_JS_OBJ)
+            continue;
+        flat = yew_json_get(value, "location") != NULL;
+        if (shape == SYMBOL_SHAPE_UNKNOWN)
+            shape = flat ? SYMBOL_SHAPE_FLAT : SYMBOL_SHAPE_TREE;
+        if ((flat && shape != SYMBOL_SHAPE_FLAT) ||
+            (!flat && shape != SYMBOL_SHAPE_TREE))
+            continue;
+        if (flat)
+            symbol_information(value, out, &added);
+        else
+            symbol_document(value, doc_path, NULL, out, 0U, &added);
+    }
+    if (out->len - base > 1U)
+        yew_sort_stable(out->data + base, out->len - base,
+                        sizeof(out->data[0]), symbol_cmp, NULL);
+    return (u32)(out->len - base);
+}
+
+void yew_lsp_symbols_free(Vec_LspSymbol *symbols)
+{
+    size_t i;
+
+    if (symbols == NULL)
+        return;
+    for (i = 0U; i < symbols->len; i++) {
+        free(symbols->data[i].name);
+        free(symbols->data[i].breadcrumb);
+        free(symbols->data[i].path);
+    }
+    Vec_LspSymbol_free(symbols);
+}
+
 static const u8 *completion_doc(const JsonValue *value, u32 *len)
 {
     const u8 *text;
@@ -1101,6 +1346,7 @@ typedef struct LspPanelRequest {
 
 typedef struct LspNavigationRequest {
     u32 win_id;
+    u32 buf_id;
     u32 server_id;
     u32 cap;
     u64 seq;
@@ -1108,6 +1354,15 @@ typedef struct LspNavigationRequest {
     const char *what;
     bool always_picker;
 } LspNavigationRequest;
+
+typedef struct LspSymbolRequest {
+    u32 win_id;
+    u32 buf_id;
+    u32 server_id;
+    u64 seq;
+    u64 request;
+    char *path;
+} LspSymbolRequest;
 
 static void completion_request_free(void *ctx)
 {
@@ -1142,6 +1397,16 @@ static void panel_request_free(void *ctx)
 static void navigation_request_free(void *ctx)
 {
     free(ctx);
+}
+
+static void symbol_request_free(void *ctx)
+{
+    LspSymbolRequest *request = ctx;
+
+    if (request == NULL)
+        return;
+    free(request->path);
+    free(request);
 }
 
 static void completion_cancel_id(Ed *ed, u32 server_id, u64 request)
@@ -1519,7 +1784,8 @@ static void navigation_done(Ed *ed, void *ctx, const JsonValue *result,
     if (ed == NULL || request == NULL)
         return;
     w = yew_ed_win_by_id(ed, request->win_id);
-    if (w == NULL || ed->win != w ||
+    if (w == NULL || ed->win != w || w->buf == NULL ||
+        w->buf->id != request->buf_id ||
         w->nav_source_server != request->server_id ||
         w->nav_source_seq != request->seq ||
         w->nav_source_request != request->request)
@@ -1583,6 +1849,7 @@ bool yew_lsp_navigation_request(Ed *ed, Win *w, const char *method,
         w->nav_source_seq++;
     request = yew_xcalloc(1U, sizeof(*request));
     request->win_id = w->id;
+    request->buf_id = w->buf->id;
     request->server_id = server->id;
     request->cap = cap;
     request->seq = w->nav_source_seq;
@@ -1610,6 +1877,116 @@ bool yew_lsp_navigation_request(Ed *ed, Win *w, const char *method,
     request->request = id;
     w->nav_source_request = id;
     w->nav_source_server = server->id;
+    return true;
+}
+
+static void document_params(Bytebuf *out, const LspDoc *doc)
+{
+    JsonW writer;
+
+    yew_jsonw_init(&writer, out);
+    yew_jsonw_obj(&writer);
+    yew_jsonw_key(&writer, "textDocument");
+    yew_jsonw_obj(&writer);
+    yew_jsonw_key(&writer, "uri");
+    yew_jsonw_cstr(&writer, doc->uri);
+    yew_jsonw_obj_end(&writer);
+    yew_jsonw_obj_end(&writer);
+}
+
+static void symbols_done(Ed *ed, void *ctx, const JsonValue *result,
+                         const JsonValue *error)
+{
+    LspSymbolRequest *request = ctx;
+    LspServer *server;
+    Win *w;
+    Vec_LspSymbol symbols = {0};
+
+    if (ed == NULL || request == NULL)
+        return;
+    w = yew_ed_win_by_id(ed, request->win_id);
+    if (w == NULL || ed->win != w || w->buf == NULL ||
+        w->buf->id != request->buf_id ||
+        w->symbol_source_server != request->server_id ||
+        w->symbol_source_seq != request->seq ||
+        w->symbol_source_request != request->request)
+        return;
+    w->symbol_source_request = 0U;
+    w->symbol_source_server = 0U;
+    server = yew_lsp_server_by_id(ed, request->server_id);
+    if (error != NULL) {
+        if (server != NULL &&
+            yew_json_int(yew_json_get(error, "code"), 0) == -32601)
+            server->caps.bits &= ~YEW_LSPC_DOCUMENT_SYMBOL;
+        return;
+    }
+    if (server == NULL)
+        return;
+    (void)yew_lsp_symbols_parse(result, request->path, &symbols);
+    if (symbols.len == 0U) {
+        yew_msg(ed, YEW_MSG_INFO, "%s: no document symbols found",
+                server->cfg->id);
+        yew_lsp_symbols_free(&symbols);
+        return;
+    }
+    yew_lsp_symbol_picker_open(ed, w, &symbols, server->pos_enc);
+    yew_lsp_symbols_free(&symbols);
+}
+
+bool yew_lsp_symbols_request(Ed *ed, Win *w)
+{
+    LspDoc *doc;
+    LspServer *server;
+    LspSymbolRequest *request;
+    RpcPending pending = {0};
+    Bytebuf params;
+    u64 id;
+
+    if (ed == NULL || w == NULL || w->buf == NULL || w->buf->tb == NULL ||
+        w->buf->path == NULL)
+        return false;
+    doc = yew_lsp_doc_for_buffer(ed, w->buf);
+    server = yew_lsp_server_for_doc(ed, doc);
+    if (doc == NULL || server == NULL || server->state != YEW_LSP_READY ||
+        !yew_lsp_has(server, YEW_LSPC_DOCUMENT_SYMBOL))
+        return false;
+    completion_cancel_id(ed, w->symbol_source_server,
+                         w->symbol_source_request);
+    w->symbol_source_request = 0U;
+    w->symbol_source_server = 0U;
+    w->symbol_source_seq++;
+    if (w->symbol_source_seq == 0U)
+        w->symbol_source_seq++;
+    request = yew_xcalloc(1U, sizeof(*request));
+    request->win_id = w->id;
+    request->buf_id = w->buf->id;
+    request->server_id = server->id;
+    request->seq = w->symbol_source_seq;
+    request->path = symbol_path_copy(w->buf->path);
+    if (request->path == NULL) {
+        symbol_request_free(request);
+        return false;
+    }
+    pending.buf_id = w->buf->id;
+    pending.gen = w->buf->tb->gen;
+    pending.sent_ms = ed->now_ms;
+    pending.cb = symbols_done;
+    pending.release = symbol_request_free;
+    pending.ctx = request;
+    yew_lsp_sync_flush(ed);
+    bytebuf_init(&params);
+    document_params(&params, doc);
+    id = params.len > UINT32_MAX ? 0U :
+         yew_rpc_call(&server->rpc, "textDocument/documentSymbol",
+                      params.data, (u32)params.len, &pending);
+    bytebuf_free(&params);
+    if (id == 0U) {
+        symbol_request_free(request);
+        return false;
+    }
+    request->request = id;
+    w->symbol_source_request = id;
+    w->symbol_source_server = server->id;
     return true;
 }
 

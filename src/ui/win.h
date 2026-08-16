@@ -69,6 +69,9 @@ typedef struct Win {
     u64 nav_source_request;
     u64 nav_source_seq;
     u32 nav_source_server;
+    u64 symbol_source_request;
+    u64 symbol_source_seq;
+    u32 symbol_source_server;
 } Win;
 
 /* Sprint 14 compatibility names; new code uses the yew_vp_* API. */

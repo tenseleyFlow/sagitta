@@ -40,6 +40,10 @@ typedef enum ComplKind {
     YEW_COMPLK_NKIND
 } ComplKind;
 
+/* Shared by completion and picker rows that use the same symbol-kind
+ * vocabulary. */
+u8 yew_compl_kind_glyph(u8 kind);
+
 typedef struct ComplItem {
     const u8 *label;
     u32 label_len;
