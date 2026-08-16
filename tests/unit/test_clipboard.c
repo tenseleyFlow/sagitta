@@ -656,6 +656,7 @@ void test_clipboard_nonexit_100_writes_are_nonblocking(void)
     for (i = 0U; i < 100U; i++) {
         u64 start;
         u64 elapsed;
+        bool nonblocking = true;
         int fd;
 
         start = clip_test_cpu_ns();
@@ -668,9 +669,9 @@ void test_clipboard_nonexit_100_writes_are_nonblocking(void)
         if (fd >= 0) {
             int flags = fcntl(fd, F_GETFL);
 
-            YEW_ASSERT(flags >= 0);
-            YEW_ASSERT((flags & O_NONBLOCK) != 0);
+            nonblocking = flags >= 0 && (flags & O_NONBLOCK) != 0;
         }
+        YEW_ASSERT(nonblocking);
         if (elapsed > slowest)
             slowest = elapsed;
         clip_pump_until_idle();
