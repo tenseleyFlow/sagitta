@@ -110,6 +110,9 @@ void yew_lsp_server_restart_reset(LspServer *s);
 
 LspClient *yew_lsp_client_new(void);
 void yew_lsp_client_free(Ed *ed);
+/* Refreshes the host-owned init.fl server table after config replacement. */
+void yew_lsp_client_refresh_config(Ed *ed);
+const LspServerCfg *yew_lsp_client_cfg(Ed *ed, const char *lang);
 bool yew_lsp_client_start(Ed *ed, Buffer *b);
 /* Compiled config entry point used by init.fl overrides and protocol tests. */
 bool yew_lsp_client_start_cfg(Ed *ed, Buffer *b,

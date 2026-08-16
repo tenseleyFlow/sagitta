@@ -105,10 +105,12 @@ bool yew_lsp_log(Ed *ed)
 
 bool yew_lsp_start(Ed *ed, Buffer *b)
 {
+    const LspServerCfg *cfg;
+
     if (ed == NULL || b == NULL)
         return false;
-    if (b->path == NULL || b->lang == NULL ||
-        yew_lsp_default_cfg(b->lang) == NULL) {
+    cfg = b->lang == NULL ? NULL : yew_lsp_client_cfg(ed, b->lang);
+    if (b->path == NULL || cfg == NULL) {
         yew_msg(ed, YEW_MSG_INFO, "no LSP server configured for this buffer");
         return true;
     }
@@ -150,6 +152,7 @@ void yew_lsp_pump(Ed *ed)
 
     if (ed == NULL || !ed->model_ready)
         return;
+    yew_lsp_client_refresh_config(ed);
     for (i = 0U; i < ed->ws.nbufs; i++) {
         Buffer *b = ed->ws.bufs[i];
 
@@ -173,8 +176,11 @@ void yew_lsp_free(Ed *ed)
 
 void yew_lsp_buffer_open(Ed *ed, Buffer *b)
 {
-    if (ed != NULL && b != NULL && b->tb != NULL && b->path != NULL)
-        (void)yew_lsp_client_start(ed, b);
+    /* Startup is intentionally deferred to yew_lsp_pump().  Initial
+     * buffers hydrate before init.fl has run; starting here would race the
+     * compiled defaults against the user's lsp.servers replacement. */
+    (void)ed;
+    (void)b;
 }
 
 void yew_lsp_buffer_save(Ed *ed, Buffer *b)

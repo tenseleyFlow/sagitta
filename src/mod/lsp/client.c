@@ -15,16 +15,37 @@
 #include "edit/ed.h"
 #include "edit/job.h"
 #include "edit/loop.h"
+#include "fl/flconf.h"
+#include "fl/value.h"
 #include "mod/lsp/diag.h"
 #include "ui/message.h"
+#include "util/arena.h"
+#include "util/log.h"
 
-enum { YEW_LSP_MAX_SERVERS = 16, YEW_LSP_RESTART_WINDOW_MS = 300000 };
+enum {
+    YEW_LSP_MAX_SERVERS = 16,
+    YEW_LSP_MAX_ARGS = 14,
+    YEW_LSP_MAX_ROOTS = 32,
+    YEW_LSP_MAX_INIT_TIMEOUT_MS = 600000,
+    YEW_LSP_RESTART_WINDOW_MS = 300000
+};
 enum { YEW_LSP_STDERR_TAIL = 8U * 1024U };
+
+typedef struct LspOwnedCfg {
+    LspServerCfg pub;
+    char **args;
+    char **roots;
+} LspOwnedCfg;
 
 struct LspClient {
     LspServer *server[YEW_LSP_MAX_SERVERS];
     u32 len;
     u32 next_id;
+    LspOwnedCfg cfg[YEW_LSP_MAX_SERVERS];
+    u32 cfg_len;
+    const void *config_token;
+    bool config_loaded;
+    bool replaces_defaults;
 };
 
 static const char *const clangd_args[] = {
@@ -86,6 +107,239 @@ static char *copy_string(const char *s)
 
     (void)memcpy(copy, s, n);
     return copy;
+}
+
+static char *copy_fl_string(const FlStr *s)
+{
+    char *copy;
+
+    if (s == NULL || memchr(s->b, '\0', s->len) != NULL)
+        return NULL;
+    copy = yew_xmalloc((size_t)s->len + 1U);
+    (void)memcpy(copy, s->b, s->len);
+    copy[s->len] = '\0';
+    return copy;
+}
+
+static bool fl_map_name(const FlMap *map, const char *name, FlValue *out)
+{
+    u32 cursor = 0U;
+    FlValue key;
+    FlValue value;
+    size_t len = strlen(name);
+
+    while (fl_map_iter(map, &cursor, &key, &value)) {
+        const FlStr *s;
+
+        if (key.t != (u8)FL_STR)
+            continue;
+        s = (const FlStr *)key.as.o;
+        if ((size_t)s->len == len && memcmp(s->b, name, len) == 0) {
+            if (out != NULL)
+                *out = value;
+            return true;
+        }
+    }
+    return false;
+}
+
+static void free_string_list(char **list)
+{
+    size_t i;
+
+    if (list == NULL)
+        return;
+    for (i = 0U; list[i] != NULL; i++)
+        free(list[i]);
+    free(list);
+}
+
+static void owned_cfg_free(LspOwnedCfg *cfg)
+{
+    free((char *)cfg->pub.id);
+    free((char *)cfg->pub.lang);
+    free((char *)cfg->pub.cmd);
+    free((char *)cfg->pub.init_options);
+    free_string_list(cfg->args);
+    free_string_list(cfg->roots);
+    (void)memset(cfg, 0, sizeof(*cfg));
+}
+
+static void client_cfg_free(LspClient *client)
+{
+    u32 i;
+
+    for (i = 0U; i < client->cfg_len; i++)
+        owned_cfg_free(&client->cfg[i]);
+    client->cfg_len = 0U;
+}
+
+static bool cfg_string(const FlMap *map, const char *name, bool required,
+                       char **out)
+{
+    FlValue value;
+
+    *out = NULL;
+    if (!fl_map_name(map, name, &value))
+        return !required;
+    if (value.t != (u8)FL_STR)
+        return false;
+    *out = copy_fl_string((const FlStr *)value.as.o);
+    return *out != NULL;
+}
+
+static bool cfg_string_list(const FlMap *map, const char *name, u32 max,
+                            char ***out)
+{
+    FlValue value;
+    const FlList *list;
+    char **copy;
+    u32 i;
+
+    *out = NULL;
+    if (!fl_map_name(map, name, &value) || value.t == (u8)FL_NIL)
+        return true;
+    if (value.t != (u8)FL_LIST)
+        return false;
+    list = (const FlList *)value.as.o;
+    if (list->n > max)
+        return false;
+    copy = yew_xcalloc((size_t)list->n + 1U, sizeof(*copy));
+    for (i = 0U; i < list->n; i++) {
+        if (list->v[i].t != (u8)FL_STR ||
+            (copy[i] = copy_fl_string((const FlStr *)list->v[i].as.o)) == NULL) {
+            free_string_list(copy);
+            return false;
+        }
+    }
+    *out = copy;
+    return true;
+}
+
+static bool cfg_init_options(const FlMap *map, char **out)
+{
+    FlValue value;
+    const FlStr *text;
+    Arena arena;
+    JsonErr err;
+    JsonValue *json;
+
+    *out = NULL;
+    if (!fl_map_name(map, "init_options", &value) || value.t == (u8)FL_NIL)
+        return true;
+    if (value.t != (u8)FL_STR)
+        return false;
+    text = (const FlStr *)value.as.o;
+    if (memchr(text->b, '\0', text->len) != NULL)
+        return false;
+    arena_init(&arena);
+    json = yew_json_parse(&arena, (const u8 *)text->b, text->len, &err);
+    if (json == NULL || json->kind != YEW_JS_OBJ) {
+        arena_free_all(&arena);
+        return false;
+    }
+    arena_free_all(&arena);
+    *out = copy_fl_string(text);
+    return *out != NULL;
+}
+
+static bool cfg_timeout(const FlMap *map, i32 *out)
+{
+    FlValue value;
+
+    *out = YEW_RPC_INIT_TIMEOUT_MS;
+    if (!fl_map_name(map, "init_timeout_ms", &value))
+        return true;
+    if (value.t != (u8)FL_INT || value.as.i <= 0 ||
+        value.as.i > YEW_LSP_MAX_INIT_TIMEOUT_MS)
+        return false;
+    *out = (i32)value.as.i;
+    return true;
+}
+
+static bool owned_cfg_parse(LspOwnedCfg *out, const FlStr *lang,
+                            const FlMap *row)
+{
+    char *id = NULL;
+    char *cmd = NULL;
+    char *init_options = NULL;
+
+    (void)memset(out, 0, sizeof(*out));
+    out->pub.lang = copy_fl_string(lang);
+    if (out->pub.lang == NULL ||
+        !cfg_string(row, "id", true, &id) ||
+        !cfg_string(row, "cmd", true, &cmd) ||
+        !cfg_string_list(row, "args", YEW_LSP_MAX_ARGS, &out->args) ||
+        !cfg_string_list(row, "roots", YEW_LSP_MAX_ROOTS, &out->roots) ||
+        !cfg_init_options(row, &init_options) ||
+        !cfg_timeout(row, &out->pub.init_timeout_ms)) {
+        free(id);
+        free(cmd);
+        free(init_options);
+        owned_cfg_free(out);
+        return false;
+    }
+    out->pub.id = id;
+    out->pub.cmd = cmd;
+    out->pub.init_options = init_options;
+    if (out->pub.id[0] == '\0' || out->pub.cmd[0] == '\0' ||
+        out->pub.lang[0] == '\0') {
+        owned_cfg_free(out);
+        return false;
+    }
+    out->pub.args = (const char *const *)out->args;
+    out->pub.roots = (const char *const *)out->roots;
+    return true;
+}
+
+static void cfg_warn(Ed *ed, const FlStr *lang, const char *why)
+{
+    yew_log(YEW_LOG_WARN, "LSP config: ignoring server %.*s: %s",
+            (int)lang->len, lang->b, why);
+    yew_msg(ed, YEW_MSG_WARN, "LSP config: ignoring server %.*s: %s",
+            (int)lang->len, lang->b, why);
+}
+
+static void client_cfg_load(Ed *ed, LspClient *client)
+{
+    FlValue lsp;
+    FlValue servers;
+    const FlMap *table;
+    u32 cursor = 0U;
+    FlValue key;
+    FlValue value;
+
+    client->config_token = ed->config;
+    client->config_loaded = true;
+    if (!yew_config_get_global(ed, "lsp", 3U, &lsp) ||
+        lsp.t != (u8)FL_MAP ||
+        !fl_map_name((const FlMap *)lsp.as.o, "servers", &servers))
+        return;
+    client->replaces_defaults = true;
+    if (servers.t != (u8)FL_MAP) {
+        yew_log(YEW_LOG_WARN, "LSP config: lsp.servers must be a map");
+        yew_msg(ed, YEW_MSG_WARN, "LSP config: lsp.servers must be a map");
+        return;
+    }
+    table = (const FlMap *)servers.as.o;
+    while (fl_map_iter(table, &cursor, &key, &value)) {
+        const FlStr *lang;
+
+        if (key.t != (u8)FL_STR)
+            continue;
+        lang = (const FlStr *)key.as.o;
+        if (client->cfg_len == YEW_LSP_MAX_SERVERS) {
+            cfg_warn(ed, lang, "server table exceeds 16 entries");
+            continue;
+        }
+        if (value.t != (u8)FL_MAP ||
+            !owned_cfg_parse(&client->cfg[client->cfg_len], lang,
+                             (const FlMap *)value.as.o)) {
+            cfg_warn(ed, lang, "invalid row or field type");
+            continue;
+        }
+        client->cfg_len++;
+    }
 }
 
 static char *canonical_dir(const char *path)
@@ -681,6 +935,36 @@ LspClient *yew_lsp_client_new(void)
     return client;
 }
 
+void yew_lsp_client_refresh_config(Ed *ed)
+{
+    if (ed == NULL)
+        return;
+    if (ed->lsp != NULL && ed->lsp->config_loaded &&
+        ed->lsp->config_token != ed->config)
+        yew_lsp_client_free(ed);
+    if (ed->lsp == NULL)
+        ed->lsp = yew_lsp_client_new();
+    if (!ed->lsp->config_loaded)
+        client_cfg_load(ed, ed->lsp);
+}
+
+const LspServerCfg *yew_lsp_client_cfg(Ed *ed, const char *lang)
+{
+    u32 i;
+
+    if (ed == NULL || lang == NULL)
+        return NULL;
+    yew_lsp_client_refresh_config(ed);
+    if (!ed->lsp->replaces_defaults)
+        return yew_lsp_default_cfg(lang);
+    if (strncmp(lang, "fortran", 7U) == 0)
+        lang = "fortran";
+    for (i = 0U; i < ed->lsp->cfg_len; i++)
+        if (strcmp(ed->lsp->cfg[i].pub.lang, lang) == 0)
+            return &ed->lsp->cfg[i].pub;
+    return NULL;
+}
+
 static LspServer *find_server(const LspClient *c, const char *id,
                               const char *root)
 {
@@ -807,7 +1091,7 @@ bool yew_lsp_client_start(Ed *ed, Buffer *b)
 
     if (b == NULL || b->lang == NULL)
         return false;
-    cfg = yew_lsp_default_cfg(b->lang);
+    cfg = yew_lsp_client_cfg(ed, b->lang);
     return cfg != NULL && yew_lsp_client_start_cfg(ed, b, cfg);
 }
 
@@ -1064,6 +1348,7 @@ void yew_lsp_client_free(Ed *ed)
         yew_lsp_server_dispose(s);
         free(s);
     }
+    client_cfg_free(ed->lsp);
     free(ed->lsp);
     ed->lsp = NULL;
 }
