@@ -746,6 +746,13 @@ bool yew_lsp_server_initialized(LspServer *s, const JsonValue *result)
                 "%s returned unknown positionEncoding; using utf-16",
                 s->cfg->id);
     if (s->caps.sync_kind == 0U) {
+        yew_log(YEW_LOG_ERROR,
+                "%s does not support document synchronization; "
+                "server is unusable", s->cfg->id);
+        if (s->owner != NULL)
+            yew_msg(s->owner, YEW_MSG_ERROR,
+                    "%s does not support document synchronization; "
+                    "LSP is off for this workspace", s->cfg->id);
         s->state = YEW_LSP_DEAD;
         return false;
     }
@@ -1326,7 +1333,8 @@ void yew_lsp_client_pump(Ed *ed)
                                         (const char *)tail.data, &msg) ||
                 msg.len != 0U) {
                 bytebuf_push_u8(&msg, 0U);
-                yew_msg(ed, s->gave_up ? YEW_MSG_ERROR : YEW_MSG_WARN,
+                yew_msg(ed, s->gave_up ? YEW_MSG_ERROR :
+                            s->restarts == 2U ? YEW_MSG_INFO : YEW_MSG_WARN,
                         "%s", msg.data);
             }
             bytebuf_free(&tail);

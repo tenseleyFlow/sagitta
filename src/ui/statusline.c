@@ -366,6 +366,10 @@ void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
     char wrap_badge[8];
     char syn_badge[8];
     char diag_badge[48];
+    size_t diag_error_off = 0U;
+    size_t diag_error_len = 0U;
+    size_t diag_warn_off = 0U;
+    size_t diag_warn_len = 0U;
     char recording[32];
     RecStatus rec_status;
     Segment segments[14];
@@ -530,25 +534,27 @@ void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
         (w->buf->diag->n[YEW_DIAG_ERROR] != 0U ||
          w->buf->diag->n[YEW_DIAG_WARN] != 0U)) {
         size_t used = strlen(diag_badge);
-        char *at = diag_badge + used;
-        size_t left = sizeof(diag_badge) - used;
 
-        if (used != 0U && left > 1U) {
-            *at++ = ' ';
-            *at = '\0';
-            left--;
-        }
-        if (w->buf->diag->n[YEW_DIAG_ERROR] != 0U &&
-            w->buf->diag->n[YEW_DIAG_WARN] != 0U)
-            (void)snprintf(at, left, "E:%u W:%u",
-                           (unsigned)w->buf->diag->n[YEW_DIAG_ERROR],
-                           (unsigned)w->buf->diag->n[YEW_DIAG_WARN]);
-        else if (w->buf->diag->n[YEW_DIAG_ERROR] != 0U)
-            (void)snprintf(at, left, "E:%u",
+        if (w->buf->diag->n[YEW_DIAG_ERROR] != 0U) {
+            if (used != 0U && used + 1U < sizeof(diag_badge))
+                diag_badge[used++] = ' ';
+            diag_error_off = used;
+            (void)snprintf(diag_badge + used, sizeof(diag_badge) - used,
+                           "E:%u",
                            (unsigned)w->buf->diag->n[YEW_DIAG_ERROR]);
-        else
-            (void)snprintf(at, left, "W:%u",
+            used = strlen(diag_badge);
+            diag_error_len = used - diag_error_off;
+        }
+        if (w->buf->diag->n[YEW_DIAG_WARN] != 0U) {
+            if (used != 0U && used + 1U < sizeof(diag_badge))
+                diag_badge[used++] = ' ';
+            diag_warn_off = used;
+            (void)snprintf(diag_badge + used, sizeof(diag_badge) - used,
+                           "W:%u",
                            (unsigned)w->buf->diag->n[YEW_DIAG_WARN]);
+            used = strlen(diag_badge);
+            diag_warn_len = used - diag_warn_off;
+        }
     }
 #endif
     segments[12] = (Segment){diag_badge, 5U, diag_badge[0] != '\0'};
@@ -606,6 +612,16 @@ void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
             }
             if (i == 2U && w->buf->meta.eol == YEW_EOL_MIXED)
                 out->warn_at = at;
+            if (i == 12U) {
+                if (diag_error_len != 0U) {
+                    out->diag_error_at = at + diag_error_off;
+                    out->diag_error_len = diag_error_len;
+                }
+                if (diag_warn_len != 0U) {
+                    out->diag_warn_at = at + diag_warn_off;
+                    out->diag_warn_len = diag_warn_len;
+                }
+            }
             at = append_text(out->body, out->body_cap, at,
                              segments[i].text);
             if (i == 2U && w->buf->meta.eol == YEW_EOL_MIXED)
@@ -623,6 +639,76 @@ void yew_statusline_text_free(StatuslineText *text)
         return;
     free(text->body);
     memset(text, 0, sizeof(*text));
+}
+
+typedef struct StatusRoleSpan {
+    size_t at;
+    size_t len;
+    const char *role;
+    bool metadata_warn;
+} StatusRoleSpan;
+
+static u16 statusline_draw_role(Ed *ed, Grid *grid, u16 row, u16 col,
+                                const u8 *text, size_t len,
+                                const YewUiStyle *base,
+                                const StatusRoleSpan *span)
+{
+    YewColor fg = base->row_fg;
+    YewColor bg = base->row_bg;
+    u16 attrs = 0U;
+
+    if (span->metadata_warn) {
+        fg = indexed_color(STATUS_WARN_COLOR);
+        attrs = YEW_ATTR_BOLD;
+    } else {
+        const ThemeEnt *theme = yew_theme_ui_tab(ed, span->role);
+
+        if (theme != NULL) {
+            if (theme->fg.tag != YEW_COLOR_DEFAULT)
+                fg = theme->fg;
+            if (theme->bg.tag != YEW_COLOR_DEFAULT)
+                bg = theme->bg;
+            attrs = theme->attrs;
+        }
+    }
+    return yew_grid_puts(grid, row, col, text, len, fg, bg, attrs);
+}
+
+static void statusline_draw_body(Ed *ed, Grid *grid, u16 row, u16 col,
+                                 const StatuslineText *text,
+                                 const YewUiStyle *style)
+{
+    StatusRoleSpan spans[3];
+    size_t n = 0U;
+    size_t pos = 0U;
+    size_t i;
+
+    if (text->warn_len != 0U)
+        spans[n++] = (StatusRoleSpan){text->warn_at, text->warn_len,
+                                     NULL, true};
+    if (text->diag_error_len != 0U)
+        spans[n++] = (StatusRoleSpan){text->diag_error_at,
+                                     text->diag_error_len,
+                                     "diag.error", false};
+    if (text->diag_warn_len != 0U)
+        spans[n++] = (StatusRoleSpan){text->diag_warn_at,
+                                     text->diag_warn_len,
+                                     "diag.warn", false};
+    for (i = 0U; i < n; i++) {
+        if (spans[i].at > pos)
+            col = yew_grid_puts(grid, row, col,
+                                (const u8 *)text->body + pos,
+                                spans[i].at - pos, style->row_fg,
+                                style->row_bg, 0U);
+        col = statusline_draw_role(ed, grid, row, col,
+                                   (const u8 *)text->body + spans[i].at,
+                                   spans[i].len, style, &spans[i]);
+        pos = spans[i].at + spans[i].len;
+    }
+    if (pos < text->body_len)
+        (void)yew_grid_puts(grid, row, col, (const u8 *)text->body + pos,
+                            text->body_len - pos, style->row_fg,
+                            style->row_bg, 0U);
 }
 
 void yew_statusline_draw(Ed *ed, Win *w)
@@ -664,27 +750,7 @@ void yew_statusline_draw(Ed *ed, Win *w)
                             recording_style.chip_bg,
                             YEW_ATTR_BOLD);
     if (col < grid->cols && text.body_len != 0U) {
-        if (text.warn_len == 0U) {
-            (void)yew_grid_puts(grid, row, col, (const u8 *)text.body,
-                                text.body_len, style.row_fg, style.row_bg,
-                                0U);
-        } else {
-            size_t tail = text.warn_at + text.warn_len;
-
-            col = yew_grid_puts(grid, row, col, (const u8 *)text.body,
-                                text.warn_at, style.row_fg, style.row_bg,
-                                0U);
-            col = yew_grid_puts(grid, row, col,
-                                (const u8 *)text.body + text.warn_at,
-                                text.warn_len,
-                                indexed_color(STATUS_WARN_COLOR),
-                                style.row_bg, YEW_ATTR_BOLD);
-            if (tail < text.body_len)
-                (void)yew_grid_puts(grid, row, col,
-                                    (const u8 *)text.body + tail,
-                                    text.body_len - tail, style.row_fg,
-                                    style.row_bg, 0U);
-        }
+        statusline_draw_body(ed, grid, row, col, &text, &style);
     }
     yew_statusline_text_free(&text);
 }

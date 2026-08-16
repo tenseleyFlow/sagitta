@@ -22,6 +22,7 @@
 #include "edit/ws_cmds.h"
 #include "fl/flconf.h"
 #include "fl/record.h"
+#include "mod/lsp/lsp.h"
 #include "ui/pickers.h"
 #include "ui/cmdline.h"
 #include "ui/complmenu.h"
@@ -80,6 +81,7 @@ static CmdStatus cmd_syn_set(CmdCtx *cx)
     Buffer *b;
     SynEngine *engine;
     const SynLangDesc *desc;
+    const char *next_lang;
     u32 lang;
 
     if (cx == NULL || cx->win == NULL || cx->win->buf == NULL ||
@@ -88,6 +90,8 @@ static CmdStatus cmd_syn_set(CmdCtx *cx)
     b = cx->win->buf;
     if ((cx->sarg_len == 4U && memcmp(cx->sarg, "none", 4U) == 0) ||
         (cx->sarg_len == 4U && memcmp(cx->sarg, "text", 4U) == 0)) {
+        if (b->lang != NULL)
+            yew_lsp_buffer_close(cx->ed, b);
         yew_syn_attach(&b->syn, YEW_LANG_NONE, b->tb);
         b->lang = NULL;
         return YEW_CMD_OK;
@@ -119,9 +123,18 @@ static CmdStatus cmd_syn_set(CmdCtx *cx)
     yew_syn_attach(&b->syn, lang, b->tb);
     yew_syn_buf_bind(&b->syn, engine);
     desc = yew_syn_lang_desc(lang);
-    b->lang = desc == NULL ? NULL :
-              strcmp(desc->name, "fortran-fixed") == 0 ?
-              "fortran(fixed)" : desc->name;
+    next_lang = desc == NULL ? NULL :
+                strcmp(desc->name, "fortran-fixed") == 0 ?
+                "fortran(fixed)" : desc->name;
+    if ((b->lang == NULL) != (next_lang == NULL) ||
+        (b->lang != NULL && strcmp(b->lang, next_lang) != 0)) {
+        yew_lsp_buffer_close(cx->ed, b);
+        b->lang = next_lang;
+        if (next_lang != NULL)
+            yew_lsp_buffer_open(cx->ed, b);
+    } else {
+        b->lang = next_lang;
+    }
     return YEW_CMD_OK;
 }
 

@@ -31,6 +31,10 @@ typedef struct StatuslineText {
     u16 body_cells;
     size_t warn_at;
     size_t warn_len;
+    size_t diag_error_at;
+    size_t diag_error_len;
+    size_t diag_warn_at;
+    size_t diag_warn_len;
 } StatuslineText;
 
 YewUiStyle yew_statusline_mode_style(Mode mode);

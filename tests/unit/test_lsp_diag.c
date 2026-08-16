@@ -3,12 +3,15 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#include "edit/theme_cmds.h"
 #include "mod/lsp/diag.h"
 #include "mod/lsp/json.h"
 #include "term/grid.h"
 #include "ui/gutter.h"
 #include "ui/message.h"
+#include "ui/statusline.h"
 #include "util/arena.h"
+#include "unicode/width.h"
 
 typedef struct DiagFix {
     Ed ed;
@@ -192,6 +195,76 @@ void test_lsp_diag_gutter_hint_and_picker_identity(void)
     YEW_ASSERT_EQ_U64(yew_picker_total(&f.ed), 4U);
     YEW_ASSERT_EQ_I64(yew_picker_selected(&f.ed), selected);
     yew_picker_close(&f.ed, false);
+    diag_fix_free(&f);
+}
+
+void test_lsp_diag_statusline_roles_and_ambiguous_glyphs(void)
+{
+    static const char rows[] =
+        "[{\"range\":{\"start\":{\"line\":0,\"character\":0},"
+        "\"end\":{\"line\":0,\"character\":1}},"
+        "\"severity\":1,\"message\":\"error\"},"
+        "{\"range\":{\"start\":{\"line\":1,\"character\":0},"
+        "\"end\":{\"line\":1,\"character\":1}},"
+        "\"severity\":2,\"message\":\"warning\"}]";
+    DiagFix f;
+    Buffer *b;
+    StatuslineText text;
+    const ThemeEnt *error_role;
+    const ThemeEnt *warn_role;
+    char theme_error[192];
+    int prefix;
+    u16 col;
+    size_t i;
+    YewWidthOpts width = {true};
+
+    diag_fix_init(&f);
+    b = yew_ed_doc(&f.ed);
+    yew_diag_replace(&f.ed, b, 1U, diag_array(&f, rows), 1);
+    YEW_ASSERT(yew_theme_apply(&f.ed, "quiver-dark", theme_error,
+                               sizeof(theme_error)));
+    YEW_ASSERT(yew_grid_init(&f.ed.grid, &f.ed.interner, 2U, 120U));
+    f.ed.grid_ready = true;
+    f.ed.footer_rect = (Rect){0U, 1U, 120U, 1U};
+    yew_statusline_build(&f.ed, f.ed.win, 120U, &text);
+    YEW_ASSERT_EQ_MEM(text.body + text.diag_error_at, "E:1",
+                      text.diag_error_len);
+    YEW_ASSERT_EQ_MEM(text.body + text.diag_warn_at, "W:1",
+                      text.diag_warn_len);
+    error_role = yew_theme_ui_tab(&f.ed, "diag.error");
+    warn_role = yew_theme_ui_tab(&f.ed, "diag.warn");
+    YEW_ASSERT_NOT_NULL(error_role);
+    YEW_ASSERT_NOT_NULL(warn_role);
+    yew_statusline_draw(&f.ed, f.ed.win);
+    prefix = yew_str_width((const u8 *)text.body, text.diag_error_at, 4U);
+    YEW_ASSERT(prefix >= 0);
+    col = (u16)(text.chip_cells + (u16)prefix);
+    for (i = 0U; i < text.diag_error_len; i++)
+        YEW_ASSERT_EQ_MEM(&f.ed.grid.back[f.ed.grid.cols + col + (u16)i].fg,
+                          &error_role->fg, sizeof(error_role->fg));
+    prefix = yew_str_width((const u8 *)text.body, text.diag_warn_at, 4U);
+    YEW_ASSERT(prefix >= 0);
+    col = (u16)(text.chip_cells + (u16)prefix);
+    for (i = 0U; i < text.diag_warn_len; i++)
+        YEW_ASSERT_EQ_MEM(&f.ed.grid.back[f.ed.grid.cols + col + (u16)i].fg,
+                          &warn_role->fg, sizeof(warn_role->fg));
+    yew_statusline_text_free(&text);
+
+    yew_width_set_opts(&width);
+    for (i = YEW_DIAG_ERROR; i <= YEW_DIAG_HINT; i++) {
+        size_t n;
+        const char *glyph = yew_diag_glyph((u8)i, &n);
+        GutterSign sign = {(const u8 *)glyph, (u8)n,
+                           yew_diag_role((u8)i), 0U};
+        const GutterSign *stored;
+
+        yew_gutter_sign_set(f.ed.win, LINENO(i - 1U), YEW_SIGN_DIAG,
+                            &sign);
+        stored = &f.ed.win->gutter_signs.v[i - 1U].sign[YEW_SIGN_DIAG];
+        YEW_ASSERT_EQ_I64(yew_cluster_width(stored->glyph,
+                                            stored->nbytes), 1);
+    }
+    yew_width_set_opts(NULL);
     diag_fix_free(&f);
 }
 

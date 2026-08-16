@@ -273,7 +273,15 @@ void yew_diag_replace(Ed *ed, Buffer *b, u32 server, const JsonValue *arr,
         yew_sort_stable(store->d.data, store->d.len,
                         sizeof(*store->d.data), diag_order, NULL);
     store_recount(store);
-    store->stale = version < 0;
+    if (version < 0) {
+        const LspDoc *doc = yew_lsp_doc_find(ed, b->id, NULL);
+
+        /* Without a wire version, the only state we can prove stale is a
+         * local generation the server has not seen at the last flush. */
+        store->stale = doc == NULL || doc->sent_gen != b->tb->gen;
+    } else {
+        store->stale = false;
+    }
     if (version >= 0)
         store->version = version;
     store->gen++;
