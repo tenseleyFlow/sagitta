@@ -72,6 +72,36 @@ bool yew_lsp_signature(Ed *ed, Win *w)
     return require_lsp(ed);
 }
 
+bool yew_lsp_goto_definition(Ed *ed, Win *w)
+{
+    (void)w;
+    return require_lsp(ed);
+}
+
+bool yew_lsp_goto_declaration(Ed *ed, Win *w)
+{
+    (void)w;
+    return require_lsp(ed);
+}
+
+bool yew_lsp_goto_type_definition(Ed *ed, Win *w)
+{
+    (void)w;
+    return require_lsp(ed);
+}
+
+bool yew_lsp_goto_implementation(Ed *ed, Win *w)
+{
+    (void)w;
+    return require_lsp(ed);
+}
+
+bool yew_lsp_references(Ed *ed, Win *w)
+{
+    (void)w;
+    return require_lsp(ed);
+}
+
 void yew_lsp_signature_maybe_auto_trigger(Ed *ed, Win *w,
                                           const u8 *text, u32 len)
 {

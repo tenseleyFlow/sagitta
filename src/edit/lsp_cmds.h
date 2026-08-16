@@ -13,6 +13,11 @@ CmdStatus yew_lsp_cmd_diag_prev(CmdCtx *cx);
 CmdStatus yew_lsp_cmd_complete(CmdCtx *cx);
 CmdStatus yew_lsp_cmd_hover(CmdCtx *cx);
 CmdStatus yew_lsp_cmd_signature(CmdCtx *cx);
+CmdStatus yew_lsp_cmd_goto_def(CmdCtx *cx);
+CmdStatus yew_lsp_cmd_goto_decl(CmdCtx *cx);
+CmdStatus yew_lsp_cmd_goto_type(CmdCtx *cx);
+CmdStatus yew_lsp_cmd_goto_impl(CmdCtx *cx);
+CmdStatus yew_lsp_cmd_references(CmdCtx *cx);
 CmdStatus yew_lsp_cmd_require(CmdCtx *cx);
 
 #endif

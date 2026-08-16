@@ -18,6 +18,7 @@
 
 #include "edit/ed.h"
 #include "mod/lsp/client.h"
+#include "mod/lsp/pickers.h"
 #include "mod/lsp/sync.h"
 #include "text/edit.h"
 #include "text/undo.h"
@@ -508,6 +509,128 @@ bool yew_lsp_signature_parse(const JsonValue *result, Bytebuf *body,
     return true;
 }
 
+static bool location_position(const JsonValue *value, u32 *line, u32 *chr)
+{
+    const JsonValue *linev;
+    const JsonValue *chrv;
+
+    if (value == NULL || value->kind != YEW_JS_OBJ || line == NULL ||
+        chr == NULL)
+        return false;
+    linev = yew_json_get(value, "line");
+    chrv = yew_json_get(value, "character");
+    if (linev == NULL || chrv == NULL || linev->kind != YEW_JS_INT ||
+        chrv->kind != YEW_JS_INT || linev->i < 0 || chrv->i < 0 ||
+        (u64)linev->i > UINT32_MAX || (u64)chrv->i > UINT32_MAX)
+        return false;
+    *line = (u32)linev->i;
+    *chr = (u32)chrv->i;
+    return true;
+}
+
+static bool location_range(const JsonValue *value, LspLoc *loc)
+{
+    if (value == NULL || value->kind != YEW_JS_OBJ || loc == NULL ||
+        !location_position(yew_json_get(value, "start"), &loc->line,
+                           &loc->chr) ||
+        !location_position(yew_json_get(value, "end"), &loc->end_line,
+                           &loc->end_chr))
+        return false;
+    return loc->end_line > loc->line ||
+           (loc->end_line == loc->line && loc->end_chr >= loc->chr);
+}
+
+static bool location_one(const JsonValue *value, LspLoc *out)
+{
+    const JsonValue *uriv;
+    const JsonValue *rangev;
+    const u8 *uri;
+    u32 uri_len = 0U;
+    Bytebuf path;
+
+    if (value == NULL || value->kind != YEW_JS_OBJ || out == NULL)
+        return false;
+    uriv = yew_json_get(value, "targetUri");
+    rangev = yew_json_get(value, "targetSelectionRange");
+    if (uriv == NULL) {
+        uriv = yew_json_get(value, "uri");
+        rangev = yew_json_get(value, "range");
+    } else if (rangev == NULL) {
+        rangev = yew_json_get(value, "targetRange");
+    }
+    uri = yew_json_str(uriv, &uri_len);
+    if (uri == NULL || !location_range(rangev, out))
+        return false;
+    bytebuf_init(&path);
+    if (!yew_lsp_path_of_uri(&path, uri, uri_len) || path.len == 0U ||
+        memchr(path.data, 0, path.len) != NULL) {
+        bytebuf_free(&path);
+        return false;
+    }
+    bytebuf_push_u8(&path, 0U);
+    out->path = (char *)path.data;
+    return true;
+}
+
+static int location_cmp(const void *a, const void *b, void *ctx)
+{
+    const LspLoc *left = a;
+    const LspLoc *right = b;
+    int cmp;
+
+    (void)ctx;
+    cmp = strcmp(left->path, right->path);
+    if (cmp != 0)
+        return cmp;
+    if (left->line != right->line)
+        return left->line < right->line ? -1 : 1;
+    if (left->chr != right->chr)
+        return left->chr < right->chr ? -1 : 1;
+    return 0;
+}
+
+u32 yew_lsp_locations_parse(const JsonValue *result, Vec_LspLoc *out)
+{
+    enum { LSP_LOCATION_MAX = 20000U };
+    size_t base;
+    u32 n;
+    u32 i;
+
+    if (out == NULL || result == NULL || result->kind == YEW_JS_NULL)
+        return 0U;
+    base = out->len;
+    if (result->kind == YEW_JS_OBJ) {
+        LspLoc loc = {0};
+
+        if (location_one(result, &loc))
+            Vec_LspLoc_push(out, loc);
+    } else if (result->kind == YEW_JS_ARR) {
+        n = result->arr.n < LSP_LOCATION_MAX ? result->arr.n :
+                                               LSP_LOCATION_MAX;
+        for (i = 0U; i < n; i++) {
+            LspLoc loc = {0};
+
+            if (location_one(result->arr.v[i], &loc))
+                Vec_LspLoc_push(out, loc);
+        }
+    }
+    if (out->len - base > 1U)
+        yew_sort_stable(out->data + base, out->len - base,
+                        sizeof(out->data[0]), location_cmp, NULL);
+    return (u32)(out->len - base);
+}
+
+void yew_lsp_locations_free(Vec_LspLoc *locs)
+{
+    size_t i;
+
+    if (locs == NULL)
+        return;
+    for (i = 0U; i < locs->len; i++)
+        free(locs->data[i].path);
+    Vec_LspLoc_free(locs);
+}
+
 static const u8 *completion_doc(const JsonValue *value, u32 *len)
 {
     const u8 *text;
@@ -976,6 +1099,16 @@ typedef struct LspPanelRequest {
     u8 kind;
 } LspPanelRequest;
 
+typedef struct LspNavigationRequest {
+    u32 win_id;
+    u32 server_id;
+    u32 cap;
+    u64 seq;
+    u64 request;
+    const char *what;
+    bool always_picker;
+} LspNavigationRequest;
+
 static void completion_request_free(void *ctx)
 {
     LspCompletionRequest *request = ctx;
@@ -1002,6 +1135,11 @@ static void completion_shadow_free(void *ctx)
 }
 
 static void panel_request_free(void *ctx)
+{
+    free(ctx);
+}
+
+static void navigation_request_free(void *ctx)
 {
     free(ctx);
 }
@@ -1335,6 +1473,144 @@ bool yew_lsp_hover_request(Ed *ed, Win *w)
 bool yew_lsp_signature_request(Ed *ed, Win *w)
 {
     return panel_request_start(ed, w, (u8)LSP_PANEL_SIGNATURE);
+}
+
+static void navigation_params(Bytebuf *out, const LspDoc *doc,
+                              u8 pos_enc, const TextBuf *tb, ByteOff cursor,
+                              bool references)
+{
+    JsonW writer;
+    i64 line;
+    i64 character;
+
+    yew_lsp_pos_of_off(pos_enc, tb, cursor, &line, &character);
+    yew_jsonw_init(&writer, out);
+    yew_jsonw_obj(&writer);
+    yew_jsonw_key(&writer, "textDocument");
+    yew_jsonw_obj(&writer);
+    yew_jsonw_key(&writer, "uri");
+    yew_jsonw_cstr(&writer, doc->uri);
+    yew_jsonw_obj_end(&writer);
+    yew_jsonw_key(&writer, "position");
+    yew_jsonw_obj(&writer);
+    yew_jsonw_key(&writer, "line");
+    yew_jsonw_int(&writer, line);
+    yew_jsonw_key(&writer, "character");
+    yew_jsonw_int(&writer, character);
+    yew_jsonw_obj_end(&writer);
+    if (references) {
+        yew_jsonw_key(&writer, "context");
+        yew_jsonw_obj(&writer);
+        yew_jsonw_key(&writer, "includeDeclaration");
+        yew_jsonw_bool(&writer, true);
+        yew_jsonw_obj_end(&writer);
+    }
+    yew_jsonw_obj_end(&writer);
+}
+
+static void navigation_done(Ed *ed, void *ctx, const JsonValue *result,
+                            const JsonValue *error)
+{
+    LspNavigationRequest *request = ctx;
+    LspServer *server;
+    Win *w;
+    Vec_LspLoc locs = {0};
+
+    if (ed == NULL || request == NULL)
+        return;
+    w = yew_ed_win_by_id(ed, request->win_id);
+    if (w == NULL || ed->win != w ||
+        w->nav_source_server != request->server_id ||
+        w->nav_source_seq != request->seq ||
+        w->nav_source_request != request->request)
+        return;
+    w->nav_source_request = 0U;
+    w->nav_source_server = 0U;
+    server = yew_lsp_server_by_id(ed, request->server_id);
+    if (error != NULL) {
+        if (server != NULL &&
+            yew_json_int(yew_json_get(error, "code"), 0) == -32601)
+            server->caps.bits &= ~request->cap;
+        return;
+    }
+    if (server == NULL)
+        return;
+    (void)yew_lsp_locations_parse(result, &locs);
+    if (locs.len == 0U) {
+        yew_msg(ed, YEW_MSG_INFO, "%s: no %s found", server->cfg->id,
+                request->what);
+        yew_lsp_locations_free(&locs);
+        return;
+    }
+    if (locs.len == 1U && !request->always_picker) {
+        if (!yew_lsp_location_jump(ed, w, &locs.data[0], server->pos_enc))
+            yew_msg(ed, YEW_MSG_ERROR, "cannot open %s",
+                    locs.data[0].path);
+        yew_lsp_locations_free(&locs);
+        return;
+    }
+    yew_lsp_location_picker_open(ed, w, &locs, server->pos_enc,
+                                 request->what);
+    yew_lsp_locations_free(&locs);
+}
+
+bool yew_lsp_navigation_request(Ed *ed, Win *w, const char *method,
+                                u32 cap, const char *what,
+                                bool always_picker)
+{
+    LspDoc *doc;
+    LspServer *server;
+    LspNavigationRequest *request;
+    RpcPending pending = {0};
+    Bytebuf params;
+    const Cursor *cursor;
+    u64 id;
+
+    if (ed == NULL || w == NULL || w->buf == NULL || w->buf->tb == NULL ||
+        method == NULL || what == NULL || w->cs.curs.len != 1U ||
+        w->cs.primary >= w->cs.curs.len)
+        return false;
+    doc = yew_lsp_doc_for_buffer(ed, w->buf);
+    server = yew_lsp_server_for_doc(ed, doc);
+    if (doc == NULL || server == NULL || server->state != YEW_LSP_READY ||
+        !yew_lsp_has(server, cap))
+        return false;
+    completion_cancel_id(ed, w->nav_source_server, w->nav_source_request);
+    w->nav_source_request = 0U;
+    w->nav_source_server = 0U;
+    w->nav_source_seq++;
+    if (w->nav_source_seq == 0U)
+        w->nav_source_seq++;
+    request = yew_xcalloc(1U, sizeof(*request));
+    request->win_id = w->id;
+    request->server_id = server->id;
+    request->cap = cap;
+    request->seq = w->nav_source_seq;
+    request->what = what;
+    request->always_picker = always_picker;
+    pending.buf_id = w->buf->id;
+    pending.gen = w->buf->tb->gen;
+    pending.sent_ms = ed->now_ms;
+    pending.cb = navigation_done;
+    pending.release = navigation_request_free;
+    pending.ctx = request;
+    cursor = &w->cs.curs.data[w->cs.primary];
+    yew_lsp_sync_flush(ed);
+    bytebuf_init(&params);
+    navigation_params(&params, doc, server->pos_enc, w->buf->tb,
+                      cursor->pos, cap == YEW_LSPC_REFERENCES);
+    id = params.len > UINT32_MAX ? 0U :
+         yew_rpc_call(&server->rpc, method, params.data, (u32)params.len,
+                      &pending);
+    bytebuf_free(&params);
+    if (id == 0U) {
+        navigation_request_free(request);
+        return false;
+    }
+    request->request = id;
+    w->nav_source_request = id;
+    w->nav_source_server = server->id;
+    return true;
 }
 
 static void completion_rows_discard(Vec_ComplItem *rows)

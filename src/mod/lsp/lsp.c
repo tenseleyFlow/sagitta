@@ -9,6 +9,7 @@
 #include "mod/lsp/client.h"
 #include "mod/lsp/diag.h"
 #include "mod/lsp/features.h"
+#include "mod/lsp/pickers.h"
 #include "mod/lsp/sync.h"
 #include "ui/complmenu.h"
 #include "ui/message.h"
@@ -275,6 +276,50 @@ bool yew_lsp_signature(Ed *ed, Win *w)
     return yew_lsp_signature_request(ed, w);
 }
 
+static bool navigation_feature(Ed *ed, Win *w, const char *method,
+                               u32 cap, const char *what,
+                               bool always_picker)
+{
+    LspServer *server = ready_feature_server(ed, w);
+
+    if (server == NULL || !feat_require(ed, server, cap, what))
+        return false;
+    return yew_lsp_navigation_request(ed, w, method, cap, what,
+                                      always_picker);
+}
+
+bool yew_lsp_goto_definition(Ed *ed, Win *w)
+{
+    return navigation_feature(ed, w, "textDocument/definition",
+                              YEW_LSPC_DEFINITION, "definition", false);
+}
+
+bool yew_lsp_goto_declaration(Ed *ed, Win *w)
+{
+    return navigation_feature(ed, w, "textDocument/declaration",
+                              YEW_LSPC_DECLARATION, "declaration", false);
+}
+
+bool yew_lsp_goto_type_definition(Ed *ed, Win *w)
+{
+    return navigation_feature(ed, w, "textDocument/typeDefinition",
+                              YEW_LSPC_TYPE_DEFINITION, "type definition",
+                              false);
+}
+
+bool yew_lsp_goto_implementation(Ed *ed, Win *w)
+{
+    return navigation_feature(ed, w, "textDocument/implementation",
+                              YEW_LSPC_IMPLEMENTATION, "implementation",
+                              false);
+}
+
+bool yew_lsp_references(Ed *ed, Win *w)
+{
+    return navigation_feature(ed, w, "textDocument/references",
+                              YEW_LSPC_REFERENCES, "references", true);
+}
+
 void yew_lsp_signature_maybe_auto_trigger(Ed *ed, Win *w,
                                           const u8 *text, u32 len)
 {
@@ -339,6 +384,7 @@ void yew_lsp_free(Ed *ed)
         return;
     for (i = 0U; i < ed->ws.nbufs; i++)
         yew_diag_store_free(ed->ws.bufs[i]);
+    yew_lsp_pickers_free();
     yew_lsp_client_free(ed);
 }
 

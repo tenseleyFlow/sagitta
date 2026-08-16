@@ -80,6 +80,41 @@ CmdStatus yew_lsp_cmd_signature(CmdCtx *cx)
     return status_of(yew_lsp_signature(cx->ed, cx->win));
 }
 
+CmdStatus yew_lsp_cmd_goto_def(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL || cx->win == NULL)
+        return YEW_CMD_ERR_STATE;
+    return status_of(yew_lsp_goto_definition(cx->ed, cx->win));
+}
+
+CmdStatus yew_lsp_cmd_goto_decl(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL || cx->win == NULL)
+        return YEW_CMD_ERR_STATE;
+    return status_of(yew_lsp_goto_declaration(cx->ed, cx->win));
+}
+
+CmdStatus yew_lsp_cmd_goto_type(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL || cx->win == NULL)
+        return YEW_CMD_ERR_STATE;
+    return status_of(yew_lsp_goto_type_definition(cx->ed, cx->win));
+}
+
+CmdStatus yew_lsp_cmd_goto_impl(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL || cx->win == NULL)
+        return YEW_CMD_ERR_STATE;
+    return status_of(yew_lsp_goto_implementation(cx->ed, cx->win));
+}
+
+CmdStatus yew_lsp_cmd_references(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL || cx->win == NULL)
+        return YEW_CMD_ERR_STATE;
+    return status_of(yew_lsp_references(cx->ed, cx->win));
+}
+
 CmdStatus yew_lsp_cmd_require(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL)

@@ -25,6 +25,11 @@ bool yew_lsp_diag_step(Ed *ed, Win *w, bool forward);
 bool yew_lsp_complete(Ed *ed, Win *w);
 bool yew_lsp_hover(Ed *ed, Win *w);
 bool yew_lsp_signature(Ed *ed, Win *w);
+bool yew_lsp_goto_definition(Ed *ed, Win *w);
+bool yew_lsp_goto_declaration(Ed *ed, Win *w);
+bool yew_lsp_goto_type_definition(Ed *ed, Win *w);
+bool yew_lsp_goto_implementation(Ed *ed, Win *w);
+bool yew_lsp_references(Ed *ed, Win *w);
 void yew_lsp_signature_maybe_auto_trigger(Ed *ed, Win *w,
                                           const u8 *text, u32 len);
 bool yew_lsp_status_badge(const Ed *ed, const Buffer *b,

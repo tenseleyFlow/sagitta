@@ -64,6 +64,11 @@ typedef struct Win {
     u64 panel_source_request;
     u64 panel_source_seq;
     u32 panel_source_server;
+    /* Definition-family/reference requests use a separate cancellation and
+     * staleness lane from panels, so a hover never cancels a pending goto. */
+    u64 nav_source_request;
+    u64 nav_source_seq;
+    u32 nav_source_server;
 } Win;
 
 /* Sprint 14 compatibility names; new code uses the yew_vp_* API. */

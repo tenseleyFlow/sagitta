@@ -6,10 +6,21 @@
 #include "mod/lsp/json.h"
 #include "edit/shadow.h"
 #include "ui/complmenu.h"
+#include "util/vec.h"
 
 typedef struct Ed Ed;
 typedef struct TextBuf TextBuf;
 typedef struct Win Win;
+
+typedef struct LspLoc {
+    char *path;
+    u32 line;
+    u32 chr;
+    u32 end_line;
+    u32 end_chr;
+} LspLoc;
+
+VEC_DECL(Vec_LspLoc, LspLoc);
 
 /* Downgrade LSP snippet syntax to insertion-ready plain text.  Returns the
  * byte offset where $0 occurred, or the emitted length when it was absent. */
@@ -33,8 +44,15 @@ bool yew_lsp_hover_parse(const JsonValue *result, const TextBuf *tb,
                          bool *has_range);
 bool yew_lsp_signature_parse(const JsonValue *result, Bytebuf *body,
                              Span *emph, bool *has_emph);
+/* Parse Location, Location[], or LocationLink[] into owned, stably sorted
+ * file locations.  Malformed/non-file rows are ignored. */
+u32 yew_lsp_locations_parse(const JsonValue *result, Vec_LspLoc *out);
+void yew_lsp_locations_free(Vec_LspLoc *locs);
 bool yew_lsp_hover_request(Ed *ed, Win *w);
 bool yew_lsp_signature_request(Ed *ed, Win *w);
+bool yew_lsp_navigation_request(Ed *ed, Win *w, const char *method,
+                                u32 cap, const char *what,
+                                bool always_picker);
 
 extern const ComplSource yew_compl_src_lsp;
 const ShadowProvider *yew_lsp_shadow_provider(void);
