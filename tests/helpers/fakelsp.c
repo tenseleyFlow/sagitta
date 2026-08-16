@@ -156,7 +156,7 @@ static int run_session(const char *mode, const char *marker)
 {
     unsigned long long id = 0U;
     const char *encoding = NULL;
-    char response[320];
+    char response[1024];
     bool crash = false;
     int n;
 
@@ -189,6 +189,8 @@ static int run_session(const char *mode, const char *marker)
         strcmp(mode, "session-close") == 0 ||
         strcmp(mode, "session-features") == 0 ||
         strcmp(mode, "session-completion-missing") == 0 ||
+        strcmp(mode, "session-panels") == 0 ||
+        strcmp(mode, "session-panel-missing") == 0 ||
         strcmp(mode, "session-unversioned") == 0 ||
         strcmp(mode, "session-stale") == 0 ||
         strcmp(mode, "session-resistant") == 0 ||
@@ -216,7 +218,11 @@ static int run_session(const char *mode, const char *marker)
             (strcmp(mode, "session-features") == 0 ||
              strcmp(mode, "session-completion-missing") == 0)
                 ? ",\"completionProvider\":{\"resolveProvider\":true}"
-                : "");
+                : (strcmp(mode, "session-panels") == 0 ||
+                   strcmp(mode, "session-panel-missing") == 0)
+                    ? ",\"signatureHelpProvider\":{"
+                      "\"triggerCharacters\":[\"(\"]}"
+                    : "");
     if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
         return 13;
     if (!read_method("\"method\":\"initialized\"", NULL) ||
@@ -271,6 +277,53 @@ static int run_session(const char *mode, const char *marker)
             "\"code\":-32601,\"message\":\"missing\"}}", id);
         if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
             return 35;
+    } else if (strcmp(mode, "session-panel-missing") == 0) {
+        if (!read_method("\"method\":\"textDocument/hover\"", &id) ||
+            id == 0U)
+            return 36;
+        n = snprintf(response, sizeof(response),
+            "{\"jsonrpc\":\"2.0\",\"id\":%llu,\"error\":{"
+            "\"code\":-32601,\"message\":\"missing\"}}", id);
+        if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
+            return 37;
+        if (!read_method("\"method\":\"textDocument/signatureHelp\"",
+                         &id) || id == 0U)
+            return 38;
+        n = snprintf(response, sizeof(response),
+            "{\"jsonrpc\":\"2.0\",\"id\":%llu,\"error\":{"
+            "\"code\":-32601,\"message\":\"missing\"}}", id);
+        if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
+            return 39;
+    } else if (strcmp(mode, "session-panels") == 0) {
+        if (!read_method("\"method\":\"textDocument/hover\"", &id) ||
+            id == 0U)
+            return 40;
+        n = snprintf(response, sizeof(response),
+            "{\"jsonrpc\":\"2.0\",\"id\":%llu,\"result\":{"
+            "\"contents\":{\"kind\":\"markdown\","
+            "\"value\":\"**int** docs\"},\"range\":{"
+            "\"start\":{\"line\":0,\"character\":0},"
+            "\"end\":{\"line\":0,\"character\":3}}}}", id);
+        if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
+            return 41;
+        if (!read_method("\"method\":\"textDocument/signatureHelp\"",
+                         &id) || id == 0U)
+            return 42;
+        n = snprintf(response, sizeof(response),
+            "{\"jsonrpc\":\"2.0\",\"id\":%llu,\"result\":{"
+            "\"signatures\":[{\"label\":\"sum(int a, int b)\","
+            "\"parameters\":[{\"label\":[4,9]},"
+            "{\"label\":[11,16]}],\"activeParameter\":0}],"
+            "\"activeSignature\":0}}", id);
+        if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
+            return 43;
+        if (!read_method("\"method\":\"textDocument/hover\"", &id) ||
+            id == 0U)
+            return 44;
+        n = snprintf(response, sizeof(response),
+            "{\"jsonrpc\":\"2.0\",\"id\":%llu,\"result\":null}", id);
+        if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
+            return 45;
     } else if (strcmp(mode, "session-features") == 0) {
         if (!read_method("\"method\":\"textDocument/completion\"", &id) ||
             id == 0U)

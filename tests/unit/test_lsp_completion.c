@@ -214,3 +214,129 @@ void test_lsp_completion_rejects_inexact_utf16_ranges(void)
     completion_rows_free(&rows);
     yew_ed_free(&ed);
 }
+
+void test_lsp_hover_flattens_all_contents_shapes_and_exact_range(void)
+{
+    static const char json[] =
+        "{\"contents\":[\"plain\",{\"language\":\"c\","
+        "\"value\":\"int x\"},{\"kind\":\"markdown\","
+        "\"value\":\"docs\"},\"\"],\"range\":{"
+        "\"start\":{\"line\":0,\"character\":0},"
+        "\"end\":{\"line\":0,\"character\":3}}}";
+    Ed ed;
+    Arena arena;
+    Bytebuf body;
+    Span range = {0};
+    bool has_range = false;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_memory(&ed, (const u8 *)"int x;\n", 7U,
+                                  "hover.c"));
+    arena_init(&arena);
+    bytebuf_init(&body);
+    YEW_ASSERT(yew_lsp_hover_parse(completion_json(&arena, json),
+                                   yew_ed_doc(&ed)->tb, YEW_POSENC_UTF8,
+                                   &body, &range, &has_range));
+    YEW_ASSERT_EQ_MEM(body.data, "plain\nint x\ndocs", 16U);
+    YEW_ASSERT(has_range);
+    YEW_ASSERT_EQ_U64(range.lo, 0U);
+    YEW_ASSERT_EQ_U64(range.hi, 3U);
+    bytebuf_free(&body);
+    arena_free_all(&arena);
+    yew_ed_free(&ed);
+}
+
+void test_lsp_hover_empty_and_inexact_range_are_nonfatal(void)
+{
+    static const u8 text[] = {0xF0U, 0x9FU, 0x98U, 0x80U, '\n'};
+    static const char json[] =
+        "{\"contents\":{\"kind\":\"plaintext\",\"value\":\"ok\"},"
+        "\"range\":{\"start\":{\"line\":0,\"character\":1},"
+        "\"end\":{\"line\":0,\"character\":2}}}";
+    Arena arena;
+    Ed ed;
+    Bytebuf body;
+    Span range = {0};
+    bool has_range = true;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_memory(&ed, text, sizeof(text), "hover.c"));
+    arena_init(&arena);
+    bytebuf_init(&body);
+    YEW_ASSERT(yew_lsp_hover_parse(completion_json(&arena, json),
+                                   yew_ed_doc(&ed)->tb, YEW_POSENC_UTF16,
+                                   &body, &range, &has_range));
+    YEW_ASSERT_EQ_MEM(body.data, "ok", 2U);
+    YEW_ASSERT(!has_range);
+    bytebuf_free(&body);
+    arena_free_all(&arena);
+
+    arena_init(&arena);
+    bytebuf_init(&body);
+    YEW_ASSERT(!yew_lsp_hover_parse(
+        completion_json(&arena, "{\"contents\":[]}"),
+        yew_ed_doc(&ed)->tb, YEW_POSENC_UTF8, &body, &range, &has_range));
+    bytebuf_free(&body);
+    arena_free_all(&arena);
+    yew_ed_free(&ed);
+}
+
+void test_lsp_signature_prefers_local_parameter_and_decodes_utf16_span(void)
+{
+    static const char json[] =
+        "{\"signatures\":[{\"label\":\"f(a, "
+        "\xF0\x9F\x98\x80"
+        "b)\",\"parameters\":[{\"label\":\"a\"},{\"label\":[5,8]}],"
+        "\"activeParameter\":1}],\"activeParameter\":0}";
+    static const char label[] = "f(a, " "\xF0\x9F\x98\x80" "b)";
+    Arena arena;
+    Bytebuf body;
+    Span emph = {0};
+    bool has_emph = false;
+
+    arena_init(&arena);
+    bytebuf_init(&body);
+    YEW_ASSERT(yew_lsp_signature_parse(completion_json(&arena, json),
+                                       &body, &emph, &has_emph));
+    YEW_ASSERT_EQ_MEM(body.data, label, sizeof(label) - 1U);
+    YEW_ASSERT(has_emph);
+    YEW_ASSERT_EQ_U64(emph.lo, 5U);
+    YEW_ASSERT_EQ_U64(emph.hi, 10U);
+    bytebuf_free(&body);
+    arena_free_all(&arena);
+}
+
+void test_lsp_signature_global_string_and_oob_parameter_are_safe(void)
+{
+    static const char good[] =
+        "{\"signatures\":[{\"label\":\"f(alpha, beta)\","
+        "\"parameters\":[{\"label\":\"alpha\"},{\"label\":\"beta\"}]}],"
+        "\"activeParameter\":1}";
+    static const char oob[] =
+        "{\"signatures\":[{\"label\":\"f(alpha)\","
+        "\"parameters\":[{\"label\":\"alpha\"}]}],"
+        "\"activeParameter\":9}";
+    Arena arena;
+    Bytebuf body;
+    Span emph = {0};
+    bool has_emph = false;
+
+    arena_init(&arena);
+    bytebuf_init(&body);
+    YEW_ASSERT(yew_lsp_signature_parse(completion_json(&arena, good),
+                                       &body, &emph, &has_emph));
+    YEW_ASSERT(has_emph);
+    YEW_ASSERT_EQ_U64(emph.lo, 9U);
+    YEW_ASSERT_EQ_U64(emph.hi, 13U);
+    bytebuf_free(&body);
+    arena_free_all(&arena);
+
+    arena_init(&arena);
+    bytebuf_init(&body);
+    has_emph = true;
+    YEW_ASSERT(yew_lsp_signature_parse(completion_json(&arena, oob),
+                                       &body, &emph, &has_emph));
+    YEW_ASSERT(!has_emph);
+    bytebuf_free(&body);
+    arena_free_all(&arena);
+}

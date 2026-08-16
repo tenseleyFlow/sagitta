@@ -60,6 +60,27 @@ bool yew_lsp_complete(Ed *ed, Win *w)
     return require_lsp(ed);
 }
 
+bool yew_lsp_hover(Ed *ed, Win *w)
+{
+    (void)w;
+    return require_lsp(ed);
+}
+
+bool yew_lsp_signature(Ed *ed, Win *w)
+{
+    (void)w;
+    return require_lsp(ed);
+}
+
+void yew_lsp_signature_maybe_auto_trigger(Ed *ed, Win *w,
+                                          const u8 *text, u32 len)
+{
+    (void)ed;
+    (void)w;
+    (void)text;
+    (void)len;
+}
+
 bool yew_lsp_status_badge(const Ed *ed, const Buffer *b,
                           char *out, size_t cap)
 {

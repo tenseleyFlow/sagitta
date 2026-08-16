@@ -32,6 +32,7 @@
         "compl.type": { fg: "@brown", mono: "bold" },
         "compl.macro": { fg: "@gold", mono: "plain" },
         "compl.keyword": { fg: "@red", mono: "dim" },
+        "lsp.hover_range": { bg: "#dbeafe", underline: true, mono: "underline" },
         "diag.error": { fg: "@red", mono: "bold" },
         "diag.warn": { fg: "@gold", mono: "bold" },
         "diag.info": { fg: "@blue", mono: "underline" },

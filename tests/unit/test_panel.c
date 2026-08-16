@@ -6,6 +6,7 @@
 #include "edit/ed.h"
 #include "term/grid.h"
 #include "term/input.h"
+#include "ui/draw.h"
 #include "ui/glyphs.h"
 #include "ui/panel.h"
 #include "ui/region.h"
@@ -570,5 +571,40 @@ void test_panel_drops_only_standalone_code_fence_lines(void)
         YEW_ASSERT_EQ_U64(ed.win->panel.rows.data[i].lo, want[i].lo);
         YEW_ASSERT_EQ_U64(ed.win->panel.rows.data[i].hi, want[i].hi);
     }
+    yew_ed_free(&ed);
+}
+
+void test_panel_mark_is_owned_drawn_and_cleared_with_panel(void)
+{
+    static const u8 text[] = "alpha beta\n";
+    static const u8 body[] = "hover";
+    Ed ed;
+    PanelSpec spec;
+    Grid grid;
+    size_t at;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_memory(&ed, text, sizeof(text) - 1U,
+                                  "panel-mark.c"));
+    ed.win->rect = (Rect){0U, 0U, 24U, 8U};
+    ed.win->vp.cols = 24U;
+    ed.win->vp.rows = 8U;
+    spec = panel_spec(body, sizeof(body) - 1U, 1U, 1U,
+                      YEW_PANEL_BELOW);
+    YEW_ASSERT(yew_panel_open(&ed, &ed.win->panel, &spec));
+    YEW_ASSERT(yew_panel_mark(&ed.win->panel, ed.win->buf->id,
+                              ed.win->buf->tb->gen, (Span){6U, 10U},
+                              "lsp.hover_range"));
+    YEW_ASSERT_EQ_STR(ed.win->panel.mark_role, "lsp.hover_range");
+    YEW_ASSERT(yew_grid_init(&grid, &ed.interner, 8U, 24U));
+    ed.grid = grid;
+    yew_draw_document_rows(&ed, ed.win, 0U, ed.win->rect.h);
+    at = 6U;
+    YEW_ASSERT((ed.grid.back[at].attrs & YEW_ATTR_UNDERLINE) != 0U);
+    yew_panel_close(&ed, &ed.win->panel);
+    YEW_ASSERT(!ed.win->panel.mark_live);
+    YEW_ASSERT_NULL(ed.win->panel.mark_role);
+    yew_grid_free(&ed.grid);
+    (void)memset(&ed.grid, 0, sizeof(ed.grid));
     yew_ed_free(&ed);
 }

@@ -327,6 +327,24 @@ bool yew_panel_open(Ed *ed, Panel *p, const PanelSpec *spec)
     return true;
 }
 
+bool yew_panel_mark(Panel *p, u32 buf_id, u64 buf_gen, Span span,
+                    const char *role)
+{
+    char *copy;
+
+    if (p == NULL || !p->open || buf_id == 0U || span.lo > span.hi ||
+        role == NULL || role[0] == '\0')
+        return false;
+    copy = panel_strdup(role);
+    free(p->mark_role);
+    p->mark_role = copy;
+    p->mark = span;
+    p->mark_buf_id = buf_id;
+    p->mark_buf_gen = buf_gen;
+    p->mark_live = span.lo != span.hi;
+    return true;
+}
+
 void yew_panel_close(Ed *ed, Panel *p)
 {
     if (p == NULL)
@@ -334,6 +352,7 @@ void yew_panel_close(Ed *ed, Panel *p)
     free(p->body);
     free(p->title);
     free(p->role);
+    free(p->mark_role);
     Vec_Span_free(&p->emph);
     Vec_Span_free(&p->rows);
     yew_keymap_free(&p->keys);

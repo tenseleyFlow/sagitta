@@ -66,6 +66,20 @@ CmdStatus yew_lsp_cmd_complete(CmdCtx *cx)
     return status_of(yew_lsp_complete(cx->ed, cx->win));
 }
 
+CmdStatus yew_lsp_cmd_hover(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL || cx->win == NULL)
+        return YEW_CMD_ERR_STATE;
+    return status_of(yew_lsp_hover(cx->ed, cx->win));
+}
+
+CmdStatus yew_lsp_cmd_signature(CmdCtx *cx)
+{
+    if (cx == NULL || cx->ed == NULL || cx->win == NULL)
+        return YEW_CMD_ERR_STATE;
+    return status_of(yew_lsp_signature(cx->ed, cx->win));
+}
+
 CmdStatus yew_lsp_cmd_require(CmdCtx *cx)
 {
     if (cx == NULL || cx->ed == NULL)

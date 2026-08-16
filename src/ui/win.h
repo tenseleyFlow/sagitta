@@ -58,6 +58,12 @@ typedef struct Win {
     ComplMenu compl;
     /* Sprint 47: one transient floating panel belongs to this view. */
     Panel panel;
+    /* Opaque async producer state.  Core does not interpret these fields;
+     * the LSP module uses stable window ids plus this sequence to reject
+     * late hover/signature responses. */
+    u64 panel_source_request;
+    u64 panel_source_seq;
+    u32 panel_source_server;
 } Win;
 
 /* Sprint 14 compatibility names; new code uses the yew_vp_* API. */

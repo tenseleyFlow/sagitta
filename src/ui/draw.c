@@ -438,6 +438,44 @@ static void draw_search_rows(Ed *ed, Win *w, u16 lo, u16 hi)
     }
 }
 
+static void draw_panel_mark_rows(Ed *ed, Win *w, u16 lo, u16 hi)
+{
+    const Panel *panel = &w->panel;
+    Cell style = ed->grid.blank;
+    u8 fields;
+    u16 screen_row;
+
+    if (!panel->open || !panel->mark_live || panel->mark_role == NULL ||
+        w->buf == NULL || w->buf->tb == NULL ||
+        panel->mark_buf_id != w->buf->id ||
+        panel->mark_buf_gen != w->buf->tb->gen ||
+        panel->mark.lo > panel->mark.hi ||
+        panel->mark.hi > yew_textbuf_len(w->buf->tb))
+        return;
+    fields = themed_overlay(&style,
+                            yew_theme_ui_tab(ed, panel->mark_role));
+    if (fields == 0U) {
+        style.attrs = YEW_ATTR_UNDERLINE;
+        fields = YEW_OVERLAY_ATTRS;
+    }
+    for (screen_row = lo;
+         screen_row < hi && screen_row < w->rect.h; screen_row++) {
+        LineNo line;
+        u32 sub;
+        Span displayed;
+
+        if (!yew_vp_line_of_row(w, screen_row, &line, &sub))
+            continue;
+        displayed = w->vp.wrap ? yew_wrap_row(w, line, sub) :
+                                 line_content_span(w->buf->tb, line);
+        if (panel->mark.hi <= displayed.lo ||
+            panel->mark.lo >= displayed.hi)
+            continue;
+        overlay_span(&ed->grid, w, (u16)(w->rect.y + screen_row),
+                     displayed, panel->mark, &style, fields);
+    }
+}
+
 #if YEW_WITH_LSP
 static void draw_diag_rows(Ed *ed, Win *w, u16 lo, u16 hi)
 {
@@ -650,6 +688,7 @@ void yew_draw_document_rows(Ed *ed, Win *w, u16 lo, u16 hi)
 #if YEW_WITH_LSP
     draw_diag_rows(ed, w, lo, hi);
 #endif
+    draw_panel_mark_rows(ed, w, lo, hi);
     draw_secondary_rows(ed, w, lo, hi);
     if (lo == 0U && hi == w->rect.h) {
         grid->cursor_overlay_signature = cursor_overlay_signature(ed, w);

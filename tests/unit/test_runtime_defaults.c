@@ -111,6 +111,7 @@ static const BindRow frozen_L[] = {
     {"N", "ed.search.prev", 0, NULL},
     {"*", "ed.search.word_next", 0, NULL},
     {"#", "ed.search.word_prev", 0, NULL},
+    {"K", "ed.lsp.hover", 0, NULL},
     {"C-o", "ed.jump.back", 0, NULL},
     {"C-i", "ed.jump.fwd", 0, NULL},
     {"g ;", "ed.change.older", 0, NULL},
@@ -193,6 +194,7 @@ static const BindRow frozen_I[] = {
     {"A-]", "ed.shadow.next", 0, NULL},
     {"A-[", "ed.shadow.prev", 0, NULL},
     {"C-<space>", "ed.lsp.complete", 0, NULL},
+    {"C-k", "ed.lsp.signature", 0, NULL},
     {"<cr>", "ed.edit.insert.newline", 0, NULL},
     {"<tab>", "ed.edit.insert.tab", 0, NULL},
     {"<bs>", "ed.edit.delete.grapheme_left", 0, NULL},
@@ -344,7 +346,7 @@ void test_runtime_defaults_rebuild_frozen_keymap(void)
                                   (u32)(source.len - 1U)), YEW_CMD_OK);
     yew_bind_batch_end(&ed);
     YEW_ASSERT_EQ_U64(yew_bind_rebuild_count(&ed), rebuilds + 1U);
-    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 180U);
+    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 182U);
     for (mode = 0U; mode < (u32)YEW_MODE__N; mode++) {
         if (mode != (u32)YEW_MODE_H)
             panic_rows += yew_keymap_binding_count(&ed.mode_keys[mode]);

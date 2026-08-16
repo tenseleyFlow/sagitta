@@ -1964,8 +1964,11 @@ void yew_ed_handle_key(Ed *ed, Key key, i64 now_ms)
         ed->dispatch_count++;
         if (compl_fallthrough)
             yew_compl_after_key(ed, ed->win);
-        else if (ed->last_status == YEW_CMD_OK)
+        else if (ed->last_status == YEW_CMD_OK) {
             (void)yew_compl_maybe_auto_trigger(ed, ed->win);
+            yew_lsp_signature_maybe_auto_trigger(ed, ed->win, key.text,
+                                                  key.ntext);
+        }
         return;
     }
     yew_dispatch_key(ed, key, now_ms);

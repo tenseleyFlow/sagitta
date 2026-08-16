@@ -234,6 +234,69 @@ bool yew_lsp_complete(Ed *ed, Win *w)
     return yew_compl_open_source(ed, w, &yew_compl_src_lsp);
 }
 
+static LspServer *ready_feature_server(Ed *ed, Win *w)
+{
+    LspDoc *doc;
+    LspServer *server;
+
+    if (ed == NULL || w == NULL || w->buf == NULL || w->buf->tb == NULL)
+        return NULL;
+    doc = yew_lsp_doc_for_buffer(ed, w->buf);
+    server = yew_lsp_server_for_doc(ed, doc);
+    if (server == NULL && yew_lsp_client_start(ed, w->buf)) {
+        doc = yew_lsp_doc_for_buffer(ed, w->buf);
+        server = yew_lsp_server_for_doc(ed, doc);
+    }
+    if (server == NULL || server->state != YEW_LSP_READY) {
+        yew_msg(ed, YEW_MSG_INFO, "no ready LSP server for %s",
+                w->buf->lang == NULL ? "this buffer" : w->buf->lang);
+        return NULL;
+    }
+    return server;
+}
+
+bool yew_lsp_hover(Ed *ed, Win *w)
+{
+    LspServer *server = ready_feature_server(ed, w);
+
+    if (server == NULL || !feat_require(ed, server, YEW_LSPC_HOVER,
+                                        "hover"))
+        return false;
+    return yew_lsp_hover_request(ed, w);
+}
+
+bool yew_lsp_signature(Ed *ed, Win *w)
+{
+    LspServer *server = ready_feature_server(ed, w);
+
+    if (server == NULL || !feat_require(ed, server, YEW_LSPC_SIGNATURE,
+                                        "signature help"))
+        return false;
+    return yew_lsp_signature_request(ed, w);
+}
+
+void yew_lsp_signature_maybe_auto_trigger(Ed *ed, Win *w,
+                                          const u8 *text, u32 len)
+{
+    LspDoc *doc;
+    LspServer *server;
+    const char *trigger;
+
+    if (ed == NULL || w == NULL || w->buf == NULL || text == NULL ||
+        len == 0U)
+        return;
+    doc = yew_lsp_doc_for_buffer(ed, w->buf);
+    server = yew_lsp_server_for_doc(ed, doc);
+    if (server == NULL || server->state != YEW_LSP_READY ||
+        !yew_lsp_has(server, YEW_LSPC_SIGNATURE))
+        return;
+    for (trigger = server->caps.sig_trigger; *trigger != '\0'; trigger++)
+        if ((u8)*trigger == text[len - 1U]) {
+            (void)yew_lsp_signature_request(ed, w);
+            return;
+        }
+}
+
 bool yew_lsp_status_badge(const Ed *ed, const Buffer *b,
                           char *out, size_t cap)
 {

@@ -367,6 +367,33 @@ static bool wait_completion_rows(LifeFix *f, size_t rows, i64 timeout_ms)
     return false;
 }
 
+static bool wait_panel_title(LifeFix *f, const char *title, i64 timeout_ms)
+{
+    i64 start = yew_now_ms();
+
+    while (yew_now_ms() - start <= timeout_ms) {
+        Panel *panel = &f->ed.win->panel;
+
+        if (panel->open && panel->title != NULL &&
+            strcmp(panel->title, title) == 0)
+            return true;
+        life_pump_once(&f->ed);
+    }
+    return false;
+}
+
+static bool wait_message(LifeFix *f, const char *message, i64 timeout_ms)
+{
+    i64 start = yew_now_ms();
+
+    while (yew_now_ms() - start <= timeout_ms) {
+        if (f->ed.msg.active && strcmp(f->ed.msg.text, message) == 0)
+            return true;
+        life_pump_once(&f->ed);
+    }
+    return false;
+}
+
 static bool wait_capability_clear(LifeFix *f, u32 capability,
                                   i64 timeout_ms)
 {
@@ -507,6 +534,84 @@ void test_lsp_lifecycle_method_not_found_clears_completion(void)
     YEW_ASSERT(yew_lsp_complete(&f.ed, f.ed.win));
     YEW_ASSERT(wait_capability_clear(&f, YEW_LSPC_COMPLETION, 2000));
     YEW_ASSERT(!f.ed.win->compl.open);
+
+    yew_lsp_client_stop(&f.ed, server, true);
+    YEW_ASSERT(wait_server_drained(&f, server, 2000));
+    life_fix_free(&f);
+}
+
+void test_lsp_lifecycle_hover_signature_panels_and_auto_trigger(void)
+{
+    static const char hover[] = "**int** docs";
+    static const char signature[] = "sum(int a, int b)";
+    LifeFix f;
+    LspServer *server;
+    Panel *panel;
+
+    life_fix_init(&f, "session-panels", 1000);
+    f.ed.win->rect = (Rect){0U, 0U, 80U, 24U};
+    f.ed.win->vp.cols = 80U;
+    f.ed.win->vp.rows = 24U;
+    YEW_ASSERT(wait_state(&f, YEW_LSP_READY, 2000));
+    server = life_server(&f);
+    YEW_ASSERT(yew_lsp_has(server, YEW_LSPC_HOVER));
+    YEW_ASSERT(yew_lsp_has(server, YEW_LSPC_SIGNATURE));
+    YEW_ASSERT_EQ_STR(server->caps.sig_trigger, "(");
+
+    YEW_ASSERT(yew_lsp_hover(&f.ed, f.ed.win));
+    YEW_ASSERT(wait_panel_title(&f, "hover", 2000));
+    panel = &f.ed.win->panel;
+    YEW_ASSERT_EQ_U64(panel->place, YEW_PANEL_BELOW);
+    YEW_ASSERT_EQ_U64(panel->len, sizeof(hover) - 1U);
+    YEW_ASSERT_EQ_MEM(panel->body, hover, sizeof(hover) - 1U);
+    YEW_ASSERT(panel->mark_live);
+    YEW_ASSERT_EQ_U64(panel->mark.lo, 0U);
+    YEW_ASSERT_EQ_U64(panel->mark.hi, 3U);
+    YEW_ASSERT_EQ_U64(panel->mark_buf_id, f.ed.buffer.id);
+    YEW_ASSERT_EQ_U64(panel->mark_buf_gen, f.ed.buffer.tb->gen);
+    YEW_ASSERT_EQ_STR(panel->mark_role, "lsp.hover_range");
+
+    yew_lsp_signature_maybe_auto_trigger(&f.ed, f.ed.win,
+                                          (const u8 *)"(", 1U);
+    YEW_ASSERT(f.ed.win->panel_source_request != 0U);
+    YEW_ASSERT(wait_panel_title(&f, "signature", 2000));
+    panel = &f.ed.win->panel;
+    YEW_ASSERT_EQ_U64(panel->place, YEW_PANEL_ABOVE);
+    YEW_ASSERT_EQ_U64(panel->len, sizeof(signature) - 1U);
+    YEW_ASSERT_EQ_MEM(panel->body, signature, sizeof(signature) - 1U);
+    YEW_ASSERT_EQ_U64(panel->emph.len, 1U);
+    YEW_ASSERT_EQ_U64(panel->emph.data[0].lo, 4U);
+    YEW_ASSERT_EQ_U64(panel->emph.data[0].hi, 9U);
+    YEW_ASSERT(!panel->mark_live);
+
+    YEW_ASSERT(yew_lsp_hover(&f.ed, f.ed.win));
+    YEW_ASSERT(wait_message(&f, "no hover information here", 2000));
+    YEW_ASSERT(!f.ed.win->panel.open);
+
+    yew_lsp_client_stop(&f.ed, server, true);
+    YEW_ASSERT(wait_server_drained(&f, server, 2000));
+    life_fix_free(&f);
+}
+
+void test_lsp_lifecycle_method_not_found_clears_panel_capabilities(void)
+{
+    LifeFix f;
+    LspServer *server;
+
+    life_fix_init(&f, "session-panel-missing", 1000);
+    f.ed.win->rect = (Rect){0U, 0U, 80U, 24U};
+    f.ed.win->vp.cols = 80U;
+    f.ed.win->vp.rows = 24U;
+    YEW_ASSERT(wait_state(&f, YEW_LSP_READY, 2000));
+    server = life_server(&f);
+    YEW_ASSERT(yew_lsp_has(server, YEW_LSPC_HOVER));
+    YEW_ASSERT(yew_lsp_has(server, YEW_LSPC_SIGNATURE));
+
+    YEW_ASSERT(yew_lsp_hover(&f.ed, f.ed.win));
+    YEW_ASSERT(wait_capability_clear(&f, YEW_LSPC_HOVER, 2000));
+    YEW_ASSERT(yew_lsp_signature(&f.ed, f.ed.win));
+    YEW_ASSERT(wait_capability_clear(&f, YEW_LSPC_SIGNATURE, 2000));
+    YEW_ASSERT(!f.ed.win->panel.open);
 
     yew_lsp_client_stop(&f.ed, server, true);
     YEW_ASSERT(wait_server_drained(&f, server, 2000));

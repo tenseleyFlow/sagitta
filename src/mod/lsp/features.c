@@ -23,6 +23,7 @@
 #include "text/undo.h"
 #include "ui/win.h"
 #include "unicode/coords.h"
+#include "unicode/utf8.h"
 #include "util/sort.h"
 #include "ws/finder.h"
 
@@ -292,8 +293,8 @@ void yew_lsp_completion_discard(ComplItem *item)
     (void)memset(item, 0, sizeof(*item));
 }
 
-static bool completion_position(const JsonValue *value, const TextBuf *tb,
-                                u8 pos_enc, ByteOff *out)
+static bool lsp_position_exact(const JsonValue *value, const TextBuf *tb,
+                               u8 pos_enc, ByteOff *out)
 {
     const JsonValue *linev;
     const JsonValue *charv;
@@ -325,19 +326,185 @@ static bool completion_position(const JsonValue *value, const TextBuf *tb,
     return true;
 }
 
-static bool completion_range(const JsonValue *value, const TextBuf *tb,
-                             u8 pos_enc, Span *out)
+static bool lsp_range_exact(const JsonValue *value, const TextBuf *tb,
+                            u8 pos_enc, Span *out)
 {
     ByteOff lo;
     ByteOff hi;
 
     if (value == NULL || value->kind != YEW_JS_OBJ ||
-        !completion_position(yew_json_get(value, "start"), tb, pos_enc,
-                             &lo) ||
-        !completion_position(yew_json_get(value, "end"), tb, pos_enc,
-                             &hi) || lo.v > hi.v)
+        !lsp_position_exact(yew_json_get(value, "start"), tb, pos_enc,
+                            &lo) ||
+        !lsp_position_exact(yew_json_get(value, "end"), tb, pos_enc,
+                            &hi) || lo.v > hi.v)
         return false;
     *out = (Span){lo.v, hi.v};
+    return true;
+}
+
+static bool append_hover_piece(Bytebuf *body, const JsonValue *piece)
+{
+    const u8 *text;
+    u32 len = 0U;
+
+    text = yew_json_str(piece, &len);
+    if (text == NULL && piece != NULL && piece->kind == YEW_JS_OBJ)
+        text = yew_json_str(yew_json_get(piece, "value"), &len);
+    if (text == NULL || len == 0U)
+        return false;
+    if (body->len != 0U)
+        bytebuf_push_u8(body, (u8)'\n');
+    bytebuf_append(body, text, len);
+    return true;
+}
+
+bool yew_lsp_hover_parse(const JsonValue *result, const TextBuf *tb,
+                         u8 pos_enc, Bytebuf *body, Span *range,
+                         bool *has_range)
+{
+    const JsonValue *contents;
+    const JsonValue *server_range;
+    bool any = false;
+    u32 i;
+
+    if (body == NULL || range == NULL || has_range == NULL ||
+        result == NULL || result->kind != YEW_JS_OBJ)
+        return false;
+    *has_range = false;
+    contents = yew_json_get(result, "contents");
+    if (contents != NULL && contents->kind == YEW_JS_ARR) {
+        for (i = 0U; i < contents->arr.n; i++)
+            if (append_hover_piece(body, contents->arr.v[i]))
+                any = true;
+    } else {
+        any = append_hover_piece(body, contents);
+    }
+    server_range = yew_json_get(result, "range");
+    if (server_range != NULL &&
+        lsp_range_exact(server_range, tb, pos_enc, range))
+        *has_range = range->lo != range->hi;
+    return any;
+}
+
+static bool raw_u16_byte(const u8 *text, u32 len, u64 want, u32 *out)
+{
+    u32 at = 0U;
+    u64 units = 0U;
+
+    while (at < len) {
+        u32 cp;
+        size_t n;
+        u64 next;
+
+        if (units == want) {
+            *out = at;
+            return true;
+        }
+        n = yew_utf8_decode(text + at, len - at, &cp);
+        if (n == 0U || n > len - at)
+            return false;
+        next = units + (cp > 0xFFFFU ? 2U : 1U);
+        if (want < next)
+            return false;
+        units = next;
+        at += (u32)n;
+    }
+    if (units != want)
+        return false;
+    *out = len;
+    return true;
+}
+
+static bool raw_find(const u8 *hay, u32 hay_len, const u8 *needle,
+                     u32 needle_len, Span *out)
+{
+    u32 at;
+
+    if (needle_len == 0U || needle_len > hay_len)
+        return false;
+    for (at = 0U; at <= hay_len - needle_len; at++) {
+        if (memcmp(hay + at, needle, needle_len) == 0) {
+            *out = (Span){at, at + needle_len};
+            return true;
+        }
+    }
+    return false;
+}
+
+static bool signature_parameter_span(const JsonValue *parameter,
+                                     const u8 *label, u32 label_len,
+                                     Span *out)
+{
+    const JsonValue *value;
+    const u8 *text;
+    u32 len = 0U;
+
+    if (parameter == NULL || parameter->kind != YEW_JS_OBJ)
+        return false;
+    value = yew_json_get(parameter, "label");
+    text = yew_json_str(value, &len);
+    if (text != NULL)
+        return raw_find(label, label_len, text, len, out);
+    if (value != NULL && value->kind == YEW_JS_ARR && value->arr.n == 2U) {
+        const JsonValue *lov = value->arr.v[0];
+        const JsonValue *hiv = value->arr.v[1];
+        u32 lo;
+        u32 hi;
+
+        if (lov == NULL || hiv == NULL || lov->kind != YEW_JS_INT ||
+            hiv->kind != YEW_JS_INT || lov->i < 0 || hiv->i < lov->i ||
+            !raw_u16_byte(label, label_len, (u64)lov->i, &lo) ||
+            !raw_u16_byte(label, label_len, (u64)hiv->i, &hi) || lo == hi)
+            return false;
+        *out = (Span){lo, hi};
+        return true;
+    }
+    return false;
+}
+
+bool yew_lsp_signature_parse(const JsonValue *result, Bytebuf *body,
+                             Span *emph, bool *has_emph)
+{
+    const JsonValue *signatures;
+    const JsonValue *signature;
+    const JsonValue *parameters;
+    const JsonValue *active;
+    const u8 *label;
+    u32 label_len = 0U;
+    i64 sig_index;
+    i64 param_index;
+
+    if (body == NULL || emph == NULL || has_emph == NULL ||
+        result == NULL || result->kind != YEW_JS_OBJ)
+        return false;
+    *has_emph = false;
+    signatures = yew_json_get(result, "signatures");
+    if (signatures == NULL || signatures->kind != YEW_JS_ARR ||
+        signatures->arr.n == 0U)
+        return false;
+    sig_index = yew_json_int(yew_json_get(result, "activeSignature"), 0);
+    if (sig_index < 0 || (u64)sig_index >= signatures->arr.n)
+        sig_index = 0;
+    signature = signatures->arr.v[(u32)sig_index];
+    if (signature == NULL || signature->kind != YEW_JS_OBJ)
+        return false;
+    label = yew_json_str(yew_json_get(signature, "label"), &label_len);
+    if (label == NULL || label_len == 0U)
+        return false;
+    bytebuf_append(body, label, label_len);
+
+    active = yew_json_get(signature, "activeParameter");
+    if (active == NULL || active->kind != YEW_JS_INT)
+        active = yew_json_get(result, "activeParameter");
+    if (active == NULL || active->kind != YEW_JS_INT || active->i < 0)
+        return true;
+    param_index = active->i;
+    parameters = yew_json_get(signature, "parameters");
+    if (parameters == NULL || parameters->kind != YEW_JS_ARR ||
+        (u64)param_index >= parameters->arr.n)
+        return true;
+    *has_emph = signature_parameter_span(
+        parameters->arr.v[(u32)param_index], label, label_len, emph);
     return true;
 }
 
@@ -394,7 +561,7 @@ static bool completion_text_edit(LspCompletionOwned *owned,
     range = yew_json_get(edit, "range");
     if (range == NULL)
         range = yew_json_get(edit, "replace");
-    if (!completion_range(range, tb, pos_enc, &owned->replace))
+    if (!lsp_range_exact(range, tb, pos_enc, &owned->replace))
         return false;
     owned->has_replace = true;
     return true;
@@ -418,8 +585,8 @@ static bool completion_additional(LspCompletionOwned *owned,
         LspCompletionEdit copy;
 
         if (edit == NULL || edit->kind != YEW_JS_OBJ ||
-            !completion_range(yew_json_get(edit, "range"), tb, pos_enc,
-                              &copy.span))
+            !lsp_range_exact(yew_json_get(edit, "range"), tb, pos_enc,
+                             &copy.span))
             return false;
         text = yew_json_str(yew_json_get(edit, "newText"), &len);
         if (text == NULL)
@@ -796,6 +963,19 @@ typedef struct LspShadowRequest {
     u32 stem_len;
 } LspShadowRequest;
 
+typedef enum LspPanelKind {
+    LSP_PANEL_HOVER = 0,
+    LSP_PANEL_SIGNATURE
+} LspPanelKind;
+
+typedef struct LspPanelRequest {
+    u32 win_id;
+    u32 server_id;
+    u64 seq;
+    u64 request;
+    u8 kind;
+} LspPanelRequest;
+
 static void completion_request_free(void *ctx)
 {
     LspCompletionRequest *request = ctx;
@@ -819,6 +999,11 @@ static void completion_shadow_free(void *ctx)
         return;
     free(request->stem);
     free(request);
+}
+
+static void panel_request_free(void *ctx)
+{
+    free(ctx);
 }
 
 static void completion_cancel_id(Ed *ed, u32 server_id, u64 request)
@@ -937,8 +1122,9 @@ static void completion_resolve_done(Ed *ed, void *ctx,
     ed->full_damage = true;
 }
 
-static void completion_params(Bytebuf *out, const LspDoc *doc,
-                              u8 pos_enc, const TextBuf *tb, ByteOff cursor)
+static void position_params(Bytebuf *out, const LspDoc *doc,
+                            u8 pos_enc, const TextBuf *tb, ByteOff cursor,
+                            bool completion)
 {
     JsonW writer;
     i64 line;
@@ -959,12 +1145,196 @@ static void completion_params(Bytebuf *out, const LspDoc *doc,
     yew_jsonw_key(&writer, "character");
     yew_jsonw_int(&writer, character);
     yew_jsonw_obj_end(&writer);
-    yew_jsonw_key(&writer, "context");
-    yew_jsonw_obj(&writer);
-    yew_jsonw_key(&writer, "triggerKind");
-    yew_jsonw_int(&writer, 1);
+    if (completion) {
+        yew_jsonw_key(&writer, "context");
+        yew_jsonw_obj(&writer);
+        yew_jsonw_key(&writer, "triggerKind");
+        yew_jsonw_int(&writer, 1);
+        yew_jsonw_obj_end(&writer);
+    }
     yew_jsonw_obj_end(&writer);
-    yew_jsonw_obj_end(&writer);
+}
+
+static bool panel_cursor_anchor(Win *w, u16 *x, u16 *y)
+{
+    const Cursor *cursor;
+    TextBuf *tb;
+    LineNo line;
+    Span displayed;
+    CCol col;
+    u32 sub;
+    u16 row;
+
+    if (w == NULL || x == NULL || y == NULL || w->buf == NULL ||
+        w->buf->tb == NULL || w->cs.curs.len == 0U ||
+        w->cs.primary >= w->cs.curs.len)
+        return false;
+    cursor = &w->cs.curs.data[w->cs.primary];
+    tb = w->buf->tb;
+    line = yew_textbuf_line_of(tb, cursor->pos);
+    sub = w->vp.wrap ? yew_vp_cursor_subrow(w) : 0U;
+    if (!yew_vp_row_of_line(w, line, sub, &row) || row >= w->rect.h)
+        return false;
+    displayed = w->vp.wrap ? yew_wrap_row(w, line, sub) :
+                              yew_textbuf_line_span(tb, line);
+    col = yew_off_to_ccol(tb, displayed, cursor->pos,
+                          w->buf->tabwidth == 0U ? YEW_VP_TABWIDTH :
+                                                  w->buf->tabwidth);
+    *x = yew_vp_gridx_of_ccol(w, col);
+    *y = (u16)(w->rect.y + row);
+    return *x >= w->rect.x &&
+           (u32)*x < (u32)w->rect.x + w->rect.w;
+}
+
+static void panel_request_done(Ed *ed, void *ctx,
+                               const JsonValue *result,
+                               const JsonValue *error)
+{
+    LspPanelRequest *request = ctx;
+    LspServer *server;
+    Win *w;
+    Bytebuf body;
+    Span span = {0};
+    bool has_span = false;
+    Vec_Span emph = {0};
+    PanelSpec spec = {0};
+    u16 x;
+    u16 y;
+    bool parsed;
+    u32 cap;
+
+    if (ed == NULL || request == NULL)
+        return;
+    w = yew_ed_win_by_id(ed, request->win_id);
+    if (w == NULL || ed->win != w ||
+        w->panel_source_server != request->server_id ||
+        w->panel_source_seq != request->seq ||
+        w->panel_source_request != request->request)
+        return;
+    w->panel_source_request = 0U;
+    w->panel_source_server = 0U;
+    server = yew_lsp_server_by_id(ed, request->server_id);
+    cap = request->kind == LSP_PANEL_HOVER ? YEW_LSPC_HOVER :
+                                             YEW_LSPC_SIGNATURE;
+    if (error != NULL) {
+        if (server != NULL &&
+            yew_json_int(yew_json_get(error, "code"), 0) == -32601)
+            server->caps.bits &= ~cap;
+        return;
+    }
+    if (server == NULL || w->buf == NULL || w->buf->tb == NULL ||
+        !panel_cursor_anchor(w, &x, &y))
+        return;
+    bytebuf_init(&body);
+    if (request->kind == LSP_PANEL_HOVER) {
+        parsed = yew_lsp_hover_parse(result, w->buf->tb, server->pos_enc,
+                                     &body, &span, &has_span);
+        if (!parsed) {
+            yew_msg(ed, YEW_MSG_INFO, "no hover information here");
+            bytebuf_free(&body);
+            return;
+        }
+        spec.title = "hover";
+        spec.place = (u8)YEW_PANEL_BELOW;
+    } else {
+        parsed = yew_lsp_signature_parse(result, &body, &span, &has_span);
+        if (!parsed) {
+            bytebuf_free(&body);
+            return;
+        }
+        if (has_span)
+            Vec_Span_push(&emph, span);
+        spec.title = "signature";
+        spec.place = (u8)YEW_PANEL_ABOVE;
+        spec.emph = &emph;
+    }
+    if (body.len > UINT32_MAX) {
+        Vec_Span_free(&emph);
+        bytebuf_free(&body);
+        return;
+    }
+    spec.body = body.data;
+    spec.len = (u32)body.len;
+    spec.x = x;
+    spec.y = y;
+    spec.role = "bg";
+    if (yew_panel_open(ed, &w->panel, &spec) &&
+        request->kind == LSP_PANEL_HOVER && has_span)
+        (void)yew_panel_mark(&w->panel, w->buf->id, w->buf->tb->gen,
+                             span, "lsp.hover_range");
+    Vec_Span_free(&emph);
+    bytebuf_free(&body);
+}
+
+static bool panel_request_start(Ed *ed, Win *w, u8 kind)
+{
+    LspDoc *doc;
+    LspServer *server;
+    LspPanelRequest *request;
+    RpcPending pending = {0};
+    Bytebuf params;
+    const Cursor *cursor;
+    const char *method;
+    u32 cap;
+    u64 id;
+
+    if (ed == NULL || w == NULL || w->buf == NULL || w->buf->tb == NULL ||
+        w->cs.curs.len != 1U || w->cs.primary >= w->cs.curs.len)
+        return false;
+    doc = yew_lsp_doc_for_buffer(ed, w->buf);
+    server = yew_lsp_server_for_doc(ed, doc);
+    cap = kind == LSP_PANEL_HOVER ? YEW_LSPC_HOVER : YEW_LSPC_SIGNATURE;
+    if (doc == NULL || server == NULL || server->state != YEW_LSP_READY ||
+        !yew_lsp_has(server, cap))
+        return false;
+    completion_cancel_id(ed, w->panel_source_server,
+                         w->panel_source_request);
+    w->panel_source_request = 0U;
+    w->panel_source_server = 0U;
+    yew_panel_close(ed, &w->panel);
+    w->panel_source_seq++;
+    if (w->panel_source_seq == 0U)
+        w->panel_source_seq++;
+    request = yew_xcalloc(1U, sizeof(*request));
+    request->win_id = w->id;
+    request->server_id = server->id;
+    request->seq = w->panel_source_seq;
+    request->kind = kind;
+    pending.buf_id = w->buf->id;
+    pending.gen = w->buf->tb->gen;
+    pending.sent_ms = ed->now_ms;
+    pending.cb = panel_request_done;
+    pending.release = panel_request_free;
+    pending.ctx = request;
+    cursor = &w->cs.curs.data[w->cs.primary];
+    method = kind == LSP_PANEL_HOVER ? "textDocument/hover" :
+                                       "textDocument/signatureHelp";
+    yew_lsp_sync_flush(ed);
+    bytebuf_init(&params);
+    position_params(&params, doc, server->pos_enc, w->buf->tb,
+                    cursor->pos, false);
+    id = params.len > UINT32_MAX ? 0U :
+         yew_rpc_call(&server->rpc, method, params.data, (u32)params.len,
+                      &pending);
+    bytebuf_free(&params);
+    if (id == 0U) {
+        panel_request_free(request);
+        return false;
+    }
+    request->request = id;
+    w->panel_source_request = id;
+    w->panel_source_server = server->id;
+    return true;
+}
+
+bool yew_lsp_hover_request(Ed *ed, Win *w)
+{
+    return panel_request_start(ed, w, (u8)LSP_PANEL_HOVER);
+}
+
+bool yew_lsp_signature_request(Ed *ed, Win *w)
+{
+    return panel_request_start(ed, w, (u8)LSP_PANEL_SIGNATURE);
 }
 
 static void completion_rows_discard(Vec_ComplItem *rows)
@@ -1163,8 +1533,8 @@ static bool lsp_shadow_request(Ed *ed, const ShadowReq *shadow)
     pending.release = completion_shadow_free;
     pending.ctx = request;
     bytebuf_init(&params);
-    completion_params(&params, doc, server->pos_enc, buffer->tb,
-                      shadow->pos);
+    position_params(&params, doc, server->pos_enc, buffer->tb,
+                    shadow->pos, true);
     id = params.len > UINT32_MAX ? 0U :
          yew_rpc_call(&server->rpc, "textDocument/completion", params.data,
                       (u32)params.len, &pending);
@@ -1241,8 +1611,8 @@ static u32 completion_enumerate(Ed *ed, Win *w, const u8 *stem, u32 stem_len,
     pending.release = completion_request_free;
     pending.ctx = request;
     bytebuf_init(&params);
-    completion_params(&params, doc, server->pos_enc, w->buf->tb,
-                      cursor->pos);
+    position_params(&params, doc, server->pos_enc, w->buf->tb,
+                    cursor->pos, true);
     id = params.len > UINT32_MAX ? 0U :
          yew_rpc_call(&server->rpc, "textDocument/completion", params.data,
                       (u32)params.len, &pending);
