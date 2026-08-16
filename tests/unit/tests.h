@@ -821,6 +821,7 @@ void test_jsonrpc_id_shapes_and_errors(void);
 void test_jsonrpc_connection_delivers_parsed_values(void);
 void test_jsonrpc_call_dispatch_and_string_echo(void);
 void test_jsonrpc_pending_cap_timeout_and_cancel(void);
+void test_jsonrpc_pending_context_released_exactly_once(void);
 void test_jsonrpc_reply_shapes(void);
 void test_jsonrpc_connection_kills_eight_malformed_messages(void);
 void test_lsp_diag_replace_tracks_marks_and_server_identity(void);

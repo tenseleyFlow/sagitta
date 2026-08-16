@@ -394,8 +394,16 @@ void yew_rpc_conn_init(RpcConn *c)
 
 void yew_rpc_conn_free(RpcConn *c)
 {
+    size_t i;
+
     if (c == NULL)
         return;
+    for (i = 0U; i < YEW_RPC_PENDING_SLOTS; i++) {
+        RpcPendingSlot *slot = &c->slots[i];
+
+        if (slot->state == RPC_SLOT_USED && slot->pending.release != NULL)
+            slot->pending.release(slot->pending.ctx);
+    }
     yew_rpcrx_free(&c->rx);
     yew_rpctx_free(&c->tx);
     (void)memset(c, 0, sizeof *c);
@@ -640,26 +648,34 @@ bool yew_rpc_dispatch(RpcConn *c, Ed *ed, const JsonValue *msg)
     if (slot == NULL || slot->state != RPC_SLOT_USED)
         return false;
     pending = slot->pending;
+    (void)memset(&slot->pending, 0, sizeof(slot->pending));
     slot->state = RPC_SLOT_TOMB;
     c->npending--;
     result = yew_json_get(msg, "result");
     error = yew_json_get(msg, "error");
     if (pending.cb != NULL)
         pending.cb(ed, pending.ctx, result, error);
+    if (pending.release != NULL)
+        pending.release(pending.ctx);
     return true;
 }
 
 bool yew_rpc_drop(RpcConn *c, u64 id)
 {
     RpcPendingSlot *slot;
+    RpcPending pending;
 
     if (c == NULL)
         return false;
     slot = find_slot(c, id, false);
     if (slot == NULL || slot->state != RPC_SLOT_USED)
         return false;
+    pending = slot->pending;
+    (void)memset(&slot->pending, 0, sizeof(slot->pending));
     slot->state = RPC_SLOT_TOMB;
     c->npending--;
+    if (pending.release != NULL)
+        pending.release(pending.ctx);
     return true;
 }
 
@@ -700,11 +716,14 @@ u32 yew_rpc_sweep(RpcConn *c, Ed *ed, i64 now_ms)
             now_ms < slot->pending.deadline_ms)
             continue;
         pending = slot->pending;
+        (void)memset(&slot->pending, 0, sizeof(slot->pending));
         slot->state = RPC_SLOT_TOMB;
         c->npending--;
         expired++;
         if (pending.cb != NULL)
             pending.cb(ed, pending.ctx, NULL, &error);
+        if (pending.release != NULL)
+            pending.release(pending.ctx);
     }
     return expired;
 }

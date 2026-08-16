@@ -843,6 +843,7 @@ const YewTest yew_tests[] = {
     T(jsonrpc_connection_delivers_parsed_values),
     T(jsonrpc_call_dispatch_and_string_echo),
     T(jsonrpc_pending_cap_timeout_and_cancel),
+    T(jsonrpc_pending_context_released_exactly_once),
     T(jsonrpc_reply_shapes),
     T(jsonrpc_connection_kills_eight_malformed_messages),
     T(lsp_diag_replace_tracks_marks_and_server_identity),

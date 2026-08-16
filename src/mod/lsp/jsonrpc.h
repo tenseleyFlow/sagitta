@@ -82,6 +82,9 @@ typedef struct RpcPending {
     i64 deadline_ms;
     void (*cb)(Ed *ed, void *ctx, const JsonValue *result,
                const JsonValue *error);
+    /* Optional ownership hook.  When set, the connection releases ctx
+     * exactly once after callback, explicit drop, timeout, or teardown. */
+    void (*release)(void *ctx);
     void *ctx;
 } RpcPending;
 

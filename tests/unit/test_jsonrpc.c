@@ -271,6 +271,75 @@ void test_jsonrpc_pending_cap_timeout_and_cancel(void)
     yew_rpc_conn_free(&c);
 }
 
+typedef struct PendingOwnerSeen {
+    u32 callbacks;
+    u32 releases;
+    bool released_during_callback;
+} PendingOwnerSeen;
+
+static void pending_owner_callback(Ed *ed, void *ctx,
+                                   const JsonValue *result,
+                                   const JsonValue *error)
+{
+    PendingOwnerSeen *seen = ctx;
+
+    (void)ed;
+    (void)result;
+    (void)error;
+    seen->callbacks++;
+    seen->released_during_callback = seen->releases != 0U;
+}
+
+static void pending_owner_release(void *ctx)
+{
+    PendingOwnerSeen *seen = ctx;
+
+    seen->releases++;
+}
+
+void test_jsonrpc_pending_context_released_exactly_once(void)
+{
+    PendingOwnerSeen seen[4] = {{0}};
+    RpcConn c;
+    RpcPending pending = {0};
+    Arena arena;
+    JsonValue *response;
+    u64 id[4];
+    u32 i;
+
+    yew_rpc_conn_init(&c);
+    pending.sent_ms = 10;
+    pending.deadline_ms = 20;
+    pending.cb = pending_owner_callback;
+    pending.release = pending_owner_release;
+    for (i = 0U; i < YEW_ARRAY_LEN(seen); i++) {
+        pending.deadline_ms = i + 1U == YEW_ARRAY_LEN(seen) ? 30 : 20;
+        pending.ctx = &seen[i];
+        id[i] = yew_rpc_call(&c, "owned", NULL, 0U, &pending);
+        YEW_ASSERT(id[i] != 0U);
+    }
+
+    arena_init(&arena);
+    response = parse(&arena,
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":null}");
+    YEW_ASSERT(yew_rpc_dispatch(&c, NULL, response));
+    YEW_ASSERT(yew_rpc_drop(&c, id[1]));
+    YEW_ASSERT_EQ_U64(yew_rpc_sweep(&c, NULL, 20), 1U);
+    yew_rpc_conn_free(&c);
+    arena_free_all(&arena);
+
+    YEW_ASSERT_EQ_U64(seen[0].callbacks, 1U);
+    YEW_ASSERT_EQ_U64(seen[0].releases, 1U);
+    YEW_ASSERT(!seen[0].released_during_callback);
+    YEW_ASSERT_EQ_U64(seen[1].callbacks, 0U);
+    YEW_ASSERT_EQ_U64(seen[1].releases, 1U);
+    YEW_ASSERT_EQ_U64(seen[2].callbacks, 1U);
+    YEW_ASSERT_EQ_U64(seen[2].releases, 1U);
+    YEW_ASSERT(!seen[2].released_during_callback);
+    YEW_ASSERT_EQ_U64(seen[3].callbacks, 0U);
+    YEW_ASSERT_EQ_U64(seen[3].releases, 1U);
+}
+
 void test_jsonrpc_reply_shapes(void)
 {
     RpcConn c;
