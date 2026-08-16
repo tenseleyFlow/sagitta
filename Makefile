@@ -1402,7 +1402,7 @@ install: all
 clean:
 	rm -rf $(BUILD)
 
-test-script: $(BUILD)/script_runner $(BUILD)/yew
+test-script: $(BUILD)/script_runner $(BUILD)/yew $(FAKELSP)
 	LC_ALL=C YEW_SCRIPT_BUDGET_MS=$(YEW_SCRIPT_BUDGET_MS) \
 		$(if $(filter 1,$(VALGRIND)),$(VALGRIND_RUN) \
 		--trace-children=yes \
@@ -1414,25 +1414,28 @@ test-script: $(BUILD)/script_runner $(BUILD)/yew
 		--trace-children=yes \
 		$(VALGRIND_TRACE_SKIP),) \
 		$(BUILD)/script_runner \
-		--yew $(abspath $(BUILD)/yew)
+		--yew $(abspath $(BUILD)/yew) \
+		--fakelsp $(abspath $(FAKELSP))
 
-test-script-determinism: $(BUILD)/script_runner $(BUILD)/yew
+test-script-determinism: $(BUILD)/script_runner $(BUILD)/yew $(FAKELSP)
 	@set -e; \
 	tmp=$$(mktemp -d); \
 	trap 'rm -rf "$$tmp"' EXIT HUP INT TERM; \
 	LC_ALL=C $(BUILD)/script_runner --selftest \
 		--yew $(abspath $(BUILD)/yew) >"$$tmp/run-1" 2>&1; \
 	LC_ALL=C $(BUILD)/script_runner \
-		--yew $(abspath $(BUILD)/yew) >>"$$tmp/run-1" 2>&1; \
+		--yew $(abspath $(BUILD)/yew) \
+		--fakelsp $(abspath $(FAKELSP)) >>"$$tmp/run-1" 2>&1; \
 	LC_ALL=C $(BUILD)/script_runner --selftest \
 		--yew $(abspath $(BUILD)/yew) >"$$tmp/run-2" 2>&1; \
 	LC_ALL=C $(BUILD)/script_runner \
-		--yew $(abspath $(BUILD)/yew) >>"$$tmp/run-2" 2>&1; \
+		--yew $(abspath $(BUILD)/yew) \
+		--fakelsp $(abspath $(FAKELSP)) >>"$$tmp/run-2" 2>&1; \
 	diff -u "$$tmp/run-1" "$$tmp/run-2"; \
 	echo 'test-script-determinism: ok'
 
 test-script-budget: $(BUILD)/perf_script_suite $(BUILD)/script_runner \
-                    $(BUILD)/yew $(SCRIPT_SUITE_BASELINE)
+                    $(BUILD)/yew $(FAKELSP) $(SCRIPT_SUITE_BASELINE)
 	$(BUILD)/perf_script_suite --selftest
 	LC_ALL=C $(BUILD)/perf_script_suite \
 		--runner $(abspath $(BUILD)/script_runner) \
