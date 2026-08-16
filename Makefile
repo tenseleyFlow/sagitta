@@ -1405,12 +1405,14 @@ clean:
 
 test-script: $(BUILD)/script_runner $(BUILD)/yew $(FAKELSP)
 	LC_ALL=C YEW_SCRIPT_BUDGET_MS=$(YEW_SCRIPT_BUDGET_MS) \
+		$(if $(filter 1,$(VALGRIND)),YEW_TEST_INSTRUMENTED=1,) \
 		$(if $(filter 1,$(VALGRIND)),$(VALGRIND_RUN) \
 		--trace-children=yes \
 		$(VALGRIND_TRACE_SKIP),) \
 		$(BUILD)/script_runner --selftest \
 		--yew $(abspath $(BUILD)/yew)
 	LC_ALL=C YEW_SCRIPT_BUDGET_MS=$(YEW_SCRIPT_BUDGET_MS) \
+		$(if $(filter 1,$(VALGRIND)),YEW_TEST_INSTRUMENTED=1,) \
 		$(if $(filter 1,$(VALGRIND)),$(VALGRIND_RUN) \
 		--trace-children=yes \
 		$(VALGRIND_TRACE_SKIP),) \

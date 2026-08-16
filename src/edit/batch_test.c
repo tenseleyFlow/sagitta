@@ -534,9 +534,14 @@ static bool t_tmpdir(FlVm *vm, FlValue *a, u32 n, FlValue *out)
  */
 static bool t_pump(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
-    enum { PUMP_MAX_MS = 5000, PUMP_SLICE_MS = 10 };
+    enum {
+        PUMP_MAX_MS = 5000,
+        PUMP_SLICE_MS = 10,
+        PUMP_INSTRUMENTED_SCALE = 8
+    };
     Ed *ed = vm->ed;
     i64 duration;
+    i64 scale;
     i64 start;
     i64 deadline;
     bool first = true;
@@ -552,7 +557,9 @@ static bool t_pump(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     start = yew_now_ms();
     if (start < 0)
         return fl_raise(vm, "io", "t.pump: monotonic clock failed");
-    deadline = start + duration;
+    scale = getenv("YEW_TEST_INSTRUMENTED") == NULL ? 1 :
+            PUMP_INSTRUMENTED_SCALE;
+    deadline = start + duration * scale;
     for (;;) {
         struct pollfd pfd[YEW_JOB_MAX * 4U];
         u32 nfds = 0U;
