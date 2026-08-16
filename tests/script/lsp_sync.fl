@@ -1,0 +1,23 @@
+# CONFIG
+# Sprint 46: a batch script drives the real framed-job LSP lifecycle.
+import buf
+
+let path = t.fixture("lsp_sync.c")
+let b = buf.open(path)
+t.eq(buf.lang(b), "c")
+
+t.pump(250)
+t.job_stderr("seq:initialize\nseq:initialized\nseq:didOpen\n")
+
+edit { buf.insert(b, buf.len(b), "/* changed */\n") }
+t.pump(100)
+t.job_stderr("seq:initialize\nseq:initialized\nseq:didOpen\nseq:didChange\n")
+
+buf.save(b)
+t.pump(100)
+t.job_stderr("seq:initialize\nseq:initialized\nseq:didOpen\nseq:didChange\nseq:didSave\n")
+t.file(path, "int main(void)\n{\n    return 0;\n}\n/* changed */\n")
+
+buf.close(b)
+t.pump(100)
+t.job_stderr("seq:initialize\nseq:initialized\nseq:didOpen\nseq:didChange\nseq:didSave\nseq:didClose\n")

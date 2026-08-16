@@ -11,8 +11,11 @@
  * A test whose first line is exactly "# CONFIG" runs without --clean; every
  * other test gets --clean.  Keeping the opt-in in byte zero makes discovery
  * deterministic and prevents an incidental comment later in a test from
- * changing its environment.  An optional sibling <test>.stdout file pins the
- * child's stdout byte-for-byte; tests without one retain the original rules.
+ * changing its environment.  A marked test may carry <test>.config, passed as
+ * an explicit --config path; the runner also pins YEW_RUNTIME_DIR and supplies
+ * an absolute YEW_TEST_FAKELSP only through --fakelsp.  An optional sibling
+ * <test>.stdout file pins the child's stdout byte-for-byte; tests without one
+ * retain the original rules.
  */
 
 #include <dirent.h>
@@ -49,6 +52,7 @@ typedef struct TestFile {
     char *name;
     char *path;
     char *stdout_path;
+    char *config_path;
     bool config;
 } TestFile;
 
@@ -254,6 +258,50 @@ static char *stdout_sibling_path(const char *path)
     return sibling;
 }
 
+static char *config_sibling_path(const char *path)
+{
+    size_t len = strlen(path);
+    char *sibling;
+
+    if (len < 3U || strcmp(path + len - 3U, ".fl") != 0 ||
+        len > SIZE_MAX - 5U)
+        return NULL;
+    sibling = malloc(len + 5U);
+    if (sibling == NULL)
+        return NULL;
+    memcpy(sibling, path, len - 3U);
+    memcpy(sibling + len - 3U, ".config", sizeof(".config"));
+    return sibling;
+}
+
+static bool optional_config_sibling(const char *path, bool requested,
+                                    char **sibling)
+{
+    struct stat st;
+    char *candidate;
+
+    *sibling = NULL;
+    if (!requested)
+        return true;
+    candidate = config_sibling_path(path);
+    if (candidate == NULL)
+        return false;
+    if (lstat(candidate, &st) == 0) {
+        if (!S_ISREG(st.st_mode)) {
+            free(candidate);
+            return false;
+        }
+        *sibling = candidate;
+        return true;
+    }
+    if (errno != ENOENT) {
+        free(candidate);
+        return false;
+    }
+    free(candidate);
+    return true;
+}
+
 static bool optional_stdout_sibling(const char *path, char **sibling)
 {
     struct stat st;
@@ -316,7 +364,7 @@ static char *test_name(const char *file)
 }
 
 static bool list_push(TestList *list, char *name, char *path,
-                      char *stdout_path, bool config)
+                      char *stdout_path, char *config_path, bool config)
 {
     TestFile *grown;
     size_t cap;
@@ -334,6 +382,7 @@ static bool list_push(TestList *list, char *name, char *path,
     list->data[list->len].name = name;
     list->data[list->len].path = path;
     list->data[list->len].stdout_path = stdout_path;
+    list->data[list->len].config_path = config_path;
     list->data[list->len].config = config;
     list->len++;
     return true;
@@ -347,6 +396,7 @@ static void list_free(TestList *list)
         free(list->data[i].name);
         free(list->data[i].path);
         free(list->data[i].stdout_path);
+        free(list->data[i].config_path);
     }
     free(list->data);
     memset(list, 0, sizeof(*list));
@@ -382,7 +432,9 @@ static bool discover(const char *dir_path, TestList *list)
         struct stat st;
         char *path;
         char *name;
-        char *stdout_path;
+        char *stdout_path = NULL;
+        char *config_path = NULL;
+        bool config;
 
         errno = 0;
         entry = readdir(dir);
@@ -403,13 +455,16 @@ static bool discover(const char *dir_path, TestList *list)
             continue;
         }
         name = test_name(entry->d_name);
+        config = header_requests_config(path);
         if (name == NULL || !optional_stdout_sibling(path, &stdout_path) ||
-            !list_push(list, name, path, stdout_path,
-                       header_requests_config(path))) {
+            !optional_config_sibling(path, config, &config_path) ||
+            !list_push(list, name, path, stdout_path, config_path, config)) {
             free(name);
             free(path);
-            if (name != NULL)
+            if (name != NULL) {
                 free(stdout_path);
+                free(config_path);
+            }
             ok = false;
             break;
         }
@@ -625,13 +680,18 @@ static bool set_result_fd_environment(void)
     return setenv("YEW_SCRIPT_RESULT_FD", "3", 1) == 0;
 }
 
-static bool child_environment(const char *root, const char *work)
+static bool child_environment(const char *root, const char *work,
+                              const char *fakelsp)
 {
     char *cfg = path_join(root, "cfg");
     char *state = path_join(root, "state");
     char *data = path_join(root, "data");
     char *cache = path_join(root, "cache");
-    bool ok = cfg != NULL && state != NULL && data != NULL && cache != NULL;
+    char *runtime = realpath("runtime", NULL);
+    bool fake_ok = fakelsp == NULL ? unsetenv("YEW_TEST_FAKELSP") == 0 :
+                   setenv("YEW_TEST_FAKELSP", fakelsp, 1) == 0;
+    bool ok = cfg != NULL && state != NULL && data != NULL && cache != NULL &&
+              runtime != NULL && fake_ok;
 
     if (ok)
         ok = setenv("HOME", root, 1) == 0 &&
@@ -639,6 +699,7 @@ static bool child_environment(const char *root, const char *work)
              setenv("XDG_STATE_HOME", state, 1) == 0 &&
              setenv("XDG_DATA_HOME", data, 1) == 0 &&
              setenv("XDG_CACHE_HOME", cache, 1) == 0 &&
+             setenv("YEW_RUNTIME_DIR", runtime, 1) == 0 &&
              setenv("TMPDIR", root, 1) == 0 &&
              setenv("YEW_SCRIPT_TMPDIR", root, 1) == 0 &&
              set_result_fd_environment() &&
@@ -647,19 +708,25 @@ static bool child_environment(const char *root, const char *work)
     free(state);
     free(data);
     free(cache);
+    free(runtime);
     return ok;
 }
 
 static size_t build_child_argv(char **argv, const char *yew,
-                               const char *script, bool config)
+                               const char *script, bool config,
+                               const char *config_path)
 {
     size_t argc = 0U;
 
     argv[argc++] = (char *)yew;
     argv[argc++] = (char *)"--batch";
     argv[argc++] = (char *)"--test";
-    if (!config)
+    if (config_path != NULL) {
+        argv[argc++] = (char *)"--config";
+        argv[argc++] = (char *)config_path;
+    } else if (!config) {
         argv[argc++] = (char *)"--clean";
+    }
     argv[argc++] = (char *)script;
     argv[argc] = NULL;
     return argc;
@@ -667,14 +734,15 @@ static size_t build_child_argv(char **argv, const char *yew,
 
 static void child_exec(const char *yew, const char *script,
                        const char *root, const char *work,
-                       bool config, int out_pipe[2], int err_pipe[2],
+                       bool config, const char *config_path,
+                       const char *fakelsp, int out_pipe[2], int err_pipe[2],
                        int result_pipe[2])
 {
     int fds[6];
     size_t i;
-    char *child_argv[6];
+    char *child_argv[8];
 
-    (void)build_child_argv(child_argv, yew, script, config);
+    (void)build_child_argv(child_argv, yew, script, config, config_path);
 
     if (setpgid(0, 0) != 0)
         _exit(126);
@@ -691,7 +759,7 @@ static void child_exec(const char *yew, const char *script,
     for (i = 0U; i < sizeof(fds) / sizeof(fds[0]); i++)
         if (fds[i] > RESULT_FD)
             (void)close(fds[i]);
-    if (!child_environment(root, work)) {
+    if (!child_environment(root, work, fakelsp)) {
         (void)dprintf(STDERR_FILENO,
                       "script: cannot prepare sandbox: %s\n",
                       strerror(errno));
@@ -841,7 +909,8 @@ static bool make_sandbox(const char *fixtures, char **root_out,
 }
 
 static bool run_test(const char *yew, const char *fixtures,
-                     const TestFile *test, char **sandbox, RunResult *result)
+                     const char *fakelsp, const TestFile *test,
+                     char **sandbox, RunResult *result)
 {
     int out_pipe[2] = {-1, -1};
     int err_pipe[2] = {-1, -1};
@@ -874,7 +943,8 @@ static bool run_test(const char *yew, const char *fixtures,
     }
     if (child == 0)
         child_exec(yew, test->path, *sandbox, work,
-                   test->config, out_pipe, err_pipe, result_pipe);
+                   test->config, test->config_path, fakelsp,
+                   out_pipe, err_pipe, result_pipe);
     if (setpgid(child, child) != 0 && errno != EACCES && errno != ESRCH) {
         (void)kill(child, SIGKILL);
         while (waitpid(child, &result->status, 0) < 0 && errno == EINTR) {
@@ -1107,13 +1177,34 @@ static char *absolute_existing(const char *path)
     return realpath(path, NULL);
 }
 
+static char *fakelsp_beside_yew(const char *yew)
+{
+    char *dir = strdup(yew);
+    char *slash;
+    char *path;
+
+    if (dir == NULL)
+        return NULL;
+    slash = strrchr(dir, '/');
+    if (slash == NULL) {
+        free(dir);
+        return NULL;
+    }
+    *slash = '\0';
+    path = path_join(dir, "tests/helpers/fakelsp");
+    free(dir);
+    return path;
+}
+
 static bool parse_cli(int argc, char **argv, const char **filter,
-                      const char **yew, bool *list, bool *selftest)
+                      const char **yew, const char **fakelsp,
+                      bool *list, bool *selftest)
 {
     int i;
 
     *filter = NULL;
     *yew = "build/yew";
+    *fakelsp = NULL;
     *list = false;
     *selftest = false;
     for (i = 1; i < argc; i++) {
@@ -1134,6 +1225,13 @@ static bool parse_cli(int argc, char **argv, const char **filter,
                 return false;
             }
             *yew = argv[i];
+        } else if (strcmp(argv[i], "--fakelsp") == 0) {
+            if (++i >= argc) {
+                (void)fprintf(stderr,
+                              "script: --fakelsp requires a path\n");
+                return false;
+            }
+            *fakelsp = argv[i];
         } else {
             (void)fprintf(stderr, "script: unknown option '%s'\n", argv[i]);
             return false;
@@ -1269,8 +1367,8 @@ static bool selftest_result_fd_env(void)
 static bool selftest_zero_filter(void)
 {
     TestFile data[] = {
-        {(char *)"alpha", (char *)"alpha.fl", NULL, false},
-        {(char *)"beta", (char *)"beta.fl", NULL, false}
+        {(char *)"alpha", (char *)"alpha.fl", NULL, NULL, false},
+        {(char *)"beta", (char *)"beta.fl", NULL, NULL, false}
     };
     TestList tests = {data, sizeof(data) / sizeof(data[0]),
                       sizeof(data) / sizeof(data[0])};
@@ -1308,12 +1406,15 @@ static bool selftest_config_directive(void)
     static const char yes_crlf[] = "# CONFIG\r\nprint(1)\r\n";
     static const char no_later[] = "# comment\n# CONFIG\n";
     static const char no_suffix[] = "# CONFIGURE\n";
-    char *clean_argv[6];
-    char *config_argv[6];
+    char *clean_argv[8];
+    char *config_argv[8];
+    char *sibling_argv[8];
     size_t clean_argc = build_child_argv(clean_argv, "yew", "test.fl",
-                                         false);
+                                         false, NULL);
     size_t config_argc = build_child_argv(config_argv, "yew", "test.fl",
-                                          true);
+                                          true, NULL);
+    size_t sibling_argc = build_child_argv(sibling_argv, "yew", "test.fl",
+                                           true, "test.config");
 
     return config_header_bytes(yes_lf, sizeof(yes_lf) - 1U) &&
            config_header_bytes(yes_crlf, sizeof(yes_crlf) - 1U) &&
@@ -1322,7 +1423,11 @@ static bool selftest_config_directive(void)
            clean_argc == 5U && strcmp(clean_argv[3], "--clean") == 0 &&
            strcmp(clean_argv[4], "test.fl") == 0 &&
            config_argc == 4U && strcmp(config_argv[3], "test.fl") == 0 &&
-           config_argv[4] == NULL;
+           config_argv[4] == NULL && sibling_argc == 6U &&
+           strcmp(sibling_argv[3], "--config") == 0 &&
+           strcmp(sibling_argv[4], "test.config") == 0 &&
+           strcmp(sibling_argv[5], "test.fl") == 0 &&
+           sibling_argv[6] == NULL;
 }
 
 static bool protocol_has_all_negative_assertions(const Bytes *protocol)
@@ -1382,7 +1487,8 @@ static bool selftest_negative_assertion_host(const char *yew,
     char *meta_dir = path_join(script_dir, "meta");
     char *script = meta_dir == NULL ? NULL :
                    path_join(meta_dir, "assertion_failures.fl");
-    TestFile test = {(char *)"assertion_failures", script, NULL, false};
+    TestFile test = {(char *)"assertion_failures", script, NULL, NULL,
+                     false};
     RunResult result;
     Protocol protocol = {0};
     char *sandbox = NULL;
@@ -1392,7 +1498,7 @@ static bool selftest_negative_assertion_host(const char *yew,
 
     if (script != NULL) {
         attempted = true;
-        ran = run_test(yew, fixtures, &test, &sandbox, &result);
+        ran = run_test(yew, fixtures, NULL, &test, &sandbox, &result);
     }
     if (ran) {
         protocol = parse_protocol(&result.protocol);
@@ -1460,12 +1566,14 @@ int main(int argc, char **argv)
 {
     const char *filter;
     const char *yew_arg;
+    const char *fakelsp_arg;
     bool list_only;
     bool selftest;
     char *root;
     char *script_dir;
     char *fixtures;
     char *yew;
+    char *fakelsp = NULL;
     TestList tests = {0};
     size_t selected = 0U;
     size_t suite_assertions = 0U;
@@ -1479,7 +1587,7 @@ int main(int argc, char **argv)
                       strerror(errno));
         return 1;
     }
-    if (!parse_cli(argc, argv, &filter, &yew_arg, &list_only,
+    if (!parse_cli(argc, argv, &filter, &yew_arg, &fakelsp_arg, &list_only,
                    &selftest))
         return 1;
     root = getcwd(NULL, 0U);
@@ -1552,10 +1660,38 @@ int main(int argc, char **argv)
         list_free(&tests);
         return 1;
     }
+    for (i = 0U; i < tests.len; i++) {
+        if ((filter == NULL || strstr(tests.data[i].name, filter) != NULL) &&
+            tests.data[i].config_path != NULL) {
+            char *derived = fakelsp_arg == NULL ? fakelsp_beside_yew(yew) :
+                            NULL;
+            const char *requested = fakelsp_arg == NULL ? derived :
+                                    fakelsp_arg;
+
+            fakelsp = requested == NULL ? NULL :
+                      absolute_existing(requested);
+            if (fakelsp == NULL) {
+                (void)fprintf(stderr,
+                              "script: cannot resolve fakelsp '%s': %s\n",
+                              requested == NULL ? "(beside yew)" : requested,
+                              strerror(errno));
+                free(derived);
+                free(yew);
+                free(root);
+                free(script_dir);
+                free(fixtures);
+                list_free(&tests);
+                return 1;
+            }
+            free(derived);
+            break;
+        }
+    }
     if (signal(SIGPIPE, SIG_IGN) == SIG_ERR) {
         (void)fprintf(stderr, "script: cannot ignore SIGPIPE: %s\n",
                       strerror(errno));
         free(yew);
+        free(fakelsp);
         free(root);
         free(script_dir);
         free(fixtures);
@@ -1574,7 +1710,8 @@ int main(int argc, char **argv)
 
         if (filter != NULL && strstr(tests.data[i].name, filter) == NULL)
             continue;
-        (void)run_test(yew, fixtures, &tests.data[i], &sandbox, &result);
+        (void)run_test(yew, fixtures, fakelsp, &tests.data[i], &sandbox,
+                       &result);
         protocol = parse_protocol(&result.protocol);
         if (protocol.valid)
             suite_assertions += protocol.assertions;
@@ -1651,6 +1788,7 @@ int main(int argc, char **argv)
                  suite_failures == 1U ? "" : "s", suite_skipped);
     (void)fflush(stdout);
     free(yew);
+    free(fakelsp);
     free(root);
     free(script_dir);
     free(fixtures);

@@ -6,18 +6,22 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <limits.h>
+#include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
 #include "edit/ed.h"
+#include "edit/job.h"
+#include "edit/loop.h"
 #include "edit/select.h"
 #include "fl/gc.h"
 #include "fl/handle.h"
 #include "fl/std.h"
 #include "fl/value.h"
 #include "fl/vm.h"
+#include "mod/lsp/lsp.h"
 #include "text/piece.h"
 #include "text/register.h"
 #include "text/undo.h"
@@ -521,6 +525,102 @@ static bool t_tmpdir(FlVm *vm, FlValue *a, u32 n, FlValue *out)
     *out = FL_OBJ_V(FL_STR, fl_str_new(vm, path, (u32)strlen(path))); return true;
 }
 
+/*
+ * A batch script normally runs to completion without entering loop.c.  LSP
+ * integration tests still need the same process and pipe mechanics as an
+ * interactive turn, so this test-only native drives precisely the job/LSP
+ * portion of that loop.  The caller supplies the wall-clock budget; both the
+ * per-call cap and the monotonic deadline keep a broken fixture bounded.
+ */
+static bool t_pump(FlVm *vm, FlValue *a, u32 n, FlValue *out)
+{
+    enum { PUMP_MAX_MS = 5000, PUMP_SLICE_MS = 10 };
+    Ed *ed = vm->ed;
+    i64 duration;
+    i64 start;
+    i64 deadline;
+    bool first = true;
+
+    (void)n;
+    if (!fl_arg_int(vm, a, 0U, &duration))
+        return false;
+    if (duration < 0 || duration > PUMP_MAX_MS)
+        return fl_raise(vm, "range", "t.pump: milliseconds must be 0..%u",
+                        (unsigned)PUMP_MAX_MS);
+    if (ed == NULL)
+        return fl_raise(vm, "handle", "t.pump: no editor is attached");
+    start = yew_now_ms();
+    if (start < 0)
+        return fl_raise(vm, "io", "t.pump: monotonic clock failed");
+    deadline = start + duration;
+    for (;;) {
+        struct pollfd pfd[YEW_JOB_MAX * 4U];
+        u32 nfds = 0U;
+        i64 now = yew_now_ms();
+        int polled;
+
+        if (!first && now >= deadline)
+            break;
+        first = false;
+        yew_job_collect_fds(ed, pfd, &nfds);
+        for (;;) {
+            i64 remain;
+            i64 job_wait;
+            int timeout;
+
+            now = yew_now_ms();
+            remain = deadline - now;
+            timeout = remain <= 0 ? 0 :
+                      remain < PUMP_SLICE_MS ? (int)remain : PUMP_SLICE_MS;
+            job_wait = yew_job_deadline(ed, now);
+            if (job_wait >= 0 && job_wait < timeout)
+                timeout = (int)job_wait;
+            polled = poll(pfd, (nfds_t)nfds, timeout);
+            if (polled >= 0 || errno != EINTR)
+                break;
+        }
+        if (polled < 0)
+            return fl_raise(vm, "io", "t.pump: poll failed: %s",
+                            strerror(errno));
+        now = yew_now_ms();
+        ed->now_ms = now;
+        yew_job_pump(ed, pfd, nfds);
+        yew_job_reap(ed);
+        yew_job_tick(ed, now);
+        yew_job_settle(ed);
+        yew_lsp_pump(ed);
+    }
+    *out = FL_NIL_V;
+    return true;
+}
+
+/* Exact, generic observation of subprocess stderr for integration scripts. */
+static bool t_job_stderr(FlVm *vm, FlValue *a, u32 n, FlValue *out)
+{
+    const FlStr *want;
+    Bytebuf got;
+    u32 i;
+
+    (void)n;
+    assertion(vm);
+    if (!fl_arg_str(vm, a, 0U, &want))
+        return false;
+    bytebuf_init(&got);
+    if (vm->ed != NULL) {
+        for (i = 0U; i < vm->ed->jobs.len; i++) {
+            const YewJob *job = &vm->ed->jobs.v[i];
+
+            bytebuf_append(&got, job->framed_err.data, job->framed_err.len);
+        }
+    }
+    if (got.len != want->len ||
+        (got.len != 0U && memcmp(got.data, want->b, got.len) != 0))
+        fail_bytes(vm, want, &got);
+    bytebuf_free(&got);
+    *out = FL_NIL_V;
+    return true;
+}
+
 static bool t_skip(FlVm *vm, FlValue *a, u32 n, FlValue *out)
 {
     const FlStr *reason; (void)n;
@@ -536,6 +636,7 @@ static const TestNativeDef TEST_NATIVES[] = {
     {"undo", t_undo, 2U, 2U}, {"file", t_file, 2U, 2U},
     {"raises", t_raises, 2U, 2U}, {"log", t_log, 2U, 2U},
     {"fixture", t_fixture, 1U, 1U}, {"tmpdir", t_tmpdir, 0U, 0U},
+    {"pump", t_pump, 1U, 1U}, {"job_stderr", t_job_stderr, 1U, 1U},
     {"skip", t_skip, 1U, 1U}
 };
 
