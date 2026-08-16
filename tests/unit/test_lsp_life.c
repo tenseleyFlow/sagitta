@@ -20,10 +20,13 @@
 #include "mod/lsp/lsp.h"
 #include "edit/cmd.h"
 #include "edit/ed.h"
+#include "edit/jumplist.h"
 #include "edit/job.h"
 #include "edit/loop.h"
+#include "term/grid.h"
 #include "ui/message.h"
 #include "ui/complmenu.h"
+#include "ui/picker.h"
 #include "util/arena.h"
 
 static JsonValue *parse(Arena *arena, const char *json)
@@ -317,6 +320,17 @@ static void life_fix_free(LifeFix *f)
     YEW_ASSERT(marker_rc == 0 || errno == ENOENT);
 }
 
+static void life_marker_write(LifeFix *f, const char *text)
+{
+    size_t len = strlen(text);
+    int fd = open(f->marker, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC,
+                  0600);
+
+    YEW_ASSERT(fd >= 0);
+    YEW_ASSERT_EQ_I64(write(fd, text, len), (i64)len);
+    YEW_ASSERT_EQ_I64(close(fd), 0);
+}
+
 static void life_pump_once(Ed *ed)
 {
     struct pollfd pfd[YEW_JOB_MAX * 4U];
@@ -401,6 +415,34 @@ static bool wait_capability_clear(LifeFix *f, u32 capability,
 
     while (yew_now_ms() - start <= timeout_ms) {
         if (!yew_lsp_has(life_server(f), capability))
+            return true;
+        life_pump_once(&f->ed);
+    }
+    return false;
+}
+
+static bool wait_current_path(LifeFix *f, const char *path, i64 timeout_ms)
+{
+    i64 start = yew_now_ms();
+
+    while (yew_now_ms() - start <= timeout_ms) {
+        Buffer *buffer = yew_ed_doc(&f->ed);
+
+        if (buffer != NULL && buffer->path != NULL &&
+            strcmp(buffer->path, path) == 0)
+            return true;
+        life_pump_once(&f->ed);
+    }
+    return false;
+}
+
+static bool wait_picker_rows(LifeFix *f, u32 rows, i64 timeout_ms)
+{
+    i64 start = yew_now_ms();
+
+    while (yew_now_ms() - start <= timeout_ms) {
+        if (yew_picker_active(&f->ed) &&
+            yew_picker_total(&f->ed) == rows)
             return true;
         life_pump_once(&f->ed);
     }
@@ -612,6 +654,99 @@ void test_lsp_lifecycle_method_not_found_clears_panel_capabilities(void)
     YEW_ASSERT(yew_lsp_signature(&f.ed, f.ed.win));
     YEW_ASSERT(wait_capability_clear(&f, YEW_LSPC_SIGNATURE, 2000));
     YEW_ASSERT(!f.ed.win->panel.open);
+
+    yew_lsp_client_stop(&f.ed, server, true);
+    YEW_ASSERT(wait_server_drained(&f, server, 2000));
+    life_fix_free(&f);
+}
+
+void test_lsp_lifecycle_definition_response_jumps_to_single_location(void)
+{
+    LifeFix f;
+    LspServer *server;
+    Cursor *cursor;
+
+    life_fix_init(&f, "session-definition", 1000);
+    life_marker_write(&f, "abcdef\n");
+    YEW_ASSERT(wait_state(&f, YEW_LSP_READY, 2000));
+    server = life_server(&f);
+    YEW_ASSERT(yew_lsp_has(server, YEW_LSPC_DEFINITION));
+    YEW_ASSERT(yew_lsp_has(server, YEW_LSPC_REFERENCES));
+    cursor = yew_ed_cursor(&f.ed);
+    YEW_ASSERT_NOT_NULL(cursor);
+    cursor->pos = BYTEOFF(1U);
+    cursor->anchor = cursor->pos;
+
+    YEW_ASSERT(yew_lsp_goto_definition(&f.ed, f.ed.win));
+    YEW_ASSERT(wait_current_path(&f, f.marker, 2000));
+    cursor = yew_ed_cursor(&f.ed);
+    YEW_ASSERT_NOT_NULL(cursor);
+    YEW_ASSERT_EQ_U64(cursor->pos.v, 2U);
+    YEW_ASSERT_EQ_U64(yew_jumplist_len(&f.ed.win->jumps), 1U);
+    YEW_ASSERT_EQ_U64(f.ed.win->nav_source_request, 0U);
+
+    yew_lsp_client_stop(&f.ed, server, true);
+    YEW_ASSERT(wait_server_drained(&f, server, 2000));
+    life_fix_free(&f);
+}
+
+void test_lsp_lifecycle_references_response_opens_multi_location_picker(void)
+{
+    LifeFix f;
+    LspServer *server;
+
+    life_fix_init(&f, "session-references", 1000);
+    life_marker_write(&f, "abcdef\n");
+    YEW_ASSERT(yew_grid_init(&f.ed.grid, &f.ed.interner, 24U, 80U));
+    YEW_ASSERT(wait_state(&f, YEW_LSP_READY, 2000));
+    server = life_server(&f);
+    YEW_ASSERT(yew_lsp_has(server, YEW_LSPC_REFERENCES));
+
+    YEW_ASSERT(yew_lsp_references(&f.ed, f.ed.win));
+    YEW_ASSERT(wait_picker_rows(&f, 2U, 2000));
+    YEW_ASSERT_EQ_U64(yew_jumplist_len(&f.ed.win->jumps), 0U);
+    yew_picker_close(&f.ed, false);
+    YEW_ASSERT_EQ_U64(yew_jumplist_len(&f.ed.win->jumps), 0U);
+
+    yew_lsp_client_stop(&f.ed, server, true);
+    YEW_ASSERT(wait_server_drained(&f, server, 2000));
+    life_fix_free(&f);
+}
+
+void test_lsp_lifecycle_empty_definition_reports_exact_info_message(void)
+{
+    LifeFix f;
+    LspServer *server;
+
+    life_fix_init(&f, "session-definition-empty", 1000);
+    YEW_ASSERT(wait_state(&f, YEW_LSP_READY, 2000));
+    server = life_server(&f);
+
+    YEW_ASSERT(yew_lsp_goto_definition(&f.ed, f.ed.win));
+    YEW_ASSERT(wait_message(&f, "fakelsp: no definition found", 2000));
+    YEW_ASSERT_EQ_U64(f.ed.msg.sev, YEW_MSG_INFO);
+    YEW_ASSERT_EQ_U64(yew_jumplist_len(&f.ed.win->jumps), 0U);
+
+    yew_lsp_client_stop(&f.ed, server, true);
+    YEW_ASSERT(wait_server_drained(&f, server, 2000));
+    life_fix_free(&f);
+}
+
+void test_lsp_lifecycle_method_not_found_clears_definition_capability(void)
+{
+    LifeFix f;
+    LspServer *server;
+
+    life_fix_init(&f, "session-definition-missing", 1000);
+    YEW_ASSERT(wait_state(&f, YEW_LSP_READY, 2000));
+    server = life_server(&f);
+    YEW_ASSERT(yew_lsp_has(server, YEW_LSPC_DEFINITION));
+
+    YEW_ASSERT(yew_lsp_goto_definition(&f.ed, f.ed.win));
+    YEW_ASSERT(wait_capability_clear(&f, YEW_LSPC_DEFINITION, 2000));
+    YEW_ASSERT(!yew_lsp_goto_definition(&f.ed, f.ed.win));
+    YEW_ASSERT_EQ_STR(f.ed.msg.text,
+                      "fakelsp does not support definition");
 
     yew_lsp_client_stop(&f.ed, server, true);
     YEW_ASSERT(wait_server_drained(&f, server, 2000));

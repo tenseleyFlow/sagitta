@@ -191,6 +191,10 @@ static int run_session(const char *mode, const char *marker)
         strcmp(mode, "session-completion-missing") == 0 ||
         strcmp(mode, "session-panels") == 0 ||
         strcmp(mode, "session-panel-missing") == 0 ||
+        strcmp(mode, "session-definition") == 0 ||
+        strcmp(mode, "session-definition-empty") == 0 ||
+        strcmp(mode, "session-definition-missing") == 0 ||
+        strcmp(mode, "session-references") == 0 ||
         strcmp(mode, "session-unversioned") == 0 ||
         strcmp(mode, "session-stale") == 0 ||
         strcmp(mode, "session-resistant") == 0 ||
@@ -222,7 +226,13 @@ static int run_session(const char *mode, const char *marker)
                    strcmp(mode, "session-panel-missing") == 0)
                     ? ",\"signatureHelpProvider\":{"
                       "\"triggerCharacters\":[\"(\"]}"
-                    : "");
+                    : (strcmp(mode, "session-definition") == 0 ||
+                       strcmp(mode, "session-definition-empty") == 0 ||
+                       strcmp(mode, "session-definition-missing") == 0 ||
+                       strcmp(mode, "session-references") == 0)
+                        ? ",\"definitionProvider\":true,"
+                          "\"referencesProvider\":true"
+                        : "");
     if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
         return 13;
     if (!read_method("\"method\":\"initialized\"", NULL) ||
@@ -268,6 +278,51 @@ static int run_session(const char *mode, const char *marker)
         if (!read_method("\"method\":\"textDocument/didChange\"", NULL) ||
             !write_all(STDERR_FILENO, "seq:didChange\n", 14U))
             return 24;
+    } else if (strcmp(mode, "session-definition") == 0) {
+        if (marker == NULL ||
+            !read_method("\"method\":\"textDocument/definition\"", &id) ||
+            id == 0U)
+            return 46;
+        n = snprintf(response, sizeof(response),
+            "{\"jsonrpc\":\"2.0\",\"id\":%llu,\"result\":{"
+            "\"uri\":\"file://%s\",\"range\":{"
+            "\"start\":{\"line\":0,\"character\":2},"
+            "\"end\":{\"line\":0,\"character\":4}}}}", id, marker);
+        if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
+            return 47;
+    } else if (strcmp(mode, "session-definition-empty") == 0) {
+        if (!read_method("\"method\":\"textDocument/definition\"", &id) ||
+            id == 0U)
+            return 48;
+        n = snprintf(response, sizeof(response),
+            "{\"jsonrpc\":\"2.0\",\"id\":%llu,\"result\":[]}", id);
+        if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
+            return 49;
+    } else if (strcmp(mode, "session-definition-missing") == 0) {
+        if (!read_method("\"method\":\"textDocument/definition\"", &id) ||
+            id == 0U)
+            return 50;
+        n = snprintf(response, sizeof(response),
+            "{\"jsonrpc\":\"2.0\",\"id\":%llu,\"error\":{"
+            "\"code\":-32601,\"message\":\"missing\"}}", id);
+        if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
+            return 51;
+    } else if (strcmp(mode, "session-references") == 0) {
+        if (marker == NULL ||
+            !read_method("\"method\":\"textDocument/references\"", &id) ||
+            id == 0U)
+            return 52;
+        n = snprintf(response, sizeof(response),
+            "{\"jsonrpc\":\"2.0\",\"id\":%llu,\"result\":["
+            "{\"uri\":\"file://%s\",\"range\":{"
+            "\"start\":{\"line\":0,\"character\":0},"
+            "\"end\":{\"line\":0,\"character\":1}}},"
+            "{\"uri\":\"file://%s\",\"range\":{"
+            "\"start\":{\"line\":0,\"character\":2},"
+            "\"end\":{\"line\":0,\"character\":4}}}]}",
+            id, marker, marker);
+        if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
+            return 53;
     } else if (strcmp(mode, "session-completion-missing") == 0) {
         if (!read_method("\"method\":\"textDocument/completion\"", &id) ||
             id == 0U)
