@@ -587,6 +587,9 @@ static const CmdDesc builtins[] = {
      YEW_CMD_PROMPTS, "Expand the current message", NULL},
     {"ed.ui.cancel", yew_edit_cmd_ui_cancel, YEW_ARITY_NONE, 0U,
      "Cancel the active prompt or message overlay", NULL},
+    {"ed.ui.panel.move", yew_panel_cmd_move, YEW_ARITY_INT,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,
+     "Scroll the active transient panel", NULL},
 
     {"ed.cmdline.hist_prev", yew_cmdline_cmd_hist_prev, YEW_ARITY_NONE,
      YEW_CMD_NEEDS_WIN | YEW_CMD_INTERNAL,

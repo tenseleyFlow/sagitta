@@ -7,6 +7,7 @@
 #include "edit/shadow.h"
 /* Sprint 22 moved Rect here, as this file said it would. */
 #include "ui/layout.h"
+#include "ui/panel.h"
 #include "search/overlay.h"
 #include "syn/engine.h"
 #include "edit/multicursor.h"
@@ -55,6 +56,8 @@ typedef struct Win {
     /* Sprint 43: display-only completion state belongs to the view. */
     Shadow shadow;
     ComplMenu compl;
+    /* Sprint 47: one transient floating panel belongs to this view. */
+    Panel panel;
 } Win;
 
 /* Sprint 14 compatibility names; new code uses the yew_vp_* API. */

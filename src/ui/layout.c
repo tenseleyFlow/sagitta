@@ -6,8 +6,9 @@
 #include "edit/ed.h"
 #include "edit/pane_cmds.h"
 #include "ui/gutter.h"
-#include "ui/viewport.h"
+#include "ui/panel.h"
 #include "ui/tabs.h"
+#include "ui/viewport.h"
 #include "ui/win.h"
 #include "util/log.h"
 
@@ -489,6 +490,8 @@ static void layout_leaf_win(Ed *ed, Pane *leaf)
     }
     yew_vp_clamp(w);
     yew_vp_follow(w);
+    if (w == ed->win && w->panel.open)
+        yew_panel_resize(ed, &w->panel);
 }
 
 static void layout_leaf_visit(Pane *p, void *ctx)

@@ -41,6 +41,11 @@ static const GlyphRow glyphs[] = {
     [YEW_GLYPH_BORDER_TEE_L] = {"\xE2\x94\xA4", "+"},  /* ┤ */
     [YEW_GLYPH_BORDER_TEE_D] = {"\xE2\x94\xAC", "+"},  /* ┬ */
     [YEW_GLYPH_BORDER_TEE_U] = {"\xE2\x94\xB4", "+"},  /* ┴ */
+    [YEW_GLYPH_BORDER_TL] = {"\xE2\x94\x8C", "+"},     /* ┌ */
+    [YEW_GLYPH_BORDER_TR] = {"\xE2\x94\x90", "+"},     /* ┐ */
+    [YEW_GLYPH_BORDER_BL] = {"\xE2\x94\x94", "+"},     /* └ */
+    [YEW_GLYPH_BORDER_BR] = {"\xE2\x94\x98", "+"},     /* ┘ */
+    [YEW_GLYPH_SCROLL_UP] = {"\xE2\x96\xB2", "^"},     /* ▲ */
     /* Reserved for Sprint 52; nothing draws these yet. */
     [YEW_GLYPH_GIT_AHEAD] = {"\xE2\x86\x91", "^"},     /* ↑ */
     [YEW_GLYPH_GIT_CONFLICT] = {"\xE2\x9C\x97", "x"},  /* ✗ */

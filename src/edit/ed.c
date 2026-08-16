@@ -12,6 +12,7 @@
 #include "ui/ctxmenu.h"
 #include "ui/draw.h"
 #include "ui/grouppicker.h"
+#include "ui/panel.h"
 #include "ui/picker.h"
 #include "ui/pickers.h"
 #include "ui/shadowdraw.h"
@@ -215,6 +216,7 @@ static void ed_buffer_free(Ed *ed)
     ed->focus = NULL;
     yew_overlay_free(&ed->single_win.overlay);
     yew_compl_free(&ed->single_win.compl);
+    yew_panel_close(ed, &ed->single_win.panel);
     yew_shadow_dismiss(ed, &ed->single_win);
     yew_shadow_free(&ed->single_win.shadow);
     yew_gutter_signs_free(&ed->single_win);
@@ -529,6 +531,7 @@ bool yew_ed_show_buffer(Ed *ed, Buffer *b)
     if (ed->win->buf == b)
         return true;
     yew_ed_insert_barrier(ed);
+    yew_panel_close(ed, &ed->win->panel);
     yew_shadow_dismiss(ed, ed->win);
     yew_vp_free(ed->win);
     yew_cset_free(&ed->win->cs);
@@ -993,6 +996,7 @@ void yew_ed_win_set_buffer(Ed *ed, Win *w, Buffer *b)
         return;
     if (w->compl.open)
         yew_compl_close_result(ed, w, false);
+    yew_panel_close(ed, &w->panel);
     yew_shadow_dismiss(ed, w);
     yew_vp_free(w);
     yew_cset_free(&w->cs);
@@ -1012,6 +1016,7 @@ void yew_ed_win_release(Ed *ed, Win *w)
     if (w->compl.open)
         yew_compl_close_result(ed, w, false);
     yew_compl_free(&w->compl);
+    yew_panel_close(ed, &w->panel);
     yew_shadow_dismiss(ed, w);
     yew_shadow_free(&w->shadow);
     yew_gutter_signs_free(w);
@@ -1915,6 +1920,15 @@ void yew_ed_handle_key(Ed *ed, Key key, i64 now_ms)
      */
     if (yew_picker_active(ed) && yew_picker_key(ed, &key))
         return;
+    /*
+     * Sprint 47: panels are transient, not modal.  Scroll keys belong to
+     * the panel; every other key closes it and falls through this same
+     * dispatch pass, so no input is swallowed behind an informational
+     * overlay.
+     */
+    if (ed->win != NULL && ed->win->panel.open &&
+        yew_panel_key(ed, &ed->win->panel, &key))
+        return;
     if (key.ev != YEW_KEY_RELEASE && yew_msg_dismiss_overlay(ed))
         return;
     if (ed->cmdline.active && yew_cmdline_key(ed, &key))
@@ -2155,6 +2169,10 @@ void yew_ed_render(Ed *ed)
      * therefore owns the last-added hit regions for its exact boxes. */
     if (win->compl.open)
         yew_compl_draw(ed, win, &ed->grid);
+    /* Sprint 47: the floating panel is the final overlay.  Its draw pass
+     * registers the stored rect as the last-added BLOCK region. */
+    if (win->panel.open)
+        yew_panel_draw(ed, &win->panel, &ed->grid);
     ed->frame.len = 0U;
     (void)yew_render_frame(&ed->render, &ed->grid, &ed->frame);
     if (!write_all(ed->tty.wfd, ed->frame.data, ed->frame.len)) {
