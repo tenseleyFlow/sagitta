@@ -32,8 +32,12 @@ typedef struct DiagPickCtx {
     size_t text_len;
     size_t text_cap;
     u32 n;
+    u32 next_payload;
     bool workspace;
+    bool truncated;
+    bool trunc_warned;
     char title[40];
+    char footer[64];
 } DiagPickCtx;
 
 typedef struct DiagCandidate {
@@ -541,29 +545,64 @@ static int candidate_order(const void *left, const void *right, void *ctx)
            a->d->identity != b->d->identity;
 }
 
-static u32 diag_list_scope(Ed *ed, Buffer *only, PickItem *out, u32 max)
+static i32 pick_payload(bool used[YEW_DIAG_PICK_MAX])
+{
+    u32 attempts;
+
+    for (attempts = 0U; attempts < YEW_DIAG_PICK_MAX; attempts++) {
+        u32 payload = picker.next_payload++ % YEW_DIAG_PICK_MAX;
+
+        if (!used[payload]) {
+            used[payload] = true;
+            return (i32)payload;
+        }
+    }
+    YEW_BUG("diagnostic picker payload table exhausted");
+}
+
+static u32 diag_list_scope(Ed *ed, Buffer *only, PickItem *out, u32 max,
+                           const DiagPickRef *keep, i32 keep_payload)
 {
     DiagCandidate candidates[YEW_DIAG_PICK_MAX];
     size_t offsets[YEW_DIAG_PICK_MAX];
+    bool used[YEW_DIAG_PICK_MAX] = {false};
+    bool keep_present = false;
     u32 n = 0U;
+    u64 omitted = 0U;
     u32 bi;
 
     if (ed == NULL || out == NULL)
         return 0U;
     if (max > YEW_DIAG_PICK_MAX)
         max = YEW_DIAG_PICK_MAX;
-    for (bi = 0U; bi < ed->ws.nbufs && n < max; bi++) {
+    for (bi = 0U; bi < ed->ws.nbufs; bi++) {
         Buffer *b = ed->ws.bufs[bi];
         u32 i;
 
         if ((only != NULL && b != only) || b->diag == NULL)
             continue;
-        for (i = 0U; i < b->diag->d.len && n < max; i++)
-            candidates[n++] = (DiagCandidate){b, &b->diag->d.data[i]};
+        for (i = 0U; i < b->diag->d.len; i++) {
+            if (n < max)
+                candidates[n++] =
+                    (DiagCandidate){b, &b->diag->d.data[i]};
+            else
+                omitted++;
+        }
     }
     if (n > 1U)
         yew_sort_stable(candidates, n, sizeof(candidates[0]),
                         candidate_order, NULL);
+    if (keep != NULL && keep_payload >= 0 &&
+        (u32)keep_payload < YEW_DIAG_PICK_MAX) {
+        for (bi = 0U; bi < n; bi++) {
+            if (candidates[bi].b->id == keep->buf_id &&
+                candidates[bi].d->identity == keep->identity) {
+                keep_present = true;
+                used[keep_payload] = true;
+                break;
+            }
+        }
+    }
     pick_text_reset();
     for (bi = 0U; bi < n; bi++) {
             Buffer *b = candidates[bi].b;
@@ -577,8 +616,16 @@ static u32 diag_list_scope(Ed *ed, Buffer *only, PickItem *out, u32 max)
             GCol col = yew_off_to_gcol(b->tb, line_span, BYTEOFF(sp.lo));
             u64 display_line = line.v;
             u64 display_col = col.v;
+            DiagPickRef ref = {b->id, d->identity};
+            i32 payload;
 
             (void)glyph_len;
+            if (keep_present && ref.buf_id == keep->buf_id &&
+                ref.identity == keep->identity) {
+                payload = keep_payload;
+            } else {
+                payload = pick_payload(used);
+            }
             display_line++;
             display_col++;
             (void)snprintf(row, sizeof(row), "%s:%llu:%llu  %s %s",
@@ -588,19 +635,20 @@ static u32 diag_list_scope(Ed *ed, Buffer *only, PickItem *out, u32 max)
                            d->message);
             offsets[bi] = pick_text(row);
             out[bi].detail = NULL;
-            out[bi].payload = (i32)bi;
+            out[bi].payload = payload;
             out[bi].flags = 0U;
-            picker.refs[bi] = (DiagPickRef){b->id, d->identity};
+            picker.refs[payload] = ref;
     }
     for (bi = 0U; bi < n; bi++)
         out[bi].label = picker.text + offsets[bi];
     picker.n = n;
+    picker.truncated = omitted != 0U;
     return n;
 }
 
 u32 yew_diag_list(Ed *ed, PickItem *out, u32 max)
 {
-    return diag_list_scope(ed, NULL, out, max);
+    return diag_list_scope(ed, NULL, out, max, NULL, -1);
 }
 
 static const PickItem *diag_pick_items(void *ctx, u32 *n)
@@ -632,7 +680,7 @@ static bool diag_pick_accept(Ed *ed, void *ctx, i32 payload, u8 how)
     ByteOff from;
 
     (void)how;
-    if (payload < 0 || (u32)payload >= p->n)
+    if (payload < 0 || (u32)payload >= YEW_DIAG_PICK_MAX)
         return false;
     b = yew_ws_buf_by_id(ed, p->refs[payload].buf_id);
     d = find_identity(b, p->refs[payload].identity);
@@ -654,15 +702,31 @@ static bool diag_pick_action(Ed *ed, void *ctx, i32 payload, const Key *key)
 {
     DiagPickCtx *p = ctx;
     Buffer *only;
+    DiagPickRef keep;
+    const DiagPickRef *keep_ptr = NULL;
 
-    (void)payload;
     if (key == NULL || key->code != YEW_KEY_TAB)
         return false;
+    if (payload >= 0 && (u32)payload < YEW_DIAG_PICK_MAX) {
+        keep = p->refs[payload];
+        keep_ptr = &keep;
+    }
     p->workspace = !p->workspace;
     only = p->workspace || ed->win == NULL ? NULL : ed->win->buf;
-    p->n = diag_list_scope(ed, only, p->rows, YEW_DIAG_PICK_MAX);
+    p->n = diag_list_scope(ed, only, p->rows, YEW_DIAG_PICK_MAX,
+                           keep_ptr, payload);
     (void)snprintf(p->title, sizeof(p->title), "Diagnostics (%s)",
                    p->workspace ? "workspace" : "buffer");
+    (void)snprintf(p->footer, sizeof(p->footer),
+                   p->truncated ?
+                       "tab scope . enter jump . first 4096 shown" :
+                       "tab scope . enter jump . esc");
+    if (p->truncated && !p->trunc_warned) {
+        yew_log(YEW_LOG_WARN,
+                "diagnostic picker showing only the first %u entries",
+                (unsigned)YEW_DIAG_PICK_MAX);
+        p->trunc_warned = true;
+    }
     yew_picker_refilter(ed);
     ed->full_damage = true;
     return true;
@@ -676,16 +740,28 @@ void yew_diag_picker_open(Ed *ed)
     if (ed == NULL)
         return;
     picker.workspace = false;
+    picker.trunc_warned = false;
     only = ed->win == NULL ? NULL : ed->win->buf;
-    picker.n = diag_list_scope(ed, only, picker.rows, YEW_DIAG_PICK_MAX);
+    picker.n = diag_list_scope(ed, only, picker.rows, YEW_DIAG_PICK_MAX,
+                               NULL, -1);
     (void)snprintf(picker.title, sizeof(picker.title),
                    "Diagnostics (buffer)");
+    (void)snprintf(picker.footer, sizeof(picker.footer),
+                   picker.truncated ?
+                       "tab scope . enter jump . first 4096 shown" :
+                       "tab scope . enter jump . esc");
+    if (picker.truncated) {
+        yew_log(YEW_LOG_WARN,
+                "diagnostic picker showing only the first %u entries",
+                (unsigned)YEW_DIAG_PICK_MAX);
+        picker.trunc_warned = true;
+    }
     (void)memset(&spec, 0, sizeof(spec));
     spec.title = picker.title;
     spec.items = diag_pick_items;
     spec.accept = diag_pick_accept;
     spec.action = diag_pick_action;
-    spec.footer = "tab scope . enter jump . esc";
+    spec.footer = picker.footer;
     spec.ctx = &picker;
     yew_picker_open(ed, &spec);
 }

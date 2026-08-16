@@ -146,6 +146,7 @@ void test_lsp_diag_gutter_hint_and_picker_identity(void)
     PickItem items[8];
     Key tab = {.code = YEW_KEY_TAB};
     i32 identity;
+    i32 selected;
 
     diag_fix_init(&f);
     b = yew_ed_doc(&f.ed);
@@ -180,13 +181,16 @@ void test_lsp_diag_gutter_hint_and_picker_identity(void)
     other = yew_ws_scratch_new(&f.ed, "other.c", 0U);
     YEW_ASSERT_NOT_NULL(other);
     yew_diag_replace(&f.ed, other, 4U, diag_array(&f, many), 1);
+    YEW_ASSERT(yew_ed_show_buffer(&f.ed, other));
     YEW_ASSERT(yew_grid_init(&f.ed.grid, &f.ed.interner, 24U, 80U));
     f.ed.grid_ready = true;
     yew_diag_picker_open(&f.ed);
     YEW_ASSERT(yew_picker_active(&f.ed));
     YEW_ASSERT_EQ_U64(yew_picker_total(&f.ed), 2U);
+    selected = yew_picker_selected(&f.ed);
     YEW_ASSERT(yew_picker_key(&f.ed, &tab));
     YEW_ASSERT_EQ_U64(yew_picker_total(&f.ed), 4U);
+    YEW_ASSERT_EQ_I64(yew_picker_selected(&f.ed), selected);
     yew_picker_close(&f.ed, false);
     diag_fix_free(&f);
 }
