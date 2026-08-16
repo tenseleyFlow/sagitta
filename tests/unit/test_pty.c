@@ -16,6 +16,7 @@ void test_pty_environment_exact(void)
         "YEW_PROBE_TIMEOUT_MS=500",
         "YEW_ESC_TIMEOUT_MS=25",
         "XDG_STATE_HOME=/tmp/yew-pty-state",
+        "XDG_CONFIG_HOME=/tmp/yew-pty-state",
         "LANG=C.UTF-8",
         "LC_ALL=C.UTF-8",
         "YEW_LOG_LEVEL=debug",
@@ -58,14 +59,14 @@ void test_pty_environment_exact(void)
     YEW_ASSERT(ptc_env_build(envp, "xterm-256color", "truecolor",
                              "/tmp/yew-pty-state",
                              "", "0", "/tmp/yew-runtime", "0"));
-    YEW_ASSERT_EQ_STR(envp[12], "NO_COLOR=");
+    YEW_ASSERT_EQ_STR(envp[13], "NO_COLOR=");
     YEW_ASSERT_NULL(envp[YEW_PTY_ENV_COUNT]);
     ptc_env_free(envp);
 
     YEW_ASSERT(ptc_env_build(envp, "xterm-256color", "truecolor",
                              "/tmp/yew-pty-state",
                              "0", "0", "/tmp/yew-runtime", "0"));
-    YEW_ASSERT_EQ_STR(envp[12], "NO_COLOR=0");
+    YEW_ASSERT_EQ_STR(envp[13], "NO_COLOR=0");
     YEW_ASSERT_NULL(envp[YEW_PTY_ENV_COUNT]);
     ptc_env_free(envp);
 
