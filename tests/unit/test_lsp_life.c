@@ -254,6 +254,10 @@ typedef struct LifeFix {
     char marker[256];
 } LifeFix;
 
+static bool wait_server_drained(LifeFix *f, LspServer *server,
+                                i64 timeout_ms);
+static bool bytes_contain(const u8 *bytes, size_t len, const char *needle);
+
 static void helper_path(char *out, size_t cap)
 {
     const char *program = yew_test_program_path();
@@ -419,6 +423,72 @@ static bool wait_capability_clear(LifeFix *f, u32 capability,
         life_pump_once(&f->ed);
     }
     return false;
+}
+
+static bool wait_rpc_tx_empty(LifeFix *f, i64 timeout_ms)
+{
+    i64 start = yew_now_ms();
+
+    while (yew_now_ms() - start <= timeout_ms) {
+        if (life_server(f)->rpc.tx.pending.len == 0U)
+            return true;
+        life_pump_once(&f->ed);
+    }
+    return false;
+}
+
+static LspServer *highlight_life_ready(LifeFix *f)
+{
+    LspServer *server;
+
+    life_fix_init(f, "session-utf8", 1000);
+    YEW_ASSERT(wait_state(f, YEW_LSP_READY, 2000));
+    YEW_ASSERT(wait_rpc_tx_empty(f, 2000));
+    server = life_server(f);
+    server->caps.bits |= YEW_LSPC_DOCUMENT_HIGHLIGHT;
+    YEW_ASSERT(yew_lsp_has(server, YEW_LSPC_DOCUMENT_HIGHLIGHT));
+    YEW_ASSERT_EQ_U64(server->rpc.npending, 0U);
+    return server;
+}
+
+static u64 highlight_fire(LifeFix *f, i64 elapsed_ms)
+{
+    i64 armed_at = f->ed.now_ms;
+
+    yew_lsp_highlight_cursor(&f->ed, f->ed.win);
+    YEW_ASSERT(f->ed.win->lsp_highlight.timer != YEW_TIMER_NONE);
+    f->ed.now_ms = armed_at + elapsed_ms;
+    yew_timers_fire(&f->ed.timers, &f->ed, f->ed.now_ms);
+    return f->ed.win->lsp_highlight.request;
+}
+
+static bool highlight_dispatch(LifeFix *f, u64 id, const char *member)
+{
+    char json[1024];
+    Arena arena;
+    int n;
+    bool dispatched;
+
+    n = snprintf(json, sizeof(json),
+                 "{\"jsonrpc\":\"2.0\",\"id\":%llu,%s}",
+                 (unsigned long long)id, member);
+    YEW_ASSERT(n >= 0 && (size_t)n < sizeof(json));
+    arena_init(&arena);
+    dispatched = yew_lsp_dispatch_response(life_server(f),
+                                            parse(&arena, json));
+    arena_free_all(&arena);
+    return dispatched;
+}
+
+static void highlight_life_finish(LifeFix *f, LspServer *server)
+{
+    /* The response is injected directly so these tests can isolate editor
+     * lifecycle state while the existing fakelsp waits for shutdown. */
+    server->rpc.tx.pending.len = 0U;
+    server->rpc.tx.sent = 0U;
+    yew_lsp_client_stop(&f->ed, server, true);
+    YEW_ASSERT(wait_server_drained(f, server, 2000));
+    life_fix_free(f);
 }
 
 static bool wait_current_path(LifeFix *f, const char *path, i64 timeout_ms)
@@ -815,6 +885,149 @@ void test_lsp_lifecycle_method_not_found_clears_document_symbol_capability(
     yew_lsp_client_stop(&f.ed, server, true);
     YEW_ASSERT(wait_server_drained(&f, server, 2000));
     life_fix_free(&f);
+}
+
+void test_lsp_lifecycle_document_highlight_waits_for_idle(void)
+{
+    LifeFix f;
+    LspServer *server = highlight_life_ready(&f);
+    i64 armed_at = f.ed.now_ms;
+    const u8 *tx = NULL;
+    u64 tx_len;
+    u64 request;
+
+    yew_lsp_highlight_cursor(&f.ed, f.ed.win);
+    YEW_ASSERT(f.ed.win->lsp_highlight.timer != YEW_TIMER_NONE);
+    yew_timers_fire(&f.ed.timers, &f.ed, armed_at + 299);
+    YEW_ASSERT_EQ_U64(f.ed.win->lsp_highlight.request, 0U);
+    YEW_ASSERT_EQ_U64(server->rpc.npending, 0U);
+
+    f.ed.now_ms = armed_at + 300;
+    yew_timers_fire(&f.ed.timers, &f.ed, f.ed.now_ms);
+    request = f.ed.win->lsp_highlight.request;
+    YEW_ASSERT(request != 0U);
+    YEW_ASSERT_EQ_U64(server->rpc.npending, 1U);
+    tx_len = yew_rpc_tx_view(&server->rpc, &tx);
+    YEW_ASSERT(tx_len != 0U);
+    YEW_ASSERT_NOT_NULL(tx);
+    YEW_ASSERT(bytes_contain(
+        tx, tx_len, "\"method\":\"textDocument/documentHighlight\""));
+    YEW_ASSERT(highlight_dispatch(&f, request, "\"result\":[]"));
+    highlight_life_finish(&f, server);
+}
+
+void test_lsp_lifecycle_document_highlight_separates_read_and_write_overlays(
+    void)
+{
+    LifeFix f;
+    LspServer *server = highlight_life_ready(&f);
+    u64 request = highlight_fire(&f, 300);
+
+    YEW_ASSERT(request != 0U);
+    YEW_ASSERT(highlight_dispatch(&f, request,
+        "\"result\":[{\"range\":{\"start\":{\"line\":0,"
+        "\"character\":0},\"end\":{\"line\":0,\"character\":3}},"
+        "\"kind\":2},{\"range\":{\"start\":{\"line\":0,"
+        "\"character\":4},\"end\":{\"line\":0,\"character\":5}},"
+        "\"kind\":3}]"));
+    YEW_ASSERT_EQ_U64(f.ed.win->lsp_highlight.read.spans.len, 1U);
+    YEW_ASSERT_EQ_U64(f.ed.win->lsp_highlight.read.spans.data[0].lo, 0U);
+    YEW_ASSERT_EQ_U64(f.ed.win->lsp_highlight.read.spans.data[0].hi, 3U);
+    YEW_ASSERT_EQ_U64(f.ed.win->lsp_highlight.write.spans.len, 1U);
+    YEW_ASSERT_EQ_U64(f.ed.win->lsp_highlight.write.spans.data[0].lo, 4U);
+    YEW_ASSERT_EQ_U64(f.ed.win->lsp_highlight.write.spans.data[0].hi, 5U);
+    YEW_ASSERT_EQ_U64(f.ed.win->overlay.spans.len, 0U);
+    highlight_life_finish(&f, server);
+}
+
+void test_lsp_lifecycle_document_highlight_edit_clears_and_cancels_stale_response(
+    void)
+{
+    LifeFix f;
+    LspServer *server = highlight_life_ready(&f);
+    Cursor *cursor;
+    EditCtx edit;
+    u64 request = highlight_fire(&f, 300);
+    u64 stale;
+
+    YEW_ASSERT(highlight_dispatch(&f, request,
+        "\"result\":[{\"range\":{\"start\":{\"line\":0,"
+        "\"character\":0},\"end\":{\"line\":0,\"character\":3}},"
+        "\"kind\":2}]"));
+    YEW_ASSERT_EQ_U64(f.ed.win->lsp_highlight.read.spans.len, 1U);
+    cursor = yew_ed_cursor(&f.ed);
+    YEW_ASSERT_NOT_NULL(cursor);
+    cursor->pos = BYTEOFF(1U);
+    cursor->anchor = cursor->pos;
+    stale = highlight_fire(&f, 300);
+    YEW_ASSERT(stale != 0U);
+    YEW_ASSERT_NOT_NULL(yew_rpc_pending(&server->rpc, stale));
+
+    edit = yew_ed_edit_ctx(&f.ed);
+    YEW_ASSERT(yew_edit_insert(&edit, BYTEOFF(0U), (const u8 *)" ", 1U));
+    YEW_ASSERT_EQ_U64(f.ed.win->lsp_highlight.read.spans.len, 0U);
+    YEW_ASSERT_EQ_U64(f.ed.win->lsp_highlight.write.spans.len, 0U);
+    YEW_ASSERT_EQ_U64(f.ed.win->lsp_highlight.request, 0U);
+    YEW_ASSERT_NULL(yew_rpc_pending(&server->rpc, stale));
+    YEW_ASSERT(!highlight_dispatch(&f, stale,
+        "\"result\":[{\"range\":{\"start\":{\"line\":0,"
+        "\"character\":0},\"end\":{\"line\":0,\"character\":1}},"
+        "\"kind\":3}]"));
+    YEW_ASSERT_EQ_U64(f.ed.win->lsp_highlight.write.spans.len, 0U);
+    yew_ed_finish_edit(&f.ed, &edit);
+    highlight_life_finish(&f, server);
+}
+
+void test_lsp_lifecycle_document_highlight_cursor_rearm_rejects_stale_response(
+    void)
+{
+    LifeFix f;
+    LspServer *server = highlight_life_ready(&f);
+    Cursor *cursor;
+    u64 stale = highlight_fire(&f, 300);
+    u64 current;
+
+    YEW_ASSERT(stale != 0U);
+    cursor = yew_ed_cursor(&f.ed);
+    YEW_ASSERT_NOT_NULL(cursor);
+    cursor->pos = BYTEOFF(1U);
+    cursor->anchor = cursor->pos;
+    yew_lsp_highlight_cursor(&f.ed, f.ed.win);
+    YEW_ASSERT_EQ_U64(f.ed.win->lsp_highlight.request, 0U);
+    YEW_ASSERT(f.ed.win->lsp_highlight.timer != YEW_TIMER_NONE);
+    YEW_ASSERT(!highlight_dispatch(&f, stale,
+        "\"result\":[{\"range\":{\"start\":{\"line\":0,"
+        "\"character\":0},\"end\":{\"line\":0,\"character\":3}},"
+        "\"kind\":2}]"));
+    YEW_ASSERT_EQ_U64(f.ed.win->lsp_highlight.read.spans.len, 0U);
+
+    f.ed.now_ms += 300;
+    yew_timers_fire(&f.ed.timers, &f.ed, f.ed.now_ms);
+    current = f.ed.win->lsp_highlight.request;
+    YEW_ASSERT(current != 0U);
+    YEW_ASSERT(current != stale);
+    YEW_ASSERT(highlight_dispatch(&f, current,
+        "\"result\":[{\"range\":{\"start\":{\"line\":0,"
+        "\"character\":4},\"end\":{\"line\":0,\"character\":5}},"
+        "\"kind\":3}]"));
+    YEW_ASSERT_EQ_U64(f.ed.win->lsp_highlight.write.spans.len, 1U);
+    highlight_life_finish(&f, server);
+}
+
+void test_lsp_lifecycle_method_not_found_clears_highlight_capability(void)
+{
+    LifeFix f;
+    LspServer *server = highlight_life_ready(&f);
+    u64 request = highlight_fire(&f, 300);
+
+    YEW_ASSERT(request != 0U);
+    YEW_ASSERT(highlight_dispatch(&f, request,
+        "\"error\":{\"code\":-32601,\"message\":\"missing\"}"));
+    YEW_ASSERT(!yew_lsp_has(server, YEW_LSPC_DOCUMENT_HIGHLIGHT));
+    YEW_ASSERT_EQ_U64(f.ed.win->lsp_highlight.request, 0U);
+    YEW_ASSERT_EQ_U64(f.ed.win->lsp_highlight.read.spans.len, 0U);
+    YEW_ASSERT_EQ_U64(f.ed.win->lsp_highlight.write.spans.len, 0U);
+    highlight_life_finish(&f, server);
 }
 
 void test_lsp_lifecycle_fakelsp_handshake_queue_and_shutdown(void)
