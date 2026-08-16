@@ -787,6 +787,10 @@ const YewTest yew_tests[] = {
     T(lsp_lifecycle_fakelsp_open_edit_save_close_sequence),
     T(lsp_lifecycle_fakelsp_delayed_response_is_stale),
     T(lsp_lifecycle_editor_free_is_graceful),
+    T(lsp_config_defaults_and_replacement_semantics),
+    T(lsp_config_is_owned_and_refreshes_after_reload),
+    T(lsp_config_rejects_invalid_rows_without_losing_valid_rows),
+    T(lsp_config_defers_startup_and_does_not_retry_disabled_language),
     T(flconf_global_accessor_reads_private_layers_in_precedence_order),
     T(flconf_global_accessor_follows_successful_reload),
     T(json_parse_values_and_accessors),
@@ -817,6 +821,7 @@ const YewTest yew_tests[] = {
     T(lsp_diag_replace_tracks_marks_and_server_identity),
     T(lsp_diag_stale_boundaries_and_visual_contract),
     T(lsp_diag_gutter_hint_and_picker_identity),
+    T(lsp_diag_store_is_bounded),
     T(lsp_diag_marks_survive_1000_mixed_edits),
     T(jsonrpc_ids_stop_at_signed_wire_limit),
 #endif

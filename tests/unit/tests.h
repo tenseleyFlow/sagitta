@@ -765,6 +765,10 @@ void test_lsp_lifecycle_fakelsp_repeated_sessions_do_not_leak_fds(void);
 void test_lsp_lifecycle_fakelsp_open_edit_save_close_sequence(void);
 void test_lsp_lifecycle_fakelsp_delayed_response_is_stale(void);
 void test_lsp_lifecycle_editor_free_is_graceful(void);
+void test_lsp_config_defaults_and_replacement_semantics(void);
+void test_lsp_config_is_owned_and_refreshes_after_reload(void);
+void test_lsp_config_rejects_invalid_rows_without_losing_valid_rows(void);
+void test_lsp_config_defers_startup_and_does_not_retry_disabled_language(void);
 void test_flconf_global_accessor_reads_private_layers_in_precedence_order(void);
 void test_flconf_global_accessor_follows_successful_reload(void);
 void test_json_parse_values_and_accessors(void);
@@ -795,6 +799,7 @@ void test_jsonrpc_connection_kills_eight_malformed_messages(void);
 void test_lsp_diag_replace_tracks_marks_and_server_identity(void);
 void test_lsp_diag_stale_boundaries_and_visual_contract(void);
 void test_lsp_diag_gutter_hint_and_picker_identity(void);
+void test_lsp_diag_store_is_bounded(void);
 void test_lsp_diag_marks_survive_1000_mixed_edits(void);
 void test_jsonrpc_ids_stop_at_signed_wire_limit(void);
 
