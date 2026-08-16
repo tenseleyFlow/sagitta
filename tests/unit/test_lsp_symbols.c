@@ -64,6 +64,8 @@ static void symbols_type(Ed *ed, char ch)
     Key key = {0};
 
     key.code = (u32)(u8)ch;
+    key.ntext = 1U;
+    key.text[0] = (u8)ch;
     YEW_ASSERT(yew_picker_key(ed, &key));
 }
 
@@ -343,6 +345,10 @@ void test_lsp_symbols_local_index_opens_and_accepts_current_buffer(void)
         bytebuf_append(&other_text, "other_symbol\n", 13U);
     yew_textbuf_insert(other->tb, BYTEOFF(0U), other_text.data,
                        (u64)other_text.len);
+    /* This fixture mutates the scratch TextBuf directly to avoid making it
+     * the focused view.  Rebind the syntax line-state array just as the
+     * normal edit notification path would after the 100k inserted lines. */
+    yew_ed_syn_bind(other);
     bytebuf_free(&other_text);
 
     /* Seed both indices while deliberately spending the first slice on
