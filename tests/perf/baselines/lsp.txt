@@ -2,4 +2,5 @@
 note_edit_utf8_4k 39 40
 note_edit_utf16_4k 16020 54607
 diag_viewport_10k 1004285 1184531
+rename_plan_20k 9297930 10747746
 framed_50m_keypress 297705 394420

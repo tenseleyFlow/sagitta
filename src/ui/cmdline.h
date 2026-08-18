@@ -21,6 +21,11 @@ typedef enum {
     YEW_PROMPT_INPUT
 } YewPromptKind;
 
+/* `text` is valid only for the duration of the callback.  The callback runs
+ * after the prompt has closed and the editor mode has been restored. */
+typedef void (*YewCmdlineInputDone)(Ed *ed, bool accepted,
+                                    const u8 *text, size_t len, void *ctx);
+
 typedef struct CmdLine {
     YewPromptKind kind;
     bool active;
@@ -47,9 +52,13 @@ typedef struct CmdLine {
     u32 comp_total;
     char *menu_stem;
     Span menu_original;
+    YewCmdlineInputDone input_done;
+    void *input_ctx;
 } CmdLine;
 
 void yew_cmdline_open(Ed *ed, YewPromptKind kind, const char *seed);
+void yew_cmdline_open_input(Ed *ed, const char *seed,
+                            YewCmdlineInputDone done, void *ctx);
 void yew_cmdline_close(Ed *ed, bool accepted);
 void yew_cmdline_dispose(Ed *ed);
 bool yew_cmdline_key(Ed *ed, const Key *key);

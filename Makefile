@@ -5,6 +5,9 @@ MODULES ?= lsp ai fuss plugins
 FUZZ_ITERS ?= 200000
 FUZZ_SEED  ?= 1
 FUZZ_SECONDS ?=
+LSP_RESP_FUZZ_ITERS ?= 50000
+LSP_RESP_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
+                       0x9e3779b97f4a7c15 0xd1b54a32d192ed03
 CMDPARSE_FUZZ_ITERS ?= 1000000
 TEXTBUF_FUZZ_SEEDS ?= 1 0x243f6a8885a308d3 \
                       0x9e3779b97f4a7c15 0xd1b54a32d192ed03
@@ -346,8 +349,10 @@ UNIT_LSP_SRC := tests/unit/test_json.c tests/unit/test_json_num.c \
                 tests/unit/test_lsp_caps.c tests/unit/test_lsp_diag.c \
                 tests/unit/test_lsp_completion.c \
                 tests/unit/test_lsp_config.c tests/unit/test_lsp_life.c \
+                tests/unit/test_lsp_gate.c \
                 tests/unit/test_lsp_highlight.c \
                 tests/unit/test_lsp_nav.c \
+                tests/unit/test_lsp_rename.c \
                 tests/unit/test_lsp_snippet.c \
                 tests/unit/test_lsp_symbols.c \
                 tests/unit/test_lsp_sync.c \
@@ -421,6 +426,9 @@ FUZZ_SYMIDX_OBJ := $(BUILD)/tests/fuzz/fuzz_symidx.o
 FUZZ_JSON_OBJ := $(BUILD)/tests/fuzz/fuzz_json.o
 FUZZ_JSONRPC_OBJ := $(BUILD)/tests/fuzz/fuzz_jsonrpc.o
 FUZZ_LSP_MSG_OBJ := $(BUILD)/tests/fuzz/fuzz_lsp_msg.o
+FUZZ_LSP_RESP_OBJ := $(BUILD)/tests/fuzz/fuzz_lsp_resp.o
+LSP_LIVE_OBJ := $(BUILD)/tests/lsp/test_clangd_live.o
+LSP_LIVE_BIN := $(BUILD)/tests/lsp/test_clangd_live
 RE_REF_OBJ := $(BUILD)/tests/fuzz/re_ref.o
 FUZZ_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 FUZZ_LINK_OBJ := $(FUZZ_CORE_OBJ) $(FUZZ_LIB_OBJ)
@@ -455,7 +463,7 @@ PERF_SCRIPT_SUITE_OBJ := $(BUILD)/tests/perf/script_suite.o
 PERF_SYMIDX_OBJ := $(BUILD)/tests/perf/perf_symidx.o
 PERF_LSP_OBJ := $(BUILD)/tests/perf/perf_lsp.o
 ifneq ($(filter lsp,$(MODULES)),)
-LSP_FUZZ_TARGET := fuzz-lsp-msg
+LSP_FUZZ_TARGET := fuzz-lsp-msg fuzz-lsp-resp
 LSP_PERF_TARGET := perf-lsp
 endif
 FLETCH_RUN_OBJ := $(BUILD)/tests/fletch/run.o
@@ -508,7 +516,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
                 $(PERF_SCRIPT_SUITE_OBJ) \
                 $(FUZZ_RECORD_OBJ) $(FUZZ_SYN_OBJ) $(FUZZ_SYN_DEF_OBJ) \
                 $(FUZZ_SYMIDX_OBJ) $(FUZZ_JSON_OBJ) $(FUZZ_JSONRPC_OBJ) \
-                $(FUZZ_LSP_MSG_OBJ) \
+                $(FUZZ_LSP_MSG_OBJ) $(FUZZ_LSP_RESP_OBJ) $(LSP_LIVE_OBJ) \
                 $(PERF_SYN_OBJ) $(PERF_SYMIDX_OBJ) $(PERF_LSP_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) \
@@ -528,7 +536,8 @@ endif
         test-script-determinism test-script-budget test-pty fuzz \
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
         fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
-        fuzz-symidx fuzz-json fuzz-jsonrpc fuzz-lsp-msg \
+        fuzz-symidx fuzz-json fuzz-jsonrpc fuzz-lsp-msg fuzz-lsp-resp \
+        test-lsp-live \
         fuzz-syn-long \
         fuzz-syn-line-long fuzz-syn-edit-long \
         test-record-corpus \
@@ -553,6 +562,9 @@ endif
         test-fletch-dispatch test-fletch-gc-stress test-fletch-determinism
 
 all: $(BUILD)/yew
+
+compile_commands.json: FORCE $(BUILD)/gen-compdb
+	$(BUILD)/gen-compdb "$(abspath .)" $(CC) $(CFLAGS) -- $(SRC) > $@
 
 $(BUILD)/yew: $(OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(OBJ) $(LDLIBS)
@@ -698,6 +710,14 @@ $(BUILD)/fuzz_lsp_msg: $(FUZZ_LINK_OBJ) $(FUZZ_LSP_MSG_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_LSP_MSG_OBJ) $(LDLIBS)
 
+$(BUILD)/fuzz_lsp_resp: $(FUZZ_LINK_OBJ) $(FUZZ_LSP_RESP_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
+		$(FUZZ_LSP_RESP_OBJ) $(LDLIBS)
+
+$(LSP_LIVE_BIN): $(FUZZ_CORE_OBJ) $(LSP_LIVE_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) \
+		$(LSP_LIVE_OBJ) $(LDLIBS)
+
 $(BUILD)/gen-bigfile: $(GEN_BIGFILE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(GEN_BIGFILE_OBJ) $(LDLIBS)
 
@@ -828,6 +848,9 @@ $(FAULTSHIM): tests/torture/faultshim.c | dirs
 		$(DL_LIBS) $(LDLIBS)
 
 $(BUILD)/gen-unicode-tables: scripts/gen-unicode-tables.c | dirs
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
+
+$(BUILD)/gen-compdb: scripts/gen-compdb.c | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
 $(FAKECLIP): tests/unit/fakeclip.c | dirs
@@ -983,6 +1006,17 @@ fuzz-jsonrpc: $(BUILD)/fuzz_jsonrpc
 
 fuzz-lsp-msg: $(BUILD)/fuzz_lsp_msg
 	$(BUILD)/fuzz_lsp_msg --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+
+fuzz-lsp-resp: $(BUILD)/fuzz_lsp_resp
+	@set -eu; \
+	for seed in $(LSP_RESP_FUZZ_SEEDS); do \
+		$(BUILD)/fuzz_lsp_resp --iters=$(LSP_RESP_FUZZ_ITERS) \
+			--seed=$$seed; \
+	done
+
+test-lsp-live: $(LSP_LIVE_BIN)
+	YEW_LSP_CI_REQUIRED=$(YEW_LSP_CI_REQUIRED) \
+		tests/lsp/clangd_ci.sh $(abspath $(LSP_LIVE_BIN))
 
 test-record-corpus: $(BUILD)/fuzz_record
 	$(BUILD)/fuzz_record --corpus-only
@@ -1529,7 +1563,7 @@ test-roundtrip-coverage: $(BUILD)/roundtrip_runner
 
 test-fletch-roundtrip: test-roundtrip
 
-test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew
+test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP)
 	$(PTY_PREP) $(PTY_RUN) --demo $(abspath $(BUILD)/demo_paint) \
 		--yew $(abspath $(BUILD)/yew) $(PTY_LOG_REDIRECT)
 
@@ -1547,7 +1581,8 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew
          $(FUZZ_SYN_DEF_OBJ:.o=.d) \
          $(FUZZ_SYMIDX_OBJ:.o=.d) \
          $(FUZZ_JSON_OBJ:.o=.d) $(FUZZ_JSONRPC_OBJ:.o=.d) \
-         $(FUZZ_LSP_MSG_OBJ:.o=.d) \
+         $(FUZZ_LSP_MSG_OBJ:.o=.d) $(FUZZ_LSP_RESP_OBJ:.o=.d) \
+         $(LSP_LIVE_OBJ:.o=.d) \
          $(FUZZ_CMDPARSE_OBJ:.o=.d) $(FUZZ_RECOMPILE_OBJ:.o=.d) \
          $(FUZZ_REDIFF_OBJ:.o=.d) $(RE_REF_OBJ:.o=.d) \
          $(PTY_ORACLE_OBJ:.o=.d) \

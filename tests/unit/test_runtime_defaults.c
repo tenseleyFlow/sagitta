@@ -117,6 +117,7 @@ static const BindRow frozen_L[] = {
     {"g y", "ed.lsp.goto_type", 0, NULL},
     {"g i", "ed.lsp.goto_impl", 0, NULL},
     {"g r", "ed.lsp.references", 0, NULL},
+    {"g R", "ed.lsp.rename", 0, NULL},
     {"g s", "ed.lsp.symbols", 0, NULL},
     {"C-o", "ed.jump.back", 0, NULL},
     {"C-i", "ed.jump.fwd", 0, NULL},
@@ -352,7 +353,7 @@ void test_runtime_defaults_rebuild_frozen_keymap(void)
                                   (u32)(source.len - 1U)), YEW_CMD_OK);
     yew_bind_batch_end(&ed);
     YEW_ASSERT_EQ_U64(yew_bind_rebuild_count(&ed), rebuilds + 1U);
-    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 188U);
+    YEW_ASSERT_EQ_U64(yew_bind_active_count(&ed), 189U);
     for (mode = 0U; mode < (u32)YEW_MODE__N; mode++) {
         if (mode != (u32)YEW_MODE_H)
             panic_rows += yew_keymap_binding_count(&ed.mode_keys[mode]);

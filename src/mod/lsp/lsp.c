@@ -11,6 +11,7 @@
 #include "mod/lsp/features.h"
 #include "mod/lsp/highlight.h"
 #include "mod/lsp/pickers.h"
+#include "mod/lsp/rename.h"
 #include "mod/lsp/sync.h"
 #include "ui/complmenu.h"
 #include "ui/message.h"
@@ -321,6 +322,16 @@ bool yew_lsp_references(Ed *ed, Win *w)
                               YEW_LSPC_REFERENCES, "references", true);
 }
 
+bool yew_lsp_rename(Ed *ed, Win *w)
+{
+    LspServer *server = ready_feature_server(ed, w);
+
+    if (server == NULL || !feat_require(ed, server, YEW_LSPC_RENAME,
+                                        "rename"))
+        return false;
+    return yew_lsp_rename_request(ed, w);
+}
+
 bool yew_lsp_symbols(Ed *ed, Win *w)
 {
     LspDoc *doc;
@@ -410,6 +421,7 @@ void yew_lsp_free(Ed *ed)
 
     if (ed == NULL)
         return;
+    yew_lsp_rename_shutdown(ed);
     yew_lsp_highlight_shutdown(ed);
     for (i = 0U; i < ed->ws.nbufs; i++)
         yew_diag_store_free(ed->ws.bufs[i]);

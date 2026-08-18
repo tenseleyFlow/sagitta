@@ -187,6 +187,18 @@ jobs:
       - name: Prove inherited colour settings cannot affect goldens
         run: COLORTERM=truecolor make test-pty CC=clang
 
+  # Sprint 47 milestone: the editor's production LSP client must drive a
+  # real clangd over yew's own source tree.  Missing clangd is a failure in
+  # this lane so the integration proof cannot silently rot into a skip.
+  lsp:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Assert the designated runner provides clangd
+        run: clangd --version
+      - name: Navigate, rename, diagnose, and hover through live clangd
+        run: YEW_LSP_CI_REQUIRED=1 make test-lsp-live CC=clang
+
   sanitize:
     runs-on: ubuntu-latest
     # Smoke depth, for the reason spelled out on the gcc lane above.

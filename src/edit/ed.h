@@ -58,6 +58,7 @@ typedef struct OptProvider OptProvider;
 typedef struct YewConfigState YewConfigState;
 typedef struct YewOptHistory YewOptHistory;
 typedef struct LspClient LspClient;
+typedef struct LspRenameState LspRenameState;
 struct OptStored;
 
 typedef struct YewEdStartup {
@@ -168,6 +169,7 @@ struct Ed {
      * LSP implementation owns this allocation; the stripped shim preserves
      * the same lifecycle surface without pulling module internals into Ed. */
     LspClient *lsp;
+    LspRenameState *lsp_rename;
     Msg msg;
     /* Cursor-local diagnostic echo; real messages always take precedence. */
     Msg msg_hint;
@@ -320,6 +322,7 @@ void yew_ed_win_release(Ed *ed, Win *w);
 
 EditCtx yew_ed_edit_ctx(Ed *ed);
 EditCtx yew_ed_edit_ctx_for(Ed *ed, Win *win);
+EditCtx yew_ed_edit_ctx_buffer(Ed *ed, Buffer *buffer);
 void yew_ed_finish_edit(Ed *ed, const EditCtx *ec);
 Cursor *yew_ed_cursor(Ed *ed);
 void yew_ed_insert_barrier(Ed *ed);

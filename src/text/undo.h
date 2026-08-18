@@ -195,6 +195,7 @@ bool yew_undo_reopen(EditCtx *ec, YewTxnReason expect);
 
 bool yew_undo(EditCtx *ec);
 bool yew_redo(EditCtx *ec);
+bool yew_undo_prune_redo(UndoTree *ut, YewTxnReason expect);
 bool yew_undo_to(EditCtx *ec, u32 node_id);
 bool yew_undo_state(EditCtx *ec, i64 delta);
 bool yew_undo_time(EditCtx *ec, i64 wall_secs);

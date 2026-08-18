@@ -26,6 +26,28 @@ typedef struct CmdlineFixture {
     char *saved_state;
 } CmdlineFixture;
 
+typedef struct InputDoneState {
+    u32 calls;
+    bool accepted;
+    bool closed;
+    size_t len;
+    u8 text[32];
+} InputDoneState;
+
+static void input_done(Ed *ed, bool accepted, const u8 *text, size_t len,
+                       void *ctx)
+{
+    InputDoneState *state = ctx;
+
+    state->calls++;
+    state->accepted = accepted;
+    state->closed = !ed->cmdline.active && ed->mode == YEW_MODE_L;
+    state->len = len;
+    YEW_ASSERT(len <= sizeof(state->text));
+    if (len != 0U)
+        (void)memcpy(state->text, text, len);
+}
+
 static char *cmdline_dup(const char *text)
 {
     size_t len = strlen(text) + 1U;
@@ -51,7 +73,8 @@ static void cmdline_fixture_init(CmdlineFixture *fixture)
 
 static void cmdline_fixture_free(CmdlineFixture *fixture)
 {
-    static const char *const names[] = {"cmd", "cmd.lock"};
+    static const char *const names[] = {"cmd", "cmd.lock", "input",
+                                        "input.lock"};
     char path[160];
     size_t i;
 
@@ -304,6 +327,7 @@ void test_cmdline_escape_restores_completion_stem_before_closing(void)
 void test_cmdline_accepts_registered_command_and_closes(void)
 {
     CmdlineFixture fixture;
+    InputDoneState state = {0};
 
     cmdline_fixture_init(&fixture);
     yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, "redraw");
@@ -311,6 +335,28 @@ void test_cmdline_accepts_registered_command_and_closes(void)
                       YEW_CMD_OK);
     YEW_ASSERT(!fixture.ed.cmdline.active);
     YEW_ASSERT_EQ_U64(fixture.ed.mode, YEW_MODE_L);
+
+    yew_cmdline_open_input(&fixture.ed, "wolf name", input_done, &state);
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, yew_cmdline_cmd_accept),
+                      YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(state.calls, 1U);
+    YEW_ASSERT(state.accepted);
+    YEW_ASSERT(state.closed);
+    YEW_ASSERT_EQ_U64(state.len, 9U);
+    YEW_ASSERT_EQ_MEM(state.text, "wolf name", 9U);
+
+    (void)memset(&state, 0, sizeof(state));
+    yew_cmdline_open_input(&fixture.ed, "old", input_done, &state);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_INPUT, "picker");
+    YEW_ASSERT_EQ_U64(state.calls, 1U);
+    YEW_ASSERT(!state.accepted);
+    YEW_ASSERT(state.closed);
+    YEW_ASSERT_EQ_U64(state.len, 3U);
+    YEW_ASSERT_EQ_MEM(state.text, "old", 3U);
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, yew_cmdline_cmd_accept),
+                      YEW_CMD_OK);
+    YEW_ASSERT_EQ_U64(state.calls, 1U);
+    YEW_ASSERT(!fixture.ed.cmdline.active);
     cmdline_fixture_free(&fixture);
 }
 

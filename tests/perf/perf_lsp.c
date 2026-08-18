@@ -1,6 +1,7 @@
 #define _POSIX_C_SOURCE 200809L
 
 #include <errno.h>
+#include <fcntl.h>
 #include <poll.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,6 +15,7 @@
 #include "mod/lsp/diag.h"
 #include "mod/lsp/json.h"
 #include "mod/lsp/jsonrpc.h"
+#include "mod/lsp/rename.h"
 #include "mod/lsp/sync.h"
 #include "term/grid.h"
 #include "term/render.h"
@@ -25,12 +27,15 @@ enum {
     LSP_DIAG_SAMPLES = 101,
     LSP_LINE_BYTES = 4096,
     LSP_DIAGNOSTICS = 10000,
+    LSP_RENAME_EDITS = 20000,
+    LSP_RENAME_SAMPLES = 5,
     LSP_VIEWPORT_LINES = 50,
     LSP_VIEWPORT_COLS = 200,
     LSP_STREAM_SAMPLE_CAP = 16384,
     LSP_NOTE_P99_BUDGET_NS = 100000,
     LSP_VIEW_P99_BUDGET_NS = 5000000,
-    LSP_KEY_P99_BUDGET_NS = 5000000
+    LSP_KEY_P99_BUDGET_NS = 5000000,
+    LSP_RENAME_P99_BUDGET_NS = 300000000
 };
 
 #define LSP_STREAM_BYTES (UINT64_C(50) * 1024U * 1024U)
@@ -353,6 +358,131 @@ static bool write_all(int fd, const u8 *bytes, size_t len)
     return true;
 }
 
+static bool measure_rename_plan(Timing *out)
+{
+    char root[] = "/tmp/yew-perf-rename-XXXXXX";
+    char path[160] = {0};
+    char uri[192];
+    u64 samples[LSP_RENAME_SAMPLES];
+    Bytebuf text;
+    Bytebuf json;
+    Arena arena;
+    JsonErr json_err;
+    JsonValue *workspace_edit;
+    JsonW writer;
+    Ed ed;
+    char rename_err[YEW_RENAME_ERROR_MAX] = {0};
+    int fd = -1;
+    u32 i;
+    bool made_root = false;
+    bool arena_ready = false;
+    bool ed_ready = false;
+    bool ok = false;
+
+    bytebuf_init(&text);
+    bytebuf_init(&json);
+    if (mkdtemp(root) == NULL)
+        goto done;
+    made_root = true;
+    if (snprintf(path, sizeof(path), "%s/rename.c", root) <= 0 ||
+        snprintf(uri, sizeof(uri), "file://%s", path) <= 0)
+        goto done;
+    for (i = 0U; i < LSP_RENAME_EDITS; i++)
+        bytebuf_append(&text, "alpha\n", sizeof("alpha\n") - 1U);
+    fd = open(path, O_WRONLY | O_CREAT | O_EXCL, 0600);
+    if (fd < 0 || !write_all(fd, text.data, text.len))
+        goto done;
+    if (close(fd) != 0) {
+        fd = -1;
+        goto done;
+    }
+    fd = -1;
+
+    yew_jsonw_init(&writer, &json);
+    yew_jsonw_obj(&writer);
+    yew_jsonw_key(&writer, "changes");
+    yew_jsonw_obj(&writer);
+    yew_jsonw_key(&writer, uri);
+    yew_jsonw_arr(&writer);
+    for (i = 0U; i < LSP_RENAME_EDITS; i++) {
+        yew_jsonw_obj(&writer);
+        yew_jsonw_key(&writer, "range");
+        yew_jsonw_obj(&writer);
+        yew_jsonw_key(&writer, "start");
+        yew_jsonw_obj(&writer);
+        yew_jsonw_key(&writer, "line");
+        yew_jsonw_int(&writer, i);
+        yew_jsonw_key(&writer, "character");
+        yew_jsonw_int(&writer, 0);
+        yew_jsonw_obj_end(&writer);
+        yew_jsonw_key(&writer, "end");
+        yew_jsonw_obj(&writer);
+        yew_jsonw_key(&writer, "line");
+        yew_jsonw_int(&writer, i);
+        yew_jsonw_key(&writer, "character");
+        yew_jsonw_int(&writer, 5);
+        yew_jsonw_obj_end(&writer);
+        yew_jsonw_obj_end(&writer);
+        yew_jsonw_key(&writer, "newText");
+        yew_jsonw_cstr(&writer, "omega");
+        yew_jsonw_obj_end(&writer);
+    }
+    yew_jsonw_arr_end(&writer);
+    yew_jsonw_obj_end(&writer);
+    yew_jsonw_obj_end(&writer);
+    arena_init(&arena);
+    arena_ready = true;
+    workspace_edit = yew_json_parse(&arena, json.data, json.len, &json_err);
+    if (workspace_edit == NULL)
+        goto done;
+
+    yew_ed_init(&ed);
+    ed_ready = true;
+    ed.ws.dir = arena_strdup(&ed.arena, root);
+    if (yew_ed_open(&ed, path) != YEW_LOAD_OK)
+        goto done;
+    for (i = 0U; i < LSP_RENAME_SAMPLES; i++) {
+        RenamePlan plan;
+        u64 started;
+
+        yew_lsp_rename_plan_init(&plan);
+        started = now_ns();
+        if (!yew_lsp_rename_preflight(&ed, workspace_edit,
+                                       YEW_POSENC_UTF8, "alpha", "omega",
+                                       &plan, rename_err)) {
+            yew_lsp_rename_plan_free(&plan);
+            goto done;
+        }
+        samples[i] = now_ns() - started;
+        if (plan.nedits != LSP_RENAME_EDITS || plan.files.len != 1U) {
+            yew_lsp_rename_plan_free(&plan);
+            goto done;
+        }
+        lsp_perf_sink ^= plan.nedits + plan.files.len;
+        yew_lsp_rename_plan_free(&plan);
+    }
+    summarize(samples, LSP_RENAME_SAMPLES, out);
+    ok = true;
+done:
+    if (!ok)
+        (void)fprintf(stderr, "perf_lsp: rename plan invariant failed: %s\n",
+                      rename_err);
+    if (ed_ready)
+        yew_ed_free(&ed);
+    if (arena_ready)
+        arena_free_all(&arena);
+    if (fd >= 0)
+        (void)close(fd);
+    if (made_root) {
+        if (path[0] != '\0')
+            (void)unlink(path);
+        (void)rmdir(root);
+    }
+    bytebuf_free(&json);
+    bytebuf_free(&text);
+    return ok;
+}
+
 static int run_stream_server(void)
 {
     u64 sent = 0U;
@@ -515,6 +645,8 @@ int main(int argc, char **argv)
          LSP_NOTE_P99_BUDGET_NS},
         {"diag_viewport_10k", 0U, 0U, 0U, 0U, 0U,
          LSP_VIEW_P99_BUDGET_NS},
+        {"rename_plan_20k", 0U, 0U, 0U, 0U, 0U,
+         LSP_RENAME_P99_BUDGET_NS},
         {"framed_50m_keypress", 0U, 0U, 0U, 0U, 0U,
          LSP_KEY_P99_BUDGET_NS}
     };
@@ -541,7 +673,11 @@ int main(int argc, char **argv)
         (void)fprintf(stderr, "perf_lsp: diagnostic viewport invariant failed\n");
         return 2;
     }
-    if (!measure_stream_keypress(argv[0], &rows[3])) {
+    if (!measure_rename_plan(&rows[3])) {
+        (void)fprintf(stderr, "perf_lsp: rename plan invariant failed\n");
+        return 2;
+    }
+    if (!measure_stream_keypress(argv[0], &rows[4])) {
         (void)fprintf(stderr, "perf_lsp: framed stream invariant failed\n");
         return 2;
     }

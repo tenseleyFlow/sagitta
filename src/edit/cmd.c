@@ -905,8 +905,10 @@ static const CmdDesc builtins[] = {
      "List references to the symbol under the cursor", NULL},
     {"ed.lsp.hover", yew_lsp_cmd_hover, YEW_ARITY_NONE,
      YEW_CMD_NEEDS_WIN | YEW_CMD_PROMPTS, "Show hover information", NULL},
-    LSP_DEFER("ed.lsp.rename", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 47,
-              "rename the symbol under the cursor"),
+    {"ed.lsp.rename", yew_lsp_cmd_rename, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN | YEW_CMD_PROMPTS | YEW_CMD_CHANGES_BUFFER |
+         YEW_CMD_MULTI_AGGREGATE,
+     "Rename the symbol under the cursor", NULL},
     {"ed.lsp.symbols", yew_lsp_cmd_symbols, YEW_ARITY_NONE,
      YEW_CMD_NEEDS_WIN | YEW_CMD_PROMPTS, "List document symbols", NULL},
     {"ed.lsp.signature", yew_lsp_cmd_signature, YEW_ARITY_NONE,

@@ -875,8 +875,6 @@ static void ed_on_change(void *ctx, ByteOff at, LineNo line,
                          i64 now_ms, bool new_change)
 {
     Buffer *b = ctx;
-    u64 current_lines;
-    u64 prior_lines;
 
     if (b == NULL)
         return;
@@ -884,19 +882,9 @@ static void ed_on_change(void *ctx, ByteOff at, LineNo line,
         yew_change_record(b, at, now_ms);
         yew_fl_hook_note_change(b->owner, b, at.v);
     }
-    if (!new_change) {
-        current_lines = yew_textbuf_line_count(b->tb);
-        prior_lines = current_lines >= inserted_lines &&
-                              removed_lines <=
-                                  UINT64_MAX -
-                                      (current_lines - inserted_lines)
-                          ? current_lines - inserted_lines + removed_lines
-                          : UINT64_MAX;
-        if (prior_lines == b->syn.entry.len)
-            yew_syn_edit(&b->syn, line, removed_lines, inserted_lines);
-        else
-            yew_syn_attach(&b->syn, b->syn.lang, b->tb);
-    }
+    (void)line;
+    (void)removed_lines;
+    (void)inserted_lines;
     if (b->owner != NULL)
         b->owner->footer_dirty = true;
 }
@@ -1037,19 +1025,14 @@ void yew_ed_win_release(Ed *ed, Win *w)
     free(w);
 }
 
-EditCtx yew_ed_edit_ctx_for(Ed *ed, Win *win)
+EditCtx yew_ed_edit_ctx_buffer(Ed *ed, Buffer *buffer)
 {
     EditCtx ec = {0};
-    Buffer *buffer;
 
-    if (ed == NULL || win == NULL || win->buf == NULL ||
-        win->buf->tb == NULL)
+    if (ed == NULL || buffer == NULL || buffer->tb == NULL)
         return ec;
-    buffer = win->buf;
     ec.tb = buffer->tb;
     ec.marks = buffer->marks;
-    ec.cset = &win->cs;
-    ec.win_id = win->id;
     ec.jrnl = buffer->jrn;
     ec.undo = buffer->undo;
     ec.meta = buffer->path == NULL ? NULL : &buffer->meta;
@@ -1058,6 +1041,20 @@ EditCtx yew_ed_edit_ctx_for(Ed *ed, Win *win)
     ec.now_ms = ed->now_ms;
     ec.ed = ed;
     ec.buffer = buffer;
+    return ec;
+}
+
+EditCtx yew_ed_edit_ctx_for(Ed *ed, Win *win)
+{
+    EditCtx ec;
+
+    if (ed == NULL || win == NULL)
+        return (EditCtx){0};
+    ec = yew_ed_edit_ctx_buffer(ed, win->buf);
+    if (ec.tb == NULL)
+        return ec;
+    ec.cset = &win->cs;
+    ec.win_id = win->id;
     return ec;
 }
 
@@ -1237,7 +1234,9 @@ void yew_ed_finish_edit(Ed *ed, const EditCtx *ec)
      * the handle is dropped on the floor, and the next crash recovers
      * nothing.
      */
-    {
+    if (ec->buffer != NULL && ec->buffer->tb == ec->tb) {
+        ec->buffer->jrn = ec->jrnl;
+    } else {
         Buffer *doc = yew_ed_doc(ed);
 
         if (doc != NULL && doc->tb == ec->tb)
@@ -1929,6 +1928,8 @@ void yew_ed_handle_key(Ed *ed, Key key, i64 now_ms)
      * reaches the document behind it.
      */
     if (yew_picker_active(ed) && yew_picker_key(ed, &key))
+        return;
+    if (yew_lsp_rename_key(ed, &key))
         return;
     /*
      * Sprint 47: panels are transient, not modal.  Scroll keys belong to

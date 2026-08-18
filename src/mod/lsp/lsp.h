@@ -10,6 +10,7 @@
 typedef struct Ed Ed;
 typedef struct Buffer Buffer;
 typedef struct EditCtx EditCtx;
+typedef struct Key Key;
 typedef struct Win Win;
 
 /* Sprint 45's editor-facing module boundary.  The disabled-module shim
@@ -30,7 +31,9 @@ bool yew_lsp_goto_declaration(Ed *ed, Win *w);
 bool yew_lsp_goto_type_definition(Ed *ed, Win *w);
 bool yew_lsp_goto_implementation(Ed *ed, Win *w);
 bool yew_lsp_references(Ed *ed, Win *w);
+bool yew_lsp_rename(Ed *ed, Win *w);
 bool yew_lsp_symbols(Ed *ed, Win *w);
+bool yew_lsp_rename_key(Ed *ed, const Key *key);
 void yew_lsp_signature_maybe_auto_trigger(Ed *ed, Win *w,
                                           const u8 *text, u32 len);
 bool yew_lsp_status_badge(const Ed *ed, const Buffer *b,

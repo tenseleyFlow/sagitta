@@ -322,6 +322,8 @@ void test_changelist_is_fed_by_the_edit_chokepoint(void)
 {
     Ed ed;
     EditCtx ec;
+    Win *source;
+    Win *peer;
 
     jl_fixture(&ed);
     ec = yew_ed_edit_ctx(&ed);
@@ -332,6 +334,27 @@ void test_changelist_is_fed_by_the_edit_chokepoint(void)
     ec.now_ms = 90000;
     YEW_ASSERT(yew_edit_insert(&ec, BYTEOFF(30U), (const u8 *)"y", 1U));
     YEW_ASSERT_EQ_U64(ed.buffer.changes.len, 2U);
+
+    /* Every view of the buffer follows direct edits and undo replay.
+     * The initiating set is adjusted by text/edit.c; the notification
+     * choke point owns all peers and must not adjust the source twice. */
+    yew_layout_compute(ed.pane_root, (Rect){0U, 0U, 80U, 24U});
+    YEW_ASSERT_NOT_NULL(yew_pane_split(&ed, ed.pane_root, YEW_SPLIT_H));
+    source = ed.pane_root->a->win;
+    peer = ed.pane_root->b->win;
+    source->cs.curs.data[0].pos = BYTEOFF(10U);
+    source->cs.curs.data[0].anchor = BYTEOFF(10U);
+    peer->cs.curs.data[0].pos = BYTEOFF(20U);
+    peer->cs.curs.data[0].anchor = BYTEOFF(20U);
+    ec = yew_ed_edit_ctx_for(&ed, source);
+    yew_undo_begin(&ec, YEW_TXN_LSP);
+    YEW_ASSERT(yew_edit_insert(&ec, BYTEOFF(0U), (const u8 *)"z", 1U));
+    yew_undo_end(&ec);
+    YEW_ASSERT_EQ_U64(source->cs.curs.data[0].pos.v, 11U);
+    YEW_ASSERT_EQ_U64(peer->cs.curs.data[0].pos.v, 21U);
+    YEW_ASSERT(yew_undo(&ec));
+    YEW_ASSERT_EQ_U64(source->cs.curs.data[0].pos.v, 10U);
+    YEW_ASSERT_EQ_U64(peer->cs.curs.data[0].pos.v, 20U);
     yew_ed_free(&ed);
 }
 

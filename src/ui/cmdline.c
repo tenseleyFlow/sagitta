@@ -440,15 +440,39 @@ void yew_cmdline_open(Ed *ed, YewPromptKind kind, const char *seed)
     ed->footer_dirty = true;
 }
 
+void yew_cmdline_open_input(Ed *ed, const char *seed,
+                            YewCmdlineInputDone done, void *ctx)
+{
+    if (ed == NULL)
+        return;
+    yew_cmdline_open(ed, YEW_PROMPT_INPUT, seed);
+    if (ed->cmdline.active) {
+        ed->cmdline.input_done = done;
+        ed->cmdline.input_ctx = ctx;
+    }
+}
+
 void yew_cmdline_close(Ed *ed, bool accepted)
 {
     CmdLine *line;
+    YewCmdlineInputDone input_done;
+    void *input_ctx;
+    char *input_text = NULL;
+    size_t input_len = 0U;
     Mode restore;
     bool keep_message;
 
     if (ed == NULL || !ed->cmdline.active)
         return;
     line = &ed->cmdline;
+    input_done = line->input_done;
+    input_ctx = line->input_ctx;
+    line->input_done = NULL;
+    line->input_ctx = NULL;
+    if (input_done != NULL) {
+        input_len = (size_t)yew_textbuf_len(line->buf);
+        input_text = text_string(line->buf);
+    }
     /* A successful command may have produced the message the user needs to
      * see.  Opening the prompt already cleared older messages, so an active
      * message here belongs to the command that was just accepted. */
@@ -495,6 +519,11 @@ void yew_cmdline_close(Ed *ed, bool accepted)
     /* A `:s/../../c` started a confirm run whose question this close
      * just wiped; restate it. */
     yew_search_confirm_reprompt(ed);
+    if (input_done != NULL) {
+        input_done(ed, accepted, (const u8 *)input_text, input_len,
+                   input_ctx);
+        free(input_text);
+    }
 }
 
 void yew_cmdline_dispose(Ed *ed)
@@ -1396,6 +1425,12 @@ CmdStatus yew_cmdline_cmd_accept(CmdCtx *cx)
      */
     if (line->kind == YEW_PROMPT_SEARCH_F ||
         line->kind == YEW_PROMPT_SEARCH_B) {
+        yew_hist_add(line->history, text);
+        free(text);
+        yew_cmdline_close(ed, true);
+        return YEW_CMD_OK;
+    }
+    if (line->kind == YEW_PROMPT_INPUT) {
         yew_hist_add(line->history, text);
         free(text);
         yew_cmdline_close(ed, true);

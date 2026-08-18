@@ -9,6 +9,8 @@
 #include <fcntl.h>
 #include <poll.h>
 #include <signal.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <sys/wait.h>
 #include <unistd.h>
@@ -180,6 +182,58 @@ void test_job_echo_lifecycle(void)
          * assertion that speaks for the parent. */
         YEW_ASSERT(open_fd_count() <= fds_before_free);
     }
+}
+
+void test_job_argv_resolves_path_and_preserves_explicit_paths(void)
+{
+    Ed ed;
+    char dir[] = "/tmp/yew-job-path-XXXXXX";
+    char probe[sizeof(dir) + 32U];
+    char *path_argv[] = {(char *)"yew-path-probe", (char *)"-c",
+                         (char *)"printf path", NULL};
+    char *explicit_argv[] = {(char *)"/bin/sh", (char *)"-c",
+                             (char *)"printf explicit", NULL};
+    const char *old_path = getenv("PATH");
+    char *saved_path = old_path != NULL ? strdup(old_path) : NULL;
+    char err[256] = {0};
+    u32 id;
+    YewJob *j;
+    bool path_ok;
+    bool explicit_ok;
+
+    job_fixture(&ed);
+    if (old_path != NULL)
+        YEW_ASSERT_NOT_NULL(saved_path);
+    YEW_ASSERT_NOT_NULL(mkdtemp(dir));
+    YEW_ASSERT(snprintf(probe, sizeof(probe), "%s/yew-path-probe", dir) > 0);
+    YEW_ASSERT_EQ_I64(symlink("/bin/sh", probe), 0);
+    YEW_ASSERT_EQ_I64(setenv("PATH", dir, 1), 0);
+
+    id = spawn_argv(&ed, path_argv, err, sizeof(err));
+    path_ok = id != 0U && run_to_completion(&ed, id);
+    j = path_ok ? yew_job_find(&ed, id) : NULL;
+    path_ok = j != NULL && j->state == YEW_JOB_EXITED &&
+              j->exit_code == 0 && j->collect.len == 4U &&
+              memcmp(j->collect.data, "path", 4U) == 0;
+
+    id = spawn_argv(&ed, explicit_argv, err, sizeof(err));
+    explicit_ok = id != 0U && run_to_completion(&ed, id);
+    j = explicit_ok ? yew_job_find(&ed, id) : NULL;
+    explicit_ok = j != NULL && j->state == YEW_JOB_EXITED &&
+                  j->exit_code == 0 && j->collect.len == 8U &&
+                  memcmp(j->collect.data, "explicit", 8U) == 0;
+
+    if (saved_path != NULL)
+        YEW_ASSERT_EQ_I64(setenv("PATH", saved_path, 1), 0);
+    else
+        YEW_ASSERT_EQ_I64(unsetenv("PATH"), 0);
+    free(saved_path);
+    YEW_ASSERT_EQ_I64(unlink(probe), 0);
+    YEW_ASSERT_EQ_I64(rmdir(dir), 0);
+    yew_ed_free(&ed);
+
+    YEW_ASSERT(path_ok);
+    YEW_ASSERT(explicit_ok);
 }
 
 void test_job_exec_failure_is_not_exit_127(void)

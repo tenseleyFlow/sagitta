@@ -18,6 +18,7 @@ let alternatives = {
     "ed.lsp.complete": "no batch alternative",
     "ed.lsp.hover": "no batch alternative",
     "ed.lsp.references": "no batch alternative",
+    "ed.lsp.rename": "no batch alternative",
     "ed.lsp.symbols": "no batch alternative",
     "ed.lsp.signature": "no batch alternative",
     "ed.macro.record": "recording needs keys; none exist",
@@ -42,7 +43,7 @@ for command in ed.commands() {
         seen = seen + 1
     }
 }
-t.eq(seen, 20)
+t.eq(seen, 21)
 
 # ed.mode.enter is conditional: only E mode is terminal-backed.
 let mode_caught = false

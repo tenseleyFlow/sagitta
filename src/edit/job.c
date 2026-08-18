@@ -371,11 +371,87 @@ static bool make_pipe(int p[2], char *err, size_t errsz)
     return true;
 }
 
-/* Everything between fork() and execve() must be async-signal-safe: malloc
+typedef struct JobExecPaths {
+    char **v;
+    size_t len;
+} JobExecPaths;
+
+static const char *job_env_path(char **envp)
+{
+    size_t i;
+
+    for (i = 0U; envp[i] != NULL; i++) {
+        if (strncmp(envp[i], "PATH=", 5U) == 0)
+            return envp[i] + 5U;
+    }
+    return NULL;
+}
+
+/* Build every PATH candidate before fork so the child can remain inside the
+ * async-signal-safe execve subset.  Relative and empty PATH entries stay
+ * relative because job_child applies the requested cwd before trying them. */
+static JobExecPaths job_exec_paths(Arena *a, char **envp, const char *name)
+{
+    static const char fallback[] = "/bin:/usr/bin";
+    JobExecPaths out = {0};
+    const char *path;
+    char *default_path = NULL;
+    const char *at;
+    size_t n;
+    size_t name_len;
+
+    out.len = 1U;
+    if (strchr(name, '/') == NULL) {
+        path = job_env_path(envp);
+        if (path == NULL) {
+            n = confstr(_CS_PATH, NULL, 0U);
+            if (n != 0U) {
+                default_path = arena_alloc(a, n, 1U);
+                if (confstr(_CS_PATH, default_path, n) == 0U)
+                    default_path = NULL;
+            }
+            path = default_path != NULL ? default_path : fallback;
+        }
+        for (at = path; *at != '\0'; at++) {
+            if (*at == ':')
+                out.len++;
+        }
+    } else {
+        path = NULL;
+    }
+
+    out.v = arena_alloc(a, out.len * sizeof(*out.v), sizeof(void *));
+    if (path == NULL) {
+        out.v[0] = (char *)name;
+        return out;
+    }
+
+    name_len = strlen(name);
+    at = path;
+    for (n = 0U; n < out.len; n++) {
+        const char *end = strchr(at, ':');
+        size_t dir_len = end != NULL ? (size_t)(end - at) : strlen(at);
+
+        if (dir_len == 0U) {
+            out.v[n] = arena_strdup(a, name);
+        } else {
+            out.v[n] = arena_alloc(a, dir_len + name_len + 2U, 1U);
+            (void)memcpy(out.v[n], at, dir_len);
+            out.v[n][dir_len] = '/';
+            (void)memcpy(out.v[n] + dir_len + 1U, name, name_len + 1U);
+        }
+        if (end != NULL)
+            at = end + 1U;
+    }
+    return out;
+}
+
+/* Everything between fork() and exec() must be async-signal-safe: malloc
  * in a forked child can deadlock on an allocator lock the parent held at
  * fork time, and yew_log formats through stdio and opens files.  The
  * exec-status pipe is the only diagnostic channel in this window. */
-static void job_child(char **argv, char **envp, const char *cwd,
+static void job_child(char **argv, char **envp, JobExecPaths exec_paths,
+                      const char *cwd,
                       int in_p[2], int out_p[2], int err_p[2],
                       int exec_p[2])
 {
@@ -384,7 +460,9 @@ static void job_child(char **argv, char **envp, const char *cwd,
                                         SIGQUIT, SIGWINCH, SIGCHLD,
                                         SIGCONT, SIGTSTP, SIGTTIN, SIGTTOU};
     int e;
+    int denied = 0;
     int sig;
+    size_t path_i;
     sigset_t empty;
 
     (void)setpgid(0, 0);
@@ -413,7 +491,16 @@ static void job_child(char **argv, char **envp, const char *cwd,
     (void)sigprocmask(SIG_SETMASK, &empty, NULL);
     if (cwd != NULL && chdir(cwd) != 0)
         goto fail;
-    (void)execve(argv[0], argv, envp);
+    for (path_i = 0U; path_i < exec_paths.len; path_i++) {
+        (void)execve(exec_paths.v[path_i], argv, envp);
+        if (errno == EACCES) {
+            denied = EACCES;
+            continue;
+        }
+        if (errno != ENOENT && errno != ENOTDIR)
+            goto fail;
+    }
+    errno = denied != 0 ? denied : ENOENT;
 fail:
     e = errno;
     /*
@@ -440,6 +527,7 @@ u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
     Arena scratch;
     char **argv;
     char **envp;
+    JobExecPaths exec_paths;
     char *shell_argv[4];
     int in_p[2] = {-1, -1};
     int out_p[2] = {-1, -1};
@@ -488,6 +576,7 @@ u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
         argv = shell_argv;
     }
     envp = job_build_env(ed, &scratch);
+    exec_paths = job_exec_paths(&scratch, envp, argv[0]);
     cwd = spec->cwd != NULL ? spec->cwd : yew_ws_root(ed);
     want_stdin = spec->in_buf != NULL &&
                  spec->in_span.hi > spec->in_span.lo;
@@ -502,7 +591,7 @@ u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
         goto fail;
     }
     if (pid == 0)
-        job_child(argv, envp, cwd, in_p, out_p, err_p, exec_p);
+        job_child(argv, envp, exec_paths, cwd, in_p, out_p, err_p, exec_p);
 
     /* Both sides call setpgid so whichever runs first wins the race. */
     (void)setpgid(pid, pid);

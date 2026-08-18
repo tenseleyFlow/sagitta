@@ -152,12 +152,34 @@ static bool read_method(const char *method, unsigned long long *id)
     return ok;
 }
 
+static bool read_until_method(const char *method, unsigned long long *id)
+{
+    unsigned int attempt;
+
+    for (attempt = 0U; attempt < 16U; attempt++) {
+        unsigned char *body = NULL;
+        size_t len = 0U;
+        bool found;
+
+        if (!read_request(&body, &len))
+            return false;
+        found = body_has(body, len, method);
+        if (found && id != NULL)
+            *id = body_id(body, len);
+        free(body);
+        if (found)
+            return true;
+    }
+    return false;
+}
+
 static int run_session(const char *mode, const char *marker)
 {
     unsigned long long id = 0U;
     const char *encoding = NULL;
-    char response[1024];
+    char response[4096];
     bool crash = false;
+    bool drain_to_shutdown = false;
     int n;
 
     if (strcmp(mode, "session-resistant") == 0)
@@ -198,6 +220,8 @@ static int run_session(const char *mode, const char *marker)
         strcmp(mode, "session-symbols") == 0 ||
         strcmp(mode, "session-symbols-empty") == 0 ||
         strcmp(mode, "session-symbols-missing") == 0 ||
+        strcmp(mode, "session-rename") == 0 ||
+        strcmp(mode, "session-rename-refuse") == 0 ||
         strcmp(mode, "session-unversioned") == 0 ||
         strcmp(mode, "session-stale") == 0 ||
         strcmp(mode, "session-resistant") == 0 ||
@@ -239,6 +263,9 @@ static int run_session(const char *mode, const char *marker)
                        strcmp(mode, "session-symbols-empty") == 0 ||
                        strcmp(mode, "session-symbols-missing") == 0)
                         ? ",\"documentSymbolProvider\":true"
+                    : (strcmp(mode, "session-rename") == 0 ||
+                       strcmp(mode, "session-rename-refuse") == 0)
+                        ? ",\"renameProvider\":true"
                         : "");
     if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
         return 13;
@@ -460,8 +487,43 @@ static int run_session(const char *mode, const char *marker)
             "{\"label\":\"printf\",\"insertText\":\"printf\"}]}", id);
         if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
             return 33;
+    } else if (strcmp(mode, "session-rename") == 0) {
+        if (marker == NULL ||
+            !read_until_method("\"method\":\"textDocument/rename\"", &id) ||
+            id == 0U)
+            return 60;
+        n = snprintf(response, sizeof(response),
+            "{\"jsonrpc\":\"2.0\",\"id\":%llu,\"result\":{"
+            "\"documentChanges\":["
+            "{\"textDocument\":{\"uri\":\"file://%s/zeta.c\"},"
+            "\"edits\":[{\"range\":{\"start\":{\"line\":0,"
+            "\"character\":0},\"end\":{\"line\":0,\"character\":5}},"
+            "\"newText\":\"beta\"}]},"
+            "{\"textDocument\":{\"uri\":\"file://%s/alpha.c\"},"
+            "\"edits\":[{\"range\":{\"start\":{\"line\":1,"
+            "\"character\":0},\"end\":{\"line\":1,\"character\":5}},"
+            "\"newText\":\"beta\"},{\"range\":{\"start\":{\"line\":0,"
+            "\"character\":0},\"end\":{\"line\":0,\"character\":5}},"
+            "\"newText\":\"beta\"}]}]}}", id, marker, marker);
+        if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
+            return 61;
+        drain_to_shutdown = true;
+    } else if (strcmp(mode, "session-rename-refuse") == 0) {
+        if (marker == NULL ||
+            !read_until_method("\"method\":\"textDocument/rename\"", &id) ||
+            id == 0U)
+            return 62;
+        n = snprintf(response, sizeof(response),
+            "{\"jsonrpc\":\"2.0\",\"id\":%llu,\"result\":{"
+            "\"documentChanges\":[{\"kind\":\"create\","
+            "\"uri\":\"file://%s/new.c\"}]}}", id, marker);
+        if (n < 0 || (size_t)n >= sizeof(response) || !write_frame(response))
+            return 63;
+        drain_to_shutdown = true;
     }
-    if (!read_method("\"method\":\"shutdown\"", &id) || id == 0U ||
+    if (!(drain_to_shutdown ?
+              read_until_method("\"method\":\"shutdown\"", &id) :
+              read_method("\"method\":\"shutdown\"", &id)) || id == 0U ||
         !write_all(STDERR_FILENO, "seq:shutdown\n", 13U))
         return 16;
     n = snprintf(response, sizeof(response),

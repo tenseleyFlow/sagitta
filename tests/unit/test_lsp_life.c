@@ -768,6 +768,7 @@ void test_lsp_lifecycle_references_response_opens_multi_location_picker(void)
     life_fix_init(&f, "session-references", 1000);
     life_marker_write(&f, "abcdef\n");
     YEW_ASSERT(yew_grid_init(&f.ed.grid, &f.ed.interner, 24U, 80U));
+    f.ed.grid_ready = true;
     YEW_ASSERT(wait_state(&f, YEW_LSP_READY, 2000));
     server = life_server(&f);
     YEW_ASSERT(yew_lsp_has(server, YEW_LSPC_REFERENCES));
@@ -830,6 +831,7 @@ void test_lsp_lifecycle_document_symbols_open_nested_picker(void)
 
     life_fix_init(&f, "session-symbols", 1000);
     YEW_ASSERT(yew_grid_init(&f.ed.grid, &f.ed.interner, 24U, 80U));
+    f.ed.grid_ready = true;
     YEW_ASSERT(wait_state(&f, YEW_LSP_READY, 2000));
     server = life_server(&f);
     YEW_ASSERT(yew_lsp_has(server, YEW_LSPC_DOCUMENT_SYMBOL));

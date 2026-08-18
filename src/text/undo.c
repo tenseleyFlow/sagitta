@@ -11,6 +11,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "edit/notify.h"
 #include "text/edit.h"
 #include "text/journal.h"
 #include "util/log.h"
@@ -214,8 +215,6 @@ static void require_reason(EditCtx *ec, YewTxnReason reason)
 {
     if (reason >= YEW_TXN_REASON_MAX)
         YEW_BUG("undo: invalid transaction reason");
-    if (reason == YEW_TXN_LSP)
-        YEW_BUG("LSP transactions land in Sprint 47");
     if (reason == YEW_TXN_MULTI) {
         if (ec->cset == NULL || ec->cset->curs.len < 2U)
             YEW_BUG("multi-cursor transaction requires multiple cursors");
@@ -742,11 +741,13 @@ static void replay_insert_span(EditCtx *ec, ByteOff at, u8 src, Span span)
     u64 len = span.hi - span.lo;
     const u8 *bytes = store_bytes(ec->tb, src, span);
 
+    yew_edit_notify_pre(ec, YEW_JOURNAL_INS, at, len);
     yew_textbuf_insert_span(ec->tb, at, src, span);
     if (ec->marks != NULL)
         yew_marks_adjust(ec->marks, YEW_JOURNAL_INS, at, len);
     if (ec->cset != NULL)
         yew_cset_adjust(ec->cset, YEW_JOURNAL_INS, at, len);
+    yew_edit_notify_post(ec, YEW_JOURNAL_INS, at, len);
     if (ec->jrnl != NULL)
         yew_journal_record(ec->jrnl, YEW_JOURNAL_INS, at.v, bytes, len);
     if (ec->on_change != NULL)
@@ -770,6 +771,7 @@ static void replay_insert_blob(EditCtx *ec, u32 op_index, const UndoOp *op)
         if (op->payload > ut->blobs.len || op->len > ut->blobs.len - op->payload)
             YEW_BUG("undo: corrupt delete payload");
         bytes = ut->blobs.data + (size_t)op->payload;
+        yew_edit_notify_pre(ec, YEW_JOURNAL_INS, BYTEOFF(op->off), op->len);
         yew_textbuf_insert(ec->tb, BYTEOFF(op->off), bytes, op->len);
         if (ec->marks != NULL)
             yew_marks_adjust(ec->marks, YEW_JOURNAL_INS, BYTEOFF(op->off),
@@ -777,6 +779,8 @@ static void replay_insert_blob(EditCtx *ec, u32 op_index, const UndoOp *op)
         if (ec->cset != NULL)
             yew_cset_adjust(ec->cset, YEW_JOURNAL_INS, BYTEOFF(op->off),
                             op->len);
+        yew_edit_notify_post(ec, YEW_JOURNAL_INS, BYTEOFF(op->off),
+                             op->len);
         if (ec->jrnl != NULL)
             yew_journal_record(ec->jrnl, YEW_JOURNAL_INS, op->off, bytes,
                                op->len);
@@ -803,11 +807,13 @@ static void replay_delete(EditCtx *ec, const UndoOp *op)
     line = yew_textbuf_line_of(ec->tb, BYTEOFF(op->off));
     old_lines = yew_textbuf_line_count(ec->tb);
     bytes = copy_live_range(ec->tb, range);
+    yew_edit_notify_pre(ec, YEW_JOURNAL_DEL, BYTEOFF(op->off), op->len);
     yew_textbuf_delete(ec->tb, range);
     if (ec->marks != NULL)
         yew_marks_adjust(ec->marks, YEW_JOURNAL_DEL, BYTEOFF(op->off), op->len);
     if (ec->cset != NULL)
         yew_cset_adjust(ec->cset, YEW_JOURNAL_DEL, BYTEOFF(op->off), op->len);
+    yew_edit_notify_post(ec, YEW_JOURNAL_DEL, BYTEOFF(op->off), op->len);
     if (ec->jrnl != NULL)
         yew_journal_record(ec->jrnl, YEW_JOURNAL_DEL, op->off, bytes, op->len);
     if (ec->on_change != NULL)
@@ -1391,6 +1397,32 @@ static void tombstone_subtree(UndoTree *ut, u32 root)
         node->flags |= YEW_TXN_DEAD;
         ut->bytes_dead += node_storage_bytes(node);
     }
+}
+
+bool yew_undo_prune_redo(UndoTree *ut, YewTxnReason expect)
+{
+    UndoNode *parent;
+    u32 child;
+
+    if (ut == NULL)
+        YEW_BUG("yew_undo_prune_redo: NULL tree");
+    if (expect >= YEW_TXN_REASON_MAX)
+        YEW_BUG("yew_undo_prune_redo: invalid transaction reason");
+    if (ut->depth != 0U)
+        YEW_BUG("redo prune inside transaction");
+    parent = node_mut(ut, ut->cur);
+    if (parent == NULL || !node_live(ut, parent->redo_child))
+        return false;
+    child = parent->redo_child;
+    if (node_get(ut, child)->reason != (u8)expect)
+        return false;
+    if (ut->saved != 0U && is_ancestor(ut, child, ut->saved))
+        return false;
+    tombstone_subtree(ut, child);
+    ut->boundary = true;
+    ut->gen++;
+    account_live(ut);
+    return true;
 }
 
 static bool prune_branch(UndoTree *ut, u32 floor)

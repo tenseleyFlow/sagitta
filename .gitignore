@@ -30,6 +30,7 @@ AGENTS.md
 # cannot be outrun by the next invented name.
 #
 build*/
+compile_commands.json
 *.a
 *.o
 *.d

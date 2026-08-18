@@ -4,6 +4,7 @@
 
 #include <errno.h>
 #include <fcntl.h>
+#include <limits.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -5833,10 +5834,231 @@ static void case_lsp_diag_picker(PtyCtx *c)
     ptc_snapshot(c, "lsp_diag_picker");
     quit_cleanly(c);
 }
+
+/* ---------------------------------------------------------------- */
+/* Sprint 47: rename confirmation and transaction UI               */
+/* ---------------------------------------------------------------- */
+
+typedef struct S47RenameFix {
+    char alpha[PATH_MAX];
+    char zeta[PATH_MAX];
+    char config[PATH_MAX];
+    u8 alpha_disk[64];
+    size_t alpha_len;
+} S47RenameFix;
+
+static bool s47_rename_open(PtyCtx *c, const char *mode, S47RenameFix *f)
+{
+    static const u8 alpha[] = "alpha first\nalpha second\n";
+    static const u8 zeta[] = "alpha third\n";
+    const char *yew = ptc_yew_bin(c);
+    const char *slash;
+    char fakelsp[PATH_MAX];
+    char source[PATH_MAX * 3U];
+    int n;
+
+    (void)memset(f, 0, sizeof(*f));
+    if (c->workspace_dir == NULL || yew == NULL) {
+        ptc_check(c, false, "Sprint 47 rename fixture lacks a workspace");
+        return false;
+    }
+    n = snprintf(f->alpha, sizeof(f->alpha), "%s/alpha.c",
+                 c->workspace_dir);
+    if (n <= 0 || (size_t)n >= sizeof(f->alpha))
+        goto overflow;
+    n = snprintf(f->zeta, sizeof(f->zeta), "%s/zeta.c", c->workspace_dir);
+    if (n <= 0 || (size_t)n >= sizeof(f->zeta))
+        goto overflow;
+    n = snprintf(f->config, sizeof(f->config), "%s/rename.fl",
+                 c->workspace_dir);
+    if (n <= 0 || (size_t)n >= sizeof(f->config))
+        goto overflow;
+    slash = strrchr(yew, '/');
+    if (slash == NULL) {
+        ptc_check(c, false, "Sprint 47 yew path is not absolute");
+        return false;
+    }
+    n = snprintf(fakelsp, sizeof(fakelsp), "%.*s/tests/helpers/fakelsp",
+                 (int)(slash - yew), yew);
+    if (n <= 0 || (size_t)n >= sizeof(fakelsp))
+        goto overflow;
+    n = snprintf(source, sizeof(source),
+        "let lsp = {servers: {c: {id: \"fakelsp\", cmd: \"%s\", "
+        "args: [\"%s\", \"%s\"], roots: [\".git\"], "
+        "init_options: nil, init_timeout_ms: 2000}}}\n",
+        fakelsp, mode, c->workspace_dir);
+    if (n <= 0 || (size_t)n >= sizeof(source))
+        goto overflow;
+    (void)memcpy(f->alpha_disk, alpha, sizeof(alpha) - 1U);
+    f->alpha_len = sizeof(alpha) - 1U;
+    if (!write_bytes(f->alpha, alpha, sizeof(alpha) - 1U) ||
+        !write_bytes(f->zeta, zeta, sizeof(zeta) - 1U) ||
+        !write_bytes(f->config, (const u8 *)source, (size_t)n)) {
+        ptc_check(c, false, "could not create Sprint 47 rename fixture");
+        return false;
+    }
+    ptc_spawn(c, yew, "--config", f->config, f->alpha, NULL);
+    ptc_settle(c, 400);
+    ptc_wait_kitty_push(c, 21U);
+    return !c->failed;
+
+overflow:
+    ptc_check(c, false, "Sprint 47 rename fixture path overflow");
+    return false;
+}
+
+static void s47_rename_begin(PtyCtx *c, bool dirty)
+{
+    if (dirty)
+        s18_settle_after_keys(c, "right i ! esc g g");
+    s18_settle_after_keys(c, "g R");
+    s18_settle_after_keys(c, "ctrl+u");
+    s18_settle_after_bytes(c, "beta");
+    s18_settle_after_keys(c, "enter");
+    ptc_settle(c, 100);
+}
+
+static bool s47_screen_ordered(const VtScreen *vt, const char *first,
+                               const char *second)
+{
+    Bytebuf screen;
+    char *a;
+    char *b;
+    bool ordered;
+
+    bytebuf_init(&screen);
+    snapshot_write(vt, &screen);
+    bytebuf_push_u8(&screen, 0U);
+    a = strstr((char *)screen.data, first);
+    b = strstr((char *)screen.data, second);
+    ordered = a != NULL && b != NULL && a < b;
+    bytebuf_free(&screen);
+    return ordered;
+}
+
+static void s47_rename_finish(PtyCtx *c, const S47RenameFix *f)
+{
+    force_quit(c);
+    (void)unlink(f->alpha);
+    (void)unlink(f->zeta);
+    (void)unlink(f->config);
+}
+
+static void case_s47_rename_summary_cancel(PtyCtx *c)
+{
+    static const u8 zeta[] = "alpha third\n";
+    S47RenameFix f;
+
+    if (!s47_rename_open(c, "session-rename", &f))
+        return;
+    s47_rename_begin(c, true);
+    ptc_snapshot(c, "lsp_feat_rename_summary");
+    ptc_check(c, s43_screen_contains(
+                     &c->vt, "rename 'alpha' \xE2\x86\x92 'beta'"),
+              "rename confirmation omitted the requested names");
+    ptc_check(c, s43_screen_contains(&c->vt, "3 edits in 2 files, 1 already modified"),
+              "rename confirmation omitted its edit/file/dirty totals");
+    ptc_check(c, s47_screen_ordered(&c->vt, "alpha.c", "zeta.c"),
+              "rename confirmation paths are not sorted");
+    ptc_check(c, s43_screen_contains(&c->vt, "alpha.c") &&
+                     s43_screen_contains(&c->vt, "*"),
+              "rename confirmation omitted the dirty-file marker");
+    s18_settle_after_keys(c, "esc");
+    ptc_check(c, file_equals(f.alpha, f.alpha_disk, f.alpha_len) &&
+                     file_equals(f.zeta, zeta, sizeof(zeta) - 1U),
+              "cancelling rename changed source files on disk");
+    s47_rename_finish(c, &f);
+}
+
+static void case_s47_rename_diff(PtyCtx *c)
+{
+    S47RenameFix f;
+
+    if (!s47_rename_open(c, "session-rename", &f))
+        return;
+    s47_rename_begin(c, true);
+    s18_settle_after_keys(c, "d");
+    ptc_check(c, s43_screen_contains(&c->vt, "--- a/alpha.c") &&
+                     s43_screen_contains(&c->vt, "+++ b/alpha.c") &&
+                     s43_screen_contains(&c->vt, "beta first"),
+              "rename diff omitted its sorted first file or replacement");
+    ptc_snapshot(c, "lsp_feat_rename_diff");
+    s47_rename_finish(c, &f);
+}
+
+static void case_s47_rename_apply(PtyCtx *c)
+{
+    static const u8 zeta[] = "alpha third\n";
+    S47RenameFix f;
+
+    if (!s47_rename_open(c, "session-rename", &f))
+        return;
+    s47_rename_begin(c, true);
+    s18_settle_after_keys(c, "enter");
+    ptc_check(c, s43_screen_contains(
+                     &c->vt,
+                     "renamed 3 occurrences in 2 files (unsaved "
+                     "\xE2\x80\x94 :wa to write)"),
+              "rename apply omitted the exact success accounting");
+    ptc_check(c, s43_screen_contains(&c->vt, "beta first"),
+              "rename apply did not update the visible buffer");
+    ptc_check(c, file_equals(f.alpha, f.alpha_disk, f.alpha_len) &&
+                     file_equals(f.zeta, zeta, sizeof(zeta) - 1U),
+              "rename apply wrote a source file to disk");
+    ptc_snapshot(c, "lsp_feat_rename_apply");
+    s47_rename_finish(c, &f);
+}
+
+static void case_s47_rename_unknown_key(PtyCtx *c)
+{
+    static const u8 zeta[] = "alpha third\n";
+    S47RenameFix f;
+
+    if (!s47_rename_open(c, "session-rename", &f))
+        return;
+    s47_rename_begin(c, true);
+    s18_settle_after_keys(c, "left");
+    ptc_check(c, !s43_screen_contains(&c->vt, "enter apply") &&
+                     !s43_screen_contains(&c->vt, "show diff"),
+              "unhandled rename confirmation key left the prompt open");
+    ptc_check(c, file_equals(f.alpha, f.alpha_disk, f.alpha_len) &&
+                     file_equals(f.zeta, zeta, sizeof(zeta) - 1U),
+              "unhandled rename confirmation key changed source files");
+    ptc_snapshot(c, "lsp_feat_rename_unknown_key");
+    s47_rename_finish(c, &f);
+}
+
+static void case_s47_rename_refusal(PtyCtx *c)
+{
+    S47RenameFix f;
+
+    if (!s47_rename_open(c, "session-rename-refuse", &f))
+        return;
+    s47_rename_begin(c, false);
+    ptc_check(c, s43_screen_contains(
+                     &c->vt,
+                     "server asked to create or delete files; refusing "
+                     "(not supported in 1.0)"),
+              "rename resource-operation refusal message is not visible");
+    ptc_check(c, file_equals(f.alpha, f.alpha_disk, f.alpha_len),
+              "refused rename changed the source file on disk");
+    ptc_snapshot(c, "lsp_feat_rename_refusal");
+    s47_rename_finish(c, &f);
+}
 #endif
 
 const PtyCase yew_pty_cases[] = {
 #if YEW_WITH_LSP
+    C(lsp_feat_rename_summary, modern, 24U, 80U,
+      case_s47_rename_summary_cancel),
+    C(lsp_feat_rename_diff, modern, 24U, 80U,
+      case_s47_rename_diff),
+    C(lsp_feat_rename_apply, modern, 24U, 80U,
+      case_s47_rename_apply),
+    C(lsp_feat_rename_unknown_key, modern, 24U, 80U,
+      case_s47_rename_unknown_key),
+    C(lsp_feat_rename_refusal, modern, 24U, 80U,
+      case_s47_rename_refusal),
     C(lsp_diag_visual_truecolor, modern, 24U, 80U,
       case_lsp_diag_visual),
     C(lsp_diag_visual_colors_256, modern, 24U, 80U,

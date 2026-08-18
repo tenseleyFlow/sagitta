@@ -102,10 +102,23 @@ bool yew_lsp_references(Ed *ed, Win *w)
     return require_lsp(ed);
 }
 
+bool yew_lsp_rename(Ed *ed, Win *w)
+{
+    (void)w;
+    return require_lsp(ed);
+}
+
 bool yew_lsp_symbols(Ed *ed, Win *w)
 {
     (void)w;
     return require_lsp(ed);
+}
+
+bool yew_lsp_rename_key(Ed *ed, const Key *key)
+{
+    (void)ed;
+    (void)key;
+    return false;
 }
 
 void yew_lsp_signature_maybe_auto_trigger(Ed *ed, Win *w,

@@ -20,9 +20,9 @@ typedef struct EditCtx {
      * stream, not a parallel notification path.  A hook rather than a
      * ChangeList* because the list lives at the edit layer and this is
      * the text layer; undo replay writes through yew_textbuf_* directly
-     * Undo replay fires it with `new_change == false`: retained syntax
-     * still follows the bytes, while changelist/Fletch observers do not
-     * mistake replay for a new user edit.
+     * Undo replay fires it with `new_change == false`, so changelist/Fletch
+     * observers do not mistake replay for a new user edit.  Syntax and the
+     * other byte consumers follow replay through yew_edit_notify_pre/post.
      */
     void (*on_change)(void *ctx, ByteOff at, LineNo line,
                       u64 removed_lines, u64 inserted_lines,
