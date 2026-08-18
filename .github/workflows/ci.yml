@@ -191,9 +191,13 @@ jobs:
   # real clangd over yew's own source tree.  Missing clangd is a failure in
   # this lane so the integration proof cannot silently rot into a skip.
   lsp:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
+      - name: Install the designated clangd
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes clangd
       - name: Assert the designated runner provides clangd
         run: clangd --version
       - name: Navigate, rename, diagnose, and hover through live clangd
