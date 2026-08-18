@@ -25,7 +25,7 @@ modes 2004,1002,1006,1004 kitty=21 sync_pairs=n/a
       |w alphaTwo                                              ||                          |        
       +--------------------------------------------------------++--------------------------+        
       1 of 5   index                                                                                
- I  pty-s14-s44_completion_flipped_doc.txt                                      utf-8  lf  18:4  all
+ I no ready LSP server for this buffer; using index completion                                      
 --- style
 AAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
 AAAAAABBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
@@ -50,7 +50,7 @@ AAAAAADEEFFFEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEEDDDDDDDDDDDDDDDDD
 AAAAAADDDGGGDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBDBBBBBBBB
 AAAAAADDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDDBBBBBBBB
 AAAAAADDDDDDDDDDDDDDBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
-HHHBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB
+HHHIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII
 --- legend
 A fg=#4b5263 bg=#12141a attrs=----------
 B fg=#c8ccd4 bg=#12141a attrs=----------
@@ -59,7 +59,8 @@ D fg=#c8ccd4 bg=default attrs=----------
 E fg=default bg=#2c313a attrs=----------
 F fg=default bg=#2c313a attrs=b---------
 G fg=#c8ccd4 bg=default attrs=b---------
-H fg=#12141a bg=#98c379 attrs=----------
+H fg=#e1f7e6 bg=#2a9148 attrs=b---------
+I fg=#d8eede bg=#12401f attrs=----------
 --- sgr
 \x1b[0;38;2;75;82;99;48;2;18;20;26m
 \x1b[1;38;2;200;204;212m
@@ -121,6 +122,6 @@ H fg=#12141a bg=#98c379 attrs=----------
 \x1b[38;2;200;204;212;49m
 \x1b[1m
 \x1b[22m
-\x1b[38;2;18;20;26;48;2;152;195;121m
-\x1b[38;2;200;204;212;48;2;18;20;26m
+\x1b[1;38;2;225;247;230;48;2;42;145;72m
+\x1b[22;38;2;216;238;222;48;2;18;64;31m
 \x1b[0;38;2;200;204;212m

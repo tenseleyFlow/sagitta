@@ -1,7 +1,10 @@
 #include "mod/lsp/lsp.h"
 
+#include "edit/buf.h"
 #include "mod/mods.h"
+#include "ui/complmenu.h"
 #include "ui/message.h"
+#include "ui/win.h"
 
 static bool require_lsp(Ed *ed)
 {
@@ -56,8 +59,18 @@ bool yew_lsp_diag_step(Ed *ed, Win *w, bool forward)
 
 bool yew_lsp_complete(Ed *ed, Win *w)
 {
-    (void)w;
-    return require_lsp(ed);
+    const char *lang;
+
+    /* Completion is the one LSP command with a core implementation to
+     * degrade to.  Keep the default C-Space binding useful in stripped
+     * builds and preserve the same user-visible fallback as an enabled
+     * build with no ready server. */
+    if (ed == NULL || w == NULL || w->buf == NULL || w->buf->tb == NULL)
+        return false;
+    lang = w->buf->lang == NULL ? "this buffer" : w->buf->lang;
+    yew_msg(ed, YEW_MSG_INFO,
+            "no ready LSP server for %s; using index completion", lang);
+    return yew_compl_open_source(ed, w, &yew_compl_source_index);
 }
 
 bool yew_lsp_hover(Ed *ed, Win *w)
