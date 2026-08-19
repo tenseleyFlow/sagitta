@@ -4840,13 +4840,14 @@ static void case_s41_5_interactive_fence_pump(PtyCtx *c)
 
     /* One input drain inserts a complete local fence and asks for status.
      * Its budget may paint the safe host fallback, but may not synchronously
-     * load the guest.  The following input-free iteration pumps JavaScript
-     * and must schedule exactly one corrective repaint. */
+     * load the guest.  The following input-free iteration must schedule a
+     * corrective repaint.  Do not pin the total frame count: settling the
+     * 5,004-line tail may finish in that same idle slice or a later one, and
+     * the latter legitimately paints the final status/footer state.  The
+     * two grids below pin the fallback-to-guest transition itself. */
     ptc_bytes(c, burst);
     ptc_wait_sync_pairs(c, before + 2U);
     ptc_settle(c, 250);
-    ptc_check(c, c->vt.nsync_pairs == before + 2U,
-              "idle embed pump did not produce exactly one repaint");
 
     pending_end = s41_5_sync_end(&c->raw, before + 1U);
     ptc_check(c, pending_end != 0U,
