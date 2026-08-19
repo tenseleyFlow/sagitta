@@ -2,6 +2,7 @@
 
 #include "edit/cmd.h"
 #include "edit/ed.h"
+#include "ui/cmdline.h"
 #include "ui/message.h"
 
 #include <stdio.h>
@@ -108,6 +109,25 @@ void test_ai_open_remains_sprint49_deferred(void)
     YEW_ASSERT_EQ_U64(ed.msg.sev, YEW_MSG_INFO);
     YEW_ASSERT_EQ_STR(ed.msg.text,
                       "AI is off; :ai enable turns it on (Sprint 50)");
+#endif
+
+    /* Exercise the real command-line dispatch path.  Its inline error wins
+     * drawing priority over ed.msg, so it must preserve the AI off-state
+     * guidance while also naming the deliberately deferred sprint. */
+    ed.clean = true;
+    yew_cmdline_open(&ed, YEW_PROMPT_CMD, "ai.open");
+    cx.win = yew_cmdline_target(&ed);
+    YEW_ASSERT_EQ_I64(yew_cmdline_cmd_accept(&cx),
+                      YEW_CMD_ERR_DEFERRED);
+    YEW_ASSERT(ed.cmdline.active);
+#if YEW_WITH_AI
+    YEW_ASSERT_EQ_STR(
+        ed.cmdline.err.msg,
+        "AI is off; :ai enable turns it on (Sprint 50); "
+        ":ai.open lands in Sprint 49");
+#else
+    YEW_ASSERT_EQ_STR(ed.cmdline.err.msg,
+                      ":ai.open lands in Sprint 49");
 #endif
     yew_ed_free(&ed);
 }

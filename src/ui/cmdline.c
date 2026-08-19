@@ -1343,6 +1343,7 @@ static void deferred_dispatch_error(Ed *ed, const CmdParse *parsed)
 {
     const CmdDesc *desc = yew_cmd_desc(parsed->command);
     CmdErr error = {0};
+    bool preserve_message;
     const char *sprint;
     const char *label;
 
@@ -1351,6 +1352,9 @@ static void deferred_dispatch_error(Ed *ed, const CmdParse *parsed)
     label = desc == NULL ? "command" :
             strncmp(desc->name, "ed.", 3U) == 0 ? desc->name + 3U :
                                                    desc->name;
+    preserve_message = desc != NULL &&
+                       strncmp(desc->name, "ed.ai.", 6U) == 0 &&
+                       ed->msg.active && ed->msg.text[0] != '\0';
     sprint = desc == NULL ? NULL : strstr(desc->help, "Sprint ");
     if (sprint != NULL) {
         char number[16];
@@ -1363,8 +1367,13 @@ static void deferred_dispatch_error(Ed *ed, const CmdParse *parsed)
             n++;
         }
         number[n] = '\0';
-        (void)snprintf(error.msg, sizeof(error.msg),
-                       ":%s lands in Sprint %s", label, number);
+        if (preserve_message)
+            (void)snprintf(error.msg, sizeof(error.msg),
+                           "%.64s; :%.24s lands in Sprint %.15s",
+                           ed->msg.text, label, number);
+        else
+            (void)snprintf(error.msg, sizeof(error.msg),
+                           ":%s lands in Sprint %s", label, number);
     } else {
         (void)snprintf(error.msg, sizeof(error.msg), ":%s failed", label);
     }
