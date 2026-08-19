@@ -97,6 +97,11 @@ typedef struct YewJobSpec {
     YewJobSink sink;
     const TextBuf *in_buf; /* stdin source; empty span = no stdin         */
     Span in_span;
+    /* Alternate stdin source when in_buf == NULL.  The borrowed object
+     * must be writable: a successful spawn owns wiping it after the last
+     * byte is written or when the job is torn down. */
+    const u8 *in_bytes;
+    u64 in_len;
     i64 timeout_ms;       /* 0 = none (async jobs)                        */
     u32 target_win;
     const char *display;  /* job-table text; defaults to cmdline/argv[0]  */
@@ -127,7 +132,9 @@ typedef struct YewJob {
     const YewJobFramedOps *framed_ops;
     const TextBuf *in_buf;
     Span in_span;
-    u64 in_off; /* bytes of in_span already written                       */
+    const u8 *in_bytes;
+    u64 in_len;
+    u64 in_off; /* bytes of the selected stdin source already written     */
     u64 bytes_out;
     u64 bytes_err;
     i64 start_ms;

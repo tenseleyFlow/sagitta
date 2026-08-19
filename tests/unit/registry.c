@@ -772,6 +772,8 @@ const YewTest yew_tests[] = {
     T(job_signal_reaches_the_whole_group),
     T(job_max_refuses_rather_than_queues),
     T(job_stdin_region_is_piped),
+    T(job_stdin_bytes_are_binary_exact_and_wiped),
+    T(job_stdin_bytes_are_wiped_when_child_closes_early),
     T(job_no_fd_or_zombie_leak_across_many_spawns),
     T(job_running_count_tracks_state),
     T(job_timeout_escalates_to_kill),

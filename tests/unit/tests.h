@@ -751,6 +751,8 @@ void test_job_killed_by_signal(void);
 void test_job_signal_reaches_the_whole_group(void);
 void test_job_max_refuses_rather_than_queues(void);
 void test_job_stdin_region_is_piped(void);
+void test_job_stdin_bytes_are_binary_exact_and_wiped(void);
+void test_job_stdin_bytes_are_wiped_when_child_closes_early(void);
 void test_job_no_fd_or_zombie_leak_across_many_spawns(void);
 void test_job_running_count_tracks_state(void);
 void test_job_timeout_escalates_to_kill(void);

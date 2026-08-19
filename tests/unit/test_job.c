@@ -413,6 +413,67 @@ void test_job_stdin_region_is_piped(void)
     yew_ed_free(&ed);
 }
 
+void test_job_stdin_bytes_are_binary_exact_and_wiped(void)
+{
+    Ed ed;
+    YewJobSpec spec = {0};
+    u8 input[] = {'a', 0U, 0xFFU, '\n', 'z'};
+    const u8 expect[] = {'a', 0U, 0xFFU, '\n', 'z'};
+    char err[256] = {0};
+    char *argv[2];
+    u32 id;
+    YewJob *j;
+    size_t i;
+
+    job_fixture(&ed);
+    argv[0] = (char *)"/bin/cat";
+    argv[1] = NULL;
+    spec.argv = argv;
+    spec.sink = YEW_SINK_COLLECT;
+    spec.in_bytes = input;
+    spec.in_len = sizeof(input);
+    id = yew_job_spawn(&ed, &spec, err, sizeof(err));
+    YEW_ASSERT(id != 0U);
+    YEW_ASSERT_EQ_STR(err, "");
+    YEW_ASSERT(run_to_completion(&ed, id));
+    j = yew_job_find(&ed, id);
+    YEW_ASSERT_NOT_NULL(j);
+    YEW_ASSERT(j->state == YEW_JOB_EXITED);
+    YEW_ASSERT_EQ_U64((u64)j->collect.len, sizeof(expect));
+    YEW_ASSERT_EQ_MEM(j->collect.data, expect, sizeof(expect));
+    for (i = 0U; i < sizeof(input); i++)
+        YEW_ASSERT_EQ_U64(input[i], 0U);
+    yew_ed_free(&ed);
+}
+
+void test_job_stdin_bytes_are_wiped_when_child_closes_early(void)
+{
+    Ed ed;
+    YewJobSpec spec = {0};
+    u8 input[128U * 1024U];
+    char err[256] = {0};
+    char *argv[2];
+    u32 id;
+    size_t i;
+    bool wiped = true;
+
+    (void)memset(input, 0xA5, sizeof(input));
+    job_fixture(&ed);
+    argv[0] = (char *)"/bin/true";
+    argv[1] = NULL;
+    spec.argv = argv;
+    spec.sink = YEW_SINK_COLLECT;
+    spec.in_bytes = input;
+    spec.in_len = sizeof(input);
+    id = yew_job_spawn(&ed, &spec, err, sizeof(err));
+    YEW_ASSERT(id != 0U);
+    YEW_ASSERT(run_to_completion(&ed, id));
+    for (i = 0U; i < sizeof(input); i++)
+        wiped = wiped && input[i] == 0U;
+    YEW_ASSERT(wiped);
+    yew_ed_free(&ed);
+}
+
 void test_job_no_fd_or_zombie_leak_across_many_spawns(void)
 {
     Ed ed;

@@ -164,6 +164,15 @@ static void job_framed_destroy(YewJob *j)
     j->framed_destroyed = true;
 }
 
+static void job_wipe_stdin_bytes(YewJob *j)
+{
+    if (j->in_bytes == NULL)
+        return;
+    yew_memzero((void *)j->in_bytes, (size_t)j->in_len);
+    j->in_bytes = NULL;
+    j->in_len = 0U;
+}
+
 static void job_dispose(YewJob *j)
 {
     job_close(&j->in_fd);
@@ -173,6 +182,7 @@ static void job_dispose(YewJob *j)
     bytebuf_free(&j->hold);
     bytebuf_free(&j->collect);
     bytebuf_free(&j->framed_err);
+    job_wipe_stdin_bytes(j);
     job_framed_destroy(j);
     free(j->label);
     (void)memset(j, 0, sizeof(*j));
@@ -553,6 +563,18 @@ u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
         (void)snprintf(err, errsz, "no command");
         return 0U;
     }
+    if (spec->in_buf != NULL && spec->in_bytes != NULL) {
+        (void)snprintf(err, errsz, "job stdin has two sources");
+        return 0U;
+    }
+    if (spec->in_bytes == NULL && spec->in_len != 0U) {
+        (void)snprintf(err, errsz, "job stdin byte length has no source");
+        return 0U;
+    }
+    if (spec->in_len > (u64)SIZE_MAX) {
+        (void)snprintf(err, errsz, "job stdin byte source is too large");
+        return 0U;
+    }
     if (spec->sink == YEW_SINK_FRAMED &&
         (spec->framed_owner == NULL || spec->framed_ops == NULL ||
          spec->framed_ops->feed_stdout == NULL ||
@@ -578,8 +600,9 @@ u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
     envp = job_build_env(ed, &scratch);
     exec_paths = job_exec_paths(&scratch, envp, argv[0]);
     cwd = spec->cwd != NULL ? spec->cwd : yew_ws_root(ed);
-    want_stdin = spec->in_buf != NULL &&
-                 spec->in_span.hi > spec->in_span.lo;
+    want_stdin = (spec->in_buf != NULL &&
+                  spec->in_span.hi > spec->in_span.lo) ||
+                 (spec->in_bytes != NULL && spec->in_len != 0U);
 
     if (!make_pipe(in_p, err, errsz) || !make_pipe(out_p, err, errsz) ||
         !make_pipe(err_p, err, errsz) || !make_pipe(exec_p, err, errsz))
@@ -623,6 +646,8 @@ u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
     j->framed_ops = spec->framed_ops;
     j->in_buf = spec->in_buf;
     j->in_span = spec->in_span;
+    j->in_bytes = spec->in_bytes;
+    j->in_len = spec->in_len;
     j->timeout_ms = spec->timeout_ms;
     j->start_ms = yew_now_ms();
     j->follow_tail = true;
@@ -689,8 +714,11 @@ static bool job_wants_stdin(const YewJob *j)
     if (j->in_fd >= 0 && j->sink == YEW_SINK_FRAMED &&
         j->framed_owner != NULL && j->framed_ops != NULL)
         return j->framed_ops->tx_view(j->framed_owner, &bytes) != 0U;
-    return j->in_fd >= 0 && j->in_buf != NULL &&
-           j->in_off < j->in_span.hi - j->in_span.lo;
+    if (j->in_fd < 0)
+        return false;
+    if (j->in_buf != NULL)
+        return j->in_off < j->in_span.hi - j->in_span.lo;
+    return j->in_bytes != NULL && j->in_off < j->in_len;
 }
 
 void yew_job_collect_fds(Ed *ed, struct pollfd *pfd, u32 *n)
@@ -880,6 +908,40 @@ static void job_write_stdin(YewJob *j)
     u64 base = j->in_span.lo;
     u64 total = j->in_span.hi - base;
 
+    if (j->in_buf == NULL) {
+        u64 sent = 0U;
+
+        while (j->in_off < j->in_len && sent < YEW_JOB_READ_BUDGET) {
+            u64 left = j->in_len - j->in_off;
+            ssize_t wrote;
+
+            if (left > YEW_JOB_READ_BUDGET - sent)
+                left = YEW_JOB_READ_BUDGET - sent;
+            if (left > (u64)SSIZE_MAX)
+                left = (u64)SSIZE_MAX;
+            wrote = write(j->in_fd, j->in_bytes + j->in_off,
+                          (size_t)left);
+            if (wrote < 0) {
+                if (errno == EINTR)
+                    continue;
+                if (errno == EAGAIN || errno == EWOULDBLOCK)
+                    return;
+                job_wipe_stdin_bytes(j);
+                job_close(&j->in_fd);
+                return;
+            }
+            if (wrote == 0)
+                return;
+            j->in_off += (u64)wrote;
+            sent += (u64)wrote;
+        }
+        if (j->in_off >= j->in_len) {
+            job_wipe_stdin_bytes(j);
+            job_close(&j->in_fd);
+        }
+        return;
+    }
+
     while (j->in_off < total) {
         const u8 *chunk = NULL;
         size_t chunk_len = 0U;
@@ -1039,6 +1101,7 @@ void yew_job_settle(Ed *ed)
             continue;
         j->drained = true;
         job_close(&j->in_fd);
+        job_wipe_stdin_bytes(j);
         job_framed_destroy(j);
         yew_job_finish(ed, j);
     }

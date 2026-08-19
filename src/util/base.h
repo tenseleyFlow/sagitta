@@ -44,4 +44,12 @@ void *yew_xrealloc(void *ptr, size_t size);
 void *yew_xcalloc(size_t count, size_t size);
 void *yew_xreallocarray(void *ptr, size_t count, size_t size);
 
+/*
+ * Wipe bytes through a volatile-qualified pointer so an optimizing compiler
+ * cannot discard the stores merely because the object is never read again.
+ * The pointed-to object must be writable even when a borrowing API exposes
+ * it as const while it is in flight.
+ */
+void yew_memzero(void *bytes, size_t len);
+
 #endif

@@ -74,3 +74,13 @@ void *yew_xreallocarray(void *ptr, size_t count, size_t size)
         YEW_BUG("allocation size overflow: %zu * %zu", count, size);
     return yew_xrealloc(ptr, count * size);
 }
+
+void yew_memzero(void *bytes, size_t len)
+{
+    volatile u8 *p = bytes;
+
+    while (len != 0U) {
+        *p++ = 0U;
+        len--;
+    }
+}
