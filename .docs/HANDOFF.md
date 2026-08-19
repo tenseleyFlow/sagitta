@@ -1,7 +1,8 @@
 # yew — session handoff
 
-**Written:** 2026-08-15. **Active implementation frontier:** Sprint 47,
-LSP Features. Sprint 46 is complete and Campaign 09 remains active.
+**Written:** 2026-08-18. **Active implementation frontier:** Sprint 48,
+HTTP/1.1, curl transport, and AI backend adapters. Sprint 47 and Campaign 09
+are complete; Campaign 10 is active.
 
 ---
 
@@ -12,81 +13,70 @@ Read, in order:
 1. `.docs/plan/00-decisions.md`
 2. `.docs/plan/01-architecture.md`
 3. `.docs/plan/02-fletch.md`
-4. `.docs/sprints/09-completion-lsp/s47-lsp-features.md`
+4. `.docs/sprints/10-ai/s48-http-and-backends.md`
 
-Sprint 47 is the binding implementation contract. Implement its deliverables
-and meet its Definition of Done before entering Campaign 10.
+Sprint 48 is the binding implementation contract. Implement its deliverables
+and meet its Definition of Done before beginning the ghost-text integration
+in Sprint 49.
 
-## 1. Sprint 46 closeout
+## 1. Sprint 47 closeout
 
-Sprint 46 turns the Sprint 45 JSON-RPC transport into a real LSP client:
+Sprint 47 completes the 1.0 editor-facing LSP surface:
 
-- Fletch-owned per-language configuration starts one server per `(id, root)`,
-  owns its copied argv/config data, and respects the stripped-module surface.
-- The poll loop owns spawn, initialize/initialized, document open/change/save/
-  close, timeout, graceful shutdown, process-group escalation, restart backoff,
-  stderr-tail reporting, and automatic document reopen after restart.
-- `src/unicode/u16.c|h` is the sole UTF-8/UTF-16 position conversion layer;
-  the differential corpus checks every byte offset in both directions.
-- Incremental sync records pre-edit positions, batches ordered changes, falls
-  back to full sync on overflow, advances versions/generations, and drops stale
-  responses before callbacks.
-- Diagnostics are generation-aware mark ranges with bounded storage, severity
-  gutter signs, undercurl/underline overlays, message hints, status badges,
-  next/previous navigation, and the existing picker.
-- The live commands are `ed.lsp.info`, `.log`, `.restart`, `.stop`,
-  `.diagnostics`, `.diag_next`, and `.diag_prev`. Sprint 47 feature commands
-  remain explicit named deferrals; permanent 1.0 non-goals remain documented,
-  not stubbed.
+- Completion and resolve feed the existing explicit menu or passive shadow
+  provider; snippets are honestly downgraded instead of partially expanded.
+- Hover and signature help use the reusable core floating panel; definition,
+  declaration, type-definition and implementation navigation use the jumplist;
+  references and hierarchical document symbols use deterministic pickers.
+- Every feature is capability-gated and generation-aware, with plain once-only
+  feedback when the active server cannot provide it.
+- Workspace rename validates the entire `WorkspaceEdit` before mutation,
+  resolves positions against each target buffer, applies edits back-to-front,
+  records exactly one `YEW_TXN_LSP` undo node per affected buffer, and rolls the
+  whole plan back on failure. It changes buffers only and never writes files.
+- Program lookup for LSP jobs is PATH-aware without invoking a shell, and the
+  checked-in compile-database generator is byte-reproducible.
+- The stripped `MODULES=""` surface preserves the core symbol-completion
+  fallback while rejecting LSP-only commands through the normal module shim.
 
-Fresh local closeout evidence:
+Closeout evidence:
 
-- final `make -j2 check`: 1,871 tests, 70,282,839 assertions, zero failures;
-  70 script cases / 605 assertions / zero failures / one intentional skip;
-  Fletch conformance, syntax assets, bans, dispatch checks, and smoke green;
-- full GCC `make test`: 206 PTYs and 1,871 tests green; full Clang `make test`:
-  206 PTYs and 1,871 tests green, warning-free;
-- stripped GCC and Clang `MODULES=""` suites: 206 PTYs, 69 applicable scripts,
-  and 1,797 tests / 70,025,358 assertions, all green and warning-free;
-- focused Clang ASan/UBSan: lifecycle/position/JSON/statusline/unit and LSP
-  script slices green; the production LSP dispatcher passes 10,000 sanitized
-  fuzz iterations at seed 1;
-- focused Valgrind with leak and fd tracking: 18 lifecycle tests (including
-  200 spawn/shutdown cycles), diagnostics, sync, the script-runner selftests,
-  and the traced `lsp_sync` editor script are clean;
-- final perf: edit-note p99 42 ns (UTF-8) and 53.313 us (UTF-16), 10k-diagnostic
-  viewport p99 1.307 ms, and framed 50 MiB keypress p99 0.396 ms — all below
-  their committed budgets;
-- structural checks: no width/cell logic in `u16.c`, no LSP line-number ±1,
-  only the two approved position-conversion call sites, all nine contracted
-  Sprint 47 command deferrals present, and 230 assertion sites across the
-  seven Sprint 46 unit files.
+- hosted CI run `32189169337` is fully green: full and stripped GCC/Clang,
+  ASan/UBSan plus every fixed fuzz campaign, PTY goldens, determinism,
+  computed-goto parity, Unicode, Fletch, scripts, torture, syntax assets,
+  structural bans, and all committed performance gates;
+- the live clangd lane reports 8/8 navigation fixtures, 6 references across
+  3 files, a two-file rename round trip back to a clean worktree, one expected
+  diagnostic, hover, and clean teardown;
+- local full/stripped fast suites are green under GCC and Clang (1,963 tests /
+  70,289,311 assertions full; 1,815 / 70,026,273 stripped), as are focused
+  rename and capability suites, all Sprint 44 completion PTYs, 50k response
+  fuzzing under GCC, Clang and ASan/UBSan, and the LSP performance gates;
+- focused Valgrind is clean for rename, capability gates, PATH-aware spawn,
+  raw prompt handling and lifecycle; the generated compile database is
+  byte-identical across repeated runs.
 
-## 2. Sprint 47 objective
+## 2. Sprint 48 objective
 
-Sprint 47 turns the client into the complete 1.0 editor-facing LSP surface:
+Sprint 48 establishes the AI module's transport and backend floor while AI
+remains off:
 
-- `src/mod/lsp/features.c`: completion/resolve, hover, signature help,
-  definition/declaration/type/implementation navigation, references,
-  document highlights, and capability gating;
-- `src/mod/lsp/pickers.c`: deterministic location and hierarchical document-
-  symbol pickers on the existing picker chrome;
-- `src/mod/lsp/rename.c`: validated, all-or-nothing, multi-buffer
-  `WorkspaceEdit` planning and rollback with one `YEW_TXN_LSP` undo node per
-  affected buffer and no disk writes;
-- `src/ui/panel.c|h`: a reusable core floating panel that also builds and
-  tests under `MODULES=""`;
-- one completion response feeding the existing explicit menu or passive
-  shadow provider, with snippets honestly downgraded rather than expanded;
-- the real-clangd milestone lane: 8/8 navigation fixtures, references across
-  files, a two-file rename round trip back to a clean worktree, diagnostics,
-  hover, and clean process/fd teardown.
+- `src/mod/ai/http.c|h`: a poll-driven plain HTTP/1.1 transport for loopback,
+  including nonblocking connect/send/receive, bounded response parsing,
+  chunked/content-length/end-by-close framing, timeouts and safe reuse;
+- `src/mod/ai/backend_curl.c`: the TLS route through a `curl` subprocess using
+  argv arrays and byte stdin, never shell interpolation;
+- `src/mod/ai/stream.c|h`: a shared incremental SSE and NDJSON parser;
+- `src/mod/ai/backend.c|h`: Ollama, OpenAI-compatible and Anthropic request,
+  response, model-listing, auth and error mappings;
+- `src/mod/ai/key.c`: API-key resolution from an environment variable or a
+  command, never a literal in `init.fl`, logs or diagnostics;
+- `src/mod/ai/shim.c`: an honest stripped-module surface under `MODULES=""`.
 
-The first slice should map the landed Sprint 43/44 shadow/completion APIs,
-picker and jumplist APIs, prompt/transaction laws, and Sprint 46 request/
-generation helpers against the exact Sprint 47 symbol ledger. Keep the core
-panel independent of `YEW_WITH_LSP`; keep every server capability failure a
-plain, once-only sentence.
+The first slice should map the existing job/poll, option, module-shim, JSON and
+timer surfaces against the exact Sprint 48 symbol ledger before adding the
+byte-stdin job field and protocol parsers. Nothing in `http.c`, `stream.c` or
+`backend.c` may know what a `TextBuf` is.
 
 ## 3. Campaign sequence
 
@@ -95,7 +85,11 @@ plain, once-only sentence.
 3. Sprint 45 — bespoke JSON/JSON-RPC and stdio transport (complete)
 4. Sprint 46 — LSP lifecycle, capabilities, changes, and diagnostics (complete)
 5. Sprint 47 — completion, hover, navigation, references, rename, symbols,
-   and the real-clangd milestone (active)
+   and the real-clangd milestone (complete)
+6. Sprint 48 — plain HTTP, curl TLS transport, streaming parsers, backend
+   adapters and API-key resolution (active)
+7. Sprint 49 — context assembly and streamed AI ghost text
+8. Sprint 50 — explicit opt-in, privacy/redaction rules and default presets
 
 ## 4. Daily Driver remains separate and pending
 
@@ -115,14 +109,16 @@ designated and logged before eligible implementation edits.
 
 - Preserve byte identity, terminal restoration, deterministic rendering and
   central edit/undo laws ahead of latency or convenience.
-- Convert an LSP position against the target buffer, never the current buffer.
-- Validate every rename edit and every generation before mutating any buffer;
-  apply edits back-to-front and roll the entire plan back on failure.
-- Rename changes buffers only. It never writes source paths to disk.
-- Keep snippets downgraded; do not add a partial placeholder/tabstop mode.
-- Keep the panel in core and reuse the existing menu, shadow, picker, prompt,
-  overlay and jumplist surfaces rather than creating parallel UI machinery.
-- Keep malformed-response fuzzing byte-identity checks around rename.
+- Keep the bespoke HTTP transport plain-text and loopback-first; deny
+  non-loopback HTTP unless `ai.allow_plain_remote` is explicitly enabled.
+- Route every HTTPS backend through `curl`; do not add or vendor a TLS library.
+- Construct subprocesses with argv arrays. Never interpolate commands through
+  a shell, and never place API-key literals in `init.fl`, argv, logs or errors.
+- Keep all socket, subprocess and streaming work poll-driven and bounded. No
+  threads, blocking request writes, or mid-keystroke DNS resolution.
+- Keep AI commands functionally off until Sprint 50's explicit opt-in flow.
+- Do not feed AI output into `TextBuf` or ghost text in Sprint 48; that is the
+  binding Sprint 49 boundary.
 - Do not add Tree-sitter, TextMate, a JSON library or another dependency.
 - Do not change performance baselines outside Sprint 56 calibration.
 - Do not mark Daily Driver `EARNED` from automated evidence.
