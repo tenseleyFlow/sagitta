@@ -22,6 +22,7 @@
 #include "edit/ws_cmds.h"
 #include "fl/flconf.h"
 #include "fl/record.h"
+#include "mod/ai/ai.h"
 #include "mod/lsp/lsp.h"
 #include "ui/pickers.h"
 #include "ui/cmdline.h"
@@ -173,6 +174,21 @@ static CmdStatus deferred_unreachable(CmdCtx *cx)
     {                                                                          \
         name_, yew_lsp_cmd_require, arity_, flags_,                            \
             "LSP module unavailable: " help_, NULL                            \
+    }
+#endif
+
+#ifndef YEW_WITH_AI
+#define YEW_WITH_AI 0
+#endif
+
+#if YEW_WITH_AI
+#define AI_DEFER(name_, sprint_, help_)                                       \
+    DEFER(name_, YEW_ARITY_NONE, 0U, sprint_, help_)
+#else
+#define AI_DEFER(name_, sprint_, help_)                                       \
+    {                                                                          \
+        name_, yew_ai_cmd_require, YEW_ARITY_NONE, 0U,                        \
+            "AI module unavailable: " help_, NULL                            \
     }
 #endif
 
@@ -915,6 +931,19 @@ static const CmdDesc builtins[] = {
      YEW_CMD_NEEDS_WIN | YEW_CMD_PROMPTS, "Show signature help", NULL},
     {"ed.lsp.complete", yew_lsp_cmd_complete, YEW_ARITY_NONE,
      YEW_CMD_NEEDS_WIN | YEW_CMD_PROMPTS, "Request LSP completion", NULL},
+    {"ed.ai.backends", yew_ai_cmd_off, YEW_ARITY_NONE, 0U,
+     "List configured AI backends and transport state", NULL},
+    {"ed.ai.models", yew_ai_cmd_off, YEW_ARITY_NONE, 0U,
+     "List models supported by the selected AI backend", NULL},
+    {"ed.ai.ping", yew_ai_cmd_off, YEW_ARITY_NONE, 0U,
+     "Probe the selected AI backend", NULL},
+    {"ed.ai.log", yew_ai_cmd_off, YEW_ARITY_NONE, 0U,
+     "Open the AI transport log", NULL},
+    {"ed.ai.reload", yew_ai_cmd_off, YEW_ARITY_NONE, 0U,
+     "Reload AI backends and clear cached credentials", NULL},
+    AI_DEFER("ed.ai.enable", 50, "enable AI after disclosure"),
+    AI_DEFER("ed.ai.disable", 50, "disable AI"),
+    AI_DEFER("ed.ai.stats", 49, "show AI request statistics"),
     DEFER("ed.git.stage", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 52,
           "stage the selected path"),
     DEFER("ed.ai.open", YEW_ARITY_NONE, YEW_CMD_PROMPTS, 49,
@@ -925,6 +954,7 @@ static const CmdDesc builtins[] = {
 
 #undef DEFER
 #undef LSP_DEFER
+#undef AI_DEFER
 
 typedef struct {
     const char *name;
@@ -1071,7 +1101,10 @@ static bool command_name_valid(const char *name)
          * lifecycle and feature implementations land. */
         "log", "restart", "diagnostics", "diag_next", "diag_prev",
         "goto_def", "goto_decl", "goto_type", "goto_impl", "references",
-        "hover", "symbols", "signature", "complete"};
+        "hover", "symbols", "signature", "complete",
+        /* Sprint 48: the AI command boundary is discoverable even when the
+         * optional module is stripped. */
+        "backends", "models", "ping"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;
@@ -1438,11 +1471,20 @@ static const char *deferred_sprint(const CmdDesc *d, char *number,
     return number;
 }
 
-static CmdStatus command_deferred(const CmdDesc *d)
+static CmdStatus command_deferred(const CmdDesc *d, CmdCtx *cx)
 {
     char number[16];
     const char *sprint = deferred_sprint(d, number, sizeof(number));
 
+#if YEW_WITH_AI
+    /* Sprint 48's off-by-default notice precedes even an AI command's
+     * implementation-sprint refusal.  Keep the descriptor deferred so the
+     * registry still enforces the no-stub invariant. */
+    if (strncmp(d->name, "ed.ai.", 6U) == 0)
+        (void)yew_ai_cmd_off(cx);
+#else
+    (void)cx;
+#endif
     yew_log(YEW_LOG_ERROR,
             "command not implemented yet: %s lands in Sprint %s", d->name,
             sprint);
@@ -1463,7 +1505,7 @@ CmdStatus yew_cmd_prepare(CmdId id, CmdCtx *cx, const CmdDesc **out)
         cx->source == YEW_SRC_CMDLINE)
         return command_fail(d, "internal E command", YEW_CMD_ERR_ARG);
     if ((d->flags & YEW_CMD_DEFERRED) != 0U)
-        return command_deferred(d);
+        return command_deferred(d, cx);
     if (!args_valid(d, cx))
         return command_fail(d, "invalid arguments", YEW_CMD_ERR_ARG);
     if (registry.record_tap != NULL &&
