@@ -1,0 +1,10 @@
+data: {"id":"chatcmpl-fixture","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-fixture","choices":[{"index":0,"delta":{"content":"int "},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-fixture","choices":[{"index":0,"delta":{"content":"answer = 42;"},"finish_reason":null}]}
+
+data: {"id":"chatcmpl-fixture","choices":[{"index":0,"delta":{},"finish_reason":"stop"}]}
+
+data: [DONE]
+

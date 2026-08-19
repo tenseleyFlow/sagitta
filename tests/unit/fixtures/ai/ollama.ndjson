@@ -1,0 +1,3 @@
+{"model":"qwen2.5-coder:7b","response":"int ","done":false}
+{"model":"qwen2.5-coder:7b","response":"answer = 42;","done":false}
+{"model":"qwen2.5-coder:7b","response":"","done":true,"done_reason":"stop"}

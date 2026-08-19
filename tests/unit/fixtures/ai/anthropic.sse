@@ -1,0 +1,24 @@
+event: message_start
+data: {"type":"message_start","message":{"id":"msg_fixture","model":"claude-fixture","usage":{"input_tokens":12}}}
+
+event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"int "}}
+
+event: ping
+data: {"type":"ping"}
+
+event: content_block_start
+data: {"type":"content_block_start","index":1,"content_block":{"type":"tool_use","id":"tool_fixture","name":"ignored"}}
+
+event: content_block_delta
+data: {"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"x\":1}"}}
+
+event: rewritten-by-proxy
+data: {"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"answer = 42;"}}
+
+event: error
+data: {"type":"error","error":{"type":"overloaded_error","message":"Overloaded"}}
+
