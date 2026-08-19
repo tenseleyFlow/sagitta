@@ -12,6 +12,91 @@ struct AiBlockState {
     bool text;
 };
 
+static bool header_name_eq(const char *left, const char *right)
+{
+    unsigned char a;
+    unsigned char b;
+
+    if (left == NULL || right == NULL)
+        return false;
+    for (;;) {
+        a = (unsigned char)*left++;
+        b = (unsigned char)*right++;
+        if (a >= (unsigned char)'A' && a <= (unsigned char)'Z')
+            a = (unsigned char)(a + ((unsigned char)'a' -
+                                     (unsigned char)'A'));
+        if (b >= (unsigned char)'A' && b <= (unsigned char)'Z')
+            b = (unsigned char)(b + ((unsigned char)'a' -
+                                     (unsigned char)'A'));
+        if (a != b)
+            return false;
+        if (a == '\0')
+            return true;
+    }
+}
+
+static const char *auth_header_name(const char *name)
+{
+    if (header_name_eq(name, "authorization") ||
+        header_name_eq(name, "proxy-authorization"))
+        return "authorization";
+    if (header_name_eq(name, "x-api-key") ||
+        header_name_eq(name, "api-key") ||
+        header_name_eq(name, "x-auth-token"))
+        return "x-api-key";
+    return NULL;
+}
+
+static bool log_secret_header(const AiSecretHeader *secret)
+{
+    const char *name;
+
+    if (secret->kind == YEW_AI_SECRET_BEARER)
+        name = "authorization";
+    else if (secret->kind == YEW_AI_SECRET_X_API_KEY)
+        name = "x-api-key";
+    else
+        return false;
+    yew_log(YEW_LOG_DEBUG, "%s: <redacted %u bytes>", name,
+            (unsigned)secret->len);
+    return true;
+}
+
+bool yew_ai_log_headers(const HttpHdr *hdrs, u32 nhdr,
+                        const AiSecretHeader *secret)
+{
+    bool valid = true;
+    bool have_secret = secret != NULL && secret->kind != YEW_AI_SECRET_NONE;
+    u32 secret_index = have_secret ? secret->index : nhdr;
+    u32 i;
+
+    if ((nhdr != 0U && hdrs == NULL) || secret_index > nhdr)
+        return false;
+    for (i = 0U; i <= nhdr; i++) {
+        const char *masked;
+
+        if (have_secret && i == secret_index) {
+            if (!log_secret_header(secret))
+                valid = false;
+        }
+        if (i == nhdr)
+            break;
+        if (hdrs[i].name == NULL || hdrs[i].value == NULL) {
+            valid = false;
+            continue;
+        }
+        masked = auth_header_name(hdrs[i].name);
+        if (masked != NULL) {
+            yew_log(YEW_LOG_DEBUG, "%s: <redacted>", masked);
+            valid = false;
+        } else {
+            yew_log(YEW_LOG_DEBUG, "%s: %s", hdrs[i].name,
+                    hdrs[i].value);
+        }
+    }
+    return valid;
+}
+
 static void json_text(JsonW *w, const AiText *text)
 {
     yew_jsonw_str(w, text->bytes, text->len);

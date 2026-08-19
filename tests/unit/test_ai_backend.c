@@ -1,6 +1,9 @@
+#define _POSIX_C_SOURCE 200809L
+
 #include "harness.h"
 
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "mod/ai/backend.h"
@@ -51,6 +54,97 @@ static AiPrompt prompt(void)
     return out;
 }
 
+typedef struct HeaderLog {
+    Bytebuf lines;
+    u32 count;
+} HeaderLog;
+
+static void header_log_write(void *user, YewLogLevel level,
+                             const char *message)
+{
+    HeaderLog *log = user;
+
+    YEW_ASSERT_EQ_U64(level, YEW_LOG_DEBUG);
+    if (log->count != 0U)
+        bytebuf_append(&log->lines, "\n", 1U);
+    bytebuf_append(&log->lines, message, strlen(message));
+    log->count++;
+}
+
+static void assert_header_log(const HttpHdr *hdrs, u32 nhdr,
+                              const AiSecretHeader *secret, bool want_ok,
+                              const char *expected, const char *forbidden)
+{
+    HeaderLog log;
+    YewLogSink sink = {header_log_write, &log};
+    const char *old_level = getenv("YEW_LOG_LEVEL");
+    char *saved_level = old_level != NULL ? strdup(old_level) : NULL;
+    const char *old_debug = getenv("YEW_AI_DEBUG");
+    char *saved_debug = old_debug != NULL ? strdup(old_debug) : NULL;
+    bool ok;
+
+    bytebuf_init(&log.lines);
+    log.count = 0U;
+    YEW_ASSERT_EQ_I64(setenv("YEW_LOG_LEVEL", "debug", 1), 0);
+    YEW_ASSERT_EQ_I64(setenv("YEW_AI_DEBUG", "1", 1), 0);
+    yew_log_set_sink(&sink);
+    ok = yew_ai_log_headers(hdrs, nhdr, secret);
+    bytebuf_append(&log.lines, "", 1U);
+    yew_log_set_sink(NULL);
+    if (saved_level != NULL) {
+        YEW_ASSERT_EQ_I64(setenv("YEW_LOG_LEVEL", saved_level, 1), 0);
+        free(saved_level);
+    } else {
+        YEW_ASSERT_EQ_I64(unsetenv("YEW_LOG_LEVEL"), 0);
+    }
+    if (saved_debug != NULL) {
+        YEW_ASSERT_EQ_I64(setenv("YEW_AI_DEBUG", saved_debug, 1), 0);
+        free(saved_debug);
+    } else {
+        YEW_ASSERT_EQ_I64(unsetenv("YEW_AI_DEBUG"), 0);
+    }
+    YEW_ASSERT_EQ_U64(ok, want_ok);
+    YEW_ASSERT_EQ_STR((const char *)log.lines.data, expected);
+    if (forbidden != NULL)
+        YEW_ASSERT_NULL(strstr((const char *)log.lines.data, forbidden));
+    bytebuf_free(&log.lines);
+}
+
+static void test_header_logging(void)
+{
+    static const HttpHdr mixed[] = {
+        {"content-type", "application/json"},
+        {"anthropic-version", "2023-06-01"},
+        {"x-trace", "fixture-7"}
+    };
+    static const HttpHdr misplaced[] = {
+        {"accept", "text/event-stream"},
+        {"AuThOrIzAtIoN", "sk-secret-must-not-appear"},
+        {"X-API-KEY", "second-secret-must-not-appear"}
+    };
+    static const AiSecretHeader bearer = {
+        YEW_AI_SECRET_BEARER, 51U, 1U
+    };
+    static const AiSecretHeader api_key = {
+        YEW_AI_SECRET_X_API_KEY, 108U, 2U
+    };
+
+    assert_header_log(mixed, YEW_ARRAY_LEN(mixed), &bearer, true,
+                      "content-type: application/json\n"
+                      "authorization: <redacted 51 bytes>\n"
+                      "anthropic-version: 2023-06-01\n"
+                      "x-trace: fixture-7", "sk-");
+    assert_header_log(mixed, YEW_ARRAY_LEN(mixed), &api_key, true,
+                      "content-type: application/json\n"
+                      "anthropic-version: 2023-06-01\n"
+                      "x-api-key: <redacted 108 bytes>\n"
+                      "x-trace: fixture-7", "sk-");
+    assert_header_log(misplaced, YEW_ARRAY_LEN(misplaced), NULL, false,
+                      "accept: text/event-stream\n"
+                      "authorization: <redacted>\n"
+                      "x-api-key: <redacted>", "secret-must-not-appear");
+}
+
 static void assert_build(const AiAdapter *adapter, const AiBackend *b,
                          const AiPrompt *p, const char *expected)
 {
@@ -95,6 +189,7 @@ void test_ai_backend_paths_and_modes(void)
                       YEW_AISTREAM_SSE);
     YEW_ASSERT_EQ_U64(yew_ai_adapters[YEW_AI_ANTHROPIC].stream_mode,
                       YEW_AISTREAM_SSE);
+    test_header_logging();
 }
 
 void test_ai_backend_request_bodies(void)

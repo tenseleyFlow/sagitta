@@ -48,6 +48,20 @@ typedef struct AiText {
     u32 len;
 } AiText;
 
+typedef enum {
+    YEW_AI_SECRET_NONE = 0,
+    YEW_AI_SECRET_BEARER,
+    YEW_AI_SECRET_X_API_KEY
+} AiSecretKind;
+
+/* Describes an authentication header without carrying its bytes.  The
+ * header is logged before hdrs[index]; index == nhdr appends it. */
+typedef struct AiSecretHeader {
+    u8 kind;
+    u32 len;
+    u32 index;
+} AiSecretHeader;
+
 /* The prompt is already assembled and privacy-checked by its caller. */
 typedef struct AiPrompt {
     AiText system;
@@ -121,5 +135,10 @@ void yew_ai_cooldown_note(AiCooldown *cooldown, AiErrKind kind,
                           i64 retry_after_ms, i64 now_ms,
                           i64 backoff_max_ms);
 i64 yew_ai_cooldown_remaining(const AiCooldown *cooldown, i64 now_ms);
+/* Public headers are emitted in insertion order.  Authentication headers
+ * must be represented by secret; a misplaced one is masked and rejected
+ * without inspecting its value. */
+bool yew_ai_log_headers(const HttpHdr *hdrs, u32 nhdr,
+                        const AiSecretHeader *secret);
 
 #endif
