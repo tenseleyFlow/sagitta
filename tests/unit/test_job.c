@@ -450,6 +450,8 @@ void test_job_stdin_bytes_are_wiped_when_child_closes_early(void)
 {
     Ed ed;
     YewJobSpec spec = {0};
+    struct sigaction ignored;
+    struct sigaction saved;
     u8 input[128U * 1024U];
     char err[256] = {0};
     char *argv[2];
@@ -457,6 +459,14 @@ void test_job_stdin_bytes_are_wiped_when_child_closes_early(void)
     size_t i;
     bool wiped = true;
 
+    (void)memset(&ignored, 0, sizeof(ignored));
+    ignored.sa_handler = SIG_IGN;
+    YEW_ASSERT_EQ_I64(sigemptyset(&ignored.sa_mask), 0);
+    /* The real editor installs this process-wide before any job can run.
+     * Pin it here too: Valgrind makes the child-close-before-write timing
+     * deterministic, and the contract is that write(2) returns EPIPE for
+     * job.c to handle rather than terminating the editor. */
+    YEW_ASSERT_EQ_I64(sigaction(SIGPIPE, &ignored, &saved), 0);
     (void)memset(input, 0xA5, sizeof(input));
     job_fixture(&ed);
     argv[0] = (char *)"/bin/true";
@@ -472,6 +482,7 @@ void test_job_stdin_bytes_are_wiped_when_child_closes_early(void)
         wiped = wiped && input[i] == 0U;
     YEW_ASSERT(wiped);
     yew_ed_free(&ed);
+    YEW_ASSERT_EQ_I64(sigaction(SIGPIPE, &saved, NULL), 0);
 }
 
 void test_job_no_fd_or_zombie_leak_across_many_spawns(void)
