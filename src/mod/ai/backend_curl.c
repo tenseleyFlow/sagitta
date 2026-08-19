@@ -4,6 +4,7 @@
 
 #include <signal.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "edit/job.h"
@@ -39,12 +40,21 @@ char *const *yew_ai_curl_argv(void)
     return curl_argv;
 }
 
-static bool curl_quoted(Bytebuf *out, const u8 *bytes, size_t len,
-                        char *err, size_t errsz)
+static bool curl_size_add(size_t *total, size_t add, char *err, size_t errsz)
+{
+    if (add > SIZE_MAX - *total) {
+        curl_error(err, errsz, "curl request is too large");
+        return false;
+    }
+    *total += add;
+    return true;
+}
+
+static bool curl_piece_measure(const u8 *bytes, size_t len, size_t *total,
+                               char *err, size_t errsz)
 {
     size_t i;
 
-    bytebuf_push_u8(out, (u8)'"');
     for (i = 0U; i < len; i++) {
         u8 c = bytes[i];
 
@@ -53,53 +63,179 @@ static bool curl_quoted(Bytebuf *out, const u8 *bytes, size_t len,
                        "curl config value contains a control byte");
             return false;
         }
-        if (c == (u8)'\\' || c == (u8)'"')
-            bytebuf_push_u8(out, (u8)'\\');
-        bytebuf_push_u8(out, c);
+        if (!curl_size_add(total,
+                           c == (u8)'\\' || c == (u8)'"' ? 2U : 1U,
+                           err, errsz))
+            return false;
     }
-    bytebuf_push_u8(out, (u8)'"');
     return true;
 }
 
-static bool curl_directive(Bytebuf *out, const char *name,
-                           const u8 *value, size_t len,
-                           char *err, size_t errsz)
+static void curl_quoted_piece(Bytebuf *out, const u8 *bytes, size_t len)
+{
+    size_t i;
+
+    for (i = 0U; i < len; i++) {
+        if (bytes[i] == (u8)'\\' || bytes[i] == (u8)'"')
+            bytebuf_push_u8(out, (u8)'\\');
+        bytebuf_push_u8(out, bytes[i]);
+    }
+}
+
+static void curl_directive(Bytebuf *out, const char *name,
+                           const u8 *value, size_t len)
 {
     bytebuf_append(out, name, strlen(name));
-    bytebuf_append(out, " = ", 3U);
-    if (!curl_quoted(out, value, len, err, errsz))
-        return false;
-    bytebuf_push_u8(out, (u8)'\n');
-    return true;
+    bytebuf_append(out, " = \"", 4U);
+    curl_quoted_piece(out, value, len);
+    bytebuf_append(out, "\"\n", 2U);
 }
 
-static bool curl_header(Bytebuf *out, const HttpHdr *h,
-                        char *err, size_t errsz)
+static bool curl_ascii_eq(const char *a, const char *b)
 {
-    Bytebuf value;
-    bool ok;
+    while (*a != '\0' && *b != '\0') {
+        unsigned char ac = (unsigned char)*a++;
+        unsigned char bc = (unsigned char)*b++;
+
+        if (ac >= (unsigned char)'A' && ac <= (unsigned char)'Z')
+            ac = (unsigned char)(ac - (unsigned char)'A' +
+                                 (unsigned char)'a');
+        if (bc >= (unsigned char)'A' && bc <= (unsigned char)'Z')
+            bc = (unsigned char)(bc - (unsigned char)'A' +
+                                 (unsigned char)'a');
+        if (ac != bc)
+            return false;
+    }
+    return *a == '\0' && *b == '\0';
+}
+
+static bool curl_auth_header(const char *name)
+{
+    return curl_ascii_eq(name, "authorization") ||
+           curl_ascii_eq(name, "x-api-key");
+}
+
+static bool curl_header_measure(const HttpHdr *h, size_t *total,
+                                char *err, size_t errsz)
+{
+    size_t nlen;
+    size_t vlen;
 
     if (h->name == NULL || h->name[0] == '\0' || h->value == NULL) {
         curl_error(err, errsz, "curl header is missing a name or value");
         return false;
     }
-    bytebuf_init(&value);
-    bytebuf_append(&value, h->name, strlen(h->name));
-    bytebuf_append(&value, ": ", 2U);
-    bytebuf_append(&value, h->value, strlen(h->value));
-    ok = curl_directive(out, "header", value.data, value.len, err, errsz);
-    yew_memzero(value.data, value.len);
-    bytebuf_free(&value);
-    return ok;
+    if (curl_auth_header(h->name)) {
+        curl_error(err, errsz,
+                   "authorization headers must use the secret argument");
+        return false;
+    }
+    nlen = strlen(h->name);
+    vlen = strlen(h->value);
+    if (!curl_size_add(total, strlen("header = \""), err, errsz) ||
+        !curl_piece_measure((const u8 *)h->name, nlen, total, err, errsz) ||
+        !curl_size_add(total, 2U, err, errsz) ||
+        !curl_piece_measure((const u8 *)h->value, vlen, total, err, errsz) ||
+        !curl_size_add(total, 2U, err, errsz))
+        return false;
+    return true;
+}
+
+static void curl_header(Bytebuf *out, const char *name,
+                        const u8 *value, size_t len, const char *prefix)
+{
+    bytebuf_append(out, "header = \"", 10U);
+    curl_quoted_piece(out, (const u8 *)name, strlen(name));
+    bytebuf_append(out, ": ", 2U);
+    if (prefix != NULL)
+        bytebuf_append(out, prefix, strlen(prefix));
+    curl_quoted_piece(out, value, len);
+    bytebuf_append(out, "\"\n", 2U);
+}
+
+static bool curl_directive_measure(const char *name, const u8 *value,
+                                   size_t len, size_t *total,
+                                   char *err, size_t errsz)
+{
+    return curl_size_add(total, strlen(name) + strlen(" = \""),
+                         err, errsz) &&
+           curl_piece_measure(value, len, total, err, errsz) &&
+           curl_size_add(total, strlen("\"\n"), err, errsz);
+}
+
+static bool curl_secret_measure(const AiCurlSecret *secret, size_t *total,
+                                char *err, size_t errsz)
+{
+    const char *name;
+    const char *prefix;
+
+    if (secret == NULL || secret->kind == YEW_CURL_AUTH_NONE)
+        return true;
+    if (secret->bytes == NULL || secret->len == 0U) {
+        curl_error(err, errsz, "curl secret is incomplete");
+        return false;
+    }
+    if (secret->kind == YEW_CURL_AUTH_BEARER) {
+        name = "Authorization";
+        prefix = "Bearer ";
+    } else if (secret->kind == YEW_CURL_AUTH_X_API_KEY) {
+        name = "x-api-key";
+        prefix = "";
+    } else {
+        curl_error(err, errsz, "unknown curl authentication kind");
+        return false;
+    }
+    if (!curl_size_add(total, strlen("header = \""), err, errsz) ||
+        !curl_piece_measure((const u8 *)name, strlen(name), total,
+                            err, errsz) ||
+        !curl_size_add(total, 2U + strlen(prefix), err, errsz) ||
+        !curl_piece_measure(secret->bytes, secret->len, total, err, errsz) ||
+        !curl_size_add(total, strlen("\"\n"), err, errsz))
+        return false;
+    return true;
+}
+
+static void curl_secure_reserve(Bytebuf *buf, size_t need)
+{
+    size_t cap;
+    u8 *data;
+
+    if (buf->cap >= need)
+        return;
+    cap = buf->cap != 0U ? buf->cap : 64U;
+    while (cap < need) {
+        if (cap > SIZE_MAX / 2U) {
+            cap = need;
+            break;
+        }
+        cap *= 2U;
+    }
+    data = yew_xmalloc(cap);
+    if (buf->len != 0U)
+        (void)memcpy(data, buf->data, buf->len);
+    if (buf->data != NULL) {
+        yew_memzero(buf->data, buf->cap);
+        free(buf->data);
+    }
+    buf->data = data;
+    buf->cap = cap;
 }
 
 bool yew_ai_curl_config(Bytebuf *out, const AiCurlRequest *req,
-                        char *err, size_t errsz)
+                        const AiCurlSecret *secret, char *err, size_t errsz)
 {
     Bytebuf tmp;
     u32 i;
     size_t at;
-    bool ok = false;
+    size_t total = 0U;
+    size_t final_len;
+    const char *secret_name = NULL;
+    const char *secret_prefix = NULL;
+    u8 *stable;
+    static const char connect_timeout[] = "connect-timeout = 2\n";
+    static const char max_time[] = "max-time = 120\n";
+    static const char write_out[] =
+        "write-out = \"%{stderr}yew-http-status: %{http_code}\\n\"\n";
 
     if (err != NULL && errsz != 0U)
         err[0] = '\0';
@@ -119,30 +255,55 @@ bool yew_ai_curl_config(Bytebuf *out, const AiCurlRequest *req,
         curl_error(err, errsz, "curl request body is too large");
         return false;
     }
+    if (!curl_directive_measure("url", (const u8 *)req->url,
+                                strlen(req->url), &total, err, errsz) ||
+        !curl_directive_measure("request", (const u8 *)req->method,
+                                strlen(req->method), &total, err, errsz))
+        return false;
+    for (i = 0U; i < req->nhdr; i++)
+        if (!curl_header_measure(&req->hdrs[i], &total, err, errsz))
+            return false;
+    if (!curl_secret_measure(secret, &total, err, errsz) ||
+        !curl_directive_measure("data-binary", req->body,
+                                (size_t)req->blen, &total, err, errsz) ||
+        !curl_size_add(&total, sizeof(connect_timeout) - 1U, err, errsz) ||
+        !curl_size_add(&total, sizeof(max_time) - 1U, err, errsz) ||
+        !curl_size_add(&total, sizeof(write_out) - 1U, err, errsz) ||
+        total > SIZE_MAX - out->len) {
+        if (total > SIZE_MAX - out->len)
+            curl_error(err, errsz, "curl request is too large");
+        return false;
+    }
+    final_len = out->len + total;
 
     bytebuf_init(&tmp);
-    if (!curl_directive(&tmp, "url", (const u8 *)req->url,
-                        strlen(req->url), err, errsz) ||
-        !curl_directive(&tmp, "request", (const u8 *)req->method,
-                        strlen(req->method), err, errsz))
-        goto done;
-    for (i = 0U; i < req->nhdr; i++) {
-        if (!curl_header(&tmp, &req->hdrs[i], err, errsz))
-            goto done;
+    bytebuf_reserve(&tmp, total);
+    curl_secure_reserve(out, final_len);
+    curl_directive(&tmp, "url", (const u8 *)req->url, strlen(req->url));
+    curl_directive(&tmp, "request", (const u8 *)req->method,
+                   strlen(req->method));
+    for (i = 0U; i < req->nhdr; i++)
+        curl_header(&tmp, req->hdrs[i].name,
+                    (const u8 *)req->hdrs[i].value,
+                    strlen(req->hdrs[i].value), NULL);
+    stable = tmp.data;
+    if (secret != NULL && secret->kind != YEW_CURL_AUTH_NONE) {
+        if (secret->kind == YEW_CURL_AUTH_BEARER) {
+            secret_name = "Authorization";
+            secret_prefix = "Bearer ";
+        } else {
+            secret_name = "x-api-key";
+            secret_prefix = "";
+        }
+        curl_header(&tmp, secret_name, secret->bytes, secret->len,
+                    secret_prefix);
     }
-    if (!curl_directive(&tmp, "data-binary", req->body,
-                        (size_t)req->blen, err, errsz))
-        goto done;
-    {
-        static const char connect_timeout[] = "connect-timeout = 2\n";
-        static const char max_time[] = "max-time = 120\n";
-        static const char write_out[] =
-            "write-out = \"%{stderr}yew-http-status: %{http_code}\\n\"\n";
-
-        bytebuf_append(&tmp, connect_timeout, sizeof(connect_timeout) - 1U);
-        bytebuf_append(&tmp, max_time, sizeof(max_time) - 1U);
-        bytebuf_append(&tmp, write_out, sizeof(write_out) - 1U);
-    }
+    curl_directive(&tmp, "data-binary", req->body, (size_t)req->blen);
+    bytebuf_append(&tmp, connect_timeout, sizeof(connect_timeout) - 1U);
+    bytebuf_append(&tmp, max_time, sizeof(max_time) - 1U);
+    bytebuf_append(&tmp, write_out, sizeof(write_out) - 1U);
+    if (tmp.data != stable || tmp.len != total)
+        YEW_BUG("curl config changed allocation after secret insertion");
 
     /* Only line separators introduced above may be controls.  Quoted input
      * was checked byte-by-byte before it could reach this buffer. */
@@ -152,12 +313,11 @@ bool yew_ai_curl_config(Bytebuf *out, const AiCurlRequest *req,
                     (unsigned)tmp.data[at]);
     }
     bytebuf_append(out, tmp.data, tmp.len);
-    ok = true;
-
-done:
-    yew_memzero(tmp.data, tmp.len);
+    if (out->len != final_len)
+        YEW_BUG("curl config output length mismatch");
+    yew_memzero(tmp.data, tmp.cap);
     bytebuf_free(&tmp);
-    return ok;
+    return true;
 }
 
 AiErrKind yew_ai_curl_exit_class(int exit_code, int termsig)

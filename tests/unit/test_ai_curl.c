@@ -173,8 +173,11 @@ void test_ai_curl_argv_is_fixed_and_secret_free(void)
 void test_ai_curl_config_golden_and_escaping(void)
 {
     static const HttpHdr hdrs[] = {
-        {"content-type", "application/json"},
-        {"x-api-key", "sk-test-\\\"quoted"}
+        {"content-type", "application/json"}
+    };
+    static const u8 key[] = "sk-test-\\\"quoted";
+    static const AiCurlSecret secret = {
+        YEW_CURL_AUTH_X_API_KEY, key, sizeof(key) - 1U
     };
     static const u8 body[] = "{\"model\":\"say \\\"hi\\\"\\\\now\"}";
     static const char expected[] =
@@ -201,13 +204,35 @@ void test_ai_curl_config_golden_and_escaping(void)
 
     bytebuf_init(&one);
     bytebuf_init(&two);
-    YEW_ASSERT(yew_ai_curl_config(&one, &req, err, sizeof(err)));
+    bytebuf_reserve(&one, sizeof(expected) - 1U);
+    {
+        u8 *stable = one.data;
+
+        YEW_ASSERT(yew_ai_curl_config(&one, &req, &secret,
+                                      err, sizeof(err)));
+        YEW_ASSERT(one.data == stable);
+    }
     YEW_ASSERT_EQ_STR(err, "");
     YEW_ASSERT_EQ_U64((u64)one.len, sizeof(expected) - 1U);
     YEW_ASSERT_EQ_MEM(one.data, expected, sizeof(expected) - 1U);
-    YEW_ASSERT(yew_ai_curl_config(&two, &req, err, sizeof(err)));
+
+    /* Forced-growth regression: the builder must grow before copying the
+     * secret.  A second same-sized build then pins allocator stability. */
+    YEW_ASSERT_NULL(two.data);
+    YEW_ASSERT(yew_ai_curl_config(&two, &req, &secret, err, sizeof(err)));
     YEW_ASSERT_EQ_U64((u64)two.len, (u64)one.len);
     YEW_ASSERT_EQ_MEM(two.data, one.data, one.len);
+    {
+        u8 *stable = two.data;
+
+        yew_memzero(two.data, two.cap);
+        two.len = 0U;
+        YEW_ASSERT(yew_ai_curl_config(&two, &req, &secret,
+                                      err, sizeof(err)));
+        YEW_ASSERT(two.data == stable);
+        YEW_ASSERT_EQ_U64((u64)two.len, (u64)one.len);
+        YEW_ASSERT_EQ_MEM(two.data, one.data, one.len);
+    }
     yew_memzero(one.data, one.len);
     yew_memzero(two.data, two.len);
     bytebuf_free(&one);
@@ -216,7 +241,13 @@ void test_ai_curl_config_golden_and_escaping(void)
 
 void test_ai_curl_config_rejects_controls_transactionally(void)
 {
-    static const HttpHdr bad_hdr[] = {{"x-api-key", "secret\nnext"}};
+    static const HttpHdr bad_hdr[] = {{"X-Api-Key", "misplaced-secret"}};
+    static const u8 bad_secret_bytes[] = "secret\nnext";
+    static const AiCurlSecret bad_secret = {
+        YEW_CURL_AUTH_X_API_KEY,
+        bad_secret_bytes,
+        sizeof(bad_secret_bytes) - 1U
+    };
     static const u8 bad_body[] = {'{', 0U, '}'};
     AiCurlRequest req = {
         "https://example.invalid/",
@@ -231,16 +262,22 @@ void test_ai_curl_config_rejects_controls_transactionally(void)
 
     bytebuf_init(&out);
     bytebuf_append(&out, "keep", 4U);
-    YEW_ASSERT(!yew_ai_curl_config(&out, &req, err, sizeof(err)));
-    YEW_ASSERT_EQ_STR(err, "curl config value contains a control byte");
+    YEW_ASSERT(!yew_ai_curl_config(&out, &req, NULL, err, sizeof(err)));
+    YEW_ASSERT_EQ_STR(err,
+                      "authorization headers must use the secret argument");
     YEW_ASSERT_EQ_U64((u64)out.len, 4U);
     YEW_ASSERT_EQ_MEM(out.data, "keep", 4U);
 
     req.hdrs = NULL;
     req.nhdr = 0U;
+    YEW_ASSERT(!yew_ai_curl_config(&out, &req, &bad_secret,
+                                   err, sizeof(err)));
+    YEW_ASSERT_EQ_STR(err, "curl config value contains a control byte");
+    YEW_ASSERT_EQ_U64((u64)out.len, 4U);
+
     req.body = bad_body;
     req.blen = sizeof(bad_body);
-    YEW_ASSERT(!yew_ai_curl_config(&out, &req, err, sizeof(err)));
+    YEW_ASSERT(!yew_ai_curl_config(&out, &req, NULL, err, sizeof(err)));
     YEW_ASSERT_EQ_STR(err, "curl config value contains a control byte");
     YEW_ASSERT_EQ_U64((u64)out.len, 4U);
     bytebuf_free(&out);
@@ -379,8 +416,12 @@ void test_ai_curl_fake_transport_routes_and_hides_secret(void)
 {
     static const char secret[] = "sk-fakecurl-never-in-argv";
     static const HttpHdr hdrs[] = {
-        {"content-type", "application/json"},
-        {"x-api-key", secret}
+        {"content-type", "application/json"}
+    };
+    static const AiCurlSecret auth = {
+        YEW_CURL_AUTH_X_API_KEY,
+        (const u8 *)secret,
+        sizeof(secret) - 1U
     };
     static const u8 body[] = "{\"stream\":true}";
     AiCurlRequest req = {
@@ -436,7 +477,8 @@ void test_ai_curl_fake_transport_routes_and_hides_secret(void)
     bytebuf_init(&witness.out);
     bytebuf_init(&witness.err);
     bytebuf_init(&config);
-    YEW_ASSERT(yew_ai_curl_config(&config, &req, err, sizeof(err)));
+    YEW_ASSERT(yew_ai_curl_config(&config, &req, &auth,
+                                  err, sizeof(err)));
     spec.argv = (char **)yew_ai_curl_argv();
     spec.sink = YEW_SINK_STREAM;
     spec.in_bytes = config.data;
@@ -476,7 +518,8 @@ void test_ai_curl_fake_transport_routes_and_hides_secret(void)
     witness.out.len = 0U;
     witness.err.len = 0U;
     config.len = 0U;
-    YEW_ASSERT(yew_ai_curl_config(&config, &req, err, sizeof(err)));
+    YEW_ASSERT(yew_ai_curl_config(&config, &req, &auth,
+                                  err, sizeof(err)));
     spec.in_bytes = config.data;
     spec.in_len = (u64)config.len;
     id = yew_job_spawn(&ed, &spec, err, sizeof(err));

@@ -18,6 +18,20 @@ typedef struct AiCurlRequest {
     u64 blen;
 } AiCurlRequest;
 
+typedef enum AiCurlAuthKind {
+    YEW_CURL_AUTH_NONE,
+    YEW_CURL_AUTH_BEARER,
+    YEW_CURL_AUTH_X_API_KEY
+} AiCurlAuthKind;
+
+/* Kept separate from ordinary headers so logging and request inspection
+ * cannot accidentally treat credentials as public request metadata. */
+typedef struct AiCurlSecret {
+    AiCurlAuthKind kind;
+    const u8 *bytes;
+    size_t len;
+} AiCurlSecret;
+
 typedef enum AiCurlState {
     YEW_CURL_UNKNOWN,
     YEW_CURL_OK,
@@ -44,8 +58,10 @@ typedef struct AiCurlProbe {
 /* Fixed for every request: secrets and request data belong only on stdin. */
 char *const *yew_ai_curl_argv(void);
 
-/* Builds the complete curl --config - input transactionally. */
+/* Builds the complete curl --config - input transactionally.  The output
+ * allocation is secured against secret-bearing realloc remnants. */
 bool yew_ai_curl_config(Bytebuf *out, const AiCurlRequest *req,
+                        const AiCurlSecret *secret,
                         char *err, size_t errsz);
 
 AiErrKind yew_ai_curl_exit_class(int exit_code, int termsig);
