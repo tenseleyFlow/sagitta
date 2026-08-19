@@ -81,7 +81,10 @@ typedef struct HttpRx {
 typedef void (*HttpBodyFn)(void *ctx, const u8 *p, u64 n);
 
 void yew_http_rx_init(HttpRx *rx);
-void yew_http_rx_feed(HttpRx *rx, const u8 *b, u64 n, bool at_eof,
-                      HttpBodyFn on_body, void *ctx);
+/* Returns the exact prefix of b consumed.  A terminal response may consume
+ * less than n, leaving the caller to retain bytes for the next protocol
+ * message or reject them at its own boundary. */
+u64 yew_http_rx_feed(HttpRx *rx, const u8 *b, u64 n, bool at_eof,
+                     HttpBodyFn on_body, void *ctx);
 
 #endif

@@ -19,6 +19,8 @@ typedef struct RxCase {
     u8 state;
 } RxCase;
 
+static void assert_exact_consumption_cases(void);
+
 static void capture_body(void *ctx, const u8 *bytes, u64 n)
 {
     RxCapture *capture = ctx;
@@ -164,6 +166,75 @@ void test_http_rx_framing_and_splits(void)
     assert_split_case((const u8 *)chunked_over_len,
                       sizeof(chunked_over_len) - 1U, 200U,
                       (const u8 *)"ok", 2U, "", -1);
+    assert_exact_consumption_cases();
+}
+
+static void assert_appended_bytes_unconsumed(const u8 *response,
+                                             size_t response_len,
+                                             const u8 *body,
+                                             size_t body_len,
+                                             u16 status)
+{
+    static const u8 appended[] = "NEXT";
+    Bytebuf input;
+    size_t split;
+
+    bytebuf_init(&input);
+    bytebuf_append(&input, response, response_len);
+    bytebuf_append(&input, appended, sizeof(appended) - 1U);
+    for (split = 0U; split <= response_len; split++) {
+        HttpRx rx;
+        RxCapture capture;
+        u64 first;
+        u64 second;
+
+        yew_http_rx_init(&rx);
+        bytebuf_init(&capture.body);
+        first = yew_http_rx_feed(&rx, input.data, split, false,
+                                 capture_body, &capture);
+        second = yew_http_rx_feed(&rx, input.data + split,
+                                  input.len - split, true,
+                                  capture_body, &capture);
+        YEW_ASSERT_EQ_U64(first, split);
+        YEW_ASSERT_EQ_U64(second, response_len - split);
+        YEW_ASSERT_EQ_U64(rx.state, YEW_HX_DONE);
+        YEW_ASSERT_EQ_U64(rx.status, status);
+        YEW_ASSERT_EQ_U64(capture.body.len, body_len);
+        YEW_ASSERT_EQ_MEM(capture.body.data, body, body_len);
+        YEW_ASSERT_EQ_U64(
+            yew_http_rx_feed(&rx, appended, sizeof(appended) - 1U, true,
+                             capture_body, &capture),
+            0U);
+        bytebuf_free(&capture.body);
+        bytebuf_free(&rx.line);
+    }
+    bytebuf_free(&input);
+}
+
+static void assert_exact_consumption_cases(void)
+{
+    static const char length[] =
+        "HTTP/1.1 200 OK\r\nContent-Length: 5\r\n\r\nhello";
+    static const char chunked[] =
+        "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n"
+        "5\r\nhello\r\n0\r\nX-Trailer: yes\r\n\r\n";
+    static const char no_content[] =
+        "HTTP/1.1 204 No Content\r\nContent-Length: 99\r\n\r\n";
+    static const char not_modified[] =
+        "HTTP/1.1 304 Not Modified\r\n\r\n";
+
+    assert_appended_bytes_unconsumed((const u8 *)length,
+                                     sizeof(length) - 1U,
+                                     (const u8 *)"hello", 5U, 200U);
+    assert_appended_bytes_unconsumed((const u8 *)chunked,
+                                     sizeof(chunked) - 1U,
+                                     (const u8 *)"hello", 5U, 200U);
+    assert_appended_bytes_unconsumed((const u8 *)no_content,
+                                     sizeof(no_content) - 1U,
+                                     NULL, 0U, 204U);
+    assert_appended_bytes_unconsumed((const u8 *)not_modified,
+                                     sizeof(not_modified) - 1U,
+                                     NULL, 0U, 304U);
 }
 
 void test_http_rx_large_split_corpus(void)

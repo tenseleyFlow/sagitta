@@ -14,8 +14,11 @@ typedef struct BodySeen {
 
 typedef struct HttpResult {
     u8 state;
+    u8 ver_minor;
     bool pending_cr;
     bool have_len;
+    bool bad_len;
+    bool conflicting_len;
     bool chunked;
     bool close_delimited;
     bool no_body;
@@ -25,6 +28,8 @@ typedef struct HttpResult {
     u64 got;
     u64 body_total;
     u64 body_hash;
+    u64 consumed;
+    i64 retry_after_ms;
     size_t line_len;
     u64 line_hash;
     char ctype[64];
@@ -96,10 +101,22 @@ static bool run_http(const u8 *data, size_t len, unsigned schedule,
     while (at < len && rx.state != YEW_HX_DONE &&
            rx.state != YEW_HX_DEAD) {
         size_t chunk = next_chunk(data, len, at, schedule);
+        u64 consumed;
 
-        yew_http_rx_feed(&rx, data + at, (u64)chunk,
-                         at + chunk == len, body_seen, &seen);
-        at += chunk;
+        consumed = yew_http_rx_feed(&rx, data + at, (u64)chunk,
+                                    at + chunk == len, body_seen, &seen);
+        if (consumed > (u64)chunk) {
+            bytebuf_free(&rx.line);
+            return fail(why, why_cap,
+                        "HTTP parser consumed beyond the supplied input");
+        }
+        at += (size_t)consumed;
+        if (consumed < (u64)chunk && rx.state != YEW_HX_DONE &&
+            rx.state != YEW_HX_DEAD) {
+            bytebuf_free(&rx.line);
+            return fail(why, why_cap,
+                        "HTTP parser stopped before a terminal state");
+        }
     }
     if (len == 0U)
         yew_http_rx_feed(&rx, NULL, 0U, true, body_seen, &seen);
@@ -133,6 +150,7 @@ static bool run_http(const u8 *data, size_t len, unsigned schedule,
                     "HTTP parser emitted more than Content-Length");
     }
     if (rx.state == YEW_HX_DONE && rx.have_len && !rx.chunked &&
+        !rx.no_body &&
         rx.body_total != rx.want) {
         bytebuf_free(&rx.line);
         return fail(why, why_cap,
@@ -141,8 +159,11 @@ static bool run_http(const u8 *data, size_t len, unsigned schedule,
 
     (void)memset(result, 0, sizeof(*result));
     result->state = rx.state;
+    result->ver_minor = rx.ver_minor;
     result->pending_cr = rx.pending_cr;
     result->have_len = rx.have_len;
+    result->bad_len = rx.bad_len;
+    result->conflicting_len = rx.conflicting_len;
     result->chunked = rx.chunked;
     result->close_delimited = rx.close_delimited;
     result->no_body = rx.no_body;
@@ -152,6 +173,8 @@ static bool run_http(const u8 *data, size_t len, unsigned schedule,
     result->got = rx.got;
     result->body_total = rx.body_total;
     result->body_hash = seen.hash;
+    result->consumed = (u64)at;
+    result->retry_after_ms = rx.retry_after_ms;
     result->line_len = rx.line.len;
     result->line_hash = hash_bytes(UINT64_C(1469598103934665603),
                                    rx.line.data, rx.line.len);
@@ -164,8 +187,11 @@ static bool run_http(const u8 *data, size_t len, unsigned schedule,
 static bool same_result(const HttpResult *a, const HttpResult *b)
 {
     return a->state == b->state &&
+           a->ver_minor == b->ver_minor &&
            a->pending_cr == b->pending_cr &&
            a->have_len == b->have_len &&
+           a->bad_len == b->bad_len &&
+           a->conflicting_len == b->conflicting_len &&
            a->chunked == b->chunked &&
            a->close_delimited == b->close_delimited &&
            a->no_body == b->no_body &&
@@ -175,6 +201,8 @@ static bool same_result(const HttpResult *a, const HttpResult *b)
            a->got == b->got &&
            a->body_total == b->body_total &&
            a->body_hash == b->body_hash &&
+           a->consumed == b->consumed &&
+           a->retry_after_ms == b->retry_after_ms &&
            a->line_len == b->line_len &&
            a->line_hash == b->line_hash &&
            memcmp(a->ctype, b->ctype, sizeof(a->ctype)) == 0 &&
@@ -230,11 +258,41 @@ static bool check_valid_body(const u8 *data, size_t len,
     return ok;
 }
 
+static bool check_valid_no_body(char *why, size_t why_cap)
+{
+    static const char *const responses[] = {
+        "HTTP/1.1 204 No Content\r\nContent-Length: 99\r\n\r\nNEXT",
+        "HTTP/1.1 304 Not Modified\r\n\r\nNEXT"
+    };
+    static const size_t consumed[] = {
+        sizeof("HTTP/1.1 204 No Content\r\nContent-Length: 99\r\n\r\n") - 1U,
+        sizeof("HTTP/1.1 304 Not Modified\r\n\r\n") - 1U
+    };
+    size_t i;
+    unsigned schedule;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(responses); i++) {
+        for (schedule = 0U; schedule < 3U; schedule++) {
+            HttpResult result;
+
+            if (!run_http((const u8 *)responses[i], strlen(responses[i]),
+                          schedule, &result, why, why_cap))
+                return false;
+            if (result.state != YEW_HX_DONE || !result.no_body ||
+                result.body_total != 0U || result.consumed != consumed[i])
+                return fail(why, why_cap,
+                            "valid no-body response consumed trailing bytes");
+        }
+    }
+    return true;
+}
+
 static bool check_input(const u8 *data, size_t len,
                         char *why, size_t why_cap)
 {
     return check_raw_stream(data, len, why, why_cap) &&
-           check_valid_body(data, len, why, why_cap);
+           check_valid_body(data, len, why, why_cap) &&
+           check_valid_no_body(why, why_cap);
 }
 
 int main(int argc, char **argv)

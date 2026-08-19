@@ -790,18 +790,18 @@ void yew_http_rx_init(HttpRx *rx)
     rx->retry_after_ms = -1;
 }
 
-void yew_http_rx_feed(HttpRx *rx, const u8 *bytes, u64 n, bool at_eof,
-                      HttpBodyFn on_body, void *ctx)
+u64 yew_http_rx_feed(HttpRx *rx, const u8 *bytes, u64 n, bool at_eof,
+                     HttpBodyFn on_body, void *ctx)
 {
     u64 pos = 0U;
 
     if (rx == NULL)
-        return;
+        return 0U;
     if (rx->state == YEW_HX_DONE || rx->state == YEW_HX_DEAD)
-        return;
+        return 0U;
     if (n != 0U && bytes == NULL) {
         rx_die(rx, "invalid response bytes");
-        return;
+        return 0U;
     }
     while (pos < n && rx->state != YEW_HX_DONE &&
            rx->state != YEW_HX_DEAD) {
@@ -846,10 +846,11 @@ void yew_http_rx_feed(HttpRx *rx, const u8 *bytes, u64 n, bool at_eof,
         }
     }
     if (!at_eof || rx->state == YEW_HX_DONE || rx->state == YEW_HX_DEAD)
-        return;
+        return pos;
     if (rx->state == YEW_HX_BODY_EOF && !rx->pending_cr) {
         rx->state = YEW_HX_DONE;
-        return;
+        return pos;
     }
     rx_die(rx, "response ended early");
+    return pos;
 }
