@@ -361,8 +361,10 @@ UNIT_LSP_SRC := tests/unit/test_jsonrpc_frame.c \
                 tests/unit/test_lsp_symbols.c \
                 tests/unit/test_lsp_sync.c \
                 tests/unit/test_lsp_uri.c
-UNIT_AI_SRC := tests/unit/test_ai_stream.c tests/unit/test_http_req.c \
-               tests/unit/test_http_url.c
+UNIT_AI_SRC := tests/unit/test_ai_backend.c tests/unit/test_ai_curl.c \
+               tests/unit/test_ai_key.c tests/unit/test_ai_stream.c \
+               tests/unit/test_http_chunk.c tests/unit/test_http_req.c \
+               tests/unit/test_http_rx.c tests/unit/test_http_url.c
 ifeq ($(filter lsp ai,$(MODULES)),)
 UNIT_SRC := $(filter-out $(UNIT_JSON_SRC),$(UNIT_SRC))
 endif
@@ -383,6 +385,10 @@ $(BUILD)/tests/unit/test_state_differential.o: CFLAGS += \
 $(BUILD)/tests/unit/test_syn_embed_runtime.o: CFLAGS += -DYEW_SYN_TEST=1
 FAKECLIP := $(BUILD)/fakeclip
 FAKELSP := $(BUILD)/tests/helpers/fakelsp
+FAKECURL := $(BUILD)/tests/helpers/fakecurl
+$(BUILD)/tests/unit/test_ai_curl.o: CFLAGS += \
+  -DYEW_TEST_FAKECURL='"$(abspath $(FAKECURL))"'
+$(BUILD)/tests/unit/test_ai_curl.o: $(FAKECURL)
 SCRIPT_RUNNER_ARGS := $(if $(filter lsp,$(MODULES)),,--exclude lsp_)
 PTY_VT_OBJ := $(BUILD)/tests/pty/vt.o
 PTY_SNAPSHOT_OBJ := $(BUILD)/tests/pty/snapshot.o
@@ -439,11 +445,14 @@ FUZZ_JSON_OBJ := $(BUILD)/tests/fuzz/fuzz_json.o
 FUZZ_JSONRPC_OBJ := $(BUILD)/tests/fuzz/fuzz_jsonrpc.o
 FUZZ_LSP_MSG_OBJ := $(BUILD)/tests/fuzz/fuzz_lsp_msg.o
 FUZZ_LSP_RESP_OBJ := $(BUILD)/tests/fuzz/fuzz_lsp_resp.o
+FUZZ_HTTP_OBJ := $(BUILD)/tests/fuzz/fuzz_http.o
+FUZZ_AI_STREAM_OBJ := $(BUILD)/tests/fuzz/fuzz_ai_stream.o
 LSP_LIVE_OBJ := $(BUILD)/tests/lsp/test_clangd_live.o
 LSP_LIVE_BIN := $(BUILD)/tests/lsp/test_clangd_live
 RE_REF_OBJ := $(BUILD)/tests/fuzz/re_ref.o
 FUZZ_CORE_OBJ := $(filter-out $(BUILD)/src/main.o,$(OBJ))
 FUZZ_LINK_OBJ := $(FUZZ_CORE_OBJ) $(FUZZ_LIB_OBJ)
+AI_FUZZ_TARGET := $(if $(filter ai,$(MODULES)),fuzz-ai,)
 
 PERF_UNICODE_OBJ := $(BUILD)/tests/perf/perf_unicode.o
 PERF_RENDER_OBJ := $(BUILD)/tests/perf/perf_render.o
@@ -529,6 +538,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
                 $(FUZZ_RECORD_OBJ) $(FUZZ_SYN_OBJ) $(FUZZ_SYN_DEF_OBJ) \
                 $(FUZZ_SYMIDX_OBJ) $(FUZZ_JSON_OBJ) $(FUZZ_JSONRPC_OBJ) \
                 $(FUZZ_LSP_MSG_OBJ) $(FUZZ_LSP_RESP_OBJ) $(LSP_LIVE_OBJ) \
+                $(FUZZ_HTTP_OBJ) $(FUZZ_AI_STREAM_OBJ) \
                 $(PERF_SYN_OBJ) $(PERF_SYMIDX_OBJ) $(PERF_LSP_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) \
@@ -549,6 +559,7 @@ endif
         fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse fuzz-long \
         fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
         fuzz-symidx fuzz-json fuzz-jsonrpc fuzz-lsp-msg fuzz-lsp-resp \
+        fuzz-ai \
         test-lsp-live \
         fuzz-syn-long \
         fuzz-syn-line-long fuzz-syn-edit-long \
@@ -726,6 +737,14 @@ $(BUILD)/fuzz_lsp_resp: $(FUZZ_LINK_OBJ) $(FUZZ_LSP_RESP_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_LSP_RESP_OBJ) $(LDLIBS)
 
+$(BUILD)/fuzz_http: $(FUZZ_LINK_OBJ) $(FUZZ_HTTP_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
+		$(FUZZ_HTTP_OBJ) $(LDLIBS)
+
+$(BUILD)/fuzz_ai_stream: $(FUZZ_LINK_OBJ) $(FUZZ_AI_STREAM_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
+		$(FUZZ_AI_STREAM_OBJ) $(LDLIBS)
+
 $(LSP_LIVE_BIN): $(FUZZ_CORE_OBJ) $(LSP_LIVE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) \
 		$(LSP_LIVE_OBJ) $(LDLIBS)
@@ -871,6 +890,9 @@ $(FAKECLIP): tests/unit/fakeclip.c | dirs
 $(FAKELSP): tests/helpers/fakelsp.c | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
+$(FAKECURL): tests/helpers/fakecurl.c | dirs
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
+
 #
 # THE FAST TIER -- what to run before every commit.
 #
@@ -926,7 +948,7 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
       $(BUILD)/fuzz_flapi \
       fuzz-textbuf fuzz-units fuzz-multicursor fuzz-cmdparse \
       fuzz-mouse fuzz-groups fuzz-shadow fuzz-record fuzz-syn fuzz-syn-def \
-      fuzz-symidx fuzz-json fuzz-jsonrpc $(LSP_FUZZ_TARGET)
+      fuzz-symidx fuzz-json fuzz-jsonrpc $(LSP_FUZZ_TARGET) $(AI_FUZZ_TARGET)
 	$(BUILD)/fuzz_utf8 --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_grapheme --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_input --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
@@ -950,6 +972,10 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
 	@if [ -n "$(FUZZ_SECONDS)" ]; then \
 		$(BUILD)/fuzz_input --seconds=$(FUZZ_SECONDS) --seed=$(FUZZ_SEED); \
 	fi
+
+fuzz-ai: $(BUILD)/fuzz_http $(BUILD)/fuzz_ai_stream
+	$(BUILD)/fuzz_http --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+	$(BUILD)/fuzz_ai_stream --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 
 fuzz-groups: $(BUILD)/fuzz_groups
 	@set -eu; \
@@ -1594,6 +1620,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP)
          $(FUZZ_SYMIDX_OBJ:.o=.d) \
          $(FUZZ_JSON_OBJ:.o=.d) $(FUZZ_JSONRPC_OBJ:.o=.d) \
          $(FUZZ_LSP_MSG_OBJ:.o=.d) $(FUZZ_LSP_RESP_OBJ:.o=.d) \
+         $(FUZZ_HTTP_OBJ:.o=.d) $(FUZZ_AI_STREAM_OBJ:.o=.d) \
          $(LSP_LIVE_OBJ:.o=.d) \
          $(FUZZ_CMDPARSE_OBJ:.o=.d) $(FUZZ_RECOMPILE_OBJ:.o=.d) \
          $(FUZZ_REDIFF_OBJ:.o=.d) $(RE_REF_OBJ:.o=.d) \
