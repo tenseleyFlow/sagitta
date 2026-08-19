@@ -59,6 +59,7 @@ typedef struct YewConfigState YewConfigState;
 typedef struct YewOptHistory YewOptHistory;
 typedef struct LspClient LspClient;
 typedef struct LspRenameState LspRenameState;
+typedef struct AiState AiState;
 struct OptStored;
 
 typedef struct YewEdStartup {
@@ -170,6 +171,10 @@ struct Ed {
      * the same lifecycle surface without pulling module internals into Ed. */
     LspClient *lsp;
     LspRenameState *lsp_rename;
+    /* Sprint 48: module-owned AI transport state.  The pointer keeps the
+     * backend registry, credentials, curl probe and HTTP pool opaque to the
+     * editor core in both full and stripped builds. */
+    AiState *ai;
     Msg msg;
     /* Cursor-local diagnostic echo; real messages always take precedence. */
     Msg msg_hint;

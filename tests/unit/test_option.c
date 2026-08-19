@@ -40,9 +40,12 @@ void test_option_table_has_frozen_order_types_scopes_and_defaults(void)
         "shadow.enable", "shadow.providers", "shadow.max_lines",
         "shadow.midline", "shadow.lsp_debounce_ms",
         "shadow.ai_debounce_ms", "compl.auto_trigger",
-        "compl.trigger_chars", "lsp.open_in"
+        "compl.trigger_chars", "lsp.open_in", "ai.enable",
+        "ai.allow_plain_remote", "ai.key_cache", "ai.connect_timeout_ms",
+        "ai.first_byte_timeout_ms", "ai.stream_idle_timeout_ms",
+        "ai.total_timeout_ms", "ai.keepalive_ms", "ai.backoff_max_ms"
     };
-    const char *listed[35];
+    const char *listed[43];
     Ed ed;
     u32 i;
 

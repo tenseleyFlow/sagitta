@@ -11,6 +11,7 @@
 #include "fl/flruntime.h"
 #include "fl/flhook.h"
 #include "fl/macrolib.h"
+#include "mod/ai/ai.h"
 #include "search/searchui.h"
 #include "text/register.h"
 #include "text/undo.h"
@@ -201,7 +202,32 @@ const OptDesc yew_opts[] = {
      "Whitespace-separated completion trigger text"},
     {"lsp.open_in", YEW_OPT_ENUM, YEW_OPT_GLOBAL, OPT_ENUM("here"),
      lsp_open_in_values, 0, 0, NULL, option_changed,
-     "Open LSP navigation targets here, in a split, or in a tab"}
+     "Open LSP navigation targets here, in a split, or in a tab"},
+    {"ai.enable", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(false), NULL,
+     0, 0, NULL, option_changed, "Enable AI features after disclosure"},
+    {"ai.allow_plain_remote", YEW_OPT_BOOL, YEW_OPT_GLOBAL,
+     OPT_BOOL(false), NULL, 0, 0, NULL, option_changed,
+     "Allow plain HTTP AI endpoints outside the local host"},
+    {"ai.key_cache", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(true), NULL,
+     0, 0, NULL, option_changed, "Cache resolved AI keys for this session"},
+    {"ai.connect_timeout_ms", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(2000),
+     NULL, 1, 600000, NULL, option_changed,
+     "AI connection timeout in milliseconds"},
+    {"ai.first_byte_timeout_ms", YEW_OPT_INT, YEW_OPT_GLOBAL,
+     OPT_INT(10000), NULL, 1, 600000, NULL, option_changed,
+     "AI first-response-byte timeout in milliseconds"},
+    {"ai.stream_idle_timeout_ms", YEW_OPT_INT, YEW_OPT_GLOBAL,
+     OPT_INT(20000), NULL, 1, 600000, NULL, option_changed,
+     "AI streaming idle timeout in milliseconds"},
+    {"ai.total_timeout_ms", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(120000),
+     NULL, 1, 3600000, NULL, option_changed,
+     "AI request wall-clock timeout in milliseconds"},
+    {"ai.keepalive_ms", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(30000), NULL,
+     0, 600000, NULL, option_changed,
+     "AI idle connection lifetime in milliseconds"},
+    {"ai.backoff_max_ms", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(60000),
+     NULL, 1000, 3600000, NULL, option_changed,
+     "Maximum AI backend cooldown in milliseconds"}
 };
 
 const u32 yew_opts_len = (u32)YEW_ARRAY_LEN(yew_opts);
@@ -410,7 +436,9 @@ static void option_changed_target(Ed *ed, const OptDesc *desc,
     (void)old;
     if (ed == NULL || desc == NULL || nu == NULL)
         return;
-    if (strcmp(desc->name, "tabwidth") == 0 && buffer != NULL) {
+    if (strcmp(desc->name, "ai.key_cache") == 0) {
+        yew_ai_state_key_cache_enable(ed, nu->as.b);
+    } else if (strcmp(desc->name, "tabwidth") == 0 && buffer != NULL) {
         buffer->tabwidth = (u32)nu->as.i;
         invalidate_buffer_views(ed, buffer);
     } else if (strcmp(desc->name, "wrap") == 0 && win != NULL) {

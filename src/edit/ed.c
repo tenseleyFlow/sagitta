@@ -28,6 +28,7 @@
 #include "fl/record.h"
 #include "fl/macrolib.h"
 #include "mod/lsp/lsp.h"
+#include "mod/ai/ai.h"
 #include "syn/defs.h"
 #include "util/log.h"
 
@@ -649,6 +650,7 @@ void yew_ed_init(Ed *ed)
     yew_reg_init(&ed->regs);
     yew_timers_init(&ed->timers);
     yew_jobs_init(&ed->jobs);
+    yew_ai_state_init(ed);
     yew_mouse_init(&ed->mouse);
     yew_shadow_test_install();
     yew_block_provider_syntax_install(true);
@@ -706,6 +708,9 @@ void yew_ed_free(Ed *ed)
     yew_symwalk_dispose(ed);
     /* LSP framed owners and diagnostics borrow jobs, buffers and marks. */
     yew_lsp_free(ed);
+    /* AI owns transport jobs and pooled sockets, so it must release them
+     * before the generic job table is dismantled. */
+    yew_ai_state_free(ed);
     /* Jobs die with the process (never persisted, s25); kill and reap
      * before the buffers they append into go away. */
     yew_jobs_free(ed);
