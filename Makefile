@@ -333,9 +333,12 @@ CORE_SRC := $(filter-out src/ws/fl_emit.c src/ws/fl_parse.c \
                          src/ws/state_legacy.c, \
               $(shell find src -path 'src/mod/*' -prune -o -name '*.c' \
                 -print | sort))
+JSON_SRC := src/mod/lsp/json.c
 MOD_SRC  := src/mod/mods.c \
+  $(if $(filter lsp ai,$(MODULES)),$(JSON_SRC)) \
   $(foreach m,$(filter $(KNOWN_MODS),$(MODULES)), \
-    $(filter-out %/shim.c,$(sort $(wildcard src/mod/$(MODDIR_$(m))/*.c)))) \
+    $(filter-out %/shim.c $(JSON_SRC), \
+      $(sort $(wildcard src/mod/$(MODDIR_$(m))/*.c)))) \
   $(foreach m,$(filter-out $(MODULES),$(KNOWN_MODS)), \
     $(sort $(wildcard src/mod/$(MODDIR_$(m))/shim.c)))
 SRC      := $(CORE_SRC) $(MOD_SRC)
@@ -343,8 +346,9 @@ OBJ      := $(SRC:%.c=$(BUILD)/%.o)
 
 UNIT_SRC := $(filter-out tests/unit/fakeclip.c, \
               $(sort $(wildcard tests/unit/*.c)))
-UNIT_LSP_SRC := tests/unit/test_json.c tests/unit/test_json_num.c \
-                tests/unit/test_jsonw.c tests/unit/test_jsonrpc_frame.c \
+UNIT_JSON_SRC := tests/unit/test_json.c tests/unit/test_json_num.c \
+                 tests/unit/test_jsonw.c
+UNIT_LSP_SRC := tests/unit/test_jsonrpc_frame.c \
                 tests/unit/test_jsonrpc.c tests/unit/test_lsp_transport.c \
                 tests/unit/test_lsp_caps.c tests/unit/test_lsp_diag.c \
                 tests/unit/test_lsp_completion.c \
@@ -357,8 +361,16 @@ UNIT_LSP_SRC := tests/unit/test_json.c tests/unit/test_json_num.c \
                 tests/unit/test_lsp_symbols.c \
                 tests/unit/test_lsp_sync.c \
                 tests/unit/test_lsp_uri.c
+UNIT_AI_SRC := tests/unit/test_ai_stream.c tests/unit/test_http_req.c \
+               tests/unit/test_http_url.c
+ifeq ($(filter lsp ai,$(MODULES)),)
+UNIT_SRC := $(filter-out $(UNIT_JSON_SRC),$(UNIT_SRC))
+endif
 ifeq ($(filter lsp,$(MODULES)),)
 UNIT_SRC := $(filter-out $(UNIT_LSP_SRC),$(UNIT_SRC))
+endif
+ifeq ($(filter ai,$(MODULES)),)
+UNIT_SRC := $(filter-out $(UNIT_AI_SRC),$(UNIT_SRC))
 endif
 UNIT_OBJ := $(UNIT_SRC:%.c=$(BUILD)/%.o)
 SYN_ENGINE_UNIT_OBJ := $(BUILD)/tests/unit/syn_engine.o
