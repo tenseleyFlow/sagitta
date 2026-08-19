@@ -409,4 +409,76 @@ void test_ai_backend_error_messages(void)
                                "21 s"));
     YEW_ASSERT_NOT_NULL(strstr(errors[YEW_AI_ERR_MODEL - 1U].msg,
                                "claude-fixture"));
+
+    {
+        AiCooldown cooldown;
+        AiErr cooldown_error;
+
+        yew_ai_cooldown_init(&cooldown);
+        YEW_ASSERT_EQ_U64(cooldown.consecutive, 0U);
+        YEW_ASSERT_EQ_I64(yew_ai_cooldown_remaining(&cooldown, 100), 0);
+
+        yew_ai_cooldown_note(&cooldown, YEW_AI_ERR_UNREACHABLE, -1,
+                             100, 60000);
+        YEW_ASSERT_EQ_U64(cooldown.consecutive, 1U);
+        YEW_ASSERT_EQ_I64(yew_ai_cooldown_remaining(&cooldown, 100),
+                          1000);
+        YEW_ASSERT_EQ_I64(yew_ai_cooldown_remaining(&cooldown, 1099), 1);
+        YEW_ASSERT_EQ_I64(yew_ai_cooldown_remaining(&cooldown, 1100), 0);
+
+        yew_ai_cooldown_note(&cooldown, YEW_AI_ERR_RATELIMIT, 500,
+                             2000, 60000);
+        YEW_ASSERT_EQ_U64(cooldown.consecutive, 2U);
+        YEW_ASSERT_EQ_I64(yew_ai_cooldown_remaining(&cooldown, 2000),
+                          2000);
+        yew_ai_cooldown_note(&cooldown, YEW_AI_ERR_RATELIMIT, 9000,
+                             5000, 60000);
+        YEW_ASSERT_EQ_U64(cooldown.consecutive, 3U);
+        YEW_ASSERT_EQ_I64(yew_ai_cooldown_remaining(&cooldown, 5000),
+                          9000);
+        yew_ai_err_format(&cooldown_error, YEW_AI_ERR_RATELIMIT, &b,
+                          429U,
+                          yew_ai_cooldown_remaining(&cooldown, 5000),
+                          NULL);
+        YEW_ASSERT_NOT_NULL(strstr(cooldown_error.msg, "9 s"));
+
+        yew_ai_cooldown_note(&cooldown, YEW_AI_OK, -1, 5000, 60000);
+        YEW_ASSERT_EQ_U64(cooldown.consecutive, 0U);
+        YEW_ASSERT_EQ_I64(yew_ai_cooldown_remaining(&cooldown, 5000), 0);
+        yew_ai_cooldown_note(&cooldown, YEW_AI_ERR_UNREACHABLE, -1,
+                             6000, 2500);
+        yew_ai_cooldown_note(&cooldown, YEW_AI_ERR_UNREACHABLE, -1,
+                             7000, 2500);
+        yew_ai_cooldown_note(&cooldown, YEW_AI_ERR_UNREACHABLE, -1,
+                             8000, 2500);
+        YEW_ASSERT_EQ_I64(yew_ai_cooldown_remaining(&cooldown, 8000),
+                          2500);
+        yew_ai_cooldown_note(&cooldown, YEW_AI_ERR_UNREACHABLE, 5000,
+                             9000, 2500);
+        YEW_ASSERT_EQ_I64(yew_ai_cooldown_remaining(&cooldown, 9000),
+                          5000);
+
+        yew_ai_cooldown_note(&cooldown, YEW_AI_ERR_PROTOCOL, -1,
+                             9000, 2500);
+        YEW_ASSERT_EQ_U64(cooldown.consecutive, 0U);
+        YEW_ASSERT_EQ_I64(yew_ai_cooldown_remaining(&cooldown, 9000), 0);
+        yew_ai_cooldown_note(&cooldown, YEW_AI_ERR_UNREACHABLE, -1,
+                             INT64_MAX - 10, INT64_MAX);
+        YEW_ASSERT_EQ_I64(cooldown.until_ms, INT64_MAX);
+        YEW_ASSERT_EQ_I64(yew_ai_cooldown_remaining(&cooldown,
+                                                     INT64_MAX - 10),
+                          10);
+        YEW_ASSERT_EQ_I64(yew_ai_cooldown_remaining(&cooldown, INT64_MAX),
+                          0);
+
+        cooldown.consecutive = UINT32_MAX;
+        yew_ai_cooldown_note(&cooldown, YEW_AI_ERR_RATELIMIT, -1,
+                             0, INT64_MAX);
+        YEW_ASSERT_EQ_U64(cooldown.consecutive, UINT32_MAX);
+        YEW_ASSERT_EQ_I64(cooldown.until_ms, INT64_MAX);
+        yew_ai_cooldown_note(&cooldown, YEW_AI_ERR_AUTH, -1,
+                             0, INT64_MAX);
+        YEW_ASSERT_EQ_U64(cooldown.consecutive, 0U);
+        YEW_ASSERT_EQ_I64(cooldown.until_ms, 0);
+    }
 }

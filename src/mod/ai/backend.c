@@ -298,6 +298,59 @@ void yew_ai_err_format(AiErr *out, AiErrKind kind,
     }
 }
 
+void yew_ai_cooldown_init(AiCooldown *cooldown)
+{
+    memset(cooldown, 0, sizeof(*cooldown));
+}
+
+static i64 cooldown_backoff(u32 consecutive, i64 backoff_max_ms)
+{
+    i64 delay;
+    u32 i;
+
+    if (backoff_max_ms <= 0)
+        return 0;
+    delay = backoff_max_ms < 1000 ? backoff_max_ms : 1000;
+    for (i = 1U; i < consecutive && delay < backoff_max_ms; i++) {
+        if (delay > backoff_max_ms / 2) {
+            delay = backoff_max_ms;
+        } else {
+            delay *= 2;
+        }
+    }
+    return delay;
+}
+
+void yew_ai_cooldown_note(AiCooldown *cooldown, AiErrKind kind,
+                          i64 retry_after_ms, i64 now_ms,
+                          i64 backoff_max_ms)
+{
+    i64 delay;
+
+    if (kind != YEW_AI_ERR_RATELIMIT && kind != YEW_AI_ERR_UNREACHABLE) {
+        yew_ai_cooldown_init(cooldown);
+        return;
+    }
+    if (cooldown->consecutive != UINT32_MAX)
+        cooldown->consecutive++;
+    delay = cooldown_backoff(cooldown->consecutive, backoff_max_ms);
+    if (retry_after_ms > delay)
+        delay = retry_after_ms;
+    if (now_ms < 0)
+        now_ms = 0;
+    cooldown->until_ms = delay > INT64_MAX - now_ms ?
+                         INT64_MAX : now_ms + delay;
+}
+
+i64 yew_ai_cooldown_remaining(const AiCooldown *cooldown, i64 now_ms)
+{
+    if (now_ms < 0)
+        now_ms = 0;
+    if (cooldown->until_ms <= now_ms)
+        return 0;
+    return cooldown->until_ms - now_ms;
+}
+
 static void copy_json_string(char *out, size_t cap, const JsonValue *value)
 {
     u32 len = 0U;

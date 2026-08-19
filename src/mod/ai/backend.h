@@ -38,6 +38,11 @@ typedef struct AiErr {
     char msg[192];
 } AiErr;
 
+typedef struct AiCooldown {
+    i64 until_ms;
+    u32 consecutive;
+} AiCooldown;
+
 typedef struct AiText {
     const u8 *bytes;
     u32 len;
@@ -111,5 +116,10 @@ void yew_ai_adapter_state_free(AiAdapterState *state);
 void yew_ai_err_format(AiErr *out, AiErrKind kind,
                        const AiBackend *backend, u16 status,
                        i64 retry_ms, const char *detail);
+void yew_ai_cooldown_init(AiCooldown *cooldown);
+void yew_ai_cooldown_note(AiCooldown *cooldown, AiErrKind kind,
+                          i64 retry_after_ms, i64 now_ms,
+                          i64 backoff_max_ms);
+i64 yew_ai_cooldown_remaining(const AiCooldown *cooldown, i64 now_ms);
 
 #endif
