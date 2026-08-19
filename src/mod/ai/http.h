@@ -8,7 +8,9 @@
 #include "util/buf.h"
 
 #define YEW_HTTP_MAX_HDRS 64U
+#define YEW_HTTP_MAX_HDRLINE (8U * 1024U)
 #define YEW_HTTP_MAX_BODY (64U * 1024U * 1024U)
+#define YEW_HTTP_MAX_CHUNK (16U * 1024U * 1024U)
 
 typedef enum {
     YEW_HTTP_SCHEME_HTTP = 0
@@ -63,6 +65,8 @@ typedef struct HttpRx {
     u16 status;
     u8 ver_minor;
     bool have_len;
+    bool bad_len;
+    bool conflicting_len;
     bool chunked;
     bool close_delimited;
     bool no_body;
