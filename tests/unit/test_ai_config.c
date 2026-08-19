@@ -53,6 +53,13 @@ static FlNode *config_parse(AiConfigFix *f, const char *src)
                             file_id);
 }
 
+static FlProgram config_parse_program(AiConfigFix *f, const char *src)
+{
+    u32 file_id = fl_diag_add_file(&f->dc, "init.fl", src, strlen(src));
+
+    return fl_parse(&f->arena, &f->dc, &f->in, src, strlen(src), file_id);
+}
+
 static void assert_forbidden(const char *key, bool quoted, u32 line, u32 col)
 {
     AiConfigFix f;
@@ -160,5 +167,32 @@ void test_ai_config_rejects_url_userinfo_at_value_span(void)
     YEW_ASSERT_EQ_U64(f.span.len,
                       strlen("\"http://user:password@example.test/v1\""));
     YEW_ASSERT_EQ_STR(f.message, "bad url: userinfo is not allowed");
+    config_close(&f);
+}
+
+void test_ai_config_program_walk_catches_nested_backend_calls(void)
+{
+    static const char src[] =
+        "if true {\n"
+        "  ai.backend(\"work\", {\n"
+        "    key: make_key(),\n"
+        "    options: {secret: \"not this schema\"},\n"
+        "  })\n"
+        "}\n";
+    AiConfigFix f;
+    FlProgram program;
+
+    config_open(&f);
+    program = config_parse_program(&f, src);
+    YEW_ASSERT(!program.had_error);
+    YEW_ASSERT(!program.incomplete);
+    YEW_ASSERT(!yew_ai_config_validate_program(&f.arena, &f.dc, &f.in,
+                                                &program));
+    YEW_ASSERT_EQ_U64(f.ndiag, 1U);
+    YEW_ASSERT_EQ_U64(f.span.line, 3U);
+    YEW_ASSERT_EQ_U64(f.span.col, 5U);
+    YEW_ASSERT_EQ_U64(f.span.len, 3U);
+    YEW_ASSERT_EQ_STR(f.message,
+                      "'key' may not hold a literal API key");
     config_close(&f);
 }

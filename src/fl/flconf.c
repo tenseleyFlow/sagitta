@@ -23,6 +23,9 @@
 #include "fl/trace.h"
 #include "fl/value.h"
 #include "fl/vm.h"
+#if YEW_WITH_AI
+#include "mod/ai/config.h"
+#endif
 #include "ui/message.h"
 #include "util/buf.h"
 #include "util/intern.h"
@@ -331,6 +334,11 @@ static bool compile_unit(Ed *ed, CfgUnit *unit, const Bytebuf *source)
                        source->len, file_id);
     if (program.had_error || program.incomplete)
         return false;
+#if YEW_WITH_AI
+    if (!yew_ai_config_validate_program(&rt->arena, &rt->diag,
+                                        &rt->interner, &program))
+        return false;
+#endif
     fn = fl_compile(vm, &rt->diag, &program, file_id, origin);
     if (fn == NULL)
         return false;

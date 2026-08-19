@@ -27,4 +27,11 @@ bool yew_ai_config_validate_backend(Arena *arena, DiagCtx *dc,
                                     const FlNode *backend,
                                     HttpUrl *parsed_url);
 
+/* Walk a compiled config AST before FlMap conversion can discard key spans.
+ * Every ai.backend(name, map) call is checked, including calls nested in
+ * control flow or helper expressions. */
+bool yew_ai_config_validate_program(Arena *arena, DiagCtx *dc,
+                                    const Interner *in,
+                                    const FlProgram *program);
+
 #endif /* YEW_MOD_AI_CONFIG_H */

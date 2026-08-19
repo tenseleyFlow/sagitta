@@ -129,3 +129,143 @@ bool yew_ai_config_validate_backend(Arena *arena, DiagCtx *dc,
     }
     return valid;
 }
+
+static bool intern_is(const Interner *in, u32 id, const char *word)
+{
+    const char *bytes = yew_intern_str(in, id);
+    size_t len = yew_intern_len(in, id);
+    size_t want = strlen(word);
+
+    return bytes != NULL && len == want && memcmp(bytes, word, want) == 0;
+}
+
+static bool backend_call(const Interner *in, const FlNode *node)
+{
+    const FlNode *callee;
+    const FlNode *object;
+
+    if (node == NULL || node->kind != (u8)FL_A_CALL)
+        return false;
+    callee = node->as.call.callee;
+    if (callee == NULL || callee->kind != (u8)FL_A_FIELD ||
+        !intern_is(in, callee->as.field.name, "backend"))
+        return false;
+    object = callee->as.field.obj;
+    return object != NULL && object->kind == (u8)FL_A_IDENT &&
+           intern_is(in, object->as.ident.name, "ai");
+}
+
+static bool validate_node(Arena *arena, DiagCtx *dc, const Interner *in,
+                          const FlNode *node);
+
+static bool validate_nodes(Arena *arena, DiagCtx *dc, const Interner *in,
+                           FlNode *const *nodes, u32 n)
+{
+    u32 i;
+    bool valid = true;
+
+    for (i = 0U; i < n; i++)
+        if (!validate_node(arena, dc, in, nodes[i]))
+            valid = false;
+    return valid;
+}
+
+static bool validate_node(Arena *arena, DiagCtx *dc, const Interner *in,
+                          const FlNode *node)
+{
+    bool valid = true;
+
+    if (node == NULL)
+        return true;
+    if (backend_call(in, node) && node->as.call.nargs >= 2U &&
+        node->as.call.args[1] != NULL &&
+        node->as.call.args[1]->kind == (u8)FL_A_MAP &&
+        !yew_ai_config_validate_backend(arena, dc, in,
+                                        node->as.call.args[1], NULL))
+        valid = false;
+    switch ((FlAstKind)node->kind) {
+    case FL_A_LET:
+        return validate_node(arena, dc, in, node->as.let.init) && valid;
+    case FL_A_ASSIGN:
+        if (!validate_node(arena, dc, in, node->as.assign.tgt)) valid = false;
+        if (!validate_node(arena, dc, in, node->as.assign.val)) valid = false;
+        return valid;
+    case FL_A_FN:
+        return validate_node(arena, dc, in, node->as.fn.body) && valid;
+    case FL_A_MACRO:
+        return validate_node(arena, dc, in, node->as.macro.body) && valid;
+    case FL_A_IF:
+        if (!validate_node(arena, dc, in, node->as.ifs.cond)) valid = false;
+        if (!validate_node(arena, dc, in, node->as.ifs.then)) valid = false;
+        if (!validate_node(arena, dc, in, node->as.ifs.els)) valid = false;
+        return valid;
+    case FL_A_WHILE:
+        if (!validate_node(arena, dc, in, node->as.whiles.cond)) valid = false;
+        if (!validate_node(arena, dc, in, node->as.whiles.body)) valid = false;
+        return valid;
+    case FL_A_FOR:
+        if (!validate_node(arena, dc, in, node->as.fors.iter)) valid = false;
+        if (!validate_node(arena, dc, in, node->as.fors.body)) valid = false;
+        return valid;
+    case FL_A_RETURN:
+        return validate_node(arena, dc, in, node->as.ret.value) && valid;
+    case FL_A_EDIT:
+        return validate_node(arena, dc, in, node->as.edit.body) && valid;
+    case FL_A_TRY:
+        if (!validate_node(arena, dc, in, node->as.trys.body)) valid = false;
+        if (!validate_node(arena, dc, in, node->as.trys.handler)) valid = false;
+        return valid;
+    case FL_A_EXPR_STMT:
+        return validate_node(arena, dc, in, node->as.expr_stmt.expr) && valid;
+    case FL_A_BLOCK:
+    case FL_A_LIST:
+    case FL_A_MOTION_BLOCK:
+        return validate_nodes(arena, dc, in, node->as.list.items,
+                              node->as.list.n) && valid;
+    case FL_A_BINOP:
+        if (!validate_node(arena, dc, in, node->as.bin.l)) valid = false;
+        if (!validate_node(arena, dc, in, node->as.bin.r)) valid = false;
+        return valid;
+    case FL_A_UNOP:
+        return validate_node(arena, dc, in, node->as.un.operand) && valid;
+    case FL_A_CALL:
+        if (!validate_node(arena, dc, in, node->as.call.callee)) valid = false;
+        if (!validate_nodes(arena, dc, in, node->as.call.args,
+                            node->as.call.nargs)) valid = false;
+        return valid;
+    case FL_A_INDEX:
+        if (!validate_node(arena, dc, in, node->as.index.obj)) valid = false;
+        if (!validate_node(arena, dc, in, node->as.index.idx)) valid = false;
+        return valid;
+    case FL_A_FIELD:
+        return validate_node(arena, dc, in, node->as.field.obj) && valid;
+    case FL_A_MAP:
+        if (!validate_nodes(arena, dc, in, node->as.map.keys,
+                            node->as.map.n)) valid = false;
+        if (!validate_nodes(arena, dc, in, node->as.map.vals,
+                            node->as.map.n)) valid = false;
+        return valid;
+    case FL_A_FN_EXPR:
+        return validate_node(arena, dc, in, node->as.fn.body) && valid;
+    case FL_A_MOTION:
+        return validate_nodes(arena, dc, in, node->as.motion.inner,
+                              node->as.motion.ninner) && valid;
+    case FL_A_IMPORT:
+    case FL_A_BREAK:
+    case FL_A_CONTINUE:
+    case FL_A_IDENT:
+    case FL_A_LIT:
+    case FL_A_KIND__N:
+        return valid;
+    }
+    return valid;
+}
+
+bool yew_ai_config_validate_program(Arena *arena, DiagCtx *dc,
+                                    const Interner *in,
+                                    const FlProgram *program)
+{
+    if (arena == NULL || dc == NULL || in == NULL || program == NULL)
+        return false;
+    return validate_nodes(arena, dc, in, program->stmts, program->n);
+}
