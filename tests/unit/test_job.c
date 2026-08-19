@@ -485,6 +485,273 @@ void test_job_stdin_bytes_are_wiped_when_child_closes_early(void)
     YEW_ASSERT_EQ_I64(sigaction(SIGPIPE, &saved, NULL), 0);
 }
 
+typedef struct JobStreamWitness {
+    Bytebuf out;
+    Bytebuf err;
+    u32 out_finish;
+    u32 err_finish;
+    u32 ticks;
+    u32 destroys;
+    bool reject_stdout;
+    i64 deadline;
+} JobStreamWitness;
+
+static bool job_stream_test_out(void *owner, const u8 *bytes, u64 len)
+{
+    JobStreamWitness *w = owner;
+
+    bytebuf_append(&w->out, bytes, (size_t)len);
+    return !w->reject_stdout;
+}
+
+static bool job_stream_test_out_finish(void *owner)
+{
+    JobStreamWitness *w = owner;
+
+    w->out_finish++;
+    return true;
+}
+
+static bool job_stream_test_err(void *owner, const u8 *bytes, u64 len)
+{
+    JobStreamWitness *w = owner;
+
+    bytebuf_append(&w->err, bytes, (size_t)len);
+    return true;
+}
+
+static bool job_stream_test_err_finish(void *owner)
+{
+    JobStreamWitness *w = owner;
+
+    w->err_finish++;
+    return true;
+}
+
+static i64 job_stream_test_deadline(const void *owner)
+{
+    const JobStreamWitness *w = owner;
+
+    return w->deadline;
+}
+
+static void job_stream_test_tick(void *owner, Ed *ed, i64 now_ms)
+{
+    JobStreamWitness *w = owner;
+
+    (void)ed;
+    (void)now_ms;
+    w->ticks++;
+}
+
+static void job_stream_test_destroy(void *owner)
+{
+    JobStreamWitness *w = owner;
+
+    w->destroys++;
+}
+
+static const YewJobStreamOps job_stream_test_ops = {
+    job_stream_test_out,
+    job_stream_test_out_finish,
+    job_stream_test_err,
+    job_stream_test_err_finish,
+    job_stream_test_deadline,
+    job_stream_test_tick,
+    job_stream_test_destroy
+};
+
+static void job_stream_witness_init(JobStreamWitness *w)
+{
+    (void)memset(w, 0, sizeof(*w));
+    bytebuf_init(&w->out);
+    bytebuf_init(&w->err);
+    w->deadline = -1;
+}
+
+static void job_stream_witness_free(JobStreamWitness *w)
+{
+    bytebuf_free(&w->out);
+    bytebuf_free(&w->err);
+}
+
+/* Regression — the safe-prefix trap: a streaming protocol must see an
+ * incomplete UTF-8 prefix immediately.  Routing this sink through
+ * yew_job_safe_prefix holds all three bytes until EOF and this test fails. */
+void test_job_stream_bypasses_safe_prefix(void)
+{
+    Ed ed;
+    YewJobSpec spec = {0};
+    JobStreamWitness w;
+    char *argv[] = {(char *)"/bin/sh", (char *)"-c",
+                    (char *)"printf '\\360\\237\\230'; sleep 30", NULL};
+    char err[256] = {0};
+    u32 id;
+    i64 start;
+
+    job_fixture(&ed);
+    job_stream_witness_init(&w);
+    spec.argv = argv;
+    spec.sink = YEW_SINK_STREAM;
+    spec.stream_owner = &w;
+    spec.stream_ops = &job_stream_test_ops;
+    id = yew_job_spawn(&ed, &spec, err, sizeof(err));
+    YEW_ASSERT(id != 0U);
+    start = yew_now_ms();
+    while (w.out.len < 3U && yew_now_ms() - start < 2000) {
+        struct pollfd pfd[YEW_JOB_MAX * 4U];
+        u32 n = 0U;
+
+        yew_job_collect_fds(&ed, pfd, &n);
+        (void)poll(pfd, (nfds_t)n, 20);
+        yew_job_pump(&ed, pfd, n);
+    }
+    YEW_ASSERT_EQ_U64((u64)w.out.len, 3U);
+    YEW_ASSERT_EQ_MEM(w.out.data, "\360\237\230", 3U);
+    YEW_ASSERT_EQ_U64(w.out_finish, 0U);
+    YEW_ASSERT(yew_job_signal(&ed, id, SIGKILL));
+    YEW_ASSERT(run_to_completion(&ed, id));
+    YEW_ASSERT_EQ_U64(w.out_finish, 1U);
+    YEW_ASSERT_EQ_U64(w.err_finish, 1U);
+    YEW_ASSERT_EQ_U64(w.destroys, 1U);
+    yew_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(w.destroys, 1U);
+    job_stream_witness_free(&w);
+}
+
+void test_job_stream_routes_stderr_and_owns_lifecycle(void)
+{
+    Ed ed;
+    YewJobSpec spec = {0};
+    JobStreamWitness w;
+    u8 input[] = "secret config\n";
+    char *argv[] = {(char *)"/bin/sh", (char *)"-c",
+                    (char *)"cat; printf 'yew-http-status: 201\\n' >&2",
+                    NULL};
+    char err[256] = {0};
+    u32 id;
+    YewJob *j;
+    size_t i;
+    i64 now;
+
+    job_fixture(&ed);
+    job_stream_witness_init(&w);
+    now = yew_now_ms();
+    w.deadline = now + 500;
+    spec.argv = argv;
+    spec.sink = YEW_SINK_STREAM;
+    spec.in_bytes = input;
+    spec.in_len = sizeof(input) - 1U;
+    spec.stream_owner = &w;
+    YEW_ASSERT_EQ_U64(yew_job_spawn(&ed, &spec, err, sizeof(err)), 0U);
+    YEW_ASSERT_EQ_STR(err, "stream job has no transport");
+    YEW_ASSERT_EQ_U64(w.destroys, 0U);
+    spec.stream_ops = &job_stream_test_ops;
+    id = yew_job_spawn(&ed, &spec, err, sizeof(err));
+    YEW_ASSERT(id != 0U);
+    YEW_ASSERT(yew_job_deadline(&ed, now) >= 0);
+    YEW_ASSERT(yew_job_deadline(&ed, now) <= 500);
+    yew_job_tick(&ed, now);
+    YEW_ASSERT_EQ_U64(w.ticks, 1U);
+    YEW_ASSERT(run_to_completion(&ed, id));
+    j = yew_job_find(&ed, id);
+    YEW_ASSERT_NOT_NULL(j);
+    YEW_ASSERT_EQ_MEM(w.out.data, "secret config\n", 14U);
+    YEW_ASSERT_EQ_MEM(w.err.data, "yew-http-status: 201\n", 21U);
+    YEW_ASSERT_EQ_MEM(j->stream_err.data, w.err.data, w.err.len);
+    YEW_ASSERT_EQ_U64(w.out_finish, 1U);
+    YEW_ASSERT_EQ_U64(w.err_finish, 1U);
+    YEW_ASSERT_EQ_U64(w.destroys, 1U);
+    for (i = 0U; i < sizeof(input); i++)
+        YEW_ASSERT_EQ_U64(input[i], 0U);
+    yew_ed_free(&ed);
+    YEW_ASSERT_EQ_U64(w.destroys, 1U);
+    job_stream_witness_free(&w);
+}
+
+void test_job_stream_read_budget_is_bounded(void)
+{
+    Ed ed;
+    YewJobSpec spec = {0};
+    JobStreamWitness w;
+    char *argv[] = {
+        (char *)"/bin/sh", (char *)"-c",
+        (char *)"while :; do printf '0123456789abcdef'; done", NULL
+    };
+    char err[256] = {0};
+    struct pollfd pfd[YEW_JOB_MAX * 4U];
+    u32 id;
+    YewJob *j;
+    i64 start;
+    bool ready = false;
+
+    job_fixture(&ed);
+    job_stream_witness_init(&w);
+    spec.argv = argv;
+    spec.sink = YEW_SINK_STREAM;
+    spec.stream_owner = &w;
+    spec.stream_ops = &job_stream_test_ops;
+    id = yew_job_spawn(&ed, &spec, err, sizeof(err));
+    YEW_ASSERT(id != 0U);
+    j = yew_job_find(&ed, id);
+    YEW_ASSERT_NOT_NULL(j);
+    start = yew_now_ms();
+    while (!ready && yew_now_ms() - start < 2000) {
+        u32 n = 0U;
+        u32 i;
+
+        yew_job_collect_fds(&ed, pfd, &n);
+        (void)poll(pfd, (nfds_t)n, 20);
+        for (i = 0U; i < n; i++) {
+            if (pfd[i].fd == j->out_fd &&
+                (pfd[i].revents & POLLIN) != 0) {
+                ready = true;
+                break;
+            }
+        }
+        if (ready)
+            yew_job_pump(&ed, pfd, n);
+    }
+    YEW_ASSERT(ready);
+    YEW_ASSERT(w.out.len != 0U);
+    YEW_ASSERT(w.out.len <= YEW_JOB_READ_BUDGET);
+    YEW_ASSERT(yew_job_signal(&ed, id, SIGKILL));
+    YEW_ASSERT(run_to_completion(&ed, id));
+    YEW_ASSERT_EQ_U64(w.destroys, 1U);
+    yew_ed_free(&ed);
+    job_stream_witness_free(&w);
+}
+
+void test_job_stream_callback_failure_terminates_job(void)
+{
+    Ed ed;
+    YewJobSpec spec = {0};
+    JobStreamWitness w;
+    char *argv[] = {(char *)"/bin/sh", (char *)"-c",
+                    (char *)"printf x; sleep 30", NULL};
+    char err[256] = {0};
+    u32 id;
+    YewJob *j;
+
+    job_fixture(&ed);
+    job_stream_witness_init(&w);
+    w.reject_stdout = true;
+    spec.argv = argv;
+    spec.sink = YEW_SINK_STREAM;
+    spec.stream_owner = &w;
+    spec.stream_ops = &job_stream_test_ops;
+    id = yew_job_spawn(&ed, &spec, err, sizeof(err));
+    YEW_ASSERT(id != 0U);
+    YEW_ASSERT(run_to_completion(&ed, id));
+    j = yew_job_find(&ed, id);
+    YEW_ASSERT_NOT_NULL(j);
+    YEW_ASSERT(j->stream_failed);
+    YEW_ASSERT(j->state == YEW_JOB_SIGNALED || j->state == YEW_JOB_EXITED);
+    YEW_ASSERT_EQ_U64(w.destroys, 1U);
+    yew_ed_free(&ed);
+    job_stream_witness_free(&w);
+}
+
 void test_job_no_fd_or_zombie_leak_across_many_spawns(void)
 {
     Ed ed;

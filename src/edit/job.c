@@ -164,6 +164,18 @@ static void job_framed_destroy(YewJob *j)
     j->framed_destroyed = true;
 }
 
+static void job_stream_destroy(YewJob *j)
+{
+    if (j->stream_destroyed)
+        return;
+    if (j->stream_owner != NULL && j->stream_ops != NULL &&
+        j->stream_ops->destroy != NULL)
+        j->stream_ops->destroy(j->stream_owner);
+    j->stream_owner = NULL;
+    j->stream_ops = NULL;
+    j->stream_destroyed = true;
+}
+
 static void job_wipe_stdin_bytes(YewJob *j)
 {
     if (j->in_bytes == NULL)
@@ -182,8 +194,10 @@ static void job_dispose(YewJob *j)
     bytebuf_free(&j->hold);
     bytebuf_free(&j->collect);
     bytebuf_free(&j->framed_err);
+    bytebuf_free(&j->stream_err);
     job_wipe_stdin_bytes(j);
     job_framed_destroy(j);
+    job_stream_destroy(j);
     free(j->label);
     (void)memset(j, 0, sizeof(*j));
     j->in_fd = j->out_fd = j->err_fd = j->exec_fd = -1;
@@ -585,6 +599,16 @@ u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
         (void)snprintf(err, errsz, "framed job has no transport");
         return 0U;
     }
+    if (spec->sink == YEW_SINK_STREAM &&
+        (spec->stream_owner == NULL || spec->stream_ops == NULL ||
+         spec->stream_ops->feed_stdout == NULL ||
+         spec->stream_ops->finish_stdout == NULL ||
+         spec->stream_ops->feed_stderr == NULL ||
+         spec->stream_ops->finish_stderr == NULL ||
+         spec->stream_ops->destroy == NULL)) {
+        (void)snprintf(err, errsz, "stream job has no transport");
+        return 0U;
+    }
 
     /* Everything that allocates happens BEFORE fork. */
     arena_init(&scratch);
@@ -644,6 +668,8 @@ u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
     j->sink = spec->sink;
     j->framed_owner = spec->framed_owner;
     j->framed_ops = spec->framed_ops;
+    j->stream_owner = spec->stream_owner;
+    j->stream_ops = spec->stream_ops;
     j->in_buf = spec->in_buf;
     j->in_span = spec->in_span;
     j->in_bytes = spec->in_bytes;
@@ -654,6 +680,7 @@ u32 yew_job_spawn(Ed *ed, const YewJobSpec *spec, char *err, size_t errsz)
     bytebuf_init(&j->hold);
     bytebuf_init(&j->collect);
     bytebuf_init(&j->framed_err);
+    bytebuf_init(&j->stream_err);
     display = spec->display != NULL ? spec->display :
               (spec->cmdline != NULL ? spec->cmdline : argv[0]);
     {
@@ -805,6 +832,28 @@ static void job_deliver(Ed *ed, YewJob *j, const u8 *bytes, u64 len,
                 (void)yew_job_signal(ed, j->id, SIGTERM);
         }
         break;
+    case YEW_SINK_STREAM:
+        if (is_err) {
+            if (len > YEW_JOB_COLLECT_MAX - (u64)j->stream_err.len) {
+                if (!j->collect_capped) {
+                    j->collect_capped = true;
+                    (void)yew_job_signal(ed, j->id, SIGTERM);
+                }
+                return;
+            }
+            bytebuf_append(&j->stream_err, bytes, (size_t)len);
+            if (!j->stream_ops->feed_stderr(j->stream_owner, bytes, len)) {
+                j->stream_failed = true;
+                if (j->state == YEW_JOB_RUNNING)
+                    (void)yew_job_signal(ed, j->id, SIGTERM);
+            }
+        } else if (!j->stream_ops->feed_stdout(j->stream_owner, bytes,
+                                                len)) {
+            j->stream_failed = true;
+            if (j->state == YEW_JOB_RUNNING)
+                (void)yew_job_signal(ed, j->id, SIGTERM);
+        }
+        break;
     case YEW_SINK_DISCARD:
     default:
         break;
@@ -819,16 +868,24 @@ static bool job_drain(Ed *ed, YewJob *j, int *fd, bool is_err)
 
     while (drained < YEW_JOB_READ_BUDGET) {
         u8 chunk[16384];
-        ssize_t got = read(*fd, chunk, sizeof(chunk));
+        u64 remaining = YEW_JOB_READ_BUDGET - drained;
+        size_t want = sizeof(chunk);
+        ssize_t got;
         u64 safe;
         u64 total;
         const u8 *view;
+
+        if ((u64)want > remaining)
+            want = (size_t)remaining;
+        got = read(*fd, chunk, want);
 
         if (got < 0) {
             if (errno == EINTR)
                 continue;
             if (errno == EAGAIN || errno == EWOULDBLOCK)
                 return false;
+            if (j->sink == YEW_SINK_STREAM)
+                j->stream_failed = true;
             job_close(fd);
             return true;
         }
@@ -840,13 +897,20 @@ static bool job_drain(Ed *ed, YewJob *j, int *fd, bool is_err)
         /* Protocol bytes are already framed and counted.  Passing them
          * through the text-safe prefix would retain a split UTF-8 tail and
          * prevent Content-Length from ever completing. */
-        if (j->sink == YEW_SINK_FRAMED) {
+        if (j->sink == YEW_SINK_FRAMED || j->sink == YEW_SINK_STREAM) {
             if (got != 0)
                 job_deliver(ed, j, chunk, (u64)got, is_err);
             if (got == 0) {
-                if (!is_err &&
-                    !j->framed_ops->finish_stdout(j->framed_owner))
-                    j->framed_failed = true;
+                if (j->sink == YEW_SINK_FRAMED) {
+                    if (!is_err &&
+                        !j->framed_ops->finish_stdout(j->framed_owner))
+                        j->framed_failed = true;
+                } else if (is_err) {
+                    if (!j->stream_ops->finish_stderr(j->stream_owner))
+                        j->stream_failed = true;
+                } else if (!j->stream_ops->finish_stdout(j->stream_owner)) {
+                    j->stream_failed = true;
+                }
                 job_close(fd);
                 return true;
             }
@@ -1103,6 +1167,7 @@ void yew_job_settle(Ed *ed)
         job_close(&j->in_fd);
         job_wipe_stdin_bytes(j);
         job_framed_destroy(j);
+        job_stream_destroy(j);
         yew_job_finish(ed, j);
     }
 }
@@ -1128,6 +1193,15 @@ i64 yew_job_deadline(const Ed *ed, i64 now_ms)
                 return 0;
             if (framed_at >= 0 && (best < 0 || framed_at - now_ms < best))
                 best = framed_at - now_ms;
+        }
+        if (j->sink == YEW_SINK_STREAM && j->stream_ops != NULL &&
+            j->stream_ops->deadline != NULL) {
+            i64 stream_at = j->stream_ops->deadline(j->stream_owner);
+
+            if (stream_at >= 0 && stream_at <= now_ms)
+                return 0;
+            if (stream_at >= 0 && (best < 0 || stream_at - now_ms < best))
+                best = stream_at - now_ms;
         }
         if (j->kill_at_ms != 0)
             at = j->kill_at_ms;
@@ -1166,6 +1240,9 @@ void yew_job_tick(Ed *ed, i64 now_ms)
         if (j->sink == YEW_SINK_FRAMED && j->framed_ops != NULL &&
             j->framed_ops->tick != NULL)
             j->framed_ops->tick(j->framed_owner, ed, now_ms);
+        if (j->sink == YEW_SINK_STREAM && j->stream_ops != NULL &&
+            j->stream_ops->tick != NULL)
+            j->stream_ops->tick(j->stream_owner, ed, now_ms);
         if (j->timeout_ms > 0 && now_ms - j->start_ms >= j->timeout_ms) {
             j->state = YEW_JOB_TIMEOUT;
             ed->jobs.dirty = true;

@@ -40,6 +40,23 @@ typedef struct YewJobFramedOps {
     void (*destroy)(void *owner);
 } YewJobFramedOps;
 
+/*
+ * Raw streaming seam for transports such as curl.  Unlike the text sinks,
+ * neither pipe passes through yew_job_safe_prefix: stdout may be an SSE
+ * record split inside UTF-8 and stderr carries an out-of-band status line.
+ * Each finish callback runs once, at EOF for its pipe.  Ownership transfers
+ * only after a successful spawn and destroy then runs exactly once.
+ */
+typedef struct YewJobStreamOps {
+    bool (*feed_stdout)(void *owner, const u8 *bytes, u64 len);
+    bool (*finish_stdout)(void *owner);
+    bool (*feed_stderr)(void *owner, const u8 *bytes, u64 len);
+    bool (*finish_stderr)(void *owner);
+    i64 (*deadline)(const void *owner);
+    void (*tick)(void *owner, Ed *ed, i64 now_ms);
+    void (*destroy)(void *owner);
+} YewJobStreamOps;
+
 enum {
     /* Concurrent jobs.  Spawning past this errors — never queues silently,
      * because a queued job that runs minutes later surprises the user. */
@@ -87,6 +104,7 @@ typedef enum {
     YEW_SINK_BUFFER,  /* append to a job buffer (mode a)                  */
     YEW_SINK_COLLECT, /* accumulate, deliver when the job ends (b and c) */
     YEW_SINK_FRAMED,  /* raw stdout -> owner; stderr -> framed_err        */
+    YEW_SINK_STREAM,  /* raw stdout/stderr -> owner; retain diagnostics   */
     YEW_SINK_DISCARD
 } YewJobSink;
 
@@ -109,6 +127,9 @@ typedef struct YewJobSpec {
      * successful spawn and is released exactly once by the job. */
     void *framed_owner;
     const YewJobFramedOps *framed_ops;
+    /* Required for YEW_SINK_STREAM; same ownership rule as framed_owner. */
+    void *stream_owner;
+    const YewJobStreamOps *stream_ops;
 } YewJobSpec;
 
 typedef struct YewJob {
@@ -130,6 +151,9 @@ typedef struct YewJob {
     Bytebuf framed_err; /* YEW_SINK_FRAMED stderr, never protocol input    */
     void *framed_owner;
     const YewJobFramedOps *framed_ops;
+    Bytebuf stream_err; /* YEW_SINK_STREAM stderr diagnostic transcript   */
+    void *stream_owner;
+    const YewJobStreamOps *stream_ops;
     const TextBuf *in_buf;
     Span in_span;
     const u8 *in_bytes;
@@ -147,6 +171,8 @@ typedef struct YewJob {
     bool collect_capped;
     bool framed_failed;
     bool framed_destroyed;
+    bool stream_failed;
+    bool stream_destroyed;
     bool reaped;
     /* Set once the child is reaped AND its output pipes have reached
      * EOF.  Child exit alone is not the end of the output: up to a
