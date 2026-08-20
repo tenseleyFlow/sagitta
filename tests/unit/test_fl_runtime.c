@@ -391,7 +391,7 @@ void test_fl_options_cover_builtins_and_raise_name_suggestions(void)
         "macro.dir", "shadow.enable", "shadow.providers",
         "shadow.max_lines", "shadow.midline", "shadow.lsp_debounce_ms",
         "shadow.ai_debounce_ms", "compl.auto_trigger",
-        "compl.trigger_chars", "lsp.open_in"
+        "compl.trigger_chars", "lsp.open_in", "ai.enable"
     };
     Ed ed;
     FlVm *vm;

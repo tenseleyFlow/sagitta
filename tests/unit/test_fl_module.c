@@ -62,7 +62,7 @@ void test_fl_modules_bare_name_is_a_builtin_and_only_that(void)
      */
     FL_EQ(&f, "import nope\nreturn 1\n",
           "!import: there is no builtin module 'nope'; they are str, list, "
-          "map, math, fmt, io, re, buf, win, cur, span, opt, ed");
+          "map, math, fmt, io, re, buf, win, cur, span, opt, ed, ai");
     flfix_close(&f);
 }
 
