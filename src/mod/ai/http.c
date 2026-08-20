@@ -68,23 +68,29 @@ static bool bytes_safe_url(const char *s, size_t n)
     return true;
 }
 
+static bool ipv4_loopback(const struct in_addr *address)
+{
+    const u32 addr = ntohl(address->s_addr);
+
+    return (addr & 0xff000000U) == 0x7f000000U;
+}
+
+static bool ipv6_loopback(const struct in6_addr *address)
+{
+    static const u8 loopback[16] = {
+        0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U,
+        0U, 0U, 0U, 0U, 0U, 0U, 0U, 1U
+    };
+
+    return memcmp(address, loopback, sizeof(loopback)) == 0;
+}
+
 static bool sockaddr_loopback(const struct sockaddr *sa)
 {
-    if (sa->sa_family == AF_INET) {
-        const struct sockaddr_in *in = (const struct sockaddr_in *)sa;
-        const u32 addr = ntohl(in->sin_addr.s_addr);
-
-        return (addr & 0xff000000U) == 0x7f000000U;
-    }
-    if (sa->sa_family == AF_INET6) {
-        static const u8 loopback[16] = {
-            0U, 0U, 0U, 0U, 0U, 0U, 0U, 0U,
-            0U, 0U, 0U, 0U, 0U, 0U, 0U, 1U
-        };
-        const struct sockaddr_in6 *in6 = (const struct sockaddr_in6 *)sa;
-
-        return memcmp(&in6->sin6_addr, loopback, sizeof(loopback)) == 0;
-    }
+    if (sa->sa_family == AF_INET)
+        return ipv4_loopback(&((const struct sockaddr_in *)sa)->sin_addr);
+    if (sa->sa_family == AF_INET6)
+        return ipv6_loopback(&((const struct sockaddr_in6 *)sa)->sin6_addr);
     return false;
 }
 
@@ -95,15 +101,11 @@ static bool host_loopback(const char *host, u16 port)
 
     (void)port;
     (void)memset(&in, 0, sizeof(in));
-    if (inet_pton(AF_INET, host, &in.sin_addr) == 1) {
-        in.sin_family = AF_INET;
-        return sockaddr_loopback((const struct sockaddr *)&in);
-    }
+    if (inet_pton(AF_INET, host, &in.sin_addr) == 1)
+        return ipv4_loopback(&in.sin_addr);
     (void)memset(&in6, 0, sizeof(in6));
-    if (inet_pton(AF_INET6, host, &in6.sin6_addr) == 1) {
-        in6.sin6_family = AF_INET6;
-        return sockaddr_loopback((const struct sockaddr *)&in6);
-    }
+    if (inet_pton(AF_INET6, host, &in6.sin6_addr) == 1)
+        return ipv6_loopback(&in6.sin6_addr);
     /* This is only a display hint.  Registration resolves localhost once
      * and the cleartext policy is applied to the cached sockaddr. */
     return strcmp(host, "localhost") == 0;
