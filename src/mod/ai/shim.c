@@ -47,6 +47,49 @@ bool yew_ai_state_key_cache_enabled(const Ed *ed)
     return ed != NULL && ed->ai != NULL && ed->ai->key_cache_enabled;
 }
 
+bool yew_ai_backend_define(Ed *ed, const FlStr *name, const FlMap *config,
+                           char *err, size_t errsz)
+{
+    (void)ed;
+    (void)name;
+    (void)config;
+    return yew_mod_require(YEW_MOD_AI, err, errsz);
+}
+
+u32 yew_ai_backend_count(const Ed *ed)
+{
+    (void)ed;
+    return 0U;
+}
+
+const AiBackendEntry *yew_ai_backend_at(const Ed *ed, u32 index)
+{
+    (void)ed;
+    (void)index;
+    return NULL;
+}
+
+void yew_ai_collect_fds(Ed *ed, struct pollfd *pfd, u32 *n)
+{
+    (void)ed;
+    (void)pfd;
+    (void)n;
+}
+
+void yew_ai_pump(Ed *ed, const struct pollfd *pfd, u32 n)
+{
+    (void)ed;
+    (void)pfd;
+    (void)n;
+}
+
+i64 yew_ai_deadline(const Ed *ed, i64 now_ms)
+{
+    (void)ed;
+    (void)now_ms;
+    return -1;
+}
+
 static CmdStatus require_ai(CmdCtx *cx)
 {
     char err[160];

@@ -456,8 +456,21 @@ void yew_ai_curl_probe_init(AiCurlProbe *probe)
 
 void yew_ai_curl_probe_free(AiCurlProbe *probe)
 {
+    YewJob *job;
+
     if (probe == NULL)
         return;
+    job = probe->running && probe->ed != NULL ?
+          yew_job_find(probe->ed, probe->job_id) : NULL;
+    if (job != NULL) {
+        /* Editor teardown frees AI state before the generic job table.
+         * Detach the callback first so that table teardown cannot call into
+         * this probe after its buffers have been released. */
+        job->stream_owner = NULL;
+        job->stream_ops = NULL;
+        job->stream_destroyed = true;
+        (void)yew_job_signal(probe->ed, probe->job_id, SIGTERM);
+    }
     bytebuf_free(&probe->out);
     bytebuf_free(&probe->err);
     (void)memset(probe, 0, sizeof(*probe));

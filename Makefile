@@ -362,9 +362,12 @@ UNIT_LSP_SRC := tests/unit/test_jsonrpc_frame.c \
                 tests/unit/test_lsp_sync.c \
                 tests/unit/test_lsp_uri.c
 UNIT_AI_SRC := tests/unit/test_ai_backend.c tests/unit/test_ai_curl.c \
-               tests/unit/test_ai_key.c tests/unit/test_ai_stream.c \
+               tests/unit/test_ai_config.c tests/unit/test_ai_key.c \
+               tests/unit/test_ai_registry.c tests/unit/test_ai_runtime.c \
+               tests/unit/test_ai_stream.c \
                tests/unit/test_http_chunk.c tests/unit/test_http_req.c \
-               tests/unit/test_http_rx.c tests/unit/test_http_url.c
+               tests/unit/test_http_rx.c tests/unit/test_http_url.c \
+               tests/unit/test_http_live.c
 ifeq ($(filter lsp ai,$(MODULES)),)
 UNIT_SRC := $(filter-out $(UNIT_JSON_SRC),$(UNIT_SRC))
 endif
@@ -386,9 +389,13 @@ $(BUILD)/tests/unit/test_syn_embed_runtime.o: CFLAGS += -DYEW_SYN_TEST=1
 FAKECLIP := $(BUILD)/fakeclip
 FAKELSP := $(BUILD)/tests/helpers/fakelsp
 FAKECURL := $(BUILD)/tests/helpers/fakecurl
+FAKEHTTP := $(BUILD)/tests/helpers/fakehttp
 $(BUILD)/tests/unit/test_ai_curl.o: CFLAGS += \
   -DYEW_TEST_FAKECURL='"$(abspath $(FAKECURL))"'
 $(BUILD)/tests/unit/test_ai_curl.o: $(FAKECURL)
+$(BUILD)/tests/unit/test_http_live.o: CFLAGS += \
+  -DYEW_TEST_FAKEHTTP='"$(abspath $(FAKEHTTP))"'
+$(BUILD)/tests/unit/test_http_live.o: $(FAKEHTTP)
 SCRIPT_RUNNER_ARGS := $(if $(filter lsp,$(MODULES)),,--exclude lsp_)
 PTY_VT_OBJ := $(BUILD)/tests/pty/vt.o
 PTY_SNAPSHOT_OBJ := $(BUILD)/tests/pty/snapshot.o
@@ -891,6 +898,9 @@ $(FAKELSP): tests/helpers/fakelsp.c | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
 $(FAKECURL): tests/helpers/fakecurl.c | dirs
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
+
+$(FAKEHTTP): tests/helpers/fakehttp.c | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
 #

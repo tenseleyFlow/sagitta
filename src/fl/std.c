@@ -25,6 +25,7 @@ extern const FlModuleDef fl_mod_math;
 extern const FlModuleDef fl_mod_fmt;
 extern const FlModuleDef fl_mod_io;
 extern const FlModuleDef fl_mod_re;
+extern const FlModuleDef fl_mod_ai;
 
 /*
  * REGISTRATION ORDER IS PART OF THE CONTRACT.  fl_std_list_natives
@@ -47,7 +48,7 @@ static const FlModuleDef *const FL_MODULES[] = {
      * editor" rather than reporting an undefined name for something that
      * merely has no editor attached (invariant 3). */
     &fl_mod_buf, &fl_mod_win, &fl_mod_cur, &fl_mod_span, &fl_mod_opt,
-    &fl_mod_ed
+    &fl_mod_ed, &fl_mod_ai
 };
 
 /* ---------------------------------------------------------------- */

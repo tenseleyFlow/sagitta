@@ -18,6 +18,8 @@
 #include "ui/mouse.h"
 #include "edit/shell.h"
 #include "fl/flruntime.h"
+#include "mod/ai/ai.h"
+#include "mod/ai/http.h"
 #include "mod/lsp/lsp.h"
 #include "term/input.h"
 #include "term/tty.h"
@@ -280,6 +282,7 @@ int yew_loop_deadline(const Ed *ed, i64 now_ms)
     /* Filter timeouts and SIGTERM->SIGKILL escalation are deadlines too:
      * without this the loop could sleep past a job's kill window. */
     deadline = deadline_min(deadline, yew_job_deadline(ed, now_ms));
+    deadline = deadline_min(deadline, yew_ai_deadline(ed, now_ms));
     /* Sprint 27 §4: the dwell and the drag auto-scroll are CLOCKS.  A
      * pointer resting on a group emits no further events, so without
      * this the loop would sleep through the 400 ms the dwell is
@@ -394,7 +397,7 @@ int yew_loop_run(Ed *ed)
         return YEW_EXIT_BUG;
     for (;;) {
         /* Two fixed slots (tty, signal pipe) plus up to four per job. */
-        struct pollfd fds[2U + YEW_JOB_MAX * 4U];
+        struct pollfd fds[2U + YEW_JOB_MAX * 4U + YEW_HTTP_POOL_MAX];
         u32 nfds = 2U;
         i64 now = yew_now_ms();
         int result;
@@ -420,6 +423,7 @@ int yew_loop_run(Ed *ed)
         fds[1].events = POLLIN;
         fds[1].revents = 0;
         yew_job_collect_fds(ed, fds, &nfds);
+        yew_ai_collect_fds(ed, fds, &nfds);
         result = poll(fds, (nfds_t)nfds, yew_loop_deadline(ed, now));
         if (result < 0 && errno != EINTR)
             return YEW_EXIT_IO;
@@ -451,6 +455,7 @@ int yew_loop_run(Ed *ed)
         /* Completion is delivered here, not from reap: a job is done
          * when the child is gone AND its pipes have drained. */
         yew_job_settle(ed);
+        yew_ai_pump(ed, fds, nfds);
         yew_lsp_pump(ed);
         if (ed->jobs.dirty) {
             /* One refresh per iteration, not one per state change: a

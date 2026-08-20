@@ -3,7 +3,7 @@ S   | section title                        | files                              
 1   | Lexical structure                    | 01-lexical.fl                                  | 3
 2   | Grammar                              | 02-grammar.fl 09-errors-compile-only.fl        | 37
 3   | Motion literals — the terse layer  | 03-motion.fl errors/kind_motion.fl             | 7
-4   | Values and types                     | 04-values-list.fl 04-values-map.fl 04-values-math.fl 04-values-str.fl 04-values.fl 11-modules-re.fl 12-pure-literal.fl 34-editor.fl | 194
+4   | Values and types                     | 04-values-list.fl 04-values-map.fl 04-values-math.fl 04-values-str.fl 04-values.fl 11-modules-re.fl 12-pure-literal.fl 34-editor.fl | 195
 5   | Expressions and operators            | 05-expressions.fl                              | 34
 6   | Statements                           | 06-statements.fl                               | 40
 7   | Scoping and closures                 | 07-scoping.fl                                  | 6
@@ -15,5 +15,5 @@ S   | section title                        | files                              
 13  | Capability model                     | 13-capability/config_main.fl 13-capability/plugin_main.fl errors/cap_denied.fl | 17
 14  | Worked example                       | 14-example.fl                                  | 19
 15  | Reserved words and style             | 15-style                                       | 2
-16  | Amendment log                        | 09-errors.fl 16-amendments.fl 34-editor.fl errors/kind_limit.fl | 82
--- totals: sections 16/16  productions 47/42  natives 177/177  kinds 13/13  opcodes 60/60
+16  | Amendment log                        | 09-errors.fl 16-amendments.fl 34-editor.fl errors/kind_limit.fl | 83
+-- totals: sections 16/16  productions 47/42  natives 178/178  kinds 13/13  opcodes 60/60

@@ -2,10 +2,16 @@
 #define YEW_MOD_AI_AI_H
 
 #include <stdbool.h>
+#include <stddef.h>
+#include <poll.h>
 
 #include "edit/cmd.h"
+#include "util/base.h"
 
 typedef struct Ed Ed;
+typedef struct FlMap FlMap;
+typedef struct FlStr FlStr;
+typedef struct AiBackendEntry AiBackendEntry;
 
 /* Sprint 48's editor-facing module boundary.  The stripped-module shim
  * implements the same command surface, so AI commands remain discoverable
@@ -20,5 +26,16 @@ void yew_ai_state_free(Ed *ed);
 bool yew_ai_state_ready(const Ed *ed);
 void yew_ai_state_key_cache_enable(Ed *ed, bool enabled);
 bool yew_ai_state_key_cache_enabled(const Ed *ed);
+
+/* Runtime backend definitions are copied immediately out of Fletch's GC. */
+bool yew_ai_backend_define(Ed *ed, const FlStr *name, const FlMap *config,
+                           char *err, size_t errsz);
+u32 yew_ai_backend_count(const Ed *ed);
+const AiBackendEntry *yew_ai_backend_at(const Ed *ed, u32 index);
+
+/* Module-neutral event-loop hooks. */
+void yew_ai_collect_fds(Ed *ed, struct pollfd *pfd, u32 *n);
+void yew_ai_pump(Ed *ed, const struct pollfd *pfd, u32 n);
+i64 yew_ai_deadline(const Ed *ed, i64 now_ms);
 
 #endif

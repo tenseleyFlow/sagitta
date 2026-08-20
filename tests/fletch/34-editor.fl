@@ -9,6 +9,7 @@
 # COVERS: span.len span.text span.lines span.replace span.replace_lines
 # COVERS: span.prepend span.append span.delete span.yank span.valid opt.get opt.set
 # COVERS: ed.run ed.commands bind unbind set record replay
+# COVERS: ai.backend
 # COVERS: kind:handle
 # ERROR_KIND: handle
 # ERROR: no editor
@@ -34,6 +35,7 @@ import cur
 import span
 import opt
 import ed
+import ai
 import list
 
 fn refuses(kind, thunk) {
@@ -81,6 +83,7 @@ try {
 # above.  Wrong receiver types must be rejected before any editor pointer
 # can be consulted; free functions must report the unavailable host.
 refuses("handle", fn() { buf.list() })
+refuses("handle", fn() { ai.backend("local", {}) })
 refuses("handle", fn() { buf.open("missing") })
 refuses("type", fn() { buf.close(42) })
 refuses("type", fn() { buf.save(42) })

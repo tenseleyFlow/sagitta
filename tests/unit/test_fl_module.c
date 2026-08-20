@@ -265,7 +265,7 @@ void test_fl_modules_list_natives_is_deterministic(void)
      */
     YEW_ASSERT_EQ_I64(memcmp(a.data, "str.len\n", 8U), 0);
     YEW_ASSERT_NOT_NULL(strstr((const char *)a.data, "re.escape\n"));
-    YEW_ASSERT_EQ_I64(memcmp(a.data + a.len - 12U, "ed.commands\n", 12U), 0);
+    YEW_ASSERT_EQ_I64(memcmp(a.data + a.len - 11U, "ai.backend\n", 11U), 0);
     /* Every line is `module.name`, once. */
     for (i = 0U; i < a.len; i++) {
         if (a.data[i] == (u8)'\n')
@@ -274,14 +274,15 @@ void test_fl_modules_list_natives_is_deterministic(void)
     YEW_ASSERT_EQ_U64((u64)lines, (u64)na);
     /*
      * 177 = the stdlib's 118 (30 str + 19 list + 12 map + 29 math +
-     * 7 fmt + 13 io + 7 re) plus Sprint 34's 59 editor natives.  Pinned so a
-     * function added or lost shows up here and in s33's coverage ledger;
+     * 7 fmt + 13 io + 7 re) plus Sprint 34's 59 editor natives and Sprint
+     * 48's AI backend front door.  Pinned so a function added or lost shows
+     * up here and in s33's coverage ledger;
      * the ledger names every new native missing a COVERS token.
      *
      * s31's DoD 2 asks for 150 and its own tables define 117; see the
      * DoD-walk note.  The number below is the tables, not the target.
      */
-    YEW_ASSERT_EQ_U64((u64)na, 177U);
+    YEW_ASSERT_EQ_U64((u64)na, 178U);
     bytebuf_free(&a);
     bytebuf_free(&b);
     flfix_close(&f);
