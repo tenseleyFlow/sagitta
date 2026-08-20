@@ -318,12 +318,12 @@ echo "smoke: fl stdin ok"
 
 run_capture "$bin" fl --list-natives
 expect_rc 0 "fl --list-natives"
-# 177 = the stdlib/editor surface after Sprint 37 added `io.stdin`. A literal
+# 178 = the stdlib/editor surface after Sprint 48 added `ai.backend`. A literal
 # rather than a range on purpose: a native appearing or vanishing without
 # anyone noticing is the thing this line exists to prevent, and it is
 # checked in three places (here, test_fl_module.c, and s33's ledger) so
 # that adding one to the tables without covering it cannot pass.
-[ "$(wc -l < "$out" | tr -d ' ')" -eq 177 ] || fail "fl --list-natives count"
+[ "$(wc -l < "$out" | tr -d ' ')" -eq 178 ] || fail "fl --list-natives count"
 echo "smoke: fl --list-natives ok"
 
 run_capture "$bin" fl --help
