@@ -133,6 +133,8 @@ static void ai_server_wait(pid_t pid)
 static void ai_command_drive(Ed *ed)
 {
     i64 started = yew_now_ms();
+    bool poll_ok = true;
+    bool within_deadline = true;
 
     while (ed->ai->command_call != NULL || ed->ai->curl.running ||
            ed->ai->curl_backends_waiting) {
@@ -140,19 +142,29 @@ static void ai_command_drive(Ed *ed)
         u32 n = 0U;
         i64 deadline;
         int timeout;
+        int polled;
 
         yew_job_collect_fds(ed, pfd, &n);
         yew_ai_collect_fds(ed, pfd, &n);
         deadline = yew_ai_deadline(ed, yew_now_ms());
         timeout = deadline < 0 || deadline > 20 ? 20 : (int)deadline;
-        YEW_ASSERT(poll(pfd, (nfds_t)n, timeout) >= 0 || errno == EINTR);
+        polled = poll(pfd, (nfds_t)n, timeout);
+        if (polled < 0 && errno != EINTR) {
+            poll_ok = false;
+            break;
+        }
         yew_job_pump(ed, pfd, n);
         yew_job_reap(ed);
         yew_job_tick(ed, yew_now_ms());
         yew_job_settle(ed);
         yew_ai_pump(ed, pfd, n);
-        YEW_ASSERT(yew_now_ms() - started < 5000);
+        if (yew_now_ms() - started >= 5000) {
+            within_deadline = false;
+            break;
+        }
     }
+    YEW_ASSERT(poll_ok);
+    YEW_ASSERT(within_deadline);
 }
 
 static char *ai_save_env(const char *name)

@@ -98,19 +98,31 @@ static void pause_ms(long milliseconds)
 static void drive(Ed *ed, const LiveCapture *capture, i64 ceiling_ms)
 {
     i64 started = yew_now_ms();
+    bool poll_ok = true;
+    bool within_deadline = true;
 
     while (!capture->done) {
         struct pollfd fds[YEW_HTTP_POOL_MAX];
         u32 nfds = 0U;
         int timeout = (int)yew_http_deadline(ed, yew_now_ms());
+        int polled;
 
         yew_http_collect_fds(ed, fds, &nfds);
         if (timeout < 0 || timeout > 50)
             timeout = 50;
-        YEW_ASSERT(poll(fds, nfds, timeout) >= 0 || errno == EINTR);
+        polled = poll(fds, nfds, timeout);
+        if (polled < 0 && errno != EINTR) {
+            poll_ok = false;
+            break;
+        }
         yew_http_pump(ed, fds, nfds);
-        YEW_ASSERT(yew_now_ms() - started < ceiling_ms);
+        if (yew_now_ms() - started >= ceiling_ms) {
+            within_deadline = false;
+            break;
+        }
     }
+    YEW_ASSERT(poll_ok);
+    YEW_ASSERT(within_deadline);
     yew_http_pump(ed, NULL, 0U);
 }
 
