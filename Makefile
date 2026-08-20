@@ -229,6 +229,7 @@ UNIT_DEATH_EXCLUDES := \
   --exclude multicursor_edit_guard_requires_multi_transaction \
   --exclude multicursor_deferred_guards_name_their_sprints \
   --exclude syn_deferred_surfaces_fail_loudly \
+  --exclude syn_registry_allocation_overflow_is_a_bug \
   --exclude json_writer_structure_bugs \
   --exclude ctxmenu_a_row_handler_reading_a_payload_is_a_bug \
   --exclude shadow_menu_ghost_conflict_is_a_bug \
