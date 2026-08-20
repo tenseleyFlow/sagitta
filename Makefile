@@ -494,9 +494,13 @@ PERF_BATCH_OBJ := $(BUILD)/tests/perf/batch.o
 PERF_SCRIPT_SUITE_OBJ := $(BUILD)/tests/perf/script_suite.o
 PERF_SYMIDX_OBJ := $(BUILD)/tests/perf/perf_symidx.o
 PERF_LSP_OBJ := $(BUILD)/tests/perf/perf_lsp.o
+PERF_AI_HTTP_OBJ := $(BUILD)/tests/perf/perf_ai_http.o
 ifneq ($(filter lsp,$(MODULES)),)
 LSP_FUZZ_TARGET := fuzz-lsp-msg fuzz-lsp-resp
 LSP_PERF_TARGET := perf-lsp
+endif
+ifneq ($(filter ai,$(MODULES)),)
+AI_PERF_TARGET := perf-ai-http
 endif
 FLETCH_RUN_OBJ := $(BUILD)/tests/fletch/run.o
 SCRIPT_RUNNER_OBJ := $(BUILD)/tests/script/runner.o
@@ -551,6 +555,7 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
                 $(FUZZ_LSP_MSG_OBJ) $(FUZZ_LSP_RESP_OBJ) $(LSP_LIVE_OBJ) \
                 $(FUZZ_HTTP_OBJ) $(FUZZ_AI_STREAM_OBJ) \
                 $(PERF_SYN_OBJ) $(PERF_SYMIDX_OBJ) $(PERF_LSP_OBJ) \
+                $(PERF_AI_HTTP_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) \
                 $(TORTURE_BATCH_OBJ) $(FAULTSHIM) $(FAKELSP)))
@@ -580,7 +585,7 @@ endif
         fixtures fixtures-quick fixtures-verify \
         fixtures-verify-quick \
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
-        perf-shadow perf-symidx perf-lsp \
+        perf-shadow perf-symidx perf-lsp perf-ai-http perf-ai-http-valgrind \
         perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
         perf-mouse perf-record perf-syn perf-syn-budgets perf-syn-quiet \
         perf-syn-gate-selftest perf-syn-line-probe \
@@ -782,6 +787,10 @@ $(BUILD)/perf_symidx: $(PERF_CORE_OBJ) $(PERF_SYMIDX_OBJ)
 $(BUILD)/perf_lsp: $(PERF_CORE_OBJ) $(PERF_LSP_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(PERF_LSP_OBJ) $(LDLIBS)
+
+$(BUILD)/perf_ai_http: $(PERF_CORE_OBJ) $(PERF_AI_HTTP_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
+		$(PERF_AI_HTTP_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_batch: $(PERF_BATCH_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_BATCH_OBJ) $(LDLIBS)
@@ -1155,10 +1164,19 @@ perf: perf-unicode perf-render perf-shadow perf-scroll perf-piece perf-cursor pe
       perf-latency perf-jobstream perf-re-pathological \
       perf-re-throughput perf-search-latency \
       perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
-      perf-mouse perf-record perf-syn perf-symidx perf-batch $(LSP_PERF_TARGET)
+      perf-mouse perf-record perf-syn perf-symidx perf-batch \
+      $(LSP_PERF_TARGET) $(AI_PERF_TARGET)
 
 perf-lsp: $(BUILD)/perf_lsp
 	$(BUILD)/perf_lsp
+
+perf-ai-http: $(BUILD)/perf_ai_http
+	$(BUILD)/perf_ai_http
+
+perf-ai-http-valgrind: $(BUILD)/perf_ai_http
+	valgrind --quiet --error-exitcode=99 --leak-check=full \
+		--errors-for-leak-kinds=definite --track-fds=yes \
+		--child-silent-after-fork=yes $(BUILD)/perf_ai_http --cycles-only
 
 perf-cursor: $(BUILD)/perf_cursor
 	$(BUILD)/perf_cursor

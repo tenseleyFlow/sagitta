@@ -1,0 +1,3 @@
+# case median_ns p99_ns
+request_build 3000 20000
+response_parse 3000 20000
