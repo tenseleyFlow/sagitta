@@ -16,6 +16,10 @@ typedef struct AiCurlRequest {
     u32 nhdr;
     const u8 *body;
     u64 blen;
+    /* Zero selects the pinned Sprint 48 defaults.  Nonzero values come
+     * from the validated global AI timeout options. */
+    i64 connect_timeout_ms;
+    i64 total_timeout_ms;
 } AiCurlRequest;
 
 typedef enum AiCurlAuthKind {

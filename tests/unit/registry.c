@@ -784,6 +784,10 @@ const YewTest yew_tests[] = {
     T(job_shell_resolution_prefers_env),
     T(ai_commands_cross_module_boundary),
     T(ai_open_remains_sprint49_deferred),
+    T(ai_commands_backends_log_and_reload),
+    T(ai_commands_models_ping_and_error_live),
+    T(ai_commands_require_exactly_one_backend),
+    T(ai_commands_curl_probe_request_and_teardown),
     T(ai_state_lifecycle_is_owned_by_editor),
     T(ai_options_have_pinned_defaults_and_bounds),
 #if YEW_WITH_LSP || YEW_WITH_AI

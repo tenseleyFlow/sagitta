@@ -959,6 +959,8 @@ static void conn_destroy(HttpConn *c)
     if (c == NULL)
         return;
     close_fd(&c->fd);
+    if (c->contains_secret && c->out.data != NULL)
+        yew_memzero(c->out.data, c->out.cap);
     bytebuf_free(&c->out);
     if (c->rx != NULL) {
         bytebuf_free(&c->rx->line);
@@ -1323,6 +1325,12 @@ void yew_http_conn_callbacks(HttpConn *c, HttpBodyFn body,
     c->on_body = body;
     c->on_done = done;
     c->callback_ctx = ctx;
+}
+
+void yew_http_conn_mark_secret(HttpConn *c)
+{
+    if (c != NULL)
+        c->contains_secret = true;
 }
 
 void yew_http_conn_mark_stream_done(HttpConn *c)

@@ -45,25 +45,27 @@ static void write_all(int fd, const char *bytes, size_t len, bool bytewise)
     }
 }
 
-static void read_request(int fd)
+static size_t read_request(int fd, char *bytes, size_t cap)
 {
-    char bytes[4096];
     size_t len = 0U;
 
-    while (len + 1U < sizeof(bytes)) {
-        ssize_t n = recv(fd, bytes + len, sizeof(bytes) - len - 1U, 0);
+    if (bytes == NULL || cap == 0U)
+        return 0U;
+    while (len + 1U < cap) {
+        ssize_t n = recv(fd, bytes + len, cap - len - 1U, 0);
 
         if (n > 0) {
             len += (size_t)n;
             bytes[len] = '\0';
             if (strstr(bytes, "\r\n\r\n") != NULL)
-                return;
+                return len;
             continue;
         }
         if (n < 0 && errno == EINTR)
             continue;
-        return;
+        return len;
     }
+    return len;
 }
 
 static int accept_one(int listener)
@@ -83,6 +85,7 @@ int main(int argc, char **argv)
     struct sockaddr_in address;
     socklen_t address_len = sizeof(address);
     const char *mode = argc > 1 ? argv[1] : "giant";
+    char request[4096];
     int listener;
     int fd;
 
@@ -104,13 +107,54 @@ int main(int argc, char **argv)
     (void)fflush(stdout);
 
     fd = accept_one(listener);
-    read_request(fd);
+    (void)read_request(fd, request, sizeof(request));
+    if ((strcmp(mode, "models") == 0 ||
+         strcmp(mode, "models-close") == 0 ||
+         strcmp(mode, "malformed") == 0 || strcmp(mode, "rate") == 0) &&
+        strncmp(request, "GET /api/tags HTTP/1.1\r\n",
+                strlen("GET /api/tags HTTP/1.1\r\n")) != 0) {
+        (void)fprintf(stderr, "fakehttp: unexpected model-list request\n");
+        (void)close(fd);
+        (void)close(listener);
+        return 3;
+    }
     if (strcmp(mode, "delay") == 0)
         pause_ms(200);
     if (strcmp(mode, "chunk") == 0) {
         static const char response[] =
             "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n"
             "Connection: close\r\n\r\n5\r\nhello\r\n0\r\nX-End: yes\r\n\r\n";
+        write_all(fd, response, sizeof(response) - 1U, false);
+    } else if (strcmp(mode, "models") == 0) {
+        static const char body[] =
+            "{\"models\":[{\"name\":\"qwen2.5\"},{\"name\":\"coder\"}]}";
+        char response[512];
+        int n = snprintf(response, sizeof(response),
+                         "HTTP/1.1 200 OK\r\nContent-Length: %llu\r\n"
+                         "Connection: close\r\n\r\n%s",
+                         (unsigned long long)(sizeof(body) - 1U), body);
+
+        if (n < 0 || (size_t)n >= sizeof(response))
+            die("format response");
+        write_all(fd, response, (size_t)n, false);
+    } else if (strcmp(mode, "models-close") == 0) {
+        static const char response[] =
+            "HTTP/1.1 200 OK\r\nConnection: close\r\n\r\n"
+            "{\"models\":[{\"name\":\"qwen2.5\"},{\"name\":\"coder\"}]}";
+
+        write_all(fd, response, sizeof(response) - 1U, true);
+    } else if (strcmp(mode, "malformed") == 0) {
+        static const char response[] =
+            "HTTP/1.1 200 OK\r\nContent-Length: 4\r\n"
+            "Connection: close\r\n\r\n{bad";
+
+        write_all(fd, response, sizeof(response) - 1U, false);
+    } else if (strcmp(mode, "rate") == 0) {
+        static const char response[] =
+            "HTTP/1.1 429 Too Many Requests\r\nContent-Length: 21\r\n"
+            "Retry-After: 3\r\nConnection: close\r\n\r\n"
+            "{\"error\":\"slow down\"}";
+
         write_all(fd, response, sizeof(response) - 1U, false);
     } else if (strcmp(mode, "close") == 0) {
         static const char response[] =
@@ -136,7 +180,7 @@ int main(int argc, char **argv)
         pause_ms(60);
         (void)close(fd);
         fd = accept_one(listener);
-        read_request(fd);
+        (void)read_request(fd, request, sizeof(request));
         write_all(fd, second, sizeof(second) - 1U, false);
     } else {
         static const char response[] =

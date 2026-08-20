@@ -195,6 +195,37 @@ static bool curl_secret_measure(const AiCurlSecret *secret, size_t *total,
     return true;
 }
 
+static bool curl_timeout_line(char *out, size_t outsz, const char *name,
+                              i64 configured_ms, i64 fallback_ms,
+                              char *err, size_t errsz)
+{
+    i64 ms = configured_ms > 0 ? configured_ms : fallback_ms;
+    i64 seconds = ms / 1000;
+    unsigned fraction = (unsigned)(ms % 1000);
+    char digits[4];
+    size_t nfrac = 3U;
+    int n;
+
+    n = snprintf(digits, sizeof(digits), "%03u", fraction);
+    if (n != 3) {
+        curl_error(err, errsz, "curl timeout is too large");
+        return false;
+    }
+    while (nfrac != 0U && digits[nfrac - 1U] == '0')
+        nfrac--;
+    if (nfrac == 0U)
+        n = snprintf(out, outsz, "%s = %lld\n", name,
+                     (long long)seconds);
+    else
+        n = snprintf(out, outsz, "%s = %lld.%.*s\n", name,
+                     (long long)seconds, (int)nfrac, digits);
+    if (n < 0 || (size_t)n >= outsz) {
+        curl_error(err, errsz, "curl timeout is too large");
+        return false;
+    }
+    return true;
+}
+
 static void curl_secure_reserve(Bytebuf *buf, size_t need)
 {
     size_t cap;
@@ -232,8 +263,8 @@ bool yew_ai_curl_config(Bytebuf *out, const AiCurlRequest *req,
     const char *secret_name = NULL;
     const char *secret_prefix = NULL;
     u8 *stable;
-    static const char connect_timeout[] = "connect-timeout = 2\n";
-    static const char max_time[] = "max-time = 120\n";
+    char connect_timeout[64];
+    char max_time[64];
     static const char write_out[] =
         "write-out = \"%{stderr}yew-http-status: %{http_code}\\n\"\n";
 
@@ -255,6 +286,12 @@ bool yew_ai_curl_config(Bytebuf *out, const AiCurlRequest *req,
         curl_error(err, errsz, "curl request body is too large");
         return false;
     }
+    if (!curl_timeout_line(connect_timeout, sizeof(connect_timeout),
+                           "connect-timeout", req->connect_timeout_ms,
+                           2000, err, errsz) ||
+        !curl_timeout_line(max_time, sizeof(max_time), "max-time",
+                           req->total_timeout_ms, 120000, err, errsz))
+        return false;
     if (!curl_directive_measure("url", (const u8 *)req->url,
                                 strlen(req->url), &total, err, errsz) ||
         !curl_directive_measure("request", (const u8 *)req->method,
@@ -266,8 +303,8 @@ bool yew_ai_curl_config(Bytebuf *out, const AiCurlRequest *req,
     if (!curl_secret_measure(secret, &total, err, errsz) ||
         !curl_directive_measure("data-binary", req->body,
                                 (size_t)req->blen, &total, err, errsz) ||
-        !curl_size_add(&total, sizeof(connect_timeout) - 1U, err, errsz) ||
-        !curl_size_add(&total, sizeof(max_time) - 1U, err, errsz) ||
+        !curl_size_add(&total, strlen(connect_timeout), err, errsz) ||
+        !curl_size_add(&total, strlen(max_time), err, errsz) ||
         !curl_size_add(&total, sizeof(write_out) - 1U, err, errsz) ||
         total > SIZE_MAX - out->len) {
         if (total > SIZE_MAX - out->len)
@@ -299,8 +336,8 @@ bool yew_ai_curl_config(Bytebuf *out, const AiCurlRequest *req,
                     secret_prefix);
     }
     curl_directive(&tmp, "data-binary", req->body, (size_t)req->blen);
-    bytebuf_append(&tmp, connect_timeout, sizeof(connect_timeout) - 1U);
-    bytebuf_append(&tmp, max_time, sizeof(max_time) - 1U);
+    bytebuf_append(&tmp, connect_timeout, strlen(connect_timeout));
+    bytebuf_append(&tmp, max_time, strlen(max_time));
     bytebuf_append(&tmp, write_out, sizeof(write_out) - 1U);
     if (tmp.data != stable || tmp.len != total)
         YEW_BUG("curl config changed allocation after secret insertion");

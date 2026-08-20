@@ -146,6 +146,7 @@ struct HttpConn {
     bool response_seen;
     bool notified;
     bool stream_complete;
+    bool contains_secret;
 };
 
 typedef struct HttpState HttpState;
@@ -161,6 +162,9 @@ HttpConn *yew_http_begin(Ed *ed, const HttpUrl *u, const HttpReq *r,
                          AiErr *e);
 void yew_http_conn_callbacks(HttpConn *c, HttpBodyFn body,
                              HttpDoneFn done, void *ctx);
+/* Mark a request whose serialized headers contain credential bytes.  The
+ * full allocation is wiped before release, including unused capacity. */
+void yew_http_conn_mark_secret(HttpConn *c);
 /* A close-delimited streaming response is successful only after its
  * adapter has observed the protocol terminator. */
 void yew_http_conn_mark_stream_done(HttpConn *c);

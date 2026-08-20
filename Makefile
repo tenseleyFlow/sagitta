@@ -396,6 +396,10 @@ $(BUILD)/tests/unit/test_ai_curl.o: $(FAKECURL)
 $(BUILD)/tests/unit/test_http_live.o: CFLAGS += \
   -DYEW_TEST_FAKEHTTP='"$(abspath $(FAKEHTTP))"'
 $(BUILD)/tests/unit/test_http_live.o: $(FAKEHTTP)
+$(BUILD)/tests/unit/test_ai_commands.o: CFLAGS += \
+  -DYEW_TEST_FAKEHTTP='"$(abspath $(FAKEHTTP))"' \
+  -DYEW_TEST_FAKECURL='"$(abspath $(FAKECURL))"'
+$(BUILD)/tests/unit/test_ai_commands.o: $(FAKEHTTP) $(FAKECURL)
 SCRIPT_RUNNER_ARGS := $(if $(filter lsp,$(MODULES)),,--exclude lsp_)
 PTY_VT_OBJ := $(BUILD)/tests/pty/vt.o
 PTY_SNAPSHOT_OBJ := $(BUILD)/tests/pty/snapshot.o

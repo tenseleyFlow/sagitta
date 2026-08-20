@@ -18,6 +18,11 @@ typedef struct AiBackendEntry AiBackendEntry;
  * and explain how to obtain the module instead of disappearing. */
 CmdStatus yew_ai_cmd_off(CmdCtx *cx);
 CmdStatus yew_ai_cmd_require(CmdCtx *cx);
+CmdStatus yew_ai_cmd_backends(CmdCtx *cx);
+CmdStatus yew_ai_cmd_models(CmdCtx *cx);
+CmdStatus yew_ai_cmd_ping(CmdCtx *cx);
+CmdStatus yew_ai_cmd_log(CmdCtx *cx);
+CmdStatus yew_ai_cmd_reload(CmdCtx *cx);
 
 /* Module-neutral, Ed-owned lifecycle.  Both the enabled implementation and
  * stripped shim provide it, keeping compile-time module checks out of core. */

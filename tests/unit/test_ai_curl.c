@@ -196,7 +196,9 @@ void test_ai_curl_config_golden_and_escaping(void)
         hdrs,
         YEW_ARRAY_LEN(hdrs),
         body,
-        sizeof(body) - 1U
+        sizeof(body) - 1U,
+        0,
+        0
     };
     Bytebuf one;
     Bytebuf two;
@@ -255,7 +257,9 @@ void test_ai_curl_config_rejects_controls_transactionally(void)
         bad_hdr,
         YEW_ARRAY_LEN(bad_hdr),
         (const u8 *)"{}",
-        2U
+        2U,
+        0,
+        0
     };
     Bytebuf out;
     char err[128] = {0};
@@ -280,6 +284,18 @@ void test_ai_curl_config_rejects_controls_transactionally(void)
     YEW_ASSERT(!yew_ai_curl_config(&out, &req, NULL, err, sizeof(err)));
     YEW_ASSERT_EQ_STR(err, "curl config value contains a control byte");
     YEW_ASSERT_EQ_U64((u64)out.len, 4U);
+
+    req.body = (const u8 *)"{}";
+    req.blen = 2U;
+    req.connect_timeout_ms = 1501;
+    req.total_timeout_ms = 3456;
+    out.len = 0U;
+    YEW_ASSERT(yew_ai_curl_config(&out, &req, NULL, err, sizeof(err)));
+    bytebuf_push_u8(&out, 0U);
+    YEW_ASSERT_NOT_NULL(strstr((const char *)out.data,
+                               "connect-timeout = 1.501\n"));
+    YEW_ASSERT_NOT_NULL(strstr((const char *)out.data,
+                               "max-time = 3.456\n"));
     bytebuf_free(&out);
 }
 
@@ -426,7 +442,7 @@ void test_ai_curl_fake_transport_routes_and_hides_secret(void)
     static const u8 body[] = "{\"stream\":true}";
     AiCurlRequest req = {
         "https://example.invalid/v1/messages", "POST", hdrs,
-        YEW_ARRAY_LEN(hdrs), body, sizeof(body) - 1U
+        YEW_ARRAY_LEN(hdrs), body, sizeof(body) - 1U, 0, 0
     };
     char dir[128];
     char counter[192];

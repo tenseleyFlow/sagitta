@@ -42,6 +42,8 @@ void yew_ai_state_init(Ed *ed)
     ed->ai = state;
     yew_ai_registry_init(&state->backends, backend_prepare, NULL, ed);
     yew_ai_curl_probe_init(&state->curl);
+    bytebuf_init(&state->log);
+    bytebuf_append(&state->log, "AI transport log\n", 17U);
 }
 
 void yew_ai_state_free(Ed *ed)
@@ -51,10 +53,12 @@ void yew_ai_state_free(Ed *ed)
     if (ed == NULL || ed->ai == NULL)
         return;
     state = ed->ai;
+    yew_ai_command_cancel(ed);
     yew_ai_curl_probe_free(&state->curl);
     yew_ai_registry_drop(&state->backends);
     yew_http_state_free(state->http);
     yew_ai_key_cache_drop(&state->keys);
+    bytebuf_free(&state->log);
     ed->ai = NULL;
     free(state);
 }
@@ -79,12 +83,24 @@ bool yew_ai_state_key_cache_enabled(const Ed *ed)
 bool yew_ai_backend_define(Ed *ed, const FlStr *name, const FlMap *config,
                            char *err, size_t errsz)
 {
+    bool ok;
+
     if (ed == NULL || ed->ai == NULL) {
         if (err != NULL && errsz != 0U)
             (void)snprintf(err, errsz, "AI state is unavailable");
         return false;
     }
-    return yew_ai_registry_put(&ed->ai->backends, name, config, err, errsz);
+    if (ed->ai->command_call != NULL) {
+        if (err != NULL && errsz != 0U)
+            (void)snprintf(
+                err, errsz,
+                "cannot change AI backends while a request is running");
+        return false;
+    }
+    ok = yew_ai_registry_put(&ed->ai->backends, name, config, err, errsz);
+    if (ok)
+        yew_ai_key_cache_reload(&ed->ai->keys);
+    return ok;
 }
 
 u32 yew_ai_backend_count(const Ed *ed)
@@ -107,6 +123,7 @@ void yew_ai_collect_fds(Ed *ed, struct pollfd *pfd, u32 *n)
 void yew_ai_pump(Ed *ed, const struct pollfd *pfd, u32 n)
 {
     yew_http_pump(ed, pfd, n);
+    yew_ai_command_pump(ed);
 }
 
 i64 yew_ai_deadline(const Ed *ed, i64 now_ms)

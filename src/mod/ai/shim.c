@@ -112,3 +112,28 @@ CmdStatus yew_ai_cmd_require(CmdCtx *cx)
 {
     return require_ai(cx);
 }
+
+CmdStatus yew_ai_cmd_backends(CmdCtx *cx)
+{
+    return require_ai(cx);
+}
+
+CmdStatus yew_ai_cmd_models(CmdCtx *cx)
+{
+    return require_ai(cx);
+}
+
+CmdStatus yew_ai_cmd_ping(CmdCtx *cx)
+{
+    return require_ai(cx);
+}
+
+CmdStatus yew_ai_cmd_log(CmdCtx *cx)
+{
+    return require_ai(cx);
+}
+
+CmdStatus yew_ai_cmd_reload(CmdCtx *cx)
+{
+    return require_ai(cx);
+}
