@@ -95,12 +95,11 @@ static void pause_ms(long milliseconds)
     while (nanosleep(&delay, &delay) != 0 && errno == EINTR) {}
 }
 
-static void drive(Ed *ed, HttpConn *conn, i64 ceiling_ms)
+static void drive(Ed *ed, const LiveCapture *capture, i64 ceiling_ms)
 {
     i64 started = yew_now_ms();
 
-    while (conn->state != (u8)YEW_HC_DONE &&
-           conn->state != (u8)YEW_HC_DEAD) {
+    while (!capture->done) {
         struct pollfd fds[YEW_HTTP_POOL_MAX];
         u32 nfds = 0U;
         int timeout = (int)yew_http_deadline(ed, yew_now_ms());
@@ -134,6 +133,7 @@ static HttpConn *request_start(Ed *ed, u16 port, bool keepalive,
     YEW_ASSERT_NOT_NULL(conn);
     capture->conn = conn;
     capture->ed = ed;
+    capture->done = false;
     yew_http_conn_callbacks(conn, body_capture, done_capture, capture);
     return conn;
 }
@@ -164,7 +164,7 @@ static void run_shape(const char *mode, bool close_complete,
     capture.close_complete = close_complete;
     capture.release_on_done = release_in_callback;
     conn = request_start(&ed, port, false, &err, &capture);
-    drive(&ed, conn, 3000);
+    drive(&ed, &capture, 3000);
     YEW_ASSERT(capture.done);
     YEW_ASSERT_EQ_U64(capture.body.len, 5U);
     YEW_ASSERT_EQ_MEM(capture.body.data, "hello", 5U);
@@ -191,7 +191,7 @@ static void run_truncated_close(void)
     yew_ed_init(&ed);
     capture_init(&capture);
     conn = request_start(&ed, port, false, &err, &capture);
-    drive(&ed, conn, 3000);
+    drive(&ed, &capture, 3000);
     YEW_ASSERT(capture.done);
     YEW_ASSERT_EQ_U64(conn->state, YEW_HC_DEAD);
     YEW_ASSERT_EQ_U64(err.kind, YEW_AI_ERR_PROTOCOL);
@@ -238,7 +238,7 @@ void test_http_live_timeout_classes(void)
         capture_init(&capture);
         set_int(&ed, cases[i].option, 25);
         conn = request_start(&ed, port, false, &err, &capture);
-        drive(&ed, conn, 1000);
+        drive(&ed, &capture, 1000);
         YEW_ASSERT_EQ_U64(conn->state, YEW_HC_DEAD);
         YEW_ASSERT_EQ_U64(err.kind, YEW_AI_ERR_TIMEOUT);
         YEW_ASSERT_EQ_STR(err.msg, cases[i].message);
@@ -265,13 +265,13 @@ void test_http_live_pool_retry_and_fresh_failure(void)
     capture_init(&first);
     capture_init(&second);
     first_conn = request_start(&ed, port, true, &first_err, &first);
-    drive(&ed, first_conn, 3000);
+    drive(&ed, &first, 3000);
     YEW_ASSERT_EQ_U64(first_conn->state, YEW_HC_DONE);
     YEW_ASSERT(first_conn->reusable);
     yew_http_conn_release(&ed, first_conn);
     pause_ms(100);
     second_conn = request_start(&ed, port, false, &second_err, &second);
-    drive(&ed, second_conn, 3000);
+    drive(&ed, &second, 3000);
     YEW_ASSERT_EQ_U64(second_conn->state, YEW_HC_DONE);
     YEW_ASSERT(second_conn->retried);
     YEW_ASSERT_EQ_U64(second.body.len, 3U);
@@ -280,7 +280,7 @@ void test_http_live_pool_retry_and_fresh_failure(void)
     server_wait(server);
 
     second_conn = request_start(&ed, port, false, &second_err, &second);
-    drive(&ed, second_conn, 1000);
+    drive(&ed, &second, 1000);
     YEW_ASSERT_EQ_U64(second_conn->state, YEW_HC_DEAD);
     YEW_ASSERT(!second_conn->retried);
     yew_http_conn_release(&ed, second_conn);
