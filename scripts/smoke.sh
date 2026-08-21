@@ -137,6 +137,8 @@ printf 'import io\nio.print("before-error")\nerror("boom")\n' \
 printf 'import io\nimport buf\nbuf.insert(buf.current(), 0, "dirty")\nio.print("script-only")\n' \
     >"$batch_dir/dirty.fl"
 printf 'import io\nio.print(io.stdin())\n' >"$batch_dir/stdin.fl"
+printf 'import ed\ned.run("ed.ai.enable", {})\n' \
+    >"$batch_dir/ai-enable.fl"
 printf 'import io\nimport buf\nio.print(buf.text(buf.current()))\n' \
     >"$batch_dir/dash.fl"
 printf 'import io\nimport list\nimport buf\nif list.len(files) != 2 { error("files") }\nif buf.path(buf.current()) != files[0] { error("order") }\nif list.len(args) != 2 or args[0] != "--flag" or args[1] != "" { error("args") }\nio.print("globals-ok")\n' \
@@ -155,6 +157,12 @@ expect_rc 2 "batch failure"
 printf 'yew: script failed: user: boom\n  at <script> (%s:3:6)\n\n  3 | error("boom")\n    |      ^\n' \
     "$batch_dir/fail.fl" >"$tmp/batch-fail.expected"
 cmp -s "$err" "$tmp/batch-fail.expected" || fail "batch failure golden"
+
+run_capture "$bin" --batch --clean "$batch_dir/ai-enable.fl"
+expect_rc 1 "batch AI enable refusal"
+expect_stderr_contains \
+    "AI cannot be enabled non-interactively; set ai.enable in init.fl if you have read :ai privacy" \
+    "batch AI enable refusal"
 
 rc=0
 YEW_BATCH_SELFTEST_TTY=1 \

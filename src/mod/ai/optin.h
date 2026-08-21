@@ -33,6 +33,10 @@ bool yew_ai_optin_begin(YewAiOptin *optin, Ed *ed,
 bool yew_ai_optin_begin_checked(YewAiOptin *optin, Ed *ed,
                                 YewAiOptinCommit commit, void *ctx,
                                 bool has_tty);
+/* Production commit path with an explicit tty decision for unit/embedding
+ * tests.  Interactive callers continue to use ed.ai.enable. */
+bool yew_ai_optin_begin_default_checked(YewAiOptin *optin, Ed *ed,
+                                        bool has_tty);
 void yew_ai_optin_cancel(YewAiOptin *optin);
 const char *yew_ai_optin_no_tty_message(void);
 /* Pure targeted-edit seam used by the atomic writer and regression tests. */

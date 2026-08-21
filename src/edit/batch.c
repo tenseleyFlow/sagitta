@@ -39,6 +39,10 @@ typedef struct InteractiveRow {
     const char *alternative;
 } InteractiveRow;
 
+static const char ai_enable_no_tty[] =
+    "AI cannot be enabled non-interactively; set ai.enable in init.fl "
+    "if you have read :ai privacy";
+
 static const InteractiveRow interactive_rows[] = {
     {"ed.ui.message_expand", "no batch alternative"},
     {"ed.cmdline.accept", "use ed.run(name, args)"},
@@ -60,9 +64,7 @@ static const InteractiveRow interactive_rows[] = {
     {"ed.lsp.symbols", "no batch alternative"},
     {"ed.lsp.signature", "no batch alternative"},
     {"ed.macro.record", "recording needs keys; none exist"},
-    {"ed.ai.enable",
-     "AI cannot be enabled non-interactively; set ai.enable in init.fl "
-     "if you have read :ai privacy"},
+    {"ed.ai.enable", ai_enable_no_tty},
     {"ed.ai.open", "no batch alternative"},
     {"ed.mode.enter", "use ed.run(name, args)"},
 };
@@ -349,13 +351,30 @@ static bool open_batch_files(Ed *ed, const BatchOpts *opts)
     return true;
 }
 
-static void render_script_error(FlVm *vm)
+static bool batch_trace_contains(const Bytebuf *trace, const char *needle)
+{
+    size_t needle_len = strlen(needle);
+    size_t i;
+
+    if (needle_len == 0U || needle_len > trace->len)
+        return false;
+    for (i = 0U; i + needle_len <= trace->len; i++)
+        if (memcmp(trace->data + i, needle, needle_len) == 0)
+            return true;
+    return false;
+}
+
+static bool render_script_error(FlVm *vm)
 {
     Bytebuf trace;
     size_t first = 0U;
+    bool ai_enable_refused;
 
     bytebuf_init(&trace);
     fl_trace_render(vm, vm->err, &trace);
+    ai_enable_refused = batch_trace_contains(
+        &trace, "\"ed.ai.enable\" requires a terminal") &&
+        batch_trace_contains(&trace, ai_enable_no_tty);
     if (trace.len >= 7U && memcmp(trace.data, "error: ", 7U) == 0)
         first = 7U;
     (void)fputs("yew: script failed: ", stderr);
@@ -363,6 +382,7 @@ static void render_script_error(FlVm *vm)
     if (trace.len == first || trace.data[trace.len - 1U] != '\n')
         (void)fputc('\n', stderr);
     bytebuf_free(&trace);
+    return ai_enable_refused;
 }
 
 static void warn_dirty(Ed *ed, bool quiet)
@@ -472,8 +492,8 @@ int yew_batch_run(const BatchOpts *opts)
         goto done;
     }
     if (!fl_call_chunk(ed.fl, script, YEW_SRC_FLETCH)) {
-        render_script_error(yew_fl_vm(&ed));
-        result = YEW_EXIT_BATCH;
+        result = render_script_error(yew_fl_vm(&ed)) ? YEW_EXIT_ERR :
+                                                       YEW_EXIT_BATCH;
         goto done;
     }
     /* Product-level guard drill: the smoke lane seeds the forbidden call

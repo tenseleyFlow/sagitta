@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "edit/ed.h"
 #include "edit/option.h"
@@ -82,6 +83,15 @@ static void optin_open_scope(YewAiOptin *optin)
                 "  [o] this session only\n"
                 "Choice [w/a/o]:",
                 yew_ws_root(optin->ed));
+}
+
+static void optin_open_session_fallback(YewAiOptin *optin)
+{
+    yew_cmdline_open_input(optin->ed, "", optin_done, optin);
+    if (optin->ed->cmdline.active)
+        yew_msg(optin->ed, YEW_MSG_WARN,
+                "AI settings could not be saved.\n"
+                "Continue with AI enabled for this session only? [y/N]:");
 }
 
 static bool answer_is(const u8 *text, size_t len, const char *expected)
@@ -199,9 +209,20 @@ static void optin_done(Ed *ed, bool accepted, const u8 *text, size_t len,
         }
         optin->scope = (char)text[0];
         if (!optin->commit(ed, optin->backend, optin->scope, optin->ctx)) {
-            optin_abort(optin);
+            if (optin->scope == 'o') {
+                optin_abort(optin);
+                return;
+            }
+            optin->phase = 4U;
+            optin_open_session_fallback(optin);
             return;
         }
+        optin_abort(optin);
+        return;
+    }
+    if (optin->phase == 4U) {
+        if (answer_is(text, len, "y") || answer_is(text, len, "Y"))
+            (void)optin->commit(ed, optin->backend, 'o', optin->ctx);
         optin_abort(optin);
     }
 }
@@ -273,6 +294,56 @@ bool yew_ai_optin_config_merge(Bytebuf *out, const char *old,
     return true;
 }
 
+static bool optin_config_disable_merge(Bytebuf *out, const char *old,
+                                       size_t old_len)
+{
+    static const char start[] =
+        "# yew AI opt-in (managed by :ai enable)\n";
+    static const char finish[] = "# end yew AI opt-in\n";
+    static const char enabled[] = "\"ai.enable\": true";
+    static const char disabled[] = "\"ai.enable\": false";
+    static const char block[] =
+        "# yew AI opt-in (managed by :ai enable)\n"
+        "set({\"ai.enable\": false})\n"
+        "# end yew AI opt-in\n";
+    const char *begin;
+    const char *end;
+    const char *flag;
+
+    if (out == NULL || old == NULL || strlen(old) != old_len)
+        return false;
+    out->len = 0U;
+    begin = strstr(old, start);
+    end = begin == NULL ? NULL : strstr(begin, finish);
+    flag = begin == NULL || end == NULL ? NULL : strstr(begin, enabled);
+    if (flag != NULL && flag < end) {
+        bytebuf_append(out, old, (size_t)(flag - old));
+        bytebuf_append(out, disabled, sizeof(disabled) - 1U);
+        flag += sizeof(enabled) - 1U;
+        bytebuf_append(out, flag, old_len - (size_t)(flag - old));
+        return true;
+    }
+    if (begin != NULL && end != NULL &&
+        (flag = strstr(begin, disabled)) != NULL && flag < end) {
+        bytebuf_append(out, old, old_len);
+        return true;
+    }
+    if (begin != NULL && end != NULL) {
+        end += sizeof(finish) - 1U;
+        bytebuf_append(out, old, (size_t)(begin - old));
+        bytebuf_append(out, block, sizeof(block) - 1U);
+        bytebuf_append(out, end, old_len - (size_t)(end - old));
+        return true;
+    }
+    bytebuf_append(out, old, old_len);
+    if (old_len != 0U && old[old_len - 1U] != '\n')
+        bytebuf_push_u8(out, (u8)'\n');
+    if (old_len != 0U)
+        bytebuf_push_u8(out, (u8)'\n');
+    bytebuf_append(out, block, sizeof(block) - 1U);
+    return true;
+}
+
 static char *optin_read_file(const char *path, size_t *len)
 {
     FILE *file;
@@ -329,8 +400,81 @@ static char *optin_parent(const char *path)
     return parent;
 }
 
+typedef struct OptinConfigBackup {
+    const char *path;
+    char *old;
+    size_t old_len;
+    bool existed;
+    bool written;
+} OptinConfigBackup;
+
+static void optin_config_backup_free(OptinConfigBackup *backup)
+{
+    if (backup == NULL)
+        return;
+    free(backup->old);
+    (void)memset(backup, 0, sizeof(*backup));
+}
+
+static bool optin_config_rollback(OptinConfigBackup *backup)
+{
+    char *parent;
+    bool ok;
+
+    if (backup == NULL || !backup->written || backup->path == NULL)
+        return true;
+    if (!backup->existed)
+        return unlink(backup->path) == 0 || errno == ENOENT;
+    parent = optin_parent(backup->path);
+    ok = yew_mkdirs(parent, 0700U) &&
+         yew_file_write_atomic(backup->path, (const u8 *)backup->old,
+                               backup->old_len, 0600) == YEW_SAVE_OK;
+    free(parent);
+    return ok;
+}
+
 static bool optin_write_config(Ed *ed, YewAiOptinBackend backend,
-                               bool allow_all)
+                               bool allow_all, OptinConfigBackup *backup)
+{
+    const char *path = yew_config_user_path(ed);
+    char *parent;
+    char *old;
+    size_t old_len;
+    Bytebuf next;
+    bool ok;
+
+    if (path == NULL || backup == NULL)
+        return false;
+    (void)memset(backup, 0, sizeof(*backup));
+    backup->path = path;
+    backup->existed = access(path, F_OK) == 0;
+    old = optin_read_file(path, &old_len);
+    if (old == NULL)
+        return false;
+    bytebuf_init(&next);
+    if (!yew_ai_optin_config_merge(&next, old, old_len, backend,
+                                    allow_all)) {
+        free(old);
+        bytebuf_free(&next);
+        return false;
+    }
+    parent = optin_parent(path);
+    ok = yew_mkdirs(parent, 0700U) &&
+         yew_file_write_atomic(path, next.data, next.len, 0600) ==
+             YEW_SAVE_OK;
+    free(parent);
+    bytebuf_free(&next);
+    if (!ok) {
+        free(old);
+        return false;
+    }
+    backup->old = old;
+    backup->old_len = old_len;
+    backup->written = true;
+    return ok;
+}
+
+static bool optin_write_disabled_config(Ed *ed)
 {
     const char *path = yew_config_user_path(ed);
     char *parent;
@@ -345,8 +489,7 @@ static bool optin_write_config(Ed *ed, YewAiOptinBackend backend,
     if (old == NULL)
         return false;
     bytebuf_init(&next);
-    if (!yew_ai_optin_config_merge(&next, old, old_len, backend,
-                                    allow_all)) {
+    if (!optin_config_disable_merge(&next, old, old_len)) {
         free(old);
         bytebuf_free(&next);
         return false;
@@ -390,47 +533,98 @@ static bool optin_commit(Ed *ed, YewAiOptinBackend backend, char scope,
                          void *ctx)
 {
     const char *preset = backend == YEW_AI_OPTIN_LOCAL ? "local" : "cloud";
+    OptinConfigBackup backup = {0};
+    AiWsGrant old_grant;
+    char *state_dir;
+    char *trust_path = NULL;
+    size_t trust_len;
 
     (void)ctx;
-    if (!yew_ai_preset_load(ed, preset)) {
-        yew_msg(ed, YEW_MSG_ERROR, "could not load the %s AI preset", preset);
-        return false;
-    }
     if (scope == 'o') {
+        if (!yew_ai_preset_load(ed, preset)) {
+            yew_msg(ed, YEW_MSG_ERROR, "could not load the %s AI preset",
+                    preset);
+            return false;
+        }
         yew_ai_workspace_session_set(ed, YEW_AI_WS_ALLOW);
         yew_msg(ed, YEW_MSG_INFO,
                 "AI enabled for this session only.\n  wrote no files\n"
                 "  undo: :ai disable");
         return true;
     }
-    if (!optin_write_config(ed, backend, scope == 'a')) {
+    if (!optin_write_config(ed, backend, scope == 'a', &backup)) {
         yew_msg(ed, YEW_MSG_ERROR,
-                "could not write init.fl; choose session-only to continue");
+                "could not write %s", yew_config_user_path(ed));
+        return false;
+    }
+    old_grant = yew_config_ai_workspace_grant(ed);
+    if (scope == 'w' &&
+        !yew_config_ai_workspace_set(ed, YEW_AI_WS_ALLOW)) {
+        if (old_grant == YEW_AI_WS_UNSET)
+            (void)yew_config_ai_workspace_forget(ed);
+        else
+            (void)yew_config_ai_workspace_set(ed, old_grant);
+        if (!optin_config_rollback(&backup))
+            yew_msg(ed, YEW_MSG_ERROR,
+                    "workspace grant failed and %s could not be restored",
+                    backup.path);
+        else
+            yew_msg(ed, YEW_MSG_ERROR,
+                    "could not write the workspace AI grant");
+        optin_config_backup_free(&backup);
+        return false;
+    }
+    if (!yew_ai_preset_load(ed, preset)) {
+        if (scope == 'w') {
+            if (old_grant == YEW_AI_WS_UNSET)
+                (void)yew_config_ai_workspace_forget(ed);
+            else
+                (void)yew_config_ai_workspace_set(ed, old_grant);
+        }
+        (void)optin_config_rollback(&backup);
+        optin_config_backup_free(&backup);
+        yew_msg(ed, YEW_MSG_ERROR, "could not load the %s AI preset", preset);
         return false;
     }
     if (scope == 'a') {
-        if (!optin_set_enum(ed, "ai.default_workspace", "allow"))
+        if (!optin_set_enum(ed, "ai.default_workspace", "allow")) {
+            (void)optin_config_rollback(&backup);
+            optin_config_backup_free(&backup);
             return false;
+        }
         yew_ai_workspace_session_set(ed, YEW_AI_WS_ALLOW);
         yew_msg(ed, YEW_MSG_INFO,
-                "AI enabled.\n  wrote ~/.config/yew/init.fl "
+                "AI enabled.\n  wrote %s "
                 "(ai.backend, ai.enable, every workspace)\n"
-                "  undo: :ai disable");
+                "  undo: :ai disable", backup.path);
+        optin_config_backup_free(&backup);
         return true;
     }
-    if (!yew_config_ai_workspace_set(ed, YEW_AI_WS_ALLOW)) {
-        yew_msg(ed, YEW_MSG_ERROR,
-                "init.fl was written, but the workspace grant failed");
-        return false;
-    }
     yew_ai_workspace_session_set(ed, YEW_AI_WS_UNSET);
+    state_dir = yew_xdg_state_dir();
+    if (state_dir != NULL) {
+        trust_len = strlen(state_dir) + sizeof("/trust.fl");
+        trust_path = yew_xmalloc(trust_len);
+        (void)snprintf(trust_path, trust_len, "%s/trust.fl", state_dir);
+    }
     yew_msg(ed, YEW_MSG_INFO,
-            "AI enabled.\n  wrote ~/.config/yew/init.fl "
+            "AI enabled.\n  wrote %s "
             "(ai.backend, ai.enable)\n"
-            "  wrote ~/.local/state/yew/trust.fl "
+            "  wrote %s "
             "(ai: allow for this workspace)\n"
-            "  undo: :ai disable; :ai forget");
+            "  undo: :ai disable; :ai forget", backup.path,
+            trust_path == NULL ? "trust.fl" : trust_path);
+    free(trust_path);
+    free(state_dir);
+    optin_config_backup_free(&backup);
     return true;
+}
+
+bool yew_ai_optin_begin_default_checked(YewAiOptin *optin, Ed *ed,
+                                        bool has_tty)
+{
+    return yew_ai_optin_begin_checked(optin, ed, optin_commit, NULL,
+                                      has_tty);
 }
 
 CmdStatus yew_ai_cmd_enable(CmdCtx *cx)
@@ -453,6 +647,10 @@ CmdStatus yew_ai_cmd_disable(CmdCtx *cx)
 
     if (cx == NULL || cx->ed == NULL)
         return YEW_CMD_ERR_STATE;
+    if (!optin_write_disabled_config(cx->ed)) {
+        yew_msg(cx->ed, YEW_MSG_ERROR, "could not persist ai.enable=false");
+        return YEW_CMD_ERR_IO;
+    }
     if (!optin_set_value(cx->ed, "ai.enable", &disabled, &error)) {
         yew_msg(cx->ed, YEW_MSG_ERROR, "%s",
                 error == NULL ? "could not disable AI" : error);
