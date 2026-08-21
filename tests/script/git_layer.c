@@ -493,8 +493,8 @@ static void check_info_state(const char *worktree, const char *relative,
     CHECK(snap != NULL && snap->gen == 1U && snap->state == want);
     CHECK(invoke_git_info(&ed) == YEW_CMD_OK);
     CHECK(snprintf(expected, sizeof(expected),
-                   "git: %s; branch trunk; age 0 ms",
-                   yew_git_state_str(want)) > 0);
+                   "git: %s; repo %s; branch trunk; age 0 ms",
+                   yew_git_state_str(want), worktree) > 0);
     CHECK(ed.msg.active);
     CHECK(strcmp(ed.msg.text, expected) == 0);
     yew_ed_free(&ed);
