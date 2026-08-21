@@ -24,6 +24,25 @@ let alternatives = {
     "ed.macro.record": "recording needs keys; none exist",
     "ed.ai.enable": "AI cannot be enabled non-interactively; set " +
                     "ai.enable in init.fl if you have read :ai privacy",
+    "ed.git.commit": "no batch alternative",
+    "ed.git.commit.amend": "no batch alternative",
+    "ed.git.push": "no batch alternative",
+    "ed.git.push.force": "no batch alternative",
+    "ed.git.branch.switch": "no batch alternative",
+    "ed.git.branch.create": "no batch alternative",
+    "ed.git.branch.delete": "no batch alternative",
+    "ed.git.merge": "no batch alternative",
+    "ed.git.reset": "no batch alternative",
+    "ed.git.rebase.interactive": "no batch alternative",
+    "ed.git.cherry_pick": "no batch alternative",
+    "ed.git.revert": "no batch alternative",
+    "ed.git.stash.push": "no batch alternative",
+    "ed.git.stash.pop": "no batch alternative",
+    "ed.git.tag": "no batch alternative",
+    "ed.git.discard": "no batch alternative",
+    "ed.git.file.delete": "no batch alternative",
+    "ed.git.file.rename": "no batch alternative",
+    "ed.git.hunk.discard": "no batch alternative",
 }
 let seen = 0
 for command in ed.commands() {
@@ -44,7 +63,7 @@ for command in ed.commands() {
         seen = seen + 1
     }
 }
-t.eq(seen, 21)
+t.eq(seen, 40)
 
 # ed.mode.enter is conditional: only E mode is terminal-backed.
 let mode_caught = false

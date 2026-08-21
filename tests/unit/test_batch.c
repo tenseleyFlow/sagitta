@@ -90,6 +90,7 @@ void test_batch_refusal_table_covers_every_interactive_command(void)
 {
     u32 i;
     u32 interactive = 0U;
+    u32 git_interactive = 0U;
 
     yew_cmd_init();
     for (i = 0U; i < yew_cmd_count(); i++) {
@@ -99,8 +100,14 @@ void test_batch_refusal_table_covers_every_interactive_command(void)
             continue;
         interactive++;
         YEW_ASSERT_NOT_NULL(yew_batch_command_alternative(desc->name, NULL));
+        if (strncmp(desc->name, "ed.git.", 7U) == 0) {
+            git_interactive++;
+            YEW_ASSERT_EQ_STR(yew_batch_command_alternative(desc->name, NULL),
+                              "no batch alternative");
+        }
     }
-    YEW_ASSERT(interactive >= 10U);
+    YEW_ASSERT(interactive >= 40U);
+    YEW_ASSERT_EQ_U64(git_interactive, 19U);
 }
 
 void test_batch_memory_buffer_is_byte_exact_named_and_initially_clean(void)

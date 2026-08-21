@@ -66,6 +66,28 @@ static const InteractiveRow interactive_rows[] = {
     {"ed.macro.record", "recording needs keys; none exist"},
     {"ed.ai.enable", ai_enable_no_tty},
     {"ed.ai.open", "no batch alternative"},
+    /* Sprint 51 registers the complete Git command vocabulary so scripts,
+     * completion, and stripped builds agree before the Sprint 52/53 UI
+     * lands.  Prompt-backed Git actions remain terminal-only. */
+    {"ed.git.commit", "no batch alternative"},
+    {"ed.git.commit.amend", "no batch alternative"},
+    {"ed.git.push", "no batch alternative"},
+    {"ed.git.push.force", "no batch alternative"},
+    {"ed.git.branch.switch", "no batch alternative"},
+    {"ed.git.branch.create", "no batch alternative"},
+    {"ed.git.branch.delete", "no batch alternative"},
+    {"ed.git.merge", "no batch alternative"},
+    {"ed.git.reset", "no batch alternative"},
+    {"ed.git.rebase.interactive", "no batch alternative"},
+    {"ed.git.cherry_pick", "no batch alternative"},
+    {"ed.git.revert", "no batch alternative"},
+    {"ed.git.stash.push", "no batch alternative"},
+    {"ed.git.stash.pop", "no batch alternative"},
+    {"ed.git.tag", "no batch alternative"},
+    {"ed.git.discard", "no batch alternative"},
+    {"ed.git.file.delete", "no batch alternative"},
+    {"ed.git.file.rename", "no batch alternative"},
+    {"ed.git.hunk.discard", "no batch alternative"},
     {"ed.mode.enter", "use ed.run(name, args)"},
 };
 
