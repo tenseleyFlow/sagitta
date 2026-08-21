@@ -18,6 +18,7 @@
 
 #if YEW_WITH_AI
 #include "edit/job.h"
+#include "fl/flconf.h"
 #include "fl/flruntime.h"
 #include "mod/ai/ai.h"
 #include "mod/ai/ai_int.h"
@@ -238,8 +239,20 @@ void test_ai_commands_cross_module_boundary(void)
     Ed ed;
     CmdCtx cx = {0};
     size_t i;
+#if YEW_WITH_AI
+    YewEdStartup startup = {0};
+    char root[] = "/tmp/yew-ai-commands-XXXXXX";
+    char config[sizeof(root) + sizeof("/init.fl")];
+
+    YEW_ASSERT_NOT_NULL(mkdtemp(root));
+    (void)snprintf(config, sizeof(config), "%s/init.fl", root);
+    startup.config_path = config;
+#endif
 
     yew_ed_init(&ed);
+#if YEW_WITH_AI
+    yew_config_init(&ed, &startup);
+#endif
     cx.ed = &ed;
     cx.count = 1U;
     cx.source = YEW_SRC_TEST;
@@ -309,6 +322,10 @@ void test_ai_commands_cross_module_boundary(void)
         yew_msg_clear(&ed);
     }
     yew_ed_free(&ed);
+#if YEW_WITH_AI
+    YEW_ASSERT_EQ_I64(unlink(config), 0);
+    YEW_ASSERT_EQ_I64(rmdir(root), 0);
+#endif
 }
 
 void test_ai_open_explains_the_ghost_only_surface(void)

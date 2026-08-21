@@ -248,6 +248,7 @@ void test_ai_privacy_commands_are_live(void)
     YewAiOptin default_optin;
     YewEdStartup startup = {0};
     Bytebuf initial;
+    Bytebuf reenabled;
     char root[] = "/tmp/yew-ai-optin-XXXXXX";
     char config[sizeof(root) + sizeof("/init.fl")];
     char blocker[sizeof(root) + sizeof("/blocker")];
@@ -256,7 +257,11 @@ void test_ai_privacy_commands_are_live(void)
     const char *state_env;
     char *saved_state = NULL;
     char *before;
+    char *original;
     char *persisted;
+    const char *managed_at;
+    const char *later_at;
+    const char *disable_at;
     size_t i;
 
     for (i = 0U; i < sizeof(rows) / sizeof(rows[0]); i++) {
@@ -277,10 +282,21 @@ void test_ai_privacy_commands_are_live(void)
     YEW_ASSERT(yew_ai_optin_config_merge(&initial, "", 0U,
                                           YEW_AI_OPTIN_LOCAL, false));
     bytebuf_append(&initial,
-                   "\n# later user override\nset({\"ai.enable\": true})\n",
+                   "\n# later user override\n"
+                   "ai.backend(\"tail\", {kind: \"ollama\", "
+                   "url: \"http://127.0.0.1:11434\", model: \"tail\"})\n"
+                   "set({\"ai.enable\": true, \"ai.backend\": \"tail\", "
+                   "\"ai.context_bytes\": 3072})\n",
                    sizeof("\n# later user override\n"
-                          "set({\"ai.enable\": true})\n") - 1U);
+                          "ai.backend(\"tail\", {kind: \"ollama\", "
+                          "url: \"http://127.0.0.1:11434\", "
+                          "model: \"tail\"})\n"
+                          "set({\"ai.enable\": true, "
+                          "\"ai.backend\": \"tail\", "
+                          "\"ai.context_bytes\": 3072})\n") - 1U);
     bytebuf_push_u8(&initial, 0U);
+    original = strdup((const char *)initial.data);
+    YEW_ASSERT_NOT_NULL(original);
     optin_write_text(config, (const char *)initial.data);
     bytebuf_free(&initial);
     startup.config_path = config;
@@ -299,14 +315,86 @@ void test_ai_privacy_commands_are_live(void)
     persisted = optin_read_text(config);
     YEW_ASSERT(strstr(persisted, "\"ai.enable\": false") != NULL);
     YEW_ASSERT(strstr(persisted, "\"ai.backend\": \"local\"") != NULL);
-    YEW_ASSERT(strstr(persisted, "# later user override") <
-               strstr(persisted, "# yew AI opt-in"));
+    managed_at = strstr(persisted, "# yew AI opt-in");
+    later_at = strstr(persisted, "# later user override");
+    disable_at = strstr(persisted, "# yew AI disable");
+    YEW_ASSERT_NOT_NULL(managed_at);
+    YEW_ASSERT_NOT_NULL(later_at);
+    YEW_ASSERT_NOT_NULL(disable_at);
+    YEW_ASSERT(managed_at < later_at);
+    YEW_ASSERT(later_at < disable_at);
+    YEW_ASSERT_EQ_U64((size_t)(disable_at - persisted), strlen(original));
+    YEW_ASSERT(memcmp(persisted, original, strlen(original)) == 0);
+    YEW_ASSERT_EQ_U64(optin_count_text(persisted, "# yew AI disable"), 1U);
+    free(original);
     before = strdup(persisted);
     YEW_ASSERT_NOT_NULL(before);
     free(persisted);
     YEW_ASSERT_EQ_I64(yew_ai_cmd_disable(&cx), YEW_CMD_OK);
     persisted = optin_read_text(config);
     YEW_ASSERT_EQ_STR(persisted, before);
+    bytebuf_init(&reenabled);
+    YEW_ASSERT(yew_ai_optin_config_merge(&reenabled, persisted,
+                                          strlen(persisted),
+                                          YEW_AI_OPTIN_LOCAL, false));
+    bytebuf_push_u8(&reenabled, 0U);
+    YEW_ASSERT(strstr((const char *)reenabled.data,
+                      "# yew AI disable") == NULL);
+    managed_at = strstr((const char *)reenabled.data,
+                        "# yew AI opt-in");
+    later_at = strstr((const char *)reenabled.data,
+                      "# later user override");
+    YEW_ASSERT_NOT_NULL(managed_at);
+    YEW_ASSERT_NOT_NULL(later_at);
+    YEW_ASSERT(managed_at < later_at);
+    bytebuf_free(&reenabled);
+
+    bytebuf_init(&reenabled);
+    YEW_ASSERT(yew_ai_optin_config_merge(
+        &reenabled,
+        "# yew AI disable (managed by :ai disable)\nlet keep = 1\n",
+        sizeof("# yew AI disable (managed by :ai disable)\n"
+               "let keep = 1\n") - 1U,
+        YEW_AI_OPTIN_LOCAL, false));
+    bytebuf_push_u8(&reenabled, 0U);
+    YEW_ASSERT(strstr((const char *)reenabled.data,
+                      "# yew AI disable (managed by :ai disable)\n"
+                      "let keep = 1\n") != NULL);
+    bytebuf_free(&reenabled);
+
+    bytebuf_init(&reenabled);
+    YEW_ASSERT(yew_ai_optin_config_merge(
+        &reenabled,
+        "# end yew AI disable\nlet orphan = 1\n",
+        sizeof("# end yew AI disable\nlet orphan = 1\n") - 1U,
+        YEW_AI_OPTIN_LOCAL, false));
+    bytebuf_push_u8(&reenabled, 0U);
+    YEW_ASSERT(strstr((const char *)reenabled.data,
+                      "# end yew AI disable\nlet orphan = 1\n") != NULL);
+    bytebuf_free(&reenabled);
+
+    bytebuf_init(&reenabled);
+    YEW_ASSERT(yew_ai_optin_config_merge(
+        &reenabled,
+        "# yew AI disable (managed by :ai disable)\n"
+        "let nested = 1\n"
+        "# yew AI disable (managed by :ai disable)\n"
+        "set({\"ai.enable\": false})\n"
+        "# end yew AI disable\n"
+        "# end yew AI disable\n",
+        sizeof("# yew AI disable (managed by :ai disable)\n"
+               "let nested = 1\n"
+               "# yew AI disable (managed by :ai disable)\n"
+               "set({\"ai.enable\": false})\n"
+               "# end yew AI disable\n"
+               "# end yew AI disable\n") - 1U,
+        YEW_AI_OPTIN_LOCAL, false));
+    bytebuf_push_u8(&reenabled, 0U);
+    YEW_ASSERT(strstr((const char *)reenabled.data,
+                      "# yew AI disable (managed by :ai disable)\n"
+                      "let nested = 1\n"
+                      "# end yew AI disable\n") != NULL);
+    bytebuf_free(&reenabled);
     free(persisted);
     free(before);
     YEW_ASSERT_EQ_I64(yew_ai_cmd_enable(&cx), YEW_CMD_ERR_STATE);
@@ -329,6 +417,11 @@ void test_ai_privacy_commands_are_live(void)
     YEW_ASSERT(yew_opt_get(&ed, NULL, NULL, "ai.enable", 9U, &enabled));
     YEW_ASSERT_EQ_U64(enabled.type, YEW_OPT_BOOL);
     YEW_ASSERT(!enabled.as.b);
+    YEW_ASSERT_NOT_NULL(yew_ai_backend_selected(&ed));
+    YEW_ASSERT_EQ_STR(yew_ai_backend_selected(&ed)->backend.name, "tail");
+    YEW_ASSERT(yew_opt_get(&ed, NULL, NULL, "ai.context_bytes", 16U,
+                           &enabled));
+    YEW_ASSERT_EQ_I64(enabled.as.i, 3072);
     yew_ed_free(&ed);
 
     (void)snprintf(blocker, sizeof(blocker), "%s/blocker", root);

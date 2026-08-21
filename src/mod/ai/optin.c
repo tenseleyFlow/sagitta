@@ -251,6 +251,28 @@ static const char cloud_config[] =
     "\"ai.temperature\": 10, \"ai.on_redact\": \"block\", "
     "\"ai.default_workspace\": \"ask\"})\n";
 
+static const char disable_block[] =
+    "# yew AI disable (managed by :ai disable)\n"
+    "set({\"ai.enable\": false})\n"
+    "# end yew AI disable\n";
+
+static void optin_strip_disable_blocks(Bytebuf *out, const char *old,
+                                       size_t old_len)
+{
+    const char *at = old;
+    const char *limit = old + old_len;
+
+    while (at < limit) {
+        const char *begin = strstr(at, disable_block);
+
+        if (begin == NULL)
+            break;
+        bytebuf_append(out, at, (size_t)(begin - at));
+        at = begin + sizeof(disable_block) - 1U;
+    }
+    bytebuf_append(out, at, (size_t)(limit - at));
+}
+
 bool yew_ai_optin_config_merge(Bytebuf *out, const char *old,
                                size_t old_len,
                                YewAiOptinBackend backend, bool allow_all)
@@ -260,6 +282,9 @@ bool yew_ai_optin_config_merge(Bytebuf *out, const char *old,
     static const char finish[] = "# end yew AI opt-in\n";
     static const char allow[] =
         "set({\"ai.default_workspace\": \"allow\"})\n";
+    Bytebuf clean;
+    const char *source;
+    size_t source_len;
     const char *block;
     const char *begin;
     const char *end;
@@ -270,102 +295,52 @@ bool yew_ai_optin_config_merge(Bytebuf *out, const char *old,
         return false;
     block = backend == YEW_AI_OPTIN_LOCAL ? local_config : cloud_config;
     out->len = 0U;
-    begin = strstr(old, start);
+    bytebuf_init(&clean);
+    optin_strip_disable_blocks(&clean, old, old_len);
+    bytebuf_push_u8(&clean, 0U);
+    source = (const char *)clean.data;
+    source_len = clean.len - 1U;
+    begin = strstr(source, start);
     end = begin == NULL ? NULL : strstr(begin, finish);
     if (begin != NULL && end != NULL) {
         end += sizeof(finish) - 1U;
-        bytebuf_append(out, old, (size_t)(begin - old));
+        bytebuf_append(out, source, (size_t)(begin - source));
         bytebuf_append(out, block, strlen(block));
         if (allow_all)
             bytebuf_append(out, allow, sizeof(allow) - 1U);
         bytebuf_append(out, finish, sizeof(finish) - 1U);
-        bytebuf_append(out, end, old_len - (size_t)(end - old));
+        bytebuf_append(out, end,
+                       source_len - (size_t)(end - source));
     } else {
-        bytebuf_append(out, old, old_len);
-        if (old_len != 0U && old[old_len - 1U] != '\n')
+        bytebuf_append(out, source, source_len);
+        if (source_len != 0U && source[source_len - 1U] != '\n')
             bytebuf_push_u8(out, (u8)'\n');
-        if (old_len != 0U)
+        if (source_len != 0U)
             bytebuf_push_u8(out, (u8)'\n');
         bytebuf_append(out, block, strlen(block));
         if (allow_all)
             bytebuf_append(out, allow, sizeof(allow) - 1U);
         bytebuf_append(out, finish, sizeof(finish) - 1U);
     }
+    bytebuf_free(&clean);
     return true;
 }
 
 static bool optin_config_disable_merge(Bytebuf *out, const char *old,
                                        size_t old_len)
 {
-    static const char start[] =
-        "# yew AI opt-in (managed by :ai enable)\n";
-    static const char finish[] = "# end yew AI opt-in\n";
-    static const char enabled[] = "\"ai.enable\": true";
-    static const char disabled[] = "\"ai.enable\": false";
-    static const char block[] =
-        "# yew AI opt-in (managed by :ai enable)\n"
-        "set({\"ai.enable\": false})\n"
-        "# end yew AI opt-in\n";
-    const char *begin;
-    const char *end;
-    const char *body_end;
-    const char *at;
-    bool found_flag = false;
+    Bytebuf clean;
 
     if (out == NULL || old == NULL || strlen(old) != old_len)
         return false;
     out->len = 0U;
-    begin = strstr(old, start);
-    end = begin == NULL ? NULL : strstr(begin, finish);
-    if (begin == NULL || end == NULL) {
-        bytebuf_append(out, old, old_len);
-        if (old_len != 0U && old[old_len - 1U] != '\n')
-            bytebuf_push_u8(out, (u8)'\n');
-        if (old_len != 0U)
-            bytebuf_push_u8(out, (u8)'\n');
-        bytebuf_append(out, block, sizeof(block) - 1U);
-        return true;
-    }
-
-    body_end = end;
-    end += sizeof(finish) - 1U;
-    /* The managed block must be the final authority.  Move it after every
-     * user-authored trailing override, retaining its backend definitions. */
-    bytebuf_append(out, old, (size_t)(begin - old));
-    bytebuf_append(out, end, old_len - (size_t)(end - old));
+    bytebuf_init(&clean);
+    optin_strip_disable_blocks(&clean, old, old_len);
+    bytebuf_append(out, clean.data, clean.len);
     if (out->len != 0U && out->data[out->len - 1U] != '\n')
         bytebuf_push_u8(out, (u8)'\n');
-
-    at = begin;
-    while (at < body_end) {
-        const char *flag = strstr(at, enabled);
-        const char *already = strstr(at, disabled);
-
-        if (flag == NULL || flag >= body_end)
-            flag = NULL;
-        if (already == NULL || already >= body_end)
-            already = NULL;
-        if (flag == NULL && already == NULL)
-            break;
-        if (already != NULL && (flag == NULL || already < flag)) {
-            bytebuf_append(out, at,
-                           (size_t)(already - at) + sizeof(disabled) - 1U);
-            at = already + sizeof(disabled) - 1U;
-        } else {
-            bytebuf_append(out, at, (size_t)(flag - at));
-            bytebuf_append(out, disabled, sizeof(disabled) - 1U);
-            at = flag + sizeof(enabled) - 1U;
-        }
-        found_flag = true;
-    }
-    bytebuf_append(out, at, (size_t)(body_end - at));
-    if (!found_flag) {
-        if (out->len != 0U && out->data[out->len - 1U] != '\n')
-            bytebuf_push_u8(out, (u8)'\n');
-        bytebuf_append(out, "set({\"ai.enable\": false})\n",
-                       sizeof("set({\"ai.enable\": false})\n") - 1U);
-    }
-    bytebuf_append(out, finish, sizeof(finish) - 1U);
+    bytebuf_append(out, disable_block, sizeof(disable_block) - 1U);
+    bytebuf_free(&clean);
     return true;
 }
 
