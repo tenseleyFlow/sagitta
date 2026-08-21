@@ -6,6 +6,7 @@
 
 #include "edit/ed.h"
 #include "edit/option.h"
+#include "fl/flconf.h"
 #include "mod/ai/ai_int.h"
 #include "mod/ai/key.h"
 #include "mod/ai/redact.h"
@@ -25,6 +26,39 @@ static bool ai_path_policy_check(Ed *ed, const char *path)
 {
     return ed != NULL && ed->ai != NULL &&
            yew_ai_path_excluded(ed->ai->paths, path, NULL);
+}
+
+static AiWsGrant ai_workspace_resolve(Ed *ed, bool notify)
+{
+    AiWsGrant grant;
+    OptVal value;
+
+    if (ed == NULL || ed->ai == NULL)
+        return YEW_AI_WS_DENY;
+    grant = yew_ai_workspace_grant(ed);
+    if (grant != YEW_AI_WS_UNSET)
+        return grant;
+    if (yew_opt_get(ed, NULL, NULL, "ai.default_workspace", 20U, &value) &&
+        value.type == (u8)YEW_OPT_ENUM && value.as.str.s != NULL) {
+        if (value.as.str.len == 5U &&
+            memcmp(value.as.str.s, "allow", 5U) == 0)
+            return YEW_AI_WS_ALLOW;
+        if (value.as.str.len == 4U &&
+            memcmp(value.as.str.s, "deny", 4U) == 0)
+            return YEW_AI_WS_DENY;
+    }
+    if (notify && !ed->ai->workspace_prompted) {
+        yew_msg(ed, YEW_MSG_INFO,
+                "AI is off in this workspace; :ai enable grants it");
+        ed->ai->workspace_prompted = true;
+    }
+    return YEW_AI_WS_DENY;
+}
+
+static bool ai_workspace_policy_check(Ed *ed, const char *root)
+{
+    (void)root;
+    return yew_ai_workspace_allowed(ed);
 }
 
 static bool backend_prepare(void *ctx, const char *url_text, HttpUrl *url,
@@ -68,6 +102,7 @@ void yew_ai_state_init(Ed *ed)
         YEW_BUG("failed to install shipped AI privacy policy");
     yew_ai_redact_hook_set(ai_redact_policy_check);
     yew_ai_path_policy_set(ai_path_policy_check);
+    yew_ai_workspace_policy_set(ai_workspace_policy_check);
     state->last_deliver_ms = -1;
     bytebuf_append(&state->log, "AI transport log\n", 17U);
 }
@@ -149,6 +184,8 @@ bool yew_ai_status_badge(const Ed *ed, char *out, size_t outsz, u8 *priority)
 
     if (out == NULL || outsz == 0U || priority == NULL || ed == NULL ||
         ed->ai == NULL || !ai_bool(ed, "ai.enable", false))
+        return false;
+    if (ai_workspace_resolve((Ed *)ed, false) != YEW_AI_WS_ALLOW)
         return false;
     call = &ed->ai->call;
     entry = call->active ? call->entry : yew_ai_backend_selected(ed);
@@ -258,6 +295,37 @@ bool yew_ai_backend_name_is_remote(const Ed *ed, const char *name, u32 len)
     selected[len] = '\0';
     entry = yew_ai_registry_find(&ed->ai->backends, selected);
     return entry != NULL && !entry->backend.url.loopback;
+}
+
+AiWsGrant yew_ai_workspace_grant(Ed *ed)
+{
+    if (ed == NULL || ed->ai == NULL)
+        return YEW_AI_WS_UNSET;
+    if (ed->ai->session_workspace_grant != YEW_AI_WS_UNSET)
+        return ed->ai->session_workspace_grant;
+    return yew_config_ai_workspace_grant(ed);
+}
+
+bool yew_ai_workspace_allowed(Ed *ed)
+{
+    return ai_workspace_resolve(ed, true) == YEW_AI_WS_ALLOW;
+}
+
+void yew_ai_workspace_set(Ed *ed, AiWsGrant grant)
+{
+    if (ed == NULL || ed->ai == NULL)
+        return;
+    ed->ai->session_workspace_grant = YEW_AI_WS_UNSET;
+    if (!yew_config_ai_workspace_set(ed, grant))
+        yew_msg(ed, YEW_MSG_ERROR, "could not write the AI workspace grant");
+}
+
+void yew_ai_workspace_session_set(Ed *ed, AiWsGrant grant)
+{
+    if (ed == NULL || ed->ai == NULL)
+        return;
+    ed->ai->session_workspace_grant = grant;
+    ed->ai->workspace_prompted = false;
 }
 
 void yew_ai_collect_fds(Ed *ed, struct pollfd *pfd, u32 *n)

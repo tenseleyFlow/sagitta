@@ -770,6 +770,7 @@ void test_ai_commands_require_a_selected_backend(void);
 void test_ai_commands_curl_probe_request_and_teardown(void);
 void test_ai_state_lifecycle_is_owned_by_editor(void);
 void test_ai_options_have_pinned_defaults_and_bounds(void);
+void test_ai_workspace_policy_resolves_once_per_session(void);
 void test_ai_badge_states_hosts_and_priority(void);
 void test_ai_badge_remote_cannot_be_hidden(void);
 void test_ai_redact_shipped_fixture_matrix(void);

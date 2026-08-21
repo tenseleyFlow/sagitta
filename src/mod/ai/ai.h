@@ -8,6 +8,7 @@
 #include "edit/cmd.h"
 #include "mod/ai/backend.h"
 #include "util/base.h"
+#include "ws/trust.h"
 
 typedef struct Ed Ed;
 typedef struct FlMap FlMap;
@@ -48,6 +49,12 @@ u32 yew_ai_backend_count(const Ed *ed);
 const AiBackendEntry *yew_ai_backend_at(const Ed *ed, u32 index);
 const AiBackendEntry *yew_ai_backend_selected(const Ed *ed);
 bool yew_ai_backend_name_is_remote(const Ed *ed, const char *name, u32 len);
+
+/* Workspace disclosure is independent of workspace-config execution trust. */
+AiWsGrant yew_ai_workspace_grant(Ed *ed);
+bool yew_ai_workspace_allowed(Ed *ed);
+void yew_ai_workspace_set(Ed *ed, AiWsGrant grant);
+void yew_ai_workspace_session_set(Ed *ed, AiWsGrant grant);
 
 /* Module-neutral event-loop hooks. */
 void yew_ai_collect_fds(Ed *ed, struct pollfd *pfd, u32 *n);

@@ -794,6 +794,7 @@ const YewTest yew_tests[] = {
     T(ai_commands_curl_probe_request_and_teardown),
     T(ai_state_lifecycle_is_owned_by_editor),
     T(ai_options_have_pinned_defaults_and_bounds),
+    T(ai_workspace_policy_resolves_once_per_session),
 #if YEW_WITH_LSP || YEW_WITH_AI
     T(json_parse_values_and_accessors),
     T(json_parse_escapes_and_surrogates),

@@ -55,12 +55,16 @@ void test_ai_badge_states_hosts_and_priority(void)
     OptVal host_max = {YEW_OPT_INT, {.i = 8}};
 
     yew_ed_init(&ed);
+    yew_ai_workspace_session_set(&ed, YEW_AI_WS_ALLOW);
     YEW_ASSERT(!yew_ai_status_badge(&ed, out, sizeof(out), &priority));
     badge_set(&ed, "ai.enable", enabled);
     YEW_ASSERT(!yew_ai_status_badge(&ed, out, sizeof(out), &priority));
     badge_define_backends(&ed);
 
     badge_select(&ed, "local");
+    yew_ai_workspace_session_set(&ed, YEW_AI_WS_DENY);
+    YEW_ASSERT(!yew_ai_status_badge(&ed, out, sizeof(out), &priority));
+    yew_ai_workspace_session_set(&ed, YEW_AI_WS_ALLOW);
     YEW_ASSERT(yew_ai_status_badge(&ed, out, sizeof(out), &priority));
     YEW_ASSERT_EQ_STR(out, "[AI]");
     YEW_ASSERT_EQ_U64(priority, 5U);

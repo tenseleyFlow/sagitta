@@ -104,6 +104,30 @@ bool yew_ai_backend_name_is_remote(const Ed *ed, const char *name, u32 len)
     return false;
 }
 
+AiWsGrant yew_ai_workspace_grant(Ed *ed)
+{
+    (void)ed;
+    return YEW_AI_WS_DENY;
+}
+
+bool yew_ai_workspace_allowed(Ed *ed)
+{
+    (void)ed;
+    return false;
+}
+
+void yew_ai_workspace_set(Ed *ed, AiWsGrant grant)
+{
+    (void)ed;
+    (void)grant;
+}
+
+void yew_ai_workspace_session_set(Ed *ed, AiWsGrant grant)
+{
+    (void)ed;
+    (void)grant;
+}
+
 void yew_ai_collect_fds(Ed *ed, struct pollfd *pfd, u32 *n)
 {
     (void)ed;

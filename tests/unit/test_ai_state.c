@@ -5,6 +5,7 @@
 #include "edit/ed.h"
 #include "edit/option.h"
 #include "mod/ai/ai.h"
+#include "ui/message.h"
 
 typedef struct AiOptionDefault {
     const char *name;
@@ -134,5 +135,35 @@ void test_ai_options_have_pinned_defaults_and_bounds(void)
                                sizeof("ai.key_cache") - 1U, &off, &err));
         YEW_ASSERT(!yew_ai_state_key_cache_enabled(&ed));
     }
+    yew_ed_free(&ed);
+}
+
+void test_ai_workspace_policy_resolves_once_per_session(void)
+{
+    Ed ed;
+    OptVal value = {YEW_OPT_STR, {.str = {"allow", 5U}}};
+    const char *error = NULL;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT_EQ_U64(yew_ai_workspace_grant(&ed), YEW_AI_WS_UNSET);
+    YEW_ASSERT(!yew_ai_workspace_allowed(&ed));
+    YEW_ASSERT(ed.msg.active);
+    YEW_ASSERT_EQ_STR(ed.msg.text,
+                      "AI is off in this workspace; :ai enable grants it");
+    yew_msg_clear(&ed);
+    YEW_ASSERT(!yew_ai_workspace_allowed(&ed));
+    YEW_ASSERT(!ed.msg.active);
+
+    YEW_ASSERT(yew_opt_set(&ed, YEW_OPT_GLOBAL, "ai.default_workspace",
+                           20U, &value, &error));
+    YEW_ASSERT_NULL(error);
+    YEW_ASSERT(yew_ai_workspace_allowed(&ed));
+
+    yew_ai_workspace_session_set(&ed, YEW_AI_WS_DENY);
+    YEW_ASSERT_EQ_U64(yew_ai_workspace_grant(&ed), YEW_AI_WS_DENY);
+    YEW_ASSERT(!yew_ai_workspace_allowed(&ed));
+    yew_ai_workspace_session_set(&ed, YEW_AI_WS_ALLOW);
+    YEW_ASSERT_EQ_U64(yew_ai_workspace_grant(&ed), YEW_AI_WS_ALLOW);
+    YEW_ASSERT(yew_ai_workspace_allowed(&ed));
     yew_ed_free(&ed);
 }

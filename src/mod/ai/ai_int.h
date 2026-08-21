@@ -32,6 +32,8 @@ struct AiState {
     bool curl_backends_waiting;
     bool redact_elide_messaged;
     bool redact_off_messaged;
+    bool workspace_prompted;
+    AiWsGrant session_workspace_grant;
     /* Last completed non-cancelled result, retained for the status badge. */
     AiErrKind last_error;
     bool have_last_error;
