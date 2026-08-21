@@ -870,6 +870,8 @@ const YewTest yew_tests[] = {
     T(ai_optin_local_and_cloud_confirmations_are_distinct),
     T(ai_optin_escape_and_no_tty_never_commit),
     T(ai_privacy_commands_are_live),
+    T(ai_privacy_wire_body_fields_match_documented_sent_rows),
+    T(ai_privacy_wire_headers_match_documented_sent_rows),
     T(ai_prompt_fim_family_table_is_conservative),
     T(ai_prompt_fim_json_is_byte_exact),
     T(ai_prompt_chat_framing_and_system_are_exact),

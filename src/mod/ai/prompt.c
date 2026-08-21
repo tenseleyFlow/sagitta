@@ -124,6 +124,13 @@ static void prompt_fim(JsonW *writer, const AiBackend *backend,
                        const AiCtx *context)
 {
     static const char *const stops[] = {"\n\n", "\n}", "```"};
+    Bytebuf metadata;
+
+    bytebuf_init(&metadata);
+    if (context->path != NULL && context->path[0] != '\0')
+        bytebuf_printf(&metadata, "File: %s\n", context->path);
+    if (context->lang != NULL && context->lang[0] != '\0')
+        bytebuf_printf(&metadata, "Language: %s\n", context->lang);
 
     yew_jsonw_obj(writer);
     yew_jsonw_key(writer, "model");
@@ -132,6 +139,8 @@ static void prompt_fim(JsonW *writer, const AiBackend *backend,
     json_text(writer, context->prefix, context->plen);
     yew_jsonw_key(writer, "suffix");
     json_text(writer, context->suffix, context->slen);
+    yew_jsonw_key(writer, "system");
+    json_text(writer, metadata.data, (u32)metadata.len);
     yew_jsonw_key(writer, "stream");
     yew_jsonw_bool(writer, true);
     yew_jsonw_key(writer, "raw");
@@ -146,6 +155,7 @@ static void prompt_fim(JsonW *writer, const AiBackend *backend,
     json_stop(writer, stops, YEW_ARRAY_LEN(stops));
     yew_jsonw_obj_end(writer);
     yew_jsonw_obj_end(writer);
+    bytebuf_free(&metadata);
 }
 
 static void prompt_chat(JsonW *writer, const AiBackend *backend,

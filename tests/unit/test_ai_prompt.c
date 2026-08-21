@@ -72,13 +72,15 @@ void test_ai_prompt_fim_json_is_byte_exact(void)
     Bytebuf json;
     const char *want =
         "{\"model\":\"qwen2.5-coder:7b\",\"prompt\":\"int \","
-        "\"suffix\":\";\\n\",\"stream\":true,\"raw\":false,"
+        "\"suffix\":\";\\n\",\"system\":\"File: src/x.c\\nLanguage: c\\n\","
+        "\"stream\":true,\"raw\":false,"
         "\"options\":{\"num_predict\":256,\"temperature\":0.1,"
         "\"stop\":[\"\\n\\n\",\"\\n}\",\"```\"]}}";
 
     prompt_json(&backend, &context, &json);
     YEW_ASSERT_EQ_STR((const char *)json.data, want);
-    YEW_ASSERT_NULL(strstr((const char *)json.data, "src/x.c"));
+    YEW_ASSERT_NOT_NULL(strstr((const char *)json.data, "src/x.c"));
+    YEW_ASSERT_NOT_NULL(strstr((const char *)json.data, "Language: c"));
     YEW_ASSERT_NULL(strstr((const char *)json.data, "fim_prefix"));
     bytebuf_free(&json);
 }

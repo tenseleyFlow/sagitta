@@ -831,6 +831,8 @@ void test_ai_privacy_page_opens_readonly_scratch(void);
 void test_ai_optin_local_and_cloud_confirmations_are_distinct(void);
 void test_ai_optin_escape_and_no_tty_never_commit(void);
 void test_ai_privacy_commands_are_live(void);
+void test_ai_privacy_wire_body_fields_match_documented_sent_rows(void);
+void test_ai_privacy_wire_headers_match_documented_sent_rows(void);
 void test_ai_prompt_fim_family_table_is_conservative(void);
 void test_ai_prompt_fim_json_is_byte_exact(void);
 void test_ai_prompt_chat_framing_and_system_are_exact(void);
