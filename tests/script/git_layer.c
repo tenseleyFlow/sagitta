@@ -160,6 +160,51 @@ static const GitEntry *entry_find(const GitSnapshot *snap, const char *path)
     return NULL;
 }
 
+static void check_spawn_argv(const GitSnapshot *snap);
+
+typedef struct SpawnCapture {
+    char argv[32][256];
+    size_t argc;
+    bool literal_paths;
+    unsigned calls;
+} SpawnCapture;
+
+static u32 capture_spawn(Ed *ed, const GitVerb *verb, char *const *argv,
+                         const GitReq *req, void *opaque,
+                         char *err, size_t errsz)
+{
+    SpawnCapture *capture = opaque;
+    size_t i;
+
+    (void)ed;
+    (void)verb;
+    (void)err;
+    (void)errsz;
+    capture->calls++;
+    capture->literal_paths = req != NULL && req->literal_paths;
+    for (i = 0U; argv[i] != NULL && i < 32U; i++) {
+        size_t len = strlen(argv[i]);
+
+        if (len >= sizeof(capture->argv[i]))
+            len = sizeof(capture->argv[i]) - 1U;
+        (void)memcpy(capture->argv[i], argv[i], len);
+        capture->argv[i][len] = '\0';
+    }
+    capture->argc = i;
+    return 700U;
+}
+
+static size_t argv_index(const SpawnCapture *capture, const char *value)
+{
+    size_t i;
+
+    for (i = 0U; i < capture->argc; i++) {
+        if (strcmp(capture->argv[i], value) == 0)
+            return i;
+    }
+    return SIZE_MAX;
+}
+
 static void check_status_fixture(const char *repo)
 {
     static char *const tail[] = {
@@ -199,6 +244,7 @@ static void check_status_fixture(const char *repo)
     e = entry_find(&snap, "untracked-dir/");
     CHECK(e != NULL && e->kind == GIT_E_UNTRACKED && e->is_dir);
     CHECK(snap.conflicted && snap.state == YEW_GIT_CONFLICTED);
+    check_spawn_argv(&snap);
     yew_git_snapshot_drop(&snap);
     bytes_drop(&out);
 }
@@ -246,6 +292,56 @@ static void check_incoming(const char *repo)
     bytes_drop(&out);
 }
 
+static void check_copied_entry(void)
+{
+    static const u8 record[] =
+        "2 C. N... 100644 100644 100644 "
+        "1111111111111111111111111111111111111111 "
+        "2222222222222222222222222222222222222222 "
+        "C100 copy-result.txt\0copy-source.txt\0";
+    GitSnapshot snap;
+    GitParseErr err = {0};
+    const GitEntry *entry;
+    SpawnCapture capture = {0};
+    GitReq req = {0};
+    char *tail[5];
+    const GitVerb *verb;
+    Ed ed;
+    char spawn_err[128] = {0};
+    size_t dash;
+
+    yew_git_snapshot_init(&snap);
+    CHECK(yew_git_parse_status(&snap, record, sizeof(record) - 1U, &err));
+    CHECK(snap.entries.len == 1U);
+    entry = entry_find(&snap, "copy-result.txt");
+    CHECK(entry != NULL && entry->kind == GIT_E_RENAME && entry->x == 'C');
+    CHECK(entry != NULL && entry->score == 100U &&
+          path_eq(entry->orig_path, entry->orig_len, "copy-source.txt"));
+    tail[0] = (char *)"add";
+    tail[1] = (char *)"--";
+    tail[2] = entry == NULL ? (char *)"copy-result.txt" : entry->path;
+    tail[3] = entry == NULL ? (char *)"copy-source.txt" : entry->orig_path;
+    tail[4] = NULL;
+    yew_ed_init(&ed);
+    arena_init(&req.arena);
+    req.kind = YEW_GREQ_VERB;
+    req.literal_paths = true;
+    verb = yew_git_verb("stage");
+    yew_git_test_spawn_set(capture_spawn, &capture);
+    CHECK(verb != NULL);
+    if (verb != NULL)
+        CHECK(yew_git_spawn(&ed, verb, tail, &req, spawn_err,
+                            sizeof(spawn_err)) == 700U);
+    yew_git_test_spawn_set(NULL, NULL);
+    dash = argv_index(&capture, "--");
+    CHECK(dash != SIZE_MAX);
+    CHECK(argv_index(&capture, tail[2]) > dash);
+    CHECK(argv_index(&capture, tail[3]) > dash);
+    arena_free_all(&req.arena);
+    yew_ed_free(&ed);
+    yew_git_snapshot_drop(&snap);
+}
+
 static bool touch_path(const char *path)
 {
     int fd = open(path, O_WRONLY | O_CREAT, 0600);
@@ -253,97 +349,13 @@ static bool touch_path(const char *path)
     return fd >= 0 && close(fd) == 0;
 }
 
-static void check_probe(const char *git_dir, const char *relative,
-                        GitStatusCode want, bool directory)
+static void check_spawn_argv(const GitSnapshot *snap)
 {
-    char path[4096];
-    GitRepo repo = {0};
-
-    CHECK(snprintf(path, sizeof(path), "%s/%s", git_dir, relative) > 0);
-    if (directory)
-        CHECK(mkdir(path, 0700) == 0);
-    else
-        CHECK(touch_path(path));
-    repo.git_dir = (char *)git_dir;
-    CHECK(yew_git_probe_state(&repo) == want);
-    CHECK(strcmp(yew_git_state_str(want), "unknown") != 0);
-    if (directory)
-        CHECK(rmdir(path) == 0);
-    else
-        CHECK(unlink(path) == 0);
-}
-
-static void check_mid_states(const char *repo)
-{
-    char git_dir[4096];
-    char merge_dir[4096];
-
-    CHECK(snprintf(git_dir, sizeof(git_dir),
-                   "%s/.fixture-variants/upstream/.git", repo) > 0);
-    check_probe(git_dir, "CHERRY_PICK_HEAD", YEW_GIT_MID_CHERRY_PICK, false);
-    check_probe(git_dir, "REVERT_HEAD", YEW_GIT_MID_REVERT, false);
-    check_probe(git_dir, "BISECT_LOG", YEW_GIT_MID_BISECT, false);
-    check_probe(git_dir, "rebase-merge", YEW_GIT_MID_REBASE, true);
-    /* The fixture is intentionally conflicted, so MERGE_HEAD already exists. */
-    {
-        GitRepo gr = {0};
-
-        CHECK(snprintf(merge_dir, sizeof(merge_dir), "%s/.git", repo) > 0);
-        gr.git_dir = merge_dir;
-        CHECK(yew_git_probe_state(&gr) == YEW_GIT_MID_MERGE);
-    }
-}
-
-typedef struct SpawnCapture {
-    char argv[32][256];
-    size_t argc;
-    bool literal_paths;
-    unsigned calls;
-} SpawnCapture;
-
-static u32 capture_spawn(Ed *ed, const GitVerb *verb, char *const *argv,
-                         const GitReq *req, void *opaque,
-                         char *err, size_t errsz)
-{
-    SpawnCapture *capture = opaque;
-    size_t i;
-
-    (void)ed;
-    (void)verb;
-    (void)err;
-    (void)errsz;
-    capture->calls++;
-    capture->literal_paths = req != NULL && req->literal_paths;
-    for (i = 0U; argv[i] != NULL && i < 32U; i++) {
-        size_t len = strlen(argv[i]);
-
-        if (len >= sizeof(capture->argv[i]))
-            len = sizeof(capture->argv[i]) - 1U;
-        (void)memcpy(capture->argv[i], argv[i], len);
-        capture->argv[i][len] = '\0';
-    }
-    capture->argc = i;
-    return 700U;
-}
-
-static size_t argv_index(const SpawnCapture *capture, const char *value)
-{
-    size_t i;
-
-    for (i = 0U; i < capture->argc; i++) {
-        if (strcmp(capture->argv[i], value) == 0)
-            return i;
-    }
-    return SIZE_MAX;
-}
-
-static void check_spawn_argv(void)
-{
-    static char *const tail[] = {
-        (char *)"add", (char *)"--", (char *)"-n",
-        (char *)"quote\"$dollar.txt", (char *)"line\nbreak.txt",
-        (char *)"space name.txt", (char *)"漢字.txt", NULL
+    static const char *const awkward[] = {
+        "space name.txt", "quote\"$dollar.txt", "line\nbreak.txt", "-n",
+        "漢字.txt"
     };
+    char *tail[sizeof(awkward) / sizeof(awkward[0]) + 3U];
     SpawnCapture capture = {0};
     GitReq req = {0};
     const GitVerb *verb = yew_git_verb("stage");
@@ -352,6 +364,15 @@ static void check_spawn_argv(void)
     size_t dash;
     size_t i;
 
+    tail[0] = (char *)"add";
+    tail[1] = (char *)"--";
+    for (i = 0U; i < sizeof(awkward) / sizeof(awkward[0]); i++) {
+        const GitEntry *entry = entry_find(snap, awkward[i]);
+
+        CHECK(entry != NULL);
+        tail[i + 2U] = entry == NULL ? (char *)awkward[i] : entry->path;
+    }
+    tail[sizeof(awkward) / sizeof(awkward[0]) + 2U] = NULL;
     yew_ed_init(&ed);
     arena_init(&req.arena);
     req.kind = YEW_GREQ_VERB;
@@ -362,7 +383,7 @@ static void check_spawn_argv(void)
         CHECK(yew_git_spawn(&ed, verb, tail, &req, err, sizeof(err)) == 700U);
     yew_git_test_spawn_set(NULL, NULL);
     CHECK(capture.calls == 1U && capture.literal_paths);
-    CHECK(capture.argc >= 12U);
+    CHECK(capture.argc >= 13U);
     CHECK(capture.argc != 0U && strcmp(capture.argv[0], "git") == 0);
     CHECK(argv_index(&capture, "--no-pager") == 1U);
     CHECK(argv_index(&capture, "core.quotepath=false") != SIZE_MAX);
@@ -370,12 +391,17 @@ static void check_spawn_argv(void)
     CHECK(argv_index(&capture, "--no-optional-locks") == SIZE_MAX);
     dash = argv_index(&capture, "--");
     CHECK(dash != SIZE_MAX);
-    for (i = 2U; i < sizeof(tail) / sizeof(tail[0]) - 1U; i++) {
-        size_t at = argv_index(&capture, tail[i]);
+    for (i = 0U; i < sizeof(awkward) / sizeof(awkward[0]); i++) {
+        const GitEntry *entry = entry_find(snap, awkward[i]);
+        size_t at = argv_index(&capture, tail[i + 2U]);
 
         CHECK(at != SIZE_MAX && at > dash);
-        CHECK(at != SIZE_MAX && strcmp(capture.argv[at], tail[i]) == 0);
+        CHECK(entry != NULL && at != SIZE_MAX &&
+              strlen(capture.argv[at]) == (size_t)entry->path_len &&
+              memcmp(capture.argv[at], entry->path, entry->path_len) == 0);
     }
+    CHECK(strchr(tail[3], '"') != NULL);
+    CHECK(strchr(tail[3], '$') != NULL);
     arena_free_all(&req.arena);
     yew_ed_free(&ed);
 }
@@ -401,6 +427,99 @@ static bool run_job_until_released(Ed *ed, u32 id)
             return false;
     }
     return true;
+}
+
+static bool run_jobs_idle(Ed *ed)
+{
+    i64 start = yew_now_ms();
+
+    while (ed->jobs.len != 0U) {
+        struct pollfd pfd[YEW_JOB_MAX * 4U];
+        u32 n = 0U;
+
+        yew_job_collect_fds(ed, pfd, &n);
+        if (n != 0U)
+            (void)poll(pfd, (nfds_t)n, 20);
+        else
+            (void)poll(NULL, 0U, 5);
+        yew_job_pump(ed, pfd, n);
+        yew_job_reap(ed);
+        yew_job_tick(ed, yew_now_ms());
+        yew_job_settle(ed);
+        if (yew_now_ms() - start > 10000)
+            return false;
+    }
+    return true;
+}
+
+static CmdStatus invoke_git_info(Ed *ed)
+{
+    CmdCtx cx = {0};
+    CmdId id = yew_cmd_lookup("ed.git.info", 11U);
+
+    CHECK(id.v != 0U);
+    cx.ed = ed;
+    cx.count = 1U;
+    cx.source = YEW_SRC_TEST;
+    return id.v == 0U ? YEW_CMD_ERR_ARG : yew_ed_invoke(ed, id, &cx);
+}
+
+static void check_info_state(const char *worktree, const char *relative,
+                             bool directory, GitStatusCode want,
+                             bool already_exists)
+{
+    char git_dir[4096];
+    char probe[4096];
+    char expected[512];
+    Ed ed;
+    const GitSnapshot *snap;
+
+    CHECK(snprintf(git_dir, sizeof(git_dir), "%s/.git", worktree) > 0);
+    CHECK(snprintf(probe, sizeof(probe), "%s/%s", git_dir, relative) > 0);
+    if (!already_exists) {
+        if (directory)
+            CHECK(mkdir(probe, 0700) == 0);
+        else
+            CHECK(touch_path(probe));
+    } else {
+        CHECK(access(probe, F_OK) == 0);
+    }
+    yew_ed_init(&ed);
+    ed.ws.dir = arena_strdup(&ed.arena, worktree);
+    yew_git_test_now_set(&ed, 1000);
+    CHECK(yew_git_refresh(&ed, true));
+    CHECK(run_jobs_idle(&ed));
+    snap = yew_git_snapshot(&ed);
+    CHECK(snap != NULL && snap->gen == 1U && snap->state == want);
+    CHECK(invoke_git_info(&ed) == YEW_CMD_OK);
+    CHECK(snprintf(expected, sizeof(expected),
+                   "git: %s; branch trunk; age 0 ms",
+                   yew_git_state_str(want)) > 0);
+    CHECK(ed.msg.active);
+    CHECK(strcmp(ed.msg.text, expected) == 0);
+    yew_ed_free(&ed);
+    if (!already_exists) {
+        if (directory)
+            CHECK(rmdir(probe) == 0);
+        else
+            CHECK(unlink(probe) == 0);
+    }
+}
+
+static void check_info_mid_states(const char *repo)
+{
+    char clean[4096];
+
+    CHECK(snprintf(clean, sizeof(clean), "%s/.fixture-variants/upstream",
+                   repo) > 0);
+    check_info_state(repo, "MERGE_HEAD", false, YEW_GIT_MID_MERGE, true);
+    check_info_state(clean, "rebase-merge", true, YEW_GIT_MID_REBASE, false);
+    check_info_state(clean, "CHERRY_PICK_HEAD", false,
+                     YEW_GIT_MID_CHERRY_PICK, false);
+    check_info_state(clean, "REVERT_HEAD", false,
+                     YEW_GIT_MID_REVERT, false);
+    check_info_state(clean, "BISECT_LOG", false,
+                     YEW_GIT_MID_BISECT, false);
 }
 
 typedef struct SavedEnv {
@@ -686,9 +805,9 @@ int main(int argc, char **argv)
     }
     check_status_fixture(argv[1]);
     check_incoming(argv[1]);
-    check_mid_states(argv[1]);
+    check_copied_entry();
+    check_info_mid_states(argv[1]);
     check_ignore_compaction(argv[1]);
-    check_spawn_argv();
     check_spawn_env(argv[1]);
     if (failures != 0U) {
         (void)fprintf(stderr, "git_layer: %u/%u checks failed\n",
