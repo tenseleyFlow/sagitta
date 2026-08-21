@@ -29,6 +29,10 @@ typedef void (*YewCmdlineInputDone)(Ed *ed, bool accepted,
 typedef struct CmdLine {
     YewPromptKind kind;
     bool active;
+    /* Monotonic identity for one prompt lifetime.  The CmdLine storage is
+     * embedded in Ed and reused, so pointer identity cannot distinguish a
+     * prompt that a command replaced while Enter was being handled. */
+    u64 generation;
     TextBuf *buf;
     Cursor cur;
     Menu menu;

@@ -174,6 +174,37 @@ static CmdStatus cmdline_noop(CmdCtx *context)
     return YEW_CMD_OK;
 }
 
+static CmdStatus cmdline_open_successor(CmdCtx *context)
+{
+    yew_cmdline_open_input(context->ed, "successor", NULL, NULL);
+    return YEW_CMD_OK;
+}
+
+static bool grid_has_ascii(const Grid *grid, const char *needle)
+{
+    size_t len = strlen(needle);
+    u16 row;
+
+    for (row = 0U; row < grid->rows; row++) {
+        u16 col;
+
+        for (col = 0U; col + len <= grid->cols; col++) {
+            size_t i;
+
+            for (i = 0U; i < len; i++) {
+                const Cell *cell =
+                    &grid->back[(size_t)row * grid->cols + col + i];
+
+                if (cell->utf8[0] != (u8)needle[i])
+                    break;
+            }
+            if (i == len)
+                return true;
+        }
+    }
+    return false;
+}
+
 void test_cmdline_reuses_textbuf_and_grapheme_cursor(void)
 {
     CmdlineFixture fixture;
@@ -328,6 +359,11 @@ void test_cmdline_accepts_registered_command_and_closes(void)
 {
     CmdlineFixture fixture;
     InputDoneState state = {0};
+    static const CmdEntry opens_successor = {
+        {"ed.ai.rename", cmdline_open_successor, YEW_ARITY_NONE,
+         YEW_CMD_PROMPTS, "Open a successor prompt for testing", NULL},
+        "", YEW_RP_OPT, NULL};
+    Bytebuf text;
 
     cmdline_fixture_init(&fixture);
     yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, "redraw");
@@ -357,6 +393,68 @@ void test_cmdline_accepts_registered_command_and_closes(void)
                       YEW_CMD_OK);
     YEW_ASSERT_EQ_U64(state.calls, 1U);
     YEW_ASSERT(!fixture.ed.cmdline.active);
+
+    (void)yew_cmd_register_entry(&opens_successor);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, "ai.rename");
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, yew_cmdline_cmd_accept),
+                      YEW_CMD_OK);
+    YEW_ASSERT(fixture.ed.cmdline.active);
+    YEW_ASSERT_EQ_U64(fixture.ed.cmdline.kind, YEW_PROMPT_INPUT);
+    YEW_ASSERT_EQ_U64(fixture.ed.mode, YEW_MODE_E);
+    text = cmdline_text(&fixture.ed.cmdline);
+    YEW_ASSERT_EQ_STR((const char *)text.data, "successor");
+    bytebuf_free(&text);
+    yew_cmdline_close(&fixture.ed, false);
+
+    /* Replacing the prompt must not lose the accepted command's history. */
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, "");
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
+                                     yew_cmdline_cmd_hist_prev),
+                      YEW_CMD_OK);
+    text = cmdline_text(&fixture.ed.cmdline);
+    YEW_ASSERT_EQ_STR((const char *)text.data, "ai.rename");
+    bytebuf_free(&text);
+    cmdline_fixture_free(&fixture);
+    yew_cmd_shutdown();
+    yew_cmd_init();
+}
+
+void test_cmdline_input_draws_the_full_multiline_message(void)
+{
+    static const char disclosure[] =
+        "First disclosure line\n"
+        "012345678901234567890123456789\n"
+        "abcdefghijabcdefghijabcdefghij\n"
+        "ABCDEFGHIJABCDEFGHIJABCDEFGHIJ\n"
+        "one two three four five six seven\n"
+        "red orange yellow green blue violet\n"
+        "alpha beta gamma delta epsilon zeta\n"
+        "privacy disclosure content row number one\n"
+        "privacy disclosure content row number two\n"
+        "privacy disclosure content row number three\n"
+        "privacy disclosure content row number four\n"
+        "privacy disclosure content row number five\n"
+        "privacy disclosure content row number six\n"
+        "this pushes the message past its inline storage\n"
+        "and proves drawing reads the allocated full text\n"
+        "Choice [y/N]:";
+    CmdlineFixture fixture;
+    cmdline_fixture_init(&fixture);
+    YEW_ASSERT(yew_grid_init(&fixture.ed.grid, &fixture.ed.interner,
+                             24U, 80U));
+    fixture.ed.footer_rect = (Rect){0U, 23U, 80U, 1U};
+    yew_cmdline_open_input(&fixture.ed, "", NULL, NULL);
+    yew_msg(&fixture.ed, YEW_MSG_INFO, "%s", disclosure);
+    YEW_ASSERT_NOT_NULL(fixture.ed.msg.full);
+    yew_cmdline_draw(&fixture.ed, fixture.ed.footer_rect);
+
+    YEW_ASSERT(grid_has_ascii(&fixture.ed.grid, "First disclosure line"));
+    YEW_ASSERT(grid_has_ascii(&fixture.ed.grid, "full text"));
+    YEW_ASSERT(grid_has_ascii(&fixture.ed.grid, "Choice [y/N]:"));
+    YEW_ASSERT_EQ_U64(fixture.ed.grid.back[23U * fixture.ed.grid.cols]
+                          .utf8[0],
+                      (u8)':');
+    yew_grid_free(&fixture.ed.grid);
     cmdline_fixture_free(&fixture);
 }
 

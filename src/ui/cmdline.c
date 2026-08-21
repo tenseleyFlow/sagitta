@@ -20,6 +20,7 @@
 #include "ui/statusline.h"
 #include "ui/viewport.h"
 #include "unicode/coords.h"
+#include "unicode/grapheme.h"
 #include "unicode/width.h"
 #include "util/buf.h"
 #include "util/log.h"
@@ -358,6 +359,34 @@ static const char *history_kind(YewPromptKind kind)
     return "cmd";
 }
 
+static CmdHist *history_open(Ed *ed, YewPromptKind kind)
+{
+    /* Sprint 25 §8.  A stateless session (--clean, --batch, an unusable
+     * state home) keeps the global history it has always had; there is no
+     * workspace directory to scope to and inventing one would put state
+     * where the user asked for none. */
+    if (ed->clean)
+        return yew_hist_open_memory();
+    if (ed->state.ready) {
+        const char *scope =
+            yew_state_option_str(ed, "history.scope", "workspace");
+
+        return yew_hist_open_scoped(history_kind(kind), ed->state.key.dir,
+                                    strcmp(scope, "global") != 0);
+    }
+    return yew_hist_open(history_kind(kind));
+}
+
+static void history_add_closed_prompt(Ed *ed, YewPromptKind kind,
+                                      const char *text)
+{
+    CmdHist *history = history_open(ed, kind);
+
+    yew_hist_add(history, text);
+    yew_hist_flush(history);
+    yew_hist_close(history);
+}
+
 void yew_cmdline_open(Ed *ed, YewPromptKind kind, const char *seed)
 {
     CmdLine *line;
@@ -372,6 +401,9 @@ void yew_cmdline_open(Ed *ed, YewPromptKind kind, const char *seed)
         yew_cmdline_close(ed, false);
     old = ed->mode;
     line = &ed->cmdline;
+    line->generation++;
+    if (line->generation == 0U)
+        line->generation = 1U;
     target = yew_xcalloc(1U, sizeof(*target));
     bytebuf_init(&clean);
     if (seed != NULL)
@@ -394,24 +426,7 @@ void yew_cmdline_open(Ed *ed, YewPromptKind kind, const char *seed)
     line->cur = cursor;
     line->target = target;
     line->return_mode = (u8)ed->mode;
-    /*
-     * Sprint 25 §8.  A stateless session (--clean, --batch, an unusable
-     * state home) keeps the global history it has always had; there is
-     * no workspace directory to scope to and inventing one would put
-     * state where the user asked for none.
-     */
-    if (ed->clean) {
-        line->history = yew_hist_open_memory();
-    } else if (ed->state.ready) {
-        const char *scope =
-            yew_state_option_str(ed, "history.scope", "workspace");
-
-        line->history = yew_hist_open_scoped(history_kind(kind),
-                                             ed->state.key.dir,
-                                             strcmp(scope, "global") != 0);
-    } else {
-        line->history = yew_hist_open(history_kind(kind));
-    }
+    line->history = history_open(ed, kind);
     {
         /* Inline, five rows, wrapping, detail at column 31 -- the
          * geometry Sprint 18's goldens pinned, now expressed as a spec
@@ -1391,11 +1406,15 @@ CmdStatus yew_cmdline_cmd_accept(CmdCtx *cx)
     CmdParse parsed;
     YewCmdInvoke invoke;
     CmdStatus status;
+    YewPromptKind accepted_kind;
+    u64 accepted_generation;
 
     if (cx == NULL || cx->ed == NULL || !cx->ed->cmdline.active)
         return YEW_CMD_ERR_STATE;
     ed = cx->ed;
     line = &ed->cmdline;
+    accepted_kind = line->kind;
+    accepted_generation = line->generation;
     /*
      * §6: Enter is governed by whether the user CHOSE a row, not by
      * whether a menu happens to be open.
@@ -1459,9 +1478,13 @@ CmdStatus yew_cmdline_cmd_accept(CmdCtx *cx)
                             ed->win};
     status = yew_ed_invoke_parsed(ed, parsed.command, &invoke);
     if (status != YEW_CMD_OK) {
-        if (status == YEW_CMD_ERR_DEFERRED)
+        bool same_prompt = ed->cmdline.active &&
+                           ed->cmdline.generation == accepted_generation &&
+                           ed->cmdline.kind == accepted_kind;
+
+        if (same_prompt && status == YEW_CMD_ERR_DEFERRED)
             deferred_dispatch_error(ed, &parsed);
-        else {
+        else if (same_prompt) {
             CmdErr error = {0};
 
             error.tok_lo = (u32)parsed.name_tok.lo;
@@ -1482,11 +1505,19 @@ CmdStatus yew_cmdline_cmd_accept(CmdCtx *cx)
         free(text);
         return status;
     }
-    yew_hist_add(line->history, text);
+    if (ed->cmdline.active &&
+        ed->cmdline.generation == accepted_generation &&
+        ed->cmdline.kind == accepted_kind)
+        yew_hist_add(ed->cmdline.history, text);
+    else
+        history_add_closed_prompt(ed, accepted_kind, text);
     set_cmd_register(ed, text);
     arena_free_all(&arena);
     free(text);
-    yew_cmdline_close(ed, true);
+    if (ed->cmdline.active &&
+        ed->cmdline.generation == accepted_generation &&
+        ed->cmdline.kind == accepted_kind)
+        yew_cmdline_close(ed, true);
     return YEW_CMD_OK;
 }
 
@@ -1573,6 +1604,81 @@ static void draw_menu(Ed *ed, u16 footer, const YewUiStyle *style)
     yew_menu_draw(ed, &ed->cmdline.menu, area, style);
 }
 
+static size_t prompt_message_row(const char *text, size_t len, u16 cells,
+                                 size_t *advance)
+{
+    const char *newline = memchr(text, '\n', len);
+    size_t line_len = newline == NULL ? len : (size_t)(newline - text);
+    size_t take;
+
+    if (line_len == 0U) {
+        *advance = newline == NULL ? 0U : 1U;
+        return 0U;
+    }
+    take = yew_str_clip((const u8 *)text, line_len, (int)cells, NULL);
+    if (take == 0U) {
+        /* A wide grapheme cannot fit a one-cell terminal, but it still
+         * has to advance or redraw would loop forever. */
+        *advance = yew_gb_next_bytes((const u8 *)text, line_len, 0U);
+        return 0U;
+    }
+    *advance = take;
+    if (take == line_len && newline != NULL)
+        (*advance)++;
+    return take;
+}
+
+static void draw_prompt_message_full(Ed *ed, u16 footer,
+                                     const YewUiStyle *style,
+                                     const char *text, size_t len)
+{
+    size_t pos = 0U;
+    size_t rows = 0U;
+    size_t skip;
+    size_t seen = 0U;
+    u16 first;
+    u16 row;
+
+    while (pos < len) {
+        size_t advance;
+
+        (void)prompt_message_row(text + pos, len - pos, ed->grid.cols,
+                                 &advance);
+        if (advance == 0U)
+            break;
+        pos += advance;
+        rows++;
+    }
+    if (rows == 0U)
+        return;
+    /* If a terminal is too short for the disclosure, retain its tail so
+     * the question and safe default remain visible and keyboard-reachable. */
+    skip = rows > footer ? rows - footer : 0U;
+    first = rows < footer ? (u16)(footer - rows) : 0U;
+    row = first;
+    pos = 0U;
+    while (pos < len && row < footer) {
+        size_t advance;
+        size_t take = prompt_message_row(text + pos, len - pos,
+                                         ed->grid.cols, &advance);
+
+        if (advance == 0U)
+            break;
+        if (seen++ >= skip) {
+            yew_grid_fill(&ed->grid, row, 0U, ed->grid.cols,
+                          styled_blank(style));
+            if (take != 0U) {
+                (void)yew_grid_puts(&ed->grid, row, 0U,
+                                    (const u8 *)text + pos, take,
+                                    style->row_fg, style->row_bg,
+                                    style->attrs);
+            }
+            row++;
+        }
+        pos += advance;
+    }
+}
+
 static void draw_prompt_message(Ed *ed, u16 footer,
                                 const YewUiStyle *style)
 {
@@ -1587,7 +1693,17 @@ static void draw_prompt_message(Ed *ed, u16 footer,
         (void)snprintf(message, sizeof(message), "E: %s",
                        ed->cmdline.err.msg);
     } else if (ed->msg.active) {
+        const char *full = ed->msg.full == NULL ? ed->msg.text :
+                                                  ed->msg.full;
+
         message_style = yew_message_style(ed);
+        if (ed->cmdline.kind == YEW_PROMPT_INPUT &&
+            (ed->msg.full != NULL ||
+             memchr(full, '\n', ed->msg.len) != NULL)) {
+            draw_prompt_message_full(ed, footer, &message_style, full,
+                                     ed->msg.len);
+            return;
+        }
         (void)snprintf(message, sizeof(message),
                        ed->msg.sev == YEW_MSG_ERROR ? "E: %s" : "%s",
                        ed->msg.text);
