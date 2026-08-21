@@ -31,6 +31,9 @@ bool yew_live_pty_write(YewLivePty *pty, const void *bytes, size_t len,
                         i64 deadline_ns);
 bool yew_live_pty_wait_frame(YewLivePty *pty, u64 after, i64 deadline_ns,
                              i64 *completed_ns);
+/* Drain terminal traffic until no bytes arrive for quiet_ns. */
+bool yew_live_pty_wait_quiet(YewLivePty *pty, i64 quiet_ns,
+                             i64 deadline_ns);
 bool yew_live_pty_wait_exit(YewLivePty *pty, i64 deadline_ns, int *code);
 void yew_live_pty_close(YewLivePty *pty);
 void yew_live_pty_exec(const char *binary, const char *path);

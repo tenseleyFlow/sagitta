@@ -62,7 +62,9 @@ static bool make_fixture(char *root, size_t root_cap,
         "fn greet(name: str) -> !int {\n"
         "    print(\"hello, {name}\")\n"
         "    0\n"
-        "}\n";
+        "}";
+    _Static_assert(sizeof(hello_lu) - 1U == 138U,
+                   "Wolf latency fixture must match hello.lu");
     char template[] = "/tmp/yew-latency-XXXXXX";
     char *made;
     int fd;
@@ -174,6 +176,50 @@ static int selftest_exit_drain(void)
     }
     yew_live_pty_close(&pty);
     (void)printf("perf-latency-selftest: exit drain ok\n");
+    return 0;
+}
+
+static int selftest_quiet_drain(void)
+{
+    static const char frame[] = "\033[?2026h.\033[?2026l";
+    YewLivePty pty = {.master = -1, .pid = -1};
+    char slave[128];
+    pid_t pid;
+    i64 deadline;
+
+    if (!yew_live_pty_open(&pty, slave, sizeof(slave),
+                           SCREEN_ROWS, SCREEN_COLS))
+        return 1;
+    pid = fork();
+    if (pid < 0) {
+        yew_live_pty_close(&pty);
+        return 1;
+    }
+    if (pid == 0) {
+        struct timespec delayed = {0, 50000000L};
+        struct timespec linger = {0, 300000000L};
+
+        if (!yew_live_pty_attach(&pty, slave, SCREEN_ROWS, SCREEN_COLS) ||
+            !write_all(STDOUT_FILENO, frame, sizeof(frame) - 1U))
+            _exit(126);
+        while (nanosleep(&delayed, &delayed) != 0 && errno == EINTR)
+            ;
+        if (!write_all(STDOUT_FILENO, frame, sizeof(frame) - 1U))
+            _exit(125);
+        while (nanosleep(&linger, &linger) != 0 && errno == EINTR)
+            ;
+        _exit(0);
+    }
+    pty.pid = pid;
+    deadline = yew_live_pty_now_ns() + INT64_C(1000000000);
+    if (!yew_live_pty_wait_frame(&pty, 0U, deadline, NULL) ||
+        !yew_live_pty_wait_quiet(&pty, INT64_C(100000000), deadline) ||
+        pty.frames != 2U) {
+        yew_live_pty_close(&pty);
+        return 1;
+    }
+    yew_live_pty_close(&pty);
+    (void)printf("perf-latency-selftest: quiet drain ok\n");
     return 0;
 }
 
@@ -359,6 +405,15 @@ static i64 injected_delay(void)
     return (i64)value;
 }
 
+static bool settle_editor(YewLivePty *pty)
+{
+    /* Startup jobs may repaint after the first frame.  Drain them before
+     * associating one subsequent frame with one measured input. */
+    return yew_live_pty_wait_quiet(
+        pty, INT64_C(250000000),
+        yew_live_pty_now_ns() + INT64_C(2000000000));
+}
+
 static void delay_ns(i64 ns)
 {
     struct timespec delay;
@@ -392,7 +447,8 @@ static bool measure_keys(const char *binary, const char *path,
     deadline = yew_live_pty_now_ns() + INT64_C(2000000000);
     if (!yew_live_pty_spawn(&pty, binary, path, state,
                             SCREEN_ROWS, SCREEN_COLS) ||
-        !yew_live_pty_wait_frame(&pty, 0U, deadline, NULL)) {
+        !yew_live_pty_wait_frame(&pty, 0U, deadline, NULL) ||
+        !settle_editor(&pty)) {
         (void)fprintf(stderr, "latency: key run did not paint initially\n");
         goto done_pty;
     }
@@ -402,7 +458,8 @@ static bool measure_keys(const char *binary, const char *path,
 
         deadline = yew_live_pty_now_ns() + INT64_C(2000000000);
         if (!yew_live_pty_write(&pty, &enter_insert, 1U, deadline) ||
-            !yew_live_pty_wait_frame(&pty, frame, deadline, NULL)) {
+            !yew_live_pty_wait_frame(&pty, frame, deadline, NULL) ||
+            !settle_editor(&pty)) {
             (void)fprintf(stderr, "latency: insert mode did not paint\n");
             goto done_pty;
         }
@@ -462,7 +519,8 @@ static bool measure_arrows(const char *binary, const char *path,
     deadline = yew_live_pty_now_ns() + INT64_C(2000000000);
     if (!yew_live_pty_spawn(&pty, binary, path, state,
                             SCREEN_ROWS, SCREEN_COLS) ||
-        !yew_live_pty_wait_frame(&pty, 0U, deadline, NULL)) {
+        !yew_live_pty_wait_frame(&pty, 0U, deadline, NULL) ||
+        !settle_editor(&pty)) {
         (void)fprintf(stderr, "latency: arrow run did not paint initially\n");
         goto done_pty;
     }
@@ -511,10 +569,13 @@ int main(int argc, char **argv)
     i64 key_p99;
     i64 arrow_p99;
     i64 cold;
+    const char *wolf_path;
     int status = 0;
 
     if (argc == 2 && strcmp(argv[1], "--selftest-exit-drain") == 0)
         return selftest_exit_drain();
+    if (argc == 2 && strcmp(argv[1], "--selftest-quiet-drain") == 0)
+        return selftest_quiet_drain();
     if (argc != 5 || strcmp(argv[1], "--yew") != 0 ||
         strcmp(argv[3], "--baseline") != 0) {
         (void)fprintf(stderr,
@@ -531,9 +592,22 @@ int main(int argc, char **argv)
         (void)fprintf(stderr, "latency: cannot create fixtures\n");
         return 2;
     }
+    wolf_path = getenv("YEW_LATENCY_WOLF_PATH");
+    if (wolf_path == NULL || *wolf_path == '\0') {
+        wolf_path = wolf;
+    } else {
+        struct stat wolf_st;
+
+        if (stat(wolf_path, &wolf_st) != 0 || !S_ISREG(wolf_st.st_mode)) {
+            (void)fprintf(stderr,
+                          "latency: invalid Wolf fixture %s\n", wolf_path);
+            (void)remove_tree(root);
+            return 2;
+        }
+    }
     if (!measure_cold(argv[2], fixture, state, &cold) ||
         !measure_keys(argv[2], fixture, state, &key_p99) ||
-        !measure_arrows(argv[2], wolf, state, &arrow_p99)) {
+        !measure_arrows(argv[2], wolf_path, state, &arrow_p99)) {
         (void)fprintf(stderr, "latency: PTY measurement failed\n");
         (void)remove_tree(root);
         return 2;

@@ -307,6 +307,51 @@ bool yew_live_pty_wait_frame(YewLivePty *pty, u64 after, i64 deadline_ns,
     return true;
 }
 
+bool yew_live_pty_wait_quiet(YewLivePty *pty, i64 quiet_ns,
+                             i64 deadline_ns)
+{
+    i64 quiet_deadline;
+
+    if (pty == NULL || pty->master < 0 || quiet_ns <= 0)
+        return false;
+    quiet_deadline = yew_live_pty_now_ns();
+    if (quiet_deadline < 0 || quiet_deadline >= deadline_ns ||
+        quiet_ns > deadline_ns - quiet_deadline)
+        return false;
+    quiet_deadline += quiet_ns;
+    for (;;) {
+        struct pollfd fd = {pty->master, POLLIN | POLLHUP, 0};
+        i64 now = yew_live_pty_now_ns();
+        i64 wait_until;
+        u8 bytes[8192];
+        int result;
+        ssize_t n;
+
+        if (now < 0 || now >= deadline_ns)
+            return false;
+        if (now >= quiet_deadline)
+            return true;
+        wait_until = quiet_deadline < deadline_ns ? quiet_deadline :
+                     deadline_ns;
+        result = poll(&fd, 1U, timeout_ms(wait_until));
+        if (result < 0 && errno == EINTR)
+            continue;
+        if (result == 0)
+            continue;
+        if (result < 0)
+            return false;
+        n = read(pty->master, bytes, sizeof(bytes));
+        if (n < 0 && errno == EINTR)
+            continue;
+        if (n <= 0 || !consume(pty, bytes, (size_t)n, deadline_ns))
+            return false;
+        now = yew_live_pty_now_ns();
+        if (now < 0 || quiet_ns > deadline_ns - now)
+            return false;
+        quiet_deadline = now + quiet_ns;
+    }
+}
+
 bool yew_live_pty_wait_exit(YewLivePty *pty, i64 deadline_ns, int *code)
 {
     for (;;) {
