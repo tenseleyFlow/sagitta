@@ -1,6 +1,8 @@
 #include "search/searchui.h"
 #include "ui/statusline.h"
 
+#include "mod/ai/ai.h"
+
 #include "edit/job.h"
 
 #include <stdio.h>
@@ -366,13 +368,14 @@ void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
     char wrap_badge[8];
     char syn_badge[8];
     char diag_badge[48];
+    char ai_badge[320];
     size_t diag_error_off = 0U;
     size_t diag_error_len = 0U;
     size_t diag_warn_off = 0U;
     size_t diag_warn_len = 0U;
     char recording[32];
     RecStatus rec_status;
-    Segment segments[14];
+    Segment segments[15];
     int available;
     int path_cells;
     int dirty_cells;
@@ -561,6 +564,12 @@ void yew_statusline_build(const Ed *ed, Win *w, u16 cols,
     segments[13] = (Segment){w->buf->lang, 3U,
                              w->buf->lang != NULL &&
                              strncmp(w->buf->lang, "fortran", 7U) == 0};
+    {
+        u8 ai_priority = 5U;
+        bool show = yew_ai_status_badge(ed, ai_badge, sizeof(ai_badge),
+                                        &ai_priority);
+        segments[14] = (Segment){ai_badge, ai_priority, show};
+    }
     path_cells = cells(path);
     dirty_cells = yew_buf_dirty(w->buf) ? 2 : 0;
     right_cells = right_width(segments, YEW_ARRAY_LEN(segments));

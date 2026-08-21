@@ -2,6 +2,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "edit/ed.h"
 #include "edit/option.h"
@@ -87,6 +88,97 @@ bool yew_ai_state_key_cache_enabled(const Ed *ed)
     return ed != NULL && ed->ai != NULL && ed->ai->keys.enabled;
 }
 
+static bool ai_bool(const Ed *ed, const char *name, bool fallback)
+{
+    OptVal v;
+    size_t n = strlen(name);
+    return yew_opt_get((Ed *)ed, NULL, NULL, name, (u32)n, &v) &&
+                   v.type == (u8)YEW_OPT_BOOL ? v.as.b : fallback;
+}
+
+static i64 ai_int(const Ed *ed, const char *name, i64 fallback)
+{
+    OptVal v;
+    size_t n = strlen(name);
+    return yew_opt_get((Ed *)ed, NULL, NULL, name, (u32)n, &v) &&
+                   v.type == (u8)YEW_OPT_INT ? v.as.i : fallback;
+}
+
+static bool ai_badge_on(const Ed *ed)
+{
+    OptVal v;
+    const char *s;
+    if (!yew_opt_get((Ed *)ed, NULL, NULL, "ai.badge", 8U, &v) ||
+        v.type != (u8)YEW_OPT_ENUM)
+        return true;
+    s = v.as.str.s;
+    return s == NULL || v.as.str.len != 3U || memcmp(s, "off", 3U) != 0;
+}
+
+bool yew_ai_status_badge(const Ed *ed, char *out, size_t outsz, u8 *priority)
+{
+    const AiBackendEntry *entry;
+    const AiCall *call;
+    const char *host;
+    bool remote;
+    bool active;
+    const char *state = "";
+    i64 max;
+
+    if (out == NULL || outsz == 0U || priority == NULL || ed == NULL ||
+        ed->ai == NULL || !ai_bool(ed, "ai.enable", false))
+        return false;
+    call = &ed->ai->call;
+    entry = call->active ? call->entry : yew_ai_backend_selected(ed);
+    if (entry == NULL)
+        return false;
+    remote = !entry->backend.url.loopback;
+    if (!ai_badge_on(ed))
+        return false;
+    active = call->active;
+    if (active)
+        state = "~";
+    else if (ed->ai->have_last_error)
+        state = "!";
+    host = entry->backend.url.host == NULL ? "" : entry->backend.url.host;
+    max = ai_int(ed, "ai.badge_host_max", 20);
+    if (max < 1)
+        max = 1;
+    *priority = remote ? 2U : 5U;
+    if (!remote) {
+        (void)snprintf(out, outsz, "[AI%s]", state);
+        return true;
+    }
+    if ((i64)strlen(host) <= max) {
+        (void)snprintf(out, outsz, "[AI->%s%s]", host, state);
+    } else {
+        size_t keep = (size_t)(max > 1 ? max - 1 : 0);
+        size_t n = strlen(host);
+        if (keep > n)
+            keep = n;
+        (void)snprintf(out, outsz, "[AI->%s%s%s]", max > 1 ? "…" : "",
+                       host + n - keep, state);
+    }
+    return true;
+}
+
+void yew_ai_status_note(Ed *ed, AiErrKind kind)
+{
+    if (ed == NULL || ed->ai == NULL || kind == YEW_AI_OK ||
+        kind == YEW_AI_ERR_CANCELLED)
+        return;
+    ed->ai->last_error = kind;
+    ed->ai->have_last_error = true;
+}
+
+void yew_ai_status_clear(Ed *ed)
+{
+    if (ed == NULL || ed->ai == NULL)
+        return;
+    ed->ai->last_error = YEW_AI_OK;
+    ed->ai->have_last_error = false;
+}
+
 bool yew_ai_backend_define(Ed *ed, const FlStr *name, const FlMap *config,
                            char *err, size_t errsz)
 {
@@ -131,6 +223,19 @@ const AiBackendEntry *yew_ai_backend_selected(const Ed *ed)
         value.type != (u8)YEW_OPT_STR || value.as.str.len == 0U)
         return NULL;
     return yew_ai_registry_find(&ed->ai->backends, value.as.str.s);
+}
+
+bool yew_ai_backend_name_is_remote(const Ed *ed, const char *name, u32 len)
+{
+    const AiBackendEntry *entry;
+    char selected[128];
+    if (ed == NULL || ed->ai == NULL || name == NULL || len == 0U ||
+        len >= sizeof(selected))
+        return false;
+    (void)memcpy(selected, name, len);
+    selected[len] = '\0';
+    entry = yew_ai_registry_find(&ed->ai->backends, selected);
+    return entry != NULL && !entry->backend.url.loopback;
 }
 
 void yew_ai_collect_fds(Ed *ed, struct pollfd *pfd, u32 *n)

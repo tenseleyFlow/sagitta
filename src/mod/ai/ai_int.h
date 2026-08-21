@@ -27,6 +27,9 @@ struct AiState {
     char suggestion_backend[128];
     bool curl_probe_messaged;
     bool curl_backends_waiting;
+    /* Last completed non-cancelled result, retained for the status badge. */
+    AiErrKind last_error;
+    bool have_last_error;
 };
 
 void yew_ai_command_pump(Ed *ed);

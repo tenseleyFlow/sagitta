@@ -254,7 +254,7 @@ const OptDesc yew_opts[] = {
      ai_badge_values, 0, 0, NULL, option_changed,
      "Show the AI statusline badge for local backends"},
     {"ai.badge_host_max", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(20), NULL,
-     8, 255, NULL, option_changed,
+     1, 255, NULL, option_changed,
      "Maximum remote AI hostname cells shown in the statusline badge"},
     {"ai.debug_bodies", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(false),
      NULL, 0, 0, NULL, option_changed,
@@ -412,7 +412,7 @@ static bool enum_contains(const OptDesc *desc, const OptVal *value)
     return false;
 }
 
-static bool value_validate(const OptDesc *desc, const OptVal *value,
+static bool value_validate(Ed *ed, const OptDesc *desc, const OptVal *value,
                            OptVal *normalized, const char **err)
 {
     *normalized = *value;
@@ -440,7 +440,33 @@ static bool value_validate(const OptDesc *desc, const OptVal *value,
         *err = "option string is missing its bytes";
         return false;
     }
-    return desc->validate == NULL || desc->validate(normalized, err);
+    if (desc->validate != NULL && !desc->validate(normalized, err))
+        return false;
+    if (strcmp(desc->name, "ai.badge") == 0 &&
+        value_string_is(normalized, "off")) {
+        OptVal backend;
+
+        if (yew_opt_get(ed, NULL, NULL, "ai.backend", 10U, &backend) &&
+            backend.type == (u8)YEW_OPT_STR &&
+            yew_ai_backend_name_is_remote(ed, backend.as.str.s,
+                                          backend.as.str.len)) {
+            *err = "ai.badge=off is not allowed with a remote AI backend";
+            return false;
+        }
+    }
+    if (strcmp(desc->name, "ai.backend") == 0 &&
+        normalized->type == (u8)YEW_OPT_STR &&
+        yew_ai_backend_name_is_remote(ed, normalized->as.str.s,
+                                      normalized->as.str.len)) {
+        OptVal badge;
+
+        if (yew_opt_get(ed, NULL, NULL, "ai.badge", 8U, &badge) &&
+            value_string_is(&badge, "off")) {
+            *err = "remote AI backends require ai.badge=on";
+            return false;
+        }
+    }
+    return true;
 }
 
 static Buffer *current_buffer(Ed *ed)
@@ -805,7 +831,7 @@ bool yew_opt_validate(Ed *ed, u8 scope_hint, const char *name, u32 len,
         *err = "no current window";
         return false;
     }
-    return value_validate(desc, value, &normalized, err);
+    return value_validate(ed, desc, value, &normalized, err);
 }
 
 bool yew_opt_set(Ed *ed, u8 scope_hint, const char *name, u32 len,
@@ -827,7 +853,7 @@ bool yew_opt_set(Ed *ed, u8 scope_hint, const char *name, u32 len,
     if (desc->type == (u8)YEW_OPT_ENUM &&
         normalized.type == (u8)YEW_OPT_STR)
         normalized.type = YEW_OPT_ENUM;
-    if (!value_validate(desc, value, &normalized, err))
+    if (!value_validate(ed, desc, value, &normalized, err))
         return false;
     index = desc_index(desc);
     if (ed->opt_inflight[index]) {

@@ -6,6 +6,7 @@
 #include <poll.h>
 
 #include "edit/cmd.h"
+#include "mod/ai/backend.h"
 #include "util/base.h"
 
 typedef struct Ed Ed;
@@ -34,12 +35,19 @@ bool yew_ai_state_ready(const Ed *ed);
 void yew_ai_state_key_cache_enable(Ed *ed, bool enabled);
 bool yew_ai_state_key_cache_enabled(const Ed *ed);
 
+/* Render the privacy badge without exposing AiState internals. */
+bool yew_ai_status_badge(const Ed *ed, char *out, size_t outsz,
+                         u8 *priority);
+void yew_ai_status_note(Ed *ed, AiErrKind kind);
+void yew_ai_status_clear(Ed *ed);
+
 /* Runtime backend definitions are copied immediately out of Fletch's GC. */
 bool yew_ai_backend_define(Ed *ed, const FlStr *name, const FlMap *config,
                            char *err, size_t errsz);
 u32 yew_ai_backend_count(const Ed *ed);
 const AiBackendEntry *yew_ai_backend_at(const Ed *ed, u32 index);
 const AiBackendEntry *yew_ai_backend_selected(const Ed *ed);
+bool yew_ai_backend_name_is_remote(const Ed *ed, const char *name, u32 len);
 
 /* Module-neutral event-loop hooks. */
 void yew_ai_collect_fds(Ed *ed, struct pollfd *pfd, u32 *n);

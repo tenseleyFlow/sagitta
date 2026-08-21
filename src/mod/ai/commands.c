@@ -950,6 +950,7 @@ CmdStatus yew_ai_cmd_log(CmdCtx *cx)
                                  YEW_BUF_NOUNDO | YEW_BUF_READONLY);
     if (log == NULL)
         return YEW_CMD_ERR_IO;
+    yew_ai_status_clear(cx->ed);
     yew_textbuf_delete(log->tb, (Span){0U, yew_textbuf_len(log->tb)});
     yew_textbuf_insert(log->tb, BYTEOFF(0U), cx->ed->ai->log.data,
                        (u64)cx->ed->ai->log.len);

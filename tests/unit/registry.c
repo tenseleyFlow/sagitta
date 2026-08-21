@@ -808,6 +808,8 @@ const YewTest yew_tests[] = {
     T(json_writer_structure_bugs),
 #endif
 #if YEW_WITH_AI
+    T(ai_badge_states_hosts_and_priority),
+    T(ai_badge_remote_cannot_be_hidden),
     T(ai_redact_shipped_fixture_matrix),
     T(ai_redact_false_positive_boundaries),
     T(ai_redact_prefix_suffix_line_and_first_rule),

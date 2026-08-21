@@ -49,7 +49,7 @@ void test_ai_options_have_pinned_defaults_and_bounds(void)
         {"ai.enable", YEW_OPT_BOOL, 0, false, 0, 0},
         {"ai.deny_replace", YEW_OPT_BOOL, 0, false, 0, 0},
         {"ai.exclude_replace", YEW_OPT_BOOL, 0, false, 0, 0},
-        {"ai.badge_host_max", YEW_OPT_INT, 20, false, 8, 255},
+        {"ai.badge_host_max", YEW_OPT_INT, 20, false, 1, 255},
         {"ai.debug_bodies", YEW_OPT_BOOL, 0, false, 0, 0},
         {"ai.allow_plain_remote", YEW_OPT_BOOL, 0, false, 0, 0},
         {"ai.key_cache", YEW_OPT_BOOL, 0, true, 0, 0},

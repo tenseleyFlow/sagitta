@@ -868,6 +868,11 @@ static void ai_finish(Ed *ed, AiCall *call)
     i64 total_ms = call->t_done < 0 ? -1 : call->t_done - call->t_armed;
     bool clear = kind != YEW_AI_OK && call->counted_delivery;
 
+    if (kind == YEW_AI_OK)
+        yew_ai_status_clear(ed);
+    else
+        yew_ai_status_note(ed, kind);
+
     (void)snprintf(backend, sizeof(backend), "%s", call->backend.name);
     if (call->conn != NULL) {
         yew_http_conn_callbacks(call->conn, NULL, NULL, NULL);

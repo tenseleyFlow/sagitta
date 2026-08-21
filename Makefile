@@ -370,6 +370,7 @@ UNIT_AI_SRC := tests/unit/test_ai_backend.c tests/unit/test_ai_curl.c \
                tests/unit/test_ai_frame.c tests/unit/test_ai_cancel.c \
                tests/unit/test_ai_stats.c tests/unit/test_ai_shadow_live.c \
                tests/unit/test_ai_shadow_policy.c \
+               tests/unit/test_ai_badge.c \
                tests/unit/test_ai_paths.c tests/unit/test_ai_redact.c \
                tests/unit/test_http_chunk.c tests/unit/test_http_req.c \
                tests/unit/test_http_rx.c tests/unit/test_http_url.c \

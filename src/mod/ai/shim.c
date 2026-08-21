@@ -47,6 +47,27 @@ bool yew_ai_state_key_cache_enabled(const Ed *ed)
     return ed != NULL && ed->ai != NULL && ed->ai->key_cache_enabled;
 }
 
+bool yew_ai_status_badge(const Ed *ed, char *out, size_t outsz, u8 *priority)
+{
+    (void)ed;
+    if (out != NULL && outsz != 0U)
+        out[0] = '\0';
+    if (priority != NULL)
+        *priority = 5U;
+    return false;
+}
+
+void yew_ai_status_note(Ed *ed, AiErrKind kind)
+{
+    (void)ed;
+    (void)kind;
+}
+
+void yew_ai_status_clear(Ed *ed)
+{
+    (void)ed;
+}
+
 bool yew_ai_backend_define(Ed *ed, const FlStr *name, const FlMap *config,
                            char *err, size_t errsz)
 {
@@ -73,6 +94,14 @@ const AiBackendEntry *yew_ai_backend_selected(const Ed *ed)
 {
     (void)ed;
     return NULL;
+}
+
+bool yew_ai_backend_name_is_remote(const Ed *ed, const char *name, u32 len)
+{
+    (void)ed;
+    (void)name;
+    (void)len;
+    return false;
 }
 
 void yew_ai_collect_fds(Ed *ed, struct pollfd *pfd, u32 *n)
