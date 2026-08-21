@@ -135,6 +135,10 @@ static bool context_apply_redaction(Ed *ed, Arena *arena, AiCtx *context,
     }
     if (remote && strcmp(mode, "elide") != 0) {
         context_error(err, YEW_AI_ERR_PROTOCOL, "");
+        yew_ai_block_offer(ed,
+                           ed->win == NULL || ed->win->buf == NULL ? 0U :
+                               ed->win->buf->id,
+                           hit->line_1based);
         (void)snprintf(
             err->msg, sizeof(err->msg),
             "AI request blocked: line %u matches '%s'. Nothing was sent to "

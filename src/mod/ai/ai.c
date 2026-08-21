@@ -10,10 +10,13 @@
 #include "fl/flconf.h"
 #include "mod/ai/ai_int.h"
 #include "mod/ai/key.h"
+#include "mod/ai/preset.h"
 #include "mod/ai/redact.h"
 #include "mod/ai/stats.h"
 #include "mod/ai/shadow_ai.h"
+#include "text/piece.h"
 #include "ui/message.h"
+#include "ui/win.h"
 #include "util/base.h"
 
 static bool ai_redact_policy_check(Ed *ed, const AiCtx *context,
@@ -85,6 +88,81 @@ const char *yew_ai_path_exclusion(Ed *ed, const char *path)
                               ai_relative_path(ed, path, relative), &hit))
         return NULL;
     return hit.pattern;
+}
+
+void yew_ai_block_offer(Ed *ed, u32 buf_id, u32 line_1based)
+{
+    if (ed == NULL || ed->ai == NULL || buf_id == 0U)
+        return;
+    ed->ai->blocked_buf_id = buf_id;
+    ed->ai->blocked_line_1based = line_1based == 0U ? 1U : line_1based;
+    ed->prompt = YEW_PROMPT_AI_BLOCK;
+}
+
+bool yew_ai_buffer_session_ignored(const Ed *ed, u32 buf_id)
+{
+    return ed != NULL && ed->ai != NULL && buf_id != 0U &&
+           ed->ai->ignored_buf_id == buf_id;
+}
+
+static void ai_block_clear(Ed *ed)
+{
+    ed->ai->blocked_buf_id = 0U;
+    ed->ai->blocked_line_1based = 0U;
+    yew_ed_prompt(ed, YEW_PROMPT_NONE);
+}
+
+bool yew_ai_block_prompt_key(Ed *ed, u8 answer)
+{
+    u32 buf_id;
+    u32 line_1based;
+
+    if (ed == NULL || ed->ai == NULL ||
+        ed->prompt != YEW_PROMPT_AI_BLOCK)
+        return false;
+    buf_id = ed->ai->blocked_buf_id;
+    line_1based = ed->ai->blocked_line_1based;
+    if (answer == 0x1BU) {
+        ai_block_clear(ed);
+        return true;
+    }
+    if (answer == (u8)'i') {
+        ed->ai->ignored_buf_id = buf_id;
+        ai_block_clear(ed);
+        yew_msg(ed, YEW_MSG_INFO,
+                "AI ignored for this file until yew exits");
+        return true;
+    }
+    if (answer == (u8)'p') {
+        ai_block_clear(ed);
+        if (!yew_ai_privacy_open(ed))
+            yew_msg(ed, YEW_MSG_ERROR,
+                    "could not open AI privacy page");
+        return true;
+    }
+    if (answer == (u8)'g') {
+        Win *win = ed->win;
+
+        ai_block_clear(ed);
+        if (win != NULL && win->buf != NULL && win->buf->id == buf_id &&
+            win->buf->tb != NULL && win->cs.curs.len != 0U) {
+            u64 lines = yew_textbuf_line_count(win->buf->tb);
+            LineNo line;
+            Cursor *cursor;
+
+            if ((u64)line_1based > lines)
+                line_1based = (u32)lines;
+            line = LINENO(line_1based == 0U ? 0U : line_1based - 1U);
+            cursor = &win->cs.curs.data[win->cs.primary];
+            cursor->pos = yew_textbuf_line_start(win->buf->tb, line);
+            cursor->anchor = cursor->pos;
+            cursor->goal_col = (GCol){0U};
+            yew_win_follow_cursor(win);
+            ed->full_damage = true;
+        }
+        return true;
+    }
+    return true;
 }
 
 static AiWsGrant ai_workspace_resolve(Ed *ed, bool notify)

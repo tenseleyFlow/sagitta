@@ -6,6 +6,7 @@
 #include "edit/ed.h"
 #include "edit/option.h"
 #include "fl/flruntime.h"
+#include "mod/ai/ai.h"
 #include "mod/ai/ai_int.h"
 #include "mod/ai/context.h"
 #include "unicode/utf8.h"
@@ -37,6 +38,20 @@ static bool context_contains(const u8 *haystack, u32 haystack_len,
             return true;
     }
     return false;
+}
+
+static Key context_key(u32 code)
+{
+    Key key = {0};
+
+    key.code = code;
+    key.kind = YEW_EV_KEY;
+    key.ev = YEW_KEY_PRESS;
+    if (code < 0x80U) {
+        key.ntext = 1U;
+        key.text[0] = (u8)code;
+    }
+    return key;
 }
 
 static void context_select_backend(Ed *ed, bool remote)
@@ -265,6 +280,30 @@ void test_ai_context_shipped_policy_blocks_cloud_before_prompt(void)
     YEW_ASSERT(strstr(err.msg, "[p] :ai privacy") != NULL);
     YEW_ASSERT(ed.ai->have_last_error);
     YEW_ASSERT_EQ_U64(ed.ai->last_error, YEW_AI_ERR_PROTOCOL);
+    YEW_ASSERT_EQ_U64(ed.prompt, YEW_PROMPT_AI_BLOCK);
+
+    yew_ed_handle_key(&ed, context_key((u32)'g'), 1);
+    YEW_ASSERT_EQ_U64(ed.prompt, YEW_PROMPT_NONE);
+    YEW_ASSERT_EQ_U64(ed.win->cs.curs.data[ed.win->cs.primary].pos.v, 9U);
+    YEW_ASSERT_EQ_U64(ed.win->cs.curs.data[ed.win->cs.primary].anchor.v,
+                      9U);
+
+    yew_ai_block_offer(&ed, ed.win->buf->id, 2U);
+    yew_ed_handle_key(&ed, context_key((u32)'i'), 2);
+    YEW_ASSERT_EQ_U64(ed.prompt, YEW_PROMPT_NONE);
+    YEW_ASSERT(yew_ai_buffer_session_ignored(&ed, ed.win->buf->id));
+    YEW_ASSERT(strstr(ed.msg.text, "until yew exits") != NULL);
+
+    yew_ai_block_offer(&ed, ed.win->buf->id, 2U);
+    yew_ed_handle_key(&ed, context_key(YEW_KEY_ESCAPE), 3);
+    YEW_ASSERT_EQ_U64(ed.prompt, YEW_PROMPT_NONE);
+
+    yew_ai_block_offer(&ed, ed.win->buf->id, 2U);
+    yew_ed_handle_key(&ed, context_key((u32)'p'), 4);
+    YEW_ASSERT_EQ_U64(ed.prompt, YEW_PROMPT_NONE);
+    YEW_ASSERT_NOT_NULL(ed.win->buf->name);
+    YEW_ASSERT_EQ_STR(ed.win->buf->name, "[AI Privacy]");
+    YEW_ASSERT((ed.win->buf->flags & YEW_BUF_READONLY) != 0U);
     arena_free_all(&arena);
     yew_ed_free(&ed);
 }

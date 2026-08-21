@@ -646,6 +646,10 @@ static bool ai_shadow_request(Ed *ed, const ShadowReq *request)
                                                selected->backend.name);
         return false;
     }
+    if (yew_ai_buffer_session_ignored(ed, ed->win->buf->id)) {
+        yew_ai_stats_decline(ed, selected->backend.name);
+        return false;
+    }
     if (workspace_allowed != NULL &&
         !workspace_allowed(ed, yew_ws_root(ed))) {
         yew_ai_stats_decline(ed, selected->backend.name);

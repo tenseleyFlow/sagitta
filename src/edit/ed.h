@@ -49,7 +49,8 @@ typedef enum {
      * prompt here asks about unsaved BYTES, and answering "delete a
      * cache" must never share a keystroke with those. */
     YEW_PROMPT_WS_FORGET,
-    YEW_PROMPT_WORKSPACE_TRUST
+    YEW_PROMPT_WORKSPACE_TRUST,
+    YEW_PROMPT_AI_BLOCK
 } PromptKind;
 
 typedef struct FlRuntime FlRuntime;

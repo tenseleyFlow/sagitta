@@ -1587,6 +1587,9 @@ void yew_ed_prompt(Ed *ed, PromptKind prompt)
     case YEW_PROMPT_WORKSPACE_TRUST:
         /* trust_prompt.c owns the path, fingerprint reason, and choices. */
         break;
+    case YEW_PROMPT_AI_BLOCK:
+        /* The AI module owns the matched rule, line, and action text. */
+        break;
     }
     if (prompt != YEW_PROMPT_NONE)
         ed->msg.prompt = true;
@@ -1824,6 +1827,12 @@ static bool prompt_key(Ed *ed, Key key)
                     (key.mods == 0U && code <= 0x7fU ? (u8)code : 0U);
 
         return yew_trust_prompt_key(ed, answer);
+    }
+    if (ed->prompt == YEW_PROMPT_AI_BLOCK) {
+        u8 answer = code == YEW_KEY_ESCAPE ? 0x1BU :
+                    (key.mods == 0U && code <= 0x7fU ? (u8)code : 0U);
+
+        return yew_ai_block_prompt_key(ed, answer);
     }
     if (code == YEW_KEY_ESCAPE) {
         ed->quit_after_save = false;

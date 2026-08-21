@@ -64,6 +64,11 @@ void yew_ai_workspace_session_set(Ed *ed, AiWsGrant grant);
 /* Returns the borrowed shipped/user glob that excludes path, or NULL. */
 const char *yew_ai_path_exclusion(Ed *ed, const char *path);
 
+/* A cloud secret hit owns a modal, session-local decision prompt. */
+void yew_ai_block_offer(Ed *ed, u32 buf_id, u32 line_1based);
+bool yew_ai_block_prompt_key(Ed *ed, u8 answer);
+bool yew_ai_buffer_session_ignored(const Ed *ed, u32 buf_id);
+
 /* Module-neutral event-loop hooks. */
 void yew_ai_collect_fds(Ed *ed, struct pollfd *pfd, u32 *n);
 void yew_ai_pump(Ed *ed, const struct pollfd *pfd, u32 n);

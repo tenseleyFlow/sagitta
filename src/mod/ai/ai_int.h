@@ -39,6 +39,9 @@ struct AiState {
     bool redact_off_messaged;
     bool workspace_prompted;
     bool debug_body_warned;
+    u32 blocked_buf_id;
+    u32 blocked_line_1based;
+    u32 ignored_buf_id;
     AiWsGrant session_workspace_grant;
     /* Last completed non-cancelled result, retained for the status badge. */
     AiErrKind last_error;
