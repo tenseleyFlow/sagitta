@@ -152,10 +152,18 @@ void test_ai_options_have_pinned_defaults_and_bounds(void)
 void test_ai_workspace_policy_resolves_once_per_session(void)
 {
     Ed ed;
+#if YEW_WITH_AI
     OptVal value = {YEW_OPT_STR, {.str = {"allow", 5U}}};
     const char *error = NULL;
+#endif
 
     yew_ed_init(&ed);
+#if !YEW_WITH_AI
+    YEW_ASSERT_EQ_U64(yew_ai_workspace_grant(&ed), YEW_AI_WS_DENY);
+    YEW_ASSERT(!yew_ai_workspace_allowed(&ed));
+    yew_ed_free(&ed);
+    return;
+#else
     YEW_ASSERT_EQ_U64(yew_ai_workspace_grant(&ed), YEW_AI_WS_UNSET);
     YEW_ASSERT(!yew_ai_workspace_allowed(&ed));
     YEW_ASSERT(ed.msg.active);
@@ -177,4 +185,5 @@ void test_ai_workspace_policy_resolves_once_per_session(void)
     YEW_ASSERT_EQ_U64(yew_ai_workspace_grant(&ed), YEW_AI_WS_ALLOW);
     YEW_ASSERT(yew_ai_workspace_allowed(&ed));
     yew_ed_free(&ed);
+#endif
 }
