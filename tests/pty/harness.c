@@ -584,13 +584,14 @@ void ptc_spawn(PtyCtx *c, const char *bin, ...)
         ptc_fail(c, "allocating pinned environment");
         return;
     }
-    /* Sprint 50's remote status badge needs a non-loopback URL to exercise
-     * its privacy marker.  The local-error cases select that backend only to
-     * establish error state.  Ordinary PTY children retain the transport
-     * guard; these named cases use only a local mock listener or make no
-     * request. */
+    /* Sprint 50's remote status badge and cloud opt-in need a non-loopback
+     * URL to exercise their privacy surfaces.  The local-error cases select
+     * that backend only to establish error state.  Ordinary PTY children
+     * retain the transport guard; these named cases use only a local mock
+     * listener or make no request. */
     if (strncmp(c->test->name, "ai_badge_remote_", 16U) == 0 ||
-        strncmp(c->test->name, "ai_badge_local_error_", 21U) == 0)
+        strncmp(c->test->name, "ai_badge_local_error_", 21U) == 0 ||
+        strncmp(c->test->name, "ai_optin_cloud_", 15U) == 0)
         env_remove(envp, "YEW_AI_MOCK");
     free(runtime_dir);
     (void)memset(&spec, 0, sizeof(spec));

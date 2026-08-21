@@ -5975,6 +5975,268 @@ static void case_s50_ai_badge(PtyCtx *c)
 out:
     s50_badge_finish(c, server, path, config);
 }
+
+/* ---------------------------------------------------------------- */
+/* Sprint 50: AI opt-in disclosure and cancellation contracts      */
+/* ---------------------------------------------------------------- */
+
+static const u8 s50_optin_initial_config[] =
+    "let lsp = {servers: {}}\n";
+
+static bool s50_optin_paths(PtyCtx *c, char *fixture, size_t fixture_cap,
+                            char *config, size_t config_cap,
+                            char *trust, size_t trust_cap)
+{
+    static const char workspace[] = "/tmp/yew-pty-ai-optin-workspace";
+    char state[PATH_MAX];
+    char state_yew[PATH_MAX];
+    int nf;
+    int nc;
+    int nt;
+
+    if (c->workspace_dir == NULL || c->state_dir == NULL)
+        return false;
+    if (mkdir(workspace, 0700) != 0 && errno != EEXIST)
+        return false;
+    nf = snprintf(fixture, fixture_cap, "%s/ai-optin.txt", workspace);
+    nc = snprintf(state, sizeof(state), "/tmp/yew-pty-ai-optin-xdg-%s",
+                  c->test->name);
+    nt = snprintf(state_yew, sizeof(state_yew), "%s/yew", state);
+    if (nc <= 0 || (size_t)nc >= sizeof(state) || nt <= 0 ||
+        (size_t)nt >= sizeof(state_yew) ||
+        (mkdir(state, 0700) != 0 && errno != EEXIST) ||
+        (mkdir(state_yew, 0700) != 0 && errno != EEXIST))
+        return false;
+    nc = snprintf(config, config_cap, "%s/init.fl", state_yew);
+    nt = snprintf(trust, trust_cap, "%s/trust.fl", state_yew);
+    return nf > 0 && (size_t)nf < fixture_cap &&
+           nc > 0 && (size_t)nc < config_cap &&
+           nt > 0 && (size_t)nt < trust_cap;
+}
+
+static bool s50_optin_files_unchanged(const char *config,
+                                      const char *trust)
+{
+    return file_equals(config, s50_optin_initial_config,
+                       sizeof(s50_optin_initial_config) - 1U) &&
+           access(trust, F_OK) != 0 && errno == ENOENT;
+}
+
+static bool s50_optin_open(PtyCtx *c, char *fixture, size_t fixture_cap,
+                           char *config, size_t config_cap,
+                           char *trust, size_t trust_cap)
+{
+    static const u8 initial[] = "privacy fixture\n";
+
+    if (!s50_optin_paths(c, fixture, fixture_cap, config, config_cap,
+                         trust, trust_cap)) {
+        ptc_check(c, false, "Sprint 50 opt-in path overflow");
+        return false;
+    }
+    if (!write_bytes(fixture, initial, sizeof(initial) - 1U)) {
+        ptc_check(c, false, "could not create Sprint 50 opt-in fixture");
+        return false;
+    }
+    (void)unlink(trust);
+    if (!write_bytes(config, s50_optin_initial_config,
+                     sizeof(s50_optin_initial_config) - 1U)) {
+        ptc_check(c, false, "could not seed Sprint 50 opt-in config");
+        return false;
+    }
+    {
+        char workspace[PATH_MAX];
+        char stable_state[PATH_MAX];
+        char *saved_state;
+        char *slash;
+
+        (void)snprintf(workspace, sizeof(workspace), "%s", fixture);
+        slash = strrchr(workspace, '/');
+        if (slash == NULL) {
+            ptc_check(c, false, "invalid Sprint 50 opt-in workspace path");
+            return false;
+        }
+        *slash = '\0';
+        (void)snprintf(stable_state, sizeof(stable_state), "%s", config);
+        slash = strrchr(stable_state, '/');
+        if (slash == NULL) {
+            ptc_check(c, false, "invalid Sprint 50 opt-in config path");
+            return false;
+        }
+        *slash = '\0';
+        slash = strrchr(stable_state, '/');
+        if (slash == NULL) {
+            ptc_check(c, false, "invalid Sprint 50 opt-in state path");
+            return false;
+        }
+        *slash = '\0';
+        saved_state = c->state_dir;
+        c->state_dir = stable_state;
+        ptc_set_cwd(c, workspace);
+        ptc_spawn(c, ptc_yew_bin(c), "ai-optin.txt", NULL);
+        ptc_set_cwd(c, c->workspace_dir);
+        c->state_dir = saved_state;
+    }
+    ptc_settle(c, 0);
+    ptc_wait_kitty_push(c, 21U);
+    s43_command(c, "ed.ai.enable");
+    ptc_check(c, s43_screen_contains(&c->vt, "Turn on AI completions?"),
+              "Sprint 50 opt-in step 1 is not visible");
+    ptc_check(c, s50_optin_files_unchanged(config, trust),
+              "Sprint 50 opt-in changed files before confirmation");
+    return !c->failed;
+}
+
+static void s50_optin_answer(PtyCtx *c, const char *answer)
+{
+    s18_settle_after_bytes(c, answer);
+    s18_settle_after_keys(c, "enter");
+}
+
+static void s50_optin_append_frame(PtyCtx *c, const char *label)
+{
+    bytebuf_append(&c->snapshot, label, strlen(label));
+    snapshot_write(&c->vt, &c->snapshot);
+}
+
+static void s50_optin_finish(PtyCtx *c, const char *fixture,
+                             const char *config, const char *trust)
+{
+    char workspace[PATH_MAX];
+    char *slash;
+
+    if (c->spawned)
+        s43_force_quit(c);
+    (void)unlink(fixture);
+    (void)unlink(config);
+    (void)unlink(trust);
+    (void)snprintf(workspace, sizeof(workspace), "%s", fixture);
+    slash = strrchr(workspace, '/');
+    if (slash != NULL) {
+        *slash = '\0';
+        (void)rmdir(workspace);
+    }
+}
+
+static void case_s50_ai_optin_flow(PtyCtx *c)
+{
+    bool cloud = strstr(c->test->name, "_cloud_") != NULL;
+    const char *step2 = cloud ? "Cloud model" : "Local model";
+    const char *backend = cloud ? "work" : "local";
+    char fixture[PATH_MAX] = {0};
+    char config[PATH_MAX] = {0};
+    char trust[PATH_MAX] = {0};
+
+    if (!s50_optin_open(c, fixture, sizeof(fixture), config,
+                        sizeof(config), trust, sizeof(trust)))
+        goto out;
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, c->test->name);
+
+    s50_optin_answer(c, cloud ? "2" : "1");
+    ptc_check(c, s43_screen_contains(&c->vt, step2),
+              "Sprint 50 opt-in step 2 is not visible");
+    s50_optin_append_frame(c, "--- step 2\n");
+
+    s50_optin_answer(c, cloud ? "send" : "y");
+    ptc_check(c, s43_screen_contains(&c->vt, "Enable AI for:"),
+              "Sprint 50 opt-in step 3 is not visible");
+    s50_optin_append_frame(c, "--- step 3\n");
+
+    s50_optin_answer(c, "w");
+    ptc_check(c, s43_screen_contains(&c->vt, "AI enabled."),
+              "Sprint 50 opt-in step 4 is not visible");
+    s18_settle_after_keys(c, "ctrl+g");
+    ptc_check(c, s43_screen_contains(&c->vt,
+                                     "wrote /tmp/yew-pty-ai-optin-xdg-"),
+              "Sprint 50 step 4 omitted the config write disclosure");
+    ptc_check(c, s43_screen_contains(&c->vt, "trust.fl"),
+              "Sprint 50 step 4 omitted the trust write disclosure");
+    ptc_check(c, !file_equals(config, s50_optin_initial_config,
+                              sizeof(s50_optin_initial_config) - 1U) &&
+                     file_contains(config, backend) &&
+                     file_contains(trust, "ai: \"allow\"") &&
+                     file_contains(trust,
+                                   "/tmp/yew-pty-ai-optin-workspace"),
+              "Sprint 50 step 4 file list does not match disk writes");
+    s50_optin_append_frame(c, "--- step 4\n");
+
+out:
+    s50_optin_finish(c, fixture, config, trust);
+}
+
+static void case_s50_ai_optin_escape(PtyCtx *c)
+{
+    bool cloud = strstr(c->test->name, "_cloud_") != NULL;
+    bool step2 = strstr(c->test->name, "_step2") != NULL;
+    bool step3 = strstr(c->test->name, "_step3") != NULL;
+    char fixture[PATH_MAX] = {0};
+    char config[PATH_MAX] = {0};
+    char trust[PATH_MAX] = {0};
+
+    if (!s50_optin_open(c, fixture, sizeof(fixture), config,
+                        sizeof(config), trust, sizeof(trust)))
+        goto out;
+    if (step2 || step3)
+        s50_optin_answer(c, cloud ? "2" : "1");
+    if (step3)
+        s50_optin_answer(c, cloud ? "send" : "y");
+    s18_settle_after_keys(c, "esc");
+    ptc_check(c, s50_optin_files_unchanged(config, trust),
+              "Esc from Sprint 50 opt-in changed config or trust state");
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, c->test->name);
+
+out:
+    s50_optin_finish(c, fixture, config, trust);
+}
+
+static void case_s50_ai_optin_cloud_literal_send(PtyCtx *c)
+{
+    static const char *const rejected[] = {"y", "Send", "send "};
+    char fixture[PATH_MAX] = {0};
+    char config[PATH_MAX] = {0};
+    char trust[PATH_MAX] = {0};
+    size_t i;
+
+    if (!s50_optin_open(c, fixture, sizeof(fixture), config,
+                        sizeof(config), trust, sizeof(trust)))
+        goto out;
+    for (i = 0U; i < YEW_ARRAY_LEN(rejected); i++) {
+        s50_optin_answer(c, "2");
+        s50_optin_answer(c, rejected[i]);
+        ptc_check(c, s50_optin_files_unchanged(config, trust),
+                  "non-literal cloud confirmation changed files");
+        s43_command(c, "ed.ai.enable");
+    }
+    s50_optin_answer(c, "2");
+    s50_optin_answer(c, "send");
+    ptc_check(c, s43_screen_contains(&c->vt, "Enable AI for:"),
+              "literal send did not advance the cloud opt-in flow");
+    s18_settle_after_keys(c, "esc");
+    ptc_check(c, s50_optin_files_unchanged(config, trust),
+              "literal-send cancellation changed files");
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, c->test->name);
+
+out:
+    s50_optin_finish(c, fixture, config, trust);
+}
+#else
+static void case_s50_ai_badge_module_disabled(PtyCtx *c)
+{
+    static const u8 initial[] = "AI module disabled\n";
+    char path[256];
+
+    if (!make_fixture(c, initial, sizeof(initial) - 1U, path, sizeof(path)))
+        return;
+    spawn_editor(c, path);
+    ptc_check(c, !s43_screen_contains(&c->vt, "[AI"),
+              "module-disabled build displayed an AI badge");
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, c->test->name);
+    s43_force_quit(c);
+    (void)unlink(path);
+}
 #endif
 
 /* ---------------------------------------------------------------- */
@@ -6454,6 +6716,20 @@ static void case_s47_rename_refusal(PtyCtx *c)
 
 const PtyCase yew_pty_cases[] = {
 #if YEW_WITH_AI
+    C(ai_optin_local_flow, modern, 30U, 100U, case_s50_ai_optin_flow),
+    C(ai_optin_cloud_flow, modern, 30U, 100U, case_s50_ai_optin_flow),
+    C(ai_optin_escape_step1, modern, 30U, 100U,
+      case_s50_ai_optin_escape),
+    C(ai_optin_local_escape_step2, modern, 30U, 100U,
+      case_s50_ai_optin_escape),
+    C(ai_optin_local_escape_step3, modern, 30U, 100U,
+      case_s50_ai_optin_escape),
+    C(ai_optin_cloud_escape_step2, modern, 30U, 100U,
+      case_s50_ai_optin_escape),
+    C(ai_optin_cloud_escape_step3, modern, 30U, 100U,
+      case_s50_ai_optin_escape),
+    C(ai_optin_cloud_literal_send, modern, 30U, 100U,
+      case_s50_ai_optin_cloud_literal_send),
     C(ai_badge_local_disabled_200, modern, 24U, 200U, case_s50_ai_badge),
     C(ai_badge_local_idle_200, modern, 24U, 200U, case_s50_ai_badge),
     C(ai_badge_local_streaming_200, modern, 24U, 200U, case_s50_ai_badge),
@@ -6486,6 +6762,9 @@ const PtyCase yew_pty_cases[] = {
     C(s49_ai_stream, modern, 24U, 80U, case_s49_ai_stream),
     C(s49_ai_escape_midstream, modern, 24U, 80U,
       case_s49_ai_escape_midstream),
+#else
+    C(ai_badge_module_disabled, modern, 24U, 80U,
+      case_s50_ai_badge_module_disabled),
 #endif
 #if YEW_WITH_LSP
     C(lsp_feat_rename_summary, modern, 24U, 80U,
