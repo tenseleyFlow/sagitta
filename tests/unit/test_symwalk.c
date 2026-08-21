@@ -29,10 +29,13 @@ static void sw_rm_rf(const char *path)
 
 static void sw_init(SymWalkFix *f)
 {
+    static const char root_template[] = "/tmp/yew-symwalk-XXXXXX";
     const char *path = getenv("PATH");
 
+    _Static_assert(sizeof(root_template) <= sizeof(f->root),
+                   "symwalk root template must fit");
     (void)memset(f, 0, sizeof(*f));
-    (void)snprintf(f->root, sizeof(f->root), "/tmp/yew-symwalk-XXXXXX");
+    (void)memcpy(f->root, root_template, sizeof(root_template));
     YEW_ASSERT_NOT_NULL(mkdtemp(f->root));
     if (path != NULL) {
         f->old_path = yew_xmalloc(strlen(path) + 1U);
