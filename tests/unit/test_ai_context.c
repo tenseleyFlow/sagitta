@@ -4,6 +4,9 @@
 #include <string.h>
 
 #include "edit/ed.h"
+#include "edit/option.h"
+#include "fl/flruntime.h"
+#include "mod/ai/ai_int.h"
 #include "mod/ai/context.h"
 #include "unicode/utf8.h"
 
@@ -19,6 +22,45 @@ static ShadowReq context_request(const Ed *ed, u64 at)
     request.seq = 1U;
     request.prov = YEW_SHADOW_AI;
     return request;
+}
+
+static bool context_contains(const u8 *haystack, u32 haystack_len,
+                             const char *needle)
+{
+    size_t needle_len = strlen(needle);
+    u32 i;
+
+    if (needle_len > haystack_len)
+        return false;
+    for (i = 0U; i <= haystack_len - (u32)needle_len; i++) {
+        if (memcmp(haystack + i, needle, needle_len) == 0)
+            return true;
+    }
+    return false;
+}
+
+static void context_select_backend(Ed *ed, bool remote)
+{
+    static const char source[] =
+        "import ai\n"
+        "ai.backend(\"local\", {kind: \"ollama\", "
+        "url: \"http://127.0.0.1:11434\", model: \"qwen\"})\n"
+        "ai.backend(\"cloud\", {kind: \"anthropic\", "
+        "url: \"https://api.anthropic.com\", model: \"sonnet\", "
+        "transport: \"curl\", key_env: \"ANTHROPIC_API_KEY\"})\n";
+    OptVal enabled = {YEW_OPT_BOOL, {.b = true}};
+    OptVal backend = {YEW_OPT_STR, {.str = {remote ? "cloud" : "local",
+                                            remote ? 5U : 5U}}};
+    const char *error = NULL;
+
+    YEW_ASSERT_EQ_I64(yew_fl_eval(ed, source, sizeof(source) - 1U),
+                      YEW_CMD_OK);
+    YEW_ASSERT(yew_opt_set(ed, YEW_OPT_GLOBAL, "ai.backend", 10U,
+                           &backend, &error));
+    YEW_ASSERT_NULL(error);
+    YEW_ASSERT(yew_opt_set(ed, YEW_OPT_GLOBAL, "ai.enable", 9U,
+                           &enabled, &error));
+    YEW_ASSERT_NULL(error);
 }
 
 void test_ai_context_snaps_budget_at_unicode_graphemes(void)
@@ -113,9 +155,11 @@ static bool context_redact(Ed *ed, const AiCtx *context, RedactHit *hit)
 {
     (void)ed;
     (void)context;
-    hit->lo = 1U;
-    hit->hi = 2U;
-    hit->pattern = "fixture";
+    hit->rule = "fixture";
+    hit->line_1based = 1U;
+    hit->off = BYTEOFF(1U);
+    hit->len = 1U;
+    hit->in_prefix = true;
     return true;
 }
 
@@ -134,7 +178,8 @@ void test_ai_context_redaction_is_a_hard_pre_prompt_gate(void)
     yew_ai_redact_hook_set(context_redact);
     YEW_ASSERT(!yew_ai_context_build(&ed, ed.win, &request, &arena,
                                      &context, &err));
-    YEW_ASSERT_EQ_U64(err.kind, YEW_AI_ERR_CANCELLED);
+    YEW_ASSERT_EQ_U64(err.kind, YEW_AI_ERR_PROTOCOL);
+    YEW_ASSERT(strstr(err.msg, "line 1 matches 'fixture'") != NULL);
     yew_ai_redact_hook_set(NULL);
     arena_free_all(&arena);
     yew_ed_free(&ed);
@@ -161,6 +206,62 @@ void test_ai_context_large_buffer_work_is_budget_bounded(void)
                                     &context, &err));
     YEW_ASSERT_EQ_U64(context.plen, 3072U);
     YEW_ASSERT_EQ_U64(context.slen, 0U);
+    arena_free_all(&arena);
+    yew_ed_free(&ed);
+}
+
+void test_ai_context_shipped_policy_elides_only_for_loopback(void)
+{
+    static const char source[] =
+        "before sk-0123456789abcdefghijklmnop after";
+    static const char marker[] = "<redacted:openai-key>";
+    Ed ed;
+    Arena arena;
+    AiCtx context;
+    AiErr err;
+    ShadowReq request;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_memory(&ed, (const u8 *)source,
+                                  sizeof(source) - 1U, "redact-local"));
+    context_select_backend(&ed, false);
+    request = context_request(&ed, sizeof(source) - 1U);
+    arena_init(&arena);
+    YEW_ASSERT(yew_ai_context_build(&ed, ed.win, &request, &arena,
+                                    &context, &err));
+    YEW_ASSERT_EQ_U64(err.kind, YEW_AI_OK);
+    YEW_ASSERT(context_contains(context.prefix, context.plen, marker));
+    YEW_ASSERT(!context_contains(context.prefix, context.plen,
+                                 "sk-0123456789"));
+    YEW_ASSERT(ed.msg.active);
+    YEW_ASSERT(strstr(ed.msg.text, "elided") != NULL);
+    arena_free_all(&arena);
+    yew_ed_free(&ed);
+}
+
+void test_ai_context_shipped_policy_blocks_cloud_before_prompt(void)
+{
+    static const char source[] =
+        "line one\nAuthorization: Bearer abcdefghijklmnop\n";
+    Ed ed;
+    Arena arena;
+    AiCtx context;
+    AiErr err;
+    ShadowReq request;
+
+    yew_ed_init(&ed);
+    YEW_ASSERT(yew_ed_open_memory(&ed, (const u8 *)source,
+                                  sizeof(source) - 1U, "redact-cloud"));
+    context_select_backend(&ed, true);
+    request = context_request(&ed, sizeof(source) - 1U);
+    arena_init(&arena);
+    YEW_ASSERT(!yew_ai_context_build(&ed, ed.win, &request, &arena,
+                                     &context, &err));
+    YEW_ASSERT_EQ_U64(err.kind, YEW_AI_ERR_PROTOCOL);
+    YEW_ASSERT(strstr(err.msg, "line 2 matches 'bearer-token'") != NULL);
+    YEW_ASSERT(strstr(err.msg, "api.anthropic.com") != NULL);
+    YEW_ASSERT(ed.ai->have_last_error);
+    YEW_ASSERT_EQ_U64(ed.ai->last_error, YEW_AI_ERR_PROTOCOL);
     arena_free_all(&arena);
     yew_ed_free(&ed);
 }

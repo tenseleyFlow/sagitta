@@ -87,7 +87,7 @@ static const RedactCase cases[] = {
 };
 
 static bool scan_text(const AiRedactPolicy *policy, const char *text,
-                      AiRedactHit *hit)
+                      RedactHit *hit)
 {
     AiCtx ctx;
 
@@ -108,7 +108,7 @@ void test_ai_redact_shipped_fixture_matrix(void)
     YEW_ASSERT_EQ_U64(yew_ai_redact_policy_len(policy), 16U);
     for (i = 0U; i < YEW_ARRAY_LEN(cases); i++) {
         for (j = 0U; j < 3U; j++) {
-            AiRedactHit hit;
+            RedactHit hit;
 
             if (!scan_text(policy, cases[i].positive[j], &hit))
                 (void)fprintf(stderr, "redaction fixture missed %s positive %lu\n",
@@ -149,7 +149,7 @@ void test_ai_redact_prefix_suffix_line_and_first_rule(void)
     const char prefix[] = "one\ntwo\nAKIA" "ABCDEFGHIJKLMNOP";
     const char suffix[] = "tail\nBearer abcdefghijklmnop";
     AiCtx ctx;
-    AiRedactHit hit;
+    RedactHit hit;
 
     (void)memset(&ctx, 0, sizeof(ctx));
     ctx.prefix = (const u8 *)prefix;
@@ -182,7 +182,7 @@ void test_ai_redact_user_merge_replace_and_compile_error(void)
     AiRedactError err;
     AiRedactPolicy *merged = yew_ai_redact_policy_new(user, 2U, false, &err);
     AiRedactPolicy *replaced = yew_ai_redact_policy_new(user, 1U, true, NULL);
-    AiRedactHit hit;
+    RedactHit hit;
 
     YEW_ASSERT_NOT_NULL(merged);
     YEW_ASSERT_EQ_U64(yew_ai_redact_policy_len(merged), 17U);

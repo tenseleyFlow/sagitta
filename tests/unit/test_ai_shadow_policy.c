@@ -39,8 +39,11 @@ static bool policy_redact(Ed *ed, const AiCtx *context, RedactHit *hit)
 {
     (void)ed;
     (void)context;
-    if (hit != NULL)
-        hit->hi = 1U;
+    if (hit != NULL) {
+        hit->rule = "fixture";
+        hit->line_1based = 1U;
+        hit->len = 1U;
+    }
     return true;
 }
 
@@ -151,12 +154,16 @@ static int policy_child(void)
     if (ed.msg.active || ed.ai->call.active ||
         yew_http_socket_call_count() != sockets)
         return 21;
+    entry->backend.url.loopback = false;
     yew_ai_redact_hook_set(policy_redact);
     policy_fire(&ed);
     yew_ai_redact_hook_set(NULL);
-    if (ed.msg.active || ed.ai->call.active ||
+    entry->backend.url.loopback = true;
+    if (!ed.msg.active || strstr(ed.msg.text, "line 1 matches 'fixture'") == NULL ||
+        ed.ai->call.active ||
         yew_http_socket_call_count() != sockets)
         return 22;
+    yew_msg_clear(&ed);
 
     /* Row 6: a non-newer generation cannot replace the global call. */
     ed.ai->call.active = true;

@@ -152,7 +152,7 @@ static u32 line_for_match(const AiCtx *ctx, bool prefix, u64 off)
 }
 
 static bool scan_half(const AiCompiledRule *rule, const AiCtx *ctx,
-                      bool prefix, AiRedactHit *hit)
+                      bool prefix, RedactHit *hit)
 {
     const u8 *bytes = prefix ? ctx->prefix : ctx->suffix;
     u32 len = prefix ? ctx->plen : ctx->slen;
@@ -179,7 +179,7 @@ static bool scan_half(const AiCompiledRule *rule, const AiCtx *ctx,
 }
 
 bool yew_ai_redact_scan(const AiRedactPolicy *policy, const AiCtx *ctx,
-                        AiRedactHit *hit)
+                        RedactHit *hit)
 {
     size_t i;
 

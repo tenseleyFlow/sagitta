@@ -690,6 +690,8 @@ static bool ai_shadow_request(Ed *ed, const ShadowReq *request)
     if (!yew_ai_context_build(ed, ed->win, request, &call->arena,
                               &call->context, &call->error)) {
         yew_ai_stats_decline(ed, call->backend.name);
+        if (call->error.msg[0] != '\0')
+            yew_msg(ed, YEW_MSG_WARN, "%s", call->error.msg);
         ai_call_reset(call);
         return false;
     }

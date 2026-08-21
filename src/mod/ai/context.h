@@ -27,11 +27,12 @@ typedef struct AiCtx {
     bool truncated_tail;
 } AiCtx;
 
-/* Sprint 50 extends the descriptive payload without moving the gate. */
 typedef struct RedactHit {
-    u64 lo;
-    u64 hi;
-    const char *pattern;
+    const char *rule;
+    u32 line_1based;
+    ByteOff off;
+    u32 len;
+    bool in_prefix;
 } RedactHit;
 
 typedef bool (*AiRedactCheck)(Ed *ed, const AiCtx *ctx, RedactHit *hit);

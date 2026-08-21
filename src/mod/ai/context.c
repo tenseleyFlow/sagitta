@@ -7,7 +7,10 @@
 #include "edit/buf.h"
 #include "edit/ed.h"
 #include "edit/option.h"
+#include "mod/ai/ai.h"
+#include "mod/ai/ai_int.h"
 #include "text/piece.h"
+#include "ui/message.h"
 #include "ui/win.h"
 #include "unicode/grapheme.h"
 #include "unicode/utf8.h"
@@ -54,6 +57,105 @@ static u32 context_option(Ed *ed, Buffer *buf, Win *win,
         (u64)value.as.i <= UINT_MAX)
         return (u32)value.as.i;
     return fallback;
+}
+
+static bool context_enabled(Ed *ed)
+{
+    OptVal value;
+
+    return yew_opt_get(ed, NULL, NULL, "ai.enable", 9U, &value) &&
+           value.type == (u8)YEW_OPT_BOOL && value.as.b;
+}
+
+static const char *context_redact_mode(Ed *ed)
+{
+    OptVal value;
+
+    if (yew_opt_get(ed, NULL, NULL, "ai.on_redact", 12U, &value) &&
+        value.type == (u8)YEW_OPT_ENUM && value.as.str.s != NULL)
+        return value.as.str.s;
+    return "block";
+}
+
+static bool context_elide(Arena *arena, const char *rule, ByteOff off,
+                          u32 hit_len, const u8 **bytes, u32 *len)
+{
+    char replacement[96];
+    int printed;
+    size_t replacement_len;
+    size_t before;
+    size_t after;
+    size_t total;
+    u8 *copy;
+
+    if (arena == NULL || bytes == NULL || len == NULL || *bytes == NULL ||
+        off.v > *len || hit_len > *len - off.v)
+        return false;
+    printed = snprintf(replacement, sizeof(replacement), "<redacted:%s>",
+                       rule == NULL ? "secret" : rule);
+    if (printed < 0)
+        return false;
+    replacement_len = (size_t)printed < sizeof(replacement) ?
+                      (size_t)printed : sizeof(replacement) - 1U;
+    before = (size_t)off.v;
+    after = (size_t)*len - before - hit_len;
+    if (before > UINT32_MAX - replacement_len ||
+        before + replacement_len > UINT32_MAX - after)
+        return false;
+    total = before + replacement_len + after;
+    copy = arena_alloc(arena, total == 0U ? 1U : total, 1U);
+    if (before != 0U)
+        (void)memcpy(copy, *bytes, before);
+    (void)memcpy(copy + before, replacement, replacement_len);
+    if (after != 0U)
+        (void)memcpy(copy + before + replacement_len,
+                     *bytes + before + hit_len, after);
+    *bytes = copy;
+    *len = (u32)total;
+    return true;
+}
+
+static bool context_apply_redaction(Ed *ed, Arena *arena, AiCtx *context,
+                                    const RedactHit *hit, AiErr *err)
+{
+    const AiBackendEntry *entry = yew_ai_backend_selected(ed);
+    const char *mode = context_redact_mode(ed);
+    bool remote = entry == NULL || !entry->backend.url.loopback;
+    const char *host = entry == NULL || entry->backend.url.host == NULL ?
+                       "the selected backend" : entry->backend.url.host;
+    const char *rule = hit->rule == NULL ? "secret" : hit->rule;
+
+    if (strcmp(mode, "off") == 0) {
+        if (ed->ai != NULL && !ed->ai->redact_off_messaged) {
+            yew_msg(ed, YEW_MSG_WARN,
+                    "AI secret redaction is off; deny rules will not fire");
+            ed->ai->redact_off_messaged = true;
+        }
+        return true;
+    }
+    if (remote && strcmp(mode, "elide") != 0) {
+        context_error(err, YEW_AI_ERR_PROTOCOL, "");
+        (void)snprintf(
+            err->msg, sizeof(err->msg),
+            "AI request blocked: line %u matches '%s'. Nothing was sent to %s.",
+            hit->line_1based, rule, host);
+        yew_ai_status_note(ed, YEW_AI_ERR_PROTOCOL);
+        return false;
+    }
+    if (!context_elide(arena, rule, hit->off, hit->len,
+                       hit->in_prefix ? &context->prefix : &context->suffix,
+                       hit->in_prefix ? &context->plen : &context->slen)) {
+        context_error(err, YEW_AI_ERR_PROTOCOL,
+                      "AI redaction produced an invalid context span");
+        yew_ai_status_note(ed, YEW_AI_ERR_PROTOCOL);
+        return false;
+    }
+    if (ed->ai != NULL && !ed->ai->redact_elide_messaged) {
+        yew_msg(ed, YEW_MSG_INFO,
+                "AI elided text matching '%s' before sending locally", rule);
+        ed->ai->redact_elide_messaged = true;
+    }
+    return true;
 }
 
 static bool text_copy(const TextBuf *tb, u64 lo, u64 hi, u8 *dst)
@@ -232,6 +334,16 @@ bool yew_ai_context_build(Ed *ed, Win *win, const ShadowReq *request,
         context_error(err, YEW_AI_ERR_PROTOCOL, "invalid AI context request");
         return false;
     }
+    /* Independent backend gate: configuration may enable AI before a
+     * backend has been selected; never build or redact context in that
+     * state.  This is intentionally redundant with shadow_ai's request
+     * gate so new callers cannot accidentally construct outbound context. */
+    if (context_enabled(ed) &&
+        yew_ai_backend_selected(ed) == NULL) {
+        context_error(err, YEW_AI_ERR_CANCELLED,
+                      "AI context declined: no backend selected");
+        return false;
+    }
     total = yew_textbuf_len(buf->tb);
     cursor = request->pos.v;
     if (request->buf_id != buf->id || cursor > total) {
@@ -263,11 +375,9 @@ bool yew_ai_context_build(Ed *ed, Win *win, const ShadowReq *request,
 
     /* Sprint 50 owns the patterns and block/elide policy.  This remains the
      * only redaction call site, before prompt construction can begin. */
-    if (yew_ai_redact_check(ed, out, &hit)) {
-        context_error(err, YEW_AI_ERR_CANCELLED,
-                      "AI context declined by redaction policy");
+    if (yew_ai_redact_check(ed, out, &hit) &&
+        !context_apply_redaction(ed, arena, out, &hit, err))
         return false;
-    }
     context_error(err, YEW_AI_OK, "");
     return true;
 }

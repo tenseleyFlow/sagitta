@@ -4,6 +4,7 @@
 #include "mod/ai/backend_curl.h"
 #include "mod/ai/http.h"
 #include "mod/ai/key.h"
+#include "mod/ai/redact.h"
 #include "mod/ai/registry.h"
 #include "mod/ai/shadow_ai.h"
 #include "mod/ai/stats.h"
@@ -19,6 +20,8 @@ struct AiState {
     Bytebuf log;
     AiCommandCall *command_call;
     AiStatsState *stats;
+    AiRedactPolicy *redact;
+    AiPathPolicy *paths;
     AiCall call;
     u32 retired_jobs[YEW_JOB_MAX];
     u32 nretired_jobs;
@@ -27,6 +30,8 @@ struct AiState {
     char suggestion_backend[128];
     bool curl_probe_messaged;
     bool curl_backends_waiting;
+    bool redact_elide_messaged;
+    bool redact_off_messaged;
     /* Last completed non-cancelled result, retained for the status badge. */
     AiErrKind last_error;
     bool have_last_error;

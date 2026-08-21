@@ -8,10 +8,24 @@
 #include "edit/option.h"
 #include "mod/ai/ai_int.h"
 #include "mod/ai/key.h"
+#include "mod/ai/redact.h"
 #include "mod/ai/stats.h"
 #include "mod/ai/shadow_ai.h"
 #include "ui/message.h"
 #include "util/base.h"
+
+static bool ai_redact_policy_check(Ed *ed, const AiCtx *context,
+                                   RedactHit *hit)
+{
+    return ed != NULL && ed->ai != NULL &&
+           yew_ai_redact_scan(ed->ai->redact, context, hit);
+}
+
+static bool ai_path_policy_check(Ed *ed, const char *path)
+{
+    return ed != NULL && ed->ai != NULL &&
+           yew_ai_path_excluded(ed->ai->paths, path, NULL);
+}
 
 static bool backend_prepare(void *ctx, const char *url_text, HttpUrl *url,
                             u8 transport, void **endpoint, char *err,
@@ -48,6 +62,12 @@ void yew_ai_state_init(Ed *ed)
     yew_ai_curl_probe_init(&state->curl);
     bytebuf_init(&state->log);
     state->stats = yew_ai_stats_new();
+    state->redact = yew_ai_redact_policy_new(NULL, 0U, false, NULL);
+    state->paths = yew_ai_path_policy_new(NULL, 0U, false, NULL);
+    if (state->redact == NULL || state->paths == NULL)
+        YEW_BUG("failed to install shipped AI privacy policy");
+    yew_ai_redact_hook_set(ai_redact_policy_check);
+    yew_ai_path_policy_set(ai_path_policy_check);
     state->last_deliver_ms = -1;
     bytebuf_append(&state->log, "AI transport log\n", 17U);
 }
@@ -66,6 +86,8 @@ void yew_ai_state_free(Ed *ed)
     yew_http_state_free(state->http);
     yew_ai_key_cache_drop(&state->keys);
     yew_ai_stats_free(ed, state->stats);
+    yew_ai_redact_policy_free(state->redact);
+    yew_ai_path_policy_free(state->paths);
     bytebuf_free(&state->log);
     ed->ai = NULL;
     free(state);

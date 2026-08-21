@@ -40,14 +40,6 @@ typedef struct AiRedactError {
     u32 pattern_off;
 } AiRedactError;
 
-typedef struct AiRedactHit {
-    const char *rule;
-    u32 line_1based;
-    ByteOff off;
-    u32 len;
-    bool in_prefix;
-} AiRedactHit;
-
 /* User rows append after the shipped set unless replace is true.  An
  * invalid user row is reported through err and skipped; it never disables
  * shipped protection.  The first invalid row is reported while later valid
@@ -58,7 +50,7 @@ AiRedactPolicy *yew_ai_redact_policy_new(const AiRedactSpec *user,
 void yew_ai_redact_policy_free(AiRedactPolicy *policy);
 size_t yew_ai_redact_policy_len(const AiRedactPolicy *policy);
 bool yew_ai_redact_scan(const AiRedactPolicy *policy, const AiCtx *ctx,
-                        AiRedactHit *hit);
+                        RedactHit *hit);
 
 typedef struct AiPathError {
     const char *pattern;
