@@ -472,6 +472,7 @@ FUZZ_LSP_MSG_OBJ := $(BUILD)/tests/fuzz/fuzz_lsp_msg.o
 FUZZ_LSP_RESP_OBJ := $(BUILD)/tests/fuzz/fuzz_lsp_resp.o
 FUZZ_HTTP_OBJ := $(BUILD)/tests/fuzz/fuzz_http.o
 FUZZ_AI_STREAM_OBJ := $(BUILD)/tests/fuzz/fuzz_ai_stream.o
+FUZZ_AI_SHADOW_OBJ := $(BUILD)/tests/fuzz/fuzz_ai_shadow.o
 LSP_LIVE_OBJ := $(BUILD)/tests/lsp/test_clangd_live.o
 LSP_LIVE_BIN := $(BUILD)/tests/lsp/test_clangd_live
 RE_REF_OBJ := $(BUILD)/tests/fuzz/re_ref.o
@@ -775,6 +776,10 @@ $(BUILD)/fuzz_ai_stream: $(FUZZ_LINK_OBJ) $(FUZZ_AI_STREAM_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_AI_STREAM_OBJ) $(LDLIBS)
 
+$(BUILD)/fuzz_ai_shadow: $(FUZZ_LINK_OBJ) $(FUZZ_AI_SHADOW_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
+		$(FUZZ_AI_SHADOW_OBJ) $(LDLIBS)
+
 $(LSP_LIVE_BIN): $(FUZZ_CORE_OBJ) $(LSP_LIVE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) \
 		$(LSP_LIVE_OBJ) $(LDLIBS)
@@ -1016,9 +1021,11 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
 		$(BUILD)/fuzz_input --seconds=$(FUZZ_SECONDS) --seed=$(FUZZ_SEED); \
 	fi
 
-fuzz-ai: $(BUILD)/fuzz_http $(BUILD)/fuzz_ai_stream
+fuzz-ai: $(BUILD)/fuzz_http $(BUILD)/fuzz_ai_stream \
+         $(BUILD)/fuzz_ai_shadow
 	$(BUILD)/fuzz_http --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_ai_stream --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+	$(BUILD)/fuzz_ai_shadow --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 
 fuzz-groups: $(BUILD)/fuzz_groups
 	@set -eu; \
