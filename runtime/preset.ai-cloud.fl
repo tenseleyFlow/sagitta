@@ -1,29 +1,66 @@
 # yew AI preset — CLOUD models (Anthropic / OpenAI-compatible).
-# READ :ai privacy FIRST. File context is sent to the configured service.
-# Requires curl for HTTPS transport. No API key is stored in this file.
+#
+# READ :ai privacy FIRST.  Loading this file arranges for parts of the
+# files you edit to be sent over the internet to a company's servers.
+#
+# Requires curl (any TLS work happens there, not in yew):
+#     curl --version      # need >= 7.63
+#
+# Your API key is NEVER written in this file or in init.fl.  init.fl gets
+# pasted into bug reports and committed to dotfile repos; a key in it is a
+# key you will rotate in a hurry someday.  Name an environment variable,
+# or a command that prints the key.
 
 import ai
 
 ai.backend("work", {
-    kind: "anthropic",
-    url: "https://api.anthropic.com",
-    model: "claude-sonnet-4-6",
-    transport: "curl",
-    key_env: "ANTHROPIC_API_KEY",
-    max_tokens: 256,
-    stream: true,
+    kind:      "anthropic",
+    url:       "https://api.anthropic.com",
+    model:     "claude-sonnet-4-6",
+    transport: "curl",                     # https always means curl
+
+    key_env:   "ANTHROPIC_API_KEY",        # export it from your shell rc,
+                                           # or:
+    # key_cmd: ["pass", "show", "api/anthropic"],   # argv array, no shell
+    # key_cmd: ["security", "find-generic-password", "-w", "-s", "anthropic"],
+
+    max_tokens: 256,                       # the Messages API requires it
+    stream:     true,
 })
+
+# An OpenAI-compatible endpoint (OpenAI, OpenRouter, vLLM, LM Studio):
+# ai.backend("oai", {
+#     kind: "openai", url: "https://api.openai.com",
+#     model: "gpt-4.1-mini", transport: "curl",
+#     key_env: "OPENAI_API_KEY",
+# })
 
 set({
-    "ai.enable": true,
+    "ai.enable":  true,
     "ai.backend": "work",
+
+    # Deliberately conservative, and each number is a decision:
+
+    # Half the local context.  Every byte here is a byte that leaves the
+    # machine and that you are billed for on the way in.
     "ai.context_bytes": 2048,
+
+    # A network round trip is not a keystroke.  600 ms means you have
+    # genuinely paused, not drawn breath between two words.
     "shadow.ai_debounce_ms": 600,
+
+    # Shorter answers: an 8-line cloud completion you reject cost real
+    # money, and the accept rate on long completions is poor (:ai stats).
     "ai.max_tokens": 192,
-    "ai.max_lines": 4,
+    "ai.max_lines":  4,
+
     "ai.temperature": 10,
+
+    # BLOCK, not elide.  A secret must never leave this machine, and a
+    # scrubber that is 99% right leaks on the hundredth file.
     "ai.on_redact": "block",
+
+    # Ask per workspace.  A cloud grant for your own scratch repo is not a
+    # grant for your employer's.
     "ai.default_workspace": "ask",
 })
-
-# Cloud redaction blocks requests containing secrets; it never scrubs-and-sends.

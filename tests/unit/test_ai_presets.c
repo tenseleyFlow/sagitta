@@ -126,7 +126,8 @@ static bool preset_default_integer(const char *comment, const char *word,
     return parsed_end == p;
 }
 
-static u32 preset_assert_source_options(Ed *ed, const char *source)
+static u32 preset_assert_source_options(Ed *ed, const char *source,
+                                        u32 *default_count)
 {
     const char *body = strstr(source, "set({");
     const char *end;
@@ -163,6 +164,7 @@ static u32 preset_assert_source_options(Ed *ed, const char *source)
             YEW_ASSERT(preset_default_integer(comment, default_word,
                                               &claimed));
             YEW_ASSERT_EQ_I64(claimed, desc->dflt.as.i);
+            (*default_count)++;
         }
         line = line_end < end ? line_end + 1 : end;
     }
@@ -179,6 +181,31 @@ static const char *preset_selected(Ed *ed)
     return value.as.str.s;
 }
 
+static void preset_assert_load(Ed *ed, const char *name)
+{
+    const char *diag;
+
+    if (yew_ai_preset_load(ed, name))
+        return;
+    diag = fl_runtime_last_diag(ed->fl, NULL);
+    yew_test_fail(__FILE__, __LINE__,
+                  diag == NULL ? "AI preset failed without a diagnostic" :
+                                 diag);
+}
+
+static void preset_assert_annotations(const char *local, const char *cloud)
+{
+    YEW_ASSERT_NOT_NULL(strstr(local, "# Model sizing, honestly:"));
+    YEW_ASSERT_NOT_NULL(strstr(local, "~60-120 tok/s"));
+    YEW_ASSERT_NOT_NULL(strstr(local, "350 ms default"));
+    YEW_ASSERT_NOT_NULL(strstr(local, "\"ai.fim\":           \"auto\""));
+    YEW_ASSERT_NOT_NULL(strstr(cloud, "key_cmd: [\"pass\", \"show\""));
+    YEW_ASSERT_NOT_NULL(strstr(cloud, "find-generic-password"));
+    YEW_ASSERT_NOT_NULL(strstr(cloud, "# An OpenAI-compatible endpoint"));
+    YEW_ASSERT_NOT_NULL(strstr(cloud, "gpt-4.1-mini"));
+    YEW_ASSERT_NOT_NULL(strstr(cloud, "# BLOCK, not elide."));
+}
+
 void test_ai_presets_parse_execute_and_replace_selection(void)
 {
     Ed ed;
@@ -189,6 +216,7 @@ void test_ai_presets_parse_execute_and_replace_selection(void)
     AiErr error;
     bool key_ok;
     int restore_rc;
+    u32 default_count = 0U;
     char *local_source = preset_source("runtime/preset.ai-local.fl");
     char *cloud_source = preset_source("runtime/preset.ai-cloud.fl");
 
@@ -197,19 +225,23 @@ void test_ai_presets_parse_execute_and_replace_selection(void)
         (void)strcpy(saved_key, old_key);
     }
 
+    preset_assert_annotations(local_source, cloud_source);
     yew_ed_init(&ed);
-    YEW_ASSERT(yew_ai_preset_load(&ed, "local"));
+    preset_assert_load(&ed, "local");
     YEW_ASSERT_NULL(fl_runtime_last_diag(ed.fl, NULL));
-    YEW_ASSERT(preset_assert_source_options(&ed, local_source) >= 1U);
+    YEW_ASSERT(preset_assert_source_options(&ed, local_source,
+                                            &default_count) >= 1U);
     YEW_ASSERT_EQ_STR(preset_selected(&ed), "local");
     YEW_ASSERT_EQ_U64(yew_ai_backend_count(&ed), 1U);
     selected = yew_ai_backend_selected(&ed);
     YEW_ASSERT_NOT_NULL(selected);
     YEW_ASSERT(selected->backend.url.loopback);
     YEW_ASSERT_NOT_NULL(yew_ai_registry_find(&ed.ai->backends, "local"));
-    YEW_ASSERT(yew_ai_preset_load(&ed, "cloud"));
+    preset_assert_load(&ed, "cloud");
     YEW_ASSERT_NULL(fl_runtime_last_diag(ed.fl, NULL));
-    YEW_ASSERT(preset_assert_source_options(&ed, cloud_source) >= 1U);
+    YEW_ASSERT(preset_assert_source_options(&ed, cloud_source,
+                                            &default_count) >= 1U);
+    YEW_ASSERT(default_count > 0U);
     YEW_ASSERT_EQ_STR(preset_selected(&ed), "work");
     YEW_ASSERT_EQ_U64(yew_ai_backend_count(&ed), 1U);
     selected = yew_ai_backend_selected(&ed);

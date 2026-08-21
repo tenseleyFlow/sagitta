@@ -1,27 +1,57 @@
 # yew AI preset — LOCAL models (ollama).
 #
-# Nothing in this file causes anything to leave your machine: every request
-# goes to a loopback socket. Load with :ai preset local or import this file.
-# Requires: ollama serve; ollama pull qwen2.5-coder:7b
+# Nothing in this file causes anything to leave your machine: every
+# request goes to a loopback socket.  Load it with:
+#     :ai preset local
+# or, in init.fl:
+#     import "preset.ai-local"
+#
+# Requires ollama running:  ollama serve
+# Then pull a completion model:
+#     ollama pull qwen2.5-coder:7b      # the recommendation below
 
 import ai
 
 ai.backend("local", {
-    kind: "ollama",
-    url: "http://127.0.0.1:11434",
+    kind:  "ollama",
+    url:   "http://127.0.0.1:11434",   # loopback only; no TLS, no wire
     model: "qwen2.5-coder:7b",
+    # ai.fim: "auto" below picks fill-in-the-middle when the model family
+    # supports it (Sprint 49 §3's table).  FIM models see the code AFTER
+    # your cursor too, which is most of why local completion feels good.
     stream: true,
 })
 
+# Model sizing, honestly:
+#   1.5B  ~0.6 GB  instant, and about as smart as it sounds
+#   7B    ~4.5 GB  the sweet spot: ~60-120 tok/s on a modern GPU,
+#                  ~10-20 tok/s CPU-only, which is usable but not brisk
+#   14B+  ~9 GB+   noticeably better completions, first token past 300 ms
+#                  on most hardware -- past the point where a ghost feels
+#                  like it appeared rather than arrived
+# If :ai stats shows a p50 first token above ~250 ms, drop a size class
+# before you touch any other setting.
+
 set({
-    "ai.enable": true,
-    "ai.backend": "local",
+    "ai.enable":        true,
+    "ai.backend":       "local",
+
+    # A local model costs watts, not dollars, and the round trip is short,
+    # so we can afford to ask sooner than the 350 ms default.
     "shadow.ai_debounce_ms": 250,
+
+    # Local means the whole 4 KiB context is free.  Cloud does not.
     "ai.context_bytes": 4096,
-    "ai.max_tokens": 256,
-    "ai.max_lines": 8,
-    "ai.temperature": 10,
-    "ai.fim": "auto",
+    "ai.max_tokens":    256,
+    "ai.max_lines":     8,
+
+    # Low temperature: this is code completion, not brainstorming.  At 0.0
+    # some models loop; 0.10 is the lowest value that reliably does not.
+    "ai.temperature":   10,          # tenths of a percent x10 -> 0.10
+    "ai.fim":           "auto",
 })
 
-# Redaction remains enabled; loopback hits may be elided by policy.
+# Redaction still runs.  On a loopback backend a hit elides the span
+# instead of blocking, because nothing is being disclosed -- see
+# :ai privacy.  Leave this alone unless you have read that page.
+# set({ ai.on_redact: "elide" })
