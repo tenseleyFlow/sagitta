@@ -18,6 +18,7 @@
 #include "ui/message.h"
 #include "ui/win.h"
 #include "util/base.h"
+#include "util/log.h"
 
 static bool ai_redact_policy_check(Ed *ed, const AiCtx *context,
                                    RedactHit *hit)
@@ -288,6 +289,45 @@ void yew_ai_policy_options_changed(Ed *ed)
 {
     if (ed != NULL && ed->ai != NULL)
         ed->ai->policy_options_loaded = false;
+}
+
+void yew_ai_redact_option_changed(Ed *ed)
+{
+    OptVal value;
+    Bytebuf warning;
+    size_t i;
+    size_t nrules;
+
+    if (ed == NULL || ed->ai == NULL || ed->ai->redact_off_messaged ||
+        !yew_opt_get(ed, NULL, NULL, "ai.on_redact", 12U, &value) ||
+        value.type != (u8)YEW_OPT_ENUM || value.as.str.s == NULL ||
+        value.as.str.len != 3U || memcmp(value.as.str.s, "off", 3U) != 0)
+        return;
+    yew_ai_policy_ensure(ed);
+    bytebuf_init(&warning);
+    bytebuf_append(&warning,
+                   "AI secret redaction is off; these deny rules will not "
+                   "fire: ",
+                   sizeof("AI secret redaction is off; these deny rules "
+                          "will not fire: ") - 1U);
+    nrules = yew_ai_redact_policy_len(ed->ai->redact);
+    for (i = 0U; i < nrules; i++) {
+        const char *name =
+            yew_ai_redact_policy_rule_name(ed->ai->redact, i);
+
+        if (i != 0U)
+            bytebuf_append(&warning, ", ", 2U);
+        bytebuf_push_u8(&warning, (u8)'\'');
+        bytebuf_append(&warning, name, strlen(name));
+        bytebuf_push_u8(&warning, (u8)'\'');
+    }
+    if (nrules == 0U)
+        bytebuf_append(&warning, "(none active)", 13U);
+    bytebuf_push_u8(&warning, 0U);
+    yew_log(YEW_LOG_WARN, "%s", (const char *)warning.data);
+    yew_msg(ed, YEW_MSG_WARN, "%s", (const char *)warning.data);
+    bytebuf_free(&warning);
+    ed->ai->redact_off_messaged = true;
 }
 
 static bool ai_bool(const Ed *ed, const char *name, bool fallback)

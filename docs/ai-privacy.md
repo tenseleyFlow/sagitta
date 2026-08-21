@@ -50,24 +50,24 @@ even when debug-body logging is explicitly enabled.
 Only the prefix and suffix that would be transmitted are scanned. The shipped
 rules are:
 
-| Rule | Detects |
-|---|---|
-| `aws-access-key` | documented AWS access-key identifiers |
-| `aws-secret` | a labelled 40-character AWS secret |
-| `pem-private-key` | PEM private-key headers |
-| `ssh-private-key` | pasted `ssh-rsa` private-key blobs |
-| `bearer-token` | bearer authorization tokens |
-| `authorization-header` | credential-bearing authorization assignments |
-| `jwt` | three-part JSON web tokens |
-| `env-assignment` | secret-named `.env` assignments |
-| `conn-string-creds` | URLs containing `user:password@host` |
-| `github-token` | GitHub token families |
-| `slack-token` | Slack token families |
-| `google-api-key` | Google API keys |
-| `openai-key` | OpenAI-compatible keys |
-| `anthropic-key` | Anthropic keys |
-| `private-key-var` | long private-key string literals |
-| `htpasswd-bcrypt` | bcrypt credential hashes |
+| Rule | Regex | Detects |
+|---|---|---|
+| `aws-access-key` | `\b(A3T[A-Z0-9]\|AKIA\|ASIA\|ABIA\|ACCA\|AGPA\|AIDA\|AIPA\|ANPA\|ANVA\|AROA)[A-Z0-9]{16}\b` | documented AWS access-key identifiers |
+| `aws-secret` | `(?i:aws_?secret_?access_?key)[^\n]{0,20}[:=][^\n]{0,4}[A-Za-z0-9/+=]{40}` | a labelled 40-character AWS secret |
+| `pem-private-key` | `-----BEGIN [A-Z0-9 ]{0,32}PRIVATE KEY-----` | PEM private-key headers |
+| `ssh-private-key` | `\bssh-rsa AAAA[A-Za-z0-9+/]{100,}` | pasted `ssh-rsa` private-key blobs |
+| `bearer-token` | `(?i:bearer)[ \t]+[A-Za-z0-9._~+/-]{16,}={0,2}` | bearer authorization tokens |
+| `authorization-header` | `(?i:authorization)[ \t]*[:=][ \t]*["']?[A-Za-z0-9._~+/-]{16,}` | credential-bearing authorization assignments |
+| `jwt` | `\beyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}\b` | three-part JSON web tokens |
+| `env-assignment` | `(?i:^[ \t]*(export[ \t]+)?[A-Za-z_][A-Za-z0-9_]*(SECRET\|TOKEN\|PASSWORD\|PASSWD\|PRIVATE_KEY\|API_?KEY\|CREDENTIAL)[A-Za-z0-9_]*[ \t]*=[ \t]*["']?[^\n"' \t]{8,})` | secret-named `.env` assignments |
+| `conn-string-creds` | `\b[a-z][a-z0-9+.-]{1,31}://[^\n/:@ ]{1,64}:[^\n/@ ]{1,128}@` | URLs containing `user:password@host` |
+| `github-token` | `\bgh[pousr]_[A-Za-z0-9]{36,255}\b` | GitHub token families |
+| `slack-token` | `\bxox[baprs]-[A-Za-z0-9-]{10,}\b` | Slack token families |
+| `google-api-key` | `\bAIza[A-Za-z0-9_-]{35}\b` | Google API keys |
+| `openai-key` | `\bsk-[A-Za-z0-9_-]{20,}\b` | OpenAI-compatible keys |
+| `anthropic-key` | `\bsk-ant-[A-Za-z0-9_-]{20,}\b` | Anthropic keys |
+| `private-key-var` | `(?i:private_?key)[ \t]*[:=][ \t]*["'][^\n"']{32,}` | long private-key string literals |
+| `htpasswd-bcrypt` | `\$2[aby]?\$[0-9]{2}\$[A-Za-z0-9./]{53}` | bcrypt credential hashes |
 
 On a cloud backend, a match blocks the whole request before a request body is
 built or a transport starts. yew reports the rule and line; it does not scrub

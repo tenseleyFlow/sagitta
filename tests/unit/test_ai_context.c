@@ -304,6 +304,31 @@ void test_ai_context_shipped_policy_blocks_cloud_before_prompt(void)
     YEW_ASSERT_NOT_NULL(ed.win->buf->name);
     YEW_ASSERT_EQ_STR(ed.win->buf->name, "[AI Privacy]");
     YEW_ASSERT((ed.win->buf->flags & YEW_BUF_READONLY) != 0U);
+    {
+        const char *option_error = NULL;
+        OptVal off = {YEW_OPT_STR, {.str = {"off", 3U}}};
+        OptVal block = {YEW_OPT_STR, {.str = {"block", 5U}}};
+
+        yew_test_capture_log();
+        YEW_ASSERT(yew_opt_set(&ed, YEW_OPT_GLOBAL, "ai.on_redact", 12U,
+                               &off, &option_error));
+        YEW_ASSERT_NULL(option_error);
+        YEW_ASSERT_EQ_U64(yew_test_log_count(), 1U);
+        YEW_ASSERT(yew_test_log_contains(YEW_LOG_WARN,
+                                         "redaction is off"));
+        YEW_ASSERT(yew_test_log_contains(YEW_LOG_WARN,
+                                         "'aws-access-key'"));
+        YEW_ASSERT(yew_test_log_contains(YEW_LOG_WARN,
+                                         "'htpasswd-bcrypt'"));
+        YEW_ASSERT(ed.msg.active);
+        YEW_ASSERT_EQ_U64(ed.msg.sev, YEW_MSG_WARN);
+        YEW_ASSERT(strstr(ed.msg.text, "'openai-key'") != NULL);
+        YEW_ASSERT(yew_opt_set(&ed, YEW_OPT_GLOBAL, "ai.on_redact", 12U,
+                               &block, &option_error));
+        YEW_ASSERT(yew_opt_set(&ed, YEW_OPT_GLOBAL, "ai.on_redact", 12U,
+                               &off, &option_error));
+        YEW_ASSERT_EQ_U64(yew_test_log_count(), 1U);
+    }
     arena_free_all(&arena);
     yew_ed_free(&ed);
 }

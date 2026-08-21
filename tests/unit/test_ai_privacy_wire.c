@@ -1,5 +1,6 @@
 #include "harness.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #include "mod/ai/http.h"
@@ -18,6 +19,118 @@ static const char wire_path[] = "src/wire_fixture.c";
 static const char wire_language[] = "wirelang";
 static const char wire_model[] = "wire-model-5D63";
 static const char wire_api_key[] = "YEW_WIRE_API_KEY_4E72";
+
+enum WireDocField {
+    WIRE_DOC_PREFIX = 1U << 0,
+    WIRE_DOC_SUFFIX = 1U << 1,
+    WIRE_DOC_PATH = 1U << 2,
+    WIRE_DOC_LANGUAGE = 1U << 3,
+    WIRE_DOC_GENERATION = 1U << 4,
+    WIRE_DOC_USER_AGENT = 1U << 5,
+    WIRE_DOC_API_KEY = 1U << 6,
+    WIRE_DOC_ANYTHING_ELSE = 1U << 7
+};
+
+typedef struct WireDocInventory {
+    u32 rows;
+    u32 local;
+    u32 cloud;
+} WireDocInventory;
+
+static bool wire_cell_eq(const char *lo, const char *hi, const char *text)
+{
+    size_t len;
+
+    while (lo < hi && (*lo == ' ' || *lo == '\t' || *lo == '`'))
+        lo++;
+    while (hi > lo && (hi[-1] == ' ' || hi[-1] == '\t' ||
+                       hi[-1] == '`' || hi[-1] == '\r' ||
+                       hi[-1] == '\n'))
+        hi--;
+    len = (size_t)(hi - lo);
+    return strlen(text) == len && memcmp(lo, text, len) == 0;
+}
+
+static u32 wire_doc_field(const char *lo, const char *hi)
+{
+    if (wire_cell_eq(lo, hi, "prefix"))
+        return WIRE_DOC_PREFIX;
+    if (wire_cell_eq(lo, hi, "suffix"))
+        return WIRE_DOC_SUFFIX;
+    if (wire_cell_eq(lo, hi, "path"))
+        return WIRE_DOC_PATH;
+    if (wire_cell_eq(lo, hi, "language"))
+        return WIRE_DOC_LANGUAGE;
+    if (wire_cell_eq(lo, hi, "generation settings"))
+        return WIRE_DOC_GENERATION;
+    if (wire_cell_eq(lo, hi, "User-Agent"))
+        return WIRE_DOC_USER_AGENT;
+    if (wire_cell_eq(lo, hi, "API key"))
+        return WIRE_DOC_API_KEY;
+    if (wire_cell_eq(lo, hi, "anything else"))
+        return WIRE_DOC_ANYTHING_ELSE;
+    return 0U;
+}
+
+static bool wire_doc_yes(const char *lo, const char *hi)
+{
+    YEW_ASSERT(wire_cell_eq(lo, hi, "yes") ||
+               wire_cell_eq(lo, hi, "no") ||
+               wire_cell_eq(lo, hi, "n/a"));
+    return wire_cell_eq(lo, hi, "yes");
+}
+
+static WireDocInventory wire_doc_inventory(void)
+{
+    static const u32 all_rows = (1U << 8) - 1U;
+    FILE *file = fopen("docs/ai-privacy.md", "rb");
+    WireDocInventory inventory = {0U, 0U, 0U};
+    char line[4096];
+    bool in_table = false;
+
+    YEW_ASSERT_NOT_NULL(file);
+    while (fgets(line, sizeof(line), file) != NULL) {
+        const char *field_end;
+        const char *value_end;
+        const char *local_end;
+        const char *cloud_end;
+        u32 field;
+
+        if (!in_table) {
+            if (strcmp(line, "## What is sent, exactly\n") == 0)
+                in_table = true;
+            continue;
+        }
+        if (strncmp(line, "## ", 3U) == 0)
+            break;
+        if (line[0] != '|')
+            continue;
+        field_end = strchr(line + 1, '|');
+        YEW_ASSERT_NOT_NULL(field_end);
+        value_end = strchr(field_end + 1, '|');
+        YEW_ASSERT_NOT_NULL(value_end);
+        local_end = strchr(value_end + 1, '|');
+        YEW_ASSERT_NOT_NULL(local_end);
+        cloud_end = strchr(local_end + 1, '|');
+        YEW_ASSERT_NOT_NULL(cloud_end);
+        field = wire_doc_field(line + 1, field_end);
+        if (field == 0U) {
+            YEW_ASSERT(wire_cell_eq(line + 1, field_end, "Field") ||
+                       line[1] == '-');
+            continue;
+        }
+        YEW_ASSERT((inventory.rows & field) == 0U);
+        inventory.rows |= field;
+        if (wire_doc_yes(value_end + 1, local_end))
+            inventory.local |= field;
+        if (wire_doc_yes(local_end + 1, cloud_end))
+            inventory.cloud |= field;
+    }
+    YEW_ASSERT_EQ_I64(fclose(file), 0);
+    YEW_ASSERT(in_table);
+    YEW_ASSERT_EQ_U64(inventory.rows, all_rows);
+    return inventory;
+}
 
 static u32 wire_occurrences(const u8 *bytes, size_t len, const char *needle)
 {
@@ -133,6 +246,9 @@ static void wire_generation_fields(const JsonValue *root, AiKind kind)
 
 void test_ai_privacy_wire_body_fields_match_documented_sent_rows(void)
 {
+    static const u32 body_fields = WIRE_DOC_PREFIX | WIRE_DOC_SUFFIX |
+                                   WIRE_DOC_PATH | WIRE_DOC_LANGUAGE |
+                                   WIRE_DOC_GENERATION;
     static const char *const ollama_keys[] = {
         "model", "prompt", "suffix", "system", "stream", "raw", "options"
     };
@@ -148,6 +264,7 @@ void test_ai_privacy_wire_body_fields_match_documented_sent_rows(void)
         "private-user", "private-host", "private-os", "private-branch",
         "private-remote", "private-stats", "private-telemetry"
     };
+    WireDocInventory documented = wire_doc_inventory();
     u32 kind;
 
     for (kind = 0U; kind < (u32)YEW_AI_NKIND; kind++) {
@@ -156,6 +273,7 @@ void test_ai_privacy_wire_body_fields_match_documented_sent_rows(void)
         Arena arena;
         Bytebuf body;
         JsonValue *root;
+        u32 observed = 0U;
         u32 i;
 
         arena_init(&arena);
@@ -170,15 +288,24 @@ void test_ai_privacy_wire_body_fields_match_documented_sent_rows(void)
 
         YEW_ASSERT_EQ_U64(wire_occurrences(body.data, body.len, wire_prefix),
                           1U);
+        observed |= WIRE_DOC_PREFIX;
         YEW_ASSERT_EQ_U64(wire_occurrences(body.data, body.len, wire_suffix),
                           1U);
+        observed |= WIRE_DOC_SUFFIX;
         YEW_ASSERT_EQ_U64(wire_occurrences(body.data, body.len, wire_path),
                           1U);
+        observed |= WIRE_DOC_PATH;
         YEW_ASSERT_EQ_U64(wire_occurrences(body.data, body.len,
                                            wire_language), 1U);
+        observed |= WIRE_DOC_LANGUAGE;
         YEW_ASSERT_EQ_U64(wire_occurrences(body.data, body.len, wire_model),
                           1U);
         wire_generation_fields(root, (AiKind)kind);
+        observed |= WIRE_DOC_GENERATION;
+        YEW_ASSERT_EQ_U64(observed,
+                          (kind == (u32)YEW_AI_OLLAMA ? documented.local :
+                                                       documented.cloud) &
+                              body_fields);
         for (i = 0U; i < YEW_ARRAY_LEN(forbidden); i++)
             YEW_ASSERT_EQ_U64(wire_occurrences(body.data, body.len,
                                                forbidden[i]), 0U);
@@ -229,6 +356,8 @@ static void wire_request(AiKind kind, Bytebuf *request)
 
 void test_ai_privacy_wire_headers_match_documented_sent_rows(void)
 {
+    static const u32 header_fields = WIRE_DOC_USER_AGENT |
+                                     WIRE_DOC_API_KEY;
     static const char *const expected[] = {
         "POST /api/generate HTTP/1.1\r\n"
         "Host: localhost:11434\r\n"
@@ -255,10 +384,12 @@ void test_ai_privacy_wire_headers_match_documented_sent_rows(void)
         "anthropic-version: 2023-06-01\r\n"
         "x-api-key: YEW_WIRE_API_KEY_4E72\r\n\r\n{}"
     };
+    WireDocInventory documented = wire_doc_inventory();
     u32 kind;
 
     for (kind = 0U; kind < (u32)YEW_AI_NKIND; kind++) {
         Bytebuf request;
+        u32 observed = 0U;
 
         wire_request((AiKind)kind, &request);
         YEW_ASSERT_EQ_U64(request.len, strlen(expected[kind]));
@@ -266,6 +397,7 @@ void test_ai_privacy_wire_headers_match_documented_sent_rows(void)
         YEW_ASSERT_EQ_U64(wire_occurrences(request.data, request.len,
                                            "User-Agent: yew/1.0.0\r\n"),
                           1U);
+        observed |= WIRE_DOC_USER_AGENT;
         YEW_ASSERT_EQ_U64(wire_occurrences(request.data, request.len,
                                            wire_api_key),
                           kind == (u32)YEW_AI_OLLAMA ? 0U : 1U);
@@ -275,6 +407,12 @@ void test_ai_privacy_wire_headers_match_documented_sent_rows(void)
         YEW_ASSERT_EQ_U64(wire_occurrences(request.data, request.len,
                                            "x-api-key:"),
                           kind == (u32)YEW_AI_ANTHROPIC ? 1U : 0U);
+        if (kind != (u32)YEW_AI_OLLAMA)
+            observed |= WIRE_DOC_API_KEY;
+        YEW_ASSERT_EQ_U64(observed,
+                          (kind == (u32)YEW_AI_OLLAMA ? documented.local :
+                                                       documented.cloud) &
+                              header_fields);
         bytebuf_free(&request);
     }
 }

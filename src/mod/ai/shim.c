@@ -52,6 +52,11 @@ void yew_ai_policy_options_changed(Ed *ed)
     (void)ed;
 }
 
+void yew_ai_redact_option_changed(Ed *ed)
+{
+    (void)ed;
+}
+
 bool yew_ai_status_badge(const Ed *ed, char *out, size_t outsz, u8 *priority)
 {
     (void)ed;

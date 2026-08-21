@@ -42,6 +42,7 @@ bool yew_ai_state_ready(const Ed *ed);
 void yew_ai_state_key_cache_enable(Ed *ed, bool enabled);
 bool yew_ai_state_key_cache_enabled(const Ed *ed);
 void yew_ai_policy_options_changed(Ed *ed);
+void yew_ai_redact_option_changed(Ed *ed);
 
 /* Render the privacy badge without exposing AiState internals. */
 bool yew_ai_status_badge(const Ed *ed, char *out, size_t outsz,

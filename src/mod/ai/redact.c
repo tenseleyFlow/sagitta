@@ -189,6 +189,13 @@ size_t yew_ai_redact_policy_len(const AiRedactPolicy *policy)
     return policy == NULL ? 0U : policy->len;
 }
 
+const char *yew_ai_redact_policy_rule_name(const AiRedactPolicy *policy,
+                                           size_t index)
+{
+    return policy == NULL || index >= policy->len ? NULL :
+           policy->rules[index].name;
+}
+
 static u32 line_for_match(const AiCtx *ctx, bool prefix, u64 off)
 {
     u64 lines = ctx->line_1based;

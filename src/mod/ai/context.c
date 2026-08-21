@@ -134,14 +134,8 @@ static bool context_apply_redaction(Ed *ed, Arena *arena, AiCtx *context,
                        "the selected backend" : entry->backend.url.host;
     const char *rule = hit->rule == NULL ? "secret" : hit->rule;
 
-    if (strcmp(mode, "off") == 0) {
-        if (ed->ai != NULL && !ed->ai->redact_off_messaged) {
-            yew_msg(ed, YEW_MSG_WARN,
-                    "AI secret redaction is off; deny rules will not fire");
-            ed->ai->redact_off_messaged = true;
-        }
+    if (strcmp(mode, "off") == 0)
         return true;
-    }
     if (remote && strcmp(mode, "elide") != 0) {
         context_error(err, YEW_AI_ERR_PROTOCOL, "");
         yew_ai_block_offer(ed,

@@ -593,6 +593,8 @@ static void option_changed_target(Ed *ed, const OptDesc *desc,
         return;
     if (strcmp(desc->name, "ai.key_cache") == 0) {
         yew_ai_state_key_cache_enable(ed, nu->as.b);
+    } else if (strcmp(desc->name, "ai.on_redact") == 0) {
+        yew_ai_redact_option_changed(ed);
     } else if (strcmp(desc->name, "ai.deny_replace") == 0 ||
                strcmp(desc->name, "ai.exclude_replace") == 0 ||
                strcmp(desc->name, "ai.exclude_paths") == 0) {

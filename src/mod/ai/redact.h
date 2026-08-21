@@ -49,6 +49,8 @@ AiRedactPolicy *yew_ai_redact_policy_new(const AiRedactSpec *user,
                                          AiRedactError *err);
 void yew_ai_redact_policy_free(AiRedactPolicy *policy);
 size_t yew_ai_redact_policy_len(const AiRedactPolicy *policy);
+const char *yew_ai_redact_policy_rule_name(const AiRedactPolicy *policy,
+                                           size_t index);
 bool yew_ai_redact_scan(const AiRedactPolicy *policy, const AiCtx *ctx,
                         RedactHit *hit);
 
