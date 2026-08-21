@@ -1,8 +1,8 @@
 # yew — session handoff
 
-**Written:** 2026-08-19. **Active implementation frontier:** Sprint 49, the
-AI shadow provider. Sprint 48 and Campaign 09 are complete; Campaign 10 is
-active.
+**Written:** 2026-08-20. **Active implementation frontier:** Sprint 50, AI
+opt-in, privacy, redaction, and shipped presets. Sprints 48–49 and Campaign 09
+are complete; Campaign 10 is active.
 
 ---
 
@@ -13,11 +13,11 @@ Read, in order:
 1. `.docs/plan/00-decisions.md`
 2. `.docs/plan/01-architecture.md`
 3. `.docs/plan/02-fletch.md`
-4. `.docs/sprints/10-ai/s49-ai-shadow.md`
+4. `.docs/sprints/10-ai/s50-ai-defaults-privacy.md`
 
-Sprint 49 is the binding implementation contract. Implement its deliverables
-and meet its Definition of Done before beginning Sprint 50's opt-in, privacy,
-redaction, and shipped-preset work.
+Sprint 50 is the binding implementation contract. Sprint 49 is complete; do
+not reopen its interfaces except where Sprint 50 explicitly requires the
+redaction, workspace-grant, opt-in, preset, documentation, or badge seams.
 
 ## 1. Sprint 47 closeout
 
@@ -56,48 +56,41 @@ Closeout evidence:
   raw prompt handling and lifecycle; the generated compile database is
   byte-identical across repeated runs.
 
-## 2. Sprint 48 closeout and Sprint 49 objective
+## 2. Sprint 49 closeout and Sprint 50 objective
 
-Sprint 48 completed the AI module's transport and backend floor while keeping
-the user-facing AI flow off by default:
+Sprint 49 completed the live AI shadow-provider path while preserving the
+off-by-default boundary:
 
-- the poll-driven plain HTTP/1.1 client covers nonblocking connect, bounded
-  send/receive, content-length, chunked and close-delimited framing, timeouts,
-  exact-once stale-pool retry and idle connection expiry;
-- HTTPS routes through a shell-free `curl` job with secret-free argv and byte
-  stdin; API keys resolve indirectly from an environment variable or command
-  and are wiped, structurally redacted and excluded from diagnostics;
-- one incremental SSE/NDJSON parser feeds Ollama, OpenAI-compatible and
-  Anthropic adapters, with deterministic request bodies and a closed error
-  taxonomy;
-- Fletch `ai.backend(...)`, the insertion-ordered backend registry, reload,
-  model listing, ping, backend and log commands are wired through the editor
-  loop; stripped builds retain honest module errors;
-- request construction and parsing have committed performance baselines, and
-  a real loopback harness proves 500 request/response cycles plus pool expiry
-  with zero descriptor delta before editor teardown.
+- bounded cursor-local context and deterministic FIM/chat prompt builders feed
+  the configured backend without placing secrets in prompts, argv, or logs;
+- the AI `ShadowProvider` streams ghost text through the provider-neutral
+  shadow surface, batches delivery once per frame, preserves matching-prefix
+  streams, and cancels HTTP or curl work when input becomes stale;
+- typed-prefix acceptance, explicit accept/decline, local accepted-byte
+  accounting, error precedence, and provider lifecycle behavior are covered by
+  unit, script, fuzz, performance, and production-provider PTY tests;
+- the deterministic mock HTTP and curl paths enforce the 150 ms first-token
+  budget, while structural gates pin the single prompt/redaction seam and
+  prohibit unsafe logging or shell execution.
 
 Closeout evidence:
 
-- strict full and stripped GCC/Clang builds are warning-free; focused command,
-  backend, HTTP, config, key, stream and shim suites are green;
-- Clang ASan/UBSan is green for 39 AI tests / 1,910 assertions and 15 HTTP
-  tests / 467,453 assertions;
-- plain and sanitized HTTP/AI-stream fuzzers each complete 200,000 iterations
-  at seed 1 with the same deterministic hash and an empty crash corpus;
-- focused Valgrind is clean for AI, live HTTP and the 500-cycle resource gate;
-  the final gate reports `fd_delta=0`, with request-build and response-parse
-  p99 latency far below the committed 100 microsecond ceilings;
-- the fast unit tier reports 2,023 tests / 70,758,941 assertions with zero
-  failures, and all structural and smoke checks are green.
+- strict full and stripped GCC/Clang suites are green; the full GCC tier
+  reports 2,050 tests / 70,761,583 assertions and the stripped tier reports
+  1,829 tests / 70,026,792 assertions;
+- focused Clang ASan/UBSan is green for 66 AI tests / 4,509 assertions and the
+  20,000-iteration shadow fuzzer; focused Valgrind is clean for the same AI
+  unit surface and both production-provider PTYs;
+- every committed PTY passes its double-run determinism gate; the Sprint 49
+  stream and mid-stream Escape cases are also green under Valgrind;
+- performance gates report context-build p99 at 3.5 microseconds, prompt-build
+  p99 at 4.1 microseconds, HTTP and curl first-token p95 at 101 ms, and live
+  stream keypress p99 at 57 microseconds.
 
-Sprint 49 now owns the integration frontier: assemble bounded cursor-local
-context, build FIM/chat prompts, register the AI `ShadowProvider`, batch
-streamed delivery once per frame, cancel both HTTP and curl work on stale
-input, count accepted AI bytes locally, and enforce the 150 ms first-token
-gate against the deterministic mock backend. Sprint 50 still owns explicit
-opt-in, the redaction policy and patterns, privacy documentation, presets and
-the statusline badge.
+Sprint 50 now owns the final Campaign 10 shipping boundary: explicit opt-in,
+schema-3 per-workspace grants, deny-pattern and path redaction, conservative
+local/cloud presets, the honest privacy page, and the four-state `[AI]`
+statusline badge. A fresh profile must continue to make zero network syscalls.
 
 ## 3. Campaign sequence
 
@@ -109,8 +102,9 @@ the statusline badge.
    and the real-clangd milestone (complete)
 6. Sprint 48 — plain HTTP, curl TLS transport, streaming parsers, backend
    adapters and API-key resolution (complete)
-7. Sprint 49 — context assembly and streamed AI ghost text (active)
+7. Sprint 49 — context assembly and streamed AI ghost text (complete)
 8. Sprint 50 — explicit opt-in, privacy/redaction rules and default presets
+   (active frontier)
 
 ## 4. Daily Driver remains separate and pending
 
@@ -137,9 +131,10 @@ designated and logged before eligible implementation edits.
   a shell, and never place API-key literals in `init.fl`, argv, logs or errors.
 - Keep all socket, subprocess and streaming work poll-driven and bounded. No
   threads, blocking request writes, or mid-keystroke DNS resolution.
-- Keep AI commands functionally off until Sprint 50's explicit opt-in flow.
-- Do not feed AI output into `TextBuf` or ghost text in Sprint 48; that is the
-  binding Sprint 49 boundary.
+- Keep fresh-profile AI requests off until Sprint 50's explicit opt-in and
+  workspace-grant gates both permit them.
+- AI output may feed only the Sprint 43 ghost surface; never mutate `TextBuf`
+  before the existing explicit shadow-accept path runs.
 - Do not add Tree-sitter, TextMate, a JSON library or another dependency.
 - Do not change performance baselines outside Sprint 56 calibration.
 - Do not mark Daily Driver `EARNED` from automated evidence.
