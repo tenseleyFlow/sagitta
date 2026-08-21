@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 
 #include "edit/ed.h"
@@ -675,6 +676,42 @@ bool yew_config_get_global(const Ed *ed, const char *name, size_t name_len,
             return true;
     }
     return false;
+}
+
+AiWsGrant yew_config_ai_workspace_grant(Ed *ed)
+{
+    if (ed == NULL || ed->config == NULL)
+        return YEW_AI_WS_UNSET;
+    return yew_trust_ai_grant(&ed->config->trust_db, yew_ws_root(ed));
+}
+
+bool yew_config_ai_workspace_set(Ed *ed, AiWsGrant grant)
+{
+    time_t now;
+
+    if (ed == NULL || ed->config == NULL)
+        return false;
+    now = time(NULL);
+    if (now == (time_t)-1 ||
+        !yew_trust_ai_set(&ed->config->trust_db, yew_ws_root(ed), grant,
+                          now))
+        return false;
+    return yew_trust_db_write(&ed->config->trust_db, now,
+                              YEW_TRUST_PRUNE_DAYS_DEFAULT);
+}
+
+bool yew_config_ai_workspace_forget(Ed *ed)
+{
+    time_t now;
+
+    if (ed == NULL || ed->config == NULL)
+        return false;
+    now = time(NULL);
+    if (now == (time_t)-1 ||
+        !yew_trust_ai_forget(&ed->config->trust_db, yew_ws_root(ed)))
+        return false;
+    return yew_trust_db_write(&ed->config->trust_db, now,
+                              YEW_TRUST_PRUNE_DAYS_DEFAULT);
 }
 
 const char *yew_config_user_path(Ed *ed)

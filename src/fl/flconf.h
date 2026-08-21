@@ -9,6 +9,7 @@
 #include "fl/diag.h"
 #include "fl/value.h"
 #include "util/base.h"
+#include "ws/trust.h"
 
 typedef struct Ed Ed;
 typedef struct YewEdStartup YewEdStartup;
@@ -39,6 +40,11 @@ void yew_origin_teardown(Ed *ed, u32 origin);
  */
 bool yew_config_get_global(const Ed *ed, const char *name, size_t name_len,
                            FlValue *out);
+
+/* Persistent AI disclosure policy for the editor's current workspace. */
+AiWsGrant yew_config_ai_workspace_grant(Ed *ed);
+bool yew_config_ai_workspace_set(Ed *ed, AiWsGrant grant);
+bool yew_config_ai_workspace_forget(Ed *ed);
 
 const char *yew_config_user_path(Ed *ed);
 CmdStatus yew_config_cmd_reload(CmdCtx *cx);

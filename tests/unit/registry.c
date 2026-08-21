@@ -22,6 +22,8 @@ const YewTest yew_tests[] = {
     T(flconf_reloaded_hook_fires_once),
     T(flconf_deleted_set_restores_default_on_reload),
     T(flconf_clean_skips_every_fletch_config_source),
+    T(flconf_ai_workspace_grants_follow_config_lifecycle),
+    T(flconf_ai_workspace_grants_require_config_state),
     T(bind_keymap_diagnostics_classify_all_six_failures),
     T(bind_fletch_validation_errors_carry_source_positions),
     T(bind_closure_dispatches_from_frozen_mode_layer),

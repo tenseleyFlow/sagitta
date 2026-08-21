@@ -1891,6 +1891,8 @@ void test_flconf_twenty_reloads_leave_no_registry_residue(void);
 void test_flconf_reloaded_hook_fires_once(void);
 void test_flconf_deleted_set_restores_default_on_reload(void);
 void test_flconf_clean_skips_every_fletch_config_source(void);
+void test_flconf_ai_workspace_grants_follow_config_lifecycle(void);
+void test_flconf_ai_workspace_grants_require_config_state(void);
 void test_bind_keymap_diagnostics_classify_all_six_failures(void);
 void test_bind_fletch_validation_errors_carry_source_positions(void);
 void test_bind_closure_dispatches_from_frozen_mode_layer(void);
