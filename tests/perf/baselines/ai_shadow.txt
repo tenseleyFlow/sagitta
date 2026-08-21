@@ -1,0 +1,18 @@
+# yew Sprint 49 AI shadow baselines
+# Hermetic mockai/mockcurl, x86_64-linux-gnu, gcc -O2.
+# Absolute budgets remain authoritative in perf_ai_shadow.c.
+# metric observed budget unit
+context_100m_p99 6066 200000 ns
+prompt_p99 4722 1000000 ns
+http_first_token_p95 101 150 ms
+curl_first_token_p95 101 150 ms
+keypress_120tps_p99 52025 5000000 ns
+
+# Debounce tuning record. Each row re-arms on a 100-key burst; the final
+# request count is pinned by test_shadow_debounce_burst_keeps_one_timer_and_one_request_each.
+# debounce_ms final_requests verdict
+0 1 too_eager
+120 1 overlaps_lsp
+250 1 model_churn_risk
+350 1 chosen
+500 1 perceptible_idle_delay
