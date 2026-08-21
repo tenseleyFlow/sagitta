@@ -137,6 +137,13 @@ void test_cmd_registry_invocation_and_deferred(void)
 
         if ((desc->flags & YEW_CMD_DEFERRED) == 0U)
             continue;
+#if !YEW_WITH_FUSS
+        /* The stripped Git boundary deliberately takes precedence over the
+         * later Sprint 52/53 refusal. test_git_commands_cross_module_boundary
+         * pins that exact module message and status for every Git command. */
+        if (strncmp(desc->name, "ed.git.", 7U) == 0)
+            continue;
+#endif
         deferred.count = 1U;
         deferred.source = YEW_SRC_TEST;
         deferred.win = (Win *)(void *)&fake_win;
