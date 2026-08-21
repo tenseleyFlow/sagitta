@@ -1,0 +1,9 @@
+# A valid provider error event after HTTP 200 and a visible text delta.
+status 200
+header content-type: text/event-stream
+framing sse
+delay 100
+emit data: {"choices":[{"delta":{"content":"partial"}}]}\n\n
+delay 50
+emit event: error\ndata: {"error":{"message":"mock stream failed","type":"server_error"}}\n\n
+emit data: [DONE]\n\n

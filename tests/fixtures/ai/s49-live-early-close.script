@@ -1,0 +1,8 @@
+# A partial streamed completion closed without the protocol terminator.
+status 200
+header content-type: text/event-stream
+framing sse
+delay 100
+emit data: {"choices":[{"delta":{"content":"partial"}}]}\n\n
+delay 50
+close

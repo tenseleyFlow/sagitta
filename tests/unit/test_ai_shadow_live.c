@@ -19,6 +19,7 @@
 #include "mod/ai/ai.h"
 #include "mod/ai/ai_int.h"
 #include "mod/ai/backend_curl.h"
+#include "text/edit.h"
 
 #ifndef YEW_TEST_MOCKAI
 #define YEW_TEST_MOCKAI "build/tests/helpers/mockai"
@@ -172,8 +173,70 @@ static bool live_probe_curl(Ed *ed)
            error[0] == '\0';
 }
 
+static bool live_text_eq(const TextBuf *tb, const u8 *want, size_t len)
+{
+    TextIter iter;
+    u64 done = 0U;
+
+    if (yew_textbuf_len(tb) != len)
+        return false;
+    if (len == 0U)
+        return true;
+    if (!yew_textiter_begin(&iter, tb, BYTEOFF(0U)))
+        return false;
+    while (done < len) {
+        const u8 *bytes;
+        u64 available;
+        u64 take;
+
+        if (!yew_textiter_chunk(&iter, tb, &bytes, &available))
+            return false;
+        take = available < len - done ? available : len - done;
+        if (take == 0U || memcmp(bytes, want + done, (size_t)take) != 0)
+            return false;
+        done += take;
+        if (done < len && !yew_textiter_advance(&iter, tb))
+            return false;
+    }
+    return true;
+}
+
+typedef enum LiveCase {
+    LIVE_STREAM,
+    LIVE_ACCEPT_WORD,
+    LIVE_ACCEPT_ALL,
+    LIVE_ERROR_EVENT,
+    LIVE_EARLY_CLOSE
+} LiveCase;
+
+static bool live_accept_and_undo(Ed *ed, LiveCase which,
+                                 const u8 *input, size_t input_len)
+{
+    EditCtx edit;
+    u32 before = yew_undo_current(ed->win->buf->undo);
+    bool accepted;
+
+    ed->mode = YEW_MODE_I;
+    accepted = which == LIVE_ACCEPT_WORD ?
+        yew_shadow_accept_word(ed, ed->win, false) :
+        yew_shadow_accept_all(ed, ed->win);
+    if (!accepted || yew_textbuf_len(ed->win->buf->tb) <= input_len ||
+        yew_undo_current(ed->win->buf->undo) == before)
+        return false;
+    if (which == LIVE_ACCEPT_WORD &&
+        (!ed->win->shadow.live || ed->win->shadow.sug.consumed == 0U))
+        return false;
+    if (which == LIVE_ACCEPT_ALL && ed->win->shadow.live)
+        return false;
+    edit = yew_ed_edit_ctx(ed);
+    if (!yew_undo(&edit))
+        return false;
+    yew_ed_finish_edit(ed, &edit);
+    return live_text_eq(ed->win->buf->tb, input, input_len);
+}
+
 static int live_adapter_child(const char *kind, const char *script,
-                              bool curl_transport)
+                              bool curl_transport, LiveCase which)
 {
     static const u8 input[] = "int main(void) {\n    ";
     char state_root[] = "/tmp/yew-ai-live-XXXXXX";
@@ -251,12 +314,29 @@ static int live_adapter_child(const char *kind, const char *script,
     stage = "drive";
     if (!ed.ai->call.active || !live_drive(&ed, &first_ms))
         goto out;
-    ok = ed.win->shadow.live &&
-         ed.win->shadow.sug.prov == (u8)YEW_SHADOW_AI &&
-         ed.win->shadow.sug.len == sizeof("int answer = 42;") - 1U &&
-         memcmp(ed.win->shadow.sug.text, "int answer = 42;",
-                sizeof("int answer = 42;") - 1U) == 0 &&
-         first_ms >= 90 && first_ms <= 150;
+    if (which == LIVE_STREAM || which == LIVE_ACCEPT_WORD ||
+        which == LIVE_ACCEPT_ALL) {
+        ok = ed.win->shadow.live &&
+             ed.win->shadow.sug.prov == (u8)YEW_SHADOW_AI &&
+             ed.win->shadow.sug.len == sizeof("int answer = 42;") - 1U &&
+             memcmp(ed.win->shadow.sug.text, "int answer = 42;",
+                    sizeof("int answer = 42;") - 1U) == 0 &&
+             first_ms >= 90 && first_ms <= 150;
+        if (ok && which != LIVE_STREAM)
+            ok = live_accept_and_undo(&ed, which, input,
+                                      sizeof(input) - 1U);
+    } else {
+        const char *message = ed.msg.full == NULL ? ed.msg.text :
+                                                    ed.msg.full;
+
+        ok = !ed.win->shadow.live &&
+             live_text_eq(ed.win->buf->tb, input, sizeof(input) - 1U);
+        if (ok && which == LIVE_ERROR_EVENT)
+            ok = strstr(message,
+                        "returned a response yew could not parse") != NULL;
+        else if (ok && which == LIVE_EARLY_CLOSE)
+            ok = strstr(message, "response ended early") != NULL;
+    }
     stage = "verify";
     if (!ok) {
         (void)fprintf(stderr,
@@ -313,9 +393,40 @@ void test_ai_shadow_live_streams_all_adapters_within_budget(void)
         YEW_ASSERT(pid >= 0);
         if (pid == 0)
             _exit(live_adapter_child(cases[i].kind, cases[i].script,
-                                     cases[i].curl_transport));
+                                     cases[i].curl_transport, LIVE_STREAM));
         while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
         YEW_ASSERT(WIFEXITED(status));
         YEW_ASSERT_EQ_I64(WEXITSTATUS(status), 0);
     }
+}
+
+static void live_expect_child(LiveCase which, const char *script)
+{
+    pid_t pid = fork();
+    int status = 0;
+
+    YEW_ASSERT(pid >= 0);
+    if (pid == 0)
+        _exit(live_adapter_child("openai", script, false, which));
+    while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
+    YEW_ASSERT(WIFEXITED(status));
+    YEW_ASSERT_EQ_I64(WEXITSTATUS(status), 0);
+}
+
+void test_ai_shadow_live_accepts_word_and_all_as_single_undo(void)
+{
+    live_expect_child(LIVE_ACCEPT_WORD, "tests/fixtures/ai/openai.script");
+    live_expect_child(LIVE_ACCEPT_ALL, "tests/fixtures/ai/openai.script");
+}
+
+void test_ai_shadow_live_error_event_clears_without_inserting(void)
+{
+    live_expect_child(LIVE_ERROR_EVENT,
+                      "tests/fixtures/ai/s49-live-error-event.script");
+}
+
+void test_ai_shadow_live_early_close_clears_without_inserting(void)
+{
+    live_expect_child(LIVE_EARLY_CLOSE,
+                      "tests/fixtures/ai/s49-live-early-close.script");
 }
