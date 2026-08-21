@@ -1,0 +1,13 @@
+# Sprint 50: selecting a remote backend fails while its badge is hidden.
+import ai
+import opt
+ai.backend("cloud", {
+    kind: "anthropic",
+    url: "https://api.anthropic.com",
+    model: "claude-test",
+    key_env: "ANTHROPIC_API_KEY",
+})
+edit { opt.set("ai.badge", "off") }
+t.raises("type", fn() { edit { opt.set("ai.backend", "cloud") } })
+t.eq(opt.get("ai.backend"), "")
+t.eq(opt.get("ai.badge"), "off")

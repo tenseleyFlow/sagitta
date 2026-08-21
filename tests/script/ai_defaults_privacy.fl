@@ -1,0 +1,9 @@
+# Sprint 50: every privacy-sensitive default is conservative.
+import opt
+t.eq(opt.get("ai.default_workspace"), "ask")
+t.eq(opt.get("ai.on_redact"), "block")
+t.eq(opt.get("ai.deny_replace"), false)
+t.eq(opt.get("ai.exclude_replace"), false)
+t.eq(opt.get("ai.debug_bodies"), false)
+t.eq(opt.get("ai.allow_plain_remote"), false)
+t.eq(opt.get("ai.badge"), "on")

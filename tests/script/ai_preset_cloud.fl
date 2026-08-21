@@ -1,0 +1,11 @@
+# Sprint 50: the cloud preset keeps blocking and workspace consent enabled.
+import ed
+import opt
+ed.run("ed.ai.preset", {sarg: "cloud"})
+t.eq(opt.get("ai.enable"), true)
+t.eq(opt.get("ai.backend"), "work")
+t.eq(opt.get("ai.on_redact"), "block")
+t.eq(opt.get("ai.default_workspace"), "ask")
+t.eq(opt.get("ai.context_bytes"), 2048)
+t.eq(opt.get("ai.max_tokens"), 192)
+t.eq(opt.get("ai.max_lines"), 4)

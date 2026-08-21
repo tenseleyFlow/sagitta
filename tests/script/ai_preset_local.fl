@@ -1,0 +1,10 @@
+# Sprint 50: the local preset selects its loopback-safe defaults.
+import ed
+import opt
+ed.run("ed.ai.preset", {sarg: "local"})
+t.eq(opt.get("ai.enable"), true)
+t.eq(opt.get("ai.backend"), "local")
+t.eq(opt.get("ai.context_bytes"), 4096)
+t.eq(opt.get("ai.max_tokens"), 256)
+t.eq(opt.get("ai.max_lines"), 8)
+t.eq(opt.get("ai.fim"), "auto")

@@ -1,0 +1,4 @@
+# Sprint 50: invalid redaction modes are rejected without changing block mode.
+import opt
+t.raises("type", fn() { edit { opt.set("ai.on_redact", "scrub") } })
+t.eq(opt.get("ai.on_redact"), "block")

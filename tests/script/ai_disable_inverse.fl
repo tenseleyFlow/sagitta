@@ -1,0 +1,10 @@
+# Sprint 50: disable turns AI off without forgetting the selected backend.
+import ed
+import opt
+ed.run("ed.ai.preset", {sarg: "local"})
+t.eq(opt.get("ai.enable"), true)
+t.eq(opt.get("ai.backend"), "local")
+ed.run("ed.ai.disable", {})
+t.eq(opt.get("ai.enable"), false)
+t.eq(opt.get("ai.backend"), "local")
+t.eq(opt.get("ai.on_redact"), "block")

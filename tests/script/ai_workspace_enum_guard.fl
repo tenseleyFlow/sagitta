@@ -1,0 +1,4 @@
+# Sprint 50: invalid default workspace policies are rejected atomically.
+import opt
+t.raises("type", fn() { edit { opt.set("ai.default_workspace", "always") } })
+t.eq(opt.get("ai.default_workspace"), "ask")

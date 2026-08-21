@@ -1,0 +1,12 @@
+# Sprint 50: the opt-in command is registered as a prompt-driven command.
+import ed
+let seen = 0
+for command in ed.commands() {
+    if command.name == "ed.ai.enable" {
+        seen = seen + 1
+        t.eq((command.flags / 32) % 2, 1)
+        t.eq((command.flags / 64) % 2, 0)
+        t.eq(command.help, "Enable AI after the privacy disclosure")
+    }
+}
+t.eq(seen, 1)

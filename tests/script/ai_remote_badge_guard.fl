@@ -1,0 +1,7 @@
+# Sprint 50: a selected remote backend cannot hide its disclosure badge.
+import ed
+import opt
+ed.run("ed.ai.preset", {sarg: "cloud"})
+t.raises("type", fn() { edit { opt.set("ai.badge", "off") } })
+t.eq(opt.get("ai.badge"), "on")
+t.eq(opt.get("ai.backend"), "work")

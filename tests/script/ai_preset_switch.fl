@@ -1,0 +1,9 @@
+# Sprint 50: switching presets leaves the last preset selected.
+import ed
+import opt
+ed.run("ed.ai.preset", {sarg: "local"})
+t.eq(opt.get("ai.backend"), "local")
+ed.run("ed.ai.preset", {sarg: "cloud"})
+t.eq(opt.get("ai.backend"), "work")
+t.eq(opt.get("ai.context_bytes"), 2048)
+t.eq(opt.get("ai.max_lines"), 4)

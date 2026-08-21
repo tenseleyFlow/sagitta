@@ -1,0 +1,13 @@
+# Sprint 50: preset names are closed rather than silently ignored.
+import ed
+import opt
+let caught = false
+try {
+    ed.run("ed.ai.preset", {sarg: "surprise"})
+} catch e {
+    caught = true
+    t.eq(e.kind, "type")
+}
+t.eq(caught, true)
+t.eq(opt.get("ai.enable"), false)
+t.eq(opt.get("ai.backend"), "")

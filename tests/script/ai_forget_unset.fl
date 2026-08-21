@@ -1,0 +1,6 @@
+# Sprint 50: forgetting an absent workspace grant is safe and explicit.
+import ed
+import opt
+ed.run("ed.ai.forget", {})
+t.eq(opt.get("ai.enable"), false)
+t.eq(opt.get("ai.default_workspace"), "ask")

@@ -1,0 +1,13 @@
+# Sprint 50: :ai privacy opens the shipped disclosure as a read-only scratch buffer.
+import buf
+import ed
+import str
+ed.run("ed.ai.privacy", {})
+let b = buf.current()
+t.eq(buf.name(b), "[AI Privacy]")
+t.eq(buf.readonly(b), true)
+let text = buf.text(b)
+t.eq(str.contains(text, "AI and your privacy"), true)
+t.eq(str.contains(text, "What is never sent"), true)
+t.eq(str.contains(text, "telemetry"), true)
+t.eq(str.contains(text, "blocks the whole request"), true)

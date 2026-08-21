@@ -1,0 +1,8 @@
+# Sprint 50: status names the selected cloud backend and missing workspace grant.
+import ed
+import opt
+ed.run("ed.ai.preset", {sarg: "cloud"})
+ed.run("ed.ai.status", {})
+t.eq(opt.get("ai.enable"), true)
+t.eq(opt.get("ai.backend"), "work")
+t.eq(opt.get("ai.default_workspace"), "ask")

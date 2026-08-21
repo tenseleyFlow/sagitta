@@ -1,0 +1,7 @@
+# Sprint 50: status reports all three fresh-profile gates honestly.
+import ed
+import opt
+ed.run("ed.ai.status", {})
+t.eq(opt.get("ai.enable"), false)
+t.eq(opt.get("ai.backend"), "")
+t.eq(opt.get("ai.default_workspace"), "ask")
