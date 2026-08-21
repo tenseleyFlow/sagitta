@@ -1727,6 +1727,16 @@ void test_gitignore_load_reads_a_file(void);
 void test_gitignore_absent_file_returns_the_parent(void);
 void test_gitignore_degenerate_inputs(void);
 
+/* Sprint 51: pure Git byte protocols. */
+void test_porcelain_status_all_records_headers_and_sort(void);
+void test_porcelain_xy_mapping_complete(void);
+void test_porcelain_rename_consumes_two_nuls_and_preserves_newline(void);
+void test_porcelain_header_state_matrices(void);
+void test_porcelain_every_byte_truncation_and_rejections(void);
+void test_porcelain_z_paths_ignore_prefixes(void);
+void test_porcelain_blame_metadata_reuse_and_incremental(void);
+void test_porcelain_log_reflog_format_edges(void);
+
 /* Sprint 26 §5: the list picker. */
 void test_picker_selection_survives_a_refilter(void);
 void test_picker_selection_falls_to_row_zero_when_filtered_out(void);
