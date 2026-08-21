@@ -10,7 +10,15 @@
 typedef struct AiCompiledRule {
     const char *name;
     YewRe *re;
+    const char *required_literal;
+    size_t required_literal_len;
+    bool required_literal_fold;
 } AiCompiledRule;
+
+typedef struct AiRulePrefilter {
+    const char *literal;
+    bool fold;
+} AiRulePrefilter;
 
 struct AiRedactPolicy {
     Arena arena;
@@ -42,6 +50,35 @@ static const AiRedactSpec shipped_redact[] = {
     {"htpasswd-bcrypt", "\\$2[aby]?\\$[0-9]{2}\\$[A-Za-z0-9./]{53}", 0U, "bcrypt credential hash", "runtime/ai-deny.fl", 19U}
 };
 
+/* Each literal is present in every match of the corresponding shipped
+ * expression.  Checking it first avoids running sixteen regex VMs over a
+ * normal 4 KiB context while retaining the regex as the source of truth.
+ * Exact expression matching below also gives runtime-loaded copies of the
+ * shipped policy the same fast path without applying assumptions to user
+ * expressions. */
+static const AiRulePrefilter shipped_prefilters[] = {
+    {"A", false},
+    {"aws", true},
+    {"PRIVATE KEY", false},
+    {"ssh-rsa AAAA", false},
+    {"bearer", true},
+    {"authorization", true},
+    {"eyJ", false},
+    {"=", false},
+    {"://", false},
+    {"gh", false},
+    {"xox", false},
+    {"AIza", false},
+    {"sk-", false},
+    {"sk-ant-", false},
+    {"private", true},
+    {"$2", false}
+};
+
+_Static_assert(YEW_ARRAY_LEN(shipped_redact) ==
+               YEW_ARRAY_LEN(shipped_prefilters),
+               "shipped AI redaction prefilters must stay aligned");
+
 static const char *const shipped_paths[] = {
     ".env*", "*secret*", "*credential*", ".ssh/", "*.pem", "*.key",
     "*.p12", "*.pfx", "*.jks", "*.keystore", "id_rsa*", "id_ecdsa*",
@@ -68,9 +105,22 @@ static void remember_redact_error(AiRedactError *out,
     out->pattern_off = re_err->off;
 }
 
+static const AiRulePrefilter *prefilter_for(const AiRedactSpec *spec)
+{
+    size_t i;
+
+    for (i = 0U; i < YEW_ARRAY_LEN(shipped_redact); i++) {
+        if (spec->flags == shipped_redact[i].flags &&
+            strcmp(spec->re, shipped_redact[i].re) == 0)
+            return &shipped_prefilters[i];
+    }
+    return NULL;
+}
+
 static bool add_redact_rule(AiRedactPolicy *policy, const AiRedactSpec *spec,
                             AiRedactError *err, bool required)
 {
+    const AiRulePrefilter *prefilter;
     YewReErr re_err = {0U, NULL};
     YewRe *re;
 
@@ -85,8 +135,15 @@ static bool add_redact_rule(AiRedactPolicy *policy, const AiRedactSpec *spec,
         remember_redact_error(err, spec, &re_err);
         return !required;
     }
+    prefilter = prefilter_for(spec);
     policy->rules[policy->len].name = arena_strdup(&policy->arena, spec->name);
     policy->rules[policy->len].re = re;
+    if (prefilter != NULL) {
+        policy->rules[policy->len].required_literal = prefilter->literal;
+        policy->rules[policy->len].required_literal_len =
+            strlen(prefilter->literal);
+        policy->rules[policy->len].required_literal_fold = prefilter->fold;
+    }
     policy->len++;
     return true;
 }
@@ -151,6 +208,41 @@ static u32 line_for_match(const AiCtx *ctx, bool prefix, u64 off)
     return (u32)lines;
 }
 
+static u8 redact_ascii_fold(u8 c)
+{
+    return c >= (u8)'A' && c <= (u8)'Z' ? (u8)(c + ('a' - 'A')) : c;
+}
+
+static bool contains_literal(const u8 *bytes, size_t len,
+                             const char *literal, size_t literal_len,
+                             bool fold)
+{
+    size_t i;
+
+    if (literal_len == 0U)
+        return true;
+    if (bytes == NULL || literal_len > len)
+        return false;
+    for (i = 0U; i <= len - literal_len; i++) {
+        size_t j;
+
+        for (j = 0U; j < literal_len; j++) {
+            u8 have = bytes[i + j];
+            u8 want = (u8)literal[j];
+
+            if (fold) {
+                have = redact_ascii_fold(have);
+                want = redact_ascii_fold(want);
+            }
+            if (have != want)
+                break;
+        }
+        if (j == literal_len)
+            return true;
+    }
+    return false;
+}
+
 static bool scan_half(const AiCompiledRule *rule, const AiCtx *ctx,
                       bool prefix, RedactHit *hit)
 {
@@ -161,6 +253,10 @@ static bool scan_half(const AiCompiledRule *rule, const AiCtx *ctx,
     u64 match_len;
 
     if (bytes == NULL || len == 0U)
+        return false;
+    if (!contains_literal(bytes, len, rule->required_literal,
+                          rule->required_literal_len,
+                          rule->required_literal_fold))
         return false;
     input = yew_re_input_bytes(bytes, len);
     if (!yew_re_search(rule->re, &input, BYTEOFF(0U), &match))

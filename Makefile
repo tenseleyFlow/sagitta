@@ -485,6 +485,7 @@ FUZZ_LSP_RESP_OBJ := $(BUILD)/tests/fuzz/fuzz_lsp_resp.o
 FUZZ_HTTP_OBJ := $(BUILD)/tests/fuzz/fuzz_http.o
 FUZZ_AI_STREAM_OBJ := $(BUILD)/tests/fuzz/fuzz_ai_stream.o
 FUZZ_AI_SHADOW_OBJ := $(BUILD)/tests/fuzz/fuzz_ai_shadow.o
+FUZZ_AI_REDACT_OBJ := $(BUILD)/tests/fuzz/fuzz_ai_redact.o
 LSP_LIVE_OBJ := $(BUILD)/tests/lsp/test_clangd_live.o
 LSP_LIVE_BIN := $(BUILD)/tests/lsp/test_clangd_live
 RE_REF_OBJ := $(BUILD)/tests/fuzz/re_ref.o
@@ -523,12 +524,13 @@ PERF_SYMIDX_OBJ := $(BUILD)/tests/perf/perf_symidx.o
 PERF_LSP_OBJ := $(BUILD)/tests/perf/perf_lsp.o
 PERF_AI_HTTP_OBJ := $(BUILD)/tests/perf/perf_ai_http.o
 PERF_AI_SHADOW_OBJ := $(BUILD)/tests/perf/perf_ai_shadow.o
+PERF_AI_PRIVACY_OBJ := $(BUILD)/tests/perf/perf_ai_privacy.o
 ifneq ($(filter lsp,$(MODULES)),)
 LSP_FUZZ_TARGET := fuzz-lsp-msg fuzz-lsp-resp
 LSP_PERF_TARGET := perf-lsp
 endif
 ifneq ($(filter ai,$(MODULES)),)
-AI_PERF_TARGET := perf-ai-http perf-ai-shadow
+AI_PERF_TARGET := perf-ai-http perf-ai-shadow perf-ai-privacy
 endif
 FLETCH_RUN_OBJ := $(BUILD)/tests/fletch/run.o
 SCRIPT_RUNNER_OBJ := $(BUILD)/tests/script/runner.o
@@ -582,9 +584,10 @@ BUILD_DIRS := $(sort $(dir $(OBJ) $(UNIT_OBJ) $(SYN_ENGINE_UNIT_OBJ) \
                 $(FUZZ_SYMIDX_OBJ) $(FUZZ_JSON_OBJ) $(FUZZ_JSONRPC_OBJ) \
                 $(FUZZ_LSP_MSG_OBJ) $(FUZZ_LSP_RESP_OBJ) $(LSP_LIVE_OBJ) \
                 $(FUZZ_HTTP_OBJ) $(FUZZ_AI_STREAM_OBJ) \
-                $(FUZZ_AI_SHADOW_OBJ) \
+                $(FUZZ_AI_SHADOW_OBJ) $(FUZZ_AI_REDACT_OBJ) \
                 $(PERF_SYN_OBJ) $(PERF_SYMIDX_OBJ) $(PERF_LSP_OBJ) \
                 $(PERF_AI_HTTP_OBJ) $(PERF_AI_SHADOW_OBJ) \
+                $(PERF_AI_PRIVACY_OBJ) \
                 $(TORTURE_CHILD_OBJ) \
                 $(TORTURE_DRIVER_OBJ) $(TORTURE_LIVE_OBJ) \
                 $(TORTURE_BATCH_OBJ) $(FAULTSHIM) $(FAKELSP)))
@@ -615,7 +618,7 @@ endif
         fixtures-verify-quick \
         unicode-tables perf perf-unicode perf-render perf-piece perf-cursor \
         perf-shadow perf-symidx perf-lsp perf-ai-http perf-ai-http-valgrind \
-        perf-ai-shadow \
+        perf-ai-shadow perf-ai-privacy \
         perf-units perf-multicursor perf-cmdcomp perf-state perf-finder \
         perf-mouse perf-record perf-syn perf-syn-budgets perf-syn-quiet \
         perf-syn-gate-selftest perf-syn-line-probe \
@@ -795,6 +798,10 @@ $(BUILD)/fuzz_ai_shadow: $(FUZZ_LINK_OBJ) $(FUZZ_AI_SHADOW_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
 		$(FUZZ_AI_SHADOW_OBJ) $(LDLIBS)
 
+$(BUILD)/fuzz_ai_redact: $(FUZZ_LINK_OBJ) $(FUZZ_AI_REDACT_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_LINK_OBJ) \
+		$(FUZZ_AI_REDACT_OBJ) $(LDLIBS)
+
 $(LSP_LIVE_BIN): $(FUZZ_CORE_OBJ) $(LSP_LIVE_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(FUZZ_CORE_OBJ) \
 		$(LSP_LIVE_OBJ) $(LDLIBS)
@@ -835,6 +842,10 @@ $(BUILD)/perf_ai_shadow: $(PERF_CORE_OBJ) $(PERF_AI_SHADOW_OBJ) \
                          $(MOCKAI) $(MOCKCURL)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
 		$(PERF_AI_SHADOW_OBJ) $(LDLIBS)
+
+$(BUILD)/perf_ai_privacy: $(PERF_CORE_OBJ) $(PERF_AI_PRIVACY_OBJ)
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_CORE_OBJ) \
+		$(PERF_AI_PRIVACY_OBJ) $(LDLIBS)
 
 $(BUILD)/perf_batch: $(PERF_BATCH_OBJ)
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $(PERF_BATCH_OBJ) $(LDLIBS)
@@ -1047,10 +1058,11 @@ fuzz: $(BUILD)/fuzz_utf8 $(BUILD)/fuzz_grapheme $(BUILD)/fuzz_input \
 	fi
 
 fuzz-ai: $(BUILD)/fuzz_http $(BUILD)/fuzz_ai_stream \
-         $(BUILD)/fuzz_ai_shadow
+         $(BUILD)/fuzz_ai_shadow $(BUILD)/fuzz_ai_redact
 	$(BUILD)/fuzz_http --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_ai_stream --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 	$(BUILD)/fuzz_ai_shadow --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
+	$(BUILD)/fuzz_ai_redact --iters=$(FUZZ_ITERS) --seed=$(FUZZ_SEED)
 
 fuzz-groups: $(BUILD)/fuzz_groups
 	@set -eu; \
@@ -1227,6 +1239,9 @@ perf-ai-http: $(BUILD)/perf_ai_http
 
 perf-ai-shadow: $(BUILD)/perf_ai_shadow $(MOCKAI) $(MOCKCURL)
 	YEW_AI_MOCK=1 $(BUILD)/perf_ai_shadow
+
+perf-ai-privacy: $(BUILD)/perf_ai_privacy
+	$(BUILD)/perf_ai_privacy
 
 perf-ai-http-valgrind: $(BUILD)/perf_ai_http
 	valgrind --quiet --error-exitcode=99 --leak-check=full \
@@ -1715,7 +1730,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP) \
          $(FUZZ_JSON_OBJ:.o=.d) $(FUZZ_JSONRPC_OBJ:.o=.d) \
          $(FUZZ_LSP_MSG_OBJ:.o=.d) $(FUZZ_LSP_RESP_OBJ:.o=.d) \
          $(FUZZ_HTTP_OBJ:.o=.d) $(FUZZ_AI_STREAM_OBJ:.o=.d) \
-         $(FUZZ_AI_SHADOW_OBJ:.o=.d) \
+         $(FUZZ_AI_SHADOW_OBJ:.o=.d) $(FUZZ_AI_REDACT_OBJ:.o=.d) \
          $(LSP_LIVE_OBJ:.o=.d) \
          $(FUZZ_CMDPARSE_OBJ:.o=.d) $(FUZZ_RECOMPILE_OBJ:.o=.d) \
          $(FUZZ_REDIFF_OBJ:.o=.d) $(RE_REF_OBJ:.o=.d) \
@@ -1741,6 +1756,7 @@ test-pty: $(BUILD)/pty_runner $(BUILD)/demo_paint $(BUILD)/yew $(FAKELSP) \
          $(PERF_SYMIDX_OBJ:.o=.d) \
          $(PERF_LSP_OBJ:.o=.d) \
          $(PERF_AI_HTTP_OBJ:.o=.d) $(PERF_AI_SHADOW_OBJ:.o=.d) \
+         $(PERF_AI_PRIVACY_OBJ:.o=.d) \
          $(PERF_SCRIPT_SUITE_OBJ:.o=.d) \
          $(GEN_BIGFILE_OBJ:.o=.d) \
          $(TORTURE_CHILD_OBJ:.o=.d) \
