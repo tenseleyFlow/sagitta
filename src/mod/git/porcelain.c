@@ -657,33 +657,43 @@ static bool next_line(const u8 *buf, u64 n, u64 *at, ByteSpan *line,
 }
 
 static bool blame_header(ByteSpan line, ByteSpan *sha, u32 *final_line,
-                         u32 *line_count)
+                         u32 *line_count, bool *continuation)
 {
     ByteSpan fields[4];
     size_t at = 0U;
-    size_t i;
+    size_t field_count = 0U;
     u64 value;
 
-    for (i = 0U; i < 3U; i++) {
+    while (at < line.n && field_count < 4U) {
         size_t start = at;
         while (at < line.n && line.p[at] != (u8)' ')
             at++;
-        if (at == start || at == line.n)
+        if (at == start)
             return false;
-        fields[i].p = line.p + start;
-        fields[i].n = at - start;
-        at++;
+        fields[field_count].p = line.p + start;
+        fields[field_count].n = at - start;
+        field_count++;
+        if (at < line.n) {
+            at++;
+            if (at == line.n)
+                return false;
+        }
     }
-    fields[3].p = line.p + at;
-    fields[3].n = line.n - at;
+    if (at != line.n || (field_count != 3U && field_count != 4U))
+        return false;
     if (!is_hex_oid(fields[0]) || !decimal_u64(fields[1], UINT32_MAX, &value))
         return false;
     if (!decimal_u64(fields[2], UINT32_MAX, &value) || value == 0U)
         return false;
     *final_line = (u32)value;
-    if (!decimal_u64(fields[3], UINT32_MAX, &value) || value == 0U)
-        return false;
-    *line_count = (u32)value;
+    if (field_count == 4U) {
+        if (!decimal_u64(fields[3], UINT32_MAX, &value) || value == 0U)
+            return false;
+        *line_count = (u32)value;
+    } else {
+        *line_count = 1U;
+    }
+    *continuation = field_count == 3U;
     *sha = fields[0];
     return true;
 }
@@ -756,11 +766,13 @@ u32 yew_git_parse_blame(Arena *a, const u8 *buf, u64 n,
         ByteSpan sha;
         u32 final_line;
         u32 count;
+        bool continuation;
         if (!next_line(buf, n, &scan, &line, err))
             return 0U;
-        if (blame_header(line, &sha, &final_line, &count)) {
+        if (blame_header(line, &sha, &final_line, &count, &continuation)) {
             (void)sha;
             (void)final_line;
+            (void)continuation;
             if (max_lines > SIZE_MAX - count) {
                 (void)parse_error(err, scan, "too many blame lines");
                 return 0U;
@@ -780,14 +792,21 @@ u32 yew_git_parse_blame(Arena *a, const u8 *buf, u64 n,
         u32 count;
         size_t commit_index;
         bool got_filename = false;
+        bool known_commit;
+        bool continuation;
         u32 i;
 
         if (!next_line(buf, n, &at, &header, err) ||
-            !blame_header(header, &sha, &final_line, &count)) {
+            !blame_header(header, &sha, &final_line, &count, &continuation)) {
             (void)parse_error(err, at, "invalid blame group header");
             return 0U;
         }
         commit_index = find_commit(commit_data, commit_len, sha);
+        known_commit = commit_index != SIZE_MAX;
+        if (continuation && commit_index == SIZE_MAX) {
+            (void)parse_error(err, at, "blame continuation without metadata");
+            return 0U;
+        }
         if (commit_index == SIZE_MAX) {
             GitCommitMeta *meta = &commit_data[commit_len];
             memset(meta, 0, sizeof(*meta));
@@ -795,7 +814,7 @@ u32 yew_git_parse_blame(Arena *a, const u8 *buf, u64 n,
             meta->sha[sha.n] = '\0';
             commit_index = commit_len++;
         }
-        while (at < n) {
+        while (!continuation && at < n) {
             u64 before = at;
             ByteSpan line;
             ByteSpan value;
@@ -833,6 +852,10 @@ u32 yew_git_parse_blame(Arena *a, const u8 *buf, u64 n,
                 meta->boundary = true;
             }
         }
+        if (known_commit && at < n && buf[at] == (u8)'\t')
+            got_filename = true;
+        if (continuation)
+            got_filename = true;
         if (!got_filename) {
             (void)parse_error(err, at, "blame group missing filename");
             return 0U;
@@ -841,19 +864,23 @@ u32 yew_git_parse_blame(Arena *a, const u8 *buf, u64 n,
             (void)parse_error(err, at, "blame line range overflow");
             return 0U;
         }
-        for (i = 0U; i < count; i++) {
-            line_data[line_len].lineno = final_line + i;
-            line_data[line_len].commit = (u32)commit_index;
-            line_len++;
-        }
-        for (i = 0U; i < count && at < n && buf[at] == (u8)'\t'; i++) {
+        if (at < n && buf[at] == (u8)'\t') {
             ByteSpan content;
             if (!next_line(buf, n, &at, &content, err))
                 return 0U;
-        }
-        if (i != 0U && i != count) {
-            (void)parse_error(err, at, "truncated blame content");
-            return 0U;
+            line_data[line_len].lineno = final_line;
+            line_data[line_len].commit = (u32)commit_index;
+            line_len++;
+        } else {
+            if (continuation) {
+                (void)parse_error(err, at, "blame continuation missing content");
+                return 0U;
+            }
+            for (i = 0U; i < count; i++) {
+                line_data[line_len].lineno = final_line + i;
+                line_data[line_len].commit = (u32)commit_index;
+                line_len++;
+            }
         }
     }
     lines->data = line_data;

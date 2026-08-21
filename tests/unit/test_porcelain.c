@@ -294,7 +294,12 @@ void test_porcelain_blame_metadata_reuse_and_incremental(void)
         "boundary\n"
         "filename source.c\n"
         "\tline ten\n"
+        OID_A " 2 11\n"
         "\tline eleven\n"
+        OID_A " 15 15 2\n"
+        "\tline fifteen\n"
+        OID_A " 16 16\n"
+        "\tline sixteen\n"
         OID_A " 8 20 1\n"
         "previous " OID_B " old.c\n"
         "filename source.c\n"
@@ -307,8 +312,8 @@ void test_porcelain_blame_metadata_reuse_and_incremental(void)
 
     arena_init(&arena);
     YEW_ASSERT_EQ_U64(yew_git_parse_blame(&arena, input, sizeof(input) - 1U,
-                                          &lines, &commits, &err), 4U);
-    YEW_ASSERT_EQ_U64(lines.len, 4U);
+                                          &lines, &commits, &err), 6U);
+    YEW_ASSERT_EQ_U64(lines.len, 6U);
     YEW_ASSERT_EQ_U64(commits.len, 1U);
     YEW_ASSERT_EQ_STR(commits.data[0].sha, OID_A);
     YEW_ASSERT_EQ_STR(commits.data[0].author, "Jane Doe");
@@ -319,10 +324,12 @@ void test_porcelain_blame_metadata_reuse_and_incremental(void)
     YEW_ASSERT(commits.data[0].boundary);
     YEW_ASSERT_EQ_U64(lines.data[0].lineno, 10U);
     YEW_ASSERT_EQ_U64(lines.data[1].lineno, 11U);
-    YEW_ASSERT_EQ_U64(lines.data[2].lineno, 20U);
-    YEW_ASSERT_EQ_U64(lines.data[3].lineno, 30U);
+    YEW_ASSERT_EQ_U64(lines.data[2].lineno, 15U);
+    YEW_ASSERT_EQ_U64(lines.data[3].lineno, 16U);
+    YEW_ASSERT_EQ_U64(lines.data[4].lineno, 20U);
+    YEW_ASSERT_EQ_U64(lines.data[5].lineno, 30U);
     YEW_ASSERT_EQ_U64(lines.data[0].commit, 0U);
-    YEW_ASSERT_EQ_U64(lines.data[3].commit, 0U);
+    YEW_ASSERT_EQ_U64(lines.data[5].commit, 0U);
     arena_free_all(&arena);
 }
 
