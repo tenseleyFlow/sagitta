@@ -10,6 +10,7 @@
 
 #include "edit/buf.h"
 #include "edit/ed.h"
+#include "edit/option.h"
 #include "fl/flruntime.h"
 #include "mod/ai/ai_int.h"
 #include "mod/ai/registry.h"
@@ -90,6 +91,79 @@ static char *ai_privacy_path(void)
     return path;
 }
 
+typedef struct AiPresetTxn {
+    AiBackendRegistry backends;
+    u32 checkpoints[10];
+    u32 ncheckpoints;
+    bool registry_saved;
+} AiPresetTxn;
+
+static const char *const ai_preset_options[] = {
+    "ai.enable",
+    "ai.backend",
+    "shadow.ai_debounce_ms",
+    "ai.context_bytes",
+    "ai.max_tokens",
+    "ai.max_lines",
+    "ai.temperature",
+    "ai.fim",
+    "ai.on_redact",
+    "ai.default_workspace"
+};
+
+_Static_assert(YEW_ARRAY_LEN(ai_preset_options) ==
+                   YEW_ARRAY_LEN(((AiPresetTxn *)0)->checkpoints),
+               "preset transaction checkpoint table mismatch");
+
+static bool ai_preset_txn_begin(Ed *ed, AiPresetTxn *txn)
+{
+    u32 i;
+
+    (void)memset(txn, 0, sizeof(*txn));
+    for (i = 0U; i < YEW_ARRAY_LEN(ai_preset_options); i++) {
+        const char *error = NULL;
+        const char *name = ai_preset_options[i];
+        u32 checkpoint = yew_opt_checkpoint(
+            ed, name, (u32)strlen(name), &error);
+
+        (void)error;
+        if (checkpoint == 0U) {
+            while (txn->ncheckpoints != 0U)
+                yew_opt_discard(ed,
+                                txn->checkpoints[--txn->ncheckpoints]);
+            return false;
+        }
+        txn->checkpoints[txn->ncheckpoints++] = checkpoint;
+    }
+    txn->backends = ed->ai->backends;
+    yew_ai_registry_init(&ed->ai->backends, txn->backends.prepare,
+                         txn->backends.release,
+                         txn->backends.prepare_ctx);
+    txn->registry_saved = true;
+    return true;
+}
+
+static void ai_preset_txn_finish(Ed *ed, AiPresetTxn *txn, bool commit)
+{
+    if (txn->registry_saved) {
+        if (commit) {
+            yew_ai_registry_drop(&txn->backends);
+        } else {
+            yew_ai_registry_drop(&ed->ai->backends);
+            ed->ai->backends = txn->backends;
+        }
+        txn->registry_saved = false;
+    }
+    while (txn->ncheckpoints != 0U) {
+        u32 checkpoint = txn->checkpoints[--txn->ncheckpoints];
+
+        if (commit)
+            yew_opt_discard(ed, checkpoint);
+        else if (!yew_opt_rollback(ed, checkpoint))
+            YEW_BUG("AI preset option rollback failed");
+    }
+}
+
 bool yew_ai_preset_load(Ed *ed, const char *name)
 {
     const char *file;
@@ -97,6 +171,8 @@ bool yew_ai_preset_load(Ed *ed, const char *name)
     char *source;
     u32 len = 0U;
     CmdStatus status;
+    AiPresetTxn txn;
+    bool ok;
 
     if (ed == NULL || name == NULL)
         return false;
@@ -111,13 +187,18 @@ bool yew_ai_preset_load(Ed *ed, const char *name)
     free(path);
     if (source == NULL)
         return false;
+    if (ed->ai == NULL || !ai_preset_txn_begin(ed, &txn)) {
+        free(source);
+        return false;
+    }
     status = yew_fl_eval(ed, source, len);
     free(source);
-    if (status != YEW_CMD_OK || ed->ai == NULL)
-        return false;
-    return yew_ai_registry_keep(&ed->ai->backends,
-                                strcmp(name, "local") == 0 ? "local" :
-                                                               "work");
+    ok = status == YEW_CMD_OK &&
+         yew_ai_registry_keep(&ed->ai->backends,
+                              strcmp(name, "local") == 0 ? "local" :
+                                                             "work");
+    ai_preset_txn_finish(ed, &txn, ok);
+    return ok;
 }
 
 bool yew_ai_privacy_open(Ed *ed)

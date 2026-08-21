@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "edit/ed.h"
 #include "edit/option.h"
@@ -32,6 +33,16 @@ static char *preset_source(const char *path)
     source[(size_t)size] = '\0';
     YEW_ASSERT_EQ_I64(fclose(file), 0);
     return source;
+}
+
+static void preset_write_source(const char *path, const char *source)
+{
+    FILE *file = fopen(path, "wb");
+    size_t len = strlen(source);
+
+    YEW_ASSERT_NOT_NULL(file);
+    YEW_ASSERT_EQ_U64(fwrite(source, 1U, len, file), len);
+    YEW_ASSERT_EQ_I64(fclose(file), 0);
 }
 
 static const OptDesc *preset_option_at(const char *line, const char *end,
@@ -216,6 +227,11 @@ void test_ai_presets_parse_execute_and_replace_selection(void)
     AiErr error;
     bool key_ok;
     int restore_rc;
+    const char *old_runtime = getenv("YEW_RUNTIME_DIR");
+    char *saved_runtime = old_runtime == NULL ? NULL : strdup(old_runtime);
+    char bad_root[] = "/tmp/yew-ai-preset-XXXXXX";
+    char bad_local[sizeof(bad_root) + sizeof("/preset.ai-local.fl")];
+    OptVal value;
     u32 default_count = 0U;
     char *local_source = preset_source("runtime/preset.ai-local.fl");
     char *cloud_source = preset_source("runtime/preset.ai-cloud.fl");
@@ -249,6 +265,35 @@ void test_ai_presets_parse_execute_and_replace_selection(void)
     YEW_ASSERT(!selected->backend.url.loopback);
     YEW_ASSERT_NULL(yew_ai_registry_find(&ed.ai->backends, "local"));
     YEW_ASSERT_NOT_NULL(yew_ai_registry_find(&ed.ai->backends, "work"));
+
+    YEW_ASSERT_NOT_NULL(mkdtemp(bad_root));
+    (void)snprintf(bad_local, sizeof(bad_local),
+                   "%s/preset.ai-local.fl", bad_root);
+    preset_write_source(
+        bad_local,
+        "import ai\n"
+        "ai.backend(\"local\", {kind: \"ollama\", "
+        "url: \"http://127.0.0.1:11434\", model: \"bad\"})\n"
+        "set({\"ai.enable\": false, \"ai.backend\": \"local\", "
+        "\"ai.context_bytes\": 1024})\n"
+        "error(\"preset failed after mutation\")\n");
+    YEW_ASSERT_EQ_I64(setenv("YEW_RUNTIME_DIR", bad_root, 1), 0);
+    YEW_ASSERT(!yew_ai_preset_load(&ed, "local"));
+    YEW_ASSERT_EQ_U64(yew_ai_backend_count(&ed), 1U);
+    YEW_ASSERT_NOT_NULL(yew_ai_registry_find(&ed.ai->backends, "work"));
+    YEW_ASSERT_NULL(yew_ai_registry_find(&ed.ai->backends, "local"));
+    YEW_ASSERT_EQ_STR(preset_selected(&ed), "work");
+    YEW_ASSERT(yew_opt_get(&ed, NULL, NULL, "ai.enable", 9U, &value));
+    YEW_ASSERT(value.as.b);
+    YEW_ASSERT(yew_opt_get(&ed, NULL, NULL, "ai.context_bytes", 16U,
+                           &value));
+    YEW_ASSERT_EQ_I64(value.as.i, 2048);
+    restore_rc = saved_runtime == NULL ? unsetenv("YEW_RUNTIME_DIR") :
+                 setenv("YEW_RUNTIME_DIR", saved_runtime, 1);
+    free(saved_runtime);
+    YEW_ASSERT_EQ_I64(restore_rc, 0);
+    YEW_ASSERT_EQ_I64(unlink(bad_local), 0);
+    YEW_ASSERT_EQ_I64(rmdir(bad_root), 0);
 
     YEW_ASSERT_EQ_I64(unsetenv("ANTHROPIC_API_KEY"), 0);
     key_ok = yew_ai_key_get(&ed, &selected->backend, secret,

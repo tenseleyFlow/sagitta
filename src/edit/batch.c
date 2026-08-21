@@ -351,30 +351,56 @@ static bool open_batch_files(Ed *ed, const BatchOpts *opts)
     return true;
 }
 
-static bool batch_trace_contains(const Bytebuf *trace, const char *needle)
+static const FlStr *batch_error_field(const FlVm *vm, const char *name)
 {
-    size_t needle_len = strlen(needle);
-    size_t i;
+    u32 cursor = 0U;
+    FlValue key;
+    FlValue value;
+    size_t len = strlen(name);
 
-    if (needle_len == 0U || needle_len > trace->len)
-        return false;
-    for (i = 0U; i + needle_len <= trace->len; i++)
-        if (memcmp(trace->data + i, needle, needle_len) == 0)
-            return true;
-    return false;
+    if (vm == NULL || vm->err.t != (u8)FL_MAP)
+        return NULL;
+    while (fl_map_iter((const FlMap *)vm->err.as.o, &cursor, &key, &value)) {
+        const FlStr *field;
+
+        if (key.t != (u8)FL_STR || value.t != (u8)FL_STR)
+            continue;
+        field = (const FlStr *)key.as.o;
+        if ((size_t)field->len == len && memcmp(field->b, name, len) == 0)
+            return (const FlStr *)value.as.o;
+    }
+    return NULL;
+}
+
+static bool batch_ai_enable_refused(const FlVm *vm)
+{
+    static const char prefix[] =
+        "\"ed.ai.enable\" requires a terminal and is not available "
+        "under --batch; ";
+    const FlStr *kind = batch_error_field(vm, "kind");
+    const FlStr *msg = batch_error_field(vm, "msg");
+    size_t prefix_len = sizeof(prefix) - 1U;
+    size_t refusal_len = sizeof(ai_enable_no_tty) - 1U;
+
+    return kind != NULL && kind->len == sizeof("capability") - 1U &&
+           memcmp(kind->b, "capability", sizeof("capability") - 1U) == 0 &&
+           msg != NULL && (size_t)msg->len == prefix_len + refusal_len &&
+           memcmp(msg->b, prefix, prefix_len) == 0 &&
+           memcmp(msg->b + prefix_len, ai_enable_no_tty, refusal_len) == 0;
 }
 
 static bool render_script_error(FlVm *vm)
 {
     Bytebuf trace;
     size_t first = 0U;
-    bool ai_enable_refused;
+
+    if (batch_ai_enable_refused(vm)) {
+        (void)fprintf(stderr, "%s\n", ai_enable_no_tty);
+        return true;
+    }
 
     bytebuf_init(&trace);
     fl_trace_render(vm, vm->err, &trace);
-    ai_enable_refused = batch_trace_contains(
-        &trace, "\"ed.ai.enable\" requires a terminal") &&
-        batch_trace_contains(&trace, ai_enable_no_tty);
     if (trace.len >= 7U && memcmp(trace.data, "error: ", 7U) == 0)
         first = 7U;
     (void)fputs("yew: script failed: ", stderr);
@@ -382,7 +408,7 @@ static bool render_script_error(FlVm *vm)
     if (trace.len == first || trace.data[trace.len - 1U] != '\n')
         (void)fputc('\n', stderr);
     bytebuf_free(&trace);
-    return ai_enable_refused;
+    return false;
 }
 
 static void warn_dirty(Ed *ed, bool quiet)

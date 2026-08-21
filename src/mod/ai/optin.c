@@ -308,39 +308,64 @@ static bool optin_config_disable_merge(Bytebuf *out, const char *old,
         "# end yew AI opt-in\n";
     const char *begin;
     const char *end;
-    const char *flag;
+    const char *body_end;
+    const char *at;
+    bool found_flag = false;
 
     if (out == NULL || old == NULL || strlen(old) != old_len)
         return false;
     out->len = 0U;
     begin = strstr(old, start);
     end = begin == NULL ? NULL : strstr(begin, finish);
-    flag = begin == NULL || end == NULL ? NULL : strstr(begin, enabled);
-    if (flag != NULL && flag < end) {
-        bytebuf_append(out, old, (size_t)(flag - old));
-        bytebuf_append(out, disabled, sizeof(disabled) - 1U);
-        flag += sizeof(enabled) - 1U;
-        bytebuf_append(out, flag, old_len - (size_t)(flag - old));
-        return true;
-    }
-    if (begin != NULL && end != NULL &&
-        (flag = strstr(begin, disabled)) != NULL && flag < end) {
+    if (begin == NULL || end == NULL) {
         bytebuf_append(out, old, old_len);
-        return true;
-    }
-    if (begin != NULL && end != NULL) {
-        end += sizeof(finish) - 1U;
-        bytebuf_append(out, old, (size_t)(begin - old));
+        if (old_len != 0U && old[old_len - 1U] != '\n')
+            bytebuf_push_u8(out, (u8)'\n');
+        if (old_len != 0U)
+            bytebuf_push_u8(out, (u8)'\n');
         bytebuf_append(out, block, sizeof(block) - 1U);
-        bytebuf_append(out, end, old_len - (size_t)(end - old));
         return true;
     }
-    bytebuf_append(out, old, old_len);
-    if (old_len != 0U && old[old_len - 1U] != '\n')
+
+    body_end = end;
+    end += sizeof(finish) - 1U;
+    /* The managed block must be the final authority.  Move it after every
+     * user-authored trailing override, retaining its backend definitions. */
+    bytebuf_append(out, old, (size_t)(begin - old));
+    bytebuf_append(out, end, old_len - (size_t)(end - old));
+    if (out->len != 0U && out->data[out->len - 1U] != '\n')
         bytebuf_push_u8(out, (u8)'\n');
-    if (old_len != 0U)
-        bytebuf_push_u8(out, (u8)'\n');
-    bytebuf_append(out, block, sizeof(block) - 1U);
+
+    at = begin;
+    while (at < body_end) {
+        const char *flag = strstr(at, enabled);
+        const char *already = strstr(at, disabled);
+
+        if (flag == NULL || flag >= body_end)
+            flag = NULL;
+        if (already == NULL || already >= body_end)
+            already = NULL;
+        if (flag == NULL && already == NULL)
+            break;
+        if (already != NULL && (flag == NULL || already < flag)) {
+            bytebuf_append(out, at,
+                           (size_t)(already - at) + sizeof(disabled) - 1U);
+            at = already + sizeof(disabled) - 1U;
+        } else {
+            bytebuf_append(out, at, (size_t)(flag - at));
+            bytebuf_append(out, disabled, sizeof(disabled) - 1U);
+            at = flag + sizeof(enabled) - 1U;
+        }
+        found_flag = true;
+    }
+    bytebuf_append(out, at, (size_t)(body_end - at));
+    if (!found_flag) {
+        if (out->len != 0U && out->data[out->len - 1U] != '\n')
+            bytebuf_push_u8(out, (u8)'\n');
+        bytebuf_append(out, "set({\"ai.enable\": false})\n",
+                       sizeof("set({\"ai.enable\": false})\n") - 1U);
+    }
+    bytebuf_append(out, finish, sizeof(finish) - 1U);
     return true;
 }
 

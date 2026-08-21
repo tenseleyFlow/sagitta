@@ -160,9 +160,11 @@ cmp -s "$err" "$tmp/batch-fail.expected" || fail "batch failure golden"
 
 run_capture "$bin" --batch --clean "$batch_dir/ai-enable.fl"
 expect_rc 1 "batch AI enable refusal"
-expect_stderr_contains \
-    "AI cannot be enabled non-interactively; set ai.enable in init.fl if you have read :ai privacy" \
-    "batch AI enable refusal"
+printf '%s\n' \
+    'AI cannot be enabled non-interactively; set ai.enable in init.fl if you have read :ai privacy' \
+    >"$tmp/batch-ai-enable.expected"
+cmp -s "$err" "$tmp/batch-ai-enable.expected" || \
+    fail "batch AI enable refusal golden"
 
 rc=0
 YEW_BATCH_SELFTEST_TTY=1 \

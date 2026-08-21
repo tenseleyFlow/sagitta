@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 
 #include "edit/cmd.h"
@@ -14,6 +15,8 @@
 #include "fl/flconf.h"
 #include "mod/ai/ai.h"
 #include "mod/ai/optin.h"
+#include "mod/ai/preset.h"
+#include "mod/ai/registry.h"
 #include "ui/cmdline.h"
 #include "ui/message.h"
 
@@ -273,6 +276,10 @@ void test_ai_privacy_commands_are_live(void)
     bytebuf_init(&initial);
     YEW_ASSERT(yew_ai_optin_config_merge(&initial, "", 0U,
                                           YEW_AI_OPTIN_LOCAL, false));
+    bytebuf_append(&initial,
+                   "\n# later user override\nset({\"ai.enable\": true})\n",
+                   sizeof("\n# later user override\n"
+                          "set({\"ai.enable\": true})\n") - 1U);
     bytebuf_push_u8(&initial, 0U);
     optin_write_text(config, (const char *)initial.data);
     bytebuf_free(&initial);
@@ -292,7 +299,16 @@ void test_ai_privacy_commands_are_live(void)
     persisted = optin_read_text(config);
     YEW_ASSERT(strstr(persisted, "\"ai.enable\": false") != NULL);
     YEW_ASSERT(strstr(persisted, "\"ai.backend\": \"local\"") != NULL);
+    YEW_ASSERT(strstr(persisted, "# later user override") <
+               strstr(persisted, "# yew AI opt-in"));
+    before = strdup(persisted);
+    YEW_ASSERT_NOT_NULL(before);
     free(persisted);
+    YEW_ASSERT_EQ_I64(yew_ai_cmd_disable(&cx), YEW_CMD_OK);
+    persisted = optin_read_text(config);
+    YEW_ASSERT_EQ_STR(persisted, before);
+    free(persisted);
+    free(before);
     YEW_ASSERT_EQ_I64(yew_ai_cmd_enable(&cx), YEW_CMD_ERR_STATE);
     YEW_ASSERT_EQ_STR(ed.msg.text, yew_ai_optin_no_tty_message());
     yew_msg_clear(&ed);
@@ -385,5 +401,121 @@ void test_ai_privacy_commands_are_live(void)
     }
     YEW_ASSERT_EQ_I64(unlink(state_blocker), 0);
     YEW_ASSERT_EQ_I64(unlink(config), 0);
+    YEW_ASSERT_EQ_I64(rmdir(root), 0);
+}
+
+void test_ai_optin_failed_presets_restore_every_scope(void)
+{
+    static const char scopes[] = {'o', 'w', 'a'};
+    static const char bad_preset[] =
+        "import ai\n"
+        "ai.backend(\"local\", {kind: \"ollama\", "
+        "url: \"http://127.0.0.1:11434\", model: \"bad\"})\n"
+        "set({\"ai.enable\": false, \"ai.backend\": \"local\", "
+        "\"ai.context_bytes\": 1024})\n"
+        "error(\"failed after mutation\")\n";
+    char root[] = "/tmp/yew-ai-optin-txn-XXXXXX";
+    char config[sizeof(root) + sizeof("/init.fl")];
+    char preset[sizeof(root) + sizeof("/preset.ai-local.fl")];
+    char state[sizeof(root) + sizeof("/state")];
+    char trust_dir[sizeof(root) + sizeof("/state/yew")];
+    char trust[sizeof(root) + sizeof("/state/yew/trust.fl")];
+    char log_path[sizeof(root) + sizeof("/state/yew/log")];
+    char history_dir[sizeof(root) + sizeof("/state/yew/history")];
+    char history_input[sizeof(root) + sizeof("/state/yew/history/input")];
+    char history_lock[sizeof(root) + sizeof("/state/yew/history/input.lock")];
+    const char *runtime_env = getenv("YEW_RUNTIME_DIR");
+    const char *state_env = getenv("XDG_STATE_HOME");
+    char *saved_runtime = runtime_env == NULL ? NULL : strdup(runtime_env);
+    char *saved_state = state_env == NULL ? NULL : strdup(state_env);
+    size_t i;
+
+    YEW_ASSERT_NOT_NULL(mkdtemp(root));
+    (void)snprintf(config, sizeof(config), "%s/init.fl", root);
+    (void)snprintf(preset, sizeof(preset), "%s/preset.ai-local.fl", root);
+    (void)snprintf(state, sizeof(state), "%s/state", root);
+    (void)snprintf(trust_dir, sizeof(trust_dir), "%s/state/yew", root);
+    (void)snprintf(trust, sizeof(trust), "%s/state/yew/trust.fl", root);
+    (void)snprintf(log_path, sizeof(log_path), "%s/state/yew/log", root);
+    (void)snprintf(history_dir, sizeof(history_dir),
+                   "%s/state/yew/history", root);
+    (void)snprintf(history_input, sizeof(history_input),
+                   "%s/state/yew/history/input", root);
+    (void)snprintf(history_lock, sizeof(history_lock),
+                   "%s/state/yew/history/input.lock", root);
+    YEW_ASSERT_EQ_I64(mkdir(state, 0700), 0);
+    optin_write_text(preset, bad_preset);
+    YEW_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", state, 1), 0);
+
+    for (i = 0U; i < sizeof(scopes); i++) {
+        Ed ed;
+        YewAiOptin optin;
+        YewEdStartup startup = {0};
+        OptVal value;
+        char answer[2] = {scopes[i], '\0'};
+        char *persisted;
+
+        optin_write_text(config, "let keep = 1\n");
+        startup.config_path = config;
+        YEW_ASSERT_EQ_I64(unsetenv("YEW_RUNTIME_DIR"), 0);
+        yew_ed_init(&ed);
+        yew_config_init(&ed, &startup);
+        YEW_ASSERT(yew_ed_open_memory(&ed, NULL, 0U, "optin-txn"));
+        YEW_ASSERT(yew_ai_preset_load(&ed, "cloud"));
+        YEW_ASSERT_EQ_I64(setenv("YEW_RUNTIME_DIR", root, 1), 0);
+        YEW_ASSERT(yew_ai_optin_begin_default_checked(&optin, &ed, true));
+        optin_answer(&ed, "1");
+        optin_answer(&ed, "y");
+        optin_answer(&ed, answer);
+        if (scopes[i] == 'o') {
+            YEW_ASSERT(!optin.active);
+        } else {
+            YEW_ASSERT(optin.active);
+            YEW_ASSERT_EQ_U64(optin.phase, 4U);
+            optin_answer(&ed, "n");
+            YEW_ASSERT(!optin.active);
+        }
+        YEW_ASSERT_NOT_NULL(yew_ai_backend_selected(&ed));
+        YEW_ASSERT_EQ_STR(yew_ai_backend_selected(&ed)->backend.name,
+                          "work");
+        YEW_ASSERT(yew_opt_get(&ed, NULL, NULL, "ai.enable", 9U, &value));
+        YEW_ASSERT(value.as.b);
+        YEW_ASSERT(yew_opt_get(&ed, NULL, NULL, "ai.context_bytes", 16U,
+                               &value));
+        YEW_ASSERT_EQ_I64(value.as.i, 2048);
+        YEW_ASSERT_EQ_U64(yew_ai_workspace_grant(&ed), YEW_AI_WS_UNSET);
+        persisted = optin_read_text(config);
+        YEW_ASSERT_EQ_STR(persisted, "let keep = 1\n");
+        free(persisted);
+        yew_ed_free(&ed);
+    }
+
+    if (saved_runtime != NULL) {
+        YEW_ASSERT_EQ_I64(setenv("YEW_RUNTIME_DIR", saved_runtime, 1), 0);
+        free(saved_runtime);
+    } else {
+        YEW_ASSERT_EQ_I64(unsetenv("YEW_RUNTIME_DIR"), 0);
+    }
+    if (saved_state != NULL) {
+        YEW_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", saved_state, 1), 0);
+        free(saved_state);
+    } else {
+        YEW_ASSERT_EQ_I64(unsetenv("XDG_STATE_HOME"), 0);
+    }
+    if (access(trust, F_OK) == 0)
+        YEW_ASSERT_EQ_I64(unlink(trust), 0);
+    if (access(log_path, F_OK) == 0)
+        YEW_ASSERT_EQ_I64(unlink(log_path), 0);
+    if (access(history_input, F_OK) == 0)
+        YEW_ASSERT_EQ_I64(unlink(history_input), 0);
+    if (access(history_lock, F_OK) == 0)
+        YEW_ASSERT_EQ_I64(unlink(history_lock), 0);
+    if (access(history_dir, F_OK) == 0)
+        YEW_ASSERT_EQ_I64(rmdir(history_dir), 0);
+    if (access(trust_dir, F_OK) == 0)
+        YEW_ASSERT_EQ_I64(rmdir(trust_dir), 0);
+    YEW_ASSERT_EQ_I64(unlink(config), 0);
+    YEW_ASSERT_EQ_I64(unlink(preset), 0);
+    YEW_ASSERT_EQ_I64(rmdir(state), 0);
     YEW_ASSERT_EQ_I64(rmdir(root), 0);
 }

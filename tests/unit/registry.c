@@ -877,6 +877,7 @@ const YewTest yew_tests[] = {
     T(ai_privacy_page_opens_readonly_scratch),
     T(ai_optin_local_and_cloud_confirmations_are_distinct),
     T(ai_optin_escape_and_no_tty_never_commit),
+    T(ai_optin_failed_presets_restore_every_scope),
     T(ai_privacy_commands_are_live),
     T(ai_privacy_wire_body_fields_match_documented_sent_rows),
     T(ai_privacy_wire_headers_match_documented_sent_rows),
