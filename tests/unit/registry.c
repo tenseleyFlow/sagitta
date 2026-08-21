@@ -808,6 +808,14 @@ const YewTest yew_tests[] = {
     T(json_writer_structure_bugs),
 #endif
 #if YEW_WITH_AI
+    T(ai_redact_shipped_fixture_matrix),
+    T(ai_redact_false_positive_boundaries),
+    T(ai_redact_prefix_suffix_line_and_first_rule),
+    T(ai_redact_user_merge_replace_and_compile_error),
+    T(ai_paths_all_defaults_case_and_nesting),
+    T(ai_paths_nonmatches_and_separator_boundary),
+    T(ai_paths_user_merge_replace_question_and_star),
+    T(ai_paths_null_and_empty_lifecycle),
     T(http_url_parse),
     T(http_url_rejections),
     T(http_req_golden),
