@@ -336,12 +336,12 @@ void test_porcelain_blame_metadata_reuse_and_incremental(void)
 void test_porcelain_log_reflog_format_edges(void)
 {
     static const u8 log_input[] =
-        OID_A "\037aaaaaaa\0371700000000\037Jane\037jane@example.test\037"
-        OID_B "\037HEAD -> trunk\037subject\037body\037with-us\0"
-        OID_B "\037bbbbbbb\037-1\037Bob\037bob@example.test\037\037\037"
-        "last\037final body";
+        OID_A "\0aaaaaaa\0" "1700000000\0Jane\0jane@example.test\0"
+        OID_B "\0HEAD -> trunk\0subject\037with-us\0body\037with-us\0"
+        OID_B "\0bbbbbbb\0-1\0Bob\0bob@example.test\0\0\0"
+        "last\0final body";
     static const u8 reflog_input[] =
-        OID_C "\037ccccccc\037HEAD@{0}\037commit: message\03742\037"
+        OID_C "\0ccccccc\0HEAD@{0}\0commit: message\0" "42\0"
         "subject\037with-us";
     Arena arena;
     GitLogRecordList logs;
@@ -352,7 +352,10 @@ void test_porcelain_log_reflog_format_edges(void)
     YEW_ASSERT(yew_git_parse_log(&arena, log_input, sizeof(log_input) - 1U,
                                  &logs, &err));
     YEW_ASSERT_EQ_U64(logs.len, 2U);
-    YEW_ASSERT_EQ_STR(logs.data[0].subject, "subject");
+    YEW_ASSERT_EQ_U64(strlen(logs.data[0].subject),
+                      strlen("subject\037with-us"));
+    YEW_ASSERT_EQ_MEM(logs.data[0].subject, "subject\037with-us",
+                      strlen("subject\037with-us"));
     YEW_ASSERT_EQ_U64(strlen(logs.data[0].body), strlen("body\037with-us"));
     YEW_ASSERT_EQ_MEM(logs.data[0].body, "body\037with-us",
                       strlen("body\037with-us"));

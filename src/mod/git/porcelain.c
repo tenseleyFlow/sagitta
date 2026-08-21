@@ -894,35 +894,47 @@ u32 yew_git_parse_blame(Arena *a, const u8 *buf, u64 n,
     return (u32)line_len;
 }
 
-static bool split_fields(ByteSpan record, ByteSpan *fields, size_t separators)
+static bool pretty_record(const u8 *buf, u64 n, u64 *at, ByteSpan *fields,
+                          size_t separators, GitParseErr *err)
 {
-    size_t at = 0U;
     size_t field;
+
     for (field = 0U; field < separators; field++) {
-        const u8 *sep = memchr(record.p + at, 0x1f, record.n - at);
-        if (!sep)
-            return false;
-        fields[field].p = record.p + at;
-        fields[field].n = (size_t)(sep - (record.p + at));
-        at = (size_t)(sep - record.p) + 1U;
+        const u8 *nul = memchr(buf + *at, 0, (size_t)(n - *at));
+        if (!nul)
+            return parse_error(err, *at, "truncated pretty record");
+        fields[field].p = buf + *at;
+        fields[field].n = (size_t)(nul - (buf + *at));
+        *at = (u64)(nul - buf) + 1U;
     }
-    fields[separators].p = record.p + at;
-    fields[separators].n = record.n - at;
+    fields[separators].p = buf + *at;
+    {
+        const u8 *nul = memchr(buf + *at, 0, (size_t)(n - *at));
+        if (nul) {
+            fields[separators].n = (size_t)(nul - (buf + *at));
+            *at = (u64)(nul - buf) + 1U;
+        } else {
+            fields[separators].n = (size_t)(n - *at);
+            *at = n;
+        }
+    }
     return true;
 }
 
-static size_t pretty_record_count(const u8 *buf, u64 n)
+static bool pretty_record_count(const u8 *buf, u64 n, size_t separators,
+                                size_t *count, GitParseErr *err)
 {
-    size_t count = 0U;
-    u64 i;
-    if (n == 0U)
-        return 0U;
-    for (i = 0U; i < n; i++)
-        if (buf[i] == 0U)
-            count++;
-    if (buf[n - 1U] != 0U)
-        count++;
-    return count;
+    ByteSpan fields[9];
+    size_t total = 0U;
+    u64 at = 0U;
+
+    while (at < n) {
+        if (!pretty_record(buf, n, &at, fields, separators, err))
+            return false;
+        total++;
+    }
+    *count = total;
+    return true;
 }
 
 bool yew_git_parse_log(Arena *a, const u8 *buf, u64 n,
@@ -936,24 +948,21 @@ bool yew_git_parse_log(Arena *a, const u8 *buf, u64 n,
         return parse_error(err, 0U, "invalid log input");
     records->data = NULL;
     records->len = 0U;
-    count = pretty_record_count(buf, n);
+    if (!pretty_record_count(buf, n, 8U, &count, err))
+        return false;
     if (count)
         records->data = arena_alloc(a, count * sizeof(*records->data),
                                     alignof(GitLogRecord));
     while (at < n) {
-        const u8 *nul = memchr(buf + at, 0, (size_t)(n - at));
-        u64 end = nul ? (u64)(nul - buf) : n;
-        ByteSpan record = {buf + at, (size_t)(end - at)};
         ByteSpan field[9];
         GitLogRecord *out;
         i64 timestamp;
-        if (record.n == 0U)
-            return parse_error(err, at, "empty log record");
-        if (!split_fields(record, field, 8U))
-            return parse_error(err, at, "truncated log record");
+        u64 record_at = at;
+        if (!pretty_record(buf, n, &at, field, 8U, err))
+            return false;
         if (!is_hex_oid(field[0]) || field[1].n == 0U ||
             !decimal_i64(field[2], &timestamp))
-            return parse_error(err, at, "invalid log record");
+            return parse_error(err, record_at, "invalid log record");
         out = &records->data[len++];
         out->oid = span_dup(a, field[0]);
         out->short_oid = span_dup(a, field[1]);
@@ -964,7 +973,6 @@ bool yew_git_parse_log(Arena *a, const u8 *buf, u64 n,
         out->refs = span_dup(a, field[6]);
         out->subject = span_dup(a, field[7]);
         out->body = span_dup(a, field[8]);
-        at = nul ? end + 1U : n;
     }
     records->len = len;
     return true;
@@ -981,24 +989,21 @@ bool yew_git_parse_reflog(Arena *a, const u8 *buf, u64 n,
         return parse_error(err, 0U, "invalid reflog input");
     records->data = NULL;
     records->len = 0U;
-    count = pretty_record_count(buf, n);
+    if (!pretty_record_count(buf, n, 5U, &count, err))
+        return false;
     if (count)
         records->data = arena_alloc(a, count * sizeof(*records->data),
                                     alignof(GitReflogRecord));
     while (at < n) {
-        const u8 *nul = memchr(buf + at, 0, (size_t)(n - at));
-        u64 end = nul ? (u64)(nul - buf) : n;
-        ByteSpan record = {buf + at, (size_t)(end - at)};
         ByteSpan field[6];
         GitReflogRecord *out;
         i64 timestamp;
-        if (record.n == 0U)
-            return parse_error(err, at, "empty reflog record");
-        if (!split_fields(record, field, 5U))
-            return parse_error(err, at, "truncated reflog record");
+        u64 record_at = at;
+        if (!pretty_record(buf, n, &at, field, 5U, err))
+            return false;
         if (!is_hex_oid(field[0]) || field[1].n == 0U ||
             !decimal_i64(field[4], &timestamp))
-            return parse_error(err, at, "invalid reflog record");
+            return parse_error(err, record_at, "invalid reflog record");
         out = &records->data[len++];
         out->oid = span_dup(a, field[0]);
         out->short_oid = span_dup(a, field[1]);
@@ -1006,7 +1011,6 @@ bool yew_git_parse_reflog(Arena *a, const u8 *buf, u64 n,
         out->message = span_dup(a, field[3]);
         out->author_time = timestamp;
         out->subject = span_dup(a, field[5]);
-        at = nul ? end + 1U : n;
     }
     records->len = len;
     return true;
