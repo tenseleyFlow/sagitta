@@ -418,6 +418,9 @@ $(BUILD)/tests/unit/test_ai_commands.o: $(FAKEHTTP) $(FAKECURL)
 $(BUILD)/tests/unit/test_ai_cancel.o: CFLAGS += \
   -DYEW_TEST_FAKEHTTP='"$(abspath $(FAKEHTTP))"'
 $(BUILD)/tests/unit/test_ai_cancel.o: $(FAKEHTTP)
+$(BUILD)/tests/unit/test_ai_debug.o: CFLAGS += \
+  -DYEW_TEST_MOCKAI='"$(abspath $(MOCKAI))"'
+$(BUILD)/tests/unit/test_ai_debug.o: $(MOCKAI)
 $(BUILD)/tests/unit/test_ai_shadow_live.o: CFLAGS += \
   -DYEW_TEST_MOCKAI='"$(abspath $(MOCKAI))"' \
   -DYEW_TEST_MOCKCURL='"$(abspath $(MOCKCURL))"'

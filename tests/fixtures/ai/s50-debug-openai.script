@@ -1,0 +1,6 @@
+# Sprint 50 debug-log lifecycle fixture.
+status 200
+header content-type: text/event-stream
+framing sse
+emit data: {"choices":[{"delta":{"content":"completion-unique-marker-s50"}}]}\n\n
+emit data: [DONE]\n\n

@@ -2,16 +2,26 @@
 
 #include "harness.h"
 
+#include <errno.h>
+#include <poll.h>
+#include <signal.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/wait.h>
+#include <unistd.h>
 
 #include "edit/ed.h"
+#include "edit/job.h"
 #include "edit/option.h"
 #include "fl/flruntime.h"
 #include "mod/ai/ai.h"
 #include "mod/ai/ai_int.h"
 #include "mod/ai/debug.h"
 #include "mod/ai/shadow_ai.h"
+
+#ifndef YEW_TEST_MOCKAI
+#define YEW_TEST_MOCKAI "build/tests/helpers/mockai"
+#endif
 
 static bool log_contains(const Bytebuf *log, const char *needle)
 {
@@ -66,6 +76,75 @@ static bool debug_transport_start(void *opaque, u8 transport,
     return true;
 }
 
+static pid_t debug_server_start(u16 *port)
+{
+    int output[2];
+    pid_t pid;
+    FILE *stream;
+    unsigned value = 0U;
+
+    YEW_ASSERT_EQ_I64(pipe(output), 0);
+    pid = fork();
+    YEW_ASSERT(pid >= 0);
+    if (pid == 0) {
+        (void)close(output[0]);
+        if (dup2(output[1], STDOUT_FILENO) < 0)
+            _exit(126);
+        (void)close(output[1]);
+        execl(YEW_TEST_MOCKAI, YEW_TEST_MOCKAI, "--port", "0",
+              "--script", "tests/fixtures/ai/s50-debug-openai.script",
+              (char *)NULL);
+        _exit(127);
+    }
+    (void)close(output[1]);
+    stream = fdopen(output[0], "r");
+    YEW_ASSERT_NOT_NULL(stream);
+    YEW_ASSERT_EQ_I64(fscanf(stream, "port %u", &value), 1);
+    YEW_ASSERT(value > 0U && value <= 65535U);
+    YEW_ASSERT_EQ_I64(fclose(stream), 0);
+    *port = (u16)value;
+    return pid;
+}
+
+static void debug_server_stop(pid_t pid)
+{
+    int status = 0;
+
+    YEW_ASSERT(pid > 0);
+    YEW_ASSERT_EQ_I64(kill(pid, SIGTERM), 0);
+    while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
+    YEW_ASSERT(WIFEXITED(status));
+    YEW_ASSERT_EQ_I64(WEXITSTATUS(status), 0);
+}
+
+static bool debug_drive(Ed *ed)
+{
+    i64 started = yew_now_ms();
+
+    while (ed->ai->call.active && yew_now_ms() - started < 3000) {
+        struct pollfd fds[YEW_JOB_MAX * 4U + YEW_HTTP_POOL_MAX];
+        u32 nfds = 0U;
+        i64 deadline;
+        int timeout;
+        int rc;
+
+        yew_job_collect_fds(ed, fds, &nfds);
+        yew_ai_collect_fds(ed, fds, &nfds);
+        deadline = yew_ai_deadline(ed, yew_now_ms());
+        timeout = deadline < 0 || deadline > 20 ? 20 : (int)deadline;
+        rc = poll(fds, (nfds_t)nfds, timeout);
+        if (rc < 0 && errno != EINTR)
+            return false;
+        ed->now_ms = yew_now_ms();
+        yew_job_pump(ed, fds, nfds);
+        yew_job_reap(ed);
+        yew_job_tick(ed, ed->now_ms);
+        yew_job_settle(ed);
+        yew_ai_pump(ed, fds, nfds);
+    }
+    return !ed->ai->call.active;
+}
+
 static ShadowReq debug_request(const Ed *ed, u32 seq)
 {
     ShadowReq request = {0};
@@ -104,28 +183,42 @@ static void debug_set_bool(Ed *ed, const char *name, bool value)
 
 static void debug_cycle(Ed *ed, const char *name, const char *kind,
                         const char *transport, const char *key_env,
-                        const char *completion, u32 *starts)
+                        const char *completion, u32 *starts, bool live)
 {
     char config[1024];
     ShadowReq request;
     AiCall *call;
+    pid_t server = 0;
+    u16 port = 9U;
+    bool requested;
     int n;
 
+    if (live)
+        server = debug_server_start(&port);
     n = snprintf(config, sizeof(config),
                  "import ai\n"
                  "ai.backend(\"%s\", {kind: \"%s\", "
-                 "transport: \"%s\", url: \"http://127.0.0.1:9/v1\", "
+                 "transport: \"%s\", url: \"http://127.0.0.1:%u/v1\", "
                  "model: \"model-marker-s50\", key_env: \"%s\"})\n",
-                 name, kind, transport, key_env);
+                 name, kind, transport, (unsigned)port, key_env);
     YEW_ASSERT(n > 0 && (size_t)n < sizeof(config));
     YEW_ASSERT_EQ_I64(yew_fl_eval(ed, config, (u32)n), YEW_CMD_OK);
     debug_set_str(ed, "ai.backend", name);
     debug_set_bool(ed, "ai.enable", true);
     yew_ai_workspace_session_set(ed, YEW_AI_WS_ALLOW);
-    yew_ai_transport_test_set(debug_transport_start, starts);
+    if (!live)
+        yew_ai_transport_test_set(debug_transport_start, starts);
 
     request = debug_request(ed, 1U);
-    YEW_ASSERT(yew_ai_shadow_test_request(ed, &request));
+    requested = yew_ai_shadow_test_request(ed, &request);
+    if (!live)
+        yew_ai_transport_test_set(NULL, NULL);
+    YEW_ASSERT(requested);
+    if (live) {
+        YEW_ASSERT(debug_drive(ed));
+        debug_server_stop(server);
+        return;
+    }
     YEW_ASSERT_EQ_U64(*starts, 1U);
     call = &ed->ai->call;
     YEW_ASSERT(call->active);
@@ -140,7 +233,6 @@ static void debug_cycle(Ed *ed, const char *name, const char *kind,
     call->adapter.output_tokens = 3;
     yew_ai_shadow_pump(ed);
     YEW_ASSERT(!ed->ai->call.active);
-    yew_ai_transport_test_set(NULL, NULL);
 }
 
 static void debug_editor(Ed *ed, const char *prompt)
@@ -199,7 +291,6 @@ void test_ai_debug_normal_cycle_logs_metadata_without_bodies(void)
     static const char completion[] = "completion-unique-marker-s50";
     const char *old_debug = getenv("YEW_AI_DEBUG");
     char *saved_debug = old_debug != NULL ? strdup(old_debug) : NULL;
-    u32 starts = 0U;
     Ed ed;
 
     YEW_ASSERT_EQ_I64(unsetenv("YEW_AI_DEBUG"), 0);
@@ -208,15 +299,15 @@ void test_ai_debug_normal_cycle_logs_metadata_without_bodies(void)
     debug_editor(&ed, prompt);
     set_debug_bodies(&ed, true);
     debug_cycle(&ed, "debug-openai", "openai", "http",
-                "YEW_TEST_AI_DEBUG_KEY", completion, &starts);
+                "YEW_TEST_AI_DEBUG_KEY", completion, NULL, true);
 
     YEW_ASSERT(log_contains(&ed.ai->log, "model=model-marker-s50"));
     YEW_ASSERT(log_contains(&ed.ai->log, "context="));
     YEW_ASSERT(log_contains(&ed.ai->log, "body="));
     YEW_ASSERT(log_contains(&ed.ai->log, "transport=http"));
+    YEW_ASSERT(log_contains(&ed.ai->log, "first-token="));
     YEW_ASSERT(log_contains(&ed.ai->log,
-                            "first-token=2 total=4 response=28 "
-                            "tokens=11/3 class=0"));
+                            "response=28 tokens=-1/-1 class=0"));
     YEW_ASSERT(!log_contains(&ed.ai->log, prompt));
     YEW_ASSERT(!log_contains(&ed.ai->log, completion));
     YEW_ASSERT(!log_contains(&ed.ai->log, "debug request body"));
@@ -249,7 +340,7 @@ void test_ai_debug_dual_gate_cycle_logs_bodies_and_redacted_keys(void)
     debug_editor(&ed, prompt);
     set_debug_bodies(&ed, true);
     debug_cycle(&ed, "debug-openai", "openai", "http",
-                "YEW_TEST_AI_DEBUG_KEY", completion, &starts);
+                "YEW_TEST_AI_DEBUG_KEY", completion, NULL, true);
 
     YEW_ASSERT(log_contains(&ed.ai->log, prompt));
     YEW_ASSERT(log_contains(&ed.ai->log, completion));
@@ -264,11 +355,10 @@ void test_ai_debug_dual_gate_cycle_logs_bodies_and_redacted_keys(void)
     YEW_ASSERT(!yew_test_log_contains(YEW_LOG_DEBUG, key));
     yew_ed_free(&ed);
 
-    starts = 0U;
     debug_editor(&ed, prompt);
     set_debug_bodies(&ed, true);
     debug_cycle(&ed, "debug-anthropic", "anthropic", "curl",
-                "YEW_TEST_AI_DEBUG_KEY", completion, &starts);
+                "YEW_TEST_AI_DEBUG_KEY", completion, &starts, false);
     YEW_ASSERT(log_contains(&ed.ai->log,
                             "x-api-key: <redacted 16 bytes>"));
     YEW_ASSERT(!log_contains(&ed.ai->log, key));
