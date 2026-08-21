@@ -367,6 +367,8 @@ UNIT_AI_SRC := tests/unit/test_ai_backend.c tests/unit/test_ai_curl.c \
                tests/unit/test_ai_registry.c tests/unit/test_ai_runtime.c \
                tests/unit/test_ai_stream.c tests/unit/test_ai_context.c \
                tests/unit/test_ai_prompt.c tests/unit/test_ai_trim.c \
+               tests/unit/test_ai_frame.c tests/unit/test_ai_cancel.c \
+               tests/unit/test_ai_stats.c tests/unit/test_ai_shadow_live.c \
                tests/unit/test_http_chunk.c tests/unit/test_http_req.c \
                tests/unit/test_http_rx.c tests/unit/test_http_url.c \
                tests/unit/test_http_live.c
@@ -392,6 +394,9 @@ FAKECLIP := $(BUILD)/fakeclip
 FAKELSP := $(BUILD)/tests/helpers/fakelsp
 FAKECURL := $(BUILD)/tests/helpers/fakecurl
 FAKEHTTP := $(BUILD)/tests/helpers/fakehttp
+MOCKAI := $(BUILD)/tests/helpers/mockai
+MOCKCURL := $(BUILD)/tests/helpers/mockcurl
+AI_TEST_HELPERS := $(if $(filter ai,$(MODULES)),$(MOCKAI) $(MOCKCURL))
 $(BUILD)/tests/unit/test_ai_curl.o: CFLAGS += \
   -DYEW_TEST_FAKECURL='"$(abspath $(FAKECURL))"'
 $(BUILD)/tests/unit/test_ai_curl.o: $(FAKECURL)
@@ -402,6 +407,13 @@ $(BUILD)/tests/unit/test_ai_commands.o: CFLAGS += \
   -DYEW_TEST_FAKEHTTP='"$(abspath $(FAKEHTTP))"' \
   -DYEW_TEST_FAKECURL='"$(abspath $(FAKECURL))"'
 $(BUILD)/tests/unit/test_ai_commands.o: $(FAKEHTTP) $(FAKECURL)
+$(BUILD)/tests/unit/test_ai_cancel.o: CFLAGS += \
+  -DYEW_TEST_FAKEHTTP='"$(abspath $(FAKEHTTP))"'
+$(BUILD)/tests/unit/test_ai_cancel.o: $(FAKEHTTP)
+$(BUILD)/tests/unit/test_ai_shadow_live.o: CFLAGS += \
+  -DYEW_TEST_MOCKAI='"$(abspath $(MOCKAI))"' \
+  -DYEW_TEST_MOCKCURL='"$(abspath $(MOCKCURL))"'
+$(BUILD)/tests/unit/test_ai_shadow_live.o: $(MOCKAI) $(MOCKCURL)
 SCRIPT_RUNNER_ARGS := $(if $(filter lsp,$(MODULES)),,--exclude lsp_)
 PTY_VT_OBJ := $(BUILD)/tests/pty/vt.o
 PTY_SNAPSHOT_OBJ := $(BUILD)/tests/pty/snapshot.o
@@ -918,6 +930,12 @@ $(FAKECURL): tests/helpers/fakecurl.c | dirs
 $(FAKEHTTP): tests/helpers/fakehttp.c | dirs
 	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
 
+$(MOCKAI): tests/helpers/mockai.c | dirs
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
+
+$(MOCKCURL): tests/helpers/mockcurl.c tests/helpers/mockai.c | dirs
+	$(CC) $(CFLAGS) $(LDFLAGS) -o $@ $< $(LDLIBS)
+
 #
 # THE FAST TIER -- what to run before every commit.
 #
@@ -935,7 +953,7 @@ $(FAKEHTTP): tests/helpers/fakehttp.c | dirs
 # see the valgrind job in .github/workflows/ci.yml for when that lane
 # has to be asked for by hand.
 #
-check: $(BUILD)/unit_tests $(BUILD)/yew test-fletch test-script \
+check: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-fletch test-script \
        test-syn-assets
 	$(UNIT_RUN)
 	scripts/bans.sh
@@ -947,7 +965,7 @@ check: $(BUILD)/unit_tests $(BUILD)/yew test-fletch test-script \
 	SMOKE_MODULES="$(MODULES)" scripts/smoke.sh $(BUILD)/yew
 	@echo "check: ok (fast tier -- pty, torture, sanitizers and valgrind NOT run)"
 
-test: $(BUILD)/unit_tests $(BUILD)/yew test-pty test-fletch test-script \
+test: $(BUILD)/unit_tests $(BUILD)/yew $(AI_TEST_HELPERS) test-pty test-fletch test-script \
       test-roundtrip test-record-corpus test-syn-corpus \
       test-syn-def-corpus test-syn-assets torture-build
 	$(UNIT_RUN)

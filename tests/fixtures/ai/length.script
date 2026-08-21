@@ -1,0 +1,5 @@
+# Fixed-length response with escaped raw bytes.
+status 200
+header content-type: application/json
+framing length
+emit {"response":"hello\x20world","done":true}\n

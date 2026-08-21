@@ -1,0 +1,7 @@
+# Exercises fragmentation, binary escapes, and chunk termination.
+status 200
+framing chunked
+split 1
+chunk hello\x20
+split 0
+chunk world\n

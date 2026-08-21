@@ -66,6 +66,17 @@ static void ai_enable(Ed *ed)
     YEW_ASSERT_NULL(error);
 }
 
+static void ai_select(Ed *ed, const char *name)
+{
+    OptVal selected = {YEW_OPT_STR,
+                       {.str = {name, (u32)strlen(name)}}};
+    const char *error = NULL;
+
+    YEW_ASSERT(yew_opt_set(ed, YEW_OPT_GLOBAL, "ai.backend", 10U,
+                           &selected, &error));
+    YEW_ASSERT_NULL(error);
+}
+
 static CmdStatus ai_invoke(Ed *ed, const char *name)
 {
     CmdCtx cx = {0};
@@ -91,6 +102,7 @@ static void ai_define_local(Ed *ed, const char *name, u16 port)
 
     YEW_ASSERT(n > 0 && (size_t)n < sizeof(source));
     YEW_ASSERT_EQ_I64(yew_fl_eval(ed, source, (u32)n), YEW_CMD_OK);
+    ai_select(ed, name);
 }
 
 static pid_t ai_server_start(const char *mode, u16 *port)
@@ -220,7 +232,7 @@ void test_ai_commands_cross_module_boundary(void)
         {"ed.ai.reload", 0U},
         {"ed.ai.enable", 50U},
         {"ed.ai.disable", 50U},
-        {"ed.ai.stats", 49U}
+        {"ed.ai.stats", 0U}
     };
     Ed ed;
     CmdCtx cx = {0};
@@ -259,13 +271,19 @@ void test_ai_commands_cross_module_boundary(void)
             YEW_ASSERT(yew_test_log_contains(YEW_LOG_ERROR, diagnostic));
         } else {
             YEW_ASSERT((desc->flags & YEW_CMD_DEFERRED) == 0U);
-            YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, id, &cx),
-                              YEW_CMD_ERR_STATE);
-            YEW_ASSERT(ed.msg.active);
-            YEW_ASSERT_EQ_U64(ed.msg.sev, YEW_MSG_INFO);
-            YEW_ASSERT_EQ_STR(
-                ed.msg.text,
-                "AI is off; :ai enable turns it on (Sprint 50)");
+            if (strcmp(rows[i].name, "ed.ai.stats") == 0) {
+                YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, id, &cx),
+                                  YEW_CMD_OK);
+                YEW_ASSERT_NOT_NULL(strstr(ai_message(&ed), "backend"));
+            } else {
+                YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, id, &cx),
+                                  YEW_CMD_ERR_STATE);
+                YEW_ASSERT(ed.msg.active);
+                YEW_ASSERT_EQ_U64(ed.msg.sev, YEW_MSG_INFO);
+                YEW_ASSERT_EQ_STR(
+                    ed.msg.text,
+                    "AI is off; :ai enable turns it on (Sprint 50)");
+            }
         }
 #else
         YEW_ASSERT((desc->flags & YEW_CMD_DEFERRED) == 0U);
@@ -281,7 +299,7 @@ void test_ai_commands_cross_module_boundary(void)
     yew_ed_free(&ed);
 }
 
-void test_ai_open_remains_sprint49_deferred(void)
+void test_ai_open_explains_the_ghost_only_surface(void)
 {
     CmdId id = yew_cmd_lookup("ed.ai.open", 10U);
     const CmdDesc *desc;
@@ -291,40 +309,18 @@ void test_ai_open_remains_sprint49_deferred(void)
     YEW_ASSERT(id.v != 0U);
     desc = yew_cmd_desc(id);
     YEW_ASSERT_NOT_NULL(desc);
-    YEW_ASSERT((desc->flags & YEW_CMD_DEFERRED) != 0U);
-    YEW_ASSERT_NOT_NULL(strstr(desc->help, "Sprint 49"));
+    YEW_ASSERT((desc->flags & YEW_CMD_DEFERRED) == 0U);
     yew_ed_init(&ed);
     cx.ed = &ed;
     cx.count = 1U;
     cx.source = YEW_SRC_TEST;
-    yew_test_capture_log();
-    YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, id, &cx), YEW_CMD_ERR_DEFERRED);
-    YEW_ASSERT(yew_test_log_contains(
-        YEW_LOG_ERROR, "ed.ai.open lands in Sprint 49"));
+    YEW_ASSERT_EQ_I64(yew_ed_invoke(&ed, id, &cx), YEW_CMD_ERR_STATE);
 #if YEW_WITH_AI
     YEW_ASSERT(ed.msg.active);
     YEW_ASSERT_EQ_U64(ed.msg.sev, YEW_MSG_INFO);
-    YEW_ASSERT_EQ_STR(ed.msg.text,
-                      "AI is off; :ai enable turns it on (Sprint 50)");
-#endif
-
-    /* Exercise the real command-line dispatch path.  Its inline error wins
-     * drawing priority over ed.msg, so it must preserve the AI off-state
-     * guidance while also naming the deliberately deferred sprint. */
-    ed.clean = true;
-    yew_cmdline_open(&ed, YEW_PROMPT_CMD, "ai.open");
-    cx.win = yew_cmdline_target(&ed);
-    YEW_ASSERT_EQ_I64(yew_cmdline_cmd_accept(&cx),
-                      YEW_CMD_ERR_DEFERRED);
-    YEW_ASSERT(ed.cmdline.active);
-#if YEW_WITH_AI
     YEW_ASSERT_EQ_STR(
-        ed.cmdline.err.msg,
-        "AI is off; :ai enable turns it on (Sprint 50); "
-        ":ai.open lands in Sprint 49");
-#else
-    YEW_ASSERT_EQ_STR(ed.cmdline.err.msg,
-                      ":ai.open lands in Sprint 49");
+        ed.msg.text,
+        "AI prompt UI is not a 1.0 feature; AI completions use ghost text");
 #endif
     yew_ed_free(&ed);
 }
@@ -533,6 +529,7 @@ void test_ai_commands_curl_probe_request_and_teardown(void)
     ai_enable(&ed);
     YEW_ASSERT_EQ_I64(yew_fl_eval(&ed, cloud, sizeof(cloud) - 1U),
                       YEW_CMD_OK);
+    ai_select(&ed, "cloud");
     YEW_ASSERT_EQ_I64(ai_invoke(&ed, "ed.ai.backends"), YEW_CMD_OK);
     YEW_ASSERT_NOT_NULL(strstr(ai_message(&ed), "curl probing"));
     YEW_ASSERT_EQ_I64(ai_invoke(&ed, "ed.ai.models"), YEW_CMD_OK);
@@ -551,6 +548,7 @@ void test_ai_commands_curl_probe_request_and_teardown(void)
     ai_enable(&ed);
     YEW_ASSERT_EQ_I64(yew_fl_eval(&ed, cloud, sizeof(cloud) - 1U),
                       YEW_CMD_OK);
+    ai_select(&ed, "cloud");
     YEW_ASSERT_EQ_I64(ai_invoke(&ed, "ed.ai.backends"), YEW_CMD_OK);
     YEW_ASSERT_NOT_NULL(strstr(ai_message(&ed), "curl probing"));
     ai_command_drive(&ed);
@@ -582,7 +580,7 @@ void test_ai_commands_curl_probe_request_and_teardown(void)
 #endif
 }
 
-void test_ai_commands_require_exactly_one_backend(void)
+void test_ai_commands_require_a_selected_backend(void)
 {
 #if YEW_WITH_AI
     Ed ed;
@@ -595,10 +593,11 @@ void test_ai_commands_require_exactly_one_backend(void)
         "no AI backends configured; add ai.backend(...) to init.fl");
     ai_define_local(&ed, "first", 11434U);
     ai_define_local(&ed, "second", 11435U);
+    ai_select(&ed, "missing");
     YEW_ASSERT_EQ_I64(ai_invoke(&ed, "ed.ai.ping"), YEW_CMD_ERR_STATE);
     YEW_ASSERT_EQ_STR(
         ai_message(&ed),
-        "multiple AI backends configured; backend selection lands in Sprint 49");
+        "select a configured backend with set({\"ai.backend\": \"name\"})");
     yew_ed_free(&ed);
 #else
     YEW_ASSERT(true);

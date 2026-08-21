@@ -1,0 +1,8 @@
+# Ollama deterministic NDJSON completion.
+status 200
+header content-type: application/x-ndjson
+framing ndjson
+delay 100
+emit {"response":"int ","done":false}\n
+emit {"response":"answer = 42;","done":false}\n
+emit {"response":"","done":true}\n

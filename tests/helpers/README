@@ -1,0 +1,61 @@
+# Deterministic test backends
+
+`mockai` and `mockcurl` are the only AI backends used by the test suite. They
+never contact a model or a non-loopback host.
+
+Build them as standalone strict C11/POSIX programs:
+
+    cc -std=c11 -pedantic -Wall -Wextra -Werror -O2 \
+       -o build/tests/helpers/mockai tests/helpers/mockai.c
+    cc -std=c11 -pedantic -Wall -Wextra -Werror -O2 \
+       -o build/tests/helpers/mockcurl tests/helpers/mockcurl.c
+
+Run the HTTP backend with a loopback ephemeral port:
+
+    build/tests/helpers/mockai --port 0 --script tests/fixtures/ai/openai.script
+
+It prints `port N`, flushes stdout, and replays the script for every accepted
+connection. `--seed N` is accepted for deterministic seeded scenarios; the
+base grammar itself contains no randomness.
+
+`mockcurl` has curl's yew-facing command line (`-sS --no-buffer --config -`).
+Set `YEW_AI_MOCK_SCRIPT` to the script path. It reads and validates the curl
+config on stdin, requires the URL, POST method, JSON body, JSON content type,
+write-out marker, and an Authorization or x-api-key header, then replays the
+body and prints the scripted status marker on stderr. `--version` reports a
+supported deterministic curl version.
+
+## Script grammar
+
+Scripts are UTF-8 line-oriented text. Blank lines and lines beginning with
+`#` are ignored. Directives execute in file order:
+
+    status 200
+    header content-type: text/event-stream
+    framing sse
+    delay 100
+    split 1
+    emit data: {"choices":[]}\n\n
+    split 0
+    chunk literal bytes\n
+    close
+    exit 7
+
+- `status N` sets the HTTP status (default 200).
+- `header NAME: VALUE` appends a response header.
+- `framing sse|ndjson|length|close|chunked` selects response framing.
+  `sse` and `ndjson` add their content type when absent and are
+  close-delimited; `length` computes Content-Length; `chunked` adds
+  Transfer-Encoding and a final zero chunk unless `close` runs.
+- `delay N` waits N milliseconds before the next operation.
+- `emit BYTES` writes exactly BYTES.
+- `chunk BYTES` writes an HTTP chunk around BYTES for `mockai`; `mockcurl`
+  emits the decoded BYTES, matching real curl.
+- `split 1` makes subsequent writes one byte at a time; `split 0` restores
+  whole-buffer writes.
+- `close` ends the response immediately without an implicit terminator.
+- `exit N` selects `mockcurl`'s exit status and has no effect on `mockai`.
+
+The byte arguments decode only `\\n`, `\\r`, `\\t`, `\\\\`, and `\\xNN`.
+Every other byte is copied verbatim. This deliberately small escape language
+makes response bytes identical across compilers and runs.

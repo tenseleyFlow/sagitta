@@ -1,0 +1,5 @@
+# A stream that terminates without its protocol terminator.
+status 200
+framing sse
+emit data: {"choices":[{"delta":{"content":"partial"}}]}\n\n
+close

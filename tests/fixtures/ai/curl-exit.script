@@ -1,0 +1,5 @@
+# Curl transport failure after one deterministic partial token.
+status 503
+framing sse
+emit data: {"choices":[{"delta":{"content":"partial"}}]}\n\n
+exit 7
