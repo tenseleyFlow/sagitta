@@ -35,7 +35,9 @@ void test_pty_environment_exact(void)
          * root across their two independent editor launches. */
         "XDG_CACHE_HOME=/tmp/yew-pty-state",
         /* Sprint 43's deterministic provider is opt-in per PTY case. */
-        "YEW_SHADOW_TEST=0"
+        "YEW_SHADOW_TEST=0",
+        /* Sprint 49's live-provider PTYs opt into deterministic mocks. */
+        "YEW_AI_MOCK=1"
     };
     char *envp[YEW_PTY_ENV_COUNT + 1U] = {0};
     size_t i;

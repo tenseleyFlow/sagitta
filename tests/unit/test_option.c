@@ -41,11 +41,14 @@ void test_option_table_has_frozen_order_types_scopes_and_defaults(void)
         "shadow.midline", "shadow.lsp_debounce_ms",
         "shadow.ai_debounce_ms", "compl.auto_trigger",
         "compl.trigger_chars", "lsp.open_in", "ai.enable",
+        "ai.backend", "ai.context_bytes", "ai.context_prefix_pct",
+        "ai.max_tokens", "ai.max_lines", "ai.temperature", "ai.frame_ms",
+        "ai.fim",
         "ai.allow_plain_remote", "ai.key_cache", "ai.connect_timeout_ms",
         "ai.first_byte_timeout_ms", "ai.stream_idle_timeout_ms",
         "ai.total_timeout_ms", "ai.keepalive_ms", "ai.backoff_max_ms"
     };
-    const char *listed[43];
+    const char *listed[YEW_ARRAY_LEN(names)];
     Ed ed;
     u32 i;
 
