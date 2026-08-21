@@ -59,6 +59,9 @@ static const char *const fortran_form_values[] = {
 static const char *const lsp_open_in_values[] = {
     "here", "split", "tab", NULL
 };
+static const char *const ai_fim_values[] = {
+    "auto", "on", "off", NULL
+};
 
 /* The core is deliberately single-threaded.  Keep a stable diagnostic for
  * the option API's borrowed error pointer without growing every Ed. */
@@ -205,6 +208,27 @@ const OptDesc yew_opts[] = {
      "Open LSP navigation targets here, in a split, or in a tab"},
     {"ai.enable", YEW_OPT_BOOL, YEW_OPT_GLOBAL, OPT_BOOL(false), NULL,
      0, 0, NULL, option_changed, "Enable AI features after disclosure"},
+    {"ai.backend", YEW_OPT_STR, YEW_OPT_GLOBAL, OPT_STR(""), NULL,
+     0, 0, NULL, option_changed, "Selected AI backend name"},
+    {"ai.context_bytes", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(4096), NULL,
+     256, 65536, NULL, option_changed,
+     "Maximum prefix and suffix context bytes"},
+    {"ai.context_prefix_pct", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(75),
+     NULL, 10, 95, NULL, option_changed,
+     "Percentage of AI context reserved for the prefix"},
+    {"ai.max_tokens", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(256), NULL,
+     16, 4096, NULL, option_changed, "Maximum AI completion tokens"},
+    {"ai.max_lines", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(8), NULL,
+     1, 8, NULL, option_changed, "Maximum AI ghost lines"},
+    {"ai.temperature", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(10), NULL,
+     0, 100, NULL, option_changed,
+     "AI temperature in thousandths (10 means 0.010)"},
+    {"ai.frame_ms", YEW_OPT_INT, YEW_OPT_GLOBAL, OPT_INT(33), NULL,
+     0, 200, NULL, option_changed,
+     "Minimum milliseconds between AI ghost deliveries"},
+    {"ai.fim", YEW_OPT_ENUM, YEW_OPT_GLOBAL, OPT_ENUM("auto"),
+     ai_fim_values, 0, 0, NULL, option_changed,
+     "Fill-in-the-middle policy: auto, on, or off"},
     {"ai.allow_plain_remote", YEW_OPT_BOOL, YEW_OPT_GLOBAL,
      OPT_BOOL(false), NULL, 0, 0, NULL, option_changed,
      "Allow plain HTTP AI endpoints outside the local host"},
