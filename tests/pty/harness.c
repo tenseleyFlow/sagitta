@@ -442,7 +442,7 @@ bool ptc_env_build(char **envp, const char *term, const char *colors,
         "YEW_PICKERS_NOW",
         /* Sprint 27 §7's degradation variants. */
         "NO_COLOR", "YEW_ASCII", "YEW_RUNTIME_DIR", "XDG_CACHE_HOME",
-        "YEW_SHADOW_TEST"
+        "YEW_SHADOW_TEST", "YEW_AI_MOCK"
     };
     const char *values[] = {
         term, colors, "1", "500", "25", state_dir, state_dir,
@@ -457,7 +457,7 @@ bool ptc_env_build(char **envp, const char *term, const char *colors,
         "/bin/sh",
         /* Sprint 26: pins the undo picker's relative timestamps. */
         "1700000000",
-        no_color, ascii, runtime_dir, state_dir, shadow_test
+        no_color, ascii, runtime_dir, state_dir, shadow_test, "1"
     };
     size_t i;
     size_t out_i = 0U;

@@ -10,11 +10,16 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <unistd.h>
 
 #include "text/file.h"
 #include "text/journal.h"
 #include "snapshot.h"
+
+#ifndef YEW_TEST_MOCKAI
+#define YEW_TEST_MOCKAI "build/tests/helpers/mockai"
+#endif
 
 static const char restore_blob[] =
     "\x1b[<u"
@@ -5574,6 +5579,207 @@ static void case_s43_shadow_escape_stages(PtyCtx *c)
 }
 
 /* ---------------------------------------------------------------- */
+/* Sprint 49: real AI shadow-provider streaming contracts           */
+/* ---------------------------------------------------------------- */
+
+#if YEW_WITH_AI
+static pid_t s49_mockai_start(const char *script, u16 *port)
+{
+    int output[2];
+    pid_t pid;
+    FILE *stream;
+    unsigned value = 0U;
+
+    if (pipe(output) != 0)
+        return -1;
+    pid = fork();
+    if (pid == 0) {
+        (void)close(output[0]);
+        if (dup2(output[1], STDOUT_FILENO) < 0)
+            _exit(126);
+        (void)close(output[1]);
+        execl(YEW_TEST_MOCKAI, YEW_TEST_MOCKAI, "--port", "0",
+              "--script", script, (char *)NULL);
+        _exit(127);
+    }
+    (void)close(output[1]);
+    if (pid < 0) {
+        (void)close(output[0]);
+        return -1;
+    }
+    stream = fdopen(output[0], "r");
+    if (stream == NULL || fscanf(stream, "port %u", &value) != 1 ||
+        value == 0U || value > 65535U) {
+        if (stream != NULL)
+            (void)fclose(stream);
+        (void)kill(pid, SIGKILL);
+        while (waitpid(pid, NULL, 0) < 0 && errno == EINTR) {}
+        return -1;
+    }
+    if (fclose(stream) != 0) {
+        (void)kill(pid, SIGKILL);
+        while (waitpid(pid, NULL, 0) < 0 && errno == EINTR) {}
+        return -1;
+    }
+    *port = (u16)value;
+    return pid;
+}
+
+static void s49_mockai_stop(pid_t pid)
+{
+    int status;
+
+    if (pid <= 0)
+        return;
+    (void)kill(pid, SIGTERM);
+    while (waitpid(pid, &status, 0) < 0 && errno == EINTR) {}
+}
+
+static bool s49_ai_open(PtyCtx *c, pid_t *server, char *path,
+                        size_t path_cap, char *config, size_t config_cap)
+{
+    static const u8 initial[] = "anchor\n";
+    u16 port = 0U;
+    char source[1024];
+    int n;
+
+    *server = s49_mockai_start("tests/fixtures/ai/pty-stream.script", &port);
+    if (*server <= 0) {
+        ptc_check(c, false, "could not start Sprint 49 mockai server");
+        return false;
+    }
+    if (!make_fixture(c, initial, sizeof(initial) - 1U, path, path_cap))
+        return false;
+    n = snprintf(config, config_cap, "build/pty-s49-%s.fl", c->test->name);
+    if (n <= 0 || (size_t)n >= config_cap) {
+        ptc_check(c, false, "Sprint 49 config path overflow");
+        return false;
+    }
+    n = snprintf(source, sizeof(source),
+                 "import ai\n"
+                 "ai.backend(\"local\", {kind: \"ollama\", "
+                 "transport: \"http\", url: \"http://127.0.0.1:%u\", "
+                 "model: \"pty-model\"})\n"
+                 "set({\"ai.enable\": true, \"ai.backend\": \"local\", "
+                 "\"ai.frame_ms\": 0, \"shadow.ai_debounce_ms\": 0, "
+                 "\"shadow.providers\": \"ai\"})\n",
+                 (unsigned)port);
+    if (n <= 0 || (size_t)n >= sizeof(source) ||
+        !write_bytes(config, (const u8 *)source, (size_t)n)) {
+        ptc_check(c, false, "could not create Sprint 49 AI config");
+        return false;
+    }
+    ptc_spawn(c, ptc_yew_bin(c), "--config", config, path, NULL);
+    ptc_settle(c, 0);
+    ptc_wait_kitty_push(c, 21U);
+    return !c->failed;
+}
+
+static bool s49_ai_first_frame(PtyCtx *c)
+{
+    u32 before = c->vt.nsync_pairs;
+
+    ptc_keys(c, "end a X");
+    ptc_wait_sync_pairs(c, before + 2U);
+    ptc_check(c, s43_screen_contains(&c->vt, "anchorXint "),
+              "Sprint 49 intermediate AI ghost did not appear");
+    ptc_check(c, !s43_screen_contains(&c->vt, "answer = 42;"),
+              "Sprint 49 stream skipped its intermediate frame");
+    return !c->failed;
+}
+
+static bool s49_ai_wait_for(PtyCtx *c, const char *text, u32 max_frames)
+{
+    u32 frame;
+
+    for (frame = 0U; frame < max_frames && !c->failed; frame++) {
+        u32 before = c->vt.nsync_pairs;
+
+        if (s43_screen_contains(&c->vt, text))
+            return true;
+        ptc_wait_sync_pairs(c, before + 1U);
+    }
+    return !c->failed && s43_screen_contains(&c->vt, text);
+}
+
+static void s49_ai_finish(PtyCtx *c, pid_t server, const char *path,
+                          const char *config)
+{
+    /* A live ghost consumes the first Esc while retaining I mode. */
+    s43_force_quit(c);
+    s49_mockai_stop(server);
+    (void)unlink(path);
+    (void)unlink(config);
+}
+
+static void case_s49_ai_stream(PtyCtx *c)
+{
+    pid_t server = -1;
+    char path[256] = {0};
+    char config[256] = {0};
+
+    if (!s49_ai_open(c, &server, path, sizeof(path), config, sizeof(config)))
+        goto out;
+    if (!s49_ai_first_frame(c))
+        goto out;
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, "s49_ai_stream");
+
+    ptc_check(c, s49_ai_wait_for(c, "anchorXint answer = 42;", 6U),
+              "Sprint 49 final AI ghost did not arrive");
+    ptc_settle(c, 0);
+    bytebuf_append(&c->snapshot, "--- final\n", 10U);
+    snapshot_write(&c->vt, &c->snapshot);
+
+out:
+    if (c->spawned)
+        s49_ai_finish(c, server, path, config);
+    else {
+        s49_mockai_stop(server);
+        (void)unlink(path);
+        (void)unlink(config);
+    }
+}
+
+static void case_s49_ai_escape_midstream(PtyCtx *c)
+{
+    static const u8 expected[] = "anchorXZ\n";
+    pid_t server = -1;
+    char path[256] = {0};
+    char config[256] = {0};
+
+    if (!s49_ai_open(c, &server, path, sizeof(path), config, sizeof(config)))
+        goto out;
+    if (!s49_ai_first_frame(c))
+        goto out;
+    s18_settle_after_keys(c, "esc");
+    ptc_check(c, !s43_screen_contains(&c->vt, "int "),
+              "Esc did not dismiss the live AI ghost");
+    ptc_settle(c, 1200);
+    ptc_check(c, !s43_screen_contains(&c->vt, "answer = 42;"),
+              "cancelled AI stream repainted after Esc");
+
+    /* A printable key after the first Esc proves the editor stayed in I;
+     * the saved bytes make that mode assertion independent of the chrome. */
+    s18_settle_after_keys(c, "Z");
+    c->vt.sync_pairs_unstable = true;
+    ptc_snapshot(c, "s49_ai_escape_midstream");
+    s18_settle_after_keys(c, "esc s");
+    ptc_check(c, file_equals(path, expected, sizeof(expected) - 1U),
+              "Esc left I mode or AI cancellation changed document bytes");
+
+out:
+    if (c->spawned)
+        s49_ai_finish(c, server, path, config);
+    else {
+        s49_mockai_stop(server);
+        (void)unlink(path);
+        (void)unlink(config);
+    }
+}
+#endif
+
+/* ---------------------------------------------------------------- */
 /* Sprint 44: no-LSP completion menu goldens                        */
 /* ---------------------------------------------------------------- */
 
@@ -6049,6 +6255,11 @@ static void case_s47_rename_refusal(PtyCtx *c)
 #endif
 
 const PtyCase yew_pty_cases[] = {
+#if YEW_WITH_AI
+    C(s49_ai_stream, modern, 24U, 80U, case_s49_ai_stream),
+    C(s49_ai_escape_midstream, modern, 24U, 80U,
+      case_s49_ai_escape_midstream),
+#endif
 #if YEW_WITH_LSP
     C(lsp_feat_rename_summary, modern, 24U, 80U,
       case_s47_rename_summary_cancel),

@@ -1,0 +1,10 @@
+# Sprint 49 production-provider pty stream.  The long gap makes the
+# intermediate ghost a deterministic frame rather than a scheduler race.
+status 200
+header content-type: application/x-ndjson
+framing ndjson
+delay 100
+emit {"response":"int ","done":false}\n
+delay 1000
+emit {"response":"answer = 42;","done":false}\n
+emit {"response":"","done":true}\n

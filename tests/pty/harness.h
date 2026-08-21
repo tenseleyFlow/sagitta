@@ -10,7 +10,7 @@
 #include "util/buf.h"
 #include "vt.h"
 
-#define YEW_PTY_ENV_COUNT 18U
+#define YEW_PTY_ENV_COUNT 19U
 
 typedef struct PtySpec {
     /*
