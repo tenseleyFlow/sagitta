@@ -554,6 +554,26 @@ bool yew_ai_registry_reload(AiBackendRegistry *registry,
     return true;
 }
 
+bool yew_ai_registry_keep(AiBackendRegistry *registry, const char *name)
+{
+    OwnedBackend *entries;
+    i32 keep;
+    u32 i;
+
+    if (registry == NULL || name == NULL ||
+        (keep = registry_index(registry, name)) < 0)
+        return false;
+    entries = owned_entries(registry);
+    for (i = 0U; i < registry->len; i++) {
+        if (i != (u32)keep)
+            owned_drop(registry, &entries[i]);
+    }
+    if (keep != 0)
+        entries[0] = entries[(u32)keep];
+    registry->len = 1U;
+    return true;
+}
+
 const AiBackendEntry *yew_ai_registry_find(const AiBackendRegistry *registry,
                                            const char *name)
 {

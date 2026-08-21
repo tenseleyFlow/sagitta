@@ -1,0 +1,29 @@
+# yew AI preset — CLOUD models (Anthropic / OpenAI-compatible).
+# READ :ai privacy FIRST. File context is sent to the configured service.
+# Requires curl for HTTPS transport. No API key is stored in this file.
+
+import ai
+
+ai.backend("work", {
+    kind: "anthropic",
+    url: "https://api.anthropic.com",
+    model: "claude-sonnet-4-6",
+    transport: "curl",
+    key_env: "ANTHROPIC_API_KEY",
+    max_tokens: 256,
+    stream: true,
+})
+
+set({
+    "ai.enable": true,
+    "ai.backend": "work",
+    "ai.context_bytes": 2048,
+    "shadow.ai_debounce_ms": 600,
+    "ai.max_tokens": 192,
+    "ai.max_lines": 4,
+    "ai.temperature": 10,
+    "ai.on_redact": "block",
+    "ai.default_workspace": "ask",
+})
+
+# Cloud redaction blocks requests containing secrets; it never scrubs-and-sends.

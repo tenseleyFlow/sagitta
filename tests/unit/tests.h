@@ -822,6 +822,8 @@ void test_ai_context_redaction_is_a_hard_pre_prompt_gate(void);
 void test_ai_context_large_buffer_work_is_budget_bounded(void);
 void test_ai_context_shipped_policy_elides_only_for_loopback(void);
 void test_ai_context_shipped_policy_blocks_cloud_before_prompt(void);
+void test_ai_presets_parse_execute_and_replace_selection(void);
+void test_ai_privacy_page_opens_readonly_scratch(void);
 void test_ai_prompt_fim_family_table_is_conservative(void);
 void test_ai_prompt_fim_json_is_byte_exact(void);
 void test_ai_prompt_chat_framing_and_system_are_exact(void);

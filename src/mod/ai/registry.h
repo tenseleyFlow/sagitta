@@ -47,6 +47,8 @@ bool yew_ai_registry_put(AiBackendRegistry *registry, const FlStr *name,
  * is the Fletch map's insertion order; failure leaves the registry intact. */
 bool yew_ai_registry_reload(AiBackendRegistry *registry,
                             const FlMap *backends, char *err, size_t errsz);
+/* Drop every definition except name after a preset has selected it. */
+bool yew_ai_registry_keep(AiBackendRegistry *registry, const char *name);
 
 const AiBackendEntry *yew_ai_registry_find(const AiBackendRegistry *registry,
                                            const char *name);

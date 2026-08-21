@@ -862,6 +862,8 @@ const YewTest yew_tests[] = {
     T(ai_context_large_buffer_work_is_budget_bounded),
     T(ai_context_shipped_policy_elides_only_for_loopback),
     T(ai_context_shipped_policy_blocks_cloud_before_prompt),
+    T(ai_presets_parse_execute_and_replace_selection),
+    T(ai_privacy_page_opens_readonly_scratch),
     T(ai_prompt_fim_family_table_is_conservative),
     T(ai_prompt_fim_json_is_byte_exact),
     T(ai_prompt_chat_framing_and_system_are_exact),

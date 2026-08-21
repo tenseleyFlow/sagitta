@@ -1553,6 +1553,12 @@ install: all
 	install -d $(DESTDIR)$(PREFIX)/share/yew/runtime
 	install -m 0644 runtime/init.fl \
 		$(DESTDIR)$(PREFIX)/share/yew/runtime/init.fl
+	install -m 0644 runtime/ai-deny.fl runtime/preset.ai-local.fl \
+		runtime/preset.ai-cloud.fl \
+		$(DESTDIR)$(PREFIX)/share/yew/runtime/
+	install -d $(DESTDIR)$(PREFIX)/share/yew/docs
+	install -m 0644 docs/ai-privacy.md \
+		$(DESTDIR)$(PREFIX)/share/yew/docs/ai-privacy.md
 	install -d $(DESTDIR)$(PREFIX)/share/yew/runtime/syntax
 	install -m 0644 runtime/syntax/*.fl \
 		$(DESTDIR)$(PREFIX)/share/yew/runtime/syntax/
