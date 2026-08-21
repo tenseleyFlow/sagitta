@@ -1898,6 +1898,12 @@ void test_trust_write_prunes_only_old_missing_dirs(void);
 void test_trust_bare_string_upgrades_and_output_sorts(void);
 void test_trust_truncated_load_does_not_clobber_live_db(void);
 void test_trust_no_tty_never_requests_prompt(void);
+void test_ai_trust3_grants_are_independent_allow_deny_unset(void);
+void test_ai_trust3_schema2_plugins_block_survives_byte_identically(void);
+void test_ai_trust3_future_schema_is_never_downgraded(void);
+void test_ai_trust3_update_preserves_unknown_entry_fields(void);
+void test_ai_trust3_writes_sorted_atomically_and_deterministically(void);
+void test_ai_trust3_replacement_clears_state_and_ai(void);
 
 void test_macro_header_parses_all_five_fields(void);
 void test_macro_header_accepts_missing_optional_fields(void);

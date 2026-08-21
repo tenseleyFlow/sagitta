@@ -21,6 +21,12 @@
 
 enum { YEW_TRUST_PRUNE_DAYS_DEFAULT = 365 };
 
+typedef enum AiWsGrant {
+    YEW_AI_WS_UNSET = 0,
+    YEW_AI_WS_ALLOW,
+    YEW_AI_WS_DENY
+} AiWsGrant;
+
 typedef enum YewTrustDecision {
     YEW_TRUST_NO_CONFIG,
     YEW_TRUST_GRANTED,
@@ -65,6 +71,15 @@ bool yew_trust_db_write_path(YewTrustDb *db, const char *path, time_t now,
                              u32 prune_days);
 bool yew_trust_db_load(YewTrustDb *db);
 bool yew_trust_db_write(YewTrustDb *db, time_t now, u32 prune_days);
+
+/* AI disclosure grants are independent of workspace-config trust.  These
+ * DB-level seams canonicalize workspace through realpath and fingerprint the
+ * directory itself; Ed-facing policy wrappers live in the AI module.  A
+ * replacement at the same path invalidates both grants. */
+AiWsGrant yew_trust_ai_grant(YewTrustDb *db, const char *workspace);
+bool yew_trust_ai_set(YewTrustDb *db, const char *workspace,
+                      AiWsGrant grant, time_t now);
+bool yew_trust_ai_forget(YewTrustDb *db, const char *workspace);
 
 void yew_trust_probe_init(YewTrustProbe *probe);
 void yew_trust_probe_free(YewTrustProbe *probe);

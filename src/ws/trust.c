@@ -1,4 +1,5 @@
 #define _POSIX_C_SOURCE 200809L
+#define _XOPEN_SOURCE 700
 
 #include "ws/trust.h"
 
@@ -32,12 +33,14 @@ typedef struct TrustImpl {
 typedef struct TrustEntry {
     const char *state;
     u32 state_len;
+    AiWsGrant ai;
     const char *hash;
     u32 hash_len;
     i64 dev;
     i64 ino;
     i64 at;
-    bool bare;
+    bool has_state;
+    bool identity;
     bool fingerprint;
 } TrustEntry;
 
@@ -95,6 +98,13 @@ static void trust_map_set(TrustImpl *impl, FlMap *map, const char *key,
     (void)fl_map_set(&impl->vm, map, FL_OBJ_V(FL_STR, name), value);
 }
 
+static bool trust_map_del(TrustImpl *impl, FlMap *map, const char *key)
+{
+    FlStr *name = fl_str_new(&impl->vm, key, (u32)strlen(key));
+
+    return fl_map_del(map, FL_OBJ_V(FL_STR, name));
+}
+
 static TrustImpl *trust_impl_new(void)
 {
     TrustImpl *impl = yew_xcalloc(1U, sizeof(*impl));
@@ -108,7 +118,7 @@ static TrustImpl *trust_impl_new(void)
     root = fl_map_new(&impl->vm);
     dirs = fl_map_new(&impl->vm);
     impl->root = FL_OBJ_V(FL_MAP, root);
-    trust_map_set(impl, root, "schema", FL_INT_V(1));
+    trust_map_set(impl, root, "schema", FL_INT_V(3));
     trust_map_set(impl, root, "dirs", FL_OBJ_V(FL_MAP, dirs));
     return impl;
 }
@@ -182,7 +192,7 @@ static bool trust_valid_root(FlValue root)
         return false;
     map = (const FlMap *)root.as.o;
     if (!trust_map_get(map, "schema", &schema) || schema.t != (u8)FL_INT ||
-        schema.as.i != 1 || !trust_map_get(map, "dirs", &dirs) ||
+        schema.as.i < 1 || !trust_map_get(map, "dirs", &dirs) ||
         dirs.t != (u8)FL_MAP)
         return false;
     map = (const FlMap *)dirs.as.o;
@@ -298,31 +308,84 @@ static bool trust_find_dir(TrustImpl *impl, const char *path, FlValue *value)
     return false;
 }
 
+static FlMap *trust_dir_map(TrustImpl *impl, const char *path, bool create)
+{
+    FlValue value;
+    FlValue dirs;
+    FlMap *entry;
+    const char *state;
+    u32 state_len;
+    FlStr *key;
+
+    if (trust_find_dir(impl, path, &value)) {
+        if (value.t == (u8)FL_MAP)
+            return (FlMap *)value.as.o;
+        if (!trust_str(value, &state, &state_len))
+            return NULL;
+        entry = fl_map_new(&impl->vm);
+        trust_map_set(impl, entry, "state",
+                      FL_OBJ_V(FL_STR, fl_str_new(&impl->vm, state,
+                                                  state_len)));
+    } else {
+        if (!create)
+            return NULL;
+        entry = fl_map_new(&impl->vm);
+    }
+    if (!trust_map_get((const FlMap *)impl->root.as.o, "dirs", &dirs))
+        return NULL;
+    key = fl_str_new(&impl->vm, path, (u32)strlen(path));
+    if (!fl_map_set(&impl->vm, (FlMap *)dirs.as.o,
+                    FL_OBJ_V(FL_STR, key), FL_OBJ_V(FL_MAP, entry)))
+        return NULL;
+    return entry;
+}
+
+static AiWsGrant trust_ai_value(FlValue value)
+{
+    const char *s;
+    u32 n;
+
+    if (!trust_str(value, &s, &n))
+        return YEW_AI_WS_UNSET;
+    if (n == 5U && memcmp(s, "allow", 5U) == 0)
+        return YEW_AI_WS_ALLOW;
+    if (n == 4U && memcmp(s, "deny", 4U) == 0)
+        return YEW_AI_WS_DENY;
+    return YEW_AI_WS_UNSET;
+}
+
 static bool trust_entry(FlValue value, TrustEntry *entry)
 {
     FlValue field;
 
     (void)memset(entry, 0, sizeof(*entry));
     if (trust_str(value, &entry->state, &entry->state_len)) {
-        entry->bare = true;
+        entry->has_state = true;
         return true;
     }
     if (value.t != (u8)FL_MAP)
         return false;
-    if (!trust_map_get((const FlMap *)value.as.o, "state", &field) ||
-        !trust_str(field, &entry->state, &entry->state_len))
-        return false;
-    if (trust_map_get((const FlMap *)value.as.o, "hash", &field) &&
-        trust_str(field, &entry->hash, &entry->hash_len) &&
-        trust_map_get((const FlMap *)value.as.o, "dev", &field) &&
+    if (trust_map_get((const FlMap *)value.as.o, "state", &field)) {
+        if (!trust_str(field, &entry->state, &entry->state_len))
+            return false;
+        entry->has_state = true;
+    }
+    if (trust_map_get((const FlMap *)value.as.o, "ai", &field))
+        entry->ai = trust_ai_value(field);
+    if (trust_map_get((const FlMap *)value.as.o, "hash", &field))
+        (void)trust_str(field, &entry->hash, &entry->hash_len);
+    /* Hash and filesystem identity are independent: AI-only entries do not
+     * have a config hash but still bind their grant to dev/ino. */
+    if (trust_map_get((const FlMap *)value.as.o, "dev", &field) &&
         field.t == (u8)FL_INT) {
         entry->dev = field.as.i;
         if (trust_map_get((const FlMap *)value.as.o, "ino", &field) &&
             field.t == (u8)FL_INT) {
             entry->ino = field.as.i;
-            entry->fingerprint = true;
+            entry->identity = true;
         }
     }
+    entry->fingerprint = entry->hash != NULL && entry->identity;
     if (trust_map_get((const FlMap *)value.as.o, "at", &field) &&
         field.t == (u8)FL_INT)
         entry->at = field.as.i;
@@ -333,7 +396,8 @@ static bool trust_state_is(const TrustEntry *entry, const char *want)
 {
     size_t n = strlen(want);
 
-    return entry->state_len == n && memcmp(entry->state, want, n) == 0;
+    return entry->has_state && entry->state_len == n &&
+           memcmp(entry->state, want, n) == 0;
 }
 
 static void trust_hash_hex(u64 hash, char out[17])
@@ -344,11 +408,9 @@ static void trust_hash_hex(u64 hash, char out[17])
 static bool trust_store(TrustImpl *impl, const YewTrustProbe *probe,
                         const char *state, time_t now, bool fingerprint)
 {
-    FlValue dirs;
-    FlMap *entry = fl_map_new(&impl->vm);
-    FlStr *key;
+    FlMap *entry = trust_dir_map(impl, probe->workspace, true);
 
-    if (!trust_map_get((const FlMap *)impl->root.as.o, "dirs", &dirs))
+    if (entry == NULL)
         return false;
     trust_map_set(impl, entry, "state",
                   FL_OBJ_V(FL_STR, fl_str_new(&impl->vm, state,
@@ -361,12 +423,113 @@ static bool trust_store(TrustImpl *impl, const YewTrustProbe *probe,
                       FL_OBJ_V(FL_STR, fl_str_new(&impl->vm, hash, 16U)));
         trust_map_set(impl, entry, "dev", FL_INT_V((i64)probe->dev));
         trust_map_set(impl, entry, "ino", FL_INT_V((i64)probe->ino));
+    } else {
+        (void)trust_map_del(impl, entry, "hash");
     }
     trust_map_set(impl, entry, "at", FL_INT_V((i64)now));
-    key = fl_str_new(&impl->vm, probe->workspace,
-                     (u32)strlen(probe->workspace));
-    return fl_map_set(&impl->vm, (FlMap *)dirs.as.o,
-                      FL_OBJ_V(FL_STR, key), FL_OBJ_V(FL_MAP, entry));
+    return true;
+}
+
+static bool trust_resolve_workspace(const char *workspace,
+                                    char resolved[PATH_MAX],
+                                    struct stat *st)
+{
+    char *real;
+    size_t n;
+
+    if (workspace == NULL || resolved == NULL || st == NULL)
+        return false;
+    real = realpath(workspace, NULL);
+    if (real == NULL)
+        return false;
+    n = strlen(real);
+    if (n >= PATH_MAX || stat(real, st) != 0 || !S_ISDIR(st->st_mode)) {
+        free(real);
+        return false;
+    }
+    (void)memcpy(resolved, real, n + 1U);
+    free(real);
+    return true;
+}
+
+static void trust_clear_replaced(TrustImpl *impl, FlMap *entry)
+{
+    (void)trust_map_del(impl, entry, "state");
+    (void)trust_map_del(impl, entry, "ai");
+    (void)trust_map_del(impl, entry, "hash");
+    (void)trust_map_del(impl, entry, "dev");
+    (void)trust_map_del(impl, entry, "ino");
+}
+
+AiWsGrant yew_trust_ai_grant(YewTrustDb *db, const char *workspace)
+{
+    TrustImpl *impl;
+    char resolved[PATH_MAX];
+    struct stat st;
+    FlValue value;
+    TrustEntry entry;
+
+    if (db == NULL || db->impl == NULL ||
+        !trust_resolve_workspace(workspace, resolved, &st))
+        return YEW_AI_WS_UNSET;
+    impl = (TrustImpl *)db->impl;
+    if (!trust_find_dir(impl, resolved, &value) ||
+        !trust_entry(value, &entry))
+        return YEW_AI_WS_UNSET;
+    if (entry.identity &&
+        (entry.dev != (i64)st.st_dev || entry.ino != (i64)st.st_ino)) {
+        FlMap *map = trust_dir_map(impl, resolved, false);
+
+        if (map != NULL)
+            trust_clear_replaced(impl, map);
+        return YEW_AI_WS_UNSET;
+    }
+    if (entry.ai != YEW_AI_WS_UNSET && !entry.identity) {
+        FlMap *map = trust_dir_map(impl, resolved, false);
+
+        if (map != NULL) {
+            trust_map_set(impl, map, "dev", FL_INT_V((i64)st.st_dev));
+            trust_map_set(impl, map, "ino", FL_INT_V((i64)st.st_ino));
+        }
+    }
+    return entry.ai;
+}
+
+bool yew_trust_ai_set(YewTrustDb *db, const char *workspace,
+                      AiWsGrant grant, time_t now)
+{
+    TrustImpl *impl;
+    char resolved[PATH_MAX];
+    struct stat st;
+    FlMap *entry;
+    const char *name;
+
+    if (db == NULL || db->impl == NULL ||
+        (grant != YEW_AI_WS_UNSET && grant != YEW_AI_WS_ALLOW &&
+         grant != YEW_AI_WS_DENY) ||
+        !trust_resolve_workspace(workspace, resolved, &st))
+        return false;
+    impl = (TrustImpl *)db->impl;
+    entry = trust_dir_map(impl, resolved, grant != YEW_AI_WS_UNSET);
+    if (entry == NULL)
+        return grant == YEW_AI_WS_UNSET;
+    if (grant == YEW_AI_WS_UNSET) {
+        (void)trust_map_del(impl, entry, "ai");
+        return true;
+    }
+    name = grant == YEW_AI_WS_ALLOW ? "allow" : "deny";
+    trust_map_set(impl, entry, "ai",
+                  FL_OBJ_V(FL_STR, fl_str_new(&impl->vm, name,
+                                              (u32)strlen(name))));
+    trust_map_set(impl, entry, "dev", FL_INT_V((i64)st.st_dev));
+    trust_map_set(impl, entry, "ino", FL_INT_V((i64)st.st_ino));
+    trust_map_set(impl, entry, "at", FL_INT_V((i64)now));
+    return true;
+}
+
+bool yew_trust_ai_forget(YewTrustDb *db, const char *workspace)
+{
+    return yew_trust_ai_set(db, workspace, YEW_AI_WS_UNSET, 0);
 }
 
 YewTrustDecision yew_trust_check(YewTrustDb *db, const char *workspace,
@@ -414,9 +577,17 @@ YewTrustDecision yew_trust_check(YewTrustDb *db, const char *workspace,
         return YEW_TRUST_GRANTED;
     if (trust_find_dir(impl, probe->workspace, &value) &&
         trust_entry(value, &entry)) {
-        if (trust_state_is(&entry, "denied"))
+        if (entry.identity &&
+            (entry.dev != (i64)probe->dev ||
+             entry.ino != (i64)probe->ino)) {
+            FlMap *map = trust_dir_map(impl, probe->workspace, false);
+
+            if (map != NULL)
+                trust_clear_replaced(impl, map);
+            prompt = YEW_TRUST_PROMPT_REPLACED;
+        } else if (trust_state_is(&entry, "denied")) {
             return YEW_TRUST_DENIED;
-        if (trust_state_is(&entry, "trusted")) {
+        } else if (trust_state_is(&entry, "trusted")) {
             if (!entry.fingerprint) {
                 (void)trust_store(impl, probe, "trusted", time(NULL), true);
                 return YEW_TRUST_GRANTED;
@@ -425,9 +596,6 @@ YewTrustDecision yew_trust_check(YewTrustDb *db, const char *workspace,
             if (entry.hash_len != 16U ||
                 memcmp(entry.hash, hash, 16U) != 0)
                 prompt = YEW_TRUST_PROMPT_CHANGED;
-            else if (entry.dev != (i64)probe->dev ||
-                     entry.ino != (i64)probe->ino)
-                prompt = YEW_TRUST_PROMPT_REPLACED;
             else
                 return YEW_TRUST_GRANTED;
         }
@@ -539,6 +707,19 @@ static bool trust_rebuild_sorted(TrustImpl *impl, time_t now, u32 prune_days)
     return true;
 }
 
+static bool trust_schema_current(TrustImpl *impl)
+{
+    FlMap *root = (FlMap *)impl->root.as.o;
+    FlValue schema;
+
+    if (!trust_map_get(root, "schema", &schema) ||
+        schema.t != (u8)FL_INT || schema.as.i < 1)
+        return false;
+    if (schema.as.i < 3)
+        trust_map_set(impl, root, "schema", FL_INT_V(3));
+    return true;
+}
+
 bool yew_trust_db_write_path(YewTrustDb *db, const char *path, time_t now,
                              u32 prune_days)
 {
@@ -551,7 +732,8 @@ bool yew_trust_db_write_path(YewTrustDb *db, const char *path, time_t now,
     if (db == NULL || db->impl == NULL || path == NULL)
         return false;
     impl = (TrustImpl *)db->impl;
-    if (!trust_rebuild_sorted(impl, now, prune_days))
+    if (!trust_schema_current(impl) ||
+        !trust_rebuild_sorted(impl, now, prune_days))
         return false;
     bytebuf_init(&out);
     bytebuf_append(&out, (const u8 *)header, sizeof(header) - 1U);
