@@ -2,6 +2,8 @@
 #define YEW_TEST_TESTS_H
 
 void test_ai_debug_bodies_require_both_privacy_gates(void);
+void test_ai_debug_normal_cycle_logs_metadata_without_bodies(void);
+void test_ai_debug_dual_gate_cycle_logs_bodies_and_redacted_keys(void);
 
 void test_batch_selfcheck_pins_every_uninitialized_subsystem(void);
 void test_batch_selfcheck_rejects_seeded_grid_input_tty_and_timer(void);

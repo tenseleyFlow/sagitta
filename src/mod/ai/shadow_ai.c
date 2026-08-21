@@ -482,6 +482,29 @@ static bool ai_auth(Ed *ed, AiCall *call, HttpHdr *headers, u32 *nhdr,
     return true;
 }
 
+static void ai_debug_headers(Ed *ed, const HttpHdr *headers, u32 nhdr,
+                             const AiCurlSecret *secret)
+{
+    AiSecretHeader safe = {YEW_AI_SECRET_NONE, 0U, nhdr};
+    u32 public_count = nhdr;
+
+    if (!yew_ai_debug_bodies_enabled(ed))
+        return;
+    if (secret != NULL && secret->kind != YEW_CURL_AUTH_NONE) {
+        safe.kind = secret->kind == YEW_CURL_AUTH_BEARER ?
+                        (u8)YEW_AI_SECRET_BEARER :
+                        (u8)YEW_AI_SECRET_X_API_KEY;
+        safe.len = (u32)secret->len;
+        if (public_count != 0U)
+            public_count--;
+        safe.index = public_count;
+    }
+    (void)yew_ai_log_headers(headers, public_count,
+                             safe.kind == (u8)YEW_AI_SECRET_NONE ? NULL :
+                                                                    &safe);
+    yew_ai_debug_secret(ed, &safe);
+}
+
 static bool ai_request_url(Bytebuf *out, const AiBackendEntry *entry,
                            const char *path)
 {
@@ -514,7 +537,8 @@ static bool ai_start_http(Ed *ed, AiCall *call, const char *path)
     u32 nhdr;
     bool secret;
 
-    if (transport_test_start != NULL)
+    if (transport_test_start != NULL &&
+        !yew_ai_debug_bodies_enabled(ed))
         return transport_test_start(transport_test_opaque,
                                     YEW_AI_TR_HTTP, call->body.data,
                                     call->body.len);
@@ -524,6 +548,17 @@ static bool ai_start_http(Ed *ed, AiCall *call, const char *path)
     if (!ai_auth(ed, call, headers, &nhdr, &unused, auth, sizeof(auth),
                  key, sizeof(key)))
         goto fail;
+    ai_debug_headers(ed, headers, nhdr, &unused);
+    if (transport_test_start != NULL) {
+        bool started = transport_test_start(transport_test_opaque,
+                                            YEW_AI_TR_HTTP,
+                                            call->body.data,
+                                            call->body.len);
+
+        yew_memzero(auth, sizeof(auth));
+        yew_memzero(key, sizeof(key));
+        return started;
+    }
     request.method = "POST";
     request.path = path;
     request.hdrs = headers;
@@ -564,7 +599,8 @@ static bool ai_start_curl(Ed *ed, AiCall *call, const char *path)
     u32 nhdr;
     u32 npublic = 1U;
 
-    if (transport_test_start != NULL)
+    if (transport_test_start != NULL &&
+        !yew_ai_debug_bodies_enabled(ed))
         return transport_test_start(transport_test_opaque,
                                     YEW_AI_TR_CURL, call->body.data,
                                     call->body.len);
@@ -576,6 +612,7 @@ static bool ai_start_curl(Ed *ed, AiCall *call, const char *path)
         !ai_auth(ed, call, auth_headers, &nhdr, &secret, auth,
                  sizeof(auth), key, sizeof(key)))
         goto fail;
+    ai_debug_headers(ed, auth_headers, nhdr, &secret);
     public_headers[0] = auth_headers[0];
     if (call->backend.kind == (u8)YEW_AI_ANTHROPIC)
         public_headers[npublic++] = auth_headers[1];
@@ -594,6 +631,17 @@ static bool ai_start_curl(Ed *ed, AiCall *call, const char *path)
         yew_ai_err_format(&call->error, YEW_AI_ERR_PROTOCOL,
                           &call->backend, 0U, -1, err);
         goto fail;
+    }
+    if (transport_test_start != NULL) {
+        bool started = transport_test_start(transport_test_opaque,
+                                            YEW_AI_TR_CURL,
+                                            call->body.data,
+                                            call->body.len);
+
+        yew_memzero(auth, sizeof(auth));
+        yew_memzero(key, sizeof(key));
+        bytebuf_free(&url);
+        return started;
     }
     spec.argv = (char **)yew_ai_curl_argv();
     spec.sink = YEW_SINK_STREAM;
@@ -737,10 +785,12 @@ static bool ai_shadow_request(Ed *ed, const ShadowReq *request)
     }
     yew_ai_stats_request(ed, call->backend.name);
     ai_shadow_log(ed,
-                  "request %s model=%s template=%s context=%u transport=%s",
+                  "request %s model=%s template=%s context=%u body=%u "
+                  "transport=%s",
                   call->backend.name, call->backend.model,
                   call->backend.fim ? "fim" : "chat",
                   call->context.plen + call->context.slen,
+                  (unsigned)call->body.len,
                   call->backend.transport == (u8)YEW_AI_TR_CURL ?
                       "curl" : "http");
     yew_ai_debug_body(ed, "request", call->body.data, (u32)call->body.len);
@@ -933,8 +983,10 @@ static void ai_finish(Ed *ed, AiCall *call)
                         call->adapter.input_tokens,
                         call->adapter.output_tokens);
     ai_shadow_log(ed,
-                  "request %s first-token=%lld total=%lld tokens=%lld/%lld class=%u",
+                  "request %s first-token=%lld total=%lld response=%u "
+                  "tokens=%lld/%lld class=%u",
                   backend, (long long)first_ms, (long long)total_ms,
+                  (unsigned)call->raw.len,
                   (long long)call->adapter.input_tokens,
                   (long long)call->adapter.output_tokens, (unsigned)kind);
     yew_ai_debug_body(ed, "completion", call->raw.data,

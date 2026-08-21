@@ -813,6 +813,8 @@ const YewTest yew_tests[] = {
 #endif
 #if YEW_WITH_AI
     T(ai_debug_bodies_require_both_privacy_gates),
+    T(ai_debug_normal_cycle_logs_metadata_without_bodies),
+    T(ai_debug_dual_gate_cycle_logs_bodies_and_redacted_keys),
     T(ai_badge_states_hosts_and_priority),
     T(ai_badge_remote_cannot_be_hidden),
     T(ai_badge_remote_survives_narrow_statusline),
