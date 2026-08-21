@@ -205,6 +205,56 @@ static bool grid_has_ascii(const Grid *grid, const char *needle)
     return false;
 }
 
+static size_t grid_count_cluster(const Grid *grid, const u8 *bytes,
+                                 size_t len)
+{
+    size_t count = 0U;
+    size_t i;
+
+    for (i = 0U; i < (size_t)grid->rows * grid->cols; i++) {
+        const Cell *cell = &grid->back[i];
+
+        if ((cell->flags & CELL_INTERNED) != 0U) {
+            const char *stored = yew_intern_str(grid->gi, cell->id);
+
+            if (stored != NULL && yew_intern_len(grid->gi, cell->id) == len &&
+                memcmp(stored, bytes, len) == 0)
+                count++;
+        } else if (len <= sizeof(cell->utf8) &&
+                   memcmp(cell->utf8, bytes, len) == 0) {
+            count++;
+        }
+    }
+    return count;
+}
+
+static void cmdline_accept_successor_and_check_history(
+    CmdlineFixture *fixture, const char *command)
+{
+    Bytebuf text;
+
+    yew_cmdline_open(&fixture->ed, YEW_PROMPT_CMD, command);
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture->ed,
+                                     yew_cmdline_cmd_accept),
+                      YEW_CMD_OK);
+    YEW_ASSERT(fixture->ed.cmdline.active);
+    YEW_ASSERT_EQ_U64(fixture->ed.cmdline.kind, YEW_PROMPT_INPUT);
+    YEW_ASSERT_EQ_U64(fixture->ed.mode, YEW_MODE_E);
+    text = cmdline_text(&fixture->ed.cmdline);
+    YEW_ASSERT_EQ_STR((const char *)text.data, "successor");
+    bytebuf_free(&text);
+    yew_cmdline_close(&fixture->ed, false);
+
+    yew_cmdline_open(&fixture->ed, YEW_PROMPT_CMD, "");
+    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture->ed,
+                                     yew_cmdline_cmd_hist_prev),
+                      YEW_CMD_OK);
+    text = cmdline_text(&fixture->ed.cmdline);
+    YEW_ASSERT_EQ_STR((const char *)text.data, command);
+    bytebuf_free(&text);
+    yew_cmdline_close(&fixture->ed, false);
+}
+
 void test_cmdline_reuses_textbuf_and_grapheme_cursor(void)
 {
     CmdlineFixture fixture;
@@ -363,7 +413,6 @@ void test_cmdline_accepts_registered_command_and_closes(void)
         {"ed.ai.rename", cmdline_open_successor, YEW_ARITY_NONE,
          YEW_CMD_PROMPTS, "Open a successor prompt for testing", NULL},
         "", YEW_RP_OPT, NULL};
-    Bytebuf text;
 
     cmdline_fixture_init(&fixture);
     yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, "redraw");
@@ -395,25 +444,24 @@ void test_cmdline_accepts_registered_command_and_closes(void)
     YEW_ASSERT(!fixture.ed.cmdline.active);
 
     (void)yew_cmd_register_entry(&opens_successor);
-    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, "ai.rename");
-    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed, yew_cmdline_cmd_accept),
-                      YEW_CMD_OK);
-    YEW_ASSERT(fixture.ed.cmdline.active);
-    YEW_ASSERT_EQ_U64(fixture.ed.cmdline.kind, YEW_PROMPT_INPUT);
-    YEW_ASSERT_EQ_U64(fixture.ed.mode, YEW_MODE_E);
-    text = cmdline_text(&fixture.ed.cmdline);
-    YEW_ASSERT_EQ_STR((const char *)text.data, "successor");
-    bytebuf_free(&text);
-    yew_cmdline_close(&fixture.ed, false);
+    cmdline_accept_successor_and_check_history(&fixture, "ai.rename");
 
-    /* Replacing the prompt must not lose the accepted command's history. */
-    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, "");
-    YEW_ASSERT_EQ_U64(cmdline_invoke(&fixture.ed,
-                                     yew_cmdline_cmd_hist_prev),
-                      YEW_CMD_OK);
-    text = cmdline_text(&fixture.ed.cmdline);
-    YEW_ASSERT_EQ_STR((const char *)text.data, "ai.rename");
-    bytebuf_free(&text);
+    fixture.ed.clean = true;
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, "ai.rename");
+    YEW_ASSERT(yew_hist_is_memory(fixture.ed.cmdline.history));
+    yew_cmdline_close(&fixture.ed, false);
+    cmdline_accept_successor_and_check_history(&fixture, "ai.rename");
+    cmdline_fixture_free(&fixture);
+
+    cmdline_fixture_init(&fixture);
+    fixture.ed.state.ready = false;
+    YEW_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", "/dev/null/yew-state", 1),
+                      0);
+    yew_cmdline_open(&fixture.ed, YEW_PROMPT_CMD, "ai.rename");
+    YEW_ASSERT(yew_hist_is_memory(fixture.ed.cmdline.history));
+    yew_cmdline_close(&fixture.ed, false);
+    cmdline_accept_successor_and_check_history(&fixture, "ai.rename");
+    YEW_ASSERT_EQ_I64(setenv("XDG_STATE_HOME", fixture.state, 1), 0);
     cmdline_fixture_free(&fixture);
     yew_cmd_shutdown();
     yew_cmd_init();
@@ -438,6 +486,27 @@ void test_cmdline_input_draws_the_full_multiline_message(void)
         "this pushes the message past its inline storage\n"
         "and proves drawing reads the allocated full text\n"
         "Choice [y/N]:";
+    static const char narrow[] =
+        "discard zero\n"
+        "discard one\n"
+        "discard two\n"
+        "discard three\n"
+        "discard four\n"
+        "discard five\n"
+        "\xe6\xbc\xa2\xe5\xad\x97\xe6\xbc\xa2\xe5\xad\x97"
+        "\xe6\xbc\xa2\xe5\xad\x97\xe6\xbc\xa2\xe5\xad\x97\n"
+        "abcdefghijklmnopqrstuvwx\n"
+        "e\xcc\x81 tail\n"
+        "\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x91\xa9"
+        "\xe2\x80\x8d\xf0\x9f\x91\xa7\xe2\x80\x8d"
+        "\xf0\x9f\x91\xa6\n"
+        "Choice [n]:";
+    static const u8 han[] = "\xe6\xbc\xa2";
+    static const u8 combined[] = "e\xcc\x81";
+    static const u8 family[] =
+        "\xf0\x9f\x91\xa8\xe2\x80\x8d\xf0\x9f\x91\xa9"
+        "\xe2\x80\x8d\xf0\x9f\x91\xa7\xe2\x80\x8d"
+        "\xf0\x9f\x91\xa6";
     CmdlineFixture fixture;
     cmdline_fixture_init(&fixture);
     YEW_ASSERT(yew_grid_init(&fixture.ed.grid, &fixture.ed.interner,
@@ -454,6 +523,24 @@ void test_cmdline_input_draws_the_full_multiline_message(void)
     YEW_ASSERT_EQ_U64(fixture.ed.grid.back[23U * fixture.ed.grid.cols]
                           .utf8[0],
                       (u8)':');
+
+    YEW_ASSERT(yew_grid_resize(&fixture.ed.grid, 8U, 12U));
+    fixture.ed.footer_rect = (Rect){0U, 7U, 12U, 1U};
+    yew_msg(&fixture.ed, YEW_MSG_INFO, "%s", narrow);
+    yew_cmdline_draw(&fixture.ed, fixture.ed.footer_rect);
+    YEW_ASSERT(!grid_has_ascii(&fixture.ed.grid, "discard"));
+    YEW_ASSERT_EQ_U64(grid_count_cluster(&fixture.ed.grid, han,
+                                         sizeof(han) - 1U),
+                      4U);
+    YEW_ASSERT_EQ_U64(grid_count_cluster(&fixture.ed.grid, combined,
+                                         sizeof(combined) - 1U),
+                      1U);
+    YEW_ASSERT_EQ_U64(grid_count_cluster(&fixture.ed.grid, family,
+                                         sizeof(family) - 1U),
+                      1U);
+    YEW_ASSERT(grid_has_ascii(&fixture.ed.grid, "abcdefghijkl"));
+    YEW_ASSERT(grid_has_ascii(&fixture.ed.grid, "mnopqrstuvwx"));
+    YEW_ASSERT(grid_has_ascii(&fixture.ed.grid, "Choice [n]:"));
     yew_grid_free(&fixture.ed.grid);
     cmdline_fixture_free(&fixture);
 }

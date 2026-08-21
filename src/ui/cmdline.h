@@ -52,6 +52,9 @@ typedef struct CmdLine {
     i32 click_row;
     void *target;
     CmdHist *history;
+    /* Histories that could not or must not persist remain session-lived.
+     * Slots are command, search, and input respectively. */
+    CmdHist *memory_history[3];
     u8 return_mode;
     u32 comp_total;
     char *menu_stem;

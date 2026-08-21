@@ -359,8 +359,23 @@ static const char *history_kind(YewPromptKind kind)
     return "cmd";
 }
 
+static size_t history_slot(YewPromptKind kind)
+{
+    if (kind == YEW_PROMPT_SEARCH_F || kind == YEW_PROMPT_SEARCH_B)
+        return 1U;
+    return kind == YEW_PROMPT_INPUT ? 2U : 0U;
+}
+
 static CmdHist *history_open(Ed *ed, YewPromptKind kind)
 {
+    CmdHist **cached = &ed->cmdline.memory_history[history_slot(kind)];
+
+    if (*cached != NULL) {
+        CmdHist *history = *cached;
+
+        *cached = NULL;
+        return history;
+    }
     /* Sprint 25 §8.  A stateless session (--clean, --batch, an unusable
      * state home) keeps the global history it has always had; there is no
      * workspace directory to scope to and inventing one would put state
@@ -377,14 +392,41 @@ static CmdHist *history_open(Ed *ed, YewPromptKind kind)
     return yew_hist_open(history_kind(kind));
 }
 
+static void history_release(Ed *ed, YewPromptKind kind,
+                            CmdHist *history)
+{
+    CmdHist **cached;
+
+    if (history == NULL)
+        return;
+    yew_hist_flush(history);
+    if (!yew_hist_is_memory(history)) {
+        yew_hist_close(history);
+        return;
+    }
+    cached = &ed->cmdline.memory_history[history_slot(kind)];
+    if (*cached != NULL)
+        YEW_BUG("two live in-memory histories for one prompt kind");
+    *cached = history;
+}
+
 static void history_add_closed_prompt(Ed *ed, YewPromptKind kind,
                                       const char *text)
 {
-    CmdHist *history = history_open(ed, kind);
+    CmdHist *history;
+
+    /* A command may replace itself with another prompt in the same history
+     * family.  That successor already owns the displaced in-memory history,
+     * so add there instead of manufacturing a second owner. */
+    if (ed->cmdline.active &&
+        history_slot(ed->cmdline.kind) == history_slot(kind)) {
+        yew_hist_add(ed->cmdline.history, text);
+        return;
+    }
+    history = history_open(ed, kind);
 
     yew_hist_add(history, text);
-    yew_hist_flush(history);
-    yew_hist_close(history);
+    history_release(ed, kind, history);
 }
 
 void yew_cmdline_open(Ed *ed, YewPromptKind kind, const char *seed)
@@ -512,8 +554,7 @@ void yew_cmdline_close(Ed *ed, bool accepted)
     menu_discard(ed);
     yew_menu_free(&line->menu);
     yew_comp_filter_free(&line->filter);
-    yew_hist_flush(line->history);
-    yew_hist_close(line->history);
+    history_release(ed, line->kind, line->history);
     line->history = NULL;
     yew_hist_cur_dispose(&line->hist);
     cmdline_target_free(cmdline_target(line));
@@ -545,8 +586,16 @@ void yew_cmdline_close(Ed *ed, bool accepted)
 
 void yew_cmdline_dispose(Ed *ed)
 {
-    if (ed != NULL && ed->cmdline.active)
+    size_t i;
+
+    if (ed == NULL)
+        return;
+    if (ed->cmdline.active)
         yew_cmdline_close(ed, false);
+    for (i = 0U; i < YEW_ARRAY_LEN(ed->cmdline.memory_history); i++) {
+        yew_hist_close(ed->cmdline.memory_history[i]);
+        ed->cmdline.memory_history[i] = NULL;
+    }
 }
 
 Win *yew_cmdline_target(Ed *ed)
