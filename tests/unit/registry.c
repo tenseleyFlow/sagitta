@@ -1750,6 +1750,13 @@ const YewTest yew_tests[] = {
     T(gitcache_every_mutation_schedules_structural_refresh),
     T(gitcache_index_lock_skips_expired_refresh),
     T(gitcache_log_completion_publishes_owned_records),
+    T(gitcache_initial_upstream_refresh_and_oid_gating),
+    T(gitcache_bare_exit_codes_and_negative_detection_cache),
+    T(gitcache_detect_completion_rechecks_captured_context),
+    T(gitcache_blob_validation_and_owned_binary_result),
+    T(gitcache_large_incoming_merge_is_sorted_and_deduplicated),
+    T(gitcache_runtime_taxonomy_is_behaviorally_reachable),
+    T(gitcache_teardown_detaches_inflight_stdin),
 #endif
     T(picker_selection_survives_a_refilter),
     T(picker_selection_falls_to_row_zero_when_filtered_out),

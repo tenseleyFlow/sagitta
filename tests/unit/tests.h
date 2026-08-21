@@ -1747,6 +1747,13 @@ void test_gitcache_refresh_ttl_coalesces_and_pingpong_survives_failure(void);
 void test_gitcache_every_mutation_schedules_structural_refresh(void);
 void test_gitcache_index_lock_skips_expired_refresh(void);
 void test_gitcache_log_completion_publishes_owned_records(void);
+void test_gitcache_initial_upstream_refresh_and_oid_gating(void);
+void test_gitcache_bare_exit_codes_and_negative_detection_cache(void);
+void test_gitcache_detect_completion_rechecks_captured_context(void);
+void test_gitcache_blob_validation_and_owned_binary_result(void);
+void test_gitcache_large_incoming_merge_is_sorted_and_deduplicated(void);
+void test_gitcache_runtime_taxonomy_is_behaviorally_reachable(void);
+void test_gitcache_teardown_detaches_inflight_stdin(void);
 
 /* Sprint 26 §5: the list picker. */
 void test_picker_selection_survives_a_refilter(void);

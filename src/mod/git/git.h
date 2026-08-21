@@ -66,6 +66,16 @@ typedef enum GitStatusCode {
     YEW_GIT_PARSE
 } GitStatusCode;
 
+typedef struct GitResult {
+    GitStatusCode state;
+    const char *verb;
+    const u8 *out;
+    u64 out_len;
+    const u8 *err;
+    u64 err_len;
+    u32 job_id;
+} GitResult;
+
 typedef struct GitParseErr {
     u64 off;
     char message[128];
@@ -233,9 +243,14 @@ bool yew_git_avail(Ed *ed, GitVersion *out);
 GitStatusCode yew_git_detect(Ed *ed, GitRepo *out);
 const GitSnapshot *yew_git_snapshot(Ed *ed);
 const GitLogRecordList *yew_git_log_records(const Ed *ed);
+const GitResult *yew_git_result(const Ed *ed);
 bool yew_git_refresh(Ed *ed, bool force);
 void yew_git_invalidate(Ed *ed);
 u64 yew_git_env_fingerprint(void);
+
+/* Fetch one object by its full object id.  Binary output is published through
+ * yew_git_result() and remains valid until the next generic completion. */
+u32 yew_git_blob(Ed *ed, const char *oid, char *err, size_t errsz);
 
 const GitVerb *yew_git_verb(const char *name);
 const GitVerb *yew_git_verb_at(size_t index);
