@@ -860,7 +860,7 @@ void test_ai_cancel_curl_detaches_then_reaps_without_callbacks(void);
 void test_ai_cancel_curl_reaps_five_hundred_cycles(void);
 void test_ai_stats_persist_and_render_local_fletch_data(void);
 void test_ai_stats_missing_file_is_an_empty_success(void);
-void test_ai_shadow_live_streams_all_adapters_within_budget(void);
+void test_ai_shadow_live_streams_all_adapters(void);
 void test_ai_shadow_live_accepts_word_and_all_as_single_undo(void);
 void test_ai_shadow_live_error_event_clears_without_inserting(void);
 void test_ai_shadow_live_early_close_clears_without_inserting(void);

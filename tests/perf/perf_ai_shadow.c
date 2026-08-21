@@ -260,6 +260,7 @@ static bool start_provider(Ed *ed, u16 port, bool curl_transport)
         (void)fprintf(stderr, "perf_ai_shadow: opening live buffer failed\n");
         return false;
     }
+    yew_ai_workspace_session_set(ed, YEW_AI_WS_ALLOW);
     ed->win->cs.curs.data[0].pos = BYTEOFF(sizeof(input) - 1U);
     ed->win->cs.curs.data[0].anchor = BYTEOFF(sizeof(input) - 1U);
     if (!set_bool(ed, "ai.enable", true) ||

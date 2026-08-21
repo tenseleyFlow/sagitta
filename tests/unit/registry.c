@@ -899,7 +899,7 @@ const YewTest yew_tests[] = {
     T(ai_cancel_curl_reaps_five_hundred_cycles),
     T(ai_stats_persist_and_render_local_fletch_data),
     T(ai_stats_missing_file_is_an_empty_success),
-    T(ai_shadow_live_streams_all_adapters_within_budget),
+    T(ai_shadow_live_streams_all_adapters),
     T(ai_shadow_live_accepts_word_and_all_as_single_undo),
     T(ai_shadow_live_error_event_clears_without_inserting),
     T(ai_shadow_live_early_close_clears_without_inserting),

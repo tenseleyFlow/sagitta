@@ -327,6 +327,8 @@ jobs:
         run: |
           make perf-batch CC=gcc
           make perf-batch-selftest CC=gcc
+      - name: Enforce AI transport, streaming, and privacy budgets
+        run: make perf-ai-http perf-ai-shadow perf-ai-privacy CC=gcc
 
   torture:
     runs-on: ubuntu-latest
