@@ -15,6 +15,7 @@
 #include "mod/ai/ai.h"
 #include "mod/ai/ai_int.h"
 #include "mod/ai/backend_curl.h"
+#include "mod/ai/debug.h"
 #include "mod/ai/key.h"
 #include "mod/ai/prompt.h"
 #include "mod/ai/registry.h"
@@ -719,6 +720,7 @@ static bool ai_shadow_request(Ed *ed, const ShadowReq *request)
                   call->context.plen + call->context.slen,
                   call->backend.transport == (u8)YEW_AI_TR_CURL ?
                       "curl" : "http");
+    yew_ai_debug_body(ed, "request", call->body.data, (u32)call->body.len);
     return true;
 }
 
@@ -907,6 +909,8 @@ static void ai_finish(Ed *ed, AiCall *call)
                   backend, (long long)first_ms, (long long)total_ms,
                   (long long)call->adapter.input_tokens,
                   (long long)call->adapter.output_tokens, (unsigned)kind);
+    yew_ai_debug_body(ed, "completion", call->raw.data,
+                      (u32)call->raw.len);
     if (clear)
         ai_clear_ghost(ed, call);
     ai_call_reset(call);

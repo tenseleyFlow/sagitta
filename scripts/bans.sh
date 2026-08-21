@@ -386,6 +386,24 @@ if [ -s "$exit_hits" ]; then
     cat "$exit_hits" >>"$hits"
 fi
 
+# AI request and completion bytes have one audited sink.  That sink enforces
+# the environment + typed-option dual gate; keeping its surface tiny makes a
+# new unconditional body log a build failure rather than a privacy regression.
+ai_body_hits=$tmp/ai-body-log
+: >"$ai_body_hits"
+grep -rnE 'yew_log[^;]*(ctx->prefix|ctx->suffix|->text\b|prompt|completion|body)' \
+    "$repo_dir/src" --include='*.c' 2>/dev/null |
+    grep -v 'yew_ai_debug_body' >"$ai_body_hits" || :
+if [ -s "$ai_body_hits" ]; then
+    echo "ban: AI prompt/completion bodies must use yew_ai_debug_body" >>"$hits"
+    cat "$ai_body_hits" >>"$hits"
+fi
+ai_debug_body_refs=$(grep -rn 'yew_ai_debug_body' "$repo_dir/src" 2>/dev/null |
+    wc -l | tr -d ' ')
+if [ "$ai_debug_body_refs" -gt 4 ]; then
+    echo "ban: yew_ai_debug_body exceeds four audited source references" >>"$hits"
+fi
+
 registry=$repo_dir/tests/unit/registry.c
 defs=$tmp/test-defs
 : >"$defs"
