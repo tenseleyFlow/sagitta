@@ -27,6 +27,12 @@ CmdStatus yew_ai_cmd_log(CmdCtx *cx);
 CmdStatus yew_ai_cmd_reload(CmdCtx *cx);
 CmdStatus yew_ai_cmd_stats(CmdCtx *cx);
 CmdStatus yew_ai_cmd_open(CmdCtx *cx);
+CmdStatus yew_ai_cmd_enable(CmdCtx *cx);
+CmdStatus yew_ai_cmd_disable(CmdCtx *cx);
+CmdStatus yew_ai_cmd_forget(CmdCtx *cx);
+CmdStatus yew_ai_cmd_privacy(CmdCtx *cx);
+CmdStatus yew_ai_cmd_preset(CmdCtx *cx);
+CmdStatus yew_ai_cmd_status(CmdCtx *cx);
 
 /* Module-neutral, Ed-owned lifecycle.  Both the enabled implementation and
  * stripped shim provide it, keeping compile-time module checks out of core. */

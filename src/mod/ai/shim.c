@@ -225,3 +225,33 @@ CmdStatus yew_ai_cmd_open(CmdCtx *cx)
 {
     return require_ai(cx);
 }
+
+CmdStatus yew_ai_cmd_enable(CmdCtx *cx)
+{
+    return require_ai(cx);
+}
+
+CmdStatus yew_ai_cmd_disable(CmdCtx *cx)
+{
+    return require_ai(cx);
+}
+
+CmdStatus yew_ai_cmd_forget(CmdCtx *cx)
+{
+    return require_ai(cx);
+}
+
+CmdStatus yew_ai_cmd_privacy(CmdCtx *cx)
+{
+    return require_ai(cx);
+}
+
+CmdStatus yew_ai_cmd_preset(CmdCtx *cx)
+{
+    return require_ai(cx);
+}
+
+CmdStatus yew_ai_cmd_status(CmdCtx *cx)
+{
+    return require_ai(cx);
+}

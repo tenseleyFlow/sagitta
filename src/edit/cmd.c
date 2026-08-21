@@ -941,8 +941,18 @@ static const CmdDesc builtins[] = {
      "Open the AI transport log", NULL},
     {"ed.ai.reload", yew_ai_cmd_reload, YEW_ARITY_NONE, 0U,
      "Reload AI backends and clear cached credentials", NULL},
-    AI_DEFER("ed.ai.enable", 50, "enable AI after disclosure"),
-    AI_DEFER("ed.ai.disable", 50, "disable AI"),
+    {"ed.ai.enable", yew_ai_cmd_enable, YEW_ARITY_NONE, YEW_CMD_PROMPTS,
+     "Enable AI after the privacy disclosure", NULL},
+    {"ed.ai.disable", yew_ai_cmd_disable, YEW_ARITY_NONE, 0U,
+     "Disable AI without deleting backend definitions", NULL},
+    {"ed.ai.forget", yew_ai_cmd_forget, YEW_ARITY_NONE, 0U,
+     "Remove this workspace's AI grant", NULL},
+    {"ed.ai.privacy", yew_ai_cmd_privacy, YEW_ARITY_NONE,
+     YEW_CMD_NEEDS_WIN, "Open the AI privacy page", NULL},
+    {"ed.ai.preset", yew_ai_cmd_preset, YEW_ARITY_STR, 0U,
+     "Load the local or cloud AI preset", NULL},
+    {"ed.ai.status", yew_ai_cmd_status, YEW_ARITY_NONE, 0U,
+     "Show the effective AI privacy gates", NULL},
     {"ed.ai.stats", yew_ai_cmd_stats, YEW_ARITY_NONE, 0U,
      "Show local AI request statistics", NULL},
     DEFER("ed.git.stage", YEW_ARITY_NONE, YEW_CMD_NEEDS_WIN, 52,
@@ -1105,7 +1115,9 @@ static bool command_name_valid(const char *name)
         "hover", "symbols", "signature", "complete",
         /* Sprint 48: the AI command boundary is discoverable even when the
          * optional module is stripped. */
-        "backends", "models", "ping"};
+        "backends", "models", "ping",
+        /* Sprint 50: explicit privacy and preset surfaces. */
+        "privacy", "preset"};
     const char *segments[4];
     size_t lengths[4];
     const char *p;

@@ -4,6 +4,7 @@
 #include "mod/ai/backend_curl.h"
 #include "mod/ai/http.h"
 #include "mod/ai/key.h"
+#include "mod/ai/optin.h"
 #include "mod/ai/redact.h"
 #include "mod/ai/registry.h"
 #include "mod/ai/shadow_ai.h"
@@ -22,6 +23,7 @@ struct AiState {
     AiStatsState *stats;
     AiRedactPolicy *redact;
     AiPathPolicy *paths;
+    YewAiOptin optin;
     AiCall call;
     u32 retired_jobs[YEW_JOB_MAX];
     u32 nretired_jobs;

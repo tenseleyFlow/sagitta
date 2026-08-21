@@ -114,6 +114,7 @@ void yew_ai_state_free(Ed *ed)
     if (ed == NULL || ed->ai == NULL)
         return;
     state = ed->ai;
+    yew_ai_optin_cancel(&state->optin);
     yew_ai_shadow_free(ed);
     yew_ai_command_cancel(ed);
     yew_ai_curl_probe_free(&state->curl);
