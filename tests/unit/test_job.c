@@ -727,8 +727,15 @@ void test_job_stream_callback_failure_terminates_job(void)
     Ed ed;
     YewJobSpec spec = {0};
     JobStreamWitness w;
-    char *argv[] = {(char *)"/bin/sh", (char *)"-c",
-                    (char *)"printf x; sleep 30", NULL};
+    char *argv[] = {
+        (char *)"/bin/sh", (char *)"-c",
+        /* The callback's SIGTERM kills the foreground sleep.  The shell's
+         * handler then starts a new member of the same process group and
+         * exits, leaving a reaped leader while the descendant still owns
+         * stdout/stderr.  SIGKILL escalation must follow the group, not
+         * stop merely because the leader was reaped. */
+        (char *)"trap 'sleep 30 & exit 0' TERM; printf x; sleep 30", NULL
+    };
     char err[256] = {0};
     u32 id;
     YewJob *j;

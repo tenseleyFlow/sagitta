@@ -1227,11 +1227,14 @@ void yew_job_tick(Ed *ed, i64 now_ms)
         YewJob *j = &ed->jobs.v[i];
 
         /* Escalation is checked BEFORE the RUNNING guard on purpose: a
-         * timed-out or cancelled job has already left RUNNING but is
-         * still alive until SIGKILL lands.  Guarding first would strand a
-         * child that ignores SIGTERM (`trap '' TERM`) forever. */
-        if (j->kill_at_ms != 0 && !j->reaped && now_ms >= j->kill_at_ms) {
-            (void)kill(-j->pgid, SIGKILL);
+         * timed-out or cancelled job has already left RUNNING but its
+         * process group may still be alive until SIGKILL lands.  Reaping
+         * the group leader is not enough: a descendant can still hold a
+         * job pipe open.  Pending keeps that group eligible without ever
+         * signalling a stale pgid after the job has fully drained. */
+        if (j->kill_at_ms != 0 && now_ms >= j->kill_at_ms) {
+            if (yew_job_pending(j))
+                (void)kill(-j->pgid, SIGKILL);
             j->kill_at_ms = 0;
             continue;
         }
